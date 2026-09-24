@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Assets.Documents;
 using Puck.World.Protocol;
 using Xunit;
@@ -18,7 +19,7 @@ public sealed class StateMutationValidationLawTests {
             Name(value: "cards"),
             CellKind.Int,
             Capacity: 2,
-            Cells: [Cell("c1"), Cell("c2")]
+            Cells: [StateFixtures.Cell("c1"), StateFixtures.Cell("c2")]
         );
         var zone = new WorldStateRow(
             Name(value: "zone"),
@@ -35,7 +36,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "zone",
             Key: "ghost",
             Value: 1,
@@ -64,7 +65,7 @@ public sealed class StateMutationValidationLawTests {
             Name(value: "cards"),
             CellKind.Int,
             Capacity: 2,
-            Cells: [Cell("c1"), Cell("c2")]
+            Cells: [StateFixtures.Cell("c1"), StateFixtures.Cell("c2")]
         );
         var zone = new WorldStateRow(
             Name(value: "zone"),
@@ -73,10 +74,10 @@ public sealed class StateMutationValidationLawTests {
                 Name(value: "cards"),
                 Ordered: true
             ),
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "c1",
-                    value: 1,
-                    kind: CellKind.Bool
+                    kind: CellKind.Bool,
+                    value: 1
                 )]
         );
         using var fixture = Fixtures.FreshServer(definition: Document([domain, zone]));
@@ -86,7 +87,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "cards",
             Key: "c1"
         ));
@@ -121,7 +122,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "flag",
             Key: WorldStateRow.SlotKey.Value,
             Value: 2,
@@ -147,7 +148,7 @@ public sealed class StateMutationValidationLawTests {
             Name(value: "limited"),
             CellKind.Int,
             Capacity: 1,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "a",
                     value: 5
                 )]
@@ -159,7 +160,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "limited",
             Key: "b",
             Value: 1,
@@ -206,7 +207,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "board",
             Key: "9",
             Value: 1,
@@ -243,7 +244,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "notes",
             Key: WorldStateRow.SlotKey.Value,
             Value: 0,
@@ -276,7 +277,7 @@ public sealed class StateMutationValidationLawTests {
             Name(value: "cards"),
             CellKind.Int,
             Capacity: 1,
-            Cells: [Cell("c1")]
+            Cells: [StateFixtures.Cell("c1")]
         );
         var zone = new WorldStateRow(
             Name(value: "zone"),
@@ -285,14 +286,14 @@ public sealed class StateMutationValidationLawTests {
                 Name(value: "cards"),
                 Ordered: true
             ),
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "c1",
-                    value: 1,
-                    kind: CellKind.Bool
-                ), Cell(
+                    kind: CellKind.Bool,
+                    value: 1
+                ), StateFixtures.Cell(
                     key: "c1",
-                    value: 1,
-                    kind: CellKind.Bool
+                    kind: CellKind.Bool,
+                    value: 1
                 )]
         );
         var definition = Document([domain, zone]);
@@ -315,34 +316,16 @@ public sealed class StateMutationValidationLawTests {
             expectedSubstring: "is duplicated"
         );
     }
-    [Fact]
-    public void AddonVectorWrite_RefusedByName() {
-        var payload = System.Text.Encoding.UTF8.GetBytes(s: """{"name":"memories","kind":"vector","value":"AQID"}""");
+    // A guest may not write a vector row by either spelling: the slot value or a keyed cell list.
+    [InlineData("""{"name":"memories","kind":"vector","value":"AQID"}""")]
+    [InlineData("""{"name":"memories","kind":"vector","cells":[{"key":"v1","value":"AQID"}]}""")]
+    [Theory]
+    public void AddonVectorWrite_RefusedByName(string json) {
         var decoded = Puck.World.Addons.WorldAddonMutationDecoder.TryDecode(
-            kindOrdinal: 46,
+            kindOrdinal: WorldMutationKindCatalog.All().Single(predicate: static entry => (entry.Type == typeof(WorldMutation.UpsertStateRow))).Ordinal,
             section: WorldSection.State,
-            payload: payload,
-            principal: WorldPrincipal.Addon(name: "guest"),
-            mutation: out var mutation,
-            error: out var error
-        );
-
-        Assert.False(condition: decoded);
-        Assert.Null(@object: mutation);
-        Assert.Contains(
-            actualString: error,
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            expectedSubstring: "vector"
-        );
-    }
-    [Fact]
-    public void AddonVectorKeyedWrite_RefusedByName() {
-        var payload = System.Text.Encoding.UTF8.GetBytes(s: """{"name":"memories","kind":"vector","cells":[{"key":"v1","value":"AQID"}]}""");
-        var decoded = Puck.World.Addons.WorldAddonMutationDecoder.TryDecode(
-            kindOrdinal: 46,
-            section: WorldSection.State,
-            payload: payload,
-            principal: WorldPrincipal.Addon(name: "guest"),
+            payload: System.Text.Encoding.UTF8.GetBytes(s: json),
+            principal: Principal.Addon(name: "guest"),
             mutation: out var mutation,
             error: out var error
         );
@@ -361,10 +344,7 @@ public sealed class StateMutationValidationLawTests {
         : 1
     );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
-        Key: Name(value: key),
-        Value: ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0L)) : CellValue.Int(value: value))
-    );
+
     // A submitted row declaration composes through an arena over the document it declares, and reaches it before
     // any validator has seen it. A board over a topology the document does not declare is a section the arena cannot
     // lay out at all, so the apply door names the row rather than throwing out of the tick.
@@ -384,7 +364,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name(value: "board"),
                 CellKind.Int,
@@ -451,7 +431,7 @@ public sealed class StateMutationValidationLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "board",
             Key: "0"
         ));
@@ -467,7 +447,7 @@ public sealed class StateMutationValidationLawTests {
 
         // The control: the same mutation against a keyed row is admitted, so the refusal is about the row's shape.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "pile",
             Key: "a"
         ));
@@ -478,6 +458,7 @@ public sealed class StateMutationValidationLawTests {
             name: "pile"
         )!.Cells ?? []));
     }
+
     private static WorldDefinition Document(WorldStateRow[] rows, LatticeTopology[]? lattices = null) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(
         World: rows,

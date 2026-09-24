@@ -1,4 +1,5 @@
 using Puck.Vulkan.Bindings;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Messages;
 
@@ -6,7 +7,7 @@ namespace Puck.Vulkan.Messages;
 /// Describes a graphics pipeline to create: the shaders and render pass it targets, the fixed-function
 /// state, the vertex input layout, the descriptor and push constant layout, and the dynamic state.
 /// </summary>
-/// <param name="DeviceHandle">The native <c>VkDevice</c> handle.</param>
+/// <param name="Device">The command table of the logical device.</param>
 /// <param name="RenderPassHandle">The native <c>VkRenderPass</c> handle the pipeline is used with.</param>
 /// <param name="VertexShaderModuleHandle">The native <c>VkShaderModule</c> handle of the vertex shader.</param>
 /// <param name="FragmentShaderModuleHandle">The native <c>VkShaderModule</c> handle of the fragment shader.</param>
@@ -22,8 +23,13 @@ namespace Puck.Vulkan.Messages;
 /// <param name="DynamicStates">The pieces of pipeline state set dynamically, as <c>VkDynamicState</c> values.</param>
 /// <param name="Rasterization">The rasterization state.</param>
 /// <param name="Multisample">The multisample state.</param>
+/// <param name="PipelineCache">The device's pipeline cache, passed to the driver and counting the creation, or
+/// <see langword="null"/> for a device created without one.</param>
+/// <param name="ClipSpaceYUp">Whether the viewport has negative height, so clip-space +y is the top of the attachment.</param>
+/// <param name="DepthStencil">The depth state of a pipeline whose render pass has a depth attachment, or
+/// <see langword="null"/> for one without.</param>
 public readonly record struct VulkanGraphicsPipelineCreateRequest(
-    nint DeviceHandle,
+    VulkanDeviceCommands Device,
     nint RenderPassHandle,
     nint VertexShaderModuleHandle,
     nint FragmentShaderModuleHandle,
@@ -38,5 +44,8 @@ public readonly record struct VulkanGraphicsPipelineCreateRequest(
     IReadOnlyList<VkPipelineColorBlendAttachmentState> ColorBlendAttachments,
     IReadOnlyList<uint> DynamicStates,
     VkPipelineRasterizationStateCreateInfo Rasterization,
-    VkPipelineMultisampleStateCreateInfo Multisample
+    VkPipelineMultisampleStateCreateInfo Multisample,
+    VulkanPipelineCache? PipelineCache,
+    VkPipelineDepthStencilStateCreateInfo? DepthStencil = null,
+    bool ClipSpaceYUp = false
 );

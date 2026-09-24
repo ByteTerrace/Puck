@@ -1,4 +1,6 @@
 using System.Runtime.CompilerServices;
+using Puck.Abstractions.Counting;
+using Puck.Maths;
 
 namespace Puck.State;
 
@@ -21,7 +23,6 @@ public sealed class ArenaScratch {
     private static class Slot<T> {
         public static readonly int Index = (Interlocked.Increment(location: ref SlotCount) - 1);
     }
-
     private sealed class Pool<T> {
         public T[]?[] Buffers = new T[]?[4];
         public int Depth;
@@ -50,6 +51,12 @@ public sealed class ArenaScratch {
             m_pool.Depth--;
         }
     }
+
+    private WorkCount m_leased;
+
+    // The running count of elements every lease has borrowed, which the owning arena reports as
+    // ArenaWork.ScratchLeasedElements.
+    internal long LeasedElements => m_leased.Value;
 
     /// <summary>Borrows <paramref name="length"/> default-valued elements.</summary>
     /// <typeparam name="T">The element type.</typeparam>
@@ -89,13 +96,14 @@ public sealed class ArenaScratch {
                 val1: 16,
                 val2: ((int)Math.Min(
                     val1: ((long)Array.MaxLength),
-                    val2: ((long)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)length)))
+                    val2: ((long)((uint)length).NextPowerOfTwo())
                 ))
             )];
             pool.Buffers[pool.Depth] = buffer;
         }
 
         pool.Depth++;
+        m_leased.Add(amount: length);
 
         var span = buffer.AsSpan(
             length: length,

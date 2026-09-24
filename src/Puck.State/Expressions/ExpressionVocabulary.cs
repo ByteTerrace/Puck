@@ -13,8 +13,6 @@ public enum ExpressionDomain : byte {
     Comparison,
     /// <summary>Reads one number, yields -1, 0 or 1.</summary>
     Sign,
-    /// <summary>Reads a condition and two arms, yields one of the arms.</summary>
-    Select,
     /// <summary>Reads one operand that may be absent, yields 1 or 0.</summary>
     Absence,
     /// <summary>Reads an operand that may be absent and a fallback, yields one of them.</summary>
@@ -49,15 +47,14 @@ public static class ExpressionVocabulary {
             Arity: entry.Value.Arity,
             Operation: entry.Value.Operation,
             Domain: entry.Value.Signature switch {
-                    ExpressionSignature.Int => ExpressionDomain.Integer,
-                    ExpressionSignature.Fixed => ExpressionDomain.Fixed,
-                    ExpressionSignature.Comparison => ExpressionDomain.Comparison,
-                    ExpressionSignature.Sign => ExpressionDomain.Sign,
-                    ExpressionSignature.Select => ExpressionDomain.Select,
-                    ExpressionSignature.Absence => ExpressionDomain.Absence,
-                    ExpressionSignature.Coalesce => ExpressionDomain.Coalesce,
-                    _ => ExpressionDomain.Number,
-                }
+                ExpressionSignature.Int => ExpressionDomain.Integer,
+                ExpressionSignature.Fixed => ExpressionDomain.Fixed,
+                ExpressionSignature.Comparison => ExpressionDomain.Comparison,
+                ExpressionSignature.Sign => ExpressionDomain.Sign,
+                ExpressionSignature.Absence => ExpressionDomain.Absence,
+                ExpressionSignature.Coalesce => ExpressionDomain.Coalesce,
+                _ => ExpressionDomain.Number,
+            }
         ),
         comparer: StringComparer.Ordinal
     );

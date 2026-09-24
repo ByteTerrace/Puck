@@ -5,7 +5,7 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 internal sealed partial class WorldPlacementCommandModule {
-    private CommandResult ReflowQuery(WorldQuery query, WorldPrincipal principal) {
+    private CommandResult ReflowQuery(WorldQuery query, Principal principal) {
         if (link is not IPrincipalServerLink attributed) {
             return CommandResult.Error(output: "[world.reflow: this link cannot attribute authoring queries]");
         }
@@ -47,7 +47,7 @@ internal sealed partial class WorldPlacementCommandModule {
                 }
                 return ReflowQuery(
                     new WorldQuery.ReflowPreview(Request: request),
-                    context.ActingPrincipal()
+                    context.Principal
                 );
             }
         );
@@ -58,7 +58,7 @@ internal sealed partial class WorldPlacementCommandModule {
             handler: (context, args) => ((args.Count == 0)
             ? ReflowQuery(
                     new WorldQuery.ReflowStatus(),
-                    context.ActingPrincipal()
+                    context.Principal
                 )
             : CommandResult.Error(output: "usage: world.reflow.status"))
         );
@@ -69,7 +69,7 @@ internal sealed partial class WorldPlacementCommandModule {
             handler: (context, args) => ((args.Count == 0)
             ? ReflowQuery(
                     new WorldQuery.ReflowCancel(),
-                    context.ActingPrincipal()
+                    context.Principal
                 )
             : CommandResult.Error(output: "usage: world.reflow.cancel"))
         );
@@ -81,7 +81,7 @@ internal sealed partial class WorldPlacementCommandModule {
             handler: (context, args) => {
                 if (args.Count != 0) { return CommandResult.Error(output: "usage: world.reflow.commit"); }
                 if (!server.TryTakeReviewedReflow(
-                    principal: context.ActingPrincipal(),
+                    principal: context.Principal,
                     proposal: out var proposal,
                     reason: out var reason
                 )) {

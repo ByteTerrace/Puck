@@ -22,14 +22,6 @@ public sealed class WorldBoxTopologyLawTests {
             layers,
             LayerHeight: 0.5f
         );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
 
     [InlineData(4, 4, 4, 48)]
     [InlineData(4, 4, 2, 16)]
@@ -194,13 +186,13 @@ public sealed class WorldBoxTopologyLawTests {
         fixture.Step();
         Assert.Equal(
             3L,
-            Value(
-                fixture: fixture,
-                row: "run"
+            fixture.SlotValue(row: "run"
             )
         );
 
-        var broken = definition with { StateRaw = definition.StateRaw! with { World = [board with { Cells = [Mark(
+        var broken = definition with {
+            StateRaw = definition.StateRaw! with {
+                World = [board with { Cells = [Mark(
                     x: 0,
                     y: 0,
                     z: 0
@@ -212,15 +204,15 @@ public sealed class WorldBoxTopologyLawTests {
                     x: 2,
                     y: 2,
                     z: 2
-                )] }, run] } };
+                )] }, run],
+            },
+        };
         using var control = Fixtures.FreshServer(definition: broken);
 
         control.Step();
         Assert.Equal(
             2L,
-            Value(
-                fixture: control,
-                row: "run"
+            control.SlotValue(row: "run"
             )
         );
     }
@@ -241,14 +233,6 @@ public sealed class WorldBoxTopologyLawTests {
                     CellValue.Int(value: 7L)
                 ))],
             Domain: new StateDomain.CellsOf("box")
-        );
-        static WorldStateRow Winner(string name) => new(
-            CellName.Parse(candidate: name),
-            CellKind.Int,
-            Cells: [new StateCell(
-                    WorldStateRow.SlotKey,
-                    CellValue.Int(value: 0L)
-                )]
         );
         var runTerminated = new PatternRow(
             CellName.Parse(candidate: "runTerminated"),
@@ -285,7 +269,7 @@ public sealed class WorldBoxTopologyLawTests {
         );
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new(
-            World: [isolated, extended, Winner(name: "winnerIsolated"), Winner(name: "winnerExtended")],
+            World: [isolated, extended, StateFixtures.IntSlot(name: "winnerIsolated"), StateFixtures.IntSlot(name: "winnerExtended")],
             Lattices: [Box(
                     depth: 1,
                     layers: 2,
@@ -317,16 +301,12 @@ public sealed class WorldBoxTopologyLawTests {
         fixture.Step();
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "winnerIsolated"
+            fixture.SlotValue(row: "winnerIsolated"
             )
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "winnerExtended"
+            fixture.SlotValue(row: "winnerExtended"
             )
         );
     }
@@ -413,7 +393,8 @@ public sealed class WorldBoxTopologyLawTests {
         // A grid's case type carries no 'layerHeight' property to author in the first place; the invariant a
         // runtime check once named ("layerHeight belongs to a box") is now enforced by the document's own
         // strict-parsed JSON shape instead.
-        var definition = Fixtures.BuildDocument() with { StateRaw = new(Lattices: [new LatticeTopology.Grid(
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new(Lattices: [new LatticeTopology.Grid(
                 "g",
                 new DocumentVector3(
                     x: 0,
@@ -423,7 +404,8 @@ public sealed class WorldBoxTopologyLawTests {
                 1,
                 4,
                 4
-            )]) };
+            )]),
+        };
         var node = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition)))!.AsObject();
 
         node["state"]!["lattices"]!.AsArray()[0]!["layerHeight"] = 1f;

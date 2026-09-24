@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Net;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -6,6 +7,7 @@ using System.Text;
 using Puck.Attestation;
 using Puck.Maths;
 using Puck.Networking;
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -15,7 +17,7 @@ using Puck.Physics.Motion;
 namespace Puck.World.Tests;
 
 /// <summary>Adversarial laws for the authority boundary and source-scoped transfer escrow.</summary>
-public sealed class FederationTransferLawTests {
+public sealed partial class FederationTransferLawTests {
     /// <summary>A fresh, throwaway <see cref="LocalKeySigningOracle"/> for one test's own SignsDirectly identity.</summary>
     private static LocalKeySigningOracle LocalOracle(string subject) => new(
         key: ECDsa.Create(curve: ECCurve.NamedCurves.nistP256),
@@ -36,19 +38,11 @@ public sealed class FederationTransferLawTests {
                 Index: index
             )
         );
-    // A budget expiry and a refusal must never read alike: the first says the machine never scheduled this exchange
-    // within Laws.SocketBudget, the second is the law's own subject matter.
     private static async Task<WireFrameRead> RequireFrameAsync(Stream stream, CancellationToken ct) {
-        WireFrameRead read;
-
-        try {
-            read = await WorldFederationCodec.ReadResponseAsync(
-                ct: ct,
-                stream: stream
-            );
-        } catch (OperationCanceledException) {
-            throw new Xunit.Sdk.XunitException(userMessage: $"no federation response frame arrived within the {Laws.SocketBudget.TotalSeconds:0}s socket budget");
-        }
+        var read = await WorldFederationCodec.ReadResponseAsync(
+            ct: ct,
+            stream: stream
+        );
 
         return (read.Ok
             ? read
@@ -67,7 +61,7 @@ public sealed class FederationTransferLawTests {
             PartyAllOrNothing: true,
             PeerAdmission: false,
             Members: [new WorldTransferReservationMember(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     PreferredSlot: 0,
                     Identity: null,
                     Source: default,
@@ -76,17 +70,6 @@ public sealed class FederationTransferLawTests {
                     Mobility: Mobility(index: 0)
                 )]
         );
-    private static WorldDefinition TransferPopulationDocument() {
-        var document = Fixtures.BuildDocument();
-
-        return document with {
-            PopulationRaw = document.Population with {
-                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
-                NetworkPlayers = 2,
-            },
-            Admission = [Fixtures.AnyAuthorityArrivals()],
-        };
-    }
     /// <summary>The SignsDirectly admission row a peer must author to trust <paramref name="oracle"/>'s own key.</summary>
     private static WorldAdmissionEntry TrustEntryFor(LocalKeySigningOracle oracle) => new(
         Domain: oracle.Domain,
@@ -99,7 +82,7 @@ public sealed class FederationTransferLawTests {
 
     [Fact]
     public void AutonomousTransfer_RefusesAnUnsupportedProducerBeforeCommit() {
-        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
         var request = Reservation(
             border: "seam",
             sourceAuthority: "machine-a/boot",
@@ -107,7 +90,7 @@ public sealed class FederationTransferLawTests {
         ) with {
             PeerAdmission = true,
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 4,
                 Identity: null,
                 Source: IntentSource.Producer(name: "not-declared"),
@@ -128,7 +111,7 @@ public sealed class FederationTransferLawTests {
     }
     [Fact]
     public void AutonomousTransfer_UsesEntityTableWithoutBecomingAHumanPeer() {
-        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
         var request = Reservation(
             border: "seam",
             sourceAuthority: "machine-a/boot",
@@ -136,7 +119,7 @@ public sealed class FederationTransferLawTests {
         ) with {
             PeerAdmission = true,
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 4,
                 Identity: null,
                 Source: IntentSource.Idle,
@@ -228,7 +211,7 @@ public sealed class FederationTransferLawTests {
             transferId: 51
         ) with {
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 1,
                 Identity: null,
                 Source: default,
@@ -361,9 +344,8 @@ public sealed class FederationTransferLawTests {
     [Fact]
     public void CommitWire_PreservesTheSelectedMotionProgramAndTheCommitTimeProfile() {
         using var fixture = Fixtures.FreshServer();
-        // The commit-time profile is the discriminating field: a colocated crossing hands this object straight to
-        // the destination, so a codec that never writes it gives federated crossings different semantics from
-        // colocated ones for the same transfer.
+        // The commit-time profile is the discriminating field: a colocated crossing hands this object straight to the
+        // destination, so a codec that drops it gives federated and colocated crossings different semantics.
         var profile = fixture.Server.Profiles.BootProfile;
         var expected = new WorldTransferCommitMember(
             Profile: profile,
@@ -627,10 +609,12 @@ public sealed class FederationTransferLawTests {
             ),
             userMessage: first
         );
-        var equal = member with { ActionContinuity = new(
+        var equal = member with {
+            ActionContinuity = new(
             Channels: [.. channels],
             Registers: [.. registers]
-        ) };
+        ),
+        };
 
         Assert.True(
             condition: fixture.Server.CommitTransfer(
@@ -772,7 +756,7 @@ public sealed class FederationTransferLawTests {
     }
     [Fact]
     public void FederatedIntentStream_HoldsDeviceStateAcrossFasterDestinationTicks_AndReleasesByLease() {
-        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
         var request = Reservation(
             border: "seam",
             sourceAuthority: "slow-player-world",
@@ -780,7 +764,7 @@ public sealed class FederationTransferLawTests {
         ) with {
             PeerAdmission = true,
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 4,
                 Identity: null,
                 Source: IntentSource.Live,
@@ -867,7 +851,7 @@ public sealed class FederationTransferLawTests {
     [Theory]
     public async Task FederatedIntentStream_RejectsAuthorityRebindingAndUnknownTransferCredentials(bool rebindAuthority) {
         const string SourceAuthority = "player-world/source";
-        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
         var request = Reservation(
             border: "east",
             sourceAuthority: SourceAuthority,
@@ -875,7 +859,7 @@ public sealed class FederationTransferLawTests {
         ) with {
             PeerAdmission = true,
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 4,
                 Identity: null,
                 Source: IntentSource.Live,
@@ -916,29 +900,31 @@ public sealed class FederationTransferLawTests {
         );
         using var host = new WorldPeerHost(
             server: fixture.Server,
-            authenticator: security
+            authenticator: security,
+            timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
         host.Start(listen: "127.0.0.1:0");
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        using var timeout = Laws.SocketDeadline();
+        var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
 
         await client.ConnectAsync(
             address: endpoint.Address,
             port: endpoint.Port,
-            cancellationToken: timeout.Token
+            cancellationToken: testToken
         );
         var stream = client.GetStream();
 
         await HandshakeWireFormat.WriteHelloAsync(
-            ct: timeout.Token,
+            ct: testToken,
             key: WorldFederationCodec.WireKey,
             stream: stream
         );
         var challenge = await RequireFrameAsync(
-            stream: stream,
-            ct: timeout.Token
+            ct: testToken,
+            stream: stream
         );
         var proof = security.Prove(challenge: challenge.Body.Span);
 
@@ -946,26 +932,26 @@ public sealed class FederationTransferLawTests {
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
             body: WorldFederationCodec.EncodeAuthentication(proof: proof),
-            ct: timeout.Token
+            ct: testToken
         );
         Assert.Equal(
             expected: ((byte)WorldFederationResponse.Authenticated),
             actual: (await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             )).Kind
         );
         await WorldFederationCodec.WriteRequestAsync(
-            stream: stream,
-            kind: WorldFederationRequest.IntentStream,
             body: default,
-            ct: timeout.Token
+            ct: testToken,
+            kind: WorldFederationRequest.IntentStream,
+            stream: stream
         );
         Assert.Equal(
             expected: ((byte)WorldFederationResponse.Ack),
             actual: (await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             )).Kind
         );
 
@@ -976,7 +962,7 @@ public sealed class FederationTransferLawTests {
                 ordinal: 0,
                 value: FixedQ4816.One
             ),
-            Principal: WorldPrincipal.Console
+            Principal: Principal.Console
         );
         var carriedAuthority = (rebindAuthority
             ? "forged-world/source"
@@ -994,15 +980,15 @@ public sealed class FederationTransferLawTests {
         );
 
         await WorldFederationCodec.WriteRequestAsync(
-            stream: stream,
-            kind: WorldFederationRequest.Intent,
             body: body,
-            ct: timeout.Token
+            ct: testToken,
+            kind: WorldFederationRequest.Intent,
+            stream: stream
         );
 
         var refusal = await RequireFrameAsync(
-            stream: stream,
-            ct: timeout.Token
+            ct: testToken,
+            stream: stream
         );
         var expectedRefusal = (rebindAuthority
             ? WorldFederationRefusal.SourceAuthorityMismatch
@@ -1021,7 +1007,7 @@ public sealed class FederationTransferLawTests {
     }
     [Fact]
     public void FederatedNeutralDeviceState_DoesNotMaskAnAuthorityAcceptedTapeSegment() {
-        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
         var request = Reservation(
             border: "seam",
             sourceAuthority: "player-world",
@@ -1029,7 +1015,7 @@ public sealed class FederationTransferLawTests {
         ) with {
             PeerAdmission = true,
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 4,
                 Identity: null,
                 Source: IntentSource.Live,
@@ -1113,29 +1099,31 @@ public sealed class FederationTransferLawTests {
         var security = new OddWidthAuthenticator();
         using var host = new WorldPeerHost(
             server: fixture.Server,
-            authenticator: security
+            authenticator: security,
+            timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
         host.Start(listen: "127.0.0.1:0");
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        using var timeout = Laws.SocketDeadline();
+        var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
 
         await client.ConnectAsync(
             address: endpoint.Address,
             port: endpoint.Port,
-            cancellationToken: timeout.Token
+            cancellationToken: testToken
         );
         var stream = client.GetStream();
 
         await HandshakeWireFormat.WriteHelloAsync(
-            ct: timeout.Token,
+            ct: testToken,
             key: WorldFederationCodec.WireKey,
             stream: stream
         );
         var challenge = await RequireFrameAsync(
-            stream: stream,
-            ct: timeout.Token
+            ct: testToken,
+            stream: stream
         );
 
         Assert.Equal(
@@ -1157,11 +1145,11 @@ public sealed class FederationTransferLawTests {
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
             body: WorldFederationCodec.EncodeAuthentication(proof: proof),
-            ct: timeout.Token
+            ct: testToken
         );
         var accepted = await RequireFrameAsync(
-            stream: stream,
-            ct: timeout.Token
+            ct: testToken,
+            stream: stream
         );
 
         Assert.Equal(
@@ -1187,29 +1175,31 @@ public sealed class FederationTransferLawTests {
         );
         using var host = new WorldPeerHost(
             server: fixture.Server,
-            authenticator: security
+            authenticator: security,
+            timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
         host.Start(listen: "127.0.0.1:0");
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        using var timeout = Laws.SocketDeadline();
+        var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
 
         await client.ConnectAsync(
             address: endpoint.Address,
             port: endpoint.Port,
-            cancellationToken: timeout.Token
+            cancellationToken: testToken
         );
         var stream = client.GetStream();
 
         await HandshakeWireFormat.WriteHelloAsync(
-            ct: timeout.Token,
+            ct: testToken,
             key: WorldFederationCodec.WireKey,
             stream: stream
         );
         var challenge = await RequireFrameAsync(
-            stream: stream,
-            ct: timeout.Token
+            ct: testToken,
+            stream: stream
         );
         // Y signs the proof — never X's own key — so the connection can only ever be recorded as "authority-y".
         var proof = oracleY.Sign(
@@ -1221,13 +1211,13 @@ public sealed class FederationTransferLawTests {
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
             body: WorldFederationCodec.EncodeAuthentication(proof: proof),
-            ct: timeout.Token
+            ct: testToken
         );
         Assert.Equal(
             expected: ((byte)WorldFederationResponse.Authenticated),
             actual: (await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             )).Kind
         );
 
@@ -1239,11 +1229,11 @@ public sealed class FederationTransferLawTests {
                 sourceAuthority: "authority-x",
                 transferId: 1
             ),
-            ct: timeout.Token
+            ct: testToken
         );
         var refusedAsX = await RequireFrameAsync(
-            stream: stream,
-            ct: timeout.Token
+            ct: testToken,
+            stream: stream
         );
 
         Assert.Equal(
@@ -1264,11 +1254,11 @@ public sealed class FederationTransferLawTests {
                 sourceAuthority: "authority-y",
                 transferId: 1
             ),
-            ct: timeout.Token
+            ct: testToken
         );
         var admittedAsY = await RequireFrameAsync(
-            stream: stream,
-            ct: timeout.Token
+            ct: testToken,
+            stream: stream
         );
 
         Assert.Equal(
@@ -1290,30 +1280,32 @@ public sealed class FederationTransferLawTests {
         );
         using var host = new WorldPeerHost(
             server: fixture.Server,
-            authenticator: security
+            authenticator: security,
+            timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
         host.Start(listen: "127.0.0.1:0");
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        using var timeout = Laws.SocketDeadline();
+        var testToken = TestContext.Current.CancellationToken;
         byte[] capturedProof;
 
         using (var first = new PeerTestClient()) {
             await first.ConnectAsync(
                 address: endpoint.Address,
                 port: endpoint.Port,
-                cancellationToken: timeout.Token
+                cancellationToken: testToken
             );
             var stream = first.GetStream();
 
             await HandshakeWireFormat.WriteHelloAsync(
-                ct: timeout.Token,
+                ct: testToken,
                 key: WorldFederationCodec.WireKey,
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             capturedProof = security.Prove(challenge: challenge.Body.Span);
@@ -1321,13 +1313,13 @@ public sealed class FederationTransferLawTests {
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
                 body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof),
-                ct: timeout.Token
+                ct: testToken
             );
             Assert.Equal(
                 expected: ((byte)WorldFederationResponse.Authenticated),
                 actual: (await RequireFrameAsync(
-                    stream: stream,
-                    ct: timeout.Token
+                    ct: testToken,
+                    stream: stream
                 )).Kind
             );
         }
@@ -1336,29 +1328,29 @@ public sealed class FederationTransferLawTests {
             await replay.ConnectAsync(
                 address: endpoint.Address,
                 port: endpoint.Port,
-                cancellationToken: timeout.Token
+                cancellationToken: testToken
             );
             var stream = replay.GetStream();
 
             await HandshakeWireFormat.WriteHelloAsync(
-                ct: timeout.Token,
+                ct: testToken,
                 key: WorldFederationCodec.WireKey,
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             await WorldFederationCodec.WriteRequestAsync(
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
                 body: WorldFederationCodec.EncodeAuthentication(proof: capturedProof),
-                ct: timeout.Token
+                ct: testToken
             );
             var refusal = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             Assert.Equal(
@@ -1382,29 +1374,31 @@ public sealed class FederationTransferLawTests {
         );
         using var host = new WorldPeerHost(
             server: fixture.Server,
-            authenticator: security
+            authenticator: security,
+            timeProvider: new VirtualClock(),
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
         host.Start(listen: "127.0.0.1:0");
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-        using var timeout = Laws.SocketDeadline();
+        var testToken = TestContext.Current.CancellationToken;
 
         using (var attacker = new PeerTestClient()) {
             await attacker.ConnectAsync(
                 address: endpoint.Address,
                 port: endpoint.Port,
-                cancellationToken: timeout.Token
+                cancellationToken: testToken
             );
             var stream = attacker.GetStream();
 
             await HandshakeWireFormat.WriteHelloAsync(
-                ct: timeout.Token,
+                ct: testToken,
                 key: WorldFederationCodec.WireKey,
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             Assert.Equal(
@@ -1416,11 +1410,11 @@ public sealed class FederationTransferLawTests {
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
                 body: WorldFederationCodec.EncodeAuthentication(proof: new byte[64]),
-                ct: timeout.Token
+                ct: testToken
             );
             var refusal = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             Assert.Equal(
@@ -1438,18 +1432,18 @@ public sealed class FederationTransferLawTests {
             await authenticated.ConnectAsync(
                 address: endpoint.Address,
                 port: endpoint.Port,
-                cancellationToken: timeout.Token
+                cancellationToken: testToken
             );
             var stream = authenticated.GetStream();
 
             await HandshakeWireFormat.WriteHelloAsync(
-                ct: timeout.Token,
+                ct: testToken,
                 key: WorldFederationCodec.WireKey,
                 stream: stream
             );
             var challenge = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
             var proof = security.Prove(challenge: challenge.Body.Span);
 
@@ -1457,11 +1451,11 @@ public sealed class FederationTransferLawTests {
                 stream: stream,
                 kind: WorldFederationRequest.Authenticate,
                 body: WorldFederationCodec.EncodeAuthentication(proof: proof),
-                ct: timeout.Token
+                ct: testToken
             );
             var accepted = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             Assert.Equal(
@@ -1477,11 +1471,11 @@ public sealed class FederationTransferLawTests {
                     sourceAuthority: "machine-a/boot",
                     transferId: 17
                 ),
-                ct: timeout.Token
+                ct: testToken
             );
             var status = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             Assert.Equal(
@@ -1500,11 +1494,11 @@ public sealed class FederationTransferLawTests {
                     sourceAuthority: "machine-b/boot",
                     transferId: 17
                 ),
-                ct: timeout.Token
+                ct: testToken
             );
             var refusal = await RequireFrameAsync(
-                stream: stream,
-                ct: timeout.Token
+                ct: testToken,
+                stream: stream
             );
 
             Assert.Equal(
@@ -1549,7 +1543,7 @@ public sealed class FederationTransferLawTests {
                 transferId: crossing
             ) with {
                 Members = [new WorldTransferReservationMember(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     PreferredSlot: 0,
                     Identity: null,
                     Source: IntentSource.Live,
@@ -1603,7 +1597,7 @@ public sealed class FederationTransferLawTests {
     }
     [Fact]
     public void MappedCommit_RefusesAMotionProgramTheDestinationDoesNotDeclare() {
-        using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
         var request = Reservation(
             border: "up",
             sourceAuthority: "source/world",
@@ -1611,7 +1605,7 @@ public sealed class FederationTransferLawTests {
         ) with {
             PeerAdmission = true,
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 4,
                 Identity: null,
                 Source: IntentSource.Live,
@@ -1661,7 +1655,7 @@ public sealed class FederationTransferLawTests {
                 transferId: crossing
             ) with {
                 Members = [new WorldTransferReservationMember(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     PreferredSlot: 0,
                     Identity: null,
                     Source: IntentSource.Live,
@@ -1846,9 +1840,14 @@ public sealed class FederationTransferLawTests {
     /// refused answer — the first, which came back through the lane, included — carries
     /// <see cref="WorldFederationResponse.Refusal"/> as its kind. Falsifiers: gating on <c>IsConfigured</c> alone
     /// turns the second answer's detail into the lane's own "is reconnecting" narration; copying a refused lane
-    /// response's default kind into the answer turns the first answer's kind red.</summary>
+    /// response's default kind into the answer turns the first answer's kind red. Every deadline on both sides —
+    /// the host's handshake and drain, the lane's per-attempt bound, the caller's answer deadline and the connect
+    /// retry — runs on one <see cref="VirtualClock"/>, so none can elapse under load; the law advances exactly the one
+    /// connect retry the refused proof schedules.</summary>
     [Fact]
-    public void RemoteAuthority_ClosesTheSigningGateOnAnAuthenticatorThatVerifiesButCannotProve() {
+    public async Task RemoteAuthority_ClosesTheSigningGateOnAnAuthenticatorThatVerifiesButCannotProve() {
+        var testToken = TestContext.Current.CancellationToken;
+        var clock = new VirtualClock();
         using var fixture = Fixtures.FreshServer();
         using var oracle = LocalOracle(subject: "machine-a/boot");
         var hostSecurity = new WorldAttestedAuthenticator(
@@ -1857,7 +1856,9 @@ public sealed class FederationTransferLawTests {
         );
         using var host = new WorldPeerHost(
             server: fixture.Server,
-            authenticator: hostSecurity
+            authenticator: hostSecurity,
+            timeProvider: clock,
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
         host.Start(listen: "127.0.0.1:0");
@@ -1865,8 +1866,13 @@ public sealed class FederationTransferLawTests {
 
         Assert.True(condition: verifyOnly.IsConfigured);
 
+        using var network = new WorldPeerNetwork(
+            timeProvider: clock,
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
+        );
         using var remote = new WorldRemoteAuthority(
             endpoint: host.ListenEndpoint!,
+            network: network,
             placeholder: fixture.Server.Definition,
             security: verifyOnly,
             observerAuthority: "machine-b/boot"
@@ -1875,11 +1881,24 @@ public sealed class FederationTransferLawTests {
             sourceAuthority: "machine-b/boot",
             transferId: 17
         );
-        var first = remote.AwaitAnswer(
-            body: body,
-            kind: WorldFederationRequest.Status,
-            sourceAuthority: "machine-b/boot"
+        // AwaitAnswer blocks its caller for the answer, as the tick thread does, so it runs off the law's thread
+        // while the law drives the clock.
+        var pending = Task.Run(
+            cancellationToken: testToken,
+            function: () => remote.AwaitAnswer(
+                body: body,
+                kind: WorldFederationRequest.Status,
+                sourceAuthority: "machine-b/boot"
+            )
         );
+
+        await clock.ExpireAsync(
+            ct: testToken,
+            dueTime: WorldRemoteAuthority.ConnectRetryDelay,
+            pending: pending
+        );
+
+        var first = await pending.WaitAsync(cancellationToken: testToken);
 
         Assert.False(condition: first.Ok);
         Assert.Equal(
@@ -1934,7 +1953,7 @@ public sealed class FederationTransferLawTests {
             transferId: 17
         ) with {
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 1,
                 Identity: null,
                 Source: default,
@@ -1986,7 +2005,7 @@ public sealed class FederationTransferLawTests {
             transferId: 18
         ) with {
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 0,
                 Identity: null,
                 Source: default,
@@ -2026,7 +2045,7 @@ public sealed class FederationTransferLawTests {
         ) with {
             PeerAdmission = true,
             Members = [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: 4,
                 Identity: null,
                 Source: source,

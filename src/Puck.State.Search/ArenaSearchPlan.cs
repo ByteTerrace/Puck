@@ -44,11 +44,11 @@ public sealed record ArenaSearchChancePlan(int RowOrdinal, int AtDepth, int Cell
 /// accepted-candidate count, or <c>-1</c>.</param>
 /// <param name="Accept">The verdict value that accepts a candidate.</param>
 /// <param name="Method">How the job compares plies by its score.</param>
-/// <param name="Iterations">The tree iterations a <see cref="SearchMethod.Tree"/> job runs.</param>
+/// <param name="Iterations">The tree iterations a <see cref="SearchMethod.MonteCarlo"/> job runs.</param>
 /// <param name="Chance">The job's baked chance node, or <see langword="null"/> for a job with none.</param>
 /// <param name="ScoresOrdinal">The keyed row holding one score per seat, in the turn row's own ordinal order, or
 /// <c>-1</c>; a level maximizes the mover seat's own entry rather than negating the reply.</param>
-/// <param name="DrawSeed">The draw stream a <see cref="SearchMethod.Tree"/> job's playouts advance from.</param>
+/// <param name="DrawSeed">The draw stream a <see cref="SearchMethod.MonteCarlo"/> job's playouts advance from.</param>
 /// <param name="EnabledOrdinal">The enabling slot, or -1 for always enabled.</param>
 /// <param name="RevisionOrdinal">The position revision slot copied into the best output, or -1.</param>
 public sealed record ArenaSearchPlan(
@@ -114,7 +114,7 @@ public sealed record ArenaSearchPlan(
     /// <param name="catalog">The catalog whose ordinals address the arena.</param>
     /// <param name="resolved">The ordinal-addressed plan on success; otherwise <see langword="null"/>.</param>
     /// <param name="reason">Why the plan was refused, or empty on success.</param>
-    /// <param name="drawSeed">The draw stream a <see cref="SearchMethod.Tree"/> job's playouts advance from.</param>
+    /// <param name="drawSeed">The draw stream a <see cref="SearchMethod.MonteCarlo"/> job's playouts advance from.</param>
     /// <returns><see langword="true"/> when every named row resolved and the plan carries nothing the arena walk
     /// does not run.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="plan"/> or <paramref name="catalog"/> is
@@ -134,7 +134,7 @@ public sealed record ArenaSearchPlan(
         }
         if (
             (plan.Scores is not null) &&
-            (plan.Method == SearchMethod.Tree)
+            (plan.Method == SearchMethod.MonteCarlo)
         ) {
             reason = $"search '{plan.Name}' declares per-seat scores, which a tree job's alternating-sign backpropagation does not fold";
 
@@ -233,7 +233,7 @@ public sealed record ArenaSearchPlan(
 
         if (plan.Topology is null) {
             foreach (var shape in plan.Shapes) {
-                if (shape.Kind is (SearchShapeKind.Jump or SearchShapeKind.Pair)) {
+                if (shape.Kind is (SearchShapeKind.Jump or SearchShapeKind.Tandem)) {
                     reason = $"search '{plan.Name}' declares a {shape.Kind} shape, which walks a board's topology, over a job that names no board";
 
                     return false;

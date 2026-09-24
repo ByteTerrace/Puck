@@ -4,8 +4,8 @@ using Puck.Vulkan.Interfaces;
 namespace Puck.Vulkan.Interop;
 
 /// <summary>
-/// Owns a native logical device (<c>VkDevice</c>) handle and its graphics and present queues, and destroys
-/// the device when disposed.
+/// Owns a native logical device (<c>VkDevice</c>) through its command table, together with its graphics and present
+/// queues, and destroys the device when disposed.
 /// </summary>
 public sealed class VulkanLogicalDevice : IDisposable {
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
@@ -14,53 +14,60 @@ public sealed class VulkanLogicalDevice : IDisposable {
 
     /// <summary>Gets the graphics queue of the device.</summary>
     public VkQueue GraphicsQueue { get; }
-    /// <summary>Gets the native <c>VkDevice</c> handle.</summary>
-    public nint Handle { get; }
-    /// <summary>Gets whether the device has been disposed — a native call against <see cref="Handle"/> after that is
+    /// <summary>Gets what the device is, as its physical device reported it when the device was created; recorded
+    /// for diagnostics and naming the device's pipeline-cache file, never branched on. <see langword="null"/> for a
+    /// device created without one.</summary>
+    public GpuDeviceIdentity? Identity { get; init; }
+    /// <summary>Gets what the device's memory is, as its physical device reported it when the device was created;
+    /// residency selection branches on it. The default profile, which reports nothing, for a device created without
+    /// one.</summary>
+    public GpuMemoryProfile MemoryProfile { get; init; }
+    /// <summary>Gets the device's command table, which carries the native <c>VkDevice</c> handle.</summary>
+    public VulkanDeviceCommands Commands { get; }
+    /// <summary>Gets whether the device has been disposed — a native call through <see cref="Commands"/> after that is
     /// a use-after-free, so late teardown paths (an upload/readback outliving the renderer's device) check this first.</summary>
     public bool IsDisposed => m_disposed;
     /// <summary>Gets the physical device this logical device was created from.</summary>
     public VkPhysicalDevice PhysicalDevice { get; }
     /// <summary>Gets the present queue of the device. May be the same queue as <see cref="GraphicsQueue"/>.</summary>
     public VkQueue PresentQueue { get; }
+    /// <summary>Gets the device's persistent pipeline cache, which every compute and graphics pipeline creation on the
+    /// device passes to the driver; <see langword="null"/> for a device created without one. The device owns it: it is
+    /// written to disk and destroyed just before the device.</summary>
+    public VulkanPipelineCache? PipelineCache { get; init; }
 
-    /// <summary>Initializes a new instance of the <see cref="VulkanLogicalDevice"/> class, taking ownership of an existing native device handle.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle to own.</param>
+    /// <summary>Initializes a new instance of the <see cref="VulkanLogicalDevice"/> class, taking ownership of an existing native device.</summary>
+    /// <param name="device">The command table of the native device to own.</param>
     /// <param name="physicalDevice">The physical device the logical device was created from.</param>
     /// <param name="graphicsQueue">The graphics queue.</param>
     /// <param name="presentQueue">The present queue.</param>
     /// <param name="logicalDeviceApi">The API used to destroy the device and wait for it to idle.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="logicalDeviceApi"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="logicalDeviceApi"/> is <see langword="null"/>.</exception>
     public VulkanLogicalDevice(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         VkPhysicalDevice physicalDevice,
         VkQueue graphicsQueue,
         VkQueue presentQueue,
         IVulkanLogicalDeviceApi logicalDeviceApi
     ) {
+        ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: logicalDeviceApi);
 
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
-
-        Handle = deviceHandle;
+        Commands = device;
         PhysicalDevice = physicalDevice;
         GraphicsQueue = graphicsQueue;
         PresentQueue = presentQueue;
         m_logicalDeviceApi = logicalDeviceApi;
     }
 
-    /// <summary>Destroys the owned device handle. Safe to call more than once.</summary>
+    /// <summary>Destroys the owned device. Safe to call more than once.</summary>
     public void Dispose() {
         if (m_disposed) {
             return;
         }
 
-        m_logicalDeviceApi.DestroyDevice(deviceHandle: Handle);
+        PipelineCache?.Dispose();
+        m_logicalDeviceApi.DestroyDevice(device: Commands);
         m_disposed = true;
     }
     /// <summary>Drains the device, tolerating an already-LOST device: <c>vkDeviceWaitIdle</c> returns
@@ -87,7 +94,7 @@ public sealed class VulkanLogicalDevice : IDisposable {
             instance: this
         );
 
-        var result = m_logicalDeviceApi.WaitIdle(deviceHandle: Handle);
+        var result = m_logicalDeviceApi.WaitIdle(device: Commands);
 
         result.ThrowIfFailed(operation: "vkDeviceWaitIdle");
     }

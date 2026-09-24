@@ -301,6 +301,18 @@ public static partial class RuleCompiler {
                 ruleName: rule.Name
             );
         }
+        // The engine mints the implicit binding a computed key needs onto this same list as `$key<n>`, so an
+        // authored local under the reserved prefix could shadow one.
+        if (name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: StateRow.ReservedNamePrefix
+        )) {
+            throw new RuleException(
+                detail: $"local '{name}' carries the reserved '{StateRow.ReservedNamePrefix}' prefix — the engine names the key bindings it mints '{StateRow.ReservedNamePrefix}key<n>'",
+                refusal: RuleRefusal.NameReserved,
+                ruleName: rule.Name
+            );
+        }
         if (local!.Kind is { } declared and not (CellKind.Int or CellKind.Fixed)) {
             throw new RuleException(
                 detail: $"local '{name}' is kind={StateSpelling.Kind(kind: declared)} — a local value is int or fixed",
@@ -620,7 +632,7 @@ public static partial class RuleCompiler {
             value: StateRow.ReservedNamePrefix
         )) {
             throw new RuleException(
-                detail: $"carries the reserved character '{StateRow.ReservedNamePrefix}' as its first character — that prefix marks what the engine mints, and nothing mints {Article(subject: subject)} {subject}",
+                detail: $"carries the reserved character '{StateRow.ReservedNamePrefix}' as its first character — that prefix marks what the engine mints, and the engine mints no {subject} under it",
                 refusal: RuleRefusal.NameReserved,
                 ruleName: name,
                 subject: subject

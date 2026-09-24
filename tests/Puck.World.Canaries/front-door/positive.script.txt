@@ -15,7 +15,7 @@ world.wait 5
 body.where 0
 body.press jump 1 0.2 0
 world.wait 10
-world.state studio_look
+world.state studio$look
 identity.facts
 world.wait 1
 world.placements

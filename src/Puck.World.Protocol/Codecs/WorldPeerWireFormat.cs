@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions.Machines;
+using Puck.Assets;
 using System.Text;
 using Puck.Networking;
 using Puck.World.Server;
@@ -560,7 +561,7 @@ public static class WorldPeerWireFormat {
                         return false;
                     }
                     if (
-                        !WorldPrincipal.TryParse(
+                        !PrincipalTokens.TryParse(
                         principal: out var actor,
                         token: actorText
                     ) ||
@@ -573,7 +574,10 @@ public static class WorldPeerWireFormat {
                     if (
                         !Enum.IsDefined(value: decision) ||
                         !Enum.IsDefined(value: persistence) ||
-                        !WorldMutationBinding.IsSha256Hex(value: payloadDigest) ||
+                        !ContentPin.TryParseHex(
+                            hex: payloadDigest,
+                            pin: out _
+                        ) ||
                         (groupRevision is < 0) ||
                         (watermark is { IsValid: false })
                     ) {

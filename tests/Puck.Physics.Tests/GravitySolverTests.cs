@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -311,17 +312,12 @@ public sealed class GravitySolverTests {
             parameters: Parameters
         );
 
-        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-
-        _ = solver.ComputeAccelerations(
-            accelerations: accelerations,
-            bodies: bodies,
-            parameters: Parameters
-        );
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
-
         Assert.Equal(
-            actual: allocated,
+            actual: AllocationWindow.Least(window: () => _ = solver.ComputeAccelerations(
+                accelerations: accelerations,
+                bodies: bodies,
+                parameters: Parameters
+            )),
             expected: 0L
         );
     }

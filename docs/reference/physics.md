@@ -144,7 +144,7 @@ stages that read and write a body's pose, velocity, and action state—belongs t
 the host that owns that state (`Puck.World.Server.WorldBody`); this project supplies
 the program it executes, not the body it executes on.
 
-The compiled predicates share `ActionStateComparison` and `ActionTriggerMode`
+The compiled predicates share the `ExpressionOp` comparisons and `ActionTriggerMode`
 with [State and rules](state.md). Authored enums use the strict by-name converter
 from Puck.Abstractions. The [project declaration](../../src/Puck.Physics/Puck.Physics.csproj)
 and [project map](../project-map.md) own the dependency list.

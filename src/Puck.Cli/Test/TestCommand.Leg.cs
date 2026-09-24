@@ -15,7 +15,6 @@ internal static partial class TestCommand {
         ? (exportTick / ((double)rateHz))
         : 0.0
     )));
-
     // The last few lines of a failing leg's stderr: the boot or validation refusal sits at the end, and the whole
     // transcript would bury it.
     private static string Tail(string text, int lines = 12) {
@@ -30,45 +29,30 @@ internal static partial class TestCommand {
             values: kept
         );
     }
-    private static bool TryResolveArtifact(string? worldArtifact, string repositoryRoot, string runDirectory, out string? artifact) {
-        if (worldArtifact is { }) {
-            artifact = Path.GetFullPath(path: worldArtifact);
-
-            if (!File.Exists(path: artifact)) {
-                Console.Error.WriteLine(value: $"ERROR: --world-artifact {artifact} does not exist.");
-
-                return false;
-            }
-
-            return true;
-        }
-
-        if (!WorldArtifactBuild.TryBuild(
-            artifact: out var built,
+    // The World every leg boots: the --world-artifact the caller named, or the build of this checkout's sources, reused
+    // when an earlier run built it and leased until every leg has exited.
+    private static bool TryResolveArtifact(string? worldArtifact, string repositoryRoot, out string? artifact, out WorldArtifact? lease) {
+        if (WorldArtifactBuild.TryResolveNamed(
             build: out var build,
-            error: out var buildError,
-            outputDirectory: Path.Combine(
-                path1: runDirectory,
-                path2: "build"
-            ),
+            error: out var error,
+            lease: out lease,
+            named: worldArtifact,
+            path: out artifact,
             repositoryRoot: repositoryRoot,
             timeout: BuildBudget,
             verb: "test"
         )) {
-            artifact = built;
-            Console.Error.WriteLine(value: $"ERROR: {buildError}");
-
-            if (build is not null) {
-                Console.Error.WriteLine(value: build.Stdout);
-                Console.Error.WriteLine(value: build.Stderr);
-            }
-
-            return false;
+            return true;
         }
 
-        artifact = built;
+        Console.Error.WriteLine(value: $"ERROR: {error}");
 
-        return true;
+        if (build is not null) {
+            Console.Error.WriteLine(value: build.Stdout);
+            Console.Error.WriteLine(value: build.Stderr);
+        }
+
+        return false;
     }
     // One leg: boot the real executable headless against its own state and schedule directories, fence past the
     // export tick, quit, then read what the world wrote.
@@ -208,6 +192,18 @@ internal static partial class TestCommand {
             return false;
         }
 
+        if (!TryReadWorlds(
+            bootBytes: exportBytes,
+            bootExport: export,
+            error: error,
+            manifest: manifest,
+            scheduleDirectory: scheduleDirectory,
+            world: world,
+            worlds: out var worlds
+        )) {
+            return false;
+        }
+
         reading = new TestReading(
             Echoes: ReadEchoes(manifest: manifest),
             ExportBytes: exportBytes,
@@ -215,8 +211,85 @@ internal static partial class TestCommand {
             ManifestBytes: manifestBytes,
             Submissions: ReadSubmissions(manifest: manifest),
             Truncated: (manifest[propertyName: "truncated"]?.GetValue<bool>() ?? false),
-            Verdicts: ReadVerdicts(export: export)
+            Worlds: worlds!
         );
+
+        return true;
+    }
+    // Every world the run exported, in the manifest's own order. A manifest with no `worlds` list is a run over one
+    // world: the booted export is the whole reading. A sibling the run could not start refuses the leg by name —
+    // a world the document armed and the host never ran measured nothing, which is a usage refusal rather than a
+    // verdict.
+    private static bool TryReadWorlds(string world, string scheduleDirectory, JsonObject manifest, JsonObject bootExport, byte[] bootBytes, TextWriter error, out IReadOnlyList<TestWorldExport>? worlds) {
+        var read = new List<TestWorldExport>();
+
+        worlds = null;
+
+        if (manifest[propertyName: "worlds"] is not JsonArray rows) {
+            worlds = [
+                new TestWorldExport(
+                ExportBytes: bootBytes,
+                ExportTick: (bootExport[propertyName: "tick"]?.GetValue<ulong>() ?? 0UL),
+                Verdicts: ReadVerdicts(export: bootExport),
+                World: WorldScheduleSection.BootWorldName
+            ),
+            ];
+
+            return true;
+        }
+
+        foreach (var node in rows) {
+            if (
+                (node is not JsonObject entry) ||
+                (entry[propertyName: "world"]?.GetValue<string>() is not { } name)
+            ) {
+                continue;
+            }
+
+            if (entry[propertyName: "started"]?.GetValue<bool>() != true) {
+                error.WriteLine(value: $"ERROR: the leg for {world} armed '{name}' and the host did not start it — {(entry[propertyName: "reason"]?.GetValue<string>() ?? "no reason recorded")}.");
+
+                return false;
+            }
+
+            var file = (entry[propertyName: "export"]?.GetValue<string>() ?? WorldScheduleSection.ExportFileNameFor(world: name));
+            var path = Path.Combine(
+                path1: scheduleDirectory,
+                path2: file
+            );
+
+            if (!File.Exists(path: path)) {
+                error.WriteLine(value: $"ERROR: the leg for {world} recorded an export for '{name}' at {file} and wrote none.");
+
+                return false;
+            }
+
+            var bytes = File.ReadAllBytes(path: path);
+
+            JsonObject? document;
+
+            try {
+                document = (JsonNode.Parse(utf8Json: bytes) as JsonObject);
+            } catch (JsonException exception) {
+                error.WriteLine(value: $"ERROR: the leg for {world} wrote malformed JSON for '{name}': {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+
+                return false;
+            }
+
+            if (document is null) {
+                error.WriteLine(value: $"ERROR: the leg for {world} wrote a non-object export for '{name}'.");
+
+                return false;
+            }
+            read.Add(item: new TestWorldExport(
+                ExportBytes: bytes,
+                ExportTick: (document[propertyName: "tick"]?.GetValue<ulong>() ?? 0UL),
+                Verdicts: ReadVerdicts(export: document),
+                World: name
+            ));
+        }
+
+        worlds = read;
 
         return true;
     }
@@ -279,7 +352,7 @@ internal static partial class TestCommand {
             var status = WorldVerdict.NotEvaluated;
             ulong? firedTick = null;
 
-            foreach (var cell in (row[propertyName: "cells"] as JsonArray ?? [])) {
+            foreach (var cell in ((row[propertyName: "cells"] as JsonArray) ?? [])) {
                 if (
                     (cell is not JsonObject declared) ||
                     (declared[propertyName: "key"]?.GetValue<string>() is not { } key)
@@ -322,7 +395,7 @@ internal static partial class TestCommand {
                     continue;
                 }
 
-                foreach (var cell in (witness[propertyName: "cells"] as JsonArray ?? [])) {
+                foreach (var cell in ((witness[propertyName: "cells"] as JsonArray) ?? [])) {
                     if (cell?[propertyName: "key"]?.GetValue<string>() is not { } key) {
                         continue;
                     }
@@ -363,7 +436,7 @@ internal static partial class TestCommand {
                 continue;
             }
 
-            foreach (var cell in (resolved[propertyName: "cells"] as JsonArray ?? [])) {
+            foreach (var cell in ((resolved[propertyName: "cells"] as JsonArray) ?? [])) {
                 if (
                     (cell is JsonObject value) &&
                     (value[propertyName: "key"]?.GetValue<string>() == key)
@@ -388,7 +461,7 @@ internal static partial class TestCommand {
         };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") {
             DefaultValueFactory = static _ => null,
-            Description = "Boot this already-built Puck.World.dll instead of building src/Puck.World into the run's own output. A test/ops override: a caller that already built the executable does not pay for a second build.",
+            Description = "Boot this already-built Puck.World.dll instead of the build of src/Puck.World kept for this checkout's sources. A test/ops override: a caller that already built the executable neither builds nor keys one.",
         };
         var keepOption = new Option<string?>(name: "--keep") {
             DefaultValueFactory = static _ => null,

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -41,7 +42,7 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
         );
 
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name: CellName.Parse(candidate: "tape-probe"),
                 Kind: CellKind.Int
@@ -49,11 +50,11 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
         ));
         transport.SubmitUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         transport.SubmitComposition(
             composition: new WorldComposition.SetActiveLayout(Name: null),
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         transport.Query(
             query: new WorldQuery.PlayerWhere(Index: 1),

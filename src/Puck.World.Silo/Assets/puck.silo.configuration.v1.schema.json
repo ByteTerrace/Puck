@@ -74,6 +74,14 @@
             "description": "Whether this row activates at silo start and never idle-deactivates.",
             "type": "boolean",
             "default": false
+          },
+          "extensions": {
+            "description": "The path of this row\u0027s host-approved extension configuration (puck.world.extensions.v1) \u2014 the same document a local World reads through --extensions-config-file \u2014 or null when the row runs no configured operations, connections, observations, embeddings, or participants. Host state, never published inside a document; no two rows share one file.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
@@ -147,7 +155,7 @@
       ],
       "properties": {
         "shutdownSeconds": {
-          "description": "Maximum time allowed for operator or deployment retirement.",
+          "description": "Maximum time, on the silo\u0027s clock, allowed for operator or deployment retirement, a pinned reload, or a release control request.",
           "type": "integer"
         },
         "healthPort": {
@@ -179,17 +187,17 @@
           "title": "WorldSiloExtension"
         },
         "progressTimeoutSeconds": {
-          "description": "Maximum wall-clock age of a completed simulation step before liveness fails.",
+          "description": "Maximum age, on the silo\u0027s clock, of a completed simulation step before liveness fails; also bounds each health request.",
           "type": "integer",
           "default": 30
         },
         "checkpointTimeoutSeconds": {
-          "description": "Maximum wall-clock age of a successful checkpoint before readiness fails.",
+          "description": "Maximum age, on the silo\u0027s clock, of a successful checkpoint before readiness fails.",
           "type": "integer",
           "default": 180
         },
         "journalTimeoutSeconds": {
-          "description": "Maximum wall-clock interval without journal progress while appends are pending.",
+          "description": "Maximum interval, on the silo\u0027s clock, without journal progress while appends are pending.",
           "type": "integer",
           "default": 30
         },

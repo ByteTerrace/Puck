@@ -12,8 +12,10 @@ Everything that talks to real hardware—Media Foundation's encoder ladder,
 WASAPI loopback and microphone capture—lives outside this project, behind
 `Puck.Abstractions.Recording`'s `IVideoEncoderFactory` and
 `IAudioCaptureSourceFactory`. The Windows backend that implements them is
-`Puck.Platform`, registered through its `AddRecordingPlatform` extension; this
-project never references it and knows nothing about Media Foundation or COM.
+`Puck.Platform.Windows`, registered through its `AddWindowsRecordingPlatform`
+extension; `Puck.Platform.Linux`'s `AddLinuxRecordingPlatform` registers
+factories that decline with a reason. This project references neither and
+knows nothing about Media Foundation or COM.
 
 ## Key features
 
@@ -46,8 +48,8 @@ project never references it and knows nothing about Media Foundation or COM.
 ```mermaid
 flowchart LR
     Doc["📄 RecordingDocument"] --> Options["🧩 RecordingSessionOptions"]
-    VideoFactory["🎥 IVideoEncoderFactory<br/>(Puck.Platform)"] --> Options
-    AudioFactory["🎙️ IAudioCaptureSourceFactory<br/>(Puck.Platform)"] --> Options
+    VideoFactory["🎥 IVideoEncoderFactory<br/>(Puck.Platform.Windows)"] --> Options
+    AudioFactory["🎙️ IAudioCaptureSourceFactory<br/>(Puck.Platform.Windows)"] --> Options
     Options --> Session["🎬 RecordingSession.TryCreate"]
     Session --> Render["🖼️ Render thread: Consume(frame)"]
     Render --> Queue["🔁 FrameSlotQueue"]
@@ -84,8 +86,8 @@ the whole take.
 ## Quick start
 
 A minimal session needs a document, the platform factories, and the source
-frame extent; `Puck.Platform.AddRecordingPlatform` is what supplies real
-factories in a Windows host:
+frame extent; `AddWindowsRecordingPlatform` (in `Puck.Platform.Windows`) is
+what supplies real factories in a Windows host:
 
 ```csharp
 using Puck.Recording.Document;
@@ -97,12 +99,12 @@ var document = RecordingDocument.CreateDefault() with {
 
 if (!RecordingSession.TryCreate(
     options: new RecordingSessionOptions {
-        AudioSourceFactory = audioSourceFactory,   // from Puck.Platform.AddRecordingPlatform
+        AudioSourceFactory = audioSourceFactory,   // from AddWindowsRecordingPlatform
         Clock = clock,                             // the RecordingSessionClock the same registration shares
         Document = document,
         SourceHeight = 1080,
         SourceWidth = 1920,
-        VideoEncoderFactory = videoEncoderFactory,  // from Puck.Platform.AddRecordingPlatform
+        VideoEncoderFactory = videoEncoderFactory,  // from AddWindowsRecordingPlatform
     },
     session: out var session,
     reason: out var reason
@@ -200,7 +202,7 @@ codec `CaptureSink` writes still frames through), and `Puck.Maths`
 (the managed Opus encoder) package. It carries no platform, GPU, or windowing
 dependency—a consumer supplies `IVideoEncoderFactory` and
 `IAudioCaptureSourceFactory` from wherever real hardware access lives, which
-inside this repository is `Puck.Platform`'s `AddRecordingPlatform`.
+inside this repository is `Puck.Platform.Windows`'s `AddWindowsRecordingPlatform`.
 
 ## Documentation
 

@@ -40,13 +40,13 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
         return score;
     }
     private bool TryCreateCandidate(
-        nint instanceHandle,
+        VulkanInstanceCommands instance,
         nint surfaceHandle,
         nint physicalDeviceHandle,
         out Candidate candidate
     ) {
         var queueFamilies = m_physicalDeviceApi.GetQueueFamilies(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
         uint? graphicsFamilyIndex = null;
@@ -59,7 +59,7 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
 
             var supportsGraphics = ((queueFamily.Flags & VkQueueFlags.Graphics) != 0);
             var supportsPresent = m_physicalDeviceApi.GetSurfaceSupport(
-                instanceHandle: instanceHandle,
+                instance: instance,
                 physicalDeviceHandle: physicalDeviceHandle,
                 queueFamilyIndex: queueFamily.Index,
                 surfaceHandle: surfaceHandle
@@ -98,7 +98,7 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
         }
 
         var deviceType = m_physicalDeviceApi.GetPhysicalDeviceType(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
         var queueFamilySelection = new VulkanQueueFamilySelection(
@@ -123,19 +123,29 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="instance"/> or <paramref name="surface"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The surface was not created from <paramref name="instance"/>, no devices were reported, or no device supports both graphics and present for the surface.</exception>
+    /// <exception cref="InvalidOperationException">The surface was not created from <paramref name="instance"/>.</exception>
+    /// <exception cref="GpuDeviceUnavailableException">Enumeration failed, no devices were reported, no device supports both graphics and present for the surface, or the best device is below the Vulkan 1.3 floor.</exception>
     public VkPhysicalDevice Select(VulkanInstance instance, VulkanSurface surface) {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(surface);
 
-        if (surface.InstanceHandle != instance.Handle) {
+        if (surface.Instance != instance.Commands) {
             throw new InvalidOperationException(message: "The Vulkan surface was not created from the supplied Vulkan instance.");
         }
 
-        var physicalDevices = m_physicalDeviceApi.EnumeratePhysicalDevices(instanceHandle: instance.Handle);
+        IReadOnlyList<nint> physicalDevices;
+
+        try {
+            physicalDevices = m_physicalDeviceApi.EnumeratePhysicalDevices(instance: instance.Commands);
+        } catch (VulkanException exception) {
+            throw VulkanResultExtensions.Unavailable(
+                innerException: exception,
+                reason: exception.Message
+            );
+        }
 
         if (physicalDevices.Count == 0) {
-            throw new InvalidOperationException(message: "No Vulkan physical devices were reported for the current instance.");
+            throw VulkanResultExtensions.Unavailable(reason: "no Vulkan physical devices were reported for the current instance.");
         }
 
         Candidate? bestCandidate = null;
@@ -143,7 +153,7 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
         foreach (var physicalDeviceHandle in physicalDevices) {
             if (!TryCreateCandidate(
                 candidate: out var candidate,
-                instanceHandle: instance.Handle,
+                instance: instance.Commands,
                 physicalDeviceHandle: physicalDeviceHandle,
                 surfaceHandle: surface.Handle
             )) {
@@ -159,23 +169,23 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
         }
 
         if (bestCandidate is null) {
-            throw new InvalidOperationException(message: "No Vulkan physical device supports both graphics and present operations for the active surface.");
+            throw VulkanResultExtensions.Unavailable(reason: "no Vulkan physical device supports both graphics and present operations for the active surface.");
         }
 
         // Enforce the SPIR-V 1.6 device floor on the winner (the loader instance version can outrank the device's own
         // reported ApiVersion). Fail loud and named — Puck's kernels are compiled at vulkan1.3 and will not load below it.
         var selectedApiVersion = m_physicalDeviceApi.GetDeviceApiVersion(
-            instanceHandle: instance.Handle,
+            instance: instance.Commands,
             physicalDeviceHandle: bestCandidate.Value.Device.Handle
         );
 
         if (selectedApiVersion < RequiredApiVersion) {
             var deviceName = m_physicalDeviceApi.GetDeviceName(
-                instanceHandle: instance.Handle,
+                instance: instance.Commands,
                 physicalDeviceHandle: bestCandidate.Value.Device.Handle
             );
 
-            throw new InvalidOperationException(message:
+            throw VulkanResultExtensions.Unavailable(reason:
                 (((((string)$"Vulkan device '{deviceName}' reports API version {FormatApiVersion(version: selectedApiVersion)}, below the required {FormatApiVersion(version: RequiredApiVersion)} (SPIR-V 1.6) floor. Puck's shader kernels are compiled for Vulkan 1.3 ") +
                 "and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 (Turing), RTX 4070 (Ada), ") +
                 "Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which expose Vulkan 1.3 on current ") +

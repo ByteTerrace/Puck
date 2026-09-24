@@ -3,8 +3,11 @@ using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX;
 
-// Graphics and compute record into the same direct queue. A resource's state belongs to the resource,
-// not to a command list; creation/disposal bound the entries so recycled native pointers cannot inherit state.
+// Graphics and compute record into the same direct queue. A texture's state belongs to the resource, not to a
+// command list, because a texture without simultaneous access does not decay; creation/disposal bound the entries so
+// recycled native pointers cannot inherit state. The one buffer entry is an upload-heap buffer's permanent
+// GENERIC_READ. A default-heap buffer decays to COMMON after every ExecuteCommandLists, so its state lives in the
+// command list's DirectXBufferStates instead.
 internal static class DirectXResourceStates {
     internal const D3D12_RESOURCE_STATES ShaderRead = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 

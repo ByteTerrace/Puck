@@ -9,19 +9,25 @@ course, but each chapter can also be revisited on its own.
 
 | Chapter | What it teaches |
 |---|---|
-| [1. Signed distance fields](01-the-idea.md) | Distance fields, composition, sphere tracing, and scene data. |
-| [2. SDF program model](02-the-program-model.md) | The flat instruction stream, accumulator, scopes, materials, instances, and Lipschitz step bounds. |
-| [3. SDF frame rendering](03-the-frame.md) | Frame assembly, culling, primary marching, shading dispatches, render scale, and frame rings. |
-| [4. Lighting and shading](04-lighting-and-shading.md) | Normals, ambient occlusion, shadows, materials, and screen surfaces. |
-| [5. Authoring SDF scenes](05-authoring.md) | `SdfProgramBuilder`, coordinate spaces, composition, capacity checks, and authoring pitfalls. |
-| [6. Motion and views](06-motion-and-views.md) | Presentation anchors, camera rigs, `ViewStack`, transitions, and screen views. |
-| [7. Queries and determinism](07-queries-and-determinism.md) | `IWorldQuery`, exact fixed-point evaluation, probes, raycasts, and derived gravity. |
-| [8. SDF performance](08-performance.md) | Cost measurement, occupancy, culling, render-scale choices, and benchmark limits. |
-| [9. Bricks and baking](09-bricks-and-baking.md) | Sampled distance bricks, march safety, and cache lifecycle. |
+| [Signed distance fields](signed-distance-fields.md) | Distance fields, composition, sphere tracing, and scene data. |
+| [SDF program model](program-model.md) | The flat instruction stream, accumulator, scopes, materials, instances, and Lipschitz step bounds. |
+| [SDF frame rendering](frame-rendering.md) | Frame assembly, culling, primary marching, shading dispatches, render scale, and frame rings. |
+| [Lighting and shading](lighting-and-shading.md) | Normals, ambient occlusion, shadows, materials, and screen surfaces. |
+| [Authoring SDF scenes](authoring-scenes.md) | `SdfProgramBuilder`, coordinate spaces, composition, capacity checks, and authoring pitfalls. |
+| [Motion and views](motion-and-views.md) | Presentation anchors, camera rigs, `ViewStack`, transitions, and screen views. |
+| [Queries and determinism](queries-and-determinism.md) | `IWorldQuery`, exact fixed-point evaluation, probes, raycasts, and derived gravity. |
+| [SDF performance](performance.md) | Live cost measurement, occupancy, culling, and render-scale choices. |
+| [Bricks and baking](bricks-and-baking.md) | Sampled distance bricks, march safety, and cache lifecycle; prototype meshes, textures, and impostors baked from the field. |
 
-Readers focused on rendering can follow chapters 3 → 4 → 8. Readers authoring
-content can follow 1 → 2 → 5 → 6. Chapter 7 is the route for simulation and
-physics questions; chapter 9 assumes the program and frame models from 2 and 3.
+If you're focused on rendering, read [SDF frame rendering](frame-rendering.md),
+then [Lighting and shading](lighting-and-shading.md), then
+[SDF performance](performance.md). If you're authoring content, read
+[Signed distance fields](signed-distance-fields.md), the
+[SDF program model](program-model.md), [Authoring SDF scenes](authoring-scenes.md),
+and [Motion and views](motion-and-views.md). For simulation and physics
+questions, go to [Queries and determinism](queries-and-determinism.md).
+[Bricks and baking](bricks-and-baking.md) assumes you've read the program model
+and frame rendering chapters.
 
 ## Related references
 

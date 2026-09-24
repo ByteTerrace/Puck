@@ -17,7 +17,7 @@ public sealed record Instruction(ExpressionOp Operation, InstructionPayload? Pay
         Payload: new InstructionPayload.Argument(Index: index)
     );
     /// <summary>Creates an instruction reading a topology-bound board operation.</summary>
-    /// <param name="operation">BoardShift, BoardFill, or BoardImage.</param>
+    /// <param name="operation">BoardShift, BoardRay, or BoardImage.</param>
     /// <param name="topology">The discrete topology's name.</param>
     /// <param name="index">The direction's name, or the symmetry element's for BoardImage.</param>
     /// <returns>The instruction.</returns>
@@ -64,18 +64,41 @@ public sealed record Instruction(ExpressionOp Operation, InstructionPayload? Pay
     /// <param name="name">The state row or reserved-channel name.</param>
     /// <param name="key">The keyed-row cell, or <see langword="null"/>.</param>
     /// <returns>The instruction.</returns>
-    public static Instruction Operand(string name, string? key = null) => new(
-        Operation: ExpressionOp.Operand,
-        Payload: new InstructionPayload.State(
-            Key: StateChannelRef.OfNullable(spelling: key),
-            Name: StateChannelRef.Parse(spelling: name)
-        )
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="key"/> is spelled by nothing the
+    /// expression spelling can write: empty, or holding a backquote.</exception>
+    public static Instruction Operand(string name, string? key = null) => Operand(
+        key: StateChannelRef.OfNullable(spelling: key),
+        name: StateChannelRef.Parse(spelling: name)
     );
     /// <summary>Creates an instruction reading an already typed state reference.</summary>
-    public static Instruction Operand(StateChannelRef name, StateChannelRef? key = null) => new(
-        Operation: ExpressionOp.Operand,
-        Payload: new InstructionPayload.State(Key: key, Name: name)
-    );
+    /// <param name="name">The state row, pool field or reserved channel.</param>
+    /// <param name="key">The keyed-row cell, or <see langword="null"/>.</param>
+    /// <returns>The instruction.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="key"/> is spelled by nothing the
+    /// expression spelling can write: empty, or holding a backquote.</exception>
+    public static Instruction Operand(StateChannelRef name, StateChannelRef? key = null) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        RequireSpelled(parameter: nameof(name), reference: name);
+        RequireSpelled(parameter: nameof(key), reference: key);
+
+        return new(
+            Operation: ExpressionOp.Operand,
+            Payload: new InstructionPayload.State(Key: key, Name: name)
+        );
+    }
+
+    // Every operand prints and reads back as itself, so a name no spelling can write is refused where the operand is
+    // built rather than printed as text that reads back as nothing or as another name.
+    private static void RequireSpelled(StateChannelRef? reference, string parameter) {
+        if ((reference is not null) && !ExpressionSpelling.IsSpelledName(name: reference.Spelling)) {
+            throw new ArgumentException(
+                message: $"an operand's name is nonempty and holds no backquote, which '{reference.Spelling}' does not",
+                paramName: parameter
+            );
+        }
+    }
+
     /// <summary>Creates an instruction calling a vector function over two vector operands.</summary>
     /// <param name="operation">Dot, Similarity, or Identical.</param>
     /// <param name="left">The left vector operand.</param>

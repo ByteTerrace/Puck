@@ -12,8 +12,8 @@ certification status. Incomplete calibration never turns work units into cycles.
 ## Command modules
 
 This project owns `IWorldConsoleAuthority` (resolves the `WorldInstance` a
-console invocation addresses) and the server-only command modules moved out
-of [`Puck.World`](../Puck.World/README.md): `world.grant`/`.revoke`/`.grants`/
+console invocation addresses) and the server-only command modules
+[`Puck.World`](../Puck.World/README.md) composes: `world.grant`/`.revoke`/`.grants`/
 `.why` (`WorldGrantCommandModule`), `world.contributions`
 (`WorldContributionCommandModule`—the contribution-slot read-back; slots are
 authored and filled through `world.row.set placements`, so it carries no
@@ -47,11 +47,7 @@ authored/mutated through the same ordinary state doors any other row uses),
 `world.wait` (`WorldWaitCommandModule`, alongside the tick-barrier gate it
 arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver`—the row's own
 gate, since a host running several rows has one gate per row and a singleton
-would always arm whichever row it was constructed against), `world.timing`
-(`WorldTimingCommandModule`—the live performance-metrics arming verb,
-registered here so a headless boot lights the world-simulation timing digest
-too; `world.gpu`, the GPU per-pass read-back the same arming lights when a
-window is present, stays in `Puck.World`), and `replay.*`
+would always arm whichever row it was constructed against), and `replay.*`
 (`WorldReplayCommandModule.cs`, `WorldReplayCommandModule.Drive.cs`,
 `WorldReplayCommandModule.Inspect.cs`—record/stop/cancel/
 drive/fork/verify/inspect/list/status; a client-local control surface over the
@@ -60,30 +56,52 @@ itself (`WorldReplayTape`, `WorldReplaySnapshot`, `WorldReplayInspector`,
 `WorldReplayEntryDescriber`) stays in
 [`Puck.World.Server`](../Puck.World.Server/README.md#deterministic-replay-worldreplaytapecs-worldreplaytapedrivecs-worldreplaysnapshotcs)—
 `WorldReplaySnapshot` reads `WorldReplayInspector.DescribeRate`, a Server-internal
-coupling this project cannot see through, so only the verb surface moves; the
+coupling this project cannot see through, so only the verb surface lives here; the
 module reaches the tape, the inspector, and `WorldInstanceHost` by their
 already-public surface. `WorldCommandArguments` (the free-text-tail
 reconstruction every JSON/prose-tailed verb shares) lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md) instead, since modules
-that stayed in `Puck.World` need it too.
+in `Puck.World` need it too.
+
+`WorldCaptureScheduler` is the second tick-published hook here beside
+`WorldConsoleWaitGate`. It arms the `captures` section's rows at their
+completed ticks. Its only contact with rendering is the
+`ICaptureRequestTarget` the composition root passes in. It writes every armed
+capture to the capture directory's `puck.parity.manifest.v1` manifest as one
+entry: the frame that showed its tick, or a
+named `refusal` with its `detail` (the vocabulary is in the
+[parity README](../../tests/Puck.Parity/README.md)). While a capture waits for
+its frame, `AwaitsFrame` holds, and the host composes that frame before its
+next step. The offscreen host goes further and steps no tick past the armed one
+until the capture is served or refused (`HoldsClock`), bounded by
+`HoldBudgetSeconds` of holding per run, after which the capture is refused as
+`unserved` with the render chain's reason. `Drain` decides whatever is still
+owed a frame as the run ends, before the host disposes the render chain. The
+scheduler counts `world.captures.held` and `world.captures.ticks-while-armed`
+under its `world.captures` work source. It lives here rather than in `Puck.World.Client` because it reads
+`WorldServer` (the capture state hash and the `SolidField` inside-check), a
+reference Client is denied.
 
 `WorldConsoleNarrationSink` (`WorldConsoleNarrationSink.cs`) is the
 `IWorldNarrationSink` implementation every composition root binds so a
-headless script or canary reads byte-identical lines to a direct
-`Console.Error` write—it lives here rather than in `Puck.World.Server`
+headless script or canary reads each narration on stdout or stderr as one
+`ConsoleRecord` (a multi-line narration's further lines indented), the same
+framing command results take—it lives here rather than in `Puck.World.Server`
 because `build/Architecture.props` denies that project a reference to
 `System.Console`.
 
 Project references: `Puck.World.Server`, `Puck.World.Protocol`,
-`Puck.World.Schema`, `Puck.Commands`, and `Puck.Launcher`. `Puck.Hosting`
-(`GpuTimingControl`, the arming authority `WorldTimingCommandModule` reads and
-writes) and `Puck.Networking` are reached only transitively, through
+`Puck.World.Schema`, `Puck.Commands`, and `Puck.Launcher`. `Puck.Hosting` and
+`Puck.Networking` are reached only transitively, through
 `Puck.Launcher`/`Puck.World.Server`; no `ProjectReference` here names either
 directly.
 
 `world.wait` holds only its issuing `TextCommandSession`. A row's
 `WorldConsoleWaitGate` supplies the host-work clock; sessions keep independent
-release deadlines. Other text sessions remain responsive. Pausing or stopping
+release deadlines. The release is exact: the host drains the console before
+every step, so the session's next line runs after the releasing tick and
+before the one after it
+([commands reference](../../docs/reference/commands.md#who-can-dispatch-a-command)). Other text sessions remain responsive. Pausing or stopping
 the row releases its armed waits. Direct registry calls without an originating
 text session are refused. A clock reset invalidates all earlier deadlines,
 including an expired wait the command pump has not yet observed.
@@ -96,18 +114,18 @@ public interface IWorldConsoleAuthority {
 }
 ```
 
-Every moved module resolves its target row through this seam instead of an
+Every module here resolves its target row through this seam instead of an
 injected `WorldServer` singleton, via the `TryResolveServer` extension that
 hands back the resolved row's `WorldServer` directly and formats a refusal
 echo on failure. `Puck.World`'s own implementation
 (`WorldBootConsoleAuthority`, internal to that project) always answers the
-boot row—none of the moved verbs carry a trailing `instance:<name>` token
+boot row—none of these verbs carry a trailing `instance:<name>` token
 the way `player.*`/`world.instance.*` do, so that answer is exact rather than
 a placeholder.
 
-## The move predicate
+## Which modules live here
 
-A module moves here when every type its constructor and handlers touch is
+A module lives here when every type its constructor and handlers touch is
 reachable from this project's own reference set. A module whose ctor or
 handlers touch `WorldClient`, `PlayerRoster`, the seat surface (e.g.
 `WorldSeatAuthorityRouter`), views, HUD, screens, audio, or recording

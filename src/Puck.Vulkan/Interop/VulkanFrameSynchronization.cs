@@ -13,8 +13,8 @@ public sealed class VulkanFrameSynchronization : IDisposable {
     private bool m_disposed;
     private nint[] m_renderFinishedSemaphoreHandles;
 
-    /// <summary>Gets the native <c>VkDevice</c> handle that owns the primitives.</summary>
-    public nint DeviceHandle { get; }
+    /// <summary>Gets the command table of the logical device that owns the primitives.</summary>
+    public VulkanDeviceCommands Device { get; }
     /// <summary>Gets the native <c>VkSemaphore</c> handle signaled when an acquired image becomes available, or zero once disposed.</summary>
     public nint ImageAvailableSemaphoreHandle { get; private set; }
     /// <summary>Gets the native <c>VkFence</c> handle signaled when the frame's submitted work completes, or zero once disposed.</summary>
@@ -23,15 +23,15 @@ public sealed class VulkanFrameSynchronization : IDisposable {
     public IReadOnlyList<nint> RenderFinishedSemaphoreHandles => m_renderFinishedSemaphoreHandles;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanFrameSynchronization"/> class, taking ownership of the supplied synchronization primitives.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the primitives.</param>
+    /// <param name="device">The command table of the logical device that owns the primitives.</param>
     /// <param name="imageAvailableSemaphoreHandle">The native <c>VkSemaphore</c> handle signaled when an acquired image becomes available.</param>
     /// <param name="inFlightFenceHandle">The native <c>VkFence</c> handle signaled when the frame's work completes.</param>
     /// <param name="renderFinishedSemaphoreHandles">The native <c>VkSemaphore</c> handles, one per swapchain image, signaled when rendering completes.</param>
     /// <param name="frameSynchronizationApi">The API used to destroy the primitives and wait on the fence.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="renderFinishedSemaphoreHandles"/> or <paramref name="frameSynchronizationApi"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/>, <paramref name="imageAvailableSemaphoreHandle"/>, or <paramref name="inFlightFenceHandle"/> is zero, or <paramref name="renderFinishedSemaphoreHandles"/> is empty or contains a zero handle.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/>, <paramref name="renderFinishedSemaphoreHandles"/>, or <paramref name="frameSynchronizationApi"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="imageAvailableSemaphoreHandle"/> or <paramref name="inFlightFenceHandle"/> is zero, or <paramref name="renderFinishedSemaphoreHandles"/> is empty or contains a zero handle.</exception>
     public VulkanFrameSynchronization(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint imageAvailableSemaphoreHandle,
         nint inFlightFenceHandle,
         nint[] renderFinishedSemaphoreHandles,
@@ -40,11 +40,7 @@ public sealed class VulkanFrameSynchronization : IDisposable {
         ArgumentNullException.ThrowIfNull(renderFinishedSemaphoreHandles);
         ArgumentNullException.ThrowIfNull(frameSynchronizationApi);
 
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: imageAvailableSemaphoreHandle,
@@ -71,7 +67,7 @@ public sealed class VulkanFrameSynchronization : IDisposable {
             );
         }
 
-        DeviceHandle = deviceHandle;
+        Device = device;
         ImageAvailableSemaphoreHandle = imageAvailableSemaphoreHandle;
         InFlightFenceHandle = inFlightFenceHandle;
         m_renderFinishedSemaphoreHandles = renderFinishedSemaphoreHandles;
@@ -85,32 +81,23 @@ public sealed class VulkanFrameSynchronization : IDisposable {
         }
 
         foreach (var renderFinishedSemaphoreHandle in m_renderFinishedSemaphoreHandles) {
-            if (renderFinishedSemaphoreHandle != 0) {
-                m_frameSynchronizationApi.DestroySemaphore(
-                    deviceHandle: DeviceHandle,
-                    semaphoreHandle: renderFinishedSemaphoreHandle
-                );
-            }
+            m_frameSynchronizationApi.DestroySemaphore(
+                device: Device,
+                semaphoreHandle: renderFinishedSemaphoreHandle
+            );
         }
 
         m_renderFinishedSemaphoreHandles = [];
-
-        if (ImageAvailableSemaphoreHandle != 0) {
-            m_frameSynchronizationApi.DestroySemaphore(
-                deviceHandle: DeviceHandle,
-                semaphoreHandle: ImageAvailableSemaphoreHandle
-            );
-            ImageAvailableSemaphoreHandle = 0;
-        }
-
-        if (InFlightFenceHandle != 0) {
-            m_frameSynchronizationApi.DestroyFence(
-                deviceHandle: DeviceHandle,
-                fenceHandle: InFlightFenceHandle
-            );
-            InFlightFenceHandle = 0;
-        }
-
+        m_frameSynchronizationApi.DestroySemaphore(
+            device: Device,
+            semaphoreHandle: ImageAvailableSemaphoreHandle
+        );
+        ImageAvailableSemaphoreHandle = 0;
+        m_frameSynchronizationApi.DestroyFence(
+            device: Device,
+            fenceHandle: InFlightFenceHandle
+        );
+        InFlightFenceHandle = 0;
         m_disposed = true;
     }
     /// <summary>Waits for the in-flight fence to become signaled, or until the timeout elapses.</summary>
@@ -123,7 +110,7 @@ public sealed class VulkanFrameSynchronization : IDisposable {
             instance: this
         );
         return m_frameSynchronizationApi.WaitForFence(
-            deviceHandle: DeviceHandle,
+            device: Device,
             fenceHandle: InFlightFenceHandle,
             timeout: timeout
         );

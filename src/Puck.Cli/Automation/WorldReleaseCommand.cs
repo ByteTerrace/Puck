@@ -1,8 +1,8 @@
 using System.CommandLine;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Assets;
 using Puck.Cli.Azure;
 using Puck.Storage;
 using Puck.World;
@@ -84,7 +84,8 @@ internal static class WorldReleaseCommand {
                 validateAdjacencyClaims: false,
                 definition: out var definition,
                 reason: out var definitionReason,
-                catalog: machines
+                catalog: machines,
+                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: definitionPath)
             ) ||
                 !WorldDefinitionValidator.TryValidateLocally(
                 definition: definition!,
@@ -96,14 +97,14 @@ internal static class WorldReleaseCommand {
             }
             var canonical = WorldDefinitionSerialization.Serialize(definition: definition!);
 
-            if (!canonical.AsSpan().SequenceEqual(File.ReadAllBytes(path: definitionPath))) {
+            if (!canonical.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: definitionPath))) {
                 throw new InvalidDataException(message: $"definition '{relative}' is not a canonical composed world output; run 'puck world prepare' first");
             }
             var identity = $"{row.Owner:D}/{row.World}";
 
             if (!definitions.TryAdd(
                 key: identity,
-                value: FullHash(bytes: canonical)
+                value: ContentPin.Compute(content: canonical).ToString()
             )) {
                 throw new InvalidDataException(message: $"release definition identity '{identity}' is duplicated");
             }
@@ -141,7 +142,7 @@ internal static class WorldReleaseCommand {
             if (definitionPaths.Contains(item: fullPath)) {
                 continue;
             }
-            artifacts[relative] = FullHash(bytes: File.ReadAllBytes(path: path));
+            artifacts[relative] = ContentPin.OfFile(path: path).ToString();
         }
         var manifest = new WorldReleaseManifest {
             Artifacts = artifacts,
@@ -170,27 +171,33 @@ internal static class WorldReleaseCommand {
         Console.WriteLine(value: $"Prepared release {manifest.Identity} ({manifest.Label}) with {definitions.Count} definitions and {artifacts.Count} artifacts.");
         return 0;
     }
-    internal static async Task<int> RunAsync(Func<Task<int>> action, bool recovery = false) {
-        try { return await action().ConfigureAwait(continueOnCapturedContext: false); } catch (Exception error) {
-            Console.Error.WriteLine(value: ((error is OperationCanceledException)
-                ? "world release: canceled."
-                : $"world release: {error.Message}"));
-            if (recovery) { Console.Error.WriteLine(value: "Run 'puck world release status' to inspect the durable result; use 'puck world release resume' if an operation is unfinished."); }
-            return ((error is OperationCanceledException)
-                ? 130
-                : 1
+
+    // A durable operation that fails or is cancelled leaves a record behind, so its refusal also says where to look.
+    // CliExit maps the exception to the exit code; this only adds the hint.
+    private static async Task<int> WithRecoveryHintAsync(Func<Task<int>> action) {
+        const string Hint = "Run 'puck world release status' to inspect the durable result; use 'puck world release resume' if an operation is unfinished.";
+
+        try {
+            return await action().ConfigureAwait(continueOnCapturedContext: false);
+        } catch (OperationCanceledException) {
+            Console.Error.WriteLine(value: Hint);
+
+            throw;
+        } catch (Exception error) {
+            throw new InvalidOperationException(
+                innerException: error,
+                message: $"{error.Message} {Hint}"
             );
         }
     }
-
     private static string FindComposedDefinition(string packageDirectory, string worldName) {
         var candidates = Directory.EnumerateFiles(
             path: packageDirectory,
             searchOption: SearchOption.AllDirectories,
-            searchPattern: "*.world.json"
+            searchPattern: ("*" + WorldDocumentName.DocumentSuffix)
         )
             .Where(predicate: path => string.Equals(
-            a: Path.GetFileName(path: path)[..^".world.json".Length],
+            a: WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: path)),
             b: worldName,
             comparisonType: StringComparison.Ordinal
         ))
@@ -204,7 +211,6 @@ internal static class WorldReleaseCommand {
         }
         return Path.GetFullPath(path: candidates[0]);
     }
-    private static string FullHash(byte[] bytes) => ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
     private static bool IsReleaseManifest(string path) {
         try {
             using var document = JsonDocument.Parse(File.ReadAllBytes(path: path));
@@ -250,8 +256,11 @@ internal static class WorldReleaseCommand {
             var snapshot = await AzureCommand.ReadWorldReleaseStatusAsync(cancellationToken: cancellationToken);
 
             if (snapshot is null) {
-                Console.Error.WriteLine(value: "The configured world deployment has no managed release record. Establish its release identity before a managed deployment.");
-                return 2;
+                return CliExit.Refuse(
+                    verb: "world release status",
+                    what: "the configured world deployment",
+                    why: "it has no managed release record; establish its release identity before a managed deployment"
+                );
             }
             record = snapshot.Value.Record;
         }
@@ -283,22 +292,31 @@ internal static class WorldReleaseCommand {
         }
         return 0;
     }
+    // The stable ID of a durable operation: repeating a command with the same ID resumes that operation rather than
+    // starting another.
+    private static Option<Guid?> Operation() => new("--operation") { Description = "A stable operation ID; repeating the same target with it resumes its pending operation." };
 
-    public static Command Create() {
+    /// <summary>Creates the <c>world release</c> verb; <paramref name="clock"/> bounds its leases and qualification
+    /// runs.</summary>
+    /// <param name="clock">The CLI host's clock.</param>
+    /// <param name="containers">The container engine <c>qualify</c> runs its legs in, or <see langword="null"/> for
+    /// Docker.</param>
+    /// <returns>The verb.</returns>
+    public static Command Create(TimeProvider clock, IWorldReleaseQualificationContainers? containers = null) {
         var package = new Argument<string>(name: "package-directory") { Description = "Package directory containing composed worlds and release artifacts." };
         var silo = new Option<string>("--silo") { Description = "Validated silo configuration whose owner/world rows name the composed definitions.", Required = true };
-        var output = new Option<string>("--output") { Description = "Manifest path (defaults to package-directory/release.json)." };
-        var label = new Option<string>("--label") { Required = true };
-        var revision = new Option<string>("--source-revision") { Required = true };
-        var image = new Option<string>("--engine-image-digest") { Required = true };
-        var persistence = new Option<string>("--persistence-contract") { Required = true };
-        var peer = new Option<string>("--peer-protocol-contract") { Required = true };
+        var output = CliOptions.Output(description: "The manifest's path; absent, release.json in the package directory.");
+        var label = new Option<string>("--label") { Description = "The release's human-readable label.", Required = true };
+        var revision = new Option<string>("--source-revision") { Description = "The full source commit the release was built from.", Required = true };
+        var image = new Option<string>("--engine-image-digest") { Description = "The sha256 digest of the engine image that runs the release.", Required = true };
+        var persistence = new Option<string>("--persistence-contract") { Description = "The persistence contract the release reads and writes, such as puck.world.persistence.v1.", Required = true };
+        var peer = new Option<string>("--peer-protocol-contract") { Description = "The peer protocol contract the release speaks, such as puck.world.peer.v1.", Required = true };
         var prepare = new Command(
             description: "Create and verify an immutable hosted-world release manifest.",
             name: "prepare"
         ) { package, silo, output, label, revision, image, persistence, peer };
 
-        prepare.SetAction(action: (parse, _) => RunAsync(() => Task.FromResult(result: Prepare(
+        prepare.SetAction(action: parse => Prepare(
             packageDirectory: Path.GetFullPath(path: parse.GetRequiredValue(argument: package)),
             siloPath: Path.GetFullPath(path: parse.GetRequiredValue(option: silo)),
             outputPath: parse.GetValue(option: output),
@@ -307,44 +325,49 @@ internal static class WorldReleaseCommand {
             engineImageDigest: parse.GetRequiredValue(option: image),
             persistenceContract: parse.GetRequiredValue(option: persistence),
             peerProtocolContract: parse.GetRequiredValue(option: peer)
-        ))));
+        ));
 
         var status = new Command(
             description: "Inspect the configured Azure world deployment, or a saved deployment-group file.",
             name: "status"
         );
-        var statusPath = new Argument<string?>(name: "group-file") { Arity = ArgumentArity.ZeroOrOne };
-        var json = new Option<bool>("--json") { Description = "Write the full validated state with named phases and the next operator action." };
+        var statusPath = new Argument<string?>(name: "group-file") { Arity = ArgumentArity.ZeroOrOne, Description = "A saved deployment-group record to read instead of the configured deployment." };
+        var json = CliOptions.Json(description: "Write the full validated state, with named phases and the next operator action, as JSON.");
 
         status.Arguments.Add(item: statusPath);
         status.Options.Add(item: json);
-        status.SetAction(action: (parse, cancellationToken) => RunAsync(() => StatusAsync(
+        status.SetAction(action: (parse, cancellationToken) => StatusAsync(
             parse.GetValue(argument: statusPath),
             parse.GetValue(option: json),
             cancellationToken
-        )));
+        ));
 
         var finalize = new Command(
             description: "Close the admitted release's rollback window, retaining recovery history and artifacts.",
             name: "finalize"
         );
 
-        finalize.SetAction(action: (_, token) => RunAsync(
-            async () => {
-                var finalized = await AzureCommand.FinalizeWorldReleaseAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
+        finalize.SetAction(action: (_, token) => WithRecoveryHintAsync(
+            action: async () => {
+                var finalized = await AzureCommand.FinalizeWorldReleaseAsync(
+                    cancellationToken: token,
+                    clock: clock
+                ).ConfigureAwait(continueOnCapturedContext: false);
 
                 Console.WriteLine(value: $"Finalized {finalized.Record.ActiveRelease}. The previous release is no longer eligible for ordinary rollback; recovery history and artifacts are retained.");
-                return 0;
-            },
-            recovery: true
+                return CliExit.Success;
+            }
         ));
 
-        var sourceManifest = new Argument<string>(name: "source-manifest");
-        var targetManifest = new Argument<string>(name: "target-manifest");
-        var fixture = new Argument<string>(name: "fixture-directory");
-        var sourceImage = new Option<string>("--source-image") { Required = true };
-        var targetImage = new Option<string>("--target-image") { Required = true };
-        var evidenceDirectory = new Option<string>("--output") { Description = "Directory retaining isolated legs and qualification evidence.", Required = true };
+        var sourceManifest = new Argument<string>(name: "source-manifest") { Description = "The release.json of the release being left." };
+        var targetManifest = new Argument<string>(name: "target-manifest") { Description = "The release.json of the release being entered." };
+        var fixture = new Argument<string>(name: "fixture-directory") { Description = "The offline fixture whose saved worlds each leg imports." };
+        var sourceImage = new Option<string>("--source-image") { Description = "The engine image of the source release.", Required = true };
+        var targetImage = new Option<string>("--target-image") { Description = "The engine image of the target release.", Required = true };
+        var evidenceDirectory = CliOptions.Output(
+            description: "The directory that retains the isolated legs and their qualification evidence.",
+            required: true
+        );
         var qualificationSteps = new Option<int>("--steps") { DefaultValueFactory = _ => 60, Description = "Exact continuation steps per packaged leg (1–1024)." };
         var qualify = new Command(
             description: "Exercise exact packaged releases in both directions against an offline fixture.",
@@ -353,7 +376,14 @@ internal static class WorldReleaseCommand {
             sourceManifest, targetManifest, fixture, sourceImage, targetImage, evidenceDirectory, qualificationSteps,
         };
 
-        qualify.SetAction(action: (parse, token) => RunAsync(async () => {
+        qualify.Detail(detail: """
+            Exit codes: 0 the pair qualified and its receipt is under --output; 1 the pair was exercised and a leg failed
+            its claim (a packaged engine exited nonzero or overran its limit, a report was incomplete, or two imports
+            disagreed); 2 a refusal (unreadable manifests, an unsupported pair, an unmarked or mismatched fixture, an
+            image that is not the release's, or a container engine that cannot run a leg).
+            """);
+
+        qualify.SetAction(action: async (parse, token) => {
             var sourcePath = Path.GetFullPath(path: parse.GetRequiredValue(argument: sourceManifest));
             var targetPath = Path.GetFullPath(path: parse.GetRequiredValue(argument: targetManifest));
             var source = (JsonSerializer.Deserialize<WorldReleaseManifest>(ConfinedFile.ReadAllBytes(
@@ -405,77 +435,87 @@ internal static class WorldReleaseCommand {
                 parse.GetRequiredValue(option: sourceImage),
                 parse.GetRequiredValue(option: targetImage),
                 parse.GetValue(option: qualificationSteps),
-                archive
+                archive,
+                clock,
+                containers
             );
-
-            _ = await runner.RunAsync(
+            var result = await runner.RunAsync(
                 cancellationToken: token,
                 source: source,
                 target: target
             ).ConfigureAwait(continueOnCapturedContext: false);
-            return 0;
-        }));
+
+            if (result.Failure is { } failure) {
+                Console.Error.WriteLine(value: $"puck world release qualify: the pair did not qualify: {failure}");
+
+                return CliExit.Failed;
+            }
+
+            return CliExit.Success;
+        });
 
         var resume = new Command(
             description: "Resume the configured group's durable operation using its retained release inputs.",
             name: "resume"
         );
 
-        resume.SetAction(action: (_, token) => RunAsync(
-            async () => {
-                var result = await AzureCommand.ResumeWorldReleaseAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
+        resume.SetAction(action: (_, token) => WithRecoveryHintAsync(
+            action: async () => {
+                var result = await AzureCommand.ResumeWorldReleaseAsync(
+                    cancellationToken: token,
+                    clock: clock
+                ).ConfigureAwait(continueOnCapturedContext: false);
 
                 Console.WriteLine(value: result.Detail);
                 return ((result.Completed && !result.SourceRecovered)
-                    ? 0
-                    : 1
+                    ? CliExit.Success
+                    : CliExit.Failed
                 );
-            },
-            recovery: true
+            }
         ));
-        var deployPackage = new Argument<string>(name: "package-directory");
-        var deployOperation = new Option<Guid?>("--operation");
+        var deployPackage = new Argument<string>(name: "package-directory") { Description = "The prepared package: composed worlds, artifacts, and their release.json." };
+        var deployOperation = Operation();
         var deploy = new Command(
             description: "Export current state, qualify, and deploy an exact package while preserving authoritative progress.",
             name: "deploy"
         ) { deployPackage, deployOperation };
 
-        deploy.SetAction(action: (parse, token) => RunAsync(
-            async () => {
+        deploy.SetAction(action: (parse, token) => WithRecoveryHintAsync(
+            action: async () => {
                 var result = await AzureCommand.DeployWorldReleaseAsync(
                     parse.GetRequiredValue(argument: deployPackage),
                     parse.GetValue(option: deployOperation),
+                    clock,
                     token
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
                 Console.WriteLine(value: result.Detail);
                 return ((result.Completed && !result.SourceRecovered)
-                    ? 0
-                    : 1
+                    ? CliExit.Success
+                    : CliExit.Failed
                 );
-            },
-            recovery: true
+            }
         ));
-        var rollbackOperation = new Option<Guid?>("--operation");
+        var rollbackOperation = Operation();
         var rollback = new Command(
             description: "Return to the retained previous release using current player progress.",
             name: "rollback"
         ) { rollbackOperation };
 
-        rollback.SetAction(action: (parse, token) => RunAsync(
-            async () => {
+        rollback.SetAction(action: (parse, token) => WithRecoveryHintAsync(
+            action: async () => {
                 var result = await AzureCommand.RollbackWorldReleaseAsync(
                     parse.GetValue(option: rollbackOperation),
+                    clock,
                     token
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
                 Console.WriteLine(value: result.Detail);
                 return ((result.Completed && !result.SourceRecovered)
-                    ? 0
-                    : 1
+                    ? CliExit.Success
+                    : CliExit.Failed
                 );
-            },
-            recovery: true
+            }
         ));
         var checkpointId = new Option<Guid?>("--request") { Description = "Stable recovery-point request ID for retrying an interrupted capture." };
         var checkpoint = new Command(
@@ -483,8 +523,9 @@ internal static class WorldReleaseCommand {
             name: "checkpoint"
         ) { checkpointId };
 
-        checkpoint.SetAction(action: (parse, token) => RunAsync(async () => {
+        checkpoint.SetAction(action: async (parse, token) => {
             var point = await AzureCommand.CaptureWorldReleasePointAsync(
+                clock: clock,
                 requestId: (parse.GetValue(option: checkpointId) ?? Guid.NewGuid()),
                 token: token
             ).ConfigureAwait(continueOnCapturedContext: false);
@@ -494,32 +535,32 @@ internal static class WorldReleaseCommand {
                 new JsonSerializerOptions { WriteIndented = true }
             ));
             Console.WriteLine(value: $"Recovery point: {point.RequestId:D}; identity: {point.Identity}");
-            return 0;
-        }));
-        var restorePoint = new Argument<Guid>(name: "recovery-point");
-        var restoreOperation = new Option<Guid?>("--operation");
+            return CliExit.Success;
+        });
+        var restorePoint = new Argument<Guid>(name: "recovery-point") { Description = "The recovery point's request ID, as world release checkpoint printed it." };
+        var restoreOperation = Operation();
         var discardProgress = new Option<bool>("--discard-progress") { Description = "Explicitly acknowledge discarding this entire group's progress after the selected point." };
         var restore = new Command(
             description: "Preview a recovery point, or explicitly rewind the complete deployment group.",
             name: "restore"
         ) { restorePoint, restoreOperation, discardProgress };
 
-        restore.SetAction(action: (parse, token) => RunAsync(
-            async () => {
+        restore.SetAction(action: (parse, token) => WithRecoveryHintAsync(
+            action: async () => {
                 var result = await AzureCommand.RestoreWorldReleaseAsync(
                     parse.GetRequiredValue(argument: restorePoint),
                     parse.GetValue(option: restoreOperation),
                     parse.GetValue(option: discardProgress),
+                    clock,
                     token
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
                 Console.WriteLine(value: result.Detail);
                 return ((!parse.GetValue(option: discardProgress) || (result.Completed && !result.SourceRecovered))
-                    ? 0
-                    : 1
+                    ? CliExit.Success
+                    : CliExit.Failed
                 );
-            },
-            recovery: true
+            }
         ));
         return new Command(
             description: "Prepare, deploy, roll back, inspect, and recover hosted-world deployment groups.",

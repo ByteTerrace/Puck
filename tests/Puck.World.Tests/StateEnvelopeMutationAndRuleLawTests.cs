@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -11,7 +13,7 @@ namespace Puck.World.Tests;
 /// <c>world.undo</c> and a checkpoint restore each reproduce a saturated value and every cell's own clock (an
 /// advance epoch, a dynamics follower's sampled position/velocity, a cycle's settled phase and substep) bit-exactly.</summary>
 public sealed class StateEnvelopeMutationAndRuleLawTests {
-    private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
+    private static readonly Principal Actor = Principal.Seat(slot: 0);
     private static readonly DynamicsRow Kick = new(
         Damping: 1f,
         Frequency: 1f,
@@ -40,14 +42,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
                 Value: CellValue.Int(value: value)
             )]
     );
-    private static WorldStateRow TriggerRow() => new(
-        Name: CellName.Parse(candidate: "trigger"),
-        Kind: CellKind.Int,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: 0)
-            )]
-    );
+    private static WorldStateRow TriggerRow() => StateFixtures.IntSlot(name: "trigger");
     private static WorldStateRow TraitsRow(long advanceValue, long dynamicsValue, long cycleValue) => new(
         Name: CellName.Parse(candidate: "traits"),
         Kind: CellKind.Int,
@@ -79,7 +74,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         )!.Cells!.Single(predicate: cell => (cell.Key.Value == key));
     private static void AdminWrite(WorldFixture fixture, string row, long value, WorldDocumentWriteKind kind = WorldDocumentWriteKind.Add, string key = "$value") {
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: row,
             Key: key,
             Value: value,
@@ -110,7 +105,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         // world.undo restores the pre-write value exactly — a saturating write is an ordinary journaled mutation.
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 
@@ -174,7 +169,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
                 Name: CellName.Parse(candidate: "push"),
                 Gate: new ActionPredicate.CompareState(
                     State: "trigger",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1m
                 ),
                 Mode: ActionTriggerMode.Edge,
@@ -206,7 +201,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
 
         Assert.Equal<Enum>(
-            expected: Puck.State.Rules.RuleEffectRefusal.MutationRejected,
+            expected: RuleEffectRefusal.MutationRejected,
             actual: diagnostic.Refusal
         );
         Assert.Equal(
@@ -221,7 +216,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
                 Name: CellName.Parse(candidate: "push"),
                 Gate: new ActionPredicate.CompareState(
                     State: "trigger",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1m
                 ),
                 Mode: ActionTriggerMode.Edge,
@@ -300,7 +295,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         )!;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: (traitsRow with { Cycle = (traitsRow.Cycle! with { TicksPerStep = 7 }) })
         ));
         fixture.Step();
@@ -346,7 +341,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
 
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var checkpoint,
                 reason: out var captureReason
             ),
@@ -358,13 +353,14 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             engines: [],
             screens: restoredDefinition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-envelope-clock-tests-");
 
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "envelope-clock-restore",
             machines: machines,
             profiles: new WorldOwnedWorlds(
-                directory: Directory.CreateTempSubdirectory(prefix: "puck-envelope-clock-tests-").FullName,
+                directory: profilesDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: restoredDefinition
             )
@@ -448,7 +444,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         );
 
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "saturating",
             Key: WorldStateRow.SlotKey.Value,
             Value: 100,
@@ -458,7 +454,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         tape.NoteTick();
 
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "refusing",
             Key: WorldStateRow.SlotKey.Value,
             Value: 100,
@@ -469,7 +465,7 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
 
         transport.SubmitUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
         tape.NoteTick();
@@ -501,19 +497,4 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
         );
     }
 
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
 }

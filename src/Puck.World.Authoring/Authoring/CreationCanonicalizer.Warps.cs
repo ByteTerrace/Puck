@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Puck.Assets.Documents;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
@@ -20,7 +21,7 @@ public static partial class CreationCanonicalizer {
 
         for (var i = 0; (i < bumps.Count); i++) {
             var bump = bumps[i];
-            var radii = (IsFinite(vector: bump.Radii)
+            var radii = (VectorFunctions.IsFinite(vector: bump.Radii)
                 ? bump.Radii.Value
                 : Vector3.One
             );
@@ -38,7 +39,7 @@ public static partial class CreationCanonicalizer {
                     y: SdfProgramBuilder.GaussianPushMinRadius
                 )
             );
-            var push = (IsFinite(vector: bump.Push)
+            var push = (VectorFunctions.IsFinite(vector: bump.Push)
                 ? bump.Push.Value
                 : Vector3.Zero
             );
@@ -49,7 +50,7 @@ public static partial class CreationCanonicalizer {
             );
 
             normalized[i] = bump with {
-                Center = (IsFinite(vector: bump.Center)
+                Center = (VectorFunctions.IsFinite(vector: bump.Center)
                 ? bump.Center.Value
                 : Vector3.Zero),
                 Push = clampedPush,
@@ -88,14 +89,14 @@ public static partial class CreationCanonicalizer {
             var bump = bumps[i];
             var bumpPath = $"{path}[{i}]";
 
-            if (!IsFinite(vector: bump.Center)) {
+            if (!VectorFunctions.IsFinite(vector: bump.Center)) {
                 errors.Add(item: new(
                     Message: "center is non-finite.",
                     Path: $"{bumpPath}.center"
                 ));
             }
             if (
-                !IsFinite(vector: bump.Radii) ||
+                !VectorFunctions.IsFinite(vector: bump.Radii) ||
                 (bump.Radii.X < 0f) ||
                 (bump.Radii.Y < 0f) ||
                 (bump.Radii.Z < 0f)
@@ -105,7 +106,7 @@ public static partial class CreationCanonicalizer {
                     Path: $"{bumpPath}.radii"
                 ));
             }
-            if (!IsFinite(vector: bump.Push)) {
+            if (!VectorFunctions.IsFinite(vector: bump.Push)) {
                 errors.Add(item: new(
                     Message: "push is non-finite.",
                     Path: $"{bumpPath}.push"

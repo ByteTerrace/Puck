@@ -18,4 +18,10 @@ public enum GpuComputeAccess : uint {
     TransferWrite = 0x8,
     /// <summary>A color attachment writes the resource.</summary>
     ColorAttachmentWrite = 0x10,
+    /// <summary>A render pass reads a color attachment's contents, which it loads.</summary>
+    ColorAttachmentRead = 0x20,
+    /// <summary>A depth test reads a depth attachment.</summary>
+    DepthAttachmentRead = 0x40,
+    /// <summary>A depth test writes a depth attachment.</summary>
+    DepthAttachmentWrite = 0x80,
 }

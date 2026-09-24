@@ -87,7 +87,7 @@ public sealed class BundleCommandTests {
                     path: path,
                     contents: manifest.ToJsonString()
                 );
-                Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(
+                Assert.Throws<InvalidDataException>(testCode: () => BundleCommand.VerifyManifest(
                     commit: commit,
                     directory: directory
                 ));
@@ -101,7 +101,7 @@ public sealed class BundleCommandTests {
                 path: path,
                 contents: manifest.ToJsonString()
             );
-            Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(
+            Assert.Throws<InvalidDataException>(testCode: () => BundleCommand.VerifyManifest(
                 commit: commit,
                 directory: directory
             ));
@@ -109,7 +109,7 @@ public sealed class BundleCommandTests {
                 contents: original,
                 path: path
             );
-            Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(
+            Assert.Throws<InvalidDataException>(testCode: () => BundleCommand.VerifyManifest(
                 commit: new string(
                     c: 'b',
                     count: 40
@@ -123,13 +123,15 @@ public sealed class BundleCommandTests {
                 ),
                 contents: "extra"
             );
-            Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(
+            Assert.Throws<InvalidDataException>(testCode: () => BundleCommand.VerifyManifest(
                 commit: commit,
                 directory: directory
             ));
-        } finally { Directory.Delete(
+        } finally {
+            Directory.Delete(
             path: directory,
             recursive: true
-        ); }
+        );
+        }
     }
 }

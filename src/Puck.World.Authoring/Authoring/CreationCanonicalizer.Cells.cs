@@ -30,10 +30,12 @@ public static partial class CreationCanonicalizer {
                 message: $"cells amplitude must be finite and in [0, {CreationNoiseDocument.MaxAmplitude}]."
             );
         }
-        if (!Enum.IsDefined(value: cells.Mode)) { Refuse(
+        if (!Enum.IsDefined(value: cells.Mode)) {
+            Refuse(
             field: "mode",
             message: "cells mode must be F1 or F2MinusF1."
-        ); } else if (
+        );
+        } else if (
             !float.IsFinite(f: cells.Randomness) ||
             (cells.Randomness < 0f) ||
             (cells.Randomness > SdfCellDisplacement.MaxRandomness(mode: cells.Mode))

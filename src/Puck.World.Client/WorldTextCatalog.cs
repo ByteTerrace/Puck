@@ -94,12 +94,8 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
             message: "The world declares no text catalog.",
             paramName: nameof(definition)
         ));
-        var basePath = ((Path.GetDirectoryName(path: origin) is { Length: > 0 } directory)
-            ? directory
-            : AppContext.BaseDirectory
-        );
         var catalog = m_resolver.ResolveCatalog(
-            basePath: basePath,
+            basePath: WorldDocumentPaths.DirectoryOf(documentPath: origin),
             definition: text
         );
 

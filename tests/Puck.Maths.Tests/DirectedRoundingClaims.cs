@@ -146,10 +146,10 @@ internal static class DirectedRoundingClaims {
         if (
             spatialOk &&
             FixedVectorMath.TryMagnitude(
+            result: out var nearest,
             x: x,
             y: y,
-            z: z,
-            result: out var nearest
+            z: z
         ) &&
             (spatial < nearest.Value)
         ) {

@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Puck.Assets;
+using Puck.World;
 
 namespace Puck.Cli.Parity;
 
@@ -8,28 +9,28 @@ namespace Puck.Cli.Parity;
 /// an exact stateHash check, and a per-tile pixel check (<see cref="ParityComparator"/>). A gate failure is
 /// never "parity held"; a per-tile check catches a localized defect a whole-frame mean would dilute away. Every
 /// verdict prints a line naming its station, tick, and outcome; a failed capture's evidence — both frames, a
-/// delta heatmap, and a one-line-per-verdict summary — lands under <c>--out</c>.</summary>
+/// delta heatmap, and a one-line-per-verdict summary — lands under <c>--output</c>.</summary>
 internal static class ParityCompareCommand {
     private const string ManifestFileName = "manifest.json";
     private const string ScratchPrefix = "puck-parity-compare-";
 
-    // Exit 3 covers every malformed input — argument, manifest, or contract — and is deliberately distinct
-    // from the 2 a real parity failure reports.
+    // CliExit.Refused covers every malformed input — argument, manifest, or contract — and is deliberately
+    // distinct from CliExit.Failed, which a real parity failure reports.
     internal static int Run(string contractPath, string leftDir, string? outDir, string rightDir) {
         if (!File.Exists(path: contractPath)) {
             Console.Error.WriteLine(value: $"ERROR: --contract file '{contractPath}' does not exist.");
 
-            return 3;
+            return CliExit.Refused;
         }
         if (!Directory.Exists(path: leftDir)) {
             Console.Error.WriteLine(value: $"ERROR: left directory '{leftDir}' does not exist.");
 
-            return 3;
+            return CliExit.Refused;
         }
         if (!Directory.Exists(path: rightDir)) {
             Console.Error.WriteLine(value: $"ERROR: right directory '{rightDir}' does not exist.");
 
-            return 3;
+            return CliExit.Refused;
         }
         if (!ParityManifestLoader.TryLoadContract(
             contract: out var contract,
@@ -38,7 +39,7 @@ internal static class ParityCompareCommand {
         )) {
             Console.Error.WriteLine(value: $"ERROR: {contractError}");
 
-            return 3;
+            return CliExit.Refused;
         }
 
         var leftManifestPath = Path.Combine(
@@ -53,12 +54,12 @@ internal static class ParityCompareCommand {
         if (!File.Exists(path: leftManifestPath)) {
             Console.Error.WriteLine(value: $"ERROR: left manifest '{leftManifestPath}' does not exist.");
 
-            return 3;
+            return CliExit.Refused;
         }
         if (!File.Exists(path: rightManifestPath)) {
             Console.Error.WriteLine(value: $"ERROR: right manifest '{rightManifestPath}' does not exist.");
 
-            return 3;
+            return CliExit.Refused;
         }
         if (!ParityManifestLoader.TryLoadManifest(
             error: out var leftError,
@@ -67,7 +68,7 @@ internal static class ParityCompareCommand {
         )) {
             Console.Error.WriteLine(value: $"ERROR: {leftError}");
 
-            return 3;
+            return CliExit.Refused;
         }
         if (!ParityManifestLoader.TryLoadManifest(
             error: out var rightError,
@@ -76,7 +77,7 @@ internal static class ParityCompareCommand {
         )) {
             Console.Error.WriteLine(value: $"ERROR: {rightError}");
 
-            return 3;
+            return CliExit.Refused;
         }
         if (!ParityComparator.TryCompare(
             contract: contract,
@@ -89,12 +90,12 @@ internal static class ParityCompareCommand {
         )) {
             Console.Error.WriteLine(value: $"ERROR: {compareError}");
 
-            return 3;
+            return CliExit.Refused;
         }
 
         CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
 
-        var resolvedOutDir = (outDir ?? CliScratchDirectories.CreateRunDirectory(scratchPrefix: ScratchPrefix));
+        var resolvedOutDir = (outDir ?? Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName);
 
         Directory.CreateDirectory(path: resolvedOutDir);
         Console.WriteLine(value: $"parity compare: evidence directory {resolvedOutDir}");
@@ -119,18 +120,21 @@ internal static class ParityCompareCommand {
         if (failedCount != 0) {
             Console.Error.WriteLine(value: $"FAIL: {failedCount} of {outcomes.Count} capture(s) failed at least one verdict; evidence in {resolvedOutDir}.");
 
-            return 2;
+            return CliExit.Failed;
         }
 
         Console.WriteLine(value: $"PASS: {outcomes.Count} capture(s) held every verdict (content gate, stateHash, per-tile pixel).");
 
-        return 0;
+        return CliExit.Success;
     }
 
     private static void WriteEvidence(ParityCaptureOutcome outcome, string outDir) {
         var captureDirectory = Path.Combine(
             path1: outDir,
-            path2: $"{outcome.Station}-{outcome.Tick}"
+            path2: WorldCaptureRow.CaptureName(
+                station: outcome.Station,
+                tick: outcome.Tick
+            )
         );
 
         Directory.CreateDirectory(path: captureDirectory);
@@ -184,21 +188,22 @@ internal static class ParityCompareCommand {
     public static Command Create() {
         var contractOption = new Option<string>(name: "--contract") { Description = "puck.parity.contract.v1: tile size, per-station census floors, per-station per-tile mean/max pixel thresholds.", Required = true };
         var leftArgument = new Argument<string>(name: "leftDir") { Description = "A directory holding one puck.parity.manifest.v1 (manifest.json) plus the PNG frames it names." };
-        var outOption = new Option<string>(name: "--out") { Description = "Where failed-capture evidence is written; a fresh temp directory if omitted." };
+        var outOption = CliOptions.Output(description: "Where failed-capture evidence is written; a fresh temp directory if omitted.");
         var rightArgument = new Argument<string>(name: "rightDir") { Description = "The second such directory, compared capture-for-capture against the first." };
         var command = new Command(
             description: """
             Gate/state/pixel-verdict comparison of two already-captured manifest runs.
 
-            Per capture, in order: a content gate (cameraInside, a missing frame, or a census below its
+            Per capture, in order: a content gate (a capture its producer refused — cameraInside, busy,
+            stale, failed, unserved — a capture or frame absent from either side, or a census below its
             station's floor refuses the capture before any pixel comparison), an exact stateHash check, and
             a per-tile pixel check (any tile exceeding its station's mean or max threshold fails the
             capture). The gate, state, and pixel checks are independent verdicts — a gate failure skips the
             other two; state and pixel are always both computed and both printed once the gate holds. Every
             verdict prints one line naming its station, tick, and outcome.
 
-            Exit codes: 0 every capture held every verdict, 2 at least one verdict failed or a usage error,
-            3 a malformed manifest or contract file (distinct from a parity failure).
+            Exit codes: 0 every capture held every verdict, 1 at least one verdict failed, 2 a usage
+            error or a malformed manifest or contract file (distinct from a parity failure).
             """,
             name: "compare"
         ) { leftArgument, rightArgument, contractOption, outOption };

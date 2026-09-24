@@ -1,6 +1,6 @@
+using Puck.Commands;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
-using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -56,7 +56,7 @@ public sealed record WorldPlacementContribution(
     string SlotCreationId,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SafeName? Link = null,
     float GraceSeconds = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrincipal? Contributor = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Principal? Contributor = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? RetractDeadlineTick = null
 ) {
     /// <summary>Returns <see cref="GraceSeconds"/> compiled against a world's simulation rate. A

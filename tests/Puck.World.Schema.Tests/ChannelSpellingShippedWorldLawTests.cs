@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Schema.Tests;
 
@@ -16,7 +17,7 @@ public sealed class ChannelSpellingShippedWorldLawTests {
 
         foreach (var path in WorldFactsCompilerShippedWorldLawTests.Worlds().Select(selector: static row => ((string)row.Data))) {
             WorldModuleNamespace.Visit(
-                node: JsonNode.Parse(json: File.ReadAllText(path: path)),
+                node: JsonNode.Parse(utf8Json: ShippedWorldDocuments.Read(path: path)),
                 type: typeof(WorldDefinition),
                 visitor: (_, jsonName, value, _, memberType) => {
                     if (!Holds(memberType: memberType)) {
@@ -108,7 +109,7 @@ public sealed class ChannelSpellingShippedWorldLawTests {
         foreach (var path in WorldFactsCompilerShippedWorldLawTests.Worlds().Select(selector: static row => ((string)row.Data))) {
             CollectReads(
                 into: reads,
-                node: JsonNode.Parse(json: File.ReadAllText(path: path))
+                node: JsonNode.Parse(utf8Json: ShippedWorldDocuments.Read(path: path))
             );
         }
 

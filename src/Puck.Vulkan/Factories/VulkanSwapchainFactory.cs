@@ -156,7 +156,7 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         );
         var request = new VulkanSwapchainCreateRequest(
             CompositeAlpha: compositeAlpha,
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             ImageColorSpace: surfaceFormat.ColorSpace,
             ImageCount: imageCount,
             ImageExtentHeight: height,
@@ -182,7 +182,7 @@ public sealed class VulkanSwapchainFactory : IVulkanSwapchainFactory {
         }
 
         return new(
-            deviceHandle: logicalDevice.Handle,
+            device: logicalDevice.Commands,
             imageExtentHeight: height,
             imageExtentWidth: width,
             imageFormat: surfaceFormat.Format,

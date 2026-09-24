@@ -212,10 +212,9 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// </para>
     /// </remarks>
     public PresentedAlgebra<TValue, TOps>.Element FloorCovector(long bound) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: bound);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: bound,
-            other: Window
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: Window,
+            value: bound
         );
 
         var material = Algebra.Presentation.Material;
@@ -249,10 +248,9 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// it is still exactly that restricted sum: a useful quantity, but not <c>M(bound)</c>, and nothing announces the
     /// difference.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element Indicator(long bound) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: bound);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: bound,
-            other: Window
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: Window,
+            value: bound
         );
 
         var material = Algebra.Presentation.Material;
@@ -285,10 +283,9 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// most <see cref="ConsecutiveBound"/>, which is the reach through which the window holds the integers being
     /// counted.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element Sieve(int primeCount) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: primeCount);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: primeCount,
-            other: m_descending.Length
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: m_descending.Length,
+            value: primeCount
         );
 
         var signed = RequireSigned();

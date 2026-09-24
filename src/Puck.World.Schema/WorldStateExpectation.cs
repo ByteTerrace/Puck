@@ -9,5 +9,5 @@ namespace Puck.World;
 /// <param name="Kind">Optional required cell kind, checked before and after composition.</param>
 /// <param name="Text">Optional required text value for text state rows, checked before composition.</param>
 public sealed record WorldStateExpectation(string Row, string? Key, long Value = 0,
-    ActionStateComparison Comparison = ActionStateComparison.Equal, long? Change = null, CellKind? Kind = null,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison = ExpressionOp.Equal, long? Change = null, CellKind? Kind = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Text = null);

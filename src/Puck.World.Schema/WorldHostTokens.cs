@@ -6,7 +6,7 @@ namespace Puck.World;
 /// The explicit token maps the host section speaks in — the ONE spelling shared by the document's JSON converters
 /// (<c>WorldBackendPreferenceJsonConverter</c>, <c>SurfaceFormatJsonConverter</c>, in
 /// <see cref="WorldDefinitionSerialization"/>) and every Puck.World reader of the same tokens — the <c>--backend</c>
-/// boot flag, the <c>host.backendDraw</c> resolver, and the <c>world.host</c> read-back — so nothing that parses or
+/// boot flag, the <c>host.backendRow</c> resolver, and the <c>world.host</c> read-back — so nothing that parses or
 /// prints one disagrees with the document. The two enum families that would serialize badly under the generic
 /// camelCase policy (<see cref="WorldBackendPreference.DirectX"/> → <c>directX</c>;
 /// <see cref="SurfaceFormat.R8G8B8A8Unorm"/> → <c>r8G8B8A8Unorm</c>) get an explicit name here instead.

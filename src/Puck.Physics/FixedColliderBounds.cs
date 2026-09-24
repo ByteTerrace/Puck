@@ -21,9 +21,9 @@ internal static class FixedColliderBounds {
 
         return (
             Center: center,
-            AxisX: rotation.Rotate(vector: FixedAxisMath.UnitX),
-            AxisY: rotation.Rotate(vector: FixedAxisMath.UnitY),
-            AxisZ: rotation.Rotate(vector: FixedAxisMath.UnitZ),
+            AxisX: rotation.Rotate(vector: FixedVector3.UnitX),
+            AxisY: rotation.Rotate(vector: FixedVector3.UnitY),
+            AxisZ: rotation.Rotate(vector: FixedVector3.UnitZ),
             HalfExtents: volume.HalfExtents
         );
     }
@@ -49,13 +49,8 @@ internal static class FixedColliderBounds {
                 Z: volume.Radius
             );
             var delta = (upper - lower);
-            var absoluteDelta = new FixedVector3(
-                X: FixedQ4816.Abs(value: delta.X),
-                Y: FixedQ4816.Abs(value: delta.Y),
-                Z: FixedQ4816.Abs(value: delta.Z)
-            );
 
-            return (Center: ((lower + upper) / Two), Extent: ((absoluteDelta / Two) + radius));
+            return (Center: ((lower + upper) / Two), Extent: ((FixedVector3.Abs(value: delta) / Two) + radius));
         }
 
         if (volume.Kind == FixedBodyColliderKind.Box) {

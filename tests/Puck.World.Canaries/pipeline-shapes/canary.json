@@ -1,0 +1,77 @@
+{
+  "id": "pipeline-shapes",
+  "title": "A compute, compute, fullscreen pipeline with half-float intermediates, sparse bindings, a raw buffer and the POSITION adapter computes each stage's arithmetic",
+  "binding": "The positive leg boots an offscreen world whose one pipeline seeds a 32x32 half-float field with (3/8, 0, 0, 1) and a raw word table with 96 at byte 0 and 32 at byte 4 (bindings 4 and 9), combines them into a half-float image of (2 * field.r, word0 / 256, word1 / 256, 1) = (3/4, 3/8, 1/8, 1) (bindings 2, 7 and 5), and presents that through a fullscreen pass drawn with the POSITION vertex adapter, which adds 1/2 to blue on the right half. Paused, it captures the RGBA8 image, then each float intermediate through the float preview; resumed, it captures the field again from a produced frame. Every expectation is derived from that arithmetic, not recorded. The discriminating leg reads the table's blue word at byte 0 instead of byte 4, so the combined image and the presented image turn to blue 3/8 and 7/8 and the positive oracles for those stages turn red, while the first stage's field oracle holds in both legs.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "shapes.pipeline.json",
+    "misaddressed.pipeline.json",
+    "seed.hlsl",
+    "combine.hlsl",
+    "combine-misaddressed.hlsl",
+    "present.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-shapes/fixture.world.json",
+    "script": "shapes.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.output", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.output", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 8, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-graph-installs", "stream": "stderr", "match": "exact", "text": "[pipeline: shapes wait installed reached]", "present": true },
+      { "type": "imageRegion", "name": "image-left-half-is-the-combined-value", "capture": "image.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [0.75, 0.375, 0.125, 1], "maximum": [0.75, 0.375, 0.125, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "image-right-half-adds-one-half-blue", "capture": "image.png", "extent": [32, 32], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.75, 0.375, 0.625, 1], "maximum": [0.75, 0.375, 0.625, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "mixed-is-the-second-stage-value", "capture": "mixed.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.75, 0.375, 0.125, 1], "maximum": [0.75, 0.375, 0.125, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "field-is-the-first-stage-value", "capture": "field.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.375, 0, 0, 1], "maximum": [0.375, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "field-captured-while-active", "capture": "field-active.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.375, 0, 0, 1], "maximum": [0.375, 0, 0, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-shapes/misaddressed.world.json",
+    "script": "shapes.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.output", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.output", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 8, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "field-is-unaffected", "capture": "field.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.375, 0, 0, 1], "maximum": [0.375, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "mixed-reads-word-zero-for-blue", "capture": "mixed.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.75, 0.375, 0.375, 1], "maximum": [0.75, 0.375, 0.375, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "image-right-half-is-seven-eighths-blue", "capture": "image.png", "extent": [32, 32], "region": [0.53125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.75, 0.375, 0.875, 1], "maximum": [0.75, 0.375, 0.875, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "mixed-is-not-the-positive-value", "capture": "mixed.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.96875, 0.96875], "reduce": "every", "minimum": [0.75, 0.375, 0.125, 1], "maximum": [0.75, 0.375, 0.125, 1], "toleranceCodes": 1, "holds": false }
+    ]
+  }
+}

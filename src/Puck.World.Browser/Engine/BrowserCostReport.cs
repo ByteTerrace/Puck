@@ -39,13 +39,13 @@ public sealed record BrowserCostReport(
         report.ModelId, report.EvidenceDigest, report.Scope, report.SimulationRateHz,
         report.StepAllowanceCycles.ToString(provider: CultureInfo.InvariantCulture),
         BrowserCostBound.From(bound: report.RecurringBound), BrowserCostBound.From(bound: report.SearchReservations),
-        BrowserCostBound.From(bound: report.TotalBound), BrowserCostBound.From(report.EditBurstBound), report.Admitted,
+        BrowserCostBound.From(bound: report.TotalBound), BrowserCostBound.From(bound: report.EditBurstBound), report.Admitted,
         report.HeuristicWorkUnitsPerTick.ToString(),
         report.Contributors.Select(selector: static line => new BrowserCostContributor(
             line.Name, line.IsInteraction, line.Multiplier.ToString(provider: CultureInfo.InvariantCulture),
             line.Cost.Setup.ToString(), line.Cost.Check.ToString(), line.Cost.Effects.ToString(), line.WorkUnits.ToString()
         )).ToArray(),
-        report.ContributorSources.Select(static source => new BrowserCostSource(
+        report.ContributorSources.Select(selector: static source => new BrowserCostSource(
             source.Name, source.IsInteraction, source.JsonPointer, source.SourcePath, source.Line, source.Column,
             source.ModuleInstancePath
         )).ToArray(),
@@ -54,8 +54,8 @@ public sealed record BrowserCostReport(
             report.Resources.RowCount, report.Resources.TopologyCount, report.Resources.PopulationCapacity,
             report.Resources.CellSlotCount, report.Resources.VectorComponentBytes.ToString(provider: CultureInfo.InvariantCulture),
             report.Resources.LaneSlotCount, report.Resources.LaneRosterCount, report.Resources.DrawMaskWordCount,
-            Text(report.Resources.LayoutBytes), Text(report.Resources.RetainedVisibilityBytes),
-            Text(report.Resources.RetainedKeyBytes), Text(report.Resources.ArenaFootprintBytes),
+            Text(value: report.Resources.LayoutBytes), Text(value: report.Resources.RetainedVisibilityBytes),
+            Text(value: report.Resources.RetainedKeyBytes), Text(value: report.Resources.ArenaFootprintBytes),
             report.Resources.ArenaAdmissionCeilingBytes.ToString(provider: CultureInfo.InvariantCulture),
             report.Resources.JournalAllowanceBytes.ToString(provider: CultureInfo.InvariantCulture),
             report.Resources.MeasurementIssue, report.Resources.UnmodeledTotalMemoryReason

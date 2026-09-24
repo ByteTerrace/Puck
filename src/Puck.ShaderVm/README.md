@@ -43,10 +43,11 @@ instruction count. There are no loops and no calls; a vocabulary inlines.
 ## Verification
 
 `dotnet test tests/Puck.ShaderVm.Tests -c Release` covers the ISA laws, the
-host interpreter, and register reuse; it also writes host renders of the sky and
-of the [null-world fixture](../../tests/Puck.ShaderVm.Tests/NullWorldScene.cs) to
-`PUCK_SKY_PREVIEW_DIR` when that is set, and
-a throughput report beside them.
+host interpreter, and register reuse. Its explicit preview harnesses, run with
+`tests/Puck.ShaderVm.Tests/bin/Release/net10.0/Puck.ShaderVm.Tests.exe -explicit only`,
+write host renders of the sky and of the
+[null-world fixture](../../tests/Puck.ShaderVm.Tests/NullWorldScene.cs), and a
+throughput report beside them, to `previews` beside the test assembly.
 
 The two interpreters have never been run against each other. The HLSL half
 compiles to SPIR-V and DXIL and nothing more has been established about it.

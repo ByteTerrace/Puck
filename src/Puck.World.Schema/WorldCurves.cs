@@ -116,10 +116,14 @@ public sealed record WorldCurveRow(
                 closed: row.Closed,
                 knots: row.ToSplineKnots()
             ),
-            valueFactory: static shape => CurvatureSpline.Compile(
-                knots: shape.Knots,
-                closed: shape.Closed
-            )
+            valueFactory: static shape => {
+                WorldBootWork.Count(kind: WorldBootWork.CurveCompiles);
+
+                return CurvatureSpline.Compile(
+                    knots: shape.Knots,
+                    closed: shape.Closed
+                );
+            }
         ))
     ).Value!; // the callback always constructs a non-null StrongBox.Value; StrongBox<T>.Value is merely MaybeNull-annotated.
 

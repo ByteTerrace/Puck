@@ -7,7 +7,9 @@ write sets, the arena and its journal scopes, `CellValue`'s kind-admission
 refusal, and the reference schedule's evidence manifest — its pinned targets,
 instruction service, kernel prices, memory profile, and the coverage of both
 registered vocabularies. Cell-set algebra is checked against a scalar oracle
-across the 256-cell inline boundary through 19×19 and 33×18 boards.
+across the 256-cell inline boundary through 19×19 and 33×18 boards, and a zone
+or family source holds a position by its cell's live value at the lowering's
+time.
 
 The pool laws cover typed defaults, generation-checked lifetimes, strict
 snapshots, protected generated rows, pair identity and cascades, acyclic nested

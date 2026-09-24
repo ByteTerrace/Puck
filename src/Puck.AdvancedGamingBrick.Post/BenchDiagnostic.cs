@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Puck.Abstractions.Counting;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -54,20 +55,19 @@ internal static class BenchDiagnostic {
 
         // Create: a full DI container per machine — the spawn-on-stumble / pooling-lever number.
         var createTicks = 0L;
-        var createBytes = GC.GetAllocatedBytesForCurrentThread();
+        var createBytes = (AllocationWindow.Total(window: () => {
+            for (var rep = 0; (rep < LatencyReps); ++rep) {
+                var start = Stopwatch.GetTimestamp();
+                var machine = PostMachine.Build(
+                    bios: bios,
+                    rom: rom
+                );
 
-        for (var rep = 0; (rep < LatencyReps); ++rep) {
-            var start = Stopwatch.GetTimestamp();
-            var machine = PostMachine.Build(
-                bios: bios,
-                rom: rom
-            );
+                createTicks += (Stopwatch.GetTimestamp() - start);
+                machine.Dispose();
+            }
+        }) / LatencyReps);
 
-            createTicks += (Stopwatch.GetTimestamp() - start);
-            machine.Dispose();
-        }
-
-        createBytes = ((GC.GetAllocatedBytesForCurrentThread() - createBytes) / LatencyReps);
         BenchDiagnosticFormatting.Line(
             report: report,
             text: $"  Create   {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (createTicks / LatencyReps)),10:F1} us  {createBytes,10:N0} B"
@@ -82,17 +82,16 @@ internal static class BenchDiagnostic {
 
         // Snapshot: the ghost-echo / bottled-moment / freeze-to-dormant cost.
         var snapshotTicks = 0L;
-        var snapshotBytes = GC.GetAllocatedBytesForCurrentThread();
         var snapshot = subject.Machine.Snapshot();
+        var snapshotBytes = (AllocationWindow.Total(window: () => {
+            for (var rep = 0; (rep < LatencyReps); ++rep) {
+                var start = Stopwatch.GetTimestamp();
 
-        for (var rep = 0; (rep < LatencyReps); ++rep) {
-            var start = Stopwatch.GetTimestamp();
+                snapshot = subject.Machine.Snapshot();
+                snapshotTicks += (Stopwatch.GetTimestamp() - start);
+            }
+        }) / LatencyReps);
 
-            snapshot = subject.Machine.Snapshot();
-            snapshotTicks += (Stopwatch.GetTimestamp() - start);
-        }
-
-        snapshotBytes = ((GC.GetAllocatedBytesForCurrentThread() - snapshotBytes) / LatencyReps);
         BenchDiagnosticFormatting.Line(
             report: report,
             text: $"  Snapshot {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (snapshotTicks / LatencyReps)),10:F1} us  {snapshotBytes,10:N0} B  (snapshot size {snapshot.Size:N0} B)"
@@ -100,16 +99,15 @@ internal static class BenchDiagnostic {
 
         // Restore: the wake-from-dormant / promote-demote-arrival cost.
         var restoreTicks = 0L;
-        var restoreBytes = GC.GetAllocatedBytesForCurrentThread();
+        var restoreBytes = (AllocationWindow.Total(window: () => {
+            for (var rep = 0; (rep < LatencyReps); ++rep) {
+                var start = Stopwatch.GetTimestamp();
 
-        for (var rep = 0; (rep < LatencyReps); ++rep) {
-            var start = Stopwatch.GetTimestamp();
+                subject.Machine.Restore(snapshot: snapshot);
+                restoreTicks += (Stopwatch.GetTimestamp() - start);
+            }
+        }) / LatencyReps);
 
-            subject.Machine.Restore(snapshot: snapshot);
-            restoreTicks += (Stopwatch.GetTimestamp() - start);
-        }
-
-        restoreBytes = ((GC.GetAllocatedBytesForCurrentThread() - restoreBytes) / LatencyReps);
         BenchDiagnosticFormatting.Line(
             report: report,
             text: $"  Restore  {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (restoreTicks / LatencyReps)),10:F1} us  {restoreBytes,10:N0} B"
@@ -117,17 +115,16 @@ internal static class BenchDiagnostic {
 
         // Fork: Create + Snapshot + Restore in one call — the counterfactual/ghost-spawn cost.
         var forkTicks = 0L;
-        var forkBytes = GC.GetAllocatedBytesForCurrentThread();
+        var forkBytes = (AllocationWindow.Total(window: () => {
+            for (var rep = 0; (rep < LatencyReps); ++rep) {
+                var start = Stopwatch.GetTimestamp();
+                var fork = subject.Fork();
 
-        for (var rep = 0; (rep < LatencyReps); ++rep) {
-            var start = Stopwatch.GetTimestamp();
-            var fork = subject.Fork();
+                forkTicks += (Stopwatch.GetTimestamp() - start);
+                fork.Dispose();
+            }
+        }) / LatencyReps);
 
-            forkTicks += (Stopwatch.GetTimestamp() - start);
-            fork.Dispose();
-        }
-
-        forkBytes = ((GC.GetAllocatedBytesForCurrentThread() - forkBytes) / LatencyReps);
         BenchDiagnosticFormatting.Line(
             report: report,
             text: $"  Fork     {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (forkTicks / LatencyReps)),10:F1} us  {forkBytes,10:N0} B"

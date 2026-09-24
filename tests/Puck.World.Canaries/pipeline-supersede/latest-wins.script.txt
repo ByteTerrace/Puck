@@ -1,0 +1,29 @@
+# The feedback graph compiles and installs; paused and reset, one step makes submission 2 hold 2/16.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+pipeline.time feedback pause
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.step feedback
+pipeline.wait feedback submitted 2 10
+# The first edit, one minus the history. pipeline.status is held until the load applies, and its reconcile queues the
+# compilation if the frame presenter has not already.
+pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.status
+# The second edit, half the history. A reload is not a step, so the paused instance may install the first edit before
+# this one arrives, or the first may be superseded while it compiles or builds; neither edit renders without a step, and
+# no superseded line is expected, since an installed edit is replaced without one.
+pipeline.load feedback halved.pipeline.json
+pipeline.status
+# The last rendered frame is what the instance presents while the latest edit compiles: still 2/16.
+pipeline.capture feedback {run}/during.png
+pipeline.wait feedback captured 10
+pipeline.wait feedback compiled 40
+pipeline.capture feedback {run}/held.png
+pipeline.wait feedback captured 10
+# The next step renders the latest edit whole over the retained history: submission 3 reads (3/16) / 2 = 3/32.
+pipeline.step feedback
+pipeline.wait feedback installed 10
+pipeline.wait feedback submitted 3 10
+pipeline.capture feedback {run}/post-edit.png
+pipeline.wait feedback captured 10

@@ -400,10 +400,8 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 ) <= near.Distance);
             case OverlayPredicate.State state:
                 return OverlayStateComparison.Holds(
-                    definition: m_client.Definition,
-                    state: state,
-                    tick: m_client.Tick,
-                    engineTick: m_client.EngineTick
+                    mirror: m_client.StateMirror,
+                    state: state
                 );
             default:
                 return true;
@@ -520,10 +518,8 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 );
             case OverlayPredicate.State state:
                 return (OverlayStateComparison.Holds(
-                    definition: m_client.Definition,
-                    state: state,
-                    tick: m_client.Tick,
-                    engineTick: m_client.EngineTick
+                    mirror: m_client.StateMirror,
+                    state: state
                 )
                     ? 1f
                     : 0f

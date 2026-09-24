@@ -21,13 +21,14 @@ internal static class LspCommand {
                 catalogFingerprint: CliWorldVocabulary.Fingerprint(catalog: machines),
                 completeDocument: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Completions,
                 diagnoseDocument: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose,
-                input: stdin,
                 machines: machines,
-                output: stdout,
                 vocabularyResolver: CliVocabularyResolver.Instance
             );
 
-            await server.RunAsync().ConfigureAwait(continueOnCapturedContext: false);
+            await server.RunAsync(
+                input: stdin,
+                output: stdout
+            ).ConfigureAwait(continueOnCapturedContext: false);
             return 0;
         });
 

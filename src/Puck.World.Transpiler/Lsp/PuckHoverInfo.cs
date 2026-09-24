@@ -61,13 +61,11 @@ internal static class PuckHoverInfo {
         if (document is null) {
             return null;
         }
-        var path = new List<SyntaxNode>();
-
-        FindPath(
-            node: document,
+        var path = SyntaxWalk.PathAt(
             offset: offset,
-            path: path
+            root: document
         );
+
         if (Schema.Value.Describe(
             document: document,
             offset: offset,
@@ -204,8 +202,13 @@ internal static class PuckHoverInfo {
         }
         return null;
     }
-
-    private static string Card(string title, string declaration, string? description = null) {
+    /// <summary>Returns a hover card: a title, the declaration as a <c>puck</c> code fence long enough that no run of
+    /// backquotes inside it closes the fence, and the description after it when there is one.</summary>
+    /// <param name="title">The card's first line, as markdown.</param>
+    /// <param name="declaration">The source the card shows.</param>
+    /// <param name="description">The text after the fence, or <see langword="null"/> for none.</param>
+    /// <returns>The card's markdown.</returns>
+    internal static string Card(string title, string declaration, string? description = null) {
         var fence = "```";
 
         while (declaration.Contains(
@@ -218,46 +221,7 @@ internal static class PuckHoverInfo {
             ? ""
             : $"\n\n{description}"));
     }
-    private static IEnumerable<SyntaxNode> Children(SyntaxNode node) => node switch {
-        DocumentNode document => document.Statements,
-        BlockNode block => block.Statements,
-        TemplateNode template => [.. template.Parameters, template.Body],
-        TemplateParameterNode { DefaultValue: { } value } => [value],
-        LetNode constant => [constant.Value],
-        PropertyNode property => [property.Value],
-        ExpressionStatementNode statement => [statement.Expression],
-        ForStatementNode loop => [loop.Sequence, .. loop.Body],
-        RepeatStatementNode repeat => [repeat.Count, .. repeat.Body],
-        RuleBlockNode rule => rule.Statements,
-        DecisionBlockNode decision => decision.Statements,
-        OptionBlockNode option => option.Statements,
-        OnNoChoiceBlockNode fallback => fallback.Effects,
-        TransactionStatementNode transaction => [.. transaction.MainEffects, .. (transaction.OnFailureEffects ?? [])],
-        IfStatementNode branch => [.. branch.Then, .. (branch.Else ?? [])],
-        TransformStatementNode transform => [transform.Transform],
-        CallExpressionNode call => call.Arguments,
-        ArgumentNode argument => [argument.Value],
-        StateTableDeclarationNode table => [.. table.Modifiers, .. table.Cells],
-        StateSlotDeclarationNode { Value: { } slotValue } slot => [.. slot.Modifiers, slotValue],
-        StateSlotDeclarationNode slot => slot.Modifiers,
-        StatePileDeclarationNode pile => pile.Modifiers,
-        StateGridDeclarationNode grid => [.. grid.Modifiers, .. grid.Cells],
-        StateCellEntryNode cell => [cell.Value, .. cell.Modifiers],
-        StateModifierNode modifier => modifier.Arguments,
-        LambdaExpressionNode lambda => [lambda.Body],
-        ArrayExpressionNode array => array.Elements,
-        ObjectExpressionNode obj => obj.Properties,
-        BinaryExpressionNode binary => [binary.Left, binary.Right],
-        UnaryExpressionNode unary => [unary.Operand],
-        IndexExpressionNode index => [index.Target, index.Index],
-        MemberAccessExpressionNode member => [member.Target],
-        RangeExpressionNode range => [.. OptionalRangeChildren(range: range)],
-        _ => []
-    };
-    private static IEnumerable<SyntaxNode> OptionalRangeChildren(RangeExpressionNode range) {
-        if (range.Start is { } start) { yield return start; }
-        if (range.End is { } end) { yield return end; }
-    }
+
     private static string? Comments(string source, SyntaxNode node) {
         var lines = source[..node.Offset].Split('\n');
         var comments = new List<string>();
@@ -291,25 +255,6 @@ internal static class PuckHoverInfo {
             source: source
         )
     );
-    private static bool FindPath(SyntaxNode node, int offset, List<SyntaxNode> path) {
-        if (!Contains(
-            node: node,
-            offset: offset
-        )) {
-            return false;
-        }
-        path.Add(item: node);
-        foreach (var child in Children(node: node)) {
-            if (FindPath(
-                node: child,
-                offset: offset,
-                path: path
-            )) {
-                break;
-            }
-        }
-        return true;
-    }
     private static string Slice(string source, SyntaxNode node) => source.Substring(
         node.Offset,
         Math.Min(

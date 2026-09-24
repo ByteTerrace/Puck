@@ -5,6 +5,12 @@ artifacts. It covers cartridge data, graphics, maps, sound, state, capacity,
 Thumb emission, and content-provider behavior through the production Forge
 project; it does not certify arbitrary authored games or retail BIOS behavior.
 
+The suite runs both targets, so the Color compiler's execution tests live here
+too. `CartridgeProbe` compiles a document with its target's compiler and boots
+it on that machine. `CartridgeRefusal` names each case validation must refuse,
+with the error's document path and message text; a class keeps its refusals in
+one table behind one theory.
+
 ## Verification
 
 ```powershell

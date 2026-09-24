@@ -80,7 +80,7 @@ public static partial class ArenaVectorTransforms {
 
         if (candidates.Length == 0) {
             refusal = Refused(
-                code: RuleRefusal.VectorMeanEmpty,
+                code: RuleEffectRefusal.VectorMeanEmpty,
                 reason: $"row '{from.RowName()}' admits no cell to average"
             );
 
@@ -99,7 +99,7 @@ public static partial class ArenaVectorTransforms {
             sum: sumLease.Span
         )) {
             refusal = Refused(
-                code: code.Value,
+                code: code,
                 reason: $"row '{from.RowName()}' averages its {candidates.Length} admitted cells to no direction"
             );
 

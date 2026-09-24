@@ -3,10 +3,10 @@ using Puck.HumbleGamingBrick.Interfaces;
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Tier-A stage: proves <see cref="SerialLinkSession.Suspend"/> refuses a mid-transfer boundary rather than silently
+/// Tier-A stage: proves <see cref="LinkSession{TPort}.Suspend"/> refuses a mid-transfer boundary rather than silently
 /// severing the cable while a shift is in flight — the same contract <c>AgbLinkSession.Suspend</c> enforces on the AGB
 /// side. Arms an internal-clock transfer directly on one port's control register (no ROM execution needed, since the
-/// transfer stays armed until the port is ticked), then asserts <see cref="SerialLinkSession.Suspend"/> throws
+/// transfer stays armed until the port is ticked), then asserts <see cref="LinkSession{TPort}.Suspend"/> throws
 /// <see cref="InvalidOperationException"/> and leaves the cable connected — never returning a resume token whose credit
 /// a caller could trust for a round no console can recover mid-shift. A control leg confirms the identical session
 /// still suspends cleanly once the transfer completes (both ports idle).

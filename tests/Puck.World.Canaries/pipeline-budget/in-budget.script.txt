@@ -1,0 +1,30 @@
+# The positive script with a 4 MiB cap, which the wide edit's 1650688-byte peak fits: nothing is refused.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+pipeline.time feedback pause
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.step feedback
+pipeline.wait feedback submitted 2 10
+pipeline.budget feedback 4194304
+pipeline.capture feedback {run}/before.png
+pipeline.wait feedback captured 10
+# The wide edit installs while paused without rendering, so the paused instance still presents submission 2.
+pipeline.load feedback wide.pipeline.json
+pipeline.status
+pipeline.wait feedback installed 40
+pipeline.capture feedback {run}/after-refusal.png
+pipeline.wait feedback captured 10
+# Its 256x256 history cannot carry the 32x32 one, so it starts from zero: submission 3 holds 1/16.
+pipeline.step feedback
+pipeline.wait feedback submitted 3 10
+pipeline.capture feedback {run}/refused-step.png
+pipeline.wait feedback captured 10
+# The corrected edit cannot carry the wide history either: submission 4 renders 1 - 1/16.
+pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.status
+pipeline.wait feedback installed 40
+pipeline.step feedback
+pipeline.wait feedback submitted 4 10
+pipeline.capture feedback {run}/in-budget.png
+pipeline.wait feedback captured 10

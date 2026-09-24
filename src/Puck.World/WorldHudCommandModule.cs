@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Puck.Commands;
 using Puck.Overlays;
@@ -185,7 +184,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
     // element's own Template speaks, then EVERY placeholder is validated against the closed HudBindingVocabulary and
     // the LIVE document's state section BEFORE anything resolves — refusing the whole template by name at the FIRST
     // bad placeholder rather than interpolating some and leaving others blank.
-    private CommandResult ResolveDynamicTemplate(string template) {
+    private CommandResult ResolveDynamicTemplate(string template, WorldStateReadView view) {
         if (!HudTemplate.TryParse(
             error: out var parseError,
             segments: out var segments,
@@ -210,11 +209,21 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
                 continue;
             }
 
-            if (!TryFindStateRow(
+            if (WorldDefinitionRows.FindStateRow(
                 name: parsed.StateName!,
-                row: out var row
-            )) {
+                rows: view.Definition.State
+            ) is not { } row) {
                 return CommandResult.Error(output: $"[world.hud.template: placeholder '{{{segment.Text}}}' names no declared state row '{parsed.StateName}']");
+            }
+
+            // The substitution resolves against the live document, so a placeholder may name only a row the caller's
+            // disclosure carries whole.
+            if (view.Withheld(row: row.Name.Value) is not null) {
+                return CommandResult.Error(output: view.Refusal(
+                    key: parsed.StateCellKey,
+                    row: row.Name.Value,
+                    verb: "world.hud.template"
+                ));
             }
 
             if (
@@ -266,18 +275,6 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             : template
         );
     }
-    // The same (row, key) existence check HudRowValidation.ValidateElement applies to a document-authored binding,
-    // split into its two steps so a refusal names the thing that is actually missing — asked of the LIVE server
-    // definition here, not the pre-built stateRows dictionary validation already has in hand, through the shared
-    // row finder, and the key half through the row's own WorldStateRow.HasCell.
-    private bool TryFindStateRow(string name, [NotNullWhen(true)] out WorldStateRow? row) {
-        row = WorldDefinitionRows.FindStateRow(
-            rows: server.Definition.State,
-            name: name
-        );
-
-        return (row is not null);
-    }
     private static bool TryParseSeatFilter(string token, out int seat) {
         seat = 0;
 
@@ -322,7 +319,13 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
                         form: "<template text...>",
                         verb: "world.hud.template"
                     )
-                    : ResolveDynamicTemplate(template: template)
+                    : ResolveDynamicTemplate(
+                        template: template,
+                        view: WorldStateReadView.Of(
+                            reader: context.Principal,
+                            server: server
+                        )
+                    )
                 );
             },
             routing: CommandRouting.Immediate

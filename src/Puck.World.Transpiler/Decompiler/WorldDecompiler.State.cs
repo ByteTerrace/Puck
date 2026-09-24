@@ -1,7 +1,10 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.State;
+using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Vocabulary;
 
@@ -45,6 +48,7 @@ public static partial class WorldDecompiler {
         );
 
         var world = (state["world"] as JsonArray);
+        var enumSpellings = EnumSpellings.Of(state: state);
         var lattices = (state["lattices"] as JsonArray);
         var spaces = (state["spaces"] as JsonArray);
         var spaceCount = (spaces?.Count ?? 0);
@@ -79,7 +83,7 @@ public static partial class WorldDecompiler {
 
                     sb.AppendLine(
                         CultureInfo.InvariantCulture,
-                        $"{indent}        space {spaceName} {{ model: \"{EscapeString(s: model)}\"  revision: \"{EscapeString(s: revision)}\"  dimensions: {dims} }}"
+                        $"{indent}        space {spaceName} {{ model: {PuckStrings.Write(value: model)}  revision: {PuckStrings.Write(value: revision)}  dimensions: {dims} }}"
                     );
                 }
             }
@@ -95,7 +99,7 @@ public static partial class WorldDecompiler {
                 continue;
             }
 
-            if (string.Equals(a: k, b: "enums", comparisonType: StringComparison.OrdinalIgnoreCase) && (v is JsonArray enums) && EnumsHaveSugar(enums: enums, records: (state["records"] as JsonArray))) {
+            if (string.Equals(a: k, b: "enums", comparisonType: StringComparison.OrdinalIgnoreCase) && (v is JsonArray enums) && EnumsHaveSugar(enums: enums, records: (state["records"] as JsonArray), world: (state["world"] as JsonArray))) {
                 if (!first) {
                     sb.AppendLine();
                 }
@@ -151,7 +155,7 @@ public static partial class WorldDecompiler {
                     sb.AppendLine();
                 }
                 first = false;
-                DecompileRecords(indentLevel: (indentLevel + 1), records: records, sb: sb);
+                DecompileRecords(enums: enumSpellings, indentLevel: (indentLevel + 1), records: records, sb: sb);
                 continue;
             }
             if (string.Equals(a: k, b: "pools", comparisonType: StringComparison.OrdinalIgnoreCase) && (v is JsonArray pools) && PoolsHaveSugar(pools: pools)) {
@@ -159,7 +163,7 @@ public static partial class WorldDecompiler {
                     sb.AppendLine();
                 }
                 first = false;
-                DecompilePools(indentLevel: (indentLevel + 1), pools: pools, sb: sb);
+                DecompilePools(enums: enumSpellings, indentLevel: (indentLevel + 1), pools: pools, records: (state["records"] as JsonArray), sb: sb);
                 continue;
             }
             if (string.Equals(a: k, b: "pairPools", comparisonType: StringComparison.OrdinalIgnoreCase) && (v is JsonArray pairPools) && PairPoolsHaveSugar(pools: pairPools)) {
@@ -186,6 +190,7 @@ public static partial class WorldDecompiler {
             ) {
                 DecompileStateWorldBlock(
                     embeddings: embeddings,
+                    enums: enumSpellings,
                     indentLevel: (indentLevel + 1),
                     lattices: lattices,
                     sb: sb,
@@ -207,7 +212,9 @@ public static partial class WorldDecompiler {
             $"{indent}}}"
         );
     }
-    private static bool EnumsHaveSugar(JsonArray enums, JsonArray? records) {
+    // An `enum` declaration reaches `state.enums` only through a record field or a state row that names it, so one
+    // named by neither has no declaration spelling.
+    private static bool EnumsHaveSugar(JsonArray enums, JsonArray? records, JsonArray? world) {
         foreach (var node in enums) {
             if ((node is not JsonObject { Count: 2 } declaration) || (declaration["name"] is not JsonValue name) || !name.TryGetValue<string>(value: out var enumName) || (declaration["members"] is not JsonArray members)) {
                 return false;
@@ -217,7 +224,8 @@ public static partial class WorldDecompiler {
             }
             if (!(records ?? []).OfType<JsonObject>()
                 .SelectMany(selector: static record => ((record["fields"] as JsonArray) ?? []).OfType<JsonObject>())
-                .Any(predicate: field => string.Equals(a: field["enum"]?.ToString(), b: enumName, comparisonType: StringComparison.Ordinal))) {
+                .Concat(second: (world ?? []).OfType<JsonObject>())
+                .Any(predicate: named => string.Equals(a: named["enum"]?.ToString(), b: enumName, comparisonType: StringComparison.Ordinal))) {
                 return false;
             }
         }
@@ -237,7 +245,7 @@ public static partial class WorldDecompiler {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
         }
     }
-    private static void DecompileRecords(StringBuilder sb, JsonArray records, int indentLevel) {
+    private static void DecompileRecords(StringBuilder sb, JsonArray records, int indentLevel, EnumSpellings? enums) {
         var indent = new string(c: ' ', count: (indentLevel * 4));
 
         foreach (var node in records) {
@@ -269,7 +277,7 @@ public static partial class WorldDecompiler {
                         line += $" advance(perSecond: {FormatStateRate(advance: advance)})";
                     }
                     if (field["default"] is { } value) {
-                        line += $" = {FormatCellValue(node: value)}";
+                        line += $" = {FormatCellValue(enumName: field["enum"]?.ToString(), enums: enums, node: value)}";
                     }
                     sb.AppendLine(value: line);
                 }
@@ -277,7 +285,7 @@ public static partial class WorldDecompiler {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
         }
     }
-    private static void DecompilePools(StringBuilder sb, JsonArray pools, int indentLevel) {
+    private static void DecompilePools(StringBuilder sb, JsonArray pools, JsonArray? records, int indentLevel, EnumSpellings? enums) {
         var indent = new string(c: ' ', count: (indentLevel * 4));
 
         foreach (var node in pools) {
@@ -285,6 +293,7 @@ public static partial class WorldDecompiler {
                 continue;
             }
             var capacity = pool["capacity"]?.ToString();
+            var fields = ((records ?? []).OfType<JsonObject>().FirstOrDefault(predicate: record => (record["name"]?.ToString() == pool["record"]?.ToString()))?["fields"] as JsonArray);
             var header = $"{indent}pool {(pool["name"]?.ToString() ?? "Pool")} of {(pool["record"]?.ToString() ?? "Record")}";
 
             if (!string.IsNullOrEmpty(value: capacity)) {
@@ -302,7 +311,9 @@ public static partial class WorldDecompiler {
                     if (seed["values"] is JsonArray entries) {
                         foreach (var valueNode in entries) {
                             if (valueNode is JsonObject entry) {
-                                values.Add(item: $"{entry["field"]}: {FormatCellValue(node: entry["value"])}");
+                                var enumName = (fields ?? []).OfType<JsonObject>().FirstOrDefault(predicate: field => (field["name"]?.ToString() == entry["field"]?.ToString()))?["enum"]?.ToString();
+
+                                values.Add(item: $"{entry["field"]}: {FormatCellValue(enumName: enumName, enums: enums, node: entry["value"])}");
                             }
                         }
                     }
@@ -338,9 +349,13 @@ public static partial class WorldDecompiler {
             ((field["advance"] is null) || ((field["advance"] is JsonObject advance) && CanSugarAdvance(advance: advance)))))));
     private static bool PairPoolsHaveSugar(JsonArray pools) => pools.All(predicate: node =>
         ((node is JsonObject pool) && pool.All(predicate: pair => (pair.Key is "name" or "record" or "leftPool" or "rightPool" or "maxLive" or "directed" or "allowSelf"))));
-    private static string FormatCellValue(JsonNode? node) {
+    // A value an enum field holds prints as the member it names.
+    private static string FormatCellValue(JsonNode? node, string? enumName = null, EnumSpellings? enums = null) {
         if ((node is not JsonObject tagged) || (tagged["kind"] is not JsonValue kindNode) || (tagged["value"] is not { } value)) {
-            return FormatValue(indentLevel: 0, node: node);
+            return (enums?.Spell(enumName: enumName, value: node) ?? FormatValue(indentLevel: 0, node: node));
+        }
+        if (enums?.Spell(enumName: enumName, value: value) is { } member) {
+            return member;
         }
         var kind = kindNode.ToString();
 
@@ -353,7 +368,7 @@ public static partial class WorldDecompiler {
         (((kind == "Fixed") && (node is JsonValue value) && value.TryGetValue<long>(value: out var raw))
             ? Puck.Maths.FixedQ4816.FromRawBits(value: raw).ToString()
             : FormatValue(indentLevel: 0, node: node));
-    private static void DecompileStateWorldBlock(StringBuilder sb, JsonArray world, JsonArray? lattices, int indentLevel, int spaceCount = 0, EmbeddingLock? embeddings = null) {
+    private static void DecompileStateWorldBlock(StringBuilder sb, JsonArray world, JsonArray? lattices, int indentLevel, int spaceCount = 0, EmbeddingLock? embeddings = null, EnumSpellings? enums = null) {
         var indent = new string(
             c: ' ',
             count: (indentLevel * 4)
@@ -388,6 +403,7 @@ public static partial class WorldDecompiler {
             DecompileStateRow(
                 embeddings: embeddings,
                 embedsPair: pair,
+                enums: enums,
                 indentLevel: (indentLevel + 1),
                 lattices: lattices,
                 row: rowObj,
@@ -410,7 +426,8 @@ public static partial class WorldDecompiler {
         int indentLevel,
         (string? VectorRowName, string? SpaceName) embedsPair = default,
         EmbeddingLock? embeddings = null,
-        int spaceCount = 0
+        int spaceCount = 0,
+        EnumSpellings? enums = null
     ) {
         if (CanSugarPileRow(
             row: row,
@@ -433,6 +450,7 @@ public static partial class WorldDecompiler {
             world: world
         )) {
             DecompileStateGridRow(
+                enums: enums,
                 indentLevel: indentLevel,
                 positionsRowName: positionsRowName,
                 row: row,
@@ -466,7 +484,7 @@ public static partial class WorldDecompiler {
         var rowSpace = row["space"]?.ToString();
 
         if (isTable) {
-            var header = new StringBuilder(value: $"{indent}table {name}");
+            var header = new StringBuilder(value: $"{indent}table {name}{EnumAnnotation(row: row)}");
 
             if (!string.IsNullOrEmpty(value: embedsPair.VectorRowName)) {
                 if ((spaceCount > 1) && !string.IsNullOrEmpty(value: embedsPair.SpaceName)) {
@@ -507,12 +525,12 @@ public static partial class WorldDecompiler {
             foreach (var cellNode in cells) {
                 var cellObj = ((JsonObject)cellNode!);
                 var key = (cellObj["key"]!.ToString());
-                var line = new StringBuilder(value: $"{cellIndent}{FormatStateCellKey(key: key)} = {FormatStateScalarLiteral(
+                var line = new StringBuilder(value: $"{cellIndent}{PuckPrinter.PrintName(name: key)} = {(enums?.Spell(enumName: row["enum"]?.ToString(), value: cellObj["value"]) ?? FormatStateScalarLiteral(
                     embeddings: embeddings,
                     kind: kind,
                     node: cellObj["value"],
                     space: rowSpace
-                )}");
+                ))}");
 
                 if (cellObj["advance"] is JsonObject cellAdvance) {
                     line.Append(value: $" advance(perSecond: {FormatStateRate(advance: cellAdvance)})");
@@ -533,15 +551,15 @@ public static partial class WorldDecompiler {
                 $"{indent}}}"
             );
         } else {
-            var header = new StringBuilder(value: $"{indent}slot {name}");
+            var header = new StringBuilder(value: $"{indent}slot {name}{EnumAnnotation(row: row)}");
 
             if (row["value"] is { } valueNode) {
-                header.Append(value: $" = {FormatStateScalarLiteral(
+                header.Append(value: $" = {(enums?.Spell(enumName: row["enum"]?.ToString(), value: valueNode) ?? FormatStateScalarLiteral(
                     embeddings: embeddings,
                     kind: kind,
                     node: valueNode,
                     space: rowSpace
-                )}");
+                ))}");
             }
 
             AppendStateRowModifiers(
@@ -628,9 +646,9 @@ public static partial class WorldDecompiler {
             case "Vector":
                 var vecStr = node.ToString();
                 if ((embeddings is not null) && embeddings.TryFindText(spaceName: space, text: out var text, vectorBase64Url: vecStr)) {
-                    return $"embed(\"{EscapeString(s: text)}\")";
+                    return $"embed({PuckStrings.Write(value: text)})";
                 }
-                return $"vector(\"{EscapeString(s: vecStr)}\")";
+                return $"vector({PuckStrings.Write(value: vecStr)})";
             case "Fixed":
                 // Already a decimal-text JSON string (see the emitter's LowerStateFixedValue). A whole-number
                 // value's exact expansion carries no point (FixedPointText.TryFormatRaw skips a zero fraction), so a
@@ -640,7 +658,7 @@ public static partial class WorldDecompiler {
 
                 return (fixedText.Contains(value: '.') ? fixedText : $"{fixedText}.0");
             case "Text":
-                return $"\"{EscapeString(s: node.ToString())}\"";
+                return PuckStrings.Write(value: node.ToString());
             case "Bool":
                 return (((node is JsonValue boolVal) && boolVal.TryGetValue<bool>(value: out var b))
                     ? (b ? "true" : "false")
@@ -812,13 +830,6 @@ public static partial class WorldDecompiler {
     }
     // The whole row must be representable without loss — every member spellable as a modifier, every cell
     // spellable as `key = value [modifier]*`, and every `advance` rate spellable as one literal.
-    // A declaration names its row with a bare identifier; a cell key that is not one is written as a string.
-    private static bool IsDeclarationIdentifier(string text) =>
-        ((text.Length > 0) && (char.IsLetter(c: text[0]) || (text[0] == '_') || (text[0] == '$')) && text.All(predicate: static character => (char.IsLetterOrDigit(c: character) || (character == '_') || (character == '$'))));
-    private static string FormatStateCellKey(string key) => (IsDeclarationIdentifier(text: key)
-        ? key
-        : $"\"{EscapeString(s: key)}\""
-    );
     // Whether a stored value prints as a literal the declaration lowering admits and lowers back to the same JSON.
     private static bool IsSugarScalar(string kind, JsonNode? node) => kind switch {
         "Int" => ((node is JsonValue intValue) && intValue.TryGetValue<long>(value: out _)),
@@ -831,20 +842,31 @@ public static partial class WorldDecompiler {
             s: text
         ) && (parsed.ToString() == text)),
     };
+    // A declaration naming an enum lowers as Int, so only an Int row naming an enum by a bare name prints as one.
+    private static bool CanSugarRowEnum(JsonObject row, string kind) => ((row["enum"] is null) || (
+        (kind == "Int") &&
+        (row["enum"] is JsonValue enumValue) &&
+        enumValue.TryGetValue<string>(value: out var enumName) &&
+        IdentifierSpelling.IsName(text: enumName)
+    ));
+    private static string EnumAnnotation(JsonObject row) => ((row["enum"] is { } name)
+        ? $": {name}"
+        : string.Empty);
     private static bool CanSugarStateRow(JsonObject row, out bool isTable) {
         isTable = false;
 
         if (
             (row["name"] is not JsonValue nameVal) ||
             !nameVal.TryGetValue<string>(value: out var rowName) ||
-            !IsDeclarationIdentifier(text: rowName)
+            !IdentifierSpelling.IsName(text: rowName)
         ) {
             return false;
         }
         if (
             (row["kind"] is not JsonValue kindVal) ||
             !kindVal.TryGetValue<string>(value: out var kind) ||
-            (kind is not ("Int" or "Fixed" or "Bool" or "Text" or "Vector"))
+            (kind is not ("Int" or "Fixed" or "Bool" or "Text" or "Vector")) ||
+            !CanSugarRowEnum(kind: kind, row: row)
         ) {
             return false;
         }
@@ -977,7 +999,7 @@ public static partial class WorldDecompiler {
         if (
             (row["name"] is not JsonValue nameVal) ||
             !nameVal.TryGetValue<string>(value: out var rowName) ||
-            !IsDeclarationIdentifier(text: rowName)
+            !IdentifierSpelling.IsName(text: rowName)
         ) {
             return false;
         }
@@ -1008,7 +1030,7 @@ public static partial class WorldDecompiler {
         if (
             (domainObj["row"] is not JsonValue rowVal) ||
             !rowVal.TryGetValue<string>(value: out var domainRow) ||
-            !IsDeclarationIdentifier(text: domainRow)
+            !IdentifierSpelling.IsName(text: domainRow)
         ) {
             return false;
         }
@@ -1081,7 +1103,7 @@ public static partial class WorldDecompiler {
         foreach (var cellNode in cells) {
             var key = (((JsonObject)cellNode!)["key"]!.ToString());
 
-            sb.AppendLine(value: $"{cellIndent}{FormatStateCellKey(key: key)}");
+            sb.AppendLine(value: $"{cellIndent}{PuckPrinter.PrintName(name: key)}");
         }
 
         sb.AppendLine(
@@ -1131,14 +1153,15 @@ public static partial class WorldDecompiler {
         if (
             (row["name"] is not JsonValue nameVal) ||
             !nameVal.TryGetValue<string>(value: out var rowName) ||
-            !IsDeclarationIdentifier(text: rowName)
+            !IdentifierSpelling.IsName(text: rowName)
         ) {
             return false;
         }
         if (
             (row["kind"] is not JsonValue kindVal) ||
             !kindVal.TryGetValue<string>(value: out var kind) ||
-            (kind is not ("Int" or "Bool"))
+            (kind is not ("Int" or "Bool")) ||
+            !CanSugarRowEnum(kind: kind, row: row)
         ) {
             return false;
         }
@@ -1353,14 +1376,14 @@ public static partial class WorldDecompiler {
             : raw.ToString(provider: CultureInfo.InvariantCulture)
         );
     }
-    private static void DecompileStateGridRow(StringBuilder sb, JsonObject row, JsonObject topology, string? positionsRowName, int indentLevel) {
+    private static void DecompileStateGridRow(StringBuilder sb, JsonObject row, JsonObject topology, string? positionsRowName, int indentLevel, EnumSpellings? enums) {
         var indent = new string(
             c: ' ',
             count: (indentLevel * 4)
         );
         var name = (row["name"]!.ToString());
         var kind = (row["kind"]!.ToString());
-        var header = new StringBuilder(value: $"{indent}grid {name} dimensions(width: {topology["width"]}, depth: {topology["depth"]})");
+        var header = new StringBuilder(value: $"{indent}grid {name}{EnumAnnotation(row: row)} dimensions(width: {topology["width"]}, depth: {topology["depth"]})");
 
         if (topology["wrap"] is { } wrapNode) {
             header.Append(value: $" wrap({wrapNode})");
@@ -1417,10 +1440,10 @@ public static partial class WorldDecompiler {
             var cellObj = ((JsonObject)cellNode!);
             var key = (cellObj["key"]!.ToString());
 
-            sb.AppendLine(value: $"{cellIndent}{FormatStateCellKey(key: key)} = {FormatStateScalarLiteral(
+            sb.AppendLine(value: $"{cellIndent}{PuckPrinter.PrintName(name: key)} = {(enums?.Spell(enumName: row["enum"]?.ToString(), value: cellObj["value"]) ?? FormatStateScalarLiteral(
                 kind: kind,
                 node: cellObj["value"]
-            )}");
+            ))}");
         }
 
         sb.AppendLine(

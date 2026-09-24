@@ -62,6 +62,6 @@ public sealed class BoardJumpDistanceLawTests {
     public void InvalidLiveTargetsAreUnreachable(int target) {
         var board = Board(5);
 
-        Assert.Equal(-1, BoardQueries.Evaluate(new BoardJumpDistanceQuery(board, 0, true), [1, 2, 0, 0, 0], 0, 0, target));
+        Assert.Equal(-1, BoardQueries.Evaluate(new BoardJumpDistanceQuery(target: 0, targetIsLive: true, topology: board), [1, 2, 0, 0, 0], 0, 0, target));
     }
 }

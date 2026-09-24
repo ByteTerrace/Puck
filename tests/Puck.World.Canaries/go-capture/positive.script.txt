@@ -1,0 +1,27 @@
+# Black closes on white's stone at the centre point, 180, from above, left and right while white plays away on the
+# edge, and black's fourth stone at 199 takes it. The CPU then plays white's reply through the search, and the recorded
+# run replays to the same state.
+replay.record go-capture
+world.state.cell.set stone play 161
+world.wait 2
+world.state.cell.set stone play 180
+world.wait 2
+world.state.cell.set stone play 179
+world.wait 2
+world.state.cell.set stone play 0
+world.wait 2
+world.state.cell.set stone play 181
+world.wait 2
+world.state.cell.set stone play 1
+world.wait 2
+world.state.cell.set stone play 199
+world.wait 2
+world.state captured
+world.state prisoners
+world.state.cell.set aiSide $value 2
+world.wait 240
+world.state moves
+world.state turn
+replay.stop
+replay.verify go-capture
+wire.errors

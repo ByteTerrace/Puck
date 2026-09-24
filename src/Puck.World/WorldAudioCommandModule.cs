@@ -148,8 +148,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         if (args.Count == 0) {
             return new CommandResult(Output: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"[world.volume: {director.EffectiveMasterVolume:0.###} ({(director.MasterVolumeLeverEngaged
-                ? "session lever; world.save folds"
+                handler: $"[world.volume: {director.EffectiveMasterVolume:0.###} ({((director.SessionMasterVolume is not null)
+                ? "session lever; world.save folds into an authored audio.masterGain"
                 : "document audio.masterGain")})]"
             ));
         }
@@ -177,13 +177,13 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
                 Name: WorldSessionLevers.MasterVolume,
                 A: volume
             ),
-            principal: context.ActingPrincipal()
+            principal: context.Principal
         );
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.volume: {director.EffectiveMasterVolume:0.###} ({(director.MasterVolumeLeverEngaged
-            ? "session lever; world.save folds into audio.masterGain"
+            handler: $"[world.volume: {director.EffectiveMasterVolume:0.###} ({((director.SessionMasterVolume is not null)
+            ? "session lever; world.save folds into an authored audio.masterGain"
             : "document audio.masterGain — lever refused")})]"
         ));
     }
@@ -216,7 +216,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.volume",
-            description: "The master-volume SESSION lever (the render-levers asymmetry): world.volume <0..8> applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
+            description: "The master-volume SESSION lever (the render-levers asymmetry): world.volume <0..8> applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain when the world authors an audio section; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
             handler: VolumeHandler
         );
         yield return CommandDefinition.WithWireArgs(

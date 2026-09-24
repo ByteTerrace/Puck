@@ -12,16 +12,6 @@ internal static partial class Subjects {
         ));
     // Is `needle` a contiguous factor of `haystack`? A phase-independent witness that two constructions of one tiling
     // share a language.
-    private static bool IsFactor(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needle) {
-        for (var start = 0; (start <= (haystack.Length - needle.Length)); ++start) {
-            if (haystack.Slice(
-                start: start,
-                length: needle.Length
-            ).SequenceEqual(other: needle)) { return true; }
-        }
-
-        return false;
-    }
     private static BigInteger SmallInteger(long raw) =>
         (raw % 101L);
     private static ulong NextField(ref Pcg32XshRr rng, ulong modulus) =>
@@ -120,29 +110,7 @@ internal static partial class Subjects {
                 value = pattern.Predicate(letters: (1UL << tree.Symbol));
 
                 return true;
-            case Oracles.WordPatternKind.Union: {
-                    value = pattern.Algebra.Zero;
-
-                    if (
-                        !TryBuildPattern(
-                        pattern: pattern,
-                        tree: tree.Left!,
-                        value: out var left
-                    ) ||
-                        !TryBuildPattern(
-                        pattern: pattern,
-                        tree: tree.Right!,
-                        value: out var right
-                    )
-                    ) { return false; }
-
-                    value = pattern.Union(
-                        left: left,
-                        right: right
-                    );
-
-                    return true;
-                }
+            case Oracles.WordPatternKind.Union:
             case Oracles.WordPatternKind.Concatenate: {
                     value = pattern.Algebra.Zero;
 
@@ -159,9 +127,15 @@ internal static partial class Subjects {
                     )
                     ) { return false; }
 
-                    value = pattern.Concatenate(
-                        left: left,
-                        right: right
+                    value = ((Oracles.WordPatternKind.Union == tree.Kind)
+                        ? pattern.Union(
+                            left: left,
+                            right: right
+                        )
+                        : pattern.Concatenate(
+                            left: left,
+                            right: right
+                        )
                     );
 
                     return true;
@@ -808,7 +782,7 @@ internal static partial class Subjects {
                 incidences: incidences,
                 material: default
             );
-            var certificate = calculus.Poset.Algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = calculus.Poset.Algebra.Certify(tupleLimit: (1L << 22));
 
             if (ClosureOutcome.BasisAssociativityVerified != certificate.Outcome) { return $"the circle's incidence algebra certifies {certificate.Outcome}"; }
 

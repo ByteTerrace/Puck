@@ -70,16 +70,16 @@ Use the provided [📋checklist](./CHECKLIST.md) to help track your progress.
 
 The current monorepo entry point is the
 [Azure GitHub Actions workflow](../../docs/development/ci.md#azure-production-deployment).
-It pins Bicep 0.46.1 and authenticates with the CI managed identity before
+It pins Bicep 0.47.16 and authenticates with the CI managed identity before
 restoring the published, versioned `ts/bvm` Template Specs. The `bvm` alias in
 `bicepconfig.json` selects their subscription and resource group; the local
-`avm-temp` sources do not replace those published deployment dependencies. The
+`avm` sources do not replace those published deployment dependencies. The
 `main.bicep` template owns the existing production platform. Supply `actorsImage` as an immutable registry digest
 when updating the shared platform with a new actor release.
 
-The `.azure-devops/pipelines` definitions describe the older standalone
-repository deployment. Their checkout paths and service connections are not
-the GitHub Actions deployment contract. A new platform still needs the identity
+The `.azure-devops/pipelines` definitions describe a standalone repository
+deployment. Their checkout paths and service connections are not the GitHub
+Actions deployment contract. A new platform still needs the identity
 and access setup described in the [checklist](./CHECKLIST.md) and bootstrap below.
 
 ### Bootstrap process
@@ -117,11 +117,10 @@ DNS names and identity-owned blob container names retain their service contracts
 
 Role assignments use AVM's `guid(scopeResourceId, principalId, roleDefinitionId)`
 formula, with the fully qualified role-definition ID also used in the assignment
-properties. The resource-role-assignment helper supplies this default. Existing
-grants with older names need a one-time operator migration before deployment;
-Azure cannot rename an assignment or create its duplicate under a new name.
-One-time repairs stay outside the repository and CI. The bootstrap remains the
-repeatable identity-team setup contract.
+properties. The resource-role-assignment helper supplies this default. Azure
+cannot rename an assignment or create its duplicate under a new name, so an
+assignment that exists under another name is an operator repair outside the
+repository and CI. The bootstrap is the repeatable identity-team setup contract.
 
 ## Remote MCP
 
@@ -164,11 +163,14 @@ The command resolves the existing API and World identity from deployed outputs,
 checks the enabled delegated scope, retains the what-if plan and refuses deletion.
 It installs the same identity trust and monitoring used by `main.bicep`, then
 merges the resulting MCP policy into deployment outputs. Publish the candidate
-image and run the ordinary `deploy-world` release lane to apply runtime policy,
+image and run the ordinary release lane (`puck azure prepare-world-release`, then
+`puck world release deploy artifacts/world-release`) to apply runtime policy,
 with its drain, persistence snapshot, verification and rollback. Later World
 platform deployments preserve the newest successful MCP policy. An ABAC-enabled
 ACR quick build needs `--source-acr-auth-id '[caller]'` to use the signed-in Entra
 identity; do not enable registry passwords.
+
+## Bicep sources
 
 Compilation and local tests do not issue certificates, deploy resources or grant live consent.
 Deployment choices belong in `main.bicepparam`. Typed configuration objects carry
@@ -176,7 +178,20 @@ names, tags, DNS settings, ports and capacity into modules. Deployment scripts u
 the same configuration through Bicep outputs. Module sources retain protocol and
 schema constants but contain no production-specific silo names or hostnames.
 
-Public AVM references pin the latest published versions validated by this change.
+Bicep is held to the same bar as C#. [bicepconfig.json](./bicepconfig.json) sets
+every linter rule to error, apart from the `use-description-*` rules (optional,
+like CS1591), `what-if-short-circuiting` (principal IDs flow between modules by
+design) and `use-recent-module-versions` (it reports unresolved version
+metadata on the command line). It also fixes the formatter settings.
+`puck azure build-infrastructure` lints and format-checks every source in this
+directory first and fails on any diagnostic, compiler warnings included. Run
+`az bicep format --file <path>` to fix formatting. Suppress a rule only with a
+`#disable-next-line` that states why the finding is a false positive.
+Sources group top-level declarations under `Imports`, `Types`, `Functions`,
+`Parameters`, `Variables`, `Resources` and `Outputs` banners, in that order.
+
+Public AVM references pin the latest published versions. Nothing refreshes them
+automatically, so check a module's registry tags when touching it.
 Reusable platform patterns are deployed Template Specs under `ts/bvm`; the alias
 continues to select the existing `byteterrace` registry. Their source paths,
 versions and dependency order are recorded in [template-specs.json](./template-specs.json).
@@ -189,7 +204,9 @@ puck azure publish-template-specs
 Run that command from the repository root after authenticating Azure CLI and
 installing the CI-pinned Bicep version. Bootstrap calls the same publisher.
 The publisher compiles sources in dependency order, skips identical published
-versions and rejects changed content under an existing version. Bump the manifest
+versions and rejects changed content under an existing version. The comparison
+ignores the compiler's `_generator` stamp, so a Bicep upgrade alone needs no new
+version. Bump the manifest
 version and consuming Bicep references together; existing published versions are
 preserved. Application CI consumes these pins without bootstrapping identities.
 

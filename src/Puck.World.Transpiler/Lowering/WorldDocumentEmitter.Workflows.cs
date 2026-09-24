@@ -9,7 +9,7 @@ public static partial class WorldDocumentEmitter {
     /// <summary>Lowers a <c>workflow</c> block into a staged entry of the document's <c>ruleGroups</c> array and its
     /// steps into <c>rules</c>.</summary>
     /// <remarks>Each <c>step</c>'s body is a rule body, lowered as one rule named
-    /// <c>&lt;workflow&gt;_&lt;step&gt;</c>; the steps are the cursor's order and the last one is terminal. A step
+    /// <c>&lt;workflow&gt;$&lt;step&gt;</c>; the steps are the cursor's order and the last one is terminal. A step
     /// declaring <c>skip</c> advances the cursor past its own refusal instead of stalling on it.
     /// <c>repeatStep</c> and <c>forEachStep</c> are refused: a staged cursor advances on a committed firing and
     /// carries neither a repeat nor an iteration of its own.</remarks>
@@ -19,9 +19,17 @@ public static partial class WorldDocumentEmitter {
         DocumentScope scope,
         RuleScopeContext? parentContext = null
     ) {
+        RefuseReservedScopedName(
+            name: workflowNode.Name,
+            prefix: parentContext?.Prefix,
+            scope: scope,
+            span: workflowNode.Span
+        );
+
         var groupName = PrefixedName(
             name: workflowNode.Name,
-            prefix: parentContext?.Prefix
+            prefix: parentContext?.Prefix,
+            scope: scope
         );
 
         if (string.IsNullOrEmpty(value: groupName)) {
@@ -103,7 +111,8 @@ public static partial class WorldDocumentEmitter {
             var lowered = new JsonObject {
                 ["rule"] = JsonValue.Create(value: PrefixedName(
                     name: stepName,
-                    prefix: groupName
+                    prefix: groupName,
+                    scope: scope
                 )),
             };
 

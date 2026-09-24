@@ -90,9 +90,6 @@ public abstract class CartridgeBase : ICartridge {
 
         source.CopyTo(destination: m_ram.AsSpan(start: offset));
     }
-    /// <summary>Reads the mapper's register state back from a snapshot.</summary>
-    /// <param name="reader">The snapshot source.</param>
-    protected abstract void LoadRegisters(StateReader reader);
     /// <summary>Maps a RAM-window address to an absolute byte offset into the save RAM.</summary>
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
     /// <returns>The absolute RAM offset; a value outside the populated size reads open-bus and drops writes.</returns>
@@ -114,9 +111,16 @@ public abstract class CartridgeBase : ICartridge {
             ? address
             : ((romBank * bankSize) + (address - MemoryMap.RomBankNStart))
         );
-    /// <summary>Writes the mapper's register state to a snapshot.</summary>
-    /// <param name="writer">The snapshot sink.</param>
-    protected abstract void SaveRegisters(StateWriter writer);
+    /// <summary>Moves the mapper's register state, which follows the save RAM in the snapshot, in one direction. The order
+    /// of the transfers is the mapper's snapshot layout; saving and loading both run this one list.</summary>
+    /// <typeparam name="TTransfer">The direction: <see cref="StateSaveTransfer"/> or <see cref="StateLoadTransfer"/>.</typeparam>
+    /// <param name="transfer">The direction's writer or reader.</param>
+    protected abstract void TransferRegisters<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer;
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Block(values: m_ram);
+        TransferRegisters(transfer: transfer);
+    }
 
     /// <inheritdoc/>
     public void ComputeRomWindows(out int bank0Offset, out int bankNOffset) {
@@ -143,10 +147,8 @@ public abstract class CartridgeBase : ICartridge {
     public virtual void ImportPersistentClock(ReadOnlySpan<byte> source) {
     }
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        reader.ReadBytes(destination: m_ram);
-        LoadRegisters(reader: reader);
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
     public void MarkExternalRamClean() {
         ExternalRamDirty = false;
@@ -197,10 +199,8 @@ public abstract class CartridgeBase : ICartridge {
     public byte ReadRom(ushort address) =>
         m_rom[(MapRomOffset(address: address) % m_rom.Length)];
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBytes(value: m_ram);
-        SaveRegisters(writer: writer);
-    }
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
     /// <inheritdoc/>
     /// <remarks>The default for every mapper whose <see cref="ReadRam"/>/<see cref="WriteRam"/> are the unmodified
     /// base implementation below: the window is exactly <see cref="MapRamOffset"/>'s bank-resolved offset, clamped to

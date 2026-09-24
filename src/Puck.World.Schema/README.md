@@ -4,7 +4,11 @@ Puck.World.Schema defines the world data model: `puck.world.definition.v1`, the
 versioned JSON document family that describes a world and a player—plus the
 two egress families, `puck.world.projection.v1` (`WorldProjection.cs`) and
 `puck.world.counterpart-attestation.v1` (`WorldCounterpartAttestation.cs`), which are what
-a world hands a peer instead of itself. It contains no rendering, no input
+a world hands a peer instead of itself. It also carries `puck.counters.report.v1`
+(`WorldCountersReport.cs`), the report
+[`puck counters`](../../docs/reference/cli.md#puck-counterswork-counter-collector)
+writes about a World run, so the report shares the document context's strictness
+and schema generation. It contains no rendering, no input
 handling, and no server logic; it exists so the data the simulation runs on
 remains independent of presentation. It also carries the
 document-embedded vocabulary that a document's own rows type themselves
@@ -72,7 +76,7 @@ centre}]` (centre relative to `origin`, world units; ordinal `i` is
 itself), and `edges: [{from, to, direction, oneWay?}]`—an edge fills the
 source's slot along its direction and, unless `oneWay`, the destination's slot
 along the opposite, so a cell with k neighbours spreads its edges over k
-distinct directions; a territory map (Risk), a star board (Nine Men's Morris),
+distinct directions; a territory map, a star board (Nine Men's Morris),
 or a tiling a tool emits. `$board:cellOf` resolves the nearest centre within
 half a `cellSize`; `$board:offset` refuses a graph (there is no axis); its
 symmetry group is the identity, so `$board:canonical` is the plain fingerprint.
@@ -119,6 +123,7 @@ Rule operands accept these bounded channels:
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` or `$board:pathCost:<row>:cell:<targetRow>:<targetKey>:<maxCost>:<maxVisits>` | Minimum terrain entry cost to the literal `<target>` cell, or to whichever cell `<targetRow>`.`<targetKey>` holds at evaluation time; -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
 | `$board:mask:<row>:<min>:<max>` | The 64-bit cell-set mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
+| `$board:fingerprint:<row>` | The 64-bit fingerprint of the whole board's values through the identity alone: the canonical fold's identity term, so a mirror image reads a different value. Go's ko check pushes it into a history ring to tell an exact position apart |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$board:component:<row>:<min>:<max>:<maxVisits>` | The size of the connected component (along the topology's directions) of cells whose value lies in min..max that contains the key cell; 0 when the key cell is outside the range, -2 when the budget of settled cells runs out |
@@ -192,7 +197,7 @@ refusal is distinct from proof that no route exists.
 `state.enums` declares symbolic value domains and `state.families` groups
 consecutively declared rows under one name; an `Int` row names an enum through
 its own `enum` member, and a write outside that enum's range is refused by name.
-See [Model state with rows and cells](../../docs/reference/state/data-model.md#symbolic-values-and-families).
+See [Enums](../../docs/reference/state/data-model.md#enums).
 
 A plain keyed row with a declared `capacity` IS the stable token-identity
 domain—no dedicated facet, just `StateDomain.Keys` (`Domain` omitted or
@@ -209,8 +214,9 @@ are separate from these piles: each `drawnMasks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `shuffle`, `sortZone`, `sortKeyed`,
-`writeSet`, `boardCombine`, `arrange`, `push`, `clearEnclosed`, or `observe`. `clearEnclosed`
+`setRay`, `pushRay`, `shuffle`, `sort`, `writeSet`, `boardCombine`, `arrange`,
+`clearEnclosed`, `observe`, or the vector transforms `mix`, `mean`, `nearest`, and
+`remember`. `clearEnclosed`
 (`row`, `from`, `lower`, `upper`) writes the board's empty value over every
 component valued lower..upper beside the cell `from` names (a literal cell or
 any dynamic key spelling) that has no empty cell beside it—the write-path
@@ -222,7 +228,7 @@ domain's own order—the inverse of `$reduce:arrangementRank`. `writeSet` (`row`
 bit is set in a cell-set mask read from an integer cell—the one board-writing
 form for a set built from `$board:mask`, `boardShift`/`boardImage`, and the
 plain bit operators (`bitAnd`/`bitOr`/`bitXor`/`bitNot` compose two boards'
-masks the way a dedicated set-algebra transform once did): populate a scratch
+masks): populate a scratch
 integer row with the composed expression, then `writeSet` it onto the board.
 `setKey` may be a literal, or any dynamic key spelling a write accepts (a
 binding token, a registered key family, an expression key, or a `$cell:` cell
@@ -360,22 +366,22 @@ cells; acceptance is always 1 or
 name `any` in place of a direction, answering the mask of accepting
 directions (bit d for direction ordinal d) or, with a trailing `count`, how
 many. `world.match` walks one word at the console and narrates every step:
-value, letter, state, verdict. A row declaring `domain: { "$type": "ring", "capacity": 1..128, "empty": ... }`
-is a ring of the last pushed values, the temporal twin of a ray: `push`
-(`row`, `value`) and the `pushState` effect (`value`/`fromState`/
-`expression`, world scope) append to it and advance its `historyCursor`;
+value, letter, state, verdict. A row declaring `domain: { "$type": "ring", "capacity": 1..4096, "empty": ... }`
+is a ring of the last pushed values, the temporal twin of a ray: the
+`pushState` effect (exactly one of `value`, `fromState`, or `expression`)
+appends to it and advances its `historyCursor`;
 `$history:<row>:<age>` reads the value `age` pushes ago (0 is the latest,
 `empty` past what the ring holds); `$match:<pattern>:<row>` reads the ring
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
-the ring is held. `sortZone` puts a zone in canonical order by `by`, one or
-more distinct attribute keys (`row`, `descending`) in precedence order, each
-priced on the work sheet; `sortKeyed`
-orders a keyed row by its own values under one `descending` flag. Both sort
-stably,
-which is what turns a multiset question into a regular one: Reversi's
+the ring is held. `sort` reorders `row` stably by `by`, one or more distinct
+numeric keys (`row`, `descending`) in precedence order, each priced on the work
+sheet: over an ordered zone the keys are token attributes sharing the zone's
+token domain, and naming the target row as the sole key orders a keyed or
+ordered numeric row by its own values. A stable sort is what turns a
+multiset question into a regular one: Reversi's
 flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
-a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a
+a sorted hand, a five-dice large straight is a `choice` of two sequences over a
 sorted tray. `world.patterns` echoes each compiled table; `world.budget`
 carries the states and the word cap.
 
@@ -462,10 +468,10 @@ checks that an occupied destination spends nothing. Complex scoring remains
 an addon concern; these operators introduce no scripts, recursion, or open loops.
 
 A `keysOf` row that authors no `capacity` is priced at the 4096-cell row
-ceiling inside every transform's storage term, document-wide—an attribute row
-keyed over a small domain (a poker hand's `rank`/`suit`, 52 cards) that omits
-`capacity` taxes every `transfer`, `sort`, and `boardCombine` in the whole
-document at that ceiling rather than its own size, and dropping the
+ceiling by every transform and sweep that addresses it—an attribute row keyed
+over a small domain (a poker hand's `rank`/`suit`, 52 cards) that omits
+`capacity` makes every `sort` by it and every rule sweeping it pay that
+ceiling rather than its own size, and dropping the
 attribute row's own `keysOf` domain entirely (to save that budget) makes its
 cells resolve through no zone-scoped visibility at all, reading fully public
 regardless of the zone's own disclosure. Author `capacity` on a `keysOf` row
@@ -512,7 +518,7 @@ What stays here is what names a world: the document's own section and row
 the placement-anchored topology find (`WorldTopologyCompilation`), the
 definition-anchored reader (`WorldStateReader`), the disclosure composer over
 principals (`WorldStateDisclosure`), the boot-only draw sites
-(`WorldDrawSites`), the table asset loader (`WorldTables`), and the JSON seam
+(`WorldDrawSites`), the asset row loader (`WorldAssetRowLoader`), and the JSON seam
 that adds the document's arms to the engine's polymorphic bases
 (`WorldJsonContext` over `WorldJsonSourceContext`, `WorldJsonVocabulary`).
 
@@ -552,15 +558,15 @@ Every validation path is covered without this project ever naming `Puck.Input`,
 ## Namespace note
 
 A handful of files carry the `Puck.World.Protocol` namespace despite
-physically living in this project: `WorldAdmission.cs`, `WorldAdmissionDoor.cs`,
-`WorldGrant.cs`, `WorldPrincipal.cs`, `WorldEntityAddress.cs`, `PlayerIntent.cs`, `ChannelPolicy.cs`,
-`MutationKindMask.cs`, `MutationKindVocabularyHook.cs`, and
-`WorldDocumentWriteMask.cs`. These types are document-embedded (a grant row,
-a principal, a channel value ride inside `WorldDefinition` itself) but were
-authored under `Protocol/` before the project split existed; every caller
-throughout the tree already spells them `Puck.World.Protocol.WorldGrant`
-etc., so the split kept the namespace and moved only the file, rather than
-renaming the type everywhere it is used.
+physically living in this project: `ChannelPolicy.cs`, `ClosedBitset.cs`,
+`ControlApplication.cs`, `MutationKindMask.cs`, `MutationKindVocabularyHook.cs`,
+`PlayerIntent.cs`, `WorldAdmission.cs`, `WorldAdmissionDoor.cs`,
+`WorldCapabilityRequests.cs`, `WorldDocumentWriteMask.cs`,
+`WorldEntityAddress.cs`, `WorldGrant.cs`, `Grantee.cs`, and
+`PrincipalTokens.cs`. These types are document-embedded (a grant row, its
+grantee, a channel value ride inside `WorldDefinition` itself), so they
+live beside the document model while every caller spells them
+`Puck.World.Protocol.WorldGrant` and so on.
 
 ## `puck.world.definition.v1`—the world definition
 
@@ -573,7 +579,7 @@ groups, properties, interactions, player defaults, probes,
 dynamics, curves, tables). Worlds live as data
 under `../Puck.World/Assets/worlds/`. There is one shipped world,
 `puck.world.json` (the island, the boot default), a `basis` delta over
-`standard.basis.json`. Its districts—`dive`, `kart`, `jump`, `studio`,
+`standard.world.json`. Its districts—`dive`, `kart`, `jump`, `studio`,
 `arena`, `arcade`, `granaries`—are imported `puck.world.definition.v1` module
 fragments under `worlds/modules/` (see `modules/README.md`); tabletop games
 live as imported fragments under `worlds/games/`. The corner shards
@@ -605,11 +611,7 @@ plus a `Medium` hold row; a program selecting `ShapeVelocity` against a kit
 authoring no shaping row refuses by the `Shaping` tuning facet's name. An
 omitted engage/release/reversalRate/lateral rate means exact convergence,
 while an explicit rate must be positive; drive-only reversalRate/backwardSpeed
-values are refused on a whole-vector row. The retired `arcade` world's
-`gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
-reaction ladder (originally a document-mounted addon, ported to a world rule
-before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section
-today. The loader resolves an explicit `--world` file or the shipped default
+values are refused on a whole-vector row. The loader resolves an explicit `--world` file or the shipped default
 document and refuses a missing, unreadable, or invalid file by name;
 `WorldDefinitionLoader.cs` owns that boundary.
 
@@ -667,16 +669,19 @@ there is no creationless placement to represent—the validator pins the pair
 `creationId == slotCreationId`, filled requires them to differ. Read back with
 `world.contributions`.
 `Respond` (`WorldPlacementResponse` rows) is a STATE-DRIVEN prototype swap: an
-ordered list of `{When, PrototypeId}` entries, each `When` the SAME
-`WorldFieldCondition` grammar a `fields.reactions` Transform/Expose condition
-uses, tested at the placement's own coupled lattice cell
-(`Puck.Physics.Fields.FieldLattice.TryBodyCellOf`). The per-tick sweep
-(`Server/WorldTick.Responses.cs`, run right after the field lattice steps)
-tries entries in authored order and swaps to the first whose condition holds,
-through an ordinary `UpsertPlacement`; nothing reverts a swap when no entry
-holds. Refused alongside `Attach`/`Inhabit`/`FaceSources`, and every candidate
-prototype (the row's own and every entry's) must be a declared, non-animated
-creation. Read back with `world.responses`.
+ordered list of `{When, PrototypeId}` entries, each `When` a lattice-field
+condition (the SAME `WorldFieldCondition` grammar a `fields.reactions`
+Transform/Expose condition uses, tested at the placement's own coupled lattice
+cell, `Puck.Physics.Fields.FieldLattice.TryBodyCellOf`) or a state-cell
+condition. The per-tick sweep (`Server/WorldTick.Responses.cs`, run right after
+the field lattice steps) tests every entry and records which held in the row's
+`Holding` mask (bit i for entry i) through an ordinary `UpsertPlacement`. The
+authored `PrototypeId` is never overwritten: the row shows the first holding
+entry (`ShownPrototypeId`, which every draw and collide consumer reads), and its
+authored prototype once none holds. Refused alongside
+`Attach`/`Inhabit`/`FaceSources`, and every candidate prototype (the row's own
+and every entry's) must be a declared, non-animated creation. Read back with
+`world.responses`.
 `Deal` (`WorldPlacementDeal`) makes the row a template whose instances are
 dealt from a keyed `state.world` row of any cell kind: one child placement per
 cell, named `<template>/<cellKey>`, parented to the template at an offset of
@@ -693,7 +698,9 @@ all skip it), and is exempt from the distributed-parent refusal
 (`WorldPlacementFrameCompilation`). Refused alongside `Inhabit`/`Attach`/
 `Respond`/`Mirror`/`FaceSources`. An authored placement id spelling the child
 separator `/` is refused by name; only the per-tick sweep
-(`Server/WorldTick.Deals.cs`) mints one. Read back with `world.placements`;
+(`Server/WorldTick.Deals.cs`) mints one. Every placement id, dealt or authored,
+is refused by name when it carries `:` or is exactly `$each`, since a channel
+names a placement by id (`WorldPlacement.TryValidateId`). Read back with `world.placements`;
 `world.budget` counts every template's offsets beside the static instances.
 `Solid` compiles the same creation-shape transform chain the renderer emits.
 The field provider evaluates that SDF geometry directly; the analytic provider
@@ -735,25 +742,43 @@ document never carries either and every wire egress is self-contained. A
 derived document's content pin folds every touched file's raw bytes
 (`ComputeChainContentHash`), so a template or import edit moves every dependent
 pin. `world.save` preserves the derivation of the file it overwrites
-(`SavePreservingBasis`): the written delta is proved by re-merging the full
-basis-plus-imports stack before anything lands, degrading to a flat save with a
-named note when it cannot. `world.status` echoes the source file's basis;
+(`SavePreservingBasis`): the delta is taken against the canonical form of the
+basis-plus-imports stack, so a row the save left alone stays out of it, and it
+is proved before anything lands by composing the bytes to be written through
+the same composer a load uses and comparing the parsed result with the saved
+definition. A delta that composition refuses (a host restating a row its import
+does not export) or that parses to anything else degrades to a flat save with a
+named note. `world.status` echoes the source file's basis;
 `world.imports` prints the whole resolved composition stack in merge order, each
 file paired with the alias it composed under and the top-level keys its own JSON
 declares. A partial template or
 import fragment cannot boot on its own (the validator names its missing
-sections). `IWorldDocumentSource` generalizes the basis-chain walk (not yet the
+sections). The work a load does is counted by `WorldBootWork`, the `world.boot`
+`IWorkCounterSource` a host registers: documents read and loaded, merges and
+merges answered from a held image, strict parses, validations, rule
+compilations, neighbour resolutions, curve derivations, shape-program builds
+and asset loads, beside the `.puck` compiles and compile-cache answers
+`Puck.World.Transpiler` counts, and the compiled-world hits and chunk
+derivations a boot's [compiled world](../../docs/architecture/worlds.md#compiled-worlds)
+(`CompiledWorld`, `CompiledWorldCache`, `CompiledWorldChunks`) counts; the
+`BAKE` chunk (`WorldBakeChunk`) fills the one creation-bake cache,
+`WorldBakeStore` ([creation bakes](../../docs/architecture/worlds.md#creation-bakes)). The
+compile-cache and compiled-world counts depend on what the per-user cache and
+the state root already hold, so they are pacing-class; the rest are
+deterministic. The loaders are static, so they count into the
+ledger a flow attributes (`WorldBootWork.Attribute`) or else the process
+ledger; a law attributes its own. `IWorldDocumentSource` generalizes the basis-chain walk (but not the
 import fan-in) onto any byte-level document source, so storage sync
 (`Puck.World.Server`'s `WorldStorageDocumentSource`, over a flat
 `puck/worlds/basis/` cloud namespace) composes a synced basis delta exactly like
-a directory load does—it no longer refuses one by name. The wire still never
+a directory load does. The wire still never
 carries a basis- or import-bearing document: a live document's `Basis`/`Imports`
 are always `null` (stripped at load), so nothing reaches the wire un-flattened
 regardless.
 
 **Name registry and aliased imports.** `WorldNameRegistry.cs` lists every
 document member that carries a state, zone, rule, table, pattern, topology,
-generator, field, or dynamics name—keyed by C# member, with the role it
+generator, field, dynamics, placement or prototype name—keyed by C# member, with the role it
 carries the name in (`Declares`, `Names`, `Key`, `Expression`, `Binding`,
 `Template`)—and derives the JSON paths those members reach by walking
 `WorldJsonContext`, so [`docs/world-name-registry.md`](../../docs/world-name-registry.md)
@@ -761,15 +786,26 @@ is generated (`puck registry`) and checked (`puck registry --check`), never
 hand-maintained. A member typed `CellName`, `ExpressionProgram`, `BindableScalar`,
 `BindableColor`, or `WorldLatticeScalar`, or a string member whose name reads
 like a name position, must be registered or excluded with a reason, so a field
-added without a registration fails the check. `WorldModuleNamespace.cs` reads
-the same registry at compose time: an import entry carrying `as` prefixes every
-name its fragment declares with `<alias>_` (the one character a `CellName`
-admits that also lexes inside a bare expression name) and rewrites every other
-registered site to match—bare name positions, a reserved `$` channel's colon
-segments, `$cell:`/`cell:`/`$expr:` key spellings, infix and postfix
-expressions, and `state.<row>` bindings—while a name the fragment does not
-declare stays as written, so a fragment still addresses its host's rows. An
-alias is a bare identifier (letter or underscore, then letters, digits, and
+added without a registration fails the check; a member holding a value a state
+cell may stand in for (`BindableScalar`, `BindableColor`, a creation's
+`IDocumentStateValue`) is a `state.<row>` binding wherever it sits.
+`WorldModuleNamespace.cs` reads the same registry at compose time: an import
+entry carrying `as` qualifies every name its fragment declares by the alias,
+`<alias>$<name>` (`GeneratedName.Qualify`, the generated spelling no author
+name can carry, so a host's own name never collides with one), and rewrites
+every other registered site to match—bare name positions, the name positions of
+a reserved `$` channel's colon segments, `$cell:`/`cell:`/`$expr:` key
+spellings, infix and postfix expressions, and `state.<row>` bindings—while a
+name the fragment does not declare stays as written, so a fragment still
+addresses its host's rows. A placement and a prototype each live in their own
+namespace, so a module's placement `gate` never renames a host row `gate` the
+module reads. The engine's own words are never renamed, whatever a module
+declares: a function an expression calls (`max(…)`), and each channel argument
+its grammar reads as an operation, facet or body-reference kind
+(`$reduce:max:<row>`, `$distance:body:0:body:1`, `$fact:<bodyRef>:Airborne`).
+Every reserved channel is a row of the rewrite's channel table, which carries
+its grammar; `WorldModuleNamespace.DescribesChannel` names them, and a spelling
+the table does not hold is left as written. An alias is a bare identifier (letter or underscore, then letters, digits, and
 underscores), refused by name otherwise. The same fragment composes twice under
 two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json`),
 and an entry with no `as` composes its names unchanged.
@@ -794,7 +830,7 @@ expression operand, a `$cell:` key, a domain, a zone table, a board facet's
 references to its own names are never checked, nor is a name the checked layer
 itself declares. Under an aliased import the export lists are prefixed with the
 declarations, so a host binds an exported action by its alias-qualified name
-(`a_tttMoveCell`). An export naming nothing the module declares, or listed
+(`a$tttMoveCell`). An export naming nothing the module declares, or listed
 twice, refuses; a document loaded as a world with `exports` still on it refuses
 at validation, since nothing imported it. The record is stripped from the
 composed tree, so a live document never carries it; `world.imports` prints each
@@ -823,24 +859,40 @@ root carries a `[JsonExtensionData]` `Extensions` bag, governed by
 (`$` or `_`) round-trips untouched, and any other unknown root key is a hard
 load failure.
 
+**The model shape** (`WorldModelShape.cs`): every type reachable from
+`WorldDefinition`, with its serializer members, its `$type` arms (the ones
+`WorldJsonVocabulary` adds included) and its element type, as a generated
+table (`WorldModelShape.generated.cs`). The walks that read the model without
+serializing it (`WorldCallArguments` for the language's call-argument forms,
+`WorldModuleNamespace.Visit` for the aliased-import rewrite and the channel
+spelling) read this table, so no process describes a type at run time. `puck
+schema` writes it from the resolver's own description of the model and `puck
+schema --check` fails when the two disagree.
+
 **Identity conventions.** Every row is addressed by a stable string id, with
 two exceptions: screens are position-addressed by index, and grant rows are
-keyed by their `(principal, capability, subject)` triple, because a grant IS
-that triple. `GrantSubject` and `WorldPrincipal` serialize as the same compact
+keyed by their `(grantee, capability, subject)` triple, because a grant IS
+that triple. `GrantSubject`, `Grantee` and `Principal` serialize as the same compact
 tokens the console grammar uses (`body:1`, `addon:default`) through their own
 JSON converters.
 
-**Canonical write-back.** The `world.save` verb serializes the live definition
-canonically—stable member order, invariant-culture numbers, LF line endings,
-one trailing newline—so a load→save of an untouched world reproduces the
-file byte-for-byte. That round-trip is a useful observation when editing the
-serializer; it is not an acceptance gate (see the verification section of
-[`Puck.World`'s README](../Puck.World/README.md)). The one honest exception is
-a document carrying an advancing `state` row/cell (`Advance`): `world.save`
-settles it to its live computed value with its projected epoch reset to 0 (see
-"The `state` document" below), so an untouched world with one still reproduces
-a slightly LARGER base than it loaded—never the identical bytes—because
-some ticks always elapse before a save can be requested at all.
+**Canonical write-back.** The `world.save` verb writes the authored document,
+not the effective one, in canonical form—stable member order, invariant-culture
+numbers, LF line endings, one trailing newline. Every section is serialized
+from its `*Raw` member, so a section the document omits stays omitted: its
+effective accessor's resolution (`WorldAudioDefaults.Absent`, say, whose zero
+speaker radius the validator refuses in an authored section) never reaches the
+file. A top-level member the document does not author is left out rather than
+written as `null`. The session state a save folds in (`WorldSessionCapture`
+for what the server owns, `WorldSessionLevers.Fold` for the presentation
+levers) lands only in sections the document authors, and a section the session
+left alone is written as authored. `WorldSaveAuthoredDocumentLawTests` saves
+every shipped world, every world document under `tests/Puck.World.Tests/Fixtures`,
+and every canary world that way and proves each one boots
+again to the definition it was loaded as. One value moves on an otherwise
+untouched world: an advancing `state` row/cell (`Advance`) settles to its live
+computed value with its projected epoch reset to 0 (see "The `state` document"
+below), because some ticks always elapse before a save can be requested.
 
 ### Groups (`WorldGroups.cs`)
 
@@ -879,7 +931,11 @@ what a key means is the reading world's own rule to author. A world receives
 facts through one reserved body-scope row it declares in `state.world` when it
 wants them at all: a keyed `int` row named `identity` (`WorldIdentityFactLane`)
 whose cells are keyed `<bodyIndex>-<fact>`; a world declaring none refuses
-every fact effect and channel by name at compile. The `setIdentityFact` effect
+every fact effect and channel by name at compile. The lane carries no
+`advance`, `dynamics` or `cycle` trait on the row or any cell: the validator
+and the rule compiler (`IdentityLaneTraited`) refuse one by name through
+`WorldIdentityFactLane.TryAdmitTraits`, so the value a rule reads is the stored
+value the server compares and persists. The `setIdentityFact` effect
 (`{key: <body>, fact, value | expression}`, the body spelled as every other
 body-addressed effect spells it) writes the body's lane cell and the identity's
 own row together; the `$identity:<bodyRef>:<fact>` channel reads the lane, 0
@@ -1093,15 +1149,16 @@ catalog changes no state value, document spelling, or storage implementation.
 `$type` discriminators—a row carrying both, or a `value` beside a
 `capacity`, is refused by name, and the canonical writer emits `value` back
 for a slot-shaped row so a load→save round-trip is byte-identical. There is
-no `$type` and no `rows` member; the retired spellings refuse as unmapped
-members like any other stale field, and the addon mutation decoder speaks
+no `$type` and no `rows` member; either refuses as an unmapped
+member like any other unknown field, and the addon mutation decoder speaks
 this identical grammar rather than forking one of its own. `name` and every
 cell `key` are `CellName` (`Puck.State`'s `SafeName.cs`)—a validated type that
-CANNOT hold an empty, unsafe, or dotted value, refusing at JSON parse (naming
-the offending character) rather than at whole-document validation; the
-dot-free rule is what makes the `state.<row>.<key>` HUD binding grammar
-unambiguous, since neither half of that token can itself contain the
-separator. Declaring `min` zero
+CANNOT hold an empty, unsafe, dotted or backquoted value, refusing at JSON
+parse (naming the offending character) rather than at whole-document
+validation; the dot-free rule is what makes the `state.<row>.<key>` HUD
+binding grammar unambiguous, since neither half of that token can itself
+contain the separator, and the backquote-free rule lets an expression write
+every row and key in its escape-free backquotes. Declaring `min` zero
 is what a "timer" meant before the table primitive's separate
 `counter`/`timer` vocabulary reconciled into this same four-token `CellKind`
 (a counter IS `fixed`; a timer IS `int` + `min: 0`). A row-wide `Min`/
@@ -1127,8 +1184,7 @@ through `WorldMutation.UpsertStateCell`/`RemoveStateCell` (works on ANY row,
 slot or keyed—pass `SlotKey` to reach a one-value row's own cell). Every
 mutation pair here is checked TWICE: the standard `Mutate`/`section:state`
 hold, plus a second, row-scoped `Edit`/`state:<name>` hold
-(`GrantSubjectKind.State`—the former separate `GrantSubjectKind.Table`
-subject is retired, since one row now has one subject)—narrower authority
+(`GrantSubjectKind.State`; one row has one subject)—narrower authority
 than any other section, deliberately, since a `state` row is genre-authored
 game data an operator may want to hand out per-row (score to one addon,
 inventory to another) rather than all-or-nothing per section. That `Edit`
@@ -1326,7 +1382,7 @@ bit-identically with nothing to reconcile.
 
 **The MOMENT** (`DrawTiming`) is `boot` (drawn once at first fill; a later
 `generate` refuses by name), `tickPeriod`, or `event`. The latter two both stay
-redrawable through the SAME `Generate` mutation (ordinal 51); the actual cadence
+redrawable through the SAME `Generate` mutation (ordinal 49); the actual cadence
 or gate is spelled with the ordinary `rules` vocabulary (a `$tick`-scheduled Edge
 rule, an event-flag-gated one), so timing costs NO mutation ordinal—the catalog
 stays 64/64.
@@ -1356,7 +1412,7 @@ when `n` divides `2^32`, rather than exactly uniform.
 **A source may declare `extended`** (`GeneratorExtended`): an authored
 `Pcg32Extended` table replacing that generator's own self-seeding, so the site
 is k-dimensionally equidistributed rather than merely 1-dimensionally so.
-`k` is a power of two in `[2, 1024]`; exactly one of `table` (the whole
+`k` is a power of two in `[2, 4096]`; exactly one of `table` (the whole
 extension table verbatim) or `script` (up to `k` values in the source's own
 OUTPUT space, compiled to a table at boot resolution) is authored. A script
 compiles as: word `i` is `wanted_i XOR base_i`, where `base_i` is the base
@@ -1407,10 +1463,27 @@ truth and overwrites the literal on every fresh load, nothing shadowed
 silently.
 
 Numeric draw domains are checked against the state row's admissible range,
-including its `min`/`max`, before sampling. Boot row consumers also validate their
-selected census or backend token. Proving every possible source outcome against
-those consuming fields remains open in the [plan register](../../docs/plans/open-items.md):
-a source can currently pass its row checks but produce a value the boot field refuses.
+including its `min`/`max`, before sampling. A boot row consumer is proved over
+its source's whole outcome set, not over the value one boot rolled, so the
+verdict is independent of the world seed and the instance identity.
+
+- `host.backendRow` enumerates every emission the named row's Markov source can
+  produce (`GeneratorEngine.TryEnumerateEmissions`) and refuses by name any that
+  names no backend, including a walk emitting more than one token. A source whose
+  reachable graph can re-enter a context emits an unbounded language and refuses
+  by name rather than being admitted on a truncated reading of it.
+- `bodies.capacityRow` enumerates every census the named row's numeric source can
+  produce (`GeneratorEngine.TryEnumerateOutcomes`), settles each into a candidate,
+  and puts it through the whole document validator. The predicate is that
+  validator rather than a hand-listed band, so the seat floor, `networkPlayers`,
+  and every authored body index bound against capacity are each proved for each
+  outcome. A source spanning more than `WorldBodiesLimits.MaxDrawnCensusOutcomes`
+  distinct values, or an unbounded one such as `streamDraw`, refuses by name.
+
+The settle-time reads still refuse an unreadable row and an unparsable token:
+those are the door for a value the row carries by another route — an authored
+literal cell, a checkpoint, a live write — whose single outcome no source check
+can see.
 
 **`host.journalDepth`** is the undo horizon, in journal entries: `0` (the
 default, every world authored before the field existed) is unbounded, today's
@@ -1484,7 +1557,7 @@ write. `world.state`'s row line echoes the trait as
 only.** `clock.epochEngineTick` is SESSION-relative (an engine tick
 count from process start), so writing it verbatim to a saved file left a
 reloaded document reading FROZEN at its stored base until the NEW session's
-own engine-tick counter climbed back past the OLD epoch. `Puck.World`'s
+own engine-tick counter climbed back past the OLD epoch. `Puck.World.Server`'s
 `WorldSessionCapture.Capture` (the `world.save` fold) writes every
 advancing cell's base as its LIVE computed value at the save's completed
 engine tick, and projects `clock.epochEngineTick: 0`—so engine tick 0 of the
@@ -1583,7 +1656,7 @@ declared envelope clamps the computed value on every read as it does an
 advancing cell's. Only a genuinely re-authored default or override — a fresh
 key, a switch in or out of cycle, a parameter change — resettles the clock,
 per the behavior transitions in
-[Model state with rows and cells](../../docs/reference/state/data-model.md#choose-behavior-deliberately).
+[Row and cell behavior](../../docs/reference/state/traits.md#re-authoring-settles-cells).
 A cycling row
 is refused as a `state:<row>` control context the same way an advancing one
 is. `world.state` echoes
@@ -1603,9 +1676,8 @@ collection of strings (flavor lines, names, phrases) a HUD `Binding` or
 DRAWN string is a different shape—a text-kind DRAW SITE is scalar, redrawn in
 place by `world.generate <row>` (above), never emitted into another row's cell.
 No separate schema exists for this—deliberately: a second "table of
-strings" concept beside the row/cell substrate would repeat the
-`GrantSubjectKind.Table`/`state:<name>` duplication this project already
-retired once (see the `Edit` hold paragraph above). Per-cell live text
+strings" concept beside the row/cell substrate would give one row two grant
+subjects (see the `Edit` hold paragraph above). Per-cell live text
 writes ride `world.state.cell.set <row> <key> <text...>` (a raw-tail verb,
 spaces included, no quoting needed, when `<row>` is ALREADY LIVE as a
 text-kind row—one verb for either kind, dispatching on the row's own
@@ -1676,9 +1748,10 @@ traversal cases live in
 `tests/Puck.World.Schema.Tests/WorldStateDocumentValuesLawTests.cs`.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** A `$`-prefixed ROW name is refused
-outright (nothing mints a row), and a `$`-prefixed CELL key is refused unless it
-is exactly the key that row's shape mints (`$value` on a slot, and nothing
-else). The rule lives in `WorldDefinitionValidator`, which
+on every row a document declares (only the state catalog mints rows under the
+prefix, a pool's `$pool$<pool>$live` family), and a `$`-prefixed CELL key is
+refused unless it is exactly a key that row's shape mints (`$value` on a slot;
+`$firedTick` and the named status key on a verdict row). The rule lives in `WorldDefinitionValidator`, which
 runs at boot, at every live mutation and on every undo-replay entry—so a
 hand-authored file and a console verb refuse by the same code rather than by one
 door the other walks around.
@@ -1694,17 +1767,18 @@ A rule reads it through `$table:<name>:<key>` (single-value) or
 `$table:<name>:<column>:<key>`, where the key is an integer literal (proven
 present at compile), a `$cell:<row>:<key>` indirection, the bound `$each` key,
 or an int `$local:<name>`. Values are never written, never hashed into the tick,
-never checkpointed; a dynamic key the table does not carry is a
-`TableKeyMissing` refusal (`world.rule.failures`) that closes the gate or fails
-the expression, never a value. `world.tables` echoes every table's name, kind,
+never checkpointed; a dynamic key the table does not carry reads as absent, so
+a comparison against it doesn't hold and records an `Arithmetic` refusal
+(`world.rule.failures`) unless the expression answers it with `isAbsent` or `??`. `world.tables` echoes every table's name, kind,
 entry count and columns. A lookup prices as 2 plus the log of the entry count.
 
 ## The `rules` document—the per-body action primitive, one level up
 
 Validation can return a [WorldRuleCompilation](WorldRuleCompilation.cs) containing
 its rules, interactions, and pinned tables. Server construction, mutation, and reload installation
-reuse this result for the exact unchanged definition. Derived-board recomposition
-that produces another definition forces a fresh compile. Rules, interactions,
+reuse this result for the exact unchanged definition. Any recomposition that
+produces another definition forces a fresh compile, which is why every loader
+settles state rows before admission (see `WorldStateSettlement`). Rules, interactions,
 and table compilation share one context; a catalog's shape alone never licenses
 program reuse. Scalar and keyed behavior traits share field validation while
 retaining their distinct placement and exclusivity checks.
@@ -1720,8 +1794,10 @@ and restoration; a distinct journal base still needs its own validation.
 
 File and composed-byte loaders expose `TryLoadForAdmission` and
 `TryLoadFileForAdmission` to retain the final document's programs through boot and
-local instance construction. Bytes, files, and asynchronous loads resolve boot draws
-and state-backed document values before full admission. A preflight uses the existing
+local instance construction; the asynchronous entry returns the same receipt to a
+hosted read. Bytes, files, and asynchronous loads resolve boot draws, state-backed
+document values, a caller's `overrides` rewrite of the loaded document, and state-row
+settlement before full admission, in that order. A preflight uses the existing
 generator and row validators for inputs that drawing can consume or replace; invalid
 source domains and authored cells cannot be hidden by their sampled replacements.
 Only the final document is fully validated and compiled. A state-only draw preserves
@@ -1730,7 +1806,9 @@ absent host and population sections. Ordinary file-source validation does not dr
 vocabularies and neighbour claims after host services compose, using the existing
 section validators without compiling rules or work analysis again. A hook delegate
 can stay the same while its registry changes, so delegate identity is not evidence
-that these checks remain valid. Boot document overrides clear their old receipt.
+that these checks remain valid. A boot override is applied through the loader's
+`overrides` parameter, so the receipt names the overridden document and no receipt
+is cleared.
 
 The receipt retains validation's work sheet when available, and otherwise computes
 its `WorkBudget` and contributor list on demand. It also owns lazy `Hazards` and
@@ -1738,7 +1816,11 @@ its `WorkBudget` and contributor list on demand. It also owns lazy `Hazards` and
 reuse the compiled programs; a replacement definition gets a fresh receipt.
 Callers making several analysis requests pass the same compilation to
 `WorldRuleHazards.Analyze`, `WorldRuleWorkBudget.Measure`, and
-`WorldRuleWorkBudget.Contributors`. The definition overloads perform fresh work.
+`WorldRuleWorkBudget.Contributors`. The definition overloads compile a fresh
+receipt of the whole document, rules, groups and interactions together, so they
+return the sheet admission holds against the ceiling; no path prices the rules
+without the groups that bind a `rewindGroup`'s price, and search planning takes the
+sheet its caller already measured.
 The report identifies both the model and its evidence digest. Reference costs
 remain unresolved while calibration is incomplete; heuristic work units never
 certify a cycle deadline. See [abstract-machine costing](../../docs/plans/abstract-machine-costing.md).
@@ -1761,8 +1843,9 @@ the `$pair:` key. The same vocabulary's `ExtendJson` is what `WorldJsonVocabular
 installs so those arms read and write under their `$type` discriminators. A
 compiled rule is a `CompiledWorldFactsRule : CompiledRule` whose effects and
 operands are `Puck.State.Rules`' compiled facts plus the world's own
-(`WorldFactOperands.cs`, `WorldFactEffects.cs`, whose payloads are
-`WorldOperandKinds.cs` and `WorldEffectKinds.cs`); the world's operands read
+(`WorldFactOperands.cs`, whose payloads are `WorldOperandKinds.cs`'s
+`WorldOperandFact` classes, and `WorldFactEffects.cs` with `WorldPoseCellEffect.cs`;
+`WorldEffectKinds.cs` prices a placement effect); the world's operands read
 through `IWorldFacts`, the facet `WorldRuleHost` implements beside `IEffectHost`,
 the host seam `Puck.State.Rules`' `RuleEvaluator` drives—the arena door a
 `Mutation` applies through, the journal scopes a transaction composes under, the
@@ -1771,7 +1854,7 @@ evaluates. Gates admit
 `all`, `any`, `not`, `compareState`, and `compareValue`; they compile to a bounded postfix
 Boolean program, so nested logic does not allocate or recurse during a tick.
 Compile refusals travel in a `RuleException` carrying a
-`Puck.State.Rules.RuleRefusal` (the rule compiler's) or a `WorldRuleRefusal`
+`RuleRefusal` (the rule compiler's) or a `WorldRuleRefusal`
 (the world's arms).
 
 ### Decision policies
@@ -1899,7 +1982,7 @@ individuals from at most 32 inspected points per reconsideration:
 
 The option can score a keyed belief row for `left` (see "Keyed belief rows and
 evidence dedup" below), then enter with
-`{"$type":"designateBody","key":"$each","register":"companion","kind":"Body","targetKey":"$right"}`.
+`{"$type":"designate","key":"$each","register":"companion","targetKey":"$right"}`.
 The register must be declared, and a producer must consume it to cause movement.
 A fixed "alone" option can clear the same register. This selects a movement
 companion, not friendship or membership in a social group.
@@ -2061,9 +2144,10 @@ is retired rather than re-keyed onto the pair-key indirection above.
 
 ### World-rule state effects
 
-The state effects are `setState`, `addState`,
-`removeStateCell`, `scheduleState`, `transaction`, and `if`. Rules may also generate a
-text row, edit HUD panels or placements, save the session, pose or drive an
+The state effects are `setState`, `addState`, `pushState`, `transformState`,
+`generate`, `removeStateCell`, `scheduleState`, `transaction`, `if`, the pool
+effects `claim`, `release`, `forEachPool`, and `claimPair`, and `rewindGroup`.
+Rules may also edit HUD panels or placements, save the session, pose or drive an
 active body, set or clear one of its target registers, emit a gameplay cue, and
 paint a bounded sphere into a live lattice field. Each effect keeps its native
 runtime meaning: document and state changes use ordinary `WorldMutation`
@@ -2078,8 +2162,7 @@ copy, or a computed share), a deadline is `scheduleState` compared against
 `$tick`, and a bid order is a `pushState` history ring. There is no bespoke
 market mutation kind, no market-only compose arm, and no market-only
 checkpoint finality barrier — a rule-authored settlement is an ordinary
-journal entry, undoable like any other write. The mutation-kind ordinals a
-retired bespoke market once reserved are never reassigned.
+journal entry, undoable like any other write.
 
 Placement upsert/removal prices into `world.budget` through
 `WorldPlacementEffectCost.Of`, derived from what the install actually
@@ -2173,10 +2256,10 @@ engine-tick `ValueSeconds`, a live copy `(FromState, FromKey)`, or a numeric
 `Expression`. A copy or expression operand is read fresh every firing through
 the same `ResolveOperand`/`ReadWorldFact` path the comparand uses, and every
 operand must match the destination's `int` or `fixed` kind. An expression is
-authored either as an infix string—`"min(damage, hp[$each]) * 2 - armor"`,
+authored either as an infix string—`"minimum(damage, hp[$each]) * 2 - armor"`,
 C precedence over `+ - * / %`, `& | ^ ~`, `<< >> >>>`, `== != < <= > >=`, and
-`c ? a : b`, the named forms as calls (`min(a, b)`, `clamp(v, lo, hi)`,
-`popCount(m)`, `bitField(v, offset, width)`, `boardShift(m, topology,
+`c ? a : b`, the named forms as calls (`minimum(a, b)`, `clamp(v, lo, hi)`,
+`setBitCount(m)`, `bitField(v, offset, width)`, `boardShift(m, topology,
 direction)`, ...), a state read as its row name keyed `row[key]`—a bare name or number is the literal key,
 `row[other[k]]` reads the key live from another cell, and any other expression (`row[from + 1]`, or
 `row[(from)]` to read row `from`'s value as the key) compiles to an implicit int binding evaluated before the
@@ -2199,18 +2282,18 @@ folds successful constant subexpressions and prices the remaining program the
 same way for both spellings, and the document writes back whichever
 spelling it read. Expressions are
 postfix token lists with a 256-token ceiling; they provide constants, state or
-reserved-channel reads, `add`, `subtract`, `multiply`, `divide`, `modulo`
-(remainder toward zero; in `fixed` the raw remainder, so `2.5 modulo 1` is
-`0.5`), `min`, `max`, `clamp`, the comparisons `equal`/`notEqual`/`less`/
+reserved-channel reads, `add`, `subtract`, `multiply`, `divide`, `remainder`
+(toward zero, spelled `%`; in `fixed` the raw remainder, so `2.5 % 1` is
+`0.5`), `minimum`, `maximum`, `clamp`, the comparisons `equal`/`notEqual`/`less`/
 `lessOrEqual`/`greater`/`greaterOrEqual` (two same-kind values in, `int` 1 or 0
 out), `select` (condition, whenTrue, whenFalse—an `int` condition picks
 between two same-kind branches, the inline conditional), and, in `int`
 expressions only, `bitAnd`/`bitOr`/`bitXor`/`bitNot`/`shiftLeft`/`shiftRight`
 (arithmetic)/`shiftRightLogical`/`rotateLeft`/`rotateRight` with counts 0..63,
-the bit census `popCount`/`leadingZeroCount`/`trailingZeroCount` (64 for zero;
+the bit census `setBitCount`/`leadingZeroCount`/`trailingZeroCount` (64 for zero;
 `63 - leadingZeroCount` is the integer log2, `trailingZeroCount` the lowest
 occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
-8x8 board symmetries `byteSwap` (rank mirror) and `bitReverse` (half turn);
+8x8 board symmetries `byteSwap` (rank mirror) and `reverseBits` (half turn);
 `replicationMask(width)` and `repeatBits(pattern, width)` construct periodic
 64-bit masks, with Int operands and strict block bounds described in
 [Puck.State](../../docs/reference/state/expressions.md#periodic-bit-masks);
@@ -2220,9 +2303,9 @@ of squares as a dense index and back); `bitField` (value, offset, width) and
 field that leaves the 64-bit carrier; and the topology-aware trio `boardShift`
 (`topology`, `direction`), which moves every set bit of a cell mask to its
 neighbour in that direction and drops a bit at the edge instead of wrapping,
-`boardFill` (`topology`, `direction`), the union of a mask and every repeated
+`boardRay` (`topology`, `direction`), the union of a mask and every repeated
 shift of it until the edge—a whole file, rank, or diagonal from one seed
-bit, `boardFill(1, board, N)`, so no wrap constant is ever hand-written—
+bit, `boardRay(1, board, N)`, so no wrap constant is ever hand-written—
 and `boardImage` (`topology`, `element`), which carries a cell mask through
 one point-group element. Together with `$board:mask` and the plain bit
 operators these are the one cell-set vocabulary: `$board:mask` of one side
@@ -2230,7 +2313,7 @@ shifted and masked against `$board:mask` of the other is an attack map in one
 expression, and `$board:mask` piped through `boardImage` is how a rule
 authored from one side's view reads the other side's position through
 `rot180`—there is no separate read-and-image board query.
-`negate`/`abs` keep their operand's kind and refuse the carrier's minimum;
+`negate`/`absolute` keep their operand's kind and refuse the carrier's minimum;
 `sign` reads either kind and pushes `int` -1/0/1. The compiler proves
 the stack's shape AND each slot's kind, so a comparison's `int` result may feed
 a `select` inside a `fixed` expression but never an arithmetic operator of the
@@ -2263,23 +2346,28 @@ dynamics target, a body-reference key) lift it through
 rather than faulting.
 
 Ordering is declaration order, on both sides: a later rule's copy operand reads
-an earlier rule's same-tick write exactly as a later gate does. Within one rule,
-each top-level state effect is preflighted and installed on its own, in order; a
-later effect's range/capacity refusal leaves the earlier writes applied.
+an earlier rule's same-tick write exactly as a later gate does. A rule firing is
+atomic: its effects run in order in one journal scope, a later effect reads an
+earlier one's write, and the first refusal rewinds the whole firing as one
+counted refusal naming the effect. An effect that leaves the arena is queued
+during the scope and preflighted, in order, before the scope commits. A document
+row (a placement or HUD row) is transactional: the firing's rows are prepared as
+one unit before the commit, a refusal there rewinds the firing, and the unit
+installs after the commit as one mutation (a `Batch` when there are several). A
+cue, pose, body motion, or `save` is delivered after the commit instead; a
+delivery that refuses is one counted refusal that undoes nothing. The
+[state and language decisions](../../docs/decisions/state-and-language.md) (D4)
+record why.
 
-An explicit `transaction` is the one atomic group—its whole branch preflights
-against one private candidate and either installs together or not at all, as one
-`Batch` mutation with one admission, one validation, one journal entry, and one
-delivery (a single-step branch installs as that step)—and adds
-an optional `onFailure` branch. Both branches accept at most 64 steps and may
+An explicit `transaction` is a savepoint inside the firing, with an optional
+`onFailure` branch. A refusal inside it rewinds only the savepoint, `onFailure`
+runs in the firing's own scope, and later siblings continue; with no
+`onFailure`, or when `onFailure` or a later sibling refuses, the whole firing
+rewinds. Both branches accept at most 256 steps and may
 combine state cells, draw generation, HUD/placement mutations, poses, cues, body
-effects, and field paints. The whole branch is preflighted against each preceding
-candidate before anything escapes; a refusal runs `onFailure` with no leaked cue,
-impulse, paint, or document write. Placement steps form the final suffix because
-they may rebuild the active population. Branches use ordinary `ActionEffect`
+effects, and field paints. Branches use ordinary `ActionEffect`
 records, including text writes and expression-sourced history pushes. The
-compiler rejects nested transactions and `save`: persistence I/O cannot be
-rolled back. Registered effect families opt in through `AllowsTransaction`.
+compiler rejects nested transactions.
 `removeStateCell` lets the same transaction retire keyed membership cleanly.
 
 An `if` effect branches its own `then`/`else` effect lists on a predicate — the
@@ -2292,8 +2380,7 @@ Each branch effect is its own boundary, on the same terms as a top-level
 effect or, inside a `transaction`, any other step — a branch is not itself a
 transaction. An `if` may sit inside a `transaction`; a `transaction` may sit
 inside an `if` only when that `if` is not itself inside one, since
-transactions never nest either way. `save` is refused inside any `if` branch,
-at any nesting depth, through `EffectFamily.AllowsInsideBranch`. `if` has no
+transactions never nest either way. `if` has no
 body-scope meaning and refuses by name in a kit's per-body actions, whose
 compiled instruction stream carries no branch of its own.
 
@@ -2381,7 +2468,7 @@ threshold reasoning in full.
 The section is optional deliberately: a new REQUIRED section would refuse every
 existing document at boot for declaring nothing. Authoring a rule is an ordinary
 mutation (`UpsertWorldRule`/`RemoveWorldRule`, `Mutate`/`section:rules`); a
-rule's own EFFECTS act as `WorldPrincipal.World`, which the server's admission
+rule's own EFFECTS act as `Principal.World`, which the server's admission
 predicate exempts STRUCTURALLY—the same standing a per-body `ActionEffect`
 always had.
 
@@ -2419,7 +2506,8 @@ limits: they neither grant omniscient sensing nor enlarge the inspected sample.
 Zero affinity does not disable separation. These are relative mean weights;
 the profile's outer `cohesion` and `alignment` still set each term's strength.
 `world.flock` echoes the expressions and counters, and `world.budget` includes
-their conservative cost in the shared 2,000,000-unit admission ceiling.
+their conservative cost in the shared `RuleCapacity.MaxWorkUnitsPerTick`
+admission ceiling.
 Runtime sampling and checkpoint semantics live in the
 [server reference](../Puck.World.Server/README.md#local-flock-steering).
 
@@ -2629,7 +2717,7 @@ A kit's optional `tether` facet (`WorldTether` → `FixedWorldTether`) is a
 further distinct facet from `rigid`/`carry`, presence-is-the-switch on the
 same terms: it admits the kit's bodies to `body.attach`/`body.detach`/
 `body.reel`, an aimed distance-cap rope a body throws along its own facing
-and reels (`Puck.Physics.FixedSurfaceQuery.TryNearestSurfaceAlongDirection`,
+and reels (`Puck.Physics.IContactField.TryNearestSurfaceAlongDirection`,
 `Puck.Physics.FixedTetherConstraint`). Absent, those three channels refuse by
 name for every body wearing the kit. `maxAnchorDistance` (non-negative) is
 the aim ceiling—also the tether's rope length at attach, clamped to the
@@ -2652,20 +2740,21 @@ are not authored here—they are a kit's own `motion.holds` list.
 
 ## The `probes` section—probe and binding rows
 
-`WorldProbesSection` (`WorldProbes.cs`) declares two lists: `probes`
-(`WorldProbe`—an id, a registered kind, an input arm of
-`WorldProbeInput` (`camera { sensor }` or a recorded `track { path }`), a
-rate ceiling in Hz, and an opaque `config`) and `bindings` (`WorldProbeBinding`
-—`axis`, `parameter`, or `control`, each naming a declared probe and
-channel). A kind is checked against the registered vocabulary at load
+`probes` is a list of `WorldProbe` rows (`WorldProbes.cs`): an `id`, a
+registered `kind`, a `rateHz` ceiling (1..240), exactly one of `inputs` (the
+kind's sockets by name, each bound to a `WorldFrameSource`) or a recorded
+`track` document path, an opaque `config`, and the row's own `bindings`
+(`WorldProbeBinding`—`axis`, `parameter`, or `control`, each naming one of the
+enclosing probe's channels). A kind is checked against the registered vocabulary at load
 (`WorldProbeVocabularyHook.IsRegisteredProbeKind`, a required hook installed
 the same way `WorldExtensionVocabularyHook`'s post-render check is); a channel
 name is not—the manifest behind that hook is not reachable here, so a
 binding's `channel` is checked only for presence, and by name once a kind's own
 manifest is consulted at boot. An `axis` binding's `source` mints the bindable
 input source `probe.<source>` (`Puck.Input.InputSources.Probe.Axis`); a
-`parameter` binding's `target` must name an entry the document's own
-`render.extensions` composes; a `control` binding's `control` field must name a
+`parameter` binding's `target` is either an `extension` entry the document's own
+`render.extensions` composes or another declared `probe` row's config field; a
+`control` binding's `control` field must name a
 `WorldCameraControls` member. Like `music`, the section is
 boot-authored only—no `WorldMutation` kind targets it and `world.row.set
 probes` refuses by name enumerating siblings—though it does carry its own
@@ -2678,10 +2767,10 @@ t3ssel8r-style pole-matched second-order response every follower consumer
 (a look's root/part followers, a camera boom, a grounded kit's planar
 shaping, a `state` cell's eased read) names by `name` rather than authoring
 inline. `f` (Hz, positive), `zeta` (damping ratio, non-negative), and `r`
-(initial response) are validated against `WorldDynamics`' ceilings
+(initial response) are validated against `Puck.State`'s `DynamicsLimits` ceilings
 (`MaxFrequencyHz`, `MaxDamping`, `MinResponse`/`MaxResponse`). The section is
 optional and every reference is nullable, so an unauthored world is
-unchanged; every reference resolves through `WorldDefinitionRows.FindDynamics`
+unchanged; every reference resolves through `Puck.State`'s `StateRows.FindDynamics`
 and refuses a dangling name, and removing a still-referenced row is refused
 naming the referrer. `DynamicsRow.Compiled` caches the row's
 `Puck.Maths.SecondOrderDynamics` derivation per row instance
@@ -2779,14 +2868,14 @@ a direction with no such occupied intermediate, or whose destination is not
 empty, is not a candidate. Past `maxHops` 1 (the default, this shape's
 original single hop), one candidate chains 1..`maxHops` such hops as a single
 move, never revisiting a cell of the chain and evicting nothing along the
-way; the tree method's own root-move decoder does not resolve a chained
-candidate, so `maxHops` past 1 is refused with it), and `pair` (`with`, a cell key of `tokens`—the
+way; the MonteCarlo method's own root-move decoder does not resolve a chained
+candidate, so `maxHops` past 1 is refused with it), and `tandem` (`with`, a cell key of `tokens`—the
 walked token relocates to the target and the named companion relocates by the
 same lattice translation, `CompiledTopology.TryTranslation`: the axial step on
 a grid, ring, hex, or box, provided its own destination is empty; a graph or
 tiling has no translations and refuses the shape; no eviction of its own—the
 minimal two-token primitive a castle's rook needs, not a general rule for every
-pair's own reach). `relocate` with
+companion's own reach). `relocate` with
 `displace: false` leaves the standing token in place, so a judge rule that
 reads two tokens sharing a cell decides the candidate itself. `promote`
 (`codes`, an integer row keyed by the tokens; `to`, up to sixteen codes) relocates
@@ -2848,7 +2937,7 @@ relocation to that depth—for each accepted root candidate, if plies remain
 it recurses one more ply and negates the reply (the value is from the
 perspective of the side that JUST MOVED, so an opponent's gain is this side's
 loss); once no plies remain, `score` is evaluated directly on the arena after
-the ply. A position with no accepted relocation scores `-WorldSearchCapacity.
+the ply. A position with no accepted relocation scores `-SearchCapacity.
 MateScore` for the side to move—a magnitude shifted down from
 `long.MaxValue` so repeated negation and comparison across the deepest
 authored search never overflows. Alpha-beta prunes every ply past the root
@@ -2862,7 +2951,7 @@ whatever it holds when the final depth finishes is that depth's answer.
 
 `scores` is the n-seat reading of what a ply is worth, authored instead of
 `score` (exactly one of the two, when a score is needed; `scores` is refused
-with the `tree` method, whose outcome backprop assumes two sides): a keyed
+with the `MonteCarlo` method, whose outcome backprop assumes two sides): a keyed
 integer row, one cell per seat in `turn`'s own ordinal order, holding each
 seat's own current score. A level maximizes the mover seat's own entry
 rather than negating the reply—no seat's gain is assumed to be another's
@@ -2872,13 +2961,13 @@ vector (in that ply's own frame, since nothing else reads it once the ply's
 candidates are its own) so the parent can read its own seat back out of it.
 
 `method` picks how plies are compared by the one `score`: `negamax` (the
-default, above) or `tree`, for a game whose score is only a terminal outcome.
-A `tree` job tree-searches after its root walk: `iterations` (default 256)
+default, above) or `MonteCarlo`, for a game whose score is only a terminal outcome.
+A `MonteCarlo` job tree-searches after its root walk: `iterations` (default 256)
 rounds of UCB1 selection from the root, expansion that judges every candidate
 of the leaf once and keeps the accepted ones as children (a pool of
-`WorldSearchCapacity.TreeNodes`), a playout that draws candidates from the
-job's own SplitMix64 stream seeded by its stamp—never an RNG in simulation
-state—until nothing is accepted or the depth cap, then the score read there
+`SearchCapacity.TreeNodes`), a playout that draws candidates from the
+job's own SplitMix64 stream seeded by the plan's `DrawSeed` (zero for every
+world job)—never an RNG in simulation state—until nothing is accepted or the depth cap, then the score read there
 from the side that just moved and folded back along the path with alternating
 sign; it lands the most-visited root move in `best` with the mean score. A tree
 step is a unit of the job's allowance like any other, and the whole tree, path,
@@ -2899,7 +2988,7 @@ both out of the same allowance. A job whose allowance cannot cover a restart, a
 full replay and one unit would stall, so it is refused by that sum. A chance
 ply is a ply like any other: it folds one outcome a unit, at the root or inside
 the walk, and a checkpoint carries the outcomes it has folded. `nodes`
-(1..`WorldSearchCapacity.MaxNodesPerTick`) caps the candidates one tick judges,
+(1..`SearchCapacity.MaxNodesPerTick`) caps the candidates one tick judges,
 for a job that should take longer than its allowance makes it. Job progress is
 simulation state—it hashes and rides the checkpoint—and `world.search` lists
 each job's phase, walk position, accepted count, judged count, node cap, judge
@@ -2933,7 +3022,21 @@ for what was withheld, so no receiving consumer changed type. Because `state` is
 one of the withheld sections, `Compose` sends a FLAT document—every
 `state.<row>[.<key>]` value answered from the composing authority's own state and
 the reference dropped—and `TryToDefinition` refuses a peer that still names a
-cell.
+cell. Placements cross as `WorldStateDisclosure.Disclose` deals them to the
+recipient: a dealt child is a reading of the cells it was dealt from, so one whose
+variant cell the recipient may not read shows the template's own prototype, and one
+whose dealt cell it may not read is absent—the child the deal sweep would deal
+from the recipient's own rows. A responsive placement whose `respond` conditions
+read a row withholding a cell from the recipient crosses with its `holding` mask
+cleared of every entry that reads a withheld cell, so it shows the first entry that
+holds over what the recipient may read, else its authored prototype; a field entry
+reads the lattice, which is not hidden state, and keeps its bit. `TryToDefinition`
+carries the projection's `observations` into the hydrated document as plain
+`state.world` rows of the disclosed cells, so a remote client reads its own hidden
+rows as state. A disclosed vector row names its space, and the projection's
+`spaces` carries the declaration of every space a disclosed vector row names (a
+model, a revision, and a dimension count) and no other, so the row hydrates as a
+vector row of that space.
 
 `WorldCounterpartAttestation` is a neighbour's statement of its seam edges plus
 the five `WorldOverlapTerms` the overlap derivation reads from its side.
@@ -2971,7 +3074,7 @@ reserved-prefix key survives) is proven in-process by
 `tests/Puck.World.Tests/StrictParseLawTests.cs`. No committed battery covers
 the HUD document—validate HUD
 document changes by running the app; see
-[the puck-world skill's hud reference](../../.agents/skills/puck-world/references/hud.md)
+[the puck-world skill's hud reference](../../.claude/skills/puck-world/references/hud.md)
 for the recipes.
 
 ## Documentation

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
@@ -44,6 +45,11 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     private readonly Func<int, nint>? m_resolveScreenSource;
     private readonly SdfViewGpuServices m_services;
     private readonly uint m_width;
+    // Owned here rather than by the engine, so submission identities keep increasing across an engine rebuild.
+    private readonly GpuWorkLedger m_work = new(
+        framesInFlight: SdfWorldEngine.FrameRingSize,
+        name: "gpu.session-view"
+    );
 
     // H3: suppresses re-narrating an upload/capacity fault every produced frame while it keeps recurring (the
     // rebuilt engine re-probes the SAME frame source, so it fails again immediately until the emitter-side re-probe
@@ -52,7 +58,10 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     private bool m_capacityFaultNarrated;
     private SdfWorldEngine? m_engine;
     private bool m_hasProduced;
-    private SdfWorldKernels? m_kernels;
+
+    // Built off the frame thread on the first resolve and kept across capacity rebuilds until a device loss or disposal.
+    private readonly SdfWorldPipelineSource m_pipelines;
+
     // H3: the last successfully produced frame's output handle — served while m_engine is torn down and awaiting
     // rebuild (see Resolve's catch below), and while no frame has ever completed (0, the ordinary "no signal" value).
     private nint m_lastGoodHandle;
@@ -88,6 +97,7 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
 
+        m_pipelines = new SdfWorldPipelineSource(cache: services.Pipelines);
         m_services = services;
         m_hostsOnDirectX = hostsOnDirectX;
         m_frameSource = frameSource;
@@ -105,8 +115,14 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     /// <remarks>Always zero — a session view films its OWN already-lit content; it contributes no light to the host
     /// room beyond whatever the host's own screen-surface glow accounting already does for a bound image.</remarks>
     public Vector3 RoomGlow => Vector3.Zero;
+    /// <summary>Gets the GPU work this view's offscreen engine recorded, per pass, for its newest completed submission
+    /// (see <see cref="SdfWorldEngine.Work"/>). Submission identities keep increasing when the view rebuilds its engine;
+    /// the view's work reads unavailable after a rebuild until a frame of the new engine completes.</summary>
+    public IGpuWorkSource Work => m_work;
+    /// <summary>Gets the GPU objects this view's engines have created, over the view's whole life.</summary>
+    public IWorkCounterSource WorkLifetime => m_work;
 
-    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) =>
+    private bool EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) =>
         SdfFilmingViewEngine.EnsureEngine(
             device: device,
             engine: ref m_engine,
@@ -115,10 +131,9 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
             gpu: gpu,
             height: m_height,
             hostsOnDirectX: m_hostsOnDirectX,
-            kernels: ref m_kernels,
-            services: m_services,
-            viewLabel: "session view",
-            width: m_width
+            pipelines: m_pipelines,
+            width: m_width,
+            work: m_work
         );
 
     /// <inheritdoc/>
@@ -127,6 +142,7 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
         m_engine = null;
         m_retiredEngine?.Dispose();
         m_retiredEngine = null;
+        m_pipelines.Release();
     }
     /// <inheritdoc/>
     public void NotifyDeviceLost() {
@@ -135,6 +151,8 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
         m_engine = null;
         m_retiredEngine?.Dispose();
         m_retiredEngine = null;
+        m_pipelines.Release();
+        m_work.Invalidate();
         // The cached handle belonged to the now-lost device — never re-served (mirrors ViewStack.NotifyDeviceLost's
         // own LastHandle reset for every entry).
         m_lastGoodHandle = 0;
@@ -196,11 +214,14 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
             width: m_width
         );
 
-        EnsureEngine(
+        // While the pipelines build, keep serving the last completed image (no signal before the first).
+        if (!EnsureEngine(
             device: device,
             gpu: m_services.Gpu,
             frame: frame
-        );
+        )) {
+            return m_lastGoodHandle;
+        }
 
         // Matches SdfCameraView.Resolve's own per-frame contract: every screen-surface slot is bound explicitly.
         // Most session projections deliberately carry no nested sources; traveler-follow may supply a resolver for
@@ -243,6 +264,7 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
             }
 
             m_engine = null;
+            m_work.Invalidate();
 
             return m_lastGoodHandle;
         }

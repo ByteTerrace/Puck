@@ -1,10 +1,9 @@
 using System.Text.Json;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Canary;
 
-internal static class CanaryManifestLoader {
-    private const int MaximumExitSeconds = 30;
-    private const int MaximumFederatedExitSeconds = 90;
+internal static partial class CanaryManifestLoader {
     private const int MaximumFederatedLegTimeoutSeconds = 240;
     private const int MaximumLegTimeoutSeconds = 60;
     private const string UnknownMemberDetail = "strict manifests refuse fields the runner does not read.";
@@ -72,14 +71,6 @@ internal static class CanaryManifestLoader {
         )
         );
     }
-    private static StringComparer PathComparer() => (OperatingSystem.IsWindows()
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal
-    );
-    private static bool PathsEqual(string left, string right) => PathComparer().Equals(
-        x: left,
-        y: right
-    );
     // Absent (null) reads the leg's own default transcript — the entry whose world/script equal the leg's, or the
     // sole transcript for a non-federated leg. A leg with no authorities[] cannot name one at all.
     private static string? ReadAssertionAuthority(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
@@ -145,6 +136,11 @@ internal static class CanaryManifestLoader {
                 context: $"{context} expect[{index}]",
                 element: row
             ),
+                "lines" => ReadLineOrderAssertion(
+                authorityIds: authorityIds,
+                context: $"{context} expect[{index}]",
+                element: row
+            ),
                 "response" => ReadResponseAssertion(
                 authorityIds: authorityIds,
                 context: $"{context} expect[{index}]",
@@ -169,7 +165,11 @@ internal static class CanaryManifestLoader {
                 context: $"{context} expect[{index}]",
                 element: row
             ),
-                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'response', 'sequence', 'relation', 'filesDiffer', or 'framesAgree' (casing is significant)."),
+                "imageRegion" => ReadImageRegionAssertion(
+                context: $"{context} expect[{index}]",
+                element: row
+            ),
+                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'lines', 'response', 'sequence', 'relation', 'filesDiffer', 'framesAgree', or 'imageRegion' (casing is significant)."),
             };
 
             if (!names.Add(item: assertion.Name)) {
@@ -292,12 +292,12 @@ internal static class CanaryManifestLoader {
             ));
         }
 
-        if (!roles.Any(predicate: role => (PathsEqual(
-            left: role.WorldPath,
-            right: legWorldPath
-        ) && PathsEqual(
-            left: role.ScriptPath,
-            right: legScriptPath
+        if (!roles.Any(predicate: role => (PuckPaths.Comparer.Equals(
+            x: role.WorldPath,
+            y: legWorldPath
+        ) && PuckPaths.Comparer.Equals(
+            x: role.ScriptPath,
+            y: legScriptPath
         )))) {
             throw new CanaryManifestRefusal(message: $"{context} authorities must include an entry whose world and script equal this leg's own — the entry unscoped assertions read by default.");
         }
@@ -308,7 +308,8 @@ internal static class CanaryManifestLoader {
         "headless" => CanaryBootShape.Headless,
         "windowed" => CanaryBootShape.Windowed,
         "stub" => CanaryBootShape.Stub,
-        _ => throw new CanaryManifestRefusal(message: $"canary '{id}' bootShape '{value}' is invalid; use exactly 'headless', 'windowed', or 'stub' (casing is significant)."),
+        "offscreen" => CanaryBootShape.Offscreen,
+        _ => throw new CanaryManifestRefusal(message: $"canary '{id}' bootShape '{value}' is invalid; use exactly 'headless', 'windowed', 'stub', or 'offscreen' (casing is significant)."),
     };
     private static IReadOnlyList<CanaryCommandClaim> ReadCommands(JsonElement element, string context, string scriptPath) {
         var array = CliStrictJson.ReadRequiredArray(
@@ -518,7 +519,7 @@ internal static class CanaryManifestLoader {
         }
 
         var fixtures = new List<string>(capacity: fixturesElement.GetArrayLength());
-        var seen = new HashSet<string>(comparer: PathComparer());
+        var seen = new HashSet<string>(comparer: PuckPaths.Comparer);
 
         for (var index = 0; (index < fixturesElement.GetArrayLength()); index++) {
             var item = fixturesElement[index];
@@ -618,7 +619,11 @@ internal static class CanaryManifestLoader {
             "authorityWorld",
             "commands",
             "connect",
+            "entry",
             "expect",
+            "hideShaderCompiler",
+            "package",
+            "relaunch",
             "script",
             "world"
         );
@@ -648,7 +653,28 @@ internal static class CanaryManifestLoader {
             rawPath: scriptText
         );
         string? authorityWorldPath = null;
+        string? entry = null;
         var connect = false;
+
+        if (element.TryGetProperty(
+            propertyName: "entry",
+            value: out var entryElement
+        )) {
+            if (
+                (entryElement.ValueKind != JsonValueKind.String) ||
+                string.IsNullOrWhiteSpace(value: entryElement.GetString())
+            ) {
+                throw new CanaryManifestRefusal(message: $"{context} entry must be a non-empty world name.");
+            }
+            if (!worldPath.EndsWith(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: ".puck"
+            )) {
+                throw new CanaryManifestRefusal(message: $"{context} entry names a declared world of a composition source, and its world is not a .puck source.");
+            }
+
+            entry = entryElement.GetString();
+        }
 
         if (element.TryGetProperty(
             propertyName: "authorityWorld",
@@ -685,6 +711,19 @@ internal static class CanaryManifestLoader {
             throw new CanaryManifestRefusal(message: $"{context} connect requires authorityWorld so the runner owns the endpoint it dials.");
         }
 
+        var hideShaderCompiler = false;
+
+        if (element.TryGetProperty(
+            propertyName: "hideShaderCompiler",
+            value: out var hideElement
+        )) {
+            hideShaderCompiler = hideElement.ValueKind switch {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => throw new CanaryManifestRefusal(message: $"{context} hideShaderCompiler must be true or false."),
+            };
+        }
+
         var authorities = ReadAuthorities(
             canaryDirectory: canaryDirectory,
             context: context,
@@ -711,6 +750,26 @@ internal static class CanaryManifestLoader {
             context: context,
             element: element
         );
+        CanaryRelaunch? relaunch = null;
+
+        if (element.TryGetProperty(
+            propertyName: "relaunch",
+            value: out var relaunchElement
+        )) {
+            if (
+                (authorities.Count != 0) ||
+                (authorityWorldPath is not null)
+            ) {
+                throw new CanaryManifestRefusal(message: $"{context} relaunch boots one process again, so it takes no authorities or authorityWorld.");
+            }
+
+            relaunch = ReadRelaunch(
+                canaryDirectory: canaryDirectory,
+                context: $"{context} relaunch",
+                element: relaunchElement,
+                repositoryRoot: repositoryRoot
+            );
+        }
 
         return new CanaryLeg(
             Assertions: assertions,
@@ -718,7 +777,17 @@ internal static class CanaryManifestLoader {
             AuthorityWorldPath: authorityWorldPath,
             Commands: commands,
             Connect: connect,
+            Entry: entry,
+            HideShaderCompiler: hideShaderCompiler,
             Name: name,
+            Package: ReadPackage(
+                canaryDirectory: canaryDirectory,
+                context: context,
+                leg: element,
+                oneProcess: ((authorities.Count == 0) && (authorityWorldPath is null)),
+                repositoryRoot: repositoryRoot
+            ),
+            Relaunch: relaunch,
             ScriptPath: scriptPath,
             WorldPath: worldPath
         );
@@ -795,6 +864,85 @@ internal static class CanaryManifestLoader {
             Present: present,
             Stream: stream,
             Text: text
+        );
+    }
+    private static CanaryLineOrderAssertion ReadLineOrderAssertion(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
+        CliStrictJson.RequireOnlyMembers(
+            element: element,
+            context: context,
+            unknownMemberDetail: UnknownMemberDetail,
+            refusal: Refusal,
+            "authority",
+            "lines",
+            "match",
+            "name",
+            "stream",
+            "type"
+        );
+
+        var name = CliStrictJson.ReadRequiredString(
+            context: context,
+            element: element,
+            member: "name",
+            refusal: Refusal
+        );
+        var authority = ReadAssertionAuthority(
+            authorityIds: authorityIds,
+            context: context,
+            element: element
+        );
+        var stream = ReadStream(
+            value: CliStrictJson.ReadRequiredString(
+                context: context,
+                element: element,
+                member: "stream",
+                refusal: Refusal
+            ),
+            context: context
+        );
+        var matchText = CliStrictJson.ReadRequiredString(
+            context: context,
+            element: element,
+            member: "match",
+            refusal: Refusal
+        );
+        var match = matchText switch {
+            "exact" => CanaryLineMatch.Exact,
+            "contains" => CanaryLineMatch.Contains,
+            _ => throw new CanaryManifestRefusal(message: $"{context} match '{matchText}' is invalid; use exactly 'exact' or 'contains' (casing is significant)."),
+        };
+        var rows = CliStrictJson.ReadRequiredArray(
+            context: context,
+            element: element,
+            member: "lines",
+            refusal: Refusal
+        );
+
+        if (rows.GetArrayLength() < 2) {
+            throw new CanaryManifestRefusal(message: $"{context} lines has {rows.GetArrayLength()} entr(ies); an order needs at least two lines, and one line is a 'line' assertion.");
+        }
+
+        var lines = new List<string>(capacity: rows.GetArrayLength());
+
+        for (var index = 0; (index < rows.GetArrayLength()); index++) {
+            var item = rows[index];
+
+            if (
+                (item.ValueKind != JsonValueKind.String) ||
+                string.IsNullOrEmpty(value: item.GetString())
+            ) {
+                throw new CanaryManifestRefusal(message: $"{context} lines[{index}] must be a non-empty string.");
+            }
+
+            lines.Add(item: item.GetString()!);
+        }
+
+        return new CanaryLineOrderAssertion(
+            Authority: authority,
+            Lines: lines,
+            Match: match,
+            Name: name,
+            Stream: stream
         );
     }
     private static CanaryOperand ReadOperand(JsonElement element, string context) {
@@ -889,6 +1037,7 @@ internal static class CanaryManifestLoader {
         var relationOperator = operatorText switch {
             "equal" => CanaryRelationOperator.Equal,
             "notEqual" => CanaryRelationOperator.NotEqual,
+            "greater" => CanaryRelationOperator.Greater,
             "betweenInclusive" => CanaryRelationOperator.BetweenInclusive,
             "atLeast" => CanaryRelationOperator.AtLeast,
             "atMost" => CanaryRelationOperator.AtMost,
@@ -904,6 +1053,7 @@ internal static class CanaryManifestLoader {
         switch (relationOperator) {
             case CanaryRelationOperator.Equal:
             case CanaryRelationOperator.NotEqual:
+            case CanaryRelationOperator.Greater:
                 right = ReadOperand(
                     element: CliStrictJson.ReadRequiredObject(
                         context: context,
@@ -1093,6 +1243,7 @@ internal static class CanaryManifestLoader {
                     refusal: Refusal,
                     "component",
                     "field",
+                    "line",
                     "name"
                 );
 
@@ -1125,6 +1276,24 @@ internal static class CanaryManifestLoader {
                     }
                 }
 
+                string? line = null;
+
+                if (row.TryGetProperty(
+                    propertyName: "line",
+                    value: out _
+                )) {
+                    line = CliStrictJson.ReadRequiredString(
+                        context: $"{context} extract[{index}]",
+                        element: row,
+                        member: "line",
+                        refusal: Refusal
+                    );
+
+                    if (string.IsNullOrWhiteSpace(value: line)) {
+                        throw new CanaryManifestRefusal(message: $"{context} extract[{index}] line must name the start of a response line.");
+                    }
+                }
+
                 if (!values.Add(item: valueName)) {
                     throw new CanaryManifestRefusal(message: $"{context} repeats extracted value name '{valueName}'.");
                 }
@@ -1132,6 +1301,7 @@ internal static class CanaryManifestLoader {
                 extractions.Add(item: new CanaryValueExtraction(
                     Component: component,
                     Field: field,
+                    Line: line,
                     Name: valueName
                 ));
             }
@@ -1350,7 +1520,7 @@ internal static class CanaryManifestLoader {
             )}'; its rigid layout contains files only.");
         }
 
-        var expected = new HashSet<string>(comparer: PathComparer()) {
+        var expected = new HashSet<string>(comparer: PuckPaths.Comparer) {
             Path.GetFullPath(path: manifestPath),
             positive.ScriptPath,
             discriminating.ScriptPath,
@@ -1378,6 +1548,11 @@ internal static class CanaryManifestLoader {
                 expected.Add(item: role.WorldPath);
             }
         }
+        foreach (var relaunch in new[] { positive.Relaunch, discriminating.Relaunch }) {
+            if (relaunch is not null) {
+                expected.Add(item: relaunch.ScriptPath);
+            }
+        }
         foreach (var fixture in fixtures) {
             expected.Add(item: fixture);
         }
@@ -1403,11 +1578,9 @@ internal static class CanaryManifestLoader {
         }
     }
     private static string ResolveFile(string rawPath, string basePath, string containmentRoot, string context) {
-        if (
-            Path.IsPathRooted(path: rawPath) ||
-            ContainsParentSegment(path: rawPath)
-        ) {
-            throw new CanaryManifestRefusal(message: $"{context} path '{rawPath}' is not a contained relative path; rooted paths and '..' escapes are refused.");
+        // A relative path may name a sibling canary's file ('..'); containment is the resolved path's, checked below.
+        if (Path.IsPathRooted(path: rawPath)) {
+            throw new CanaryManifestRefusal(message: $"{context} path '{rawPath}' is rooted; a manifest names files relative to its canary directory.");
         }
 
         string fullPath;
@@ -1461,6 +1634,7 @@ internal static class CanaryManifestLoader {
                 context: "manifest root",
                 unknownMemberDetail: UnknownMemberDetail,
                 refusal: Refusal,
+                "backends",
                 "binding",
                 "bootShape",
                 "discriminating",
@@ -1468,7 +1642,6 @@ internal static class CanaryManifestLoader {
                 "id",
                 "positive",
                 "requirements",
-                "seconds",
                 "timeoutSeconds",
                 "title"
             );
@@ -1513,12 +1686,6 @@ internal static class CanaryManifestLoader {
                 element: root,
                 id: id
             );
-            var seconds = CliStrictJson.ReadRequiredInt32(
-                context: $"canary '{id}'",
-                element: root,
-                member: "seconds",
-                refusal: Refusal
-            );
             var timeoutSeconds = CliStrictJson.ReadRequiredInt32(
                 context: $"canary '{id}'",
                 element: root,
@@ -1553,42 +1720,41 @@ internal static class CanaryManifestLoader {
             // A federated mesh leg spawns several concurrently-launched Puck.World processes on a shared machine
             // rather than one — real spawn/handshake variance earns it a wider ceiling than the single-process budget.
             var isFederated = ((positive.Authorities.Count != 0) || (discriminating.Authorities.Count != 0));
-            var maximumExitSeconds = (isFederated
-                ? MaximumFederatedExitSeconds
-                : MaximumExitSeconds
-            );
             var maximumLegTimeoutSeconds = (isFederated
                 ? MaximumFederatedLegTimeoutSeconds
                 : MaximumLegTimeoutSeconds
             );
 
+            // The leg ends when its script does (the runner closes every script with wire.errors and quit); this is
+            // only the ceiling a hung leg is killed at.
             if (
-                (seconds <= 0) ||
-                (seconds > maximumExitSeconds)
-            ) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' seconds must be in 1..{maximumExitSeconds}; an automatic proof must end on its own and stay cheap.");
-            }
-
-            if (
-                (timeoutSeconds <= seconds) ||
+                (timeoutSeconds <= 0) ||
                 (timeoutSeconds > maximumLegTimeoutSeconds)
             ) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' timeoutSeconds must be greater than seconds and at most {maximumLegTimeoutSeconds}; it must distinguish a hang without making the gate unbounded.");
+                throw new CanaryManifestRefusal(message: $"canary '{id}' timeoutSeconds must be in 1..{maximumLegTimeoutSeconds}; it must distinguish a hang without making the gate unbounded.");
             }
 
             if (
-                PathsEqual(
-                left: positive.WorldPath,
-                right: discriminating.WorldPath
+                PuckPaths.Comparer.Equals(
+                x: positive.WorldPath,
+                y: discriminating.WorldPath
             ) &&
-                PathsEqual(
-                left: positive.ScriptPath,
-                right: discriminating.ScriptPath
+                PuckPaths.Comparer.Equals(
+                x: positive.ScriptPath,
+                y: discriminating.ScriptPath
             )
             ) {
                 throw new CanaryManifestRefusal(message: $"canary '{id}' discriminating leg changes neither world nor script; prose alone cannot make the positive observation turn red.");
             }
 
+            var backends = ReadBackends(
+                bootShape: bootShape,
+                discriminating: discriminating,
+                element: root,
+                id: id,
+                positive: positive,
+                requirements: requirements
+            );
             var fixtures = ReadFixtures(
                 canaryDirectory: directory,
                 element: root,
@@ -1607,6 +1773,7 @@ internal static class CanaryManifestLoader {
             );
 
             manifest = new CanaryManifest(
+                Backends: backends,
                 Binding: binding,
                 BootShape: bootShape,
                 DirectoryPath: directory,
@@ -1615,7 +1782,6 @@ internal static class CanaryManifestLoader {
                 Id: id,
                 Positive: positive,
                 Requirements: requirements,
-                Seconds: seconds,
                 TimeoutSeconds: timeoutSeconds,
                 Title: title
             );

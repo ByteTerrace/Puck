@@ -1,16 +1,17 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Puck.Maths;
 
 namespace Puck.SignedDistance.Queries;
 
 // KEEP IN SYNC with mapCore's RIGID op/shape cases in Assets/Shaders/Sdf/sdf-vm.hlsli (the SYNC PAIR this file is
-// half of — see the sdf-world skill's sync-pair table). This is a SECOND, INDEPENDENT interpreter of the same
+// half of — see the rendering skill's sync-pair table). This is a SECOND, INDEPENDENT interpreter of the same
 // SdfInstruction stream mapCore walks, in FixedQ4816/FixedVector3 instead of shader float — a deliberate DUAL
 // implementation (like SdfProgram's own host-side AnalyzeBounds/AnalyzeLipschitz passes), not a codegen of the
 // shader. Touching mapCore's RESET/TRANSLATE/ROTATE/SCALE/REPEAT/REPEAT_LIMITED/SYMMETRY_PLANE/ELONGATE/ONION/
 // DILATE/PUSH_FIELD/POP_FIELD/SHAPE cases, or blendShape/evaluateShape's Sphere/Box/ScreenSlab/Torus/Plane/
-// RoundCone/Capsule/Cylinder/Ellipsoid/Vesica/RoundedRectangle/Trapezoid/Superellipsoid/ConvexPolygon bodies, means
+// RoundCone/Capsule/Cylinder/Vesica/RoundedRectangle/Trapezoid/Superellipsoid/ConvexPolygon bodies, means
 // updating this file's mirror in the SAME change (and vice versa) — a divergence is silent (both sides compile and
 // run; only the ANSWER differs).
 //
@@ -45,11 +46,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // SDF_FAR_DISTANCE (sdf-vm.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
     private static readonly FixedQ4816 FarDistance = FixedQ4816.FromInteger(value: 1_000_000_000L);
-    // SDF_SMOOTH_RADIUS_MIN / SDF_SQRT_HALF / SDF_ELLIPSOID_MIN_DENOM (sdf-vm.hlsli) — the same epsilon floors the
+    // SDF_SMOOTH_RADIUS_MIN / SDF_SQRT_HALF (sdf-vm.hlsli) — the same epsilon floors the
     // shader's blend/shape math uses, transcribed to fixed point so a zero/degenerate radius behaves identically.
     private static readonly FixedQ4816 SmoothRadiusMin = FixedQ4816.FromDouble(value: 0.0001);
     private static readonly FixedQ4816 SqrtHalf = FixedQ4816.FromDouble(value: 0.70710678118654752440);
-    private static readonly FixedQ4816 EllipsoidMinDenom = FixedQ4816.FromDouble(value: 0.0001);
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
     // The central-difference probe offset for TryFieldGradient, in RAW world units. Two failure modes
@@ -92,7 +92,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     private readonly int m_marchIterations;
     // SdfProgram.StepScale (1/L, in (0, 1]) in fixed point — the factor that turns the interpreted field's value into
     // a lower bound on true Euclidean distance. The interpreted op subset is 1-Lipschitz, but the blend tail is not:
-    // a chamfer's bevel arm and an eccentric Ellipsoid both make the field OVERESTIMATE, so a march advancing by the
+    // a chamfer's bevel arm makes the field OVERESTIMATE, so a march advancing by the
     // raw value steps past thin geometry and tunnels.
     private readonly FixedQ4816 m_stepScale;
     // One conservative world-space bound per hard-union instance (see BuildCullBounds/IsPureUnionInstance), sorted by
@@ -202,12 +202,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         }
     }
 
-    private static FixedVector3 Abs(FixedVector3 value) =>
-        new(
-            X: FixedQ4816.Abs(value: value.X),
-            Y: FixedQ4816.Abs(value: value.Y),
-            Z: FixedQ4816.Abs(value: value.Z)
-        );
     private static FixedQ4816 BlendShape(FixedQ4816 current, FixedQ4816 candidate, uint blend, FixedQ4816 smoothRadius) {
         var smoothK = FixedQ4816.Max(
             x: smoothRadius,
@@ -339,24 +333,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (blended - ((k * h) * (FixedQ4816.One - h)));
     }
-    private static FixedVector3 ClampComponents(FixedVector3 value, FixedVector3 minimum, FixedVector3 maximum) =>
-        new(
-            X: FixedQ4816.Clamp(
-                value: value.X,
-                minimum: minimum.X,
-                maximum: maximum.X
-            ),
-            Y: FixedQ4816.Clamp(
-                value: value.Y,
-                minimum: minimum.Y,
-                maximum: maximum.Y
-            ),
-            Z: FixedQ4816.Clamp(
-                value: value.Z,
-                minimum: minimum.Z,
-                maximum: maximum.Z
-            )
-        );
     // Validates and converts a program's instruction stream ONCE — see the type remarks' excluded-ops rule for what
     // throws and why.
     private static CompiledInstruction[] Compile(SdfProgram program) {
@@ -461,10 +437,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             }
 
             return new SweepCurveFixed(
-                A: FixedVector(value: curve.A),
-                B: FixedVector(value: curve.B),
+                A: FixedVector3.FromVector3(value: curve.A),
+                B: FixedVector3.FromVector3(value: curve.B),
                 Bulge: FixedQ4816.FromDouble(value: curve.Bulge),
-                C: FixedVector(value: curve.C),
+                C: FixedVector3.FromVector3(value: curve.C),
                 RadiusEnd: FixedQ4816.FromDouble(value: curve.RadiusEnd),
                 RadiusStart: FixedQ4816.FromDouble(value: curve.RadiusStart)
             );
@@ -475,11 +451,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             paramName: nameof(sweepCurves)
         );
     }
-    private static FixedVector3 FixedVector(Vector3 value) => new(
-        X: FixedQ4816.FromDouble(value: value.X),
-        Y: FixedQ4816.FromDouble(value: value.Y),
-        Z: FixedQ4816.FromDouble(value: value.Z)
-    );
     private static FixedVector2[] CompileConvexPolygonVertices(IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)> convexPolygonProfiles, int instructionIndex) {
         foreach (var (profileInstructionIndex, vertices) in convexPolygonProfiles) {
             if (profileInstructionIndex != instructionIndex) {
@@ -631,12 +602,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (blended, winnerMaterial);
     }
-    private static FixedVector3 DivideComponents(FixedVector3 left, FixedVector3 right) =>
-        new(
-            X: (left.X / right.X),
-            Y: (left.Y / right.Y),
-            Z: (left.Z / right.Z)
-        );
     // === The shape distance functions (KEEP IN SYNC with the matching sdf* functions in Assets/Shaders/Sdf/sdf-vm.hlsli)
     // ======================================================================================================================
 
@@ -680,14 +645,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             radius: instruction.Data0X,
             halfHeight: instruction.Data0Y
         ) - instruction.Data1W),
-            SdfShapeType.Ellipsoid => SdfEllipsoid(
-            p: p,
-            inverseRadii: new FixedVector3(
-                X: instruction.Data1Y,
-                Y: instruction.Data1Z,
-                Z: instruction.Data1W
-            )
-        ),
             SdfShapeType.Vesica => SdfVesica(
             p: p,
             r: instruction.Data0X,
@@ -775,7 +732,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             SdfShapeType.Torus or
             SdfShapeType.Cylinder or
             SdfShapeType.Plane or
-            SdfShapeType.Ellipsoid or
             SdfShapeType.Vesica or
             SdfShapeType.RoundedRectangle or
             SdfShapeType.Trapezoid or
@@ -830,41 +786,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return ((int)(((reach.Value + floor.Value) - 1L) / floor.Value));
     }
-    private static FixedQ4816 MaxComponent(FixedVector3 value) =>
-        FixedQ4816.Max(
-            x: value.X,
-            y: FixedQ4816.Max(
-                x: value.Y,
-                y: value.Z
-            )
-        );
-    private static FixedVector3 MaxComponents(FixedVector3 value, FixedQ4816 scalar) =>
-        new(
-            X: FixedQ4816.Max(
-                x: value.X,
-                y: scalar
-            ),
-            Y: FixedQ4816.Max(
-                x: value.Y,
-                y: scalar
-            ),
-            Z: FixedQ4816.Max(
-                x: value.Z,
-                y: scalar
-            )
-        );
-    private static FixedVector3 MultiplyComponents(FixedVector3 left, FixedVector3 right) =>
-        new(
-            X: (left.X * right.X),
-            Y: (left.Y * right.Y),
-            Z: (left.Z * right.Z)
-        );
-    private static FixedVector3 Negate(FixedVector3 value) =>
-        new(
-            X: -value.X,
-            Y: -value.Y,
-            Z: -value.Z
-        );
     private static FixedQ4816 RadialLength(FixedQ4816 x, FixedQ4816 z) =>
         new FixedVector2(
             X: x,
@@ -892,23 +813,19 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return rotation.RotateInverse(vector: p);
     }
-    private static FixedVector3 RoundComponents(FixedVector3 value) =>
-        new(
-            X: FixedQ4816.Round(value: value.X),
-            Y: FixedQ4816.Round(value: value.Y),
-            Z: FixedQ4816.Round(value: value.Z)
-        );
     private static FixedQ4816 SdfBox(FixedVector3 p, FixedVector3 halfExtents, FixedQ4816 cornerRadius) {
-        var q = (Abs(value: p) - SubtractScalar(
-            scalar: cornerRadius,
-            value: halfExtents
-        ));
-        var outside = MaxComponents(
-            value: q,
-            scalar: FixedQ4816.Zero
+        var inset = new FixedVector3(
+            X: cornerRadius,
+            Y: cornerRadius,
+            Z: cornerRadius
+        );
+        var q = (FixedVector3.Abs(value: p) - (halfExtents - inset));
+        var outside = FixedVector3.Max(
+            left: q,
+            right: FixedVector3.Zero
         ).Length;
         var inside = FixedQ4816.Min(
-            x: MaxComponent(value: q),
+            x: FixedVector3.MaxComponent(value: q),
             y: FixedQ4816.Zero
         );
 
@@ -952,23 +869,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (inside + outside);
     }
-    private static FixedQ4816 SdfEllipsoid(FixedVector3 p, FixedVector3 inverseRadii) {
-        var q = MultiplyComponents(
-            left: p,
-            right: inverseRadii
-        );
-        var k0 = q.Length;
-        var k1 = MultiplyComponents(
-            left: q,
-            right: inverseRadii
-        ).Length;
-        var denom = FixedQ4816.Max(
-            x: k1,
-            y: EllipsoidMinDenom
-        );
-
-        return ((k0 * (k0 - FixedQ4816.One)) / denom);
-    }
     // KEEP IN SYNC with sdfSuperellipsoid in sdf-vm.hlsli. Exactly 1-Lipschitz for every radius and exponent (see
     // SdfProgramBuilder.Superellipsoid's remarks) — no step-scale correction needed here beyond m_stepScale, which
     // this program's own Data1.y lane bakes to 1.0 already for a scope carrying nothing else non-1-Lipschitz.
@@ -976,9 +876,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // [0, 1] (the sum in [1, 3]), so a far query never saturates the Q48.16 carrier — the plain sum(q_i^e) saturates at
     // |p|/r ~ 60 for e = 8 (FixedQ4816.Pow clamps to MaxValue), collapsing a far field to a few radii and starving
     // every march that crosses it. Mathematically identical to sum(q_i^e)^(1/e).
+    // e == 2 is the ellipsoid, every ellipsoid the ISA carries: it takes the pow-free fast path (|q| - 1) * min(r), the
+    // same scaled L2 gauge without four Pow evaluations, and the same m <= 0 center value -min(r) (|q| = 0 there).
+    // KEEP the fast path IN SYNC with sdfSuperellipsoid's own e == 2 branch.
     private static FixedQ4816 SdfSuperellipsoid(FixedVector3 p, FixedVector3 radii, FixedVector3 inverseRadii, FixedQ4816 exponent) {
-        var absP = Abs(value: p);
-        var q = MultiplyComponents(
+        var absP = FixedVector3.Abs(value: p);
+        var q = FixedVector3.Multiply(
             left: absP,
             right: inverseRadii
         );
@@ -996,6 +899,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 y: radii.Z
             )
         );
+
+        if (exponent == Two) {
+            return ((q.Length - FixedQ4816.One) * minRadius);
+        }
 
         if (m <= FixedQ4816.Zero) {
             return -minRadius;
@@ -1392,43 +1299,50 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return (((qx * a) + (qy * b)) - lowerRadius);
     }
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static FixedVector2 ProjectLiftPoint(FixedVector3 p, FixedQ4816 liftAmount, FixedQ4816 lift) =>
+        ((lift > Half)
+            ? new FixedVector2(
+                X: p.X,
+                Y: p.Y
+            )
+            : new FixedVector2(
+                X: (RadialLength(
+                    x: p.X,
+                    z: p.Z
+                ) - liftAmount),
+                Y: p.Y
+            ));
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static FixedQ4816 ApplyLift(FixedVector3 p, FixedQ4816 distance2D, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) =>
+        ((lift > Half)
+            ? SdfExtrudeChamfer2D(
+                c: capChamfer,
+                distance2D: distance2D,
+                halfDepth: liftAmount,
+                z: p.Z
+            )
+            : distance2D);
     // capChamfer is Data1Z — a cap-only bevel radius on the extrude's rims (KEEP IN SYNC with sdfRoundedRect's data1.z
     // read in sdf-vm.hlsli). Zero (every pre-existing caller) takes SdfExtrude2D's plain join exactly.
     private static FixedQ4816 SdfRoundedRectangle(FixedVector3 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 cornerRadius, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
-        FixedVector2 point2D;
-
-        if (lift > Half) {
-            point2D = new FixedVector2(
-                X: p.X,
-                Y: p.Y
-            );
-
-            return SdfExtrudeChamfer2D(
-                distance2D: SdfRoundedRectangle2D(
-                    cornerRadius: cornerRadius,
-                    halfHeight: halfHeight,
-                    halfWidth: halfWidth,
-                    p: point2D
-                ),
-                z: p.Z,
-                halfDepth: liftAmount,
-                c: capChamfer
-            );
-        }
-
-        point2D = new FixedVector2(
-            X: (RadialLength(
-                x: p.X,
-                z: p.Z
-            ) - liftAmount),
-            Y: p.Y
+        var point2D = ProjectLiftPoint(
+            lift: lift,
+            liftAmount: liftAmount,
+            p: p
         );
 
-        return SdfRoundedRectangle2D(
-            cornerRadius: cornerRadius,
-            halfHeight: halfHeight,
-            halfWidth: halfWidth,
-            p: point2D
+        return ApplyLift(
+            capChamfer: capChamfer,
+            distance2D: SdfRoundedRectangle2D(
+                cornerRadius: cornerRadius,
+                halfHeight: halfHeight,
+                halfWidth: halfWidth,
+                p: point2D
+            ),
+            lift: lift,
+            liftAmount: liftAmount,
+            p: p
         );
     }
     private static FixedQ4816 SdfRoundedRectangle2D(FixedVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 cornerRadius) {
@@ -1459,40 +1373,23 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // KEEP IN SYNC with sdfChamferedRect in sdf-vm.hlsli. The shape's own chamfer c (Data0Z) doubles as its cap
     // bevel (the extrude call below passes it as capChamfer too), exactly as the shader does.
     private static FixedQ4816 SdfChamferedRectangle(FixedVector3 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 chamfer, FixedQ4816 liftAmount, FixedQ4816 lift) {
-        FixedVector2 point2D;
-
-        if (lift > Half) {
-            point2D = new FixedVector2(
-                X: p.X,
-                Y: p.Y
-            );
-
-            return SdfExtrudeChamfer2D(
-                distance2D: SdfChamferBox2D(
-                    chamfer: chamfer,
-                    halfHeight: halfHeight,
-                    halfWidth: halfWidth,
-                    p: point2D
-                ),
-                z: p.Z,
-                halfDepth: liftAmount,
-                c: chamfer
-            );
-        }
-
-        point2D = new FixedVector2(
-            X: (RadialLength(
-                x: p.X,
-                z: p.Z
-            ) - liftAmount),
-            Y: p.Y
+        var point2D = ProjectLiftPoint(
+            lift: lift,
+            liftAmount: liftAmount,
+            p: p
         );
 
-        return SdfChamferBox2D(
-            chamfer: chamfer,
-            halfHeight: halfHeight,
-            halfWidth: halfWidth,
-            p: point2D
+        return ApplyLift(
+            capChamfer: chamfer,
+            distance2D: SdfChamferBox2D(
+                chamfer: chamfer,
+                halfHeight: halfHeight,
+                halfWidth: halfWidth,
+                p: point2D
+            ),
+            lift: lift,
+            liftAmount: liftAmount,
+            p: p
         );
     }
     // KEEP IN SYNC with sdfChamferBox2D in sdf-vm.hlsli.
@@ -1647,12 +1544,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             ).Length - r)
         );
     }
-    private static FixedVector3 SubtractScalar(FixedVector3 value, FixedQ4816 scalar) =>
-        new(
-            X: (value.X - scalar),
-            Y: (value.Y - scalar),
-            Z: (value.Z - scalar)
-        );
     // One central-difference pair: d(p + offset) - d(p - offset). Both taps must answer.
     private bool TryAxisDifference(FixedPosition position, FixedVector3 offset, out FixedQ4816 difference) {
         difference = FixedQ4816.Zero;
@@ -1696,27 +1587,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// <remarks>A probe that cannot converge reports BLOCKED, because it rides
     /// <see cref="Raycast(FixedPosition, FixedVector3, FixedQ4816, out RayHit)"/>'s conservative non-convergence
     /// contract: "clear" is the assertion this verb makes, so it is the one an unfinished march may not make.</remarks>
-    public bool LineOfSight(FixedPosition from, FixedPosition to) {
-        var delta = (to - from);
-        var distance = delta.Length;
-
-        if (distance <= FixedQ4816.Zero) {
-            return true;
-        }
-
-        var probeDistance = (distance - SdfFieldMarch.LineOfSightSkin);
-
-        if (probeDistance <= FixedQ4816.Zero) {
-            return true;
-        }
-
-        return !Raycast(
-            dir: delta,
-            hit: out _,
-            maxDist: probeDistance,
-            origin: from
-        );
-    }
+    public bool LineOfSight(FixedPosition from, FixedPosition to) =>
+        SdfFieldMarch.LineOfSight(from: from, raycast: Raycast, to: to);
     /// <inheritdoc/>
     /// <remarks>The test is the SCALED field value against the radius, so the sphere is effectively widened by the
     /// program's Lipschitz factor: occupancy may over-report by that factor and never under-reports, which is the
@@ -1842,7 +1714,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                         break;
                     }
                 case SdfOp.Scale: {
-                        localPosition = DivideComponents(
+                        localPosition = FixedVector3.Divide(
                             left: localPosition,
                             right: Vector(instruction: instruction)
                         );
@@ -1853,9 +1725,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                         var spacing = Vector(instruction: instruction);
                         var inverseSpacing = Vector1(instruction: instruction);
 
-                        localPosition -= MultiplyComponents(
+                        localPosition -= FixedVector3.Multiply(
                             left: spacing,
-                            right: RoundComponents(value: MultiplyComponents(
+                            right: FixedVector3.Round(value: FixedVector3.Multiply(
                                 left: localPosition,
                                 right: inverseSpacing
                             ))
@@ -1865,17 +1737,17 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 case SdfOp.RepeatLimited: {
                         var spacing = Vector(instruction: instruction);
                         var limit = Vector1(instruction: instruction);
-                        var rounded = RoundComponents(value: DivideComponents(
+                        var rounded = FixedVector3.Round(value: FixedVector3.Divide(
                             left: localPosition,
                             right: spacing
                         ));
 
-                        localPosition -= MultiplyComponents(
+                        localPosition -= FixedVector3.Multiply(
                             left: spacing,
-                            right: ClampComponents(
-                                value: rounded,
-                                minimum: Negate(value: limit),
-                                maximum: limit
+                            right: FixedVector3.Clamp(
+                                maximum: limit,
+                                minimum: -limit,
+                                value: rounded
                             )
                         );
                         break;
@@ -1897,10 +1769,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 case SdfOp.Elongate: {
                         var extents = Vector(instruction: instruction);
 
-                        localPosition -= ClampComponents(
-                            value: localPosition,
-                            minimum: Negate(value: extents),
-                            maximum: extents
+                        localPosition -= FixedVector3.Clamp(
+                            maximum: extents,
+                            minimum: -extents,
+                            value: localPosition
                         );
                         break;
                     }

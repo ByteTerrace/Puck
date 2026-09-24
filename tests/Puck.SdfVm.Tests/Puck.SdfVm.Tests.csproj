@@ -15,5 +15,8 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>
 </Project>

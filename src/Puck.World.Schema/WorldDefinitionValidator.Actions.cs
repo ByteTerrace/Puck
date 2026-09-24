@@ -221,46 +221,16 @@ public static partial class WorldDefinitionValidator {
             case null:
                 errors.Add(item: $"{path} is required.");
                 break;
-            case WorldEffect.SetVerticalVelocity set:
-                RequireFinite(
-                    value: set.Velocity,
-                    name: $"{path}.velocity",
-                    errors: errors
-                );
-                break;
-            case WorldEffect.ScaleVerticalVelocity scale:
-                RequireFinite(
-                    value: scale.Factor,
-                    name: $"{path}.factor",
-                    errors: errors
-                );
-                break;
-            case WorldEffect.PlanarImpulse impulse:
-                RequireFinite(
-                    value: impulse.Speed,
-                    name: $"{path}.speed",
-                    errors: errors
-                );
-                RequireNonNegative(
-                    value: impulse.DurationSeconds,
-                    name: $"{path}.durationSeconds",
-                    errors: errors
-                );
-
-                if (
-                    !IsFinite(value: impulse.BodyDirection) ||
-                    (impulse.BodyDirection.LengthSquared() <= MinimumBasisLengthSquared)
-                ) {
-                    errors.Add(item: $"{path}.bodyDirection must be finite and non-zero.");
-                } else {
-                    // The runtime rides BodyDirection AS AUTHORED — it is never normalized, only rotated and scaled by
-                    // Speed (WorldBody's PlanarImpulse op) — so an unnormalized direction silently rescales the impulse:
-                    // an author who typo'd (3, 0, 4) meaning +X gets a 5x speed, not a refusal.
-                    var magnitude = impulse.BodyDirection.Length();
-
-                    if (MathF.Abs(x: (magnitude - 1f)) > PlanarImpulseUnitDirectionTolerance) {
-                        errors.Add(item: $"{path}.bodyDirection {impulse.BodyDirection} has magnitude {magnitude}, not 1 — PlanarImpulse rides BodyDirection as authored (never normalized), so a non-unit direction silently rescales Speed ({impulse.Speed}).");
-                    }
+            case WorldEffect.SetVerticalVelocity or WorldEffect.ScaleVerticalVelocity or WorldEffect.PlanarImpulse or WorldEffect.Designate:
+                if (!WorldBodyEffects.TryLower(
+                    effect: effect,
+                    form: out _,
+                    reason: out var bodyMotionReason,
+                    refusal: out _,
+                    registerDeclared: targetRegisterNames.Contains,
+                    scope: WorldBodyEffectScope.Kit
+                )) {
+                    errors.Add(item: $"{path}: {bodyMotionReason}.");
                 }
 
                 break;
@@ -318,7 +288,7 @@ public static partial class WorldDefinitionValidator {
                     value: add.Value
                 );
                 break;
-            case ActionEffect.TransformState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or ActionEffect.If or WorldEffect.EmitCue or WorldEffect.SetBodyVerticalVelocity or WorldEffect.ScaleBodyVerticalVelocity or WorldEffect.ApplyBodyImpulse or WorldEffect.ApplyRigidImpulse or WorldEffect.DesignateBody or WorldEffect.PaintField:
+            case ActionEffect.TransformState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or ActionEffect.If or WorldEffect.EmitCue or WorldEffect.ApplyRigidImpulse or WorldEffect.PaintField:
                 errors.Add(item: $"{path} is a world-rule effect, which has no body-action meaning — admissible only inside a world rule's own effects.");
                 break;
             case WorldEffect.StartTimer timer:
@@ -335,19 +305,6 @@ public static partial class WorldDefinitionValidator {
                     name: $"{path}.seconds",
                     errors: errors
                 );
-                break;
-            case WorldEffect.Designate designate:
-                RequireDeclared(
-                    value: designate.Register,
-                    declaredSet: targetRegisterNames,
-                    path: path,
-                    field: "register",
-                    rowNoun: "target register",
-                    errors: errors
-                );
-                if (designate.Target != ActionTarget.AffectingSubject) {
-                    errors.Add(item: $"{path}.target must be AffectingSubject.");
-                }
                 break;
             case ActionEffect.Generate generate:
                 // The ONE effect admissible at both scopes: its names address world `state` rows, so they resolve
@@ -433,14 +390,11 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        // The body-motion effects check their own target (WorldBodyEffects), so a kit and a rule refuse it alike.
         static ActionTarget TargetOf(ActionEffect value) => value switch {
-            WorldEffect.SetVerticalVelocity item => item.Target,
-            WorldEffect.ScaleVerticalVelocity item => item.Target,
-            WorldEffect.PlanarImpulse item => item.Target,
             ActionEffect.SetState item => item.Target,
             ActionEffect.AddState item => item.Target,
             WorldEffect.StartTimer item => item.Target,
-            WorldEffect.Designate item => item.Target,
             _ => ActionTarget.Self,
         };
     }
@@ -604,8 +558,8 @@ public static partial class WorldDefinitionValidator {
                 } else if (compareSlot.Kind != ActionStateKind.Counter) {
                     errors.Add(item: $"{path}.state '{compare.State}' is a timer; compareState requires a counter.");
                 }
-                if (!Enum.IsDefined(value: compare.Comparison)) {
-                    errors.Add(item: $"{path}.comparison '{compare.Comparison}' is not a defined ActionStateComparison.");
+                if (!compare.Comparison.IsComparison()) {
+                    errors.Add(item: $"{path}.comparison '{compare.Comparison}' is not a defined ExpressionOp.");
                 }
                 if (compare.Value is not { } compareValue) {
                     errors.Add(item: $"{path}.value is required at body scope — a per-body predicate names an authored constant (a comparand row reference is legitimate only in a world rule).");

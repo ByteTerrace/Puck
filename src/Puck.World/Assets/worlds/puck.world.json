@@ -93,7 +93,7 @@
       "subject": null
     }
   ],
-  "basis": "standard.basis.json",
+  "basis": "standard",
   "bindingOverlays": [
     {
       "document": {
@@ -803,7 +803,6 @@
     }
   ],
   "captures": {
-    "directory": "captures",
     "rows": [
       {
         "palette": [
@@ -1296,7 +1295,7 @@
   "grants": [
     {
       "capability": "Mutate",
-      "principal": "seat1",
+      "grantee": "seat1",
       "subject": "all"
     }
   ],
@@ -1388,64 +1387,62 @@
     "listen": null,
     "presentMode": "Immediate",
     "presentation": "Windowed",
-    "rayQuery": true,
     "surfaceFormat": "r8g8b8a8",
     "targetHertz": 60,
-    "timing": false,
     "width": 1280
   },
   "imports": [
     {
-      "document": "games/poker.world.json"
+      "document": "games/poker"
     },
     {
-      "document": "games/dominoes.world.json"
+      "document": "games/dominoes"
     },
     {
-      "document": "games/billiards.world.json"
+      "document": "games/billiards"
     },
     {
-      "document": "games/bowling.world.json"
+      "document": "games/bowling"
     },
     {
-      "document": "games/tictactoe.world.json"
+      "document": "games/tictactoe"
     },
     {
-      "document": "games/hexlines.world.json"
+      "document": "games/hexlines"
     },
     {
-      "document": "games/mancala.world.json"
+      "document": "games/mancala"
     },
     {
-      "document": "games/solitaire.world.json"
+      "document": "games/solitaire"
     },
     {
       "as": "granaries",
-      "document": "modules/granaries.world.json"
+      "document": "modules/granaries"
     },
     {
       "as": "arcade",
-      "document": "modules/arcade.world.json"
+      "document": "modules/arcade"
     },
     {
       "as": "dive",
-      "document": "modules/dive.world.json"
+      "document": "modules/dive"
     },
     {
       "as": "kart",
-      "document": "modules/kart.world.json"
+      "document": "modules/kart"
     },
     {
       "as": "jump",
-      "document": "modules/jump.world.json"
+      "document": "modules/jump"
     },
     {
       "as": "arena",
-      "document": "modules/arena.world.json"
+      "document": "modules/arena"
     },
     {
       "as": "studio",
-      "document": "modules/studio.world.json"
+      "document": "modules/studio"
     }
   ],
   "interactions": {
@@ -2977,7 +2974,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "diveCourt",
+        "id": "dive$diveCourt",
         "position": [
           0,
           0,
@@ -2986,7 +2983,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "kartCourt",
+        "id": "kart$kartCourt",
         "position": [
           48,
           0,
@@ -2995,7 +2992,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "jumpCourt",
+        "id": "jump$jumpCourt",
         "position": [
           0,
           0,
@@ -3004,7 +3001,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "studioCourt",
+        "id": "studio$studioCourt",
         "position": [
           -42,
           0,
@@ -3013,7 +3010,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "arenaCourt",
+        "id": "arena$arenaCourt",
         "position": [
           46,
           0,
@@ -3022,7 +3019,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "arcadeCourt",
+        "id": "arcade$arcadeCourt",
         "position": [
           26,
           0,
@@ -3031,7 +3028,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "granaryCourt",
+        "id": "granaries$granaryCourt",
         "position": [
           -10,
           -0.5,
@@ -3045,10 +3042,10 @@
     "names": [
       "hound",
       "wren",
-      "arena_hot",
-      "arena_cold",
-      "arena_flammable",
-      "arena_freezable"
+      "arena$hot",
+      "arena$cold",
+      "arena$flammable",
+      "arena$freezable"
     ]
   },
   "prototypes": [
@@ -9534,19 +9531,19 @@
   ],
   "references": [
     {
-      "document": "shards/quilt-nw.world.json",
+      "document": "shards/quilt-nw",
       "name": "nw"
     },
     {
-      "document": "shards/quilt-ne.world.json",
+      "document": "shards/quilt-ne",
       "name": "ne"
     },
     {
-      "document": "shards/quilt-se.world.json",
+      "document": "shards/quilt-se",
       "name": "se"
     },
     {
-      "document": "shards/quilt-sw.world.json",
+      "document": "shards/quilt-sw",
       "name": "sw"
     }
   ],
@@ -9969,7 +9966,7 @@
           {
             "effects": [
               {
-                "$type": "designateBody",
+                "$type": "designate",
                 "key": {
                   "channel": "each"
                 },
@@ -10026,7 +10023,7 @@
           {
             "effects": [
               {
-                "$type": "designateBody",
+                "$type": "designate",
                 "key": {
                   "channel": "each"
                 },
@@ -10061,7 +10058,7 @@
           {
             "effects": [
               {
-                "$type": "designateBody",
+                "$type": "designate",
                 "key": {
                   "channel": "each"
                 },
@@ -10097,7 +10094,7 @@
           {
             "effects": [
               {
-                "$type": "designateBody",
+                "$type": "designate",
                 "key": {
                   "channel": "each"
                 },
@@ -10132,7 +10129,7 @@
           {
             "effects": [
               {
-                "$type": "designateBody",
+                "$type": "designate",
                 "key": {
                   "channel": "each"
                 },
@@ -10421,7 +10418,7 @@
           "expression": {
             "instructions": [
               {
-                "name": "studio_look",
+                "name": "studio$look",
                 "op": "Operand"
               },
               {
@@ -10436,11 +10433,11 @@
                 "value": 8
               },
               {
-                "op": "Modulo"
+                "op": "Remainder"
               }
             ]
           },
-          "state": "studio_look"
+          "state": "studio$look"
         },
         {
           "$type": "setIdentityFact",
@@ -10458,7 +10455,7 @@
             "state": {
               "channel": "region",
               "arguments": [
-                "studioTurntable"
+                "studio$studioTurntable"
               ]
             },
             "value": 1

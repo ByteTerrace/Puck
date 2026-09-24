@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -108,7 +109,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                     Seat: slot,
                     Section: WorldSection.Bindings
                 ),
-                principal: context.ActingPrincipal()
+                principal: context.Principal
             );
         }
 
@@ -169,7 +170,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                     return CommandResult.Error(output: $"[world.screenshot: could not create the target directory ({exception.Message})]");
                 }
 
-                _ = render.RequestCapture(path: path);
+                render.RequestCapture(request: new FrameCaptureRequest(path: path));
 
                 // "pending", not the bare path: the words are true at the instant they are printed. The capture line
                 // on stderr is what says the file exists.

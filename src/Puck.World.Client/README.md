@@ -15,7 +15,7 @@ vocabulary and the link-query seam; never `Puck.World.Server`—a live
 `WorldAudioDirector` stay in `Puck.World` itself rather than living here: the
 audio director imports `Puck.World.Audio` types directly. `WorldFramePresenter`,
 `WorldSceneEmitter`, and `WorldViewComposer` live here—their only
-root-crossing dependency was the audio director, narrowed to
+root-crossing dependency, the audio director, reaches them only through
 `IWorldAudioFrameFeed`/`IWorldAudioCueSink` below.
 
 Live static-placement admission reserves both rendering forms at boot: whole
@@ -124,7 +124,9 @@ separate constraint on dense populations; reusable appearances do not remove it.
 - `WorldViewComposer.cs`—offscreen view composition (the diegetic world
   cameras): layout selection and eased transitions for the main window.
 - `WorldOverlayCapacity.cs`—`FromSchema()`, the one bridge from
-  `WorldPopulationLimits.LocalSeatCount` and `WorldHudCapacity` to the
+  `WorldBodiesLimits.LocalSeatCount`, `WorldHudCapacity`,
+  `WorldBindingBarCapacity`, `WorldMarkerCapacity`, and the
+  `BindingWheelDefinition` ring/sector bounds to the
   `Puck.Overlays.OverlayCapacity` a host constructs `UnifiedOverlayNode` with;
   the numbers cross the layering as constructor data, never restated.
 - `WorldSeatCameraPose.cs`—one seat's resolved listener-policy camera pose,
@@ -183,7 +185,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
   fit a cross-authority window projects through.
 - `WorldAuthorityRoute.cs`, `WorldContinuum.cs`, `WorldSeatAuthorityRouter.cs`
 —per-seat cross-authority routing: the selected route, the per-seat
-  continuity state a route swap preserves, and the router itself.
+  continuity state a route swap preserves, and the router itself. A claim may
+  be published from any thread; `RouteChanged` fires only from
+  `DeliverRouteChanges`, on the thread that pumps and presents, and
+  `WorldSeatBindings.FollowRoutes` recomposes the changed seat there.
 - `WorldSeatCameraResolver.cs`, `WorldSeatViewState.cs`, `WorldSeatViewports.cs`
 —the seat-owned camera rig cache, view/pointer/cursor state, and the
   published per-seat viewport + camera a pointer consumer reads.
@@ -193,15 +198,53 @@ separate constraint on dense populations; reusable appearances do not remove it.
   `WorldScreenTextDecal.cs`—the camera-program translation, static
   placement/shape anchor geometry, the avatar instance layout, and screen decal
   text.
+- `Sources/`—the runtime half of an image producer: `IWorldImageProducer` and
+  `IWorldImageFeed`, the `WorldImageProducers` registry a screen's `producer`
+  source opens through, the shipped `WorldTestPatternProducer` and
+  `WorldQrProducer`, `WorldImageLight` (a frame's room glow), and
+  `WorldCaptureGate`, which resolves every external image to its capture fill
+  while a capture is armed. The [World guide](../Puck.World/README.md#image-producers)
+  explains how a producer registers.
+
+## Bound state
+
+- `WorldClient.StateMirror` is the client's `WorldStateMirror` (in
+  `Puck.World.Protocol`), the one path presentation reads state through: the
+  HUD resolver, camera rigs, markers, render and theme colors, the binding bar,
+  the radial wheel and overlay predicates register their `StateBinding`s with
+  it. `WorldClient.DeliverState` refreshes the slots the delivery's
+  `WorldStateStamp` moved, `DeliverSnapshot` refreshes the trait-bearing slots
+  still moving, `DeliverDefinition` re-resolves every slot, and
+  `WorldFramePresenter.CaptureFrame` applies the frame's interpolation fraction
+  (pinned to one offscreen) before anything reads it. `StateMirrorFor` answers
+  the mirror of the authority a seat is routed to: this one for the authority
+  the client observes, and that authority's followed session mirror otherwise.
+- `WorldStateLease.cs` is one holder's acquired slots: a stamp registration's
+  lanes, drivers, gates, poses and effectors, a body's scale, a seat's
+  state-backed binding contexts. A `$body` key names the lease's body, and the
+  lease releases its slots when the body leaves, its binding moves, or the
+  mirror installs a document, so the mirror retires what nothing reads.
+- `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
+  and the hub label, read from the wheel's label and icon rows through the
+  seat's routed mirror, and rebuilt only when one of the slots it read changes.
+- `WorldStateCells.cs` is the one keyed-cell read the rings and the binding
+  bar's action icons make: a row reference parsed once, and each row and key
+  registered with the mirror once and its slot kept, so a read repeated every
+  frame allocates nothing and still answers the live cell.
+- `WorldTransformOwners.cs` is the rest state of a band of dynamic-transform
+  owners, which the scene, adjacency and session emitters and the stamp pool
+  use to repack only what moved (see `SdfMovedTransforms` in `Puck.SdfVm`).
 
 ## Camera programs
 
 - `WorldCameraRigCompiler.cs` translates an authored `WorldCameraProgram` into
   the document-blind IR in `Puck.SdfVm.Views` and returns an
   `IWorldCameraProgramRig`: authored subjects and `state.<row>[.<key>]` bindings
-  become per-frame slots the rig refills from the live document inside
-  `Resolve`, so no caller can evaluate against a stale binding by missing an
-  ordering step. `Retarget` repoints a cached rig at a newly delivered document;
+  become per-frame slots the rig refills inside `Resolve` — a bound operand from
+  its `WorldStateMirror` slot (the seat's routed authority's mirror, for a seat
+  rig), a subject from the live document — so no caller
+  can evaluate against a stale binding by missing an ordering step. `Retarget`
+  repoints a cached rig at a newly delivered document;
   `Look` carries the seat's live orbit delta (inert on a program compiled
   non-interactive); `Spread` feeds an authored `spreadPullback`.
   `WorldCameraRigCompiler.Cache` is the one compiled-rig cache slot every
@@ -228,11 +271,13 @@ separate constraint on dense populations; reusable appearances do not remove it.
   against the routed definition, never a per-tick poll).
 - `WorldAffordances.cs`—the process command vocabulary check every binding
   document validates against.
-- `CommandVocabulary.cs`—the command-name string constants (and the two
-  pure functions `PlayerCommandNames.RoutedChannelCommandName` and
-  `AddonSourceVocabulary.TryResolve`) nine root `*CommandModule` classes in
+- `CommandVocabulary.cs`—the command-name string constants
+  (`PlayerCommandNames`, with the pure function `RoutedChannelCommandName`,
+  and `WorldWheelCommandNames`) the root player and wheel command modules in
   `Puck.World` forward their own declarations to, single-sourced here since
   the binding-authoring files above cannot reference those root types.
+  `AddonSourceVocabulary.cs` narrows the input-source vocabulary to the value
+  kinds an addon input act can carry.
 - `PlayerAssignmentCommand.cs`—the shared `player.assign` definition and
   outcome narration over `PlayerRoster`; the root module registers this exact
   definition and command-level laws drive it through `CommandRegistry`.

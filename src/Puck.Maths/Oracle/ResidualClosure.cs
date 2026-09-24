@@ -60,10 +60,9 @@ public sealed class ResidualClosure<TValue, TOps>
     /// <returns>The element.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The state number is outside <see cref="StateCount"/>.</exception>
     public PresentedAlgebra<TValue, TOps>.Element State(int state) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: state,
-            other: StateCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: StateCount,
+            value: state
         );
 
         return m_states[state];
@@ -74,18 +73,12 @@ public sealed class ResidualClosure<TValue, TOps>
     /// <returns>The target state, or <c>-1</c> when the residual is zero and the arrow is therefore absent.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The state number or the symbol is outside its range.</exception>
     public long Transition(int state, int symbol) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: state,
-            other: StateCount
-        );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: symbol,
-            other: m_generatorCount
-        );
-
-        return m_transition[((state * m_generatorCount) + symbol)];
+        return m_transition[ArgumentRange.ThrowIfNotCell(
+            column: symbol,
+            columnCount: m_generatorCount,
+            row: state,
+            rowCount: StateCount
+        )];
     }
 }
 public sealed partial class PresentedAlgebra<TValue, TOps>

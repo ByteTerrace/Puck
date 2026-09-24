@@ -2,7 +2,7 @@
 // This source is canonical; compile it to regenerate the world document.
 
 schema: "puck.world.definition.v1"
-basis: "parlor.basis.puck"
+basis: "parlor.basis"
 documentId: "chinese-checkers"
 
 views {
@@ -13,6 +13,7 @@ views {
 
 bodies {
   capacity: 64
+  localSeats: 1
 }
 
 cameras [{
@@ -97,7 +98,7 @@ let axial = reduce(range(-8, 17), [], (cells, q) => concat(cells, map(range(-8, 
 let star = filter(axial, p => (absolute(p["q"]) <= 4) + (absolute(p["r"]) <= 4) + (absolute(p["s"]) <= 4) >= 2)
 let holes = map(star, (p, i) => {
   id: i, q: p["q"], r: p["r"], x: 0.18 * (p["q"] + p["r"] / 2), z: 0.155884572681 * p["r"],
-  camp: select(p["q"] > 4, 0, select(p["r"] < -4, 1, select(p["s"] > 4, 2, select(p["q"] < -4, 3, select(p["r"] > 4, 4, select(p["s"] < -4, 5, -1))))))
+  camp: p["q"] > 4 ? 0 : p["r"] < -4 ? 1 : p["s"] > 4 ? 2 : p["q"] < -4 ? 3 : p["r"] > 4 ? 4 : p["s"] < -4 ? 5 : -1
 }
 )
 let pieces = reduce(playerCamps, [], (all, camp) => concat(all, filter(holes, p => p["camp"] == camp)))
@@ -362,7 +363,7 @@ state {
       capacity: 121
       kind: "Int"
       domain: cellsOf(topology: ccStar)
-      cells: map(holes, p => { key: $"{p[\"id\"]}", value: reduce(initialTokens, 0, (code, token) => code + select(token["cell"] == p["id"], token["code"], 0)) })
+      cells: map(holes, p => { key: $"{p[\"id\"]}", value: reduce(initialTokens, 0, (code, token) => code + (token["cell"] == p["id"] ? token["code"] : 0)) })
     }
     row {
       name: "camp"

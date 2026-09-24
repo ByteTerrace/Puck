@@ -147,7 +147,7 @@ public sealed partial class WorldDocument {
             } else if (mutation.RawToken is { } rawToken) {
                 if (!StateVector.TryParseBase64Url(
                     text: rawToken,
-                    dimensions: space.Dimensions,
+                    dimensions: space.Identity.Dimensions,
                     vector: out var parsedVector,
                     error: out var parseError
                 )) {
@@ -163,8 +163,8 @@ public sealed partial class WorldDocument {
                 return false;
             }
 
-            if (vectorToWrite.Dimensions != space.Dimensions) {
-                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' vector dimensions {vectorToWrite.Dimensions} do not match space '{space.Name}' dimensions {space.Dimensions}";
+            if (vectorToWrite.Dimensions != space.Identity.Dimensions) {
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' vector dimensions {vectorToWrite.Dimensions} do not match space '{space.Name}' dimensions {space.Identity.Dimensions}";
 
                 return false;
             }
@@ -295,6 +295,7 @@ public sealed partial class WorldDocument {
                 if (!CellValue.TryParse(
                     kind: row.Kind,
                     reason: out var cycleReason,
+                    symbols: working.EnumOf(row: row),
                     token: cycleTokens[index],
                     value: out var carried
                 )) {
@@ -324,6 +325,7 @@ public sealed partial class WorldDocument {
             if (!CellValue.TryParse(
                 kind: row.Kind,
                 reason: out var tokenReason,
+                symbols: working.EnumOf(row: row),
                 token: rawToken,
                 value: out var parsedToken
             )) {
@@ -344,7 +346,6 @@ public sealed partial class WorldDocument {
             keyText: mutation.Key,
             operand: operand,
             reason: out reason,
-            row: row,
             rowName: mutation.Row,
             rowOrdinal: rowOrdinal,
             time: in time,
@@ -429,95 +430,59 @@ public sealed partial class WorldDocument {
     // The one door a composed numeric operand reaches the arena through: the live write — which rebases an advancing
     // cell, kicks an easing one, and leaves a rotating cell's clock where it is — or a mint when the row holds no
     // cell under the key yet.
-    private static bool TryStoreNumber(StateArena arena, int rowOrdinal, WorldStateRow row, CellName cellKey, string rowName, string keyText, long operand, StateWriteKind write, in ArenaTime time, out string reason, out CellName? evictedKey) {
-        if (!TryLocateCell(
+    private static bool TryStoreNumber(StateArena arena, int rowOrdinal, CellName cellKey, string rowName, string keyText, long operand, StateWriteKind write, in ArenaTime time, out string reason, out CellName? evictedKey) {
+        if (!TryInternCell(
             arena: arena,
             cellKey: cellKey,
-            evictedKey: out evictedKey,
             key: out var key,
             keyText: keyText,
-            mints: out var mints,
-            present: out _,
             reason: out reason,
-            rowName: rowName,
-            rowOrdinal: rowOrdinal
+            rowName: rowName
         )) {
+            evictedKey = null;
+
             return false;
         }
 
-        if (!mints) {
-            return arena.TryWriteLive(
-                key: key,
-                operand: operand,
-                reason: out reason,
-                rowOrdinal: rowOrdinal,
-                time: in time,
-                write: write
-            );
-        }
-
-        // A mint carries the operand itself: an add against a cell the row does not hold adds to nothing, which is
-        // the operand the row's own envelope then admits.
-        return TryMintCell(
-            arena: arena,
-            cellKey: cellKey,
-            evictedKey: ref evictedKey,
+        return arena.TryWriteLiveOrMint(
+            evicted: out evictedKey,
+            key: key,
+            operand: operand,
             reason: out reason,
             rowOrdinal: rowOrdinal,
-            value: (row.Kind switch {
-                CellKind.Bool => CellValue.Bool(value: (operand != 0L)),
-                CellKind.Fixed => CellValue.Fixed(rawBits: operand),
-                _ => CellValue.Int(value: operand),
-            })
+            time: in time,
+            write: write
         );
     }
     // The text and vector counterpart of TryStoreNumber: neither kind carries a value-over-time trait, so the
     // carried value is stored as it stands.
     private static bool TryStoreCarried(StateArena arena, int rowOrdinal, CellName cellKey, string rowName, string keyText, CellValue value, out string reason, out CellName? evictedKey) {
-        if (!TryLocateCell(
+        if (!TryInternCell(
             arena: arena,
             cellKey: cellKey,
-            evictedKey: out evictedKey,
             key: out var key,
             keyText: keyText,
-            mints: out var mints,
-            present: out _,
             reason: out reason,
-            rowName: rowName,
-            rowOrdinal: rowOrdinal
+            rowName: rowName
         )) {
+            evictedKey = null;
+
             return false;
         }
 
-        if (!mints) {
-            return arena.TryWrite(
-                key: key,
-                reason: out reason,
-                rowOrdinal: rowOrdinal,
-                value: value
-            );
-        }
-
-        return TryMintCell(
-            arena: arena,
-            cellKey: cellKey,
-            evictedKey: ref evictedKey,
+        return arena.TryWriteOrMint(
+            evicted: out evictedKey,
+            key: key,
             reason: out reason,
             rowOrdinal: rowOrdinal,
             value: value
         );
     }
-    // Reports whether the row already holds the addressed cell, whether a write would mint one, and which key that
-    // mint would evict. Every admission the write itself needs — the envelope, the reserved-cell rule, the capacity
-    // and its eviction — belongs to the arena door below, not here.
-    private static bool TryLocateCell(StateArena arena, int rowOrdinal, CellName cellKey, string rowName, string keyText, out CellKey key, out bool present, out bool mints, out CellName? evictedKey, out string reason) {
-        evictedKey = null;
-        key = default;
-        mints = false;
-        present = false;
-
-        // The key is interned before the row is addressed: a lattice or ring row resolves a cell's position from
-        // the interned NAME, so a write naming one of its own addresses reaches it rather than reading as absent.
+    // The key is interned before the row is addressed: a lattice or ring row resolves a cell's position from the
+    // interned NAME, so a write naming one of its own addresses reaches it rather than reading as absent. Every
+    // admission the write itself needs — the envelope, the reserved-cell rule, the capacity and its eviction —
+    // belongs to the arena door, not here.
+    private static bool TryInternCell(StateArena arena, CellName cellKey, string rowName, string keyText, out CellKey key, out string reason) {
         if (!arena.Keys.TryIntern(
             key: out key,
             name: cellKey,
@@ -529,41 +494,7 @@ public sealed partial class WorldDocument {
         }
 
         reason = string.Empty;
-        present = arena.TryCellSlot(
-            key: key,
-            rowOrdinal: rowOrdinal,
-            slot: out _
-        );
-        // Only a keyed or ordered row mints. Every other shape's addresses are its own — a lattice's topology keys,
-        // a ring's slot indices, a slot row's one reserved key — so a write naming an address it does not hold goes
-        // to the write door and is refused there by the address, never minted beside them.
-        mints = (!present && (arena.Layout[rowOrdinal].Shape is (RowShape.Keyed or RowShape.Ordered)));
-
-        if (
-            mints &&
-            arena.TryEvictionVictim(
-            key: out var victim,
-            rowOrdinal: rowOrdinal
-        )
-        ) {
-            evictedKey = arena.Keys[victim];
-        }
 
         return true;
-    }
-    private static bool TryMintCell(StateArena arena, int rowOrdinal, CellName cellKey, CellValue value, ref CellName? evictedKey, out string reason) {
-        if (arena.TryMint(
-            key: out _,
-            name: cellKey,
-            reason: out reason,
-            rowOrdinal: rowOrdinal,
-            value: value
-        )) {
-            return true;
-        }
-
-        evictedKey = null;
-
-        return false;
     }
 }

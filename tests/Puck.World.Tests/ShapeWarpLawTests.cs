@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -40,23 +39,6 @@ public sealed class ShapeWarpLawTests {
             )
         )];
 
-    private static void AssertCanonicalizerAccepts(CreationDocument document) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.Empty(collection: violations);
-    }
-    private static void AssertCanonicalizerRefusesNaming(CreationDocument document, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
     private static void AssertWarpIsScoped(SdfProgram program) {
         var instructions = program.Instructions.ToList();
         var shapeIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.ShapeBlend));
@@ -78,92 +60,23 @@ public sealed class ShapeWarpLawTests {
             userMessage: "the warped shape has no PopField after it."
         );
     }
-    private static CreationDocument Document(params ShapeDocument[] shapes) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: shapes,
-            Frames: null
-        );
+    private static CreationDocument Document(params ShapeDocument[] shapes) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: shapes
+    );
     // --- Pool emission path (WorldStampPool.EmitShape's warp prefix) ---
 
-    private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale, bool probeWorstCase = false) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: [new(
-                        "#AAAAAA",
-                        null,
-                        null,
-                        null
-                    )],
-                Shapes: [shape],
-                Frames: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: bodyScale,
-                Motion: WorldLookMotion.Default
-            )],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: probeWorstCase,
-            maxPlacementScale: bodyScale,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale) => CreationFixtures.EmitPool(
+        bodyScale: bodyScale,
+        name: PrototypeId,
+        shapes: [shape]
+    );
     // --- Static emission path (CreationStampEmitter.EmitShapeChain's BuildTransformChain) ---
 
-    private static SdfProgram EmitStatic(ShapeDocument shape, float stampScale) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        CreationStampEmitter.Emit(
-            builder: builder,
-            document: Document(shape),
-            materialFor: _ => material,
-            transform: new CreationStampTransform(
-                Origin: Vector3.Zero,
-                Rotation: Quaternion.Identity,
-                Scale: stampScale,
-                ReflectionNormal: null
-            )
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static SdfProgram EmitStatic(ShapeDocument shape, float stampScale) => CreationFixtures.EmitStatic(
+        document: Document(shape),
+        stampScale: stampScale
+    );
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, int id = 0, IReadOnlyList<ShapeDomainOp>? domain = null) =>
         new(
             Id: id,
@@ -183,7 +96,7 @@ public sealed class ShapeWarpLawTests {
 
     [Fact]
     public void ANegativeBumpRadiusIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 Vector3.One,
@@ -197,7 +110,7 @@ public sealed class ShapeWarpLawTests {
         );
     [Fact]
     public void ANonFiniteBumpPushIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 Vector3.One,
@@ -211,7 +124,7 @@ public sealed class ShapeWarpLawTests {
         );
     [Fact]
     public void ANonFiniteShearIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 Vector3.One,
@@ -221,7 +134,7 @@ public sealed class ShapeWarpLawTests {
         );
     [Fact]
     public void AShearWithTheSameTargetAndDriverIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 Vector3.One,
@@ -317,8 +230,8 @@ public sealed class ShapeWarpLawTests {
 
             Assert.True(condition: (bound.Radius >= (surfaceReach * scale)));
             var pool = EmitPool(
-                shape,
-                scale
+                bodyScale: scale,
+                shape: shape
             );
 
             Assert.True(condition: (pool.Instances[0].Radius >= (surfaceReach * scale)));
@@ -326,27 +239,34 @@ public sealed class ShapeWarpLawTests {
     }
     // Sweep is not a closed solid: its curve facet refuses the warp facets by name (ShapeCurveLawTests), so this
     // every-primitive admission law ranges over the closed set only.
-    public static IEnumerable<object[]> EveryPrimitive() =>
-        Enum.GetValues<SdfSolidPrimitive>().Where(predicate: static type => (type != SdfSolidPrimitive.Sweep)).Select(selector: static type => new object[] { type });
+    public static TheoryData<SdfSolidPrimitive> EveryPrimitive() => CreationFixtures.EveryPrimitiveExcept(excluded: SdfSolidPrimitive.Sweep);
     [MemberData(memberName: nameof(EveryPrimitive))]
     [Theory]
     public void ShearAndBumpsAreAdmittedOnEveryPrimitive(SdfSolidPrimitive type) =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             type,
             Vector3.One,
             Shear,
             Bumps
         )));
-    [Fact]
-    public void ThePoolEmitsAShearInstructionCarryingTheAuthoredCoefficientsAtBodyScaleOne() {
-        var program = EmitPool(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                shear: Shear
-            ),
-            bodyScale: 1f
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void BothPathsEmitAShearInstructionCarryingTheAuthoredCoefficientsAtScaleOne(bool pooled) {
+        var shape = Shape(
+            SdfSolidPrimitive.Box,
+            Vector3.One,
+            shear: Shear
         );
+        var program = (pooled
+            ? EmitPool(
+                bodyScale: 1f,
+                shape: shape
+            )
+            : EmitStatic(
+                shape: shape,
+                stampScale: 1f
+            ));
         var instruction = program.Instructions.Single(predicate: static i => (i.Op == SdfOp.Shear));
 
         Assert.Equal(
@@ -360,49 +280,16 @@ public sealed class ShapeWarpLawTests {
             precision: 6
         );
     }
-    [Fact]
-    public void ThePoolsProbeEmitsShearAndGaussianPushEvenWithoutAnyAuthored() {
-        var program = EmitPool(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One
-            ),
-            bodyScale: 1f,
-            probeWorstCase: true
-        );
-
-        Assert.Contains(
-            collection: program.Instructions,
-            filter: static i => (i.Op == SdfOp.Shear)
-        );
-        Assert.Contains(
-            collection: program.Instructions,
-            filter: static i => (i.Op == SdfOp.GaussianPush)
-        );
-    }
-    [Fact]
-    public void TheStaticPathEmitsAShearInstructionCarryingTheAuthoredCoefficients() {
-        var program = EmitStatic(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                shear: Shear
-            ),
-            stampScale: 1f
-        );
-        var instruction = program.Instructions.Single(predicate: static i => (i.Op == SdfOp.Shear));
-
-        Assert.Equal(
-            expected: Shear.Linear,
-            actual: instruction.Data0.X,
-            precision: 6
-        );
-        Assert.Equal(
-            expected: Shear.Quadratic,
-            actual: instruction.Data0.Y,
-            precision: 6
-        );
-    }
+    // The probe reserves every warp form on every slot whatever a body authors, so a live flared, sheared, or bumped
+    // shape never outgrows the envelope.
+    [InlineData(SdfOp.AxialProfile)]
+    [InlineData(SdfOp.GaussianPush)]
+    [InlineData(SdfOp.Shear)]
+    [Theory]
+    public void ThePoolProbeReservesEveryWarpFormWithoutAnyAuthored(SdfOp op) => Assert.Contains(
+        collection: CreationFixtures.PoolProbe.Instructions,
+        filter: i => (i.Op == op)
+    );
     [Fact]
     public void TheStaticPathEmitsOneGaussianPushPerBump() {
         var program = EmitStatic(
@@ -468,7 +355,7 @@ public sealed class ShapeWarpLawTests {
             value: Bumps[0]
         );
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 Vector3.One,

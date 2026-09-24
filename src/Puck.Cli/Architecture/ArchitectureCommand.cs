@@ -155,6 +155,20 @@ internal static class ArchitectureCommand {
     /// it had done — it was missing three projects and still carried a row for one that had been quarantined
     /// out of the repository.
     /// </remarks>
+    // A backend's own test project: a Test-kind project named for exactly the one backend it holds (Puck.X.Tests holds
+    // Puck.X and no other backend). The build gate states the same rule.
+    private static bool IsBackendOwnTests(string[] held, ArchitectureProject project) => (
+        string.Equals(
+            a: project.Kind,
+            b: "Test",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ) &&
+        held.All(predicate: backend => string.Equals(
+            a: project.Name,
+            b: $"{backend}.Tests",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        ))
+    );
     private static string RenderLayeringBlock(ArchitectureModel model) {
         var output = new StringBuilder();
         var width = (model.Layers.Max(selector: l => l.Length) + 2);
@@ -249,8 +263,11 @@ internal static class ArchitectureCommand {
             var permission =
                 (((project.Layer == PresentationLayer) || (project.Layer == CompositionRootsLayer))
                 ? $"permitted: {project.Layer}"
-                : (model.BackendExceptions.ContainsKey(key: project.Name)
-                    ? "permitted: NAMED EXCEPTION"
+                : (IsBackendOwnTests(
+                    held: held,
+                    project: project
+                )
+                    ? "permitted: the backend's own test project"
                     : ((terminal && (introduced.Length == 0))
                         ? $"permitted: terminal kind ({project.Kind}), inherits and introduces nothing"
                         : "NOT PERMITTED"
@@ -270,11 +287,7 @@ internal static class ArchitectureCommand {
         }
 
         _ = output.AppendLine();
-        _ = output.AppendLine(value: $"  {holders} project(s) hold a backend; {model.BackendExceptions.Count} named exception(s).");
-
-        foreach (var (name, reason) in model.BackendExceptions) {
-            _ = output.AppendLine(value: $"  {name}: {reason}");
-        }
+        _ = output.AppendLine(value: $"  {holders} project(s) hold a backend.");
 
         // The absent finding is the load-bearing half, so it is reported rather than left as a silence:
         // empty-because-the-rule-was-too-wide and empty-because-the-graph-is-clean read identically.

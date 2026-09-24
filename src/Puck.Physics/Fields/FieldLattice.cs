@@ -52,12 +52,6 @@ public readonly record struct FixedFieldSurface(FixedVector3 Point, FixedVector3
 /// <see cref="FieldLatticeInput"/> the host compiles once from its own document.
 /// </summary>
 public sealed class FieldLattice {
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-
     private readonly FixedQ4816 m_bodyCouplingCeiling;
     private readonly FixedQ4816 m_cellSize;
     private readonly bool[][] m_deltaDirty;
@@ -1520,7 +1514,7 @@ public sealed class FieldLattice {
 
         return ((best is { } height)
             ? new FixedFieldSurface(
-                Normal: UnitY,
+                Normal: FixedVector3.UnitY,
                 Point: new FixedVector3(
                     X: position.X,
                     Y: height,
@@ -1550,7 +1544,9 @@ public sealed class FieldLattice {
             return 0;
         }
         ArgumentOutOfRangeException.ThrowIfNegative(value: radius);
-        if (!Enum.IsDefined(value: operation)) {
+        // Named rather than Enum.IsDefined, which reads a type cache the runtime holds only weakly and allocates it
+        // again after every collection, on a check every paint firing makes.
+        if (operation is not (FieldWriteOp.Set or FieldWriteOp.Add)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(operation),
                 actualValue: operation,
@@ -1976,40 +1972,16 @@ public sealed class FieldLatticeSolid : IFieldEvaluator {
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
 
     private static FixedQ4816 BoxDistance(in FixedVector3 point, in FixedVector3 min, in FixedVector3 max) {
-        var dx = FixedQ4816.Max(
-            x: (min.X - point.X),
-            y: (point.X - max.X)
+        var d = FixedVector3.Max(
+            left: (min - point),
+            right: (point - max)
         );
-        var dy = FixedQ4816.Max(
-            x: (min.Y - point.Y),
-            y: (point.Y - max.Y)
-        );
-        var dz = FixedQ4816.Max(
-            x: (min.Z - point.Z),
-            y: (point.Z - max.Z)
-        );
-        var outside = new FixedVector3(
-            X: FixedQ4816.Max(
-                x: dx,
-                y: FixedQ4816.Zero
-            ),
-            Y: FixedQ4816.Max(
-                x: dy,
-                y: FixedQ4816.Zero
-            ),
-            Z: FixedQ4816.Max(
-                x: dz,
-                y: FixedQ4816.Zero
-            )
+        var outside = FixedVector3.Max(
+            left: d,
+            right: FixedVector3.Zero
         );
         var inside = FixedQ4816.Min(
-            x: FixedQ4816.Max(
-                x: dx,
-                y: FixedQ4816.Max(
-                    x: dy,
-                    y: dz
-                )
-            ),
+            x: FixedVector3.MaxComponent(value: d),
             y: FixedQ4816.Zero
         );
 

@@ -55,9 +55,10 @@ graph LR
 
 For a simulation that owns the final state, the loop is fixed-step: producers
 capture whenever input arrives, and the host pulls one snapshot per host-owned
-tick. Each tick the host calls `SnapshotForTick`, receives the ordered per-slot
-snapshot, applies it to the registry, and steps the simulation, in that order,
-once:
+tick. Before each tick the host drains submitted text
+(`TextCommandSource.Collect`). Then it calls `SnapshotForTick`, receives the
+ordered per-slot snapshot, applies it to the registry, and steps the
+simulation, in that order, once:
 
 ```mermaid
 sequenceDiagram
@@ -68,6 +69,7 @@ sequenceDiagram
     participant S as Simulation
     loop every fixed tick
         P->>R: Capture(signal…)
+        H->>G: drain submitted text (Collect)
         H->>R: SnapshotForTick(tick, windowEndTick)
         R-->>H: ordered per-slot snapshot
         H->>G: ApplySnapshot — map-gated dispatch
@@ -112,8 +114,8 @@ sealed class FlatBindings : IInputBindings {
 }
 
 // This simple host says that logical slot N belongs to local seat N.
-sealed class LocalRoster : ICommandPrincipalResolver {
-    public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+sealed class LocalRoster : IPrincipalResolver {
+    public Principal PrincipalOf(int slot) => Principal.Seat(slot: slot);
 }
 ```
 
@@ -146,7 +148,7 @@ var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: 1UL);
 
 registry.ApplySnapshot(snapshot: in snapshot);
 
-// Console entry point (not map-gated), dispatched as CommandPrincipal.Console.
+// Console entry point (not map-gated), dispatched as Principal.Console.
 CommandResult help = registry.Submit(line: "help");
 ```
 
@@ -237,7 +239,7 @@ command's value shape.
 
 | Kind | Components used | Typical use |
 |------|-----------------|-------------|
-| `Digital` | `X` (0/1) | press/release actions (`jump`, `exit`) |
+| `Digital` | `X` (0/1) | press/release actions (`jump`, `quit`) |
 | `Axis1D` | `X` | scalar, conventionally −1…1 |
 | `Axis2D` | `X, Y` | movement, or a raw look delta |
 | `Axis3D` | `X, Y, Z` | motion sensors (gyro, accel) |
@@ -401,11 +403,11 @@ Two public paths reach a handler:
    refusing one that names no source, while `InputRouter.Activate` accepts a
    command activation produced by an authored interface for a non-negative slot.
    `SnapshotForTick` groups both by logical slot. For each slot,
-   `ICommandPrincipalResolver.PrincipalOf(slot)` supplies the actor that the
+   `IPrincipalResolver.PrincipalOf(slot)` supplies the actor that the
    host currently recognizes there; the router does not guess that a slot
    belongs to a local seat.
 2. **Submitted text.** `CommandRegistry.Submit` runs an immediate command as
-   `CommandPrincipal.Console`. A command declared `CommandRouting.Simulation`
+   `Principal.Console`. A command declared `CommandRouting.Simulation`
    defers instead, but only once a sink is wired for it: either the registry's
    own through `RouteSimulationTo`, or the one a `TextCommandSession` carries. A
    wired line enters the router through that sink and runs when the host applies
@@ -493,6 +495,43 @@ guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
 session's following non-Simulation line until its pending Simulation submission
 has applied, and each session's hold is independent of every other session's.
 
+A host runs that drain before every fixed step, not once per frame. When the
+host is behind and runs several steps in one frame, each step still gets its
+own drain. So a line that a step unblocks, such as the line after a tick wait,
+runs before the next step. It does not wait for the rest of the batch. The
+administrative session, the one that reads process stdin, marks its
+`Simulation` lines as due in the next step that takes input
+(`TextCommandSession.DueNextTick`). Otherwise the capture clock would decide:
+that clock is wall time, and a host that is running behind would pick up the
+line a varying number of steps later. A session created without
+`dueNextTick`, such as a seat's own text session, keeps capture-clock timing.
+
+A launcher host (`FixedStepPump.CreateHosted`) also holds its first step while
+a piped script is still arriving. It takes that step as soon as one of these
+is true:
+
+- The administrative session can't go on without a step
+  (`TextCommandSource.AdministrativeSessionAwaitsStep`). Its `world.wait` is
+  counting down, or its next line is a read waiting for a `Simulation` line to
+  apply.
+- Standard input has ended, or a read from it failed.
+- Standard input is an interactive terminal.
+- The pipe was still empty when the host first read it. An editor or a
+  supervising process can hold a pipe open without writing to it.
+
+A session runs its lines in order, so when it stops to wait for a step, every
+line before that point has already run. The lines of a piped script up to its
+first wait therefore run before the first step, however the writer splits them
+into chunks. An empty pipe after the first byte doesn't release the hold: the
+host can't tell a writer that is pausing from one that has finished. As a
+result, a script with no wait, sent through a pipe that stays open, doesn't
+step until the pipe closes. A writer whose first byte arrives after the host's
+first read counts as silent, so its lines may land after the first step. Once
+the host has taken one step, the hold never applies again.
+
+The terminal's `quit` verb ends the host. It runs only after the work queued
+ahead of it in its session. Once it has run, the host takes no further step.
+
 The drain skips blank lines and lines whose first non-whitespace character
 is `#`, so scripts can carry comments. An immediate handler receives its
 issuing `CommandContext.TextSession` on both text parsing paths. It can call
@@ -537,6 +576,46 @@ than through a half-applied tick. `ApiSurfaceTests` fails the
 suite if a public constructor appears on any of the four, so this is enforced
 rather than merely asserted.
 
+## Pointing at a displayed source
+
+A source such as an emulator, a captured window or another view can be shown on
+a screen in the world or in a pane on the display. `SourceMapping` is the one
+record of how it is shown: hits map through it, it is the data the GPU is to
+draw with, and nothing ever reads a mapping back from the GPU. It holds the
+chain from the place it is shown to the source's pixels:
+
+- the placement: a `SourcePlacement.Surface` face frame in the world, or a
+  `SourcePlacement.Pane` rectangle on the display;
+- an optional `SourceWarp` pass the face is drawn through, such as a screen's
+  bezel. A warp either declares its exact inverse (`SourceWarpInverse.Affine`)
+  or it cannot be an input path, though it still draws;
+- a `SourceUvLayout`, one of the eight rotations and reflections;
+- a `SourceFit` that stretches, letterboxes or fills the face with the crop;
+- the crop, a `SourcePixelRect` of the source.
+
+`MapRay` meets a surface with a `SourceRay`, and `MapDisplayPoint` finds a
+display point on a pane. Both run the chain in `Puck.Maths` fixed point, with
+every float quantized once, so the same mapping and input give a bit-identical
+`SourceHit` on every run and machine. The hit reports what the point landed on
+(the source, off the face, a bezel, a letterbox bar, or a warp with no inverse)
+and the point in source pixels. `SourceRay.Through` casts the ray a camera casts
+through a point of its image, which is how a hit on another view continues into
+that view's world (`RenderGraphHitWalk` in `Puck.Hosting`).
+
+A mapped point goes to one `SourceDestination`:
+
+| Destination | What reaches it |
+|---|---|
+| `Presentation` | Hover and highlight. `ISourcePicker` is the seam, and a host may answer it by GPU picking because nothing reaches state. |
+| `Simulation` | A pointer ray that arrives as the `source.pointer.origin` and `source.pointer.direction` Axis3D commands (`SourcePointerCommands`) in a tick's snapshot, quantized by `CommandValueQuantization.QuantizeAxis3D` and mapped from document data. `TryValidate` refuses a pane here, because a pane's aspect ratio depends on the host's display. |
+| `Passthrough` | An external window on the host. `SourcePassthrough.ToClient` scales a source pixel into the window's client area in physical and logical pixels. Only a source whose `SourceOpener` is the local user may take this destination, and `TryValidate` refuses it by name for a source a document opened. |
+
+`SourceHandle` names the source shown, a registered producer or a render-graph
+instance. Nothing publishes mappings from the live renderer yet: the renderer's
+screens and panes read them when the frame graph wires sources, and delivery of
+passthrough input to a window is Windows-specific host work. Both are open in
+[the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+
 ## Core types
 
 This table is the conceptual map. The
@@ -549,10 +628,11 @@ member-by-member surface.
 | `CommandDefinition` | Named, typed, invokable command—the shared identity behind every way it can be driven. Its identity-bearing members (`Name`, `TextCommand`, `Description`, `Map`) are readable but settable only inside the assembly, so a `with` expression cannot split a command's dispatch identity from its text identity. Build one through `Verb` or `WithWireArgs`, which refuse a null handler, name, or description at the registration rather than at the first dispatch. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
 | `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). Internal to construct. |
-| `CommandPrincipal` / `CommandPrincipalKind` | The acting identity a dispatch carries: `Console`, `Seat`, `Addon`, or `Peer`. |
-| `ICommandPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
+| `Principal` / `PrincipalKind` | Who is acting: the one identity a dispatch, and every world submission after it, carries — `Console`, `Seat`, `Addon`, `Peer`, or `World` (a world's own authored program). The default, `Unspecified`, is no identity, and a context refuses it. |
+| `IPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
-| `CommandMetadata` | The public read-only face of a registration, the registry's own three verbs included—what `Definitions` returns. Its eight members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, and whether it accepts wire arguments; the vocabulary gate reads that last one to decide whether a binding row may carry authored text. |
+| `CommandAudience` | Who a command answers: `Anyone` (the default) or `Operator`. The registry refuses an `Operator` command for every principal but `Console` at its dispatch boundary, before the handler runs, whichever door the line or press arrived through: `[<verb>: refused — an operator verb; seat2 is not the operator]`. |
+| `CommandMetadata` | The public read-only face of a registration, the registry's own three verbs included—what `Definitions` returns. Its nine members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, whether it accepts wire arguments, and its audience; the vocabulary gate reads the wire-argument member to decide whether a binding row may carry authored text. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` / `CommandValueKind` | The per-frame value, tagged with its shape, packed into a `Vector4`. |
 | `CommandPhase` | Transition the activation represents: `Started`, `Active`, `Completed`, `Canceled`. |
@@ -560,11 +640,13 @@ member-by-member surface.
 | `InputSignal` | A raw input keyed by a physical source id, *before* binding; distinguishes persistent samples, digital held-state reassertions, and transient impulses. |
 | `CommandBinding` | Binds an input source id to a command (constant or pass-through value). |
 | `IInputBindings` / `PagedInputBindings` | The slot-aware binding boundary, and the stateful chord/page/wheel implementation of it. |
-| `CommandInjectionSink` | The read-only public face of the console sink used to queue simulation-class submitted text under `CommandPrincipal.Console`. |
+| `CommandInjectionSink` | The read-only public face of the console sink used to queue simulation-class submitted text under `Principal.Console`. |
 | `TextCommandSource` | Queue and per-frame pump for command lines through the registry's text path. |
 | `InputRouter` | Owns each slot's active maps, captures timestamped physical signals and pre-resolved injections, then emits ordered per-tick, per-slot snapshots. Disposable: a host that replaces a router must dispose the old one, or it keeps mutating its held tables on every binding reload and device disconnect. |
 | `CommandEcho` | The bracketed `[verb: key=value …]` echo grammar a read-back or mutation verb writes, defined once rather than hand-spelled per verb. `Field` routes its value through `Quote`, and `SpliceTag(text, prefix, value)` quotes only the VALUE, because the tag's declared literal prefix has to stay readable to the readers that test for it. Either way a reserved character inside a value cannot end the token, the segment, the envelope, or the line. `Quote` emits a value verbatim unless it carries whitespace, a backslash, or one of the grammar's own delimiters, and otherwise as a double-quoted run in which a backslash doubles, newline, carriage return and tab take their short spellings, and every other control character, both Unicode line and paragraph separators, and an interior quote ride as `\uXXXX`. One encoding serves two readers, which is why an interior quote rides as `\u0022` rather than `\"` and a value carrying a backslash is always quoted: the console's resubmit splitter knows quoted runs and no escapes at all, so once it has stripped the run every backslash left is unambiguously an escape for `Unescape` to invert. `Unquote` is the exact inverse of `Quote` for a token already in hand, and `TryReadToken` is what a driver reading a whole echo line wants instead. |
+| `ConsoleRecord` | The framing a host writes one result or narration to a line-oriented stream with: the first line at column zero, every further non-empty line indented by `ContinuationIndent` (two spaces). `IsContinuation` is the reader's side, so a driver that sees only lines tells one multi-line answer from two back-to-back answers of the same verb. `Puck.Launcher`'s `BufferedConsoleOutput` and the World's narration sink write through it. |
 | `CommandSnapshot` / `CommandLane` / `CommandEntry` | Canonical deterministic input for one fixed tick, built and applied within it—ephemeral, never itself persisted, with local device identities excluded from its deterministic content. |
+| `SourceMapping` / `SourceHit` / `SourceDestination` | The published chain from where a source is shown to its pixels, a point mapped through it in fixed point, and where that point goes. |
 
 ## Design notes
 

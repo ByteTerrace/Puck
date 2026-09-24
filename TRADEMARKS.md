@@ -1,7 +1,7 @@
 # ByteTerrace and Puck Trademark Policy
 
 **Puck®** and **ByteTerrace®** are registered trademarks of ByteTerrace. The Puck source code is
-available under its own license (see [`LICENSING.md`](LICENSING.md)); this policy governs the
+available under its own license (the Apache License 2.0; see [`LICENSE.md`](LICENSE.md)); this policy governs the
 **names and logos**, which that license does not grant, and explains how you may — and may not —
 use them.
 
@@ -9,7 +9,7 @@ use them.
 
 ## Plain-language summary (not the legal terms)
 
-**The code is source-available. The names are not.** You may use ByteTerrace.Puck's source under
+**The code is open source. The names are not.** You may use ByteTerrace.Puck's source under
 its license — but **Puck®** and **ByteTerrace®** are our registered trademarks, and the license does not
 give you the right to use them. You can always *truthfully refer to* Puck ("built on Puck,"
 "compatible with ByteTerrace Puck"). You can't use our names in a way that suggests we made,
@@ -31,11 +31,12 @@ are used with `™`.
 
 ## 2. The code license does not grant trademark rights
 
-Puck's source license (**PolyForm Noncommercial 1.0.0**, plus any commercial license) grants
-rights in the **software**, not the **Marks**. PolyForm Noncommercial's *No Other Rights* clause
-states expressly that it grants no rights beyond the copyright and patent licenses in it — so
-receiving or using the software gives you **no** license to the Marks. Trademark permission comes
-only from this policy or from separate written permission by ByteTerrace.
+Puck's source license (the **Apache License 2.0**) grants rights in the **software**, not the
+**Marks**. Its section 6, *Trademarks*, states expressly that it grants no permission to use
+ByteTerrace's trade names, trademarks, service marks, or product names beyond describing where the
+work came from — so receiving or using the software gives you **no** license to the Marks.
+Trademark permission comes only from this policy or from separate written permission by
+ByteTerrace.
 
 ## 3. Uses you may make **without asking** (nominative / fair use)
 

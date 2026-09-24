@@ -8,11 +8,12 @@ public sealed partial class ArenaSearch {
         var baseIndex = (outcome * chance.CellCount);
 
         for (var index = 0; ((index < chance.CellCount) && (index < job.ChanceKeys.Length)); index++) {
-            _ = m_arena.TryWrite(
+            _ = m_arena.TryWriteLive(
                 key: job.ChanceKeys[index],
                 operand: chance.Outcomes[(baseIndex + index)],
                 reason: out _,
                 rowOrdinal: chance.RowOrdinal,
+                time: Time,
                 write: StateWriteKind.Set
             );
         }

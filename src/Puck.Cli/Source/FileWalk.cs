@@ -5,11 +5,18 @@ namespace Puck.Cli.Source;
 // filter and an optional per-file gate decide the rest. The result is ordinal-sorted absolute paths,
 // each file admitted exactly once.
 internal static class FileWalk {
-    // Pruned at every depth of the walk, and below the scan root of the scan/format corpus
-    // (SourceFiles). Naming one as a search root still searches it, and so does naming a file inside it.
+    // The one prune set: generated, vendored, artifact and scratch directories, pruned at every depth below a
+    // walk's root for every verb that walks the tree. Naming one as a root still walks it, and so does naming a
+    // file inside it.
     internal static readonly HashSet<string> SkipDirectories = new(comparer: StringComparer.OrdinalIgnoreCase) {
-        ".git", "artifacts", "BenchmarkDotNet.Artifacts", "bin", "node_modules", "obj", "publish",
+        ".git", ".tmp", "artifacts", "BenchmarkDotNet.Artifacts", "bin", "node_modules", "obj", "publish",
     };
+
+    // The prune set as a verb's help prints it, so no help text keeps a copy of the list.
+    internal static string PrunedNames => string.Join(
+        separator: ", ",
+        values: SkipDirectories.Order(comparer: StringComparer.OrdinalIgnoreCase)
+    );
 
     private static bool HasExtension(string path, string? extension) =>
         ((extension is null) || path.EndsWith(

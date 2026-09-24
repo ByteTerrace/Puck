@@ -11,18 +11,6 @@ namespace Puck.World.Tests;
 public sealed class BodyDynamicsLawTests {
     private const int ForwardOrdinal = 0;
 
-    private static WorldBody JoinBody(WorldFixture fixture) {
-        var actor = WorldPrincipal.Seat(slot: 0);
-
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: actor,
-            Slot: actor.Index,
-            IdentityName: null,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
-
-        return fixture.Server.Body(index: actor.Index)!;
-    }
     private static WorldDefinition WithKitDynamics(string dynamicsRow, float damping) {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
@@ -45,7 +33,7 @@ public sealed class BodyDynamicsLawTests {
             damping: 1f,
             dynamicsRow: "settle"
         ));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
         var moveSpeed = ((float)((double)body.EffectiveMoveSpeed));
         var previous = 0f;
 
@@ -105,13 +93,13 @@ public sealed class BodyDynamicsLawTests {
         var first = Fixtures.DriveHashTrace(
             document: document,
             ticks: 240,
-            join: JoinBody,
+            join: static fixture => fixture.JoinSeat(),
             perTick: holdForward
         );
         var second = Fixtures.DriveHashTrace(
             document: document,
             ticks: 240,
-            join: JoinBody,
+            join: static fixture => fixture.JoinSeat(),
             perTick: holdForward
         );
 
@@ -125,7 +113,7 @@ public sealed class BodyDynamicsLawTests {
         var slowStepTicks = checked((ulong)(FixedTickConversion.TicksPerSecond / ((ulong)SlowRateHz)));
         var third = Fixtures.DriveHashTrace(
             document: slowDocument,
-            join: JoinBody,
+            join: static fixture => fixture.JoinSeat(),
             perTick: holdForward,
             stepTicks: slowStepTicks,
             ticks: 240
@@ -148,7 +136,7 @@ public sealed class BodyDynamicsLawTests {
             damping: 0.25f,
             dynamicsRow: "loose"
         ));
-        var lightBody = JoinBody(fixture: lightFixture);
+        var lightBody = lightFixture.JoinSeat();
         var targetSpeed = (((float)((double)lightBody.EffectiveMoveSpeed)) * 0.4f);
         var lightOvershot = false;
 
@@ -173,7 +161,7 @@ public sealed class BodyDynamicsLawTests {
             damping: 1f,
             dynamicsRow: "settle"
         ));
-        var criticalBody = JoinBody(fixture: criticalFixture);
+        var criticalBody = criticalFixture.JoinSeat();
         var criticalOvershot = false;
 
         for (var tick = 0; (tick < 30); tick++) {

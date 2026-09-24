@@ -10,14 +10,7 @@ namespace Puck.World.Browser.Tests;
 /// row the document's own <c>MarkHostOwned</c> missed.</summary>
 public sealed class BrowserHostOwnedRowLawTests {
     private static WorldDefinition ComposedIsland() {
-        var path = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "puck.world.json"
-        );
+        var path = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryComposeDocumentTree(
@@ -45,23 +38,6 @@ public sealed class BrowserHostOwnedRowLawTests {
         );
 
         return definition!;
-    }
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
     }
     private static List<string> HostOwned(WorldDefinition definition) {
         var names = new List<string>();

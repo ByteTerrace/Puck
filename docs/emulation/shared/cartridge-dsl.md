@@ -11,8 +11,8 @@ committed document, so the two can never drift apart quietly.
 ## Round trip
 
 ```bash
-puck decompile src/Puck.World/Assets/cartridges/tetris.cgb.cartridge.json --output tetris.cgb.puck
-puck compile tetris.cgb.puck --output tetris.cgb.cartridge.json --validate
+puck decompile src/Puck.World/Assets/cartridges/tetromino.cgb.cartridge.json --output tetromino.cgb.puck
+puck compile tetromino.cgb.puck --output tetromino.cgb.cartridge.json --validate
 ```
 
 `--validate` runs the forge's own document validation (`CartridgeDocuments.Validate`) over the lowered JSON:
@@ -40,7 +40,7 @@ Everything outside `rule` is the language's ordinary property and block syntax, 
 ```puck
 schema: "puck.cartridge.v1"
 target: "cgb"
-title: "TETRIS"
+title: "TETROMINO"
 
 let wellFloor = 17
 
@@ -60,7 +60,7 @@ arrays [
 ]
 ```
 
-The named scalar functions (`squareRoot`, `remainder`, `greatestCommonDivisor`, and the rest of
+The named scalar functions (`squareRoot`, `floorModulo`, `greatestCommonDivisor`, and the rest of
 [`Puck.State`'s shared vocabulary](../../reference/dsl.md#scalar-functions-come-from-puckstate-not-from-here))
 fold the same way here as in any other document—an integer-domain one exactly, by delegating to
 `ExpressionArithmetic`, everything else in `double`.
@@ -81,9 +81,9 @@ The bound names are compile-time values, so a loop variable used as an operand l
 to a machine variable of the same name, and it shadows a `let` of that name for the length of one iteration.
 
 `map(range(...), i => ...)` remains the spelling for a repeated VALUE inside one row (an array cell, a variable's
-initial contents); `for` is the spelling for a repeated ROW. Neither reaches inside a rule body: a rule's steps are
-parsed by the language's own effect dispatcher, which has no `for` production, and a rule's `repeat <count> as
-<name> { }` is unrelated: the machine runs it at play time, with a compile-time count in 1..255.
+initial contents); `for` is the spelling for a repeated ROW, and inside a rule body for a repeated STEP: the rule
+carries one step per element, each with the loop variable as a literal operand. A rule's `repeat <count> as <name>
+{ }` is unrelated: the machine runs it at play time, with a compile-time count in 1..255.
 
 A statement this vocabulary has no case for is refused rather than dropped, so a misspelled row keyword cannot
 silently lose the row and everything nested in it.

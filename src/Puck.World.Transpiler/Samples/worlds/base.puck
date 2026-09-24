@@ -1,0 +1,15 @@
+// The Samples tree's own shared host baseline: every field a root document's `host` block requires, so a sample
+// authoring only the fields it wants to illustrate inherits the rest through `basis: "worlds/base"`.
+schema: "puck.world.definition.v1"
+
+host {
+  presentation: Windowed
+  backend: auto
+  width: 1280
+  height: 720
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentMode: Immediate
+  targetHertz: 60
+  exitAfterSeconds: 0
+}

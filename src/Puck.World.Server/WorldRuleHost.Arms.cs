@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
@@ -11,7 +12,7 @@ namespace Puck.World.Server;
 /// outward. The arms of one firing are preflighted as a sequence: what one would do is what the next is judged
 /// against.</para>
 /// <para>A document-row arm is <see cref="EffectNeeds.Transactional"/>. The firing's rows compose, in order, into one
-/// <see cref="WorldMutation.Batch"/> stamped <see cref="WorldPrincipal.World"/>. Each preflight composes the batch
+/// <see cref="WorldMutation.Batch"/> stamped <see cref="Principal.World"/>. Each preflight composes the batch
 /// so far against the document the firing proposes, so a row is judged against what the rows before it leave. Once
 /// every arm has passed, the whole batch is prepared through the ordinary mutation door: every gate that can refuse
 /// it runs while the firing can still rewind. The commit adopts the proposed document and installs the prepared
@@ -115,7 +116,7 @@ public sealed partial class WorldRuleHost {
         ? m_documentArms[0]
         : new WorldMutation.Batch(
             Mutations: [.. m_documentArms],
-            Principal: WorldPrincipal.World
+            Principal: Principal.World
         )
     );
 
@@ -305,7 +306,7 @@ public sealed partial class WorldRuleHost {
                     Subject: GrantSubject.Body(index: targetIndex)
                 ),
                 knownSubject: true,
-                principal: WorldPrincipal.World
+                principal: Principal.World
             );
 
             return true;
@@ -602,26 +603,17 @@ public sealed partial class WorldRuleHost {
             fact: effect.Fact.Value
         );
 
-        if (!Host.Arena.TryWrite(
+        if (!TryWriteIdentityLane(
             key: key,
-            operand: value,
             reason: out var reason,
             rowOrdinal: laneOrdinal,
-            write: StateWriteKind.Set
+            value: value
         )) {
-            if (!Host.Arena.TryMint(
-                key: out _,
-                name: Host.Arena.Keys[key],
-                reason: out reason,
-                rowOrdinal: laneOrdinal,
-                value: CellValue.Int(value: value)
-            )) {
-                return Refuse(
-                    code: WorldRuleEffectRefusal.IdentityFactUnwritable,
-                    reason: reason,
-                    refusal: out refusal
-                );
-            }
+            return Refuse(
+                code: WorldRuleEffectRefusal.IdentityFactUnwritable,
+                reason: reason,
+                refusal: out refusal
+            );
         }
 
         m_pendingIdentityFacts.Add(item: new PendingIdentityFact(
@@ -643,15 +635,11 @@ public sealed partial class WorldRuleHost {
         }
 
         foreach (var pending in m_pendingIdentityFacts) {
-            if (
-                Host.Arena.TryRead(
+            if (LaneHolds(
                 key: pending.LaneKey,
                 rowOrdinal: pending.LaneOrdinal,
-                value: out var stored
-            ) &&
-                (stored.Kind == CellKind.Int) &&
-                (stored.AsInt == pending.Value)
-            ) {
+                value: pending.Value
+            )) {
                 PersistIdentityFact(
                     identity: pending.Identity,
                     key: pending.Key,
@@ -702,19 +690,19 @@ public sealed partial class WorldRuleHost {
         WorldMutation mutation = (effect.Write switch {
             WorldDocumentWrite.UpsertHudPanel => new WorldMutation.UpsertHudPanel(
             Panel: effect.HudPanel!,
-            Principal: WorldPrincipal.World
+            Principal: Principal.World
         ),
             WorldDocumentWrite.RemoveHudPanel => new WorldMutation.RemoveHudPanel(
             Id: effect.Id,
-            Principal: WorldPrincipal.World
+            Principal: Principal.World
         ),
             WorldDocumentWrite.UpsertPlacement => new WorldMutation.UpsertPlacement(
             Placement: effect.Placement!,
-            Principal: WorldPrincipal.World
+            Principal: Principal.World
         ),
             _ => new WorldMutation.RemovePlacement(
             Id: effect.Id,
-            Principal: WorldPrincipal.World
+            Principal: Principal.World
         ),
         });
 

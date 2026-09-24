@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -17,13 +16,13 @@ public readonly record struct ShaderPipelineExternalImage(
 /// <summary>
 /// One render node for an ordered multi-pass shader graph. All passes are recorded before one queue submission;
 /// frame-slot fences protect command buffers and descriptors, and every inter-pass image transition is explicit.
-/// A compiled candidate is installed only after all prior slots retire.
+/// A compiled candidate's pipelines and shader modules are built on the thread pool, never on the frame thread; its
+/// resources are allocated and it installs at the first frame boundary after. The graph it replaces retires once the
+/// node's latest submission has completed, at once when it already has; the images behind the two most recently
+/// published surfaces are held until a newer publication displaces them and the node's second submission after that
+/// has completed. An install neither waits for a build nor drains the device.
 /// </summary>
-public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarget, IPassTimingSource {
-    private const GpuComputeAccess PriorAccess = GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite | GpuComputeAccess.TransferWrite | GpuComputeAccess.ColorAttachmentWrite;
-    private const GpuComputeStage PriorStages = GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader | GpuComputeStage.Transfer | GpuComputeStage.ColorAttachmentOutput;
-
-    private readonly ulong m_allocationBudgetBytes;
+public sealed partial class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarget {
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDeviceContext m_device;
     private readonly bool m_directX;
@@ -31,22 +30,29 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
     private readonly IFullscreenPassServices? m_graphics;
     private readonly uint m_inFlight;
     private readonly GpuImageLayout m_outputLayout;
-    private readonly IReadOnlyDictionary<string, IShaderPipelinePassConstants> m_passConstants;
-    private readonly HashSet<string> m_positionVertexPasses;
     private readonly FrameSlot[] m_slots;
 
     private ulong m_allocationBytes;
     private bool m_disposed;
     private ulong m_frame;
     private uint m_height;
+    // Whether the installed graph has rendered no frame since it installed. A paused instance installs a replacement
+    // without rendering, so until that graph renders, the replaced graph's last image stays published.
+    private bool m_installedUnrendered;
     private Surface m_lastSurface;
     private Exception? m_lastSwapError;
+    // Whether a device loss destroyed the published image. Nothing is published then, but no initialization frame is
+    // owed: a paused node presents nothing, and refuses a capture, until its next step, resume or reset renders.
+    private bool m_publicationLost;
     private bool m_outputRefreshRequested;
     private CompiledShaderPipeline? m_pending;
     private CompiledShaderPipeline? m_pipeline;
     private FloatPreviewPass? m_preview;
     private IGpuSurfaceReadback? m_readback;
     private bool m_ready;
+    private uint m_requestedHeight;
+    private uint m_requestedWidth;
+    private bool m_resizePending;
     private string? m_selectedOutput;
     private int m_steps;
     private uint m_width;
@@ -63,24 +69,29 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
     private readonly List<nint> m_commands = [];
 
     /// <summary>Creates an initially empty node. The first valid <see cref="Swap"/> installs a graph.</summary>
-    public ShaderPipelineRenderNode(string name, IGpuComputeServices gpu, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, IFullscreenPassServices? graphics = null, uint inFlightFrames = 3, ulong allocationBudgetBytes = ((512UL * 1024UL) * 1024UL), IReadOnlyDictionary<string, IShaderPipelinePassConstants>? passConstants = null, GpuImageLayout outputLayout = GpuImageLayout.General, IReadOnlySet<string>? positionVertexPasses = null) {
+    public ShaderPipelineRenderNode(string name, IGpuComputeServices gpu, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, IFullscreenPassServices? graphics = null, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(gpu);
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
         ArgumentOutOfRangeException.ThrowIfZero(inFlightFrames);
-        ArgumentOutOfRangeException.ThrowIfZero(allocationBudgetBytes);
         m_descriptor = new NodeDescriptor(
             Name: name,
             SurfaceId: SurfaceId.New()
         );
-        m_gpu = gpu;
+        m_work = new GpuWorkLedger(
+            framesInFlight: ((int)inFlightFrames),
+            name: "gpu.shader-pipeline"
+        );
+        m_gpu = GpuWorkCounting.Wrap(
+            ledger: m_work,
+            services: gpu
+        );
         m_device = deviceContext;
         m_directX = hostsOnDirectX;
-        m_graphics = graphics;
+        m_graphics = CountGraphics(graphics: graphics);
         m_inFlight = inFlightFrames;
-        m_allocationBudgetBytes = allocationBudgetBytes;
         if (outputLayout is not GpuImageLayout.General and not GpuImageLayout.ShaderReadOnly) {
             throw new ArgumentOutOfRangeException(
                 nameof(outputLayout),
@@ -89,27 +100,15 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             );
         }
         m_outputLayout = outputLayout;
-        m_positionVertexPasses = ((positionVertexPasses is null)
-            ? new(comparer: StringComparer.Ordinal)
-            : new(
-                collection: positionVertexPasses,
-                comparer: StringComparer.Ordinal
-            )
-        );
-        m_passConstants = ((passConstants is null)
-            ? new Dictionary<string, IShaderPipelinePassConstants>(comparer: StringComparer.Ordinal)
-            : new Dictionary<string, IShaderPipelinePassConstants>(
-                collection: passConstants,
-                comparer: StringComparer.Ordinal
-            )
-        );
         m_slots = new FrameSlot[inFlightFrames];
         for (var i = 0; (i < m_slots.Length); i++) { m_slots[i] = new FrameSlot(); }
         m_width = width;
         m_height = height;
+        m_requestedWidth = width;
+        m_requestedHeight = height;
     }
     /// <summary>Creates a node with an already compiled candidate.</summary>
-    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuComputeServices gpu, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, IFullscreenPassServices? graphics = null, uint inFlightFrames = 3, ulong allocationBudgetBytes = ((512UL * 1024UL) * 1024UL), IReadOnlyDictionary<string, IShaderPipelinePassConstants>? passConstants = null, GpuImageLayout outputLayout = GpuImageLayout.General, IReadOnlySet<string>? positionVertexPasses = null)
+    public ShaderPipelineRenderNode(CompiledShaderPipeline pipeline, IGpuComputeServices gpu, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint width, uint height, IFullscreenPassServices? graphics = null, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General)
         : this(
         pipeline.Plan.Definition.Name,
         gpu,
@@ -119,50 +118,52 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         height,
         graphics,
         inFlightFrames,
-        allocationBudgetBytes,
-        passConstants,
-        outputLayout,
-        positionVertexPasses
+        outputLayout
     ) => Swap(pipeline: pipeline);
 
-    /// <summary>Gets the configured graph allocation ceiling.</summary>
-    public ulong AllocationBudgetBytes => m_allocationBudgetBytes;
-    /// <summary>Gets the current graph allocation in bytes.</summary>
-    public ulong AllocationBytes => checked((m_allocationBytes + ((m_preview is null)
-        ? 0
-        : (((((ulong)m_preview.Width) * m_preview.Height) * 4) * m_inFlight))));
+    /// <summary>Gets the bytes the installed graph owns: every frame slot's resources and its float preview. It is the
+    /// installed graph's <see cref="ShaderPipelineMemoryAccount.SteadyBytes"/>.</summary>
+    public ulong AllocationBytes => checked((m_allocationBytes + PreviewBytes(
+        extent: ((m_preview is { } preview)
+            ? (preview.Width, preview.Height)
+            : null
+        ),
+        inFlight: m_inFlight
+    )));
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
+    /// <summary>Gets the frame extent, in pixels, the installed graph's frame-relative resources were built for.</summary>
+    public (uint Width, uint Height) Extent => (m_width, m_height);
+    /// <summary>Gets whether a compiled candidate is queued and not yet installed.</summary>
+    public bool HasPendingCandidate => (m_pending is not null);
+    /// <summary>Gets the frame extent, in pixels, most recently requested through <see cref="Resize"/>. It differs from
+    /// <see cref="Extent"/> while a resize builds, paused or running, and after a resize whose candidate was
+    /// refused.</summary>
+    public (uint Width, uint Height) RequestedExtent => (m_requestedWidth, m_requestedHeight);
     /// <summary>Gets the submitted frame count.</summary>
     public ulong FrameCounter => m_frame;
-    /// <summary>Gets or sets presentation values supplied to shader frame constants by the host.</summary>
-    public ShaderFrameInput Input { get; set; }
+    /// <summary>Gets or sets the frame values the host supplies to every pass's frame block.</summary>
+    public ShaderFrameValues Frame { get; set; }
     /// <summary>Gets whether a compiled graph has allocated all of its GPU resources.</summary>
     public bool IsReady => ((m_pipeline is not null) && m_ready);
     /// <summary>Gets the last deferred candidate creation failure, if any.</summary>
     public Exception? LastSwapError => m_lastSwapError;
-    /// <inheritdoc/>
+    /// <summary>Gets the number of passes in the installed graph.</summary>
     public int PassCount => m_passes.Length;
-    /// <inheritdoc/>
+    /// <summary>Gets the installed graph's pass names, in execution order: the labels its work counts are reported under.</summary>
     public ReadOnlySpan<string> PassLabels => m_passLabels;
-    /// <summary>Gets pass binding information. GPU timings are currently unavailable.</summary>
-    public IReadOnlyList<ShaderPipelinePassStatus> PassStatus => m_passes.Select(selector: pass => new ShaderPipelinePassStatus(
-        pass.Spec.Name,
-        pass.Spec.Kind,
-        ((uint)pass.Bindings.Count),
-        null
-    )).ToArray();
     /// <summary>Gets or sets whether rendering is paused.</summary>
     public bool Paused { get; set; }
+    /// <summary>Gets or sets whether every pass's frame block holds its echo sentinels
+    /// (<see cref="ShaderInterfaceEcho.WriteSentinels"/>) in place of the frame values and config, so an echo pass can
+    /// hold what it reads to what was written.</summary>
+    public bool Sentinels { get; set; }
     /// <inheritdoc/>
     public string? PendingCapturePath => m_capture.PendingPath;
     /// <summary>Gets the active immutable execution plan.</summary>
     public ShaderPipelinePlan? Plan => m_pipeline?.Plan;
     /// <summary>Gets resource allocation and extent information for the active graph.</summary>
-    public IReadOnlyList<ShaderPipelineResourceStatus> ResourceStatus => m_resources.Select(selector: resource => resource.Status(
-        frameHeight: m_height,
-        frameWidth: m_width
-    )).ToArray();
+    public IReadOnlyList<ShaderPipelineResourceStatus> ResourceStatus => m_resources.Select(selector: StatusOf).ToArray();
     /// <summary>Gets or sets whether a step is pending.</summary>
     public bool StepRequested {
         get => (m_steps != 0); set => m_steps = (value
@@ -174,7 +175,9 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
     );
     }
 
-    private void BarrierTarget(RuntimePass pass, int slot, nint command, bool before, List<nint> commands) {
+    // A fullscreen pass records its barriers in their own command buffer before its render pass; the render pass leaves
+    // its color attachment shader-readable, which the plan already accounts for, so nothing follows it.
+    private void RecordPreBarriers(RuntimePass pass, int slot, nint command, List<nint> commands) {
         var recorder = m_gpu.ComputeRecorder;
 
         recorder.BeginCommandBuffer(
@@ -183,234 +186,107 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         );
         InitializeResources(
             command: command,
-            recorder: recorder
+            recorder: recorder,
+            slot: slot
         );
-        foreach (var input in pass.Spec.InputReferences) {
-            Transition(
-                command: command,
-                pass: pass,
-                recorder: recorder,
-                reference: input,
-                slot: slot
-            );
-        }
-        foreach (var output in pass.Spec.OutputReferences) {
-            var resource = m_resourceLookup[output.Name];
-            var target = resource.Targets![slot];
-            // The shared render-pass contract leaves its color attachment in ShaderReadOnly when the
-            // render pass ends. Track that actual state before publishing the node's General surface.
-            var old = (before
-                ? resource.Layouts![slot]
-                : GpuImageLayout.ShaderReadOnly
-            );
-            var desired = (before
-                ? GpuImageLayout.RenderTarget
-                : m_outputLayout
-            );
-
-            if (old != desired) {
-                recorder.TransitionImageLayout(
-                    m_device.DeviceHandle,
-                    command,
-                    target.ImageHandle,
-                    old,
-                    desired,
-                    ((old == GpuImageLayout.Undefined)
-                    ? GpuComputeAccess.None
-                    : PriorAccess),
-                    (before
-                    ? GpuComputeAccess.ColorAttachmentWrite
-                    : GpuComputeAccess.ShaderRead),
-                    ((old == GpuImageLayout.Undefined)
-                    ? GpuComputeStage.TopOfPipe
-                    : PriorStages),
-                    (before
-                    ? GpuComputeStage.ColorAttachmentOutput
-                    : GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader)
-                );
-            } else if (!before) {
-                recorder.MemoryBarrier(
-                    m_device.DeviceHandle,
-                    command,
-                    GpuComputeAccess.ColorAttachmentWrite,
-                    GpuComputeAccess.ShaderRead,
-                    GpuComputeStage.ColorAttachmentOutput,
-                    GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
-                );
-            }
-            resource.Layouts![slot] = desired;
-        }
+        RecordAccesses(
+            command: command,
+            pass: pass,
+            recorder: recorder,
+            slot: slot
+        );
         recorder.EndCommandBuffer(
             m_device.DeviceHandle,
             command
         );
         commands.Add(item: command);
     }
-    private RuntimePass BuildPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map) {
+    // Puts one pass of a finished build into service: takes its modules, pipeline and render pass from the build, then
+    // allocates what the frame thread owns — the geometry buffer, the framebuffer binding each frame slot's attachments,
+    // and the per-slot descriptor and command objects.
+    private void InstallPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map, GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried) {
         var declaration = planned.Declaration;
-        var compiled = m_pipeline!.Shaders[planned.Name];
-        var constants = (m_passConstants.TryGetValue(
-            key: planned.Name,
-            value: out var writer
-        )
-            ? writer
-            : null
-        );
-
-        if (
-            (constants is not null) &&
-            (((constants.SizeBytes != 0) && ((constants.SizeBytes & 3) != 0)) || ((constants.SizeBytes == 0) && (constants.Stages != GpuShaderStage.None)) || ((constants.SizeBytes != 0) && (constants.Stages == GpuShaderStage.None)))
-        ) {
-            throw new InvalidDataException(message: $"Pass {planned.Name} has an invalid custom constants block.");
-        }
         var runtime = new RuntimePass(
             declaration,
-            compiled,
+            m_pipeline!.Shaders[planned.Name],
             planned.Parameters,
-            constants,
             ((int)m_inFlight),
-            ResolveExtent(
-                map: map,
-                pass: declaration
-            )
+            built.Passes[planned.Index]!.Extent,
+            [.. planned.Accesses]
         );
 
         m_passes[planned.Index] = runtime;
-        var descriptors = Descriptors(
-            map: map,
-            pass: declaration
-        );
 
-        runtime.Bindings = descriptors;
-        var primary = (m_directX
-            ? compiled.DxilByStage
-            : compiled.SpirvByStage
-        );
+        var objects = built.TakePass(index: planned.Index);
+
+        runtime.Bindings = objects.Bindings;
+        runtime.Compute = objects.Compute;
+        runtime.Graphics = objects.Graphics;
+        runtime.Primary = objects.Primary;
+        runtime.RenderPass = objects.RenderPass;
+        runtime.Secondary = objects.Secondary;
 
         if (declaration.Kind == ShaderPipelinePassKind.Compute) {
-            if (
-                !primary.TryGetValue(
-                key: ShaderStage.Compute,
-                value: out var bytes
-            ) ||
-                bytes.IsEmpty
-            ) {
-                throw new InvalidDataException(message: $"Pass '{declaration.Name}' has no compute bytecode.");
-            }
-            runtime.Primary = m_gpu.ShaderModuleFactory.Create(
-                bytecode: bytes,
-                deviceContext: m_device,
-                stage: GpuShaderStage.Compute
-            );
-            runtime.Compute = m_gpu.ComputePipelineFactory.Create(
-                m_device,
-                runtime.Primary,
-                new GpuComputePipelineDescription(
-                    declaration.Name,
-                    descriptors,
-                    runtime.PushBinding
-                )
-            );
             runtime.Pools = new IGpuComputeCommandPool[m_inFlight];
         } else {
-            if (
-                (m_graphics is null) ||
-                !primary.TryGetValue(
-                key: ShaderStage.Vertex,
-                value: out var vertex
-            ) ||
-                !primary.TryGetValue(
-                key: ShaderStage.Fragment,
-                value: out var fragment
-            )
-            ) {
-                throw new InvalidDataException(message: $"Fullscreen pass '{declaration.Name}' needs vertex and fragment bytecode plus graphics services.");
-            }
-            runtime.Primary = m_gpu.ShaderModuleFactory.Create(
-                bytecode: vertex,
-                deviceContext: m_device,
-                stage: GpuShaderStage.Vertex
-            );
-            runtime.Secondary = m_gpu.ShaderModuleFactory.Create(
-                bytecode: fragment,
-                deviceContext: m_device,
-                stage: GpuShaderStage.Fragment
-            );
-            var vertexInput = new GpuVertexInputLayout(
-                Attributes: [],
-                StrideBytes: 0
-            );
-
-            if (m_positionVertexPasses.Contains(item: declaration.Name)) {
-                runtime.VertexBuffer = m_graphics.VertexBufferFactory.Create(
+            if (declaration.Geometry is { } geometry) {
+                runtime.GeometryBuffer = m_graphics!.GeometryBufferFactory.Create(
+                    m_device,
+                    geometry.BufferData(),
+                    GpuBufferUsage.Vertex | GpuBufferUsage.Index
+                );
+            } else if (declaration.Vertex == ShaderPipelineVertexInput.Position) {
+                runtime.GeometryBuffer = m_graphics!.GeometryBufferFactory.Create(
                     m_device,
                     FullscreenTriangle.CreateVertexData(),
-                    FullscreenTriangle.StrideBytes
-                );
-                vertexInput = new GpuVertexInputLayout(
-                    FullscreenTriangle.StrideBytes,
-                    [new GpuVertexAttribute(
-                            Format: GpuVertexFormat.R32G32Float,
-                            Location: 0,
-                            OffsetBytes: 0
-                        )]
+                    GpuBufferUsage.Vertex
                 );
             }
-            runtime.Targets = new IGpuRenderTarget[m_inFlight];
-            runtime.Graphics = new IGpuPipeline[m_inFlight];
             runtime.Pre = new IGpuComputeCommandPool[m_inFlight];
-            runtime.Post = new IGpuComputeCommandPool[m_inFlight];
-            var sampled = ((uint)descriptors.Count(predicate: item => (item.Kind == GpuComputeBindingKind.SampledImage)));
-            var extent = ResolveExtent(
-                map: map,
-                pass: declaration
-            );
+            runtime.Draw = new IGpuComputeCommandPool[m_inFlight];
+            runtime.Framebuffers = new IGpuFramebuffer[m_inFlight];
 
-            for (var i = 0; (i < m_inFlight); i++) {
-                runtime.Targets[i] = m_graphics.CreateRenderTarget(
-                    extent.Width,
-                    extent.Height
-                );
-                runtime.Graphics[i] = m_graphics.PipelineFactory.Create(
-                    m_device,
-                    runtime.Targets[i],
-                    runtime.Primary,
-                    runtime.Secondary,
-                    new GpuGraphicsPipelineDescription(
-                        declaration.Name,
-                        vertexInput,
-                        sampled,
-                        false,
-                        runtime.PushBinding
-                    ),
-                    extent.Width,
-                    extent.Height
-                );
+            // A framebuffer owns no image, so one over history the install carries binds the replaced graph's instances,
+            // which move into this graph only once nothing else can fail.
+            IGpuImage[] ImagesOf(ShaderPipelineAttachment attachment) {
+                var resource = map[attachment.Version];
+
+                return (carried.TryGetValue(
+                    key: resource.Storage.Index,
+                    value: out var carry
+                )
+                    ? carry.Old.Images
+                    : resource.Images)!;
             }
-            foreach (var output in declaration.OutputReferences) {
-                if (map.TryGetValue(
-                    key: output.Name,
-                    value: out var resource
-                )) {
-                    resource.Images = null;
-                    resource.Targets = runtime.Targets;
-                    resource.Layouts = new GpuImageLayout[m_inFlight];
-                    Array.Fill(
-                        array: resource.Layouts,
-                        value: GpuImageLayout.Undefined
-                    );
-                }
+            var colors = planned.Attachments.Where(predicate: static attachment => !attachment.Depth).Select(selector: ImagesOf).ToArray();
+            var depth = ((planned.Attachments.FirstOrDefault(predicate: static attachment => attachment.Depth) is { } depthAttachment)
+                ? ImagesOf(attachment: depthAttachment)
+                : null);
+
+            for (var slot = 0; (slot < m_inFlight); slot++) {
+                runtime.Framebuffers[slot] = m_graphics!.RenderPassFactory.CreateFramebuffer(
+                    m_device,
+                    runtime.RenderPass!,
+                    [.. colors.Select(selector: images => images[slot])],
+                    depth?[slot]
+                );
             }
         }
         runtime.Sets = new nint[m_inFlight];
         runtime.PoolsDescriptors = new nint[m_inFlight];
         runtime.Samplers = new nint[m_inFlight];
-        return runtime;
+        AllocateSlotObjects(pass: runtime);
     }
-    private void CaptureIfPending(int slot) {
+    // A capture armed after a selection reads that selection: while its float preview builds, the published image is still
+    // the previous selection's, so the capture waits for the frame that publishes the new one.
+    private void CaptureIfPending() {
+        if (m_previewRequest is not null) {
+            return;
+        }
+
         m_capture.Serve(
             failureLabel: "[capture] failed",
-            writer: path => {
+            writer: (m_captureWriter ??= path => {
                 m_capturePng.ThrowIfUnavailable(path: path);
                 if (
                     m_lastSurface.IsEmpty ||
@@ -425,9 +301,13 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                 };
 
                 m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_device);
-                var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.OutputResourceName);
-                var selectedResource = m_resourceLookup[selectedName];
                 var sourceLayout = m_outputLayout;
+
+                // The readback sizes its staging buffer to the surface it reads, replacing one of another size.
+                m_readbackBytes = ReadbackBytes(
+                    height: m_lastSurface.Height,
+                    width: m_lastSurface.Width
+                );
                 var pixels = m_readback.Read(
                     m_device,
                     m_lastSurface.ImageHandle,
@@ -446,10 +326,13 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                 )) {
                     throw new NotSupportedException(message: "PNG capture is unavailable.");
                 }
-            }
+            })
         );
     }
-    private bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current) {
+    // Whether history built for the installed graph's frame extent carries into a candidate planned at another unchanged:
+    // same declaration shape, and, for an image, the same resolved extent, each resolved against the frame extent it was
+    // built for.
+    private static bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current, (uint Width, uint Height) previousExtent, (uint Width, uint Height) extent) {
         if (
             (old.Kind != current.Kind) ||
             !string.Equals(
@@ -458,29 +341,30 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             comparisonType: StringComparison.OrdinalIgnoreCase
         ) ||
             (old.History != current.History) ||
-            (old.Dimensions?.Resolve(
-            frameHeight: m_height,
-            frameWidth: m_width
-        ) != current.Dimensions?.Resolve(
-            frameHeight: m_height,
-            frameWidth: m_width
-        )) ||
+            (
+                (current.Kind == ShaderPipelineResourceKind.Image) &&
+                ((old.Dimensions?.Resolve(
+                    frameHeight: previousExtent.Height,
+                    frameWidth: previousExtent.Width
+                ) ?? previousExtent) != (current.Dimensions?.Resolve(
+                    frameHeight: extent.Height,
+                    frameWidth: extent.Width
+                ) ?? extent))
+            ) ||
             (old.SizeBytes != current.SizeBytes) ||
-            (old.ElementType != current.ElementType) ||
-            (old.StrideBytes != current.StrideBytes) ||
             (old.Initialization != current.Initialization)
         ) {
             return false;
         }
         return true;
     }
-    private static List<GpuComputeBinding> Descriptors(ShaderPipelinePass pass, IReadOnlyDictionary<string, RuntimeResource> map) {
+    private static List<GpuComputeBinding> Descriptors(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> specs) {
         var result = new List<GpuComputeBinding>(capacity: (pass.InputReferences.Count + pass.OutputReferences.Count));
 
         foreach (var input in pass.InputReferences) {
             result.Add(item: new GpuComputeBinding(
                 input.Binding!.Value,
-                ((map[input.Name].Spec.Kind == ShaderPipelineResourceKind.Image)
+                ((specs[input.Name].Kind == ShaderPipelineResourceKind.Image)
                 ? GpuComputeBindingKind.SampledImage
                 : GpuComputeBindingKind.StorageBufferRead)
             ));
@@ -489,7 +373,7 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             foreach (var output in pass.OutputReferences) {
                 result.Add(item: new GpuComputeBinding(
                     output.Binding!.Value,
-                    ((map[output.Name].Spec.Kind == ShaderPipelineResourceKind.Image)
+                    ((specs[output.Name].Kind == ShaderPipelineResourceKind.Image)
                     ? GpuComputeBindingKind.StorageImage
                     : GpuComputeBindingKind.StorageBufferReadWrite)
                 ));
@@ -513,73 +397,55 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             }
         }
     }
-    private void Ensure() {
-        if (m_ready) {
-            return;
-        }
+    // Allocates the installed pipeline's resources on the frame thread and takes the built pipeline and module set into
+    // them. The budget was checked against the plan before the build started. A storage whose instances carry over from
+    // the replaced graph gets none of its own; PreserveCompatibleHistory moves the carried ones in.
+    private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried) {
         var plan = m_pipeline!.Plan;
         var map = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
-        var allocationBytes = 0UL;
+        FloatPreviewPass? preview = null;
 
-        foreach (var planned in plan.Resources) {
-            allocationBytes = checked((allocationBytes + new RuntimeResource(
-                planned.Declaration,
-                ((int)m_inFlight)
-            ).EstimateBytes(
-                frameHeight: m_height,
-                frameWidth: m_width
-            )));
-        }
-        var largestPreviewBytes = plan.Resources.Where(predicate: static resource => ((resource.Declaration.Kind == ShaderPipelineResourceKind.Image) && (resource.Declaration.IsExternal || IsFloatFormat(format: ParseFormat(format: resource.Declaration.Format)))))
-            .Select(selector: resource => {
-                var extent = (resource.Declaration.Dimensions?.Resolve(
-                frameHeight: m_height,
-                frameWidth: m_width
-            ) ?? (m_width, m_height)); return checked((((((ulong)extent.Width) * extent.Height) * 4) * m_inFlight));
-            }).DefaultIfEmpty().Max();
+        var storages = new RuntimeResource[plan.Storages.Count];
 
-        if (checked((allocationBytes + largestPreviewBytes)) > m_allocationBudgetBytes) {
-            throw new InvalidDataException(message: $"Shader pipeline allocation exceeds the {m_allocationBudgetBytes} byte budget.");
-        }
-        allocationBytes = 0;
         try {
-            foreach (var planned in plan.Resources) {
+            foreach (var planned in plan.Storages) {
                 var declaration = planned.Declaration;
                 var resource = new RuntimeResource(
                     count: ((int)m_inFlight),
-                    spec: declaration
+                    storage: planned
                 );
 
-                map.Add(
-                    key: declaration.Name,
-                    value: resource
-                );
-                resource.Layouts = new GpuImageLayout[m_inFlight];
-                Array.Fill(
-                    array: resource.Layouts,
-                    value: GpuImageLayout.Undefined
-                );
-                var writtenByFullscreen = ((declaration.Kind == ShaderPipelineResourceKind.Image) &&
-                    plan.Passes.Any(predicate: pass => ((pass.Declaration.Kind == ShaderPipelinePassKind.Fullscreen) &&
-                        pass.Declaration.OutputReferences.Any(predicate: output => (output.Name == declaration.Name)))));
-
+                storages[planned.Index] = resource;
+                foreach (var version in planned.Versions) {
+                    map.Add(
+                        key: version,
+                        value: resource
+                    );
+                }
+                if (carried.ContainsKey(key: planned.Index)) {
+                    continue;
+                }
                 if (
-                    (declaration.Kind == ShaderPipelineResourceKind.Image) &&
-                    !declaration.IsExternal &&
-                    !writtenByFullscreen
+                    (declaration.Kind != ShaderPipelineResourceKind.Buffer) &&
+                    !declaration.IsExternal
                 ) {
-                    resource.Images = new IGpuStorageImage[m_inFlight];
+                    resource.Images = new IGpuImage[m_inFlight];
                     var extent = (declaration.Dimensions?.Resolve(
                         frameHeight: m_height,
                         frameWidth: m_width
                     ) ?? (m_width, m_height));
+                    var usage = UsageOf(
+                        plan: plan,
+                        storage: planned
+                    );
 
                     for (var i = 0; (i < m_inFlight); i++) {
-                        resource.Images[i] = m_gpu.StorageImageFactory.Create(
+                        resource.Images[i] = m_gpu.ImageFactory.Create(
                             m_device,
                             ParseFormat(format: declaration.Format),
                             extent.Width,
-                            extent.Height
+                            extent.Height,
+                            usage
                         );
                     }
                 } else if (
@@ -602,40 +468,57 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                         );
                     }
                 }
-                allocationBytes = checked((allocationBytes + resource.EstimateBytes(
-                    frameHeight: m_height,
-                    frameWidth: m_width
-                )));
-                if (allocationBytes > m_allocationBudgetBytes) {
-                    throw new InvalidDataException(message: $"Shader pipeline allocation exceeds the {m_allocationBudgetBytes} byte budget.");
-                }
             }
-            m_allocationBytes = allocationBytes;
+            m_allocationBytes = GraphBytes(
+                extent: (m_width, m_height),
+                inFlight: m_inFlight,
+                plan: plan
+            );
             m_resourceLookup = map;
-            m_resources = [.. map.Values];
+            m_resources = storages;
             m_passLabels = plan.Passes.Select(selector: static pass => pass.Name).ToArray();
             m_passes = new RuntimePass[plan.Passes.Count];
             for (var i = 0; (i < plan.Passes.Count); i++) {
-                m_passes[i] = BuildPass(
-                    plan.Passes[i],
-                    map
+                InstallPass(
+                    built: built,
+                    carried: carried,
+                    map: map,
+                    planned: plan.Passes[i]
                 );
             }
-            for (var i = 0; (i < m_inFlight); i++) {
-                if (m_slots[i].Fence is null) {
-                    m_slots[i].Fence = m_gpu.QueueSubmitter.CreateSubmissionFence(deviceContext: m_device);
-                }
+            // The preview the selected output publishes through is part of the graph: a float or external selection
+            // was built with its targets and pipelines, and gets its descriptors and command pools here, before the
+            // installed graph retires.
+            var selected = (map.TryGetValue(
+                key: (m_selectedOutput ?? plan.DefaultOutput),
+                value: out var chosen
+            )
+                ? chosen
+                : map[plan.DefaultOutput]
+            );
+
+            if (NeedsPreview(spec: selected.Spec)) {
+                var objects = (built.Preview ?? throw new InvalidOperationException(message: "The candidate was built without the float preview its selected output needs."));
+
+                built.Preview = null;
+                preview = CreatePreview(objects: objects);
             }
+            foreach (var slot in m_slots) {
+                slot.Fence ??= m_gpu.QueueSubmitter.CreateSubmissionFence(deviceContext: m_device);
+                slot.Final ??= m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
+            }
+            m_preview = preview;
             m_initializationPending = true;
             m_ready = true;
         } catch {
+            preview?.Dispose();
             DisposeGraph(
                 passes: m_passes,
                 resources: m_resources
             );
             if (m_resources.Length == 0) {
-                foreach (var resource in map.Values) {
-                    resource.Dispose();
+                foreach (var resource in storages) {
+                    resource?.Dispose();
                 }
             }
             m_passes = [];
@@ -645,82 +528,20 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             throw;
         }
     }
-    private void EnsurePreview(RuntimeResource selected) {
-        if (!NeedsPreview(resource: selected)) {
-            if (m_preview is not null) { WaitAll(); m_device.WaitIdle(); m_preview.Dispose(); }
-            m_preview = null;
-            return;
-        }
-        var extent = (selected.Spec.Dimensions?.Resolve(
-            frameHeight: m_height,
-            frameWidth: m_width
-        ) ?? (m_width, m_height));
-
-        if (
-            (m_preview is null) ||
-            (m_preview.Width != extent.Width) ||
-            (m_preview.Height != extent.Height)
-        ) {
-            if (m_preview is not null) { WaitAll(); m_device.WaitIdle(); m_preview.Dispose(); }
-            m_preview = new FloatPreviewPass(
-                m_gpu,
-                (m_graphics ?? throw new InvalidOperationException(message: "Float preview requires graphics services.")),
-                m_device,
-                m_directX,
-                extent.Width,
-                extent.Height,
-                m_inFlight,
-                m_outputLayout
-            );
-        }
-    }
     private void FinalizeOutputs(int slot, List<nint> commands) {
-        var pool = m_slots[slot].Final ??= m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-        var command = pool.CommandBufferHandle;
+        var command = m_slots[slot].Final!.CommandBufferHandle;
         var recorder = m_gpu.ComputeRecorder;
 
         recorder.BeginCommandBuffer(
             m_device.DeviceHandle,
             command
         );
-        var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.OutputResourceName)];
-
-        foreach (var resource in m_resources) {
-            if (resource.Spec.Kind != ShaderPipelineResourceKind.Image) { continue; }
-            var external = resource.Spec.IsExternal;
-
-            if (
-                !external &&
-                ((resource != selected) || NeedsPreview(resource: resource))
-            ) { continue; }
-            var image = ResolveImage(
-                resource,
-                resource.Spec.Name,
-                slot
-            );
-            var desired = (external
-                ? m_externalImages[resource.Spec.Name].Layout
-                : m_outputLayout
-            );
-            var old = resource.Layouts![slot];
-
-            recorder.TransitionImageLayout(
-                m_device.DeviceHandle,
-                command,
-                image.ImageHandle,
-                old,
-                desired,
-                ((old == GpuImageLayout.Undefined)
-                ? GpuComputeAccess.None
-                : PriorAccess),
-                GpuComputeAccess.ShaderRead,
-                ((old == GpuImageLayout.Undefined)
-                ? GpuComputeStage.TopOfPipe
-                : PriorStages),
-                GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
-            );
-            resource.Layouts[slot] = desired;
-        }
+        RecordPresentation(
+            command: command,
+            recorder: recorder,
+            selected: m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)],
+            slot: slot
+        );
         recorder.EndCommandBuffer(
             m_device.DeviceHandle,
             command
@@ -728,28 +549,11 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         commands.Add(item: command);
     }
     private nint GetDescriptor(RuntimePass pass, int slot) {
+        // The set, its pool and its sampler were allocated with the graph (AllocateSlotObjects).
         var device = m_device.DeviceHandle;
-
-        if (pass.Sets![slot] == 0) {
-            pass.PoolsDescriptors![slot] = m_gpu.DescriptorAllocator.CreatePool(
-                deviceHandle: device,
-                sizes: GpuDescriptorPoolSizes.ForSets(pass.Bindings)
-            );
-            var layout = ((pass.Spec.Kind == ShaderPipelinePassKind.Compute)
-                ? pass.Compute!.DescriptorSetLayoutHandle
-                : pass.Graphics![slot].DescriptorSetLayoutHandle
-            );
-
-            pass.Sets[slot] = m_gpu.DescriptorAllocator.AllocateSet(
-                device,
-                pass.PoolsDescriptors[slot],
-                layout
-            );
-            pass.Samplers![slot] = m_gpu.DescriptorAllocator.CreateSampler(device);
-        }
         var descriptorIndex = 0;
 
-        foreach (var input in pass.Spec.InputReferences) {
+        foreach (var input in pass.Inputs) {
             var resource = m_resourceLookup[input.Name];
             var index = HistoryIndex(
                 resource,
@@ -780,17 +584,18 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                     index
                 );
 
-                m_gpu.DescriptorAllocator.WriteStorageBufferReadOnly(
+                m_gpu.DescriptorAllocator.WriteRawBuffer(
                     device,
                     pass.Sets![slot],
                     binding.Binding,
                     buffer.BufferHandle,
-                    (resource.Spec.SizeBytes ?? 0)
+                    (resource.Spec.SizeBytes ?? 0),
+                    false
                 );
             }
         }
         if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
-            foreach (var output in pass.Spec.OutputReferences) {
+            foreach (var output in pass.Outputs) {
                 var resource = m_resourceLookup[output.Name];
                 var binding = pass.Bindings[descriptorIndex++];
 
@@ -815,131 +620,34 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                         slot
                     );
 
-                    m_gpu.DescriptorAllocator.WriteStorageBufferReadWrite(
+                    m_gpu.DescriptorAllocator.WriteRawBuffer(
                         device,
                         pass.Sets![slot],
                         binding.Binding,
                         buffer.BufferHandle,
-                        (resource.Spec.SizeBytes ?? 0)
+                        (resource.Spec.SizeBytes ?? 0),
+                        true
                     );
                 }
             }
         }
-        return pass.Sets[slot];
+        return pass.Sets![slot];
     }
     private static int HistoryIndex(RuntimeResource resource, int slot, bool previous) {
         if (!previous) {
             return slot;
         }
-        if (!resource.Spec.History) {
+        if (!resource.History) {
             throw new InvalidDataException(message: $"Resource '{resource.Spec.Name}' is not declared as history.");
         }
         return (((slot + resource.Count) - 1) % resource.Count);
     }
-    private void InitializeResources(nint command, IGpuComputeRecorder recorder) {
-        if (!m_initializationPending) { return; }
-        InitializeZeroImages(
-            command: command,
-            recorder: recorder
-        );
-        InitializeZeroBuffers(
-            command: command,
-            recorder: recorder
-        );
-        m_initializationPending = false;
-    }
-    private void InitializeZeroBuffers(nint command, IGpuComputeRecorder recorder) {
-        foreach (var resource in m_resources) {
-            if (
-                (resource.Spec.Initialization != ShaderPipelineInitialization.Zero) ||
-                (resource.Buffers is null)
-            ) {
-                continue;
-            }
-            resource.Initialized ??= new bool[resource.Buffers.Length];
-            if (recorder is not IGpuBufferInitializationRecorder clearRecorder) {
-                throw new InvalidOperationException(message: "The selected GPU backend cannot clear shader pipeline storage buffers.");
-            }
-            for (var index = 0; (index < resource.Buffers.Length); index++) {
-                if (resource.Initialized[index]) {
-                    continue;
-                }
-                var buffer = resource.Buffers[index];
-
-                recorder.TransitionBuffer(
-                    m_device.DeviceHandle,
-                    command,
-                    buffer.BufferHandle,
-                    GpuComputeAccess.None,
-                    GpuComputeAccess.TransferWrite,
-                    GpuComputeStage.TopOfPipe,
-                    GpuComputeStage.Transfer
-                );
-                clearRecorder.ClearStorageBuffer(
-                    m_device.DeviceHandle,
-                    command,
-                    buffer.BufferHandle,
-                    buffer.SizeBytes
-                );
-                resource.Initialized[index] = true;
-            }
-        }
-    }
-    private void InitializeZeroImages(nint command, IGpuComputeRecorder recorder) {
-        foreach (var resource in m_resources) {
-            if (
-                (resource.Spec.Initialization != ShaderPipelineInitialization.Zero) ||
-                resource.Spec.IsExternal ||
-                ((resource.Images is null) && (resource.Targets is null))
-            ) {
-                continue;
-            }
-            if (resource.Initialized is null) {
-                resource.Initialized = new bool[resource.Count];
-            }
-            var clearRecorder = (recorder as IGpuImageInitializationRecorder);
-
-            if (clearRecorder is null) {
-                throw new InvalidOperationException(message: "The selected GPU backend cannot clear shader pipeline history images.");
-            }
-            for (var index = 0; (index < resource.Count); index++) {
-                if (resource.Initialized[index]) {
-                    continue;
-                }
-                var image = ResolveImage(
-                    resource,
-                    resource.Spec.Name,
-                    index
-                );
-
-                recorder.TransitionImageLayout(
-                    m_device.DeviceHandle,
-                    command,
-                    image.ImageHandle,
-                    GpuImageLayout.Undefined,
-                    GpuImageLayout.General,
-                    GpuComputeAccess.None,
-                    GpuComputeAccess.TransferWrite,
-                    GpuComputeStage.TopOfPipe,
-                    GpuComputeStage.Transfer
-                );
-                clearRecorder.ClearStorageImage(
-                    m_device.DeviceHandle,
-                    command,
-                    image.ImageHandle,
-                    ParseFormat(format: resource.Spec.Format)
-                );
-                resource.Layouts![index] = GpuImageLayout.General;
-                resource.Initialized[index] = true;
-            }
-        }
-    }
-    private void InstallPending() {
-        if (m_pending is not { } next) {
-            return;
-        }
-        // Build the candidate beside the live graph. A malformed descriptor, unsupported format, or
-        // backend pipeline failure must leave the last good graph and its feedback images intact.
+    // Installs a finished build beside the installed graph: allocates its resources, carries compatible history and live
+    // parameters over, and retires the replaced graph once its readers' submissions complete. An allocation
+    // failure leaves the installed graph, its extent, its preview and its feedback images intact, and releases exactly
+    // what the candidate created.
+    private void Install(GraphBuild built, BuildKey key) {
+        var next = key.Pipeline!;
         var previousPipeline = m_pipeline;
         var previousResources = m_resources;
         var previousLookup = m_resourceLookup;
@@ -947,45 +655,59 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         var previousPasses = m_passes;
         var previousLabels = m_passLabels;
         var previousReady = m_ready;
+        var previousPreview = m_preview;
         var previousSelectedOutput = m_selectedOutput;
+        var nextSelectedOutput = DesiredSelection;
+        var previousExtent = (m_width, m_height);
         var hadFences = m_slots.Any(predicate: static slot => (slot.Fence is not null));
+        var carried = CarriedHistoryOf(
+            extent: (key.Width, key.Height),
+            plan: next.Plan
+        );
 
         m_pipeline = next;
+        m_width = key.Width;
+        m_height = key.Height;
+        m_selectedOutput = (IsDeclaredImageOutput(
+            plan: next.Plan,
+            resourceName: nextSelectedOutput
+        )
+            ? nextSelectedOutput
+            : null
+        );
+        m_preview = null;
         m_resources = [];
         m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
         m_passes = [];
         m_ready = false;
         try {
-            Ensure();
-            WaitAll();
-            // A downstream compositor may still sample the old graph after its own submission fence.
-            m_device.WaitIdle();
+            Allocate(
+                built: built,
+                carried: carried
+            );
             PreserveCompatibleHistory(
-                next: m_resources,
-                previous: previousResources,
-                previousPasses: previousPasses
+                carried: carried,
+                previousPlan: previousPipeline?.Plan
             );
             PreserveLiveParameters(
                 next: m_passes,
                 previous: previousPasses
             );
-            DisposeGraph(
-                passes: previousPasses,
-                resources: previousResources
-            );
-            m_pending = null;
-            m_selectedOutput = (IsDeclaredImageOutput(
-                plan: next.Plan,
-                resourceName: previousSelectedOutput
-            )
-                ? previousSelectedOutput
-                : next.Plan.OutputResourceName
-            );
+            m_installedUnrendered = true;
+            // A rebuild of the installed pipeline after a device loss keeps its revision: the loss already withdrew the
+            // sample, and the passes are the ones it had.
+            if (key.Candidate) {
+                m_pending = null;
+                m_resizePending = false;
+                ConfigureWork();
+            }
         } catch (Exception error) {
+            m_preview?.Dispose();
             DisposeGraph(
                 passes: m_passes,
                 resources: m_resources
             );
+            built.Dispose();
             m_pipeline = previousPipeline;
             m_resources = previousResources;
             m_resourceLookup = previousLookup;
@@ -993,27 +715,44 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             m_passLabels = previousLabels;
             m_ready = previousReady;
             m_allocationBytes = previousAllocation;
-            m_pending = null;
-            m_lastSwapError = error;
+            m_preview = previousPreview;
+            m_selectedOutput = previousSelectedOutput;
+            (m_width, m_height) = previousExtent;
             if (!hadFences) {
-                foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; }
+                foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Final?.Dispose(); slot.Final = null; }
             }
+            if (!key.Candidate) {
+                throw;
+            }
+            Refuse(
+                candidate: true,
+                error: error
+            );
+
             return;
         }
+        // The graph installed with the desired selection's preview, so no separate preview is wanted; a preview build
+        // still running for it is disposed when it is taken.
+        m_previewRequest = null;
+        Retire(
+            passes: previousPasses,
+            preview: previousPreview,
+            resources: previousResources
+        );
     }
     private static bool IsDeclaredImageOutput(ShaderPipelinePlan plan, string? resourceName) {
         if (resourceName is null) {
             return false;
         }
-        return plan.Resources.Any(predicate: resource => ((resource.Name == resourceName) && (resource.Declaration.Kind == ShaderPipelineResourceKind.Image)));
+        return (plan.FindResource(name: resourceName) is { Declaration.Kind: ShaderPipelineResourceKind.Image, IsConsumed: false });
     }
     private static bool IsFloatFormat(GpuPixelFormat format) => (format is GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float);
-    private static bool NeedsPreview(RuntimeResource resource) => ((resource.Spec.Kind == ShaderPipelineResourceKind.Image) && (resource.Spec.IsExternal || IsFloatFormat(format: ParseFormat(format: resource.Spec.Format))));
+    private static bool NeedsPreview(ShaderPipelineResource spec) => ((spec.Kind == ShaderPipelineResourceKind.Image) && (spec.IsExternal || IsFloatFormat(format: ParseFormat(format: spec.Format))));
     private Surface Output(int slot) {
-        var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.OutputResourceName);
-        var selectedResource = m_resources.First(predicate: item => (item.Spec.Name == selectedName));
+        var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput);
+        var selectedResource = m_resourceLookup[selectedName];
 
-        if (NeedsPreview(resource: selectedResource)) {
+        if (NeedsPreview(spec: selectedResource.Spec)) {
             var target = (m_preview?.GetTarget(slot: slot) ?? throw new InvalidOperationException(message: "The float preview target is not ready."));
 
             return Surface.SameDeviceImage(
@@ -1069,15 +808,16 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
     private void PresentSelectedOutput() {
         WaitAll();
         var slot = ((int)((m_frame - 1) % m_inFlight));
-        var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.OutputResourceName)];
-
-        EnsurePreview(selected: selected);
+        var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
         var commands = m_commands;
 
         commands.Clear();
-        if (NeedsPreview(resource: selected)) {
+        if (NeedsPreview(spec: selected.Spec)) {
             m_preview!.Record(
-                selected,
+                PreviewSource(
+                    selected: selected,
+                    slot: slot
+                ),
                 ResolveImage(
                     selected,
                     selected.Spec.Name,
@@ -1091,12 +831,11 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             commands: commands,
             slot: slot
         );
-        m_gpu.QueueSubmitter.Submit(
-            m_device,
-            CollectionsMarshal.AsSpan(list: commands),
-            m_slots[slot].Fence!
+        SubmitCounted(
+            commands: commands,
+            fence: m_slots[slot].Fence!
         );
-        m_lastSurface = Output(slot: slot);
+        Publish(surface: Output(slot: slot));
         m_outputRefreshRequested = false;
     }
     private RuntimeResource PresentationResource(RuntimeResource selected) {
@@ -1110,67 +849,28 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         }
         throw new InvalidDataException(message: $"Selected output '{selected.Spec.Name}' must be RGBA8 or a float image with preview conversion.");
     }
-    private void PreserveCompatibleHistory(RuntimeResource[] previous, RuntimeResource[] next, RuntimePass[] previousPasses) {
-        var oldByName = previous.ToDictionary(
-            resource => resource.Spec.Name,
-            StringComparer.Ordinal
-        );
+    // Moves the carried history's instances out of the replaced graph into the installed one. The carried instances keep
+    // their contents and the states the replaced graph left them in.
+    private void PreserveCompatibleHistory(IReadOnlyDictionary<int, CarriedHistory> carried, ShaderPipelinePlan? previousPlan) {
+        foreach (var (index, carry) in carried) {
+            var current = m_resources[index];
+            var old = carry.Old;
 
-        foreach (var current in next) {
-            if (
-                !current.Spec.History ||
-                !oldByName.TryGetValue(
-                key: current.Spec.Name,
-                value: out var old
-            ) ||
-                !CompatibleHistory(
-                current: current.Spec,
-                old: old.Spec
-            )
-            ) {
-                continue;
-            }
-            if (
-                (current.Images is not null) &&
-                (old.Images is not null)
-            ) {
-                foreach (var image in current.Images) {
-                    image?.Dispose();
-                }
+            Array.Copy(
+                destinationArray: current.Initialized,
+                length: current.Count,
+                sourceArray: old.Initialized
+            );
+            CarryStates(
+                current: current,
+                old: old,
+                oldPlan: previousPlan!
+            );
+            if (old.Images is not null) {
                 current.Images = old.Images;
-                current.Layouts = old.Layouts;
-                current.Initialized = old.Initialized;
                 old.Images = null;
-                old.Buffers = null;
-            } else if (
-                (current.Targets is not null) &&
-                (old.Targets is not null)
-            ) {
-                var nextPass = m_passes.First(predicate: pass => ReferenceEquals(
-                    objA: pass.Targets,
-                    objB: current.Targets
-                ));
-                var oldPass = previousPasses.First(predicate: pass => ReferenceEquals(
-                    objA: pass.Targets,
-                    objB: old.Targets
-                ));
-
-                foreach (var target in current.Targets) { target.Dispose(); }
-                current.Targets = old.Targets;
-                current.Layouts = old.Layouts;
-                current.Initialized = old.Initialized;
-                nextPass.Targets = old.Targets;
-                oldPass.Targets = null;
-                old.Targets = null;
-            } else if (
-                (current.Buffers is not null) &&
-                (old.Buffers is not null)
-            ) {
-                foreach (var buffer in current.Buffers) {
-                    buffer?.Dispose();
-                }
+            } else {
                 current.Buffers = old.Buffers;
-                current.Initialized = old.Initialized;
                 old.Buffers = null;
             }
         }
@@ -1221,51 +921,33 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             }
         }
     }
+    // Writes the pass's frame block: its bound config, then every frame member through the layout's host writer, or, with
+    // sentinels on, every member's echo sentinel.
     private void PushFrameConstants(RuntimePass pass, in FrameContext context, nint command, nint layout, uint width, uint height, IGpuComputeRecorder? compute, IGpuCommandRecorder? graphics) {
-        if (pass.ConstantsSizeBytes == 0) {
-            return;
-        }
-        Span<byte> bytes = stackalloc byte[((int)pass.ConstantsSizeBytes)];
+        Span<byte> bytes = stackalloc byte[((int)pass.ParametersLayout.SizeBytes)];
 
-        if (pass.CustomConstants is not null) {
-            pass.CustomConstants.Write(
-                context,
-                Input,
-                width,
-                height,
-                m_frame,
-                bytes
+        if (Sentinels) {
+            ShaderInterfaceEcho.WriteSentinels(
+                block: bytes,
+                layout: pass.ParametersLayout
             );
         } else {
-            var constants = new ShaderFrameConstants(
-                new System.Numerics.Vector3(
-                    x: width,
-                    y: height,
-                    z: 1f
-                ),
-                ((float)Input.Seconds),
-                ((float)Input.DeltaSeconds),
-                unchecked((int)m_frame),
-                default,
-                Input.Mouse,
-                Input.Date,
-                Input.CameraPos,
-                Input.CameraFov,
-                Input.CameraTarget,
-                0f,
-                Input.CameraUp,
-                0f
+            pass.Parameters.Bytes.Span.CopyTo(destination: bytes);
+            pass.ParametersLayout.WriteFrame(
+                block: bytes,
+                frame: m_frame,
+                height: height,
+                tick: context.ElapsedTicks,
+                values: Frame,
+                width: width
             );
-
-            constants.CopyTo(destination: bytes);
-            pass.Parameters.Bytes.Span[ShaderFrameConstants.SizeBytes..].CopyTo(destination: bytes[ShaderFrameConstants.SizeBytes..]);
         }
         if (compute is not null) {
             compute.PushConstants(
                 m_device.DeviceHandle,
                 command,
                 layout,
-                pass.ConstantsStages,
+                FrameBlockStages,
                 0,
                 bytes
             );
@@ -1274,7 +956,7 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                 m_device.DeviceHandle,
                 command,
                 layout,
-                pass.ConstantsStages,
+                FrameBlockStages,
                 0,
                 bytes
             );
@@ -1287,13 +969,7 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         );
 
         if (pass.Spec.Kind == ShaderPipelinePassKind.Compute) {
-            var pool = pass.Pools![slot];
-
-            if (pool is null) {
-                pool = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-                pass.Pools[slot] = pool;
-            }
-            var handle = pool.CommandBufferHandle;
+            var handle = pass.Pools![slot].CommandBufferHandle;
             var recorder = m_gpu.ComputeRecorder;
 
             recorder.BeginCommandBuffer(
@@ -1302,26 +978,15 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             );
             InitializeResources(
                 command: handle,
-                recorder: recorder
+                recorder: recorder,
+                slot: slot
             );
-            foreach (var binding in pass.Spec.InputReferences) {
-                Transition(
-                    command: handle,
-                    pass: pass,
-                    recorder: recorder,
-                    reference: binding,
-                    slot: slot
-                );
-            }
-            foreach (var binding in pass.Spec.OutputReferences) {
-                Transition(
-                    command: handle,
-                    pass: pass,
-                    recorder: recorder,
-                    reference: binding,
-                    slot: slot
-                );
-            }
+            RecordAccesses(
+                command: handle,
+                pass: pass,
+                recorder: recorder,
+                slot: slot
+            );
             recorder.BindComputePipeline(
                 m_device.DeviceHandle,
                 handle,
@@ -1360,22 +1025,16 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             return;
         }
 
-        var pre = pass.Pre![slot];
-
-        if (pre is null) {
-            pre = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-            pass.Pre[slot] = pre;
-        }
-        BarrierTarget(
-            pass,
-            slot,
-            pre.CommandBufferHandle,
-            before: true,
-            commands
+        RecordPreBarriers(
+            command: pass.Pre![slot].CommandBufferHandle,
+            commands: commands,
+            pass: pass,
+            slot: slot
         );
-        var target = pass.Targets![slot];
-        var command = target.CommandBufferHandle;
+        var framebuffer = pass.Framebuffers![slot];
+        var command = pass.Draw![slot].CommandBufferHandle;
         var recorderGraphics = m_graphics!.CommandRecorder;
+        var pipeline = pass.Graphics!;
 
         recorderGraphics.BeginCommandBuffer(
             m_device.DeviceHandle,
@@ -1384,55 +1043,78 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         recorderGraphics.BeginRenderPass(
             m_device.DeviceHandle,
             command,
-            target.RenderPassHandle,
-            target.FramebufferHandle,
-            target.Width,
-            target.Height
+            framebuffer
         );
         recorderGraphics.SetScissor(
             m_device.DeviceHandle,
             command,
             0,
             0,
-            target.Width,
-            target.Height
+            framebuffer.Width,
+            framebuffer.Height
         );
         recorderGraphics.BindGraphicsPipeline(
             m_device.DeviceHandle,
             command,
-            pass.Graphics![slot].Handle
+            pipeline.Handle
         );
-        if (pass.VertexBuffer is not null) {
+        var geometry = pass.Spec.Geometry;
+
+        if (pass.GeometryBuffer is { } buffer) {
             recorderGraphics.BindVertexBuffer(
-            m_device.DeviceHandle,
-            command,
-            pass.VertexBuffer.BufferHandle
-        );
+                m_device.DeviceHandle,
+                command,
+                buffer.BufferHandle,
+                (geometry?.VertexBytes ?? buffer.SizeBytes),
+                (geometry?.StrideBytes ?? FullscreenTriangle.StrideBytes)
+            );
+            if (geometry is not null) {
+                recorderGraphics.BindIndexBuffer(
+                    m_device.DeviceHandle,
+                    command,
+                    buffer.BufferHandle,
+                    geometry.VertexBytes,
+                    (geometry.SizeBytes - geometry.VertexBytes),
+                    ((geometry.IndexFormat == ShaderPipelineIndexFormat.UInt32)
+                        ? GpuIndexFormat.UInt32
+                        : GpuIndexFormat.UInt16)
+                );
+            }
         }
         PushFrameConstants(
             pass,
             context,
             command,
-            pass.Graphics[slot].LayoutHandle,
-            target.Width,
-            target.Height,
+            pipeline.LayoutHandle,
+            framebuffer.Width,
+            framebuffer.Height,
             null,
             recorderGraphics
         );
-        recorderGraphics.BindDescriptorSet(
-            m_device.DeviceHandle,
-            command,
-            pass.Graphics[slot].LayoutHandle,
-            descriptor
-        );
-        recorderGraphics.Draw(
-            m_device.DeviceHandle,
-            command,
-            new GpuDrawParameters(
-                3,
-                1
-            )
-        );
+        if (descriptor != 0) {
+            recorderGraphics.BindDescriptorSet(
+                m_device.DeviceHandle,
+                command,
+                pipeline.LayoutHandle,
+                descriptor
+            );
+        }
+        if (geometry is not null) {
+            recorderGraphics.DrawIndexed(
+                m_device.DeviceHandle,
+                command,
+                ((uint)geometry.Indices.Count)
+            );
+        } else {
+            recorderGraphics.Draw(
+                m_device.DeviceHandle,
+                command,
+                new GpuDrawParameters(
+                    3,
+                    1
+                )
+            );
+        }
         recorderGraphics.EndRenderPass(
             m_device.DeviceHandle,
             command
@@ -1442,22 +1124,17 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             command
         );
         commands.Add(item: command);
-        var post = pass.Post![slot];
-
-        if (post is null) {
-            post = m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-            pass.Post[slot] = post;
-        }
-        BarrierTarget(
-            pass,
-            slot,
-            post.CommandBufferHandle,
-            before: false,
-            commands
-        );
     }
     private void Release(bool wait) {
-        if (wait) {
+        // A build in flight creates objects on the device being released, so it is waited out and discarded first.
+        m_build.CancelAndWait(discard: static built => built.Dispose());
+        m_buildKey = default;
+        CancelPreviewBuild();
+        // A node that never allocated submitted nothing, so it drains nothing and touches no device context.
+        if (
+            wait &&
+            HoldsDeviceObjects
+        ) {
             WaitAll();
             m_device.WaitIdle();
         }
@@ -1465,10 +1142,15 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             passes: m_passes,
             resources: m_resources
         );
+        ReleaseRetired();
+        // The published images were the released graph's or held from one, so nothing stays published.
+        m_lastSurface = default;
+        m_previousSurface = default;
         m_preview?.Dispose();
         m_preview = null;
         m_readback?.Dispose();
         m_readback = null;
+        m_readbackBytes = 0UL;
         foreach (var slot in m_slots) {
             slot.Final?.Dispose();
             slot.Final = null;
@@ -1481,6 +1163,7 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         m_allocationBytes = 0;
         m_passLabels = [];
         m_ready = false;
+        m_work.Invalidate();
     }
     private IGpuBuffer ResolveBuffer(RuntimeResource resource, string name, int index) {
         if (resource.Buffers is not null) {
@@ -1494,36 +1177,37 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         }
         throw new InvalidDataException(message: $"External buffer '{name}' is not bound.");
     }
-    private (uint Width, uint Height) ResolveExtent(ShaderPipelinePass pass, IReadOnlyDictionary<string, RuntimeResource> map) {
+    // The extent a pass runs at: its first output's declared dimensions, else its first input's, else the frame's.
+    private static (uint Width, uint Height) ResolveExtent(ShaderPipelinePass pass, IReadOnlyDictionary<string, ShaderPipelineResource> specs, (uint Width, uint Height) frame) {
         foreach (var output in pass.OutputReferences) {
             if (
-                map.TryGetValue(
+                specs.TryGetValue(
                 key: output.Name,
-                value: out var resource
+                value: out var spec
             ) &&
-                (resource.Spec.Dimensions is { } dimensions)
+                (spec.Dimensions is { } dimensions)
             ) {
                 return dimensions.Resolve(
-                    frameHeight: m_height,
-                    frameWidth: m_width
+                    frameHeight: frame.Height,
+                    frameWidth: frame.Width
                 );
             }
         }
         foreach (var input in pass.InputReferences) {
             if (
-                map.TryGetValue(
+                specs.TryGetValue(
                 key: input.Name,
-                value: out var resource
+                value: out var spec
             ) &&
-                (resource.Spec.Dimensions is { } dimensions)
+                (spec.Dimensions is { } dimensions)
             ) {
                 return dimensions.Resolve(
-                    frameHeight: m_height,
-                    frameWidth: m_width
+                    frameHeight: frame.Height,
+                    frameWidth: frame.Width
                 );
             }
         }
-        return (m_width, m_height);
+        return frame;
     }
     private ShaderPipelineExternalImage ResolveImage(RuntimeResource resource, string name, int index) {
         if (
@@ -1544,96 +1228,10 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                 image.Width,
                 image.Height,
                 ParseFormat(format: resource.Spec.Format),
-                resource.Layouts![index]
-            );
-        }
-        if (resource.Targets is not null) {
-            var target = resource.Targets[index];
-
-            return new ShaderPipelineExternalImage(
-                target.ImageHandle,
-                target.ImageViewHandle,
-                target.Width,
-                target.Height,
-                ParseFormat(format: resource.Spec.Format),
-                resource.Layouts![index]
+                GpuImageLayout.Undefined
             );
         }
         throw new InvalidDataException(message: $"External image '{name}' is not bound.");
-    }
-    private void Transition(RuntimePass pass, ResourceReference reference, int slot, nint command, IGpuComputeRecorder recorder) {
-        var resource = m_resourceLookup[reference.Name];
-
-        if (resource.Spec.Kind == ShaderPipelineResourceKind.Buffer) {
-            var buffer = ResolveBuffer(
-                resource,
-                reference.Name,
-                HistoryIndex(
-                    resource,
-                    slot,
-                    reference.PreviousFrame
-                )
-            );
-            var write = (!reference.PreviousFrame && pass.Spec.OutputReferences.Any(predicate: output => (output.Name == reference.Name)));
-
-            recorder.TransitionBuffer(
-                m_device.DeviceHandle,
-                command,
-                buffer.BufferHandle,
-                GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite | GpuComputeAccess.TransferWrite,
-                (write
-                ? GpuComputeAccess.ShaderWrite
-                : GpuComputeAccess.ShaderRead),
-                GpuComputeStage.ComputeShader | GpuComputeStage.Transfer,
-                GpuComputeStage.ComputeShader
-            );
-            return;
-        }
-        var index = HistoryIndex(
-            resource,
-            slot,
-            reference.PreviousFrame
-        );
-        var image = ResolveImage(
-            resource,
-            reference.Name,
-            index
-        );
-        var desired = ((!reference.PreviousFrame && pass.Spec.OutputReferences.Any(predicate: output => (output.Name == reference.Name)))
-            ? GpuImageLayout.General
-            : GpuImageLayout.ShaderReadOnly
-        );
-        var old = resource.Layouts![index];
-
-        if (old != desired) {
-            recorder.TransitionImageLayout(
-                m_device.DeviceHandle,
-                command,
-                image.ImageHandle,
-                old,
-                desired,
-                ((old == GpuImageLayout.Undefined)
-                ? GpuComputeAccess.None
-                : PriorAccess),
-                ((desired == GpuImageLayout.General)
-                ? GpuComputeAccess.ShaderWrite
-                : GpuComputeAccess.ShaderRead),
-                ((old == GpuImageLayout.Undefined)
-                ? GpuComputeStage.TopOfPipe
-                : PriorStages),
-                GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
-            );
-            resource.Layouts![index] = desired;
-        } else if (desired == GpuImageLayout.General) {
-            recorder.MemoryBarrier(
-                m_device.DeviceHandle,
-                command,
-                PriorAccess,
-                GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite,
-                PriorStages,
-                GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
-            );
-        }
     }
     private void ValidateExternalBinding(string name, ShaderPipelineResourceKind kind) {
         var plan = (m_pending?.Plan ?? m_pipeline?.Plan);
@@ -1648,13 +1246,10 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             );
         }
     }
-    private void ValidateExternalResources(ShaderPipelinePlan plan) {
-        foreach (var planned in plan.Resources) {
-            var declaration = planned.Declaration;
+    private void ValidateExternalResources() {
+        foreach (var resource in m_resources) {
+            var declaration = resource.Spec;
 
-            if (declaration.Kind == ShaderPipelineResourceKind.Depth) {
-                throw new InvalidDataException(message: $"Depth resource '{declaration.Name}' is not supported by the pipeline executor yet.");
-            }
             if (!declaration.IsExternal) {
                 continue;
             }
@@ -1697,19 +1292,19 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             throw new InvalidDataException(message: "A shader pipeline needs resources and passes.");
         }
         if (
-            plan.Passes.Any(predicate: pass => (pass.Declaration.Kind == ShaderPipelinePassKind.Fullscreen)) &&
+            plan.Passes.Any(predicate: static pass => pass.Declaration.IsGraphics) &&
             (graphics is null)
         ) {
-            throw new InvalidDataException(message: "Fullscreen pipeline passes require graphics services.");
+            throw new InvalidDataException(message: "Graphics pipeline passes require graphics services.");
         }
         var resources = plan.Resources.ToDictionary(
             item => item.Name,
             StringComparer.Ordinal
         );
 
-        foreach (var pass in plan.Passes.Where(predicate: pass => (pass.Declaration.Kind == ShaderPipelinePassKind.Fullscreen))) {
+        foreach (var pass in plan.Passes.Where(predicate: static pass => pass.Declaration.IsGraphics)) {
             if (pass.Declaration.InputReferences.Any(predicate: input => (resources[input.Name].Declaration.Kind == ShaderPipelineResourceKind.Buffer))) {
-                throw new InvalidDataException(message: $"Fullscreen pass '{pass.Name}' cannot consume a storage buffer through the current graphics binding contract.");
+                throw new InvalidDataException(message: $"Graphics pass '{pass.Name}' cannot consume a storage buffer through the graphics binding contract.");
             }
         }
     }
@@ -1758,29 +1353,64 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         Release(wait: true);
     }
     /// <inheritdoc/>
-    public void OnDeviceLost() => Release(wait: false);
+    /// <remarks>The published image is destroyed with the device. A paused node presents nothing after the rebuild,
+    /// and a capture of it reports that no completed output exists, until a step, resume or reset renders.</remarks>
+    public void OnDeviceLost() {
+        Release(wait: false);
+        m_publicationLost = true;
+    }
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {
         if (m_disposed) {
             return default;
         }
+        // Publishes the newest finished submission's counts, paused or not, so a held frame still completes them.
+        m_work.Poll();
+        // A node with nothing published (never rendered, or reset) owes an initialization frame. That frame is its own
+        // obligation: a step requested before it renders stays pending and advances one submission beyond it. A device
+        // loss unpublishes the image without owing one.
+        var published = (!m_lastSurface.IsEmpty || m_publicationLost);
+        var stepping = (
+            Paused &&
+            (m_steps != 0) &&
+            published
+        );
+
+        RetireCompleted();
+        // A reload, a row upsert or a resize replaces the graph; it is not a step, so a paused frame builds and installs
+        // it too, rendering nothing.
+        EnsureBuild();
+        InstallPending();
+        InstallPendingPreview();
+        // Nothing is installed yet: the first graph, or the installed pipeline rebuilt after a device loss, is building.
         if (
-            !Paused ||
-            (m_steps != 0) ||
+            (m_pipeline is null) ||
             !m_ready
-        ) { InstallPending(); }
-        if (m_pipeline is null) {
+        ) {
             return default;
         }
+        // A step renders the candidate it was requested after, so it waits while that candidate builds.
+        if (
+            stepping &&
+            ((m_pending is not null) || m_resizePending)
+        ) {
+            if (m_frame != 0) {
+                CaptureIfPending();
+            }
+            return m_lastSurface;
+        }
+        // A paused frame with no step owed presents the last image. A selection re-publishes the last rendered frame,
+        // so on a graph that has not rendered since a paused install it waits for that graph's first frame. After a device
+        // loss the last image is empty, and a capture served here reports that no completed output exists.
         if (
             Paused &&
             (m_steps == 0) &&
             m_ready &&
-            !m_lastSurface.IsEmpty &&
-            !m_outputRefreshRequested
+            published &&
+            (!m_outputRefreshRequested || m_installedUnrendered)
         ) {
             if (m_frame != 0) {
-                CaptureIfPending(slot: ((int)((m_frame - 1) % m_inFlight)));
+                CaptureIfPending();
             }
             return m_lastSurface;
         }
@@ -1792,49 +1422,32 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             (m_frame != 0)
         ) {
             PresentSelectedOutput();
-            CaptureIfPending(slot: ((int)((m_frame - 1) % m_inFlight)));
+            CaptureIfPending();
             return m_lastSurface;
         }
-        if (
-            Paused &&
-            (m_steps != 0)
-        ) {
+        if (stepping) {
             m_steps--;
         }
-        Ensure();
-        ValidateExternalResources(plan: m_pipeline.Plan);
-        var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline.Plan.OutputResourceName)];
-
-        EnsurePreview(selected: selectedResource);
+        ValidateExternalResources();
+        var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline.Plan.DefaultOutput)];
         var slotIndex = ((int)(m_frame % m_inFlight));
         var slot = m_slots[slotIndex];
 
         slot.Fence!.Wait();
-        foreach (var resource in m_resources) {
-            if (
-                resource.Spec.IsExternal &&
-                (resource.Spec.Kind == ShaderPipelineResourceKind.Image)
-            ) {
-                Array.Fill(
-                array: resource.Layouts!,
-                value: m_externalImages[resource.Spec.Name].Layout
-            );
-            }
-        }
         var commands = m_commands;
 
         commands.Clear();
-        foreach (var pass in m_passes) {
-            Record(
-                commands: commands,
-                context: context,
-                pass: pass,
-                slot: slotIndex
-            );
-        }
-        if (NeedsPreview(resource: selectedResource)) {
+        RecordPasses(
+            commands: commands,
+            context: context,
+            slot: slotIndex
+        );
+        if (NeedsPreview(spec: selectedResource.Spec)) {
             m_preview!.Record(
-                selectedResource,
+                PreviewSource(
+                    selected: selectedResource,
+                    slot: slotIndex
+                ),
                 ResolveImage(
                     selectedResource,
                     selectedResource.Spec.Name,
@@ -1851,16 +1464,15 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         if (commands.Count == 0) {
             return m_lastSurface;
         }
-        m_gpu.QueueSubmitter.Submit(
-            m_device,
-            CollectionsMarshal.AsSpan(list: commands),
-            slot.Fence!
+        SubmitCounted(
+            commands: commands,
+            fence: slot.Fence!
         );
-        m_lastSurface = Output(slot: slotIndex);
+        Publish(surface: Output(slot: slotIndex));
         m_outputRefreshRequested = false;
+        m_installedUnrendered = false;
         m_frame++;
-        m_ready = true;
-        CaptureIfPending(slot: slotIndex);
+        CaptureIfPending();
         return m_lastSurface;
     }
     /// <summary>Requests a capture of the next completed RGBA8 output frame.</summary>
@@ -1874,34 +1486,35 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             PendingCapturePath
         );
     }
-    /// <summary>Clears all history state and resets the presentation counter.</summary>
+    /// <summary>Clears all history state and resets the presentation counter. Submissions in flight complete first; the
+    /// completed work sample is then withdrawn, and <see cref="ResetSubmission"/> marks where counting since this reset
+    /// begins.</summary>
     public void Reset() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
         WaitAll();
-        foreach (var resource in m_resources) {
-            if (resource.Layouts is not null) {
-                Array.Fill(
-                    array: resource.Layouts,
-                    value: GpuImageLayout.Undefined
-                );
-            }
-            if (resource.Initialized is not null) {
-                Array.Fill(
-                    array: resource.Initialized,
-                    value: false
-                );
-            }
-        }
-        m_initializationPending = true;
+        DiscardInstances();
         m_frame = 0;
         m_steps = 0;
         m_outputRefreshRequested = false;
-        m_lastSurface = default;
+        Publish(surface: default);
+        ResetWork();
     }
-    /// <summary>Resizes all graph images after the current frame slots retire.</summary>
+    /// <summary>Requests a new frame extent. The pipeline is rebuilt at the new extent as a candidate beside the
+    /// installed graph, exactly like a reload: its pipelines build on the thread pool while the installed graph keeps
+    /// producing at its current extent, and it installs at the first frame boundary after. History whose resolved
+    /// extent is unchanged carries over with its contents, history whose extent changes starts again from its declared
+    /// initialization, and the old graph retires like any replaced graph. A resize replaces the graph and is not a step:
+    /// a paused instance builds and installs it too, renders nothing, and keeps publishing its last image until its next
+    /// step, resume or reset. A refused candidate leaves the installed graph at its old extent, records
+    /// <see cref="LastSwapError"/>, and is not retried until a different extent is
+    /// requested. Requesting the extent already requested does nothing.</summary>
+    /// <param name="width">The requested frame width, in pixels.</param>
+    /// <param name="height">The requested frame height, in pixels.</param>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is zero.</exception>
     public void Resize(uint width, uint height) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1910,17 +1523,41 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         ArgumentOutOfRangeException.ThrowIfZero(width);
         ArgumentOutOfRangeException.ThrowIfZero(height);
         if (
-            (width == m_width) &&
-            (height == m_height)
+            (width == m_requestedWidth) &&
+            (height == m_requestedHeight)
         ) {
             return;
         }
-        m_width = width;
-        m_height = height;
-        Release(wait: true);
-        m_lastSurface = default;
+        m_requestedWidth = width;
+        m_requestedHeight = height;
+        if (
+            !m_ready ||
+            (m_pipeline is null)
+        ) {
+            // Nothing is allocated, so the next graph built is simply built at the new extent.
+            m_width = width;
+            m_height = height;
+            m_resizePending = false;
+            return;
+        }
+        m_resizePending = (
+            (width != m_width) ||
+            (height != m_height)
+        );
     }
-    /// <summary>Publishes a declared image output by name.</summary>
+    /// <summary>Publishes a declared image output by name. A float or external output is published through a float
+    /// preview, which is allocated here for an installed graph (or built with the graph that installs next), so a frame
+    /// never creates one; the previous preview retires like a replaced graph. A selection is neither a replacement nor a
+    /// step: a paused instance re-publishes its last rendered frame through the new selection without rendering, and on
+    /// a graph installed while paused that has not rendered yet, the selection is published with that graph's first
+    /// frame.</summary>
+    /// <param name="name">The name of a live image version: a public output or an intermediate one.</param>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> names no live image version, or names a version its
+    /// successor overwrites within the frame, whose contents are discarded before publication.</exception>
+    /// <exception cref="InvalidOperationException">No pipeline is installed or queued, or the preview for the selection
+    /// could not be allocated or would take the node's owned bytes past <see cref="BudgetBytes"/>; the previous selection
+    /// stays published.</exception>
     public void SelectOutput(string name) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1928,21 +1565,48 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         var pipeline = (m_pipeline ?? (m_pending ?? throw new InvalidOperationException(message: "No shader pipeline is installed.")));
-        var output = pipeline.Plan.Outputs.FirstOrDefault(predicate: item => (item.Name == name));
-        var resourceName = (output?.Resource.Name ?? name);
+        var resourceName = name;
+        var version = pipeline.Plan.FindResource(name: name);
 
-        if (!pipeline.Plan.Resources.Any(predicate: resource => ((resource.Name == resourceName) && (resource.Declaration.Kind == ShaderPipelineResourceKind.Image)))) {
+        if (version is not { Declaration.Kind: ShaderPipelineResourceKind.Image }) {
             throw new ArgumentException(
                 message: $"Output {name} is not a declared image resource.",
                 paramName: nameof(name)
             );
         }
+        if (version.IsConsumed) {
+            throw new ArgumentException(
+                message: $"Output {name} is overwritten by '{version.Successor}' within the frame, so its contents are discarded before publication.",
+                paramName: nameof(name)
+            );
+        }
+        if (
+            m_ready &&
+            ReferenceEquals(
+            objA: pipeline,
+            objB: m_pipeline
+        ) &&
+            !RequestPreview(
+            name: resourceName,
+            selected: m_resourceLookup[resourceName]
+        )
+        ) {
+            return;
+        }
         m_selectedOutput = resourceName;
         m_outputRefreshRequested = true;
     }
-    /// <summary>Requests one render while <see cref="Paused"/>.</summary>
+    /// <summary>Requests one render while <see cref="Paused"/>. The initialization frame a paused node owes after a
+    /// <see cref="Reset"/> never consumes a step, so a step requested before that frame renders one frame beyond it. A
+    /// step taken while a candidate or resize builds waits until it installs, then renders once through it.</summary>
     public void Step() => m_steps = checked((m_steps + 1));
-    /// <summary>Queues an atomic compiled candidate for the next frame boundary.</summary>
+    /// <summary>Queues an atomic compiled candidate. The next produced frame starts building its pipelines and shader
+    /// modules on the thread pool, so a resize or selection requested before that frame is built with it. The installed
+    /// graph keeps presenting until the build finishes; the candidate's resources are then allocated and it installs at
+    /// that frame boundary. A swap replaces the graph and is not a step: a paused instance builds and installs the
+    /// candidate too, without rendering or consuming a step, and keeps publishing the replaced graph's last image until
+    /// its next step, resume or reset renders the candidate. A newer candidate replaces a queued one; one whose build is
+    /// already running is discarded when that build is taken.</summary>
     public void Swap(CompiledShaderPipeline pipeline) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -1977,19 +1641,6 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         bytes = pass.Parameters.Bytes.ToArray();
         return true;
     }
-    /// <inheritdoc/>
-    public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frameMilliseconds) {
-        if (passMilliseconds.Length < m_passes.Length) {
-            throw new ArgumentException(
-                message: "The timing destination is smaller than PassCount.",
-                paramName: nameof(passMilliseconds)
-            );
-        }
-        passMilliseconds[..m_passes.Length].Clear();
-        passCount = 0;
-        frameMilliseconds = 0;
-        return false;
-    }
     /// <summary>Rebinds a complete JSON object to one pass's authored parameter schema.</summary>
     public bool TrySetConfig(string passName, JsonElement? config, out string reason) {
         ArgumentException.ThrowIfNullOrWhiteSpace(passName);
@@ -2006,10 +1657,6 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             reason = $"Unknown shader pass '{passName}'.";
             return false;
         }
-        if (pass.CustomConstants is not null) {
-            reason = "This pass supplies a custom constants writer.";
-            return false;
-        }
         if (!pass.ParametersLayout.TryBind(
             config: config,
             reason: out reason,
@@ -2021,295 +1668,55 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         return true;
     }
 
-    private sealed class FloatPreviewPass : IDisposable {
-        private const GpuComputeAccess PriorAccess = GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite | GpuComputeAccess.TransferWrite | GpuComputeAccess.ColorAttachmentWrite;
-        private const GpuComputeStage PriorStages = GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader | GpuComputeStage.Transfer | GpuComputeStage.ColorAttachmentOutput;
-
-        private readonly nint[] m_descriptorPools;
-        private readonly nint[] m_descriptorSets;
-        private readonly IGpuDeviceContext m_device;
-        private readonly IGpuShaderModule m_fragment;
-        private readonly IGpuComputeServices m_gpu;
-        private readonly IFullscreenPassServices m_graphics;
-        private readonly GpuImageLayout m_outputLayout;
-        private readonly IGpuPipeline[] m_pipelines;
-        private readonly IGpuComputeCommandPool[] m_post;
-        private readonly IGpuComputeCommandPool[] m_pre;
-        private readonly nint[] m_samplers;
-        private readonly bool[] m_targetInitialized;
-        private readonly IGpuRenderTarget[] m_targets;
-        private readonly IGpuShaderModule m_vertex;
-
-        public FloatPreviewPass(IGpuComputeServices gpu, IFullscreenPassServices graphics, IGpuDeviceContext device, bool directX, uint width, uint height, uint inFlight, GpuImageLayout outputLayout) {
-            m_gpu = gpu;
-            m_graphics = graphics;
-            m_device = device;
-            m_outputLayout = outputLayout;
-            Width = width;
-            Height = height;
-            var extension = (directX
-                ? ".dxil"
-                : ".spv"
-            );
-            var root = Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: "Assets",
-                path3: "Runtime",
-                path4: "pipeline-preview"
-            );
-
-            m_targets = new IGpuRenderTarget[inFlight];
-            m_pipelines = new IGpuPipeline[inFlight];
-            m_pre = new IGpuComputeCommandPool[inFlight];
-            m_post = new IGpuComputeCommandPool[inFlight];
-            m_descriptorPools = new nint[inFlight];
-            m_descriptorSets = new nint[inFlight];
-            m_samplers = new nint[inFlight];
-            m_targetInitialized = new bool[inFlight];
-            try {
-                m_vertex = gpu.ShaderModuleFactory.Create(
-                    device,
-                    GpuShaderStage.Vertex,
-                    File.ReadAllBytes(path: ((root + ".vert") + extension))
-                );
-                m_fragment = gpu.ShaderModuleFactory.Create(
-                    device,
-                    GpuShaderStage.Fragment,
-                    File.ReadAllBytes(path: ((root + ".frag") + extension))
-                );
-                var description = new GpuGraphicsPipelineDescription(
-                    "pipeline-float-preview",
-                    new GpuVertexInputLayout(
-                        Attributes: [],
-                        StrideBytes: 0
-                    ),
-                    1,
-                    false,
-                    null
-                );
-
-                for (var i = 0; (i < inFlight); i++) {
-                    m_targets[i] = graphics.CreateRenderTarget(
-                        width,
-                        height
-                    );
-                    m_pipelines[i] = graphics.PipelineFactory.Create(
-                        device,
-                        m_targets[i],
-                        m_vertex,
-                        m_fragment,
-                        description,
-                        width,
-                        height
-                    );
-                }
-            } catch { Dispose(); throw; }
-        }
-
-        public uint Height { get; }
-        public uint Width { get; }
-
-        private void EnsureDescriptors(int slot) {
-            if (m_descriptorSets[slot] != 0) { return; }
-            m_descriptorPools[slot] = m_gpu.DescriptorAllocator.CreatePool(
-                deviceHandle: m_device.DeviceHandle,
-                sizes: new GpuDescriptorPoolSizes(
-                    AccelerationStructureCount: 0,
-                    CombinedImageSamplerCount: 1,
-                    MaxSets: 1,
-                    StorageBufferCount: 0,
-                    StorageImageCount: 0
-                )
-            );
-            m_descriptorSets[slot] = m_gpu.DescriptorAllocator.AllocateSet(
-                m_device.DeviceHandle,
-                m_descriptorPools[slot],
-                m_pipelines[slot].DescriptorSetLayoutHandle
-            );
-            m_samplers[slot] = m_gpu.DescriptorAllocator.CreateSampler(m_device.DeviceHandle);
-        }
-
-        public void Dispose() {
-            foreach (var pipeline in m_pipelines) { pipeline?.Dispose(); }
-            m_vertex?.Dispose();
-            m_fragment?.Dispose();
-            foreach (var target in m_targets) { target?.Dispose(); }
-            foreach (var pool in m_pre) { pool?.Dispose(); }
-            foreach (var pool in m_post) { pool?.Dispose(); }
-            foreach (var sampler in m_samplers) {
-                if (sampler != 0) {
-                    m_gpu.DescriptorAllocator.DestroySampler(
-                deviceHandle: m_device.DeviceHandle,
-                samplerHandle: sampler
-            );
-                }
-            }
-            foreach (var pool in m_descriptorPools) {
-                if (pool != 0) {
-                    m_gpu.DescriptorAllocator.DestroyPool(
-                deviceHandle: m_device.DeviceHandle,
-                poolHandle: pool
-            );
-                }
-            }
-        }
-        public IGpuRenderTarget GetTarget(int slot) => m_targets[slot];
-        public void Record(RuntimeResource source, ShaderPipelineExternalImage image, int slot, List<nint> commands) {
-            EnsureDescriptors(slot: slot);
-            var sourceImageHandle = image.ImageHandle;
-            var sourceImageView = image.ImageViewHandle;
-
-            m_gpu.DescriptorAllocator.WriteCombinedImageSampler(
-                m_device.DeviceHandle,
-                m_descriptorSets[slot],
-                0,
-                0,
-                sourceImageView,
-                m_samplers[slot]
-            );
-            var recorder = m_gpu.ComputeRecorder;
-            var pre = m_pre[slot] ??= m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-
-            recorder.BeginCommandBuffer(
-                m_device.DeviceHandle,
-                pre.CommandBufferHandle
-            );
-            var old = source.Layouts![slot];
-
-            if (old != GpuImageLayout.ShaderReadOnly) {
-                recorder.TransitionImageLayout(
-                    m_device.DeviceHandle,
-                    pre.CommandBufferHandle,
-                    sourceImageHandle,
-                    old,
-                    GpuImageLayout.ShaderReadOnly,
-                    ((old == GpuImageLayout.Undefined)
-                    ? GpuComputeAccess.None
-                    : PriorAccess),
-                    GpuComputeAccess.ShaderRead,
-                    ((old == GpuImageLayout.Undefined)
-                    ? GpuComputeStage.TopOfPipe
-                    : PriorStages),
-                    GpuComputeStage.FragmentShader
-                );
-                source.Layouts![slot] = GpuImageLayout.ShaderReadOnly;
-            }
-            var target = m_targets[slot];
-            var targetOld = (m_targetInitialized[slot]
-                ? m_outputLayout
-                : GpuImageLayout.Undefined
-            );
-
-            recorder.TransitionImageLayout(
-                m_device.DeviceHandle,
-                pre.CommandBufferHandle,
-                target.ImageHandle,
-                targetOld,
-                GpuImageLayout.RenderTarget,
-                ((targetOld == GpuImageLayout.Undefined)
-                ? GpuComputeAccess.None
-                : PriorAccess),
-                GpuComputeAccess.ColorAttachmentWrite,
-                ((targetOld == GpuImageLayout.Undefined)
-                ? GpuComputeStage.TopOfPipe
-                : PriorStages),
-                GpuComputeStage.ColorAttachmentOutput
-            );
-            recorder.EndCommandBuffer(
-                m_device.DeviceHandle,
-                pre.CommandBufferHandle
-            );
-            commands.Add(item: pre.CommandBufferHandle);
-            var draw = target.CommandBufferHandle;
-            var graphics = m_graphics.CommandRecorder;
-
-            graphics.BeginCommandBuffer(
-                m_device.DeviceHandle,
-                draw
-            );
-            graphics.BeginRenderPass(
-                m_device.DeviceHandle,
-                draw,
-                target.RenderPassHandle,
-                target.FramebufferHandle,
-                Width,
-                Height
-            );
-            graphics.SetScissor(
-                m_device.DeviceHandle,
-                draw,
-                0,
-                0,
-                Width,
-                Height
-            );
-            graphics.BindGraphicsPipeline(
-                m_device.DeviceHandle,
-                draw,
-                m_pipelines[slot].Handle
-            );
-            graphics.BindDescriptorSet(
-                m_device.DeviceHandle,
-                draw,
-                m_pipelines[slot].LayoutHandle,
-                m_descriptorSets[slot]
-            );
-            graphics.Draw(
-                m_device.DeviceHandle,
-                draw,
-                new GpuDrawParameters(
-                    3,
-                    1
-                )
-            );
-            graphics.EndRenderPass(
-                m_device.DeviceHandle,
-                draw
-            );
-            graphics.EndCommandBuffer(
-                m_device.DeviceHandle,
-                draw
-            );
-            commands.Add(item: draw);
-            var post = m_post[slot] ??= m_gpu.CommandPoolFactory.Create(deviceContext: m_device);
-
-            recorder.BeginCommandBuffer(
-                m_device.DeviceHandle,
-                post.CommandBufferHandle
-            );
-            recorder.TransitionImageLayout(
-                m_device.DeviceHandle,
-                post.CommandBufferHandle,
-                target.ImageHandle,
-                GpuImageLayout.ShaderReadOnly,
-                m_outputLayout,
-                GpuComputeAccess.ColorAttachmentWrite,
-                GpuComputeAccess.ShaderRead,
-                GpuComputeStage.ColorAttachmentOutput,
-                GpuComputeStage.ComputeShader | GpuComputeStage.FragmentShader
-            );
-            recorder.EndCommandBuffer(
-                m_device.DeviceHandle,
-                post.CommandBufferHandle
-            );
-            commands.Add(item: post.CommandBufferHandle);
-            m_targetInitialized[slot] = true;
-        }
-    }
     private sealed class FrameSlot {
         public IGpuSubmissionFence? Fence;
         public IGpuComputeCommandPool? Final;
     }
-    private sealed class RuntimeResource(ShaderPipelineResource spec, int count) {
-        public readonly ShaderPipelineResource Spec = spec;
-        public readonly int Count = count;
+    // One storage of the plan, which every version of its forwarding chain names, with one instance per frame slot (one
+    // instance only for a host-owned storage).
+    private sealed class RuntimeResource {
+        public readonly ShaderPipelinePlannedStorage Storage;
+        public readonly ShaderPipelineResource Spec;
+        public readonly int Count;
+        // Per instance: whether it holds contents (cleared, written by a pass, or carried with them), and the unplanned
+        // state a host event left it in, if any (see ShaderPipelineRenderNode.Tracker.cs).
+        public readonly bool[] Initialized;
+        public readonly bool[] HasOverride;
+        public readonly ShaderPipelineAccessState[] Override;
 
         public IGpuBuffer[]? Buffers;
-        public IGpuStorageImage[]? Images;
-        public bool[]? Initialized;
-        public GpuImageLayout[]? Layouts;
-        public IGpuRenderTarget[]? Targets;
+        public IGpuImage[]? Images;
 
+        public RuntimeResource(ShaderPipelinePlannedStorage storage, int count) {
+            Storage = storage;
+            Spec = storage.Declaration;
+            Count = count;
+            Initialized = new bool[count];
+            HasOverride = new bool[count];
+            Override = new ShaderPipelineAccessState[count];
+            if (!Spec.IsExternal) {
+                // A new instance holds nothing, and no access has touched it.
+                Array.Fill(
+                    array: HasOverride,
+                    value: true
+                );
+                Array.Fill(
+                    array: Override,
+                    value: ShaderPipelineAccessState.Fresh
+                );
+            }
+        }
+
+        public bool History => Storage.History;
+
+        public ShaderPipelineAccessState Prior(int instance) =>
+            (HasOverride[instance]
+                ? Override[instance]
+                : ShaderPipelineAccessState.Fresh);
+        public void SetOverride(int instance, ShaderPipelineAccessState state) {
+            Override[instance] = state;
+            HasOverride[instance] = true;
+        }
         public void Dispose() {
             if (Images is not null) {
                 foreach (var image in Images) {
@@ -2322,56 +1729,18 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
                 }
             }
         }
-        public ulong EstimateBytes(uint frameWidth, uint frameHeight) {
-            if (Spec.IsExternal) { return 0; }
-            if (Spec.Kind == ShaderPipelineResourceKind.Buffer) {
-                return checked(((Spec.SizeBytes ?? 0) * ((ulong)Count)));
-            }
-            var extent = (Spec.Dimensions?.Resolve(
-                frameHeight: frameHeight,
-                frameWidth: frameWidth
-            ) ?? (frameWidth, frameHeight));
-            var bytesPerPixel = ParseFormat(format: Spec.Format) switch {
-                GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm => 4UL,
-                GpuPixelFormat.R16G16B16A16Float => 8UL,
-                GpuPixelFormat.R32G32B32A32Float => 16UL,
-                _ => throw new InvalidDataException(message: $"Unsupported format '{Spec.Format}'.")
-            };
-
-            return checked((((((ulong)extent.Width) * extent.Height) * bytesPerPixel) * ((ulong)Count)));
-        }
-        public ShaderPipelineResourceStatus Status(uint frameWidth, uint frameHeight) {
-            var extent = (Spec.Dimensions?.Resolve(
-                frameHeight: frameHeight,
-                frameWidth: frameWidth
-            ) ?? (frameWidth, frameHeight));
-
-            return new ShaderPipelineResourceStatus(
-                Spec.Name,
-                Spec.Kind,
-                EstimateBytes(
-                    frameHeight: frameHeight,
-                    frameWidth: frameWidth
-                ),
-                ((Spec.Kind == ShaderPipelineResourceKind.Buffer)
-                ? 0
-                : extent.Width),
-                ((Spec.Kind == ShaderPipelineResourceKind.Buffer)
-                ? 0
-                : extent.Height),
-                Spec.IsExternal,
-                Spec.History
-            );
-        }
     }
-    private sealed class RuntimePass(ShaderPipelinePass spec, CompiledShader compiled, ShaderPipelineParameterLayout parameterLayout, IShaderPipelinePassConstants? customConstants, int count, (uint Width, uint Height) extent) {
+    private sealed class RuntimePass(ShaderPipelinePass spec, CompiledShader compiled, ShaderPipelineParameterLayout parameterLayout, int count, (uint Width, uint Height) extent, ShaderPipelineAccess[] accesses) {
         public readonly ShaderPipelinePass Spec = spec;
+        // Arrays, so the per-frame walks over a pass's bindings and accesses enumerate without allocating.
+        public readonly ResourceReference[] Inputs = [.. spec.InputReferences];
+        public readonly ResourceReference[] Outputs = [.. spec.OutputReferences];
+        public readonly ShaderPipelineAccess[] Accesses = accesses;
         public readonly CompiledShader Compiled = compiled;
         public readonly int Count = count;
         public readonly uint Width = extent.Width;
         public readonly uint Height = extent.Height;
         public readonly ShaderPipelineParameterLayout ParametersLayout = parameterLayout;
-        public readonly IShaderPipelinePassConstants? CustomConstants = customConstants;
         public ShaderPipelineParameterValues Parameters = (parameterLayout.TryBind(
             config: null,
             reason: out _,
@@ -2382,43 +1751,35 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         );
         public List<GpuComputeBinding> Bindings = [];
 
-        public uint ConstantsSizeBytes => (CustomConstants?.SizeBytes ?? ParametersLayout.SizeBytes);
-        public GpuShaderStage ConstantsStages => (CustomConstants?.Stages ?? (GpuShaderStage.Compute | GpuShaderStage.Fragment));
-        public GpuPushConstantBinding? PushBinding => ((ConstantsSizeBytes == 0)
-            ? null
-            : new GpuPushConstantBinding(
-                0,
-                ConstantsStages,
-                new byte[ConstantsSizeBytes]
-            )
-        );
-
         public IGpuComputePipeline? Compute;
-        public IGpuPipeline[]? Graphics;
+        public IGpuComputeCommandPool[]? Draw;
+        public IGpuFramebuffer[]? Framebuffers;
+        public IGpuPipeline? Graphics;
         public IGpuComputeCommandPool[]? Pools;
         public nint[]? PoolsDescriptors;
-        public IGpuComputeCommandPool[]? Post;
         public IGpuComputeCommandPool[]? Pre;
         public IGpuShaderModule? Primary;
+        public IGpuRenderPass? RenderPass;
         public nint[]? Samplers;
         public IGpuShaderModule? Secondary;
         public nint[]? Sets;
-        public IGpuRenderTarget[]? Targets;
-        public IGpuVertexBuffer? VertexBuffer;
+        public IGpuBuffer? GeometryBuffer;
 
         public void Dispose(IGpuComputeServices gpu, IGpuDeviceContext device) {
             Compute?.Dispose();
-            VertexBuffer?.Dispose();
-            if (Graphics is not null) {
-                foreach (var pipeline in Graphics) {
-                    pipeline?.Dispose();
+            GeometryBuffer?.Dispose();
+            if (Framebuffers is not null) {
+                foreach (var framebuffer in Framebuffers) {
+                    framebuffer?.Dispose();
                 }
             }
+            Graphics?.Dispose();
+            RenderPass?.Dispose();
             Primary?.Dispose();
             Secondary?.Dispose();
-            if (Targets is not null) {
-                foreach (var target in Targets) {
-                    target?.Dispose();
+            if (Draw is not null) {
+                foreach (var pool in Draw) {
+                    pool?.Dispose();
                 }
             }
             if (Pools is not null) {
@@ -2428,11 +1789,6 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             }
             if (Pre is not null) {
                 foreach (var pool in Pre) {
-                    pool?.Dispose();
-                }
-            }
-            if (Post is not null) {
-                foreach (var pool in Post) {
                     pool?.Dispose();
                 }
             }

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { StudioContext } from "../../context/StudioContext";
 import { bootEngineFromOfficial } from "../../native/engineBoot";
 import { resolveOfficial } from "../../official/officialBase";
@@ -25,9 +25,22 @@ export function WorldStudio() {
 
   return (
     <StudioContext.Provider options={{ input }}>
+      {import.meta.env.DEV && <DevelopmentHook />}
       <StudioShellWithConfirmation />
     </StudioContext.Provider>
   );
+}
+
+/** Development builds only: the studio actor as `window.__puckStudio`, so a browser session can ask the engines for
+ * their counts (`context.languageEngine.wasmCounts()`) the way the Node tests do. */
+function DevelopmentHook() {
+  const actor = StudioContext.useActorRef();
+  useEffect(() => {
+    const page = window as { __puckStudio?: unknown };
+    page.__puckStudio = actor;
+    return () => { delete page.__puckStudio; };
+  }, [actor]);
+  return null;
 }
 
 export default WorldStudio;

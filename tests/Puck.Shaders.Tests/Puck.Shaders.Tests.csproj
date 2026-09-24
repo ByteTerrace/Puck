@@ -13,20 +13,32 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\..\src\Puck.Shaders\Puck.Shaders.csproj" />
         <!-- Generate the shipped SDF shader fixtures before copying them. -->
         <ProjectReference Include="..\..\src\Puck.SdfVm\Puck.SdfVm.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The packing-rule fixture compiles through the shared shader recipe like any shipped set, so the test
+        <!-- The constant-packing fixture compiles through the shared shader recipe like any shipped shader, so the law
              reads the offsets DXC assigned out of real bytecode. -->
         <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
         <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The one shipped set with a config schema and a tick-quantized push constant, with its bytecode beside
-             it, in a second directory so the catalog scan crosses subdirectories. -->
+        <!-- The two-group binding spike's pass variants: plain content, compiled at test time against the include each
+             one's pass interface generates, so they never reach the shared shader recipe. -->
+        <Content Include="Assets\Interfaces\**\*.hlsl" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The film-grain variant hashes with sdfPcg3d, so the interpreter include and the files it includes resolve
+             from the linked SDF directory. -->
+        <Content Include="..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-vm.hlsli;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-isa.hlsli;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-ellipse.hlsli;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-parts.hlsli" Link="Assets\Shaders\Sdf\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Package fixtures: pipeline documents, sources, includes, and malformed manifests the package laws copy into
+             a scratch directory. Plain content, never fed to the shader recipe, because the laws compile them. -->
+        <Content Include="Assets\ShaderPackages\**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The one shipped set with a config schema, with its bytecode beside it, in a second directory so the catalog
+             scan crosses subdirectories. -->
         <Content Include="..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.puck.shader.json;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.frag.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\sdf-film-grain.frag.dxil;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\fullscreen.vert.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\fullscreen.vert.dxil" Link="Assets\Shaders\Sdf\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

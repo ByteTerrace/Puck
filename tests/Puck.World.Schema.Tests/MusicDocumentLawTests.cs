@@ -113,10 +113,12 @@ public sealed class MusicDocumentLawTests {
     }
     [Fact]
     public void MusicNonPositiveTicksPerBeatIsRefused() {
-        var violations = MusicCanonicalizer.Validate(document: (Score() with { Tempo = new MusicTempoDocument(
+        var violations = MusicCanonicalizer.Validate(document: (Score() with {
+            Tempo = new MusicTempoDocument(
             BeatsPerBar: 4,
             TicksPerBeat: 0
-        ) }));
+        ),
+        }));
 
         Assert.Contains(
             collection: violations,

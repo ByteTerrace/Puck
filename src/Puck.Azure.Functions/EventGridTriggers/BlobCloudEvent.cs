@@ -38,7 +38,8 @@ internal sealed class BatchMapEntry {
 
 public sealed class BlobCloudEvent(
     ILogger<BlobCloudEvent> logger,
-    [FromKeyedServices(key: "Default")] TokenCredential tokenCredential
+    [FromKeyedServices(key: "Default")] TokenCredential tokenCredential,
+    TimeProvider timeProvider
 ) {
     private const int BatchTimeoutInSeconds = 23;
     private const string DestinationSegment = "system";
@@ -123,7 +124,10 @@ public sealed class BlobCloudEvent(
     [Function(nameof(BlobCloudEvent))]
     public async Task Run([EventGridTrigger(IsBatched = true)] CloudEvent[] cloudEvents) {
         try {
-            using var cancellationTokenSource = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: BatchTimeoutInSeconds));
+            using var cancellationTokenSource = new CancellationTokenSource(
+                delay: TimeSpan.FromSeconds(seconds: BatchTimeoutInSeconds),
+                timeProvider: timeProvider
+            );
 
             var containerBatchMap = new Dictionary<string, BatchMapEntry>();
 

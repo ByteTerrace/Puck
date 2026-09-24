@@ -35,10 +35,12 @@ public sealed record AzureResourceBinding(string Name, string ResourceId, string
         )) {
             ArgumentException.ThrowIfNullOrWhiteSpace(name);
             ArgumentNullException.ThrowIfNull(value);
-            if (!names.Add(item: name)) { throw new ArgumentException(
+            if (!names.Add(item: name)) {
+                throw new ArgumentException(
                 message: "Query parameter names must be unique and cannot override api-version.",
                 paramName: nameof(QueryParameters)
-            ); }
+            );
+            }
             query += ((("&" + Uri.EscapeDataString(stringToEscape: name)) + "=") + Uri.EscapeDataString(stringToEscape: value));
         }
         return query;

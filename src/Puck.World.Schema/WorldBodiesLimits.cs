@@ -19,6 +19,11 @@ public static class WorldBodiesLimits {
     /// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/>), so a creature in the detailed band can always be
     /// drawn as its creature — there is no separate, smaller ceiling on how many bodies may wear a creation.</summary>
     public const int DetailedRenderBand = 128;
+    /// <summary>The most distinct censuses a drawn <see cref="WorldBodiesDefaults.CapacityRow"/> source may span.
+    /// Each one is settled into a candidate and put through the whole document validator, so this bound is what keeps
+    /// proving every outcome a bounded admission cost; a wider source refuses by name rather than being admitted on
+    /// the strength of the value one boot happened to roll.</summary>
+    public const int MaxDrawnCensusOutcomes = 16;
     /// <summary>The maximum local-seat count. Each document reserves only its authored
     /// <see cref="WorldBodiesDefaults.LocalSeats"/>; remaining slots may host inhabitants or peers.</summary>
     public const int LocalSeatCount = 4;

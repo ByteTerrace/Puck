@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -13,7 +14,7 @@ public sealed partial class WorldServer {
     /// <param name="reason">Named failure, without any mutation or payment.</param>
     /// <returns>Whether a layout and exact payment candidate was found within the authored work budget.
     /// Installation still validates current document and capacity constraints.</returns>
-    public bool TryPreviewReflow(string templateId, WorldPrincipal principal, out WorldPlacementProposal? proposal, out string reason) {
+    public bool TryPreviewReflow(string templateId, Principal principal, out WorldPlacementProposal? proposal, out string reason) {
         return TryPreviewReflow(
             new WorldPlacementReflowRequest(TemplateId: templateId),
             principal,
@@ -22,7 +23,7 @@ public sealed partial class WorldServer {
         );
     }
     /// <summary>Previews a bounded placement edit and neighbor rearrangement as one guarded batch.</summary>
-    public bool TryPreviewReflow(WorldPlacementReflowRequest request, WorldPrincipal principal, out WorldPlacementProposal? proposal, out string reason) {
+    public bool TryPreviewReflow(WorldPlacementReflowRequest request, Principal principal, out WorldPlacementProposal? proposal, out string reason) {
         if (request is null) { proposal = null; reason = "a reflow request is required"; return false; }
         if (!TryCaptureReflow(
             definition: out var definition,
@@ -52,7 +53,7 @@ public sealed partial class WorldServer {
     /// <param name="pending">The detached proposal or named refusal, when work completes.</param>
     /// <param name="reason">An immediate admission or busy refusal.</param>
     /// <returns>Whether a worker was started.</returns>
-    public bool TryStartReflowPreview(string templateId, WorldPrincipal principal,
+    public bool TryStartReflowPreview(string templateId, Principal principal,
         out Task<(WorldPlacementProposal? Proposal, string Reason)>? pending, out string reason) {
         pending = null;
         return TryStartReflowPreview(
@@ -63,7 +64,7 @@ public sealed partial class WorldServer {
         );
     }
     /// <summary>Starts a background preview for a bounded placement request.</summary>
-    public bool TryStartReflowPreview(WorldPlacementReflowRequest request, WorldPrincipal principal,
+    public bool TryStartReflowPreview(WorldPlacementReflowRequest request, Principal principal,
         out Task<(WorldPlacementProposal? Proposal, string Reason)>? pending, out string reason) {
         pending = null;
         if (request is null) { reason = "a reflow request is required"; return false; }
@@ -94,7 +95,7 @@ public sealed partial class WorldServer {
         }
     }
 
-    private bool TryCaptureReflow(WorldPlacementReflowRequest request, WorldPrincipal principal, out WorldDefinition? definition, out ulong tick, out string reason) {
+    private bool TryCaptureReflow(WorldPlacementReflowRequest request, Principal principal, out WorldDefinition? definition, out ulong tick, out string reason) {
         definition = null;
         tick = 0;
         reason = "another reflow preview is running";
@@ -143,7 +144,7 @@ public sealed partial class WorldServer {
             throw;
         }
     }
-    private (WorldPlacementProposal? Proposal, string Reason) BuildReflowPreview(WorldDefinition definition, ulong tick, WorldPlacementReflowRequest request, WorldPrincipal principal) {
+    private (WorldPlacementProposal? Proposal, string Reason) BuildReflowPreview(WorldDefinition definition, ulong tick, WorldPlacementReflowRequest request, Principal principal) {
         try {
             TryBuildReflowPreview(
                 definition: definition,
@@ -163,7 +164,7 @@ public sealed partial class WorldServer {
             );
         }
     }
-    private bool TryBuildReflowPreview(WorldDefinition definition, ulong tick, WorldPlacementReflowRequest request, WorldPrincipal principal, out WorldPlacementProposal? proposal, out string reason) {
+    private bool TryBuildReflowPreview(WorldDefinition definition, ulong tick, WorldPlacementReflowRequest request, Principal principal, out WorldPlacementProposal? proposal, out string reason) {
         proposal = null;
         reason = string.Empty;
         var defaultSelection = (request.PlacementIds is null);
@@ -465,7 +466,7 @@ public sealed partial class WorldServer {
         if (cost > 0) {
             if (
                 (policy.CostRow is { } payerRow) &&
-                (principal != WorldPrincipal.World) &&
+                (principal != Principal.World) &&
                 !ExecuteAuthorityOperation(operation: () => ((bool)m_grants.Allows(
                 principal,
                 WorldCapability.Observe,
@@ -505,7 +506,7 @@ public sealed partial class WorldServer {
                     row,
                     policy.CostKey,
                     cost,
-                    ActionStateComparison.GreaterOrEqual,
+                    ExpressionOp.GreaterOrEqual,
                     -cost,
                     CellKind.Int
                 )];

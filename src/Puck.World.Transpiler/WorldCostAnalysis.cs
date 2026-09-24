@@ -42,7 +42,7 @@ public static class WorldCostAnalysis {
         for (var index = 0; (index < sources.Length); index++) {
             var source = report.ContributorSources[index];
 
-            sources[index] = (sourceMap.TryGetOrigin(source.JsonPointer, out var origin)
+            sources[index] = (sourceMap.TryGetOrigin(jsonPointer: source.JsonPointer, origin: out var origin)
                 ? source with {
                     SourcePath = origin.SourcePath,
                     Line = origin.Span.Line,

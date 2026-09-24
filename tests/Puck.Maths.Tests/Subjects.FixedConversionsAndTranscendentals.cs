@@ -158,8 +158,8 @@ internal static partial class Subjects {
                 numerator: numerator
             );
             var actual = FixedPointConvert.ScaleDecimalWide(
-                value: value,
-                fractionBitCount: fractionBitCount
+                fractionBitCount: fractionBitCount,
+                value: value
             );
 
             if (actual != expected) {
@@ -884,18 +884,6 @@ internal static partial class Subjects {
     // The tolerance a transcendental envelope allows, in guard units: numerator/denominator raw ULP.
     private static BigInteger UlpUnits(int numerator, int denominator) =>
         (((BigInteger.One << Oracles.GuardBitCount) * numerator) / denominator);
-    // The envelope statement itself: the subject's raw, lifted to the guard scale, lies inside the enclosure widened by
-    // the stated tolerance. A transcendental kernel has no correctly-rounded answer to be compared against, so this is
-    // the strongest statement an oracle can make — and it is a strong one, because the enclosure's own width is a
-    // handful of guard units while the tolerance is a fraction of one ULP.
-    private static string? WithinEnvelope(string name, long subjectRaw, Oracles.Enclosure enclosure, BigInteger toleranceUnits) {
-        var scaled = (new BigInteger(value: subjectRaw) << Oracles.GuardBitCount);
-
-        if (scaled < (enclosure.Low - toleranceUnits)) { return $"{name} is {subjectRaw}, below the envelope [{enclosure.Low}, {enclosure.High}] at guard scale by more than the allowed {toleranceUnits} units"; }
-        if (scaled > (enclosure.High + toleranceUnits)) { return $"{name} is {subjectRaw}, above the envelope [{enclosure.Low}, {enclosure.High}] at guard scale by more than the allowed {toleranceUnits} units"; }
-
-        return null;
-    }
     // The logarithm's domain is the positive raws; a non-positive raw is the documented MinValue refusal, stated
     // structurally rather than swept. Clearing the sign bit maps the whole sampled space onto it, and the zero raw —
     // the one value that would still be refused — onto Epsilon.
@@ -994,7 +982,7 @@ internal static partial class Subjects {
         var raw = PositiveRaw(raw: left[0]);
         var actual = FixedQ4816.Log2(value: Raw(value: raw)).Value;
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Log2({raw})",
             subjectRaw: actual,
             enclosure: Oracles.EncloseLog2(
@@ -1046,7 +1034,7 @@ internal static partial class Subjects {
             guardBitCount: Oracles.GuardBitCount
         );
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Exp2({raw})",
             subjectRaw: actual,
             enclosure: enclosure,
@@ -1092,13 +1080,13 @@ internal static partial class Subjects {
         var tolerance = SinCosToleranceUnits();
         var one = (1L << FixedQ4816.FractionBitCount);
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Sin({raw})",
             subjectRaw: sin.Value,
             enclosure: enclosure.Sin,
             toleranceUnits: tolerance
         ) is { } sine) { return sine; }
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Cos({raw})",
             subjectRaw: cos.Value,
             enclosure: enclosure.Cos,
@@ -1173,7 +1161,7 @@ internal static partial class Subjects {
             x: Raw(value: xRaw)
         ).Value;
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Atan2({yRaw}, {xRaw})",
             subjectRaw: actual,
             enclosure: Oracles.EncloseAtan2(
@@ -1447,7 +1435,7 @@ internal static partial class Subjects {
         // plus 2⁻³³: in units of 2⁻⁵¹, 8·|yRaw| + 2¹⁸.
         var quantization = ((high * ((8 * BigInteger.Abs(value: new BigInteger(value: exponentRaw))) + (BigInteger.One << 18))) >> 51);
 
-        return WithinEnvelope(
+        return Oracles.WithinEnvelope(
             name: $"Pow({baseRaw}, {exponentRaw})",
             subjectRaw: actual,
             enclosure: new Oracles.Enclosure(
@@ -1483,7 +1471,7 @@ internal static partial class Subjects {
 
         if (FixedSqrtAt(raw: raw) is { } root) { return root; }
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Log2({logarithmRaw})",
             subjectRaw: FixedQ4816.Log2(value: Raw(value: logarithmRaw)).Value,
             enclosure: Oracles.EncloseLog2(
@@ -1496,20 +1484,20 @@ internal static partial class Subjects {
             )
         ) is { } logarithm) { return logarithm; }
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Exp2({exponentRaw})",
             subjectRaw: FixedQ4816.Exp2(value: Raw(value: exponentRaw)).Value,
             enclosure: exponential,
             toleranceUnits: Exp2ToleranceUnits(high: exponential.High)
         ) is { } exponentiation) { return exponentiation; }
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Sin({raw})",
             subjectRaw: sin.Value,
             enclosure: circular.Sin,
             toleranceUnits: tolerance
         ) is { } sine) { return sine; }
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"Cos({raw})",
             subjectRaw: cos.Value,
             enclosure: circular.Cos,
@@ -1518,7 +1506,7 @@ internal static partial class Subjects {
         if (FixedQ4816.Sin(angle: Raw(value: raw)) != sin) { return $"the sine projection diverges from the pair at raw {raw}"; }
         if (FixedQ4816.Cos(angle: Raw(value: raw)) != cos) { return $"the cosine projection diverges from the pair at raw {raw}"; }
 
-        return WithinEnvelope(
+        return Oracles.WithinEnvelope(
             name: $"Atan2({raw}, {right[0]})",
             subjectRaw: FixedQ4816.Atan2(
                 y: Raw(value: raw),

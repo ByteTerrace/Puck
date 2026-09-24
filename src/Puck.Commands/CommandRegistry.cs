@@ -13,8 +13,8 @@ namespace Puck.Commands;
 /// <remarks>
 /// The registry exposes three cooperating facets over the same set of definitions:
 /// <list type="bullet">
-/// <item><description><b>Snapshots.</b> <see cref="ApplySnapshot"/> dispatches one fixed-step tick's entries. The <see cref="InputRouter"/>'s mixer is the only producer of those snapshots, resolves each slot's active command maps before building them, and stamps every entry with a <see cref="CommandPrincipal"/>.</description></item>
-/// <item><description><b>Text.</b> <see cref="Submit"/> parses a line and runs the matching handler as <see cref="CommandPrincipal.Console"/>. This path performs no I/O and is never gated by command maps.</description></item>
+/// <item><description><b>Snapshots.</b> <see cref="ApplySnapshot"/> dispatches one fixed-step tick's entries. The <see cref="InputRouter"/>'s mixer is the only producer of those snapshots, resolves each slot's active command maps before building them, and stamps every entry with a <see cref="Principal"/>.</description></item>
+/// <item><description><b>Text.</b> <see cref="Submit"/> parses a line and runs the matching handler as <see cref="Principal.Console"/>. This path performs no I/O and is never gated by command maps.</description></item>
 /// <item><description><b>Maps.</b> Definitions classify commands into immutable maps; each <see cref="InputRouter"/> owns the active modality independently for every logical slot.</description></item>
 /// </list>
 /// There is no fourth door: dispatch requires a <see cref="CommandContext"/>, which only this type and the mixer can
@@ -479,7 +479,7 @@ public sealed class CommandRegistry {
     // The entry's read-after-write barrier is NOT this method's to release: ApplySnapshot's per-entry boundary owns
     // that, so a throw anywhere in here — the parse, CanonicalizeVerb, a handler's exception rendering — releases it
     // exactly once and cannot strand the session.
-    private CommandResult ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, CommandPrincipal principal, int slot) {
+    private CommandResult ApplySubmittedSimulation(string line, ushort expectedCommandId, CommandPhase phase, CommandValue value, Principal principal, int slot) {
         Span<Range> tokenRanges = stackalloc Range[MaxWireTokens];
 
         if (
@@ -792,7 +792,10 @@ public sealed class CommandRegistry {
 
         try {
             faulted = false;
-            result = definition.Handler(arg: context);
+            result = (AudienceRefusal(
+                definition: definition,
+                principal: context.Principal
+            ) ?? definition.Handler(arg: context));
         } catch (Exception exception) when (IsContainable(exception: exception)) {
             faulted = true;
             result = HandlerFault(
@@ -826,7 +829,7 @@ public sealed class CommandRegistry {
         ReadOnlySpan<Range> argumentRanges,
         CommandPhase phase,
         CommandValue value,
-        CommandPrincipal principal,
+        Principal principal,
         int slot,
         bool observe,
         out bool faulted,
@@ -848,14 +851,17 @@ public sealed class CommandRegistry {
 
         try {
             faulted = false;
-            result = definition.WireArgsHandler!(
+            result = (AudienceRefusal(
+                definition: definition,
+                principal: principal
+            ) ?? definition.WireArgsHandler!(
                 arg1: context,
                 arg2: new WireArgs(
                     echo: !quiet,
                     line: line,
                     ranges: argumentRanges
                 )
-            );
+            ));
         } catch (Exception exception) when (IsContainable(exception: exception)) {
             faulted = true;
             result = HandlerFault(
@@ -879,6 +885,12 @@ public sealed class CommandRegistry {
 
         return result;
     }
+    // The one audience check, ahead of both handler boundaries: an operator verb never runs for anyone but the console,
+    // whichever door the line arrived through.
+    private static CommandResult? AudienceRefusal(CommandDefinition definition, Principal principal) => (((definition.Audience == CommandAudience.Operator) && (principal.Kind != PrincipalKind.Console))
+        ? CommandResult.Error(output: $"[{definition.Name}: refused — an operator verb; {principal.Describe()} is not the operator]")
+        : null
+    );
     /// <summary>Renders a handler's escaped exception as the error result the wire reports it through.</summary>
     /// <param name="definition">The command whose handler threw.</param>
     /// <param name="exception">The escaped exception.</param>
@@ -984,7 +996,7 @@ public sealed class CommandRegistry {
     // console tape) keys on the activation's Text, so without this the refusal is invisible on every surface but the
     // wire.errors counter nobody polls. The alternative — a synchronous shape check at submit — would re-parse the
     // line at both ends, which is exactly the double parse the deferred route exists to avoid.
-    private CommandResult NotifyRefusal(string line, ushort expectedCommandId, IReadOnlyList<ParseError> errors, CommandPhase phase, CommandPrincipal principal, int slot) {
+    private CommandResult NotifyRefusal(string line, ushort expectedCommandId, IReadOnlyList<ParseError> errors, CommandPhase phase, Principal principal, int slot) {
         // Named for the command the line was INJECTED as, which is what the operator asked for; the line's own text
         // rides Text, so a sink can show both when they disagree.
         var name = ((((int)expectedCommandId) < m_nameById.Length)
@@ -1097,7 +1109,7 @@ public sealed class CommandRegistry {
             return CommandResult.Error(output: "[wire.reject: a blank line names no command]");
         }
 
-        var principal = (session?.Principal ?? CommandPrincipal.Console);
+        var principal = (session?.Principal ?? Principal.Console);
         var slot = (session?.Slot ?? 0);
 
         // WIRE-NATIVE PATH for the plain `verb arg arg…` line shape — skips the System.CommandLine parse (measured
@@ -1231,7 +1243,10 @@ public sealed class CommandRegistry {
             CommandResult result;
 
             try {
-                result = definition.Handler(arg: context);
+                result = (AudienceRefusal(
+                    definition: definition,
+                    principal: principal
+                ) ?? definition.Handler(arg: context));
             } catch (Exception exception) when (IsContainable(exception: exception)) {
                 result = HandlerFault(
                     definition: definition,

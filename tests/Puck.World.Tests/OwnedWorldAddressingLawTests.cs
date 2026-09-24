@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -7,7 +8,7 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 /// <summary>Proves the rule that makes an owned-world id name exactly one storage location: ids are unique IGNORING
-/// CASE, because <see cref="WorldOwnedWorldFileName"/> maps injectively into file-name strings while the filesystem
+/// CASE, because <see cref="WorldDocumentName"/> maps injectively into file-name strings while the filesystem
 /// under the catalog resolves those strings case-insensitively. The authored seed list refuses a case-variant pair,
 /// the catalog admits the file its id addresses whatever case that file's name carries, and the two doors that mint a
 /// NEW id — <see cref="WorldOwnedWorlds.Create"/> and <see cref="WorldOwnedWorlds.ReplaceFromSync"/> — refuse rather
@@ -16,7 +17,7 @@ public sealed class OwnedWorldAddressingLawTests {
     // Whether the directory holding this catalog resolves names case-insensitively. The storage-location half of the
     // rule is a property of the filesystem, not of the catalog, so the assertions that rest on it are asked only
     // where it holds; every other assertion in these laws runs unconditionally.
-    private static bool CaseInsensitive(TempWorldDirectory dir) {
+    private static bool CaseInsensitive(TemporaryDirectory dir) {
         var probe = dir.WriteText(
             name: "case-probe.tmp",
             text: "probe"
@@ -30,21 +31,21 @@ public sealed class OwnedWorldAddressingLawTests {
 
         return insensitive;
     }
-    private static string[] CatalogFiles(TempWorldDirectory dir) => [.. Directory
+    private static string[] CatalogFiles(TemporaryDirectory dir) => [.. Directory
         .GetFiles(
             path: dir.RootPath,
             searchOption: SearchOption.TopDirectoryOnly,
-            searchPattern: $"*{WorldOwnedWorldFileName.Suffix}"
+            searchPattern: $"*{WorldDocumentName.DocumentSuffix}"
         )
         .Order(comparer: StringComparer.Ordinal)];
-    private static WorldOwnedWorlds Open(TempWorldDirectory dir) => new(
+    private static WorldOwnedWorlds Open(TemporaryDirectory dir) => new(
         directory: dir.RootPath,
         machineId: Guid.NewGuid(),
         template: Fixtures.BuildDocument()
     );
     // The seeded document re-declared under a chosen id and written under a chosen file name, so a law can put the
     // two deliberately out of step.
-    private static string Rewrite(TempWorldDirectory dir, string source, string id, string fileName) {
+    private static string Rewrite(TemporaryDirectory dir, string source, string id, string fileName) {
         var node = JsonNode.Parse(json: File.ReadAllText(path: source))!.AsObject();
         var identity = node["identity"]!.AsObject();
 
@@ -57,7 +58,7 @@ public sealed class OwnedWorldAddressingLawTests {
             text: node.ToJsonString()
         );
     }
-    private static string Seed(TempWorldDirectory dir) {
+    private static string Seed(TemporaryDirectory dir) {
         var seeded = Open(dir: dir);
 
         Assert.NotEmpty(collection: seeded.All);
@@ -123,7 +124,7 @@ public sealed class OwnedWorldAddressingLawTests {
     /// through the id's own spelling, which the filesystem resolves onto the existing entry.</summary>
     [Fact]
     public void CaseRenamedCatalogFile_IsAdmitted_AndKeepsItsOneStorageLocation() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var seeded = Seed(dir: dir);
         var insensitive = CaseInsensitive(dir: dir);
         var name = Path.GetFileName(path: seeded);
@@ -190,12 +191,12 @@ public sealed class OwnedWorldAddressingLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "'Amber' is duplicated"
-        );
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "unique ignoring case"
+            expectedSubstring: Puck.Assets.Documents.DocumentName.Collision(
+                heldFile: "seatDefaults.identities[0].id",
+                heldName: "amber",
+                otherFile: "seatDefaults.identities[1].id",
+                otherName: "Amber"
+            )
         );
     }
     /// <summary>A file whose name is not the one its declared id maps to — beyond case — cannot be addressed: it is
@@ -203,7 +204,7 @@ public sealed class OwnedWorldAddressingLawTests {
     /// maps to.</summary>
     [Fact]
     public void CatalogFileName_MustBeTheNameItsIdMapsTo() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var seeded = Seed(dir: dir);
 
         Laws.RefusalWithControl(
@@ -211,7 +212,7 @@ public sealed class OwnedWorldAddressingLawTests {
             deniedOutcome: () => {
                 var stray = Rewrite(
                     dir: dir,
-                    fileName: $"stranger{WorldOwnedWorldFileName.Suffix}",
+                    fileName: $"stranger{WorldDocumentName.DocumentSuffix}",
                     id: "cobalt",
                     source: seeded
                 );
@@ -220,7 +221,7 @@ public sealed class OwnedWorldAddressingLawTests {
                 var refused = Assert.Single(collection: catalog.Refused);
 
                 Assert.Equal(
-                    expected: $"stranger{WorldOwnedWorldFileName.Suffix}",
+                    expected: $"stranger{WorldDocumentName.DocumentSuffix}",
                     actual: refused.FileName
                 );
                 Assert.Contains(
@@ -239,7 +240,7 @@ public sealed class OwnedWorldAddressingLawTests {
             controlOutcome: () => {
                 _ = Rewrite(
                     dir: dir,
-                    fileName: $"cobalt{WorldOwnedWorldFileName.Suffix}",
+                    fileName: $"cobalt{WorldDocumentName.DocumentSuffix}",
                     id: "cobalt",
                     source: seeded
                 );
@@ -257,7 +258,7 @@ public sealed class OwnedWorldAddressingLawTests {
     /// against an id whose path is free.</summary>
     [Fact]
     public void Create_RefusesAnIdWhoseCatalogPathIsOccupied() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var seeded = Seed(dir: dir);
         var before = File.ReadAllBytes(path: seeded);
         WorldOwnedWorlds catalog;
@@ -303,16 +304,56 @@ public sealed class OwnedWorldAddressingLawTests {
             ) is not null)
         );
     }
+    /// <summary>An owned identity's id is spelled into directory names, so <c>identity.create</c> refuses an id carrying
+    /// either <see cref="GeneratedName"/> joiner by name, anywhere in it, and writes nothing. The control is the same
+    /// id with the joiner replaced.</summary>
+    [InlineData("amber$1")]
+    [InlineData("$amber")]
+    [InlineData("amber~1")]
+    [Theory]
+    public void Create_RefusesAnIdCarryingAGeneratedNameJoiner(string id) {
+        using var dir = new TemporaryDirectory();
+        var catalog = Open(dir: dir);
+        var files = CatalogFiles(dir: dir);
+
+        Laws.RefusalWithControl(
+            lawId: "owned-world.create-refuses-a-joiner",
+            deniedOutcome: () => {
+                var created = catalog.Create(
+                    colorHex: "#ED8530",
+                    name: SafeName.Parse(candidate: id),
+                    reason: out var reason
+                );
+
+                Assert.Contains(
+                    actualString: reason,
+                    comparisonType: StringComparison.Ordinal,
+                    expectedSubstring: "the characters Puck reserves for the names it generates"
+                );
+                Assert.Equal(
+                    expected: files,
+                    actual: CatalogFiles(dir: dir)
+                );
+
+                return (created is not null);
+            },
+            controlOutcome: () => (catalog.Create(
+                colorHex: "#ED8530",
+                name: SafeName.Parse(candidate: id.Replace(newChar: '-', oldChar: '$').Replace(newChar: '-', oldChar: '~')),
+                reason: out _
+            ) is not null)
+        );
+    }
     /// <summary>The refusal's discriminator reports what it checked: when another file in the directory really does
     /// carry the addressed name, the message says so rather than claiming the name is unheld.</summary>
     [Fact]
     public void MismatchRefusal_NamesTheFileThatHoldsTheAddressedName() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var seeded = Seed(dir: dir);
 
         _ = Rewrite(
             dir: dir,
-            fileName: $"stranger{WorldOwnedWorldFileName.Suffix}",
+            fileName: $"stranger{WorldDocumentName.DocumentSuffix}",
             id: "amber",
             source: seeded
         );
@@ -330,7 +371,7 @@ public sealed class OwnedWorldAddressingLawTests {
     /// replaces the local copy as an ordinary pull does.</summary>
     [Fact]
     public void SyncAdoption_RefusesAnIdCollidingInCaseOnly() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var seeded = Seed(dir: dir);
         var catalog = Open(dir: dir);
 
@@ -346,10 +387,14 @@ public sealed class OwnedWorldAddressingLawTests {
                     reason: out var reason
                 );
 
-                Assert.Contains(
-                    actualString: reason,
-                    comparisonType: StringComparison.Ordinal,
-                    expectedSubstring: "in case only"
+                Assert.Equal(
+                    actual: reason,
+                    expected: Puck.Assets.Documents.DocumentName.Collision(
+                        heldFile: "amber.world.json",
+                        heldName: "amber",
+                        otherFile: "AMBER.world.json",
+                        otherName: "AMBER"
+                    )
                 );
 
                 return adopted;
@@ -363,5 +408,44 @@ public sealed class OwnedWorldAddressingLawTests {
             )
         );
         Assert.Single(collection: catalog.All);
+    }
+    /// <summary>Creating an owned world whose id differs from a held one in case only would save onto that world's
+    /// one file, so creation refuses in the document-name rule's own words. The control is a distinct id, which is
+    /// created.</summary>
+    [Fact]
+    public void Create_RefusesAnIdCollidingInCaseOnly() {
+        using var dir = new TemporaryDirectory();
+
+        _ = Seed(dir: dir);
+
+        var catalog = Open(dir: dir);
+
+        Laws.RefusalWithControl(
+            lawId: "owned-world.create-unique-ignoring-case",
+            deniedOutcome: () => {
+                var created = catalog.Create(
+                    colorHex: "#112233",
+                    name: SafeName.Parse(candidate: "AMBER"),
+                    reason: out var reason
+                );
+
+                Assert.Equal(
+                    actual: reason,
+                    expected: Puck.Assets.Documents.DocumentName.Collision(
+                        heldFile: "amber.world.json",
+                        heldName: "amber",
+                        otherFile: "AMBER.world.json",
+                        otherName: "AMBER"
+                    )
+                );
+
+                return (created is not null);
+            },
+            controlOutcome: () => (catalog.Create(
+                colorHex: "#112233",
+                name: SafeName.Parse(candidate: "teal"),
+                reason: out _
+            ) is not null)
+        );
     }
 }

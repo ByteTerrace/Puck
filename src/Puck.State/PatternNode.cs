@@ -66,7 +66,7 @@ public static class PatternCapacity {
     public const int MaxSymbols = 32;
     /// <summary>The most bytes every compiled pattern table of one document may occupy together: four bytes a
     /// transition and one a state. A document whose rows cross it is refused at the row that crossed.</summary>
-    public const int MaxTableBytes = (4 * 1024 * 1024);
+    public const int MaxTableBytes = ((4 * 1024) * 1024);
     /// <summary>The longest word one read walks: every source row fits, so a read is always decided.</summary>
     public const int MaxWord = TopologyCompilation.MaxCells;
 }

@@ -3,7 +3,10 @@
 This xUnit suite tests [Puck.Analyzers](../../src/Puck.Analyzers/README.md) using
 in-memory Roslyn compilations and workspaces. It checks diagnostic contracts,
 manifest integrity and ownership, declaration coverage, fingerprints,
-file-length and strict-enum rules, and code-fix behavior.
+the ratchet ledger and its file-length and comment-smell rules, strict-enum,
+unmanaged function-pointer and environment-read rules, and code-fix behavior. The function-pointer
+cases also call real unmanaged function pointers to show that a pointer to a type parameter and a pointer-typed view of a generic
+signature work, and a by-reference type parameter throws.
 
 ## Verification
 

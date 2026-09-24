@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Xunit;
 
@@ -17,7 +18,7 @@ public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
     public void ShippedWorldIdleTicksStaySteadyStateAllocation() {
         const string WorldPath = "src/Puck.World/Assets/worlds/puck.world.json";
         var catalog = TestHookInstaller.CreateMachineCatalog();
-        var definition = AuthoredGameFixtures.Load(relativePath: WorldPath, catalog: catalog);
+        var definition = AuthoredGameFixtures.Load(catalog: catalog, relativePath: WorldPath);
         using var fixture = Fixtures.FreshServer(
             definition: definition,
             machineCatalog: catalog,
@@ -33,10 +34,7 @@ public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
         var samples = new long[120];
 
         for (var tick = 0; (tick < samples.Length); tick++) {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
-            fixture.Step(stepTicks: width);
-            samples[tick] = (GC.GetAllocatedBytesForCurrentThread() - before);
+            samples[tick] = AllocationWindow.Total(window: () => fixture.Step(stepTicks: width));
         }
 
         Array.Sort(array: samples);

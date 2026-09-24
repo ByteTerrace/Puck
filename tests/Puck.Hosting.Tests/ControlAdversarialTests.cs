@@ -145,11 +145,13 @@ public sealed class ControlAdversarialTests {
                 expected: 1
             );
             Assert.False(condition: work.Task.IsCompleted);
-        } finally { work.TrySetResult(result: new(
+        } finally {
+            work.TrySetResult(result: new(
             1,
             "completed",
             "late"
-        )); }
+        ));
+        }
     }
     [Fact]
     public async Task DisposingConsoleSessionEndsAnAcceptedCaptureWaitWithoutDeletingItsPathEarly() {
@@ -215,11 +217,13 @@ public sealed class ControlAdversarialTests {
     public async Task MissingAndDuplicateRequestFieldsNeverDispatch(string json) {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         var calls = 0;
-        using var host = new LocalControlServer(createSession: () => new CallbackSession(execute: request => { Interlocked.Increment(location: ref calls); return new(
+        using var host = new LocalControlServer(createSession: () => new CallbackSession(execute: request => {
+            Interlocked.Increment(location: ref calls); return new(
             request.Id,
             "completed",
             "ran"
-        ); }));
+        );
+        }));
         using var peer = await ConnectRawAsync(path: host.AttachmentPath);
 
         await WireFrame.WriteAsync(

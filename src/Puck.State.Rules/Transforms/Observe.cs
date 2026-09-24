@@ -2,8 +2,9 @@ namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
     // Every remembered token drops to not-visible first, then each positioned token on a visible mask cell takes
-    // its source property's current value and a fresh stamp. Identity, rather than the occupied cell, carries what
-    // was learned when a piece moves.
+    // its source property's live value at the firing's time and a fresh stamp. Identity, rather than the occupied cell, carries what
+    // was learned when a piece moves. A token-keyed knowledge cell may carry its own trait, so the write goes through the live
+    // door: the remembered cell reads the observed value at the firing's time and moves on from there.
     private static bool TryObserve(in ArenaTransformContext context, ArenaTransform.Observe observe, out bool moved, out EffectRefusal refusal) {
         moved = false;
 
@@ -113,25 +114,28 @@ public static partial class ArenaTransforms {
             rowOrdinal: observe.PositionsRowOrdinal
         )) {
             if (
-                !arena.TryReadRaw(
+                !arena.TryReadLiveNumber(
                 key: token,
-                raw: out var cell,
-                rowOrdinal: observe.PositionsRowOrdinal
+                rowOrdinal: observe.PositionsRowOrdinal,
+                time: context.Time,
+                value: out var cell
             ) ||
                 (((ulong)cell) >= ((ulong)topology.CellCount)) ||
                 (visible[((int)cell)] == 0L) ||
-                !arena.TryReadRaw(
+                !arena.TryReadLiveNumber(
                 key: token,
-                raw: out var value,
-                rowOrdinal: observe.SourceRowOrdinal
+                rowOrdinal: observe.SourceRowOrdinal,
+                time: context.Time,
+                value: out var value
             )) {
                 continue;
             }
-            if (!arena.TryWrite(
+            if (!arena.TryWriteLive(
                 key: token,
                 operand: value,
                 reason: out var reason,
                 rowOrdinal: observe.RowOrdinal,
+                time: context.Time,
                 write: StateWriteKind.Set
             )) {
                 moved = false;

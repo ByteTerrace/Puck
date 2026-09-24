@@ -390,11 +390,11 @@ public static partial class WorldDefinitionValidator {
         }
 
         var errorsBeforeSite = errors.Count;
+
         ValidateDrawSite(
             draw: draw,
             generators: generators,
             targetKind: row.Kind,
-            bootOnly: false,
             domainLow: domainLow,
             domainHigh: domainHigh,
             path: $"{path}.draw",
@@ -506,10 +506,8 @@ public static partial class WorldDefinitionValidator {
         }
     }
     /// <summary>
-    /// Applies the one site rule — asked identically by a <c>state</c> draw row and by both boot-only field sites.
-    /// Resolves the facet's source (named or inline), holds the pairing to the one kind predicate, refuses a source
-    /// the site's timing cannot drive, and narrows the source's numeric domain against what the site can actually
-    /// hold.
+    /// Applies the one site rule: resolves the facet's source (named or inline), holds the pairing to the one kind
+    /// predicate, and narrows the source's numeric domain against what the site can actually hold.
     /// </summary>
     /// <remarks>The domain narrowing is the difference between a refusal at authoring and a coin-flip refusal at
     /// boot: without it a draw whose shape the validator admits can produce a value the same validator refuses on the
@@ -519,19 +517,13 @@ public static partial class WorldDefinitionValidator {
     /// <param name="draw">The site's authored facet.</param>
     /// <param name="generators">The document's declared sources, for reference resolution.</param>
     /// <param name="targetKind">The kind the site can hold.</param>
-    /// <param name="bootOnly">Whether the site is a boot-only document field (see <see cref="WorldDrawSites"/>).</param>
     /// <param name="domainLow">The lowest numeric value the site admits (ignored for a text site).</param>
     /// <param name="domainHigh">The highest numeric value the site admits (ignored for a text site).</param>
     /// <param name="path">The document path this site reports under.</param>
     /// <param name="errors">The accumulating error list.</param>
-    private static void ValidateDrawSite(Draw draw, IReadOnlyList<GeneratorRow>? generators, CellKind targetKind, bool bootOnly, long domainLow, long domainHigh, string path, List<string> errors) {
+    private static void ValidateDrawSite(Draw draw, IReadOnlyList<GeneratorRow>? generators, CellKind targetKind, long domainLow, long domainHigh, string path, List<string> errors) {
         if (!Enum.IsDefined(value: draw.Timing)) {
             errors.Add(item: $"{path}.timing '{draw.Timing}' is not a defined DrawTiming.");
-        } else if (
-            bootOnly &&
-            (draw.Timing != DrawTiming.Boot)
-        ) {
-            errors.Add(item: $"{path}.timing={draw.Timing.ToString().ToLowerInvariant()} — this is a BOOT-ONLY document field, read once at composition; nothing could observe a later redraw, so only timing=boot is admissible here.");
         }
 
         if (draw.Skip < 0L) {
@@ -568,15 +560,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} {kindReason}.");
 
             return;
-        }
-
-        // An exhausting source at a settle-and-clear boot site declares state across draws that this site can never
-        // have: it draws once and its facet is erased, so the drawn mask could not survive to be drawn from again.
-        if (
-            bootOnly &&
-            (generator.Mode != GeneratorMode.WithReplacement)
-        ) {
-            errors.Add(item: $"{path} draws from a source declaring mode={generator.Mode.ToString().ToLowerInvariant()} — a boot-only site draws once and its facet is cleared, so a drawn mask has no second draw to accumulate into.");
         }
 
         if (GeneratorEngine.WritesText(source: generator.Source)) {
@@ -1045,8 +1028,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"identity.facts.state '{facts.State}' declares capacity {(row.Capacity?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}; identity.facts.capacity is {facts.Capacity} — the two are one number.");
         }
     }
-    // The reserved lane a world declares to carry facts: a bounded keyed int row whose every authored cell key is a
-    // (body, fact) pair, since the server keys the cells it loads that way.
+    // The reserved lane a world declares to carry facts: a bounded, trait-free keyed int row whose every authored
+    // cell key is a (body, fact) pair, since the server keys the cells it loads that way.
     private static void ValidateIdentityFactLane(IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
         if (!stateRows.TryGetValue(
             key: WorldIdentityFactLane.RowName,
@@ -1058,6 +1041,12 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"state.world row '{WorldIdentityFactLane.RowName}' is the reserved identity fact lane: it must be a keyed int row declaring a capacity.");
 
             return;
+        }
+        if (!WorldIdentityFactLane.TryAdmitTraits(
+            reason: out var traitReason,
+            row: lane
+        )) {
+            errors.Add(item: traitReason);
         }
 
         foreach (var cell in (lane.Cells ?? [])) {
@@ -1132,17 +1121,10 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{space.Name}' length {space.Name.Value.Length} exceeds the maximum of {StateSpace.MaxNameLength}.");
             }
 
-            if (string.IsNullOrWhiteSpace(value: space.Model) || (space.Model.Length > StateSpace.MaxModelLength)) {
-                errors.Add(item: $"{path}.model must be non-empty and at most {StateSpace.MaxModelLength} characters.");
-            }
-
-            if (string.IsNullOrWhiteSpace(value: space.Revision) || (space.Revision.Length > StateSpace.MaxRevisionLength)) {
-                errors.Add(item: $"{path}.revision must be non-empty and at most {StateSpace.MaxRevisionLength} characters.");
-            }
-
-            if ((space.Dimensions < StateCapacity.MinVectorDimensions) || (space.Dimensions > StateCapacity.MaxVectorDimensions)) {
-                errors.Add(item: $"{path}.dimensions {space.Dimensions} must be between {StateCapacity.MinVectorDimensions} and {StateCapacity.MaxVectorDimensions}.");
-            }
+            _ = space.Identity.TryValidate(
+                path: path,
+                refusals: errors
+            );
         }
 
         return byName;
@@ -1194,18 +1176,86 @@ public static partial class WorldDefinitionValidator {
 
         if (resolvedSpace is not null) {
             var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
-            var rowVectorBytes = checked((((long)effectiveCapacity) * resolvedSpace.Dimensions));
+            var rowVectorBytes = checked((((long)effectiveCapacity) * resolvedSpace.Identity.Dimensions));
 
             if (rowVectorBytes > StateCapacity.MaxVectorRowBytes) {
-                errors.Add(item: $"{path} ('{row.Name}') vector byte size {rowVectorBytes} ({effectiveCapacity} * {resolvedSpace.Dimensions}) exceeds the maximum per-row ceiling of {StateCapacity.MaxVectorRowBytes}.");
+                errors.Add(item: $"{path} ('{row.Name}') vector byte size {rowVectorBytes} ({effectiveCapacity} * {resolvedSpace.Identity.Dimensions}) exceeds the maximum per-row ceiling of {StateCapacity.MaxVectorRowBytes}.");
             }
         }
     }
-    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, IReadOnlyDictionary<string, StateSpace> spaces, IReadOnlyDictionary<string, StateEnum> enums, List<string> errors) {
+
+    /// <summary>Returns the path a refusal names an authored state row by: the row's index in <c>state.world</c>,
+    /// the member it is authored under.</summary>
+    /// <param name="index">The row's index among the section's rows.</param>
+    /// <returns>The path, <c>state.world[index]</c>.</returns>
+    public static string StateRowPath(int index) => $"state.world[{index}]";
+    /// <summary>Returns the refusal a state row draws for naming an enum its state section does not declare, the one
+    /// place that refusal is worded.</summary>
+    /// <param name="path">The row's path, as <see cref="StateRowPath"/> spells it.</param>
+    /// <param name="row">The row's name.</param>
+    /// <param name="enumName">The enum the row names.</param>
+    /// <returns>The refusal, which names the row's <c>enum</c> member as its path.</returns>
+    public static string UndeclaredRowEnum(string path, string row, string enumName) =>
+        $"{path}.enum: row '{row}' names enum '{enumName}', which the state section does not declare.";
+    /// <summary>Returns the path a refusal names a record field by: the record's index in <c>state.records</c> and
+    /// the field's index among its fields.</summary>
+    /// <param name="record">The record's index among the section's records.</param>
+    /// <param name="field">The field's index among the record's fields.</param>
+    /// <returns>The path, <c>state.records[record].fields[field]</c>.</returns>
+    public static string StateRecordFieldPath(int record, int field) => $"state.records[{record}].fields[{field}]";
+    /// <summary>Returns the refusal a record field draws for naming an enum its state section does not declare, the
+    /// one place that refusal is worded.</summary>
+    /// <param name="path">The field's path, as <see cref="StateRecordFieldPath"/> spells it.</param>
+    /// <param name="record">The record's name.</param>
+    /// <param name="field">The field's name.</param>
+    /// <param name="enumName">The enum the field names.</param>
+    /// <returns>The refusal, which names the field's <c>enum</c> member as its path.</returns>
+    public static string UndeclaredRecordFieldEnum(string path, string record, string field, string enumName) =>
+        $"{path}.enum: record '{record}' field '{field}' names enum '{enumName}', which the state section does not declare.";
+
+    // A record field names an enum the way a row does, and draws the same two refusals: an enum on a kind that cannot
+    // carry one, and an enum the section does not declare.
+    private static void ValidateRecordEnums(IReadOnlyList<StateRecord>? records, IReadOnlyDictionary<string, StateEnum> enums, List<string> errors) {
+        for (var recordIndex = 0; (recordIndex < (records?.Count ?? 0)); recordIndex++) {
+            var fields = (records![recordIndex]?.Fields ?? []);
+
+            for (var fieldIndex = 0; (fieldIndex < fields.Count); fieldIndex++) {
+                if ((fields[fieldIndex] is not { Enum: { } symbols } field)) {
+                    continue;
+                }
+
+                var path = StateRecordFieldPath(
+                    field: fieldIndex,
+                    record: recordIndex
+                );
+
+                if (field.Kind != CellKind.Int) {
+                    errors.Add(item: $"{path}.enum: record '{records[recordIndex].Name}' field '{field.Name}' names enum '{symbols}' on a {StateSpelling.Kind(kind: field.Kind)} field — only int fields carry a symbolic domain.");
+                } else if (!enums.ContainsKey(key: symbols.Value)) {
+                    errors.Add(item: UndeclaredRecordFieldEnum(
+                        enumName: symbols.Value,
+                        field: field.Name.Value,
+                        path: path,
+                        record: records[recordIndex].Name.Value
+                    ));
+                }
+            }
+        }
+    }
+    // Validates the section's rows and the enums its record fields name.
+    private static Dictionary<string, WorldStateRow> ValidateState(WorldDefinition definition, ISet<string> dynamicsNames, IReadOnlyDictionary<string, StateSpace> spaces, IReadOnlyDictionary<string, StateEnum> enums, List<string> errors) {
         // The map every other section resolves a row name through holds authored rows alone: a generated storage
         // row is validated and counted here, and no authored name reaches it.
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var rows = definition.State;
+        var generators = definition.Generators;
+
+        ValidateRecordEnums(
+            enums: enums,
+            errors: errors,
+            records: definition.StateRaw?.Records
+        );
 
         if (rows is null) {
             errors.Add(item: "state is required.");
@@ -1221,7 +1271,7 @@ public static partial class WorldDefinitionValidator {
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
-            var path = $"state[{index}]";
+            var path = StateRowPath(index: index);
 
             if (row is null) {
                 errors.Add(item: $"{path} is required.");
@@ -1257,7 +1307,7 @@ public static partial class WorldDefinitionValidator {
                 if (vectorSpace is not null) {
                     var effectiveCapacity = (row.Capacity ?? (row.IsSlot ? 1 : row.CellCeiling));
 
-                    totalVectorBytes += checked((((long)effectiveCapacity) * vectorSpace.Dimensions));
+                    totalVectorBytes += checked((((long)effectiveCapacity) * vectorSpace.Identity.Dimensions));
                 }
             }
         }
@@ -1345,17 +1395,26 @@ public static partial class WorldDefinitionValidator {
 
         StateEnum? resolvedEnum = null;
 
+        // A generated pool row names the enum of the record field it stores, and that field is where an enum it cannot
+        // carry is refused (ValidateRecordEnums), so the row is not refused a second time.
         if (row.Enum is { } symbols) {
             if (row.Kind != CellKind.Int) {
-                errors.Add(item: $"{path} ('{row.Name}') names enum '{symbols}' on a {StateSpelling.Kind(kind: row.Kind)} row — only int rows carry a symbolic domain.");
+                if (!row.Generated) {
+                    errors.Add(item: $"{path}.enum: row '{row.Name}' names enum '{symbols}' on a {StateSpelling.Kind(kind: row.Kind)} row — only int rows carry a symbolic domain.");
+                }
             } else if (
-                (enums is null) ||
+                ((enums is null) ||
                 !enums.TryGetValue(
-                key: symbols.Value,
-                value: out resolvedEnum
-            )
+                    key: symbols.Value,
+                    value: out resolvedEnum
+                )) &&
+                !row.Generated
             ) {
-                errors.Add(item: $"{path} ('{row.Name}') names enum '{symbols}', which the state section does not declare.");
+                errors.Add(item: UndeclaredRowEnum(
+                    enumName: symbols.Value,
+                    path: path,
+                    row: row.Name
+                ));
             }
         }
 
@@ -1610,8 +1669,8 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (row.Kind == CellKind.Vector) {
-                if ((resolvedSpace is not null) && (cell.Value.AsVector.Length != resolvedSpace.Dimensions)) {
-                    errors.Add(item: $"{cellPath}.vector dimensions {cell.Value.AsVector.Length} must match space '{resolvedSpace.Name}' dimensions {resolvedSpace.Dimensions}.");
+                if ((resolvedSpace is not null) && (cell.Value.AsVector.Length != resolvedSpace.Identity.Dimensions)) {
+                    errors.Add(item: $"{cellPath}.vector dimensions {cell.Value.AsVector.Length} must match space '{resolvedSpace.Name}' dimensions {resolvedSpace.Identity.Dimensions}.");
                 }
 
                 if (cell.Advance is not null) {

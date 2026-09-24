@@ -13,12 +13,24 @@ namespace Puck.World.Tests;
 /// <see cref="RuleLatch.Reset"/> runs before every one of them: the shipped tabletop judges are <c>Edge</c> rules,
 /// which fire on their gate's crossing, and a latch carrying its crossings and its binding memos across positions
 /// would judge the first alone. Every position loads into the arena the rules were compiled against, because a
-/// compiled operand's row ordinal and interned cell key belong to that catalog.</remarks>
+/// compiled operand's row ordinal and interned cell key belong to that catalog.
+/// <para>A position loads only the rows whose content the arena may not already hold: a row is skipped when it is
+/// the same <see cref="StateRow"/> instance this fixture last loaded at that ordinal and the arena's
+/// <see cref="StateArena.RowGeneration"/> has not moved since, which every write, judge, and rewind of the row
+/// moves. <see cref="StateArena.TryLoad"/> keeps an omitted row as it stands, so the arena a judge reads is the one a
+/// load of every row would have produced.</para></remarks>
 internal sealed class RuleArenaFixture {
     private readonly StateArena m_arena;
     private readonly RuleEvaluator m_evaluator;
     private readonly ArenaEffectHost m_host;
+
     private readonly RuleLatch m_latch = new();
+
+    private readonly ulong[] m_loadedGenerations;
+    private readonly StateRow?[] m_loadedRows;
+
+    private readonly List<(int Ordinal, StateRow Row)> m_pending = [];
+
     private readonly CompiledRule[] m_rules;
 
     private IReadOnlyList<StateRow> m_rows;
@@ -52,6 +64,8 @@ internal sealed class RuleArenaFixture {
             ticksPerSecond: definition.SimulationRateHz
         );
         m_evaluator = new RuleEvaluator(host: m_host);
+        m_loadedGenerations = new ulong[arena.Layout.RowCount];
+        m_loadedRows = new StateRow?[arena.Layout.RowCount];
         m_rows = definition.State;
         m_rules = WorldFactsCompiler.CompileAll(definition: definition);
     }
@@ -63,19 +77,54 @@ internal sealed class RuleArenaFixture {
     /// <param name="position">The position.</param>
     public void Evaluate(WorldDefinition position) {
         var time = ArenaTime.Origin;
+        var rows = new List<StateRow>(capacity: position.State.Count);
+
+        m_pending.Clear();
+
+        foreach (var row in position.State) {
+            if (!m_arena.Catalog.TryResolve(
+                handle: out var handle,
+                lane: StateLane.Document,
+                name: row.Name
+            )) {
+                rows.Add(item: row);
+
+                continue;
+            }
+
+            var ordinal = handle.Ordinal;
+
+            if (
+                ReferenceEquals(
+                objA: m_loadedRows[ordinal],
+                objB: row
+            ) &&
+                (m_arena.RowGeneration(rowOrdinal: ordinal) == m_loadedGenerations[ordinal])
+            ) {
+                continue;
+            }
+
+            rows.Add(item: row);
+            m_pending.Add(item: (ordinal, row));
+        }
 
         Assert.True(
             condition: m_arena.TryLoad(
                 reason: out var reason,
-                rows: position.State,
+                rows: rows,
                 time: in time
             ),
             userMessage: reason
         );
         Assert.Equal(
-            string.Empty,
-            reason
+            actual: reason,
+            expected: string.Empty
         );
+
+        foreach (var (ordinal, row) in m_pending) {
+            m_loadedRows[ordinal] = row;
+            m_loadedGenerations[ordinal] = m_arena.RowGeneration(rowOrdinal: ordinal);
+        }
 
         m_rows = position.State;
 

@@ -45,7 +45,7 @@
 #define SDF_MATERIAL_VECTORS_PER_ENTRY 20u
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
-// view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still
+// view, the beam prepass's own cone march) passes this, so an instanced program still
 // renders its complete picture through them; only sdf-world-views.comp narrows it to a real per-tile mask base.
 #define SDF_INSTANCE_MASK_ALL 0xFFFFFFFFu
 
@@ -476,10 +476,9 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
 #define SDF_FAR_DISTANCE 1.0e9
 
-// Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder) — these
-// two are the ones the shader still applies itself.
+// Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder) — this
+// is the one the shader still applies itself.
 #define SDF_SMOOTH_RADIUS_MIN  0.0001   // the smooth blends' radius floor (the CHAMFER blends clamp against 0.0)
-#define SDF_ELLIPSOID_MIN_DENOM 0.0001  // keeps the approximate ellipsoid's k1 divide finite at its center
 
 // Clamps length(p) away from 0 in the log-spherical fold so log() never sees -inf at the Droste center (the origin is
 // a measure-zero singularity, kept finite). A host-contracted literal — identical across DXC targets.
@@ -505,13 +504,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // fold it — it emits a runtime OpExtInst Normalize — so spelling the folded value here keeps the single most
 // load-bearing shading vector (sunDiffuse, the shadow ray, sdfMaterialShade's half-vector) the SAME BITS on both
 // backends instead of "one compile-time constant, one driver rsqrt". Every kernel that lights a surface uses it.
-// The sun is a FRAME, not a single vector: the area-light shadow estimator samples a disc around the direction, so it
-// needs two tangents as well. All three are pinned as hex-exact float32 literals for the same reason the direction is
-// — a runtime cross/normalize here would be one compile-time constant on DXIL and a driver rsqrt on SPIR-V, and the
-// sampled directions would differ between backends before the march even starts. Computed host-side once from the
-// float32 direction against the +Z axis (tangent = normalize(Z x sun), bitangent = normalize(sun x tangent)) and
-// pasted; the residual non-orthonormality is ~2e-8, far below the disc's 0.11 rad aperture. Both DXC backends must
-// read these identical bits.
 static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201);
 
 // --- primitives ---
@@ -521,7 +513,7 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 #define SDF_SHAPE_TORUS        3u
 #define SDF_SHAPE_CYLINDER     4u
 #define SDF_SHAPE_PLANE        5u
-#define SDF_SHAPE_ELLIPSOID    6u
+// 6 is retired (the approximate iq ellipsoid): every ellipsoid is SDF_SHAPE_SUPERELLIPSOID at exponent 2.
 #define SDF_SHAPE_VESICA       7u
 // The 2D-primitive family: an exact 2D SDF lifted to 3D. KEEP IN SYNC with SdfShapeType. Shared lane layout —
 // data0.xyz = 2D params, data0.w = lift amount (revolve offset o OR extrude half-height h), data1.x = smooth,
@@ -551,7 +543,9 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 #define SDF_SHAPE_CHAMFERED_RECT  17u
 // A generalized ellipsoid (KEEP IN SYNC with SdfShapeType.Superellipsoid). data0 = (radiusX, radiusY, radiusZ,
 // exponent e in [2, 8]); data1 = (smooth [ISA-wide], 1/radiusX, 1/radiusY, 1/radiusZ [host-baked]). e = 2 is the
-// ellipsoid limit — the builder emits SDF_SHAPE_ELLIPSOID directly at that exponent, so this id never carries it.
+// ellipsoid — the ISA's one ellipsoid spelling — and runs a pow-free fast path (sdfEllipsoidGauge) that stays compiled
+// in the fold tier; the general exponent path is SDF_STRIP_HEAVY. KEEP IN SYNC with SdfViewsKernelVariants, which
+// sends an e != 2 instance to the full variant.
 #define SDF_SHAPE_SUPERELLIPSOID  18u
 // A validated convex polygon (KEEP IN SYNC with SdfShapeType.ConvexPolygon) — the 2D-primitive family's lane layout,
 // but its profile is a vertex list too large to pack inline: data0.x = asfloat(packed uint (tableOffset << 4) |
@@ -579,7 +573,12 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 #define SDF_SEGMENT_RIGID_PLAN 0x80000000u
 #define SDF_SEGMENT_BOUND_MASK 0x000000FFu
 #define SDF_RIGID_LEAF_IDENTITY_ROTATION 0x80000000u
-#define SDF_RIGID_LEAF_SHAPE_MASK        0x7FFFFFFFu
+// The leaf rides a fold run; the slot after it holds (pose before the run.xyz, first fold | identity bit), that
+// pose's quaternion, and (run length in instructions, 0, 0, 0). KEEP IN SYNC with SdfProgram.RigidLeafFoldedFlag and
+// SdfProgram.RigidLeafMaxFoldRun.
+#define SDF_RIGID_LEAF_FOLDED            0x40000000u
+#define SDF_RIGID_LEAF_SHAPE_MASK        0x3FFFFFFFu
+#define SDF_RIGID_LEAF_MAX_FOLD_RUN      8u
 
 // --- blend operators ---
 // THE ACCUMULATOR RULE (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp's summary). mapCore carries ONE running nearest-surface
@@ -1132,19 +1131,21 @@ float sdfCylinder(float3 p, float radius, float halfHeight) {
     float2 d = (float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
     return (min(max(d.x, d.y), 0.0) + length(max(d, 0.0)));
 }
-// NOT an exact distance (a first-order approximation): accurate near the surface, degrading with eccentricity — which
-// is why it is the one primitive that earns no cull bound and instead feeds its eccentricity into the program's
-// Lipschitz step clamp (SdfProgram.AnalyzeLipschitz). Prefer the exact revolved Ellipse (2D family) when a real
-// bound matters. inverseRadii = 1/max(abs(radii), eps), HOST-BAKED (data1.yzw).
-float sdfEllipsoid(float3 p, float3 inverseRadii) {
-    float3 q = (p * inverseRadii);
-    float k0 = length(q);
-    float k1 = length(q * inverseRadii);
-    return ((k0 * (k0 - 1.0)) / max(k1, SDF_ELLIPSOID_MIN_DENOM));
+// The ellipsoid: the superellipsoid's scaled gauge at e = 2, (|p/r| - 1) * min(r). EXACTLY 1-Lipschitz at every
+// eccentricity (SdfProgramBuilder.Superellipsoid's proof covers e = 2), so it needs no step clamp and no field scope;
+// it shares its zero set with the true ellipsoid and underestimates Euclidean distance away from it. The center
+// returns -min(r) like the general path's m <= 0 branch (length(0) = 0). KEEP IN SYNC with the e == 2 fast path of
+// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
+float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
+    float minRadius = min(radii.x, min(radii.y, radii.z));
+
+    return ((length(p * inverseRadii) - 1.0) * minRadius);
 }
+#ifndef SDF_STRIP_HEAVY
 // The superellipsoid: q = pow(abs(p) * inverseRadii, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r). EXACTLY
 // 1-Lipschitz for every radius and every e >= 1 (see SdfProgramBuilder.Superellipsoid's remarks for the proof) — no
-// AnalyzeLipschitz step clamp is needed, unlike sdfEllipsoid above. inverseRadii = 1/max(abs(radii), eps),
+// AnalyzeLipschitz step clamp is needed. e == 2 (every ellipsoid) takes sdfEllipsoidGauge's pow-free form, the same
+// field. inverseRadii = 1/max(abs(radii), eps),
 // HOST-BAKED (data1.yzw); minRadius = min(abs(radii)) is cheap enough to read straight off data0.xyz per eval.
 // The l_e gauge is computed in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every pow() argument
 // stays in [0, 1] (the sum in [1, 3]), so a far query never overflows — the plain sum(q_i^e) reaches float infinity at
@@ -1152,6 +1153,10 @@ float sdfEllipsoid(float3 p, float3 inverseRadii) {
 // the far field. Mathematically identical to sum(q_i^e)^(1/e). KEEP IN SYNC with
 // Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
 float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float exponent) {
+    if (exponent == 2.0) {
+        return sdfEllipsoidGauge(p, radii, inverseRadii);
+    }
+
     float3 q = (abs(p) * inverseRadii);
     float m = max(q.x, max(q.y, q.z));
     float minRadius = min(radii.x, min(radii.y, radii.z));
@@ -1164,6 +1169,7 @@ float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float expon
 
     return ((m * pow((u.x + u.y) + u.z, (1.0 / exponent))) - 1.0) * minRadius;
 }
+#endif
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
 float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
     float2 q = float2(length(p.xz), p.y);
@@ -1433,9 +1439,8 @@ float2 sdfGlyphUnpackUv(float packed) {
     return (float2((bits & 0xFFFFu), (bits >> 16u)) * (1.0 / 65535.0));
 }
 // The extruded-quad FALLBACK: the glyph cell as a plain box, exact and 1-Lipschitz. Every kernel WITHOUT the atlas
-// bound (the beam cull, the ray-query debug marcher) evaluates this — a conservative UNDERESTIMATE of the true glyph
-// distance, since the letter is strictly inside its cell, so the cull never holes and rt-debug renders the glyph flat
-// (as ScreenSlab renders its screen as a box there). halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
+// bound (the beam cull) evaluates this — a conservative UNDERESTIMATE of the true glyph distance, since the letter is
+// strictly inside its cell, so the cull never holes. halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
 float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
     float2 b = (abs(p.xy) - float2(data1.y, data1.z));
     float dQuad = (length(max(b, 0.0)) + min(max(b.x, b.y), 0.0));
@@ -1616,7 +1621,7 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 #else
     // The pool is NOT bound: the conservative UNION-HULL fallback. A Subtraction compose of SDF_FAR_DISTANCE never bites
     // (max(acc, -1e9) == acc), so the region renders as its uncarved hull — solid, never a hole (the Glyph quad-fallback
-    // precedent). The instance-cull + rt-debug + diagnostic kernels take this path (only the world-views/core-ops/beam
+    // precedent). The instance-cull and diagnostic kernels take this path (only the world-views/core-ops/beam
     // kernels bind the pool), and a program with no SampledRegion never reaches this arm at all.
     return SDF_FAR_DISTANCE;
 #endif
@@ -1772,8 +1777,14 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         case SDF_SHAPE_PLANE:       result = sdfPlane(p, data0.xyz, data0.w); break;
 #ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_ROUND_CONE:  result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;
-        case SDF_SHAPE_ELLIPSOID:   result = sdfEllipsoid(p, data1.yzw); break;
         case SDF_SHAPE_VESICA:      result = sdfVesica(p, data0.x, data0.y, data0.z); break;
+        // The fold tier admits a superellipsoid only at e == 2 (SdfViewsKernelVariants), so the stripped build
+        // compiles just the ellipsoid's pow-free gauge; the full build dispatches on the exponent.
+#ifdef SDF_STRIP_HEAVY
+        case SDF_SHAPE_SUPERELLIPSOID:  result = sdfEllipsoidGauge(p, data0.xyz, data1.yzw); break;
+#else
+        case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
+#endif
 #endif
         // Articulated-character core: limbs overwhelmingly lower to capsules/cylinders. Keeping these two inexpensive
         // primitives in CoreOps avoids promoting an otherwise rigid humanoid program to the register-heavy full ISA.
@@ -1790,13 +1801,12 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
         case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
         case SDF_SHAPE_ELLIPSE:         result = sdfEllipseSolid(p, data0, data1); break;
-        case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
         case SDF_SHAPE_CONVEX_POLYGON:  result = sdfConvexPolygonSolid(p, data0, data1); break;
         case SDF_SHAPE_PATH: result = sdfPathSolid(p, data0, data1); break;
         case SDF_SHAPE_SWEEP:           result = sdfSweep(p, data0, data1); break;
 #endif
         // A glyph is the atlas-sampled letter where the atlas is bound (the world-views kernel), else the conservative
-        // extruded quad — so the beam cull and rt-debug see a solid cell box (never a hole), and only the lit render
+        // extruded quad — so the beam cull sees a solid cell box (never a hole), and only the lit render
         // resolves the true lettering.
         case SDF_SHAPE_GLYPH:
 #ifdef SDF_GLYPH_ATLAS
@@ -2001,7 +2011,7 @@ float3 sdfCylinderGradient(float3 p, float radius, float halfHeight) {
 
     return float3((n.x * radial.x), (n.y * ySign), (n.x * radial.y));
 }
-// Shape-LOCAL 4-tap tetrahedron FD for the exotic primitives (ellipsoid/vesica/roundcone/the 2D-lifted family, and the
+// Shape-LOCAL 4-tap tetrahedron FD for the exotic primitives (vesica/roundcone/the 2D-lifted family, and the
 // atlas-sampled Glyph): a tight difference of just that one primitive's SDF in folded space, no transform chain — so it
 // fixes the op-CHAIN propagation (the real win) with a cheap, cancellation-light leaf. The Glyph's taps re-sample the
 // atlas (band-culled), which is why the honest leaf is a shape-local FD, not an analytic gradient. Same isotropic
@@ -2016,12 +2026,22 @@ float3 sdfShapeGradientFd(uint shapeType, float3 p, float4 data0, float4 data1) 
         (k.yxy * evaluateShape(shapeType, (p + (k.yxy * e)), data0, data1)) +
         (k.xxx * evaluateShape(shapeType, (p + (k.xxx * e)), data0, data1)));
 }
+// The normalized gradient of the ellipsoid gauge (|p/r| - 1) * min(r): p / r^2, normalized. Zero at the center, which
+// has no unique normal (sdfSafeNormalize of the zero vector is zero), matching sdfSuperellipsoidGradient. KEEP IN SYNC
+// with sdfEllipsoidGauge.
+float3 sdfEllipsoidGaugeGradient(float3 p, float3 inverseRadii) {
+    return sdfSafeNormalize(p * (inverseRadii * inverseRadii));
+}
 #ifndef SDF_STRIP_HEAVY
 // The normalized gradient of min(r) * (sum(abs(p/r)^e)^(1/e) - 1). Its common positive factor cancels
 // on normalization, leaving sign(p_i) * abs(p_i/r_i)^(e-1) / r_i. Factor by max(abs(p/r)) before pow,
 // as in sdfSuperellipsoid, to avoid overflowing for distant samples. The center has no unique normal.
 // Return a unit direction like the previous shape-local FD path; transform/CSG gradient transport is unchanged.
 float3 sdfSuperellipsoidGradient(float3 p, float3 inverseRadii, float exponent) {
+    if (exponent == 2.0) {
+        return sdfEllipsoidGaugeGradient(p, inverseRadii);
+    }
+
     float3 q = (abs(p) * inverseRadii);
     float m = max(q.x, max(q.y, q.z));
     if (m <= 0.0) {
@@ -2043,8 +2063,13 @@ float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data
 #endif
         case SDF_SHAPE_CAPSULE:     return sdfCapsuleGradient(p, data0.xyz, data1.y);
         case SDF_SHAPE_CYLINDER:    return sdfCylinderGradient(p, data0.x, data0.y);
-#ifndef SDF_STRIP_HEAVY
+#ifndef SDF_STRIP_ALL_EXOTIC
+        // Same tiering as evaluateShape's case: the fold tier only ever sees e == 2.
+#ifdef SDF_STRIP_HEAVY
+        case SDF_SHAPE_SUPERELLIPSOID: return sdfEllipsoidGaugeGradient(p, data1.yzw);
+#else
         case SDF_SHAPE_SUPERELLIPSOID: return sdfSuperellipsoidGradient(p, data1.yzw, data0.w);
+#endif
 #endif
         // The exotic tail — the 2D-lift family, Glyph, and SDF_SHAPE_SAMPLED_REGION — falls to the shape-local 4-tap FD
         // (the analytic-dual doctrine already pays FD for Star/Ellipse here). For a brick that is 4 extra pool samples,
@@ -2390,6 +2415,67 @@ static float sdfAmbientDistanceCeiling = SDF_FAR_DISTANCE;
 #if defined(SDF_PRIMARY_READ) && defined(SDF_PART_RAY_BOUNDS)
 bool sdfPartCannotImprove(uint instance, float3 p, float distance);
 #endif
+// A folded rigid leaf's point: the pose before its fold run, then the run as written with the generic interpreter's
+// exact formulas (symmetry plane, repeat, limited repeat, and the translate/rotate/identity scale between them). Bit k
+// of reflected records whether run instruction k mirrored the point, for sdfRigidFoldGradient. Programs carrying folds
+// never select the core-ops tier.
+float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset, out uint reflected) {
+    reflected = 0u;
+#ifndef SDF_STRIP_ALL_EXOTIC
+    uint4 prefix = sdfWords[extensionOffset];
+    p -= asfloat(prefix.xyz);
+    if ((prefix.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
+        p = rotatePointByInverseQuaternion(p, asfloat(sdfWords[extensionOffset + 1u]));
+    }
+    uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
+    uint count = min(sdfWords[extensionOffset + 2u].x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
+    [loop]
+    for (uint step = 0u; (step < count); step++) {
+        uint index = (first + step);
+        uint op = sdfWords[1u + index].x;
+        float4 data0 = asfloat(sdfWords[dataOffset + (2u * index)]);
+        float4 data1 = asfloat(sdfWords[dataOffset + (2u * index) + 1u]);
+        if (op == SDF_OP_SYMMETRY_PLANE) {
+            float spT = (dot(p, data0.xyz) + data0.w);
+            reflected |= ((spT < 0.0) ? (1u << step) : 0u);
+            p -= ((2.0 * min(spT, 0.0)) * data0.xyz);
+        } else if (op == SDF_OP_REPEAT) {
+            p -= (data0.xyz * round(p * data1.xyz));
+        } else if (op == SDF_OP_REPEAT_LIMITED) {
+            p -= (data0.xyz * clamp(round(p / data0.xyz), -data1.xyz, data1.xyz));
+        } else if (op == SDF_OP_TRANSLATE) {
+            p -= data0.xyz;
+        } else if (op == SDF_OP_ROTATE) {
+            p = rotatePointByInverseQuaternion(p, data0);
+        }
+    }
+#endif
+    return p;
+}
+// The gradient twin: a gradient in the frame after the run, carried back through its reflections and rotations in
+// reverse order (repeats and translates are translations) and the prefix rotation, into the leaf's base frame.
+float3 sdfRigidFoldGradient(float3 g, uint extensionOffset, uint dataOffset, uint reflected) {
+#ifndef SDF_STRIP_ALL_EXOTIC
+    uint4 prefix = sdfWords[extensionOffset];
+    uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
+    uint count = min(sdfWords[extensionOffset + 2u].x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
+    [loop]
+    for (uint step = count; (step > 0u); step--) {
+        uint index = (first + step - 1u);
+        uint op = sdfWords[1u + index].x;
+        if ((reflected & (1u << (step - 1u))) != 0u) {
+            float3 normal = asfloat(sdfWords[dataOffset + (2u * index)].xyz);
+            g -= ((2.0 * dot(g, normal)) * normal);
+        } else if (op == SDF_OP_ROTATE) {
+            g = rotatePointByQuaternion(g, asfloat(sdfWords[dataOffset + (2u * index)]));
+        }
+    }
+    if ((prefix.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
+        g = rotatePointByQuaternion(g, asfloat(sdfWords[extensionOffset + 1u]));
+    }
+#endif
+    return g;
+}
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
     // fold cases below tighten walkStepBound and the single return publishes it in clamped units.
@@ -2413,7 +2499,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint rigidPlanOffset = sdfProgramLayout.rigidPlanOffset;
     // The per-PROGRAM Lipschitz STEP SCALE (1/L; see sdfStepScale). Applied as ONE multiply on the FINAL returned
     // distance below, it clamps sphere-tracing steps to the field's true rate of change so a non-1-Lipschitz warp
-    // (twist/bend/chamfer/displace/domain-warp) or an eccentric ellipsoid cannot overstep and hole. DISTINCT from the
+    // (twist/bend/chamfer/displace/domain-warp) cannot overstep and hole. DISTINCT from the
     // per-sample distanceScale below (the true DOMAIN corrections: Scale's min-axis factor and LogSphere's r/density
     // factor) — that one is applied per candidate mid-walk; this is the field-preserving step clamp on the final min.
     // Never merge the two.
@@ -2612,6 +2698,11 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     uint4 packedPose = sdfWords[leafOffset];
                     uint packedShape = packedPose.w;
                     uint shapeIndex = (packedShape & SDF_RIGID_LEAF_SHAPE_MASK);
+                    bool folded = ((packedShape & SDF_RIGID_LEAF_FOLDED) != 0u);
+
+                    if (folded) {
+                        leaf++; // the extension slot
+                    }
 
                     // The outer dynamic sphere avoids a forward quaternion by inflating around the entity root. This
                     // tight primitive sphere is baked in the SAME chain frame rigidBasePosition occupies, so it rejects
@@ -2633,7 +2724,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         continue;
                     }
 
-                    float3 rigidPosition = (rigidBasePosition - asfloat(packedPose.xyz));
+                    float3 leafBasePosition = rigidBasePosition;
+
+                    if (folded) {
+                        uint reflected;
+                        leafBasePosition = sdfRigidFoldPoint(rigidBasePosition, (leafOffset + 3u), dataOffset, reflected);
+                    }
+
+                    float3 rigidPosition = (leafBasePosition - asfloat(packedPose.xyz));
 
                     if ((packedShape & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
                         rigidPosition = rotatePointByInverseQuaternion(rigidPosition, asfloat(sdfWords[leafOffset + 1u]));
@@ -3314,7 +3412,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                                     result.material = candidateWins ? composeMaterial : savedFieldMaterial;
                                     result.lanes = candidateWins ? composeLanes : savedFieldLanes;
                                     result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
-                                    sdfMaterialBlendWeight = 0.0;
+                                    // A losing scope leaves the parent's restored seam intact, as the shared tail does.
+                                    if (candidateWins) {
+                                        sdfMaterialBlendWeight = 0.0;
+                                    }
                                 }
                             } else {
                                 result.distance = min(min(a, b), dStairs);
@@ -3323,7 +3424,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                                     result.material = candidateWins ? composeMaterial : savedFieldMaterial;
                                     result.lanes = candidateWins ? composeLanes : savedFieldLanes;
                                     result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
-                                    sdfMaterialBlendWeight = 0.0;
+                                    if (candidateWins) {
+                                        sdfMaterialBlendWeight = 0.0;
+                                    }
                                 }
                             }
                             composePending = false;
@@ -3383,9 +3486,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 #undef SDF_VM_LOAD_DATA0
 #undef SDF_VM_LOAD_DATA1
 
-// The universal entry point every consumer outside the world path's Stage 1 calls (the beam cone-march,
-// sdf-world-rt-debug's marcher and its normal probe and shadow march): every instance visible, so an instanced program
-// still renders its complete picture — only Stage 1 narrows the mask (see mapMasked).
+// The universal entry point every consumer outside the world path's Stage 1 calls (the beam cone-march): every
+// instance visible, so an instanced program still renders its complete picture — only Stage 1 narrows the mask (see
+// mapMasked).
 SdfHit map(float3 worldPosition) {
     return mapCore(worldPosition, SDF_INSTANCE_MASK_ALL, true);
 }
@@ -3604,6 +3707,11 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     uint4 packedPose = sdfWords[leafOffset];
                     uint packedShape = packedPose.w;
                     uint shapeIndex = (packedShape & SDF_RIGID_LEAF_SHAPE_MASK);
+                    bool folded = ((packedShape & SDF_RIGID_LEAF_FOLDED) != 0u);
+
+                    if (folded) {
+                        leaf++; // the extension slot
+                    }
 
                     // Same tight-sphere reject mapCore's rigid walk applies, in the same chain frame. Negative radius
                     // marks a non-Union/unbounded leaf that is always evaluated.
@@ -3624,7 +3732,14 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         continue;
                     }
 
-                    float3 rigidPosition = (rigidBasePosition - asfloat(packedPose.xyz));
+                    float3 leafBasePosition = rigidBasePosition;
+                    uint reflected = 0u;
+
+                    if (folded) {
+                        leafBasePosition = sdfRigidFoldPoint(rigidBasePosition, (leafOffset + 3u), dataOffset, reflected);
+                    }
+
+                    float3 rigidPosition = (leafBasePosition - asfloat(packedPose.xyz));
                     bool leafIdentity = ((packedShape & SDF_RIGID_LEAF_IDENTITY_ROTATION) != 0u);
                     float4 leafQuat = asfloat(sdfWords[leafOffset + 1u]);
 
@@ -3642,6 +3757,10 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
                     if (!leafIdentity) {
                         leafGrad = rotatePointByQuaternion(leafGrad, leafQuat);
+                    }
+
+                    if (folded) {
+                        leafGrad = sdfRigidFoldGradient(leafGrad, (leafOffset + 3u), dataOffset, reflected);
                     }
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
@@ -4442,7 +4561,7 @@ float3 sdfMaterialSpecular(SdfMaterialData material, float3 normal, float3 viewD
 // caller's own light direction, an emissive lift, and a fresnel sheen edge-lift. `diffuse` is the caller's
 // accumulated radiance (ambient + the sun + any colored screen/point lights — a float3 so colored lights tint the
 // surface); `lightScale` scales the GGX/coat lobes by the caller's shadow/light attenuation. KEEP IN SYNC across
-// every caller (sdf-world.hlsli, sdf-world-rt-debug).
+// every caller (sdf-world.hlsli).
 float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
     float3 diffuseAlbedo = (material.albedo * (1.0 - material.metal));
     float3 color = (diffuseAlbedo * diffuse);

@@ -64,7 +64,7 @@ public sealed class BrowserRuleGroupLawTests {
         Assert.Empty(collection: refusedTrace.Writes);
         // Preview admission must not make authored work disappear from the cost report.
         Assert.Equal(ungrouped.CostReport.WorkBudget, refused.CostReport.WorkBudget);
-        Assert.Single(refused.CostReport.Contributors);
+        Assert.Single(collection: refused.CostReport.Contributors);
         Assert.Contains(
             collection: refusedTrace.Refusals,
             filter: static refusal => string.Equals(

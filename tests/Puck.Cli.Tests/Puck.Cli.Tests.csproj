@@ -21,6 +21,11 @@
         <ProjectReference Include="..\..\src\Puck.World\Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+        <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+    </ItemGroup>
+    <ItemGroup>
         <None Update="Assets\**">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>

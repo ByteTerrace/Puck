@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -26,7 +27,7 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldRuleHost.Answer"/>
     public QueryAnswer Answer(WorldQuery query) => m_ruleHost.Answer(query: query);
     /// <inheritdoc cref="WorldRuleHost.AnswerSubmittedQuery"/>
-    public QueryAnswer AnswerSubmittedQuery(WorldQuery query, WorldPrincipal principal) =>
+    public QueryAnswer AnswerSubmittedQuery(WorldQuery query, Principal principal) =>
         m_ruleHost.AnswerSubmittedQuery(
             principal: principal,
             query: query

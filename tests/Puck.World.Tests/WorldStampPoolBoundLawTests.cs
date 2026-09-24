@@ -76,62 +76,13 @@ public sealed class WorldStampPoolBoundLawTests {
         ),
     ];
 
-    private static SdfProgram EmitPool(float bodyScale = 1f) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: null,
-                Shapes: Shapes,
-                Frames: null,
-                Noise: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [
-                new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: bodyScale,
-                Motion: WorldLookMotion.Default
-            ),
-            ],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [
-                new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                ),
-            ]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: false,
-            maxPlacementScale: bodyScale,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static SdfProgram EmitPool(float bodyScale = 1f) => CreationFixtures.EmitPool(
+        bodyScale: bodyScale,
+        creation: CreationFixtures.Prototype(document: CreationFixtures.Document(
+            name: PrototypeId,
+            shapes: Shapes
+        ))
+    );
     private static ShapeDocument Shape(int id, SdfSolidPrimitive type, Vector3 scale, float? dilate = null, float? onion = null, ShapePanelDocument? panel = null) =>
         new(
             Id: id,
@@ -204,7 +155,7 @@ public sealed class WorldStampPoolBoundLawTests {
             fontFor: null
         );
         var pool = CreationDomainParentLawTests.Pool(creation: creation);
-        var client = CreationDomainParentLawTests.Client(definition: CreationDomainParentLawTests.Definition(creation: creation));
+        var client = ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation));
         var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
         var escapedRoot = false;
 

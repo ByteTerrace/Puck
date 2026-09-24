@@ -3,11 +3,10 @@ using Puck.Networking;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static byte[] EncodeOwnedWorlds(WorldOwnedWorlds.WorldOwnedWorldsCheckpoint section) {
+    private static byte[] EncodeOwnedWorlds(WorldOwnedWorldsCheckpoint section) {
         var writer = new WireWriter();
 
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.IdentityDocumentsJson,
             writeItem: static (w, json) => w.WriteBlock(value: json)
         );
@@ -15,15 +14,15 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeOwnedWorlds(byte[] bytes, out string reason, out WorldOwnedWorlds.WorldOwnedWorldsCheckpoint section) {
+    private static bool TryDecodeOwnedWorlds(byte[] bytes, out string reason, out WorldOwnedWorldsCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
-        var identityDocumentsJson = ReadArray(
-            reader: ref reader,
+        var identityDocumentsJson = reader.ReadArray(
             field: "owned worlds documents",
             readItem: static (ref WireReader r) => r.ReadBlock(
                 field: "owned world document",
                 maxBytes: MaxSectionBytes
-            )
+            ),
+            maximum: MaxCollectionCount
         );
         var revision = reader.ReadInt64();
 
@@ -34,7 +33,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new WorldOwnedWorlds.WorldOwnedWorldsCheckpoint(
+        section = new WorldOwnedWorldsCheckpoint(
             IdentityDocumentsJson: identityDocumentsJson,
             Revision: revision
         );
@@ -54,23 +53,19 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             state: member.DynamicState
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: member.Designations,
             writeItem: WriteTargetDesignation
         );
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: member.Peer,
             writeValue: WritePeerEventEntry
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: member.AdmissionGrants,
             writeItem: WriteAdmissionGrant
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: member.SourceGrants,
             writeItem: WriteWorldGrant
         );
@@ -87,24 +82,23 @@ public static partial class WorldAuthorityCheckpointCodec {
         var position = reader.ReadFixedVector();
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
-        var designations = ReadArray(
-            reader: ref reader,
+        var designations = reader.ReadArray(
             field: "landed member designations",
-            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r)
+            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var peer = ReadOptional(
-            reader: ref reader,
-            readValue: static (ref WireReader r) => ReadPeerEventEntry(reader: ref r)
+        var peer = reader.ReadOptional(
+            readValue: static (ref WireReader r) => WorldWireLeaves.ReadPeerEventEntry(reader: ref r)
         );
-        var admissionGrants = ReadArray(
-            reader: ref reader,
+        var admissionGrants = reader.ReadArray(
             field: "landed member admission grants",
-            readItem: static (ref WireReader r) => ReadAdmissionGrant(reader: ref r)
+            readItem: static (ref WireReader r) => ReadAdmissionGrant(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var sourceGrants = ReadArray(
-            reader: ref reader,
+        var sourceGrants = reader.ReadArray(
             field: "landed member source grants",
-            readItem: static (ref WireReader r) => ReadWorldGrant(reader: ref r)
+            readItem: static (ref WireReader r) => ReadWorldGrant(reader: ref r),
+            maximum: MaxCollectionCount
         );
         var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
         var followedSeatMask = reader.ReadByte();
@@ -135,23 +129,19 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: row.MemberCount);
         writer.WriteBoolean(value: row.RollbackOnly);
         writer.WriteBoolean(value: row.CommitConfirmed);
-        WriteOptionalClass(
-            writer,
-            row.Continuation,
-            WriteTransferContinuation
+        writer.WriteOptionalClass(
+            value: row.Continuation,
+            writeValue: WriteTransferContinuation
         );
-        WriteOptionalClass(
-            writer,
-            row.TargetDefinitionJson,
-            static (w, bytes) => w.WriteBlock(value: bytes)
+        writer.WriteOptionalClass(
+            value: row.TargetDefinitionJson,
+            writeValue: static (w, bytes) => w.WriteBlock(value: bytes)
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.CommitMembers,
             writeItem: WriteCommitMember
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.Landed,
             writeItem: WriteLandedMember
         );
@@ -179,29 +169,27 @@ public static partial class WorldAuthorityCheckpointCodec {
         var memberCount = reader.ReadInt32();
         var rollbackOnly = reader.ReadBoolean();
         var commitConfirmed = reader.ReadBoolean();
-        var continuation = ReadOptionalClass(
-            readValue: ReadTransferContinuation,
-            reader: ref reader
+        var continuation = reader.ReadOptionalClass(
+            readValue: ReadTransferContinuation
         );
-        var targetDefinition = ReadOptionalClass(
-            ref reader,
-            static (ref WireReader r) => r.ReadBlock(
+        var targetDefinition = reader.ReadOptionalClass(
+            readValue: static (ref WireReader r) => r.ReadBlock(
                 field: "recovery destination definition",
                 maxBytes: MaxSectionBytes
             )
         );
-        var commitMembers = ReadArray(
-            reader: ref reader,
+        var commitMembers = reader.ReadArray(
             field: "in-doubt transfer commit members",
             readItem: (ref WireReader r) => ReadCommitMember(
                 defaults: defaults,
                 reader: ref r
-            )
+            ),
+            maximum: MaxCollectionCount
         );
-        var landed = ReadArray(
-            reader: ref reader,
+        var landed = reader.ReadArray(
             field: "in-doubt transfer landed members",
-            readItem: static (ref WireReader r) => ReadLandedMember(reader: ref r)
+            readItem: static (ref WireReader r) => ReadLandedMember(reader: ref r),
+            maximum: MaxCollectionCount
         );
 
         return new WorldInDoubtTransferCheckpoint(
@@ -237,10 +225,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteString(value: row.SourceAuthority);
         writer.WriteNullableString(value: row.DestinationEndpoint);
-        WriteOptionalClass(
-            writer,
-            row.DestinationDefinitionJson,
-            static (w, bytes) => w.WriteBlock(value: bytes)
+        writer.WriteOptionalClass(
+            value: row.DestinationDefinitionJson,
+            writeValue: static (w, bytes) => w.WriteBlock(value: bytes)
         );
     }
     private static WorldForwardedBodyCheckpoint ReadForwardedBody(ref WireReader reader) {
@@ -256,9 +243,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "forwarding destination endpoint",
             maxBytes: MaxStringBytes
         );
-        var definition = ReadOptionalClass(
-            ref reader,
-            static (ref WireReader r) => r.ReadBlock(
+        var definition = reader.ReadOptionalClass(
+            readValue: static (ref WireReader r) => r.ReadBlock(
                 field: "forwarding destination definition",
                 maxBytes: MaxSectionBytes
             )

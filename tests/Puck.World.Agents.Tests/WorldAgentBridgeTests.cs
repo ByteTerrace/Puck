@@ -1,7 +1,6 @@
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.AI;
 using Puck.Commands;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Puck.Maths;
 using Puck.World.Agents.Harness;
 using Puck.World.Machines;
@@ -12,7 +11,7 @@ using Xunit;
 namespace Puck.World.Agents.Tests;
 
 public sealed class WorldAgentBridgeTests {
-    private static WorldAgentBridge Bridge(RecordingLink link, WorldPrincipal principal, int bodyIndex) => new(
+    private static WorldAgentBridge Bridge(RecordingLink link, Principal principal, int bodyIndex) => new(
         bodyIndex: bodyIndex,
         channels: Channels,
         dispatcher: InlineDispatcher.Instance,
@@ -49,7 +48,7 @@ public sealed class WorldAgentBridgeTests {
         var bridge = Bridge(
             bodyIndex: 4,
             link: new RecordingLink(),
-            principal: WorldPrincipal.Peer(
+            principal: Principal.Peer(
                 generation: 1,
                 index: 4
             )
@@ -82,7 +81,7 @@ public sealed class WorldAgentBridgeTests {
             channels: () => current,
             dispatcher: InlineDispatcher.Instance,
             link: link,
-            principal: WorldPrincipal.Peer(
+            principal: Principal.Peer(
                 generation: 1,
                 index: 4
             )
@@ -112,44 +111,18 @@ public sealed class WorldAgentBridgeTests {
         );
     }
     [Fact]
-    public void AgentHostCompositionIsAnExplicitExtension() {
-        var services = new ServiceCollection();
-
-        services.AddPuckWorldAgentBridge(
-            mailboxCapacity: 4,
-            maximumOperationsPerFrame: 2
-        );
-
-        Assert.Single(
-            collection: services,
-            predicate: static descriptor => (descriptor.ServiceType == typeof(IPrincipalServerLink))
-        );
-        Assert.Single(
-            collection: services,
-            predicate: static descriptor => (descriptor.ServiceType == typeof(WorldAgentMailbox))
-        );
-        Assert.Single(
-            collection: services,
-            predicate: static descriptor => (descriptor.ServiceType == typeof(IWorldAgentDispatcher))
-        );
-        Assert.Single(
-            collection: services,
-            predicate: static descriptor => (descriptor.ServiceType == typeof(ISnapshotInputCapture))
-        );
-    }
-    [Fact]
     public async Task BridgeDoesNotTouchLinkBeforeHostMailboxCapture() {
         var link = new RecordingLink();
         using var mailbox = new WorldAgentMailbox(
             capacity: 4,
-            maximumOperationsPerFrame: 2
+            maximumOperationsPerDrain: 2
         );
         var bridge = new WorldAgentBridge(
             bodyIndex: 7,
             channels: Channels,
             dispatcher: mailbox,
             link: link,
-            principal: WorldPrincipal.Peer(
+            principal: Principal.Peer(
                 generation: 3,
                 index: 7
             )
@@ -163,7 +136,7 @@ public sealed class WorldAgentBridgeTests {
         Assert.False(condition: pending.IsCompleted);
         Assert.Null(@object: link.LastQuery);
 
-        mailbox.CaptureFrame(frameKey: 1);
+        mailbox.Drain();
 
         Assert.Equal(
             expected: WorldAgentObservationKind.Pose,
@@ -178,7 +151,7 @@ public sealed class WorldAgentBridgeTests {
             channels: static () => WorldChannelTable.Empty,
             dispatcher: InlineDispatcher.Instance,
             link: new RecordingLink(),
-            principal: WorldPrincipal.World
+            principal: Principal.World
         ));
     }
     [Fact]
@@ -210,7 +183,7 @@ public sealed class WorldAgentBridgeTests {
             var agent = WorldAgentHarness.Create(
                 bridge: Bridge(
                     link: new RecordingLink(),
-                    principal: WorldPrincipal.Peer(
+                    principal: Principal.Peer(
                         generation: 1,
                         index: 4
                     ),
@@ -246,7 +219,7 @@ public sealed class WorldAgentBridgeTests {
         var chatClient = new RecordingChatClient();
         var bridge = Bridge(
             link: new RecordingLink(),
-            principal: WorldPrincipal.Peer(
+            principal: Principal.Peer(
                 generation: 1,
                 index: 4
             ),
@@ -299,7 +272,7 @@ public sealed class WorldAgentBridgeTests {
     public void LoopbackPrincipalQueryStampsExplicitIdentity() {
         var host = new RecordingHost();
         var link = new LoopbackTransport(server: host);
-        var principal = WorldPrincipal.Peer(
+        var principal = Principal.Peer(
             generation: 4,
             index: 9
         );
@@ -322,7 +295,7 @@ public sealed class WorldAgentBridgeTests {
     }
     [Fact]
     public async Task WriteVectorAsync_ThroughRealServer_GrantedLands_UngrantedRefused() {
-        var space = new StateSpace(Dimensions: 8, Model: "test-model", Name: CellName.Parse(candidate: "lore"), Revision: "1");
+        var space = new StateSpace(dimensions: 8, model: "test-model", name: CellName.Parse(candidate: "lore"), revision: "1");
         var eventsRow = new WorldStateRow(
             Capacity: 4,
             Kind: CellKind.Vector,
@@ -336,7 +309,7 @@ public sealed class WorldAgentBridgeTests {
             )
         );
         var population = new WorldPopulation(definition: definition);
-        var stateDirectory = Path.Combine(Path.GetTempPath(), $"puck-agents-test-{Guid.NewGuid():N}");
+        var stateDirectory = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-agents-test-{Guid.NewGuid():N}");
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
         using var machines = new WorldMachineHost(screens: definition.Screens, catalog: new WorldMachineCatalog([]), documentPath: null);
         var server = new WorldServer(
@@ -348,39 +321,39 @@ public sealed class WorldAgentBridgeTests {
         );
 
         var transport = new LoopbackTransport(server: server);
-        var grantedPeer = WorldPrincipal.Peer(generation: 1, index: 1);
-        var ungrantedPeer = WorldPrincipal.Peer(generation: 1, index: 2);
+        var grantedPeer = Principal.Peer(generation: 1, index: 1);
+        var ungrantedPeer = Principal.Peer(generation: 1, index: 2);
 
-        Assert.True(WorldMutationKindCatalog.TryParseMask("UpsertStateCell", out var kindMask, out _));
+        Assert.True(condition: WorldMutationKindCatalog.TryParseMask(mask: out var kindMask, text: "UpsertStateCell", unknown: out _));
         server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Budget: 10,
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kindMask,
-                Principal: grantedPeer,
+                Grantee: grantedPeer,
                 Subject: GrantSubject.Section(section: WorldSection.State)
             )
         );
         server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Capability: WorldCapability.Edit,
                 Exclusive: false,
-                Principal: grantedPeer,
+                Grantee: grantedPeer,
                 Subject: GrantSubject.State(name: "events")
             )
         );
 
         server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Budget: 10,
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kindMask,
-                Principal: ungrantedPeer,
+                Grantee: ungrantedPeer,
                 Subject: GrantSubject.Section(section: WorldSection.State)
             )
         );
@@ -407,24 +380,26 @@ public sealed class WorldAgentBridgeTests {
         server.Advance(stepTicks: 1);
 
         var rowAfterGranted = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "events");
-        Assert.NotNull(rowAfterGranted);
-        Assert.NotNull(rowAfterGranted.Cells);
-        Assert.Contains(rowAfterGranted.Cells, c => c.Key.Value == "g1");
+
+        Assert.NotNull(@object: rowAfterGranted);
+        Assert.NotNull(@object: rowAfterGranted.Cells);
+        Assert.Contains(collection: rowAfterGranted.Cells, filter: c => (c.Key.Value == "g1"));
 
         // Ungranted principal writes "u1"
         _ = await ungrantedBridge.WriteVectorAsync(row: "events", key: "u1", components: vec, cancellationToken: TestContext.Current.CancellationToken);
         server.Advance(stepTicks: 1);
 
         var rowAfterUngranted = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "events");
-        Assert.NotNull(rowAfterUngranted);
-        Assert.NotNull(rowAfterUngranted.Cells);
-        Assert.DoesNotContain(rowAfterUngranted.Cells, c => c.Key.Value == "u1");
+
+        Assert.NotNull(@object: rowAfterUngranted);
+        Assert.NotNull(@object: rowAfterUngranted.Cells);
+        Assert.DoesNotContain(collection: rowAfterUngranted.Cells, filter: c => (c.Key.Value == "u1"));
     }
     [Fact]
     public async Task MailboxCancellationPreventsQueuedWorldOperation() {
         using var mailbox = new WorldAgentMailbox(
             capacity: 1,
-            maximumOperationsPerFrame: 1
+            maximumOperationsPerDrain: 1
         );
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
         var invoked = false;
@@ -439,14 +414,14 @@ public sealed class WorldAgentBridgeTests {
         await cancellation.CancelAsync();
 
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: async () => await pending);
-        mailbox.CaptureFrame(frameKey: 1);
+        mailbox.Drain();
         Assert.False(condition: invoked);
     }
     [Fact]
     public async Task MailboxDefersWorkToHostCaptureAndRefusesOverflow() {
         using var mailbox = new WorldAgentMailbox(
             capacity: 1,
-            maximumOperationsPerFrame: 1
+            maximumOperationsPerDrain: 1
         );
         var captureThread = Environment.CurrentManagedThreadId;
         var executionThread = -1;
@@ -469,7 +444,7 @@ public sealed class WorldAgentBridgeTests {
         );
         _ = await Assert.ThrowsAsync<InvalidOperationException>(testCode: async () => await overflow);
 
-        mailbox.CaptureFrame(frameKey: 7);
+        mailbox.Drain();
 
         Assert.Equal(
             expected: 42,
@@ -488,7 +463,7 @@ public sealed class WorldAgentBridgeTests {
     public async Task MailboxShutdownRefusesQueuedAndFutureWork() {
         var mailbox = new WorldAgentMailbox(
             capacity: 2,
-            maximumOperationsPerFrame: 1
+            maximumOperationsPerDrain: 1
         );
         var pending = mailbox.InvokeAsync(
             operation: static () => 42,
@@ -507,7 +482,7 @@ public sealed class WorldAgentBridgeTests {
     [Fact]
     public async Task MoveBuildsTypedIntentAndReturnsSubmissionNotAcceptance() {
         var link = new RecordingLink { CorrelationId = 91 };
-        var principal = WorldPrincipal.Peer(
+        var principal = Principal.Peer(
             generation: 2,
             index: 5
         );
@@ -561,7 +536,7 @@ public sealed class WorldAgentBridgeTests {
     [Fact]
     public async Task ObservationCarriesScopedPrincipalAndBodyCoordinate() {
         var link = new RecordingLink();
-        var principal = WorldPrincipal.Peer(
+        var principal = Principal.Peer(
             generation: 3,
             index: 7
         );
@@ -601,7 +576,7 @@ public sealed class WorldAgentBridgeTests {
         var bridge = Bridge(
             bodyIndex: 4,
             link: link,
-            principal: WorldPrincipal.Peer(
+            principal: Principal.Peer(
                 generation: 1,
                 index: 4
             )
@@ -621,7 +596,7 @@ public sealed class WorldAgentBridgeTests {
         var link = new RecordingLink();
         var bridge = Bridge(
             link: link,
-            principal: WorldPrincipal.Addon(name: "guide"),
+            principal: Principal.Addon(name: "guide"),
             bodyIndex: 1
         );
 
@@ -645,11 +620,10 @@ public sealed class WorldAgentBridgeTests {
             channel: "invented"
         ));
     }
-
     [Fact]
     public async Task WriteVectorAsync_StampsPrincipalAndSuppliedKey() {
         var link = new RecordingLink();
-        var principal = WorldPrincipal.Peer(
+        var principal = Principal.Peer(
             generation: 1,
             index: 4
         );
@@ -660,6 +634,7 @@ public sealed class WorldAgentBridgeTests {
         );
 
         var components = new sbyte[32];
+
         components[0] = 127;
 
         var receipt = await bridge.WriteVectorAsync(
@@ -680,6 +655,7 @@ public sealed class WorldAgentBridgeTests {
 
         var payload = Assert.IsType<WorldSubmissionPayload.Mutation>(@object: link.LastPayload);
         var mutation = Assert.IsType<WorldMutation.UpsertStateCell>(@object: payload.Value);
+
         Assert.Equal(
             expected: "embedding",
             actual: mutation.Row
@@ -695,11 +671,10 @@ public sealed class WorldAgentBridgeTests {
         Assert.NotNull(@object: mutation.Vector);
         Assert.True(condition: mutation.Vector.Components.SequenceEqual(other: components));
     }
-
     [Fact]
     public async Task WriteVectorAsync_FallsBackToSlotKeyWhenNull() {
         var link = new RecordingLink();
-        var principal = WorldPrincipal.Addon(name: "guide");
+        var principal = Principal.Addon(name: "guide");
         var bridge = Bridge(
             bodyIndex: 1,
             link: link,
@@ -707,6 +682,7 @@ public sealed class WorldAgentBridgeTests {
         );
 
         var components = new sbyte[32];
+
         components[0] = 127;
 
         var receipt = await bridge.WriteVectorAsync(
@@ -727,6 +703,7 @@ public sealed class WorldAgentBridgeTests {
 
         var payload = Assert.IsType<WorldSubmissionPayload.Mutation>(@object: link.LastPayload);
         var mutation = Assert.IsType<WorldMutation.UpsertStateCell>(@object: payload.Value);
+
         Assert.Equal(
             expected: "slot_row",
             actual: mutation.Row
@@ -740,12 +717,12 @@ public sealed class WorldAgentBridgeTests {
             actual: mutation.Principal
         );
     }
-
     [Fact]
     public async Task WriteVectorAsync_SubmissionCorrelation_GrantedVsUngranted() {
         var components = new sbyte[32];
+
         components[0] = 127;
-        var principal = WorldPrincipal.Peer(
+        var principal = Principal.Peer(
             generation: 1,
             index: 4
         );
@@ -800,14 +777,13 @@ public sealed class WorldAgentBridgeTests {
             actualString: ungrantedReceipt.Message
         );
     }
-
     [Fact]
     public async Task WriteVectorAsync_RefusesNonUnitOrInvalidComponentCountsBeforeDispatch() {
         var link = new RecordingLink();
         var bridge = Bridge(
             bodyIndex: 0,
             link: link,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
 
         await Assert.ThrowsAsync<ArgumentException>(testCode: async () =>
@@ -849,17 +825,17 @@ public sealed class WorldAgentBridgeTests {
         public bool CompleteQueries { get; init; } = true;
         public long CorrelationId { get; init; } = 1;
         public WorldSubmissionPayload? LastPayload { get; private set; }
-        public WorldPrincipal LastPrincipal { get; private set; }
+        public Principal LastPrincipal { get; private set; }
         public WorldQuery? LastQuery { get; private set; }
-        public WorldPrincipal LastQueryPrincipal { get; private set; }
-        public List<WorldPrincipal> QueryPrincipals { get; } = [];
+        public Principal LastQueryPrincipal { get; private set; }
+        public List<Principal> QueryPrincipals { get; } = [];
 
         public void Query(WorldQuery query, Action<QueryAnswer> completion) => Query(
             completion: completion,
-            principal: WorldPrincipal.Console,
+            principal: Principal.Console,
             query: query
         );
-        public void Query(WorldQuery query, WorldPrincipal principal, Action<QueryAnswer> completion) {
+        public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
             LastQuery = query;
             LastQueryPrincipal = principal;
             QueryPrincipals.Add(item: principal);
@@ -877,12 +853,12 @@ public sealed class WorldAgentBridgeTests {
                 Text: "authoritative answer"
             ));
         }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
+        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) {
             LastPayload = payload;
             LastPrincipal = principal;
             return CorrelationId;
         }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) =>
+        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) =>
             SubmitEnvelope(payload: payload, principal: principal);
         public void SubmitIntent(in IntentSubmission submission) => throw new NotSupportedException();
         public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => throw new NotSupportedException();

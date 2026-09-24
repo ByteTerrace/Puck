@@ -52,7 +52,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedPosition.TryCreate \u2014 the per-axis arithmetic-shift quotient, masked residue, half-cell carry compare and the unchecked (localRaw \u2212 (carry \u003C\u003C 36)) subtraction, FixedPosition.cs:265-284",
+        "Subject": "FixedPosition.TryCreate \u2014 the per-axis arithmetic-shift quotient, masked residue, half-cell carry compare and the unchecked (localRaw \u2212 (carry \u003C\u003C 36)) subtraction",
         "Against": "Oracles.CellSplit \u2014 one Oracles.FloorQuotient of (localRaw \u002B 2\u00B3\u2075) over 2\u00B3\u2076 and one exact multiply-subtract in BigInteger, with no mask, no shift and no wrap anywhere. EXACT on both sides: the rounding substrate does not arise in this type at all, so the statement is the canonicalization rule itself. ENVELOPE, reached every run: at localRaw = long.MaxValue the subject\u0027s carry \u003C\u003C 36 forms 2\u2076\u00B3 and wraps to long.MinValue; the subtraction stays congruent mod 2\u2076\u2074 and the true offset is in band, and the oracle judges that without reproducing it",
         "Shared": "",
         "Citation": "",
@@ -168,7 +168,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedPosition.TryDelta \u2014 BOTH code paths: the narrow long path gated on a non-overflowing cell subtraction AND |cellDelta| \u2264 2\u00B2\u2076 (FixedPosition.cs:307-319) and the Int128 path beyond it",
+        "Subject": "FixedPosition.TryDelta \u2014 BOTH code paths: the narrow long path gated on a non-overflowing cell subtraction AND |cellDelta| \u2264 2\u00B2\u2076 and the Int128 path beyond it",
         "Against": "Oracles.CellDelta \u2014 the single exact BigInteger expression (cell \u2212 originCell)\u00B72\u00B3\u2076 \u002B (localRaw \u2212 originLocalRaw), one branch and no gate. EXACT on both sides; the oracle knows nothing of the conservative 2\u00B2\u2076 gate and therefore judges the two paths equally",
         "Shared": "",
         "Citation": "",
@@ -253,7 +253,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedPosition.TryTranslate \u2014 the per-axis long add with the branchless exclusive-or overflow test then the long canonicalizer, and the Int128 fallback that recomputes ALL THREE components wide when any one add overflows (FixedPosition.cs:118-144)",
+        "Subject": "FixedPosition.TryTranslate \u2014 the per-axis long add through BinaryIntegerFunctions.TryAdd then the long canonicalizer, and the Int128 fallback that recomputes ALL THREE components wide when any one add overflows",
         "Against": "Oracles.CellSplit of the EXACT BigInteger sum (localRaw \u002B delta) against the existing cell, per axis \u2014 one derivation covering both of the subject\u0027s paths, exact on both sides",
         "Shared": "",
         "Citation": "",
@@ -461,7 +461,7 @@
         "Flavor": "DelegationTwin",
         "Subject": "FixedPosition.ToRenderRelative",
         "Against": "Delta(origin).ToVector3() on the same operands",
-        "Shared": "the whole body \u2014 ToRenderRelative IS that expression (FixedPosition.cs:191-192), so agreement proves the wiring and never the conversion",
+        "Shared": "the whole body \u2014 ToRenderRelative IS that expression, so agreement proves the wiring and never the conversion",
         "Citation": "the published-constant leg above, which reads the FLOATS themselves against a hand-derived table and so pins the conversion independently of the delegation; and position.delta-vs-oracle, which pins Delta against Oracles.CellDelta",
         "Absolute": ""
       },

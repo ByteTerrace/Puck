@@ -1466,5 +1466,167 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "vector.componentwise-helpers-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Abs"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Clamp"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Divide"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "MaxComponent"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_CheckedAddition"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_CheckedSubtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_CheckedUnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "op_CheckedMultiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3 op_CheckedAddition, op_CheckedSubtraction and op_CheckedUnaryNegation, every component, and the refusal",
+        "Against": "The exact BigInteger sum, difference and negation per lane: the operator must answer them exactly when all three fit the signed 64-bit raw and throw OverflowException when any one does not. The claim decides representability by a BigInteger range comparison, sharing nothing with the branded scalar operators the subject lifts",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3 op_CheckedMultiply by a scalar, every component, and the refusal",
+        "Against": "Oracles.ExactRoundedProduct: one ties-to-even rounding of the exact BigInteger product, UNWRAPPED, so representability is decided on the rounded value itself. The operator must answer it exactly when all three lanes fit and throw OverflowException otherwise",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Multiply (the Hadamard product) and FixedVector3.Divide, every component",
+        "Against": "Oracles.RoundDyadic of the exact BigInteger lane product and Oracles.RoundDyadicRatio of the exact lane ratio, each one ties-to-even rounding at shift 16, wrapped to the carrier. ENVELOPE: a sampled zero divisor lane is mapped to one raw unit by Subjects.NonZeroDivisor before either side reads it; the zero divisor is the scalar operator's refusal and belongs to its own law",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Round, every component, and the refusal",
+        "Against": "Oracles.RoundToEvenUnits at shift 16 of the lane raw, shifted back to the carrier scale: ties to even, computed in BigInteger. A lane whose rounded value passes long.MaxValue must throw OverflowException",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Abs, every component, and the refusal",
+        "Against": "BigInteger.Abs of the lane raw: exact, and OverflowException expected exactly when some lane is long.MinValue, whose magnitude has no signed 64-bit raw",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.Max, FixedVector3.MaxComponent and FixedVector3.Clamp",
+        "Against": "Exact inline comparisons of the lane raws in the claim: the greater raw per lane, the greatest of the three lanes, and the clamp of each lane to bounds built from the second operand's lane and its fourth lane, ordered so the lower is never above the upper",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Clamp with its bounds swapped throws ArgumentException whenever some lane's range is wider than one point, and returns the single point when every lane's bounds coincide",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the helpers are LANE-FAITHFUL: every expectation is computed per lane from that lane's raws alone, so a transposed or shared lane fails",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.unit-axes-are-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "UnitX"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "UnitY"
+      },
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "UnitZ"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.UnitX, UnitY and UnitZ, every lane",
+        "Against": "The literal raws: one unit (2^16) on the axis's own lane and zero on the other two",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the axes form a right-handed orthonormal frame under the library's exact products: each dots itself to one and the others to zero, and X cross Y is Z, cyclically. Dot and Cross are exact at these operands, so the statement adds no rounding envelope",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

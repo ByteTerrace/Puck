@@ -25,7 +25,7 @@ var journal = new WorldExternalOperationJournal(store, privateTarget,
 await using var host = new WorldExtensionHost(server, journal, authorityLineage,
     registrations, () => server.CaptureExternalOperationCause(hostRow));
 
-using var client = host.CreateClient(WorldPrincipal.Addon("creature-controller"),
+using var client = host.CreateClient(Principal.Addon("creature-controller"),
     allowedOperations: ["creature.delete"], worldRequests: manifest);
 host.Start();
 ```
@@ -60,8 +60,9 @@ explicitly disclosed scalar fields, and cooperates with cancellation. Throw on
 incomplete results; returning an empty collection means authoritative absence.
 The [configuration layer](ExtensionConfiguration.md#observe-a-collection) owns
 bounded scheduling, state-row projection, and source disposal.
-Custom hosts call `WorldConfiguredExtensions.Pump` at closed boundaries;
-observation-only configurations do not need `Host.Start` or effect checkpoints.
+A host attaches a configuration to a world row with `WorldConfiguredExtensions.Attach`,
+calls `Pump` at closed boundaries, and calls `Start` when it starts; observation-only
+configurations start no operation worker and need no effect checkpoints.
 This optional collection adapter does not constrain richer SDK integrations to
 a universal resource model.
 

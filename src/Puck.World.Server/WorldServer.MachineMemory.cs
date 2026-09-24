@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -55,6 +56,7 @@ public sealed partial class WorldServer {
             }
         }
     }
+
     private void SyncMachineMemoryWrite(int screen, WorldScreenMemory binding, ulong tick) {
         if (
             !WorldStateReader.TryRead(
@@ -147,7 +149,7 @@ public sealed partial class WorldServer {
 
         var applied = TryApplyMutation(
             mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.World,
+                Principal: Principal.World,
                 Row: binding.Row,
                 Key: (binding.Key ?? WorldStateRow.SlotKey.Value),
                 Value: value,
@@ -165,7 +167,7 @@ public sealed partial class WorldServer {
         }
 
         m_machineMemoryReadObserved[key] = value;
-        m_output.DeliverState(definition: m_document.Definition);
+        m_document.DeliverPending();
     }
 
     /// <summary>Returns the last value a <c>screens[].memory</c> binding at <paramref name="address"/> observed in

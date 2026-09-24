@@ -15,7 +15,7 @@
       "source": "branding/assets/puck-logo-256.png",
       "sha256": "a7314521f9677bf53142ebf200f1bb4258a333670ff0635e74b26b721627136c",
       "variant": "Dashboard portal header mark retained at its authored 256x256 size.",
-      "consumers": ["src/Puck.Dashboard/src/portal/assets/logo.png"]
+      "consumers": ["src/Puck.Dashboard/src/portal/src/ui/puck-mark.png"]
     },
     {
       "id": "puck-editor-icon-128",
@@ -27,14 +27,14 @@
     {
       "id": "puck-palette-tokens",
       "source": "branding/tokens.css",
-      "sha256": "81d7514bf90af04e015a0e4546b9381e20e005e14a1df916468efba8dbc01019",
+      "sha256": "49e3750cf55162caffedb858840109a8d2d700fdd294470ecfac08508cc4edc0",
       "variant": "Shared light/dark CSS custom properties consumed by the site, DocFX, and dashboard adapters.",
-      "consumers": ["docs/site/_theme/tokens.css", "docs/site/_theme/theme.css", "docs/api/templates/byteterrace/public/main.css", "src/Puck.Dashboard/src/portal/src/theme.css"]
+      "consumers": ["docs/site/_theme/tokens.css", "docs/site/_theme/theme.css", "docs/api/templates/byteterrace/public/main.css", "src/Puck.Dashboard/src/portal/src/theme/global.css", "src/Puck.Dashboard/src/host/src/host.css"]
     },
     {
       "id": "puck-favicon",
       "source": "branding/assets/puck-favicon.ico",
-      "sha256": "5b986c532c2034eb53b0ff89b031fe1c5cb553569315db5261060e2098f718e7",
+      "sha256": "5f62a5b311e5718e59519d3799fbbfbf76b226baed7f459fa728a16f6ea160b0",
       "variant": "Shared browser favicon.",
       "consumers": ["docs/site/favicon.ico", "docs/site/icons/favicon.ico", "src/Puck.Dashboard/src/host/public/favicon.ico"]
     },
@@ -111,7 +111,7 @@
   ],
   "copies": [
     { "asset": "puck-logo-200", "path": "docs/site/_theme/logo.png" },
-    { "asset": "puck-logo-256", "path": "src/Puck.Dashboard/src/portal/assets/logo.png" },
+    { "asset": "puck-logo-256", "path": "src/Puck.Dashboard/src/portal/src/ui/puck-mark.png" },
     { "asset": "puck-editor-icon-128", "path": "editors/vscode/icon.png" },
     { "asset": "puck-palette-tokens", "path": "docs/site/_theme/tokens.css" },
     { "asset": "puck-favicon", "path": "docs/site/favicon.ico" },
@@ -145,7 +145,7 @@
   },
   "palette": {
     "tokens": "branding/tokens.css",
-    "adapters": ["docs/site/_theme/theme.css", "docs/api/templates/byteterrace/public/main.css", "src/Puck.Dashboard/src/portal/src/theme.css"]
+    "adapters": ["docs/site/_theme/theme.css", "docs/api/templates/byteterrace/public/main.css", "src/Puck.Dashboard/src/portal/src/theme/global.css", "src/Puck.Dashboard/src/host/src/host.css"]
   },
   "wiring": [
     { "path": "build/Packaging.targets", "contains": "branding\\assets\\puck-logo-200.png", "description": "NuGet packages consume the canonical product mark." },
@@ -155,7 +155,8 @@
     { "path": "docs/api/templates/byteterrace/public/main.css", "contains": "@import url(\"/_theme/tokens.css\");", "description": "The DocFX adapter consumes the staged shared token copy." },
     { "path": "docs/api/templates/byteterrace/public/main.css", "contains": "--bs-body-font-family: var(--font-body);", "description": "The DocFX adapter maps the canonical body font stack." },
     { "path": "docs/api/templates/byteterrace/public/main.css", "contains": "--bs-font-monospace: var(--font-code);", "description": "The DocFX adapter maps the canonical code font stack." },
-    { "path": "src/Puck.Dashboard/src/portal/src/theme.css", "contains": "@import url(\"../../../../../branding/tokens.css\");", "description": "The dashboard adapter consumes the canonical token source directly." },
-    { "path": "src/Puck.Dashboard/src/portal/src/theme.css", "contains": "font-family: var(--font-body);", "description": "The dashboard consumes the canonical body font stack." }
+    { "path": "src/Puck.Dashboard/src/portal/src/theme/global.css", "contains": "@import url(\"../../../../../../branding/tokens.css\");", "description": "The dashboard adapter consumes the canonical token source directly." },
+    { "path": "src/Puck.Dashboard/src/portal/src/theme/global.css", "contains": "font-family: var(--font-body);", "description": "The dashboard sets display type and prose in the canonical body font stack." },
+    { "path": "src/Puck.Dashboard/src/host/src/host.css", "contains": "@import url(\"../../../../../branding/tokens.css\");", "description": "The dashboard host loading screen consumes the canonical token source directly." }
   ]
 }

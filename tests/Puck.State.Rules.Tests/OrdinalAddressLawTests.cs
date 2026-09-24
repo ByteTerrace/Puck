@@ -151,7 +151,7 @@ public sealed class OrdinalAddressLawTests {
                 ],
                 forEach: "tokens",
                 gate: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     State: "$reduce:count:deck",
                     Value: 0m
                 ),
@@ -176,7 +176,7 @@ public sealed class OrdinalAddressLawTests {
     public void ARulesDescribeTextIsTheOnlyPlaceItsAuthoredNamesSurvive() {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 State: "score",
                 Value: 1m
             ),

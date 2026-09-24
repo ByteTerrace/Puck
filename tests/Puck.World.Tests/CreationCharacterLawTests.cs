@@ -2,7 +2,6 @@ using System.Numerics;
 
 using Puck.Assets.Documents;
 using Puck.Maths;
-using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Client;
 
@@ -69,27 +68,6 @@ public sealed class CreationCharacterLawTests {
             Knots: knots
         );
     }
-    private static ShapeDocument Limb(ShapeSwingDocument swing) => new(
-        Id: 0,
-        Name: "limb",
-        Type: SdfSolidPrimitive.Capsule,
-        Position: new Vector3(
-            x: 0f,
-            y: -1f,
-            z: 0f
-        ),
-        Rotation: Quaternion.Identity,
-        Scale: new Vector3(
-            x: 0.05f,
-            y: 1f,
-            z: 0.05f
-        ),
-        Material: 0,
-        Blend: SdfBlendOp.Union,
-        Smooth: 0f,
-        Group: 0,
-        Swings: [swing]
-    );
     private static string Refusal(WorldDefinition definition) => (WorldDefinitionValidator.TryValidateLocally(
         definition: definition,
         reason: out var reason
@@ -97,40 +75,19 @@ public sealed class CreationCharacterLawTests {
         ? string.Empty
         : reason
     );
-    private static CreationDocument Rig(IReadOnlyList<CreationDriverDocument> drivers, params ShapeDocument[] shapes) => new(
-        Schema: CreationDocument.CurrentSchema,
-        Name: "rig",
-        Palette: null,
-        Shapes: shapes,
-        Frames: null,
-        Drivers: drivers
-    );
-    private static WorldDefinition World(CreationDocument creation, IReadOnlyList<WorldStateRow>? state = null, IReadOnlyList<WorldCurveRow>? curves = null) {
-        var basis = Fixtures.BuildGradientUpDocument(gradientUp: false);
-        var section = (basis.StateRaw ?? new WorldStateSection());
-
-        return basis with {
-            CreationsRaw = [.. basis.Creations, new WorldPrototype(
-                Id: new DocumentIdentifier(value: "rig"),
-                Document: creation
-            )],
-            StateRaw = (section with { World = [.. (section.World ?? []), .. (state ?? [])] }),
-            CurvesRaw = curves,
-        };
-    }
 
     /// <summary>A <c>curve:</c> waveform samples the world's row: at half a turn the hump reads its crest, at zero
     /// its start; the control is sine on the same arguments, which reads zero at half a turn.</summary>
     [Fact]
     public void ACurveWaveSamplesTheWorldsCurveRow() {
-        var creation = Rig(
+        var creation = CreationFixtures.Rig(
             drivers: [new CreationDriverDocument(
                     Name: "stride",
                     Signal: CreationDriverDocument.SignalPlanarTravel,
                     Cadence: 1f,
                     When: ["always"]
                 )],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "stride",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
@@ -138,8 +95,7 @@ public sealed class CreationCharacterLawTests {
                 Wave: "curve:hump"
             ))
         );
-        var world = World(
-            creation: creation,
+        var world = CreationFixtures.RigWorld(creation: creation,
             curves: [Hump()]
         );
 
@@ -183,14 +139,14 @@ public sealed class CreationCharacterLawTests {
     /// the cells' numbers; the control is a literal beside them, untouched by the walk.</summary>
     [Fact]
     public void AScalarReferenceResolvesFromANumericStateCell() {
-        var creation = Rig(
+        var creation = CreationFixtures.Rig(
             drivers: [new CreationDriverDocument(
                     Name: "stride",
                     Signal: CreationDriverDocument.SignalPlanarTravel,
                     Cadence: Bound(reference: "state.gait.cadence"),
                     When: ["always"]
                 )],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "stride",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
@@ -198,8 +154,7 @@ public sealed class CreationCharacterLawTests {
                 Phase: 0.25f
             ))
         );
-        var world = World(
-            creation: creation,
+        var world = CreationFixtures.RigWorld(creation: creation,
             state: [
             new WorldStateRow(
                     Name: CellName.Parse(candidate: "gait"),
@@ -256,24 +211,22 @@ public sealed class CreationCharacterLawTests {
             Cadence: 2f,
             When: ["always"]
         );
-        var creation = Rig(
+        var creation = CreationFixtures.Rig(
             drivers: [driver],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "clock",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
                 Amplitude: 1f
             ))
         );
-        var world = World(
-            creation: creation,
+        var world = CreationFixtures.RigWorld(creation: creation,
             state: [FixedRow(
                     name: "turns",
                     value: 0.25
                 )]
         );
-        var zero = World(
-            creation: creation,
+        var zero = CreationFixtures.RigWorld(creation: creation,
             state: [FixedRow(
                     name: "turns",
                     value: 0
@@ -313,8 +266,11 @@ public sealed class CreationCharacterLawTests {
                 lastAddress: ref lastAddress,
                 easedSpeed: ref speed,
                 address: address,
-                definition: world,
-                tick: 10UL
+                reads: ClientFixtures.StateReads(
+                    bodyIndex: address.Index,
+                    definition: world,
+                    tick: 10UL
+                )
             );
         }
         Assert.Equal(
@@ -337,8 +293,11 @@ public sealed class CreationCharacterLawTests {
             lastAddress: ref lastAddress,
             easedSpeed: ref speed,
             address: address,
-            definition: zero,
-            tick: 10UL
+            reads: ClientFixtures.StateReads(
+                bodyIndex: address.Index,
+                definition: zero,
+                tick: 10UL
+            )
         );
         Assert.Equal(
             expected: 0f,
@@ -350,22 +309,8 @@ public sealed class CreationCharacterLawTests {
     /// the same driver gated on a published fact and on the client's own <c>moving</c> token, both admitted.</summary>
     [Fact]
     public void TheWorldValidatorRefusesAGateTokenNamingNoBodyFact() {
-        static CreationDocument Gated(string token) => Rig(
-            drivers: [new CreationDriverDocument(
-                    Name: "stride",
-                    Signal: CreationDriverDocument.SignalPlanarTravel,
-                    Cadence: 1f,
-                    When: [token]
-                )],
-            Limb(swing: new ShapeSwingDocument(
-                Driver: "stride",
-                Pivot: Vector3.Zero,
-                Axis: Vector3.UnitZ,
-                Amplitude: 1f
-            ))
-        );
 
-        var refusal = Refusal(definition: World(creation: Gated(token: "Floating")));
+        var refusal = Refusal(definition: CreationFixtures.RigWorld(creation: CreationFixtures.GatedStrideRig(token: "Floating")));
 
         Assert.Contains(
             actualString: refusal,
@@ -373,25 +318,25 @@ public sealed class CreationCharacterLawTests {
         );
         Assert.Equal(
             expected: string.Empty,
-            actual: Refusal(definition: World(creation: Gated(token: "Grounded")))
+            actual: Refusal(definition: CreationFixtures.RigWorld(creation: CreationFixtures.GatedStrideRig(token: "Grounded")))
         );
         Assert.Equal(
             expected: string.Empty,
-            actual: Refusal(definition: World(creation: Gated(token: CreationDriverDocument.TokenMoving)))
+            actual: Refusal(definition: CreationFixtures.RigWorld(creation: CreationFixtures.GatedStrideRig(token: CreationDriverDocument.TokenMoving)))
         );
     }
     /// <summary>The world validator refuses a curve waveform naming no row and a state signal naming a text row;
     /// the control is the same document with the row declared.</summary>
     [Fact]
     public void TheWorldValidatorRefusesAnUnknownCurveOrANonNumericSignalRow() {
-        var curved = Rig(
+        var curved = CreationFixtures.Rig(
             drivers: [new CreationDriverDocument(
                     Name: "stride",
                     Signal: CreationDriverDocument.SignalPlanarTravel,
                     Cadence: 1f,
                     When: ["always"]
                 )],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "stride",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
@@ -402,24 +347,23 @@ public sealed class CreationCharacterLawTests {
 
         Assert.Contains(
             expectedSubstring: "names no declared curves row",
-            actualString: Refusal(definition: World(creation: curved))
+            actualString: Refusal(definition: CreationFixtures.RigWorld(creation: curved))
         );
         Assert.Equal(
             expected: string.Empty,
-            actual: Refusal(definition: World(
-                creation: curved,
+            actual: Refusal(definition: CreationFixtures.RigWorld(creation: curved,
                 curves: [Hump()]
             ))
         );
 
-        var clocked = Rig(
+        var clocked = CreationFixtures.Rig(
             drivers: [new CreationDriverDocument(
                     Name: "clock",
                     Signal: "state.label",
                     Cadence: 1f,
                     When: ["always"]
                 )],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "clock",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
@@ -437,14 +381,13 @@ public sealed class CreationCharacterLawTests {
 
         Assert.Contains(
             expectedSubstring: "a signal reads an int or fixed cell",
-            actualString: Refusal(definition: World(
-                creation: clocked,
+            actualString: Refusal(definition: CreationFixtures.RigWorld(creation: clocked,
                 state: [textRow]
             ))
         );
         Assert.Contains(
             expectedSubstring: "names no declared state row",
-            actualString: Refusal(definition: World(creation: clocked))
+            actualString: Refusal(definition: CreationFixtures.RigWorld(creation: clocked))
         );
     }
 }

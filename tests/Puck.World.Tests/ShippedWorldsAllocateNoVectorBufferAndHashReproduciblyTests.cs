@@ -1,4 +1,3 @@
-using Puck.Hosting;
 using Puck.World.Server;
 using Xunit;
 
@@ -18,54 +17,21 @@ public sealed class ShippedWorldsAllocateNoVectorBufferAndHashReproduciblyTests 
     }
     [Fact]
     public void ShippedWorld_PuckWorld_HasEmptyVectorFrame_AndUnchangedAuthoritativeHash() {
-        const string RelativePath = "src/Puck.World/Assets/worlds/puck.world.json";
-        var catalog = TestHookInstaller.CreateMachineCatalog();
-        var definition = AuthoredGameFixtures.Load(catalog: catalog, relativePath: RelativePath);
-        var documentPath = Path.Combine(path1: AuthoredGameFixtures.Root, path2: RelativePath);
-        var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
+        var definition = AuthoredGameFixtures.Nexus;
+        var layout = ArenaLayout.Build(catalog: definition.StateCatalog, section: definition.StateRaw);
 
-        var layout1 = ArenaLayout.Build(catalog: definition.StateCatalog, section: definition.StateRaw);
+        Assert.Equal(expected: 0, actual: layout.VectorByteCount);
 
-        Assert.Equal(expected: 0, actual: layout1.VectorByteCount);
+        var first = ShippedWorldIdleRuns.First;
+        var second = ShippedWorldIdleRuns.Second;
 
-        // Boot server 1
-        using var fixture1 = Fixtures.FreshServer(
-            definition: definition,
-            documentPath: documentPath,
-            machineCatalog: catalog
-        );
+        Assert.NotEqual(actual: first.Authoritative[0], expected: 0UL);
+        Assert.NotEqual(actual: first.Authoritative[31], expected: 0UL);
+        Assert.NotEqual(actual: first.Authoritative[31], expected: first.Authoritative[0]);
 
-        var hash1Tick0 = WorldStateHashComposition.HashAuthoritative(server: fixture1.Server, tick: 0UL);
-
-        Assert.NotEqual(actual: hash1Tick0, expected: 0UL);
-
-        for (var tick = 1; (tick <= 31); tick++) {
-            fixture1.Step(stepTicks: width);
-        }
-
-        var hash1Tick31 = WorldStateHashComposition.HashAuthoritative(server: fixture1.Server, tick: 31UL);
-
-        Assert.NotEqual(actual: hash1Tick31, expected: 0UL);
-        Assert.NotEqual(actual: hash1Tick31, expected: hash1Tick0);
-
-        // Boot server 2 from the exact same source to verify bit-identical stability
-        using var fixture2 = Fixtures.FreshServer(
-            definition: definition,
-            documentPath: documentPath,
-            machineCatalog: catalog
-        );
-
-        var hash2Tick0 = WorldStateHashComposition.HashAuthoritative(server: fixture2.Server, tick: 0UL);
-
-        Assert.Equal(actual: hash2Tick0, expected: hash1Tick0);
-
-        for (var tick = 1; (tick <= 31); tick++) {
-            fixture2.Step(stepTicks: width);
-        }
-
-        var hash2Tick31 = WorldStateHashComposition.HashAuthoritative(server: fixture2.Server, tick: 31UL);
-
-        Assert.Equal(actual: hash2Tick31, expected: hash1Tick31);
+        // The second boot, from the same source, is bit-identical at boot and after the same ticks.
+        Assert.Equal(actual: second.Authoritative[0], expected: first.Authoritative[0]);
+        Assert.Equal(actual: second.Authoritative[31], expected: first.Authoritative[31]);
     }
     [Fact]
     public void ShippedWorld_Pipeline_HasEmptyVectorFrame_AndUnchangedAuthoritativeHash() {

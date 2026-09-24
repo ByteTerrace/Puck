@@ -6,6 +6,8 @@ namespace Puck.Vulkan;
 public static class VulkanImageUsageFlags {
     /// <summary>The <c>VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT</c> value.</summary>
     public const uint ColorAttachment = 0x00000010;
+    /// <summary>The <c>VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT</c> value.</summary>
+    public const uint DepthStencilAttachment = 0x00000020;
     /// <summary>The <c>VK_IMAGE_USAGE_SAMPLED_BIT</c> value.</summary>
     public const uint Sampled = 0x00000004;
     /// <summary>The <c>VK_IMAGE_USAGE_STORAGE_BIT</c> value.</summary>

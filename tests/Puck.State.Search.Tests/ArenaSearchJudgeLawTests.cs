@@ -10,7 +10,7 @@ namespace Puck.State.Search.Tests;
 /// serve is refused by name when the job set is installed, and never again.</summary>
 public sealed class ArenaSearchJudgeLawTests {
     [Fact]
-    public void RewindTurnIsRefusedAtSearchAdmission() {
+    public void RewindGroupIsRefusedAtSearchAdmission() {
         var position = new Position(rows: Rows());
         var judge = new RuleArenaSearchJudge(
             host: new ArenaSearchEffectHost(arena: position.Arena),
@@ -18,14 +18,14 @@ public sealed class ArenaSearchJudgeLawTests {
                 Name: "undo",
                 Mode: ActionTriggerMode.Level,
                 Gate: [],
-                Effects: [new Puck.State.Rules.RewindTurnEffect(group: "play")],
+                Effects: [new Puck.State.Rules.RewindGroupEffect(group: "play")],
                 Needs: RuleNeeds.None
             )]
         );
 
         Assert.True(condition: ArenaSearchPlan.TryResolve(catalog: position.Catalog, plan: Plan(), reason: out var reason, resolved: out var resolved), userMessage: reason);
         Assert.False(condition: judge.TryAdmit(plan: resolved, refusal: out var refusal));
-        Assert.Contains(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedSubstring: "rewindTurn");
+        Assert.Contains(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedSubstring: "rewindGroup");
         Assert.Contains(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedSubstring: "settled authoritative turn boundary");
     }
 
@@ -134,7 +134,7 @@ public sealed class ArenaSearchJudgeLawTests {
                     Kind: SearchShapeKind.Relocate,
                     Displace: false,
                     Directions: [],
-                    PairWithIndex: -1
+                    CompanionIndex: -1
                 )],
             Counts: "counts",
             Legal: "legal"

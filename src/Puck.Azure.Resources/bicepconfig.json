@@ -1,12 +1,79 @@
 {
+  // Every linter rule is an error, mirroring TreatWarningsAsErrors; `puck azure build-infrastructure` also fails on compiler warnings.
+  // Descriptions stay optional, like CS1591. What-if short-circuiting is inherent to principal IDs flowing between modules.
+  // use-recent-module-versions reports unresolved version metadata on the command line, so AVM pins are refreshed by hand.
+  "analyzers": {
+    "core": {
+      "rules": {
+        "adminusername-should-not-be-literal": { "level": "error" },
+        "artifacts-parameters": { "level": "error" },
+        "decompiler-cleanup": { "level": "error" },
+        "explicit-values-for-loc-params": { "level": "error" },
+        "max-asserts": { "level": "error" },
+        "max-outputs": { "level": "error" },
+        "max-parameters": { "level": "error" },
+        "max-resources": { "level": "error" },
+        "max-variables": { "level": "error" },
+        "nested-deployment-template-scoping": { "level": "error" },
+        "no-conflicting-metadata": { "level": "error" },
+        "no-deployments-resources": { "level": "error" },
+        "no-explicit-any": { "level": "error" },
+        "no-hardcoded-env-urls": { "level": "error" },
+        "no-hardcoded-location": { "level": "error" },
+        "no-hardcoded-outputs": { "level": "error" },
+        "no-loc-expr-outside-params": { "level": "error" },
+        "no-module-name": { "level": "error" },
+        "no-unnecessary-dependson": { "level": "error" },
+        "no-unused-existing-resources": { "level": "error" },
+        "no-unused-imports": { "level": "error" },
+        "no-unused-params": { "level": "error" },
+        "no-unused-types": { "level": "error" },
+        "no-unused-vars": { "level": "error" },
+        "outputs-should-not-contain-secrets": { "level": "error" },
+        "prefer-interpolation": { "level": "error" },
+        "prefer-unquoted-property-names": { "level": "error" },
+        "protect-commandtoexecute-secrets": { "level": "error" },
+        "secure-parameter-default": { "level": "error" },
+        "secure-params-in-nested-deploy": { "level": "error" },
+        "secure-params-in-parameters-file": { "level": "error" },
+        "secure-secrets-in-params": { "level": "error" },
+        "simplify-interpolation": { "level": "error" },
+        "simplify-json-null": { "level": "error" },
+        "use-description-outputs": { "level": "off" },
+        "use-description-params": { "level": "off" },
+        "use-description-type-properties": { "level": "off" },
+        "use-description-types": { "level": "off" },
+        "use-description-vars": { "level": "off" },
+        "use-parent-property": { "level": "error" },
+        "use-recent-api-versions": { "level": "error" },
+        "use-recent-az-powershell-version": { "level": "error" },
+        "use-recent-module-versions": { "level": "off" },
+        "use-recognized-resource-type": { "level": "error" },
+        "use-resource-id-functions": { "level": "error" },
+        "use-resource-symbol-reference": { "level": "error" },
+        "use-safe-access": { "level": "error" },
+        "use-secure-value-for-secure-inputs": { "level": "error" },
+        "use-stable-resource-identifiers": { "level": "error" },
+        "use-stable-vm-image": { "level": "error" },
+        "use-user-defined-types": { "level": "error" },
+        "what-if-short-circuiting": { "level": "off" }
+      }
+    }
+  },
+  "formatting": {
+    "indentKind": "Space",
+    "indentSize": 2,
+    "insertFinalNewline": true,
+    "newlineKind": "LF",
+    "width": 120
+  },
   "moduleAliases": {
     "br": {},
     "ts": {
-        "bvm": {
-            "resourceGroup": "byteterrace",
-            "subscription": "fd49ea67-135b-449f-a62c-3e4b8d26d3d6"
-        }
+      "bvm": {
+        "resourceGroup": "byteterrace",
+        "subscription": "fd49ea67-135b-449f-a62c-3e4b8d26d3d6"
+      }
     }
   }
 }
-

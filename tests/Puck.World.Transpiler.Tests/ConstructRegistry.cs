@@ -25,7 +25,7 @@ internal static class ConstructRegistry {
         Arms(family: "topology", registry: typeof(LatticeTopology)),
         Arms(family: "cellSet", registry: typeof(CellSetExpression)),
         Arms(family: "pattern", registry: typeof(PatternNode)),
-        Enum.GetValues<ActionStateComparison>().Select(selector: static comparison => $"comparison/{PuckDslVocabulary.NameOf(comparison: comparison)}"),
+        ExpressionComparisons.All.Select(selector: static comparison => $"comparison/{Enum.GetName(value: comparison)}"),
         PuckDslVocabulary.ComparisonKindNames.Select(selector: static kind => $"comparisonKind/{kind}"),
     }.SelectMany(selector: static names => names).Order(comparer: StringComparer.Ordinal)];
 }

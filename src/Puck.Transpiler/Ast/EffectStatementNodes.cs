@@ -13,6 +13,9 @@ namespace Puck.Transpiler.Ast;
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="KeyAtom">The interpolated string a key written <c>name[$"…"]</c> computes, which lowering evaluates
+/// to the one key it spells, as it does the same atom in a read; <paramref name="Key"/> then holds the atom as
+/// written.</param>
 public sealed record RowRefNode(
     string Name,
     string? Key,
@@ -20,7 +23,8 @@ public sealed record RowRefNode(
     int Length = 0,
     int Line = 1,
     int Column = 1,
-    bool FieldAccess = false
+    bool FieldAccess = false,
+    InterpolatedStringNode? KeyAtom = null
 ) : SyntaxNode(
     Offset,
     Length,

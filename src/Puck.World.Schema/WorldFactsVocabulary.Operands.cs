@@ -5,7 +5,6 @@ using OperandFamily = Puck.State.Rules.OperandFamily;
 using OperandSite = Puck.State.Rules.OperandSite;
 using RuleCompileContext = Puck.State.Rules.RuleCompileContext;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
-using RuleRefusal = Puck.State.Rules.RuleRefusal;
 
 namespace Puck.World;
 

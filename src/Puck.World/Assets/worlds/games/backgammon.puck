@@ -17,8 +17,6 @@ host {
   presentMode: Immediate
   targetHertz: 0
   exitAfterSeconds: 0
-  rayQuery: false
-  timing: false
   genlock: null
   listen: null
 }

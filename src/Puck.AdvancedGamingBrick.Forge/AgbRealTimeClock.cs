@@ -70,21 +70,10 @@ public sealed class AgbRealTimeClock {
             source: LowRegister.R1
         );
     }
-    private void Write(uint address, uint value) {
-        m_emitter.LoadConstant(
-            destination: LowRegister.R0,
-            value: value
-        );
-        m_emitter.LoadConstant(
-            destination: LowRegister.R2,
-            value: address
-        );
-        m_emitter.StoreHalf(
-            baseRegister: LowRegister.R2,
-            byteOffset: 0,
-            source: LowRegister.R0
-        );
-    }
+    private void Write(uint address, uint value) => m_emitter.StoreHalfConstant(
+        address: address,
+        value: value
+    );
 
     /// <summary>Emits the power-up: let the data register be read, and take the three driven pins.</summary>
     public void EmitBoot() {

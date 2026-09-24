@@ -1,0 +1,11 @@
+// A game standing in the fixture room: one counter row.
+schema: "puck.world.definition.v1"
+basis: "../base"
+
+state {
+  world {
+    table score {
+      points = 0
+    }
+  }
+}

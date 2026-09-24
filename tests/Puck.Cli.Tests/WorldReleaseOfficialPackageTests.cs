@@ -56,7 +56,7 @@ public sealed class WorldReleaseOfficialPackageTests {
             );
             var primary = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: new WorldDefinition()))!;
 
-            primary["references"] = JsonNode.Parse("""[{"name":"child","document":"nested/child.world.json"}]""");
+            primary["references"] = JsonNode.Parse("""[{"name":"child","document":"nested/child"}]""");
             File.WriteAllText(
                 Path.Combine(
                     path1: source.FullName,
@@ -79,7 +79,7 @@ public sealed class WorldReleaseOfficialPackageTests {
             );
             Assert.Equal(
                 0,
-                await WorldPrepareCommand.Create().Parse([source.FullName, output]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken)
+                await WorldPrepareCommand.Create().Parse([source.FullName, "--output", output]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken)
             );
             var published = File.ReadAllText(path: Path.Combine(
                 path1: output,
@@ -223,7 +223,7 @@ public sealed class WorldReleaseOfficialPackageTests {
                 path1: source,
                 path2: "amber.world.json"
             ));
-            Assert.Throws<InvalidDataException>(() => AzureCommand.PrepareOfficialWorldReleasePackage(
+            Assert.Throws<InvalidDataException>(testCode: () => AzureCommand.PrepareOfficialWorldReleasePackage(
                 outputs,
                 new string(
                     c: 'a',
@@ -254,29 +254,29 @@ public sealed class WorldReleaseOfficialPackageTests {
         ));
         var modern = new JsonObject { ["Id"] = index, ["Descriptor"] = new JsonObject { ["digest"] = index } };
 
-        Assert.True(AzureCommand.MatchesPublishedContainer(
+        Assert.True(condition: AzureCommand.MatchesPublishedContainer(
             index,
             modern,
             new JsonObject { ["manifests"] = new JsonArray() }
         ));
-        Assert.False(AzureCommand.MatchesPublishedContainer(
+        Assert.False(condition: AzureCommand.MatchesPublishedContainer(
             config,
             modern,
             new JsonObject { ["config"] = new JsonObject { ["digest"] = index } }
         ));
         var classic = new JsonObject { ["Id"] = config };
 
-        Assert.True(AzureCommand.MatchesPublishedContainer(
+        Assert.True(condition: AzureCommand.MatchesPublishedContainer(
             index,
             classic,
             new JsonObject { ["config"] = new JsonObject { ["digest"] = config } }
         ));
-        Assert.False(AzureCommand.MatchesPublishedContainer(
+        Assert.False(condition: AzureCommand.MatchesPublishedContainer(
             index,
             classic,
             new JsonObject { ["config"] = new JsonObject { ["digest"] = index } }
         ));
-        Assert.False(AzureCommand.MatchesPublishedContainer(
+        Assert.False(condition: AzureCommand.MatchesPublishedContainer(
             index,
             classic,
             new JsonObject { ["manifests"] = new JsonArray() }
@@ -288,7 +288,7 @@ public sealed class WorldReleaseOfficialPackageTests {
     [InlineData("example.azurecr.io.evil.test/world@sha256:")]
     [Theory]
     public void RegistryProtectionCannotFallBackToATagOrAnotherHost(string image) {
-        Assert.Throws<InvalidDataException>(() => AzureCommand.ParseWorldReleaseImage(image));
+        Assert.Throws<InvalidDataException>(testCode: () => AzureCommand.ParseWorldReleaseImage(image: image));
     }
     [InlineData(false, false, true, false)]
     [InlineData(true, false, true, true)]
@@ -300,19 +300,19 @@ public sealed class WorldReleaseOfficialPackageTests {
             c: 'b',
             count: 64
         ));
-        var image = AzureCommand.ParseWorldReleaseImage(("example.azurecr.io/world-silo@" + digest));
+        var image = AzureCommand.ParseWorldReleaseImage(image: ("example.azurecr.io/world-silo@" + digest));
 
         Assert.Equal(
-            "example.azurecr.io",
-            image.Server
+            actual: image.Server,
+            expected: "example.azurecr.io"
         );
         Assert.Equal(
             "example-dnslabel.azurecr.io",
-            AzureCommand.ParseWorldReleaseImage(("example-dnslabel.azurecr.io/world-silo@" + digest)).Server
+            AzureCommand.ParseWorldReleaseImage(image: ("example-dnslabel.azurecr.io/world-silo@" + digest)).Server
         );
         Assert.Equal(
-            ("world-silo@" + digest),
-            image.Reference
+            actual: image.Reference,
+            expected: ("world-silo@" + digest)
         );
         var result = new JsonObject {
             ["digest"] = digest,
@@ -323,20 +323,24 @@ public sealed class WorldReleaseOfficialPackageTests {
             },
         };
 
-        if (refuses) { Assert.Throws<InvalidDataException>(() => AzureCommand.ValidateRetainedWorldReleaseImage(
-            digest,
-            result
-        )); } else { AzureCommand.ValidateRetainedWorldReleaseImage(
-            digest,
-            result
-        ); }
+        if (refuses) {
+            Assert.Throws<InvalidDataException>(testCode: () => AzureCommand.ValidateRetainedWorldReleaseImage(
+            digest: digest,
+            retained: result
+        ));
+        } else {
+            AzureCommand.ValidateRetainedWorldReleaseImage(
+            digest: digest,
+            retained: result
+        );
+        }
         result["digest"] = ("sha256:" + new string(
             c: 'c',
             count: 64
         ));
-        Assert.Throws<InvalidDataException>(() => AzureCommand.ValidateRetainedWorldReleaseImage(
-            digest,
-            result
+        Assert.Throws<InvalidDataException>(testCode: () => AzureCommand.ValidateRetainedWorldReleaseImage(
+            digest: digest,
+            retained: result
         ));
     }
 }

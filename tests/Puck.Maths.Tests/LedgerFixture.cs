@@ -20,7 +20,7 @@ internal static class LedgerState {
     /// whichever runner thread saw the failure, and is read once after the last test has finished, so
     /// <see langword="volatile"/> is the whole synchronization it needs.</summary>
     /// <remarks>NON-law gates are deliberately outside this signal. Only <see cref="Laws"/>'s combinators call
-    /// <see cref="Frontier.Consume"/> — the ratchet gate, both leg gates and the bench consume no operand at all — so
+    /// <see cref="Frontier.Consume"/> — the ratchet gate and both leg gates consume no operand at all — so
     /// their verdicts are pure functions of the reflected member surface, the declaration text and the tool files. A red
     /// there reproduces identically on the next run whatever the frontier counters say: it has no sweep to be masked by,
     /// and so nothing to gate.</remarks>
@@ -63,10 +63,12 @@ internal static class LedgerState {
 /// The assembly-level ledger. Disposed once, after the session's last test, it persists exactly what that session
 /// exercised: the rolling
 /// <see cref="Frontier"/> when a GREEN run consumed domains, the coverage <see cref="Manifest"/> when the ratchet gate
-/// ran, and the <c>RESULTS.md</c> blocks the run owns — one per tier that executed law cases, plus bench, coverage, and
+/// ran, and the <c>RESULTS.md</c> blocks the run owns — one per tier that executed law cases, plus coverage, legs, and
 /// frontier. A block no one exercised keeps the text its own last run left, so alternating tiers never overwrites one
 /// tier's record with another tier's zero. Writes are update-on-change on deterministic content: the last-run dates are
-/// the only volatile ones and are excluded from the comparison, so an unchanged run leaves the tree alone.
+/// the only volatile ones and are excluded from the comparison, so an unchanged run leaves the tree alone. Every write
+/// goes to <see cref="TestPaths.Output"/>: the run's own ledger directory in the build output, which
+/// <see cref="TestPaths.RecordCommand"/> promotes over the committed files.
 /// </summary>
 /// <remarks>
 /// EVERY figure here is machine-independent BY CONSTRUCTION — executed case counts, coverage counts, leg counts,
@@ -76,10 +78,7 @@ internal static class LedgerState {
 /// machine identity, so each machine's run would overwrite the last one's and two consecutive readings would compare
 /// two different computers. The fixture spans the whole SESSION rather than one tier, so a figure stamped under a
 /// block could not be that block's cost even on one machine. And nothing here measures the environment, so a figure
-/// taken on a loaded machine would be committed as fact. Cost belongs to the bench tier, which has all three — a
-/// RATIO against a per-machine baseline in <c>bench-baselines.json</c> keyed by <see cref="Bench.Fingerprint"/>, and
-/// a <see cref="Bench.Calibrate"/> busy-machine guard that records NOTHING when the environment is suspect. Add
-/// timing here only with that machinery attached to it.
+/// taken on a loaded machine would be committed as fact. Cost is measured outside the suite, by <c>puck bench</c>.
 /// </remarks>
 public sealed class LedgerFixture : IDisposable {
     private const string NotRecorded = "No run has recorded this block.";
@@ -87,29 +86,8 @@ public sealed class LedgerFixture : IDisposable {
     private const string StampPrefix = "- last run: ";
 
     private static readonly Tier[] ReportedTiers = [Tier.Smoke, Tier.Default, Tier.Deep, Tier.Exhaustive];
-    private static readonly string[] SectionOrder = ["Invocations", "Smoke", "Default", "Deep", "Exhaustive", "Bench", "Coverage", "Legs", "Frontier"];
+    private static readonly string[] SectionOrder = ["Invocations", "Smoke", "Default", "Deep", "Exhaustive", "Coverage", "Legs", "Frontier"];
 
-    private static string BenchTable() {
-        var builder = new StringBuilder();
-
-        _ = builder.Append(value: "| bench | median ratio | baseline | band | status |\n");
-        _ = builder.Append(value: "| --- | --- | --- | --- | --- |\n");
-
-        foreach (var observation in BenchState.Observations().OrderBy(
-            keySelector: static observation => observation.Id,
-            comparer: StringComparer.Ordinal
-        )) {
-            _ = builder.Append(value: $"| {observation.Id} | {observation.Median:F4} | {observation.BaselineMedian:F4} | {observation.Band:F4} | {observation.Status} |\n");
-        }
-
-        // The ONE number in this file that is not machine-independent, so it names the machine it came from. A ratio
-        // read without its fingerprint is the confusion the tier blocks used to have: this repository's own committed
-        // baselines differ by more than 2x between machines, so an unlabelled 0.97 beside an unlabelled 0.45 reads as
-        // a catastrophic regression and is in fact two computers.
-        _ = builder.Append(value: $"\n- machine: {Bench.Fingerprint()} (its own baseline in bench-baselines.json)\n");
-
-        return (builder.ToString() + "\n");
-    }
     // A block this run does NOT own, brought forward from the previous file — with its last-run line normalized to the
     // date alone. A carried block keeps whatever text its own last run wrote, which is the whole point of the merge,
     // but the file must never render a line shape this ledger does not produce, or a rarely-run tier could publish one
@@ -166,7 +144,7 @@ public sealed class LedgerFixture : IDisposable {
         _ = builder.Append(value: "| Default (Smoke+Default) | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` |\n");
         _ = builder.Append(value: "| Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings` |\n");
         _ = builder.Append(value: "| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings` |\n");
-        _ = builder.Append(value: "| Bench | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/bench.runsettings` |\n");
+        _ = builder.Append(value: "| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings` |\n");
 
         return builder.ToString();
     }
@@ -206,8 +184,7 @@ public sealed class LedgerFixture : IDisposable {
         _ = builder.Append(value: "frontier indices on every machine, so a difference here is a real difference and never a difference of hardware.\n");
         _ = builder.Append(value: "No duration is recorded, deliberately. One here would carry no machine identity, would span the whole session\n");
         _ = builder.Append(value: "rather than the block it sits under, and would be taken without a busy-machine guard — so it could not answer\n");
-        _ = builder.Append(value: "any question asked of it. Cost is the bench tier's business: a RATIO against a baseline held per machine, which\n");
-        _ = builder.Append(value: "records nothing at all when the environment is suspect, and which names the machine it ran on.\n\n");
+        _ = builder.Append(value: "any question asked of it. Cost is measured outside the suite, by `puck bench`.\n\n");
 
         foreach (var name in SectionOrder) {
             var owned = fresh.GetValueOrDefault(key: name);
@@ -228,10 +205,6 @@ public sealed class LedgerFixture : IDisposable {
             if (count > 0) {
                 sections[tier.ToString()] = $"- law cases executed: {count}\n{stamp}";
             }
-        }
-
-        if (BenchState.Ran) {
-            sections["Bench"] = (BenchTable() + stamp);
         }
 
         if (coverage is { } counts) {
@@ -292,7 +265,7 @@ public sealed class LedgerFixture : IDisposable {
         var lawRows = LegLedger.LawRows();
 
         _ = ArtifactJson.WriteIfChanged(
-            path: TestPaths.Artifact(fileName: "leg-ledger.md"),
+            path: TestPaths.Output(fileName: "leg-ledger.md"),
             content: LegLedger.Render(lawRows: lawRows)
         );
 
@@ -305,11 +278,11 @@ public sealed class LedgerFixture : IDisposable {
             return null;
         }
 
-        var path = TestPaths.Artifact(fileName: "coverage-manifest.json");
-        var manifest = Coverage.Generate(existing: ArtifactJson.ReadOrDefault<Manifest>(path: path));
+        // Generated from the committed manifest, the one the ratchet gate reads, whichever path the run writes.
+        var manifest = Coverage.Generate(existing: ArtifactJson.ReadOrDefault<Manifest>(path: TestPaths.Artifact(fileName: "coverage-manifest.json")));
 
         _ = ArtifactJson.WriteIfChanged(
-            path: path,
+            path: TestPaths.Output(fileName: "coverage-manifest.json"),
             content: ArtifactJson.Serialize(value: manifest)
         );
 
@@ -331,9 +304,10 @@ public sealed class LedgerFixture : IDisposable {
             ))
         );
     private static void WriteResults(IReadOnlyList<(string Key, int Block, long Index)>? frontier, (int Covered, int Waived, int Uncovered)? coverage, IReadOnlyList<LegRow>? legs) {
-        var path = TestPaths.Artifact(fileName: "RESULTS.md");
-        var existing = (File.Exists(path: path)
-            ? File.ReadAllText(path: path)
+        var previous = TestPaths.Previous(fileName: "RESULTS.md");
+        var path = TestPaths.Output(fileName: "RESULTS.md");
+        var existing = (File.Exists(path: previous)
+            ? File.ReadAllText(path: previous)
             : ""
         );
         var content = Merge(

@@ -91,7 +91,7 @@ public sealed partial class WorldBody {
         ? (collider.Volumes[0].Radius * m_scale)
         : FixedQ4816.Zero
     );
-    private FixedVector3 HoldProbeOrigin => (m_position + (UnitY * HoldProbeHeight));
+    private FixedVector3 HoldProbeOrigin => (m_position + (FixedVector3.UnitY * HoldProbeHeight));
     // The axis every hold cone is measured against — the direction the world's own gravity opposes, never the body's
     // own up. A row's cone says what a face is (floor, wall, ceiling), which is a fact about the world; measuring it
     // against a body already leaned onto a ceiling would read that ceiling's own floor as a ceiling.
@@ -108,7 +108,7 @@ public sealed partial class WorldBody {
                 }
             }
 
-            return UnitY;
+            return FixedVector3.UnitY;
         }
     }
 
@@ -394,7 +394,7 @@ public sealed partial class WorldBody {
     // face keeps holding it however close the ground is, which is what lets a hold be taken at a wall's foot.
     private bool HoldOutlivedByStanding(in FixedBodyHold hold, in PlayerIntent intent) => (m_grounded && (PlanarIntent(intent: in intent).Forward <= FixedQ4816.Zero) && (hold.Bond == BodyHoldBond.Surface) && (m_holdNormal != FixedVector3.Zero) && (FixedVector3.Dot(
         left: m_holdNormal,
-        right: UnitY
+        right: FixedVector3.UnitY
     ) < m_walkableThreshold));
     // The ResolveHold operation. What the body is actively driving into outranks what it happens to be resting on,
     // so the drive pass runs first. Otherwise the ordered list decides, first match wins, with the row already held
@@ -570,7 +570,7 @@ public sealed partial class WorldBody {
         var held = m_holds[chosen];
 
         if (arrive) {
-            m_position = ((anchor + (normal * HoldSpan)) - (UnitY * HoldProbeHeight));
+            m_position = ((anchor + (normal * HoldSpan)) - (FixedVector3.UnitY * HoldProbeHeight));
             m_positionAccumulator.Reset();
             m_planarVelocity = FixedVector3.Zero;
             m_verticalVelocity = FixedQ4816.Zero;
@@ -871,7 +871,7 @@ public sealed partial class WorldBody {
                 !TryPerpendicular(
                 axis: in leaned,
                 unit: out aligned,
-                vector: scratch.Orientation.Rotate(vector: -UnitZ)
+                vector: scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ)
             ) &&
                 !TryPerpendicular(
                 axis: in leaned,
@@ -907,10 +907,10 @@ public sealed partial class WorldBody {
 
         var attitude = FixedQuaternion.FromAxisAngle(
             angle: m_yaw,
-            axis: UnitY
+            axis: FixedVector3.UnitY
         );
 
-        scratch.Orientation = ((m_up == UnitY)
+        scratch.Orientation = ((m_up == FixedVector3.UnitY)
             ? attitude
             : (m_frame * attitude)
         );
@@ -940,10 +940,10 @@ public sealed partial class WorldBody {
     // composed rotation is the same whichever axis that arc picked.
     private static FixedQuaternion AttitudeFrom(in FixedVector3 forward, in FixedVector3 up) {
         var arc = FixedQuaternion.FromTo(
-            from: UnitY,
+            from: FixedVector3.UnitY,
             to: up
         );
-        var arcForward = arc.Rotate(vector: -UnitZ);
+        var arcForward = arc.Rotate(vector: -FixedVector3.UnitZ);
         var twist = FixedQuaternion.FromAxisAngle(
             angle: FixedQ4816.Atan2(
                 x: FixedVector3.Dot(
@@ -1342,7 +1342,7 @@ public sealed partial class WorldBody {
 
         return (FixedVector3.Dot(
             left: m_holdNormal,
-            right: UnitY
+            right: FixedVector3.UnitY
         ) < m_walkableThreshold);
     }
     // Whether the body is holding itself up with no surface at all — the published Unsupported fact.
@@ -1376,7 +1376,7 @@ public sealed partial class WorldBody {
         if (commanded.LengthSquared <= FixedQ4816.Zero) {
             var (forward, strafe) = PlanarIntent(intent: in intent);
 
-            commanded = ((m_orientation.Rotate(vector: -UnitZ) * forward) + (m_orientation.Rotate(vector: UnitX) * strafe));
+            commanded = ((m_orientation.Rotate(vector: -FixedVector3.UnitZ) * forward) + (m_orientation.Rotate(vector: FixedVector3.UnitX) * strafe));
         }
 
         var length = commanded.Length;

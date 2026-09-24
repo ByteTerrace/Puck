@@ -115,7 +115,7 @@ public static class WorldRuleCapacity {
     public const long SightTestWork = 64L;
 }
 /// <summary>The compile-time refusals only a world's own arms raise; the rule compiler's own are
-/// <see cref="Puck.State.Rules.RuleRefusal"/>. Both travel in a <see cref="RuleException"/>.</summary>
+/// <see cref="RuleRefusal"/>. Both travel in a <see cref="RuleException"/>.</summary>
 public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a 'body:<n>' reference names an index outside the document's declared entity-table capacity", kind: RefusalKind.Verdict)]
     BodyIndexUnknown,
@@ -125,6 +125,8 @@ public enum WorldRuleRefusal : byte {
     IdentityFactMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel is authored in a document declaring no 'identity' lane row in state.world", kind: RefusalKind.Verdict)]
     IdentityLaneUndeclared,
+    [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel is authored in a document whose 'identity' lane row declares an advance, dynamics or cycle trait on the row or a cell", kind: RefusalKind.Verdict)]
+    IdentityLaneTraited,
     [Refusal(door: "world.rule.compile", condition: "a '$channel:' channel does not spell '$channel:<seat>:<channelName>' with seat in 1..population.localSeats and channelName naming a declared 'channels[]' row", kind: RefusalKind.Verdict)]
     ChannelMalformed,
     [Refusal(door: "world.rule.compile", condition: "an 'upsertHudPanel'/'removeHudPanel' effect carries no panel id", kind: RefusalKind.Verdict)]

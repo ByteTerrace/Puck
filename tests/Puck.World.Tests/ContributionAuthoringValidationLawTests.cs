@@ -1,8 +1,6 @@
 using System.Numerics;
 using System.Text;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
-using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -19,57 +17,6 @@ public sealed class ContributionAuthoringValidationLawTests {
     private const string SlotCreation = "plinth";
     private const string SlotId = "plaza-slot";
 
-    private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: definition,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: needle
-        );
-    }
-    private static void AssertValidates(WorldDefinition definition) {
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: definition,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-    }
-    private static WorldPrototype Creation(string id) {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: id,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: id
-        );
-
-        return new WorldPrototype(
-            Id: id,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     private static WorldPlacementContribution WellFormed() => new(
         Tenure: WorldContributionTenure.Presence,
         SlotCreationId: SlotCreation,
@@ -80,7 +27,7 @@ public sealed class ContributionAuthoringValidationLawTests {
         var document = Fixtures.BuildDocument();
 
         return (document with {
-            CreationsRaw = [Creation(id: SlotCreation)],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: SlotCreation)],
             PlacementRowsRaw = [
                 new WorldPlacement(
                 Id: SlotId,
@@ -94,7 +41,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             References = [
                 new WorldReference(
                 Name: SafeName.Parse(candidate: "peer"),
-                Document: "peer.world.json",
+                Document: "peer",
                 Owner: null,
                 World: null
             ),
@@ -132,7 +79,8 @@ public sealed class ContributionAuthoringValidationLawTests {
     /// <summary>DENIAL: an endowed slot carrying the presence-only fields. CONTROL: the same tenure with neither.</summary>
     [Fact]
     public void EndowedTenureRefusesTheLinkAndGraceFields() {
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(contribution: new WorldPlacementContribution(
                 Tenure: WorldContributionTenure.Endowed,
                 SlotCreationId: SlotCreation,
@@ -140,7 +88,8 @@ public sealed class ContributionAuthoringValidationLawTests {
             )),
             needle: "is refused for tenure 'Endowed' — an endowed piece watches no link"
         );
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(contribution: new WorldPlacementContribution(
                 Tenure: WorldContributionTenure.Endowed,
                 SlotCreationId: SlotCreation,
@@ -148,7 +97,7 @@ public sealed class ContributionAuthoringValidationLawTests {
             )),
             needle: "is refused for tenure 'Endowed' — an endowed piece runs no grace"
         );
-        AssertValidates(definition: With(contribution: new WorldPlacementContribution(
+        Laws.Validates(locally: true, definition: With(contribution: new WorldPlacementContribution(
             Tenure: WorldContributionTenure.Endowed,
             SlotCreationId: SlotCreation
         )));
@@ -157,16 +106,18 @@ public sealed class ContributionAuthoringValidationLawTests {
     /// validate.</summary>
     [Fact]
     public void GraceSecondsMustSitInsideItsBand() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(contribution: (WellFormed() with { GraceSeconds = -1f })),
+            locally: true,
             needle: "contribution.graceSeconds -1 must be finite and within"
         );
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(contribution: (WellFormed() with { GraceSeconds = (WorldContributionCapacity.MaxGraceSeconds + 1f) })),
+            locally: true,
             needle: "contribution.graceSeconds"
         );
-        AssertValidates(definition: With(contribution: (WellFormed() with { GraceSeconds = 0f })));
-        AssertValidates(definition: With(contribution: (WellFormed() with { GraceSeconds = WorldContributionCapacity.MaxGraceSeconds })));
+        Laws.Validates(locally: true, definition: With(contribution: (WellFormed() with { GraceSeconds = 0f })));
+        Laws.Validates(locally: true, definition: With(contribution: (WellFormed() with { GraceSeconds = WorldContributionCapacity.MaxGraceSeconds })));
     }
     /// <summary>DENIAL: a misspelled tenure token is a hard PARSE failure, never a silent default to the first enum
     /// member. CONTROL: the correctly spelled token round-trips.</summary>
@@ -203,37 +154,42 @@ public sealed class ContributionAuthoringValidationLawTests {
     /// naming the row it does.</summary>
     [Fact]
     public void PresenceLinkMustNameADeclaredAdjacency() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(contribution: (WellFormed() with { Link = SafeName.Parse(candidate: "elsewhere") })),
+            locally: true,
             needle: "contribution.link 'elsewhere' names no adjacencies row"
         );
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(contribution: (WellFormed() with { Link = null })),
+            locally: true,
             needle: "contribution.link is required for tenure 'Presence'"
         );
-        AssertValidates(definition: With(contribution: WellFormed()));
+        Laws.Validates(locally: true, definition: With(contribution: WellFormed()));
     }
     /// <summary>DENIAL: a slotCreationId naming no creation row. CONTROL: the declared one.</summary>
     [Fact]
     public void SlotCreationIdMustResolve() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(contribution: (WellFormed() with { SlotCreationId = "no-such-creation" })),
+            locally: true,
             needle: "contribution.slotCreationId 'no-such-creation' names no creation row"
         );
-        AssertValidates(definition: With(contribution: WellFormed()));
+        Laws.Validates(locally: true, definition: With(contribution: WellFormed()));
     }
     /// <summary>DENIAL: an unfilled slot carrying a deadline, and a filled slot still showing its slotCreationId.
     /// CONTROL: the coherent unfilled spelling.</summary>
     [Fact]
     public void StampedHalfMustCohereWithTheFillState() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(contribution: (WellFormed() with { RetractDeadlineTick = 99L })),
+            locally: true,
             needle: "stands on an unfilled slot"
         );
-        AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { Contributor = Puck.World.Protocol.WorldPrincipal.Seat(slot: 1) })),
+        Laws.Refuses(
+            definition: With(contribution: (WellFormed() with { Contributor = Puck.Commands.Principal.Seat(slot: 1) })),
+            locally: true,
             needle: "its prototypeId still reads slotCreationId"
         );
-        AssertValidates(definition: With(contribution: WellFormed()));
+        Laws.Validates(locally: true, definition: With(contribution: WellFormed()));
     }
 }

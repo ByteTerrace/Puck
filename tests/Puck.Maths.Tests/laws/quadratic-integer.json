@@ -327,7 +327,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "FundamentalUnit completes inside a bounded wait (a safety net against a regression of the former hang, not a timing measurement — the assertion is completion, never elapsed time) at both discriminants, each producing a certificate X^2-Delta*Y^2 = +-4",
+        "Subject": "FundamentalUnit completes at both discriminants, each producing a certificate X^2-Delta*Y^2 = +-4; it runs on a worker the test's cancellation token can abandon, so a regression of the former hang holds the case until the run is cancelled and no elapsed time decides the verdict",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -405,7 +405,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "both factorizations complete inside a bounded wait at the exact elements the audit's orbit-box-sized search could not return from — D = 991's 29-digit fundamental unit and D = 99991's 200-plus-digit one — the bounded wait being a safety net against a regression of that hang, not a timing measurement",
+        "Subject": "both factorizations complete at the exact elements the audit's orbit-box-sized search could not return from — D = 991's 29-digit fundamental unit and D = 99991's 200-plus-digit one — each on a worker the test's cancellation token can abandon, so a regression of that hang holds the case until the run is cancelled and no elapsed time decides the verdict",
         "Against": "",
         "Shared": "",
         "Citation": "",

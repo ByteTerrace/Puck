@@ -28,10 +28,10 @@ public sealed class OverlayPresentationPredicateLawTests {
         RenderHeight: 240U,
         Anchors: anchors
     );
-    private static WorldFrameSource CaptureSource(string title) => new WorldScreenSource.Capture(
+    private static WorldFrameSource CaptureSource(string title) => WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CaptureId, settings: new WorldCaptureSettings(
         WindowTitle: title,
         Profile: WorldFeedProfile.Default
-    );
+    ));
     private static WorldHudElement FrameElement(WorldFrameSource? source = null, IReadOnlyList<WorldHudFrameCandidate>? sources = null, float fadeSeconds = 0f) => new(
         Id: "face",
         Kind: WorldHudElementKind.Frame,
@@ -41,32 +41,16 @@ public sealed class OverlayPresentationPredicateLawTests {
         Sources: sources,
         FadeSeconds: fadeSeconds
     );
-    private static WorldStateRow IntRow(string name, long value) => new(
-        Name: CellName.Parse(candidate: name),
-        Kind: CellKind.Int,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: value)
-            )]
-    );
-    private static WorldStateRow TextRow(string name, string text) => new(
-        Name: CellName.Parse(candidate: name),
-        Kind: CellKind.Text,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Text(value: text)
-            )]
-    );
     private static bool Validates(WorldDefinition definition) => WorldDefinitionValidator.TryValidateLocally(
         definition: definition,
         reason: out _
     );
     private static WorldDefinition WithCameras(params WorldCamera[] cameras) => Fixtures.BuildDocument() with { CamerasRaw = cameras };
     private static WorldDefinition WithPanel(OverlayPredicate? visible = null, WorldHudElement? element = null) => (Fixtures.BuildDocument() with {
-        StateRaw = new WorldStateSection(World: [IntRow(
+        StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
             name: "score",
             value: 3
-        ), TextRow(
+        ), StateFixtures.TextSlot(
             name: "phase",
             text: "lobby"
         )]),
@@ -360,72 +344,59 @@ public sealed class OverlayPresentationPredicateLawTests {
     [Fact]
     public void AStatePredicateComparesTextOrdinallyAndNumbersThroughTheComparison() {
         var definition = WithPanel();
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
 
         Assert.True(condition: OverlayStateComparison.Holds(
-            definition: definition,
             state: new OverlayPredicate.State(
                 Binding: "state.phase",
                 Text: "lobby"
             ),
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: mirror
         ));
         Assert.False(condition: OverlayStateComparison.Holds(
-            definition: definition,
             state: new OverlayPredicate.State(
                 Binding: "state.phase",
                 Text: "Lobby"
             ),
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: mirror
         ));
         Assert.True(condition: OverlayStateComparison.Holds(
-            definition: definition,
             state: new OverlayPredicate.State(
                 Binding: "state.phase",
-                Comparison: ActionStateComparison.NotEqual,
+                Comparison: ExpressionOp.NotEqual,
                 Text: "arena"
             ),
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: mirror
         ));
         Assert.True(condition: OverlayStateComparison.Holds(
-            definition: definition,
             state: new OverlayPredicate.State(
                 Binding: "state.score",
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Value: 2.5f
             ),
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: mirror
         ));
         Assert.False(condition: OverlayStateComparison.Holds(
-            definition: definition,
             state: new OverlayPredicate.State(
                 Binding: "state.score",
-                Comparison: ActionStateComparison.Less,
+                Comparison: ExpressionOp.Less,
                 Value: 3f
             ),
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: mirror
         ));
         Assert.True(condition: OverlayStateComparison.Holds(
-            definition: definition,
             state: new OverlayPredicate.State(
                 Binding: "state.score",
                 Value: 3f
             ),
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: mirror
         ));
         Assert.False(condition: OverlayStateComparison.Holds(
-            definition: definition,
             state: new OverlayPredicate.State(
                 Binding: "state.missing",
                 Value: 3f
             ),
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: mirror
         ));
     }
     [Fact]
@@ -448,12 +419,12 @@ public sealed class OverlayPresentationPredicateLawTests {
             lawId: "overlay.state-text-comparison",
             deniedOutcome: () => Validates(definition: WithPanel(visible: new OverlayPredicate.State(
                 Binding: "state.phase",
-                Comparison: ActionStateComparison.Less,
+                Comparison: ExpressionOp.Less,
                 Text: "lobby"
             ))),
             controlOutcome: () => Validates(definition: WithPanel(visible: new OverlayPredicate.State(
                 Binding: "state.phase",
-                Comparison: ActionStateComparison.NotEqual,
+                Comparison: ExpressionOp.NotEqual,
                 Text: "lobby"
             )))
         );
@@ -469,7 +440,7 @@ public sealed class OverlayPresentationPredicateLawTests {
             ))),
             controlOutcome: () => Validates(definition: WithPanel(visible: new OverlayPredicate.State(
                 Binding: "state.score",
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Value: 1f
             )))
         );

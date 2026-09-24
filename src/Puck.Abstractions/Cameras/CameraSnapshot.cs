@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Cameras;
 
@@ -103,11 +104,7 @@ public readonly record struct CameraSnapshot {
         }
     }
     private static void ValidateFinite(Vector3 value, string paramName) {
-        if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
-            !float.IsFinite(f: value.Z)
-        ) {
+        if (!VectorFunctions.IsFinite(vector: value)) {
             throw new ArgumentException(
                 message: "All vector components must be finite.",
                 paramName: paramName

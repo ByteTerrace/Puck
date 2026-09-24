@@ -16,12 +16,12 @@ public sealed class StateCellClockTransitionLawTests {
         Advance: advance,
         Dynamics: dynamics,
         Cycle: cycle,
-        Cells: cells ?? [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 100L))]
+        Cells: (cells ?? [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 100L))])
     );
 
     [Fact]
     public void AdvanceTrait_WithClockEpoch_ReadsBaseAtEpoch_AndAdvancesProportionally() {
-        var advance = new StateAdvance(PerSecondNumerator: 10, PerSecondDenominator: 1);
+        var advance = new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 10);
         var clock = new StateCellClock(EpochEngineTick: 50400L);
         var cell = new StateCell(
             Key: StateRow.SlotKey,
@@ -32,30 +32,29 @@ public sealed class StateCellClockTransitionLawTests {
 
         // At epoch tick, reading cell must yield exactly base value
         StateReader.ReadCell(
-            row: row,
-            key: null,
-            tick: 100UL,
             engineTick: 50400UL,
+            key: null,
             rawValue: out var atEpoch,
-            text: out _
+            row: row,
+            text: out _,
+            tick: 100UL
         );
-        Assert.Equal(100L, atEpoch);
+        Assert.Equal(actual: atEpoch, expected: 100L);
 
         // One second later (50400 ticks later): should advance by exactly numerator (10)
         StateReader.ReadCell(
-            row: row,
-            key: null,
-            tick: 100UL,
             engineTick: 100800UL,
+            key: null,
             rawValue: out var afterOneSecond,
-            text: out _
+            row: row,
+            text: out _,
+            tick: 100UL
         );
-        Assert.Equal(110L, afterOneSecond);
+        Assert.Equal(actual: afterOneSecond, expected: 110L);
     }
-
     [Fact]
     public void AdvanceTrait_OptOutToNone_AlwaysReturnsBaseValue() {
-        var advance = new StateAdvance(PerSecondNumerator: 10, PerSecondDenominator: 1);
+        var advance = new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 10);
         var clock = new StateCellClock(EpochEngineTick: 50400L);
         var cell = new StateCell(
             Key: CellName.Parse(candidate: "item"),
@@ -66,16 +65,15 @@ public sealed class StateCellClockTransitionLawTests {
         var row = CreateRow(advance: advance, cells: [cell]);
 
         StateReader.ReadCell(
-            row: row,
-            key: "item",
-            tick: 100UL,
             engineTick: 100800UL,
+            key: "item",
             rawValue: out var raw,
-            text: out _
+            row: row,
+            text: out _,
+            tick: 100UL
         );
-        Assert.Equal(100L, raw);
+        Assert.Equal(actual: raw, expected: 100L);
     }
-
     [Fact]
     public void CycleTrait_WithClockEpochAndSubstep_RespectsOffset() {
         var cycle = new StateCycle(TicksPerStep: 10);
@@ -89,30 +87,29 @@ public sealed class StateCellClockTransitionLawTests {
 
         // At tick 20 with SubstepTicks 5, elapsed is 5 ticks (step 0)
         StateReader.ReadCell(
-            row: row,
-            key: null,
-            tick: 20UL,
             engineTick: 0UL,
+            key: null,
             rawValue: out var atStart,
-            text: out _
+            row: row,
+            text: out _,
+            tick: 20UL
         );
-        Assert.Equal(0L, atStart);
+        Assert.Equal(actual: atStart, expected: 0L);
 
         // At tick 25, elapsed is 5 + 5 = 10 ticks -> exactly advances to step 1
         StateReader.ReadCell(
-            row: row,
-            key: null,
-            tick: 25UL,
             engineTick: 0UL,
+            key: null,
             rawValue: out var nextStep,
-            text: out _
+            row: row,
+            text: out _,
+            tick: 25UL
         );
-        Assert.Equal(1L, nextStep);
+        Assert.Equal(actual: nextStep, expected: 1L);
     }
-
     [Fact]
     public void TransitionFromRowAdvanceToCellCycle_OverridesBehaviorAndClocks() {
-        var rowAdvance = new StateAdvance(PerSecondNumerator: 10, PerSecondDenominator: 1);
+        var rowAdvance = new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 10);
         var cellCycle = new StateCycle(TicksPerStep: 10);
         var clock = new StateCellClock(EpochTick: 0L, EpochEngineTick: 50400L, SubstepTicks: 0L);
 
@@ -125,25 +122,25 @@ public sealed class StateCellClockTransitionLawTests {
         var row = CreateRow(advance: rowAdvance, cells: [cell]);
 
         var effective = EffectiveBehavior.Resolve(cell: cell, row: row);
-        Assert.Null(effective.Advance);
+
+        Assert.Null(@object: effective.Advance);
         Assert.Same(cellCycle, effective.Cycle);
 
         // Reader applies cycle, not advance
         StateReader.ReadCell(
-            row: row,
-            key: "override",
-            tick: 20UL,
             engineTick: 100800UL,
+            key: "override",
             rawValue: out var raw,
-            text: out _
+            row: row,
+            text: out _,
+            tick: 20UL
         );
-        Assert.Equal(2L, raw); // 20 ticks with 10 ticks/step = step 2
+        Assert.Equal(actual: raw, expected: 2L); // 20 ticks with 10 ticks/step = step 2
     }
-
     [Fact]
     public void TransitionFromRowCycleToCellAdvance_OverridesBehaviorAndClocks() {
         var rowCycle = new StateCycle(TicksPerStep: 10);
-        var cellAdvance = new StateAdvance(PerSecondNumerator: 5, PerSecondDenominator: 1);
+        var cellAdvance = new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 5);
         var clock = new StateCellClock(EpochTick: 100L, EpochEngineTick: 0L);
 
         var cell = new StateCell(
@@ -155,18 +152,19 @@ public sealed class StateCellClockTransitionLawTests {
         var row = CreateRow(cycle: rowCycle, cells: [cell]);
 
         var effective = EffectiveBehavior.Resolve(cell: cell, row: row);
-        Assert.Null(effective.Cycle);
+
+        Assert.Null(@object: effective.Cycle);
         Assert.Same(cellAdvance, effective.Advance);
 
         // Reader applies advance, not cycle
         StateReader.ReadCell(
-            row: row,
-            key: "override",
-            tick: 100UL,
             engineTick: 50400UL,
+            key: "override",
             rawValue: out var raw,
-            text: out _
+            row: row,
+            text: out _,
+            tick: 100UL
         );
-        Assert.Equal(55L, raw); // 50 + 5
+        Assert.Equal(actual: raw, expected: 55L); // 50 + 5
     }
 }

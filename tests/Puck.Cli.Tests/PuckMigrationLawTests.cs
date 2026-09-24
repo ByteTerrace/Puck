@@ -39,6 +39,7 @@ public sealed class PuckMigrationLawTests {
         public override string Name => "rename-constant";
         public override IReadOnlyList<string> ReshapedMembers => [];
         public override string Summary => "renames one compile-time constant and every read of it";
+
         // Whether the rewrite also moves the host's height, which is a document member and not compile-time at all.
         protected virtual bool Shorten => false;
 
@@ -48,12 +49,14 @@ public sealed class PuckMigrationLawTests {
         public override string Name => "rename-and-declare";
         public override IReadOnlyList<string> ReshapedMembers => ["host/height"];
         public override string Summary => "renames the constant and shortens the host, saying so";
+
         protected override bool Shorten => true;
     }
     private sealed class RenameAndSneak : RenameConstant {
         public override string Name => "rename-and-sneak";
         public override IReadOnlyList<string> ReshapedMembers => [];
         public override string Summary => "renames the constant and shortens the host without saying so";
+
         protected override bool Shorten => true;
     }
     // Drops the trivia of one property, which moves no document member at all: the whole effect is the loss of the

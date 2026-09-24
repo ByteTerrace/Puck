@@ -7,21 +7,9 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 public class AuthoringSugarTests {
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
-    }
-
     [Fact]
     public void RuntimeRecordEnumIsMaterializedAtItsFieldDeclaration() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             state {
                 enum Facing { North South }
                 record Unit { facing: Facing = North }
@@ -38,7 +26,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void PoolNamedPairUsesOrdinaryClaimSyntax() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             state {
                 record Item { value: Int }
                 pool pair of Item capacity(1)
@@ -53,10 +41,10 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void BoundsAdmitOnlyTheCanonicalRangeSpelling() {
-        var (closed, closedDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(0..10) } }");
-        var (minimumOnly, minimumDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(0..) } }");
-        var (maximumOnly, maximumDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(..10) } }");
-        var (_, namedDiagnostics) = Lower(body: "state { world { slot score = 0 bounds(minimum: 0, maximum: 10) } }");
+        var (closed, closedDiagnostics) = WorldSources.Lower(body: "state { world { slot score = 0 bounds(0..10) } }");
+        var (minimumOnly, minimumDiagnostics) = WorldSources.Lower(body: "state { world { slot score = 0 bounds(0..) } }");
+        var (maximumOnly, maximumDiagnostics) = WorldSources.Lower(body: "state { world { slot score = 0 bounds(..10) } }");
+        var (_, namedDiagnostics) = WorldSources.Lower(body: "state { world { slot score = 0 bounds(minimum: 0, maximum: 10) } }");
 
         Assert.False(condition: closedDiagnostics.HasErrors, userMessage: closedDiagnostics.FormatReport(""));
         Assert.False(condition: minimumDiagnostics.HasErrors, userMessage: minimumDiagnostics.FormatReport(""));
@@ -67,13 +55,20 @@ public class AuthoringSugarTests {
         Assert.Null(@object: WorldRows(json: maximumOnly)[0]!["min"]);
         Assert.True(condition: namedDiagnostics.HasErrors);
     }
+    [Fact]
+    public void FractionalBoundsInferAFixedRow() {
+        var (json, diagnostics) = WorldSources.Lower(body: "state { world { table recalled capacity(3) bounds(-1.0..1.0) } }");
+
+        Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport(""));
+        Assert.Equal("Fixed", WorldRows(json: json)[0]!["kind"]?.ToString());
+    }
 
     private static JsonArray WorldRows(JsonObject json) =>
         Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["state"])["world"]);
 
     [Fact]
     public void RecordAndPoolDeclarationsLowerTypedSeeds() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 record Player {
                     name: Text = "guest"
@@ -107,7 +102,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void PoolEffectsKeepLexicalAliasFieldReferences() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 record Player { score: Int }
                 pool players of Player capacity(1)
@@ -132,7 +127,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void RuleHeaderIteratesPoolAndCountReadsItsLiveDomain() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             state {
                 record Player { score: Int }
                 pool players of Player capacity(2)
@@ -156,7 +151,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void NamedPoolForeachLowersNestedEffects() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 record Player { score: Int }
                 pool players of Player capacity(2)
@@ -177,7 +172,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void NestedPoolIterationGateRetainsItsLexicalFieldOperand() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             state {
                 record Piece { mover: Int }
                 pool pieces of Piece capacity(1)
@@ -208,7 +203,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void NestedClaimAndForeachKeepEachLexicalBinding() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 record Player { score: Int }
                 pool players of Player capacity(2)
@@ -233,7 +228,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void StaticPoolFieldAccessUsesSlotThenFieldWithoutRewritingTextLiterals() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 record Fighter { frags: Int = 0 }
                 pool fighters of Fighter capacity(2) = [{ frags: 0 }, { frags: 0 }]
@@ -270,7 +265,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void IdentitySelectsNamespacedCapacityOneRecordPools() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             identity {
                 id: "hero"
                 name: "Hero"
@@ -286,7 +281,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void TableFamilyExpandsToNumberedTables() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table scores[4]
@@ -306,7 +301,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void PileFamilyExpandsAndDeclaresAFamilyWithLiveRowSpellingsKeptVerbatim() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table cardNames {
@@ -355,7 +350,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void ConstantFamilyIndexLowersDirectly() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table meter[3]
@@ -377,7 +372,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void RuleScopeInheritsPrefixAndWhenGate() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table phase {
@@ -403,14 +398,14 @@ public class AuthoringSugarTests {
 
         var r0 = Assert.IsType<JsonObject>(@object: rules[0]);
 
-        Assert.Equal("dealing_start", r0["name"]?.ToString());
+        Assert.Equal("dealing$start", r0["name"]?.ToString());
         var r0Gate = Assert.IsType<JsonObject>(@object: r0["gate"]);
 
         Assert.Equal("Equal", r0Gate["comparison"]?.ToString());
 
         var r1 = Assert.IsType<JsonObject>(@object: rules[1]);
 
-        Assert.Equal("dealing_step", r1["name"]?.ToString());
+        Assert.Equal("dealing$step", r1["name"]?.ToString());
         var r1Gate = Assert.IsType<JsonObject>(@object: r1["gate"]);
 
         Assert.Equal("all", r1Gate["$type"]?.ToString());
@@ -420,7 +415,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void StaticCollectionInitializersLowerCells() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table cards = range(0, 5)
@@ -455,7 +450,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void StabilizeLowersToAFixpointRuleGroupAndItsMemberRules() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table board {
@@ -484,15 +479,54 @@ public class AuthoringSugarTests {
 
         var step = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: group["steps"])));
 
-        Assert.Equal("settleBoard_collapse", step["rule"]?.ToString());
+        Assert.Equal("settleBoard$collapse", step["rule"]?.ToString());
 
         var rule = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: json["rules"])));
 
-        Assert.Equal("settleBoard_collapse", rule["name"]?.ToString());
+        Assert.Equal("settleBoard$collapse", rule["name"]?.ToString());
+    }
+    // A group declared between rules decompiles where its members stand, so the source it prints compiles back to the
+    // same rules array rather than one with the group's members moved to the front.
+    [Fact]
+    public void AGroupBetweenRulesDecompilesWhereItStood() {
+        var (json, diag) = WorldSources.Lower(body: """
+            state {
+                world {
+                    slot before = 0
+                    slot inside = 0
+                    slot after = 0
+                }
+            }
+
+            rule "first" {
+                before = 1
+            }
+
+            stabilize settle {
+                rule "middle" {
+                    inside = 1
+                }
+            }
+
+            rule "last" {
+                after = 1
+            }
+            """);
+
+        Assert.DoesNotContain(collection: diag, filter: d => (d.Severity == DiagnosticSeverity.Error));
+
+        var printed = WorldDecompiler.Decompile(root: json);
+        var again = WorldSources.LowerSourceClean(source: printed);
+
+        Assert.Equal(
+            expected: json["rules"]!.AsArray().Select(selector: static rule => rule!["name"]!.ToString()),
+            actual: again["rules"]!.AsArray().Select(selector: static rule => rule!["name"]!.ToString())
+        );
+        Assert.True(condition: (printed.IndexOf(comparisonType: StringComparison.Ordinal, value: "rule \"first\"") < printed.IndexOf(comparisonType: StringComparison.Ordinal, value: "stabilize settle")), userMessage: printed);
     }
     [Fact]
     public void WorkflowLowersToAStagedRuleGroupWhoseStepsAreItsRules() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table combat {
@@ -522,18 +556,18 @@ public class AuthoringSugarTests {
         var steps = Assert.IsType<JsonArray>(@object: group["steps"]);
 
         Assert.Equal(2, steps.Count);
-        Assert.Equal("turn_beginTurn", steps[0]?["rule"]?.ToString());
+        Assert.Equal("turn$beginTurn", steps[0]?["rule"]?.ToString());
         Assert.Null(@object: steps[0]?["onRefusal"]);
-        Assert.Equal("turn_endTurn", steps[1]?["rule"]?.ToString());
+        Assert.Equal("turn$endTurn", steps[1]?["rule"]?.ToString());
         Assert.Equal("Skip", steps[1]?["onRefusal"]?.ToString());
 
         var ruleNames = Assert.IsType<JsonArray>(@object: json["rules"]).Select(selector: r => r?["name"]?.ToString()).ToList();
 
-        Assert.Equal(actual: ruleNames, expected: ["turn_beginTurn", "turn_endTurn"]);
+        Assert.Equal(actual: ruleNames, expected: ["turn$beginTurn", "turn$endTurn"]);
     }
     [Fact]
     public void AWorkflowRepeatStepIsRefusedBecauseAStagedCursorCarriesNoRepeat() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table combat {
@@ -557,7 +591,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void AFamilyMemberListCarriesItsGapsIntoTheDocument() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table Pile[0, 2..4]
@@ -579,7 +613,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void ABareFamilyCountKeepsTheNumberedRowLoweringAndDeclaresAFamily() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table scores[3]
@@ -600,7 +634,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void EnumLowersToIntegerConstants() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 enum Suit {
                     Clubs,
@@ -643,7 +677,7 @@ public class AuthoringSugarTests {
     }
     [Fact]
     public void DerivedStateInlinesMacroExpressions() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table board {
@@ -668,7 +702,7 @@ public class AuthoringSugarTests {
     // Family folds retain their runtime subprogram instead of expanding into gate-language text.
     [Fact]
     public void CollectionOperationsRetainTheirFoldSubprogram() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 world {
                     table scores[3]
@@ -682,12 +716,13 @@ public class AuthoringSugarTests {
 
         Assert.False(condition: diag.HasErrors, userMessage: diag.FormatReport(""));
         var program = json["rules"]![0]!["gate"]!["left"]!;
+
         Assert.Equal("All", program["instructions"]![0]!["op"]!.GetValue<string>());
         Assert.Single(collection: program["subprograms"]!.AsArray());
     }
     [Fact]
     public void EnumResolvesInRuleLocalExpressions() {
-        var (json, diag) = Lower(body: """
+        var (json, diag) = WorldSources.Lower(body: """
             state {
                 enum MoveKind {
                     None

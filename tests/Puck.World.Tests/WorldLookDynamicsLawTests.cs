@@ -85,90 +85,21 @@ public sealed class WorldLookDynamicsLawTests {
         Assert.Null(@object: motion.Dynamics);
         Assert.Null(@object: motion.PartDynamics);
     }
-    [Fact]
-    public void PartDynamicsDanglingPartIdRefusesWhileResolvingPasses() {
-        var denied = WithPartedCreation(motion: WorldLookMotion.Default with {
-            PartDynamics = new Dictionary<string, string> { ["missing-part"] = "chase" },
-        });
-        var admitted = WithPartedCreation(motion: WorldLookMotion.Default with {
+    // Each denial breaks one side of a partDynamics entry; the control names the creation's real part and a declared
+    // dynamics row.
+    [InlineData("missing-part", "chase", "looks[0].motion.partDynamics['missing-part'] names no part of creation 'parted'.")]
+    [InlineData("head", "missing", "looks[0].motion.partDynamics['head'] 'missing' names no dynamics row.")]
+    [InlineData("", "chase", "looks[0].motion.partDynamics has an empty part id.")]
+    [Theory]
+    public void AMalformedPartDynamicsEntryRefusesByNameWhileAResolvingOnePasses(string part, string row, string refusal) => Laws.RefusalWithControl(
+        control: WithPartedCreation(motion: WorldLookMotion.Default with {
             PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
-        });
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "looks[0].motion.partDynamics['missing-part'] names no part of creation 'parted'."
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
-    [Fact]
-    public void PartDynamicsDanglingRowRefusesWhileResolvingPasses() {
-        var denied = WithPartedCreation(motion: WorldLookMotion.Default with {
-            PartDynamics = new Dictionary<string, string> { ["head"] = "missing" },
-        });
-        var admitted = WithPartedCreation(motion: WorldLookMotion.Default with {
-            PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
-        });
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "looks[0].motion.partDynamics['head'] 'missing' names no dynamics row."
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
-    [Fact]
-    public void PartDynamicsEmptyPartIdRefusesWhileNonEmptyPasses() {
-        var denied = WithPartedCreation(motion: WorldLookMotion.Default with {
-            PartDynamics = new Dictionary<string, string> { [""] = "chase" },
-        });
-        var admitted = WithPartedCreation(motion: WorldLookMotion.Default with {
-            PartDynamics = new Dictionary<string, string> { ["head"] = "chase" },
-        });
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "looks[0].motion.partDynamics has an empty part id."
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
+        }),
+        denied: WithPartedCreation(motion: WorldLookMotion.Default with {
+            PartDynamics = new Dictionary<string, string> { [part] = row },
+        }),
+        needle: refusal
+    );
     [Fact]
     public void RootAndPartDynamicsTogetherPass() {
         var admitted = WithPartedCreation(motion: WorldLookMotion.Default with {

@@ -14,6 +14,11 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\Puck.State.Rules.Tests\WorldAdmission.cs" Link="WorldAdmission.cs" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.State.Search\Puck.State.Search.csproj" />
+        <!-- A trait law's fixture is checked against the world validator, so it cannot rest on a shape no world admits. -->
+        <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
 </Project>

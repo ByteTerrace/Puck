@@ -2,7 +2,7 @@
 
 These PowerShell harnesses exercise Puck.World's pointer, cursor, drag-and-drop,
 and camera-focus behavior by injecting operating-system input through `SendInput`.
-They provide repeatable manual evidence for interactions that require the actual
+They are repeatable manual checks for interactions that require the actual
 window and input path. No build or CI job runs them automatically.
 
 ## Desktop requirements
@@ -51,5 +51,5 @@ to remind you.
 
 | Script | Checks |
 |---|---|
-| `pointer-cross-slot-latch.ps1`—**verified from this location** | A held pointer button cannot survive a keyboard-seat reassignment as a phantom drag (`WorldPointer.ReleaseAllButtons`), `SystemReleaseCount` advances only on a force-release and never on a genuine one, and a wheel burst with no registered consumer drains cleanly. |
-| `camera-orbit-focus-loss.ps1` (+ `camera-orbit-focus-loss-sink.ps1`, its inert Alt-away target)—**verified from this location** | An armed camera-orbit drag stops responding to motion the instant OS focus is lost mid-drag, and resumes normally once re-armed and refocused—the orbit path is provably alive, not just silent by coincidence. |
+| `pointer-cross-slot-latch.ps1` | A held pointer button cannot survive a keyboard-seat reassignment as a phantom drag (`WorldPointer.ReleaseAllButtons`), `SystemReleaseCount` advances only on a force-release and never on a genuine one, and a wheel burst with no registered consumer drains cleanly. |
+| `camera-orbit-focus-loss.ps1` (+ `camera-orbit-focus-loss-sink.ps1`, its inert Alt-away target) | An armed camera-orbit drag stops responding to motion the instant OS focus is lost mid-drag, and resumes normally once re-armed and refocused—the orbit path is provably alive, not just silent by coincidence. |

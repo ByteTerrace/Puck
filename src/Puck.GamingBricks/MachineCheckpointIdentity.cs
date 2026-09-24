@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Puck.Assets;
 
 namespace Puck.GamingBricks;
 
@@ -38,6 +39,6 @@ public static class MachineCheckpointIdentity {
             bytes: cartridge,
             hash: hash
         );
-        return ("sha256/" + Convert.ToHexStringLower(inArray: hash.GetHashAndReset()));
+        return ContentPin.FromDigest(digest: hash.GetHashAndReset()).ToString();
     }
 }

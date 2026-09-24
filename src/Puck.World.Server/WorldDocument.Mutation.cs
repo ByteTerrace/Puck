@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -63,8 +64,8 @@ public sealed partial class WorldDocument {
         return true;
     }
     /// <summary>Runs every gate a mutation can be refused at, against a document the caller names, and moves
-    /// nothing: authority through the one admission predicate, composition, whole-document validation, the render
-    /// envelope and field capacities, the solid field build, and the addon and machine staging.</summary>
+    /// nothing: authority through the one admission predicate, composition, whole-document validation, the pipeline
+    /// override binding, the render envelope and field capacities, the solid field build, and the addon and machine staging.</summary>
     /// <param name="mutation">The mutation.</param>
     /// <param name="current">The document the mutation composes against: the installed one, or the one that will
     /// be installed when the prepared mutation is.</param>
@@ -171,6 +172,14 @@ public sealed partial class WorldDocument {
         if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason, compilation: out var compilation)) {
             return false;
         }
+        if (!TryAdmitPipelineOverrides(
+            candidate: candidate,
+            current: current,
+            mutation: mutation,
+            reason: out reason
+        )) {
+            return false;
+        }
         // A value-only candidate reuses the live arena rather than carrying a prepared replacement. Validate its
         // complete import against that arena now, while a rule firing's scope is still open, so retained orphan keys
         // and visibility payload can refuse before commit. Direct mutations install immediately after preparation;
@@ -243,7 +252,7 @@ public sealed partial class WorldDocument {
         IWorldAddonPreparedPlan? addonPlan = null;
         IWorldMachinePreparedPlan? machinePlan = null;
         int[]? tickWrittenEntity = null;
-        WorldPrincipal[]? tickWrittenPrincipal = null;
+        Principal[]? tickWrittenPrincipal = null;
         bool[]? tickCollided = null;
         var staged = false;
 
@@ -440,6 +449,9 @@ public sealed partial class WorldDocument {
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(channel: "world.mutation", text: $"[world.mutation: {message}]");
         }
+        if (!HasSubmitter(mutation: mutation)) {
+            return;
+        }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: false,
@@ -453,6 +465,10 @@ public sealed partial class WorldDocument {
 
     }
 
+    // A mutation the World makes itself — a per-tick sweep's, a rule's document-row effect — was submitted by no
+    // session, so it is narrated on the transcript and echoed to none: an echo is a submitter's verdict, and one
+    // raised here would reach the toast, the console tape and the edit cue lane as if a seat had typed it.
+    private static bool HasSubmitter(WorldMutation mutation) => (mutation.Principal != Principal.World);
     // A state-value mutation can reuse every compiled product only while it keeps the catalog identity and does
     // not rebind a population look. All other mutations install a replacement prepared alongside the document.
     private bool RequiresFullInstall(WorldDefinition candidate, WorldMutation mutation, WorldDefinition previous) => !(

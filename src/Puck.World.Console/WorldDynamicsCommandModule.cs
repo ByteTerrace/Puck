@@ -101,29 +101,10 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.dynamics",
+        yield return authority.CreateServerQueryCommand(
             description: "Reports the dynamics census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one segment per row — the authored f/zeta/r triple, the derived decay/osc/k3 constants (the SAME fixed-point derivation the simulation reads), and how many document members reference it.",
-            handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.dynamics"
-                ) is { } refusal) {
-                    return refusal;
-                }
-
-                if (!authority.TryResolveServer(
-                    context: context,
-                    error: out var error,
-                    server: out var server,
-                    verb: "world.dynamics"
-                )) {
-                    return error;
-                }
-
-                return new CommandResult(Output: DescribeDynamics(definition: server.Definition));
-            }
+            describe: server => DescribeDynamics(definition: server.Definition),
+            name: "world.dynamics"
         );
     }
 }

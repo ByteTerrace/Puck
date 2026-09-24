@@ -12,7 +12,7 @@ public static partial class RuleCompiler {
             field = default;
             return false;
         }
-        if (!context.TryInstanceBinding(name: bindingName, binding: out binding)) {
+        if (!context.TryInstanceBinding(binding: out binding, name: bindingName)) {
             field = default;
             return false;
         }
@@ -26,12 +26,29 @@ public static partial class RuleCompiler {
         field = default;
         return false;
     }
+    /// <summary>Determines whether a row declares the cell a literal key names: an authored cell, or, on a board
+    /// row, any cell of its topology, which every board declares whether or not it holds a value.</summary>
+    /// <param name="row">The row read.</param>
+    /// <param name="key">The literal cell key.</param>
+    /// <param name="context">The compile context the board's topology resolves in.</param>
+    /// <returns><see langword="true"/> when a read of the cell can see a value.</returns>
+    public static bool DeclaresCell(StateRow row, string key, RuleCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        return (row.HasCell(key: key) || (
+            (row.EffectiveDomain is StateDomain.CellsOf board) &&
+            (context.FindTopology(name: board.Topology) is { } topology) &&
+            long.TryParse(provider: CultureInfo.InvariantCulture, result: out var ordinal, s: key, style: NumberStyles.None) &&
+            (ordinal < topology.CellCount)
+        ));
+    }
 
     private static bool TryResolveStaticInstanceField(StateChannelRef reference, StateChannelRef? cell, RuleCompileContext context, out StatePoolDescriptor? pool, out StatePoolFieldDescriptor field, out StateInstanceHandle handle) {
         pool = null;
         field = default;
         handle = default;
-        if ((reference.PoolField is not { Pool: { } poolName, Slot: { } slot, Binding: null } typed) || (cell is not null) || !context.TryStaticPoolHandle(poolName: poolName, slot: slot, pool: out pool, handle: out handle) || (pool is null)) {
+        if ((reference.PoolField is not { Pool: { } poolName, Slot: { } slot, Binding: null } typed) || (cell is not null) || !context.TryStaticPoolHandle(handle: out handle, pool: out pool, poolName: poolName, slot: slot) || (pool is null)) {
             return false;
         }
         foreach (var candidate in pool.Fields) {
@@ -132,7 +149,7 @@ public static partial class RuleCompiler {
         }
         if (operand.PoolField is { Binding: { } bindingName } bindingField) {
             throw new RuleException(
-                detail: (context.TryInstanceBinding(name: bindingName, binding: out _)
+                detail: (context.TryInstanceBinding(binding: out _, name: bindingName)
                     ? $"pool binding '{bindingName}' has no field '{bindingField.Field}'"
                     : $"pool binding '{bindingName}' is not live at this use"),
                 refusal: RuleRefusal.StateRowUnknown,
@@ -352,7 +369,7 @@ public static partial class RuleCompiler {
         // A read operand must address a cell the row declares today: an undeclared cell reads 0 forever with no
         // refusal anywhere, so it refuses at compile instead. A draw site's slot cell is declared by its facet.
         if (
-            !row.HasCell(key: resolvedKey) &&
+            !DeclaresCell(context: context, key: resolvedKey, row: row) &&
             !(row.IsDraw && (resolvedKey == StateRow.SlotKey.Value))
         ) {
             throw new RuleException(

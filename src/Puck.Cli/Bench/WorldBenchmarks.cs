@@ -1,5 +1,7 @@
+using Puck.Commands;
 using System.Diagnostics;
 
+using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Puck.World;
 using Puck.World.Protocol;
@@ -34,7 +36,7 @@ internal static class WorldBenchmarks {
         // The authored option row the deal reads before dealing (draw-1 vs draw-3) — settled before the window
         // opens so only the deal itself is measured.
         server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: Game,
             Key: "option",
             Value: 1,
@@ -46,23 +48,21 @@ internal static class WorldBenchmarks {
 
         server.MutationJournalTap = (_, _, _) => applied++;
 
-        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var ticks = 0;
         var stopwatch = Stopwatch.StartNew();
-
-        RequestDeal(
-            game: Game,
-            server: server
-        );
-
-        var ticks = SettleUntilQuiet(
-            server: server,
-            game: Game,
-            stepTicks: stepTicks
-        );
+        var allocated = AllocationWindow.Total(window: () => {
+            RequestDeal(
+                game: Game,
+                server: server
+            );
+            ticks = SettleUntilQuiet(
+                server: server,
+                game: Game,
+                stepTicks: stepTicks
+            );
+        });
 
         stopwatch.Stop();
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
 
         if (ReadCell(
             key: "result",
@@ -128,13 +128,10 @@ internal static class WorldBenchmarks {
         var elapsedTicksSamples = new long[SampleTicks];
 
         for (var tick = 0; (tick < SampleTicks); tick++) {
-            var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
             var timestampBefore = Stopwatch.GetTimestamp();
 
-            server.Advance(stepTicks: stepTicks);
-
+            allocationSamples[tick] = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
             elapsedTicksSamples[tick] = (Stopwatch.GetTimestamp() - timestampBefore);
-            allocationSamples[tick] = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
         }
 
         Array.Sort(array: allocationSamples);
@@ -166,7 +163,7 @@ internal static class WorldBenchmarks {
 
         foreach (var (key, value) in new (string Key, long Value)[] { ("action", 1), ("from", -1), ("to", -1), ("card", -1), ("request", request) }) {
             server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: game,
                 Key: key,
                 Value: value,

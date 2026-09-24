@@ -7,11 +7,11 @@ namespace Puck.State.Rules.Tests;
 /// to permute: the compiler refuses one of those rows where the transform is authored, and the kernel refuses a
 /// transform built by hand around the compiler.</summary>
 public sealed class TransformRowShapeLawTests {
-    [Theory]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [Theory]
     public void ASortRefusesMissingDuplicateAndMixedKeys(int shape) {
         var (_, context) = Arrange();
         IReadOnlyList<SortKey> keys = shape switch {
@@ -20,19 +20,19 @@ public sealed class TransformRowShapeLawTests {
             2 => [new(Row: "rank"), new(Row: "rank")],
             _ => [new(Row: "deck"), new(Row: "rank")],
         };
-        Assert.False(condition: Resolves(context, new StateTransform.Sort(Row: "deck", By: keys), out var reason));
+
+        Assert.False(condition: Resolves(context, new StateTransform.Sort(By: keys, Row: "deck"), out var reason));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "sort");
     }
-
     [Fact]
     public void ASortSelectsItsStoragePathAtCompilationAndKeepsDirection() {
         var (_, context) = Arrange();
         Assert.True(condition: RuleCompiler.TryResolveTransform(
-            new StateTransform.Sort(Row: "scores", By: [new(Row: "scores", Descending: true)]),
+            new StateTransform.Sort(Row: "scores", By: [new(Descending: true, Row: "scores")]),
             context, out var own, out var reason), userMessage: reason);
         Assert.True(condition: Assert.IsType<ArenaTransform.SortKeyed>(@object: own).Descending);
         Assert.True(condition: RuleCompiler.TryResolveTransform(
-            new StateTransform.Sort(Row: "deck", By: [new(Row: "rank", Descending: true)]),
+            new StateTransform.Sort(Row: "deck", By: [new(Descending: true, Row: "rank")]),
             context, out var attributes, out reason), userMessage: reason);
         Assert.True(condition: Assert.Single(collection: Assert.IsType<ArenaTransform.SortZone>(@object: attributes).By).Descending);
     }

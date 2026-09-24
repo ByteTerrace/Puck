@@ -53,12 +53,21 @@
         <ProjectReference Include="..\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
-        <ProjectReference Include="..\Puck.World.Azure\Puck.World.Azure.csproj" />
         <ProjectReference Include="..\Puck.World.Embeddings\Puck.World.Embeddings.csproj" />
         <ProjectReference Include="..\Puck.GamingBricks.Transpiler\Puck.GamingBricks.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.Mcp\Puck.Mcp.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Directory.Build.props hands every project Puck.Analyzers as a compiler extension only. The ratchet verbs
+             (`puck lengths`, `puck comment-smells`) and `puck scan` also reference it as an ordinary assembly, so the
+             ledger, its judgement and the per-file counts they check are the analyzers' own; it stays an analyzer
+             over this project too. -->
+        <ProjectReference
+            Update="..\Puck.Analyzers\Puck.Analyzers.csproj"
+            ReferenceOutputAssembly="true"
+        />
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">
         <Copy
@@ -75,5 +84,4 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
-    <Import Project="..\..\build\WorldAssets.targets" />
 </Project>

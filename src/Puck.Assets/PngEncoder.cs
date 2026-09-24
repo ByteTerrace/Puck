@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
-using System.IO.Hashing;
 
 namespace Puck.Assets;
 
@@ -62,16 +61,14 @@ public static class PngEncoder {
         stream.Write(buffer: typeBytes);
         stream.Write(buffer: data);
 
-        var crc = new Crc32();
-
-        crc.Append(source: typeBytes);
-        crc.Append(source: data);
-
         Span<byte> crcBytes = stackalloc byte[4];
 
         BinaryPrimitives.WriteUInt32BigEndian(
             destination: crcBytes,
-            value: crc.GetCurrentHashAsUInt32()
+            value: PngChunk.Crc(
+                data: data,
+                type: typeBytes
+            )
         );
         stream.Write(buffer: crcBytes);
     }

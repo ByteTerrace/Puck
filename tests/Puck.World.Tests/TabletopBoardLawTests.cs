@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.Assets.Documents;
@@ -16,31 +17,23 @@ namespace Puck.World.Tests;
 /// board row, and an illegal destination is recorded without disturbing <c>lastLegal</c>.</summary>
 public sealed class TabletopBoardLawTests {
     private static ActionPredicate All(params ActionPredicate[] predicates) => new ActionPredicate.All(Predicates: predicates);
-    private static ActionPredicate.CompareState Cs(string state, ActionStateComparison comparison, decimal? value = null, string? key = null,
-        string? comparandState = null, string? comparandKey = null) => new(
-            ComparandKey: StateChannelRef.OfNullable(spelling: comparandKey),
-            ComparandState: StateChannelRef.OfNullable(spelling: comparandState),
-            Comparison: comparison,
-            Key: StateChannelRef.OfNullable(spelling: key),
-            State: state,
-            Value: value
-        );
+    private static ActionPredicate.CompareState Cs(string state, ExpressionOp comparison, decimal? value = null, string? key = null, string? comparandState = null, string? comparandKey = null) => StateFixtures.Compare(comparandKey: comparandKey, comparandState: comparandState, comparison: comparison, key: key, state: state, value: value);
     private static ActionPredicate[] MoverDetectPredicates(ActionPredicate quiescentEqualsOne, bool excludeOffFrameMover) {
         ActionPredicate[] baseline = [
             quiescentEqualsOne, Cs(
                 "justMoved",
-                ActionStateComparison.Equal,
+                ExpressionOp.Equal,
                 0m
             ),
             Cs(
                 "piecePrevCell",
-                ActionStateComparison.NotEqual,
+                ExpressionOp.NotEqual,
                 -1m,
                 key: "0"
             ),
             Cs(
                 "pieceCell",
-                ActionStateComparison.NotEqual,
+                ExpressionOp.NotEqual,
                 key: "0",
                 comparandState: "piecePrevCell",
                 comparandKey: "0"
@@ -50,7 +43,7 @@ public sealed class TabletopBoardLawTests {
         return (excludeOffFrameMover
             ? [.. baseline, Cs(
                     "pieceCell",
-                    ActionStateComparison.NotEqual,
+                    ExpressionOp.NotEqual,
                     -1m,
                     key: "0"
                 )]
@@ -167,7 +160,7 @@ public sealed class TabletopBoardLawTests {
 
         var quiescentEqualsOne = Cs(
             Quiescent,
-            ActionStateComparison.Equal,
+            ExpressionOp.Equal,
             1m
         );
 
@@ -268,7 +261,7 @@ public sealed class TabletopBoardLawTests {
                 "verdict-optimistic",
                 Cs(
                     "justMoved",
-                    ActionStateComparison.Equal,
+                    ExpressionOp.Equal,
                     1m
                 ),
                 ActionTriggerMode.Level,
@@ -282,12 +275,12 @@ public sealed class TabletopBoardLawTests {
                 All(
                     Cs(
                         "justMoved",
-                        ActionStateComparison.Equal,
+                        ExpressionOp.Equal,
                         1m
                     ),
                     Cs(
                         "previousBoard",
-                        ActionStateComparison.NotEqual,
+                        ExpressionOp.NotEqual,
                         0m,
                         key: "$cell:pieceCell:0"
                     )
@@ -303,12 +296,12 @@ public sealed class TabletopBoardLawTests {
                 All(
                     Cs(
                         "justMoved",
-                        ActionStateComparison.Equal,
+                        ExpressionOp.Equal,
                         1m
                     ),
                     Cs(
                         "verdict",
-                        ActionStateComparison.Equal,
+                        ExpressionOp.Equal,
                         1m
                     )
                 ),
@@ -343,12 +336,12 @@ public sealed class TabletopBoardLawTests {
                 All(
                     Cs(
                         "justMoved",
-                        ActionStateComparison.Equal,
+                        ExpressionOp.Equal,
                         1m
                     ),
                     Cs(
                         "verdict",
-                        ActionStateComparison.Equal,
+                        ExpressionOp.Equal,
                         0m
                     )
                 ),
@@ -362,7 +355,7 @@ public sealed class TabletopBoardLawTests {
                 "reset-just-moved",
                 Cs(
                     "justMoved",
-                    ActionStateComparison.Equal,
+                    ExpressionOp.Equal,
                     1m
                 ),
                 ActionTriggerMode.Level,
@@ -376,11 +369,13 @@ public sealed class TabletopBoardLawTests {
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(
+            GravityRaw = source.Gravity with {
+                Uniform = new DocumentVector3(value: new Vector3(
             x: 0f,
             y: -9.8f,
             z: 0f
-        )) },
+        )),
+            },
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 BodyContact = WorldBodyContactMode.Solid,
                 Collider = new WorldCollider.Sphere(Radius: 0.15f),
@@ -520,7 +515,7 @@ public sealed class TabletopBoardLawTests {
 
         var quiescentEqualsOne = Cs(
             Quiescent,
-            ActionStateComparison.Equal,
+            ExpressionOp.Equal,
             1m
         );
         ActionEffect[] deriveEffects = [
@@ -602,11 +597,13 @@ public sealed class TabletopBoardLawTests {
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(
+            GravityRaw = source.Gravity with {
+                Uniform = new DocumentVector3(value: new Vector3(
             x: 0f,
             y: -9.8f,
             z: 0f
-        )) },
+        )),
+            },
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 BodyContact = WorldBodyContactMode.Solid,
                 Collider = new WorldCollider.Sphere(Radius: 0.15f),
@@ -891,7 +888,7 @@ public sealed class TabletopBoardLawTests {
     [InlineData(false)] // one combined rule — every top-level effect is its own boundary, so piece 0 still derives.
     public void OneOffFrameSiblingNeverCostsTheOtherPieceItsDeriveWhateverTheRuleShape(bool splitRules) {
         using var fixture = Fixtures.FreshServer(definition: TwoPieceTabletopDocument(splitRules: splitRules));
-        var left = WorldPrincipal.Seat(slot: 0);
+        var left = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             left,
@@ -940,7 +937,7 @@ public sealed class TabletopBoardLawTests {
     [InlineData(false)]
     public void PieceLeavingTheTopologyEntirelyNeverRegistersAsItsOwnMover(bool excludeOffFrameMover) {
         using var fixture = Fixtures.FreshServer(definition: TabletopBridgeDocument(excludeOffFrameMover: excludeOffFrameMover));
-        var left = WorldPrincipal.Seat(slot: 0);
+        var left = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             left,
@@ -1056,7 +1053,7 @@ public sealed class TabletopBoardLawTests {
     [Fact]
     public void RestingBodyDerivesOccupancyAndAnIllegalDestinationLeavesLastLegalUntouched() {
         using var fixture = Fixtures.FreshServer(definition: TabletopBridgeDocument());
-        var left = WorldPrincipal.Seat(slot: 0);
+        var left = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             left,
@@ -1128,9 +1125,9 @@ public sealed class TabletopBoardLawTests {
             0,
             1,
             1,
-            WorldPrincipal.Console,
+            Principal.Console,
             new WorldSubmissionPayload.Mutation(Value: new WorldMutation.UpsertStateCell(
-                WorldPrincipal.Console,
+                Principal.Console,
                 row,
                 key,
                 value,

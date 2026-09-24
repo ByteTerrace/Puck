@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -25,8 +26,22 @@ namespace Puck.World.Addons;
 /// mirror, emission, solid, inhabit, faceSources, region, attach), plus <see cref="WorldMutation.SetInputHold"/>. Other
 /// declared kinds have no entry yet;
 /// <see cref="TryDecode"/> refuses an unwired ordinal by name rather than guessing a shape for it, so wiring one in
-/// is strictly additive — a new <c>case</c> arm, never a change to this method's own contract.</remarks>
+/// is strictly additive — a new <c>Decoders</c> row, never a change to this method's own contract.</remarks>
 public static class WorldAddonMutationDecoder {
+    // The kinds a guest may submit, keyed by the catalog's declared ordinal and section, so the dispatch reads the one
+    // ordinal the catalog declares rather than restating it.
+    private static readonly Dictionary<int, (WorldSection Section, Func<JsonElement, Principal, WorldMutation> Decode)> Decoders = Wire(
+        (typeof(WorldMutation.UpsertPlacement), static (root, principal) => DecodeUpsertPlacement(principal: principal, root: root)),
+        (typeof(WorldMutation.RemovePlacement), static (root, principal) => DecodeRemovePlacement(principal: principal, root: root)),
+        (typeof(WorldMutation.UpsertHudPanel), static (root, principal) => DecodeUpsertHudPanel(principal: principal, root: root)),
+        (typeof(WorldMutation.RemoveHudPanel), static (root, principal) => DecodeRemoveHudPanel(principal: principal, root: root)),
+        (typeof(WorldMutation.UpsertHudElement), static (root, principal) => DecodeUpsertHudElement(principal: principal, root: root)),
+        (typeof(WorldMutation.RemoveHudElement), static (root, principal) => DecodeRemoveHudElement(principal: principal, root: root)),
+        (typeof(WorldMutation.SetHudDefaults), static (root, principal) => DecodeSetHudDefaults(principal: principal, root: root)),
+        (typeof(WorldMutation.UpsertStateRow), static (root, principal) => DecodeUpsertStateRow(principal: principal, root: root)),
+        (typeof(WorldMutation.RemoveStateRow), static (root, principal) => DecodeRemoveStateRow(principal: principal, root: root)),
+        (typeof(WorldMutation.SetInputHold), static (root, principal) => DecodeSetInputHold(principal: principal, root: root))
+    );
     private static readonly string[] RectMembers = ["x", "y", "width", "height"];
     private static readonly string[] ElementMembers = ["id", "kind", "rect", "style", "text", "binding"];
     private static readonly string[] PanelMembers = ["id", "rect", "layer", "style", "elements"];
@@ -68,17 +83,12 @@ public static class WorldAddonMutationDecoder {
     private static readonly string[] AttachMembers = ["bodyIndex", "localOffset", "localYawDegrees"];
     private static readonly string[] InhabitMembers = ["kit", "look", "source", "count", "distribution"];
     private static readonly string[] FaceSourceMembers = ["face", "source"];
-    private static readonly string[] FeedProfileMembers = ["width", "height", "refreshRateHz"];
     // WorldScreenSource's eight $type-discriminated variants (FaceSources[].source) — each variant's own allowed-
     // member list includes "$type" itself, since UniqueMembers keeps it in the same dictionary the field reads walk.
     private static readonly string[] ScreenSourceNoneMembers = ["$type"];
-    private static readonly string[] ScreenSourceTestPatternMembers = ["$type", "width", "height"];
     private static readonly string[] ScreenSourceMachineMembers = ["$type", "instance", "output"];
-    private static readonly string[] ScreenSourceCameraMembers = ["$type", "profile"];
+    private static readonly string[] ScreenSourceProducerMembers = ["$type", "id", "settings"];
     private static readonly string[] ScreenSourceViewMembers = ["$type", "cameraName"];
-    private static readonly string[] ScreenSourceCaptureMembers = ["$type", "windowTitle", "profile", "monitorIndex"];
-    private static readonly string[] ScreenSourceConsoleMembers = ["$type", "rows", "columns", "procedural"];
-    private static readonly string[] ScreenSourceQrMembers = ["$type", "payload", "ecLevel", "quietZoneModules"];
     private static readonly Dictionary<string, WorldHudElementKind> ElementKinds = new(comparer: StringComparer.Ordinal) {
         ["rect"] = WorldHudElementKind.Rect,
         ["text"] = WorldHudElementKind.Text,
@@ -479,40 +489,6 @@ public static class WorldAddonMutationDecoder {
             Source: source
         );
     }
-    private static WorldFeedProfile DecodeFeedProfile(JsonElement element, string context) {
-        var members = UniqueMembers(
-            context: context,
-            element: element
-        );
-
-        RequireNoUnknownMembers(
-            allowed: FeedProfileMembers,
-            context: context,
-            members: members
-        );
-
-        var width = RequireInt32(
-            context: context,
-            members: members,
-            name: "width"
-        );
-        var height = RequireInt32(
-            context: context,
-            members: members,
-            name: "height"
-        );
-        var refreshRateHz = RequireUInt32(
-            context: context,
-            members: members,
-            name: "refreshRateHz"
-        );
-
-        return new WorldFeedProfile(
-            Height: height,
-            RefreshRateHz: refreshRateHz,
-            Width: width
-        );
-    }
     // Kit/look name resolution and population-wide bounds stay with the document validator. An addon-authored
     // count is always a literal — the cell-reference shape (Puck.World.WorldPlacementInhabitCount.Row) is not part
     // of this wire grammar.
@@ -657,7 +633,7 @@ public static class WorldAddonMutationDecoder {
 
         return new WorldPlacementRegion(Radius: radius);
     }
-    private static WorldMutation DecodeRemoveHudElement(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeRemoveHudElement(JsonElement root, Principal principal) {
         var members = UniqueMembers(
             context: "RemoveHudElement",
             element: root
@@ -686,7 +662,7 @@ public static class WorldAddonMutationDecoder {
             Principal: principal
         );
     }
-    private static WorldMutation DecodeRemoveHudPanel(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeRemoveHudPanel(JsonElement root, Principal principal) {
         return DecodeSingleKeyRemoval(
             root: root,
             principal: principal,
@@ -699,7 +675,7 @@ public static class WorldAddonMutationDecoder {
             )
         );
     }
-    private static WorldMutation DecodeRemovePlacement(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeRemovePlacement(JsonElement root, Principal principal) {
         return DecodeSingleKeyRemoval(
             root: root,
             principal: principal,
@@ -712,7 +688,7 @@ public static class WorldAddonMutationDecoder {
             )
         );
     }
-    private static WorldMutation DecodeRemoveStateRow(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeRemoveStateRow(JsonElement root, Principal principal) {
         return DecodeSingleKeyRemoval(
             root: root,
             principal: principal,
@@ -744,15 +720,11 @@ public static class WorldAddonMutationDecoder {
             context: context,
             members: members
         ),
-            "testPattern" => DecodeScreenSourceTestPattern(
-            context: context,
-            members: members
-        ),
             "machine" => DecodeScreenSourceMachine(
             context: context,
             members: members
         ),
-            "camera" => DecodeScreenSourceCamera(
+            "producer" => DecodeScreenSourceProducer(
             context: context,
             members: members
         ),
@@ -760,145 +732,8 @@ public static class WorldAddonMutationDecoder {
             context: context,
             members: members
         ),
-            "capture" => DecodeScreenSourceCapture(
-            context: context,
-            members: members
-        ),
-            "console" => DecodeScreenSourceConsole(
-            context: context,
-            members: members
-        ),
-            "qr" => DecodeScreenSourceQr(
-            context: context,
-            members: members
-        ),
-            _ => throw new AddonMutationDecodeException(message: $"{context}: '$type' names '{type}', which is not one of {{none, testPattern, machine, camera, view, capture, console, qr}}"),
+            _ => throw new AddonMutationDecodeException(message: $"{context}: '$type' names '{type}', which is not one of {{none, machine, producer, view}}"),
         };
-    }
-    private static WorldScreenSource DecodeScreenSourceCamera(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceCameraMembers,
-            context: context,
-            members: members
-        );
-
-        if (
-            !members.TryGetValue(
-            key: "profile",
-            value: out var profileElement
-        ) ||
-            (profileElement.ValueKind != JsonValueKind.Object)
-        ) {
-            throw new AddonMutationDecodeException(message: $"{context}: 'profile' must be an object");
-        }
-
-        var profile = DecodeFeedProfile(
-            context: $"{context}.profile",
-            element: profileElement
-        );
-
-        return new WorldScreenSource.Camera(Profile: profile);
-    }
-    private static WorldScreenSource DecodeScreenSourceCapture(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceCaptureMembers,
-            context: context,
-            members: members
-        );
-
-        var windowTitle = RequireString(
-            context: context,
-            members: members,
-            name: "windowTitle"
-        );
-
-        if (
-            !members.TryGetValue(
-            key: "profile",
-            value: out var profileElement
-        ) ||
-            (profileElement.ValueKind != JsonValueKind.Object)
-        ) {
-            throw new AddonMutationDecodeException(message: $"{context}: 'profile' must be an object");
-        }
-
-        var profile = DecodeFeedProfile(
-            context: $"{context}.profile",
-            element: profileElement
-        );
-        int? monitorIndex = null;
-
-        if (members.TryGetValue(
-            key: "monitorIndex",
-            value: out var monitorElement
-        )) {
-            if (
-                (monitorElement.ValueKind != JsonValueKind.Number) ||
-                !monitorElement.TryGetInt32(value: out var value)
-            ) {
-                throw new AddonMutationDecodeException(message: $"{context}: 'monitorIndex' must be an integer");
-            }
-
-            monitorIndex = value;
-        }
-
-        return new WorldScreenSource.Capture(
-            MonitorIndex: monitorIndex,
-            Profile: profile,
-            WindowTitle: windowTitle
-        );
-    }
-    private static WorldScreenSource DecodeScreenSourceConsole(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceConsoleMembers,
-            context: context,
-            members: members
-        );
-
-        var rows = 24;
-        var columns = 64;
-        var procedural = false;
-
-        if (members.TryGetValue(
-            key: "rows",
-            value: out var rowsElement
-        )) {
-            if (
-                (rowsElement.ValueKind != JsonValueKind.Number) ||
-                !rowsElement.TryGetInt32(value: out rows)
-            ) {
-                throw new AddonMutationDecodeException(message: $"{context}: 'rows' must be an integer");
-            }
-        }
-
-        if (members.TryGetValue(
-            key: "columns",
-            value: out var columnsElement
-        )) {
-            if (
-                (columnsElement.ValueKind != JsonValueKind.Number) ||
-                !columnsElement.TryGetInt32(value: out columns)
-            ) {
-                throw new AddonMutationDecodeException(message: $"{context}: 'columns' must be an integer");
-            }
-        }
-
-        if (members.TryGetValue(
-            key: "procedural",
-            value: out var proceduralElement
-        )) {
-            if (proceduralElement.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) {
-                throw new AddonMutationDecodeException(message: $"{context}: 'procedural' must be a boolean");
-            }
-
-            procedural = proceduralElement.GetBoolean();
-        }
-
-        return new WorldScreenSource.Console(
-            Columns: columns,
-            Procedural: procedural,
-            Rows: rows
-        );
     }
     private static WorldScreenSource DecodeScreenSourceMachine(Dictionary<string, JsonElement> members, string context) {
         RequireNoUnknownMembers(
@@ -932,73 +767,44 @@ public static class WorldAddonMutationDecoder {
 
         return new WorldScreenSource.None();
     }
-    private static WorldScreenSource DecodeScreenSourceQr(Dictionary<string, JsonElement> members, string context) {
+    // A producer's settings object is carried whole: the producer's registered shape binds and checks it when the
+    // validator gates the composed candidate, exactly as a document row's is, so this decoder only shapes the row.
+    private static WorldScreenSource DecodeScreenSourceProducer(Dictionary<string, JsonElement> members, string context) {
         RequireNoUnknownMembers(
-            allowed: ScreenSourceQrMembers,
+            allowed: ScreenSourceProducerMembers,
             context: context,
             members: members
         );
 
-        var payload = RequireString(
+        var id = RequireString(
             context: context,
             members: members,
-            name: "payload"
+            name: "id"
         );
-        var ecLevel = "M";
-        var quietZoneModules = 4;
 
-        if (members.TryGetValue(
-            key: "ecLevel",
-            value: out var ecLevelElement
+        if (!members.TryGetValue(
+            key: "settings",
+            value: out var settingsElement
         )) {
-            if (ecLevelElement.ValueKind != JsonValueKind.String) {
-                throw new AddonMutationDecodeException(message: $"{context}: 'ecLevel' must be a string");
-            }
-
-            ecLevel = ecLevelElement.GetString()!;
+            return new WorldScreenSource.Producer(Id: id);
         }
 
-        if (members.TryGetValue(
-            key: "quietZoneModules",
-            value: out var quietZoneElement
-        )) {
-            if (
-                (quietZoneElement.ValueKind != JsonValueKind.Number) ||
-                !quietZoneElement.TryGetInt32(value: out quietZoneModules)
-            ) {
-                throw new AddonMutationDecodeException(message: $"{context}: 'quietZoneModules' must be an integer");
-            }
+        if (settingsElement.ValueKind != JsonValueKind.Object) {
+            throw new AddonMutationDecodeException(message: $"{context}: 'settings' must be an object");
         }
 
-        // The letter/capacity checks are NOT repeated here: this decoder only shapes the row, and
-        // WorldDefinitionValidator gates the composed candidate before any mutation applies.
-        return new WorldScreenSource.Qr(
-            EcLevel: ecLevel,
-            Payload: payload,
-            QuietZoneModules: quietZoneModules
-        );
-    }
-    private static WorldScreenSource DecodeScreenSourceTestPattern(Dictionary<string, JsonElement> members, string context) {
-        RequireNoUnknownMembers(
-            allowed: ScreenSourceTestPatternMembers,
-            context: context,
-            members: members
-        );
+        var settings = new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal);
 
-        var width = RequireInt32(
-            context: context,
-            members: members,
-            name: "width"
-        );
-        var height = RequireInt32(
-            context: context,
-            members: members,
-            name: "height"
-        );
+        foreach (var (name, value) in UniqueMembers(
+            context: $"{context}.settings",
+            element: settingsElement
+        )) {
+            settings[name] = value.Clone();
+        }
 
-        return new WorldScreenSource.TestPattern(
-            Height: height,
-            Width: width
+        return new WorldScreenSource.Producer(
+            Id: id,
+            Settings: settings
         );
     }
     private static WorldScreenSource DecodeScreenSourceView(Dictionary<string, JsonElement> members, string context) {
@@ -1050,7 +856,7 @@ public static class WorldAddonMutationDecoder {
             )
         );
     }
-    private static WorldMutation DecodeSetHudDefaults(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeSetHudDefaults(JsonElement root, Principal principal) {
         var members = UniqueMembers(
             context: "SetHudDefaults",
             element: root
@@ -1137,7 +943,7 @@ public static class WorldAddonMutationDecoder {
             )
         );
     }
-    private static WorldMutation DecodeSetInputHold(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeSetInputHold(JsonElement root, Principal principal) {
         var members = UniqueMembers(
             context: "SetInputHold",
             element: root
@@ -1229,11 +1035,11 @@ public static class WorldAddonMutationDecoder {
     /// <summary>Owns the wire shape shared by mutations that remove one row by a required string key.</summary>
     private static WorldMutation DecodeSingleKeyRemoval(
         JsonElement root,
-        WorldPrincipal principal,
+        Principal principal,
         string context,
         IReadOnlyList<string> allowed,
         string keyName,
-        Func<WorldPrincipal, string, WorldMutation> create) {
+        Func<Principal, string, WorldMutation> create) {
         var members = UniqueMembers(
             context: context,
             element: root
@@ -1382,7 +1188,7 @@ public static class WorldAddonMutationDecoder {
 
         return cells;
     }
-    private static WorldMutation DecodeUpsertHudElement(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeUpsertHudElement(JsonElement root, Principal principal) {
         var members = UniqueMembers(
             context: "UpsertHudElement",
             element: root
@@ -1421,7 +1227,7 @@ public static class WorldAddonMutationDecoder {
             Principal: principal
         );
     }
-    private static WorldMutation DecodeUpsertHudPanel(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeUpsertHudPanel(JsonElement root, Principal principal) {
         var members = UniqueMembers(
             context: "UpsertHudPanel",
             element: root
@@ -1486,7 +1292,7 @@ public static class WorldAddonMutationDecoder {
     }
     // ---- Placement rows (UpsertPlacement 19 / RemovePlacement 20) ----
 
-    private static WorldMutation DecodeUpsertPlacement(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeUpsertPlacement(JsonElement root, Principal principal) {
         var members = UniqueMembers(
             context: "UpsertPlacement",
             element: root
@@ -1648,7 +1454,7 @@ public static class WorldAddonMutationDecoder {
     // list, one walk, no per-$type branching. Min/Max ordering, the value's own in-range check, and the
     // capacity/text-length ceilings are all WorldDefinitionValidator's job; this only turns wire scalars into the
     // typed row, exactly like the HUD decoders leave capacity/authoring-policy checks to the same validate stage.
-    private static WorldMutation DecodeUpsertStateRow(JsonElement root, WorldPrincipal principal) {
+    private static WorldMutation DecodeUpsertStateRow(JsonElement root, Principal principal) {
         const string Context = "UpsertStateRow";
 
         var members = UniqueMembers(
@@ -1856,34 +1662,39 @@ public static class WorldAddonMutationDecoder {
 
         return value;
     }
-    private static int RequireInt32(Dictionary<string, JsonElement> members, string name, string context) {
+
+    private delegate bool TryGetNumber<T>(JsonElement element, out T value);
+
+    private static T RequireNumber<T>(Dictionary<string, JsonElement> members, string name, string context, string expected, TryGetNumber<T> getter) {
         var element = RequireNumberElement(
             context: context,
-            expected: "an integer",
+            expected: expected,
             members: members,
             name: name
         );
 
-        if (!element.TryGetInt32(value: out var value)) {
-            throw new AddonMutationDecodeException(message: $"{context}: '{name}' must be an integer");
+        if (!getter(element, out var value)) {
+            throw new AddonMutationDecodeException(message: $"{context}: '{name}' must be {expected}");
         }
 
         return value;
     }
-    private static long RequireInt64(Dictionary<string, JsonElement> members, string name, string context) {
-        var element = RequireNumberElement(
+    private static int RequireInt32(Dictionary<string, JsonElement> members, string name, string context) =>
+        RequireNumber(
             context: context,
             expected: "an integer",
+            getter: static (JsonElement e, out int val) => e.TryGetInt32(value: out val),
             members: members,
             name: name
         );
-
-        if (!element.TryGetInt64(value: out var value)) {
-            throw new AddonMutationDecodeException(message: $"{context}: '{name}' must be an integer");
-        }
-
-        return value;
-    }
+    private static long RequireInt64(Dictionary<string, JsonElement> members, string name, string context) =>
+        RequireNumber(
+            context: context,
+            expected: "an integer",
+            getter: static (JsonElement e, out long val) => e.TryGetInt64(value: out val),
+            members: members,
+            name: name
+        );
     private static IntentSource RequireIntentSource(Dictionary<string, JsonElement> members, string context) {
         var token = RequireString(
             context: context,
@@ -2049,20 +1860,6 @@ public static class WorldAddonMutationDecoder {
 
         return (element.GetString() ?? throw new AddonMutationDecodeException(message: $"{context}: '{name}' must not be null"));
     }
-    private static uint RequireUInt32(Dictionary<string, JsonElement> members, string name, string context) {
-        var element = RequireNumberElement(
-            context: context,
-            expected: "a non-negative integer",
-            members: members,
-            name: name
-        );
-
-        if (!element.TryGetUInt32(value: out var value)) {
-            throw new AddonMutationDecodeException(message: $"{context}: '{name}' must be a non-negative integer");
-        }
-
-        return value;
-    }
     private static Vector3 RequireVector3(Dictionary<string, JsonElement> members, string name, string context) {
         if (
             !members.TryGetValue(
@@ -2121,6 +1918,19 @@ public static class WorldAddonMutationDecoder {
 
         return members;
     }
+    // Keys each wired kind's decoder by the ordinal and section its catalog entry declares.
+    private static Dictionary<int, (WorldSection Section, Func<JsonElement, Principal, WorldMutation> Decode)> Wire(params (Type Kind, Func<JsonElement, Principal, WorldMutation> Decode)[] kinds) {
+        var catalog = WorldMutationKindCatalog.All();
+        var decoders = new Dictionary<int, (WorldSection Section, Func<JsonElement, Principal, WorldMutation> Decode)>(capacity: kinds.Length);
+
+        foreach (var (kind, decode) in kinds) {
+            var entry = catalog.Single(predicate: candidate => (candidate.Type == kind));
+
+            decoders.Add(key: entry.Ordinal, value: (entry.Section, decode));
+        }
+
+        return decoders;
+    }
 
     /// <summary>Decodes one host-copied payload into a typed mutation, per the wire-declared kind ordinal a grant's
     /// verb mask already cleared it against (stages 1-5 own everything before this call). Never throws on
@@ -2135,7 +1945,7 @@ public static class WorldAddonMutationDecoder {
     /// <param name="mutation">The decoded mutation, on success.</param>
     /// <param name="error">The human-readable refusal reason, on failure.</param>
     /// <returns><see langword="true"/> when the payload decoded to a well-formed mutation of the declared kind.</returns>
-    public static bool TryDecode(int kindOrdinal, WorldSection section, ReadOnlyMemory<byte> payload, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
+    public static bool TryDecode(int kindOrdinal, WorldSection section, ReadOnlyMemory<byte> payload, Principal principal, out WorldMutation? mutation, out string error) {
         mutation = null;
         error = "";
 
@@ -2154,67 +1964,21 @@ public static class WorldAddonMutationDecoder {
                 return false;
             }
 
+            if (!Decoders.TryGetValue(key: kindOrdinal, value: out var wired)) {
+                error = $"kind ordinal {kindOrdinal} has no decoder wired";
+                return false;
+            }
+
             try {
-                mutation = kindOrdinal switch {
-                    19 => DecodeUpsertPlacement(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    20 => DecodeRemovePlacement(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    41 => DecodeUpsertHudPanel(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    42 => DecodeRemoveHudPanel(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    43 => DecodeUpsertHudElement(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    44 => DecodeRemoveHudElement(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    45 => DecodeSetHudDefaults(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    46 => DecodeUpsertStateRow(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    47 => DecodeRemoveStateRow(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    48 => DecodeSetInputHold(
-                    root: document.RootElement,
-                    principal: principal
-                ),
-                    _ => throw new AddonMutationDecodeException(message: $"kind ordinal {kindOrdinal} has no decoder wired"),
-                };
+                mutation = wired.Decode(arg1: document.RootElement, arg2: principal);
             } catch (AddonMutationDecodeException exception) {
                 error = exception.Message;
                 return false;
             }
 
             // Defense in depth: the section the grant door bounded the mask against must be what the decoded kind's
-            // OWN catalog entry declares — a mismatch here means the mask/kind pairing at the grant door and this
-            // decoder's own ordinal table have drifted, never something a guest can trigger through the wire alone
-            // (the kind switch above is total over its wired ordinals, each pinned to exactly one section below),
-            // but checked rather than assumed.
-            var expectedSection = kindOrdinal switch {
-                19 or 20 => WorldSection.Placements,
-                41 or 42 or 43 or 44 or 45 => WorldSection.Hud,
-                46 or 47 => WorldSection.State,
-                48 => WorldSection.InputHold,
-                _ => section, // Unreachable: the switch above already refused any other ordinal.
-            };
+            // own catalog entry declares, checked rather than assumed.
+            var expectedSection = wired.Section;
 
             if (section != expectedSection) {
                 mutation = null;

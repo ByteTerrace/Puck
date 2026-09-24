@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 
 using Puck.Maths;
@@ -9,6 +8,47 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 public sealed class SdfFieldEvaluatorTests {
+    // Answers every query from the wrapped evaluator and counts ground probes. A probe past the ceiling throws, so a
+    // walk that never stops fails at the first probe it has no cell for rather than running on.
+    private sealed class CountingGround(SdfFieldEvaluator inner, int ceiling) : IWorldQuery {
+        public QueryCapabilities Capabilities => ((IWorldQuery)inner).Capabilities;
+        public int Probes { get; private set; }
+
+        public bool LineOfSight(FixedPosition from, FixedPosition to) => inner.LineOfSight(
+            from: from,
+            to: to
+        );
+        public bool Overlap(FixedPosition center, FixedQ4816 radius) => inner.Overlap(
+            center: center,
+            radius: radius
+        );
+        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) => inner.Raycast(
+            dir: dir,
+            hit: out hit,
+            maxDist: maxDist,
+            origin: origin
+        );
+        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) => inner.SphereCast(
+            dir: dir,
+            hit: out hit,
+            maxDist: maxDist,
+            origin: origin,
+            radius: radius
+        );
+        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
+            if (++Probes > ceiling) {
+                throw new InvalidOperationException(message: $"ground probe {Probes} exceeds the {ceiling} cells the grid holds");
+            }
+
+            return inner.TryGroundHeight(
+                groundY: out groundY,
+                position: position,
+                probeDown: probeDown,
+                probeUp: probeUp
+            );
+        }
+    }
+
     private static SdfFieldEvaluator BuildRoundedRectangleEvaluator() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -131,10 +171,15 @@ public sealed class SdfFieldEvaluatorTests {
         // under their OWN centre rather than the sentinel a mis-addressed sample would leave behind. Each expected
         // height is the slope read at that cell's centre offset from the grid corner: -(u/4 + v/2) for a centre
         // (u, v) cell-local to the translated plane, so dropping either origin term from the walk moves every probe
-        // to a column where this plane is kilometres away and the bake answers with the sentinel instead.
-        var walk = Stopwatch.StartNew();
+        // to a column where this plane is kilometres away and the bake answers with the sentinel instead. The walk
+        // probes each of the eight cells once: a walk that steps float bounds instead of integer cell indices never
+        // stops, and fails at its ninth probe.
+        var ground = new CountingGround(
+            ceiling: 8,
+            inner: evaluator
+        );
         var artifact = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
-            evaluator: evaluator,
+            evaluator: ground,
             maxCellCount: 8,
             maxX: (Addressable + 1f),
             maxZ: (Addressable + 0.5f),
@@ -144,13 +189,9 @@ public sealed class SdfFieldEvaluatorTests {
             probeUp: 1f
         );
 
-        walk.Stop();
-
-        // The bounded-work leg: a walk that steps float bounds instead of integer cell indices does not answer
-        // wrongly, it never answers at all, and an unbounded loop appending cells reports as a stalled run.
-        Assert.True(
-            condition: (walk.Elapsed < TimeSpan.FromSeconds(value: 10.0)),
-            userMessage: $"The eight-cell bake took {walk.Elapsed}, which is not a bounded cell walk."
+        Assert.Equal(
+            expected: 8,
+            actual: ground.Probes
         );
         Assert.Equal(
             expected: 4,
@@ -180,14 +221,16 @@ public sealed class SdfFieldEvaluatorTests {
     }
     /// <summary>The ground-height bake allocates one height cell and runs one ground march per cell of the measured
     /// grid, so the cell budget has to be measured first or the refusal costs the whole working set it exists to
-    /// prevent. The refused region below is 16000x16000 cells: if the per-cell loop ran, the refusal would arrive a
-    /// minute-plus later, after every one of those 256 million marches — which is what the elapsed bound pins.</summary>
+    /// prevent. The refused region below is 16000x16000 cells, and its refusal runs no ground march at all.</summary>
     [Fact]
     public void GroundHeightBakeRefusesAnOverBudgetRegionBeforeMarchingIt() {
         var evaluator = BuildRoundedRectangleEvaluator();
-        var elapsed = Stopwatch.StartNew();
+        var refused = new CountingGround(
+            ceiling: 0,
+            inner: evaluator
+        );
         var refusal = Assert.Throws<ArgumentException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
-            evaluator: evaluator,
+            evaluator: refused,
             maxX: 2000f,
             maxZ: 2000f,
             minX: -2000f,
@@ -196,15 +239,13 @@ public sealed class SdfFieldEvaluatorTests {
             probeUp: 4f
         ));
 
-        elapsed.Stop();
-
         Assert.Equal(
             expected: "maxCellCount",
             actual: refusal.ParamName
         );
-        Assert.True(
-            condition: (elapsed.Elapsed < TimeSpan.FromSeconds(value: 10.0)),
-            userMessage: $"The over-budget refusal took {elapsed.Elapsed}, long enough to have marched cells before refusing."
+        Assert.Equal(
+            expected: 0,
+            actual: refused.Probes
         );
 
         // The ceiling is now the caller's to raise, and a region inside it still bakes.
@@ -219,8 +260,12 @@ public sealed class SdfFieldEvaluatorTests {
             probeUp: 4f
         ));
 
+        var inside = new CountingGround(
+            ceiling: 16,
+            inner: evaluator
+        );
         var control = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
-            evaluator: evaluator,
+            evaluator: inside,
             maxCellCount: 16,
             maxX: 1f,
             maxZ: 1f,
@@ -237,6 +282,10 @@ public sealed class SdfFieldEvaluatorTests {
         Assert.Equal(
             expected: 4,
             actual: control.Height
+        );
+        Assert.Equal(
+            expected: 16,
+            actual: inside.Probes
         );
     }
     [Fact]

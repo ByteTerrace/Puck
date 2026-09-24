@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -47,61 +48,60 @@ public sealed class ArenaByteCeilingLawTests {
             catalog: catalog,
             value: "a"
         );
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var arena = new StateArena(
-            catalog: catalog,
-            options: null,
-            section: section,
-            time: ArenaTime.Origin
-        );
-        var mark = arena.BeginScope();
+        var measured = 0L;
+        var allocated = AllocationWindow.Measure(window: () => {
+            var arena = new StateArena(
+                catalog: catalog,
+                options: null,
+                section: section,
+                time: ArenaTime.Origin
+            );
+            var mark = arena.BeginScope();
 
-        Assert.True(condition: arena.TryWriteClock(
-            epochEngineTick: 4L,
-            epochTick: 3L,
-            key: a,
-            reason: out _,
-            rowOrdinal: 0,
-            substepTicks: 7L,
-            v0: 6L,
-            y0: 5L
-        ));
-        Assert.True(condition: arena.TryWriteProvenance(
-            key: a,
-            provenance: "issuer",
-            rowOrdinal: 0
-        ));
-        Assert.True(condition: arena.TryWriteBehavior(
-            behavior: StateCellBehavior.None,
-            key: a,
-            rowOrdinal: 0
-        ));
-        Assert.True(condition: arena.TryWriteVisibility(
-            key: a,
-            rowOrdinal: 0,
-            visibility: new StateVisibility(Readers: ["p1"])
-        ));
-        Assert.True(condition: arena.TryWriteObservation(
-            key: a,
-            observation: new StateObservation(
-                Tick: 12L,
-                Visible: true
-            ),
-            rowOrdinal: 0
-        ));
-        Assert.True(condition: arena.TryWriteText(
-            key: a,
-            reason: out _,
-            rowOrdinal: 1,
-            text: "bye"
-        ));
-        arena.Commit(mark: mark);
+            Assert.True(condition: arena.TryWriteClock(
+                epochEngineTick: 4L,
+                epochTick: 3L,
+                key: a,
+                reason: out _,
+                rowOrdinal: 0,
+                substepTicks: 7L,
+                v0: 6L,
+                y0: 5L
+            ));
+            Assert.True(condition: arena.TryWriteProvenance(
+                key: a,
+                provenance: "issuer",
+                rowOrdinal: 0
+            ));
+            Assert.True(condition: arena.TryWriteBehavior(
+                behavior: StateCellBehavior.None,
+                key: a,
+                rowOrdinal: 0
+            ));
+            Assert.True(condition: arena.TryWriteVisibility(
+                key: a,
+                rowOrdinal: 0,
+                visibility: new StateVisibility(Readers: ["p1"])
+            ));
+            Assert.True(condition: arena.TryWriteObservation(
+                key: a,
+                observation: new StateObservation(
+                    Tick: 12L,
+                    Visible: true
+                ),
+                rowOrdinal: 0
+            ));
+            Assert.True(condition: arena.TryWriteText(
+                key: a,
+                reason: out _,
+                rowOrdinal: 1,
+                text: "bye"
+            ));
+            arena.Commit(mark: mark);
+            measured = arena.Bytes;
+        });
 
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        GC.KeepAlive(obj: arena);
-
-        return (allocated, arena.Bytes);
+        return (allocated, measured);
     }
 
     [Fact]
@@ -128,11 +128,8 @@ public sealed class ArenaByteCeilingLawTests {
         );
         var catalog = StateCatalog.Compile(section: section);
         var layout = ArenaLayout.Build(catalog: catalog, options: null, section: section);
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var arena = new StateArena(catalog: catalog, layout: layout, section: section, time: ArenaTime.Origin);
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        var allocated = AllocationWindow.Measure(window: () => _ = new StateArena(catalog: catalog, layout: layout, section: section, time: ArenaTime.Origin));
 
-        GC.KeepAlive(obj: arena);
         return (allocated, layout.Bytes);
     }
 
@@ -177,39 +174,39 @@ public sealed class ArenaByteCeilingLawTests {
             );
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var arena = new StateArena(
-            catalog: catalog,
-            options: null,
-            section: section,
-            time: ArenaTime.Origin
-        );
+        var measured = 0L;
+        var allocated = AllocationWindow.Measure(window: () => {
+            var arena = new StateArena(
+                catalog: catalog,
+                options: null,
+                section: section,
+                time: ArenaTime.Origin
+            );
 
-        for (var index = 0; (index < capacity); index++) {
-            Assert.True(condition: arena.TryWriteText(
-                key: keys[index],
-                reason: out _,
-                rowOrdinal: 0,
-                text: new string(
-                    c: 't',
-                    count: StateCapacity.MaxTextValueLength
-                )
-            ));
-            Assert.True(condition: arena.TryWriteProvenance(
-                key: keys[index],
-                provenance: new string(
-                    c: 'p',
-                    count: StateCapacity.MaxProvenanceLength
-                ),
-                rowOrdinal: 0
-            ));
-        }
+            for (var index = 0; (index < capacity); index++) {
+                Assert.True(condition: arena.TryWriteText(
+                    key: keys[index],
+                    reason: out _,
+                    rowOrdinal: 0,
+                    text: new string(
+                        c: 't',
+                        count: StateCapacity.MaxTextValueLength
+                    )
+                ));
+                Assert.True(condition: arena.TryWriteProvenance(
+                    key: keys[index],
+                    provenance: new string(
+                        c: 'p',
+                        count: StateCapacity.MaxProvenanceLength
+                    ),
+                    rowOrdinal: 0
+                ));
+            }
 
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+            measured = arena.Bytes;
+        });
 
-        GC.KeepAlive(obj: arena);
-
-        return (allocated, arena.Bytes);
+        return (allocated, measured);
     }
 
     [Fact]

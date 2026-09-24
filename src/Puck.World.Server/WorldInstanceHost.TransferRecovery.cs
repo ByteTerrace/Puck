@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -45,18 +46,20 @@ public sealed partial class WorldInstanceHost {
             value: out var source
         )
         ) { return false; }
-        var remote = RecoveryRemoteAuthority(
+        if (RecoveryRemoteAuthority(
             source,
             pending.SourceAuthority,
             authority,
             endpoint,
             definition
-        );
+        ) is not { } remote) { return false; }
 
-        pending = pending with { TargetAuthority = new WorldPeerCall(
+        pending = pending with {
+            TargetAuthority = new WorldPeerCall(
             null,
             remote
-        ) };
+        ),
+        };
         return true;
     }
     // Complete this preflight before installing any host schedule or table. A malformed later row must not leave
@@ -111,11 +114,13 @@ public sealed partial class WorldInstanceHost {
 
             if (pending.TargetEndpoint is not null) {
                 if (pending.TargetDefinitionJson is null) { Refuse(reason: "remote target definition is missing"); }
-                try { targetDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: pending.TargetDefinitionJson!); } catch (InvalidDataException exception) { throw new ArgumentException(
+                try { targetDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: pending.TargetDefinitionJson!); } catch (InvalidDataException exception) {
+                    throw new ArgumentException(
                     "remote target definition is invalid",
                     nameof(records),
                     exception
-                ); }
+                );
+                }
             } else if (pending.TargetDefinitionJson is not null) { Refuse(reason: "a local target cannot carry remote connection state"); }
             var sourceSlots = new HashSet<int>();
             var targetSlots = new HashSet<int>();
@@ -150,7 +155,7 @@ public sealed partial class WorldInstanceHost {
                     Profile: pending.CommitMembers[ordinal].Profile,
                     FollowedSeatMask: member.FollowedSeatMask,
                     SourceGrants: [.. member.SourceGrants],
-                    SourcePrincipal: WorldPrincipal.Console,
+                    SourcePrincipal: Principal.Console,
                     SourceSlot: member.SourceSlot,
                     TargetSlot: member.TargetSlot,
                     Yaw: member.Yaw
@@ -197,7 +202,7 @@ public sealed partial class WorldInstanceHost {
                 // Resolver admission and mapped arrival are already decided. Reconciliation uses only the exact
                 // commit payload and this source-side completion context; it never reruns destination resolution.
                 Transfer: new(
-                    ActingPrincipal: WorldPrincipal.Console,
+                    ActingPrincipal: Principal.Console,
                     AdjacencyCounterpart: continuation?.AdjacencyCounterpart,
                     Arrival: WorldPortalArrival.Spawn,
                     Border: (continuation?.Border ?? string.Empty),

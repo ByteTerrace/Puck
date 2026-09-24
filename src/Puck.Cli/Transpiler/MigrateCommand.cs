@@ -9,7 +9,7 @@ using Puck.World.Transpiler;
 namespace Puck.Cli.Transpiler;
 
 /// <summary><c>puck migrate</c> — applies one named syntax-tree rewrite to every <c>.puck</c> source under a path
-/// and prints each result through the same printer <c>puck fmt</c> uses.</summary>
+/// and prints each result through the same printer <c>puck format</c> uses.</summary>
 /// <remarks>
 /// <para>The run is all-or-nothing: every source is planned, and each source the run would change is compiled
 /// before and after and judged against the migration's own declared members, before anything is written — so a

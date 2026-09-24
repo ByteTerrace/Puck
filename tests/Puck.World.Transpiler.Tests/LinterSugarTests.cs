@@ -40,11 +40,11 @@ public class LinterSugarTests {
             File.WriteAllText(
                 Path.Combine(
                     path1: directory,
-                    path2: "basis.json"
+                    path2: "basis.world.json"
                 ),
                 "{}"
             );
-            document["basis"] = "basis.json";
+            document["basis"] = "basis";
             var diagnostics = new DiagnosticBag();
 
             PuckLinter.LintReferences(
@@ -64,9 +64,8 @@ public class LinterSugarTests {
             );
         }
     }
-    // `fullPath` need not exist on disk itself (it is the shipped .world.json, not the decompiled text) — only its
-    // directory matters, since that is where a declared basis or import resolves from, and it is the real worlds
-    // directory either way.
+    // A shipped world is linted as its source: a `.puck` source as written, a hand-authored JSON world through its
+    // decompilation. Its directory is where a declared basis or import resolves from.
     private static LintResult LintShippedWorld(string relativePath) {
         var fullPath = Path.Combine(
             path1: ShippedWorlds.FindDirectory(),
@@ -77,7 +76,10 @@ public class LinterSugarTests {
             condition: File.Exists(path: fullPath),
             userMessage: $"Shipped world file not found: {fullPath}"
         );
-        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
+        var decompiled = (WorldDocumentName.IsSourceFile(path: fullPath)
+            ? File.ReadAllText(path: fullPath)
+            : WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath))
+        );
 
         var diagnostics = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
@@ -147,12 +149,12 @@ public class LinterSugarTests {
             File.WriteAllText(
                 Path.Combine(
                     path1: directory,
-                    path2: "basis.json"
+                    path2: "basis.world.json"
                 ),
                 """{ "state": { "world": [ { "name": "transforms" } ] } }"""
             );
             var document = new JsonObject {
-                ["basis"] = "basis.json",
+                ["basis"] = "basis",
                 ["rules"] = new JsonArray(new JsonObject {
                     ["name"] = "r",
                     ["gate"] = new JsonObject { ["$type"] = "compareState", ["state"] = "transforms", ["comparison"] = "Equal", ["value"] = 1 },
@@ -305,10 +307,12 @@ public class LinterSugarTests {
 
         Assert.Empty(collection: LintReferencesAsRoot(document: document));
     }
-    [Fact]
-    public void ExtensionChannelPrefixFarFromEveryKnownPrefixIsNotFlagged() {
-        // "$board" is a real extension prefix (Puck.World.Schema, not Puck.State's own RuleFacts) — never a typo
-        // candidate against the RuleFacts list, so it must never be flagged.
+    // "$board" is a real extension prefix (Puck.World.Schema, not Puck.State's own RuleFacts) and "$table" a known
+    // reserved one: neither is ever a typo candidate against the RuleFacts list.
+    [InlineData("$board:cellOf:board:1:1")]
+    [InlineData("$table:power:1")]
+    [Theory]
+    public void AKnownChannelPrefixIsNotFlagged(string channel) {
         var document = new JsonObject {
             ["state"] = new JsonObject { ["world"] = new JsonArray() },
             ["rules"] = new JsonArray(new JsonObject {
@@ -317,29 +321,7 @@ public class LinterSugarTests {
                     ["$type"] = "compareValue",
                     ["comparison"] = "Equal",
                     ["kind"] = "Fixed",
-                    ["left"] = WorldExpressionJson.Node(text: "$board:cellOf:board:1:1"),
-                    ["right"] = WorldExpressionJson.Node(text: "1"),
-                },
-                ["effects"] = new JsonArray(),
-            }),
-        };
-
-        Assert.DoesNotContain(
-            collection: LintReferencesAsModule(document: document),
-            filter: d => (d.Code == "PUCK_LINT_009")
-        );
-    }
-    [Fact]
-    public void KnownReservedChannelPrefixIsNotFlagged() {
-        var document = new JsonObject {
-            ["state"] = new JsonObject { ["world"] = new JsonArray() },
-            ["rules"] = new JsonArray(new JsonObject {
-                ["name"] = "r",
-                ["gate"] = new JsonObject {
-                    ["$type"] = "compareValue",
-                    ["comparison"] = "Equal",
-                    ["kind"] = "Fixed",
-                    ["left"] = WorldExpressionJson.Node(text: "$table:power:1"),
+                    ["left"] = WorldExpressionJson.Node(text: channel),
                     ["right"] = WorldExpressionJson.Node(text: "1"),
                 },
                 ["effects"] = new JsonArray(),
@@ -411,9 +393,9 @@ public class LinterSugarTests {
     }
     [Fact]
     public void SolitaireContainerLintsClean() {
-        // games/solitaire.world.json declares no `basis` and composes klondike/spider/freecell through `imports`,
+        // games/solitaire.puck declares no `basis` and composes klondike/spider/freecell through `imports`,
         // but its own body never references a row/prototype those siblings own, so it lints clean either way.
-        var result = LintShippedWorld(relativePath: "games/solitaire.world.json");
+        var result = LintShippedWorld(relativePath: "games/solitaire.puck");
 
         Assert.Empty(collection: result.Diagnostics);
     }
@@ -497,7 +479,7 @@ public class LinterSugarTests {
             ["spawnPoints"] = new JsonArray(new JsonObject { ["id"] = "plaza-1" }),
             ["rules"] = new JsonArray(new JsonObject {
                 ["name"] = "r",
-                ["effects"] = new JsonArray(new JsonObject { ["$type"] = "designateBody", ["spawnPoint"] = "plaza-9" }),
+                ["effects"] = new JsonArray(new JsonObject { ["$type"] = "designate", ["spawnPoint"] = "plaza-9" }),
             }),
         };
 
@@ -547,22 +529,22 @@ public class LinterSugarTests {
 
     private static readonly string[] ReferenceLintCodes = ["PUCK_LINT_005", "PUCK_LINT_006", "PUCK_LINT_007", "PUCK_LINT_008", "PUCK_LINT_009", "PUCK034"];
 
-    // Leaf "district" worlds imported by a parent (puck.world.json) or a sibling composer (solitaire.world.json)
+    // Leaf "district" worlds imported by a parent (puck.world.json) or a sibling composer (games/solitaire.puck)
     // that supplies the row/prototype they reference. None declares its own basis, so each is a module: a name it
     // cannot resolve standalone is never a finding — it may belong to whichever root imports it.
     public static TheoryData<string> CrossFileLeafWorlds => new() {
-        "games/freecell.world.json",
-        "games/klondike.world.json",
-        "games/spider.world.json",
-        "games/mancala.world.json",
-        "games/bowling.world.json",
+        "games/freecell.puck",
+        "games/klondike.puck",
+        "games/spider.puck",
+        "games/mancala.puck",
+        "games/bowling.puck",
     };
     // Worlds with no `basis`/`imports` of their own, whose every gate/effect/placement/camera reference resolves
     // inside the same file — the common case `puck lint` targets.
     public static TheoryData<string> SelfContainedShippedWorlds => new() {
-        "games/billiards.world.json",
-        "games/tictactoe.world.json",
-        "games/poker.world.json",
+        "games/billiards.puck",
+        "games/tictactoe.puck",
+        "games/poker.puck",
         "pipeline.world.json",
     };
 }

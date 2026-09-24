@@ -39,7 +39,8 @@ internal sealed class SourceCorpus {
         if (!SourceFiles.TryEnumerate(
             files: out var files,
             rootArgument: rootArgument,
-            scanRoot: out var scanRoot
+            scanRoot: out var scanRoot,
+            verb: "scan"
         )) {
             return null;
         }

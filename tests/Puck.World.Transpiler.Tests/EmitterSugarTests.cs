@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.State;
-using Puck.Transpiler.Diagnostics;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -14,17 +13,8 @@ public class EmitterSugarTests {
         ? null
         : StateChannelRefJsonConverter.FromNode(node: node).Spelling
     );
-    // JsonValue<T>.GetValue<T> refuses cross-numeric-type reads (long vs decimal vs double), and which CLR type an
-    // emitted literal carries depends on whether it was integral — so assertions read every number through this.
-    private static double AsDouble(JsonNode? node) => node switch {
-        JsonValue v when v.TryGetValue<int>(value: out var i) => i,
-        JsonValue v when v.TryGetValue<long>(value: out var l) => l,
-        JsonValue v when v.TryGetValue<double>(value: out var d) => d,
-        JsonValue v when v.TryGetValue<decimal>(value: out var m) => ((double)m),
-        _ => throw new InvalidOperationException(message: $"'{node?.ToJsonString()}' is not a number"),
-    };
     private static JsonObject FirstRule(string body) {
-        var (json, diagnostics) = Lower(body: body);
+        var (json, diagnostics) = WorldSources.Lower(body: body);
         Assert.False(
             condition: diagnostics.HasErrors,
             userMessage: diagnostics.FormatReport(body)
@@ -62,17 +52,6 @@ public class EmitterSugarTests {
             }
         }
         throw new InvalidOperationException(message: $"rule '{ruleName}' not found in {relativeWorldPath}");
-    }
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
     }
 
     [Fact]
@@ -143,7 +122,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             60,
-            AsDouble(node: gate["value"])
+            LoweredNumbers.AsDouble(node: gate["value"])
         );
         Assert.False(condition: gate.ContainsKey(propertyName: "key"));
     }
@@ -250,7 +229,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             60,
-            AsDouble(node: gate["value"])
+            LoweredNumbers.AsDouble(node: gate["value"])
         );
     }
     [Fact]
@@ -282,7 +261,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             5,
-            AsDouble(node: schedule["delaySeconds"])
+            LoweredNumbers.AsDouble(node: schedule["delaySeconds"])
         );
     }
     [Fact]
@@ -300,7 +279,7 @@ public class EmitterSugarTests {
                     option "follow" {
                         when hound[$right] == 1
                         score: trust * 2.0
-                        designateBody(key: $each, kind: Body, register: "companion", targetKey: $right)
+                        designate(key: $each, register: "companion", targetKey: $right)
                     }
                 }
             }
@@ -310,15 +289,15 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             1,
-            AsDouble(node: decision["periodSeconds"])
+            LoweredNumbers.AsDouble(node: decision["periodSeconds"])
         );
         Assert.Equal(
             3,
-            AsDouble(node: decision["commitmentSeconds"])
+            LoweredNumbers.AsDouble(node: decision["commitmentSeconds"])
         );
         Assert.Equal(
             11,
-            AsDouble(node: decision["seed"])
+            LoweredNumbers.AsDouble(node: decision["seed"])
         );
         // mode/scoreKind/incumbentBonus were never authored, so they equal WorldDecision's own C# defaults and elide.
         Assert.False(condition: decision.ContainsKey(propertyName: "mode"));
@@ -346,7 +325,7 @@ public class EmitterSugarTests {
         var designate = Assert.IsType<JsonObject>(@object: optionEffects[0]);
 
         Assert.Equal(
-            "designateBody",
+            "designate",
             designate["$type"]?.ToString()
         );
     }
@@ -382,7 +361,7 @@ public class EmitterSugarTests {
 
     [Fact]
     public void DegreesNativeFieldPassesThroughUnconverted() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             placements {
                 placement "p" {
                     prototype: proto
@@ -400,7 +379,7 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             45,
-            AsDouble(node: row["yawDegrees"])
+            LoweredNumbers.AsDouble(node: row["yawDegrees"])
         );
     }
     [Fact]
@@ -460,20 +439,21 @@ public class EmitterSugarTests {
         Assert.Null(@object: mismatch);
     }
     [Fact]
-    public void KnownFieldWithWrongUnitReportsPuck025() {
-        var (_, diagnostics) = Lower(body: """
-            placements {
-                placement "p" {
-                    prototype: proto
-                    yawDegrees: 5s
+    public void KnownFieldWithWrongUnitReportsPuck025() => WorldSources.AssertRefused(
+        label: nameof(KnownFieldWithWrongUnitReportsPuck025),
+        refusal: new(
+            Body: """
+                placements {
+                    placement "p" {
+                        prototype: proto
+                        yawDegrees: 5s
+                    }
                 }
-            }
-            """);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK025")
-        );
-    }
+                """,
+            Code: "PUCK025",
+            Needle: "yawDegrees: 5s"
+        )
+    );
     [Fact]
     public void LiveZoneBracketSelectorPassesThroughAsOneOpaqueOperand() {
         var rule = FirstRule(body: """
@@ -503,7 +483,7 @@ public class EmitterSugarTests {
     }
     [Fact]
     public void MetersFieldConvertsCentimetersAndMillimeters() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             placements {
                 placement "p" {
                     prototype: proto
@@ -528,7 +508,7 @@ public class EmitterSugarTests {
         );
     }
     [Fact]
-    public void MultiTokenOperandsForceCompareValueWithDefaultFixedKind() {
+    public void MultiTokenOperandsForceCompareValueWithAnInferredKind() {
         var rule = FirstRule(body: """
             rule "r" {
                 when a + b == c * 2
@@ -542,10 +522,7 @@ public class EmitterSugarTests {
             "compareValue",
             gate["$type"]?.ToString()
         );
-        Assert.Equal(
-            "Fixed",
-            gate["kind"]?.ToString()
-        );
+        Assert.Null(@object: gate["kind"]);
         Assert.Equal(
             "a + b",
             WorldExpressionJson.Text(node: gate["left"])
@@ -618,7 +595,7 @@ public class EmitterSugarTests {
     }
     [Fact]
     public void PercentSuffixDividesByOneHundredOnAnyField() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             host {
                 opacity: 50%
             }
@@ -636,7 +613,7 @@ public class EmitterSugarTests {
     }
     [Fact]
     public void PlacementBlockNameFillsIdNotNameAndPrototypeRenamesToPrototypeId() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             placements {
                 placement "debugRoom" {
                     prototype: debugRoom
@@ -671,17 +648,17 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             0,
-            AsDouble(node: row["yawDegrees"])
+            LoweredNumbers.AsDouble(node: row["yawDegrees"])
         );
         Assert.Equal(
             1,
-            AsDouble(node: row["scale"])
+            LoweredNumbers.AsDouble(node: row["scale"])
         );
         var solid = Assert.IsType<JsonObject>(@object: row["solid"]);
 
         Assert.Equal(
             0,
-            AsDouble(node: solid["margin"])
+            LoweredNumbers.AsDouble(node: solid["margin"])
         );
         var grip = Assert.IsType<JsonObject>(@object: row["grip"]);
 
@@ -689,7 +666,7 @@ public class EmitterSugarTests {
     }
     [Fact]
     public void PlacementsPolicySurvivesAlongsidePlacementRows() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             placements {
                 policy { maxLivePlacements: 8 }
                 placement "p1" {
@@ -707,7 +684,7 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             8,
-            AsDouble(node: policy["maxLivePlacements"])
+            LoweredNumbers.AsDouble(node: policy["maxLivePlacements"])
         );
         Assert.Single(collection: Assert.IsType<JsonArray>(@object: placements["rows"]));
     }
@@ -738,7 +715,7 @@ public class EmitterSugarTests {
     public void RadiansFieldConvertsDegreesAndPassesThroughRadians() {
         // `orbit`'s named-argument keys thread as the CallExpressionNode's own field keys regardless of the
         // enclosing property's own name, so this exercises the table without needing real seatRig semantics.
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             host {
                 camera: orbit(pitch: 90deg, yaw: 1rad, distance: 5)
             }
@@ -754,12 +731,12 @@ public class EmitterSugarTests {
                 digits: 6,
                 value: (Math.PI / 2)
             ),
-            AsDouble(node: orbit["pitch"]),
+            LoweredNumbers.AsDouble(node: orbit["pitch"]),
             6
         );
         Assert.Equal(
             1d,
-            AsDouble(node: orbit["yaw"])
+            LoweredNumbers.AsDouble(node: orbit["yaw"])
         );
     }
     [Fact]
@@ -768,7 +745,7 @@ public class EmitterSugarTests {
         // property/call-argument layer the unit-dimension table governs, so this exercises the conversion through
         // `periodSeconds` instead (§5's own worked example: `schedule respawnAt in 500ms` -> `delaySeconds: 0.5`
         // describes the *value*, not `schedule`'s own required-unit grammar).
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 claimTicks = 0
                 decision {
@@ -788,7 +765,7 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             0.5,
-            AsDouble(node: decision["periodSeconds"])
+            LoweredNumbers.AsDouble(node: decision["periodSeconds"])
         );
     }
     [Fact]
@@ -802,7 +779,7 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             3,
-            AsDouble(node: effect["valueSeconds"])
+            LoweredNumbers.AsDouble(node: effect["valueSeconds"])
         );
         Assert.False(condition: effect.ContainsKey(propertyName: "value"));
     }
@@ -845,7 +822,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             5,
-            AsDouble(node: effect["value"])
+            LoweredNumbers.AsDouble(node: effect["value"])
         );
     }
     [Fact]
@@ -886,7 +863,7 @@ public class EmitterSugarTests {
     }
     [Fact]
     public void ShapeExplicitBlendAndRotationReferenceAreNeverOverwritten() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             shape Cylinder "meadow" {
                 blend: SmoothUnion
                 rotation: "state.transforms.identity"
@@ -912,7 +889,7 @@ public class EmitterSugarTests {
 
     [Fact]
     public void ShapeFillsBlendSmoothRotationScaleOnlyWhenAbsent() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             shape Box "board" {
                 position [0, -2.5, 0]
             }
@@ -938,7 +915,7 @@ public class EmitterSugarTests {
         );
         Assert.Equal(
             0,
-            AsDouble(node: shape["smooth"])
+            LoweredNumbers.AsDouble(node: shape["smooth"])
         );
         var rotation = Assert.IsType<JsonArray>(@object: shape["rotation"]);
 
@@ -958,7 +935,7 @@ public class EmitterSugarTests {
     // never fills it and an unauthored shape carries no `group` key at all.
     [Fact]
     public void ShapeNeverFillsGroupWhenAbsent() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             shape Box "board" {
                 position [0, -2.5, 0]
             }
@@ -973,7 +950,7 @@ public class EmitterSugarTests {
     }
     [Fact]
     public void ShapeWithNoNameLeavesTheBareTypeIdentifierAsType() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             shape Sphere {
                 position [0, 0, 0]
             }
@@ -1056,17 +1033,18 @@ public class EmitterSugarTests {
         );
     }
     [Fact]
-    public void UnknownFieldWithUnitReportsPuck024() {
-        var (_, diagnostics) = Lower(body: """
-            host {
-                width: 5m
-            }
-            """);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK024")
-        );
-    }
+    public void UnknownFieldWithUnitReportsPuck024() => WorldSources.AssertRefused(
+        label: nameof(UnknownFieldWithUnitReportsPuck024),
+        refusal: new(
+            Body: """
+                host {
+                    width: 5m
+                }
+                """,
+            Code: "PUCK024",
+            Needle: "width: 5m"
+        )
+    );
     [Fact]
     public void DrawDealShuffle_LowerToTransformState() {
         var rule = FirstRule(body: """

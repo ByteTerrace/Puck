@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 
 namespace Puck.GamingBricks;
 
@@ -35,14 +34,15 @@ namespace Puck.GamingBricks;
 public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     private readonly IMachineGroupCore m_core;
     private readonly QueuedWorkerLifecycle<GroupWorkItem> m_lifecycle;
-    private readonly Lock m_lifecycleLock = new();
     private readonly IMachineRuntime[] m_machines;
     private readonly int m_maximumPendingSteps;
+    private readonly TaskCompletionSource m_severed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly MachineTimeTravel<MachineLinkPads> m_timeTravel;
     private readonly string m_workerName;
     private readonly QueuedMachineWorker[] m_workers;
 
-    private ulong m_cycleRemainder;
+    // The one tick-to-cycle phase for the whole group, so every member advances by identical wall time.
+    private RationalRateAccumulator m_cyclePhase;
     private int m_disposed;
 
     /// <summary>Forms a link over two or more queued machines: each member's core is lent to this group, the medium is
@@ -115,7 +115,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             );
         } catch {
             for (var index = 0; (index < lentCount); ++index) {
-                m_workers[index].ReturnCore(hostAccumulator: 0UL);
+                m_workers[index].ReturnCore(hostAccumulator: default);
             }
 
             throw;
@@ -178,6 +178,12 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         }
     }
 
+    /// <summary>Occurs on a severing caller's thread immediately before that caller blocks until the link's execution
+    /// thread has finished the step it was running and every core has returned to its worker. Nothing runs between the
+    /// raise and that wait, so a handler that has seen one raise per concurrent caller knows none of them can return
+    /// before the in-flight step finishes. Handlers must not block or call back into the link.</summary>
+    public event Action? SeverWaiting;
+
     private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, bool forceStage) {
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
@@ -207,15 +213,6 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             worker.PublishLentStep(forceStage: forceStage);
         }
     }
-    // Consume a tick budget against the exact integer accumulator and return the cycle budget it buys under the medium's
-    // current rate — ONE conversion for the whole group, so every member advances by identical wall time.
-    private ulong TakeCycleBudget(ulong ticks) {
-        var scaled = checked(((ticks * m_core.CyclesPerSecond) + m_cycleRemainder));
-
-        m_cycleRemainder = (scaled % EngineTicks.PerSecond);
-
-        return (scaled / EngineTicks.PerSecond);
-    }
     private void WorkerLoop() {
         var current = default(GroupWorkItem);
 
@@ -229,13 +226,16 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
                         var factor = m_timeTravel.FastForwardFactor;
 
                         for (var repeat = 0; (repeat < factor); ++repeat) {
-                            var budget = checked((long)TakeCycleBudget(ticks: current.DeltaTicks));
+                            var budget = m_cyclePhase.TakeCycleBudget(
+                                cyclesPerSecond: m_core.CyclesPerSecond,
+                                ticks: current.DeltaTicks
+                            );
 
                             m_core.ApplyInput(input: in inputs);
                             m_core.RunCycles(cycles: budget);
                             m_timeTravel.Record(
                                 budget: budget,
-                                hostAccumulator: m_cycleRemainder,
+                                hostAccumulator: m_cyclePhase,
                                 input: in inputs
                             );
                         }
@@ -283,28 +283,35 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         return image;
     }
     /// <inheritdoc/>
-    // The whole method runs under m_lifecycleLock, not just the teardown: a second concurrent caller (typically a
-    // member's own DetachCore cascading through SeverLink while another member's Dispose already won the exchange)
-    // blocks here until the first finishes returning every core, rather than observing a false "severed" the instant
-    // it loses the race. Member workers do not deadlock against this wait: ReturnCore's own pre-lock m_lent check lets
-    // the winner's foreach skip a worker that is concurrently tearing itself down without ever taking that worker's
-    // lifecycle lock.
+    /// <remarks>Every caller returns only once the link's execution thread has finished the step it was running and
+    /// every core has returned to its worker. The first caller performs that teardown; a concurrent caller (typically
+    /// a member's own sever racing another member's) waits for it rather than returning the instant it loses the race.
+    /// Each caller raises <see cref="SeverWaiting"/> immediately before its wait.</remarks>
+    // Member workers do not deadlock against a concurrent caller's wait: ReturnCore's own pre-lock m_lent check lets
+    // the teardown skip a worker that is concurrently tearing itself down without ever taking that worker's lifecycle
+    // lock.
     public void Dispose() {
-        lock (m_lifecycleLock) {
-            if (0 != Interlocked.Exchange(
-                location1: ref m_disposed,
-                value: 1
-            )) {
-                return;
-            }
+        if (0 != Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        )) {
+            SeverWaiting?.Invoke();
+            m_severed.Task.Wait();
 
+            return;
+        }
+
+        try {
+            SeverWaiting?.Invoke();
             m_lifecycle.Stop();
             m_timeTravel.Dispose();
             m_core.Dispose();
 
             foreach (var worker in m_workers) {
-                worker.ReturnCore(hostAccumulator: m_cycleRemainder);
+                worker.ReturnCore(hostAccumulator: m_cyclePhase);
             }
+        } finally {
+            _ = m_severed.TrySetResult();
         }
     }
     /// <inheritdoc/>
@@ -338,7 +345,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             if (rewound > 0) {
                 // The group jumped to a past instant: restore the tick-to-cycle accumulator phase that instant was
                 // produced under, atomically with the members, so identical future ticks buy identical budgets.
-                m_cycleRemainder = landedAccumulator;
+                m_cyclePhase = landedAccumulator;
 
                 foreach (var worker in m_workers) {
                     worker.RestageLentFrame();

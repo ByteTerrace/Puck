@@ -7,8 +7,8 @@ namespace Puck.World.Browser.Tests;
 /// unrebound value, and a rebind mid-session re-births the clock where the session stands.</summary>
 public sealed class BrowserRebindClockLawTests {
     private const string OutRow = "out";
-    private const long StepTicks = 20L;
     private const string SpinRow = "spin";
+    private const long StepTicks = 20L;
 
     private static WorldDefinition Document() =>
         new(

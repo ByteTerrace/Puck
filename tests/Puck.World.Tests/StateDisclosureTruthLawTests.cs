@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -35,7 +36,7 @@ public sealed class StateDisclosureTruthLawTests {
 
         // A console write through the server's own door kicks the follower, so the cell is mid-ease on the next step.
         server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "eased",
             Key: "0",
             Value: 100,
@@ -63,7 +64,7 @@ public sealed class StateDisclosureTruthLawTests {
 
 
         var answer = server.RuleHost.AnswerSubmittedQuery(
-            principal: WorldPrincipal.Console,
+            principal: Principal.Console,
             query: new WorldQuery.StateObservations(Row: "eased")
         );
 

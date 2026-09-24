@@ -79,6 +79,8 @@ public sealed class ThumbEmitter {
         ((ushort)(0x4400 | (operation << 8) | ((((byte)destination) & 0x8) << 4) | ((((byte)source) & 0xF) << 3) | (((byte)destination) & 0x7)));
     private static ushort BuildRegisterOffset(ushort opcode, LowRegister register, LowRegister baseRegister, LowRegister offsetRegister) =>
         ((ushort)(opcode | (((byte)offsetRegister) << 6) | (((byte)baseRegister) << 3) | ((byte)register)));
+    private static ushort BuildScaledOffset(ushort opcode, LowRegister register, LowRegister baseRegister, int byteOffset, int scale) =>
+        ((ushort)(opcode | (ValidateScaledOffset(byteOffset: byteOffset, scale: scale) << 6) | (((byte)baseRegister) << 3) | ((byte)register)));
     private void EmitHalfWord(ushort value) {
         m_code.Add(item: ((byte)(value & 0xFF)));
         m_code.Add(item: ((byte)((value >> 8) & 0xFF)));
@@ -304,10 +306,13 @@ public sealed class ThumbEmitter {
     }
     /// <summary>ldrb rd, [rb, #offset] — load a zero-extended byte from a byte offset (0..31).</summary>
     public void LoadByte(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x7800 | (ValidateScaledOffset(
+        EmitHalfWord(value: BuildScaledOffset(
+            baseRegister: baseRegister,
             byteOffset: byteOffset,
+            opcode: 0x7800,
+            register: destination,
             scale: 1
-        ) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
+        ));
     /// <summary>ldrb rd, [rb, ro] — load a zero-extended byte.</summary>
     public void LoadByteRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
         EmitHalfWord(value: BuildRegisterOffset(
@@ -326,10 +331,13 @@ public sealed class ThumbEmitter {
     }
     /// <summary>ldrh rd, [rb, #offset] — load a zero-extended halfword from a byte offset (0..62, even).</summary>
     public void LoadHalf(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x8800 | (ValidateScaledOffset(
+        EmitHalfWord(value: BuildScaledOffset(
+            baseRegister: baseRegister,
             byteOffset: byteOffset,
+            opcode: 0x8800,
+            register: destination,
             scale: 2
-        ) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
+        ));
     /// <summary>ldrh rd, [rb, ro] — load a zero-extended halfword.</summary>
     public void LoadHalfRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
         EmitHalfWord(value: BuildRegisterOffset(
@@ -361,10 +369,13 @@ public sealed class ThumbEmitter {
     // --- Formats 9 and 10: load/store with an immediate offset. ---------------------------------------------------------
     /// <summary>ldr rd, [rb, #offset] — load a word from a byte offset (0..124, a multiple of 4).</summary>
     public void LoadWord(LowRegister destination, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x6800 | (ValidateScaledOffset(
+        EmitHalfWord(value: BuildScaledOffset(
+            baseRegister: baseRegister,
             byteOffset: byteOffset,
+            opcode: 0x6800,
+            register: destination,
             scale: 4
-        ) << 6) | (((byte)baseRegister) << 3) | ((byte)destination))));
+        ));
     // --- Formats 7 and 8: load/store with a register offset. ------------------------------------------------------------
     /// <summary>ldr rd, [rb, ro] — load a word.</summary>
     public void LoadWordRegister(LowRegister destination, LowRegister baseRegister, LowRegister offsetRegister) =>
@@ -456,10 +467,13 @@ public sealed class ThumbEmitter {
     }
     /// <summary>strb rd, [rb, #offset] — store a byte to a byte offset (0..31).</summary>
     public void StoreByte(LowRegister source, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x7000 | (ValidateScaledOffset(
+        EmitHalfWord(value: BuildScaledOffset(
+            baseRegister: baseRegister,
             byteOffset: byteOffset,
+            opcode: 0x7000,
+            register: source,
             scale: 1
-        ) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
+        ));
     /// <summary>strb rd, [rb, ro] — store a byte.</summary>
     public void StoreByteRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
         EmitHalfWord(value: BuildRegisterOffset(
@@ -470,10 +484,31 @@ public sealed class ThumbEmitter {
         ));
     /// <summary>strh rd, [rb, #offset] — store a halfword to a byte offset (0..62, even).</summary>
     public void StoreHalf(LowRegister source, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x8000 | (ValidateScaledOffset(
+        EmitHalfWord(value: BuildScaledOffset(
+            baseRegister: baseRegister,
             byteOffset: byteOffset,
+            opcode: 0x8000,
+            register: source,
             scale: 2
-        ) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
+        ));
+    /// <summary>Loads <paramref name="value"/> into R0 and <paramref name="address"/> into R2, then stores the halfword.</summary>
+    /// <param name="address">The memory address to store into.</param>
+    /// <param name="value">The halfword value to store.</param>
+    public void StoreHalfConstant(uint address, uint value) {
+        LoadConstant(
+            destination: LowRegister.R0,
+            value: value
+        );
+        LoadConstant(
+            destination: LowRegister.R2,
+            value: address
+        );
+        StoreHalf(
+            baseRegister: LowRegister.R2,
+            byteOffset: 0,
+            source: LowRegister.R0
+        );
+    }
     /// <summary>strh rd, [rb, ro] — store a halfword.</summary>
     public void StoreHalfRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
         EmitHalfWord(value: BuildRegisterOffset(
@@ -487,10 +522,31 @@ public sealed class ThumbEmitter {
         EmitHalfWord(value: ((ushort)(0x9000 | (((byte)source) << 8) | ValidateSpOffset(byteOffset: byteOffset))));
     /// <summary>str rd, [rb, #offset] — store a word to a byte offset (0..124, a multiple of 4).</summary>
     public void StoreWord(LowRegister source, LowRegister baseRegister, int byteOffset) =>
-        EmitHalfWord(value: ((ushort)(0x6000 | (ValidateScaledOffset(
+        EmitHalfWord(value: BuildScaledOffset(
+            baseRegister: baseRegister,
             byteOffset: byteOffset,
+            opcode: 0x6000,
+            register: source,
             scale: 4
-        ) << 6) | (((byte)baseRegister) << 3) | ((byte)source))));
+        ));
+    /// <summary>Loads <paramref name="value"/> into R0 and <paramref name="address"/> into R2, then stores the word.</summary>
+    /// <param name="address">The memory address to store into.</param>
+    /// <param name="value">The word value to store.</param>
+    public void StoreWordConstant(uint address, uint value) {
+        LoadConstant(
+            destination: LowRegister.R0,
+            value: value
+        );
+        LoadConstant(
+            destination: LowRegister.R2,
+            value: address
+        );
+        StoreWord(
+            baseRegister: LowRegister.R2,
+            byteOffset: 0,
+            source: LowRegister.R0
+        );
+    }
     /// <summary>str rd, [rb, ro] — store a word.</summary>
     public void StoreWordRegister(LowRegister source, LowRegister baseRegister, LowRegister offsetRegister) =>
         EmitHalfWord(value: BuildRegisterOffset(

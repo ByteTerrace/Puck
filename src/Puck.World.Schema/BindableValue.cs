@@ -3,53 +3,66 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.World.Authoring;
-using Puck.Maths;
 
 namespace Puck.World;
 
 /// <summary>
-/// The shared "authored literal, or a state.&lt;row&gt;[.&lt;key&gt;] binding" grammar every bindable document token
-/// speaks — generalized from the narrower dialect <see cref="WorldColor"/> still carries for a plain-string color
-/// field. <see cref="BindableColor"/> and <see cref="BindableScalar"/> are its two closed instances; both parse
-/// their binding half through <see cref="TryParseBinding"/> and resolve it through <see cref="WorldStateReader"/>,
-/// so no second binding-token parser or state reader exists anywhere in the document model.
+/// One parsed <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c> binding — the state arm of the grammar every bindable
+/// document token speaks (<see cref="BindableColor"/>, <see cref="BindableScalar"/>, <see cref="WorldColor"/>, a HUD
+/// element's binding). <see cref="TryParse"/> is the one parse of that arm; a bindable stores its parsed binding
+/// rather than re-parsing it on every read.
 /// </summary>
-public static class BindableState {
-    /// <summary>Parses the state-binding arm of the grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
-    /// <c>state.&lt;row&gt;.&lt;key&gt;</c>. Any other token — including a literal — is not a binding.</summary>
-    /// <param name="value">The candidate token.</param>
-    /// <param name="row">The bound row's name, or empty when not a binding.</param>
-    /// <param name="key">The bound cell key, or <see langword="null"/> for the row's own slot cell.</param>
-    /// <returns><see langword="true"/> when <paramref name="value"/> is a well-formed state binding.</returns>
-    public static bool TryParseBinding(string? value, out string row, out string? key) {
-        row = string.Empty;
-        key = null;
-
+/// <param name="Row">The bound row's name.</param>
+/// <param name="Key">The bound cell key, or <see langword="null"/> for the row's own slot cell.</param>
+/// <param name="Target">Whether the token carried the trailing <c>.$target</c> facet: a read of the cell's stored
+/// truth rather than its eased value, which differ only while a cell carrying an easing trait is still moving.</param>
+public readonly record struct StateBinding(string Row, string? Key, bool Target) {
+    /// <summary>Parses the state arm of the binding grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
+    /// <c>state.&lt;row&gt;.&lt;key&gt;</c>, either with an optional trailing <c>.$target</c>. Any other token —
+    /// including a literal — is not a state binding.</summary>
+    /// <param name="token">The candidate token.</param>
+    /// <param name="binding">The parsed binding, or <see langword="default"/> when the token is not one.</param>
+    /// <returns><see langword="true"/> when <paramref name="token"/> is a well-formed state binding.</returns>
+    public static bool TryParse(string? token, out StateBinding binding) {
         if (
-            string.IsNullOrEmpty(value: value) ||
+            string.IsNullOrEmpty(value: token) ||
             !HudBindingVocabulary.TryParse(
-            binding: out var binding,
-            token: value
+            binding: out var parsed,
+            token: token
         ) ||
-            (binding.Kind != HudBindingKind.StateNamed)
+            (parsed.Kind != HudBindingKind.StateNamed)
         ) {
+            binding = default;
+
             return false;
         }
 
-        row = binding.StateName!;
-        key = binding.StateCellKey;
+        binding = new StateBinding(
+            Key: parsed.StateCellKey,
+            Row: parsed.StateName!,
+            Target: parsed.Target
+        );
 
         return true;
     }
+    /// <summary>Returns the parsed binding a token carries, or <see langword="null"/> when it carries none.</summary>
+    /// <param name="token">The candidate token.</param>
+    /// <returns>The parsed binding, or <see langword="null"/>.</returns>
+    public static StateBinding? Parse(string? token) => (TryParse(
+        binding: out var binding,
+        token: token
+    )
+        ? binding
+        : null
+    );
 }
 /// <summary>
-/// A color authored as a <c>#RRGGBB</c>/<c>#RRGGBBAA</c> hex literal, or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c>
+/// A color authored as a <c>#RRGGBB</c>/<c>#RRGGBBAA</c> hex literal, or a <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>
 /// binding naming a Text cell that holds one — the theme/marker/render vocabulary's shared color grammar. Parses and
-/// serializes as a plain JSON string; resolution reuses <see cref="HexColor"/>'s literal parse and
-/// <see cref="WorldStateReader"/>'s state read exactly as <see cref="WorldColor"/> does, so this and
-/// <see cref="WorldColor"/>'s own narrower <c>#RRGGBB</c>-only dialect never disagree about what a binding names.
-/// This carries alpha — a translucent theme surface bakes it into the token — while an opaque consumer (the sky and
-/// lighting fields resolved by <c>Puck.World.Client.WorldRenderCycleTrack</c>) drops it at resolve.
+/// serializes as a plain JSON string. The token is parsed once, into <see cref="Literal"/> or <see cref="State"/>; a
+/// presentation reads the binding through the client's state mirror, the one binding path, which reads it eased by
+/// default and as stored truth with <c>.$target</c>. This carries alpha — a translucent theme surface bakes it into
+/// the token — while an opaque consumer (the sky and lighting fields) drops it.
 /// </summary>
 /// <param name="Raw">The authored token, verbatim.</param>
 [JsonConverter(typeof(BindableColorJsonConverter))]
@@ -57,33 +70,38 @@ public readonly record struct BindableColor(string Raw) {
     /// <summary>The refusal every bindable color field shares.</summary>
     public const string Grammar = "must be #RRGGBB, #RRGGBBAA, or state.<row>[.<key>] naming a Text cell that holds one";
 
+    /// <summary>Gets the parsed hex literal, or <see langword="null"/> when the token is a binding or malformed.</summary>
+    public Vector4? Literal { get; } = (HexColor.TryParseRgba(
+        rgba: out var literal,
+        value: Raw
+    )
+        ? literal
+        : null
+    );
+    /// <summary>Gets the parsed state binding, or <see langword="null"/> when the token is a literal or malformed.</summary>
+    public StateBinding? State { get; } = StateBinding.Parse(token: Raw);
+
     /// <summary>Returns whether this color is admissible against a document: a hex literal, or a state binding
     /// naming a declared Text cell whose text is one.</summary>
     /// <param name="definition">The document to check the binding half against.</param>
+    /// <returns><see langword="true"/> when the color is admissible.</returns>
     public bool IsAuthorable(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        if (!BindableState.TryParseBinding(
-            key: out var key,
-            row: out var row,
-            value: Raw
-        )) {
-            return HexColor.TryParseRgba(
-                rgba: out _,
-                value: Raw
-            );
+        if (State is not { } binding) {
+            return Literal.HasValue;
         }
 
         return (
             WorldStateReader.TryRead(
             definition: definition,
-            key: key,
+            engineTick: 0UL,
+            key: binding.Key,
             rawValue: out _,
             row: out var stateRow,
-            rowName: row,
+            rowName: binding.Row,
             text: out var text,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
@@ -92,59 +110,12 @@ public readonly record struct BindableColor(string Raw) {
         )
         );
     }
-    /// <summary>Resolves this color against the live document — a hex literal parses directly, a state binding
-    /// reads its Text cell — falling back when the token is neither, the cell is absent, or its text is not a hex
-    /// color (the validator refuses all three at author time for a literal binding; a live cell edit can still put a
-    /// non-color there).</summary>
-    /// <param name="definition">The document to resolve against.</param>
-    /// <param name="fallback">The color returned when this token does not resolve.</param>
-    /// <param name="tick">The tick a bound cell's value is read as of.</param>
-    /// <param name="engineTick">The engine tick an advancing bound cell's value is read as of.</param>
-    public Vector4 Resolve(WorldDefinition definition, Vector4 fallback, ulong tick = 0UL, ulong engineTick = 0UL) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        if (!BindableState.TryParseBinding(
-            key: out var key,
-            row: out var row,
-            value: Raw
-        )) {
-            return (HexColor.TryParseRgba(
-                rgba: out var literal,
-                value: Raw
-            )
-                ? literal
-                : fallback
-            );
-        }
-
-        if (
-            WorldStateReader.TryRead(
-            definition: definition,
-            key: key,
-            rawValue: out _,
-            row: out var stateRow,
-            rowName: row,
-            text: out var text,
-            tick: tick,
-            engineTick: engineTick
-        ) &&
-            (stateRow.Kind == CellKind.Text) &&
-            HexColor.TryParseRgba(
-            rgba: out var bound,
-            value: text
-        )
-        ) {
-            return bound;
-        }
-
-        return fallback;
-    }
 }
 /// <summary>
-/// A scalar authored as a finite number literal, or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding naming a Fixed
-/// or Int cell whose live value drives it — the numeric twin of <see cref="BindableColor"/>, sharing its binding
-/// grammar (<see cref="BindableState.TryParseBinding"/>) and its resolve-through-<see cref="WorldStateReader"/>
-/// shape. Parses as a JSON number (literal) or string (binding).
+/// A scalar authored as a finite number literal, or a <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c> binding naming
+/// a Fixed or Int cell whose live value drives it — the numeric twin of <see cref="BindableColor"/>, sharing its
+/// binding grammar (<see cref="StateBinding"/>) and its one read path, the client's state mirror. Parses as a JSON
+/// number (literal) or string (binding).
 /// </summary>
 [JsonConverter(typeof(BindableScalarJsonConverter))]
 public readonly record struct BindableScalar {
@@ -155,23 +126,32 @@ public readonly record struct BindableScalar {
     public string? Binding { get; }
     /// <summary>Gets the authored literal value, or <see langword="null"/> when this is a binding.</summary>
     public float? Literal { get; }
+    /// <summary>Gets the parsed state binding, or <see langword="null"/> when this is a literal or the token is
+    /// malformed.</summary>
+    public StateBinding? State { get; }
 
-    /// <summary>Creates a literal scalar.</summary>
+    /// <summary>Initializes a new instance of the <see cref="BindableScalar"/> struct as a literal.</summary>
+    /// <param name="literal">The authored value.</param>
     public BindableScalar(float literal) {
         Binding = null;
         Literal = literal;
+        State = null;
     }
-    /// <summary>Creates a bound scalar.</summary>
+    /// <summary>Initializes a new instance of the <see cref="BindableScalar"/> struct as a binding.</summary>
+    /// <param name="binding">The authored binding token.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
     public BindableScalar(string binding) {
         ArgumentNullException.ThrowIfNull(argument: binding);
 
         Binding = binding;
         Literal = null;
+        State = StateBinding.Parse(token: binding);
     }
 
     /// <summary>Returns whether this scalar is admissible against a document: a finite literal, or a state binding
     /// naming a declared Fixed or Int cell.</summary>
     /// <param name="definition">The document to check the binding half against.</param>
+    /// <returns><see langword="true"/> when the scalar is admissible.</returns>
     public bool IsAuthorable(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
@@ -183,68 +163,19 @@ public readonly record struct BindableScalar {
         }
 
         return (
-            BindableState.TryParseBinding(
-            key: out var key,
-            row: out var row,
-            value: Binding
-        ) &&
+            (State is { } binding) &&
             WorldStateReader.TryRead(
             definition: definition,
-            key: key,
+            engineTick: 0UL,
+            key: binding.Key,
             rawValue: out _,
             row: out var stateRow,
-            rowName: row,
+            rowName: binding.Row,
             text: out _,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ) &&
             (stateRow.Kind is CellKind.Fixed or CellKind.Int)
         );
-    }
-    /// <summary>Resolves this scalar against the live document — a literal parses directly, a state binding reads
-    /// its Fixed/Int cell — falling back when the token is neither, the cell is absent, or it is not a Fixed/Int
-    /// cell.</summary>
-    /// <param name="definition">The document to resolve against.</param>
-    /// <param name="fallback">The value returned when this token does not resolve.</param>
-    /// <param name="tick">The tick a bound cell's value is read as of.</param>
-    /// <param name="engineTick">The engine tick an advancing bound cell's value is read as of.</param>
-    public float Resolve(WorldDefinition definition, float fallback, ulong tick = 0UL, ulong engineTick = 0UL) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        if (Binding is null) {
-            return (((Literal is { } literal) && float.IsFinite(f: literal))
-                ? literal
-                : fallback
-            );
-        }
-
-        if (
-            !BindableState.TryParseBinding(
-            key: out var key,
-            row: out var row,
-            value: Binding
-        ) ||
-            !WorldStateReader.TryRead(
-            definition: definition,
-            key: key,
-            rawValue: out var raw,
-            row: out var stateRow,
-            rowName: row,
-            text: out _,
-            tick: tick,
-            engineTick: engineTick
-        ) ||
-            (raw is not { } rawValue)
-        ) {
-            return fallback;
-        }
-
-        return (stateRow.Kind switch {
-            CellKind.Fixed => ((float)((double)FixedQ4816.FromRawBits(value: rawValue))),
-            CellKind.Int => ((float)rawValue),
-            CellKind.Vector => fallback,
-            _ => fallback,
-        });
     }
 }
 /// <summary>Reads/writes <see cref="BindableColor"/> as its plain-string wire form — a free-form string validated

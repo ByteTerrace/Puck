@@ -150,10 +150,29 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
+
+    private static void AddPositionSource(WorldDefinition definition, ISet<string> names, StateChannelRef? source) {
+        if (source is null) {
+            return;
+        }
+        if ((source.Name is { } name) && definition.Sets.Any(predicate: set => (set?.Name.Value == name))) {
+            return;
+        }
+
+        names.Add(item: source.Spelling);
+    }
+
     /// <summary>Adds every row name a <see cref="StateTransform"/> reads or writes to <paramref name="names"/> —
     /// the touched-row set <see cref="TryValidateTouchedStateRows"/> needs to check the same invariants the
     /// whole-document walk would, without compiling the rest of the document.</summary>
-    public static bool TryCollectTransformRowNames(StateTransform transform, ISet<string> names, out string reason) {
+    /// <param name="definition">The candidate the transform composes into; a source naming one of its declared cell
+    /// sets adds no row, since a set's sources are only read.</param>
+    /// <param name="transform">The transform.</param>
+    /// <param name="names">The set the row names are added to.</param>
+    /// <param name="reason">Why the transform was refused, or empty.</param>
+    /// <returns><see langword="true"/> when every name was collected.</returns>
+    public static bool TryCollectTransformRowNames(WorldDefinition definition, StateTransform transform, ISet<string> names, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: transform);
         ArgumentNullException.ThrowIfNull(argument: names);
 
@@ -196,28 +215,30 @@ public static partial class WorldDefinitionValidator {
                 break;
             case StateTransform.WriteSet writeSet:
                 names.Add(item: writeSet.Row.Spelling);
-                names.Add(item: writeSet.Set.Spelling);
+                AddPositionSource(
+                    definition: definition,
+                    names: names,
+                    source: writeSet.Set
+                );
 
                 break;
             case StateTransform.BoardCombine combine:
                 names.Add(item: combine.Row.Spelling);
-
-                if (combine.Left is { } left) {
-                    names.Add(item: left.Spelling);
-                }
-
-                if (combine.Right is { } right) {
-                    names.Add(item: right.Spelling);
-                }
+                AddPositionSource(
+                    definition: definition,
+                    names: names,
+                    source: combine.Left
+                );
+                AddPositionSource(
+                    definition: definition,
+                    names: names,
+                    source: combine.Right
+                );
 
                 break;
             case StateTransform.Arrange arrange:
                 names.Add(item: arrange.Row.Spelling);
                 names.Add(item: arrange.From.Spelling);
-
-                break;
-            case StateTransform.Push push:
-                names.Add(item: push.Row.Spelling);
 
                 break;
             case StateTransform.ClearEnclosed clear:

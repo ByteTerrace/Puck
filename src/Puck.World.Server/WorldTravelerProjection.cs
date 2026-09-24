@@ -23,10 +23,12 @@ internal static class WorldTravelerProjection {
             ) is not null) {
                 return "the source authority is no longer admitted for traveler projection";
             }
-            request = request with { Ceiling = ((WorldDisclosureTier)Math.Min(
+            request = request with {
+                Ceiling = ((WorldDisclosureTier)Math.Min(
                 val1: ((byte)request.Ceiling),
                 val2: ((byte)admission!.Tier)
-            )) };
+            )),
+            };
             if (request.Ceiling == WorldDisclosureTier.Frames) { return "the projection disclosure tier permits no world document"; }
             if (!WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
                 principal: principal,
@@ -97,10 +99,12 @@ internal static class WorldTravelerProjection {
                 : "the traveler has no committed onward projection route"
             );
         }
-        try { await sink.StreamAsync(
+        try {
+            await sink.StreamAsync(
             ct: ct,
             output: output
-        ).ConfigureAwait(continueOnCapturedContext: false); } finally { server.ExecuteAuthorityOperation(operation: lease.Dispose); }
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        } finally { server.ExecuteAuthorityOperation(operation: lease.Dispose); }
         return null;
     }
 }

@@ -3,7 +3,7 @@
   "documentId": "dive-medium-canary",
   "imports": [
     {
-      "document": "../../../src/Puck.World/Assets/worlds/modules/dive.world.json",
+      "document": "../../../src/Puck.World/Assets/worlds/modules/dive",
       "as": "dive"
     }
   ],

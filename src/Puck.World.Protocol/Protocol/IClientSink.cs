@@ -24,7 +24,9 @@ public interface IClientSink {
     /// bumping the definition-delivery revision or recompiling anything <see cref="DeliverDefinition"/>
     /// would.</summary>
     /// <param name="definition">The world definition now live on the server.</param>
-    void DeliverState(WorldDefinition definition);
+    /// <param name="stamp">The tick the values hold as of and the rows whose values moved since the previous
+    /// delivery.</param>
+    void DeliverState(WorldDefinition definition, in WorldStateStamp stamp);
     /// <summary>Delivers an accepted LIVE window-composition override for the client to apply to its composer (the
     /// <c>view.override layout</c>/<c>view.override camera</c> path).</summary>
     /// <param name="composition">The composition override.</param>

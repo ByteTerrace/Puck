@@ -13,21 +13,22 @@ public sealed partial class SdfWorldEngine {
         RequireScreenIndex(screenIndex: screenIndex);
 
         var descriptorBase = (screenIndex * DecalWordsPerCell);
+        var decalWords = DecalWords;
 
         // CADENCE GATE: same producer-level fix as SetScreenDecal — a slot that is ALREADY clear (gridCols already 0)
         // must not look like a change; a caller that clears every frame (mirroring SetScreenDecal's every-frame poll)
         // would otherwise defeat the gate exactly as the unconditional bump did.
-        if (m_decalScratch[(descriptorBase + 0)] == 0u) {
+        if (decalWords[(descriptorBase + 0)] == 0u) {
             return;
         }
 
-        m_decalScratch[(descriptorBase + 0)] = 0u; // gridCols 0 => inert (the image/procedural path applies)
-        m_decalScratch[(descriptorBase + 1)] = 0u;
-        m_decalScratch[(descriptorBase + 2)] = 0u;
-        m_decalScratch[(descriptorBase + 3)] = 0u;
-        Array.Fill(
-            array: m_decalDirty,
-            value: true
+        decalWords[(descriptorBase + 0)] = 0u; // gridCols 0 => inert (the image/procedural path applies)
+        decalWords[(descriptorBase + 1)] = 0u;
+        decalWords[(descriptorBase + 2)] = 0u;
+        decalWords[(descriptorBase + 3)] = 0u;
+        m_decals.MarkChanged(
+            length: (DecalWordsPerCell * sizeof(uint)),
+            offset: (descriptorBase * sizeof(uint))
         );
         // CADENCE GATE: revision-track the REAL decal change (see SetScreenDecal).
         m_decalRevision++;
@@ -173,8 +174,10 @@ public sealed partial class SdfWorldEngine {
         var cellBase = ((uint)(DecalDescriptorCount + (screenIndex * MaxScreenDecalCells)));
         var descriptorBase = (screenIndex * DecalWordsPerCell);
         var distanceRangeBits = BitConverter.SingleToUInt32Bits(value: distanceRange);
-        var cellDestination = m_decalScratch.AsSpan(
-            start: (((int)cellBase) * DecalWordsPerCell),
+        var decalWords = DecalWords;
+        var cellWordStart = (((int)cellBase) * DecalWordsPerCell);
+        var cellDestination = decalWords.Slice(
+            start: cellWordStart,
             length: cellWords.Length
         );
 
@@ -183,23 +186,27 @@ public sealed partial class SdfWorldEngine {
         // call even when its cell bytes are unchanged) must not look like new content. Change-detect before writing:
         // a call that reproduces the bytes already stored is a no-op, not a revision bump.
         if (
-            (m_decalScratch[(descriptorBase + 0)] == ((uint)columns)) &&
-            (m_decalScratch[(descriptorBase + 1)] == ((uint)rows)) &&
-            (m_decalScratch[(descriptorBase + 3)] == distanceRangeBits) &&
+            (decalWords[(descriptorBase + 0)] == ((uint)columns)) &&
+            (decalWords[(descriptorBase + 1)] == ((uint)rows)) &&
+            (decalWords[(descriptorBase + 3)] == distanceRangeBits) &&
             cellWords.SequenceEqual(other: cellDestination)
         ) {
             return;
         }
 
-        m_decalScratch[(descriptorBase + 0)] = ((uint)columns);
-        m_decalScratch[(descriptorBase + 1)] = ((uint)rows);
-        m_decalScratch[(descriptorBase + 2)] = cellBase;
-        m_decalScratch[(descriptorBase + 3)] = distanceRangeBits;
+        decalWords[(descriptorBase + 0)] = ((uint)columns);
+        decalWords[(descriptorBase + 1)] = ((uint)rows);
+        decalWords[(descriptorBase + 2)] = cellBase;
+        decalWords[(descriptorBase + 3)] = distanceRangeBits;
         cellWords.CopyTo(destination: cellDestination);
-        // Every ring slot's buffer must catch up with the patched mirror when its turn comes.
-        Array.Fill(
-            array: m_decalDirty,
-            value: true
+        // Every ring slot's buffer must catch up with the patched descriptor and cells when its turn comes.
+        m_decals.MarkChanged(
+            length: (DecalWordsPerCell * sizeof(uint)),
+            offset: (descriptorBase * sizeof(uint))
+        );
+        m_decals.MarkChanged(
+            length: (cellWords.Length * sizeof(uint)),
+            offset: (cellWordStart * sizeof(uint))
         );
         // CADENCE GATE: the decal buffer is revision-tracked (not re-hashed each frame — it is 820 KB), so a REAL decal
         // change invalidates the signature.
@@ -265,30 +272,23 @@ public sealed partial class SdfWorldEngine {
 
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
-        var floats = MemoryMarshal.Cast<byte, float>(span: m_screenSurfaceScratch.AsSpan());
         // 3 float4 per entry (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad) — KEEP IN SYNC with SdfProgram's
         // ScreenSurfaceWords packing and sdf-world.hlsli's ScreenSurfaceData.
-        var b = (screenIndex * 12);
+        Span<float> floats = stackalloc float[(ScreenSurfaceByteLength / sizeof(float))];
+
+        floats[0] = unitRight.X; floats[1] = unitRight.Y; floats[2] = unitRight.Z; floats[3] = halfWidth;
+        floats[4] = unitUp.X; floats[5] = unitUp.Y; floats[6] = unitUp.Z; floats[7] = halfHeight;
+        floats[8] = origin.X; floats[9] = origin.Y; floats[10] = origin.Z; floats[11] = 0f;
         // SdfEngineNode polls this every frame via transform providers, often with an unchanged value (a static screen,
-        // or a rig sampled at the same pose) — only an actual change needs to dirty the ring.
-        var changed =
-            ((floats[(b + 0)] != unitRight.X) || (floats[(b + 1)] != unitRight.Y) || (floats[(b + 2)] != unitRight.Z) || (floats[(b + 3)] != halfWidth) ||
-            (floats[(b + 4)] != unitUp.X) || (floats[(b + 5)] != unitUp.Y) || (floats[(b + 6)] != unitUp.Z) || (floats[(b + 7)] != halfHeight) ||
-            (floats[(b + 8)] != origin.X) || (floats[(b + 9)] != origin.Y) || (floats[(b + 10)] != origin.Z));
-
-        if (!changed) {
-            return;
-        }
-
-        floats[(b + 0)] = unitRight.X; floats[(b + 1)] = unitRight.Y; floats[(b + 2)] = unitRight.Z; floats[(b + 3)] = halfWidth;
-        floats[(b + 4)] = unitUp.X; floats[(b + 5)] = unitUp.Y; floats[(b + 6)] = unitUp.Z; floats[(b + 7)] = halfHeight;
-        floats[(b + 8)] = origin.X; floats[(b + 9)] = origin.Y; floats[(b + 10)] = origin.Z; floats[(b + 11)] = 0f;
-        // Every ring slot's buffer must catch up with the patched mirror when its turn comes.
-        Array.Fill(
-            array: m_screenSurfaceDirty,
-            value: true
+        // or a rig sampled at the same pose); the ring table owes the slots only the bytes that actually changed.
+        _ = m_screenSurfaces.Write(
+            bytes: MemoryMarshal.AsBytes(span: floats),
+            offset: (screenIndex * ScreenSurfaceByteLength)
         );
     }
+
+    // The decal mirror as the descriptor band + cell region's words.
+    private Span<uint> DecalWords => MemoryMarshal.Cast<byte, uint>(span: m_decals.Current.AsSpan());
 
     /// <summary>Throws if <paramref name="screenIndex"/> falls outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>

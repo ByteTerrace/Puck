@@ -170,11 +170,13 @@ public sealed class WorldTopologyDirectionLawTests {
         );
 
         Assert.False(condition: TopologyCompilation.TryValidate(
-            ring with { Directions = [new(
+            ring with {
+                Directions = [new(
                     "skew",
                     1,
                     1
-                )] },
+                )],
+            },
             out var ringReason
         ));
         Assert.Contains(
@@ -182,7 +184,8 @@ public sealed class WorldTopologyDirectionLawTests {
             expectedSubstring: "no second axis"
         );
         Assert.False(condition: TopologyCompilation.TryValidate(
-            ring with { Directions = [new(
+            ring with {
+                Directions = [new(
                     "around",
                     5,
                     0
@@ -190,7 +193,8 @@ public sealed class WorldTopologyDirectionLawTests {
                     "back",
                     -5,
                     0
-                )] },
+                )],
+            },
             out var wideReason
         ));
         Assert.Contains(
@@ -199,7 +203,8 @@ public sealed class WorldTopologyDirectionLawTests {
         );
         // Control: a step under the ring's own width is admitted.
         Assert.True(condition: TopologyCompilation.TryValidate(
-            ring with { Directions = [new(
+            ring with {
+                Directions = [new(
                     "step",
                     4,
                     0
@@ -207,14 +212,16 @@ public sealed class WorldTopologyDirectionLawTests {
                     "back",
                     -4,
                     0
-                )] },
+                )],
+            },
             out _
         ));
 
         var wrappedGrid = Grid() with { Wrap = TopologyWrap.Both };
 
         Assert.False(condition: TopologyCompilation.TryValidate(
-            wrappedGrid with { Directions = [new(
+            wrappedGrid with {
+                Directions = [new(
                     "far",
                     0,
                     4
@@ -222,7 +229,8 @@ public sealed class WorldTopologyDirectionLawTests {
                     "near",
                     0,
                     -4
-                )] },
+                )],
+            },
             out var deepReason
         ));
         Assert.Contains(

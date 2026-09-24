@@ -172,7 +172,7 @@ public static partial class PuckParser {
 
             if (
                 (beforeWord > 0) &&
-                IsNameContinuationCharacter(c: trimmed[(beforeWord - 1)])
+                IdentifierSpelling.IsNameCharacter(character: trimmed[(beforeWord - 1)])
             ) {
                 continue;
             }
@@ -187,21 +187,23 @@ public static partial class PuckParser {
         }
         return false;
     }
-    private static OperandExpressionNode ValidatedOperand(string text, SourceSpan span, DiagnosticBag? diagnostics) {
-        var operand = CreateOperand(span: span, text: text);
-        ValidateOperand(diagnostics: diagnostics, operand: operand);
-        return operand;
-    }
-
-    private static void ValidateOperand(OperandExpressionNode operand, DiagnosticBag? diagnostics) {
+    private static OperandExpressionNode ValidatedOperand(string text, SourceSpan span, DiagnosticBag? diagnostics) =>
+        ValidateOperand(diagnostics: diagnostics, operand: CreateOperand(span: span, text: text));
+    // Reports an operand's refusal once, here, and returns the operand marked as reported when it was.
+    private static OperandExpressionNode ValidateOperand(OperandExpressionNode operand, DiagnosticBag? diagnostics) {
         var respelled = ExpressionSpelling.ToSourceDialect(text: operand.Text);
+
         if (!string.Equals(a: respelled, b: operand.Text, comparisonType: StringComparison.Ordinal)) {
             diagnostics?.ReportError(code: PuckDiagnosticCodes.OperandColonChannel,
                 message: $"'{operand.Text}' spells a reserved channel with colons; write '{respelled}'", span: operand.Span);
-        } else if (operand.Syntax is null) {
-            diagnostics?.ReportError(code: PuckDiagnosticCodes.OperandParse,
+        } else if ((operand.Syntax is null) && (diagnostics is not null)) {
+            diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
                 message: $"'{operand.Text}' {operand.SyntaxError}", span: operand.Span);
+
+            return (operand with { SyntaxErrorReported = true });
         }
+
+        return operand;
     }
     /// <summary>Reads a row reference span — a name (extended for reserved <c>$</c>-channels and a folded
     /// <c>$zones[...]</c> selector, §9-A8) followed by zero or more immediately adjacent, balanced <c>[...]</c>
@@ -264,6 +266,31 @@ public static partial class PuckParser {
     /// the span does not even parse). The token's own <c>Name</c>/<c>Key</c> become the result — the parser never
     /// re-derives that split itself.</summary>
     private static RowRefNode ResolveRowRef(string text, SourceSpan span, DiagnosticBag? diagnostics) {
+        // `row[$"…"]` computes its key at lowering, as the same atom does in a read; the row is resolved alone.
+        if (
+            (text.IndexOf(comparisonType: StringComparison.Ordinal, value: "[$\"") is var open and > 0) &&
+            text.EndsWith(comparisonType: StringComparison.Ordinal, value: "\"]") &&
+            (text.IndexOf(value: '[') == open)
+        ) {
+            var keyText = text[(open + 1)..^1];
+            var row = ResolveRowRef(
+                diagnostics: diagnostics,
+                span: span,
+                text: text[..open]
+            );
+
+            if (TryParseKeyAtom(atom: out var atom, text: keyText)) {
+                return new RowRefNode(
+                    row.Name,
+                    keyText,
+                    span.Offset,
+                    span.Length,
+                    span.Line,
+                    span.Column,
+                    KeyAtom: atom
+                );
+            }
+        }
         if (text.Contains(value: "].")) {
             return new RowRefNode(
                 text,
@@ -272,6 +299,19 @@ public static partial class PuckParser {
                 span.Length,
                 span.Line,
                 span.Column
+            );
+        }
+        // A name a nested module instance declares, `outer.inner.name`: the scope reads the chain through its
+        // instances (DocumentScope.TryQualify), which is lowering's to resolve or refuse.
+        if ((QualifiedName.Parse(text: text) is { Segments.Count: > 2 } nested) && nested.Segments.All(predicate: static part => IdentifierSpelling.IsName(text: part))) {
+            return new RowRefNode(
+                nested.Head,
+                nested.Tail,
+                span.Offset,
+                span.Length,
+                span.Line,
+                span.Column,
+                FieldAccess: true
             );
         }
 
@@ -332,6 +372,16 @@ public static partial class PuckParser {
             span.Line,
             span.Column
         );
+    }
+    // A key that does not read as one interpolated string falls back to the ordinary resolution, which reports it.
+    private static bool TryParseKeyAtom(string text, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out InterpolatedStringNode? atom) {
+        try {
+            atom = (ParseExpression(source: text) as InterpolatedStringNode);
+        } catch (PuckParseException) {
+            atom = null;
+        }
+
+        return (atom is not null);
     }
     /// <summary>Reads and eagerly resolves a row reference in the unconditional contexts (<c>remove</c>,
     /// <c>schedule</c>) where nothing else could follow the keyword. The whole operand span is
@@ -420,7 +470,7 @@ public static partial class PuckParser {
     private static string? MatchingWordAt(string buffer, int offset, IReadOnlySet<string> candidates) {
         if (
             (offset > 0) &&
-            IsNameContinuationCharacter(c: buffer[(offset - 1)])
+            IdentifierSpelling.IsNameCharacter(character: buffer[(offset - 1)])
         ) {
             return null;
         }
@@ -441,7 +491,7 @@ public static partial class PuckParser {
 
             if (
                 (after < buffer.Length) &&
-                IsNameContinuationCharacter(c: buffer[after])
+                IdentifierSpelling.IsPart(character: buffer[after])
             ) {
                 continue;
             }
@@ -449,7 +499,6 @@ public static partial class PuckParser {
         }
         return null;
     }
-    private static bool IsNameContinuationCharacter(char c) => (char.IsLetterOrDigit(c: c) || (c == '_') || (c == '$'));
     // Whether nothing else follows `identifier` on its own logical line (only spaces/tabs, then a newline, a line
     // comment, '}', ';', ',', or end of input) — used to recognize a bare keyword statement (e.g. `solid`, §4.2)
     // without the general whitespace skip first erasing the line boundary a newline-terminated grammar depends on.
@@ -522,7 +571,7 @@ public static partial class PuckParser {
 
         if (
             (i >= buffer.Length) ||
-            !(char.IsLetter(c: buffer[i]) || (buffer[i] is '_' or '$' or '"'))
+            !(IdentifierSpelling.IsStart(character: buffer[i]) || (buffer[i] is IdentifierSpelling.Sigil or '"'))
         ) {
             return false;
         }
@@ -567,16 +616,8 @@ public static partial class PuckParser {
         }
         var word = trimmed[(colon + 1)..].TrimStart();
 
-        if (
-            (word.Length == 0) ||
-            !char.IsLetter(c: word[0])
-        ) {
+        if (!IdentifierSpelling.IsIdentifier(text: word)) {
             return null;
-        }
-        foreach (var c in word) {
-            if (!IsNameContinuationCharacter(c: c)) {
-                return null;
-            }
         }
         // A reserved channel carries its own colons inside one unbroken name ("$cell:row:key"); only a colon that
         // stands apart from the text before it can be a kind annotation.

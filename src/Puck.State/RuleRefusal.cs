@@ -38,162 +38,150 @@ public sealed class RefusalAttribute(string door, string condition, RefusalKind 
 /// <param name="Kind">Whether this is a protocol fault or a verdict.</param>
 /// <param name="Condition">The one-line triggering condition.</param>
 public readonly record struct RefusalCatalogEntry(string Door, string Id, RefusalKind Kind, string Condition);
-/// <summary>Names why a rule was refused during compilation, for every refusal the state-neutral compiler itself
-/// raises. Every member is tagged <see cref="RefusalAttribute"/> under the <c>world.rule.compile</c> door, so a
-/// refusal catalog lists the whole family beside the categories a document project's own families add (each
-/// declares its own tagged enum and throws a <see cref="RuleException"/> carrying it).</summary>
+/// <summary>Names why a rule was refused during compilation, for every refusal the state-neutral compiler raises
+/// itself. Every member is tagged <see cref="RefusalAttribute"/> under the <c>state.rule.compile</c> door, so a
+/// refusal catalog lists the whole family beside the categories a document project's own families add (each declares
+/// its own tagged enum and throws a <see cref="RuleException"/> carrying it). The vector transforms in
+/// <c>Puck.State.Vectors</c> repeat the compiler's shape checks when they fire and report a failed one with the same
+/// member; a refusal only a firing can decide is a <see cref="RuleEffectRefusal"/>.</summary>
 public enum RuleRefusal : byte {
     /// <summary>The rule declares no name.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a rule declares no name", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "a rule declares no name", kind: RefusalKind.Verdict)]
     NameMissing,
 
     /// <summary>Another rule already declares this name.</summary>
-    [Refusal(door: "world.rule.compile", condition: "another rule already declares this name", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "another rule already declares this name", kind: RefusalKind.Verdict)]
     NameDuplicated,
 
-    /// <summary>The rule's name carries the reserved <see cref="StateRow.ReservedNamePrefix"/> prefix, which
-    /// marks what the engine mints — and nothing mints a rule.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a rule's name carries the reserved '$' prefix, which marks what the engine mints", kind: RefusalKind.Verdict)]
+    /// <summary>The rule's name carries the reserved <see cref="StateRow.ReservedNamePrefix"/> prefix, which marks
+    /// what the engine mints — and the engine mints no rule.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a rule's name carries the reserved '$' prefix, which marks what the engine mints", kind: RefusalKind.Verdict)]
     NameReserved,
 
     /// <summary>A predicate kind that has no meaning at rule scope.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a gate uses a predicate kind ('now'/'recently'/'timerElapsed') that reads a per-body fact a world has none of", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "a gate uses a predicate kind that reads a per-body fact a section has none of, or nests past the token ceiling", kind: RefusalKind.Verdict)]
     PredicateKindInadmissible,
 
-    /// <summary>An effect kind that has no meaning at rule scope.</summary>
-    [Refusal(door: "world.rule.compile", condition: "an effect uses a kind that addresses a body's own kinematic/register state, which world scope has none of", kind: RefusalKind.Verdict)]
+    /// <summary>An effect kind that has no meaning at rule scope, or a declaration past one of the rule ceilings.</summary>
+    [Refusal(door: "state.rule.compile", condition: "an effect uses a kind rule scope has no meaning for, or a rule exceeds its binding, effect, or transaction ceiling", kind: RefusalKind.Verdict)]
     EffectKindInadmissible,
 
     /// <summary>A named state row is not declared.</summary>
-    [Refusal(door: "world.rule.compile", condition: "an operand names a state row the document does not declare, and is not a reserved channel", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "an operand names a state row the document does not declare, and is not a reserved channel", kind: RefusalKind.Verdict)]
     StateRowUnknown,
 
     /// <summary>A named cell is not addressable on the row named (a null key on a keyed row, or a declared row whose
     /// kind cannot carry the operation).</summary>
-    [Refusal(door: "world.rule.compile", condition: "a cell is not addressable on the row named (a null key on a keyed row, a text row compared/written as a number, or a dotted 'row.key' spelling)", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "a cell is not addressable on the row named (a null key on a keyed row, a text row compared/written as a number, or a dotted 'row.key' spelling)", kind: RefusalKind.Verdict)]
     StateCellUnaddressable,
 
-    /// <summary>A <c>compareState</c> names both an authored 'value' and a 'comparandState', or neither — exactly
-    /// one comparand spelling is admitted (a 'comparandKey' with no 'comparandState' is refused here too).</summary>
-    [Refusal(door: "world.rule.compile", condition: "a compareState names both 'value' and 'comparandState' (or neither), or a bare 'comparandKey' with no 'comparandState'", kind: RefusalKind.Verdict)]
+    /// <summary>A <c>compareState</c> names both an authored <c>value</c> and a <c>comparandState</c>, or neither.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a compareState names both 'value' and 'comparandState' (or neither), or a bare 'comparandKey' with no 'comparandState'", kind: RefusalKind.Verdict)]
     ComparandAmbiguous,
 
-    /// <summary>A <c>compareState</c>'s two sides resolve to incompatible cell kinds (an <c>int</c> row against a
-    /// <c>fixed</c> row, say) — mixing scales silently is refused rather than coerced.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a compareState's two sides resolve to incompatible cell kinds", kind: RefusalKind.Verdict)]
+    /// <summary>A <c>compareState</c>'s two sides resolve to incompatible cell kinds.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a compareState's two sides resolve to incompatible cell kinds", kind: RefusalKind.Verdict)]
     ComparandKindMismatch,
 
     /// <summary>An effect carries a participant target, which rule scope has none of.</summary>
-    [Refusal(door: "world.rule.compile", condition: "an effect carries a non-Self target, which world scope has no entity to resolve", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "an effect carries a non-Self target, which rule scope has no entity to resolve", kind: RefusalKind.Verdict)]
     TargetInadmissible,
 
     /// <summary>A named generator row is not declared, or declares no generator.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a 'generate' effect names a row that is not declared, or declares no generator", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "a 'generate' effect names a row that is not declared, or declares no draw", kind: RefusalKind.Verdict)]
     GeneratorUnknown,
 
-    /// <summary>A <c>setState</c>/<c>addState</c> effect names both an authored 'value' and a 'fromState', or
-    /// neither — exactly one write-source spelling is admitted (a 'fromKey' with no 'fromState' is refused here too),
-    /// the same duality <see cref="ComparandAmbiguous"/> enforces on the predicate side.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a setState/addState names both 'value' and 'fromState' (or neither), or a bare 'fromKey' with no 'fromState'", kind: RefusalKind.Verdict)]
+    /// <summary>A <c>setState</c>/<c>addState</c> effect names both an authored <c>value</c> and a
+    /// <c>fromState</c>, or neither.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a setState/addState names both 'value' and 'fromState' (or neither), or a bare 'fromKey' with no 'fromState'", kind: RefusalKind.Verdict)]
     EffectSourceAmbiguous,
 
     /// <summary>A <c>setState</c>/<c>addState</c> effect's live <c>fromState</c> resolves to a cell kind that does
-    /// not match the destination row's own kind (an <c>int</c> row fed from a <c>fixed</c> source, say) — mixing
-    /// scales silently is refused rather than coerced, the effect-side sibling of
-    /// <see cref="ComparandKindMismatch"/>.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a setState/addState's live 'fromState' resolves to a cell kind that does not match the destination row's own kind", kind: RefusalKind.Verdict)]
+    /// not match the destination row's own kind.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a setState/addState's live 'fromState' resolves to a cell kind that does not match the destination row's own kind", kind: RefusalKind.Verdict)]
     EffectSourceKindMismatch,
 
     /// <summary>A <c>setState</c>/<c>addState</c> effect's <c>valueSeconds</c> is not an exact whole engine-tick
-    /// count — <see cref="Puck.Maths.FixedTickConversion.TryDurationEngineTicksExact"/> found no whole multiple of
-    /// <c>1/50400</c> second equal to the authored value — this refuses rather than rounds, so a duration that
-    /// silently drifted from what was authored can never happen. The message names the nearest exact
-    /// durations on either side; author one of those, or author the raw engine-tick count directly via 'value' when
-    /// no terminating decimal spells the intended duration exactly.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a setState/addState's 'valueSeconds' is not an exact whole engine-tick count (not a whole multiple of 1/50400 s), or is negative", kind: RefusalKind.Verdict)]
+    /// count: <see cref="Puck.Maths.FixedTickConversion.TryDurationEngineTicksExact"/> found no whole multiple of
+    /// <c>1/50400</c> second equal to the authored value. The compiler refuses rather than rounds, and the message
+    /// names the nearest exact durations on either side.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a setState/addState's 'valueSeconds' is not an exact whole engine-tick count (not a whole multiple of 1/50400 s), or is negative", kind: RefusalKind.Verdict)]
     DurationNotExactEngineTicks,
 
-    /// <summary>A <c>setState</c>/<c>addState</c> effect's non-negative <c>valueSeconds</c> would compile beyond the
-    /// signed 64-bit raw carrier a <c>kind=Int</c> state cell stores.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a setState/addState's non-negative 'valueSeconds' exceeds the signed 64-bit engine-tick carrier", kind: RefusalKind.Verdict)]
+    /// <summary>A non-negative <c>valueSeconds</c> or delay would compile beyond the signed 64-bit raw carrier.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a non-negative 'valueSeconds' or scheduled delay exceeds the signed 64-bit tick carrier", kind: RefusalKind.Verdict)]
     DurationEngineTicksOutOfRange,
 
     /// <summary>A read operand — a <c>compareState</c> subject, a <c>comparandState</c>, or a <c>fromState</c> —
-    /// addresses a cell its declared row does not carry. Reading an undeclared cell would be 0 forever with no
-    /// refusal anywhere, so this refuses at compile instead; the mint-later pattern declares the cell first. Write
-    /// destinations are exempt — a write mints its cell.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a READ operand addresses a cell its declared row does not carry", kind: RefusalKind.Verdict)]
+    /// addresses a cell its declared row does not carry. Such a read would answer 0 forever, so the compiler refuses
+    /// it; a write destination is exempt, because a write mints its cell.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a READ operand addresses a cell its declared row does not carry", kind: RefusalKind.Verdict)]
     StateCellUndeclared,
 
-    /// <summary>A <c>$reduce:</c> channel does not spell <c>$reduce:&lt;max|min|sum|count&gt;:&lt;row&gt;</c>, or
-    /// names a row that is not declared or is kind=Text.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a '$reduce:' channel does not spell '$reduce:<max|min|sum|count>:<row>' against a declared, non-text row", kind: RefusalKind.Verdict)]
+    /// <summary>A <c>$reduce:</c> channel does not spell <c>$reduce:&lt;max|min|sum|count|arrangementRank&gt;:&lt;row&gt;</c>,
+    /// or names a row that is not declared or is kind=Text.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a '$reduce:' channel does not spell '$reduce:<max|min|sum|count|arrangementRank>:<row>' against a declared, non-text row", kind: RefusalKind.Verdict)]
     ReduceChannelMalformed,
 
-    /// <summary>A rule's <c>zones</c> table is empty, names an undeclared row, a row that is not an ordered token
-    /// zone, zones over different token domains or of different kinds, or one zone twice — or <c>forEach: "$zones"</c>
-    /// iterates a table the rule does not declare.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a rule's 'zones' table is empty, names something other than distinct ordered zones over one token domain and kind, or is iterated by a rule that declares none", kind: RefusalKind.Verdict)]
+    /// <summary>A rule's <c>zones</c> table is empty, names something other than distinct ordered zones over one
+    /// token domain and kind, or is iterated by a rule that declares none.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a rule's 'zones' table is empty, names something other than distinct ordered zones over one token domain and kind, or is iterated by a rule that declares none", kind: RefusalKind.Verdict)]
     ZoneTableMalformed,
 
-    /// <summary>A <c>$symmetry:</c> channel does not spell <c>$symmetry:&lt;function&gt;[:&lt;argument&gt;]:&lt;row&gt;</c>
-    /// — an unknown function, a function given an argument it does not take (or missing one it needs), an argument
-    /// that is neither a node literal nor <c>cell:&lt;row&gt;[.&lt;key&gt;]</c>, or a source row that is not a declared
-    /// numeric row.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a '$symmetry:' channel does not spell '$symmetry:<function>[:<argument>]:<row>' with a known function, a well-formed argument and a declared numeric source row", kind: RefusalKind.Verdict)]
+    /// <summary>A <c>$symmetry:</c> channel does not spell
+    /// <c>$symmetry:&lt;function&gt;[:&lt;argument&gt;]:&lt;row&gt;</c>.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a '$symmetry:' channel does not spell '$symmetry:<function>[:<argument>]:<row>' with a known function, a well-formed argument and a declared numeric source row", kind: RefusalKind.Verdict)]
     SymmetryChannelMalformed,
 
-    /// <summary>An <c>$argmax:</c>/<c>$argmin:</c> channel names no row, or a row that is not declared or is
-    /// kind=Text.</summary>
-    [Refusal(door: "world.rule.compile", condition: "an '$argmax:'/'$argmin:' channel names no row, or a row that is not declared or is kind=Text", kind: RefusalKind.Verdict)]
-    ArgChannelMalformed,
-
-    /// <summary>A key-yielding read — an <c>$argmax:</c>/<c>$argmin:</c> channel standalone or embedded in a
-    /// participant reference, a reduction's <c>:where:</c> filter, a rule's <c>forEach</c> — names a row that is not
-    /// keyed. A slot-shaped row's one cell carries the engine-minted <c>$value</c> key rather than an index — author
-    /// a keyed row (a per-participant tally) instead.</summary>
-    [Refusal(door: "world.rule.compile", condition: "an argmax/argmin body reference names a row that is not KEYED — a slot row's cell has no body-index key", kind: RefusalKind.Verdict)]
+    /// <summary>A key-yielding read names a row that is not keyed.</summary>
+    [Refusal(door: "state.rule.compile", condition: "an argmax/argmin body reference, a reduction filter, or a forEach names a row that is not keyed", kind: RefusalKind.Verdict)]
     ArgRowNotKeyed,
 
+    /// <summary>A rule group's declaration is malformed: no members, a member no rule declares, a member claimed by
+    /// two groups, a pass ceiling outside its bounds, or a staged group with no step.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a rule group declares no members, names a rule no section declares, claims a rule another group already claims, declares a pass ceiling outside its bounds, or is staged with no step", kind: RefusalKind.Verdict)]
+    RuleGroupMalformed,
+
+    /// <summary>An effect whose arm cannot be rewound is read back inside the same firing.</summary>
+    [Refusal(door: "state.rule.compile", condition: "a later effect of the same firing reads a cell an irreversible arm writes, whose write lands only after the firing commits", kind: RefusalKind.Verdict)]
+    IrreversibleResultRead,
+
     /// <summary>Vector operands do not share the same space or length.</summary>
-    [Refusal(door: "world.rule.compile", condition: "vector operands do not belong to the same space", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "vector operands do not belong to the same space", kind: RefusalKind.Verdict)]
     VectorSpaceMismatch,
 
     /// <summary>An operand expected to be a vector is not of kind Vector.</summary>
-    [Refusal(door: "world.rule.compile", condition: "an operand is not a vector", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "an operand is not a vector", kind: RefusalKind.Verdict)]
     VectorOperandNotVector,
 
-    /// <summary>A vector mix produced a zero sum.</summary>
-    [Refusal(door: "world.rule.effect", condition: "a vector mix sum of terms is zero", kind: RefusalKind.Verdict)]
-    VectorMixZero,
-
     /// <summary>Vector mix term count or weight is out of range.</summary>
-    [Refusal(door: "world.rule.compile", condition: "vector mix terms count or weight is out of range", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "vector mix terms count or weight is out of range", kind: RefusalKind.Verdict)]
     VectorMixTerms,
 
-    /// <summary>Vector mean has no candidate cells or sum is zero.</summary>
-    [Refusal(door: "world.rule.effect", condition: "vector mean has no candidates or sum is zero", kind: RefusalKind.Verdict)]
-    VectorMeanEmpty,
-
-    /// <summary>Vector filter where row is not a keyed Bool row.</summary>
-    [Refusal(door: "world.rule.compile", condition: "vector where row is not a keyed Bool row", kind: RefusalKind.Verdict)]
+    /// <summary>A vector filter's <c>where</c> row is not a keyed Bool row.</summary>
+    [Refusal(door: "state.rule.compile", condition: "vector where row is not a keyed Bool row", kind: RefusalKind.Verdict)]
     VectorFilterShape,
 
-    /// <summary>Vector exclude key is malformed.</summary>
-    [Refusal(door: "world.rule.compile", condition: "vector exclude key is malformed", kind: RefusalKind.Verdict)]
+    /// <summary>A vector exclude key is malformed.</summary>
+    [Refusal(door: "state.rule.compile", condition: "vector exclude key is malformed", kind: RefusalKind.Verdict)]
     VectorExcludeKey,
 
-    /// <summary>Vector nearest destination shape or parameters are invalid.</summary>
-    [Refusal(door: "world.rule.compile", condition: "vector nearest transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
+    /// <summary>A vector nearest destination shape or parameters are invalid.</summary>
+    [Refusal(door: "state.rule.compile", condition: "vector nearest transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
     VectorNearestShape,
 
-    /// <summary>Vector remember destination shape or parameters are invalid.</summary>
-    [Refusal(door: "world.rule.compile", condition: "vector remember transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
+    /// <summary>A vector remember destination shape or parameters are invalid.</summary>
+    [Refusal(door: "state.rule.compile", condition: "vector remember transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
     VectorRememberShape,
 
     /// <summary>A vector cell was targeted by an effect kind that does not admit vectors.</summary>
-    [Refusal(door: "world.rule.compile", condition: "a vector cell was targeted by an unsupported effect kind", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "a vector cell was targeted by an unsupported effect kind", kind: RefusalKind.Verdict)]
     VectorEffectNotAdmitted,
+
+    /// <summary>A transform writes a row a reader may see who may not see a row the transform reads, so the written
+    /// order or value would disclose what that reader is refused (<see cref="StateVisibility.Encloses"/>).</summary>
+    [Refusal(door: "state.rule.compile", condition: "a transform writes a row whose audience a row it reads does not enclose", kind: RefusalKind.Verdict)]
+    TransformWidensAudience,
 }
 /// <summary>Reports a rule compilation refusal — caught and reported by name at validation. The category is a
 /// <see cref="RuleRefusal"/> for the refusals the state-neutral compiler raises itself, or a member of a document
@@ -250,20 +238,4 @@ public sealed class RuleException : ArgumentException {
             subject: Subject
         )
     );
-}
-/// <summary>The runtime refusals the evaluator itself draws while firing; a document project's own effect arms
-/// declare their own tagged enum and report through the same ledger.</summary>
-public enum RuleEffectRefusal : byte {
-    /// <summary>A binding, gate conjunct, or effect expression overflowed, divided by zero, left a function's
-    /// domain, or read a fact with no number.</summary>
-    [Refusal(door: "world.rule.effect", condition: "a rule expression overflows, divides by zero, leaves a function's domain, or produces an invalid stack result", kind: RefusalKind.Verdict)]
-    Arithmetic,
-
-    /// <summary>The host's mutation door refused the effect's composition, validation, or admission.</summary>
-    [Refusal(door: "world.rule.effect", condition: "a rule-produced mutation refuses composition, validation, or admission", kind: RefusalKind.Verdict)]
-    MutationRejected,
-
-    /// <summary>A dynamic table key named an entry its table does not carry.</summary>
-    [Refusal(door: "world.rule.effect", condition: "a '$table:' read names a key its table does not carry", kind: RefusalKind.Verdict)]
-    TableKeyMissing,
 }

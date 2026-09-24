@@ -16,7 +16,7 @@
         "type": "string"
       },
       "document": {
-        "description": "The referenced world\u0027s document path (e.g. \u0022dive.world.json\u0022), authored verbatim. Mutually exclusive with Owner/World.",
+        "description": "The referenced world\u0027s document name (e.g. \u0022modules/dive\u0022, see WorldDocumentName), authored verbatim and relative to the referring document. Mutually exclusive with Owner/World.",
         "type": [
           "string",
           "null"

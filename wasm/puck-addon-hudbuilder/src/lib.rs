@@ -50,16 +50,16 @@ use puck_stdlib::abi;
 /// shape and migrates for the same reason).
 const HUD_SECTION_NAME: &str = "Hud";
 
-/// `[MutationKind(ordinal: 41, section: WorldSection.Hud)] WorldMutation.UpsertHudPanel`'s declared
+/// `[MutationKind(ordinal: 39, section: WorldSection.Hud)] WorldMutation.UpsertHudPanel`'s declared
 /// dispatch ordinal.
-const KIND_UPSERT_HUD_PANEL: u8 = 41;
-/// `[MutationKind(ordinal: 42, section: WorldSection.Hud)] WorldMutation.RemoveHudPanel`'s declared
+const KIND_UPSERT_HUD_PANEL: u8 = 39;
+/// `[MutationKind(ordinal: 40, section: WorldSection.Hud)] WorldMutation.RemoveHudPanel`'s declared
 /// dispatch ordinal — deliberately NOT granted to the `badkind` variant, so an act naming it is
 /// refused by the deciding row's verb mask.
-const KIND_REMOVE_HUD_PANEL: u8 = 42;
-/// `[MutationKind(ordinal: 43, section: WorldSection.Hud)] WorldMutation.UpsertHudElement`'s declared
+const KIND_REMOVE_HUD_PANEL: u8 = 40;
+/// `[MutationKind(ordinal: 41, section: WorldSection.Hud)] WorldMutation.UpsertHudElement`'s declared
 /// dispatch ordinal.
-const KIND_UPSERT_HUD_ELEMENT: u8 = 43;
+const KIND_UPSERT_HUD_ELEMENT: u8 = 41;
 
 /// The maximum payload size the host's dispatch door admits without a `PayloadTooLarge` refusal
 /// (`Puck.Scripting.AddonAbi.MaxMutationPayloadBytes`). Mirrored here as a literal — this crate has
@@ -274,10 +274,10 @@ mod main_behavior {
 mod badkind {
     //! Grant grammar: `world.grant addon:<name> mutate section:hud verbs:UpsertHudPanel budget:4`
     //! (`RemoveHudPanel` DELIBERATELY OMITTED from `verbs:`). Once the Mutate handle is granted, this
-    //! guest submits `RemoveHudPanel`(42) with an otherwise well-formed payload — the mask check
+    //! guest submits `RemoveHudPanel`(40) with an otherwise well-formed payload — the mask check
     //! (dispatch-door stage 2) refuses it as `AttenuatedToEmpty` BEFORE decode ever runs, so the
     //! payload's content is irrelevant. Reads that verdict off its own Answer, then reports it via a
-    //! well-formed `UpsertHudPanel` act (kind 41, which IS granted) into panel `report-badkind`, then
+    //! well-formed `UpsertHudPanel` act (kind 39, which IS granted) into panel `report-badkind`, then
     //! goes quiet.
 
     use puck_stdlib::{abi, CAP_MUTATE, Handle, InCellKind, Inputs, Outputs, Verdict};
@@ -394,7 +394,7 @@ mod badkind {
 mod badjson {
     //! Grant grammar: `world.grant addon:<name> mutate section:hud verbs:UpsertHudPanel budget:4`.
     //! Once granted, this guest walks a FIXED SEQUENCE of six deliberately malformed
-    //! `UpsertHudPanel`(41, which IS granted) payloads — ONE case per tick, in order, each read back
+    //! `UpsertHudPanel`(39, which IS granted) payloads — ONE case per tick, in order, each read back
     //! off its own Answer before the next is sent — every one of which the JSON-payload door must
     //! refuse `MalformedPayload`: (0) an unterminated object (invalid syntax), (1) invalid UTF-8
     //! bytes, (2) a duplicate `"id"` member, (3) an unknown member (`"bogus"`), (4) nesting past

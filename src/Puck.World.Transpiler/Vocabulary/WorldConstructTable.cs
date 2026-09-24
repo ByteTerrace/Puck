@@ -9,6 +9,12 @@ namespace Puck.World.Transpiler.Vocabulary;
 /// every reader one description it made up and watch all of them follow.</remarks>
 public sealed class WorldConstructTable {
     private readonly Dictionary<(string Enclosing, string Keyword), WorldConstruct> m_byKey;
+    // The lowering and the parser ask these per statement, so each is answered once, here, rather than by a scan
+    // of the whole table at every ask.
+    private readonly Dictionary<string, IReadOnlyList<WorldConstruct>> m_inside;
+    private readonly Dictionary<string, WorldConstruct> m_byKeyword;
+    private readonly Dictionary<string, WorldConstruct> m_rootByKeyword;
+    private readonly HashSet<string> m_embeddedLanguages;
 
     /// <summary>Initializes a table over <paramref name="constructs"/>.</summary>
     /// <param name="constructs">The described constructs; no two may share both an enclosing construct and a
@@ -39,6 +45,37 @@ public sealed class WorldConstructTable {
         Constructs = [.. constructs
             .OrderBy(keySelector: static construct => (construct.Enclosing ?? ""), comparer: StringComparer.Ordinal)
             .ThenBy(keySelector: static construct => construct.Keyword, comparer: StringComparer.Ordinal)];
+        m_inside = Constructs
+            .GroupBy(keySelector: static construct => (construct.Enclosing ?? ""), comparer: StringComparer.Ordinal)
+            .ToDictionary(
+                comparer: StringComparer.Ordinal,
+                elementSelector: static group => ((IReadOnlyList<WorldConstruct>)Array.AsReadOnly(array: group.ToArray())),
+                keySelector: static group => group.Key
+            );
+        // A keyword names the construct written at the root when one is, and otherwise the one construct that
+        // spells it; a keyword several nested constructs share and the root does not names none of them.
+        m_byKeyword = [];
+        foreach (var group in Constructs.GroupBy(keySelector: static construct => construct.Keyword, comparer: StringComparer.Ordinal)) {
+            var matches = group.ToArray();
+            var chosen = (matches.FirstOrDefault(predicate: static candidate => (candidate.Enclosing is null)) ?? ((matches.Length == 1)
+                ? matches[0]
+                : null
+            ));
+
+            if (chosen is not null) {
+                m_byKeyword[group.Key] = chosen;
+            }
+        }
+        m_embeddedLanguages = new(
+            collection: Constructs
+                .Where(predicate: static construct => (construct.Shape == WorldConstructShape.EmbeddedLanguage))
+                .Select(selector: static construct => construct.Keyword),
+            comparer: StringComparer.OrdinalIgnoreCase
+        );
+        m_rootByKeyword = new(comparer: StringComparer.OrdinalIgnoreCase);
+        foreach (var construct in Inside(enclosing: null)) {
+            _ = m_rootByKeyword.TryAdd(key: construct.Keyword, value: construct);
+        }
     }
 
     private static string Cell(string text) => ((text.Length == 0)
@@ -107,6 +144,15 @@ public sealed class WorldConstructTable {
             return;
         }
 
+        if (construct.Sugar.FromRows) {
+            _ = output.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"Read back as `{construct.Keyword}` from the rows it generated when {construct.Sugar.Condition}; otherwise {construct.Sugar.Fallback}."
+            );
+
+            return;
+        }
+
         var requirements = new List<string>();
 
         if (construct.RequiredKeys.Count > 0) {
@@ -160,11 +206,10 @@ public sealed class WorldConstructTable {
     /// <param name="enclosing">An enclosing construct's keyword, or <see langword="null"/> for the document's own
     /// root.</param>
     /// <returns>The constructs legal there, in table order.</returns>
-    public IReadOnlyList<WorldConstruct> Inside(string? enclosing) => [.. Constructs.Where(predicate: construct => string.Equals(
-        a: (construct.Enclosing ?? ""),
-        b: (enclosing ?? ""),
-        comparisonType: StringComparison.Ordinal
-    ))];
+    public IReadOnlyList<WorldConstruct> Inside(string? enclosing) => m_inside.GetValueOrDefault(
+        defaultValue: [],
+        key: (enclosing ?? "")
+    );
     /// <summary>Returns the root dispatch arm of the construct written as <paramref name="keyword"/> at the
     /// document's own root.</summary>
     /// <param name="keyword">The keyword as written.</param>
@@ -173,13 +218,7 @@ public sealed class WorldConstructTable {
     /// <remarks>The lowering's own dispatch: a block whose identifier names no root construct takes the generic
     /// path, which is what a block nested inside another construct is. The keyword is matched without regard to
     /// case, matching how a block's identifier reaches the lowering.</remarks>
-    public WorldRootArm? RootArmOf(string keyword) => Inside(enclosing: null)
-        .FirstOrDefault(predicate: construct => string.Equals(
-        a: construct.Keyword,
-        b: keyword,
-        comparisonType: StringComparison.OrdinalIgnoreCase
-    ))
-        ?.RootArm;
+    public WorldRootArm? RootArmOf(string keyword) => m_rootByKeyword.GetValueOrDefault(key: keyword)?.RootArm;
     /// <summary>Returns the root dispatch arm of the constructs that write <paramref name="documentKey"/>, the
     /// document's own root key.</summary>
     /// <param name="documentKey">A key on the document's root object, as the document spells it.</param>
@@ -215,14 +254,7 @@ public sealed class WorldConstructTable {
     /// <returns><see langword="true"/> when a described construct of that keyword is an embedded language.</returns>
     /// <remarks>An embedded language's own name is matched without regard to case, matching how the block's
     /// lowering finds its dialect; every other keyword is matched exactly.</remarks>
-    public bool IsEmbeddedLanguage(string identifier) => Constructs.Any(predicate: construct => (
-        (construct.Shape == WorldConstructShape.EmbeddedLanguage) &&
-        string.Equals(
-        a: construct.Keyword,
-        b: identifier,
-        comparisonType: StringComparison.OrdinalIgnoreCase
-    )
-    ));
+    public bool IsEmbeddedLanguage(string identifier) => m_embeddedLanguages.Contains(item: identifier);
     /// <summary>Returns the one construct whose keyword is <paramref name="keyword"/>, wherever it is
     /// written.</summary>
     /// <param name="keyword">The keyword as written.</param>
@@ -231,20 +263,10 @@ public sealed class WorldConstructTable {
     /// keyword.</returns>
     /// <remarks>The root spelling wins when a keyword is also meaningful in a nested construct. A caller that
     /// knows the nesting takes the contextual overload.</remarks>
-    public bool TryGet(string keyword, out WorldConstruct? construct) {
-        var matches = Constructs.Where(predicate: candidate => string.Equals(
-            a: candidate.Keyword,
-            b: keyword,
-            comparisonType: StringComparison.Ordinal
-        )).ToArray();
-
-        construct = matches.FirstOrDefault(predicate: static candidate => (candidate.Enclosing is null));
-        if ((construct is null) && (matches.Length == 1)) {
-            construct = matches[0];
-        }
-
-        return (construct is not null);
-    }
+    public bool TryGet(string keyword, out WorldConstruct? construct) => m_byKeyword.TryGetValue(
+        key: keyword,
+        value: out construct
+    );
     /// <summary>Returns the construct written as <paramref name="keyword"/> inside
     /// <paramref name="enclosing"/>.</summary>
     /// <param name="enclosing">The enclosing construct's keyword, or <see langword="null"/> for the document's own

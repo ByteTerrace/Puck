@@ -13,12 +13,18 @@ people and tools stable names for content that may change. `ContentPetname`
 turns a hash into a short label such as `Willow-Lantern-Nine` when raw hex would
 be awkward to read aloud.
 
-The library carries three codec families. `PngEncoder` and `PngDecoder` round-trip 8-bit
+The library carries five codec families. `PngEncoder` and `PngDecoder` round-trip 8-bit
 RGBA stills and APNG animations for capture frames and baked font atlases.
+`Puck.Assets.Textures` compresses texture levels to BC4, BC5, BC6H and BC7 and
+builds their tile-aware mip chains, with an exact decoder beside each encoder.
 `QrEncoder` goes the other direction—a payload string in, a scannable module
 grid out; there is no QR decoder here. `AutomaticIntegerSequenceCodec` carries
 compiled numeration/DFAO programs as compact, deterministic, versioned binary,
-validating the byte structure under explicit allocation ceilings. Puck.Assets
+validating the byte structure under explicit allocation ceilings.
+`ChunkContainer` is the one container Puck's binary products share: a format's
+magic and header, then content-hashed, 8-byte-aligned chunks, written with the
+same canonical primitives (`CanonicalBinaryWriterExtensions`,
+`CanonicalBinaryReader`) the automatic-sequence codec uses. Puck.Assets
 does not decode fonts, shaders, or documents, and it does not mount archives,
 layer sources, or normalize paths.
 
@@ -40,6 +46,9 @@ parameters, return values, and exceptions.
   key even when their paths differ.
 - *Bounded reuse:* `ContentAddressedLruCache<TValue>` retains recently used
   decoded values and evicts the least recently used value at a fixed capacity.
+- *One pin grammar:* `ContentPin` (`sha256/<hex64>`) and `AssetContentHash`
+  (`sha256-64/<hex16>`) are the only code that computes, parses, and prints a
+  content pin, and both refuse anything but lowercase canonical text.
 - *Persistent deduplication:* `ContentAddressedStore` writes one immutable
   object for each full SHA-256 digest and avoids rewriting bytes already held.
 - *Stable names and derivations:* named refs point to stored objects, while
@@ -49,6 +58,9 @@ parameters, return values, and exceptions.
 - *A minimal PNG/APNG codec:* `PngEncoder` and `PngDecoder` write and read
   8-bit RGBA stills and full-frame APNG animations—just enough to round-trip
   the files Puck itself writes and bakes, not a general image library.
+- *Deterministic block compression:* `Bc4Codec`, `Bc5Codec`, `Bc6hCodec` and
+  `Bc7Codec` encode 4x4 blocks with the same bytes on every machine, and
+  `TextureMipChain` filters a tiled atlas into mips that never mix tiles.
 - *A spec-correct QR encoder:* `QrEncoder` builds ISO/IEC 18004 byte-mode
   symbols—auto version selection, all four error-correction levels, and a
   CPU-rasterizable module grid—from a payload string.
@@ -56,6 +68,9 @@ parameters, return values, and exceptions.
   preserves positional or quadratic-Ostrowski numeration, the reachable DFAO
   graph, and its arbitrary-width output alphabet. Re-encoding decoded bytes is
   byte-identical, so the full SHA-256 digest is a stable persistent identity.
+- *One chunk container:* `ChunkContainer` stores keyed, content-hashed,
+  8-byte-aligned chunks under a format's own magic and header. A compiled world
+  and a `PBAK` bake are both one; a decode reads a container whole or refuses it.
 - *A small dependency surface:* the package depends on the .NET base class
   library, `System.IO.Hashing`, and `Puck.Maths` (the QR encoder's field
   arithmetic), and does not perform dependency-injection wiring.
@@ -120,16 +135,16 @@ store.SetRef(
     hash: objectHash);
 
 if (
-    store.TryResolveRef(category: "dialogue", name: "intro", hash: out var resolvedHash) &&
-    store.TryGet(hash: resolvedHash, content: out var storedBytes)
+    store.TryResolveRef(category: "dialogue", name: "intro", hash: out var resolvedPin) &&
+    store.TryGet(pin: resolvedPin, content: out var storedBytes)
 ) {
-    Console.WriteLine($"{ContentPetname.From(hashHex: resolvedHash)}: {storedBytes.Length} bytes");
+    Console.WriteLine($"{ContentPetname.From(hashHex: resolvedPin.Hex)}: {storedBytes.Length} bytes");
 }
 ```
 
-`Put` returns a canonical `sha256/{64 lowercase hex characters}` address.
-Writing identical bytes again returns the same address and keeps the existing
-object.
+`Put` returns the object's `ContentPin`, whose text form is
+`sha256/{64 lowercase hex characters}`. Writing identical bytes again returns
+the same pin and keeps the existing object.
 
 ## Supplying bytes
 
@@ -162,8 +177,18 @@ problems:
 
 | Representation | Text form | Use it for |
 |---|---|---|
-| `AssetContentHash` | `sha256-64/{16 lowercase hex characters}` | Compact in-memory identities, cache keys, and diagnostics within a running process. |
-| `ContentAddressedStore` address | `sha256/{64 lowercase hex characters}` | Persistent objects, named refs, derived artifacts, and interchange between runs. |
+| `AssetContentHash` | `sha256-64/{16 lowercase hex characters}` | Compact in-memory identities, cache keys, document pins, and diagnostics. |
+| `ContentPin` | `sha256/{64 lowercase hex characters}` | Persistent objects, named refs, derived artifacts, release files and manifests, and interchange between runs. |
+
+Each type is the one place its form is computed, parsed, and printed.
+`ContentPin.Compute` hashes a span or a stream, `ContentPin.OfFile` streams a
+file, and `ContentPin.FromDigest` wraps a digest a caller built incrementally.
+`ContentPin.TryParse` and `AssetContentHash.TryParse` admit only the canonical
+text: the exact prefix followed by lowercase hexadecimal digits of the exact
+length. Uppercase digits, whitespace, and any other length are refused, so a
+pin that one reader admits, every reader admits, and it names the same object
+path on a case-sensitive file system. `ContentPin.TryParseHex` reads the bare
+64 digits that an object file name or a derived-cache key carries.
 
 `AssetContentHash.Compute` hashes the payload and stores the first eight digest
 bytes in a `ulong`. The 64-bit result is intentionally compact: it is suitable
@@ -206,6 +231,11 @@ refs/<category>/<name>  a one-line sha256/<hex> pointer
 tmp/                    write staging before an object or ref is promoted
 ```
 
+`ContentAddressedStore.ObjectPath(root, pin)` and
+`ContentAddressedStore.ObjectRelativePath(pin)` state that layout once. A
+reader that shares the tree without opening a store, such as a launcher release
+source or an HTTP mirror of the tree, addresses objects through them.
+
 Object writes are staged in `tmp/` and moved into place. If another writer has
 already stored the same object, the duplicate temporary file is discarded.
 Objects are never overwritten because their address is derived from their
@@ -219,6 +249,33 @@ which is how the derived-cache helpers use `derived/<kind>`.
 `SetDerived(kind, inputHash, outputHash)` records the output produced from one
 input. `TryResolveDerived` performs the inverse lookup, allowing a build tool
 to skip work while the input content remains unchanged.
+
+## Replacing a file atomically
+
+`AtomicFile` replaces one file so that a reader, or a process that crashes
+mid-write, never finds half of it behind the real name. `WriteAllBytes` and
+`WriteAllText` take the whole content; `Write` hands a stream to a writer that
+produces it incrementally. Each writes a temporary file beside the destination,
+flushes it to disk, and renames it over the destination:
+
+```csharp
+AtomicFile.WriteAllText(
+    contents: manifest.Version,
+    path: Path.Combine(cacheRoot, "current"));
+```
+
+A missing parent directory is created. A write that fails at any step, including
+a writer that throws, leaves the old file in place and deletes its temporary
+file. A reader that holds the old file memory-mapped keeps seeing the old bytes
+and does not block the replacement: when Windows refuses the rename over a
+mapped file, `AtomicFile` falls back to `File.Replace`, which moves the old file
+aside. On Unix the replacement keeps the destination's file mode, or takes the
+`unixCreateMode` the caller names, such as owner-only for a private key. A
+destination spelled in another case than the entry a case-insensitive file
+system already holds keeps that entry's name.
+
+The store does not use `AtomicFile` for its own writes. It stages in `tmp/` so
+that `ListRefs` never sees a temporary file beside a ref.
 
 ## Naming content for people
 
@@ -258,6 +315,37 @@ round-trip the files Puck itself writes and bakes, including `Puck.Text`'s
 font atlas artifacts (`FontAtlasArtifactWriter` / `FontAtlasImageDataLoader`)
 and `Puck.Recording`'s capture stills (`CaptureSink`).
 
+## Block-compressed textures
+
+`Textures/` compresses texture levels for GPU sampling. `TextureFormat` names
+the uncompressed layouts (R8, RG8, RGBA8, RGBA16F) and the block formats, and
+`TextureFormats` gives a level's extent and byte size. `TextureCompression`
+encodes and decodes a whole level block by block, repeating edge texels into a
+partial block; the codecs work one block at a time:
+
+| Codec | Encodes | Decoder reads | Stored exactly |
+|---|---|---|---|
+| `Bc4Codec` | One 8-bit channel: the better of the eight-value and six-value palettes over the block's extremes | Both palettes | One or two distinct values |
+| `Bc5Codec` | Two 8-bit channels, each a BC4 block | Both palettes | One or two values a channel |
+| `Bc6hCodec` | Three unsigned halves in the one-region modes 11 to 14 | Modes 11 to 14; reserved modes as zero | One value |
+| `Bc7Codec` | RGBA8 in mode 6, or mode 5 when alpha runs apart from color | Modes 4, 5 and 6 | One color |
+
+Each encoder is integer arithmetic plus, for its least-squares endpoint refit,
+scalar double arithmetic in a written order, so its bytes are the same on every
+machine. Each decoder is exact to its format, so it is the encoder's test
+oracle, and it refuses the modes it does not read: BC7's partitioned modes and
+BC6H's two-region modes, which the encoders never write.
+
+`TextureMipChain` builds a mip chain over an atlas of square power-of-two tiles:
+each level halves with a 2x2 box inside one tile, and the chain ends where a
+tile is one texel. Its filters average unsigned-normalized codes, average sRGB
+color in linear light through the exact `ImageSourceConversion.Srgb8ToLinear`
+and `LinearToSrgb8`, renormalize octahedral normals, keep the majority of an
+identity, and average halves; coverage weights keep empty texels out of the
+average. `OctahedralNormal` stores a unit direction in two 8-bit codes. The SDF
+baker stores its textures through these types
+([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
+
 ## QR encoding
 
 `Qr/` is a deterministic, spec-correct ISO/IEC 18004 byte-mode encoder:
@@ -281,6 +369,42 @@ convention to the shared carrier. What stays here is what is genuinely the
 standard's: the block-count and capacity tables, the alignment-pattern
 coordinates, the format/version BCH codes, masking, and matrix placement.
 
+## Chunk containers
+
+`ChunkContainer` is the one binary container every chunked Puck product uses: a
+compiled world (`Puck.World.CompiledWorld`, magic `PWLD`) and a Game Boy art
+bake (`PbakBundle`, magic `PBAK`). A format supplies its four-byte magic, a
+format version, and a header whose bytes it owns; the container supplies the
+chunk layout and the refusals. Every integer is written by
+`CanonicalBinaryWriterExtensions`—minimal little-endian base-128 unsigned
+integers, sign-and-magnitude integers, length-prefixed UTF-8 text, and
+little-endian 64-bit words—and `CanonicalBinaryReader` accepts only that
+spelling, so equal containers are equal bytes.
+
+```text
+magic[4]  formatVersion:varuint  headerLength:varuint  header  chunkCount:varuint
+chunk:
+  code[4]  version:varuint
+  inputCount:varuint  { name:text  present:byte  [hash:u64] }  (ascending ordinal name order)
+  payloadLength:varuint  payloadHash:u64
+  zero padding to the next multiple of 8, counted from the container's first byte
+  payload
+```
+
+A chunk's `ChunkCode` is four printable ASCII characters naming the chunk and the
+derivation that wrote it. Its version is that derivation's version, and its
+inputs (`ChunkInput`) are what the derivation read beyond what the header keys,
+each named as the derivation spells it, with the input's 64-bit content hash or
+its absence. The payload's `AssetContentHash` is checked on every decode. The
+container keeps chunks in the order they were written and lets a code repeat; a
+format that allows each code once, such as a compiled world, refuses a repeat
+itself. `ChunkContainer.Decode` refuses, with `InvalidDataException`, a wrong
+magic, a noncanonical integer, nonzero padding, a payload whose hash disagrees,
+inputs out of order, a count or length the remaining bytes cannot hold, a
+container past its byte ceiling, and trailing bytes, so a decode never allocates
+more than the bytes it was given can justify. Decoded headers and payloads are slices of the bytes the
+caller supplied, never copies.
+
 ## Core types
 
 This table is the conceptual map. The
@@ -294,18 +418,24 @@ surface.
 | `AssetContentHash` | Holds the compact 64-bit SHA-256-derived identity used for process-lifetime caching. |
 | `ContentAddressedLruCache<TValue>` | Retains a fixed number of decoded values by content identity. |
 | `ContentAddressedStore` | Persists immutable objects under full SHA-256 addresses and manages named and derived refs. |
+| `AtomicFile` | Replaces one file atomically through a temporary file beside it, leaving nothing behind on failure. `world.save`, the forge console's cartridge and draft writes, an owned world's synced basis-chain and tip documents, and the `.puck` compile cache's persisted entries all write through it. |
 | `ContentPetname` | Produces a deterministic three-word label from a hexadecimal content hash. |
 | `PngEncoder` / `PngDecoder` | Write and read 8-bit RGBA PNG stills and full-frame APNG animations. |
 | `PngImage` / `PngAnimation` / `PngAnimationFrame` | The decoded still and animation shapes `PngDecoder` returns. |
+| `TextureFormat` / `TextureColorSpace` / `TextureFormats` | Texture level layouts, color spaces, and a level's extent and size. |
+| `Bc4Codec` / `Bc5Codec` / `Bc6hCodec` / `Bc7Codec` / `TextureCompression` | Encode and decode block-compressed blocks and whole levels. |
+| `TextureMipChain` / `TextureMipFilter` / `OctahedralNormal` | Build tile-aware mip chains and store unit directions in two channels. |
 | `QrEncoder` | Builds an ISO/IEC 18004 byte-mode `QrMatrix` from a payload string and error-correction level. |
 | `QrMatrix` | The resolved module grid—placement, masking, and a B8G8R8A8 raster. |
 | `QrErrorCorrectionLevel` / `QrErrorCorrection` | The four EC levels and their one canonical letter spelling/parse. |
 | `QrCapacityTable` / `QrReedSolomon` | The version/level block-and-capacity tables and the standard's Reed–Solomon binding. |
+| `ChunkContainer` / `ContainerChunk` / `ChunkCode` / `ChunkInput` | The shared chunk container, one keyed and content-hashed chunk, its four-character code, and one input a chunk's derivation read. |
+| `CanonicalBinaryWriterExtensions` / `CanonicalBinaryReader` | Write and read the canonical binary primitives the automatic-sequence codec and the chunk container share. |
 
 ## Design notes
 
-- **Bytes stay mostly untyped.** Beyond the PNG codec, decoders, serializers,
-  GPU uploaders, and format validation belong to consumers.
+- **Bytes stay mostly untyped.** Beyond the PNG and texture codecs, decoders,
+  serializers, GPU uploaders, and format validation belong to consumers.
 - **Paths stay with the caller.** There is no virtual file system, mount table,
   fallback search, or normalization policy in this package.
 - **The two hash widths are deliberate.** A process cache uses the compact
@@ -333,6 +463,17 @@ one codeword byte. `AutomaticSequenceCodecTests` pins both binary artifact
 digests, checks byte-identical re-encoding for save and network crossings,
 exercises positional and Ostrowski programs, and proves that malformed or
 over-limit input is refused before mathematical verification.
+`TextureCodecLawTests` round-trips every representable block exactly (every
+uniform value, and two-endpoint blocks each format holds), reads hand-built
+blocks field by field, bounds the error on a natural test image, and pins each
+encoder's bytes for that image by SHA-256. `TextureMipChainLawTests` proves no
+level mixes tiles under any filter, and checks the linear-light sRGB average,
+renormalized and coverage-weighted normals, the majority identity, and the
+octahedral pair's angle.
+`ChunkContainerLawTests` round-trips a container byte for byte with every payload
+aligned, and refuses a wrong magic, a changed payload, nonzero padding, a
+noncanonical integer, trailing and missing bytes, a container past its byte
+ceiling, and a count no remaining bytes could hold.
 
 ## Building the package
 

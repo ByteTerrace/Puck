@@ -1,0 +1,22 @@
+# The compiler is hidden from this World's search path.
+# The ink row names the shipped ink pipeline by its source, which the build packaged into the World's package store.
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+# The tint row names a source no shipped world names, so the store holds no package for it and nothing compiles it.
+pipeline.wait tint compiled 40
+# The shipped pipeline renders from its package: exposure zero, as the one initialization frame after a reset.
+pipeline.set ink simulation {"decay":0.987}
+pipeline.set ink visualize {"exposure":0}
+pipeline.reset ink
+pipeline.wait ink submitted 1 10
+pipeline.capture ink {run}/shipped.png
+pipeline.wait ink captured 10
+# The same tint instance names the tint package, whose binaries the runner built before the boot with the compiler it sees.
+world.row.set views.pipelines {"name":"tint","source":"{run}/tint"}
+pipeline.reload tint
+pipeline.wait tint compiled 40
+pipeline.wait tint installed 10
+pipeline.reset tint
+pipeline.wait tint submitted 1 10
+pipeline.capture tint {run}/package.png
+pipeline.wait tint captured 10

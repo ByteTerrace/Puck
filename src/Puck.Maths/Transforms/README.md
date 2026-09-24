@@ -209,9 +209,9 @@ Deep-tier mirror at longer lengths), the fast route against a direct O(N^2)
 sum built from the same `SinCosTurns` kernel with a different schedule, the wiring
 of the real wrappers and the pointwise product, and refusals.
 
-`puck bench --filter '*Ntt*'`, `'*Wht*'`, `'*Fft*'` and `'*Dct*'` measure
+`puck bench kernels --filter '*Ntt*'`, `'*Wht*'`, `'*Fft*'` and `'*Dct*'` measure
 `Forward`/`Inverse` latency on a pristine input per invocation and each
-transform against its O(N^2) baseline. `puck bench --filter
+transform against its O(N^2) baseline. `puck bench kernels --filter
 '*TransformPlanCreation*'` measures the time and allocation cost of building
 the reusable plans; none gates a value.
 

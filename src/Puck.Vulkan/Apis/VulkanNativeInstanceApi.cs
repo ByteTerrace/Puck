@@ -31,7 +31,6 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     private readonly Lock m_syncRoot = new();
 
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> m_createInstance;
-    private unsafe delegate* unmanaged[Cdecl]<nint, nint, void> m_destroyInstance;
     private unsafe delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult> m_enumerateInstanceExtensionProperties;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeInstanceApi"/> class.</summary>
@@ -63,15 +62,6 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return m_createInstance;
         }
     }
-    private unsafe delegate* unmanaged[Cdecl]<nint, nint, void> GetDestroyInstance() {
-        lock (m_syncRoot) {
-            if (m_destroyInstance is not null) {
-                return m_destroyInstance;
-            }
-            m_destroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveExport(functionName: "vkDestroyInstance"));
-            return m_destroyInstance;
-        }
-    }
     private unsafe delegate* unmanaged[Cdecl]<byte*, uint*, VkExtensionProperties*, VkResult> GetEnumerateInstanceExtensionProperties() {
         lock (m_syncRoot) {
             if (m_enumerateInstanceExtensionProperties is not null) {
@@ -100,7 +90,16 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
                     : "INFO"
             ));
 
-            Console.Error.WriteLine(value: $"[vulkan-debug] {label}: {Marshal.PtrToStringUTF8(ptr: callbackData->Message)}");
+            // The type leads the line so a reader can tell a validation finding from the loader's own general
+            // notices, such as a duplicate third-party layer on the machine, which are not about this program.
+            var type = (((messageTypes & 0x2u) != 0u)
+                ? "validation"
+                : (((messageTypes & 0x4u) != 0u)
+                    ? "performance"
+                    : "general"
+            ));
+
+            Console.Error.WriteLine(value: $"[vulkan-debug] {type} {label}: {Marshal.PtrToStringUTF8(ptr: callbackData->Message)}");
         }
 
         return 0;
@@ -129,15 +128,12 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     }
 
     /// <inheritdoc/>
-    public nint CreateDebugMessenger(nint instanceHandle) {
-        if (0 == instanceHandle) {
+    public nint CreateDebugMessenger(VulkanInstanceCommands instance) {
+        if (instance is null) {
             return 0;
         }
 
-        var createMessenger = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsMessengerCreateInfoExt, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
-            functionName: "vkCreateDebugUtilsMessengerEXT"u8,
-            instanceHandle: instanceHandle
-        ));
+        var createMessenger = instance.CreateDebugUtilsMessengerExt;
 
         // Best-effort: the entry point is absent unless VK_EXT_debug_utils is enabled and supported.
         if (createMessenger is null) {
@@ -147,7 +143,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         var createInfo = BuildMessengerCreateInfo();
 
         return ((VkResult.Success == createMessenger(
-            instanceHandle,
+            instance.Handle,
             in createInfo,
             0,
             out var messengerHandle
@@ -157,18 +153,18 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         );
     }
     /// <inheritdoc/>
-    public VkResult CreateInstance(VulkanInstanceCreateRequest request, out nint instanceHandle) {
+    public VkResult CreateInstance(VulkanInstanceCreateRequest request, out VulkanInstanceCommands? instance) {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.ApplicationName);
 
-        instanceHandle = 0;
+        instance = null;
 
         using var applicationName = Utf8StringScope.Create(value: request.ApplicationName);
         using var engineName = Utf8StringScope.Create(value: "Puck");
-        using var extensionNames = Utf8StringArrayScope.Create(
+        using var extensionNames = Utf8StringArray.Create(
             allocator: m_allocator,
             values: request.ExtensionNames
         );
-        using var layerNames = Utf8StringArrayScope.Create(
+        using var layerNames = Utf8StringArray.Create(
             allocator: m_allocator,
             values: request.LayerNames
         );
@@ -206,11 +202,26 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             );
             var createInstance = GetCreateInstance();
 
-            return createInstance(
+            var result = createInstance(
                 in createInfo,
                 0,
-                out instanceHandle
+                out var instanceHandle
             );
+
+            if (
+                (VkResult.Success == result) &&
+                (0 != instanceHandle)
+            ) {
+                try {
+                    instance = new VulkanInstanceCommands(instanceHandle: instanceHandle);
+                } catch {
+                    DestroyUnresolvedInstance(instanceHandle: instanceHandle);
+
+                    throw;
+                }
+            }
+
+            return result;
         } finally {
             if (0 != createInfo.ApplicationInfo) {
                 m_allocator.Free(ptr: createInfo.ApplicationInfo);
@@ -218,37 +229,27 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         }
     }
     /// <inheritdoc/>
-    public void DestroyDebugMessenger(nint instanceHandle, nint messengerHandle) {
+    public void DestroyDebugMessenger(VulkanInstanceCommands instance, nint messengerHandle) {
         if (
-            (0 == instanceHandle) ||
-            (0 == messengerHandle)
+            (instance is null) ||
+            (instance.DestroyDebugUtilsMessengerExt is null)
         ) {
             return;
         }
 
-        var destroyMessenger = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
-            functionName: "vkDestroyDebugUtilsMessengerEXT"u8,
-            instanceHandle: instanceHandle
-        ));
-
-        if (destroyMessenger is null) {
-            return;
-        }
-
-        destroyMessenger(
-            instanceHandle,
-            messengerHandle,
-            0
+        instance.Destroy(
+            destroy: instance.DestroyDebugUtilsMessengerExt,
+            handle: messengerHandle
         );
     }
     /// <inheritdoc/>
-    public void DestroyInstance(nint instanceHandle) {
-        if (0 == instanceHandle) {
+    public void DestroyInstance(VulkanInstanceCommands instance) {
+        if (instance is null) {
             return;
         }
 
-        GetDestroyInstance()(
-            instanceHandle,
+        instance.DestroyInstance(
+            instance.Handle,
             0
         );
     }
@@ -309,6 +310,22 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         return false;
     }
 
+    // An instance whose command table could not be built is still a live VkInstance; destroy it before the failure
+    // propagates, resolving vkDestroyInstance alone because no table exists to hold it.
+    private static unsafe void DestroyUnresolvedInstance(nint instanceHandle) {
+        var destroyInstance = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
+            functionName: "vkDestroyInstance"u8,
+            instanceHandle: instanceHandle
+        ));
+
+        if (null != destroyInstance) {
+            destroyInstance(
+                instanceHandle,
+                0
+            );
+        }
+    }
+
     private sealed class Utf8StringScope : IDisposable {
         private Utf8StringScope(nint pointer) {
             Pointer = pointer;
@@ -322,71 +339,6 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         public void Dispose() {
             if (0 != Pointer) {
                 Marshal.FreeCoTaskMem(ptr: Pointer);
-            }
-        }
-    }
-    private sealed class Utf8StringArrayScope : IDisposable {
-        private readonly IAllocator m_allocator;
-        private readonly nint[] m_stringPointers;
-
-        private Utf8StringArrayScope(IAllocator allocator, nint pointer, nint[] stringPointers) {
-            m_allocator = allocator;
-            Pointer = pointer;
-            m_stringPointers = stringPointers;
-        }
-
-        public nint Pointer { get; }
-
-        public static Utf8StringArrayScope Create(IAllocator allocator, IReadOnlyList<string> values) {
-            ArgumentNullException.ThrowIfNull(allocator);
-            ArgumentNullException.ThrowIfNull(values);
-
-            if (0 == values.Count) {
-                return new Utf8StringArrayScope(
-                    allocator: allocator,
-                    pointer: 0,
-                    stringPointers: []
-                );
-            }
-
-            var stringPointers = new nint[values.Count];
-            var arrayPointer = allocator.Alloc(size: (IntPtr.Size * values.Count));
-
-            try {
-                for (var index = 0; (index < values.Count); index++) {
-                    stringPointers[index] = Marshal.StringToCoTaskMemUTF8(s: values[index]);
-                    Marshal.WriteIntPtr(
-                        ofs: (index * IntPtr.Size),
-                        ptr: arrayPointer,
-                        val: stringPointers[index]
-                    );
-                }
-
-                return new Utf8StringArrayScope(
-                    allocator: allocator,
-                    pointer: arrayPointer,
-                    stringPointers: stringPointers
-                );
-            } catch {
-                for (var index = 0; (index < stringPointers.Length); index++) {
-                    if (0 != stringPointers[index]) {
-                        Marshal.FreeCoTaskMem(ptr: stringPointers[index]);
-                    }
-                }
-
-                allocator.Free(ptr: arrayPointer);
-                throw;
-            }
-        }
-        public void Dispose() {
-            foreach (var stringPointer in m_stringPointers) {
-                if (0 != stringPointer) {
-                    Marshal.FreeCoTaskMem(ptr: stringPointer);
-                }
-            }
-
-            if (0 != Pointer) {
-                m_allocator.Free(ptr: Pointer);
             }
         }
     }

@@ -74,12 +74,14 @@ public enum TransformRefusal : byte {
     [Refusal(door: "state.transform", condition: "a sortKeyed addresses no keyed or ordered numeric row", kind: RefusalKind.Verdict)]
     SortKeyedShape,
 
-    /// <summary>A writeSet addresses no board row of at most <see cref="BoardMask.MaxCells"/> cells.</summary>
-    [Refusal(door: "state.transform", condition: "a writeSet addresses no board row of at most 64 cells", kind: RefusalKind.Verdict)]
+    /// <summary>A writeSet addresses no board row, or reads a mask onto a board of more than
+    /// <see cref="BoardMask.MaxCells"/> cells.</summary>
+    [Refusal(door: "state.transform", condition: "a writeSet addresses no board row, or reads a mask onto a board of more than 64 cells", kind: RefusalKind.Verdict)]
     WriteSetBoard,
 
-    /// <summary>A writeSet's cell-set mask is not readable from an integer cell.</summary>
-    [Refusal(door: "state.transform", condition: "a writeSet's cell-set mask is not readable from an integer cell", kind: RefusalKind.Verdict)]
+    /// <summary>A writeSet's mask is not readable from an integer cell, or its declared set does not lower at the
+    /// board's width.</summary>
+    [Refusal(door: "state.transform", condition: "a writeSet's mask is not readable from an integer cell, or its declared set does not lower at the board's width", kind: RefusalKind.Verdict)]
     WriteSetSource,
 
     /// <summary>A writeSet writes a value its board row does not admit.</summary>
@@ -90,11 +92,12 @@ public enum TransformRefusal : byte {
     [Refusal(door: "state.transform", condition: "a boardCombine addresses no board row", kind: RefusalKind.Verdict)]
     BoardCombineBoard,
 
-    /// <summary>A boardCombine's source board does not lie over the written board's topology.</summary>
-    [Refusal(door: "state.transform", condition: "a boardCombine's source board does not lie over the written board's topology", kind: RefusalKind.Verdict)]
+    /// <summary>A boardCombine's source board does not lie over the written board's topology, or its declared set
+    /// does not lower at the board's width.</summary>
+    [Refusal(door: "state.transform", condition: "a boardCombine's source board does not lie over the written board's topology, or its declared set does not lower at the board's width", kind: RefusalKind.Verdict)]
     BoardCombineOperands,
 
-    /// <summary>An arrange addresses no ordered zone of at most <see cref="RuleReads.MaxArrangementTokens"/> tokens
+    /// <summary>An arrange addresses no ordered zone of at most <see cref="StateReader.MaxArrangementTokens"/> tokens
     /// every one of which its domain declares.</summary>
     [Refusal(door: "state.transform", condition: "an arrange addresses no ordered zone of at most 20 tokens every one of which its domain declares", kind: RefusalKind.Verdict)]
     ArrangeShape,
@@ -106,18 +109,6 @@ public enum TransformRefusal : byte {
     /// <summary>An arrange's rank lies outside 0..k!-1 for the zone's token count.</summary>
     [Refusal(door: "state.transform", condition: "an arrange's rank lies outside 0..k!-1 for the zone's token count", kind: RefusalKind.Verdict)]
     ArrangeRankRange,
-
-    /// <summary>A push addresses no history row.</summary>
-    [Refusal(door: "state.transform", condition: "a push addresses no history row", kind: RefusalKind.Verdict)]
-    PushRowShape,
-
-    /// <summary>A push writes a value its history row does not admit.</summary>
-    [Refusal(door: "state.transform", condition: "a push writes a value its history row does not admit", kind: RefusalKind.Verdict)]
-    PushValueInadmissible,
-
-    /// <summary>A push reads its value from a live source, and the application supplied no resolved value.</summary>
-    [Refusal(door: "state.transform", condition: "a push reads its value from a live source the application resolved none for", kind: RefusalKind.Verdict)]
-    PushValueUnbound,
 
     /// <summary>A pushRay has no live origin token, reaches an edge or cycle before an admitted terminator, or its pattern rejects the run.</summary>
     [Refusal(door: "state.transform", condition: "a pushRay has no live origin token or no admitted terminating cell", kind: RefusalKind.Verdict)]

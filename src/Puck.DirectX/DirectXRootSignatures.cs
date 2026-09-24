@@ -40,8 +40,10 @@ public static unsafe class DirectXRootSignatures {
     /// <summary>Serializes a root-signature description and creates it on the given device.</summary>
     /// <param name="device">The device that owns the root signature.</param>
     /// <param name="description">The root-signature description to serialize.</param>
+    /// <param name="serialized">The serialized root signature: part of a pipeline's identity in the device's
+    /// <see cref="Interop.DirectXPipelineLibrary"/>.</param>
     /// <returns>The created root-signature pointer.</returns>
-    public static nint Create(ID3D12Device* device, in D3D12_ROOT_SIGNATURE_DESC description) {
+    public static nint Create(ID3D12Device* device, in D3D12_ROOT_SIGNATURE_DESC description, out byte[] serialized) {
         ID3DBlob* sigBlob = null;
         ID3DBlob* errBlob = null;
 
@@ -55,6 +57,11 @@ public static unsafe class DirectXRootSignatures {
 
             void* rootSig;
             var rootSigIid = ID3D12RootSignature.IID_Guid;
+
+            serialized = new ReadOnlySpan<byte>(
+                length: checked((int)sigBlob->GetBufferSize()),
+                pointer: sigBlob->GetBufferPointer()
+            ).ToArray();
 
             device->CreateRootSignature(
                 0,

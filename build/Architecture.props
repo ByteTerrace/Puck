@@ -100,7 +100,9 @@
               the closure of whatever it composes and never introduces one. That inheritance is safe by
               COMPOSITION rather than by trust: every ranked project in the closure has passed this same
               gate in its own build, so a backend arriving through one arrived legally; or
-          (c) it carries an explicitly reasoned <PuckArchitectureBackendException> entry below. None do today.
+          (c) it is a backend's own test project: its kind is Test and it is named for exactly the one backend it
+              holds (Puck.X.Tests holds Puck.X and no other backend). It names its backend because the backend is
+              what it tests, and nothing references a test project.
 
         The wider form that suggests itself — "nothing may hold a Backends assembly unless it sits at or
         above that row" — permits any Engine-services project to take a direct backend dependency: legal by
@@ -108,13 +110,11 @@
         the .Presentation wrapper row exists. That predicate would have flagged nothing, forever. Clause (b)
         is confined to terminal kinds for the same reason: extending closure-inheritance to ranked projects
         would reopen the hole through the .Presentation row, letting an engine service reach a backend by
-        referencing a presentation wrapper.
+        referencing a presentation wrapper. Clause (c) is confined by name for the same reason: a test project
+        named for one backend cannot reach the other.
 
-        Empirically verified: zero exceptions across the live graph. Puck.Post was the sole exception before
-        its quarantine; experimental projects are now structurally outside this gate, so retaining that entry
-        would be dead policy for an assembly the build does not produce. The absent finding remains load-bearing:
-        the report proves no Engine-services project reaches a backend, rather than producing an empty sheet by
-        widening the rule.
+        No Engine-services project reaches a backend; the report proves that rather than producing an empty sheet
+        by widening the rule.
     -->
 
     <!--
@@ -155,6 +155,13 @@
              reverse, so a card game or a turn-based resolver can run rules over Puck.Maths and this package
              alone. -->
         <PuckArchitectureProfile Include="Puck.State" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths" />
+        <!-- The embedding providers (fixture and Azure OpenAI generators, batching, quantization). Puck.State for
+             the one embedding-space identity each generator is built for; Puck.Maths for the signed-byte vector
+             arithmetic. The edge runs one way: this project carries the Azure and OpenAI packages, and exact
+             equality on the Puck.World.Server and Puck.World.Browser profiles (the latter's closure holds
+             Puck.World.Transpiler) keeps them out of the server, the transpiler and the browser engine, which reach
+             embeddings only through the dynamically loaded Puck.World.Embeddings extension. -->
+        <PuckArchitectureProfile Include="Puck.Embeddings" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths;Puck.State" />
         <!-- The headless P1 split's document row (docs/project-map.md's Puck.World.Schema row; formerly
              Puck.World.Data). Puck.World.Authoring is the authored-content document row (formerly the Authoring/
              half of Puck.World.Forge; the SM83 forge half moved to Puck.HumbleGamingBrick.Forge, taking the
@@ -183,10 +190,11 @@
         <!-- The world-agnostic wire substrate (docs/project-map.md's Puck.Networking row) — the socketless frame
              grammar and the bounded reader/writer pair every World socket frames its bytes through, plus the
              symmetric peer substrate (Puck.Networking.Peers: QUIC transport, identity-bound handshake, attested
-             messages). Carries no World vocabulary, so its closure is exactly its two leaf dependencies: Puck.Maths,
-             for the fixed-point scalar/vector/quaternion lanes the reader/writer read and write, and
-             Puck.Attestation, for the signed claims a peer handshake and every peer message are verified as. -->
-        <PuckArchitectureProfile Include="Puck.Networking" Closure="Puck.Attestation;Puck.Maths" />
+             messages). Carries no World vocabulary, so its closure is leaf projects only: Puck.Maths, for the
+             fixed-point scalar/vector/quaternion lanes the reader/writer read and write; Puck.Attestation, for the
+             signed claims a peer handshake and every peer message are verified as; and Puck.Assets, whose
+             AtomicFile writes a peer's private key (Puck.Abstractions arrives with it). -->
+        <PuckArchitectureProfile Include="Puck.Networking" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Maths" />
         <!-- Sim-side music/rhythm state (MusicClock/MusicDirector/RhythmJudge) plus the presentation-adjacent
              fixed-point mixer/voice-synth core, bundled on one measured closure derived from what the moved
              mixer/synth files actually name (WorldMachineAudioRate relocated in, WorldVoicePatch.FromDocument's
@@ -286,12 +294,13 @@
              proves that rather than merely stating it. -->
         <PuckArchitectureProfile Include="Puck.Launcher.Stub" Closure="" />
         <!-- The browser-wasm engine (docs/project-map.md's Puck.World.Browser row): Schema's own exact closure plus
-             Puck.World.Schema itself, since this project references it directly. Composition-roots layer, same as
+             Puck.World.Schema itself, since this project references it directly, and the authoring toolchain
+             (Puck.Transpiler, Puck.World.Transpiler) the studio edits .puck sources through. Composition-roots layer, same as
              every other host that composes a whole world document and runs it standalone — this one runs it inside
              a browser tab instead of a desktop process. Exact equality is what proves this project never grows a
              Presentation, Backends, or Puck.World.Server edge just because it happens to sit at Composition roots'
              rank: nothing here renders, hosts a network peer, or runs authoritative mutation. -->
-        <PuckArchitectureProfile Include="Puck.World.Browser" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.Browser" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.State.Generators;Puck.State.Rules;Puck.State.Topology;Puck.State.Vectors;Puck.Text;Puck.Transpiler;Puck.World.Authoring;Puck.World.Schema;Puck.World.Transpiler" />
     </ItemGroup>
 
     <!--

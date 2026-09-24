@@ -125,8 +125,8 @@ internal static class MixedScaleClaims {
 
         var quarter = FusedArithmetic.MixedScaleProduct(
             a: Huge,
-            fractionBitsA: 64,
             b: Huge,
+            fractionBitsA: 64,
             fractionBitsB: 64,
             fractionBitsOut: 0
         );
@@ -151,8 +151,8 @@ internal static class MixedScaleClaims {
 
         var wrapped = FusedArithmetic.MixedScaleProduct(
             a: Huge,
-            fractionBitsA: 0,
             b: Huge,
+            fractionBitsA: 0,
             fractionBitsB: 0,
             fractionBitsOut: int.MaxValue
         );
@@ -182,8 +182,8 @@ internal static class MixedScaleClaims {
         // because both readings then land on a shift the accumulator answers as zero anyway.
         var wrappingExponent = FusedArithmetic.MixedScaleProduct(
             a: 3L,
-            fractionBitsA: int.MinValue,
             b: 3L,
+            fractionBitsA: int.MinValue,
             fractionBitsB: int.MinValue,
             fractionBitsOut: 0
         );
@@ -217,8 +217,8 @@ internal static class MixedScaleClaims {
 
         var subject = FusedArithmetic.MixedScaleProduct(
             a: a,
-            fractionBitsA: fractionBitsA,
             b: b,
+            fractionBitsA: fractionBitsA,
             fractionBitsB: fractionBitsB,
             fractionBitsOut: fractionBitsOut
         );

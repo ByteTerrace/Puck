@@ -93,7 +93,7 @@ public static class WorldAdjacencyGeometry {
                 (placement?.Solid is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation) ||
                 !TryMeasureReach(
                 creation: creation,
@@ -111,11 +111,11 @@ public static class WorldAdjacencyGeometry {
         }
 
         candidates.Sort(comparison: static (left, right) => {
-            var byDistance = left.SeamDistance.CompareTo(value: right.SeamDistance);
-
-            return ((byDistance != 0)
-                ? byDistance
-                : left.Row.CompareTo(value: right.Row)
+            return LexicographicOrder.Compare(
+                leftPrimary: left.SeamDistance,
+                leftSecondary: left.Row,
+                rightPrimary: right.SeamDistance,
+                rightSecondary: right.Row
             );
         });
 

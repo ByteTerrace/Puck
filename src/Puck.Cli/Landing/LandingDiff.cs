@@ -17,15 +17,10 @@ internal static class LandingDiff {
     /// <param name="to">The landing tip.</param>
     /// <param name="path">The repository-relative path.</param>
     public static IReadOnlyList<string> CommitsBetween(string from, string to, string path) {
-        var output = Git.Capture(
-            "log",
-            "--no-color",
-            "--oneline",
-            "--no-decorate",
-            $"{from}..{to}",
-            "--",
-            path
-        );
+        var output = CliGit.Run(
+            arguments: ["log", "--no-color", "--oneline", "--no-decorate", $"{from}..{to}", "--", path],
+            repository: "."
+        ).Stdout;
         var commits = new List<string>();
 
         foreach (var line in output.Split(separator: '\n')) {
@@ -46,13 +41,10 @@ internal static class LandingDiff {
         // -U0: no context lines, so every '-' line in the output is a genuine deletion rather than shared context.
         // --no-renames: a rename detected as such would hide the deletion side; this check wants the raw removal.
         // --no-color and -M0 keep the stream machine-readable and stable across a user's git config.
-        var output = Git.Capture(
-            "diff",
-            "--no-color",
-            "--no-renames",
-            "-U0",
-            $"{from}..{to}"
-        );
+        var output = CliGit.Run(
+            arguments: ["diff", "--no-color", "--no-renames", "-U0", $"{from}..{to}"],
+            repository: "."
+        ).Stdout;
         var deletions = new Dictionary<string, List<string>>(comparer: StringComparer.Ordinal);
         var path = string.Empty;
 

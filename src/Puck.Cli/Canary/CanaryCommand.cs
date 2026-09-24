@@ -1,46 +1,76 @@
 using System.CommandLine;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.ExceptionServices;
 using System.Text;
-using System.Text.Json.Nodes;
 
 namespace Puck.Cli.Canary;
 
 /// <summary><c>puck canary</c> — bounded, two-leg behavioral proofs against the real Puck.World executable.</summary>
 internal static partial class CanaryCommand {
     // The one-time Release builds run against their own allowance on their own clock, so build time can never be
-    // spent out of a proof's. Leg time is a separate budget derived from the selection itself; see LegBudget.
+    // spent out of a proof's. Leg time is a separate budget derived from the selection itself; see CanaryBudget.
     private static readonly TimeSpan BuildBudget = TimeSpan.FromSeconds(value: 600);
 
     private const string ScratchPrefix = "puck-canary-";
 
+    // Every leg's script ends with the runner's own two lines: wire.errors, the exact-count terminal observation, and
+    // quit, which ends the session once everything queued ahead of it has run. A leg therefore lasts as long as its
+    // script and no longer; its manifest's timeoutSeconds is only the ceiling a hung leg is killed at.
+    private static readonly string RunnerQuit = $"quit{Environment.NewLine}";
+
     public static Command Create() {
         var allOption = new Option<bool>(name: "--all") { Description = "Explicitly run every proof, including any declared environmental requirements; it does not promote any proof into the automatic set." };
-        var capabilityOption = new Option<string>(name: "--capability") { Description = "Filter by automatic, headless, windowed, gpu, audio-output, or input:<hardware-name>." };
+        var capabilityOption = new Option<string>(name: "--capability") { Description = "Filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<hardware-name>." };
         var idsArgument = new Argument<string[]>(name: "id") { Arity = ArgumentArity.ZeroOrMore, DefaultValueFactory = static _ => [], Description = "Run the named proofs explicitly, regardless of their declared requirements." };
         var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list every manifest without building or running." };
+        var mergeOption = new Option<bool>(name: "--merge") { Description = "Run what a merge needs: the automatic set plus every proof requiring gpu." };
+        var jobsOption = new Option<int>(name: "--jobs") {
+            DefaultValueFactory = static _ => DefaultJobs,
+            Description = "Maximum World processes to run at once. A federated leg holds one per process, and a windowed, offscreen, or requirement-declaring leg holds all of them. Output remains in authored order.",
+        };
+        var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget against its ceiling — without building or running." };
+        var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
+        var debugLayersOption = new Option<bool>(name: WorldOffscreenLeg.DebugLayersFlag) { Description = "Boot every offscreen leg's World with --debug-layers, the validation layer of its backend." };
         var command = new Command(
-            description: """
-            Bounded, two-leg behavioral proofs against the real Puck.World executable.
+            description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
+            name: "canary"
+        ) { idsArgument, allOption, capabilityOption, debugLayersOption, jobsOption, listOption, mergeOption, planOption, worldArtifactOption };
 
+        command.Detail(detail: """
               no selection           run the automatic set: headless shape and no environmental requirements
               <id> ...               run the named proofs explicitly, regardless of requirements
               --all                  explicitly run every proof; does not promote any proof into the automatic set
               --list                 strictly load and list every manifest without building or running
-              --capability <class>   filter by automatic, headless, windowed, gpu, audio-output, or input:<name>
+              --capability <class>   filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<name>
+              --merge                run the merge gate: the automatic set plus every proof requiring gpu
+              --debug-layers         boot every offscreen leg with its backend's validation layer
+              --plan                 print the selection's counts and ceiling without building or running
 
-            The four selection forms are mutually exclusive. Every execution refuses an empty selection,
-            builds Puck.World once, then runs each positive and discriminating leg sequentially from fresh state.
+            The five selection forms are mutually exclusive. Every execution refuses an empty selection,
+            and a gate selection (the automatic set or --merge) whose planned World boots or summed leg
+            budget exceed its ceiling in CanaryCeilings.cs. It builds Puck.World once (or takes
+            --world-artifact as given), then runs every positive and discriminating leg from fresh state,
+            up to --jobs World processes at once; a windowed, offscreen, or requirement-declaring leg runs
+            alone. A leg ends when its script does: the runner closes each script with wire.errors and
+            quit, and kills a leg only at its manifest's timeoutSeconds. An offscreen
+            proof runs every leg once per backend, Vulkan then Direct3D 12, and holds only when both did.
 
-            Exit codes: 0 all proofs held, 1 an observed proof failed, 2 refusal/infrastructure.
-            """,
-            name: "canary"
-        ) { idsArgument, allOption, capabilityOption, listOption };
+            Exit codes: 0 all proofs held, 1 an observed proof failed, 2 refusal/infrastructure, including
+            an environment that cannot run a selected proof (UNSUPPORTED: no usable GPU device for a
+            backend, or an absent shader compiler).
+            """);
+
+        jobsOption.Validators.Add(item: static result => {
+            if (result.GetValueOrDefault<int>() < 1) {
+                result.AddError(errorMessage: "--jobs must be at least 1.");
+            }
+        });
 
         command.Validators.Add(item: result => {
             var capability = result.GetValue(option: capabilityOption);
             var ids = (result.GetValue(argument: idsArgument) ?? []);
-            var forms = ((((result.GetValue(option: allOption)
+            var forms = (((((result.GetValue(option: allOption)
                 ? 1
                 : 0) + ((capability is null)
                 ? 0
@@ -48,10 +78,20 @@ internal static partial class CanaryCommand {
                 ? 0
                 : 1)) + (result.GetValue(option: listOption)
                 ? 1
+                : 0)) + (result.GetValue(option: mergeOption)
+                ? 1
                 : 0));
 
             if (forms > 1) {
-                result.AddError(errorMessage: "ids, --all, --list, and --capability <class> are mutually exclusive selection forms.");
+                result.AddError(errorMessage: "ids, --all, --list, --merge, and --capability <class> are mutually exclusive selection forms.");
+
+                return;
+            }
+            if (
+                result.GetValue(option: planOption) &&
+                result.GetValue(option: listOption)
+            ) {
+                result.AddError(errorMessage: "--plan counts a run and --list runs nothing; name a selection to plan instead.");
 
                 return;
             }
@@ -59,7 +99,7 @@ internal static partial class CanaryCommand {
                 (capability is not null) &&
                 !IsKnownCapability(capability: capability)
             ) {
-                result.AddError(errorMessage: $"unknown capability filter '{capability}'; use automatic, headless, windowed, gpu, audio-output, or input:<hardware-name>.");
+                result.AddError(errorMessage: $"unknown capability filter '{capability}'; use automatic, headless, windowed, offscreen, gpu, audio-output, or input:<hardware-name>.");
 
                 return;
             }
@@ -72,42 +112,85 @@ internal static partial class CanaryCommand {
             if (duplicate is not null) {
                 result.AddError(errorMessage: $"duplicate canary id '{duplicate.Key}' in the selection; one proof must not be counted twice.");
             }
+
         });
         command.SetAction(action: parseResult => Run(
             all: parseResult.GetValue(option: allOption),
             capability: parseResult.GetValue(option: capabilityOption),
+            debugLayers: (parseResult.GetValue(option: debugLayersOption)
+                ? WorldOffscreenLeg.Backends
+                : []),
             ids: (parseResult.GetValue(argument: idsArgument) ?? []),
-            list: parseResult.GetValue(option: listOption)
+            jobs: parseResult.GetValue(option: jobsOption),
+            list: parseResult.GetValue(option: listOption),
+            merge: parseResult.GetValue(option: mergeOption),
+            plan: parseResult.GetValue(option: planOption),
+            worldArtifact: parseResult.GetValue(option: worldArtifactOption)
         ));
         return command;
     }
+
+    /// <summary>Runs the named proofs on a given World entry assembly, as <c>puck canary --world-artifact</c> does.</summary>
+    /// <param name="ids">The proofs to run.</param>
+    /// <param name="worldArtifact">The World entry assembly every leg launches.</param>
+    /// <param name="debugLayers">The backends whose offscreen legs boot their World with <c>--debug-layers</c>.</param>
+    /// <returns>The canary exit code: 0 every proof held, 1 a proof failed, 2 a refusal, an unknown id, or an
+    /// environment that could not exercise a proof.</returns>
+    internal static int RunNamed(IReadOnlyList<string> ids, string worldArtifact, IReadOnlyCollection<string> debugLayers) =>
+        Run(
+            all: false,
+            capability: null,
+            debugLayers: debugLayers,
+            ids: [.. ids],
+            jobs: DefaultJobs,
+            list: false,
+            merge: false,
+            plan: false,
+            worldArtifact: worldArtifact
+        );
+
+    // Half the processors, at most eight: every World process runs a pump, a stdin reader and its own worker threads,
+    // and the federated legs keep live sockets whose peers must stay responsive.
+    private static int DefaultJobs => Math.Min(
+        val1: 8,
+        val2: Math.Max(
+            val1: 1,
+            val2: (Environment.ProcessorCount / 2)
+        )
+    );
 
     // The selection the landing gate runs: no ids, no filter, no --all — the automatic set alone.
     internal static int RunAutomatic() =>
         Run(
             all: false,
             capability: null,
+            debugLayers: [],
             ids: [],
-            list: false
+            jobs: DefaultJobs,
+            list: false,
+            merge: false,
+            plan: false,
+            worldArtifact: null
         );
 
     private static bool IsKnownCapability(string capability) => (
-        (capability is "automatic" or "headless" or "windowed" or "gpu" or "audio-output")
+        (capability is "automatic" or "headless" or "windowed" or "offscreen" or "gpu" or "audio-output")
         || (capability.StartsWith(
         comparisonType: StringComparison.Ordinal,
         value: "input:"
     ) && (capability.Length > 6))
     );
-    private static int Run(bool all, string? capability, string[] ids, bool list) {
+    private static int Run(bool all, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, int jobs, bool list, bool merge, bool plan, string? worldArtifact) {
         var selection = ToSelection(
             all: all,
             capability: capability,
             ids: ids,
-            list: list
+            list: list,
+            merge: merge
         );
 
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
-            return 2;
+            return CliExit.Refused;
         }
         // --list stays strict (a single, unambiguous refusal for an author curating manifests); every running shape
         // tolerates a rotten manifest instead of letting it block every other proof — see TryLoadAll's own remarks.
@@ -122,7 +205,7 @@ internal static partial class CanaryCommand {
         )) {
             Console.Error.WriteLine(value: $"ERROR: {manifestError}");
 
-            return 2;
+            return CliExit.Refused;
         }
 
         foreach (var (directory, reason) in refusedManifests) {
@@ -135,7 +218,7 @@ internal static partial class CanaryCommand {
                 repositoryRoot: repositoryRoot
             );
 
-            return 0;
+            return CliExit.Success;
         }
 
         if (!TrySelect(
@@ -146,17 +229,52 @@ internal static partial class CanaryCommand {
         )) {
             Console.Error.WriteLine(value: $"ERROR: {selectionError}");
 
-            return 2;
+            return CliExit.Refused;
+        }
+
+        var costs = Plan(
+            manifests: selected,
+            namedWorldArtifact: (worldArtifact is not null)
+        );
+        var ceiling = CeilingOf(selection: selection);
+        var ceilingName = CeilingName(selection: selection);
+
+        if (plan) {
+            PrintPlan(
+                ceiling: ceiling,
+                ceilingName: ceilingName,
+                plan: costs
+            );
+        }
+
+        // Checked before anything builds, so a gate that outgrew its ceiling costs nothing to refuse.
+        if (
+            (ceiling is not null) &&
+            (CeilingRefusal(
+                ceiling: ceiling,
+                name: ceilingName,
+                plan: costs
+            ) is { } overCeiling)
+        ) {
+            Console.Error.WriteLine(value: $"ERROR: {overCeiling}");
+
+            return CliExit.Refused;
         }
 
         var exit = SuiteExit(
             kind: selection.Kind,
             refusedCount: refusedManifests.Count,
-            runExit: RunSelected(
-                manifests: selected,
-                repositoryRoot: repositoryRoot,
-                explicitAll: (selection.Kind == CanarySelectionKind.All)
-            )
+            runExit: (plan
+                ? CliExit.Success
+                : RunSelected(
+                    debugLayers: debugLayers,
+                    explicitAll: (selection.Kind == CanarySelectionKind.All),
+                    jobs: jobs,
+                    manifests: selected,
+                    plan: costs,
+                    repositoryRoot: repositoryRoot,
+                    worldArtifact: worldArtifact
+                ))
         );
 
         if (
@@ -174,18 +292,18 @@ internal static partial class CanaryCommand {
     // surviving proof's verdict already printed, which is the whole difference from refusing the discovery
     // outright. A selection that named its proofs is answered on those proofs alone.
     internal static int SuiteExit(int runExit, int refusedCount, CanarySelectionKind kind) => (
-        ((refusedCount > 0) && (kind is CanarySelectionKind.Automatic or CanarySelectionKind.All or CanarySelectionKind.Capability))
+        ((refusedCount > 0) && (kind is CanarySelectionKind.Automatic or CanarySelectionKind.All or CanarySelectionKind.Capability or CanarySelectionKind.Merge))
         ? Math.Max(
             val1: runExit,
-            val2: 1
+            val2: CliExit.Failed
         )
         : runExit
     );
 
-    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, string repositoryRoot, bool explicitAll) {
-        var buildClock = Stopwatch.StartNew();
-
+    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, int jobs, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
         CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
+
+        var buildClock = Stopwatch.StartNew();
 
         if (explicitAll) {
             Console.WriteLine(value: $"canary: explicit --all selected {manifests.Count} proof(s), including any declared environmental requirements; it does not change the automatic set.");
@@ -193,11 +311,14 @@ internal static partial class CanaryCommand {
             Console.WriteLine(value: $"canary: selected {manifests.Count} proof(s).");
         }
 
-        if (!WorldArtifactBuild.TryBuild(
-            artifact: out var artifact,
+        // Every leg launches one World: the --world-artifact named, or the build keyed by this checkout's sources, reused
+        // when an earlier run built it and leased until the last leg has exited (see WorldArtifactBuild).
+        if (!WorldArtifactBuild.TryResolveNamed(
             build: out var build,
             error: out var buildError,
-            outputDirectory: null,
+            lease: out var world,
+            named: worldArtifact,
+            path: out var artifact,
             repositoryRoot: repositoryRoot,
             timeout: CliProcess.RemainingBudget(
                 budget: BuildBudget,
@@ -211,10 +332,12 @@ internal static partial class CanaryCommand {
                 PrintCaptured(result: build);
             }
 
-            return 2;
+            return CliExit.Refused;
         }
 
-        Console.WriteLine(value: $"canary: built artifact {artifact}");
+        using var lease = world;
+
+        Console.Error.WriteLine(value: $"canary: World artifact {artifact}");
 
         // A stub-shaped leg launches Puck.Launcher.Stub, never Puck.World.dll directly, from a leg-private install
         // tree — built once here, exactly like Puck.World above, only when a selected manifest actually needs it.
@@ -230,7 +353,7 @@ internal static partial class CanaryCommand {
 
             stubArtifact = Path.Combine(paths: [repositoryRoot, "src", "Puck.Launcher.Stub", "bin", "Release", "net10.0", "Puck.Launcher.Stub.exe"]);
 
-            Console.WriteLine(value: "canary: building Puck.Launcher.Stub once (Release).");
+            Console.Error.WriteLine(value: "canary: building Puck.Launcher.Stub once (Release).");
 
             var stubBuild = CliProcess.RunCaptured(
                 fileName: "dotnet",
@@ -251,138 +374,341 @@ internal static partial class CanaryCommand {
                     : $"ERROR: the one Puck.Launcher.Stub build exited {stubBuild.ExitCode}."));
                 PrintCaptured(result: stubBuild);
 
-                return 2;
+                return CliExit.Refused;
             }
             if (!File.Exists(path: stubArtifact)) {
                 Console.Error.WriteLine(value: $"ERROR: the Puck.Launcher.Stub build exited 0 but did not produce the exact artifact {stubArtifact}.");
 
-                return 2;
+                return CliExit.Refused;
             }
 
-            Console.WriteLine(value: $"canary: built artifact {stubArtifact}");
+            Console.Error.WriteLine(value: $"canary: built artifact {stubArtifact}");
         }
 
         var failed = false;
         var infrastructureFailed = false;
-        var budget = new CanaryBudget(
-            Clock: Stopwatch.StartNew(),
-            Total: LegBudget(manifests: manifests)
-        );
+        var unsupported = new List<string>();
+        IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
+        var endings = new List<CanaryLegEnding>(capacity: plan.Legs);
 
-        Console.WriteLine(value: $"canary: leg budget {budget.Total.TotalSeconds:0}s, derived from the selected manifests' own declared per-leg timeouts.");
+        using var cancellation = new CancellationTokenSource();
 
-        foreach (var manifest in manifests) {
-            CanaryLegRun positive;
-            CanaryLegRun discriminating;
-
-            if (manifest.BootShape == CanaryBootShape.Stub) {
-                positive = RunStubLeg(
-                    budget: budget,
-                    discriminating: false,
-                    manifest: manifest,
-                    stubArtifact: stubArtifact!,
-                    worldArtifact: artifact
-                );
-                discriminating = RunStubLeg(
-                    budget: budget,
-                    discriminating: true,
-                    manifest: manifest,
-                    stubArtifact: stubArtifact!,
-                    worldArtifact: artifact
-                );
-            } else {
-                positive = RunEitherLeg(
-                    artifact: artifact,
-                    budget: budget,
-                    leg: manifest.Positive,
-                    manifest: manifest
-                );
-                discriminating = RunEitherLeg(
-                    artifact: artifact,
-                    budget: budget,
-                    leg: manifest.Discriminating,
-                    manifest: manifest
-                );
-            }
-
-            ReportLeg(
-                id: manifest.Id,
-                result: positive
-            );
-            ReportLeg(
-                id: manifest.Id,
-                result: discriminating
-            );
-
-            var positivePassed = positive.Passed;
-            var discriminatingPassed = discriminating.Passed;
-
-            infrastructureFailed |= ((positive.InfrastructureError is not null) || (discriminating.InfrastructureError is not null));
-            var positiveOnDiscriminating = CanaryAssertions.Evaluate(
-                authorityEndpoint: discriminating.AuthorityEndpoint,
-                authorityTranscripts: discriminating.AuthorityTranscripts,
-                leg: manifest.Positive,
-                primaryTranscript: discriminating.Transcript
-            );
-            var turnedRed = !positiveOnDiscriminating.Passed;
-
-            if (turnedRed) {
-                Console.WriteLine(value: $"canary {manifest.Id} discriminating: FAIL (expected) — the positive observation turned red under the alternate authored world/input.");
-                foreach (var result in positiveOnDiscriminating.Results.Where(predicate: static result => !result.Passed)) {
-                    Console.WriteLine(value: $"  expected-red: {result.Detail}");
-                }
-            } else {
-                Console.Error.WriteLine(value: $"canary {manifest.Id} discriminating: UNEXPECTED PASS — the positive observation survived the declared discriminator, so the proof is not sensitive.");
-            }
-
-            if (
-                positivePassed &&
-                discriminatingPassed &&
-                turnedRed
-            ) {
-                Console.WriteLine(value: $"PASS: canary {manifest.Id} — positive held, opposite observation held, and the positive observation failed in the discriminating leg.");
-            } else {
-                Console.Error.WriteLine(value: $"FAIL: canary {manifest.Id} — positive={Verdict(value: positivePassed)}, opposite={Verdict(value: discriminatingPassed)}, discriminator-turned-red={Verdict(value: turnedRed)}.");
-                failed = true;
+        // The first Ctrl+C stops the run and kills every child it started; a second one ends the runner outright.
+        void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs args) {
+            if (!cancellation.IsCancellationRequested) {
+                args.Cancel = true;
+                cancellation.Cancel();
             }
         }
 
+        var budget = new CanaryBudget(
+            Cancellation: cancellation.Token,
+            Clock: Stopwatch.StartNew(),
+            Packages: new CanaryPackages(),
+            Tally: new CanaryTally(),
+            Total: TimeSpan.FromSeconds(value: plan.BudgetSeconds)
+        );
+
+        Console.WriteLine(value: $"canary: leg budget {budget.Total.TotalSeconds:0}s, derived from the selected manifests' own declared per-leg timeouts; up to {jobs} World process(es) at once.");
+
+        // results is written by each leg's own thread; legs holds only what completed has taken from it, on this thread.
+        var results = new CanaryLegRun?[proofs.Count, 2];
+        var legs = new CanaryLegRun[proofs.Count, 2];
+        var work = new List<CanaryLegWork>(capacity: (proofs.Count * 2));
+
+        for (var index = 0; (index < proofs.Count); index++) {
+            var manifest = proofs[index].Manifest;
+            var backend = proofs[index].Backend;
+            var manifestIndex = index;
+
+            foreach (var discriminating in ((bool[])[false, true])) {
+                var leg = (discriminating
+                    ? manifest.Discriminating
+                    : manifest.Positive
+                );
+                var side = (discriminating
+                    ? 1
+                    : 0);
+                Func<CanaryLegRun> run = ((manifest.BootShape == CanaryBootShape.Stub)
+                    ? () => RunStubLeg(
+                        budget: budget,
+                        discriminating: discriminating,
+                        manifest: manifest,
+                        stubArtifact: stubArtifact!,
+                        worldArtifact: artifact
+                    )
+                    : () => RunEitherLeg(
+                        artifact: artifact,
+                        backend: backend,
+                        budget: budget,
+                        debugLayers: ((backend is not null) && debugLayers.Contains(value: backend)),
+                        leg: leg,
+                        manifest: manifest
+                    ));
+
+                work.Add(item: new CanaryLegWork {
+                    Discriminating = discriminating,
+                    ManifestIndex = manifestIndex,
+                    Run = () => results[manifestIndex, side] = run(),
+                    Weight = LegWeight(
+                        jobs: jobs,
+                        leg: leg,
+                        manifest: manifest
+                    ),
+                });
+            }
+        }
+
+        var reported = 0;
+
+        Console.CancelKeyPress += OnCancelKeyPress;
+
+        try {
+            RunLegsConcurrently(
+                cancellation: cancellation,
+                completed: item => {
+                    var side = (item.Discriminating
+                        ? 1
+                        : 0);
+
+                    legs[item.ManifestIndex, side] = results[item.ManifestIndex, side]!;
+
+                    // Reports print in authored order, each proof whole, as soon as it and every proof before it are in.
+                    while (
+                        (reported < proofs.Count) &&
+                        (legs[reported, 0] is not null) &&
+                        (legs[reported, 1] is not null)
+                    ) {
+                        var verdict = ReportProof(
+                            discriminating: legs[reported, 1],
+                            positive: legs[reported, 0],
+                            proof: proofs[reported]
+                        );
+
+                        endings.Add(item: EndingOf(leg: legs[reported, 0]));
+                        endings.Add(item: EndingOf(leg: legs[reported, 1]));
+                        failed |= !verdict.Passed;
+                        infrastructureFailed |= verdict.InfrastructureFailed;
+                        if (verdict.Unsupported is { } reason) {
+                            unsupported.Add(item: $"{proofs[reported].Label}: {reason}");
+                        }
+                        reported++;
+                    }
+                },
+                jobs: jobs,
+                work: work
+            );
+        } catch (Exception exception) {
+            // Every leg has ended by now and its children are dead; what threw is an infrastructure failure.
+            Console.Error.WriteLine(value: $"ERROR: a canary leg failed before it could report, and the run was stopped: {exception}");
+
+            return CliExit.Refused;
+        } finally {
+            Console.CancelKeyPress -= OnCancelKeyPress;
+        }
+
+        PrintTally(
+            built: (build is not null),
+            endings: endings,
+            plan: plan,
+            tally: budget.Tally
+        );
+
+        if (cancellation.IsCancellationRequested) {
+            Console.Error.WriteLine(value: $"ERROR: the run was cancelled after {reported} of {proofs.Count} proof(s); every World process it started has been stopped.");
+
+            return CliExit.Refused;
+        }
         if (infrastructureFailed) {
             Console.Error.WriteLine(value: "ERROR: one or more selected canary legs could not run because infrastructure refused.");
 
-            return 2;
+            return CliExit.Refused;
+        }
+        if (unsupported.Count != 0) {
+            foreach (var reason in unsupported) {
+                Console.Error.WriteLine(value: $"UNSUPPORTED: {reason}");
+            }
+            Console.Error.WriteLine(value: "ERROR: this environment could not exercise every selected proof; an offscreen proof holds only when every declared backend ran, so the selection is not green.");
+
+            return CliExit.Refused;
         }
         if (failed) {
             Console.Error.WriteLine(value: "FAIL: one or more selected canaries did not prove both their green leg and executable red leg.");
 
-            return 1;
+            return CliExit.Failed;
         }
 
         Console.WriteLine(value: $"PASS: all {manifests.Count} selected canary proof(s) held within the {budget.Total.TotalSeconds:0}-second leg budget.");
 
-        return 0;
+        return CliExit.Success;
+    }
+
+    // One leg waiting to run: which proof and side it answers, how many --jobs slots it holds while it runs, and the
+    // run itself, which stores its own result where the completed callback reads it once the leg's thread has ended.
+    internal sealed class CanaryLegWork {
+        public required bool Discriminating { get; init; }
+        public required int ManifestIndex { get; init; }
+        public required Action Run { get; init; }
+        public required int Weight { get; init; }
+    }
+
+    // How many of the --jobs slots a leg holds: one per World process it runs at once. An exclusive leg (IsExclusive)
+    // holds them all, so its GPU, window, or device never shares the machine with another leg.
+    internal static int LegWeight(CanaryManifest manifest, CanaryLeg leg, int jobs) {
+        var processes = (IsExclusive(manifest: manifest)
+            ? jobs
+            : ((leg.Authorities.Count != 0)
+                ? leg.Authorities.Count
+                : ((leg.AuthorityWorldPath is null)
+                    ? 1
+                    : 2
+                )
+            )
+        );
+
+        return Math.Clamp(
+            max: jobs,
+            min: 1,
+            value: processes
+        );
+    }
+    // Starts legs strictly in authored order whenever enough slots are free, each on its own thread, and hands every
+    // finished leg to completed on the calling thread. In-order starts mean a heavy leg is never passed over by lighter
+    // ones behind it. Once cancellation fires no further leg starts, and no leg that finishes afterwards is reported.
+    // Nothing leaves this method while a leg still runs: a leg that throws, or a completed callback that throws,
+    // cancels the rest, which kills their children, and the first failure is rethrown only after every leg has ended.
+    internal static void RunLegsConcurrently(IReadOnlyList<CanaryLegWork> work, int jobs, Action<CanaryLegWork> completed, CancellationTokenSource cancellation) {
+        var running = new List<(Task Task, CanaryLegWork Item)>(capacity: jobs);
+        var next = 0;
+        var free = jobs;
+        ExceptionDispatchInfo? failure = null;
+
+        try {
+            while (true) {
+                while (
+                    !cancellation.IsCancellationRequested &&
+                    (next < work.Count) &&
+                    (work[next].Weight <= free)
+                ) {
+                    var item = work[next++];
+
+                    free -= item.Weight;
+                    running.Add(item: (Task.Factory.StartNew(
+                        action: item.Run,
+                        cancellationToken: CancellationToken.None,
+                        creationOptions: TaskCreationOptions.LongRunning,
+                        scheduler: TaskScheduler.Default
+                    ), item));
+                }
+
+                if (running.Count == 0) {
+                    break;
+                }
+
+                var finished = Task.WaitAny(tasks: [.. running.Select(selector: static entry => entry.Task)]);
+
+                var (task, done) = running[finished];
+
+                running.RemoveAt(index: finished);
+                free += done.Weight;
+
+                if (task.Exception?.InnerException is { } exception) {
+                    // A leg the cancellation stopped ends in OperationCanceledException; only another failure is one.
+                    if (!((exception is OperationCanceledException) && cancellation.IsCancellationRequested)) {
+                        failure ??= ExceptionDispatchInfo.Capture(source: exception);
+                        cancellation.Cancel();
+                    }
+
+                    continue;
+                }
+
+                if (!cancellation.IsCancellationRequested) {
+                    completed(obj: done);
+                }
+            }
+        } catch (Exception exception) {
+            failure ??= ExceptionDispatchInfo.Capture(source: exception);
+            cancellation.Cancel();
+        } finally {
+            foreach (var (task, _) in running) {
+                try {
+                    task.Wait();
+                } catch (AggregateException) {
+                    // The run is already failing or cancelled; this leg's own outcome adds nothing.
+                }
+            }
+        }
+
+        failure?.Throw();
+    }
+
+    // Prints one proof's whole report — both legs, then the discriminator verdict — and answers whether it held. A leg
+    // that could not exercise its environment makes the proof unsupported rather than judged: neither its observations
+    // nor the discriminator mean anything about the code under test.
+    private static (bool Passed, bool InfrastructureFailed, string? Unsupported) ReportProof(CanaryProof proof, CanaryLegRun positive, CanaryLegRun discriminating) {
+        var manifest = proof.Manifest;
+
+        ReportLeg(
+            id: proof.Label,
+            result: positive
+        );
+        ReportLeg(
+            id: proof.Label,
+            result: discriminating
+        );
+
+        if ((positive.Unsupported ?? discriminating.Unsupported) is { } unsupported) {
+            Console.Error.WriteLine(value: $"UNSUPPORTED: canary {proof.Label} — {unsupported}");
+
+            return (false, false, unsupported);
+        }
+
+        var positiveOnDiscriminating = CanaryAssertions.Evaluate(
+            authorityEndpoint: discriminating.AuthorityEndpoint,
+            authorityTranscripts: discriminating.AuthorityTranscripts,
+            leg: manifest.Positive,
+            primaryTranscript: discriminating.Transcript
+        );
+        var turnedRed = !positiveOnDiscriminating.Passed;
+
+        if (turnedRed) {
+            Console.WriteLine(value: $"canary {proof.Label} discriminating: FAIL (expected) — the positive observation turned red under the alternate authored world/input.");
+            foreach (var result in positiveOnDiscriminating.Results.Where(predicate: static result => !result.Passed)) {
+                Console.WriteLine(value: $"  expected-red: {result.Detail}");
+            }
+        } else {
+            Console.Error.WriteLine(value: $"canary {proof.Label} discriminating: UNEXPECTED PASS — the positive observation survived the declared discriminator, so the proof is not sensitive.");
+        }
+
+        var passed = (positive.Passed && discriminating.Passed && turnedRed);
+
+        if (passed) {
+            Console.WriteLine(value: $"PASS: canary {proof.Label} — positive held, opposite observation held, and the positive observation failed in the discriminating leg.");
+        } else {
+            Console.Error.WriteLine(value: $"FAIL: canary {proof.Label} — positive={Verdict(value: positive.Passed)}, opposite={Verdict(value: discriminating.Passed)}, discriminator-turned-red={Verdict(value: turnedRed)}.");
+        }
+
+        return (passed, ((positive.InfrastructureError is not null) || (discriminating.InfrastructureError is not null)), null);
     }
 
     /// <summary>The suite's leg clock and the ceiling it is measured against.</summary>
-    private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total) {
+    // Cancellation ends the whole run: Ctrl+C, or a leg that threw. Every child a leg starts is killed when it fires.
+    // A leg may run only under the whole timeout its manifest declares, never a clamped remainder: a child killed by
+    // a short timeout reports exit -1 with empty streams, which reads as a failure to launch rather than as the
+    // budget refusal it is. Total is therefore the exact sum of what every selected leg may spend
+    // (CanaryPlan.BudgetSeconds), so a leg is refused only when an earlier one overran its own declared ceiling. Concurrency keeps
+    // that true: a leg waits only while legs started before it run, so the time spent before it starts never exceeds
+    // their timeouts. Packages holds the run's shader packages, and Tally counts what the run starts.
+    private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total, CancellationToken Cancellation, CanaryPackages Packages, CanaryTally Tally) {
         public TimeSpan Remaining => CliProcess.RemainingBudget(
             budget: Total,
             clock: Clock
         );
     }
 
-    // A leg may run only under the whole timeout its manifest declares, never a clamped remainder: a child killed by
-    // a short timeout reports exit -1 with empty streams, which reads as a failure to launch rather than as the
-    // budget refusal it is. The total below is therefore the exact sum of what every selected leg may spend, so a
-    // leg is refused only when an earlier one overran its own declared ceiling.
-    private static TimeSpan LegBudget(IReadOnlyList<CanaryManifest> manifests) =>
-        TimeSpan.FromSeconds(value: manifests.Sum(selector: static manifest => ((BootsPerLeg(shape: manifest.BootShape) * 2) * manifest.TimeoutSeconds)));
-    // A stub-shaped leg observes two successive launches against one declared timeout each; every other shape is one.
-    private static int BootsPerLeg(CanaryBootShape shape) => ((shape == CanaryBootShape.Stub)
-        ? 2
-        : 1
-    );
-    private static CanaryLegRun RunEitherLeg(string artifact, CanaryBudget budget, CanaryLeg leg, CanaryManifest manifest) =>
+    // A leg that relaunches boots twice, each boot under the whole declared timeout.
+    private static bool RelaunchesLeg(CanaryManifest manifest) => ((manifest.Positive.Relaunch is not null) || (manifest.Discriminating.Relaunch is not null));
+    private static CanaryLegRun RunEitherLeg(string artifact, string? backend, CanaryBudget budget, bool debugLayers, CanaryLeg leg, CanaryManifest manifest) =>
         ((leg.Authorities.Count != 0)
             ? RunFederatedMeshLeg(
                 artifact: artifact,
@@ -392,16 +718,20 @@ internal static partial class CanaryCommand {
             )
             : RunLeg(
                 artifact: artifact,
+                backend: backend,
                 budget: budget,
+                debugLayers: debugLayers,
                 leg: leg,
                 manifest: manifest
             )
         );
-    private static CanaryLegRun RunLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, CanaryBudget budget) {
+    private static CanaryLegRun RunLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, string? backend, CanaryBudget budget, bool debugLayers) {
         try {
             return RunLegCore(
                 artifact: artifact,
+                backend: backend,
                 budget: budget,
+                debugLayers: debugLayers,
                 leg: leg,
                 manifest: manifest
             );
@@ -413,10 +743,12 @@ internal static partial class CanaryCommand {
             );
         }
     }
-    private static CanaryLegRun RunLegCore(CanaryManifest manifest, CanaryLeg leg, string artifact, CanaryBudget budget) {
+    private static CanaryLegRun RunLegCore(CanaryManifest manifest, CanaryLeg leg, string artifact, string? backend, CanaryBudget budget, bool debugLayers) {
         var runDirectory = CreateRunDirectory(
             id: manifest.Id,
-            leg: leg.Name
+            leg: ((backend is null)
+                ? leg.Name
+                : $"{leg.Name}-{backend}")
         );
         var stateDirectory = Path.Combine(
             path1: runDirectory,
@@ -455,10 +787,9 @@ internal static partial class CanaryCommand {
         var authorityExecutionWorld = leg.AuthorityWorldPath;
         string? clientFederationKeyPath = null;
         string? authorityFederationKeyPath = null;
-        // Bound to a free loopback port per leg, exactly as a mesh leg's authorities are: several manifests carry a
-        // companion authority, and a fixed port shared between them cannot be rebound while the previous leg's
-        // sockets are still draining through TIME_WAIT — the companion then never reports a listener and the leg
-        // fails as infrastructure, later in a run than the identical leg selected on its own.
+        // Bound to a free loopback UDP port per leg, exactly as a mesh leg's authorities are, so no two companions in a
+        // run share an endpoint; a companion that still cannot bind never reports a listener, and the leg fails as
+        // infrastructure.
         var federationEndpoint = string.Empty;
 
         if (leg.AuthorityWorldPath is not null) {
@@ -498,12 +829,24 @@ internal static partial class CanaryCommand {
             input += Environment.NewLine;
         }
 
-        // Runner-owned completion: this line follows every authored byte, stdin is closed immediately after it, and
-        // the exact response count is checked. A process that merely lived until --exit-after-seconds cannot satisfy it.
-        input += $"wire.errors{Environment.NewLine}";
+        // Runner-owned completion: wire.errors follows every authored byte and its exact response count is checked,
+        // then quit ends the session. A process that ended any other way cannot satisfy the count.
+        input += $"wire.errors{Environment.NewLine}{RunnerQuit}";
 
         var timeout = TimeSpan.FromSeconds(value: manifest.TimeoutSeconds);
 
+        if (
+            (leg.Package is { } package) &&
+            (PreparePackage(
+                budget: budget,
+                leg: leg,
+                package: package,
+                runDirectory: runDirectory,
+                timeout: timeout
+            ) is { } unprepared)
+        ) {
+            return unprepared;
+        }
         if (budget.Remaining < timeout) {
             return CanaryLegRun.BudgetExpired(
                 budget: budget,
@@ -517,42 +860,62 @@ internal static partial class CanaryCommand {
 
         try {
             if (authorityExecutionWorld is { } authorityWorld) {
+                budget.Tally.WorldStarted();
                 authority = AuthorityCompanion.Start(
                     artifact: artifact,
+                    cancellationToken: budget.Cancellation,
+                    exitAfterSeconds: ((manifest.TimeoutSeconds + AuthorityCompanion.ListenSeconds) + AuthorityCompanion.QuitGraceSeconds),
                     world: authorityWorld,
                     stateDirectory: Path.Combine(
                         path1: runDirectory,
                         path2: "authority-state"
                     ),
-                    seconds: (manifest.Seconds + 2),
                     federationKeyPath: authorityFederationKeyPath!
                 );
-                if (!authority.WaitUntilListening(timeout: TimeSpan.FromSeconds(seconds: 5))) {
+                if (!authority.WaitUntilListening(timeout: TimeSpan.FromSeconds(seconds: AuthorityCompanion.ListenSeconds))) {
+                    budget.Cancellation.ThrowIfCancellationRequested();
+
                     return CanaryLegRun.InfrastructureFailure(
                         leg: leg,
-                        reason: "companion authority did not report a bound listener within 5 seconds",
+                        reason: ((ListenerRefusal(stderr: SplitLines(text: authority.Stderr)) is { } refused)
+                            ? $"companion authority could not bind {federationEndpoint}: {refused}"
+                            : $"companion authority did not report a bound listener within {AuthorityCompanion.ListenSeconds} seconds"),
                         runDirectory: runDirectory
                     );
                 }
             }
 
+            budget.Tally.WorldStarted();
             process = CliProcess.RunCaptured(
                 fileName: "dotnet",
                 arguments: [
                     artifact,
                     "--world", executionWorld,
+                    .. ((leg.Entry is null)
+                ? []
+                : new[] { "--entry", leg.Entry }),
                             .. (leg.Connect
                 ? new[] { "--connect", federationEndpoint }
                 : []),
                     .. ((clientFederationKeyPath is null)
                 ? []
                 : new[] { "--federation-key-file", clientFederationKeyPath }),
-                    "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                     "--state-dir", stateDirectory,
-                    "--headless", ((manifest.BootShape == CanaryBootShape.Headless)
-                ? "true"
-                : "false"),
+                    "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
+                    .. BootShapeArguments(
+                    backend: backend,
+                    debugLayers: debugLayers,
+                    manifest: manifest
+                ),
                 ],
+                cancellationToken: budget.Cancellation,
+                environment: (leg.HideShaderCompiler
+                    ? Qualification.QualificationPackage.LegEnvironment(
+                        compiler: Qualification.ReleaseCompilerDiscovery.None,
+                        holdsCompiler: Qualification.QualificationPackage.HoldsCompiler,
+                        searchPath: Environment.GetEnvironmentVariable(variable: "PATH")
+                    )
+                    : null),
                 input: input,
                 timeout: timeout
             );
@@ -563,9 +926,11 @@ internal static partial class CanaryCommand {
                 reason: exception.Message.ReplaceLineEndings(replacementText: " ")
             );
         } finally {
-            // Disposed exactly once here — an earlier early-return above must never also dispose, or the second
-            // Dispose() throws on the already-released Process handle.
+            // Ended exactly once here — an earlier early-return above must never also dispose, or the second
+            // Dispose() throws on the already-released Process handle. The companion is asked to quit and is only
+            // killed if it does not, so its transcript ends the way a session ends.
             if (authority is not null) {
+                authority.Dispose();
                 File.WriteAllText(
                     path: Path.Combine(
                         path1: runDirectory,
@@ -582,7 +947,6 @@ internal static partial class CanaryCommand {
                     contents: authority.Stderr,
                     encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
                 );
-                authority.Dispose();
             }
         }
 
@@ -602,11 +966,6 @@ internal static partial class CanaryCommand {
             Stderr: SplitLines(text: process.Stderr),
             Stdout: SplitLines(text: process.Stdout)
         );
-        var assertions = CanaryAssertions.Evaluate(
-            authorityEndpoint: federationEndpoint,
-            leg: leg,
-            primaryTranscript: transcript
-        );
         var invariants = EvaluateRunnerInvariants(
             executionWorld: executionWorld,
             leg: leg,
@@ -614,655 +973,171 @@ internal static partial class CanaryCommand {
             process: process,
             transcript: transcript
         );
+        var unsupported = (process.TimedOut
+            ? null
+            : (UnsupportedReason(
+                compilerHidden: leg.HideShaderCompiler,
+                exitCode: process.ExitCode,
+                transcript: transcript
+            ) ?? AudioUnsupportedReason(
+                manifest: manifest,
+                transcript: transcript
+            )));
+        var exitCode = process.ExitCode;
+        var timedOut = process.TimedOut;
 
-        return new CanaryLegRun(
-            Assertions: assertions,
-            AuthorityEndpoint: federationEndpoint,
-            AuthorityTranscripts: ImmutableEmptyAuthorityTranscripts,
-            ExitCode: process.ExitCode,
-            InfrastructureError: null,
-            Invariants: invariants,
-            Leg: leg,
-            RunDirectory: runDirectory,
-            TimedOut: process.TimedOut,
-            Transcript: transcript
-        );
-    }
-
-    private static readonly IReadOnlyDictionary<string, CanaryTranscript> ImmutableEmptyAuthorityTranscripts = new Dictionary<string, CanaryTranscript>(comparer: StringComparer.Ordinal);
-
-    /// <summary>One authority's throwaway federation-identity keypair — a fresh ECDSA P-256 key, its self-certifying
-    /// domain fingerprint, and its SPKI bytes ready to pin into a peer's admission row.</summary>
-    private readonly record struct FederationIdentity(string Domain, string PublicKeyBase64, byte[] Pkcs8);
-
-    /// <summary>The subject the canary's connecting-out process signs its claims as. It authors no host.authority
-    /// of its own (it never listens for federation in this fixture), so Puck.World's own boot-instance fallback
-    /// names it — see Program.cs's own remarks on why that fallback exists.</summary>
-    private const string CanaryClientAuthoritySubject = Puck.World.WorldDefinitionLoader.BootInstanceName;
-    // The census section a federated fixture raises so an arrival from a peer has a slot to land in. KEEP IN SYNC
-    // with WorldBodiesDefaults' own JSON name: bodies.networkPlayers defaults to 0, so a fixture that raises the
-    // wrong member reads as a world that admits nobody, and every crossing is refused on arrival rather than
-    // failing to compose.
-    private const string WorldBodiesSectionName = "bodies";
-
-    private static FederationIdentity GenerateFederationIdentity() {
-        using var ecdsa = System.Security.Cryptography.ECDsa.Create(curve: System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
-        var spki = ecdsa.ExportSubjectPublicKeyInfo();
-        var fingerprint = System.Security.Cryptography.SHA256.HashData(source: spki);
-
-        return new FederationIdentity(
-            Domain: Convert.ToHexStringLower(bytes: fingerprint),
-            PublicKeyBase64: Convert.ToBase64String(inArray: spki),
-            Pkcs8: ecdsa.ExportPkcs8PrivateKey()
-        );
-    }
-    private static JsonObject AdmissionRow(FederationIdentity peer, string peerSubject) => new() {
-        ["domain"] = peer.Domain,
-        ["subject"] = peerSubject,
-        ["mode"] = "SignsDirectly",
-        ["algorithm"] = "ecdsa-p256-sha256",
-        ["publicKey"] = peer.PublicKeyBase64,
-        ["grants"] = new JsonArray(),
-    };
-    // Stages every world a federated leg boots into the run's own tree, mirrored whole from the nearest directory
-    // holding all of them, and answers the staged path for each source path. A leg's worlds are patched copies —
-    // each carries its own endpoint and admission rows — so every reference they resolve must land on a copy rather
-    // than on the shipped asset, which means the staged tree has to have the shipped tree's shape, not just its
-    // booted files: a shard names its basis one directory up, that basis names imports one directory down again,
-    // and an adjacency `references` row names a sibling. Anything short of the mirror leaves one of those three
-    // resolving to nothing, and the process refuses its own definition before it ever listens.
-    private static Dictionary<string, string> StageFederatedWorlds(IReadOnlyCollection<string> worldPaths, string federatedDirectory) {
-        var full = new List<(string Given, string Resolved)>(capacity: worldPaths.Count);
-
-        foreach (var path in worldPaths) {
-            full.Add(item: (path, Path.GetFullPath(path: path)));
-        }
-
-        var root = Path.GetDirectoryName(path: full[0].Resolved)!;
-
-        for (var index = 1; (index < full.Count); index++) {
-            var candidate = Path.GetDirectoryName(path: full[index].Resolved)!;
-
-            while (Path.GetRelativePath(
-                path: candidate,
-                relativeTo: root
-            ).StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: ".."
-            )) {
-                var parent = Path.GetDirectoryName(path: root);
-
-                if (string.IsNullOrEmpty(value: parent)) {
-                    throw new InvalidOperationException(message: $"federated worlds '{full[0].Resolved}' and '{full[index].Resolved}' share no directory to stage from.");
-                }
-
-                root = parent;
-            }
-        }
-
-        // A document's machine content lives beside `worlds` in the same `Assets` tree (a cabinet reaches
-        // `../../cartridges/…`), so when the worlds sit inside a content root the whole root is staged, never the
-        // worlds' own directory alone — the relative paths the documents carry then resolve in the copy too.
-        for (var ancestor = root; !string.IsNullOrEmpty(value: ancestor); ancestor = Path.GetDirectoryName(path: ancestor)) {
-            if (string.Equals(
-                a: Path.GetFileName(path: ancestor),
-                b: "Assets",
-                comparisonType: StringComparison.Ordinal
-            )) {
-                root = ancestor;
-
-                break;
-            }
-        }
-
-        CopyDirectory(
-            source: root,
-            target: federatedDirectory
-        );
-
-        var staged = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (given, resolved) in full) {
-            staged[given] = Path.Combine(
-                path1: federatedDirectory,
-                path2: Path.GetRelativePath(
-                    path: resolved,
-                    relativeTo: root
-                )
-            );
-        }
-
-        return staged;
-    }
-    private static void CopyDirectory(string source, string target) {
-        Directory.CreateDirectory(path: target);
-
-        foreach (var file in Directory.GetFiles(path: source)) {
-            File.Copy(
-                destFileName: Path.Combine(
-                    path1: target,
-                    path2: Path.GetFileName(path: file)
-                ),
-                overwrite: true,
-                sourceFileName: file
-            );
-        }
-
-        foreach (var directory in Directory.GetDirectories(path: source)) {
-            CopyDirectory(
-                source: directory,
-                target: Path.Combine(
-                    path1: target,
-                    path2: Path.GetFileName(path: directory)
-                )
-            );
-        }
-    }
-    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
-        var machineCatalog = CliWorldVocabulary.EnsureInstalled();
-        var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machineCatalog);
-        var federatedDirectory = Path.Combine(
-            path1: runDirectory,
-            path2: "federated-worlds"
-        );
-        var staged = StageFederatedWorlds(
-            federatedDirectory: federatedDirectory,
-            worldPaths: [leg.WorldPath, leg.AuthorityWorldPath!]
-        );
-        var authorityTarget = staged[leg.AuthorityWorldPath!];
-
-        var root = (JsonNode.Parse(json: File.ReadAllText(path: authorityTarget))?.AsObject()
-            ?? throw new InvalidOperationException(message: "authority world is not a JSON object"));
-
-        // The authority world may be a delta over a `basis` template (the quilt documents are), so an edited member
-        // is created when absent — an added member deep-merges over the template at load — and the population floor
-        // reads the composed document, never the delta alone, so a template-authored capacity above the floor is
-        // kept rather than clamped back down. The same composed read carries forward whatever admission rows the
-        // basis already authors (a wildcard FederatedAuthority arrival row, typically) — this door's own key-bearing
-        // row is ADDED to that set, never a replacement of it.
-        var composedCapacity = 8;
-        var composedNetworkPlayers = 4;
-        var composedAdmission = new JsonArray();
-
-        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(
-            catalog: machineCatalog,
-            catalogFingerprint: catalogFingerprint,
-            path: authorityTarget,
-            reason: out _,
-            tree: out var composed
-        )) {
-            if (composed![WorldBodiesSectionName] is JsonObject composedPopulation) {
-                composedCapacity = Math.Max(
-                    val1: composedCapacity,
-                    val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity)
-                );
-                composedNetworkPlayers = Math.Max(
-                    val1: composedNetworkPlayers,
-                    val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers)
+        // The relaunch boots only after a first boot that ran its script to the end, on the document that boot wrote.
+        if (
+            (leg.Relaunch is { } relaunch) &&
+            (unsupported is null) &&
+            !timedOut
+        ) {
+            if (budget.Remaining < timeout) {
+                return CanaryLegRun.BudgetExpired(
+                    budget: budget,
+                    leg: leg,
+                    runDirectory: runDirectory
                 );
             }
-            if (composed["admission"] is JsonArray composedRows) {
-                foreach (var row in composedRows) {
-                    composedAdmission.Add(item: row?.DeepClone());
-                }
-            }
-        }
 
-        if (root["host"] is not JsonObject host) {
-            host = new JsonObject();
-            root["host"] = host;
-        }
-
-        host["listen"] = endpoint;
-        host["authority"] = endpoint;
-
-        if (root[WorldBodiesSectionName] is not JsonObject population) {
-            population = new JsonObject();
-            root[WorldBodiesSectionName] = population;
-        }
-
-        population["capacity"] = composedCapacity;
-        population["networkPlayers"] = composedNetworkPlayers;
-        // The federation door verifies a claim against THIS document's own admission rows — pin the client's key
-        // (proving as CanaryClientAuthoritySubject, since it authors no host.authority of its own) alongside
-        // whatever the basis already authors, so WorldAttestedAuthenticator has a key-bearing row to build a trust
-        // list from AND the pre-existing FederatedAuthority row still decides what an admitted arrival is minted.
-        composedAdmission.Add(value: AdmissionRow(
-            peer: clientIdentity,
-            peerSubject: CanaryClientAuthoritySubject
-        ));
-        root["admission"] = composedAdmission;
-        File.WriteAllText(
-            path: authorityTarget,
-            contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-        );
-
-        // The client side never needs editing: it authors no host.authority (so it signs as the boot-instance
-        // fallback, see CanaryClientAuthoritySubject's own remarks) and it never listens for federation in this
-        // fixture, so it never verifies an inbound claim and needs no admission rows of its own. A --connect leg
-        // therefore still boots from the pristine, unmodified checked-in asset.
-        return ((leg.Connect
-            ? leg.WorldPath
-            : staged[leg.WorldPath]), authorityTarget);
-    }
-    // A federated mesh leg (leg.Authorities.Count != 0, CANARY-SHAPE.md's N-ary shape): every authority is a
-    // listener bound to its own dynamic loopback port, none dials out, and neighbours resolve each other by reading
-    // a sibling document's own host.authority — the same adjacency/references mechanism a two-authority leg already
-    // relies on, generalized from one companion to N. All N processes launch concurrently and run to completion
-    // before any assertion reads a transcript.
-    private static CanaryLegRun RunFederatedMeshLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, CanaryBudget budget) {
-        var runDirectory = CreateRunDirectory(
-            id: manifest.Id,
-            leg: leg.Name
-        );
-        var federatedDirectory = Path.Combine(
-            path1: runDirectory,
-            path2: "federated-worlds"
-        );
-        var stagedWorlds = StageFederatedWorlds(
-            federatedDirectory: federatedDirectory,
-            worldPaths: [leg.WorldPath, .. leg.Authorities.Select(selector: static role => role.WorldPath)]
-        );
-        var identities = new Dictionary<string, FederationIdentity>(comparer: StringComparer.Ordinal);
-        var endpoints = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-        var patchedWorldPaths = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-        var keyPaths = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var role in leg.Authorities) {
-            identities[role.Id] = GenerateFederationIdentity();
-            endpoints[role.Id] = $"127.0.0.1:{GetFreeLoopbackPort()}";
-        }
-
-        foreach (var role in leg.Authorities) {
-            var target = stagedWorlds[role.WorldPath];
-
-            PatchMeshAuthorityDocument(
-                endpoints: endpoints,
-                identities: identities,
-                selfId: role.Id,
-                targetPath: target
-            );
-            patchedWorldPaths[role.Id] = target;
-
-            var keyPath = Path.Combine(
+            var relaunchWorld = Path.Combine(
                 path1: runDirectory,
-                path2: $"{role.Id}-federation.key"
+                path2: relaunch.WorldFileName
             );
-
-            File.WriteAllBytes(
-                path: keyPath,
-                bytes: identities[role.Id].Pkcs8
-            );
-            keyPaths[role.Id] = keyPath;
-        }
-
-        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        var scriptTexts = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var role in leg.Authorities) {
-            var input = File.ReadAllText(path: role.ScriptPath)
+            var relaunchInput = File.ReadAllText(path: relaunch.ScriptPath)
                 .Replace(
                 oldValue: "{fixtures}",
                 newValue: manifest.DirectoryPath.Replace(
-                    newChar: '\\',
-                    oldChar: '/'
+                    newChar: '/',
+                    oldChar: '\\'
                 ),
                 comparisonType: StringComparison.Ordinal
             )
                 .Replace(
                 oldValue: "{run}",
                 newValue: runDirectory.Replace(
-                    newChar: '\\',
-                    oldChar: '/'
+                    newChar: '/',
+                    oldChar: '\\'
                 ),
                 comparisonType: StringComparison.Ordinal
             );
 
-            if (!input.EndsWith(value: '\n')) {
-                input += Environment.NewLine;
+            if (!relaunchInput.EndsWith(value: '\n')) {
+                relaunchInput += Environment.NewLine;
+            }
+            relaunchInput += $"wire.errors{Environment.NewLine}{RunnerQuit}";
+
+            CliProcessResult second;
+
+            try {
+                budget.Tally.WorldStarted();
+                second = CliProcess.RunCaptured(
+                    fileName: "dotnet",
+                    arguments: [
+                        artifact,
+                        "--world", relaunchWorld,
+                        "--state-dir", stateDirectory,
+                        "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
+                        .. BootShapeArguments(
+                        backend: backend,
+                        debugLayers: debugLayers,
+                        manifest: manifest
+                    ),
+                    ],
+                    cancellationToken: budget.Cancellation,
+                    environment: (leg.HideShaderCompiler
+                        ? Qualification.QualificationPackage.LegEnvironment(
+                            compiler: Qualification.ReleaseCompilerDiscovery.None,
+                            holdsCompiler: Qualification.QualificationPackage.HoldsCompiler,
+                            searchPath: Environment.GetEnvironmentVariable(variable: "PATH")
+                        )
+                        : null),
+                    input: relaunchInput,
+                    timeout: timeout
+                );
+            } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
+                return CanaryLegRun.InfrastructureFailure(
+                    leg: leg,
+                    runDirectory: runDirectory,
+                    reason: exception.Message.ReplaceLineEndings(replacementText: " ")
+                );
             }
 
-            // Every authority carries the SAME runner-owned terminal observation a single-process leg does — see
-            // EvaluateFederatedInvariants below, which checks each authority's own zero-rejected tally independently.
-            input += $"wire.errors{Environment.NewLine}";
-            scriptTexts[role.Id] = input;
-        }
-
-        var timeout = TimeSpan.FromSeconds(value: manifest.TimeoutSeconds);
-
-        if (budget.Remaining < timeout) {
-            return CanaryLegRun.BudgetExpired(
-                budget: budget,
-                leg: leg,
-                runDirectory: runDirectory
-            );
-        }
-
-        var tasks = new Dictionary<string, Task<CliProcessResult>>(comparer: StringComparer.Ordinal);
-
-        foreach (var role in leg.Authorities) {
-            var stateDirectory = Path.Combine(
-                path1: runDirectory,
-                path2: $"state-{role.Id}"
-            );
-            var arguments = new List<string> {
-                artifact,
-                "--world", patchedWorldPaths[role.Id],
-                "--federation-key-file", keyPaths[role.Id],
-                "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
-                "--state-dir", stateDirectory,
-                "--headless", ((manifest.BootShape == CanaryBootShape.Headless)
-                ? "true"
-                : "false"),
-            };
-            var script = scriptTexts[role.Id];
-
-            tasks[role.Id] = Task.Run(function: () => CliProcess.RunCaptured(
-                arguments: arguments,
-                fileName: "dotnet",
-                input: script,
-                timeout: timeout
-            ));
-        }
-
-        try {
-            Task.WaitAll(tasks: [.. tasks.Values]);
-        } catch (AggregateException exception) {
-            return CanaryLegRun.InfrastructureFailure(
-                leg: leg,
-                reason: (exception.InnerException?.Message.ReplaceLineEndings(replacementText: " ") ?? exception.Message),
-                runDirectory: runDirectory
-            );
-        }
-
-        var transcripts = new Dictionary<string, CanaryTranscript>(comparer: StringComparer.Ordinal);
-
-        foreach (var (authorityId, task) in tasks) {
-            var result = task.Result;
-
             File.WriteAllText(
                 path: Path.Combine(
                     path1: runDirectory,
-                    path2: $"{authorityId}-stdout.log"
+                    path2: "relaunch-stdout.log"
                 ),
-                contents: result.Stdout,
-                encoding: utf8NoBom
+                contents: second.Stdout,
+                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
             );
             File.WriteAllText(
                 path: Path.Combine(
                     path1: runDirectory,
-                    path2: $"{authorityId}-stderr.log"
+                    path2: "relaunch-stderr.log"
                 ),
-                contents: result.Stderr,
-                encoding: utf8NoBom
+                contents: second.Stderr,
+                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
             );
-            transcripts[authorityId] = new CanaryTranscript(
+
+            var secondTranscript = new CanaryTranscript(
                 RunDirectory: runDirectory,
-                Stderr: SplitLines(text: result.Stderr),
-                Stdout: SplitLines(text: result.Stdout)
+                Stderr: SplitLines(text: second.Stderr),
+                Stdout: SplitLines(text: second.Stdout)
+            );
+
+            invariants = [
+                .. invariants,
+                .. EvaluateRunnerInvariants(
+                    executionWorld: relaunchWorld,
+                    leg: (leg with { Commands = relaunch.Commands }),
+                    manifest: manifest,
+                    process: second,
+                    transcript: secondTranscript
+                ).Select(selector: static result => (result with { Detail = $"relaunch: {result.Detail}" })),
+            ];
+            unsupported = (second.TimedOut
+                ? null
+                : (UnsupportedReason(
+                    compilerHidden: leg.HideShaderCompiler,
+                    exitCode: second.ExitCode,
+                    transcript: secondTranscript
+                ) ?? AudioUnsupportedReason(
+                    manifest: manifest,
+                    transcript: secondTranscript
+                )));
+            exitCode = ((exitCode != 0)
+                ? exitCode
+                : second.ExitCode);
+            timedOut = second.TimedOut;
+            transcript = new CanaryTranscript(
+                RunDirectory: runDirectory,
+                Stderr: [.. transcript.Stderr, .. secondTranscript.Stderr],
+                Stdout: [.. transcript.Stdout, .. secondTranscript.Stdout]
             );
         }
 
-        var primaryId = leg.Authorities.First(predicate: role => (PathsEqual(
-            left: role.WorldPath,
-            right: leg.WorldPath
-        ) && PathsEqual(
-            left: role.ScriptPath,
-            right: leg.ScriptPath
-        ))).Id;
-        var primaryTranscript = transcripts[primaryId];
         var assertions = CanaryAssertions.Evaluate(
-            authorityTranscripts: transcripts,
+            authorityEndpoint: federationEndpoint,
             leg: leg,
-            primaryTranscript: primaryTranscript
+            primaryTranscript: transcript
         );
-        var invariants = EvaluateFederatedInvariants(
-            manifestTimeoutSeconds: manifest.TimeoutSeconds,
-            patchedWorldPaths: patchedWorldPaths,
-            primaryId: primaryId,
-            leg: leg,
-            tasks: tasks,
-            transcripts: transcripts
-        );
-        var anyTimedOut = tasks.Values.Any(predicate: static task => task.Result.TimedOut);
-        var anyNonZeroExit = tasks.Values.Any(predicate: static task => (task.Result.ExitCode != 0));
 
         return new CanaryLegRun(
             Assertions: assertions,
-            AuthorityEndpoint: string.Empty,
-            AuthorityTranscripts: transcripts,
-            ExitCode: (anyNonZeroExit
-            ? tasks.Values.First(predicate: static task => (task.Result.ExitCode != 0)).Result.ExitCode
-            : 0),
-            InfrastructureError: null,
+            AuthorityEndpoint: federationEndpoint,
+            AuthorityTranscripts: ImmutableEmptyAuthorityTranscripts,
+            ExitCode: exitCode,
+            InfrastructureError: ListenerRefusal(stderr: transcript.Stderr),
             Invariants: invariants,
             Leg: leg,
             RunDirectory: runDirectory,
-            TimedOut: anyTimedOut,
-            Transcript: primaryTranscript
-        );
+            TimedOut: timedOut,
+            Transcript: transcript
+        ) {
+            Unsupported = unsupported,
+        };
     }
-    private static IReadOnlyList<CanaryAssertionResult> EvaluateFederatedInvariants(
-        CanaryLeg leg,
-        int manifestTimeoutSeconds,
-        string primaryId,
-        IReadOnlyDictionary<string, string> patchedWorldPaths,
-        IReadOnlyDictionary<string, Task<CliProcessResult>> tasks,
-        IReadOnlyDictionary<string, CanaryTranscript> transcripts
-    ) {
-        var results = new List<CanaryAssertionResult>(capacity: (leg.Authorities.Count * 3));
-
-        // The manifest's commands[] claims are authored against the leg's own (primary) script, so full per-verb,
-        // per-occurrence, per-stream accounting only applies to that one authority — a non-primary authority's
-        // script is unclaimed and gets only the health checks below.
-        results.AddRange(collection: EvaluateCommandAccounting(
-            commands: leg.Commands,
-            outputLines: tasks[primaryId].Result.OutputLines
-        ));
-
-        foreach (var role in leg.Authorities) {
-            var result = tasks[role.Id].Result;
-            var transcript = transcripts[role.Id];
-
-            results.Add(item: new CanaryAssertionResult(
-                Detail: $"{role.Id} process exited 0 (actual {result.ExitCode})",
-                Passed: (!result.TimedOut && (result.ExitCode == 0))
-            ));
-            results.Add(item: new CanaryAssertionResult(
-                Detail: $"{role.Id} completed before {manifestTimeoutSeconds}s timeout",
-                Passed: !result.TimedOut
-            ));
-
-            var origin = $"[world] definition: {patchedWorldPaths[role.Id]} (--world)";
-
-            results.Add(item: new CanaryAssertionResult(
-                Detail: $"{role.Id} stderr names the exact absolute --world origin",
-                Passed: transcript.Stderr.Any(predicate: line => string.Equals(
-                    a: line,
-                    b: origin,
-                    comparisonType: StringComparison.Ordinal
-                ))
-            ));
-
-            var terminal = transcript.Stdout.Where(predicate: static line => line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "[wire.errors:"
-            )).ToArray();
-
-            results.Add(item: new CanaryAssertionResult(
-                Detail: $"{role.Id} runner-owned terminal observation is exact '[wire.errors: 0 rejected]'",
-                Passed: ((terminal.Length != 0) && string.Equals(
-                    a: terminal[^1],
-                    b: "[wire.errors: 0 rejected]",
-                    comparisonType: StringComparison.Ordinal
-                ))
-            ));
-        }
-
-        return results;
-    }
-    private static int GetFreeLoopbackPort() {
-        var listener = new System.Net.Sockets.TcpListener(
-            localaddr: System.Net.IPAddress.Loopback,
-            port: 0
-        );
-
-        try {
-            listener.Start();
-
-            return ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
-        } finally {
-            listener.Stop();
-        }
-    }
-    // Patches one authority's copied world document in place: its own listen/authority endpoint, and one
-    // SignsDirectly admission row per OTHER authority in the mesh so WorldAttestedAuthenticator can verify every
-    // peer's signed claim against a key pinned by this document — the N-ary generalization of PrepareFederatedWorlds'
-    // single companion row above. Reads the pristine composed document (basis + this authority's own delta) BEFORE
-    // any of these edits land, so an authored capacity/admission floor the basis already carries is kept, not lost.
-    private static void PatchMeshAuthorityDocument(string targetPath, string selfId, IReadOnlyDictionary<string, string> endpoints, IReadOnlyDictionary<string, FederationIdentity> identities) {
-        var machineCatalog = CliWorldVocabulary.EnsureInstalled();
-        var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machineCatalog);
-        var root = (JsonNode.Parse(json: File.ReadAllText(path: targetPath))?.AsObject()
-            ?? throw new InvalidOperationException(message: $"authority world '{targetPath}' is not a JSON object"));
-        var composedCapacity = 8;
-        var composedNetworkPlayers = 4;
-        var composedAdmission = new JsonArray();
-
-        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(
-            catalog: machineCatalog,
-            catalogFingerprint: catalogFingerprint,
-            path: targetPath,
-            reason: out _,
-            tree: out var composed
-        )) {
-            if (composed![WorldBodiesSectionName] is JsonObject composedPopulation) {
-                composedCapacity = Math.Max(
-                    val1: composedCapacity,
-                    val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity)
-                );
-                composedNetworkPlayers = Math.Max(
-                    val1: composedNetworkPlayers,
-                    val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers)
-                );
-            }
-            if (composed["admission"] is JsonArray composedRows) {
-                foreach (var row in composedRows) {
-                    composedAdmission.Add(item: row?.DeepClone());
-                }
-            }
-        }
-
-        if (root["host"] is not JsonObject host) {
-            host = new JsonObject();
-            root["host"] = host;
-        }
-
-        host["listen"] = endpoints[selfId];
-        host["authority"] = endpoints[selfId];
-
-        if (root[WorldBodiesSectionName] is not JsonObject population) {
-            population = new JsonObject();
-            root[WorldBodiesSectionName] = population;
-        }
-
-        population["capacity"] = composedCapacity;
-        population["networkPlayers"] = composedNetworkPlayers;
-
-        foreach (var (peerId, peerEndpoint) in endpoints) {
-            if (peerId == selfId) {
-                continue;
-            }
-
-            composedAdmission.Add(value: AdmissionRow(
-                peer: identities[peerId],
-                peerSubject: peerEndpoint
-            ));
-        }
-
-        root["admission"] = composedAdmission;
-        File.WriteAllText(
-            path: targetPath,
-            contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
-        );
-    }
-
-    private sealed class AuthorityCompanion : IDisposable {
-        private readonly Process m_process;
-
-        private readonly StringBuilder m_stdout = new();
-        private readonly StringBuilder m_stderr = new();
-        private readonly Lock m_gate = new();
-
-        private AuthorityCompanion(Process process) {
-            m_process = process;
-            process.OutputDataReceived += (_, args) => {
-                if (args.Data is { } line) {
-                    lock (m_gate) {
-                        m_stdout.AppendLine(value: line);
-                    }
-                }
-            };
-            process.ErrorDataReceived += (_, args) => {
-                if (args.Data is { } line) {
-                    lock (m_gate) {
-                        m_stderr.AppendLine(value: line);
-                    }
-                }
-            };
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            process.StandardInput.Close();
-        }
-
-        public string Stderr { get { lock (m_gate) { return m_stderr.ToString(); } } }
-        public string Stdout { get { lock (m_gate) { return m_stdout.ToString(); } } }
-
-        public void Dispose() {
-            if (!m_process.HasExited) {
-                try { m_process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-                m_process.WaitForExit();
-            }
-            m_process.Dispose();
-        }
-        public static AuthorityCompanion Start(string artifact, string world, string stateDirectory, int seconds, string federationKeyPath) {
-            var startInfo = new ProcessStartInfo {
-                CreateNoWindow = true,
-                FileName = "dotnet",
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-            };
-
-            foreach (var argument in new[] { artifact, "--world", world, "--exit-after-seconds", seconds.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", stateDirectory, "--headless", "true", "--federation-key-file", federationKeyPath }) {
-                startInfo.ArgumentList.Add(item: argument);
-            }
-            return new AuthorityCompanion(process: (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "failed to start companion authority")));
-        }
-        public bool WaitUntilListening(TimeSpan timeout) {
-            var clock = Stopwatch.StartNew();
-
-            while (clock.Elapsed < timeout) {
-                lock (m_gate) {
-                    if (m_stderr.ToString().Contains(
-                        comparisonType: StringComparison.Ordinal,
-                        value: "[world.listen: bound "
-                    )) {
-                        return true;
-                    }
-                }
-                if (m_process.HasExited) {
-                    return false;
-                }
-                _ = m_process.WaitForExit(milliseconds: 25);
-            }
-            return false;
-        }
-    }
-
     private static IReadOnlyList<CanaryAssertionResult> EvaluateRunnerInvariants(
         CanaryManifest manifest,
         CanaryLeg leg,
@@ -1295,362 +1170,9 @@ internal static partial class CanaryCommand {
             commands: leg.Commands,
             outputLines: process.OutputLines
         ));
+        results.AddRange(collection: PipelineWaitInvariants(transcript: transcript));
 
         return results;
-    }
-
-    // Per-verb command-claim accounting shared by a single-process leg and a federated mesh leg's primary
-    // authority: every authored occurrence's response is ResponseEvents' own reading for that verb (either
-    // stream; OutputLines carries both, sequence-ordered) — checked against its declared stream (accepted implies
-    // stdout unless StreamOverride says otherwise, except a narrated verb — see NarratedMutationVerbs — whose only
-    // signal is engine narration and so is always stderr; refused always implies stderr). wire.errors additionally
-    // carries the runner-owned terminal call, one beyond whatever occurrences the script itself authored.
-    internal static IReadOnlyList<CanaryAssertionResult> EvaluateCommandAccounting(IReadOnlyList<CanaryCommandClaim> commands, IReadOnlyList<CliProcessOutputLine> outputLines) {
-        var results = new List<CanaryAssertionResult>();
-        var expectedRefusals = commands.Count(predicate: static claim => (claim.Outcome == CanaryCommandOutcome.Refused));
-        var byVerb = commands.GroupBy(
-            keySelector: static claim => claim.Verb,
-            comparer: StringComparer.Ordinal
-        );
-
-        foreach (var group in byVerb) {
-            var responseEvents = ResponseEvents(
-                outputLines: outputLines,
-                verb: group.Key
-            );
-            var claims = group.OrderBy(keySelector: static claim => claim.Occurrence).ToList();
-            var terminalAdjustment = ((group.Key == "wire.errors")
-                ? 1
-                : 0
-            );
-            var countPassed = (responseEvents.Count == (claims.Count + terminalAdjustment));
-
-            results.Add(item: new CanaryAssertionResult(
-                Detail: $"accounted {group.Key}: {responseEvents.Count} response(s) for {claims.Count} authored occurrence(s){((terminalAdjustment == 1)
-                ? " plus terminal observation"
-                : string.Empty)}",
-                Passed: countPassed
-            ));
-
-            if (countPassed) {
-                for (var index = 0; (index < claims.Count); index++) {
-                    var expectedStream = (((claims[index].StreamOverride ?? DefaultStream(
-                        outcome: claims[index].Outcome,
-                        verb: group.Key
-                    )) == CanaryStream.Stdout)
-                        ? CliProcessOutputStream.Stdout
-                        : CliProcessOutputStream.Stderr
-                    );
-
-                    results.Add(item: new CanaryAssertionResult(
-                        Detail: $"{group.Key} occurrence {claims[index].Occurrence} was {claims[index].Outcome.ToString().ToLowerInvariant()}",
-                        Passed: (responseEvents[index].Stream == expectedStream)
-                    ));
-                }
-            }
-        }
-
-        var terminalResponses = outputLines
-            .Where(predicate: static line => line.Line.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "[wire.errors:"
-        ))
-            .ToArray();
-        var expectedTerminal = $"[wire.errors: {expectedRefusals} rejected]";
-        var terminalPassed = ((terminalResponses.Length != 0) && (terminalResponses[^1].Stream == CliProcessOutputStream.Stdout) && string.Equals(
-            a: terminalResponses[^1].Line,
-            b: expectedTerminal,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        results.Add(item: new CanaryAssertionResult(
-            Detail: $"runner-owned terminal observation is exact '{expectedTerminal}' after all authored commands",
-            Passed: terminalPassed
-        ));
-
-        return results;
-    }
-
-    // A buffered mutation verb the console layer never registers against WorldDeferredVerbEchoes (WorldServer stays
-    // off limits to this task, so the registration gap itself is not this runner's to close) leaves the universal
-    // tick-boundary narration — "[world.mutation: <Describe> applied]" accepted, "[world.mutation rejected:
-    // <Describe> — …]" refused, ALWAYS on stderr (engine narration, never the accepted-implies-stdout default) — as
-    // its only observable answer. Describe's own text is unique per WorldMutation case (WorldServer.Describe.cs), so
-    // the prefix below is a stable, verb-specific correlation, not a guess.
-    private static readonly IReadOnlyDictionary<string, string> NarratedMutationVerbs = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
-        ["world.generate"] = "Generate '",
-        ["world.state.cell.remove"] = "RemoveStateCell '",
-        ["world.state.cell.set"] = "UpsertStateCell '",
-    };
-
-    // Refused always answers on stderr; accepted answers on stdout UNLESS the verb is narration-only (above), whose
-    // sole signal is engine narration and so is stderr regardless of outcome.
-    private static CanaryStream DefaultStream(CanaryCommandOutcome outcome, string verb) =>
-        (((outcome == CanaryCommandOutcome.Accepted) && !NarratedMutationVerbs.ContainsKey(key: verb))
-            ? CanaryStream.Stdout
-            : CanaryStream.Stderr
-        );
-
-    // A verb whose space-led answer opens with an inline key ("[world.symmetry node=5 …]") rather than a bracketed
-    // name reads the same as any other spaced answer except for one ambiguity BracketResponseEvents cannot resolve
-    // on its own: two SEPARATE calls back to back (no other command between them) are indistinguishable from one
-    // call's own multi-line answer by prefix alone, since both are runs of "[verb …]" lines with nothing else
-    // between them. The key value breaks the tie — a second line still naming the same key is the same call's own
-    // further output (world.symmetry's second line echoes the identical node its first line answered for); a key
-    // change can only be a fresh call.
-    private static readonly IReadOnlyDictionary<string, string> KeyedSpacedVerbs = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
-        ["world.symmetry"] = "node=",
-    };
-
-    private static List<CliProcessOutputLine> KeyedResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb, string keyPrefix) {
-        var lead = $"[{verb} {keyPrefix}";
-        var events = new List<CliProcessOutputLine>();
-        var inRun = false;
-        var openKey = string.Empty;
-
-        foreach (var line in outputLines) {
-            if (TryReadDelimited(
-                line: line.Line,
-                prefix: lead,
-                value: out var key
-            )) {
-                if (!(inRun && string.Equals(
-                    a: openKey,
-                    b: key,
-                    comparisonType: StringComparison.Ordinal
-                ))) {
-                    events.Add(item: line);
-                    inRun = true;
-                }
-
-                openKey = key;
-            } else {
-                inRun = false;
-                openKey = string.Empty;
-            }
-        }
-
-        return events;
-    }
-    // Reads the token right after a known prefix, up to the next space or closing bracket — "5" from
-    // "[world.symmetry node=5 …]" given prefix "[world.symmetry node=".
-    private static bool TryReadDelimited(string line, string prefix, out string value) {
-        value = string.Empty;
-
-        if (!line.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: prefix
-        )) {
-            return false;
-        }
-
-        var end = line.IndexOfAny(
-            anyOf: [' ', ']'],
-            startIndex: prefix.Length
-        );
-
-        value = ((end < 0)
-            ? line[prefix.Length..]
-            : line[prefix.Length..end]
-        );
-
-        return true;
-    }
-
-    // One event per answer. A verb narrated only through the universal mutation channel (above) is matched by
-    // Describe-prefix instead of its own bracket; world.state's own two-tier read-back (a row header opening a run
-    // of cell lines) gets its own reading, since a bare cell line can ALSO be a whole answer on its own (the
-    // row+key single-cell form) and a fresh row header must never be swallowed into a run already open for a
-    // DIFFERENT row; every other verb uses the general bracket reading.
-    internal static List<CliProcessOutputLine> ResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb) {
-        if (NarratedMutationVerbs.TryGetValue(
-            key: verb,
-            value: out var describePrefix
-        )) {
-            return NarratedResponseEvents(
-                describePrefix: describePrefix,
-                outputLines: outputLines
-            );
-        }
-        if (KeyedSpacedVerbs.TryGetValue(
-            key: verb,
-            value: out var keyPrefix
-        )) {
-            return KeyedResponseEvents(
-                keyPrefix: keyPrefix,
-                outputLines: outputLines,
-                verb: verb
-            );
-        }
-
-        return (string.Equals(
-            a: verb,
-            b: "world.state",
-            comparisonType: StringComparison.Ordinal
-        )
-            ? WorldStateResponseEvents(outputLines: outputLines)
-            : BracketResponseEvents(
-                outputLines: outputLines,
-                verb: verb
-            )
-        );
-    }
-
-    private static List<CliProcessOutputLine> NarratedResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string describePrefix) {
-        var accepted = $"[world.mutation: {describePrefix}";
-        var rejected = $"[world.mutation rejected: {describePrefix}";
-        var events = new List<CliProcessOutputLine>();
-
-        foreach (var line in outputLines) {
-            if (
-                line.Line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: accepted
-            ) ||
-                line.Line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: rejected
-            )
-            ) {
-                events.Add(item: line);
-            }
-        }
-
-        return events;
-    }
-    // "[verb:" always opens a fresh answer AND stays open for whatever "[verb." or "[verb " lines follow it without
-    // a gap — the header-then-details shape console.md documents for world.state generalizes to any verb whose
-    // read-back is one summary line followed by a run of detail lines under the same prefix (world.rule.trace's
-    // read-back names its rule instead of a bare colon: "[world.rule.trace <rule>: N/N captured]" then one
-    // "[world.rule.trace <rule> tick=…]" line per evaluation — a space-led run exactly like a dot-led facet run).
-    // A "[verb." or "[verb " line not already inside a run of its own verb opens one; two such lines in a row
-    // continue the same answer, since the only way to tell separate answers apart from bracket text alone is a
-    // non-matching line between them.
-    private static List<CliProcessOutputLine> BracketResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb) {
-        var exact = $"[{verb}:";
-        var dotted = $"[{verb}.";
-        var spaced = $"[{verb} ";
-        var events = new List<CliProcessOutputLine>();
-        var inRun = false;
-
-        foreach (var line in outputLines) {
-            if (line.Line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: exact
-            )) {
-                events.Add(item: line);
-                inRun = true;
-            } else if (
-                line.Line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: dotted
-            ) ||
-                line.Line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: spaced
-            )
-            ) {
-                if (!inRun) {
-                    events.Add(item: line);
-                }
-
-                inRun = true;
-            } else {
-                inRun = false;
-            }
-        }
-
-        return events;
-    }
-    // world.state's own two forms collide under the general bracket reading: "world.state <row>" prints ONE
-    // "[world.state.row '<row>' …]" header followed by that row's own "[world.state.cell '<row>'.'<key>' …]"
-    // lines (one answer), "world.state <row> <key>" prints ONLY the cell line with no header at all (also one
-    // answer), and "world.state" alone prints an EXACT "[world.state: rows N/…]" header followed by every row's
-    // own header-then-cells run in turn (still one answer, the whole dump). A row header can only ever be the
-    // first line of its own answer, so one immediately following another row's cell lines — the row-only form
-    // called back to back — must always open fresh; the one case it must not is a header inside the "world.state"
-    // dump's own already-open run, where every row's header is a further line of the same answer. A cell line
-    // continues the run only when the run's own open row already names it — the dump's own exact-opened run
-    // (whose "open row" tracks whichever header struck last) or a prior cell line reporting the identical row (the
-    // row+key single-cell form has no header to open on, so its first cell line is what opens it).
-    private static List<CliProcessOutputLine> WorldStateResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines) {
-        const string Exact = "[world.state:";
-        const string RowPrefix = "[world.state.row '";
-        const string CellPrefix = "[world.state.cell '";
-        var events = new List<CliProcessOutputLine>();
-        var inRun = false;
-        var runIsDump = false;
-        var openRow = string.Empty;
-
-        foreach (var line in outputLines) {
-            if (line.Line.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Exact
-            )) {
-                events.Add(item: line);
-                inRun = true;
-                runIsDump = true;
-                openRow = string.Empty;
-            } else if (TryReadQuoted(
-                line: line.Line,
-                prefix: RowPrefix,
-                value: out var rowName
-            )) {
-                if (!(inRun && runIsDump)) {
-                    events.Add(item: line);
-                    inRun = true;
-                    runIsDump = false;
-                }
-
-                openRow = rowName;
-            } else if (TryReadQuoted(
-                line: line.Line,
-                prefix: CellPrefix,
-                value: out var cellRow
-            )) {
-                if (!(inRun && (runIsDump || string.Equals(
-                    a: openRow,
-                    b: cellRow,
-                    comparisonType: StringComparison.Ordinal
-                )))) {
-                    events.Add(item: line);
-                    inRun = true;
-                    runIsDump = false;
-                    openRow = cellRow;
-                }
-            } else {
-                inRun = false;
-                runIsDump = false;
-                openRow = string.Empty;
-            }
-        }
-
-        return events;
-    }
-    // Reads the quoted token right after a known prefix — "'<name>'" from either "[world.state.row 'name' …]" or
-    // "[world.state.cell 'name'.'key' …]", both of which quote their row name first.
-    private static bool TryReadQuoted(string line, string prefix, out string value) {
-        value = string.Empty;
-
-        if (!line.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: prefix
-        )) {
-            return false;
-        }
-
-        var closing = line.IndexOf(
-            value: '\'',
-            startIndex: prefix.Length
-        );
-
-        if (closing < 0) {
-            return false;
-        }
-
-        value = line[prefix.Length..closing];
-
-        return true;
     }
     private static void ReportLeg(string id, CanaryLegRun result) {
         Console.WriteLine(value: $"canary {id} {result.Leg.Name}: transcripts {result.RunDirectory}");
@@ -1682,7 +1204,12 @@ internal static partial class CanaryCommand {
                 )
             );
 
-            Console.WriteLine(value: $"{manifest.Id} shape={manifest.BootShape.ToString().ToLowerInvariant()} requirements={requirements} automatic={manifest.IsAutomatic.ToString().ToLowerInvariant()}");
+            Console.WriteLine(value: $"{manifest.Id} shape={manifest.BootShape.ToString().ToLowerInvariant()}{((manifest.Backends.Count == 0)
+                ? string.Empty
+                : $" backends={string.Join(
+                    separator: ',',
+                    values: manifest.Backends
+                )}")} requirements={requirements} automatic={manifest.IsAutomatic.ToString().ToLowerInvariant()}");
             Console.WriteLine(value: $"  world: {CliPaths.ToDisplay(
                 relativeTo: repositoryRoot,
                 fullPath: manifest.Positive.WorldPath
@@ -1703,6 +1230,7 @@ internal static partial class CanaryCommand {
             manifests: manifests,
             ids: selection.Ids
         ),
+            CanarySelectionKind.Merge => SelectMerge(manifests: manifests),
             _ => [],
         };
 
@@ -1724,6 +1252,7 @@ internal static partial class CanaryCommand {
             error = selection.Kind switch {
                 CanarySelectionKind.Automatic => "the automatic set is empty; landing cannot report green without a headless, requirement-free proof.",
                 CanarySelectionKind.Capability => $"capability filter '{selection.Capability}' selected zero canaries; an empty selection cannot report green.",
+                CanarySelectionKind.Merge => "the merge set is empty; a merge cannot report green without a proof to run.",
                 _ => "selection contains zero canaries; an empty run cannot report green.",
             };
 
@@ -1736,11 +1265,23 @@ internal static partial class CanaryCommand {
         "automatic" => manifests.Where(predicate: static manifest => manifest.IsAutomatic).ToArray(),
         "headless" => manifests.Where(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Headless)).ToArray(),
         "windowed" => manifests.Where(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Windowed)).ToArray(),
+        "offscreen" => manifests.Where(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Offscreen)).ToArray(),
         _ => manifests.Where(predicate: manifest => manifest.Requirements.Contains(
         value: capability,
         comparer: StringComparer.Ordinal
     )).ToArray(),
     };
+
+    // The merge gate: every automatic proof and every proof requiring gpu, once each, in authored order.
+    internal static IReadOnlyList<CanaryManifest> SelectMerge(IReadOnlyList<CanaryManifest> manifests) {
+        var gpu = FilterCapability(
+            capability: "gpu",
+            manifests: manifests
+        );
+
+        return manifests.Where(predicate: manifest => (manifest.IsAutomatic || gpu.Contains(value: manifest))).ToArray();
+    }
+
     private static IReadOnlyList<CanaryManifest> SelectIds(IReadOnlyList<CanaryManifest> manifests, IReadOnlyList<string> ids) {
         var byId = manifests.ToDictionary(
             keySelector: static manifest => manifest.Id,
@@ -1749,8 +1290,8 @@ internal static partial class CanaryCommand {
 
         return ids.Where(predicate: byId.ContainsKey).Select(selector: id => byId[id]).ToArray();
     }
-    // The four selection forms are mutually exclusive at parse time, so at most one of these can be set.
-    private static CanarySelection ToSelection(bool all, string? capability, string[] ids, bool list) {
+    // The five selection forms are mutually exclusive at parse time, so at most one of these can be set.
+    private static CanarySelection ToSelection(bool all, string? capability, string[] ids, bool list, bool merge) {
         if (list) {
             return new CanarySelection(
                 Capability: null,
@@ -1763,6 +1304,13 @@ internal static partial class CanaryCommand {
                 Capability: null,
                 Ids: [],
                 Kind: CanarySelectionKind.All
+            );
+        }
+        if (merge) {
+            return new CanarySelection(
+                Capability: null,
+                Ids: [],
+                Kind: CanarySelectionKind.Merge
             );
         }
         if (capability is not null) {
@@ -1786,33 +1334,9 @@ internal static partial class CanaryCommand {
             Kind: CanarySelectionKind.Automatic
         );
     }
-    private static string CreateRunDirectory(string id, string leg) {
-        var temp = Path.GetTempPath();
-
-        for (var attempt = 0; (attempt < 8); attempt++) {
-            var path = Path.Combine(
-                path1: temp,
-                path2: $"{ScratchPrefix}{Guid.NewGuid():N}-{id}-{leg}"
-            );
-
-            if (Directory.Exists(path: path)) {
-                continue;
-            }
-
-            Directory.CreateDirectory(path: path);
-
-            return path;
-        }
-
-        throw new IOException(message: "Could not create a fresh random canary run directory after 8 attempts.");
-    }
-    private static bool PathsEqual(string left, string right) =>
-        (OperatingSystem.IsWindows()
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal).Equals(
-            x: left,
-            y: right
-        );
+    // The run directory names its canary and leg after the prefix SweepScratch finds.
+    private static string CreateRunDirectory(string id, string leg) =>
+        Directory.CreateTempSubdirectory(prefix: $"{ScratchPrefix}{id}-{leg}-").FullName;
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.ReplaceLineEndings(replacementText: "\n").Split(
             options: StringSplitOptions.RemoveEmptyEntries,
@@ -1839,6 +1363,7 @@ internal static partial class CanaryCommand {
         Capability,
         Ids,
         List,
+        Merge,
     }
 
     private sealed record CanarySelection(string? Capability, IReadOnlyList<string> Ids, CanarySelectionKind Kind);
@@ -1854,7 +1379,9 @@ internal static partial class CanaryCommand {
         bool TimedOut,
         CanaryTranscript Transcript
     ) {
-        public bool Passed => ((InfrastructureError is null) && !TimedOut && (ExitCode == 0) && Invariants.All(predicate: static result => result.Passed) && Assertions.Passed);
+        public bool Passed => ((InfrastructureError is null) && (Unsupported is null) && !TimedOut && (ExitCode == 0) && Invariants.All(predicate: static result => result.Passed) && Assertions.Passed);
+        // The line that announced this leg's environment could not run it, or null when it could.
+        public string? Unsupported { get; init; }
 
         public static CanaryLegRun BudgetExpired(CanaryBudget budget, CanaryLeg leg, string runDirectory) => InfrastructureFailure(
             leg: leg,

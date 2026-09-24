@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Maths;
@@ -20,7 +21,7 @@ public sealed class PortalSweepOriginLawTests {
     [Fact]
     public void Advance_CapturesPreStepOrigin_NotPostStepOrigin() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -62,7 +63,7 @@ public sealed class PortalSweepOriginLawTests {
     [Fact]
     public void Pose_HardTeleport_CollapsesSweptSegmentToLandingPosition() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -111,7 +112,7 @@ public sealed class PortalSweepOriginLawTests {
     [Fact]
     public void Reconcile_HardCorrection_CollapsesSweptSegmentToLandingPosition() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

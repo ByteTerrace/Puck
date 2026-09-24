@@ -23,6 +23,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly IHostApplicationLifetime m_applicationLifetime;
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly IInputClock m_inputClock;
+    private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
     private readonly ILogger<HeadlessTickHostedService> m_logger;
     private readonly LauncherOptions m_options;
@@ -45,7 +46,8 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         IEnumerable<ISnapshotInputCapture> snapshotInputCaptures,
         CommandRegistry registry,
         TextCommandSource textSource,
-        TerminalControl terminal
+        TerminalControl terminal,
+        StandardInputBacklog inputBacklog
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
@@ -58,6 +60,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(snapshotInputCaptures);
         ArgumentNullException.ThrowIfNull(textSource);
         ArgumentNullException.ThrowIfNull(terminal);
+        ArgumentNullException.ThrowIfNull(inputBacklog);
 
         m_applicationLifetime = applicationLifetime;
         m_bufferedOutput = bufferedOutput;
@@ -79,6 +82,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             hostDescription: "headless host"
         );
         m_terminal = terminal;
+        m_inputBacklog = inputBacklog;
 
         if ((m_simulation is null) != (m_inputRouter is null)) {
             throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
@@ -91,6 +95,8 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     }
 
     private void RunHeadlessLoop(CancellationToken stoppingToken) {
+        Exception? fault = null;
+
         try {
             if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
                 m_logger.LogInformation(message: "Headless boot: no window, no GPU device, no swapchain, no audio device — the authoritative server, console, and tape only.");
@@ -99,14 +105,16 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             var clock = TickClock.Start();
             // Mirrors LauncherWindowHostedService's own null-simulation tolerance: a composition root that registers
             // no fixed-step sim still runs the console pump alone.
-            var pump = (((m_simulation is { } pumpSimulation) && (m_inputRouter is { } pumpInputRouter))
-                ? new FixedStepPump(
-                    simulation: pumpSimulation,
-                    inputRouter: pumpInputRouter,
-                    registry: m_registry,
-                    captureOriginTicks: m_inputClock.NowTicks
-                )
-                : null
+            var pump = FixedStepPump.CreateHosted(
+                holdsClock: false,
+                inputBacklog: m_inputBacklog,
+                inputClock: m_inputClock,
+                inputRouter: m_inputRouter,
+                output: m_bufferedOutput,
+                registry: m_registry,
+                simulation: m_simulation,
+                terminal: m_terminal,
+                textSource: m_textSource
             );
             var frequency = Stopwatch.Frequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
@@ -122,15 +130,6 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             // document mid-session, and this boot shape must adopt the new cadence — both the step width handed to
             // Advance and the wall-clock wait grid below — the next iteration rather than keep pacing at a stale
             // rate.
-            static uint ResolveRatePerSecond(IFixedStepSimulation? simulation) {
-                var simRatePerSecond = (simulation?.RatePerSecond ?? LauncherHostLoop.DefaultUpdateRate);
-
-                return ((simRatePerSecond == 0U)
-                    ? LauncherHostLoop.DefaultUpdateRate
-                    : simRatePerSecond
-                );
-            }
-
             var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
             var hostFrame = 0UL;
             var nextDeadline = Stopwatch.GetTimestamp();
@@ -166,7 +165,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 hostFrame++;
 
                 // Re-resolved every iteration — see ResolveRatePerSecond's own remarks above.
-                var ratePerSecond = ResolveRatePerSecond(simulation: m_simulation);
+                var ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: ratePerSecond);
                 // An offline schedule already pins every input and observation to the simulation's integer tick
                 // grid. Feeding exactly one step here preserves the ordinary FixedStepPump/InputRouter path while
@@ -216,24 +215,28 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             }
 
             m_logger.LogInformation(message: "Headless run ending; shutting the host down.");
-        } finally {
-            // Flush any buffered echo tail before teardown so the final lines a scripted run emits (e.g. right before
-            // an --exit-after shutdown, or the frame a quit/exit verb lands) are never lost.
-            m_bufferedOutput.Flush();
+        } catch (Exception exception) {
+            fault = exception;
 
-            m_applicationLifetime.StopApplication();
+            throw;
+        } finally {
+            try {
+                // Flush any buffered echo tail before teardown so the final lines a scripted run emits (e.g. right
+                // before an --exit-after shutdown, or the frame a quit/exit verb lands) are never lost.
+                LauncherHostRun.RunTeardown(
+                    fault,
+                    m_logger,
+                    ("flush output", m_bufferedOutput.Flush)
+                );
+            } finally {
+                m_applicationLifetime.StopApplication();
+            }
         }
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) {
-        var pumpThread = new Thread(start: () => RunHeadlessLoop(stoppingToken: stoppingToken)) {
-            IsBackground = true,
-            Name = "Puck.Launcher Headless Tick Pump",
-        };
-
-        pumpThread.Start();
-
-        return Task.CompletedTask;
-    }
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => LauncherHostLoop.RunPump(
+        name: "Puck.Launcher Headless Tick Pump",
+        pump: () => RunHeadlessLoop(stoppingToken: stoppingToken)
+    );
 
 }

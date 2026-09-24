@@ -33,40 +33,33 @@ public sealed partial class SdfWorldEngine {
         WaitForFrameRing();
         EnsureProgramCapacity(program: program);
 
-        // A program whose grid contains no active maskable dynamic instance has one invariant ring-local table. Build
-        // it against the engine's actual capacity envelope and seed every now-idle slot once. Programs with moving
-        // binnable instances retain the per-frame build after the matching transform upload.
+        // A program whose grid contains no active maskable dynamic instance has one invariant table. Build it against
+        // the engine's actual capacity envelope and stage the words that differ from the uploaded grid; the next frame
+        // copies them. Programs with moving binnable instances rebuild on the next frame and on every frame whose
+        // transforms move.
         var rebuildInstanceGridPerFrame = program.RequiresFrameInstanceGridRebuild;
-        ReadOnlySpan<uint> invariantInstanceGrid = default;
 
         if (!rebuildInstanceGridPerFrame) {
-            invariantInstanceGrid = program.BuildInvariantFrameInstanceGrid(
+            var invariantInstanceGrid = program.BuildInvariantFrameInstanceGrid(
                 inputScratch: m_instanceGridInputScratch,
                 workspace: m_instanceGridWorkspace
             );
+
             ValidateInstanceGridCapacity(words: invariantInstanceGrid);
+            StageInstanceGrid(words: invariantInstanceGrid);
         }
 
-        m_programBuffer.Write<uint>(data: program.Words);
-        // Seed the host-side mirror from the program's declared surfaces (the "program uploaded once" baseline); any
-        // SetScreenSurface call made before the next produced frame patches this same mirror before it goes out — a
+        WriteProgramWords(program: program);
+        // Seed the screen-surface mirror from the program's declared surfaces (the "program uploaded once" baseline);
+        // any SetScreenSurface call made before the next produced frame patches this same mirror before it goes out — a
         // re-upload never resurrects the program's original frame over a live SetScreenSurface write made in between.
-        MemoryMarshal.Cast<uint, byte>(span: program.ScreenSurfaceWords).CopyTo(destination: m_screenSurfaceScratch);
-        // Every ring slot's copy is now stale relative to the freshly seeded mirror (all idle after the drain above);
-        // PrepareFrame's dirty gate catches each one up on its next turn — mirrors m_decalDirty's pattern.
-        Array.Fill(
-            array: m_screenSurfaceDirty,
-            value: true
+        // Only the bytes that differ are owed to the ring slots.
+        _ = m_screenSurfaces.Write(
+            bytes: MemoryMarshal.Cast<uint, byte>(span: program.ScreenSurfaceWords),
+            offset: 0
         );
 
-        if (!rebuildInstanceGridPerFrame) {
-            foreach (var instanceGridBuffer in m_instanceGridBuffers) {
-                instanceGridBuffer.Write<uint>(data: invariantInstanceGrid);
-            }
-
-            m_instanceGridWordsWritten = invariantInstanceGrid.Length;
-        }
-
+        m_instanceGridRebuildOwed = rebuildInstanceGridPerFrame;
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
         m_rebuildInstanceGridPerFrame = rebuildInstanceGridPerFrame;
@@ -79,26 +72,14 @@ public sealed partial class SdfWorldEngine {
         // CADENCE GATE: a new program (words, live mask width, kernel variant, reseeded screen-surface table, invariant
         // instance grid) invalidates any prior frame's signature — bump the revision the signature folds in.
         m_programRevision++;
+        ReconfigureWork();
 
         // Stage 1 kernel-variant selection — a pure function of the uploaded program's instruction stream (see
         // SdfViewsKernelVariant): a program touching any exotic op/shape runs the full-ISA reference kernel; a
         // core-only program runs the exotic-stripped variant, bit-identical by construction (the stripped cases are
-        // unreachable) but with far less live register state in the interpreter. Logged (when GPU timing is armed) only
-        // when the selection CHANGES, so a per-interaction overworld rebuild doesn't spam the digest stream.
-        var (viewsVariant, variantTouch) = SdfViewsKernelVariants.Select(program: program);
+        // unreachable) but with far less live register state in the interpreter.
+        var (viewsVariant, _) = SdfViewsKernelVariants.Select(program: program);
 
         m_viewsVariant = viewsVariant;
-
-        if (
-            Views.ViewTiming.Enabled &&
-            (m_loggedViewsVariant != viewsVariant)
-        ) {
-            m_loggedViewsVariant = viewsVariant;
-            Console.Error.WriteLine(value: (viewsVariant switch {
-                SdfViewsKernelVariant.CoreOps => $"[world-timing] {DebugLabel} views variant: core-ops (no exotic op in the program)",
-                SdfViewsKernelVariant.Folds => $"[world-timing] {DebugLabel} views variant: folds (program touches {variantTouch}, no heavy op)",
-                _ => $"[world-timing] {DebugLabel} views variant: full (program touches {variantTouch})",
-            }));
-        }
     }
 }

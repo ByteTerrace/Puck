@@ -36,6 +36,22 @@ public sealed class HeldDigitalInputState {
         return -1;
     }
 
+    /// <summary>Returns whether any device holds a control.</summary>
+    /// <param name="source">The control's <see cref="InputSources"/> id.</param>
+    /// <returns><see langword="true"/> when some device holds <paramref name="source"/>.</returns>
+    public bool IsHeld(string source) {
+        foreach (var control in m_controls) {
+            if (string.Equals(
+                a: control.Source,
+                b: source,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Drops every physically held control, such as on OS focus loss.</summary>
     public void Clear() {
         m_controls.Clear();

@@ -1,7 +1,4 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -29,9 +26,7 @@ public sealed class CartridgeExpressionTests {
     private static CartridgeCompilation Compile(CartridgeDocument document, string target) {
         Assert.Empty(collection: CartridgeDocuments.Validate(document: document));
 
-        return (((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : (ICartridgeCompiler)new HgbCartridgeCompiler()).Compile(document: document));
+        return CartridgeProbe.Compiler(target: target).Compile(document: document);
     }
     private static CartridgeDocument Document(string target, string[] slots, int[] seeds, CartridgeArray[] arrays, CartridgeStatement[] body) =>
         CartridgeDocuments.Create(
@@ -54,17 +49,24 @@ public sealed class CartridgeExpressionTests {
         return CartridgeExpressions.Gate(
             left: ExpressionProgram.Parse(text: parts[0]),
             comparison: ((parts[1] == "==")
-            ? ActionStateComparison.Equal
-            : ActionStateComparison.NotEqual),
+            ? ExpressionOp.Equal
+            : ExpressionOp.NotEqual),
             right: ExpressionProgram.Parse(text: parts[2])
         );
     }
     private static int Read(CartridgeCompilation result, string slot) {
-        using var probe = new ExpressionProbe(result: result);
+        using var probe = Run(result: result);
+
+        return probe.Read(variable: slot);
+    }
+    private static CartridgeProbe Run(CartridgeCompilation result) {
+        var probe = new CartridgeProbe(
+            label: "expression",
+            result: result
+        );
 
         probe.Run(frames: 12);
-
-        return probe.Read(address: result.Variables[slot]);
+        return probe;
     }
     private static CartridgeStatement Write(string slot, string value) =>
         new(
@@ -94,11 +96,11 @@ public sealed class CartridgeExpressionTests {
 
         var result = Compile(
             document: document with {
-            Rules = [document.Rules[0] with { When = new ActionPredicate.Not(Predicate: CartridgeExpressions.Pressing(
+                Rules = [document.Rules[0] with { When = new ActionPredicate.Not(Predicate: CartridgeExpressions.Pressing(
                     button: "a",
                     mode: "held"
                 )) }],
-        },
+            },
             target: target
         );
 
@@ -130,41 +132,40 @@ public sealed class CartridgeExpressionTests {
         ]
         );
 
+        using var machine = Run(result: result);
+
         Assert.Equal(
             expected: 1,
-            actual: Read(
-                result: result,
-                slot: "greater"
-            )
+            actual: machine.Read(variable: "greater")
         );
         Assert.Equal(
             expected: 0,
-            actual: Read(
-                result: result,
-                slot: "lesser"
-            )
+            actual: machine.Read(variable: "lesser")
         );
     }
-    [InlineData("cgb")]
-    [InlineData("agb")]
+    // (7 + 3) * 4 is 40; evaluating left to right without the grouping would give 7 + 12, and dividing before
+    // subtracting would give something else again, so one expression pins the whole order. The operand order a stack
+    // machine is easy to get backwards is the other: 9 - 4 is 5, never 251.
+    [InlineData("cgb", "(a + b) * 4", 7, 3, 40)]
+    [InlineData("agb", "(a + b) * 4", 7, 3, 40)]
+    [InlineData("cgb", "a - b", 9, 4, 5)]
+    [InlineData("agb", "a - b", 9, 4, 5)]
     [Theory]
-    public void ANestedExpressionEvaluatesInOperandOrder(string target) {
-        // (7 + 3) * 4 is 40; evaluating left to right without the grouping would give 7 + 12, and dividing before
-        // subtracting would give something else again. One expression pins the whole order.
+    public void AnExpressionEvaluatesInTheOrderItIsWritten(string target, string expression, int a, int b, int expected) {
         var result = Compile(
             target: target,
             slots: ["a", "b", "out"],
-            seeds: [7, 3, 0],
+            seeds: [a, b, 0],
             body: [
             Write(
                     slot: "out",
-                    value: "(a + b) * 4"
+                    value: expression
                 ),
         ]
         );
 
         Assert.Equal(
-            expected: 40,
+            expected: expected,
             actual: Read(
                 result: result,
                 slot: "out"
@@ -195,13 +196,12 @@ public sealed class CartridgeExpressionTests {
             )],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "wide slot"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "wide slot",
+            Name: "a wide slot inside an expression",
+            Path: "rules[0].body[0].value"
+        ).Holds();
     }
     [InlineData("cgb")]
     [InlineData("agb")]
@@ -261,38 +261,12 @@ public sealed class CartridgeExpressionTests {
                 )]
         );
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "values at once"
-            )
-        );
-    }
-    [InlineData("cgb")]
-    [InlineData("agb")]
-    [Theory]
-    public void AnExpressionSubtractsInTheOrderItIsWritten(string target) {
-        // The operand order a stack machine is easy to get backwards: 9 - 4 is 5, never 251.
-        var result = Compile(
-            target: target,
-            slots: ["a", "b", "out"],
-            seeds: [9, 4, 0],
-            body: [
-            Write(
-                    slot: "out",
-                    value: "a - b"
-                ),
-        ]
-        );
-
-        Assert.Equal(
-            expected: 5,
-            actual: Read(
-                result: result,
-                slot: "out"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "values at once",
+            Name: "an expression past the operand depth",
+            Path: "rules[0].body[0].value"
+        ).Holds();
     }
     [Fact]
     public void AnOperationTheRuleLanguageHasButACartridgeDoesNotIsRefusedByName() {
@@ -309,13 +283,12 @@ public sealed class CartridgeExpressionTests {
         ]
         );
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "a cartridge does not"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "a cartridge does not",
+            Name: "a rule-language operation",
+            Path: "rules[0].body[0].value"
+        ).Holds();
     }
     [InlineData("cgb")]
     [InlineData("agb")]
@@ -337,11 +310,11 @@ public sealed class CartridgeExpressionTests {
         // Neither arm holds, so an any gate must refuse: the control that makes the positive case mean something.
         var quiet = Compile(
             document: document with {
-            Rules = [document.Rules[0] with { When = Any(
+                Rules = [document.Rules[0] with { When = Any(
                     left: "a == 1",
                     right: "b == 1"
                 ) }],
-        },
+            },
             target: target
         );
 
@@ -356,7 +329,7 @@ public sealed class CartridgeExpressionTests {
         // The second arm holds on its own.
         var loud = Compile(
             document: document with {
-            Variables = [new CartridgeVariable(
+                Variables = [new CartridgeVariable(
                     Name: "a",
                     Initial: 0
                 ), new CartridgeVariable(
@@ -366,11 +339,11 @@ public sealed class CartridgeExpressionTests {
                     Name: "fired",
                     Initial: 0
                 )],
-            Rules = [document.Rules[0] with { When = Any(
+                Rules = [document.Rules[0] with { When = Any(
                     left: "a == 1",
                     right: "b == 1"
                 ) }],
-        },
+            },
             target: target
         );
 
@@ -410,33 +383,23 @@ public sealed class CartridgeExpressionTests {
         ]
         );
 
+        using var machine = Run(result: result);
+
         Assert.Equal(
             expected: 4,
-            actual: Read(
-                result: result,
-                slot: "low"
-            )
+            actual: machine.Read(variable: "low")
         );
         Assert.Equal(
             expected: 9,
-            actual: Read(
-                result: result,
-                slot: "high"
-            )
+            actual: machine.Read(variable: "high")
         );
         Assert.Equal(
             expected: 9,
-            actual: Read(
-                result: result,
-                slot: "held"
-            )
+            actual: machine.Read(variable: "held")
         );
         Assert.Equal(
             expected: 5,
-            actual: Read(
-                result: result,
-                slot: "clamped"
-            )
+            actual: machine.Read(variable: "clamped")
         );
     }
     [InlineData("cgb")]
@@ -472,15 +435,15 @@ public sealed class CartridgeExpressionTests {
 
         var suppressed = Compile(
             document: document with {
-            Variables = [new CartridgeVariable(
+                Variables = [new CartridgeVariable(
                     Name: "a",
                     Initial: 1
                 ), new CartridgeVariable(
                     Name: "fired",
                     Initial: 0
                 )],
-            Rules = [document.Rules[0] with { When = gate }],
-        },
+                Rules = [document.Rules[0] with { When = gate }],
+            },
             target: target
         );
 
@@ -491,33 +454,5 @@ public sealed class CartridgeExpressionTests {
                 slot: "fired"
             )
         );
-    }
-
-    private sealed class ExpressionProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public ExpressionProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "expression"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "expression"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
     }
 }

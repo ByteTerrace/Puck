@@ -54,7 +54,7 @@ public sealed class PuckRewriteException : Exception {
         ArgumentNullException.ThrowIfNull(argument: position);
 
         return new PuckRewriteException(
-            message: $"a rewrite answered a '{position.Name}' position holding '{original.GetType().Name}' at line {original.Line}, column {original.Column} with '{rewritten?.GetType().Name ?? "nothing"}'; that position admits only a '{position.Name}'."
+            message: $"a rewrite answered a '{position.Name}' position holding '{original.GetType().Name}' at line {original.Line}, column {original.Column} with '{(rewritten?.GetType().Name ?? "nothing")}'; that position admits only a '{position.Name}'."
         );
     }
 }

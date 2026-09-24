@@ -58,7 +58,7 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
             return CommandResult.Error(output: $"[world.identify: index '{args[0].ToString()}' must be an integer]");
         }
 
-        var principal = context.ActingPrincipal();
+        var principal = context.Principal;
 
         // The same Control-over-the-screen check every screen.* producer verb applies, under whichever identity this
         // dispatch's ingress door stamped — drawing onto someone else's cabinet is drawing onto a cabinet.

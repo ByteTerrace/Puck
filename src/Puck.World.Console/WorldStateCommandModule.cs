@@ -25,7 +25,7 @@ namespace Puck.World;
 /// <see cref="CommandRouting.Immediate"/> read of the live section.
 /// </summary>
 /// <remarks>Every mutation here carries the identity its ingress door stamped (see
-/// <see cref="WorldPrincipalMapping"/>) — Console for a typed line. <see cref="WorldServer"/> checks it twice: the
+/// <see cref="CommandContext.Principal"/>) — Console for a typed line. <see cref="WorldServer"/> checks it twice: the
 /// standard <see cref="WorldCapability.Mutate"/> hold over <see cref="WorldSection.State"/> every mutation kind
 /// requires, plus a second, row-scoped <see cref="WorldCapability.Edit"/> hold over the concrete
 /// <c>state:&lt;name&gt;</c> subject the row names (or the wildcard), the same subject whichever grain the write
@@ -34,10 +34,11 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
-    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, CellValue value, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, StateCellClock? clock) =>
+    private static string DescribeCell(WorldStateReadView view, WorldStateRow row, string key, CellValue value, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, StateCellClock? clock) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             row: row,
-            value: value
+            value: value,
+            view: view
         )}{DescribeCellAdvance(
             advance: advance,
             clock: clock
@@ -46,7 +47,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             dynamics: dynamics,
             key: key,
             row: row,
-            server: server
+            view: view
         )}{DescribeCycle(
             clock: clock,
             cycle: cycle
@@ -87,7 +88,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // FixedQ4816 bits on every row kind, so they print in the fixed spelling — plus the LIVE eased value in the
     // row's own encoding, read through the same WorldStateReader.TryReadEased the HUD's state.<row>[.<key>]
     // binding resolves. `clock` is the carrying cell's own timing state, absent for a row-level default line.
-    private static string DescribeDynamics(WorldServer server, WorldStateRow row, string key, StateDynamics? dynamics, StateCellClock? clock) {
+    private static string DescribeDynamics(WorldStateReadView view, WorldStateRow row, string key, StateDynamics? dynamics, StateCellClock? clock) {
         if (dynamics is not { } d) {
             return string.Empty;
         }
@@ -96,19 +97,20 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
         if (
             WorldStateReader.TryReadEasedValue(
-            definition: server.Definition,
+            definition: view.Definition,
             key: key,
             row: out _,
             rowName: row.Name,
             value: out var easedValue,
-            tick: CompletedTick(server: server),
-            engineTick: CompletedEngineTick(server: server)
+            tick: view.CompletedTick,
+            engineTick: view.CompletedEngineTick
         ) &&
             easedValue.HasValue
         ) {
             eased = $" eased={DescribeValue(
                 row: row,
-                value: easedValue
+                value: easedValue,
+                view: view
             )}";
         }
 
@@ -221,14 +223,16 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         : string.Empty
     );
     // The one-cell grain, resolved through WorldStateReader — the SAME (row, key) read the rule gates and the HUD
-    // binding run, so this read-back cannot report a cell the engine would not have read.
-    private static CommandResult DescribeOneCell(WorldServer server, string rowName, string key) {
+    // binding run, so this read-back cannot report a cell the engine would not have read. It reads the reader's
+    // disclosed document, and a key the reader's disclosure does not carry is refused alike whether it is withheld or
+    // absent, so the refusal never says which of a restricted row's keys exist.
+    private static CommandResult DescribeOneCell(WorldStateReadView view, string rowName, string key) {
         if (!WorldStateReader.TryReadValue(
-            definition: server.Definition,
+            definition: view.Definition,
             rowName: rowName,
             key: key,
-            tick: CompletedTick(server: server),
-            engineTick: CompletedEngineTick(server: server),
+            tick: view.CompletedTick,
+            engineTick: view.CompletedEngineTick,
             row: out var row,
             value: out var value
         )) {
@@ -236,7 +240,13 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         }
 
         if (!value.HasValue) {
-            return CommandResult.Error(output: $"[world.state {rowName} {key}: no such cell]");
+            return CommandResult.Error(output: ((view.Withheld(row: row.Name.Value) is null)
+                ? $"[world.state {rowName} {key}: no such cell]"
+                : view.Refusal(
+                    key: key,
+                    row: rowName,
+                    verb: "world.state"
+                )));
         }
 
         var cell = StateRows.FindCell(
@@ -249,7 +259,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         );
 
         return new CommandResult(Output: DescribeCell(
-            server: server,
+            view: view,
             row: row,
             key: key,
             value: value,
@@ -260,11 +270,12 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         ));
     }
     // One row's own line PLUS every cell it holds — the verb's one-argument form, because there is one substrate and
-    // no shape that hides from it.
-    private static CommandResult DescribeOneRow(WorldServer server, string name) {
-        if (FindRow(
+    // no shape that hides from it. A reader's withheld cells follow as the row's own hidden policy shows them: nothing,
+    // a count, or one anonymous placeholder each.
+    private static CommandResult DescribeOneRow(WorldStateReadView view, string name) {
+        if (WorldDefinitionRows.FindStateRow(
             name: name,
-            server: server
+            rows: view.Definition.State
         ) is not { } row) {
             return CommandResult.Error(output: $"[world.state {name}: no such row]");
         }
@@ -273,7 +284,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         var lines = new List<string>(capacity: (1 + cells.Count)) {
             DescribeRow(
             row: row,
-            server: server
+            view: view
         ),
         };
 
@@ -282,11 +293,11 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         // output can never show the same cell two ways.
         foreach (var cell in cells) {
             _ = WorldStateReader.TryReadValue(
-                definition: server.Definition,
+                definition: view.Definition,
                 rowName: row.Name,
                 key: cell.Key.Value,
-                tick: CompletedTick(server: server),
-                engineTick: CompletedEngineTick(server: server),
+                tick: view.CompletedTick,
+                engineTick: view.CompletedEngineTick,
                 row: out _,
                 value: out var value
             );
@@ -296,7 +307,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             );
 
             lines.Add(item: DescribeCell(
-                server: server,
+                view: view,
                 row: row,
                 key: cell.Key.Value,
                 value: value,
@@ -305,6 +316,16 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 cycle: behavior.Cycle,
                 clock: cell.Clock
             ));
+        }
+
+        if (view.Withheld(row: row.Name.Value) is { Count: > 0 } withheld) {
+            if (withheld.Policy == HiddenCells.Count) {
+                lines.Add(item: $"[world.state.hidden '{row.Name}' count={withheld.Count}]");
+            } else if (withheld.Policy == HiddenCells.Placeholder) {
+                for (var index = 0; (index < withheld.Count); index++) {
+                    lines.Add(item: $"[world.state.cell '{row.Name}' hidden]");
+                }
+            }
         }
 
         return new CommandResult(Output: string.Join(
@@ -331,19 +352,32 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // different numbers. Every other shape shows its cell count against its effective capacity, and its cells follow
     // on the one-argument form. ONE line format either way — the shape is a field of the line, never a different
     // verb.
-    private static string DescribeRow(WorldServer server, WorldStateRow row) {
+    private static string DescribeRow(WorldStateReadView view, WorldStateRow row) {
+        var head = $"[world.state.row '{row.Name}' kind={DescribeKind(kind: row.Kind)}{DescribeSpace(row: row)}{DescribeGatesDrive(row: row)}{DescribeEvicts(row: row)}";
+        var range = $"{DescribeRange(
+            kind: row.Kind,
+            min: row.Min,
+            max: row.Max
+        )}{DescribeOverflow(row: row)}";
+
+        // A row the reader's disclosure withheld anything from shows its declaration and what was withheld, and none
+        // of the live facts a trait carries (a clock, a draw cursor or drawn mask, a ring cursor, a phase sequence),
+        // since each of those is a reading of the cells it withheld.
+        if (view.Withheld(row: row.Name.Value) is { } withheld) {
+            return $"{head}{(row.IsSlot
+                ? " value=withheld"
+                : $" cells={(row.Cells?.Count ?? 0)}")} withheld={(withheld.WholeRow
+                ? "row"
+                : withheld.Count.ToString(provider: CultureInfo.InvariantCulture))}{range}]";
+        }
+
         // A row-level default's epoch is a per-cell fact, not the row's — a slot row has exactly one cell to read it
         // off; a keyed row's own cells each show their own epoch on their own cell lines instead.
         var slotClock = ((row.IsSlot && (row.Cells is { Count: 1 } slotCells))
             ? slotCells[0].Clock
             : null
         );
-        var head = $"[world.state.row '{row.Name}' kind={DescribeKind(kind: row.Kind)}{DescribeSpace(row: row)}{DescribeGatesDrive(row: row)}{DescribeEvicts(row: row)}";
-        var tail = $"{DescribeRange(
-            kind: row.Kind,
-            min: row.Min,
-            max: row.Max
-        )}{DescribeOverflow(row: row)}{DescribeCellAdvance(
+        var tail = $"{range}{DescribeCellAdvance(
             advance: row.Advance,
             clock: slotClock
         )}{DescribeDynamics(
@@ -351,17 +385,14 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             dynamics: row.Dynamics,
             key: WorldStateRow.SlotKey.Value,
             row: row,
-            server: server
+            view: view
         )}{DescribeCycle(
             clock: slotClock,
             cycle: row.Cycle
         )}{DescribeDraw(
             row: row,
-            generators: server.Definition.Generators
-        )}{DescribeDiscrete(
-            row: row,
-            server: server
-        )}]";
+            generators: view.Definition.Generators
+        )}{DescribeDiscrete(row: row)}]";
 
         if (!row.IsSlot) {
             var capacity = Math.Clamp(
@@ -376,18 +407,19 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         // IsSlot already proved this row carries exactly the cell a null key addresses, and the row came out of the
         // very section the reader looks it up in.
         _ = WorldStateReader.TryReadValue(
-            definition: server.Definition,
+            definition: view.Definition,
             rowName: row.Name,
             key: null,
-            tick: CompletedTick(server: server),
-            engineTick: CompletedEngineTick(server: server),
+            tick: view.CompletedTick,
+            engineTick: view.CompletedEngineTick,
             row: out _,
             value: out var slot
         );
 
         return $"{head} value={DescribeValue(
             row: row,
-            value: slot
+            value: slot,
+            view: view
         )}{tail}";
     }
     private static string DescribeSourceShape(StateGenerator? generator) =>
@@ -463,16 +495,16 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             values: effects
         )}]]";
     }
-    private static string DescribeState(WorldServer server) {
-        var rows = server.Definition.State;
+    private static string DescribeState(WorldStateReadView view) {
+        var rows = view.Definition.State;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
-            $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}, arena {server.Arena.Bytes}/{ArenaCapacity.MaxBytes} bytes]",
+            $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}, arena {view.ArenaBytes}/{ArenaCapacity.MaxBytes} bytes]",
         };
 
         foreach (var row in rows) {
             lines.Add(item: DescribeRow(
                 row: row,
-                server: server
+                view: view
             ));
         }
 
@@ -481,25 +513,28 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             values: lines
         );
     }
-    private static CommandResult DescribeStateHandler(WorldServer server, WireArgs args) {
+    private static CommandResult DescribeStateHandler(WorldStateReadView view, WireArgs args) {
         return args.Count switch {
-            0 => new CommandResult(Output: DescribeState(server: server)),
+            0 => new CommandResult(Output: DescribeState(view: view)),
             1 => DescribeOneRow(
-            server: server,
-            name: args[0].ToString()
+            name: args[0].ToString(),
+            view: view
         ),
             2 => DescribeOneCell(
-            server: server,
+            key: args[1].ToString(),
             rowName: args[0].ToString(),
-            key: args[1].ToString()
+            view: view
         ),
             _ => CommandResult.Error(output: "[world.state: expected no arguments, <row>, or <row> <key>]"),
         };
     }
     // An absent cell carries no case at all, so what the line prints for one is a function of the row's declared
     // kind alone — the neutral reading of that kind, never a value.
-    private static string DescribeValue(WorldStateRow row, CellValue value) => (value.HasValue
-        ? StateSpelling.Value(value: value)
+    private static string DescribeValue(WorldStateReadView view, WorldStateRow row, CellValue value) => (value.HasValue
+        ? StateSpelling.Value(
+            symbols: view.Definition.EnumOf(row: row),
+            value: value
+        )
         : (row.Kind switch {
             CellKind.Fixed => FixedQ4816.FromRawBits(value: 0L).ToString(),
             CellKind.Bool => "false",
@@ -546,7 +581,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             }
 
             return link.Submit(mutation: new WorldMutation.UpsertStateCell(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 Row: rowName,
                 Key: args[1].ToString(),
                 Value: 0L,
@@ -567,7 +602,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             );
 
             return link.Submit(mutation: new WorldMutation.UpsertStateCell(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 Row: rowName,
                 Key: args[1].ToString(),
                 Value: 0L,
@@ -601,7 +636,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         }
 
         return link.Submit(mutation: new WorldMutation.UpsertStateCell(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             Row: rowName,
             Key: args[1].ToString(),
             Value: 0L,
@@ -618,17 +653,13 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             yield return command;
         }
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.rule.failures",
             description: "Prints bounded runtime rule-effect refusal counters (Immediate): category, total occurrences, latest tick/rule/effect, and the latest concrete reason. Level-triggered failures log only their category's first occurrence; this read-back keeps the exact count without stderr spam.",
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.rule.failures"
-                ) is { } refusal) {
-                    return refusal;
-                }
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveServerWithoutArguments(
+                    args: in args,
                     context: context,
                     error: out var error,
                     server: out var server,
@@ -640,6 +671,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.rule.trace",
             description: $"Captures one rule's or interaction's next evaluations and reads them back (Immediate): world.rule.trace <rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] arms a capture (default {DefaultRuleTraceEvaluations}; replaces any earlier one); world.rule.trace alone prints what was captured so far — per evaluation its tick, the forEach key, every binding's value, every gate conjunct with the two values it compared and its verdict, whether the gate held (and whether an edge rule was already held), and each effect's spelling, computed value, and outcome: applied, refused with the reason, emitted, or skipped because the write could not move its destination; world.rule.trace off disarms. Arm, world.wait the ticks the rule should run over, then read. An observer only — a traced run hashes identically to an untraced one. A decision rule is refused here; world.decisions echoes it.",
@@ -768,6 +800,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.search",
             description: "Lists every search job's progress (Immediate): world.search. Each line carries whether the job is running or done, the token and target cell its walk is at, how many relocations the rules accepted so far, how many it has judged, its per-tick node quota, the work units one judge run costs, and how many rules the frame evaluates; a job authoring a depth past one and a score also carries the depth it is iterative-deepening through and the negamax answer (token, target cell, score) the deepest completed pass found. A job restarts whenever a framed cell other than its own outputs changes.",
@@ -859,9 +892,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.state.cell.set",
-            description: $"Upserts ONE cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...>. DISPATCHES ON THE ROW'S OWN DECLARED KIND: when <row> is ALREADY LIVE as a text-kind row, everything after <key> is taken as the RAW TAIL — spaces included, no quoting needed, no 'add' (a string has no addition) — replacing the cell wholesale; otherwise (int/fixed/bool, or a row this SAME batch has not yet declared — the one case this door cannot see live, which falls through to this grammar exactly as it always has) <value> is a single token resolved AT COMPOSE against the row's declared kind (so a same-batch world.row.set state declaring <row> ahead of this line composes first and this line lands against it, deterministically): DECIMAL text for a fixed-kind row (e.g. \"12.5\"), a whole number for int, or true|false for bool — never raw FixedQ4816 bits. The optional trailing 'add' token adds <value> to the key's current value (0 if the key is absent) instead of replacing it — refused on bool, and never admitted on a text write. Reaches any row — pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' RE-BASES it: the written value becomes the new base and its epoch becomes this tick, exactly like redeclaring the row. Writing a KEYED cell that already carries its OWN advance re-bases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' instead rebases the SAME way, preserving which dynamics row it names: its Y0/V0 become the live eased value/velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick — the write moves TRUTH, never the follower's own position, which keeps chasing from wherever it actually was. A trailing 'add' adds to the row's LIVE truth — the accumulated value for 'advance', the stored value itself for 'dynamics' (never the eased follower position) — rather than to the stored base. Buffers and applies at the tick boundary; rejected loudly (against the CANDIDATE this batch has built so far, never a stale read) if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or vice versa, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping — a cursor, the drawn masks — lives in the row's own fields, never a cell this door can reach), or — at whole-document revalidation — if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
+            description: $"Upserts one cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>. The row's declared kind decides the form. When <row> is already live as a text-kind row, everything after <key> is the text, spaces included and unquoted, replacing the cell; 'add' is refused there. When <row> is already live as a vector-kind row, the one token after <key> is the unpadded base64url encoding of the vector's signed 8-bit components. Otherwise (int, fixed or bool, or a row the same batch has not yet declared, which this command cannot see live) <value> is a single token resolved at compose against the row's declared kind, so a same-batch world.row.set state that declares <row> ahead of this line composes first and this line lands against it: decimal text for a fixed-kind row (e.g. \"12.5\"), a whole number for int (or, on a row naming an enum, one of its member names), or true|false for bool, never raw FixedQ4816 bits. The optional trailing 'add' adds <value> to the key's current value (0 if the key is absent) instead of replacing it; it is refused on bool. Any row is reachable; pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' rebases it: the written value becomes the new base and its epoch becomes this tick, as redeclaring the row does. Writing a keyed cell that carries its own advance rebases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' rebases the same way, preserving which dynamics row it names: its Y0/V0 become the live eased value and velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick. The write moves the truth, never the follower's own position, which keeps chasing from wherever it was. A trailing 'add' adds to the row's live truth (the accumulated value for 'advance', the stored value itself for 'dynamics', never the eased follower position) rather than to the stored base. Buffers and applies at the tick boundary. Refused, against the candidate this batch has built so far rather than a stale read, if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or the reverse, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping such as a cursor or the drawn masks lives in the row's own fields, never in a cell this command can reach), or, at whole-document revalidation, if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -893,7 +926,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 }
 
                 return link.Submit(mutation: new WorldMutation.RemoveStateCell(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Row: args[0].ToString(),
                     Key: args[1].ToString()
                 ));
@@ -1072,7 +1105,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 }
 
                 return link.Submit(mutation: new WorldMutation.Generate(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Row: args[0].ToString(),
                     Keys: keys
                 ));
@@ -1082,20 +1115,20 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.state",
-            description: "Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone — or a refusal naming why there is none: world.state [row] [key].",
+            description: "Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name — or a refusal naming why there is none: world.state [row] [key].",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveReadView(
                     context: context,
                     error: out var error,
-                    server: out var server,
-                    verb: "world.state"
+                    verb: "world.state",
+                    view: out var view
                 )) {
                     return error;
                 }
 
                 return DescribeStateHandler(
                     args: args,
-                    server: server
+                    view: view
                 );
             },
             routing: CommandRouting.Immediate
@@ -1163,7 +1196,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             return CommandResult.Error(output: $"[world.state.similar: no such query vector '{queryRowName}.{queryKeyName}']");
         }
 
-        var principal = context.ActingPrincipal();
+        var principal = context.Principal;
 
         if (!WorldStateDisclosure.CanRead(arena: server.Arena, definition: server.Definition, key: queryCell.Key, row: queryRow, recipient: principal)) {
             return CommandResult.Error(output: $"[world.state.similar: query cell '{queryRowName}.{queryKeyName}' is hidden]");

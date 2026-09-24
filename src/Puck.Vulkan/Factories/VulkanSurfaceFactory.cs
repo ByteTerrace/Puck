@@ -19,144 +19,65 @@ public sealed class VulkanSurfaceFactory : IVulkanSurfaceFactory {
         m_surfaceApi = surfaceApi;
     }
 
-    private VulkanSurface CreateViSurface(
-        nint instanceHandle,
-        NativeSurfaceBinding binding
-    ) {
-        if (binding.Vi is null) {
-            throw new InvalidOperationException(message: "A Nintendo Switch (VI) native surface binding requires a native window handle.");
-        }
-
-        var result = m_surfaceApi.CreateViSurface(
-            binding: binding.Vi.Value,
-            instanceHandle: instanceHandle,
-            surfaceHandle: out var surfaceHandle
-        );
-
-        result.ThrowIfFailed(operation: "vkCreateViSurfaceNN");
-
-        if (0 == surfaceHandle) {
-            throw new InvalidOperationException(message: "vkCreateViSurfaceNN returned success without a valid surface handle.");
-        }
-
-        return new(
-            displayKind: binding.DisplayKind,
-            instanceHandle: instanceHandle,
-            surfaceApi: m_surfaceApi,
-            surfaceHandle: surfaceHandle
-        );
-    }
-    private VulkanSurface CreateWaylandSurface(
-        nint instanceHandle,
-        NativeSurfaceBinding binding
-    ) {
-        if (binding.Wayland is null) {
-            throw new InvalidOperationException(message: "A Wayland native surface binding requires display and surface handles.");
-        }
-
-        var result = m_surfaceApi.CreateWaylandSurface(
-            binding: binding.Wayland.Value,
-            instanceHandle: instanceHandle,
-            surfaceHandle: out var surfaceHandle
-        );
-
-        result.ThrowIfFailed(operation: "vkCreateWaylandSurfaceKHR");
-
-        if (0 == surfaceHandle) {
-            throw new InvalidOperationException(message: "vkCreateWaylandSurfaceKHR returned success without a valid surface handle.");
-        }
-
-        return new(
-            displayKind: binding.DisplayKind,
-            instanceHandle: instanceHandle,
-            surfaceApi: m_surfaceApi,
-            surfaceHandle: surfaceHandle
-        );
-    }
-    private VulkanSurface CreateWin32Surface(
-        nint instanceHandle,
-        NativeSurfaceBinding binding
-    ) {
-        if (binding.Win32 is null) {
-            throw new InvalidOperationException(message: "A Win32 native surface binding requires instance and window handles.");
-        }
-
-        var result = m_surfaceApi.CreateWin32Surface(
-            binding: binding.Win32.Value,
-            instanceHandle: instanceHandle,
-            surfaceHandle: out var surfaceHandle
-        );
-
-        result.ThrowIfFailed(operation: "vkCreateWin32SurfaceKHR");
-
-        if (0 == surfaceHandle) {
-            throw new InvalidOperationException(message: "vkCreateWin32SurfaceKHR returned success without a valid surface handle.");
-        }
-
-        return new(
-            displayKind: binding.DisplayKind,
-            instanceHandle: instanceHandle,
-            surfaceApi: m_surfaceApi,
-            surfaceHandle: surfaceHandle
-        );
-    }
-    private VulkanSurface CreateXcbSurface(
-        nint instanceHandle,
-        NativeSurfaceBinding binding
-    ) {
-        if (binding.Xcb is null) {
-            throw new InvalidOperationException(message: "An XCB native surface binding requires a connection and window.");
-        }
-
-        var result = m_surfaceApi.CreateXcbSurface(
-            binding: binding.Xcb.Value,
-            instanceHandle: instanceHandle,
-            surfaceHandle: out var surfaceHandle
-        );
-
-        result.ThrowIfFailed(operation: "vkCreateXcbSurfaceKHR");
-
-        if (0 == surfaceHandle) {
-            throw new InvalidOperationException(message: "vkCreateXcbSurfaceKHR returned success without a valid surface handle.");
-        }
-
-        return new(
-            displayKind: binding.DisplayKind,
-            instanceHandle: instanceHandle,
-            surfaceApi: m_surfaceApi,
-            surfaceHandle: surfaceHandle
-        );
-    }
+    private static TBinding Require<TBinding>(TBinding? binding, string requirement) where TBinding : struct =>
+        (binding ?? throw new InvalidOperationException(message: requirement));
 
     /// <inheritdoc/>
     public VulkanSurface Create(
-        nint instanceHandle,
+        VulkanInstanceCommands instance,
         NativeSurfaceBinding binding
     ) {
-        VulkanArgument.RequireHandle(
-            handle: instanceHandle,
-            handleDescription: "instance",
-            paramName: nameof(instanceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: instance);
 
-        return binding.DisplayKind switch {
-            NativeDisplayKind.Vi => CreateViSurface(
-            binding: binding,
-            instanceHandle: instanceHandle
-        ),
-            NativeDisplayKind.Wayland => CreateWaylandSurface(
-            binding: binding,
-            instanceHandle: instanceHandle
-        ),
-            NativeDisplayKind.Win32 => CreateWin32Surface(
-            binding: binding,
-            instanceHandle: instanceHandle
-        ),
-            NativeDisplayKind.Xcb => CreateXcbSurface(
-            binding: binding,
-            instanceHandle: instanceHandle
-        ),
+        nint surfaceHandle;
+
+        var (result, operation) = (binding.DisplayKind switch {
+            NativeDisplayKind.Vi => (m_surfaceApi.CreateViSurface(
+                binding: Require(
+                    binding: binding.Vi,
+                    requirement: "A Nintendo Switch (VI) native surface binding requires a native window handle."
+                ),
+                instance: instance,
+                surfaceHandle: out surfaceHandle
+            ), "vkCreateViSurfaceNN"),
+            NativeDisplayKind.Wayland => (m_surfaceApi.CreateWaylandSurface(
+                binding: Require(
+                    binding: binding.Wayland,
+                    requirement: "A Wayland native surface binding requires display and surface handles."
+                ),
+                instance: instance,
+                surfaceHandle: out surfaceHandle
+            ), "vkCreateWaylandSurfaceKHR"),
+            NativeDisplayKind.Win32 => (m_surfaceApi.CreateWin32Surface(
+                binding: Require(
+                    binding: binding.Win32,
+                    requirement: "A Win32 native surface binding requires instance and window handles."
+                ),
+                instance: instance,
+                surfaceHandle: out surfaceHandle
+            ), "vkCreateWin32SurfaceKHR"),
+            NativeDisplayKind.Xcb => (m_surfaceApi.CreateXcbSurface(
+                binding: Require(
+                    binding: binding.Xcb,
+                    requirement: "An XCB native surface binding requires a connection and window."
+                ),
+                instance: instance,
+                surfaceHandle: out surfaceHandle
+            ), "vkCreateXcbSurfaceKHR"),
             _ => throw new PlatformNotSupportedException(message: $"Vulkan surface creation is not implemented for display kind '{binding.DisplayKind}'.")
-        };
+        });
+
+        result.ThrowIfFailed(operation: operation);
+
+        if (0 == surfaceHandle) {
+            throw new InvalidOperationException(message: $"{operation} returned success without a valid surface handle.");
+        }
+
+        return new(
+            displayKind: binding.DisplayKind,
+            instance: instance,
+            surfaceApi: m_surfaceApi,
+            surfaceHandle: surfaceHandle
+        );
     }
 }

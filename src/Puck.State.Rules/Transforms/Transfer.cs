@@ -111,16 +111,14 @@ public static partial class ArenaTransforms {
             );
         }
 
-        StateGenerator generator = default!;
-        Draw draw = default!;
+        GeneratorEngine.DrawStream draws = default;
 
         if (
             (transfer.Selector == ZoneSelector.Random) &&
-            !TryDrawSite(
+            !TryOpenDraws(
             code: TransformRefusal.TransferDrawSite,
             context: in context,
-            draw: out draw,
-            generator: out generator,
+            draws: out draws,
             refusal: out refusal,
             rowOrdinal: transfer.DrawRowOrdinal,
             verb: "random transfer"
@@ -150,11 +148,8 @@ public static partial class ArenaTransforms {
             if (transfer.Selector == ZoneSelector.Random) {
                 if (!TrySample(
                     code: TransformRefusal.TransferDrawSite,
-                    context: in context,
-                    draw: in draw,
-                    generator: generator,
+                    draws: ref draws,
                     refusal: out refusal,
-                    rowOrdinal: transfer.DrawRowOrdinal,
                     sample: out sample
                 )) {
                     return false;
@@ -208,9 +203,10 @@ public static partial class ArenaTransforms {
         }
         if (
             (transfer.Selector == ZoneSelector.Random) &&
-            !TryRecordSample(
+            !TryCloseDraws(
             code: TransformRefusal.TransferDrawSite,
             context: in context,
+            draws: in draws,
             refusal: out refusal,
             rowOrdinal: transfer.DrawRowOrdinal,
             sample: sample
@@ -253,6 +249,7 @@ public static partial class ArenaTransforms {
             using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
             var order = orderLease.Span;
+
             for (var position = 0; (position < count); position++) {
                 order[position] = ((position < run)
                     ? (start + position)
@@ -325,6 +322,7 @@ public static partial class ArenaTransforms {
         using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
         var order = orderLease.Span;
+
         for (var slot = 0; (slot < count); slot++) {
             order[slot] = (insertFirst
                 ? ((slot == 0)

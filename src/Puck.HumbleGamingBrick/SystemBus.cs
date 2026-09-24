@@ -727,10 +727,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         );
     }
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        reader.ReadBytes(destination: m_ioRegisters);
-        m_bootRomMapped = reader.ReadBoolean();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
     public void NoteInstructionStart(ushort pc) =>
         m_currentInstructionPc = pc;
@@ -888,10 +886,14 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             value: value
         );
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBytes(value: m_ioRegisters);
-        writer.WriteBoolean(value: m_bootRomMapped);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Block(values: m_ioRegisters);
+        transfer.Boolean(value: ref m_bootRomMapped);
     }
+
     /// <summary>Takes the one pending watch hit (if any), reporting its address, the byte, whether it was a write, and
     /// the accessing instruction's PC. Clears the pending slot so a subsequent access can latch the next hit.</summary>
     /// <param name="address">The hit address.</param>

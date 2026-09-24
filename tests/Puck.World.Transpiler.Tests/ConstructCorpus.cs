@@ -45,7 +45,7 @@ internal static class ConstructCorpus {
         ["effect/claimPair"] = PoolRule(body: "    claim items as left {\n        claim items as right {\n            claim pair links between left, right as link {\n                link.value = 1\n            }\n        }\n    }"),
         ["effect/forEachPool"] = PoolRule(body: "    for each item in items {\n        item.value = 1\n    }"),
         ["effect/release"] = PoolRule(body: "    claim items as item {\n        release item\n    }"),
-        ["effect/rewindTurn"] = Document(body: $"{Rows}\n\nworkflow turn undo({{ rows [\"hp\"] depth: 2 }}) {{\n    step move {{ hp = 2 }}\n}}\n\nrule rewind {{\n    rewindTurn(turn)\n}}"),
+        ["effect/rewindGroup"] = Document(body: $"{Rows}\n\nworkflow turn undo({{ rows [\"hp\"] depth: 2 }}) {{\n    step move {{ hp = 2 }}\n}}\n\nrule rewind {{\n    rewindGroup(turn)\n}}"),
 
         ["predicate/compareState"] = Gate(gate: "hp == 1"),
         ["predicate/compareValue"] = Gate(gate: "hp + 1 == 2"),
@@ -62,7 +62,6 @@ internal static class ConstructCorpus {
         ["transform/writeSet"] = Transform(call: "writeSet(row: deck, set: s, value: 1)"),
         ["transform/boardCombine"] = Transform(call: "boardCombine(row: deck, operation: Or, left: deck, right: bag)"),
         ["transform/arrange"] = Transform(call: "arrange(row: deck, from: bag)"),
-        ["transform/push"] = Transform(call: "push(row: deck, value: 1)"),
         ["transform/clearEnclosed"] = Transform(call: "clearEnclosed(row: deck, from: a, lower: 0, upper: 1)"),
         ["transform/mix"] = Transform(call: "mix(into: deck, terms: [{ from: bag, weight: 1 }])"),
         ["transform/mean"] = Transform(call: "mean(from: bag, into: deck)"),

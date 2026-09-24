@@ -23,24 +23,25 @@ public enum GateOp : byte {
 /// <param name="Describe">The authored spelling of this conjunct.</param>
 /// <param name="Op">The postfix Boolean operation.</param>
 /// <param name="Arity">The number of preceding results consumed by an <c>all</c> or <c>any</c> token.</param>
-public readonly record struct GateToken(CompiledValueSource LeftSource, ActionStateComparison Comparison, CompiledValueSource RightSource, CellKind ValueKind, string Describe, GateOp Op = GateOp.Compare, int Arity = 0);
+public readonly record struct GateToken(CompiledValueSource LeftSource, ExpressionOp Comparison, CompiledValueSource RightSource, CellKind ValueKind, string Describe, GateOp Op = GateOp.Compare, int Arity = 0);
 /// <summary>One token in an allocation-free postfix numeric expression.</summary>
 /// <param name="Operation">The stack operation.</param>
 /// <param name="Constant">The raw destination-kind literal for a constant token, or the argument slot for an
 /// <see cref="ExpressionOp.Argument"/> token.</param>
 /// <param name="Operand">The live operand for an operand token.</param>
 /// <param name="Board">The compiled topology and direction of a board token.</param>
-/// <param name="Fold">The compiled family and per-member body of a fold token.</param>
+/// <param name="Fold">The compiled row and per-cell body of a fold token.</param>
 /// <param name="Call">The compiled subprogram of a <see cref="ExpressionOp.Call"/> token.</param>
 public readonly record struct CompiledExpressionToken(ExpressionOp Operation, long Constant = 0L, IRuleOperand? Operand = null, BoardQuery? Board = null, CompiledFold? Fold = null, CompiledSubprogram? Call = null);
-/// <summary>A compiled fold: the family whose members are reduced, and the body evaluated once per member.</summary>
+/// <summary>A compiled fold: the one row whose cells are reduced, and the body evaluated once per cell the row holds.</summary>
 /// <param name="Operation">All, Any, Count, or Sum.</param>
-/// <param name="RowOrdinal">The family row's catalog ordinal.</param>
-/// <param name="Describe">The family's authored name, for a refusal that quotes what the author wrote.</param>
-/// <param name="MemberKind">The kind a member reads as.</param>
-/// <param name="Body">The per-member body, reading the member through <see cref="ExpressionOp.Member"/>.</param>
-/// <param name="Members">The family's declared member count, which prices the fold.</param>
-public sealed record CompiledFold(ExpressionOp Operation, int RowOrdinal, string Describe, CellKind MemberKind, CompiledExpressionToken[] Body, int Members);
+/// <param name="RowOrdinal">The folded row's catalog ordinal, the one row the fold reads.</param>
+/// <param name="Describe">The row's authored name, for a refusal that quotes what the author wrote.</param>
+/// <param name="MemberKind">The kind a cell reads as.</param>
+/// <param name="Body">The per-cell body, reading the cell through <see cref="ExpressionOp.Member"/>.</param>
+/// <param name="Cells">The most cells the row can hold (its capacity), which bounds one fold's visits and prices
+/// it; the cells a row is authored with say nothing about the cells a rule writes into it later.</param>
+public sealed record CompiledFold(ExpressionOp Operation, int RowOrdinal, string Describe, CellKind MemberKind, CompiledExpressionToken[] Body, long Cells);
 /// <summary>A compiled subprogram: the body a call site evaluates over the operands it consumed.</summary>
 /// <param name="Name">The authored name, for a refusal that quotes what the author wrote.</param>
 /// <param name="Arity">How many operands the call consumes.</param>

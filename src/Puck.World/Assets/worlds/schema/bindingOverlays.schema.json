@@ -827,7 +827,7 @@
             "type": "string"
           },
           "comparison": {
-            "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+            "$ref": "./common.schema.json#/$defs/ExpressionComparison",
             "description": "The comparison."
           },
           "value": {

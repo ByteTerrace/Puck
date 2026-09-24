@@ -262,38 +262,39 @@ public sealed class StateCatalogModelLawTests {
         ));
         Assert.Null(@object: none);
     }
+    // A row's enum is whole-document validation's to refuse, once; the catalog draws a row from the enum it names
+    // only when that is a declared enum on an Int row, and from no symbolic domain otherwise.
     [Fact]
-    public void ARowNamingAnUndeclaredEnumRefusesByName() {
-        var exception = Assert.Throws<InvalidOperationException>(testCode: () => StateCatalog.Compile(section: new StateSection(Rows: [Row(
-                name: "trump",
-                symbols: Name(candidate: "Suit")
-            )])));
-
-        Assert.Contains(
-            expectedSubstring: "Suit",
-            actualString: exception.Message,
-            comparisonType: StringComparison.Ordinal
-        );
-    }
-    [Fact]
-    public void ANonIntRowCannotNameAnEnum() {
-        var exception = Assert.Throws<InvalidOperationException>(testCode: () => StateCatalog.Compile(section: new StateSection(
-            Rows: [Row(
-                    kind: CellKind.Text,
+    public void ARowNamingAnEnumTheCatalogCannotDrawFromHasNoSymbolicDomain() {
+        var catalog = StateCatalog.Compile(section: new StateSection(
+            Rows: [
+                Row(
                     name: "trump",
+                    symbols: Name(candidate: "Missing")
+                ),
+                Row(
+                    kind: CellKind.Text,
+                    name: "label",
                     symbols: Name(candidate: "Suit")
-                )],
+                ),
+            ],
             Enums: [new StateEnum(
                     Name: Name(candidate: "Suit"),
                     Members: [Name(candidate: "Clubs")]
                 )]
-        )));
+        ));
 
-        Assert.Contains(
-            expectedSubstring: "symbolic domain",
-            actualString: exception.Message,
-            comparisonType: StringComparison.Ordinal
-        );
+        foreach (var name in ((string[])["trump", "label"])) {
+            Assert.True(condition: catalog.TryResolve(
+                handle: out var handle,
+                lane: StateLane.Document,
+                name: name
+            ));
+            Assert.False(condition: catalog.TryGetEnum(
+                handle: handle,
+                symbols: out _
+            ));
+        }
     }
     [Fact]
     public void AnEnumAdmitsItsOwnRangeAndRendersItsMembers() {

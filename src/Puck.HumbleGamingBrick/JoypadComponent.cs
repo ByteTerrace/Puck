@@ -78,20 +78,21 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
     }
 
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_buttons = reader.ReadByte();
-        m_select = reader.ReadByte();
-        m_previousLine = reader.ReadByte();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
     public byte ReadRegister() =>
         ((byte)(0xC0 | m_select | CurrentLine()));
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: m_buttons);
-        writer.WriteByte(value: m_select);
-        writer.WriteByte(value: m_previousLine);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Byte(value: ref m_buttons);
+        transfer.Byte(value: ref m_select);
+        transfer.Byte(value: ref m_previousLine);
     }
+
     /// <inheritdoc/>
     public void SetButtons(JoypadButtons pressed) {
         m_buttons = ((byte)pressed);

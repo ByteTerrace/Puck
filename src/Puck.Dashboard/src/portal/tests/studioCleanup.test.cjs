@@ -1,49 +1,25 @@
+// Regressions the studio's preview and views have held: exact bigint comparison, large projections, and — against
+// the published engine as the world engine — preview history replay, handle release, and geometry reuse. The
+// real-engine tests stand a fixed document in for the check's compileSource and composeSource, so they run on an
+// engine build with or without the source exports.
 const assert = require('node:assert/strict');
 const { test, before } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
-const options = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX };
-for (const extension of ['.ts', '.tsx']) require.extensions[extension] = (module, file) =>
-  module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: options }).outputText, file);
+const { buildOfficialFixture, fakeEngine, bootSequence, memoryStorage } = require('./support/studioFixture.cjs');
 
-const { createActor, fromPromise, waitFor } = require('xstate');
+const { createActor, waitFor } = require('xstate');
 const { studioMachine } = require('../src/machines/studioMachine.ts');
-const { openTextDocument, openDraftDocument, applyText, editDocument, undoDocument, redoDocument } = require('../src/machines/studio/document.ts');
-const { selectIsDirty } = require('../src/machines/studio/selectors.ts');
 const { bootEngineFromLocalBundle } = require('../src/native/engineBoot.ts');
 const { computeGeometry } = require('../src/machines/studio/geometry.ts');
 const { compilePreview } = require('../src/machines/studio/preview.ts');
 const { sameCells, StateMatrixView } = require('../src/components/world/StateMatrixView.tsx');
 const { projectScene } = require('../src/authoring/sceneProjection.ts');
-const { LocalDraftStore, readDraftListing } = require('../src/document/localDrafts.ts');
+const { LocalDraftStore } = require('../src/document/localDrafts.ts');
 const { StudioContext } = require('../src/context/StudioContext.tsx');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { MantineProvider } = require('@mantine/core');
-
-test('JSON typing, apply, undo, redo and saved-text detection agree on one applied revision', () => {
-  const text = '{"metadata":{"custom":{"marker":"before","large":9223372036854775807}}}';
-  const opened = openTextDocument(text, 'draft');
-  assert.equal(selectIsDirty({ context: { document: opened } }), false);
-  const draft = { ...opened, text: text.replace('before', 'after') };
-  assert.equal(selectIsDirty({ context: { document: draft } }), true);
-  assert.throws(() => editDocument(draft, ['metadata', 'custom', 'other'], 1, 'edit'), /Apply or discard/);
-  const applied = applyText(draft, draft.text);
-  assert.equal(applied.value.metadata.custom.marker, 'after');
-  assert.equal(applied.value.metadata.custom.large, 9223372036854775807n);
-  assert.equal(applied.past.length, 1);
-  assert.equal(applied.appliedText, draft.text);
-  const undone = undoDocument(applied);
-  assert.equal(undone.text, text);
-  assert.equal(undone.value.metadata.custom.marker, 'before');
-  assert.equal(selectIsDirty({ context: { document: undone } }), false);
-  assert.equal(redoDocument(undone).text, draft.text);
-  const repaired = applyText(openDraftDocument('{ unfinished', 'draft'), '{}');
-  assert.equal(repaired.text, '{}');
-  assert.equal(repaired.appliedText, '{}');
-  assert.equal(repaired.validation, 'pending');
-});
 
 test('state comparison preserves bigint precision, cell identity and the carried case', () => {
   const cells = [{ key: 'x', value: { kind: 'Int', value: 9223372036854775807n } }];
@@ -54,20 +30,6 @@ test('state comparison preserves bigint precision, cell identity and the carried
   // The same 64-bit word under another kind is a different value, which the sibling-nullable shape could not say.
   assert.equal(sameCells([{ key: 'f', value: { kind: 'Int', value: 1n } }], [{ key: 'f', value: { kind: 'Bool', value: true } }]), false);
   assert.equal(sameCells([{ key: 'f', value: null }], [{ key: 'f', value: null }]), true);
-});
-
-test('an unreadable draft library is reported without discarding it or crashing the editor', () => {
-  for (const raw of ['{ broken', '{"broken":{"id":"broken"}}']) {
-    let writes = 0;
-    const store = new LocalDraftStore({ getItem: () => raw, setItem: () => writes++ });
-    const listing = readDraftListing(store);
-    assert.deepEqual(listing.drafts, []);
-    assert.match(listing.error, /unreadable/);
-    assert.throws(() => store.save('new', 'New', 'new', '{}', 'save'), /unreadable/);
-    assert.equal(writes, 0);
-  }
-  const store = new LocalDraftStore({ getItem: () => null, setItem: () => assert.fail('oversized draft was persisted') });
-  assert.throws(() => store.save('large', 'Large', 'large', 'x'.repeat(2 * 1024 * 1024 + 1), 'save'), /byte cap/);
 });
 
 test('large irregular projections retain ordinal identity without argument-count overflow', () => {
@@ -83,68 +45,40 @@ test('large irregular projections retain ordinal identity without argument-count
 
 const bundle = path.resolve(__dirname, '../../../../Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle');
 const hasBundle = fs.existsSync(path.join(bundle, 'main.mjs'));
-const fixture = JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'cleanup-fixture', state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] } });
+const composed = JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'cleanup-fixture', state: { world: [{ name: 'counter', kind: 'Int', value: 0 }] } });
 let engine;
 before(async () => { if (hasBundle) engine = await bootEngineFromLocalBundle(bundle); });
 const native = (name, run) => test(name, { skip: hasBundle ? false : 'Publish Puck.World.Browser to run the real-engine cleanup regressions.' }, run);
 
-async function start(engineOverride = engine) {
-  // Only the official-content load is bypassed. Every parse, compile, write, tick and hash is
-  // the published engine; wrappers in individual tests count or delay those same real calls.
-  const machine = studioMachine.provide({ actors: { bootActor: fromPromise(async () => ({
-    officialLoad: {}, engine: engineOverride, version: await engineOverride.version(),
-  })) } });
-  const entries = new Map();
-  const input = { draftStore: new LocalDraftStore({ getItem: key => entries.get(key) ?? null, setItem: (key, value) => entries.set(key, value) }) };
-  const actor = createActor(machine, { input }).start();
-  await waitFor(actor, s => s.matches('ready'), { timeout: 5000 });
-  actor.send({ type: 'OPEN_TEXT', name: 'cleanup', text: fixture });
-  await idle(actor);
-  assert.equal(actor.getSnapshot().context.document.validation, 'clean');
+/** Opens the fixture's counter with the published engine as the world engine; its composition is `composed`. */
+async function start() {
+  const language = fakeEngine();
+  const world = {
+    ...engine,
+    mountSources: async () => {},
+    writeSource: async () => {},
+    compileSource: async () => ({ ok: true, document: composed, worlds: [], diagnostics: [], sourceMap: {} }),
+    composeSource: async () => ({ ok: true, composed, diagnostics: [] }),
+  };
+  const fixture = await buildOfficialFixture();
+  const input = {
+    official: fixture.official, engineMode: 'inline', fetchImpl: fixture.fetchImpl,
+    bootEngine: bootSequence(language, world).bootEngine, draftStore: new LocalDraftStore(memoryStorage()),
+  };
+  const actor = createActor(studioMachine, { input }).start();
+  await waitFor(actor, (s) => s.matches('ready'), { timeout: 5000 });
+  actor.send({ type: 'OPEN_OFFICIAL', name: 'counter' });
+  await waitFor(actor, (s) => s.matches({ ready: { workspace: 'open' } }), { timeout: 5000 });
+  language.publish('counter.puck', 0, []);
+  await waitFor(actor, (s) => s.context.workspace.island?.ok === true, { timeout: 10000 });
   return { actor, input };
 }
-const idle = actor => waitFor(actor, s => s.matches({ ready: { document: 'idle' } }), { timeout: 10000 });
 async function previewEvent(actor, event) {
   actor.send(event);
-  return (await waitFor(actor, s => s.matches({ ready: { preview: 'ready' } }), { timeout: 10000 })).context.preview;
+  return (await waitFor(actor, (s) => s.matches({ ready: { preview: 'ready' } }), { timeout: 10000 })).context.preview;
 }
 
-native('rapid independent edits all commit while validation is coalesced', async t => {
-  let parses = 0;
-  const { actor } = await start({ ...engine, parse: async text => { parses++; return engine.parse(text); } });
-  t.after(() => actor.stop());
-  parses = 0;
-  for (let i = 0; i < 12; i++) actor.send({ type: 'EDIT_DOCUMENT', path: ['metadata', 'custom', 'field' + i], value: i, label: 'field ' + i });
-  assert.equal(Object.keys(actor.getSnapshot().context.document.value.metadata.custom).length, 12);
-  assert.equal(actor.getSnapshot().context.document.past.length, 12);
-  await idle(actor);
-  assert.equal(parses, 1);
-});
-
-native('typing during validation is retained and preview compiles applied text only', async t => {
-  const { actor } = await start();
-  t.after(() => actor.stop());
-  actor.send({ type: 'EDIT_DOCUMENT', path: ['metadata', 'custom', 'note'], value: 'applied', label: 'note' });
-  actor.send({ type: 'SET_TEXT_DRAFT', text: '{ unfinished draft' });
-  await idle(actor);
-  assert.equal(actor.getSnapshot().context.document.text, '{ unfinished draft');
-  const preview = await previewEvent(actor, { type: 'PREVIEW_START' });
-  assert.equal(preview.rows[0].cells[0].value.value, 0n);
-  actor.send({ type: 'SAVE_DRAFT', id: 'unfinished' });
-  await idle(actor);
-  assert.equal(selectIsDirty(actor.getSnapshot()), false);
-  actor.send({ type: 'OPEN_TEXT', text: fixture });
-  await idle(actor);
-  actor.send({ type: 'LOAD_DRAFT', id: 'unfinished' });
-  await idle(actor);
-  assert.equal(actor.getSnapshot().context.document.text, '{ unfinished draft');
-  assert.equal(actor.getSnapshot().context.document.validation, 'refused');
-  actor.send({ type: 'APPLY_TEXT', text: fixture });
-  await idle(actor);
-  assert.equal(actor.getSnapshot().context.document.validation, 'clean');
-});
-
-native('history replays the selected tick and a new write discards the abandoned future', async t => {
+native('history replays the selected tick and a new write discards the abandoned future', async (t) => {
   const { actor, input } = await start();
   t.after(() => actor.stop());
   await previewEvent(actor, { type: 'PREVIEW_START' });
@@ -178,12 +112,47 @@ native('history replays the selected tick and a new write discards the abandoned
   assert.equal(current.rows[0].cells[0].value.value, 9n);
 });
 
+native('a jump to a recorded tick restores that snapshot\'s hash, and a jump to the current cursor is not taken', async (t) => {
+  const { actor } = await start();
+  t.after(() => actor.stop());
+  const started = await previewEvent(actor, { type: 'PREVIEW_START' });
+  const initialHash = started.snapshots[0].hash;
+  assert.equal(await engine.stateHash(started.handle), initialHash);
+  await previewEvent(actor, { type: 'PREVIEW_WRITE', row: 'counter', value: 3n, write: 'set' });
+  await previewEvent(actor, { type: 'PREVIEW_TICK' });
+  await previewEvent(actor, { type: 'PREVIEW_WRITE', row: 'counter', value: 7n, write: 'set' });
+  const latest = await previewEvent(actor, { type: 'PREVIEW_TICK' });
+  assert.equal(latest.cursor, 2);
+  assert.notEqual(latest.snapshots[2].hash, initialHash);
+
+  const here = actor.getSnapshot();
+  assert.equal(here.can({ type: 'JUMP_TO_TICK', index: 2 }), false, 'the cursor is already there');
+  assert.equal(here.can({ type: 'JUMP_TO_TICK', index: 3 }), false, 'no snapshot is recorded there');
+  assert.equal(here.can({ type: 'JUMP_TO_TICK', index: 0.5 }), false);
+  actor.send({ type: 'JUMP_TO_TICK', index: 2 });
+  assert.equal(actor.getSnapshot().hasTag('preview-busy'), false, 'nothing replays');
+  assert.equal(actor.getSnapshot().context.preview.handle, latest.handle);
+
+  assert.equal(here.can({ type: 'JUMP_TO_TICK', index: 0 }), true);
+  const first = await previewEvent(actor, { type: 'JUMP_TO_TICK', index: 0 });
+  assert.equal(first.cursor, 0);
+  assert.equal(first.tick, 0n);
+  assert.equal(first.rows[0].cells[0].value.value, 0n);
+  assert.equal(await engine.stateHash(first.handle), initialHash);
+  assert.deepEqual(first.refusals, []);
+
+  const back = await previewEvent(actor, { type: 'JUMP_TO_TICK', index: 2 });
+  assert.equal(back.cursor, 2);
+  assert.equal(back.rows[0].cells[0].value.value, 7n);
+  assert.equal(await engine.stateHash(back.handle), latest.snapshots[2].hash);
+});
+
 native('cancelling compilation releases the handle when the engine eventually answers', async () => {
   let resume, compiledHandle;
-  const pending = new Promise(resolve => { resume = resolve; });
+  const pending = new Promise((resolve) => { resume = resolve; });
   const controller = new AbortController();
-  const wrapped = { ...engine, compile: async source => { const result = await engine.compile(source); compiledHandle = result.handle; await pending; return result; } };
-  const compiling = compilePreview(wrapped, fixture, controller.signal);
+  const wrapped = { ...engine, compile: async (source) => { const result = await engine.compile(source); compiledHandle = result.handle; await pending; return result; } };
+  const compiling = compilePreview(wrapped, composed, controller.signal);
   controller.abort();
   resume();
   await assert.rejects(compiling, /abort/i);
@@ -194,13 +163,13 @@ native('stopping the actor releases its accepted preview handle', async () => {
   const { actor } = await start();
   const preview = await previewEvent(actor, { type: 'PREVIEW_START' });
   actor.stop();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   await assert.rejects(engine.stateHash(preview.handle));
 });
 
 native('unchanged topology geometry reuses the real engine answer and cell array identity', async () => {
   let calls = 0;
-  const wrapped = { ...engine, cells: async json => { calls++; return engine.cells(json); } };
+  const wrapped = { ...engine, cells: async (json) => { calls++; return engine.cells(json); } };
   const document = { state: { lattices: [{ $type: 'grid', name: 'board', width: 3, depth: 2, cellSize: 1, band: 0.3, origin: [0, 0, 0] }] } };
   const first = await computeGeometry(wrapped, document);
   assert.deepEqual(first.diagnostics, []);

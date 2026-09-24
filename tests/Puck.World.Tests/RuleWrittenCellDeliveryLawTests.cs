@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -13,16 +14,6 @@ namespace Puck.World.Tests;
 public sealed class RuleWrittenCellDeliveryLawTests {
     private const string TallyRow = "tally";
 
-    private static WorldClient Client(WorldDefinition definition) => new(
-        composition: new WorldCompositionState(),
-        definition: definition,
-        roster: new PlayerRoster(
-            definition: definition,
-            link: new SilentLink(definition: definition),
-            seatBindings: new WorldSeatBindings(definition: definition)
-        ),
-        seatRouter: new WorldSeatAuthorityRouter()
-    );
     // The base fixture plus one Int slot and, optionally, the rule that adds to it every tick.
     private static WorldDefinition Document(bool rule) {
         var document = Fixtures.BuildDocument().WithWorldState(rows: [new WorldStateRow(
@@ -60,7 +51,7 @@ public sealed class RuleWrittenCellDeliveryLawTests {
     [Fact]
     public void ACellARuleWroteReachesTheAttachedClientsDefinition() {
         using var fixture = Fixtures.FreshServer(definition: Document(rule: true));
-        var client = Client(definition: fixture.Server.Definition);
+        var client = ClientFixtures.Client(definition: fixture.Server.Definition);
 
         using var lease = fixture.Server.AttachSink(sink: client);
 
@@ -87,12 +78,12 @@ public sealed class RuleWrittenCellDeliveryLawTests {
     [Fact]
     public void ACellTheConsoleWroteReachesTheAttachedClientsDefinition() {
         using var fixture = Fixtures.FreshServer(definition: Document(rule: false));
-        var client = Client(definition: fixture.Server.Definition);
+        var client = ClientFixtures.Client(definition: fixture.Server.Definition);
 
         using var lease = fixture.Server.AttachSink(sink: client);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: TallyRow,
             Key: WorldStateRow.SlotKey.Value,
             Value: 7,
@@ -110,21 +101,4 @@ public sealed class RuleWrittenCellDeliveryLawTests {
         );
     }
 
-    // The narrowest link a PlayerRoster can be built over: it answers the one construction-time query and drops
-    // everything else, so the client under test reaches the server only through the attached sink.
-    private sealed class SilentLink(WorldDefinition definition) : IServerLink {
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) {
-            if (query is WorldQuery.PopulationChannels) {
-                completion(obj: new QueryAnswer(
-                    Payload: WorldChannelTable.Compile(channels: definition.Channels),
-                    Text: string.Empty
-                ));
-            }
-        }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => 0L;
-        public void SubmitIntent(in IntentSubmission submission) {
-        }
-        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
-        }
-    }
 }

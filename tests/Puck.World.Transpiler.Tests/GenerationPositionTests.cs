@@ -8,29 +8,9 @@ namespace Puck.World.Transpiler.Tests;
 // produce before a section's own dispatcher reads them, so a generated row sits wherever a written one may, and a
 // gate operand resolves the `let` bindings in scope rather than reading every bare name as a state row.
 public class GenerationPositionTests {
-    private static WorldCompilation Compile(string body) =>
-        WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: $"schema: \"puck.world.definition.v1\"\n\n{body}"
-        );
-    private static JsonObject Lower(string body) {
-        var compilation = Compile(body: body);
-
-        Assert.False(
-            condition: compilation.Diagnostics.HasErrors,
-            userMessage: string.Join(
-                separator: "\n",
-                values: compilation.Diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
-            )
-        );
-
-        return compilation.RequireJson();
-    }
-    private static DiagnosticBag LowerForDiagnostics(string body) => Compile(body: body).Diagnostics;
-
     [Fact]
     public void TestAForMayInvokeATemplateAndKeepDocumentOrder() {
-        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: Lower(body: """
+        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: WorldSources.LowerClean(body: """
             template marker(id, at) {
                 placement id {
                     prototype: "post"
@@ -60,7 +40,7 @@ public class GenerationPositionTests {
         // silent: a scalar kept the last iteration, and an array was spliced element-wise into whatever the field
         // already held — flattening it and corrupting an array the document authored above the loop.
         Assert.Contains(
-            collection: LowerForDiagnostics(body: """
+            collection: WorldSources.Diagnose(body: """
                 let points = [1, 2, 3]
 
                 for p in points {
@@ -71,7 +51,7 @@ public class GenerationPositionTests {
         );
 
         Assert.Contains(
-            collection: LowerForDiagnostics(body: """
+            collection: WorldSources.Diagnose(body: """
                 let points = [1, 2, 3]
 
                 for p in points {
@@ -83,7 +63,7 @@ public class GenerationPositionTests {
     }
     [Fact]
     public void TestAGateOperandReadsALetBindingRatherThanAStateRowOfThatName() {
-        var rules = Assert.IsType<JsonArray>(@object: Lower(body: """
+        var rules = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
             let wellFloor = 17
 
             rule "settle" {
@@ -112,7 +92,7 @@ public class GenerationPositionTests {
     }
     [Fact]
     public void TestATemplateStandsInPlacementPosition() {
-        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: Lower(body: """
+        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: WorldSources.LowerClean(body: """
             template marker(id, at) {
                 placement id {
                     prototype: "post"
@@ -142,7 +122,7 @@ public class GenerationPositionTests {
     [Fact]
     public void TestATemplateThatInvokesItselfIsRefusedRatherThanExpandingForever() {
         Assert.Contains(
-            collection: LowerForDiagnostics(body: """
+            collection: WorldSources.Diagnose(body: """
                 template loop(n) {
                     loop(n: n)
                 }
@@ -157,7 +137,7 @@ public class GenerationPositionTests {
     [Fact]
     public void TestMapIsHowASequenceBecomesAValue() {
         // The other half of the same rule: the refusal above is only honest because `map` covers the case.
-        var lowered = Lower(body: """
+        var lowered = WorldSources.LowerClean(body: """
             let points = [1, 2, 3]
 
             curve: map(points, p => [p, 0])
@@ -170,7 +150,7 @@ public class GenerationPositionTests {
     }
     [Fact]
     public void TestARuleNameSubstitutesATemplateParameterAndInterpolates() {
-        var rules = Assert.IsType<JsonArray>(@object: Lower(body: """
+        var rules = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
             template flipper(n) {
                 rule n {
                     phase = 2
@@ -195,7 +175,7 @@ public class GenerationPositionTests {
         // Substitution reaches a template's own top-level statements, so a rule nested inside a `rules` scope keeps
         // the parameter's spelling and every instantiation would mint the same name.
         Assert.Contains(
-            collection: LowerForDiagnostics(body: """
+            collection: WorldSources.Diagnose(body: """
                 template flipper(n) {
                     rules group {
                         rule n {

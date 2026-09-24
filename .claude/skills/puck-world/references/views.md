@@ -45,7 +45,7 @@ form, since that is the shipped flagship world's own committed source today):
   },
   "seatRig": {
     "name": "seatChase",
-    "version": "puck.camera.v1",
+    "version": "puck.camera.program.v1",
     "operations": [
       { "$type": "orbit", "distance": 5.4626001, "yaw": "state.look.behind", "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
       { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
@@ -92,7 +92,7 @@ views {
     }
     seatRig {
         name: "seatChase"
-        version: "puck.camera.v1"
+        version: "puck.camera.program.v1"
         operations [
             orbit(distance: 5.4626001, yaw: "state.look.behind", pitch: 0.4145069, pivotOffset: [0, 0, 0])
             lookAt(subject: { $type: "reference" }, targetOffset: [0, 1, 0], worldAxes: false)
@@ -154,11 +154,11 @@ A joined identity's preference travels; otherwise the routed world's default
 applies. Neither can override the routed world's `seatControl`.
 
 Motion input is a separate, generic toggled mode. The standard profile binds
-`LT → North` to `body.motion.controls`, and `gamepad.gyro` to
-`body.motion.angular`. Each North press toggles the mode; it remains active
+`LT → North` to `player.motion.controls`, and `gamepad.gyro` to
+`player.motion.angular`. Each North press toggles the mode; it remains active
 after the buttons release. The command is intentionally not gyro-named so a
 later orientation/tilt-to-move adapter can share it. `LT → RB → LB` explicitly
-submits the same `body.state.cell.toggle look behind 0 3.14159265` line as
+submits the same `player.state.cell.toggle look behind 0 3.14159265` line as
 `LT → LB`, toggling the `state.look.behind` yaw bound above; the shorter `LT + RB`
 chord holds `player.look.free`: right-stick
 yaw/pitch continues to orbit the camera, but yaw does not write body heading
@@ -218,7 +218,8 @@ the `run` channel; West and Left Shift remain ordinary hold-to-run sources.
 A camera rig is an authored PROGRAM — `{ name, version, operations }`, an
 ordered op list, the same shape `bodyMotionPrograms` uses for sim-side movement.
 There is no motion/aim/lens kind union: a new framing is a different op list,
-never a new engine type. `version` is `puck.camera.v1`; the op-count ceiling is
+never a new engine type. `version` is `puck.camera.program.v1`
+(`WorldCameraProgram.CurrentVersion`); the op-count ceiling is
 `WorldCameraProgram.MaxOperations`.
 
 | op | does |
@@ -260,6 +261,17 @@ unprojection ride the view the player is looking at. The composer's active
 selection also publishes the `layout` context family every tick, so a world
 can flip a seat's binding group with the view (see documents.md, context
 rows).
+
+`views.graphs` rows are frame-graph instances (`WorldViewGraph`): a graph
+source, a camera, a `refresh` of exactly one positive `divisor` or `hertz`, and
+`inputs` binding a graph's external version to another row. The validator
+(`WorldDefinitionValidator.Graphs.cs`) refuses a loop of same-frame inputs
+through `RenderGraphInstanceSet.TryCreate`, naming every instance; a self-input
+and a `previousFrame` input are legal. `views.graphBudget.passPixelsPerFrame`
+is the scheduler's price ceiling. `world.budget` echoes every row with its
+extent ceiling, rate and planned passes (`WorldPresentationCost`, priced by
+`WorldPipelineSources.PlanGraph`). No live view renders through a row yet;
+the `rendering` skill owns the graph document and the scheduler.
 
 ## Pointer, cursor, Free Cam
 

@@ -1,39 +1,134 @@
 using Puck.Assets.Documents;
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers authored music reaching the sound hardware, and the target gate on cartridge audio.</summary>
 public sealed class CartridgeSoundTests {
+    private const uint AdvancedStateAddress = 0x0200013Cu;
+
+    private static readonly CartridgeRefusal[] GateRefusals = [
+        new(
+            Name: "an unknown sound",
+            Document: Bad() with { Rules = [Rule(body: [new CartridgeStatement(
+                        Kind: "play",
+                        Sound: "nope"
+                    )])] },
+            Path: "rules[0].body[0].sound",
+            Fragment: "Unknown sound"
+        ),
+        new(
+            Name: "a stop without a sound",
+            Document: Bad() with { Rules = [Rule(body: [new CartridgeStatement(Kind: "stop")])] },
+            Path: "rules[0].body[0]",
+            Fragment: "requires a declared sound"
+        ),
+    ];
+    private static readonly CartridgeRefusal[] ShapeRefusals = [
+        new(
+            Name: "a sound with no body",
+            Document: Bad() with { Sounds = [new CartridgeSound(Name: "s")] },
+            Path: "sounds[0]",
+            Fragment: "exactly one of music, effect or sample"
+        ),
+        new(
+            Name: "a sound that is both music and an effect",
+            Document: Bad() with { Sounds = [new CartridgeSound(
+                    Name: "s",
+                    Music: [Lead(part: Track())],
+                    Effect: new AudioEffectDocument(
+                        Rows: [],
+                        Voice: "noise"
+                    )
+                )] },
+            Path: "sounds[0]",
+            Fragment: "exactly one of music, effect or sample"
+        ),
+        new(
+            Name: "a frame count on music",
+            Document: Bad() with { Sounds = [new CartridgeSound(
+                    Name: "s",
+                    Music: [Lead(part: Track())],
+                    Frames: 4
+                )] },
+            Path: "sounds[0].frames",
+            Fragment: "takes its pacing"
+        ),
+        new(
+            Name: "an unknown effect voice",
+            Document: Bad() with { Sounds = [Effect(
+                    frames: 4,
+                    voice: "sine"
+                )] },
+            Path: "sounds[0].effect.voice",
+            Fragment: "Expected pulse1, noise or wave"
+        ),
+        new(
+            // The wave voice is the only one that carries a waveform, and it must.
+            Name: "a wave effect without a waveform",
+            Document: Bad() with { Sounds = [Effect(
+                    frames: 4,
+                    voice: "wave"
+                )] },
+            Path: "sounds[0].waveform",
+            Fragment: "carries a waveform"
+        ),
+        new(
+            Name: "an effect without a frame count",
+            Document: Bad() with { Sounds = [Effect(
+                    frames: null,
+                    voice: "noise"
+                )] },
+            Path: "sounds[0].frames",
+            Fragment: "per-row frame count"
+        ),
+    ];
+
+    public static TheoryData<string> GateRefusalNames => CartridgeRefusal.Names(table: GateRefusals);
+    public static TheoryData<string> ShapeRefusalNames => CartridgeRefusal.Names(table: ShapeRefusals);
+
     private static CartridgeRule At(int phase, CartridgeStatement[] body) => new(
         Name: $"phase{phase}",
         When: CartridgeExpressions.Gate(
             left: CartridgeExpressions.Of(state: "phase"),
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             right: CartridgeExpressions.Of(constant: phase)
         ),
         Body: body
+    );
+    private static CartridgeDocument Bad() => CartridgeDocuments.Create(
+        target: "cgb",
+        title: "SOUNDBAD"
+    ) with {
+        Variables = [new CartridgeVariable(
+            Name: "x",
+            Initial: 0
+        )],
+    };
+    // A one-row effect on the named voice.
+    private static CartridgeSound Effect(string voice, int? frames) => new(
+        Name: "s",
+        Effect: new AudioEffectDocument(
+            Voice: voice,
+            Rows: [new AudioRowDocument(
+                    Duty: null,
+                    Envelope: null,
+                    Note: "C5"
+                )]
+        ),
+        Frames: frames
     );
     private static CartridgeMusicVoice Lead(AudioDocument part) =>
         new(
             Voice: AudioEffectDocument.VoicePulse2,
             Part: part
         );
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
+    // The second pulse voice's live sequencer pointer, wherever each machine keeps it: nonzero while a track plays.
+    private static uint Playing(CartridgeProbe probe) => probe.Observe(
+        advanced: agb => agb.ReadWord(address: AdvancedStateAddress),
+        humble: hgb => ((uint)hgb.Read(address: ((ushort)((FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset) + 1))))
+    );
     private static CartridgeRule Rule(CartridgeStatement[] body) => new(
         Name: "rule",
         Body: body
@@ -91,13 +186,12 @@ public sealed class CartridgeSoundTests {
             )],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "each voice at most one part"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "each voice at most one part",
+            Name: "two parts on one voice",
+            Path: "sounds[0].music[1].voice"
+        ).Holds();
     }
     [Fact]
     public void AnEffectIsRefusedOnAVoiceTheMusicOccupies() {
@@ -136,13 +230,12 @@ public sealed class CartridgeSoundTests {
             ],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "carries a part of this cartridge's music"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "carries a part of this cartridge's music",
+            Name: "an effect on a music voice",
+            Path: "sounds[1].effect.voice"
+        ).Holds();
     }
     [InlineData("cgb", "pulse1")]
     [InlineData("cgb", "noise")]
@@ -207,7 +300,7 @@ public sealed class CartridgeSoundTests {
                 Name: "tick",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 200)
                 ),
                 Body: [new CartridgeStatement(
@@ -219,12 +312,11 @@ public sealed class CartridgeSoundTests {
             ),
             ],
         };
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
+        var result = CartridgeProbe.Compile(document: document);
+        using var machine = new CartridgeProbe(
+            label: "sound",
+            result: result
         );
-        var result = compiler.Compile(document: document);
-        using var machine = new SoundProbe(result: result);
 
         // Boot length varies with how much the image copies into video memory, so allow room past the gate.
         machine.Run(frames: 16);
@@ -232,22 +324,26 @@ public sealed class CartridgeSoundTests {
 
         Assert.NotEqual(
             expected: 0u,
-            actual: machine.ChannelActive()
+            actual: machine.SoundStatus() & 2u
         );
         Assert.NotEqual(
             expected: 0u,
-            actual: machine.Status() & mask
+            actual: machine.SoundStatus() & mask
         );
 
         // The one-shot ends on its own terminator; the music voice is still going.
-        machine.Run(frames: 40);
+        machine.RunUntil(
+            awaited: "the effect's voice falling silent",
+            limit: 40,
+            until: probe => ((probe.SoundStatus() & mask) == 0u)
+        );
         Assert.NotEqual(
             expected: 0u,
-            actual: machine.ChannelActive()
+            actual: machine.SoundStatus() & 2u
         );
         Assert.Equal(
             expected: 0u,
-            actual: machine.Status() & mask
+            actual: machine.SoundStatus() & mask
         );
     }
     [InlineData("cgb")]
@@ -296,7 +392,7 @@ public sealed class CartridgeSoundTests {
                 Name: "tick",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 200)
                 ),
                 Body: [new CartridgeStatement(
@@ -308,25 +404,24 @@ public sealed class CartridgeSoundTests {
             ),
             ],
         };
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
+        var result = CartridgeProbe.Compile(document: document);
+        using var machine = new CartridgeProbe(
+            label: "sound",
+            result: result
         );
-        var result = compiler.Compile(document: document);
-        using var machine = new SoundProbe(result: result);
 
         machine.Run(frames: 8);
 
         // The status register's low nibble reports the channels that are sounding; the track claims three of them.
         Assert.Equal(
             expected: 0x07u,
-            actual: machine.Status() & 0x07u
+            actual: machine.SoundStatus() & 0x07u
         );
 
         machine.Run(frames: 34);
         Assert.Equal(
             expected: 0u,
-            actual: machine.Status() & 0x07u
+            actual: machine.SoundStatus() & 0x07u
         );
     }
     [InlineData("cgb")]
@@ -362,7 +457,7 @@ public sealed class CartridgeSoundTests {
                 Name: "tick",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 200)
                 ),
                 Body: [new CartridgeStatement(
@@ -374,182 +469,43 @@ public sealed class CartridgeSoundTests {
             ),
             ],
         };
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
+        var result = CartridgeProbe.Compile(document: document);
+        using var machine = new CartridgeProbe(
+            label: "sound",
+            result: result
         );
-        var result = compiler.Compile(document: document);
-        using var machine = new SoundProbe(result: result);
 
         // Boot costs a few frames before the rule loop runs, so the gates land after it.
         machine.Run(frames: 8);
         Assert.NotEqual(
             expected: 0u,
-            actual: machine.Playing()
+            actual: Playing(probe: machine)
         );
         Assert.NotEqual(
             expected: 0u,
-            actual: machine.ChannelActive()
+            actual: machine.SoundStatus() & 2u
         );
 
         machine.Run(frames: 14);
         Assert.Equal(
             expected: 0u,
-            actual: machine.Playing()
+            actual: Playing(probe: machine)
         );
         Assert.Equal(
             expected: 0u,
-            actual: machine.ChannelActive()
+            actual: machine.SoundStatus() & 2u
         );
     }
-    [Fact]
-    public void ValidationGatesAudioOnTargetAndDeclaration() {
-        var document = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "SOUNDBAD"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "x",
-                Initial: 0
-            )],
-        };
-
-        Refuses(
-            document: document with { Rules = [Rule(body: [new CartridgeStatement(
-                        Kind: "play",
-                        Sound: "nope"
-                    )])] },
-            fragment: "Unknown sound"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "stop")])] },
-            fragment: "requires a declared sound"
-        );
-
-    }
-    [Fact]
-    public void ValidationRefusesMalformedSounds() {
-        var document = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "SFXBAD"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "x",
-                Initial: 0
-            )],
-        };
-
-        Refuses(
-            document: document with { Sounds = [new CartridgeSound(Name: "s")] },
-            fragment: "exactly one of music, effect or sample"
-        );
-        Refuses(
-            document: document with { Sounds = [new CartridgeSound(
-                    Name: "s",
-                    Music: [Lead(part: Track())],
-                    Effect: new AudioEffectDocument(
-                        Rows: [],
-                        Voice: "noise"
-                    )
-                )] },
-            fragment: "exactly one of music, effect or sample"
-        );
-        Refuses(
-            document: document with { Sounds = [new CartridgeSound(
-                    Name: "s",
-                    Music: [Lead(part: Track())],
-                    Frames: 4
-                )] },
-            fragment: "takes its pacing"
-        );
-        Refuses(
-            document: document with { Sounds = [new CartridgeSound(
-                    Name: "s",
-                    Effect: new AudioEffectDocument(
-                        Voice: "sine",
-                        Rows: [new AudioRowDocument(
-                                Duty: null,
-                                Envelope: null,
-                                Note: "C5"
-                            )]
-                    ),
-                    Frames: 4
-                )] },
-            fragment: "Expected pulse1, noise or wave"
-        );
-        // The wave voice is the only one that carries a waveform, and it must.
-        Refuses(
-            document: document with { Sounds = [new CartridgeSound(
-                    Name: "s",
-                    Effect: new AudioEffectDocument(
-                        Voice: "wave",
-                        Rows: [new AudioRowDocument(
-                                Duty: null,
-                                Envelope: null,
-                                Note: "C5"
-                            )]
-                    ),
-                    Frames: 4
-                )] },
-            fragment: "carries a waveform"
-        );
-        Refuses(
-            document: document with { Sounds = [new CartridgeSound(
-                    Name: "s",
-                    Effect: new AudioEffectDocument(
-                        Voice: "noise",
-                        Rows: [new AudioRowDocument(
-                                Duty: null,
-                                Envelope: null,
-                                Note: "C5"
-                            )]
-                    )
-                )] },
-            fragment: "per-row frame count"
-        );
-    }
-
-    // The sequencer's live pointer and the channel's envelope byte, wherever each machine keeps them.
-    private sealed class SoundProbe : IDisposable {
-        private const uint AdvancedStateAddress = 0x0200013Cu;
-        // Bit one of the master status register is set while the music channel is sounding, on either machine.
-        private const uint AdvancedStatusAddress = 0x04000084u;
-        private const ushort HumbleStatusAddress = 0xFF26;
-
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public SoundProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "sound"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "sound"
-            ); }
-        }
-
-        public uint ChannelActive() => ((m_agb is { } agb)
-            ? agb.ReadHalf(address: AdvancedStatusAddress)
-            : m_hgb!.Read(address: HumbleStatusAddress)) & 2u;
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public uint Playing() => ((m_agb is { } agb)
-            ? agb.ReadWord(address: AdvancedStateAddress)
-            : m_hgb!.Read(address: ((ushort)((FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset) + 1)))
-        );
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-        public uint Status() => ((m_agb is { } agb)
-            ? agb.ReadHalf(address: AdvancedStatusAddress)
-            : m_hgb!.Read(address: HumbleStatusAddress)
-        );
-    }
+    [MemberData(memberName: nameof(GateRefusalNames))]
+    [Theory]
+    public void ValidationGatesAudioOnTargetAndDeclaration(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: GateRefusals
+    );
+    [MemberData(memberName: nameof(ShapeRefusalNames))]
+    [Theory]
+    public void ValidationRefusesMalformedSounds(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: ShapeRefusals
+    );
 }

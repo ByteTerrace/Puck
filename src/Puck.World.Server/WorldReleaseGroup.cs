@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Security.Cryptography;
+using Puck.Assets;
 using Puck.Storage;
 
 namespace Puck.World.Server;
@@ -108,10 +109,12 @@ public sealed partial class WorldReleaseGroupStore {
     public WorldReleaseGroupStore(IObjectBlobStore store, ObjectStorageTarget target, Guid owner) {
         m_store = (store ?? throw new ArgumentNullException(paramName: nameof(store)));
         m_target = (target ?? throw new ArgumentNullException(paramName: nameof(target)));
-        if (owner == Guid.Empty) { throw new ArgumentException(
+        if (owner == Guid.Empty) {
+            throw new ArgumentException(
             message: "The deployment-group owner cannot be empty.",
             paramName: nameof(owner)
-        ); }
+        );
+        }
         m_owner = owner;
     }
 
@@ -164,10 +167,12 @@ public sealed partial class WorldReleaseGroupStore {
         if (
             (activeRelease is not null) &&
             string.IsNullOrWhiteSpace(value: activeRelease)
-        ) { throw new ArgumentException(
+        ) {
+            throw new ArgumentException(
             message: "An active release must be non-empty when supplied.",
             paramName: nameof(activeRelease)
-        ); }
+        );
+        }
         var record = new WorldReleaseGroupRecord {
             ActiveRelease = activeRelease,
             Admission = ((activeRelease is null)
@@ -361,7 +366,7 @@ public sealed partial class WorldReleaseGroupStore {
             ));
         }
         if (
-            !SameRoots(
+            !WorldReleaseCompatibility.SameInventory(
             left: old.RecoveryRoots,
             right: next.RecoveryRoots
         ) &&
@@ -391,10 +396,12 @@ public sealed partial class WorldReleaseGroupStore {
         if (!CanAdvance(
             next: next,
             old: old
-        )) { return Task.FromResult(result: new WorldReleaseGroupOutcome(
+        )) {
+            return Task.FromResult(result: new WorldReleaseGroupOutcome(
             WorldReleaseOperationOutcomeKind.Conflict,
             "release phase cannot regress or skip"
-        )); }
+        ));
+        }
         return WriteAsync(
             cancellationToken: cancellationToken,
             current: current,
@@ -474,11 +481,25 @@ public sealed partial class WorldReleaseGroupStore {
             b: old.PreviousRelease,
             comparisonType: StringComparison.Ordinal
         ));
-        var next = old with { RestorePoint = null, PendingOperationId = null, PendingSourceRelease = null, PendingTargetRelease = null, PendingPhase = null, PendingCommitted = false, PendingFailure = null, RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal), Admission = ((sourceAuthorityLease is null)
+        var next = old with {
+            RestorePoint = null,
+            PendingOperationId = null,
+            PendingSourceRelease = null,
+            PendingTargetRelease = null,
+            PendingPhase = null,
+            PendingCommitted = false,
+            PendingFailure = null,
+            RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal),
+            Admission = ((sourceAuthorityLease is null)
             ? WorldReleaseAdmissionState.Closed
-            : WorldReleaseAdmissionState.Open), AuthorityLease = (sourceAuthorityLease ?? old.AuthorityLease), RollbackEligible = ((old.RestorePoint is not null)
+            : WorldReleaseAdmissionState.Open),
+            AuthorityLease = (sourceAuthorityLease ?? old.AuthorityLease),
+            RollbackEligible = ((old.RestorePoint is not null)
             ? old.RollbackEligible
-            : rollbackAttempt), History = history, Revision = checked((old.Revision + 1)) };
+            : rollbackAttempt),
+            History = history,
+            Revision = checked((old.Revision + 1)),
+        };
 
         return WriteAsync(
             cancellationToken: cancellationToken,
@@ -504,11 +525,20 @@ public sealed partial class WorldReleaseGroupStore {
             ));
         }
         var sameReleaseRestore = ((old.RestorePoint is not null) && (old.PendingSourceRelease == old.PendingTargetRelease));
-        var next = old with { ActiveRelease = old.PendingTargetRelease!, PreviousRelease = (sameReleaseRestore
+        var next = old with {
+            ActiveRelease = old.PendingTargetRelease!,
+            PreviousRelease = (sameReleaseRestore
             ? old.PreviousRelease
-            : old.PendingSourceRelease), PendingPhase = WorldReleaseOperationPhase.Commit, PendingCommitted = true, Admission = WorldReleaseAdmissionState.Closed, RollbackEligible = (sameReleaseRestore
+            : old.PendingSourceRelease),
+            PendingPhase = WorldReleaseOperationPhase.Commit,
+            PendingCommitted = true,
+            Admission = WorldReleaseAdmissionState.Closed,
+            RollbackEligible = (sameReleaseRestore
             ? old.RollbackEligible
-            : (old.PendingSourceRelease is not null)), AuthorityLease = freshAuthorityLease, Revision = checked((old.Revision + 1)) };
+            : (old.PendingSourceRelease is not null)),
+            AuthorityLease = freshAuthorityLease,
+            Revision = checked((old.Revision + 1)),
+        };
 
         return WriteAsync(
             cancellationToken: cancellationToken,
@@ -700,14 +730,6 @@ public sealed partial class WorldReleaseGroupStore {
             _ => false,
         };
     }
-    private static bool SameRoots(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) => ((left.Count == right.Count) && left.All(predicate: item => (right.TryGetValue(
-        key: item.Key,
-        value: out var value
-    ) && string.Equals(
-        a: item.Value,
-        b: value,
-        comparisonType: StringComparison.Ordinal
-    ))));
     private static bool SameHistory(IReadOnlyList<WorldReleaseGroupHistoryEntry> left, IReadOnlyList<WorldReleaseGroupHistoryEntry> right) =>
         ((left.Count == right.Count) && left.Zip(second: right).All(predicate: pair =>
             ((pair.First.OperationId == pair.Second.OperationId) &&
@@ -728,7 +750,7 @@ public sealed partial class WorldReleaseGroupStore {
             comparisonType: StringComparison.Ordinal
         ) &&
             (pair.First.Revision == pair.Second.Revision) &&
-            SameRoots(
+            WorldReleaseCompatibility.SameInventory(
             left: pair.First.RecoveryRoots,
             right: pair.Second.RecoveryRoots
         ))));
@@ -745,10 +767,12 @@ public sealed partial class WorldReleaseGroupStore {
     ));
     private static void ValidateIdentity(string group, string release) {
         ValidateGroup(group: group);
-        if (string.IsNullOrWhiteSpace(value: release)) { throw new ArgumentException(
+        if (string.IsNullOrWhiteSpace(value: release)) {
+            throw new ArgumentException(
             message: "A release identity is required.",
             paramName: nameof(release)
-        ); }
+        );
+        }
     }
     private static void ValidateGroup(string group) {
         if (
@@ -759,10 +783,12 @@ public sealed partial class WorldReleaseGroupStore {
             value: ".."
         ) ||
             group.Contains(value: '/')
-        ) { throw new ArgumentException(
+        ) {
+            throw new ArgumentException(
             message: "Deployment group must be one safe name.",
             paramName: nameof(group)
-        ); }
+        );
+        }
     }
     private static void Validate(WorldReleaseGroupRecord record, string expectedGroup, Guid expectedOwner) {
         if (
@@ -803,7 +829,7 @@ public sealed partial class WorldReleaseGroupStore {
         ) { throw new InvalidDataException(message: "a pending failure requires a pending operation"); }
         if (
             (record.RestorePoint is { } point) &&
-            ((record.PendingOperationId is null) || (point.PointId == Guid.Empty) || !WorldAuthorityRecoveryRootCodec.IsPin(pin: point.Identity))
+            ((record.PendingOperationId is null) || (point.PointId == Guid.Empty) || !ContentPin.TryParse(pin: out _, text: point.Identity))
         ) { throw new InvalidDataException(message: "restore selection requires an exact point and pending operation"); }
         if (
             (record.PendingOperationId is not null) &&
@@ -841,19 +867,26 @@ public sealed partial class WorldReleaseGroupStore {
             comparisonType: StringComparison.Ordinal
         )
         ) { throw new InvalidDataException(message: "a committed group must point at its pending target"); }
-        foreach (var item in record.RecoveryRoots) { if (
+        foreach (var item in record.RecoveryRoots) {
+            if (
             string.IsNullOrWhiteSpace(value: item.Key) ||
             string.IsNullOrWhiteSpace(value: item.Value)
-        ) { throw new InvalidDataException(message: "recovery roots require names and pins"); } }
-        foreach (var item in record.History) { if (
+        ) { throw new InvalidDataException(message: "recovery roots require names and pins"); }
+        }
+        foreach (var item in record.History) {
+            if (
             (item.OperationId == Guid.Empty) ||
             string.IsNullOrWhiteSpace(value: item.TargetRelease) ||
             string.IsNullOrWhiteSpace(value: item.Result) ||
             (item.RecoveryRoots is null)
-        ) { throw new InvalidDataException(message: "release history is incomplete"); } foreach (var root in item.RecoveryRoots) { if (
+        ) { throw new InvalidDataException(message: "release history is incomplete"); }
+            foreach (var root in item.RecoveryRoots) {
+                if (
             string.IsNullOrWhiteSpace(value: root.Key) ||
             string.IsNullOrWhiteSpace(value: root.Value)
-        ) { throw new InvalidDataException(message: "release history recovery roots are incomplete"); } } }
+        ) { throw new InvalidDataException(message: "release history recovery roots are incomplete"); }
+            }
+        }
     }
     private static void ValidateJson(ReadOnlySpan<byte> bytes) {
         using var document = JsonDocument.Parse(bytes.ToArray());
@@ -869,10 +902,12 @@ public sealed partial class WorldReleaseGroupStore {
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var property in document.RootElement.EnumerateObject()) { if (!allowed.Contains(item: property.Name)) { throw new InvalidDataException(message: $"release group record contains unknown member '{property.Name}'"); } if (!seen.Add(item: property.Name)) { throw new InvalidDataException(message: $"release group record contains duplicate member '{property.Name}'"); } required.Remove(item: property.Name); }
-        if (required.Count != 0) { throw new InvalidDataException(message: $"release group record is missing required member(s): {string.Join(
+        if (required.Count != 0) {
+            throw new InvalidDataException(message: $"release group record is missing required member(s): {string.Join(
             separator: ", ",
             values: required.Order(comparer: StringComparer.Ordinal)
-        )}"); }
+        )}");
+        }
         var pendingPhase = document.RootElement.GetProperty(propertyName: "pendingPhase");
 
         if (
@@ -897,10 +932,13 @@ public sealed partial class WorldReleaseGroupStore {
             historyAllowed.Add(item: "restorePoint");
             var historySeen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-            foreach (var property in entry.EnumerateObject()) { if (
+            foreach (var property in entry.EnumerateObject()) {
+                if (
                 !historyAllowed.Contains(item: property.Name) ||
                 !historySeen.Add(item: property.Name)
-            ) { throw new InvalidDataException(message: "release history contains an unknown or duplicate member"); } historyRequired.Remove(item: property.Name); }
+            ) { throw new InvalidDataException(message: "release history contains an unknown or duplicate member"); }
+                historyRequired.Remove(item: property.Name);
+            }
             if (
                 (historyRequired.Count != 0) ||
                 (entry.GetProperty(propertyName: "recoveryRoots").ValueKind != JsonValueKind.Object)
@@ -926,7 +964,7 @@ public sealed partial class WorldReleaseGroupStore {
             !selection.GetProperty(propertyName: "pointId").TryGetGuid(value: out var id) ||
             (id == Guid.Empty) ||
             (selection.GetProperty(propertyName: "identity").ValueKind != JsonValueKind.String) ||
-            !WorldAuthorityRecoveryRootCodec.IsPin(pin: selection.GetProperty(propertyName: "identity").GetString())
+            !ContentPin.TryParse(pin: out _, text: selection.GetProperty(propertyName: "identity").GetString())
         ) {
             throw new InvalidDataException(message: "restore point requires a unique point ID and full identity pin");
         }
@@ -945,14 +983,18 @@ public sealed partial class WorldReleaseGroupStore {
             }
         }
     }
-    private static bool IsDefinedEnum<T>(JsonElement element) where T : struct, Enum => element.ValueKind switch { JsonValueKind.Number when element.TryGetInt32(value: out var number) => Enum.IsDefined(
+    private static bool IsDefinedEnum<T>(JsonElement element) where T : struct, Enum => element.ValueKind switch {
+        JsonValueKind.Number when element.TryGetInt32(value: out var number) => Enum.IsDefined(
         enumType: typeof(T),
         value: number
-    ), JsonValueKind.String when ((element.GetString() is { } text) && Enum.TryParse<T>(
+    ),
+        JsonValueKind.String when ((element.GetString() is { } text) && Enum.TryParse<T>(
         result: out var value,
         value: text
     )) => Enum.IsDefined(
         enumType: typeof(T),
         value: value
-    ), _ => false };
+    ),
+        _ => false
+    };
 }

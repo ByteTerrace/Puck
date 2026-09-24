@@ -176,44 +176,6 @@ public sealed class FontAtlasSourceResolver(
             )
         );
     }
-    private static string ResolveContainedPath(string path, string basePath) {
-        if (Path.IsPathRooted(path: path)) {
-            throw new ArgumentException(
-                message: "A contained font asset path must be relative to its document.",
-                paramName: nameof(path)
-            );
-        }
-
-        var root = Path.GetFullPath(path: basePath);
-        var resolved = Path.GetFullPath(path: Path.Combine(
-            path1: root,
-            path2: path
-        ));
-        var relative = Path.GetRelativePath(
-            path: resolved,
-            relativeTo: root
-        );
-
-        if (
-            Path.IsPathRooted(path: relative) ||
-            string.Equals(
-            a: relative,
-            b: "..",
-            comparisonType: StringComparison.Ordinal
-        ) ||
-            relative.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: $"..{Path.DirectorySeparatorChar}"
-        )
-        ) {
-            throw new ArgumentException(
-                message: "A contained font asset path must stay beneath its document directory.",
-                paramName: nameof(path)
-            );
-        }
-
-        return resolved;
-    }
     private static string ToCanonicalRangeToken(int start, int end) {
         return ((start == end)
             ? $"U+{start:X}"
@@ -221,7 +183,7 @@ public sealed class FontAtlasSourceResolver(
         );
     }
     private static string ToContentAddress(string scheme, AssetContentHash hash) {
-        return $"{scheme}://sha256-64/{hash.Value:x16}";
+        return $"{scheme}://{hash}";
     }
 
     /// <inheritdoc/>
@@ -250,7 +212,7 @@ public sealed class FontAtlasSourceResolver(
             generationOptions: generationOptions
         );
     }
-    /// <summary>Resolves and packs an entire hash-pinned font catalog beneath one document directory.</summary>
+    /// <summary>Resolves and packs an entire hash-pinned font catalog beside one document directory.</summary>
     public PackedFontAtlasCatalog ResolveCatalog(TextFontCatalogDefinition definition, string basePath) {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: definition.DefaultFont);
@@ -271,7 +233,7 @@ public sealed class FontAtlasSourceResolver(
 
             fonts.Add(
                 key: row.Name,
-                value: ResolvePinnedContained(
+                value: ResolvePinned(
                     fontPath: row.Source,
                     expectedHash: row.Hash,
                     generationOptions: row.ToGenerationOptions(),
@@ -285,20 +247,21 @@ public sealed class FontAtlasSourceResolver(
             fonts: fonts
         );
     }
-    /// <summary>Resolves a hash-pinned font that must remain beneath <paramref name="basePath"/>.</summary>
-    /// <param name="fontPath">The world-relative font asset path.</param>
+    /// <summary>Resolves a hash-pinned font beside <paramref name="basePath"/>; the pin, not the directory, is what
+    /// admits its bytes.</summary>
+    /// <param name="fontPath">The font asset path, relative to <paramref name="basePath"/> unless rooted.</param>
     /// <param name="expectedHash">The canonical <c>sha256-64/{16 lowercase hex}</c> content pin.</param>
     /// <param name="generationOptions">The generation options.</param>
     /// <param name="basePath">The containing document directory.</param>
-    public FontAtlas ResolvePinnedContained(string fontPath, string expectedHash, FontAtlasGenerationOptions generationOptions, string basePath) {
+    public FontAtlas ResolvePinned(string fontPath, string expectedHash, FontAtlasGenerationOptions generationOptions, string basePath) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: fontPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: expectedHash);
         ArgumentNullException.ThrowIfNull(generationOptions);
 
-        var resolvedPath = ResolveContainedPath(
+        var resolvedPath = Path.GetFullPath(path: ResolveAgainstBase(
             basePath: basePath,
             path: fontPath
-        );
+        ));
         var fontBytes = m_assetSource.Read(path: resolvedPath);
         var actualHash = AssetContentHash.Compute(content: fontBytes.Span).ToString();
 

@@ -2,30 +2,23 @@ namespace Puck.AdvancedGamingBrick;
 
 public sealed partial class AgbInterruptController : ISnapshotable {
     /// <inheritdoc/>
-    // Both pipeline stages (committed [0] and programmed [1] of IE/IF/IME) plus the synchronizer line — the whole
-    // double-buffered state the 1-cycle register-visibility and 2-cycle recognition latencies emerge from.
-    public void SaveState(StateWriter writer) {
-        ArgumentNullException.ThrowIfNull(argument: writer);
-
-        writer.WriteUInt16(value: m_enable0);
-        writer.WriteUInt16(value: m_enable1);
-        writer.WriteUInt16(value: m_flag0);
-        writer.WriteUInt16(value: m_flag1);
-        writer.WriteBoolean(value: m_ime0);
-        writer.WriteBoolean(value: m_ime1);
-        writer.WriteBoolean(value: m_synchronizer);
+    public void LoadState(StateReader reader) {
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
+        RefreshPipelineQuiescent(); // Derived cache; the snapshot continues to contain only hardware state.
     }
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
 
-        m_enable0 = reader.ReadUInt16();
-        m_enable1 = reader.ReadUInt16();
-        m_flag0 = reader.ReadUInt16();
-        m_flag1 = reader.ReadUInt16();
-        m_ime0 = reader.ReadBoolean();
-        m_ime1 = reader.ReadBoolean();
-        m_synchronizer = reader.ReadBoolean();
-        RefreshPipelineQuiescent(); // Derived cache; the snapshot continues to contain only hardware state.
+    // Both pipeline stages (committed [0] and programmed [1] of IE/IF/IME) plus the synchronizer line — the whole
+    // double-buffered state the 1-cycle register-visibility and 2-cycle recognition latencies emerge from.
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.UInt16(value: ref m_enable0);
+        transfer.UInt16(value: ref m_enable1);
+        transfer.UInt16(value: ref m_flag0);
+        transfer.UInt16(value: ref m_flag1);
+        transfer.Boolean(value: ref m_ime0);
+        transfer.Boolean(value: ref m_ime1);
+        transfer.Boolean(value: ref m_synchronizer);
     }
 }

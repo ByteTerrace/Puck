@@ -119,7 +119,13 @@ public class RuleCompileContext : IRuleCostContext {
         return false;
     }
     /// <summary>Opens one lexical instance binding and returns its distinct evaluator register.</summary>
-    public RuleInstanceBinding PushInstanceBinding(CellName name, StatePoolDescriptor pool) {
+    /// <param name="name">The authored binding name.</param>
+    /// <param name="pool">The pool the binding belongs to.</param>
+    /// <param name="effectScoped"><see langword="true"/> for a binding an effect body opens (a claim, a pair claim,
+    /// or a <c>for each</c> effect), whose handle exists only while that body fires; <see langword="false"/> for a
+    /// binding bound before the rule's locals and gate evaluate.</param>
+    /// <returns>The binding.</returns>
+    public RuleInstanceBinding PushInstanceBinding(CellName name, StatePoolDescriptor pool, bool effectScoped = false) {
         ArgumentNullException.ThrowIfNull(argument: pool);
         if (m_instanceBindings.Count >= StateCapacity.MaxInstanceBindings) {
             throw new InvalidOperationException(message: $"a rule may bind at most {StateCapacity.MaxInstanceBindings} pool instances");
@@ -129,11 +135,23 @@ public class RuleCompileContext : IRuleCostContext {
                 throw new InvalidOperationException(message: $"instance binding '{name}' is already live in this scope");
             }
         }
-        var binding = new RuleInstanceBinding(Name: name.Value, Pool: pool, Slot: m_instanceBindings.Count);
+        var binding = new RuleInstanceBinding(Name: name.Value, Pool: pool, Slot: m_instanceBindings.Count, EffectScoped: effectScoped);
 
         m_instanceBindings.Add(item: binding);
         _ = m_releasedInstanceSlots.Remove(item: binding.Slot);
         return binding;
+    }
+    /// <summary>Determines whether an evaluator register belongs to a binding an effect body opened, whose handle
+    /// exists only while that body fires.</summary>
+    /// <param name="slot">The binding's evaluator register.</param>
+    /// <returns><see langword="true"/> when an effect-scoped binding in scope owns the register.</returns>
+    public bool IsEffectScopedBinding(int slot) {
+        foreach (var binding in m_instanceBindings) {
+            if ((binding.Slot == slot) && binding.EffectScoped) {
+                return true;
+            }
+        }
+        return false;
     }
     /// <summary>Marks a lexical binding unavailable after its release effect.</summary>
     public void ReleaseInstanceBinding(RuleInstanceBinding binding) => m_releasedInstanceSlots.Add(item: binding.Slot);
@@ -240,12 +258,12 @@ public class RuleCompileContext : IRuleCostContext {
     }
     /// <summary>Resolves a declared cell set by name.</summary>
     /// <param name="name">The set's name.</param>
-    /// <param name="set">The declared expression, on success.</param>
+    /// <param name="set">The declared set, its name beside its expression, on success.</param>
     /// <returns><see langword="true"/> when the document declares a set of that name.</returns>
-    public bool TryCellSet(string name, out CellSetExpression? set) {
+    public bool TryCellSet(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out CellSetRow? set) {
         foreach (var row in Sets) {
-            if ((row is not null) && string.Equals(a: row.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
-                set = row.Set;
+            if ((row?.Set is not null) && string.Equals(a: row.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
+                set = row;
 
                 return true;
             }
@@ -357,4 +375,6 @@ public class RuleCompileContext : IRuleCostContext {
 /// <param name="Name">The authored binding name.</param>
 /// <param name="Pool">The pool the binding belongs to.</param>
 /// <param name="Slot">The distinct evaluator register slot.</param>
-public readonly record struct RuleInstanceBinding(string Name, StatePoolDescriptor Pool, int Slot);
+/// <param name="EffectScoped"><see langword="true"/> when an effect body opened the binding, so its handle exists only
+/// while that body fires.</param>
+public readonly record struct RuleInstanceBinding(string Name, StatePoolDescriptor Pool, int Slot, bool EffectScoped = false);

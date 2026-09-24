@@ -210,8 +210,8 @@ public static class ReferenceScheduleManifest {
     public static IReadOnlyList<ReferenceEvidenceTarget> Targets { get; }
 
     static ReferenceScheduleManifest() {
-        using var stream = typeof(ReferenceScheduleManifest).Assembly.GetManifestResourceStream(name: ResourceName)
-            ?? throw new InvalidOperationException(message: $"The reference-schedule manifest '{ResourceName}' is not embedded in Puck.State.");
+        using var stream = (typeof(ReferenceScheduleManifest).Assembly.GetManifestResourceStream(name: ResourceName)
+            ?? throw new InvalidOperationException(message: $"The reference-schedule manifest '{ResourceName}' is not embedded in Puck.State."));
         using var buffer = new MemoryStream();
 
         stream.CopyTo(destination: buffer);
@@ -293,12 +293,13 @@ public static class ReferenceScheduleManifest {
             );
         }
     }
-    private static long Number(JsonElement element, string name) => (element.TryGetProperty(
+
+    private static long Number(JsonElement element, string name) => ((element.TryGetProperty(
         propertyName: name,
         value: out var member
     ) && (member.ValueKind == JsonValueKind.Number))
         ? member.GetInt64()
-        : throw new InvalidOperationException(message: $"The reference-schedule manifest is missing the number '{name}'.");
+        : throw new InvalidOperationException(message: $"The reference-schedule manifest is missing the number '{name}'."));
     private static IReadOnlyDictionary<string, IReadOnlyList<InstructionForm>> ReadForms(JsonElement service) {
         var families = new Dictionary<string, IReadOnlyList<InstructionForm>>(comparer: StringComparer.Ordinal);
 
@@ -336,12 +337,12 @@ public static class ReferenceScheduleManifest {
         return families;
     }
     private static InstructionService ReadService(JsonElement element) {
-        var throughput = element.TryGetProperty(
+        var throughput = ((element.TryGetProperty(
             propertyName: "reciprocalThroughput",
             value: out var rational
-        ) && (rational.ValueKind == JsonValueKind.Array) && (rational.GetArrayLength() == 2)
+        ) && (rational.ValueKind == JsonValueKind.Array) && (rational.GetArrayLength() == 2))
             ? rational
-            : throw new InvalidOperationException(message: "A reference-schedule service row carries no reciprocal-throughput rational.");
+            : throw new InvalidOperationException(message: "A reference-schedule service row carries no reciprocal-throughput rational."));
 
         return new(
             Latency: Number(
@@ -795,16 +796,16 @@ public static class ReferenceScheduleManifest {
         }
         return rows;
     }
-    private static JsonElement Section(JsonElement element, string name) => (element.TryGetProperty(
+    private static JsonElement Section(JsonElement element, string name) => ((element.TryGetProperty(
         propertyName: name,
         value: out var member
     ) && (member.ValueKind == JsonValueKind.Object))
         ? member
-        : throw new InvalidOperationException(message: $"The reference-schedule manifest is missing the section '{name}'.");
-    private static string Text(JsonElement element, string name) => (element.TryGetProperty(
+        : throw new InvalidOperationException(message: $"The reference-schedule manifest is missing the section '{name}'."));
+    private static string Text(JsonElement element, string name) => ((element.TryGetProperty(
         propertyName: name,
         value: out var member
     ) && (member.ValueKind == JsonValueKind.String))
         ? (member.GetString() ?? string.Empty)
-        : throw new InvalidOperationException(message: $"The reference-schedule manifest is missing the text '{name}'.");
+        : throw new InvalidOperationException(message: $"The reference-schedule manifest is missing the text '{name}'."));
 }

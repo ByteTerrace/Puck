@@ -131,9 +131,8 @@ public abstract record WorldSpeaker(
     );
 }
 /// <summary>
-/// One tune asset reference row — a <c>puck.tune.v1</c> document's stable name, its file path (relative to
-/// <see cref="AppContext.BaseDirectory"/>, the same convention <see cref="WorldMusicRow"/> uses), and the SHA-256
-/// hex64 pin of the referenced document's own canonical bytes. Never embedded: the document is loaded,
+/// One tune asset reference row — a <c>puck.tune.v1</c> document's stable name, its file path (resolved beside the
+/// document that authors the row, the same rule <see cref="WorldMusicRow"/> follows), and the SHA-256 hex64 pin of the referenced document's own canonical bytes. Never embedded: the document is loaded,
 /// canonicalized, and hash-verified where it is compiled, the same load-then-pin discipline <see cref="WorldMusicRow"/>
 /// already applies. The hash doubles as the runtime restart discriminator: a content change restarts the tune's
 /// headless host, a rename does not.

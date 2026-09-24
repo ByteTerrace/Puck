@@ -324,10 +324,9 @@ public sealed class PresentedFunctor<TValue, TOps>
     /// <returns>The image, an element of <see cref="Target"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The symbol names no source generator.</exception>
     public PresentedAlgebra<TValue, TOps>.Element Image(int symbol) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: symbol,
-            other: ImageCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: ImageCount,
+            value: symbol
         );
 
         return m_images[symbol];

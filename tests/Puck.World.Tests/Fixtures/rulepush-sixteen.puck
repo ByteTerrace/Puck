@@ -1,0 +1,29 @@
+// A 16x16 rulepush level carrying 58 tokens, stamped from the package's own level module: the Hedges and Sink maps
+// stacked on one board with a row of loose boulders between them. It is a test world, never shipped:
+// RulePushTurnLawTests boots it, holds its per-tick rule work under the ceiling and reports the price.
+
+schema: "puck.world.definition.v1"
+documentId: "rulepush-sixteen"
+
+import "../../../worlds/rulepush/level.puck"
+
+let sixteen = [
+  "I.H.....F......."
+  "=.=.....=......."
+  "Y.S.....V......."
+  ".....hhhh......."
+  ".ibb.h.f........"
+  ".....hhhh......."
+  "B=P............."
+  "..........bbbbb."
+  "I=Y..M=N........"
+  "t..............."
+  ".i.b............"
+  "mmmmmmmmm......."
+  "................"
+  "..f............."
+  "B=PT=DF=V......."
+  "................"
+]
+
+use level(centre: [0m, 0m, 0m], record: "sixteenCleared", layout: sixteen)

@@ -3,8 +3,8 @@ namespace Puck.World.Server;
 public sealed partial class WorldAuthorityBlobStore {
     /// <summary>Creates a disposable authority from a coherent capture and its exact receipt history. It
     /// preserves source sequence/ordinal meaning, covers the captured journal with the new checkpoint, and
-    /// publishes an unowned root last. The caller owns a fresh disposable destination; existing rooted or
-    /// legacy state refuses, and a competing root publication wins over this create-only operation.</summary>
+    /// publishes an unowned root last. The caller owns a fresh disposable destination; an existing root
+    /// refuses, and a competing root publication wins over this create-only operation.</summary>
     /// <param name="identity">The source identity, also used in the disposable fixture.</param>
     /// <param name="definition">Exact published source definition bytes.</param>
     /// <param name="checkpoint">Complete checkpoint captured at the receipt root's publication boundary.</param>
@@ -21,11 +21,14 @@ public sealed partial class WorldAuthorityBlobStore {
         // Own all caller buffers before the first await.
         var definitionBytes = definition.ToArray();
         var checkpointBytes = checkpoint.ToArray();
-        var detached = history with { Index = history.Index.ToArray(), Nodes = history.Nodes.ToDictionary(
+        var detached = history with {
+            Index = history.Index.ToArray(),
+            Nodes = history.Nodes.ToDictionary(
             pair => pair.Key,
             pair => pair.Value.ToArray(),
             StringComparer.Ordinal
-        ) };
+        ),
+        };
 
         _ = detached.Validate();
         if (
@@ -50,28 +53,11 @@ public sealed partial class WorldAuthorityBlobStore {
         ) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture checkpoint predates its captured authority root");
         }
-        if (
-            (await ReadRootSnapshotAsync(
+        if (await ReadRootSnapshotAsync(
             cancellationToken: cancellationToken,
             identity: identity
-        ).ConfigureAwait(continueOnCapturedContext: false) is not null) ||
-            (await ReadAsync(
-            address: LatestPointerAddress(
-                containerId: identity.Owner,
-                world: identity.World
-            ),
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false) is not null) ||
-            (await ReadAsync(
-            address: WorldOwnedWorldSync.HostedAddressFor(
-                identity.Owner,
-                identity.World,
-                "definition.json"
-            ),
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false) is not null)
-        ) {
-            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture creation requires a new world with no existing authority or legacy state");
+        ).ConfigureAwait(continueOnCapturedContext: false) is not null) {
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture creation requires a new world with no existing authority root");
         }
         var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(content: checkpointBytes);
         var ordinal = checked((detached.Source.Root.CheckpointOrdinal + 1));

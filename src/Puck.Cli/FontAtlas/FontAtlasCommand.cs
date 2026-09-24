@@ -106,12 +106,11 @@ internal static class FontAtlasCommand {
     public static Command Create() {
         var charactersOption = new Option<string>(name: "--characters") { DefaultValueFactory = static _ => string.Empty, Description = "Additional non-whitespace Unicode scalars to include." };
         var columnsOption = new Option<int?>(name: "--columns") { Description = "Preferred glyphs per shelf row (default: 16)." };
-        var defaults = new FontAtlasGenerationLimits();
-        var maxWorkOption = new Option<long>("--max-work") { DefaultValueFactory = _ => defaults.MaxWork, Description = "Whole-job processing work units." };
-        var maxGeometryOption = new Option<int>("--max-geometry") { DefaultValueFactory = _ => defaults.MaxGeometryElements, Description = "Whole-job geometry elements, including composite copies and boundaries." };
-        var maxPairsOption = new Option<int>("--max-kerning-pairs") { DefaultValueFactory = _ => defaults.MaxKerningPairs, Description = "Kerning entries processed or emitted, including zero matches and Unicode aliases." };
-        var maxFontBytesOption = new Option<int>("--max-font-bytes") { DefaultValueFactory = _ => defaults.MaxFontBytes, Description = "Maximum source font bytes, checked before reading." };
-        var maxGlyphsOption = new Option<int>("--max-glyphs") { DefaultValueFactory = _ => defaults.MaxGlyphs, Description = "Maximum distinct mapped source glyphs." };
+        var maxWorkOption = new Option<long>("--max-work") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxWork, Description = "Whole-job processing work units." };
+        var maxGeometryOption = new Option<int>("--max-geometry") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxGeometryElements, Description = "Whole-job geometry elements, including composite copies and boundaries." };
+        var maxPairsOption = new Option<int>("--max-kerning-pairs") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxKerningPairs, Description = "Kerning entries processed or emitted, including zero matches and Unicode aliases." };
+        var maxFontBytesOption = new Option<int>("--max-font-bytes") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxFontBytes, Description = "Maximum source font bytes, checked before reading." };
+        var maxGlyphsOption = new Option<int>("--max-glyphs") { DefaultValueFactory = static _ => new FontAtlasGenerationLimits().MaxGlyphs, Description = "Maximum distinct mapped source glyphs." };
         var distanceRangeOption = new Option<float?>(name: "--distance-range") { Description = "Signed-distance band width in pixels (default: 8)." };
         var faceIndexOption = new Option<int?>(name: "--face-index") { Description = "Zero-based face in a TTC/OTC collection (default: 0)." };
         var fontArgument = new Argument<string>(name: "font-file") { Description = "The source font: a standalone OpenType font or a TTC/OTC collection." };

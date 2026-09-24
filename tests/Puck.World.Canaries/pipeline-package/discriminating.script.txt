@@ -1,0 +1,13 @@
+# The source row with nothing previewed or committed renders the source's default gain.
+pipeline.wait tint compiled 40
+pipeline.wait tint installed 10
+pipeline.overrides tint
+pipeline.reset tint
+pipeline.wait tint submitted 1 10
+pipeline.capture tint {run}/source.png
+pipeline.wait tint captured 10
+# The row names the relocated package, one of whose files the runner altered after packaging, so loading it is refused
+# by the file's pin before anything compiles.
+world.row.set views.pipelines {"name":"tint","source":"{run}/tint"}
+pipeline.reload tint
+pipeline.wait tint compiled 40

@@ -1,0 +1,16 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "alchemy",
+  "name": "Puck Alchemy",
+  "version": "0.1.0",
+  "worlds": [
+    {
+      "id": "alchemy",
+      "source": "alchemy.puck"
+    }
+  ],
+  "files": [
+    "README.md",
+    "alchemy.puck"
+  ]
+}

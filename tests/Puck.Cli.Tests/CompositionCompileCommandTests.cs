@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Text.Json;
 using Xunit;
 
@@ -13,12 +14,12 @@ public sealed class CompositionCompileCommandTests {
     [Fact]
     public async Task CompositionWritesEveryDeclaredFilenameAndDocumentIdentityAsync() {
         using var directory = new TemporaryDirectory();
-        var source = directory.WriteText(path: "map.puck", text: TwoWorlds);
+        var source = directory.WriteText(name: "map.puck", text: TwoWorlds);
 
         Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source]));
 
-        using var north = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: directory.PathOf(path: "north.world.json")));
-        using var south = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: directory.PathOf(path: "south.world.json")));
+        using var north = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: directory.PathOf(name: "north.world.json")));
+        using var south = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: directory.PathOf(name: "south.world.json")));
 
         Assert.Equal(expected: "north", actual: north.RootElement.GetProperty(propertyName: "documentId").GetString());
         Assert.Equal(expected: "south", actual: south.RootElement.GetProperty(propertyName: "documentId").GetString());
@@ -26,43 +27,71 @@ public sealed class CompositionCompileCommandTests {
     [Fact]
     public async Task OneInvalidWorldPreventsEveryCompositionOutputAsync() {
         using var directory = new TemporaryDirectory();
-        var source = directory.WriteText(path: "map.puck", text: """
+        var source = directory.WriteText(name: "map.puck", text: """
             module room() { state { world { slot score = 0 } } }
             world north = room()
             world south = missing()
             """);
 
         Assert.Equal(expected: 1, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source]));
-        Assert.False(condition: File.Exists(path: directory.PathOf(path: "north.world.json")));
-        Assert.False(condition: File.Exists(path: directory.PathOf(path: "south.world.json")));
+        Assert.False(condition: File.Exists(path: directory.PathOf(name: "north.world.json")));
+        Assert.False(condition: File.Exists(path: directory.PathOf(name: "south.world.json")));
+    }
+    // A composition's worlds decompile together into the one source that emits them, with the border between them
+    // read back from the rows it generated in both; that source compiles to the same documents, byte for byte.
+    [Fact]
+    public async Task CompositionWorldsDecompileTogetherIntoTheSourceThatEmitsThemAsync() {
+        using var directory = new TemporaryDirectory();
+        var source = directory.WriteText(name: "map.puck", text: """
+            module plot(centre: Point) {
+                ground yard { center: centre size [12m, 12m] }
+            }
+            world north = plot(centre: [0m, 0m, -6m])
+            world south = plot(centre: [0m, 0m, 6m])
+            border north.south, south.north { height: 4m }
+            """);
+        var decompiled = directory.PathOf(name: "again/map.puck");
+
+        Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source]));
+        Assert.Equal(expected: 2, actual: await PuckRootCommand.InvokeAsync(args: ["decompile", directory.PathOf(name: "north.world.json"), directory.PathOf(name: "south.world.json")]));
+        Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["decompile", directory.PathOf(name: "north.world.json"), directory.PathOf(name: "south.world.json"), "--output", decompiled]));
+        Assert.Contains(expectedSubstring: "border north.south, south.north", actualString: File.ReadAllText(path: decompiled), comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", decompiled]));
+
+        foreach (var world in new[] { "north", "south" }) {
+            Assert.Equal(
+                expected: File.ReadAllBytes(path: directory.PathOf(name: $"{world}.world.json")),
+                actual: File.ReadAllBytes(path: directory.PathOf(name: $"again/{world}.world.json"))
+            );
+        }
     }
     [Fact]
     public async Task CompositionOutputOptionNamesDestinationDirectoryAsync() {
         using var directory = new TemporaryDirectory();
-        var source = directory.WriteText(path: "map.puck", text: TwoWorlds);
-        var destination = directory.PathOf(path: "generated");
+        var source = directory.WriteText(name: "map.puck", text: TwoWorlds);
+        var destination = directory.PathOf(name: "generated");
 
         Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--output", destination]));
 
         Assert.True(condition: File.Exists(path: Path.Combine(path1: destination, path2: "north.world.json")));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: destination, path2: "south.world.json")));
-        Assert.False(condition: File.Exists(path: directory.PathOf(path: "north.world.json")));
+        Assert.False(condition: File.Exists(path: directory.PathOf(name: "north.world.json")));
     }
     [Fact]
     public async Task AssetUpdateRequiresSemanticValidationAndDefaultCompileRefusesStaleBytesAsync() {
         using var directory = new TemporaryDirectory();
-        var asset = directory.WriteBytes(path: "game.gb", bytes: "first"u8);
-        var invalid = directory.WriteText(path: "invalid.puck", text: MachineSource(model: "not-a-model"));
+        var asset = directory.WriteBytes(bytes: "first"u8, name: "game.gb");
+        var invalid = directory.WriteText(name: "invalid.puck", text: MachineSource(model: "not-a-model"));
 
         Assert.Equal(expected: 1, actual: await PuckRootCommand.InvokeAsync(args: ["compile", invalid, "--update-assets"]));
-        Assert.False(condition: File.Exists(path: directory.PathOf(path: "invalid.assets.json")));
-        Assert.False(condition: File.Exists(path: directory.PathOf(path: "invalid.world.json")));
+        Assert.False(condition: File.Exists(path: directory.PathOf(name: "invalid.assets.json")));
+        Assert.False(condition: File.Exists(path: directory.PathOf(name: "invalid.world.json")));
 
-        var source = directory.WriteText(path: "cabinet.puck", text: MachineSource(model: "cgb"));
+        var source = directory.WriteText(name: "cabinet.puck", text: MachineSource(model: "cgb"));
 
         Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--update-assets"]));
-        Assert.True(condition: File.Exists(path: directory.PathOf(path: "cabinet.assets.json")));
-        var output = directory.PathOf(path: "cabinet.world.json");
+        Assert.True(condition: File.Exists(path: directory.PathOf(name: "cabinet.assets.json")));
+        var output = directory.PathOf(name: "cabinet.world.json");
         var originalOutput = File.ReadAllBytes(path: output);
 
         File.WriteAllBytes(path: asset, bytes: "changed"u8.ToArray());
@@ -72,21 +101,21 @@ public sealed class CompositionCompileCommandTests {
     [Fact]
     public async Task CartridgeSourceRefusesWorldAssetUpdateFlagAsync() {
         using var directory = new TemporaryDirectory();
-        var source = directory.WriteText(path: "game.puck", text: "schema: \"puck.cartridge.v1\"");
+        var source = directory.WriteText(name: "game.puck", text: "schema: \"puck.cartridge.v1\"");
 
         Assert.Equal(expected: 1, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--update-assets"]));
-        Assert.False(condition: File.Exists(path: directory.PathOf(path: "game.assets.json")));
-        Assert.False(condition: File.Exists(path: directory.PathOf(path: "game.cartridge.json")));
+        Assert.False(condition: File.Exists(path: directory.PathOf(name: "game.assets.json")));
+        Assert.False(condition: File.Exists(path: directory.PathOf(name: "game.cartridge.json")));
     }
     [Fact]
     public async Task AssetCompilationRefusesRelocatingOutputAwayFromSourceAsync() {
         using var directory = new TemporaryDirectory();
 
-        _ = directory.WriteBytes(path: "game.gb", bytes: "game"u8);
-        var source = directory.WriteText(path: "cabinet.puck", text: MachineSource(model: "cgb"));
+        _ = directory.WriteBytes(bytes: "game"u8, name: "game.gb");
+        var source = directory.WriteText(name: "cabinet.puck", text: MachineSource(model: "cgb"));
 
         Assert.Equal(expected: 0, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--update-assets"]));
-        var relocated = directory.PathOf(path: "elsewhere/cabinet.world.json");
+        var relocated = directory.PathOf(name: "elsewhere/cabinet.world.json");
 
         Assert.Equal(expected: 1, actual: await PuckRootCommand.InvokeAsync(args: ["compile", source, "--output", relocated]));
         Assert.False(condition: File.Exists(path: relocated));
@@ -108,29 +137,4 @@ public sealed class CompositionCompileCommandTests {
         ]
         """;
 
-    private sealed class TemporaryDirectory : IDisposable {
-        private readonly string m_path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-composition-cli-" + Guid.NewGuid().ToString(format: "n"))
-        );
-
-        public TemporaryDirectory() {
-            _ = Directory.CreateDirectory(path: m_path);
-        }
-
-        public string PathOf(string path) =>
-            Path.Combine(path1: m_path, path2: path.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
-        public string WriteBytes(string path, ReadOnlySpan<byte> bytes) {
-            var fullPath = PathOf(path: path);
-
-            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: fullPath)!);
-            File.WriteAllBytes(path: fullPath, bytes: bytes);
-            return fullPath;
-        }
-        public string WriteText(string path, string text) =>
-            WriteBytes(path: path, bytes: System.Text.Encoding.UTF8.GetBytes(s: text));
-        public void Dispose() {
-            Directory.Delete(path: m_path, recursive: true);
-        }
-    }
 }

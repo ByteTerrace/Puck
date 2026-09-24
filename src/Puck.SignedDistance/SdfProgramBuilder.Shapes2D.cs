@@ -4,8 +4,8 @@ namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
     /// <summary>Adds an ellipse (the exact ellipse 2D SDF) lifted to a 3D solid — <see cref="SdfLift.Revolve"/> at offset 0 gives
-    /// an exact spheroid (which, unlike the approximate <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float, bool)"/> #6,
-    /// earns a real cull bound), <see cref="SdfLift.Extrude"/> an elliptic-cylinder prism. Exact and 1-Lipschitz.
+    /// an exact spheroid (which, unlike the underestimating gauge of
+    /// <see cref="Superellipsoid(Vector3, float, int, SdfBlendOp, float, bool)"/>, earns a real cull bound), <see cref="SdfLift.Extrude"/> an elliptic-cylinder prism. Exact and 1-Lipschitz.
     /// KEEP IN SYNC with sdfEllipseSolid in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     /// <param name="semiX">The semi-axis along local X.</param>
     /// <param name="semiY">The semi-axis along local Y.</param>

@@ -102,22 +102,22 @@ public sealed class IslandLawTests {
         // The gate stands solid between the studio and the plaza until either seat's fact is set.
         var gate = Assert.Single(
             collection: definition.Placements,
-            predicate: row => (row.Id == "studioGate")
+            predicate: row => (row.Id == "studio$studioGate")
         );
 
         Assert.Equal(
-            "studioGateClosed",
+            "studio$studioGateClosed",
             gate.PrototypeId
         );
         Assert.Equal(
-            "studioCourt",
+            "studio$studioCourt",
             gate.Parent
         );
         Assert.NotNull(@object: gate.Solid);
         Assert.All(
             gate.Respond!,
             response => Assert.Equal(
-                "studioGateOpen",
+                "studio$studioGateOpen",
                 response.PrototypeId
             )
         );
@@ -125,7 +125,7 @@ public sealed class IslandLawTests {
         // The turntable's look cycle also marks the identity awakened, on the same edge that advances the counter.
         var lookCycle = Assert.Single(
             collection: definition.Rules!,
-            predicate: rule => (rule.Name.ToString() == "studio_studio-look-cycle")
+            predicate: rule => (rule.Name.ToString() == "studio$studio-look-cycle")
         );
 
         Assert.Contains(
@@ -167,7 +167,7 @@ public sealed class IslandLawTests {
             );
         }
 
-        foreach (var court in new[] { "diveCourt", "kartCourt", "jumpCourt", "studioCourt", "arenaCourt", "arcadeCourt", "granaryCourt", "marketCourt", "provingCourt", "gardenCourt" }) {
+        foreach (var court in new[] { "dive$diveCourt", "kart$kartCourt", "jump$jumpCourt", "studio$studioCourt", "arena$arenaCourt", "arcade$arcadeCourt", "granaries$granaryCourt", "marketCourt", "provingCourt", "gardenCourt" }) {
             var placement = Assert.Single(
                 collection: definition.Placements,
                 predicate: row => (row.Id == court)
@@ -258,7 +258,7 @@ public sealed class IslandLawTests {
             );
 
             Assert.Equal(
-                $"modules/{alias}.world.json",
+                $"modules/{alias}",
                 entry!["document"]!.GetValue<string>()
             );
         }

@@ -307,7 +307,7 @@ public sealed class AtomicFiringLawTests {
                 ),
                 new ActionEffect.If(
                     Condition: EvaluatorFixture.Compare(
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         row: "score",
                         value: 4m
                     ),

@@ -21,7 +21,7 @@ The repository command is `puck firmware agb`. For example, from the repository
 root with LLVM 19.1.6 installed:
 
 ```powershell
-dotnet src/Puck.Cli/publish/Puck.Cli.dll firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang "C:/Program Files/LLVM/bin/clang.exe" --linker "C:/Program Files/LLVM/bin/ld.lld.exe" --verify
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang "C:/Program Files/LLVM/bin/clang.exe" --linker "C:/Program Files/LLVM/bin/ld.lld.exe" --verify
 ```
 
 Omit `--verify` to regenerate the image. Verification compiles independently and

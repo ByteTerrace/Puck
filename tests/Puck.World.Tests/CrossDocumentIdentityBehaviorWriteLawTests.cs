@@ -12,28 +12,18 @@ namespace Puck.World.Tests;
 public sealed class CrossDocumentIdentityBehaviorWriteLawTests {
     private const string SourceDocumentId = "external-doc";
 
-    private static WorldStateRow AdvancingRow() => new(
-        Name: CellName.Parse(candidate: "counterAdvancing"),
-        Kind: CellKind.Fixed,
-        Advance: new StateAdvance(
-            PerSecondNumerator: 1,
-            PerSecondDenominator: 1
+    private static WorldStateRow AdvancingRow() => StateFixtures.Slot(
+        advance: new StateAdvance(
+            PerSecondDenominator: 1,
+            PerSecondNumerator: 1
         ),
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Fixed(rawBits: 0)
-            )]
+        kind: CellKind.Fixed,
+        name: "counterAdvancing",
+        value: CellValue.Fixed(rawBits: 0)
     );
-    private static WorldStateRow PlainRow() => new(
-        Name: CellName.Parse(candidate: "counterPlain"),
-        Kind: CellKind.Fixed,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Fixed(rawBits: 0)
-            )]
-    );
+    private static WorldStateRow PlainRow() => StateFixtures.FixedSlot(name: "counterPlain", rawBits: 0);
     private static WorldGrant WriteGrant(string slot) => new(
-        Principal: WorldPrincipal.Document(id: SourceDocumentId),
+        Grantee: Grantee.Document(id: SourceDocumentId),
         Capability: WorldCapability.Mutate,
         Subject: GrantSubject.State(name: slot),
         Exclusive: false,

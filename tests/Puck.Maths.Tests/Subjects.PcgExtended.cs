@@ -180,17 +180,11 @@ internal static partial class Subjects {
             stream: 5UL
         );
 
-        for (var index = 0; (index < 256); ++index) {
-            var wide = fractions.NextUnitFraction32();
-            var expectedWide = raws.NextUInt32();
-
-            if (wide.Value != expectedWide) { return $"NextUnitFraction32 at draw {index} is {wide.Value}, not the raw draw {expectedWide}"; }
-
-            var narrow = fractions.NextUnitFraction16();
-            var expectedNarrow = ((ushort)(raws.NextUInt32() >> 16));
-
-            if (narrow.Value != expectedNarrow) { return $"NextUnitFraction16 at draw {index} is {narrow.Value}, not {expectedNarrow}"; }
-        }
+        if (FractionAdaptersCarryRawDraws(
+            narrow: () => fractions.NextUnitFraction16(),
+            raw: () => raws.NextUInt32(),
+            wide: () => fractions.NextUnitFraction32()
+        ) is { } adapterFailure) { return adapterFailure; }
 
         var bounded = Pcg32Extended.Create(
             k: 4,

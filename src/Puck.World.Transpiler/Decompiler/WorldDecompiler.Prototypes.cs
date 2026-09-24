@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Transpiler.Parsing;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -79,7 +80,7 @@ public static partial class WorldDecompiler {
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{indent}prototype \"{EscapeString(s: id)}\" {{"
+            $"{indent}prototype {PuckStrings.Write(value: id)} {{"
         );
 
         if (proto["document"] is JsonObject documentObj) {

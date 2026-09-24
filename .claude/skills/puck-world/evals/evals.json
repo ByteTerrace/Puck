@@ -22,7 +22,19 @@
     {
       "id": 4,
       "prompt": "Add a world rule that arms a cooldown deadline and removes a stale cell once the deadline passes. Author it and say which mutation kind it lowers to and how you would boot it.",
-      "expected_output": "Authors the rule as `.puck` source (rule/gate/effect sugar — `schedule row[key] in Ns`, `remove row[key]`) instead of hand-writing JSON, routes grammar/CLI questions to puck-dsl, gates the removal on `$tick >= row` rather than a decrementing remainder, and states from the mutations reference that `scheduleState` and `removeStateCell` fold through `UpsertStateCell`/`RemoveStateCell` via the rule frame, not a bespoke path. Boots the source directly with `--world <file>.puck` (PuckWorldLoader compiles it in memory) rather than hand-authoring the compiled JSON, and knows the flagship puck.world.json has no .puck source of its own so a scratch/basis-merged world is needed to try this live. Does not claim world.row.set is the authoring path for a new rule, and does not reach for a retired `countdown` statement.",
+      "expected_output": "Authors the rule as `.puck` source (rule/gate/effect sugar — `schedule row[key] in Ns`, `remove row[key]`) instead of hand-writing JSON, routes grammar/CLI questions to puck-dsl, gates the removal on `$tick >= row` rather than a decrementing remainder, and states from the mutations reference that `scheduleState` and `removeStateCell` fold through `UpsertStateCell`/`RemoveStateCell` via the rule frame, not a bespoke path. Boots the source directly with `--world <file>.puck` (PuckWorldLoader compiles it in memory) rather than hand-authoring the compiled JSON, and knows the flagship puck.world.json has no .puck source of its own so a scratch/basis-merged world is needed to try this live. Does not claim world.row.set is the authoring path for a new rule.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Add a GCP blob storage provider the silo can select from its document, and make it available to remote MCP deployments too. Where does it go and how do the World and silo pick it up?",
+      "expected_output": "Reads the host provider boundary section and docs/reference/extensions.md; writes one optional extension project whose IPuckExtension entry (declared with [assembly: PuckExtension]) registers a WorldSiloStorageProvider through AddStorage under its document key, installed as extensions/<name>/<name>.dll rather than referenced by Puck.World, the silo, Puck.Mcp or the CLI; does not add a per-kind extension interface, a static registry, or a directory scan of its own; knows PuckExtensionSet refuses a duplicate key or name by name instead of letting load order pick a winner, that an MCP services host is an McpServicesProvider contribution selected only when the configuration has `services` and refused with none or two, and that a host has exactly one HostedControl; verifies with ExtensionModelLawTests and world.extensions.catalog in a running host.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Run a model-driven guide on body 5 of a silo row, using our Azure OpenAI deployment, and let me try the same thing locally first.",
+      "expected_output": "Reads the host provider boundary section and ExtensionConfiguration.md's participant section; installs Puck.World.AgentHarness and Puck.World.AgentHarness.Azure beside each host rather than referencing them; writes one puck.world.extensions.v1 file with an agent.harness participant (principal a seat, addon or peer, never console; body 5; settings with objective, provider azure.openai, providerSettings endpoint and deployment) and passes it to the local World with --extensions-config-file and to the silo row through its extensions member; authenticates with DefaultAzureCredential and never adds a key; grants the principal Observe and Drive in the world itself, since the configuration grants nothing; chooses approval refuse or allow deliberately; reads the participant's status line with world.extensions; verifies with WorldAgentParticipantLawTests and WorldSiloExtensionLawTests.",
       "files": []
     }
   ]

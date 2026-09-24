@@ -7,7 +7,8 @@ using Puck.World.Server;
 namespace Puck.Cli.Automation;
 
 /// <summary>Materializes a disposable, credential-free qualification store from a complete retained capture.
-/// Bootstrap uses the same inventory without creating authority state; the marker is published last.</summary>
+/// Bootstrap publishes each world's exact release definition through an unowned authority root and creates no
+/// gameplay state; the marker is published last.</summary>
 internal sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldReleaseArchive releases, WorldReleaseFixtureArchive fixtures) {
     public async Task BuildAsync(WorldReleaseManifest release, Guid owner, WorldReleaseFixtureManifest? snapshot,
         string directory, CancellationToken token) {
@@ -87,19 +88,13 @@ internal sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRe
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (snapshot is null) {
-                var written = await blobs.WriteAsync(
-                    target,
-                    WorldOwnedWorldSync.HostedAddressFor(
-                        owner,
-                        identity.World,
-                        "definition.json"
-                    ),
-                    definitionBytes,
-                    ObjectBlobWriteMode.CreateOnly,
-                    cancellationToken: token
+                var published = await authority.PublishDefinitionBytesAsync(
+                    cancellationToken: token,
+                    definition: definitionBytes,
+                    identity: identity
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
-                if (!written.Succeeded) { throw new IOException(message: "bootstrap fixture definition could not be published"); }
+                if (!published.Ok) { throw new IOException(message: ("bootstrap fixture definition could not be published: " + published.Detail)); }
             } else {
                 var checkpointBytes = await fixtures.ReadCheckpointAsync(
                     snapshot,

@@ -38,9 +38,9 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
     private const string OwnerKeyPrefix = "owner/";
 
     private readonly IReadOnlyList<WorldAdmissionEntry>? m_admissionEntries;
+    private readonly TimeProvider m_clock;
     private readonly TokenCredential m_credential;
     private readonly HttpClient m_httpClient;
-    private readonly Func<DateTimeOffset> m_now;
 
     /// <summary>Initializes the resolver.</summary>
     /// <param name="httpClient">The API client — base address the API root. Owned by the caller; not disposed here.</param>
@@ -49,16 +49,18 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
     /// as the rest of this world's wiring, never read live mid-resolution.</param>
     /// <param name="credential">The ambient platform-API credential (<c>DefaultAzureCredential</c> — no Puck app
     /// registration exists; the platform app pre-authorizes Azure CLI/VS Code for <c>user_impersonation</c>).</param>
-    /// <param name="now">The verification-boundary wall-clock read, overridable for tests.</param>
+    /// <param name="timeProvider">The host clock: each resolution's <see cref="CounterpartApiPolicy.OperationTimeout"/>
+    /// and the instant a counterpart claim's age is verified at; <see langword="null"/> is
+    /// <see cref="TimeProvider.System"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="httpClient"/> or <paramref name="credential"/> is <see langword="null"/>.</exception>
-    public WorldApiCounterpartResolver(HttpClient httpClient, IReadOnlyList<WorldAdmissionEntry>? admissionEntries, TokenCredential credential, Func<DateTimeOffset>? now = null) {
+    public WorldApiCounterpartResolver(HttpClient httpClient, IReadOnlyList<WorldAdmissionEntry>? admissionEntries, TokenCredential credential, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(argument: httpClient);
         ArgumentNullException.ThrowIfNull(argument: credential);
 
         m_admissionEntries = admissionEntries;
         m_credential = credential;
         m_httpClient = httpClient;
-        m_now = (now ?? (static () => DateTimeOffset.UtcNow));
+        m_clock = (timeProvider ?? TimeProvider.System);
     }
 
     /// <summary>Parses the owner-named neighbour key shape this resolver recognizes.</summary>
@@ -107,7 +109,10 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: $"'{document}' is not an owner-named neighbour key");
         }
 
-        using var timeout = new CancellationTokenSource(delay: CounterpartApiPolicy.OperationTimeout);
+        using var timeout = new CancellationTokenSource(
+            delay: CounterpartApiPolicy.OperationTimeout,
+            timeProvider: m_clock
+        );
 
         AccessToken token;
 
@@ -202,7 +207,7 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
                 codec: Codec,
                 entries: m_admissionEntries,
                 maximumAge: MaximumClaimAge,
-                now: m_now(),
+                now: m_clock.GetUtcNow(),
                 reason: out var verifyReason,
                 subject: out var subject
             ) ||

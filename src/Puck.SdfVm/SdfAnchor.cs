@@ -6,11 +6,10 @@ namespace Puck.SdfVm;
 /// One resolved world-space pose — the smallest shared vocabulary a camera rig, a placed prop, or a diegetic screen
 /// needs to pose itself against something else: a position and an orientation, nothing else. Not a live reference (it
 /// carries no id back to whatever produced it) — a snapshot for this tick, republished the next.
-/// <see cref="Views.ISdfCameraRig.Resolve"/> consumes one; <see cref="SdfAnchorTable"/> is the sim-side registry that
-/// produces them by name.
+/// <see cref="Views.ISdfCameraRig.Resolve"/> consumes one; an <see cref="ISdfAnchorSource"/> resolves one by id.
 /// </summary>
-/// <param name="Position">The world-space position (or render-relative, matching whatever space the publisher and the
-/// consumer both agree on — an anchor never carries its own space; see <see cref="SdfAnchorTable"/>'s remarks).</param>
+/// <param name="Position">The world-space position (or render-relative, matching whatever space the source and the
+/// consumer both agree on — an anchor never carries its own space).</param>
 /// <param name="Orientation">The world-space orientation. <see cref="Quaternion.Identity"/> for a pose that only ever
 /// needs a position (many anchors — a room's spawn point, a static console screen — never rotate).</param>
 public readonly record struct SdfAnchor(Vector3 Position, Quaternion Orientation);
@@ -23,16 +22,14 @@ public readonly record struct SdfAnchor(Vector3 Position, Quaternion Orientation
 /// </summary>
 public interface ISdfAnchorSource {
     /// <summary>Resolves <paramref name="anchorId"/> to its pose this tick.</summary>
-    /// <param name="anchorId">The stable anchor id (see <see cref="SdfAnchorTable.TryResolveId"/>).</param>
+    /// <param name="anchorId">The anchor id, in the source's own id space.</param>
     /// <param name="anchor">The resolved pose, or <see langword="default"/> when the id resolves to nothing.</param>
     /// <returns><see langword="true"/> when the id is currently live.</returns>
     bool TryResolveAnchor(int anchorId, out SdfAnchor anchor);
 }
 /// <summary>
-/// The sim-side anchor registry — the write half of the anchor contract <see cref="ISdfAnchorSource"/> reads. A host
-/// (the overworld's frame source, a future RTS scenario) owns one instance and, once per tick, republishes every
-/// pose a consumer might want to ride: a player body, the room's spawn point, a console's screen face, a placed
-/// camera's anchor stamp. Consumers never hold a reference to the thing that moved — they hold a name (resolved once
+/// A name-keyed <see cref="ISdfAnchorSource"/>: a host republishes, once per tick, every pose a consumer might want to
+/// ride. Consumers never hold a reference to the thing that moved — they hold a name (resolved once
 /// to a stable id) and re-resolve the pose through this table every frame, so an anchor's producer can change
 /// identity entirely (a companion despawns and a different one takes its name) without the consumer noticing anything
 /// but a pose jump.

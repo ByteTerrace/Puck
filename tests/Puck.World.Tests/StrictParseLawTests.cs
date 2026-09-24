@@ -48,31 +48,54 @@ public sealed class StrictParseLawTests {
 
         _ = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: node.ToJsonString()));
     }
-    [Fact]
-    public void DynamicsRow_UnmappedMember_RefusesByName() {
-        var definition = Fixtures.BuildDocument() with {
-            DynamicsRaw = [new DynamicsRow(
-                Damping: 1f,
-                Frequency: 1f,
-                Name: "chase",
-                Response: 0f
-            )],
+    // Each row authors one optional nested record, so the control (the same document, unsabotaged) parses and the
+    // injected member is the only difference.
+    [InlineData("dynamics")]
+    [InlineData("obstruction")]
+    [InlineData("upTurn")]
+    [Theory]
+    public void NestedRow_UnmappedMember_RefusesByName_ControlParsesClean(string row) {
+        var document = Fixtures.BuildDocument();
+        var kit = document.Kits[0];
+        var definition = row switch {
+            "dynamics" => document with {
+                DynamicsRaw = [new DynamicsRow(
+                    Damping: 1f,
+                    Frequency: 1f,
+                    Name: "chase",
+                    Response: 0f
+                )],
+            },
+            "obstruction" => document with { KitRowsRaw = [kit with { Motion = (kit.Motion! with { ObstructionRaw = WorldObstructionLatch.Default }) }, .. document.Kits.Skip(count: 1)] },
+            _ => document with { KitRowsRaw = [kit with { Motion = (kit.Motion! with { UpTurnRaw = WorldUpTurnRates.Default }) }, .. document.Kits.Skip(count: 1)] },
         };
         var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition)))!.AsObject();
 
-        node["dynamics"]!.AsArray()[0]!["rate"] = 6;
+        Assert.True(condition: TryParse(bytes: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
+
+        var target = ((row == "dynamics")
+            ? node["dynamics"]!.AsArray()[0]!
+            : node["kits"]!["rows"]![0]!["motion"]![row]!);
+
+        target["bogus"] = 1;
 
         var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
 
         Assert.IsType<JsonException>(@object: exception.InnerException);
         Assert.Contains(
-            expectedSubstring: "rate",
+            expectedSubstring: "bogus",
             actualString: exception.InnerException!.Message,
             comparisonType: StringComparison.Ordinal
         );
     }
     [Fact]
-    public void MissingRequiredConstructorMember_RefusesByName() {
+    public void MissingRequiredConstructorMember_RefusesByName_ControlParsesClean() {
+        Laws.RefusalWithControl(
+            lawId: "strict-parse.host-missing-presentation",
+            deniedOutcome: static () => TryParse(bytes: Fixtures.MissingHostPresentationBytes()),
+            controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes())
+        );
+
         var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.MissingHostPresentationBytes()));
 
         // Named, not merely refused. This is the OTHER half of strict parse: unmapped members were always caught,
@@ -84,14 +107,6 @@ public sealed class StrictParseLawTests {
         );
     }
     [Fact]
-    public void MissingRequiredConstructorMember_RefusesByName_ControlParsesClean() {
-        Laws.RefusalWithControl(
-            lawId: "strict-parse.host-missing-presentation",
-            deniedOutcome: static () => TryParse(bytes: Fixtures.MissingHostPresentationBytes()),
-            controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes())
-        );
-    }
-    [Fact]
     public void MissingSeatLook_ParsesCleanAndResolvesToTheInertDefault() {
         // A seat's control feel is now optional: absence parses clean and resolves to WorldSeatCameraFeel.Default
         // (zero sensitivity, the drag disarmed) rather than refusing.
@@ -100,25 +115,6 @@ public sealed class StrictParseLawTests {
         Assert.Equal(
             expected: WorldSeatCameraFeel.Default,
             actual: definition.PlayerDefaults.SeatLook
-        );
-    }
-    [Fact]
-    public void ObstructionLatch_UnmappedMember_RefusesByName() {
-        var kits = Fixtures.BuildDocument().Kits.ToList();
-
-        kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { ObstructionRaw = WorldObstructionLatch.Default }) });
-
-        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: (Fixtures.BuildDocument() with { KitRowsRaw = kits }))))!.AsObject();
-
-        node["kits"]!["rows"]![0]!["motion"]!["obstruction"]!["bogus"] = 1;
-
-        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
-
-        Assert.IsType<JsonException>(@object: exception.InnerException);
-        Assert.Contains(
-            expectedSubstring: "bogus",
-            actualString: exception.InnerException!.Message,
-            comparisonType: StringComparison.Ordinal
         );
     }
     [Fact]
@@ -189,42 +185,24 @@ public sealed class StrictParseLawTests {
         );
     }
     [Fact]
-    public void UnknownMemberOnNestedRow_RefusesByName() {
-        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.SabotagedAddonBytes()));
-
-        Assert.IsType<JsonException>(@object: exception.InnerException);
-
-        // "Refuses BY NAME" is the law's own claim, not incidental structure — this is the one place this suite
-        // inspects an exception message, and only for the injected member's own name.
-        Assert.Contains(
-            expectedSubstring: "bogusField",
-            actualString: exception.InnerException!.Message,
-            comparisonType: StringComparison.Ordinal
-        );
-    }
-    [Fact]
     public void UnknownMemberOnNestedRow_RefusesByName_ControlParsesClean() {
         Laws.RefusalWithControl(
             lawId: "strict-parse.addon-row-unmapped-member",
             deniedOutcome: static () => TryParse(bytes: Fixtures.SabotagedAddonBytes()),
             controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes())
         );
-    }
-    [Fact]
-    public void UpTurnRow_UnmappedMember_RefusesByName() {
-        var kits = Fixtures.BuildDocument().Kits.ToList();
 
-        kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { UpTurnRaw = WorldUpTurnRates.Default }) });
-
-        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: (Fixtures.BuildDocument() with { KitRowsRaw = kits }))))!.AsObject();
-
-        node["kits"]!["rows"]![0]!["motion"]!["upTurn"]!["bogus"] = 1;
-
-        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.SabotagedAddonBytes()));
 
         Assert.IsType<JsonException>(@object: exception.InnerException);
+
+        // "Refuses BY NAME" is the law's own claim, not incidental structure: the message is inspected only for the
+        // injected member's own name.
+
+        // "Refuses BY NAME" is the law's own claim, not incidental structure — this is the one place this suite
+        // inspects an exception message, and only for the injected member's own name.
         Assert.Contains(
-            expectedSubstring: "bogus",
+            expectedSubstring: "bogusField",
             actualString: exception.InnerException!.Message,
             comparisonType: StringComparison.Ordinal
         );

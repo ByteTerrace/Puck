@@ -1,7 +1,5 @@
 using System.Text.Json.Nodes;
 
-using Json.Schema;
-
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -20,10 +18,10 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
             Common: new JsonObject { ["$defs"] = new JsonObject() }
         );
 
-        var bundle = JsonSchema.FromText(jsonText: WorldSchema.Bundle(split: split).ToJsonString());
+        var bundle = SchemaVerdicts.Build(schema: WorldSchema.Bundle(split: split));
 
-        Assert.False(condition: bundle.Evaluate(root: JsonNode.Parse(json: """{"first":{"value":null}}""")).IsValid);
-        Assert.True(condition: bundle.Evaluate(root: JsonNode.Parse(json: """{"second":{"value":null}}""")).IsValid);
+        Assert.False(condition: bundle.Admits(instance: JsonNode.Parse(json: """{"first":{"value":null}}""")));
+        Assert.True(condition: bundle.Admits(instance: JsonNode.Parse(json: """{"second":{"value":null}}""")));
     }
     [Fact]
     public void BareAndDiscriminatedStateConditionsKeepSeparateContracts() {
@@ -37,14 +35,14 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
             actual: ((string?)bundle["$defs"]![arm]!["properties"]!["$type"]!["const"])
         );
         var isolated = new JsonObject { ["$defs"] = bundle["$defs"]!.DeepClone(), ["$ref"] = $"#/$defs/{bare}" };
-        var schema = JsonSchema.FromText(jsonText: isolated.ToJsonString());
+        var schema = SchemaVerdicts.Build(schema: isolated);
 
-        Assert.True(condition: schema.Evaluate(root: JsonNode.Parse(json: """{"state":"score","comparison":"Equal","value":1}""")).IsValid);
-        Assert.False(condition: schema.Evaluate(root: JsonNode.Parse(json: """{"$type":"state","state":"score","comparison":"Equal"}""")).IsValid);
+        Assert.True(condition: schema.Admits(instance: JsonNode.Parse(json: """{"state":"score","comparison":"Equal","value":1}""")));
+        Assert.False(condition: schema.Admits(instance: JsonNode.Parse(json: """{"$type":"state","state":"score","comparison":"Equal"}""")));
         isolated["$ref"] = $"#/$defs/{arm}";
-        schema = JsonSchema.FromText(jsonText: isolated.ToJsonString());
-        Assert.True(condition: schema.Evaluate(root: JsonNode.Parse(json: """{"$type":"state","state":"score","comparison":"Equal"}""")).IsValid);
-        Assert.False(condition: schema.Evaluate(root: JsonNode.Parse(json: """{"$type":"field","state":"score","comparison":"Equal"}""")).IsValid);
+        schema = SchemaVerdicts.Build(schema: isolated);
+        Assert.True(condition: schema.Admits(instance: JsonNode.Parse(json: """{"$type":"state","state":"score","comparison":"Equal"}""")));
+        Assert.False(condition: schema.Admits(instance: JsonNode.Parse(json: """{"$type":"field","state":"score","comparison":"Equal"}""")));
     }
     [Fact]
     public void BareReferencesKeepTheTargetsNullAdmission() {
@@ -60,13 +58,13 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
         var originalRoot = split.Common.DeepClone().AsObject();
 
         originalRoot["$ref"] = "#/$defs/WorldDistribution";
-        var original = JsonSchema.FromText(jsonText: originalRoot.ToJsonString());
+        var original = SchemaVerdicts.Build(schema: originalRoot);
 
-        Assert.True(condition: original.Evaluate(root: null).IsValid);
+        Assert.True(condition: original.Admits(instance: null));
 
-        var bundle = JsonSchema.FromText(jsonText: WorldSchema.Bundle(split: split).ToJsonString());
+        var bundle = SchemaVerdicts.Build(schema: WorldSchema.Bundle(split: split));
 
-        Assert.True(condition: bundle.Evaluate(root: JsonNode.Parse(json: """{"bodies":{"distribution":null}}""")).IsValid);
+        Assert.True(condition: bundle.Admits(instance: JsonNode.Parse(json: """{"bodies":{"distribution":null}}""")));
     }
     [Fact]
     public void BundlingDoesNotRewriteObjectLiteralsInExtensionSchemas() {
@@ -78,11 +76,11 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
                 ConfigSchema: config,
                 Id: "literal-config"
             )]);
-        var bundle = JsonSchema.FromText(jsonText: WorldSchema.Bundle(split: split).ToJsonString());
+        var bundle = SchemaVerdicts.Build(schema: WorldSchema.Bundle(split: split));
 
-        Assert.True(condition: bundle.Evaluate(root: JsonNode.Parse(json: """
+        Assert.True(condition: bundle.Admits(instance: JsonNode.Parse(json: """
             {"render":{"extensions":[{"id":"literal-config","config":{"title":"Night","exposure":1}}]}}
-            """)).IsValid);
+            """)));
     }
     [Fact]
     public void EveryCommonDefinitionKeepsItsValidationAcrossJsonKinds() {
@@ -101,15 +99,15 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
             Sections: sections,
             Common: common
         );
-        var original = JsonSchema.FromText(jsonText: originalRoot.ToJsonString());
-        var bundled = JsonSchema.FromText(jsonText: WorldSchema.Bundle(split: split).ToJsonString());
+        var original = SchemaVerdicts.Build(schema: originalRoot);
+        var bundled = SchemaVerdicts.Build(schema: WorldSchema.Bundle(split: split));
         var failures = new List<string>();
 
         foreach (var (name, _) in common["$defs"]!.AsObject()) {
             foreach (var text in new[] { "null", "0", "true", "\"\"", "[]", "{}" }) {
                 var instance = new JsonObject { [name] = JsonNode.Parse(json: text) };
 
-                if (original.Evaluate(root: instance).IsValid != bundled.Evaluate(root: instance).IsValid) {
+                if (original.Admits(instance: instance) != bundled.Admits(instance: instance)) {
                     failures.Add(item: $"{name}: {text}");
                 }
             }
@@ -140,13 +138,13 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
 
         Assert.Equal(
             expected: expected,
-            actual: JsonSchema.FromText(jsonText: schema).Evaluate(root: value).IsValid
+            actual: SchemaVerdicts.Build(schema: JsonNode.Parse(json: schema)!).Admits(instance: value)
         );
-        var bundle = JsonSchema.FromText(jsonText: WorldSchema.Bundle(split: split).ToJsonString());
+        var bundle = SchemaVerdicts.Build(schema: WorldSchema.Bundle(split: split));
 
         Assert.Equal(
             expected: expected,
-            actual: bundle.Evaluate(root: new JsonObject { ["choice"] = value }).IsValid
+            actual: bundle.Admits(instance: new JsonObject { ["choice"] = value })
         );
     }
     [Fact]
@@ -156,9 +154,9 @@ public sealed class WorldSchemaBundleSemanticsLawTests {
             Sections: [("choice", JsonNode.Parse(json: """{"$ref":"./common.schema.json#/$defs/Text","anyOf":[{"type":"integer"}]}""")!)],
             Common: JsonNode.Parse(json: """{"$defs":{"Text":{"type":"string"}}}""")!.AsObject()
         );
-        var schema = JsonSchema.FromText(jsonText: WorldSchema.Bundle(split: split).ToJsonString());
+        var schema = SchemaVerdicts.Build(schema: WorldSchema.Bundle(split: split));
 
-        Assert.False(condition: schema.Evaluate(root: JsonNode.Parse(json: """{"choice":42}""")).IsValid);
-        Assert.False(condition: schema.Evaluate(root: JsonNode.Parse(json: """{"choice":"text"}""")).IsValid);
+        Assert.False(condition: schema.Admits(instance: JsonNode.Parse(json: """{"choice":42}""")));
+        Assert.False(condition: schema.Admits(instance: JsonNode.Parse(json: """{"choice":"text"}""")));
     }
 }

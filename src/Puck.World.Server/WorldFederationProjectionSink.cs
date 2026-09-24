@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Threading.Channels;
 using Puck.World.Protocol;
 
@@ -6,7 +7,7 @@ namespace Puck.World.Server;
 /// <summary>Samples borrowed authority snapshots at the live disclosure cadence, redacts only frames that are due,
 /// and copies them into a bounded wire queue; no socket writes run on the authority tick.</summary>
 internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
-    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, WorldPrincipal? recipient = null) : IClientSink {
+    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null) : IClientSink {
     private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: 8) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
     private EntitySnapshot[] m_redacted = [];
@@ -47,7 +48,8 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
     public void DeliverDefinition(WorldDefinition definition) {
-        if (Current()) { Write(
+        if (Current()) {
+            Write(
             WorldFederationResponse.Definition,
             WorldFederationCodec.EncodeDocument(
                 definition,
@@ -56,7 +58,8 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
                 revision(),
                 recipient
             )
-        ); }
+        );
+        }
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
@@ -86,15 +89,14 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
     }
     // The wire carries one definition-frame kind; a value-only delivery rides the same encode until the wire
     // grammar grows its own state/definition split.
-    public void DeliverState(WorldDefinition definition) => DeliverDefinition(definition: definition);
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) => DeliverDefinition(definition: definition);
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
         WorldFederationResponse.Route,
         WorldFederationCodec.EncodeRoute(
             in route,
             tier,
             authority,
-            revision(),
-            recipient
+            revision()
         )
     );
     public Task StreamAsync(Stream output, CancellationToken ct) =>
@@ -123,9 +125,11 @@ internal static class WorldProjectionStream {
             task2: closed
         ).ConfigureAwait(continueOnCapturedContext: false);
         lifetime.Cancel();
-        try { await Task.WhenAll(
+        try {
+            await Task.WhenAll(
             pump,
             closed
-        ).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
     }
 }

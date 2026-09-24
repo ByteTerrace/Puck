@@ -9,12 +9,9 @@ internal static class FixedSphereBoxContact {
     internal static bool TryPush(FixedVector3 sphereCenter, FixedQ4816 radius, FixedVector3 boxCenter,
         FixedQuaternion boxRotation, FixedVector3 halfExtents, out FixedContactPush push) {
         var local = boxRotation.RotateInverse(vector: (sphereCenter - boxCenter));
-        var closest = new FixedVector3(
-            X: FixedQ4816.Clamp(value: local.X, minimum: -halfExtents.X, maximum: halfExtents.X),
-            Y: FixedQ4816.Clamp(value: local.Y, minimum: -halfExtents.Y, maximum: halfExtents.Y),
-            Z: FixedQ4816.Clamp(value: local.Z, minimum: -halfExtents.Z, maximum: halfExtents.Z)
-        );
+        var closest = FixedVector3.Clamp(maximum: halfExtents, minimum: -halfExtents, value: local);
         var delta = (local - closest);
+
         if (delta == FixedVector3.Zero) {
             var (normal, _, gap) = FixedAxisMath.BoxInteriorExit(halfExtents: halfExtents, local: local);
             push = new FixedContactPush(
@@ -26,6 +23,7 @@ internal static class FixedSphereBoxContact {
 
         // Length uses the full-width raw square sum; a sub-millimetre distance must not round to zero before sqrt.
         var distance = delta.Length;
+
         if (distance >= radius) {
             push = default;
             return false;

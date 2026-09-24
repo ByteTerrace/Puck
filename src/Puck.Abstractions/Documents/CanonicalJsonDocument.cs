@@ -6,7 +6,8 @@ namespace Puck.Abstractions.Documents;
 
 /// <summary>The canonical write shape every document family in this repository shares: UTF-8 with no BOM, LF
 /// newlines, two-space indentation, and exactly one trailing newline at EOF, so a load then save reproduces a file
-/// byte-for-byte and every document stays diffable and git-friendly.</summary>
+/// byte-for-byte and every document stays diffable and git-friendly. <see cref="SerializeCompact{T}"/> writes the
+/// same document with no whitespace at all, for a product a machine stores rather than a person reads.</summary>
 public static class CanonicalJsonDocument {
     // Relaxed escaping: these documents are read by this engine and by people, never embedded in HTML, so an
     // authored "a + b < c" or an em-dash is written as itself rather than as a \u escape.
@@ -15,7 +16,34 @@ public static class CanonicalJsonDocument {
         Indented = true,
         NewLine = "\n",
     };
+    private static readonly JsonWriterOptions CompactWriterOptions = new() {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
+    /// <summary>Serializes a document to its compact canonical UTF-8 bytes: the members, order, and escaping of
+    /// <see cref="Serialize{T}(T, JsonTypeInfo{T})"/>, with no indentation, newlines, or trailing newline.</summary>
+    /// <param name="value">The document to serialize.</param>
+    /// <param name="jsonTypeInfo">The document type's source-generated metadata.</param>
+    /// <returns>The compact canonical UTF-8 byte form.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static byte[] SerializeCompact<T>(T value, JsonTypeInfo<T> jsonTypeInfo) where T : class {
+        ArgumentNullException.ThrowIfNull(argument: value);
+
+        using var stream = new MemoryStream();
+
+        using (var writer = new Utf8JsonWriter(
+            options: CompactWriterOptions,
+            utf8Json: stream
+        )) {
+            JsonSerializer.Serialize(
+                jsonTypeInfo: jsonTypeInfo,
+                value: value,
+                writer: writer
+            );
+        }
+
+        return stream.ToArray();
+    }
     /// <summary>Serializes a document to its canonical UTF-8 bytes.</summary>
     /// <param name="value">The document to serialize.</param>
     /// <param name="jsonTypeInfo">The document type's source-generated metadata.</param>

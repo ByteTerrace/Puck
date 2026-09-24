@@ -10,14 +10,7 @@ namespace Puck.World.Browser.Tests;
 /// judgeable at all (see that type's own remarks, and the project README's "Verified scope boundary").</summary>
 public sealed class BrowserHostlessIslandTests {
     private static byte[] ComposedPuckWorldBytes() {
-        var path = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "puck.world.json"
-        );
+        var path = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryComposeDocumentTree(
@@ -48,23 +41,6 @@ public sealed class BrowserHostlessIslandTests {
         );
 
         return new BrowserSession(definition: definition!);
-    }
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
     }
 
     [Fact]
@@ -97,11 +73,11 @@ public sealed class BrowserHostlessIslandTests {
         Assert.Contains(
             collection: hostFacts,
             filter: fact => (fact.Operand.Contains(
-                value: "Physics",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "Physics"
             ) || fact.Operand.Contains(
-                value: "Body",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "Body"
             ))
         );
     }

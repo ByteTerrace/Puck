@@ -7,7 +7,13 @@ namespace Puck.World.Tests;
 /// <summary>A real QUIC peer used by the World wire laws. Application admission is deliberately separate from
 /// the certificate-bound transport identity, so malformed application proofs still exercise the real door.</summary>
 internal sealed class PeerTestClient : IDisposable {
-    private readonly WorldPeerNetwork m_network = new();
+    /// <summary>The QUIC/TLS handshake bound every in-process World test host and client uses. The handshake runs on
+    /// msquic's own wall-clock timer, which no law can drive, and a loaded machine can stall a loopback handshake past
+    /// <see cref="QuicPeerTransport.DefaultHandshakeTimeout"/>; a genuine hang still ends at the test's own
+    /// cancellation.</summary>
+    public static readonly TimeSpan TransportHandshakeTimeout = TimeSpan.FromMinutes(minutes: 5);
+
+    private readonly WorldPeerNetwork m_network = new(transportHandshakeTimeout: TransportHandshakeTimeout);
 
     private PeerStream? m_stream;
 

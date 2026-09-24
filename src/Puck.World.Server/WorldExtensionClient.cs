@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Storage;
 using Puck.World.Protocol;
 
@@ -15,7 +16,7 @@ public sealed class WorldExtensionClient : IDisposable {
     internal WorldRecordedExtension Runtime { get; }
 
     /// <summary>Gets this client's fixed acting identity.</summary>
-    public WorldPrincipal Principal => Runtime.Principal;
+    public Principal Principal => Runtime.Principal;
     /// <summary>Gets the separately granted private storage capability, if any.</summary>
     public ObjectBlobNamespace? Storage { get; }
 
@@ -31,10 +32,12 @@ public sealed class WorldExtensionClient : IDisposable {
     }
 
     internal void CheckActive() {
-        if (!Runtime.IsActive) { throw new ObjectDisposedException(
+        if (!Runtime.IsActive) {
+            throw new ObjectDisposedException(
             nameof(WorldExtensionClient),
             "The client is revoked or its timeline is suppressed."
-        ); }
+        );
+        }
     }
 
     /// <summary>Gets the operations this client may discover and invoke.</summary>

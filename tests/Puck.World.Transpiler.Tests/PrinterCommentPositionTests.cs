@@ -7,7 +7,7 @@ namespace Puck.World.Transpiler.Tests;
 public class PrinterCommentPositionTests {
     private static void RoundTrips(string source) {
         Assert.Equal(
-            actual: PuckFormat.Format(source),
+            actual: PuckFormat.Format(source: source),
             expected: source
         );
     }
@@ -126,7 +126,7 @@ public class PrinterCommentPositionTests {
                 1,
                 2
               ]
-              facing: select(
+              facing: clamp(
                 // S3: inside a call's argument list.
                 1,
                 2,

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 
 namespace Puck.Maths.Tests;
 
@@ -236,14 +237,13 @@ internal static partial class Subjects {
             negative[index] = (index, FixedQ4816.FromRawBits(value: 1L));
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        if (!ThrowsExactly<ArgumentException>(
+        var refused = true;
+        var spent = AllocationWindow.Measure(window: () => refused &= ThrowsExactly<ArgumentException>(
             action: () => _ = WeightedSampler.Create<int>(entries: negative),
             paramName: "entries"
-        )) { return "a negative signed weight was accepted"; }
+        ));
 
-        var spent = (GC.GetAllocatedBytesForCurrentThread() - before);
+        if (!refused) { return "a negative signed weight was accepted"; }
 
         if (spent > 65536L) { return $"the negative-weight refusal allocated {spent} bytes, so it converted before it refused"; }
 
@@ -664,17 +664,11 @@ internal static partial class Subjects {
             stream: 5UL
         );
 
-        for (var index = 0; (index < 256); ++index) {
-            var wide = fractions.NextUnitFraction32();
-            var expectedWide = raws.NextUInt32();
-
-            if (wide.Value != expectedWide) { return $"NextUnitFraction32 at draw {index} is {wide.Value}, not the raw draw {expectedWide}"; }
-
-            var narrow = fractions.NextUnitFraction16();
-            var expectedNarrow = ((ushort)(raws.NextUInt32() >> 16));
-
-            if (narrow.Value != expectedNarrow) { return $"NextUnitFraction16 at draw {index} is {narrow.Value}, not {expectedNarrow}"; }
-        }
+        if (FractionAdaptersCarryRawDraws(
+            narrow: () => fractions.NextUnitFraction16(),
+            raw: () => raws.NextUInt32(),
+            wide: () => fractions.NextUnitFraction32()
+        ) is { } adapterFailure) { return adapterFailure; }
 
         // The Gaussian pair: exactly two advances, the single draw is the pair's first, and the documented cap holds.
         var gaussian = Pcg32XshRr.Create(
@@ -1707,62 +1701,21 @@ internal static partial class Subjects {
 
         return null;
     }
-    // The message an argument refusal carried, or null where the call did not refuse.
-    private static string? RefusedMessage(Action action) {
-        try {
-            action();
-        } catch (ArgumentException exception) {
-            return exception.Message;
+    // The two fraction adapters over one generator are the raw draw itself and the raw draw's top sixteen bits: 256
+    // interleaved pairs against a twin generator from the same state, so the adapters are carriage and nothing more.
+    private static string? FractionAdaptersCarryRawDraws(Func<UnitFraction32> wide, Func<UnitFraction16> narrow, Func<uint> raw) {
+        for (var index = 0; (index < 256); ++index) {
+            var drawnWide = wide();
+            var expectedWide = raw();
+
+            if (drawnWide.Value != expectedWide) { return $"NextUnitFraction32 at draw {index} is {drawnWide.Value}, not the raw draw {expectedWide}"; }
+
+            var drawnNarrow = narrow();
+            var expectedNarrow = ((ushort)(raw() >> 16));
+
+            if (drawnNarrow.Value != expectedNarrow) { return $"NextUnitFraction16 at draw {index} is {drawnNarrow.Value}, not {expectedNarrow}"; }
         }
 
         return null;
-    }
-    // Whether a call refused with EXACTLY the named argument exception and named the expected parameter. A ladder that
-    // has to tell ArgumentOutOfRangeException apart from its ArgumentException base cannot do it with a catch clause.
-    private static bool ThrowsExactly<TException>(Action action, string paramName)
-        where TException : ArgumentException {
-        try {
-            action();
-        } catch (TException exception) {
-            return (
-                (exception.GetType() == typeof(TException)) &&
-                (exception.ParamName == paramName)
-            );
-        }
-
-        return false;
-    }
-    // The parameter an argument refusal names, or null where the call did not refuse.
-    private static string? RefusedParameter(Action action) {
-        try {
-            action();
-        } catch (ArgumentException exception) {
-            return (exception.ParamName ?? string.Empty);
-        }
-
-        return null;
-    }
-    // Whether a call refused with the named exception.
-    private static bool Throws<TException>(Action action)
-        where TException : Exception {
-        try {
-            action();
-        } catch (TException) {
-            return true;
-        }
-
-        return false;
-    }
-    // Whether a call refused with the named argument exception AND named the expected parameter, so a refusal ladder
-    // states the diagnosis it promises rather than merely that something went wrong.
-    private static bool Throws<TException>(Action action, string paramName)
-        where TException : ArgumentException {
-        try {
-            action();
-        } catch (TException exception) {
-            return (exception.ParamName == paramName);
-        }
-
-        return false;
     }
 }

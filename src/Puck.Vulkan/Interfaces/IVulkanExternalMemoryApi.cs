@@ -1,4 +1,5 @@
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -24,9 +25,9 @@ public interface IVulkanExternalMemoryApi {
     /// <param name="request">The import parameters; <c>SharedHandle</c> must be an opaque Win32 handle from <see cref="CreateExportableImage"/>.</param>
     /// <returns>The created image and imported memory handles.</returns>
     VulkanExternalImageImportResult ImportOpaqueImage(VulkanExternalImageImportRequest request);
-    /// <summary>Destroys an imported image and frees its imported memory.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the image.</param>
+    /// <summary>Destroys an imported image and frees its imported memory; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the image.</param>
     /// <param name="imageHandle">The native <c>VkImage</c> handle to destroy.</param>
     /// <param name="memoryHandle">The native <c>VkDeviceMemory</c> handle to free.</param>
-    void DestroyImage(nint deviceHandle, nint imageHandle, nint memoryHandle);
+    void DestroyImage(VulkanDeviceCommands device, nint imageHandle, nint memoryHandle);
 }

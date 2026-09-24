@@ -1,5 +1,3 @@
-using Puck.World.Protocol;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -8,21 +6,6 @@ namespace Puck.World.Tests;
 /// the empty value past what the ring holds, a pattern reads the ring oldest first, the effect resolves its value
 /// like a write, and the validator refuses a ring that is not a plain numeric row.</summary>
 public sealed class WorldHistoryLawTests {
-    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
-        Assert.True(
-            condition: WorldArenaTransforms.TryApply(
-                definition,
-                transform,
-                WorldPrincipal.World,
-                1,
-                "test",
-                out var candidate,
-                out var reason
-            ),
-            userMessage: reason
-        );
-        return candidate!;
-    }
     private static StateCell Cell(string key, long value = 1) => new(
         Name(value: key),
         CellValue.Int(value: value)
@@ -50,22 +33,15 @@ public sealed class WorldHistoryLawTests {
         row
     )!;
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static WorldStateRow Slot(string name, long value = 0) => new(
-        Name(value: name),
-        CellKind.Int,
-        Cells: [new StateCell(
-                WorldStateRow.SlotKey,
-                CellValue.Int(value: value)
-            )]
+    // Pushes every value onto the ring in one firing, on the first tick alone.
+    private static WorldRule Fill(long[] values) => new(
+        Name(value: "fill"),
+        Mode: ActionTriggerMode.Edge,
+        Effects: [.. values.Select(selector: static value => new ActionEffect.PushState(
+            State: "taps",
+            Value: value
+        ))]
     );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.AsInt;
 
     [Fact]
     public void APatternReadsTheRingOldestFirstAndTheEffectPushesLikeAWrite() {
@@ -88,12 +64,14 @@ public sealed class WorldHistoryLawTests {
                 )],
             Pattern: new PatternNode.Sequence(Items: [new PatternNode.Star(Item: new PatternNode.AnySymbol()), new PatternNode.Symbol(Name: "a"), new PatternNode.Symbol(Name: "a"), new PatternNode.Symbol(Name: "b")])
         );
-        var definition = Document(
-            [ring, Slot("hit"), Slot("tick"), Slot(
+
+        WorldDefinition Pushing(params long[] values) => Document(
+            [ring, StateFixtures.IntSlot("hit"), StateFixtures.IntSlot("tick"), StateFixtures.IntSlot(
                     name: "source",
                     value: 2
                 )],
             [
+            Fill(values: values),
             new WorldRule(
                     Name(value: "hit"),
                     [new ActionEffect.SetState(
@@ -104,26 +82,12 @@ public sealed class WorldHistoryLawTests {
         ],
             [combo]
         );
-
-        var pushed = definition;
-
-        foreach (var value in new long[] { 9, 1, 1, 2 }) {
-            pushed = Apply(
-                definition: pushed,
-                transform: new StateTransform.Push(
-                    Row: "taps",
-                    Value: value
-                )
-            );
-        }
-        using var fixture = Fixtures.FreshServer(definition: pushed);
+        using var fixture = Fixtures.FreshServer(definition: Pushing(9, 1, 1, 2));
 
         fixture.Step();
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "hit"
+            fixture.SlotValue(row: "hit"
             )
         );
         Assert.Contains(
@@ -137,29 +101,20 @@ public sealed class WorldHistoryLawTests {
             )
         );
 
-        var wrapped = Apply(
-            definition: pushed,
-            transform: new StateTransform.Push(
-                Row: "taps",
-                Value: 5
-            )
-        );
-        using var stale = Fixtures.FreshServer(definition: wrapped);
+        using var stale = Fixtures.FreshServer(definition: Pushing(9, 1, 1, 2, 5));
 
         stale.Step();
         Assert.Equal(
             0L,
-            Value(
-                fixture: stale,
-                row: "hit"
+            stale.SlotValue(row: "hit"
             )
         );
 
         var effects = Document(
-            [ring, Slot(
+            [ring, StateFixtures.IntSlot(
                     name: "source",
                     value: 2
-                ), Slot("count")],
+                ), StateFixtures.IntSlot("count")],
             [
             new WorldRule(
                     Name(value: "push-literal"),
@@ -232,9 +187,7 @@ public sealed class WorldHistoryLawTests {
         );
         Assert.Equal(
             6L,
-            Value(
-                fixture: fired,
-                row: "count"
+            fired.SlotValue(row: "count"
             )
         );
     }
@@ -248,9 +201,11 @@ public sealed class WorldHistoryLawTests {
                 Empty: -1
             )
         );
-        var definition = Document(
-            [ring, Slot("latest"), Slot("oldest"), Slot("beyond")],
+
+        WorldDefinition Pushing(params long[] values) => Document(
+            [ring, StateFixtures.IntSlot("latest"), StateFixtures.IntSlot("oldest"), StateFixtures.IntSlot("beyond")],
             [
+            Fill(values: values),
             new WorldRule(
                     Name(value: "latest"),
                     [new ActionEffect.SetState(
@@ -267,20 +222,12 @@ public sealed class WorldHistoryLawTests {
                 ),
         ]
         );
+        using var fixture = Fixtures.FreshServer(definition: Pushing(10, 20, 30, 40));
 
-        var pushed = definition;
+        fixture.Step();
 
-        foreach (var value in new long[] { 10, 20, 30, 40 }) {
-            pushed = Apply(
-                definition: pushed,
-                transform: new StateTransform.Push(
-                    Row: "taps",
-                    Value: value
-                )
-            );
-        }
         var row = Find(
-            document: pushed,
+            document: fixture.Server.Definition,
             row: "taps"
         );
 
@@ -310,52 +257,34 @@ public sealed class WorldHistoryLawTests {
             )!.Value.AsInt
         );
 
-        using var fixture = Fixtures.FreshServer(definition: pushed);
-
-        fixture.Step();
         Assert.Equal(
             40L,
-            Value(
-                fixture: fixture,
-                row: "latest"
+            fixture.SlotValue(row: "latest"
             )
         );
         Assert.Equal(
             20L,
-            Value(
-                fixture: fixture,
-                row: "oldest"
+            fixture.SlotValue(row: "oldest"
             )
         );
 
-        var young = Apply(
-            definition: definition,
-            transform: new StateTransform.Push(
-                Row: "taps",
-                Value: 7
-            )
-        );
-        using var sparse = Fixtures.FreshServer(definition: young);
+        using var sparse = Fixtures.FreshServer(definition: Pushing(7));
 
         sparse.Step();
         Assert.Equal(
             7L,
-            Value(
-                fixture: sparse,
-                row: "latest"
+            sparse.SlotValue(row: "latest"
             )
         );
         Assert.Equal(
             -1L,
-            Value(
-                fixture: sparse,
-                row: "oldest"
+            sparse.SlotValue(row: "oldest"
             )
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: Document(
-                [ring, Slot("beyond")],
+                [ring, StateFixtures.IntSlot("beyond")],
                 [new WorldRule(
                         Name(value: "beyond"),
                         [new ActionEffect.SetState(
@@ -526,20 +455,18 @@ public sealed class WorldHistoryLawTests {
             actualString: traitReason,
             expectedSubstring: "no other storage"
         );
-        Assert.False(condition: WorldArenaTransforms.TryApply(
-            Document(
-                [Slot("plain")],
-                []
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: Document(
+                [StateFixtures.IntSlot("plain")],
+                [new WorldRule(
+                        Name(value: "push"),
+                        [new ActionEffect.PushState(
+                                State: "plain",
+                                Value: 1m
+                            )]
+                    )]
             ),
-            new StateTransform.Push(
-                Row: "plain",
-                Value: 1
-            ),
-            WorldPrincipal.World,
-            0,
-            "test",
-            out _,
-            out var pushReason
+            reason: out var pushReason
         ));
         Assert.Contains(
             actualString: pushReason,

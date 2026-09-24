@@ -1,6 +1,6 @@
-# `render`, `dynamics`, `curves`, pipelines, flock, crowd-scale, `rigid`
+# `render`, `dynamics`, `curves`, pipelines, flock, crowd-scale, render validation, `rigid`/`carry`/`tether`
 
-Part of [`puck.world.def.v1`](documents.md). Field names, defaults, and ranges
+Part of [`puck.world.definition.v1`](documents.md). Field names, defaults, and ranges
 are generated (`puck schema`, or `Assets/worlds/schema/*.schema.json`); this
 file is the decision/derivation prose the schema cannot state.
 
@@ -10,8 +10,9 @@ file is the decision/derivation prose the schema cannot state.
 inert section. The boot levers (`shadows`, `shadowCrowdRadius`,
 `ambientOcclusion`, `renderScale`, `upscaleSharpness`, the `low`/`medium`/
 `high` presets) seed `WorldRenderSettings` once at boot and move only through
-their verbs afterwards; `world.save` folds the live levers back into the
-section. Three members are read off the LIVE definition every frame instead,
+their verbs afterwards; `world.save` folds a moved lever back into the section
+when the world authors one (`WorldSessionLevers.Fold`), and never writes a
+`render` section the world omits. Three members are read off the LIVE definition every frame instead,
 so `world.row.set render {…}` lands on the next frame with no rebuild:
 `lighting`/`sky`/`cycle` (`WorldRenderCycleTrack`) and `farDistance`
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
@@ -28,7 +29,7 @@ first. Read back with `world.row.set render` (the section's read arm) and
 reach multiplier over the default, the horizon-ray step count per unit of
 camera height against the primary march's 128-step budget, and the fog
 remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
-`sdf-world` skill, the FAR DISTANCE row.
+`rendering` skill sync pairs, the viewport row.
 
 `environment` (`WorldRenderEnvironment`, optional) and `tonemap`
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
@@ -41,7 +42,7 @@ never authored it. `tonemap` absent is `none` — the stylized shaded color,
 unchanged; `filmic` applies an ACES-fit filmic curve (no gamma encode — the
 shading is already display-referred) to the frame's final color, hit or sky
 alike (never a debug view). Read back with `world.lighting`.
-Renderer contract: `sdf-world` skill, the `render.environment` row.
+Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
 `SdfEnvironment.MaxLights` 8, in slot order — a `render.cycle` key moves a
@@ -60,8 +61,8 @@ kind is refused by name): its position then rides that placement's — or, with
 `shapeId`, one of the placement's creation shapes' — dynamic transform every
 frame instead of the authored `position`, so the light follows the placement.
 Resolved in `WorldFramePresenter` (`WorldStampPool.TryShapeTransformSlot`),
-fresh every produced frame. Renderer contract: `sdf-world` skill, the
-environment block row.
+fresh every produced frame. Renderer contract: `rendering` skill sync pairs, the
+`SdfEnvironment` rows.
 
 `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
 surface illumination. It declares `position`, positive `radius`,
@@ -76,7 +77,7 @@ array. Each `PaletteEntryDocument` entry: `color` (`#RRGGBB` or a
 the `SdfMaterial` default 0; the GGX dielectric reflectance at normal
 incidence before the `metal` mix), `roughness` (null =
 `SdfMaterial.DefaultRoughness`; [0, 1], the GGX roughness-floor curve
-parameter — see the sdf-world skill's material row), `sheen` (null = 0;
+parameter — see the `rendering` skill sync pairs, `SdfMaterial` packing), `sheen` (null = 0;
 [0, 1], a fresnel edge-lift strength), `metal` (null = 0; [0, 1], mixes the
 reflectance toward `color` and scales the diffuse term by `1 - metal`),
 `coat` (null = 0; [0, 1], a fixed-roughness clearcoat GGX lobe). Each of
@@ -100,15 +101,15 @@ static hit. `wrap`, `soften`, and `bounce` retain their shading roles.
 a t3ssel8r-style pole-matched second-order response every follower consumer
 names by `name` rather than authoring inline, so one row can drive a look's
 root/part followers, a camera boom, a kit's planar shaping, and a state cell's
-eased read at once. `f` (Hz, positive, finite, ≤ `WorldDynamics.MaxFrequencyHz`
-100) is the natural frequency; `zeta` (≥ 0, ≤ `WorldDynamics.MaxDamping` 16) is
+eased read at once. `f` (Hz, positive, finite, ≤ `DynamicsLimits.MaxFrequencyHz`
+100) is the natural frequency; `zeta` (≥ 0, ≤ `DynamicsLimits.MaxDamping` 16) is
 the damping ratio — `0` rings forever, `<1` overshoots and rings down, `1` is
-critically damped, `>1` is overdamped; `r` (`WorldDynamics.MinResponse`..
-`WorldDynamics.MaxResponse`, ∓4) is the initial response — `0` eases in from
+critically damped, `>1` is overdamped; `r` (`DynamicsLimits.MinResponse`..
+`DynamicsLimits.MaxResponse`, ∓4) is the initial response — `0` eases in from
 rest, `>0` reacts immediately to the target's own motion, `>1` overshoots the
 target's motion before settling, `<0` anticipates. The section is OPTIONAL and
 every reference to a row is nullable, so an unauthored world is unchanged.
-Every consumer resolves a name through `WorldDefinitionRows.FindDynamics` and
+Every consumer resolves a name through `StateRows.FindDynamics` and
 refuses a dangling one by name (`'{name}' names no dynamics row.`); removing a
 still-referenced row is refused the same way, naming the referrer. Authored
 with `world.row.set dynamics {"name":"chase","f":0.9549,"zeta":1,"r":1}` /
@@ -167,8 +168,18 @@ arc-length follower feeding the SAME planar target-consuming op vocabulary a
 ### `views.pipelines` — shader-pipeline instances
 
 `WorldViewPipeline` (`WorldViews.cs`) carries `{name, source, camera,
-timeScale}`. Source is a pipeline JSON document or a one-off shader and
-resolves relative to the world document. The pipeline's own shader paths
+timeScale, output, overrides}`. `overrides` maps a pass name to that pass's
+config object and `output` names the shown image version; both are bound
+through the source's config schema at the mutation door, at boot, and at
+`world.load`/`world.reload`, and the shared source keeps its defaults (see
+[mutations.md](mutations.md) and the
+[per-instance overrides contract](../../../../docs/reference/shaders.md#per-instance-overrides)).
+`pipeline.commit` is the one door that turns a session preview into these
+members. Source is a pipeline JSON document, a one-off shader, or a
+`puck.shader.package.v1` package directory (a directory is a package; there is
+no second member for it), and resolves relative to the world document. A
+package loads through `ShaderPackager.LoadSource`, and its `SHADERPKG_*` or
+`SHADERSRC_*` refusal is the instance's failed compilation, by code. The pipeline's own shader paths
 resolve relative to its document. `WorldViewSlot.pipeline` names the instance;
 a slot cannot name both a camera and a pipeline. The row's camera supplies
 optional shader camera inputs, with zero FOV denoting no paired camera.
@@ -181,7 +192,7 @@ reconciles only accepted document state. The runtime owns resources, history,
 background compilation and frame-boundary installation; none belongs in the
 schema. Use [the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
 for the live three-pass editing workflow. The
-[shader README](../../../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development)
+[shader reference](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development)
 owns the GPU pipeline document contract.
 
 ### Kit producer `flock` — bounded local perception
@@ -273,6 +284,36 @@ through the rigid impulse path, so an impulse chain (a rack break, a falling
 domino line) can cross more than one pair-hop within the same tick instead of
 propagating one body-hop per tick.
 
+### Render validation and stamp capacity
+
+For multi-body render validation, inhabited placements belong only to the body
+stamp census, even when their creation is animated or attached. A simultaneous
+animated-placement registration doubles the character. Verify body count and
+`world.budget` together. Bounded flow/cloud media share 64 frame slots; disabled
+volumes emit nothing, and the budget readback includes their submitted count.
+The [Moth courtyard](../../../../src/Puck.World/Assets/worlds/moth-courtyard.md)
+provides eight held poses and independent sky/cloud switches for repeatable GPU
+captures. Density controls live in the World.Authoring README.
+
+The stamp budget is `WorldPlacementPolicy.MaxShapesPerStamp` = 367
+shapes, including expanded glyphs — a panelled shape charges 2 (`sdf-authoring` owns panels); the matched CPU/HLSL
+instance ceiling is 65536 (the stamp pool's own worst-case draw is
+`WorldPlacementPolicy.MaxStampRegistrations x MaxShapesPerStamp`). The shipped overworld's whole
+COMPOSED boot probe — the presenter's four emitters, every adjacency band's reservation included —
+must leave at least 4096 instances under that ceiling, and `MaxShapesPerStamp` is sized against that
+floor; the scene emitter alone under-counts by the adjacency and field reservations, so only the
+composed figure governs. `WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom`
+enforces the floor and prints the current figures on its `world.budget probe:` output line (run it
+with `--logger "console;verbosity=detailed"`).
+Verify capacity with `WorldRenderEnvelopeLawTests` plus a real rendered world.
+
+`WorldStampPool` keeps fixed dynamic-transform addresses but emits only live
+registrations and authored shapes/groups. Empty capacity does not add parked
+instances or widen live masks. The worst-case boot probe still emits every
+reserved slot. `WorldStampPoolCompactionLawTests` covers removal, slot reuse,
+and grouped geometry growing after a rebuild; `world.budget` shows the live
+instance count separately from the reserved capacity.
+
 ### A kit's `rigid` facet
 
 `mass`, `restitution`, `friction`, `rollingFriction`,
@@ -282,3 +323,65 @@ instead of a locomotion program — see
 `mass` is required and positive; the other four are non-negative per-second
 decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
 or box — never `fromCreation`) and `bodyContact: solid`.
+
+A kit's `rigid` facet (`Puck.World.Schema.WorldRigid`) is a passive
+physical entity — mass/restitution/friction/damping derived to
+mass/inertia from the kit's own sphere/capsule/box collider, never a free
+density or tensor. `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs`) hands the
+whole step to the rigid solver instead of the grounded/free motion
+program. Every contact anchor — static (ground/obstruction) and pair alike —
+is the shape's own true witness point (`Puck.Physics.FixedRigidWitness.Anchor`),
+never a point on the conservative bounding sphere, so an off-centre strike
+carries a real lever arm into `Puck.Physics.FixedTwoBodyKernel`. A box or
+capsule resting on a near-horizontal surface additionally resolves over its
+own support MANIFOLD (`FixedRigidWitness.SupportManifold` — up to four box
+corners, or two capsule cap points lying on a side) with a few sequential-
+impulse passes (`collision.bodyContacts.rigidManifoldIterations`), which is
+what keeps an upright body's centre of mass over its support polygon without
+artificial damping. Dynamic-vs-dynamic contact rides the existing
+`ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`); the first
+pass's own resolved rigid-pair count derives a count of extra FULL sweeps —
+fresh broadphase and narrowphase, over the same bodies' now-current
+positions — over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
+`rigidPairIterationBudget`), so an impulse chain (a rack break, a falling
+domino line) crosses more than one pair-hop within one tick instead of one
+body per tick; a box-vs-box pair depenetrates by separating-axis test over
+world X/Y/Z plus each box's own three face axes
+(`Puck.Physics.FixedColliderBounds.BoxAxes`), not the coarser world-bounds
+approximation every other volume pair still uses. Once the resting latch
+closes, `AdvanceRigid` stops integrating that body entirely until something
+wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
+teleport, or a live solid edit replacing the contact field it rested
+against) — this is what makes `Resting`/`$physics:quiescent` mean the body
+is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
+`$physics:quiescent` rule operand are the console/rule surface; see
+[Crowd scale policies](#crowd-scale-policies)
+for the authored `collision.bodyContacts` rigid fields, and the
+[server](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
+references for the mechanics. The shipped garden's `billiardsTray`/
+`bowlingLane`/`dominoes` placements are the worked example.
+
+### `carry` and `tether` facets
+
+A DISTINCT kit
+facet, `carry` (`Puck.World.Schema.WorldCarry`), lets a body pick up another
+rigid one — `body.carry <carrier> <target>`/`body.release [carrier]`,
+`WorldBody.Carry.cs`/`WorldPopulation.Carry.cs`; a carried body's own
+integration is suspended and its pose is derived from the carrier's frame
+every tick, but TANGIBLY: its own collider sweeps from its previous pose to
+that frame-derived one against static geometry (`WorldBody.FollowCarrier`)
+and against every other active solid body (`WorldPopulation.ResolveCarriedBodyPush`),
+so it pushes and is blocked rather than passing through — whatever
+correction either sweep applies is handed back to the carrier too, so the
+carrier itself is stopped, not just the object it holds. `body.release`
+refuses by name when the carried body's CURRENT pose still overlaps static
+geometry or another body. The garden's `walker` kit (Wren) carries this
+facet.
+
+A THIRD distinct facet, `tether` (`Puck.World.Schema.WorldTether`),
+is an aimed distance-cap rope a body throws along its own facing and reels —
+`body.attach`/`body.detach`/`body.reel`, `WorldBody.Tether.cs`; presence is
+the switch, the same convention `rigid`/`carry` carry. A body's attach
+state is `m_tether is not null` — there is no separate mode field. Read
+back per body with `body.tether`, per kit with `world.kits`. The garden's
+`walker` kit (Wren) carries this facet too.

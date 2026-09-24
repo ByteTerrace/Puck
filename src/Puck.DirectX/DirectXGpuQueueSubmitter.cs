@@ -101,6 +101,25 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>Reads <c>ID3D12Fence::GetCompletedValue</c>. A removed device reports <c>UINT64_MAX</c>, a value this
+    /// fence never signals, which surfaces as <see cref="DeviceLostException"/>.</remarks>
+    public bool IsSignaled {
+        get {
+            if (0UL == m_pendingValue) {
+                return true;
+            }
+
+            var completed = ((ID3D12Fence*)m_fence)->GetCompletedValue();
+
+            if (completed == ulong.MaxValue) {
+                throw new DeviceLostException(message: "ID3D12Fence::GetCompletedValue reported a removed device.");
+            }
+
+            return (completed >= m_pendingValue);
+        }
+    }
+
     /// <summary>Queues a signal for the just-executed submission; the caller must have drained any prior one first.</summary>
     internal void Arm(ID3D12CommandQueue* commandQueue) {
         if (0UL != m_pendingValue) {

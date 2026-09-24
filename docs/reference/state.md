@@ -1,258 +1,204 @@
-# State and rules
+# State and rules overview
 
-Puck.State gives a simulation a shared model of named data and rules for changing
-it. It can support a card game, a board-game judge, a turn-based resolver, or
-another deterministic application with its own host. Puck.World builds on these
-same contracts and adds world-specific concepts.
+Puck's state system holds the data a simulation reasons about and the rules that
+change it. You describe your game's data as named rows of values, write rules
+that read those values and propose changes, and let a host run the rules once per
+tick. The same libraries power a card game, a board-game move judge, a
+turn-based resolver, and every world that Puck.World runs.
 
-Start with four ideas:
+This article introduces the system: what you can build with it, the ideas it's
+built on, how its parts fit together, and where to read next. If you'd rather
+start with code, try the [quickstart](state/quickstart.md) first and come back.
 
-- **Rows describe data.** A row is a named collection of values of one kind,
-  and a cell is one value addressed by a key inside it.
-- **One arena holds every value.** `StateArena` is a columnar store: every row
-  and cell lives in a typed column, and every read and write on the tick path
-  addresses a column position rather than a name.
-- **Rules propose changes, and a firing is atomic.** One gate opening is one
-  journal scope on the arena. Either every reversible effect in it lands, or
-  the scope rewinds and none of them do.
-- **A host serves facets and owns what cannot be rewound.** The host supplies
-  the tick, answers the capabilities a rule declared it needs, installs a
-  firing's transactional arms as one unit with its commit, and delivers every
-  other arm that leaves the arena only after it.
+## What you can build
 
-## See the whole system
+The state system is general enough for most rule-driven simulations. Here are a
+few of the things it's used for, and the part of the system that does the work:
+
+| You want to… | You use… |
+|---|---|
+| Track a score, a timer, a hand of cards, or a board | [Rows, cells, and values](state/data-model.md) |
+| Make a value refill over time, ease toward a target, or stay hidden from some players | [Row and cell behavior](state/traits.md) |
+| Spawn and remove bounded sets of units, each with typed fields | [Records, pools, and handles](state/records-and-pools.md) |
+| Model a grid, a hex board, a map of territories, or an aperiodic tiling | [Topologies and boards](state/topologies.md) |
+| Ask "can this piece move there?" or "does this hand form a run?" | [Reads and expressions](state/expressions.md) and [Patterns](state/patterns.md) |
+| Spend coins and award a card in one step that either fully happens or doesn't | [Rules and firing](state/rules.md) |
+| Shuffle a deck, move cards between piles, flip a line of discs | [State transforms](state/transforms.md) |
+| Resolve a chain reaction, walk through the phases of a turn, or undo a move | [Rule groups and turn undo](state/rule-groups.md) |
+| Roll dice or deal cards reproducibly | [Generators and draw sites](state/generators.md) |
+| Let characters remember events and recall the ones that fit the moment | [Vectors and embedding spaces](state/vectors.md) |
+| Find legal moves or pick a computer opponent's best move | [Search](state/search.md) |
+| Save, restore, and hash the whole state | [The state arena](state/arena.md) |
+| Find rules whose order decides a result, or price a tick's worst-case work | [Rule analysis, scheduling, and work budgets](state/analysis.md) |
+
+## Key concepts
+
+These terms appear throughout the manual. Each article defines the terms it
+uses again, so you can start anywhere. The [glossary](state/glossary.md) collects
+every term in one place.
+
+- A **row** is a named collection of values of one kind, such as `coins` or
+  `pieceCell`. A **cell** is one value in a row, found by its **key**. A row
+  with a single value is a **slot**.
+- The **catalog** compiles row declarations into compact **handles**, so the
+  running system addresses rows by number instead of by name.
+- The **arena** stores every value in columns and records changes in **journal
+  scopes** that can be committed or rewound.
+- A **rule** has a **gate** (a condition) and **effects** (the changes it
+  attempts). One gate opening is one **firing**, and a firing is atomic.
+- A **host** is the application that runs the rules: it supplies the tick,
+  serves the capabilities rules ask for, and delivers anything that leaves the
+  arena, such as a sound cue or a save.
+
+## How the pieces fit together
+
+The following diagram follows state from the author's declarations to a running
+simulation.
 
 ```mermaid
-flowchart TB
-    Author["Authored rows and rules"] --> Compile["Compile names, kinds, and operations"]
-    Compile --> Rules["Compiled rules and rule groups"]
-    Rules --> Admit["Admission: does the host<br/>serve every facet the rule needs?"]
-    Admit --> Evaluate["Evaluation: gate, bindings,<br/>one journal scope per firing"]
-    Evaluate --> Arena["StateArena: columns, journal scopes,<br/>versions, hash"]
-    Arena -- "Export / Import" --> Document["StateRow list (serialization)"]
-    Evaluate -- "with the commit" --> Unit["Transactional arms:<br/>document rows, as one unit"]
-    Evaluate -- "after the commit" --> Outward["Delivered arms:<br/>saves, cues, poses"]
-    Search["Search: candidates as scopes"] --> Arena
+flowchart LR
+    Author["Rows and rules<br/>(.puck or C#)"] --> Compile["Catalog and<br/>rule compiler"]
+    Compile --> Evaluator["Rule evaluator"]
+    Host["Host: tick, capabilities,<br/>delivery"] --> Evaluator
+    Evaluator <--> Arena["State arena:<br/>columns and journal scopes"]
+    Arena -- "export" --> Document["Saved rows"]
+    Document -- "import" --> Arena
+    Search["Search"] --> Arena
 ```
 
-**Compilation** resolves names and validates rule operations. **Admission**
-compares a rule's declared needs against what the host advertises, and
-refuses by facet name when the host cannot serve one. **Evaluation** reads
-the current values through the arena and attempts the effects of rules whose
-gates hold. **Export** turns the arena's columns back into the authored row
-list, which is how a document is saved and loaded.
+1. **Declare.** You describe rows and rules, either in a `.puck` source that a
+   world compiles or directly as C# records.
+1. **Compile.** The catalog turns row names into handles. The rule compiler
+   resolves every name a rule mentions, checks that each operation fits the row
+   it touches, and records what the rule needs from its host.
+1. **Admit.** Before a rule runs, the host confirms that it can serve every
+   capability the rule declared. A rule that needs something the host can't
+   provide is rejected before evaluation starts.
+1. **Evaluate.** Each tick, the evaluator runs the rules in order. Every firing
+   opens a journal scope on the arena. If all of its effects succeed, the scope
+   commits; if any is refused, the scope rewinds and nothing the firing did
+   remains.
+1. **Save and load.** The arena exports its contents back to the row list
+   you declared, which is how a world is saved, sent to clients, and loaded
+   again.
 
-These are separate stages. Compiling a rule does not run it. Judging a candidate
-does not commit it. The host owns time, admission, persistence, and any concepts
-outside the library's state vocabulary.
+Search uses the same arena and the same rules. It opens a scope, tries a
+candidate move, lets the rules judge it, and rewinds, without copying the state.
 
-## Learn the concepts in order
+## Guarantees
 
-| Chapter | The question it answers |
-|---|---|
-| [1. Rows, cells, and domains](state/data-model.md) | How do I represent a balance, a piece, a board, or a pile? |
-| [2. Reads and expressions](state/expressions.md) | How do I read live values and combine them into a question? |
-| [3. Rules, firing, and groups](state/rules.md) | When does a rule fire, which writes succeed together, and how do several rules run as one step? |
-| [4. The arena](state/frames.md) | Where do values live, how does a scope rewind, and when is a cached answer safe? |
-| [5. Generators and draw sites](state/generators.md) | How do random values remain reproducible and independently resumable? |
-| [6. Search](state/search.md) | How do rules judge legal moves and compare possible futures? |
-| [7. Hosting and extension](state/hosting.md) | What must my application implement, validate, and checkpoint? |
+The state system makes a few promises that the rest of Puck builds on.
 
-Try the small example below before choosing a deeper chapter.
+- **Deterministic.** The same declarations and the same inputs produce
+  bit-identical state on every run and every machine, whichever GPU backend
+  presents it. Simulation values use
+  integers and [Q48.16 fixed-point numbers](maths.md) (64-bit integers scaled by
+  65,536) in place of floating point, and nothing reads the wall clock.
+- **Atomic.** A rule firing's writes to the arena land together or not at all.
+  Effects that leave the arena, such as a sound cue or a save, are checked
+  before the firing commits and carried out after it.
+  [Rules and firing](state/rules.md) explains which of them share the
+  all-or-nothing promise.
+- **Bounded.** Every row, pool, pattern, and search declares or inherits a
+  ceiling, checked before anything runs. The rule analysis prices each
+  rule's worst-case work, and Puck.World refuses a document whose rules could
+  exceed the per-tick work ceiling when it loads.
+- **Host-neutral.** The libraries know nothing about bodies, cameras, or
+  networks. A host teaches the compiler its own concepts through registered
+  extensions, and Puck.World is one such host.
 
-## Build a small game's vocabulary
+> [!NOTE]
+> Determinism holds at a fixed code version. When a calculation or a rule is
+> corrected on purpose, state hashes move, and the baselines that recorded the
+> old values are re-recorded in the same change. [Verify state changes](state/testing.md)
+> covers the checks.
 
-A **row** is a named collection of values of one kind. A **cell** is one
-value addressed by a key inside its row. A **gate** is the condition of a
-rule; an **effect** is a change attempted when the rule fires.
+## The projects
 
-| Game idea | Representation | What rules can do with it |
-|---|---|---|
-| One player's balance | An Int slot named `coins` | Test the balance, add a reward, or spend it. |
-| A location per piece | A keyed Int row named `pieceCell` | Read or change the cell ordinal of a named piece. |
-| Occupancy on a board | A row over a topology, optionally derived from piece positions | Test occupied locations without storing a second independent position. |
-| Cards in a hand | An ordered row whose keys come from the card domain | Inspect an endpoint or transfer a card between piles. |
+The state system is six .NET projects in the engine services layer. Each
+project references only the projects below it in this diagram.
 
-A **topology** supplies locations and their connections. A **domain** says
-how a row's cells are addressed. Neither decides what a legal move is:
-rules and host admission provide that meaning.
-
-Numeric expressions use integers or [Q48.16 fixed-point values](maths.md);
-rows also support booleans and text. The encoding and addressing rules belong
-to the [data-model chapter](state/data-model.md).
-
-## Store bounded records and relationships
-
-Pool storage reserves fixed identity slots with presence bits. Releasing an
-instance leaves a hole; it never shifts another instance. `CellCount` returns the
-live count. Use `TryNextCell` to visit every held cell in physical slot order
-without observing holes, or `CopyPoolSnapshot` for live handles in slot order.
-Generated pool rows do not accept positional reads; handle and cursor access keep
-their identity capacity separate from their live count. Claim, release, and rewind
-journal only the affected slots; free-slot selection and dependent-pair cascades
-still perform bounded scans.
-
-A handle read uses the arena's address table and checks catalog ownership,
-occupancy, and generation. `TryReadRaw` returns a numeric field's stored number;
-`TryReadLiveRaw` evaluates its traits at the supplied time. Both return a `long`
-in the field's own kind and refuse text or vector fields. Timed numeric reads
-share the same evaluator as carrier reads without constructing a `CellValue`.
-`TryRead` and `TryReadLive` return the full carrier.
-
-Generated pool storage rows cannot be named by authored rules, transforms, or
-search plans, including through a channel object. Use pool iteration and typed
-pool-field references. The compiler retains generated rows by ordinal for
-handle evaluation, dataflow, and costing.
-
-A `StateRecord` groups typed fields and their defaults. A `StatePool` gives that
-record a fixed identity universe. `StateArena.TryClaim` chooses the lowest free
-slot, returns a `StateInstanceHandle` containing the pool ordinal, slot, and
-generation, and installs every field default before later effects write it.
-`TryRelease` advances the slot generation, so a handle from an earlier lifetime
-can neither read nor write a reclaimed slot.
-The runtime handle is also bound to its `StateCatalog`: arenas using the same
-catalog may share it, while a replacement catalog refuses it. Persistence stores
-the stable pool name, slot, and generation, then uses
-`StateCatalog.CreateInstanceHandle` after resolving that name in the current catalog.
-
-Text fields support literal writes and typed copies between ordinary rows and
-pool fields. A missing or stale copy source leaves its destination unchanged.
-Numeric rule predicates refuse text and vector pool fields; vector operations
-use their declared vector space.
-
-`StatePairPool` stores a record for a relationship between two live handles.
-`TryClaimPair` validates both endpoint lifetimes and derives the pair's stable
-slot from their endpoint slots. Directed pairs preserve endpoint order.
-Undirected pairs require one shared endpoint pool and use canonical endpoint
-order. `AllowSelf` controls whether an instance may pair with itself. Releasing
-an endpoint releases every incident pair, including dependent pair pools, as one
-journaled operation. Pair dependencies must form an acyclic graph.
-
-The identity universe and live limit answer different questions. An ordinary
-pool's universe is `Capacity`; a pair pool's universe is left capacity multiplied
-by right capacity. That product must fit `StateCapacity.MaxCellsPerRow`, while
-`MaxLive` limits the number currently present. The catalog reserves every numeric
-slot key and generates protected membership, generation, and field rows. Generic
-row mutation and import APIs refuse those rows.
-
-Persistence uses `StatePoolSnapshot`: one nonnegative generation for every slot,
-plus every field value for every live slot. Pair snapshots also require live
-endpoints. `StateArena.ToPools()` and `ToPairPools()` return declarations carrying
-complete snapshots. Relayout carries these protected rows internally and refuses
-the whole replacement if the new shape cannot hold them.
-
-World retains these declarations and snapshots in `state`; generated rows are
-runtime storage and never authored or serialized as ordinary rows. Its
-`properties.attachments` entries identify a pool, slot, generation, and either
-a named single-inhabitant placement or a zero-based local seat. Interactions
-may name those pools on either side: geometry uses the attached bodies, while
-`left.field` and `right.field` address their records. A release detaches that
-lifetime; reclaiming the slot does not attach its replacement automatically.
-
-An owned identity selects capacity-one pools through `identity.records`.
-`WorldIdentity.TryReadRecord` and `TryWriteRecord` preserve typed fields; a
-successful write updates its owned document for the persistence service to save.
-Travel and checkpoints carry only those selected records and their schema
-dependencies. Unselected state remains private. Time traits such as advance and
-deadline clocks currently belong to ordinary rows, not record fields.
-
-## Evaluate a small rule
-
-This complete C# program adds one coin to an integer slot. Run it in a console
-project referencing Puck.State and Puck.State.Rules, or place it in a checkout
-project with project references to both. The
-[getting-started guide](../getting-started.md) owns the repository setup.
-
-```csharp
-using Puck.State;
-using Puck.State.Rules;
-
-StateRow[] rows = [new StateRow(
-    Name: CellName.Parse("coins"),
-    Kind: CellKind.Int,
-    Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(2L))])];
-var section = new StateSection(Rows: rows);
-var catalog = StateCatalog.Compile(section: section);
-var context = new RuleCompileContext(
-    section: section, catalog: catalog, tables: null, patterns: null,
-    generators: null, simulationRateHz: 60, vocabulary: RuleVocabulary.Core);
-var rules = RuleCompiler.CompileAll(
-    rules: [new Rule(
-        Name: CellName.Parse("award"),
-        Effects: [new ActionEffect.AddState(State: "coins", Value: 1m)])],
-    context: context);
-
-var arena = new StateArena(catalog: catalog, section: section, time: ArenaTime.Origin);
-var host = new ArenaEffectHost(arena: arena);
-
-host.Advance(tick: 1UL, engineTick: 1UL);
-new RuleEvaluator(host: host).Evaluate(
-    rules: rules, latch: new RuleLatch(), stepTicks: 1UL);
-
-catalog.TryResolve(lane: StateLane.Document, name: "coins", handle: out var coinsHandle);
-catalog.Keys.TryResolve(name: StateRow.SlotKey, key: out var slotKey);
-host.Arena.TryRead(rowOrdinal: coinsHandle.Ordinal, key: slotKey, value: out var coins);
-Console.WriteLine(coins.AsInt);                 // 3
-Console.WriteLine(rows[0].Cells![0].Value.AsInt); // 2: the authored row is unchanged
+```mermaid
+flowchart BT
+    Core["Puck.State<br/>model, catalog, arena, expressions"]
+    Topology["Puck.State.Topology<br/>board queries, patterns"] --> Core
+    Generators["Puck.State.Generators<br/>randomness, tables"] --> Core
+    Vectors["Puck.State.Vectors<br/>vector transforms"] --> Core
+    Rules["Puck.State.Rules<br/>compiler, evaluator, transforms"] --> Topology
+    Rules --> Generators
+    Rules --> Vectors
+    Search["Puck.State.Search<br/>negamax, tree search"] --> Rules
 ```
 
-Read the program in three stages:
-
-1. Describe the row and rule, then build a catalog and compile context. The
-   catalog resolves the name `coins`; its handles belong to that catalog.
-2. Build an arena over that catalog and seed it from the section. This supplies
-   the starting value of two.
-3. Evaluate the rule and read the arena. It now holds three, while the authored
-   row still holds two. Loading the section again would reset the arena to two.
-
-With no gate, the rule always fires. With no explicit mode, it uses Level and
-fires on every evaluation.
-
-A journal scope on the arena is what a hypothetical evaluation and a search
-candidate use: a rewound scope leaves the arena byte-identical, a committed one
-does not. A caller that judges many independent positions calls
-`RuleLatch.Reset` before each judge, so every crossing is a first one; a
-continuing simulation retains the latch between steps so Edge rules fire once
-per gate crossing.
-
-## The six projects
-
-The state system is one layer split by concern. Every project declares
-`<PuckLayer>Engine services</PuckLayer>`, and its project references point only
-down this list.
-
-| Project | What it owns |
+| Project | What it contains |
 |---|---|
-| `Puck.State` | The model — rows, cells, `CellValue`, the catalog, the arena, compiled lattice topology, authored randomness's document facet, the pattern algebra's authored tree, the expression IR, the authored rule vocabulary, and the fact and facet base types. |
-| `Puck.State.Topology` | The board-query and pattern layer over an arena: rays and board shapes through one span kernel, and the compiled pattern automaton's incremental resume over an arena-read word. |
-| `Puck.State.Generators` | The authored-randomness engine over an arena: drawing a site's next value, a generator's declared table data, and a seeded Penrose patch. |
-| `Puck.State.Vectors` | The vector half of the state graph: the typed view over a row's vector column, and the `mix`/`mean`/`nearest`/`remember` transforms over an arena. |
-| `Puck.State.Rules` | The rule compiler, the evaluator, rule groups, the latch, the transforms, and the work budget. |
-| `Puck.State.Search` | Negamax, tree search, and the candidate walk over arena journal scopes. |
+| `Puck.State` | The data model (rows, cells, `CellValue`, domains, traits, records and pools), the catalog and the arena, compiled topologies, the expression language, the authored rule model, and the base types for facts and host capabilities. It references `Puck.Abstractions`, `Puck.Assets`, and `Puck.Maths`. |
+| `Puck.State.Topology` | Board queries (rays and shapes) and pattern matching over arena values. |
+| `Puck.State.Generators` | The randomness engine: draw sites, generator sources, Penrose patches, and static lookup tables. |
+| `Puck.State.Vectors` | Typed access to vector columns and the `mix`, `mean`, `nearest`, and `remember` transforms. |
+| `Puck.State.Rules` | The rule compiler, the evaluator, rule groups, the latch, the state transforms, and rule analysis and budgets. |
+| `Puck.State.Search` | Game-tree search over arena journal scopes: negamax with alpha-beta pruning, and UCB1 tree search. |
 
-`Puck.State` references only `Puck.Abstractions`, `Puck.Assets`, and
-`Puck.Maths`; several of its own types — the compiled topology `ArenaLayout`
-lays a lattice row's columns out with, the pattern node `PatternSpelling`
-parses and prints, `Draw`/`StateGenerator` the document row schema types on —
-stay in core rather than in Topology or Generators because a core file
-consumes them directly, not because either satellite project is optional.
-Topology, Generators, and Vectors each reference `Puck.State`;
-`Puck.State.Rules` references those three; `Puck.State.Search` references
-`Puck.State.Rules`. [The project map](../project-map.md) owns the
-repository-wide layering, the gate that checks it, and each project's full
-responsibility.
+A few types live in `Puck.State` even though their main users are in another
+project, because the arena itself needs them: the compiled topology that lays
+out board columns, the pattern tree that the parser reads, and the draw and
+generator declarations that rows carry. The [project map](../project-map.md)
+owns the repository-wide layering and the build check that enforces it.
 
-## Choose your next step
+## Find your way
 
-Use [Compile and run rules](state/rules.md) to add conditions, grouped
-effects, and rule groups. Read
-[Evaluate a candidate and reuse a proven answer](state/frames.md) before using
-a judge for hypothetical moves, and [Hosting and extension](state/hosting.md)
-before building a continuing simulation.
+The manual is organized by what you're trying to do.
 
-The [world schema](../../src/Puck.World.Schema/README.md) owns world-specific
-fields and authoring contracts. The [API reference](../api/index.md) owns member
-signatures. [State tests](../../tests/Puck.State.Tests/README.md) own verification
-scope and run instructions.
+### Get started
 
-[Reference index](README.md)
+- [Quickstart: compile and run a rule](state/quickstart.md)
+- [State in Puck.World](state/worlds.md)
+
+### Understand the model
+
+- [Rows, cells, and values](state/data-model.md)
+- [Row and cell behavior](state/traits.md)
+- [Records, pools, and handles](state/records-and-pools.md)
+- [Topologies and boards](state/topologies.md)
+- [Vectors and embedding spaces](state/vectors.md)
+- [The state arena](state/arena.md)
+
+### Read and change state
+
+- [Reads and expressions](state/expressions.md)
+- [Patterns](state/patterns.md)
+- [Rules and firing](state/rules.md)
+- [State transforms](state/transforms.md)
+- [Rule groups and turn undo](state/rule-groups.md)
+- [Generators and draw sites](state/generators.md)
+- [Search](state/search.md)
+
+### Build a host
+
+- [Host and extend the state engine](state/hosting.md)
+- [Rule analysis, scheduling, and work budgets](state/analysis.md)
+- [Verify state changes](state/testing.md)
+
+### Look things up
+
+- [Limits and capacities](state/limits.md)
+- [Glossary](state/glossary.md)
+- [API reference](../api/index.md)
+
+## Next steps
+
+- [Quickstart: compile and run a rule](state/quickstart.md): build a tiny shop
+  and watch a firing roll back.
+- [Rows, cells, and values](state/data-model.md): learn how to represent your
+  game's data.
+- [State in Puck.World](state/worlds.md): see how a world declares, runs,
+  saves, and verifies its state.
+
+## See also
+
+- [State and the authoring language: decisions](../decisions/state-and-language.md#the-rebuild):
+  the reasoning behind the arena, atomic firing, and typed host capabilities.
+- [World schema](../../src/Puck.World.Schema/README.md): every field of a world
+  document's `state`, `rules`, and `search` sections.
+- [Deterministic numerics](maths.md): the fixed-point and integer math that
+  state values use.

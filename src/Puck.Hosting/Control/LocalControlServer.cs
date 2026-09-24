@@ -14,7 +14,12 @@ public sealed class LocalControlServer : IDisposable {
         localaddr: IPAddress.Loopback,
         port: 0
     );
+    // The time a connected peer may take to prove the capability before its connection is closed.
+    private static readonly TimeSpan HandshakeDeadline = TimeSpan.FromSeconds(seconds: 5);
+    // The time a refused request's reply may take to write.
+    private static readonly TimeSpan RefusalDeadline = TimeSpan.FromSeconds(seconds: 1);
 
+    private readonly TimeProvider m_clock;
     private readonly Func<IControlSession> m_createSession;
     private readonly LocalEndpointCapability m_descriptor;
     private readonly FileStream m_descriptorFile;
@@ -23,13 +28,18 @@ public sealed class LocalControlServer : IDisposable {
 
     /// <summary>Starts listening and creates a unique, user-only attachment file. The host owns this lifetime.</summary>
     /// <param name="createSession">Creates an independent Console ingress after authentication, on a worker.</param>
-    public LocalControlServer(Func<IControlSession> createSession) {
+    /// <param name="clock">Drives each connection's five-second handshake deadline and each request's deadline;
+    /// <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
+    /// <param name="directory">The directory the attachment file is published in, where an adapter following the
+    /// newest World looks; <see langword="null"/> is the user's temporary directory.</param>
+    public LocalControlServer(Func<IControlSession> createSession, TimeProvider? clock = null, string? directory = null) {
         ArgumentNullException.ThrowIfNull(createSession);
+        m_clock = (clock ?? TimeProvider.System);
         m_createSession = createSession;
         var host = Guid.NewGuid().ToString(format: "N");
 
         AttachmentPath = Path.Combine(
-            path1: Path.GetTempPath(),
+            path1: (directory ?? Path.GetTempPath()),
             path2: $"puck-control-{host}.json"
         );
         try {
@@ -94,11 +104,17 @@ public sealed class LocalControlServer : IDisposable {
             try {
                 var stream = client.GetStream();
 
-                await m_descriptor.AuthenticateAsync(
-                    stream,
-                    server: true,
-                    lifetime.Token
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                using (var handshake = new OperationDeadline(
+                    caller: lifetime.Token,
+                    timeout: HandshakeDeadline,
+                    timeProvider: m_clock
+                )) {
+                    await m_descriptor.AuthenticateAsync(
+                        stream,
+                        server: true,
+                        handshake.Token
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                }
                 using var session = m_createSession();
                 var sequence = 0L;
 
@@ -116,11 +132,14 @@ public sealed class LocalControlServer : IDisposable {
 
                     if (request.Id != checked(++sequence)) { throw new InvalidDataException(message: "Duplicate or out-of-order request ID."); }
                     var refusal = Validate(request);
-                    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: lifetime.Token);
+                    using var deadline = new OperationDeadline(
+                        caller: lifetime.Token,
+                        timeout: ((refusal is null)
+                            ? TimeSpan.FromMilliseconds(value: request.TimeoutMilliseconds)
+                            : RefusalDeadline),
+                        timeProvider: m_clock
+                    );
 
-                    deadline.CancelAfter(((refusal is null)
-                        ? request.TimeoutMilliseconds
-                        : 1000));
                     // Keep one bounded read outstanding to observe disconnect while the pump is waiting.
                     // Pipelining is forbidden: it closes the ingress instead of growing the text queue.
                     next = ControlWire.ReadAsync(

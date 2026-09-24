@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.Assets;
 
 namespace Puck.AdvancedGamingBrick;
 
@@ -156,38 +157,12 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
         m_instance.Dispose();
     }
 
-    private static void WriteBatterySave(string path, ReadOnlySpan<byte> data) {
-        var destination = Path.GetFullPath(path: path);
-        var temporary = Path.Combine(
-            path1: Path.GetDirectoryName(path: destination)!,
-            path2: $".agb-save-{Guid.NewGuid():N}.tmp"
+    // A failed write leaves the previous save intact. Only a successful replacement clears dirty state.
+    private static void WriteBatterySave(string path, ReadOnlySpan<byte> data) =>
+        AtomicFile.WriteAllBytes(
+            bytes: data,
+            path: path
         );
-
-        try {
-            // The temporary lives on the destination filesystem. Finish and flush it before the rename so a
-            // failed write leaves the previous save intact. Only a successful replacement clears dirty state.
-            using (var stream = new FileStream(
-                access: FileAccess.Write,
-                mode: FileMode.CreateNew,
-                path: temporary,
-                share: FileShare.None
-            )) {
-                stream.Write(buffer: data);
-                stream.Flush(flushToDisk: true);
-            }
-            File.Move(
-                destFileName: destination,
-                overwrite: true,
-                sourceFileName: temporary
-            );
-        } finally {
-            try {
-                File.Delete(path: temporary);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"[advanced-machine-host] temporary save cleanup failed ({exception.Message}).");
-            }
-        }
-    }
     private void LoadBatterySave() {
         if (
             (m_savePath is not { } savePath) ||

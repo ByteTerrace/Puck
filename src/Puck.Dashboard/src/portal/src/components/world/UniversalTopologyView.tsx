@@ -1,7 +1,9 @@
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Button, Group, Text } from "@mantine/core";
+import { RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react";
 import type { SceneCell } from "../../authoring/sceneProjection";
 import { appearanceFor, type ValueAppearance } from "../../authoring/presentation";
+import classes from "./UniversalTopologyView.module.css";
 
 const PAGE_SIZE = 144;
 
@@ -33,15 +35,15 @@ function UniversalTopologyView({ cells, values, empty, selection, highlights, bi
   const minRow = visible.length ? Math.min(...visible.map((cell) => cell.grid.row)) : 0;
   const columns = visible.length ? (Math.max(...visible.map((cell) => cell.grid.col)) - minCol + 1) : 1;
   const focusOrdinal = visible.some((cell) => cell.ordinal === focused) ? focused : visible[0]?.ordinal;
-  return <div className="studio-plan-view">
-    <div className="studio-board-surface">
-      <div role="group" aria-label="Topology cells" aria-describedby={helpId} className="studio-cell-grid"
+  return <div className={classes.plan}>
+    <div className={classes.board}>
+      <div role="group" aria-label="Topology cells" aria-describedby={helpId} className={classes.grid}
         style={{ gridTemplateColumns: "repeat(" + columns + ", minmax(44px, 1fr))" }}>
         {visible.map((cell, position) => {
           const { ordinal } = cell;
           const appearance = appearanceFor(values.get(ordinal) ?? empty, bindings);
-          return <button key={ordinal} type="button" className="studio-cell" aria-pressed={selection.has(ordinal)}
-            style={{ color: appearance.color, gridColumn: (cell.grid.col - minCol + 1), gridRow: (cell.grid.row - minRow + 1) }}
+          return <button key={ordinal} type="button" className={classes.cell} aria-pressed={selection.has(ordinal)}
+            style={{ "--cell-color": appearance.color, gridColumn: (cell.grid.col - minCol + 1), gridRow: (cell.grid.row - minRow + 1) } as CSSProperties}
             data-highlighted={highlights?.has(ordinal) || undefined}
             ref={node => { if (node) buttons.current.set(ordinal, node); else buttons.current.delete(ordinal); }}
             tabIndex={focusOrdinal === ordinal ? 0 : -1}
@@ -60,18 +62,18 @@ function UniversalTopologyView({ cells, values, empty, selection, highlights, bi
                 ?? visible[Math.max(0, Math.min(visible.length - 1, position + dCol + dRow * columns))];
               buttons.current.get(next.ordinal)?.focus();
             }}>
-            <span className="studio-cell-index">{ordinal}</span><span className="studio-cell-value" aria-hidden="true">{appearance.label}</span>
+            <span className={classes.index}>{ordinal}</span><span className={classes.value} aria-hidden="true">{appearance.label}</span>
           </button>;
         })}
       </div>
-      {!cells.length && <Text>No visible cells. Change the layer or visibility filter.</Text>}
+      {!cells.length && <Text c="dimmed" size="sm" ta="center" py="xl">No visible cells. Change the layer or visibility filter.</Text>}
     </div>
     {pageCount > 1 && <Group justify="space-between" mt="sm">
-      <Button variant="default" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>Previous cells</Button>
-      <Text size="sm">{currentPage + 1} / {pageCount}</Text>
-      <Button variant="default" disabled={currentPage + 1 === pageCount} onClick={() => setPage(currentPage + 1)}>Next cells</Button>
+      <Button variant="default" size="xs" leftSection={<RiArrowLeftSLine size={16} />} disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>Previous cells</Button>
+      <Text size="xs" ff="monospace" c="dimmed">{currentPage + 1} / {pageCount}</Text>
+      <Button variant="default" size="xs" rightSection={<RiArrowRightSLine size={16} />} disabled={currentPage + 1 === pageCount} onClick={() => setPage(currentPage + 1)}>Next cells</Button>
     </Group>}
-    <Text id={helpId} size="xs" c="dimmed" mt="sm">Arrows move focus. Enter or Space selects. Hold Shift to add or remove a cell.</Text>
+    <Text id={helpId} size="xs" c="dimmed" mt="sm" ta="center">Arrows move focus. Enter or Space selects. Hold Shift to add or remove a cell.</Text>
   </div>;
 }
 export default React.memo(UniversalTopologyView);

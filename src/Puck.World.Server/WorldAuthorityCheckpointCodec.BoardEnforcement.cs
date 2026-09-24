@@ -19,8 +19,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static byte[] EncodeBoardEnforcement(WorldBoardEnforcementCheckpoint section) {
         var writer = new WireWriter();
 
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Entries,
             writeItem: WriteBoardVerdict
         );
@@ -29,10 +28,10 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     private static bool TryDecodeBoardEnforcement(byte[] bytes, out string reason, out WorldBoardEnforcementCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
-        var entries = ReadArray(
-            reader: ref reader,
+        var entries = reader.ReadArray(
             field: "board enforcement entries",
-            readItem: static (ref WireReader r) => ReadBoardVerdict(reader: ref r)
+            readItem: static (ref WireReader r) => ReadBoardVerdict(reader: ref r),
+            maximum: MaxCollectionCount
         );
 
         if (!reader.TryFinish(failure: out var failure)) {

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Xunit;
@@ -7,6 +8,7 @@ using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.Storage;
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -16,8 +18,11 @@ namespace Puck.World.Tests;
 /// through <see cref="WorldAuthorityBlobStore"/> over <see cref="FakeObjectBlobStore"/>.</summary>
 public sealed class WorldAuthorityCheckpointCodecLawTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
+    // Capturing boots a server and steps it; the checkpoint is an immutable record, so one capture serves every law.
+    private static readonly Lazy<WorldAuthorityCheckpoint> Captured = new(valueFactory: Capture);
 
-    private static WorldAuthorityCheckpoint CapturedCheckpoint() {
+    private static WorldAuthorityCheckpoint CapturedCheckpoint() => Captured.Value;
+    private static WorldAuthorityCheckpoint Capture() {
         using var fixture = Fixtures.FreshServer();
 
         Assert.True(
@@ -31,7 +36,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
@@ -54,24 +59,9 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         return checkpoint!;
     }
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     // Carries one populated WorldInDoubtTransferCheckpoint (commit members AND landed members both non-empty) so the
     // round-trip laws below actually exercise every leaf the in-doubt shape added, not just its zero-length case.
-    private static WorldAuthorityHostRowCheckpoint SampleHostRow(WorldBody.TransferState dynamicState) {
+    private static WorldAuthorityHostRowCheckpoint SampleHostRow(WorldBodyTransferState dynamicState) {
         var commitMember = new WorldTransferCommitMember(
             ActionContinuity: new WorldTransferActionContinuity(
                 Channels: [new WorldTransferChannelEdge(
@@ -135,7 +125,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
                 BodyIndex: 4,
                 CatalogRig: 0,
                 Generation: 1,
-                Identity: WorldPrincipal.Peer(
+                Identity: Principal.Peer(
                     generation: 1,
                     index: 4
                 ),
@@ -150,7 +140,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
                 Z: FixedQ4816.Zero
             ),
             SourceGrants: [new WorldGrant(
-                    Principal: WorldPrincipal.Peer(
+                    Grantee: Principal.Peer(
                         generation: 1,
                         index: 4
                     ),
@@ -200,7 +190,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         try {
             Assert.False(condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out _,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ));
             Assert.Contains(
@@ -250,7 +240,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out reason
         ), reason);
 
@@ -258,13 +248,14 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             engines: [],
             screens: definition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-key-ledger-tests-");
 
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint!,
             instanceIdentity: "restored-ledger",
             machines: restoredMachines,
             profiles: new WorldOwnedWorlds(
-                directory: Directory.CreateTempSubdirectory(prefix: "puck-key-ledger-tests-").FullName,
+                directory: profilesDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: definition
             )
@@ -281,10 +272,10 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         var next = CellName.Parse(candidate: "next-key");
 
         Assert.Equal(
-            actual: restored.Arena.Keys.TryIntern(next, out _, out var restoredReason),
-            expected: fixture.Server.Arena.Keys.TryIntern(next, out _, out var originalReason)
+            actual: restored.Arena.Keys.TryIntern(key: out _, name: next, reason: out var restoredReason),
+            expected: fixture.Server.Arena.Keys.TryIntern(key: out _, name: next, reason: out var originalReason)
         );
-        Assert.Equal(originalReason, restoredReason);
+        Assert.Equal(actual: restoredReason, expected: originalReason);
         Assert.Equal(fixture.Server.Arena.Bytes, restored.Arena.Bytes);
         Assert.Equal(fixture.Server.Arena.ComputeHash(), restored.Arena.ComputeHash());
     }
@@ -409,13 +400,14 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             engines: [],
             screens: definition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-checkpoint-codec-tests-");
 
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: decoded,
             instanceIdentity: "boot",
             machines: restoredMachines,
             profiles: new WorldOwnedWorlds(
-                directory: Directory.CreateTempSubdirectory(prefix: "puck-checkpoint-codec-tests-").FullName,
+                directory: profilesDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: definition
             )
@@ -525,7 +517,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
@@ -539,7 +531,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
@@ -648,7 +640,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
@@ -746,7 +738,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     [Fact]
     public void MachineControlGrantSurvivesCheckpointEncodeDecodeAndRestore() {
         using var source = Fixtures.FreshServer();
-        var tool = WorldPrincipal.Addon(name: "cabinet-tool");
+        var tool = Principal.Addon(name: "cabinet-tool");
 
         source.Server.Grant(
             grant: new WorldGrant(
@@ -755,7 +747,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
                 GrantSubject.Machine(name: "cabinet"),
                 Exclusive: false
             ),
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
         Assert.True(condition: source.Server.Grants.Allows(
             tool,
@@ -813,132 +805,35 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             expected: string.Empty
         );
     }
-    [Fact]
-    public void A_later_version_envelope_refuses_by_name() {
-        var checkpoint = CapturedCheckpoint();
-        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
-        var downgraded = ((byte[])encoded.Clone());
+    // Every older layout lacks a section the current reader requires, and a newer one is unknown to it; the envelope
+    // refuses both by version before any payload is read with the wrong layout.
+    public static TheoryData<ushort> EveryUnsupportedVersion() => new(values: [
+        .. Enumerable.Range(
+            count: WorldAuthorityCheckpointCodec.SupportedVersion,
+            start: 0
+        ).Select(selector: static version => ((ushort)version)),
+        ((ushort)(WorldAuthorityCheckpointCodec.SupportedVersion + 1)),
+        ushort.MaxValue,
+    ]);
+    [MemberData(memberName: nameof(EveryUnsupportedVersion))]
+    [Theory]
+    public void An_unsupported_version_envelope_refuses_by_name(ushort version) {
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: CapturedCheckpoint());
 
-        // A future version must refuse even when the payload has the current shape.
+        // The version u16 sits immediately after the 4-byte "PCKP" magic.
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
-            destination: downgraded.AsSpan(start: 4),
-            value: ((ushort)(WorldAuthorityCheckpointCodec.SupportedVersion + 1))
+            destination: encoded.AsSpan(start: 4),
+            value: version
         );
 
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: downgraded,
+            bytes: encoded,
             checkpoint: out _,
             reason: out var reason
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: $"version {(WorldAuthorityCheckpointCodec.SupportedVersion + 1)}"
-        );
-    }
-    [Fact]
-    public void Version_three_envelope_refuses_by_name() {
-        var checkpoint = CapturedCheckpoint();
-        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
-        var downgraded = ((byte[])encoded.Clone());
-
-        // Version 3 predates the journal's recorded engine-tick timestamp. Refuse its envelope before
-        // attempting to decode a journal entry using the new layout.
-        downgraded[4] = 3;
-        downgraded[5] = 0;
-
-        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: downgraded,
-            checkpoint: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: "version 3"
-        );
-    }
-    [Fact]
-    public void Version_mismatch_refuses_by_name() {
-        var checkpoint = CapturedCheckpoint();
-        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
-        var corrupted = ((byte[])encoded.Clone());
-
-        // The version u16 sits immediately after the 4-byte "PCKP" magic (WorldAuthorityCheckpointCodec's own wire
-        // layout) — bump it past the one supported value.
-        corrupted[4] = 0xFF;
-        corrupted[5] = 0xFF;
-
-        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: corrupted,
-            checkpoint: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: "version"
-        );
-    }
-    [Fact]
-    public void Version_one_envelope_refuses_by_name() {
-        var checkpoint = CapturedCheckpoint();
-        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
-        var downgraded = ((byte[])encoded.Clone());
-
-        // The version u16 sits immediately after the 4-byte "PCKP" magic — pin the version before the search block
-        // literally (1), not an arbitrary corrupt value, to prove the specific old wire shape is refused rather than
-        // silently tolerated by a reader that skips the new block.
-        downgraded[4] = 1;
-        downgraded[5] = 0;
-
-        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: downgraded,
-            checkpoint: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: "version 1"
-        );
-    }
-    [Fact]
-    public void Version_five_envelope_refuses_by_name() {
-        var checkpoint = CapturedCheckpoint();
-        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
-        var downgraded = ((byte[])encoded.Clone());
-
-        // Version 5 predates the arena's full interned-key ledger. Refuse it rather than restoring with orphaned
-        // committed names missing from the key ceiling and retained-memory state.
-        downgraded[4] = 5;
-        downgraded[5] = 0;
-
-        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: downgraded,
-            checkpoint: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: "version 5"
-        );
-    }
-    [Fact]
-    public void Version_two_envelope_refuses_by_name() {
-        var checkpoint = CapturedCheckpoint();
-        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
-        var downgraded = ((byte[])encoded.Clone());
-
-        // Version 2 predates the board-enforcement latch section. Refuse that shorter layout rather than reading
-        // a checkpoint that carries no remembered verdicts as though it always carried none.
-        downgraded[4] = 2;
-        downgraded[5] = 0;
-
-        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: downgraded,
-            checkpoint: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: "version 2"
+            expectedSubstring: $"checkpoint version {version} is not the supported version"
         );
     }
 }

@@ -1,0 +1,13 @@
+# The same frames, but the first keeps the authored exposure instead of setting zero.
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+pipeline.set ink simulation {"decay":0.987}
+pipeline.reset ink
+pipeline.wait ink submitted 1 10
+pipeline.capture ink {run}/exposure-zero.png
+pipeline.wait ink captured 10
+pipeline.set ink visualize {"exposure":1}
+pipeline.reset ink
+pipeline.wait ink submitted 1 10
+pipeline.capture ink {run}/exposure-one.png
+pipeline.wait ink captured 10

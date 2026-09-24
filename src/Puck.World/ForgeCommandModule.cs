@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.GamingBricks.Forge;
@@ -8,7 +9,7 @@ namespace Puck.World;
 
 /// <summary>Local document authoring and native cartridge compilation, available in every boot shape.</summary>
 internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, IEnumerable<ICartridgeCompiler>? compilers = null) : ICommandModule {
-    private readonly Dictionary<WorldPrincipal, CartridgeDraft> m_drafts = [];
+    private readonly Dictionary<Principal, CartridgeDraft> m_drafts = [];
     private readonly IEnumerable<ICartridgeCompiler>? m_compilers = compilers;
 
     private CommandDefinition Command(string name, string grammar, string detail) => CommandDefinition.WithWireArgs(
@@ -23,7 +24,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
         )
     );
     private CommandResult Execute(string name, string grammar, CommandContext context, WireArgs args) {
-        var principal = context.ActingPrincipal();
+        var principal = context.Principal;
 
         if (principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
             return CommandResult.Error(output: "[forge: local authoring requires a console or local seat]");
@@ -66,10 +67,12 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                 value: out var draft
             )) { return CommandResult.Error(output: "[forge: create or open a draft first]"); }
             switch (name) {
-                case "show": return new CommandResult(Output: draft.Show(pointer: ((args.Count == 0)
+                case "show":
+                    return new CommandResult(Output: draft.Show(pointer: ((args.Count == 0)
                     ? ""
                     : args[0].ToString())));
-                case "set": draft.Set(
+                case "set":
+                    draft.Set(
                     pointer: args[0].ToString(),
                     json: WorldCommandArguments.RawAfter(
                         args: in args,
@@ -207,16 +210,10 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
     }
     private static string Write(string path, byte[] bytes) {
         path = Path.GetFullPath(path: path);
-        var temporary = (((path + ".") + Guid.NewGuid().ToString(format: "N")) + ".tmp");
-
-        try { File.WriteAllBytes(
+        AtomicFile.WriteAllBytes(
             bytes: bytes,
-            path: temporary
-        ); File.Move(
-            destFileName: path,
-            overwrite: true,
-            sourceFileName: temporary
-        ); } finally { File.Delete(path: temporary); }
+            path: path
+        );
         return path;
     }
 

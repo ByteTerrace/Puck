@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Overlays;
 
 namespace Puck.World.Client;
@@ -5,15 +6,58 @@ namespace Puck.World.Client;
 /// <summary>
 /// Resolves the document's authored <c>theme</c> section (<see cref="WorldDefinition.Theme"/>) against live state
 /// into the mechanism-side <see cref="OverlayThemeValues"/> Puck.Overlays reads — the theme's counterpart to
-/// <see cref="WorldRenderCycleTrack"/>, at the identical cadence: recomputed only when the definition revision
-/// moves (a <c>state.&lt;row&gt;</c> binding's live value moves with it, since a state write bumps the revision the
-/// same way any other mutation does). <see cref="WorldThemeCapacity.ScrimMinAlpha"/> clamps every resolved scrim
-/// alpha here, unconditionally — a no-op for an already-validated literal, the actual floor enforcement for a state
-/// binding the validator could not check at boot.
+/// <see cref="WorldRenderCycleTrack"/>: recomputed only when the definition revision moves or a
+/// <see cref="WorldStateMirror"/> slot one of its own <c>state.&lt;row&gt;</c> tokens reads changes, never for a slot
+/// some other consumer binds.
+/// <see cref="WorldThemeCapacity.ScrimMinAlpha"/> clamps every resolved scrim alpha here, unconditionally — a no-op
+/// for an already-validated literal, the actual floor enforcement for a state binding the validator could not check
+/// at boot.
 /// </summary>
 public sealed class WorldThemeResolve {
+    private ThemeReads? m_reads;
     private OverlayThemeValues m_resolved;
+    private int m_resolvedAt;
+    private int m_resolutions;
     private int m_revision = -1;
+
+    // The mirror reads one resolve makes, noting every slot a bound token reads so the next frame can ask whether any
+    // of them moved.
+    private sealed class ThemeReads(WorldStateMirror mirror) {
+        public List<int> Bound { get; } = [];
+        public WorldStateMirror Mirror { get; } = mirror;
+
+        public Vector4 Color(in BindableColor color, Vector4 fallback) {
+            Note(
+                binding: color.State,
+                conversion: WorldStateConversion.Color
+            );
+
+            return Mirror.Color(
+                color: in color,
+                fallback: fallback
+            );
+        }
+        public float Scalar(in BindableScalar scalar, float fallback) {
+            Note(
+                binding: scalar.State,
+                conversion: WorldStateConversion.Number
+            );
+
+            return Mirror.Scalar(
+                fallback: fallback,
+                scalar: in scalar
+            );
+        }
+
+        private void Note(StateBinding? binding, WorldStateConversion conversion) {
+            if (binding is { } bound) {
+                Bound.Add(item: Mirror.Register(
+                    binding: in bound,
+                    conversion: conversion
+                ));
+            }
+        }
+    }
 
     private static CubicBezier ResolveBezier(WorldThemeCubicBezier bezier) => new(
         X1: bezier.X1,
@@ -21,16 +65,14 @@ public sealed class WorldThemeResolve {
         X2: bezier.X2,
         Y2: bezier.Y2
     );
-    private static BloomHue ResolveBloomHue(WorldThemeBloomHue hue, WorldDefinition definition, ulong tick) => new(
+    private static BloomHue ResolveBloomHue(WorldThemeBloomHue hue, ThemeReads mirror) => new(
         Halo: ResolveColor(
             color: hue.Halo,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         Ring: ResolveColor(
             color: hue.Ring,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         )
     );
     private static OverlayThemeValues.ChromeSet ResolveChrome(WorldThemeChrome chrome) => new(
@@ -50,11 +92,10 @@ public sealed class WorldThemeResolve {
         WheelMarkerHalf: chrome.WheelMarkerHalf,
         WheelRingAlpha: chrome.WheelRingAlpha
     );
-    private static RgbaColor ResolveColor(BindableColor color, WorldDefinition definition, ulong tick) {
-        var resolved = color.Resolve(
-            definition: definition,
-            fallback: default,
-            tick: tick
+    private static RgbaColor ResolveColor(BindableColor color, ThemeReads mirror) {
+        var resolved = mirror.Color(
+            color: color,
+            fallback: default
         );
 
         return new RgbaColor(
@@ -64,157 +105,128 @@ public sealed class WorldThemeResolve {
             R: resolved.X
         );
     }
-    private static OverlayThemeValues.ColorSet ResolveColor(WorldThemeColor color, WorldDefinition definition, ulong tick) => new(
+    private static OverlayThemeValues.ColorSet ResolveColor(WorldThemeColor color, ThemeReads mirror) => new(
         Accent: ResolveColor(
             color: color.Accent,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         AccentInk: ResolveColor(
             color: color.AccentInk,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         AccentLine: ResolveColor(
             color: color.AccentLine,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         AccentQuiet: ResolveColor(
             color: color.AccentQuiet,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BadgeDark: ResolveColor(
             color: color.BadgeDark,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BadgeLight: ResolveColor(
             color: color.BadgeLight,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         Danger: ResolveColor(
             color: color.Danger,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         LineHair: ResolveColor(
             color: color.LineHair,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         LineInset: ResolveColor(
             color: color.LineInset,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         LineSoft: ResolveColor(
             color: color.LineSoft,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         LineStrong: ResolveColor(
             color: color.LineStrong,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         Phosphor: ResolveColor(
             color: color.Phosphor,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         PhosphorCyan: ResolveColor(
             color: color.PhosphorCyan,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         PhosphorDim: ResolveColor(
             color: color.PhosphorDim,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         Positive: ResolveColor(
             color: color.Positive,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         ScrimChip: ResolveScrim(
             scrim: color.ScrimChip,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         ScrimPanel: ResolveScrim(
             scrim: color.ScrimPanel,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         ScrimStrip: ResolveScrim(
             scrim: color.ScrimStrip,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         SurfaceBase: ResolveColor(
             color: color.SurfaceBase,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         SurfaceInset: ResolveColor(
             color: color.SurfaceInset,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         SurfacePanel: ResolveColor(
             color: color.SurfacePanel,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         SurfaceRaised: ResolveColor(
             color: color.SurfaceRaised,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         TextDim: ResolveColor(
             color: color.TextDim,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         TextMute: ResolveColor(
             color: color.TextMute,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         TextPrimary: ResolveColor(
             color: color.TextPrimary,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         Warning: ResolveColor(
             color: color.Warning,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         )
     );
-    private static OverlayThemeValues ResolveCore(WorldDefinition definition, ulong tick) {
+    private static OverlayThemeValues ResolveCore(WorldDefinition definition, ThemeReads mirror) {
         var theme = definition.Theme;
 
         return new OverlayThemeValues(
             Chrome: ResolveChrome(chrome: theme.Chrome),
             Color: ResolveColor(
                 color: theme.Color,
-                definition: definition,
-                tick: tick
+                mirror: mirror
             ),
             Diegetic: ResolveDiegetic(
                 diegetic: theme.Diegetic,
-                definition: definition,
-                tick: tick
+                mirror: mirror
             ),
             Elevation: ResolveElevation(
                 elevation: theme.Elevation,
-                definition: definition,
-                tick: tick
+                mirror: mirror
             ),
             Icon: ResolveIcon(icon: theme.Icon),
             Motion: ResolveMotion(motion: theme.Motion),
@@ -223,26 +235,22 @@ public sealed class WorldThemeResolve {
             Type: ResolveType(type: theme.Type)
         );
     }
-    private static OverlayThemeValues.DiegeticSet ResolveDiegetic(WorldThemeDiegetic diegetic, WorldDefinition definition, ulong tick) => new(
+    private static OverlayThemeValues.DiegeticSet ResolveDiegetic(WorldThemeDiegetic diegetic, ThemeReads mirror) => new(
         BezelEdge: ResolveColor(
             color: diegetic.BezelEdge,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BezelInner: ResolveColor(
             color: diegetic.BezelInner,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BezelOuter: ResolveColor(
             color: diegetic.BezelOuter,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         EmbossFill: ResolveColor(
             color: diegetic.EmbossFill,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         EmbossShadowDropAlpha: diegetic.EmbossShadowDropAlpha,
         EmbossShadowDropBlur: diegetic.EmbossShadowDropBlur,
@@ -251,8 +259,7 @@ public sealed class WorldThemeResolve {
         EmbossShadowLitOffsetY: diegetic.EmbossShadowLitOffsetY,
         EngraveFill: ResolveColor(
             color: diegetic.EngraveFill,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         EngraveShadowLipAlpha: diegetic.EngraveShadowLipAlpha,
         EngraveShadowLipOffsetY: diegetic.EngraveShadowLipOffsetY,
@@ -262,95 +269,78 @@ public sealed class WorldThemeResolve {
         PhosphorGlowBlur: diegetic.PhosphorGlowBlur,
         PlateBottom: ResolveColor(
             color: diegetic.PlateBottom,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         PlateMid: ResolveColor(
             color: diegetic.PlateMid,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         PlateStripeColor: ResolveColor(
             color: diegetic.PlateStripeColor,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         PlateTop: ResolveColor(
             color: diegetic.PlateTop,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         ScreenWellInner: ResolveColor(
             color: diegetic.ScreenWellInner,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         ScreenWellOuter: ResolveColor(
             color: diegetic.ScreenWellOuter,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         )
     );
-    private static OverlayThemeValues.ElevationSet ResolveElevation(WorldThemeElevation elevation, WorldDefinition definition, ulong tick) => new(
+    private static OverlayThemeValues.ElevationSet ResolveElevation(WorldThemeElevation elevation, ThemeReads mirror) => new(
         BloomAccent: ResolveBloomHue(
             hue: elevation.BloomAccent,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomDanger: ResolveBloomHue(
             hue: elevation.BloomDanger,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomHaloAlpha: ResolveScalar(
             scalar: elevation.BloomHaloAlpha,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomHaloBlur: elevation.BloomHaloBlur,
         BloomHaloSpread: elevation.BloomHaloSpread,
         BloomHeldInsetAlpha: ResolveScalar(
             scalar: elevation.BloomHeldInsetAlpha,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomHeldInsetBlur: elevation.BloomHeldInsetBlur,
         BloomHeldInsetSpread: elevation.BloomHeldInsetSpread,
         BloomNeutral: ResolveBloomHue(
             hue: elevation.BloomNeutral,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomNeutralHaloAlpha: ResolveScalar(
             scalar: elevation.BloomNeutralHaloAlpha,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomNeutralRingAlpha: ResolveScalar(
             scalar: elevation.BloomNeutralRingAlpha,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomPositive: ResolveBloomHue(
             hue: elevation.BloomPositive,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomRingAlpha: ResolveScalar(
             scalar: elevation.BloomRingAlpha,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         BloomRingWidth: elevation.BloomRingWidth,
         BloomWarning: ResolveBloomHue(
             hue: elevation.BloomWarning,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         CatchlightColor: ResolveColor(
             color: elevation.CatchlightColor,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         CatchlightOffsetY: elevation.CatchlightOffsetY,
         ChipRestOpacity: elevation.ChipRestOpacity,
@@ -358,15 +348,13 @@ public sealed class WorldThemeResolve {
         PressHeldGlowBlur: elevation.PressHeldGlowBlur,
         PressHeldGlowColor: ResolveColor(
             color: elevation.PressHeldGlowColor,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         PressHeldGlowSpread: elevation.PressHeldGlowSpread,
         PressHeldShadowBlur: elevation.PressHeldShadowBlur,
         PressHeldShadowColor: ResolveColor(
             color: elevation.PressHeldShadowColor,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         PressHeldShadowOffsetY: elevation.PressHeldShadowOffsetY,
         PressHeldTranslateY: elevation.PressHeldTranslateY,
@@ -375,15 +363,13 @@ public sealed class WorldThemeResolve {
         ShadowSeatBlur: elevation.ShadowSeatBlur,
         ShadowSeatColor: ResolveColor(
             color: elevation.ShadowSeatColor,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         ShadowSeatOffsetY: elevation.ShadowSeatOffsetY,
         ShadowSeatSpread: elevation.ShadowSeatSpread,
         ShadowSeatStripColor: ResolveColor(
             color: elevation.ShadowSeatStripColor,
-            definition: definition,
-            tick: tick
+            mirror: mirror
         ),
         ShadowSeatStripSpread: elevation.ShadowSeatStripSpread
     );
@@ -401,16 +387,14 @@ public sealed class WorldThemeResolve {
         Radius2: radius.Radius2,
         Radius3: radius.Radius3
     );
-    private static float ResolveScalar(BindableScalar scalar, WorldDefinition definition, ulong tick) => scalar.Resolve(
-        definition: definition,
+    private static float ResolveScalar(BindableScalar scalar, ThemeReads mirror) => mirror.Scalar(
         fallback: 0f,
-        tick: tick
+        scalar: scalar
     );
-    private static OverlayThemeValues.Scrim ResolveScrim(WorldThemeScrim scrim, WorldDefinition definition, ulong tick) {
-        var alpha = scrim.Alpha.Resolve(
-            definition: definition,
+    private static OverlayThemeValues.Scrim ResolveScrim(WorldThemeScrim scrim, ThemeReads mirror) {
+        var alpha = mirror.Scalar(
             fallback: 0f,
-            tick: tick
+            scalar: scrim.Alpha
         );
 
         return new OverlayThemeValues.Scrim(
@@ -420,8 +404,7 @@ public sealed class WorldThemeResolve {
             ),
             Color: ResolveColor(
                 color: scrim.Color,
-                definition: definition,
-                tick: tick
+                mirror: mirror
             )
         );
     }
@@ -467,20 +450,54 @@ public sealed class WorldThemeResolve {
         TitleWeight: type.TitleWeight
     );
 
-    /// <summary>Resolves (or returns the cached resolve of) the theme for a definition revision.</summary>
+    /// <summary>Gets how many times this resolver has resolved the theme rather than answering from its cache.</summary>
+    public int Resolutions => m_resolutions;
+
+    /// <summary>Resolves (or returns the cached resolve of) the theme for a definition revision and the state mirror
+    /// slots its bound tokens read: a slot bound only by another consumer never re-resolves it.</summary>
     /// <param name="definition">The live document.</param>
     /// <param name="revision">The definition's current revision.</param>
-    /// <param name="tick">The tick a bound cell's value is read as of.</param>
+    /// <param name="mirror">The state mirror a bound token reads through.</param>
     /// <returns>The resolved theme.</returns>
-    public OverlayThemeValues Resolve(WorldDefinition definition, int revision, ulong tick) {
-        if (revision != m_revision) {
+    public OverlayThemeValues Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        if (
+            (revision != m_revision) ||
+            !ReferenceEquals(
+            objA: m_reads?.Mirror,
+            objB: mirror
+        ) ||
+            BoundSlotMoved()
+        ) {
+            if (!ReferenceEquals(
+                objA: m_reads?.Mirror,
+                objB: mirror
+            )) {
+                m_reads = new ThemeReads(mirror: mirror);
+            }
+
+            m_reads!.Bound.Clear();
             m_revision = revision;
             m_resolved = ResolveCore(
                 definition: definition,
-                tick: tick
+                mirror: m_reads
             );
+            m_resolvedAt = mirror.Revision;
+            m_resolutions++;
         }
 
         return m_resolved;
+    }
+
+    private bool BoundSlotMoved() {
+        foreach (var slot in m_reads!.Bound) {
+            if (m_reads.Mirror.Changed(slot: slot) > m_resolvedAt) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -1,6 +1,8 @@
+using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -91,7 +93,12 @@ public sealed record ShaderPipelineDimensions(
         ));
     }
 }
-/// <summary>A named resource reference in a pass or pipeline output.</summary>
+/// <summary>A pass's reference to one resource version: which version it reads or writes, which frame's instance, and
+/// its descriptor binding.</summary>
+/// <param name="Name">The version name.</param>
+/// <param name="PreviousFrame">Reads the contents the previous frame left rather than this frame's. Only a pass input
+/// sets it, and only for a version declared <see cref="ShaderPipelineResource.History"/>.</param>
+/// <param name="Binding">The descriptor binding, or <see langword="null"/> for the planner to assign one.</param>
 public sealed record ResourceReference(
     string Name,
     bool PreviousFrame = false,
@@ -100,61 +107,146 @@ public sealed record ResourceReference(
     /// <summary>Converts the convenient document spelling <c>"name"</c> to a current-frame reference.</summary>
     public static implicit operator ResourceReference(string name) => new(Name: name);
 }
-/// <summary>One resource declaration in a <see cref="ShaderPipelineDefinition"/>.</summary>
-/// <param name="Name">The unique resource name.</param>
+/// <summary>One resource version declared by a <see cref="ShaderPipelineDefinition"/>. Each version has exactly one
+/// writer. A version that names <see cref="From"/> forwards that predecessor: its writer continues the predecessor's
+/// storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.</summary>
+/// <param name="Name">The unique version name.</param>
 /// <param name="Kind">Image, buffer, or depth resource.</param>
 /// <param name="Format">The backend-neutral format spelling. Required for images and depth resources.</param>
 /// <param name="Dimensions">Image dimensions; omitted for buffers.</param>
-/// <param name="Persistent">Keeps the resource across frames.</param>
-/// <param name="History">Allows explicit <see cref="ResourceReference.PreviousFrame"/> reads.</param>
-/// <param name="Initialization">How the first frame obtains valid contents.</param>
-/// <param name="SizeBytes">Buffer capacity, or <see langword="null"/> for images.</param>
-/// <param name="ElementType">Optional typed element type for an external or structured buffer.</param>
-/// <param name="StrideBytes">Optional byte stride for a structured buffer.</param>
+/// <param name="History">Retains this version's contents into the next frame, where a pass input reads them with
+/// <see cref="ResourceReference.PreviousFrame"/>. Only the last version of a forwarding chain can be history, because a
+/// forward would overwrite what is retained.</param>
+/// <param name="Initialization">How the first frame obtains valid contents. Only a version that forwards nothing
+/// declares it; a forwarded version's contents come from its predecessor.</param>
+/// <param name="SizeBytes">Buffer capacity in bytes, a multiple of four, or <see langword="null"/> for images. A buffer
+/// is a raw buffer of 32-bit words, read and written by byte address.</param>
+/// <param name="From">The predecessor version this one forwards, or <see langword="null"/> for a version whose writer
+/// starts from discarded contents. A predecessor has at most one successor, and its kind, format, extent and sample
+/// count equal this version's.</param>
+/// <param name="Samples">The sample count of an image. Only single-sampled images are executable, so any other count is
+/// refused by name.</param>
 public sealed record ShaderPipelineResource(
     string Name,
     ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image,
     string? Format = null,
     ShaderPipelineDimensions? Dimensions = null,
-    bool Persistent = false,
     bool History = false,
     ShaderPipelineInitialization Initialization = ShaderPipelineInitialization.Undefined,
     ulong? SizeBytes = null,
-    ShaderValueType? ElementType = null,
-    uint? StrideBytes = null
+    string? From = null,
+    uint Samples = 1
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]
     public bool IsExternal => (Initialization == ShaderPipelineInitialization.External);
 }
-/// <summary>An authored output name and the resource it exposes.</summary>
-public sealed record ShaderPipelineOutput(
-    string Name,
-    ResourceReference Resource
+/// <summary>One attribute of a geometry pass's vertices. The vertex stage reads attribute <c>n</c> as the
+/// <c>POSITION{n}</c> semantic, the <c>n</c>th input it declares.</summary>
+/// <param name="Location">The attribute's input location, equal to its position in the attribute list.</param>
+/// <param name="Format">The attribute's format, spelled as a <see cref="GpuVertexFormat"/> name.</param>
+/// <param name="OffsetBytes">The attribute's byte offset within one vertex, a multiple of four.</param>
+public sealed record ShaderPipelineVertexAttribute(
+    uint Location,
+    string Format,
+    uint OffsetBytes = 0
+);
+/// <summary>The indexed triangle list a geometry pass draws, with the layout its vertex stage reads. The vertices are
+/// 32-bit floats, each vertex <see cref="StrideBytes"/> long; every three indices name one triangle, drawn in index
+/// order.</summary>
+/// <param name="VertexEntryPoint">The vertex stage's entry point in the pass's source, which also holds the fragment
+/// stage's <see cref="ShaderPipelinePass.EntryPoint"/>. The vertex stage receives no parameters: the pass's parameter
+/// block reaches only the fragment stage.</param>
+/// <param name="StrideBytes">The bytes of one vertex, a positive multiple of four.</param>
+/// <param name="Attributes">The vertex attributes, one per location from zero.</param>
+/// <param name="Vertices">The vertex data as 32-bit floats, a whole number of vertices.</param>
+/// <param name="Indices">The triangle list's indices, three per triangle, each naming a declared vertex.</param>
+/// <param name="IndexFormat">The width of each index; a 16-bit index is at most 65535.</param>
+public sealed record ShaderPipelineGeometry(
+    string VertexEntryPoint,
+    uint StrideBytes,
+    IReadOnlyList<ShaderPipelineVertexAttribute> Attributes,
+    IReadOnlyList<float> Vertices,
+    IReadOnlyList<uint> Indices,
+    ShaderPipelineIndexFormat IndexFormat = ShaderPipelineIndexFormat.UInt16
 ) {
-    /// <summary>Converts <c>"name"</c> to an output with the same public and resource name.</summary>
-    public static implicit operator ShaderPipelineOutput(string name) =>
-        new(
-            Name: name,
-            Resource: new ResourceReference(Name: name)
-        );
+    /// <summary>Gets the bytes of one index.</summary>
+    [JsonIgnore]
+    public uint IndexBytes => ((IndexFormat == ShaderPipelineIndexFormat.UInt32)
+        ? 4U
+        : 2U);
+    /// <summary>Gets the number of whole vertices the data holds.</summary>
+    [JsonIgnore]
+    public uint VertexCount => ((StrideBytes == 0)
+        ? 0U
+        : ((uint)((((ulong)Vertices.Count) * 4UL) / StrideBytes)));
+    /// <summary>Gets the bytes of the vertex data, which a geometry buffer holds ahead of the indices.</summary>
+    [JsonIgnore]
+    public ulong VertexBytes => (((ulong)Vertices.Count) * 4UL);
+    /// <summary>Gets the bytes of the geometry buffer: the vertex data, then the indices.</summary>
+    [JsonIgnore]
+    public ulong SizeBytes => (VertexBytes + (((ulong)Indices.Count) * IndexBytes));
+
+    /// <summary>Returns the bytes a geometry buffer holds: the vertices as little-endian 32-bit floats, then the
+    /// indices at their declared width, in declared order, starting at <see cref="VertexBytes"/>.</summary>
+    /// <returns>The <see cref="SizeBytes"/> bytes.</returns>
+    public byte[] BufferData() {
+        var data = new byte[SizeBytes];
+        var span = data.AsSpan();
+
+        for (var index = 0; (index < Vertices.Count); index++) {
+            BinaryPrimitives.WriteSingleLittleEndian(
+                destination: span[(index * 4)..],
+                value: Vertices[index]
+            );
+        }
+
+        var indices = span[((int)VertexBytes)..];
+
+        for (var position = 0; (position < Indices.Count); position++) {
+            if (IndexFormat == ShaderPipelineIndexFormat.UInt16) {
+                BinaryPrimitives.WriteUInt16LittleEndian(
+                    destination: indices[(position * 2)..],
+                    value: checked((ushort)Indices[position])
+                );
+            } else {
+                BinaryPrimitives.WriteUInt32LittleEndian(
+                    destination: indices[(position * 4)..],
+                    value: Indices[position]
+                );
+            }
+        }
+
+        return data;
+    }
 }
 /// <summary>One executable pass in a shader pipeline.</summary>
 /// <param name="Name">The unique pass name.</param>
-/// <param name="Source">The shader source or a source/bytecode asset identifier.</param>
-/// <param name="Language">The source language, using <see cref="ShaderSourceLanguage"/>.</param>
-/// <param name="EntryPoint">The entry point compiled by the shader compiler.</param>
-/// <param name="Kind">Compute or fullscreen graphics.</param>
+/// <param name="Source">The HLSL source's path, relative to the pipeline document.</param>
+/// <param name="EntryPoint">The entry point compiled by the shader compiler: a compute pass's kernel, or a graphics
+/// pass's fragment stage.</param>
+/// <param name="Kind">Compute, fullscreen graphics, or indexed geometry.</param>
 /// <param name="Inputs">Named resource bindings. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
-/// <param name="Outputs">One or more resource names; multiple names support MRT.</param>
+/// <param name="Outputs">The versions the pass writes. A graphics pass writes one color image and, for a geometry pass,
+/// at most one depth version.</param>
 /// <param name="Config">Optional config fields, using the shared shader-set config vocabulary.</param>
-/// <param name="GroupSizeX">Compute workgroup width; ignored for fullscreen passes.</param>
-/// <param name="GroupSizeY">Compute workgroup height; ignored for fullscreen passes.</param>
-/// <param name="GroupSizeZ">Compute workgroup depth; ignored for fullscreen passes.</param>
+/// <param name="GroupSizeX">Compute workgroup width; ignored for graphics passes.</param>
+/// <param name="GroupSizeY">Compute workgroup height; ignored for graphics passes.</param>
+/// <param name="GroupSizeZ">Compute workgroup depth; ignored for graphics passes.</param>
+/// <param name="Vertex">How a fullscreen pass's vertex stage obtains the triangle's corners;
+/// <see langword="null"/> means <see cref="ShaderPipelineVertexInput.VertexId"/>. Only a fullscreen pass declares
+/// it.</param>
+/// <param name="Geometry">A geometry pass's vertices, indices and vertex layout. Only a geometry pass declares it, and
+/// it must.</param>
+/// <param name="DepthCompare">A geometry pass's depth test, which it declares exactly when it writes a depth version;
+/// <see langword="null"/> there means <see cref="ShaderPipelineDepthCompare.Less"/>. A passing fragment writes its
+/// depth.</param>
+/// <param name="Blend">A graphics pass's blend policy; <see langword="null"/> means
+/// <see cref="ShaderPipelineBlend.Opaque"/>, the only policy the planner admits.</param>
+/// <param name="AlphaTest">An alpha-test cutoff. The planner refuses every value by name.</param>
 public sealed record ShaderPipelinePass(
     string Name,
     string Source,
-    ShaderSourceLanguage Language,
     string EntryPoint,
     ShaderPipelinePassKind Kind,
     IReadOnlyList<ResourceReference>? Inputs = null,
@@ -162,8 +254,16 @@ public sealed record ShaderPipelinePass(
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
     uint GroupSizeX = 8,
     uint GroupSizeY = 8,
-    uint GroupSizeZ = 1
+    uint GroupSizeZ = 1,
+    ShaderPipelineVertexInput? Vertex = null,
+    ShaderPipelineGeometry? Geometry = null,
+    ShaderPipelineDepthCompare? DepthCompare = null,
+    ShaderPipelineBlend? Blend = null,
+    double? AlphaTest = null
 ) {
+    /// <summary>Gets whether the pass draws through a render pass rather than dispatching.</summary>
+    [JsonIgnore]
+    public bool IsGraphics => (Kind is ShaderPipelinePassKind.Fullscreen or ShaderPipelinePassKind.Geometry);
     /// <summary>Gets an immutable empty input list when no resources are read.</summary>
     [JsonIgnore]
     public IReadOnlyList<ResourceReference> InputReferences => (Inputs ?? Array.Empty<ResourceReference>());
@@ -178,15 +278,20 @@ public sealed record ShaderPipelineDefinition(
     string Name,
     IReadOnlyList<ShaderPipelineResource> Resources,
     IReadOnlyList<ShaderPipelinePass> Passes,
-    IReadOnlyList<ShaderPipelineOutput> Outputs,
+    IReadOnlyList<string> Outputs,
     IReadOnlyDictionary<string, ShaderConfigField>? Config = null
 ) {
     /// <summary>Initializes a pipeline using <see cref="ShaderPipelineSchemas.Pipeline"/>.</summary>
+    /// <param name="name">The pipeline name.</param>
+    /// <param name="resources">The resource versions.</param>
+    /// <param name="passes">The passes, in any order; the planner orders them.</param>
+    /// <param name="outputs">The public versions, each named by its version name; the first is published by
+    /// default.</param>
     public ShaderPipelineDefinition(
         string name,
         IReadOnlyList<ShaderPipelineResource> resources,
         IReadOnlyList<ShaderPipelinePass> passes,
-        IReadOnlyList<ShaderPipelineOutput> outputs
+        IReadOnlyList<string> outputs
     ) : this(
         Schema: ShaderPipelineSchemas.Pipeline,
         Name: name,
@@ -202,8 +307,10 @@ public sealed record ShaderPipelineDefinition(
     /// <summary>Creates the minimal single-pass definition for a file-backed shader source.</summary>
     /// <param name="name">The pipeline name.</param>
     /// <param name="sourcePath">The shader source path.</param>
-    /// <param name="kind">The pass kind; when omitted, the source extension infers compute for .hlsl/.comp/.glsl and fullscreen for .frag.</param>
+    /// <param name="kind">The pass kind; when omitted, the pass is a compute pass.</param>
     /// <param name="entryPoint">The compiler entry point.</param>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="sourcePath"/> is empty, or the source
+    /// is not an <c>.hlsl</c> file.</exception>
     public static ShaderPipelineDefinition FromShaderSource(
         string name,
         string sourcePath,
@@ -212,27 +319,16 @@ public sealed record ShaderPipelineDefinition(
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
-        var extension = Path.GetExtension(path: sourcePath).ToLowerInvariant();
+        var extension = Path.GetExtension(path: sourcePath);
 
-        var (language, inferredKind) = extension switch {
-            ".hlsl" => (ShaderSourceLanguage.Hlsl, ShaderPipelinePassKind.Compute),
-            ".comp" => (ShaderSourceLanguage.Glsl, ShaderPipelinePassKind.Compute),
-            ".glsl" => (ShaderSourceLanguage.ShadertoyGlsl, ShaderPipelinePassKind.Compute),
-            ".frag" => (ShaderSourceLanguage.Glsl, ShaderPipelinePassKind.Fullscreen),
-            ".vert" => throw new ArgumentException(
-            message: "A vertex-only source cannot form the one-off pipeline; use a JSON pipeline with a fullscreen pass.",
-            paramName: nameof(sourcePath)
-        ),
-            _ => throw new ArgumentException(
-            message: $"Shader source extension '{extension}' is unsupported; use .hlsl, .comp, .frag, or .glsl.",
-            paramName: nameof(sourcePath)
-        ),
-        };
-        if (
-            (language == ShaderSourceLanguage.ShadertoyGlsl) &&
-            (entryPoint == "main")
-        ) {
-            entryPoint = "mainImage";
+        if (!extension.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: ".hlsl"
+        )) {
+            throw new ArgumentException(
+                message: $"Shader source extension '{extension}' is unsupported; a one-off shader is an .hlsl file.",
+                paramName: nameof(sourcePath)
+            );
         }
         var output = new ShaderPipelineResource(
             Name: "output",
@@ -243,31 +339,33 @@ public sealed record ShaderPipelineDefinition(
         var pass = new ShaderPipelinePass(
             Name: name,
             Source: Path.GetFullPath(path: sourcePath),
-            Language: language,
             EntryPoint: entryPoint,
-            Kind: (kind ?? inferredKind),
+            Kind: (kind ?? ShaderPipelinePassKind.Compute),
             Outputs: [new ResourceReference(Name: output.Name)]
         );
 
         return new ShaderPipelineDefinition(
             name: name,
-            outputs: [((ShaderPipelineOutput)"output")],
+            outputs: [output.Name],
             passes: [pass],
             resources: [output]
         );
     }
 }
-/// <summary>Limits applied while compiling an execution plan.</summary>
+/// <summary>Limits applied while compiling an execution plan. <c>MaxFrameBlockBytes</c> bounds a pass's frame block,
+/// frame members and config together: 128 bytes is the push-constant size every Vulkan device guarantees.</summary>
 public sealed record ShaderPipelineLimits(
     int MaxResources = 128,
     int MaxPasses = 128,
     int MaxInputsPerPass = 32,
     int MaxOutputsPerPass = 8,
-    uint MaxConfigConstantBytes = 16,
+    uint MaxFrameBlockBytes = 128,
     uint MaxComputeWorkGroupSizeX = 128,
     uint MaxComputeWorkGroupSizeY = 128,
     uint MaxComputeWorkGroupSizeZ = 64,
-    uint MaxComputeWorkGroupInvocations = 128
+    uint MaxComputeWorkGroupInvocations = 128,
+    int MaxVertexAttributes = 8,
+    ulong MaxGeometryBytes = (1UL << 20)
 );
 /// <summary>A planner diagnostic with an actionable code and optional pass/resource name.</summary>
 public sealed record ShaderPipelineDiagnostic(
@@ -293,8 +391,9 @@ public sealed class ShaderPipelineCompilationException : Exception {
 [JsonSerializable(typeof(ShaderPipelineDefinition))]
 [JsonSerializable(typeof(ShaderPipelineResource))]
 [JsonSerializable(typeof(ShaderPipelinePass))]
-[JsonSerializable(typeof(ShaderPipelineOutput))]
 [JsonSerializable(typeof(ResourceReference))]
+[JsonSerializable(typeof(ShaderPipelineGeometry))]
+[JsonSerializable(typeof(ShaderPipelineVertexAttribute))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 public partial class ShaderPipelineJsonContext : JsonSerializerContext {
 }

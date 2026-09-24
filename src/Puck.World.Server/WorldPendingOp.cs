@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -27,11 +28,11 @@ public abstract record WorldPendingOp {
     /// <param name="CorrelationId">The submitting envelope's correlation id.</param>
     /// <param name="ExpectedContentHash">The candidate's CAS content hash, when the submitter pinned one.</param>
     /// <param name="PreparationFailure">The refusal the synchronous preparation already decided, when it failed.</param>
-    public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : WorldPendingOp;
+    public sealed record Rebuild(WorldRebuildRequest Request, Principal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : WorldPendingOp;
     /// <summary>One buffered journal undo.</summary>
     /// <param name="Count">How many journal entries to drop from the tail.</param>
     /// <param name="Principal">The acting principal.</param>
     /// <param name="ConnectionId">The submitting envelope's connection id.</param>
     /// <param name="CorrelationId">The submitting envelope's correlation id.</param>
-    public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : WorldPendingOp;
+    public sealed record Undo(int Count, Principal Principal, int ConnectionId, long CorrelationId) : WorldPendingOp;
 }

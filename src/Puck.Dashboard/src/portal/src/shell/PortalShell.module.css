@@ -1,0 +1,26 @@
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  color: var(--mantine-color-text);
+  text-decoration: none;
+  border-radius: var(--mantine-radius-md);
+}
+
+.mark {
+  display: block;
+  filter: drop-shadow(0 1px 4px light-dark(rgb(173 58 83 / 0.25), rgb(242 135 154 / 0.3)));
+}
+
+.wordmark {
+  font-family: var(--font-body);
+  font-size: rem(20px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.divider {
+  height: rem(20px);
+  align-self: center;
+  border-color: var(--puck-line);
+}

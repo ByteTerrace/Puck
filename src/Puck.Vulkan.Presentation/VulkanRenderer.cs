@@ -34,7 +34,7 @@ public sealed class VulkanRenderer(
     IVulkanFramePresenter framePresenter,
     IVulkanCommandBufferRecorder commandBufferRecorder,
     IVulkanPhysicalDeviceApi physicalDeviceApi
-) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext {
+) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext, IGpuPipelineCache {
     /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
     /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
     /// (its own image-available semaphore and in-flight fence; the per-image render-finished semaphores ride
@@ -42,13 +42,6 @@ public sealed class VulkanRenderer(
     /// the node-side <c>SdfWorldEngine.FrameRingSize</c> — the engine ring guards resource reuse, this ring
     /// bounds host latency.</summary>
     private const int PresentFrameRingSize = 2;
-
-    // Vulkan validation is a developer diagnostic, opt-in via PUCK_VULKAN_DEBUG (the peer of PUCK_D3D12_DEBUG on the
-    // Direct3D 12 backend). Default OFF: the validation layer and its debug-utils messenger add per-call CPU overhead
-    // and never fire in a normal run. Set PUCK_VULKAN_DEBUG=1 to load the layer and surface validation messages to the
-    // console. The debug-utils EXTENSION (and the command-buffer labels it carries) is enabled independently of this —
-    // see VulkanInstanceFactory — so GPU-capture debug groups survive a validation-off run.
-    private static readonly bool ValidationEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_VULKAN_DEBUG") is not null);
 
     private long? m_adapterLuid;
     private VulkanLogicalDevice? m_device;
@@ -59,7 +52,6 @@ public sealed class VulkanRenderer(
     private bool m_needsRecreate;
     private VkPhysicalDevice m_physicalDevice;
     private VulkanRenderPass? m_renderPass;
-    private ulong m_skippedPresentCount;
     private VulkanSurface? m_surface;
     private VulkanSwapchain? m_swapchain;
     private uint m_width;
@@ -81,12 +73,16 @@ public sealed class VulkanRenderer(
     // or on a driver without the device-ID query (cross-API sharing then unavailable); cached after the first read.
     long IGpuDeviceContext.AdapterLuid => (((m_instance is not null) && (0 != m_physicalDevice.Handle))
         ? (m_adapterLuid ??= physicalDeviceApi.GetDeviceLuid(
-            instanceHandle: m_instance.Handle,
+            instance: m_instance.Commands,
             physicalDeviceHandle: m_physicalDevice.Handle
         ))
         : 0L
     );
-    nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Handle;
+    nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Commands.Token;
+    // Read from the physical device when the logical device is created; null without a device.
+    GpuDeviceIdentity? IGpuDeviceContext.Identity => m_device?.Identity;
+    // Read with the identity; the default profile, which reports nothing, without a device.
+    GpuMemoryProfile IGpuDeviceContext.MemoryProfile => (m_device?.MemoryProfile ?? default);
 
     /// <summary>The logical device, valid after <see cref="Initialize"/>.</summary>
     public VulkanLogicalDevice Device => (m_device ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
@@ -99,9 +95,11 @@ public sealed class VulkanRenderer(
     /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
-    /// <summary>The running total of <see cref="VulkanFramePresentationResult.Skipped"/> outcomes since this renderer
-    /// was created — the backing read for <see cref="IPresentationSkipFeedback.SkippedPresentCount"/>.</summary>
-    public ulong SkippedPresentCount => m_skippedPresentCount;
+
+    /// <summary>The renderer's presentation counters, the <c>presentation.vulkan</c> work source: each
+    /// <see cref="VulkanFramePresentationResult.Skipped"/> outcome counts one <c>presentation.skipped</c>.</summary>
+    public PresentationWork Presentation { get; } = new(name: "presentation.vulkan");
+
     /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>
     public VulkanSurface Surface => (m_surface ?? throw new InvalidOperationException(message: "The renderer must be initialized before its surface is used."));
     /// <summary>The current swapchain; valid after the first <see cref="BeginFrame"/> and replaced on
@@ -109,7 +107,49 @@ public sealed class VulkanRenderer(
     public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
 
     void IGpuDeviceContext.WaitIdle() => WaitForGpuIdle();
+    // The current device's cache; a device recreated after a loss brings its own, loaded from the same file.
+    void IGpuPipelineCache.Persist() => m_device?.PipelineCache?.Persist();
 
+    // Builds the boot chain into the renderer's fields: instance, window surface, physical-device selection, and the
+    // logical device (which reads the device's identity). Whatever fails, and whatever it throws, tears down every
+    // link it built before rethrowing, so the renderer is left with no chain and the next attempt starts clean.
+    private void CreateDeviceChain(NativeSurfaceBinding binding) {
+        try {
+            m_instance = instanceFactory.Create(
+                applicationName: options.ApplicationName,
+                displayKind: binding.DisplayKind,
+                enableValidation: options.EnableValidation
+            );
+            m_surface = surfaceFactory.Create(
+                binding: binding,
+                instance: m_instance.Commands
+            );
+            m_physicalDevice = physicalDeviceSelector.Select(
+                instance: m_instance,
+                surface: m_surface
+            );
+            m_device = logicalDeviceFactory.Create(
+                instance: m_instance,
+                physicalDevice: m_physicalDevice
+            );
+        } catch {
+            DisposeDeviceChain();
+
+            throw;
+        }
+    }
+    // Destroys the logical device, the surface and the instance, children first, and forgets the physical device and
+    // its cached LUID: a rebuilt chain may select another adapter. The one teardown of the boot chain.
+    private void DisposeDeviceChain() {
+        m_device?.Dispose();
+        m_device = null;
+        m_surface?.Dispose();
+        m_surface = null;
+        m_instance?.Dispose();
+        m_instance = null;
+        m_physicalDevice = default;
+        m_adapterLuid = null;
+    }
     private void DisposePresentationResources() {
         TryWaitIdle();
 
@@ -249,12 +289,7 @@ public sealed class VulkanRenderer(
     }
     public void Dispose() {
         DisposePresentationResources();
-        m_device?.Dispose();
-        m_device = null;
-        m_surface?.Dispose();
-        m_surface = null;
-        m_instance?.Dispose();
-        m_instance = null;
+        DisposeDeviceChain();
     }
     /// <summary>Boots the Vulkan instance, surface, and device for a native surface binding at the given
     /// initial size. Presentation resources are created lazily on the first <see cref="BeginFrame"/>.</summary>
@@ -280,40 +315,14 @@ public sealed class VulkanRenderer(
             m_surface?.Dispose();
             m_surface = surfaceFactory.Create(
                 binding: binding,
-                instanceHandle: m_instance.Handle
+                instance: m_instance.Commands
             );
             m_needsRecreate = true;
 
             return;
         }
 
-        try {
-            m_instance = instanceFactory.Create(
-                applicationName: options.ApplicationName,
-                displayKind: binding.DisplayKind,
-                enableValidation: ValidationEnabled
-            );
-            m_surface = surfaceFactory.Create(
-                binding: binding,
-                instanceHandle: m_instance.Handle
-            );
-            m_physicalDevice = physicalDeviceSelector.Select(
-                instance: m_instance,
-                surface: m_surface
-            );
-            m_device = logicalDeviceFactory.Create(
-                instance: m_instance,
-                physicalDevice: m_physicalDevice
-            );
-        } catch {
-            m_device?.Dispose();
-            m_device = null;
-            m_surface?.Dispose();
-            m_surface = null;
-            m_instance?.Dispose();
-            m_instance = null;
-            throw;
-        }
+        CreateDeviceChain(binding: binding);
     }
     /// <summary>Records and presents one frame from caller-supplied draw commands and the pipelines they
     /// reference. A no-op until the first successful <see cref="BeginFrame"/>.</summary>
@@ -359,13 +368,11 @@ public sealed class VulkanRenderer(
             // produced but consumed nowhere before; it is now the device-loss recovery trigger).
             throw new DeviceLostException(message: "Vulkan present reported a lost device or surface.");
         } else if (outcome.Result == VulkanFramePresentationResult.Skipped) {
-            // The fence/acquire was not ready this tick — no GPU work submitted. Tallied for the host's [frame-timing]
-            // digest (IPresentationSkipFeedback); not itself an error, so nothing else reacts to it. Under the frame
-            // ring this path is LIVE whenever the swapchain is backpressured (no image acquirable at timeout 0) — the
-            // produced frame's compute still ran; only its blit is dropped.
-            unchecked {
-                m_skippedPresentCount++;
-            }
+            // The fence/acquire was not ready this tick — no GPU work submitted. Counted as presentation.skipped, which
+            // world.counters reads; not itself an error, so nothing else reacts to it. Under the frame ring this path
+            // is LIVE whenever the swapchain is backpressured (no image acquirable at timeout 0) — the produced frame's
+            // compute still ran; only its blit is dropped.
+            Presentation.RecordSkip();
         }
     }
     /// <summary>Recreates the lost chain IN PLACE — keeping this renderer's object identity so the published
@@ -385,47 +392,15 @@ public sealed class VulkanRenderer(
         // rebuild below re-enumerates adapters from scratch (TryWaitIdle inside DisposePresentationResources swallows the
         // device-lost a drain would raise).
         DisposePresentationResources();
-        m_device?.Dispose();
-        m_device = null;
-        m_surface?.Dispose();
-        m_surface = null;
-        m_instance?.Dispose();
-        m_instance = null;
-        // The re-enumerated adapter may differ (e.g. a driver reset moved the default), so the cached LUID re-reads.
-        m_adapterLuid = null;
+        DisposeDeviceChain();
 
-        // Rebuild the instance, surface, physical-device selection, and logical device. While the adapter is still absent
-        // the fresh instance enumerates no suitable physical device, so Select fails BEFORE vkCreateDevice is reached
-        // (avoiding the ICD crash). Surface any failure here as the neutral DeviceLostException so the host pump treats it
-        // as "device not back yet" and waits/retries; tear the partial chain back down so the next retry starts clean.
+        // While the adapter is still absent the fresh instance enumerates no suitable physical device, so Select fails
+        // BEFORE vkCreateDevice is reached (avoiding the ICD crash). The chain has torn itself down whatever failed, so
+        // the next retry starts clean; any failure is surfaced as the neutral DeviceLostException so the host pump treats
+        // it as "device not back yet" and waits/retries.
         try {
-            m_instance = instanceFactory.Create(
-                applicationName: options.ApplicationName,
-                displayKind: binding.DisplayKind,
-                enableValidation: ValidationEnabled
-            );
-            m_surface = surfaceFactory.Create(
-                binding: binding,
-                instanceHandle: m_instance.Handle
-            );
-            m_physicalDevice = physicalDeviceSelector.Select(
-                instance: m_instance,
-                surface: m_surface
-            );
-            m_device = logicalDeviceFactory.Create(
-                instance: m_instance,
-                physicalDevice: m_physicalDevice
-            );
-        } catch (DeviceLostException) {
-            throw;
-        } catch (Exception exception) {
-            m_device?.Dispose();
-            m_device = null;
-            m_surface?.Dispose();
-            m_surface = null;
-            m_instance?.Dispose();
-            m_instance = null;
-
+            CreateDeviceChain(binding: binding);
+        } catch (Exception exception) when ((exception is not DeviceLostException)) {
             throw new DeviceLostException(
                 message: "The Vulkan device could not be recreated yet (the adapter is unavailable).",
                 innerException: exception

@@ -1,9 +1,9 @@
 namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
-    // The mask is one expression value, so the board it lands on is at most 64 cells; a bit past the topology's
+    // A mask is one expression value, so the board it lands on is at most 64 cells; a bit past the topology's
     // own cell count names no cell and is skipped rather than refused, the way a mask read back from a wider
-    // integer always was.
+    // integer always was. A declared set lowers at the board's own width, whatever its size.
     private static bool TryWriteSet(in ArenaTransformContext context, ArenaTransform.WriteSet writeSet, in ArenaTransformBinding binding, out bool moved, out EffectRefusal refusal) {
         moved = false;
 
@@ -18,6 +18,44 @@ public static partial class ArenaTransforms {
         )) {
             return false;
         }
+        if (writeSet.Set is { } declared) {
+            if (!TryLowerDeclaredSet(
+                cells: out var cells,
+                code: TransformRefusal.WriteSetSource,
+                context: in context,
+                refusal: out refusal,
+                set: declared,
+                topology: topology,
+                verb: "writeSet"
+            )) {
+                return false;
+            }
+
+            for (var position = 0; (position < topology.CellCount); position++) {
+                if (!cells.Contains(index: position)) {
+                    continue;
+                }
+                if (!context.Arena.TryWriteBoardCell(
+                    cell: position,
+                    reason: out var reason,
+                    rowOrdinal: writeSet.RowOrdinal,
+                    value: writeSet.Value,
+                    write: StateWriteKind.Set
+                )) {
+                    moved = false;
+
+                    return Refuse(
+                        code: TransformRefusal.WriteSetValueInadmissible,
+                        reason: reason,
+                        refusal: out refusal
+                    );
+                }
+
+                moved = true;
+            }
+
+            return Applied(refusal: out refusal);
+        }
         if (topology.CellCount > BoardMask.MaxCells) {
             return Refuse(
                 code: TransformRefusal.WriteSetBoard,
@@ -26,9 +64,10 @@ public static partial class ArenaTransforms {
             );
         }
         if (
-            !context.Arena.TryRead(
+            !context.Arena.TryReadLive(
             key: binding.KeyOr(own: writeSet.SetKey),
             rowOrdinal: writeSet.SetRowOrdinal,
+            time: context.Time,
             value: out var cell
         ) ||
             (cell.Kind != CellKind.Int)

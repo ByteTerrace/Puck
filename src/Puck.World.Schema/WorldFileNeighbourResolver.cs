@@ -1,3 +1,6 @@
+using Puck.Abstractions;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 
 using Puck.Abstractions.Machines;
@@ -8,9 +11,9 @@ namespace Puck.World;
 /// The file-backed <see cref="IWorldNeighbourResolver"/> — reads a named neighbour's document straight off disk,
 /// relative to a base directory resolved fresh on every call. The natural resolver for a locally-authored quilt: a
 /// document names its neighbours by a <see cref="WorldReference.Document"/> locator relative to its own directory
-/// (the island names <c>"shards/quilt-nw.world.json"</c>; a shard names <c>"quilt-ne.world.json"</c> beside itself
-/// and <c>"../puck.world.json"</c> above it), so "relative to the document that names it" is the whole resolution
-/// rule — <see cref="Path.Combine(string, string)"/>, never a catalog or a discovery step. The definition handed
+/// (the island names <c>"shards/quilt-nw"</c>; a shard names <c>"quilt-ne"</c> beside itself and <c>"../puck"</c>
+/// above it), so "relative to the document that names it" is the whole resolution rule, and the file read is that
+/// name's document file (<see cref="WorldDocumentName"/>), never a catalog or a discovery step. The definition handed
 /// back is read from the base directory, so every locator the neighbour authored is re-expressed against that base
 /// (<see cref="ReexpressReferences"/>): the derived-corner walk compares two neighbours' locators for one third
 /// document by string and resolves the winner beside the reading document, and both hold only when every locator
@@ -19,7 +22,7 @@ namespace Puck.World;
 /// <remarks>
 /// <para><b>Read-only and parse-only</b>, mirroring <c>Server.WorldStorageNeighbourResolver</c>'s own contract
 /// exactly: parses through <see cref="WorldJsonPayload.TryParse{T}(string, System.Text.Json.Serialization.Metadata.JsonTypeInfo{T},
-/// out T, out string, bool)"/> and <see cref="WorldDefinitionMigrations.Apply"/> only — never
+/// out T, out string, bool)"/> only — never
 /// <see cref="WorldDefinitionValidator.Validate"/> — because the neighbour's own validity (which may in turn need its
 /// own neighbour resolver, for a border of its own) is that world's own boot concern, not a proof this resolver
 /// re-derives. A read that fails for any reason (missing file, unreadable, not valid UTF-8, does not parse) answers
@@ -33,12 +36,18 @@ namespace Puck.World;
 /// exists) simply hands a constant callback instead.</para>
 /// </remarks>
 public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
+    // A neighbour's resolved document is a function of the composed image it was parsed from and the directory its
+    // locators were re-expressed against, so it is held against the image itself: while the image stands, every
+    // resolver reading that neighbour from that directory — a boot's admission and its completion, a reload — is
+    // answered without parsing it again, and a recomposed image is a different key. Nothing holds an image alive.
+    private static readonly ConditionalWeakTable<byte[], ConcurrentDictionary<string, WorldDefinition>> ResolvedByImage = new();
+
     private readonly Func<string> m_baseDirectory;
     private readonly IMachineValidationCatalog? m_catalog;
     private readonly string m_catalogFingerprint;
 
     /// <summary>Initializes the resolver.</summary>
-    /// <param name="baseDirectory">Resolves the directory a bare <see cref="WorldReference.Document"/> file name is
+    /// <param name="baseDirectory">Resolves the directory a <see cref="WorldReference.Document"/> name is
     /// combined against, evaluated fresh on every <see cref="Resolve"/> call.</param>
     /// <exception cref="ArgumentNullException"><paramref name="baseDirectory"/> is <see langword="null"/>.</exception>
     /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed neighbour images.</param>
@@ -91,17 +100,19 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: "the reference names no document");
         }
 
-        string directory;
-        string path;
+        WorldBootWork.Count(kind: WorldBootWork.NeighbourResolves);
 
-        try {
-            directory = m_baseDirectory();
-            path = Path.GetFullPath(path: Path.Combine(
-                path1: directory,
-                path2: document
-            ));
-        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-            return WorldNeighbourResolution.Unavailable(reason: $"'{document}' does not resolve to a path this platform can express — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+        // One spelling per directory, so every resolver over the same directory shares the images held for it.
+        var directory = PuckPaths.Normalize(path: m_baseDirectory());
+
+        if (!WorldDefinitionFileSource.TryResolveDocumentIn(
+            directory: directory,
+            documentPath: out var path,
+            name: document,
+            reason: out var nameReason,
+            sourcePath: out _
+        )) {
+            return WorldNeighbourResolution.Unavailable(reason: nameReason);
         }
 
         if (!File.Exists(path: path)) {
@@ -110,10 +121,28 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
 
         // Asked before the composition, never after: a held image that still stands for this path is exactly what
         // the composition below is about to answer from, so this reads the outcome rather than a record of one.
-        var shared = WorldDefinitionFileSource.HoldsComposedDocument(
+        var shared = WorldDefinitionFileSource.TryGetComposedImage(
             catalogFingerprint: m_catalogFingerprint,
+            composedJson: out var standing,
             resolvedPath: path
         );
+
+        if (
+            (standing is not null) &&
+            ResolvedByImage.TryGetValue(
+            key: standing,
+            value: out var resolvedFrom
+        ) &&
+            resolvedFrom.TryGetValue(
+            key: directory,
+            value: out var held
+        )
+        ) {
+            return WorldNeighbourResolution.Resolved(
+                definition: held,
+                shared: true
+            );
+        }
 
         // Composes the neighbour's basis chain (a flat file passes through untouched), so a neighbour authored as a
         // delta proves its border with the same composed document it boots as.
@@ -136,6 +165,8 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
         // A reference into a first-fill draw site stays attached through this parse and is answered once the
         // site draws, the same two steps the neighbour's own boot takes (WorldDefinitionLoader), under the same
         // boot instance name, so the image proven here is the document the neighbour boots as.
+        WorldBootWork.Count(kind: WorldBootWork.Parses);
+
         if (!WorldJsonPayload.TryParse(
             json: tree!.ToJsonString(),
             info: WorldJsonContext.Default.WorldDefinition,
@@ -147,7 +178,7 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
         }
 
         if (!WorldDrawBootResolver.TryResolve(
-            definition: WorldDefinitionMigrations.Apply(definition: parsed),
+            definition: parsed,
             instanceIdentity: WorldDefinitionLoader.BootInstanceName,
             reason: out var drawReason,
             resolved: out var drawn
@@ -160,6 +191,13 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             reason: out var referenceReason
         )) {
             return WorldNeighbourResolution.Unavailable(reason: $"'{path}' holds a state reference nothing fills — {referenceReason}");
+        }
+
+        if (WorldDefinitionFileSource.PeekComposedImage(
+            catalogFingerprint: m_catalogFingerprint,
+            resolvedPath: path
+        ) is { } image) {
+            ResolvedByImage.GetOrCreateValue(key: image)[directory] = drawn;
         }
 
         return WorldNeighbourResolution.Resolved(

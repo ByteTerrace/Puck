@@ -1,0 +1,410 @@
+{
+  "id": "source-conversion",
+  "title": "The shipped palette and NV12 conversion passes turn uploaded source regions into the pixels the CPU reference computes",
+  "binding": "The positive leg boots an offscreen world whose one pipeline seeds a 32x32 palette-indexed region and a 32x32 NV12 region in the uploaded-source layout, runs the shipped source-palette and source-nv12 kernels from src/Puck.Shaders over them, and captures each converted image paused. Each quadrant of the palette image is the palette entry (i, 255 - i, 3i mod 256) its index selects, and each quadrant of the NV12 image is the BT.709 limited-range conversion of its Y, Cb, Cr sample, clamped; every expectation is the CPU reference ImageSourceConversion applied to the same regions, which SourceConversionCanaryFixtureTests recomputes. The discriminating leg names BT.601 in the NV12 header and raises every palette index by one: the neutral white quadrant holds, and every other quadrant turns to the value the changed header or index predicts.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": ["conversion.pipeline.json", "discriminating.pipeline.json", "seed.hlsl", "seed-discriminating.hlsl"],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/source-conversion/fixture.world.json",
+    "script": "conversion.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the-graph-installs",
+        "stream": "stderr",
+        "match": "exact",
+        "text": "[pipeline: conversion wait installed reached]",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-top-left-is-its-palette-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.019608, 0.980392, 0.058824, 1],
+        "maximum": [0.019608, 0.980392, 0.058824, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-top-right-is-its-palette-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.270588, 0.729412, 0.811765, 1],
+        "maximum": [0.270588, 0.729412, 0.811765, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-bottom-left-is-its-palette-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.521569, 0.478431, 0.560784, 1],
+        "maximum": [0.521569, 0.478431, 0.560784, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-bottom-right-is-its-palette-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.772549, 0.227451, 0.309804, 1],
+        "maximum": [0.772549, 0.227451, 0.309804, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-top-left-is-its-bt709-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 1.0, 1.0, 1],
+        "maximum": [1.0, 1.0, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-top-right-is-its-bt709-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 0.003922, 0.0, 1],
+        "maximum": [1.0, 0.003922, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-bottom-left-is-its-bt709-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.784314, 0.419608, 0.501961, 1],
+        "maximum": [0.784314, 0.419608, 0.501961, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-bottom-right-is-its-bt709-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.168627, 0.364706, 0.0, 1],
+        "maximum": [0.168627, 0.364706, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/source-conversion/discriminating.world.json",
+    "script": "conversion.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "palette-top-left-is-not-the-positive-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.019608, 0.980392, 0.058824, 1],
+        "maximum": [0.019608, 0.980392, 0.058824, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-top-right-is-not-the-positive-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.270588, 0.729412, 0.811765, 1],
+        "maximum": [0.270588, 0.729412, 0.811765, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-bottom-left-is-not-the-positive-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.521569, 0.478431, 0.560784, 1],
+        "maximum": [0.521569, 0.478431, 0.560784, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-bottom-right-is-not-the-positive-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.772549, 0.227451, 0.309804, 1],
+        "maximum": [0.772549, 0.227451, 0.309804, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-top-left-is-the-next-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.023529, 0.976471, 0.070588, 1],
+        "maximum": [0.023529, 0.976471, 0.070588, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-top-right-is-the-next-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.27451, 0.72549, 0.823529, 1],
+        "maximum": [0.27451, 0.72549, 0.823529, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-bottom-left-is-the-next-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.52549, 0.47451, 0.572549, 1],
+        "maximum": [0.52549, 0.47451, 0.572549, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "palette-bottom-right-is-the-next-entry",
+        "capture": "palette.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.776471, 0.223529, 0.321569, 1],
+        "maximum": [0.776471, 0.223529, 0.321569, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-top-left-white-holds-under-either-matrix",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 1.0, 1.0, 1],
+        "maximum": [1.0, 1.0, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-top-right-is-not-the-bt709-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 0.003922, 0.0, 1],
+        "maximum": [1.0, 0.003922, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-bottom-left-is-not-the-bt709-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.784314, 0.419608, 0.501961, 1],
+        "maximum": [0.784314, 0.419608, 0.501961, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-bottom-right-is-not-the-bt709-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.168627, 0.364706, 0.0, 1],
+        "maximum": [0.168627, 0.364706, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-top-right-is-the-bt601-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.913725, 0.0, 0.007843, 1],
+        "maximum": [0.913725, 0.0, 0.007843, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-bottom-left-is-the-bt601-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.752941, 0.376471, 0.501961, 1],
+        "maximum": [0.752941, 0.376471, 0.501961, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "nv12-bottom-right-is-the-bt601-color",
+        "capture": "nv12.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.184314, 0.411765, 0.0, 1],
+        "maximum": [0.184314, 0.411765, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      }
+    ]
+  }
+}

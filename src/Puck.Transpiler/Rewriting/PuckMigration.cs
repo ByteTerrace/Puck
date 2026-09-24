@@ -90,7 +90,6 @@ public abstract class PuckMigration {
     );
     // A `/* … */` spans lines; a refusal is one line.
     private static string OneLine(string text) => text.ReplaceLineEndings(replacementText: " ");
-
     // A member the migration declares is not descended into at all: the whole subtree under it is the migration's
     // to reshape, so a difference deeper down is still covered by the declaration above it.
     private string? Difference(JsonNode? before, JsonNode? after, string path) {

@@ -44,10 +44,12 @@ public sealed partial class AzureResourceOperationProvider {
                 if (!TryPollUri(
                     uri: out var uri,
                     value: poll
-                )) { return new(
+                )) {
+                    return new(
                     WorldExternalOperationStatus.Unknown,
                     receipt.Encode()
-                ); }
+                );
+                }
                 receipt = receipt with { PollUri = uri.AbsoluteUri, PollKind = kind };
                 return new(
                     WorldExternalOperationStatus.Running,
@@ -59,11 +61,13 @@ public sealed partial class AzureResourceOperationProvider {
         // Preserve receipt even when a body is truncated, oversized, malformed, or lost after its headers.
         string? state;
 
-        try { state = await ReadStateAsync(
+        try {
+            state = await ReadStateAsync(
             response,
             previous?.PollKind,
             cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false); } catch (Exception exception) when ((exception is IOException or JsonException or OperationCanceledException)) {
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception exception) when ((exception is IOException or JsonException or OperationCanceledException)) {
             return new(
                 WorldExternalOperationStatus.Unknown,
                 receipt.Encode()
@@ -111,10 +115,12 @@ public sealed partial class AzureResourceOperationProvider {
         var root = body.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object) { throw new JsonException(message: "ARM status must be an object."); }
-        if (pollKind is "Azure-AsyncOperation" or "Operation-Location") { return State(
+        if (pollKind is "Azure-AsyncOperation" or "Operation-Location") {
+            return State(
             property: "status",
             value: root
-        ); }
+        );
+        }
         if (State(
             property: "provisioningState",
             value: root

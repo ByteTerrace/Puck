@@ -1,5 +1,6 @@
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -18,23 +19,28 @@ public interface IVulkanFrameSynchronizationApi {
     /// <param name="semaphoreHandle">When this method returns, the created native <c>VkSemaphore</c> handle.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the semaphore was created successfully.</returns>
     VkResult CreateSemaphore(VulkanFrameSynchronizationCreateRequest request, out nint semaphoreHandle);
-    /// <summary>Destroys a fence.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the fence.</param>
+    /// <summary>Destroys a fence; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the fence.</param>
     /// <param name="fenceHandle">The native <c>VkFence</c> handle to destroy.</param>
-    void DestroyFence(nint deviceHandle, nint fenceHandle);
-    /// <summary>Destroys a semaphore.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the semaphore.</param>
+    void DestroyFence(VulkanDeviceCommands device, nint fenceHandle);
+    /// <summary>Destroys a semaphore; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the semaphore.</param>
     /// <param name="semaphoreHandle">The native <c>VkSemaphore</c> handle to destroy.</param>
-    void DestroySemaphore(nint deviceHandle, nint semaphoreHandle);
+    void DestroySemaphore(VulkanDeviceCommands device, nint semaphoreHandle);
+    /// <summary>Reads whether a fence is signaled, without waiting.</summary>
+    /// <param name="device">The command table of the logical device that owns the fence.</param>
+    /// <param name="fenceHandle">The native <c>VkFence</c> handle to query.</param>
+    /// <returns><see cref="VkResult.Success"/> if the fence is signaled, <see cref="VkResult.NotReady"/> if it is not, or an error code.</returns>
+    VkResult GetFenceStatus(VulkanDeviceCommands device, nint fenceHandle);
     /// <summary>Resets a fence to the unsignaled state.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the fence.</param>
+    /// <param name="device">The command table of the logical device that owns the fence.</param>
     /// <param name="fenceHandle">The native <c>VkFence</c> handle to reset.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the fence was reset successfully.</returns>
-    VkResult ResetFence(nint deviceHandle, nint fenceHandle);
+    VkResult ResetFence(VulkanDeviceCommands device, nint fenceHandle);
     /// <summary>Waits for a fence to become signaled, or until the timeout elapses.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the fence.</param>
+    /// <param name="device">The command table of the logical device that owns the fence.</param>
     /// <param name="fenceHandle">The native <c>VkFence</c> handle to wait on.</param>
     /// <param name="timeout">The maximum time to wait, in nanoseconds.</param>
     /// <returns><see cref="VkResult.Success"/> if the fence became signaled, <see cref="VkResult.Timeout"/> if the timeout elapsed first, or an error code.</returns>
-    VkResult WaitForFence(nint deviceHandle, nint fenceHandle, ulong timeout);
+    VkResult WaitForFence(VulkanDeviceCommands device, nint fenceHandle, ulong timeout);
 }

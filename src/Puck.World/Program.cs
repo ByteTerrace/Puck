@@ -1,13 +1,17 @@
+using Puck.Commands;
 using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.Platform.Windows;
 using Puck.World;
-using Puck.World.Protocol;
+using Puck.World.Machines;
 
+WorldMethodRecorder.StartIfBuiltIn(stateRoot: Puck.World.Server.WorldStateRoot.Resolve);
 // The host CLI flags are a DEPLOYMENT OVERRIDE laid over the world document's presentation intent, so each is NULLABLE
 // with no DefaultValueFactory: absent means "the document decides" (WorldHostSettings.Resolve coalesces to the authored
 // host defaults). A DefaultValueFactory here would silently defeat the document on every unflagged run.
@@ -33,7 +37,11 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.definition.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/puck.world.json beside the executable loads; failure to load that document also fails the boot.",
+    Description = "The world definition file (puck.world.definition.v1) to load: a .world.json document, or a .puck source compiled in memory. A .puck source that declares several worlds boots its entry world (see --entry). A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/puck.world.json beside the executable loads; failure to load that document also fails the boot.",
+};
+var entryOption = new Option<string?>(name: "--entry") {
+    DefaultValueFactory = static _ => null,
+    Description = "The declared world a --world composition source boots, in place of the world it declares `entry world`. The whole composition is staged either way, so its borders stay real. A name the source does not declare, or a --world that is not a composition, refuses the boot by name.",
 };
 var recordingOption = new Option<string?>(name: "--recording") {
     DefaultValueFactory = static _ => null,
@@ -53,7 +61,7 @@ var storageDiscoveryUriOption = new Option<string?>(name: "--storage-discovery-u
 };
 var stateDirOption = new Option<string?>(name: "--state-dir") {
     DefaultValueFactory = static _ => null,
-    Description = "Override the on-disk state root (profile catalog, replays). Absent uses %LOCALAPPDATA%\\Puck\\World. A developer/deployment override: parallel verification runs and multiple hosts on one machine each need their own root.",
+    Description = "Override the on-disk state root (profile catalog, replays). Compiled worlds and bakes are per-user caches every boot shares. Absent uses the world subdirectory of the per-user Puck directory (%LOCALAPPDATA%/Puck/world on Windows). A developer/deployment override: parallel verification runs and multiple hosts on one machine each need their own root.",
 };
 var captureDirOption = new Option<string?>(name: "--capture-dir") {
     DefaultValueFactory = static _ => null,
@@ -61,7 +69,13 @@ var captureDirOption = new Option<string?>(name: "--capture-dir") {
 };
 var scheduleDirOption = new Option<string?>(name: "--schedule-dir") {
     DefaultValueFactory = static _ => null,
-    Description = "Arms the world document's schedule section and overrides its schedule.directory — where the run writes its state export and submission manifest. Absent, a document carrying a schedule submits no row and writes no export, and the boot says so once: a published world travels, and a section that submits commands runs only where the operator asked for it.",
+    Description = "Arms the world document's schedule section and names where the run writes its state export and submission manifest. Absent, a document carrying a schedule submits no row and writes no export, and the boot says so once: a published world travels, and a section that submits commands runs only where the operator asked for it.",
+};
+// A developer and qualification diagnostic, never world-authored: the validation layer of whichever backend the run
+// hosts on. `puck canary --debug-layers` and `puck qualify` (its profile's debugLayers) pass it to the Worlds they start.
+var debugLayersOption = new Option<bool>(name: "--debug-layers") {
+    DefaultValueFactory = static _ => false,
+    Description = "Create the GPU device with its backend's validation layer: [vulkan-debug] lines on Vulkan, [d3d12-debug] lines and a teardown live-object report on Direct3D 12. Adds per-call CPU cost; on some Direct3D 12 configurations the layer makes device creation fail.",
 };
 var unpacedOption = new Option<bool>(name: "--unpaced") {
     DefaultValueFactory = static _ => false,
@@ -114,6 +128,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     federationKeyFileOption,
     authenticationConfigFileOption,
     captureDirOption,
+    debugLayersOption,
     scheduleDirOption,
     unpacedOption,
     exitAfterSecondsOption,
@@ -130,6 +145,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     userIdOption,
     widthOption,
     worldOption,
+    entryOption,
 };
 var parseResult = launchCommand.Parse(args);
 // Fail loudly on an unrecognized/invalid option (a typo, a bad value) rather than silently falling through to a live
@@ -151,10 +167,7 @@ Puck.World.Server.WorldExtensionConfiguration? extensionsConfiguration = null;
 if (parseResult.GetValue(option: extensionsConfigFileOption) is { } extensionsPath) {
     try {
         if (connectTarget is not null) { throw new InvalidOperationException(message: "Service extensions require a local authority, not a remote client boot."); }
-        extensionsConfiguration = Puck.World.Server.WorldExtensionConfiguration.Parse(utf8: Puck.Storage.ConfinedFile.ReadAllBytes(
-            maximumBytes: 1048576,
-            path: extensionsPath
-        ));
+        extensionsConfiguration = Puck.World.Server.WorldExtensionConfiguration.Load(path: extensionsPath);
     } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)) {
         Console.Error.WriteLine(value: $"[world.extensions: configuration refused: {exception.Message}]");
         return 1;
@@ -163,6 +176,9 @@ if (parseResult.GetValue(option: extensionsConfigFileOption) is { } extensionsPa
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
 }
+// A world source compiles once across boots: the cache is per user rather than under the state root, since what it
+// holds is a pure function of the source files it names and the compiler that read them, never of a run's state.
+Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: Puck.World.Transpiler.Composition.WorldCompileCache.DefaultDirectory);
 if (parseResult.GetValue(option: captureDirOption) is { } captureDirOverride) {
     WorldCaptureRoot.Override(path: captureDirOverride);
 }
@@ -204,27 +220,19 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
     false => WorldHostPresentation.Windowed,
     null => null,
 });
-// Build the host-local extension snapshot before loading the world: composition and semantic validation must use the same
-// immutable catalog that runtime machine construction receives, including optional installed extensions.
-var machineCatalog = WorldBootComposition.BuildMachineCatalog();
-var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog);
-// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/puck.world.json beside
-// the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
-// window/launcher/presentation registrations because those now read their values from the resolved host section. Read
-// by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is
-// registered so world.save knows its default target. Any path that will not load ends the boot here — a typo or missing
-// shipped document must never quietly run a different world.
-if (!PuckWorldLoader.TryResolveWorld(
-    explicitPath: parseResult.GetValue(option: worldOption),
-    failure: out var worldFailure,
-    source: out var worldSource,
-    catalogFingerprint: machineCatalogFingerprint,
-    catalog: machineCatalog
-)) {
-    Console.Error.WriteLine(value: worldFailure);
+// Compose the host's extensions before loading the world: composition and semantic validation must use the same
+// immutable machine catalog that runtime machine construction receives, including optional installed extensions.
+PuckExtensionSet extensions;
+WorldMachineCatalog machineCatalog;
+try {
+    extensions = WorldBootComposition.ComposeExtensions(directories: PuckExtensionDiscovery.DefaultDirectories());
+    machineCatalog = WorldMachineCatalog.From(extensions: extensions);
+} catch (Exception error) when ((error is PuckExtensionException or ArgumentException)) {
+    Console.Error.WriteLine(value: $"[world.extensions: refused: {error.Message}]");
 
     return 1;
 }
+var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog);
 // The federation identity door — deny-by-default, mirroring --listen's own absent-means-closed posture: an
 // unconfigured authenticator refuses the federation dialect outright at WorldPeerHost's IsConfigured gate, leaving
 // ordinary admitted-peer listening (the interactive attestation door) untouched. A configured one signs
@@ -233,6 +241,8 @@ if (!PuckWorldLoader.TryResolveWorld(
 // every attempt, so a live world.reload/edit is honored the same way the interactive door already is.
 Puck.Networking.IAuthenticator authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator();
 string? connectionSubject = null;
+// Read before the world so an override it carries reaches the document before its one admission, never after.
+Func<WorldDefinition, WorldDefinition>? bootOverrides = null;
 if (parseResult.GetValue(option: authenticationConfigFileOption) is { } authenticationPath) {
     try {
         if (
@@ -241,19 +251,40 @@ if (parseResult.GetValue(option: authenticationConfigFileOption) is { } authenti
         ) {
             throw new ArgumentException(message: "Connection authentication requires --connect and cannot be combined with --federation-key-file.");
         }
-        var connection = WorldConnectionAuthentication.Load(path: authenticationPath);
+        // The desktop host runs on system time; the provider's token and metadata deadlines read it.
+        var connection = WorldConnectionAuthentication.Load(
+            clock: TimeProvider.System,
+            extensions: extensions,
+            path: authenticationPath
+        );
 
         authenticator = connection.Authenticator;
         connectionSubject = connection.Subject;
         // A user's local authority is an instance namespace, not a published listening endpoint.
-        worldSource = worldSource with {
-            Definition = worldSource.Definition with { HostRaw = worldSource.Definition.Host with { Authority = null, Listen = null } },
-            Admission = null,
-        };
+        bootOverrides = static definition => (definition with { HostRaw = definition.Host with { Authority = null, Listen = null } });
     } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException or Azure.Identity.AuthenticationFailedException)) {
         Console.Error.WriteLine(value: $"[world.authentication: configuration refused: {error.Message}]");
         return 1;
     }
+}
+// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/puck.world.json beside
+// the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
+// window/launcher/presentation registrations because those now read their values from the resolved host section. Read
+// by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is
+// registered so world.save knows its default target. Any path that will not load ends the boot here — a typo or missing
+// shipped document must never quietly run a different world.
+if (!PuckWorldLoader.TryResolveWorld(
+    entry: parseResult.GetValue(option: entryOption),
+    explicitPath: parseResult.GetValue(option: worldOption),
+    failure: out var worldFailure,
+    source: out var worldSource,
+    catalogFingerprint: machineCatalogFingerprint,
+    catalog: machineCatalog,
+    overrides: bootOverrides
+)) {
+    Console.Error.WriteLine(value: worldFailure);
+
+    return 1;
 }
 if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
     // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authority absent
@@ -313,10 +344,29 @@ if (unpaced && !hostSettings.Headless) {
 
     return 1;
 }
-if (hostSettings.BackendUnsatisfiable) {
-    Console.Error.WriteLine(value: "The Direct3D 12 backend requires Windows 10 or newer; use --backend vulkan on this platform.");
+// The document validates host.listen's shape only, and --listen not at all, so the endpoint is parsed here: an
+// endpoint the peer host cannot parse refuses the boot as configuration, before any host exists to bind it.
+if (
+    (hostSettings.Listen is { } listenEndpoint) &&
+    !System.Net.IPEndPoint.TryParse(
+        result: out _,
+        s: listenEndpoint
+    )
+) {
+    Console.Error.WriteLine(value: $"[world.host: refused: listen endpoint '{listenEndpoint}' is not a parseable \"ip:port\" endpoint (a hostname is not accepted)]");
 
     return 1;
+}
+if (hostSettings.BackendUnsatisfiable) {
+    Console.Error.WriteLine(value: LauncherHostRun.FormatUnsupported(
+        label: "world",
+        unavailable: new Puck.Abstractions.Gpu.GpuDeviceUnavailableException(
+            backend: "directx",
+            reason: "Direct3D 12 requires Windows 10 or newer; use --backend vulkan on this platform"
+        )
+    ));
+
+    return LauncherHostRun.UnsupportedExitCode;
 }
 if (hostSettings.BackendDowngraded) {
     Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
@@ -324,11 +374,12 @@ if (hostSettings.BackendDowngraded) {
 var hostsOnDirectX = hostSettings.HostsOnDirectX;
 var width = ((uint)hostSettings.Width);
 var height = ((uint)hostSettings.Height);
-// The GPU-timing arm boots from the host section's timing field — the lowest-precedence seed (a live world.timing
-// SetArmed always overrides). TrySeed is idempotent and claims the control only if nothing above has.
-GpuTimingControl.Shared.TrySeed(armed: hostSettings.Timing);
 var builder = Host.CreateApplicationBuilder(args: args);
+// Standard output carries the console's read-back answers, which a script parses; every log line, whatever its level
+// and whichever thread writes it, goes to standard error beside the narration.
+builder.Logging.AddConsole(configure: static options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 var services = builder.Services;
+services.AddPuckExtensions(extensions: extensions);
 services.AddWorldMachineCatalog(machineCatalog: machineCatalog);
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
@@ -344,6 +395,10 @@ services.AddSingleton(implementationFactory: _ => new Puck.World.Server.WorldPee
 ))));
 // The resolved host settings — read by the composition modules below and the world.host verb.
 services.AddSingleton(implementationInstance: hostSettings);
+// Read by either backend's registration when it creates the device; a headless boot creates none.
+services.AddSingleton(implementationInstance: new Puck.Abstractions.Gpu.GpuDeviceOptions {
+    DebugLayers = parseResult.GetValue(option: debugLayersOption),
+});
 // Registered before the launcher terminal block (AddLauncherTerminal/AddLauncherHeadlessTerminal, reached through
 // AddWorldPresentation/AddHeadlessHost) so the launcher's TryAddSingleton<LauncherOptions> defers to this one, IN
 // EITHER BOOT SHAPE — --exit-after-seconds applies to the headless tick host exactly like the windowed one. A null target
@@ -534,8 +589,11 @@ if (connectTarget is { } remoteEndpoint) {
             documentPath: worldSource.SourcePath,
             authority: remoteEndpoint
         ),
-        actingPrincipal: WorldPrincipal.Console
+        actingPrincipal: Principal.Console
     );
 }
-await host.RunAsync();
-return 0;
+return await LauncherHostRun.RunAsync(
+    error: Console.Error,
+    host: host,
+    label: "world"
+);

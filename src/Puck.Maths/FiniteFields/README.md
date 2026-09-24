@@ -110,7 +110,7 @@ The six public types come first, then the three internal ones that
 | `ReedSolomon` | `static` | Systematic Reed–Solomon coding over any `BinaryField<T>`: the generator polynomial whose roots are consecutive powers of a chosen element, the check symbols a message's division by it leaves behind, and the syndromes that read a codeword back. Generic in the carrier, span-based, and allocation-free. |
 | `PrimeField64` | `readonly record struct` | The prime field `F_p` for an odd prime `p < 2⁶²`, whose elements are bare `ulong` values in `[0, p)`. Field arithmetic, the quadratic character (the test for whether a value is a square), modular square roots, a batch inversion, and the static primality surface. |
 | `QuadraticExtensionField64` | `readonly record struct` | The extension `F_{p²} = F_p(√d)` over a fixed non-square `d`. An element is the pair `(A, B)`, standing for `A + B·√d`. It adds `Frobenius`, `Norm`, `Trace`, and a deterministic chooser for the smallest non-square. |
-| `BinaryFieldKernels` | `internal static` | The free functions beneath `BinaryField<T>`: both carryless-multiply tiers, tail-fold reduction, the inversion chain, the irreducibility criterion, and the region ladder. Seven named tiers become ten kernels, because the sixteen-bit width has a kernel of its own at each of the three affine tiers. |
+| `BinaryFieldKernels` | `internal static` | The free functions beneath `BinaryField<T>`: both carryless-multiply tiers, tail-fold reduction, the inversion chain, the irreducibility criterion, and the region ladder. Seven named tiers become ten kernels, because the sixteen-bit width has a kernel of its own at each of the three affine tiers. The byte-wide affine, byte-wide nibble-split, and sixteen-bit affine kernels are each one body written over the internal `VectorLanes128`/`VectorLanes256`/`VectorLanes512` width structs and instantiated at each width, which compiles to the instructions a hand-written body per width would. |
 | `BinaryFieldRegionTier` | `internal enum` | Names the seven rungs of the bulk region-scaling ladder and does nothing else; dispatch lives in the kernels. |
 | `ScaledResidueRing64` | `internal readonly struct` | The residue ring `Z/nZ` for an odd `n` above one—the arithmetic of remainders modulo `n`—carried in Montgomery form so that a chain of modular multiplications performs no hardware division. It requires oddness only, never primality. |
 
@@ -378,10 +378,9 @@ below `2⁶³` and so never overflow the carrier.
 **What construction validates.** `Create` rejects a modulus at or above
 `MaximumModulus` (`ArgumentOutOfRangeException`), an even modulus, and a
 composite modulus (`ArgumentException` for both). The even check is a mask
-against one rather than a comparison against two, and there is history behind
-that: comparing against two never fired, which let `Create(2)` through, and an
-even modulus reaches arithmetic that assumes an odd one, where `TrySqrt`'s
-non-residue walk does not terminate. Primality is decided exactly, so `Create`
+against one rather than a comparison against two, because a comparison
+against two would admit `Create(2)`, and an even modulus reaches arithmetic that
+assumes an odd one, where `TrySqrt`'s non-residue walk does not terminate. Primality is decided exactly, so `Create`
 never admits a modulus on probabilistic evidence. Nothing else is precomputed,
 so construction costs only the primality test.
 
@@ -900,8 +899,9 @@ decision, and it has not been taken.
 - **`BinaryFields` is built from the field factory and does not take its own
   constants on trust.** Each entry is a `BinaryField<T>.Create` call at static
   initialization, which validates the tail's shape but deliberately not its
-  irreducibility; the catalog expects an external gate to re-prove each modulus
-  irreducible at run time.
+  irreducibility. The `binary-field.irreducibility-vs-trial-division` law in
+  `tests/Puck.Maths.Tests` checks `IsIrreducible()` at every catalog modulus;
+  nothing re-proves them at run time.
 - **The Sampling wing consumes this one.** The digital-net direction-number
   builder—digital nets are point sets that spread evenly by construction—
   requires a primitive generator polynomial, and the shipped plane's generator
@@ -964,10 +964,10 @@ a change misbehaves.
   arithmetic—the identities `One` and `Zero` included—throws
   `InvalidOperationException` there, uniformly across the three types and
   including an empty `BatchInverse`, because the descriptor is read before the
-  span is. The one policy replaces what each type used to do on its own: plausible
-  carryless answers from a degree-zero binary field, unreduced integer arithmetic
-  from `Add`/`Subtract`/`Negate` on a zero-modulus prime field, and an incidental
-  divide by zero from the members that happened to reduce. The alternative—
+  span is. One policy for all three types rules out plausible carryless answers
+  from a degree-zero binary field, unreduced integer arithmetic from
+  `Add`/`Subtract`/`Negate` on a zero-modulus prime field, and an incidental
+  divide by zero from the members that reduce. The alternative—
   encoding the all-zero backing state as a valid smallest field—was rejected
   because it makes `default` a silent lie about which field a caller is in, and
   because a wrong field is the failure this wing is least able to detect

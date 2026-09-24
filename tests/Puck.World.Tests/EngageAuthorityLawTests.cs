@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -19,7 +20,7 @@ namespace Puck.World.Tests;
 /// "revoke first, then prove the denial, then re-grant and prove success" shape the puck-world skill's own
 /// engagement-authority "Verifying" section names), which is what makes the denied case a REAL refusal rather than
 /// a no-op against a permissive default. The control case then re-grants Control narrowly over the target screen
-/// ONLY — <see cref="Puck.World.Tests.Laws.RefusalWithControl"/>'s "the SAME action with the ONE discriminating
+/// ONLY — <see cref="Laws.RefusalWithControl(string, Func{bool}, Func{bool})"/>'s "the SAME action with the ONE discriminating
 /// fact reversed", never the wildcard restored wholesale.</para>
 /// Actor (Seat 1, body index 1) and target (the code-built test-pattern screen at index 0,
 /// <see cref="Fixtures.TestPatternScreenIndex"/>) are different subject kinds entirely — actor ≠ target by
@@ -29,7 +30,7 @@ public sealed class EngageAuthorityLawTests {
     // Compose(...) itself IS the observation: it checks CheckEngage first and returns false without mutating
     // anything on a denial (Puck.World.Server.WorldEngagement.Compose's own contract), so its bool return is exactly
     // the door's verdict — no need to separately probe the grant table or the application set afterward.
-    private static bool ComposeAndObserve(WorldFixture fixture, WorldPrincipal actor, GrantSubject target) =>
+    private static bool ComposeAndObserve(WorldFixture fixture, Principal actor, GrantSubject target) =>
         fixture.Server.Engagement.Compose(
             entityIndex: actor.Index,
             target: target,
@@ -46,16 +47,16 @@ public sealed class EngageAuthorityLawTests {
     public void DissolveWithoutControlIsDenied_DissolveWithControlSucceeds() {
         using var fixture = Fixtures.FreshServer();
 
-        var actor = WorldPrincipal.Seat(slot: 1);
+        var actor = Principal.Seat(slot: 1);
         var target = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
         var controlAll = new WorldGrant(
-            Principal: actor,
+            Grantee: actor,
             Capability: WorldCapability.Control,
             Subject: GrantSubject.All,
             Exclusive: false
         );
         var controlOverTarget = new WorldGrant(
-            Principal: actor,
+            Grantee: actor,
             Capability: WorldCapability.Control,
             Subject: target,
             Exclusive: false
@@ -73,13 +74,13 @@ public sealed class EngageAuthorityLawTests {
         // standing on an application it does not itself hold Control over — exactly the state dissolve must refuse.
         fixture.Server.Revoke(
             grant: controlAll,
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
         Assert.True(condition: fixture.Server.Engagement.Compose(
             entityIndex: actor.Index,
             target: target,
             exclusive: true,
-            actingPrincipal: WorldPrincipal.Console,
+            actingPrincipal: Principal.Console,
             targetPrincipal: actor
         ));
 
@@ -93,7 +94,7 @@ public sealed class EngageAuthorityLawTests {
             controlOutcome: () => {
                 fixture.Server.Grant(
                     grant: controlOverTarget,
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 );
 
                 return (fixture.Server.Engagement.Dissolve(
@@ -108,16 +109,16 @@ public sealed class EngageAuthorityLawTests {
     public void SeatLackingScreenControlIsRefused_SeatHoldingScreenControlSucceeds() {
         using var fixture = Fixtures.FreshServer();
 
-        var actor = WorldPrincipal.Seat(slot: 1);
+        var actor = Principal.Seat(slot: 1);
         var target = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
         var controlAll = new WorldGrant(
-            Principal: actor,
+            Grantee: actor,
             Capability: WorldCapability.Control,
             Subject: GrantSubject.All,
             Exclusive: false
         );
         var controlOverTarget = new WorldGrant(
-            Principal: actor,
+            Grantee: actor,
             Capability: WorldCapability.Control,
             Subject: target,
             Exclusive: false
@@ -140,7 +141,7 @@ public sealed class EngageAuthorityLawTests {
         // reason).
         fixture.Server.Revoke(
             grant: controlAll,
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
 
         Laws.RefusalWithControl(
@@ -154,7 +155,7 @@ public sealed class EngageAuthorityLawTests {
                 // The missing grant restored — narrowly, over the target screen only, never the wildcard.
                 fixture.Server.Grant(
                     grant: controlOverTarget,
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 );
 
                 return ComposeAndObserve(

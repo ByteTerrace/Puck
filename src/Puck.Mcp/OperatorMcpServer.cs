@@ -6,17 +6,22 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 using Puck.Hosting;
+using Puck.Networking;
 
 namespace Puck.Mcp;
 
 /// <summary>Official-SDK stdio adapter for an explicitly trusted local Operator. World owns its own lifetime.</summary>
 public static class OperatorMcpServer {
-    private static readonly JsonElement ExecInput = JsonElement.Parse("""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["command"],"additionalProperties":false}""");
-    private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"additionalProperties":false}""");
+    internal const string StatusMeanings = "status is completed when the command returned output, submitted when it returned none (accepted, which does not certify authoritative application), refused when the command or adapter reported an error, and unknown when the attachment closed or the deadline passed after dispatch; inspect state before retrying an unknown call. Mutation commands that report an authority settlement wait for its applied or refused verdict in output. clearTranscript is true when the command asked the console to clear its transcript.";
 
+    private static readonly JsonElement ExecInput = JsonElement.Parse("""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192,"description":"One console line, exactly as typed at the Puck console."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the result. When it passes, the attachment closes and the outcome is reported as unknown."}},"required":["command"],"additionalProperties":false}""");
+    private static readonly JsonElement CaptureInput = JsonElement.Parse("""{"type":"object","properties":{"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Milliseconds to wait for the frame. When it passes, the attachment closes and the outcome is reported as unknown."}},"additionalProperties":false}""");
+
+    /// <summary>The output schema every console-backed tool's structured result satisfies: <c>puck_exec</c>,
+    /// <c>puck_capture_frame</c>, and <c>puck_state_vector_write</c>, locally and over HTTP.</summary>
     internal static readonly JsonElement ResultSchema = JsonElement.Parse("""{"type":"object","properties":{"requestId":{"type":["string","null"]},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean"},"clearTranscript":{"type":"boolean"}},"required":["requestId","status","output","isError","clearTranscript"],"additionalProperties":false}""");
 
-    internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, CancellationToken token, long requestId = 1) {
+    internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, TimeProvider clock, CancellationToken token, long requestId = 1) {
         if (
             (parameters is null) ||
             (parameters.Name is not ("puck_exec" or "puck_capture_frame" or "puck_state_vector_write"))
@@ -104,9 +109,12 @@ public static class OperatorMcpServer {
                 : "capture"),
                 TimeoutMilliseconds: timeout
             );
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: token);
+            using var deadline = new OperationDeadline(
+                caller: token,
+                timeout: TimeSpan.FromMilliseconds(value: timeout),
+                timeProvider: clock
+            );
 
-            deadline.CancelAfter(millisecondsDelay: timeout);
             var operation = client.ExecuteAsync(
                 request,
                 deadline.Token
@@ -136,12 +144,12 @@ public static class OperatorMcpServer {
             );
         } catch (Exception error) when (((error is TimeoutException) || ((error is OperationCanceledException) && !token.IsCancellationRequested))) {
             client.Dispose();
-            return Error("Deadline expired. Attachment closed; dispatched outcome is unknown. Restart and inspect state before retrying.");
+            return Error("Deadline expired. Attachment closed; dispatched outcome is unknown. Inspect state before retrying; the next call attaches anew.");
         } catch (OperationCanceledException) {
             client.Dispose();
             throw;
         } catch (Exception error) when ((error is IOException or InvalidDataException or System.Net.Sockets.SocketException or ObjectDisposedException or JsonException)) {
-            return Error($"Attachment closed; dispatched outcome may be unknown. Restart and inspect state before retrying. {error.Message}");
+            return Error($"Attachment closed; dispatched outcome may be unknown. Inspect state before retrying; the next call attaches anew. {error.Message}");
         }
     }
     internal static Tool CaptureTool() => new() {
@@ -163,7 +171,7 @@ public static class OperatorMcpServer {
     );
     internal static Tool ExecTool() => new() {
         Name = "puck_exec",
-        Description = "Execute one Puck console command as the explicitly trusted Operator. Full existing registry, ordinary validation and authority. No batches, blank lines or comments. Results preserve output/error/clearTranscript; submitted does not certify authoritative application. Use help to discover console verbs.",
+        Description = ("Execute one Puck console line as the explicitly trusted Operator, with the full console registry, ordinary validation and the Operator's authority. The line must be one nonblank, non-comment line; batches are refused. Run help to discover console verbs. " + StatusMeanings),
         InputSchema = ExecInput,
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },
@@ -194,25 +202,36 @@ public static class OperatorMcpServer {
         return new() { Content = content, IsError = isError, StructuredContent = metadata };
     }
 
-    /// <summary>Serves two tools until EOF or cancellation, closing only the attached Console session.</summary>
-    /// <param name="attachmentPath">The running World's private capability file.</param>
+    /// <summary>Serves the tools until EOF or cancellation, independent of any World's lifetime. Each call runs on the
+    /// current attachment, opening one first when there is none: to the capability file <paramref name="target"/>
+    /// names, or to the newest World in the directory it names that answers. A call whose attachment closes is
+    /// reported with an unknown outcome and never replayed; the next call attaches anew, so a World restart needs no
+    /// adapter restart.</summary>
+    /// <param name="target">A World's private capability file, or a directory of them whose newest answering World
+    /// each attachment follows; Worlds publish theirs in the user's temporary directory.</param>
     /// <param name="input">MCP JSON-RPC input, with a 64 KiB line ceiling.</param>
     /// <param name="output">Protocol-only output. The adapter owns and closes both streams on shutdown.</param>
     /// <param name="cancellationToken">Adapter shutdown.</param>
-    public static async Task RunAsync(string attachmentPath, Stream input, Stream output, CancellationToken cancellationToken = default) {
+    /// <param name="clock">Drives every adapter-side deadline: the attachment's connect and handshake, each call, the
+    /// control connection's own call deadline, and each reply write. <see langword="null"/> is
+    /// <see cref="TimeProvider.System"/>. The World's side runs its deadlines on its own clock.</param>
+    public static async Task RunAsync(string target, Stream input, Stream output, CancellationToken cancellationToken = default, TimeProvider? clock = null) {
+        ArgumentException.ThrowIfNullOrEmpty(target);
+        clock ??= TimeProvider.System;
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-        using var client = await LocalControlClient.ConnectAsync(
-            attachmentPath: attachmentPath,
-            cancellationToken: lifetime.Token
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        using var attachment = new OperatorAttachment(
+            clock: clock,
+            target: target
+        );
         using var bounded = new BoundedMcpInput(
             input,
-            () => { client.Dispose(); lifetime.Cancel(); }
+            () => { attachment.Dispose(); lifetime.Cancel(); }
         );
         await using var transport = new BoundedMcpTransport(
             bounded,
             output,
             bounded.Fail,
+            clock,
             lifetime.Token
         );
         using var interruptIo = lifetime.Token.Register(callback: () => { bounded.Dispose(); output.Dispose(); });
@@ -222,7 +241,7 @@ public static class OperatorMcpServer {
             // harness opens with it. The server answers whichever revision the client speaks.
             new McpServerOptions {
                 ServerInfo = new() { Name = "puck-operator", Version = "1.0.0" },
-                ServerInstructions = "Trusted local Operator: full Puck Console authority. Call tools serially. Exec evaluates one Puck console line. A submitted result is not an authoritative mutation receipt. Capture returns the next completed composed PNG, including overlays. Cancellation or timeout closes the attachment; restart the adapter and inspect state before any retry. World continues running. Participant and remote access are not provided.",
+                ServerInstructions = "Trusted local Operator: full Puck Console authority; participant and remote access are not provided. Each call attaches to the running World on demand; with no World it is refused and nothing runs. The adapter runs one call at a time, so issue calls serially when their order matters: a capture is ordered after the commands before it. A submitted result is not an authoritative mutation receipt. Cancellation, timeout or a lost World closes the attachment and reports an unknown outcome; the next call attaches anew, possibly to a restarted World with fresh state, so inspect state before any retry.",
                 Filters = new() {
                     Message = new() {
                         IncomingFilters = [next => (context, token) => {
@@ -237,11 +256,19 @@ public static class OperatorMcpServer {
                 },
                 Handlers = new() {
                     ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [ExecTool(), CaptureTool(), RemoteMcpHost.StateVectorWriteTool] }),
-                    CallToolHandler = (context, token) => CallAsync(
-                    client,
-                    context.Params,
-                    token
-                ),
+                    CallToolHandler = async (context, token) => await attachment.RunAsync(
+                        call: (client, callToken) => CallAsync(
+                            client,
+                            context.Params,
+                            clock,
+                            callToken
+                        ).AsTask(),
+                        refuse: refusal => Error(
+                            refusal,
+                            unknown: false
+                        ),
+                        cancellationToken: token
+                    ).ConfigureAwait(continueOnCapturedContext: false),
                 },
             }
         );
@@ -249,6 +276,4 @@ public static class OperatorMcpServer {
         try { await server.RunAsync(cancellationToken: lifetime.Token).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         if (bounded.Failure is { } failure) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: failure).Throw(); }
     }
-
-
 }

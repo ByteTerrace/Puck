@@ -1,0 +1,3 @@
+# Two reads before the first tick: no frame has completed, so neither read can show a submission's work.
+world.counters gpu
+world.counters gpu

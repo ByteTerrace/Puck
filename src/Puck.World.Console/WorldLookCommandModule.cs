@@ -153,35 +153,16 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
                 }
 
                 return link.Submit(mutation: new WorldMutation.SetPopulationDistribution(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Distribution: distribution
                 ));
             },
             routing: CommandRouting.Simulation
         );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.looks",
+        yield return authority.CreateServerQueryCommand(
             description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
-            handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.looks"
-                ) is { } refusal) {
-                    return refusal;
-                }
-
-                if (!authority.TryResolveServer(
-                    context: context,
-                    error: out var error,
-                    server: out var server,
-                    verb: "world.looks"
-                )) {
-                    return error;
-                }
-
-                return new CommandResult(Output: DescribeLooks(population: server.Population));
-            }
+            describe: server => DescribeLooks(population: server.Population),
+            name: "world.looks"
         );
     }
 }

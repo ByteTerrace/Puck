@@ -52,9 +52,9 @@ internal static class GuardScaleTieDisciplineClaims {
     }
     private static string? CompareGuardRounding(BigInteger numerator, BigInteger denominator, int guard, string label) {
         var newRaw = FixedPointRounding.RoundRational(
-            numerator: numerator,
             denominator: denominator,
-            fractionBitCount: guard
+            fractionBitCount: guard,
+            numerator: numerator
         );
         var oldRaw = Oracles.RoundHalfUp(
             denominator: denominator,
@@ -174,14 +174,14 @@ internal static class GuardScaleTieDisciplineClaims {
             var numerator = ((2 * ((BigInteger)truncated)) + BigInteger.One);
             var denominator = (BigInteger.One << (Guard + 1));
             var newRaw = FixedPointRounding.RoundRational(
-                numerator: numerator,
                 denominator: denominator,
-                fractionBitCount: Guard
+                fractionBitCount: Guard,
+                numerator: numerator
             );
             var oldRaw = Oracles.RoundHalfUp(
-                numerator: numerator,
                 denominator: denominator,
-                fractionBitCount: Guard
+                fractionBitCount: Guard,
+                numerator: numerator
             );
             var isEven = (0 == (truncated & 1));
 
@@ -215,14 +215,14 @@ internal static class GuardScaleTieDisciplineClaims {
             var wideNumerator = (numerator * widenFactor);
             var wideDenominator = (denominator * widenFactor);
             var wideNewRaw = FixedPointRounding.RoundRational(
-                numerator: wideNumerator,
                 denominator: wideDenominator,
-                fractionBitCount: Guard
+                fractionBitCount: Guard,
+                numerator: wideNumerator
             );
             var wideOldRaw = Oracles.RoundHalfUp(
-                numerator: wideNumerator,
                 denominator: wideDenominator,
-                fractionBitCount: Guard
+                fractionBitCount: Guard,
+                numerator: wideNumerator
             );
 
             if (
@@ -243,9 +243,9 @@ internal static class GuardScaleTieDisciplineClaims {
 
         foreach (var (numerator, denominator) in nonTieOperands) {
             var newRaw = FixedPointRounding.RoundRational(
-                numerator: numerator,
                 denominator: denominator,
-                fractionBitCount: Guard
+                fractionBitCount: Guard,
+                numerator: numerator
             );
             var oldRaw = Oracles.RoundHalfUp(
                 denominator: denominator,

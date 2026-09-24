@@ -1,3 +1,5 @@
+schema: "puck.world.definition.v1"
+
 state {
   spaces {
     space lore {
@@ -7,20 +9,20 @@ state {
     }
   }
   world {
-    table events {
+    table events space(lore) {
       ambush = "Bandits ambushed the caravan on the north road"
       gift = "A stranger shared bread and water with the guards"
     }
-    table memories capacity(128) evicts
-    table stance capacity(4) {
+    table memories capacity(128) evicts space(lore)
+    table stance capacity(4) space(lore) {
       guards = "Wary but fair"
     }
     table lines embeds(lineVectors) {
       warn = "Stay close to the wagons tonight."
       thank = "Your kindness will not be forgotten."
     }
-    slot situation = "Travellers approach the gate at dusk"
-    table recalled capacity(3)
+    slot situation = "Travellers approach the gate at dusk" space(lore)
+    table recalled capacity(3) bounds(-1.0..1.0)
     slot reply = ""
     slot caravanAttacked = 0
     slot hostile = 0

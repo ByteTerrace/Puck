@@ -1,16 +1,15 @@
 namespace Puck.State.Rules;
 
+// Pool effects are priced in the element operations every other effect and transform is: one per journal entry and
+// one per vector component copied. A text value is stored and journaled by reference, so its length is memory the
+// journal's byte ceiling holds, not work.
 internal static class PoolEffectWork {
-    private const long RetainedObjectBytes = 32L;
-
-    public static long FieldJournalWidth(StatePoolFieldDescriptor field) => (field.Kind switch {
-        CellKind.Text => ((ArenaJournal.EntryBytes + RetainedObjectBytes) + (2L * StateCapacity.MaxTextValueLength)),
-        CellKind.Vector => (ArenaJournal.EntryBytes + Math.Max(val1: 1L, val2: field.Declaration.Dimensions.GetValueOrDefault())),
-        _ => ArenaJournal.EntryBytes,
-    });
-    public static long TextSourceWidth(string? text) => (2L * (text?.Length ?? 0));
+    public static long FieldJournalWidth(StatePoolFieldDescriptor field) => ((field.Kind == CellKind.Vector)
+        ? (1L + Math.Max(val1: 1L, val2: field.Declaration.Dimensions.GetValueOrDefault()))
+        : 1L
+    );
     public static long InsertWidth(StatePoolDescriptor pool, IRuleCostContext context) {
-        var units = RowMutationWidth(valueWidth: ArenaJournal.EntryBytes);
+        var units = RowMutationWidth(valueWidth: 1L);
 
         foreach (var field in pool.Fields) {
             units = RuleWorkBudget.SaturatingAdd(
@@ -21,9 +20,9 @@ internal static class PoolEffectWork {
         return units;
     }
     public static long ReleaseWidth(StatePoolDescriptor pool, IRuleCostContext context) {
-        var units = RowMutationWidth(valueWidth: ArenaJournal.EntryBytes);
+        var units = RowMutationWidth(valueWidth: 1L);
 
-        units = RuleWorkBudget.SaturatingAdd(left: units, right: ArenaJournal.EntryBytes);
+        units = RuleWorkBudget.SaturatingAdd(left: units, right: 1L);
         foreach (var field in pool.Fields) {
             units = RuleWorkBudget.SaturatingAdd(
                 left: units,
@@ -36,11 +35,11 @@ internal static class PoolEffectWork {
         ? long.MaxValue
         : (left * right));
 
-    // One fixed slot, its member count, and every optional per-cell metadata lane. The typed value
-    // includes retained text and vector bytes. A claim clears then initializes its vector, journaling
-    // the payload twice; no live-count multiplier remains.
+    // One fixed slot, its member count, and every optional per-cell metadata lane. The typed value includes a
+    // vector's components. A claim clears then initializes its vector, journaling the payload twice; no live-count
+    // multiplier remains.
     private static long RowMutationWidth(long valueWidth) => RuleWorkBudget.SaturatingAdd(
-        left: (20L * ArenaJournal.EntryBytes),
+        left: 20L,
         right: SaturatingMultiply(left: 2L, right: valueWidth)
     );
 
@@ -391,10 +390,7 @@ public sealed class StaticInstanceFieldWriteEffect : RuleEffect, IValueSourcedEf
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) => into.Add(item: new CellAccess(Field.RowOrdinal, default, (Write == StateWriteKind.Set)));
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(
-        left: RuleWorkBudget.SaturatingAdd(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field)),
-        right: PoolEffectWork.TextSourceWidth(text: Text)
-    )) + Source.Cost(context));
+    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field))) + Source.Cost(context));
 }
 /// <summary>Writes one qualified field through its bound, generation-checked instance handle.</summary>
 public sealed class InstanceFieldWriteEffect : RuleEffect, IValueSourcedEffect {
@@ -433,10 +429,7 @@ public sealed class InstanceFieldWriteEffect : RuleEffect, IValueSourcedEffect {
     /// <inheritdoc/>
     public override void CollectWrites(List<CellAccess> into) => into.Add(item: new CellAccess(IsSet: (Write == StateWriteKind.Set), Key: default, RowOrdinal: Field.RowOrdinal));
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(
-        left: RuleWorkBudget.SaturatingAdd(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field)),
-        right: PoolEffectWork.TextSourceWidth(text: Text)
-    )) + Source.Cost(context: context));
+    public override RuleWork Cost(IRuleCostContext context) => (RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(left: 2L, right: PoolEffectWork.FieldJournalWidth(field: Field))) + Source.Cost(context: context));
 }
 /// <summary>Writes an absolute due tick to an integer field through either a lexical instance binding or a static pool slot.</summary>
 public sealed class InstanceFieldScheduleEffect : RuleEffect {
@@ -526,7 +519,7 @@ public sealed class InstanceFieldVectorWriteEffect : RuleEffect {
     public override void CollectWrites(List<CellAccess> into) => into.Add(item: new CellAccess(IsSet: true, Key: default, RowOrdinal: Field.RowOrdinal));
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) {
-        var sourceWidth = ((long)(Source.Vector?.Space.Dimensions ?? Source.Field.Declaration.Dimensions.GetValueOrDefault()));
+        var sourceWidth = ((long)(Source.Vector?.Space.Identity.Dimensions ?? Source.Field.Declaration.Dimensions.GetValueOrDefault()));
 
         return RuleWork.Known(units: RuleWorkBudget.SaturatingAdd(
             left: RuleWorkBudget.SaturatingAdd(left: 2L, right: sourceWidth),

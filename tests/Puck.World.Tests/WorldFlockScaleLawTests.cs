@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
@@ -11,21 +12,6 @@ namespace Puck.World.Tests;
 /// <summary>Whole-population acceptance evidence for the dense few-thousand-creature representation.</summary>
 [Collection(AllocationCollection.Name)]
 public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     private static void Coincide(WorldFixture fixture) {
         for (var index = fixture.Server.Population.LocalSeatCount; (index < fixture.Server.Population.Capacity); index++) {
             fixture.Server.Body(index: index)!.Pose(
@@ -88,7 +74,6 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             }],
         };
     }
-
     // The authority ticks an authored cadence spans, never less than one: a cadence shorter than a step runs every
     // step.
     private static int CadenceTicks(int rateHz, float seconds) => Math.Max(
@@ -159,10 +144,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         var watch = Stopwatch.StartNew();
 
         for (var tick = 0; (tick < samples.Length); tick++) {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
-            fixture.Step();
-            samples[tick] = (GC.GetAllocatedBytesForCurrentThread() - before);
+            samples[tick] = AllocationWindow.Total(window: () => fixture.Step());
             var work = fixture.Server.Population.FlockStatistics;
 
             candidates = Math.Max(
@@ -261,12 +243,14 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             Coincide(fixture: fixture);
             fixture.Step();
             for (var tick = 0; (tick < 20); tick++) { fixture.Step(); }
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            var watch = Stopwatch.StartNew();
+            var watch = new Stopwatch();
+            var bytes = AllocationWindow.Total(window: () => {
+                watch.Start();
+                for (var tick = 0; (tick < 20); tick++) { fixture.Step(); }
+                watch.Stop();
+            });
 
-            for (var tick = 0; (tick < 20); tick++) { fixture.Step(); }
-            watch.Stop();
-            output.WriteLine(message: $"dense flock={sample.Flocking} perception={sample.Perception}s motion={sample.Motion}s steering={sample.Steering}s: {(watch.Elapsed.TotalMilliseconds / 20):F2} ms/tick, {(GC.GetAllocatedBytesForCurrentThread() - before)} bytes");
+            output.WriteLine(message: $"dense flock={sample.Flocking} perception={sample.Perception}s motion={sample.Motion}s steering={sample.Steering}s: {(watch.Elapsed.TotalMilliseconds / 20):F2} ms/tick, {bytes} bytes");
         }
     }
     [Fact]
@@ -554,7 +538,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         for (var tick = 0; (tick < 13); tick++) { fixture.Step(); }
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var captured,
                 reason: out var captureReason
             ),

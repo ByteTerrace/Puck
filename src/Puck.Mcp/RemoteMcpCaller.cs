@@ -2,6 +2,8 @@ namespace Puck.Mcp;
 
 /// <summary>One validated HTTP caller, supplied only to trusted host integrations. Never persist or return this object.</summary>
 public sealed class RemoteMcpCaller {
+    /// <summary>The state <see cref="RemoteMcpHost.AuthorizeAsync"/> returned for this request's tool call, or null.</summary>
+    public object? Authorization { get; internal set; }
     /// <summary>Expiry of this request's validated API access token.</summary>
     public DateTimeOffset ExpiresAt { get; }
     /// <summary>The exact validated issuer.</summary>
@@ -13,7 +15,10 @@ public sealed class RemoteMcpCaller {
     /// <summary>The validated API token, solely for a trusted downstream OAuth exchange. Never forward it to the downstream API.</summary>
     public string UserAssertion { get; }
 
-    internal RemoteMcpCaller(string subject, string issuer, string? tenantId, DateTimeOffset expiresAt, string userAssertion) {
-        Subject = subject; Issuer = issuer; TenantId = tenantId; ExpiresAt = expiresAt; UserAssertion = userAssertion;
+    // Issuance of the validated token, when it carries one; orders it against a token a downstream service rejected.
+    internal DateTimeOffset? IssuedAt { get; }
+
+    internal RemoteMcpCaller(string subject, string issuer, string? tenantId, DateTimeOffset expiresAt, DateTimeOffset? issuedAt, string userAssertion) {
+        Subject = subject; Issuer = issuer; TenantId = tenantId; ExpiresAt = expiresAt; IssuedAt = issuedAt; UserAssertion = userAssertion;
     }
 }

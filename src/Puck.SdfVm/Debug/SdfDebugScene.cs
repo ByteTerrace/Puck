@@ -88,7 +88,9 @@ public sealed class SdfDebugScene {
     // bumps Revision (Bump), which the planner reads as the invalidation signal — a new/removed carve inside a baked
     // bin re-emits analytic the same rebuild and re-bakes next settle. Reached as SdfDebugMode.CarveBake.
     private readonly SdfCarveBakePlanner m_carvePlanner = new(settleFrames: SdfCarveBakePlanner.DefaultSettleFrames);
-    private float[] m_params = DefaultParams(kind: SdfDebugShapeKind.Torus);
+    private float[] m_params = DefaultParams(
+        kind: SdfDebugShapeKind.Torus
+    );
     private float[] m_params2 = [];
 
     /// <summary>The subject primitive.</summary>
@@ -207,24 +209,24 @@ public sealed class SdfDebugScene {
     }
     /// <summary>The per-shape default numeric params (a fresh array — the caller owns it). The count is the shape's
     /// param arity; the meanings mirror the <see cref="SdfProgramBuilder"/> signatures.</summary>
-    public static float[] DefaultParams(SdfDebugShapeKind kind) {
-        return kind switch {
-            SdfDebugShapeKind.Sphere => [1f],                       // radius
-            SdfDebugShapeKind.Box => [0.8f, 0.8f, 0.8f, 0.05f],     // halfX halfY halfZ round
-            SdfDebugShapeKind.Torus => [1f, 0.35f],                 // major minor
-            SdfDebugShapeKind.Capsule => [1f, 0.35f],               // halfLength radius (endpoint = (0, 2*halfLength, 0))
-            SdfDebugShapeKind.Cylinder => [0.7f, 1f],               // radius halfHeight
-            SdfDebugShapeKind.Ellipsoid => [1f, 0.7f, 0.5f],        // radiusX radiusY radiusZ
-            SdfDebugShapeKind.Vesica => [1f, 0.5f],                 // radius halfSeparation
-            SdfDebugShapeKind.RoundCone => [0.7f, 0.3f, 1.2f],      // lowerRadius upperRadius height
-            SdfDebugShapeKind.RoundedRect => [0.8f, 0.5f, 0.15f],   // halfWidth halfHeight cornerRadius (lifted)
-            SdfDebugShapeKind.Polygon => [6f, 0.9f],                // sides radius (lifted)
-            SdfDebugShapeKind.Star => [5f, 0.9f, 2.6f],             // points radius sharpness (lifted)
-            SdfDebugShapeKind.Trapezoid => [0.8f, 0.4f, 0.7f],      // bottomHalfW topHalfW halfHeight (lifted)
-            SdfDebugShapeKind.Ellipse => [0.9f, 0.6f],              // semiX semiY (lifted)
-            _ => [1f],
-        };
-    }
+    /// <param name="kind">The shape whose params are returned.</param>
+    /// <returns>A fresh array of the shape's params.</returns>
+    public static float[] DefaultParams(SdfDebugShapeKind kind) => kind switch {
+        SdfDebugShapeKind.Sphere => [1f],                         // radius
+        SdfDebugShapeKind.Box => [0.8f, 0.8f, 0.8f, 0.05f],       // halfX halfY halfZ round
+        SdfDebugShapeKind.Torus => [1f, 0.35f],                   // major minor
+        SdfDebugShapeKind.Capsule => [1f, 0.35f],                 // halfLength radius (endpoint = (0, 2*halfLength, 0))
+        SdfDebugShapeKind.Cylinder => [0.7f, 1f],                 // radius halfHeight
+        SdfDebugShapeKind.Ellipsoid => [1f, 0.7f, 0.5f],          // radiusX radiusY radiusZ
+        SdfDebugShapeKind.Vesica => [1f, 0.5f],                   // radius halfSeparation
+        SdfDebugShapeKind.RoundCone => [0.7f, 0.3f, 1.2f],        // lowerRadius upperRadius height
+        SdfDebugShapeKind.RoundedRect => [0.8f, 0.5f, 0.15f],     // halfWidth halfHeight cornerRadius (lifted)
+        SdfDebugShapeKind.Polygon => [6f, 0.9f],                  // sides radius (lifted)
+        SdfDebugShapeKind.Star => [5f, 0.9f, 2.6f],               // points radius sharpness (lifted)
+        SdfDebugShapeKind.Trapezoid => [0.8f, 0.4f, 0.7f],        // bottomHalfW topHalfW halfHeight (lifted)
+        SdfDebugShapeKind.Ellipse => [0.9f, 0.6f],                // semiX semiY (lifted)
+        _ => [1f],
+    };
     /// <summary>Formats one carve as the shared echo fragment <c>@(x,y,z) r=… [smooth k=…]</c> — used by both the
     /// <c>sdf.carve</c> verb and the pad-chord echo so a scripted carve and a pad carve read (and are) the same data.</summary>
     public static string FormatCarve(SdfCarve carve) =>
@@ -314,7 +316,9 @@ public sealed class SdfDebugScene {
     public void SetShape(SdfDebugShapeKind kind, IReadOnlyList<float> overrides) {
         ArgumentNullException.ThrowIfNull(overrides);
 
-        var defaults = DefaultParams(kind: kind);
+        var defaults = DefaultParams(
+            kind: kind
+        );
 
         for (var index = 0; ((index < overrides.Count) && (index < defaults.Length)); index++) {
             defaults[index] = overrides[index];
@@ -329,7 +333,9 @@ public sealed class SdfDebugScene {
     public void SetShape2(SdfDebugShapeKind kind, IReadOnlyList<float> overrides) {
         ArgumentNullException.ThrowIfNull(overrides);
 
-        var defaults = DefaultParams(kind: kind);
+        var defaults = DefaultParams(
+            kind: kind
+        );
 
         for (var index = 0; ((index < overrides.Count) && (index < defaults.Length)); index++) {
             defaults[index] = overrides[index];
@@ -391,7 +397,7 @@ public sealed class SdfDebugScene {
         m_meteorsRemaining--;
 
         var i = m_meteorIndex++;
-        // R2 low-discrepancy fractions (plastic-number alphas, the carve bench's discipline) + the golden angle.
+        // R2 low-discrepancy fractions (plastic-number alphas) + the golden angle.
         var u = ((i * 0.7548776662466927f) % 1f);
         var v = ((i * 0.5698402909980532f) % 1f);
         var angle = (i * 2.3999632297286533f);

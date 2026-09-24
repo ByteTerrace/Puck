@@ -145,47 +145,17 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    public SdfProgramBuilder Ellipsoid(Vector3 radii, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
-        // The sign is absorbed by the Vector3.Abs clamp below (and the 1e-4 floor keeps the reciprocal finite), so
-        // only NaN/infinity — which neither absorbs — are refused.
-        RequireFinite(
-            value: radii,
-            paramName: nameof(radii),
-            subject: "An ellipsoid radius"
-        );
-
-        // The degenerate-radius clamp and inverse radii are HOST-BAKED (Data1.yzw) to avoid two vector divides per
-        // evaluation (KEEP IN SYNC with sdfEllipsoid in Assets/Shaders/Sdf/sdf-vm.hlsli).
-        var clamped = Vector3.Max(
-            value1: Vector3.Abs(value: radii),
-            value2: new Vector3(value: 0.0001f)
-        );
-        var inverse = (Vector3.One / clamped);
-
-        return Shape(
-            blend: blend,
-            derived1: inverse.X,
-            derived2: inverse.Y,
-            derived3: inverse.Z,
-            detail: detail,
-            dimensions: new Vector4(
-                value: clamped,
-                w: 0f
-            ),
-            material: material,
-            shape: SdfShapeType.Ellipsoid,
-            smooth: smooth
-        );
-    }
-    /// <summary>Adds a superellipsoid — <c>q = pow(abs(p)/r, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r)</c> — unit
-    /// radii the ellipsoid formula generalizes with an exponent <paramref name="exponent"/> in
-    /// [<see cref="MinSuperellipsoidExponent"/>, <see cref="MaxSuperellipsoidExponent"/>]: e = 2 (
-    /// <see cref="MinSuperellipsoidExponent"/>) reduces the formula to the plain ellipsoid's field exactly, so this
-    /// emits <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float, bool)"/> directly at that exponent rather than a
-    /// second, redundant field — a program built at e = 2 is byte-for-bit what <see cref="Ellipsoid"/> alone would
-    /// emit. Larger e rounds the surface toward a box (a "squircle"/rounded-cube family).
-    /// <para>The field is EXACTLY 1-Lipschitz for every radius and every exponent in the admitted range — no
-    /// <c>AnalyzeLipschitz</c> step clamp is needed, unlike the approximate <see cref="Ellipsoid"/> shape #6. The
+    /// <summary>Adds a superellipsoid — <c>q = pow(abs(p)/r, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r)</c> — the
+    /// scaled gauge of per-axis radii <paramref name="radii"/> under an exponent <paramref name="exponent"/> in
+    /// [<see cref="MinSuperellipsoidExponent"/>, <see cref="MaxSuperellipsoidExponent"/>]. This is the ISA's ONE
+    /// ellipsoid: e = 2 (<see cref="MinSuperellipsoidExponent"/>) is the ellipsoid itself,
+    /// <c>(|p/r| - 1) * min(r)</c>, packed as <see cref="SdfShapeType.Superellipsoid"/> like every other exponent (both
+    /// evaluators take a pow-free fast path there). Larger e rounds the surface toward a box (a "squircle"/rounded-cube
+    /// family).
+    /// <para>The field is EXACTLY 1-Lipschitz for every radius and every exponent in the admitted range, e = 2
+    /// included — no <c>AnalyzeLipschitz</c> step clamp and no field scope is needed, however eccentric the radii. It
+    /// shares its zero set with the true ellipsoid but is not its Euclidean distance: off the surface it is a lower
+    /// bound, underestimating by up to <c>min(r)/max(r)</c> along the long axis. The
     /// scaled gauge <c>N(p) = min(r)·(Σ|pᵢ/rᵢ|^e)^(1/e)</c> is positively homogeneous of degree 1
     /// (<c>N(tp) = t·N(p)</c> for <c>t &gt; 0</c>), so its gradient is scale-invariant along every ray from the
     /// origin and the sup of <c>|∇d|</c> over all of space equals its sup on the field's own zero-level surface
@@ -198,7 +168,7 @@ public sealed partial class SdfProgramBuilder {
     /// exactly, independent of e and of every other radius. <c>SuperellipsoidLawTests</c> proves this
     /// numerically over a grid of exponents, radius ratios, and surface points, both on- and off-axis.</para></summary>
     /// <param name="radii">The three semi-axis radii; signs are absorbed (<see cref="MathF.Abs(float)"/>) and each is
-    /// floored at a small positive epsilon, matching <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float, bool)"/>.</param>
+    /// floored at a small positive epsilon (<c>0.0001</c>), which keeps the host-baked reciprocals finite.</param>
     /// <param name="exponent">The generalizing exponent, finite in [<see cref="MinSuperellipsoidExponent"/>,
     /// <see cref="MaxSuperellipsoidExponent"/>].</param>
     /// <param name="material">The material index assigned to the shape.</param>
@@ -233,16 +203,9 @@ public sealed partial class SdfProgramBuilder {
             value2: new Vector3(value: 0.0001f)
         );
 
-        if (exponent == MinSuperellipsoidExponent) {
-            return Ellipsoid(
-                blend: blend,
-                detail: detail,
-                material: material,
-                radii: clamped,
-                smooth: smooth
-            );
-        }
-
+        // The degenerate-radius clamp and inverse radii are HOST-BAKED (Data1.yzw) to avoid three divides per
+        // evaluation (KEEP IN SYNC with sdfSuperellipsoid in Assets/Shaders/Sdf/sdf-vm.hlsli and
+        // SdfFieldEvaluator.SdfSuperellipsoid).
         var inverse = (Vector3.One / clamped);
 
         return Shape(

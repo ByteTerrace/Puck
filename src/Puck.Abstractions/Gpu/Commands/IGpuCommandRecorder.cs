@@ -25,21 +25,12 @@ public interface IGpuCommandRecorder {
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="commandBufferHandle">The command buffer receiving the marker.</param>
     void EndDebugGroup(nint deviceHandle, nint commandBufferHandle);
-    /// <summary>Begins a render pass instance for the given framebuffer and render pass.</summary>
+    /// <summary>Begins a framebuffer's render pass over its whole extent: each attachment is cleared, loaded or
+    /// discarded as the pass declares, and the viewport covers the extent.</summary>
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="commandBufferHandle">The command buffer to record.</param>
-    /// <param name="renderPassHandle">The render-pass or render-target handle.</param>
-    /// <param name="framebufferHandle">The framebuffer or render-target-view handle.</param>
-    /// <param name="width">The render area width.</param>
-    /// <param name="height">The render area height.</param>
-    void BeginRenderPass(
-        nint deviceHandle,
-        nint commandBufferHandle,
-        nint renderPassHandle,
-        nint framebufferHandle,
-        uint width,
-        uint height
-    );
+    /// <param name="framebuffer">The framebuffer, created by the backend's <see cref="IGpuRenderPassFactory"/>.</param>
+    void BeginRenderPass(nint deviceHandle, nint commandBufferHandle, IGpuFramebuffer framebuffer);
     /// <summary>Ends the current render pass instance.</summary>
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="commandBufferHandle">The command buffer to record.</param>
@@ -49,11 +40,30 @@ public interface IGpuCommandRecorder {
     /// <param name="commandBufferHandle">The command buffer to record.</param>
     /// <param name="pipelineHandle">The backend-neutral pipeline token.</param>
     void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle);
-    /// <summary>Binds a vertex buffer at binding number 0.</summary>
+    /// <summary>Binds a geometry buffer's vertices at vertex binding 0.</summary>
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="commandBufferHandle">The command buffer to record.</param>
-    /// <param name="vertexBufferHandle">The backend-neutral vertex-buffer token.</param>
-    void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, nint vertexBufferHandle);
+    /// <param name="bufferHandle">The <see cref="IGpuBuffer.BufferHandle"/> of a buffer created with
+    /// <see cref="GpuBufferUsage.Vertex"/>.</param>
+    /// <param name="sizeBytes">The bytes of the buffer the draw may read.</param>
+    /// <param name="strideBytes">The bytes between consecutive vertices, as the pipeline's
+    /// <see cref="GpuVertexInputLayout.StrideBytes"/> declares.</param>
+    void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, uint strideBytes);
+    /// <summary>Binds a range of a geometry buffer as the indices the next indexed draw reads.</summary>
+    /// <param name="deviceHandle">The native device handle.</param>
+    /// <param name="commandBufferHandle">The command buffer to record.</param>
+    /// <param name="bufferHandle">The <see cref="IGpuBuffer.BufferHandle"/> of a buffer created with
+    /// <see cref="GpuBufferUsage.Index"/>.</param>
+    /// <param name="offsetBytes">The byte offset of the first index, a multiple of four.</param>
+    /// <param name="sizeBytes">The bytes of indices from that offset.</param>
+    /// <param name="format">The width of each index.</param>
+    void BindIndexBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, ulong sizeBytes, GpuIndexFormat format);
+    /// <summary>Records a draw of one instance of the triangle list the bound indices name, in index order, starting at
+    /// the first bound index.</summary>
+    /// <param name="deviceHandle">The native device handle.</param>
+    /// <param name="commandBufferHandle">The command buffer to record.</param>
+    /// <param name="indexCount">The number of indices drawn; positive.</param>
+    void DrawIndexed(nint deviceHandle, nint commandBufferHandle, uint indexCount);
     /// <summary>Binds a single descriptor set at set number 0 for the graphics bind point.</summary>
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="commandBufferHandle">The command buffer to record.</param>

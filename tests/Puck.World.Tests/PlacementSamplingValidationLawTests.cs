@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
 using Puck.SignedDistance;
 using Xunit;
 
@@ -15,57 +14,6 @@ public sealed class PlacementSamplingValidationLawTests {
     private const string PlacementId = "field";
     private const string PrototypeId = "marker";
 
-    private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: definition,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: needle
-        );
-    }
-    private static void AssertValidates(WorldDefinition definition) {
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: definition,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-    }
-    private static WorldPrototype Creation() {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: PrototypeId
-        );
-
-        return new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     private static WorldDistributionRegion.Noise WellFormedNoise() => new(
         CellSize: 1f,
         Depth: 16,
@@ -87,7 +35,7 @@ public sealed class PlacementSamplingValidationLawTests {
         var document = Fixtures.BuildDocument();
 
         return (document with {
-            CreationsRaw = [Creation()],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: PrototypeId)],
             PlacementRowsRaw = [
                 new WorldPlacement(
                 Id: PlacementId,
@@ -110,81 +58,93 @@ public sealed class PlacementSamplingValidationLawTests {
 
     [Fact]
     public void ANoiseFrequencyMustBeAtLeastOne() {
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedNoise() with { Frequency = 0 })),
+        Laws.RefusalWithControl(
+            control: With(region: WellFormedNoise()),
+            denied: With(region: (WellFormedNoise() with { Frequency = 0 })),
+            locally: true,
             needle: "region.frequency must be at least 1"
         );
-        AssertValidates(definition: With(region: WellFormedNoise()));
     }
     [Fact]
     public void ANoiseGridWorstCaseCannotExceedTheEngineInstanceCeiling() {
         var oversized = (WellFormedNoise() with { Width = 300, Depth = 300 });
 
         Assert.True(condition: ((300L * 300L) > SdfProgramBuilder.MaxInstances));
-        AssertRefusedNaming(
-            definition: With(region: oversized),
+        Laws.RefusalWithControl(
+            control: With(region: WellFormedNoise()),
+            denied: With(region: oversized),
+            locally: true,
             needle: $"worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling"
         );
-        AssertValidates(definition: With(region: WellFormedNoise()));
     }
     [Fact]
     public void ANoiseOctaveCountMustLieInOneToFour() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(region: (WellFormedNoise() with { Octaves = 0 })),
+            locally: true,
             needle: "region.octaves must be in 1..4"
         );
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedNoise() with { Octaves = 5 })),
+        Laws.RefusalWithControl(
+            control: With(region: WellFormedNoise()),
+            denied: With(region: (WellFormedNoise() with { Octaves = 5 })),
+            locally: true,
             needle: "region.octaves must be in 1..4"
         );
-        AssertValidates(definition: With(region: WellFormedNoise()));
     }
     [Fact]
     public void ANoiseThresholdMustLieInZeroOneHalfOpen() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(region: (WellFormedNoise() with { Threshold = -0.01f })),
+            locally: true,
             needle: "region.threshold must be in [0, 1)"
         );
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedNoise() with { Threshold = 1f })),
+        Laws.RefusalWithControl(
+            control: With(region: WellFormedNoise()),
+            denied: With(region: (WellFormedNoise() with { Threshold = 1f })),
+            locally: true,
             needle: "region.threshold must be in [0, 1)"
         );
-        AssertValidates(definition: With(region: WellFormedNoise()));
     }
     [Fact]
     public void ASampledGridNeedsAPositiveCellSizeAndAtLeastOneCellPerAxis() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(region: (WellFormedScatter() with { CellSize = 0f })),
+            locally: true,
             needle: "region.cellSize must be finite and positive"
         );
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(region: (WellFormedScatter() with { Width = 0 })),
+            locally: true,
             needle: "region.width must be at least 1"
         );
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedScatter() with { Depth = 0 })),
+        Laws.RefusalWithControl(
+            control: With(region: WellFormedScatter()),
+            denied: With(region: (WellFormedScatter() with { Depth = 0 })),
+            locally: true,
             needle: "region.depth must be at least 1"
         );
-        AssertValidates(definition: With(region: WellFormedScatter()));
     }
     [Fact]
     public void AScatterRadiusMustFitInsideHalfTheSpacing() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(region: (WellFormedScatter() with { Radius = 0 })),
+            locally: true,
             needle: "region.radius must be at least 1 and at most spacing/2"
         );
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedScatter() with { Radius = 2, Spacing = 3 })),
+        Laws.RefusalWithControl(
+            control: With(region: WellFormedScatter()),
+            denied: With(region: (WellFormedScatter() with { Radius = 2, Spacing = 3 })),
+            locally: true,
             needle: "region.radius must be at least 1 and at most spacing/2"
         );
-        AssertValidates(definition: With(region: WellFormedScatter()));
     }
     [Fact]
     public void AScatterSpacingMustBeAtLeastTwoCells() {
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedScatter() with { Spacing = 1 })),
+        Laws.RefusalWithControl(
+            control: With(region: WellFormedScatter()),
+            denied: With(region: (WellFormedScatter() with { Spacing = 1 })),
+            locally: true,
             needle: "region.spacing must be at least 2 cells"
         );
-        AssertValidates(definition: With(region: WellFormedScatter()));
     }
 }

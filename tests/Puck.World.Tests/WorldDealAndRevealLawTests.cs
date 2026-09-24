@@ -1,4 +1,4 @@
-using Puck.World.Protocol;
+using Puck.Commands;
 using Puck.World.Server;
 using Xunit;
 
@@ -7,25 +7,6 @@ namespace Puck.World.Tests;
 /// <summary>Pins a multi-card deal as one transfer, a rule quantified over a token-keyed row, and an audience a
 /// rule widens by writing a token into the readersFrom row.</summary>
 public sealed class WorldDealAndRevealLawTests {
-    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
-        Assert.True(
-            condition: WorldArenaTransforms.TryApply(
-                definition,
-                transform,
-                WorldPrincipal.World,
-                1,
-                "test",
-                out var candidate,
-                out var reason
-            ),
-            userMessage: reason
-        );
-        return candidate!;
-    }
-    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
-        Name(value: key),
-        ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0L)) : CellValue.Int(value: value))
-    );
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules) => Fixtures.BuildDocument() with {
         StateRaw = new(World: rows),
         Rules = rules,
@@ -39,14 +20,6 @@ public sealed class WorldDealAndRevealLawTests {
         row: row
     ).Cells ?? []).Select(selector: c => c.Key.Value).ToArray();
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static WorldStateRow Slot(string name, long value) => new(
-        Name(value: name),
-        CellKind.Int,
-        Cells: [new StateCell(
-                WorldStateRow.SlotKey,
-                CellValue.Int(value: value)
-            )]
-    );
 
     [Fact]
     public void ACountedTransferDealsInOneMutationAndRefusesPastThePile() {
@@ -56,13 +29,13 @@ public sealed class WorldDealAndRevealLawTests {
                     Name(value: "cards"),
                     CellKind.Int,
                     Capacity: 6,
-                    Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5"), Cell("c6")]
+                    Cells: [StateFixtures.Cell("c1"), StateFixtures.Cell("c2"), StateFixtures.Cell("c3"), StateFixtures.Cell("c4"), StateFixtures.Cell("c5"), StateFixtures.Cell("c6")]
                 ),
             new(
                     Name(value: "deck"),
                     CellKind.Bool,
                     Capacity: 6,
-                    Cells: [Cell("c1", kind: CellKind.Bool), Cell("c2", kind: CellKind.Bool), Cell("c3", kind: CellKind.Bool), Cell("c4", kind: CellKind.Bool), Cell("c5", kind: CellKind.Bool), Cell("c6", kind: CellKind.Bool)],
+                    Cells: [StateFixtures.Cell("c1", kind: CellKind.Bool), StateFixtures.Cell("c2", kind: CellKind.Bool), StateFixtures.Cell("c3", kind: CellKind.Bool), StateFixtures.Cell("c4", kind: CellKind.Bool), StateFixtures.Cell("c5", kind: CellKind.Bool), StateFixtures.Cell("c6", kind: CellKind.Bool)],
                     Domain: new StateDomain.KeysOf(
                         CellName.Parse(candidate: "cards"),
                         Ordered: true
@@ -81,7 +54,7 @@ public sealed class WorldDealAndRevealLawTests {
             rules: []
         );
 
-        var dealt = Apply(
+        var dealt = StateFixtures.Apply(
             definition: definition,
             transform: new StateTransform.Transfer(
                 "deck",
@@ -114,7 +87,7 @@ public sealed class WorldDealAndRevealLawTests {
                 ZoneSelector.First,
                 Count: 2
             ),
-            WorldPrincipal.World,
+            Principal.World,
             0,
             "test",
             out _,
@@ -133,7 +106,7 @@ public sealed class WorldDealAndRevealLawTests {
                 Key: "c1",
                 Count: 2
             ),
-            WorldPrincipal.World,
+            Principal.World,
             0,
             "test",
             out _,
@@ -164,15 +137,15 @@ public sealed class WorldDealAndRevealLawTests {
     }
     [Fact]
     public void AReadersFromRowRevealsAHandWhenARuleWritesTheToken() {
-        var seat = WorldPrincipal.Seat(slot: 1);
+        var seat = Principal.Seat(slot: 1);
         var hand = new WorldStateRow(
             Name(value: "hand"),
             CellKind.Int,
             Capacity: 2,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "c1",
                     value: 11
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "c2",
                     value: 12
                 )],
@@ -191,7 +164,7 @@ public sealed class WorldDealAndRevealLawTests {
                 )]
         );
         var definition = Document(
-            rows: [hand, audience, Slot(
+            rows: [hand, audience, StateFixtures.IntSlot(
                     name: "showdown",
                     value: 0
                 )],
@@ -201,7 +174,7 @@ public sealed class WorldDealAndRevealLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Gate: new ActionPredicate.CompareState(
                         State: "showdown",
-                        Comparison: ActionStateComparison.Equal,
+                        Comparison: ExpressionOp.Equal,
                         Value: 1m
                     ),
                     Effects: [new ActionEffect.SetState(
@@ -251,7 +224,7 @@ public sealed class WorldDealAndRevealLawTests {
         );
         Assert.Null(@object: Fixtures.Disclose(
             definition: shown.Server.Definition,
-            recipient: WorldPrincipal.Seat(slot: 2)
+            recipient: Principal.Seat(slot: 2)
         )?.FirstOrDefault(predicate: r => (r.Name == "hand")));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
@@ -259,7 +232,7 @@ public sealed class WorldDealAndRevealLawTests {
                 rows: [hand with { Visibility = new(
                         Readers: [],
                         ReadersFrom: "showdown"
-                    ) }, Slot(
+                    ) }, StateFixtures.IntSlot(
                         name: "showdown",
                         value: 0
                     )],
@@ -280,20 +253,20 @@ public sealed class WorldDealAndRevealLawTests {
                     Name(value: "cards"),
                     CellKind.Int,
                     Capacity: 3,
-                    Cells: [Cell("c1"), Cell("c2"), Cell("c3")]
+                    Cells: [StateFixtures.Cell("c1"), StateFixtures.Cell("c2"), StateFixtures.Cell("c3")]
                 ),
             new(
                     Name(value: "rank"),
                     CellKind.Int,
                     Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards")),
                     Capacity: 3,
-                    Cells: [Cell(
+                    Cells: [StateFixtures.Cell(
                             key: "c1",
                             value: 5
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c2",
                             value: 9
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c3",
                             value: 2
                         )]
@@ -303,13 +276,13 @@ public sealed class WorldDealAndRevealLawTests {
                     CellKind.Int,
                     Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards")),
                     Capacity: 3,
-                    Cells: [Cell(
+                    Cells: [StateFixtures.Cell(
                             key: "c1",
                             value: 0
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c2",
                             value: 0
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c3",
                             value: 0
                         )]

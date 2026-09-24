@@ -112,15 +112,7 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
 
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
-        m_counter = reader.ReadUInt16();
-        m_tima = reader.ReadByte();
-        m_tma = reader.ReadByte();
-        m_tac = reader.ReadByte();
-        m_lastTimaInput = reader.ReadBoolean();
-        m_overflowCountdown = reader.ReadInt32();
-        m_reloadedThisCycle = reader.ReadBoolean();
-        m_stopLatched = reader.ReadBoolean();
-        m_switchBlockLatched = reader.ReadBoolean();
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
 
         // The input mask is derived from TAC, not part of the snapshot; rebuild it from the restored TAC.
         UpdateTimaInputMask();
@@ -155,17 +147,21 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
             _ => ((byte)(~TacWritableMask | m_tac)),
         };
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteUInt16(value: m_counter);
-        writer.WriteByte(value: m_tima);
-        writer.WriteByte(value: m_tma);
-        writer.WriteByte(value: m_tac);
-        writer.WriteBoolean(value: m_lastTimaInput);
-        writer.WriteInt32(value: m_overflowCountdown);
-        writer.WriteBoolean(value: m_reloadedThisCycle);
-        writer.WriteBoolean(value: m_stopLatched);
-        writer.WriteBoolean(value: m_switchBlockLatched);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.UInt16(value: ref m_counter);
+        transfer.Byte(value: ref m_tima);
+        transfer.Byte(value: ref m_tma);
+        transfer.Byte(value: ref m_tac);
+        transfer.Boolean(value: ref m_lastTimaInput);
+        transfer.Int32(value: ref m_overflowCountdown);
+        transfer.Boolean(value: ref m_reloadedThisCycle);
+        transfer.Boolean(value: ref m_stopLatched);
+        transfer.Boolean(value: ref m_switchBlockLatched);
     }
+
     /// <summary>Advances the counter by <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed:
     /// no falling edge of the selected bit lies inside them, so TIMA holds and only the detector's input follows.</summary>
     /// <param name="cycles">The T-cycles to absorb.</param>

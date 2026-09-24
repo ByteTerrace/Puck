@@ -2,8 +2,11 @@ using Puck.State;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Embeddings;
+using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -95,9 +98,34 @@ public static partial class WorldDecompiler {
     /// <param name="root">The root JSON object representing the world definition.</param>
     /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Clean, idiomatic Puck DSL source code.</returns>
+    /// <exception cref="WorldDecompileRefusedException">The document declares a name in the generated form that no
+    /// construct the decompiler prints would generate.</exception>
     public static string Decompile(JsonObject root, EmbeddingLock? embeddings = null) {
         ArgumentNullException.ThrowIfNull(root);
 
+        // 0. Header: the source is what a reader edits, so the file says which direction is authoritative. A
+        // decompile BOOTSTRAPS a source from a document and is one-way -- `let`, `template` and `for` are a source
+        // idea the JSON no longer carries, so re-running it over an edited source discards that work.
+        return (Header + DecompileDocument(
+            embeddings: embeddings,
+            moduleBody: false,
+            root: root
+        ));
+    }
+
+    private const string Header = """
+        // Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+        // compile, never the '.world.json' beside it.
+        //
+        // Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+        // 'for' in it, none of which the document carries.
+
+
+        """;
+
+    // A document's statements. A module body that a `world name = module()` declaration expands carries neither
+    // `schema` nor `documentId`: the declaration writes both.
+    private static string DecompileDocument(JsonObject root, EmbeddingLock? embeddings, bool moduleBody) {
         // Every section prints a reference from its colon spelling, so the copy printed from holds that spelling
         // where the document holds a call node.
         root = ((JsonObject)root.DeepClone());
@@ -106,17 +134,17 @@ public static partial class WorldDecompiler {
             type: typeof(WorldDefinition)
         );
 
-        var sb = new StringBuilder();
+        if (moduleBody) {
+            _ = root.Remove(propertyName: "documentId");
 
-        // 0. Header: the source is what a reader edits, so the file says which direction is authoritative. A
-        // decompile BOOTSTRAPS a source from a document and is one-way -- `let`, `template` and `for` are a source
-        // idea the JSON no longer carries, so re-running it over an edited source discards that work.
-        sb.AppendLine(value: "// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and");
-        sb.AppendLine(value: "// compile, never the '.world.json' beside it.");
-        sb.AppendLine(value: "//");
-        sb.AppendLine(value: "// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and");
-        sb.AppendLine(value: "// 'for' in it, none of which the document carries.");
-        sb.AppendLine();
+            if (root["schema"]?.GetValue<string>() == WorldDocumentVocabulary.Schema) {
+                _ = root.Remove(propertyName: "schema");
+            }
+        }
+
+        var names = NamesToSweep(root: root);
+        var generated = ReverseGenerated(root: root);
+        var sb = new StringBuilder();
 
         // 1. Headers: schema, basis, documentId
         if (
@@ -198,12 +226,12 @@ public static partial class WorldDecompiler {
                     ) {
                         sb.AppendLine(
                             CultureInfo.InvariantCulture,
-                            $"import \"{EscapeString(s: docPath)}\" as {asNode}"
+                            $"import {PuckStrings.Write(value: docPath)} as {asNode}"
                         );
                     } else {
                         sb.AppendLine(
                             CultureInfo.InvariantCulture,
-                            $"import \"{EscapeString(s: docPath)}\""
+                            $"import {PuckStrings.Write(value: docPath)}"
                         );
                     }
                 }
@@ -277,6 +305,23 @@ public static partial class WorldDecompiler {
             )
         );
 
+        RefuseUnprintedGeneratedNames(
+            consumed: generated.Consumed,
+            groupsPrintAsSugar: sugaredGroups,
+            names: names,
+            rulesPrintAsSugar: ((root["rules"] is JsonArray printedRules) && CanSugarRules(rules: printedRules))
+        );
+
+        // A ground block prints after the prototypes and placements written before it and ahead of every other
+        // statement, so both sections come back in the order they were written.
+        foreach (var leading in generated.Leading) {
+            if (sb.Length > 0) {
+                sb.AppendLine();
+            }
+
+            leading(obj: sb);
+        }
+
         foreach (var (key, value) in root) {
             if (knownRootKeys.Contains(item: key)) {
                 continue;
@@ -286,6 +331,13 @@ public static partial class WorldDecompiler {
                 b: "ruleGroups",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
+                // Where the rules print as sugar, each group prints among them, where its members stand.
+                if (
+                    (root["rules"] is JsonArray sugaredRules) &&
+                    CanSugarRules(rules: sugaredRules)
+                ) {
+                    continue;
+                }
                 if (sb.Length > 0) {
                     sb.AppendLine();
                 }
@@ -310,7 +362,7 @@ public static partial class WorldDecompiler {
             if (value is null) {
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
-                    $"{key}: null"
+                    $"{PuckPrinter.PrintPropertyName(level: 0, name: key)}: null"
                 );
                 continue;
             }
@@ -341,6 +393,9 @@ public static partial class WorldDecompiler {
                 ),
                 WorldRootArm.Rules => TryDecompileRules(
                     claimed: groupedRules,
+                    groups: (sugaredGroups
+                        ? (root["ruleGroups"] as JsonArray)
+                        : null),
                     sb: sb,
                     value: value
                 ),
@@ -381,9 +436,14 @@ public static partial class WorldDecompiler {
             }
         }
 
-        return Respell(text: (sb.ToString().TrimEnd() + "\n"));
-    }
+        var text = Respell(text: (sb.ToString().TrimEnd() + "\n"));
 
+        // A test's `when` lines carry console commands, which are not expressions to respell.
+        return ((generated.Test is { } test)
+            ? $"{text}\n{test}"
+            : text
+        );
+    }
     // One printer per root arm. Each answers whether it printed the section as its construct: a node whose shape
     // or sugar requirement does not hold prints as an ordinary field instead, which is the fallback the row's own
     // description names.
@@ -468,21 +528,85 @@ public static partial class WorldDecompiler {
 
         return true;
     }
-    private static bool TryDecompileRules(StringBuilder sb, JsonNode? value, IReadOnlyDictionary<string, JsonObject> claimed) {
+    // A group prints where its first member stands among the rules, so a source that interleaves groups and rules
+    // compiles back to the same rules array.
+    private static bool TryDecompileRules(StringBuilder sb, JsonNode? value, IReadOnlyDictionary<string, JsonObject> claimed, JsonArray? groups) {
         if (
             (value is not JsonArray rules) ||
             !CanSugarRules(rules: rules)
         ) {
             return false;
         }
-        DecompileRulesBlock(
-            sb,
-            Unclaimed(
-                claimed: claimed,
-                rules: rules
-            ),
-            indentLevel: 0
-        );
+        if (groups is null) {
+            DecompileRulesBlock(
+                sb,
+                Unclaimed(
+                    claimed: claimed,
+                    rules: rules
+                ),
+                indentLevel: 0
+            );
+
+            return true;
+        }
+
+        var groupOf = new Dictionary<string, JsonObject>(comparer: StringComparer.Ordinal);
+
+        foreach (var item in groups) {
+            if (
+                (item is JsonObject group) &&
+                (group["steps"] is JsonArray steps)
+            ) {
+                foreach (var step in steps) {
+                    if ((step as JsonObject)?["rule"]?.ToString() is { } member) {
+                        groupOf[member] = group;
+                    }
+                }
+            }
+        }
+
+        var printed = new HashSet<JsonObject>(comparer: ReferenceEqualityComparer.Instance);
+        var first = true;
+
+        foreach (var item in rules) {
+            if (item is not JsonObject rule) {
+                continue;
+            }
+
+            var name = (rule["name"]?.ToString() ?? "");
+
+            if (claimed.ContainsKey(key: name)) {
+                if (
+                    !groupOf.TryGetValue(key: name, value: out var group) ||
+                    !printed.Add(item: group)
+                ) {
+                    continue;
+                }
+                if (!first) {
+                    sb.AppendLine();
+                }
+
+                first = false;
+                AppendRuleGroupBlock(
+                    claimed: claimed,
+                    group: group,
+                    indentLevel: 0,
+                    sb: sb
+                );
+
+                continue;
+            }
+            if (!first) {
+                sb.AppendLine();
+            }
+
+            first = false;
+            AppendRuleBlock(
+                indentLevel: 0,
+                rule: rule,
+                sb: sb
+            );
+        }
 
         return true;
     }
@@ -651,21 +775,25 @@ public static partial class WorldDecompiler {
             );
         }
 
-        // Pipelines
-        if (
-            views.TryGetPropertyValue(
-            jsonNode: out var pipelinesNode,
-            propertyName: "pipelines"
-        ) &&
-            (pipelinesNode is JsonArray pipelinesArr)
-        ) {
-            foreach (var pipelineItem in pipelinesArr) {
-                if (pipelineItem is JsonObject pipelineObj) {
+        // Pipelines and graph instances: each row prints as its named block.
+        foreach (var (rowsKey, keyword) in ((ReadOnlySpan<(string, string)>)[("pipelines", "pipeline"), ("graphs", "graph")])) {
+            if (
+                !views.TryGetPropertyValue(
+                jsonNode: out var rowsNode,
+                propertyName: rowsKey
+            ) ||
+                (rowsNode is not JsonArray rows)
+            ) {
+                continue;
+            }
+
+            foreach (var row in rows) {
+                if (row is JsonObject rowObj) {
                     if (!first) {
                         sb.AppendLine();
                     }
                     first = false;
-                    var name = (pipelineObj.TryGetPropertyValue(
+                    var name = (rowObj.TryGetPropertyValue(
                         jsonNode: out var n,
                         propertyName: "name"
                     )
@@ -675,9 +803,9 @@ public static partial class WorldDecompiler {
 
                     DecompileNamedBlock(
                         sb,
-                        "pipeline",
+                        keyword,
                         name,
-                        pipelineObj,
+                        rowObj,
                         indentLevel: 1,
                         excludedKeys: ["name"]
                     );
@@ -687,7 +815,7 @@ public static partial class WorldDecompiler {
 
         // Other views properties
         var handledViewsKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) {
-            "layouts", "seatControl", "seatRig", "pipelines",
+            "layouts", "seatControl", "seatRig", "pipelines", "graphs",
         };
 
         foreach (var (k, v) in views) {
@@ -709,7 +837,7 @@ public static partial class WorldDecompiler {
             } else {
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
-                    $"    {k}: {FormatValue(
+                    $"    {PuckPrinter.PrintPropertyName(level: 1, name: k)}: {FormatValue(
                         indentLevel: 1,
                         node: v
                     )}"
@@ -728,7 +856,7 @@ public static partial class WorldDecompiler {
         if (name is not null) {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
-                $"{indent}seatRig \"{EscapeString(s: name)}\" {{"
+                $"{indent}seatRig {PuckStrings.Write(value: name)} {{"
             );
         } else {
             sb.AppendLine(
@@ -931,7 +1059,7 @@ public static partial class WorldDecompiler {
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{indent}{key}{(text ? ": " : FieldSeparator(value: value))}{FormatArgument(
+            $"{indent}{PuckPrinter.PrintPropertyName(level: indentLevel, name: key)}{(text ? ": " : FieldSeparator(value: value))}{FormatArgument(
                 context: position,
                 form: form,
                 indentLevel: indentLevel,
@@ -957,12 +1085,13 @@ public static partial class WorldDecompiler {
         if (name is not null) {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
-                $"{indent}{identifier} \"{EscapeString(s: name)}\" {{"
+                $"{indent}{identifier} {PuckStrings.Write(value: name)} {{"
             );
         } else {
+            // With no name the block is a document member, whose key is spelled as a property's.
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
-                $"{indent}{identifier} {{"
+                $"{indent}{PuckPrinter.PrintPropertyName(level: indentLevel, name: identifier)} {{"
             );
         }
 
@@ -1028,7 +1157,7 @@ public static partial class WorldDecompiler {
                 return d.ToString(provider: CultureInfo.InvariantCulture);
             }
             if (val.TryGetValue<string>(value: out var s)) {
-                return $"\"{EscapeString(s: s)}\"";
+                return PuckStrings.Write(value: s);
             }
             return val.ToString();
         }
@@ -1120,7 +1249,7 @@ public static partial class WorldDecompiler {
                 // container. The literal grammar admits `key { }` and `key [ ]` directly.
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
-                    $"{itemIndent}{k}{(PrintsAsText(form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)), node: v) ? ": " : FieldSeparator(value: v))}{FormatArgument(
+                    $"{itemIndent}{PuckPrinter.PrintPropertyName(level: (indentLevel + 1), name: k)}{(PrintsAsText(form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)), node: v) ? ": " : FieldSeparator(value: v))}{FormatArgument(
                         context: ((context is null) ? null : WorldCallArguments.MemberType(member: k, owner: context)),
                         form: ((context is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: k, owner: context)),
                         indentLevel: (indentLevel + 1),
@@ -1205,17 +1334,6 @@ public static partial class WorldDecompiler {
             context: context,
             indentLevel: indentLevel,
             node: node
-        );
-    }
-    private static string EscapeString(string s) {
-        return s.Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "\\\\",
-            oldValue: "\\"
-        ).Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "\\\"",
-            oldValue: "\""
         );
     }
 }

@@ -1,0 +1,58 @@
+/* The document masthead, its toolbar, and the Open picker's document list. */
+/* One line whatever the document is called; the full name is the title's tooltip. */
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar {
+  margin-top: var(--mantine-spacing-sm);
+  padding-top: var(--mantine-spacing-sm);
+  border-top: 1px solid var(--puck-line);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--puck-line);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+}
+
+.list > li + li {
+  border-top: 1px solid var(--puck-line);
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  width: 100%;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  color: var(--mantine-color-text);
+
+  @mixin hover {
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  &[aria-current="true"] {
+    color: var(--mantine-color-anchor);
+  }
+}
+
+.entryName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

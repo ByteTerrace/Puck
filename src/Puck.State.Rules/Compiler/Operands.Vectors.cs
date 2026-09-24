@@ -114,7 +114,7 @@ public sealed class VectorCallOperand : RuleOperand {
         ArgumentNullException.ThrowIfNull(argument: left);
         ArgumentNullException.ThrowIfNull(argument: right);
 
-        Dimensions = left.Space.Dimensions;
+        Dimensions = left.Space.Identity.Dimensions;
         Left = left;
         Operation = operation;
         Right = right;

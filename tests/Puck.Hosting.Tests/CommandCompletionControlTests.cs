@@ -14,7 +14,7 @@ public sealed class CommandCompletionControlTests {
 
         source.Collect();
         Assert.False(condition: response.IsCompleted);
-        pending.Settle((rejected ? CommandResult.Error(output: "authority refused") : new CommandResult("authority applied")));
+        pending.Settle(result: (rejected ? CommandResult.Error(output: "authority refused") : new CommandResult("authority applied")));
         var result = await response;
 
         Assert.Equal((rejected ? "refused" : "completed"), result.Status);
@@ -25,7 +25,7 @@ public sealed class CommandCompletionControlTests {
     private sealed class Module(CommandSettlement pending) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(name: "edit", description: "Deferred authority edit.",
-                handler: (_, _) => CommandResult.Settling(pending), bindability: CommandBindability.Unbindable);
+                handler: (_, _) => CommandResult.Settling(settlement: pending), bindability: CommandBindability.Unbindable);
         }
     }
 }

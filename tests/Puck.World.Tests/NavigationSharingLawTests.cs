@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics.Fields;
 using Puck.Physics.Navigation;
@@ -28,12 +29,7 @@ public sealed partial class NavigationLawTests {
             withMedium: medium
         );
     }
-    private static FixedVector3 SharedGoal(int x = 4, int y = 4, int z = 0) =>
-        new(
-            X: FixedQ4816.FromInteger(value: x),
-            Y: FixedQ4816.FromInteger(value: y),
-            Z: FixedQ4816.FromInteger(value: z)
-        );
+    private static FixedVector3 SharedGoal(int x = 4, int y = 4, int z = 0) => Fixtures.FixedPoint(x: x, y: y, z: z);
     private static NavigationTreeCheckpoint[] SharedTrees(WorldFixture fixture) =>
         fixture.Server.Population.Capture().SharedNavigation![0].Trees;
 
@@ -95,7 +91,7 @@ public sealed partial class NavigationLawTests {
                     default,
                     SharedGoal()
                 ),
-                WorldPrincipal.Console
+                Principal.Console
             ));
         }
         for (var tick = 0; (tick < 120); tick++) {
@@ -395,7 +391,7 @@ public sealed partial class NavigationLawTests {
                     z: 2
                 )
             ),
-            WorldPrincipal.Seat(slot: 0)
+            Principal.Seat(slot: 0)
         ));
         fixture.Step();
         var trees = SharedTrees(fixture: fixture);
@@ -446,7 +442,7 @@ public sealed partial class NavigationLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var captured,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
@@ -518,7 +514,7 @@ public sealed partial class NavigationLawTests {
                     z: 2
                 )
             ),
-            WorldPrincipal.Seat(slot: 0)
+            Principal.Seat(slot: 0)
         ));
         fixture.Step(); fixture.Step();
         Assert.Equal(
@@ -536,7 +532,7 @@ public sealed partial class NavigationLawTests {
                 default,
                 SharedGoal()
             ),
-            WorldPrincipal.Seat(slot: 0)
+            Principal.Seat(slot: 0)
         ));
         first.Pose(
             SharedGoal(
@@ -573,7 +569,7 @@ public sealed partial class NavigationLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var captured,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
@@ -637,7 +633,7 @@ public sealed partial class NavigationLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var captured,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason

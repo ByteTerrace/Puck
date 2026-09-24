@@ -1,0 +1,53 @@
+/* The section list beside the selected section. The header keeps a fixed height, so picking a section with a longer
+   or shorter description never moves the view below it. */
+
+.workspace {
+  display: grid;
+  grid-template-columns: rem(248px) minmax(0, 1fr);
+  border: 1px solid var(--puck-line);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--puck-surface-raised);
+}
+
+.explorer {
+  min-width: 0;
+  max-height: calc(clamp(rem(360px), 64dvh, rem(760px)) + rem(150px));
+  padding: var(--mantine-spacing-md) var(--mantine-spacing-xs);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-inline-end: 1px solid var(--puck-line);
+}
+
+.content {
+  min-width: 0;
+  padding: var(--mantine-spacing-md);
+
+  & h2 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.description {
+  height: calc(2 * var(--mantine-line-height-sm) * var(--mantine-font-size-sm));
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  height: rem(24px);
+}
+
+@mixin smaller-than $mantine-breakpoint-sm {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .explorer {
+    max-height: rem(240px);
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--puck-line);
+  }
+}

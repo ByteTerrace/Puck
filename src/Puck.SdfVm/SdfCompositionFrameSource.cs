@@ -17,12 +17,14 @@ public interface ISdfFrameDresser {
     /// host's OWN buffer, handed over as the concrete array rather than a read-only view because a dresser typically
     /// retains it past this call (an offscreen view pass rendering the same world after capture) and passes it to
     /// span-taking consumers. Never mutated by the host until the next <see cref="ISdfFrameSource.CaptureFrame"/>.</param>
+    /// <param name="moved">The table's moved set, which the dressed frame carries as
+    /// <see cref="SdfFrame.MovedTransforms"/> so every engine rendering it stages only the rows it is owed.</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
     /// <param name="deltaSeconds">The presentation frame delta in seconds.</param>
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> toward the current fixed simulation tick.</param>
     /// <returns>The frame to render.</returns>
-    SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha);
+    SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, uint width, uint height, float deltaSeconds, float interpolationAlpha);
 }
 /// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into one <see cref="ISdfFrameSource"/> — the
 /// generalization of the hand-written <c>BuildProgram</c> method every prior frame source wrote for itself: rather
@@ -89,9 +91,13 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     // once at construction from each emitter's RevisionComponentCount, which its contract pins for the emitter's life.
     private readonly int[] m_revisionOffsets;
     private readonly int[] m_slotBases;
+    // The shared table: it keeps every slot's last packed transform across frames, so an owner at rest costs nothing.
     private readonly DynamicTransform[] m_transforms;
 
+    private readonly SdfMovedTransforms m_moved = new();
+
     private float m_interpolationAlpha;
+    private Vector3 m_packedParkPosition;
     private SdfProgram? m_program;
     private float m_time;
 
@@ -161,9 +167,12 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
 
     /// <summary>Gets or sets where a hidden/unused dynamic-transform slot parks this frame (<see cref="SdfEmitContext.ParkPosition"/>)
     /// — settable so a host can move it to sit well outside its own world's camera/tile-cull reach. Changing this does
-    /// not rebuild the program (it only affects <see cref="ISdfSceneEmitter.PackDynamicTransforms"/>, called every
-    /// frame regardless).</summary>
+    /// not rebuild the program; the next frame repacks the whole table.</summary>
     public Vector3 ParkPosition { get; set; } = DefaultParkPosition;
+
+    /// <summary>Gets the dynamic-transform table's moved set, which also counts the packing work as
+    /// <see cref="SdfMovedTransforms.SourceName"/>.</summary>
+    public SdfMovedTransforms MovedTransforms => m_moved;
     /// <summary>Gets the dynamic-transform slot floor the render assembly must reserve — the sum of every registered
     /// emitter's <see cref="ISdfSceneEmitter.DynamicSlotCount"/>.</summary>
     public int WorstCaseDynamicTransformCapacity { get; }
@@ -266,14 +275,26 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
 
         return moved;
     }
-    private void PackTransforms() {
-        Array.Fill(
-            array: m_transforms,
-            value: new DynamicTransform(
-                Position: ParkPosition,
-                Orientation: Quaternion.Identity
-            )
+    // A frame owes the whole table when the program was rebuilt (every slot's meaning may have changed) or the park
+    // position moved; the table is parked first so a slot no owner claims reads hidden. Any other frame repacks only
+    // the owners each emitter finds moved or settling.
+    private void PackTransforms(bool everything) {
+        everything |= (m_packedParkPosition != ParkPosition);
+        m_moved.Begin(
+            everything: everything,
+            tableRows: m_transforms.Length
         );
+
+        if (everything) {
+            Array.Fill(
+                array: m_transforms,
+                value: new DynamicTransform(
+                    Position: ParkPosition,
+                    Orientation: Quaternion.Identity
+                )
+            );
+            m_packedParkPosition = ParkPosition;
+        }
 
         for (var index = 0; (index < m_emitters.Count); index++) {
             var emitter = m_emitters[index];
@@ -293,6 +314,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
 
             emitter.PackDynamicTransforms(
                 context: in context,
+                moved: m_moved,
                 slots: m_transforms
             );
         }
@@ -319,11 +341,12 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         //   Promotion below happens only once BuildProgram has returned, so a throw leaves the record describing the
         //   program actually held and the next frame retries the rebuild.
         var moved = CaptureRevisions();
-
-        if (
+        var rebuilt = (
             (m_program is null) ||
             moved
-        ) {
+        );
+
+        if (rebuilt) {
             m_program = BuildProgram(
                 context: new SdfEmitContext(
                     Probe: false,
@@ -343,13 +366,14 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
             );
         }
 
-        PackTransforms();
+        PackTransforms(everything: rebuilt);
 
         return m_dresser.Dress(
             deltaSeconds: deltaSeconds,
             height: height,
             interpolationAlpha: interpolationAlpha,
-            program: m_program,
+            moved: m_moved,
+            program: m_program!,
             transforms: m_transforms,
             width: width
         );

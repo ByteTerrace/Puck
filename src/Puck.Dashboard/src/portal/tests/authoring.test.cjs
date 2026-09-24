@@ -1,37 +1,29 @@
-// Exercises this package's boundary: `authoring/documentTools.ts`, `authoring/sceneProjection.ts`,
-// `authoring/presentation.ts`, and `authoring/jsonReference.ts`. The pure document-shape helpers
-// (documentTools/presentation/jsonReference) are tested against small synthetic documents with no
-// engine at all; `sceneProjection`'s render-space projection is tested against the REAL engine's
-// own `cells()` geometry (a synthetic box topology, and the real tictactoe board) — this module's
-// whole point is to project the engine's OWN positions, never re-derive them, so a fake geometry
-// would not exercise the thing that matters.
+// Exercises this package's boundary: `authoring/documentTools.ts`, `authoring/sceneProjection.ts`, and
+// `authoring/presentation.ts`. The pure document-shape helpers are tested against small synthetic documents with no
+// engine at all; `sceneProjection`'s render-space projection is tested against the REAL engine's own `cells()`
+// geometry — this module's whole point is to project the engine's OWN positions, never re-derive them, so a fake
+// geometry would not exercise the thing that matters.
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
 
-require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, file);
+require('./support/register.cjs');
 
 const {
   decodeCellValue,
-  authoredCellValue,
   authoredCellValues,
-  canPaintRow,
   emptyValueFor,
   findTopology,
   listStateRows,
   listTopologies,
   parseCellAddresses,
-  parsePaintValue,
+  parseRowValue,
   rowsBoundToTopology,
   topologyDirections,
 } = require('../src/authoring/documentTools.ts');
 const { isVolumetric, projectDirections, projectScene } = require('../src/authoring/sceneProjection.ts');
-const { PRESENTATION_KEY, appearanceFor, presentationEdit, readPresentation } = require('../src/authoring/presentation.ts');
-const { cellJsonPath } = require('../src/authoring/jsonReference.ts');
+const { PRESENTATION_KEY, appearanceFor, readPresentation } = require('../src/authoring/presentation.ts');
 const { bootEngineFromLocalBundle } = require('../src/native/engineBoot.ts');
 
 function repositoryRoot() {
@@ -47,7 +39,6 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const worldsDir = path.join(root, 'src', 'Puck.World', 'Assets', 'worlds');
 
 // ---------------------------------------------------------------------------------------------
 // documentTools.ts — pure, no engine.
@@ -80,7 +71,7 @@ function syntheticDocument() {
   };
 }
 
-test('listTopologies/findTopology/listStateRows/rowsBoundToTopology/canPaintRow read a synthetic document', () => {
+test('listTopologies/findTopology/listStateRows/rowsBoundToTopology read a synthetic document', () => {
   const document = syntheticDocument();
   assert.equal(listTopologies(document).length, 1);
   assert.equal(findTopology(document, 'board')?.name, 'board');
@@ -90,8 +81,6 @@ test('listTopologies/findTopology/listStateRows/rowsBoundToTopology/canPaintRow 
   const bound = rowsBoundToTopology(document, 'board');
   assert.equal(bound.length, 1);
   assert.equal(bound[0].name, 'cell');
-  assert.equal(canPaintRow(bound[0]), true);
-  assert.equal(canPaintRow(listStateRows(document)[1]), false, 'a scalar row (no cellsOf domain) is not paintable by ordinal');
 
   const directions = topologyDirections(findTopology(document, 'board'));
   assert.deepEqual(directions, [{ name: 'east', x: 1, y: 0 }]);
@@ -119,28 +108,24 @@ test('topologyDirections reads directions only from grid/ring/hex/box, empty for
   assert.deepEqual(topologyDirections(gridNoDirections), []);
 });
 
-test('authoredCellValue/authoredCellValues decode by String(ordinal), and emptyValueFor reads the domain default', () => {
+test('authoredCellValues decodes by String(ordinal), and emptyValueFor reads the domain default', () => {
   const document = syntheticDocument();
   const row = rowsBoundToTopology(document, 'board')[0];
-  assert.equal(authoredCellValue(row, 0), 5n);
-  assert.equal(authoredCellValue(row, 3), 9n);
-  assert.equal(authoredCellValue(row, 1), undefined, 'an unauthored ordinal has no cells[] entry');
-  assert.equal(authoredCellValue(undefined, 0), undefined);
   assert.deepEqual([...authoredCellValues(row).entries()].sort((a, b) => a[0] - b[0]), [[0, 5n], [3, 9n]]);
   assert.equal(emptyValueFor(row), 0n);
   assert.equal(emptyValueFor(undefined), 0n);
 });
 
-test('parsePaintValue validates Int bounds and Bool tokens with a readable message, and throws on a bad literal', () => {
+test('parseRowValue validates Int bounds and Bool tokens with a readable message, and throws on a bad literal', () => {
   const row = { name: 'score', kind: 'Int', min: 0, max: 10 };
-  assert.equal(parsePaintValue(row, ' 5 '), 5n);
-  assert.throws(() => parsePaintValue(row, '11'), /maximum/);
-  assert.throws(() => parsePaintValue(row, '-1'));
-  assert.throws(() => parsePaintValue(row, 'abc'));
+  assert.equal(parseRowValue(row, ' 5 '), 5n);
+  assert.throws(() => parseRowValue(row, '11'), /maximum/);
+  assert.throws(() => parseRowValue(row, '-1'));
+  assert.throws(() => parseRowValue(row, 'abc'));
   const boolRow = { name: 'flag', kind: 'Bool' };
-  assert.equal(parsePaintValue(boolRow, 'true'), 1n);
-  assert.equal(parsePaintValue(boolRow, '0'), 0n);
-  assert.throws(() => parsePaintValue(boolRow, '2'));
+  assert.equal(parseRowValue(boolRow, 'true'), 1n);
+  assert.equal(parseRowValue(boolRow, '0'), 0n);
+  assert.throws(() => parseRowValue(boolRow, '2'));
 });
 
 test('parseCellAddresses parses ranges and singles, de-duplicates, sorts, and validates against the geometry', () => {
@@ -156,22 +141,13 @@ test('parseCellAddresses parses ranges and singles, de-duplicates, sorts, and va
 // presentation.ts — pure, no engine.
 // ---------------------------------------------------------------------------------------------
 
-test('presentation bindings round-trip through metadata.custom.puckStudioPresentation, keyed as decimal strings', () => {
-  const edit = presentationEdit({}, 'cell', 7n, { label: 'X', color: '#ff0000', shape: 'sphere' });
-  assert.deepEqual(edit.path, ['metadata', 'custom', PRESENTATION_KEY, 'cell']);
-  assert.deepEqual(edit.value, { 7: { label: 'X', color: '#ff0000', shape: 'sphere' } });
-
-  const edited = { metadata: { custom: { [PRESENTATION_KEY]: { cell: edit.value } } } };
-  const bindings = readPresentation(edited);
+test('presentation bindings read from metadata.custom.puckStudioPresentation, keyed as decimal strings', () => {
+  const composed = { metadata: { custom: { [PRESENTATION_KEY]: { cell: { 7: { label: 'X', color: '#ff0000', shape: 'sphere' }, 8: { label: 'O', color: '#00ff00' } } } } } };
+  const bindings = readPresentation(composed);
   assert.deepEqual(bindings.cell['7'], { label: 'X', color: '#ff0000', shape: 'sphere' });
+  assert.deepEqual(bindings.cell['8'], { label: 'O', color: '#00ff00' });
   assert.equal(appearanceFor(7n, bindings.cell).label, 'X');
   assert.equal(appearanceFor(-7n, bindings.cell).label, '-7', 'an unbound value falls back to its own decimal label');
-
-  // A second edit for a DIFFERENT value on the same state row preserves the first binding.
-  const secondEdit = presentationEdit(edited, 'cell', 8n, { label: 'O', color: '#00ff00' });
-  const bothBound = readPresentation({ metadata: { custom: { [PRESENTATION_KEY]: { cell: secondEdit.value } } } });
-  assert.deepEqual(bothBound.cell['7'], { label: 'X', color: '#ff0000', shape: 'sphere' });
-  assert.deepEqual(bothBound.cell['8'], { label: 'O', color: '#00ff00' });
 });
 
 test('readPresentation refuses a malformed bag by name rather than silently discarding it', () => {
@@ -185,17 +161,6 @@ test('appearanceFor is deterministic for an unbound value, and zero always reads
   assert.equal(appearanceFor(0n).label, '0');
   const first = appearanceFor(42n), second = appearanceFor(42n);
   assert.equal(first.color, second.color);
-});
-
-// ---------------------------------------------------------------------------------------------
-// jsonReference.ts — pure, no engine.
-// ---------------------------------------------------------------------------------------------
-
-test('cellJsonPath points at the row cells[] entry when a cell is authored, else the row itself, else null', () => {
-  const document = { state: { world: [{ name: 'a' }, { name: 'cell', cells: [{ key: '3', value: 1 }] }] } };
-  assert.deepEqual(cellJsonPath(document, 'cell', 3), ['state', 'world', 1, 'cells', 0]);
-  assert.deepEqual(cellJsonPath(document, 'cell', 9), ['state', 'world', 1]);
-  assert.equal(cellJsonPath(document, 'missing-row', 0), null);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -265,13 +230,10 @@ if (!fs.existsSync(mainMjs)) {
     }
   });
 
-  test('projectScene over the real tictactoe board preserves every ordinal address with no two cells colliding in render-space', async () => {
+  test('projectScene over a 4x4x4 box preserves every ordinal address with no two cells colliding in render-space', async () => {
     const engine = await bootEngineFromLocalBundle(appBundleDir);
     try {
-      const fragmentJson = fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8');
-      const value = JSON.parse(fragmentJson);
-      const lattice = value.state.lattices[0];
-      assert.equal(lattice.$type, 'box');
+      const lattice = { $type: 'box', name: 'cube', width: 4, depth: 4, layers: 4, layerHeight: 1, cellSize: 1, origin: [0, 0, 0] };
 
       const result = await engine.cells(JSON.stringify(lattice));
       assert.equal(result.ok, true, JSON.stringify(result));

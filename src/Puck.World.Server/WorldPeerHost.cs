@@ -1,7 +1,9 @@
+using Puck.Commands;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
+using Puck.Abstractions;
 using Puck.Networking;
 using Puck.Networking.Peers;
 using Puck.World.Protocol;
@@ -48,18 +50,22 @@ public sealed class WorldPeerHost : IDisposable {
     /// connections can pin before any of them ever reaches a capacity check.</summary>
     private const int MaxConcurrentHandshakes = 64;
 
-    /// <summary>The wall-clock deadline for the entire pre-admission handshake (Hello's version check through the
-    /// identity door's verify and the tick-thread population admit). This bounds connection lifecycle, never
-    /// simulation state — the wall-clock ban in CLAUDE.md's determinism rule governs the tick, and a socket that
+    /// <summary>Gets the deadline, on the host's clock, for the entire pre-admission handshake (Hello's version check
+    /// through the identity door's verify and the tick-thread population admit). This bounds connection lifecycle,
+    /// never simulation state — the wall-clock ban in CLAUDE.md's determinism rule governs the tick, and a socket that
     /// never finishes proving who it is has not entered the tick at all
-    /// (<see cref="Protocol.WorldAdmissionDoor.TryAdmit"/>'s own <c>now: DateTimeOffset</c> parameter already reads
-    /// the wall clock for the identical reason). Without a deadline, a peer that completes Hello but then stalls
+    /// (<see cref="Protocol.WorldAdmissionDoor.TryAdmit"/>'s own <c>now: DateTimeOffset</c> parameter reads the same
+    /// admission clock for the identical reason). Without a deadline, a peer that completes Hello but then stalls
     /// (or never sends) the identity frame pins a socket, a read buffer, and a slot under
     /// <see cref="MaxConcurrentHandshakes"/> forever — the slowloris shape. 10 seconds is generous for any
     /// legitimate LAN or WAN client (the identity frame is at most
     /// <see cref="HandshakeWireFormat.MaxHelloIdentityBytes"/>, ~64 KiB of already-small P-256 envelopes) while still
     /// bounding the worst case to a small, fixed number of seconds rather than never.</summary>
-    private static readonly TimeSpan HandshakeDeadline = TimeSpan.FromSeconds(value: 10);
+    public static TimeSpan HandshakeDeadline { get; } = TimeSpan.FromSeconds(value: 10);
+    /// <summary>Gets how long a forwarded submission or intent waits, on the host clock, before it looks up an onward
+    /// route again: detaching a traveler precedes publishing its committed onward route, so ingress landing inside
+    /// that window retries rather than refusing an ordinary handoff.</summary>
+    public static TimeSpan RouteLookupRetryDelay { get; } = TimeSpan.FromMilliseconds(value: 4);
 
     private readonly IAuthenticator m_authenticator;
     private readonly WorldPeerNetwork m_network;
@@ -79,32 +85,64 @@ public sealed class WorldPeerHost : IDisposable {
     // Federation connections are long-lived and are not admitted bodies, so they are not in m_connections. They are
     // tracked here only so shutdown can half-close them; the value is unused.
     private readonly ConcurrentDictionary<PeerStream, byte> m_federationConnections = new();
-    private readonly ConcurrentQueue<Action> m_pending = new();
+    private readonly Channel<Action> m_pending = Channel.CreateUnbounded<Action>();
     private readonly List<Connection> m_connections = [];
     private readonly Lock m_connectionsLock = new();
 
     /// <summary>Initializes a new instance of the <see cref="WorldPeerHost"/> class over the server it admits into.</summary>
     /// <param name="server">The authoritative server.</param>
-    /// <param name="timeProvider">The admission deadline clock; defaults to system time.</param>
-    public WorldPeerHost(WorldServer server, TimeProvider? timeProvider = null) : this(
+    /// <param name="timeProvider">The host clock: the handshake deadline, the refusal drain that holds a closing
+    /// connection open for its peer, the instant an identity claim is verified at, and the peer deadlines of a network
+    /// this host owns. Defaults to system time.</param>
+    /// <param name="transportHandshakeTimeout">The wall-clock bound on each QUIC/TLS handshake of the network this host
+    /// owns; <see langword="null"/> is <see cref="QuicPeerTransport.DefaultHandshakeTimeout"/>.</param>
+    public WorldPeerHost(WorldServer server, TimeProvider? timeProvider = null, TimeSpan? transportHandshakeTimeout = null) : this(
         server: server,
         authenticator: new WorldAttestedAuthenticator(),
-        timeProvider: timeProvider
+        timeProvider: timeProvider,
+        transportHandshakeTimeout: transportHandshakeTimeout
     ) { }
     /// <summary>Initializes a host with an explicit federation authentication policy.</summary>
     /// <param name="server">The authoritative server.</param>
     /// <param name="authenticator">The process-scoped federation authenticator; an unconfigured instance denies federation.</param>
-    /// <param name="network">The externally owned shared peer network, or null to own an ephemeral one.</param>
-    /// <param name="timeProvider">The admission deadline clock; defaults to system time.</param>
+    /// <param name="network">The externally owned shared peer network, or null to own an ephemeral one. A supplied
+    /// network's <see cref="WorldPeerNetwork.Clock"/> is this host's clock.</param>
+    /// <param name="timeProvider">The host clock: the handshake deadline, the refusal drain that holds a closing
+    /// connection open for its peer, the instant an identity claim is verified at, the pacing of a forwarded
+    /// submission's or intent's route-lookup retry, and the peer deadlines of a network this host owns. Defaults to the
+    /// supplied network's clock, else system time; a clock other than a supplied network's is refused, since one host
+    /// has one clock.</param>
+    /// <param name="transportHandshakeTimeout">The wall-clock bound on each QUIC/TLS handshake when this host owns its
+    /// network; <see langword="null"/> is <see cref="QuicPeerTransport.DefaultHandshakeTimeout"/>. A supplied
+    /// <paramref name="network"/> carries its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> or <paramref name="authenticator"/> is <see langword="null"/>.</exception>
-    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null, TimeProvider? timeProvider = null) {
-        m_timeProvider = (timeProvider ?? TimeProvider.System);
+    /// <exception cref="ArgumentException"><paramref name="timeProvider"/> is not the supplied
+    /// <paramref name="network"/>'s clock.</exception>
+    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null, TimeProvider? timeProvider = null, TimeSpan? transportHandshakeTimeout = null) {
+        if (
+            (network is not null) &&
+            (timeProvider is not null) &&
+            !ReferenceEquals(
+            objA: network.Clock,
+            objB: timeProvider
+        )
+        ) {
+            throw new ArgumentException(
+                message: "a peer host runs on its network's clock; the supplied clock is a second one",
+                paramName: nameof(timeProvider)
+            );
+        }
+
+        m_timeProvider = (network?.Clock ?? (timeProvider ?? TimeProvider.System));
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: authenticator);
 
         m_server = server;
         m_authenticator = authenticator;
-        m_network = (network ?? new WorldPeerNetwork());
+        m_network = (network ?? new WorldPeerNetwork(
+            timeProvider: m_timeProvider,
+            transportHandshakeTimeout: transportHandshakeTimeout
+        ));
         m_ownsNetwork = (network is null);
     }
 
@@ -144,8 +182,6 @@ public sealed class WorldPeerHost : IDisposable {
     public bool IsListening => (ListenEndpoint is not null);
     /// <summary>Gets the bound endpoint, or <see langword="null"/> while not listening.</summary>
     public string? ListenEndpoint { get; private set; }
-    /// <summary>Gets the queued tick-thread work count, including admission waiting for a paused host to drain.</summary>
-    public int PendingWorkCount => m_pending.Count;
 
     private async Task AcceptLoopAsync(CancellationToken ct) {
         var incoming = m_network.Peer.IncomingLinks;
@@ -256,12 +292,12 @@ public sealed class WorldPeerHost : IDisposable {
 
             await RunOnTickThreadAsync(
                 work: () => {
-                m_server.Submit(
-                    envelope: envelope,
-                    completion: r => completion.TrySetResult(result: r)
-                );
-                return true;
-            },
+                    m_server.Submit(
+                        envelope: envelope,
+                        completion: r => completion.TrySetResult(result: r)
+                    );
+                    return true;
+                },
                 ct: ct
             ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -327,17 +363,14 @@ public sealed class WorldPeerHost : IDisposable {
         // refused/times out/dies (the outer finally releases it).
         var handshakeSlotHeld = true;
 
-        // The wall-clock deadline, linked to the accept loop's own cancellation so shutdown still wins.
-        using var timer = new CancellationTokenSource(
-            delay: HandshakeDeadline,
+        // The handshake deadline on the host clock, linked to the accept loop's own cancellation so shutdown still wins.
+        using var handshakeDeadline = new OperationDeadline(
+            caller: ct,
+            timeout: HandshakeDeadline,
             timeProvider: m_timeProvider
         );
-        using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(
-            token1: ct,
-            token2: timer.Token
-        );
 
-        var handshakeCt = deadlineCts.Token;
+        var handshakeCt = handshakeDeadline.Token;
 
         try {
             // Door 1 of 2 — protocol-version compatibility, checked first and refused with its own spelling
@@ -502,7 +535,7 @@ public sealed class WorldPeerHost : IDisposable {
                     challenge: challenge,
                     claim: claimAttestation,
                     chain: chainAttestations,
-                    now: DateTimeOffset.UtcNow
+                    now: m_timeProvider.GetUtcNow()
                 );
             } catch (FormatException exception) {
                 await WorldPeerWireFormat.WriteHelloRefusedAsync(
@@ -629,9 +662,13 @@ public sealed class WorldPeerHost : IDisposable {
         } finally {
             // A completed QUIC write only hands bytes to the transport. Immediate connection disposal can
             // discard the final refusal before the peer reads it. Keep the handshake slot while draining, using
-            // the networking library's same bounded refusal window; process shutdown still cancels immediately.
-            using (var drain = CancellationTokenSource.CreateLinkedTokenSource(token: ct)) {
-                drain.CancelAfter(delay: PeerWireProtocol.RefusalDrainTimeout);
+            // the networking library's same bounded refusal window on the host's clock; process shutdown still
+            // cancels immediately.
+            using (var drain = new OperationDeadline(
+                caller: ct,
+                timeout: PeerWireProtocol.RefusalDrainTimeout,
+                timeProvider: m_timeProvider
+            )) {
                 await StreamDrain.UntilClosedAsync(
                     client,
                     drain.Token
@@ -688,8 +725,9 @@ public sealed class WorldPeerHost : IDisposable {
             }
 
             await Task.Delay(
-                delay: TimeSpan.FromMilliseconds(milliseconds: 4),
-                cancellationToken: ct
+                cancellationToken: ct,
+                delay: RouteLookupRetryDelay,
+                timeProvider: m_timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
 
@@ -700,7 +738,7 @@ public sealed class WorldPeerHost : IDisposable {
     private Task<T> RunOnTickThreadAsync<T>(Func<T> work, CancellationToken ct = default) {
         var tcs = new TaskCompletionSource<T>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_pending.Enqueue(item: () => {
+        _ = m_pending.Writer.TryWrite(item: () => {
             // A canceled queue item must never execute later: the caller has already released its socket/handshake
             // slot, so committing admission here would create a population body with no connection to own it.
             if (ct.IsCancellationRequested) {
@@ -888,10 +926,12 @@ public sealed class WorldPeerHost : IDisposable {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return false;
                 }
-                observation = observation with { Ceiling = ((WorldDisclosureTier)Math.Min(
+                observation = observation with {
+                    Ceiling = ((WorldDisclosureTier)Math.Min(
                     val1: ((byte)tier),
                     val2: ((byte)observation.Ceiling)
-                )) };
+                )),
+                };
                 var refusal = await WorldTravelerProjection.StreamAsync(
                     m_server,
                     observation,
@@ -1307,7 +1347,7 @@ public sealed class WorldPeerHost : IDisposable {
     // are paid once rather than once per simulation tick.
     private async Task StreamFederatedIntentsAsync(Stream stream, string sourceAuthority, CancellationToken ct) {
         var leaseId = WorldFederatedIntentLease.Next();
-        var touched = new Dictionary<WorldMobilityIdentity, (WorldPrincipal Principal, IntentSubmission Submission)>();
+        var touched = new Dictionary<WorldMobilityIdentity, (Principal Principal, IntentSubmission Submission)>();
         var forwardRelease = true;
 
         await WorldFederationCodec.WriteResponseAsync(
@@ -1444,8 +1484,9 @@ public sealed class WorldPeerHost : IDisposable {
                             break;
                         }
                         await Task.Delay(
-                            delay: TimeSpan.FromMilliseconds(milliseconds: 4),
-                            cancellationToken: ct
+                            cancellationToken: ct,
+                            delay: RouteLookupRetryDelay,
+                            timeProvider: m_timeProvider
                         ).ConfigureAwait(continueOnCapturedContext: false);
                     }
                 }
@@ -1509,6 +1550,8 @@ public sealed class WorldPeerHost : IDisposable {
             }
         }
     }
+    // The lane authenticated a source authority's namespace, which names no body here, so it observes as the public
+    // observer. A seat reads its own disclosure through ObserveTraveler, whose credential resolves to its principal.
     private async Task StreamProjectionAsync(Stream stream, WorldDisclosureTier tier, CancellationToken ct) {
         var sink = new WorldFederationProjectionSink(
             tier: tier,
@@ -1594,15 +1637,24 @@ public sealed class WorldPeerHost : IDisposable {
     /// submissions, and disconnects alike. MUST run on the tick thread, before <c>WorldServer.Step</c>, so it never
     /// races the single-threaded server/population/grant state.</summary>
     public void DrainPending() {
-        while (m_pending.TryDequeue(result: out var action)) {
+        while (m_pending.Reader.TryRead(item: out var action)) {
             action();
         }
+    }
+    /// <summary>Completes once tick-thread work is queued for <see cref="DrainPending"/>, immediately when some
+    /// already is. A loop that only needs to step when a connection has work waits here instead of polling.</summary>
+    /// <param name="cancellationToken">Abandons the wait; queued work is unaffected.</param>
+    /// <returns>A task that completes when at least one work item is queued.</returns>
+    public async ValueTask WaitForPendingWorkAsync(CancellationToken cancellationToken) {
+        _ = await m_pending.Reader.WaitToReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Binds the listener and starts accepting connections in the background. The composition root calls this
     /// only when <c>host.listen</c>/<c>--listen</c> names an endpoint; when it is absent the call is skipped entirely,
     /// so no listener ever binds.</summary>
     /// <param name="listen">The <c>host:port</c> endpoint to bind.</param>
     /// <exception cref="FormatException"><paramref name="listen"/> is not a parseable IP endpoint.</exception>
+    /// <exception cref="ListenEndpointUnavailableException">This host cannot bind <paramref name="listen"/>: the address
+    /// is in use, the operating system refused it, or QUIC is not offered here.</exception>
     public void Start(string listen) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: listen);
         ObjectDisposedException.ThrowIf(
@@ -1618,13 +1670,24 @@ public sealed class WorldPeerHost : IDisposable {
             throw new FormatException(message: $"host.listen '{listen}' is not a parseable \"ip:port\" endpoint (a hostname is not accepted).");
         }
 
-        m_cts = new CancellationTokenSource();
-        var lifetime = m_cts.Token;
+        var cts = new CancellationTokenSource();
+        var lifetime = cts.Token;
 
-        ListenEndpoint = m_network.Peer.ListenAsync(
-            ct: lifetime,
-            endpoint: endpoint
-        ).GetAwaiter().GetResult().ToString();
+        try {
+            ListenEndpoint = m_network.Peer.ListenAsync(
+                ct: lifetime,
+                endpoint: endpoint
+            ).GetAwaiter().GetResult().ToString();
+        } catch (Exception failure) when ((ListenEndpointUnavailableException.Classify(
+            endpoint: listen,
+            failure: failure,
+            transport: "quic"
+        ) is { } unavailable)) {
+            cts.Dispose();
+
+            throw unavailable;
+        }
+        m_cts = cts;
         m_acceptLoop = Task.Run(function: () => AcceptLoopAsync(ct: lifetime));
         if (m_server.Output.HasNarrationSink) {
             m_server.Output.Narrate(
@@ -1650,7 +1713,7 @@ public sealed class WorldPeerHost : IDisposable {
         public string IdentitySubject { get; } = identitySubject;
         public WorldDisclosureTier Tier { get; } = tier;
 
-        public WorldPrincipal Principal => WorldPrincipal.Peer(
+        public Principal Principal => Principal.Peer(
             index: PeerIndex,
             generation: Generation
         );

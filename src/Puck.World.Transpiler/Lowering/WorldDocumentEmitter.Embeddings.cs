@@ -38,35 +38,55 @@ public static partial class WorldDocumentEmitter {
         return 0;
     }
 
-    internal static (string Name, string Model, string Revision, int Dimensions)? FindSpaceInfo(JsonObject? parent, string? spaceName) {
+    /// <summary>Reads the embedding identity a lowered document's <c>state.spaces</c> entry declares, reading an
+    /// absent model or revision as empty and an absent or non-integer dimension count as zero.</summary>
+    /// <param name="space">One object of the lowered document's <c>state.spaces</c> array.</param>
+    /// <returns>The declared identity, unvalidated.</returns>
+    public static EmbeddingIdentity ReadSpaceIdentity(JsonObject space) {
+        ArgumentNullException.ThrowIfNull(argument: space);
+
+        return new EmbeddingIdentity(
+            Dimensions: ReadDimensions(node: space["dimensions"]),
+            Model: (space["model"]?.ToString() ?? ""),
+            Revision: (space["revision"]?.ToString() ?? "")
+        );
+    }
+
+    internal static EmbeddingIdentity? FindSpaceIdentity(JsonObject? parent, string? spaceName) {
         if ((parent is null) || (parent["state"]?["spaces"] is not JsonArray spacesArr)) {
             return null;
         }
 
         if (string.IsNullOrEmpty(value: spaceName)) {
-            if ((spacesArr.Count == 1) && (spacesArr[0] is JsonObject defaultObj)) {
-                var name = (defaultObj["name"]?.ToString() ?? "");
-                var model = (defaultObj["model"]?.ToString() ?? "");
-                var rev = (defaultObj["revision"]?.ToString() ?? "");
-                var dims = ReadDimensions(node: defaultObj["dimensions"]);
-
-                return (name, model, rev, dims);
-            }
-            return null;
+            return (((spacesArr.Count == 1) && (spacesArr[0] is JsonObject defaultObj)) ? ReadSpaceIdentity(space: defaultObj) : null);
         }
 
         foreach (var node in spacesArr) {
             if ((node is JsonObject obj) && string.Equals(a: obj["name"]?.ToString(), b: spaceName, comparisonType: StringComparison.Ordinal)) {
-                var name = (obj["name"]?.ToString() ?? "");
-                var model = (obj["model"]?.ToString() ?? "");
-                var rev = (obj["revision"]?.ToString() ?? "");
-                var dims = ReadDimensions(node: obj["dimensions"]);
-
-                return (name, model, rev, dims);
+                return ReadSpaceIdentity(space: obj);
             }
         }
 
         return null;
+    }
+    // The one admission of an authored vector(...) literal, whichever surface wrote it: base64url, carrying exactly
+    // as many components as the space it lands in has dimensions. A literal with no space to hold it against — none
+    // named and more than one declared — is held to its encoding alone.
+    internal static bool TryAdmitVectorLiteral(string text, string? space, DocumentScope scope, SourceSpan span) {
+        var root = ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rootNode) && (rootNode is JsonObject rootObj)) ? rootObj : null);
+        string? error;
+        var admitted = ((FindSpaceIdentity(parent: root, spaceName: space) is { Dimensions: > 0 } info)
+            ? StateVector.TryParseBase64Url(dimensions: info.Dimensions, error: out error, text: text, vector: out _)
+            : StateVector.TryParseBase64Url(error: out error, text: text, vector: out _));
+
+        if (!admitted) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.VectorLiteralInvalid,
+                message: $"vector(...) literal is invalid: {error}",
+                span: span
+            );
+        }
+        return admitted;
     }
     internal static bool TryResolveEmbeddedText(string text, string? space, DocumentScope scope, SourceSpan span, out string base64) {
         base64 = "";
@@ -119,11 +139,7 @@ public static partial class WorldDocumentEmitter {
             (rootParent["state"]?["spaces"] is JsonArray spacesArr)) {
             foreach (var spNode in spacesArr) {
                 if ((spNode is JsonObject spObj) && string.Equals(a: spObj["name"]?.ToString(), b: resolvedSpace, comparisonType: StringComparison.Ordinal)) {
-                    var docModel = (spObj["model"]?.ToString() ?? "");
-                    var docRev = (spObj["revision"]?.ToString() ?? "");
-                    var docDims = (((spObj["dimensions"] is JsonValue dv) && (dv.TryGetValue<int>(value: out var dVal) || (dv.TryGetValue<long>(value: out var lVal) && ((dVal = ((int)lVal)) == dVal)))) ? dVal : 0);
-
-                    if (lockFile.IsSpaceStale(dimensions: docDims, model: docModel, revision: docRev, spaceName: resolvedSpace)) {
+                    if (lockFile.IsSpaceStale(identity: ReadSpaceIdentity(space: spObj), spaceName: resolvedSpace)) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.EmbeddingLockStale,
                             message: $"Embedding space '{resolvedSpace}' in lock is stale; run puck embed.",
@@ -207,18 +223,17 @@ public static partial class WorldDocumentEmitter {
 
                 spaceObj["name"] = resolvedName;
 
-                // Validate fields: model, revision, dimensions
-                string? model = null;
-                string? revision = null;
-                int? dimensions = null;
+                // A field written with an invalid value is refused for its value, never again as missing.
+                var model = false;
+                var revision = false;
+                var dimensions = false;
 
                 foreach (var s in spaceBlock.Statements) {
                     if (s is PropertyNode prop) {
                         switch (prop.Name) {
                             case "model":
-                                if ((prop.Value is LiteralExpressionNode { Value: string mStr }) && (mStr.Length is > 0 and <= 128)) {
-                                    model = mStr;
-                                } else {
+                                model = true;
+                                if (!((prop.Value is LiteralExpressionNode { Value: string mStr }) && (mStr.Length is > 0 and <= 128))) {
                                     scope.Diagnostics.ReportError(
                                         code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
                                         message: "Embedding space 'model' must be a non-empty string of at most 128 characters.",
@@ -227,9 +242,8 @@ public static partial class WorldDocumentEmitter {
                                 }
                                 break;
                             case "revision":
-                                if ((prop.Value is LiteralExpressionNode { Value: string rStr }) && (rStr.Length is > 0 and <= 128)) {
-                                    revision = rStr;
-                                } else {
+                                revision = true;
+                                if (!((prop.Value is LiteralExpressionNode { Value: string rStr }) && (rStr.Length is > 0 and <= 128))) {
                                     scope.Diagnostics.ReportError(
                                         code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
                                         message: "Embedding space 'revision' must be a non-empty string of at most 128 characters.",
@@ -238,9 +252,8 @@ public static partial class WorldDocumentEmitter {
                                 }
                                 break;
                             case "dimensions":
-                                if ((prop.Value is LiteralExpressionNode { Value: long dVal }) && (dVal is >= 8 and <= 1024)) {
-                                    dimensions = ((int)dVal);
-                                } else {
+                                dimensions = true;
+                                if (!((prop.Value is LiteralExpressionNode { Value: long dVal }) && (dVal is >= 8 and <= 1024))) {
                                     scope.Diagnostics.ReportError(
                                         code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
                                         message: "Embedding space 'dimensions' must be an integer in [8, 1024].",
@@ -261,21 +274,21 @@ public static partial class WorldDocumentEmitter {
                     }
                 }
 
-                if (string.IsNullOrEmpty(value: model)) {
+                if (!model) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
                         message: $"Embedding space '{resolvedName}' requires a 'model' field.",
                         span: spaceBlock.Span
                     );
                 }
-                if (string.IsNullOrEmpty(value: revision)) {
+                if (!revision) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
                         message: $"Embedding space '{resolvedName}' requires a 'revision' field.",
                         span: spaceBlock.Span
                     );
                 }
-                if (!dimensions.HasValue) {
+                if (!dimensions) {
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
                         message: $"Embedding space '{resolvedName}' requires a 'dimensions' field in [8, 1024].",
@@ -291,12 +304,8 @@ public static partial class WorldDocumentEmitter {
         ExpressionNode expr,
         string context,
         string spaceName,
-        JsonObject rootObj,
         DocumentScope scope
     ) {
-        var spaceInfo = FindSpaceInfo(parent: rootObj, spaceName: spaceName);
-        var dims = (spaceInfo?.Dimensions ?? 256);
-
         if (expr is LiteralExpressionNode { Unit: null, Value: string text }) {
             if (TryResolveEmbeddedText(text, spaceName, scope, expr.Span, out var b64)) {
                 return JsonValue.Create(b64)!;
@@ -353,16 +362,9 @@ public static partial class WorldDocumentEmitter {
                     return null;
                 }
 
-                if (!StateVector.TryParseBase64Url(dimensions: dims, error: out var error, text: vecBase64, vector: out _)) {
-                    scope.Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.VectorLiteralInvalid,
-                        message: $"vector(...) literal in {context} is invalid: {error}",
-                        span: call.Span
-                    );
-                    return null;
-                }
-
-                return JsonValue.Create(vecBase64)!;
+                return (TryAdmitVectorLiteral(scope: scope, space: spaceName, span: call.Span, text: vecBase64)
+                    ? JsonValue.Create(vecBase64)
+                    : null);
             }
         }
 
@@ -462,7 +464,7 @@ public static partial class WorldDocumentEmitter {
             return null;
         }
 
-        var spaceInfo = FindSpaceInfo(parent: rootObj, spaceName: spaceName);
+        var spaceInfo = FindSpaceIdentity(parent: rootObj, spaceName: spaceName);
 
         if (!spaceInfo.HasValue) {
             scope.Diagnostics.ReportError(
@@ -541,13 +543,11 @@ public static partial class WorldDocumentEmitter {
         if (
             (lowered["from"] is JsonValue fromValue) &&
             fromValue.TryGetValue<string>(value: out var from) &&
-            IsPoolBindingField(scope: scope, text: from)
+            TryPoolBindingField(binding: out var binding, field: out var field, scope: scope, text: from)
         ) {
-            var dot = from.IndexOf(value: '.');
-
             lowered["from"] = StateChannelRefJsonConverter.ToNode(value: StateChannelRef.OfBindingField(
-                binding: from[..dot],
-                field: from[(dot + 1)..]
+                binding: binding,
+                field: field
             ));
         }
         return lowered;
@@ -818,15 +818,16 @@ public static partial class WorldDocumentEmitter {
         OperandExpressionNode operand => (((LowerOperandArgument(operand: operand, scope: scope) is JsonValue lowered) && lowered.TryGetValue<string>(value: out var spelled)) ? spelled : operand.Text),
         _ => null,
     };
-
     // Resolve vector payloads in the program, including fold bodies. Preserve the subprogram table and avoid
     // allocating a replacement instruction array when no literal needs embedding.
     private static ExpressionProgram ResolveEmbeddedOperands(ExpressionProgram program, string? expectedSpace, DocumentScope scope, SourceSpan span) {
         var instructions = Resolve(instructions: program.Instructions);
         Subprogram[]? subprograms = null;
+
         for (var index = 0; (index < program.Subprograms.Count); index++) {
             var subprogram = program.Subprograms[index];
             var resolved = Resolve(instructions: subprogram.Instructions);
+
             if (!ReferenceEquals(objA: resolved, objB: subprogram.Instructions)) {
                 subprograms ??= program.Subprograms.ToArray();
                 subprograms[index] = subprogram with { Instructions = resolved };
@@ -837,8 +838,10 @@ public static partial class WorldDocumentEmitter {
 
         IReadOnlyList<Instruction> Resolve(IReadOnlyList<Instruction> instructions) {
             Instruction[]? newTokens = null;
+
             for (var index = 0; (index < instructions.Count); index++) {
                 var token = instructions[index];
+
                 if (token.Payload is InstructionPayload.Vector vecCall) {
                     var left = vecCall.Left;
                     var right = vecCall.Right;

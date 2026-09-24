@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using Puck.Vulkan.Bindings;
@@ -20,13 +19,6 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
     // Values verified against the Vulkan SDK 1.4 header (vulkan_core.h).
     private const uint StructureTypePipelineInfoKhr = 1000269001;
 
-    private readonly ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult> GetPipelineExecutableProperties;
-        public delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult> GetPipelineExecutableStatistics;
-    }
-
     // VkPipelineExecutableStatisticValueKHR is an 8-byte union; the format selects how the
     // raw bits are read (0 = bool32, 1 = int64, 2 = uint64, 3 = float64).
     private static string FormatStatisticValue(uint format, ulong rawValue) {
@@ -43,21 +35,6 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
             _ => rawValue.ToString(provider: CultureInfo.InvariantCulture)
         };
     }
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                GetPipelineExecutableProperties = ((delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkGetPipelineExecutablePropertiesKHR"u8
-            )),
-                GetPipelineExecutableStatistics = ((delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkGetPipelineExecutableStatisticsKHR"u8
-            )),
-            }
-        );
-    }
     private static string ReadFixedUtf8(byte* namePointer) {
         var span = new ReadOnlySpan<byte>(
             length: MaxDescriptionSize,
@@ -71,32 +48,28 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
     }
 
     /// <inheritdoc/>
-    public bool IsSupported(nint deviceHandle) {
-        if (0 == deviceHandle) {
+    public bool IsSupported(VulkanDeviceCommands device) {
+        if (device is null) {
             return false;
         }
 
-        var pointers = GetPointers(deviceHandle: deviceHandle);
-
         return (
-            (pointers.GetPipelineExecutableProperties is not null) &&
-            (pointers.GetPipelineExecutableStatistics is not null)
+            (device.GetPipelineExecutablePropertiesKhr is not null) &&
+            (device.GetPipelineExecutableStatisticsKhr is not null)
         );
     }
     /// <inheritdoc/>
-    public IReadOnlyList<VulkanPipelineExecutableStatistic> QueryStatistics(nint deviceHandle, nint pipelineHandle) {
+    public IReadOnlyList<VulkanPipelineExecutableStatistic> QueryStatistics(VulkanDeviceCommands device, nint pipelineHandle) {
         if (
-            (0 == deviceHandle) ||
+            (device is null) ||
             (0 == pipelineHandle)
         ) {
             return [];
         }
 
-        var pointers = GetPointers(deviceHandle: deviceHandle);
-
         if (
-            (pointers.GetPipelineExecutableProperties is null) ||
-            (pointers.GetPipelineExecutableStatistics is null)
+            (device.GetPipelineExecutablePropertiesKhr is null) ||
+            (device.GetPipelineExecutableStatisticsKhr is null)
         ) {
             return [];
         }
@@ -108,8 +81,8 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
         var executableCount = 0U;
 
         if (
-            (VkResult.Success != pointers.GetPipelineExecutableProperties(
-            deviceHandle,
+            (VkResult.Success != device.GetPipelineExecutablePropertiesKhr(
+            device.Handle,
             &pipelineInfo,
             &executableCount,
             ((VkPipelineExecutablePropertiesKhr*)null)
@@ -128,8 +101,8 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
                 propertiesPointer[index].PNext = 0;
             }
 
-            var propertiesResult = pointers.GetPipelineExecutableProperties(
-                deviceHandle,
+            var propertiesResult = device.GetPipelineExecutablePropertiesKhr(
+                device.Handle,
                 &pipelineInfo,
                 &executableCount,
                 propertiesPointer
@@ -152,8 +125,8 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
                 var statisticCount = 0U;
 
                 if (
-                    (VkResult.Success != pointers.GetPipelineExecutableStatistics(
-                    deviceHandle,
+                    (VkResult.Success != device.GetPipelineExecutableStatisticsKhr(
+                    device.Handle,
                     &executableInfo,
                     &statisticCount,
                     ((VkPipelineExecutableStatisticKhr*)null)
@@ -171,8 +144,8 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
                         statisticsPointer[index].PNext = 0;
                     }
 
-                    var statisticsResult = pointers.GetPipelineExecutableStatistics(
-                        deviceHandle,
+                    var statisticsResult = device.GetPipelineExecutableStatisticsKhr(
+                        device.Handle,
                         &executableInfo,
                         &statisticCount,
                         statisticsPointer

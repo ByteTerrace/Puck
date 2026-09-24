@@ -1166,7 +1166,7 @@ internal static partial class Subjects {
                 material: default,
                 windowDegree: window
             ))
-                .Certify(overlapLimit: (1L << 20));
+                .Certify(tupleLimit: (1L << 20));
 
             if (
                 !certificate.HasIdentity ||
@@ -1749,7 +1749,7 @@ internal static partial class Subjects {
 
         // The word problem is a LIMIT and not the row above: a bounded normalization that runs out of budget reports the
         // budget, which stays distinct from a failure.
-        if (ClosureOutcome.SearchLimitReached != free.Certify(overlapLimit: (1L << 10)).Outcome) {
+        if (ClosureOutcome.SearchLimitReached != free.Certify(tupleLimit: (1L << 10)).Outcome) {
             return "the free monoid's certificate does not report its budget, where a bounded search that did not finish must say so rather than answer";
         }
 

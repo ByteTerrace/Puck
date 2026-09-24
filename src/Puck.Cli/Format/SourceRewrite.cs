@@ -13,13 +13,13 @@ internal static class SourceRewrite {
         foreach (var pass in passes) {
             var node = CSharpSyntaxTree.ParseText(text: text).GetRoot();
 
-            text = pass.Apply!(arg: node).ToFullString();
+            text = pass.Apply(node: node).ToFullString();
         }
 
         return text;
     }
 
-    public static int Run(string label, string rootArgument, bool whatIf, bool verify, IReadOnlyList<FormatPass> passes, string[]? targets = null) {
+    public static int Run(string label, string rootArgument, bool check, IReadOnlyList<FormatPass> passes, string[]? targets = null) {
         var files = targets;
 
         if (
@@ -27,15 +27,15 @@ internal static class SourceRewrite {
             !SourceFiles.TryEnumerate(
             files: out files,
             rootArgument: rootArgument,
-            scanRoot: out _
+            scanRoot: out _,
+            verb: "format"
         )
         ) {
             return 2;
         }
 
-        // -Verify audits the passes without touching the tree: it asserts every rewrite is a fixed point
+        // --check audits the passes without touching the tree: it asserts every rewrite is a fixed point
         // (a formatter run twice must equal running it once), and never writes.
-        var writing = (!whatIf && !verify);
         var drifted = new List<string>();
         var corrupted = new List<string>();
         var nonConvergent = new List<string>();
@@ -66,7 +66,7 @@ internal static class SourceRewrite {
             }
 
             if (
-                verify &&
+                check &&
                 !RewriteIo.ContentEquals(
                 a: ApplyAll(
                     passes: passes,
@@ -82,7 +82,7 @@ internal static class SourceRewrite {
 
             drifted.Add(item: relative);
 
-            if (writing) {
+            if (!check) {
                 RewriteIo.WriteText(
                     file: file,
                     text: current
@@ -94,7 +94,7 @@ internal static class SourceRewrite {
             label: label,
             fileCount: files.Length,
             drifted: drifted,
-            whatIf: (whatIf || verify),
+            check: check,
             problems: [
                 ("have syntax errors before or after rewriting — SKIPPED", corrupted),
                 ("do not converge (a pass is not idempotent) — SKIPPED", nonConvergent),

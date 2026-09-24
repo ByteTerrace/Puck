@@ -40,6 +40,10 @@ public enum BoardQueryKind : byte {
     /// nothing about a non-sliding mover — that stays <see cref="Neighbour"/>/<see cref="Offset"/> composition,
     /// cheap enough not to need a primitive.</summary>
     Attacks,
+    /// <summary>The 64-bit fingerprint of the board's values as they stand, through the identity alone: equal for two
+    /// boards holding the same value on every cell, and the term of <see cref="Canonical"/> for the identity element,
+    /// so a mirror image of a board reads a different fingerprint and the same canonical form.</summary>
+    Fingerprint,
     /// <summary>A query a document project declares — evaluated by its own case type, never by this library.</summary>
     Custom,
 }
@@ -197,6 +201,14 @@ public sealed class BoardCanonicalQuery : BoardQuery {
 
     /// <inheritdoc/>
     public override long Visits => (((long)Topology.CellCount) * Topology.ElementCount);
+}
+/// <summary>The 64-bit fingerprint of the board's values through the identity alone (<see cref="BoardQueryKind.Fingerprint"/>).</summary>
+public sealed class BoardFingerprintQuery : BoardQuery {
+    /// <param name="topology">The immutable adjacency table.</param>
+    public BoardFingerprintQuery(CompiledTopology topology) : base(
+        BoardQueryKind.Fingerprint,
+        topology
+    ) { }
 }
 /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell (<see cref="BoardQueryKind.Offset"/>).</summary>
 public sealed class BoardOffsetQuery : BoardQuery {

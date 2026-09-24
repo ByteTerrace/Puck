@@ -1,0 +1,25 @@
+# The same opening, but black's fourth stone lands at 200, beside white's stone rather than on its last liberty: nothing
+# is captured, and with no CPU side named the game waits on white.
+replay.record go-capture
+world.state.cell.set stone play 161
+world.wait 2
+world.state.cell.set stone play 180
+world.wait 2
+world.state.cell.set stone play 179
+world.wait 2
+world.state.cell.set stone play 0
+world.wait 2
+world.state.cell.set stone play 181
+world.wait 2
+world.state.cell.set stone play 1
+world.wait 2
+world.state.cell.set stone play 200
+world.wait 2
+world.state captured
+world.state prisoners
+world.wait 240
+world.state moves
+world.state turn
+replay.stop
+replay.verify go-capture
+wire.errors

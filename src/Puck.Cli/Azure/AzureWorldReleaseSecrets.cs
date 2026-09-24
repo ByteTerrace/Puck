@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using Puck.Assets;
 
 namespace Puck.Cli.Azure;
 
@@ -34,8 +35,10 @@ internal static partial class AzureCommand {
                 comparisonType: StringComparison.Ordinal,
                 value: (prefix + "-")
             ) ||
-                (parts[1].Length != (prefix.Length + 65)) ||
-                (parts[1].AsSpan((prefix.Length + 1)).IndexOfAnyExcept("0123456789abcdef") >= 0) ||
+                !ContentPin.TryParseHex(
+                hex: parts[1].AsSpan(start: (prefix.Length + 1)),
+                pin: out _
+            ) ||
                 (parts[2].Length != 32) ||
                 parts[2].Any(predicate: character => !Uri.IsHexDigit(character: character))
             ) {
@@ -70,14 +73,14 @@ internal static partial class AzureCommand {
 
             while (count < bytes.Length) {
                 var read = await gzip.ReadAsync(
-                    bytes.AsMemory(count),
-                    cancellationToken
-                ).ConfigureAwait(false);
+                    buffer: bytes.AsMemory(start: count),
+                    cancellationToken: cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
 
                 if (read == 0) {
                     return bytes.AsMemory(
-                        0,
-                        count
+                        length: count,
+                        start: 0
                     );
                 }
                 count += read;
@@ -85,17 +88,13 @@ internal static partial class AzureCommand {
             throw new InvalidDataException(message: "retained deployment secret exceeds its decoded budget");
         }
         public async Task<string> WriteAsync(string release, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) {
-            if (
-                (release.Length != 71) ||
-                !release.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "sha256/"
-            ) ||
-                (release.AsSpan(7).IndexOfAnyExcept("0123456789abcdef") >= 0)
-            ) {
+            if (!ContentPin.TryParse(
+                pin: out var releasePin,
+                text: release
+            )) {
                 throw new InvalidDataException(message: "deployment secret requires a full release identity");
             }
-            var name = ((prefix + "-") + release[7..]);
+            var name = ((prefix + "-") + releasePin.Hex);
 
             if (
                 (name.Length > 127) ||
@@ -111,9 +110,9 @@ internal static partial class AzureCommand {
                 leaveOpen: true
             )) {
                 await gzip.WriteAsync(
-                    content,
-                    cancellationToken
-                ).ConfigureAwait(false);
+                    buffer: content,
+                    cancellationToken: cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
             }
             var encoded = Convert.ToBase64String(inArray: compressed.ToArray());
 

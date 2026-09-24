@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -13,14 +14,14 @@ public sealed partial class WorldServer {
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>
     public int[] TickWrittenEntity => m_tick.TickWrittenEntity;
     /// <summary>Gets the principals that wrote the matching <see cref="TickWrittenEntity"/> slot.</summary>
-    public WorldPrincipal[] TickWrittenPrincipal => m_tick.TickWrittenPrincipal;
+    public Principal[] TickWrittenPrincipal => m_tick.TickWrittenPrincipal;
 
     /// <summary>Adopts a widened contention-tracking trio in one step, so the three arrays can never disagree on
     /// length.</summary>
     /// <param name="collided">The new collision flags.</param>
     /// <param name="entity">The new written-entity indices.</param>
     /// <param name="principal">The new writing principals.</param>
-    public void AdoptContentionArrays(bool[] collided, int[] entity, WorldPrincipal[] principal) =>
+    public void AdoptContentionArrays(bool[] collided, int[] entity, Principal[] principal) =>
         m_tick.AdoptContentionArrays(
             collided: collided,
             entity: entity,
@@ -43,7 +44,7 @@ public sealed partial class WorldServer {
             correlationId: correlationId
         );
     /// <inheritdoc cref="WorldDocument.ApplyComposition"/>
-    public void ApplyComposition(WorldComposition composition, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    public void ApplyComposition(WorldComposition composition, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
         m_document.ApplyComposition(
             composition: composition,
             connectionId: connectionId,
@@ -51,7 +52,7 @@ public sealed partial class WorldServer {
             principal: principal
         );
     /// <inheritdoc cref="WorldDocument.ApplyDesignation"/>
-    public bool ApplyDesignation(WorldDesignation designation, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    public bool ApplyDesignation(WorldDesignation designation, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
         m_document.ApplyDesignation(
             connectionId: connectionId,
             correlationId: correlationId,
@@ -59,7 +60,7 @@ public sealed partial class WorldServer {
             principal: principal
         );
     /// <inheritdoc cref="WorldDocument.ApplyScreenOp"/>
-    public void ApplyScreenOp(WorldScreenOp op, WorldPrincipal principal, string? expectedContentHash = null) =>
+    public void ApplyScreenOp(WorldScreenOp op, Principal principal, string? expectedContentHash = null) =>
         m_document.ApplyScreenOp(
             expectedContentHash: expectedContentHash,
             op: op,
@@ -88,7 +89,7 @@ public sealed partial class WorldServer {
             sourceAddonInstanceId: sourceAddonInstanceId
         );
     /// <inheritdoc cref="WorldDocument.EnqueueRebuild"/>
-    public void EnqueueRebuild(WorldRebuildRequest request, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, string? expectedContentHash = null) =>
+    public void EnqueueRebuild(WorldRebuildRequest request, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, string? expectedContentHash = null) =>
         m_document.EnqueueRebuild(
             connectionId: connectionId,
             correlationId: correlationId,

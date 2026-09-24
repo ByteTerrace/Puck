@@ -1,8 +1,6 @@
 using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.Maths;
-using Puck.World.Authoring;
-using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -19,44 +17,12 @@ public sealed class PlacementResponseRowReferenceLawTests {
     private const string ThresholdRow = "charThreshold";
     private const double ThresholdValue = 0.25;
 
-    private static WorldPrototype Creation(string id) {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: id,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: id
-        );
-
-        return new WorldPrototype(
-            Id: id,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     private static WorldDefinition Document(WorldLatticeScalar threshold) {
         var document = Fixtures.BuildDocument();
 
         return (document with {
             StateRaw = FieldsSection(),
-            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation)],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.UnitSphere(id: TargetCreation)],
             PlacementRowsRaw = [
                 new WorldPlacement(
                 Id: PlacementId,
@@ -67,7 +33,7 @@ public sealed class PlacementResponseRowReferenceLawTests {
                 Respond: [
                         new WorldPlacementResponse(
                         When: new WorldPlacementResponseCondition.FieldCondition(
-                            Comparison: ActionStateComparison.GreaterOrEqual,
+                            Comparison: ExpressionOp.GreaterOrEqual,
                             Field: FieldName,
                             Value: threshold
                         ),
@@ -126,7 +92,7 @@ public sealed class PlacementResponseRowReferenceLawTests {
     private static string PrototypeOf(WorldFixture fixture) => WorldDefinitionRows.FindPlacement(
         id: PlacementId,
         placements: fixture.Server.Definition.Placements
-    )!.PrototypeId;
+    )!.ShownPrototypeId;
 
     [Fact]
     public void RowReferencedThresholdMatchesTheEquivalentLiteralTickForTick() {

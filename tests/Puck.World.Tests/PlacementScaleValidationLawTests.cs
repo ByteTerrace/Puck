@@ -1,7 +1,5 @@
 using System.Numerics;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
-using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -16,62 +14,11 @@ namespace Puck.World.Tests;
 public sealed class PlacementScaleValidationLawTests {
     private const string PrototypeId = "marker";
 
-    private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: definition,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: needle
-        );
-    }
-    private static void AssertValidates(WorldDefinition definition) {
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: definition,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-    }
-    private static WorldPrototype Creation() {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: PrototypeId
-        );
-
-        return new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     private static WorldDefinition With(float scale, WorldPlacementPolicyDefaults? policy = null, bool unauthoredPolicy = false) {
         var document = Fixtures.BuildDocument();
 
         document = (document with {
-            CreationsRaw = [Creation()],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: PrototypeId)],
             PlacementRowsRaw = [
                 new WorldPlacement(
                 Id: "row",
@@ -92,7 +39,8 @@ public sealed class PlacementScaleValidationLawTests {
     }
 
     [Fact]
-    public void ADeclaredZeroEnvelopeIsRefusedByName() => AssertRefusedNaming(
+    public void ADeclaredZeroEnvelopeIsRefusedByName() => Laws.Refuses(
+        locally: true,
         definition: With(
             policy: WorldPlacementPolicyDefaults.Absent,
             scale: 1f
@@ -100,22 +48,24 @@ public sealed class PlacementScaleValidationLawTests {
         needle: "placements.policy.maxPlacementScale"
     );
     [Fact]
-    public void APositiveScaleInsideTheEnvelopeValidates() => AssertValidates(definition: With(scale: 1f));
+    public void APositiveScaleInsideTheEnvelopeValidates() => Laws.Validates(locally: true, definition: With(scale: 1f));
     [Fact]
-    public void AScaleOutsideADeclaredEnvelopeIsRefusedByName() => AssertRefusedNaming(
-        definition: With(scale: (Fixtures.StandardAuthoring.MaxPlacementScale * 2f)),
-        needle: $"is outside {Fixtures.StandardAuthoring.MinPlacementScale}..{Fixtures.StandardAuthoring.MaxPlacementScale}"
-    );
+    public void AScaleOutsideADeclaredEnvelopeIsRefusedByName() => Laws.Refuses(
+            definition: With(scale: (Fixtures.StandardAuthoring.MaxPlacementScale * 2f)),
+            locally: true,
+            needle: $"is outside {Fixtures.StandardAuthoring.MinPlacementScale}..{Fixtures.StandardAuthoring.MaxPlacementScale}"
+        );
     [Fact]
-    public void AnyAuthoredScaleValidatesUnderTheUnauthoredPolicy() => AssertValidates(definition: With(
+    public void AnyAuthoredScaleValidatesUnderTheUnauthoredPolicy() => Laws.Validates(locally: true, definition: With(
         scale: (Fixtures.StandardAuthoring.MaxPlacementScale * 4f),
         unauthoredPolicy: true
     ));
     [Fact]
-    public void NegativeScaleIsRefused() => AssertRefusedNaming(
-        definition: With(scale: -1f),
-        needle: "must be a finite positive value"
-    );
+    public void NegativeScaleIsRefused() => Laws.Refuses(
+            definition: With(scale: -1f),
+            locally: true,
+            needle: "must be a finite positive value"
+        );
     [Fact]
     public void TheUnauthoredPolicyDerivesTheEnvelopeTheRowsSpan() {
         var derived = With(
@@ -132,12 +82,14 @@ public sealed class PlacementScaleValidationLawTests {
         );
     }
     [Fact]
-    public void ZeroScaleIsRefusedUnderAPermissivePolicy() => AssertRefusedNaming(
-        definition: With(scale: 0f),
-        needle: "must be a finite positive value"
-    );
+    public void ZeroScaleIsRefusedUnderAPermissivePolicy() => Laws.Refuses(
+            definition: With(scale: 0f),
+            locally: true,
+            needle: "must be a finite positive value"
+        );
     [Fact]
-    public void ZeroScaleIsRefusedUnderTheUnauthoredPolicy() => AssertRefusedNaming(
+    public void ZeroScaleIsRefusedUnderTheUnauthoredPolicy() => Laws.Refuses(
+        locally: true,
         definition: With(
             scale: 0f,
             unauthoredPolicy: true

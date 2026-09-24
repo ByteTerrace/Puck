@@ -2,13 +2,77 @@ using Puck.GamingBricks.Forge;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
+/// <summary>Samples the fully weighted panel once for every blend test that compares against it.</summary>
+public sealed class BlendFixture {
+    private readonly Lazy<uint> m_opaque = new(valueFactory: static () => CartridgeBlendTests.Panel(weight: 16));
+
+    /// <summary>Gets the panel's corner at full weight.</summary>
+    public uint Opaque => m_opaque.Value;
+}
 /// <summary>Covers mixing one surface with what is drawn beneath it, which is how a translucent panel is made.</summary>
-public sealed class CartridgeBlendTests {
-    // Outside the panel, where only the background draws.
-    private static uint Beside() => Sample(
-        document: Document(),
-        x: 20,
-        y: 20
+public sealed class CartridgeBlendTests(BlendFixture blend) : IClassFixture<BlendFixture> {
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "an unknown surface",
+            Document: Bad() with { Rules = [Rule(
+                    surface: "nowhere",
+                    weight: 8
+                )] },
+            Path: "rules[0].body[0].surface",
+            Fragment: "background, panel, middle, far, sprites or backdrop"
+        ),
+        new(
+            Name: "the panel without a window",
+            Document: Bad() with { Rules = [Rule(
+                    surface: "panel",
+                    weight: 8
+                )] },
+            Path: "rules[0].body[0].surface",
+            Fragment: "needs a declared window"
+        ),
+        new(
+            Name: "the middle surface without a layer",
+            Document: Bad() with { Rules = [Rule(
+                    surface: "middle",
+                    weight: 8
+                )] },
+            Path: "rules[0].body[0].surface",
+            Fragment: "needs a turning background or a declared layer"
+        ),
+        new(
+            Name: "the far surface without a second layer",
+            Document: Bad() with { Rules = [Rule(
+                    surface: "far",
+                    weight: 8
+                )] },
+            Path: "rules[0].body[0].surface",
+            Fragment: "needs a layer behind the middle one"
+        ),
+        new(
+            Name: "a weight past full",
+            Document: Bad() with { Rules = [Rule(
+                    surface: "backdrop",
+                    weight: 40
+                )] },
+            Path: "rules[0].body[0].weight",
+            Fragment: "weight runs 0 through 16"
+        ),
+        new(
+            Name: "the colour machine",
+            Document: Bad(target: "cgb") with { Rules = [Rule(
+                    surface: "backdrop",
+                    weight: 8
+                )] },
+            Path: "rules[0].body[0]",
+            Fragment: "cgb target has no blend unit"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    private static CartridgeDocument Bad(string target = "agb") => CartridgeDocuments.Create(
+        target: target,
+        title: "BLENDBAD"
     );
     // Two flatly coloured surfaces, so a mix of them is distinguishable from either on its own.
     private static CartridgeDocument Document() {
@@ -65,26 +129,21 @@ public sealed class CartridgeBlendTests {
         ),
         };
     }
-    // Inside the panel's corner, where a blend mixes it with the background.
-    private static uint Panel(int weight) => Sample(
-        document: Document() with { Rules = [Rule(
+
+    /// <summary>Samples inside the panel's corner, where a blend mixes it with the background.</summary>
+    /// <param name="weight">The authored blend weight, 0 through 16.</param>
+    /// <returns>The packed pixel.</returns>
+    internal static uint Panel(int weight) => Sample(
+        document: Document() with {
+            Rules = [Rule(
                 surface: "panel",
                 weight: weight
-            )] },
+            )],
+        },
         x: 160,
         y: 120
     );
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
 
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
     private static CartridgeRule Rule(string surface, int weight) => new(
         Name: "mix",
         Body: [new CartridgeStatement(
@@ -93,28 +152,22 @@ public sealed class CartridgeBlendTests {
                 Weight: CartridgeExpressions.Of(constant: weight)
             )]
     );
-    private static uint Sample(CartridgeDocument document, int x, int y) {
-        var result = new AgbCartridgeCompiler().Compile(document: document);
-        using var machine = new AgbVerifyMachineDriver(
-            rom: result.Rom,
+    private static uint Sample(CartridgeDocument document, int x, int y) => Sample(
+        document: document,
+        points: [(x, y)]
+    )[0];
+    private static uint[] Sample(CartridgeDocument document, (int X, int Y)[] points) {
+        using var machine = CartridgeProbe.Boot(
+            document: document,
+            frames: 8,
             label: "blend"
         );
 
-        machine.RunFrames(
-            frames: 8,
-            keys: AgbKeys.None
-        );
-
-        return machine.ReadPixel(
-            x: x,
-            y: y
-        );
+        return [.. points.Select(selector: point => machine.Pixel(
+            x: point.X,
+            y: point.Y
+        ))];
     }
-    private static uint Unblended() => Sample(
-        document: Document(),
-        x: 160,
-        y: 120
-    );
 
     [Fact]
     public void AWeightPastFullIsHeldAtFull() {
@@ -137,7 +190,7 @@ public sealed class CartridgeBlendTests {
         };
 
         Assert.Equal(
-            expected: Panel(weight: 16),
+            expected: blend.Opaque,
             actual: Sample(
                 document: document,
                 x: 160,
@@ -147,17 +200,22 @@ public sealed class CartridgeBlendTests {
     }
     [Fact]
     public void TheWeightMovesThePanelBetweenItsOwnColourAndTheBackgroundBeneath() {
-        var opaque = Panel(weight: 16);
+        var opaque = blend.Opaque;
         var mixed = Panel(weight: 8);
         var clear = Panel(weight: 0);
+        // Inside the panel's corner with no blend at all, and outside the panel where only the background draws.
+        var unblended = Sample(
+            document: Document(),
+            points: [(160, 120), (20, 20)]
+        );
 
         // Full weight leaves the panel exactly as an unblended one; no weight leaves only what is beneath it.
         Assert.Equal(
-            expected: Unblended(),
+            expected: unblended[0],
             actual: opaque
         );
         Assert.Equal(
-            expected: Beside(),
+            expected: unblended[1],
             actual: clear
         );
 
@@ -184,57 +242,10 @@ public sealed class CartridgeBlendTests {
             );
         }
     }
-    [Fact]
-    public void ValidationNamesTheSurfaceAndRefusesTheColourMachine() {
-        var document = CartridgeDocuments.Create(
-            target: "agb",
-            title: "BLENDBAD"
-        );
-
-        Refuses(
-            document: document with { Rules = [Rule(
-                    surface: "nowhere",
-                    weight: 8
-                )] },
-            fragment: "background, panel, middle, far, sprites or backdrop"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(
-                    surface: "panel",
-                    weight: 8
-                )] },
-            fragment: "needs a declared window"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(
-                    surface: "middle",
-                    weight: 8
-                )] },
-            fragment: "needs a turning background or a declared layer"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(
-                    surface: "far",
-                    weight: 8
-                )] },
-            fragment: "needs a layer behind the middle one"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(
-                    surface: "backdrop",
-                    weight: 40
-                )] },
-            fragment: "weight runs 0 through 16"
-        );
-        Refuses(
-            document: CartridgeDocuments.Create(
-                target: "cgb",
-                title: "BLENDBAD"
-            ) with { Rules = [Rule(
-                    surface: "backdrop",
-                    weight: 8
-                )] },
-            fragment: "cgb target has no blend unit"
-        );
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationNamesTheSurfaceAndRefusesTheColourMachine(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

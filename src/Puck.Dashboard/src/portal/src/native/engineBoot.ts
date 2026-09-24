@@ -15,11 +15,12 @@
 // engineBoot.ts under `require.extensions['.ts']`'s CommonJS transpile. The dynamic import defers
 // that cost to an actual `'worker'`-mode boot, which only ever happens in a real browser tab
 // anyway (Node has no `Worker` global either).
-import type { OfficialLoad } from "../official/officialClient";
+import { generatorCommit, type OfficialLoad } from "../official/officialClient";
 import { OfficialRefusal } from "../official/verify";
 import type { WorldEngine } from "./engineTypes";
 import { bootEngineFromOfficialFiles, type FetchLike } from "./workerBoot";
 import { createInlineWorldEngine, dynamicImport } from "./inlineHost";
+import { withLanguageServer } from "./languagePump";
 
 export interface EngineBootOptions {
   mode: "inline" | "worker";
@@ -29,13 +30,16 @@ export interface EngineBootOptions {
    * mode always fetches with the worker's own global `fetch` — see engineWorkerLauncher.ts's own
    * remarks. */
   fetchImpl?: FetchLike;
+  /** The compiled module an engine of this session already booted with: this boot instantiates it and compiles
+   * nothing. Omitted, the boot compiles the module once and hands it back as `engine.wasmModule`. */
+  wasmModule?: WebAssembly.Module;
 }
 
 function refuseVersionMismatch(official: OfficialLoad, version: { schemaVersion: string; commit: string }): never {
   throw new OfficialRefusal(
     `official refusal: the booted engine reports schemaVersion '${version.schemaVersion}' commit ` +
       `'${version.commit}', but the official manifest's build names schemaVersion ` +
-      `'${official.build.worldSchema}' commit '${official.build.commit}'.`,
+      `'${official.build.worldSchema}' and its world schema bundle was generated at commit '${generatorCommit(official)}'.`,
   );
 }
 
@@ -43,20 +47,22 @@ function refuseVersionMismatch(official: OfficialLoad, version: { schemaVersion:
  * Boots Puck.World.Browser from the official tree `official` names: every engine file is fetched
  * by its manifest object URL, hash-verified, and stored in the byte store before dotnet's own
  * runtime ever runs (see workerBoot.ts's `bootEngineFromOfficialFiles`). After boot, in both
- * modes, `engine.version()` must report `official.build`'s own `worldSchema`/`commit` exactly —
- * a mismatch disposes the engine and throws an `OfficialRefusal` naming both.
+ * modes, `engine.version()` must report `official.build.worldSchema` and the commit its world
+ * schema bundle was generated at (`generatorCommit`) exactly — a mismatch disposes the engine and
+ * throws an `OfficialRefusal` naming both. `official.build.commit` names the worlds tree the
+ * manifest was built from, not an engine build, so it takes no part.
  */
 export async function bootEngineFromOfficial(official: OfficialLoad, options: EngineBootOptions): Promise<WorldEngine> {
   const engine =
     options.mode === "worker"
-      ? await (await import("./engineWorkerLauncher")).createWorkerEngine({ kind: "boot", engineFiles: official.engineFiles }, options.signal)
-      : await bootEngineFromOfficialFiles({ engineFiles: official.engineFiles }, options.fetchImpl ?? fetch);
+      ? await (await import("./engineWorkerLauncher")).createWorkerEngine({ kind: "boot", engineFiles: official.engineFiles, wasmModule: options.wasmModule }, options.signal)
+      : withLanguageServer(await bootEngineFromOfficialFiles({ engineFiles: official.engineFiles, wasmModule: options.wasmModule }, options.fetchImpl ?? fetch));
 
   try {
     options.signal?.throwIfAborted();
     const version = await engine.version();
     options.signal?.throwIfAborted();
-    if (version.schemaVersion !== official.build.worldSchema || version.commit !== official.build.commit) {
+    if (version.schemaVersion !== official.build.worldSchema || version.commit !== generatorCommit(official)) {
       refuseVersionMismatch(official, version);
     }
     return engine;
@@ -79,5 +85,5 @@ export async function bootEngineFromLocalBundle(appBundleDir: string): Promise<W
   const { pathToFileURL }: any = await dynamicImport("node:url");
 
   const mainMjs = path.join(appBundleDir, "main.mjs");
-  return createInlineWorldEngine({ mode: "inline", engineEntryUrl: pathToFileURL(mainMjs).href as string });
+  return withLanguageServer(await createInlineWorldEngine({ mode: "inline", engineEntryUrl: pathToFileURL(mainMjs).href as string }));
 }

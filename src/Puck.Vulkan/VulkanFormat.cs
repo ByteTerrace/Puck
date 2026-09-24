@@ -6,6 +6,8 @@ namespace Puck.Vulkan;
 public static class VulkanFormat {
     /// <summary>The <c>VK_FORMAT_B8G8R8A8_UNORM</c> format.</summary>
     public const uint B8G8R8A8Unorm = 44;
+    /// <summary>The <c>VK_FORMAT_D32_SFLOAT</c> value.</summary>
+    public const uint D32Sfloat = 126;
     /// <summary>The <c>VK_FORMAT_R16G16B16A16_SFLOAT</c> value.</summary>
     public const uint R16G16B16A16Sfloat = 97;
     /// <summary>The <c>VK_FORMAT_R32G32B32A32_SFLOAT</c> value.</summary>

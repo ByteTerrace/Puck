@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text;
 using Puck.Storage;
 using Puck.World.Protocol;
@@ -38,7 +39,8 @@ public sealed partial class WorldSiloHost {
                 owner: identity.Owner,
                 world: identity.World,
                 store: m_blobStore,
-                target: m_storageTarget
+                target: m_storageTarget,
+                timeProvider: m_clock
             );
 
             var (definition, reason) = await origin.LoadAsync(
@@ -81,7 +83,7 @@ public sealed partial class WorldSiloHost {
             if (!m_pendingReleases.ContainsKey(key: identity)) {
                 var completion = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-                m_mailbox.Enqueue(item: () => {
+                Post(action: () => {
                     if (cancellationToken.IsCancellationRequested) { completion.TrySetCanceled(cancellationToken: cancellationToken); return; }
                     try {
                         if (
@@ -116,10 +118,12 @@ public sealed partial class WorldSiloHost {
                                 (echo.CorrelationId != correlation)
                             ) { return; }
                             row.Server.EchoTap -= Observe;
-                            if (echo.Rejected) { m_pendingReleases.TryRemove(
+                            if (echo.Rejected) {
+                                m_pendingReleases.TryRemove(
                                 key: identity,
                                 value: out _
-                            ); completion.TrySetException(exception: new InvalidOperationException(message: echo.Message)); } else { completion.TrySetResult(); }
+                            ); completion.TrySetException(exception: new InvalidOperationException(message: echo.Message));
+                            } else { completion.TrySetResult(); }
                         }
                         row.Server.EchoTap += Observe;
                         try {
@@ -132,13 +136,15 @@ public sealed partial class WorldSiloHost {
                                     false,
                                     hash
                                 )),
-                                principal: WorldPrincipal.Console
+                                principal: Principal.Console
                             );
                             if (correlation == 0) { throw new InvalidOperationException(message: "Reload was refused by the transport."); }
-                        } catch { m_pendingReleases.TryRemove(
+                        } catch {
+                            m_pendingReleases.TryRemove(
                             key: identity,
                             value: out _
-                        ); row.Server.EchoTap -= Observe; throw; }
+                        ); row.Server.EchoTap -= Observe; throw;
+                        }
                     } catch (Exception error) { completion.TrySetException(exception: error); }
                 });
                 await completion.Task.WaitAsync(cancellationToken: cancellationToken);

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -20,7 +21,7 @@ public sealed class WorldNarrationLawTests {
         using var lease = fixture.Server.AttachNarrationSink(sink: sink);
 
         var grant = new WorldGrant(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Grantee: Principal.Seat(slot: 0),
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: 0),
             Exclusive: false
@@ -28,7 +29,7 @@ public sealed class WorldNarrationLawTests {
 
         fixture.Server.Grant(
             grant: grant,
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
 
         var narration = Assert.Single(collection: sink.Narrations);
@@ -60,7 +61,7 @@ public sealed class WorldNarrationLawTests {
         var lease = fixture.Server.AttachNarrationSink(sink: sink);
 
         var first = new WorldGrant(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Grantee: Principal.Seat(slot: 0),
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: 0),
             Exclusive: false
@@ -68,14 +69,14 @@ public sealed class WorldNarrationLawTests {
 
         fixture.Server.Grant(
             grant: first,
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
         Assert.Single(collection: sink.Narrations);
 
         lease.Dispose();
 
         var second = new WorldGrant(
-            Principal: WorldPrincipal.Seat(slot: 1),
+            Grantee: Principal.Seat(slot: 1),
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: 1),
             Exclusive: false
@@ -83,7 +84,7 @@ public sealed class WorldNarrationLawTests {
 
         fixture.Server.Grant(
             grant: second,
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
 
         // Still exactly one — the lease's own dispose stopped this sink from observing the second grant's line.
@@ -95,7 +96,7 @@ public sealed class WorldNarrationLawTests {
         var sink = new RecordingNarrationSink();
 
         var grant = new WorldGrant(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Grantee: Principal.Seat(slot: 0),
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: 0),
             Exclusive: false
@@ -103,7 +104,7 @@ public sealed class WorldNarrationLawTests {
 
         fixture.Server.Grant(
             grant: grant,
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
 
         Assert.Empty(collection: sink.Narrations);

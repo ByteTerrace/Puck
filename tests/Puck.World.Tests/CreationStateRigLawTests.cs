@@ -1,8 +1,6 @@
 using System.Numerics;
 
-using Puck.Assets.Documents;
 using Puck.Maths;
-using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -38,27 +36,6 @@ public sealed class CreationStateRigLawTests {
             ),
         ]
     );
-    private static ShapeDocument Limb(ShapeSwingDocument swing) => new(
-        Id: 0,
-        Name: "limb",
-        Type: SdfSolidPrimitive.Capsule,
-        Position: new Vector3(
-            x: 0f,
-            y: -1f,
-            z: 0f
-        ),
-        Rotation: Quaternion.Identity,
-        Scale: new Vector3(
-            x: 0.05f,
-            y: 1f,
-            z: 0.05f
-        ),
-        Material: 0,
-        Blend: SdfBlendOp.Union,
-        Smooth: 0f,
-        Group: 0,
-        Swings: [swing]
-    );
     private static float Phase(WorldDefinition world, CreationDocument creation, int bodyIndex, ulong tick) {
         var phases = new float[CreationDocument.MaxDrivers];
         var weights = new float[CreationDocument.MaxDrivers];
@@ -89,8 +66,11 @@ public sealed class CreationStateRigLawTests {
                 lastAddress: ref lastAddress,
                 easedSpeed: ref speed,
                 address: address,
-                definition: world,
-                tick: tick
+                reads: ClientFixtures.StateReads(
+                    bodyIndex: address.Index,
+                    definition: world,
+                    tick: tick
+                )
             );
         }
 
@@ -103,25 +83,15 @@ public sealed class CreationStateRigLawTests {
         ? string.Empty
         : reason
     );
-    private static CreationDocument Rig(IReadOnlyList<CreationDriverDocument> drivers, params ShapeDocument[] shapes) => new(
-        Schema: CreationDocument.CurrentSchema,
-        Name: "rig",
-        Palette: null,
-        Shapes: shapes,
-        Frames: null,
-        Drivers: drivers
-    );
+    // The shared rig world plus the ease row this suite's drivers read.
     private static WorldDefinition World(CreationDocument creation, IReadOnlyList<WorldStateRow>? state = null) {
-        var basis = Fixtures.BuildGradientUpDocument(gradientUp: false);
-        var section = (basis.StateRaw ?? new WorldStateSection());
+        var world = CreationFixtures.RigWorld(
+            creation: creation,
+            state: state
+        );
 
-        return basis with {
-            CreationsRaw = [.. basis.Creations, new WorldPrototype(
-                Id: new DocumentIdentifier(value: "rig"),
-                Document: creation
-            )],
-            StateRaw = (section with { World = [.. (section.World ?? []), .. (state ?? [])] }),
-            DynamicsRaw = [.. basis.Dynamics, new DynamicsRow(
+        return world with {
+            DynamicsRaw = [.. world.Dynamics, new DynamicsRow(
                 Damping: 1f,
                 Frequency: 1f,
                 Name: EaseRow,
@@ -138,9 +108,9 @@ public sealed class CreationStateRigLawTests {
             Cadence: 1f,
             When: ["always"]
         );
-        var creation = Rig(
+        var creation = CreationFixtures.Rig(
             drivers: [driver],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "flight",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
@@ -148,8 +118,7 @@ public sealed class CreationStateRigLawTests {
                 Wave: CreationWave.Linear
             ))
         );
-        var world = World(
-            creation: creation,
+        var world = World(creation: creation,
             state: [EasedAirRow()]
         );
 
@@ -221,9 +190,9 @@ public sealed class CreationStateRigLawTests {
                     )
                 )]
         );
-        var creation = (Rig(
+        var creation = (CreationFixtures.Rig(
             drivers: [],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "stride",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
@@ -243,11 +212,10 @@ public sealed class CreationStateRigLawTests {
             Source: new WorldLookSource.Creation(PrototypeId: "rig"),
             Scale: 1f,
             Motion: (WorldLookMotion.Default with {
-            Poses = new Dictionary<string, string> { ["wink"] = $"state.{AirRow}.$body" },
-        })
+                Poses = new Dictionary<string, string> { ["wink"] = $"state.{AirRow}.$body" },
+            })
         );
-        var world = (World(
-            creation: creation,
+        var world = (World(creation: creation,
             state: [EasedAirRow()]
         ) with { LookRowsRaw = [look] });
 
@@ -259,53 +227,55 @@ public sealed class CreationStateRigLawTests {
         Assert.Equal(
             expected: 1,
             actual: WorldStampPool.SelectPoseFrame(
-                definition: world,
+                reads: ClientFixtures.StateReads(
+                    bodyIndex: 0,
+                    definition: world
+                ),
                 poses: look.Motion.Poses!,
-                frames: creation.Frames!,
-                bodyIndex: 0,
-                tick: 0UL
+                frames: creation.Frames!
             )
         );
         // Body 1's cell stores 1 (the pose holds, frame 1); body 2 has no cell (the live pose, frame 0).
         Assert.Equal(
             expected: 1,
             actual: WorldStampPool.SelectPoseFrame(
-                definition: world,
+                reads: ClientFixtures.StateReads(
+                    bodyIndex: 1,
+                    definition: world
+                ),
                 poses: look.Motion.Poses!,
-                frames: creation.Frames!,
-                bodyIndex: 1,
-                tick: 0UL
+                frames: creation.Frames!
             )
         );
         Assert.Equal(
             expected: 0,
             actual: WorldStampPool.SelectPoseFrame(
-                definition: world,
+                reads: ClientFixtures.StateReads(
+                    bodyIndex: 2,
+                    definition: world
+                ),
                 poses: look.Motion.Poses!,
-                frames: creation.Frames!,
-                bodyIndex: 2,
-                tick: 0UL
+                frames: creation.Frames!
             )
         );
     }
     [Fact]
     public void AStateGateTokenHoldsOnTheStoredTruthNotTheEasedSample() {
-        var creation = Rig(
+        var creation = CreationFixtures.Rig(
             drivers: [new CreationDriverDocument(
                     Name: "stride",
                     Signal: CreationDriverDocument.SignalPlanarTravel,
                     Cadence: 1f,
                     When: [$"state.{AirRow}.$body"]
                 )],
-            Limb(swing: new ShapeSwingDocument(
+            CreationFixtures.SwingingLimb(swing: new ShapeSwingDocument(
                 Driver: "stride",
                 Pivot: Vector3.Zero,
                 Axis: Vector3.UnitZ,
                 Amplitude: 1f
             ))
         );
-        var world = World(
-            creation: creation,
+        var world = World(creation: creation,
             state: [EasedAirRow()]
         );
 
@@ -319,18 +289,20 @@ public sealed class CreationStateRigLawTests {
             gate: creation.Drivers![0].When,
             facts: Physics.Motion.BodyFacts.Grounded,
             moving: false,
-            definition: world,
-            tick: 0UL,
-            bodyIndex: 0
+            reads: ClientFixtures.StateReads(
+                bodyIndex: 0,
+                definition: world
+            )
         ));
         // No cell for body 2, and no definition at all: the token fails the conjunction.
         Assert.False(condition: WorldGaitDrivers.GateHolds(
             gate: creation.Drivers![0].When,
             facts: Physics.Motion.BodyFacts.Grounded,
             moving: false,
-            definition: world,
-            tick: 0UL,
-            bodyIndex: 2
+            reads: ClientFixtures.StateReads(
+                bodyIndex: 2,
+                definition: world
+            )
         ));
         Assert.False(condition: WorldGaitDrivers.GateHolds(
             gate: creation.Drivers![0].When,
@@ -340,38 +312,21 @@ public sealed class CreationStateRigLawTests {
     }
     [Fact]
     public void TheWorldValidatorRefusesAGateTokenOrPoseNamingNoNumericRow_ControlDeclaredClean() {
-        static CreationDocument Gated(string token) => Rig(
-            drivers: [new CreationDriverDocument(
-                    Name: "stride",
-                    Signal: CreationDriverDocument.SignalPlanarTravel,
-                    Cadence: 1f,
-                    When: [token]
-                )],
-            Limb(swing: new ShapeSwingDocument(
-                Driver: "stride",
-                Pivot: Vector3.Zero,
-                Axis: Vector3.UnitZ,
-                Amplitude: 1f
-            ))
-        );
 
         Assert.Contains(
             expectedSubstring: "drivers[0].when[0] 'state.missing.0' names no declared state row",
-            actualString: Refusal(definition: World(
-                creation: Gated(token: "state.missing.0"),
+            actualString: Refusal(definition: World(creation: CreationFixtures.GatedStrideRig(token: "state.missing.0"),
                 state: [EasedAirRow()]
             ))
         );
         Assert.Equal(
             expected: string.Empty,
-            actual: Refusal(definition: World(
-                creation: Gated(token: $"state.{AirRow}.$body"),
+            actual: Refusal(definition: World(creation: CreationFixtures.GatedStrideRig(token: $"state.{AirRow}.$body"),
                 state: [EasedAirRow()]
             ))
         );
 
-        var world = World(
-            creation: Gated(token: "always"),
+        var world = World(creation: CreationFixtures.GatedStrideRig(token: "always"),
             state: [EasedAirRow()]
         );
         var look = new WorldLook(

@@ -113,7 +113,7 @@ public sealed class ArenaSearchSeatScoreLawTests {
                     Kind: SearchShapeKind.Relocate,
                     Displace: false,
                     Directions: [],
-                    PairWithIndex: -1
+                    CompanionIndex: -1
                 )],
             Scores: "scores"
         );
@@ -219,7 +219,7 @@ public sealed class ArenaSearchSeatScoreLawTests {
             catalog: position.Catalog,
             plan: Plan() with {
                 Iterations = 8,
-                Method = SearchMethod.Tree,
+                Method = SearchMethod.MonteCarlo,
             },
             reason: out var treed,
             resolved: out _

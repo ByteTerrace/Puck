@@ -1,4 +1,5 @@
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -19,17 +20,14 @@ public interface IVulkanDescriptorApi {
     /// <param name="request">The sampler creation parameters.</param>
     /// <returns>The created native <c>VkSampler</c> handle.</returns>
     nint CreateSampler(VulkanSamplerCreateRequest request);
-    /// <summary>Destroys a descriptor pool and the descriptor sets allocated from it.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the pool.</param>
+    /// <summary>Destroys a descriptor pool and the descriptor sets allocated from it; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the pool.</param>
     /// <param name="poolHandle">The native <c>VkDescriptorPool</c> handle to destroy.</param>
-    void DestroyPool(nint deviceHandle, nint poolHandle);
-    /// <summary>Destroys a sampler.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the sampler.</param>
+    void DestroyPool(VulkanDeviceCommands device, nint poolHandle);
+    /// <summary>Destroys a sampler; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the sampler.</param>
     /// <param name="samplerHandle">The native <c>VkSampler</c> handle to destroy.</param>
-    void DestroySampler(nint deviceHandle, nint samplerHandle);
-    /// <summary>Updates a descriptor set with a top-level acceleration structure (TLAS) binding. Vulkan-only.</summary>
-    /// <param name="request">The write parameters identifying the destination binding and the acceleration structure.</param>
-    void WriteAccelerationStructure(VulkanDescriptorAccelerationStructureWriteRequest request);
+    void DestroySampler(VulkanDeviceCommands device, nint samplerHandle);
     /// <summary>Updates a descriptor set with a buffer binding.</summary>
     /// <param name="request">The write parameters identifying the destination binding and the buffer.</param>
     void WriteBuffer(VulkanDescriptorBufferWriteRequest request);

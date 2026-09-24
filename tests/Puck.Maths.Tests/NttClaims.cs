@@ -13,23 +13,6 @@ internal static class NttClaims {
     // any single machine word's worth of butterflies.
     private static readonly int[] Lengths = [1, 2, 4, 8, 16, 64, 256, 1024];
 
-    /// <summary>Runs an action that must throw, and reports what it did instead.</summary>
-    private static string? Refuses(Action action, Type type, string? parameterName, string what) {
-        try {
-            action();
-        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
-            if (parameterName is null) { return null; }
-
-            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
-                ? null
-                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'"
-            );
-        } catch (Exception thrown) {
-            return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
-        }
-
-        return $"{what} did not throw at all";
-    }
     /// <summary>Fills a length-<paramref name="length"/> sequence with reduced field elements from a seeded
     /// <see cref="Pcg32XshRr"/> stream, so a sweep is deterministic without repeating one operand pattern.</summary>
     /// <param name="length">The sequence length.</param>
@@ -322,10 +305,12 @@ internal static class NttClaims {
             );
             var sum = new ulong[length];
 
-            for (var i = 0; (i < length); ++i) { sum[i] = field.Add(
+            for (var i = 0; (i < length); ++i) {
+                sum[i] = field.Add(
                 left: a[i],
                 right: b[i]
-            ); }
+            );
+            }
 
             var forwardA = ((ulong[])a.Clone());
             var forwardB = ((ulong[])b.Clone());

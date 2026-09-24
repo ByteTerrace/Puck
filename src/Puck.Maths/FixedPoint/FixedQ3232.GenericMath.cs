@@ -4,8 +4,6 @@ using System.Numerics;
 namespace Puck.Maths;
 
 public readonly partial record struct FixedQ3232 {
-    private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(fractionBitCount: FractionBitCount);
-
     public static int Radix => 2;
 
     public static FixedQ3232 operator +(FixedQ3232 value) => value;
@@ -48,38 +46,30 @@ public readonly partial record struct FixedQ3232 {
         x: x,
         y: y
     );
-    public static FixedQ3232 Parse(string s, IFormatProvider? provider) {
-        ArgumentNullException.ThrowIfNull(argument: s);
-
-        return Parse(
-            s: s.AsSpan(),
-            style: FixedPointText.DefaultParseStyle,
-            provider: provider
+    public static FixedQ3232 Parse(string s, IFormatProvider? provider) =>
+        FixedPointText.Parse<FixedQ3232>(
+            provider: provider,
+            s: s,
+            style: FixedPointText.DefaultParseStyle
         );
-    }
     public static FixedQ3232 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
         Parse(
             provider: provider,
             s: s,
             style: FixedPointText.DefaultParseStyle
         );
-    public static FixedQ3232 Parse(string s, NumberStyles style, IFormatProvider? provider) {
-        ArgumentNullException.ThrowIfNull(argument: s);
-
-        return Parse(
-            s: s.AsSpan(),
-            style: style,
-            provider: provider
-        );
-    }
-    public static FixedQ3232 Parse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider) =>
-        new(Value: FixedPointText.ParseSignedRaw<FixedQ3232>(
-            fractionBitCount: FractionBitCount,
-            parsingDenominator: ParsingDenominator,
+    public static FixedQ3232 Parse(string s, NumberStyles style, IFormatProvider? provider) =>
+        FixedPointText.Parse<FixedQ3232>(
             provider: provider,
             s: s,
             style: style
-        ));
+        );
+    public static FixedQ3232 Parse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider) =>
+        FixedPointText.ParseSigned<FixedQ3232>(
+            provider: provider,
+            s: s,
+            style: style
+        );
     public static bool TryParse(string? s, IFormatProvider? provider, out FixedQ3232 result) =>
         TryParse(
             provider: provider,
@@ -104,20 +94,13 @@ public readonly partial record struct FixedQ3232 {
             provider: provider,
             result: out result
         );
-    public static bool TryParse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out FixedQ3232 result) {
-        var parsed = FixedPointText.TryParseSignedRaw(
-            fractionBitCount: FractionBitCount,
-            parsingDenominator: ParsingDenominator,
+    public static bool TryParse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out FixedQ3232 result) =>
+        FixedPointText.TryParseSigned(
             provider: provider,
-            rawValue: out var rawValue,
+            result: out result,
             s: s,
             style: style
         );
-
-        result = new(Value: rawValue);
-
-        return parsed;
-    }
     /// <summary>Renders the exact decimal expansion into <paramref name="destination"/>.</summary>
     /// <param name="destination">The span the rendering is written to.</param>
     /// <param name="charsWritten">The characters written, which is zero whenever this call returns
@@ -134,9 +117,8 @@ public readonly partial record struct FixedQ3232 {
             charsWritten: out charsWritten,
             destination: destination,
             format: format,
-            fractionBitCount: FractionBitCount,
             provider: provider,
-            rawValue: Value
+            value: this
         );
     /// <summary>Renders the exact decimal expansion as a string.</summary>
     /// <param name="format">An empty format, <c>G</c> or <c>g</c>; any other specifier raises a
@@ -151,6 +133,8 @@ public readonly partial record struct FixedQ3232 {
             invariant: ToString(),
             provider: formatProvider
         );
+
+    static int ISignedFixedPointFormat<FixedQ3232>.FractionBitCount => FractionBitCount;
 
     static bool INumberBase<FixedQ3232>.TryConvertFromChecked<TOther>(TOther value, out FixedQ3232 result) =>
         FixedPointConvert.TryConvertFromChecked<FixedQ3232, TOther>(

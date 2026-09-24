@@ -18,7 +18,7 @@ public enum CompiledPredicateKind : byte {
 /// <see cref="CompiledPredicateKind.Held"/> predicate's resolved composition-channel ordinal (<c>-1</c> for every
 /// other kind) — legitimate only inside a kit's <c>shaping</c>-row gate, where the world's channel table is
 /// available to resolve it at kit-compile time.</summary>
-public readonly record struct CompiledPredicate(ActionFact Fact, int RecencySlot, int StateSlot, FixedQ4816 Value, ActionStateComparison Comparison, CompiledPredicateKind Kind, int Arity = 0, int ChannelOrdinal = -1);
+public readonly record struct CompiledPredicate(ActionFact Fact, int RecencySlot, int StateSlot, FixedQ4816 Value, ExpressionOp Comparison, CompiledPredicateKind Kind, int Arity = 0, int ChannelOrdinal = -1);
 /// <summary>Representation bound for one compiled body predicate program.</summary>
 public static class CompiledPredicateCapacity {
     /// <summary>The most postfix tokens one body gate may execute.</summary>

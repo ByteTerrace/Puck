@@ -6,14 +6,19 @@ namespace Puck.Abstractions.Presentation;
 /// </summary>
 /// <remarks>Arming and serving are the render host's pump, so this carries no synchronization of its own. A node
 /// holding a slot still owns the two facts the slot cannot see: whether it has been disposed, and whether a
-/// capture-capable node deeper in its chain is already armed.</remarks>
+/// capture-capable node deeper in its chain is already armed. A request its requester refused while it was armed
+/// (<see cref="FrameCaptureRequest.TryFail"/>) is withdrawn: the slot no longer reports it as pending, and drops it
+/// instead of serving or forwarding it.</remarks>
 public sealed class CaptureRequestSlot {
     private FrameCaptureRequest? m_request;
 
     /// <summary>Gets the path armed on this slot, or <see langword="null"/>. A busy diagnostic, not a success
     /// signal: the completed write is observed through the request's own
-    /// <see cref="FrameCaptureRequest.Completion"/>.</summary>
-    public string? PendingPath => m_request?.Path;
+    /// <see cref="FrameCaptureRequest.Completion"/>. A withdrawn request is not pending.</summary>
+    public string? PendingPath => ((m_request is { Completion.IsCompleted: false } request)
+        ? request.Path
+        : null
+    );
 
     /// <summary>Arms a request on this slot.</summary>
     /// <param name="request">The unserved request.</param>
@@ -37,6 +42,8 @@ public sealed class CaptureRequestSlot {
     /// from vanishing silently.</summary>
     /// <param name="target">The inner node, or <see langword="null"/> when it captures nothing.</param>
     public void Forward(ICaptureRequestTarget? target) {
+        DropWithdrawn();
+
         if (
             (m_request is not { } request) ||
             (target is null)
@@ -66,6 +73,8 @@ public sealed class CaptureRequestSlot {
         ArgumentException.ThrowIfNullOrEmpty(argument: failureLabel);
         ArgumentNullException.ThrowIfNull(argument: writer);
 
+        DropWithdrawn();
+
         if (m_request is not { } request) {
             return;
         }
@@ -74,6 +83,13 @@ public sealed class CaptureRequestSlot {
 
         if (request.Write(writer: writer).Error is { } error) {
             Console.Error.WriteLine(value: $"{failureLabel} -> {request.Path} ({error.Message})");
+        }
+    }
+
+    // A request its requester refused while it was armed is dropped before anything could serve or forward it.
+    private void DropWithdrawn() {
+        if (m_request is { Completion.IsCompleted: true }) {
+            m_request = null;
         }
     }
 }

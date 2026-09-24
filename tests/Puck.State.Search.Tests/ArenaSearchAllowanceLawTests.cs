@@ -69,7 +69,7 @@ public sealed class ArenaSearchAllowanceLawTests {
             Kind: SearchShapeKind.Relocate,
             Displace: false,
             Directions: [],
-            PairWithIndex: -1
+            CompanionIndex: -1
         )];
     private static SearchWork Priced(int depth, SearchMethod method, int cells, bool chance) => SearchWork.Price(
         allowance: long.MaxValue,
@@ -111,7 +111,7 @@ public sealed class ArenaSearchAllowanceLawTests {
                     Weights: [1UL, 2UL, 1UL]
                 )
                 : null),
-            Iterations: ((method == SearchMethod.Tree)
+            Iterations: ((method == SearchMethod.MonteCarlo)
                 ? 48
                 : 0),
             Method: method
@@ -160,7 +160,7 @@ public sealed class ArenaSearchAllowanceLawTests {
             );
             // Every judge run the step made, the replay's included, was bought at the judge's price.
             Assert.True(
-                condition: (plan.Work.Allowance == long.MaxValue) || (((judge.Judged - judgedBefore) * JudgeWork) <= plan.Work.Allowance),
+                condition: ((plan.Work.Allowance == long.MaxValue) || (((judge.Judged - judgedBefore) * JudgeWork) <= plan.Work.Allowance)),
                 userMessage: $"step {steps} judged {(judge.Judged - judgedBefore)} times under {plan.Work.Allowance}"
             );
         }
@@ -173,13 +173,13 @@ public sealed class ArenaSearchAllowanceLawTests {
         ), steps, search.Status(index: 0));
     }
 
-    [Theory]
     [InlineData(null, 3, SearchMethod.Negamax)]
     [InlineData(0, 3, SearchMethod.Negamax)]
     [InlineData(1, 3, SearchMethod.Negamax)]
     [InlineData(2, 4, SearchMethod.Negamax)]
-    [InlineData(null, 3, SearchMethod.Tree)]
-    [InlineData(2, 3, SearchMethod.Tree)]
+    [InlineData(null, 3, SearchMethod.MonteCarlo)]
+    [InlineData(2, 3, SearchMethod.MonteCarlo)]
+    [Theory]
     public void TheLeastAdmissibleAllowanceLandsWhatAnUnboundedJobLands(int? atDepth, int depth, SearchMethod method) {
         var priced = Priced(
             cells: 4,
@@ -201,8 +201,8 @@ public sealed class ArenaSearchAllowanceLawTests {
         ));
 
         Assert.Equal(
-            unbounded.Landed,
-            bounded.Landed
+            actual: bounded.Landed,
+            expected: unbounded.Landed
         );
         // The bound bit: the bounded job had to yield where the unbounded one ran on.
         Assert.True(
@@ -214,9 +214,9 @@ public sealed class ArenaSearchAllowanceLawTests {
             bounded.Status.Nodes
         );
     }
-    [Theory]
     [InlineData(0L)]
     [InlineData(-1L)]
+    [Theory]
     public void AnAllowanceShortOfGuaranteedProgressIsRefusedWithTheSumItNeeds(long shortBy) {
         var priced = Priced(
             cells: 4,
@@ -269,6 +269,7 @@ public sealed class ArenaSearchAllowanceLawTests {
             depth: 1,
             method: SearchMethod.Negamax
         );
+
         var (_, _, status) = Run(plan: Plan(
             atDepth: null,
             cells: 1,
@@ -306,8 +307,8 @@ public sealed class ArenaSearchAllowanceLawTests {
         ));
 
         Assert.Equal(
-            many.Landed,
-            one.Landed
+            actual: one.Landed,
+            expected: many.Landed
         );
         Assert.True(condition: (one.Steps >= one.Status.Nodes));
         Assert.True(condition: (many.Steps < one.Steps));

@@ -27,22 +27,22 @@ public sealed class VulkanSwapchainSupportApi : IVulkanSwapchainSupportApi {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(surface);
 
-        if (surface.InstanceHandle != instance.Handle) {
+        if (surface.Instance != instance.Commands) {
             throw new InvalidOperationException(message: "The Vulkan surface was not created from the supplied Vulkan instance.");
         }
 
         var capabilities = m_physicalDeviceApi.GetSurfaceCapabilities(
-            instanceHandle: instance.Handle,
+            instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle,
             surfaceHandle: surface.Handle
         );
         var formats = m_physicalDeviceApi.GetSurfaceFormats(
-            instanceHandle: instance.Handle,
+            instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle,
             surfaceHandle: surface.Handle
         );
         var presentModes = m_physicalDeviceApi.GetPresentModes(
-            instanceHandle: instance.Handle,
+            instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle,
             surfaceHandle: surface.Handle
         );

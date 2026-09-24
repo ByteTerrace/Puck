@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Maths;
 
 namespace Puck.State;
 
@@ -6,9 +7,10 @@ namespace Puck.State;
 /// the positions of a family, a board, or a zone. Every expression lowers to one
 /// <see cref="CellSet"/> whose width is the carrier's own.</summary>
 /// <remarks>A source names a carrier and an inclusive value range, and its set holds every position of that carrier
-/// whose value falls in the range. The three sources address different things — a family addresses its member rows,
-/// a board its topology cells, a zone its pile positions — but all three answer with a set over
-/// <c>0..elements-1</c>, so the operators never know which carrier they are over. Complement is relative to that
+/// whose live value falls in the range — the value every other read of that cell answers at the lowering's time. The
+/// three sources address different things — a family addresses its member rows, a board its topology cells, a zone
+/// its pile positions — but all three answer with a set over <c>0..elements-1</c>, so the operators never know which
+/// carrier they are over. Complement is relative to that
 /// element count, which every source in one expression must agree on.</remarks>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(CellSetExpression.Board), "board")]
@@ -108,10 +110,7 @@ public static class CellSetLowering {
             value: (elements - (word * 64))
         );
 
-        return ((admitted == 64)
-            ? ulong.MaxValue
-            : ((1UL << admitted) - 1UL)
-        );
+        return admitted.LowMask<ulong>();
     }
     private static CellSet Full(int elements) {
         var wordCount = CellSet.WordCount(length: elements);
@@ -309,7 +308,7 @@ public static class CellSetLowering {
 
         return true;
     }
-    private static bool TryLowerSource(StateArena arena, CellSetExpression expression, int elements, out CellSet set, out string reason) {
+    private static bool TryLowerSource(StateArena arena, CellSetExpression expression, int elements, in ArenaTime time, out CellSet set, out string reason) {
         set = default;
         var wordCount = CellSet.WordCount(length: elements);
         var word0 = 0UL;
@@ -368,10 +367,11 @@ public static class CellSetLowering {
 
                             foreach (var rowOrdinal in range.Ordinals()) {
                                 if (
-                                    arena.TryReadRaw(
+                                    arena.TryReadLiveNumber(
                                     key: token,
-                                    raw: out var held,
-                                    rowOrdinal: rowOrdinal
+                                    rowOrdinal: rowOrdinal,
+                                    time: in time,
+                                    value: out var held
                                 ) &&
                                     (held >= family.Low) &&
                                     (held <= family.High)
@@ -393,10 +393,16 @@ public static class CellSetLowering {
 
                     foreach (var rowOrdinal in range.Ordinals()) {
                         if (
-                            arena.TryReadRawAt(
+                            arena.TryKeyAt(
+                            key: out var slot,
                             position: 0,
-                            raw: out var raw,
                             rowOrdinal: rowOrdinal
+                        ) &&
+                            arena.TryReadLiveNumber(
+                            key: slot,
+                            rowOrdinal: rowOrdinal,
+                            time: in time,
+                            value: out var raw
                         ) &&
                             (raw >= family.Low) &&
                             (raw <= family.High)
@@ -424,7 +430,7 @@ public static class CellSetLowering {
 
                         if (position >= elements) { break; }
                         if (
-                            arena.TryReadRaw(key: key, raw: out var raw, rowOrdinal: rowOrdinal) &&
+                            arena.TryReadLiveNumber(key: key, rowOrdinal: rowOrdinal, time: in time, value: out var raw) &&
                             (raw >= zone.Low) &&
                             (raw <= zone.High)
                         ) {
@@ -490,12 +496,13 @@ public static class CellSetLowering {
     /// <summary>Lowers an expression to the set of positions it holds, over the width its sources agree on.</summary>
     /// <param name="arena">The arena the sources read.</param>
     /// <param name="expression">The expression.</param>
+    /// <param name="time">The clocks a source cell's value-over-time trait is evaluated against.</param>
     /// <param name="set">The lowered set, on success.</param>
     /// <param name="reason">Why the expression was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the expression lowered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> or <paramref name="expression"/> is
     /// <see langword="null"/>.</exception>
-    public static bool TryLower(StateArena arena, CellSetExpression expression, out CellSet set, out string reason) {
+    public static bool TryLower(StateArena arena, CellSetExpression expression, in ArenaTime time, out CellSet set, out string reason) {
         set = default;
 
         return (TryElementCount(
@@ -508,13 +515,15 @@ public static class CellSetLowering {
             elements: elements,
             expression: expression,
             reason: out reason,
-            set: out set
+            set: out set,
+            time: in time
         ));
     }
     /// <summary>Lowers an expression to the set of positions it holds, over a declared width.</summary>
     /// <param name="arena">The arena the sources read.</param>
     /// <param name="expression">The expression.</param>
     /// <param name="elements">The carrier's element count.</param>
+    /// <param name="time">The clocks a source cell's value-over-time trait is evaluated against.</param>
     /// <param name="set">The lowered set, on success.</param>
     /// <param name="reason">Why the expression was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the expression lowered.</returns>
@@ -522,7 +531,7 @@ public static class CellSetLowering {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="elements"/> is outside the carrier's
     /// bounds.</exception>
-    public static bool TryLower(StateArena arena, CellSetExpression expression, int elements, out CellSet set, out string reason) {
+    public static bool TryLower(StateArena arena, CellSetExpression expression, int elements, in ArenaTime time, out CellSet set, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: arena);
         ArgumentNullException.ThrowIfNull(argument: expression);
         ArgumentOutOfRangeException.ThrowIfNegative(value: elements);
@@ -536,13 +545,17 @@ public static class CellSetLowering {
             case CellSetExpression.Any any: {
                     var first = true;
 
-                    foreach (var item in any.Items) {
+                    // Indexed rather than enumerated: an interface enumerator is a heap object on every lowering.
+                    for (var index = 0; (index < any.Items.Count); index++) {
+                        var item = any.Items[index];
+
                         if (!TryLower(
                             arena: arena,
                             elements: elements,
                             expression: item,
                             reason: out reason,
-                            set: out var member
+                            set: out var member,
+                            time: in time
                         )) {
                             return false;
                         }
@@ -566,13 +579,16 @@ public static class CellSetLowering {
             case CellSetExpression.Both both: {
                     var first = true;
 
-                    foreach (var item in both.Items) {
+                    for (var index = 0; (index < both.Items.Count); index++) {
+                        var item = both.Items[index];
+
                         if (!TryLower(
                             arena: arena,
                             elements: elements,
                             expression: item,
                             reason: out reason,
-                            set: out var member
+                            set: out var member,
+                            time: in time
                         )) {
                             set = CellSet.Empty(length: elements);
 
@@ -602,7 +618,8 @@ public static class CellSetLowering {
                         elements: elements,
                         expression: complement.Item,
                         reason: out reason,
-                        set: out var item
+                        set: out var item,
+                        time: in time
                     )) {
                         return false;
                     }
@@ -630,7 +647,8 @@ public static class CellSetLowering {
                         elements: elements,
                         expression: expression,
                         reason: out reason,
-                        set: out set
+                        set: out set,
+                        time: in time
                     ));
                 }
         }
@@ -657,7 +675,9 @@ public static class CellSetLowering {
     private static bool TryWiden(StateArena arena, CellSetExpression expression, ref int elements, out string reason) {
         switch (expression) {
             case CellSetExpression.Any any: {
-                    foreach (var item in any.Items) {
+                    for (var index = 0; (index < any.Items.Count); index++) {
+                        var item = any.Items[index];
+
                         if (!TryWiden(
                             arena: arena,
                             elements: ref elements,
@@ -673,7 +693,9 @@ public static class CellSetLowering {
                     return true;
                 }
             case CellSetExpression.Both both: {
-                    foreach (var item in both.Items) {
+                    for (var index = 0; (index < both.Items.Count); index++) {
+                        var item = both.Items[index];
+
                         if (!TryWiden(
                             arena: arena,
                             elements: ref elements,

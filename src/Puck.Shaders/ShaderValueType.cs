@@ -1,36 +1,49 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.Shaders;
 
 /// <summary>The type of one manifest-declared value — a push-constant field or a config field — in HLSL's own
-/// spelling (<c>float</c>, <c>float2</c>, <c>uint</c>, <c>int4</c>, …), via
-/// <see cref="ShaderValueTypeJsonConverter"/>. Every type is one to four 32-bit components; the component kind
-/// (<see cref="ShaderScalarKind"/>) and count derive from the value.</summary>
-[JsonConverter(typeof(ShaderValueTypeJsonConverter))]
+/// spelling (<c>float</c>, <c>float2</c>, <c>uint</c>, <c>int4</c>, …), which is each member's JSON string. Every type
+/// is one to four 32-bit components; the component kind (<see cref="ShaderScalarKind"/>) and count derive from the
+/// value.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ShaderValueType>))]
 public enum ShaderValueType {
     /// <summary>One 32-bit float.</summary>
+    [JsonStringEnumMemberName(name: "float")]
     Float = 0x11,
     /// <summary>Two 32-bit floats.</summary>
+    [JsonStringEnumMemberName(name: "float2")]
     Float2 = 0x12,
     /// <summary>Three 32-bit floats.</summary>
+    [JsonStringEnumMemberName(name: "float3")]
     Float3 = 0x13,
     /// <summary>Four 32-bit floats.</summary>
+    [JsonStringEnumMemberName(name: "float4")]
     Float4 = 0x14,
     /// <summary>One unsigned 32-bit integer.</summary>
+    [JsonStringEnumMemberName(name: "uint")]
     Uint = 0x21,
     /// <summary>Two unsigned 32-bit integers.</summary>
+    [JsonStringEnumMemberName(name: "uint2")]
     Uint2 = 0x22,
     /// <summary>Three unsigned 32-bit integers.</summary>
+    [JsonStringEnumMemberName(name: "uint3")]
     Uint3 = 0x23,
     /// <summary>Four unsigned 32-bit integers.</summary>
+    [JsonStringEnumMemberName(name: "uint4")]
     Uint4 = 0x24,
     /// <summary>One signed 32-bit integer.</summary>
+    [JsonStringEnumMemberName(name: "int")]
     Int = 0x31,
     /// <summary>Two signed 32-bit integers.</summary>
+    [JsonStringEnumMemberName(name: "int2")]
     Int2 = 0x32,
     /// <summary>Three signed 32-bit integers.</summary>
+    [JsonStringEnumMemberName(name: "int3")]
     Int3 = 0x33,
     /// <summary>Four signed 32-bit integers.</summary>
+    [JsonStringEnumMemberName(name: "int4")]
     Int4 = 0x34,
 }
 /// <summary>The component kind of a <see cref="ShaderValueType"/>.</summary>
@@ -51,6 +64,29 @@ public static class ShaderValueTypes {
     /// <param name="type">The value type.</param>
     /// <returns>The component count.</returns>
     public static uint ComponentCount(this ShaderValueType type) => ((uint)type) & 0xF;
+    /// <summary>Gets the value type with <paramref name="count"/> components of <paramref name="kind"/>.</summary>
+    /// <param name="kind">The component kind.</param>
+    /// <param name="count">The component count, one to four.</param>
+    /// <returns>The value type.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not a defined kind, or
+    /// <paramref name="count"/> is not one to four.</exception>
+    public static ShaderValueType FromComponents(ShaderScalarKind kind, uint count) {
+        if (!Enum.IsDefined(value: kind)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: kind,
+                message: "The component kind is not defined.",
+                paramName: nameof(kind)
+            );
+        }
+
+        ArgumentOutOfRangeException.ThrowIfZero(value: count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: 4u,
+            value: count
+        );
+
+        return ((ShaderValueType)((((uint)kind) << 4) | count));
+    }
     /// <summary>Gets the component kind.</summary>
     /// <param name="type">The value type.</param>
     /// <returns>The scalar kind.</returns>
@@ -79,28 +115,5 @@ public static class ShaderValueTypes {
             ? kind
             : $"{kind}{count}"
         );
-    }
-    /// <summary>Parses an HLSL spelling back into a <see cref="ShaderValueType"/>.</summary>
-    /// <param name="spelling">The spelling.</param>
-    /// <param name="type">The parsed type, when the spelling is recognized.</param>
-    /// <returns><see langword="true"/> when recognized.</returns>
-    public static bool TryParse(string? spelling, out ShaderValueType type) {
-        type = spelling switch {
-            "float" => ShaderValueType.Float,
-            "float2" => ShaderValueType.Float2,
-            "float3" => ShaderValueType.Float3,
-            "float4" => ShaderValueType.Float4,
-            "uint" => ShaderValueType.Uint,
-            "uint2" => ShaderValueType.Uint2,
-            "uint3" => ShaderValueType.Uint3,
-            "uint4" => ShaderValueType.Uint4,
-            "int" => ShaderValueType.Int,
-            "int2" => ShaderValueType.Int2,
-            "int3" => ShaderValueType.Int3,
-            "int4" => ShaderValueType.Int4,
-            _ => default,
-        };
-
-        return (type != default);
     }
 }

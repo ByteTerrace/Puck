@@ -1,0 +1,16 @@
+/* The validation line and the diagnostics list between the masthead and the tool tabs. */
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--mantine-spacing-xs);
+  align-items: baseline;
+}
+
+.message {
+  overflow-wrap: anywhere;
+}
+
+/* The summary line holds one height in every state: the Show/Hide button's appearing never moves what follows. */
+.summary {
+  height: rem(28px);
+}

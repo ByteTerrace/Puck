@@ -1,6 +1,6 @@
 # Binding composition (`WorldBindingComposer.cs`)
 
-Part of [`puck.world.def.v1`](documents.md). Field names and defaults are
+Part of [`puck.world.definition.v1`](documents.md). Field names and defaults are
 generated (`puck schema`, or `Assets/worlds/schema/bindingOverlays.schema.json`);
 this file is the decision/derivation prose the schema cannot state.
 
@@ -59,14 +59,14 @@ A chord row's, context row's, and wheel row's `group` may be a literal or a
 `state.<row>[.<key>]` reference to a Text cell. All references to one cell
 resolve together before the profile is composed, so changing that single cell
 renames the relationship consistently instead of requiring a document-wide
-search/replace. `standard.basis.json` is the worked example — its
+search/replace. `standard.world.json` is the worked example — its
 `state.world.bindingGroups` row holds `defaultActionGroup`, and every chord and
 wheel row names it through the reference.
 
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
 identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
-bar draws; there is no baked-in C# look any more. No shipped world or basis
+bar draws. No shipped world or basis
 authors `bindingBar` today — check `Assets/worlds/schema/bindingOverlays.schema.json`
 for the shape before relying on a live example. The first world row, when one
 is authored, supplies the world
@@ -82,36 +82,42 @@ validated against `Puck.Input.InputSourceVocabulary` through
 `InputSourceVocabularyHook` (the `Puck.Input`-vocabulary seam Schema reaches the
 same way it reaches command/channel vocabulary), refusing an unknown id by it, a
 duplicate by index, and the whole list past `WorldBindingBarCapacity.MaxSlots`
-(32 — a declared document ceiling now that no device enum bounds the vocabulary).
-The classic twelve (`BindingBarLayout.SlotSources`) render in their fixed
-compass-diamond positions regardless of authored order; `gamepad.back`/
-`gamepad.guide`/`gamepad.start` (`CenterSources`) render as a fixed three-slot
-row above the anchor, left to right in that real-controller order regardless of
-authored order; every other id (touchpad, mute, the grips, a mouse button, …)
-renders in a row further above, left to right in AUTHORED order —
-`BindingBarLayout.Categorize`/`Place`'s documented placement rule.
+(32, a declared document ceiling).
+A control appears on a bank only where the live layout places it; the engine
+derives no position from the source id or the authored order.
 
-`bindingBar.banks` (required, 1..`WorldBindingBarCapacity.MaxBanks` = 5 — the
-WoW-addon original's five chord states: resting/LT/RT/LT>RT/RT>LT) is a keyed
-list of `(id, pageId, order, alpha, activeAlpha?, offsetX?, offsetY?)` rows: each
-bank renders the WHOLE authored `slotSet` against its OWN named page (a
-`BindingPageDefinition.Id` — validated to exist somewhere in the COMPOSED
-binding profile, checked after `BindingProfile.Compile` succeeds, since only the
-whole overlay stack's result can answer that), displaced from the bar's shared
-anchor by an arrangement the ENGINE derives from `order` alone (unique per row;
-`BindingBarLayout.BankOffset` uses a fixed nested-cross table in button pitches:
-order 1 nests up and inward, 2 down and inward, and 3/4 sit straight above/below;
-later orders alternate farther above and below) — `offsetX`/
-`offsetY` are optional per-axis overrides for a world that wants one bank placed
-by hand. Each draws at its authored `alpha` — or `activeAlpha`
-(default 1.0) when that bank's page is the seat's CURRENTLY active one. A
-player's own `BindingProfileDocument.BindingBar` (stored in the identity
-document's `bindingOverlays` section)
-(`Puck.Commands.BindingBarPreferences`: `hideUnbound`/`stacked`/`scale`, all
-nullable, LOOK only — never a binding) overrides the world's `hideUnbound` and
-adds a `stacked` toggle (render every bank vs. only the seat's active one — falling
-back to every bank when none of them actually names the active page, rather than
-drawing nothing) and a `scale` override, resolved in `WorldBindingBarControl.Status`.
+`bindingBar.banks` (required, 1..`WorldBindingBarCapacity.MaxBanks` = 5, unique
+ids) is a list of `WorldBindingBarBank(id, pageId, alpha, activeAlpha?)` rows:
+each bank renders against its OWN named page (a `BindingPageDefinition.Id` —
+validated to exist somewhere in the COMPOSED binding profile, checked after
+`BindingProfile.Compile` succeeds, since only the whole overlay stack's result
+can answer that), at its authored `alpha`, or `activeAlpha` (default 1.0) when
+that bank's page is the seat's CURRENTLY active one. List order is draw order.
+
+Where a bank sits is the layout's to say. `bindingBar.layouts` maps a name to a
+`WorldBindingBarLayout`: `tables` (named plate tables, each row a
+`WorldBindingBarSlotPlacement(source, x, y, badge?)` in button pitches from the
+anchor, x right and y up), `banks` (per bank id, a
+`WorldBindingBarBankPlacement` of ordered `pieces`, each a table moved by `at`
+with an optional `badge` override, and an optional `anchor`), the bar's own
+`anchor` (`WorldBindingBarAnchor(edge, inset)`), and optional size-tuning
+overrides (`buttonSize` and the `*Ratio`/`*MinPx` fields). Banks sharing an
+edge and inset share one frame and are laid out together on one pitch grid; a
+bank with no row in the live layout is not drawn, and a source two pieces place
+takes the later one. `layout` names the default layout and `layoutCell` (a text
+state cell) the live one, so a chord, a wheel sector, or the console switches
+the bar's whole shape by writing that cell; a name matching no layout falls
+back to `layout`, then to `WorldBindingBarLayout.Default`, which places nothing.
+`modelCell` (a text state cell) reading `single` draws one bar — the active
+page's bank, in the first authored bank's place — and any other value draws
+every placed bank. The resolved placement compiles into
+`Puck.Commands.CompiledBindingBarLayout`, which `BindingBarWriter` draws.
+
+A player's own `BindingProfileDocument.BindingBar` (stored in the identity
+document's `bindingOverlays` section; `Puck.Commands.BindingBarPreferences`:
+`hideUnbound`/`scale`/`contrastBoost`/`uiScale`, all nullable, LOOK only —
+never a binding) overrides the world's `hideUnbound` and the layout's scale and
+adjusts the resolved theme, resolved in `WorldBindingBarControl.Status`.
 
 `bindingBar.text` (default `true`) is the bar's ATLAS-TEXT switch: `false` drops
 every text run the bar writes — every badge whose authored icon row carries a
@@ -256,6 +262,8 @@ targeting and gamepad excursion on the same authored radial.
 Selection, ring navigation, commit, and cancel sources are ordinary entries
 on each hold page. The engine default uses Tab and authors right-stick
 selection; the four shipped worlds currently replace the `play-primary`
-radial with one six-sector action ring. `WorldWheelFeed` owns presentation,
-and `world.view.wheel` reports the live wheel, hover, effective selector dead
+radial with one six-sector action ring. `WorldWheelFeed` owns presentation;
+its drawn labels, icons and hub label come from `WorldWheelRings`
+(`Puck.World.Client`), which reads the label and icon rows through the seat's
+routed mirror and rebuilds only when one of those cells changes. `world.view.wheel` reports the live wheel, hover, effective selector dead
 zone, and neutral-grace duration.

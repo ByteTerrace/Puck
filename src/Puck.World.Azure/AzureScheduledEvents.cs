@@ -1,12 +1,29 @@
 using System.Text.Json;
+using Puck.Networking;
 
 namespace Puck.World.Azure;
 
-/// <summary>Observes Azure host maintenance independently of world simulation and replay.</summary>
-public sealed class AzureScheduledEvents(HttpClient client) {
+/// <summary>Observes Azure host maintenance independently of world simulation and replay. Every metadata read's
+/// deadline, the poll interval, and the fallback retirement instant run on the host clock.</summary>
+/// <param name="client">The metadata client; each read is bounded by <see cref="RequestTimeout"/> here, so the client
+/// needs no timeout of its own.</param>
+/// <param name="timeProvider">The host clock; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
+public sealed class AzureScheduledEvents(HttpClient client, TimeProvider? timeProvider = null) {
     private const string Metadata = "http://169.254.169.254/metadata/";
 
+    private readonly TimeProvider m_clock = (timeProvider ?? TimeProvider.System);
+
+    /// <summary>Gets how long, on the host clock, one metadata read may take.</summary>
+    public static TimeSpan RequestTimeout { get; } = TimeSpan.FromSeconds(seconds: 5);
+
     private async Task<JsonDocument> ReadAsync(string path, CancellationToken cancellationToken) {
+        using var deadline = new OperationDeadline(
+            caller: cancellationToken,
+            timeout: RequestTimeout,
+            timeProvider: m_clock
+        );
+
+        cancellationToken = deadline.Token;
         using var request = new HttpRequestMessage(
             method: HttpMethod.Get,
             requestUri: (Metadata + path)
@@ -73,7 +90,7 @@ public sealed class AzureScheduledEvents(HttpClient client) {
                         out var parsed
                     )
                         ? parsed
-                        : DateTimeOffset.UtcNow
+                        : m_clock.GetUtcNow()
                     );
                     break;
                 }
@@ -91,7 +108,8 @@ public sealed class AzureScheduledEvents(HttpClient client) {
             }
             await Task.Delay(
                 cancellationToken: cancellationToken,
-                delay: pollInterval
+                delay: pollInterval,
+                timeProvider: m_clock
             );
         }
     }

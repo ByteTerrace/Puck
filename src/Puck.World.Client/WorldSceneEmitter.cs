@@ -93,6 +93,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldBodiesLimits.CapacityCeiling];
+    private readonly WorldTransformOwners m_avatarOwners = new(capacity: WorldBodiesLimits.CapacityCeiling);
     private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
     // The live program's avatar geometry and its transform pack share this rebuild-latched appearance image. This
     // closes the delivery-thread gap where a reused slot could otherwise pack a new rig into old compiled geometry.
@@ -103,6 +104,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // per-entity flag the pack/emit path reads to skip the catalog avatar (the body renders its creation instead).
     private readonly List<WorldStampPool.BodyStamp> m_bodyStamps = new();
     private readonly bool[] m_rendersAsStamp = new bool[WorldBodiesLimits.CapacityCeiling];
+    // Each active body's reads of the client's state mirror (its live scale), created on first need and released when
+    // the body leaves.
+    private readonly WorldStateLease?[] m_bodyReads = new WorldStateLease?[WorldBodiesLimits.CapacityCeiling];
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
     // raw interpolated pose instead of drawing it directly — resolved once per rebuild (Compose, beside the rig/scale/
@@ -299,11 +303,20 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             position: out _
         );
     }
-    private float LiveBodyScale(WorldDefinition definition, int index) => WorldGaitDrivers.LiveBodyScale(
-        definition: definition,
-        index: index,
-        tick: m_client.Tick
-    );
+    // The body's live scale through the state mirror slot its lease holds, acquired while the body is active.
+    private float LiveBodyScale(WorldDefinition definition, int index) {
+        var reads = (m_bodyReads[index] ??= new WorldStateLease());
+
+        reads.Bind(
+            bodyIndex: index,
+            mirror: m_client.StateMirror
+        );
+
+        return WorldGaitDrivers.LiveBodyScale(
+            reads: reads,
+            scaleRow: definition.Population.ScaleRow
+        );
+    }
     private static int[] NewPoseEpochs() {
         var epochs = new int[WorldBodiesLimits.CapacityCeiling];
 
@@ -323,8 +336,14 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var definition = m_client.Definition;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+            if (!m_client.IsActive(index: index)) {
+                // A body that left stops being read: its scale slot goes back to the mirror.
+                m_bodyReads[index]?.Release();
+
+                continue;
+            }
+
             if (
-                !m_client.IsActive(index: index) ||
                 (ResolveStampCreation(
                 definition: definition,
                 index: index
@@ -618,15 +637,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     /// <remarks>Every active avatar's leaves ride its interpolated snapshot pose plus a distance-driven gait phase (an
     /// idle avatar holds its pose; a teleport is clamped so it cannot spin the limbs through dozens of cycles), and the
-    /// animated/body-rooted stamps follow in the replay pool's range. Local seats fire one footstep cue per gait
-    /// half-cycle. Slots this call does not write hold the host's park position, which is the same point below the
-    /// floor a hidden avatar and an unused pool slot use.</remarks>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
-        // The catalog addresses its own ranges from 0; the slice makes the host-assigned base the origin.
-        var avatars = slots.Slice(
-            start: context.SlotBase,
-            length: WorldRigCatalog.DynamicTransformCapacity
-        );
+    /// animated/body-rooted stamps follow in the replay pool's range. An avatar repacks only while its presented pose,
+    /// shadow participation or pose epoch moves, or its root follower is still settling; a body that stops drawing
+    /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
+    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
@@ -666,6 +680,19 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             )) {
                 m_avatarPoseSeeded[index] = false;
 
+                if (m_avatarOwners.Vacate(
+                    moved: moved,
+                    owner: index
+                )) {
+                    WorldTransformOwners.ParkBody(
+                        avatar: index,
+                        catalogBase: context.SlotBase,
+                        moved: moved,
+                        parkPosition: context.ParkPosition,
+                        table: slots
+                    );
+                }
+
                 continue;
             }
 
@@ -674,6 +701,21 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 seats: joinedSeats[..joinedSeatCount],
                 radiusSquared: crowdRadiusSquared
             ));
+
+            if (!m_avatarOwners.Wake(
+                castsSoftShadow: castsSoftShadow,
+                moved: moved,
+                orientation: orientation,
+                owner: index,
+                position: position,
+                discontinuity: (
+                !m_avatarPoseSeeded[index] ||
+                (m_avatarMotionAddresses[index] != address) ||
+                (m_avatarDynamicsPoseEpoch[index] != m_client.PoseEpoch(index: index))
+            )
+            )) {
+                continue;
+            }
             // The combined (epoch, address) watch — the pool's own WorldStampPool.RootEpoch/RootAddress shape:
             // EITHER term moving is the SAME discontinuity class (a teleport/over-threshold correction bumps the
             // epoch; a body index reused by a different inhabitant changes the address), so both gate the SAME
@@ -750,17 +792,25 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             // A creation-STAMP body (inhabitant / crowd creation-look) renders its creation through the stamp pool, so
             // its catalog avatar packs HIDDEN below the floor (culled) — the "never black, never vanished" degradation
             // is gone: the body shows its actual creation geometry instead.
-            WorldRigCatalog.PackTransforms(
+            m_avatarOwners.Settle(
+                deltaSeconds: (m_avatarFollows[index]
+                ? deltaSeconds
+                : 1f),
+                moved: WorldTransformOwners.PackBody(
                 avatar: index,
+                castsSoftShadow: castsSoftShadow,
+                catalogBase: context.SlotBase,
+                gaitPhase: (m_avatarGaitPhases[index] * m_emittedAvatarGaitAmplitudes[index]),
+                moved: moved,
+                rig: m_emittedAvatarRigs[index],
+                rootOrientation: followedOrientation,
                 rootPosition: (m_rendersAsStamp[index]
                 ? context.ParkPosition
                 : followedPosition),
-                rootOrientation: followedOrientation,
-                gaitPhase: (m_avatarGaitPhases[index] * m_emittedAvatarGaitAmplitudes[index]),
-                castsSoftShadow: castsSoftShadow,
-                transforms: avatars,
-                rig: m_emittedAvatarRigs[index],
-                scale: m_emittedAvatarScales[index]
+                scale: m_emittedAvatarScales[index],
+                table: slots
+            ),
+                owner: index
             );
         }
 
@@ -770,6 +820,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_animator.PackTransforms(
             transforms: slots,
             client: m_client,
+            moved: moved,
             slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity),
             parkPosition: context.ParkPosition
         );

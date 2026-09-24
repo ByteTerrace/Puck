@@ -188,6 +188,34 @@ This project contributes only `InputSourceLabels`, which describes a physical
 source using the connected family's labels—for example, the south face button
 is B on Switch, A on Xbox or Steam, and X on DualSense.
 
+## Keyboard focus and passthrough sources
+
+A window captured into a pane, such as an editor, can take the keyboard.
+`SourceFocus` decides where each window event goes, before
+`WindowInputMapper` sees it:
+
+- `Press` reports a pointer press and the `SourceMapping` it landed on (the
+  published source mapping in `Puck.Commands`). Focus moves to that source when
+  the mapping takes the `Passthrough` destination, the local user opened it,
+  and the press lands on its pixels. A press anywhere else returns focus to the
+  game.
+- `Route` sends a key or text event to the focused source, or to the game when
+  no source has focus. A key's release goes wherever its press went, so neither
+  side is left holding a key after focus moves. Pointer events are routed by
+  the mapping a hit lands on, never by focus.
+- The reserved chord, Control and Alt held with Escape pressed, always returns
+  focus to the game. Its Escape reaches neither the game nor a source, whichever
+  had focus.
+
+A world document never creates a passthrough source: the world validator
+refuses a screen whose `input` is `Passthrough`. Focus sits inside the input the
+engine already holds, so it is separate from `IInputFocus` in `Puck.Hosting`,
+which decides whether the terminal routes a device to the engine at all.
+Nothing hosts `SourceFocus` yet. Delivering a focused source's keys and
+pointer events to its window through Windows messages, in the window's client
+coordinates (`SourcePassthrough.ToClient`, DPI included), is P13b in
+[the rendering programme](../plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations).
+
 ## Output and haptics
 
 `IGamepadOutput` accepts typed output commands and a raw-report escape hatch.
@@ -281,6 +309,7 @@ feature framing. Triton feature messages use report id 1 and
 | `ImuOrientationTracker` | Holds complementary-filter orientation and gyro-bias state. |
 | `InputSources` / `WindowInputMapper` | Own physical source names and neutral keyboard/mouse/text mapping. |
 | `HeldDigitalInputState` | Retains edge-reported held controls in press order and produces safe per-frame reassertions. |
+| `SourceFocus` | Routes keys and text between the game and a focused passthrough source, and holds the reserved focus chord. |
 | `IGamepadOutput` / `TriggerEffectSpec` | Expose capability-gated controller output. |
 | `LightLegendComposer` / `LightLegendDriver` | Compose and deliver presentation-side LampArray legends. |
 

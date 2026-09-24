@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -11,7 +12,7 @@ public sealed partial class ConfinedStorageLawTests {
 
     [Fact]
     public async Task LongPathsSupportAtomicWritesReadBackAndListing() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var id = Guid.NewGuid();
@@ -85,7 +86,7 @@ public sealed partial class ConfinedStorageLawTests {
     }
     [Fact]
     public void HostConfigurationReadsAreBoundedAndRejectLinkedParents() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var file = Path.Combine(
             path1: directory.RootPath,
             path2: "extensions.json"
@@ -115,13 +116,15 @@ public sealed partial class ConfinedStorageLawTests {
             name: link,
             target: directory.RootPath
         );
-        try { Assert.Throws<IOException>(testCode: () => ConfinedFile.ReadAllBytes(
+        try {
+            Assert.Throws<IOException>(testCode: () => ConfinedFile.ReadAllBytes(
             Path.Combine(
                 path1: link,
                 path2: "extensions.json"
             ),
             2
-        )); } finally { Directory.Delete(path: link); }
+        ));
+        } finally { Directory.Delete(path: link); }
     }
     [InlineData("../escape")]
     [InlineData("nested/../../escape")]
@@ -139,7 +142,7 @@ public sealed partial class ConfinedStorageLawTests {
     [InlineData("nested/.puck-file")]
     [Theory]
     public async Task UnsafeLogicalKeysNeverReachTheFilesystem(string key) {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
@@ -160,7 +163,7 @@ public sealed partial class ConfinedStorageLawTests {
     }
     [Fact]
     public async Task LinkedDirectoryCannotRedirectReadWriteOrList() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
@@ -235,7 +238,7 @@ public sealed partial class ConfinedStorageLawTests {
             condition: (OperatingSystem.IsWindows() && !hardLink),
             reason: "Windows file-symlink creation needs an OS privilege; Linux covers this case, Windows separately covers junctions and hard links."
         );
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
@@ -263,21 +266,27 @@ public sealed partial class ConfinedStorageLawTests {
         );
 
         if (hardLink) {
-            if (OperatingSystem.IsWindows()) { Assert.True(condition: CreateHardLink(
+            if (OperatingSystem.IsWindows()) {
+                Assert.True(condition: CreateHardLink(
                 existing: outside,
                 name: link,
                 security: 0
-            )); } else { Assert.Equal(
+            ));
+            } else {
+                Assert.Equal(
                 0,
                 Link(
                     existing: outside,
                     name: link
                 )
-            ); }
-        } else { File.CreateSymbolicLink(
+            );
+            }
+        } else {
+            File.CreateSymbolicLink(
             path: link,
             pathToTarget: outside
-        ); }
+        );
+        }
         try {
             var address = new ObjectBlobAddress(
                 Key: "linked",
@@ -304,7 +313,7 @@ public sealed partial class ConfinedStorageLawTests {
     }
     [Fact]
     public async Task FailedConditionalCreateLeavesNoBlob_AndPublicationHidesStorageMetadata() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var id = Guid.NewGuid();
@@ -379,7 +388,7 @@ public sealed partial class ConfinedStorageLawTests {
     }
     [Fact]
     public async Task BackendByteAndTraversalBudgetsAlsoBoundPreexistingData() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(
             Path.Combine(
@@ -439,7 +448,7 @@ public sealed partial class ConfinedStorageLawTests {
     }
     [Fact]
     public async Task NamespaceCannotChooseAnotherObjectOrEscapeItsPrefix_AndCanBeRevoked() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var id = Guid.NewGuid();
@@ -533,7 +542,7 @@ public sealed partial class ConfinedStorageLawTests {
     }
     [Fact]
     public async Task ConcurrentDirectoryReplacementCannotRedirectAnOpenedRead() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var store = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
@@ -590,36 +599,39 @@ public sealed partial class ConfinedStorageLawTests {
         // This blocking race loop needs its own thread, even when other tests occupy the pool.
         var swaps = Task.Factory.StartNew(
             action: () => {
-            while (!stop.IsCancellationRequested) {
-                try { Directory.Move(
-                    destDirName: moved,
-                    sourceDirName: slot
-                ); } catch (IOException) { Thread.Yield(); continue; }
-                try { MoveWithRetry(
-                    destination: slot,
-                    source: stagedLink
-                ); started.TrySetResult(); Thread.Yield(); } finally {
-                    if (Directory.Exists(path: slot)) { MoveWithRetry(
-                        destination: stagedLink,
-                        source: slot
-                    ); }
-                    MoveWithRetry(
-                        destination: slot,
-                        source: moved
+                while (!stop.IsCancellationRequested) {
+                    try {
+                        Directory.Move(
+                        destDirName: moved,
+                        sourceDirName: slot
                     );
+                    } catch (IOException) { Thread.Yield(); continue; }
+                    try {
+                        MoveWithRetry(
+                        destination: slot,
+                        source: stagedLink
+                    ); started.TrySetResult(); Thread.Yield();
+                    } finally {
+                        if (Directory.Exists(path: slot)) {
+                            MoveWithRetry(
+                            destination: stagedLink,
+                            source: slot
+                        );
+                        }
+                        MoveWithRetry(
+                            destination: slot,
+                            source: moved
+                        );
+                    }
                 }
-            }
-        },
+            },
             cancellationToken: Cancel,
             creationOptions: TaskCreationOptions.LongRunning,
             scheduler: TaskScheduler.Default
         );
 
         try {
-            await started.Task.WaitAsync(
-                TimeSpan.FromSeconds(seconds: 5),
-                Cancel
-            );
+            await started.Task.WaitAsync(cancellationToken: Cancel);
             for (var i = 0; (i < 200); i++) {
                 try {
                     var read = await store.ReadAsync(
@@ -628,10 +640,12 @@ public sealed partial class ConfinedStorageLawTests {
                         Cancel
                     );
 
-                    if (read is not null) { Assert.Equal(
+                    if (read is not null) {
+                        Assert.Equal(
                         "inside",
                         Encoding.UTF8.GetString(bytes: read.Value.Content.Span)
-                    ); }
+                    );
+                    }
                 } catch (IOException) { /* A raced or linked lookup must fail closed. */ }
             }
         } finally { await stop.CancelAsync(); await swaps; Directory.Delete(path: stagedLink); }
@@ -644,21 +658,24 @@ public sealed partial class ConfinedStorageLawTests {
         );
     }
 
+    // A concurrent read can hold the directory open for a moment; the move succeeds once it lets go.
     private static void MoveWithRetry(string source, string destination) {
-        var until = (Environment.TickCount64 + 5000);
-
         while (true) {
-            try { Directory.Move(
+            try {
+                Directory.Move(
                 destDirName: destination,
                 sourceDirName: source
-            ); return; } catch (IOException) when ((Environment.TickCount64 < until)) { Thread.Yield(); }
+            ); return;
+            } catch (IOException) when (!Cancel.IsCancellationRequested) { Thread.Yield(); }
         }
     }
     private static void CreateDirectoryLink(string name, string target) {
-        if (!OperatingSystem.IsWindows()) { Directory.CreateSymbolicLink(
+        if (!OperatingSystem.IsWindows()) {
+            Directory.CreateSymbolicLink(
             path: name,
             pathToTarget: target
-        ); return; }
+        ); return;
+        }
         // NTFS junctions exercise the reparse-point boundary without requiring SeCreateSymbolicLinkPrivilege.
         Directory.CreateDirectory(path: name);
         using var handle = OpenDirectory(

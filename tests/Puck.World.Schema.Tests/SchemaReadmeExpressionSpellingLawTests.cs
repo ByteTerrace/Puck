@@ -8,26 +8,7 @@ namespace Puck.World.Schema.Tests;
 /// <summary>THE LAW: the package README spells a postfix expression the way the reader takes one — an
 /// <c>instructions</c> array whose every element names its <c>op</c>.</summary>
 public sealed class SchemaReadmeExpressionSpellingLawTests {
-    private static string Readme() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        return File.ReadAllText(path: Path.Combine(
-            directory!.FullName,
-            "src",
-            "Puck.World.Schema",
-            "README.md"
-        ));
-    }
+    private static string Readme() => File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World.Schema/README.md"));
 
     [Fact]
     public void TheReadmeSpellsAPostfixProgramAsAnInstructionArray() {

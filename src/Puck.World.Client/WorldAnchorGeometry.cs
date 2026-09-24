@@ -31,7 +31,7 @@ public static class WorldAnchorGeometry {
 
             var creation = WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             );
 
             return ((creation is null)

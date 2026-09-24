@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Assets;
 
 namespace Puck.World.Server;
 
@@ -53,13 +54,7 @@ public interface IWorldAuthorityRecoveryStore {
 }
 
 internal static class WorldAuthorityRecoveryRootCodec {
-    private const string HashPrefix = "sha256/";
     private const string Schema = "puck.authority.recovery-root.v1";
-
-    private static readonly JsonSerializerOptions Options = new() {
-        PropertyNamingPolicy = null,
-        WriteIndented = false,
-    };
 
     private sealed record Envelope(
         [property: JsonPropertyName("schema")] string Schema,
@@ -71,11 +66,6 @@ internal static class WorldAuthorityRecoveryRootCodec {
         [property: JsonPropertyName("root")] WorldAuthorityRoot Root
     );
 
-    public static string ComputePin(ReadOnlySpan<byte> bytes) {
-        var digest = System.Security.Cryptography.SHA256.HashData(source: bytes);
-
-        return (HashPrefix + Convert.ToHexStringLower(inArray: digest));
-    }
     public static byte[] Encode(WorldAuthorityIdentity identity, Guid operationId, WorldAuthorityRootSnapshot root) => JsonSerializer.SerializeToUtf8Bytes(
         new Envelope(
             Schema,
@@ -86,28 +76,8 @@ internal static class WorldAuthorityRecoveryRootCodec {
             DateTimeOffset.UtcNow,
             root.Root
         ),
-        Options
+        WorldAuthorityRootCodec.Options
     );
-    public static bool IsPin(string? pin) {
-        if (
-            (pin is null) ||
-            (pin.Length != (HashPrefix.Length + 64)) ||
-            !pin.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: HashPrefix
-        )
-        ) {
-            return false;
-        }
-        for (var index = HashPrefix.Length; (index < pin.Length); index++) {
-            var character = pin[index];
-
-            if (!(character is >= '0' and <= '9' or >= 'a' and <= 'f')) {
-                return false;
-            }
-        }
-        return true;
-    }
     public static bool TryDecode(
         ReadOnlySpan<byte> bytes,
         WorldAuthorityIdentity expectedIdentity,
@@ -145,7 +115,7 @@ internal static class WorldAuthorityRecoveryRootCodec {
             }
 
             var envelope = JsonSerializer.Deserialize<Envelope>(
-                options: Options,
+                options: WorldAuthorityRootCodec.Options,
                 utf8Json: bytes
             );
 
@@ -197,7 +167,7 @@ internal static class WorldAuthorityRecoveryRootCodec {
                 return false;
             }
             reference = new WorldRecoveryRootReference(
-                Pin: ComputePin(bytes: bytes),
+                Pin: ContentPin.Compute(content: bytes).ToString(),
                 Owner: envelope.Owner,
                 World: world,
                 OperationId: envelope.OperationId,

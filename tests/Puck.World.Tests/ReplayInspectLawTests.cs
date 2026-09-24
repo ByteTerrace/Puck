@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Maths;
@@ -49,7 +50,7 @@ public sealed class ReplayInspectLawTests {
             moveAdvance: forward,
             moveStrafe: strafe
         ),
-        Principal: WorldPrincipal.Seat(slot: entity)
+        Principal: Principal.Seat(slot: entity)
     );
     private static WorldReplayTickInput Tick(params IntentSubmission[] intents) => new(
         Authority: [],
@@ -112,12 +113,12 @@ public sealed class ReplayInspectLawTests {
         tape.NoteTick();
         transport.SubmitGrant(
             grant: new WorldGrant(
-                Principal: WorldPrincipal.Seat(slot: 1),
+                Grantee: Principal.Seat(slot: 1),
                 Capability: WorldCapability.Drive,
                 Subject: GrantSubject.Body(index: 0),
                 Exclusive: false
             ),
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
         fixture.Step();
         tape.NoteTick();

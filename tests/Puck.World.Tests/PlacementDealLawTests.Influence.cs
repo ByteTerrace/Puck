@@ -1,4 +1,6 @@
+using Puck.Commands;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -47,14 +49,14 @@ public sealed partial class PlacementDealLawTests {
 
         fixture.Step();
         var first = new PlacementInfluenceOperand(
-            "water",
-            TemplateId,
-            "a"
+            channel: "water",
+            key: "a",
+            placementId: TemplateId
         );
         var second = new PlacementInfluenceOperand(
-            "water",
-            TemplateId,
-            "b"
+            channel: "water",
+            key: "b",
+            placementId: TemplateId
         );
 
         Assert.Equal(
@@ -66,17 +68,19 @@ public sealed partial class PlacementDealLawTests {
             fixture.Server.RuleHost.Read(operand: second).Value
         );
         Assert.True(condition: fixture.Server.RuleHost.Read(operand: new PlacementInfluenceOperand(
-            "water",
-            TemplateId,
-            "missing"
+            channel: "water",
+            key: "missing",
+            placementId: TemplateId
         )).IsAbsent);
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
-            supply with { Spatial = [Water(
+            Principal.Console,
+            supply with {
+                Spatial = [Water(
                     name: "outer",
                     radius: 3
-                )] }
+                )],
+            }
         ));
         fixture.Step();
         Assert.Equal(
@@ -86,18 +90,17 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(
             0,
             fixture.Server.RuleHost.Read(operand: new PlacementInfluenceOperand(
-                "power",
-                TemplateId,
-                "b"
+                channel: "power",
+                key: "b",
+                placementId: TemplateId
             )).Value
         );
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var read = 0; (read < 100); read++) { _ = fixture.Server.RuleHost.Read(operand: second); }
         Assert.Equal(
-            0,
-            (GC.GetAllocatedBytesForCurrentThread() - before)
+            0L,
+            AllocationWindow.Least(window: () => {
+                for (var read = 0; (read < 100); read++) { _ = fixture.Server.RuleHost.Read(operand: second); }
+            })
         );
     }
     [Fact]

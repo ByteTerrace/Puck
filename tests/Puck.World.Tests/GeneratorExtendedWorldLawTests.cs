@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -8,7 +9,7 @@ namespace Puck.World.Tests;
 /// about it is persisted runtime state outside the document, so two independent boots of the identical document hash
 /// identically, and <c>world.undo</c> rewinds it exactly as it rewinds any other draw.</summary>
 public sealed class GeneratorExtendedWorldLawTests {
-    private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
+    private static readonly Principal Actor = Principal.Seat(slot: 0);
 
     // WorldServer never resolves a first-fill draw itself (WorldDefinitionLoader — the real file-loading path —
     // does, once, at process boot); Fixtures.FreshServer round-trips the document as-authored. A law over a draw
@@ -112,7 +113,7 @@ public sealed class GeneratorExtendedWorldLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 

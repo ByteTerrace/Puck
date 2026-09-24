@@ -14,6 +14,10 @@ public enum GpuImageLayout : uint {
     /// <summary>The cross-backend handoff layout an importer on another backend samples from after opening the shared
     /// handle (Vulkan GENERAL; Direct3D 12 COMMON — the state a shared resource must rest in for a foreign device).</summary>
     External = 3,
-    /// <summary>The color-attachment layout/state used by a fullscreen graphics pass.</summary>
+    /// <summary>The color-attachment layout a render pass draws in (Vulkan COLOR_ATTACHMENT_OPTIMAL; Direct3D 12
+    /// RENDER_TARGET).</summary>
     RenderTarget = 4,
+    /// <summary>The depth-attachment layout a render pass tests and writes depth in (Vulkan
+    /// DEPTH_STENCIL_ATTACHMENT_OPTIMAL; Direct3D 12 DEPTH_WRITE).</summary>
+    DepthAttachment = 5,
 }

@@ -21,7 +21,11 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const worldsDir = path.join(root, 'src', 'Puck.World', 'Assets', 'worlds');
+const {
+  officialTreeMissing, officialDocument, officialSchemaBundle, officialSources, officialIslandRootSource, TICTACTOE_ROOT,
+} = require('./support/officialTree.cjs');
+// A test that needs a compiled world skips itself by name when no official tree has been built.
+const needsTree = (t) => { const missing = officialTreeMissing(); if (missing) t.skip(missing); return !missing; };
 const parityFixturePath = path.join(root, 'tests', 'Puck.World.Browser.Tests', 'Fixtures', 'browser-parity', 'expected.json');
 
 if (!fs.existsSync(mainMjs)) {
@@ -34,7 +38,7 @@ if (!fs.existsSync(mainMjs)) {
     return createEngine();
   })();
 
-  test('Version() reports this build\'s schema version', async () => {
+  test('Version() reports this build\'s schema version', async (t) => {
     const engine = await engineReady;
     const version = JSON.parse(engine.Version());
 
@@ -44,8 +48,8 @@ if (!fs.existsSync(mainMjs)) {
 
     // The schema's own self-identification (WP-A's x-puck root member) is the source of truth once it lands;
     // until then the schema's declared `schema` const is the same fact under its pre-existing name.
-    const schemaPath = path.join(worldsDir, 'puck.world.definition.v1.schema.json');
-    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+    if (!needsTree(t)) return;
+    const schema = officialSchemaBundle();
     const expected = (schema['x-puck'] && schema['x-puck'].schemaVersion)
       || (schema.properties && schema.properties.schema && schema.properties.schema.const)
       || version.schemaVersion;
@@ -71,17 +75,19 @@ if (!fs.existsSync(mainMjs)) {
     assert.deepEqual(result.cells[0], { ordinal: 0, key: '0', x: 0.5, y: 0, z: 0.5 });
   });
 
-  test('ParseFragment() composes the tictactoe fragment under standard.basis.json', async () => {
+  test('ParseFragment() composes the tictactoe fragment under the standard basis', async (t) => {
+    if (!needsTree(t)) return;
     const engine = await engineReady;
-    const hostJson = fs.readFileSync(path.join(worldsDir, 'standard.basis.json'), 'utf8');
-    const fragmentJson = fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8');
+    const hostJson = officialDocument('standard');
+    const fragmentJson = officialDocument('games/tictactoe');
     const result = JSON.parse(engine.ParseFragment(fragmentJson, hostJson, 'a'));
 
     assert.equal(result.ok, true, JSON.stringify(result.errors));
     assert.ok(result.document);
   });
 
-  test('Compile()/Judge()/StateHash() match the native parity baseline', async () => {
+  test('Compile()/Judge()/StateHash() match the native parity baseline', async (t) => {
+    if (!needsTree(t)) return;
     if (!fs.existsSync(parityFixturePath)) {
       // The record run (PUCK_BROWSER_PARITY_RECORD=1 dotnet test tests/Puck.World.Browser.Tests) is the one
       // producer of this file; without it there is no baseline to compare the wasm run against.
@@ -90,8 +96,8 @@ if (!fs.existsSync(mainMjs)) {
 
     const expected = JSON.parse(fs.readFileSync(parityFixturePath, 'utf8'));
     const engine = await engineReady;
-    const hostJson = fs.readFileSync(path.join(worldsDir, 'standard.basis.json'), 'utf8');
-    const fragmentJson = fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8');
+    const hostJson = officialDocument('standard');
+    const fragmentJson = officialDocument('games/tictactoe');
     const composed = JSON.parse(engine.ParseFragment(fragmentJson, hostJson, 'a'));
 
     assert.equal(composed.ok, true, JSON.stringify(composed.errors));
@@ -134,32 +140,48 @@ if (!fs.existsSync(mainMjs)) {
     }
   });
 
-  test('ComposeTree() composes the real island and defers its unregistered machine engines', async () => {
+  // The source-workspace tests mount the official tree's sources[] the way the studio does, so they need the source
+  // exports.
+  async function needsSources(t) {
+    if (!needsTree(t)) return null;
     const engine = await engineReady;
-    const documents = {};
-    for (const file of fs.readdirSync(worldsDir, { recursive: true })) {
-      if (!file.endsWith('.json')) continue;
-      documents[file.split(path.sep).join('/')] = fs.readFileSync(path.join(worldsDir, file), 'utf8');
+    if (typeof engine.MountSources !== 'function') {
+      t.skip('this AppBundle predates the source exports (no MountSources)');
+      return null;
     }
+    return engine;
+  }
+  const mount = (engine, files) => {
+    const mounted = JSON.parse(engine.MountSources(JSON.stringify(files)));
+    assert.equal(mounted.ok, true, mounted.error);
+  };
+  async function needsIsland(t) {
+    const engine = await needsSources(t);
+    if (engine) mount(engine, officialSources());
+    return engine;
+  }
 
-    const result = JSON.parse(engine.ComposeTree('puck.world.json', JSON.stringify(documents), '', ''));
+  test('ComposeSource() composes the real island, and reports the machine checks it defers as information', async (t) => {
+    const engine = await needsIsland(t);
+    if (!engine) return;
 
-    assert.equal(result.ok, true, JSON.stringify(result.errors));
-    assert.ok(result.composed);
-    assert.ok(result.document);
-    assert.ok(result.deferred.some(m => m.includes("no machine catalog was supplied for 'gaming-brick'")));
+    const result = JSON.parse(engine.ComposeSource(officialIslandRootSource()));
+    assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
+    assert.deepEqual(result.diagnostics.filter(d => d.severity === 'error'), []);
+    const deferrals = result.diagnostics.filter(d => d.severity === 'information' && d.message.includes('no machine catalog was supplied'));
+    assert.ok(deferrals.length > 0, 'the browser has no machine catalog, so it defers those checks');
+    assert.ok(deferrals.every(d => d.line === 0), 'a composed-world finding is about the whole document');
+    const parsed = JSON.parse(engine.Parse(result.composed));
+    assert.equal(parsed.ok, true, JSON.stringify(parsed.errors));
+    assert.ok(parsed.deferred.some(m => m.includes("no machine catalog was supplied for 'gaming-brick'")));
   });
 
-  test('Judge() over the composed island runs ticks 1-3 and reports hostFacts for a world-scoped read', async () => {
-    const engine = await engineReady;
-    const documents = {};
-    for (const file of fs.readdirSync(worldsDir, { recursive: true })) {
-      if (!file.endsWith('.json')) continue;
-      documents[file.split(path.sep).join('/')] = fs.readFileSync(path.join(worldsDir, file), 'utf8');
-    }
+  test('Judge() over the composed island runs ticks 1-3 and reports hostFacts for a world-scoped read', async (t) => {
+    const engine = await needsIsland(t);
+    if (!engine) return;
 
-    const composed = JSON.parse(engine.ComposeTree('puck.world.json', JSON.stringify(documents), '', ''));
-    assert.equal(composed.ok, true, JSON.stringify(composed.errors));
+    const composed = JSON.parse(engine.ComposeSource(officialIslandRootSource()));
+    assert.equal(composed.ok, true, JSON.stringify(composed.diagnostics));
 
     const compiled = JSON.parse(engine.Compile(composed.composed));
     assert.equal(compiled.ok, true, JSON.stringify(compiled.errors));
@@ -176,39 +198,27 @@ if (!fs.existsSync(mainMjs)) {
     assert.ok(hostFacts.some(f => (f.operand.includes('Physics') || f.operand.includes('Body'))));
   });
 
-  // Duplicates the fragment's first rule object by TEXT surgery, never JSON.parse/stringify of the whole document —
-  // tictactoe.world.json carries Int64.Min/MaxValue sentinels (state row min/max) JavaScript's own JSON round trip
-  // cannot preserve exactly (see documentValidation.ts's own remarks); splicing the raw text leaves every other
-  // byte, including those sentinels, untouched.
-  function withADuplicatedFirstRule(fragmentJson) {
-    const arrayOpen = fragmentJson.indexOf('[', fragmentJson.indexOf('"rules"'));
-    const rulesStart = fragmentJson.indexOf('{', arrayOpen);
-    let depth = 0, ruleEnd = rulesStart;
-    for (let i = rulesStart; i < fragmentJson.length; i++) {
-      if (fragmentJson[i] === '{') depth++;
-      else if (fragmentJson[i] === '}' && --depth === 0) { ruleEnd = i + 1; break; }
-    }
-    const firstRule = fragmentJson.slice(rulesStart, ruleEnd);
-
-    return fragmentJson.slice(0, rulesStart) + firstRule + ',' + fragmentJson.slice(rulesStart);
+  // Duplicates the fragment's first rule block by text surgery on its .puck source.
+  function withADuplicatedFirstRule(source) {
+    const start = source.indexOf('rule "');
+    const end = source.indexOf('\n}\n', start) + 3;
+    return source.slice(0, end) + '\n' + source.slice(start);
   }
 
-  test('ComposeTree() with an edited document reports its own diagnostic, not another document\'s', async () => {
-    const engine = await engineReady;
-    const basisJson = fs.readFileSync(path.join(worldsDir, 'standard.basis.json'), 'utf8');
-    const fragmentJson = fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8');
-    const rootJson = JSON.stringify({ basis: 'standard.basis.json', imports: [{ document: 'games/tictactoe.world.json' }] });
-    const documents = { 'test-root.json': rootJson, 'standard.basis.json': basisJson, 'games/tictactoe.world.json': fragmentJson };
+  test('CompileSource() of a root reports an edited import\'s duplicate rule by name', async (t) => {
+    const engine = await needsSources(t);
+    if (!engine) return;
+    const sources = officialSources();
+    mount(engine, { ...sources, [TICTACTOE_ROOT.path]: TICTACTOE_ROOT.text });
+    const clean = JSON.parse(engine.CompileSource(TICTACTOE_ROOT.path));
+    assert.deepEqual(clean.diagnostics.filter(d => d.severity === 'error'), [], 'the unedited composition is clean');
 
-    const result = JSON.parse(engine.ComposeTree(
-      'test-root.json',
-      JSON.stringify(documents),
-      'games/tictactoe.world.json',
-      withADuplicatedFirstRule(fragmentJson),
-    ));
+    const written = JSON.parse(engine.WriteSource('games/tictactoe.puck', withADuplicatedFirstRule(sources['games/tictactoe.puck'])));
+    assert.equal(written.ok, true, written.error);
+    const result = JSON.parse(engine.CompileSource(TICTACTOE_ROOT.path));
 
     assert.equal(result.ok, false);
-    assert.ok(result.errors.some(e => e.message.includes('ttt-place-mark') && e.message.includes("duplicates an earlier rule's name")));
-    assert.ok(!result.errors.some(e => e.message.includes('test-root.json:')));
+    assert.ok(result.diagnostics.some(d => d.severity === 'error' && d.message.includes('ttt-place-mark') && d.message.includes("duplicates an earlier rule's name")),
+      JSON.stringify(result.diagnostics));
   });
 }

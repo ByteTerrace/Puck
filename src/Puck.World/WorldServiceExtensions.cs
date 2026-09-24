@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Puck.Abstractions;
 using Puck.Storage;
 using Puck.World.Server;
 
@@ -6,13 +7,10 @@ namespace Puck.World;
 
 /// <summary>Explicit deployment input; absent means external services are disabled.</summary>
 internal sealed record WorldServiceExtensionOptions(WorldExtensionConfiguration? Configuration);
-/// <summary>The every-boot-shape service-extension composition. Only an operator-selected configuration enables it.</summary>
-internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions options, WorldServer server,
-    WorldInstanceHost instances, WorldReplayTape tape, IObjectBlobStore store) : IHostedService {
-    private static readonly Dictionary<string, WorldExtensionProviderType> TypesValue = new(comparer: StringComparer.Ordinal);
-    private static readonly Dictionary<string, WorldExtensionEmbeddingProviderType> EmbeddingTypesValue = new(comparer: StringComparer.Ordinal);
-    private static readonly Lock Gate = new();
-
+/// <summary>The every-boot-shape service-extension composition. Only an operator-selected configuration enables it; it
+/// attaches to the boot row through <see cref="WorldConfiguredExtensions.Attach"/>, the path every host shares.</summary>
+internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions options, WorldInstanceHost instances,
+    IObjectBlobStore store, PuckExtensionSet extensions) : IHostedService {
     internal void Initialize() {
         if (options.Configuration is not { } configuration) { return; }
         if (
@@ -24,49 +22,25 @@ internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions option
         ) {
             throw new InvalidOperationException(message: "Extension authority is unavailable.");
         }
-        Runtime = WorldConfiguredExtensions.Create(
-            configuration,
-            Types,
-            server,
-            store,
-            new DirectoryObjectStorageTarget(
+        Runtime = WorldConfiguredExtensions.Attach(
+            configuration: configuration,
+            extensions: extensions,
+            instances: instances,
+            row: boot,
+            store: store,
+            target: new DirectoryObjectStorageTarget(
                 Path.Combine(
                     path1: WorldStateRoot.Resolve(),
                     path2: "extensions"
                 ),
                 maximumBlobBytes: configuration.MaximumBytes
-            ),
-            () => ((configuration.Recovery == "recording")
-            ? tape.CaptureExternalOperationCause()
-            : server.CaptureExternalOperationCause(hostRow: instances.CaptureRow(row: boot))),
-            EmbeddingTypes
+            )
         );
-        if (
-            (configuration.Recovery == "recording") &&
-            !tape.TryBeginRecording(
-            name: ("extensions-" + configuration.Lineage.ToString(format: "N")),
-            refusal: out var reason
-        )
-        ) {
-            throw new InvalidOperationException(message: $"Extension recovery recording refused: {reason}");
-        }
     }
     internal void Pump(ulong tick) => Runtime?.Pump(completedTick: tick);
-    internal static void Register(WorldExtensionProviderType providerType) {
-        ArgumentNullException.ThrowIfNull(argument: providerType);
-        lock (Gate) {
-            TypesValue[providerType.Type] = providerType;
-        }
-    }
-    internal static void Register(WorldExtensionEmbeddingProviderType embeddingType) {
-        ArgumentNullException.ThrowIfNull(argument: embeddingType);
-        lock (Gate) {
-            EmbeddingTypesValue[embeddingType.Type] = embeddingType;
-        }
-    }
 
     public Task StartAsync(CancellationToken cancellationToken) {
-        if (Runtime?.OperationNames.Count > 0) { Runtime.Host.Start(); }
+        Runtime?.Start();
         return Task.CompletedTask;
     }
     public async Task StopAsync(CancellationToken cancellationToken) {
@@ -74,24 +48,4 @@ internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions option
     }
 
     internal WorldConfiguredExtensions? Runtime { get; private set; }
-    internal static WorldExtensionRegistry<WorldExtensionProviderType> Types {
-        get {
-            lock (Gate) {
-                return new WorldExtensionRegistry<WorldExtensionProviderType>(
-                    extensions: TypesValue.Values.ToArray(),
-                    keyOf: static type => type.Type
-                );
-            }
-        }
-    }
-    internal static WorldExtensionRegistry<WorldExtensionEmbeddingProviderType> EmbeddingTypes {
-        get {
-            lock (Gate) {
-                return new WorldExtensionRegistry<WorldExtensionEmbeddingProviderType>(
-                    extensions: EmbeddingTypesValue.Values.ToArray(),
-                    keyOf: static type => type.Type
-                );
-            }
-        }
-    }
 }

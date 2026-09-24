@@ -57,4 +57,4 @@ evidence-first hardware citations and mathematical theorem citations, see
 - **CsWin32** (Microsoft) — the source-generated Win32 interop used by the platform layer (HID, windowing).
 - **DXC** (the DirectX Shader Compiler, Microsoft) — single-source HLSL compiled to both SPIR-V and DXIL — and the **Vulkan SDK** (LunarG) — tooling and the validation layers.
 - **mimalloc** ([Microsoft](https://github.com/microsoft/mimalloc)) — the default unmanaged allocator behind `IAllocator`.
-- **RE#** ([Ian Erik Varatalu](https://github.com/ieviev/resharp-dotnet)) — the non-backtracking symbolic-derivatives regular-expression engine (linear-time, leftmost-longest, with intersection/complement/lookaround) behind the `puck rex` content-search verb in `src/Puck.Cli`.
+- **RE#** ([Ian Erik Varatalu](https://github.com/ieviev/resharp-dotnet)) — the non-backtracking symbolic-derivatives regular-expression engine (linear-time, leftmost-longest, with intersection/complement/lookaround) behind the `puck search` content-search verb and the CLI's glob matching in `src/Puck.Cli`.

@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "games/backgammon.world.json",
+  "world": "games/backgammon.puck",
   "host": {
     "kind": "document"
   },

@@ -8,4 +8,4 @@ body motion, navigation, and evolving scalar fields.
 - [Physics kernels](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/physics.md) — usage and host contracts.
 - [Engine manual](https://github.com/ByteTerrace/Puck/blob/main/docs/README.md) — architecture and related topics.
 - [Development and verification](https://github.com/ByteTerrace/Puck/blob/main/tests/Puck.Physics.Tests/README.md).
-- [License](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md) and [commercial licensing](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md).
+- [License](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md): Apache 2.0.

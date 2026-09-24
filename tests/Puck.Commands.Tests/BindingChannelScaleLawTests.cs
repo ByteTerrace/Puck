@@ -114,8 +114,8 @@ public sealed class BindingChannelScaleLawTests {
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
     }
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class ChannelModule(string command) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

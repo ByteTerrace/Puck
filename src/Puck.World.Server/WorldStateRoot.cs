@@ -1,10 +1,10 @@
 namespace Puck.World.Server;
 
 /// <summary>
-/// The single source of the world's on-disk state root — the directory the profile store and the replay tape
-/// persist under. Defaults to <c>%LOCALAPPDATA%\Puck\World</c> via the shell's known-folder resolution (which
-/// deliberately IGNORES a <c>LOCALAPPDATA</c> environment override — that is why this seam exists). The
-/// <c>--state-dir</c> CLI option overrides it at boot: a developer/deployment reflection in the established
+/// The single source of the world's on-disk state root — the directory the profile store and the replay tape persist
+/// under. Compiled worlds and bakes are not state: they live in per-user caches every boot shares. Defaults to the <c>world</c> subdirectory of the per-user Puck directory
+/// (<see cref="Puck.Abstractions.PuckUserDirectory"/>), whose known-folder resolution ignores a <c>LOCALAPPDATA</c>
+/// environment override — that is why this seam exists. The <c>--state-dir</c> CLI option overrides it at boot: a developer/deployment reflection in the established
 /// nullable-override pattern, needed by anything that runs more than one world process per user — parallel
 /// verification runs today, multiple headless hosts on one machine at the destination.
 /// </summary>
@@ -26,9 +26,5 @@ public static class WorldStateRoot {
     }
     /// <summary>Resolves the effective state root: the boot override when present, else the per-user default.</summary>
     public static string Resolve() =>
-        (OverridePath ?? Path.Combine(
-            path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData),
-            path2: "Puck",
-            path3: "World"
-        ));
+        (OverridePath ?? Puck.Abstractions.PuckUserDirectory.Resolve(name: "world"));
 }

@@ -3,6 +3,7 @@ using System.Numerics;
 using Puck.SignedDistance;
 using Puck.SdfVm;
 using Puck.World.Client;
+using Puck.World.Protocol;
 
 using Xunit;
 
@@ -32,13 +33,16 @@ public sealed class WorldRenderLightingSkyLawTests {
                 Value: CellValue.Text(value: hex)
             )]
     );
-    private static SdfEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldRenderCycleTrack? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) => (track ?? new WorldRenderCycleTrack()).Resolve(
-        definition: (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults }),
-        revision: revision,
-        tick: 0UL,
-        engineTick: 0UL,
-        resolveLightAnchor: resolveLightAnchor
-    );
+    private static SdfEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldRenderCycleTrack? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
+        var definition = (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults });
+
+        return (track ?? new WorldRenderCycleTrack()).Resolve(
+            definition: definition,
+            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition)),
+            resolveLightAnchor: resolveLightAnchor,
+            revision: revision
+        );
+    }
     private static WorldRenderSoftbox Softbox(float x = 1f, float y = 1f, float z = 1f, float width = 0.3f, float height = 0.4f) => new(
         Direction: new Vector3(
             x: x,
@@ -149,16 +153,20 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.lighting.angular-radius",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
                     AngularRadius: 0.5f,
                     Shadows: true
-                )]) },
+                )]),
+                },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
                     AngularRadius: 0.1f,
                     Shadows: true
-                )]) },
+                )]),
+                },
             }))
         );
     }
@@ -488,18 +496,22 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.lighting.curvature-ink-band",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
                 InkLow: 12f,
                 InkHigh: 4f
-            )) },
+            )),
+                },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
                 InkLow: 4f,
                 InkHigh: 12f
-            )) },
+            )),
+                },
             }))
         );
     }
@@ -509,16 +521,20 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.lighting.curvature-ink-band-default",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
                 InkLow: SdfEnvironment.DefaultCurvatureInkHigh
-            )) },
+            )),
+                },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
                 InkLow: (SdfEnvironment.DefaultCurvatureInkHigh - 1f)
-            )) },
+            )),
+                },
             }))
         );
     }
@@ -728,11 +744,13 @@ public sealed class WorldRenderLightingSkyLawTests {
         ),
         }))));
         Assert.True(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-            RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(
+            RenderRaw = BaseDefaults() with {
+                Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(
                 Intensity: 1f,
                 Light: 0,
                 Radius: 0.05f
-            )]) },
+            )]),
+            },
         })));
     }
     [Fact]
@@ -829,11 +847,13 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Direction: Vector3.Zero)]) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Direction: new Vector3(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Direction: new Vector3(
                     x: 0f,
                     y: 1f,
                     z: 0f
-                ))]) },
+                ))]),
+                },
             }))
         );
     }
@@ -898,11 +918,13 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.environment.softbox-direction",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(
+                RenderRaw = BaseDefaults() with {
+                    Environment = new WorldRenderEnvironment(Softboxes: [Softbox(
                     x: 0f,
                     y: 0f,
                     z: 0f
-                )]) },
+                )]),
+                },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
                 RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox()]) },
@@ -1006,10 +1028,12 @@ public sealed class WorldRenderLightingSkyLawTests {
     }
     [Fact]
     public void OccluderRefusesInvalidStrengthAndRadius() {
-        var valid = BaseDefaults() with { Lighting = new(Lights: [new WorldRenderLight.Occluder(
+        var valid = BaseDefaults() with {
+            Lighting = new(Lights: [new WorldRenderLight.Occluder(
                 Radius: 2f,
                 Weight: 0.5f
-            )]) };
+            )]),
+        };
 
         Assert.True(condition: TryValidateLocal(definition: Fixtures.BuildDocument() with { RenderRaw = valid }));
         Assert.False(condition: TryValidateLocal(definition: Fixtures.BuildDocument() with {
@@ -1153,10 +1177,12 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Point(Anchor: new WorldAnchor.Seat())]) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Point(Anchor: new WorldAnchor.Placement(
+                RenderRaw = BaseDefaults() with {
+                    Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Point(Anchor: new WorldAnchor.Placement(
                     PlacementId: "ball",
                     ShapeId: null
-                ))]) },
+                ))]),
+                },
             }))
         );
     }
@@ -1294,18 +1320,22 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.sky.stars-density-positive",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(
+                RenderRaw = BaseDefaults() with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(
                     Density: 0f,
                     Brightness: 0.5f,
                     Seed: 1u
-                )]) },
+                )]),
+                },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(
+                RenderRaw = BaseDefaults() with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(
                     Density: 32f,
                     Brightness: 0.5f,
                     Seed: 1u
-                )]) },
+                )]),
+                },
             }))
         );
     }
@@ -1375,16 +1405,20 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.sky.sun-disc-radius-range",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(
+                RenderRaw = BaseDefaults() with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(
                     Radius: 0f,
                     Intensity: 1f
-                )]) },
+                )]),
+                },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(
+                RenderRaw = BaseDefaults() with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(
                     Radius: 0.05f,
                     Intensity: 1f
-                )]) },
+                )]),
+                },
             }))
         );
     }
@@ -1457,27 +1491,35 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void SunColor_BoundToStateTextCell_ResolvesToTheCell_AndFollowsARevisionMove() {
+    public void SunColor_BoundToStateTextCell_ResolvesToTheCell_AndFollowsItsRowWithoutARevisionMove() {
         var track = new WorldRenderCycleTrack();
         var lighting = SunAndSky(sunColor: new BindableColor(Raw: "state.colors.sun"));
+        var definition = (Fixtures.BuildDocument().WithWorldState(rows: [ColorsRow(hex: "#FFD9A6")]) with { RenderRaw = BaseDefaults() with { Lighting = lighting } });
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+        var first = track.Resolve(
+            definition: definition,
+            mirror: mirror,
+            revision: 1
+        ).GetLight(index: 0).Color;
 
-        var first = Resolve(
-            defaults: BaseDefaults() with { Lighting = lighting },
-            state: [ColorsRow(hex: "#FFD9A6")],
-            revision: 1,
-            track: track
+        // A value-only delivery: the definition revision holds, the mirror refreshes the moved row.
+        definition = (Fixtures.BuildDocument().WithWorldState(rows: [ColorsRow(hex: "#4C5C8C")]) with { RenderRaw = BaseDefaults() with { Lighting = lighting } });
+        mirror.Refresh(stamp: new WorldStateStamp(
+            EngineTick: 0UL,
+            Everything: true,
+            MovedRows: default,
+            Tick: 1UL
+        ));
+
+        var second = track.Resolve(
+            definition: definition,
+            mirror: mirror,
+            revision: 1
         ).GetLight(index: 0).Color;
-        var second = Resolve(
-            defaults: BaseDefaults() with { Lighting = lighting },
-            state: [ColorsRow(hex: "#4C5C8C")],
-            revision: 2,
-            track: track
-        ).GetLight(index: 0).Color;
-        var stale = Resolve(
-            defaults: BaseDefaults() with { Lighting = lighting },
-            state: [ColorsRow(hex: "#000000")],
-            revision: 2,
-            track: track
+        var held = track.Resolve(
+            definition: definition,
+            mirror: mirror,
+            revision: 1
         ).GetLight(index: 0).Color;
 
         Assert.Equal(
@@ -1496,9 +1538,8 @@ public sealed class WorldRenderLightingSkyLawTests {
             ),
             actual: second
         );
-        // Same revision: the cached resolution stands until the next delivery.
         Assert.Equal(
-            actual: stale,
+            actual: held,
             expected: second
         );
     }

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -148,23 +147,34 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
     private const string UnconfiguredDetail = "this run holds no federation signing identity";
 
-    /// <summary>The ceiling on how long a caller waits for its answer, queue time included — the outer of the two
-    /// clocks. The lane's own <see cref="LaneRequestTimeout"/> bounds one attempt on the socket; this bounds how long
-    /// the caller's task waits behind whatever else is queued on the same ordered lane, so it is deliberately longer
-    /// than one attempt. A caller that runs out of it answers <see cref="WireRefusal.LaneUnavailable"/> and the
-    /// request stays queued for the lane to finish. This bounds transport lifecycle, never simulation state.</summary>
-    private static readonly TimeSpan RoutedRequestDeadline = TimeSpan.FromSeconds(value: 10);
-    /// <summary>How long a lane waits before retrying a connect that failed, before it calls the peer down.</summary>
-    private static readonly TimeSpan ConnectRetryDelay = TimeSpan.FromMilliseconds(value: 50);
     /// <summary>How long a lane that failed to reach its peer answers immediately with
     /// <see cref="WireRefusal.LaneUnavailable"/> before trying to connect again.</summary>
     private static readonly TimeSpan LaneBackoff = TimeSpan.FromSeconds(value: 1);
-    /// <summary>The lane's per-attempt deadline — the inner of the two clocks. One attempt is connect, hello, and
-    /// authenticate (when the lane has no connection) plus the request write and the response read; a peer that goes
-    /// silent inside it is answered <see cref="WireRefusal.RequestTimedOut"/> once the request was written (no re-send,
-    /// no backoff) or counted as a connect failure before it. Shorter than <see cref="RoutedRequestDeadline"/> so a
-    /// caller's wait can cover its own attempt plus one queued ahead of it.</summary>
-    private static readonly TimeSpan LaneRequestTimeout = TimeSpan.FromSeconds(value: 5);
+    /// <summary>How long an observer session that ended waits before it reconnects.</summary>
+    private static readonly TimeSpan ObserveRetryDelay = TimeSpan.FromMilliseconds(value: 250);
+    /// <summary>How long an intent stream that failed waits before it reconnects.</summary>
+    private static readonly TimeSpan IntentRetryDelay = TimeSpan.FromMilliseconds(value: 100);
+    /// <summary>How long an acknowledged intent suppresses a re-send of the identical submission.</summary>
+    private static readonly TimeSpan IntentAcknowledgementWindow = TimeSpan.FromSeconds(value: 1);
+
+    /// <summary>Gets the ceiling on how long a caller waits for its answer, queue time included — the outer of the two
+    /// deadlines, run on the host clock (<see cref="WorldPeerNetwork.Clock"/>). The lane's own
+    /// <see cref="LaneRequestTimeout"/> bounds one attempt on the socket; this bounds how long the caller's task waits
+    /// behind whatever else is queued on the same ordered lane, so it is deliberately longer than one attempt. A caller
+    /// that runs out of it answers <see cref="WireRefusal.LaneUnavailable"/> and the request stays queued for the lane
+    /// to finish. This bounds transport lifecycle, never simulation state.</summary>
+    public static TimeSpan RoutedRequestDeadline { get; } = TimeSpan.FromSeconds(value: 10);
+    /// <summary>Gets the lane's per-attempt deadline — the inner of the two, run on the host clock. One attempt is
+    /// connect, hello, and authenticate (when the lane has no connection) plus the request write and the response read;
+    /// a peer that goes silent inside it is answered <see cref="WireRefusal.RequestTimedOut"/> once the request was
+    /// written (no re-send, no backoff) or counted as a connect failure before it. Shorter than
+    /// <see cref="RoutedRequestDeadline"/> so a caller's wait can cover its own attempt plus one queued ahead of
+    /// it.</summary>
+    public static TimeSpan LaneRequestTimeout { get; } = TimeSpan.FromSeconds(value: 5);
+    /// <summary>Gets how long a lane waits, on the host clock, before retrying a connect that failed, before it calls
+    /// the peer down.</summary>
+    public static TimeSpan ConnectRetryDelay { get; } = TimeSpan.FromMilliseconds(value: 50);
+
     // Written from the simulation thread as reservations commit and read from socket workers resolving a forwarded
     // submission, so the table itself must be concurrent even though every write comes from the commit path.
     private readonly ConcurrentDictionary<int, WorldRemoteRouteCredential> m_credentials = new();
@@ -179,13 +189,13 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     // Frames is the "nothing observed yet" value, so the first delivered document always narrates its tier once.
     private WorldDisclosureTier m_observedTier = WorldDisclosureTier.Frames;
 
+    private readonly TimeProvider m_clock;
     private readonly CancellationTokenSource m_lifetime;
     private readonly WorldFederatedServerLink m_link;
     private readonly string m_observerAuthority;
     private readonly Action<WorldAuthorityRouteDescription>? m_routeChanged;
     private readonly IAuthenticator m_security;
     private readonly WorldPeerNetwork m_network;
-    private readonly bool m_ownsNetwork;
     private readonly WorldRemoteAuthority? m_submissionAuthority;
     private readonly WorldRemoteRouteCredential? m_submissionCredential;
 
@@ -218,8 +228,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         m_route = new PublishedRoute(endpoint: parsed);
         m_definition = placeholder;
         m_security = (security ?? throw new ArgumentNullException(paramName: nameof(security)));
-        m_network = (network ?? (submissionAuthority?.m_network ?? new WorldPeerNetwork()));
-        m_ownsNetwork = ((network is null) && (submissionAuthority is null));
+        // One peer network per host: a routed observer dials through its transaction authority's, and a root authority
+        // through the host's own. Never a second network — that would be a second identity and a second clock.
+        m_network = (submissionAuthority?.m_network ?? (network ?? throw new InvalidOperationException(message: $"federation to '{endpoint}' needs its host's peer network, and this instance is local-only")));
+        m_clock = m_network.Clock;
         m_observerAuthority = observerAuthority;
         m_peerAuthority = (expectedAuthority ?? string.Empty);
         m_submissionAuthority = submissionAuthority;
@@ -274,7 +286,8 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     public IServerLink Link => m_link;
     public ulong NextInputTick => (unchecked((ulong)Interlocked.Read(location: ref m_lastObservedTickBits)) + 1UL);
 
-    /// <summary>Issues one routed request on the source namespace's lane and waits, bounded, for its answer.</summary>
+    /// <summary>Issues one routed request on the source namespace's lane and waits, bounded on the host clock, for its
+    /// answer.</summary>
     /// <remarks>This wait, and its twin in the transfer-step resolver, is reached from the tick thread: the transfer
     /// steps from <c>WorldInstanceHost.DrainPendingTransfers</c> (the host's per-tick fixed point) and the forwarded
     /// submissions and route lookups from the server's own drain, plus the routed observer's <see cref="IServerLink"/>
@@ -282,7 +295,8 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     /// A bounded synchronous wait is acceptable there because the contract demands an ANSWER inside the tick — a
     /// caller told "not yet" would hold state across ticks the adjacency scan is concurrently re-deriving and mint a
     /// second crossing for the same seat — and the wait is bounded twice over: the lane's own
-    /// <see cref="LaneRequestTimeout"/> per attempt, then <see cref="RoutedRequestDeadline"/> here. A lane already
+    /// <see cref="LaneRequestTimeout"/> per attempt, then <see cref="RoutedRequestDeadline"/> here, both on the host
+    /// clock (<see cref="WorldPeerNetwork.Clock"/>), so a test clock decides when either elapses. A lane already
     /// known unreachable, or a run holding no signing identity, answers without waiting at all, so the stall is
     /// confined to the one tick that carries a request to a peer that stops answering mid-exchange — the cost the
     /// authored unavailable policy exists to absorb.</remarks>
@@ -318,17 +332,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             );
         }
 
-        var task = EnqueueAnswerAsync(
-            body: body,
+        return AnswerWithinDeadline(
             kind: kind,
-            lane: lane
-        );
-
-        return (task.Wait(timeout: RoutedRequestDeadline)
-            ? task.Result
-            : WorldFederationAnswer.Refused(
-                refusal: WireRefusal.LaneUnavailable,
-                detail: $"'{Endpoint}' did not answer {kind} within {RoutedRequestDeadline.TotalSeconds:0.#}s"
+            task: EnqueueAnswerAsync(
+                body: body,
+                kind: kind,
+                lane: lane
             )
         );
     }
@@ -563,6 +572,26 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             }
         }
     }
+    // The one wait on a lane's answer. The tick thread needs an answer inside the tick (see AwaitAnswer), so the caller
+    // blocks on the awaited deadline rather than on a wall-clock Task.Wait: the deadline is a WaitAsync on the host
+    // clock, and the lane's task itself never faults, so the only non-answer is that deadline elapsing.
+    private WorldFederationAnswer AnswerWithinDeadline(Task<WorldFederationAnswer> task, WorldFederationRequest kind) {
+        if (!task.IsCompleted) {
+            try {
+                task.WaitAsync(
+                    timeout: RoutedRequestDeadline,
+                    timeProvider: m_clock
+                ).GetAwaiter().GetResult();
+            } catch (TimeoutException) {
+                return WorldFederationAnswer.Refused(
+                    refusal: WireRefusal.LaneUnavailable,
+                    detail: $"'{Endpoint}' did not answer {kind} within {RoutedRequestDeadline.TotalSeconds:0.#}s"
+                );
+            }
+        }
+
+        return task.Result;
+    }
     private LaneRoute CurrentRoute() => m_route.Lane;
     private static string DescribeHandshake(WireFrameRead read, string stage) =>
         (read.Ok
@@ -656,6 +685,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                 requestTimeout: LaneRequestTimeout,
                 route: CurrentRoute,
                 sourceAuthority: key.SourceAuthority,
+                timeProvider: m_clock,
                 unavailableBackoff: LaneBackoff
             )
         );
@@ -839,8 +869,9 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
 
             try {
                 await Task.Delay(
-                    delay: TimeSpan.FromMilliseconds(milliseconds: 250),
-                    cancellationToken: ct
+                    cancellationToken: ct,
+                    delay: ObserveRetryDelay,
+                    timeProvider: m_clock
                 ).ConfigureAwait(continueOnCapturedContext: false);
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 return;
@@ -974,18 +1005,13 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         // mints a second crossing for the same seat — the traveler then arrives at the destination twice. A step
         // that ran out of time is an answered refusal, which the caller resolves once: terminal for a reservation,
         // in doubt for a commit.
-        var answered = (task.IsCompleted || task.Wait(timeout: RoutedRequestDeadline));
-
+        answer = AnswerWithinDeadline(
+            kind: kind,
+            task: task
+        );
         _ = m_transferSteps.TryRemove(
             key: key,
             value: out _
-        );
-        answer = ((answered && task.IsCompletedSuccessfully)
-            ? task.Result
-            : WorldFederationAnswer.Refused(
-                refusal: WireRefusal.LaneUnavailable,
-                detail: $"'{Endpoint}' did not answer {kind} within {RoutedRequestDeadline.TotalSeconds:0.#}s"
-            )
         );
 
         return true;
@@ -1169,7 +1195,6 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         }
         m_requestLanes.Clear();
         m_transferSteps.Clear();
-        if (m_ownsNetwork) { m_network.Dispose(); }
     }
     /// <summary>Resolves this transfer's reservation step.</summary>
     /// <param name="request">The reservation request.</param>
@@ -1365,8 +1390,9 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
 
                     try {
                         await Task.Delay(
-                            delay: TimeSpan.FromMilliseconds(milliseconds: 100),
-                            cancellationToken: ct
+                            cancellationToken: ct,
+                            delay: IntentRetryDelay,
+                            timeProvider: m_owner.m_clock
                         ).ConfigureAwait(continueOnCapturedContext: false);
                     } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                         return;
@@ -1488,7 +1514,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                     ) {
                         m_acknowledged[pair.Key] = new AcknowledgedIntent(
                             Submission: sent,
-                            Timestamp: Stopwatch.GetTimestamp()
+                            Timestamp: m_owner.m_clock.GetTimestamp()
                         );
                         _ = m_pending.TryRemove(
                             key: pair.Key,
@@ -1544,7 +1570,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                 value: out var acknowledged
             ) &&
                 (acknowledged.Submission == submission) &&
-                (Stopwatch.GetElapsedTime(startingTimestamp: acknowledged.Timestamp) < TimeSpan.FromSeconds(seconds: 1))
+                (m_owner.m_clock.GetElapsedTime(startingTimestamp: acknowledged.Timestamp) < IntentAcknowledgementWindow)
             ) {
                 return;
             }

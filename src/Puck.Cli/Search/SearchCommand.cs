@@ -14,6 +14,8 @@
 
 using System.CommandLine;
 
+using Puck.Cli.Source;
+
 using Resharp;
 
 namespace Puck.Cli.Search;
@@ -184,26 +186,7 @@ internal static class SearchCommand {
             aliases: ["-s"]
         ) { Description = "Span mode: run the pattern over whole-file text and print start-end line ranges." };
         var command = new Command(
-            description: """
-            Content search over a linear-time symbolic-derivatives regex engine.
-
-              0  matched
-              1  no match
-              2  bad pattern, or a path that names nothing on disk
-
-            An empty result is not a true negative until the exit code says so.
-
-            Globs are NOT ripgrep's: brace sets and character classes are literal, and '**' requires an
-            intermediate directory, so 'src/**/*.cs' misses 'src/foo.cs'. Repeat -g instead of writing a
-            brace set.
-
-            The walk prunes .git, artifacts, bin, obj, node_modules, publish, BenchmarkDotNet.Artifacts,
-            agent worktrees under .claude/worktrees, and binary files; naming one of those paths searches
-            it anyway.
-
-            Engine syntax extensions: _ = any char incl. newline; & = intersection; ~(...) = complement.
-            Matching is leftmost-longest; no backreferences.
-            """,
+            description: "Search file contents with a ripgrep-shaped, linear-time regex engine.",
             name: "search"
         ) {
             afterOption,
@@ -224,6 +207,20 @@ internal static class SearchCommand {
             operandsArgument,
         };
 
+        command.Detail(detail: $"""
+            Exit codes: 0 matched; 1 no match; 2 a bad pattern, or a path that names nothing on
+            disk. An empty result is not a true negative until the exit code says so.
+
+            Globs are NOT ripgrep's: brace sets and character classes are literal, and '**'
+            requires an intermediate directory, so 'src/**/*.cs' misses 'src/foo.cs'. Repeat -g
+            instead of writing a brace set.
+
+            The walk skips {FileWalk.PrunedNames}, agent worktrees under .claude/worktrees, and
+            binary files; naming one of those paths searches it anyway.
+
+            Engine syntax extensions: _ = any char incl. newline; & = intersection;
+            ~(...) = complement. Matching is leftmost-longest; no backreferences.
+            """);
         RejectNegative(option: afterOption);
         RejectNegative(option: beforeOption);
         RejectNegative(option: contextOption);

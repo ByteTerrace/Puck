@@ -151,56 +151,37 @@ public static class WorldStateBindingContext {
 
         return true;
     }
-    /// <summary>Reads the state published for a seat from a delivered world definition.</summary>
+    /// <summary>Resolves the row a <c>state:&lt;row&gt;</c> family publishes from in a routed world definition. The
+    /// value itself is read through the presentation's state mirror, keyed by the controlled body's entity index when
+    /// the row is keyed, and spelled by <see cref="FormatState"/>.</summary>
     /// <param name="definition">The routed world definition.</param>
-    /// <param name="family">The <c>state:&lt;row&gt;</c> family.</param>
-    /// <param name="entityIndex">The controlled body's entity index, used as the key for a keyed row.</param>
-    /// <param name="tick">The delivered authority tick at which advancing state would be read.</param>
-    /// <param name="state">The formatted context state on success.</param>
-    /// <returns><see langword="true"/> when the family names a declared, non-advancing row.</returns>
+    /// <param name="family">The binding-context family.</param>
+    /// <param name="row">The declared, non-advancing row on success.</param>
+    /// <returns><see langword="true"/> when the family names a declared row that changes only through explicit state
+    /// writes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static bool TryRead(WorldDefinition definition, string family, int entityIndex, ulong tick, out string state) {
+    public static bool TryResolveRow(WorldDefinition definition, string family, [NotNullWhen(true)] out WorldStateRow? row) {
         ArgumentNullException.ThrowIfNull(argument: definition);
-        state = string.Empty;
 
-        if (!TryParseFamily(
+        row = (TryParseFamily(
             family: family,
             rowName: out var rowName
-        )) {
-            return false;
-        }
-
-        var row = WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: rowName
+        )
+            ? WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: rowName
+            )
+            : null
         );
 
         if (
             (row is null) ||
             Advances(row: row)
         ) {
+            row = null;
+
             return false;
         }
-
-        _ = WorldStateReader.TryRead(
-            definition: definition,
-            rowName: rowName,
-            key: (row.IsKeyed
-            ? entityIndex.ToString(provider: CultureInfo.InvariantCulture)
-            : null),
-            tick: tick,
-            // Advances(row) refused above, so no read this door reaches can be a StateAdvance trait — the engine
-            // tick coordinate is unreachable and irrelevant here.
-            engineTick: 0UL,
-            row: out _,
-            rawValue: out var rawValue,
-            text: out var text
-        );
-        state = FormatState(
-            rawValue: rawValue,
-            row: row,
-            text: text
-        );
 
         return true;
     }

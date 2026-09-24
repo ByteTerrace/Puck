@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -56,7 +57,7 @@ public sealed class WorldCaptureHashClockLawTests {
     private static void KickAndRestore(WorldFixture fixture) {
         foreach (var value in new[] { 500L, 0L }) {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: EasedRow,
                 Key: WorldStateRow.SlotKey.Value,
                 Value: value,

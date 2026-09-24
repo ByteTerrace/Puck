@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.AI;
 using Puck.Maths;
+using Puck.State;
 
 namespace Puck.Embeddings;
 
@@ -42,19 +43,20 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
     ) {
         ArgumentNullException.ThrowIfNull(argument: values);
 
-        var list = (values as IReadOnlyList<string> ?? values.ToList());
+        var list = ((values as IReadOnlyList<string>) ?? values.ToList());
         var embeddings = new List<Embedding<float>>(capacity: list.Count);
 
-        for (var t = 0; t < list.Count; t++) {
+        for (var t = 0; (t < list.Count); t++) {
             cancellationToken.ThrowIfCancellationRequested();
             var vector = ComputeFixtureVector(identity: m_identity, text: list[t]);
+
             embeddings.Add(item: new Embedding<float>(vector: vector));
         }
 
         var result = new GeneratedEmbeddings<Embedding<float>>(embeddings: embeddings);
+
         return Task.FromResult(result: result);
     }
-
     /// <summary>Computes the floating-point unit vector for a single text using the fixture algorithm.</summary>
     /// <param name="identity">The embedding identity.</param>
     /// <param name="text">The text to embed.</param>
@@ -62,22 +64,24 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
     public static float[] ComputeFixtureVector(EmbeddingIdentity identity, string text) {
         var dims = identity.Dimensions;
         var sbytes = new sbyte[dims];
+
         ComputeFixtureSbytes(destination: sbytes, identity: identity, text: text);
 
         var vector = new float[dims];
-        for (var i = 0; i < dims; i++) {
-            vector[i] = (float)sbytes[i] / 127.0f;
+
+        for (var i = 0; (i < dims); i++) {
+            vector[i] = (((float)sbytes[i]) / 127.0f);
         }
 
         return vector;
     }
-
     /// <summary>Computes the normalized signed-byte components for a single text using the fixture algorithm without floating-point arithmetic.</summary>
     /// <param name="identity">The embedding identity.</param>
     /// <param name="text">The text to embed.</param>
     /// <param name="destination">Destination span of length equal to identity dimensions.</param>
     public static void ComputeFixtureSbytes(EmbeddingIdentity identity, string text, Span<sbyte> destination) {
         var dims = identity.Dimensions;
+
         if (destination.Length != dims) {
             throw new ArgumentException(message: "Destination length must match dimensions.", paramName: nameof(destination));
         }
@@ -88,10 +92,10 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
         var dimsBytes = Encoding.UTF8.GetBytes(s: dims.ToString(provider: CultureInfo.InvariantCulture));
         var textBytes = Encoding.UTF8.GetBytes(s: text);
 
-        var prefixLength = (modelBytes.Length + 1 + revisionBytes.Length + 1 + dimsBytes.Length + 1 + textBytes.Length + 1);
+        var prefixLength = (((((((modelBytes.Length + 1) + revisionBytes.Length) + 1) + dimsBytes.Length) + 1) + textBytes.Length) + 1);
         var blockCount = ((dims + 31) / 32);
 
-        for (var b = 0; b < blockCount; b++) {
+        for (var b = 0; (b < blockCount); b++) {
             var blockStrBytes = Encoding.UTF8.GetBytes(s: b.ToString(provider: CultureInfo.InvariantCulture));
             var totalLength = (prefixLength + blockStrBytes.Length);
             var buffer = new byte[totalLength];
@@ -117,14 +121,14 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
 
             var hash = SHA256.HashData(source: buffer);
 
-            for (var byteIdx = 0; byteIdx < 32; byteIdx++) {
-                var componentIndex = (b * 32 + byteIdx);
+            for (var byteIdx = 0; (byteIdx < 32); byteIdx++) {
+                var componentIndex = ((b * 32) + byteIdx);
 
                 if (componentIndex >= dims) {
                     break;
                 }
 
-                var sbyteVal = (sbyte)hash[byteIdx];
+                var sbyteVal = ((sbyte)hash[byteIdx]);
 
                 if (sbyteVal == -128) {
                     sbyteVal = -127;
@@ -138,10 +142,8 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
             throw new InvalidOperationException(message: "Failed to normalize fixture vector.");
         }
     }
-
     /// <inheritdoc />
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
     /// <inheritdoc />
     public void Dispose() { }
 }

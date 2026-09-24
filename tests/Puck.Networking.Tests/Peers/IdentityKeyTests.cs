@@ -18,14 +18,14 @@ public sealed class IdentityKeyTests {
     ];
 
     private static async Task AssertRefusedAsIdentityKeyInvalidAsync(X509Certificate2 certificate) {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
         await using var acceptor = PeerTestSupport.NewPeer();
 
         var endpoint = await PeerTestSupport.ListenLoopbackAsync(peer: acceptor);
         var toldToDialer = await DialOfferingOwnKeyAsync(
             certificate: certificate,
-            ct: deadline.Token,
+            ct: ct,
             endpoint: endpoint
         );
 
@@ -46,10 +46,10 @@ public sealed class IdentityKeyTests {
         await using var honest = PeerTestSupport.NewPeer();
 
         var linkHonestToAcceptor = await honest.DialAsync(
-            ct: deadline.Token,
+            ct: ct,
             endpoint: endpoint
         );
-        var linkAcceptorToHonest = await acceptor.IncomingLinks.ReadAsync(cancellationToken: deadline.Token);
+        var linkAcceptorToHonest = await acceptor.IncomingLinks.ReadAsync(cancellationToken: ct);
 
         Assert.Equal(
             expected: honest.Id.Domain,

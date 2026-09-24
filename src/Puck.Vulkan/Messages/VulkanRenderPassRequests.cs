@@ -1,4 +1,5 @@
 using Puck.Vulkan.Bindings;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Messages;
 
@@ -24,39 +25,25 @@ public static class VulkanRenderPassRequests {
     private const uint SubpassExternal = uint.MaxValue;
 
     /// <summary>Builds a request for a render pass whose color attachment is cleared on load and ends in the present-source layout, ready to be presented.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="device">The command table of the logical device.</param>
     /// <param name="colorFormat">The color attachment format, as a <c>VkFormat</c> value.</param>
     /// <returns>A render pass create request configured for presentation.</returns>
-    public static VulkanRenderPassCreateRequest Present(nint deviceHandle, uint colorFormat) {
+    public static VulkanRenderPassCreateRequest Present(VulkanDeviceCommands device, uint colorFormat) {
         return SingleColorAttachment(
             colorFormat: colorFormat,
-            deviceHandle: deviceHandle,
+            device: device,
             finalLayout: ImageLayoutPresentSourceKhr
         );
     }
-    /// <summary>Builds a request for an offscreen render pass whose color attachment ends in the shader-read-only layout, ready to be sampled by a later pass.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
-    /// <param name="colorFormat">The color attachment format, as a <c>VkFormat</c> value.</param>
-    /// <param name="preserveExistingContents">Whether the attachment's existing contents are loaded and preserved rather than cleared.</param>
-    /// <returns>A render pass create request configured for offscreen rendering that is later sampled.</returns>
-    public static VulkanRenderPassCreateRequest Sampled(nint deviceHandle, uint colorFormat, bool preserveExistingContents) {
-        return SingleColorAttachment(
-            colorFormat: colorFormat,
-            deviceHandle: deviceHandle,
-            finalLayout: ImageLayoutShaderReadOnlyOptimal,
-            makeResultsVisibleToFragmentShaders: true,
-            preserveExistingContents: preserveExistingContents
-        );
-    }
     /// <summary>Builds a request for a render pass with a single color attachment, configurable final layout, load behavior, and exit synchronization.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="device">The command table of the logical device.</param>
     /// <param name="colorFormat">The color attachment format, as a <c>VkFormat</c> value.</param>
     /// <param name="finalLayout">The layout the attachment is transitioned to when the pass ends, as a <c>VkImageLayout</c> value.</param>
     /// <param name="preserveExistingContents">Whether the attachment's existing contents are loaded and preserved (<see langword="true"/>) rather than cleared (<see langword="false"/>).</param>
     /// <param name="makeResultsVisibleToFragmentShaders">Whether to add an exit dependency making the color writes visible to later fragment-shader sampling.</param>
     /// <returns>A render pass create request for a single color attachment.</returns>
     public static VulkanRenderPassCreateRequest SingleColorAttachment(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         uint colorFormat,
         uint finalLayout,
         bool preserveExistingContents = false,
@@ -107,7 +94,7 @@ public static class VulkanRenderPassRequests {
                 },
             ],
             Dependencies: dependencies,
-            DeviceHandle: deviceHandle
+            Device: device
         );
     }
 }

@@ -10,10 +10,8 @@
     "listen": null,
     "presentMode": "Immediate",
     "presentation": "Windowed",
-    "rayQuery": true,
     "surfaceFormat": "r8g8b8a8",
     "targetHertz": 60,
-    "timing": false,
     "width": 1280
   },
   "schema": "puck.world.definition.v1",

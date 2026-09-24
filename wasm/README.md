@@ -8,8 +8,8 @@ An addon is a sandboxed guest the engine drives once per sim tick. It holds no a
 cannot enumerate the world, and it acts only through handles the host mints for it. Everything it
 hears and everything it says crosses as fixed-size cells in two rings inside its own linear memory.
 
-> **The ABI contract lives in [`../src/Puck.Scripting/README.md`](../src/Puck.Scripting/README.md)**,
-> beside the C# constants that define it — cell layouts, the export set, the batch protocol, the
+> **The ABI contract lives in [deterministic WASM scripting](../docs/reference/scripting.md)**,
+> the reference for the C# constants that define it — cell layouts, the export set, the batch protocol, the
 > channel kinds, the wire value sets, the verb vocabularies, the mount sequence. Use that reference for the ABI and this page for the guest build workflow.
 
 ## Workspace crates
@@ -19,20 +19,20 @@ hears and everything it says crosses as fixed-size cells in two rings inside its
 | [puck-stdlib](puck-stdlib/README.md) | Shared guest ABI and deterministic numeric helpers. |
 | [puck-addon-default](puck-addon-default/README.md) | The default guest and authoring example. |
 | [puck-addon-queryspam](puck-addon-queryspam/README.md) | Query-budget refusal fixture. |
-| [puck-addon-channelwalk](puck-addon-channelwalk/README.md) | Capability-channel verification and its dated evidence. |
+| [puck-addon-channelwalk](puck-addon-channelwalk/README.md) | Capability-channel verification battery and its findings. |
 | [puck-addon-stalekind](puck-addon-stalekind/README.md) | Invalid channel-kind fixture. |
 | [puck-addon-hudbuilder](puck-addon-hudbuilder/README.md) | HUD mutation fixture. |
 | [puck-addon-eventwatch](puck-addon-eventwatch/README.md) | Region-event observation fixture. |
 
 ```text
 wasm/
-  Cargo.toml                  [workspace] over both members; the shared release profile
+  Cargo.toml                  [workspace] over every crate above; the shared release profile
   .cargo/config.toml          pins the default build target to wasm32-unknown-unknown
-  build.cs                    build + refresh the copy Puck.World ships + print its content hash
   puck-stdlib/                crate-type rlib — THE standard library every addon depends on
     src/{lib,abi,abi_generated,fixed,fixed_generated,fixed_vectors,fixed_tests,channels}.rs
   puck-addon-default/         crate-type cdylib — the default addon; ships with the engine
     src/lib.rs
+  puck-addon-*/               crate-type cdylib — the verification guests
 ```
 
 ## Why two crates
@@ -216,11 +216,11 @@ The import list must be empty. The export list must cover the full required surf
 `puck_abi_version`, `puck_out_ptr`, `puck_out_cap`, `puck_in_ptr`, `puck_in_cap`,
 `puck_channels_ptr`, `puck_channels_count`, `puck_on_tick`, and optionally `puck_init`. Signatures
 and semantics are in
-[the ABI contract](../src/Puck.Scripting/README.md#guest-exports).
+[the ABI contract](../docs/reference/scripting.md#guest-exports).
 
 ## Drop it into a world document
 
-Point a `puck.world.def.v1` document's `addons` entry at the built `.wasm` file:
+Point a `puck.world.definition.v1` document's `addons` entry at the built `.wasm` file:
 
 ```json
 {
@@ -297,7 +297,7 @@ sequenceDiagram
    `sub` and `clamp` are enough. Every channel act is per-tick and declarative: stop emitting one and
    the body stops moving on that axis, the same tick.
 5. **One jump.** On arrival it emits `jump` with `A = fixed::ONE` for exactly one tick, then never
-   emits it again. There is no phase and no host-side lane memory any more—the host holds no state
+   emits it again. There is no phase and no host-side lane memory—the host holds no state
    across ticks on any channel—so "pressed once" is just "the act appeared on one tick and not the
    next", tracked by the addon's own one-`bool` latch, not a press/release pair.
 
@@ -321,8 +321,8 @@ the bottom, so no reference into the static ever exists.
   `puck_stdlib::channels!`; the macro assigns each handle's declared index and packs the variable-
   length name entries, so there is no numeric index or byte offset for an author to get wrong. The
   row order is wire-visible—reordering a `channels!` table changes what the addon emits.
-- **A declared name the host doesn't recognize is inert, not a mount fault.** Unlike the old
-  source-id vocabulary, the host never refuses the mount for an unrecognized declared name—it
+- **A declared name the host doesn't recognize is inert, not a mount fault.** The host never
+  refuses the mount for an unrecognized declared name—it
   reports the name once at mount, and any act naming it answers `Verdict::AttenuatedToEmpty` forever.
   A misspelled channel name therefore compiles, mounts, and silently does nothing; check the mount
   line for "channel name(s) the host table does not recognize" if a channel act never seems to land.
@@ -330,9 +330,9 @@ the bottom, so no reference into the static ever exists.
   state across ticks, analog or digital: an act with no value this tick contributes nothing this
   tick, on every channel alike. A `Binary` channel's "pressed" is `A == fixed::ONE` THIS tick, full
   stop—re-emit it every tick you want it to read held, and simply stop emitting it to release it.
-- **Never emit two acts against the same declared channel in one tick.** That used to be a silent
-  "later act wins" overwrite; it is now a whole-batch protocol fault, because there is no phase left
-  to disambiguate which of the two acts is the tick's actual declaration.
+- **Never emit two acts against the same declared channel in one tick.** It is a whole-batch
+  protocol fault, because there is no phase to disambiguate which of the two acts is the tick's
+  actual declaration.
 - **Correlate by ordinal, never by handle.** Every emit method returns the ordinal of the cell it
   wrote, and next tick's answer carries that ordinal back. A pose answer's handle fields are zero.
 - **No answer at all is starvation, not denial.** If an ordinal never comes back, the host's

@@ -21,30 +21,9 @@ public sealed class MachineHostTransactionLawTests {
     private const int MachineScreen = 8;
 
     private static string CartridgePath(string file) => Path.Combine(
-        RepoRoot(),
-        "src",
-        "Puck.World",
-        "Assets",
-        "cartridges",
-        file
+        path1: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges"),
+        path2: file
     );
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
         var configuration = JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = contentPath } });

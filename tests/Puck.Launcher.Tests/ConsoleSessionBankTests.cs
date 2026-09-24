@@ -61,7 +61,7 @@ public sealed class ConsoleSessionBankTests {
             Phase: CommandPhase.Completed,
             Result: new CommandResult(Output: "deferred result"),
             Text: "simulate",
-            Principal: CommandPrincipal.Console
+            Principal: Principal.Console
         ));
 
         Assert.True(condition: sessions.StoreFor(slot: 0).TrySnapshot(frame: out var frame));
@@ -284,7 +284,7 @@ public sealed class ConsoleSessionBankTests {
         Assert.All(
             collection: seen,
             action: static context => Assert.Equal(
-                expected: CommandPrincipal.Seat(slot: context.Slot),
+                expected: Principal.Seat(slot: context.Slot),
                 actual: context.Principal
             )
         );
@@ -337,8 +337,8 @@ public sealed class ConsoleSessionBankTests {
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
-    private sealed class SeatPrincipals : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+    private sealed class SeatPrincipals : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Seat(slot: slot);
     }
     private sealed class TwoSeatSlots : IInputSlotResolver {
         private int m_seatOneSlot;

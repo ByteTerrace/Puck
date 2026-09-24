@@ -4,9 +4,8 @@
   "binding": "A mover and two PUSH tokens advance into a terminator cell occupied by a passable token. The passable token stays in place and shares its cell with both pushed tokens; the alternate request keeps every token at its authored cell.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 3,
   "timeoutSeconds": 30,
-  "fixtures": ["fixture.puck"],
+  "fixtures": [],
   "positive": {
     "expect": [
       { "name": "mover-advanced", "present": true, "match": "contains", "text": "'moverCell' kind=Int value=1", "stream": "stdout", "type": "line" },
@@ -26,7 +25,7 @@
       { "verb": "world.state", "outcome": "accepted", "occurrence": 4 },
       { "verb": "wire.errors", "outcome": "accepted", "occurrence": 1 }
     ],
-    "world": "tests/Puck.World.Canaries/push-ray/fixture.world.json"
+    "world": "tests/Puck.World.Canaries/push-ray/fixture.puck"
   },
   "discriminating": {
     "expect": [
@@ -47,6 +46,6 @@
       { "verb": "world.state", "outcome": "accepted", "occurrence": 4 },
       { "verb": "wire.errors", "outcome": "accepted", "occurrence": 1 }
     ],
-    "world": "tests/Puck.World.Canaries/push-ray/fixture.world.json"
+    "world": "tests/Puck.World.Canaries/push-ray/fixture.puck"
   }
 }

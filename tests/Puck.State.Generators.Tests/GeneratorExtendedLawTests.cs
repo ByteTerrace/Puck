@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Generators.Tests;
@@ -39,7 +40,7 @@ public sealed class GeneratorExtendedLawTests {
     private static ulong Stream() => GeneratorEngine.ComputeStreamId(site: Site);
 
     [Fact]
-    public void PerTickExtendedSite_AllocatesNothingAfterTheFirstRebuild() {
+    public void PerTickExtendedSite_AllocatesNothingAfterTheFirstRebuildOrACollection() {
         var table = new uint[32];
         var generator = new StateGenerator(
             Source: GeneratorSource.StreamDraw,
@@ -70,29 +71,28 @@ public sealed class GeneratorExtendedLawTests {
         );
         cursor = checked((cursor + fired.Samples));
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var tick = 0; (tick < 1000); tick++) {
-            Assert.True(
-                condition: GeneratorEngine.TryFire(
-                    generator: generator,
-                    targetKind: CellKind.Int,
-                    seedState: seed,
-                    stream: stream,
-                    cursor: cursor,
-                    masks: null,
-                    result: out fired,
-                    reason: out reason
-                ),
-                userMessage: reason
-            );
-            cursor = checked((cursor + fired.Samples));
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
+        // The window opens on a collection, so a check that re-reads a weakly held runtime cache after one — as
+        // Enum.IsDefined does — allocates inside it.
         Assert.Equal(
-            actual: allocated,
+            actual: AllocationWindow.Least(window: () => {
+                GC.Collect();
+                for (var tick = 0; (tick < 1000); tick++) {
+                    Assert.True(
+                        condition: GeneratorEngine.TryFire(
+                            generator: generator,
+                            targetKind: CellKind.Int,
+                            seedState: seed,
+                            stream: stream,
+                            cursor: cursor,
+                            masks: null,
+                            result: out var drawn,
+                            reason: out var refused
+                        ),
+                        userMessage: refused
+                    );
+                    cursor = checked((cursor + drawn.Samples));
+                }
+            }),
             expected: 0L
         );
     }

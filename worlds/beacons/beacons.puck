@@ -1,0 +1,36 @@
+// Two beacons side by side, sharing a walkable seam, from the one beacon module. Compiling this source writes
+// `north.world.json` and `south.world.json` and the reciprocal adjacency rows the border derives from the two
+// grounds.
+//
+// Each `world` is a use of the module, so the module's own tests run once per world, under that world's threshold.
+// The tests written here choose their own arguments and stand the module up on its own.
+
+import "beacon.puck"
+
+entry world north = beacon(centre: [0m, 0m, -12m], threshold: 3)
+world south = beacon(centre: [0m, 0m, 12m], threshold: 7)
+
+border north.south, south.north {
+  height: 6m
+  hysteresis: 2m
+}
+
+test "a beacon at threshold three lights on the third charge" with beacon(centre: [0m, 0m, 0m], threshold: 3) {
+  when {
+    seat1: world.state.cell.set charge $value 3
+    ticks 1
+  }
+  expect {
+    lit == 1
+  }
+}
+
+test "a beacon at threshold seven is still dark on the third charge" with beacon(centre: [0m, 0m, 0m], threshold: 7) {
+  when {
+    seat1: world.state.cell.set charge $value 3
+    ticks 1
+  }
+  expect {
+    lit == 0
+  }
+}

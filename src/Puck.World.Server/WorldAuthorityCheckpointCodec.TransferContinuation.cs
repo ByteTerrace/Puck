@@ -4,10 +4,9 @@ namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteTransferContinuation(WireWriter writer, WorldTransferContinuationCheckpoint row) {
-        WriteArray(
-            writer,
-            row.CohortSlots,
-            static (w, slot) => w.WriteInt32(value: slot)
+        writer.WriteArray(
+            items: row.CohortSlots,
+            writeItem: static (w, slot) => w.WriteInt32(value: slot)
         );
         writer.WriteInt32(value: row.SourceSlot);
         writer.WriteString(value: row.Border);
@@ -29,11 +28,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         if (row.GenerationId is { } generation) { writer.WriteUInt64(value: generation); }
     }
     private static WorldTransferContinuationCheckpoint ReadTransferContinuation(ref WireReader reader) {
-        var slots = ReadArray(
-            ref reader,
-            "transfer continuation slots",
-            static (ref WireReader r) => r.ReadInt32(),
-            WorldBodiesLimits.CapacityCeiling
+        var slots = reader.ReadArray(
+            field: "transfer continuation slots",
+            readItem: static (ref WireReader r) => r.ReadInt32(),
+            maximum: WorldBodiesLimits.CapacityCeiling
         );
         var sourceSlot = reader.ReadInt32();
         var border = reader.ReadString(

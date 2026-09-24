@@ -79,7 +79,7 @@ public sealed class ArenaSearchJudgeTruthLawTests {
                 Value: 1m
             )],
             Gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.GreaterOrEqual,
+                Comparison: ExpressionOp.GreaterOrEqual,
                 State: "eased",
                 Value: 100m
             ),

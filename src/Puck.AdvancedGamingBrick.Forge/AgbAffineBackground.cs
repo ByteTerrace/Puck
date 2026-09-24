@@ -147,21 +147,10 @@ public sealed class AgbAffineBackground {
     };
     /// <summary>Emits the layer's control register.</summary>
     /// <param name="control">The control halfword from <see cref="Control"/>.</param>
-    public void EmitControl(uint control) {
-        m_emitter.LoadConstant(
-            destination: LowRegister.R0,
-            value: control
-        );
-        m_emitter.LoadConstant(
-            destination: LowRegister.R2,
-            value: ControlAddress
-        );
-        m_emitter.StoreHalf(
-            baseRegister: LowRegister.R2,
-            byteOffset: 0,
-            source: LowRegister.R0
-        );
-    }
+    public void EmitControl(uint control) => m_emitter.StoreHalfConstant(
+        address: ControlAddress,
+        value: control
+    );
     /// <summary>Emits the per-frame matrix and reference point from the angle, zoom and centre already in memory.</summary>
     /// <param name="angle">Loads the angle into the given register.</param>
     /// <param name="scale">Loads the zoom into the given register.</param>

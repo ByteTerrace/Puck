@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Storage;
 
 namespace Puck.World.Server;
 
@@ -18,12 +19,16 @@ namespace Puck.World.Server;
 /// <param name="Recovery">checkpoint or recording; recording requires an active closed replay prefix.</param>
 /// <param name="Observations">Optional bounded collection observations, independent of effect dispatch.</param>
 /// <param name="Embeddings">Optional state text embedding connections.</param>
+/// <param name="Participants">Optional participants acting in the world through installed participant types.</param>
 public sealed record WorldExtensionConfiguration(string Schema, string World, Guid Lineage,
     IReadOnlyList<WorldExtensionProviderSettings> Providers, IReadOnlyList<WorldExtensionOperationSettings> Operations,
     IReadOnlyList<WorldExtensionClientSettings> Clients, IReadOnlyList<WorldExtensionConnection> Connections,
     WorldExtensionHostOptions? Worker = null, int MaximumEntries = 1024, int MaximumBytes = 16777216,
     int ScanEveryTicks = 240, string Recovery = "checkpoint", IReadOnlyList<WorldExtensionObservationSettings>? Observations = null,
-    IReadOnlyList<WorldExtensionEmbeddingSettings>? Embeddings = null) {
+    IReadOnlyList<WorldExtensionEmbeddingSettings>? Embeddings = null, IReadOnlyList<WorldExtensionParticipantSettings>? Participants = null) {
+    /// <summary>The largest configuration file, in bytes, a host reads.</summary>
+    public const int MaximumFileBytes = 1048576;
+
     private static void CheckDuplicates(JsonElement value) {
         if (value.ValueKind == JsonValueKind.Object) {
             var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -42,7 +47,7 @@ public sealed record WorldExtensionConfiguration(string Schema, string World, Gu
     /// <returns>The detached configuration.</returns>
     /// <exception cref="JsonException">The document is malformed, ambiguous, oversized, or unsupported.</exception>
     public static WorldExtensionConfiguration Parse(ReadOnlySpan<byte> utf8) {
-        if (utf8.Length > 1048576) { throw new JsonException(message: "Extension configuration exceeds 1 MiB."); }
+        if (utf8.Length > MaximumFileBytes) { throw new JsonException(message: "Extension configuration exceeds 1 MiB."); }
         using var document = JsonDocument.Parse(utf8.ToArray());
 
         CheckDuplicates(value: document.RootElement);
@@ -55,6 +60,17 @@ public sealed record WorldExtensionConfiguration(string Schema, string World, Gu
         if (value.Schema != "puck.world.extensions.v1") { throw new JsonException(message: "Unsupported extension configuration schema."); }
         return value;
     }
+    /// <summary>Reads and parses the host-selected configuration file through the confined file reader, the one way
+    /// every host loads it.</summary>
+    /// <param name="path">The host-selected file path; never a path from world content.</param>
+    /// <returns>The detached configuration.</returns>
+    /// <exception cref="IOException">The file cannot be read or exceeds <see cref="MaximumFileBytes"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is blank or not a confined file path.</exception>
+    /// <exception cref="JsonException">The document is malformed, ambiguous, oversized, or unsupported.</exception>
+    public static WorldExtensionConfiguration Load(string path) => Parse(utf8: ConfinedFile.ReadAllBytes(
+        maximumBytes: MaximumFileBytes,
+        path: path
+    ));
 }
 /// <summary>One named, explicitly installed provider and its private configuration.</summary>
 /// <param name="Name">Deployment-local provider instance name.</param>
@@ -102,7 +118,6 @@ public interface IWorldConfiguredProvider : IDisposable {
     /// <returns>The bound operation.</returns>
     WorldExtensionOperation Bind(string name, string description, JsonElement settings);
 }
-
 /// <summary>One state text embedding connection connecting a text request table, vector result table, and optional status table.</summary>
 /// <param name="Name">Connection name.</param>
 /// <param name="Provider">Configured provider instance name.</param>

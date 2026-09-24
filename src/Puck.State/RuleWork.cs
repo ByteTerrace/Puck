@@ -62,7 +62,6 @@ public readonly record struct RuleWork {
     /// <param name="reason">What has no price.</param>
     /// <returns>The bound.</returns>
     public static RuleWork Unmodeled(string reason) => new(bound: CostBound.Unmodeled(reason: reason));
-
     /// <summary>Returns whether the bound is known and within a ceiling. An unmodeled or overflowed bound fits no
     /// ceiling, <see cref="long.MaxValue"/> included.</summary>
     /// <param name="ceiling">The ceiling, in work units.</param>

@@ -22,20 +22,11 @@ public static class CartridgeDecompiler {
         [nameof(ExpressionOp.BitOr)] = "|=",
         [nameof(ExpressionOp.BitXor)] = "^=",
         [nameof(ExpressionOp.Divide)] = "/=",
-        [nameof(ExpressionOp.Modulo)] = "%=",
+        [nameof(ExpressionOp.Remainder)] = "%=",
         [nameof(ExpressionOp.Multiply)] = "*=",
         [nameof(ExpressionOp.ShiftLeft)] = "<<=",
         [nameof(ExpressionOp.ShiftRight)] = ">>=",
         [nameof(ExpressionOp.Subtract)] = "-=",
-    };
-    // The engine comparisons, and the infix comparator each is written as.
-    private static readonly Dictionary<string, string> Comparators = new(comparer: StringComparer.Ordinal) {
-        [nameof(ActionStateComparison.Equal)] = "==",
-        [nameof(ActionStateComparison.Greater)] = ">",
-        [nameof(ActionStateComparison.GreaterOrEqual)] = ">=",
-        [nameof(ActionStateComparison.Less)] = "<",
-        [nameof(ActionStateComparison.LessOrEqual)] = "<=",
-        [nameof(ActionStateComparison.NotEqual)] = "!=",
     };
     // The order sections are written in: the cartridge's own identity first, then its data, then its behaviour.
     // Any key not named here follows in ordinal order, so a section added to the document still round-trips.
@@ -104,18 +95,18 @@ public static class CartridgeDecompiler {
             default: {
                     var left = CartridgeOperand.ToSource(node: gate["left"]);
                     var right = CartridgeOperand.ToSource(node: gate["right"]);
-                    var comparison = (gate["comparison"]?.GetValue<string>() ?? nameof(ActionStateComparison.Equal));
-                    var comparator = (Comparators.TryGetValue(
-                        key: comparison,
-                        value: out var found
+                    var comparison = (gate["comparison"]?.GetValue<string>() ?? nameof(ExpressionOp.Equal));
+                    var comparator = (ExpressionComparisons.TryParseName(
+                        comparison: out var parsed,
+                        name: comparison
                     )
-                        ? found
+                        ? parsed.Symbol()
                         : "=="
                     );
 
                     // A button read against one is what a key test lowered to, and the key spelling is the readable half.
                     if (
-                        (comparison == nameof(ActionStateComparison.Equal)) &&
+                        (comparison == nameof(ExpressionOp.Equal)) &&
                         (right == "1") &&
                         CartridgeExpressions.TryKey(
                         button: out var button,

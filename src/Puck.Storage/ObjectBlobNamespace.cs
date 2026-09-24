@@ -41,10 +41,12 @@ public sealed class ObjectBlobNamespace : IDisposable {
             throwOnInvalidBytes: true
         );
 
-        if (encoding.GetByteCount(chars: name) > 1024) { throw new ArgumentException(
+        if (encoding.GetByteCount(chars: name) > 1024) {
+            throw new ArgumentException(
             message: "Namespace name exceeds its byte budget.",
             paramName: nameof(name)
-        ); }
+        );
+        }
         var nameBytes = encoding.GetBytes(s: name);
         // Fixed-depth opaque names cannot overlap through path nesting, case folding, or filesystem aliases.
         m_prefix = (("namespaces/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: nameBytes))) + "/");

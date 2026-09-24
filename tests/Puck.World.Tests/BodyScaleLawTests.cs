@@ -4,6 +4,7 @@ using Xunit;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -18,38 +19,6 @@ public sealed class BodyScaleLawTests {
     private static readonly FixedQ4816 EnvelopeMax = FixedQ4816.One;
     private static readonly ulong StepWidth = Puck.Hosting.EngineTicks.PerRate(ratePerSecond: SimulationRateHz);
 
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
-    private static WorldOwnedWorlds FreshProfiles(WorldDefinition definition) => new(
-        directory: Directory.CreateTempSubdirectory(prefix: "puck-body-scale-tests-").FullName,
-        machineId: Guid.NewGuid(),
-        template: definition
-    );
-    private static WorldBody JoinBody(WorldFixture fixture, int slot = 0) {
-        var actor = WorldPrincipal.Seat(slot: slot);
-
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: actor,
-            Slot: actor.Index,
-            IdentityName: null,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
-
-        return fixture.Server.Body(index: actor.Index)!;
-    }
     // The shipped world's own platform/walker/gravity recipe (see ConstantUpLipContactLawTests.PlatformDocument),
     // with a bodies.scaleRow cell layered on top so the contact resolve runs against a real collider-bearing
     // ground contact at the exact radius/skin ratio a shrunk garden body reaches.
@@ -170,13 +139,13 @@ public sealed class BodyScaleLawTests {
     public void ScaleRow_AbsentCell_CheckpointRestoreLeavesBodyScaleAtOne() {
         using var fixture = Fixtures.FreshServer();
 
-        JoinBody(fixture: fixture);
+        fixture.JoinSeat();
         fixture.Step();
 
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var refusal
             ),
             userMessage: refusal
@@ -187,12 +156,13 @@ public sealed class BodyScaleLawTests {
             engines: [],
             screens: restoredDefinition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-body-scale-tests-");
 
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: FreshProfiles(definition: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
 
         Assert.Equal(
@@ -203,7 +173,7 @@ public sealed class BodyScaleLawTests {
     [Fact]
     public void ScaleRow_Absent_BodyScaleDefaultsToOne() {
         using var fixture = Fixtures.FreshServer();
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.Equal(
             expected: FixedQ4816.One,
@@ -220,13 +190,13 @@ public sealed class BodyScaleLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: document);
 
-        JoinBody(fixture: fixture);
+        fixture.JoinSeat();
         fixture.Step();
 
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var refusal
             ),
             userMessage: refusal
@@ -237,12 +207,13 @@ public sealed class BodyScaleLawTests {
             engines: [],
             screens: restoredDefinition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-body-scale-tests-");
 
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: FreshProfiles(definition: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
 
         Assert.Equal(
@@ -256,7 +227,7 @@ public sealed class BodyScaleLawTests {
         var document = WithScaleRow(cellValue: authored);
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.Equal(
             expected: authored,
@@ -316,7 +287,7 @@ public sealed class BodyScaleLawTests {
         var scale = FixedQ4816.FromDouble(value: scaleValue);
 
         using var fixture = Fixtures.FreshServer(definition: PlatformDocumentWithScale(cellValue: scale));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         body.Pose(
             pitchRadians: 0f,

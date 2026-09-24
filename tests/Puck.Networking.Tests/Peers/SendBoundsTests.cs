@@ -14,9 +14,9 @@ public sealed class SendBoundsTests {
     /// is delivered, so the constant names the largest payload that fits the frame, not one past it.</summary>
     [Fact]
     public async Task SendAsync_ExactlyAtTheCap_IsDelivered() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, linkBtoA) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, linkBtoA) = await PeerTestSupport.ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;
         await using var disposeB = peerB;
@@ -26,7 +26,7 @@ public sealed class SendBoundsTests {
         Random.Shared.NextBytes(buffer: payload);
 
         await linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: payload
         );
 
@@ -39,9 +39,9 @@ public sealed class SendBoundsTests {
     }
     [Fact]
     public async Task SendAsync_OnAClosedLink_ThrowsConnectionClosed() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;
         await using var disposeB = peerB;
@@ -51,7 +51,7 @@ public sealed class SendBoundsTests {
         Assert.False(condition: linkAtoB.IsOpen);
 
         var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: "too late"u8.ToArray()
         ));
 
@@ -62,15 +62,15 @@ public sealed class SendBoundsTests {
     }
     [Fact]
     public async Task SendAsync_OneByteOverTheCap_ThrowsBeforeSendingAnything_AndTheLinkStaysOpen() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, linkBtoA) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, linkBtoA) = await PeerTestSupport.ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;
         await using var disposeB = peerB;
 
         var thrown = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(testCode: () => linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: new byte[(PeerWireProtocol.MaxMessagePayloadBytes + 1)]
         ));
 
@@ -83,7 +83,7 @@ public sealed class SendBoundsTests {
         // Nothing reached the wire: the receiver's very next event is the honest message that follows, not a
         // refusal of an oversized frame and not a closure.
         await linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: "still open"u8.ToArray()
         );
 
@@ -96,7 +96,7 @@ public sealed class SendBoundsTests {
     }
     [Fact]
     public async Task SendAsync_WhoseIdentityWasDisposedUnderAnOpenLink_ThrowsConnectionClosed_NotObjectDisposedException() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
         var identityA = PeerIdentity.Create();
         var peerA = PeerTestSupport.NewPeer(identity: identityA);
@@ -107,11 +107,11 @@ public sealed class SendBoundsTests {
 
         var endpointB = await PeerTestSupport.ListenLoopbackAsync(peer: peerB);
         var linkAtoB = await peerA.DialAsync(
-            ct: deadline.Token,
+            ct: ct,
             endpoint: endpointB
         );
 
-        _ = await peerB.IncomingLinks.ReadAsync(cancellationToken: deadline.Token);
+        _ = await peerB.IncomingLinks.ReadAsync(cancellationToken: ct);
 
         // The state a send reaches when it passed the open check just before Peer.DisposeAsync closed the links and
         // then disposed the identity: the link still reports open, and the key it signs with is gone.
@@ -120,7 +120,7 @@ public sealed class SendBoundsTests {
         Assert.True(condition: linkAtoB.IsOpen);
 
         var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: "signed with a disposed key"u8.ToArray()
         ));
 

@@ -1,0 +1,38 @@
+# Graph creation: compiled and installed, paused and reset, the float history's first submission through the float
+# preview reads 1/16 at the whole 64x64 offscreen frame.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+pipeline.time feedback pause
+pipeline.output feedback history
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.capture feedback {run}/created.png
+pipeline.wait feedback captured 10
+pipeline.step feedback
+pipeline.wait feedback submitted 2 10
+# The layout slot shrinks to half the frame on each axis, so the host asks the instance for 32x32.
+world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":0.5,"pipeline":"feedback","width":0.5,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
+pipeline.wait feedback resized 32 32 10
+# A resize is not a step: paused, the instance installs the graph at 32x32 without rendering and keeps presenting
+# submission 2 at 64x64.
+pipeline.capture feedback {run}/held.png
+pipeline.wait feedback captured 10
+# The next step renders at 32x32. The history's extent changed, so every slot restarts from zero: 1/16.
+pipeline.step feedback
+pipeline.wait feedback submitted 3 10
+pipeline.capture feedback {run}/resized.png
+pipeline.wait feedback captured 10
+pipeline.step feedback
+pipeline.wait feedback submitted 4 10
+pipeline.capture feedback {run}/resized-step.png
+pipeline.wait feedback captured 10
+# Active: resumed, the slot returns to the whole frame and the running instance rebuilds at 64x64 off the frame
+# thread; resized is reached once that graph installs, so the reset below counts only submissions at 64x64.
+# After a reset and twenty-four submissions the history is past full scale, which the preview saturates to 1.
+pipeline.time feedback resume
+world.row.set views.layouts {"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"pipeline":"feedback","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}
+pipeline.wait feedback resized 64 64 10
+pipeline.reset feedback
+pipeline.wait feedback submitted 24 10
+pipeline.capture feedback {run}/active.png
+pipeline.wait feedback captured 10

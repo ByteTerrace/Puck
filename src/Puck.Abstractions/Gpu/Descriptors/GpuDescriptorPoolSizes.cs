@@ -10,13 +10,11 @@ namespace Puck.Abstractions.Gpu;
 /// <param name="CombinedImageSamplerCount">Total combined image-sampler descriptors — graphics texture bindings and any compute <see cref="GpuComputeBindingKind.SampledImage"/> source.</param>
 /// <param name="StorageBufferCount">Total storage-buffer descriptors (read + read-write).</param>
 /// <param name="StorageImageCount">Total storage-image descriptors.</param>
-/// <param name="AccelerationStructureCount">Total acceleration-structure descriptors (ray-query only).</param>
 public readonly record struct GpuDescriptorPoolSizes(
     uint MaxSets,
     uint CombinedImageSamplerCount,
     uint StorageBufferCount,
-    uint StorageImageCount,
-    uint AccelerationStructureCount
+    uint StorageImageCount
 ) {
     /// <summary>Sums the per-kind descriptor demand across one or more descriptor sets, each a compute pipeline's
     /// binding list. <see cref="MaxSets"/> is the number of sets; an array binding (<see cref="GpuComputeBinding.Count"/>
@@ -30,7 +28,6 @@ public readonly record struct GpuDescriptorPoolSizes(
         var combinedImageSamplerCount = 0u;
         var storageBufferCount = 0u;
         var storageImageCount = 0u;
-        var accelerationStructureCount = 0u;
 
         foreach (var set in sets) {
             ArgumentNullException.ThrowIfNull(set);
@@ -49,10 +46,6 @@ public readonly record struct GpuDescriptorPoolSizes(
                         storageBufferCount = checked((storageBufferCount + count));
 
                         break;
-                    case GpuComputeBindingKind.AccelerationStructure:
-                        accelerationStructureCount = checked((accelerationStructureCount + count));
-
-                        break;
                     case GpuComputeBindingKind.SampledImage:
                         // A sampled image is a combined-image-sampler descriptor on Vulkan; on Direct3D 12 it is one
                         // SRV heap slot. Either way it must be provisioned, or the pool/heap under-counts.
@@ -69,8 +62,7 @@ public readonly record struct GpuDescriptorPoolSizes(
             MaxSets: ((uint)sets.Length),
             CombinedImageSamplerCount: combinedImageSamplerCount,
             StorageBufferCount: storageBufferCount,
-            StorageImageCount: storageImageCount,
-            AccelerationStructureCount: accelerationStructureCount
+            StorageImageCount: storageImageCount
         );
     }
 }

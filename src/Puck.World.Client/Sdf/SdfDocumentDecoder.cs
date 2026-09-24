@@ -353,13 +353,15 @@ public static class SdfDocumentDecoder {
             members: members
         );
 
-        try { new SdfCellDisplacement(
+        try {
+            new SdfCellDisplacement(
             Amplitude: amplitude,
             Frequency: frequency,
             Mode: mode,
             Randomness: randomness,
             Seed: seed
-        ).Validate(); } catch (ArgumentException exception) {
+        ).Validate();
+        } catch (ArgumentException exception) {
             throw new SdfDocumentException(
                 SdfRefusal.NotANumber,
                 $"{context}: {exception.Message}"
@@ -1204,19 +1206,24 @@ public static class SdfDocumentDecoder {
 
         return axis;
     }
-    private static float RequireFloat(Dictionary<string, JsonElement> members, string key, string context) {
-        var element = RequireMember(
+    private static T RequireParsedMember<T>(Dictionary<string, JsonElement> members, string key, string context, string shape, Func<JsonElement, string, T> reader) =>
+        reader(
+            RequireMember(
+                context: context,
+                key: key,
+                members: members,
+                shape: shape
+            ),
+            $"{context}.{key}"
+        );
+    private static float RequireFloat(Dictionary<string, JsonElement> members, string key, string context) =>
+        RequireParsedMember<float>(
             context: context,
             key: key,
             members: members,
+            reader: ReadFloat,
             shape: "a number"
         );
-
-        return ReadFloat(
-            context: $"{context}.{key}",
-            element: element
-        );
-    }
     private static int RequireMaterial(Dictionary<string, JsonElement> members, int materialCount, string context) {
         if (
             !members.TryGetValue(
@@ -1289,32 +1296,22 @@ public static class SdfDocumentDecoder {
     // field this decoder passes to a RequireNonNegative-guarded builder parameter (a shape radius/half-extent/round,
     // or a material channel) is sign-checked HERE, at decode — mirroring RequireScale/ReadSmooth/RequireAxis's own
     // shape (read the base value, then refuse a rule the builder would otherwise repair or reject further downstream).
-    private static float RequireNonNegativeFloat(Dictionary<string, JsonElement> members, string key, string context) {
-        var element = RequireMember(
+    private static float RequireNonNegativeFloat(Dictionary<string, JsonElement> members, string key, string context) =>
+        RequireParsedMember<float>(
             context: context,
             key: key,
             members: members,
+            reader: ReadNonNegativeFloat,
             shape: "a number"
         );
-
-        return ReadNonNegativeFloat(
-            context: $"{context}.{key}",
-            element: element
-        );
-    }
-    private static Vector3 RequireNonNegativeVector3(Dictionary<string, JsonElement> members, string key, string context) {
-        var element = RequireMember(
+    private static Vector3 RequireNonNegativeVector3(Dictionary<string, JsonElement> members, string key, string context) =>
+        RequireParsedMember<Vector3>(
             context: context,
             key: key,
             members: members,
+            reader: ReadNonNegativeVector3,
             shape: "a 3-element number array"
         );
-
-        return ReadNonNegativeVector3(
-            context: $"{context}.{key}",
-            element: element
-        );
-    }
     // Scale() takes the absolute value and floors near-zero magnitudes to 0.0001 — a REPAIR this front door must
     // refuse instead of forwarding. ReadFloat already guarantees every component is finite.
     private static Vector3 RequireScale(Dictionary<string, JsonElement> members, string context) {
@@ -1337,19 +1334,14 @@ public static class SdfDocumentDecoder {
 
         return scale;
     }
-    private static Vector3 RequireVector3(Dictionary<string, JsonElement> members, string key, string context) {
-        var element = RequireMember(
+    private static Vector3 RequireVector3(Dictionary<string, JsonElement> members, string key, string context) =>
+        RequireParsedMember<Vector3>(
             context: context,
             key: key,
             members: members,
+            reader: ReadVector3,
             shape: "a 3-element number array"
         );
-
-        return ReadVector3(
-            context: $"{context}.{key}",
-            element: element
-        );
-    }
     // JsonDocument preserves every occurrence of a repeated name (unlike JsonSerializer's POCO path, which silently
     // keeps the LAST one — decision 7's duplicate-key hazard) — walking EnumerateObject ourselves is what lets a
     // repeat be refused instead of silently resolved to whichever occurrence STJ would have picked.

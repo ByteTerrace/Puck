@@ -6,47 +6,20 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Agents.Harness;
 
-/// <summary>
-/// First-class dynamic extension providing Microsoft Agent Framework Harness autonomous participant runners.
-/// </summary>
-public sealed class WorldAgentHarnessExtension : IWorldAgentExtension {
+/// <summary>Contributes the <c>agent.harness</c> participant type: a host-approved extension configuration that lists
+/// an <c>agent.harness</c> participant runs a Harness agent over the installed <see cref="ChatClientProvider"/> it
+/// selects, driving its body through <see cref="WorldAgentBridge"/>. Registration makes no service call and starts no
+/// work; without a configured participant the extension does nothing.</summary>
+public sealed class WorldAgentHarnessExtension : IPuckExtension {
     /// <inheritdoc/>
     public string Name => "Puck.World.AgentHarness";
 
     /// <inheritdoc/>
-    public void Register(IWorldAgentExtensionRegistry registry) {
+    public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
-
-        registry.RegisterAgentRunner(factory: static services => {
-            return new WorldAgentHostedService(services: services);
-        });
-    }
-
-    private sealed class WorldAgentHostedService(IServiceProvider services) : IPuckHostedService {
-        private readonly IServiceProvider m_services = (services ?? throw new ArgumentNullException(paramName: nameof(services)));
-
-        private CancellationTokenSource? m_cts;
-
-        public IServiceProvider Services => m_services;
-
-        public void Dispose() {
-            m_cts?.Dispose();
-            m_cts = null;
-        }
-        public ValueTask DisposeAsync() {
-            Dispose();
-
-            return ValueTask.CompletedTask;
-        }
-        public Task StartAsync(CancellationToken cancellationToken) {
-            m_cts = new CancellationTokenSource();
-
-            return Task.CompletedTask;
-        }
-        public Task StopAsync(CancellationToken cancellationToken) {
-            m_cts?.Cancel();
-
-            return Task.CompletedTask;
-        }
+        registry.AddParticipant(participant: new WorldParticipantType(
+            Create: WorldAgentParticipant.Create,
+            Type: WorldAgentParticipant.Type
+        ));
     }
 }

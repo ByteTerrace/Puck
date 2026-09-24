@@ -39,6 +39,11 @@ public sealed class CameraDeviceScanner : IDisposable {
         m_intervalTicks = ((long)ticks);
     }
 
+    /// <summary>Gets a task that completes when the outstanding scan finishes, or a completed task when no scan is
+    /// outstanding or the scanner is disposed. It never faults, and awaiting it consumes nothing: the next
+    /// <see cref="TryPoll"/> still returns the result.</summary>
+    public Task ScanCompletion => (m_pending ?? Task.CompletedTask);
+
     private static CameraDeviceScanResult Scan(ICameraCaptureService service) {
         try {
             if (!service.IsSupported) {

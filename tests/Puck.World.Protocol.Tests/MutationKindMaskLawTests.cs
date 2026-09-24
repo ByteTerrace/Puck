@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Protocol.Tests;
@@ -29,7 +30,7 @@ public sealed class MutationKindMaskLawTests {
         var grant = new WorldGrant(
             // Console, not World: the codec refuses World as a SUBMITTER by design (the world's own program acts
             // inside the process and is stamped by the server), and that refusal is not what this law is about.
-            Principal: WorldPrincipal.Console,
+            Grantee: Principal.Console,
             Capability: WorldCapability.Mutate,
             Subject: GrantSubject.All,
             Exclusive: false,
@@ -80,6 +81,20 @@ public sealed class MutationKindMaskLawTests {
             );
         }
     }
+    // The catalog declares its ordinals densely from zero: deleting a kind renumbers the ones after it rather than
+    // leaving a hole, since no recorded tape, grant or guest outlives the code version that wrote it.
+    [Fact]
+    public void TheDeclaredOrdinals_AreDenseFromZero() {
+        var ordinals = WorldMutationKindCatalog.All()
+            .Select(selector: static entry => entry.Ordinal)
+            .Order()
+            .ToArray();
+
+        Assert.Equal(
+            actual: ordinals,
+            expected: Enumerable.Range(count: ordinals.Length, start: 0)
+        );
+    }
     [Fact]
     public void EveryOrdinalInTheOldRange_SurvivesUnchanged() {
         // Necessary but NOT sufficient (see this class's remarks): every assertion here passes on a truncating codec.
@@ -113,8 +128,8 @@ public sealed class MutationKindMaskLawTests {
     }
     [Fact]
     public void OrdinalPastOldCeiling_SurvivesTheGrantWireCodec() {
-        // The cast-truncation catcher. BinaryWriter has no UInt128 overload, so `w.Write((ulong)value.Bits)` COMPILES
-        // and silently drops this bit; the encode/decode pair below is the only leg that can see that happen.
+        // The cast-truncation catcher. A 64-bit lane such as `w.WriteUInt64((ulong)value.Bits)` COMPILES and silently
+        // drops this bit; the encode/decode pair below is the only leg that can see that happen.
         var authored = MutationKindMask.Empty.With(ordinal: PastOldCeiling).With(ordinal: 3);
         var decoded = RoundTrip(mask: authored);
 

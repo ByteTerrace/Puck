@@ -6,11 +6,9 @@
  * a `number` (see `native/engineTypes.ts`'s own header). Pure and document-only: nothing here calls
  * the engine or touches `StudioContext` — the components in this package's boundary do that.
  *
- * Every function here takes `document: unknown` (the exact shape `machines/studio/types.ts`'s own
- * `DocumentState.value` carries — parsed JSON the ENGINE validates, never statically trusted at this
- * layer) and degrades to an empty/undefined answer on a document that is not yet shaped like a
- * `WorldDefinition`, mirroring `document/geometry.ts`'s and `document/documentRole.ts`'s own
- * defensive posture — never throwing on a document mid-edit or freshly opened.
+ * Every function here takes `document: unknown` (a composed or compiled document the engine produced, parsed with
+ * `document/jsonText.ts` — never statically trusted at this layer) and degrades to an empty/undefined answer on a
+ * document that is not shaped like a `WorldDefinition`, mirroring `document/geometry.ts`'s defensive posture.
  */
 import type { EngineCell } from "../native/engineTypes";
 import type {
@@ -101,13 +99,6 @@ export function topologyDirections(topology: WorldTopology): readonly WorldDirec
   return (directions ?? []).filter((direction): direction is WorldDirection => direction != null);
 }
 
-/** Whether `row` is paintable by ordinal: a `cellsOf` domain over an `Int` or `Bool` kind — the
- * only kinds a cell address can hold a document-encodable value for (`Fixed` cells store raw
- * Q48.16 bits this module never guesses at decoding; `Text` cells hold no numeric paint value). */
-export function canPaintRow(row: WorldStateRow): boolean {
-  return isCellsOfDomain(row.domain) && (row.kind === "Int" || row.kind === "Bool");
-}
-
 /** The value an unauthored cell of `row` reads as — the `cellsOf` domain's own `empty` (default 0)
  * when `row` carries one, else `0n`. */
 export function emptyValueFor(row: WorldStateRow | undefined): bigint {
@@ -135,17 +126,8 @@ export function decodeCellValue(value: number | string | boolean): bigint {
   return BigInt(value);
 }
 
-/** The authored value at cell ordinal `ordinal` of `row`, or `undefined` when that ordinal carries
- * no authored cell (its value comes from the row's own domain-declared default instead — see
- * `emptyValueFor`). Looks up by `String(ordinal)`, exactly how `PAINT_CELLS`/`paintCells` key
- * `cells[]` (see `machines/studio/document.ts`'s own remarks). */
-export function authoredCellValue(row: WorldStateRow | undefined, ordinal: number): bigint | undefined {
-  const cell = row?.cells?.find((candidate) => candidate.key === String(ordinal));
-  return cell === undefined ? undefined : decodeCellValue(cell.value);
-}
-
-/** Every authored cell of `row`, decoded, keyed by ordinal — for building a fast per-topology
- * value lookup once per render instead of re-scanning `cells[]` per cell. */
+/** Every authored cell of `row`, decoded, keyed by ordinal (a cell's `key` is its ordinal's decimal spelling) — for
+ * building a fast per-topology value lookup once per render instead of re-scanning `cells[]` per cell. */
 export function authoredCellValues(row: WorldStateRow | undefined): ReadonlyMap<number, bigint> {
   const values = new Map<number, bigint>();
   for (const cell of row?.cells ?? []) {
@@ -157,10 +139,9 @@ export function authoredCellValues(row: WorldStateRow | undefined): ReadonlyMap<
   return values;
 }
 
-/** Parses a paint value typed for `row` — a decimal integer, or `true`/`false`/`0`/`1` for a
- * `Bool` row — and checks it against the row's own declared bounds. Throws a message fit to show
- * the author directly. */
-export function parsePaintValue(row: WorldStateRow, raw: string): bigint {
+/** Parses a value typed for `row` — a decimal integer, or `true`/`false`/`0`/`1` for a `Bool` row — and checks it
+ * against the row's own declared bounds. Throws a message fit to show the author directly. */
+export function parseRowValue(row: WorldStateRow, raw: string): bigint {
   const trimmed = raw.trim();
   if (row.kind === "Bool") {
     if (!["0", "1", "true", "false"].includes(trimmed)) {

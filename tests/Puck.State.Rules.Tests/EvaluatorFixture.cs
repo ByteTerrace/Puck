@@ -206,7 +206,7 @@ public static class EvaluatorFixture {
     /// <param name="comparison">The comparison.</param>
     /// <param name="value">The constant.</param>
     /// <returns>The predicate.</returns>
-    public static ActionPredicate Compare(string row, ActionStateComparison comparison, decimal value) => new ActionPredicate.CompareState(
+    public static ActionPredicate Compare(string row, ExpressionOp comparison, decimal value) => new ActionPredicate.CompareState(
         Comparison: comparison,
         State: row,
         Value: value

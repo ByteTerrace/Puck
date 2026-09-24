@@ -106,7 +106,7 @@ public sealed class WorldDocumentEffect : WorldFactEffect {
     /// other rows; a save is delivered after it.</summary>
     public override EffectNeeds Needs => ((Write == WorldDocumentWrite.Save)
         ? EffectNeeds.Irreversible
-        : (EffectNeeds.Irreversible | EffectNeeds.Transactional)
+        : EffectNeeds.Irreversible | EffectNeeds.Transactional
     );
     /// <inheritdoc/>
     public override bool SubmitsMutation => (Write != WorldDocumentWrite.Save);

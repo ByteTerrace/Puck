@@ -1,0 +1,79 @@
+/* Class names the theme attaches to Mantine components. Values come from theme.ts's resolver and the brand tokens. */
+
+.shellBar {
+  background-color: var(--puck-surface-raised);
+  border-color: var(--puck-line);
+}
+
+.shellMain {
+  background-color: var(--puck-surface-canvas);
+}
+
+.surface {
+  background-color: var(--puck-surface-raised);
+  border-color: var(--puck-line);
+}
+
+.code {
+  background-color: var(--puck-surface-sunken);
+  color: var(--mantine-color-text);
+}
+
+.badge {
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.tabsList {
+  --tab-border-color: var(--puck-line);
+}
+
+.tab {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+
+  &[data-active] {
+    color: var(--mantine-color-text);
+  }
+
+  @mixin hover {
+    color: var(--mantine-color-text);
+    background-color: transparent;
+  }
+}
+
+.navLink {
+  border-radius: var(--mantine-radius-md);
+  color: var(--mantine-color-dimmed);
+
+  &[data-active] {
+    color: var(--mantine-color-anchor);
+    background-color: light-dark(var(--mantine-color-coral-0), color-mix(in oklab, var(--mantine-color-coral-4) 12%, transparent));
+  }
+}
+
+.navLabel {
+  font-weight: 500;
+}
+
+.tableHead {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+/* Tables sit on raised panels and sunken wells alike, so their rules and tints are relative to the surface. A
+   sticky header takes `--table-surface`, which a well sets to its own background. */
+.table {
+  --table-border-color: var(--puck-line);
+  --table-hover-color: color-mix(in oklab, var(--mantine-color-text) 5%, transparent);
+  --table-striped-color: color-mix(in oklab, var(--mantine-color-text) 3%, transparent);
+
+  & thead:where([data-sticky]) {
+    background-color: var(--table-surface, var(--puck-surface-raised));
+  }
+}

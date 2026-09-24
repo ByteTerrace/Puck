@@ -1,7 +1,4 @@
-using System.Text;
-using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lsp;
 using Puck.World.Transpiler.Validation;
 using Xunit;
 
@@ -29,110 +26,18 @@ public class EditorDiagnosticsLawTests {
         }
         """;
 
-    private static async Task<List<(string Code, string Message, int Line)>> PublishedAsync(string uri, string source) {
-        using var clientToServer = new MemoryStream();
-        using var serverToClient = new MemoryStream();
-
-        WriteRpcMessage(
-            json: "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
-            stream: clientToServer
-        );
-        WriteRpcMessage(
-            json: new JsonObject {
-                ["jsonrpc"] = "2.0",
-                ["method"] = "textDocument/didOpen",
-                ["params"] = new JsonObject {
-                    ["textDocument"] = new JsonObject {
-                        ["uri"] = uri,
-                        ["languageId"] = "puck",
-                        ["version"] = 1,
-                        ["text"] = source,
-                    },
-                },
-            }.ToJsonString(),
-            stream: clientToServer
-        );
-        WriteRpcMessage(
-            json: "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}",
-            stream: clientToServer
-        );
-        WriteRpcMessage(
-            json: "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}",
-            stream: clientToServer
-        );
-        clientToServer.Position = 0;
-        await new PuckLanguageServer(
-            clientToServer,
-            serverToClient
-        ).RunAsync(cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(continueOnCapturedContext: true);
-        serverToClient.Position = 0;
-
-        var published = new List<(string Code, string Message, int Line)>();
-
-        while (ReadRpcMessage(stream: serverToClient) is { } message) {
-            if (JsonNode.Parse(json: message)?["params"]?["diagnostics"] is not JsonArray entries) {
-                continue;
-            }
-            foreach (var entry in entries) {
-                published.Add(item: (
-                    entry!["code"]!.ToString(),
-                    entry["message"]!.ToString(),
-                    entry["range"]!["start"]!["line"]!.GetValue<int>()
-                ));
-            }
-        }
-
-        return published;
-    }
-    private static string? ReadRpcMessage(Stream stream) {
-        var header = new List<byte>();
-
-        while (true) {
-            var value = stream.ReadByte();
-
-            if (value < 0) {
-                return null;
-            }
-
-            header.Add(item: ((byte)value));
-            if (
-                (header.Count >= 4) &&
-                (header[^4] == '\r') &&
-                (header[^3] == '\n') &&
-                (header[^2] == '\r') &&
-                (header[^1] == '\n')
-            ) {
-                break;
-            }
-        }
-
-        var length = int.Parse(s: Encoding.ASCII.GetString(bytes: [.. header])
-            .Split(separator: ':')[1]
-            .Trim());
-        var body = new byte[length];
-
-        stream.ReadExactly(buffer: body);
-
-        return Encoding.UTF8.GetString(bytes: body);
-    }
-    private static List<(string Code, string Message, int Line)> Reported(string source, string? sourcePath) =>
+    private static List<PublishedDiagnostic> Reported(string source, string? sourcePath) =>
         [.. WorldSourceDiagnostics.Diagnose(
             source: source,
             sourcePath: sourcePath
-        ).Select(selector: static diagnostic => (
-            diagnostic.Code,
-            diagnostic.Message,
-            Math.Max(
+        ).Select(selector: static diagnostic => new PublishedDiagnostic(
+            Code: diagnostic.Code,
+            Line: Math.Max(
                 val1: 0,
                 val2: (diagnostic.Span.Line - 1)
-            )
+            ),
+            Message: diagnostic.Message
         ))];
-    private static void WriteRpcMessage(Stream stream, string json) {
-        var body = Encoding.UTF8.GetBytes(s: json);
-
-        stream.Write(buffer: Encoding.ASCII.GetBytes(s: $"Content-Length: {body.Length}\r\n\r\n"));
-        stream.Write(buffer: body);
-    }
 
     [Fact]
     public async Task AWorldTheEngineRefusesIsRefusedInTheEditorByTheSameCodeTextAndLine() {
@@ -173,15 +78,15 @@ public class EditorDiagnosticsLawTests {
             );
             Assert.Equal(
                 saved,
-                await PublishedAsync(
-                    source: Refused,
+                await LanguageServerClient.PublishedAsync(
+                    text: Refused,
                     uri: new Uri(uriString: path).AbsoluteUri
                 )
             );
             Assert.Equal(
                 saved,
-                await PublishedAsync(
-                    source: Refused,
+                await LanguageServerClient.PublishedAsync(
+                    text: Refused,
                     uri: "untitled:refused"
                 )
             );

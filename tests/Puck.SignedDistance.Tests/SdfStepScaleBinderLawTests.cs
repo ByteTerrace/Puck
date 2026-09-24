@@ -6,20 +6,21 @@ namespace Puck.SignedDistance.Tests;
 
 /// <summary>
 /// THE LAW: a program's global step scale has an author. <see cref="SdfProgram.StepScaleBinder"/> names the one
-/// unscoped chain whose Lipschitz factor binds <see cref="SdfProgram.StepScale"/> below 1, and
-/// <see cref="SdfSolidGeometry.StepFactor"/> predicts that factor from the authored primitive and scale before any
-/// program is built, so a stamper can decide to scope an eccentric shape and a cost sheet can name one that was not.
-/// Each arm pairs the taxed program with a control differing in exactly one thing: the scope, or the scale.
+/// unscoped chain whose Lipschitz factor binds <see cref="SdfProgram.StepScale"/> below 1, so a cost sheet can name a
+/// warp that was left unscoped. A primitive is never that author: every primitive is 1-Lipschitz, a non-uniformly
+/// scaled sphere included (the exact exponent-2 superellipsoid gauge). Each arm pairs the taxed program with a control
+/// differing in exactly one thing: the scope, the warp, or the scale.
 /// </summary>
 public sealed class SdfStepScaleBinderLawTests {
-    // The shipped wren's hips: 0.16 x 0.1 x 0.125, the squashed sphere that taxed every march in the frame at 1.6x.
+    // The shipped wren's hips: 0.16 x 0.1 x 0.125, a 1.6:1 squashed sphere.
     private static readonly Vector3 EccentricScale = new(
         x: 0.16f,
         y: 0.1f,
         z: 0.125f
     );
+    private static readonly Vector3 RoundScale = new(value: 0.3f);
 
-    private static SdfProgram Build(Vector3 scale, bool scoped, Vector3? secondScale = null) {
+    private static SdfProgram Build(Vector3 scale, float twist, bool scoped, float? secondTwist = null) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -27,21 +28,23 @@ public sealed class SdfStepScaleBinderLawTests {
             builder: builder,
             material: material,
             scale: scale,
-            scoped: scoped
+            scoped: scoped,
+            twist: twist
         );
 
-        if (secondScale is { } second) {
+        if (secondTwist is { } second) {
             EmitInstance(
                 builder: builder,
                 material: material,
-                scale: second,
-                scoped: false
+                scale: scale,
+                scoped: false,
+                twist: second
             );
         }
 
         return builder.Build(buildInstanceGrid: false);
     }
-    private static void EmitInstance(SdfProgramBuilder builder, int material, Vector3 scale, bool scoped) {
+    private static void EmitInstance(SdfProgramBuilder builder, int material, Vector3 scale, float twist, bool scoped) {
         _ = builder.BeginInstance(
             boundCenter: Vector3.Zero,
             boundRadius: 4f
@@ -51,6 +54,10 @@ public sealed class SdfStepScaleBinderLawTests {
 
         if (scoped) {
             chain = chain.PushField(compose: SdfBlendOp.Union);
+        }
+
+        if (twist != 0f) {
+            chain = chain.TwistY(rate: twist);
         }
 
         chain = SdfSolidGeometry.AppendScaledPrimitive(
@@ -69,17 +76,10 @@ public sealed class SdfStepScaleBinderLawTests {
 
     [Fact]
     public void ARoundSphereCarriesNoFactorAndNoBinder() {
-        Assert.Equal(
-            expected: 1f,
-            actual: SdfSolidGeometry.StepFactor(
-                type: SdfSolidPrimitive.Sphere,
-                scale: new Vector3(value: 0.3f)
-            )
-        );
-
         var program = Build(
-            scale: new Vector3(value: 0.3f),
-            scoped: false
+            scale: RoundScale,
+            scoped: false,
+            twist: 0f
         );
 
         Assert.Equal(
@@ -89,33 +89,43 @@ public sealed class SdfStepScaleBinderLawTests {
         Assert.Null(value: program.StepScaleBinder);
     }
     [Fact]
-    public void AnUnscopedEccentricSphereBindsTheStepScaleAtItsOwnFactor() {
-        var factor = SdfSolidGeometry.StepFactor(
-            scale: EccentricScale,
-            type: SdfSolidPrimitive.Sphere
-        );
+    public void AnUnscopedEccentricSphereCarriesNoFactorAndNoBinder() {
         var program = Build(
             scale: EccentricScale,
-            scoped: false
+            scoped: false,
+            twist: 0f
         );
 
         Assert.Equal(
-            actual: factor,
-            expected: (0.16f / 0.1f)
-        );
-        Assert.Equal(
-            expected: (1f / factor),
+            expected: 1f,
             actual: program.StepScale
         );
-
+        Assert.Null(value: program.StepScaleBinder);
+        Assert.Contains(
+            collection: program.Instructions,
+            filter: instruction => (
+                (instruction.Op == SdfOp.ShapeBlend) &&
+                (instruction.Shape == ((uint)SdfShapeType.Superellipsoid)) &&
+                (instruction.Data0.W == SdfProgramBuilder.MinSuperellipsoidExponent)
+            )
+        );
+    }
+    [Fact]
+    public void AnUnscopedTwistBindsTheStepScaleAtItsOwnFactor() {
+        var program = Build(
+            scale: RoundScale,
+            scoped: false,
+            twist: 4f
+        );
         var binder = Assert.NotNull(value: program.StepScaleBinder);
 
+        Assert.True(condition: (binder.Factor > 1f));
         Assert.Equal(
-            expected: factor,
-            actual: binder.Factor
+            expected: (1f / binder.Factor),
+            actual: program.StepScale
         );
         Assert.Equal(
-            expected: SdfShapeType.Ellipsoid,
+            expected: SdfShapeType.Sphere,
             actual: binder.Shape
         );
         Assert.Equal(
@@ -128,26 +138,11 @@ public sealed class SdfStepScaleBinderLawTests {
         );
     }
     [Fact]
-    public void EveryOtherPrimitiveReportsFactorOne() {
-        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
-            if (type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid) {
-                continue;
-            }
-
-            Assert.Equal(
-                expected: 1f,
-                actual: SdfSolidGeometry.StepFactor(
-                    scale: EccentricScale,
-                    type: type
-                )
-            );
-        }
-    }
-    [Fact]
-    public void ScopingTheSameSphereLeavesTheGlobalStepScaleAtOne() {
+    public void ScopingTheSameTwistLeavesTheGlobalStepScaleAtOne() {
         var program = Build(
-            scale: EccentricScale,
-            scoped: true
+            scale: RoundScale,
+            scoped: true,
+            twist: 4f
         );
 
         Assert.Equal(
@@ -158,14 +153,16 @@ public sealed class SdfStepScaleBinderLawTests {
     }
     [Fact]
     public void TheLargestUnscopedFactorIsTheOneNamed() {
-        var program = Build(
-            scale: EccentricScale,
+        var lone = Assert.NotNull(value: Build(
+            scale: RoundScale,
             scoped: false,
-            secondScale: new Vector3(
-                x: 0.2f,
-                y: 0.1f,
-                z: 0.2f
-            )
+            twist: 8f
+        ).StepScaleBinder);
+        var program = Build(
+            scale: RoundScale,
+            scoped: false,
+            secondTwist: 8f,
+            twist: 4f
         );
         var binder = Assert.NotNull(value: program.StepScaleBinder);
 
@@ -174,11 +171,11 @@ public sealed class SdfStepScaleBinderLawTests {
             actual: binder.InstanceIndex
         );
         Assert.Equal(
-            expected: 2f,
+            expected: lone.Factor,
             actual: binder.Factor
         );
         Assert.Equal(
-            expected: 0.5f,
+            expected: (1f / lone.Factor),
             actual: program.StepScale
         );
     }

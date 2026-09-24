@@ -1,10 +1,10 @@
 namespace Puck.World.Client;
 
 /// <summary>Evaluates a render lane expression against a body's live state — the client-side,
-/// presentation half of the shared <c>ExpressionSpelling</c>/<see cref="ExpressionProgram"/> grammar. Reads EASED
-/// state (<see cref="WorldGaitDrivers.TryReadStateNumber(WorldDefinition, string, ulong, out float, int, ulong)"/>, the
-/// same smoothing every other look/driver binding takes), not the raw authoritative tick a server rule reads — a
-/// lane expression drives presentation without modifying simulation values.
+/// presentation half of the shared <c>ExpressionSpelling</c>/<see cref="ExpressionProgram"/> grammar. Reads each state
+/// operand's EASED, presented value through the state mirror slot the body's <see cref="WorldStateLease"/> holds for
+/// it (the same smoothing every other look/driver binding takes), not the raw authoritative tick a server rule reads —
+/// a lane expression drives presentation without modifying simulation values.
 /// Supports a restricted arithmetic subset of <see cref="Instruction"/> (constants, state reads, and the basic
 /// arithmetic/comparison/min/max/clamp/sign operators); every other token, a malformed stack, or a failed read
 /// (division by zero, an absent cell) evaluates to 0 — matching an unauthored lane, never a thrown exception on a
@@ -42,11 +42,9 @@ public static class WorldLookLaneEvaluator {
 
     /// <summary>Evaluates one lane expression.</summary>
     /// <param name="expression">The expression, or <see langword="null"/> for an unauthored lane (reads 0).</param>
-    /// <param name="definition">The live definition.</param>
-    /// <param name="tick">The tick to read eased state at.</param>
-    /// <param name="bodyIndex">The body's index, substituted for <c>$body</c> in a state key.</param>
+    /// <param name="reads">The body's reads of the state mirror, bound to the body a <c>$body</c> key names.</param>
     /// <returns>The evaluated value, or 0 for a null expression, an unsupported token, or a failed evaluation.</returns>
-    public static float Evaluate(ExpressionProgram? expression, WorldDefinition definition, ulong tick, int bodyIndex) {
+    public static float Evaluate(ExpressionProgram? expression, WorldStateLease reads) {
         if (expression is not { Instructions.Count: > 0 } authored) {
             return 0f;
         }
@@ -54,8 +52,10 @@ public static class WorldLookLaneEvaluator {
         Span<float> stack = stackalloc float[authored.Instructions.Count];
         var depth = 0;
 
-        foreach (var token in authored.Instructions) {
-            switch (token) {
+        var instructions = authored.Instructions;
+
+        for (var index = 0; (index < instructions.Count); index++) {
+            switch (instructions[index]) {
                 case { Payload: InstructionPayload.Constant constant }: {
                         if (depth >= stack.Length) {
                             return 0f;
@@ -69,16 +69,22 @@ public static class WorldLookLaneEvaluator {
                             return 0f;
                         }
 
-                        var reference = ((state.Key is { } key)
-                            ? $"state.{state.Name}.{key}"
-                            : $"state.{state.Name}"
-                        );
+                        // The spellings are only built the first time the operand is read.
+                        if (!reads.TryFind(
+                            slot: out var slot,
+                            source: state,
+                            target: false
+                        )) {
+                            slot = reads.Slot(
+                                key: state.Key?.Spelling,
+                                row: state.Name.Spelling,
+                                source: state,
+                                target: false
+                            );
+                        }
 
-                        stack[depth++] = (WorldGaitDrivers.TryReadStateNumber(
-                            bodyIndex: bodyIndex,
-                            definition: definition,
-                            reference: reference,
-                            tick: tick,
+                        stack[depth++] = (reads.TryNumber(
+                            slot: slot,
                             value: out var value
                         )
                             ? value
@@ -97,7 +103,7 @@ public static class WorldLookLaneEvaluator {
 
                         break;
                     }
-                case { Operation: ExpressionOp.Abs }: {
+                case { Operation: ExpressionOp.Absolute }: {
                         if (!TryUnary(
                             depth: ref depth,
                             stack: stack,
@@ -220,7 +226,10 @@ public static class WorldLookLaneEvaluator {
         );
     }
     /// <summary>Evaluates the four expressions in component order; absent entries are zero.</summary>
-    public static System.Numerics.Vector4 EvaluateLanes(IReadOnlyList<ExpressionProgram?>? expressions, WorldDefinition definition, ulong tick, int bodyIndex) {
+    /// <param name="expressions">The look's lane expressions, or <see langword="null"/> when it authors none.</param>
+    /// <param name="reads">The body's reads of the state mirror, bound to the body a <c>$body</c> key names.</param>
+    /// <returns>The four lane values.</returns>
+    public static System.Numerics.Vector4 EvaluateLanes(IReadOnlyList<ExpressionProgram?>? expressions, WorldStateLease reads) {
         var result = System.Numerics.Vector4.Zero;
 
         for (var index = 0; (index < Math.Min(
@@ -228,10 +237,8 @@ public static class WorldLookLaneEvaluator {
             val2: 4
         )); index++) {
             result[index] = Evaluate(
-                expressions![index],
-                definition,
-                tick,
-                bodyIndex
+                expression: expressions![index],
+                reads: reads
             );
         }
         return result;

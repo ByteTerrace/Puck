@@ -83,11 +83,13 @@ public sealed class WorldPatternDifferentialLawTests {
     private static HashSet<string> Language(PatternNode node, List<string> universe) {
         switch (node) {
             case PatternNode.Symbol s: return [((char)('0' + Ordinal(name: s.Name))).ToString()];
-            case PatternNode.Except e: return [.. Enumerable.Range(
+            case PatternNode.Except e:
+                return [.. Enumerable.Range(
                     count: Letters,
                     start: 0
                 ).Where(predicate: l => (l != Ordinal(name: e.Name))).Select(selector: l => ((char)('0' + l)).ToString())];
-            case PatternNode.AnySymbol: return [.. Enumerable.Range(
+            case PatternNode.AnySymbol:
+                return [.. Enumerable.Range(
                     count: Letters,
                     start: 0
                 ).Select(selector: l => ((char)('0' + l)).ToString())];
@@ -96,22 +98,26 @@ public sealed class WorldPatternDifferentialLawTests {
             case PatternNode.Sequence q: {
                     var set = new HashSet<string> { string.Empty };
 
-                    foreach (var item in q.Items) { set = Concat(
+                    foreach (var item in q.Items) {
+                        set = Concat(
                         left: set,
                         right: Language(
                             node: item,
                             universe: universe
                         )
-                    ); }
+                    );
+                    }
                     return set;
                 }
             case PatternNode.Choice ch: {
                     var set = new HashSet<string>();
 
-                    foreach (var item in ch.Items) { set.UnionWith(other: Language(
+                    foreach (var item in ch.Items) {
+                        set.UnionWith(other: Language(
                         node: item,
                         universe: universe
-                    )); }
+                    ));
+                    }
                     return set;
                 }
             case PatternNode.Both both: {
@@ -136,21 +142,26 @@ public sealed class WorldPatternDifferentialLawTests {
                     ));
                     return set;
                 }
-            case PatternNode.Optional o: { var set = Language(
+            case PatternNode.Optional o: {
+                    var set = Language(
                 node: o.Item,
                 universe: universe
-            ); set.Add(item: string.Empty); return set; }
-            case PatternNode.Star s: return Closure(unit: Language(
+            ); set.Add(item: string.Empty); return set;
+                }
+            case PatternNode.Star s:
+                return Closure(unit: Language(
                 node: s.Item,
                 universe: universe
             ));
-            case PatternNode.Plus p: { var unit = Language(
+            case PatternNode.Plus p: {
+                    var unit = Language(
                 node: p.Item,
                 universe: universe
             ); return Concat(
                 left: unit,
                 right: Closure(unit: unit)
-            ); }
+            );
+                }
             case PatternNode.Repeat r: {
                     var unit = Language(
                         node: r.Item,

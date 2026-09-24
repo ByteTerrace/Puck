@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using System.Numerics;
@@ -62,7 +63,7 @@ public sealed class ChannelFrameLawTests {
         using var fixture = Fixtures.FreshServer(definition: (document with {
             KitRowsRaw = [kit with { Motion = kit.Motion with { MoveFrame = MotionMoveFrame.World, FacingSnap = true } }],
         }));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

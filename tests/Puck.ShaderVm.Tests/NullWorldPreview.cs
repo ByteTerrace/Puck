@@ -245,14 +245,9 @@ public sealed class NullWorldPreview {
 
     [InlineData(false)]
     [InlineData(true)]
-    [Theory]
+    [Theory(Explicit = true)]
     public void RendersTheDocument(bool overview) {
-        var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
-
-        Assert.SkipWhen(
-            condition: string.IsNullOrEmpty(value: directory),
-            reason: "Opt-in harness: set PUCK_SKY_PREVIEW_DIR to the directory the preview is written to."
-        );
+        var directory = PreviewOutput.Directory;
 
         var field = ShaderExpressionCompiler.Compile(root: NullWorldScene.Build(point: ShaderExpression.Input(input: ShaderInput.Coordinate)));
         var sky = SkyProgram.Compile();
@@ -279,37 +274,37 @@ public sealed class NullWorldPreview {
 
         _ = Parallel.For(
             body: y => {
-            var local = 0L;
+                var local = 0L;
 
-            for (var x = 0; (x < Width); x++) {
-                var direction = RayDirection(
-                    overview: overview,
-                    x: x,
-                    y: y
+                for (var x = 0; (x < Width); x++) {
+                    var direction = RayDirection(
+                        overview: overview,
+                        x: x,
+                        y: y
+                    );
+                    var color = Trace(
+                        direction: direction,
+                        origin: Origin(overview: overview),
+                        evaluations: ref local,
+                        field: field,
+                        palette: palette,
+                        parameters: parameters,
+                        sky: sky,
+                        sun: sun
+                    );
+                    var offset = (((y * Width) + x) * 4);
+
+                    pixels[(offset + 0)] = Encode(value: color.X);
+                    pixels[(offset + 1)] = Encode(value: color.Y);
+                    pixels[(offset + 2)] = Encode(value: color.Z);
+                    pixels[(offset + 3)] = 255;
+                }
+
+                _ = Interlocked.Add(
+                    location1: ref evaluations,
+                    value: local
                 );
-                var color = Trace(
-                    direction: direction,
-                    origin: Origin(overview: overview),
-                    evaluations: ref local,
-                    field: field,
-                    palette: palette,
-                    parameters: parameters,
-                    sky: sky,
-                    sun: sun
-                );
-                var offset = (((y * Width) + x) * 4);
-
-                pixels[(offset + 0)] = Encode(value: color.X);
-                pixels[(offset + 1)] = Encode(value: color.Y);
-                pixels[(offset + 2)] = Encode(value: color.Z);
-                pixels[(offset + 3)] = 255;
-            }
-
-            _ = Interlocked.Add(
-                location1: ref evaluations,
-                value: local
-            );
-        },
+            },
             fromInclusive: 0,
             toExclusive: Height
         );
@@ -318,7 +313,7 @@ public sealed class NullWorldPreview {
         PngEncoder.Write(
             height: Height,
             path: Path.Combine(
-                path1: directory!,
+                path1: directory,
                 path2: (overview
             ? "null-world-overview.png"
             : "null-world.png")
@@ -331,7 +326,7 @@ public sealed class NullWorldPreview {
                 + $"trace: fieldEvaluations={evaluations} perPixel={(((double)evaluations) / (Width * Height)):F1} milliseconds={stopwatch.ElapsedMilliseconds}\n")
                 + $"cost:  fieldInstructionsPerPixel={((((double)evaluations) / (Width * Height)) * statistics.InstructionCount):F0}\n"),
             path: Path.Combine(
-                path1: directory!,
+                path1: directory,
                 path2: (overview
             ? "null-world-overview.txt"
             : "null-world.txt")

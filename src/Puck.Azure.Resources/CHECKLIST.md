@@ -22,7 +22,7 @@ repository's immutable OIDC subject and the existing credential. For a new envir
       these for an Azure token over OIDC.
 - [ ] `officialContentContainerName` (a template output) is a GUID, not a fixed name — it is the
       Front Door identity's own principal id, matching the container
-      `avm-temp/ptn/platform/public-flex-api/main.bicep` already provisions for platform-owned
+      `avm/ptn/platform/public-flex-api/main.bicep` already provisions for platform-owned
       content (favicon.ico's own container). The publisher must resolve it from this output,
       never hard-code it.
 - [ ] `officialContentBaseUrl` is `https://puck.byteterrace.com/official` — `puck.byteterrace.com`

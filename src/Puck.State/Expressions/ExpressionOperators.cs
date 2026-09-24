@@ -35,8 +35,12 @@ public enum ExpressionSignature : byte {
 /// <param name="Function">Whether the operation evaluates through
 /// <see cref="ExpressionArithmetic.TryValidatedFunction"/> rather than the unary or binary entry.</param>
 /// <param name="Payload">Which <see cref="InstructionPayload"/> case its instruction must carry.</param>
+/// <param name="Binding">How tightly its infix <paramref name="Symbol"/> holds its operands, in C's order: a higher
+/// binding groups first, and every infix operator associates to the left. Zero for a row with no infix symbol. The
+/// rule operand and the document value, the two expression languages, parse and print their infix operators from
+/// this column.</param>
 public sealed record ExpressionOperator(ExpressionOp Operation, int Arity, ExpressionSignature Signature,
-    long Cost, string? Name, string? Symbol, bool Function, PayloadShape Payload) {
+    long Cost, string? Name, string? Symbol, bool Function, PayloadShape Payload, int Binding) {
     /// <summary>Returns a value indicating whether the operation is defined over a numeric kind.</summary>
     /// <param name="kind">The kind.</param>
     /// <returns><see langword="true"/> when the operation admits it.</returns>
@@ -54,6 +58,9 @@ public static class ExpressionOperators {
     /// <summary>Gets every row the infix parser admits as a call, keyed by its spelling. A fold, a board query, and
     /// a vector call carry a name but parse through their own arm, so they are absent here.</summary>
     public static IReadOnlyDictionary<string, ExpressionOperator> Calls { get; }
+    /// <summary>Gets every row spelled by an infix symbol, longest symbol first, so a reader matching symbols in
+    /// this order never reads <c>&lt;&lt;</c> as <c>&lt;</c>.</summary>
+    public static IReadOnlyList<ExpressionOperator> Infix { get; }
 
     /// <summary>Returns how many values an operation consumes from the stack.</summary>
     /// <param name="operation">The operation.</param>
@@ -99,16 +106,17 @@ public static class ExpressionOperators {
         return result;
     }
     private static ExpressionOperator Define(ExpressionOp operation, int arity, ExpressionSignature signature,
-        long cost, string? name, string? symbol, bool function, PayloadShape payload) =>
+        long cost, string? name, string? symbol, bool function, PayloadShape payload, int binding = 0) =>
         new(
-            operation,
-            arity,
-            signature,
-            cost,
-            name,
-            symbol,
-            function,
-            payload
+            Arity: arity,
+            Binding: binding,
+            Cost: cost,
+            Function: function,
+            Name: name,
+            Operation: operation,
+            Payload: payload,
+            Signature: signature,
+            Symbol: symbol
         );
 
     static ExpressionOperators() {
@@ -116,11 +124,13 @@ public static class ExpressionOperators {
             static entry => entry.Name!,
             StringComparer.Ordinal
         );
+        Infix = [.. Entries.Where(predicate: static entry => (entry.Binding > 0)).OrderByDescending(keySelector: static entry => entry.Symbol!.Length)];
     }
 
     private static readonly ExpressionOperator[] Entries = [
         Define(
             arity: 2,
+            binding: 9,
             cost: 1L,
             function: false,
             name: null,
@@ -131,6 +141,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 9,
             cost: 1L,
             function: false,
             name: null,
@@ -141,6 +152,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 10,
             cost: 3L,
             function: false,
             name: null,
@@ -151,6 +163,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 10,
             cost: 16L,
             function: false,
             name: null,
@@ -181,10 +194,11 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 10,
             cost: 16L,
             function: false,
             name: null,
-            operation: ExpressionOp.Modulo,
+            operation: ExpressionOp.Remainder,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Numeric,
             symbol: "%"
@@ -201,6 +215,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 5,
             cost: 1L,
             function: false,
             name: null,
@@ -211,6 +226,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 3,
             cost: 1L,
             function: false,
             name: null,
@@ -221,6 +237,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 4,
             cost: 1L,
             function: false,
             name: null,
@@ -231,6 +248,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 8,
             cost: 1L,
             function: false,
             name: null,
@@ -241,6 +259,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 8,
             cost: 1L,
             function: false,
             name: null,
@@ -251,6 +270,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 8,
             cost: 1L,
             function: false,
             name: null,
@@ -271,6 +291,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 6,
             cost: 1L,
             function: false,
             name: null,
@@ -281,6 +302,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 6,
             cost: 1L,
             function: false,
             name: null,
@@ -291,6 +313,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 7,
             cost: 1L,
             function: false,
             name: null,
@@ -301,6 +324,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 7,
             cost: 1L,
             function: false,
             name: null,
@@ -311,6 +335,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 7,
             cost: 1L,
             function: false,
             name: null,
@@ -321,6 +346,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 7,
             cost: 1L,
             function: false,
             name: null,
@@ -329,11 +355,13 @@ public static class ExpressionOperators {
             signature: ExpressionSignature.Comparison,
             symbol: ">="
         ),
+        // Spelled `condition ? whenTrue : whenFalse` in both languages, so it carries neither a call name nor an
+        // infix symbol.
         Define(
             arity: 3,
             cost: 2L,
             function: false,
-            name: "select",
+            name: null,
             operation: ExpressionOp.Select,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Select,
@@ -344,7 +372,7 @@ public static class ExpressionOperators {
             cost: 2L,
             function: false,
             name: "setBitCount",
-            operation: ExpressionOp.PopCount,
+            operation: ExpressionOp.SetBitCount,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -403,8 +431,8 @@ public static class ExpressionOperators {
             arity: 1,
             cost: 2L,
             function: false,
-            name: "bitReverse",
-            operation: ExpressionOp.BitReverse,
+            name: "reverseBits",
+            operation: ExpressionOp.ReverseBits,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -464,7 +492,7 @@ public static class ExpressionOperators {
             cost: 1L,
             function: false,
             name: "absolute",
-            operation: ExpressionOp.Abs,
+            operation: ExpressionOp.Absolute,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Numeric,
             symbol: null
@@ -564,7 +592,7 @@ public static class ExpressionOperators {
             cost: 25L,
             function: true,
             name: "pairMaximum",
-            operation: ExpressionOp.PairMax,
+            operation: ExpressionOp.PairMaximum,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -574,7 +602,7 @@ public static class ExpressionOperators {
             cost: 25L,
             function: true,
             name: "pairMinimum",
-            operation: ExpressionOp.PairMin,
+            operation: ExpressionOp.PairMinimum,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -624,7 +652,7 @@ public static class ExpressionOperators {
             cost: 15L,
             function: true,
             name: "mortonIndex",
-            operation: ExpressionOp.Morton,
+            operation: ExpressionOp.MortonIndex,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -654,7 +682,7 @@ public static class ExpressionOperators {
             cost: 60L,
             function: true,
             name: "hilbertIndex",
-            operation: ExpressionOp.Hilbert,
+            operation: ExpressionOp.HilbertIndex,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -903,7 +931,7 @@ public static class ExpressionOperators {
             arity: 2,
             cost: 10L,
             function: true,
-            name: "square",
+            name: "squareIndex",
             operation: ExpressionOp.SquareIndex,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
@@ -1093,7 +1121,7 @@ public static class ExpressionOperators {
             arity: 2,
             cost: 18L,
             function: true,
-            name: "remainder",
+            name: "floorModulo",
             operation: ExpressionOp.FloorModulo,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
@@ -1144,7 +1172,7 @@ public static class ExpressionOperators {
             cost: 3L,
             function: true,
             name: "primeAt",
-            operation: ExpressionOp.Prime,
+            operation: ExpressionOp.PrimeAt,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -1154,7 +1182,7 @@ public static class ExpressionOperators {
             cost: 40L,
             function: true,
             name: "binomialCoefficient",
-            operation: ExpressionOp.Choose,
+            operation: ExpressionOp.BinomialCoefficient,
             payload: PayloadShape.None,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -1293,8 +1321,8 @@ public static class ExpressionOperators {
             arity: 1,
             cost: 1536L,
             function: true,
-            name: "boardFill",
-            operation: ExpressionOp.BoardFill,
+            name: "boardRay",
+            operation: ExpressionOp.BoardRay,
             payload: PayloadShape.Board,
             signature: ExpressionSignature.Int,
             symbol: null
@@ -1351,6 +1379,7 @@ public static class ExpressionOperators {
         ),
         Define(
             arity: 2,
+            binding: 2,
             cost: 1L,
             function: false,
             name: null,

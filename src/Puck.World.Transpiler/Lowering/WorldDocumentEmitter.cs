@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.State;
 using Puck.World.Transpiler.Addons;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Vocabulary;
@@ -7,6 +8,7 @@ using Puck.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -114,7 +116,8 @@ public static partial class WorldDocumentEmitter {
         string? testStem = null,
         WorldDocumentVocabulary? vocabulary = null,
         List<WorldOutput>? worldOutputs = null,
-        Assets.AssetCompilationContext? assets = null
+        Assets.AssetCompilationContext? assets = null,
+        IReadOnlyList<EnumDefinition>? inheritedEnums = null
     ) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -159,12 +162,15 @@ public static partial class WorldDocumentEmitter {
 
         scope.Annotations["WorldDocumentRoot"] = root;
         if (assets is not null) { scope.Annotations["AssetContext"] = assets; }
-        var composition = new Composition();
+        var composition = new Composition(statements: document.Statements);
 
         scope.Annotations[CompositionAnnotation] = composition;
+        _ = GetOrCreateGeneratedNames(scope: scope);
+        scope.Annotations["ModuleAliases"] = new Dictionary<JsonObject, HashSet<string>>(comparer: ReferenceEqualityComparer.Instance);
 
         scope.IndexDeclarations(statements: document.Statements);
         IndexStateFamilies(statements: document.Statements, scope: scope);
+        IndexInheritedEnums(document: document, enums: (inheritedEnums ?? []), scope: scope);
         IndexTypesAndDerivedState(statements: document.Statements, scope: scope);
         try {
             _ = DocumentLowering.At(
@@ -191,15 +197,30 @@ public static partial class WorldDocumentEmitter {
         }
 
         discoveredEmbeddings = textsMap;
+        if ((document.Schema is not null) || (document.Basis is not null)) {
+            MaterializeDeclaredEnums(root: root, scope: scope);
+        }
         EmitStateFamilies(
             root: root,
             scope: scope
         );
+        RefuseAuthoredGeneratedNames(
+            document: root,
+            scope: scope
+        );
+        RefuseReservedPlacementIds(
+            document: root,
+            scope: scope
+        );
         if (composition.Worlds.Count > 0) {
             var outputs = (worldOutputs ?? []);
+            var rootTests = new List<WorldTestWorld>();
 
-            try { FinishComposition(common: root, composition: composition, outputs: outputs, scope: scope); } catch (DocumentEvaluationException error) { diagnostics.ReportError(code: error.Code, message: error.Message, span: error.Span); }
-            testWorlds = outputs.SelectMany(selector: static output => output.TestWorlds).ToArray();
+            try { FinishComposition(common: root, composition: composition, outputs: outputs, rootTests: rootTests, scope: scope, stem: (testStem ?? "world")); } catch (DocumentEvaluationException error) { diagnostics.ReportError(code: error.Code, message: error.Message, span: error.Span); }
+            testWorlds = [
+                .. outputs.SelectMany(selector: static output => output.TestWorlds),
+                .. rootTests,
+            ];
             if (worldOutputs is null) { diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "This consumer requires one world; compile the composition to its individual documents first.", span: document.Span); }
             return new CompilationResult<JsonObject>(Diagnostics: diagnostics, Value: root);
         }
@@ -214,7 +235,7 @@ public static partial class WorldDocumentEmitter {
             type: typeof(WorldDefinition)
         );
 
-        var canonicalRoot = ((JsonObject)Canonicalize(node: root)!);
+        var canonicalRoot = ((JsonObject)DocumentLowering.Canonicalize(node: root)!);
 
         testWorlds = LowerTests(
             document: canonicalRoot,
@@ -243,10 +264,6 @@ public static partial class WorldDocumentEmitter {
             set.Add(item: text);
         }
     }
-    /// <summary>Recursively canonicalizes a JSON node by sorting every object's properties ordinally.</summary>
-    /// <param name="node">The node to canonicalize.</param>
-    /// <returns>A new canonicalized node, or <see langword="null"/> when the input was null.</returns>
-    public static JsonNode? Canonicalize(JsonNode? node) => DocumentLowering.Canonicalize(node: node);
 
     private static void ProcessStatement(StatementNode statement, JsonObject target, DocumentScope scope) {
         using var evaluation = scope.Budget.Enter(span: statement.Span);
@@ -270,7 +287,7 @@ public static partial class WorldDocumentEmitter {
                     var records = ((state["records"] as JsonArray) ?? new JsonArray());
 
                     state["records"] = records;
-                    records.Add(item: LowerRecordDeclaration(declaration: recordNode, scope: scope, state: state));
+                    records.Add(item: LowerRecordDeclaration(declaration: recordNode, pointer: ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var documentRoot) && ReferenceEquals(objA: target, objB: documentRoot)) ? $"/state/records/{records.Count}" : null), scope: scope, state: state));
                     break;
                 }
 
@@ -288,7 +305,7 @@ public static partial class WorldDocumentEmitter {
             case ImportNode importNode: {
                     // Source imports contribute compile-time module/template/let declarations through
                     // ModuleResolver. They are not runtime document composition requests.
-                    if (importNode.Path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) { break; }
+                    if (WorldSourceDeclaration.ImportsModule(import: importNode)) { break; }
                     if (target["imports"] is not JsonArray importsArray) {
                         importsArray = [];
                         target["imports"] = importsArray;
@@ -324,8 +341,9 @@ public static partial class WorldDocumentEmitter {
                         exportsObj[facetKey] = facetArr;
                     }
 
+                    // A re-export names what a module instance of this scope declares, `child.score`.
                     foreach (var name in exportNode.Names) {
-                        facetArr.AppendNode(item: JsonValue.Create(name));
+                        facetArr.AppendNode(item: JsonValue.Create((scope.TryQualify(qualified: out var instanceName, reference: name) ? instanceName : name)));
                     }
                     break;
                 }
@@ -333,7 +351,13 @@ public static partial class WorldDocumentEmitter {
             case ExpressionStatementNode exprStmt: {
                     if (exprStmt.Expression is CallExpressionNode call) {
                         if (exprStmt.IsUse) {
-                            ExpandModuleUse(call: call, scope: scope, statement: exprStmt, target: target);
+                            ExpandModuleUse(call: call, invocation: out var invocation, scope: scope, statement: exprStmt, target: target);
+                            HoistModuleTests(
+                                call: call,
+                                instance: (exprStmt.UseAlias ?? call.Name),
+                                invocation: invocation,
+                                scope: scope
+                            );
                         } else {
                             ExpandTemplateInvocation(call, target, scope);
                         }
@@ -358,17 +382,39 @@ public static partial class WorldDocumentEmitter {
                         jsonPointer: childPointer,
                         span: propNode.Span
                     );
+
+                    var lowered = DocumentLowering.LowerMember(
+                        fieldKey: propNode.Name,
+                        holder: DocumentLowering.MemberContext(scope: scope),
+                        holderName: null,
+                        memberName: propNode.Name,
+                        scope: scope,
+                        value: propNode.Value
+                    );
+
+                    // An array written element by element maps each element to the text that wrote it, at the index it
+                    // lands on once appended to whatever the member already held.
+                    if (
+                        (propNode.Value is ArrayExpressionNode authored) &&
+                        (lowered is JsonArray elements) &&
+                        (elements.Count == authored.Elements.Count)
+                    ) {
+                        var offset = (((target[propNode.Name] is JsonArray existing) && !ReferenceEquals(objA: existing, objB: elements))
+                            ? existing.Count
+                            : 0
+                        );
+
+                        for (var index = 0; (index < authored.Elements.Count); ++index) {
+                            scope.SourceMap?.Register(
+                                jsonPointer: $"{childPointer}/{(offset + index)}",
+                                span: authored.Elements[index].Span
+                            );
+                        }
+                    }
                     DocumentLowering.AssignOrExtend(
                         target,
                         propNode.Name,
-                        DocumentLowering.LowerMember(
-                            fieldKey: propNode.Name,
-                            holder: DocumentLowering.MemberContext(scope: scope),
-                            holderName: null,
-                            memberName: propNode.Name,
-                            scope: scope,
-                            value: propNode.Value
-                        )
+                        lowered
                     );
                     break;
                 }
@@ -489,13 +535,16 @@ public static partial class WorldDocumentEmitter {
                     )) {
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.TestShapeInadmissible,
-                            message: $"test '{test.Name}' is written inside another construct — a test states a whole world's behaviour, so it stands at the document's own root",
+                            message: $"test '{test.Name}' is written inside another construct — a test states a whole world's or a whole module's behaviour, so it stands at the root of the document or the module body it is about",
                             span: test.Span
                         );
 
                         break;
                     }
-                    GetOrCreateTests(scope: scope).Add(item: test);
+                    CollectTest(
+                        scope: scope,
+                        test: test
+                    );
                     break;
                 }
 
@@ -761,13 +810,16 @@ public static partial class WorldDocumentEmitter {
             return false;
         }
 
-        value = WithInteractionSides(
-            lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: scope),
-            scope: scope
-        );
+        value = LowerWithInteractionSides(expression: expression, fieldKey: fieldKey, scope: scope);
         return true;
     }
 
+    // Its own method so the closure is built only for a value that binds the sides, never on the way past for
+    // every value lowered.
+    private static JsonNode? LowerWithInteractionSides(ExpressionNode expression, DocumentScope scope, string? fieldKey) => WithInteractionSides(
+        lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: scope),
+        scope: scope
+    );
     private static JsonObject LowerBlockToObject(BlockNode block, DocumentScope scope) {
         var obj = new JsonObject();
 
@@ -796,12 +848,14 @@ public static partial class WorldDocumentEmitter {
             target: target
         );
     }
-    private static void ExpandModuleUse(ExpressionStatementNode statement, CallExpressionNode call, JsonObject target, DocumentScope scope) {
+    private static void ExpandModuleUse(ExpressionStatementNode statement, CallExpressionNode call, JsonObject target, DocumentScope scope, out DocumentScope? invocation) {
         var expanded = new JsonObject();
         var replacements = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
         var moduleAnnotations = CreateModuleAnnotations(expanded: expanded, scope: scope);
         Dictionary<string, SourceOrigin> expandedSpans;
-        DocumentScope? invocation = null;
+        DocumentScope? expansionScope = null;
+
+        invocation = null;
 
         using (scope.SourceMap?.PushOrigin(moduleInstance: (statement.UseAlias ?? call.Name)))
         using (scope.SourceMap?.PushIsolatedEntries()) {
@@ -811,18 +865,19 @@ public static partial class WorldDocumentEmitter {
                 scope,
                 ProcessStatement,
                 moduleAnnotations,
-                (parameter, value, bindingScope) => PreserveExternalReference(parameter, value, bindingScope, moduleAnnotations, replacements),
+                (parameter, value, bindingScope) => PreserveExternalReference(invocationAnnotations: moduleAnnotations, parameter: parameter, replacements: replacements, scope: bindingScope, value: value),
                 (invocationScope, statements) => {
-                    invocation = invocationScope;
-                    IndexStateFamilies(statements: statements, scope: invocationScope);
-                    IndexTypesAndDerivedState(statements: statements, scope: invocationScope);
+                    expansionScope = invocationScope;
+                    IndexStateFamilies(scope: invocationScope, statements: statements);
+                    IndexTypesAndDerivedState(scope: invocationScope, statements: statements);
                 }
             );
-            if (invocation is not null) {
-                EmitStateFamilies(root: expanded, scope: invocation);
+            if (expansionScope is not null) {
+                EmitStateFamilies(root: expanded, scope: expansionScope);
             }
             expandedSpans = CaptureExpandedSpans(node: expanded, sourceMap: scope.SourceMap);
         }
+        invocation = expansionScope;
 
         if (scope.Diagnostics.HasErrors) {
             return;
@@ -839,21 +894,46 @@ public static partial class WorldDocumentEmitter {
                 aliases = new HashSet<string>(comparer: StringComparer.Ordinal);
                 aliasesByTarget[target] = aliases;
             }
-            if (!aliases.Add(alias)) {
+            if (!aliases.Add(item: alias)) {
                 scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"Module alias '{alias}' is used more than once.", span: statement.Span);
                 return;
             }
-            if (!WorldModuleNamespace.TryApply(expanded, alias, out var reason)) {
+            // `alias.name` reads the instance, so the alias cannot also be a row or constant the scope reads by name.
+            if (
+                (scope.Annotations.TryGetValue(key: "DeclaredRows", value: out var declaredRows) && (declaredRows is HashSet<string> rows) && rows.Contains(item: alias)) ||
+                scope.Constants.ContainsKey(key: alias)
+            ) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.ModuleAliasShadowsName,
+                    message: $"module alias '{alias}' is spelled like a row or constant this scope declares, so '{alias}.name' would read both the instance's name and a cell or member of '{alias}'; rename one of them",
+                    span: statement.Span
+                );
+                return;
+            }
+            if (!WorldModuleNamespace.TryApply(alias: alias, module: expanded, qualified: out var qualified, reason: out var reason)) {
                 scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"Module instance '{alias}' cannot be expanded: {reason}", span: statement.Span);
                 return;
             }
-            PrefixCompositionEndpoints(expanded, alias);
+            foreach (var name in qualified) {
+                _ = Generated(name: name, scope: scope);
+            }
+            QualifyCompositionGrounds(alias: alias, module: expanded);
         }
-        if (!WorldModuleNamespace.TryRestoreReferences(expanded, replacements, out var restoreReason)) {
+        if (!WorldModuleNamespace.TryRestoreReferences(module: expanded, reason: out var restoreReason, replacements: replacements)) {
             scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"Module arguments cannot be restored: {restoreReason}", span: statement.Span);
             return;
         }
         PublishExpandedStructuralNames(expanded: expanded, scope: scope);
+        // A use without an alias stamps the module's names where it stands, so its records and pools are the using
+        // scope's own: a static slot such as `pieces[0].cell` reads the same beside the use as inside the module.
+        if ((statement.UseAlias is null) && (expansionScope is not null)) {
+            foreach (var (record, definition) in GetOrCreateRecords(scope: expansionScope)) {
+                GetOrCreateRecords(scope: scope).TryAdd(key: record, value: definition);
+            }
+            foreach (var (pool, record) in GetOrCreateRecordPools(scope: expansionScope)) {
+                GetOrCreateRecordPools(scope: scope).TryAdd(key: pool, value: record);
+            }
+        }
 
         MergeExpandedModule(expanded: expanded, origin: statement, pointer: "", scope: scope, spans: expandedSpans, target: target);
     }
@@ -888,7 +968,7 @@ public static partial class WorldDocumentEmitter {
                 annotations[catalogName] = new HashSet<string>(collection: catalog, comparer: StringComparer.Ordinal);
             }
         }
-        foreach (var sharedName in new[] { "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext" }) {
+        foreach (var sharedName in new[] { "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", GeneratedNamesAnnotation, "ModuleAliases" }) {
             if (scope.Annotations.TryGetValue(key: sharedName, value: out var value)) { annotations[sharedName] = value; }
         }
         return annotations;
@@ -907,6 +987,8 @@ public static partial class WorldDocumentEmitter {
         }
         while (replacements.TryGetValue(key: externalName, value: out var capturedName)) { externalName = capturedName; }
 
+        // The placeholder is a generated name, `arg$<n>`, so no name a document declares can be one; the only names
+        // it must step around are the placeholders an enclosing expansion already stands in the catalogs.
         var occupied = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var catalogName in new[] { "DeclaredRows", "DeclaredPools", "DeclaredGates" }) {
@@ -914,12 +996,11 @@ public static partial class WorldDocumentEmitter {
                 occupied.UnionWith(other: catalog);
             }
         }
-        foreach (var template in scope.Templates.Values) { CollectDeclaredNames(template.Body.Statements, occupied); }
 
         string placeholder;
         var ordinal = replacements.Count;
 
-        do { placeholder = $"__puck_arg_{ordinal++}"; } while (occupied.Contains(item: placeholder) || replacements.ContainsKey(key: placeholder));
+        do { placeholder = GeneratedName.Join("arg", (ordinal++).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)); } while (occupied.Contains(item: placeholder) || replacements.ContainsKey(key: placeholder));
         replacements.Add(key: placeholder, value: externalName);
         if (parameter.Kind is "Row" or "Gate") { ((HashSet<string>)invocationAnnotations["DeclaredRows"]!).Add(item: placeholder); }
         if (parameter.Kind == "Pool") {
@@ -934,22 +1015,6 @@ public static partial class WorldDocumentEmitter {
             Line: value.Line,
             Column: value.Column
         );
-
-        static void CollectDeclaredNames(IReadOnlyList<StatementNode> statements, HashSet<string> names) {
-            foreach (var child in statements) {
-                switch (child) {
-                    case StateTableDeclarationNode row: names.Add(item: row.Name); break;
-                    case StateSlotDeclarationNode row: names.Add(item: row.Name); break;
-                    case StatePileDeclarationNode row: names.Add(item: row.Name); break;
-                    case StateGridDeclarationNode row: names.Add(item: row.Name); break;
-                    case StatePoolDeclarationNode pool: names.Add(item: pool.Name); break;
-                    case StatePairPoolDeclarationNode pool: names.Add(item: pool.Name); break;
-                    case RuleBlockNode rule: names.Add(item: rule.Name); break;
-                    case BlockNode block: CollectDeclaredNames(block.Statements, names); break;
-                    case ForStatementNode loop: CollectDeclaredNames(loop.Body, names); break;
-                }
-            }
-        }
     }
     private static Dictionary<string, SourceOrigin> CaptureExpandedSpans(JsonNode node, SourceMap? sourceMap) {
         var spans = new Dictionary<string, SourceOrigin>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -958,7 +1023,7 @@ public static partial class WorldDocumentEmitter {
         return spans;
 
         void Visit(JsonNode current, string pointer) {
-            if (sourceMap?.TryGetOrigin(pointer, out var origin) == true) { spans[pointer] = origin; }
+            if (sourceMap?.TryGetOrigin(jsonPointer: pointer, origin: out var origin) == true) { spans[pointer] = origin; }
             if (current is JsonObject obj) {
                 foreach (var entry in obj) { if (entry.Value is not null) { Visit(current: entry.Value, pointer: $"{pointer}/{entry.Key}"); } }
             } else if (current is JsonArray array) {
@@ -990,7 +1055,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         void RegisterTree(JsonNode? node, string sourcePointer, string targetPointer) {
-            if (spans.TryGetValue(key: sourcePointer, value: out var sourceOrigin)) { scope.SourceMap?.Register(targetPointer, sourceOrigin); }
+            if (spans.TryGetValue(key: sourcePointer, value: out var sourceOrigin)) { scope.SourceMap?.Register(jsonPointer: targetPointer, origin: sourceOrigin); }
             if (node is JsonObject obj) {
                 foreach (var child in obj) { RegisterTree(node: child.Value, sourcePointer: $"{sourcePointer}/{child.Key}", targetPointer: $"{targetPointer}/{child.Key}"); }
             } else if (node is JsonArray array) {
@@ -1014,41 +1079,26 @@ public static partial class WorldDocumentEmitter {
             var subId = subBlock.Identifier.ToLowerInvariant();
 
             if (subId is "layout" or "layouts") {
-                if (viewsObj["layouts"] is not JsonArray layoutsArr) {
-                    layoutsArr = [];
-                    viewsObj["layouts"] = layoutsArr;
-                }
-                scope.SourceMap?.Register(
-                    jsonPointer: $"{scope.CurrentPointer}/layouts/{layoutsArr.Count}",
-                    span: subBlock.Span
-                );
-                var layoutObj = LowerBlockToObject(
+                AppendNamedBlock(
                     block: subBlock,
-                    scope: scope
+                    scope: scope,
+                    target: viewsObj,
+                    targetKey: "layouts"
                 );
-
-                if (subBlock.Name is not null) {
-                    layoutObj["name"] = subBlock.Name;
-                }
-                layoutsArr.AppendNode(item: layoutObj);
             } else if (subId is "pipeline" or "pipelines") {
-                if (viewsObj["pipelines"] is not JsonArray pipelinesArr) {
-                    pipelinesArr = [];
-                    viewsObj["pipelines"] = pipelinesArr;
-                }
-                scope.SourceMap?.Register(
-                    jsonPointer: $"{scope.CurrentPointer}/pipelines/{pipelinesArr.Count}",
-                    span: subBlock.Span
-                );
-                var pipelineObj = LowerBlockToObject(
+                AppendNamedBlock(
                     block: subBlock,
-                    scope: scope
+                    scope: scope,
+                    target: viewsObj,
+                    targetKey: "pipelines"
                 );
-
-                if (subBlock.Name is not null) {
-                    pipelineObj["name"] = subBlock.Name;
-                }
-                pipelinesArr.AppendNode(item: pipelineObj);
+            } else if (subId is "graph" or "graphs") {
+                AppendNamedBlock(
+                    block: subBlock,
+                    scope: scope,
+                    target: viewsObj,
+                    targetKey: "graphs"
+                );
             } else if (subId is "seatrig") {
                 scope.SourceMap?.Register(
                     jsonPointer: $"{scope.CurrentPointer}/seatRig",
@@ -1099,6 +1149,30 @@ public static partial class WorldDocumentEmitter {
             );
         }
     }
+    private static void AppendNamedBlock(
+        BlockNode block,
+        DocumentScope scope,
+        JsonObject target,
+        string targetKey
+    ) {
+        if (target[targetKey] is not JsonArray array) {
+            array = [];
+            target[targetKey] = array;
+        }
+        scope.SourceMap?.Register(
+            jsonPointer: $"{scope.CurrentPointer}/{targetKey}/{array.Count}",
+            span: block.Span
+        );
+        var obj = LowerBlockToObject(
+            block: block,
+            scope: scope
+        );
+
+        if (block.Name is not null) {
+            obj["name"] = block.Name;
+        }
+        array.AppendNode(item: obj);
+    }
     private static void ResolveAddonHash(JsonObject addon, DocumentScope scope, SourceSpan span = default) {
         var sourcePath = (addon["modulePath"]?.ToString() ?? (addon["source"]?.ToString() ?? (addon["path"]?.ToString() ?? (addon["rom"]?.ToString() ?? (addon["name"]?.ToString() ?? "addon")))));
         var hashToken = addon["hash"]?.ToString();
@@ -1115,16 +1189,16 @@ public static partial class WorldDocumentEmitter {
                 path2: sourcePath
             );
 
-            if (File.Exists(path: fullPath)) {
-                wasmBytes = File.ReadAllBytes(path: fullPath);
+            if (CompileInputs.Exists(path: fullPath)) {
+                wasmBytes = CompileInputs.ReadAllBytes(path: fullPath);
             }
         }
 
         if (
             (wasmBytes is null) &&
-            File.Exists(path: sourcePath)
+            CompileInputs.Exists(path: sourcePath)
         ) {
-            wasmBytes = File.ReadAllBytes(path: sourcePath);
+            wasmBytes = CompileInputs.ReadAllBytes(path: sourcePath);
         }
 
         if (wasmBytes is not null) {

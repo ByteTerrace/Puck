@@ -5,7 +5,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Platform;
 using Puck.Platform.Probes;
-using Puck.SdfVm;
+using Puck.Hosting;
 using Puck.World.Client;
 using Puck.SdfVm.Views;
 
@@ -102,7 +102,7 @@ internal sealed partial class WorldScreenBinder {
     /// <summary>Reads a named camera's offscreen view as a kernel input ring, registering the view for export on first
     /// request; the ring arrives at a later publish. Export needs the Direct3D 12 host: the offscreen engine's
     /// exportable image is opened by the probe kernel bench's Direct3D 11 <c>OpenSharedResource1</c>, and a Vulkan
-    /// host's exported handle is Vulkan-to-Vulkan only (see <see cref="Puck.Vulkan.VulkanGpuExportableStorageImage"/>'s
+    /// host's exported handle is Vulkan-to-Vulkan only (see <see cref="Puck.Vulkan.VulkanGpuExportableImage"/>'s
     /// own remarks) — refused loudly here rather than silently producing a ring nothing can read.</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
     /// <param name="ring">The exported ring, set only when this returns <see langword="true"/>.</param>
@@ -278,7 +278,7 @@ internal sealed partial class WorldScreenBinder {
         var width = camera.RenderWidth;
         var height = camera.RenderHeight;
 
-        view.ExportFactory = device => m_surfaceExport!.CreateSharedComputeStorageImage(
+        view.ExportFactory = device => m_surfaceExport!.CreateSharedComputeImage(
             deviceContext: device,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: height,
@@ -410,7 +410,7 @@ internal sealed partial class WorldScreenBinder {
         public (int Width, int Height)? Request { get; set; }
         public CameraGpuTargetSet? Targets { get; set; }
 
-        public SdfScreenSourceFrame AcquireFrame() {
+        public GpuImageLease AcquireFrame() {
             if (
                 !Live ||
                 (Targets is not { } targets)

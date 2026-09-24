@@ -32,17 +32,16 @@ or the `$parked:` reserved rule channel.
   (`identityDomain`/`identitySubject`) is what a reconnecting peer is matched
   against for body-resume (below).
 
-## Park-with-grace (deliverable: reconnect primitives)
+## Park-with-grace
 
-Before this wave, both doors' leave/disconnect path nulled `Entry.Body`,
-cleared `Entry.Active` (and, for a peer, `Entry.IsRemoteHuman`) IMMEDIATELY.
-Now, when the compiled `definition.PopulationReconnectGraceTicks`
-(`WorldDefinition.cs:322`, a `CompiledTickDuration` derived from the authored
+When the compiled `definition.PopulationReconnectGraceTicks` (a
+`CompiledTickDuration` derived from the authored
 `population.reconnectGraceSeconds` field at the world's own simulation rate;
-default 3.0s = 720 ticks at 240 Hz) is finite and positive — `IsZero` keeps
-the exact pre-park immediate-teardown behavior, and `IsNever` (a positive
-authored grace compiled at simulation rate 0) parks the body forever, never
-sweeping it — the SAME call instead:
+default 3.0 s = 90 ticks at the unauthored 30 Hz) is `IsZero`, both doors'
+leave/disconnect path tears down immediately: it nulls `Entry.Body` and clears
+`Entry.Active` (and, for a peer, `Entry.IsRemoteHuman`). Any other grace parks
+the body instead (`IsNever`, a positive authored grace compiled at simulation
+rate 0, parks it forever and never sweeps it) — the same call:
 
 1. Sets `Entry.Parked = true` and `Entry.ParkedUntilTick = tick +` the
    compiled grace's tick count (`WorldPopulation`'s own cache of
@@ -61,7 +60,7 @@ sweeping it — the SAME call instead:
    removes it from the pool.
 
 `WorldPopulation.ReclaimExpiredParks(tick)` — swept every `Step`, right beside
-`WorldServer.ReclaimExpiredEscrows` (same tick-driven, no-wall-clock,
+`WorldGrants.ReclaimExpiredEscrows` (same tick-driven, no-wall-clock,
 replay-deterministic shape `OwnershipEscrow.DeadlineTick` already established)
 — tears down every entry where `Active && Parked && tick >= ParkedUntilTick`:
 drops the body, clears `Active`/`Parked`/`IsRemoteHuman`. It never touches the
@@ -121,7 +120,7 @@ connect (never a transfer commit) whose door verdict's
 (`identityDomain`, `identitySubject`) pair matches a parked peer resumes that
 SAME retained body and generation in place
 (`WorldPopulation.TryResumeParkedPeer`, called from
-`WorldServer.TryAdmitVerifiedParticipant`), then re-dispatches the ordinary
+`WorldGrants.TryAdmitVerifiedParticipant`), then re-dispatches the ordinary
 `PeerAdmitted` event carrying the fresh connection's minted admission
 templates — which is also what unparks and re-mints a replayed resume
 (`ApplyPeerAdmitted`'s generation-guarded unpark). An unverified or
@@ -147,7 +146,7 @@ all, reads `0` (the ordinary "absent/inapplicable reads as the neutral falsy
 value" convention `$region:`/`$machine:` already set — NOT the inverted
 `s_noBodyDistance` sentinel `$distance:` uses, since `0` is the correct
 "never gate open on a body that was never parked" answer here).
-`WorldServer.ReadParkedRemaining`/`WorldPopulation.ParkedRemainingTicks` is
+`WorldRuleHost.Read(ParkedOperand)` over `WorldPopulation.ParkedRemainingTicks` is
 the runtime read; `WorldFactsCompiler`'s `ResolveOperand` is the compile-time
 parse (`WorldRuleRefusal.ParkedChannelMalformed` on a bad spelling).
 
@@ -164,8 +163,7 @@ gate (see the gotcha below).
 
 Everything past park-with-grace/body-resume/`$parked:` above is an ordinary
 authored `WorldRule` — no further engine surface exists or is needed.
-The retired `reconnect.world.json` scenario (git history; retired alongside `combat.world.json`,
-whose rules now live in `modules/arena.world.json`) was the worked forcing-function demo: a CC countdown (`stunRemaining`, a plain
+Three rule shapes cover a reconnect policy: a CC countdown (`stunRemaining`, a plain
 `Level`-mode decrement rule) keeps ticking through a park because rule
 evaluation never consults occupancy (see "Park-with-grace" above); a
 periodic-attack rule gated on `$argmax:threat` resolving to the PARKED body

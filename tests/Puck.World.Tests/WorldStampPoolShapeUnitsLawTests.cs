@@ -2,7 +2,6 @@ using System.Numerics;
 
 using Puck.SignedDistance;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -16,62 +15,11 @@ namespace Puck.World.Tests;
 public sealed class WorldStampPoolShapeUnitsLawTests {
     private const string PrototypeId = "radii";
 
-    private static SdfProgram Program(IReadOnlyList<ShapeDocument> shapes, float bodyScale) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: [new(
-                        "#AAAAAA",
-                        null,
-                        null,
-                        null
-                    )],
-                Shapes: shapes,
-                Frames: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: bodyScale,
-                Motion: WorldLookMotion.Default
-            )],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: false,
-            maxPlacementScale: bodyScale,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static SdfProgram Program(IReadOnlyList<ShapeDocument> shapes, float bodyScale) => CreationFixtures.EmitPool(
+        bodyScale: bodyScale,
+        name: PrototypeId,
+        shapes: shapes
+    );
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, float? rounding, float? chamfer) => new(
         Id: 0,
         Name: null,
@@ -160,10 +108,16 @@ public sealed class WorldStampPoolShapeUnitsLawTests {
             precision: 6
         );
     }
-    [Fact]
-    public void ALookAtScaleOneEmitsTheAuthoredDilateVerbatim() {
-        // Dilate/Onion are field ops of their own (SdfOp.Dilate/Onion), not a lane on the shape's own instruction.
-        var shape = (Shape(
+    // Dilate/Onion are field ops of their own (SdfOp.Dilate/Onion), not a lane on the shape's own instruction: a look
+    // at scale one emits the authored radius verbatim and a look at scale two doubles it.
+    [InlineData(SdfOp.Dilate, 1f)]
+    [InlineData(SdfOp.Dilate, 2f)]
+    [InlineData(SdfOp.Onion, 2f)]
+    [Theory]
+    public void ALooksScaleMultipliesTheAuthoredFieldOpRadius(SdfOp op, float bodyScale) {
+        const float Authored = 0.02f;
+
+        var shape = Shape(
             SdfSolidPrimitive.Box,
             new Vector3(
                 x: 0.3f,
@@ -172,15 +126,17 @@ public sealed class WorldStampPoolShapeUnitsLawTests {
             ),
             null,
             null
-        ) with { Dilate = 0.02f });
-        var program = Program(
-            bodyScale: 1f,
-            shapes: [shape]
         );
-        var instruction = program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.Dilate));
+        var program = Program(
+            bodyScale: bodyScale,
+            shapes: [((op == SdfOp.Dilate)
+                ? (shape with { Dilate = Authored })
+                : (shape with { Onion = Authored }))]
+        );
+        var instruction = program.Instructions.Single(predicate: instruction => (instruction.Op == op));
 
         Assert.Equal(
-            0.02f,
+            (Authored * bodyScale),
             instruction.Data0.X,
             precision: 6
         );
@@ -213,54 +169,6 @@ public sealed class WorldStampPoolShapeUnitsLawTests {
         );
         Assert.Equal(
             (0.3f - 0.02f),
-            instruction.Data0.X,
-            precision: 6
-        );
-    }
-    [Fact]
-    public void ALookAtScaleTwoDoublesTheEmittedDilate() {
-        var shape = (Shape(
-            SdfSolidPrimitive.Box,
-            new Vector3(
-                x: 0.3f,
-                y: 0.2f,
-                z: 0.3f
-            ),
-            null,
-            null
-        ) with { Dilate = 0.02f });
-        var program = Program(
-            bodyScale: 2f,
-            shapes: [shape]
-        );
-        var instruction = program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.Dilate));
-
-        Assert.Equal(
-            0.04f,
-            instruction.Data0.X,
-            precision: 6
-        );
-    }
-    [Fact]
-    public void ALookAtScaleTwoDoublesTheEmittedOnion() {
-        var shape = (Shape(
-            SdfSolidPrimitive.Box,
-            new Vector3(
-                x: 0.3f,
-                y: 0.2f,
-                z: 0.3f
-            ),
-            null,
-            null
-        ) with { Onion = 0.02f });
-        var program = Program(
-            bodyScale: 2f,
-            shapes: [shape]
-        );
-        var instruction = program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.Onion));
-
-        Assert.Equal(
-            0.04f,
             instruction.Data0.X,
             precision: 6
         );

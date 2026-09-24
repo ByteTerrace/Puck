@@ -16,11 +16,11 @@ namespace Puck.World;
 /// and returns <see cref="CommandResult.None"/> — the server prints the loud <c>[world.mutation: … applied/rejected]</c> line.
 /// </summary>
 public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
-    // Narrower than WorldPrincipal.TokenGrammar: a group member/ownership party is never group:<id> or document:<id>
+    // Narrower than Grantee.TokenGrammar: a group member/ownership party is never group:<id> or document:<id>
     // (a group cannot itself be a member — see this class's own remarks) or world (never a real actor).
     private const string MemberTokenGrammar = "seat1..seat4|console|addon:<name>|peer:<n>:<generation>";
 
-    private delegate WorldMutation Build(string groupId, WorldPrincipal member, WorldPrincipal actor);
+    private delegate WorldMutation Build(string groupId, Principal member, Principal actor);
 
     // The read-back: kinds, then every live group row (id-filtered when requested), then ownership bindings. Omits a
     // group with no section at all (an OPTIONAL document that never declared `groups`).
@@ -161,7 +161,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 }
 
                 link.SubmitWorldMutation(mutation: new WorldMutation.FormGroup(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Id: args[0].ToString(),
                     KindName: args[1].ToString()
                 ));
@@ -269,7 +269,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     return CommandResult.Error(output: $"[world.ownership.offer: unknown subject '{args[0].ToString()}' — group:<id>]");
                 }
 
-                if (!WorldGrantCommandModule.TryParsePrincipal(
+                if (!PrincipalTokens.TryParse(
                     token: args[1],
                     principal: out var recipient
                 )) {
@@ -284,7 +284,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 }
 
                 link.SubmitWorldMutation(mutation: new WorldMutation.OfferOwnership(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Subject: subject,
                     Recipient: recipient,
                     DeadlineTick: deadline
@@ -337,7 +337,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             }
 
             link.SubmitWorldMutation(mutation: new WorldMutation.SettleOwnership(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 Subject: subject,
                 Reclaim: reclaim
             ));
@@ -355,7 +355,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 );
             }
 
-            if (!WorldGrantCommandModule.TryParsePrincipal(
+            if (!PrincipalTokens.TryParse(
                 token: args[1],
                 principal: out var member
             )) {
@@ -365,7 +365,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             link.SubmitWorldMutation(mutation: build(
                 args[0].ToString(),
                 member,
-                context.ActingPrincipal()
+                context.Principal
             ));
 
             return CommandResult.None;

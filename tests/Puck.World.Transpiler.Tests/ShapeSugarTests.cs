@@ -20,23 +20,10 @@ public class ShapeSugarTests {
         );
     }
     private static JsonObject FirstPrototype(string body) {
-        var json = Lower(body: body);
+        var json = WorldSources.LowerClean(body: body);
         var prototypes = Assert.IsType<JsonArray>(@object: json["prototypes"]);
 
         return Assert.IsType<JsonObject>(@object: prototypes[0]);
-    }
-    private static JsonObject Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.False(
-            condition: compilation.Diagnostics.HasErrors,
-            userMessage: compilation.Diagnostics.FormatReport(source)
-        );
-        return compilation.RequireJson();
     }
 
     [Fact]

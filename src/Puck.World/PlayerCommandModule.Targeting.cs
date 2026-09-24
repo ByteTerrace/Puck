@@ -55,7 +55,7 @@ internal sealed partial class PlayerCommandModule {
                 Register: register,
                 Subject: subject
             ),
-            principal: context.ActingPrincipal()
+            principal: context.Principal
         );
 
         return TargetsResult(

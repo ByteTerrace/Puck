@@ -4,30 +4,11 @@ using Puck.Assets;
 namespace Puck.Launcher.Release;
 
 /// <summary>
-/// The one cross-platform <see cref="IUpdateApplier"/>: write-temp-then-<see cref="File.Move(string, string, bool)"/>
-/// is atomic on both NTFS and POSIX filesystems, so nothing OS-specific is needed once the update model is a pointer
-/// swap rather than an in-place executable/DLL replacement.
+/// The one cross-platform <see cref="IUpdateApplier"/>: every pointer it writes goes through
+/// <see cref="AtomicFile"/>, whose temp-then-rename is atomic on both NTFS and POSIX filesystems, so nothing
+/// OS-specific is needed once the update model is a pointer swap rather than an in-place executable/DLL replacement.
 /// </summary>
 public sealed class FileUpdateApplier : IUpdateApplier {
-    private static void WriteTextAtomic(string path, string content) {
-        var directory = Path.GetDirectoryName(path: path)!;
-        var tmpPath = Path.Combine(
-            path1: directory,
-            path2: $"{Guid.NewGuid():n}.tmp"
-        );
-
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllText(
-            contents: content,
-            path: tmpPath
-        );
-        File.Move(
-            destFileName: path,
-            overwrite: true,
-            sourceFileName: tmpPath
-        );
-    }
-
     /// <inheritdoc/>
     public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
@@ -65,7 +46,7 @@ public sealed class FileUpdateApplier : IUpdateApplier {
                 return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' is missing from '{versionDirectory}' — refused rather than applied");
             }
 
-            var actualHash = $"sha256/{ContentAddressedStore.ComputeHash(content: File.ReadAllBytes(path: filePath))}";
+            var actualHash = ContentPin.OfFile(path: filePath).ToString();
 
             if (!string.Equals(
                 a: actualHash,
@@ -76,12 +57,12 @@ public sealed class FileUpdateApplier : IUpdateApplier {
             }
         }
 
-        WriteTextAtomic(
+        AtomicFile.WriteAllText(
             path: Path.Combine(
                 path1: versionDirectory,
                 path2: "state-generation"
             ),
-            content: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
+            contents: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
         );
 
         var currentPath = Path.Combine(
@@ -94,18 +75,18 @@ public sealed class FileUpdateApplier : IUpdateApplier {
         );
 
         if (previousVersion is { Length: > 0 }) {
-            WriteTextAtomic(
+            AtomicFile.WriteAllText(
                 path: Path.Combine(
                     path1: root,
                     path2: "last-good"
                 ),
-                content: previousVersion
+                contents: previousVersion
             );
         }
 
-        WriteTextAtomic(
+        AtomicFile.WriteAllText(
             path: currentPath,
-            content: manifest.Version
+            contents: manifest.Version
         );
 
         return new UpdateApplyResult(

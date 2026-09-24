@@ -1,3 +1,4 @@
+using Puck.Vulkan.Interop;
 namespace Puck.Vulkan.Messages;
 
 /// <summary>
@@ -9,12 +10,12 @@ namespace Puck.Vulkan.Messages;
 /// <param name="GraphicsQueueHandle">The native <c>VkQueue</c> handle the work is submitted to.</param>
 /// <param name="ImageAvailableSemaphoreHandle">The native <c>VkSemaphore</c> handle waited on before execution (the acquired image is ready).</param>
 /// <param name="RenderFinishedSemaphoreHandle">The native <c>VkSemaphore</c> handle signaled when execution completes (ready to present).</param>
-/// <param name="DeviceHandle">The native <c>VkDevice</c> handle.</param>
+/// <param name="Device">The command table of the logical device.</param>
 public readonly record struct VulkanFrameSubmitRequest(
     nint CommandBufferHandle,
     nint FenceHandle,
     nint GraphicsQueueHandle,
     nint ImageAvailableSemaphoreHandle,
     nint RenderFinishedSemaphoreHandle,
-    nint DeviceHandle
+    VulkanDeviceCommands Device
 );

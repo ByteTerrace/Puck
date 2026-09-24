@@ -1,8 +1,4 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -41,7 +37,7 @@ public sealed class CartridgeStateCapacityTests {
                 Name: "touch",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "done"),
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     right: CartridgeExpressions.Of(constant: 0)
                 ),
                 Body: [
@@ -72,18 +68,17 @@ public sealed class CartridgeStateCapacityTests {
                 ]
             )],
         };
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-        var result = compiler.Compile(document: document);
+        var result = CartridgeProbe.Compile(document: document);
 
         // The last array starts past the fixed page on the humble machine, which is the point of the test.
         if (target == "cgb") {
             Assert.True(condition: (result.Arrays["block27"] >= 0xD000));
         }
 
-        using var machine = new CapacityProbe(result: result);
+        using var machine = new CartridgeProbe(
+            label: "capacity",
+            result: result
+        );
 
         machine.Run(frames: 12);
         Assert.Equal(
@@ -98,33 +93,5 @@ public sealed class CartridgeStateCapacityTests {
             expected: 27,
             actual: machine.Read(address: result.Arrays["block27"])
         );
-    }
-
-    private sealed class CapacityProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public CapacityProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "capacity"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "capacity"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
     }
 }

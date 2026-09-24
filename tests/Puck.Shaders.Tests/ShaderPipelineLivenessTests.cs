@@ -10,7 +10,6 @@ public sealed class ShaderPipelineLivenessTests {
         new(
             name,
             (name + ".hlsl"),
-            ShaderSourceLanguage.Hlsl,
             "main",
             ShaderPipelinePassKind.Compute,
             inputs,
@@ -21,7 +20,7 @@ public sealed class ShaderPipelineLivenessTests {
     public void A_previous_frame_dependency_retains_its_writer_without_creating_a_same_frame_edge() {
         var definition = new ShaderPipelineDefinition(
             "history",
-            [Image(name: "history") with { History = true, Persistent = true, Initialization = ShaderPipelineInitialization.Zero }, Image(name: "image")],
+            [Image(name: "history") with { History = true, Initialization = ShaderPipelineInitialization.Zero }, Image(name: "image")],
             [Pass(
                     "display",
                     [new(

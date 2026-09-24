@@ -88,12 +88,41 @@ public sealed partial class StateArena {
         }
         m_undoWriter = null;
     }
-    /// <summary>Closes and retains the logical turn in the group's bounded ring.</summary>
+    /// <summary>Closes and retains the logical turn in the group's bounded ring. A turn that leaves every position it
+    /// wrote holding what it held when the turn began changed nothing, so it takes no retained slot, the same as a
+    /// turn that wrote nothing.</summary>
     public void CommitUndoTurn(string group) {
         var state = RequirePendingUndo(group: group);
 
+        if (state.Pending!.Rewindable && !PendingChangedAnything(segment: state.Pending)) {
+            state.DiscardPendingEntries();
+        }
         state.CommitPending();
     }
+
+    // Whether a retained turn left any position different from the value it recorded for it: each entry holds the
+    // first value its position held in the turn.
+    private bool PendingChangedAnything(ArenaUndoSegment segment) {
+        for (var index = 0; (index < segment.Count); index++) {
+            var retained = segment[index];
+            var entry = retained.Entry;
+            var differs = (entry.Column switch {
+                ArenaColumn.Vector => !segment.Components(entry: retained).SequenceEqual(other: VectorSpan(slot: entry.Index)),
+                ArenaColumn.MemberKey => !string.Equals(
+                    a: retained.MemberKey,
+                    b: ((ReadNumberRaw(column: ArenaColumn.MemberKey, index: entry.Index) is var ordinal and >= 0L) ? m_keys.Names[((int)ordinal)].Value : null),
+                    comparisonType: StringComparison.Ordinal
+                ),
+                _ => Differs(entry: entry),
+            });
+
+            if (differs) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Abandons a logical turn's retained record while keeping its already committed state writes.</summary>
     public void CancelUndoTurn(string group) {
         var state = RequirePendingUndo(group: group);
@@ -104,7 +133,7 @@ public sealed partial class StateArena {
         state.CancelPending();
     }
     /// <summary>Restores and removes the newest rewindable turn.</summary>
-    public bool TryRewindTurn(string group, out string reason) {
+    public bool TryRewindGroup(string group, out string reason) {
         if (m_journal.Scopes != 0) {
             reason = $"undo group '{group}' cannot rewind inside an open arena scope";
             return false;
@@ -407,6 +436,7 @@ public sealed partial class StateArena {
     }
 
     private void RetainDirectWrite(ArenaColumn column, int index, long number, object? reference = null, ReadOnlySpan<sbyte> components = default) {
+        WindowOpaque(column: column, index: index);
         if (m_undo is null) {
             return;
         }
@@ -464,6 +494,62 @@ public sealed partial class StateArena {
         }
         return bytes;
     }
+    /// <summary>Returns the work rewinding one retained turn of <paramref name="plan"/> costs at its widest, in the
+    /// element operations every other price is written in: finding the group by name, then for every position a turn
+    /// can retain its restore, its generation and version, its reindex mark and a containment test against every
+    /// configured group, then each vector component copied back and cleared, each keyed or ordered row's key index
+    /// rebuilt, and the popped segment cleared.</summary>
+    /// <param name="catalog">The catalog the plans' rows address.</param>
+    /// <param name="layout">The arena layout the plans' rows are laid out in.</param>
+    /// <param name="plans">Every undo plan the arena is configured with; a restored position is tested against each.</param>
+    /// <param name="plan">The plan whose newest turn is rewound.</param>
+    /// <returns>The work units.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="OverflowException">The work does not fit a 64-bit count.</exception>
+    /// <remarks>A turn retains each position at most once, so a segment holds at most one entry per position the
+    /// plan's rows can store, less the clock lanes of a row no trait rebases. The rewind's own <see cref="ArenaWork.Visits"/>
+    /// count one per entry, its components, and each rebuilt row's members.</remarks>
+    public static long EstimateRewindWork(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<ArenaUndoPlan> plans, ArenaUndoPlan plan) {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(plans);
+        ArgumentNullException.ThrowIfNull(plan);
+
+        var rows = plan.Rows.Distinct().Order().ToArray();
+        var entries = 0L;
+        var components = ((long)UndoComponentCapacity(layout: layout, rows: rows));
+
+        foreach (var row in rows) {
+            // The reservation keeps every document row's clock lanes, but only a traited row's live write rebases
+            // them, so an untraited row's turn never retains one.
+            var clocks = (catalog.IsPoolRow(rowOrdinal: row)
+                ? catalog.IsPoolFieldRow(rowOrdinal: row)
+                : ArenaLayout.HasTraits(row: catalog.Rows[row])
+            );
+
+            foreach (var column in ArenaColumns.All) {
+                if (clocks || (column is not (ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet))) {
+                    entries = checked((entries + UndoPositionCount(catalog: catalog, column: column, layout: layout[row], row: row)));
+                }
+            }
+        }
+        var containment = 0L;
+        var reindex = 0L;
+
+        foreach (var other in plans) {
+            // The identity test, then a binary search of the group's sorted rows.
+            containment = checked((containment + (2L + System.Numerics.BitOperations.Log2(value: (((uint)other.Rows.Length) + 1U)))));
+        }
+        foreach (var row in rows) {
+            ref readonly var rowLayout = ref layout[row];
+
+            if ((rowLayout.Shape is (RowShape.Keyed or RowShape.Ordered)) && !catalog.IsPoolRow(rowOrdinal: row)) {
+                reindex = checked((reindex + (2L * rowLayout.CellCapacity)));
+            }
+        }
+
+        return checked(((((4L + (3L * plan.Name.Length)) + (entries * (6L + containment))) + (2L * components)) + reindex));
+    }
 
     private static long EstimateUndoGroupBytes(StateCatalog catalog, ArenaLayout layout, int[] rows, int depth) {
         var entryCapacity = UndoEntryCapacity(catalog: catalog, layout: layout, rows: rows);
@@ -520,7 +606,13 @@ public sealed partial class StateArena {
             // A pool snapshot may carry a persisted clock even when its field declares no advancing trait, and a
             // later load may introduce one without changing the layout. Reserve every pool field's clock columns.
             ArenaColumn.ClockEpochTick or ArenaColumn.ClockEpochEngineTick or ArenaColumn.ClockY0 or ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet => ((!poolRow || poolFieldRow) ? layout.CellCapacity : 0),
-            ArenaColumn.Provenance or ArenaColumn.Behavior or ArenaColumn.Visibility or ArenaColumn.Observation => (poolRow ? 0 : layout.CellCapacity),
+            // A turn is written by its group's rules, and no rule writes a cell's provenance, behavior, or audience
+            // restriction: those arrive only through an import, which never runs inside a pass. Only a knowledge
+            // row's observe transform stamps a last-seen observation. Reserving the unreachable columns would price
+            // every board cell at kilobytes and keep a board out of any useful depth; a write that does reach one
+            // makes its turn unrewindable instead (RetainWrite).
+            ArenaColumn.Provenance or ArenaColumn.Behavior or ArenaColumn.Visibility => 0,
+            ArenaColumn.Observation => ((!poolRow && (catalog.Rows[row].Knowledge is not null)) ? layout.CellCapacity : 0),
             ArenaColumn.HistoryCursor => ((layout.Shape == RowShape.Ring) ? 1 : 0),
             ArenaColumn.DrawCursor => ((layout.MaskWordStart >= 0) ? 1 : 0),
             ArenaColumn.DrawnMaskWord => (layout.MaskCount * 4),
@@ -556,16 +648,16 @@ public sealed partial class StateArena {
             var retained = segment[index];
             var entry = retained.Entry;
 
-            if (entry.Column == ArenaColumn.MemberKey) {
-                entry = entry with { Number = ((retained.MemberKey is null) ? -1L : (m_keys.TryResolve(CellName.Parse(candidate: retained.MemberKey), out var memberKey) ? memberKey.Ordinal : throw new InvalidOperationException(message: $"Retained member key '{retained.MemberKey}' is absent from the arena ledger."))) };
-            }
+            // A retained member-key entry carries its key's ledger ordinal: the ledger only ever sheds keys a rewound
+            // scope minted, and a retained turn holds committed writes, so the ordinal still names the same key.
+            Visit(lanes: (1L + retained.ComponentLength));
             if (retained.ComponentLength > 0) {
                 VectorSpan(slot: entry.Index).Clear();
                 segment.Components(entry: retained).CopyTo(destination: VectorSpan(slot: entry.Index));
             } else {
                 Restore(entry: entry);
             }
-            BumpGeneration(column: entry.Column, index: entry.Index, tailPush: false);
+            BumpGeneration(column: entry.Column, index: entry.Index);
             MarkReindex(column: entry.Column, epoch: epoch, index: entry.Index);
             var changedRow = m_layout.RowOf(column: entry.Column, index: entry.Index);
 
@@ -639,6 +731,10 @@ public sealed partial class StateArena {
             }
             m_seen.Add(key: identity, value: m_seen.Count);
             Pending!.Add(components: components, entry: entry, memberKey: memberKey);
+        }
+        public void DiscardPendingEntries() {
+            m_segments[Depth].Reset(rewindable: Pending!.Rewindable);
+            m_seen.Clear();
         }
         public void CommitPending() {
             if ((Pending!.Count == 0) && Pending.Rewindable) {
@@ -786,14 +882,16 @@ public sealed partial class StateArena {
                 // Retain the ledger-owned name, not a separate decoded string per historical entry.
                 // Validation already proved the key exists; this keeps import within the same reservation.
                 string? memberName = null;
+                var number = entry.Number;
 
                 if (entry.MemberKey is { } spelling) {
                     if (!keys.TryResolve(CellName.Parse(candidate: spelling), out var key)) {
                         throw new InvalidOperationException(message: "Validated retained member key disappeared during import.");
                     }
                     memberName = keys.Names[key.Ordinal].Value;
+                    number = key.Ordinal;
                 }
-                Add(new ArenaJournalEntry(Column: entry.Column, Index: entry.Index, Number: entry.Number, Reference: reference), (entry.Components ?? []), memberName);
+                Add(new ArenaJournalEntry(Column: entry.Column, Index: entry.Index, Number: number, Reference: reference), (entry.Components ?? []), memberName);
             }
         }
         public void AddTo(ref Fnv1aHash hash) {

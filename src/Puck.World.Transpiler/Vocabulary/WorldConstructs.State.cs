@@ -49,6 +49,13 @@ public static partial class WorldConstructs {
         Required: true,
         Summary: "The domain every cell of the row holds a value in."
     );
+    private static WorldConstructMember RowEnum() => new(
+        DocumentKeys: ["enum"],
+        Kind: WorldMemberKind.Reference,
+        Name: "enum",
+        Position: WorldMemberPosition.Header,
+        Summary: "The declared enum the row's cells are drawn from, written `: Enum` after the name; the row is then Int."
+    );
     private static WorldConstructMember RowName(string summary) => new(
         DocumentKeys: ["name"],
         Kind: WorldMemberKind.Name,
@@ -137,10 +144,11 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "table name[family] [capacity(n)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }",
+            Grammar: "table name[family] [: Enum] [capacity(n)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }",
             Keyword: "table",
             Members: [
                 RowName(summary: "The row's name, which every rule and binding reads it by."),
+                RowEnum(),
                 Capacity(summary: "The row's cell-count ceiling; smaller than its own authored cells is refused."),
                 Bounds(),
                 Advance(),
@@ -220,10 +228,11 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "slot name[family] [= value] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [space(name)]",
+            Grammar: "slot name[family] [: Enum] [= value] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [space(name)]",
             Keyword: "slot",
             Members: [
                 RowName(summary: "The row's name, which every rule and binding reads it by."),
+                RowEnum(),
                 new(
                     DocumentKeys: ["value"],
                     Kind: WorldMemberKind.Value,
@@ -287,10 +296,11 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "grid name[family] dimensions(width:, depth:) [wrap(…)] [cellSize(n)] [origin(x, y, z)] [band(n)] [empty(v)] [positions(row)] [inverse(tokens:, codes:)] [bounds(…)] [{ \"ordinal\" = value … }]",
+            Grammar: "grid name[family] [: Enum] dimensions(width:, depth:) [wrap(…)] [cellSize(n)] [origin(x, y, z)] [band(n)] [empty(v)] [positions(row)] [inverse(tokens:, codes:)] [bounds(…)] [{ \"ordinal\" = value … }]",
             Keyword: "grid",
             Members: [
                 RowName(summary: "The row's name, which is also the name of the topology the declaration mints."),
+                RowEnum(),
                 new(
                     DocumentKeys: ["width", "depth"],
                     DocumentNode: "state.lattices[]",

@@ -1,0 +1,4 @@
+/* Room for a few lines of SQL before the editor grows with its text. */
+.editor :global(.cm-content) {
+  min-height: rem(96px);
+}

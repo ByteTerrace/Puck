@@ -199,7 +199,7 @@ public class ParserTests {
     public void TestMinimalSyntheticWorldParsing() {
         const string Source = """
             schema: "puck.world.definition.v1"
-            basis: "worlds/standard.basis.json"
+            basis: "worlds/standard"
 
             host {
                 width: 1280
@@ -216,7 +216,7 @@ public class ParserTests {
             doc.Schema
         );
         Assert.Equal(
-            "worlds/standard.basis.json",
+            "worlds/standard",
             doc.Basis
         );
         Assert.Single(collection: doc.Statements);

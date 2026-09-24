@@ -13,12 +13,10 @@ public static class WorldFrameCodec {
 
     // WireRefusal (Puck.Networking, the transport-neutral frame/wire grammar) and WorldCodecRefusal (this leaf
     // vocabulary) are deliberately separate enums — this is the one seam a WireFailure crosses into a
-    // WorldCodecFailure, so the map lives here rather than forcing the two vocabularies into one. Every name both
-    // sides declare maps by identity; the tail arm covers the WireRefusal members FrameCodec.TrySplit's own frame-
-    // length gate can reach today (FrameLengthInvalid) plus every member neither TrySplit nor this decode path can
-    // produce (CountOutOfRange, StringTooLong, ConnectionClosed, LaneUnavailable, RequestTimedOut, None) — a length
-    // problem is the correct default for an otherwise-unreachable wire refusal surfacing from a length-prefixed
-    // grammar's own split step.
+    // WorldCodecFailure, for the frame split here and for every leaf WorldSubmissionCodec reads. Every name both
+    // sides declare maps by identity; an out-of-range count is a malformed leaf and an over-long string an
+    // oversized one; the tail arm covers FrameCodec.TrySplit's own frame-length gate (FrameLengthInvalid) plus the
+    // members no decode path produces (ConnectionClosed, LaneUnavailable, RequestTimedOut, None).
     private static WorldCodecRefusal ToCodecRefusal(WireRefusal refusal) => refusal switch {
         WireRefusal.PayloadTooLarge => WorldCodecRefusal.PayloadTooLarge,
         WireRefusal.FrameKindUnknown => WorldCodecRefusal.FrameKindUnknown,
@@ -26,8 +24,19 @@ public static class WorldFrameCodec {
         WireRefusal.PayloadTrailingBytes => WorldCodecRefusal.PayloadTrailingBytes,
         WireRefusal.PayloadMalformed => WorldCodecRefusal.PayloadMalformed,
         WireRefusal.EnumValueUnknown => WorldCodecRefusal.EnumValueUnknown,
+        WireRefusal.CountOutOfRange => WorldCodecRefusal.PayloadMalformed,
+        WireRefusal.StringTooLong => WorldCodecRefusal.PayloadTooLarge,
         _ => WorldCodecRefusal.FrameLengthInvalid,
     };
+
+    /// <summary>Maps a reader's latched <see cref="WireFailure"/> onto the leaf refusal vocabulary, keeping its
+    /// detail.</summary>
+    /// <param name="failure">The wire failure.</param>
+    /// <returns>The leaf failure.</returns>
+    internal static WorldCodecFailure ToCodecFailure(WireFailure failure) => new(
+        Detail: failure.Detail,
+        Refusal: ToCodecRefusal(refusal: failure.Refusal)
+    );
 
     /// <summary>Returns the hard payload cap for a declared kind.</summary>
     /// <param name="kind">The declared kind.</param>
@@ -80,10 +89,7 @@ public static class WorldFrameCodec {
             maxPayloadBytes: wideCap,
             payload: out var leaf
         )) {
-            failure = new WorldCodecFailure(
-                Detail: wireFailure.Detail,
-                Refusal: ToCodecRefusal(refusal: wireFailure.Refusal)
-            );
+            failure = ToCodecFailure(failure: wireFailure);
 
             return false;
         }

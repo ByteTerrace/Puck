@@ -1,9 +1,9 @@
 using System.CommandLine;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
+using Puck.Assets;
 
 namespace Puck.Cli.Automation;
 
@@ -17,12 +17,12 @@ internal static class ArtifactsCommand {
 
     private static async Task<int> CaptureAsync() {
         if (!OperatingSystem.IsWindows()) { throw new InvalidOperationException(message: "The solution artifact is produced on Windows."); }
-        var root = Root();
+        var root = RepositoryPaths.RequireRoot();
         var changes = (await CliProcess.RunCheckedAsync(
             arguments: ["status", "--porcelain", "--untracked-files=no"],
             capture: true,
-            executable: "git",
-            root: root
+            fileName: "git",
+            workingDirectory: root
         )).Trim();
 
         if (changes.Length != 0) { throw new InvalidDataException(message: $"Tracked source changed while producing release artifacts:\n{changes}"); }
@@ -82,9 +82,8 @@ internal static class ArtifactsCommand {
                     path: file,
                     root: root
                 );
-                string hash;
+                var hash = ContentPin.OfFile(path: file).Hex;
 
-                using (var input = File.OpenRead(path: file)) { hash = Convert.ToHexStringLower(inArray: SHA256.HashData(source: input)); }
                 if (contents.TryGetValue(
                     key: hash,
                     value: out var original
@@ -149,8 +148,8 @@ internal static class ArtifactsCommand {
     private static async Task<string> CommitAsync(string root) => (await CliProcess.RunCheckedAsync(
         arguments: ["rev-parse", "HEAD"],
         capture: true,
-        executable: "git",
-        root: root
+        fileName: "git",
+        workingDirectory: root
     )).Trim();
     // Every destination is validated before any entry is extracted.
     private static async Task<(ZipArchive Archive, JsonNode Source, JsonObject Copies, HashSet<string> Paths)> OpenArchiveAsync(bool occupiedIsError, string root) {
@@ -222,7 +221,7 @@ internal static class ArtifactsCommand {
         oldChar: '\\'
     );
     private static async Task<int> RestoreAsync() {
-        var root = Root();
+        var root = RepositoryPaths.RequireRoot();
 
         var (archive, source, copies, _) = await OpenArchiveAsync(
             occupiedIsError: true,
@@ -258,9 +257,8 @@ internal static class ArtifactsCommand {
         Console.WriteLine(value: $"Restored compiled Release outputs for {source["commit"]}; no compilation was performed.");
         return 0;
     }
-    private static string Root() => (RepositoryPaths.FindRoot() ?? throw new DirectoryNotFoundException(message: "Run within the Puck checkout."));
     private static async Task<int> TestWindowsAsync() {
-        var root = Root();
+        var root = RepositoryPaths.RequireRoot();
 
         var (archive, source, _, paths) = await OpenArchiveAsync(
             occupiedIsError: false,
@@ -314,39 +312,57 @@ internal static class ArtifactsCommand {
 
         if (Directory.Exists(path: Results)) { throw new IOException(message: $"Use a fresh test result directory: {Results}"); }
         Directory.CreateDirectory(path: Results);
-        foreach (var (test, index) in selected.OrderBy(
+        // Two assemblies at a time, largest first, so the longest suite runs alongside the others instead of after
+        // them. Each run's output is printed whole when it finishes, so two runs never interleave, and a failure
+        // cancels the other run.
+        var console = new Lock();
+        var ordered = selected.OrderBy(
             keySelector: entry => entry.Key,
             comparer: StringComparer.Ordinal
-        ).Select(selector: (test, index) => (test, index))) {
-            var assembly = test.Key;
-            var report = $"{index:D3}-{Path.GetFileNameWithoutExtension(path: assembly)}.trx";
-            string[] settings = ((test.Value is { } runSettings)
-                ? ["--settings", runSettings]
-                : []
-            );
+        ).Select(selector: (test, index) => (test, index)).OrderByDescending(keySelector: item => new FileInfo(fileName: item.test.Key).Length);
 
-            await CliProcess.RunCheckedAsync(
-                arguments: ["test", assembly, .. settings, "--logger", $"trx;LogFileName={report}", "--results-directory", Results, "--filter", "Category!=Performance", "--blame-hang-timeout", "15m", "--blame-hang-dump-type", "mini"],
-                executable: "dotnet",
-                root: root
-            );
-            var result = (XDocument.Load(uri: Path.Combine(
-                path1: Results,
-                path2: report
-            )).Root ?? throw new InvalidDataException(message: $"Missing test results: {report}"));
-            var ns = result.Name.Namespace;
+        await Parallel.ForEachAsync(
+            body: async (item, cancellationToken) => {
+                var (test, index) = item;
+                var assembly = test.Key;
+                var report = $"{index:D3}-{Path.GetFileNameWithoutExtension(path: assembly)}.trx";
+                string[] settings = ((test.Value is { } runSettings)
+                    ? ["--settings", runSettings]
+                    : []
+                );
+                var run = await CliProcess.RunAsync(
+                    arguments: ["test", assembly, .. settings, "--logger", $"trx;LogFileName={report}", "--results-directory", Results, "--filter", "Category!=Performance", "--blame-hang-timeout", "15m", "--blame-hang-dump-type", "mini"],
+                    cancellationToken: cancellationToken,
+                    capture: true,
+                    fileName: "dotnet",
+                    workingDirectory: root
+                );
 
-            // A hardware-only assembly may legitimately skip every case, but discovery must never be empty.
-            if (((int?)result.Element(name: (ns + "ResultSummary"))?.Element(name: (ns + "Counters"))?.Attribute(name: "total")) is not > 0) {
-                throw new InvalidDataException(message: $"No tests discovered in {assembly}.");
-            }
-        }
+                lock (console) {
+                    Console.Write(value: run.Stdout);
+                    Console.Error.Write(value: run.Stderr);
+                }
+                if (run.ExitCode != 0) { throw new InvalidOperationException(message: $"dotnet test {Path.GetFileName(path: assembly)} exited with code {run.ExitCode}."); }
+                var result = (XDocument.Load(uri: Path.Combine(
+                    path1: Results,
+                    path2: report
+                )).Root ?? throw new InvalidDataException(message: $"Missing test results: {report}"));
+                var ns = result.Name.Namespace;
+
+                // A hardware-only assembly may legitimately skip every case, but discovery must never be empty.
+                if (((int?)result.Element(name: (ns + "ResultSummary"))?.Element(name: (ns + "Counters"))?.Attribute(name: "total")) is not > 0) {
+                    throw new InvalidDataException(message: $"No tests discovered in {assembly}.");
+                }
+            },
+            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = 2 },
+            source: ordered
+        );
         Console.WriteLine(value: $"Verified {selected.Count} compiled test assemblies without solution restore or workload installation.");
         return 0;
     }
     private static async Task<int> TestWorldAsync() {
         const string Results = "artifacts/world-test-results";
-        var root = Root();
+        var root = RepositoryPaths.RequireRoot();
 
         Directory.CreateDirectory(path: Results);
         foreach (var (project, testClass) in new[] {
@@ -363,8 +379,8 @@ internal static class ArtifactsCommand {
             // xUnit v3's in-process runner is portable; VSTest otherwise looks for the producer OS's apphost.
             await CliProcess.RunCheckedAsync(
                 arguments: [$"artifacts/world-tests/{project}/{project}.dll", "-class", $"{project}.{testClass}", "-xml", report],
-                executable: "dotnet",
-                root: root
+                fileName: "dotnet",
+                workingDirectory: root
             );
             var result = (XDocument.Load(uri: report).Root?.Element(name: "assembly") ?? throw new InvalidDataException(message: $"Missing test result for {project}."));
 

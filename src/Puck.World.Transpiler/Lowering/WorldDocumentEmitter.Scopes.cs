@@ -18,9 +18,18 @@ public static partial class WorldDocumentEmitter {
         DocumentScope scope,
         RuleScopeContext? parentContext = null
     ) {
-        var prefix = (string.IsNullOrEmpty(value: parentContext?.Prefix)
-            ? scopeNode.Name
-            : (string.IsNullOrEmpty(value: scopeNode.Name) ? parentContext.Prefix : $"{parentContext.Prefix}_{scopeNode.Name}"));
+        RefuseReservedScopedName(
+            name: scopeNode.Name,
+            prefix: parentContext?.Prefix,
+            scope: scope,
+            span: scopeNode.Span
+        );
+
+        var prefix = PrefixedName(
+            name: scopeNode.Name,
+            prefix: parentContext?.Prefix,
+            scope: scope
+        );
 
         var combinedGate = (parentContext?.Gate?.DeepClone() as JsonObject);
 

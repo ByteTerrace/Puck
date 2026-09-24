@@ -8,11 +8,8 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
 
-require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, file);
+require('./support/register.cjs');
 
 const { createEngineHost } = require('../src/native/engineHost.ts');
 const { bootEngineFromLocalBundle } = require('../src/native/engineBoot.ts');
@@ -30,20 +27,37 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const worldsDir = path.join(root, 'src', 'Puck.World', 'Assets', 'worlds');
+const { officialTreeMissing, officialDocument, officialSources, TICTACTOE_ROOT } = require('./support/officialTree.cjs');
+const { readWorkspaceFixture } = require('./support/studioFixture.cjs');
+const { EngineCapabilityMissing } = require('../src/native/engineTypes.ts');
+const { sourceUri } = require('../src/document/sourcePaths.ts');
+const { parseDocumentText } = require('../src/document/jsonText.ts');
+const { pathToPointer } = require('../src/document/jsonPath.ts');
+const { rulePath, ruleSpan } = require('../src/authoring/sourceMap.ts');
 
-// tictactoe.world.json carries Int64.Min/MaxValue sentinels (state row min/max) that JavaScript's
-// own JSON.parse/stringify round trip cannot preserve exactly (see engine-wasm.test.cjs's own
-// remarks). `parseFragment()`'s facade already parses its `document` into a plain JS value, so
-// re-stringifying THAT for compile() loses precision; `composeTree()`'s own `composed` field is
-// the raw, never-JS-round-tripped text instead, so `compile()` gets the exact original bytes.
+// A test that needs a compiled world skips itself by name when no official tree has been built.
+const needsTree = (t) => { const missing = officialTreeMissing(); if (missing) t.skip(missing); return !missing; };
+
+// A test of the source exports skips itself by name on an engine build that has none.
+async function needsSourceExports(t, engine) {
+  try {
+    await engine.mountSources(readWorkspaceFixture());
+    return true;
+  } catch (error) {
+    if (!(error instanceof EngineCapabilityMissing)) throw error;
+    t.skip(`this AppBundle predates the source exports: ${error.message}`);
+    return false;
+  }
+}
+
+// The tictactoe fragment composed over the standard basis, from the official tree's sources mounted the way the
+// studio mounts them, with a small `.puck` root beside them. The composed document carries Int64.Min/MaxValue
+// sentinels (state row min/max) that JavaScript's own JSON.parse/stringify round trip cannot preserve exactly, so
+// `compile()` gets `composeSource()`'s raw, never-JS-round-tripped text.
 async function composeTicTacToeText(engine) {
-  const basisJson = fs.readFileSync(path.join(worldsDir, 'standard.basis.json'), 'utf8');
-  const fragmentJson = fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8');
-  const rootJson = JSON.stringify({ basis: 'standard.basis.json', imports: [{ document: 'games/tictactoe.world.json' }] });
-  const documents = { 'test-root.json': rootJson, 'standard.basis.json': basisJson, 'games/tictactoe.world.json': fragmentJson };
-  const result = await engine.composeTree('test-root.json', documents);
-  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  await engine.mountSources({ ...officialSources(), [TICTACTOE_ROOT.path]: TICTACTOE_ROOT.text });
+  const result = await engine.composeSource(TICTACTOE_ROOT.path);
+  assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
   assert.equal(typeof result.composed, 'string');
   return result.composed;
 }
@@ -126,7 +140,8 @@ if (!fs.existsSync(mainMjs)) {
     }
   });
 
-  test('parse() decodes both ParseResult arms through the facade', async () => {
+  test('parse() decodes both ParseResult arms through the facade', async (t) => {
+    if (!needsTree(t)) return;
     const engine = await bootEngineFromLocalBundle(appBundleDir);
     try {
       const bad = await engine.parse(JSON.stringify({ schema: 'not.a.real.schema' }));
@@ -135,7 +150,7 @@ if (!fs.existsSync(mainMjs)) {
       assert.ok(bad.errors.some((e) => e.message.includes('not.a.real.schema')));
       assert.ok(Array.isArray(bad.deferred));
 
-      const hostJson = fs.readFileSync(path.join(worldsDir, 'standard.basis.json'), 'utf8');
+      const hostJson = officialDocument('standard');
       const good = await engine.parse(hostJson);
       assert.equal(good.ok, true, JSON.stringify(good));
       assert.equal(typeof good.document, 'object');
@@ -157,9 +172,11 @@ if (!fs.existsSync(mainMjs)) {
     }
   });
 
-  test('compile()/rows()/writeRow()/judge()/stateHash() round-trip bigints through the facade', async () => {
+  test('compile()/rows()/writeRow()/judge()/stateHash() round-trip bigints through the facade', async (t) => {
+    if (!needsTree(t)) return;
     const engine = await bootEngineFromLocalBundle(appBundleDir);
     try {
+      if (!(await needsSourceExports(t, engine))) return;
       const composedText = await composeTicTacToeText(engine);
       const compiled = await engine.compile(composedText);
       assert.equal(compiled.ok, true, JSON.stringify(compiled));
@@ -202,9 +219,11 @@ if (!fs.existsSync(mainMjs)) {
     }
   });
 
-  test('evaluate() and boardMask() decode their bigint arms', async () => {
+  test('evaluate() and boardMask() decode their bigint arms', async (t) => {
+    if (!needsTree(t)) return;
     const engine = await bootEngineFromLocalBundle(appBundleDir);
     try {
+      if (!(await needsSourceExports(t, engine))) return;
       const composedText = await composeTicTacToeText(engine);
       const compiled = await engine.compile(composedText);
       assert.equal(compiled.ok, true, JSON.stringify(compiled));
@@ -231,6 +250,85 @@ if (!fs.existsSync(mainMjs)) {
       assert.ok(boardMaskChecked, 'no keyed row in the composed document is board-shaped (<=64 cells)');
 
       await engine.release(handle);
+    } finally {
+      await engine.dispose();
+    }
+  });
+
+  test('mountSources()/compileSource()/composeSource() decode a source workspace\'s answers', async (t) => {
+    const engine = await bootEngineFromLocalBundle(appBundleDir);
+    try {
+      if (!(await needsSourceExports(t, engine))) return;
+      const compiled = await engine.compileSource('counter.puck');
+      assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+      assert.equal(JSON.parse(compiled.document).documentId, 'counter');
+      assert.ok(Object.values(compiled.sourceMap).some((span) => span.path === 'counter.puck' && span.line > 0), 'compiled values map back to their source');
+      assert.deepEqual(compiled.worlds, []);
+
+      const composed = await engine.composeSource('counter.puck');
+      assert.equal(composed.ok, true, JSON.stringify(composed.diagnostics));
+      assert.deepEqual(composed.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), []);
+      assert.equal(JSON.parse(composed.composed).documentId, 'counter');
+
+      // A container never takes a colon (PUCK040), reported where it was written, 1-based.
+      await engine.writeSource('counter.puck', 'schema: "puck.world.definition.v1"\nstate: {\n}\n');
+      const refused = await engine.compileSource('counter.puck');
+      assert.equal(refused.ok, false);
+      assert.equal(refused.document, null);
+      assert.ok(refused.diagnostics.some((diagnostic) => diagnostic.code === 'PUCK040' && diagnostic.path === 'counter.puck' && diagnostic.line === 2 && diagnostic.column === 1));
+
+      const uncomposed = await engine.composeSource('counter.puck');
+      assert.equal(uncomposed.ok, false);
+      assert.equal(uncomposed.composed, null, 'nothing composed');
+      assert.ok(uncomposed.diagnostics.some((diagnostic) => diagnostic.severity === 'error' && diagnostic.path === 'counter.puck'), JSON.stringify(uncomposed.diagnostics));
+      await assert.rejects(engine.writeSource('../escape.puck', ''), 'a path outside the workspace is refused');
+    } finally {
+      await engine.dispose();
+    }
+  });
+
+  test('every rule of a compiled source maps to its own rule line, so a rule-trace link lands on the rule itself', async (t) => {
+    if (!needsTree(t)) return;
+    const engine = await bootEngineFromLocalBundle(appBundleDir);
+    try {
+      if (!(await needsSourceExports(t, engine))) return;
+      const sources = officialSources();
+      await engine.mountSources(sources);
+      const source = 'games/tictactoe.puck';
+      const compiled = await engine.compileSource(source);
+      assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+      const document = parseDocumentText(compiled.document);
+      const lines = sources[source].split('\n');
+      assert.ok(document.rules.length > 0);
+      for (const rule of document.rules) {
+        assert.ok(compiled.sourceMap[pathToPointer(rulePath(document, rule.name))], `rule '${rule.name}' has its own pointer`);
+        const span = ruleSpan(document, compiled.sourceMap, rule.name);
+        assert.equal(span.path, source);
+        assert.ok(lines[span.line - 1].includes(`rule "${rule.name}"`), `rule '${rule.name}' links to line ${span.line}: ${lines[span.line - 1]}`);
+      }
+    } finally {
+      await engine.dispose();
+    }
+  });
+
+  test('lsp()/lspIdle() answer at once and diagnose only when idle, for the version they were given', async (t) => {
+    const engine = await bootEngineFromLocalBundle(appBundleDir);
+    try {
+      if (!(await needsSourceExports(t, engine))) return;
+      const [initialized] = await engine.lsp(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { capabilities: {} } }));
+      assert.equal(initialized.id, 1);
+      assert.ok(initialized.result.capabilities.semanticTokensProvider.legend.tokenTypes.length > 0, 'the token legend arrives with initialize');
+      const uri = sourceUri('counter.puck');
+      const opened = await engine.lsp(JSON.stringify({ jsonrpc: '2.0', method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: 'puck', version: 4, text: readWorkspaceFixture()['counter.puck'] } } }));
+      assert.equal(opened.filter((message) => message.method === 'textDocument/publishDiagnostics').length, 0, 'didOpen never diagnoses inline');
+      const published = [];
+      for (let units = 0; units < 16; units++) {
+        const idle = await engine.lspIdle();
+        published.push(...idle.messages.filter((message) => message.method === 'textDocument/publishDiagnostics'));
+        if (!idle.pending) break;
+      }
+      assert.ok(published.some((message) => message.params.uri === uri && message.params.version === 4));
+      assert.equal((await engine.lspIdle()).ran, false, 'nothing is pending once the units ran');
     } finally {
       await engine.dispose();
     }

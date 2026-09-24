@@ -10,8 +10,8 @@ namespace Puck.World;
 /// <param name="Document">The fragment's file path, resolved against the importing document's own directory exactly
 /// like <c>basis</c>.</param>
 /// <param name="As">The alias, or <see langword="null"/> to compose the fragment's names unchanged. An alias is a
-/// bare identifier — a letter or underscore, then letters, digits, and underscores — so an aliased name still lexes
-/// as one bare name inside an infix expression and still parses as a <see cref="CellName"/>
+/// bare identifier — a letter or underscore, then letters, digits, and underscores — so it heads the generated name
+/// <c>alias$name</c> each of the fragment's declarations composes as, and a source reads it as <c>alias.name</c>
 /// (<see cref="TryValidateAlias"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldImport(
@@ -36,20 +36,14 @@ public sealed record WorldImport(
             return false;
         }
 
-        if (
-            !char.IsAsciiLetter(c: alias[0]) &&
-            (alias[0] != '_')
-        ) {
+        if (!IdentifierSpelling.IsStart(character: alias[0])) {
             reason = $"an import alias must start with a letter or underscore; '{alias}' starts with '{alias[0]}'";
 
             return false;
         }
 
         foreach (var character in alias) {
-            if (
-                !char.IsAsciiLetterOrDigit(c: character) &&
-                (character != '_')
-            ) {
+            if (!IdentifierSpelling.IsPart(character: character)) {
                 reason = $"an import alias carries only letters, digits, and underscores; '{alias}' carries '{character}'";
 
                 return false;

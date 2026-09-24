@@ -59,13 +59,15 @@ public sealed partial class WorldRemoteAuthority {
     // a closure is allocated on the polling path. The transport worker owns timeouts; the simulation never waits.
     private bool TryPollTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind,
         IReadOnlyList<WorldTransferCommitMember>? members, out WorldFederationAnswer answer) {
-        if (m_submissionAuthority is { } upstream) { return upstream.TryPollTransferStep(
+        if (m_submissionAuthority is { } upstream) {
+            return upstream.TryPollTransferStep(
             answer: out answer,
             kind: kind,
             members: members,
             sourceAuthority: sourceAuthority,
             transferId: transferId
-        ); }
+        );
+        }
         answer = default;
         var key = new TransferStepKey(
             Kind: kind,
@@ -81,10 +83,12 @@ public sealed partial class WorldRemoteAuthority {
             if (!m_requestLanes.TryGetValue(
                 key: (sourceAuthority, LaneOf(kind: kind)),
                 value: out var lane
-            )) { lane = LaneFor(
+            )) {
+                lane = LaneFor(
                 kind: kind,
                 sourceAuthority: sourceAuthority
-            ); }
+            );
+            }
             if (!lane.IsAvailable) { return false; }
             task = m_transferSteps.GetOrAdd(
                 key,

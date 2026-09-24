@@ -23,17 +23,48 @@ literal, not what the value turns out to be; a call's named argument keeps its
 colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a
 statement.
 
+## Names
+
+One rule, `Puck.State.IdentifierSpelling`, for every Puck language (document
+grammar, expression spelling, pattern/cell-set/state spellings, `sql { }`):
+
+| Class | Characters |
+|---|---|
+| identifier start | ASCII letter or `_` |
+| identifier part | ASCII letter, ASCII digit, or `_` |
+| name | identifier, optionally opened by the `$` sigil (`$value`, `$replace`) |
+
+- `$` only opens a name: `a$b` is two tokens, `$"…"` is an interpolated string.
+- Any other name is quoted: `"seat-1"` in the document grammar, `` `seat-1` ``
+  in an expression. Non-ASCII names (`"größe"`) are quoted too.
+- A position's reservations (statement keywords, reserved call names, pattern
+  words `any`/`empty`/`except`/`none`, SQL keywords, dotted paths, `$x:seg`
+  continuations) layer on the rule as that position's own set. They never add
+  a character class.
+- Every printer prints a name bare exactly when the bare spelling reads back as
+  that name and the position doesn't reserve it. `IdentifierSpellingLawTests`
+  (State) and `IdentifierAgreementLawTests` (World.Transpiler) gate it, over
+  `tests/Shared/IdentifierCorpus.cs` with `tests/Shared/SpellingLaws.cs`. A new
+  printer position gets a row in one of those law classes.
+- Never add a `char.IsLetter` check or another identifier predicate. Call
+  `IdentifierSpelling`. A document-name printer, the decompiler included, calls
+  `PuckPrinter.PrintName` or `PuckPrinter.PrintPropertyName` rather than deciding
+  quoting itself, and a printer of a name inside an expression calls
+  `ExpressionSpelling.PrintName` (`quoted: true` for a literal row no binding may
+  capture) rather than wrapping backquotes by hand.
+
 ## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```
-table name : Kind [modifier(...)]* { key = value [modifier(...)]* ... }
-slot name : Kind [= value] [modifier(...)]*
+table name [: Enum] [modifier(...)]* { key = value [modifier(...)]* ... }
+slot name [: Enum] [= value] [modifier(...)]*
 pile name of tokenRow [modifier(...)]* { token ... }
-grid name : Kind [modifier(...)]* [{ key = value ... }]
+grid name [: Enum] [modifier(...)]* [{ key = value ... }]
 ```
 
 A schema-agnostic grammar shape (`Ast/StateDeclarationNodes.cs`, `Parsing/PuckParser.StateDeclarations.cs`): a name,
-an optional bare-identifier kind, an optional bare-identifier reference (`pile`'s `of tokenRow`), zero or more
+an optional `: Enum` (the node's `Enum`; a cell-kind word there is PUCK107, since the kind is inferred), an optional
+bare-identifier reference (`pile`'s `of tokenRow`), zero or more
 `name(args)` modifier calls, and an optional `{ }` body of `key = value` cell entries (`table`/`grid`) or bare
 `token` entries (`pile`). The core parses the shape only; which kind names, modifier names, and locations are legal
 is the owning vocabulary's answer. `puck.world.definition.v1`'s `state.world` is the one vocabulary use today —
@@ -114,10 +145,14 @@ line, so the text reads at the indentation it is authored at.
 ```
 rows[1]
 named["beta"]
+named.beta
+"B=Y..w"[2]
 ```
 
-An array takes a whole-number index, an object a string key; either must
-resolve at compile time or the read is **PUCK043**. The `[` must be adjacent
+An array takes a whole-number index, an object a string key, and a string a
+whole-number index that reads one UTF-16 unit as a one-character string. An
+object's member also reads as `object.member`, on a `let` or on any compile-time
+object. Each must resolve at compile time or the read is **PUCK043**. The `[` must be adjacent
 (no line break) to what it indexes — an array literal's own elements are
 newline-separated with no comma, so a `[` opening the next line is always the
 next element, never an index on the line above:
@@ -145,20 +180,26 @@ for (leg, i) in ["front-left", "front-right", "rear-left", "rear-right"] {
 
 `DocumentLowering.ExpandFor` runs the loop while lowering and emits its body
 once per element in place — the document carries the statements produced,
-never the loop. `Item`/`Index` are bound as locals for one iteration and never
-leak. The sequence must be an array known at compile time or the `for` is
-**PUCK044**; a body that assigns a field instead of emitting a row is
-**PUCK046**; nesting past the expansion ceiling is **PUCK045**. This is
+never the loop. A `for` in a `stabilize` body stamps one member rule per
+element, and so does a template called there. A `for` inside a rule body, a
+workflow step's body, or an effect list (`if` branch, `transaction`,
+`onFailure`, `claim`, `for each`) repeats locals and effects in place, in both
+vocabularies; `local $"name{i}"` names each iteration's local, and a `when`,
+`decision` or nested `rule` inside it is **PUCK114**. `Item`/`Index` are bound
+as locals for one iteration and never leak. The sequence must be an array known
+at compile time or the `for` is **PUCK044**; a body that assigns a field
+instead of emitting a row is **PUCK046**; nesting past the expansion ceiling is
+**PUCK045**. A test's `when` block has its own step grammar and takes no `for`. This is
 distinct from a cartridge rule's `repeat`, a play-time loop with a compile-time
 count in 1..255.
 
 ## Scalar functions come from `Puck.State`
 
 `squareRoot`, `sine`, `cosine`, `absolute`, `ceiling`, `floor`, `clamp`,
-`minimum`, `maximum`, `remainder`, `greatestCommonDivisor`,
+`minimum`, `maximum`, `floorModulo`, `greatestCommonDivisor`,
 `leastCommonMultiple`, `setBitCount`, `binomialCoefficient`, `primeAt`,
 `hexIndex`, `mortonIndex`, `hilbertIndex`, `pairMinimum`, `pairMaximum`,
-`select`, and the rest are not declared in the transpiler — they come from
+and the rest are not declared in the transpiler — they come from
 `Puck.State.ExpressionVocabulary`, the same table a compiled rule runs
 against, so a name can never mean one thing in a rule and another (or nothing)
 in a document:
@@ -171,8 +212,14 @@ in a document:
   signed 64-bit precision. The folded number is document DATA baked into JSON
   at compile time — never simulation state — so quantizing it to the rule
   language's `Q48.16` fixed point would only lose precision for no gain.
-- `select(condition, whenTrue, whenFalse)` lowers only the arm it takes; the
-  untaken arm is never evaluated.
+- An infix operator folds as its `ExpressionOperators` row means it over the
+  reals (the rule language's `Fixed` reading, at the document's precision):
+  whole operands with a whole result go through `ExpressionArithmetic`'s Int
+  arm, and only a non-whole `/` of two whole numbers parts from an `Int` rule
+  (`7 / 2` is `3.5`). `OperatorTableLawTests` holds both readings to the rule
+  evaluator.
+- `condition ? whenTrue : whenFalse` lowers only the arm it takes; the
+  untaken arm is never evaluated, and an arm may hold any value.
 - A name the document language cannot fold this way is refused **by name**
   (`the rule language evaluates '<name>'; the document language does not fold
   it`), never reported as unknown.
@@ -208,10 +255,20 @@ belong to their own vocabulary (a cartridge's `map` step is untouched).
 
 ## Comparisons are 1 or 0
 
-`+ - * / %`, six comparisons (`== != < <= > >=`), member access, calls, arrays,
-objects, ranges (`a..b`), colors (`#rrggbb[aa]`), unit-suffixed numbers. A
-comparison yields `1`/`0`, never a JSON boolean — the rule language has no
-boolean either. `filter`'s lambda, `select`'s condition, and a `for`'s reads
+The rule language's conditional (`c ? a : b`, loosest and right-associative, and
+the only spelling of a choice), its infix operators (`?? | ^ & == != < <= > >= << >> >>> + - * / %`),
+and its two prefix operators (`-` and `~`; there is no prefix `+`), member access, calls, arrays, objects, ranges (`a..b`),
+colors (`#rrggbb[aa]`), unit-suffixed numbers. Both parsers read the infix
+operators and their binding from `Puck.State.ExpressionOperators` (the
+`Binding` column, C's order, left-associative), so a `let` and a rule group the
+same text the same way; the range sits between the relational comparisons and
+the shifts. `& | ^ << >> >>> ~` read whole numbers and fold through
+`ExpressionArithmetic`; a zero divisor under `/` or `%` and a shift count
+outside 0..63 are refused. Never add an operator or a precedence level to the
+document parser alone: add the row to the table. Two
+strings compare with `==` and `!=` only. A comparison yields `1`/`0`, never a
+JSON boolean — the rule language has no
+boolean either. `filter`'s lambda, a conditional's condition, and a `for`'s reads
 all use the same truth test: a number is true when non-zero, a string when
 non-empty, a present container is true, an absent value is false.
 
@@ -232,7 +289,7 @@ The world vocabulary's rule body lowers `if`/`else if`/`else` to the state
 engine's conditional effect (`ActionEffect.If`), reusing the `when` gate's own
 predicate lowering for the condition — see the [world transpiler
 guide](../../../../src/Puck.World.Transpiler/README.md#rules). `repeat`/`break`
-still have nothing to lower onto there, so PUCK037 still fires for them.
+have nothing to lower onto there, so PUCK037 fires for them.
 Cartridge rules support all three, `if`/`repeat`/`break` (`rom-forge` owns
 that grammar).
 

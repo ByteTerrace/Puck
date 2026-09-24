@@ -5,11 +5,12 @@ using Xunit;
 
 namespace Puck.Networking.Tests;
 
-/// <summary>A read-only stream that serves a fixed byte sequence and then blocks — never reporting EOF — until the
-/// read's own token cancels, the way a live socket idles between frames. Each read hands back at most what the
-/// caller asked for and at most what is left, exactly as a socket does, and the size of the very first request is
-/// recorded so a law can pin how many bytes a reader asked for before any frame was declared.</summary>
-file sealed class ServeThenBlockStream(byte[] bytes) : Stream {
+/// <summary>A read-only stream that serves a fixed byte sequence and then refuses any further read — never reporting
+/// EOF — standing in for a live socket idling between frames: a reader that asks for a byte past the served sequence
+/// would wait on that socket forever, so here it fails at once instead. Each read hands back at most what the caller
+/// asked for and at most what is left, exactly as a socket does, and the size of the very first request is recorded so
+/// a law can pin how many bytes a reader asked for before any frame was declared.</summary>
+file sealed class ServeThenIdleStream(byte[] bytes) : Stream {
     private int m_offset;
 
     public override bool CanRead => true;
@@ -26,7 +27,7 @@ file sealed class ServeThenBlockStream(byte[] bytes) : Stream {
     public override void Flush() {
     }
     public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
+    public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
         if (FirstRequestLength < 0) {
             FirstRequestLength = buffer.Length;
         }
@@ -34,13 +35,7 @@ file sealed class ServeThenBlockStream(byte[] bytes) : Stream {
         var remaining = (bytes.Length - m_offset);
 
         if (remaining == 0) {
-            await Task.Delay(
-                cancellationToken: cancellationToken,
-                delay: Timeout.InfiniteTimeSpan
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            // Unreachable — an infinite delay only ever ends by throwing — but never let a read report EOF.
-            throw new OperationCanceledException(token: cancellationToken);
+            throw new InvalidOperationException(message: $"the reader asked for {buffer.Length} bytes past the {bytes.Length} the idle socket delivered");
         }
 
         var count = Math.Min(
@@ -54,7 +49,7 @@ file sealed class ServeThenBlockStream(byte[] bytes) : Stream {
         ).CopyTo(destination: buffer);
         m_offset += count;
 
-        return count;
+        return ValueTask.FromResult(result: count);
     }
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();
@@ -282,17 +277,17 @@ public sealed class FrameLawTests {
     /// delivers exactly those and then idles must still yield the frame. The prefix is read into a pooled array that
     /// is at least sixteen bytes long, and <see cref="HandshakeWireFormat.TryReadExactAsync"/> fills whatever memory
     /// it is handed, so the read must ask for exactly four bytes. Falsifier: handing the exact read the whole rented
-    /// array makes it wait for twelve bytes that never come; this law then hangs until the deadline cancels it.</summary>
+    /// array makes it ask for twelve bytes the idle socket never delivers.</summary>
     [Fact]
     public async Task ReadAsync_FiveByteFrameOnAStreamThatThenBlocks_StillReturns() {
-        using var deadline = Laws.SocketDeadline();
-        using var stream = new ServeThenBlockStream(bytes: Declaring(
+        var ct = TestContext.Current.CancellationToken;
+        using var stream = new ServeThenIdleStream(bytes: Declaring(
             following: 1,
             rest: [Kind]
         ));
 
         var read = await WireFrame.ReadAsync(
-            ct: deadline.Token,
+            ct: ct,
             maxFrameBytes: 4096,
             stream: stream
         );

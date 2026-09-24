@@ -86,6 +86,8 @@ public sealed partial class WorldReplayTape {
     // with. Persisted as the child's header provenance; null for a recording armed from boot.
     private WorldReplayForkProvenance? m_forkedFrom;
     private WorldReplayMode m_mode;
+    // The directory the live server's pipeline source reader resolved rows against at record-start, or null for none.
+    private string? m_pipelineSourceDirectory;
     // The guests MOUNTED at record-start, copied out of the live server's runtime. Read once here rather than at stop:
     // the pin must describe the world that produced the recorded stream, and mounting is a boot-time act that a later
     // read could only re-report, never re-witness.
@@ -241,6 +243,7 @@ public sealed partial class WorldReplayTape {
         m_recordName = null;
         m_definitionJson = null;
         m_forkedFrom = null;
+        m_pipelineSourceDirectory = null;
         m_recordRateHz = 0U;
         m_mountedAddons = null;
         m_seats = null;
@@ -643,6 +646,7 @@ public sealed partial class WorldReplayTape {
         // span is actually about to run at. See this field's own remarks for why StopRecording must never re-read
         // the live rate instead.
         m_recordRateHz = ((uint)m_liveServer.Definition.SimulationRateHz);
+        m_pipelineSourceDirectory = m_liveServer.PipelineSources?.DocumentDirectory;
         m_mountedAddons = [.. m_liveServer.AddonReceipts];
         m_seats = CaptureActiveSeats();
         m_ticks = new List<WorldReplayTickInput>();

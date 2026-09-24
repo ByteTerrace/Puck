@@ -9,7 +9,7 @@ namespace Puck.SignedDistance;
 /// <param name="InstanceIndex">The index in <see cref="SdfProgram.Instances"/> of the instance owning that instruction,
 /// or -1 for the world stream.</param>
 /// <param name="Shape">The chain's shape.</param>
-/// <param name="Factor">The chain's own Lipschitz factor (an eccentricity, a warp bound, or their product). The
+/// <param name="Factor">The chain's own Lipschitz factor (a warp bound, or a product of warp bounds). The
 /// program's step scale is at most <c>1 / Factor</c>; a chamfer composition can push it lower still.</param>
 public readonly record struct SdfStepScaleBinder(
     int InstructionIndex,

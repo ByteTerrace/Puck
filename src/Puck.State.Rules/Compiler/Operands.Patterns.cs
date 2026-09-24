@@ -226,23 +226,14 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             );
         }
 
-        var length = ((TokenExpression is { } tokenExpression)
-            ? ReadTupleWord(
-                expression: tokenExpression,
-                kind: Pattern.Source.Kind,
-                reader: reader,
-                rowOrdinal: rowOrdinal,
-                start: start,
-                word: word
-            )
-            : arena.ReadWord(
-                attributeOrdinal: ((AttributeOrdinal >= 0)
-                ? AttributeOrdinal
-                : rowOrdinal),
-                rowOrdinal: rowOrdinal,
-                start: start,
-                word: word
-            ).Length
+        var length = ReadWord(
+            attributeOrdinal: AttributeOrdinal,
+            kind: Pattern.Source.Kind,
+            reader: reader,
+            rowOrdinal: rowOrdinal,
+            start: start,
+            tokenExpression: TokenExpression,
+            word: word
         );
 
         if (MatchFacet is MatchFacet.At or MatchFacet.Length) {
@@ -263,6 +254,45 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         );
     }
 
+    /// <summary>Reads the word a zone, keyed, pool, or history source spells at the reader's
+    /// <see cref="IStateReader.Time"/>: each token through <paramref name="tokenExpression"/> when the pattern
+    /// carries one (<see cref="ReadTupleWord"/>), else each member's live value in
+    /// <paramref name="attributeOrdinal"/>, else the row's own live values
+    /// (<see cref="StateArena.ReadWord(int, int, in ArenaTime, Span{long}, int)"/>).</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="rowOrdinal">The source row's catalog ordinal.</param>
+    /// <param name="attributeOrdinal">The attribute row's catalog ordinal, or <c>-1</c> for the row's own
+    /// values.</param>
+    /// <param name="tokenExpression">The per-token value expression, or <see langword="null"/>.</param>
+    /// <param name="kind">The pattern's kind, which a value expression evaluates in.</param>
+    /// <param name="word">The word buffer.</param>
+    /// <param name="start">The position the word starts at.</param>
+    /// <returns>The word's length.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+    public static int ReadWord(IStateReader reader, int rowOrdinal, int attributeOrdinal, CompiledExpressionToken[]? tokenExpression, CellKind kind, Span<long> word, int start = 0) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        return ((tokenExpression is not null)
+            ? ReadTupleWord(
+                expression: tokenExpression,
+                kind: kind,
+                reader: reader,
+                rowOrdinal: rowOrdinal,
+                start: start,
+                word: word
+            )
+            : reader.Arena.ReadWord(
+                attributeOrdinal: ((attributeOrdinal >= 0)
+                    ? attributeOrdinal
+                    : rowOrdinal
+                ),
+                rowOrdinal: rowOrdinal,
+                start: start,
+                time: reader.Time,
+                word: word
+            ).Length
+        );
+    }
     /// <summary>Reads a zone's tokens in pile order, each through the pattern's value expression with
     /// <c>$token</c> bound to it; an expression that fails on a token reads that letter as zero.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -384,10 +414,13 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     public override RuleWork Cost(IRuleCostContext context) {
         var occurrenceSearch = (MatchFacet is MatchFacet.At or MatchFacet.Length);
 
+        // A board read copies the row, walks one ray, and an occurrence search then tries every start along that
+        // ray: the square is the ray's, never the whole board's.
         if (Board is { } board) {
             var cells = ((long)board.Topology.CellCount);
+            var ray = ((board.Direction >= 0) ? ((long)board.Topology.LongestRay(direction: board.Direction)) : cells);
 
-            return RuleWork.Known(units: (board.Visits + (occurrenceSearch ? (cells * cells) : cells)));
+            return RuleWork.Known(units: ((board.Visits + cells) + (occurrenceSearch ? (ray * ray) : 0L)));
         }
 
         var capacity = ((long)((RowFrom is { } live) ? live.SelectionCapacity : Capacity));

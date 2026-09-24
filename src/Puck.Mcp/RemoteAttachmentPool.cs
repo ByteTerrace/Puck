@@ -116,6 +116,7 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
             var result = await OperatorMcpServer.CallAsync(
                 attachment.Client,
                 parameters,
+                m_clock,
                 active.Token,
                 checked(++attachment.Sequence)
             ).ConfigureAwait(continueOnCapturedContext: false);

@@ -6,25 +6,25 @@ using Puck.World.Server;
 namespace Puck.World.Azure;
 
 /// <summary>
-/// First-class dynamic extension implementing <see cref="IWorldExtension"/> for Azure services:
-/// blob persistence, scheduled-events retirement observer, Entra ID authentication,
-/// ARM operations, and /livez/azure health check.
+/// Contributes the Azure world-hosting providers: <c>azure.blob</c> persistence, the <c>azure.scheduled-events</c>
+/// retirement observer, <c>azure.api-users</c> connection authentication, the <c>azure.resource</c> operation provider,
+/// and the <c>/livez/azure</c> health endpoint. Registration performs no cloud access.
 /// </summary>
-public sealed class AzureWorldExtension : IWorldExtension {
+public sealed class AzureWorldExtension : IPuckExtension {
     /// <inheritdoc/>
-    public string Name => "Azure";
+    public string Name => "Puck.World.Azure";
 
     /// <inheritdoc/>
-    public void Register(IWorldExtensionRegistry registry) {
+    public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.RegisterStorage(provider: AzureSiloExtensions.Storage);
-        registry.RegisterRetirement(provider: AzureSiloExtensions.Retirement);
-        registry.RegisterAuthentication(provider: AzureSiloExtensions.Authentication);
-        registry.RegisterOperation(provider: AzureConfiguredProvider.Registration);
-        registry.RegisterHealthCheck(
-            path: "/livez/azure",
-            handler: static live => ("application/json", AzureApplicationHealth.Response(live: live))
-        );
+        registry.AddStorage(provider: AzureSiloExtensions.Storage);
+        registry.AddRetirement(provider: AzureSiloExtensions.Retirement);
+        registry.AddAuthentication(provider: AzureSiloExtensions.Authentication);
+        registry.AddOperation(provider: AzureConfiguredProvider.Registration);
+        registry.AddHealthCheck(check: new(
+            Path: "/livez/azure",
+            Respond: static live => ("application/json", AzureApplicationHealth.Response(live: live))
+        ));
     }
 }

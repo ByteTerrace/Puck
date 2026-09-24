@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/paddleball.puck",
+  "simulationRateHz": 30,
+  "ticks": 2941,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 13,
+      "interactionRows": 4,
+      "evaluationSlots": 19,
+      "workUnitsPerTick": 24384,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 13,
+      "interactionRows": 4,
+      "evaluationSlots": 19,
+      "workUnitsPerTick": 24384,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

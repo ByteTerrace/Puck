@@ -6,24 +6,6 @@ namespace Puck.World.Tests;
 /// <summary>Game imports retain their current rules, state, patterns, and topology in authored order.</summary>
 [Collection(name: DocumentCompositionCollection.Name)]
 public sealed class GardenSplitLawTests {
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
-
     [InlineData("poker")]
     [InlineData("dominoes")]
     [InlineData("billiards")]
@@ -32,14 +14,11 @@ public sealed class GardenSplitLawTests {
     [InlineData("hexlines")]
     [Theory]
     public void ComposedGardenRetainsEachModulesProgramInOrder(string module) {
-        var worlds = Path.Combine(
-            path1: RepoRoot(),
-            path2: "src/Puck.World/Assets/worlds"
-        );
-        var source = JsonNode.Parse(File.ReadAllText(path: Path.Combine(
+        var worlds = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds");
+        var source = JsonNode.Parse(utf8Json: Puck.Testing.ShippedWorldDocuments.Read(path: Path.Combine(
             path1: worlds,
             path2: "games",
-            path3: (module + ".world.json")
+            path3: WorldDocumentName.SourceFile(name: module)
         )))!;
 
         Assert.True(
@@ -94,10 +73,7 @@ public sealed class GardenSplitLawTests {
     }
     [Fact]
     public void HoundIdentitiesBelongToTheGardenAndFitTheirDestinationRows() {
-        var garden = JsonNode.Parse(File.ReadAllText(path: Path.Combine(
-            path1: RepoRoot(),
-            path2: "src/Puck.World/Assets/worlds/puck.world.json"
-        )))!;
+        var garden = JsonNode.Parse(File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json")))!;
         var rows = garden["state"]!["world"]!.AsArray();
         var identities = Assert.Single(
             collection: rows,

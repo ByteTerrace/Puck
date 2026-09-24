@@ -14,9 +14,9 @@ public sealed class CreationShapeSpatialMemberLawTests {
         Id: 0,
         Name: null,
         Type: SdfSolidPrimitive.Box,
-        Position: new DocumentVector3(0f, 0f, 0f),
-        Rotation: new DocumentQuaternion(0f, 0f, 0f, 1f),
-        Scale: new DocumentVector3(1f, 1f, 1f),
+        Position: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+        Rotation: new DocumentQuaternion(w: 1f, x: 0f, y: 0f, z: 0f),
+        Scale: new DocumentVector3(x: 1f, y: 1f, z: 1f),
         Material: 0,
         Blend: SdfBlendOp.Union,
         Smooth: 0f,
@@ -35,7 +35,6 @@ public sealed class CreationShapeSpatialMemberLawTests {
         "rotation",
         "scale"
     );
-
     [MemberData(nameof(Members))]
     [Theory]
     public void AnOmittedSpatialMemberIsNamed(string member) {
@@ -59,4 +58,22 @@ public sealed class CreationShapeSpatialMemberLawTests {
     }
     [Fact]
     public void AShapeAuthoringEveryOneOfThemIsAccepted() => Assert.Empty(collection: Validate(shape: Shape()));
+    // A zero quaternion is finite (no NaN or infinite component slips past AnOmittedSpatialMemberIsNamed's own
+    // check), but Quaternion.Normalize divides by its zero magnitude and returns (NaN, NaN, NaN, NaN) — refused here
+    // rather than reaching the emitter as a silent NaN.
+    [Fact]
+    public void AZeroRotationIsRefusedByName() {
+        var violations = Validate(shape: (Shape() with { Rotation = new DocumentQuaternion(w: 0f, x: 0f, y: 0f, z: 0f) }));
+
+        Assert.Contains(
+            collection: violations,
+            filter: violation => (
+                (violation.Path == "shapes[0].rotation") &&
+                violation.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "zero quaternion"
+            )
+            )
+        );
+    }
 }

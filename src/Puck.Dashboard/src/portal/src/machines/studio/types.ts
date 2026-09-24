@@ -1,24 +1,25 @@
 /**
- * Shared type definitions for the studio machine: context, events, and the single boot seam
- * (`BootEngine`) the machine's boot actor calls. Split out of `studioMachine.ts` so the region
- * modules (`document.ts`, `preview.ts`, `geometry.ts`) and the machine setup itself share one
- * definition of "what the context looks like" instead of re-declaring it.
+ * Shared type definitions for the studio machine: context, events, and the single boot seam (`BootEngine`) the
+ * machine calls once for each engine it owns. Split out of `studioMachine.ts` so the region modules and the machine
+ * setup share one definition of what the context looks like.
  */
-import type { JsonPath } from "../../document/jsonPath";
-import type { DocumentRole } from "../../document/documentRole";
 import type {
   EngineCell,
-  EngineDiagnostic,
   JudgeTrace,
+  LanguageServerChannel,
   RowInfo,
+  SourceCompileResult,
+  SourceDiagnostic,
+  SourceMap,
   WorldEngine,
 } from "../../native/engineTypes";
 import type { FetchLike, OfficialLoad } from "../../official/officialClient";
 import type { ByteStore } from "../../official/byteStore";
 import type { ResolvedOfficial } from "../../official/officialBase";
-import type { LocalDraftStore } from "../../document/localDrafts";
+import type { DocumentRole } from "../../official/manifest";
+import type { DraftListing, LocalDraftStore } from "../../document/localDrafts";
 
-/** Injectable boot seam; production supplies native/engineBoot.ts, tests can use a local bundle. */
+/** Injectable boot seam; production supplies native/engineBoot.ts, tests supply a local bundle or a fake. */
 export type BootEngine = (official: OfficialLoad, options: EngineBootOptionsLike) => Promise<WorldEngine>;
 
 /** Options shared with the native engine boot implementation. */
@@ -26,6 +27,8 @@ export interface EngineBootOptionsLike {
   readonly mode: "inline" | "worker";
   readonly fetchImpl?: FetchLike;
   readonly signal?: AbortSignal;
+  /** The language engine's compiled module, which the world engine boots from without compiling its own. */
+  readonly wasmModule?: WebAssembly.Module;
 }
 
 export interface StudioMachineInput {
@@ -40,47 +43,105 @@ export interface StudioMachineInput {
 export type { LocalDraftStore };
 export type OfficialSourceLike = OfficialLoad["source"];
 
+/** The official build, which loads when the studio starts. Its build line is the manifest's. */
 export interface BootState {
   readonly status: "booting" | "ready" | "refused";
   readonly refusal: string | null;
-  readonly build: { readonly commit: string; readonly schemaVersion: string; readonly source: OfficialSourceLike } | null;
+  readonly build: { readonly commit: string; readonly dirty: boolean; readonly schemaVersion: string; readonly source: OfficialSourceLike } | null;
 }
 
-/** A prior document snapshot on the undo/redo stacks — the document state MINUS its own
- * diagnostics/deferred/composed, which are re-derived by validation rather than carried through
- * history (a document worth undoing back to is always re-validated, never trusted stale). */
-export interface DocumentRevision {
+/** The language engine, which boots from the official build when the studio starts. A refused one leaves the
+ * workspace editable, without diagnostics, and refuses the preview with its reason. */
+export interface LanguageEngineState {
+  readonly status: "booting" | "ready" | "refused";
+  readonly refusal: string | null;
+}
+
+/** The world engine, which boots the first time an island check or a preview needs it. */
+export interface WorldEngineState {
+  readonly status: "dormant" | "booting" | "ready" | "refused";
+  readonly refusal: string | null;
+}
+
+/** One workspace file. `text` is the editor's current buffer; `savedText` is the text as last opened or saved (the
+ * dirty baseline); `officialText` is the official build's text (the draft overlay's baseline). `version` counts the
+ * editor's changes to the file since the workspace opened; the language server sees the same numbers. */
+export interface WorkspaceFile {
   readonly text: string;
-  readonly value: unknown;
-  readonly label: string;
+  readonly savedText: string;
+  readonly officialText: string;
+  readonly version: number;
+}
+
+/** The language server's latest diagnostics for one file — the source tier — and the file version they describe. */
+export interface FileDiagnostics {
+  readonly version: number;
+  readonly items: readonly SourceDiagnostic[];
 }
 
 /**
- * Where this document's OWN validation stands — distinct from `diagnostics.length === 0`, which
- * is ALSO true before validation has ever run (a fresh or just-edited document starts with no
- * diagnostics of its own). `'pending'` covers both "never validated yet" and "a newer edit has
- * since superseded whatever the last validation found" — a caller with no engine available (see
- * `diagnoseEngineUnavailable`) stays `'pending'` forever, which is the correct, honest answer:
- * "unknown", not "clean".
+ * The world engine's check of one workspace revision. `compile` is the semantic tier: the full compile of the open
+ * `.puck` source (every diagnostic, its IR, and its source map), or `null` when the open file has no source. When it
+ * has no errors, the workspace's root is composed and validated; `composeDiagnostics` are what that found, joining the
+ * semantic tier. `ok` means both passed, counting errors only: an `information` finding never blocks the preview.
+ * `value` is the composed document parsed with 64-bit literals kept exact.
  */
-export type DocumentValidationStatus = "pending" | "clean" | "refused";
-
-export interface DocumentState extends DocumentRevision {
-  readonly name: string;
-  readonly role: DocumentRole;
+export interface IslandCheck {
   readonly revision: number;
-  /** Text of the applied value; JSON typing only changes `text`. */
-  readonly appliedText: string;
-  /** Last opened or saved text, used for dirty detection including unapplied edits. */
-  readonly savedText: string;
-  readonly past: readonly DocumentRevision[];
-  readonly future: readonly DocumentRevision[];
-  readonly diagnostics: readonly EngineDiagnostic[];
-  readonly deferred: readonly string[];
-  /** The engine's composed standalone JSON for a fragment or the island root; null for a
-   * standalone world document (validated by `engine.parse` alone) or before validation runs. */
+  readonly compile: { readonly path: string; readonly result: SourceCompileResult } | null;
+  readonly ok: boolean;
   readonly composed: string | null;
-  readonly validation: DocumentValidationStatus;
+  readonly value: unknown;
+  readonly composeDiagnostics: readonly SourceDiagnostic[];
+}
+
+/** A source span the editor should show and select; `nonce` makes a repeated reveal of the same span a new one. */
+export interface SourceReveal {
+  readonly path: string;
+  readonly line: number;
+  readonly column: number;
+  readonly length: number;
+  readonly nonce: number;
+}
+
+export interface WorkspaceState {
+  /** Increments with each open, so an editor can tell one workspace from the next. */
+  readonly id: number;
+  /** The official document the workspace opened on (its manifest name) and that document's manifest role. */
+  readonly documentName: string;
+  readonly role: DocumentRole;
+  /** The draft the workspace was loaded from, or `null` for the official build itself. */
+  readonly draftId: string | null;
+  /** The document's own source file. */
+  readonly entry: string;
+  /** The source the island check and the preview compose: the manifest's composed island root for a fragment, the
+   * document's own source otherwise, or `null` when there is nothing the studio can compose (`rootRefusal` says why). */
+  readonly root: string | null;
+  readonly rootRefusal: string | null;
+  readonly files: Readonly<Record<string, WorkspaceFile>>;
+  /** The file the editor shows. */
+  readonly active: string;
+  /** Increments with each source change, in any file. */
+  readonly revision: number;
+  readonly diagnostics: Readonly<Record<string, FileDiagnostics>>;
+  /** The latest island check the machine accepted, or `null` before the first. */
+  readonly island: IslandCheck | null;
+  /** The newest clean composition's document, which the Spatial and State views show; it outlives a refused check
+   * so an error in progress does not empty them. */
+  readonly composition: unknown;
+  readonly reveal: SourceReveal | null;
+}
+
+/** The compiled IR of one source for the Compiled and Sections views: the island check's compile at its revision, or
+ * one fetched on request. */
+export interface CompiledView {
+  readonly workspaceId: number;
+  readonly path: string;
+  readonly revision: number;
+  readonly result: SourceCompileResult;
+  /** `result.document` parsed with 64-bit literals kept exact, or `null` when compilation refused. */
+  readonly value: unknown;
+  readonly sourceMap: SourceMap;
 }
 
 export type PreviewScriptStep =
@@ -109,9 +170,8 @@ export interface PreviewState {
   /** The full write/tick recipe since the last compile — the source `JUMP_TO_TICK`/undo/redo
    * replay against a freshly recompiled handle (the engine has no snapshot-restore of its own). */
   readonly script: readonly PreviewScriptStep[];
-  /** The `document.revision` this preview was compiled from — a later document revision makes
-   * this preview stale (see the machine's own document-invalidates-preview transition). */
-  readonly sourceRevision: number;
+  /** The composed document this preview compiled, which every history move recompiles. */
+  readonly composed: string | null;
 }
 
 export interface SelectionState {
@@ -122,33 +182,41 @@ export interface SelectionState {
 
 export interface StudioContext {
   readonly official: OfficialLoad | null;
-  readonly engine: WorldEngine | null;
+  /** Hosts the language server; boots with the studio. */
+  readonly languageEngine: WorldEngine | null;
+  /** The language engine's language server channel, shared by the editor's client and the diagnostics stream. */
+  readonly languageChannel: LanguageServerChannel | null;
+  /** Hosts composition, preview, the console, and geometry; boots on first need. */
+  readonly worldEngine: WorldEngine | null;
   readonly boot: BootState;
-  readonly document: DocumentState;
+  readonly language: LanguageEngineState;
+  readonly world: WorldEngineState;
+  readonly workspace: WorkspaceState | null;
+  readonly compiled: CompiledView | null;
   readonly geometry: Readonly<Record<string, readonly EngineCell[]>>;
   readonly selection: SelectionState;
   readonly preview: PreviewState;
-  /** The machine's own construction input, carried into context because an invoked actor's
-   * `input` factory only ever sees `{context, event}` — never the original `createActor` input —
-   * so anything an actor (the boot actor, the draft actors) needs from it must live here.
-   * `draftStore` is resolved to a concrete store at context-construction time (defaulting to
-   * `defaultLocalDraftStore`) so nothing downstream repeats that fallback. Not part of the
-   * machine's own public "what does the studio look like" contract — a UI selector has no reason
-   * to read it. */
+  /** The local draft library, read when the studio starts and again after each save or delete. */
+  readonly drafts: DraftListing;
+  /** What the studio itself refused (an open, a save, a compile request), newest last; cleared by the next open. */
+  readonly refusals: readonly string[];
+  /** The machine's own construction input, carried into context because an invoked actor's `input` factory only
+   * sees `{context, event}`. `draftStore` is resolved to a concrete store at construction. */
   readonly machineInput: StudioMachineInput & { readonly draftStore: LocalDraftStore };
 }
 
 export type StudioEvent =
   | { type: "OPEN_OFFICIAL"; name: string }
-  | { type: "OPEN_TEXT"; text: string; name?: string }
-  | { type: "EDIT_DOCUMENT"; path: JsonPath; value?: unknown; label: string }
-  | { type: "APPLY_TEXT"; text: string }
-  | { type: "SET_TEXT_DRAFT"; text: string }
-  | { type: "UNDO" }
-  | { type: "REDO" }
-  | { type: "PAINT_CELLS"; topology: string; row: string; ordinals: number[]; value: bigint }
-  | { type: "SAVE_DRAFT"; id?: string; title?: string }
   | { type: "LOAD_DRAFT"; id: string }
+  | { type: "OPEN_FILE"; path: string }
+  | { type: "SOURCE_CHANGED"; path: string; version: number; text: string }
+  | { type: "DIAGNOSTICS"; path: string; version: number | null; diagnostics: readonly SourceDiagnostic[] }
+  | { type: "ISLAND_CHECKED"; check: Omit<IslandCheck, "value"> }
+  | { type: "LANGUAGE_FAILED"; message: string }
+  | { type: "WORLD_FAILED"; message: string }
+  | { type: "REVEAL_SOURCE"; path: string; line: number; column: number; length: number }
+  | { type: "REQUEST_COMPILED" }
+  | { type: "SAVE_DRAFT"; id?: string; title?: string }
   | { type: "DELETE_DRAFT"; id: string }
   | { type: "SELECT_TOPOLOGY"; name: string }
   | { type: "SELECT_CELLS"; ordinals: number[]; mode: "replace" | "toggle" }
@@ -162,17 +230,8 @@ export type StudioEvent =
   | { type: "RESET_WORLD" }
   | { type: "PREVIEW_STOP" };
 
-/** Event types that change `context.document` — dispatched to the preview region too (parallel
- * states see every event), so it can stop a preview that would otherwise run against a document
- * the engine hasn't validated yet. `SET_TEXT_DRAFT` is deliberately absent: typing is not a
- * revision. */
-export const DOCUMENT_MUTATING_EVENTS: ReadonlySet<StudioEvent["type"]> = new Set([
-  "OPEN_OFFICIAL",
-  "OPEN_TEXT",
-  "EDIT_DOCUMENT",
-  "APPLY_TEXT",
-  "UNDO",
-  "REDO",
-  "PAINT_CELLS",
-  "LOAD_DRAFT",
-]);
+/** Opens that read the workspace from somewhere first (the official build, or a draft over it). */
+export const OPEN_EVENTS = ["OPEN_OFFICIAL", "LOAD_DRAFT"] as const;
+
+/** Events that change what the preview would compile, so a running preview stops. */
+export const SOURCE_EVENTS = ["SOURCE_CHANGED", ...OPEN_EVENTS] as const;

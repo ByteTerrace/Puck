@@ -4,6 +4,53 @@
   maintained home. Keep layout rules in the consuming adapter.
 */
 
+/*
+  Metric-matched fallbacks for the brand fonts. Until Lora and JetBrains Mono arrive, text renders in a local
+  font scaled and aligned to their measurements, so the swap changes the glyphs and moves nothing: every line
+  keeps its height, and monospaced text keeps its width exactly. size-adjust makes the local font's average
+  advance (weighted by English letter frequency) equal the brand font's; the ascent, descent, and line-gap
+  overrides are the brand font's own vertical metrics. Computed from the self-hosted docs/site/_theme/fonts
+  files against Georgia, Georgia Bold, Consolas, and Menlo (DejaVu Sans Mono's metrics); recompute them if
+  any of those fonts change. A face whose local font is missing is skipped, and the next font in the stack is
+  used as before.
+*/
+@font-face {
+  font-family: "Lora Fallback";
+  font-weight: 400;
+  src: local("Georgia");
+  size-adjust: 106.15%;
+  ascent-override: 94.77%;
+  descent-override: 25.81%;
+  line-gap-override: 0.00%;
+}
+@font-face {
+  font-family: "Lora Fallback";
+  font-weight: 500 700;
+  src: local("Georgia Bold"), local("Georgia-Bold");
+  size-adjust: 92.89%;
+  ascent-override: 108.31%;
+  descent-override: 29.50%;
+  line-gap-override: 0.00%;
+}
+@font-face {
+  font-family: "JetBrains Mono Fallback";
+  font-weight: 400 700;
+  src: local("Consolas");
+  size-adjust: 109.13%;
+  ascent-override: 93.47%;
+  descent-override: 27.49%;
+  line-gap-override: 0.00%;
+}
+@font-face {
+  font-family: "JetBrains Mono Fallback Menlo";
+  font-weight: 400 700;
+  src: local("Menlo"), local("Menlo-Regular");
+  size-adjust: 99.66%;
+  ascent-override: 102.35%;
+  descent-override: 30.10%;
+  line-gap-override: 0.00%;
+}
+
 :root {
   --paper:         #e7e4ed;
   --paper-2:       #dbd7e4;
@@ -18,8 +65,8 @@
   --code-bg:       #221f2c;
   --code-fg:       #e9e5f1;
   --quote-bg:      #e0dce9;
-  --font-body:     "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  --font-code:     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-body:     "Lora", "Lora Fallback", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --font-code:     "JetBrains Mono", "JetBrains Mono Fallback", "JetBrains Mono Fallback Menlo", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -56,8 +103,8 @@
   --code-bg:       #221f2c;
   --code-fg:       #e9e5f1;
   --quote-bg:      #e0dce9;
-  --font-body:     "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  --font-code:     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-body:     "Lora", "Lora Fallback", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --font-code:     "JetBrains Mono", "JetBrains Mono Fallback", "JetBrains Mono Fallback Menlo", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 :root[data-theme="dark"],

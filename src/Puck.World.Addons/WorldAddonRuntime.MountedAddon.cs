@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Scripting;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -35,7 +36,7 @@ public sealed partial class WorldAddonRuntime {
             // already proves a guest's whole batch (every kind of act combined) cannot exceed its declared outCap.
             ReservedAnswers = new AddonInCell[AddonAbi.MaxOutCells];
             Pending = new AddonInCell[AddonAbi.MaxInCells];
-            Principal = WorldPrincipal.Addon(name: instance.Name);
+            Principal = Principal.Addon(name: instance.Name);
             Pump = new AddonSimulationPump();
             Requests = requests;
             ResponseChannel = ResolveResponseChannel(instance: instance);
@@ -148,7 +149,7 @@ public sealed partial class WorldAddonRuntime {
         public AddonInCell[] Pending { get; }
         public int PendingCount { get; set; }
         /// <summary>Gets the mount-bound acting identity — never carried on a record.</summary>
-        public WorldPrincipal Principal { get; }
+        public Principal Principal { get; }
         /// <summary>Gets the adapter crossing that drives this guest and validates its vocabulary.</summary>
         public AddonSimulationPump Pump { get; }
         public bool QuotaDropReported { get; set; }

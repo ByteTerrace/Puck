@@ -46,13 +46,10 @@ public sealed partial class CorpusManifest {
     /// <summary>Gets the declared corpora.</summary>
     public IReadOnlyList<Corpus> Corpora =>
         m_corpora;
-    /// <summary>Gets the directory the corpora are cached under.</summary>
+    /// <summary>Gets the directory the corpora are cached under: the <c>corpora</c> subdirectory of the per-user
+    /// Puck directory (<see cref="Puck.Abstractions.PuckUserDirectory"/>).</summary>
     public static string CacheRoot =>
-        Path.Combine(
-            path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData),
-            path2: "Puck",
-            path3: "corpora"
-        );
+        Puck.Abstractions.PuckUserDirectory.Resolve(name: "corpora");
 
     /// <summary>Resolves a battery's committed <c>corpora.json</c> in the running checkout, independently of
     /// compiler source-path mapping.</summary>

@@ -269,6 +269,7 @@ public sealed partial record WorldCostReport(
         ) {
             EvidenceDigest = model.EvidenceDigest,
             ContributorSources = WorldCostSource.From(definition: definition),
+            Presentation = WorldPresentationCost.Measure(definition: definition),
             Resources = WorldResourceDimensions.Measure(definition: definition),
             WorkBudget = budget,
         };

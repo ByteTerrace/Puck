@@ -103,10 +103,14 @@ public sealed class CodeFixTests {
 
         var before = Manifest.Of(
             new ManifestEntry { Id = "alpha", Sha256 = StaleHash, Symbol = "M:Subject.Assembly.Subject.Alpha" },
-            new ManifestEntry { Id = "beta", Sha256 = new string(
+            new ManifestEntry {
+                Id = "beta",
+                Sha256 = new string(
                 c: 'd',
                 count: 64
-            ), Symbol = "M:Subject.Assembly.Subject.Beta" }
+            ),
+                Symbol = "M:Subject.Assembly.Subject.Beta",
+            }
         );
 
         using var subject = FixHarness.Create(

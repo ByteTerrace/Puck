@@ -1,0 +1,784 @@
+{
+  "id": "rulepush-overworld",
+  "title": "A rulepush level cleared on the visitor's record opens the overworld's west gate",
+  "binding": "Boots the rulepush overworld with a fresh identity bound to the seat. The seat walks across the east border into Hedges and clears it with the puzzle presses, which writes 'pushCleared' onto its own identity; it walks back, north into Rewrite, clears it ('rewriteCleared'), and back again. The overworld's own rule reads both facts off the identity that arrived with the body, opens the west gate, and the respond facet swaps the solid gate for the open one; the seat then walks west into Sink and clears it too. Nothing crosses between the worlds but the body and its identity. The discriminating leg leaves Rewrite unsolved, so the record carries one clear, the gate stays shut, and the walk west ends at the gate.",
+  "bootShape": "headless",
+  "requirements": [],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "expect": [
+      {
+        "name": "hedges-cleared-on-the-record",
+        "present": true,
+        "match": "contains",
+        "text": "facts=pushCleared:1]",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "rewrite-cleared-on-the-record",
+        "present": true,
+        "match": "contains",
+        "text": "facts=pushCleared:1,rewriteCleared:1]",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "gate-shut-after-one-clear",
+        "present": true,
+        "match": "contains",
+        "text": "'westOpen'.'$value' value=0",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "gate-open-after-two-clears",
+        "present": true,
+        "match": "contains",
+        "text": "'westOpen'.'$value' value=1",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "gate-swapped-open",
+        "present": true,
+        "match": "contains",
+        "text": "'westGate' prototype=gateOpen",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "walked-through-into-sink",
+        "present": true,
+        "match": "contains",
+        "text": "link~west' seat 1 arrived as impfan",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "sink-cleared-on-the-record",
+        "present": true,
+        "match": "contains",
+        "text": "facts=pushCleared:1,rewriteCleared:1,sinkCleared:1]",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "no-rule-refusal",
+        "present": false,
+        "match": "contains",
+        "text": "effect refused",
+        "stream": "stderr",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "identity.create",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "player.identity",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.pose",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 11
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 12
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 13
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 14
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.pose",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 15
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 11
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 16
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 12
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 17
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 13
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 18
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 14
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 19
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 15
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 20
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 16
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 21
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 17
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 22
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 18
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 23
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 19
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 24
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 25
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 26
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.placements",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.pose",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 27
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 20
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 28
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 21
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 29
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 22
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 30
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 23
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 31
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 24
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 32
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 25
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 33
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 26
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 34
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 27
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 35
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 36
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "wire.errors",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "worlds/rulepush/rulepush.puck"
+  },
+  "discriminating": {
+    "expect": [
+      {
+        "name": "hedges-cleared-on-the-record",
+        "present": true,
+        "match": "contains",
+        "text": "facts=pushCleared:1]",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "gate-shut-after-one-clear",
+        "present": true,
+        "match": "contains",
+        "text": "'westOpen'.'$value' value=0",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "gate-stays-closed",
+        "present": true,
+        "match": "contains",
+        "text": "'westGate' prototype=gateClosed",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "identity.create",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "player.identity",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.pose",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 11
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 12
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 13
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 14
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.pose",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 15
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 11
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 16
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 12
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 17
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 13
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 18
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 19
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 20
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.placements",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.pose",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 21
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "wire.errors",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "worlds/rulepush/rulepush.puck"
+  }
+}

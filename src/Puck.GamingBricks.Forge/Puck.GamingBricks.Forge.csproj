@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <PuckLicenseKind>OpenSource</PuckLicenseKind>
-        <PuckLicenseKind>OpenSource</PuckLicenseKind>
+        <PuckLicenseKind>GamingBricks</PuckLicenseKind>
     <Description>Data-first cartridge authoring: editable ROM documents, validation, canonical source identity, and compiler contracts shared by the HGB and AGB backends.</Description>
     <IsAotCompatible>false</IsAotCompatible>
     <IsPackable>true</IsPackable>

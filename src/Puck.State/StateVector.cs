@@ -14,10 +14,8 @@ public sealed class StateVector : IEquatable<StateVector> {
 
     /// <summary>Gets the vector components as a read-only span of signed 8-bit integers.</summary>
     public ReadOnlySpan<sbyte> Components => m_components;
-
     /// <summary>Gets the vector components as a read-only memory of signed 8-bit integers.</summary>
     public ReadOnlyMemory<sbyte> Memory => m_components;
-
     /// <summary>Gets the component dimension count.</summary>
     public int Dimensions => m_components.Length;
 
@@ -29,7 +27,6 @@ public sealed class StateVector : IEquatable<StateVector> {
     /// already hold an admitted vector's bytes, such as a value just read back from the arena.</summary>
     public static StateVector CreateUnchecked(ReadOnlySpan<sbyte> components) =>
         new(components: components.ToArray());
-
     /// <summary>Tries to create a validated, admitted unit vector from the given components.</summary>
     /// <param name="components">The candidate components.</param>
     /// <param name="vector">The created vector on success; otherwise <see langword="null"/>.</param>
@@ -43,7 +40,7 @@ public sealed class StateVector : IEquatable<StateVector> {
             return false;
         }
 
-        for (var i = 0; i < components.Length; i++) {
+        for (var i = 0; (i < components.Length); i++) {
             if (components[i] == -128) {
                 vector = null;
                 error = "Vector component -128 is not permitted.";
@@ -64,21 +61,19 @@ public sealed class StateVector : IEquatable<StateVector> {
 
         return true;
     }
-
     /// <summary>Encodes the vector components as an unpadded base64url string.</summary>
     public string ToBase64Url() {
-        var byteSpan = MemoryMarshal.Cast<sbyte, byte>(m_components);
+        var byteSpan = MemoryMarshal.Cast<sbyte, byte>(span: m_components);
 
         return Base64Url.EncodeToString(source: byteSpan);
     }
-
     /// <summary>Tries to parse a base64url string into an admitted vector of the expected dimension count.</summary>
     /// <param name="text">The base64url text.</param>
     /// <param name="dimensions">The expected dimension count.</param>
     /// <param name="vector">The parsed vector on success; otherwise <see langword="null"/>.</param>
     /// <param name="error">The error reason on failure; otherwise <see langword="null"/>.</param>
     public static bool TryParseBase64Url(string text, int dimensions, [NotNullWhen(true)] out StateVector? vector, [NotNullWhen(false)] out string? error) {
-        if (string.IsNullOrEmpty(text)) {
+        if (string.IsNullOrEmpty(value: text)) {
             vector = null;
             error = "Base64url vector string cannot be empty.";
 
@@ -101,17 +96,16 @@ public sealed class StateVector : IEquatable<StateVector> {
             return false;
         }
 
-        var sbyteBuffer = MemoryMarshal.Cast<byte, sbyte>(byteBuffer);
+        var sbyteBuffer = MemoryMarshal.Cast<byte, sbyte>(span: byteBuffer);
 
-        return TryCreate(components: sbyteBuffer, vector: out vector, error: out error);
+        return TryCreate(components: sbyteBuffer, error: out error, vector: out vector);
     }
-
     /// <summary>Tries to parse an unpadded base64url string into an admitted vector.</summary>
     /// <param name="text">The base64url text.</param>
     /// <param name="vector">The parsed vector on success; otherwise <see langword="null"/>.</param>
     /// <param name="error">The error reason on failure; otherwise <see langword="null"/>.</param>
     public static bool TryParseBase64Url(string text, [NotNullWhen(true)] out StateVector? vector, [NotNullWhen(false)] out string? error) {
-        if (string.IsNullOrEmpty(text)) {
+        if (string.IsNullOrEmpty(value: text)) {
             vector = null;
             error = "Base64url vector string cannot be empty.";
 
@@ -135,11 +129,10 @@ public sealed class StateVector : IEquatable<StateVector> {
             return false;
         }
 
-        var sbyteSpan = MemoryMarshal.Cast<byte, sbyte>(byteBuffer[..written]);
+        var sbyteSpan = MemoryMarshal.Cast<byte, sbyte>(span: byteBuffer[..written]);
 
-        return TryCreate(components: sbyteSpan, vector: out vector, error: out error);
+        return TryCreate(components: sbyteSpan, error: out error, vector: out vector);
     }
-
     /// <summary>Calculates a 32-bit FNV-1a digest over the vector components for compact human display.</summary>
     public uint ComputeDigest() => ComputeDigest(components: m_components);
     /// <summary>Calculates a 32-bit FNV-1a digest over loose vector components for compact human display.</summary>
@@ -150,41 +143,35 @@ public sealed class StateVector : IEquatable<StateVector> {
 
         return ((uint)(hash ^ (hash >> 32)));
     }
-
     /// <inheritdoc/>
     public bool Equals(StateVector? other) {
         if (other is null) {
             return false;
         }
 
-        if (ReferenceEquals(this, other)) {
+        if (ReferenceEquals(objA: this, objB: other)) {
             return true;
         }
 
-        return m_components.AsSpan().SequenceEqual(other.m_components.AsSpan());
+        return m_components.AsSpan().SequenceEqual(other: other.m_components.AsSpan());
     }
-
     /// <inheritdoc/>
     public override bool Equals(object? obj) =>
-        (obj is StateVector other) && Equals(other);
-
+        ((obj is StateVector other) && Equals(other: other));
     /// <inheritdoc/>
     public override int GetHashCode() {
-        var bytes = MemoryMarshal.Cast<sbyte, byte>(m_components);
+        var bytes = MemoryMarshal.Cast<sbyte, byte>(span: m_components);
 
         return unchecked((int)Fnv1aHash.Compute(values: bytes));
     }
-
     /// <inheritdoc/>
     public override string ToString() => ToBase64Url();
 
     public static bool operator ==(StateVector? left, StateVector? right) =>
-        left?.Equals(right) ?? (right is null);
-
+        (left?.Equals(other: right) ?? (right is null));
     public static bool operator !=(StateVector? left, StateVector? right) =>
         !(left == right);
 }
-
 /// <summary>JSON converter for <see cref="StateVector"/>, serializing as unpadded base64url.</summary>
 public sealed class StateVectorJsonConverter : JsonConverter<StateVector> {
     /// <inheritdoc/>
@@ -194,7 +181,7 @@ public sealed class StateVectorJsonConverter : JsonConverter<StateVector> {
         }
 
         if (reader.TokenType != JsonTokenType.String) {
-            throw new JsonException("Expected string token for base64url StateVector.");
+            throw new JsonException(message: "Expected string token for base64url StateVector.");
         }
 
         var text = reader.GetString();
@@ -203,13 +190,12 @@ public sealed class StateVectorJsonConverter : JsonConverter<StateVector> {
             return null;
         }
 
-        if (!StateVector.TryParseBase64Url(text: text, vector: out var vector, error: out var error)) {
-            throw new JsonException($"Invalid StateVector base64url: {error}");
+        if (!StateVector.TryParseBase64Url(error: out var error, text: text, vector: out var vector)) {
+            throw new JsonException(message: $"Invalid StateVector base64url: {error}");
         }
 
         return vector;
     }
-
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, StateVector value, JsonSerializerOptions options) {
         writer.WriteStringValue(value: value.ToBase64Url());

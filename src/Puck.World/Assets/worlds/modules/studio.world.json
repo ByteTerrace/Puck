@@ -374,7 +374,7 @@
                 "value": 8
               },
               {
-                "op": "Modulo"
+                "op": "Remainder"
               }
             ]
           }
@@ -419,7 +419,8 @@
   ],
   "exports": {
     "reads": [
-      "look"
+      "look",
+      "studioTurntable"
     ],
     "actions": [
       "look"

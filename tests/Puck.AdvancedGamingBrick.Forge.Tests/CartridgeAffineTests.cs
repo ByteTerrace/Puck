@@ -2,21 +2,78 @@ using Puck.GamingBricks.Forge;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
-/// <summary>Covers the rotating and scaling background: the matrix follows the authored angle and zoom.</summary>
-public sealed class CartridgeAffineTests {
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
+/// <summary>Renders the layer turned an eighth once for every affine test that compares against it.</summary>
+public sealed class AffineFixture {
+    private readonly Lazy<string> m_turned = new(valueFactory: static () => CartridgeAffineTests.Render(
+        angle: 32,
+        scale: 16
+    ));
 
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
-    // A wedge of solid cells in one corner, so a turn is visible rather than symmetric.
-    private static string Render(int angle, int scale, int visible = 1, bool solid = false, (int X, int Y)? single = null, bool turningSprite = false) {
+    /// <summary>Gets the sampled frame of the background-only cartridge turned by 32 steps at unit scale.</summary>
+    public string Turned => m_turned.Value;
+}
+/// <summary>Covers the rotating and scaling background: the matrix follows the authored angle and zoom.</summary>
+public sealed class CartridgeAffineTests(AffineFixture affine) : IClassFixture<AffineFixture> {
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "the colour machine",
+            Document: CartridgeDocuments.Create(
+                target: "cgb",
+                title: "AFFCGB"
+            ) with { Affine = Turning(
+                map: new int[256],
+                scale: 16
+            ) },
+            Path: "affine",
+            Fragment: "needs the advanced machine"
+        ),
+        new(
+            Name: "a map that is not square",
+            Document: CartridgeDocuments.Create(
+                target: "agb",
+                title: "AFFBAD"
+            ) with { Affine = Turning(
+                map: new int[300],
+                scale: 16
+            ) },
+            Path: "affine.map",
+            Fragment: "forming a square map"
+        ),
+        new(
+            Name: "a zero scale",
+            Document: CartridgeDocuments.Create(
+                target: "agb",
+                title: "AFFBAD"
+            ) with { Affine = Turning(
+                map: new int[256],
+                scale: 0
+            ) },
+            Path: "affine.scale",
+            Fragment: "zero scale has no inverse"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    // An upright, visible turning layer at the origin, so only the map and scale vary between refusals.
+    private static CartridgeAffine Turning(int[] map, int scale) => new(
+        Map: map,
+        Angle: CartridgeExpressions.Of(constant: 0),
+        Scale: CartridgeExpressions.Of(constant: scale),
+        CentreX: CartridgeExpressions.Of(constant: 0),
+        CentreY: CartridgeExpressions.Of(constant: 0),
+        Visible: CartridgeExpressions.Of(constant: 1)
+    );
+
+    /// <summary>Renders a wedge of solid cells in one corner, so a turn is visible rather than symmetric.</summary>
+    /// <param name="angle">The authored angle, in 256ths of a turn.</param>
+    /// <param name="scale">The authored scale, where 16 is unit.</param>
+    /// <param name="visible">The authored visibility.</param>
+    /// <param name="solid">Whether every cell is solid rather than the wedge.</param>
+    /// <param name="single">One pixel to return instead of the sampled grid.</param>
+    /// <param name="turningSprite">Whether to add an off-screen turning sprite sharing the turn table.</param>
+    /// <returns>The sampled pixels as hexadecimal text.</returns>
+    internal static string Render(int angle, int scale, int visible = 1, bool solid = false, (int X, int Y)? single = null, bool turningSprite = false) {
         var map = new int[256];
 
         for (var row = 0; (row < 16); ++row) {
@@ -133,6 +190,7 @@ public sealed class CartridgeAffineTests {
 
         return sample.ToString();
     }
+
     private static string RenderCentre(int visible) => Render(
         angle: 0,
         scale: 16,
@@ -191,10 +249,7 @@ public sealed class CartridgeAffineTests {
             angle: 0,
             scale: 16
         );
-        var turned = Render(
-            angle: 32,
-            scale: 16
-        );
+        var turned = affine.Turned;
         var enlarged = Render(
             angle: 0,
             scale: 8
@@ -221,10 +276,7 @@ public sealed class CartridgeAffineTests {
     [Fact]
     public void TurningSpritesAndBackgroundShareOneTableAndKeepTheirTransforms() {
         Assert.Equal(
-            expected: Render(
-                angle: 32,
-                scale: 16
-            ),
+            expected: affine.Turned,
             actual: Render(
                 angle: 32,
                 scale: 16,
@@ -232,54 +284,10 @@ public sealed class CartridgeAffineTests {
             )
         );
     }
-    [Fact]
-    public void ValidationGatesTheTurningLayer() {
-        var square = new int[256];
-        var humble = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "AFFCGB"
-        ) with {
-            Affine = new CartridgeAffine(
-            Map: square,
-            Angle: CartridgeExpressions.Of(constant: 0),
-            Scale: CartridgeExpressions.Of(constant: 16),
-            CentreX: CartridgeExpressions.Of(constant: 0),
-            CentreY: CartridgeExpressions.Of(constant: 0),
-            Visible: CartridgeExpressions.Of(constant: 1)
-        ),
-        };
-
-        Refuses(
-            document: humble,
-            fragment: "needs the advanced machine"
-        );
-
-        var advanced = CartridgeDocuments.Create(
-            target: "agb",
-            title: "AFFBAD"
-        );
-
-        Refuses(
-            document: advanced with { Affine = new CartridgeAffine(
-                Map: new int[300],
-                Angle: CartridgeExpressions.Of(constant: 0),
-                Scale: CartridgeExpressions.Of(constant: 16),
-                CentreX: CartridgeExpressions.Of(constant: 0),
-                CentreY: CartridgeExpressions.Of(constant: 0),
-                Visible: CartridgeExpressions.Of(constant: 1)
-            ) },
-            fragment: "forming a square map"
-        );
-        Refuses(
-            document: advanced with { Affine = new CartridgeAffine(
-                Map: square,
-                Angle: CartridgeExpressions.Of(constant: 0),
-                Scale: CartridgeExpressions.Of(constant: 0),
-                CentreX: CartridgeExpressions.Of(constant: 0),
-                CentreY: CartridgeExpressions.Of(constant: 0),
-                Visible: CartridgeExpressions.Of(constant: 1)
-            ) },
-            fragment: "zero scale has no inverse"
-        );
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationGatesTheTurningLayer(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

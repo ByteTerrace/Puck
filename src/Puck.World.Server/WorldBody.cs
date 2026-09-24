@@ -239,21 +239,6 @@ public sealed partial class WorldBody {
     private FixedQ4816 MaxDrivePitch => m_tuning.Turn.MaxPitch;
 
     private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
     // The scripted tape: a FIFO of timed segments in a growable ring buffer of structs. While one is live it overrides
     // the keys; a segment is consumed one host tick at a time (one segment drives each Advance) and
     // dropped once its time runs out. An enqueue writes a struct into a pre-owned slot (no per-segment heap object) and
@@ -275,7 +260,7 @@ public sealed partial class WorldBody {
     // stands against. Ambient follows opposed solved gravity or the contact field's fallback; SurfaceFollowing also
     // admits a measured support normal while grounded. Held from the previous step only when the active policy's
     // ambient query is degenerate.
-    private FixedVector3 m_up = UnitY;
+    private FixedVector3 m_up = FixedVector3.UnitY;
 
     // Set by a teleport: the next up resolve SNAPS to the field instead of steering toward it, because the body did
     // not turn — it was relocated. See WorldBody.Lifecycle's Pose and WorldBody.Step's ResolveUp.
@@ -292,9 +277,11 @@ public sealed partial class WorldBody {
     private readonly CompiledActionSpec?[] m_laneBindings = new CompiledActionSpec?[ActionLaneCount];
     private readonly LaneActionRuntime[] m_laneActions = new LaneActionRuntime[ActionLaneCount];
     private CompiledActionStateSlot[] m_actionStateDefinitions = [];
+
     // Named counters and timers are stored in the arena's slot lanes, addressed by this body's own entity index —
     // the body holds the address, never the values.
     private WorldActionStateLane? m_stateLane;
+
     private int m_stateOrdinal = -1;
     private long[] m_actionStateRequested = [];
     private string[] m_actionStateLastWriter = [];
@@ -382,6 +369,7 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+        RescaleColliderVolumes();
         m_rigid = rigid;
         m_carry = carry;
         m_tetherFacet = tether;

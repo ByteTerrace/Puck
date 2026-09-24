@@ -1,0 +1,12 @@
+# The same instance names the perturbed echo, whose declarations read time and timeDelta from each other's offset.
+pipeline.wait echo compiled 40
+pipeline.wait echo installed 10
+world.row.set views.pipelines {"name":"echo","source":"{fixtures}/perturbed.pipeline.json"}
+pipeline.reload echo
+pipeline.wait echo compiled 40
+pipeline.wait echo installed 10
+pipeline.sentinels echo on
+pipeline.reset echo
+pipeline.wait echo submitted 1 10
+pipeline.capture echo {run}/echo.png
+pipeline.wait echo captured 10

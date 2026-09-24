@@ -95,15 +95,14 @@ internal sealed class FakePeerTransport : IPeerTransport {
 /// transport key is present so the fault, when one is provoked, is the silence and never an unbound channel.</summary>
 internal sealed class SilentPeerConnection : IPeerConnection {
     private readonly CancellationTokenSource m_closed = new();
+    private readonly TaskCompletionSource m_disposed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
     public EndPoint RemoteEndpoint { get; } = PeerTestSupport.Loopback(port: 1);
     public ReadOnlyMemory<byte> RemoteTransportKey { get; } = "a key this connection never has to prove"u8.ToArray();
 
-    private int m_disposed;
-
     /// <summary>Gets a value indicating whether <see cref="DisposeAsync"/> ran — what a law asserts to show a
     /// failed handshake released its connection.</summary>
-    public bool IsDisposed => (Volatile.Read(location: ref m_disposed) != 0);
+    public bool IsDisposed => m_disposed.Task.IsCompleted;
     public int MaxDatagramBytes => 0;
 
     public async ValueTask<Stream?> AcceptStreamAsync(CancellationToken ct = default) {
@@ -125,10 +124,7 @@ internal sealed class SilentPeerConnection : IPeerConnection {
         return null;
     }
     public ValueTask DisposeAsync() {
-        if (Interlocked.Exchange(
-            location1: ref m_disposed,
-            value: 1
-        ) == 0) {
+        if (m_disposed.TrySetResult()) {
             m_closed.Cancel();
         }
 
@@ -199,15 +195,24 @@ internal sealed class SilentPeerConnection : IPeerConnection {
 /// the remote side acknowledges it (<see cref="AcknowledgeShutdowns"/>, which a law standing in for a vanished
 /// remote never calls) or the connection beneath it is disposed, and a stream write completes only once the remote
 /// side has granted flow-control credit for it (<see cref="WithholdWriteCredit"/> models a remote that never
-/// does).</summary>
+/// does). It also reports two facts a law awaits instead of polling: a stream shutdown left waiting on the remote's
+/// acknowledgement (<see cref="ShutdownParked"/>), and how many bytes this end's streams have read
+/// (<see cref="ReadThroughAsync"/>) against how many they wrote (<see cref="BytesWritten"/>).</summary>
 internal sealed class InMemoryPeerConnection : IPeerConnection {
     private readonly TaskCompletionSource m_closed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource m_closing = new();
     private readonly Channel<Stream> m_inboundStreams = Channel.CreateUnbounded<Stream>();
+    private readonly TaskCompletionSource m_shutdownParked = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource m_shutdownsAcknowledged = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Lock m_progressLock = new();
     private readonly List<InMemoryStream> m_streams = [];
     private readonly Lock m_streamsLock = new();
     private InMemoryPeerConnection m_remote = null!;
+
+    private long m_bytesRead;
+    private long m_bytesWritten;
+
+    private TaskCompletionSource m_readProgress = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
     private int m_writeCreditWithheld;
 
@@ -216,8 +221,14 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
         RemoteTransportKey = remoteTransportKey;
     }
 
+    /// <summary>Gets how many bytes this end's streams have written, in total.</summary>
+    public long BytesWritten => Interlocked.Read(location: ref m_bytesWritten);
     /// <summary>Gets a value indicating whether <see cref="DisposeAsync"/> ran.</summary>
     public bool IsDisposed => m_closed.Task.IsCompleted;
+    /// <summary>Gets a task that completes the first time a stream on this end begins a graceful shutdown while the
+    /// connection is still open and the remote has not acknowledged shutdowns — a dispose that will now wait for the
+    /// remote. Never completes for a stream disposed after the connection closed.</summary>
+    public Task ShutdownParked => m_shutdownParked.Task;
     /// <summary>Gets a value indicating whether the remote side has stopped granting this end's stream writes any
     /// flow-control credit (<see cref="WithholdWriteCredit"/>).</summary>
     public bool IsWriteCreditWithheld => (Volatile.Read(location: ref m_writeCreditWithheld) != 0);
@@ -263,6 +274,19 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
 
         return ValueTask.CompletedTask;
     }
+
+    private void Read(int bytes) {
+        TaskCompletionSource progress;
+
+        lock (m_progressLock) {
+            m_bytesRead += bytes;
+            progress = m_readProgress;
+            m_readProgress = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        progress.TrySetResult();
+    }
+
     public ValueTask<Stream> OpenStreamAsync(CancellationToken ct = default) {
         var toRemote = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
         var fromRemote = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
@@ -312,6 +336,25 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
 
         return (a, b);
     }
+    /// <summary>Waits until this end's streams have read at least <paramref name="bytes"/> bytes in total.</summary>
+    /// <param name="bytes">The byte count to wait for — typically the remote end's <see cref="BytesWritten"/>.</param>
+    /// <param name="ct">The test's own cancellation.</param>
+    /// <returns>The wait.</returns>
+    public async Task ReadThroughAsync(long bytes, CancellationToken ct) {
+        while (true) {
+            Task progress;
+
+            lock (m_progressLock) {
+                if (m_bytesRead >= bytes) {
+                    return;
+                }
+
+                progress = m_readProgress.Task;
+            }
+
+            await progress.WaitAsync(cancellationToken: ct);
+        }
+    }
     public ValueTask<ReadOnlyMemory<byte>?> ReceiveDatagramAsync(CancellationToken ct = default) => throw new NotSupportedException(message: "the in-memory connection carries no datagrams");
     public ValueTask SendDatagramAsync(ReadOnlyMemory<byte> datagram, CancellationToken ct = default) => throw new NotSupportedException(message: "the in-memory connection carries no datagrams");
     /// <summary>Stands in for a remote that keeps the connection alive but never grants another byte of stream
@@ -350,6 +393,10 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
 
         private async ValueTask DisposeCoreAsync() {
             m_outbox.Writer.TryComplete();
+
+            if (!m_owner.m_closed.Task.IsCompleted && !m_owner.m_shutdownsAcknowledged.Task.IsCompleted) {
+                m_owner.m_shutdownParked.TrySetResult();
+            }
 
             await Task.WhenAny(
                 task1: m_owner.m_shutdownsAcknowledged.Task,
@@ -397,6 +444,7 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
 
             m_pending.Span[..count].CopyTo(destination: buffer.Span);
             m_pending = m_pending[count..];
+            m_owner.Read(bytes: count);
 
             return count;
         }
@@ -429,10 +477,16 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
                 }
             }
 
-            if (
-                buffer.IsEmpty ||
-                m_outbox.Writer.TryWrite(item: buffer.ToArray())
-            ) {
+            if (buffer.IsEmpty) {
+                return;
+            }
+
+            if (m_outbox.Writer.TryWrite(item: buffer.ToArray())) {
+                Interlocked.Add(
+                    location1: ref m_owner.m_bytesWritten,
+                    value: buffer.Length
+                );
+
                 return;
             }
 

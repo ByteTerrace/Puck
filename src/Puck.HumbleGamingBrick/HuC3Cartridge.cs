@@ -152,18 +152,6 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     }
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_accessFlags = reader.ReadInt32();
-        m_accessIndex = reader.ReadInt32();
-        m_days = reader.ReadInt32();
-        m_dotAccumulator = reader.ReadInt32();
-        m_minutes = reader.ReadInt32();
-        m_mode = reader.ReadInt32();
-        m_ramBank = reader.ReadInt32();
-        m_readValue = reader.ReadInt32();
-        m_romBank = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
     /// <inheritdoc/>
@@ -174,16 +162,16 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
             romBank: m_romBank
         );
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteInt32(value: m_accessFlags);
-        writer.WriteInt32(value: m_accessIndex);
-        writer.WriteInt32(value: m_days);
-        writer.WriteInt32(value: m_dotAccumulator);
-        writer.WriteInt32(value: m_minutes);
-        writer.WriteInt32(value: m_mode);
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteInt32(value: m_readValue);
-        writer.WriteInt32(value: m_romBank);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Int32(value: ref m_accessFlags);
+        transfer.Int32(value: ref m_accessIndex);
+        transfer.Int32(value: ref m_days);
+        transfer.Int32(value: ref m_dotAccumulator);
+        transfer.Int32(value: ref m_minutes);
+        transfer.Int32(value: ref m_mode);
+        transfer.Int32(value: ref m_ramBank);
+        transfer.Int32(value: ref m_readValue);
+        transfer.Int32(value: ref m_romBank);
     }
 
     /// <inheritdoc/>

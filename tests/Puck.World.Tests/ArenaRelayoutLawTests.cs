@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -26,7 +27,7 @@ public sealed class ArenaRelayoutLawTests {
         var before = fixture.Server.Arena;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name(value: "extra"),
                 CellKind.Int,

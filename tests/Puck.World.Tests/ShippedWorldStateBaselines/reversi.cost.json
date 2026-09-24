@@ -1,24 +1,24 @@
 {
   "schema": "puck.world.state-baseline-cost.v1",
-  "world": "games/reversi.world.json",
+  "world": "games/reversi.puck",
   "simulationRateHz": 30,
   "ticks": 580,
   "workUnits": {
     "boot": {
-      "ruleRows": 129,
+      "ruleRows": 11,
       "interactionRows": 0,
-      "evaluationSlots": 255,
-      "workUnitsPerTick": 271928,
+      "evaluationSlots": 137,
+      "workUnitsPerTick": 133102,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,
       "decisionGridPointsPerTick": 0
     },
     "final": {
-      "ruleRows": 129,
+      "ruleRows": 11,
       "interactionRows": 0,
-      "evaluationSlots": 255,
-      "workUnitsPerTick": 271928,
+      "evaluationSlots": 137,
+      "workUnitsPerTick": 133102,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,

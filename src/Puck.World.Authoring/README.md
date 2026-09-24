@@ -79,10 +79,11 @@ inradius and the extrude half-depth: a triangular prism admits a chamfer
 where it admits no rounding.
 
 A shape authored `type: "Superellipsoid"` generalizes `Ellipsoid` with an
-`exponent` field (finite in [2, 8]; null = 2, the ellipsoid limit—the two
-spellings then agree bit-for-bit). Larger exponents round the solid toward a
-box. Exact and 1-Lipschitz for the whole admitted range, so—unlike
-`Ellipsoid`—it earns no separate march correction.
+`exponent` field (finite in [2, 8]; null = 2, the ellipsoid itself—an
+`Ellipsoid` emits the identical instruction). Larger exponents round the solid
+toward a box. The field is 1-Lipschitz for the whole admitted range, so no
+ellipsoid or superellipsoid needs a march correction or a field scope, however
+unevenly it is scaled.
 
 A shape authored `type: "Sweep"` requires a `curve` (`ShapeCurveDocument`): a
 quadratic Bezier `a`/`b`/`c` (each a literal `[x,y,z]` or a
@@ -94,8 +95,8 @@ required on, this type; the curve's own control points and radii already carry
 creation-unit dimensions, so `scale` must be uniform. Not a closed solid: no
 collider, no panel/trims/flare/shear/bumps/domain. `bulge`/the radius taper/
 `strandOffset` are each capped as a ratio to the authored radii, past which the
-shape's field can no longer be proven conservative—see the sdf-world skill's
-`Sweep` row for the exact ratios and what they guard.
+shape's field can no longer be proven conservative—the `MaxSweep*` constants
+in `SdfProgramBuilder.Sweep.cs` carry the exact ratios and what they guard.
 
 Animated and static stamps use the same profile. The deterministic field
 supports trapezoids, rounded rectangles, chamfered rectangles, convex
@@ -107,6 +108,30 @@ World stamps admit up to `WorldPlacementPolicy.MaxShapesPerStamp` shapes
 (367), including expanded text glyphs, with a panelled shape charged as 2 and
 each of a shape's trims charged 2 more. This is headroom for authored detail,
 not a requirement to fill every slot.
+
+## Canonical form and the creation pin
+
+`CreationCanonicalizer.Canonicalize` validates a creation, normalizes it, and
+serializes the result through `DocumentJsonOptions.Shared`. The pin it reports
+is the `ContentPin` of exactly the bytes it returns, and a world's
+`prototypes[].hash`, when authored, must equal it. Canonical form is a fixed
+point: canonicalizing the canonical document, its bytes read back, or the
+document after it rides a world file yields the same bytes.
+
+Normalization clamps and fills defaults, and it brings rotations and
+directions (a shape's or text run's `rotation`, a panel's `face`, domain
+normals and axes) to unit length. A value whose squared length lies within
+2^-20 of 1 is already unit and keeps its authored bits; any other is divided
+by its length in double precision and rounded once, which lands it inside that
+band. Renormalizing a unit value in float would move its last bits, so the
+band is what makes the form a fixed point. `CreationCanonicalFormLawTests`
+holds every prototype a shipped world boots to both laws.
+
+The pin also keys a creation's bakes: `CreationBakeKey` pairs it with the
+baker's version and a quality tier, `CreationBaker` bakes the creation through
+the contact emission (`CreationStampEmitter.EmitFixed`), and `CreationBakeCodec`
+encodes the outcome, a bake or the creation's refusal
+([prototype bakes](../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
 
 ## Animation: drivers, waveforms, joints
 
@@ -363,7 +388,7 @@ scale explicitly before emission (`CreationStampEmitter.EmitShapeChain` for a
 static placement, `Client.WorldStampPool.EmitShape`/`EmitGroup` for the
 animated pool) rather than relying on the chain's own `Scale` op. `Dilate`/
 `Onion` on an otherwise scope-free shape open the same one-deep field scope a
-panel or an eccentric primitive would (below)—unscoped, they would inflate
+panel would (below)—unscoped, they would inflate
 or hollow every shape emitted before them in the whole program, not just this
 one.
 

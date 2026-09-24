@@ -81,8 +81,11 @@
         <!-- The brand ledger Puck.Analyzers reads at RegisterCompilationStartAction time; see VerifiedCode.json
              itself for the schema and the analyzer's VerifiedCodeManifest.cs for the reader. -->
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)VerifiedCode.json" />
-        <!-- The file-length ledger FileLengthAnalyzer reads (LEN001-LEN004); `puck lengths` regenerates it. -->
+        <!-- The two ratchet ledgers: FileLengthAnalyzer reads the file-length ledger (LEN001-LEN004) and
+             CommentSmellAnalyzer the comment-smell ledger (SMELL001-SMELL004); `puck lengths` and
+             `puck comment-smells` regenerate them. -->
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)FileLengths.json" />
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory)CommentSmells.json" />
     </ItemGroup>
 
     <!-- Every project except the analyzer itself (which would otherwise be a build-order cycle: the analyzer

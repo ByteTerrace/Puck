@@ -14,15 +14,8 @@ namespace Puck.World;
 /// the DI container exists and before any device is opened — the scan reads file names only; a manifest is parsed
 /// and validated when a set is composed.</remarks>
 public static class WorldPostRenderExtensions {
-    /// <summary>Gets the shipped shader sets, found under <c>Assets/Shaders</c> beside the executable.</summary>
-    public static ShaderSetCatalog Shipped { get; } = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(
-        path1: AppContext.BaseDirectory,
-        path2: "Assets",
-        path3: "Shaders"
-    ));
-
     /// <summary>Determines whether an extension id names a shipped shader set.</summary>
     /// <param name="extensionId">The candidate id.</param>
     /// <returns><see langword="true"/> when a manifest with that id is shipped.</returns>
-    public static bool IsShipped(string extensionId) => Shipped.Contains(id: extensionId);
+    public static bool IsShipped(string extensionId) => ShaderSetCatalog.Shipped.Contains(id: extensionId);
 }

@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.DirectX.Apis;
-using Puck.DirectX.Factories;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Puck.Hosting;
@@ -19,6 +18,9 @@ namespace Puck.DirectX.Presentation;
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public static class DirectXPresenterServiceRegistration {
+    // The key the backend's GpuPipelineCacheWork is registered under, and the name its counts report.
+    private const string PipelineCacheBackend = "directx";
+
     /// <summary>
     /// Registers the Direct3D 12 backend: native APIs, the vertex-buffer factory chain, all
     /// <c>IGpu*</c> adapters, and the <see cref="IDirectXDeviceContext"/> /
@@ -28,26 +30,35 @@ public static class DirectXPresenterServiceRegistration {
     public static IServiceCollection AddDirectXPresenter(this IServiceCollection services) {
         services.AddDirectXComputeApis();
 
-        services.TryAddSingleton<DirectXDeviceContext>();
+        services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
+        // The device is created lazily on the default adapter; its pipeline library lives under the host's
+        // GpuPipelineCacheStore when one is registered, and in memory otherwise. The debug layer follows the host's
+        // GpuDeviceOptions, and is off when none is registered.
+        services.TryAddSingleton(implementationFactory: static sp => new DirectXDeviceContext(
+            adapterLuid: 0,
+            deviceApi: new DirectXNativeDeviceApi(),
+            minimumFeatureLevel: DirectXFeatureLevel.Level110,
+            pipelineCacheStore: sp.GetService<GpuPipelineCacheStore>(),
+            pipelineCacheWork: sp.GetRequiredKeyedService<GpuPipelineCacheWork>(serviceKey: PipelineCacheBackend)
+        ) {
+            EnableDebugLayer = (sp.GetService<GpuDeviceOptions>()?.DebugLayers ?? false),
+        });
         services.TryAddSingleton<IDirectXDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());
         services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());
 
-        services.TryAddSingleton<IDirectXVertexBufferApi>(implementationFactory: static _ => new DirectXNativeVertexBufferApi());
-        services.TryAddSingleton<IDirectXVertexBufferFactory>(implementationFactory: static sp => new DirectXVertexBufferFactory(vertexBufferApi: sp.GetRequiredService<IDirectXVertexBufferApi>()));
-        services.TryAddSingleton<IDirectXShaderCompilerApi>(implementationFactory: static _ => new DirectXNativeShaderCompilerApi());
 
         services.TryAddSingleton<IGpuCommandRecorder>(implementationFactory: static _ => new DirectXGpuCommandRecorder());
         services.TryAddSingleton<IGpuDescriptorAllocator>(implementationFactory: static _ => new DirectXGpuDescriptorAllocator());
         services.TryAddSingleton<IGpuPipelineFactory>(implementationFactory: static _ => new DirectXGpuPipelineFactory());
         services.TryAddSingleton<IGpuQueueSubmitter>(implementationFactory: static _ => new DirectXGpuQueueSubmitter());
-        services.TryAddSingleton<IGpuRenderTargetFactory>(implementationFactory: static _ => new DirectXGpuRenderTargetFactory());
+        services.TryAddSingleton<IGpuRenderPassFactory>(implementationFactory: static _ => new DirectXGpuRenderPassFactory());
         services.TryAddSingleton<IGpuShaderModuleFactory>(implementationFactory: static _ => new DirectXGpuShaderModuleFactory());
         services.TryAddSingleton<IGpuStorageBufferFactory>(implementationFactory: static _ => new DirectXGpuStorageBufferFactory());
         services.TryAddSingleton<IGpuSurfaceTransferFactory>(implementationFactory: static _ => new DirectXGpuSurfaceTransferFactory());
         // Optional capability: Direct3D 12 can export a shared texture for another backend on the same adapter to
         // import zero-copy. A host resolves this when present and falls back to the CPU-pixel transport otherwise.
         services.TryAddSingleton<IGpuSurfaceExportFactory>(implementationFactory: static _ => new DirectXGpuSurfaceExportFactory());
-        services.TryAddSingleton<IGpuVertexBufferFactory>(implementationFactory: static sp => new DirectXGpuVertexBufferFactory(vertexBufferFactory: sp.GetRequiredService<IDirectXVertexBufferFactory>()));
+        services.TryAddSingleton<IGpuGeometryBufferFactory>(implementationFactory: static _ => new DirectXGpuGeometryBufferFactory());
 
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).
@@ -56,7 +67,11 @@ public static class DirectXPresenterServiceRegistration {
         services.TryAddSingleton<DirectXSurfaceCompositor>(implementationFactory: static sp => new DirectXSurfaceCompositor(
             commandListRecorder: sp.GetRequiredService<IDirectXCommandListRecorder>(),
             presentationOptions: sp.GetRequiredService<PresentationOptions>(),
-            shaderCompiler: sp.GetRequiredService<IDirectXShaderCompilerApi>(),
+            shaderDirectory: Path.Combine(
+                path1: AppContext.BaseDirectory,
+                path2: "Assets",
+                path3: "Shaders"
+            ),
             surfaceTransferFactory: sp.GetRequiredService<IGpuSurfaceTransferFactory>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new DirectXSurfacePresenter(

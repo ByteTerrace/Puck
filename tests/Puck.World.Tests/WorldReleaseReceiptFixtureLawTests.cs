@@ -1,4 +1,6 @@
+using Puck.Commands;
 using Puck.Storage;
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -69,7 +71,7 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
         );
     }
     [Fact]
-    public async Task ExplicitEmptyHistoryCanCreateAFixtureButLegacyStateCannotBeReplaced() {
+    public async Task ExplicitEmptyHistoryCanCreateAFixtureButAnExistingRootCannotBeReplaced() {
         using var empty = await Scenario.CreateAsync(receipts: false);
 
         Assert.Empty(collection: empty.History.Validate());
@@ -81,32 +83,26 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
 
         Assert.Null(@object: root.ReceiptHash);
         Assert.Null(@object: root.ReceiptIndexHash);
-        using var legacy = await Scenario.CreateAsync();
-        var address = WorldOwnedWorldSync.HostedAddressFor(
-            legacy.Identity.Owner,
-            legacy.Identity.World,
-            "definition.json"
+        using var existing = await Scenario.CreateAsync();
+
+        Assert.True(condition: (await existing.Fixture.PublishDefinitionBytesAsync(
+            existing.Identity,
+            existing.Definition,
+            Token
+        )).Ok);
+        var before = await existing.Fixture.LoadRootAsync(
+            existing.Identity,
+            Token
         );
 
-        await legacy.Blobs.WriteAsync(
-            legacy.Target,
-            address,
-            legacy.Definition,
-            ObjectBlobWriteMode.CreateOnly,
-            cancellationToken: Token
-        );
-        Assert.False(condition: (await legacy.CreateFixtureAsync()).Ok);
-        Assert.Null(value: await legacy.Fixture.LoadRootAsync(
-            legacy.Identity,
-            Token
-        ));
+        Assert.NotNull(value: before);
+        Assert.False(condition: (await existing.CreateFixtureAsync()).Ok);
         Assert.Equal(
-            legacy.Definition,
-            (await legacy.Blobs.ReadAsync(
-                legacy.Target,
-                address,
+            before,
+            await existing.Fixture.LoadRootAsync(
+                existing.Identity,
                 Token
-            ))!.Value.Content.ToArray()
+            )
         );
     }
     [Fact]
@@ -329,7 +325,7 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
     }
 
     private sealed class Scenario : IDisposable {
-        private readonly TempWorldDirectory m_directory = new();
+        private readonly TemporaryDirectory m_directory = new();
 
         public IObjectBlobStore Blobs { get; } = PuckStorageTestComposition.BuildStore();
         public WorldAuthorityIdentity Identity { get; } = new(
@@ -416,7 +412,7 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
                 fence
             )).Ok);
             var mutation = new WorldMutation.SetRenderDefaults(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Render: definition.Render with { AmbientOcclusion = !definition.Render.AmbientOcclusion }
             );
 
@@ -450,12 +446,14 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
                 ? scenario.Applied
                 : null)
             )).Ok);
-            if (receipts) { Assert.True(condition: (await scenario.Source.RecordReceiptAsync(
+            if (receipts) {
+                Assert.True(condition: (await scenario.Source.RecordReceiptAsync(
                 scenario.Identity,
                 scenario.Refused,
                 Token,
                 fence
-            )).Ok); }
+            )).Ok);
+            }
             world.Step();
             Assert.True(
                 condition: world.Server.TryCaptureCheckpoint(

@@ -9,14 +9,10 @@ programme owns the reference game's remaining engineering and the two surfaces
 that let other people and other programs reach it: the finder that admits a
 party across authorities, and the MCP adapter that hands an agent a body or a
 console. The authored experience is [the reference game design](../game/design.md);
-the checks earlier game work recorded are in
-[game development milestones](../development/game-milestones.md); the
-reasoning behind every decision is in
+the reasoning behind every decision is in
 [the decisions register](../decisions/play.md).
 
 ## Implementation status
-
-Checked against `state/rebuild` at `6d0a4cbb2`.
 
 - **Landed:** seamless crossing, the four ground corner authorities and the
   island, and the `four-corners-sharded`, `seamless-adjacency`,
@@ -69,18 +65,15 @@ captured PNG returns from `FrameCaptureRequest.Completion`.
 
 ### The playthrough substrate remainder
 
-**Owns:** the state section's row ownership, the handheld attach pair, the
-`chance` level's hidden operands, the four-corners canaries' ring.
+**Owns:** the state section's row ownership, the `chance` level's hidden
+operands, the four-corners canaries' ring.
 
 **Delivers:** the catalog walk per operand read goes and the idle tick lands
-under four milliseconds; the handheld's attach pair ships once the rule-work
-sheet has room for it (a region-scoped pair interaction, or a placement-effect
-cost derived from the population it rebuilds); the `chance` level's hidden
-operands; the multi-authority four-corners canaries re-recorded at the shards'
+under four milliseconds; the `chance` level's hidden operands; the multi-authority four-corners canaries re-recorded at the shards'
 2.75× ring.
 
-**Check:** `puck landing`; the idle-tick measurement recorded in the milestone
-record.
+**Check:** `puck landing`; the idle-tick measurement, carried by the landing
+commit message.
 
 ### The population
 
@@ -96,7 +89,23 @@ derivation and the per-tick neighbour tape, ghost records.
    diagonal peers; and the binding-destination escalation witness, one
    real-path refusal-with-control canary in which a non-privileged principal
    authoring a binding whose destination is an administrative verb refuses
-   while the same mutation naming an ordinary verb applies.
+   while the same mutation naming an ordinary verb applies. Three behaviors
+   have no live canary yet, and the widening adds one for each:
+   - A compiled WASM addon guest acquires a handle, submits an
+     `UpsertHudPanel` and then a chained `UpsertHudElement` through a
+     verb-masked grant, `world.hud` reflects both, and `replay.record` refuses
+     to arm once the guest has pumped.
+   - Region-conditioned music: a conditional layer and a region-entry
+     embellishment fire as a driven body crosses an island region, locally
+     and over `--connect`. The island binds no music today
+     (`Assets/worlds/music/nexus-ambient.music.json` authors region conditions
+     that no world references), and
+     `music-conditional-layer-and-embellishment` proves the mechanism only on
+     a minimal fixture's seat-join edge.
+   - A frame capture shows that moving a body, crossing a portal, or crossing
+     a seam changes the composed frame, locally and over `--connect`.
+     `seamless-adjacency` proves the seam crossing and `front-door` the
+     studio-arrival gate, both at the console level without a capture.
 2. **Frames, as the envelope ratification:** one document shape (root frame,
    sibling frames, body-parented frames on demand) whose envelope takes an
    angular-speed bound, a minimum feature size or aspect-ratio bound, and a
@@ -139,7 +148,7 @@ the reference-game content that proves them, after re-verifying that the
 property vocabulary, rules, interactions, and the arena district's combat
 rules survive the schema drift that once refused the combat document.
 
-**Check:** the feel sitting recorded in the milestone record; `puck canary`
+**Check:** the feel sitting, carried by the landing commit message; `puck canary`
 for the view-state and win-slice proofs; the content proofs from the game
 itself.
 
@@ -164,8 +173,7 @@ a `machine` screen booting a `puck.cartridge.v1` document.
 
 **Delivers:** the island authored on those primitives; `granaries.world.json`
 moved under the modules rather than deleted; the frozen documents, the
-scenarios, their canaries, and `experimental/Puck.Demo` retired with a ledger
-naming each successor. After [S6](state-and-language.md#s6--modules-and-the-forcing-world)
+scenarios, and their canaries retired with a ledger naming each successor. After [S6](state-and-language.md#s6--modules-and-the-forcing-world)
 lands, the island and its districts move onto the same modules.
 
 **Check:** the forcing artifact's boot check; every retired canary re-recorded
@@ -451,7 +459,8 @@ Deferred until the forcing world plays, and re-asked at step 5: how another
 identity's world attaches to the hub; the pre-allocation embodiment subject;
 multi-world replay tape ownership; ephemeral terminal policy; federated group
 proof through issuer-qualified group ids; the admission-policy
-representation; the `OwnershipPolicy` and `SharedStateScope` contract; the
+representation; whether a group kind carries a loot-ownership policy and a
+shared state row, which the group schema does not declare; the
 reauthentication policy for an OBO credential expiring during a durable job;
 distributed placement and portable world handles; the finder's load envelope
 beyond the provisional targets.
@@ -483,7 +492,7 @@ dotnet test tests/Puck.World.Schema.Tests -c Release
 ```
 
 ```bash
-puck doc-links
+puck docs links
 ```
 
 ---

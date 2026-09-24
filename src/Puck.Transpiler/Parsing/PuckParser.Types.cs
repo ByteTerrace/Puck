@@ -5,48 +5,12 @@ using Puck.Transpiler.Diagnostics;
 namespace Puck.Transpiler.Parsing;
 
 public static partial class PuckParser {
-    private static bool TryMatchEnumKeyword(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (TryMatchKeyword(context: context, keyword: "enum") && SkipSpacesOnLine(context: context)) {
-            if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)) {
-                cursor.ResetPosition(position: saved);
-                return TryMatchKeyword(context: context, keyword: "enum");
-            }
-        }
-
-        cursor.ResetPosition(position: saved);
-        return false;
-    }
-    private static bool TryMatchRecordKeyword(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (TryMatchKeyword(context: context, keyword: "record") && SkipSpacesOnLine(context: context)) {
-            if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)) {
-                cursor.ResetPosition(position: saved);
-                return TryMatchKeyword(context: context, keyword: "record");
-            }
-        }
-
-        cursor.ResetPosition(position: saved);
-        return false;
-    }
-    private static bool TryMatchDeriveKeyword(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (TryMatchKeyword(context: context, keyword: "derive") && SkipSpacesOnLine(context: context)) {
-            if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out _)) {
-                cursor.ResetPosition(position: saved);
-                return TryMatchKeyword(context: context, keyword: "derive");
-            }
-        }
-
-        cursor.ResetPosition(position: saved);
-        return false;
-    }
+    private static bool TryMatchEnumKeyword(ParseContext context) =>
+        TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "enum");
+    private static bool TryMatchRecordKeyword(ParseContext context) =>
+        TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "record");
+    private static bool TryMatchDeriveKeyword(ParseContext context) =>
+        TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "derive");
     private static EnumDeclarationNode ParseEnumDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;
 
@@ -205,6 +169,7 @@ public static partial class PuckParser {
         SkipWhiteSpace(context: context);
         var exprStart = cursor.Offset;
         var rawExpr = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
+
         var (exprLine, exprColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: exprStart);
         var expr = ValidatedOperand(rawExpr, new SourceSpan(exprStart, (cursor.Offset - exprStart), exprLine, exprColumn), diagnostics);
         var len = (cursor.Offset - startOffset);

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -55,7 +56,7 @@ public sealed class WorldHandleTable {
 
     private readonly WorldCapability m_capability;
     private readonly WorldGrants m_grants;
-    private readonly WorldPrincipal m_principal;
+    private readonly Principal m_principal;
 
     // -1 so the very first EnsureFresh() always rebuilds, even against a fresh WorldGrants whose own Revision starts
     // at 0 — an untouched table must never answer as though it already reflects a grant that has not been projected
@@ -73,7 +74,7 @@ public sealed class WorldHandleTable {
     /// <exception cref="ArgumentNullException"><paramref name="grants"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="principal"/> is inside the trust boundary (Console or
     /// Seat).</exception>
-    public WorldHandleTable(WorldGrants grants, WorldPrincipal principal, WorldCapability capability) {
+    public WorldHandleTable(WorldGrants grants, Principal principal, WorldCapability capability) {
         ArgumentNullException.ThrowIfNull(argument: grants);
 
         if (principal.Kind is not (PrincipalKind.Addon or PrincipalKind.Peer)) {

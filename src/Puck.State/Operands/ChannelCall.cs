@@ -262,7 +262,7 @@ public static class ChannelSpelling {
                 provider: CultureInfo.InvariantCulture,
                 result: out var number,
                 s: part,
-                style: (NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint)
+                style: NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint
             ) &&
             string.Equals(
                 a: number.ToString(provider: CultureInfo.InvariantCulture),

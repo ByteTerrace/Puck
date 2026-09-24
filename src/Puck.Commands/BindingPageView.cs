@@ -42,7 +42,7 @@ public sealed record BindingPageView(
 /// <see cref="BindingPageView.ButtonsBySource"/>. Empty for an activator row, whose trigger is a sequence rather
 /// than a set of sources.</param>
 /// <param name="Command">The ROUTED command name the source activates on this page — for a channel row this is the
-/// routing ordinal (<c>channel.ordinal.N</c>), an engine-internal name no author writes.</param>
+/// routing ordinal name the engine mints per channel, which no author writes.</param>
 /// <param name="Action">The AUTHORED action name this row names — its <c>command</c>, else its <c>channel</c>.</param>
 /// <param name="Id">The row's authored identity, if any (<see cref="BindingPageEntryDefinition.Id"/>).</param>
 /// <param name="Toggle">Whether the row latches (<see cref="BindingEntryMode.Toggle"/>): its command stays held

@@ -9,7 +9,7 @@ public sealed class RuleNeedsLawTests {
     public void ARuleThatReadsNeitherTheTickNorAHostOwnedRowNeedsNothing() {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 State: "score",
                 Value: 0m
             ),
@@ -26,7 +26,7 @@ public sealed class RuleNeedsLawTests {
     public void AReadOfTheTickMarksTheRuleVolatile() {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.GreaterOrEqual,
+                Comparison: ExpressionOp.GreaterOrEqual,
                 State: RuleFacts.Tick,
                 Value: 30m
             ),
@@ -43,7 +43,7 @@ public sealed class RuleNeedsLawTests {
             context: context,
             rule: RulesFixture.Rule(
                 gate: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     State: $"{RuleFacts.ReducePrefix}count:{RulesFixture.HostField}",
                     Value: 0m
                 ),

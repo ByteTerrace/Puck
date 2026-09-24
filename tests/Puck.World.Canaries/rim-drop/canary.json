@@ -3,7 +3,6 @@
   "title": "A pitched adjacency lying flat beneath a deck hands a FALLING body to the world below, velocity and per-body register intact",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 28,
   "timeoutSeconds": 60,
   "fixtures": [
     "corner.world.json"

@@ -1,0 +1,27 @@
+# The deal draws both busts; seat 2's is then set to Finn (5) so the script knows it. Seat 1 asks two questions, the
+# computer answering each on its own turn, and then names Finn: the rules judge the name against seat 2's hidden bust
+# and seat 1 wins. The recorded run replays to the same state.
+replay.record lineup
+world.wait 5
+world.state.cell.set lineupSecret2 $value 5
+world.wait 2
+world.state.cell.set lineupAct seat 1
+world.state.cell.set lineupAct kind 1
+world.state.cell.set lineupAct value 9
+world.state.cell.set lineupAct request 1 add
+world.wait 45
+world.state.cell.set lineupAct seat 1
+world.state.cell.set lineupAct kind 1
+world.state.cell.set lineupAct value 8
+world.state.cell.set lineupAct request 1 add
+world.wait 45
+world.state.cell.set lineupAct seat 1
+world.state.cell.set lineupAct kind 2
+world.state.cell.set lineupAct value 5
+world.state.cell.set lineupAct request 1 add
+world.wait 5
+world.state lineupTable winner
+world.state lineupTable stage
+world.state lineupAsked
+replay.stop
+replay.verify lineup

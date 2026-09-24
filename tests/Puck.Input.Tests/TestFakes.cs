@@ -3,6 +3,7 @@ using Puck.Commands;
 using Puck.Input.Devices;
 using Puck.Input.Hid;
 using Puck.Input.Output;
+using Puck.Testing;
 
 namespace Puck.Input.Tests;
 
@@ -15,12 +16,15 @@ internal sealed class EmptyHidDeviceSource : IHidDeviceSource {
 }
 /// <summary>
 /// An in-memory HID transport. Reads honor the <see cref="IHidDevice"/> contract: a report enqueued while a
-/// read is pending completes that read, and a timed read returns zero only once its timeout elapses. A test that
-/// must order its observations against the device's silence watchdog holds read timeouts, which keeps every
-/// timed read pending until a report arrives or the hold is released.
+/// read is pending completes that read, and a timed read returns zero only once its timeout elapses on
+/// <see cref="Time"/>, which moves only when the test advances it. Every read announces itself once its expiry is
+/// armed, so a test that awaits read <c>n</c> knows the device loop finished everything it did with read
+/// <c>n - 1</c> and is parked on the transport.
 /// </summary>
 internal sealed class TestHidDevice : IHidDevice {
     private readonly TaskCompletionSource m_disposedSignal = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Lock m_readGate = new();
+    private readonly List<(int Ordinal, TaskCompletionSource Signal)> m_readWaiters = [];
     private readonly ConcurrentQueue<byte[]> m_reports = new();
     private TaskCompletionSource m_reportArrived = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -28,13 +32,12 @@ internal sealed class TestHidDevice : IHidDevice {
     public ushort UsagePage { get; init; } = 1;
     public ushort Usage { get; init; } = 5;
     public HidTransport Transport { get; init; } = HidTransport.Usb;
-    public TaskCompletionSource ReadEntered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     public List<byte[]> Writes { get; } = [];
     public List<byte[]> FeatureWrites { get; } = [];
 
     private int m_activeReads;
     private bool m_disposed;
-    private TaskCompletionSource? m_readTimeoutHold;
+    private int m_readsEntered;
 
     public bool BlockReadUntilDisposed { get; init; }
     public bool DisposedWhileReading { get; private set; }
@@ -43,36 +46,49 @@ internal sealed class TestHidDevice : IHidDevice {
     public bool IsDisposed => m_disposed;
     public int OutputReportByteLength { get; init; }
     public ushort ProductId { get; init; }
+
+    /// <summary>Gets the clock timed reads expire on; a device under test shares it for its own deadlines.</summary>
+    public VirtualClock Time { get; } = new();
+
     public ushort VendorId { get; init; }
 
-    private async Task ExpireAsync(int timeoutInMilliseconds, CancellationToken cancellationToken) {
-        if (Volatile.Read(location: ref m_readTimeoutHold) is { } hold) {
-            await hold.Task.WaitAsync(cancellationToken: cancellationToken);
-        }
+    private void AnnounceRead() {
+        lock (m_readGate) {
+            ++m_readsEntered;
 
-        await Task.Delay(
-            cancellationToken: cancellationToken,
-            millisecondsDelay: timeoutInMilliseconds
-        );
+            for (var index = (m_readWaiters.Count - 1); (index >= 0); --index) {
+                if (m_readWaiters[index].Ordinal <= m_readsEntered) {
+                    _ = m_readWaiters[index].Signal.TrySetResult();
+                    m_readWaiters.RemoveAt(index: index);
+                }
+            }
+        }
     }
     private async ValueTask<int> ReadCoreAsync(Memory<byte> buffer, int? timeoutInMilliseconds, CancellationToken cancellationToken) {
+        using var settled = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+
         _ = Interlocked.Increment(location: ref m_activeReads);
-        _ = ReadEntered.TrySetResult();
 
         try {
             if (BlockReadUntilDisposed) {
+                AnnounceRead();
                 await m_disposedSignal.Task;
 
                 return 0;
             }
 
+            // Arm the expiry before announcing the read, so an advance the test makes after observing the read
+            // always reaches its timer. A read a report completes disarms its expiry on the way out.
             var expiry = ((timeoutInMilliseconds is { } timeout)
-                ? ExpireAsync(
-                    cancellationToken: cancellationToken,
-                    timeoutInMilliseconds: timeout
+                ? Task.Delay(
+                    cancellationToken: settled.Token,
+                    delay: TimeSpan.FromMilliseconds(value: timeout),
+                    timeProvider: Time
                 )
                 : null
             );
+
+            AnnounceRead();
 
             while (true) {
                 // Snapshot the arrival pulse before probing the queue so an enqueue between the probe and the
@@ -98,6 +114,7 @@ internal sealed class TestHidDevice : IHidDevice {
                 }
             }
         } finally {
+            settled.Cancel();
             _ = Interlocked.Decrement(location: ref m_activeReads);
         }
     }
@@ -120,9 +137,6 @@ internal sealed class TestHidDevice : IHidDevice {
             value: new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)
         ).TrySetResult();
     }
-    /// <summary>Keeps timed reads pending until a report arrives or <see cref="ReleaseReadTimeouts"/> runs.</summary>
-    public void HoldReadTimeouts() =>
-        m_readTimeoutHold ??= new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     public ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken) =>
         ReadCoreAsync(
             buffer: buffer,
@@ -139,12 +153,6 @@ internal sealed class TestHidDevice : IHidDevice {
         cancellationToken: cancellationToken,
         timeoutInMilliseconds: timeoutInMilliseconds
     );
-    /// <summary>Lets pending and future timed reads expire after their timeout again.</summary>
-    public void ReleaseReadTimeouts() =>
-        _ = Interlocked.Exchange(
-            location1: ref m_readTimeoutHold,
-            value: null
-        )?.TrySetResult();
     public bool TryGetFeatureReport(Span<byte> buffer) => false;
     public bool TrySetFeatureReport(ReadOnlySpan<byte> buffer) {
         lock (FeatureWrites) {
@@ -152,6 +160,21 @@ internal sealed class TestHidDevice : IHidDevice {
         }
 
         return true;
+    }
+    /// <summary>Completes once the one-based <paramref name="ordinal"/>-th read has begun and armed its expiry.</summary>
+    public Task WhenReadAsync(int ordinal, CancellationToken cancellationToken) {
+        TaskCompletionSource signal;
+
+        lock (m_readGate) {
+            if (m_readsEntered >= ordinal) {
+                return Task.CompletedTask;
+            }
+
+            signal = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+            m_readWaiters.Add(item: (ordinal, signal));
+        }
+
+        return signal.Task.WaitAsync(cancellationToken: cancellationToken);
     }
     public ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
         lock (Writes) {
@@ -228,17 +251,5 @@ internal sealed class TestParser : IGamepadParser, IRumbleParser, ITriggerEffect
         state = GamepadState.Neutral;
 
         return false;
-    }
-}
-internal static class TestWait {
-    public static async Task UntilAsync(Func<bool> condition, int timeoutMilliseconds = 2000) {
-        using var cancellation = new CancellationTokenSource(millisecondsDelay: timeoutMilliseconds);
-
-        while (!condition()) {
-            await Task.Delay(
-                millisecondsDelay: 5,
-                cancellationToken: cancellation.Token
-            );
-        }
     }
 }

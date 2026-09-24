@@ -224,16 +224,18 @@ public sealed class WorldSeatViewState {
     /// <param name="views">The routed world's views section.</param>
     /// <param name="bodyOrientation">The perceived body's orientation.</param>
     /// <param name="definition">The routed world's live document.</param>
+    /// <param name="mirror">The state mirror the rig's bound operands read through.</param>
     /// <returns>The rig.</returns>
     /// <remarks>The compiled rig is cached against the AUTHORED program instance, so a delivery that only advances
     /// the document retargets in place — the seat's live orbit is an evaluator input, never a recompile.</remarks>
-    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition) {
+    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var rig = m_rigCache.Resolve(
             definition: definition,
             interactive: true,
+            mirror: mirror,
             program: views.SeatRig
         );
 

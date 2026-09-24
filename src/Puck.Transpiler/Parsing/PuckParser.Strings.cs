@@ -16,7 +16,7 @@ public static partial class PuckParser {
     /// fails without consuming anything when that form is not among the admitted ones.</summary>
     [Flags]
     private enum NameForms {
-        /// <summary>A bare identifier: letters, digits, <c>_</c>, and <c>$</c>.</summary>
+        /// <summary>A bare name, by <see cref="IdentifierSpelling.ScanName"/>.</summary>
         Identifier = 1,
         /// <summary>A quoted string, plain or raw.</summary>
         String = 2,
@@ -168,31 +168,18 @@ public static partial class PuckParser {
             return false;
         }
 
-        var first = cursor.Current;
+        var nameLength = IdentifierSpelling.ScanName(
+            start: startOffset,
+            text: buffer
+        );
 
-        if (
-            !char.IsLetter(c: first) &&
-            (first != '_') &&
-            (first != '$')
-        ) {
+        if (nameLength == 0) {
             return false;
         }
 
-        cursor.Advance();
-        while (!cursor.Eof) {
-            var current = cursor.Current;
-
-            if (
-                !char.IsLetterOrDigit(c: current) &&
-                (current != '_') &&
-                (current != '$')
-            ) {
-                break;
-            }
-            cursor.Advance();
-        }
+        cursor.Advance(count: nameLength);
         text = buffer.Substring(
-            length: (cursor.Offset - startOffset),
+            length: nameLength,
             startIndex: startOffset
         );
 

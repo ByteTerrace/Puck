@@ -1,11 +1,12 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldGrants {
     private static void AddRoleScopedGroup(
-        Dictionary<WorldPrincipal, List<GroupRoleReach>> target,
-        WorldPrincipal principal,
+        Dictionary<Principal, List<GroupRoleReach>> target,
+        Principal principal,
         string groupId,
         HashSet<WorldCapability> reach
     ) {
@@ -30,8 +31,8 @@ public sealed partial class WorldGrants {
     // capability, then the group's own grant row is resolved fresh. The same helper serves ordinary membership and
     // group-owner reach so both doors enforce the same null/unknown-role refusal.
     private bool TryRoleGroupExpansion(
-        Dictionary<WorldPrincipal, List<GroupRoleReach>> groups,
-        WorldPrincipal principal,
+        Dictionary<Principal, List<GroupRoleReach>> groups,
+        Principal principal,
         WorldCapability capability,
         GrantSubject subject,
         GrantRule rule,
@@ -46,11 +47,11 @@ public sealed partial class WorldGrants {
                     continue;
                 }
 
-                var groupPrincipal = WorldPrincipal.Group(id: groupRow.GroupId);
+                var groupGrantee = Grantee.Group(id: groupRow.GroupId);
 
                 if (
-                    !m_byPrincipal.TryGetValue(
-                    key: groupPrincipal,
+                    !m_byGrantee.TryGetValue(
+                    key: groupGrantee,
                     value: out var groupGrants
                 ) ||
                     (groupGrants.For(capability: capability) is not { } groupSubjects)
@@ -81,20 +82,27 @@ public sealed partial class WorldGrants {
     // only the acting principal's dictionaries would silently turn a granted group row into an unmetered/defaulted
     // authority path.
     private bool TryResolveDecidingGrant(
-        WorldPrincipal principal,
+        Grantee grantee,
         WorldCapability capability,
         GrantSubject subject,
-        out WorldPrincipal grantPrincipal,
+        out Grantee grantHolder,
         out GrantSubject grantSubject
     ) {
-        var verdict = Allows(
-            capability: capability,
-            principal: principal,
-            subject: subject
+        var verdict = (grantee.TryGetPrincipal(principal: out var principal)
+            ? Allows(
+                capability: capability,
+                principal: principal,
+                subject: subject
+            )
+            : Holds(
+                capability: capability,
+                grantee: grantee,
+                subject: subject
+            )
         );
 
         if (!verdict.IsAllowed) {
-            grantPrincipal = default;
+            grantHolder = default;
             grantSubject = default;
 
             return false;
@@ -110,18 +118,18 @@ public sealed partial class WorldGrants {
                 subject: subject
             )
             ) {
-                grantPrincipal = default;
+                grantHolder = default;
                 grantSubject = default;
 
                 return false;
             }
 
-            grantPrincipal = WorldPrincipal.Group(id: groupId);
+            grantHolder = Grantee.Group(id: groupId);
 
             return true;
         }
 
-        grantPrincipal = principal;
+        grantHolder = grantee;
         grantSubject = ((verdict.Rule == GrantRule.WildcardHold)
             ? GrantSubject.All
             : subject
@@ -131,8 +139,8 @@ public sealed partial class WorldGrants {
     }
     private bool TryGroupGrantSubject(string groupId, WorldCapability capability, GrantSubject subject, out GrantSubject grantSubject) {
         if (
-            m_byPrincipal.TryGetValue(
-            key: WorldPrincipal.Group(id: groupId),
+            m_byGrantee.TryGetValue(
+            key: Grantee.Group(id: groupId),
             value: out var grants
         ) &&
             (grants.For(capability: capability) is { } subjects)
@@ -182,8 +190,8 @@ public sealed partial class WorldGrants {
         );
 
     private void RebuildGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership, bool advanceRevision) {
-        m_groupMembership.Clear();
         m_groupRoleMembership.Clear();
+
         m_groupReach.Clear();
         m_ownedGroups.Clear();
         m_ownedGroupRoleReach.Clear();
@@ -236,19 +244,10 @@ public sealed partial class WorldGrants {
                     (memberRow.Ref.Principal is not { } member)
                 ) {
                     // Verified identities are retained in the document roster but cannot impersonate a local
-                    // WorldPrincipal in this local grant index; the federation/consent lane owns that projection.
+                    // Principal in this local grant index; the federation/consent lane owns that projection.
                     continue;
                 }
 
-                if (!m_groupMembership.TryGetValue(
-                    key: member,
-                    value: out var memberOf
-                )) {
-                    memberOf = new List<string>();
-                    m_groupMembership[member] = memberOf;
-                }
-
-                memberOf.Add(item: group.Id);
 
                 if (
                     (memberRow.Role is { } roleName) &&

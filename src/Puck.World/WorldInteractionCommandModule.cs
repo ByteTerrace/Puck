@@ -12,11 +12,11 @@ namespace Puck.World;
 /// <see cref="WorldRowCommandModule"/>. A property is the ONE <see cref="WorldMutation.SetProperty"/> kind (ordinal
 /// 10, distinguished by its own <c>Remove</c> flag), which is why it carries the SPECIAL bare-name grammar —
 /// <c>world.row.set</c>/<c>world.row.remove properties.names &lt;name&gt;</c>; an interaction is the ordinary
-/// Upsert/Remove pair (ordinals 54/55) over
+/// Upsert/Remove pair (ordinals 52/53) over
 /// <c>world.row.set</c>/<c>world.row.remove interactions.interactions</c>.
 /// </summary>
 /// <remarks>An interaction's own EFFECTS are a different question entirely from authoring it: they act as
-/// <see cref="WorldPrincipal.World"/>, exempted structurally by the admission predicate, on the SAME terms a world
+/// <see cref="Principal.World"/>, exempted structurally by the admission predicate, on the SAME terms a world
 /// rule's effects already are (see <see cref="WorldRulesCommandModule"/>'s own remarks) — the authority that matters
 /// over authoring is the ordinary <see cref="WorldCapability.Mutate"/> hold over
 /// <see cref="WorldSection.Properties"/>/<see cref="WorldSection.Interactions"/> the row verb already checks.</remarks>

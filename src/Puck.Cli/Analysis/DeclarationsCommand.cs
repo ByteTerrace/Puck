@@ -102,31 +102,19 @@ internal static class DeclarationsCommand {
         var baseOption = new Option<string?>(name: "--base") { Description = "Keep declarations whose base list contains this fragment (ordinal); types only." };
         var docOption = new Option<bool>(name: "--doc") { Description = "Also emit XML-doc cref targets, filtered by --name alone." };
         var excludeOption = new Option<string[]>(name: "--not") { DefaultValueFactory = static _ => [], Description = "Exclude glob (repeatable; a glob with no '/' matches a file OR directory basename)." };
-        var includeOption = new Option<string[]>(name: "-g") { DefaultValueFactory = static _ => [], Description = "Include glob (repeatable; a glob with no '/' matches the basename)." };
-        var jsonOption = new Option<bool>(name: "--json") { Description = "One JSON object per line instead of text." };
+        var includeOption = new Option<string[]>(name: "--glob") { DefaultValueFactory = static _ => [], Description = "Include glob (repeatable; a glob with no '/' matches the basename)." };
+        var jsonOption = CliOptions.Json();
         var kindOption = new Option<string?>(name: "--kind") { Description = "Comma-separated kinds: class, struct, record, interface, enum, delegate, method, property, field, event, ctor. Absent means every type kind." };
         var membersOption = new Option<bool>(name: "--members") { Description = "List members inside each type (implied by a member --kind)." };
         var nameOption = new Option<string?>(name: "--name") { Description = "Keep declarations whose declared simple name contains this fragment (ordinal)." };
-        var quietOption = new Option<bool>(name: "-q") { Description = "Quiet: exit code only." };
+        var quietOption = new Option<bool>(name: "--quiet") { Description = "Print nothing; report the verdict in the exit code alone." };
         var rootsArgument = new Argument<string[]>(name: "path") {
             Arity = ArgumentArity.ZeroOrMore,
             DefaultValueFactory = static _ => ["."],
             Description = "Roots to walk; the working directory when none is given.",
         };
         var command = new Command(
-            description: """
-            Declaration inventory read off the parsed syntax, with no build and no restore.
-
-            Output is `path:line:col decl <kind> <qualified name>[ : <base list>]`, sorted
-            by path then position. Both record forms report the kind `record`. The walk
-            prunes .git, artifacts, bin, obj, node_modules, publish,
-            BenchmarkDotNet.Artifacts, and agent worktrees under .claude/worktrees (name
-            one as a root to inventory it).
-            This tier reads syntax, not symbols: it sees every .cs file on disk, including
-            the ones no project compiles, but it matches names rather than resolving them.
-            Use `puck references` for who-uses-what.
-            Exit codes: 0 found, 1 nothing found, 2 usage error.
-            """,
+            description: "List the C# declarations under a tree, read off the parsed syntax with no build.",
             name: "declarations"
         ) {
             rootsArgument,
@@ -142,6 +130,18 @@ internal static class DeclarationsCommand {
             quietOption,
         };
 
+        command.Detail(detail: $"""
+            Output is `path:line:col decl <kind> <qualified name>[ : <base list>]`, sorted by
+            path then position. Both record forms report the kind `record`. The walk skips
+            {FileWalk.PrunedNames}, and agent worktrees under .claude/worktrees; name one as a
+            root to inventory it.
+
+            This tier reads syntax, not symbols: it sees every .cs file on disk, including the
+            ones no project compiles, but it matches names rather than resolving them. Use
+            `puck references` for who-uses-what.
+
+            Exit codes: 0 found, 1 nothing found, 2 usage error.
+            """);
         command.SetAction(action: parseResult => Run(
             attribute: parseResult.GetValue(option: attributeOption),
             baseFragment: parseResult.GetValue(option: baseOption),

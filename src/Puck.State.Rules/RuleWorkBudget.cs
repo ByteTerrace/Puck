@@ -45,6 +45,7 @@ public static partial class RuleWorkBudget {
             tokens: tokens
         );
     }
+
     /// <summary>The most tokens the compiler evaluates to fold one constant subtree. A longer one is left in the
     /// program for the work sheet to price.</summary>
     public const long MaxFoldSteps = 65_536L;
@@ -63,7 +64,7 @@ public static partial class RuleWorkBudget {
                 { Fold: { } fold } => SaturatingMultiply(
                     left: Math.Max(
                         val1: 1L,
-                        val2: fold.Members
+                        val2: fold.Cells
                     ),
                     right: Steps(tokens: fold.Body)
                 ),
@@ -100,7 +101,7 @@ public static partial class RuleWorkBudget {
                 case { Fold: { } fold }:
                     cost += (Math.Max(
                         val1: 1L,
-                        val2: fold.Members
+                        val2: fold.Cells
                     ) * ExpressionCost(
                         context: context,
                         kind: fold.MemberKind,
@@ -141,6 +142,7 @@ public static partial class RuleWorkBudget {
 
         return cost;
     }
+
     /// <summary>Returns the work units a gate costs: each operand and expression read, plus one per comparison whose
     /// side is a program.</summary>
     /// <param name="tokens">The compiled postfix gate.</param>
@@ -226,7 +228,7 @@ public static partial class RuleWorkBudget {
     /// <returns>The work units.</returns>
     public static RuleWork OperationCost(ExpressionOp operation, CellKind kind = CellKind.Int, BoardQuery? board = null) => ((board, operation) switch {
         ( { } shifted, (ExpressionOp.BoardShift or ExpressionOp.BoardImage)) => RuleWork.Known(units: ((shifted.Topology.CellCount / 2) + shifted.Visits)),
-        ( { } fill, ExpressionOp.BoardFill) => (((long)fill.Topology.CellCount) * RuleWork.Known(units: ((fill.Topology.CellCount / 2) + fill.Visits))),
+        ( { } ray, ExpressionOp.BoardRay) => (((long)ray.Topology.CellCount) * RuleWork.Known(units: ((ray.Topology.CellCount / 2) + ray.Visits))),
         _ => ((ExpressionOperators.Find(operation: operation) is { } row)
             ? RuleWork.Known(units: row.Cost)
             : RuleWork.Unmodeled(reason: $"expression operation {((byte)operation)} is not registered")

@@ -11,9 +11,9 @@ owning projects.
 - [SDF renderer](sdf/README.md) introduces the implemented signed-distance
   field renderer and routes to its handbook and technical reference.
 
-- [`Puck.Shaders` README](../../src/Puck.Shaders/README.md) documents shader
-  manifests, pipeline graphs, resource bindings, configuration, and live
-  loading.
+- [Shader manifests, pipelines, and compilation](../reference/shaders.md)
+  documents shader manifests, pipeline graphs, resource bindings,
+  configuration, and live loading.
 
 - [Rendering](../plans/rendering.md) records
   the planned work beyond the current pipeline foundation, including hybrid

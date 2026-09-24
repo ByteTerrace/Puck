@@ -256,7 +256,7 @@
                 "value": 3
               },
               {
-                "op": "Modulo"
+                "op": "Remainder"
               }
             ]
           }
@@ -518,7 +518,7 @@
             "shape": {
               "kind": "Box",
               "center": [0, 1.5, 0],
-              "halfExtents": "state.granaries_granaryIrrigationSelected"
+              "halfExtents": "state.granaryIrrigationSelected"
             }
           }
         ]
@@ -538,7 +538,7 @@
             "shape": {
               "kind": "Box",
               "center": [0, 1.5, 0],
-              "halfExtents": "state.granaries_granaryPowerSelected"
+              "halfExtents": "state.granaryPowerSelected"
             }
           }
         ]
@@ -1173,7 +1173,7 @@
             "type": "Box",
             "position": [0, 0.05, 0],
             "rotation": [0, 0, 0, 1],
-            "scale": "state.granaries_granaryIrrigationSelected",
+            "scale": "state.granaryIrrigationSelected",
             "material": 0,
             "blend": "Union",
             "smooth": 0
@@ -1219,7 +1219,7 @@
             "type": "Box",
             "position": [0, 0.05, 0],
             "rotation": [0, 0, 0, 1],
-            "scale": "state.granaries_granaryPowerSelected",
+            "scale": "state.granaryPowerSelected",
             "material": 0,
             "blend": "Union",
             "smooth": 0
@@ -2688,7 +2688,7 @@
     "fonts": [
       {
         "name": "inter",
-        "source": "fonts/inter-regular.ttf",
+        "source": "../fonts/inter-regular.ttf",
         "hash": "sha256-64/47e488e1fc92d640",
         "codePointRanges": [
           "U+0020-U+007E"

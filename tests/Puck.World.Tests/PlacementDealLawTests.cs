@@ -1,10 +1,10 @@
+using Puck.Commands;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Puck.Hosting;
-using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -24,38 +24,6 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     private const string TemplateId = "stores";
     private const string VariantRowName = "levels";
 
-    private static WorldPrototype Creation(string id) {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: id,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: id
-        );
-
-        return new WorldPrototype(
-            Id: id,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     private static StateCell TextCell(string key) => new(
         Key: CellName.Parse(candidate: key),
         Value: CellValue.Text(value: key)
@@ -109,7 +77,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
             StateRaw = new WorldStateSection(World: ((variantRow is null)
             ? [row]
             : [row, variantRow])),
-            CreationsRaw = [Creation(id: StoreCreation), Creation(id: AnchorCreation)],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: StoreCreation), CreationFixtures.UnitSphere(id: AnchorCreation)],
             PlacementRowsRaw = [template],
         });
     }
@@ -142,7 +110,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         z: 0f
     );
     private static WorldMutation.UpsertStateCell Upsert(string key) => new(
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: RowName,
         Key: key,
         Value: 0L,
@@ -189,20 +157,24 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         var moved = Child(
             fixture.Server,
             "a"
-        ) with { Position = new Vector3(
+        ) with {
+            Position = new Vector3(
             x: 17,
             y: 0,
             z: 9
-        ), YawDegrees = 45, Region = new WorldPlacementRegion(Radius: 3) };
+        ),
+            YawDegrees = 45,
+            Region = new WorldPlacementRegion(Radius: 3),
+        };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
+            Principal.Console,
             moved
         ));
         fixture.Step();
         fixture.Server.EnqueueMutation(Upsert(key: "c"));
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             VariantRowName,
             "a",
             1,
@@ -370,7 +342,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
 
         fixture.Step();
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: RowName,
             Key: "b"
         ));
@@ -506,7 +478,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
             );
 
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: VariantRowName,
                 Key: "c",
                 Value: 1L,
@@ -553,7 +525,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 
@@ -613,7 +585,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
                     break;
                 case 3:
                     _ = transport.SubmitWorldMutation(mutation: new WorldMutation.RemoveStateCell(
-                        Principal: WorldPrincipal.Console,
+                        Principal: Principal.Console,
                         Row: RowName,
                         Key: "b"
                     ));
@@ -800,10 +772,13 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         AssertRefusedNaming(
             definition: Document(
                 row: AccountsRow("a"),
-                template: (Template(deal: new WorldPlacementDeal(Row: RowName)) with { Region = new WorldPlacementRegion(Radius: 1f), Mirror = new WorldPlacementMirror(
+                template: (Template(deal: new WorldPlacementDeal(Row: RowName)) with {
+                    Region = new WorldPlacementRegion(Radius: 1f),
+                    Mirror = new WorldPlacementMirror(
                     Normal: new DocumentVector3(value: Vector3.UnitX),
                     Offset: 0f
-                ) })
+                ),
+                })
             ),
             needle: "refused alongside inhabit/attach/respond/mirror/faceSources"
         );
@@ -840,14 +815,14 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         );
 
         var source = AuthoredGameFixtures.Nexus;
-        var ids = new HashSet<string>(comparer: StringComparer.Ordinal) { "granaryCourt", "granaryStore", "granaryAnchor" };
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal) { "granaries$granaryCourt", "granaries$granaryStore", "granaries$granaryAnchor" };
         var island = Fixtures.BuildDocument() with {
             Text = source.Text,
             CreationsRaw = [.. source.Creations.Where(predicate: row => ids.Contains(item: row.Id))],
-            PlacementRowsRaw = [.. source.Placements.Where(predicate: row => (row.Id is "granaryCourt" or "granaryStores"))],
+            PlacementRowsRaw = [.. source.Placements.Where(predicate: row => (row.Id is "granaries$granaryCourt" or "granaries$granaryStores"))],
             StateRaw = new WorldStateSection(World: [.. source.State.Where(predicate: row => row.Name.Value.StartsWith(
                 comparisonType: StringComparison.Ordinal,
-                value: "granaries_"
+                value: "granaries$"
             ))]),
         };
         var template = Assert.Single(
@@ -855,10 +830,10 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
             predicate: static placement => (placement.Deal is not null)
         );
         var seed = new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: [
             new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: template.Deal!.Row,
                     Key: "bytrcstp001",
                     Value: 0L,
@@ -866,7 +841,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
                     Text: "bytrcstp001"
                 ),
             new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: template.Deal!.Row,
                     Key: "bytrcstp002",
                     Value: 0L,
@@ -874,7 +849,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
                     Text: "bytrcstp002"
                 ),
             new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: template.Deal!.Row,
                     Key: "bytrcstp003",
                     Value: 0L,
@@ -888,12 +863,14 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
             seed: seed
         );
         var granariesControl = Measure(
-            definition: (island with { PlacementRowsRaw = [.. island.Placements.Select(selector: placement => (ReferenceEquals(
+            definition: (island with {
+                PlacementRowsRaw = [.. island.Placements.Select(selector: placement => (ReferenceEquals(
                     objA: placement,
                     objB: template
                 )
             ? (placement with { Deal = null })
-            : placement))] }),
+            : placement))],
+            }),
             seed: seed
         );
 
@@ -919,10 +896,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
         var samples = new long[120];
 
         for (var tick = 0; (tick < samples.Length); tick++) {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
-            fixture.Step(stepTicks: width);
-            samples[tick] = (GC.GetAllocatedBytesForCurrentThread() - before);
+            samples[tick] = AllocationWindow.Total(window: () => fixture.Step(stepTicks: width));
         }
 
         Array.Sort(array: samples);

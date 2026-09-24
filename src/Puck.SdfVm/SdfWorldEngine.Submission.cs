@@ -77,36 +77,13 @@ public sealed partial class SdfWorldEngine {
             deviceContext: m_deviceContext
         );
 
-        // The wait above completed this frame's pool, so its marks are readable immediately. m_frameTimingActive was
-        // latched by Record; the ring index only advances on timed frames so the pool selection stays consistent.
-        if (m_frameTimingActive) {
-            Span<ulong> ticks = stackalloc ulong[((int)TimingMarkCount)];
-            var pool = m_timingPools![((int)(m_timingFrame % ((ulong)TimingPoolCount)))];
-
-            m_lastFrameGpuMilliseconds = ((m_timingRecorder!.ReadTimestamps(
-                deviceHandle: m_deviceHandle,
-                firstQuery: 0,
-                poolHandle: pool.PoolHandle,
-                queryCount: TimingMarkCount,
-                rawTicks: ticks
-            ) < TimingMarkCount)
-                ? null
-                : m_timingCapabilities.TicksToMilliseconds(
-                    startTicks: ticks[0],
-                    endTicks: ticks[(((int)TimingMarkCount) - 1)]
-                )
-            );
-
-            m_timingFrame++;
-        }
-
         return ReadPixels().ToArray();
     }
     /// <summary>Records and submits one frame fire-and-forget — the live node path. The submit arms the current ring
     /// slot's fence: nothing waits here, and the only wait a later frame pays is that slot fence in
     /// <c>PrepareFrame</c>, <see cref="FrameRingSize"/> frames later — so a pipelining host overlaps this frame's GPU
     /// execution with the next frame's CPU production. In export mode the consumer lives on another backend with no
-    /// shared timeline, so this does drain the producer queue (<see cref="IGpuExportableStorageImage.FinalizeForExport"/>)
+    /// shared timeline, so this does drain the producer queue (<see cref="IGpuExportableImage.FinalizeForExport"/>)
     /// before the shared handle is handed off.</summary>
     /// <param name="frame">The per-frame data: views (cameras + regions), time, and the dynamic entity transforms.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
@@ -126,6 +103,9 @@ public sealed partial class SdfWorldEngine {
 
     private void SubmitFrameCore(SdfFrame frame, Action<int>? onFrameSlotAvailable) {
         ThrowIfPipelinedFrameInFlight();
+        // Publishes the newest frame whose fence has already signaled; the slot-fence wait in PrepareFrame completes
+        // the frame FrameRingSize back regardless.
+        m_work.Poll();
 
         var viewportCount = PrepareFrame(
             frame: frame,
@@ -139,12 +119,6 @@ public sealed partial class SdfWorldEngine {
             fence: m_frameFences[m_currentSlot]
         );
         m_exportableImage?.FinalizeForExport();
-
-        // The ring index advances only on TIMED frames (Record latched m_frameTimingActive), so disarmed frames leave
-        // the last timed frame's pool readable and the N−FrameRingSize readback contract intact across arm/disarm gaps.
-        if (m_frameTimingActive) {
-            m_timingFrame++;
-        }
     }
 
     /// <summary>Records and submits one frame fire-and-forget, then issues a non-blocking fenced readback of the
@@ -166,8 +140,7 @@ public sealed partial class SdfWorldEngine {
 
         Record(viewportCount: viewportCount);
         // Fire-and-forget compute submit (the SAME fenced call SubmitFrame uses), then the fenced-but-unwaited
-        // readback copy. The readback lives on this engine and tracks its own single outstanding fence; the timing
-        // path is not driven here (this path is preview-only and never constructed with a timing pool).
+        // readback copy. The readback lives on this engine and tracks its own single outstanding fence.
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: [m_commandPools[m_currentSlot].CommandBufferHandle],
             deviceContext: m_deviceContext,

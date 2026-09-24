@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -36,7 +37,7 @@ public sealed class GradientUpContactLawTests {
     // EngageAuthorityLawTests documents) plus its horizontal (X-Z) distance from the ball's Y axis.
     private static (bool Grounded, float HorizontalOffset) Settle(bool gradientUp) {
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: gradientUp));
-        var actor = WorldPrincipal.Seat(slot: Fixtures.GradientUpSeatSlot);
+        var actor = Principal.Seat(slot: Fixtures.GradientUpSeatSlot);
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

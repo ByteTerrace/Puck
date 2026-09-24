@@ -1,9 +1,8 @@
 # Moth flight studio
 
-[moth.world.json](moth.world.json) contains a playable SDF character rebuilt from
-[the Moth Pipeline](../../pipelines/moth.glsl). The creation starts with new shape IDs,
-directly authored dimensions and a new rig. The earlier character's geometry,
-pose frames and `mothScale` / `mothRot` / `mothJoints` bindings are retired.
+[moth.puck](moth.puck) contains a playable SDF character rebuilt from
+[the Moth Pipeline](../../pipelines/moth.hlsl), with its own shape IDs,
+directly authored dimensions and rig.
 
 The Pipeline remains the visual standard. Both render inside Puck. The native model
 uses curved ivory shin shells with lilac arch trim, swept shoulder plates, an
@@ -17,13 +16,13 @@ edge weathering. Fine sculpting and surface finish still differ from the Pipelin
 Run from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/avatars/moth.world.json --state-dir artifacts/moth-demo/state --exit-after-seconds 0
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
 With an existing Release build:
 
 ```powershell
-dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/avatars/moth.world.json --state-dir artifacts/moth-demo/state --exit-after-seconds 0
+dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/avatars/moth.puck --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
 The initial view is the native model's three-quarter inspection. In the running
@@ -112,8 +111,7 @@ The creation uses superellipsoids for smooth volumes, convex extrusions for
 armor plates, quadratic sweeps for digits and facial lines, and axial profiles
 for flared shins. Scoped subtraction and intersection isolate the hood opening,
 eye sockets, plate boundaries and ankle arches. The near-ellipsoidal forms use
-exponent 2.1; exponent 2 currently takes the older ellipsoid path and must not be
-substituted casually for thin features. Check `world.budget` after geometry edits:
+exponent 2.1, a slightly fuller form than the ellipsoid (exponent 2). Check `world.budget` after geometry edits:
 the rebuilt world was verified at `stepScale 1`.
 
 The new rig swings the thighs, shins, feet, arms and forearms during walking.
@@ -140,7 +138,7 @@ a directional ground gait or a dedicated impact-and-recovery animation.
 Check document admission and the stamp budget:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll creation stats --world src/Puck.World/Assets/worlds/avatars/moth.world.json --prototype moth
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll creation stats --world src/Puck.World/Assets/worlds/avatars/moth.puck --prototype moth
 ```
 
 Then inspect the live front, rear and face views. Exercise takeoff and landing:

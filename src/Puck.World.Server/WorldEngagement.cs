@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Abstractions.Machines;
 using Puck.Maths;
@@ -36,7 +37,7 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// or a population entry's Peer identity) rather than by this class, because that resolution needs the local
 /// roster's claim state — client-only bookkeeping this class has no business holding. The read half's
 /// entity→principal resolution needs no such indirection: a body/entity index is a
-/// <see cref="WorldPrincipal.Index"/> directly for both <see cref="PrincipalKind.Seat"/> (0..3,
+/// <see cref="Principal.Index"/> directly for both <see cref="PrincipalKind.Seat"/> (0..3,
 /// <see cref="WorldPopulation.LocalSeatCount"/>-bounded) and <see cref="PrincipalKind.Peer"/> (indices 4 through
 /// the population capacity minus one) principals,
 /// so <see cref="PlayersOn"/>/<see cref="FoldTick"/>/<see cref="DissolveScreen"/> resolve bodies with plain index
@@ -74,8 +75,8 @@ public sealed class WorldEngagement {
     private readonly Dictionary<int, string?> m_screenKit = new();
     // Reused scratch for the per-frame PlayersOn/DissolveScreen collect+prune, so the hot path allocates nothing
     // after warmup.
-    private readonly List<WorldPrincipal> m_holderScratch = new();
-    private readonly List<WorldPrincipal> m_staleScratch = new();
+    private readonly List<Principal> m_holderScratch = new();
+    private readonly List<Principal> m_staleScratch = new();
     // Reused scratch for a Compose/Dissolve set rebuild — the write path is human-cadence, but reusing it keeps the
     // allocation profile of this class uniform.
     private readonly List<ControlApplication> m_composeScratch = new();
@@ -192,8 +193,8 @@ public sealed class WorldEngagement {
     }
     // The principal a 0-based entity index resolves to — a seat slot below the local seat count, a population peer
     // identity above it (see the class remarks: no roster indirection is needed on the read half).
-    private WorldPrincipal PrincipalOf(int index) => ((index < m_population.LocalSeatCount)
-        ? WorldPrincipal.Seat(slot: index)
+    private Principal PrincipalOf(int index) => ((index < m_population.LocalSeatCount)
+        ? Principal.Seat(slot: index)
         : m_population.PeerPrincipal(index: index)
     );
     // Clear the composed application set of every principal collected as stale this pass (its body no longer live).
@@ -207,7 +208,7 @@ public sealed class WorldEngagement {
     }
     // The shared check-then-mutate decision Dissolve applies and PeekDissolve reports. Every dissolved target is
     // Control-checked against the actor — the identical pair composing it required — before anything is written.
-    private ControlOutcome ResolveDissolve(int entityIndex, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal, bool apply) {
+    private ControlOutcome ResolveDissolve(int entityIndex, Principal actingPrincipal, Principal targetPrincipal, bool apply) {
         if (Body(index: entityIndex) is null) {
             return ControlOutcome.NotApplied;
         }
@@ -256,7 +257,7 @@ public sealed class WorldEngagement {
     // The single latch derivation — the ONLY writer of WorldBody.SetEngaged. Idempotent (SetEngaged short-circuits
     // an unchanged value), so calling it from every write path and again per tick costs nothing and leaves no
     // window in which the latch and the set disagree.
-    private void SyncLatch(WorldPrincipal principal, IReadOnlyList<ControlApplication> applications) {
+    private void SyncLatch(Principal principal, IReadOnlyList<ControlApplication> applications) {
         if (Body(index: principal.Index) is not { } body) {
             return;
         }
@@ -322,7 +323,7 @@ public sealed class WorldEngagement {
     /// mutation passes through.</summary>
     /// <param name="target">The application target subject (a screen or a body) to check.</param>
     /// <param name="actingPrincipal">The principal asking to compose or dissolve.</param>
-    public GrantVerdict CheckEngage(GrantSubject target, WorldPrincipal actingPrincipal) =>
+    public GrantVerdict CheckEngage(GrantSubject target, Principal actingPrincipal) =>
         m_grants.Allows(
             capability: WorldCapability.Control,
             principal: actingPrincipal,
@@ -348,7 +349,7 @@ public sealed class WorldEngagement {
     /// seeded permissive default.</param>
     /// <param name="targetPrincipal">The identity whose set is composed — the entity's own resolved identity.</param>
     /// <returns>Whether the application was permitted and recorded.</returns>
-    public bool Compose(int entityIndex, GrantSubject target, bool exclusive, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal) {
+    public bool Compose(int entityIndex, GrantSubject target, bool exclusive, Principal actingPrincipal, Principal targetPrincipal) {
         if (!CheckEngage(
             actingPrincipal: actingPrincipal,
             target: target
@@ -421,7 +422,7 @@ public sealed class WorldEngagement {
     /// <param name="actingPrincipal">The principal asking to dissolve.</param>
     /// <param name="targetPrincipal">The identity whose set is dissolved.</param>
     /// <returns>The outcome (see <see cref="ControlOutcome"/>).</returns>
-    public ControlOutcome Dissolve(int entityIndex, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal) =>
+    public ControlOutcome Dissolve(int entityIndex, Principal actingPrincipal, Principal targetPrincipal) =>
         ResolveDissolve(
             actingPrincipal: actingPrincipal,
             apply: true,
@@ -547,7 +548,7 @@ public sealed class WorldEngagement {
     /// <param name="actingPrincipal">The principal asking to dissolve.</param>
     /// <param name="targetPrincipal">The identity whose set would be dissolved.</param>
     /// <returns>The outcome dissolving would produce.</returns>
-    public ControlOutcome PeekDissolve(int entityIndex, WorldPrincipal actingPrincipal, WorldPrincipal targetPrincipal) =>
+    public ControlOutcome PeekDissolve(int entityIndex, Principal actingPrincipal, Principal targetPrincipal) =>
         ResolveDissolve(
             actingPrincipal: actingPrincipal,
             apply: false,
@@ -556,7 +557,7 @@ public sealed class WorldEngagement {
         );
     /// <summary>Returns every entity currently applied to <paramref name="screenIndex"/>, reported as 1-based display
     /// numbers (1..128, matching the <c>player.*</c> verb convention — a Seat/Peer principal's
-    /// <see cref="WorldPrincipal.Index"/> plus one) alongside whether the application captures it (its avatar idle,
+    /// <see cref="Principal.Index"/> plus one) alongside whether the application captures it (its avatar idle,
     /// the classic engage) or mirrors it (its avatar still driving), in ascending display order. Prunes any set that
     /// no longer resolves to a live body.</summary>
     /// <param name="screenIndex">The engine screen index.</param>
@@ -695,4 +696,4 @@ public sealed class WorldEngagement {
 /// <param name="Principal">The applying principal — the contribution's acting identity (still checked for Drive over
 /// <paramref name="TargetBody"/> at the ordinary intent-submission door; an application alone never grants Drive).</param>
 /// <param name="Intent">The reach-masked intent to contribute.</param>
-public readonly record struct BodyRouteContribution(int TargetBody, WorldPrincipal Principal, PlayerIntent Intent);
+public readonly record struct BodyRouteContribution(int TargetBody, Principal Principal, PlayerIntent Intent);

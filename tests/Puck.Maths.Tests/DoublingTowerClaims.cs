@@ -530,10 +530,12 @@ internal static class DoublingTowerClaims {
         for (var step = 0; (step < 1500); ++step) {
             var leaves = new long[8];
 
-            for (var lane = 0; (lane < 8); ++lane) { leaves[lane] = DeterministicFullRangeRaw(
+            for (var lane = 0; (lane < 8); ++lane) {
+                leaves[lane] = DeterministicFullRangeRaw(
                 lane: lane,
                 step: step
-            ); }
+            );
+            }
 
             var error = CheckFloor3Norm(
                 leaves: leaves,
@@ -550,11 +552,13 @@ internal static class DoublingTowerClaims {
         for (var step = 0; (step < 1500); ++step) {
             var leaves = new long[8];
 
-            for (var lane = 0; (lane < 8); ++lane) { leaves[lane] = DeterministicBoundedRaw(
+            for (var lane = 0; (lane < 8); ++lane) {
+                leaves[lane] = DeterministicBoundedRaw(
                 bound: NarrowBound,
                 lane: (100 + lane),
                 step: step
-            ); }
+            );
+            }
 
             var error = CheckFloor3Norm(
                 leaves: leaves,

@@ -1,31 +1,20 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
+
+using Puck.Testing;
+using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
 
 /// <summary>Every shipped world document loads through the door the game loads it through and compiles under the
 /// arena-addressed compiler with no refusal, needs that name the facet of every arm it can fire, and a program
-/// carrying ordinal addresses alone. A document the door does not load standalone is accounted for by name: either
-/// another shipped document imports it, so its rules reach the compiler through that one, or its basis is a
-/// <c>.puck</c> source this suite does not lower.</summary>
+/// carrying ordinal addresses alone. A document with a <c>.puck</c> source is that source, as the game resolves it. A
+/// document the door does not load standalone is accounted for by name: another shipped document imports it, so its
+/// rules reach the compiler through that one.</summary>
 public sealed class WorldFactsCompilerShippedWorldLawTests {
-    private const string PuckBasisReason = "its basis is a .puck source";
-    private const string WorldDirectory = "src/Puck.World/Assets/worlds";
+    private static IEnumerable<string> ShippedWorlds() => ShippedWorldDocuments.Files(directory: RepositoryPaths.Resolve(relativePath: ShippedWorldDocuments.WorldDirectory));
 
-    private static IEnumerable<string> ShippedWorlds() => Directory.EnumerateFiles(
-        path: Path.Combine(
-            path1: RepositoryRoot(),
-            path2: WorldDirectory
-        ),
-        searchOption: SearchOption.AllDirectories,
-        searchPattern: "*.world.json"
-    ).Select(selector: static path => path.Replace(
-        newChar: '/',
-        oldChar: '\\'
-    )).OrderBy(
-        comparer: StringComparer.Ordinal,
-        keySelector: static path => path
-    );
     private const string FixtureDirectory = "tests/Puck.World.Tests/Fixtures";
 
     // A fragment carries no schema of its own and never loads standalone, but a fixture host imports it and DOES
@@ -33,27 +22,24 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
     // excusing the fragment by name.
     private static Dictionary<string, string> FixtureHosts() {
         var hosts = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
-        var directory = Path.Combine(
-            path1: RepositoryRoot(),
-            path2: FixtureDirectory
-        );
+        var directory = RepositoryPaths.Resolve(relativePath: FixtureDirectory);
 
         if (!Directory.Exists(path: directory)) {
             return hosts;
         }
 
-        foreach (var host in Directory.EnumerateFiles(
-            path: directory,
-            searchPattern: "*.world.json"
+        foreach (var host in ShippedWorldDocuments.Files(
+            directory: directory,
+            option: SearchOption.TopDirectoryOnly
         )) {
             foreach (var reference in References(
                 member: "imports",
                 path: host
             )) {
-                hosts[Path.GetFullPath(path: Path.Combine(
-                    path1: (Path.GetDirectoryName(path: host) ?? string.Empty),
-                    path2: reference
-                ))] = host;
+                hosts[ShippedWorldDocuments.Carrier(
+                    name: reference,
+                    referrer: host
+                )] = host;
             }
         }
 
@@ -69,17 +55,17 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
                 member: "imports",
                 path: path
             )) {
-                _ = targets.Add(item: Path.GetFullPath(path: Path.Combine(
-                    path1: (Path.GetDirectoryName(path: path) ?? string.Empty),
-                    path2: reference
-                )));
+                _ = targets.Add(item: ShippedWorldDocuments.Carrier(
+                    name: reference,
+                    referrer: path
+                ));
             }
         }
 
         return targets;
     }
     private static IEnumerable<string> References(string path, string member) {
-        using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: path));
+        using var document = JsonDocument.Parse(utf8Json: ShippedWorldDocuments.Read(path: path));
 
         if (!document.RootElement.TryGetProperty(
             propertyName: member,
@@ -105,42 +91,12 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
             }
         }
     }
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
     // Why a document the load door refuses is still covered, or null when nothing accounts for it.
     private static string? Unloadable(string path, HashSet<string> imported) {
-        if (imported.Contains(item: Path.GetFullPath(path: path))) {
-            return "another shipped document imports it";
-        }
-
-        foreach (var basis in References(
-            member: "basis",
-            path: path
-        )) {
-            if (basis.EndsWith(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: ".puck"
-            )) {
-                return PuckBasisReason;
-            }
-        }
-
-        return null;
+        return (imported.Contains(item: Path.GetFullPath(path: path))
+            ? "another shipped document imports it"
+            : null
+        );
     }
 
     public static TheoryData<string> Worlds() {
@@ -153,7 +109,19 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
         return data;
     }
 
-    private static CompileOutcome Compile(WorldDefinition definition) {
+    // Loading and compiling are deterministic and every law only reads what they return, so each document is
+    // loaded once, and each loaded definition compiled once, for the whole class.
+    private static readonly ConcurrentDictionary<string, Lazy<LoadOutcome>> Loads = new(comparer: StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<WorldDefinition, Lazy<CompileOutcome>> Compiles = new(comparer: ReferenceEqualityComparer.Instance);
+    private static readonly Lazy<Dictionary<string, string>> FixtureHostsOnce = new(valueFactory: FixtureHosts);
+    private static readonly Lazy<HashSet<string>> ImportTargetsOnce = new(valueFactory: ImportTargets);
+
+    private static CompileOutcome Compile(WorldDefinition definition) =>
+        Compiles.GetOrAdd(
+            key: definition,
+            valueFactory: static key => new Lazy<CompileOutcome>(valueFactory: () => CompileUncached(definition: key))
+        ).Value;
+    private static CompileOutcome CompileUncached(WorldDefinition definition) {
         try {
             return new CompileOutcome(
                 Refusal: null,
@@ -168,16 +136,28 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
             );
         }
     }
+    private static WorldDefinition? Load(string path) =>
+        LoadOnce(path: path).Definition;
+    private static LoadOutcome LoadOnce(string path) =>
+        Loads.GetOrAdd(
+            key: path,
+            valueFactory: static key => new Lazy<LoadOutcome>(valueFactory: () => LoadUncached(path: key))
+        ).Value;
     // The door the game itself loads a world through: composition, migration, and document-local validation.
-    private static WorldDefinition? Load(string path) => (WorldDefinitionFileSource.TryLoadLocally(
-        contentHash: out _,
-        definition: out var definition,
-        path: path,
-        reason: out _
-    )
-        ? definition
-        : null
-    );
+    private static LoadOutcome LoadUncached(string path) {
+        var loaded = WorldDefinitionFileSource.TryLoadLocally(
+            contentHash: out _,
+            definition: out var definition,
+            documents: PuckDocumentComposer.Instance,
+            path: path,
+            reason: out var reason
+        );
+
+        return new LoadOutcome(
+            Definition: (loaded ? definition : null),
+            Reason: reason
+        );
+    }
     // A refusal names its rule first: "rule '<name>' refused <category>: <detail>".
     private static string RefusedRuleOf(RuleException failure) {
         var message = failure.Message;
@@ -195,8 +175,8 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
 
     [Fact]
     public void EveryShippedWorldDocumentEitherLoadsOrIsAccountedForByName() {
-        var hosts = FixtureHosts();
-        var imported = ImportTargets();
+        var hosts = FixtureHostsOnce.Value;
+        var imported = ImportTargetsOnce.Value;
         var loaded = new List<string>();
         var rules = 0;
         var unaccounted = new List<string>();
@@ -238,7 +218,7 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
         if (Load(path: path) is not { } definition) {
             // A fragment a fixture hosts is PROVED through that host, not excused: the host composes it and the
             // compiler runs over the composition.
-            if (FixtureHosts().TryGetValue(
+            if (FixtureHostsOnce.Value.TryGetValue(
                 key: Path.GetFullPath(path: path),
                 value: out var host
             )) {
@@ -254,8 +234,13 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
                 return;
             }
 
-            _ = WorldDefinitionFileSource.TryLoadLocally(path: path, definition: out _, contentHash: out _, reason: out var loadReason);
-            Assert.True(Unloadable(imported: ImportTargets(), path: path) is not null, $"{path}: {loadReason}");
+            Assert.True(
+                condition: (Unloadable(
+                    imported: ImportTargetsOnce.Value,
+                    path: path
+                ) is not null),
+                userMessage: $"{path}: {LoadOnce(path: path).Reason}"
+            );
 
             return;
         }
@@ -412,6 +397,7 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
         }
 
         var catalog = definition.StateCatalog;
+        StateArena? arena = null;
 
         foreach (var row in definition.State) {
             Assert.True(condition: catalog.TryResolve(
@@ -431,7 +417,7 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
                 continue;
             }
 
-            var arena = new StateArena(
+            arena ??= new StateArena(
                 catalog: catalog,
                 section: definition.StateRaw,
                 time: ArenaTime.Origin
@@ -472,3 +458,7 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
 /// <param name="Refusal">The refusal's own name, or <see langword="null"/>.</param>
 /// <param name="RefusedRule">The refusing rule's name, or <see langword="null"/>.</param>
 internal readonly record struct CompileOutcome(Puck.State.Rules.CompiledRule[] Rules, string? Refusal, string? RefusedRule);
+/// <summary>What one load of a shipped world through the game's door returned.</summary>
+/// <param name="Definition">The loaded definition, or <see langword="null"/> when the door refused it.</param>
+/// <param name="Reason">The door's reason for a refusal.</param>
+internal readonly record struct LoadOutcome(WorldDefinition? Definition, string Reason);

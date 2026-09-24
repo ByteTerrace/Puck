@@ -46,6 +46,23 @@ public sealed class WorldSessionMirror : IClientSink {
 
     private WorldDefinition m_definition;
     private int m_definitionRevision;
+
+    // The rows state deliveries moved since the presentation last followed them: written by the delivering thread,
+    // taken by FollowState, both under m_stampGate. m_followGate serializes followers over the one state mirror.
+    private readonly Lock m_stampGate = new();
+    private readonly Lock m_followGate = new();
+    private int[] m_pendingRows = [];
+    private bool[] m_pendingNoted = [];
+
+    private int m_pendingCount;
+    private bool m_pendingEverything;
+
+    private int[] m_followedRows = [];
+
+    private WorldStateMirror? m_state;
+
+    private int m_stateRevision = -1;
+
     private WorldBodyContactMode[] m_kitBodyContacts;
     private FixedWorldCollider?[] m_kitColliders;
     // Attach replays the authority's most recently completed snapshot. A transfer committed after that snapshot
@@ -425,15 +442,120 @@ public sealed class WorldSessionMirror : IClientSink {
         }
     }
     /// <inheritdoc/>
-    public void DeliverState(WorldDefinition definition) {
+    /// <remarks>The stamp's moved rows are kept until <see cref="FollowState"/> takes them, so the presentation reads
+    /// only the bound slots of rows that moved.</remarks>
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
+        // The definition publishes before its rows are noted, so a follower that takes a row reads a definition at
+        // least as new as the delivery that moved it.
         Volatile.Write(
             location: ref m_definition,
             value: definition
         );
+
+        lock (m_stampGate) {
+            if (stamp.Everything) {
+                m_pendingEverything = true;
+
+                return;
+            }
+
+            foreach (var ordinal in stamp.MovedRows.Span) {
+                if (ordinal < 0) {
+                    continue;
+                }
+
+                if (ordinal >= m_pendingNoted.Length) {
+                    var capacity = Math.Max(
+                        val1: (ordinal + 1),
+                        val2: (m_pendingNoted.Length * 2)
+                    );
+
+                    Array.Resize(
+                        array: ref m_pendingNoted,
+                        newSize: capacity
+                    );
+                    Array.Resize(
+                        array: ref m_pendingRows,
+                        newSize: capacity
+                    );
+                }
+
+                if (!m_pendingNoted[ordinal]) {
+                    m_pendingNoted[ordinal] = true;
+                    m_pendingRows[m_pendingCount++] = ordinal;
+                }
+            }
+        }
+    }
+    /// <summary>Brings this mirror's state mirror up to the latest delivery and returns it: a definition delivery
+    /// installs it, the rows state deliveries moved since the last follow refresh only the slots bound to them, and a
+    /// newer tick with nothing moved refreshes only the slots still moving. Called on the thread that presents
+    /// frames, as often as a presentation reads; a follow with nothing new reads nothing.</summary>
+    /// <returns>The state mirror every presentation read of this destination's rows goes through.</returns>
+    public WorldStateMirror FollowState() {
+        lock (m_followGate) {
+            var state = (m_state ??= new WorldStateMirror(view: new WorldDocumentStateView(definition: () => Definition)));
+            int count;
+            bool everything;
+
+            lock (m_stampGate) {
+                count = m_pendingCount;
+
+                if (m_followedRows.Length < count) {
+                    Array.Resize(
+                        array: ref m_followedRows,
+                        newSize: m_pendingRows.Length
+                    );
+                }
+
+                for (var index = 0; (index < count); index++) {
+                    var ordinal = m_pendingRows[index];
+
+                    m_followedRows[index] = ordinal;
+                    m_pendingNoted[ordinal] = false;
+                }
+
+                everything = m_pendingEverything;
+                m_pendingCount = 0;
+                m_pendingEverything = false;
+            }
+
+            var revision = DefinitionRevision;
+            var tick = Tick;
+            var engineTick = EngineTick;
+
+            if (revision != m_stateRevision) {
+                m_stateRevision = revision;
+                state.Install(
+                    engineTick: engineTick,
+                    tick: tick
+                );
+            } else if (
+                everything ||
+                (count > 0)
+            ) {
+                state.Refresh(stamp: new WorldStateStamp(
+                    EngineTick: engineTick,
+                    Everything: everything,
+                    MovedRows: m_followedRows.AsMemory(
+                        length: count,
+                        start: 0
+                    ),
+                    Tick: tick
+                ));
+            } else {
+                state.Advance(
+                    engineTick: engineTick,
+                    tick: tick
+                );
+            }
+
+            return state;
+        }
     }
     /// <summary>Gets an entity's latest authoritative fact mask (<see cref="EntitySnapshot.Facts"/>) — not
     /// interpolated; the facts are discrete authority answers.</summary>

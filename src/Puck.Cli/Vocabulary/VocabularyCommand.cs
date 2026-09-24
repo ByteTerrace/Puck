@@ -81,31 +81,24 @@ internal static class VocabularyCommand {
         return 1;
     }
 
-    public static Command Create() {
-        var checkOption = new Option<bool>(name: "--check") {
-            Description = "Regenerate in memory and compare against docs/reference/world-vocabulary.md; write nothing, and exit 1 naming the first differing line.",
-        };
-        var command = new Command(
-            description: """
-            The world authoring vocabulary, generated and checked.
+    public static Command Create() => CliOptions.CheckVerb(
+        checkDescription: "Regenerate in memory and compare against docs/reference/world-vocabulary.md; write nothing, and exit 1 naming the first differing line.",
+        description: """
+        The world authoring vocabulary, generated and checked.
 
-            Generated from Puck.World.Transpiler.Vocabulary.WorldConstructs.Table: every construct
-            of puck.world.definition.v1's surface, its members with their kinds and defaults, the
-            document member it lowers to, and what the printer requires before it may print a
-            document node back as that construct. The parser's embedded-language test, the
-            decompiler's sugar guards, and the language server's completion and hover read the same
-            table, so this file cannot describe a construct the code spells differently.
+        Generated from Puck.World.Transpiler.Vocabulary.WorldConstructs.Table: every construct
+        of puck.world.definition.v1's surface, its members with their kinds and defaults, the
+        document member it lowers to, and what the printer requires before it may print a
+        document node back as that construct. The parser's embedded-language test, the
+        decompiler's sugar guards, and the language server's completion and hover read the same
+        table, so this file cannot describe a construct the code spells differently.
 
-            What a document field means is `puck schema`'s and which fields carry names is
-            `puck registry`'s; this table is the surface and its mapping onto them.
+        What a document field means is `puck schema`'s and which fields carry names is
+        `puck registry`'s; this table is the surface and its mapping onto them.
 
-            Written to: docs/reference/world-vocabulary.md.
-            """,
-            name: "vocabulary"
-        ) { checkOption };
-
-        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: checkOption)));
-
-        return command;
-    }
+        Written to: docs/reference/world-vocabulary.md.
+        """,
+        name: "vocabulary",
+        run: Run
+    );
 }

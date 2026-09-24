@@ -1,7 +1,6 @@
 using System.Numerics;
-using Puck.World.Authoring;
+using Puck.Abstractions.Counting;
 using Puck.Maths;
-using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -44,38 +43,6 @@ public sealed class InhabitCountLawTests {
             actual: actual.Z
         );
     }
-    private static WorldPrototype Creation() {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: CourtCreation,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: CourtCreation
-        );
-
-        return new WorldPrototype(
-            Id: CourtCreation,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     // A court whose inhabit count reads the "courtSize" Int slot cell (initial value initial), fanned over a
     // radius-2 Disc distribution sampled at DistributionSampleCount — a bound tighter than the authored peer
     // capacity (ExtraPeerSlots), so a law can drive the cell past either bound independently.
@@ -83,7 +50,7 @@ public sealed class InhabitCountLawTests {
         var document = Fixtures.BuildDocument();
 
         return (document with {
-            CreationsRaw = [Creation()],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: CourtCreation)],
             PlacementRowsRaw = [
                 new WorldPlacement(
                 Id: CourtPlacementId,
@@ -285,18 +252,12 @@ public sealed class InhabitCountLawTests {
             tick: fixture.Server.NextInputTick
         );
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        fixture.Server.Population.ReconcileInhabitCounts(
-            definition: definition,
-            tick: fixture.Server.NextInputTick
-        );
-
-        var after = GC.GetAllocatedBytesForCurrentThread();
-
         Assert.Equal(
-            actual: after,
-            expected: before
+            actual: AllocationWindow.Least(window: () => fixture.Server.Population.ReconcileInhabitCounts(
+                definition: definition,
+                tick: fixture.Server.NextInputTick
+            )),
+            expected: 0L
         );
     }
     [Fact]

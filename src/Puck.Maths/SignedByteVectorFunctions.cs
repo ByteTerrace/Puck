@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 
@@ -14,12 +13,11 @@ public static class SignedByteVectorFunctions {
             throw new ArgumentOutOfRangeException(nameof(dimensions), "Dimensions must be positive.");
         }
 
-        var floorSqrt = (int)((uint)dimensions).SquareRoot();
-        var ceilSqrt = floorSqrt + ((floorSqrt * floorSqrt < dimensions) ? 1 : 0);
+        var floorSqrt = ((int)((uint)dimensions).SquareRoot());
+        var ceilSqrt = (floorSqrt + (((floorSqrt * floorSqrt) < dimensions) ? 1 : 0));
 
         return (((ceilSqrt + 1) / 2) + 1);
     }
-
     /// <summary>Computes the exact integer dot product of two signed 8-bit vectors.</summary>
     /// <param name="left">The first vector.</param>
     /// <param name="right">The second vector.</param>
@@ -27,36 +25,34 @@ public static class SignedByteVectorFunctions {
     /// <exception cref="ArgumentException">Thrown when vector lengths differ.</exception>
     public static long Dot(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
         if (left.Length != right.Length) {
-            throw new ArgumentException("Vector lengths must match.", nameof(right));
+            throw new ArgumentException(message: "Vector lengths must match.", paramName: nameof(right));
         }
 
         if (Vector512.IsHardwareAccelerated && (left.Length >= Vector512<sbyte>.Count)) {
-            return DotVector512(left: left, right: right);
+            return DotVector<VectorLanes512, Vector512<sbyte>, Vector512<short>, Vector512<int>>(left: left, right: right);
         }
 
         if (Vector256.IsHardwareAccelerated && (left.Length >= Vector256<sbyte>.Count)) {
-            return DotVector256(left: left, right: right);
+            return DotVector<VectorLanes256, Vector256<sbyte>, Vector256<short>, Vector256<int>>(left: left, right: right);
         }
 
         if (Vector128.IsHardwareAccelerated && (left.Length >= Vector128<sbyte>.Count)) {
-            return DotVector128(left: left, right: right);
+            return DotVector<VectorLanes128, Vector128<sbyte>, Vector128<short>, Vector128<int>>(left: left, right: right);
         }
 
         return DotScalar(left: left, right: right);
     }
-
     /// <summary>Computes the exact sum of squares (dot product with itself) of a signed 8-bit vector.</summary>
     /// <param name="components">The vector components.</param>
     /// <returns>The exact sum of squares.</returns>
     public static long SumOfSquares(ReadOnlySpan<sbyte> components) => Dot(left: components, right: components);
-
     /// <summary>Computes the exact cosine similarity between two signed 8-bit vectors in Q48.16 fixed-point format.</summary>
     /// <param name="left">The first vector.</param>
     /// <param name="right">The second vector.</param>
     /// <returns>The cosine similarity in Q48.16 (scaled by 65536, in [-65536, 65536]).</returns>
     public static long CosineQ16(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
         if (left.Length != right.Length) {
-            throw new ArgumentException("Vector lengths must match.", nameof(right));
+            throw new ArgumentException(message: "Vector lengths must match.", paramName: nameof(right));
         }
 
         var dot = Dot(left: left, right: right);
@@ -71,182 +67,98 @@ public static class SignedByteVectorFunctions {
             return 65536L;
         }
 
-        var product = ((UInt128)(ulong)sumA * (UInt128)(ulong)sumB);
-        var r = (ulong)(product << 32).SquareRoot();
+        var product = (((UInt128)((ulong)sumA)) * ((UInt128)((ulong)sumB)));
+        var r = ((ulong)(product << 32).SquareRoot());
 
         if (r == 0UL) {
             return 0L;
         }
 
-        var absDot = (ulong)Math.Abs(value: dot);
+        var absDot = ((ulong)Math.Abs(value: dot));
         var numerator = (absDot << 32);
         var quotient = (numerator / r);
         var remainder = (numerator % r);
         var distanceToNext = (r - remainder);
-        var rounded = FixedPointRounding.RoundHalfToEven(truncated: quotient, remainder: remainder, threshold: distanceToNext);
-        var raw = (dot < 0L) ? -(long)rounded : (long)rounded;
+        var rounded = FixedPointRounding.RoundHalfToEven(remainder: remainder, threshold: distanceToNext, truncated: quotient);
+        var raw = ((dot < 0L) ? -((long)rounded) : (long)rounded);
 
-        return Math.Clamp(value: raw, min: -65536L, max: 65536L);
+        return Math.Clamp(max: 65536L, min: -65536L, value: raw);
     }
 
     /// <summary>Scalar reference rung for the signed 8-bit vector dot product.</summary>
     internal static long DotScalar(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
         if (left.Length != right.Length) {
-            throw new ArgumentException("Vector lengths must match.", nameof(right));
+            throw new ArgumentException(message: "Vector lengths must match.", paramName: nameof(right));
         }
 
         var sum = 0L;
 
-        for (var i = 0; i < left.Length; i++) {
-            sum += ((long)left[i] * right[i]);
+        for (var i = 0; (i < left.Length); i++) {
+            sum += (((long)left[i]) * right[i]);
         }
 
         return sum;
     }
-
-    /// <summary>128-bit SIMD rung for the signed 8-bit vector dot product.</summary>
-    internal static long DotVector128(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
+    /// <summary>SIMD rung for the signed 8-bit vector dot product at one vector width.</summary>
+    /// <typeparam name="TLanes">The vector width.</typeparam>
+    /// <typeparam name="TSignedBytes">The eight-bit signed vector at that width.</typeparam>
+    /// <typeparam name="TShorts">The sixteen-bit signed vector at that width.</typeparam>
+    /// <typeparam name="TInts">The thirty-two-bit signed vector at that width.</typeparam>
+    /// <param name="left">The first vector.</param>
+    /// <param name="right">The second vector.</param>
+    /// <returns>The exact dot product.</returns>
+    /// <remarks>
+    /// Each block adds four products of at most 2^14 in magnitude into every thirty-two-bit lane, so the lane
+    /// accumulator is drained into the sixty-four-bit sum every 256 blocks, long before it could wrap.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The vector lengths differ.</exception>
+    internal static long DotVector<TLanes, TSignedBytes, TShorts, TInts>(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right)
+        where TLanes : ISignedByteWideningLanes<TSignedBytes, TShorts, TInts>
+        where TSignedBytes : struct
+        where TShorts : struct
+        where TInts : struct {
         if (left.Length != right.Length) {
-            throw new ArgumentException("Vector lengths must match.", nameof(right));
+            throw new ArgumentException(message: "Vector lengths must match.", paramName: nameof(right));
         }
 
-        ref var leftRef = ref MemoryMarshal.GetReference(left);
-        ref var rightRef = ref MemoryMarshal.GetReference(right);
+        ref var leftRef = ref MemoryMarshal.GetReference(span: left);
+        ref var rightRef = ref MemoryMarshal.GetReference(span: right);
         var index = 0;
         var count = left.Length;
-        var acc = Vector128<int>.Zero;
+        var acc = default(TInts);
         var sum = 0L;
         var blockCount = 0;
 
-        for (; (index + 16) <= count; index += 16) {
-            var vLeft = Vector128.LoadUnsafe(ref leftRef, (nuint)index);
-            var vRight = Vector128.LoadUnsafe(ref rightRef, (nuint)index);
+        for (; ((index + TLanes.ByteCount) <= count); index += TLanes.ByteCount) {
+            var vLeft = TLanes.Load(elementOffset: ((nuint)index), source: in leftRef);
+            var vRight = TLanes.Load(elementOffset: ((nuint)index), source: in rightRef);
 
-            var (lLow, lHigh) = Vector128.Widen(vLeft);
-            var (rLow, rHigh) = Vector128.Widen(vRight);
+            var (lLow, lHigh) = TLanes.Widen(value: vLeft);
+            var (rLow, rHigh) = TLanes.Widen(value: vRight);
 
-            var prodLow = (lLow * rLow);
-            var prodHigh = (lHigh * rHigh);
+            var prodHigh = TLanes.Multiply(left: lHigh, right: rHigh);
+            var prodLow = TLanes.Multiply(left: lLow, right: rLow);
 
-            var (p1, p2) = Vector128.Widen(prodLow);
-            var (p3, p4) = Vector128.Widen(prodHigh);
+            var (p1, p2) = TLanes.Widen(value: prodLow);
+            var (p3, p4) = TLanes.Widen(value: prodHigh);
 
-            acc += (((p1 + p2) + p3) + p4);
+            acc = TLanes.Add(left: acc, right: TLanes.Add(left: TLanes.Add(left: TLanes.Add(left: p1, right: p2), right: p3), right: p4));
 
             if (++blockCount == 256) {
-                sum += (((long)acc.GetElement(0) + acc.GetElement(1)) + ((long)acc.GetElement(2) + acc.GetElement(3)));
-                acc = Vector128<int>.Zero;
+                sum += TLanes.Sum(value: acc);
+                acc = default;
                 blockCount = 0;
             }
         }
 
-        sum += (((long)acc.GetElement(0) + acc.GetElement(1)) + ((long)acc.GetElement(2) + acc.GetElement(3)));
+        sum += TLanes.Sum(value: acc);
 
-        for (; index < count; index++) {
-            sum += ((long)left[index] * right[index]);
+        for (; (index < count); index++) {
+            sum += (((long)left[index]) * right[index]);
         }
 
         return sum;
     }
-
-    /// <summary>256-bit SIMD rung for the signed 8-bit vector dot product.</summary>
-    internal static long DotVector256(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
-        if (left.Length != right.Length) {
-            throw new ArgumentException("Vector lengths must match.", nameof(right));
-        }
-
-        ref var leftRef = ref MemoryMarshal.GetReference(left);
-        ref var rightRef = ref MemoryMarshal.GetReference(right);
-        var index = 0;
-        var count = left.Length;
-        var acc = Vector256<int>.Zero;
-        var sum = 0L;
-        var blockCount = 0;
-
-        for (; (index + 32) <= count; index += 32) {
-            var vLeft = Vector256.LoadUnsafe(ref leftRef, (nuint)index);
-            var vRight = Vector256.LoadUnsafe(ref rightRef, (nuint)index);
-
-            var (lLow, lHigh) = Vector256.Widen(vLeft);
-            var (rLow, rHigh) = Vector256.Widen(vRight);
-
-            var prodLow = (lLow * rLow);
-            var prodHigh = (lHigh * rHigh);
-
-            var (p1, p2) = Vector256.Widen(prodLow);
-            var (p3, p4) = Vector256.Widen(prodHigh);
-
-            acc += (((p1 + p2) + p3) + p4);
-
-            if (++blockCount == 256) {
-                for (var lane = 0; lane < 8; lane++) {
-                    sum += acc.GetElement(lane);
-                }
-                acc = Vector256<int>.Zero;
-                blockCount = 0;
-            }
-        }
-
-        for (var lane = 0; lane < 8; lane++) {
-            sum += acc.GetElement(lane);
-        }
-
-        for (; index < count; index++) {
-            sum += ((long)left[index] * right[index]);
-        }
-
-        return sum;
-    }
-
-    /// <summary>512-bit SIMD rung for the signed 8-bit vector dot product.</summary>
-    internal static long DotVector512(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
-        if (left.Length != right.Length) {
-            throw new ArgumentException("Vector lengths must match.", nameof(right));
-        }
-
-        ref var leftRef = ref MemoryMarshal.GetReference(left);
-        ref var rightRef = ref MemoryMarshal.GetReference(right);
-        var index = 0;
-        var count = left.Length;
-        var acc = Vector512<int>.Zero;
-        var sum = 0L;
-        var blockCount = 0;
-
-        for (; (index + 64) <= count; index += 64) {
-            var vLeft = Vector512.LoadUnsafe(ref leftRef, (nuint)index);
-            var vRight = Vector512.LoadUnsafe(ref rightRef, (nuint)index);
-
-            var (lLow, lHigh) = Vector512.Widen(vLeft);
-            var (rLow, rHigh) = Vector512.Widen(vRight);
-
-            var prodLow = (lLow * rLow);
-            var prodHigh = (lHigh * rHigh);
-
-            var (p1, p2) = Vector512.Widen(prodLow);
-            var (p3, p4) = Vector512.Widen(prodHigh);
-
-            acc += (((p1 + p2) + p3) + p4);
-
-            if (++blockCount == 256) {
-                for (var lane = 0; lane < 16; lane++) {
-                    sum += acc.GetElement(lane);
-                }
-                acc = Vector512<int>.Zero;
-                blockCount = 0;
-            }
-        }
-
-        for (var lane = 0; lane < 16; lane++) {
-            sum += acc.GetElement(lane);
-        }
-
-        for (; index < count; index++) {
-            sum += ((long)left[index] * right[index]);
-        }
-
-        return sum;
-    }
-
     /// <summary>Reports the highest hardware acceleration tier available on the current host.</summary>
     internal static SignedByteVectorTier GetHardwareTier() {
         if (Vector512.IsHardwareAccelerated) {
@@ -263,7 +175,6 @@ public static class SignedByteVectorFunctions {
 
         return SignedByteVectorTier.Scalar;
     }
-
     /// <summary>Checks whether a given dot product hardware acceleration tier is supported.</summary>
     internal static bool IsDotTierSupported(SignedByteVectorTier tier) => tier switch {
         SignedByteVectorTier.Scalar => true,
@@ -283,26 +194,25 @@ public static class SignedByteVectorFunctions {
 
         var sumSquares = 0UL;
 
-        for (var i = 0; i < components.Length; i++) {
+        for (var i = 0; (i < components.Length); i++) {
             var c = components[i];
 
             if (c == -128) {
                 return false;
             }
 
-            sumSquares += (ulong)((long)c * c);
+            sumSquares += ((ulong)(((long)c) * c));
         }
 
         if (sumSquares == 0UL) {
             return false;
         }
 
-        var radiusFloor = (int)sumSquares.SquareRoot();
+        var radiusFloor = ((int)sumSquares.SquareRoot());
         var tolerance = AdmissionTolerance(dimensions: components.Length);
 
-        return (Math.Abs(radiusFloor - 127) <= tolerance);
+        return (Math.Abs(value: (radiusFloor - 127)) <= tolerance);
     }
-
     /// <summary>Normalizes integer components to unit length on radius 127 using exact integer arithmetic.</summary>
     /// <param name="components">The source components, each with magnitude at most 2^24.</param>
     /// <param name="destination">The destination span to receive the normalized signed 8-bit components.</param>
@@ -327,15 +237,15 @@ public static class SignedByteVectorFunctions {
         const long MaxComponentMagnitude = (1L << 24);
         var sumSquares = 0UL;
 
-        for (var i = 0; i < components.Length; i++) {
+        for (var i = 0; (i < components.Length); i++) {
             var c = components[i];
-            var absC = Math.Abs(c);
+            var absC = Math.Abs(value: c);
 
             if (absC > MaxComponentMagnitude) {
                 throw new ArgumentOutOfRangeException(nameof(components), "Component magnitude exceeds 2^24.");
             }
 
-            sumSquares += (ulong)(absC * absC);
+            sumSquares += ((ulong)(absC * absC));
         }
 
         if (sumSquares == 0UL) {
@@ -343,15 +253,15 @@ public static class SignedByteVectorFunctions {
         }
 
         var shiftedS = (((UInt128)sumSquares) << 32);
-        var r = (ulong)shiftedS.SquareRoot();
+        var r = ((ulong)shiftedS.SquareRoot());
 
         if (r == 0UL) {
             return false;
         }
 
-        for (var i = 0; i < components.Length; i++) {
+        for (var i = 0; (i < components.Length); i++) {
             var c = components[i];
-            var absC = (ulong)Math.Abs(c);
+            var absC = ((ulong)Math.Abs(value: c));
             var numerator = ((127UL * absC) << 16);
             var quotient = (numerator / r);
             var remainder = (numerator % r);
@@ -364,14 +274,13 @@ public static class SignedByteVectorFunctions {
             );
 
             var sign = ((c < 0) ? -1L : ((c > 0) ? 1L : 0L));
-            var qi = ((long)rounded * sign);
+            var qi = (((long)rounded) * sign);
 
-            destination[i] = (sbyte)Math.Clamp(value: qi, min: -127L, max: 127L);
+            destination[i] = ((sbyte)Math.Clamp(max: 127L, min: -127L, value: qi));
         }
 
         return IsUnitAdmissible(components: destination);
     }
-
     /// <summary>Quantizes a floating-point unit vector into signed 8-bit components on radius 127.</summary>
     /// <param name="source">The floating-point components, each finite with magnitude at most 8.</param>
     /// <param name="destination">The destination span to receive the normalized signed 8-bit components.</param>
@@ -383,14 +292,14 @@ public static class SignedByteVectorFunctions {
 
         var components = ((source.Length <= 1024) ? stackalloc long[source.Length] : new long[source.Length]);
 
-        for (var i = 0; i < source.Length; i++) {
+        for (var i = 0; (i < source.Length); i++) {
             var x = source[i];
 
-            if (!double.IsFinite(x) || (Math.Abs(x) > 8.0)) {
+            if (!double.IsFinite(d: x) || (Math.Abs(value: x) > 8.0)) {
                 return false;
             }
 
-            components[i] = (long)Math.Round(value: (x * 1048576.0), mode: MidpointRounding.ToEven);
+            components[i] = ((long)Math.Round(mode: MidpointRounding.ToEven, value: (x * 1048576.0)));
         }
 
         return TryNormalize(components: components, destination: destination);

@@ -7,7 +7,8 @@ namespace Puck.GamingBricks;
 /// including its internal clock, next-event instant, latches, and pipeline stages — as plain data, and must hold no
 /// state that cannot be reconstructed this way (no captured delegates, no reference that aliases another machine). Each
 /// component owns its own <see cref="SaveState"/>/<see cref="LoadState"/>, so a change to that component's internals is
-/// a local edit, not a machine-wide one.
+/// a local edit, not a machine-wide one. A component whose two methods would mirror each other lists its fields once
+/// through <see cref="IStateTransfer"/> and runs that list in both directions.
 /// </summary>
 public interface ISnapshotable {
     /// <summary>Writes this component's complete mutable state to the snapshot.</summary>

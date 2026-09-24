@@ -18,37 +18,14 @@ public unsafe sealed class VulkanNativeCommandResourcesApi : IVulkanCommandResou
     private const uint StructureTypeCommandBufferAllocateInfo = 40;
     private const uint StructureTypeCommandPoolCreateInfo = 39;
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AllocateCommandBuffers = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkAllocateCommandBuffers"u8
-            )),
-                CreateCommandPool = ((delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateCommandPool"u8
-            )),
-                DestroyCommandPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyCommandPool"u8
-            )),
-            }
-        );
-    }
-
     /// <inheritdoc/>
     public VkResult AllocateCommandBuffers(VulkanCommandBufferAllocateRequest request, nint buffer, uint commandBufferCount) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
-        var allocateCommandBuffers = GetPointers(deviceHandle: request.DeviceHandle).AllocateCommandBuffers;
+        var allocateCommandBuffers = request.Device.AllocateCommandBuffers;
         var allocateInfo = new VkCommandBufferAllocateInfo {
             CommandBufferCount = commandBufferCount,
             CommandPool = request.CommandPoolHandle,
@@ -57,20 +34,19 @@ public unsafe sealed class VulkanNativeCommandResourcesApi : IVulkanCommandResou
         };
 
         return allocateCommandBuffers(
-            request.DeviceHandle,
+            request.Device.Handle,
             in allocateInfo,
             buffer
         );
     }
     /// <inheritdoc/>
     public VkResult CreateCommandPool(VulkanCommandPoolCreateRequest request, out nint commandPoolHandle) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
-        var createCommandPool = GetPointers(deviceHandle: request.DeviceHandle).CreateCommandPool;
+        var createCommandPool = request.Device.CreateCommandPool;
         var createInfo = new VkCommandPoolCreateInfo {
             Flags = CommandPoolCreateResetCommandBufferFlag,
             QueueFamilyIndex = request.QueueFamilyIndex,
@@ -78,33 +54,16 @@ public unsafe sealed class VulkanNativeCommandResourcesApi : IVulkanCommandResou
         };
 
         return createCommandPool(
-            request.DeviceHandle,
+            request.Device.Handle,
             in createInfo,
             0,
             out commandPoolHandle
         );
     }
     /// <inheritdoc/>
-    public void DestroyCommandPool(nint deviceHandle, nint commandPoolHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == commandPoolHandle)
-        ) {
-            return;
-        }
-
-        var destroyCommandPool = GetPointers(deviceHandle: deviceHandle).DestroyCommandPool;
-
-        destroyCommandPool(
-            deviceHandle,
-            commandPoolHandle,
-            0
+    public void DestroyCommandPool(VulkanDeviceCommands device, nint commandPoolHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyCommandPool,
+            handle: commandPoolHandle
         );
-    }
-
-    private unsafe struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult> AllocateCommandBuffers;
-        public delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult> CreateCommandPool;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyCommandPool;
-    }
 }

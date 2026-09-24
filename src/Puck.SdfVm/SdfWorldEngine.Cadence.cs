@@ -17,7 +17,7 @@ public enum SdfCadenceSpan {
     Push = (1 << 1),
     /// <summary>The per-view camera/region/render-scale table, excluding each row's presentation-time lane.</summary>
     Viewports = (1 << 2),
-    /// <summary>The per-entity dynamic-transform table.</summary>
+    /// <summary>The per-entity dynamic-transform table, through its change revision.</summary>
     Dynamics = (1 << 3),
     /// <summary>The screen-surface sampling-frame table.</summary>
     ScreenSurfaces = (1 << 4),
@@ -35,7 +35,8 @@ public enum SdfCadenceSpan {
 /// <param name="RevisionsHash">This frame's independent FNV-1a hash of the revisions span (see <see cref="SdfCadenceSpan.Revisions"/>).</param>
 /// <param name="PushHash">This frame's independent hash of the push-constant span.</param>
 /// <param name="ViewportsHash">This frame's independent hash of the viewport span (time lane excluded).</param>
-/// <param name="DynamicsHash">This frame's independent hash of the dynamic-transform span.</param>
+/// <param name="DynamicsHash">This frame's independent hash of the dynamic-transform table's change revision, which
+/// moves exactly when a packed slot's bytes differ from the previous frame's.</param>
 /// <param name="ScreenSurfacesHash">This frame's independent hash of the screen-surface span.</param>
 /// <param name="ScreenLightsHash">This frame's independent hash of the screen-light span.</param>
 /// <param name="ChangedSpans">Which spans' hashes differ from the previous decided frame's — the payload a human reads
@@ -164,15 +165,21 @@ public sealed partial class SdfWorldEngine {
             span: ref viewportsSpan,
             viewportScratch: m_viewportScratch
         );
+        Span<byte> dynamicsRevision = stackalloc byte[sizeof(ulong)];
+
+        MemoryMarshal.Write(
+            destination: dynamicsRevision,
+            value: in m_dynamicTransformRevision
+        );
         AddToBoth(
             combined: ref combined,
             span: ref dynamicsSpan,
-            values: m_dynamicTransformScratch
+            values: dynamicsRevision
         );
         AddToBoth(
             combined: ref combined,
             span: ref screenSurfacesSpan,
-            values: m_screenSurfaceScratch
+            values: m_screenSurfaces.Current
         );
         AddToBoth(
             combined: ref combined,
@@ -193,7 +200,7 @@ public sealed partial class SdfWorldEngine {
         );
     }
     // Cadence gate: latches whether Record may skip the sky/mask/beam/cull-args/views passes and re-composite from
-    // the retained (ring-shared) views output + tile buffer. A skip is permitted only when the gate is enabled, this
+    // the retained (ring-shared) views output. A skip is permitted only when the gate is enabled, this
     // frame's change signature exactly matches the last rendered frame's, the live program declares no ScreenSlab,
     // and no carve bake is in progress.
     //
@@ -209,9 +216,11 @@ public sealed partial class SdfWorldEngine {
     //                          frame (it feeds the animated test-card in screenContent, sdf-world.hlsli), so hashing
     //                          it would make the signature never repeat and the gate permanently inert. Any camera
     //                          ease still counts (it changes the surrounding lanes in the same row).
-    //   - m_dynamicTransformScratch : every moving entity's position/orientation + soft-shadow participation. Also
-    //                          covers the frame instance grid (a pure function of these transforms + the program).
-    //   - m_screenSurfaceScratch : the screen-surface sampling table (a slab riding a dynamic rig re-poses here).
+    //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row (the producer's moved
+    //                          set: every moving entity's position/orientation/lanes + soft-shadow participation), so
+    //                          the table is never re-hashed. Also covers the frame instance grid (a pure function of these transforms +
+    //                          the program).
+    //   - m_screenSurfaces   : the screen-surface sampling table (a slab riding a dynamic rig re-poses here).
     //   - m_screenLightScratch : per-screen glow colors + the environment row (ambient/sun/slice) + the grid-overlay
     //                          rows + the engine-bench lever rows (soft-shadow/AO/shadow-distance/screen-lights) + the
     //                          shadow-proxy rows + the analytic-normal and shadow-cull toggles — every shading lever.
@@ -228,6 +237,8 @@ public sealed partial class SdfWorldEngine {
     //     frame with the same view handle, unseen by any packed span) — force-renders on any declared ScreenSlab
     //     regardless of binding.
     //   - AnyBrickBaking() : an in-progress carve bake writing brick voxels each frame.
+    //   - frame.Volumes    : bounded volumes animate on the excluded time lane (shadeVolumes), and their table is
+    //                        not hashed, so any volume forces a render.
     // Refinement path: a per-source content revision the provider supplies (then a static bound source could skip),
     // and a "settled" flag once every bake completes.
     private void DecideCadenceSkip(SdfFrame frame, uint viewportCount) {
@@ -252,7 +263,8 @@ public sealed partial class SdfWorldEngine {
             (m_hasPreviousFrameSignature &&
             (signature == m_previousFrameSignature) &&
             !m_programDeclaresScreenSlab &&
-            !brickBaking);
+            !brickBaking &&
+            (frame.Volumes.Count == 0));
         m_previousFrameSignature = signature;
         m_hasPreviousFrameSignature = true;
 

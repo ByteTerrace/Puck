@@ -4,12 +4,8 @@
     "null"
   ],
   "properties": {
-    "directory": {
-      "description": "The output directory every scheduled capture in this document writes into, and where manifest.json (the puck.parity.manifest.v1 document) lands once at least one capture has landed \u2014 relative to the process\u0027s current directory unless rooted. A --capture-dir boot flag overrides this for a deployment run (the --state-dir pattern), so two backend legs of the same document can target sibling directories without two document copies.",
-      "type": "string"
-    },
     "rows": {
-      "description": "The scheduled stations. Station names are unique; capacity MaxRows.",
+      "description": "The scheduled stations. Station names are unique ignoring case, since each names capture files; capacity MaxRows.",
       "type": "array",
       "items": {
         "description": "One tick-scheduled capture station: a stable name, the exact engine ticks it arms a composed-frame capture at, and the palette its per-pixel census sorts against. A station carries no camera reference of its own \u2014 what the composed frame shows at a given tick is the document\u0027s own doing (a state row plus rules driving a camera program\u0027s select op; see docs/views.md), so two backends that step the identical document capture the identical moment by construction, and this row only says WHEN to look, never AT WHAT.",
@@ -19,7 +15,7 @@
         ],
         "properties": {
           "station": {
-            "description": "The stable name \u2014 the manifest\u0027s station field and the frame filename\u0027s own prefix (\u003Cstation\u003E-\u003Ctick\u003E.png). A CellName: dot-free, non-empty, free of the reserved character set.",
+            "description": "The stable name \u2014 the manifest\u0027s station field and the first part of the capture\u0027s generated name (CaptureName, \u003Cstation\u003E~\u003Ctick\u003E). A CellName: dot-free, non-empty, free of the reserved character set, and free of ~.",
             "title": "CellName",
             "type": "string"
           },
@@ -66,10 +62,17 @@
         "additionalProperties": false,
         "title": "WorldCaptureRow"
       }
+    },
+    "directory": {
+      "description": "The output directory every scheduled capture in this document writes into, and where manifest.json (the puck.parity.manifest.v1 document) is written whenever a capture ends, whether it produced a frame or a named refusal. Absent, the default, is a captures directory under the run\u0027s state root (--state-dir, else the per-user state directory), so a boot that names no directory writes nothing under its working directory; an authored relative path resolves beside the document (WorldDocumentPaths). A --capture-dir boot flag overrides either for a deployment run (the --state-dir pattern), so two backend legs of the same document can target sibling directories without two document copies.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     }
   },
   "required": [
-    "directory",
     "rows"
   ],
   "additionalProperties": false,

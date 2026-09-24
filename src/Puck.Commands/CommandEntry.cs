@@ -37,7 +37,7 @@ public readonly record struct CommandEntry {
         InputDeviceId device = default,
         string? source = null,
         bool assignedSlot = false,
-        CommandPrincipal principal = default
+        Principal principal = default
     ) {
         AssignedSlot = assignedSlot;
         CommandId = commandId;
@@ -81,11 +81,11 @@ public readonly record struct CommandEntry {
     public CommandPhase Phase { get; internal init; }
     /// <summary>
     /// The identity acting through this entry. An injected entry carries the principal its sink was CONSTRUCTED with;
-    /// every other entry is stamped at snapshot assembly from the lane's <see cref="ICommandPrincipalResolver"/> answer.
-    /// An entry that reaches dispatch carrying <see cref="CommandPrincipalKind.Unspecified"/> found a path that skipped
+    /// every other entry is stamped at snapshot assembly from the lane's <see cref="IPrincipalResolver"/> answer.
+    /// An entry that reaches dispatch carrying <see cref="PrincipalKind.Unspecified"/> found a path that skipped
     /// both doors.
     /// </summary>
-    public CommandPrincipal Principal { get; internal init; }
+    public Principal Principal { get; internal init; }
     /// <summary>The deterministic binding owner that produced this entry: a provider-neutral physical source id
     /// (e.g. <c>keyboard.w</c>) or a stable synthesized destination id for a chord or toggle. It is
     /// <see langword="null"/> for an injection with no binding owner. Unlike

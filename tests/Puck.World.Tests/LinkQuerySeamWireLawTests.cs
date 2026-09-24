@@ -32,7 +32,7 @@ public sealed class LinkQuerySeamWireLawTests {
     // admitted peer's own principal, and submits it over a genuine TCP connection. The grant is deliberately narrow
     // so GrantAllows' concrete-subject success and the other six leaves' Observe/all refusal are proven under the
     // SAME admitted session, not two different setups.
-    private static async Task<QueryAnswer> RunQueryAsync(Func<WorldPrincipal, WorldQuery> query) {
+    private static async Task<QueryAnswer> RunQueryAsync(Func<Principal, WorldQuery> query) {
         var identity = GenerateIdentity(subject: "link-query-seam-peer");
 
         try {
@@ -47,27 +47,24 @@ public sealed class LinkQuerySeamWireLawTests {
             ));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(server: fixture.Server);
-
-            host.Start(listen: "127.0.0.1:0");
-
-            using var pumpCts = new CancellationTokenSource();
-            var pumpTask = RunPumpAsync(
-                fixture: fixture,
-                host: host,
-                ct: pumpCts.Token
+            using var host = StartHost(
+                clock: out _,
+                server: fixture.Server
             );
 
-            try {
-                using var requestCts = Laws.SocketDeadline();
+            await using (StartPump(
+                fixture: fixture,
+                host: host
+            )) {
+                var testToken = TestContext.Current.CancellationToken;
                 var admitted = await ConnectAndAdmitAsync(
+                    ct: testToken,
                     host: host,
-                    identity: identity,
-                    ct: requestCts.Token
+                    identity: identity
                 );
 
                 using (admitted.Client) {
-                    var peer = WorldPrincipal.Peer(
+                    var peer = Principal.Peer(
                         index: admitted.PeerIndex,
                         generation: admitted.Generation
                     );
@@ -75,12 +72,9 @@ public sealed class LinkQuerySeamWireLawTests {
                     return await SubmitQueryAsync(
                         stream: admitted.Client.GetStream(),
                         query: query(arg: peer),
-                        ct: requestCts.Token
+                        ct: testToken
                     );
                 }
-            } finally {
-                pumpCts.Cancel();
-                await pumpTask;
             }
         } finally {
             identity.Key.Dispose();
@@ -103,7 +97,7 @@ public sealed class LinkQuerySeamWireLawTests {
     [Fact]
     public async Task GrantAllows_AnswersOverTheWire_WhenThePeerObservesTheConcreteSubject() {
         var answer = await RunQueryAsync(query: peer => new WorldQuery.GrantAllows(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: peer.Index)
         ));
@@ -120,7 +114,7 @@ public sealed class LinkQuerySeamWireLawTests {
     [Fact]
     public async Task GrantHandleMint_RefusesOverTheWire_ObserveAllIsConsoleAndSeatOnly() {
         var answer = await RunQueryAsync(query: _ => new WorldQuery.GrantHandleMint(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Capability: WorldCapability.Observe,
             Index: 0
         ));
@@ -139,7 +133,7 @@ public sealed class LinkQuerySeamWireLawTests {
         var handle = new WorldHandle(
             Index: 0,
             Generation: 0,
-            TablePrincipal: WorldPrincipal.Seat(slot: 0),
+            TablePrincipal: Principal.Seat(slot: 0),
             TableCapability: WorldCapability.Observe
         );
         var answer = await RunQueryAsync(query: _ => new WorldQuery.GrantHandleResolve(Handle: handle));
@@ -153,9 +147,14 @@ public sealed class LinkQuerySeamWireLawTests {
             actualString: answer.Text
         );
     }
-    [Fact]
-    public async Task PopulationChannels_RefusesOverTheWire_ObserveAllIsConsoleAndSeatOnly() {
-        var answer = await RunQueryAsync(query: _ => new WorldQuery.PopulationChannels());
+    // Observe-all queries answer only the console and local seats; over the wire they refuse by name.
+    [InlineData("population-channels")]
+    [InlineData("profile-catalog")]
+    [Theory]
+    public async Task AnObserveAllQuery_RefusesOverTheWire_ObserveAllIsConsoleAndSeatOnly(string query) {
+        var answer = await RunQueryAsync(query: _ => ((query == "population-channels")
+            ? new WorldQuery.PopulationChannels()
+            : new WorldQuery.ProfileCatalog()));
 
         Assert.True(
             condition: answer.Refused,
@@ -173,19 +172,6 @@ public sealed class LinkQuerySeamWireLawTests {
             Persistence: InputDeviceIdentityPersistence.Reconnect
         );
         var answer = await RunQueryAsync(query: _ => new WorldQuery.PreferredControllerProfile(Device: device));
-
-        Assert.True(
-            condition: answer.Refused,
-            userMessage: answer.Text
-        );
-        Assert.Contains(
-            expectedSubstring: "cannot observe all",
-            actualString: answer.Text
-        );
-    }
-    [Fact]
-    public async Task ProfileCatalog_RefusesOverTheWire_ObserveAllIsConsoleAndSeatOnly() {
-        var answer = await RunQueryAsync(query: _ => new WorldQuery.ProfileCatalog());
 
         Assert.True(
             condition: answer.Refused,

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using System.Text.Json.Serialization;
 
@@ -181,7 +182,7 @@ public readonly record struct WorldMemberIdentity(string Issuer, string Subject,
 /// <summary>Distinguishes a locally addressed principal from an issuer-qualified verified identity.</summary>
 [JsonConverter(typeof(StrictEnumConverter<MemberRefKind>))]
 public enum MemberRefKind : byte {
-    /// <summary>The member is addressed by a local canonical <see cref="WorldPrincipal"/>.</summary>
+    /// <summary>The member is addressed by a local canonical <see cref="Principal"/>.</summary>
     Local,
     /// <summary>The member is addressed by a verified issuer-qualified identity.</summary>
     Verified,
@@ -192,9 +193,9 @@ public enum MemberRefKind : byte {
 /// <param name="Principal">The local principal, only for <see cref="MemberRefKind.Local"/>.</param>
 /// <param name="Verified">The verified identity, only for <see cref="MemberRefKind.Verified"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public readonly record struct WorldMemberRef(MemberRefKind Kind, WorldPrincipal? Principal = null, WorldMemberIdentity? Verified = null) {
+public readonly record struct WorldMemberRef(MemberRefKind Kind, Principal? Principal = null, WorldMemberIdentity? Verified = null) {
     /// <summary>Creates a local membership reference.</summary>
-    public static WorldMemberRef Local(WorldPrincipal principal) => new(
+    public static WorldMemberRef Local(Principal principal) => new(
         Kind: MemberRefKind.Local,
         Principal: principal
     );
@@ -227,7 +228,7 @@ public readonly record struct WorldMemberRef(MemberRefKind Kind, WorldPrincipal?
             comparisonType: StringComparison.Ordinal,
             value: "local:"
         ) &&
-            WorldPrincipal.TryParseCanonical(
+            PrincipalTokens.TryParseCanonical(
             token: token[6..],
             principal: out var principal
         )

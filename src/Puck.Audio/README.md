@@ -8,4 +8,4 @@ tempo-clock tracking, and music direction state machines.
 - [Audio mixer, synthesis, and music direction](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/audio.md) — mixer core, voice synth, music clock, and babble schedule.
 - [Engine manual](https://github.com/ByteTerrace/Puck/blob/main/docs/README.md) — setup, architecture, and related libraries.
 - [Development and verification](https://github.com/ByteTerrace/Puck/blob/main/tests/Puck.Audio.Tests/README.md).
-- [License](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md) and [commercial licensing](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md).
+- [License](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md): Apache 2.0.

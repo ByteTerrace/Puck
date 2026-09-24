@@ -285,7 +285,7 @@ public static class PuckSyntaxTrivia {
                 bodyEnd: close,
                 bodyStart: (open + 1),
                 items: items,
-                visit: static item => item
+                visit: TestItem
             );
 
             cursor = (close + 1);
@@ -295,6 +295,56 @@ public static class PuckSyntaxTrivia {
                 arg2: walked,
                 arg3: inner
             ).WithTrivia(trivia: (block.Trivia with { Leading = leading.Pieces, Opening = m_opening })));
+        }
+        // A world block standing among a test block's own lines: its inner lines are walked here, so a comment or a
+        // blank-line run inside one keeps its place the way one outside it does.
+        private TItem TestItem<TItem>(TItem item) where TItem : SyntaxNode => (item switch {
+            TestGivenWorldNode addressed => ((TItem)((SyntaxNode)TestWorldBlock(
+                block: addressed,
+                items: addressed.Cells,
+                rebuild: static (block, cells, inner) => (block with { Cells = cells, Trivia = (block.Trivia with { Inner = inner }) })
+            ))),
+            TestWhenWorldNode addressed => ((TItem)((SyntaxNode)TestWorldBlock(
+                block: addressed,
+                items: addressed.Steps,
+                rebuild: static (block, steps, inner) => (block with { Steps = steps, Trivia = (block.Trivia with { Inner = inner }) })
+            ))),
+            TestExpectWorldNode addressed => ((TItem)((SyntaxNode)TestWorldBlock(
+                block: addressed,
+                items: addressed.Expectations,
+                rebuild: static (block, expectations, inner) => (block with { Expectations = expectations, Trivia = (block.Trivia with { Inner = inner }) })
+            ))),
+            _ => item,
+        });
+        private TBlock TestWorldBlock<TBlock, TItem>(TBlock block, IReadOnlyList<TItem> items, Func<TBlock, IReadOnlyList<TItem>, IReadOnlyList<TriviaPiece>, TBlock> rebuild)
+            where TBlock : SyntaxNode
+            where TItem : SyntaxNode {
+            var open = FindNext(
+                from: block.Offset,
+                limit: ContentEnd(node: block),
+                target: '{'
+            );
+            var close = MatchDelimiter(open: open);
+
+            if ((open < 0) || (close < 0)) {
+                return block;
+            }
+
+            var (walked, inner) = List(
+                bodyEnd: close,
+                bodyStart: (open + 1),
+                items: items,
+                visit: static item => item
+            );
+            // The enclosing List reads m_opening only after its own last visit, so the nested read has to happen
+            // here, while it still holds this block's own opening comment.
+            var opening = m_opening;
+
+            return ((TBlock)rebuild(
+                arg1: block,
+                arg2: walked,
+                arg3: inner
+            ).WithTrivia(trivia: (block.Trivia with { Opening = opening })));
         }
         // The comments standing inside a construct's own header, between its first token and its opening brace.
         private IReadOnlyList<TriviaPiece> Header(int from, int open) => ((open <= from)
@@ -1006,6 +1056,13 @@ public static class PuckSyntaxTrivia {
                         return (binary with {
                             Left = VisitExpression(expression: binary.Left),
                             Right = VisitExpression(expression: binary.Right),
+                        });
+                    }
+                case ConditionalExpressionNode conditional: {
+                        return (conditional with {
+                            Condition = VisitExpression(expression: conditional.Condition),
+                            WhenFalse = VisitExpression(expression: conditional.WhenFalse),
+                            WhenTrue = VisitExpression(expression: conditional.WhenTrue),
                         });
                     }
                 case UnaryExpressionNode unary: {

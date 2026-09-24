@@ -48,7 +48,8 @@ internal static class SolitaireDealChecks {
     public static void NewDeal(string game, int option, int stock, int faces) {
         var definition = Game(
             game,
-            source => { Set(
+            source => {
+                Set(
             game: game,
             key: "option",
             source: source,
@@ -63,7 +64,8 @@ internal static class SolitaireDealChecks {
             key: "action",
             source: source,
             value: 1
-        ); }
+        );
+            }
         );
         using var f = Fixtures.FreshServer(definition);
 
@@ -124,7 +126,8 @@ internal static class SolitaireDealChecks {
                 : 7
         ));
 
-        for (var i = 0; (i < columns); i++) { Assert.Equal(
+        for (var i = 0; (i < columns); i++) {
+            Assert.Equal(
             ((game == "solitaireSpider")
             ? ((i < 4)
                 ? 6
@@ -139,14 +142,17 @@ internal static class SolitaireDealChecks {
                 game: game,
                 pile: (i + 2)
             )
-        ); }
-        if (game == "solitaireSpider") { Assert.Equal(
+        );
+        }
+        if (game == "solitaireSpider") {
+            Assert.Equal(
             option,
             Row(
                 f: f,
                 name: (game + "Suit")
             ).Cells!.Select(selector: c => c.Value).Distinct().Count()
-        ); }
+        );
+        }
     }
     public static void Redeal(string game) {
         using var f = Fixtures.FreshServer(Game(game));
@@ -156,11 +162,13 @@ internal static class SolitaireDealChecks {
             game,
             1
         );
-        if (game != "solitaireFreecell") { Request(
+        if (game != "solitaireFreecell") {
+            Request(
             f,
             game,
             3
-        ); }
+        );
+        }
         var cursor = Row(
             f: f,
             name: (game + "Stream")

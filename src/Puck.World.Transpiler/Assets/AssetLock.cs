@@ -1,7 +1,9 @@
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions;
+using Puck.Assets;
+using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Assets;
 
@@ -24,13 +26,12 @@ public sealed record AssetReference(string Path, string BasePath);
 /// <remarks>Compilation reads this lock but never changes it. Tooling must call <see cref="Update(string, IEnumerable{string})"/> explicitly
 /// when an author intends to admit new bytes.</remarks>
 public sealed class AssetLock {
-    private const int HashLength = 64;
-    private const string HashPrefix = "sha256/";
-
     private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>The only admitted lock schema.</summary>
     public const int SupportedFormat = 1;
+    /// <summary>The suffix of the lock file beside a source.</summary>
+    public const string LockSuffix = ".assets.json";
     /// <summary>The maximum number of distinct assets one source may pin.</summary>
     public const int MaximumAssetCount = 256;
     /// <summary>The maximum UTF-16 length of one normalized logical path.</summary>
@@ -56,25 +57,11 @@ public sealed class AssetLock {
 
     /// <summary>Derives the <c>&lt;stem&gt;.assets.json</c> path beside a source.</summary>
     /// <param name="sourcePath">A <c>.puck</c> source path or an asset-lock path.</param>
-    /// <returns>The absolute lock path.</returns>
-    public static string DeriveLockPath(string sourcePath) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
-
-        if (sourcePath.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".assets.json")) {
-            return Path.GetFullPath(path: sourcePath);
-        }
-
-        var directory = (Path.GetDirectoryName(path: sourcePath) ?? ".");
-        var filename = Path.GetFileName(path: sourcePath);
-
-        if (filename.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".world.json")) {
-            filename = filename[..^11];
-        } else if (filename.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
-            filename = filename[..^5];
-        }
-
-        return Path.GetFullPath(path: Path.Combine(path1: directory, path2: (filename + ".assets.json")));
-    }
+    /// <returns>The absolute lock path (<see cref="WorldDocumentName.SidecarFile"/>).</returns>
+    public static string DeriveLockPath(string sourcePath) => WorldDocumentName.SidecarFile(
+        sourcePath: sourcePath,
+        suffix: LockSuffix
+    );
     /// <summary>Loads the lock beside a source.</summary>
     /// <param name="sourcePath">The source or lock path.</param>
     /// <returns>The validated lock.</returns>
@@ -83,7 +70,7 @@ public sealed class AssetLock {
         var lockPath = DeriveLockPath(sourcePath: sourcePath);
 
         try {
-            return Parse(json: File.ReadAllText(path: lockPath, encoding: Encoding.UTF8));
+            return Parse(json: CompileInputs.ReadAllText(encoding: Encoding.UTF8, path: lockPath));
         } catch (AssetLockException) {
             throw;
         } catch (FileNotFoundException) {
@@ -199,7 +186,7 @@ public sealed class AssetLock {
                 throw new AssetLockException(message: $"Assets exceed their {MaximumTotalBytes}-byte total limit.");
             }
 
-            var actualHash = ComputeHash(content: bytes);
+            var actualHash = ContentPin.Compute(content: bytes).ToString();
 
             if (!string.Equals(a: expectedHash, b: actualHash, comparisonType: StringComparison.Ordinal)) {
                 throw new AssetLockException(message: $"Asset '{reference.Key}' does not match its lock (expected {expectedHash}, found {actualHash}); update the lock only if the byte change is intended.");
@@ -246,7 +233,7 @@ public sealed class AssetLock {
                 throw new AssetLockException(message: $"Assets exceed their {MaximumTotalBytes}-byte total limit.");
             }
 
-            entries.Add(key: reference.Key, value: ComputeHash(content: bytes));
+            entries.Add(key: reference.Key, value: ContentPin.Compute(content: bytes).ToString());
         }
 
         return new AssetLock(assets: entries);
@@ -300,23 +287,12 @@ public sealed class AssetLock {
             return false;
         }
 
-        var directory = Path.GetDirectoryName(path: lockPath);
+        AtomicFile.WriteAllBytes(
+            bytes: bytes,
+            path: lockPath
+        );
 
-        if (!string.IsNullOrEmpty(value: directory)) {
-            _ = Directory.CreateDirectory(path: directory);
-        }
-
-        var temporaryPath = (((lockPath + ".") + Guid.NewGuid().ToString(format: "n")) + ".tmp");
-
-        try {
-            File.WriteAllBytes(bytes: bytes, path: temporaryPath);
-            File.Move(destFileName: lockPath, overwrite: true, sourceFileName: temporaryPath);
-            return true;
-        } finally {
-            if (File.Exists(path: temporaryPath)) {
-                File.Delete(path: temporaryPath);
-            }
-        }
+        return true;
     }
 
     private static string ReadHash(string path, JsonElement value) {
@@ -326,10 +302,7 @@ public sealed class AssetLock {
 
         var hash = value.GetString()!;
 
-        if ((hash.Length != (HashPrefix.Length + HashLength)) ||
-            !hash.StartsWith(comparisonType: StringComparison.Ordinal, value: HashPrefix) ||
-            !hash.AsSpan(start: HashPrefix.Length).ToString().All(predicate: static character =>
-                (((character >= '0') && (character <= '9')) || ((character >= 'a') && (character <= 'f'))))) {
+        if (!ContentPin.TryParse(pin: out _, text: hash)) {
             throw new AssetLockException(message: $"Asset lock hash for '{path}' must be 'sha256/' followed by 64 lowercase hexadecimal characters.");
         }
 
@@ -337,9 +310,7 @@ public sealed class AssetLock {
     }
     private static IReadOnlyList<NormalizedReference> NormalizeReferences(string root, IEnumerable<AssetReference> references) {
         var normalized = new SortedDictionary<string, NormalizedReference>(comparer: StringComparer.Ordinal);
-        var physicalPaths = new Dictionary<string, string>(
-            comparer: (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-        );
+        var physicalPaths = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
 
         foreach (var reference in references) {
             ArgumentNullException.ThrowIfNull(argument: reference);
@@ -354,7 +325,7 @@ public sealed class AssetLock {
             key = NormalizeLogicalPath(path: key);
 
             if (normalized.TryGetValue(key: key, value: out var existing) &&
-                !string.Equals(a: existing.FullPath, b: fullPath, comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))) {
+                !string.Equals(a: existing.FullPath, b: fullPath, comparisonType: PuckPaths.Comparison)) {
                 throw new AssetLockException(message: $"Asset lock key '{key}' resolves to more than one physical file.");
             }
             if (physicalPaths.TryGetValue(key: fullPath, value: out var existingKey) &&
@@ -412,18 +383,13 @@ public sealed class AssetLock {
             if (stream.ReadByte() != -1) {
                 throw new AssetLockException(message: $"Asset '{logicalPath}' changed size while it was being read.");
             }
+            CompileInputs.Note(content: bytes, path: fullPath);
             return bytes;
         } catch (AssetLockException) {
             throw;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             throw new AssetLockException(message: $"Asset '{logicalPath}' could not be read: {exception.Message}");
         }
-    }
-    private static string ComputeHash(ReadOnlySpan<byte> content) {
-        Span<byte> digest = stackalloc byte[32];
-
-        SHA256.HashData(destination: digest, source: content);
-        return (HashPrefix + Convert.ToHexStringLower(bytes: digest));
     }
     // Reads at most the expected byte count plus one trailing-byte probe. A malformed existing lock may be
     // arbitrarily large, and an explicit refresh must replace it without first allocating its size.

@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Storage;
@@ -23,7 +24,7 @@ public sealed class WorldAuthorityReceiptSnapshotLawTests {
 
     [Fact]
     public async Task CapturedRootSelectsExactReceiptHistoryDespiteLaterPublications() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var blobs = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var store = new WorldAuthorityBlobStore(
@@ -221,16 +222,18 @@ public sealed class WorldAuthorityReceiptSnapshotLawTests {
         var corrupt = snapshot with { Index = "corrupt"u8.ToArray() };
 
         Assert.Throws<InvalidDataException>(testCode: () => corrupt.Validate());
-        var nullNode = snapshot with { Nodes = snapshot.Nodes.ToDictionary(
+        var nullNode = snapshot with {
+            Nodes = snapshot.Nodes.ToDictionary(
             pair => pair.Key,
             _ => ((byte[])null!)
-        ) };
+        ),
+        };
 
         Assert.Throws<InvalidDataException>(testCode: () => nullNode.Validate());
     }
     [Fact]
     public async Task EmptyHistoryIsExplicitAndCorruptSourceObjectsRefuse() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var blobs = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var store = new WorldAuthorityBlobStore(

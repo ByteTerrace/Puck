@@ -112,11 +112,13 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
                 reason: out var reason
             )
         );
-        if (!accepted) { Assert.Contains(
+        if (!accepted) {
+            Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "clustering.kind"
-        ); }
+        );
+        }
     }
     [Fact]
     public void MalformedKeyFile_Refuses() {
@@ -221,16 +223,20 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
     public void ProviderSettingsRejectExtraMissingAndDuplicateProperties(string json, bool accepted) {
         var settings = JsonElement.Parse(json);
 
-        if (accepted) { Assert.Equal(
+        if (accepted) {
+            Assert.Equal(
             "root",
             WorldExtensionSettings.OnlySetting(
                 name: "path",
                 settings: settings
             ).GetString()
-        ); } else { Assert.Throws<ArgumentException>(testCode: () => WorldExtensionSettings.OnlySetting(
+        );
+        } else {
+            Assert.Throws<ArgumentException>(testCode: () => WorldExtensionSettings.OnlySetting(
             name: "path",
             settings: settings
-        )); }
+        ));
+        }
     }
     [Fact]
     public void ProviderSettingsRoundTripWithoutSchemaInterpretation() {
@@ -333,11 +339,48 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         );
     }
     [Fact]
+    public void SharedOrBlankExtensionsFile_Refuses() {
+        var valid = MakeValid();
+        var separate = valid with {
+            Worlds = [valid.Worlds[0] with { Extensions = "a.extensions.json" }, valid.Worlds[1] with { Extensions = "b.extensions.json" }],
+        };
+
+        Assert.True(
+            condition: WorldSiloDefinitionValidator.TryValidate(
+                definition: separate,
+                reason: out var accepted
+            ),
+            userMessage: accepted
+        );
+        Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(
+            definition: separate with {
+                Worlds = [separate.Worlds[0], separate.Worlds[1] with { Extensions = "a.extensions.json" }],
+            },
+            reason: out var shared
+        ));
+        Assert.Contains(
+            actualString: shared,
+            expectedSubstring: "share the extensions file 'a.extensions.json'"
+        );
+        Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(
+            definition: separate with {
+                Worlds = [separate.Worlds[0] with { Extensions = " " }, separate.Worlds[1]],
+            },
+            reason: out var blank
+        ));
+        Assert.Contains(
+            actualString: blank,
+            expectedSubstring: "names a blank extensions path"
+        );
+    }
+    [Fact]
     public void StoreWithNonObjectSettings_Refuses() {
-        var mismatched = MakeValid() with { Store = new WorldSiloExtension(
+        var mismatched = MakeValid() with {
+            Store = new WorldSiloExtension(
             "directory",
             JsonSerializer.SerializeToElement("not an object")
-        ) };
+        ),
+        };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(
             definition: mismatched,

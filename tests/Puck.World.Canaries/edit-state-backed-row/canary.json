@@ -3,12 +3,11 @@
   "title": "A live row edit whose position names a state cell applies, and the world keeps running past its edit echo",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 3,
   "timeoutSeconds": 60,
   "binding": "The document resolves a submitted row's state-backed values in a private copy, so the mutation an edit echo carries still holds the reference as its submitter wrote it: every echo tap reads a payload with no resolved value. The positive leg sets the fixture placement's position to state.spot (a Text cell holding [2, 0, 0]), and asserts the edit applies and world.status still answers after the echo fired. The discriminating leg writes a reference that names no row and then a null position. Both are refused by name, so no edit applies and the world still answers.",
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/edit-state-backed-row/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/edit-state-backed-row/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -23,7 +22,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/edit-state-backed-row/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/edit-state-backed-row/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },

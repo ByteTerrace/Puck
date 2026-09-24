@@ -1,12 +1,12 @@
 using System.CommandLine;
 using System.IO.Compression;
 using System.Net;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Puck.Assets;
 
 namespace Puck.Cli.NuGet;
 
@@ -22,28 +22,12 @@ internal static class NuGetCommand {
         return ((Environment.GetEnvironmentVariable(variable: "GITHUB_SHA") is { Length: > 0 } commit)
             ? commit
             : (await CliProcess.RunCheckedAsync(
-                root,
-                "git",
-                ["rev-parse", "HEAD"],
+                arguments: ["rev-parse", "HEAD"],
+                fileName: "git",
+                workingDirectory: root,
                 capture: true
             )).Trim()
         );
-    }
-    internal static string ExpectedVersion(string root) {
-        var version = ReadVersion(root: root);
-
-        if (
-            (Environment.GetEnvironmentVariable(variable: "VERSION") is { Length: > 0 } expected) &&
-            (expected != version)
-        ) {
-            throw new InvalidDataException(message: "VERSION differs from the shared source version.");
-        }
-        return version;
-    }
-    internal static string Hash(string path) {
-        using var stream = File.OpenRead(path: path);
-
-        return Convert.ToHexStringLower(inArray: SHA256.HashData(source: stream));
     }
     internal static async Task<JsonObject> PrepareAsync(string input, string output, string selection, string version, string commit, Func<string, Task<string[]>> publishedVersions) {
         ValidateVersion(version: version);
@@ -74,7 +58,7 @@ internal static class NuGetCommand {
                         path2: name
                     )
                 );
-                files.Add(item: ((JsonNode)new JsonObject { ["name"] = name, ["sha256"] = Hash(path: path) }));
+                files.Add(item: ((JsonNode)new JsonObject { ["name"] = name, ["sha256"] = ContentPin.OfFile(path: path).Hex }));
             }
             packages.Add(item: ((JsonNode)new JsonObject { ["id"] = package.Id, ["version"] = version, ["files"] = files }));
         }
@@ -121,7 +105,6 @@ internal static class NuGetCommand {
         if (nodes.Length != 1) { throw new InvalidDataException(message: "Expected one shared Version in build/Packaging.targets."); }
         return ValidateVersion(version: nodes[0].Value);
     }
-    internal static string Root() => (Puck.RepositoryPaths.FindRoot() ?? throw new DirectoryNotFoundException(message: "Run puck nuget from within the Puck checkout."));
     internal static string ValidateVersion(string version) {
         // Reject spellings NuGet normalizes to the same package identity, so a
         // second source tag cannot claim an already published version.
@@ -186,12 +169,12 @@ internal static class NuGetCommand {
                     name.Contains(value: '\\')
                 ) { throw new InvalidDataException(message: "Invalid artifact filename."); }
                 if (!string.Equals(
-                    a: Hash(path: Path.Combine(
+                    a: ContentPin.OfFile(path: Path.Combine(
                         path1: directory,
                         path2: name
-                    )),
+                    )).Hex,
                     b: ((string?)files[index]!["sha256"]),
-                    comparisonType: StringComparison.OrdinalIgnoreCase
+                    comparisonType: StringComparison.Ordinal
                 )) {
                     throw new InvalidDataException(message: $"Artifact checksum mismatch: {name}.");
                 }
@@ -222,9 +205,9 @@ internal static class NuGetCommand {
 
         foreach (var project in projects) {
             using var metadata = JsonDocument.Parse(await CliProcess.RunCheckedAsync(
-                root,
-                "dotnet",
-                ["msbuild", project, "-nologo", "-getProperty:PackageId,Version"],
+                arguments: ["msbuild", project, "-nologo", "-getProperty:PackageId,Version"],
+                fileName: "dotnet",
+                workingDirectory: root,
                 capture: true
             ));
             var properties = metadata.RootElement.GetProperty(propertyName: "Properties");
@@ -236,18 +219,18 @@ internal static class NuGetCommand {
             if (!expected.Add(item: id)) { throw new InvalidDataException(message: $"Duplicate package ID: {id}."); }
             if (!noBuild) {
                 await CliProcess.RunCheckedAsync(
-                    root,
-                    "dotnet",
-                    ["restore", project, "--locked-mode"]
+                    arguments: ["restore", project, "--locked-mode"],
+                    fileName: "dotnet",
+                    workingDirectory: root
                 );
             }
             List<string> pack = ["pack", project, "--configuration", "Release", "--no-restore", "--output", output];
 
             if (noBuild) { pack.Add(item: "--no-build"); }
             await CliProcess.RunCheckedAsync(
-                root,
-                "dotnet",
-                pack
+                arguments: pack,
+                fileName: "dotnet",
+                workingDirectory: root
             );
         }
         var catalog = ReadPackages(
@@ -267,7 +250,7 @@ internal static class NuGetCommand {
         Console.WriteLine(value: $"Validated {catalog.Count} packages and their internal dependency closure in {output}.");
     }
     private static async Task<int> PrepareBatchAsync(string input, string output, string selection) {
-        var root = Root();
+        var root = RepositoryPaths.RequireRoot();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(seconds: 60) };
         var manifest = await PrepareAsync(
             commit: await ExpectedCommitAsync(root: root),
@@ -278,14 +261,14 @@ internal static class NuGetCommand {
                 id: id
             ),
             selection: selection,
-            version: ExpectedVersion(root: root)
+            version: ReadVersion(root: root)
         );
 
         CliGitHub.Summarize(message: Summary(manifest: manifest));
         return 0;
     }
     private static int PrintVersion() {
-        var version = ReadVersion(root: Root());
+        var version = ReadVersion(root: RepositoryPaths.RequireRoot());
 
         Console.WriteLine(value: version);
         CliGitHub.Output(
@@ -315,11 +298,11 @@ internal static class NuGetCommand {
         );
     }
     private static async Task<int> PushAsync(string directory) {
-        var root = Root();
+        var root = RepositoryPaths.RequireRoot();
         var release = Verify(
             commit: await ExpectedCommitAsync(root: root),
             directory: directory,
-            version: ExpectedVersion(root: root)
+            version: ReadVersion(root: root)
         );
 
         if (string.IsNullOrEmpty(value: Environment.GetEnvironmentVariable(variable: "NUGET_API_KEY"))) { throw new InvalidOperationException(message: "NUGET_API_KEY is required for publishing."); }
@@ -330,8 +313,8 @@ internal static class NuGetCommand {
         )) {
             await CliProcess.RunCheckedAsync(
                 arguments: push,
-                executable: "dotnet",
-                root: root
+                fileName: "dotnet",
+                workingDirectory: root
             );
         }
         return 0;
@@ -359,9 +342,14 @@ internal static class NuGetCommand {
 
             if (Value(name: "version") != version) { throw new InvalidDataException(message: $"{id}: expected shared version {version}."); }
             if (Path.GetFileName(path: path) != $"{id}.{version}.nupkg") { throw new InvalidDataException(message: $"Unexpected package filename: {path}."); }
-            foreach (var name in new[] { "README.md", "LICENSE.md", "LICENSING.md", "icon.png" }) {
+            foreach (var name in new[] { "README.md", "LICENSE.md", "icon.png" }) {
                 if (zip.GetEntry(entryName: name) is null) { throw new InvalidDataException(message: $"{id} is missing {name}."); }
             }
+            // build/Packaging.targets: every package declares its license as an SPDX expression and carries the text.
+            var license = metadata.Elements().SingleOrDefault(predicate: element => (element.Name.LocalName == "license"));
+
+            if (license is null) { throw new InvalidDataException(message: $"{id} declares no license."); }
+            if (((string?)license.Attribute(name: "type")) != "expression") { throw new InvalidDataException(message: $"{id} must declare its license as an SPDX expression."); }
             var symbols = Path.Combine(
                 path1: input,
                 path2: $"{id}.{version}.snupkg"
@@ -492,12 +480,12 @@ internal static class NuGetCommand {
         }
     }
     private static async Task<int> VerifyBatchAsync(string directory) {
-        var root = Root();
+        var root = RepositoryPaths.RequireRoot();
 
         Verify(
             commit: await ExpectedCommitAsync(root: root),
             directory: directory,
-            version: ExpectedVersion(root: root)
+            version: ReadVersion(root: root)
         );
         Console.WriteLine(value: "Release manifest and artifact checksums verified.");
         return 0;
@@ -506,8 +494,11 @@ internal static class NuGetCommand {
     public static Command Create() {
         var directoryArgument = new Argument<string>(name: "directory") { Description = "The prepared release directory holding release.json and the packages." };
         var inputArgument = new Argument<string>(name: "input") { Description = "The directory holding every packed .nupkg and .snupkg." };
-        var outputArgument = new Argument<string>(name: "output") { Description = "The empty directory to receive the selected batch and its release.json." };
-        var packOutputArgument = new Argument<string>(name: "output-directory") { Arity = ArgumentArity.ZeroOrOne, DefaultValueFactory = _ => "artifacts/packages", Description = "The empty directory to pack into." };
+        var outputOption = CliOptions.Output(
+            description: "The empty directory to receive the selected batch and its release.json.",
+            required: true
+        );
+        var packOutputOption = CliOptions.Output(description: "The empty directory to pack into; absent, artifacts/packages.");
         var selectionArgument = new Argument<string>(name: "ids") { Description = "all, or comma-separated full package IDs." };
         var noBuildOption = new Option<bool>(name: "--no-build") { Description = "Pack the already compiled outputs without restoring or building." };
         var version = new Command(
@@ -517,11 +508,11 @@ internal static class NuGetCommand {
         var pack = new Command(
             description: "Pack and validate every opted-in project at the shared version.",
             name: "pack"
-        ) { packOutputArgument, noBuildOption };
+        ) { packOutputOption, noBuildOption };
         var prepare = new Command(
             description: "Select a batch, verify its internal dependency closure, and copy it with a release.json manifest.",
             name: "prepare"
-        ) { inputArgument, outputArgument, selectionArgument };
+        ) { inputArgument, selectionArgument, outputOption };
         var verify = new Command(
             description: "Verify a prepared batch's manifest, source commit, and artifact checksums.",
             name: "verify"
@@ -531,21 +522,23 @@ internal static class NuGetCommand {
             name: "push"
         ) { directoryArgument };
         var command = new Command(
-            description: "Pack, select, verify, and push a shared-version NuGet release. prepare, verify, and push use VERSION (or the shared version) and GITHUB_SHA (or git HEAD).",
+            description: "Pack, select, verify, and push a shared-version NuGet release.",
             name: "nuget"
         ) {
             version, pack, prepare, verify, push, NuGetReleaseCommand.Gate(), NuGetReleaseCommand.Tag(), NuGetReleaseCommand.Release(), NuGetReleaseCommand.Pin(), NuGetReleaseCommand.PinPublished(), NuGetReleaseCommand.Smoke(),
         };
 
+        command.Detail(detail: "prepare, verify, and push use VERSION (or the shared version) and GITHUB_SHA (or git HEAD).");
+
         version.SetAction(action: _ => PrintVersion());
         pack.SetAction(action: (parseResult, _) => PackAsync(
             noBuild: parseResult.GetValue(option: noBuildOption),
-            output: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: packOutputArgument)),
-            root: Root()
+            output: Path.GetFullPath(path: (parseResult.GetValue(option: packOutputOption) ?? "artifacts/packages")),
+            root: RepositoryPaths.RequireRoot()
         ));
         prepare.SetAction(action: (parseResult, _) => PrepareBatchAsync(
             input: parseResult.GetRequiredValue(argument: inputArgument),
-            output: parseResult.GetRequiredValue(argument: outputArgument),
+            output: parseResult.GetRequiredValue(option: outputOption),
             selection: parseResult.GetRequiredValue(argument: selectionArgument)
         ));
         verify.SetAction(action: (parseResult, _) => VerifyBatchAsync(directory: parseResult.GetRequiredValue(argument: directoryArgument)));

@@ -1,35 +1,41 @@
 using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
-    private static async Task SetOwnerAsync(string group) {
+    // Returns the owner's object id, and hands it and its principal type to the Bicep parameter files, which read them
+    // with readEnvironmentVariable in the az processes this verb starts.
+    private static async Task<string> SetOwnerAsync(string group) {
         // The shared CI identity that federates to GitHub's environment; it exists before any deployment output does.
+        var owner = await AzAsync(
+            "identity",
+            "show",
+            "--name",
+            "bytrcidpzzz",
+            "-g",
+            group,
+            "--query",
+            "principalId",
+            "-o",
+            "tsv"
+        );
+
         Environment.SetEnvironmentVariable(
-            variable: "BICEPPARAM_OWNER_OBJECT_ID",
-            value: await AzAsync(
-                "identity",
-                "show",
-                "--name",
-                "bytrcidpzzz",
-                "-g",
-                group,
-                "--query",
-                "principalId",
-                "-o",
-                "tsv"
-            )
+            value: owner,
+            variable: "BICEPPARAM_OWNER_OBJECT_ID"
         );
         Environment.SetEnvironmentVariable(
             value: "ServicePrincipal",
             variable: "BICEPPARAM_OWNER_PRINCIPAL_TYPE"
         );
+
+        return owner;
     }
     private static async Task DeployInfrastructureAsync(string group, string? infrastructure) {
-        await SetOwnerAsync(group: group);
-        var owner = Environment.GetEnvironmentVariable(variable: "BICEPPARAM_OWNER_OBJECT_ID")!;
+        var owner = await SetOwnerAsync(group: group);
         var graph = await AzJsonAsync(
             "ad",
             "sp",
@@ -179,7 +185,8 @@ internal static partial class AzureCommand {
         );
     }
     private static async Task DeployWorldPlatformAsync(string group) {
-        await SetOwnerAsync(group: group);
+        var owner = await SetOwnerAsync(group: group);
+
         Directory.CreateDirectory(path: "artifacts");
         await AzAsync(
             "bicep",
@@ -193,7 +200,7 @@ internal static partial class AzureCommand {
         var values = new JsonObject {
             ["configuration"] = source["resources"]!["value"]!["worldSilo"]!.DeepClone(),
             ["actionGroup"] = source["resources"]!["value"]!["worldSiloActionGroup"]!.DeepClone(),
-            ["publishingPrincipalId"] = Environment.GetEnvironmentVariable(variable: "BICEPPARAM_OWNER_OBJECT_ID"),
+            ["publishingPrincipalId"] = owner,
             ["storageAccountName"] = (Text(value: source["partitioning"]!["value"]!["prefix"]) + "stp001"),
             ["registryName"] = source["resources"]!["value"]!["containerRegistry"]!["name"]!.DeepClone(),
             ["keyVaultName"] = source["resources"]!["value"]!["keyVault"]!["name"]!.DeepClone(),
@@ -388,7 +395,11 @@ internal static partial class AzureCommand {
     private static async Task PublishTemplateSpecsAsync() {
         const string Sources = "src/Puck.Azure.Resources";
         const string Destination = "artifacts/template-specs";
-        var alias = CliFiles.ReadJson(path: $"{Sources}/bicepconfig.json")["moduleAliases"]!["ts"]!["bvm"]!;
+        // bicepconfig.json is JSON with comments.
+        var alias = JsonNode.Parse(
+            documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip },
+            json: File.ReadAllText(path: $"{Sources}/bicepconfig.json")
+        )!["moduleAliases"]!["ts"]!["bvm"]!;
         var subscription = Text(value: alias["subscription"]);
         var group = Text(value: alias["resourceGroup"]);
 
@@ -512,8 +523,10 @@ internal static partial class AzureCommand {
             Console.WriteLine(value: $"Published: {name}:{version}");
         }
     }
+    // The compiler stamps its version and a template hash into every nested metadata._generator; neither is content.
     private static void NormalizeTemplate(JsonNode? node) {
         if (node is JsonObject obj) {
+            (obj["metadata"] as JsonObject)?.Remove(propertyName: "_generator");
             if (
                 (obj["templateLink"] is JsonObject link) &&
                 (((string?)link["id"]) is { } id) &&

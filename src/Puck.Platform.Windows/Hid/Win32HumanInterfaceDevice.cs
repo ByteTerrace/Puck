@@ -29,8 +29,9 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
     /// the report parsers work from raw reports — but the report lengths and usage are.
     /// </summary>
     /// <param name="devicePath">The device interface path (from <see cref="EnumerateInterfaces"/>).</param>
+    /// <param name="timeProvider">The clock every timed read's timeout runs on.</param>
     /// <returns>An opened device, or <see langword="null"/> if it could not be opened.</returns>
-    public static Win32HumanInterfaceDevice? Open(string devicePath) {
+    public static Win32HumanInterfaceDevice? Open(string devicePath, TimeProvider timeProvider) {
         ArgumentNullException.ThrowIfNull(devicePath);
 
         // The transport is inferred from the path form; VID/PID come from HidD_GetAttributes below (authoritative).
@@ -92,6 +93,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 devicePath: devicePath,
                 fileStream: fileStream,
                 preparsedData: preparsedData,
+                timeProvider: timeProvider,
                 transport: transport
             );
         } catch {
@@ -430,6 +432,8 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
 
     private CancellationTokenSource? m_readTimeoutSource;
 
+    private readonly TimeProvider m_timeProvider;
+
     /// <inheritdoc />
     public string DevicePath { get => m_devicePath; }
     /// <inheritdoc />
@@ -455,8 +459,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
         string devicePath,
         FileStream? fileStream,
         PHIDP_PREPARSED_DATA preparsedData,
+        TimeProvider timeProvider,
         HidTransport transport
     ) {
+        m_timeProvider = timeProvider;
         m_attributes = attributes;
         m_capabilities = capabilities;
         m_devicePath = devicePath;
@@ -532,7 +538,10 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
             // Reads are serialized on the device's single I/O loop, so one resettable timeout source is reused per
             // device instead of creating one for every timed read. An elapsed timeout retires the source and the
             // next timed read replaces it.
-            var timeoutSource = (m_readTimeoutSource ??= new CancellationTokenSource());
+            var timeoutSource = (m_readTimeoutSource ??= new CancellationTokenSource(
+                delay: Timeout.InfiniteTimeSpan,
+                timeProvider: m_timeProvider
+            ));
 
             timeoutSource.CancelAfter(millisecondsDelay: timeoutInMilliseconds);
 

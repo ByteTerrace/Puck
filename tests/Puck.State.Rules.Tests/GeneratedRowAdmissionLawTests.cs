@@ -42,11 +42,11 @@ public sealed class GeneratedRowAdmissionLawTests {
 
             rule = consumer switch {
                 "forEach" => rule with { ForEach = reference },
-                "read" => rule with { Gate = new ActionPredicate.CompareState(State: reference, Key: "0", Comparison: ActionStateComparison.Equal, Value: 1m) },
+                "read" => rule with { Gate = new ActionPredicate.CompareState(State: reference, Key: "0", Comparison: ExpressionOp.Equal, Value: 1m) },
                 "write" => rule with { Effects = [new ActionEffect.SetState(State: reference, Key: "0", Value: 1m)] },
                 "sort" => rule with { Effects = [new ActionEffect.TransformState(Transform: new StateTransform.Sort(Row: reference, By: [new SortKey(Row: reference)]))] },
                 "shuffle" => rule with { Effects = [new ActionEffect.TransformState(Transform: new StateTransform.Shuffle(Draw: "unused", Row: reference))] },
-                "arrangementRank" => rule with { Gate = new ActionPredicate.CompareState(State: StateChannelRef.OfCall(call: new ChannelCall(Channel: "reduce", Arguments: [new ChannelArgument.Word(Text: "arrangementRank"), new ChannelArgument.Word(Text: row.Name.Value)])), Comparison: ActionStateComparison.Equal, Value: 0m) },
+                "arrangementRank" => rule with { Gate = new ActionPredicate.CompareState(State: StateChannelRef.OfCall(call: new ChannelCall(Channel: "reduce", Arguments: [new ChannelArgument.Word(Text: "arrangementRank"), new ChannelArgument.Word(Text: row.Name.Value)])), Comparison: ExpressionOp.Equal, Value: 0m) },
                 "vectorSource" => rule with { Effects = [new ActionEffect.TransformState(Transform: new StateTransform.Mean(From: row.Name.Value, Into: "counter"))] },
                 _ => throw new InvalidOperationException(),
             };

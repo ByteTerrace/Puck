@@ -169,12 +169,6 @@ internal static class GeometryClaims {
 
         return result;
     }
-    private static FixedQuaternion QuaternionOf(long[] lanes) => new(
-        X: Raw(value: lanes[0]),
-        Y: Raw(value: lanes[1]),
-        Z: Raw(value: lanes[2]),
-        W: Raw(value: lanes[3])
-    );
     private static FixedQ4816 Raw(long value) => FixedQ4816.FromRawBits(value: value);
     // ---- shared exact BigInteger primitives, deliberately re-derived here rather than shared with Oracles.cs, so
     // this file owns its own reference chain ----
@@ -268,15 +262,6 @@ internal static class GeometryClaims {
             Low: (enclosure.Low - toleranceUnits),
             High: (enclosure.High + toleranceUnits)
         );
-    // A raw lies within a BigInteger enclosure (at guard scale) widened by a raw-ULP tolerance, also at guard scale.
-    private static string? WithinGuardEnvelope(string name, long subjectRaw, Oracles.Enclosure enclosure, BigInteger toleranceUnits) {
-        var scaled = (new BigInteger(value: subjectRaw) << Oracles.GuardBitCount);
-
-        if (scaled < (enclosure.Low - toleranceUnits)) { return $"{name} is {subjectRaw}, below the exact envelope [{enclosure.Low}, {enclosure.High}] (guard scale) by more than {toleranceUnits} guard units"; }
-        if (scaled > (enclosure.High + toleranceUnits)) { return $"{name} is {subjectRaw}, above the exact envelope [{enclosure.Low}, {enclosure.High}] (guard scale) by more than {toleranceUnits} guard units"; }
-
-        return null;
-    }
 
     // ==== "complex / rigid transform" banner ==============================================================
 
@@ -516,7 +501,7 @@ internal static class GeometryClaims {
                 numerator: 2
             ));
 
-            if (WithinGuardEnvelope(
+            if (Oracles.WithinEnvelope(
                 name: $"d/dx[sqrt(x)*sin(x)+x^2/(x+1)] at xRaw={xRaw}",
                 subjectRaw: f.Dual.Value,
                 enclosure: idealEnclosure,
@@ -555,7 +540,7 @@ internal static class GeometryClaims {
 
             if (squaredNorm.IsZero) { continue; }
 
-            var quaternion = QuaternionOf(lanes: quad).Normalize();
+            var quaternion = Subjects.QuaternionOf(lanes: quad).Normalize();
             var expected = NormalizeOracle(values: quad);
 
             if (Math.Abs(value: (quaternion.X.Value - expected[0])) > 1L) { return $"X of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.X.Value}, expected {expected[0]}"; }
@@ -698,7 +683,7 @@ internal static class GeometryClaims {
 
             // W is cos(magnitude) directly, with no further rounding, so it stands against the kernel's own
             // committed SinCos envelope alone.
-            if (WithinGuardEnvelope(
+            if (Oracles.WithinEnvelope(
                 name: $"W of Exp([{bivector[0]},{bivector[1]},{bivector[2]}])",
                 subjectRaw: value.W.Value,
                 enclosure: enclosure.Cos,
@@ -720,7 +705,7 @@ internal static class GeometryClaims {
                     multiplierRaw: idealAxis[lane]
                 );
 
-                if (WithinGuardEnvelope(
+                if (Oracles.WithinEnvelope(
                     name: $"{laneNames[lane]} of Exp([{bivector[0]},{bivector[1]},{bivector[2]}])",
                     subjectRaw: lanes[lane],
                     enclosure: expected,
@@ -742,7 +727,7 @@ internal static class GeometryClaims {
                 yRaw: ((long)vectorLength)
             );
             var idealAxis = NormalizeOracle(values: [qx, qy, qz]);
-            var value = QuaternionOf(lanes: quaternion).Log();
+            var value = Subjects.QuaternionOf(lanes: quaternion).Log();
             var lanes = new[] { value.X.Value, value.Y.Value, value.Z.Value };
             // Log computes scale = Atan2(vectorLength, W)/vectorLength then component·scale directly (no separate
             // normalize step), so a raw ULP of Atan2/division error is attenuated by the SAME factor a component's
@@ -763,7 +748,7 @@ internal static class GeometryClaims {
                     multiplierRaw: idealAxis[lane]
                 );
 
-                if (WithinGuardEnvelope(
+                if (Oracles.WithinEnvelope(
                     name: $"{laneNames[lane]} of Log([{qx},{qy},{qz},{qw}])",
                     subjectRaw: lanes[lane],
                     enclosure: expected,
@@ -826,7 +811,7 @@ internal static class GeometryClaims {
 
             // W = cos(half) directly, with no further rounding, so it stands against the kernel's own committed
             // SinCos envelope alone.
-            if (WithinGuardEnvelope(
+            if (Oracles.WithinEnvelope(
                 name: $"W of FromAxisAngle(axis=[{axis[0]},{axis[1]},{axis[2]}], angleRaw={angleRaw})",
                 subjectRaw: value.W.Value,
                 enclosure: enclosure.Cos,
@@ -852,7 +837,7 @@ internal static class GeometryClaims {
                     multiplierRaw: axis[lane]
                 );
 
-                if (WithinGuardEnvelope(
+                if (Oracles.WithinEnvelope(
                     name: $"{names[lane]} of FromAxisAngle(axis=[{axis[0]},{axis[1]},{axis[2]}], angleRaw={angleRaw})",
                     subjectRaw: lanes[lane],
                     enclosure: expected,
@@ -918,8 +903,8 @@ internal static class GeometryClaims {
     public static string? QuaternionHamiltonProductDotInverseSurface() {
         foreach (var left in QuaternionEdgeQuads) {
             foreach (var right in QuaternionEdgeQuads) {
-                var l = QuaternionOf(lanes: left);
-                var r = QuaternionOf(lanes: right);
+                var l = Subjects.QuaternionOf(lanes: left);
+                var r = Subjects.QuaternionOf(lanes: right);
                 var expectedProduct = HamiltonProductOracle(
                     left: left,
                     right: right
@@ -952,7 +937,7 @@ internal static class GeometryClaims {
 
             if (squaredNorm.IsZero) { continue; }
 
-            var subject = QuaternionOf(lanes: left);
+            var subject = Subjects.QuaternionOf(lanes: left);
             var expectedInverse = new long[] {
                 RoundRatioQ16(
                 numerator: -(((BigInteger)left[0]) << FixedQ4816.FractionBitCount),
@@ -997,7 +982,7 @@ internal static class GeometryClaims {
             foreach (var right in Vector3EdgeTriples) {
                 var (lx, ly, lz, lw) = (left[0], left[1], left[2], left[3]);
                 var (rx, ry, rz) = (right[0], right[1], right[2]);
-                var rotor = QuaternionOf(lanes: left);
+                var rotor = Subjects.QuaternionOf(lanes: left);
                 var vector = Vector3Of(lanes: right);
                 var tx = RoundProductSumOracle(sum: (((((BigInteger)ly) * rz) - (((BigInteger)lz) * ry)) + (((BigInteger)lw) * rx)));
                 var ty = RoundProductSumOracle(sum: (((((BigInteger)lz) * rx) - (((BigInteger)lx) * rz)) + (((BigInteger)lw) * ry)));
@@ -1030,7 +1015,7 @@ internal static class GeometryClaims {
         // that briefly needs more headroom than v's own scale, not of Rotate, which never forms that intermediate
         // and stays exact at those same rows in the transcription check above.
         foreach (var left in QuaternionEdgeQuads) {
-            var rotor = QuaternionOf(lanes: left).Normalize();
+            var rotor = Subjects.QuaternionOf(lanes: left).Normalize();
             var q = new[] { rotor.X.Value, rotor.Y.Value, rotor.Z.Value, rotor.W.Value };
             var conjugateQ = new[] { -q[0], -q[1], -q[2], q[3] };
 
@@ -1467,17 +1452,21 @@ internal static class GeometryClaims {
                         if (FixedVector2.Dot(
                             left: a,
                             right: b
-                        ).Value != expectedDot) { return $"Dot(({ax},{ay}),({bx},{by})) is {FixedVector2.Dot(
+                        ).Value != expectedDot) {
+                            return $"Dot(({ax},{ay}),({bx},{by})) is {FixedVector2.Dot(
                             left: a,
                             right: b
-                        ).Value}, expected {expectedDot}"; }
+                        ).Value}, expected {expectedDot}";
+                        }
                         if (FixedVector2.Wedge(
                             left: a,
                             right: b
-                        ).Value != expectedWedge) { return $"Wedge(({ax},{ay}),({bx},{by})) is {FixedVector2.Wedge(
+                        ).Value != expectedWedge) {
+                            return $"Wedge(({ax},{ay}),({bx},{by})) is {FixedVector2.Wedge(
                             left: a,
                             right: b
-                        ).Value}, expected {expectedWedge}"; }
+                        ).Value}, expected {expectedWedge}";
+                        }
                         if (FixedVector2.Wedge(
                             left: a,
                             right: a
@@ -1528,10 +1517,12 @@ internal static class GeometryClaims {
                 if (FixedVector3.Dot(
                     left: av,
                     right: bv
-                ).Value != expectedDot) { return $"a=[{a[0]},{a[1]},{a[2]}] b=[{b[0]},{b[1]},{b[2]}]: Dot is {FixedVector3.Dot(
+                ).Value != expectedDot) {
+                    return $"a=[{a[0]},{a[1]},{a[2]}] b=[{b[0]},{b[1]},{b[2]}]: Dot is {FixedVector3.Dot(
                     left: av,
                     right: bv
-                ).Value}, expected {expectedDot}"; }
+                ).Value}, expected {expectedDot}";
+                }
                 if (cross != expectedCross) { return $"a=[{a[0]},{a[1]},{a[2]}] b=[{b[0]},{b[1]},{b[2]}]: Cross is ({cross.X.Value},{cross.Y.Value},{cross.Z.Value}), expected ({expectedCross.X.Value},{expectedCross.Y.Value},{expectedCross.Z.Value})"; }
                 if (cross != -FixedVector3.Cross(
                     left: bv,

@@ -15,6 +15,11 @@ namespace Puck.SignedDistance;
 public enum SdfBlendOp : uint {
     Union = 0,
     SmoothUnion = 1, // blend radius = instruction Data1.x
+    /// <summary>Carves the shape out of everything accumulated so far: <c>max(a, −b)</c>.
+    /// <para>The result is an exact distance only where the subject is the nearest surface. Inside the carved void
+    /// <c>max(a, −b)</c> returns the subject's carved-away face or the carve's own boundary rather than the true clearance,
+    /// so contact queries see phantom surfaces there: <c>world.collision.probe</c> reads a positive distance with an upward
+    /// gradient in open air. Extend a carve past every point a body can reach, or build the void from union geometry.</para></summary>
     Subtraction = 2,
     /// <summary>Intersection with everything accumulated so far — not with the preceding shape alone. See the accumulator
     /// rule on <see cref="SdfBlendOp"/>.</summary>
@@ -57,10 +62,10 @@ public enum SdfBlendOp : uint {
     /// <summary>Leaves a round bead while subtracting: min(max(a, -b), sqrt(a²+b²) - r). Radius is Data1.x.
     /// Composes derivative bounds as sqrt(La²+Lb²).</summary>
     PipeSubtraction = 14,
-    /// <summary>Adds continuous steps of radius r (Data1.x) and step count n (Data1.y) to the union.
+    /// <summary>Adds continuous steps of radius r (Data1.x) and step count n (Data1.z) to the union.
     /// Strictly 1-Lipschitz. PopField compose only.</summary>
     StairsUnion = 15,
-    /// <summary>Carves continuous steps of radius r (Data1.x) and step count n (Data1.y) from the subtraction.
+    /// <summary>Carves continuous steps of radius r (Data1.x) and step count n (Data1.z) from the subtraction.
     /// Strictly 1-Lipschitz. PopField compose only.</summary>
     StairsSubtraction = 16,
 }

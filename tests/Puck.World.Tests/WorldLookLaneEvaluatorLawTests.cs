@@ -11,32 +11,26 @@ namespace Puck.World.Tests;
 /// per-frame render path.
 /// </summary>
 public sealed class WorldLookLaneEvaluatorLawTests {
-    [Fact]
-    public void ALiteralExpressionEvaluatesToItsOwnValue() {
-        var definition = Fixtures.BuildDocument();
-        var expression = ExpressionProgram.Parse(text: "0.5");
-
-        var value = WorldLookLaneEvaluator.Evaluate(
-            bodyIndex: -1,
-            definition: definition,
-            expression: expression,
-            tick: 0ul
-        );
-
-        Assert.Equal(
-            actual: value,
-            expected: 0.5f
-        );
-    }
+    // A literal evaluates to itself, arithmetic over literals evaluates exactly, and a division by zero reads zero
+    // rather than throwing.
+    [InlineData("0.5", 0.5f)]
+    [InlineData("clamp(0.2 + 0.9, 0, 1)", 1f)]
+    [InlineData("1 / 0", 0f)]
+    [Theory]
+    public void AnExpressionOverLiteralsEvaluatesExactly(string text, float expected) => Assert.Equal(
+        actual: WorldLookLaneEvaluator.Evaluate(
+            expression: ExpressionProgram.Parse(text: text),
+            reads: ClientFixtures.StateReads(definition: Fixtures.BuildDocument())
+        ),
+        expected: expected
+    );
     [Fact]
     public void ANullExpressionEvaluatesToZero() {
         var definition = Fixtures.BuildDocument();
 
         var value = WorldLookLaneEvaluator.Evaluate(
-            bodyIndex: -1,
-            definition: definition,
             expression: null,
-            tick: 0ul
+            reads: ClientFixtures.StateReads(definition: definition)
         );
 
         Assert.Equal(
@@ -51,48 +45,12 @@ public sealed class WorldLookLaneEvaluatorLawTests {
         var definition = Fixtures.BuildDocument();
         var expression = new ExpressionProgram(Instructions: [
             Instruction.Constant(value: 7m),
-            Instruction.Of(operation: ExpressionOp.PopCount),
+            Instruction.Of(operation: ExpressionOp.SetBitCount),
         ]);
 
         var value = WorldLookLaneEvaluator.Evaluate(
-            bodyIndex: -1,
-            definition: definition,
             expression: expression,
-            tick: 0ul
-        );
-
-        Assert.Equal(
-            actual: value,
-            expected: 0f
-        );
-    }
-    [Fact]
-    public void ArithmeticOverLiteralsEvaluatesExactly() {
-        var definition = Fixtures.BuildDocument();
-        var expression = ExpressionProgram.Parse(text: "clamp(0.2 + 0.9, 0, 1)");
-
-        var value = WorldLookLaneEvaluator.Evaluate(
-            bodyIndex: -1,
-            definition: definition,
-            expression: expression,
-            tick: 0ul
-        );
-
-        Assert.Equal(
-            actual: value,
-            expected: 1f
-        );
-    }
-    [Fact]
-    public void DivisionByZeroReadsZeroRatherThanThrowing() {
-        var definition = Fixtures.BuildDocument();
-        var expression = ExpressionProgram.Parse(text: "1 / 0");
-
-        var value = WorldLookLaneEvaluator.Evaluate(
-            bodyIndex: -1,
-            definition: definition,
-            expression: expression,
-            tick: 0ul
+            reads: ClientFixtures.StateReads(definition: definition)
         );
 
         Assert.Equal(
@@ -112,10 +70,8 @@ public sealed class WorldLookLaneEvaluatorLawTests {
                 z: 0.75f
             ),
             WorldLookLaneEvaluator.EvaluateLanes(
-                lanes,
-                Fixtures.BuildDocument(),
-                0,
-                -1
+                expressions: lanes,
+                reads: ClientFixtures.StateReads(definition: Fixtures.BuildDocument())
             )
         );
         var options = new System.Text.Json.JsonSerializerOptions();
@@ -158,10 +114,8 @@ public sealed class WorldLookLaneEvaluatorLawTests {
         Assert.Equal(
             0f,
             WorldLookLaneEvaluator.Evaluate(
-                ExpressionProgram.Parse(text: expression),
-                Fixtures.BuildDocument(),
-                0,
-                -1
+                expression: ExpressionProgram.Parse(text: expression),
+                reads: ClientFixtures.StateReads(definition: Fixtures.BuildDocument())
             )
         );
     [Fact]
@@ -191,10 +145,8 @@ public sealed class WorldLookLaneEvaluatorLawTests {
                 z: 1f
             ),
             WorldLookLaneEvaluator.EvaluateLanes(
-                restored.Looks[0].Motion.Lanes,
-                restored,
-                0,
-                -1
+                expressions: restored.Looks[0].Motion.Lanes,
+                reads: ClientFixtures.StateReads(definition: restored)
             )
         );
     }

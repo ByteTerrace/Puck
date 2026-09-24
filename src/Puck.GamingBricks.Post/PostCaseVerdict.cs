@@ -14,7 +14,6 @@ public enum PostCaseVerdict {
     /// <summary>The case's outcome differs from what was expected of it, in either direction: a recorded pass that
     /// failed, a recorded fail that now passes, a changed pixel count. Folds to a stage failure.</summary>
     Mismatch,
-    /// <summary>The case could not be measured: it threw, exceeded its wall-clock budget, or its inputs no longer
-    /// match their recorded hashes. Folds to a stage failure and blocks accepting the run's candidate ledger.</summary>
+    /// <summary>The case could not be measured: it threw, or its inputs no longer match their recorded hashes. Folds to a stage failure and blocks accepting the run's candidate ledger.</summary>
     Error,
 }

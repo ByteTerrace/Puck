@@ -39,7 +39,7 @@ public static class BrowserCostAnalyzer {
         IReadOnlyList<BrowserErrorPath>? validationErrors, IReadOnlyList<string> deferred) => new(
         Ok: true,
         Validated: validated,
-        Report: BrowserCostReport.From(compilation.CostReport),
+        Report: BrowserCostReport.From(report: compilation.CostReport),
         Errors: null,
         ValidationErrors: validationErrors,
         Deferred: deferred

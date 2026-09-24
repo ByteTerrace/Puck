@@ -5,16 +5,28 @@ shader is the smallest such pipeline and the foundation for developing
 procedural content in the same environment where it will be used. This
 programme extends that foundation so several rendering representations can
 contribute to one world: durable GPU regressions for the compute and
-fullscreen foundation, per-pass timing, general graphics attachments, a
+fullscreen foundation, per-pass work counters, general graphics attachments, a
 shared visibility contract between meshes and SDF surfaces, and authored
 overrides and packaged dependencies that make a shader edit reproducible. It
 then carries authored world data to the GPU: a pass interface with generated
 declarations, one binding contract, and a state mirror sampled at presentation
 time. The foundation packages share no code with the other programmes and block
 none of them, but the mirror reads the state substrate and
-[the presentation view](runtime-and-delivery.md#the-presentation-view), so the
-packages from P7 on are scheduled against those. The implemented contract is
-owned by
+[the presentation view](runtime-and-delivery.md#the-presentation-view), so P9
+and P10 are scheduled against those.
+
+The programme ends with the frame graph at the centre of rendering. Today the
+SDF renderer is the host: it composites panes, nested cameras, and screens
+inside its own passes. It is a prototype, and the pipeline that replaces it has
+to be better at everything it does. P11 to P17 make the frame graph a document
+that every view is an instance of, and nest those instances efficiently. They
+feed the graph from image sources such as emulators, desktop capture, cameras,
+and other views. They map a hit on a displayed source back to that source's
+pixels, and turn the SDF engine into one pass package among others. They also
+add temporal reconstruction, a minimal HDR output path, and meshes and textures
+derived from SDFs.
+
+The implemented contract is owned by
 [the shader guide](../reference/shaders.md#shader-pipelines-and-live-development)
 and [the World guide](../../src/Puck.World/README.md#shader-pipelines); the
 reasoning behind every decision is in
@@ -22,32 +34,608 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-Checked against `state/rebuild` at `6d0a4cbb2`. None of P1 to P6 is
-complete. The programmable compute and fullscreen foundation exists with
-CPU-side tests to extend; shared timestamp infrastructure exists but pipeline
-timing is unavailable; neutral vertex and draw infrastructure exists to
-extend; SDF traversal and shading passes exist with no shared mesh visibility
-path; the live authoring and compiler foundation exists with persistence and
-relocatable packaging open.
+P2, P3 and P5 are complete; P1a, P1b, P4 and P6 are not. The programmable compute and
+graphics foundation has functional GPU fixtures on both backends. The
+work-counting model, the GPU work ledger, and the counting wrappers live in
+`Puck.Abstractions`. The state arena, rules and search, the shader pipeline
+node, the SDF world engine, its views, and the unified overlay all report
+through that model, and `world.counters`, `pipeline.inspect`, and
+`puck counters` read it. The SDF engine builds its pipelines off the frame
+thread and keeps a persistent pipeline cache per device. Neutral vertex and
+draw infrastructure exists to extend. SDF traversal and shading passes exist
+with no shared mesh visibility path. The live authoring and compiler foundation
+exists, and so does its first relocatable package form; persistence is still
+open.
 
-None of P7 to P10 has started. A pipeline row reads no state row and has no
-deterministic tick: the whole surface a pass sees is `ShaderFrameInput`, whose
-seconds come from the entry's own presentation clock, plus the config bytes
-`ShaderPipelineModel` caps at `MaxConfigConstantBytes`. Every shader binding
-declares descriptor set zero and no source names a Direct3D register space, so
-the layout is one flat set with hand-assigned register numbers documented in
-banner comments. `IGpuDeviceContext` reports nothing about memory, and
-`ShaderSourceLanguage` still admits `Glsl` and `ShadertoyGlsl` through the
-`spirv-cross` round trip. The one state-shaped path that reaches the GPU is the
+P1a's first slice has landed; the package stays open. `puck canary` has an
+`offscreen` boot shape that runs every leg once per backend. It also has an
+`imageRegion` pixel assertion, an unsupported verdict for a missing GPU or
+shader tool, and a check that every `pipeline.wait` resolves. The
+`pipeline-feedback` canary checks the arithmetic feedback oracle across pause,
+reset, step and repeated paused capture, with a wrong-history negative control.
+`pipeline-ink` checks the shipped ink pipeline's exposure regions. Both run
+on both backends.
+
+The second slice adds the `pipeline-edit` canary, which loads a broken
+middle-pass edit and then a corrected one. The broken edit leaves the installed
+graph producing. The corrected edit replaces the graph whole on the next step,
+over the retained history. The canary runs on both backends.
+`ShaderPipelineRenderNodeLawTests` add the render node's
+allocation and replacement laws, run through its factory seams on a device-free
+fake. A failure is injected at each of a replacement's 48 allocations, and each
+refused candidate disposes exactly what it created. An over-budget candidate
+allocates nothing. Steady-state frames allocate zero managed bytes, including
+over a buffer handoff between two passes, whose barrier prior uses are now
+planned with the graph instead of every frame. The old graph retires once the
+node's latest submission has completed, never through a device drain. The candidate build now
+allocates every per-slot object before the old graph retires. The canary and
+parity runners build the World artifact outside the checkout's `bin`
+directories ([where the World artifact is built](../reference/cli.md#where-the-world-artifact-is-built)). A
+windowed boot with no usable device is meant to exit 2 with the unsupported
+line, as the offscreen shape does. Its first no-driver run exposed a teardown
+defect, which is now fixed: disposing the render root threw from GPU consumers
+that had never allocated, and that error replaced the device failure. That
+boot has not been rerun on a machine without a driver since the fix.
+
+The third slice adds three canaries, each running on both backends.
+`pipeline-supersede` loads two valid edits back to back on a paused instance.
+The first is reported superseded, the installed graph keeps presenting, and
+the next step installs the latest edit. `pipeline-shapes` runs compute,
+compute and fullscreen passes over half-float intermediates, sparse bindings,
+a raw buffer and the `Position` vertex input, with an arithmetic oracle for
+each stage. `pipeline-resize` shrinks the instance's layout slot while paused
+and grows it while running, capturing the float history throughout. A resize
+is a candidate rebuild of the installed pipeline at the new extent, held
+while paused, and the float preview is allocated with the candidate instead of
+on the first frame that needs it. Pipeline buffers bind as raw views on both
+backends, and a fullscreen pass names its vertex input in the document. The
+render node's laws cover each of these without a device.
+
+The fourth slice adds the counted-bytes memory budget. Before a replacement
+allocates anything, the render node counts two numbers from the plan it would
+install. The steady state is every frame slot's storage, retained history and
+the images fullscreen passes draw into included, `Position` vertex buffers and
+float-preview images. The replacement peak is everything the node owns now plus that steady
+state, less the history the candidate carries, which moves into it rather than
+being allocated. A candidate whose peak exceeds the budget is refused by
+`SHADERPIPE_BUDGET` before it allocates, and the installed graph is never freed
+to make room. The budget is a quarter of the device-local memory in the
+device's `GpuMemoryProfile`, or 512 MiB when the profile reports none. `pipeline.budget` caps
+it lower for one instance, and `pipeline.inspect` prints `steady=` and `peak=`
+beside `owned=`. The node's laws hold the planned steady state and peak equal
+to the bytes the fake creates, which it counts independently, for every graph
+shape. The `pipeline-budget` canary drives an over-budget candidate through the
+real World on both backends. The refusal names the budget with exact counts,
+the installed graph keeps presenting and stepping, and a following in-budget
+edit installs. The `pipeline-churn` canary replaces a running instance's graph,
+unloads it and loads it again, three times over, and fails on any Vulkan
+validation or Direct3D 12 debug-layer message. Both canaries hold on both
+backends, and `pipeline-churn` holds under `puck canary --debug-layers`.
+The Direct3D 12 drain skips
+`D3D12_MESSAGE_ID_LOADPIPELINE_NAMENOTFOUND`, a cold pipeline-library miss the
+`gpu.pipeline-cache.misses` count already reports. P1a still owes a
+partial-allocation failure on a real device: the device factories have no
+fault-injection seam, so only the fake proves exact disposal.
+
+P2 has landed. The pipeline
+node wraps its GPU services once and counts each pass's work into the ledger,
+with the zero clears in the first pass and the preview and output finalization
+outside every pass. `pipeline.inspect` prints the newest completed
+submission's per-pass counts and the node's creation counts, `pipeline.status`
+its counters, and `pipeline.wait <name> counted <n>` waits for the nth
+completed submission since the last reset; the node reports no milliseconds.
+The node's laws derive the feedback graph's exact per-pass counts
+at the initialization, second and steady-state submissions without a device, and
+check the `pipeline-counters` canary's expected lines against the same fixtures,
+and the canary reads exactly those lines on both backends. The
+node writes its own `pipeline.inspect` record
+(`ShaderPipelineRenderNode.TryAppendInspection`), so the law replays the text the
+verb prints. GPU timestamp timing and every CPU and GPU millisecond readout
+are deleted: the neutral timing contracts and both backends' pools and
+recorders, the render engine's and views' pass timing, and the World's timing
+verb, host timing, and CPU digests. Every
+`world.counters`, `pipeline.inspect`, and `pipeline.status` reading is a
+deterministic per-pass count. `world.counters` discovers every
+`IWorkCounterSource` registered in the World (each carries a stable dotted
+`Name`) and folds the render nodes' GPU work into its `gpu`
+section, with a filter and a one-line `--json` form. The `gpu` section's header
+carries the device's `GpuDeviceIdentity` (backend, adapter, PCI ids, driver and
+API versions, Vulkan's driver properties), recorded at device creation and
+never branched on. A live `world.counters` prints the identity on both
+backends and, windowed on Vulkan, the `presentation.vulkan` section with its
+`presentation.skipped` count.
+
+The counter collector has landed. Every `WorkKind` declares its
+`WorkClass` (deterministic, per-backend-deterministic, or pacing), and
+`world.counters --json` publishes each reported kind's unit and class in a
+`kinds` legend. Its `allocation` section measures one read of every count with
+`AllocationWindow.Measure` over the named window `world.counters.read` and
+names the GC mode. The World registers the server's `state.arena`,
+`state.rules` and `state.search` sources; the arena and search sit behind
+forwarders that carry a retired instance's totals across a definition rebuild,
+so their readings never go down. `puck counters` boots
+`tests/Puck.Counters/counters.world.json` offscreen once per backend through
+the leg machinery it shares with `puck parity`, writes a
+`puck.counters.report.v1` report whose schema `puck schema` generates, and exits
+1 naming the kind, pass and node of any deterministic count or pass state the
+backends disagree on. `puck counters compare` holds two reports to each other
+by class. Laws over fixture readings and reports cover the classification and
+the comparison, and a server law covers the forwarders across `world.reload`.
+The workload sets `world.cadence off` so every pass runs; the render levers
+(`WorldRenderLeverCommandModule`) are composed by the offscreen shape as well as
+the windowed one. The pipeline-cache counts in a
+report are pacing: each leg boots on a fresh state root, so every run starts
+with a cold cache and reports misses only.
+
+`AllocationWindow` (`Puck.Abstractions.Counting`) is the one managed-allocation
+measurement. A law that sees every window allocate re-runs the body under the
+runtime's `AllocationSampled` event and fails naming the sampled types; the
+event carries no stack, so the culprit is named by type only.
+
+The lifetime counts outside the render nodes read through their own named
+sources, each a `WorkCounterSet`. `shaders.compiler` counts a compiler's
+requests, its cache hits, and each native tool's runs, where
+`ShaderCompiler.StepsOf`'s steps run. `procedures.vulkan` counts the device-
+and instance-level procedures `VulkanProcResolver` resolves.
+`shaders.sdf-kernels`, `shaders.fullscreen-pass` and `shaders.set-manifest`
+count the shader loads in `SdfWorldKernels`, `FullscreenPassNode` and
+`ShaderSetManifest` and the bytecode bytes each read. Requests, tool runs,
+resolutions and loads are per-backend-deterministic; cache hits are pacing,
+because the compile cache under the state root outlives the process. The
+World registers the shader sources in both presentation shapes, and the Vulkan
+backend registers its own. The zero-allocation law
+`ASteadyStateFrameAllocatesNoManagedMemory` in `ShaderPipelineRenderNodeLawTests`
+passes in serial full runs; an intermittent failure once seen under a fully
+parallel run has no confirmed cause, and a failure names the allocating types.
+
+P3 has landed. Pipeline resources are versions: a version names the predecessor it forwards
+in `from`, the chain shares one storage, and the planner orders every reader of
+a forwarded version before the overwrite and refuses, by name, a cycle, an
+incompatible kind, format, extent or sample count, a second successor, a
+forward of a public output, history, a host input or an unwritten version, and
+a read of discarded contents. Outputs are a list of version names, and
+`persistent` is gone. The plan carries each pass's ordered accesses with their
+prior states and barriers, including the first use of a frame, and
+`ShaderPipelineRenderNode` records exactly those; the node's own prior-use
+search, its counter, and its image layout tracking are deleted. Zero
+initialization clears only the instances a pass reads before writing.
+
+The plan admits attachments. A graphics pass's written version is an attachment
+of its render pass, loaded when it forwards a predecessor and cleared otherwise,
+stored exactly when anything uses it afterwards, and left in its attachment
+layout; the next planned barrier, a sampling reader's included, moves it on. A
+`Geometry` pass draws the indexed triangle list its document declares
+(`geometry`: vertex entry point, stride, attributes, vertices, 16- or 32-bit
+indices) into one color image and optionally one `D32Float` depth version,
+tested by `depthCompare` and written where a fragment passes. The planner
+validates extent, sample count, format, vertex layout, and index type, count
+and range, and refuses blending, multisampling and alpha test by name. Both
+backends draw that geometry opaque, single-sampled, unculled and flat as the
+fragment stage shades it, with clip-space +y at the top of the attachment:
+Vulkan's neutral pipelines draw through a negative-height viewport and no
+longer blend, which also turned the fullscreen adapter's UV the right way up on
+Vulkan. One image type with declared usages replaces the storage-image and
+render-target types, one exportable image replaces their exportable pair, and
+vertex and index data are usages of one geometry buffer; a render pass and its
+framebuffers are separate objects over those images. The
+`pipeline-geometry` canary draws two geometry passes through one color and one
+depth chain on both backends, and GPU-free laws hold the plan, the node's
+recording and each backend's refusal of incompatible attachments. The float
+preview, overlays and `FullscreenPassNode` draw through the same render passes.
+The vertex stage of a geometry pass receives no parameters; a camera or
+per-instance transform for mesh geometry belongs to P4.
+
+P5-1 has landed. A `views.pipelines` row carries per-instance
+`overrides` keyed by pass and config field, an authored `output`, and its
+`timeScale`. The server binds them through the pass's config schema whenever a
+mutation changes them. `pipeline.set`, `pipeline.output` and
+`pipeline.time … scale` preview values for the session, `pipeline.overrides`
+shows them beside the committed values, and `pipeline.commit` submits the
+`CommitViewPipeline` mutation. That mutation carries the row's revision and
+the installed source's content and config-schema identities, and the
+`pipeline.overrides` door refuses a stale, edited-source, or incompatible
+commit by name. `world.save` writes through the atomic file writer.
+`PipelineOverrideLawTests` cover a commit that survives save and reload, two
+instances of one source, a concurrent source edit, a stale revision, the wrong
+instance, the bind refusals, and a headless and a rendering host accepting the
+same commits. The `pipeline-override` canary saves a committed exposure,
+relaunches the World on the saved document, and checks the regions its
+arithmetic predicts. The source identity covers only the file a row names, or
+a package's whole closure through its manifest. A boot, `world.load` and
+`world.reload` bind every row's overrides against its source and refuse a bad
+value by name, and a replay tape records the source reader's directory, so
+`replay.verify` re-drives a recorded commit to its live outcome.
+
+P5-2 has landed. Every compile collects its source closure (`ShaderSourceClosure`) before
+the cache is consulted. The closure reads each include line of every file, so
+a missing include is refused by name even after a warm compile. The closure
+fits `ShaderSourceLimits`, whose refusals name the expanded bytes, a file's
+size, the include count and depth, and the native tool runs.
+`ShaderCompileIdentity` is the compile's machine-independent half: the
+compiler and adapter revisions, each stage's profile and tool steps from
+`ShaderCompiler.StepsOf`, and every file's content hash. The cache key hashes
+it, and the package manifest records it.
+`puck shaders package` writes a `puck.shader.package.v1` package: the source
+closure at logical paths, content pins, the pinned tool versions, and the
+capabilities the plan requires. `puck shaders pipeline` loads one from any
+directory with its source tree gone. Loading refuses a malformed manifest, a
+missing or altered file, a closure other than the listed files or outside the
+package, a limit, other capabilities, a missing or different tool, and a pass
+identity that differs, each by name. `ShaderPackageLawTests` hold these over
+fixture data. A `views.pipelines` row's `source` names a package by its
+directory, and the World loads it through `ShaderPackager.LoadSource`: every
+package refusal is the instance's failed compilation by its code, and the
+row's overrides bind against the package's config schema. The
+`pipeline-package` canary packages a fixture with the candidate CLI, moves it,
+deletes the source copy, and asserts that a source row, the relocated package
+row carrying the saved override, and a relaunch on the saved document all
+capture the override's arithmetic, while an altered package file fails with
+`SHADERPKG_FILE_PIN`. That canary and `pipeline-override` hold on both backends, so
+P5 is complete. P8 extended the manifest: each pass entry records its
+interface hash, and the package carries its precompiled binaries.
+
+P7's gate spike has run its build-time half; P10 has not
+started. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
+lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
+`sdf-film-grain.frag.hlsl` and `pixelate.comp.hlsl`, each with a frame group
+at set and space 0 and a pass group at set and space 3, because a group's
+ordinal is its set. On the build-time criteria the spike passes for HLSL
+through DXC:
+
+- The SPIR-V reader and the DXIL reader find the same group, binding and
+  offset for every member of both groups. The DXIL reader uses only DXC's
+  documented reflection interface.
+- DXC's SPIR-V and DXIL are byte-identical across two builds on one host.
+- The generated annotations express the second group on both backends with no
+  register remapping.
+- A hand-edited offset fails the SPIR-V reader, and a removed padding member
+  fails the DXIL reader.
+
+The same build showed that a group holding a sampler needs a second table on
+Direct3D 12, because a descriptor table cannot mix samplers with other views.
+The gate stays open until three legs run:
+
+- one build on Linux compared byte for byte, which needs the pinned DXC that
+  `setup-dxc` installs;
+- the two-group layout on Direct3D 12 and Vulkan inside the parity contract,
+  with one parity station, once both backends build more than one set;
+- the capability reports on the floor and ceiling devices.
+
+P8 has landed, pending its GPU canaries; the frame group's move from push
+constants to a descriptor set waits on P7's grouped binding. HLSL is the one
+source language. `ShaderCompiler` runs DXC alone, a pass document names no
+language, and the Shadertoy adapter, the GLSL front end, the translation back
+into HLSL and the register remap are deleted, so a compile identity is the
+compiler revision, the stages and their DXC steps, and the closure.
+
+A pass reads its frame data only through its frame block, a pass interface the
+engine derives from the pass (`ShaderFrameInterface`): extent, pointer, the
+engine tick and tick rate, presentation time and its delta, the frame count,
+the pointer's pressed state and press count, and the paired camera, then the
+pass's config fields in ordinal name order, all in the frame group. The group
+is delivered as push constants (`ShaderInterface.PushConstants`, Direct3D 12
+root constants at `b0`, space 0) until P7's grouped binding binds it as a set.
+Its declarations are generated into `<interface>.interface.hlsli`, which the
+loader supplies in memory for a pipeline pass and a shader set checks in, and
+the host writes the block through `ShaderPipelineParameterLayout.WriteFrame`.
+`ShaderFrameConstants`, `ShaderFrameInput`, `IShaderPipelinePassConstants`,
+`ShaderPushConstantLayout` and `ManifestPassConstants` are deleted, with the
+shader-set manifest's `pushConstants` block and the hand-declared frame
+structs. The ink passes, the package canary's tint, the Moth, the genesis card
+and film grain read the generated block; the pointer has Puck's top-left
+origin and the sources are re-derived so each renders the same, and film grain
+quantizes the tick to its flicker period itself, exactly as the host did.
+`ShaderFrameBlockLawTests` holds the offsets DXC assigned every shipped pass,
+in both bytecodes, to the host writer's.
+
+A package carries, for each pass, its interface, the generated declarations
+and its SPIR-V and DXIL for the `default` variant; the pass entry records the
+interface hash, which versions both. A build holds every binary's reflected
+block, and each interface's generated echo pass, to the layout
+(`SHADERPKG_INTERFACE`); a load reads the binaries and runs no tool, so
+`SHADERPKG_IDENTITY` is retired. A KERNEL-class probe kind's kernel and the
+camera frame converter's conversion kernels compile to `cs_5_0` at build
+(`CompileDirect3D11Kernels`), and the Direct3D 12 surface compositor's blit
+compiles to DXIL at build; a device only creates them, and no Puck assembly
+imports the Direct3D HLSL compiler (`NoDeviceShaderCompileLawTests`).
+
+The game's build packages every pipeline source a shipped world's row names:
+the tree run that writes the compiled worlds writes one package per source and
+name into the package store beside them (`Assets/worlds/packages`), keyed by the
+source's closure, its passes' interfaces and its plan's names
+(`ShaderPackager.KeyOf`). The World's packager loads a source row from the
+stored package with its key and compiles nothing, wherever the booted document
+lies; a source with no stored package compiles in a checkout that has DXC and
+is refused by `SHADERPKG_ABSENT` where nothing can compile it. The shipped rows
+name the ink pipeline and the Moth shader; film grain is a shader set whose
+bytecode the SDF build compiles. The `pipeline-echo` canary runs the generated
+echo with `pipeline.sentinels` on and a hand-perturbed copy of the declarations.
+The `no-device-compile` canary hides DXC from the World's path and renders the
+shipped ink pipeline from its stored package and a relocated package from its
+binaries, while an unpackaged source is refused. Both canaries wait for their
+GPU run, after which P8 is complete.
+
+Open: the frame group's descriptor set and the pass group's named inputs wait
+on P7's grouped binding; only the `default` variant is built, with no authored
+quality tier; and the worlds under the repository's `worlds/` tree, the genesis
+card among them, are not part of the game's build, so their source rows compile
+where DXC is present.
+P9's CPU half has landed; its frame-group half is open. Every presentation
+read of state goes through one state mirror, `WorldStateMirror` in
+`Puck.World.Protocol`: a flat table of slots, each a row ordinal, a key, a
+target flag, and a conversion. A binding the document authors registers its
+slot once, by the HUD resolver, camera rigs, markers, render colors, the theme,
+the binding bar, overlay predicates, the radial wheel and the binding bar's
+icon row; the wheel and the icon row both read a keyed cell through
+`WorldStateCells`, which keeps each slot it registered. A read made on behalf of a body or a seat acquires its slot through a
+`WorldStateLease`, and releases it when the body leaves, the seat's route or
+controlled body changes, or the mirror installs a document: a look's lanes, gait
+drivers and their gates, pose frames, effectors, body scale, and a seat's
+state-backed binding contexts. A `$body` key names the lease's body, so each
+body reads its own slot of one table. The token is parsed once, by
+`StateBinding.TryParse`, and a bindable stores the parse. The mirror reads
+through `IWorldStateView`, the presentation view's state interface, which
+`WorldDocumentStateView` implements over a delivered definition today. A state
+delivery carries a `WorldStateStamp` with the tick, the engine tick, and the row
+ordinals the server's export sweep found moved, so the refresh in
+`WorldClient.DeliverState` reads only the slots bound to those rows plus the
+trait-bearing slots still moving, and a snapshot tick with no delivery
+refreshes only the moving ones. A `WorldSessionMirror` keeps the rows its
+deliveries moved until the presentation follows them, so a session view and a
+seat routed to another authority read only moved slots too. A seat's camera
+operands, its body scale, its contexts and its wheels read the mirror of the
+authority the seat is routed to: the client's own for the authority it
+observes, and that authority's followed session mirror otherwise. A route
+change can be published off the presentation thread, by a federated observer
+reporting an onward handoff, but the seat mutation and the mirror binding that
+follow it run on that thread: `WorldSeatAuthorityRouter.RouteChanged` fires only
+from `DeliverRouteChanges`, which `WorldHostStep` calls at its fixed points, so
+the mirror keeps its one-thread, no-lock design. The theme and the radial
+wheel's rings (`WorldWheelRings`) re-resolve only when a slot one of their own
+cells reads changes. The capture
+scheduler reads a camera `select` key through a mirror over the server's
+document at the armed tick. `WorldFramePresenter.CaptureFrame` applies the
+frame's interpolation fraction before the program build and the transform
+pack: an easing or advancing slot presents between its previous and current
+tick samples, a plain or cycling slot steps, and the offscreen presentation
+pins the fraction to one. Presentation time is that fraction and the delivered
+tick, computed on the presentation side; nothing writes it into a frame group
+yet. The same moved set reaches the SDF renderer:
+`SdfCompositionFrameSource` keeps its dynamic-transform table across frames,
+emitters repack only owners whose inputs moved or that are still settling, and
+`SdfMovedTransforms` hands each engine the ranges owed since the frame it last
+consumed, so a still frame packs and stages no transform rows, and
+`world.counters` reads those counts as `sdf.transforms`, summed over the main
+frame source and the one each session view composes for itself. A material
+color still resolves at program build.
+
+A pipeline row reads no state row. Its frame block carries the frame's engine
+tick from the frame context and presentation time from the entry's own
+presentation clock; P9 fills both from the mirror's delivered tick and
+interpolation fraction. Every shipped shader binding declares descriptor set
+zero and no shipped source names a Direct3D register space, so the resource
+layout is one flat set with hand-assigned register numbers documented in
+banner comments.
+
+P7's adapter memory profile and residency selector have landed; its
+consumer migration and its binding groups have not. `IGpuDeviceContext`
+reports a `GpuMemoryProfile` beside its identity, filled at device creation
+from `D3D12_FEATURE_DATA_ARCHITECTURE`, `DXGI_ADAPTER_DESC1` and options 16's
+GPU upload heap support on Direct3D 12, and from the device type and
+`vkGetPhysicalDeviceMemoryProperties` on Vulkan. `GpuResidency.Select` maps a
+profile and a region's size onto writing in place, a per-frame ring, or a
+staged copy, and `GpuRegion` writes a region under any of the three through
+the neutral buffer, descriptor and compute-recorder interfaces. Its staged
+copy speaks the ABI of `sdf-frame-upload.comp`, which stays in the SDF engine
+until that engine adopts the region. `pipeline.inspect` ends with the profile
+and the policy chosen for the instance's parameter bytes. No consumer writes
+through a region yet: the SDF engine's host-table ring, its
+`sdf-frame-upload.comp` copy and brick staging, and the overlay's
+host-written buffer still upload by hand. The neutral buffer factory places a
+ring's buffers in host-visible memory, not in the device-local aperture the
+profile reports, and an in-place region serves a caller that retires every
+frame reading it before it writes, as the overlay does and the SDF engine's
+frame ring does not. The one state-shaped path that reaches the GPU is the
 physics field lattice, mirrored on the client by `WorldClientFieldLattice` and
 uploaded by `WorldFieldEmitter` one field per produced frame.
+
+P11's CPU half has landed; its second half, P11b, waits on P3-2 and P7's
+binding groups. The frame graph is a document, `puck.render.graph.v1`
+(`RenderGraphDefinition` in `src/Puck.Shaders/Graph`). Its members are the
+pipeline document's, plus `packages`: engine work named by package id from
+`RenderGraphPackageCatalog`, which offers `sdf.world`, `overlay` and one
+`post.<id>` package per shipped post-process set. `RenderGraphCompiler` plans a
+graph with P3's planner through its public API: a package pass enters the plan
+as a compute pass whose source is `package:<id>`, so one planner orders,
+versions and barriers every pass. `RenderGraphDocumentLawTests` holds every
+checked-in pipeline document to planning identically as a graph, and
+`puck schema` generates the document's schema. A world names instances in
+`views.graphs`: a graph source, a camera, a refresh divisor or rate, and
+inputs bound to other instances' outputs, with `views.graphBudget` as the
+scheduling policy's price. The instance model and the demand scheduler live in
+`src/Puck.Hosting/Graph` (`RenderGraphInstanceSet`, `RenderGraphScheduler`) as a
+pure function of what the frame shows. `RenderGraphSchedulerLawTests` shows a
+camera on two screens scheduled once per frame, a camera whose only screen is
+off view scheduled zero times, a mirror reading its previous frame, a
+same-frame loop refused naming both instances, a quarter-screen view scheduled
+at a quarter of the extent, a divisor honoured while consumers read the latest
+completed output, and a budget that defers the freshest instance and starves
+none. The world validator refuses a same-frame loop of `views.graphs` inputs by
+the scheduler's rule. Every instance appears in the cost report's
+presentation dimension (`WorldPresentationCost`) and in `world.budget` with its
+extent ceiling, rate and planned passes; the server plans each row's source
+for that price.
+
+P11b owes the rest of the package. The live renderer does not run graphs:
+`SdfEngineNode`'s child composition, `ViewStack` and `WorldPipelineRuntime`
+still render every view, nothing feeds the scheduler a frame, and
+`views.pipelines` rows and layout slots do not name graph instances yet. P11b
+wires `WorldBootComposition`'s node tree onto graph instances fed by the
+scheduler, puts the live schedule's extents and prices in `world.budget`,
+runs the parity and counted-GPU checks, makes a steady-state schedule
+allocate nothing (today each `Schedule` call allocates its result and the
+next history), and makes the deletions P11 lists,
+including the `puck.shader.pipeline.v1` schema, whose documents then need only
+their tag changed. It also needs one planner change: a first-class package
+pass kind in `ShaderPipelineCompiler`, so a package pass stops travelling as a
+compute pass with a `package:` source.
+
+P13's CPU half has landed; its second half, P13b, waits on P12b and P11b. The
+published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
+or pane placement, an optional warp pass, a UV layout, a letterboxing fit and a
+crop, as data. A warp declares its exact inverse (`SourceWarpInverse.Affine`)
+or refuses as an input path while still drawing. `MapRay` and
+`MapDisplayPoint` invert the chain in fixed point over
+`FixedVector3.TryIntersectPlane`, `Puck.Maths`'s ray and plane intersection,
+which oracle laws pin. The three destinations are defined:
+`Simulation` reads a pointer ray from the `source.pointer.origin` and
+`source.pointer.direction` Axis3D commands in a tick's snapshot and maps a
+surface only; `Passthrough` needs a source the local user opened, and
+`SourcePassthrough.ToClient` states the client-coordinate and DPI contract;
+`Presentation` is the `ISourcePicker` seam. A world screen's `route.input`
+names its destination, `WorldScreenMappings.Of` publishes the row's mapping with
+the glass bezel as its warp, `world.screens` echoes the destination, and the
+validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
+keys and text to a focused passthrough source, sends each release where its
+press went, and returns focus to the game on Control, Alt and Escape.
+`RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
+source through the producer's camera up to a depth limit, normally
+`RenderGraphInstanceSet.NestingDepth`. The pipeline pane's pointer
+(`WorldFramePresenter.ResolvePipelineMouse`) maps through its pane's
+`SourceMapping`. The laws are `SourceMappingLawTests`,
+`SourcePointerCommandLawTests`, `RenderGraphHitWalkLawTests`,
+`SourceFocusLawTests`, `WorldScreenInputLawTests` and the Maths
+`vector.ray-plane-*` laws.
+
+P13b owes the rest. Nothing publishes a mapping from the live renderer, so the
+screen shading still reads its own bezel constant, which `WorldScreenMappings`
+mirrors, and the GPU does not yet draw from the mapping. `SourceHandle` stands
+in for P12's producer id until P12b names sources in the graph. No host feeds
+`SourceFocus` or delivers a focused source's input to its window, no module
+registers the pointer commands or reads them into a machine, and no host
+implements `ISourcePicker`. The recorded Windows run, a click reaching a
+captured editor window at the mapped point and the chord returning input to the
+game, belongs to P13b.
+
+Rendering today is a tree of `IRenderNode`s
+(`src/Puck.Hosting`), with no scheduler: each node calls its children's
+`ProduceFrame` from inside its own. `WorldBootComposition` builds the live
+chain:
+
+1. `SdfEngineNode`, which also hosts each `views.pipelines` pane as a child
+   slot.
+2. One `FullscreenPassNode` per `render.extensions` row. Each one already runs
+   on an internal `ShaderPipelineRenderNode`.
+3. `UnifiedOverlayNode`, which draws the console, HUD, toasts, and cursor.
+4. The launcher, which hands the result to a surface compositor that blits one
+   image to the swapchain.
+
+The SDF engine's second stage composites panes and child views, up to
+`SdfWorldEngine.MaxViewports` (5). Diegetic screens are 32 fixed sampler slots
+with a nearest filter. Nested cameras are `ViewStack` entries refreshed
+round-robin under `OffscreenRenderBudget`: 4 per produced frame, 64 registered.
+A view that would see itself reads slot 0 and draws the procedural test card,
+and a chain of different views lags one frame per hop.
+
+`Surface` already distinguishes CPU pixels, a shared handle, and a same-device
+image, but `SurfaceFormat` has only two 8-bit RGBA formats, the SDF engine's
+internal targets are `R8G8B8A8Unorm`, and no HDR color space is selected
+anywhere. The tonemap is an ACES fit applied at the end of the SDF view pass.
+There is no jitter, motion vector, or history in the SDF kernels; render scale
+is a bilinear-to-Catmull-Rom upsample in the composite pass.
+
+P12's source contract, producer registration and conversion passes have
+landed; the graph wiring, the uploads through P7's residency, and zero-copy
+import are owed. Every image that enters rendering from outside a pass is
+described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
+transport, extent, pixel format (including palette-indexed and NV12), color
+encoding, cadence, presentation stamp, content class and capture fill. A world
+document names a producer by id, as a `producer` source with a settings object,
+so the four shipped producers (`testPattern`, `qr`, `camera`, `capture`) and any
+a host adds register a shape in `WorldImageProducerVocabulary` and a runtime in
+`WorldImageProducers` with no schema change. `testPattern`, `qr`, `camera` and
+`capture` are producer ids rather than source kinds, and no `console` source
+exists. The machine, view, probe and
+session arms stay typed because each names a document row; an emulator joins as
+a machine engine. External content resolves through `WorldCaptureGate`, so a
+capture shows its declared fill and never its pixels. That covers every frame of
+an offscreen host, which serves captures and `puck parity`, and a windowed frame
+from a `world.screenshot` for two frames after. A deterministic source states the
+exact image it shows (`IImageSourceReference`) for the exact verdict
+`ImageSourceVerdict`, which the P12b canary will apply before composition.
+
+An uploaded source's pixels travel as one region, `ImageSourceUploadLayout`'s
+header and planes. The shipped kernels in `src/Puck.Shaders/Assets/Shaders/Sources`
+convert a region into the image a consumer samples. `source-palette` and
+`source-nv12` use a stated matrix and range with co-sited chroma. `source-rgba`
+carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
+linear light. `ImageSourceConversion` is their CPU reference, and the
+`source-conversion` canary holds the palette and NV12 kernels to it on both
+backends. No producer writes a region yet. The emulators still publish through
+`IMachineVideoOutput`'s own `IGpuSurfaceUpload`, and the test pattern, the QR
+code, the capture CPU tier and the fills through `CpuSurfaceSource`. Each waits
+for P12b to record its region flush and conversion dispatch as a graph source
+node. Desktop capture runs through `Win32GraphicsCaptureFeed` and cameras
+through Media Foundation (`Win32MediaFoundationCameraService`). Linux registers
+null capture services, and there is no POSIX file-descriptor import, external
+semaphore, or keyed mutex.
+A hit maps back to a source's pixels only through P13's CPU model; no live
+consumer feeds it a world-surface hit yet. The GPU bakes
+settled carves into 128-cubed bricks (`SdfWorldEngine.BrickBake.cs`).
+
+P17's CPU half has landed; its GPU half is open. `SdfBaker`
+(`src/Puck.SignedDistance/Baking`) bakes a program through `SdfFieldEvaluator`
+into an indexed mesh, five surface textures and an octahedral impostor
+([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).
+Every texture is a tile-aware mip chain that ends at one texel per tile, filtered
+in its declared space, and stored block-compressed by the CPU codecs in
+`Puck.Assets.Textures`: albedo as BC7 in sRGB, normals as BC5 octahedral pairs,
+occlusion and impostor depth as BC4, and emission as BC6H, while material
+identity stays uncompressed with majority mips. The encoders write the same
+bytes on every machine and each has an exact decoder as its test oracle.
+Dual contouring won the extraction: it strays from the field about half as far
+as surface nets did, for about a tenth more evaluations over a whole bake, and
+surface nets is deleted. A bake is keyed by the creation pin, `SdfBaker.Version`
+and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
+chunk fills it, so a released world bakes nothing on the device, and a
+presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
+pool, keeps it under the state root, and reports it ready through the
+`sdf.bakes` counters ([creation bakes](../architecture/worlds.md#creation-bakes)).
+`SdfBakerLawTests` and `CreationBakeLawTests` hold the laws. A compiled world's
+`BAKE` chunk names only the keys it needs; the build writes the standard tier's
+bakes once, in one bake pack (`bakes.puckbake`) at the root of the shipped
+worlds, so a creation several worlds share is baked and shipped once. A bake is
+the same bytes on every machine: the baker reads the field in fixed point,
+writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
+against exact thresholds.
+
+P17 still owes:
+
+- drawing a bake, which needs P3-2's indexed geometry and P4's shared
+  visibility, and choosing per placement between a bake and the field by P6's
+  measured cost;
+- the device half of the bake sampling check: uploading the BC7, BC5 and BC6H
+  textures of `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json` with
+  every level and sampling each probe texel on both backends, which needs a GPU
+  image of a block-compressed format with mip levels; `BakeSamplingFixtureLawTests`
+  holds the fixture's GPU-free half;
+- the partitioned BC7 modes and two-region BC6H modes, which neither encoder
+  writes nor decoder reads, and an emission texture for the impostor;
+- the parity world shipping its bakes, and the check that a missing bake draws
+  through its field and then switches.
+
+The two largest kernel includes are `sdf-vm.hlsli` (4,584 lines) and
+`sdf-world.hlsli` (2,814 lines). The frame data is written by hand in three
+places: an `SdfFrame` field, a numbered row in the packed buffer, and an HLSL
+accessor. `viewport-composite.comp.hlsl`, `pixelate.comp.hlsl`,
+`resample.comp.hlsl`, and `sdf-child.comp.hlsl` compile but have no consumer.
 
 ## The forcing artifact
 
 [The forcing world](state-and-language.md#the-forcing-world) is rendered on
 both backends through the pipeline this programme ships, and one arcade
 screen in it is a hybrid scene: a mesh cabinet in front of SDF ground. That
-proves P1a's fixtures on real content, P2's timing on a scene someone plays,
+proves P1a's fixtures on real content, P2's work counters on a scene someone plays,
 P3 and P4's shared visibility where a body walks behind a placed surface, and
 P5's overrides when a district author tunes one cabinet's glow while the other
 keeps its default.
@@ -55,25 +643,49 @@ keeps its default.
 It also gives P10 a bound row a player can see: the Cistern's water pass reads
 the reservoir's level, so a rule that fills the pool changes the picture.
 
+The same world exercises nesting. The arcade cabinet's screen shows an
+embedded emulator, so its source image gets an exact verdict. A security
+monitor shows a game camera from elsewhere in the world, and a mirror faces
+itself. An author working on the world opens their own editor window in a
+picture-in-picture pane and clicks into it. The Steam Deck runs the world
+with temporal upscaling. On the desktop, an HDR
+display shows the world through the HDR output path.
+
 **Check:** `puck parity` over the forcing world's captures on both backends;
 the P4 hybrid fixtures over the arcade scene; a saved override survives exit
 and reopen with the same image; the Cistern's level moved by `world.row.set`
-changes its captured pixels and the same pass bound to a literal does not.
+changes its captured pixels and the same pass bound to a literal does not; the
+cabinet's source image matches the emulator's framebuffer exactly; the camera
+shown on two screens renders once per frame; the mirror shows the previous
+frame; the editor pane receives a click at the mapped point and appears only as
+the redaction fill in every capture; a recorded Steam Deck run renders the
+world with temporal upscaling on; and the HDR path passes P16's check on the
+desktop. Whether the Steam Deck run holds a frame-time target is not checked:
+wall-clock and GPU timing are deferred with no date.
 
 ## Packages
 
 Each package's two halves land together, because the second is what makes
 the first observable. Source entry points: planning and loading in
 `src/Puck.Shaders/Pipeline` (`ShaderPipelineCompiler`, `ShaderPipelinePlan`,
-`ShaderPipelineModel`, `ShaderPipelineLoader`); execution and replacement in
+`ShaderPipelineDefinition`, `ShaderPipelineLoader`); execution and replacement in
 `ShaderPipelineRenderNode` (`Ensure`, `InstallPending`, `ProduceFrame`,
 retirement); the fixture runner in `tests/Puck.World.Canaries` and
 `src/Puck.Cli/Canary`; authoring in `WorldPipelineCommandModule`,
-`WorldPipelineRuntime`, `WorldViews`; timing in `src/Puck.Abstractions/Gpu/Timing`
-and `SdfWorldEngine.Diagnostics`; graphics in `src/Puck.Abstractions/Gpu`,
+`WorldPipelineRuntime`, `WorldViewPipeline`; work counting in
+`src/Puck.Abstractions/Counting` and `src/Puck.Abstractions/Gpu/Counters`;
+graphics in `src/Puck.Abstractions/Gpu`,
 `DirectXGpuPipelineFactory`, `VulkanNativeGraphicsPipelineApi`, and the SDF
-engine's cull, primary, surface, and views passes. Load `sdf-world` for GPU
+engine's cull, primary, surface, and views passes. Load `rendering` for GPU
 work and read the contributing guide before touching a backend.
+
+To pick up a package, recheck its **Starts from** facts against the current
+commit first, because they record what the code did when the package was
+written. Then confirm that everything under **Depends on** has landed, deliver
+what the package lists, and close it with its **Check**. Tick it here and in
+[open items](open-items.md) in the same change. Packages P1a to P10 predate the
+**Starts from** and **Depends on** labels; for them, the implementation status
+above and the sequencing below carry that information.
 
 ### P1a — Durable functional fixtures
 
@@ -122,30 +734,80 @@ failure cases on both backends with independent expected results and explicit
 unsupported-environment outcomes; near-budget replacement refusal and
 recovery.
 
-### P2 — Per-pass timing and comparable measurements
+### P2 — Per-pass work counters and the collector
 
-**Owns:** the shared timing read contract and every producer and consumer of
-it, pipeline query recording, `pipeline.inspect` and pass status, the World
-timing reports, the Puck CLI measurement collector.
+**Owns:** the one deterministic work-counting model in `Puck.Abstractions` and
+every counter that reports through it, including the arena's lane visits,
+change-window probes, and leased scratch elements; the counting wrappers
+over the neutral GPU recorder, descriptor, buffer, and submission interfaces;
+the GPU work sample and its producers in the shader pipeline node, the SDF
+engine, and the overlay node; `pipeline.inspect`, `pipeline.status`, and
+`world.counters`; and the Puck CLI counter collector.
 
-**Delivers:** one completed sample carrying revision identity, a monotonic
-submission identity, the executed-pass labels and their validity, and
-whole-submission duration, read only after completion with query pools
-protected by frame completion and reused without a wait per pass. Reset,
-resize, reload, pause, skipped passes, and arm or disarm never present old
-values as fresh; unavailable is distinct from a measured zero; repeated reads
-may return the same sample and observers deduplicate it; labels and durations
-describe the same completed submission, never a pending candidate or a
-re-laid-out installed graph. The collector records GPU, driver, backend,
-compiler identity, resolution, warm-up, duration, and source revision, and
-reports median and tail frame times, per-pass cost, CPU allocations, owned
-GPU bytes, and reload spikes over one authored workload. A node's submission
-time is never equated with delivered frame time.
+**Delivers:** performance is judged by code, disassembly, and deterministic
+counts. Wall-clock and GPU timing are deferred with no date, so the timestamp
+query pools, timing recorders, the pass-timing source interface, and their
+per-pass millisecond readouts are deleted rather than kept dormant; that
+retirement is done. A counter is a
+named count owned by one instance; it only goes up and is never reset, and a
+reader takes a window by reading it twice. Any engine service can expose
+counters through one source interface, and a collector reads them without
+knowing the service. GPU work is counted once, where every node records: a
+node wraps its neutral GPU services, and the wrappers count dispatches,
+indirect dispatches, draws, render passes, command buffers, the image, memory,
+and buffer barriers a node requests, pipeline and descriptor-set binds,
+push-constant bytes, descriptor writes, bytes written to host-visible buffers,
+and storage image and buffer clears. Each count goes to the pass the node has
+entered, and work outside any pass has its own row. Lifetime counts cover
+pipelines, shader modules, images, buffers, descriptor pools, and descriptor
+sets created; shader compilation requests, cache hits, and tool runs; shader
+loads and the bytecode bytes they read; and Vulkan procedure resolutions.
+Counts live in preallocated arrays, and counting
+allocates nothing in a steady-state frame.
 
-**Check:** pending queries across a reload with reordered or renamed passes,
-repeated polling while paused, reset then resume, unsupported timestamps, and
-skipped work; sample identity, label and duration alignment, query lifetime,
-and no duplicate counting.
+A node publishes one completed sample. It carries revision identity, a
+monotonic submission identity that reset never rewinds, the labels of the
+passes it was recorded under, and each pass's state: executed, skipped, or not
+reached. A sample is published only once its submission's fence is known
+complete. Reset, resize, reload, and pause never present old values as fresh:
+after reset, resize, or reload there is no sample until a newer submission
+completes, and a paused node keeps returning its last one. Unavailable is
+distinct from a measured zero, and a skipped pass reads as skipped, never as
+zero. Repeated reads may return the same sample, and observers deduplicate it
+by submission identity. Labels and counts describe the same completed
+submission, never a pending candidate or a re-laid-out graph, because each
+submission keeps the label list it was recorded under.
+
+The arena counters named under **Owns** are migrated. `StateArena`
+reports its lane visits, change-window probes, and leased scratch elements
+under the `state.arena.*` kinds of `ArenaWork`, and the change-window count
+never resets when a window closes. The pipeline node has no prior-use search to
+count: the plan gives every access its prior state.
+
+The collector boots an authored workload offscreen once per backend and
+records the GPU, driver, backend, compiler identity, resolution, and source
+revision beside the counts. It says which counts are deterministic.
+Per-submission counts at pinned inputs are deterministic and must also match
+across the two backends. Lifetime counts at a fixed extent with a fresh shader
+cache are deterministic within one backend. It keeps apart the counts that
+depend on wall-clock pacing, such as the number of submissions in a window and
+how often the SDF cadence skips. It reports managed allocation only as zero or
+not zero, over the least of several windows. Two runs of the same workload at
+the same code compare equal on every deterministic count.
+
+**Check:** laws over a fake recorder, with no GPU: every call counted once and
+passed through once; nothing available before the first completion; nothing
+published before completion; submission identity strictly increasing across
+reset; a submission pending across a reload with reordered or renamed passes
+publishes its own labels; repeated reads while paused return one submission;
+after reset, nothing is published until a new submission completes; a skipped
+pass reads as skipped; no allocation in a steady-state frame; and the three
+migrated arena counters read through the model with their laws unchanged in
+meaning.
+On both backends, the `pipeline-counters` canary reads exact per-pass counts
+for the feedback graph at its initialization and steady-state submissions,
+identical on Vulkan and Direct3D 12, with a changed graph as the negative
+control. `puck search -M 0` finds no timing type left.
 
 ### P1b — Foundation qualification
 
@@ -154,14 +816,135 @@ and no duplicate counting.
 **Delivers:** against the packaged candidate that ships the forcing world, the
 recorded GPU, driver, backend, resolution, workload, warm-up, sample duration,
 repeat count, stability soak, and reload, resize, load, and unload counts, with
-numerical thresholds for frame-time median and tail, memory peaks, and reload
-stalls, and the intended publish mode and compiler-discovery policy. Run on
-the producer-built package, never a source rebuild, from a clean installation
-and cache, in the Native AOT form if applicable. It covers the existing
-foundation assets and toolchain; P5's user-content packaging is separate.
+numerical thresholds for memory peaks, and the intended publish mode and
+compiler-discovery policy. Run on the producer-built package, never a source
+rebuild, from a clean installation and cache, in the Native AOT form if
+applicable. It covers the existing foundation assets and toolchain; P5's
+user-content packaging is separate.
+
+Thresholds for frame-time median and tail and for reload stalls are deferred.
+They need wall-clock and GPU timing, which the owner has deferred with no date,
+so P1b sets none of them and does not wait for them.
 
 **Check:** both-backend functional and stability matrix plus the agreed
-thresholds on the shipping candidate, or explicitly blocked checks.
+memory thresholds on the shipping candidate, or explicitly blocked checks.
+
+Direct3D 12 buffer transitions now take a buffer's first before-state in each
+command list from its declared prior access. The buffer has in fact decayed to
+`COMMON` after its previous submission, so the transition relies on implicit
+promotion. That has never been checked under the debug layer, because the
+debug layer fails device creation on the reference RTX 4070. P1b's run on a
+machine where the debug layer works is the evidence that settles it:
+`puck qualify` runs every Direct3D 12 cell under the debug layer when the
+release profile asks for it, and any debug-layer message fails the cell.
+
+**Pipeline creation leaves the frame thread.** The SDF engine used to build its
+compute pipelines, about 14 for the world and about 12 for each view,
+synchronously on the frame thread the first time it produced a frame. With the
+driver's shader cache cold, which happens after every kernel or driver change,
+and several processes compiling at once, that took tens of seconds. The frame
+thread drained nothing in that time, so console waits could not reach their
+own deadlines: the `pipeline-supersede` hang on Vulkan was this, reproduced
+with four of six parallel instances stalled inside `vkCreateComputePipelines`.
+On a Steam Deck or a Switch 2-class device it is a frozen first boot after any
+update. DXC compilation is P8's concern; the driver's own translation to native
+code is what the cache covers.
+
+Done: the engine and its views build their pipelines on the thread pool
+(`SdfWorldPipelines` through `Puck.Hosting.BackgroundBuild`, the mechanism
+`WorldPipelineRuntime`'s compilations also use) and install them when ready; a
+kernel reload prepares its pipelines the same way. Until the engine's pipelines
+exist it presents nothing new, but the panes it hosts (`views.pipelines`) keep
+stepping, compiling and installing, and only the engine's own composite waits.
+Each backend keeps a persistent pipeline cache per device, `VkPipelineCache` on
+Vulkan and `ID3D12PipelineLibrary` on Direct3D 12, under the state root's
+`pipeline-cache/<backend>/<vendor>-<device>-<driver>/<kernel-set hash>.bin`,
+validated on load and written atomically; both the windowed and the offscreen
+presentation shapes compose it. One policy, `GpuPipelineCacheFile`, serves both
+backends, and the device directory is named from `GpuDeviceIdentity.CacheKey`,
+the identity the device already read. Each backend keeps its eight most recently
+used cache files across all its device directories: opening a file or hitting
+it refreshes its last-write time, and opening deletes the rest and removes a
+device directory left empty, so worktrees on different commits sharing a state
+root keep their caches and a stale driver's directory ages out. Pipeline
+creations, cache hits and misses, and pruned files are counted per backend
+through P2's model (`GpuPipelineCacheWork`, source `pipeline-cache.<backend>`). The cache belongs to the state root, so a canary
+leg, a `puck counters` leg, or any boot with a fresh `--state-dir` starts cold.
+The offscreen harness holds its clock for that cold build: it steps no tick past
+an armed capture's tick until the capture is served or refused, so a cold first
+boot lengthens a `puck parity` leg instead of losing its first capture, and a
+capture still unserved after a 60-second hold is refused as `unserved`, naming
+the reason.
+
+**Check** for that part, all holding: `SdfPipelineBuildLivenessLawTests` shows
+the frame thread keeps draining the console and a wait keeps its deadline while
+a pipeline build is held, and that a hosted pane still produces every frame
+meanwhile. On both backends, a second offscreen boot on the same state root
+creates every pipeline from a cache hit with no miss, where the first boot
+misses. After a kernel rebuild that changes most kernel binaries, the supersede
+fixture runs six instances in parallel on each backend: every leg installs its
+pipeline, no wait times out, and every leg captures all three images.
+
+A `ShaderPipelineRenderNode` candidate's shader modules and pipelines, with the
+render passes its graphics pipelines are created for and the float preview's,
+build on the thread pool through `BackgroundBuild`, starting at the
+node's next produced frame. Meanwhile the frame thread keeps presenting the
+installed graph, and when it takes the build it allocates the candidate's
+resources and installs it without draining the device; the replaced graph is
+freed once the node's second submission after the install completes.
+
+The engine node and its views share their pipeline sets through one
+`SdfWorldPipelineCache` per composition, carried on `SdfViewGpuServices`: one
+set per device, kernel set (`SdfWorldKernels.ContentKey`) and brick-pipeline
+choice, leased by every holder and disposed with its last lease after any build
+in flight returns. The cache reads each backend's deployed kernels once, and it
+counts the pipelines and shader modules it creates as its own source,
+`gpu.sdf-pipelines`, so no node's or view's ledger counts them. A node whose
+set another engine on the device also leases refuses a kernel reload, because a
+reload replaces pipelines in place. `SdfWorldKernels` describes the kernel
+bytecode as the gitignored build product it is.
+`SdfWorldPipelineCacheLawTests` pins the sharing, the counts and the refusal.
+
+Selecting an output on the installed graph builds its float preview's modules,
+pipelines and targets on the thread pool as well; the previous selection stays
+published until the frame boundary that takes the finished build, and a
+preview that fails to build leaves it published and reports the failure where
+a refused swap reports its own. A `FullscreenPassNode` whose input changes size
+no longer drains the device: the replaced executor retires once its
+successor's second submission after the replacement completes, the rule the
+render node applies to an image it stops publishing.
+`FullscreenPassNodeRetirementLawTests` and
+`TheFrameThreadCreatesNoPipelineOrShaderModuleOnAnyInstallOrSelection` pin both.
+
+Still open in this part: no law without a GPU shows that both presentation
+shapes register the pipeline-cache store, or that the offscreen shape
+registers every verb the collector's script sends. `WorldBootComposition` is
+internal to the `Puck.World` executable and no test links it; P11b rebuilds
+that composition as the frame graph's node tree, and the two laws land with
+it.
+
+The qualification of the packaged candidate has its tool and its profile;
+[Qualifying a package](../development/qualification.md) is the owning
+explanation. The release profile,
+`tests/Puck.Qualification/release.profile.json`, records the publish mode
+(framework-dependent ReadyToRun, since `Puck.World` is not AOT-compatible),
+compiler discovery `None`, the validation layers on both backends, the
+functional canaries, and the stability matrix: both backends, 1280×800 and
+1920×1080, the flagship world (the forcing world is not authored yet) and the
+shipped ink pipeline. Warm-up, soak and churn are counted in ticks and frames.
+`puck qualify <package>` runs that matrix on a published package's own World
+from a clean install and a cold pipeline cache, reads its evidence from
+`world.counters` and `pipeline.inspect`, and judges each cell pass, fail or
+blocked. The debug-layer run answers the buffer-transition question above.
+The peak owned pipeline bytes threshold is set for every pipeline cell. Peak
+device-local bytes is deferred, because no reading of what a World process
+allocates exists. Zero live Direct3D 12 objects after teardown is deferred,
+because the backend never asks its debug layer for them.
+
+Still open: the first runs on the reference GPUs. They either confirm the
+pipeline thresholds or show what to re-record, and they settle the
+buffer-transition question. Direct3D 12 cells are blocked on a machine whose
+debug layer stops device creation.
 
 ### P3 — Attachments and indexed geometry
 
@@ -186,12 +969,33 @@ transitions, refusing blending, multisampling, and alpha-test policies by name
 until each is admitted with its own evidence. No document form is enabled that
 only one backend supports.
 
+**Deletes:** one resource tracker survives, the one the planner feeds. The
+pipeline node's buffer prior-use search and its image layout tracking have
+collapsed into it (done in P3-1), and P14 deletes the SDF engine's
+copy of the same job. The image types merge into one image
+with declared usages: `IGpuStorageImage` and `IGpuRenderTarget` become one
+type, and so do `IGpuExportableStorageImage` and `IGpuExportableRenderTarget`.
+`IGpuVertexBuffer` becomes a usage of `IGpuBuffer`, so indexed geometry adds a
+usage rather than a third buffer type.
+
 **Check:** a reader forced before overwrite and a cyclic reader ordering
 refused in a planned graph; two graphics uses of preserved attachment content
 followed by a sampling consumer; indexed geometry with a nontrivial index
-order; a deliberate incompatible-attachment refusal on both backends.
+order; a deliberate incompatible-attachment refusal on both backends; `puck
+references` finding no consumer of `IGpuRenderTarget`,
+`IGpuExportableRenderTarget`, or `IGpuVertexBuffer`.
 
 ### P4 — Shared opaque visibility
+
+**Starts from:** the SDF engine's private hit record, `PrimaryHits` in
+`sdf-world.hlsli`: five 16-byte rows per pixel of each viewport's full extent.
+The primary pass writes the hit, lanes and blend rows, the surface pass the
+normal and curvature rows, the ambient pass updates the last, and the views pass
+reads all five, including a neighbour's record for the silhouette sky blend
+behind a `TileEmpty` test. Primary traversal (`sdf-primary.hlsli`) exits at the
+far bound or the far distance after at most 128 steps, with its ray parameter
+the Euclidean distance along the normalized camera ray. P3's depth attachment is
+always cleared to 1, and a `Geometry` pass's vertex stage takes no parameters.
 
 **Owns:** the SDF engine's passes and the shared visibility records (P4-1);
 the SDF primary traversal and hybrid fixtures (P4-2).
@@ -216,6 +1020,13 @@ matching depth alone does not give correct edges; correct visibility provides
 no shared shadows, ambient occlusion, or reflections; a compact visibility
 record is tried before a large deferred buffer.
 
+**Deletes:** the shared record replaces the SDF engine's private one rather
+than sitting beside it. The `PrimaryHits` buffer and its per-pixel layout, and
+every pass that reads it, move to the shared visibility record, so one
+visibility format remains. The unbounded traversal survives only as the
+reference the check compares against, inside the test fixtures; no runtime
+setting selects it.
+
 **Check:** mesh-only against sky, a mesh outside the SDF dispatch bounds, a
 mesh through an opening with no SDF hit behind it, motion across SDF tile
 boundaries, equal-depth ties, silhouettes, near-plane clipping, empty
@@ -225,7 +1036,63 @@ assertions and a depth-disabled or independently calculated reference; the
 bounded traversal agrees with the unbounded reference on every discriminating
 scene so the mesh bound cannot hide nearer SDF hits, with measured cost and no
 promised speedup; expected visible objects verified, not only cross-backend
-agreement.
+agreement; `puck search -M 0` finding no reader of the retired hit-record
+layout outside the test reference.
+
+**Build sequence.** The first five commits need nothing from P7b; the rest
+follow its device-bound services, its one recorder and the SDF engine's groups.
+
+1. P4-0, the depth clear value: a render pass names its depth clear value, so
+   a reversed-Z attachment clears to 0 on both backends. P7b-7's recorder
+   carries it if that lands first.
+2. P4-1a, landed, the shared record: `sdf-visibility.hlsli` declares visibility
+   (ray parameter; identity, with its kind in bits 31 and 30 — background, SDF
+   or mesh — and a source index; material; flags), coverage (terminal radius,
+   threshold, blend weight and partner), lanes, normal and surface, and every
+   pass reads and writes `PrimaryHits` through it. Done when `puck parity` and
+   `puck counters` read identically before and after.
+3. P4-1b, freshness: a record is current only inside the frame's dispatch box,
+   which replaces the `TileEmpty` neighbour test, and a `visibility` debug view
+   (mode 11, `debug.view.visibility`) shows each pixel's record kind. Done when
+   a fixture shows no stale record reaching the resolve.
+4. P4-1c, the compact-record trial: a smaller encoding, measured in counted
+   work and bytes against the full record, kept only within the limit below.
+5. P4-2a, landed, the GPU-free contracts: `ViewProjection` in
+   `Puck.Abstractions/Cameras`, `SdfMesh`, `SdfMeshDraw` and
+   `SdfFrame.MeshDraws`, with laws that include the fixed-point raycast bounded
+   at a distance agreeing with the unbounded one whenever its hit is nearer. A
+   pipeline `Geometry` pass takes its camera as a `ViewProjection` here.
+6. P4-2b, the mesh source: a minimal document row of inline indexed triangles
+   reaches `SdfFrame.MeshDraws` through a `GpuRegion`.
+7. P4-2c, the raster pass and the bounded primary. Done when parity holds and
+   the mesh fixtures of the check above pass.
+8. P4-2d, the canaries: `sdf-mesh-visibility` and `sdf-mesh-motion` on both
+   backends against an analytic oracle.
+9. The `PrimaryHit*` names become the visibility record's, and the owning
+   guides describe it.
+
+**Decisions.** Meshes rasterize first, into a sampled `RGBA32F` target (ray
+parameter, draw id plus one, octahedral normal) and a reversed-Z `D32Float`
+depth cleared to 0, compared `Greater`, with an infinite far plane and the cone
+near distance (0.02) as the near plane. Primary traversal takes the smaller of
+its far bound and the mesh's ray parameter as its bound and skips the march when
+it starts beyond it. At equal depth the mesh wins; the SDF surface wins only
+when strictly nearer. While a mesh draws, the cull arguments cover the full
+extent and the resolve runs over it, and the cadence signature includes the mesh
+draws. The compact record may move presentation pixels by at most one
+least-significant bit; the state hash and the record's identity stay exact. Mesh
+pixels shade with neutral shadows and ambient occlusion until P6. P4 carries
+zero jitter and previous transforms, which P15 builds on. `world.budget` reports
+the mesh attachments' memory, about 41 MB at 1920×1080. The unbounded reference
+is the fixed-point law and the canary oracle, an unbounded fixed-point raycast
+beside analytic triangles. `SDF_MONOLITHIC_VIEWS` is deleted.
+
+**Depends on:** P3, landed. P4-2b onward follows P7b-7 to P7b-10 and P7b-20,
+which follows P4-1. `sdf-world.hlsli` changes in P4 first; the views and
+cull-args kernels and `SdfWorldEngine`'s partials change in P7b first. Whichever
+lands second re-records the work laws and counter baselines, and rebuilds
+compiled shaders rather than merging them. Open: whether the compact record
+survives its trial.
 
 ### P5 — Reproducible authoring and packaged dependencies
 
@@ -250,8 +1117,8 @@ capabilities; the first package includes source and requires its pinned
 compiler, with precompiled-only distribution a separate extension; limits on
 expanded bytes, dependency count and depth, resource size, and compilation
 work refuse before use, includes outside the closure refuse, and a warm cache
-cannot conceal a missing compiler or dependency. Shadertoy entry points and
-channel bindings are an adapter; native HLSL and GLSL feed the same contracts.
+cannot conceal a missing compiler or dependency. HLSL is the one source
+language feeding these contracts.
 Rendering enabled and headless compare the same accepted mutations and tick
 inputs, so compilation, timing, and preview never alter authoritative
 simulation outcomes.
@@ -297,11 +1164,11 @@ backends' descriptor-set and root-signature construction; the memory profile on
 
 **Delivers:** the four frequency groups — frame, world, pipeline instance, and
 pass — each one descriptor set on Vulkan and one root-signature table on
-Direct3D 12, with one closed set of binding kinds for graphics and compute
-alike and push constants carrying at most an index. `IGpuDeviceContext` reports
-an adapter LUID, a native device handle, and `WaitIdle`, so the profile is new
-surface: whether device-local memory is host-visible and coherent, how much of
-it there is, and the largest device-local heap, filled from
+Direct3D 12 (plus a sampler table for a group that holds a sampler), with the
+group's ordinal as its set and register space, with one closed set of binding kinds for graphics and compute
+alike and push constants carrying at most an index. The profile on
+`IGpuDeviceContext` records whether device-local memory is host-visible and
+coherent, how much of it there is, and the largest device-local heap, filled from
 `D3D12_FEATURE_DATA_ARCHITECTURE` and the heap properties on one backend and
 from `vkGetPhysicalDeviceMemoryProperties` and the device properties on the
 other. A pure selector maps that record and a region's byte count onto one of
@@ -312,8 +1179,35 @@ selecting the staged copy. P3 owns resource versions and lifetimes, and this
 package is what gives its planner a pass's declared needs to plan from, so the
 two land beside each other and share one owner per file.
 
+The neutral `IGpu*` services also become bound to their device context. Today
+every call passes `IGpuDeviceContext.DeviceHandle`, and that value means
+different things on each backend: Direct3D 12 passes its native device, while
+Vulkan passes a token that the backend turns back into its device command table
+on every call. A service obtained from its device context needs neither, so
+`DeviceHandle` leaves the neutral surface. The change reaches
+`Puck.Abstractions`, both backends, `Puck.Overlays`, `Puck.Shaders`, and
+`Puck.SdfVm`, which is why it rides this package rather than a smaller one.
+
+**Deletes:** the three residency policies replace the upload paths built by
+hand for each consumer: the SDF engine's ring of host tables and its
+`sdf-frame-upload.comp` copy, its brick staging buffer, and the unified
+overlay's single host-written buffer all go through the selector. The service
+bundles collapse into the one device-bound set: `IGpuComputeServices` and
+`GpuComputeServices`, `IFullscreenPassServices` and
+`WorldPostRenderExtensionServices`, `OverlayServices`, and
+`SdfViewGpuServices` are deleted, and so is the split between
+`IGpuCommandRecorder` and `IGpuComputeRecorder`, which today makes a
+fullscreen pass record its barriers through the compute recorder. The closed
+set of binding kinds replaces `GpuComputeBindingKind`,
+`ShaderSetManifestBindingKind`, the positional
+`TextureSamplerCount` and `EnableStorageBuffer` fields of
+`GpuGraphicsPipelineDescription`, and every binding index set by hand, such as
+`OverlayServices.StorageBufferBinding` and the SDF engine's binding constants.
+
 **Gate before P8 starts:** a one-day spike builds one package over two passes
-that already exist, `sdf-film-grain.frag.hlsl` and `pixelate.comp.hlsl`, with
+that already exist, `sdf-film-grain.frag.hlsl` and `pixelate.comp.hlsl`
+(which compiles but has no live consumer, so the spike drives it from a test
+pipeline), with
 two frequency groups rather than today's single flat set: the interface as data,
 declarations generated from it as paired Vulkan binding and Direct3D register
 annotations, a C# reader for SPIR-V decorations and one for the DXIL container
@@ -327,7 +1221,7 @@ tolerances. It fails toward Slang when the DXIL container cannot be read well
 enough to assert group, binding, and offset for every member without parsing
 undocumented structure, when a second group cannot be expressed identically on
 both backends from generated annotations — anything resembling
-`ShaderCompiler.RemapTranslatedHlslRegisters` surviving into the new design is
+a register remap surviving into the new design is
 that failure — or when DXC output is not byte-stable run to run. It also reads
 both backends' capability reports on the floor and ceiling devices to establish
 that neither lacks what the grouped contract assumes, which is a real-hardware
@@ -338,14 +1232,100 @@ discrete with a small host-visible aperture, discrete with none, and one
 reporting zeros — pinning one policy each; a law that one region's contents are
 byte-identical under all three policies; `puck canary --capability gpu` on both
 backends showing `pipeline.inspect` echo a policy and a nonzero device-local
-heap; `puck architecture --check` and `puck parity` exit 0.
+heap; `IGpuDeviceContext` no longer declares `DeviceHandle` and no `IGpu*`
+member takes a device value; `puck references` finding no consumer of any
+type or member this package deletes; `puck architecture --check` and `puck parity` exit 0.
+
+**P7b, the rest of the package.** The device-bound services and the binding
+groups start from `DeviceHandle` passed about a hundred times by `SdfWorldEngine`
+and fifty by `ShaderPipelineRenderNode`, several test fakes of the whole
+service surface, and a Direct3D 12 backend with positional registers, static
+samplers and one shader-visible heap per descriptor pool, which cannot bind two
+groups from different pools. P7b is 22 commits in four phases, each done when
+its laws pass and `puck parity` holds; the services phase also reads identical
+counts before and after through `puck counters compare`.
+
+Phase 0 needs nothing else, and all of it but part of step 2 has landed:
+
+1. Done: no ray-query path or acceleration-structure surface exists, and no
+   world or schema names `host.rayQuery`.
+2. The command tables take the proc lookup through their constructors, and a
+   test stands in for the driver there. Still open: `VulkanProcResolver`
+   becomes an instance rather than a static class, and
+   `VulkanDestroyGuardLawTests` stops enumerating the tables by reflection.
+3. Done: a law fails each link of the Vulkan boot chain and holds that
+   everything built before it is destroyed once, in reverse.
+4. Done: under `--debug-layers`, Direct3D 12 teardown prints a `[d3d12-debug] live` line
+   for every object the device still holds, with a negative control in
+   `DirectXDebugLayerLivenessTests`, and qualification no longer defers
+   `Direct3D12LiveObjects`.
+
+Phase 1 follows P3, which has landed:
+
+5. Direct3D 12 skips destroying descriptor pool zero, so the zero guards in
+   `GpuRegion.Dispose`, `UnifiedOverlayNode` and `ShaderPipelineRenderNode` and
+   its float preview are deleted.
+6. `memory.vulkan` and `memory.directx` count device-local bytes allocated and
+   released (per-backend-deterministic) at their actual size, and the peak
+   (pacing); `QualificationJudge` gains the peak device-local threshold.
+
+Phase 2, the services, follows the generated frame block, which has landed:
+
+7. One `IGpuRecorder`, with no device parameter, replaces `IGpuCommandRecorder`
+   and `IGpuComputeRecorder`; its render pass takes a depth clear value and a
+   viewport and scissor rectangle.
+8. `IGpuBindings`.
+9. The factories lose the device parameter, and `IGpuBufferFactory` creates a
+   buffer by usage (storage, uniform, indirect, vertex, index) and placement
+   (host-visible, device-local), with a law over Direct3D 12's transition into
+   the indirect-argument state.
+10. The bundles under **Deletes** collapse into `IGpuDeviceContext.Services`
+    and its bring-up; `DeviceHandle`, `VulkanDeviceCommands.Token` and
+    `FromToken` go.
+11. `GpuCreationFaults`, a decorator over the factories armed by a console verb,
+    injects a creation failure on a real device, which closes P1a's partial
+    allocation check.
+
+Phase 3, the groups, follows phase 2:
+
+12. A law holds every shipped shader's register number equal to its binding.
+13. The GPU-free group contract: a closed `GpuBindingKind` set, group and
+    pipeline layout descriptions, and the `DirectXRootLayout.Plan` and
+    `VulkanGroupLayouts.Plan` planners, tested against the spike's tables.
+14. Direct3D 12 keeps one shader-visible heap per device, and a pool is a range
+    of it (14a). Both backends then realize several groups, with sampler tables
+    and one 4-byte push range (14b), the riskiest commit.
+15. Pipelines move onto groups: `WriteFrame` writes the frame group, set 0, into
+    a per-node frame `GpuRegion`; config becomes the pass block at `b0` of set
+    3; passes include their generated interface; the pipeline document's
+    binding fields are deleted; and a load checks `SHADERPIPE_INTERFACE`.
+16. The gate spike's GPU half, a binding station in `tests/Puck.Parity`.
+17. The region-copy kernel leaves the SDF engine for `Puck.Shaders`.
+18. The overlay and fullscreen passes move onto groups.
+19. The SDF engine uploads through `GpuRegion`, deleting
+    `sdf-frame-upload.comp`, `sdf-brick-upload.comp` and `SdfRingTable`.
+20. The SDF engine moves onto groups, its push blocks and hand-set binding
+    constants included. It follows P4-1, which rewrites the same kernels.
+21. The owning guides and the `rendering` skill describe the result.
+
+**Decisions.** Root parameter indices are dense, and the push index sits at
+`b0` in space 4, outside every group's space. The spike's frame group is the
+generated frame block, the only generated include, and previous-frame inputs
+join it: a pass row declaring `history: [color]` generates `ColorHistory`,
+which on the first frame and after a resize is a cleared attachment with the
+block's `historyValid` at 0; a name colliding with `ShaderInterfaceHlsl`'s
+takes the nearest free spelling. `GpuResidency.Select` also takes whether
+readers are in flight, and brick staging is a region with an external
+destination. The SDF engine's groups are P14's; its 32 screens bind as 32
+bindings and one sampler until P14 makes them an array. The test fakes
+consolidate as the surface shrinks. Open: the gate's Linux build and the floor
+and ceiling capability reports.
 
 ### P8 — The shader package, and one source language
 
 **Owns:** the pass interface schema and its hash; the declaration generator; the
-package format, its variants, and the generated echo pass; `ShaderSourceLanguage`
-and the GLSL half of `ShaderCompiler`; the three GLSL pipeline sources; the two
-run-time compilation paths.
+package format, its variants, and the generated echo pass; the frame block the
+HLSL pipeline sources declare by hand; the two run-time compilation paths.
 
 **Delivers:** a pass interface declared as data — named scalars, vectors,
 arrays, and images with GPU types — and declarations generated from it with
@@ -358,13 +1338,15 @@ pass per interface reads every member through the generated declarations, writes
 it to an output buffer, and has to read back distinct sentinels exactly on both
 backends, so a generator mistake fails the package on a real driver; compiler
 reflection over both binaries is the cheaper build-time check where no GPU
-exists. GLSL leaves with it: `ShaderSourceLanguage` keeps `Hlsl` alone, the
-`glslangValidator` and `spirv-cross` invocations,
-`ShaderCompiler.RemapTranslatedHlslRegisters`, and `ShadertoyShaderAdapter`'s
-prelude and per-component offset reconciliation are deleted, and
-`ink-simulation.glsl`, `ink-visualize.glsl`, and `moth.glsl` are ported to HLSL
-against the same interface — the adapter's prelude is the specification of that
-port. A KERNEL-class probe kind's run-time `cs_5_0` compile on the camera's own
+exists. The HLSL pipeline sources (`ink-simulation.hlsl`, `ink-visualize.hlsl`,
+`moth.hlsl`, the genesis `card.hlsl` and the package canary's `tint.hlsl`) move
+onto a pass interface designed for Puck: presentation time and the
+deterministic tick from P9, the camera, config through the generated struct,
+and named inputs. Nothing keeps a Shadertoy name or shape for compatibility:
+`ShaderFrameConstants` and its `iTime`-style block, `ShaderFrameInput`,
+`IShaderPipelinePassConstants`, `ShaderPushConstantLayout`, and
+`ManifestPassConstants` are deleted, the hand-declared frame structs leave the
+sources, and the generated struct is the only frame block a pass reads. A KERNEL-class probe kind's run-time `cs_5_0` compile on the camera's own
 device and `ShaderPipelineLoader`'s run-time pipeline compile both retire into
 the package build, because a world is data and may not ask a player's device for
 a toolchain. P5 owns the source closure, the snapshot machinery, and packaging,
@@ -374,8 +1356,8 @@ beside P5-2 or after it.
 **Check:** the echo pass green on both backends for every shipped package, and
 failing when a generated offset is perturbed by hand, shown once; the ink
 fixtures from P1a hold their region assertions with the ported HLSL sources;
-`puck search -M 0 -i glslang` and `puck search -M 0 -i "spirv-cross"` outside
-git history and `experimental/` return nothing; no shader compiles on a device
+`puck references` finds no consumer of the retired frame-block types; no shader
+compiles on a device
 during a `Puck.World` run, shown by a canary that runs with no compiler on the
 path; `puck parity` exit 0 on both backends.
 
@@ -383,15 +1365,15 @@ path; `puck parity` exit 0 on both backends.
 
 **Owns:** the presentation manifest compiled from every presentation binding;
 the mirror's slot table, its refresh, and its per-tick stamp; presentation time
-in the frame group; `BindableScalar.Resolve` and
-`WorldCameraRigCompiler.CompiledRig.Refresh`.
+in the frame group; `WorldStateMirror`, `WorldStateStamp`, `IWorldStateView`,
+and `SdfMovedTransforms`.
 
 **Delivers:** the deduplicated union of every row a HUD gauge, camera operand,
 pipeline parameter, material, or signed-distance program reads, compiled to a
 flat table of slots carrying a row ordinal, a key, a target flag, and a
 conversion, resolved to ordinals when the document is installed. The refresh
 attaches at the tick boundary, which is `WorldClient.DeliverState`, and the
-apply at the frame, which is `WorldFramePresenter.Dress`; both already run on
+apply at the frame, which is `WorldFramePresenter.CaptureFrame`; both already run on
 the one thread that pumps and presents in the same loop iteration, so no lock
 is added. The export sweep publishes the ordinals it found moved beside the
 delivered definition — a stamp carrying the tick, the engine tick, and the moved
@@ -403,16 +1385,26 @@ not when a read changes. A moving slot keeps the previous tick's sample and the
 current one; presentation time is the tick plus the frame's interpolation
 fraction, a trait-bearing cell is evaluated at that fractional time, a plain
 cell steps, and an offscreen capture pins the fraction to one. Every bindable
-reads eased by default and the stored truth with `.$target`:
-`BindableState.TryParseBinding` produces the target flag today,
-`BindableScalar.Resolve` discards it and reads truth through
-`WorldStateReader.TryRead`, and the parsed row and key are stored rather than
-re-parsed per resolve. `CompiledRig.Refresh` passes the engine tick, so an
-advancing row's camera operand stops reading engine tick zero. The mirror is
+reads eased by default and the stored truth with `.$target`: the parsed
+`StateBinding` carries the target flag into its slot, and a bindable stores the
+parse rather than re-parsing per resolve. A camera operand reads its slot, so an
+advancing row's operand moves with the delivered engine tick. The mirror is
 written against
 [the presentation view's](runtime-and-delivery.md#the-presentation-view) state
 interface from its first line, over the current delivery, so it adds no
 raw-document reader and is not blocked by that programme.
+
+The same moved set reaches the SDF renderer, which today does work in
+proportion to its capacity rather than to what moved. Every frame,
+`SdfCompositionFrameSource` has each emitter repack every dynamic-transform
+slot (118,912 in the shipped world), and `SdfWorldEngine` compares all of them,
+5.7 MB, against its mirror to find the few that changed, on a still frame as
+much as a moving one. The upload side already copies only changed ranges, one
+dispatch per table; the CPU side is what remains. Emitters are told which
+slots their moved rows own and repack only those, and the engine takes those
+slot ranges as its owed set instead of diffing the whole table. That is the
+work a slow CPU such as a Steam Deck's or a Switch 2-class part cannot spend
+per frame.
 
 **Check:** a law counting reads — ticks that move one bound row of many perform
 one read each, not one per bound row — and a law that a tick moving nothing with
@@ -420,10 +1412,23 @@ every slot at rest performs none; a law that an easing slot keeps refreshing
 after its row stops moving and stops once its follower rests; a law that the
 eased and `.$target` forms of a dynamics row differ mid-follower and agree at
 rest; a law that an advancing row's camera operand moves with the engine tick;
+counter laws in the P2 model that a still frame packs no dynamic-transform rows
+and compares no mirror bytes, and that a frame moving k bound bodies packs and
+compares work proportional to k, failing on today's per-frame repack;
 allocation laws over the refresh and the apply at 64 repetitions after warm-up;
 the shipped-world state baselines unmoved and the `rim-drop` and
 `traveller-kit` canaries green; the parity contract re-recorded in the same
 change when the eased default moves a station's pixels.
+
+**Open:** filling the generated frame group's `tick` and `time` from the
+mirror's delivered tick and interpolation fraction; the manifest compiled from
+the document at install rather than
+registered by each consumer on first read, which P10's tier law needs; and the
+materials a program bakes at build, which join the mirror when the field
+lattice becomes a region kind. The `WorldStateMirrorLawTests`,
+`WorldStateReadRoutingLawTests`, `SeatRouteDeliveryLawTests`,
+`WorldWheelRingsLawTests` and `WorldSceneMovedTransformsLawTests` laws cover the
+landed half.
 
 ### P10 — Bound rows reach a pass
 
@@ -454,9 +1459,11 @@ by the engine rate over the requested rate, refused unless that rate divides the
 engine rate exactly. A capture records the tick its regions were refreshed at,
 the offscreen host renders at most one frame per step, and `puck parity` gains a
 verdict that the frame shows the tick it was armed for, ordered after the state
-hash and before the pixel verdict; `WorldCaptureScheduler`'s own explanation
-says under what condition a composed frame is an exact-tick snapshot rather than
-disclaiming it. The cost report gains a named presentation dimension in bytes
+hash and before the pixel verdict. A scheduled capture already ends the pump's
+catch-up burst at its armed tick (`IFixedStepSimulation.AwaitsFrame`), and one
+served by a frame showing another tick is refused as `stale`, naming both ticks.
+The tick verdict extends that from the simulation tick to the tick the bound
+regions were refreshed at. The cost report gains a named presentation dimension in bytes
 per tick and bytes per frame, separate from the simulation's cycle bound, with a
 per-document ceiling that refuses naming the pipeline and the binding, and a
 pipeline names its tier from the authored quality vocabulary.
@@ -472,41 +1479,504 @@ different presentation clocks and that a non-dividing rate refuses by name; a
 law that two documents differing only in tier compile identical manifests,
 identical mirrors, and equal state hashes; the cost report equal native and
 WebAssembly; `puck parity` exit 0 at the pinned reference tier with one station
-whose pixels depend on a bound row, and a capture deliberately armed mid-burst
-failing the tick verdict rather than the pixel verdict, shown once.
+whose pixels depend on a bound row, and a `world.screenshot` requested
+mid-burst failing the tick verdict rather than the pixel verdict, shown once.
+Scheduled `captures` rows cannot land mid-burst: the pump ends a burst at a
+step with an armed capture.
+
+**Forcing case:** the rulepush world (`worlds/rulepush`) simulates its rules and
+levels from state rows, but nothing draws its board. A grid board read straight
+from those rows is the first real consumer of a bound array member, and the
+package is not done until a person can see and play a rulepush level on both
+backends. The only way to show the board today, placement facets at three per
+cell, is refused as the substitute. The board's look is designed for Puck from
+the world's own nouns (imp, hedge, boulder, flower, mire, thorn), with original
+art, palette, and tile shapes; nothing in it takes the likeness of the game
+whose mechanic rulepush keeps.
+
+### P11 — The frame graph document and nested views
+
+**Starts from:** the `IRenderNode` tree and the fixed-capacity composition
+described in the implementation status: SDF composite slots, 32 screen slots,
+the `ViewStack` round-robin budget, and the test card for self-reference.
+
+**Owns:** the `puck.render.graph.v1` schema, its validation, and its world
+document section; graph instances and their scheduling; the replacement of
+`SdfEngineNode`'s child composition and `ViewStack`'s budget; nested-view rows
+in the cost report and `world.budget`.
+
+**Delivers:** a document that describes a frame as passes connected by named
+images and buffers, planned by the same planner P3 builds for pipelines. Engine
+work such as SDF rendering, overlays, and post-processing arrives as packages
+the document names, so a world extends its graph with data rather than C#.
+Every view is an instance of a graph: the main camera, a pane, a game camera
+shown on a screen, and a nested world. An instance can read another instance's
+output as an input, and that is how nesting is written.
+
+The graph schedules instances by demand:
+
+- An instance renders only when something visible reads it, and at most once
+  per frame however many consumers it has.
+- It renders at the extent its on-screen footprint needs, quantized so small
+  changes in size do not reallocate its targets.
+- It declares a refresh rate or divisor. Consumers read its latest completed
+  output and never wait for a slower producer.
+- The round-robin refresh limit becomes a scheduling policy the cost report
+  prices, and no fixed viewport or screen count remains as a design limit.
+
+A graph that reads its own output does so through a previous-frame edge, the
+planner's history resource, so a mirror facing itself shows last frame's image
+instead of the test card. The planner refuses a same-frame cycle and names the
+instances in it. Every instance appears in the cost report and `world.budget`
+with its extent, rate, and pass cost.
+
+**Deletes:** one graph document remains. `puck.shader.pipeline.v1` folds into
+`puck.render.graph.v1`, a pipeline being a graph a world names, and the
+`views.pipelines` section, `WorldPipelineRuntime`, and
+`WorldComposedSlot.Pipeline` go with it. The hand-composed `IRenderNode` tree
+and its `Children` wiring in `WorldBootComposition` give way to graph
+instances. The SDF composite kernel `sdf-world-composite.comp`, its
+`MaxViewports` limit and push block, `SdfEngineNode`'s child map and
+`RegisterChild`, and `ViewStack` itself are deleted, not only its budget. The
+unified overlay becomes a package the graph names, so `UnifiedOverlayNode`'s
+fixed `OverlayFrameSlots` and its hand-built node wiring are deleted with the
+composition they served.
+
+**Check:** a graph document validates, and `puck schema --check` exits 0; a
+camera shown on two screens renders once per frame, counted; a camera whose
+only screen is off view renders zero times; a mirror facing itself shows the
+previous frame, and a same-frame cycle refuses with both instance names; a view
+occupying a quarter of the screen renders at a quarter of the extent; `puck
+references` and `puck search -M 0` finding no consumer of any type, kernel, or
+document section this package deletes; `puck
+parity` exits 0 once the main view runs through the graph, with the contract
+re-recorded in the same change if pixels moved.
+
+**Depends on:** P3 for versioned resources and the planner, and P7 for the
+binding groups.
+
+### P12 — Image sources
+
+**Starts from:** `Surface`'s three kinds, the producers named in the
+implementation status (`IMachineVideoOutput`, `Win32GraphicsCaptureFeed`, the
+Media Foundation camera graphs), `WorldScreenBinder`, the `WorldScreenSource`
+kinds in `src/Puck.World.Schema/WorldScreen.cs`, and the external-memory types
+in `src/Puck.Abstractions/Gpu/Sharing`.
+
+**Owns:** the source contract, producer registration, the conversion passes,
+upload and import on both backends, and the migration of every
+`WorldScreenSource` kind onto registered producers.
+
+**Delivers:** one contract for every image that enters the graph from outside
+a pass, classified by how the image arrives:
+
+| Transport | How the image arrives | Example producers |
+|---|---|---|
+| Uploaded | The producer writes pixels in CPU memory and the engine uploads them | An emulator with a CPU-side picture unit, software video decoding, CPU-drawn UI |
+| Imported | The producer owns GPU memory and shares it with a synchronization primitive | Desktop capture, a camera, hardware video decoding, another process |
+| Rendered | Another graph instance produces it | A game camera, a nested world, an emulator whose picture unit runs as GPU passes |
+
+Each source also declares its extent, pixel format (including palette-indexed
+and planar YUV formats such as NV12), color space and transfer function,
+refresh cadence, a presentation timestamp, and a content class:
+
+- **Deterministic** content is an exact function of simulation state, such as
+  an emulator framebuffer.
+- **External** content comes from outside the engine and may be private, such
+  as a desktop or a camera.
+- **Presentation** content is ordinary rendered output.
+
+A producer registers with the host under an id, and the graph names a source by
+id and transport. Adding an emulator, a capture API, or a video decoder means
+registering a producer; the graph schema and the planner do not change. The
+producer-named `WorldScreenSource` kinds become producer ids, and
+`TestPatternSource` becomes an ordinary producer rather than a fallback the
+view stack owns.
+
+Format and color conversion are shipped passes that the planner inserts once
+per source and shares across every consumer. Uploads use P7's residency policy.
+Imports are zero-copy where the backend can import the producer's memory, with
+the staged copy as the fallback. Filtering is the consumer's choice, so pixel
+art can sample nearest while a camera feed samples filtered.
+
+The content class decides what verification and privacy apply. External
+content never reaches simulation state, a replay, or the state hash; captures
+and `puck parity` replace it with a declared fill or refuse the capture by
+name. A deterministic source's image gets an exact pixel verdict before
+composition, which is stricter than the tolerant per-tile verdict for the
+composed frame.
+
+Windows producers come first. The import interface is written in terms of what
+Vulkan external memory and external semaphores define, so PipeWire DMA-BUF
+capture and V4L2 cameras can be added on Linux as producers without changing
+the contract. The Vulkan backend on Windows already imports shared memory, so
+the contract is exercised on both backends before Linux producers exist.
+
+**Check:** a list of every current `WorldScreenSource` kind, each reproduced by
+a registered producer and checked, before the binder paths it replaces are
+deleted; two consumers of one camera run one conversion, counted; a
+palette-indexed source and an NV12 source convert to arithmetically expected
+pixels; a capture of a world containing a desktop source shows the fill and
+never desktop pixels; an emulator source's image matches the emulator's
+framebuffer exactly on both backends; a test registers a third producer with no
+schema or planner change.
+
+**Depends on:** P11 and P7.
+
+### P13 — Hit-to-source mapping and input destinations
+
+**Starts from:** `WorldFramePresenter.ResolvePipelineMouse`, which maps the
+pointer into a pipeline pane, and `WorldCursorFeed`, which hover-tests HUD
+rectangles only. Nothing maps a hit on a world surface to a source's pixels.
+
+**Owns:** the published mapping for every source placement, its fixed-point
+inversion, the three input destinations, and the passthrough permission rule.
+Keyboard focus belongs to `Puck.Input`, which reads the mapping.
+
+**Delivers:** every placement of a source publishes, as data, the chain from
+the place it is shown to the source's pixels: UV layout, crop, letterbox, and
+any warp pass. A placement can be a screen on a world surface or a pane in
+screen space, such as picture-in-picture or split screen. The GPU draws with
+that data, and nothing reads the mapping back from the GPU. A warp pass either
+declares its exact inverse or is refused as an input path, though it can still
+be drawn.
+
+A mapped point goes to one of three destinations:
+
+| Destination | Example | What the mapping must guarantee |
+|---|---|---|
+| Simulation | A light gun aimed at an emulated game | Fixed-point inversion from document data; the input arrives as a `CommandSnapshot` on a tick |
+| Host passthrough | An editor window captured into a pane | Pointer and keyboard events reach the external window in its client coordinates, including DPI scaling; floats are allowed because nothing touches state |
+| Presentation | Hover and highlight | GPU picking is allowed |
+
+When a source has keyboard focus, keys go to it instead of the game, and a
+reserved chord always returns focus to the game. Host passthrough exists only
+for a source the local user opened on their own machine. A world document can
+never create a passthrough source or send it input, whether it was authored
+locally or arrived through a portal. A hit on a rendered source continues as a
+ray into that instance's camera, recursively, up to the graph's nesting depth.
+
+**Check:** laws that a screen at an arbitrary pose and a pane at an arbitrary
+rectangle map known points to known source pixels, with identical results on
+every run because the simulation path uses fixed point; a warp pass with no
+inverse refuses as an input path; a document that declares passthrough refuses
+by name; a recorded Windows run in which a window captured into a pane receives
+a click at the mapped point and the focus chord returns input to the game; a
+pick through a portal reaches the nested world's surface.
+
+**Depends on:** P11 and P12.
+
+### P14 — The SDF engine as a pass package
+
+**Starts from:** `SdfWorldEngine`'s own dispatch sequence (the
+`SdfWorldEngine.PassLabels` passes plus brick bake and upload), its Stage 2
+composition, the hand-written frame data, `SdfEnvironment`'s separate packing,
+the two large includes, the orphaned shaders, and the prose sync pairs in the
+`rendering` skill's reference.
+
+**Owns:** the capability matrix, the SDF pass package, its generated frame
+block, the HLSL module tree and its layering check, staged shading, and the
+retirements listed below.
+
+**Delivers:** first, a capability matrix that lists every feature the SDF engine
+provides, the graph equivalent that replaces it, and the check that proves the
+equivalent works. The list is generated from the engine's public surface and
+console verbs, not written from memory. It covers screen slots, decals, child
+slots, viewports, render scale, tonemap, captures, pass labels, kernel
+variants, brick baking, the glyph atlas, volumes, lights, far field, and debug
+views, plus anything else the code shows. No part of the old engine is deleted
+until its row is green.
+
+Then:
+
+- Each SDF dispatch becomes a declared pass with a P8 interface.
+- `SdfFrame` and `SdfEnvironment` become one generated frame block. The
+  instruction-set enums and packed-layout constants are generated from the C#
+  model. Any coupling a generator cannot express gets a mechanical check rather
+  than a line in a prose table.
+- `sdf-vm.hlsli` and `sdf-world.hlsli` split by responsibility into modules for
+  the instruction set and interpreter, field operations, marching, surfaces,
+  shading, and passes. A check fails when a lower module includes a higher one.
+- Shading is staged: the march produces a surface sample record, lights read it
+  through one interface, and post-processing follows. Lights, ambient
+  occlusion, and shadows become stages instead of branches inside one large
+  view function.
+- Working targets move to a float format such as `R16G16B16A16Float`, so HDR
+  and temporal accumulation have headroom. The tonemap moves into P16's
+  display transform.
+- Composition of panes and child views moves to the graph (P11), and screens
+  read sources through P12.
+
+This retires `render.extensions` as a separate document section, because a
+post-process pass becomes a graph node. It also retires `FullscreenPassNode`,
+`WorldPostRenderExtensionPasses`, the child plumbing in `SdfEngineNode`,
+`ViewStack`'s fixed budget, the orphaned shaders, and the shaders README lines
+that name consumers which no longer exist. Every internal caller and world
+document is updated in the same change.
+
+The engine's own pass and hazard model is deleted once its passes are graph
+passes, because the planner's tracker (P3) then decides every barrier:
+`SdfFramePass`, `SdfFrameBuffer`, `SdfBufferAccess`, `SdfBufferUse`,
+`SdfBufferEdge`, `SdfFrameBufferPlan`, `SdfFrameBufferHazards`,
+`RecordBufferBarriers`, the hand-written image barriers in `Record`, the
+pass-index constants, `PassLabels`, and the `Record*` methods that fix the
+dispatch order by hand. `SdfWorldEngine` does not survive as a second path
+beside the pass package: when the last capability row is green, the
+monolith is gone. `WorldPostRenderExtensionServices` is also the graphics
+bundle every `views.pipelines` node receives, so retiring `render.extensions`
+does not free it; P7's bundle collapse does.
+
+**Check:** every capability-matrix row green; `puck parity` recorded before the
+move and re-recorded after, with any moved pixels explained in the change; P2's
+per-pass work counts recorded on both backends before and after the move, with
+every changed count explained in the change and no speedup promised; the
+layering check shown failing once on a deliberate upward include; `puck search
+-M 0` finding no consumer of any retired type, including `SdfWorldEngine`
+itself.
+
+**Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
+splices into the graph, so `ShaderPipelineCompiler` orders, versions and
+barriers its passes: sky, mask, beam, cull arguments (indirect arguments and
+bounds), primary (dispatched indirectly, writing visibility version 0), surface
+(version 1), ambient (version 2), then shadow, light and volume shading (color
+versions 0 to 2). Brick upload and brick bake form `sdf.bricks`, a world-scoped
+instance joined to the views by buffer edges. A display pass tonemaps and
+encodes until P16 inherits it. There is no upload pass, because uploads go
+through `GpuRegion`, and no composite, because P11b deletes it. Group 0 is the
+frame (the generated block and per-world tables), group 1 the world (program
+words, screens, decals, the glyph atlas, the brick pool), group 2 the instance
+(empty and reserved), and group 3 the pass (masks, tiles, arguments, bounds,
+visibility, shadow, color, and the 32 screen sources as an array with a sampler
+table). `SdfEngineNode` splits into an `SdfWorldResidency` for the world's
+half and the graph runtime for captures, work, readiness and
+`UnservedCaptureReason`; `SdfWorldEngine`'s partials become per-pass recorders
+and its frame packers frame-block writers; the views become `sdf.world`
+instances. `sdf-vm.hlsli` splits into a generated `isa/` and `field/`, and
+`sdf-world.hlsli` into a generated `frame/`, `march/`, `surface/`, `shade/` and
+`debug/`, with pass entry points under `passes/`.
+
+**Build sequence.**
+
+1. The capability matrix as a law, with the members nothing calls deleted:
+   `SubmitFramePipelined`, `AcquireFramePixels`, `IsFramePixelsReady`,
+   `TryReadCadenceDiagnostics`, `SdfFrame.WarpAmount`, and the export-mode
+   output image branch.
+2. The HLSL module split and the upward-include refusal, with every compiled
+   kernel's hash unchanged.
+3. `puck shaders generate --check` generates the instruction-set and layout
+   constants from the C# model.
+4. The planner's vocabulary: an indirect-argument state, dispatch shapes,
+   strides, storage sized by instance or by program, and fragments. Done when
+   a law plans the SDF passes in `PassLabels`' order less the composite, with
+   exactly `SdfFrameBufferPlan`'s edges.
+5. The SDF pass interfaces over the four groups, with generated declarations;
+   parity reads identically.
+6. The cutover, the riskiest commit: the package records into the graph's
+   command list, and Direct3D 12's promotion from `COMMON`, the
+   indirect-argument state and per-instance scratch hazards all move with it.
+   Done when parity and `puck counters compare` hold and both debug layers stay
+   silent on the RTX 2060, with Vulkan validation repeated on the RTX 4070.
+7. `SdfFrame` and `SdfEnvironment` join the generated frame block as members of
+   the block pipeline passes already read.
+8. The SDF pipelines build through the graph's pipeline cache.
+9. The engine's cadence becomes the scheduler's.
+10. Float working targets and the display pass, with parity re-recorded.
+11. Staged shading.
+12. `render.extensions` retires with `FullscreenPassNode`, its validation and
+    the `world.extensions` verb; `comprehensive.synthetic.world.puck` migrates.
+13. The final sweep deletes the matrix law, `SdfWorldEngine` and the types
+    listed above, `SdfViewGpuServices`, `SdfShaderSetVerification`,
+    `SdfWorldKernels`, the SDF pipeline set and its cache,
+    `sdf-frame-upload.comp` and `sdf-child.comp`, and corrects the comments and
+    guides.
+
+**Decisions.** P4's visibility record is the surface sample record staged
+shading reads. P7b moves the SDF push blocks and binding constants onto groups.
+P11b keeps one resample pass, a port of `resample.comp.hlsl`, in the graph's
+package library and deletes `pixelate.comp.hlsl` and
+`viewport-composite.comp.hlsl`; P14 deletes any SDF-side copy, and the pixelate
+interface fixture under `tests/Puck.Shaders.Tests` stays. Until the cutover,
+P11b's `sdf.world` adapter submits through `SdfWorldEngine`'s ring as an
+external producer whose output image the graph imports. Before P12, a screen's
+matrix row is green when host leases and instance reads serve it. Without the
+composite, N split-screen seats render as N dispatch sets rather than one
+dispatch whose Z dimension is N; counters on the RTX 2060 measure that cost, and
+layered views return only if the counts call for them.
+
+**Depends on:** P2, P8, P11, P12, P4 for the visibility record, and P7b: at
+most four group layouts, separate sampler tables, the world group at a fixed
+root parameter, one recorder with indirect dispatch and debug groups, an index
+as the only push constant, and SDF uploads through regions. From P11b: one view
+per `sdf.world` pass with the child map, `ViewStack`, `WorldPipelineRuntime`
+and the composite gone; a first-class package pass kind, which P14 extends to
+fragments; one pass-pipeline cache per device, built off the frame thread;
+captures from the graph's root output; per-instance pass counts; render scale
+as a reduced extent and a resample pass; and buffer edges.
+
+### P15 — Temporal reconstruction
+
+**Starts from:** no jitter, motion vectors, or history in the SDF kernels, and
+render scale implemented as an upsample in the composite pass
+(`RenderScaleQ`, `UpscaleSharpnessQ` in `SdfWorldEngine.FramePreparation.cs`).
+
+**Owns:** jitter, motion vectors, the temporal upscaler, history management,
+dynamic resolution, and temporal reuse inside the SDF march.
+
+**Delivers:** Puck's own complete temporal pipeline, built to current best
+practice:
+
+- Sub-pixel jitter from a low-discrepancy sequence on every view, applied
+  equally to SDF primary rays and mesh projection.
+- Motion vectors for everything visible. SDF surfaces take theirs from the hit
+  position and the previous transform of the instance that produced the hit,
+  so dynamic transforms keep their previous-frame values. Meshes use their
+  previous transforms, and nested views carry their own motion.
+- Reprojection validated against depth and material identity, with
+  disoccluded pixels rejected rather than smeared.
+- A temporal upscaler that reconstructs output resolution from jittered
+  low-resolution input, with history rectification, reactive and transparency
+  masks for content motion vectors cannot describe (screens showing live
+  sources, particles, animated emission), and a sharpening pass.
+- History kept per graph instance and discarded on a camera cut, a resize, a
+  view transition, or when a hidden view becomes visible again.
+- Dynamic resolution that adjusts render scale each frame to hold a frame-time
+  target, driven by a runtime frame-pacing signal such as the presenter's
+  confirmed-present timing (`IPresentTimingFeedback`). That signal is product
+  behaviour, the engine reacting to its own frames on the player's device, not
+  a measurement, so it does not depend on P2 or on the deferred timing work.
+- The previous frame's reprojected depth seeds the SDF march. This is a cost
+  optimization with a correctness fallback: it may never skip a surface nearer
+  than the seed.
+- The HUD and overlays composite after upscaling, at output resolution.
+
+Vendor upscalers such as FSR, DLSS, and XeSS are not part of this package. The
+inputs it produces are the ones they expect, so one could be added later as an
+alternative pass.
+
+**Check:** a static scene converges to a supersampled reference within a
+stated tolerance; an object moving across SDF tile boundaries stays under a
+stated ghosting metric; a set of disocclusion scenes; history reset on a cut;
+parity captures pin the jitter index so pixel verdicts stay meaningful; a
+recorded Steam Deck run with dynamic resolution on shows render scale
+responding to the pacing signal; P2's work counts recorded on both reference
+machines. Whether the run holds its frame-time target is not checked while
+wall-clock and GPU timing are deferred.
+
+**Depends on:** P4's motion and jitter contract, P11 for per-instance history,
+and P14.
+
+### P16 — Display output
+
+**Starts from:** 8-bit UNORM swapchains in the default color space on both
+backends, no HDR selection, and the tonemap inside the SDF view pass.
+
+**Owns:** the scene-linear working space, the display-transform node, HDR
+swapchain selection, and paper white for UI.
+
+**Delivers:** the smallest HDR path that exercises the contracts. That means a
+scene-linear working space and one display-transform node at the end of the
+graph, which tonemaps and encodes for the target. On Windows it adds an HDR10
+or scRGB swapchain, chosen from what the display reports. The HUD and overlays
+use a paper-white level, and one HDR source, desktop capture on an HDR display,
+converts through P12. SDR stays the default and the fallback. Calibration UI,
+per-display metadata, and HDR on the Steam Deck OLED under Linux are later work
+and stay listed in open items until scheduled.
+
+**Check:** on an HDR display the swapchain reports an HDR color space and a
+test ramp exceeds SDR white; on an SDR display the same graph produces the
+previous image within the parity contract; an HDR desktop capture displays
+without clipping; the HUD renders at paper white.
+
+**Depends on:** P11, and P14's float working targets.
+
+### P17 — Assets derived from SDFs
+
+**Starts from:** brick baking (`SdfWorldEngine.BrickBake.cs`, with
+`SdfBrickPoolLayout` holding at most 8 bricks of 128 cubed samples) for settled
+carves; the CPU baker, its key, its cache, the `BAKE` chunk of
+[compiled worlds](runtime-and-delivery.md#compiled-worlds), and background baking
+on the device, described under the implementation status; and no path that
+draws a bake.
+
+**Owns:** the baker, the texture pipeline, the content-addressed bake cache,
+its chunk in compiled worlds, and background baking on the device.
+
+**Delivers:** one baker that turns an SDF prototype into presentation assets:
+
+- A mesh with UVs, extracted with surface nets or dual contouring, whichever
+  measures better on silhouette error and cost.
+- Baked textures for albedo, normals, ambient occlusion, and material identity.
+- Impostors for distant content.
+
+The texture pipeline that stores these generates mips and compresses with BC7
+for color, BC5 for normals, and BC6H for HDR data, and each texture declares
+whether it is sRGB or linear. The Steam Deck supports all three formats.
+
+Each bake is keyed by the prototype's content hash, the baker version, and the
+quality tier, and one cache is filled in two ways. A build ships each bake once
+in a bake pack, and a compiled world's chunk names the keys it needs from it, so
+a released world bakes nothing on a player's device. On a cache miss, which happens during live authoring or for a world
+that has not been compiled, the device bakes in the background. It bakes only
+the prototypes that changed, stores the results locally, and keeps drawing the
+SDF path until each bake is ready. Baking is data processing with shipped
+kernels, so it needs no toolchain on the device.
+
+Bakes are presentation only: contact and queries keep reading the SDF field.
+The parity world ships its bakes, so captures never depend on a local bake.
+Which representation a placement uses follows P6's rule that representations
+are chosen by measured cost.
+
+**Check:** baking one prototype twice produces the same key and, on one
+device, the same bytes; editing one prototype rebakes only that prototype; a
+compiled world with a filled cache bakes nothing on load, counted; a missing
+bake renders through SDF and then switches; baked silhouettes stay under a
+stated error against the SDF; state hashes are equal with bakes on and off.
+
+**Depends on:** P3 for indexed geometry, P4 for shared visibility, P5 for
+packaging, and compiled worlds in the runtime and delivery programme.
 
 ## Sequencing
 
-P1a, then P2, then P1b and P3 in parallel, then P4, then P5, then P6. P1a and
-P5's design can proceed independently; P1b does not block P3 or P4, and they do
-not block releasing the foundation; image-only packaging stays independent of
-placed-surface support; shared GPU and World files have one owner at a time.
-P1a can start today, and nothing through P6 waits on the state rebuild.
+**Foundation.** P1a, then P2, then P1b and P3 in parallel, then P4, then P5,
+then P6. P1a and P5's design can proceed independently. P1b does not block P3
+or P4, and neither blocks releasing the foundation. Image-only packaging stays
+independent of placed-surface support, and shared GPU and World files have one
+owner at a time. P1a is under way.
 
-Then P7, P8, P9, and P10 in that order. P7 lands beside P3, whose planner reads
-the same declared interface, and P7's spike is what gates P8. P8 lands beside
-P5-2 or after it, because a package's manifest and interface hash extend P5's
-source closure. P9 follows P8 for the frame group it fills, and is written
+**Contracts.** P7 lands beside P3, because P3's planner reads the interface P7
+declares, and P7's spike gates P8. P8 lands beside P5-2 or after it, because a
+package's manifest and interface hash extend P5's source closure. P7 and P8 do
+not read simulation state, so they do not wait on the state rebuild.
+
+**The frame graph and nesting.** P11 follows P3 and P7. P12 follows P11, and
+P13 follows P12. P14 follows P4, P7b, P8, P11, and P12, because the engine's
+composition and screens need somewhere to go before it moves. P7b's services
+and P4-1 run beside each other; P7b's SDF groups follow P4-1, and P4-2's mesh
+work follows both. P15 and P16 both
+follow P14: P15 also needs P4, and P16, the smallest package in this group,
+needs P14's float working targets. P17 follows P3, P4, P5, and compiled worlds.
+
+**Bound state.** P9 follows P8 for the frame group it fills. It is written
 against the state interface of
 [the presentation view](runtime-and-delivery.md#the-presentation-view), which
-the runtime and delivery programme owns. P10 is last: a bound member and an
-overridden member have to compose by a stated rule, so it needs P5-1 as well as
-P7's residency policies, P8's interface, and P9's mirror. None of P7 to P10
-starts before the state rebuild lands, because the mirror's refresh edits the
-export sweep and the delivery seam the rebuild is rewriting.
+the runtime and delivery programme owns. P10 is last in this group: a bound
+member and an overridden member have to compose by a stated rule, so it needs
+P5-1 as well as P7's residency policies, P8's interface, and P9's mirror.
+
+The longest dependency chain runs from P1a and P2 through P3 and P7 to P11
+and P12, joins P8 (which also waits on P5-2), and ends with P14 and then P15.
 
 ## Verification summary
 
 Focused shader and planner tests first, then the supported GPU fixtures
-through the real `Puck.World` executable on both backends, with performance
-measurements run without competing builds or GPU workloads. A GPU-backed check
-runs on real floor and ceiling hardware, not over a remote session, because a
-remote session reports neither the adapter's memory properties nor a true frame
-time. A missing environment leaves the milestone open with its blocked checks
-named. A
-completed package updates its owning guide and records the candidate,
-commands, environment, expected results, and retained evidence in the game's
-milestone record.
+through the real `Puck.World` executable on both backends. Performance is
+judged by code, disassembly, and deterministic counts; wall-clock and GPU
+timing are deferred with no date. A GPU-backed check runs on real floor and
+ceiling hardware, not over a remote session, because a remote session does not
+report the adapter's memory properties. A missing environment leaves the
+package open with its blocked checks named. A completed package updates its
+owning guide, and the landing commit message carries the evidence: the
+candidate, commands, environment, expected results, and retained evidence.
 
 ```bash
 dotnet test tests/Puck.Shaders.Tests -c Release

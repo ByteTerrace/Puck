@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics.Arm;
@@ -13,7 +14,8 @@ namespace Puck.Maths;
 /// The routines are written against <see cref="IBinaryInteger{TSelf}"/>, so a single implementation serves every
 /// width from <see cref="byte"/> through <see cref="System.Int128"/>. Bit-twiddling operations favor branchless,
 /// width-agnostic formulations (and hardware bit-manipulation instructions where available), so a closed generic
-/// compiles down to a compact, value-independent instruction sequence.
+/// compiles down to a compact, value-independent instruction sequence. Every hardware path returns the same bits as
+/// the portable formulation it replaces.
 /// </remarks>
 public static class BinaryIntegerFunctions {
     /// <summary>Reinterprets a Boolean as a <typeparamref name="T"/> without branching, yielding <c>1</c> for <see langword="true"/> and <c>0</c> for <see langword="false"/>.</summary>
@@ -30,50 +32,6 @@ public static class BinaryIntegerFunctions {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static T IsNonZero<T>(this T value) where T : IBinaryInteger<T> =>
         (T.Zero != value).As<T>();
-    /// <summary>
-    /// Builds the periodic bit mask whose set bits form blocks of <c>2^<paramref name="value"/></c> ones alternating
-    /// with equally sized blocks of zeros (for example <c>0x5555…</c>, <c>0x3333…</c>, and <c>0x0F0F…</c> for inputs
-    /// <c>0</c>, <c>1</c>, and <c>2</c>).
-    /// </summary>
-    /// <typeparam name="T">The fixed-width binary integer type the mask is produced in.</typeparam>
-    /// <param name="value">The block exponent; callers supply a nonnegative value for which two blocks of <c>2^value</c> bits fit in the word.</param>
-    /// <returns>The repeating mask for the requested block width.</returns>
-    /// <remarks>
-    /// Repeats a block of ones followed by an equally wide block of zeros through <see cref="RepeatBits{T}(T, int)"/>.
-    /// For b-bit blocks in a W-bit word, <c>(2^b - 1) * (2^W - 1) / (2^(2b) - 1)</c> simplifies to
-    /// <c>(2^W - 1) / (2^b + 1)</c>, the Fermat-number construction. These masks drive the SWAR bit-permutation
-    /// routines such as <see cref="BitwisePair{TInput, TResult}(TInput, TInput)"/> and <see cref="ReverseBits{T}(T)"/>.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static T NthFermatMask<T>(this int value) where T : IBinaryInteger<T> {
-        var blockWidth = (1 << value);
-
-        if (
-            (typeof(T) == typeof(UInt128)) ||
-            (typeof(T) == typeof(Int128))
-        ) {
-            return RepeatWordInto128<T>(
-                blockWidth: (blockWidth << 1),
-                value: (ulong.MaxValue >>> (64 - blockWidth))
-            );
-        }
-
-        // A legal block occupies at most half the word. Up through 128-bit carriers its ones therefore fit in a
-        // ulong; materializing that scalar first avoids spending the caller's inline budget on wide shifts/subtracts.
-        var pattern = ((Unsafe.SizeOf<T>() <= 16)
-            ? T.CreateTruncating(value: (ulong.MaxValue >>> (64 - blockWidth)))
-            : ((T.One << blockWidth) - T.One)
-        );
-
-        return pattern.RepeatBits(blockWidth: (blockWidth << 1));
-    }
-    /// <summary>Computes two raised to the power <paramref name="value"/> (that is, <c>1 &lt;&lt; <paramref name="value"/></c>).</summary>
-    /// <typeparam name="T">The binary integer type the result is produced in.</typeparam>
-    /// <param name="value">The exponent.</param>
-    /// <returns>The value <c>2^<paramref name="value"/></c>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static T NthPowerOfTwo<T>(this int value) where T : IBinaryInteger<T> =>
-        (T.One << value);
     /// <summary>Cyclically rotates the base-10 digits of <paramref name="value"/> by <paramref name="count"/> places, preserving the sign.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value whose decimal digits are rotated.</param>
@@ -85,7 +43,7 @@ public static class BinaryIntegerFunctions {
     /// always narrows back to a representable <typeparamref name="T"/>.
     /// </remarks>
     internal static T RotateDigits<T>(this T value, long count) where T : IBinaryInteger<T> {
-        var digitCount = value.LogarithmBase10();
+        var digitCount = value.DigitCount();
 
         count %= long.CreateTruncating(value: digitCount);
 
@@ -103,6 +61,252 @@ public static class BinaryIntegerFunctions {
         return ((startDigits * BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: countAsT)) + endDigits);
     }
 
+    // The SWAR forms are separate out-of-line methods so each is its own JIT root with its own inline budget, and so
+    // the law suite can hold them to the same oracle as the hardware path on a host that has BMI2.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static TResult BitwisePairBySwar<TInput, TResult>(TInput value, TInput other) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        var resultBitCount = (Unsafe.SizeOf<TResult>() << 3);
+        var laneBitCount = PairLaneBitCount<TInput, TResult>();
+        var laneMask = (TResult.AllBitsSet >>> (resultBitCount - laneBitCount));
+        var levelCount = BitOperations.Log2(value: ((uint)laneBitCount));
+        var evenBits = ClimbButterfly<TResult, SpreadRung<TResult>>(
+            levelCount: levelCount,
+            value: TResult.CreateTruncating(value: value) & laneMask
+        );
+        var oddBits = ClimbButterfly<TResult, SpreadRung<TResult>>(
+            levelCount: levelCount,
+            value: TResult.CreateTruncating(value: other) & laneMask
+        );
+
+        return evenBits | (oddBits << 1);
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static TResult BitwiseTripleBySwar<TInput, TResult>(TInput value, TInput second, TInput third) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        var resultBitCount = (Unsafe.SizeOf<TResult>() << 3);
+        var laneBitCount = TripleLaneBitCount<TInput, TResult>();
+        var laneMask = (TResult.AllBitsSet >>> (resultBitCount - laneBitCount));
+        var levelCount = (32 - BitOperations.LeadingZeroCount(value: ((uint)(laneBitCount - 1))));
+        var first = ClimbButterfly<TResult, TriadSpreadRung<TResult>>(
+            levelCount: levelCount,
+            value: TResult.CreateTruncating(value: value) & laneMask
+        );
+        var middle = ClimbButterfly<TResult, TriadSpreadRung<TResult>>(
+            levelCount: levelCount,
+            value: TResult.CreateTruncating(value: second) & laneMask
+        );
+        var last = ClimbButterfly<TResult, TriadSpreadRung<TResult>>(
+            levelCount: levelCount,
+            value: TResult.CreateTruncating(value: third) & laneMask
+        );
+
+        return first | (middle << 1) | (last << 2);
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (TResult, TResult) BitwiseUnpairBySwar<TInput, TResult>(TInput value) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        var slots = 0.NthFermatMask<TInput>();
+        // Only min(result width, half the input) bits of each component can land.
+        var levelCount = BitOperations.Log2(value: ((uint)Math.Min(
+            val1: (Unsafe.SizeOf<TResult>() << 3),
+            val2: (Unsafe.SizeOf<TInput>() << 2)
+        )));
+        var evenBits = ClimbButterfly<TInput, GatherRung<TInput>>(
+            levelCount: levelCount,
+            value: value & slots
+        );
+        var oddBits = ClimbButterfly<TInput, GatherRung<TInput>>(
+            levelCount: levelCount,
+            value: (value >> 1) & slots
+        );
+
+        return (TResult.CreateTruncating(value: evenBits), TResult.CreateTruncating(value: oddBits));
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (TResult, TResult, TResult) BitwiseUntripleBySwar<TInput, TResult>(TInput value) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        var slots = 3.ReplicationMask<TInput>();
+        // The first component owns ceil(width / 3) positions, the most of the three; no more of any can land.
+        var gatheredBitCount = Math.Min(
+            val1: (Unsafe.SizeOf<TResult>() << 3),
+            val2: (((Unsafe.SizeOf<TInput>() << 3) + 2) / 3)
+        );
+        var levelCount = (32 - BitOperations.LeadingZeroCount(value: ((uint)(gatheredBitCount - 1))));
+        var first = ClimbButterfly<TInput, TriadGatherRung<TInput>>(
+            levelCount: levelCount,
+            value: value & slots
+        );
+        var middle = ClimbButterfly<TInput, TriadGatherRung<TInput>>(
+            levelCount: levelCount,
+            value: (value >>> 1) & slots
+        );
+        var last = ClimbButterfly<TInput, TriadGatherRung<TInput>>(
+            levelCount: levelCount,
+            value: (value >>> 2) & slots
+        );
+
+        return (TResult.CreateTruncating(value: first), TResult.CreateTruncating(value: middle), TResult.CreateTruncating(value: last));
+    }
+    // Only min(input width, half the result) bits of each operand can land in a pair.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int PairLaneBitCount<TInput, TResult>() => Math.Min(
+        val1: (Unsafe.SizeOf<TInput>() << 3),
+        val2: (Unsafe.SizeOf<TResult>() << 2)
+    );
+    // The first operand of a triple owns ceil(width / 3) positions, the most of the three; no more of any can land.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int TripleLaneBitCount<TInput, TResult>() => Math.Min(
+        val1: (Unsafe.SizeOf<TInput>() << 3),
+        val2: (((Unsafe.SizeOf<TResult>() << 3) + 2) / 3)
+    );
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T ClimbButterfly<T, TRung>(T value, int levelCount) where T : IBinaryInteger<T> where TRung : IButterflyRung<T> {
+        // Unrolled by hand: the JIT keeps a counted loop as a loop, which rebuilds every mask at run time. Seven rungs
+        // cover every built-in carrier. The public members that climb stay NoInlining: inlined into a small caller,
+        // the caller's inline budget runs out part-way up the ladder and the remaining rungs stay calls.
+        if (0 < levelCount) { value = TRung.Apply(level: 0, levelCount: levelCount, value: value); }
+        if (1 < levelCount) { value = TRung.Apply(level: 1, levelCount: levelCount, value: value); }
+        if (2 < levelCount) { value = TRung.Apply(level: 2, levelCount: levelCount, value: value); }
+        if (3 < levelCount) { value = TRung.Apply(level: 3, levelCount: levelCount, value: value); }
+        if (4 < levelCount) { value = TRung.Apply(level: 4, levelCount: levelCount, value: value); }
+        if (5 < levelCount) { value = TRung.Apply(level: 5, levelCount: levelCount, value: value); }
+        if (6 < levelCount) { value = TRung.Apply(level: 6, levelCount: levelCount, value: value); }
+
+        // The explicit guard lets the JIT drop the wide-carrier loop outright; a bare counted loop survives as dead code.
+        if (7 < levelCount) {
+            var level = 7;
+
+            do {
+                value = TRung.Apply(
+                    level: level,
+                    levelCount: levelCount,
+                    value: value
+                );
+            } while (++level < levelCount);
+        }
+
+        return value;
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T ParallelBitDepositInHardware<T>(T value, T mask) where T : IBinaryInteger<T> {
+        if (Unsafe.SizeOf<T>() <= sizeof(uint)) {
+            return T.CreateTruncating(value: Bmi2.ParallelBitDeposit(
+                mask: ZeroExtendToUInt32(value: mask),
+                value: uint.CreateTruncating(value: value)
+            ));
+        }
+
+        if (Unsafe.SizeOf<T>() == sizeof(ulong)) {
+            return T.CreateTruncating(value: Bmi2.X64.ParallelBitDeposit(
+                mask: ulong.CreateTruncating(value: mask),
+                value: ulong.CreateTruncating(value: value)
+            ));
+        }
+
+        // A 128-bit word deposits each half separately: the upper half resumes at the source bit after the last one
+        // the lower half's mask consumed.
+        var wideMask = UInt128.CreateTruncating(value: mask);
+        var wideValue = UInt128.CreateTruncating(value: value);
+        var lowerMask = ((ulong)wideMask);
+        var lower = Bmi2.X64.ParallelBitDeposit(
+            mask: lowerMask,
+            value: ((ulong)wideValue)
+        );
+        var upper = Bmi2.X64.ParallelBitDeposit(
+            mask: ((ulong)(wideMask >>> 64)),
+            value: ((ulong)(wideValue >>> BitOperations.PopCount(value: lowerMask)))
+        );
+
+        return T.CreateTruncating(value: new UInt128(
+            lower: lower,
+            upper: upper
+        ));
+    }
+    private static T ParallelBitDepositInSoftware<T>(T value, T mask) where T : IBinaryInteger<T> {
+        var result = T.Zero;
+
+        // Walks the mask's set bits from the bottom, consuming one source bit per mask bit.
+        while (T.Zero != mask) {
+            var lowest = mask.LowestSetBit();
+
+            result |= lowest & (T.Zero - (value & T.One));
+            mask ^= lowest;
+            value >>>= 1;
+        }
+
+        return result;
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T ParallelBitExtractInHardware<T>(T value, T mask) where T : IBinaryInteger<T> {
+        if (Unsafe.SizeOf<T>() <= sizeof(uint)) {
+            return T.CreateTruncating(value: Bmi2.ParallelBitExtract(
+                mask: ZeroExtendToUInt32(value: mask),
+                value: uint.CreateTruncating(value: value)
+            ));
+        }
+
+        if (Unsafe.SizeOf<T>() == sizeof(ulong)) {
+            return T.CreateTruncating(value: Bmi2.X64.ParallelBitExtract(
+                mask: ulong.CreateTruncating(value: mask),
+                value: ulong.CreateTruncating(value: value)
+            ));
+        }
+
+        // A 128-bit word extracts each half separately and packs the upper half's bits directly above the lower's.
+        var wideMask = UInt128.CreateTruncating(value: mask);
+        var wideValue = UInt128.CreateTruncating(value: value);
+        var lowerMask = ((ulong)wideMask);
+        var lower = Bmi2.X64.ParallelBitExtract(
+            mask: lowerMask,
+            value: ((ulong)wideValue)
+        );
+        var upper = Bmi2.X64.ParallelBitExtract(
+            mask: ((ulong)(wideMask >>> 64)),
+            value: ((ulong)(wideValue >>> 64))
+        );
+
+        return T.CreateTruncating(value: (((UInt128)upper) << BitOperations.PopCount(value: lowerMask)) | lower);
+    }
+    private static T ParallelBitExtractInSoftware<T>(T value, T mask) where T : IBinaryInteger<T> {
+        var result = T.Zero;
+        var destination = T.One;
+
+        // Walks the mask's set bits from the bottom, packing each selected source bit into the next result bit.
+        while (T.Zero != mask) {
+            var lowest = mask.LowestSetBit();
+
+            result |= destination & (T.Zero - (value & lowest).IsNonZero());
+            mask ^= lowest;
+            destination <<= 1;
+        }
+
+        return result;
+    }
+    /// <summary>Returns whether BMI2's deposit and extract instructions cover every bit of <typeparamref name="T"/>, splitting a 128-bit word into two 64-bit halves, and run fast on this host (<see cref="BitManipulation.HasFastParallelBits"/>).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool HasHardwareBitScatter<T>() where T : IBinaryInteger<T> =>
+        (((Unsafe.SizeOf<T>() <= sizeof(uint))
+            ? Bmi2.IsSupported
+            : ((Unsafe.SizeOf<T>() <= 16) && Bmi2.X64.IsSupported)) && BitManipulation.HasFastParallelBits);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T LowMaskInRange<T>(int count) where T : IBinaryInteger<T> {
+        if (Bmi2.IsSupported && (Unsafe.SizeOf<T>() <= sizeof(uint))) {
+            return T.CreateTruncating(value: Bmi2.ZeroHighBits(
+                index: ((uint)count),
+                value: uint.MaxValue
+            ));
+        }
+
+        if (Bmi2.X64.IsSupported && (Unsafe.SizeOf<T>() == sizeof(ulong))) {
+            return T.CreateTruncating(value: Bmi2.X64.ZeroHighBits(
+                index: ((ulong)count),
+                value: ulong.MaxValue
+            ));
+        }
+
+        // Two half shifts: neither reaches the carrier width, so a whole-word count clears every bit instead of the
+        // shift count wrapping to zero.
+        var half = (count >> 1);
+
+        return ~((T.AllBitsSet << half) << (count - half));
+    }
     private static BigInteger NextSamePopulationCount(BigInteger value) {
         // Gosper's hack with unbounded headroom: strictly ascending and never terminal, because a positive
         // BigInteger always has another zero above its highest set bit.
@@ -129,8 +333,8 @@ public static class BinaryIntegerFunctions {
             : ~NextSamePopulationCount(value: ~value)
         );
     }
-    // The source pattern fits in a ulong. A whole 128-bit block is an identity; every smaller legal block repeats
-    // identically in each half. Shared by the wide public path and Fermat masks, whose pattern is known to fit.
+    // The source pattern fits in a ulong and the block divides 64, so every copy sits identically in each half. A whole
+    // 128-bit block is an identity. Shared by the wide public path and Fermat masks, whose pattern is known to fit.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static T RepeatWordInto128<T>(ulong value, int blockWidth) where T : IBinaryInteger<T> {
         if (blockWidth == 128) { return T.CreateTruncating(value: value); }
@@ -145,9 +349,27 @@ public static class BinaryIntegerFunctions {
     // Keep exception construction out of the arithmetic inline budget. Successful calls eliminate these branches
     // when the width and pattern are known; invalid calls retain the same exception type, parameter and message.
     [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowAlignment() =>
+        throw new ArgumentOutOfRangeException(
+            message: "The alignment must be a positive power of two.",
+            paramName: "alignment"
+        );
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowExponent() =>
+        throw new ArgumentOutOfRangeException(
+            message: "The exponent lies outside the range the carrier's width admits.",
+            paramName: "exponent"
+        );
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowLowMaskCount() =>
+        throw new ArgumentOutOfRangeException(
+            message: "The count must lie between zero and the carrier's bit width.",
+            paramName: "count"
+        );
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowReplicationBlockWidth() =>
         throw new ArgumentOutOfRangeException(
-            message: "The block width must be a positive divisor of the word width.",
+            message: "The block width must be positive and no wider than the word.",
             paramName: "blockWidth"
         );
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -156,29 +378,90 @@ public static class BinaryIntegerFunctions {
             message: "The pattern must fit entirely within one block.",
             paramName: "value"
         );
+    /// <summary>Builds the word whose set bits form runs of <paramref name="width"/> ones repeating every <c>3 * width</c> bits, the top run truncated at the word's edge.</summary>
+    /// <remarks>These are the one-in-three Morton masks: <c>(2^width - 1) * ReplicationMask(3 * width)</c>, written as <c>(marks &lt;&lt; width) - marks</c> so a 128-bit carrier never multiplies. A period wider than the word holds the first run alone.</remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T TriadMask<T>(int width) where T : IBinaryInteger<T> {
+        var bitWidth = (Unsafe.SizeOf<T>() << 3);
+
+        if ((3 * width) > bitWidth) {
+            return (T.AllBitsSet >>> (bitWidth - Math.Min(
+                val1: width,
+                val2: bitWidth
+            )));
+        }
+
+        var marks = (3 * width).ReplicationMask<T>();
+
+        return ((marks << width) - marks);
+    }
     /// <summary>Validates the shared block contract and returns the carrier's fixed bit width.</summary>
     /// <typeparam name="T">The binary integer carrier.</typeparam>
     /// <param name="blockWidth">The proposed block width.</param>
     /// <returns>The fixed carrier width in bits.</returns>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the carrier width.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not positive or exceeds the carrier width.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int ValidateReplicationBlockWidth<T>(int blockWidth) where T : IBinaryInteger<T> {
         BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReplicationMask));
 
         var bitWidth = (Unsafe.SizeOf<T>() << 3);
 
-        if (
-            (blockWidth <= 0) ||
-            (blockWidth > bitWidth) ||
-            ((bitWidth % blockWidth) != 0)
-        ) {
-            ThrowReplicationBlockWidth();
-        }
+        if (((uint)(blockWidth - 1)) >= ((uint)bitWidth)) { ThrowReplicationBlockWidth(); }
 
         return bitWidth;
     }
+    // Sub-word carriers reach the 32-bit instructions zero-extended, so a signed mask's sign bits never select
+    // positions above the carrier.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint ZeroExtendToUInt32<T>(T value) where T : IBinaryInteger<T> =>
+        uint.CreateTruncating(value: value) & (uint.MaxValue >>> (32 - (Unsafe.SizeOf<T>() << 3)));
 
+    /// <summary>Rounds <paramref name="value"/> down to a multiple of <paramref name="alignment"/>.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="value">The value to round.</param>
+    /// <param name="alignment">The alignment; a positive power of two.</param>
+    /// <returns>The largest multiple of <paramref name="alignment"/> that does not exceed <paramref name="value"/>. A negative signed value rounds toward negative infinity.</returns>
+    /// <remarks>Clears the bits below the alignment, <c>value &amp; ~(alignment - 1)</c>; nothing can overflow.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="alignment"/> is not a positive power of two.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T AlignDown<T>(this T value, T alignment) where T : IBinaryInteger<T> {
+        if (!T.IsPow2(value: alignment)) { ThrowAlignment(); }
+
+        return value & ~(alignment - T.One);
+    }
+    /// <summary>Rounds <paramref name="value"/> up to a multiple of <paramref name="alignment"/>.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="value">The value to round.</param>
+    /// <param name="alignment">The alignment; a positive power of two.</param>
+    /// <returns>The smallest multiple of <paramref name="alignment"/> that is not below <paramref name="value"/>, wrapped to the carrier: when that multiple lies beyond the top of a fixed-width <typeparamref name="T"/>, the result is its residue modulo the carrier (zero for an unsigned carrier, the signed minimum for a signed one).</returns>
+    /// <remarks>Computes <c>(value + (alignment - 1)) &amp; ~(alignment - 1)</c>. Because the carrier's modulus is itself a multiple of every legal alignment, the wrapped sum still rounds to the exact residue.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="alignment"/> is not a positive power of two.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T AlignUp<T>(this T value, T alignment) where T : IBinaryInteger<T> {
+        if (!T.IsPow2(value: alignment)) { ThrowAlignment(); }
+
+        var slack = (alignment - T.One);
+
+        return (value + slack) & ~slack;
+    }
+    /// <summary>Returns the bit length of <paramref name="value"/>: the one-based position of its highest set bit.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="value">The value to examine.</param>
+    /// <returns>The position of the most significant set bit, counting from <c>1</c>, or <c>0</c> when <paramref name="value"/> is zero. A negative fixed-width value sets its sign bit and so has the carrier's full width.</returns>
+    /// <remarks>
+    /// "Bit length" has a well-defined meaning even for an unbounded <typeparamref name="T"/> such as <see cref="BigInteger"/>,
+    /// so this is computed from the value itself (<see cref="IBinaryInteger{TSelf}.GetShortestBitLength"/>) rather than
+    /// from a fixed carrier width in that case. Every fixed-width instantiation keeps the branchless width-minus-leading-
+    /// zeros fast path — see <see cref="BinaryIntegerConstants{T}.IsUnbounded"/> for why the guard costs nothing there.
+    /// </remarks>
+    public static T BitLength<T>(this T value) where T : IBinaryInteger<T> {
+        if (typeof(T) == typeof(BigInteger)) {
+            return T.CreateTruncating(value: value.GetShortestBitLength());
+        }
+
+        return (BinaryIntegerConstants<T>.Size - T.LeadingZeroCount(value: value));
+    }
     /// <summary>
     /// Interleaves the bits of two integers into a single value (a Morton, or Z-order, code), placing the bits of
     /// <paramref name="value"/> in the even-indexed positions and the bits of <paramref name="other"/> in the
@@ -188,142 +471,109 @@ public static class BinaryIntegerFunctions {
     /// <typeparam name="TResult">The binary integer type of the interleaved result; it must be wide enough to hold the combined bits of both operands.</typeparam>
     /// <param name="value">The operand whose bits occupy the even-indexed positions of the result.</param>
     /// <param name="other">The operand whose bits occupy the odd-indexed positions of the result.</param>
-    /// <returns>The Morton code that interleaves the bits of <paramref name="value"/> and <paramref name="other"/>.</returns>
+    /// <returns>The Morton code that interleaves the bits of <paramref name="value"/> and <paramref name="other"/>. Operand bits whose position would fall outside <typeparamref name="TResult"/> are dropped, and an operand narrower than half the result leaves the upper positions clear.</returns>
     /// <remarks>
-    /// The hardware <c>PDEP</c> instruction is used when the BMI2 instruction set is available; otherwise a
-    /// width-agnostic SWAR fallback performs the interleave. <see cref="BitwiseUnpair{TInput, TResult}(TInput)"/> is the
-    /// inverse operation.
+    /// Deposits each operand through <see cref="ParallelBitDeposit{T}(T, T)"/> under the alternating mask when fast BMI2
+    /// (<see cref="BitManipulation.HasFastParallelBits"/>) covers <typeparamref name="TResult"/>; otherwise a width-agnostic SWAR ladder spreads each operand under
+    /// <see cref="NthFermatMask{T}(int)"/> masks. <see cref="BitwiseUnpair{TInput, TResult}(TInput)"/> is the inverse
+    /// operation.
     /// </remarks>
     /// <exception cref="NotSupportedException"><typeparamref name="TInput"/> or <typeparamref name="TResult"/> is <see cref="BigInteger"/>. Interleaving requires a fixed carrier width for both operand and result.</exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static TResult BitwisePair<TInput, TResult>(this TInput value, TInput other) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
         BinaryIntegerConstants<TInput>.ThrowIfUnbounded(operationName: nameof(BitwisePair));
         BinaryIntegerConstants<TResult>.ThrowIfUnbounded(operationName: nameof(BitwisePair));
 
-        switch (value) {
-            case short:
-            case ushort:
-                if (Bmi2.IsSupported) {
-                    return TResult.CreateTruncating(value: Bmi2.ParallelBitDeposit(
-                        mask: 0.NthFermatMask<uint>(),
-                        value: uint.CreateTruncating(value: value)
-                    )) |
-                        TResult.CreateTruncating(value: Bmi2.ParallelBitDeposit(
-                        mask: (0.NthFermatMask<uint>() << 1),
-                        value: uint.CreateTruncating(value: other)
-                    ));
-                }
-                break;
-            case int:
-            case uint:
-                if (Bmi2.X64.IsSupported) {
-                    return TResult.CreateTruncating(value: Bmi2.X64.ParallelBitDeposit(
-                        mask: 0.NthFermatMask<ulong>(),
-                        value: ulong.CreateTruncating(value: value)
-                    )) |
-                        TResult.CreateTruncating(value: Bmi2.X64.ParallelBitDeposit(
-                        mask: (0.NthFermatMask<ulong>() << 1),
-                        value: ulong.CreateTruncating(value: other)
-                    ));
-                }
-                break;
-            default:
-                break;
-        }
-
-        const int LoopOffset = 7;
-
-        int offset;
-        int shift;
-
-        var resultBitCount = int.CreateChecked(value: BinaryIntegerConstants<TResult>.Size);
-        var bitCountDividedByTwo = (resultBitCount >> 1);
-        var inputBitCount = int.CreateChecked(value: BinaryIntegerConstants<TInput>.Size);
-        var inputMask = (TResult.AllBitsSet >>> (resultBitCount - inputBitCount));
-        var evenBits = TResult.CreateTruncating(value: other) & inputMask;
-        var oddBits = TResult.CreateTruncating(value: value) & inputMask;
-
-        if (LoopOffset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            var i = ((int.CreateChecked(value: BinaryIntegerConstants<TResult>.Log2Size) - LoopOffset) - 1);
-
-            do {
-                offset = (i + (LoopOffset - 1));
-                shift = offset.NthPowerOfTwo<int>();
-
-                DistributeBits(
-                    evenBits: ref evenBits,
-                    oddBits: ref oddBits,
-                    offset: offset,
-                    shift: shift
-                );
-            } while (0 < --i);
-        }
-
-        offset = 6; if ((shift = offset.NthPowerOfTwo<int>()) < bitCountDividedByTwo) {
-            DistributeBits(
-                evenBits: ref evenBits,
-                oddBits: ref oddBits,
-                offset: offset,
-                shift: shift
-            );
-        }
-        offset = 5; if ((shift = offset.NthPowerOfTwo<int>()) < bitCountDividedByTwo) {
-            DistributeBits(
-                evenBits: ref evenBits,
-                oddBits: ref oddBits,
-                offset: offset,
-                shift: shift
-            );
-        }
-        offset = 4; if ((shift = offset.NthPowerOfTwo<int>()) < bitCountDividedByTwo) {
-            DistributeBits(
-                evenBits: ref evenBits,
-                oddBits: ref oddBits,
-                offset: offset,
-                shift: shift
-            );
-        }
-        offset = 3; if ((shift = offset.NthPowerOfTwo<int>()) < bitCountDividedByTwo) {
-            DistributeBits(
-                evenBits: ref evenBits,
-                oddBits: ref oddBits,
-                offset: offset,
-                shift: shift
-            );
-        }
-        offset = 2; if ((shift = offset.NthPowerOfTwo<int>()) < bitCountDividedByTwo) {
-            DistributeBits(
-                evenBits: ref evenBits,
-                oddBits: ref oddBits,
-                offset: offset,
-                shift: shift
-            );
-        }
-        offset = 1; if ((shift = offset.NthPowerOfTwo<int>()) < bitCountDividedByTwo) {
-            DistributeBits(
-                evenBits: ref evenBits,
-                oddBits: ref oddBits,
-                offset: offset,
-                shift: shift
-            );
-        }
-        offset = 0; if ((shift = offset.NthPowerOfTwo<int>()) < bitCountDividedByTwo) {
-            DistributeBits(
-                evenBits: ref evenBits,
-                oddBits: ref oddBits,
-                offset: offset,
-                shift: shift
+        if (!HasHardwareBitScatter<TResult>()) {
+            return BitwisePairBySwar<TInput, TResult>(
+                other: other,
+                value: value
             );
         }
 
-        return oddBits | (evenBits << shift);
+        var resultBitCount = (Unsafe.SizeOf<TResult>() << 3);
+        var laneBitCount = PairLaneBitCount<TInput, TResult>();
+        var evenBits = TResult.CreateTruncating(value: value);
+        var oddBits = TResult.CreateTruncating(value: other);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void DistributeBits(int offset, int shift, ref TResult evenBits, ref TResult oddBits) {
-            var mask = offset.NthFermatMask<TResult>();
+        // A deposit reads only as many source bits as its mask has slots, so a lane that fills half the result needs
+        // no trimming; a narrower lane must shed the sign extension that CreateTruncating brought in.
+        if (laneBitCount < (resultBitCount >> 1)) {
+            var laneMask = (TResult.AllBitsSet >>> (resultBitCount - laneBitCount));
 
-            evenBits = (evenBits | (evenBits << shift)) & mask;
-            oddBits = (oddBits | (oddBits << shift)) & mask;
+            evenBits &= laneMask;
+            oddBits &= laneMask;
         }
+
+        var slots = 0.NthFermatMask<TResult>();
+
+        return ParallelBitDepositInHardware(
+            mask: slots,
+            value: evenBits
+        ) | ParallelBitDepositInHardware(
+            mask: (slots << 1),
+            value: oddBits
+        );
+    }
+    /// <summary>
+    /// Interleaves the bits of three integers into a single value (a three-dimensional Morton code), placing bit
+    /// <c>i</c> of <paramref name="value"/>, <paramref name="second"/> and <paramref name="third"/> at positions
+    /// <c>3i</c>, <c>3i + 1</c> and <c>3i + 2</c>.
+    /// </summary>
+    /// <typeparam name="TInput">The binary integer type of the operands.</typeparam>
+    /// <typeparam name="TResult">The binary integer type of the interleaved result.</typeparam>
+    /// <param name="value">The operand whose bits occupy the positions congruent to zero modulo three.</param>
+    /// <param name="second">The operand whose bits occupy the positions congruent to one modulo three.</param>
+    /// <param name="third">The operand whose bits occupy the positions congruent to two modulo three.</param>
+    /// <returns>The Morton code of the three operands. Operand bits whose position would fall outside <typeparamref name="TResult"/> are dropped: a 64-bit result carries 22 bits of <paramref name="value"/> and 21 of each other operand.</returns>
+    /// <remarks>
+    /// Deposits each operand through <see cref="ParallelBitDeposit{T}(T, T)"/> under the one-in-three
+    /// <see cref="ReplicationMask{T}(int)"/> when fast BMI2 (<see cref="BitManipulation.HasFastParallelBits"/>) covers
+    /// <typeparamref name="TResult"/>; otherwise a SWAR ladder
+    /// spreads each operand under masks of <c>s</c> ones every <c>3s</c> bits, the replication pattern with its last
+    /// copy truncated at the word's edge. <see cref="BitwiseUntriple{TInput, TResult}(TInput)"/> is the inverse.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="TInput"/> or <typeparamref name="TResult"/> is <see cref="BigInteger"/>. Interleaving requires a fixed carrier width for both operand and result.</exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static TResult BitwiseTriple<TInput, TResult>(this TInput value, TInput second, TInput third) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        BinaryIntegerConstants<TInput>.ThrowIfUnbounded(operationName: nameof(BitwiseTriple));
+        BinaryIntegerConstants<TResult>.ThrowIfUnbounded(operationName: nameof(BitwiseTriple));
+
+        if (!HasHardwareBitScatter<TResult>()) {
+            return BitwiseTripleBySwar<TInput, TResult>(
+                second: second,
+                third: third,
+                value: value
+            );
+        }
+
+        var resultBitCount = (Unsafe.SizeOf<TResult>() << 3);
+        var laneBitCount = TripleLaneBitCount<TInput, TResult>();
+        var first = TResult.CreateTruncating(value: value);
+        var middle = TResult.CreateTruncating(value: second);
+        var last = TResult.CreateTruncating(value: third);
+
+        // As for a pair: only a lane narrower than the first operand's slot count needs its sign extension shed.
+        if (laneBitCount < ((resultBitCount + 2) / 3)) {
+            var laneMask = (TResult.AllBitsSet >>> (resultBitCount - laneBitCount));
+
+            first &= laneMask;
+            middle &= laneMask;
+            last &= laneMask;
+        }
+
+        var slots = 3.ReplicationMask<TResult>();
+
+        return ParallelBitDepositInHardware(
+            mask: slots,
+            value: first
+        ) | ParallelBitDepositInHardware(
+            mask: (slots << 1),
+            value: middle
+        ) | ParallelBitDepositInHardware(
+            mask: (slots << 2),
+            value: last
+        );
     }
     /// <summary>
     /// Separates the interleaved bits of a Morton (Z-order) code into its two components, returning the even-indexed
@@ -332,135 +582,97 @@ public static class BinaryIntegerFunctions {
     /// <typeparam name="TInput">The binary integer type of the interleaved input.</typeparam>
     /// <typeparam name="TResult">The binary integer type of each extracted component.</typeparam>
     /// <param name="value">The Morton code to de-interleave.</param>
-    /// <returns>A pair whose first element is gathered from the even-indexed bits of <paramref name="value"/> and whose second element is gathered from the odd-indexed bits.</returns>
+    /// <returns>A pair whose first element is gathered from the even-indexed bits of <paramref name="value"/> and whose second element is gathered from the odd-indexed bits. A component wider than <typeparamref name="TResult"/> is truncated to it.</returns>
     /// <remarks>
-    /// This is the inverse of <see cref="BitwisePair{TInput, TResult}(TInput, TInput)"/>. The hardware <c>PEXT</c>
-    /// instruction is used when the BMI2 instruction set is available; otherwise a width-agnostic SWAR fallback
-    /// performs the extraction.
+    /// This is the inverse of <see cref="BitwisePair{TInput, TResult}(TInput, TInput)"/>. Extracts through
+    /// <see cref="ParallelBitExtract{T}(T, T)"/> when fast BMI2 (<see cref="BitManipulation.HasFastParallelBits"/>) covers
+    /// <typeparamref name="TInput"/>; otherwise a width-agnostic SWAR
+    /// ladder gathers each component.
     /// </remarks>
     /// <exception cref="NotSupportedException"><typeparamref name="TInput"/> or <typeparamref name="TResult"/> is <see cref="BigInteger"/>. De-interleaving requires a fixed carrier width for both operand and result.</exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static (TResult, TResult) BitwiseUnpair<TInput, TResult>(this TInput value) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
         BinaryIntegerConstants<TInput>.ThrowIfUnbounded(operationName: nameof(BitwiseUnpair));
         BinaryIntegerConstants<TResult>.ThrowIfUnbounded(operationName: nameof(BitwiseUnpair));
 
-        switch (value) {
-            case int:
-            case uint:
-                if (Bmi2.IsSupported) {
-                    return (
-                        TResult.CreateTruncating(value: Bmi2.ParallelBitExtract(
-                        mask: 0.NthFermatMask<uint>(),
-                        value: uint.CreateTruncating(value: value)
-                    )),
-                        TResult.CreateTruncating(value: Bmi2.ParallelBitExtract(
-                        mask: (0.NthFermatMask<uint>() << 1),
-                        value: uint.CreateTruncating(value: value)
-                    ))
-                    );
-                }
-                break;
-            case long:
-            case ulong:
-                if (Bmi2.X64.IsSupported) {
-                    return (
-                        TResult.CreateTruncating(value: Bmi2.X64.ParallelBitExtract(
-                        mask: 0.NthFermatMask<ulong>(),
-                        value: ulong.CreateTruncating(value: value)
-                    )),
-                        TResult.CreateTruncating(value: Bmi2.X64.ParallelBitExtract(
-                        mask: (0.NthFermatMask<ulong>() << 1),
-                        value: ulong.CreateTruncating(value: value)
-                    ))
-                    );
-                }
-                break;
-            default:
-                break;
-        }
+        if (!HasHardwareBitScatter<TInput>()) { return BitwiseUnpairBySwar<TInput, TResult>(value: value); }
 
-        return (UnpairCore(value: value), UnpairCore(value: (value >> 1)));
+        var slots = 0.NthFermatMask<TInput>();
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void AggregateBits(int offset, int shift, ref TInput value) {
-            value = (((value | (value >> shift)) & offset.NthFermatMask<TInput>()));
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static TResult UnpairCore(TInput value) {
-            const int LoopOffset = 7;
+        return (
+            TResult.CreateTruncating(value: ParallelBitExtractInHardware(
+                mask: slots,
+                value: value
+            )),
+            TResult.CreateTruncating(value: ParallelBitExtractInHardware(
+                mask: (slots << 1),
+                value: value
+            ))
+        );
+    }
+    /// <summary>
+    /// Separates the interleaved bits of a three-dimensional Morton code into its three components, gathering the bits
+    /// at positions congruent to zero, one and two modulo three.
+    /// </summary>
+    /// <typeparam name="TInput">The binary integer type of the interleaved input.</typeparam>
+    /// <typeparam name="TResult">The binary integer type of each extracted component.</typeparam>
+    /// <param name="value">The Morton code to de-interleave.</param>
+    /// <returns>The three components in position order. A component wider than <typeparamref name="TResult"/> is truncated to it.</returns>
+    /// <remarks>
+    /// This is the inverse of <see cref="BitwiseTriple{TInput, TResult}(TInput, TInput, TInput)"/>. Extracts through
+    /// <see cref="ParallelBitExtract{T}(T, T)"/> when fast BMI2 (<see cref="BitManipulation.HasFastParallelBits"/>) covers
+    /// <typeparamref name="TInput"/>; otherwise a SWAR ladder
+    /// gathers each component.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="TInput"/> or <typeparamref name="TResult"/> is <see cref="BigInteger"/>. De-interleaving requires a fixed carrier width for both operand and result.</exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static (TResult, TResult, TResult) BitwiseUntriple<TInput, TResult>(this TInput value) where TInput : IBinaryInteger<TInput> where TResult : IBinaryInteger<TResult> {
+        BinaryIntegerConstants<TInput>.ThrowIfUnbounded(operationName: nameof(BitwiseUntriple));
+        BinaryIntegerConstants<TResult>.ThrowIfUnbounded(operationName: nameof(BitwiseUntriple));
 
-            int offset;
-            int shift;
+        if (!HasHardwareBitScatter<TInput>()) { return BitwiseUntripleBySwar<TInput, TResult>(value: value); }
 
-            var bitCount = int.CreateChecked(value: BinaryIntegerConstants<TResult>.Size);
+        var slots = 3.ReplicationMask<TInput>();
 
-            value &= 0.NthFermatMask<TInput>();
+        return (
+            TResult.CreateTruncating(value: ParallelBitExtractInHardware(
+                mask: slots,
+                value: value
+            )),
+            TResult.CreateTruncating(value: ParallelBitExtractInHardware(
+                mask: (slots << 1),
+                value: value
+            )),
+            TResult.CreateTruncating(value: ParallelBitExtractInHardware(
+                mask: (slots << 2),
+                value: value
+            ))
+        );
+    }
+    /// <summary>Scatters the low bits of <paramref name="value"/> into the set positions of <paramref name="mask"/>, the operation x86 names <c>PDEP</c>.</summary>
+    /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
+    /// <param name="value">The source whose bits are consumed from bit zero upward, one per set bit of <paramref name="mask"/>.</param>
+    /// <param name="mask">The destination positions; any bit pattern, including a negative signed value.</param>
+    /// <returns>A value whose bit at the <c>k</c>-th lowest set position of <paramref name="mask"/> is bit <c>k</c> of <paramref name="value"/>, with every position outside <paramref name="mask"/> clear.</returns>
+    /// <remarks>
+    /// One <c>PDEP</c> serves a carrier up to 64 bits wide and two serve a 128-bit carrier when BMI2 is available and fast
+    /// (<see cref="BitManipulation.HasFastParallelBits"/>); otherwise a loop visits the mask's set bits from the bottom. Both return the same bits.
+    /// <see cref="ParallelBitExtract{T}(T, T)"/> is the inverse on the positions <paramref name="mask"/> selects.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>, which has no fixed word width.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T ParallelBitDeposit<T>(this T value, T mask) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ParallelBitDeposit));
 
-            offset = 0; if ((shift = offset.NthPowerOfTwo<int>()) < bitCount) {
-                AggregateBits(
-                    offset: (offset + 1),
-                    shift: shift,
-                    value: ref value
-                );
-            }
-            offset = 1; if ((shift = offset.NthPowerOfTwo<int>()) < bitCount) {
-                AggregateBits(
-                    offset: (offset + 1),
-                    shift: shift,
-                    value: ref value
-                );
-            }
-            offset = 2; if ((shift = offset.NthPowerOfTwo<int>()) < bitCount) {
-                AggregateBits(
-                    offset: (offset + 1),
-                    shift: shift,
-                    value: ref value
-                );
-            }
-            offset = 3; if ((shift = offset.NthPowerOfTwo<int>()) < bitCount) {
-                AggregateBits(
-                    offset: (offset + 1),
-                    shift: shift,
-                    value: ref value
-                );
-            }
-            offset = 4; if ((shift = offset.NthPowerOfTwo<int>()) < bitCount) {
-                AggregateBits(
-                    offset: (offset + 1),
-                    shift: shift,
-                    value: ref value
-                );
-            }
-            offset = 5; if ((shift = offset.NthPowerOfTwo<int>()) < bitCount) {
-                AggregateBits(
-                    offset: (offset + 1),
-                    shift: shift,
-                    value: ref value
-                );
-            }
-            offset = 6; if ((shift = offset.NthPowerOfTwo<int>()) < bitCount) {
-                AggregateBits(
-                    offset: (offset + 1),
-                    shift: shift,
-                    value: ref value
-                );
-            }
-
-            if (LoopOffset.NthPowerOfTwo<int>() < bitCount) {
-                var i = (int.CreateChecked(value: BinaryIntegerConstants<TResult>.Log2Size) - LoopOffset);
-
-                do {
-                    shift = (++offset).NthPowerOfTwo<int>();
-
-                    AggregateBits(
-                        offset: (offset + 1),
-                        shift: shift,
-                        value: ref value
-                    );
-                } while (0 < --i);
-            }
-
-            return TResult.CreateTruncating(value: value);
-        }
+        return (HasHardwareBitScatter<T>()
+            ? ParallelBitDepositInHardware(
+                mask: mask,
+                value: value
+            )
+            : ParallelBitDepositInSoftware(
+                mask: mask,
+                value: value
+            ));
     }
     /// <summary>Divides <paramref name="value"/> by <paramref name="divisor"/> with a quotient rounded toward positive infinity.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -556,7 +768,7 @@ public static class BinaryIntegerFunctions {
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to operate on.</param>
     /// <returns>A value in which only the least significant set bit of <paramref name="value"/> is set, or zero when <paramref name="value"/> is zero.</returns>
-    public static T ExtractLowestSetBit<T>(this T value) where T : IBinaryInteger<T> =>
+    public static T LowestSetBit<T>(this T value) where T : IBinaryInteger<T> =>
         value & (-value);
     /// <summary>Clears the contiguous run of set bits at and below the lowest clear (zero) bit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -699,12 +911,6 @@ public static class BinaryIntegerFunctions {
             : result
         );
     }
-    /// <summary>Returns the one-based position of the lowest set bit of <paramref name="value"/>.</summary>
-    /// <typeparam name="T">The binary integer type.</typeparam>
-    /// <param name="value">The value to examine.</param>
-    /// <returns>The position of the least significant set bit, counting from <c>1</c>, or <c>0</c> when <paramref name="value"/> is zero.</returns>
-    public static T LeastSignificantBit<T>(this T value) where T : IBinaryInteger<T> =>
-        (value.IsNonZero() * (T.TrailingZeroCount(value: value) + T.One));
     /// <summary>Returns the least significant base-10 digit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to examine; its sign is ignored.</param>
@@ -716,7 +922,7 @@ public static class BinaryIntegerFunctions {
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value to measure; its sign is ignored.</param>
     /// <returns>The decimal digit count of <paramref name="value"/>. For a non-zero magnitude this equals <c>⌊log₁₀(|value|)⌋ + 1</c>; the magnitude zero yields <c>1</c>.</returns>
-    public static T LogarithmBase10<T>(this T value) where T : IBinaryInteger<T> {
+    public static T DigitCount<T>(this T value) where T : IBinaryInteger<T> {
         if (T.IsZero(value: value)) { return T.One; }
 
         // From the bit length: 1233/4096 sits just below log₁₀ 2, so estimate = ⌊(bitLength − 1)·1233/4096⌋ never exceeds
@@ -725,8 +931,8 @@ public static class BinaryIntegerFunctions {
         // 10^estimate, which keeps both the SIGNED value (T.MinValue has no T.Abs) and the carrier's own ceiling
         // (10^(estimate + 1) may not fit) out of the decision.
         var bitLength = int.CreateChecked(value: ((value < T.Zero)
-            ? (~value).MostSignificantBit()
-            : value.MostSignificantBit()));
+            ? (~value).BitLength()
+            : value.BitLength()));
         var estimate = T.CreateChecked(value: (((bitLength - 1) * 1233) >> 12));
         // The quotient's magnitude is below one hundred, so negating it is always representable — unlike a negated ten
         // on an unsigned carrier, which would wrap to the carrier's top and admit every quotient.
@@ -741,22 +947,100 @@ public static class BinaryIntegerFunctions {
             : (estimate + T.One)
         );
     }
-    /// <summary>Returns the one-based position of the highest set bit of <paramref name="value"/>, equivalently its bit length.</summary>
-    /// <typeparam name="T">The binary integer type.</typeparam>
-    /// <param name="value">The value to examine.</param>
-    /// <returns>The position of the most significant set bit, counting from <c>1</c>, or <c>0</c> when <paramref name="value"/> is zero.</returns>
+    /// <summary>Gathers the bits of <paramref name="value"/> at the set positions of <paramref name="mask"/> into the low bits of the result, the operation x86 names <c>PEXT</c>.</summary>
+    /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
+    /// <param name="value">The source whose selected bits are gathered.</param>
+    /// <param name="mask">The source positions; any bit pattern, including a negative signed value.</param>
+    /// <returns>A value whose bit <c>k</c> is the bit of <paramref name="value"/> at the <c>k</c>-th lowest set position of <paramref name="mask"/>, with every bit from the mask's population count upward clear.</returns>
     /// <remarks>
-    /// "Bit length" has a well-defined meaning even for an unbounded <typeparamref name="T"/> such as <see cref="BigInteger"/>,
-    /// so this is computed from the value itself (<see cref="IBinaryInteger{TSelf}.GetShortestBitLength"/>) rather than
-    /// from a fixed carrier width in that case. Every fixed-width instantiation keeps the branchless width-minus-leading-
-    /// zeros fast path — see <see cref="BinaryIntegerConstants{T}.IsUnbounded"/> for why the guard costs nothing there.
+    /// One <c>PEXT</c> serves a carrier up to 64 bits wide and two serve a 128-bit carrier when BMI2 is available and fast
+    /// (<see cref="BitManipulation.HasFastParallelBits"/>); otherwise a loop visits the mask's set bits from the bottom. Both return the same bits.
+    /// <see cref="ParallelBitDeposit{T}(T, T)"/> is the inverse on the positions <paramref name="mask"/> selects.
     /// </remarks>
-    public static T MostSignificantBit<T>(this T value) where T : IBinaryInteger<T> {
-        if (typeof(T) == typeof(BigInteger)) {
-            return T.CreateTruncating(value: value.GetShortestBitLength());
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>, which has no fixed word width.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T ParallelBitExtract<T>(this T value, T mask) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ParallelBitExtract));
+
+        return (HasHardwareBitScatter<T>()
+            ? ParallelBitExtractInHardware(
+                mask: mask,
+                value: value
+            )
+            : ParallelBitExtractInSoftware(
+                mask: mask,
+                value: value
+            ));
+    }
+    /// <summary>Builds the word whose low <paramref name="count"/> bits are set and whose remaining bits are clear.</summary>
+    /// <typeparam name="T">The binary integer type the mask is produced in.</typeparam>
+    /// <param name="count">The number of low ones, from zero through the bit width of <typeparamref name="T"/>; a <see cref="BigInteger"/> accepts any non-negative count.</param>
+    /// <returns><c>2^count - 1</c> as a bit pattern: zero when <paramref name="count"/> is zero, and the all-ones word (minus one for a signed carrier) when it equals the carrier width.</returns>
+    /// <remarks>Exact at both ends, where <c>(1 &lt;&lt; count) - 1</c> fails at the full width because the shift count wraps modulo the width. BMI2's <c>BZHI</c> builds it in one instruction for carriers up to 64 bits.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative or exceeds the bit width of <typeparamref name="T"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T LowMask<T>(this int count) where T : IBinaryInteger<T> {
+        if (BinaryIntegerConstants<T>.IsUnbounded
+            ? (count < 0)
+            : (((uint)count) > ((uint)(Unsafe.SizeOf<T>() << 3)))) { ThrowLowMaskCount(); }
+
+        return LowMaskInRange<T>(count: count);
+    }
+    /// <summary>
+    /// Builds the periodic bit mask whose set bits form blocks of <c>2^<paramref name="exponent"/></c> ones alternating
+    /// with equally sized blocks of zeros (for example <c>0x5555…</c>, <c>0x3333…</c>, and <c>0x0F0F…</c> for exponents
+    /// <c>0</c>, <c>1</c>, and <c>2</c>).
+    /// </summary>
+    /// <typeparam name="T">The fixed-width binary integer type the mask is produced in, signed or unsigned.</typeparam>
+    /// <param name="exponent">The block exponent, from zero through <c>log₂(width) - 1</c>, so that two blocks of <c>2^exponent</c> bits fit in the word.</param>
+    /// <returns>The repeating mask for the requested block width; the largest exponent yields the low half of the word.</returns>
+    /// <remarks>
+    /// Repeats a block of ones followed by an equally wide block of zeros through <see cref="RepeatBits{T}(T, int)"/>.
+    /// For b-bit blocks in a W-bit word, <c>(2^b - 1) * (2^W - 1) / (2^(2b) - 1)</c> simplifies to
+    /// <c>(2^W - 1) / (2^b + 1)</c>, the Fermat-number construction. These masks drive the SWAR bit-permutation
+    /// routines such as <see cref="BitwisePair{TInput, TResult}(TInput, TInput)"/> and <see cref="ReverseBits{T}(T)"/>.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>, which has no fixed word width.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="exponent"/> is negative, or two blocks of <c>2^exponent</c> bits do not fit in the word.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T NthFermatMask<T>(this int exponent) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(NthFermatMask));
+
+        if (((uint)exponent) >= ((uint)BitOperations.Log2(value: ((uint)(Unsafe.SizeOf<T>() << 3))))) { ThrowExponent(); }
+
+        var blockWidth = (1 << exponent);
+
+        if (
+            (typeof(T) == typeof(UInt128)) ||
+            (typeof(T) == typeof(Int128))
+        ) {
+            return RepeatWordInto128<T>(
+                blockWidth: (blockWidth << 1),
+                value: (ulong.MaxValue >>> (64 - blockWidth))
+            );
         }
 
-        return (BinaryIntegerConstants<T>.Size - T.LeadingZeroCount(value: value));
+        // A legal block occupies at most half the word. Up through 128-bit carriers its ones therefore fit in a
+        // ulong; materializing that scalar first avoids spending the caller's inline budget on wide shifts/subtracts.
+        var pattern = ((Unsafe.SizeOf<T>() <= 16)
+            ? T.CreateTruncating(value: (ulong.MaxValue >>> (64 - blockWidth)))
+            : ((T.One << blockWidth) - T.One)
+        );
+
+        return pattern.RepeatBits(blockWidth: (blockWidth << 1));
+    }
+    /// <summary>Computes two raised to the power <paramref name="exponent"/>: the word whose only set bit is bit <paramref name="exponent"/>.</summary>
+    /// <typeparam name="T">The binary integer type the result is produced in.</typeparam>
+    /// <param name="exponent">The exponent, from zero through the bit width of <typeparamref name="T"/> minus one; a <see cref="BigInteger"/> accepts any non-negative exponent.</param>
+    /// <returns><c>2^exponent</c> as a bit pattern. For a signed carrier the top exponent sets the sign bit alone and yields the signed minimum.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="exponent"/> is negative or not below the bit width of <typeparamref name="T"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T NthPowerOfTwo<T>(this int exponent) where T : IBinaryInteger<T> {
+        if (BinaryIntegerConstants<T>.IsUnbounded
+            ? (exponent < 0)
+            : (((uint)exponent) >= ((uint)(Unsafe.SizeOf<T>() << 3)))) { ThrowExponent(); }
+
+        return (T.One << exponent);
     }
     /// <summary>Returns the most significant (leading) base-10 digit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -765,7 +1049,7 @@ public static class BinaryIntegerFunctions {
     public static T MostSignificantDigit<T>(this T value) where T : IBinaryInteger<T> =>
         // Divide the signed value by the leading power of ten, then abs the single-digit result: |value / p| equals
         // |value| / p (p is positive), so this avoids the unrepresentable T.Abs(T.MinValue).
-        T.Abs(value: (value / BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: (value.LogarithmBase10() - T.One))));
+        T.Abs(value: (value / BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: (value.DigitCount() - T.One))));
     /// <summary>Advances <paramref name="value"/> to the next bit permutation with the same population count of its finite bit content.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The current bit permutation.</param>
@@ -800,19 +1084,15 @@ public static class BinaryIntegerFunctions {
         var populationCount = int.CreateChecked(value: T.PopCount(value: value));
         var x = value.FillFromLowestSetBit();
         var y = int.CreateTruncating(value: (T.TrailingZeroCount(value: value) + T.One));
-        var z = (((~x).ExtractLowestSetBit() - T.One) >>> y);
+        var z = (((~x).LowestSetBit() - T.One) >>> y);
         var result = (x + T.One) | z;
 
-        if (T.PopCount(result) == T.CreateChecked(value: populationCount)) {
+        if (T.PopCount(value: result) == T.CreateChecked(value: populationCount)) {
             return result;
         }
 
-        var bitCount = int.CreateChecked(value: BinaryIntegerConstants<T>.Size);
-
-        return ((populationCount == bitCount)
-            ? ~T.Zero
-            : ((T.One << populationCount) - T.One)
-        );
+        // The count is at most the width, so the whole-word class wraps to all ones rather than a shift by zero.
+        return LowMaskInRange<T>(count: populationCount);
     }
     /// <summary>Returns the parity of the population count of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -826,31 +1106,15 @@ public static class BinaryIntegerFunctions {
     /// <returns>The standard binary value corresponding to the Gray code <paramref name="value"/>.</returns>
     /// <remarks>This is the inverse of <see cref="ReflectedBinaryEncode{T}(T)"/>.</remarks>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>. Decoding is width-bounded — it XOR-folds against the carrier's own bit width.</exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static T ReflectedBinaryDecode<T>(this T value) where T : IBinaryInteger<T> {
         BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReflectedBinaryDecode));
 
-        const int LoopOffset = 8;
-
-        var bitCount = int.CreateChecked(value: BinaryIntegerConstants<T>.Size);
-
-        if (0.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 0.NthPowerOfTwo<int>()); }
-        if (1.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 1.NthPowerOfTwo<int>()); }
-        if (2.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 2.NthPowerOfTwo<int>()); }
-        if (3.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 3.NthPowerOfTwo<int>()); }
-        if (4.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 4.NthPowerOfTwo<int>()); }
-        if (5.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 5.NthPowerOfTwo<int>()); }
-        if (6.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 6.NthPowerOfTwo<int>()); }
-        if (7.NthPowerOfTwo<int>() < bitCount) { value ^= (value >>> 7.NthPowerOfTwo<int>()); }
-
-        if (LoopOffset.NthPowerOfTwo<int>() < bitCount) {
-            var i = (int.CreateChecked(value: BinaryIntegerConstants<T>.Log2Size) - LoopOffset);
-
-            do {
-                value ^= (value >>> (bitCount >> i));
-            } while (0 < --i);
-        }
-
-        return value;
+        // A prefix XOR from the top: each rung doubles the span already folded in.
+        return ClimbButterfly<T, PrefixXorRung<T>>(
+            levelCount: BitOperations.Log2(value: ((uint)(Unsafe.SizeOf<T>() << 3))),
+            value: value
+        );
     }
     /// <summary>Converts a standard binary value to its reflected binary (Gray) code.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -862,16 +1126,17 @@ public static class BinaryIntegerFunctions {
     /// <summary>Repeats the low <paramref name="blockWidth"/> bits of <paramref name="value"/> across a fixed-width word.</summary>
     /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
     /// <param name="value">The pattern, with no set bits outside its block. A whole-word block accepts every bit pattern, including negative values.</param>
-    /// <param name="blockWidth">A positive divisor of the bit width of <typeparamref name="T"/>, including the whole word width.</param>
-    /// <returns>The repeated pattern; for example, <c>0xABu.RepeatBits(8)</c> is <c>0xABABABAB</c>.</returns>
+    /// <param name="blockWidth">The block width, from one through the bit width of <typeparamref name="T"/>. A width that does not divide the word leaves the last copy truncated at the top.</param>
+    /// <returns>The repeated pattern; for example, <c>0xABu.RepeatBits(8)</c> is <c>0xABABABAB</c> and <c>0b011u.RepeatBits(3)</c> is <c>0xDB6DB6DB</c>.</returns>
     /// <remarks>
     /// Multiplying the pattern by <see cref="ReplicationMask{T}(int)"/> places one copy in each block without
-    /// overlapping bits. For <see cref="UInt128"/> and <see cref="Int128"/>, proper blocks repeat within a
-    /// <see cref="ulong"/> first and that word is copied into both halves; whole-word blocks return unchanged.
-    /// This avoids wide division and multiplication. The result is a bit pattern, so a signed result may be negative.
+    /// overlapping bits, and the product's truncation cuts the last copy. For <see cref="UInt128"/> and
+    /// <see cref="Int128"/>, a block dividing 64 repeats within a <see cref="ulong"/> first and that word is copied into
+    /// both halves, avoiding the wide multiplication; whole-word blocks return unchanged. The result is a bit pattern,
+    /// so a signed result may be negative.
     /// </remarks>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the word width, or <paramref name="value"/> has set bits outside the block.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not positive or exceeds the word width, or <paramref name="value"/> has set bits outside the block.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T RepeatBits<T>(this T value, int blockWidth) where T : IBinaryInteger<T> {
         var bitWidth = ValidateReplicationBlockWidth<T>(blockWidth: blockWidth);
@@ -879,36 +1144,41 @@ public static class BinaryIntegerFunctions {
         if (blockWidth == bitWidth) { return value; }
 
         if (
-            (typeof(T) == typeof(UInt128)) ||
-            (typeof(T) == typeof(Int128))
+            (
+                (typeof(T) == typeof(UInt128)) ||
+                (typeof(T) == typeof(Int128))
+            ) &&
+            ((64 % blockWidth) == 0)
         ) {
             if ((value >>> 64) != T.Zero) { ThrowReplicationPattern(); }
 
-            // Every proper block fits in at most 64 bits. Repeat within a ulong and copy the word, avoiding
-            // the wide multiplication that otherwise survives even when both operands are constants.
+            // A block dividing 64 fits in a ulong. Repeat within it and copy the word, avoiding the wide
+            // multiplication that otherwise survives even when both operands are constants.
             return RepeatWordInto128<T>(
                 value: ulong.CreateTruncating(value: value),
                 blockWidth: blockWidth
             );
         }
 
-        var blockMask = (T.AllBitsSet >>> (bitWidth - blockWidth));
-
-        if ((value & ~blockMask) != T.Zero) { ThrowReplicationPattern(); }
+        if ((value & ~(T.AllBitsSet >>> (bitWidth - blockWidth))) != T.Zero) { ThrowReplicationPattern(); }
 
         return unchecked((value * blockWidth.ReplicationMask<T>()));
     }
     /// <summary>Builds a word with one set bit at the bottom of every block of <paramref name="blockWidth"/> bits.</summary>
     /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
-    /// <param name="blockWidth">A positive divisor of the bit width of <typeparamref name="T"/>, including the whole word width.</param>
-    /// <returns>The replication mask; for example, <c>8.ReplicationMask&lt;uint&gt;()</c> is <c>0x01010101</c>.</returns>
+    /// <param name="blockWidth">The block width, from one through the bit width of <typeparamref name="T"/>. A width that does not divide the word still marks its last, truncated block.</param>
+    /// <returns>The replication mask: bit <c>i * blockWidth</c> set for every block that starts inside the word. For example, <c>8.ReplicationMask&lt;uint&gt;()</c> is <c>0x01010101</c> and <c>3.ReplicationMask&lt;byte&gt;()</c> is <c>0x49</c>.</returns>
     /// <remarks>
     /// For a W-bit word and b-bit blocks, the geometric series <c>1 + 2^b + 2^(2b) + ...</c> equals
-    /// <c>(2^W - 1) / (2^b - 1)</c>. A signed result carries the same bits as its unsigned counterpart;
-    /// in particular, one-bit blocks return an all-ones word. No shift by the whole word width is performed.
+    /// <c>(2^W - 1) / (2^b - 1)</c> when b divides W. Otherwise, with <c>W = qb + r</c>, the floor of that quotient
+    /// holds q marks sitting r bits above the block boundaries; shifting it left by <c>b - r</c> moves them onto the
+    /// boundaries from b through the truncated block's at <c>qb</c>, and the mark at bit zero is set separately. A
+    /// signed result carries the same bits as its unsigned
+    /// counterpart; in particular, one-bit blocks return an all-ones word. No shift by the whole word width is
+    /// performed.
     /// </remarks>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>, which has no fixed word width.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the word width.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not positive or exceeds the word width.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T ReplicationMask<T>(this int blockWidth) where T : IBinaryInteger<T> {
         var bitWidth = ValidateReplicationBlockWidth<T>(blockWidth: blockWidth);
@@ -919,13 +1189,21 @@ public static class BinaryIntegerFunctions {
             (typeof(T) == typeof(UInt128)) ||
             (typeof(T) == typeof(Int128))
         ) {
-            // Every proper divisor of 128 divides 64. Build one machine-word mask and copy it into both halves;
-            // the JIT folds ulong division by constants, whereas Int128/UInt128 division remains a runtime call.
-            var half = blockWidth.ReplicationMask<ulong>();
+            // Build each half from machine words; the JIT folds ulong division by constants, whereas Int128/UInt128
+            // division remains a runtime call. The upper half's first mark sits where the first block at or above bit
+            // 64 begins, so a block dividing 64 marks both halves identically.
+            if (blockWidth >= 64) {
+                return T.CreateTruncating(value: new UInt128(
+                    lower: 1UL,
+                    upper: (1UL << (blockWidth - 64))
+                ));
+            }
+
+            var lower = blockWidth.ReplicationMask<ulong>();
 
             return T.CreateTruncating(value: new UInt128(
-                lower: half,
-                upper: half
+                lower: lower,
+                upper: (lower << ((blockWidth - 1) - (63 % blockWidth)))
             ));
         }
 
@@ -933,21 +1211,27 @@ public static class BinaryIntegerFunctions {
         var signed = T.IsNegative(value: allBits).As<int>();
         var divisor = ((T.One << blockWidth) - T.One);
 
-        // Both the all-ones numerator and its exact quotient are odd. Halving the positive numerator for signed T
-        // yields (quotient - 1) / 2 after division; doubling and setting bit zero reconstructs the original bits.
-        return (((allBits >>> signed) / divisor) << signed) | T.One;
+        // The all-ones numerator is odd, so halving it for a signed T floors the quotient to half its unsigned value;
+        // the quotient itself is odd exactly when the block divides the word. The shift restores the halved bit and
+        // lifts the marks of a non-dividing block by b - r, where (b - 1) - ((W - 1) mod b) is b - r reduced modulo b;
+        // the final OR sets bit zero.
+        return (((allBits >>> signed) / divisor) << (signed + ((blockWidth - 1) - ((bitWidth - 1) % blockWidth)))) | T.One;
     }
     /// <summary>Returns <paramref name="value"/> with the order of all of its bits reversed.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The value whose bits are reversed.</param>
     /// <returns>A value whose bit at position <c>i</c> equals the bit of <paramref name="value"/> at position <c>(width − 1 − i)</c>.</returns>
-    /// <remarks>Implemented as a width-agnostic SWAR butterfly that swaps progressively larger bit groups.</remarks>
+    /// <remarks>
+    /// Arm64 reverses a 32- or 64-bit word in one instruction. Elsewhere a SWAR ladder reverses the bits within each
+    /// byte and a byte swap reverses the byte order; a single byte closes its ladder with a nibble rotation instead.
+    /// </remarks>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>. Bit reversal requires a fixed carrier width to define which bit is "first".</exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static T ReverseBits<T>(this T value) where T : IBinaryInteger<T> {
         BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReverseBits));
 
         // One RBIT instruction on Arm64 for the two machine widths; the reversal is exact, so it returns the same bits
-        // the SWAR butterfly below does.
+        // the ladder below does.
         if (ArmBase.Arm64.IsSupported) {
             if (
                 (typeof(T) == typeof(ulong)) ||
@@ -964,75 +1248,27 @@ public static class BinaryIntegerFunctions {
             }
         }
 
-        const int LoopOffset = 7;
-
-        int offset;
-
-        var bitCountDividedByTwo = (int.CreateChecked(value: BinaryIntegerConstants<T>.Size) >> 1);
-
-        offset = 0; if (offset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            SwapBitPairs(
-                offset: offset,
-                value: ref value
+        if (Unsafe.SizeOf<T>() == sizeof(byte)) {
+            value = ClimbButterfly<T, SwapRung<T>>(
+                levelCount: 2,
+                value: value
             );
-        }
-        offset = 1; if (offset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            SwapBitPairs(
-                offset: offset,
-                value: ref value
-            );
-        }
-        offset = 2; if (offset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            SwapBitPairs(
-                offset: offset,
-                value: ref value
-            );
-        }
-        offset = 3; if (offset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            SwapBitPairs(
-                offset: offset,
-                value: ref value
-            );
-        }
-        offset = 4; if (offset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            SwapBitPairs(
-                offset: offset,
-                value: ref value
-            );
-        }
-        offset = 5; if (offset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            SwapBitPairs(
-                offset: offset,
-                value: ref value
-            );
-        }
-        offset = 6; if (offset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            SwapBitPairs(
-                offset: offset,
-                value: ref value
-            );
+
+            return (value >>> 4) | (value << 4);
         }
 
-        if (LoopOffset.NthPowerOfTwo<int>() < bitCountDividedByTwo) {
-            var i = ((int.CreateChecked(value: BinaryIntegerConstants<T>.Log2Size) - LoopOffset) - 1);
+        // Three rungs reverse the bits within every byte; the byte swap finishes the permutation.
+        value = ClimbButterfly<T, SwapRung<T>>(
+            levelCount: 3,
+            value: value
+        );
 
-            do {
-                SwapBitPairs(
-                    offset: ++offset,
-                    value: ref value
-                );
-            } while (0 < --i);
-        }
-
-        return (value >>> bitCountDividedByTwo) | (value << bitCountDividedByTwo);
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static void SwapBitPairs(int offset, ref T value) {
-            var mask = offset.NthFermatMask<T>();
-            var shift = offset.NthPowerOfTwo<int>();
-
-            value = ((value >>> shift) & mask) | ((value & mask) << shift);
-        }
+        return Unsafe.SizeOf<T>() switch {
+            sizeof(ushort) => T.CreateTruncating(value: BinaryPrimitives.ReverseEndianness(value: ushort.CreateTruncating(value: value))),
+            sizeof(uint) => T.CreateTruncating(value: BinaryPrimitives.ReverseEndianness(value: uint.CreateTruncating(value: value))),
+            sizeof(ulong) => T.CreateTruncating(value: BinaryPrimitives.ReverseEndianness(value: ulong.CreateTruncating(value: value))),
+            _ => T.CreateTruncating(value: BinaryPrimitives.ReverseEndianness(value: UInt128.CreateTruncating(value: value))),
+        };
     }
     /// <summary>Returns <paramref name="value"/> with the order of its base-10 digits reversed, preserving the sign.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -1075,4 +1311,113 @@ public static class BinaryIntegerFunctions {
     /// </remarks>
     public static T RotateDigitsRight<T>(this T value, int count) where T : IBinaryInteger<T> =>
         value.RotateDigits(count: -((long)count));
+    /// <summary>Sets every bit below the highest set bit of <paramref name="value"/>, filling from its leading one down to bit zero.</summary>
+    /// <typeparam name="T">The fixed-width binary integer type.</typeparam>
+    /// <param name="value">The value to operate on.</param>
+    /// <returns>The all-ones word of <paramref name="value"/>'s <see cref="BitLength{T}(T)"/>: zero when <paramref name="value"/> is zero, and all ones for a negative signed value, whose sign bit is its highest set bit. This is the dual of <see cref="FillFromLowestSetBit{T}(T)"/>.</returns>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>, whose negative values have no highest set bit.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T SmearBelowHighestSetBit<T>(this T value) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(SmearBelowHighestSetBit));
+
+        return LowMaskInRange<T>(count: int.CreateTruncating(value: value.BitLength()));
+    }
+    /// <summary>Adds two values, reporting whether the exact sum is representable in <typeparamref name="T"/>.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="left">The first addend.</param>
+    /// <param name="right">The second addend.</param>
+    /// <param name="sum">The exact sum when it is representable; otherwise the wrapped sum.</param>
+    /// <returns><see langword="true"/> when the addition did not overflow. A signed sum overflows exactly when both
+    /// addends share a sign the wrapped sum does not; an unsigned sum overflows exactly when it wraps below an addend.
+    /// A <see cref="BigInteger"/> sum never overflows.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryAdd<T>(this T left, T right, out T sum) where T : IBinaryInteger<T> {
+        sum = unchecked((left + right));
+
+        return (T.IsNegative(value: T.AllBitsSet)
+            ? !T.IsNegative(value: (left ^ sum) & (right ^ sum))
+            : (sum >= left)
+        );
+    }
+    /// <summary>Converts a value to another binary integer type when, and only when, the conversion is exact.</summary>
+    /// <typeparam name="TWide">The source type.</typeparam>
+    /// <typeparam name="TNarrow">The destination type.</typeparam>
+    /// <param name="value">The value to convert.</param>
+    /// <param name="result">The converted value when <paramref name="value"/> is representable in
+    /// <typeparamref name="TNarrow"/>; otherwise zero.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> lies in <typeparamref name="TNarrow"/>'s range, so
+    /// <paramref name="result"/> denotes the same integer. Nothing is wrapped or clamped: an out-of-range value is
+    /// refused.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryNarrow<TWide, TNarrow>(this TWide value, out TNarrow result) where TWide : IBinaryInteger<TWide> where TNarrow : IBinaryInteger<TNarrow> {
+        // A saturating conversion is exact exactly when the value is in range; out of range it lands on a destination
+        // extreme strictly nearer zero than the value, which the saturating conversion back cannot restore.
+        var narrowed = TNarrow.CreateSaturating(value: value);
+
+        if (TWide.CreateSaturating(value: narrowed) != value) {
+            result = TNarrow.Zero;
+
+            return false;
+        }
+
+        result = narrowed;
+
+        return true;
+    }
+
+    /// <summary>One rung of a log-depth SWAR network over <typeparamref name="T"/>: the rung at <c>level</c> moves bit groups <c>2^level</c> wide.</summary>
+    /// <typeparam name="T">The binary integer carrier.</typeparam>
+    private interface IButterflyRung<T> where T : IBinaryInteger<T> {
+        /// <summary>Applies the rung at <paramref name="level"/> of a ladder <paramref name="levelCount"/> rungs tall.</summary>
+        static abstract T Apply(T value, int level, int levelCount);
+    }
+    /// <summary>Gathers the even bits of each <c>2^(level + 2)</c>-bit block into its low half; the inverse of <see cref="SpreadRung{T}"/>.</summary>
+    private readonly struct GatherRung<T> : IButterflyRung<T> where T : IBinaryInteger<T> {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T Apply(T value, int level, int levelCount) =>
+            (value | (value >> level.NthPowerOfTwo<int>())) & (level + 1).NthFermatMask<T>();
+    }
+    /// <summary>XOR-folds each bit with the one <c>2^level</c> positions above it, a step of the Gray-code prefix sum.</summary>
+    private readonly struct PrefixXorRung<T> : IButterflyRung<T> where T : IBinaryInteger<T> {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T Apply(T value, int level, int levelCount) =>
+            value ^ (value >>> level.NthPowerOfTwo<int>());
+    }
+    /// <summary>Spreads each block's low half apart from the top rung down, so that after the last rung every source bit sits at an even position.</summary>
+    private readonly struct SpreadRung<T> : IButterflyRung<T> where T : IBinaryInteger<T> {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T Apply(T value, int level, int levelCount) {
+            var exponent = ((levelCount - 1) - level);
+
+            return (value | (value << exponent.NthPowerOfTwo<int>())) & exponent.NthFermatMask<T>();
+        }
+    }
+    /// <summary>Exchanges each pair of neighbouring <c>2^level</c>-bit groups.</summary>
+    private readonly struct SwapRung<T> : IButterflyRung<T> where T : IBinaryInteger<T> {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T Apply(T value, int level, int levelCount) {
+            var mask = level.NthFermatMask<T>();
+            var shift = level.NthPowerOfTwo<int>();
+
+            return ((value >>> shift) & mask) | ((value & mask) << shift);
+        }
+    }
+    /// <summary>Gathers every third bit, doubling the packed run each rung; the inverse of <see cref="TriadSpreadRung{T}"/>.</summary>
+    private readonly struct TriadGatherRung<T> : IButterflyRung<T> where T : IBinaryInteger<T> {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T Apply(T value, int level, int levelCount) {
+            var run = (2 << level);
+
+            return (value | (value >>> run)) & TriadMask<T>(width: run);
+        }
+    }
+    /// <summary>Spreads runs apart from the top rung down, so that after the last rung every source bit sits at a multiple of three.</summary>
+    private readonly struct TriadSpreadRung<T> : IButterflyRung<T> where T : IBinaryInteger<T> {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T Apply(T value, int level, int levelCount) {
+            var run = (1 << ((levelCount - 1) - level));
+
+            return (value | (value << (run << 1))) & TriadMask<T>(width: run);
+        }
+    }
 }

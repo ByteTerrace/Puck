@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-cost.v1",
-  "world": "games/poker.world.json",
+  "world": "games/poker.puck",
   "simulationRateHz": 30,
   "ticks": 610,
   "workUnits": {
@@ -8,7 +8,7 @@
       "ruleRows": 21,
       "interactionRows": 0,
       "evaluationSlots": 27,
-      "workUnitsPerTick": 94253,
+      "workUnitsPerTick": 53621,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,
@@ -18,7 +18,7 @@
       "ruleRows": 21,
       "interactionRows": 0,
       "evaluationSlots": 27,
-      "workUnitsPerTick": 94253,
+      "workUnitsPerTick": 53621,
       "flockAffinityWorkUnitsPerTick": 0,
       "decisionImagePointsPerTick": 0,
       "decisionGridBuildsPerTick": 0,

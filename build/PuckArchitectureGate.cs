@@ -27,11 +27,9 @@ public sealed class PuckArchitectureGate : Task {
     private const string BackendsLayer = "Backends";
     private const string CompositionRootsLayer = "Composition roots";
     private const string PresentationLayer = "Presentation";
+    private const string TestKind = "Test";
 
     private readonly Dictionary<string, ProjectFacts> m_facts = new Dictionary<string, ProjectFacts>(comparer: StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Named backend-quarantine exceptions: <c>Include</c> is the project, <c>Reason</c> is why.</summary>
-    public ITaskItem[] BackendExceptions { get; set; } = Array.Empty<ITaskItem>();
 
     /// <summary>
     /// This project's <c>@(ProjectReference)</c> as MSBuild evaluated it, which includes an edge contributed by
@@ -39,28 +37,20 @@ public sealed class PuckArchitectureGate : Task {
     /// text is read only for provenance, where being incomplete degrades a message rather than a verdict.
     /// </summary>
     public ITaskItem[] DeclaredReferences { get; set; } = Array.Empty<ITaskItem>();
-
     /// <summary>The kind taxonomy: <c>Include</c> is the kind, <c>Ranked</c> is "true" or "false".</summary>
     public ITaskItem[] Kinds { get; set; } = Array.Empty<ITaskItem>();
-
     /// <summary>This project's declared <c>&lt;PuckKind&gt;</c>.</summary>
     public string Kind { get; set; } = "";
-
     /// <summary>This project's declared <c>&lt;PuckLayer&gt;</c>, empty for a terminal kind.</summary>
     public string Layer { get; set; } = "";
-
     /// <summary>The layer taxonomy: <c>Include</c> is the row name, <c>Rank</c> its index from the top.</summary>
     public ITaskItem[] Layers { get; set; } = Array.Empty<ITaskItem>();
-
     /// <summary>Exact-equality closures: <c>Include</c> is the project, <c>Closure</c> a semicolon list.</summary>
     public ITaskItem[] Profiles { get; set; } = Array.Empty<ITaskItem>();
-
     /// <summary>This project's full path, used for provenance and for the diagnostic's file position.</summary>
     public string ProjectFile { get; set; } = "";
-
     /// <summary>This project's name.</summary>
     public string ProjectName { get; set; } = "";
-
     /// <summary>
     /// The WHOLE resolved reference set, unfiltered. Project-produced items carry
     /// <c>MSBuildSourceProjectFile</c> — the csproj that produced the assembly, which is what makes the
@@ -81,7 +71,7 @@ public sealed class PuckArchitectureGate : Task {
         var ownRank = RankOf(kinds: kinds, ranks: ranks, kind: Kind, layer: Layer);
 
         foreach (var reference in closure) {
-            ok &= CheckEdge(kinds: kinds, ranks: ranks, ownRank: ownRank, reference: reference);
+            ok &= CheckEdge(kinds: kinds, ownRank: ownRank, ranks: ranks, reference: reference);
         }
 
         ok &= CheckBackendQuarantine(closure: closure, kinds: kinds);
@@ -91,7 +81,7 @@ public sealed class PuckArchitectureGate : Task {
     }
 
     private bool CheckBackendQuarantine(List<ProjectFacts> closure, Dictionary<string, bool> kinds) {
-        var backends = closure.Where(predicate: f => f.Layer == BackendsLayer).ToArray();
+        var backends = closure.Where(predicate: f => (f.Layer == BackendsLayer)).ToArray();
 
         if (backends.Length == 0) {
             return true;
@@ -101,16 +91,17 @@ public sealed class PuckArchitectureGate : Task {
             return true;
         }
 
-        var exception = BackendExceptions.FirstOrDefault(predicate: e => string.Equals(a: e.ItemSpec, b: ProjectName, comparisonType: StringComparison.OrdinalIgnoreCase));
-
-        if (exception != null) {
+        // A backend's own test project names the backend because the backend is what it tests: a Test-kind project
+        // named Puck.X.Tests may hold Puck.X, and no other backend.
+        if (string.Equals(a: Kind, b: TestKind, comparisonType: StringComparison.OrdinalIgnoreCase)
+            && backends.All(predicate: backend => string.Equals(a: ProjectName, b: (backend.Name + ".Tests"), comparisonType: StringComparison.OrdinalIgnoreCase))) {
             return true;
         }
 
         // A terminal consumer inherits the closure of whatever it composes and never introduces a backend: every
         // ranked project in its closure passed this gate in its own build, so only an edge this project names
         // itself is checked.
-        var terminal = kinds.TryGetValue(key: Kind, value: out var ranked) && !ranked;
+        var terminal = (kinds.TryGetValue(key: Kind, value: out var ranked) && !ranked);
         var declared = EvaluatedReferenceNames();
         var introduced = backends.Where(predicate: b => declared.Contains(item: b.Name)).ToArray();
 
@@ -124,18 +115,16 @@ public sealed class PuckArchitectureGate : Task {
             LogViolation(
                 code: "PUCKARCH002",
                 message:
-                    $"{Describe()} holds the Backends-row assembly '{backend.Name}' in its resolved closure. Only the Presentation row and composition roots may. "
-                    + $"Arrives by: {path}. "
-                    + "The .Presentation wrapper row exists precisely so engine code never names a backend. If this edge is genuinely right, the fix is a "
-                    + "PuckArchitectureBackendException in build/Architecture.props carrying the reason it is right — never a widening of the rule, which would "
-                    + "silently un-check every project at once.");
+                    (((((string)$"{Describe()} holds the Backends-row assembly '{backend.Name}' in its resolved closure. Only the Presentation row and composition roots may. Arrives by: {path}. ")
+                    + "The .Presentation wrapper row exists precisely so engine code never names a backend, and a backend's own test project (Puck.X.Tests, ")
+                    + "Test kind) holds only Puck.X. If this edge is genuinely right, the fix is a reasoned change to the quarantine in build/Architecture.props ")
+                    + "— never a quiet widening, which would silently un-check every project at once."));
         }
 
         return false;
     }
-
     private bool CheckEdge(Dictionary<string, bool> kinds, Dictionary<string, int> ranks, int ownRank, ProjectFacts reference) {
-        var ownRanked = !kinds.TryGetValue(key: Kind, value: out var thisRanked) || thisRanked;
+        var ownRanked = (!kinds.TryGetValue(key: Kind, value: out var thisRanked) || thisRanked);
 
         // An UNDECLARED referent fails HERE, at the consumer. It used to fall through RankOf to int.MaxValue
         // — bottom of the world, and therefore referenceable by everyone — which the unit-1 review turned
@@ -149,12 +138,11 @@ public sealed class PuckArchitectureGate : Task {
             LogViolation(
                 code: "PUCKARCH007",
                 message:
-                    $"{Describe()} holds '{reference.Name}' in its resolved closure, and that project declares no <PuckKind> — it is outside the gate's scope "
-                    + $"(its project file is '{reference.ProjectPath}'). "
-                    + $"Arrives by: {DescribePath(target: reference.Name)}. "
-                    + "An undeclared project is not a project at the bottom of the layering; it is a project the rules have never been applied to, and depending on one "
-                    + "imports exactly the freedom it was excluded to have. If it belongs in the graph, bring it into scope and declare it; if it belongs outside, nothing "
-                    + "inside may reference it.");
+                    ((((((string)$"{Describe()} holds '{reference.Name}' in its resolved closure, and that project declares no <PuckKind> — it is outside the gate's scope (its project file is '{reference.ProjectPath}'). ")
+                    + $"Arrives by: {DescribePath(target: reference.Name)}. ")
+                    + "An undeclared project is not a project at the bottom of the layering; it is a project the rules have never been applied to, and depending on one ")
+                    + "imports exactly the freedom it was excluded to have. If it belongs in the graph, bring it into scope and declare it; if it belongs outside, nothing ")
+                    + "inside may reference it."));
 
             return false;
         }
@@ -169,14 +157,13 @@ public sealed class PuckArchitectureGate : Task {
             LogViolation(
                 code: "PUCKARCH003",
                 message:
-                    $"{Describe()} holds '{reference.Name}' in its resolved closure, and that project's kind is {reference.Kind} — a TERMINAL kind, which consumes the tree and is never consumed by it. "
-                    + $"Arrives by: {DescribePath(target: reference.Name)}. "
-                    + "Either the dependency is inverted, or the referenced project is misclassified and its <PuckKind> should be a ranked kind with a <PuckLayer> to match.");
+                    (((string)$"{Describe()} holds '{reference.Name}' in its resolved closure, and that project's kind is {reference.Kind} — a TERMINAL kind, which consumes the tree and is never consumed by it. Arrives by: {DescribePath(target: reference.Name)}. ")
+                    + "Either the dependency is inverted, or the referenced project is misclassified and its <PuckKind> should be a ranked kind with a <PuckLayer> to match."));
 
             return false;
         }
 
-        var referenceRank = RankOf(kinds: kinds, ranks: ranks, kind: reference.Kind, layer: reference.Layer);
+        var referenceRank = RankOf(kind: reference.Kind, kinds: kinds, layer: reference.Layer, ranks: ranks);
 
         if (referenceRank >= ownRank) {
             return true;
@@ -185,23 +172,21 @@ public sealed class PuckArchitectureGate : Task {
         LogViolation(
             code: "PUCKARCH001",
             message:
-                $"{Describe()} holds '{reference.Name}' ({reference.Layer}) in its resolved closure — an UPWARD edge. Dependencies point downward or sideways, never up. "
-                + $"Arrives by: {DescribePath(target: reference.Name)}. "
-                + "Note this is the RESOLVED closure, not the declared one: an edge that arrives transitively is the same architectural fact as one written in this csproj, and reads "
-                + "differently only to a human reading project files.");
+                ((((string)$"{Describe()} holds '{reference.Name}' ({reference.Layer}) in its resolved closure — an UPWARD edge. Dependencies point downward or sideways, never up. Arrives by: {DescribePath(target: reference.Name)}. ")
+                + "Note this is the RESOLVED closure, not the declared one: an edge that arrives transitively is the same architectural fact as one written in this csproj, and reads ")
+                + "differently only to a human reading project files."));
 
         return false;
     }
-
     private bool CheckProfile(List<ProjectFacts> closure) {
         var profile = Profiles.FirstOrDefault(predicate: p => string.Equals(a: p.ItemSpec, b: ProjectName, comparisonType: StringComparison.OrdinalIgnoreCase));
 
-        if (profile == null) {
+        if (profile is null) {
             return true;
         }
 
         var expected = new SortedSet<string>(
-            collection: (profile.GetMetadata(metadataName: "Closure") ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(selector: s => s.Trim()),
+            collection: (profile.GetMetadata(metadataName: "Closure") ?? "").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: new[] { ';' }).Select(selector: s => s.Trim()),
             comparer: StringComparer.OrdinalIgnoreCase);
         var actual = new SortedSet<string>(collection: closure.Select(selector: f => f.Name), comparer: StringComparer.OrdinalIgnoreCase);
         var added = actual.Except(second: expected).ToArray();
@@ -216,33 +201,30 @@ public sealed class PuckArchitectureGate : Task {
         // Cast to the sequence overload explicitly: a string[] is convertible to object[] by array
         // covariance, which leaves string.Join ambiguous between its two shapes.
         if (added.Length != 0) {
-            detail.Add(item: $"gained {string.Join(separator: ", ", values: (IEnumerable<string>)added)}");
+            detail.Add(item: $"gained {string.Join(separator: ", ", values: ((IEnumerable<string>)added))}");
         }
 
         if (removed.Length != 0) {
-            detail.Add(item: $"lost {string.Join(separator: ", ", values: (IEnumerable<string>)removed)}");
+            detail.Add(item: $"lost {string.Join(separator: ", ", values: ((IEnumerable<string>)removed))}");
         }
 
         LogViolation(
             code: "PUCKARCH004",
             message:
-                $"{ProjectName} carries a lane profile, and its resolved closure no longer EQUALS it: {string.Join(separator: "; ", values: detail)}. "
-                + $"Expected exactly [{string.Join(separator: ", ", values: expected)}]. "
-                + "Equality is deliberate — a removed edge has to be as visible as an added one, or a boundary can be dismantled a reference at a time and every check still passes. "
-                + "Every forbidden edge in this split is SAME-ROW, so the layer rule cannot see any of them; this profile is the only thing that can. "
-                + "If the change is right, update the profile in build/Architecture.props in the same commit and say why.");
+                (((((string)$"{ProjectName} carries a lane profile, and its resolved closure no longer EQUALS it: {string.Join(separator: "; ", values: detail)}. Expected exactly [{string.Join(separator: ", ", values: expected)}]. ")
+                + "Equality is deliberate — a removed edge has to be as visible as an added one, or a boundary can be dismantled a reference at a time and every check still passes. ")
+                + "Every forbidden edge in this split is SAME-ROW, so the layer rule cannot see any of them; this profile is the only thing that can. ")
+                + "If the change is right, update the profile in build/Architecture.props in the same commit and say why."));
 
         return false;
     }
-
     private bool TryValidateOwnDeclaration(Dictionary<string, bool> kinds, Dictionary<string, int> ranks) {
         if (string.IsNullOrEmpty(value: Kind)) {
             LogViolation(
                 code: "PUCKARCH005",
                 message:
-                    $"{ProjectName} declares no <PuckKind>. Every project in the gate's scope declares one, so a new project is classified when it is created rather than whenever someone notices. "
-                    + $"Ranked kinds ({string.Join(separator: ", ", values: kinds.Where(predicate: k => k.Value).Select(selector: k => k.Key))}) also declare a <PuckLayer>; "
-                    + $"terminal kinds ({string.Join(separator: ", ", values: kinds.Where(predicate: k => !k.Value).Select(selector: k => k.Key))}) must not.");
+                    (((string)$"{ProjectName} declares no <PuckKind>. Every project in the gate's scope declares one, so a new project is classified when it is created rather than whenever someone notices. Ranked kinds ({string.Join(separator: ", ", values: kinds.Where(predicate: k => k.Value).Select(selector: k => k.Key))}) also declare a <PuckLayer>; ")
+                    + $"terminal kinds ({string.Join(separator: ", ", values: kinds.Where(predicate: k => !k.Value).Select(selector: k => k.Key))}) must not."));
 
             return false;
         }
@@ -282,7 +264,6 @@ public sealed class PuckArchitectureGate : Task {
 
         return true;
     }
-
     /// <summary>
     /// The names this project references directly, from MSBuild's evaluated <c>@(ProjectReference)</c> rather
     /// than the csproj text, so an edge contributed by an <c>&lt;Import&gt;</c> counts.
@@ -296,7 +277,6 @@ public sealed class PuckArchitectureGate : Task {
 
         return names;
     }
-
     private static List<Edge> DeclaredEdges(string projectFile) {
         var edges = new List<Edge>();
 
@@ -304,37 +284,37 @@ public sealed class PuckArchitectureGate : Task {
             return edges;
         }
 
-        var document = XDocument.Load(uri: projectFile, options: LoadOptions.SetLineInfo);
+        var document = XDocument.Load(options: LoadOptions.SetLineInfo, uri: projectFile);
 
-        foreach (var element in document.Descendants().Where(predicate: e => e.Name.LocalName == "ProjectReference")) {
+        foreach (var element in document.Descendants().Where(predicate: e => (e.Name.LocalName == "ProjectReference"))) {
             // Update= counts as a declaration for provenance. An edge whose Include lives in
             // Directory.Build.props and whose metadata is amended here (Puck.Analyzers.Tests does exactly
             // this, turning the repo-wide analyzer extension into an ordinary assembly reference) is one a
             // reader has to come HERE to change, which is the only thing this walk is for.
-            var include = element.Attribute(name: "Include") ?? element.Attribute(name: "Update");
+            var include = (element.Attribute(name: "Include") ?? element.Attribute(name: "Update"));
 
-            if (include == null) {
+            if (include is null) {
                 continue;
             }
 
             // The analyzer edge is not an assembly reference — ReferenceOutputAssembly="false" keeps it out
             // of every resolved reference set — so it is not an architectural edge either.
             var outputAssembly =
-                element.Attribute(name: "ReferenceOutputAssembly")?.Value
-                ?? element.Elements().FirstOrDefault(predicate: e => e.Name.LocalName == "ReferenceOutputAssembly")?.Value;
+                (element.Attribute(name: "ReferenceOutputAssembly")?.Value
+                ?? element.Elements().FirstOrDefault(predicate: e => (e.Name.LocalName == "ReferenceOutputAssembly"))?.Value);
 
             if (string.Equals(a: outputAssembly, b: "false", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 continue;
             }
 
-            var relative = include.Value.Replace(oldChar: '\\', newChar: Path.DirectorySeparatorChar);
-            var resolved = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: projectFile) ?? ".", path2: relative));
-            var lineInfo = (IXmlLineInfo)element;
+            var relative = include.Value.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '\\');
+            var resolved = Path.GetFullPath(path: Path.Combine(path1: (Path.GetDirectoryName(path: projectFile) ?? "."), path2: relative));
+            var lineInfo = ((IXmlLineInfo)element);
 
             edges.Add(
                 item: new Edge {
                     DeclaredIn = projectFile,
-                    Line = lineInfo.HasLineInfo() ? lineInfo.LineNumber : 0,
+                    Line = (lineInfo.HasLineInfo() ? lineInfo.LineNumber : 0),
                     Name = Path.GetFileNameWithoutExtension(path: resolved),
                     ProjectPath = resolved,
                 });
@@ -342,7 +322,6 @@ public sealed class PuckArchitectureGate : Task {
 
         return edges;
     }
-
     /// <summary>
     /// The resolved Puck closure, and the place PUCKARCH006 is raised: a Puck assembly that arrives by any
     /// route OTHER than a project reference is refused on the spot, before its layer is ever considered.
@@ -365,7 +344,7 @@ public sealed class PuckArchitectureGate : Task {
             var identity = Path.GetFileNameWithoutExtension(path: reference.ItemSpec);
 
             if (string.IsNullOrEmpty(value: source)) {
-                if (!identity.StartsWith(value: "Puck.", comparisonType: StringComparison.OrdinalIgnoreCase) || !seen.Add(item: identity)) {
+                if (!identity.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.") || !seen.Add(item: identity)) {
                     continue;
                 }
 
@@ -374,13 +353,13 @@ public sealed class PuckArchitectureGate : Task {
                 LogViolation(
                     code: "PUCKARCH006",
                     message:
-                        $"{Describe()} resolves the Puck assembly '{identity}' by a route that is not a project reference"
-                        + (string.IsNullOrEmpty(value: route) ? " (a raw <Reference>, or a package)" : $" (ReferenceSourceTarget='{route}')")
-                        + $", from '{reference.ItemSpec}'. "
-                        + "There is no csproj line to name here, because nothing declared it as a project edge — that absence IS the finding. "
-                        + "Every architecture rule below this one reads the project graph, so an assembly reached around the project system is "
-                        + "invisible to all of them at once: it defeats the lane profiles, which are the only tier doing security work, and it "
-                        + "carries a backend past the quarantine from any row. Reference the project.");
+                        (((((($"{Describe()} resolves the Puck assembly '{identity}' by a route that is not a project reference"
+                        + (string.IsNullOrEmpty(value: route) ? " (a raw <Reference>, or a package)" : $" (ReferenceSourceTarget='{route}')"))
+                        + $", from '{reference.ItemSpec}'. ")
+                        + "There is no csproj line to name here, because nothing declared it as a project edge — that absence IS the finding. ")
+                        + "Every architecture rule below this one reads the project graph, so an assembly reached around the project system is ")
+                        + "invisible to all of them at once: it defeats the lane profiles, which are the only tier doing security work, and it ")
+                        + "carries a backend past the quarantine from any row. Reference the project."));
 
                 ok = false;
 
@@ -398,7 +377,6 @@ public sealed class PuckArchitectureGate : Task {
 
         return closure;
     }
-
     private ProjectFacts FactsFor(string projectFile) {
         if (m_facts.TryGetValue(key: projectFile, value: out var cached)) {
             return cached;
@@ -409,15 +387,14 @@ public sealed class PuckArchitectureGate : Task {
         if (File.Exists(path: projectFile)) {
             var document = XDocument.Load(uri: projectFile);
 
-            facts.Kind = document.Descendants().FirstOrDefault(predicate: e => e.Name.LocalName == "PuckKind")?.Value.Trim() ?? "";
-            facts.Layer = document.Descendants().FirstOrDefault(predicate: e => e.Name.LocalName == "PuckLayer")?.Value.Trim() ?? "";
+            facts.Kind = (document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == "PuckKind"))?.Value.Trim() ?? "");
+            facts.Layer = (document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == "PuckLayer"))?.Value.Trim() ?? "");
         }
 
         m_facts[projectFile] = facts;
 
         return facts;
     }
-
     private Dictionary<string, bool> ReadKinds() {
         var kinds = new Dictionary<string, bool>(comparer: StringComparer.OrdinalIgnoreCase);
 
@@ -427,17 +404,15 @@ public sealed class PuckArchitectureGate : Task {
 
         return kinds;
     }
-
     private Dictionary<string, int> ReadRanks() {
         var ranks = new Dictionary<string, int>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var layer in Layers) {
-            ranks[layer.ItemSpec] = int.TryParse(s: layer.GetMetadata(metadataName: "Rank"), result: out var rank) ? rank : int.MaxValue;
+            ranks[layer.ItemSpec] = (int.TryParse(s: layer.GetMetadata(metadataName: "Rank"), result: out var rank) ? rank : int.MaxValue);
         }
 
         return ranks;
     }
-
     private static int RankOf(Dictionary<string, bool> kinds, Dictionary<string, int> ranks, string kind, string layer) {
         // A terminal kind sits above every layer by construction, so everything it references is below it
         // and the rank rule needs no special case for it.
@@ -445,9 +420,8 @@ public sealed class PuckArchitectureGate : Task {
             return -1;
         }
 
-        return ranks.TryGetValue(key: layer, value: out var rank) ? rank : int.MaxValue;
+        return (ranks.TryGetValue(key: layer, value: out var rank) ? rank : int.MaxValue);
     }
-
     /// <summary>
     /// The shortest declared path from this project to <paramref name="target"/>, each hop carrying the csproj
     /// and line that declares it: the resolved set proves an edge exists, only this says where to change it.
@@ -462,10 +436,10 @@ public sealed class PuckArchitectureGate : Task {
 
         while (queue.Count != 0) {
             var path = queue.Dequeue();
-            var last = path[path.Count - 1];
+            var last = path[(path.Count - 1)];
 
             if (string.Equals(a: last.Name, b: target, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return ProjectName + " -> " + string.Join(separator: " -> ", values: path.Select(selector: e => $"{e.Name} ({Path.GetFileName(path: e.DeclaredIn)}:{e.Line})"));
+                return ((ProjectName + " -> ") + string.Join(separator: " -> ", values: path.Select(selector: e => $"{e.Name} ({Path.GetFileName(path: e.DeclaredIn)}:{e.Line})")));
             }
 
             if (!visited.Add(item: last.Name)) {
@@ -481,11 +455,9 @@ public sealed class PuckArchitectureGate : Task {
 
         return $"{ProjectName} -> ... -> {target} (no declared path found — the reference resolves but no csproj in the walk declares it, which is itself worth understanding before anything else here is believed)";
     }
-
     private string Describe() {
-        return string.IsNullOrEmpty(value: Layer) ? $"{ProjectName} ({Kind})" : $"{ProjectName} ({Layer})";
+        return (string.IsNullOrEmpty(value: Layer) ? $"{ProjectName} ({Kind})" : $"{ProjectName} ({Layer})");
     }
-
     private void LogViolation(string code, string message) {
         Log.LogError(
             subcategory: null,
@@ -505,7 +477,6 @@ public sealed class PuckArchitectureGate : Task {
         public string Name = "";
         public string ProjectPath = "";
     }
-
     private sealed class ProjectFacts {
         public string Kind = "";
         public string Layer = "";
@@ -513,7 +484,6 @@ public sealed class PuckArchitectureGate : Task {
         public string ProjectPath = "";
     }
 }
-
 /// <summary>
 /// The denied-API gate: after a project compiles, reads its OUTPUT ASSEMBLY's own assembly-reference table and
 /// fails when it names an assembly <c>build/Architecture.props</c> denies that project.
@@ -531,13 +501,10 @@ public sealed class PuckArchitectureGate : Task {
 public sealed class PuckArchitectureDeniedApiGate : Task {
     /// <summary>The freshly compiled output assembly to inspect (<c>@(IntermediateAssembly)</c>).</summary>
     public string AssemblyPath { get; set; } = "";
-
     /// <summary>The denial ledger: <c>Include</c> is the denied project, <c>Type</c> the denied assembly's name, <c>Enabled</c> "true" or "false".</summary>
     public ITaskItem[] DeniedApis { get; set; } = Array.Empty<ITaskItem>();
-
     /// <summary>This project's full path, used for the diagnostic's file position.</summary>
     public string ProjectFile { get; set; } = "";
-
     /// <summary>This project's name.</summary>
     public string ProjectName { get; set; } = "";
 
@@ -571,8 +538,7 @@ public sealed class PuckArchitectureDeniedApiGate : Task {
                 endLineNumber: 0,
                 endColumnNumber: 0,
                 message:
-                    $"{ProjectName}'s compiled output references the denied assembly '{deniedAssembly}' (build/Architecture.props, PuckArchitectureDeniedApi). "
-                    + $"Route the call through a seam {ProjectName} already exposes for it and bind the concrete implementation from a composition root or console project the ledger does not deny.");
+                    ((string)$"{ProjectName}'s compiled output references the denied assembly '{deniedAssembly}' (build/Architecture.props, PuckArchitectureDeniedApi). Route the call through a seam {ProjectName} already exposes for it and bind the concrete implementation from a composition root or console project the ledger does not deny."));
 
             ok = false;
         }

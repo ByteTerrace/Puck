@@ -74,6 +74,30 @@ internal static class FixedSaturateClaims {
             }
         }
 
+        // The vector overload over the first three lanes: each component is the clamped exact sum of its own pair, so a
+        // lane that saturates leaves its neighbours exact.
+        var vectorSum = FixedSaturate.Add(
+            left: new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: left[0]),
+                Y: FixedQ4816.FromRawBits(value: left[1]),
+                Z: FixedQ4816.FromRawBits(value: left[2])
+            ),
+            right: new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: right[0]),
+                Y: FixedQ4816.FromRawBits(value: right[1]),
+                Z: FixedQ4816.FromRawBits(value: right[2])
+            )
+        );
+        long[] vectorLanes = [vectorSum.X.Value, vectorSum.Y.Value, vectorSum.Z.Value];
+
+        for (var lane = 0; (lane < 3); ++lane) {
+            var expected = Clamp(value: (((BigInteger)left[lane]) + right[lane]));
+
+            if (vectorLanes[lane] != expected) {
+                return $"Add(vector) lane {lane} raw is {vectorLanes[lane]}, expected the clamped exact sum {expected}";
+            }
+        }
+
         return NarrowsTheSeams();
     }
 }

@@ -115,6 +115,25 @@ public readonly struct CellValue : IEquatable<CellValue>, IUnion {
         text: null,
         vector: default
     );
+    /// <summary>Creates the numeric case a row's kind declares from the one number its column stores — the inverse
+    /// of <see cref="Raw"/>.</summary>
+    /// <param name="kind">The row's declared kind: <see cref="CellKind.Int"/>, <see cref="CellKind.Fixed"/>, or
+    /// <see cref="CellKind.Bool"/>.</param>
+    /// <param name="raw">The stored encoding: an int's value, a fixed's raw <c>FixedQ4816</c> bits, or a bool's
+    /// number, read as <see langword="true"/> when it is nonzero.</param>
+    /// <returns>The carrier.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is <see cref="CellKind.Text"/>,
+    /// <see cref="CellKind.Vector"/>, or no declared kind; neither payload is a number.</exception>
+    public static CellValue FromNumber(CellKind kind, long raw) => kind switch {
+        CellKind.Int => Int(value: raw),
+        CellKind.Fixed => Fixed(rawBits: raw),
+        CellKind.Bool => Bool(value: (raw != 0L)),
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: kind,
+            message: $"A {kind} cell value is not built from a stored number.",
+            paramName: nameof(kind)
+        ),
+    };
     /// <summary>Creates the <see cref="CellKind.Text"/> case.</summary>
     /// <param name="value">The text; <see langword="null"/> is carried as the empty string.</param>
     /// <returns>The carrier.</returns>
@@ -139,15 +158,18 @@ public readonly struct CellValue : IEquatable<CellValue>, IUnion {
     /// <param name="token">The wire token exactly as typed.</param>
     /// <param name="value">The parsed carrier on success; otherwise the carrier holding no case.</param>
     /// <param name="reason">Why the token was refused, or empty on success.</param>
+    /// <param name="symbols">The enum the destination row draws its cells from, or <see langword="null"/> for a row
+    /// that names none; an Int token may then name one of its members.</param>
     /// <returns><see langword="true"/> when the token parsed under <paramref name="kind"/>'s grammar.</returns>
     /// <remarks>The grammar is the authored one, never the stored encoding: a decimal spelling for
     /// <see cref="CellKind.Fixed"/> (never raw <c>FixedQ4816</c> bits), <c>true</c>/<c>false</c> for
-    /// <see cref="CellKind.Bool"/>, and a plain integer literal for <see cref="CellKind.Int"/>.
+    /// <see cref="CellKind.Bool"/>, and a plain integer literal, or a member name of
+    /// <paramref name="symbols"/>, for <see cref="CellKind.Int"/>.
     /// <see cref="CellKind.Text"/> and <see cref="CellKind.Vector"/> carry their own payloads and are refused by
     /// name here rather than guessed at.
     /// <para>A row's kind is resolved against the candidate the write composes against, never at the verb that
     /// typed the token: the row this token targets may not exist yet when it is typed.</para></remarks>
-    public static bool TryParse(CellKind kind, string token, out CellValue value, out string reason) {
+    public static bool TryParse(CellKind kind, string token, out CellValue value, out string reason, StateEnum? symbols = null) {
         switch (kind) {
             case CellKind.Vector:
                 value = default;
@@ -202,9 +224,28 @@ public readonly struct CellValue : IEquatable<CellValue>, IUnion {
 
                     return true;
                 }
+                if (
+                    (symbols is not null) &&
+                    CellName.TryParse(
+                        candidate: token,
+                        name: out var member,
+                        reason: out _
+                    ) &&
+                    symbols.TryGetValue(
+                        member: member,
+                        value: out var ordinal
+                    )
+                ) {
+                    reason = string.Empty;
+                    value = Int(value: ordinal);
+
+                    return true;
+                }
 
                 value = default;
-                reason = $"'{token}' is not an integer";
+                reason = ((symbols is null)
+                    ? $"'{token}' is not an integer"
+                    : $"'{token}' is not an integer or a member of enum '{symbols.Name.Value}'");
 
                 return false;
         }

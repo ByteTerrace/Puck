@@ -1,6 +1,6 @@
+using Puck.Commands;
 using Xunit;
 
-using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
 
@@ -19,10 +19,10 @@ public sealed class EscrowedTransferRuleLawTests {
     private const long BuyoutPrice = 300;
     private const int FeeBasisPoints = 1_000; // 10%, chosen so a fee amount is exact and easy to hand-verify.
 
-    private static readonly WorldPrincipal Seller = WorldPrincipal.Seat(slot: 0);
-    private static readonly WorldPrincipal BidderA = WorldPrincipal.Seat(slot: 1);
-    private static readonly WorldPrincipal BidderB = WorldPrincipal.Seat(slot: 2);
-    private static readonly WorldPrincipal Buyer = WorldPrincipal.Seat(slot: 3);
+    private static readonly Principal Seller = Principal.Seat(slot: 0);
+    private static readonly Principal BidderA = Principal.Seat(slot: 1);
+    private static readonly Principal BidderB = Principal.Seat(slot: 2);
+    private static readonly Principal Buyer = Principal.Seat(slot: 3);
 
     private static ActionEffect.AddState Add(string state, decimal value, string? key = null) => new(
         State: state,
@@ -144,27 +144,27 @@ public sealed class EscrowedTransferRuleLawTests {
             Gate: new ActionPredicate.All(Predicates: [
                 Cmp(
                     state: "auctionActive",
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     value: 1
                 ),
                 Cmp(
                     state: request,
-                    comparison: ActionStateComparison.Greater,
+                    comparison: ExpressionOp.Greater,
                     value: -1
                 ),
                 Cmp(
                     state: "auctionCurrentBidder",
-                    comparison: ActionStateComparison.NotEqual,
+                    comparison: ExpressionOp.NotEqual,
                     value: seat
                 ),
                 Cmp(
                     state: request,
-                    comparison: ActionStateComparison.Greater,
+                    comparison: ExpressionOp.Greater,
                     comparandState: "auctionCurrentBid"
                 ),
                 Cmp(
                     state: request,
-                    comparison: ActionStateComparison.LessOrEqual,
+                    comparison: ExpressionOp.LessOrEqual,
                     comparandState: "coins",
                     comparandKey: seat.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
                 ),
@@ -216,12 +216,12 @@ public sealed class EscrowedTransferRuleLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         Cmp(
                         state: "auctionListRequest",
-                        comparison: ActionStateComparison.Greater,
+                        comparison: ExpressionOp.Greater,
                         value: 0
                     ),
                         Cmp(
                         state: "auctionActive",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 0
                     ),
                     ]),
@@ -273,17 +273,17 @@ public sealed class EscrowedTransferRuleLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         Cmp(
                         state: "auctionActive",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 1
                     ),
                         Cmp(
                         state: RuleFacts.Tick,
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         comparandState: "auctionDeadline"
                     ),
                         Cmp(
                         state: "auctionCurrentBidder",
-                        comparison: ActionStateComparison.NotEqual,
+                        comparison: ExpressionOp.NotEqual,
                         value: -1
                     ),
                     ]),
@@ -332,17 +332,17 @@ public sealed class EscrowedTransferRuleLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         Cmp(
                         state: "auctionActive",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 1
                     ),
                         Cmp(
                         state: RuleFacts.Tick,
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         comparandState: "auctionDeadline"
                     ),
                         Cmp(
                         state: "auctionCurrentBidder",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: -1
                     ),
                     ]),
@@ -368,12 +368,12 @@ public sealed class EscrowedTransferRuleLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         Cmp(
                         state: "buyoutListRequest",
-                        comparison: ActionStateComparison.Greater,
+                        comparison: ExpressionOp.Greater,
                         value: 0
                     ),
                         Cmp(
                         state: "buyoutActive",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 0
                     ),
                     ]),
@@ -407,17 +407,17 @@ public sealed class EscrowedTransferRuleLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         Cmp(
                         state: "buyoutActive",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 1
                     ),
                         Cmp(
                         state: "buyoutRequest3",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 1
                     ),
                         Cmp(
                         state: "coins",
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         value: BuyoutPrice,
                         key: "3"
                     ),
@@ -468,12 +468,12 @@ public sealed class EscrowedTransferRuleLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         Cmp(
                         state: "buyoutActive",
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 1
                     ),
                         Cmp(
                         state: RuleFacts.Tick,
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         comparandState: "buyoutDeadline"
                     ),
                     ]),
@@ -499,15 +499,7 @@ public sealed class EscrowedTransferRuleLawTests {
 
         return document;
     }
-    private static ActionPredicate.CompareState Cmp(string state, ActionStateComparison comparison, decimal? value = null, string? comparandState = null, string? comparandKey = null, string? key = null) =>
-        new(
-            ComparandKey: StateChannelRef.OfNullable(spelling: comparandKey),
-            ComparandState: StateChannelRef.OfNullable(spelling: comparandState),
-            Comparison: comparison,
-            Key: StateChannelRef.OfNullable(spelling: key),
-            State: state,
-            Value: value
-        );
+    private static ActionPredicate.CompareState Cmp(string state, ExpressionOp comparison, decimal? value = null, string? comparandState = null, string? comparandKey = null, string? key = null) => StateFixtures.Compare(comparandKey: comparandKey, comparandState: comparandState, comparison: comparison, key: key, state: state, value: value);
     private static ActionEffect.SetState Copy(string state, string fromState, string? key = null) => new(
         State: state,
         FromState: fromState,
@@ -576,22 +568,12 @@ public sealed class EscrowedTransferRuleLawTests {
         Value: value,
         Key: StateChannelRef.OfNullable(spelling: key)
     );
-    private static WorldStateRow Slot(string name, long initial, bool nonNegative = false) => new(
-        Name: CellName.Parse(candidate: name),
-        Kind: CellKind.Int,
-        Min: (nonNegative ? 0L : null),
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: initial)
-            )]
+    private static WorldStateRow Slot(string name, long initial, bool nonNegative = false) => StateFixtures.IntSlot(
+        min: (nonNegative ? 0L : null),
+        name: name,
+        value: initial
     );
-    private static void Write(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-        Principal: WorldPrincipal.Console,
-        Row: row,
-        Key: WorldStateRow.SlotKey.Value,
-        Value: value,
-        Kind: WorldDocumentWriteKind.Set
-    ));
+    private static void Write(WorldFixture fixture, string row, long value) => fixture.WriteSlot(row: row, value: value);
 
     [Fact]
     public void Buyout_Executes_PaysTheSellerNetOfFeeAndCreditsTheBuyer() {

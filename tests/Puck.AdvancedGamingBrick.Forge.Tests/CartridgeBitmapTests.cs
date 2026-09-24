@@ -5,6 +5,63 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers the per-pixel drawing surface, where a picture is plotted point by point rather than built of tiles.</summary>
 public sealed class CartridgeBitmapTests {
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "the colour machine",
+            Document: CartridgeDocuments.Create(
+                target: "cgb",
+                title: "BITBAD"
+            ) with { Bitmap = new CartridgeBitmap() },
+            Path: "bitmap",
+            Fragment: "cgb target draws only from tiles"
+        ),
+        new(
+            Name: "a bitmap beside a panel",
+            Document: CartridgeDocuments.Create(
+                target: "agb",
+                title: "BITBAD"
+            ) with {
+                Tiles = [new CartridgeTile(
+                    Name: "blank",
+                    Pixels: [.. Enumerable.Repeat(
+                            count: 8,
+                            element: "00000000"
+                        )]
+                )],
+                Bitmap = new CartridgeBitmap(),
+                Window = new CartridgeWindow(
+                Map: new int[1024],
+                MapPalettes: null,
+                X: CartridgeExpressions.Of(constant: 0),
+                Y: CartridgeExpressions.Of(constant: 0),
+                Visible: CartridgeExpressions.Of(constant: 1)
+            ),
+            },
+            Path: "bitmap",
+            Fragment: "replaces the tile background"
+        ),
+        new(
+            Name: "a plot without a bitmap",
+            Document: CartridgeDocuments.Create(
+                target: "agb",
+                title: "BITBAD"
+            ) with {
+                Rules = [new CartridgeRule(
+                    Name: "r",
+                    Body: [Plot(
+                            colour: 1,
+                            x: 0,
+                            y: 0
+                        )]
+                )],
+            },
+            Path: "rules[0].body[0]",
+            Fragment: "requires a declared bitmap"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
     private static CartridgeDocument Document() {
         // The surface reads the background palette bank as one flat run, so a colour is the declared palette's entry.
         var palette = new int[16];
@@ -35,17 +92,6 @@ public sealed class CartridgeBitmapTests {
         Column: CartridgeExpressions.Of(constant: x),
         Colour: CartridgeExpressions.Of(constant: colour)
     );
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
     private static AgbVerifyMachineDriver Run((int X, int Y, int Colour)[] plots) {
         var document = Document() with {
             Rules = [new CartridgeRule(
@@ -152,7 +198,7 @@ public sealed class CartridgeBitmapTests {
                 Name: "once",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 3)
                 ),
                 Body: [Plot(
@@ -204,57 +250,10 @@ public sealed class CartridgeBitmapTests {
             )
         );
     }
-    [Fact]
-    public void ValidationGatesTheSurfaceOnTargetAndOnWhatItReplaces() {
-        var tiles = new CartridgeTile[] {
-            new(
-            Name: "blank",
-            Pixels: [.. Enumerable.Repeat(
-                    count: 8,
-                    element: "00000000"
-                )]
-        ),
-        };
-
-        Refuses(
-            document: CartridgeDocuments.Create(
-                target: "cgb",
-                title: "BITBAD"
-            ) with { Bitmap = new CartridgeBitmap() },
-            fragment: "cgb target draws only from tiles"
-        );
-        Refuses(
-            document: CartridgeDocuments.Create(
-                target: "agb",
-                title: "BITBAD"
-            ) with {
-                Tiles = tiles,
-                Bitmap = new CartridgeBitmap(),
-                Window = new CartridgeWindow(
-                Map: new int[1024],
-                MapPalettes: null,
-                X: CartridgeExpressions.Of(constant: 0),
-                Y: CartridgeExpressions.Of(constant: 0),
-                Visible: CartridgeExpressions.Of(constant: 1)
-            ),
-            },
-            fragment: "replaces the tile background"
-        );
-        Refuses(
-            document: CartridgeDocuments.Create(
-                target: "agb",
-                title: "BITBAD"
-            ) with {
-                Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [Plot(
-                            colour: 1,
-                            x: 0,
-                            y: 0
-                        )]
-                )],
-            },
-            fragment: "requires a declared bitmap"
-        );
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationGatesTheSurfaceOnTargetAndOnWhatItReplaces(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

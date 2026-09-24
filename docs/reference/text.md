@@ -314,10 +314,10 @@ pack them into one texture through `FontAtlasCatalogPacker`; the returned
 `PackedFontAtlasCatalog` retains named font metrics while remapping every
 glyph rectangle into the shared image.
 
-World documents use the stricter `ResolvePinnedContained` path: rooted paths
-and paths escaping the document directory are refused, and the bytes must
-match their declared hash. There is no ambient system-font lookup, which
-keeps a world portable and replayable.
+World documents use the stricter `ResolvePinned` path: a source resolves
+beside the document that names it, like every other path a document authors,
+and the bytes must match their declared hash. There is no ambient system-font
+lookup, which keeps a world portable and replayable.
 
 ```json
 "text": {

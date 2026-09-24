@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -6,26 +6,24 @@ namespace Puck.World.Schema.Tests;
 public class WorldCallArgumentsLawTests {
     [Fact]
     public void ACallArmBelongsToItsDeclaredPosition() {
-        Assert.Equal(typeof(Puck.State.StateTransform.Sort), WorldCallArguments.ArmType(typeof(Puck.State.StateTransform), "sort"));
-        Assert.Equal(typeof(Puck.State.StateTransform.Sort), WorldCallArguments.ArmType(typeof(Puck.State.StateTransform.Sort), "sort"));
-        Assert.Equal(typeof(Puck.State.StateTransform.Sort), WorldCallArguments.ArmType(null, "sort"));
-        Assert.Null(WorldCallArguments.ArmType(typeof(WorldRule), "sort"));
-        Assert.Null(WorldCallArguments.ArmType(typeof(Puck.State.ActionEffect), "sort"));
+        Assert.Equal(typeof(Puck.State.StateTransform.Sort), WorldCallArguments.ArmType(baseType: typeof(Puck.State.StateTransform), discriminator: "sort"));
+        Assert.Equal(typeof(Puck.State.StateTransform.Sort), WorldCallArguments.ArmType(baseType: typeof(Puck.State.StateTransform.Sort), discriminator: "sort"));
+        Assert.Equal(typeof(Puck.State.StateTransform.Sort), WorldCallArguments.ArmType(baseType: null, discriminator: "sort"));
+        Assert.Null(@object: WorldCallArguments.ArmType(baseType: typeof(WorldRule), discriminator: "sort"));
+        Assert.Null(@object: WorldCallArguments.ArmType(baseType: typeof(Puck.State.ActionEffect), discriminator: "sort"));
     }
-
     [Fact]
     public void ASharedDiscriminatorRetainsEveryConcreteArm() {
-        Assert.Equal(typeof(ActionPredicate.All), WorldCallArguments.ArmType(typeof(ActionPredicate.All), "all"));
-        Assert.Equal(typeof(PatternNode.Both), WorldCallArguments.ArmType(typeof(PatternNode.Both), "all"));
-        Assert.Equal(typeof(CellSetExpression.Everything), WorldCallArguments.ArmType(typeof(CellSetExpression.Everything), "all"));
+        Assert.Equal(typeof(ActionPredicate.All), WorldCallArguments.ArmType(baseType: typeof(ActionPredicate.All), discriminator: "all"));
+        Assert.Equal(typeof(PatternNode.Both), WorldCallArguments.ArmType(baseType: typeof(PatternNode.Both), discriminator: "all"));
+        Assert.Equal(typeof(CellSetExpression.Everything), WorldCallArguments.ArmType(baseType: typeof(CellSetExpression.Everything), discriminator: "all"));
     }
-
     [Fact]
     public void LookingUpUnknownAuthoredMembersDoesNotAllocateCacheEntries() {
         const int QueriesPerWindow = 1000;
-        var names = Enumerable.Range(0, (QueriesPerWindow * AllocationWindow.MaximumWindows)).Select(selector: static i => $"missing_{i}").ToArray();
+        var names = Enumerable.Range(count: (QueriesPerWindow * AllocationWindow.MaximumWindows), start: 0).Select(selector: static i => $"missing_{i}").ToArray();
 
-        _ = WorldCallArguments.Classify(owner: typeof(WorldRule), member: "mode");
+        _ = WorldCallArguments.Classify(member: "mode", owner: typeof(WorldRule));
         var offset = 0;
         var allocated = AllocationWindow.Least(window: () => {
             // Every window queries fresh misses so an implementation retaining them cannot pass on its next run.
@@ -37,19 +35,19 @@ public class WorldCallArgumentsLawTests {
             }
         });
 
-        Assert.Equal(0, allocated);
+        Assert.Equal(actual: allocated, expected: 0);
     }
     [Fact]
     public void EnumWordLookupsDoNotRebuildTheEnumNames() {
-        Assert.True(WorldCallArguments.IsChoiceWord(owner: typeof(WorldRule), member: "mode", word: "level"));
+        Assert.True(condition: WorldCallArguments.IsChoiceWord(member: "mode", owner: typeof(WorldRule), word: "level"));
         var admitted = true;
         var allocated = AllocationWindow.Least(window: () => {
             for (var index = 0; (index < 1000); index++) {
-                admitted &= WorldCallArguments.IsChoiceWord(owner: typeof(WorldRule), member: "mode", word: "Level");
+                admitted &= WorldCallArguments.IsChoiceWord(member: "mode", owner: typeof(WorldRule), word: "Level");
             }
         });
 
         Assert.True(condition: admitted);
-        Assert.Equal(0, allocated);
+        Assert.Equal(actual: allocated, expected: 0);
     }
 }

@@ -30,20 +30,7 @@ public sealed class BrandingCommandTests {
             actual: File.ReadAllBytes(path: fixture.DestinationPath)
         );
     }
-    private static (int ExitCode, string Output) Capture(Func<int> run) {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        using var writer = new StringWriter();
-
-        Console.SetOut(newOut: writer);
-        Console.SetError(newError: writer);
-        try {
-            return (run(), writer.ToString());
-        } finally {
-            Console.SetOut(newOut: originalOut);
-            Console.SetError(newError: originalError);
-        }
-    }
+    private static (int ExitCode, string Output) Capture(Func<int> run) => ConsoleCapture.Run(run: run);
 
     [Fact]
     public void CheckIsReadOnlyAndReportsDeferredCopies() {
@@ -391,10 +378,12 @@ public sealed class BrandingCommandTests {
             );
         }
         public void Dispose() {
-            try { Directory.Delete(
+            try {
+                Directory.Delete(
                 Root,
                 recursive: true
-            ); } catch { }
+            );
+            } catch { }
         }
     }
 }

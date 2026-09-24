@@ -11,183 +11,66 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Laws for the render-capacity registrations shared by the world continuum and session-screen views.</summary>
-public sealed class WorldRenderEnvelopeLawTests {
+/// <param name="scenes">The boot probes the headroom laws share, built at most once for this class.</param>
+/// <param name="output">The test's output, where the shipped-world law prints its measured figures.</param>
+public sealed partial class WorldRenderEnvelopeLawTests(WorldRenderEnvelopeLawTests.Scenes scenes, ITestOutputHelper output) : IClassFixture<WorldRenderEnvelopeLawTests.Scenes> {
     [Fact]
     public void GrowingConsumerStillRefusesTheEngineInstanceCeiling() {
         var envelope = new WorldRenderEnvelope();
         using var registration = envelope.Configure(
-            programWordCapacity: 1,
+            allowGrowth: true,
             instanceCapacity: 1,
-            measure: _ => (100, SdfProgramBuilder.MaxInstances + 1),
-            allowGrowth: true
+            measure: _ => (100, (SdfProgramBuilder.MaxInstances + 1)),
+            programWordCapacity: 1
         );
 
-        Assert.False(envelope.TryFit(Fixtures.BuildDocument(), out var reason));
-        Assert.Contains("engine ceiling", reason, StringComparison.Ordinal);
+        Assert.False(condition: envelope.TryFit(candidate: Fixtures.BuildDocument(), reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "engine ceiling");
     }
-
     [Fact]
     public void LiveDocumentCanGrowButRefusalsPreserveItsPreviousProgram() {
         var emitter = new WorldSdfDocumentEmitter();
         var document = """
             {"schema":"puck.sdf.v1","materials":[{"albedo":[1,0,0]}],"ops":[{"op":"sphere","radius":1,"material":0}]}
             """u8.ToArray();
+
         emitter.Configure(1, 0, _ => (1024, 1), allowGrowth: true);
-        emitter.Load(document);
+        emitter.Load(utf8Json: document);
         var accepted = emitter.CurrentProgram;
         Span<int> before = stackalloc int[1];
-        emitter.WriteRevision(before);
 
-        emitter.Configure(1, 0, _ => (1024, SdfProgramBuilder.MaxInstances + 1), allowGrowth: true);
-        Assert.Throws<SdfDocumentException>(() => emitter.Load(document));
+        emitter.WriteRevision(destination: before);
+
+        emitter.Configure(1, 0, _ => (1024, (SdfProgramBuilder.MaxInstances + 1)), allowGrowth: true);
+        Assert.Throws<SdfDocumentException>(testCode: () => emitter.Load(utf8Json: document));
         Assert.Same(accepted, emitter.CurrentProgram);
 
-        emitter.Configure(1, 0, _ => throw new InvalidOperationException("composed structural limit"), allowGrowth: true);
-        var refusal = Assert.Throws<SdfDocumentException>(() => emitter.Load(document));
+        emitter.Configure(1, 0, _ => throw new InvalidOperationException(message: "composed structural limit"), allowGrowth: true);
+        var refusal = Assert.Throws<SdfDocumentException>(testCode: () => emitter.Load(utf8Json: document));
+
         Assert.Contains("composed structural limit", refusal.Message, StringComparison.Ordinal);
         Assert.Same(accepted, emitter.CurrentProgram);
 
         emitter.Configure(1, 0, _ => (1024, 1));
-        Assert.Throws<SdfDocumentException>(() => emitter.Load(document));
+        Assert.Throws<SdfDocumentException>(testCode: () => emitter.Load(utf8Json: document));
         Assert.Same(accepted, emitter.CurrentProgram);
         Span<int> after = stackalloc int[1];
-        emitter.WriteRevision(after);
+
+        emitter.WriteRevision(destination: after);
         Assert.Equal(before[0], after[0]);
     }
-
     /// <summary>The panel case: a panelled shape emits TWO shape instructions (the plate and its eroded copy) instead
     /// of one, so a new placement referencing it must still fit inside the boot probe's already-reserved headroom
     /// (<see cref="WorldPlacementPolicy.MaxShapesPerStamp"/> covers it — see
     /// <see cref="Puck.World.Authoring.CreationDocument.StampShapeCount"/>, which charges a panelled shape as 2).</summary>
     [Fact]
     public void AuthoredHeadroomAdmitsANewPanelledPlacement() {
-        var prototype = new WorldPrototype(
-            "plaque",
-            new(
-                "puck.creation.v1",
-                "plaque",
-                [new(
-                        "#AA7755",
-                        null,
-                        null,
-                        null
-                    ), new(
-                        "#EEEEDD",
-                        null,
-                        null,
-                        null
-                    )],
-                [new(
-                        0,
-                        "plate",
-                        SdfSolidPrimitive.Box,
-                        Vector3.Zero,
-                        Quaternion.Identity,
-                        new Vector3(
-                            x: 0.4f,
-                            y: 0.3f,
-                            z: 0.2f
-                        ),
-                        0,
-                        null,
-                        0,
-                        null,
-                        Panel: new(
-                            Inset: 0.05f,
-                            Depth: 0.1f,
-                            Material: 1
-                        )
-                    )],
-                null
-            )
-        );
-        var definition = Fixtures.BuildDocument() with {
-            CreationsRaw = [prototype],
-            PlacementsRaw = new(
-            Rows: [],
-            Policy: new(
-                AuthoringHeadroomPlacements: 1,
-                AuthoringHeadroomScreens: 0,
-                CandidateCap: 4,
-                CandidateRadius: 10,
-                DerivedFaceScreens: 0,
-                MaxPlacementScale: 1,
-                MinPlacementScale: 1,
-                PreviewDeadlineFrames: 8
-            )
-        ),
-        };
-        var routes = new WorldSeatAuthorityRouter();
-        var client = new WorldClient(
-            new PlayerRoster(
-                definition: definition,
-                link: new SilentLink(definition: definition),
-                seatBindings: new WorldSeatBindings(definition: definition)
-            ),
-            definition,
-            new WorldCompositionState(),
-            routes
-        );
-        var emitter = new WorldSceneEmitter(
-            client,
-            new(defaults: definition.Render),
-            new(),
-            new SilentAudio(),
-            new(),
-            new(
-                client,
-                routes,
-                new NoNeighbours()
-            ),
-            new(source: new(
-                Definition: definition,
-                SourcePath: "unused.world.json"
-            ))
-        );
-        var bootBuilder = new SdfProgramBuilder();
-
-        using (bootBuilder.BeginMaterialScope()) { emitter.Emit(
-            builder: bootBuilder,
-            context: new(
-                true,
-                0,
-                Vector3.Zero,
-                Vector3.Zero,
-                0
-            )
-        ); }
-        var boot = bootBuilder.Build(buildInstanceGrid: false);
-        var candidate = definition with { PlacementsRaw = definition.PlacementsRaw! with { Rows = [new(
-                "new-plaque",
-                "plaque",
-                Vector3.Zero,
-                0,
-                1
-            )] } };
-        var candidateBuilder = new SdfProgramBuilder();
-
-        emitter.ComposeCandidate(
-            builder: candidateBuilder,
-            candidate: candidate
-        );
-        var measured = candidateBuilder.Build(buildInstanceGrid: false);
-        var soloBuilder = new SdfProgramBuilder();
-
-        using (soloBuilder.BeginMaterialScope()) {
-            CreationStampEmitter.Emit(
-                soloBuilder,
-                prototype.Document,
-                new(
-                    Vector3.Zero,
-                    Quaternion.Identity,
-                    1f,
-                    null
-                ),
-                _ => soloBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One))
-            );
-        }
-
-        var solo = soloBuilder.Build(buildInstanceGrid: false);
+        var scene = scenes.Headroom(headroom: 1);
+        var measured = scene.Measure(candidate: scene.Candidate(
+            name: "new-plaque",
+            prototype: "plaque"
+        ));
+        var solo = Solo(prototype: Plaque);
 
         // The panelled plate emits two ShapeBlend instructions (the plate and its eroded copy) in isolation, and
         // the whole candidate scene (this placement plus everything else the boot probe already covers) still
@@ -196,8 +79,8 @@ public sealed class WorldRenderEnvelopeLawTests {
             2,
             solo.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.ShapeBlend))
         );
-        Assert.True(condition: (measured.Words.Length <= boot.Words.Length));
-        Assert.True(condition: (measured.Instances.Count <= boot.Instances.Count));
+        Assert.True(condition: (measured.Words <= scene.BootWords));
+        Assert.True(condition: (measured.Instances <= scene.BootInstances));
     }
     /// <summary>The trim case: a trimmed shape's document emits its own instruction PLUS the reference's own PLUS
     /// the trim's own two (the host's eroded copy and the reference's dilated copy), so a new placement referencing
@@ -206,141 +89,12 @@ public sealed class WorldRenderEnvelopeLawTests {
     /// shape's trims as 2).</summary>
     [Fact]
     public void AuthoredHeadroomAdmitsANewTrimmedPlacement() {
-        var prototype = new WorldPrototype(
-            "seam",
-            new(
-                "puck.creation.v1",
-                "seam",
-                [new(
-                        "#AA7755",
-                        null,
-                        null,
-                        null
-                    ), new(
-                        "#EEEEDD",
-                        null,
-                        null,
-                        null
-                    )],
-                [new(
-                        0,
-                        "cutter",
-                        SdfSolidPrimitive.Sphere,
-                        Vector3.UnitZ,
-                        Quaternion.Identity,
-                        new Vector3(value: 0.3f),
-                        0,
-                        null,
-                        0,
-                        null
-                    ),
-             new(
-                        1,
-                        "plate",
-                        SdfSolidPrimitive.Box,
-                        Vector3.Zero,
-                        Quaternion.Identity,
-                        Vector3.One,
-                        0,
-                        null,
-                        0,
-                        null,
-                        Trims: [new(
-                                Shape: "cutter",
-                                Width: 0.4f,
-                                Material: 1
-                            )]
-                    )],
-                null
-            )
-        );
-        var definition = Fixtures.BuildDocument() with {
-            CreationsRaw = [prototype],
-            PlacementsRaw = new(
-            Rows: [],
-            Policy: new(
-                AuthoringHeadroomPlacements: 1,
-                AuthoringHeadroomScreens: 0,
-                CandidateCap: 4,
-                CandidateRadius: 10,
-                DerivedFaceScreens: 0,
-                MaxPlacementScale: 1,
-                MinPlacementScale: 1,
-                PreviewDeadlineFrames: 8
-            )
-        ),
-        };
-        var routes = new WorldSeatAuthorityRouter();
-        var client = new WorldClient(
-            new PlayerRoster(
-                definition: definition,
-                link: new SilentLink(definition: definition),
-                seatBindings: new WorldSeatBindings(definition: definition)
-            ),
-            definition,
-            new WorldCompositionState(),
-            routes
-        );
-        var emitter = new WorldSceneEmitter(
-            client,
-            new(defaults: definition.Render),
-            new(),
-            new SilentAudio(),
-            new(),
-            new(
-                client,
-                routes,
-                new NoNeighbours()
-            ),
-            new(source: new(
-                Definition: definition,
-                SourcePath: "unused.world.json"
-            ))
-        );
-        var bootBuilder = new SdfProgramBuilder();
-
-        using (bootBuilder.BeginMaterialScope()) { emitter.Emit(
-            builder: bootBuilder,
-            context: new(
-                true,
-                0,
-                Vector3.Zero,
-                Vector3.Zero,
-                0
-            )
-        ); }
-        var boot = bootBuilder.Build(buildInstanceGrid: false);
-        var candidate = definition with { PlacementsRaw = definition.PlacementsRaw! with { Rows = [new(
-                "new-seam",
-                "seam",
-                Vector3.Zero,
-                0,
-                1
-            )] } };
-        var candidateBuilder = new SdfProgramBuilder();
-
-        emitter.ComposeCandidate(
-            builder: candidateBuilder,
-            candidate: candidate
-        );
-        var measured = candidateBuilder.Build(buildInstanceGrid: false);
-        var soloBuilder = new SdfProgramBuilder();
-
-        using (soloBuilder.BeginMaterialScope()) {
-            CreationStampEmitter.Emit(
-                soloBuilder,
-                prototype.Document,
-                new(
-                    Vector3.Zero,
-                    Quaternion.Identity,
-                    1f,
-                    null
-                ),
-                _ => soloBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One))
-            );
-        }
-
-        var solo = soloBuilder.Build(buildInstanceGrid: false);
+        var scene = scenes.Headroom(headroom: 1);
+        var measured = scene.Measure(candidate: scene.Candidate(
+            name: "new-seam",
+            prototype: "seam"
+        ));
+        var solo = Solo(prototype: Seam);
 
         // The cutter's own shape, the plate's own shape, plus the trim's two (eroded plate copy, dilated cutter
         // copy) — four ShapeBlend instructions in isolation — and the whole candidate scene still fits inside the
@@ -349,138 +103,38 @@ public sealed class WorldRenderEnvelopeLawTests {
             4,
             solo.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.ShapeBlend))
         );
-        Assert.True(condition: (measured.Words.Length <= boot.Words.Length));
-        Assert.True(condition: (measured.Instances.Count <= boot.Instances.Count));
+        Assert.True(condition: (measured.Words <= scene.BootWords));
+        Assert.True(condition: (measured.Instances <= scene.BootInstances));
     }
-    [Theory]
     [InlineData(0)]
     [InlineData(1)]
+    [Theory]
     public void LiveGrowthAdmitsNewScopeFreePlacementsWithOrWithoutHeadroom(int headroom) {
-        var prototype = new WorldPrototype(
-            "store",
-            new(
-                "puck.creation.v1",
-                "store",
-                [new(
-                        "#AA7755",
-                        null,
-                        null,
-                        null
-                    )],
-                [new(
-                        0,
-                        "wall",
-                        SdfSolidPrimitive.Box,
-                        Vector3.Zero,
-                        Quaternion.Identity,
-                        Vector3.One,
-                        0,
-                        null,
-                        0,
-                        null
-                    ),
-             new(
-                        1,
-                        "roof",
-                        SdfSolidPrimitive.Box,
-                        (Vector3.UnitY * 2),
-                        Quaternion.Identity,
-                        Vector3.One,
-                        0,
-                        null,
-                        0,
-                        null
-                    )],
-                null
-            )
+        var scene = scenes.Headroom(headroom: headroom);
+        var candidate = scene.Candidate(
+            name: "new-store",
+            prototype: "store"
         );
-        var definition = Fixtures.BuildDocument() with {
-            CreationsRaw = [prototype],
-            PlacementsRaw = new(
-            Rows: [],
-            Policy: new(
-                AuthoringHeadroomPlacements: headroom,
-                AuthoringHeadroomScreens: 0,
-                CandidateCap: 4,
-                CandidateRadius: 10,
-                DerivedFaceScreens: 0,
-                MaxPlacementScale: 1,
-                MinPlacementScale: 1,
-                PreviewDeadlineFrames: 8
-            )
-        ),
-        };
-        var routes = new WorldSeatAuthorityRouter();
-        var client = new WorldClient(
-            new PlayerRoster(
-                definition: definition,
-                link: new SilentLink(definition: definition),
-                seatBindings: new WorldSeatBindings(definition: definition)
-            ),
-            definition,
-            new WorldCompositionState(),
-            routes
-        );
-        var emitter = new WorldSceneEmitter(
-            client,
-            new(defaults: definition.Render),
-            new(),
-            new SilentAudio(),
-            new(),
-            new(
-                client,
-                routes,
-                new NoNeighbours()
-            ),
-            new(source: new(
-                Definition: definition,
-                SourcePath: "unused.world.json"
-            ))
-        );
-        var bootBuilder = new SdfProgramBuilder();
-
-        using (bootBuilder.BeginMaterialScope()) { emitter.Emit(
-            builder: bootBuilder,
-            context: new(
-                true,
-                0,
-                Vector3.Zero,
-                Vector3.Zero,
-                0
-            )
-        ); }
-        var boot = bootBuilder.Build(buildInstanceGrid: false);
-        var candidate = definition with { PlacementsRaw = definition.PlacementsRaw! with { Rows = [new(
-                "new-store",
-                "store",
-                Vector3.Zero,
-                0,
-                1
-            )] } };
-        var candidateBuilder = new SdfProgramBuilder();
-
-        emitter.ComposeCandidate(
-            builder: candidateBuilder,
-            candidate: candidate
-        );
-        var measured = candidateBuilder.Build(buildInstanceGrid: false);
+        var measured = scene.Measure(candidate: candidate);
 
         var envelope = new WorldRenderEnvelope();
         using var growing = envelope.Configure(
-            programWordCapacity: boot.Words.Length,
-            instanceCapacity: boot.Instances.Count,
-            measure: _ => (measured.Words.Length, measured.Instances.Count),
+            programWordCapacity: scene.BootWords,
+            instanceCapacity: scene.BootInstances,
+            measure: _ => measured,
             allowGrowth: true
         );
-        Assert.True(envelope.TryFit(candidate, out var reason), reason);
+
+        Assert.True(condition: envelope.TryFit(candidate: candidate, reason: out var reason), userMessage: reason);
         // The zero-reserve case reproduces adding the queen to an unauthored placement policy.
-        Assert.Equal(headroom == 0, measured.Instances.Count > boot.Instances.Count);
+        Assert.Equal((headroom == 0), (measured.Instances > scene.BootInstances));
         using var fixedConsumer = envelope.Configure(
-            programWordCapacity: boot.Words.Length,
-            instanceCapacity: boot.Instances.Count,
-            measure: _ => (measured.Words.Length, measured.Instances.Count)
+            programWordCapacity: scene.BootWords,
+            instanceCapacity: scene.BootInstances,
+            measure: _ => measured
         );
-        Assert.Equal(headroom != 0, envelope.TryFit(candidate, out _));
+
+        Assert.Equal((headroom != 0), envelope.TryFit(candidate: candidate, reason: out _));
     }
     /// <summary>Every active renderer constrains admission independently, and disposing one renderer removes only
     /// its own constraint. This pins both halves of the lease contract: no last-writer-wins overwrite and no stale
@@ -544,33 +198,8 @@ public sealed class WorldRenderEnvelopeLawTests {
     [Fact]
     public void ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom() {
         var definition = AuthoredGameFixtures.Nexus;
-        var routes = new WorldSeatAuthorityRouter();
-        var client = new WorldClient(
-            new PlayerRoster(
-                definition: definition,
-                link: new SilentLink(definition: definition),
-                seatBindings: new WorldSeatBindings(definition: definition)
-            ),
-            definition,
-            new WorldCompositionState(),
-            routes
-        );
-        var scene = new WorldSceneEmitter(
-            client,
-            new(defaults: definition.Render),
-            new(),
-            new SilentAudio(),
-            new(),
-            new(
-                client,
-                routes,
-                new NoNeighbours()
-            ),
-            new(source: new(
-                Definition: definition,
-                SourcePath: "unused.world.json"
-            ))
-        );
+
+        var (client, scene) = SceneEmitter(definition: definition);
         var adjacencies = new WorldAdjacencySceneEmitter(
             client,
             new NoNeighbours()
@@ -578,19 +207,8 @@ public sealed class WorldRenderEnvelopeLawTests {
         // The presenter's emitter list, in its order: [scene, sdf documents, adjacencies, fields].
         ISdfSceneEmitter[] emitters = [scene, new WorldSdfDocumentEmitter(), adjacencies, new WorldFieldEmitter(client: client)];
         var bootBuilder = new SdfProgramBuilder();
-        var sceneOnlyBuilder = new SdfProgramBuilder();
+        var sceneOnlyInstances = -1;
         var slotBase = 0;
-
-        using (sceneOnlyBuilder.BeginMaterialScope()) { scene.Emit(
-            builder: sceneOnlyBuilder,
-            context: new(
-                true,
-                0,
-                Vector3.Zero,
-                Vector3.Zero,
-                0
-            )
-        ); }
 
         foreach (var emitter in emitters) {
             var context = new SdfEmitContext(
@@ -615,6 +233,15 @@ public sealed class WorldRenderEnvelopeLawTests {
                 );
             }
 
+            // The scene emitter leads the list at slot base zero into an empty builder, so the instances it leaves
+            // are exactly the ones it composes alone.
+            if (ReferenceEquals(
+                objA: emitter,
+                objB: scene
+            )) {
+                sceneOnlyInstances = bootBuilder.InstanceCount;
+            }
+
             slotBase += Math.Max(
                 val1: 0,
                 val2: emitter.DynamicSlotCount
@@ -622,14 +249,13 @@ public sealed class WorldRenderEnvelopeLawTests {
         }
 
         var boot = bootBuilder.Build(buildInstanceGrid: false);
-        var sceneOnly = sceneOnlyBuilder.Build(buildInstanceGrid: false);
         var stampPoolWorstCase = (WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp);
         var headroom = (SdfProgramBuilder.MaxInstances - boot.Instances.Count);
 
-        Console.WriteLine(value: (((string)$"world.budget probe: composed boot instances={boot.Instances.Count} (scene emitter alone {sceneOnly.Instances.Count}, adjacency bands {WorldAdjacencyBands.ProjectionCapacity(definition: definition)}) words={boot.Words.Length} ") +
+        output.WriteLine(message: (((string)$"world.budget probe: composed boot instances={boot.Instances.Count} (scene emitter alone {sceneOnlyInstances}, adjacency bands {WorldAdjacencyBands.ProjectionCapacity(definition: definition)}) words={boot.Words.Length} ") +
             $"ceiling={SdfProgramBuilder.MaxInstances} headroom={headroom} stampPoolWorstCase={stampPoolWorstCase}"));
 
-        var figures = (((string)$"composed boot probe {boot.Instances.Count} instance(s) (scene emitter alone {sceneOnly.Instances.Count}, {WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s)), stamp pool worst case {stampPoolWorstCase}, ") +
+        var figures = (((string)$"composed boot probe {boot.Instances.Count} instance(s) (scene emitter alone {sceneOnlyInstances}, {WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s)), stamp pool worst case {stampPoolWorstCase}, ") +
             $"headroom {headroom} under the {SdfProgramBuilder.MaxInstances}-instance ceiling at MaxShapesPerStamp {WorldPlacementPolicy.MaxShapesPerStamp}");
 
         Assert.True(
@@ -644,9 +270,30 @@ public sealed class WorldRenderEnvelopeLawTests {
         // emitter alone under-counts by the adjacency/field reservations, so a law reading only it would admit a
         // constant the real boot refuses.
         Assert.True(
-            condition: (boot.Instances.Count > sceneOnly.Instances.Count),
+            condition: (boot.Instances.Count > sceneOnlyInstances),
             userMessage: $"{figures}: the composed probe reserves nothing beyond the scene emitter, so the composed measure is not discriminating."
         );
+    }
+
+    // One prototype stamped alone at the origin under its own material scope.
+    private static SdfProgram Solo(WorldPrototype prototype) {
+        var builder = new SdfProgramBuilder();
+
+        using (builder.BeginMaterialScope()) {
+            CreationStampEmitter.Emit(
+                builder,
+                prototype.Document,
+                new(
+                    Vector3.Zero,
+                    Quaternion.Identity,
+                    1f,
+                    null
+                ),
+                _ => builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One))
+            );
+        }
+
+        return builder.Build(buildInstanceGrid: false);
     }
 
     private sealed class SilentAudio : IWorldAudioCueSink {
@@ -663,16 +310,5 @@ public sealed class WorldRenderEnvelopeLawTests {
 
             return false;
         }
-    }
-    private sealed class SilentLink(WorldDefinition definition) : IServerLink {
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) {
-            if (query is WorldQuery.PopulationChannels) { completion(new(
-                Payload: WorldChannelTable.Compile(channels: definition.Channels),
-                Text: ""
-            )); }
-        }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => 0;
-        public void SubmitIntent(in IntentSubmission submission) { }
-        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) { }
     }
 }

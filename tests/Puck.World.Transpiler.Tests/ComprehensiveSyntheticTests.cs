@@ -20,11 +20,11 @@ public class ComprehensiveSyntheticTests {
     public void TestCartridgeDocumentRoundTrip() {
         const string CartPuck = """
             schema: "puck.cartridge.v1"
-            documentId: "tetris-cart"
+            documentId: "synthetic-cart"
 
             cartridge {
-                title: "Tetris AGB"
-                rom: "roms/tetris.agb"
+                title: "Synthetic AGB"
+                rom: "synthetic.agb"
                 hash: "auto"
                 saveType: "Sram32k"
             }
@@ -40,18 +40,18 @@ public class ComprehensiveSyntheticTests {
             json["schema"]?.ToString()
         );
         Assert.Equal(
-            "tetris-cart",
+            "synthetic-cart",
             json["documentId"]?.ToString()
         );
 
         var cart = Assert.IsType<JsonObject>(@object: json["cartridge"]);
 
         Assert.Equal(
-            "Tetris AGB",
+            "Synthetic AGB",
             cart["title"]?.ToString()
         );
         Assert.Equal(
-            "roms/tetris.agb",
+            "synthetic.agb",
             cart["rom"]?.ToString()
         );
         var hash = cart["hash"]?.ToString();
@@ -75,7 +75,7 @@ public class ComprehensiveSyntheticTests {
         );
         Assert.Contains(
             actualString: decompiled,
-            expectedSubstring: "title: \"Tetris AGB\""
+            expectedSubstring: "title: \"Synthetic AGB\""
         );
 
         Assert.Equal(
@@ -90,7 +90,7 @@ public class ComprehensiveSyntheticTests {
     public void TestComprehensiveNookAndCrannySynthesis() {
         const string ComprehensivePuck = """
             schema: "puck.world.definition.v1"
-            basis: "worlds/standard.basis.json"
+            basis: "worlds/standard"
             documentId: "comprehensive-synthetic-v1"
 
             // Compile-time constants
@@ -105,7 +105,7 @@ public class ComprehensiveSyntheticTests {
 
             // Module imports
             import "extensions/rules.world.puck" as rules
-            import "modules/arcade.world.json"
+            import "modules/arcade"
 
             // Facet exports
             export read state, scores, tableStatus
@@ -135,7 +135,6 @@ public class ComprehensiveSyntheticTests {
                 listen: null
                 presentMode: Immediate
                 presentation: Windowed
-                rayQuery: true
                 surfaceFormat: r8g8b8a8
                 targetHertz: targetFps
                 timing: false
@@ -170,7 +169,7 @@ public class ComprehensiveSyntheticTests {
 
                 pipeline "moth-pipeline" {
                     camera: null
-                    source: "../pipelines/moth.glsl"
+                    source: "../pipelines/moth.hlsl"
                     timeScale: 1
                 }
             }
@@ -212,7 +211,7 @@ public class ComprehensiveSyntheticTests {
             json["schema"]?.ToString()
         );
         Assert.Equal(
-            "worlds/standard.basis.json",
+            "worlds/standard",
             json["basis"]?.ToString()
         );
         Assert.Equal(
@@ -227,7 +226,7 @@ public class ComprehensiveSyntheticTests {
         var imp0 = Assert.IsType<JsonObject>(@object: imports[0]);
 
         Assert.Equal(
-            "modules/arcade.world.json",
+            "modules/arcade",
             imp0["document"]?.ToString()
         );
         Assert.Null(@object: imp0["as"]);
@@ -371,7 +370,7 @@ public class ComprehensiveSyntheticTests {
         );
         Assert.Contains(
             actualString: decompiledPuck,
-            expectedSubstring: "basis: \"worlds/standard.basis.json\""
+            expectedSubstring: "basis: \"worlds/standard\""
         );
         Assert.Contains(
             actualString: decompiledPuck,

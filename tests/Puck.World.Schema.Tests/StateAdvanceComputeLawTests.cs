@@ -26,7 +26,7 @@ public sealed class StateAdvanceComputeLawTests {
         );
         var magnitude = BigInteger.Divide(
             dividend: ((elapsed * BigInteger.Abs(value: advance.PerSecondNumerator)) * scale),
-            divisor: (new BigInteger(advance.PerSecondDenominator) * 50400)
+            divisor: (new BigInteger(value: advance.PerSecondDenominator) * 50400)
         );
         var raw = (baseValue + ((advance.PerSecondNumerator < 0)
             ? -magnitude
@@ -67,7 +67,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 30L,
             actual: advance.ComputeCurrentValue(
                 baseValue: 0L,
-                currentEngineTick: 10UL * 50400UL,
+                currentEngineTick: (10UL * 50400UL),
                 row: row
             )
         );
@@ -75,7 +75,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 100L,
             actual: advance.ComputeCurrentValue(
                 baseValue: 0L,
-                currentEngineTick: 1000UL * 50400UL,
+                currentEngineTick: (1000UL * 50400UL),
                 row: row
             )
         );
@@ -83,7 +83,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 100L,
             actual: advance.ComputeCurrentValue(
                 baseValue: long.MaxValue,
-                currentEngineTick: 1000UL * 50400UL,
+                currentEngineTick: (1000UL * 50400UL),
                 row: row
             )
         );
@@ -97,7 +97,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: -5L,
             actual: drain.ComputeCurrentValue(
                 baseValue: 0L,
-                currentEngineTick: 1000UL * 50400UL,
+                currentEngineTick: (1000UL * 50400UL),
                 row: row
             )
         );
@@ -105,7 +105,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: -5L,
             actual: drain.ComputeCurrentValue(
                 baseValue: long.MinValue,
-                currentEngineTick: 1000UL * 50400UL,
+                currentEngineTick: (1000UL * 50400UL),
                 row: row
             )
         );

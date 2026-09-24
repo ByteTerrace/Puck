@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 using System.Text.Json;
 
@@ -146,7 +147,7 @@ public sealed class InstrumentClockSourceLawTests {
             definition: BuildDocument(assetDirectory: assetDirectory),
             engines: [new TuneInstrumentEngine()]
         );
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: seat,

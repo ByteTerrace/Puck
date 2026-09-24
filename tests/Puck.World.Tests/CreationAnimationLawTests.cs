@@ -47,42 +47,10 @@ public sealed class CreationAnimationLawTests {
     }
     // The dynamic emission path a body-stamped creation actually renders through — the one place an animation facet
     // could leak into geometry if PackTransforms were not the only reader.
-    private static uint[] EmitBodyStampWords(WorldPrototype creation) {
-        var definition = Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: creation.Id),
-                Scale: 1f,
-                Motion: WorldLookMotion.Default
-            )],
-        };
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: 1f,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: false,
-            maxPlacementScale: 1f,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false).Words.ToArray();
-    }
+    private static uint[] EmitBodyStampWords(WorldPrototype creation) => CreationFixtures.EmitPool(
+        bodyScale: 1f,
+        creation: creation
+    ).Words.ToArray();
     private static ShapeDocument Limb(IReadOnlyList<ShapeSwingDocument>? swings = null, IReadOnlyList<ShapeSlideDocument>? slides = null, IReadOnlyList<ShapeDomainOp>? domain = null) => new(
         Id: 1,
         Name: "limb",
@@ -160,12 +128,14 @@ public sealed class CreationAnimationLawTests {
             actual: position
         );
         // The control: the same shape naming the declared driver does move under the same phase and weight.
-        var named = (shape with { Swings = [new ShapeSwingDocument(
+        var named = (shape with {
+            Swings = [new ShapeSwingDocument(
                 Amplitude: 1f,
                 Axis: Vector3.UnitZ,
                 Driver: "stride",
                 Pivot: Vector3.Zero
-            )] });
+            )],
+        });
         var namedPosition = named.Position.Value;
         var namedRotation = named.Rotation.Value;
 

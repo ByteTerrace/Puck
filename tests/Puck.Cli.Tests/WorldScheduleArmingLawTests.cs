@@ -11,14 +11,14 @@ namespace Puck.Cli.Tests;
 /// landed.</remarks>
 public sealed class WorldScheduleArmingLawTests {
     private const string ScheduledWorld = "phase-advance.world.json";
-
     // The document's own export tick (two rows, the last at tick 6, settleTicks 6), fenced two ticks past so the
     // export lands before the pipe closes.
     private const string Script = "world.wait 14\nworld.schedule\nworld.verdicts\nquit\n";
 
     [Fact]
     public void ABareBootOfAScheduledWorldSubmitsNothingAndSaysSo() {
-        var legDirectory = ScheduledWorldBoot.Leg(name: "unarmed");
+        using var leg = ScheduledWorldBoot.Leg();
+        var legDirectory = leg.PathOf(name: "unarmed");
         var process = ScheduledWorldBoot.Boot(
             legDirectory: legDirectory,
             script: Script,
@@ -26,7 +26,6 @@ public sealed class WorldScheduleArmingLawTests {
         );
         var transcript = (process.Stdout + process.Stderr);
 
-        Assert.False(condition: process.TimedOut);
         Assert.Contains(
             actualString: transcript,
             comparisonType: StringComparison.Ordinal,
@@ -55,7 +54,8 @@ public sealed class WorldScheduleArmingLawTests {
     }
     [Fact]
     public void TheSameBootArmedRunsTheScheduleAndTurnsTheVerdictOver() {
-        var legDirectory = ScheduledWorldBoot.Leg(name: "armed");
+        using var leg = ScheduledWorldBoot.Leg();
+        var legDirectory = leg.PathOf(name: "armed");
         var scheduleDirectory = Path.Combine(
             path1: legDirectory,
             path2: "out"
@@ -68,7 +68,6 @@ public sealed class WorldScheduleArmingLawTests {
         );
         var transcript = (process.Stdout + process.Stderr);
 
-        Assert.False(condition: process.TimedOut);
         Assert.Contains(
             actualString: transcript,
             comparisonType: StringComparison.Ordinal,

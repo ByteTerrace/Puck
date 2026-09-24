@@ -36,8 +36,8 @@ public sealed class StateKernelMatrixLawTests {
         }
     }
     private static IReadOnlyList<object?> Values<T>(string property) {
-        var member = typeof(T).GetProperty(name: property)
-            ?? throw new InvalidOperationException(message: $"{typeof(T).Name} declares no scenario parameter '{property}'.");
+        var member = (typeof(T).GetProperty(name: property)
+            ?? throw new InvalidOperationException(message: $"{typeof(T).Name} declares no scenario parameter '{property}'."));
 
         return (member.GetCustomAttribute<ParamsAttribute>()?.Values
             ?? throw new InvalidOperationException(message: $"{typeof(T).Name}.{property} is not a benchmark scenario parameter."));
@@ -57,7 +57,7 @@ public sealed class StateKernelMatrixLawTests {
             [KernelOutcome.Successful, KernelOutcome.Refused],
             Values<StateArithmeticKernels>(property: nameof(StateArithmeticKernels.Outcome))
         );
-        foreach (var entry in new[] { "BinaryAdd", "BinaryDivide", "BinaryMultiply", "BinaryParallelBitExtract", "BinaryShiftLeft", "BitField", "BitInsert", "UnaryAbs", "UnaryBitReverse", "UnaryNegate", "UnaryPopCount" }) {
+        foreach (var entry in new[] { "BinaryAdd", "BinaryDivide", "BinaryMultiply", "BinaryParallelBitExtract", "BinaryShiftLeft", "BitField", "BitInsert", "UnaryAbs", "UnaryReverseBits", "UnaryNegate", "UnaryPopCount" }) {
             Assert.NotNull(@object: typeof(StateArithmeticKernels).GetMethod(name: entry)?.GetCustomAttribute<BenchmarkAttribute>());
         }
     }

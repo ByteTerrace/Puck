@@ -19,12 +19,12 @@ public sealed class TextCommandSessionTests {
         var heldResults = new List<string>();
         var freeResults = new List<string>();
         var heldSession = source.CreateSession(
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             hold: () => held,
             onResult: (line, _) => heldResults.Add(item: line)
         );
         var freeSession = source.CreateSession(
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             onResult: (line, _) => freeResults.Add(item: line)
         );
 
@@ -176,14 +176,14 @@ public sealed class TextCommandSessionTests {
         var source = new TextCommandSource(new CommandRegistry([new SessionModule(seen: seen)]));
         var permitted = true;
         using var alice = source.CreateSession(
-            CommandPrincipal.Peer(
+            Principal.Peer(
                 generation: 1,
                 index: 8
             ),
             authorize: command => (permitted && (command.Name == "probe"))
         );
         using var bob = source.CreateSession(
-            CommandPrincipal.Peer(
+            Principal.Peer(
                 generation: 2,
                 index: 9
             ),
@@ -196,10 +196,10 @@ public sealed class TextCommandSessionTests {
         alice.Enqueue(line: "\"simulate\"");
         source.Collect();
         Assert.Equal(
-            [CommandPrincipal.Peer(
+            [Principal.Peer(
                     generation: 1,
                     index: 8
-                ), CommandPrincipal.Peer(
+                ), Principal.Peer(
                     generation: 2,
                     index: 9
                 )],
@@ -212,12 +212,12 @@ public sealed class TextCommandSessionTests {
             2,
             seen.Count
         );
-        using var local = source.CreateSession(CommandPrincipal.Console);
+        using var local = source.CreateSession(Principal.Console);
 
         local.Enqueue(line: "simulate");
         source.Collect();
         Assert.Equal(
-            CommandPrincipal.Console,
+            Principal.Console,
             seen[^1].Principal
         );
     }
@@ -250,7 +250,7 @@ public sealed class TextCommandSessionTests {
         Assert.All(
             collection: seen,
             action: static context => Assert.Equal(
-                expected: CommandPrincipal.Seat(slot: context.Slot),
+                expected: Principal.Seat(slot: context.Slot),
                 actual: context.Principal
             )
         );
@@ -262,7 +262,6 @@ public sealed class TextCommandSessionTests {
             )
         );
     }
-
     // The capture clock is wall time. A simulation running behind it snapshots a window that closes before the
     // clock's now, so an ordinary session's line waits for simulation time to catch up, which is a different number
     // of ticks on every run. A scripted session's line is due in the next snapshot whatever the clock reads.
@@ -334,8 +333,8 @@ public sealed class TextCommandSessionTests {
     private sealed class FixedAlwaysActiveBindings(IReadOnlyList<CommandBinding> bindings) : IAlwaysActiveInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => bindings;
     }
-    private sealed class SeatPrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+    private sealed class SeatPrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Seat(slot: slot);
     }
     private sealed class SessionModule(List<CommandContext> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

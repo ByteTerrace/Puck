@@ -2,9 +2,30 @@ using Puck.Maths;
 
 namespace Puck.State;
 
+/// <summary>One registered vocabulary's pricing coverage. <paramref name="Unmodeled"/> names the operations a
+/// document can still reach without a reference-cycle price, which is what withholds certification of the scoped
+/// deadline; an empty list is the certifiable state.</summary>
+/// <param name="Vocabulary">The registered vocabulary.</param>
+/// <param name="Registered">How many operations it registers.</param>
+/// <param name="Priced">How many of them carry a reference-cycle price.</param>
+/// <param name="Unmodeled">The operations carrying an explicit unmodeled reason instead of a price.</param>
+public sealed record CostCoverage(string Vocabulary, int Registered, int Priced, IReadOnlyList<string> Unmodeled);
 /// <summary>Portable semantic operation pricing, read from the reference schedule's one owning evidence manifest.</summary>
 public static class ReferenceSchedule {
     private static readonly Dictionary<string, CostCoefficient> Expressions = Load();
+
+    /// <summary>Gets each registered vocabulary's pricing coverage, ordered by vocabulary. A reachable operation
+    /// absent from the manifest is absent here too: completeness of the registry is the vocabulary laws' subject,
+    /// not this summary's.</summary>
+    public static IReadOnlyList<CostCoverage> Coverage { get; } = [.. ReferenceScheduleManifest.Coefficients
+        .GroupBy(keySelector: coefficient => coefficient.Vocabulary, comparer: StringComparer.Ordinal)
+        .OrderBy(keySelector: group => group.Key, comparer: StringComparer.Ordinal)
+        .Select(selector: group => new CostCoverage(
+            Priced: group.Count(predicate: coefficient => coefficient.Bound.IsKnown),
+            Registered: group.Count(),
+            Unmodeled: [.. group.Where(predicate: coefficient => !coefficient.Bound.IsKnown).Select(selector: coefficient => coefficient.Operation)],
+            Vocabulary: group.Key
+        ))];
 
     private static Dictionary<string, CostCoefficient> Load() {
         var coefficients = new Dictionary<string, CostCoefficient>(comparer: StringComparer.Ordinal);

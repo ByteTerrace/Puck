@@ -35,10 +35,10 @@ public sealed class WorldRenderEnvelope {
         m_constraints.Add(
             key: id,
             value: new Constraint(
+                AllowGrowth: allowGrowth,
                 InstanceCapacity: instanceCapacity,
                 Measure: measure,
-                ProgramWordCapacity: programWordCapacity,
-                AllowGrowth: allowGrowth
+                ProgramWordCapacity: programWordCapacity
             )
         );
 
@@ -53,7 +53,18 @@ public sealed class WorldRenderEnvelope {
     /// <returns><see langword="true"/> when the candidate fits every active registration (or none exists).</returns>
     public bool TryFit(WorldDefinition candidate, out string reason) {
         foreach (var constraint in m_constraints.Values) {
-            var (words, instances) = constraint.Measure(arg: candidate);
+            int words;
+            int instances;
+
+            // Building the composed candidate is how a measurer enforces the program's structural limits, so a limit
+            // it reaches is this candidate's refusal, never the host's failure.
+            try {
+                (words, instances) = constraint.Measure(arg: candidate);
+            } catch (Puck.SignedDistance.SdfProgramCapacityException error) {
+                reason = error.Message;
+
+                return false;
+            }
 
             if (constraint.AllowGrowth) {
                 if (instances > Puck.SignedDistance.SdfProgramBuilder.MaxInstances) {

@@ -13,6 +13,12 @@ changes pass through composition and whole-candidate validation before becoming
 active. Accepted mutations can be recorded in a journal and replayed through
 the normal apply path. Saving and recovery must preserve those semantics.
 
+The running engine is the visual editor. Puck has no separate scene editor or
+content-creation tool: selecting, placing, sculpting and inspecting happen
+inside a live World, through its console, views and HUD, and produce the same
+document an author could write by hand. A missing editing affordance is a
+feature of the World, not a reason for a second application.
+
 Prefer existing data and operations when they express a new feature clearly.
 For example, a body can be controlled through permissions without classifying
 its geometry as a player or NPC. An anchor describes a camera's pose, while a
@@ -22,6 +28,26 @@ choices; they are not a prohibition on adding a justified type or document field
 The engine provides general mechanisms; game-specific names and policies belong
 in authored content. Authority and admission rules must stay explicit when a
 new opcode, document shape or addon interface is introduced.
+
+## A document owns the paths it names
+
+A world document is self-contained and movable. Every relative path it authors
+resolves beside the document that authored it: a basis, an import, a
+neighbour reference, an asset row's source, an addon module, a pipeline or
+graph source, a probe track, a machine's content, and the window icon. A
+document and the files it names therefore move together, whether they are
+copied into a build's output, staged under a state directory, or saved
+somewhere new.
+
+The engine's own content is different. The default world, fonts, shaders and
+probe kinds ship beside the executable and resolve there. The two kinds of
+lookup never share a resolver, and neither falls back to the other: a
+document-relative path that is missing beside its document is refused, rather
+than found by accident in the executable's directory.
+
+A document read from somewhere other than a file, such as standard input, an
+in-memory build or a wire delivery, has no directory. It can still name
+absolute paths, but a relative one is refused by name at validation.
 
 ## Simulation and presentation have different contracts
 
@@ -59,8 +85,8 @@ an image alone does not imply geometry or depth.
 Vulkan and Direct3D 12 implement neutral GPU interfaces. Select the backend
 when building the render host; a document must not silently combine live GPU
 resources from different APIs. Cross-backend composition is not an admitted
-shortcut around resource ownership. Hardware ray-query experiments likewise
-do not replace the primary SDF traversal merely because a device supports them.
+shortcut around resource ownership. Hardware ray tracing likewise does not
+replace the primary SDF traversal merely because a device supports it.
 
 The earlier SDF-only scope is a description of the established world-rendering
 path, not a restriction on the programmable pipeline foundation. General mesh
@@ -74,6 +100,23 @@ for every visual copy. A change to that choice needs a defined spatial-audio
 and resource-budget contract rather than following the render instance count
 implicitly.
 
+## An actor is one type, and a grant names more than actors
+
+Every surface that acts carries one identity type, `Principal` in
+`Puck.Commands`: a console, a seat, an addon, a network peer, or the world's own
+authored program. The command router stamps it, the submission wire and the
+replay tape carry it, and a mutation admits against it, so no layer translates
+one identity into another and no conversion can drift. Its default value names
+no one: a dispatch that reaches a handler without an ingress door stamping it is
+refused rather than treated as an anonymous caller. Only an ingress door mints a
+principal; a handler reads the one its context carries.
+
+A grant row can name more than an actor. A group holds rows its members reach,
+and another world document holds rows the cross-document channel reads. Those
+two never act, so they are not principals: a grant's holder is a separate type,
+`Grantee` in the world schema, which is a principal, a group, or a document.
+Because no acting surface accepts a grantee, a group or a document acting is a
+type error rather than a run-time refusal.
 ## Configuration and operations remain discoverable
 
 Durable configuration belongs in documents. Live operations belong in the

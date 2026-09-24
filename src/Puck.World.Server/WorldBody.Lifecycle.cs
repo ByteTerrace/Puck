@@ -101,7 +101,7 @@ public sealed partial class WorldBody {
             m_drivePitch = FixedQ4816.Zero;
             m_orientation = FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
-                axis: UnitY
+                axis: FixedVector3.UnitY
             );
         } else if (program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
             m_yaw = ExtractYaw(orientation: m_orientation);
@@ -469,6 +469,7 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+        RescaleColliderVolumes();
 
         var hadRigidFacet = (m_rigid is not null);
 
@@ -602,7 +603,7 @@ public sealed partial class WorldBody {
         m_drivePitch = FixedQ4816.Zero;
         m_orientation = FixedQuaternion.FromAxisAngle(
             angle: fixedYaw,
-            axis: UnitY
+            axis: FixedVector3.UnitY
         );
         CommitTeleport();
 

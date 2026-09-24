@@ -1,7 +1,6 @@
 # Maths-laws complete reference
 
-This preserves the full declaration, evidence, coverage, and mutation-proof
-contract. Read the relevant section when the compact skill routes here.
+Read the relevant section when `SKILL.md` routes here.
 
 ## Contents
 
@@ -45,7 +44,7 @@ do), because the loader reads every `*.json` in the directory and keys by id.
 ```json
 {
   "Id": "<family>.<kebab-statement>",
-  "Tier": "Smoke|Default|Deep|Exhaustive|Bench",
+  "Tier": "Smoke|Default|Deep|Exhaustive",
   "Members": [ { "Type": "Puck.Maths.FixedQ4816", "Name": "Multiply" } ],
   "Legs": [ {
     "Kind": "Classical|PresentedTwin|InTreeIndependent|SharedSubstrate|Structural",
@@ -77,21 +76,27 @@ is `SharedSubstrate`. The seven prose slots map onto the `Legs.cs` factories:
 `LawRegistry.Build()`:
 
 ```csharp
-Case("<family>.<kebab-statement>", () => Laws.<Combinator>(lawId: "<family>.<kebab-statement>", domain: <Domain>, tier: Tier.Default, …)),
+ClaimCase(id: "<family>.<kebab-statement>", claim: Subjects.<Claim>),
+SweptCase(id: "<family>.<kebab-statement>", domain: <Domain>, width: <lanes>, claim: Subjects.<SweptClaim>),
+Case(id: "<family>.<kebab-statement>", run: () => Laws.<Combinator>(lawId: "<family>.<kebab-statement>", domain: <Domain>, tier: Tier.Default, …)),
 ```
 
 `Case(id, run)` looks the declaration up by id, parses the tier, resolves each
-member against the `Puck.Maths` assembly, and materializes each leg. Repeat the
-id inside the run lambda — the combinator quotes it on failure.
+member against the `Puck.Maths` assembly, and materializes each leg. A law whose
+whole run is one `Laws.Claim` binds with `ClaimCase(id, claim)`, and one whose
+whole run is one `Laws.SweptClaim` with `SweptCase(id, domain, width, claim)`:
+both spell the id once and take the tier from the declaration, so the two cannot
+disagree. Any other run is a `Case` lambda; repeat the id inside it — the
+combinator quotes it on failure — and pass the tier the declaration names.
+
+The registry is built in `LawRegistry`'s static constructor, after every
+partial's `Domain` field is assigned, so a binding may capture a domain eagerly.
 
 **A declaration without a binding, or a binding without a declaration, fails
 `LawDeclarationTests.EveryDeclarationHasExactlyOneCase` (tier `Default`) and the
-failure names the offending ids.** That gate is what replaced the old
-compile-time guarantee: when declarations lived in C#, a case could not exist
-without its legs because it would not compile. Now the check is a Default-tier
-assertion — which every change already runs, thirteen seconds in — rather than a
-compiler error. Adding a law means editing two files, and forgetting the second
-is a named failure, not a silent gap.
+failure names the offending ids.** Every change already runs that tier, so
+adding a law means editing two files, and forgetting the second is a named
+failure, not a silent gap.
 
 **Why it is data.** The leg text is the ONE thing no gate can check — nothing
 reads the bodies a leg describes, so a leg claiming independence it does not have
@@ -106,9 +111,10 @@ Where things live, and nothing crosses:
 | File | Holds | Never holds |
 |---|---|---|
 | `laws/*.json` | ids, tiers, covered members, leg prose | anything executable |
-| `LawRegistry.cs` and its per-family partials | domains and one `Case(id, run)` binding per law | legs, members, arithmetic, assertions |
+| `LawRegistry.cs` and its per-family partials | domains and one binding per law (`ClaimCase`, `SweptCase` or `Case`) | legs, members, arithmetic, assertions |
 | `LawDeclarations.cs` | the declaration records and their loader | law logic |
 | `Subjects.cs` and its per-family partials, `*Claims.cs` | subject closures + claim bodies | oracle arithmetic |
+| `Refusals.cs`, `DoublingTower.cs` | the refusal probes and the doubling-tower basis and lane readout every claim body shares | law-specific logic |
 | `Oracles.cs` and its per-area partials | shared-nothing reference arithmetic | a `Puck.Maths` call |
 | `Domains.cs`, `Frontier.cs` | operand sources | anything law-specific |
 | `Laws.cs` | generic combinators, written once | per-subject logic |
@@ -160,7 +166,7 @@ is by construction the state the run's generator started from.
 
 Tier selection is declarative — **no environment variables anywhere**. The
 project binds `default.runsettings` via `RunSettingsFilePath`
-(`TestCaseFilter` = `tier!=Deep&tier!=Bench`), so plain `dotnet test` runs
+(`TestCaseFilter` = `tier!=Deep&tier!=Exhaustive`), so plain `dotnet test` runs
 Smoke + Default.
 
 | Tier | Selected by | Declared budget | When it runs |
@@ -169,10 +175,12 @@ Smoke + Default.
 | Default (Smoke + Default) | the bound default | ~13 s | **every change**, unconditionally |
 | Deep | `--settings …/deep.runsettings` | minutes | before you commit, and before any rounding change lands |
 | Exhaustive | `--settings …/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an ENTIRE carrier |
-| Bench | `--settings …/bench.runsettings` | timing, breach-tolerant | on demand; gates no value |
 
-`default.runsettings` filters `tier!=Deep&tier!=Bench&tier!=Exhaustive`, so the
-three opt-in tiers never fire on a plain `dotnet test`. **Tier by COST, not by
+`default.runsettings` filters `tier!=Deep&tier!=Exhaustive`, so the
+two opt-in tiers never fire on a plain `dotnet test`. A CLI `--settings`
+replaces that filter; a CLI `--filter` is combined with it, so
+`--filter "tier=Exhaustive"` alone selects no test. Select an opt-in tier by
+its `--settings` file, and narrow it with a `--filter` on the law id. **Tier by COST, not by
 the word "exhaustive."** `Exhaustive` is for sweeping every value of a carrier —
 a 2³² word sweep qualifies; a 240×240 pair sweep is milliseconds and belongs at
 `Default` or `Deep`. Parking a cheap case in an opt-in tier silently costs it its
@@ -188,9 +196,9 @@ cost** — `RESULTS.md` carries no duration, by design, because every figure in
 it is machine-independent and a wall time is not (see that file's own header).
 Treat a budget as the ceiling your new case must not blow through, and if you
 want to know what it costs, time the run yourself on an idle machine and
-compare it only against that same machine. Cost across machines is the bench
-tier's business: a ratio against a per-machine baseline, with a busy-machine
-guard that records nothing when the environment is suspect.
+compare it only against that same machine. No law measures time: a claim about
+cost is stated as a deterministic count (an allocation meter reading, a
+case or operand count) or it is `puck bench`'s measurement, not a law.
 
 **Tier placement.**
 
@@ -272,7 +280,8 @@ behaviour with `Leg.PinnedAsObserved(statement, documented)` — never a plain
 *behaviour pinned as observed* register is derived from, and `documented` is
 required (an empty one throws at the factory). The register closes only by
 **correcting the code or the doc and re-spelling the leg**; editing
-`leg-ledger.md` closes nothing — it is regenerated on the next run. The
+`leg-ledger.md` closes nothing — the leg gate fails a hand-edited copy, and a
+recording run rewrites it. The
 tool-side label grammar has no token for this, so a doc gap can only be spelled
 in `LawRegistry.cs` or one of its per-family partials.
 
@@ -359,18 +368,18 @@ non-zero) folds every operand onto `2^shift` multiples bounded by an odd span,
 so pairwise products are exact and a rounding-free law can hold bit-for-bit.
 
 - **A new domain needs no code outside its declaration.** `Frontier.Consume`
-  registers an unseen key on first use and the ledger writes it into
-  `frontier.json`. Do not hand-add an entry.
+  registers an unseen key on first use and the ledger writes it into the
+  run's `frontier.json`; a recording run commits it. Do not hand-add an entry.
 - **Give a new law its own key** unless you deliberately want the shared-operand
   bracket: cases sharing a key in one run read the *same* index and therefore
   sweep bit-identical operands (some legs lean on exactly that, and say so).
   The counter advances by **one per consuming GREEN run**, whatever the case
   count. The advance is green-gated at PERSISTENCE: a session in which any law
   failed writes `frontier.json` not at all, for no key, so re-running from the
-  committed state reproduces the red at the same indices instead of sliding the
+  persisted state reproduces the red at the same indices instead of sliding the
   window past it. Consumption is unaffected — a domain still hands out its index
   mid-sweep, so operand determinism within a run does not depend on how the run
-  ends. The non-law gates (ratchet, leg gate, bench) do not gate it and
+  ends. The non-law gates (ratchet, leg gate) do not gate it and
   need not: they consume no domain, so their verdicts sweep no operands and
   reproduce identically whatever the counters say.
 - **Fold at the domain only when the whole point is that nothing rounds**
@@ -400,7 +409,9 @@ initial uncovered backlog: coverage only grows.
 1. Land it **with its classification in the same change**: a law case naming it
    in `Members` via a `CoverRef(typeof(T), "MemberName")`, **or** an entry in
    `Coverage.WaiverDeclarations` with a reason.
-2. Run the Default tier. Commit the regenerated artifacts.
+2. Record the Default tier (`puck baselines maths-ledger`, below) and commit the
+   regenerated artifacts. A test run passes the ratchet but fails the manifest
+   check until the committed manifest matches the declarations.
 
 Land it with neither and the gate fails on **every** run and cannot heal
 itself: `Coverage.Generate` never writes a state for a member the committed
@@ -414,23 +425,38 @@ Details that decide a declaration:
   fails a reference that resolves to no member — a typo cannot silently
   under-count.
 - **Coverage is credited only from executed cases.** Every registry entry is a
-  law `LawTests` runs and asserts; the bench has no registry declaration, so
-  timing work never counts.
+  law `LawTests` runs and asserts.
 - **Cite only what the case could catch.** A citation is a claim that the case
   would fail if the member were wrong. Citing a member from every case in a
   family records a breadth of coverage in the manifest that the evidence does
-  not support — `QuaternionLaneSurface` is cited only by cases that read lanes
-  back and compare them lane for lane, and the registry says so at the
+  not support. A lane surface, for example, is cited only by cases that read
+  lanes back and compare them lane for lane, and the registry says so at the
   declaration.
 - **A waiver is a category argument, not an apology.** Write one shared reason
   per category and cite it verbatim from every member of it; name the gate of
   record that *does* pin the member (a battery section, a Post stage). An
   individual reason appears only where the category does not honestly fit.
 - Presentation boundaries — the points where a value leaves the deterministic
-  world for the renderer — are **not** automatically waivable. Three of them
-  were waived as "presentation-only" and were wrong: lane order and narrowing
-  rounding are decidable in integers, so they are laws now. A lossy map is
-  still a decidable one.
+  world for the renderer — are **not** automatically waivable: lane order and
+  narrowing rounding are decidable in integers, so they take laws. A lossy map
+  is still a decidable one.
+
+**Where a run writes.** A test run never changes the checkout: every run
+writes its ledger to `records/maths-ledger/` beside the test assembly in the
+build output, reading the previous frontier and `RESULTS.md` from there when an
+earlier run left them. Only `puck baselines` writes the committed artifacts: it
+clears that directory, runs the unfiltered Default tier, and promotes the run's
+ledger over them (`--check` compares the manifest and the leg ledger instead):
+
+```text
+puck baselines maths-ledger
+```
+
+Every run's ratchet gate fails when `coverage-manifest.json`
+differs from what the declarations generate, and the leg gate fails when
+`leg-ledger.md` differs from the rendered declarations; `frontier.json` and
+`RESULTS.md` are run records and fail nothing when stale. `LedgerOutputTests`
+holds the writer to this.
 
 **Never hand-edit `coverage-manifest.json`, `leg-ledger.md`, `RESULTS.md` or
 `frontier.json`.** All four are machine-written and every write is
@@ -441,7 +467,7 @@ therefore leaves every other record exactly as its own last run left it — and
 can never quiet a gate it never ran. Because the ratchet and leg gate carry the
 `Default` trait, **only a run that includes the Default tier
 regenerates the manifest and the ledger**; a Smoke-only or Deep-only run will
-not. Commit whatever the run regenerates as part of your change.
+not. Commit whatever a recording run regenerates as part of your change.
 
 ---
 
@@ -506,9 +532,9 @@ is decorative and its text must say so as an `ENVELOPE`.
 claiming a new law verified:
 
 1. Work in an **isolated worktree** (the harness's `EnterWorktree`, or
-   `git worktree add`). A green run advances `frontier.json`, and any run
-   rewrites `RESULTS.md`, so probing in the live tree dirties committed
-   artifacts.
+   `git worktree add`), so the broken kernel never meets another session's
+   build. Never record during a probe: a plain run writes only to the build
+   output.
 2. Break the kernel the case claims to pin, **one line**.
 3. Run the tier the case lives in.
 4. **The new case must go red.** If it stays green, it does not bite — the
@@ -532,7 +558,7 @@ filter on the display name — which *is* the law id. Confirm from the run outpu
 what actually executed rather than assuming a filter composed with the tier
 gate the way you expected, and remember that a filtered run regenerates only
 the artifacts of the checks it ran; the run that produces what you commit is
-the unfiltered Default tier.
+the unfiltered Default tier, recorded with `puck baselines maths-ledger`.
 
 **Machine gotcha — `-c Release` must PRECEDE the file path** in any file-based
 `dotnet run <script>.cs`. Put it after and the script is silently built and run
@@ -569,7 +595,8 @@ correct a rounding, a fold or a claim:
 - re-run the relevant tier to prove determinism still holds (the gates are
   self-referential and pin no historical values);
 - **re-record what the correction invalidated in the same change** — the
-  regenerated manifest, ledger, `RESULTS.md`, frontier, and any expectation
+  manifest, ledger, `RESULTS.md` and frontier that `puck baselines maths-ledger`
+  regenerates, and any expectation
   ladder whose values genuinely changed. A hand-derived ladder that no longer
   matches is either a correction to re-derive from the definition or a bug the
   law just caught; decide which and say so in the leg.

@@ -1,13 +1,13 @@
+using Puck.Commands;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
 
 public sealed class WorldStateDisclosureVectorTests {
     // The disclosure reads the live store, so a law over a document composes one over it first.
-    private static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, WorldPrincipal? recipient) {
+    private static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, Principal? recipient) {
         var arena = new StateArena(
             catalog: definition.StateCatalog,
             section: definition.StateRaw,
@@ -34,10 +34,10 @@ public sealed class WorldStateDisclosureVectorTests {
     }
     private static StateSpace SampleSpace(string name = "lore", int dimensions = 32) =>
         new(
-            Dimensions: dimensions,
-            Model: "text-embedding-3-small",
-            Name: CellName.Parse(candidate: name),
-            Revision: "1"
+            dimensions: dimensions,
+            model: "text-embedding-3-small",
+            name: CellName.Parse(candidate: name),
+            revision: "1"
         );
     private static WorldDefinition BuildDefinition(WorldStateRow[] rows, StateSpace[] spaces) =>
         new(
@@ -52,7 +52,7 @@ public sealed class WorldStateDisclosureVectorTests {
     public void DiscloseVectorRow_PreservesVectorAndFormatsAsBase64Url() {
         var space = SampleSpace(dimensions: 32);
         var vector = SampleVector(dimensions: 32);
-        var principal = WorldPrincipal.Seat(slot: 0);
+        var principal = Principal.Seat(slot: 0);
 
         var row = new WorldStateRow(
             Cells: [
@@ -110,8 +110,8 @@ public sealed class WorldStateDisclosureVectorTests {
     public void DiscloseVectorRow_HiddenCellsPlaceholder_MasksVector() {
         var space = SampleSpace(dimensions: 32);
         var vector = SampleVector(dimensions: 32);
-        var seat0 = WorldPrincipal.Seat(slot: 0);
-        var seat1 = WorldPrincipal.Seat(slot: 1);
+        var seat0 = Principal.Seat(slot: 0);
+        var seat1 = Principal.Seat(slot: 1);
 
         var row = new WorldStateRow(
             Cells: [
@@ -155,8 +155,8 @@ public sealed class WorldStateDisclosureVectorTests {
     public void DiscloseVectorRow_HiddenCellsOmit_OmitsCell() {
         var space = SampleSpace(dimensions: 32);
         var vector = SampleVector(dimensions: 32);
-        var seat0 = WorldPrincipal.Seat(slot: 0);
-        var seat1 = WorldPrincipal.Seat(slot: 1);
+        var seat0 = Principal.Seat(slot: 0);
+        var seat1 = Principal.Seat(slot: 1);
 
         var row = new WorldStateRow(
             Cells: [
@@ -187,8 +187,8 @@ public sealed class WorldStateDisclosureVectorTests {
     public void DiscloseVectorRow_WithheldRow_OmittedEntirely() {
         var space = SampleSpace(dimensions: 32);
         var vector = SampleVector(dimensions: 32);
-        var seat0 = WorldPrincipal.Seat(slot: 0);
-        var seat1 = WorldPrincipal.Seat(slot: 1);
+        var seat0 = Principal.Seat(slot: 0);
+        var seat1 = Principal.Seat(slot: 1);
 
         var row = new WorldStateRow(
             Cells: [

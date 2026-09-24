@@ -56,8 +56,10 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
 
             sb.AppendLine(value: diag.Format(filePath: filePath));
 
+            // A diagnostic attributed to another source has no line in this one to show.
             if (
                 (lines is not null) &&
+                (diag.SourcePath is null) &&
                 (diag.Span.Line > 0) &&
                 (diag.Span.Line <= lines.Length)
             ) {

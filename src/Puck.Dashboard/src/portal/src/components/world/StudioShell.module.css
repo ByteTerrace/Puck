@@ -1,0 +1,16 @@
+/* The studio frame: the page padding comes from the portal shell; this only bounds line length on wide screens. */
+.studio {
+  max-width: rem(1680px);
+  margin-inline: auto;
+}
+
+.tickReadout {
+  min-width: rem(88px);
+  font-variant-numeric: tabular-nums;
+}
+
+.scrubber {
+  flex: 1;
+  min-width: rem(160px);
+  max-width: rem(480px);
+}

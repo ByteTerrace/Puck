@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Puck.Maths;
+
 namespace Puck.SignedDistance;
 
 /// <summary>A linear color and its roughness/metal response.</summary>
@@ -22,9 +24,10 @@ public sealed record SdfWeathering(float Edge = 0f, float Lines = 0f, float Sett
     IReadOnlyList<SdfRevealStage>? Under = null, SdfSurface? Deposit = null);
 /// <summary>The shared admission rules for engine and document material layers.</summary>
 public static class SdfMaterialLayers {
-    private static bool Color(Vector3 v) => (Finite(v: v) && (v.X >= 0f) && (v.Y >= 0f) && (v.Z >= 0f));
-    private static bool Finite(Vector3 v) => (float.IsFinite(f: v.X) && float.IsFinite(f: v.Y) && float.IsFinite(f: v.Z));
-    private static bool NonNegative(float v) => (float.IsFinite(f: v) && (v >= 0f));
+    private static bool Color(Vector3 v) => (VectorFunctions.IsFinite(vector: v) && (v.X >= 0f) && (v.Y >= 0f) && (v.Z >= 0f));
+
+    public static bool NonNegative(float v) => (float.IsFinite(f: v) && (v >= 0f));
+
     private static bool Positive(float v) => (float.IsFinite(f: v) && (v > 0f));
     private static bool Surface(SdfSurface s) => (Color(v: s.Color) && Unit(v: s.Roughness) && Unit(v: s.Metal));
     private static bool Unit(float v) => (NonNegative(v: v) && (v <= 1f));
@@ -33,7 +36,7 @@ public static class SdfMaterialLayers {
     public static bool IsValid(SdfInset? inset, SdfWeathering? weathering) {
         if (inset is { } layer) {
             if (
-                !Finite(v: layer.Origin) ||
+                !VectorFunctions.IsFinite(vector: layer.Origin) ||
                 !float.IsFinite(f: layer.Rotation.LengthSquared()) ||
                 (layer.Rotation.LengthSquared() < 1e-12f) ||
                 !Positive(v: layer.Ior) ||

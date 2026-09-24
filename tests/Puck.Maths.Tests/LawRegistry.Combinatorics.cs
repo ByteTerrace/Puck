@@ -2,33 +2,27 @@ namespace Puck.Maths.Tests;
 
 internal static partial class LawRegistry {
     private static LawCase[] CombinatoricsCases() => [
-        Case(
-            id: "deep.combinatorics-poker",
-            run: () => Laws.Claim(
-                claim: Subjects.CombinatoricsPoker,
-                lawId: "deep.combinatorics-poker"
-            )
+        ClaimCase(
+            claim: Subjects.CombinatoricsPoker,
+            id: "deep.combinatorics-poker"
         ),
-        Case(
-            id: "integer.combinatorics-counts",
-            run: () => Laws.Claim(
-                claim: Subjects.CombinatoricsCounts,
-                lawId: "integer.combinatorics-counts"
-            )
+        ClaimCase(
+            claim: Subjects.CombinatoricsCounts,
+            id: "integer.combinatorics-counts"
         ),
-        Case(
-            id: "integer.combinatorics-order",
-            run: () => Laws.Claim(
-                claim: Subjects.CombinatoricsOrder,
-                lawId: "integer.combinatorics-order"
-            )
+        ClaimCase(
+            claim: Subjects.CombinatoricsOrder,
+            id: "integer.combinatorics-order"
         ),
-        Case(
-            id: "integer.combinatorics-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.CombinatoricsRefusals,
-                lawId: "integer.combinatorics-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.CombinatoricsRefusals,
+            id: "integer.combinatorics-refusals"
+        ),
+        SweptCase(
+            claim: Subjects.LexicographicOrderMatchesOracle,
+            domain: Scalar,
+            id: "integer.lexicographic-order-vs-oracle",
+            width: 2
         ),
     ];
 }

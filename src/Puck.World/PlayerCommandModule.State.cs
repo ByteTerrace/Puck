@@ -104,7 +104,7 @@ internal sealed partial class PlayerCommandModule {
         var tick = m_server.NextInputTick;
 
         m_link.SubmitCommand(command: new WorldCommand.LoadDurableState(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: index,
             Tick: tick,
             Values: [value]

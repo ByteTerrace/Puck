@@ -15,7 +15,7 @@ public sealed class WorldSearchJudgeCostLawTests {
         ForEach: "many",
         Gate: new ActionPredicate.CompareState(
             State: "phase",
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Value: phase
         )
     );

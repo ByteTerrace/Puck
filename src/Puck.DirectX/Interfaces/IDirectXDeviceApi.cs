@@ -33,6 +33,23 @@ public interface IDirectXDeviceApi {
     /// <returns>The adapter LUID, packed as <c>(HighPart &lt;&lt; 32) | LowPart</c> — directly comparable to the value <c>IVulkanPhysicalDeviceApi.GetDeviceLuid</c> returns.</returns>
     /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
     long GetAdapterLuid(nint deviceHandle);
+    /// <summary>Reads what a created device is: its adapter's name and PCI identifiers
+    /// (<c>IDXGIAdapter1::GetDesc1</c>), the user-mode driver version
+    /// (<c>IDXGIAdapter::CheckInterfaceSupport</c> for <c>IDXGIDevice</c>), and the highest feature level the device
+    /// supports.</summary>
+    /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle.</param>
+    /// <returns>The device's identity, recorded for diagnostics and never branched on.</returns>
+    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
+    Puck.Abstractions.Gpu.GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle);
+    /// <summary>Reads what a created device's memory is: the architecture's unified-memory flags
+    /// (<c>D3D12_FEATURE_ARCHITECTURE</c>), its adapter's dedicated and shared memory (<c>IDXGIAdapter1::GetDesc1</c>),
+    /// and whether it supports GPU upload heaps (<c>D3D12_FEATURE_D3D12_OPTIONS16</c>).</summary>
+    /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle.</param>
+    /// <returns>The device's memory profile, which residency selection branches on; the default profile when the
+    /// device will not answer the architecture query.</returns>
+    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero, or no adapter carries the device's
+    /// LUID.</exception>
+    Puck.Abstractions.Gpu.GpuMemoryProfile GetMemoryProfile(nint deviceHandle);
     /// <summary>Reads <c>ID3D12Device::GetDeviceRemovedReason</c> — the specific HRESULT explaining a device removal
     /// (e.g. <c>DXGI_ERROR_DEVICE_HUNG</c> 0x887A0006 for a GPU timeout/too-much-work, <c>DXGI_ERROR_DEVICE_RESET</c>
     /// 0x887A0007, <c>DXGI_ERROR_DRIVER_INTERNAL_ERROR</c> 0x887A0020 for invalid GPU work / a page fault). Returns

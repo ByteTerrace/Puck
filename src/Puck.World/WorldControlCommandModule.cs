@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 
@@ -15,7 +16,7 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
             description: "Local trusted Operator attachment: world.control start|stop|status. start prints a private attachment file for puck mcp --profile operator --attach <file>. The endpoint exposes the full Console registry and composed screenshots to this OS user; stop closes attachments while World keeps running.",
             bindability: CommandBindability.Unbindable,
             handler: (context, args) => {
-                if (context.Principal != CommandPrincipal.Console) { return CommandResult.Error(output: "Local control requires the host Console principal."); }
+                if (context.Principal != Principal.Console) { return CommandResult.Error(output: "Local control requires the host Console principal."); }
                 if (args.Count != 1) { return CommandResult.Error(output: "Expected world.control start|stop|status."); }
                 if (args.Is(
                     index: 0,
@@ -28,8 +29,13 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
                     try {
                         m_server ??= new LocalControlServer(createSession: () => new ConsoleControlSession(
                             source(),
-                            path =>
-                            (probe?.Render ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer.")).RequestCapture(path: path)
+                            path => {
+                                var request = new FrameCaptureRequest(path: path);
+
+                                (probe?.Render ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer.")).RequestCapture(request: request);
+
+                                return request;
+                            }
                         ));
                     } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or NotSupportedException or System.Net.Sockets.SocketException)) {
                         return CommandResult.Error(output: $"[world.control: {error.Message}]");

@@ -11,7 +11,7 @@ in the same change rather than preserving an obsolete workflow.
 ## Authoring a cartridge
 
 `.puck` is the cartridge's authorial source; `puck.cartridge.v1` JSON is the derived, engine-consumed
-artifact and stays committed beside it (`tetris.cgb.puck` / `tetris.cgb.cartridge.json`, `hgb-mirror.cgb.puck`
+artifact and stays committed beside it (`tetromino.cgb.puck` / `tetromino.cgb.cartridge.json`, `hgb-mirror.cgb.puck`
 / `hgb-mirror.cgb.cartridge.json`). The regeneration gate in `tests/Puck.GamingBricks.Transpiler.Tests`
 (`CartridgeRoundTripTests.TestCommittedSourceCompilesToTheCommittedDocument`) compiles every committed
 source and byte-compares it against its committed document, so the two can never drift apart quietly.
@@ -22,7 +22,7 @@ directly as JSON, by hand or through the `forge.set` JSON-Pointer editor below.
 `Puck.GamingBricks.Transpiler` is the `puck.cartridge.v1` vocabulary: it knows what a cartridge's sections
 mean. The language itself — the one-spelling grammar, `let`/`template`/`for`, units, the compile-time
 collection builtins and lambdas (`range`/`length`/`concat`/`map`/`filter`/`reduce`/`distinct`/`sort`/
-`groupBy`), the `puck compile`/`decompile`/`lint`/`fmt`/`lsp` verbs and their flags, and the shared
+`groupBy`), the `puck compile`/`decompile`/`lint`/`format`/`lsp` verbs and their flags, and the shared
 diagnostics catalog belong to the puck-dsl skill; read that rather than re-deriving the grammar here. This
 skill owns the cartridge vocabulary's own shape and the loop that turns a `.puck` edit into a running,
 observable cartridge.
@@ -32,7 +32,7 @@ as <name> { }` (count a compile-time literal 1..255) with `break`, call-form gat
 held|pressed|released)`), and every compound-assignment operator (`+= -= *= /= %= &= |= ^= <<= >>=`) all trip a
 world-vocabulary refusal — `if … { } else { }`/chained `else if` does not, since a world rule lowers it to its
 own conditional effect (`puck-world` owns that shape). Writing `repeat`/`break`/a call-form gate/a compound
-assignment into a `puck.world.def.v1` document instead trips **PUCK037** (control flow the vocabulary's rule
+assignment into a `puck.world.definition.v1` document instead trips **PUCK037** (control flow the vocabulary's rule
 shape has nothing to lower onto), **PUCK038** (a call-form gate where only comparisons are legal), or
 **PUCK039** (a compound assignment the vocabulary's effects carry no operator for) —
 `src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs`. Porting a cartridge idiom into a world document, or a
@@ -42,7 +42,7 @@ A rule step or gate lowers to JSON as:
 
 | DSL form | Lowers to |
 |---|---|
-| `a = b`, and `+= -= *= /= %= &= \|= ^= <<= >>=` | `set`, operation absent (assignment) or `Add`/`Subtract`/`Multiply`/`Divide`/`Modulo`/`BitAnd`/`BitOr`/`BitXor`/`ShiftLeft`/`ShiftRight` |
+| `a = b`, and `+= -= *= /= %= &= \|= ^= <<= >>=` | `set`, operation absent (assignment) or `Add`/`Subtract`/`Multiply`/`Divide`/`Remainder`/`BitAnd`/`BitOr`/`BitXor`/`ShiftLeft`/`ShiftRight` |
 | `if <gate> { … } else { … }`, chained `else if` | `if` with `when`/`then`/`else` |
 | `repeat <count> as <name> { … }` | `repeat` (a play-time loop; distinct from the document-only, compile-time `for`) |
 | `break` | `break` |
@@ -50,46 +50,47 @@ A rule step or gate lowers to JSON as:
 | `key(<button>, held\|pressed\|released)` | a `key` condition reading `$key:<button>:<mode>` |
 | `==` `!=` `<` `<=` `>` `>=`, composed with `and`/`or`/`not` | a `compare` condition, composed as `all`/`any`/`not` |
 
-Verified against the shipped `tetris.cgb.puck` (compiled with `puck compile --validate`), an input gate and
+Verified against the shipped `tetromino.cgb.puck` (compiled with `puck compile --validate`), an input gate and
 control flow read:
 
 ```
 rule "steer" {
-    when ph == 0
-    ...
-    if key(left, held) {
-        want = 1
-    }
-    if key(right, held) {
-        want = 2
-    }
-    ...
+  when ph == 0
+  ...
+  if key(left, held) {
+    want = 1
+  }
+  if key(right, held) {
+    want = 2
+  }
+  ...
 }
 ```
 
-(`src/Puck.World/Assets/cartridges/tetris.cgb.puck:7603-7699`, elided to the gate usage — `key(...)` is a
+(`src/Puck.World/Assets/cartridges/tetromino.cgb.puck`, rules `steer` and `fall`, elided to the gate usage — `key(...)` is a
 gate condition only; it is not a readable operand inside an expression, unlike a plain state name.) A nested, guarded loop:
 
 ```
 rule "scan" {
-    when ph == 2
-    repeat 5 as k {
-        if rcur >= 18 {
-            break
-        }
-        ...
+  when ph == 2
+  repeat 5 as k {
+    if rcur >= 18 {
+      break
     }
+    ...
+  }
+  ...
 }
 ```
 
-(`tetris.cgb.puck:7773-7778`; a `repeat`'s index name — `k` above — must be a declared variable, the same as
+(`tetromino.cgb.puck`, rule `scan`; a `repeat`'s index name — `k` above — must be a declared variable, the same as
 any other read.) A `map` step writing a background cell reads `map(column: "c2", palette: "pcol", row: "r2",
-tile: "1")` (`tetris.cgb.puck:7765`). The compile-time collection builtins keep big data
+tile: "1")` (rule `settle`). The compile-time collection builtins keep big data
 sections short and reach a document field, never a rule body:
 
 ```
 arrays [
-    { name: "field", initial: map(range(0, 180), i => 0) }
+  { name: "field", initial: map(range(0, 180), i => 0) }
 ]
 ```
 
@@ -100,8 +101,7 @@ The loop from source to a running, observable cartridge:
 1. Edit the `.puck` source.
 2. `puck compile <name>.cgb.puck --output <name>.cgb.cartridge.json --validate` — `--validate` runs the
    forge's own `CartridgeDocuments.Validate` over the lowered JSON; lowering alone only proves the source was
-   well formed, never that the cartridge is legal. (`-w`/`--watch`, `--strict`, and `--bundle` are the verb's
-   other real flags.)
+   well formed, never that the cartridge is legal. `puck-dsl` lists the verb's other flags.
 3. In a running `Puck.World`, load the compiled document: `forge.open <name>.cgb.cartridge.json` for a local
    draft, or `forge.play <screen-index> <name>.cgb.cartridge.json` to hot-load straight into a screen (an
    arcade cabinet's, among others). **Both verbs are JSON-only** — `forge.open` calls `CartridgeDocuments.Parse`
@@ -139,7 +139,7 @@ The current schema has explicit limits and omissions: cgb/agb targets,
 byte and two-byte state, addressable byte arrays, 8x8 or tall sprites, runtime background writes,
 cartridge audio, battery-backed state, and rule bodies that are step TREES
 (`set`/`if`/`repeat`/`break`/`map`/`blit`/`play`/`stop`/`save`/`load`), not flat
-action lists. An operand is a `Puck.State.ValueExpression` in its infix spelling
+action lists. An operand is a `Puck.State.ExpressionProgram` in its infix spelling
 and a gate is a `Puck.State.ActionPredicate`, so `(a + b) * 2`, `field[i + 1]`,
 `any` and `not` are all authorable; `CartridgeExpressions.Reads` is the admitted
 operation subset and everything outside it is refused at its own spelling. A
@@ -284,10 +284,10 @@ source or a bundled asset.
 `CartridgeDocuments.Estimate` reports the frame's bound beside the target's
 reservation; nothing refuses on it. The units name no processor,
 clock or instruction count; one unit is an eleventh of a `set` step writing a
-literal to a variable. Weights come from `CartridgeCostMeasurement`, which boots
-documents on both real machines and bisects the largest per-frame iteration count
-each sustains at full frame rate; cost per iteration is inversely proportional to
-that capacity. Never hand-count an emitter's instruction sequence into a weight,
+literal to a variable. Weights come from `puck cartridge-cost`, which boots
+`CartridgeCostMeasurement`'s probe documents (in `Puck.GamingBricks.Forge`) on both
+real machines and bisects the largest per-frame iteration count each sustains at
+full frame rate; cost per iteration is inversely proportional to that capacity. Never hand-count an emitter's instruction sequence into a weight,
 and never adjust a weight to make a document fit.
 
 `CartridgeCostProfile` carries separate weights and reservations for each target. A multiply has different
@@ -312,9 +312,10 @@ Do not give it a weight without a model that spans both observations.
 
 A primitive with no measured weight prices as `CostBound.Unmodeled`, which
 poisons the whole estimate rather than contributing an invented number, so the
-document builds with no usable advice. Adding a primitive means measuring it. To re-measure, raise the reservation so the harness
-can probe past it, run the harness with `PUCK_FORGE_MEASURE=1`, fold the reported
-capacities in, and restore the reservation. `CostBound` and `CostModelProfile`
+document builds with no usable advice. Adding a primitive means measuring it: add
+its shape to `CartridgeCostMeasurement.Shapes`, run `puck cartridge-cost`, and fold
+the reported capacities in. Nothing refuses a probe for cost, so the search reaches
+past any reservation without touching it. `CostBound` and `CostModelProfile`
 live in `Puck.Maths` and are shared with `Puck.State`'s rule cost; each subsystem
 owns its own coefficients.
 
@@ -331,6 +332,14 @@ Every SM83 verifier MUST call
 `VerifyMachineSettle.SettleOutOfOamDma` after stepping frames before bus reads.
 A fixed cycle boundary can land inside DMA and otherwise falsely read gated
 WRAM as 0xFF. `Framework.VerifyMachineDriver` already applies this rule.
+
+Wait on the observable fact, not a duration: both verify drivers' `RunFramesUntil`
+advance until a condition holds and fail at a frame cap, so a test pays only for
+the frames its fact needs. A position several tests start from (a title, a menu,
+a game in play) is reached once through the cartridge's own path and handed out
+with `VerifyMachineDriver.Snapshot`/`Restore`; keep one test that walks that path
+and asserts each step (`TetrominoCartridgeFixture` is the shape). A cadence claim is
+a rate over an exact span, so it stays one `RunFrames` call.
 
 For World integration, run the actual host through stdin using the puck-world
 skill. Verify source editing, canonical save/open, ROM export and accepted

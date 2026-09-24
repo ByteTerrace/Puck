@@ -377,18 +377,43 @@ public sealed class StateCatalog {
             Slots: slots
         );
     }
-    private static CellName PoolRowName(StatePool pool, string suffix) {
+
+    // The first part of every row a pool generates: the pool's live-slot and generation rows are
+    // `$pool$<pool>$live` and `$pool$<pool>$generation`, and each record field's row is `$pool$<pool>$field$<field>`,
+    // so no pool, field or pair of them can generate another's row. The pool may itself be a generated name, a
+    // module instance's `left$pieces`, which is the one part that may carry the joiner. The reserved prefix keeps
+    // each one a row no author declares.
+    private const string PoolRowHead = "$pool";
+
+    private static CellName PoolRowName(StatePool pool, params ReadOnlySpan<string> parts) => GeneratedPoolRowName(
+        kind: "pool",
+        parts: parts,
+        pool: pool.Name
+    );
+    private static CellName PairPoolRowName(StatePairPool pool, params ReadOnlySpan<string> parts) => GeneratedPoolRowName(
+        kind: "pair pool",
+        parts: parts,
+        pool: pool.Name
+    );
+    private static CellName GeneratedPoolRowName(string kind, CellName pool, ReadOnlySpan<string> parts) {
         try {
-            return CellName.Parse(candidate: $"$pool_{pool.Name.Value}_{suffix}");
+            var name = GeneratedName.Qualify(
+                head: PoolRowHead,
+                name: pool.Value
+            );
+
+            foreach (var part in parts) {
+                name = GeneratedName.Append(
+                    name: name,
+                    part: part
+                );
+            }
+
+            return CellName.Parse(candidate: name);
+        } catch (ArgumentException exception) {
+            throw new InvalidOperationException(message: $"State {kind} '{pool.Value}' cannot generate its '{string.Join(separator: GeneratedName.Joiner, values: parts.ToArray())}' row: {exception.Message} — a record field name may not carry '{GeneratedName.Joiner}'", innerException: exception);
         } catch (FormatException exception) {
-            throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' cannot generate its '{suffix}' row: {exception.Message}", innerException: exception);
-        }
-    }
-    private static CellName PairPoolRowName(StatePairPool pool, string suffix) {
-        try {
-            return CellName.Parse(candidate: $"$pool_{pool.Name.Value}_{suffix}");
-        } catch (FormatException exception) {
-            throw new InvalidOperationException(message: $"State pair pool '{pool.Name.Value}' cannot generate its '{suffix}' row: {exception.Message}", innerException: exception);
+            throw new InvalidOperationException(message: $"State {kind} '{pool.Value}' cannot generate its '{string.Join(separator: GeneratedName.Joiner, values: parts.ToArray())}' row: {exception.Message}", innerException: exception);
         }
     }
     private static CellValue DefaultValue(StatePoolField field) {
@@ -418,12 +443,16 @@ public sealed class StateCatalog {
 
         var value = DefaultValue(field: field);
 
-        if (field.Enum is { } enumName) {
-            var domain = section?.Enums?.FirstOrDefault(predicate: candidate => (candidate.Name == enumName));
-
-            if ((field.Kind != CellKind.Int) || (domain is null)) {
-                throw new InvalidOperationException(message: $"State record '{record.Name.Value}' field '{field.Name.Value}' requires an Int field and declared enum '{enumName.Value}'.");
-            }
+        // A field draws its default from the enum it names only when that is a declared enum on an Int field; the
+        // document's validator is the one refusal of any other (an undeclared enum, a non-Int field).
+        if (
+            (field.Kind == CellKind.Int) &&
+            (field.Enum is { } enumName) &&
+            (StateEnum.Named(
+                enums: section?.Enums,
+                name: enumName
+            ) is { } domain)
+        ) {
             if (!domain.TryValidate(reason: out var enumReason)) {
                 throw new InvalidOperationException(message: enumReason);
             }
@@ -568,8 +597,8 @@ public sealed class StateCatalog {
             }
 
             var privateVisibility = new StateVisibility(Readers: []);
-            var domainName = PoolRowName(pool: pool, suffix: "live");
-            var generationName = PoolRowName(pool: pool, suffix: "generation");
+            var domainName = PoolRowName(pool: pool, "live");
+            var generationName = PoolRowName(pool: pool, "generation");
             var domainCells = liveBySlot.Select(selector: pair => new StateCell(
                 Key: CellName.Parse(candidate: pair.Key.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
                 Value: CellValue.Int(value: generations[pair.Key])
@@ -589,7 +618,7 @@ public sealed class StateCatalog {
             rows.Add(item: new StateRow(Name: generationName, Kind: CellKind.Int, Capacity: pool.Capacity, Cells: generationCells, Min: 0L, Visibility: privateVisibility) { Generated = true });
 
             foreach (var field in (record.Fields ?? [])) {
-                var fieldName = PoolRowName(pool: pool, suffix: $"field_{field.Name.Value}");
+                var fieldName = PoolRowName(pool: pool, "field", field.Name.Value);
 
                 if (!names.Add(item: fieldName.Value)) {
                     throw new InvalidOperationException(message: $"State pool '{pool.Name.Value}' generated duplicate row '{fieldName.Value}'.");
@@ -741,8 +770,8 @@ public sealed class StateCatalog {
             }
 
             var visibility = new StateVisibility(Readers: []);
-            var domainName = PairPoolRowName(pool: pair, suffix: "live");
-            var generationName = PairPoolRowName(pool: pair, suffix: "generation");
+            var domainName = PairPoolRowName(pool: pair, "live");
+            var generationName = PairPoolRowName(pool: pair, "generation");
 
             foreach (var generatedName in new[] { domainName.Value, generationName.Value }) {
                 if (!names.Add(item: generatedName)) {
@@ -753,7 +782,7 @@ public sealed class StateCatalog {
             rows.Add(item: new StateRow(Name: domainName, Kind: CellKind.Int, Capacity: capacity, Cells: Cells(value: slot => CellValue.Int(value: generations[slot])), Visibility: visibility) { Generated = true });
             rows.Add(item: new StateRow(Name: generationName, Kind: CellKind.Int, Capacity: capacity, Cells: Enumerable.Range(count: capacity, start: 0).Select(selector: slot => new StateCell(Key: CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), Value: CellValue.Int(value: generations[slot]))).ToArray(), Min: 0L, Visibility: visibility) { Generated = true });
             foreach (var field in (record.Fields ?? [])) {
-                var fieldName = PairPoolRowName(pool: pair, suffix: $"field_{field.Name.Value}");
+                var fieldName = PairPoolRowName(pool: pair, "field", field.Name.Value);
 
                 if (!names.Add(item: fieldName.Value)) {
                     throw new InvalidOperationException(message: $"State pair pool '{pair.Name.Value}' generated duplicate row '{fieldName.Value}'.");
@@ -775,14 +804,16 @@ public sealed class StateCatalog {
         return rows.AsReadOnly();
     }
 
-    /// <summary>Compiles an authored state section into its typed runtime catalog.</summary>
+    /// <summary>Compiles an authored state section into its typed runtime catalog. A row's enum is whole-document
+    /// validation's alone to refuse: the catalog draws a row's cells from the enum it names when that is a declared
+    /// enum on an Int row, and from no symbolic domain otherwise.</summary>
     /// <param name="section">The authored state section, or <see langword="null"/> for an empty catalog.</param>
     /// <returns>The compiled catalog.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="section"/> contains a null declaration, a
     /// duplicate document-lane name, a name shared by the participant and identity lanes, a malformed or duplicate
-    /// enum, a row naming an undeclared enum or naming one on a kind that cannot carry it, a host-owned row whose
-    /// shape no host can serve, or a family whose member rows are missing, non-contiguous, or of mixed kind.
-    /// Whole-document validation normally refuses those shapes before runtime compilation.</exception>
+    /// enum, a host-owned row whose shape no host can serve, or a family whose member rows are missing,
+    /// non-contiguous, or of mixed kind. Whole-document validation normally refuses those shapes before runtime
+    /// compilation.</exception>
     public static StateCatalog Compile(IStateSection? section) {
         var identity = new object();
         var descriptors = new List<StateDescriptor>();
@@ -953,7 +984,7 @@ public sealed class StateCatalog {
 
             for (var fieldOrdinal = 0; (fieldOrdinal < (record.Fields?.Count ?? 0)); fieldOrdinal++) {
                 var field = record.Fields![fieldOrdinal];
-                var rowName = PoolRowName(pool: declaredPool, suffix: $"field_{field.Name.Value}");
+                var rowName = PoolRowName(pool: declaredPool, "field", field.Name.Value);
 
                 fields.Add(item: new StatePoolFieldDescriptor(
                     Default: DefaultValue(field: field),
@@ -967,9 +998,9 @@ public sealed class StateCatalog {
 
             pools.Add(item: new StatePoolDescriptor(
                 Capacity: declaredPool.Capacity,
-                DomainRowOrdinal: ordinalsByName[PoolRowName(pool: declaredPool, suffix: "live").Value],
+                DomainRowOrdinal: ordinalsByName[PoolRowName(pool: declaredPool, "live").Value],
                 Fields: fields.AsReadOnly(),
-                GenerationRowOrdinal: ordinalsByName[PoolRowName(pool: declaredPool, suffix: "generation").Value],
+                GenerationRowOrdinal: ordinalsByName[PoolRowName(pool: declaredPool, "generation").Value],
                 Name: declaredPool.Name,
                 Ordinal: pools.Count,
                 Record: declaredPool.Record
@@ -979,7 +1010,7 @@ public sealed class StateCatalog {
             var record = recordsByName[declaredPool.Record.Value];
             var leftOrdinal = allPoolOrdinals[declaredPool.LeftPool.Value];
             var rightOrdinal = allPoolOrdinals[declaredPool.RightPool.Value];
-            var capacity = (rows[ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: "generation").Value]].Capacity ?? throw new InvalidOperationException(message: "Generated pair generation row has no capacity."));
+            var capacity = (rows[ordinalsByName[PairPoolRowName(pool: declaredPool, "generation").Value]].Capacity ?? throw new InvalidOperationException(message: "Generated pair generation row has no capacity."));
             var fields = new List<StatePoolFieldDescriptor>();
 
             for (var fieldOrdinal = 0; (fieldOrdinal < (record.Fields?.Count ?? 0)); fieldOrdinal++) {
@@ -987,12 +1018,12 @@ public sealed class StateCatalog {
 
                 fields.Add(item: new StatePoolFieldDescriptor(
                     Default: DefaultValue(field: field), Kind: field.Kind, Name: field.Name, Ordinal: fieldOrdinal,
-                    RowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: $"field_{field.Name.Value}").Value], Declaration: field));
+                    RowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, "field", field.Name.Value).Value], Declaration: field));
             }
             pools.Add(item: new StatePoolDescriptor(
                 Ordinal: pools.Count, Name: declaredPool.Name, Record: declaredPool.Record, Capacity: capacity,
-                DomainRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: "live").Value],
-                GenerationRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, suffix: "generation").Value],
+                DomainRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, "live").Value],
+                GenerationRowOrdinal: ordinalsByName[PairPoolRowName(pool: declaredPool, "generation").Value],
                 Fields: fields.AsReadOnly(), IsPair: true, LeftPoolOrdinal: leftOrdinal, RightPoolOrdinal: rightOrdinal,
                 MaxLive: declaredPool.MaxLive, Directed: declaredPool.Directed, AllowSelf: declaredPool.AllowSelf));
         }
@@ -1073,7 +1104,7 @@ public sealed class StateCatalog {
     /// <param name="lane">The lane to describe.</param>
     /// <returns>The lane's descriptor range.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="lane"/> is not a declared lane.</exception>
-    public StateLaneDescriptor Lane(StateLane lane) => (Enum.IsDefined(value: lane)
+    public StateLaneDescriptor Lane(StateLane lane) => ((((uint)lane) < ((uint)m_lanes.Length))
         ? m_lanes[((int)lane)]
         : throw new ArgumentOutOfRangeException(
             paramName: nameof(lane),
@@ -1293,8 +1324,10 @@ public sealed class StateCatalog {
     /// <param name="handle">The resolved handle, or the invalid default value when no declaration matches.</param>
     /// <returns><see langword="true"/> when the lane declares the name.</returns>
     public bool TryResolve(StateLane lane, string name, out StateHandle handle) {
+        // The lane tables are indexed by lane, so their length is the guard. Enum.IsDefined would read a type cache
+        // the runtime holds only weakly, and allocate it again after every collection.
         if (
-            !Enum.IsDefined(value: lane) ||
+            (((uint)lane) >= ((uint)m_handlesByLane.Length)) ||
             (name is null)
         ) {
             handle = default;
@@ -1342,23 +1375,16 @@ public sealed class StateCatalog {
 
         return enumsByName;
     }
-    private static StateEnum? ResolveRowEnum(StateRow row, IReadOnlyDictionary<string, StateEnum> enumsByName) {
-        if (row.Enum is not { } name) {
-            return null;
-        }
-
-        if (row.Kind != CellKind.Int) {
-            throw new InvalidOperationException(message: $"State row '{row.Name.Value}' names enum '{name.Value}' but is {row.Kind}; only Int rows carry a symbolic domain.");
-        }
-
-        return (enumsByName.TryGetValue(
+    private static StateEnum? ResolveRowEnum(StateRow row, IReadOnlyDictionary<string, StateEnum> enumsByName) => (
+        ((row.Enum is { } name) &&
+        (row.Kind == CellKind.Int) &&
+        enumsByName.TryGetValue(
             key: name.Value,
             value: out var symbols
-        )
+        ))
             ? symbols
-            : throw new InvalidOperationException(message: $"State row '{row.Name.Value}' names undeclared enum '{name.Value}'.")
-        );
-    }
+            : null
+    );
     private bool MatchesFamilies(IStateSection? section) {
         var declared = (section?.Families ?? []);
 

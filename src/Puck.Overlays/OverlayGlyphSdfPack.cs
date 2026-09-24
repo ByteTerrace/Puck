@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Puck.Assets;
 using Puck.Text;
 
 namespace Puck.Overlays;
@@ -218,16 +219,9 @@ public sealed class OverlayGlyphSdfPack {
         }
 
         try {
-            var temporary = (path + $".{Guid.NewGuid():N}.tmp");
-
-            File.WriteAllBytes(
+            AtomicFile.WriteAllBytes(
                 bytes: bytes,
-                path: temporary
-            );
-            File.Move(
-                destFileName: path,
-                overwrite: true,
-                sourceFileName: temporary
+                path: path
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[Puck.Overlays] could not persist the overlay glyph pack '{path}' ({exception.Message}); the next start decodes the full atlas again.");

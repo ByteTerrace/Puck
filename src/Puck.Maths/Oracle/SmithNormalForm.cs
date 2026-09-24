@@ -134,18 +134,12 @@ public sealed class SmithNormalForm {
         return true;
     }
     private static BigInteger Read(BigInteger[] matrix, int order, int row, int column) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: row);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: row,
-            other: order
-        );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: column);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: column,
-            other: order
-        );
-
-        return matrix[((row * order) + column)];
+        return matrix[ArgumentRange.ThrowIfNotCell(
+            column: column,
+            columnCount: order,
+            row: row,
+            rowCount: order
+        )];
     }
 
     /// <summary>Reads one entry of the left transform <c>U</c>, which is square of order <see cref="RowCount"/>.</summary>
@@ -447,34 +441,57 @@ public sealed class SmithNormalForm {
             return true;
         }
 
+        private void AddColumnInMatrix(BigInteger factor, BigInteger[] matrix, int rows, int sourceColumn, int stride, int targetColumn) {
+            for (var row = 0; (row < rows); ++row) {
+                var baseOffset = (row * stride);
+
+                Write(
+                    index: (baseOffset + targetColumn),
+                    matrix: matrix,
+                    value: (matrix[(baseOffset + targetColumn)] + (factor * matrix[(baseOffset + sourceColumn)]))
+                );
+            }
+        }
+        private void AddRowInMatrix(int columns, BigInteger factor, BigInteger[] matrix, int sourceRow, int targetRow) {
+            var sourceOffset = (sourceRow * columns);
+            var targetOffset = (targetRow * columns);
+
+            for (var column = 0; (column < columns); ++column) {
+                Write(
+                    index: (targetOffset + column),
+                    matrix: matrix,
+                    value: (matrix[(targetOffset + column)] + (factor * matrix[(sourceOffset + column)]))
+                );
+            }
+        }
         // Column j += factor * column k, in the working matrix and in the right transform, with the inverse taking the
         // matching row operation from the other side.
         private void AddColumn(int target, int source, BigInteger factor) {
             if (factor.IsZero) { return; }
 
-            for (var row = 0; (row < RowCount); ++row) {
-                Write(
-                    matrix: m_matrix,
-                    index: ((row * ColumnCount) + target),
-                    value: (m_matrix[((row * ColumnCount) + target)] + (factor * m_matrix[((row * ColumnCount) + source)]))
-                );
-            }
-
-            for (var row = 0; (row < ColumnCount); ++row) {
-                Write(
-                    matrix: Right,
-                    index: ((row * ColumnCount) + target),
-                    value: (Right[((row * ColumnCount) + target)] + (factor * Right[((row * ColumnCount) + source)]))
-                );
-            }
-
-            for (var column = 0; (column < ColumnCount); ++column) {
-                Write(
-                    matrix: RightInverse,
-                    index: ((source * ColumnCount) + column),
-                    value: (RightInverse[((source * ColumnCount) + column)] - (factor * RightInverse[((target * ColumnCount) + column)]))
-                );
-            }
+            AddColumnInMatrix(
+                factor: factor,
+                matrix: m_matrix,
+                rows: RowCount,
+                sourceColumn: source,
+                stride: ColumnCount,
+                targetColumn: target
+            );
+            AddColumnInMatrix(
+                factor: factor,
+                matrix: Right,
+                rows: ColumnCount,
+                sourceColumn: source,
+                stride: ColumnCount,
+                targetColumn: target
+            );
+            AddRowInMatrix(
+                columns: ColumnCount,
+                factor: -factor,
+                matrix: RightInverse,
+                sourceRow: target,
+                targetRow: source
+            );
 
             ++StepsTaken;
         }
@@ -483,93 +500,83 @@ public sealed class SmithNormalForm {
         private void AddRow(int target, int source, BigInteger factor) {
             if (factor.IsZero) { return; }
 
-            for (var column = 0; (column < ColumnCount); ++column) {
-                Write(
-                    matrix: m_matrix,
-                    index: ((target * ColumnCount) + column),
-                    value: (m_matrix[((target * ColumnCount) + column)] + (factor * m_matrix[((source * ColumnCount) + column)]))
-                );
-            }
-
-            for (var column = 0; (column < RowCount); ++column) {
-                Write(
-                    matrix: Left,
-                    index: ((target * RowCount) + column),
-                    value: (Left[((target * RowCount) + column)] + (factor * Left[((source * RowCount) + column)]))
-                );
-            }
-
-            for (var row = 0; (row < RowCount); ++row) {
-                Write(
-                    matrix: LeftInverse,
-                    index: ((row * RowCount) + source),
-                    value: (LeftInverse[((row * RowCount) + source)] - (factor * LeftInverse[((row * RowCount) + target)]))
-                );
-            }
+            AddRowInMatrix(
+                columns: ColumnCount,
+                factor: factor,
+                matrix: m_matrix,
+                sourceRow: source,
+                targetRow: target
+            );
+            AddRowInMatrix(
+                columns: RowCount,
+                factor: factor,
+                matrix: Left,
+                sourceRow: source,
+                targetRow: target
+            );
+            AddColumnInMatrix(
+                factor: -factor,
+                matrix: LeftInverse,
+                rows: RowCount,
+                sourceColumn: target,
+                stride: RowCount,
+                targetColumn: source
+            );
 
             ++StepsTaken;
         }
         // Clears the pivot's column below the diagonal. A nonzero remainder is smaller than the pivot, so swapping it
+        private bool ClearAxis(
+            int count,
+            Func<int, int> getEntryIndex,
+            Action<int, int, BigInteger> add,
+            Action<int, int> swap
+        ) {
+            var clean = true;
+            var pivotIndex = ((m_stage * ColumnCount) + m_stage);
+
+            for (var index = (m_stage + 1); ((index < count) && !m_refused); ++index) {
+                var entry = m_matrix[getEntryIndex(index)];
+
+                if (entry.IsZero) { continue; }
+
+                add(
+                    index,
+                    m_stage,
+                    -BigInteger.Divide(
+                        dividend: entry,
+                        divisor: m_matrix[pivotIndex]
+                    )
+                );
+
+                if (!m_matrix[getEntryIndex(index)].IsZero) {
+                    swap(
+                        m_stage,
+                        index
+                    );
+
+                    clean = false;
+                }
+            }
+
+            return clean;
+        }
         // up strictly decreases the pivot's absolute value — which is why the surrounding loop terminates.
-        private bool ClearColumn() {
-            var clean = true;
-
-            for (var row = (m_stage + 1); ((row < RowCount) && !m_refused); ++row) {
-                var entry = m_matrix[((row * ColumnCount) + m_stage)];
-
-                if (entry.IsZero) { continue; }
-
-                AddRow(
-                    target: row,
-                    source: m_stage,
-                    factor: -BigInteger.Divide(
-                        dividend: entry,
-                        divisor: m_matrix[((m_stage * ColumnCount) + m_stage)]
-                    )
-                );
-
-                if (!m_matrix[((row * ColumnCount) + m_stage)].IsZero) {
-                    SwapRows(
-                        first: m_stage,
-                        second: row
-                    );
-
-                    clean = false;
-                }
-            }
-
-            return clean;
-        }
+        private bool ClearColumn() =>
+            ClearAxis(
+                add: AddRow,
+                count: RowCount,
+                getEntryIndex: index => ((index * ColumnCount) + m_stage),
+                swap: SwapRows
+            );
         // The mirror image, clearing the pivot's row to the right of the diagonal.
-        private bool ClearRow() {
-            var clean = true;
-
-            for (var column = (m_stage + 1); ((column < ColumnCount) && !m_refused); ++column) {
-                var entry = m_matrix[((m_stage * ColumnCount) + column)];
-
-                if (entry.IsZero) { continue; }
-
-                AddColumn(
-                    target: column,
-                    source: m_stage,
-                    factor: -BigInteger.Divide(
-                        dividend: entry,
-                        divisor: m_matrix[((m_stage * ColumnCount) + m_stage)]
-                    )
-                );
-
-                if (!m_matrix[((m_stage * ColumnCount) + column)].IsZero) {
-                    SwapColumns(
-                        first: m_stage,
-                        second: column
-                    );
-
-                    clean = false;
-                }
-            }
-
-            return clean;
-        }
+        private bool ClearRow() =>
+            ClearAxis(
+                add: AddColumn,
+                count: ColumnCount,
+                getEntryIndex: index => ((m_stage * ColumnCount) + index),
+                swap: SwapColumns
+            );
         // The whole stage: drive the pivot down to the greatest common divisor of its row, its column and — through the
         // divisibility repair — the entire remaining submatrix, then leave it positive.
         private void FixPivot() {
@@ -664,37 +671,69 @@ public sealed class SmithNormalForm {
 
             return false;
         }
+        private static void SwapColumnsInMatrix(BigInteger[] matrix, int firstColumn, int rows, int secondColumn, int stride) {
+            for (var row = 0; (row < rows); ++row) {
+                var baseOffset = (row * stride);
+
+                (matrix[(baseOffset + firstColumn)], matrix[(baseOffset + secondColumn)]) = (matrix[(baseOffset + secondColumn)], matrix[(baseOffset + firstColumn)]);
+            }
+        }
+        private static void SwapRowsInMatrix(BigInteger[] matrix, int columns, int firstRow, int secondRow) {
+            var firstOffset = (firstRow * columns);
+            var secondOffset = (secondRow * columns);
+
+            for (var column = 0; (column < columns); ++column) {
+                (matrix[(firstOffset + column)], matrix[(secondOffset + column)]) = (matrix[(secondOffset + column)], matrix[(firstOffset + column)]);
+            }
+        }
         private void SwapColumns(int first, int second) {
             if (first == second) { return; }
 
-            for (var row = 0; (row < RowCount); ++row) {
-                (m_matrix[((row * ColumnCount) + first)], m_matrix[((row * ColumnCount) + second)]) = (m_matrix[((row * ColumnCount) + second)], m_matrix[((row * ColumnCount) + first)]);
-            }
-
-            for (var row = 0; (row < ColumnCount); ++row) {
-                (Right[((row * ColumnCount) + first)], Right[((row * ColumnCount) + second)]) = (Right[((row * ColumnCount) + second)], Right[((row * ColumnCount) + first)]);
-            }
-
-            for (var column = 0; (column < ColumnCount); ++column) {
-                (RightInverse[((first * ColumnCount) + column)], RightInverse[((second * ColumnCount) + column)]) = (RightInverse[((second * ColumnCount) + column)], RightInverse[((first * ColumnCount) + column)]);
-            }
+            SwapColumnsInMatrix(
+                firstColumn: first,
+                matrix: m_matrix,
+                rows: RowCount,
+                secondColumn: second,
+                stride: ColumnCount
+            );
+            SwapColumnsInMatrix(
+                firstColumn: first,
+                matrix: Right,
+                rows: ColumnCount,
+                secondColumn: second,
+                stride: ColumnCount
+            );
+            SwapRowsInMatrix(
+                columns: ColumnCount,
+                firstRow: first,
+                matrix: RightInverse,
+                secondRow: second
+            );
 
             ++StepsTaken;
         }
         private void SwapRows(int first, int second) {
             if (first == second) { return; }
 
-            for (var column = 0; (column < ColumnCount); ++column) {
-                (m_matrix[((first * ColumnCount) + column)], m_matrix[((second * ColumnCount) + column)]) = (m_matrix[((second * ColumnCount) + column)], m_matrix[((first * ColumnCount) + column)]);
-            }
-
-            for (var column = 0; (column < RowCount); ++column) {
-                (Left[((first * RowCount) + column)], Left[((second * RowCount) + column)]) = (Left[((second * RowCount) + column)], Left[((first * RowCount) + column)]);
-            }
-
-            for (var row = 0; (row < RowCount); ++row) {
-                (LeftInverse[((row * RowCount) + first)], LeftInverse[((row * RowCount) + second)]) = (LeftInverse[((row * RowCount) + second)], LeftInverse[((row * RowCount) + first)]);
-            }
+            SwapRowsInMatrix(
+                columns: ColumnCount,
+                firstRow: first,
+                matrix: m_matrix,
+                secondRow: second
+            );
+            SwapRowsInMatrix(
+                columns: RowCount,
+                firstRow: first,
+                matrix: Left,
+                secondRow: second
+            );
+            SwapColumnsInMatrix(
+                firstColumn: first,
+                matrix: LeftInverse,
+                rows: RowCount,
+                secondColumn: second,
+                stride: RowCount
+            );
 
             ++StepsTaken;
         }

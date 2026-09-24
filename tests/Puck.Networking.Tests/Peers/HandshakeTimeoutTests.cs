@@ -12,8 +12,8 @@ namespace Puck.Networking.Tests.Peers;
 public sealed class HandshakeTimeoutTests {
     [Fact]
     public async Task Acceptor_WhoseConnectionNeverOpensAControlStream_RecordsHandshakeTimedOut_AtTheControlStreamTimeout() {
-        using var deadline = Laws.SocketDeadline();
-        var clock = new DeadlineClock();
+        var ct = TestContext.Current.CancellationToken;
+        var clock = new VirtualClock();
 
         var transport = new FakePeerTransport(dial: static _ => throw new InvalidOperationException(message: "this law never dials"));
         var connection = new SilentPeerConnection();
@@ -25,19 +25,19 @@ public sealed class HandshakeTimeoutTests {
         );
 
         await acceptor.ListenAsync(
-            ct: deadline.Token,
+            ct: ct,
             endpoint: PeerTestSupport.Loopback()
         );
-
-
         transport.Accept(connection: connection);
         Assert.False(condition: acceptor.HandshakeRefusals.TryRead(item: out _));
-        await clock.ExpireAsync(
-            PeerWireProtocol.ControlStreamTimeout,
-            deadline.Token
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: ct,
+            dueTime: PeerWireProtocol.ControlStreamTimeout
         );
+        clock.Advance(by: PeerWireProtocol.ControlStreamTimeout);
 
-        var refused = await acceptor.HandshakeRefusals.ReadAsync(cancellationToken: deadline.Token);
+        var refused = await acceptor.HandshakeRefusals.ReadAsync(cancellationToken: ct);
 
         Assert.Equal(
             expected: PeerRefusal.HandshakeTimedOut,
@@ -48,25 +48,21 @@ public sealed class HandshakeTimeoutTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: nameof(PeerWireProtocol.ControlStreamTimeout)
         );
+        Assert.Empty(collection: acceptor.Links);
+        Assert.Null(@object: acceptor.ListenerFault);
 
-
-        // The acceptor records the refusal before it disposes the connection, so the release is observable only
-        // after the read the law just completed; the law polls for it rather than assuming the ordering.
-        await PeerTestSupport.WaitUntilAsync(
-            condition: () => connection.IsDisposed,
-            ct: deadline.Token
-        );
+        // The acceptor records the refusal before it disposes the connection; its own disposal waits for every
+        // handshake to finish, so once it returns the refused connection must already have been released.
+        await acceptor.DisposeAsync();
         Assert.True(
             condition: connection.IsDisposed,
             userMessage: "a timed-out handshake must release its connection"
         );
-        Assert.Empty(collection: acceptor.Links);
-        Assert.Null(@object: acceptor.ListenerFault);
     }
     [Fact]
     public async Task Dialer_WhoseStreamNeverAnswers_IsRefusedHandshakeTimedOut_AtTheHandshakeTimeout() {
-        using var deadline = Laws.SocketDeadline();
-        var clock = new DeadlineClock();
+        var ct = TestContext.Current.CancellationToken;
+        var clock = new VirtualClock();
 
         var connection = new SilentPeerConnection();
 
@@ -77,15 +73,17 @@ public sealed class HandshakeTimeoutTests {
         );
 
         var dialing = dialer.DialAsync(
-            ct: deadline.Token,
+            ct: ct,
             endpoint: PeerTestSupport.Loopback(port: 1)
         );
 
         Assert.False(condition: dialing.IsCompleted);
-        await clock.ExpireAsync(
-            PeerWireProtocol.HandshakeTimeout,
-            deadline.Token
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: ct,
+            dueTime: PeerWireProtocol.HandshakeTimeout
         );
+        clock.Advance(by: PeerWireProtocol.HandshakeTimeout);
         var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => dialing);
 
         Assert.Equal(

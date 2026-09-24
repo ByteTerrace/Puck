@@ -216,15 +216,6 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     }
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        reader.ReadBytes(destination: m_cameraRegisters);
-        m_busyDots = reader.ReadInt32();
-        m_cameraSelected = reader.ReadBoolean();
-        m_ramBank = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
     /// <inheritdoc/>
@@ -235,13 +226,13 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
             romBank: m_romBank
         );
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBytes(value: m_cameraRegisters);
-        writer.WriteInt32(value: m_busyDots);
-        writer.WriteBoolean(value: m_cameraSelected);
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Block(values: m_cameraRegisters);
+        transfer.Int32(value: ref m_busyDots);
+        transfer.Boolean(value: ref m_cameraSelected);
+        transfer.Int32(value: ref m_ramBank);
+        transfer.Boolean(value: ref m_ramEnabled);
+        transfer.Int32(value: ref m_romBank);
     }
 
     /// <summary>Reads from the external window: register&#160;0's busy flag while the camera block is selected and that

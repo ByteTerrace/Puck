@@ -1,6 +1,4 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick.Forge;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -9,12 +7,6 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 /// that merely runs slowly is not refused, so this is where a refusal has to be clear.
 /// </summary>
 public sealed class CartridgeCapacityTests {
-    private static CartridgeCompilation Compile(string target, CartridgeDocument document) =>
-        ((target == "agb")
-            ? new AgbCartridgeCompiler().Compile(document: document)
-            : new HgbCartridgeCompiler().Compile(document: document)
-        );
-
     [InlineData("cgb")]
     [InlineData("agb")]
     [Theory]
@@ -61,10 +53,7 @@ public sealed class CartridgeCapacityTests {
         // Nothing about this is malformed: it is the schema's own maximum, and the shape checks pass.
         Assert.Empty(collection: CartridgeDocuments.Validate(document: document));
 
-        var overrun = Record.Exception(testCode: () => Compile(
-            document: document,
-            target: target
-        ));
+        var overrun = Record.Exception(testCode: () => CartridgeProbe.Compiler(target: target).Compile(document: document));
 
         if (overrun is null) {
             // The machine had room. The point stands only if the guard is reachable, which the direct check below covers.

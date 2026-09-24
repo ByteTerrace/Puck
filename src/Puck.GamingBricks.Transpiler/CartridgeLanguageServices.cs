@@ -3,7 +3,7 @@ using Puck.Abstractions.Documents;
 using Puck.GamingBricks.Forge;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Editing;
 
 namespace Puck.GamingBricks.Transpiler;
 
@@ -68,13 +68,13 @@ public static class CartridgeLanguageServices {
         }
         return items;
 
-        void Add(string label, string insertText) => items.AppendNode(item: new JsonObject {
-            ["label"] = label,
-            ["kind"] = 14,
-            ["insertText"] = insertText,
-            ["insertTextFormat"] = 2,
-            ["detail"] = "Cartridge authoring",
-        });
+        void Add(string label, string insertText) => LspJson.AddCompletion(
+            detail: "Cartridge authoring",
+            insertText: insertText,
+            items: items,
+            kind: 14,
+            label: label
+        );
     }
     /// <summary>Lowers and validates a cartridge document if its schema selects this vocabulary.</summary>
     /// <param name="document">The parsed source.</param>

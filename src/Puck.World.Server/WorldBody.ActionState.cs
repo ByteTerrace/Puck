@@ -19,6 +19,7 @@ public sealed partial class WorldBody {
         m_stateLane = lane;
         m_stateOrdinal = ordinal;
     }
+
     // The action-state portion of WorldStateHashComposition's authoritative boundary: the declaration and the
     // per-lane trigger runtime. The stored values are the arena's own, folded by the Arena component.
     internal void AppendActionStateHash(ref Fnv1aHash hash) {

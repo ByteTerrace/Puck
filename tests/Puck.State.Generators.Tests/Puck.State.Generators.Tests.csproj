@@ -14,6 +14,9 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\Shared\TopologyArenaFixture.cs" Link="TopologyArenaFixture.cs" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.State\Puck.State.csproj" />
         <ProjectReference Include="..\..\src\Puck.State.Generators\Puck.State.Generators.csproj" />
     </ItemGroup>

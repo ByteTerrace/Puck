@@ -3,10 +3,10 @@
   "tick": 580,
   "engineTick": 974400,
   "hashes": {
-    "authoritative": "bbba62b3cffc6fbe",
-    "capture": "4067872ac51a5f88",
+    "authoritative": "ad83fddce0e58b18",
+    "capture": "135753f81278b1bb",
     "pose": "cbf29ce484222325",
-    "world": "a9d03303faaeba03"
+    "world": "65f67b5715c0e8fc"
   },
   "state": {
     "world": [
@@ -99,11 +99,11 @@
           },
           {
             "key": "20",
-            "value": 2
+            "value": 1
           },
           {
             "key": "21",
-            "value": 0
+            "value": 1
           },
           {
             "key": "22",
@@ -127,7 +127,7 @@
           },
           {
             "key": "27",
-            "value": 2
+            "value": 1
           },
           {
             "key": "28",
@@ -195,7 +195,7 @@
           },
           {
             "key": "44",
-            "value": 0
+            "value": 2
           },
           {
             "key": "45",
@@ -287,16 +287,20 @@
         "capacity": 64,
         "cells": [
           {
-            "key": "11",
-            "value": 11
+            "key": "12",
+            "value": 12
           },
           {
             "key": "18",
             "value": 18
           },
           {
-            "key": "29",
-            "value": 29
+            "key": "26",
+            "value": 26
+          },
+          {
+            "key": "30",
+            "value": 30
           },
           {
             "key": "34",
@@ -305,10 +309,6 @@
           {
             "key": "38",
             "value": 38
-          },
-          {
-            "key": "43",
-            "value": 43
           }
         ],
         "domain": {
@@ -374,11 +374,11 @@
           },
           {
             "key": "11",
-            "value": 11
+            "value": -1
           },
           {
             "key": "12",
-            "value": -1
+            "value": 12
           },
           {
             "key": "13",
@@ -434,7 +434,7 @@
           },
           {
             "key": "26",
-            "value": -1
+            "value": 26
           },
           {
             "key": "27",
@@ -446,11 +446,11 @@
           },
           {
             "key": "29",
-            "value": 29
+            "value": -1
           },
           {
             "key": "30",
-            "value": -1
+            "value": 30
           },
           {
             "key": "31",
@@ -502,7 +502,7 @@
           },
           {
             "key": "43",
-            "value": 43
+            "value": -1
           },
           {
             "key": "44",
@@ -880,7 +880,7 @@
           },
           {
             "key": "SW",
-            "value": 1
+            "value": 2
           },
           {
             "key": "W",
@@ -930,14 +930,14 @@
         "kind": "Int",
         "min": 0,
         "max": 60,
-        "value": 3
+        "value": 5
       },
       {
         "name": "reversiRejected",
         "kind": "Int",
         "min": 0,
         "max": 50400,
-        "value": 3
+        "value": 1
       },
       {
         "name": "reversiPasses",
@@ -951,28 +951,28 @@
         "kind": "Int",
         "min": 0,
         "max": 64,
-        "value": 3
+        "value": 4
       },
       {
         "name": "reversiFlips",
         "kind": "Int",
         "min": 0,
         "max": 63,
-        "value": 0
+        "value": 2
       },
       {
         "name": "reversiBlack",
         "kind": "Int",
         "min": 0,
         "max": 64,
-        "value": 4
+        "value": 7
       },
       {
         "name": "reversiWhite",
         "kind": "Int",
         "min": 0,
         "max": 64,
-        "value": 3
+        "value": 2
       },
       {
         "name": "reversiMobilityCount",
@@ -1112,12 +1112,12 @@
         },
         {
           "key": "20",
-          "value": 2,
+          "value": 1,
           "text": null
         },
         {
           "key": "21",
-          "value": 0,
+          "value": 1,
           "text": null
         },
         {
@@ -1147,7 +1147,7 @@
         },
         {
           "key": "27",
-          "value": 2,
+          "value": 1,
           "text": null
         },
         {
@@ -1232,7 +1232,7 @@
         },
         {
           "key": "44",
-          "value": 0,
+          "value": 2,
           "text": null
         },
         {
@@ -1336,8 +1336,8 @@
       "row": "reversiMobility",
       "cells": [
         {
-          "key": "11",
-          "value": 11,
+          "key": "12",
+          "value": 12,
           "text": null
         },
         {
@@ -1346,8 +1346,13 @@
           "text": null
         },
         {
-          "key": "29",
-          "value": 29,
+          "key": "26",
+          "value": 26,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 30,
           "text": null
         },
         {
@@ -1358,11 +1363,6 @@
         {
           "key": "38",
           "value": 38,
-          "text": null
-        },
-        {
-          "key": "43",
-          "value": 43,
           "text": null
         }
       ]
@@ -1427,12 +1427,12 @@
         },
         {
           "key": "11",
-          "value": 11,
+          "value": -1,
           "text": null
         },
         {
           "key": "12",
-          "value": -1,
+          "value": 12,
           "text": null
         },
         {
@@ -1502,7 +1502,7 @@
         },
         {
           "key": "26",
-          "value": -1,
+          "value": 26,
           "text": null
         },
         {
@@ -1517,12 +1517,12 @@
         },
         {
           "key": "29",
-          "value": 29,
+          "value": -1,
           "text": null
         },
         {
           "key": "30",
-          "value": -1,
+          "value": 30,
           "text": null
         },
         {
@@ -1587,7 +1587,7 @@
         },
         {
           "key": "43",
-          "value": 43,
+          "value": -1,
           "text": null
         },
         {
@@ -2047,7 +2047,7 @@
         },
         {
           "key": "SW",
-          "value": 1,
+          "value": 2,
           "text": null
         },
         {
@@ -2117,7 +2117,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 3,
+          "value": 5,
           "text": null
         }
       ]
@@ -2127,7 +2127,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 3,
+          "value": 1,
           "text": null
         }
       ]
@@ -2147,7 +2147,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 3,
+          "value": 4,
           "text": null
         }
       ]
@@ -2157,7 +2157,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 0,
+          "value": 2,
           "text": null
         }
       ]
@@ -2167,7 +2167,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 4,
+          "value": 7,
           "text": null
         }
       ]
@@ -2177,7 +2177,7 @@
       "cells": [
         {
           "key": "$value",
-          "value": 3,
+          "value": 2,
           "text": null
         }
       ]

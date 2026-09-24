@@ -22,7 +22,7 @@ public sealed class PresentationReadsStateLawTests {
 
     private static WorldPlacementResponseCondition.StateCondition Awakened() => new(
         State: AwakenedRow,
-        Comparison: ActionStateComparison.GreaterOrEqual,
+        Comparison: ExpressionOp.GreaterOrEqual,
         Value: 1
     );
     private static WorldStateRow AwakenedCell(long value) => new(
@@ -47,6 +47,7 @@ public sealed class PresentationReadsStateLawTests {
                 )]
         )
     );
+    private static WorldStateMirror Mirror(WorldDefinition definition) => new(view: new WorldDocumentStateView(definition: () => definition));
     private static WorldDefinition DocumentWithGate(long awakened) => Fixtures.BuildDocument().WithWorldState(rows: [AwakenedCell(value: awakened)]) with {
         BindingOverlaysRaw = [BaseOverlay(), RevealedOverlay(when: Awakened())],
     };
@@ -74,7 +75,7 @@ public sealed class PresentationReadsStateLawTests {
                 definition: (Fixtures.BuildDocument().WithWorldState(rows: [AwakenedCell(value: 0)]) with {
                     BindingOverlaysRaw = [BaseOverlay(), RevealedOverlay(when: new WorldPlacementResponseCondition.StateCondition(
                         State: "not-declared",
-                        Comparison: ActionStateComparison.GreaterOrEqual,
+                        Comparison: ExpressionOp.GreaterOrEqual,
                         Value: 1
                     ))],
                 }),
@@ -101,6 +102,7 @@ public sealed class PresentationReadsStateLawTests {
         bindings.SyncSeat(
             slot: 0,
             definition: DocumentWithGate(awakened: 1),
+            state: ClientFixtures.StateMirror(definition: DocumentWithGate(awakened: 1)),
             engineTick: 0UL,
             entityIndex: 0,
             nextInputTick: 1UL
@@ -116,6 +118,7 @@ public sealed class PresentationReadsStateLawTests {
         bindings.SyncSeat(
             slot: 0,
             definition: DocumentWithGate(awakened: 0),
+            state: ClientFixtures.StateMirror(definition: DocumentWithGate(awakened: 0)),
             engineTick: 0UL,
             entityIndex: 0,
             nextInputTick: 2UL
@@ -132,13 +135,17 @@ public sealed class PresentationReadsStateLawTests {
     [Fact]
     public void SkyZenith_AcceptsAnAlphaSuffixLiteral_IgnoringAlpha() {
         var track = new WorldRenderCycleTrack();
-        var definition = Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(
+        var definition = Fixtures.BuildDocument() with {
+            RenderRaw = WorldRenderDefaults.Absent with {
+                Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(
                     Elevation: -1f,
                     Color: new BindableColor(Raw: "#000000")
                 ), new WorldRenderSkyStop(
                     Elevation: 1f,
                     Color: new BindableColor(Raw: "#1B2350FF")
-                )])]) } };
+                )])]),
+            },
+        };
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
@@ -150,9 +157,8 @@ public sealed class PresentationReadsStateLawTests {
 
         var settings = track.Resolve(
             definition: definition,
-            revision: 1,
-            tick: 0UL,
-            engineTick: 0UL
+            mirror: Mirror(definition: definition),
+            revision: 1
         );
 
         Assert.Equal(
@@ -184,11 +190,11 @@ public sealed class PresentationReadsStateLawTests {
                     Value: CellValue.Text(value: "#112233")
                 )]
         );
+        var firstDefinition = (Fixtures.BuildDocument().WithWorldState(rows: [colorsRow]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } });
         var first = track.Resolve(
-            definition: (Fixtures.BuildDocument().WithWorldState(rows: [colorsRow]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } }),
-            revision: 1,
-            tick: 0UL,
-            engineTick: 0UL
+            definition: firstDefinition,
+            mirror: Mirror(definition: firstDefinition),
+            revision: 1
         );
 
         Assert.Equal(
@@ -208,11 +214,11 @@ public sealed class PresentationReadsStateLawTests {
                     Value: CellValue.Text(value: "#AABBCC")
                 )]
         );
+        var secondDefinition = (Fixtures.BuildDocument().WithWorldState(rows: [moved]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } });
         var second = track.Resolve(
-            definition: (Fixtures.BuildDocument().WithWorldState(rows: [moved]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } }),
-            revision: 2,
-            tick: 0UL,
-            engineTick: 0UL
+            definition: secondDefinition,
+            mirror: Mirror(definition: secondDefinition),
+            revision: 2
         );
 
         // No re-bake: the same track instance, told only that the revision moved, reads the new cell straight through.

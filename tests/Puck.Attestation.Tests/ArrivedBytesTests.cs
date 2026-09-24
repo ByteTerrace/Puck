@@ -150,33 +150,35 @@ public sealed class ArrivedBytesTests {
         Parallel.For(
             0,
             wire.Length,
-            new ParallelOptions { MaxDegreeOfParallelism = Math.Min(
+            new ParallelOptions {
+                MaxDegreeOfParallelism = Math.Min(
                 val1: 8,
                 val2: Environment.ProcessorCount
-            ) },
+            ),
+            },
             offset => {
-            var mutated = ((byte[])wire.Clone());
+                var mutated = ((byte[])wire.Clone());
 
-            for (var value = 0; (value < 256); value++) {
-                if (value == wire[offset]) { continue; }
-                mutated[offset] = ((byte)value);
-                try {
-                    if (VerifyWire(
-                        bytes: mutated,
-                        codec: codec,
-                        trust: trust
-                    ).Verified) {
-                        failures[offset] = $"offset {offset} = 0x{value:X2} was accepted";
+                for (var value = 0; (value < 256); value++) {
+                    if (value == wire[offset]) { continue; }
+                    mutated[offset] = ((byte)value);
+                    try {
+                        if (VerifyWire(
+                            bytes: mutated,
+                            codec: codec,
+                            trust: trust
+                        ).Verified) {
+                            failures[offset] = $"offset {offset} = 0x{value:X2} was accepted";
+                            return;
+                        }
+                    } catch (FormatException) {
+                        // Expected: refused at decode.
+                    } catch (Exception exception) {
+                        failures[offset] = $"offset {offset} = 0x{value:X2} threw {exception.GetType().Name}";
                         return;
                     }
-                } catch (FormatException) {
-                    // Expected: refused at decode.
-                } catch (Exception exception) {
-                    failures[offset] = $"offset {offset} = 0x{value:X2} threw {exception.GetType().Name}";
-                    return;
                 }
             }
-        }
         );
         Assert.All(
             failures,

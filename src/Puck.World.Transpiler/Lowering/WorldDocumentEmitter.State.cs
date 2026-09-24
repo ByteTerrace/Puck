@@ -1,7 +1,4 @@
-using System.Globalization;
-using System.Numerics;
 using System.Text.Json.Nodes;
-using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -64,7 +61,7 @@ public static partial class WorldDocumentEmitter {
                 var records = ((stateObj["records"] as JsonArray) ?? new JsonArray());
 
                 stateObj["records"] = records;
-                records.Add(item: LowerRecordDeclaration(declaration: recordNode, scope: scope, state: stateObj));
+                records.Add(item: LowerRecordDeclaration(declaration: recordNode, pointer: $"{statePointer}/records/{records.Count}", scope: scope, state: stateObj));
                 continue;
             }
 
@@ -111,9 +108,10 @@ public static partial class WorldDocumentEmitter {
         return true;
     }
     private static void LowerStateWorldBlock(BlockNode block, JsonObject stateObj, DocumentScope scope, string statePointer) {
+        // Authoring is judged per scope: rows a `use` stamped here were authored by that module, so a block written
+        // beside them appends to them rather than authoring the section twice.
         if (scope.Annotations.ContainsKey(key: "StateWorldArrayForm") ||
-            scope.Annotations.ContainsKey(key: "StateWorldDeclarationBlock") ||
-            (stateObj.ContainsKey(propertyName: "world") && !scope.Annotations.ContainsKey(key: "StateWorldSqlForm"))) {
+            scope.Annotations.ContainsKey(key: "StateWorldDeclarationBlock")) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateWorldSectionMixed,
                 message: "'state.world' is authored more than once — write it either as the array form ('world [ ]') or the declaration block ('world { }'), never both",
@@ -150,6 +148,7 @@ public static partial class WorldDocumentEmitter {
             scope
         )) {
             JsonObject? companionRow = null;
+            var latticesBefore = ((stateObj["lattices"] as JsonArray)?.Count ?? 0);
             var rowObj = (stmt switch {
                 StateTableDeclarationNode table => LowerStateTableDeclaration(
                     companionRow: out companionRow,
@@ -210,6 +209,21 @@ public static partial class WorldDocumentEmitter {
                 span: stmt.Span
             );
             worldArr.AppendNode(item: rowObj);
+            ResolveRowEnum(
+                pointer: $"{worldPointer}/{rowIdx}",
+                row: rowObj,
+                scope: rowScope,
+                state: stateObj,
+                statement: stmt
+            );
+
+            // A grid also declares the lattice its board lies over, authored by the same declaration.
+            if (((stateObj["lattices"] as JsonArray)?.Count is { } latticesAfter) && (latticesAfter > latticesBefore)) {
+                rowScope.SourceMap?.Register(
+                    jsonPointer: $"{statePointer}/lattices/{latticesBefore}",
+                    span: stmt.Span
+                );
+            }
 
             if (companionRow is not null) {
                 if ((companionRow["name"]?.ToString() is { } compName) && !seenNames.Add(item: compName)) {
@@ -243,7 +257,7 @@ public static partial class WorldDocumentEmitter {
         out JsonObject? companionRow
     ) {
         companionRow = null;
-        table = table with { Kind = InferTableKind(scope: scope, table: table) };
+        table = table with { Kind = ((table.Enum is null) ? InferTableKind(scope: scope, table: table) : "Int") };
         ValidateStateRowName(
             kind: "table",
             name: table.Name,
@@ -262,43 +276,23 @@ public static partial class WorldDocumentEmitter {
             ["kind"] = table.Kind,
         };
 
-        var rootObj = ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rObj) && (rObj is JsonObject ro)) ? ro : new JsonObject());
-        string? spaceName = null;
-        (string Name, string Model, string Revision, int Dimensions)? spaceInfo = null;
-
-        if (table.Kind == "Vector") {
-            var spaceMod = table.Modifiers.FirstOrDefault(predicate: m => string.Equals(a: m.Name, b: "space", comparisonType: StringComparison.OrdinalIgnoreCase));
-
-            if ((spaceMod is not null) && (spaceMod.Arguments.Count > 0)) {
-                if (spaceMod.Arguments[0].Value is IdentifierExpressionNode idNode) {
-                    spaceName = idNode.Name;
-                } else if (spaceMod.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
-                    spaceName = sVal;
-                }
-            }
-
-            if (string.IsNullOrEmpty(value: spaceName)) {
-                spaceName = FindDefaultSpace(parent: rootObj);
-            }
-
-            if (string.IsNullOrEmpty(value: spaceName)) {
-                scope.Diagnostics.ReportError(
-                    code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
-                    message: $"Vector row '{table.Name}' has no space and no default space was declared.",
-                    span: table.Span
-                );
-            } else {
-                rowObj["space"] = spaceName;
-                spaceInfo = FindSpaceInfo(parent: rootObj, spaceName: spaceName);
-                if (!spaceInfo.HasValue) {
-                    scope.Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
-                        message: $"Embedding space '{spaceName}' declared on table '{table.Name}' was not found in 'spaces'.",
-                        span: table.Span
-                    );
-                }
-            }
+        if (table.Enum is { } tableEnum) {
+            rowObj["enum"] = tableEnum;
         }
+
+        var rootObj = ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rObj) && (rObj is JsonObject ro)) ? ro : new JsonObject());
+
+        var (spaceName, spaceInfo) = ResolveVectorSpace(
+            declarationKind: "row",
+            kind: table.Kind,
+            missingDeclContext: "table",
+            modifiers: table.Modifiers,
+            name: table.Name,
+            rootObj: rootObj,
+            rowObj: rowObj,
+            scope: scope,
+            span: table.Span
+        );
 
         var cellsArr = new JsonArray();
         var seenKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -325,7 +319,6 @@ public static partial class WorldDocumentEmitter {
                 cellObj["value"] = LowerVectorCellValue(
                     context: $"table '{table.Name}' cell '{cell.Key}'",
                     expr: cell.Value,
-                    rootObj: rootObj,
                     scope: scope,
                     spaceName: (spaceName ?? "")
                 );
@@ -482,7 +475,7 @@ public static partial class WorldDocumentEmitter {
         DocumentScope scope,
         ref long totalVectorBytes
     ) {
-        slot = slot with { Kind = InferSlotKind(scope: scope, slot: slot) };
+        slot = slot with { Kind = ((slot.Enum is null) ? InferSlotKind(scope: scope, slot: slot) : "Int") };
         ValidateStateRowName(
             kind: "slot",
             name: slot.Name,
@@ -501,50 +494,29 @@ public static partial class WorldDocumentEmitter {
             ["kind"] = slot.Kind,
         };
 
-        var rootObj = ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rObj) && (rObj is JsonObject ro)) ? ro : new JsonObject());
-        string? spaceName = null;
-        (string Name, string Model, string Revision, int Dimensions)? spaceInfo = null;
-
-        if (slot.Kind == "Vector") {
-            var spaceMod = slot.Modifiers.FirstOrDefault(predicate: m => string.Equals(a: m.Name, b: "space", comparisonType: StringComparison.OrdinalIgnoreCase));
-
-            if ((spaceMod is not null) && (spaceMod.Arguments.Count > 0)) {
-                if (spaceMod.Arguments[0].Value is IdentifierExpressionNode idNode) {
-                    spaceName = idNode.Name;
-                } else if (spaceMod.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
-                    spaceName = sVal;
-                }
-            }
-
-            if (string.IsNullOrEmpty(value: spaceName)) {
-                spaceName = FindDefaultSpace(parent: rootObj);
-            }
-
-            if (string.IsNullOrEmpty(value: spaceName)) {
-                scope.Diagnostics.ReportError(
-                    code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
-                    message: $"Vector slot '{slot.Name}' has no space and no default space was declared.",
-                    span: slot.Span
-                );
-            } else {
-                rowObj["space"] = spaceName;
-                spaceInfo = FindSpaceInfo(parent: rootObj, spaceName: spaceName);
-                if (!spaceInfo.HasValue) {
-                    scope.Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
-                        message: $"Embedding space '{spaceName}' declared on slot '{slot.Name}' was not found in 'spaces'.",
-                        span: slot.Span
-                    );
-                }
-            }
+        if (slot.Enum is { } slotEnum) {
+            rowObj["enum"] = slotEnum;
         }
+
+        var rootObj = ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rObj) && (rObj is JsonObject ro)) ? ro : new JsonObject());
+
+        var (spaceName, spaceInfo) = ResolveVectorSpace(
+            declarationKind: "slot",
+            kind: slot.Kind,
+            missingDeclContext: "slot",
+            modifiers: slot.Modifiers,
+            name: slot.Name,
+            rootObj: rootObj,
+            rowObj: rowObj,
+            scope: scope,
+            span: slot.Span
+        );
 
         if (slot.Value is { } value) {
             if (slot.Kind == "Vector") {
                 rowObj["value"] = LowerVectorCellValue(
                     context: $"slot '{slot.Name}'",
                     expr: value,
-                    rootObj: rootObj,
                     scope: scope,
                     spaceName: (spaceName ?? "")
                 );
@@ -712,7 +684,7 @@ public static partial class WorldDocumentEmitter {
     private static readonly HashSet<string> GridWrapNames = new(comparer: StringComparer.Ordinal) { "None", "X", "Y", "Both" };
 
     private static JsonObject LowerStateGridDeclaration(StateGridDeclarationNode grid, DocumentScope scope, JsonObject stateObj, List<PendingStateReference> pending) {
-        grid = grid with { Kind = InferGridKind(grid: grid, scope: scope) };
+        grid = grid with { Kind = ((grid.Enum is null) ? InferGridKind(grid: grid, scope: scope) : "Int") };
         ValidateStateRowName(
             kind: "grid",
             name: grid.Name,
@@ -755,6 +727,10 @@ public static partial class WorldDocumentEmitter {
             ["name"] = grid.Name,
             ["kind"] = grid.Kind,
         };
+
+        if (grid.Enum is { } gridEnum) {
+            rowObj["enum"] = gridEnum;
+        }
 
         foreach (var modifier in grid.Modifiers) {
             switch (modifier.Name) {
@@ -1104,7 +1080,9 @@ public static partial class WorldDocumentEmitter {
                 default:
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.StateDeclarationUnknownModifier,
-                        message: $"'{modifier.Name}' is not a modifier 'grid {grid.Name}' admits — expected {string.Join(separator: ", ", values: GridModifierNames.Order(comparer: StringComparer.Ordinal))}",
+                        message: ((modifier.Name == "enum")
+                            ? EnumModifierRefusal(keyword: "grid", rowName: grid.Name)
+                            : $"'{modifier.Name}' is not a modifier 'grid {grid.Name}' admits — expected {string.Join(separator: ", ", values: GridModifierNames.Order(comparer: StringComparer.Ordinal))}"),
                         span: modifier.Span
                     );
 
@@ -1146,8 +1124,10 @@ public static partial class WorldDocumentEmitter {
             }
             if (
                 !long.TryParse(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out var ordinal,
                 s: cell.Key,
-                result: out var ordinal
+                style: System.Globalization.NumberStyles.Integer
             ) ||
                 (ordinal < 0) ||
                 (ordinal >= cellCeiling)
@@ -1287,6 +1267,10 @@ public static partial class WorldDocumentEmitter {
     // an exact-type generic match otherwise wins overload resolution over the non-generic one, and that overload
     // carries the trim/AOT warnings `Puck.World.Transpiler`'s Native AOT-compatible LSP build treats as errors.
     private static JsonNode CreateNumberNode(double value) => JsonValue.Create(value: value)!;
+    // A row names the enum its cells are drawn from after its name, so `enum(...)` is refused with that spelling by
+    // every declaration that reads modifiers.
+    private static string EnumModifierRefusal(string keyword, string rowName) =>
+        $"'enum' is not a modifier — a row names the enum its cells are drawn from after its name, as a record field does: '{keyword} {rowName}: Enum'";
     private static void ReportGridModifierRepeated(StateGridDeclarationNode grid, StateModifierNode modifier, DocumentScope scope) {
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
@@ -1360,207 +1344,6 @@ public static partial class WorldDocumentEmitter {
     // or later in the same block — settled once every row has its own JSON object, so declaration order never
     // matters. Mutates the referenced row's own object in place for `positions` (adding `valuesFrom`); a grid's
     // own `inverse` member is already set at its declaration site and is only checked, not written, here.
-    private static void ValidateStateCrossReferences(List<PendingStateReference> pending, JsonArray worldArr, DocumentScope scope) {
-        if (pending.Count == 0) {
-            return;
-        }
-
-        var byName = new Dictionary<string, JsonObject>(comparer: StringComparer.Ordinal);
-
-        foreach (var rowNode in worldArr) {
-            if (
-                (rowNode is JsonObject rowObj) &&
-                (rowObj["name"] is JsonValue nameVal) &&
-                nameVal.TryGetValue<string>(value: out var name)
-            ) {
-                byName[name] = rowObj;
-            }
-        }
-
-        foreach (var reference in pending) {
-            switch (reference.Kind) {
-                case PendingStateReferenceKind.PileTokenDomain:
-                    ValidatePileTokenDomainReference(
-                        byName: byName,
-                        reference: reference,
-                        scope: scope
-                    );
-
-                    break;
-                case PendingStateReferenceKind.GridPositions:
-                    ValidateGridPositionsReference(
-                        byName: byName,
-                        reference: reference,
-                        scope: scope
-                    );
-
-                    break;
-                case PendingStateReferenceKind.GridInverse:
-                    ValidateGridInverseReference(
-                        byName: byName,
-                        reference: reference,
-                        scope: scope
-                    );
-
-                    break;
-            }
-        }
-    }
-    private static bool IsRowKindInt(JsonObject row) => ((row["kind"] is JsonValue kindVal) && kindVal.TryGetValue<string>(value: out var kind) && (kind == "Int"));
-    private static bool IsPlainTokenDomainRow(JsonObject row) {
-        if (row["domain"] is JsonObject domainObj) {
-            return (
-                (domainObj["$type"] is JsonValue typeVal) &&
-                typeVal.TryGetValue<string>(value: out var type) &&
-                (type == "keys")
-            );
-        }
-
-        // Undeclared domain infers Keys exactly when the row carries a capacity or more than one cell, or one
-        // cell under an author-chosen key — StateRow.InferDomain's own rule, restated over the row's raw JSON.
-        var hasCapacity = row.ContainsKey(propertyName: "capacity");
-        var cells = (row["cells"] as JsonArray);
-
-        if (hasCapacity || (cells is { Count: > 1 })) {
-            return true;
-        }
-
-        return ((cells is { Count: 1 }) && (((cells[0] as JsonObject)?["key"]?.ToString()) != "$value"));
-    }
-    private static void ValidatePileTokenDomainReference(PendingStateReference reference, IReadOnlyDictionary<string, JsonObject> byName, DocumentScope scope) {
-        if (!byName.TryGetValue(
-            key: reference.RowName,
-            value: out var domainRow
-        )) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"pile '{reference.OwnRowName}' names no row '{reference.RowName}'",
-                span: reference.Span
-            );
-
-            return;
-        }
-        if (!IsPlainTokenDomainRow(row: domainRow)) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"pile '{reference.OwnRowName}' names '{reference.RowName}', which is not a plain token-domain row",
-                span: reference.Span
-            );
-
-            return;
-        }
-        if (reference.Capacity is not { } capacity) {
-            return;
-        }
-
-        // A table's declared cells are only its initial population — more keys are legal up to `capacity`, or
-        // unbounded (StateCapacity.MaxCellsPerRow) when no capacity is declared — so only a declared capacity is a
-        // real ceiling here; the row's current cell count is never one, and checking against it would refuse a
-        // capacity this table is free to grow into.
-        var domainCount = (((domainRow["capacity"] is JsonValue capVal) && capVal.TryGetValue<int>(value: out var domainCapacity))
-            ? domainCapacity
-            : ((int?)null)
-        );
-
-        if ((domainCount is { } count) && (capacity > count)) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationCapacityExceedsDomain,
-                message: $"pile '{reference.OwnRowName}' declares capacity {capacity} greater than its token domain '{reference.RowName}' provides ({count})",
-                span: reference.Span
-            );
-        }
-    }
-    private static void ValidateGridPositionsReference(PendingStateReference reference, IReadOnlyDictionary<string, JsonObject> byName, DocumentScope scope) {
-        if (!byName.TryGetValue(
-            key: reference.RowName,
-            value: out var positionsRow
-        )) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"grid '{reference.OwnRowName}' positions names no row '{reference.RowName}'",
-                span: reference.Span
-            );
-
-            return;
-        }
-
-        var domainType = ((positionsRow["domain"] as JsonObject)?["$type"] as JsonValue);
-
-        if (
-            !IsRowKindInt(row: positionsRow) ||
-            (domainType is null) ||
-            !domainType.TryGetValue<string>(value: out var domainTypeName) ||
-            (domainTypeName != "keysOf")
-        ) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' positions names '{reference.RowName}', which is not an integer keysOf row",
-                span: reference.Span
-            );
-
-            return;
-        }
-
-        positionsRow["valuesFrom"] = reference.OwnRowName;
-    }
-    private static void ValidateGridInverseReference(PendingStateReference reference, IReadOnlyDictionary<string, JsonObject> byName, DocumentScope scope) {
-        if (!byName.TryGetValue(
-            key: reference.RowName,
-            value: out var tokensRow
-        )) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"grid '{reference.OwnRowName}' inverse.tokens names no row '{reference.RowName}'",
-                span: reference.Span
-            );
-
-            return;
-        }
-        if (!byName.TryGetValue(
-            key: reference.SecondaryRowName!,
-            value: out var codesRow
-        )) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
-                message: $"grid '{reference.OwnRowName}' inverse.codes names no row '{reference.SecondaryRowName}'",
-                span: reference.Span
-            );
-
-            return;
-        }
-        if (
-            !IsRowKindInt(row: tokensRow) ||
-            !IsPlainTokenDomainRow(row: tokensRow)
-        ) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' inverse.tokens '{reference.RowName}' names no keyed integer row",
-                span: reference.Span
-            );
-        }
-        if (!IsRowKindInt(row: codesRow)) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' inverse.codes '{reference.SecondaryRowName}' names no integer row",
-                span: reference.Span
-            );
-        }
-
-        var tokenCells = ((tokensRow["cells"] as JsonArray) ?? []);
-        var codeCells = ((codesRow["cells"] as JsonArray) ?? []);
-        var sameShape = (tokenCells.Count == codeCells.Count);
-
-        for (var index = 0; (sameShape && (index < tokenCells.Count)); index++) {
-            sameShape = ((((tokenCells[index] as JsonObject)?["key"])?.ToString()) == (((codeCells[index] as JsonObject)?["key"])?.ToString()));
-        }
-        if (!sameShape) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
-                message: $"grid '{reference.OwnRowName}' inverse.codes '{reference.SecondaryRowName}' must carry the same keys, in the same order, as inverse.tokens '{reference.RowName}'",
-                span: reference.Span
-            );
-        }
-    }
     private static void ValidateStateRowName(string kind, string name, DocumentScope scope, SourceSpan span) {
         if (name.StartsWith(value: '$')) {
             scope.Diagnostics.ReportError(
@@ -1618,9 +1401,11 @@ public static partial class WorldDocumentEmitter {
                         ? PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted
                         : PuckDiagnosticCodes.StateDeclarationUnknownModifier
                     ),
-                    message: (tableOnly.Contains(item: modifier.Name)
+                    message: ((modifier.Name == "enum")
+                        ? EnumModifierRefusal(keyword: keyword, rowName: rowName)
+                        : (tableOnly.Contains(item: modifier.Name)
                         ? $"'{modifier.Name}' is only legal on a 'table' declaration — 'slot {rowName}' is always exactly one cell"
-                        : $"'{modifier.Name}' is not a modifier '{rowName}' admits — expected {string.Join(separator: ", ", values: admitted.Order(comparer: StringComparer.Ordinal))}"
+                        : $"'{modifier.Name}' is not a modifier '{rowName}' admits — expected {string.Join(separator: ", ", values: admitted.Order(comparer: StringComparer.Ordinal))}")
                     ),
                     span: modifier.Span
                 );
@@ -2005,288 +1790,56 @@ public static partial class WorldDocumentEmitter {
     // convention throughout the engine — a decimal STRING (never raw Q48.16 bits) for Fixed.
     // A declaration value or modifier argument may be any compile-time expression, a `let` constant included: it is
     // evaluated once and read back as the literal it produces, so every literal rule below applies unchanged.
-    private static ExpressionNode ResolveStateLiteral(ExpressionNode expr, DocumentScope scope) {
-        if (expr is LiteralExpressionNode) {
-            return expr;
-        }
-        if (DocumentLowering.LowerValue(
-            expr: expr,
-            scope: scope
-        ) is not JsonValue lowered) {
-            return expr;
+    private static (string? SpaceName, EmbeddingIdentity? SpaceIdentity) ResolveVectorSpace(
+        string kind,
+        IReadOnlyList<StateModifierNode> modifiers,
+        string name,
+        string declarationKind,
+        string missingDeclContext,
+        SourceSpan span,
+        JsonObject rowObj,
+        JsonObject rootObj,
+        DocumentScope scope
+    ) {
+        if (kind != "Vector") {
+            return (null, null);
         }
 
-        object? value = null;
+        string? spaceName = null;
+        var spaceMod = modifiers.FirstOrDefault(predicate: m => string.Equals(a: m.Name, b: "space", comparisonType: StringComparison.OrdinalIgnoreCase));
 
-        if (lowered.TryGetValue<long>(value: out var whole)) {
-            value = whole;
-        } else if (lowered.TryGetValue<bool>(value: out var flag)) {
-            value = flag;
-        } else if (lowered.TryGetValue<string>(value: out var text)) {
-            value = text;
-        } else if (lowered.TryGetValue<decimal>(value: out var exact)) {
-            value = (((exact == decimal.Truncate(d: exact)) && (exact >= long.MinValue) && (exact <= long.MaxValue))
-                ? ((object)((long)exact))
-                : ((double)exact)
+        if ((spaceMod is not null) && (spaceMod.Arguments.Count > 0)) {
+            if (spaceMod.Arguments[0].Value is IdentifierExpressionNode idNode) {
+                spaceName = idNode.Name;
+            } else if (spaceMod.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
+                spaceName = sVal;
+            }
+        }
+
+        if (string.IsNullOrEmpty(value: spaceName)) {
+            spaceName = FindDefaultSpace(parent: rootObj);
+        }
+
+        EmbeddingIdentity? spaceInfo = null;
+
+        if (string.IsNullOrEmpty(value: spaceName)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                message: $"Vector {declarationKind} '{name}' has no space and no default space was declared.",
+                span: span
             );
-        } else if (lowered.TryGetValue<double>(value: out var real)) {
-            value = real;
-        }
-
-        return ((value is null)
-            ? expr
-            : new LiteralExpressionNode(
-                Column: expr.Column,
-                Length: expr.Length,
-                Line: expr.Line,
-                Offset: expr.Offset,
-                Value: value
-            )
-        );
-    }
-    private static JsonNode LowerStateScalarValue(ExpressionNode expr, string kind, string context, DocumentScope scope) {
-        var literal = ResolveStateLiteral(
-            expr: expr,
-            scope: scope
-        );
-
-        return kind switch {
-            "Bool" => LowerStateBoolValue(context: context, expr: literal, scope: scope),
-            "Text" => LowerStateTextValue(context: context, expr: literal, scope: scope),
-            "Fixed" => LowerStateFixedValue(context: context, expr: literal, scope: scope),
-            _ => LowerStateIntValue(context: context, expr: literal, scope: scope),
-        };
-    }
-    private static JsonNode LowerStateIntValue(ExpressionNode expr, string context, DocumentScope scope) {
-        if ((expr is LiteralExpressionNode { Unit: null, Value: decimal exact }) &&
-            (exact == decimal.Truncate(d: exact)) && (exact >= long.MinValue) && (exact <= long.MaxValue)) {
-            return JsonValue.Create(((long)exact))!;
-        }
-        if (expr is LiteralExpressionNode { Unit: null, Value: long l }) {
-            return JsonValue.Create(value: l)!;
-        }
-        if (
-            (expr is LiteralExpressionNode { Unit: null, Value: ulong ul }) &&
-            (ul <= long.MaxValue)
-        ) {
-            return JsonValue.Create(value: ((long)ul))!;
-        }
-
-        scope.Diagnostics.ReportError(
-            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be a whole number for an Int row",
-            span: expr.Span
-        );
-
-        return JsonValue.Create(value: 0L)!;
-    }
-    private static JsonNode LowerStateBoolValue(ExpressionNode expr, string context, DocumentScope scope) {
-        if (expr is LiteralExpressionNode { Unit: null, Value: bool b }) {
-            return JsonValue.Create(value: b)!;
-        }
-
-        scope.Diagnostics.ReportError(
-            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be 'true' or 'false' for a Bool row",
-            span: expr.Span
-        );
-
-        return JsonValue.Create(value: false)!;
-    }
-    private static JsonNode LowerStateTextValue(ExpressionNode expr, string context, DocumentScope scope) {
-        if (expr is LiteralExpressionNode { Unit: null, Value: string s }) {
-            return JsonValue.Create(value: s)!;
-        }
-
-        scope.Diagnostics.ReportError(
-            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be a string for a Text row",
-            span: expr.Span
-        );
-
-        return JsonValue.Create(value: "")!;
-    }
-    private static JsonNode LowerStateFixedValue(ExpressionNode expr, string context, DocumentScope scope) {
-        if (TryFormatFixedLiteral(
-            expr: expr,
-            text: out var text
-        )) {
-            return JsonValue.Create(value: text)!;
-        }
-
-        scope.Diagnostics.ReportError(
-            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be a decimal number for a Fixed row",
-            span: expr.Span
-        );
-
-        return JsonValue.Create(value: "0")!;
-    }
-    private static bool TryFormatFixedLiteral(ExpressionNode expr, out string text) {
-        text = "";
-
-        if (expr is not LiteralExpressionNode { Unit: null, Value: var raw }) {
-            return false;
-        }
-
-        var decimalText = (raw switch {
-            long l => l.ToString(provider: CultureInfo.InvariantCulture),
-            ulong ul => ul.ToString(provider: CultureInfo.InvariantCulture),
-            decimal exact => exact.ToString(provider: CultureInfo.InvariantCulture),
-            double d => d.ToString(format: "R", provider: CultureInfo.InvariantCulture),
-            _ => null,
-        });
-
-        if (
-            (decimalText is null) ||
-            !FixedQ4816.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out var parsed,
-            s: decimalText
-        )
-        ) {
-            return false;
-        }
-
-        text = parsed.ToString();
-
-        return true;
-    }
-    // A decimal `perSecond` rate reduces to an exact fraction from the author's own digits, never from a double's
-    // raw bits: a directly authored literal carries its exact source text on RawText (set by the lexer before it
-    // ever rounds that text into a double). Only a value with none — an identifier or expression the lowering
-    // pipeline already folded through `double` arithmetic before this reduction ever sees it — falls back to that
-    // double's own shortest round-trip text, since no more precise source exists once the value has actually been
-    // computed in `double`.
-    private static bool TryReduceRate(ExpressionNode expr, out long numerator, out long denominator) {
-        numerator = 0L;
-        denominator = 1L;
-
-        if (expr is not LiteralExpressionNode { Unit: null, Value: var raw } literal) {
-            return false;
-        }
-
-        switch (raw) {
-            case long l:
-                numerator = l;
-                denominator = 1L;
-
-                return true;
-            case ulong ul when (ul <= long.MaxValue):
-                numerator = ((long)ul);
-                denominator = 1L;
-
-                return true;
-            case double d:
-                return TryReduceDecimalRate(
-                    denominator: out denominator,
-                    numerator: out numerator,
-                    text: (literal.RawText ?? d.ToString(format: "R", provider: CultureInfo.InvariantCulture))
+        } else {
+            rowObj["space"] = spaceName;
+            spaceInfo = FindSpaceIdentity(parent: rootObj, spaceName: spaceName);
+            if (!spaceInfo.HasValue) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                    message: $"Embedding space '{spaceName}' declared on {missingDeclContext} '{name}' was not found in 'spaces'.",
+                    span: span
                 );
-            default:
-                return false;
-        }
-    }
-    // Parses `text` (a sign, digits, an optional '.', and an optional exponent — exactly what the lexer or
-    // decimal.ToString can produce) into an exact unscaled BigInteger and a base-10 scale with no intermediate
-    // double or decimal, so a rate with more significant digits than either type holds still reduces from the
-    // author's own digits instead of silently rounding.
-    private static bool TryParseExactDecimalText(string text, out BigInteger unscaled, out int scale) {
-        unscaled = BigInteger.Zero;
-        scale = 0;
-
-        var mantissa = text;
-        var negative = false;
-
-        if ((mantissa.Length > 0) && (mantissa[0] is '+' or '-')) {
-            negative = (mantissa[0] == '-');
-            mantissa = mantissa[1..];
-        }
-
-        var exponent = 0;
-        var exponentIndex = mantissa.IndexOfAny(anyOf: ['e', 'E']);
-
-        if (exponentIndex >= 0) {
-            if (!int.TryParse(
-                provider: CultureInfo.InvariantCulture,
-                result: out exponent,
-                s: mantissa[(exponentIndex + 1)..],
-                style: NumberStyles.AllowLeadingSign
-            )) {
-                return false;
-            }
-
-            mantissa = mantissa[..exponentIndex];
-        }
-
-        var pointIndex = mantissa.IndexOf(value: '.');
-        var digits = ((pointIndex < 0) ? mantissa : (mantissa[..pointIndex] + mantissa[(pointIndex + 1)..]));
-        var fractionLength = ((pointIndex < 0) ? 0 : ((mantissa.Length - pointIndex) - 1));
-
-        if (digits.Length == 0) {
-            return false;
-        }
-        foreach (var c in digits) {
-            if (!char.IsAsciiDigit(c: c)) {
-                return false;
             }
         }
 
-        unscaled = BigInteger.Parse(
-            provider: CultureInfo.InvariantCulture,
-            value: digits
-        );
-        scale = (fractionLength - exponent);
-
-        if (scale < 0) {
-            unscaled *= BigInteger.Pow(
-                exponent: -scale,
-                value: 10
-            );
-            scale = 0;
-        }
-        if (negative) {
-            unscaled = -unscaled;
-        }
-
-        return true;
-    }
-    private static bool TryReduceDecimalRate(string text, out long numerator, out long denominator) {
-        numerator = 0L;
-        denominator = 1L;
-
-        if (!TryParseExactDecimalText(
-            scale: out var scale,
-            text: text,
-            unscaled: out var unscaled
-        )) {
-            return false;
-        }
-
-        var scaledDenominator = BigInteger.Pow(
-            exponent: scale,
-            value: 10
-        );
-        var gcd = BigInteger.GreatestCommonDivisor(
-            left: BigInteger.Abs(value: unscaled),
-            right: scaledDenominator
-        );
-
-        if (gcd > BigInteger.Zero) {
-            unscaled /= gcd;
-            scaledDenominator /= gcd;
-        }
-        if (
-            (unscaled < long.MinValue) ||
-            (unscaled > long.MaxValue) ||
-            (scaledDenominator > long.MaxValue)
-        ) {
-            return false;
-        }
-
-        numerator = ((long)unscaled);
-        denominator = ((long)scaledDenominator);
-
-        return true;
+        return (spaceName, spaceInfo);
     }
 }

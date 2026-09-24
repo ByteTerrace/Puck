@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Protocol.Tests;
@@ -27,7 +28,7 @@ public sealed class ReflowQueryCodecLawTests {
     [Fact]
     public void ExpectedInputsAndSpatialRegionRoundTripInsideBatchGuard() {
         var member = new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "selected",
             Key: "$value",
             Value: 1,
@@ -54,7 +55,7 @@ public sealed class ReflowQueryCodecLawTests {
             MaxYRaw: 32768
         );
         var batch = new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: [member],
             ExpectedSpatialReads: [spatial],
             ExpectedInputs: expectedInputs
@@ -99,14 +100,14 @@ public sealed class ReflowQueryCodecLawTests {
     [Fact]
     public void GuardRejectsNullInputNamesBeforeWireEncoding() {
         var member = new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "selected",
             Key: "$value",
             Value: 1,
             Kind: WorldDocumentWriteKind.Set
         );
         var malformed = new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: [member],
             ExpectedInputs: new WorldDefinitionReadDependency(
                 PlacementIds: [null!],

@@ -21,7 +21,7 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: error!);
         }
 
-        var actingPrincipal = context.ActingPrincipal();
+        var actingPrincipal = context.Principal;
         var targetPrincipal = TargetPrincipalFor(index: index);
         // A READ-ONLY peek of the decision Server.WorldEngagement.Dissolve will make — the console echo's source of
         // truth (see WorldEngagement.PeekDissolve's own remarks for why this is safe over loopback). The command
@@ -139,7 +139,7 @@ internal sealed partial class PlayerCommandModule {
         // principal (the submitter), not the target player's own principal — every seat is pre-seeded Control/all,
         // so checking the target would pass unconditionally. This is a client-side precheck against the server's
         // grant table; the mutation itself re-checks the identical pair atomically in ComposeControl's apply.
-        var actingPrincipal = context.ActingPrincipal();
+        var actingPrincipal = context.Principal;
 
         if (m_server.Engagement.CheckEngage(
             actingPrincipal: actingPrincipal,
@@ -269,10 +269,10 @@ internal sealed partial class PlayerCommandModule {
             value: "capture:"
         );
     // The identity an engagement route is recorded under for a 0-based body index — the seat's own claimed
-    // identity (PlayerRoster.PrincipalOf, falling back to WorldPrincipal.Seat) for 0..3, or the population's current
+    // identity (PlayerRoster.PrincipalOf, falling back to Principal.Seat) for 0..3, or the population's current
     // peer identity for 4..4095. Passed explicitly because only the client's roster knows about a claim override;
     // Server.WorldEngagement resolves a body's own principal by index arithmetic alone and has no roster to ask.
-    private WorldPrincipal TargetPrincipalFor(int index) {
+    private Principal TargetPrincipalFor(int index) {
         return (IsSeat(index: index)
             ? m_roster.PrincipalOf(slot: index)
             : m_server.Population.PeerPrincipal(index: index)

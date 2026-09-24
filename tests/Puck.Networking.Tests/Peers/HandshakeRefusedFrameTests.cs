@@ -12,7 +12,7 @@ namespace Puck.Networking.Tests.Peers;
 /// malformed refusal.</summary>
 public sealed class HandshakeRefusedFrameTests {
     private static async Task AssertMalformedHelloRefusedIsAnsweredAsync(byte[] body) {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
         var identityA = PeerIdentity.Create();
 
@@ -27,17 +27,17 @@ public sealed class HandshakeRefusedFrameTests {
         );
 
         var dialing = peerA.DialAsync(
-            ct: deadline.Token,
+            ct: ct,
             endpoint: PeerTestSupport.Loopback(port: 2)
         );
-        var streamAtB = await connectionAtB.AcceptStreamAsync(ct: deadline.Token);
+        var streamAtB = await connectionAtB.AcceptStreamAsync(ct: ct);
 
         Assert.NotNull(@object: streamAtB);
 
         // A's offer arrives first, exactly as the handshake promises; the far side answers it with a refusal frame
         // that does not decode instead of an offer of its own.
         var offer = await WireFrame.ReadAsync(
-            ct: deadline.Token,
+            ct: ct,
             maxFrameBytes: PeerWireProtocol.MaxFrameBytes,
             stream: streamAtB
         );
@@ -53,12 +53,12 @@ public sealed class HandshakeRefusedFrameTests {
 
         await WireFrame.WriteAsync(
             body: body,
-            ct: deadline.Token,
+            ct: ct,
             kind: ((byte)PeerFrameKind.HelloRefused),
             stream: streamAtB
         );
 
-        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => dialing.WaitAsync(cancellationToken: deadline.Token));
+        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => dialing.WaitAsync(cancellationToken: ct));
 
         Assert.Equal(
             expected: PeerRefusal.HandshakeMalformed,
@@ -68,7 +68,7 @@ public sealed class HandshakeRefusedFrameTests {
 
         // What crossed the wire before A closed: A's own refusal, naming the grammar violation to the far side.
         var answered = await WireFrame.ReadAsync(
-            ct: deadline.Token,
+            ct: ct,
             maxFrameBytes: PeerWireProtocol.MaxFrameBytes,
             stream: streamAtB
         );

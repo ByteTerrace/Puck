@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -9,7 +10,7 @@ public sealed partial class WorldServer {
     /// and peer/session admission halves that run against it.</summary>
     /// <remarks><see cref="Grants"/> remains the narrow <see cref="IWorldGrantsView"/> every ordinary reader holds;
     /// this property is the facade itself, whose <see cref="WorldGrants.TryGrant"/>/<see cref="WorldGrants.Revoke"/>
-    /// doors skip the actor check <see cref="Grant"/>/<see cref="Revoke(WorldGrant, WorldPrincipal, int, long)"/>
+    /// doors skip the actor check <see cref="Grant"/>/<see cref="Revoke(WorldGrant, Principal, int, long)"/>
     /// run.</remarks>
     public WorldGrants GrantTable => m_grants;
     /// <summary>Gets the per-tick dispatch tally behind the mutation admission budget gate.</summary>
@@ -18,7 +19,7 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldGrants.ApplySession"/>
     public SessionReply ApplySession(SessionRequest request) => m_grants.ApplySession(request: request);
     /// <inheritdoc cref="WorldGrants.ApplySessionLever"/>
-    public void ApplySessionLever(WorldSessionLever lever, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    public void ApplySessionLever(WorldSessionLever lever, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
         m_grants.ApplySessionLever(
             connectionId: connectionId,
             correlationId: correlationId,
@@ -28,7 +29,7 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldGrants.DisconnectPeerConnection"/>
     public void DisconnectPeerConnection(WorldPeerEventEntry peer) => m_grants.DisconnectPeerConnection(peer: peer);
     /// <inheritdoc cref="WorldGrants.ApplyGrant"/>
-    public void Grant(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    public void Grant(WorldGrant grant, Principal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
         m_grants.ApplyGrant(
             actor: actor,
             connectionId: connectionId,
@@ -39,9 +40,9 @@ public sealed partial class WorldServer {
     /// federated peer generation leaves so an aborted onward handoff can restore the exact source authority.</summary>
     /// <param name="principal">The holder.</param>
     /// <returns>That principal's rows.</returns>
-    public IReadOnlyList<WorldGrant> GrantRows(WorldPrincipal principal) => m_grants.Rows(principal: principal);
+    public IReadOnlyList<WorldGrant> GrantRows(Principal principal) => m_grants.Rows(principal: principal);
     /// <inheritdoc cref="WorldGrants.ApplyRevoke"/>
-    public void Revoke(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    public void Revoke(WorldGrant grant, Principal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
         m_grants.ApplyRevoke(
             actor: actor,
             connectionId: connectionId,
@@ -49,7 +50,7 @@ public sealed partial class WorldServer {
             grant: grant
         );
     /// <inheritdoc cref="WorldGrants.TryAdmitMutation"/>
-    public bool TryAdmitMutation(WorldPrincipal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) =>
+    public bool TryAdmitMutation(Principal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) =>
         m_grants.TryAdmitMutation(
             admission: out admission,
             kindOrdinal: kindOrdinal,

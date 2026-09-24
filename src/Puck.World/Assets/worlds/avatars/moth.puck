@@ -926,10 +926,8 @@ host {
   journalDepth: 2000
   presentMode: Immediate
   presentation: Windowed
-  rayQuery: true
   surfaceFormat: r8g8b8a8
   targetHertz: 60
-  timing: false
   width: 1280
 }
 
@@ -1032,7 +1030,7 @@ looks {
       }
       name: "moth"
       scale: 1
-      source: creation(prototypeId: "moth")
+      source: creation(prototypeId: moth)
     }
   ]
 }
@@ -4769,7 +4767,7 @@ views {
 
   pipeline "moth-pipeline" {
     camera: "three-quarter"
-    source: "../pipelines/moth.glsl"
+    source: "../../pipelines/moth.hlsl"
     timeScale: 1
   }
 }

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Hosting;
@@ -23,7 +24,7 @@ public sealed class MappedArrivalApplicationLawTests {
     [Fact]
     public void ApplyMappedArrival_ActiveSeat_OverridesPoseAndVelocity_AfterTeleportCommit() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -124,7 +125,7 @@ public sealed class MappedArrivalApplicationLawTests {
             )],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,
@@ -201,7 +202,7 @@ public sealed class MappedArrivalApplicationLawTests {
     [Fact]
     public void ContinuumArrival_CannotAdvanceTwice_AndAbortCaptureRetainsItsCursor() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,
@@ -209,7 +210,7 @@ public sealed class MappedArrivalApplicationLawTests {
             null,
             WorldProtocol.WireProtocolKey
         )).Accepted);
-        var contactActor = WorldPrincipal.Seat(slot: 1);
+        var contactActor = Principal.Seat(slot: 1);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             contactActor,
@@ -296,7 +297,7 @@ public sealed class MappedArrivalApplicationLawTests {
     [Fact]
     public void ContinuumHopClamp_PreservesTheConsumedThroughTimeFence() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,
@@ -371,7 +372,7 @@ public sealed class MappedArrivalApplicationLawTests {
     [Theory]
     public void ContinuumTimeFence_RejectsEveryDestinationStepThatOverlapsTheSourceStep(uint destinationRateHz, int overlappingSteps) {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,
@@ -430,7 +431,7 @@ public sealed class MappedArrivalApplicationLawTests {
     [Fact]
     public void ContinuumTimeFence_UsesDestinationAdmissionTimeWhenTransportArrivesLate() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,

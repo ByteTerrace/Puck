@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -19,7 +20,7 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldPersistence.EnforceJournalDepth"/>
     public void EnforceJournalDepth() => m_persistence.EnforceJournalDepth();
     /// <inheritdoc cref="WorldPersistence.EnqueueUndo"/>
-    public void EnqueueUndo(int count, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    public void EnqueueUndo(int count, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
         m_persistence.EnqueueUndo(
             connectionId: connectionId,
             correlationId: correlationId,

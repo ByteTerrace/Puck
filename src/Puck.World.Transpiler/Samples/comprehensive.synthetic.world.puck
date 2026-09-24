@@ -1,5 +1,5 @@
 schema: "puck.world.definition.v1"
-basis: "worlds/base.puck"
+basis: "worlds/base"
 documentId: "comprehensive-synthetic-v1"
 
 // Compile-time constants
@@ -14,12 +14,7 @@ let doubleFps = 60 * 2
 
 // Module imports
 import "extensions/rules.world.puck" as rules
-import "modules/arcade.world.json"
-
-// Facet exports
-export read state, scores, tableStatus
-export action step, reset, deal
-export binding input, pointer, pad
+import "modules/arcade"
 
 // Parametric templates
 template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
@@ -44,10 +39,8 @@ host {
   listen: null
   presentMode: Immediate
   presentation: Windowed
-  rayQuery: true
   surfaceFormat: r8g8b8a8
   targetHertz: targetFps
-  timing: false
   width: 1280
 }
 
@@ -79,14 +72,16 @@ views {
 
   pipeline "moth-pipeline" {
     camera: null
-    source: "../pipelines/moth.glsl"
+    source: "../pipelines/moth.hlsl"
     timeScale: 1
   }
 }
 
 // Addon with auto-hashing
 addon "rules-engine" {
-  source: "addons/rules.wasm"
+  modulePath: "addons/rules.wasm"
+  fuel: 1000000
+  enabled: true
   hash: "auto"
 }
 
@@ -96,44 +91,91 @@ state {
     {
       name: "tableState"
       kind: "Int"
-      capacity: 1
+      capacity: 4
+      cells [
+        {
+          key: "activeRound"
+          value: 1
+        }
+        {
+          key: "locked"
+          value: 0
+        }
+        {
+          key: "busy"
+          value: 0
+        }
+        {
+          key: "choice"
+          value: 0
+        }
+      ]
+    }
+    {
+      name: "tableText"
+      kind: "Text"
+      capacity: 2
       cells [
         {
           key: "feltColor"
           value: feltColor
         }
         {
-          key: "activeRound"
-          value: 1
+          key: "status"
+          value: "idle"
+        }
+      ]
+    }
+    {
+      name: "seat"
+      kind: "Int"
+      capacity: 2
+      cells [
+        {
+          key: "occupied"
+          value: 0
         }
       ]
     }
   ]
 }
 
-// Creation document: `shape <Type> "<name>" { }` rows, with the canonicalizer's own defaults elided.
-creation {
-  schema: "puck.creation.v1"
+// Prototypes: `prototype "<id>" { document { } }` rows, each a creation document authored with
+// `shape <Type> "<name>" { }` rows and the canonicalizer's own defaults elided.
+prototypes {
+  prototype "tableTop" {
+    document {
+      schema: "puck.creation.v1"
 
-  shape Box "felt" {
-    material: 0
-    position [0, -1, 0]
-    scale [24, 0.5, 24]
+      shape Box "felt" {
+        material: 0
+        position [0, -1, 0]
+        scale [24, 0.5, 24]
+      }
+
+      shape Cylinder "post" {
+        material: 1
+        position [0, 0, 0]
+        smooth: 0.25
+      }
+    }
   }
 
-  shape Cylinder "post" {
-    material: 1
-    position [0, 0, 0]
-    smooth: 0.25
+  prototype "seat" {
+    document {
+      schema: "puck.creation.v1"
+
+      shape Cylinder "stool" {
+        material: 1
+        position [0, 0, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
   }
 }
 
 // Placements: `placement "<id>" { }` rows, with `prototype:` and the bare `solid` flag.
 placements {
-  policy {
-    collision: "Ignore"
-  }
-
   placement "table" {
     prototype: tableTop
     position [0, 0, 0]
@@ -153,12 +195,12 @@ placements {
 rule "advance-round" {
   when tableState[activeRound] < 8 and not tableState[locked] == 1
   mode: Edge
-  local seat = $each
+  local remainingRounds = 8 - tableState[activeRound]
   tableState[activeRound] += 1
   schedule tableState[settle] in 0.25s
   transaction {
     tableState[busy] = 1
-    tableState[status] = "dealing"
+    tableText[status] = "dealing"
   } onFailure {
     tableState[busy] = 0
   }
@@ -172,7 +214,7 @@ rule "choose-seat" {
     seed: 11
     option "hold" {
       when tableState[activeRound] >= 1
-      score: tableState[activeRound] * 2
+      score: 2.0
       tableState[choice] = 1
     }
   }

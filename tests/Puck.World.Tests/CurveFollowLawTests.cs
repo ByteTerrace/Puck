@@ -67,7 +67,7 @@ public sealed class CurveFollowLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
@@ -75,21 +75,6 @@ public sealed class CurveFollowLawTests {
 
         return checkpoint!.Population.Entries.Single(predicate: row => (row.Index == bodyIndex)).ProducerCurveArcRaw;
     }
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     // The straight, zero-curvature StraightPath collapses arc length to world X exactly (see StraightPath's own
     // remarks), so the expected curve point at elapsed second t is (min(rate * t, 20), 0, 0) with no independent
     // spline evaluation needed.
@@ -130,24 +115,12 @@ public sealed class CurveFollowLawTests {
         },
         Channels: new Dictionary<string, string>()
     );
-    private static WorldBody JoinBody(WorldFixture fixture) {
-        var actor = WorldPrincipal.Seat(slot: 0);
-
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: actor,
-            Slot: actor.Index,
-            IdentityName: null,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
-
-        return fixture.Server.Body(index: actor.Index)!;
-    }
     // Joins the seat and selects the "follow" producer — nothing else in this file ever calls SubmitIntent, so the
     // body's whole per-tick movement comes from the staged producer output (WorldBody.Step's own merge: submitted
     // intent, when present, still outranks it — see BodyProducerSupport/WorldPopulation.Step's remarks — but nothing
     // here ever submits one).
     private static WorldBody JoinFollower(WorldFixture fixture) {
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         body.SetIntentSource(source: IntentSource.Producer(name: FollowProgramName));
 
@@ -290,7 +263,7 @@ public sealed class CurveFollowLawTests {
 
         using var controlFixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f));
 
-        _ = JoinBody(fixture: controlFixture);
+        _ = controlFixture.JoinSeat();
         controlFixture.Step();
 
         Assert.Equal(
@@ -311,7 +284,7 @@ public sealed class CurveFollowLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
@@ -366,7 +339,7 @@ public sealed class CurveFollowLawTests {
         // Live source with nothing ever submitted — WorldBody.Step's merge resolves that to a zero intent every
         // tick, so a body that never selects the curve-follow producer must not move at all.
         using var controlFixture = Fixtures.FreshServer(definition: WithFollower(rate: 2f, rateHz: Fixtures.DefaultRateHz));
-        var controlBody = JoinBody(fixture: controlFixture);
+        var controlBody = controlFixture.JoinSeat();
         var controlSpawn = controlBody.FixedPosition;
 
         for (var tick = 0; (tick < 60); tick++) {
@@ -443,7 +416,7 @@ public sealed class CurveFollowLawTests {
         var control = Fixtures.DriveHashTrace(
             document: document,
             ticks: 240,
-            join: JoinBody
+            join: static fixture => fixture.JoinSeat()
         );
 
         Assert.NotEqual(

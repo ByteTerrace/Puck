@@ -6,10 +6,13 @@ using Puck.Transpiler.Ast;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Assets;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.World.Transpiler;
 
-/// <summary>What a <c>.puck</c> world source's imports are worth to a compile.</summary>
+/// <summary>What a <c>.puck</c> world source's imports are worth to a compile. Every mode but
+/// <see cref="Ignore"/> also reads the enums the source's <c>basis</c> declares, so the source lowers an enum member
+/// it writes as the basis reads it.</summary>
 public enum ImportHandling {
     /// <summary>Walk the import graph, reporting an unresolvable path or a cycle, and lower the root alone —
     /// <c>puck compile</c>'s own default.</summary>
@@ -46,7 +49,53 @@ public sealed record WorldCompilation(
     public AssetCompilationContext? Assets { get; init; }
     /// <summary>Gets whether a document was lowered and nothing refused it.</summary>
     public bool Success => (!Diagnostics.HasErrors && ((Json is not null) || (Worlds.Count > 0)));
+    /// <summary>Gets what the compiled tree declares about the documents it emits (<see cref="WorldSourceDeclaration"/>),
+    /// the same reading the name index takes from a parse alone; <see langword="null"/> when the source did not
+    /// parse.</summary>
+    public WorldSourceDeclaration? Declaration => ((Document is { } document)
+        ? WorldSourceDeclaration.Of(document: document)
+        : null
+    );
+    /// <summary>Gets whether the source emits a document: each world it declares, or else the one document its top
+    /// level lowers to. A module library, whose modules, templates and <c>let</c>s only the sources importing it
+    /// expand, emits none and carries no document name (<see cref="WorldSourceDeclaration.EmitsDocument"/>).</summary>
+    public bool EmitsDocument => (Declaration?.EmitsDocument ?? false);
 
+    /// <summary>Returns the document names a compiled source emits, relative to its directory: each world a
+    /// composition declares, under the name it declares; else the source's own file stem, for an ordinary source;
+    /// else none, for a module library. These are exactly the names the source carries, the one reading every door
+    /// that resolves or ships a name by emission asks: the name index (<see cref="Composition.WorldSourceIndex"/>)
+    /// through which the document composer (<see cref="Composition.PuckDocumentComposer"/>), a tree compile and the
+    /// official build resolve names, and every writer of a compiled source's documents.</summary>
+    /// <param name="sourcePath">The source's path, spelled as the file system spells its file name; its stem is the
+    /// file name without its <c>.puck</c> suffix.</param>
+    /// <param name="emitsDocument">Whether the source emits a document (<see cref="EmitsDocument"/>).</param>
+    /// <param name="declaredWorlds">The names of the worlds the source declares, in declaration order.</param>
+    /// <returns>The emitted document names, in declaration order.</returns>
+    public static IReadOnlyList<string> EmittedNames(string sourcePath, bool emitsDocument, IEnumerable<string> declaredWorlds) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
+        ArgumentNullException.ThrowIfNull(argument: declaredWorlds);
+
+        if (!emitsDocument) {
+            return [];
+        }
+
+        IReadOnlyList<string> worlds = [.. declaredWorlds];
+
+        return ((worlds.Count > 0)
+            ? worlds
+            : [Path.GetFileNameWithoutExtension(path: sourcePath)]
+        );
+    }
+    /// <summary>Returns the document names this compile emits, relative to the source's directory
+    /// (<see cref="EmittedNames"/> over <see cref="Declaration"/>).</summary>
+    /// <param name="sourcePath">The compiled source's path.</param>
+    /// <returns>The emitted document names, in declaration order.</returns>
+    public IReadOnlyList<string> DocumentNames(string sourcePath) => EmittedNames(
+        declaredWorlds: (Declaration?.Worlds ?? []),
+        emitsDocument: EmitsDocument,
+        sourcePath: sourcePath
+    );
     /// <summary>Returns the lowered document, refusing to hand back partial output after an error.</summary>
     /// <returns>The canonical document.</returns>
     /// <exception cref="InvalidOperationException">The compile reported an error, or lowered nothing.</exception>
@@ -107,7 +156,46 @@ public static class WorldCompiler {
         diagnostics ??= new DiagnosticBag();
         sourceMap ??= new SourceMap();
         vocabulary ??= WorldDocumentVocabulary.Instance;
+        WorldBootWork.Count(kind: WorldBootWork.Compiles);
 
+        // The modules the import walk parses are the .puck files it reads, so the walk's own reads are the count. The
+        // basis read for its enums is a compile of its own, counted there or served held, so its reads are not.
+        var reads = new CompileInputLog();
+        var basisReads = new CompileInputLog();
+        using var recording = CompileInputs.Record(log: reads);
+
+        try {
+            return CompileRecorded(
+                allowMultiple: allowMultiple,
+                basePath: basePath,
+                basisReads: basisReads,
+                cancellationToken: cancellationToken,
+                defaultSchema: defaultSchema,
+                diagnostics: diagnostics,
+                embeddings: embeddings,
+                imports: imports,
+                source: source,
+                sourceMap: sourceMap,
+                sourcePath: sourcePath,
+                updateAssets: updateAssets,
+                vocabulary: vocabulary
+            );
+        } finally {
+            var basisPaths = basisReads.Inputs.Select(selector: static input => input.Path).ToHashSet(comparer: StringComparer.Ordinal);
+
+            WorldBootWork.Current.Add(
+                amount: (1L + reads.Inputs.LongCount(predicate: input => (
+                    (input.Kind == CompileInputKind.Content) &&
+                    WorldDocumentName.IsSourceFile(path: input.Path) &&
+                    !basisPaths.Contains(item: input.Path)
+                ))),
+                kind: WorldBootWork.PuckParses
+            );
+        }
+    }
+
+    private static WorldCompilation CompileRecorded(string source, string? sourcePath, string? basePath, ImportHandling imports, EmbeddingLock? embeddings, string? defaultSchema, DiagnosticBag diagnostics, SourceMap sourceMap,
+        CancellationToken cancellationToken, WorldDocumentVocabulary vocabulary, bool allowMultiple, bool updateAssets, CompileInputLog basisReads) {
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             defaultSchema: defaultSchema,
             diagnostics: diagnostics,
@@ -136,11 +224,11 @@ public static class WorldCompiler {
 
         if (effectiveImports == ImportHandling.Bundle) {
             var bundled = ModuleResolver.BundleDocument(
+                cancellationToken: cancellationToken,
                 diagnostics: diagnostics,
                 rootDoc: document,
                 rootPath: sourcePath!,
-                vocabulary: vocabulary,
-                cancellationToken: cancellationToken
+                vocabulary: vocabulary
             );
 
             if (bundled is not null) {
@@ -148,11 +236,11 @@ public static class WorldCompiler {
             }
         } else if (effectiveImports == ImportHandling.Validate) {
             var withModules = ModuleResolver.ImportModules(
+                cancellationToken: cancellationToken,
                 diagnostics: diagnostics,
                 rootDoc: document,
                 rootPath: sourcePath!,
-                vocabulary: vocabulary,
-                cancellationToken: cancellationToken
+                vocabulary: vocabulary
             );
 
             if (withModules is not null) {
@@ -179,7 +267,12 @@ public static class WorldCompiler {
             testWorlds: out var testWorlds,
             vocabulary: vocabulary,
             worldOutputs: worlds,
-            assets: assets
+            assets: assets,
+            inheritedEnums: InheritedEnums(
+                basis: ((effectiveImports == ImportHandling.Ignore) ? null : document.Basis),
+                reads: basisReads,
+                sourcePath: sourcePath
+            )
         );
 
         if (!allowMultiple && (worlds.Count > 1)) {
@@ -196,6 +289,7 @@ public static class WorldCompiler {
             TestWorlds: testWorlds
         ) { Assets = assets, Worlds = worlds };
     }
+
     /// <summary>Reads <paramref name="path"/> and compiles it.</summary>
     /// <param name="path">The <c>.puck</c> source file.</param>
     /// <param name="imports">What the import graph is worth to this compile.</param>
@@ -227,14 +321,76 @@ public static class WorldCompiler {
             diagnostics: diagnostics,
             embeddings: embeddings,
             imports: imports,
-            source: File.ReadAllText(path: path),
+            source: CompileInputs.ReadAllText(path: path),
             sourceMap: sourceMap,
             sourcePath: path
         );
     }
 
+    // The enums a source's basis declares, read from the basis's composed document through the one composer, so the
+    // source lowers an enum member it writes as the basis reads it. A basis that does not resolve or compose leaves
+    // the source to lower alone: the source's own composition reports why (PUCK035). A basis cycle stops at the
+    // source already being read, whose composition refuses the cycle by name.
+    private static IReadOnlyList<WorldDocumentEmitter.EnumDefinition> InheritedEnums(string? basis, string? sourcePath, CompileInputLog reads) {
+        if ((basis is null) || (sourcePath is null)) {
+            return [];
+        }
+
+        using var recording = CompileInputs.Record(log: reads);
+
+        var referrer = Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: sourcePath));
+        var reading = (ReadingBasisOf.Value ?? []);
+
+        if (reading.Contains(item: referrer)) {
+            return [];
+        }
+
+        var previous = ReadingBasisOf.Value;
+
+        ReadingBasisOf.Value = reading.Add(item: referrer);
+
+        try {
+            if (
+                !PuckDocumentComposer.Instance.TryRead(
+                    content: out var content,
+                    name: basis,
+                    reason: out _,
+                    referrerName: referrer,
+                    resolvedName: out var resolved
+                ) ||
+                (content is null) ||
+                !PuckDocumentComposer.TryComposeWorldDocument(
+                    chainBytes: out _,
+                    composed: out var composed,
+                    reason: out _,
+                    rootBytes: content,
+                    rootResolvedPath: resolved
+                ) ||
+                ((composed ?? (JsonNode.Parse(utf8Json: content) as JsonObject))?["state"]?["enums"] is not JsonArray enums)
+            ) {
+                return [];
+            }
+
+            return [
+                .. enums.OfType<JsonObject>()
+                    .Where(predicate: static entry => ((entry["name"] is JsonValue name) && name.TryGetValue<string>(value: out _) && (entry["members"] is JsonArray)))
+                    .Select(selector: static entry => new WorldDocumentEmitter.EnumDefinition(
+                        Inherited: true,
+                        Members: [.. entry["members"]!.AsArray().Select(selector: static member => (member?.ToString() ?? string.Empty))],
+                        Name: entry["name"]!.GetValue<string>()
+                    )),
+            ];
+        } catch (System.Text.Json.JsonException) {
+            return [];
+        } finally {
+            ReadingBasisOf.Value = previous;
+        }
+    }
+
+    private static readonly AsyncLocal<System.Collections.Immutable.ImmutableHashSet<string>?> ReadingBasisOf = new();
+
     // A source's stem with every compound extension dropped, so `chinese-checkers.puck` and
-    // `pong.world.puck` both name their generated test worlds `<stem>--<slug>.world.json`.
+    // `paddleball.world.puck` both name their generated test worlds `<stem>~<slug>.world.json`.
     private static string TestStem(string? sourcePath) {
         if (sourcePath is null) {
             return "world";

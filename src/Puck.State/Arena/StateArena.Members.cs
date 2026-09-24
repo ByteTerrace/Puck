@@ -28,8 +28,6 @@ public sealed partial class StateArena {
     /// <param name="key">The interned key on success; otherwise the invalid default.</param>
     /// <param name="reason">Why the mint was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the cell was minted.</returns>
-    /// <remarks>A mint at the tail of an ordered row leaves <see cref="AppendGeneration"/> where it was; every
-    /// other membership change moves it.</remarks>
     public bool TryMint(int rowOrdinal, CellName name, CellValue value, out CellKey key, out string reason) => TryInsert(
         key: out key,
         name: name,
@@ -107,13 +105,10 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var tail = (at == count);
-
         for (var position2 = count; (position2 > at); position2--) {
             MoveCell(
                 from: (layout.CellStart + (position2 - 1)),
                 rowOrdinal: rowOrdinal,
-                tailPush: false,
                 to: (layout.CellStart + position2)
             );
         }
@@ -122,25 +117,21 @@ public sealed partial class StateArena {
 
         ClearCell(
             rowOrdinal: rowOrdinal,
-            slot: slot,
-            tailPush: tail
+            slot: slot
         );
         WriteNumber(
             column: ArenaColumn.MemberKey,
             index: slot,
-            tailPush: tail,
             value: key.Ordinal
         );
         WriteNumber(
             column: ArenaColumn.MemberCount,
             index: rowOrdinal,
-            tailPush: tail,
             value: (count + 1)
         );
         StoreValueRaw(
             layout: layout,
             slot: slot,
-            tailPush: tail,
             value: admitted
         );
         Reindex(
@@ -176,6 +167,143 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal
         ));
     }
+    /// <summary>Attempts to mint a new cell at the tail of a keyed or ordered row, naming the cell the mint dropped
+    /// to make room.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="name">The cell key name to mint.</param>
+    /// <param name="value">The value the new cell carries.</param>
+    /// <param name="key">The interned key on success; otherwise the invalid default.</param>
+    /// <param name="evicted">The name of the cell a full evicting row dropped for this one, or
+    /// <see langword="null"/> when nothing was dropped or the mint was refused.</param>
+    /// <param name="reason">Why the mint was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the cell was minted.</returns>
+    public bool TryMintEvicting(int rowOrdinal, CellName name, CellValue value, out CellKey key, out CellName? evicted, out string reason) {
+        evicted = (TryEvictionVictim(
+            key: out var victim,
+            rowOrdinal: rowOrdinal
+        )
+            ? m_keys[victim]
+            : null
+        );
+
+        if (TryMint(
+            key: out key,
+            name: name,
+            reason: out reason,
+            rowOrdinal: rowOrdinal,
+            value: value
+        )) {
+            return true;
+        }
+
+        evicted = null;
+
+        return false;
+    }
+    /// <summary>Attempts to set one cell to a carried value through the stored door, minting the cell when a keyed
+    /// or ordered row holds none under the key.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
+    /// <param name="value">The value to store; its case must be the row's declared kind.</param>
+    /// <param name="evicted">The name of the cell a mint dropped from a full evicting row, or
+    /// <see langword="null"/>.</param>
+    /// <param name="reason">Why the write or the mint was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the value was stored.</returns>
+    /// <remarks>Only a missing cell mints, so a refusal of a cell the row holds reports the write's own reason.
+    /// Every other shape's addresses are its own — a lattice's topology keys, a ring's slot indices, a slot row's
+    /// reserved key — so a write naming an address such a row does not hold is refused by the write door, never
+    /// minted beside them. The stored door sets a traited cell's base and leaves its clock where it is;
+    /// <see cref="TryWriteLiveOrMint"/> is the door that rebases it.</remarks>
+    public bool TryWriteOrMint(int rowOrdinal, CellKey key, CellValue value, out CellName? evicted, out string reason) {
+        if (MintsAbsent(
+            key: key,
+            rowOrdinal: rowOrdinal
+        )) {
+            return TryMintEvicting(
+                evicted: out evicted,
+                key: out _,
+                name: m_keys[key],
+                reason: out reason,
+                rowOrdinal: rowOrdinal,
+                value: value
+            );
+        }
+
+        evicted = null;
+
+        return TryWrite(
+            key: key,
+            reason: out reason,
+            rowOrdinal: rowOrdinal,
+            value: value
+        );
+    }
+    /// <summary>Attempts an explicit numeric write through the live door — rebasing a traited cell's clock, as
+    /// <see cref="TryWriteLive(int, CellKey, long, StateWriteKind, in ArenaTime, out string)"/> does — minting
+    /// the cell when a keyed or ordered row holds none under the key.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
+    /// <param name="operand">The replacement for a set, or the addend for an add; a mint carries it as the new
+    /// cell's value, since an add to a cell the row does not hold adds to nothing.</param>
+    /// <param name="write">Set or add.</param>
+    /// <param name="time">The clocks the write settles the cell's clock to.</param>
+    /// <param name="evicted">The name of the cell a mint dropped from a full evicting row, or
+    /// <see langword="null"/>.</param>
+    /// <param name="reason">Why the write or the mint was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the value was stored.</returns>
+    /// <remarks>Mints on exactly the terms <see cref="TryWriteOrMint"/> does. A text or vector row takes no numeric
+    /// write and is refused by the write door.</remarks>
+    public bool TryWriteLiveOrMint(int rowOrdinal, CellKey key, long operand, StateWriteKind write, in ArenaTime time, out CellName? evicted, out string reason) {
+        if (
+            MintsAbsent(
+            key: key,
+            rowOrdinal: rowOrdinal
+        ) &&
+            (m_layout[rowOrdinal].Kind is not (CellKind.Text or CellKind.Vector))
+        ) {
+            return TryMintEvicting(
+                evicted: out evicted,
+                key: out _,
+                name: m_keys[key],
+                reason: out reason,
+                rowOrdinal: rowOrdinal,
+                value: CellValue.FromNumber(
+                    kind: m_layout[rowOrdinal].Kind,
+                    raw: operand
+                )
+            );
+        }
+
+        evicted = null;
+
+        return TryWriteLive(
+            key: key,
+            operand: operand,
+            reason: out reason,
+            rowOrdinal: rowOrdinal,
+            time: in time,
+            write: write
+        );
+    }
+
+    // Whether a write to this address mints: the key names no cell of a keyed or ordered row.
+    private bool MintsAbsent(int rowOrdinal, CellKey key) => (
+        TryRowLayout(
+        layout: out var layout,
+        rowOrdinal: rowOrdinal
+    ) &&
+        (layout.Shape is (RowShape.Keyed or RowShape.Ordered)) &&
+        m_keys.TryGetName(
+        key: key,
+        name: out _
+    ) &&
+        !TryCellSlot(
+        key: key,
+        rowOrdinal: rowOrdinal,
+        slot: out _
+    )
+    );
+
     /// <summary>Attempts to push one value onto a ring row, overwriting the oldest slot once the ring is
     /// full.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
@@ -224,8 +352,7 @@ public sealed partial class StateArena {
 
         ClearCell(
             rowOrdinal: rowOrdinal,
-            slot: slot,
-            tailPush: false
+            slot: slot
         );
         WriteNumber(
             column: ArenaColumn.Number,
@@ -355,6 +482,8 @@ public sealed partial class StateArena {
             return false;
         }
 
+        Visit(lanes: (2L + from.Dimensions));
+
         var carried = (Bit(
             index: slot,
             words: m_presence
@@ -478,8 +607,8 @@ public sealed partial class StateArena {
     /// <remarks>A member carries every column it owns to its new position — value, cell clock, provenance,
     /// visibility, observation, and behavior override — so a reorder changes order and nothing else. The
     /// permutation is checked whole before one byte moves, so a refused reorder leaves the row as it was.
-    /// <para><see cref="AppendGeneration"/> moves, because a reorder is not a tail push; a board derived from the
-    /// row is recomputed, because two members naming one cell are resolved by their order.</para></remarks>
+    /// <para>A board derived from the row is recomputed, because two members naming one cell are resolved by their
+    /// order.</para></remarks>
     public bool TryReorder(int rowOrdinal, ReadOnlySpan<int> order, out string reason) {
         if ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is owned by a state pool";
@@ -572,7 +701,7 @@ public sealed partial class StateArena {
         return true;
     }
 
-    private void ClearCell(int rowOrdinal, int slot, bool tailPush) {
+    private void ClearCell(int rowOrdinal, int slot) {
         foreach (var column in CellColumns) {
             if (!IsMaterialized(column: column)) {
                 continue;
@@ -581,14 +710,12 @@ public sealed partial class StateArena {
                 WriteReference(
                     column: column,
                     index: slot,
-                    tailPush: tailPush,
                     value: null
                 );
             } else {
                 WriteNumber(
                     column: column,
                     index: slot,
-                    tailPush: tailPush,
                     value: ((column == ArenaColumn.MemberKey)
                         ? -1L
                         : 0L
@@ -603,18 +730,17 @@ public sealed partial class StateArena {
             WriteVectorSlot(
                 components: default,
                 layout: layout,
-                slot: slot,
-                tailPush: tailPush
+                slot: slot
             );
         }
     }
-    private void MoveCell(int rowOrdinal, int from, int to, bool tailPush) {
+    private void MoveCell(int rowOrdinal, int from, int to) {
+        Visit(lanes: (CellColumns.Length + m_layout[rowOrdinal].Dimensions));
         foreach (var column in CellColumns) {
             if (ArenaColumns.IsReference(column: column)) {
                 WriteReference(
                     column: column,
                     index: to,
-                    tailPush: tailPush,
                     value: ReadReferenceRaw(
                         column: column,
                         index: from
@@ -624,7 +750,6 @@ public sealed partial class StateArena {
                 WriteNumber(
                     column: column,
                     index: to,
-                    tailPush: tailPush,
                     value: ReadNumberRaw(
                         column: column,
                         index: from
@@ -639,8 +764,7 @@ public sealed partial class StateArena {
             WriteVectorSlot(
                 components: VectorSpan(slot: from),
                 layout: layout,
-                slot: to,
-                tailPush: tailPush
+                slot: to
             );
         }
     }
@@ -649,6 +773,7 @@ public sealed partial class StateArena {
             if (!IsMaterialized(column: column)) {
                 continue;
             }
+            Visit(lanes: 2L);
             if (ArenaColumns.IsReference(column: column)) {
                 var carried = ReadReferenceRaw(
                     column: column,
@@ -658,7 +783,6 @@ public sealed partial class StateArena {
                 WriteReference(
                     column: column,
                     index: left,
-                    tailPush: false,
                     value: ReadReferenceRaw(
                         column: column,
                         index: right
@@ -667,7 +791,6 @@ public sealed partial class StateArena {
                 WriteReference(
                     column: column,
                     index: right,
-                    tailPush: false,
                     value: carried
                 );
             } else {
@@ -679,7 +802,6 @@ public sealed partial class StateArena {
                 WriteNumber(
                     column: column,
                     index: left,
-                    tailPush: false,
                     value: ReadNumberRaw(
                         column: column,
                         index: right
@@ -688,7 +810,6 @@ public sealed partial class StateArena {
                 WriteNumber(
                     column: column,
                     index: right,
-                    tailPush: false,
                     value: carried
                 );
             }
@@ -702,6 +823,8 @@ public sealed partial class StateArena {
         if (m_carried.Length < layout.Dimensions) {
             m_carried = new sbyte[layout.Dimensions];
         }
+
+        Visit(lanes: (2L * layout.Dimensions));
 
         var scratch = m_carried.AsSpan(
             length: layout.Dimensions,
@@ -728,6 +851,7 @@ public sealed partial class StateArena {
             // Numeric pool keys address fixed slots directly; no per-row key index is needed.
             return;
         }
+        Visit(lanes: m_memberCounts[rowOrdinal]);
         for (var position = 0; (position < m_memberCounts[rowOrdinal]); position++) {
             var slot = (layout.CellStart + position);
             var ordinal = m_memberKeys[slot];
@@ -846,14 +970,7 @@ public sealed partial class StateArena {
                     return true;
                 }
             default: {
-                    var operand = (layout.Kind switch {
-                        CellKind.Bool => (value.AsBool
-                            ? 1L
-                            : 0L
-                        ),
-                        CellKind.Fixed => value.AsFixed,
-                        _ => value.AsInt,
-                    });
+                    var operand = value.Raw;
 
                     _ = m_catalog.TryGetEnum(
                         handle: m_catalog.Descriptors[rowOrdinal].Handle,
@@ -881,11 +998,10 @@ public sealed partial class StateArena {
                         return false;
                     }
 
-                    admitted = (layout.Kind switch {
-                        CellKind.Bool => CellValue.Bool(value: (stored != 0L)),
-                        CellKind.Fixed => CellValue.Fixed(rawBits: stored),
-                        _ => CellValue.Int(value: stored),
-                    });
+                    admitted = CellValue.FromNumber(
+                        kind: layout.Kind,
+                        raw: stored
+                    );
 
                     return true;
                 }
@@ -932,15 +1048,13 @@ public sealed partial class StateArena {
             MoveCell(
                 from: (layout.CellStart + next),
                 rowOrdinal: rowOrdinal,
-                tailPush: false,
                 to: (layout.CellStart + (next - 1))
             );
         }
 
         ClearCell(
             rowOrdinal: rowOrdinal,
-            slot: (layout.CellStart + (count - 1)),
-            tailPush: false
+            slot: (layout.CellStart + (count - 1))
         );
         WriteNumber(
             column: ArenaColumn.MemberCount,
@@ -957,7 +1071,7 @@ public sealed partial class StateArena {
 
         return true;
     }
-    private void StoreValueRaw(in ArenaRowLayout layout, int slot, CellValue value, bool tailPush) {
+    private void StoreValueRaw(in ArenaRowLayout layout, int slot, CellValue value) {
         if (!value.HasValue) {
             return;
         }
@@ -967,7 +1081,6 @@ public sealed partial class StateArena {
                 WriteReference(
                     column: ArenaColumn.Text,
                     index: slot,
-                    tailPush: tailPush,
                     value: value.AsText
                 );
 
@@ -976,8 +1089,7 @@ public sealed partial class StateArena {
                 WriteVectorSlot(
                     components: value.AsVector.Span,
                     layout: layout,
-                    slot: slot,
-                    tailPush: tailPush
+                    slot: slot
                 );
 
                 break;
@@ -985,7 +1097,6 @@ public sealed partial class StateArena {
                 WriteNumber(
                     column: ArenaColumn.Number,
                     index: slot,
-                    tailPush: tailPush,
                     value: (layout.Kind switch {
                         CellKind.Bool => (value.AsBool
                             ? 1L
@@ -1002,7 +1113,6 @@ public sealed partial class StateArena {
         WriteNumber(
             column: ArenaColumn.Presence,
             index: slot,
-            tailPush: tailPush,
             value: 1L
         );
     }

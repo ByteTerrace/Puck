@@ -31,11 +31,6 @@ public static class LauncherServiceRegistration {
         // retargeted mid-session by the `present-rate` verb (presentation pacing only — the fixed-step sim is untouched).
         services.TryAddSingleton(implementationFactory: static sp => new PresentPacingControl(initialTargetHertz: sp.GetRequiredService<LauncherOptions>().TargetRenderRate));
 
-        // The in-process CPU frame-timing publish hub: the window loop publishes one FrameTimingSample per iteration
-        // while GPU timing is armed, and observers (the [frame-timing] stderr digest, a bench runner) subscribe. A
-        // presentation-side diagnostic seam, registered beside the present-pacing control.
-        services.TryAddSingleton<FrameTimingHub>();
-
         // The shared monotonic capture clock: every input backend stamps CaptureTick from this one instance, and
         // the window pump uses it to time-stamp drained input. One origin so all stamps are comparable.
         services.TryAddSingleton<InputClock>(implementationFactory: static _ => InputClock.Start());
@@ -48,6 +43,8 @@ public static class LauncherServiceRegistration {
         services.TryAddSingleton<ExternalClockRegistry>();
 
         services.TryAddSingleton<TerminalControl>();
+        // Caught up unless a standard-input reader claims it; every tick host holds its first step on it.
+        services.TryAddSingleton<StandardInputBacklog>();
         services.TryAddSingleton<ITerminalControl>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
         services.TryAddSingleton<IInputFocus>(implementationFactory: static sp => sp.GetRequiredService<TerminalControl>());
         services.TryAddSingleton<TerminalConsoleSessions>();
@@ -145,6 +142,7 @@ public static class LauncherServiceRegistration {
     // fixed-step/tick hosted service, so host startup order matches AddLauncherTerminal's original shape exactly.
     private static void AddStandardInputReader(IServiceCollection services) {
         services.AddHostedService(implementationFactory: static sp => new StandardInputReaderService(
+            backlog: sp.GetRequiredService<StandardInputBacklog>(),
             source: sp.GetRequiredService<TextCommandSource>(),
             threadName: "Puck.Launcher Stdin Reader"
         ));
@@ -233,7 +231,7 @@ public static class LauncherServiceRegistration {
             // REQUIRED, not optional: the mixer stamps every captured entry with the lane's acting identity, and there
             // is no defensible fallback — synthesizing a seat from the slot number would attribute a claimant's action
             // to the seat it displaced. A root that drives a simulation declares who its slots are.
-            var principalResolver = sp.GetRequiredService<ICommandPrincipalResolver>();
+            var principalResolver = sp.GetRequiredService<IPrincipalResolver>();
             var registry = sp.GetRequiredService<CommandRegistry>();
             var alwaysActiveBindings = sp.GetService<IAlwaysActiveInputBindings>();
 

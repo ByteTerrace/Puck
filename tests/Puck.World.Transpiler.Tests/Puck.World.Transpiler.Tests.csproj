@@ -12,12 +12,13 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\Shared\IdentifierCorpus.cs" Link="IdentifierCorpus.cs" />
+        <Compile Include="..\Shared\SpellingLaws.cs" Link="SpellingLaws.cs" />
+        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Transpiler\Puck.Transpiler.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
-    </ItemGroup>
-    <ItemGroup>
-        <!-- Build-time world generation only; the CLI is not a runtime dependency. -->
-        <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
 </Project>

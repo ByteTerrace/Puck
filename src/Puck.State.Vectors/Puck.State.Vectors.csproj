@@ -2,7 +2,7 @@
     <PropertyGroup>
         <AssemblyName>Puck.State.Vectors</AssemblyName>
         <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
-        <Description>Deterministic embedding vectors over a Puck.State arena: a typed view over a row's vector column and the mix, mean, nearest, and remember transforms that read and write it. Every component is a signed 8-bit integer, every score is an exact integer dot product or a Q48.16 cosine from Puck.Maths, and every transform runs as one journal scope over the arena, so a refused transform leaves the arena exactly as it found it and the same document replays bit-identically on every host and backend. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <Description>Deterministic embedding vectors over a Puck.State arena: a typed view over a row's vector column and the mix, mean, nearest, and remember transforms that read and write it. Every component is a signed 8-bit integer, every score is an exact integer dot product or a Q48.16 cosine from Puck.Maths, and every transform runs as one journal scope over the arena, so a refused transform leaves the arena exactly as it found it and the same document replays bit-identically on every host and backend. Licensed under the Apache License 2.0.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.State.Vectors</PackageId>
         <PackageTags>determinism;embeddings;simulation;state;vectors</PackageTags>

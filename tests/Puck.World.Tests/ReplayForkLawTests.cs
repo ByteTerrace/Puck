@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Maths;
@@ -43,7 +44,7 @@ public sealed class ReplayForkLawTests {
             moveAdvance: forward,
             moveStrafe: strafe
         ),
-        Principal: WorldPrincipal.Seat(slot: 0)
+        Principal: Principal.Seat(slot: 0)
     );
     private static WorldReplaySnapshot ReadTape(string name) {
         using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
@@ -108,7 +109,7 @@ public sealed class ReplayForkLawTests {
         var parent = $"drive-cancel-{Guid.NewGuid():N}";
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -206,8 +207,8 @@ public sealed class ReplayForkLawTests {
 
         var bytes = buffer.ToArray();
         // Header layout: magic u32, shape token u32, rate u32, fork-present bool, then the length-prefixed parent name
-        // ("parent" — one length byte plus six characters) and the int32 tick, which this doctors from 3 to 4.
-        var tickOffset = (((((4 + 4) + 4) + 1) + 1) + "parent".Length);
+        // ("parent" — a u16 byte length plus six characters) and the int32 tick, which this doctors from 3 to 4.
+        var tickOffset = (((((4 + 4) + 4) + 1) + sizeof(ushort)) + "parent".Length);
 
         Assert.Equal(
             expected: 3,
@@ -275,7 +276,7 @@ public sealed class ReplayForkLawTests {
         var child = $"fork-child-{Guid.NewGuid():N}";
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -294,12 +295,12 @@ public sealed class ReplayForkLawTests {
             if (tick == 1UL) {
                 transport.SubmitGrant(
                     grant: new WorldGrant(
-                        Principal: WorldPrincipal.Seat(slot: 1),
+                        Grantee: Principal.Seat(slot: 1),
                         Capability: WorldCapability.Drive,
                         Subject: GrantSubject.Body(index: 0),
                         Exclusive: false
                     ),
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 );
             }
 

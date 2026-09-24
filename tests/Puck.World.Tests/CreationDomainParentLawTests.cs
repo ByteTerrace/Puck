@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Puck.Physics.Motion;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 using Puck.World.Client;
@@ -65,7 +66,14 @@ public sealed class CreationDomainParentLawTests {
         ));
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: (1f / 60f));
+        var moved = new SdfMovedTransforms();
+
+        moved.Begin(
+            everything: false,
+            tableRows: transforms.Length
+        );
         pool.PackTransforms(
+            moved: moved,
             client: client,
             parkPosition: new Vector3(
                 x: 0f,
@@ -76,16 +84,6 @@ public sealed class CreationDomainParentLawTests {
             transforms: transforms
         );
     }
-    internal static WorldClient Client(WorldDefinition definition) => new(
-        composition: new WorldCompositionState(),
-        definition: definition,
-        roster: new PlayerRoster(
-            definition: definition,
-            link: new SilentLink(definition: definition),
-            seatBindings: new WorldSeatBindings(definition: definition)
-        ),
-        seatRouter: new WorldSeatAuthorityRouter()
-    );
     internal static WorldDefinition Definition(WorldPrototype creation, float scale = 1f) => (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
         CreationsRaw = [creation],
         LookRowsRaw = [new WorldLook(
@@ -154,18 +152,7 @@ public sealed class CreationDomainParentLawTests {
 
         return pool;
     }
-    internal static WorldPrototype Prototype(CreationDocument document) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: "rig"
-        );
-
-        return new WorldPrototype(
-            Id: "rig",
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
+    internal static WorldPrototype Prototype(CreationDocument document) => CreationFixtures.Prototype(document: document, id: "rig");
 
     // A second, UNPARENTED domain-bearing shape: its own slot always carries the identity delta (no parent to
     // chain), so it is the follow law's control — the same rig, the same driver, but never moved by the swing.
@@ -348,7 +335,7 @@ public sealed class CreationDomainParentLawTests {
             creation: creation,
             scale: Scale
         );
-        var client = Client(definition: Definition(
+        var client = ClientFixtures.Client(definition: Definition(
             creation: creation,
             scale: Scale
         ));
@@ -433,7 +420,7 @@ public sealed class CreationDomainParentLawTests {
     public void DomainShapeParentedToASwingingShapeRidesExactlyTheParentDelta() {
         var creation = Prototype(document: FollowRig());
         var pool = Pool(creation: creation);
-        var client = Client(definition: Definition(creation: creation));
+        var client = ClientFixtures.Client(definition: Definition(creation: creation));
         var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
 
         for (var frame = 0; (frame < 120); frame++) {
@@ -566,11 +553,13 @@ public sealed class CreationDomainParentLawTests {
                 fold: Fold(
                     domain: [new ShapeDomainOp.Symmetry(Normal: Vector3.UnitX)],
                     parent: "torso"
-                ) with { Slides = [new ShapeSlideDocument(
+                ) with {
+                    Slides = [new ShapeSlideDocument(
                         Amplitude: 0.1f,
                         Axis: Vector3.UnitY,
                         Driver: "sway"
-                    )] },
+                    )],
+                },
                 torso: Torso(swings: null)
             )),
             comparisonType: StringComparison.Ordinal,
@@ -592,7 +581,7 @@ public sealed class CreationDomainParentLawTests {
             creation: creation,
             scale: Scale
         );
-        var client = Client(definition: Definition(
+        var client = ClientFixtures.Client(definition: Definition(
             creation: creation,
             scale: Scale
         ));
@@ -663,14 +652,14 @@ public sealed class CreationDomainParentLawTests {
         var denied = ValidatedDefinition(
             creation: creation,
             motion: (WorldLookMotion.Default with {
-            PartDynamics = new Dictionary<string, string> { ["fold"] = "chase" },
-        })
+                PartDynamics = new Dictionary<string, string> { ["fold"] = "chase" },
+            })
         );
         var admitted = ValidatedDefinition(
             creation: creation,
             motion: (WorldLookMotion.Default with {
-            PartDynamics = new Dictionary<string, string> { ["torso"] = "chase" },
-        })
+                PartDynamics = new Dictionary<string, string> { ["torso"] = "chase" },
+            })
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
@@ -693,21 +682,4 @@ public sealed class CreationDomainParentLawTests {
         );
     }
 
-    // The narrowest link a PlayerRoster can be built over: it answers the one construction-time query and drops
-    // everything else, so no server has to run for a pack-path law.
-    private sealed class SilentLink(WorldDefinition definition) : IServerLink {
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) {
-            if (query is WorldQuery.PopulationChannels) {
-                completion(obj: new QueryAnswer(
-                    Payload: WorldChannelTable.Compile(channels: definition.Channels),
-                    Text: string.Empty
-                ));
-            }
-        }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => 0L;
-        public void SubmitIntent(in IntentSubmission submission) {
-        }
-        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
-        }
-    }
 }

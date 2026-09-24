@@ -2,30 +2,11 @@ using Puck.Maths;
 
 namespace Puck.Physics;
 
-/// <summary>The world-axis unit vectors and axis-sign arithmetic the analytic collider queries share, and the
-/// box-interior nearest-exit-face rule <see cref="FixedStaticCollider"/>'s sphere push and
-/// <see cref="FixedSurfaceQuery"/>'s box query both resolve an interior probe with. One home so a correction to the
-/// exit-face tie-break reaches every caller in the same change.</summary>
+/// <summary>The axis-sign arithmetic the analytic collider queries share, and the box-interior nearest-exit-face rule
+/// <see cref="FixedStaticCollider"/>'s sphere push and <see cref="FixedSurfaceQuery"/>'s box query both resolve an
+/// interior probe with. One home so a correction to the exit-face tie-break reaches every caller in the same
+/// change.</summary>
 internal static class FixedAxisMath {
-    /// <summary>The world X axis.</summary>
-    internal static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    /// <summary>The world Y axis.</summary>
-    internal static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    /// <summary>The world Z axis.</summary>
-    internal static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
-
     /// <summary>Resolves a probe inside (or exactly on the boundary of) an axis-aligned box to its nearest exit
     /// face: the axis with the smallest gap to its half-extent, ties breaking X, then Y, then Z.</summary>
     /// <param name="local">The probe relative to the box center, in box axes.</param>
@@ -43,7 +24,7 @@ internal static class FixedAxisMath {
         ) {
             var axisSign = Sign(value: local.X);
 
-            return (Normal: (UnitX * axisSign), SurfaceLocal: new FixedVector3(
+            return (Normal: (FixedVector3.UnitX * axisSign), SurfaceLocal: new FixedVector3(
                 X: (halfExtents.X * axisSign),
                 Y: local.Y,
                 Z: local.Z
@@ -53,7 +34,7 @@ internal static class FixedAxisMath {
         if (gapY <= gapZ) {
             var axisSign = Sign(value: local.Y);
 
-            return (Normal: (UnitY * axisSign), SurfaceLocal: new FixedVector3(
+            return (Normal: (FixedVector3.UnitY * axisSign), SurfaceLocal: new FixedVector3(
                 X: local.X,
                 Y: (halfExtents.Y * axisSign),
                 Z: local.Z
@@ -62,7 +43,7 @@ internal static class FixedAxisMath {
 
         var signZ = Sign(value: local.Z);
 
-        return (Normal: (UnitZ * signZ), SurfaceLocal: new FixedVector3(
+        return (Normal: (FixedVector3.UnitZ * signZ), SurfaceLocal: new FixedVector3(
             X: local.X,
             Y: local.Y,
             Z: (halfExtents.Z * signZ)

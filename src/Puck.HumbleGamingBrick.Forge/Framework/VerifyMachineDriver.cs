@@ -72,6 +72,10 @@ public sealed class VerifyMachineDriver : IDisposable {
         return m_framebuffer.Pixels[((y * m_framebuffer.Width) + x)];
     }
     public int ReadWide(ushort address) => Read(address: address) | (Read(address: ((ushort)(address + 1))) << 8);
+    /// <summary>Replaces the machine's whole state with a snapshot, so a position reached once can seed many runs.</summary>
+    /// <param name="snapshot">A snapshot taken from a driver over the same cartridge.</param>
+    /// <exception cref="InvalidOperationException">The snapshot was taken from a different machine or cartridge.</exception>
+    public void Restore(MachineSnapshot snapshot) => m_machine.Machine.Restore(snapshot: snapshot);
     public void RunFrames(JoypadButtons buttons, int frames) {
         for (var frame = 0; (frame < frames); frame++) {
             m_joypad.SetButtons(pressed: buttons);
@@ -84,6 +88,38 @@ public sealed class VerifyMachineDriver : IDisposable {
             label: m_label
         );
     }
+    /// <summary>Runs whole frames with a button set held until a condition holds, checking it after every frame.</summary>
+    /// <param name="buttons">The buttons held on every frame.</param>
+    /// <param name="until">The condition, read against settled memory after each frame.</param>
+    /// <param name="limit">The most frames the condition may take; reaching it without the condition is a failure.</param>
+    /// <param name="awaited">What the condition waits for, named in the failure.</param>
+    /// <returns>The frames run, from one to <paramref name="limit"/>.</returns>
+    /// <exception cref="InvalidOperationException">The condition did not hold within <paramref name="limit"/> frames.</exception>
+    /// <remarks>
+    /// A caller pays only for the frames its fact needs; the limit is the failure guard, not a duration. Every frame
+    /// settles out of OAM DMA before the condition reads memory, so the boundaries drift by the settle's few cycles
+    /// against one long <see cref="RunFrames"/>; a caller measuring cadence over an exact span runs that instead.
+    /// </remarks>
+    public int RunFramesUntil(JoypadButtons buttons, Func<VerifyMachineDriver, bool> until, int limit, string awaited) {
+        ArgumentNullException.ThrowIfNull(argument: until);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: limit);
+
+        for (var frame = 1; (frame <= limit); frame++) {
+            RunFrames(
+                buttons: buttons,
+                frames: 1
+            );
+
+            if (until(arg: this)) {
+                return frame;
+            }
+        }
+
+        throw new InvalidOperationException(message: $"{m_label} ROM verification failed: {awaited} did not happen within {limit} frames.");
+    }
+    /// <summary>Captures the machine's whole state at the current frame boundary.</summary>
+    /// <returns>A snapshot that aliases nothing live, for <see cref="Restore"/> on any driver over the same cartridge.</returns>
+    public MachineSnapshot Snapshot() => m_machine.Machine.Snapshot();
     /// <summary>Writes one work-memory byte, for setting up a position a cartridge would take many inputs to reach.</summary>
     /// <param name="address">The bus address.</param>
     /// <param name="value">The byte to write.</param>

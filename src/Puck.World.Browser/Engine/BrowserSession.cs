@@ -215,7 +215,7 @@ public sealed class BrowserSession {
         var compiled = WorldFactsCompiler.CompileAll(definition: definition);
         var context = m_context;
 
-        m_costReport = new(() => WorldCostReport.AnalyzePrograms(context, compiled,
+        m_costReport = new(valueFactory: () => WorldCostReport.AnalyzePrograms(context, compiled,
             WorldFactsCompiler.CompileAllInteractions(context: context, definition: definition)));
 
         foreach (var rule in compiled) {

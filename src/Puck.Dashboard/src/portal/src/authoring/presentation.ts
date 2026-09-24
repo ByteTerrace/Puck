@@ -1,13 +1,13 @@
 /**
  * The studio's own per-value presentation bag, carried in `metadata.custom.puckStudioPresentation`
- * — `metadata.custom` is a native nested object bag in the generated schema
- * (`{[k: string]: {[k: string]: unknown}}`, see `worldDefinition.generated.ts`'s own `metadata`
- * member), so no JSON-string encoding step is needed the way an ad hoc string extension would need
- * one. Bindings are keyed by state row name, then by the cell VALUE as a decimal string (`bigint`
+ * — `metadata.custom` is an open object bag in the generated schema (`{[k: string]: unknown}`,
+ * see `worldDefinition.generated.ts`'s own `metadata` member), so a nested object rides it
+ * natively and no JSON-string encoding step is needed the way an ad hoc string extension would
+ * need one. Bindings are keyed by state row name, then by the cell VALUE as a decimal string (`bigint`
  * cannot be an object key, and every engine value is a `bigint` — see `documentTools.ts`'s own
- * header), so a huge Int64 value binds exactly like a small one.
+ * header), so a huge Int64 value binds exactly like a small one. The studio reads the bag from the composed
+ * document; an author writes it in the source's own `metadata` block.
  */
-import type { JsonPath } from "../document/jsonPath";
 
 export const PRESENTATION_KEY = "puckStudioPresentation";
 
@@ -80,25 +80,4 @@ export function readPresentation(document: unknown): PresentationBindings {
     }
   }
   return bag as unknown as PresentationBindings;
-}
-
-/** Builds the `EDIT_DOCUMENT` path/value/label for binding `value`'s appearance on `stateName` —
- * the caller sends `{type: "EDIT_DOCUMENT", ...}` itself; this module never touches `StudioContext`
- * (see this package's own boundary). Re-validates the merged bag before returning, so a caller
- * that applies the edit can trust `readPresentation` will accept it back unchanged. */
-export function presentationEdit(
-  document: unknown,
-  stateName: string,
-  value: bigint,
-  appearance: ValueAppearance,
-): { path: JsonPath; value: unknown; label: string } {
-  const bindings = readPresentation(document);
-  const nextForState = { ...(bindings[stateName] ?? {}), [value.toString()]: appearance };
-  const edited = { ...bindings, [stateName]: nextForState };
-  readPresentation({ metadata: { custom: { [PRESENTATION_KEY]: edited } } });
-  return {
-    path: ["metadata", "custom", PRESENTATION_KEY, stateName],
-    value: nextForState,
-    label: `bind ${stateName}=${value} appearance`,
-  };
 }

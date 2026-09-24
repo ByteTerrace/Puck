@@ -1,4 +1,5 @@
-using System.Security.Cryptography;
+using Puck.Commands;
+using Puck.Assets;
 
 namespace Puck.World.Protocol;
 
@@ -46,32 +47,15 @@ public readonly record struct WorldDurableWatermark(
 /// <param name="OperationId">The caller-minted operation id.</param>
 /// <param name="Actor">The exact actor stamped by the ingress door.</param>
 /// <param name="PayloadDigest">The lowercase SHA-256 digest of the canonical mutation discriminator and leaf bytes.</param>
-public readonly record struct WorldMutationBinding(Guid OperationId, WorldPrincipal Actor, string PayloadDigest) {
+public readonly record struct WorldMutationBinding(Guid OperationId, Principal Actor, string PayloadDigest) {
     /// <summary>Returns whether all binding fields have their canonical shape.</summary>
     public bool IsValid =>
         ((OperationId != Guid.Empty) &&
         Actor.IsCanonical() &&
-        IsSha256Hex(value: PayloadDigest));
-
-    internal static bool IsSha256Hex(string? value) {
-        if (
-            (value is null) ||
-            (value.Length != 64)
-        ) {
-            return false;
-        }
-
-        foreach (var character in value) {
-            if (
-                !Uri.IsHexDigit(character: character) ||
-                char.IsUpper(c: character)
-            ) {
-                return false;
-            }
-        }
-
-        return true;
-    }
+        ContentPin.TryParseHex(
+            hex: PayloadDigest,
+            pin: out _
+        ));
 
     /// <summary>Returns the actor's stable canonical label and payload digest as one diagnostic token.</summary>
     public override string ToString() => $"{Actor.Describe()}:{PayloadDigest}";
@@ -88,7 +72,7 @@ public readonly record struct WorldMutationBinding(Guid OperationId, WorldPrinci
 /// <param name="DurableWatermark">The durable journal watermark, when available.</param>
 public readonly record struct WorldMutationOutcome(
     Guid OperationId,
-    WorldPrincipal Actor,
+    Principal Actor,
     string PayloadDigest,
     WorldMutationDecision Decision,
     string Code,
@@ -250,7 +234,7 @@ public static class WorldMutationBindingFactory {
         binding = new WorldMutationBinding(
             envelope.OperationId,
             envelope.Principal,
-            Convert.ToHexString(inArray: SHA256.HashData(source: canonical)).ToLowerInvariant()
+            ContentPin.Compute(content: canonical).Hex
         );
         return true;
     }

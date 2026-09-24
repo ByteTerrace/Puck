@@ -39,4 +39,32 @@ public static class VulkanResultExtensions {
             result: result
         );
     }
+    /// <summary>
+    /// Throws a <see cref="GpuDeviceUnavailableException"/> if a device bring-up call's result code indicates failure:
+    /// on the bring-up path (instance creation, device enumeration, device creation) a failing result means this host
+    /// has no usable Vulkan device. A lost device or surface still raises <see cref="DeviceLostException"/>.
+    /// </summary>
+    /// <param name="result">The result code to check.</param>
+    /// <param name="operation">The name of the bring-up operation that produced the result.</param>
+    /// <exception cref="GpuDeviceUnavailableException"><paramref name="result"/> is a failure code other than a lost device or surface; the inner exception is the <see cref="VulkanException"/>.</exception>
+    /// <exception cref="DeviceLostException"><paramref name="result"/> reports a lost device or surface.</exception>
+    public static void ThrowIfUnavailable(this VkResult result, string operation) {
+        try {
+            result.ThrowIfFailed(operation: operation);
+        } catch (VulkanException exception) {
+            throw Unavailable(
+                innerException: exception,
+                reason: exception.Message
+            );
+        }
+    }
+    /// <summary>Creates the <see cref="GpuDeviceUnavailableException"/> the Vulkan bring-up path raises.</summary>
+    /// <param name="reason">What the bring-up found missing or refused.</param>
+    /// <param name="innerException">The failure being classified, if any.</param>
+    /// <returns>The exception, naming the <c>vulkan</c> backend.</returns>
+    public static GpuDeviceUnavailableException Unavailable(string reason, Exception? innerException = null) => new(
+        backend: "vulkan",
+        innerException: innerException,
+        reason: reason
+    );
 }

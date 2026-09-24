@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.AspNetCore.Http;
+using Puck.Networking;
 using Puck.World.Server;
 
 namespace Puck.World.Silo;
@@ -22,9 +23,11 @@ public sealed class WorldSiloReleaseControl(WorldSiloHost silo) {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return true;
         }
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: context.RequestAborted);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: (silo.Definition.Lifecycle?.ShutdownSeconds ?? 120)));
+        using var deadline = new OperationDeadline(
+            caller: context.RequestAborted,
+            timeout: TimeSpan.FromSeconds(seconds: (silo.Definition.Lifecycle?.ShutdownSeconds ?? 120)),
+            timeProvider: silo.Clock
+        );
         var token = deadline.Token;
 
         try {

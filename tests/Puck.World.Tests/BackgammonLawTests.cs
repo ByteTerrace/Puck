@@ -6,39 +6,7 @@ namespace Puck.World.Tests;
 /// two-cell draw row the AI's search averages over at a chance ply, and a judge rule that refuses a checker's own
 /// move while a different one of its side's checkers still occupies the bar.</summary>
 public sealed class BackgammonLawTests {
-    private static long Cell(WorldFixture fixture, string row, string key) => Row(
-        fixture: fixture,
-        name: row
-    ).Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
-    private static WorldDefinition Load() {
-        var path = Path.Combine(
-            RepoRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "games",
-            "backgammon.world.json"
-        );
-
-        Assert.True(
-            condition: WorldDefinitionLoader.TryLoadFile(
-                path,
-                out var definition,
-                out var reason
-            ),
-            userMessage: reason
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: definition!,
-                reason: out var invalid
-            ),
-            userMessage: invalid
-        );
-
-        return definition!;
-    }
+    private static WorldDefinition Load() => AuthoredGameFixtures.Load(relativePath: "src/Puck.World/Assets/worlds/games/backgammon.puck");
     // Authors the starting position directly (never pokes a live cell after boot): a raw write to checkerPoint or
     // dice would itself cross the same accept rules the search's judge shares, flipping turn for real before the
     // search ever runs — exactly the trap this fixture avoids.
@@ -49,7 +17,8 @@ public sealed class BackgammonLawTests {
 
         for (var index = 0; (index < rows.Count); index++) {
             if (rows[index].Name.Value == "checkerPoint") {
-                rows[index] = rows[index] with { Cells = [new StateCell(
+                rows[index] = rows[index] with {
+                    Cells = [new StateCell(
                         CellName.Parse(candidate: "w0"),
                         CellValue.Int(value: w0)
                     ), new StateCell(
@@ -61,9 +30,11 @@ public sealed class BackgammonLawTests {
                     ), new StateCell(
                         CellName.Parse(candidate: "b1"),
                         CellValue.Int(value: 1)
-                    )] };
+                    )],
+                };
             } else if (rows[index].Name.Value == "origPoint") {
-                rows[index] = rows[index] with { Cells = [new StateCell(
+                rows[index] = rows[index] with {
+                    Cells = [new StateCell(
                         CellName.Parse(candidate: "w0"),
                         CellValue.Int(value: w0)
                     ), new StateCell(
@@ -75,15 +46,18 @@ public sealed class BackgammonLawTests {
                     ), new StateCell(
                         CellName.Parse(candidate: "b1"),
                         CellValue.Int(value: 1)
-                    )] };
+                    )],
+                };
             } else if (rows[index].Name.Value == "dice") {
-                rows[index] = rows[index] with { Cells = [new StateCell(
+                rows[index] = rows[index] with {
+                    Cells = [new StateCell(
                         CellName.Parse(candidate: "d1"),
                         CellValue.Int(value: d1)
                     ), new StateCell(
                         CellName.Parse(candidate: "d2"),
                         CellValue.Int(value: d2)
-                    )] };
+                    )],
+                };
             }
         }
 
@@ -98,37 +72,6 @@ public sealed class BackgammonLawTests {
         );
 
         return definition;
-    }
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
-    private static WorldStateRow Row(WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(
-        rows: fixture.Server.Definition.State,
-        name: name
-    )!;
-    private static ArenaSearchStatus Settle(WorldFixture fixture, int maxTicks = 4000) {
-        var status = fixture.Server.SearchStatus()[0];
-
-        for (var tick = 0; ((tick < maxTicks) && !status.Done); tick++) {
-            fixture.Step();
-            status = fixture.Server.SearchStatus()[0];
-        }
-
-        return status;
     }
 
     // White's checker w0 sits on the bar (checkerPoint -1); w1 stands on the board at 22. With dice 1 and 5, w1's own
@@ -145,7 +88,7 @@ public sealed class BackgammonLawTests {
             w1: 22
         ));
 
-        var status = Settle(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(
             condition: status.Done,
@@ -153,9 +96,7 @@ public sealed class BackgammonLawTests {
         );
         // The control: white's bar checker itself may still enter — a denial that can never fire proves nothing.
         Assert.True(
-            condition: (Cell(
-                fixture: fixture,
-                key: "w0",
+            condition: (fixture.KeyedValue(key: "w0",
                 row: "moveCounts"
             ) > 0L),
             userMessage: "w0's own bar entry must stay legal"
@@ -163,9 +104,7 @@ public sealed class BackgammonLawTests {
         // The denial the law is about: w1 owns no accepted candidate while w0 sits on the bar.
         Assert.Equal(
             0L,
-            Cell(
-                fixture: fixture,
-                key: "w1",
+            fixture.KeyedValue(key: "w1",
                 row: "moveCounts"
             )
         );
@@ -232,16 +171,14 @@ public sealed class BackgammonLawTests {
             w1: 22
         ));
 
-        var status = Settle(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(
             condition: status.Done,
             userMessage: status.ToString()
         );
         Assert.True(
-            condition: (Cell(
-                fixture: fixture,
-                key: "w1",
+            condition: (fixture.KeyedValue(key: "w1",
                 row: "moveCounts"
             ) > 0L),
             userMessage: "w1 must be free to move its own ordinary distance when the bar is clear"

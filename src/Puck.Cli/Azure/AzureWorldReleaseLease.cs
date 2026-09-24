@@ -10,10 +10,11 @@ internal static partial class AzureCommand {
     private static readonly AsyncLocal<WorldReleaseControllerLease?> WorldReleaseController = new();
 
     private static async Task<T> WithWorldReleaseControllerAsync<T>(string endpoint, Guid owner, string group,
-        Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken) {
+        Func<CancellationToken, Task<T>> action, TimeProvider clock, CancellationToken cancellationToken) {
         if (WorldReleaseController.Value is not null) { throw new InvalidOperationException(message: "a release controller is already active in this operation"); }
         var lease = await AcquireWorldReleaseLeaseAsync(
             cancellationToken: cancellationToken,
+            clock: clock,
             endpoint: endpoint,
             group: group,
             owner: owner
@@ -24,7 +25,7 @@ internal static partial class AzureCommand {
             return await action(lease.Token).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
             WorldReleaseController.Value = null;
-            await lease.DisposeAsync().ConfigureAwait(false);
+            await lease.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
             if (lease.ReleaseFailure is { } error) {
                 Console.Error.WriteLine(value: $"Release controller lease could not be released; it expires within sixty seconds: {error.Message}");
             }
@@ -61,7 +62,7 @@ internal static partial class AzureCommand {
             await m_lease.RenewAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
     }
 
-    private static Task<WorldReleaseControllerLease> AcquireWorldReleaseLeaseAsync(string endpoint, Guid owner, string group, CancellationToken cancellationToken) {
+    private static Task<WorldReleaseControllerLease> AcquireWorldReleaseLeaseAsync(string endpoint, Guid owner, string group, TimeProvider clock, CancellationToken cancellationToken) {
         _ = SafeName.Parse(candidate: group);
         var options = new BlobClientOptions();
 
@@ -75,7 +76,8 @@ internal static partial class AzureCommand {
 
         return WorldReleaseControllerLease.AcquireAsync(
             backend: new AzureWorldReleaseLeaseBackend(blob: blob),
-            cancellationToken: cancellationToken
+            cancellationToken: cancellationToken,
+            clock: clock
         );
     }
 }

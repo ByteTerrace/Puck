@@ -118,6 +118,21 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             y: y,
             z: z
         ));
+
+    // A cellular relief's Lipschitz bound is 1 + amplitude * frequency (SdfCellDisplacement.StepFactor), which the
+    // analysis folds into the program's step scale. An amplitude of 2^-18 quantizes to raw zero in Q48.16 (a quarter
+    // tick, ties to even), so the relief term the fixed-point evaluator adds is exactly zero: this sets the analyzed step
+    // scale to exactly 1/factor for an integral factor without moving the field these laws read.
+    private const float QuantizedAwayReliefAmplitude = (1f / 262144f);
+
+    private static SdfProgramBuilder WithStepFactor(SdfProgramBuilder builder, float factor) =>
+        builder.CellDisplace(
+            amplitude: QuantizedAwayReliefAmplitude,
+            frequency: ((factor - 1f) / QuantizedAwayReliefAmplitude),
+            mode: SdfCellMode.F1,
+            randomness: 0f,
+            seed: 0u
+        );
     private static FixedVector3 Vector(double x, double y, double z) =>
         new(
             X: FixedQ4816.FromDouble(value: x),
@@ -130,16 +145,15 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        // 1e-5 sits in [half-ULP, ULP) of Q48.16, the ONE band where the two conversion policies disagree: nearest
-        // rounds it to raw 1, a directed floor to raw 0. An eccentricity twice this large scales below half a ULP,
-        // where both policies produce zero and no fixture can tell them apart.
-        _ = builder.Ellipsoid(
-            radii: new Vector3(
-                x: 100_000f,
-                y: 1f,
-                z: 100_000f
+        // ~1e-5 sits in [half-ULP, ULP) of Q48.16, the ONE band where the two conversion policies disagree: nearest
+        // rounds it to raw 1, a directed floor to raw 0. A factor twice this large scales below half a ULP, where both
+        // policies produce zero and no fixture can tell them apart.
+        _ = WithStepFactor(
+            builder: builder.Sphere(
+                material: material,
+                radius: 1f
             ),
-            material: material
+            factor: 98_305f
         );
 
         var program = builder.Build();
@@ -151,7 +165,7 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         );
 
         var evaluator = new SdfFieldEvaluator(program: program);
-        // Twenty thousand units of clearance above the disc's pole. A scale rounded up to one raw tick authorizes an
+        // Twenty thousand units of clearance above the sphere's pole. A scale rounded up to one raw tick authorizes an
         // advance of f/65536 per iteration — three hundred metres a step out here — so the whole budget marches
         // thousands of units on a proof that authorizes none. At the floored scale nothing is authorized at all and
         // the march can only creep at the format's own minimum, whose total is the point-cast reach.
@@ -427,14 +441,18 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        // A 20:1 disc: eccentricity IS the analyzed Lipschitz factor, so this one shape sets the step scale to 1/20.
-        _ = builder.Ellipsoid(
-            radii: new Vector3(
-                x: 20f,
-                y: 1f,
-                z: 20f
+        // A 20-wide slab whose analyzed Lipschitz factor is 20, so the program's step scale is 1/20.
+        _ = WithStepFactor(
+            builder: builder.Box(
+                halfExtents: new Vector3(
+                    x: 20f,
+                    y: 1f,
+                    z: 20f
+                ),
+                material: material,
+                round: 0f
             ),
-            material: material
+            factor: 20f
         );
 
         var program = builder.Build();
@@ -444,7 +462,7 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             actual: program.StepScale
         );
 
-        // On the polar axis the ellipsoid's approximate field is exact, so the top surface sits at Y = 1.
+        // The slab's field is exact, so the top surface sits at Y = 1.
         Assert.True(condition: new SdfFieldEvaluator(program: program).TryGroundHeight(
             groundY: out var groundY,
             position: Local(
@@ -464,18 +482,22 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         // Past the crossing, which is the half of this the leg above cannot see. The accept arm tests the RAW field
         // against HitEpsilon (raw 66) while the advance is the SCALED field; below step scale 978/65536 (~0.0149) the
         // last advance the proof supports rounds away one tick ABOVE the accept band, and the descent stops on raw 67
-        // with the surface already inside HitEpsilon + one tick. A 67:1 disc is the first eccentricity that reaches
-        // it: 1/67 floors to raw 978, and floor(67 * 978 / 65536) is zero.
+        // with the surface already inside HitEpsilon + one tick. A factor of 67 is the first integral one that
+        // reaches it: 1/67 floors to raw 978, and floor(67 * 978 / 65536) is zero.
         var edgeProgram = new SdfProgramBuilder();
         var edgeMaterial = edgeProgram.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = edgeProgram.Ellipsoid(
-            radii: new Vector3(
-                x: 67f,
-                y: 1f,
-                z: 67f
+        _ = WithStepFactor(
+            builder: edgeProgram.Box(
+                halfExtents: new Vector3(
+                    x: 67f,
+                    y: 1f,
+                    z: 67f
+                ),
+                material: edgeMaterial,
+                round: 0f
             ),
-            material: edgeMaterial
+            factor: 67f
         );
 
         var edge = new SdfFieldEvaluator(program: edgeProgram.Build());
@@ -496,7 +518,7 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             tolerance: 0.01
         );
 
-        // The control: the same disc probed over a column its rim does not reach still answers false, so neither leg
+        // The control: the same slab probed over a column its rim does not reach still answers false, so neither leg
         // above is a verb that has been turned into a constant.
         Assert.False(condition: edge.TryGroundHeight(
             groundY: out _,
@@ -663,27 +685,14 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        // A floor to sweep onto, plus a 2:1 ellipsoid parked far below purely to move the analyzed step scale to 1/2
-        // without putting geometry near the cast.
-        _ = builder
-            .Plane(
-            normal: Vector3.UnitY,
-            offset: 0f,
-            material: material
-        )
-            .ResetPoint()
-            .Translate(offset: new Vector3(
-            x: 0f,
-            y: -100f,
-            z: 0f
-        ))
-            .Ellipsoid(
-            radii: new Vector3(
-                x: 2f,
-                y: 1f,
-                z: 1f
+        // A floor to sweep onto, with a relief that moves only the analyzed step scale to 1/2.
+        _ = WithStepFactor(
+            builder: builder.Plane(
+                material: material,
+                normal: Vector3.UnitY,
+                offset: 0f
             ),
-            material: material
+            factor: 2f
         );
 
         var program = builder.Build();
@@ -758,27 +767,15 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        // A ground plane, whose field on the Y axis is Y to the raw bit, plus a 2:1 ellipsoid parked far below to set
-        // the analyzed step scale to exactly 1/2 without putting geometry near the probes.
-        _ = builder
-            .Plane(
-            normal: Vector3.UnitY,
-            offset: 0f,
-            material: material
-        )
-            .ResetPoint()
-            .Translate(offset: new Vector3(
-            x: 0f,
-            y: -100f,
-            z: 0f
-        ))
-            .Ellipsoid(
-            radii: new Vector3(
-                x: 2f,
-                y: 1f,
-                z: 1f
+        // A ground plane, whose field on the Y axis is Y to the raw bit, with a relief that sets only the analyzed step
+        // scale, to exactly 1/2.
+        _ = WithStepFactor(
+            builder: builder.Plane(
+                material: material,
+                normal: Vector3.UnitY,
+                offset: 0f
             ),
-            material: material
+            factor: 2f
         );
 
         var program = builder.Build();

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 using Xunit;
@@ -9,8 +10,8 @@ namespace Puck.World.Tests;
 /// its own host.</summary>
 public sealed class ServerResyncClockLawTests {
     private const string OutRow = "out";
-    private const long StepTicks = 20L;
     private const string SpinRow = "spin";
+    private const long StepTicks = 20L;
 
     private static WorldDefinition Document() => (Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz).WithWorldState(rows: [
         new WorldStateRow(
@@ -45,10 +46,7 @@ public sealed class ServerResyncClockLawTests {
             )]
         )],
     });
-    private static long Read(WorldFixture fixture) => WorldDefinitionRows.FindStateRow(
-        rows: fixture.Server.Definition.State,
-        name: OutRow
-    )!.Cells![0].Value.AsInt;
+    private static long Read(WorldFixture fixture) => fixture.Row(name: OutRow).Cells![0].Value.Raw;
 
     [Fact]
     public void AResyncAtTickZeroLeavesACyclingCellTurningFromTheOrigin() {
@@ -59,7 +57,7 @@ public sealed class ServerResyncClockLawTests {
 
         // A state-value install re-seeds the arena through the one import door, which is the server's own resync.
         resynced.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: OutRow,
             Key: WorldStateRow.SlotKey.Value,
             Value: 0,

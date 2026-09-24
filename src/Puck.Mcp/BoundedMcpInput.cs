@@ -4,6 +4,7 @@ namespace Puck.Mcp;
 
 // The SDK remains the sole MCP parser. This wrapper owns byte/queue budgets and its underlying stream.
 internal sealed class BoundedMcpInput(Stream input, Action ended) : Stream {
+    private readonly TaskCompletionSource m_closed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Decoder m_utf8 = new UTF8Encoding(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true
@@ -92,7 +93,7 @@ internal sealed class BoundedMcpInput(Stream input, Action ended) : Stream {
             location1: ref m_disposed,
             value: 1
         ) == 0)
-        ) { input.Dispose(); }
+        ) { m_closed.TrySetResult(); input.Dispose(); }
         base.Dispose(disposing: disposing);
     }
 
@@ -123,10 +124,25 @@ internal sealed class BoundedMcpInput(Stream input, Action ended) : Stream {
     ).AsTask();
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
         try {
-            var read = await input.ReadAsync(
+            var pending = input.ReadAsync(
                 buffer: buffer,
                 cancellationToken: cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            ).AsTask();
+
+            // A console or pipe read can ignore both cancellation and disposal; closing ends the wait, not the read.
+            if (await Task.WhenAny(
+                task1: pending,
+                task2: m_closed.Task
+            ).ConfigureAwait(continueOnCapturedContext: false) != pending) {
+                _ = pending.ContinueWith(
+                    static task => { _ = task.Exception; },
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default
+                );
+                return 0;
+            }
+            var read = await pending.ConfigureAwait(continueOnCapturedContext: false);
 
             if (!buffer.IsEmpty) { Inspect(bytes: buffer.Span[..read]); }
             return read;

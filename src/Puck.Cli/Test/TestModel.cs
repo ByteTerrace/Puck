@@ -19,7 +19,7 @@ internal enum TestHost {
 /// one of them: it is the engine's, not a value the gate saw.</param>
 internal sealed record TestVerdict(string Name, string Gate, long Status, ulong? FiredTick, IReadOnlyList<string> Saw) {
     /// <summary>Gets a value indicating whether a rule firing ever wrote this row.</summary>
-    public bool Fired => (FiredTick is { } tick) && (tick > 0UL);
+    public bool Fired => ((FiredTick is { } tick) && (tick > 0UL));
     /// <summary>Gets the status the runner judges: the cell's own value only when a rule firing wrote the row, and
     /// <see cref="WorldVerdict.NotEvaluated"/> otherwise.</summary>
     public long Judged => (Fired
@@ -38,6 +38,22 @@ internal sealed record TestEcho(bool Rejected, string Message);
 /// <param name="Outcome">What the ingress answered.</param>
 /// <param name="Detail">The refusal reason or the handler's own output, when there was one.</param>
 internal sealed record TestSubmission(ulong Tick, string Principal, string Command, string Outcome, string? Detail);
+/// <summary>One world's export inside a leg: the world this run booted with, or a sibling it armed beside it.</summary>
+/// <param name="World">The world's name — <c>boot</c> for the world the leg booted with.</param>
+/// <param name="ExportBytes">The canonical state-export bytes, compared across runs during reproduction
+/// qualification.</param>
+/// <param name="ExportTick">The tick this world's export was taken at.</param>
+/// <param name="Verdicts">Every verdict row this world's export declares.</param>
+internal sealed record TestWorldExport(string World, byte[] ExportBytes, ulong ExportTick, IReadOnlyList<TestVerdict> Verdicts) {
+    /// <summary>Gets a value indicating whether this world is the one the leg booted with.</summary>
+    public bool IsBoot => (World == WorldScheduleSection.BootWorldName);
+    /// <summary>Gets the prefix a verdict of this world is reported under: nothing for the booted world, and the
+    /// world's own name for a sibling, so one report names which world answered.</summary>
+    public string Label => (IsBoot
+        ? string.Empty
+        : $"{World}/"
+    );
+}
 /// <summary>One leg's whole reading of a world: the export bytes the run wrote and what they say.</summary>
 /// <param name="ExportBytes">The canonical state-export bytes, compared across runs during reproduction
 /// qualification.</param>
@@ -45,7 +61,8 @@ internal sealed record TestSubmission(ulong Tick, string Principal, string Comma
 /// qualification.</param>
 /// <param name="ExportTick">The tick the export was taken at, as the manifest recorded it.</param>
 /// <param name="Truncated">Whether the run ended before the tick the document declared.</param>
-/// <param name="Verdicts">Every verdict row the export declares.</param>
+/// <param name="Worlds">Every world this leg exported: the booted one first, then each armed sibling in the order
+/// the document declared it.</param>
 /// <param name="Submissions">One entry per declared scheduled row, in declaration order.</param>
 /// <param name="Echoes">Every local edit verdict the run recorded.</param>
 internal sealed record TestReading(
@@ -53,10 +70,14 @@ internal sealed record TestReading(
     byte[] ManifestBytes,
     ulong ExportTick,
     bool Truncated,
-    IReadOnlyList<TestVerdict> Verdicts,
+    IReadOnlyList<TestWorldExport> Worlds,
     IReadOnlyList<TestSubmission> Submissions,
     IReadOnlyList<TestEcho> Echoes
-);
+) {
+    /// <summary>Gets every verdict row across every world this leg exported.</summary>
+    public IEnumerable<(TestWorldExport World, TestVerdict Verdict)> Verdicts =>
+        Worlds.SelectMany(selector: static world => world.Verdicts.Select(selector: verdict => (world, verdict)));
+}
 /// <summary>One scheduled row as the world document declares it.</summary>
 /// <param name="Tick">The tick the row is submitted at.</param>
 /// <param name="Principal">The acting seat's label.</param>

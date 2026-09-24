@@ -97,7 +97,7 @@ public static class DocumentScalars {
 
         if (
             !InDouble.Contains(item: call.Name) &&
-            (function.Domain is not (ExpressionDomain.Integer or ExpressionDomain.Select))
+            (function.Domain != ExpressionDomain.Integer)
         ) {
             return Refuse(
                 scope: scope,
@@ -111,24 +111,6 @@ public static class DocumentScalars {
                 scope: scope,
                 call: call,
                 message: $"{call.Name} takes {function.Arity} argument(s)"
-            );
-        }
-
-        // `select` reads its condition as a truth value, not as a number, so it is folded before the numeric read
-        // that every other function needs.
-        if (function.Domain == ExpressionDomain.Select) {
-            var condition = DocumentLowering.LowerValue(
-                expr: call.Arguments[0].Value,
-                scope: scope,
-                fieldKey: fieldKey
-            );
-
-            return DocumentLowering.LowerValue(
-                expr: call.Arguments[(DocumentLowering.IsTruthy(node: condition)
-                ? 1
-                : 2)].Value,
-                scope: scope,
-                fieldKey: fieldKey
             );
         }
 
@@ -228,32 +210,32 @@ public static class DocumentScalars {
 
         return DocumentLowering.NumberNode(
             value: call.Name switch {
-            "absolute" => Math.Abs(value: numbers[0]),
-            "ceiling" => Math.Ceiling(a: numbers[0]),
-            "clamp" => Math.Clamp(
-                value: numbers[0],
-                min: numbers[1],
-                max: numbers[2]
-            ),
-            "cosine" => Math.Cos(d: numbers[0]),
-            "floor" => Math.Floor(d: numbers[0]),
-            "maximum" => Math.Max(
-                val1: numbers[0],
-                val2: numbers[1]
-            ),
-            "minimum" => Math.Min(
-                val1: numbers[0],
-                val2: numbers[1]
-            ),
-            "round" => Math.Round(
-                value: numbers[0],
-                mode: MidpointRounding.ToEven
-            ),
-            "sign" => Math.Sign(value: numbers[0]),
-            "sine" => Math.Sin(a: numbers[0]),
-            "squareRoot" => Math.Sqrt(d: numbers[0]),
-            _ => 0,
-        },
+                "absolute" => Math.Abs(value: numbers[0]),
+                "ceiling" => Math.Ceiling(a: numbers[0]),
+                "clamp" => Math.Clamp(
+                    value: numbers[0],
+                    min: numbers[1],
+                    max: numbers[2]
+                ),
+                "cosine" => Math.Cos(d: numbers[0]),
+                "floor" => Math.Floor(d: numbers[0]),
+                "maximum" => Math.Max(
+                    val1: numbers[0],
+                    val2: numbers[1]
+                ),
+                "minimum" => Math.Min(
+                    val1: numbers[0],
+                    val2: numbers[1]
+                ),
+                "round" => Math.Round(
+                    value: numbers[0],
+                    mode: MidpointRounding.ToEven
+                ),
+                "sign" => Math.Sign(value: numbers[0]),
+                "sine" => Math.Sin(a: numbers[0]),
+                "squareRoot" => Math.Sqrt(d: numbers[0]),
+                _ => 0,
+            },
             span: call.Span
         );
     }

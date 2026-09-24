@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "games/spider.world.json",
+  "world": "games/spider.puck",
   "host": {
     "kind": "spliced",
     "stateRows": [

@@ -1,6 +1,7 @@
+using Puck.Commands;
 using System.Diagnostics;
+using Puck.Abstractions.Counting;
 using Puck.Physics.Navigation;
-using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
@@ -53,14 +54,10 @@ public sealed partial class NavigationLawTests {
             );
         }
         var actual = 0UL;
-        var allocated = long.MaxValue;
-        var elapsed = TimeSpan.MaxValue;
-
-        // The hash is immutable across these samples. Taking the lower envelope excludes a one-time background JIT
-        // or runtime bookkeeping allocation under full-suite load; a real hash-path allocation repeats in every
-        // 1,000-call window and still fails the exact-zero assertion.
-        for (var sample = 0; (sample < 3); sample++) {
-            var before = GC.GetAllocatedBytesForCurrentThread();
+        var elapsed = TimeSpan.Zero;
+        // The hash is immutable across windows; the window that reads zero is the last one run, so its time is the one
+        // reported.
+        var allocated = AllocationWindow.Least(window: () => {
             var start = Stopwatch.GetTimestamp();
 
             for (var iteration = 0; (iteration < 1000); iteration++) {
@@ -70,13 +67,8 @@ public sealed partial class NavigationLawTests {
                 );
             }
 
-            var sampleAllocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-            if (sampleAllocated < allocated) {
-                allocated = sampleAllocated;
-                elapsed = Stopwatch.GetElapsedTime(startingTimestamp: start);
-            }
-        }
+            elapsed = Stopwatch.GetElapsedTime(startingTimestamp: start);
+        });
 
         TestContext.Current.TestOutputHelper!.WriteLine(message: $"Shared navigation {(dense
             ? "dense"
@@ -103,7 +95,7 @@ public sealed partial class NavigationLawTests {
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var original,
                 reason: out var reason,
-                hostRow: EmptyHostRow()
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty
             ),
             userMessage: reason
         );
@@ -153,7 +145,7 @@ public sealed partial class NavigationLawTests {
                             z: 1
                         )
                     ),
-                    WorldPrincipal.Seat(slot: 0)
+                    Principal.Seat(slot: 0)
                 ));
             }
             fixture.Step();
@@ -166,7 +158,7 @@ public sealed partial class NavigationLawTests {
                 condition: fixture.Server.TryCaptureCheckpoint(
                     checkpoint: out var captured,
                     reason: out var reason,
-                    hostRow: EmptyHostRow()
+                    hostRow: WorldAuthorityHostRowCheckpoint.Empty
                 ),
                 userMessage: reason
             );

@@ -1,14 +1,15 @@
 <Project>
     <!--
         The shared shader-compile recipe. DXC compiles HLSL to SPIR-V (Vulkan) and DXIL (DirectX) from whatever
-        @(VertexShaderSource)/@(FragmentShaderSource)/@(ComputeShaderSource)/@(RayQueryComputeShaderSource) items a
-        consuming project declares in its own csproj — this file adds no item declarations and no project-specific
-        branching. Imported once by Directory.Build.targets into EVERY project; a project declaring none of the four
-        item types never triggers a single Exec. Per-project knobs, set in a project's own PropertyGroup BEFORE this
-        file imports: $(DxcCommand) (default "dxc"), $(PuckShaderDxilEnabled) (default true — governs vertex/fragment
-        DXIL emission), $(PuckComputeShaderDxilEnabled) (default true — governs compute/ray-query DXIL emission).
-        SPIR-V emission is never gated; only DXIL is opt-out, so a project with no DirectX consumer (or whose compute
-        kernels only ever run on Vulkan) can shed bytecode it would otherwise ship unread.
+        @(VertexShaderSource)/@(FragmentShaderSource)/@(ComputeShaderSource) items a consuming project declares in its
+        own csproj — this file adds no item declarations and no project-specific branching. Imported once by
+        Directory.Build.targets into EVERY project; a project declaring none of the three item types never triggers a
+        single Exec. Per-project knobs, set in a project's own PropertyGroup BEFORE this file imports: $(DxcCommand)
+        (default "dxc"), $(PuckShaderDxilEnabled) (default true — governs vertex/fragment DXIL emission),
+        $(PuckComputeShaderDxilEnabled) (default true — governs compute DXIL emission),
+        $(PuckShaderSpirvEnabled) (default true — governs SPIR-V emission for every stage). A project with no DirectX
+        consumer (or whose compute kernels only ever run on Vulkan) sheds the DXIL, and one whose shaders run only on
+        Direct3D 12 sheds the SPIR-V, it would otherwise ship unread.
 
         This is the SAME physical file two ways: an in-repo project imports it transitively through
         Directory.Build.targets, and an external ByteTerrace.Puck.Shaders package consumer imports the identical file
@@ -42,10 +43,25 @@
         </Task>
     </UsingTask>
 
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckCompileDirect3D11Kernels"
+    >
+        <ParameterGroup>
+            <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+            <Bytecode ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckDirect3D11KernelBytecode.cs" Type="Class" />
+        </Task>
+    </UsingTask>
+
     <PropertyGroup>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
+        <PuckShaderSpirvEnabled Condition="'$(PuckShaderSpirvEnabled)' == ''">true</PuckShaderSpirvEnabled>
     </PropertyGroup>
 
     <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
@@ -65,21 +81,21 @@
          anything. Its source hash covers that .hlsl plus every @(ShaderInclude), in item order — a conservative
          over-approximation (touching any .hlsli invalidates every sidecar, even a kernel that doesn't include it). -->
     <ItemGroup>
-        <_PuckExpectedBytecode Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')" />
+        <_PuckExpectedBytecode Condition="'$(PuckShaderSpirvEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')" />
         <_PuckExpectedBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
-        <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
+        <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
     </ItemGroup>
     <Target Name="CompileShaders" BeforeTargets="PrepareForBuild"
-            Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)"
+            Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)"
             Outputs="@(_PuckExpectedBytecode);@(_PuckExpectedBytecode -> '%(Identity).hash')">
         <!-- Guards the DXC version probe and its <Error> below: a buildTransitive consumer with no shaders and no
              DXC installed (PackageReference'd only for IShaderModuleLoader/ShaderBytecode) must not fail its build
              for a compiler it never needed. An empty Inputs/Outputs list is not an incremental skip, so the target
              body still runs with every batch empty unless this guard keeps the probe itself from firing. Item-list
              conditions are only legal inside a Target (not on a project-level PropertyGroup/ItemGroup), and only one
-             item list per condition — so the four item types are unioned into one list first, INSIDE this target. -->
+             item list per condition — so the three item types are unioned into one list first, INSIDE this target. -->
         <ItemGroup>
-            <_PuckShaderItems Include="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource)" />
+            <_PuckShaderItems Include="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource)" />
         </ItemGroup>
         <PropertyGroup>
             <_PuckHasShaderItems Condition="'@(_PuckShaderItems)' != ''">true</_PuckHasShaderItems>
@@ -90,53 +106,40 @@
         <Error Condition="'$(_PuckHasShaderItems)' == 'true' and '$(DxcProbeExitCode)' != '0'" Text="$(MSBuildProjectName) shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
 
         <!-- Vertex. -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
         <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
 
         <!-- Fragment. -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
         <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
 
         <!-- Compute kernels: SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX) when enabled. The vk::
              binding/push-constant attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored"
              warnings; the register() slots drive the Direct3D 12 root signature. -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
         <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
-
-        <!-- Ray-query kernels compile to BOTH backends at Shader Model 6.6 when DXIL is enabled: SPIR-V (Vulkan;
-             the vulkan1.3 target env — SPIR-V 1.6 — subsumes SPV_KHR_ray_query's 1.2 requirement, entry renamed to
-             "main") and DXIL (Direct3D 12 DXR 1.1 inline ray tracing). The vk:: binding/push-constant/image-format
-             attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. -->
-        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).spv&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).dxil&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
 
         <!-- The full set of bytecode files this pass just produced, one item per stage/extension combination that
              was actually enabled — a project declaring no VertexShaderSource contributes zero vertex items via the
              transform (no Condition needed there), and the two DXIL Conditions mirror the Exec guards above. -->
         <ItemGroup Condition="'$(DxcProbeExitCode)' == '0'">
-            <_PuckCompiledBytecode Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+            <_PuckCompiledBytecode Condition="'$(PuckShaderSpirvEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
                 <SourcePath>%(VertexShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
             <_PuckCompiledBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
                 <SourcePath>%(VertexShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
-            <_PuckCompiledBytecode Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+            <_PuckCompiledBytecode Condition="'$(PuckShaderSpirvEnabled)' == 'true'" Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
                 <SourcePath>%(FragmentShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
             <_PuckCompiledBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
                 <SourcePath>%(FragmentShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
-            <_PuckCompiledBytecode Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+            <_PuckCompiledBytecode Condition="'$(PuckShaderSpirvEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
                 <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
             <_PuckCompiledBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
                 <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
-            </_PuckCompiledBytecode>
-            <_PuckCompiledBytecode Include="@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
-                <SourcePath>%(RayQueryComputeShaderSource.FullPath)</SourcePath>
-            </_PuckCompiledBytecode>
-            <_PuckCompiledBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
-                <SourcePath>%(RayQueryComputeShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
         </ItemGroup>
         <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" />
@@ -160,6 +163,20 @@
             <!-- A shader set's puck.shader.v1 manifest ships beside its bytecode: a host's ShaderSetCatalog finds a
                  set by its manifest, so shipping the manifest IS registering the set. -->
             <Content Include="Assets\Shaders\**\*.puck.shader.json" CopyToOutputDirectory="PreserveNewest" />
+        </ItemGroup>
+    </Target>
+
+    <!-- Kernel-class probe kernels and the camera frame converter's conversion kernels run on a camera graph's own
+         Direct3D 11 device, so each @(Direct3D11KernelSource) item's entry points (its Entries metadata) compile to
+         cs_5_0 DXBC here, beside the source as <stem>.<entry>.dxbc, and ship as content: a world run creates a kernel
+         from its bytecode and compiles nothing. Direct3D 11 exists only on Windows, so a build elsewhere writes no kernel
+         bytecode. -->
+    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths">
+        <PuckCompileDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
+            <Output ItemName="_PuckDirect3D11KernelBytecode" TaskParameter="Bytecode" />
+        </PuckCompileDirect3D11Kernels>
+        <ItemGroup>
+            <Content Include="@(_PuckDirect3D11KernelBytecode)" CopyToOutputDirectory="PreserveNewest" />
         </ItemGroup>
     </Target>
 

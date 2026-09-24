@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.State.Rules.Tests;
 
-/// <summary>CONTRACT UNDER TEST: a <c>push</c> transform holds one value, so a row whose kind resolves its write to
+/// <summary>CONTRACT UNDER TEST: a <c>pushState</c> holds one value, so a row whose kind resolves its write to
 /// something other than a single-value write is refused by name rather than cast into one.</summary>
 public sealed class PushRowKindLawTests {
     private static StateSection Section() => new(
@@ -23,10 +23,10 @@ public sealed class PushRowKindLawTests {
             ),
         ],
         Spaces: [new StateSpace(
-                Name: RulesFixture.Name(value: "wide16"),
-                Model: "model",
-                Revision: "r1",
-                Dimensions: 16
+                name: RulesFixture.Name(value: "wide16"),
+                model: "model",
+                revision: "r1",
+                dimensions: 16
             )]
     );
 
@@ -46,10 +46,10 @@ public sealed class PushRowKindLawTests {
             context: context,
             rule: new Rule(
                 Name: RulesFixture.Name(value: "push"),
-                Effects: [new ActionEffect.TransformState(Transform: new StateTransform.Push(
-                            FromState: "here",
-                            Row: "trail"
-                        ))]
+                Effects: [new ActionEffect.PushState(
+                        FromState: "here",
+                        State: "trail"
+                    )]
             )
         ));
 

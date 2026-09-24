@@ -16,6 +16,6 @@ public sealed record GpuComputeServices(
     IGpuQueueSubmitter QueueSubmitter,
     IGpuShaderModuleFactory ShaderModuleFactory,
     IGpuStorageBufferFactory StorageBufferFactory,
-    IGpuStorageImageFactory StorageImageFactory,
+    IGpuImageFactory ImageFactory,
     IGpuSurfaceTransferFactory SurfaceTransferFactory
 ) : IGpuComputeServices;

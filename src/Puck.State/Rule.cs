@@ -30,7 +30,8 @@ namespace Puck.State;
 /// validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set,
 /// refused by name at the JSON converter. The reserved <c>$</c> prefix is refused on top of that, by
 /// <c>RuleCompiler.CompileAll</c> — exactly as it is for a state row name, and for the same reason: <c>$</c>
-/// marks what the engine mints, and nothing mints a rule.</param>
+/// marks what the engine mints, and the engine mints no rule. A rule a <c>.puck</c> scope generates carries the
+/// <c>$</c> inside its name instead (<see cref="GeneratedName"/>: <c>turn$east</c>).</param>
 /// <param name="Effects">The effects applied in order when the rule fires.</param>
 /// <param name="Gate">The predicate that must hold, or <see langword="null"/> for always.</param>
 /// <param name="Mode">Whether the rule fires every tick the gate holds (<see cref="ActionTriggerMode.Level"/>, the
@@ -41,8 +42,8 @@ namespace Puck.State;
 /// one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
 /// <c>$each</c> bound to that cell's key — the quantifier that lets one rule tick a status for every participant
 /// carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the <c>each</c>
-/// participant reference; a non-integer key binds <c>$each</c> alone. The latch is kept per key, by the key's value
-/// when it is an integer and by its position in the row otherwise.</param>
+/// participant reference; a non-integer key binds <c>$each</c> alone. The latch is kept per key, by the key's
+/// interned <see cref="CellKey"/> ordinal, so a key keeps its latch wherever it sits in the row.</param>
 /// <param name="Locals">The values computed once per evaluation, in declared order, read as <c>$local:&lt;name&gt;</c>.</param>
 /// <param name="Zones">The rule's zone table, or <see langword="null"/>: ordered zones over one token domain, in
 /// index order, an empty entry holding an index no zone answers. Every row position in the rule — a

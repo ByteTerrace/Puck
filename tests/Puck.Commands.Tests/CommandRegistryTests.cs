@@ -679,7 +679,7 @@ public sealed class CommandRegistryTests {
     }
     [Fact]
     public void BoundTextSeparatorsRemainArgumentsOfOneSeatStampedCommand() {
-        CommandPrincipal? seenPrincipal = null;
+        Principal? seenPrincipal = null;
         string? seenLine = null;
         var secondCommandInvoked = false;
         var registry = new CommandRegistry(modules: [new SeparatorProbeModule(
@@ -707,7 +707,7 @@ public sealed class CommandRegistryTests {
         registry.ApplySnapshot(snapshot: in snapshot);
 
         Assert.Equal(
-            expected: CommandPrincipal.Seat(slot: 0),
+            expected: Principal.Seat(slot: 0),
             actual: seenPrincipal
         );
         Assert.Equal(
@@ -1245,8 +1245,8 @@ public sealed class CommandRegistryTests {
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
     }
-    private sealed class SeatPrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+    private sealed class SeatPrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Seat(slot: slot);
     }
     private sealed class SeparatorProbeModule(Action<CommandContext> onBound, Action onSecond) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
@@ -1312,8 +1312,8 @@ public sealed class CommandRegistryTests {
             }
         }
     }
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class RecordingObserver(List<CommandActivation> seen) : ICommandObserver {
         public void OnCommand(in CommandActivation activation) => seen.Add(item: activation);

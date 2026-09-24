@@ -70,7 +70,7 @@ public abstract record StateDomain {
     public sealed record CellsOf(string Topology, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] long Empty = 0) : StateDomain;
     /// <summary>The history ring: the row keeps the last <see cref="Capacity"/> pushed values in slots keyed
     /// <c>0..Capacity-1</c>, oldest overwritten first — the old <c>history</c> facet.</summary>
-    /// <param name="Capacity">How many pushes the ring keeps, 1..128.</param>
+    /// <param name="Capacity">How many pushes the ring keeps, from 1 to <see cref="StateCapacity.MaxCellsPerRow"/>.</param>
     /// <param name="Empty">The value read for an age older than the ring holds.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed record Ring(int Capacity, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] long Empty = 0) : StateDomain;

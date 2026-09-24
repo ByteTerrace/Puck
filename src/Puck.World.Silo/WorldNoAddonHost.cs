@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -15,7 +16,7 @@ internal sealed class WorldNoAddonHost : IWorldAddonHost {
     public void ApplyContributions(ulong tick) { }
     public void Commit(IWorldAddonPreparedPlan plan) { }
     public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) { }
-    public string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
+    public string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
     public void Dispose() { }
     public void Finish(IWorldAddonPreparedPlan plan) { }
     public void ResolveReads(ulong tick) { }

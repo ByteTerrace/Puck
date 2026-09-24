@@ -10,13 +10,15 @@ public static class VectorTransforms {
     /// <param name="Score">The similarity score (dot or Q48.16 cosine).</param>
     public readonly record struct NearestMatch(CellName Key, long Score);
 
-    /// <summary>Writes the normalized weighted sum of 1 to 8 vector terms.</summary>
+    /// <summary>Writes the normalized weighted sum of 1 to <see cref="StateCapacity.MaxMixTerms"/> vector terms.</summary>
     /// <param name="vectors">The component spans of each vector term.</param>
     /// <param name="weights">The integer weights for each term ([-1000, 1000], non-zero).</param>
     /// <param name="destination">The destination component span, matching the vectors' dimensions.</param>
     /// <param name="sum">Working storage for the weighted sum, at least as wide as
     /// <paramref name="destination"/>.</param>
-    /// <param name="refusal">The refusal reason if the operation fails; otherwise <see langword="null"/>.</param>
+    /// <param name="refusal">The refusal reason if the operation fails — a <see cref="RuleRefusal"/> for a shape the
+    /// compiler also checks, a <see cref="RuleEffectRefusal"/> for one only the data decides; otherwise
+    /// <see langword="null"/>.</param>
     /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="sum"/> is narrower than
     /// <paramref name="destination"/>.</exception>
@@ -25,7 +27,7 @@ public static class VectorTransforms {
         ReadOnlySpan<int> weights,
         Span<sbyte> destination,
         Span<long> sum,
-        [NotNullWhen(false)] out RuleRefusal? refusal
+        [NotNullWhen(false)] out Enum? refusal
     ) {
         if ((vectors.Length == 0) || (vectors.Length > StateCapacity.MaxMixTerms) || (vectors.Length != weights.Length)) {
             refusal = RuleRefusal.VectorMixTerms;
@@ -35,7 +37,7 @@ public static class VectorTransforms {
 
         var dimensions = destination.Length;
 
-        for (var termIndex = 0; termIndex < vectors.Length; termIndex++) {
+        for (var termIndex = 0; (termIndex < vectors.Length); termIndex++) {
             if (vectors[termIndex].Length != dimensions) {
                 refusal = RuleRefusal.VectorSpaceMismatch;
 
@@ -61,18 +63,18 @@ public static class VectorTransforms {
         sum = sum[..dimensions];
         sum.Clear();
 
-        for (var termIndex = 0; termIndex < vectors.Length; termIndex++) {
+        for (var termIndex = 0; (termIndex < vectors.Length); termIndex++) {
             var vector = vectors[termIndex].Span;
             long weight = weights[termIndex];
 
-            for (var dimensionIndex = 0; dimensionIndex < dimensions; dimensionIndex++) {
-                sum[dimensionIndex] += weight * vector[dimensionIndex];
+            for (var dimensionIndex = 0; (dimensionIndex < dimensions); dimensionIndex++) {
+                sum[dimensionIndex] += (weight * vector[dimensionIndex]);
             }
         }
 
         var isAllZero = true;
 
-        for (var dimensionIndex = 0; dimensionIndex < dimensions; dimensionIndex++) {
+        for (var dimensionIndex = 0; (dimensionIndex < dimensions); dimensionIndex++) {
             if (sum[dimensionIndex] != 0L) {
                 isAllZero = false;
 
@@ -81,13 +83,13 @@ public static class VectorTransforms {
         }
 
         if (isAllZero) {
-            refusal = RuleRefusal.VectorMixZero;
+            refusal = RuleEffectRefusal.VectorMixZero;
 
             return false;
         }
 
         if (!SignedByteVectorFunctions.TryNormalize(components: sum, destination: destination)) {
-            refusal = RuleRefusal.VectorMixZero;
+            refusal = RuleEffectRefusal.VectorMixZero;
 
             return false;
         }
@@ -96,13 +98,14 @@ public static class VectorTransforms {
 
         return true;
     }
-
     /// <summary>Writes the normalized centroid (mean) of candidate vectors.</summary>
     /// <param name="candidates">The candidate vector component spans.</param>
     /// <param name="destination">The destination component span.</param>
     /// <param name="sum">Working storage for the component sums, at least as wide as
     /// <paramref name="destination"/>.</param>
-    /// <param name="refusal">The refusal reason if the operation fails; otherwise <see langword="null"/>.</param>
+    /// <param name="refusal">The refusal reason if the operation fails — a <see cref="RuleRefusal"/> for a shape the
+    /// compiler also checks, a <see cref="RuleEffectRefusal"/> for one only the data decides; otherwise
+    /// <see langword="null"/>.</param>
     /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="sum"/> is narrower than
     /// <paramref name="destination"/>.</exception>
@@ -110,17 +113,17 @@ public static class VectorTransforms {
         ReadOnlySpan<ReadOnlyMemory<sbyte>> candidates,
         Span<sbyte> destination,
         Span<long> sum,
-        [NotNullWhen(false)] out RuleRefusal? refusal
+        [NotNullWhen(false)] out Enum? refusal
     ) {
         if (candidates.Length == 0) {
-            refusal = RuleRefusal.VectorMeanEmpty;
+            refusal = RuleEffectRefusal.VectorMeanEmpty;
 
             return false;
         }
 
         var dimensions = destination.Length;
 
-        for (var candidateIndex = 0; candidateIndex < candidates.Length; candidateIndex++) {
+        for (var candidateIndex = 0; (candidateIndex < candidates.Length); candidateIndex++) {
             if (candidates[candidateIndex].Length != dimensions) {
                 refusal = RuleRefusal.VectorSpaceMismatch;
 
@@ -138,17 +141,17 @@ public static class VectorTransforms {
         sum = sum[..dimensions];
         sum.Clear();
 
-        for (var candidateIndex = 0; candidateIndex < candidates.Length; candidateIndex++) {
+        for (var candidateIndex = 0; (candidateIndex < candidates.Length); candidateIndex++) {
             var candidate = candidates[candidateIndex].Span;
 
-            for (var dimensionIndex = 0; dimensionIndex < dimensions; dimensionIndex++) {
+            for (var dimensionIndex = 0; (dimensionIndex < dimensions); dimensionIndex++) {
                 sum[dimensionIndex] += candidate[dimensionIndex];
             }
         }
 
         var isAllZero = true;
 
-        for (var dimensionIndex = 0; dimensionIndex < dimensions; dimensionIndex++) {
+        for (var dimensionIndex = 0; (dimensionIndex < dimensions); dimensionIndex++) {
             if (sum[dimensionIndex] != 0L) {
                 isAllZero = false;
 
@@ -157,13 +160,13 @@ public static class VectorTransforms {
         }
 
         if (isAllZero) {
-            refusal = RuleRefusal.VectorMeanEmpty;
+            refusal = RuleEffectRefusal.VectorMeanEmpty;
 
             return false;
         }
 
         if (!SignedByteVectorFunctions.TryNormalize(components: sum, destination: destination)) {
-            refusal = RuleRefusal.VectorMeanEmpty;
+            refusal = RuleEffectRefusal.VectorMeanEmpty;
 
             return false;
         }
@@ -172,7 +175,6 @@ public static class VectorTransforms {
 
         return true;
     }
-
     /// <summary>Selects the top-K nearest or farthest matches from candidate vectors using a bounded buffer.</summary>
     public static int SelectNearest(
         ReadOnlySpan<NearestCandidate> candidates,
@@ -190,7 +192,7 @@ public static class VectorTransforms {
 
         var count = 0;
 
-        for (var candidateIndex = 0; candidateIndex < candidates.Length; candidateIndex++) {
+        for (var candidateIndex = 0; (candidateIndex < candidates.Length); candidateIndex++) {
             ref readonly var candidate = ref candidates[candidateIndex];
 
             if (excludeKey.HasValue && (candidate.Key == excludeKey.Value)) {
@@ -251,11 +253,11 @@ public static class VectorTransforms {
             return;
         }
 
-        var shiftCount = Math.Min(val1: count, val2: (capacity - 1)) - pos;
+        var shiftCount = (Math.Min(val1: count, val2: (capacity - 1)) - pos);
 
         if (shiftCount > 0) {
-            results.Slice(start: pos, length: shiftCount)
-                .CopyTo(destination: results.Slice(start: pos + 1, length: shiftCount));
+            results.Slice(length: shiftCount, start: pos)
+                .CopyTo(destination: results.Slice(length: shiftCount, start: (pos + 1)));
         }
 
         results[pos] = item;
@@ -264,18 +266,17 @@ public static class VectorTransforms {
             count++;
         }
     }
-
     private static int CompareMatches(NearestMatch a, NearestMatch b, bool farthest) {
         // Return < 0 if a ranks before b, > 0 if a ranks after b.
         // Primary: score
         if (a.Score != b.Score) {
             if (!farthest) {
                 // Higher score ranks first
-                return (a.Score > b.Score) ? -1 : 1;
+                return ((a.Score > b.Score) ? -1 : 1);
             }
 
             // Lower score ranks first
-            return (a.Score < b.Score) ? -1 : 1;
+            return ((a.Score < b.Score) ? -1 : 1);
         }
 
         // Secondary tie-break: Key in ordinal order (ascending)
@@ -296,7 +297,7 @@ public static class VectorTransforms {
         long unlessWithinQ16,
         out CellName? matchingKey
     ) {
-        for (var index = 0; index < existingCells.Length; index++) {
+        for (var index = 0; (index < existingCells.Length); index++) {
             ref readonly var candidate = ref existingCells[index];
 
             if (candidate.Key == key) {
@@ -317,7 +318,6 @@ public static class VectorTransforms {
         return true;
     }
 }
-
 /// <summary>A candidate vector cell passed to vector search or transform kernels.</summary>
 /// <param name="Key">The candidate cell key.</param>
 /// <param name="Components">The vector components.</param>

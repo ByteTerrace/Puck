@@ -29,7 +29,7 @@ public sealed partial class RuleEvaluator {
 
             foreach (var group in groups) {
                 if (group.Undo is not null) {
-                    (plans ??= []).Add(group.Undo);
+                    (plans ??= []).Add(item: group.Undo);
                 }
             }
             undoHost.ConfigureUndo(plans: ((plans is null) ? Array.Empty<ArenaUndoPlan>() : plans));
@@ -98,8 +98,9 @@ public sealed partial class RuleEvaluator {
         return (open && !faulted);
     }
     // One pass per tick over every member, in authored order. The pass closes the group when no row of its write
-    // set moved: RowVersion moves only on a commit that left the row's bytes different, so a member that wrote and
-    // then rewound is not progress.
+    // set differs from what it held when the pass began. Each member commits on its own, so RowVersion only answers
+    // one commit at a time; the arena's change window answers the whole pass, so a row one member clears and a later
+    // one rebuilds to the same bytes is not progress, and neither is a member that wrote and then rewound.
     private bool RunFixpoint(CompiledRuleGroup group, CompiledRule[] rules, RuleGroupState state, RuleLatch latch, ulong stepTicks) {
         var progress = state.Progress(name: group.Name);
 
@@ -118,18 +119,26 @@ public sealed partial class RuleEvaluator {
         }
 
         var applied = false;
+        var arena = m_host.Arena;
 
-        foreach (var member in group.Members) {
-            _ = EvaluateRule(
-                applied: out var moved,
-                latch: latch,
-                rule: rules[member],
-                stepTicks: stepTicks
-            );
-            applied |= moved;
+        arena.BeginChangeWindow();
+        try {
+            foreach (var member in group.Members) {
+                _ = EvaluateRule(
+                    applied: out var moved,
+                    latch: latch,
+                    rule: rules[member],
+                    stepTicks: stepTicks
+                );
+                applied |= moved;
+            }
+        } catch {
+            _ = arena.EndChangeWindow(rows: group.WriteSet);
+
+            throw;
         }
 
-        var changed = false;
+        var versionMoved = false;
 
         for (var index = 0; (index < group.WriteRows.Length); index++) {
             var version = (m_host.TryRowVersion(
@@ -140,8 +149,10 @@ public sealed partial class RuleEvaluator {
                 : 0UL
             );
 
-            changed |= (version != m_groupVersions[index]);
+            versionMoved |= (version != m_groupVersions[index]);
         }
+
+        var changed = (arena.EndChangeWindow(rows: group.WriteSet) && versionMoved);
 
         if (!changed) {
             CommitUndoIfPending(group: group);

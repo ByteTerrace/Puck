@@ -21,9 +21,20 @@ refresh, cloud selection, and HTTP transport remain Azure SDK responsibilities.
 See Microsoft's [generic resource API](https://learn.microsoft.com/en-us/dotnet/api/azure.resourcemanager.resources.genericresource)
 and [ARM resource pipeline](https://learn.microsoft.com/en-us/dotnet/api/azure.resourcemanager.armresource.pipeline).
 
+## Installation
+
+This is an installed [extension](../../docs/reference/extensions.md), not a
+reference any host carries: publish it into a host's
+`extensions/Puck.World.Azure` directory. `AzureWorldExtension` then contributes
+`azure.blob` storage, the `azure.scheduled-events` retirement observer,
+`azure.api-users` authentication, the `azure.resource` operation provider and the
+`/livez/azure` health endpoint. Registration performs no cloud access; a
+deployment document selects each one by its key. `world.extensions.catalog`
+confirms what a running host composed.
+
 ## Silo hosting
 
-`AzureSiloExtensions` registers opt-in storage, retirement, and API-user authentication providers:
+The silo selects the storage and retirement providers from its document:
 
 ```json
 "store": { "type": "azure.blob", "settings": { "accountUrl": "https://<account>.blob.core.windows.net" } },
@@ -75,9 +86,10 @@ a separate durable travel-recovery operation.
 The extension also owns `WorldApiCounterpartResolver` and `HttpCounterpartPublisher`,
 which implement the engine's neighbour-resolution and counterpart-publication seams
 using Azure credentials. The engine interfaces carry no Azure credential types.
+
 ## Host composition
 
-The normal world executable registers `azure.resource` as an installed provider
+A world host with this extension installed offers `azure.resource` as a provider
 type. Operators select instances and bindings with
 [declarative extension configuration](../Puck.World.Server/ExtensionConfiguration.md).
 External access stays disabled unless the operator selects a configuration file.
@@ -90,7 +102,9 @@ managed identity uses the configured host identity. There is no implicit fallbac
 credential chain and no client-secret or arbitrary token-file configuration.
 See the SDK's [managed identity selection](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.managedidentityid).
 
-Custom C# hosts may also reference this project directly. They supply a
+A custom C# program outside the shipped hosts may also reference this project
+directly; the shipped hosts never do, and its Optional extensions layer keeps
+them from it. Such a program supplies a
 `TokenCredential`, using their chosen managed
 identity, workload identity, or other Azure authentication arrangement.
 The resource-operation provider never searches for credentials or selects a subscription implicitly.
@@ -120,7 +134,7 @@ using var provider = new AzureResourceOperationProvider(credential, binding);
 await using var host = new WorldExtensionHost(server, journal, authorityLineage,
     [provider.Register("Delete this creature's associated resource")],
     () => server.CaptureExternalOperationCause(hostRow));
-using var client = host.CreateClient(WorldPrincipal.Addon("creature-controller"),
+using var client = host.CreateClient(Principal.Addon("creature-controller"),
     allowedOperations: [binding.Name], worldRequests: manifest);
 host.Start();
 
@@ -243,16 +257,22 @@ federated client assertion. The ARM token is used only for the downstream read;
 neither assertion is forwarded to ARM or persisted. There is no fallback to host
 authority when consent or authentication fails.
 
-Token exchange, onboarding and ARM responses preserve user-interaction challenges
-as `AzureDelegatedAuthenticationException`. Its optional JSON claims request is
+Each operation runs in two steps. `ExchangeOnboardingAsync` or
+`ExchangeObservationAsync` performs the OBO exchange and returns a
+request-confined `AzureDelegatedGrant`; `EnsureOnboardedAsync` or `ReadAsync`
+then uses only that grant's token. An ingress can therefore decide a sign-in,
+consent or claims requirement before it starts answering the operation. The
+exchange, and onboarding or ARM responses to the exchanged token, preserve
+user-interaction challenges as `AzureDelegatedAuthenticationException`. Its optional JSON claims request is
 limited to 4096 UTF-8 bytes; raw authentication headers, downstream authority and
 scope overrides never leave this adapter. The HTTP transport detects challenges
 before the Azure SDK can silently retry them. The ingress translates the exception
 into its own authentication challenge and lets the caller obtain fresh authorization.
 An ordinary permission-denied response remains a refusal.
 
-The optional [MCP host composition](../Puck.Mcp/README.md#host-extension) installs
-`puck_service_observe` when its remote configuration contains, for example:
+The [Puck.Mcp.Azure](../Puck.Mcp.Azure/README.md) extension serves these
+operations over [remote MCP](../Puck.Mcp/README.md#host-extension); it installs
+`puck_service_observe` when the remote configuration contains, for example:
 
 ```json
 "services": {
@@ -294,11 +314,12 @@ The Function owns account provisioning, partition routing and protected user
 escrow. Responses are bounded to 4 KiB and must name `Ready`, `Migrating` or
 `Onboarding`; redirects and failed consent are refused. MCP retains no assertion
 after the request; the existing Function owns its accepted escrow and expiration.
+
 ## Verification and scope
 
 ```text
 dotnet test tests/Puck.World.Azure.Tests/Puck.World.Azure.Tests.csproj -c Release
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter FullyQualifiedName~WorldExtensionLawTests
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter "FullyQualifiedName~WorldExtensionLawTests|FullyQualifiedName~ExtensionModelLawTests"
 ```
 
 The Azure suite exercises declarative provider setup and the real SDK authentication and HTTP pipeline against
@@ -310,8 +331,10 @@ tests cover resource-ID validation, aggregation/interval selection, the latest-
 complete-bucket scan against a recorded response shape, refusal of an omitted or
 still-filling metric, and the provider's kind dispatch.
 The server suite exercises durable dispatch,
-continuation preservation, authority, and replay. These tests require no Azure
-account and perform no live resource changes.
+continuation preservation, authority, and replay; the extension-model laws install
+this assembly beside a World and a silo and check that both compose the same
+contributions. These tests require no Azure account and perform no live resource
+changes.
 
 ARM covers the management plane. Data-plane operations such as uploading blob
 contents may need their service SDK and a separately scoped provider. The Azure

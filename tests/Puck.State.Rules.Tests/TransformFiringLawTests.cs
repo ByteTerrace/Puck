@@ -153,7 +153,7 @@ public sealed class TransformFiringLawTests {
         );
     }
     [Fact]
-    public void APushTakesTheLiveValueSourcesPushStateTakes() {
+    public void APushTakesALiveCellAnExpressionOrALiteral() {
         var (host, evaluator, rules, latch, context) = Arrange(rules: [new Rule(
                 Name: TransformFixture.Name(value: "record"),
                 Effects: [
@@ -161,18 +161,18 @@ public sealed class TransformFiringLawTests {
                         row: "rankValue",
                         value: 7m
                     ),
-                    new ActionEffect.TransformState(Transform: new StateTransform.Push(
+                    new ActionEffect.PushState(
                         FromState: "rankValue",
-                        Row: "log"
-                    )),
-                    new ActionEffect.TransformState(Transform: new StateTransform.Push(
+                        State: "log"
+                    ),
+                    new ActionEffect.PushState(
                         Expression: RulesFixture.Program(text: "rankValue + 1"),
-                        Row: "log"
-                    )),
-                    new ActionEffect.TransformState(Transform: new StateTransform.Push(
-                        Row: "log",
-                        Value: 21L
-                    )),
+                        State: "log"
+                    ),
+                    new ActionEffect.PushState(
+                        State: "log",
+                        Value: 21m
+                    ),
                 ],
                 Mode: ActionTriggerMode.Level
             )]);
@@ -196,11 +196,11 @@ public sealed class TransformFiringLawTests {
     [Fact]
     public void APushNamingALiveSourceBesideALiteralRefusesAsAmbiguous() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
-            effects: [new ActionEffect.TransformState(Transform: new StateTransform.Push(
+            effects: [new ActionEffect.PushState(
                 FromState: "score",
-                Row: "history",
-                Value: 3L
-            ))],
+                State: "history",
+                Value: 3m
+            )],
             name: "both"
         )),
         expected: RuleRefusal.EffectSourceAmbiguous

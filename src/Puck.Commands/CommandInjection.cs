@@ -37,7 +37,7 @@ internal readonly record struct CommandInjection(
     CommandValue Value,
     CommandPhase Phase,
     CommandOrigin Origin,
-    CommandPrincipal Principal,
+    Principal Principal,
     int Slot = 0,
     ulong CaptureTick = 0UL,
     string? Text = null,

@@ -11,14 +11,11 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { findRepositoryRoot, puckCommand } = require('../scripts/puckCli.cjs');
-const ts = require('typescript');
 
-require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, file);
+require('./support/register.cjs');
 
 const { resolveOfficial } = require('../src/official/officialBase.ts');
-const { loadOfficial } = require('../src/official/officialClient.ts');
+const { loadOfficial, generatorCommit } = require('../src/official/officialClient.ts');
 const { createByteStore } = require('../src/official/byteStore.ts');
 const { OfficialRefusal } = require('../src/official/verify.ts');
 const { bootEngineFromOfficial, bootEngineFromLocalBundle } = require('../src/native/engineBoot.ts');
@@ -89,7 +86,7 @@ if (!ready) {
     return resolveOfficial({ VITE_PUCK_OFFICIAL_BASE: baseUrl, VITE_PUCK_OFFICIAL_CHANNEL: CHANNEL });
   }
 
-  test('bootEngineFromOfficial (inline) reaches version() with the manifest\'s own commit', async () => {
+  test('bootEngineFromOfficial (inline) reaches version() with the commit the manifest\'s schema bundle was generated at', async () => {
     const { baseUrl } = await startServer(officialTreeDir);
     const official = await loadOfficial(officialFor(baseUrl), fetch, createByteStore());
 
@@ -97,36 +94,72 @@ if (!ready) {
     try {
       const version = await engine.version();
       assert.equal(version.schemaVersion, official.build.worldSchema);
-      assert.equal(version.commit, official.build.commit);
+      assert.equal(version.commit, generatorCommit(official));
       assert.equal(version.engine, 'Puck.World.Browser');
     } finally {
       await engine.dispose();
     }
   });
 
-  test('a manifest whose build.commit disagrees with the running engine is refused by name', async () => {
-    const { baseUrl } = await startServer(officialTreeDir);
-    const resolved = officialFor(baseUrl);
-
-    // Tamper only the manifest text handed to loadOfficial; every engine object is fetched from
-    // the real, untouched server, so the booted engine reports its own REAL commit.
-    const tamperingFetch = async (input) => {
+  // Serves the real tree through `fetch`, with the manifest rewritten by `rewrite`; a replaced schema bundle is served
+  // at its object URL under the manifest's rewritten hash and size, so it verifies.
+  function rewritingFetch(resolved, rewrite) {
+    let replacedBundle = null;
+    return async (input) => {
       const url = typeof input === 'string' ? input : input.href;
       if (url === resolved.manifestUrl.href) {
-        const real = await fetch(url);
-        const manifest = await real.json();
-        manifest.build = { ...manifest.build, commit: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' };
-        return new Response(JSON.stringify(manifest), { status: 200, headers: { 'content-type': 'application/json' } });
+        const manifest = await (await fetch(url)).json();
+        const bundleUrl = resolved.objectUrl(manifest.worldSchemaBundle.path).href;
+        const bundle = await (await fetch(bundleUrl)).json();
+        const rewritten = rewrite({ manifest, bundle });
+        if (rewritten.bundle) {
+          const bytes = new TextEncoder().encode(JSON.stringify(rewritten.bundle));
+          const digest = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+          rewritten.manifest.worldSchemaBundle = { ...rewritten.manifest.worldSchemaBundle, hash: `sha256/${digest}`, size: bytes.length };
+          replacedBundle = { url: bundleUrl, bytes };
+        }
+        return new Response(JSON.stringify(rewritten.manifest), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (replacedBundle && url === replacedBundle.url) {
+        return new Response(replacedBundle.bytes, { status: 200, headers: { 'content-type': 'application/json' } });
       }
       return fetch(input);
     };
+  }
 
-    const official = await loadOfficial(resolved, tamperingFetch, createByteStore());
-    assert.equal(official.build.commit, 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  test('build.commit names the worlds tree, not the engine: a tree no commit holds still boots its engine', async () => {
+    const { baseUrl } = await startServer(officialTreeDir);
+    const resolved = officialFor(baseUrl);
+
+    // Only the manifest's build changes; every engine object is the real, untouched one.
+    const official = await loadOfficial(resolved, rewritingFetch(resolved, ({ manifest }) => ({
+      manifest: { ...manifest, build: { ...manifest.build, commit: 'none', dirty: true } },
+    })), createByteStore());
+    assert.equal(official.build.commit, 'none');
+
+    const engine = await bootEngineFromOfficial(official, { mode: 'inline' });
+    try {
+      assert.equal((await engine.version()).commit, generatorCommit(official));
+    } finally {
+      await engine.dispose();
+    }
+  });
+
+  test('a schema bundle generated at another commit than the running engine is refused by name', async () => {
+    const { baseUrl } = await startServer(officialTreeDir);
+    const resolved = officialFor(baseUrl);
+
+    // The bundle is rewritten and re-hashed, so it verifies; the engine objects are the real ones, so the booted
+    // engine reports its own REAL commit.
+    const official = await loadOfficial(resolved, rewritingFetch(resolved, ({ manifest, bundle }) => ({
+      manifest,
+      bundle: { ...bundle, 'x-puck': { ...bundle['x-puck'], commit: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' } },
+    })), createByteStore());
+    assert.equal(generatorCommit(official), 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
 
     await assert.rejects(bootEngineFromOfficial(official, { mode: 'inline' }), (error) => {
       assert.ok(error instanceof OfficialRefusal, error.stack);
-      // Names both the tampered manifest commit and the real engine's own reported commit.
+      // Names both the rewritten generator commit and the real engine's own reported commit.
       assert.match(error.message, /deadbeefdeadbeefdeadbeefdeadbeefdeadbeef/);
       assert.match(error.message, /schemaVersion/);
       return true;
@@ -185,7 +218,7 @@ if (!ready) {
     const second = await bootEngineFromOfficialFiles({ engineFiles: official.engineFiles }, countingFetch, store);
     assert.equal(fetchCount, 0, 'a warm byte store must answer the second boot with zero fetchImpl calls');
     const version = await second.version();
-    assert.equal(version.commit, official.build.commit);
+    assert.equal(version.commit, generatorCommit(official));
     await second.dispose();
   });
 

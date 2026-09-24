@@ -17,7 +17,10 @@ internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandMo
             return new CommandResult(Output: "[world.captures: no schedule authored]");
         }
 
-        var directory = WorldCaptureRoot.Resolve(authored: captures.Directory);
+        var directory = WorldCaptureRoot.Resolve(
+            captures: captures,
+            documentDirectory: server.Definition.DocumentDirectory
+        );
         var lines = new List<string>(capacity: (1 + rows.Count)) {
             $"[world.captures: directory {directory} stations {rows.Count}]",
         };
@@ -58,9 +61,9 @@ internal sealed class WorldCaptureCommandModule(WorldServer server) : ICommandMo
         }
 
         var tick = (server.NextInputTick - 1UL);
-        var hash = WorldCaptureScheduler.ComputeStateHash(
-            server: server,
+        var hash = WorldStateHashComposition.Hash(
             scope: scope.Value,
+            server: server,
             tick: tick
         );
 

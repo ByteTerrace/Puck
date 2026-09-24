@@ -73,9 +73,6 @@ public sealed partial class ArenaSearch {
                 hash.Add(value: ((uint)job.TreeCount));
                 hash.Add(value: ((uint)job.Iteration));
                 hash.Add(value: job.Seed);
-                hash.Add(value: ((uint)job.UShape));
-                hash.Add(value: ((uint)job.UToken));
-                hash.Add(value: ((uint)job.UTarget));
                 hash.Add(value: ((uint)job.UScan));
                 hash.Add(value: ((uint)job.UStart));
                 hash.Add(value: ((uint)job.PlayoutPlies));
@@ -85,13 +82,15 @@ public sealed partial class ArenaSearch {
                 for (var node = 0; (node < job.TreeCount); node++) {
                     hash.Add(value: ((uint)parents[node]));
                     hash.Add(value: ((uint)job.TreeFirstChild![node]));
+                    hash.Add(value: ((uint)job.TreeNextSibling![node]));
                     hash.Add(value: ((uint)job.TreeChildCount![node]));
                     hash.Add(value: job.TreeVisits![node]);
                     hash.Add(value: job.TreeTotal![node]);
                     hash.Add(value: ((uint)job.TreeShape![node]));
                     hash.Add(value: ((uint)job.TreeToken![node]));
                     hash.Add(value: ((uint)job.TreeTarget![node]));
-                    hash.Add(value: job.TreeExpanded![node]);
+                    hash.Add(value: ((uint)job.TreeScanned![node]));
+                    hash.Add(value: ((uint)job.TreeScanStart![node]));
                 }
                 for (var index = 0; (index < job.PathLength); index++) {
                     hash.Add(value: ((uint)job.Path![index]));
@@ -309,7 +308,7 @@ public sealed partial class ArenaSearch {
         level.BestTarget = carried.BestTarget;
         level.BestToken = carried.BestToken;
         level.Beta = carried.Beta;
-        level.ChanceSum = ((((Int128)carried.ChanceSumHigh) << 64) | carried.ChanceSumLow);
+        level.ChanceSum = (((Int128)carried.ChanceSumHigh) << 64) | carried.ChanceSumLow;
         level.ChanceWeight = carried.ChanceWeight;
         level.EntryTarget = carried.EntryTarget;
         level.Key = carried.Key;
@@ -395,10 +394,12 @@ public sealed partial class ArenaSearch {
         }
         if (
             !Same(carried: tree.ChildCount, held: job.TreeChildCount) ||
-            !Same(carried: tree.Expanded, held: job.TreeExpanded) ||
             !Same(carried: tree.FirstChild, held: job.TreeFirstChild) ||
+            !Same(carried: tree.NextSibling, held: job.TreeNextSibling) ||
             !Same(carried: tree.Parent, held: job.TreeParent) ||
             !Same(carried: tree.Path, held: job.Path) ||
+            !Same(carried: tree.ScanStart, held: job.TreeScanStart) ||
+            !Same(carried: tree.Scanned, held: job.TreeScanned) ||
             !Same(carried: tree.Shape, held: job.TreeShape) ||
             !Same(carried: tree.Target, held: job.TreeTarget) ||
             !Same(carried: tree.Token, held: job.TreeToken) ||
@@ -410,8 +411,7 @@ public sealed partial class ArenaSearch {
             (tree.Scan < 0) ||
             (tree.Start < 0) ||
             // The playout scans from Start for Scan candidates, so their sum must stay a position.
-            ((((long)tree.Scan) + tree.Start) > int.MaxValue) ||
-            !Cursor(shape: tree.ExpandShape, token: tree.ExpandToken, target: tree.ExpandTarget)
+            ((((long)tree.Scan) + tree.Start) > int.MaxValue)
         ) {
             return false;
         }
@@ -421,16 +421,39 @@ public sealed partial class ArenaSearch {
                 return false;
             }
         }
-        // A node's children are one run inside the pool, and every node but the root names the candidate that
-        // reaches it.
-        for (var node = 0; (node < tree.Count); node++) {
-            var children = tree.ChildCount[node];
 
+        // A node's children are a list of nodes naming it their parent, as long as its count says; its scan stays
+        // inside the candidates it scans; and every node but the root names the candidate that reaches it. A list is
+        // walked no further than the pool holds, so a cycle is a mismatch rather than a hang.
+        var candidates = TotalCandidates(
+            cellCount: cells,
+            shapes: shapes,
+            tokenCount: entry.TokenCount
+        );
+
+        for (var node = 0; (node < tree.Count); node++) {
             if (
-                (children < 0) ||
-                ((children > 0) && ((tree.FirstChild[node] < 0) || ((((long)tree.FirstChild[node]) + children) > tree.Count))) ||
+                (tree.ChildCount[node] < 0) ||
+                (((uint)tree.Scanned[node]) > ((uint)candidates)) ||
+                (((uint)tree.ScanStart[node]) >= ((uint)Math.Max(val1: 1, val2: candidates))) ||
+                (((uint)(tree.NextSibling[node] + 1)) > ((uint)tree.Count)) ||
                 ((node > 0) && !Candidate(shape: tree.Shape[node], token: tree.Token[node], target: tree.Target[node]))
             ) {
+                return false;
+            }
+
+            var walked = 0;
+
+            for (var child = tree.FirstChild[node]; (child != -1); child = tree.NextSibling[child]) {
+                if (
+                    (((uint)child) >= ((uint)tree.Count)) ||
+                    (tree.Parent[child] != node) ||
+                    (++walked > tree.ChildCount[node])
+                ) {
+                    return false;
+                }
+            }
+            if (walked != tree.ChildCount[node]) {
                 return false;
             }
         }
@@ -445,22 +468,21 @@ public sealed partial class ArenaSearch {
             Count: job.TreeCount,
             Iteration: job.Iteration,
             Seed: job.Seed,
-            ExpandShape: job.UShape,
-            ExpandToken: job.UToken,
-            ExpandTarget: job.UTarget,
             Scan: job.UScan,
             Start: job.UStart,
             PlayoutPlies: job.PlayoutPlies,
             PlayCount: job.PlayCount,
             Parent: job.TreeParent!.ToArray(),
             FirstChild: job.TreeFirstChild!.ToArray(),
+            NextSibling: job.TreeNextSibling!.ToArray(),
             ChildCount: job.TreeChildCount!.ToArray(),
             Visits: job.TreeVisits!.ToArray(),
             Total: job.TreeTotal!.ToArray(),
             Shape: job.TreeShape!.ToArray(),
             Token: job.TreeToken!.ToArray(),
             Target: job.TreeTarget!.ToArray(),
-            Expanded: job.TreeExpanded!.ToArray(),
+            Scanned: job.TreeScanned!.ToArray(),
+            ScanStart: job.TreeScanStart!.ToArray(),
             Path: job.Path.ToArray(),
             PathLength: job.PathLength
         )
@@ -474,10 +496,12 @@ public sealed partial class ArenaSearch {
         }
 
         carried.ChildCount.AsSpan().CopyTo(destination: job.TreeChildCount!);
-        carried.Expanded.AsSpan().CopyTo(destination: job.TreeExpanded!);
         carried.FirstChild.AsSpan().CopyTo(destination: job.TreeFirstChild!);
+        carried.NextSibling.AsSpan().CopyTo(destination: job.TreeNextSibling!);
         carried.Parent.AsSpan().CopyTo(destination: job.TreeParent!);
         carried.Path.AsSpan().CopyTo(destination: job.Path);
+        carried.ScanStart.AsSpan().CopyTo(destination: job.TreeScanStart!);
+        carried.Scanned.AsSpan().CopyTo(destination: job.TreeScanned!);
         carried.Shape.AsSpan().CopyTo(destination: job.TreeShape!);
         carried.Target.AsSpan().CopyTo(destination: job.TreeTarget!);
         carried.Token.AsSpan().CopyTo(destination: job.TreeToken!);
@@ -492,9 +516,6 @@ public sealed partial class ArenaSearch {
         job.TreeActive = carried.Active;
         job.TreeCount = carried.Count;
         job.UScan = carried.Scan;
-        job.UShape = carried.ExpandShape;
         job.UStart = carried.Start;
-        job.UTarget = carried.ExpandTarget;
-        job.UToken = carried.ExpandToken;
     }
 }

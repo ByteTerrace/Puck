@@ -1,11 +1,12 @@
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
 /// <summary>
-/// Wraps the native entry points for a graphics pipeline and its associated objects (descriptor set layout
-/// and pipeline layout), which are created together and destroyed individually.
+/// Wraps the native entry points for a graphics pipeline, created together with its descriptor set layout and
+/// pipeline layout; the layouts are destroyed through <see cref="VulkanPipelineLayouts"/>.
 /// </summary>
 public interface IVulkanGraphicsPipelineApi {
     /// <summary>Creates a graphics pipeline together with its descriptor set layout and pipeline layout.</summary>
@@ -20,16 +21,8 @@ public interface IVulkanGraphicsPipelineApi {
         out nint pipelineLayoutHandle,
         out nint pipelineHandle
     );
-    /// <summary>Destroys a descriptor set layout.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the layout.</param>
-    /// <param name="descriptorSetLayoutHandle">The native <c>VkDescriptorSetLayout</c> handle to destroy.</param>
-    void DestroyDescriptorSetLayout(nint deviceHandle, nint descriptorSetLayoutHandle);
-    /// <summary>Destroys a pipeline.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the pipeline.</param>
+    /// <summary>Destroys a pipeline, skipping a zero handle; its layouts go through <see cref="VulkanPipelineLayouts.Destroy"/>.</summary>
+    /// <param name="device">The command table of the logical device that owns the pipeline.</param>
     /// <param name="pipelineHandle">The native <c>VkPipeline</c> handle to destroy.</param>
-    void DestroyPipeline(nint deviceHandle, nint pipelineHandle);
-    /// <summary>Destroys a pipeline layout.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the pipeline layout.</param>
-    /// <param name="pipelineLayoutHandle">The native <c>VkPipelineLayout</c> handle to destroy.</param>
-    void DestroyPipelineLayout(nint deviceHandle, nint pipelineLayoutHandle);
+    void DestroyPipeline(VulkanDeviceCommands device, nint pipelineHandle);
 }

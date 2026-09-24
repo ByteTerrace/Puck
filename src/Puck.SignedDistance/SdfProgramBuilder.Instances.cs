@@ -97,6 +97,12 @@ public sealed partial class SdfProgramBuilder {
 
         return (m_materials.Count - 1);
     }
+
+    /// <summary>Gets the number of instances closed so far — the count <see cref="Build"/> would report in
+    /// <see cref="SdfProgram.Instances"/>; an instance still open (see <see cref="BeginInstance"/>) is not
+    /// counted until <see cref="EndInstance"/> closes it.</summary>
+    public int InstanceCount => m_instances.Count;
+
     /// <summary>Opens a static per-object instance: every instruction until the matching <see cref="EndInstance"/>
     /// belongs to it, and the world renderer's tile-cull beam prepass tests <paramref name="boundCenter"/>/
     /// <paramref name="boundRadius"/> (a world-space bounding sphere) per tile, evaluating the instance's instruction

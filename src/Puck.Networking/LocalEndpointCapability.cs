@@ -95,18 +95,15 @@ public sealed class LocalEndpointCapability {
         ) { throw new UnauthorizedAccessException(message: "Control authentication failed."); }
     }
 
-    /// <summary>Proves both peers hold this capability using role-separated HMAC challenges and a five-second deadline.</summary>
+    /// <summary>Proves both peers hold this capability using role-separated HMAC challenges.</summary>
     /// <param name="stream">The connected local stream; callers close it on any failure.</param>
     /// <param name="server">True for the listener; false for the attaching client.</param>
-    /// <param name="token">Cancels the handshake, invalidating the connection.</param>
+    /// <param name="token">The caller's handshake deadline; cancellation invalidates the connection. The handshake
+    /// has no deadline of its own.</param>
     /// <returns>Completion after the peer proves possession of the secret.</returns>
     /// <exception cref="UnauthorizedAccessException">The peer fails identity or proof validation.</exception>
     public async Task AuthenticateAsync(Stream stream, bool server, CancellationToken token) {
         var descriptor = m_descriptor;
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: token);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 5));
-        token = deadline.Token;
         var nonce = Convert.ToHexString(inArray: RandomNumberGenerator.GetBytes(count: 32));
 
         if (server) {

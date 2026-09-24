@@ -2,7 +2,7 @@
     <PropertyGroup>
         <AssemblyName>Puck.State.Search</AssemblyName>
         <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
-        <Description>Deterministic game-tree search over a Puck.State arena: negamax with alpha-beta and transpositions, UCB1 tree search, chance nodes, and per-seat max-n scores, every candidate a journal scope rather than a copied position. A candidate is judged by the same compiled rules the simulation runs, through the Puck.State.Rules evaluator, so a search judges what the world would judge and a rewound candidate leaves the arena byte-identical. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <Description>Deterministic game-tree search over a Puck.State arena: negamax with alpha-beta and transpositions, UCB1 tree search, chance nodes, and per-seat max-n scores, every candidate a journal scope rather than a copied position. A candidate is judged by the same compiled rules the simulation runs, through the Puck.State.Rules evaluator, so a search judges what the world would judge and a rewound candidate leaves the arena byte-identical. Licensed under the Apache License 2.0.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.State.Search</PackageId>
         <PackageTags>determinism;negamax;search;simulation;state</PackageTags>

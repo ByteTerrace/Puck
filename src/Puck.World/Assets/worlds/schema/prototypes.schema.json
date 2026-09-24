@@ -362,7 +362,7 @@
                     "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
                     "Cone": "A sharp circular cone with a flat base, centered along local Y.",
                     "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
-                    "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid limit \u2014 the two spellings agree bit-for-bit at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
+                    "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid itself \u2014 an Ellipsoid emits the identical instruction, since every ellipsoid is this shape at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
                     "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
                   }
                 },
@@ -408,6 +408,7 @@
                   ],
                   "description": "The blend op name (null = Union).",
                   "x-enumDescriptions": {
+                    "Subtraction": "Carves the shape out of everything accumulated so far: max(a, \u2212b). The result is an exact distance only where the subject is the nearest surface. Inside the carved void max(a, \u2212b) returns the subject\u0027s carved-away face or the carve\u0027s own boundary rather than the true clearance, so contact queries see phantom surfaces there: world.collision.probe reads a positive distance with an upward gradient in open air. Extend a carve past every point a body can reach, or build the void from union geometry.",
                     "Intersection": "Intersection with everything accumulated so far \u2014 not with the preceding shape alone. See the accumulator rule on SdfBlendOp.",
                     "Xor": "Symmetric difference: solid where exactly one of the fields is solid (hollow where they overlap).",
                     "SmoothIntersection": "Intersection with a smooth seam (blend radius = instruction Data1.x). Subject to the accumulator rule on SdfBlendOp.",
@@ -420,8 +421,8 @@
                     "Morph": "Continuous linear field interpolation between parent accumulator and field scope: (1 - t)\u00B7a \u002B t\u00B7b. t is derived from an instance render lane: t = saturate((lane[Data0.x] - Data0.y) / (Data0.z - Data0.y)). Strictly 1-Lipschitz. PopField compose only.",
                     "GrooveSubtraction": "Carves a round seam while subtracting: max(a, -b, r - sqrt(a\u00B2\u002Bb\u00B2)). Radius is Data1.x. Composes derivative bounds as sqrt(La\u00B2\u002BLb\u00B2).",
                     "PipeSubtraction": "Leaves a round bead while subtracting: min(max(a, -b), sqrt(a\u00B2\u002Bb\u00B2) - r). Radius is Data1.x. Composes derivative bounds as sqrt(La\u00B2\u002BLb\u00B2).",
-                    "StairsUnion": "Adds continuous steps of radius r (Data1.x) and step count n (Data1.y) to the union. Strictly 1-Lipschitz. PopField compose only.",
-                    "StairsSubtraction": "Carves continuous steps of radius r (Data1.x) and step count n (Data1.y) from the subtraction. Strictly 1-Lipschitz. PopField compose only."
+                    "StairsUnion": "Adds continuous steps of radius r (Data1.x) and step count n (Data1.z) to the union. Strictly 1-Lipschitz. PopField compose only.",
+                    "StairsSubtraction": "Carves continuous steps of radius r (Data1.x) and step count n (Data1.z) from the subtraction. Strictly 1-Lipschitz. PopField compose only."
                   }
                 },
                 "smooth": {

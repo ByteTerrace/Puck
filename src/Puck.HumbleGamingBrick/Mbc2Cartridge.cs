@@ -34,11 +34,6 @@ public sealed class Mbc2Cartridge : CartridgeBase {
         m_ramEnabled;
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (address - MemoryMap.ExternalRamStart) & RamMask;
     /// <inheritdoc/>
@@ -49,9 +44,9 @@ public sealed class Mbc2Cartridge : CartridgeBase {
             romBank: m_romBank
         );
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Boolean(value: ref m_ramEnabled);
+        transfer.Int32(value: ref m_romBank);
     }
 
     /// <summary>Reads a byte from the built-in RAM, returning the stored nibble in the low four bits with the high nibble

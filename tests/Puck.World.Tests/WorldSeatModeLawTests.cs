@@ -129,16 +129,20 @@ public sealed class WorldSeatModeLawTests {
     }
     [Fact]
     public void DuplicateStateName_RefusesByName() {
-        var denied = Fixtures.BuildDocument() with { SeatModesRaw = [new WorldSeatModeFamily(
+        var denied = Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
                 Name: FamilyName,
                 States: [new WorldSeatModeState(Name: OffState), new WorldSeatModeState(Name: OffState)],
                 DefaultState: OffState
-            )] };
-        var control = Fixtures.BuildDocument() with { SeatModesRaw = [new WorldSeatModeFamily(
+            )],
+        };
+        var control = Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
                 Name: FamilyName,
                 States: [new WorldSeatModeState(Name: OffState), new WorldSeatModeState(Name: OnState)],
                 DefaultState: OffState
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: denied,
@@ -160,16 +164,20 @@ public sealed class WorldSeatModeLawTests {
     // Validator laws: seatModes name/state rules, each a denied document beside a one-value-different control.
     [Fact]
     public void FamilyName_CollidingWithABuiltInFamily_RefusesByName() {
-        var denied = Fixtures.BuildDocument() with { SeatModesRaw = [new WorldSeatModeFamily(
+        var denied = Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
                 Name: "roster",
                 States: [new WorldSeatModeState(Name: OffState)],
                 DefaultState: OffState
-            )] };
-        var control = Fixtures.BuildDocument() with { SeatModesRaw = [new WorldSeatModeFamily(
+            )],
+        };
+        var control = Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
                 Name: "not-roster",
                 States: [new WorldSeatModeState(Name: OffState)],
                 DefaultState: OffState
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: denied,
@@ -394,16 +402,20 @@ public sealed class WorldSeatModeLawTests {
     }
     [Fact]
     public void UnknownDefaultState_RefusesByName() {
-        var denied = Fixtures.BuildDocument() with { SeatModesRaw = [new WorldSeatModeFamily(
+        var denied = Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
                 Name: FamilyName,
                 States: [new WorldSeatModeState(Name: OffState)],
                 DefaultState: "not-declared"
-            )] };
-        var control = Fixtures.BuildDocument() with { SeatModesRaw = [new WorldSeatModeFamily(
+            )],
+        };
+        var control = Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
                 Name: FamilyName,
                 States: [new WorldSeatModeState(Name: OffState)],
                 DefaultState: OffState
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: denied,
@@ -424,14 +436,16 @@ public sealed class WorldSeatModeLawTests {
     }
     [Fact]
     public void UnknownTarget_RefusesByName() {
-        var denied = Fixtures.BuildDocument() with { SeatModesRaw = [new WorldSeatModeFamily(
+        var denied = Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
                 Name: FamilyName,
                 States: [new WorldSeatModeState(
                         Name: OnState,
                         Target: "not-a-real-target"
                     )],
                 DefaultState: OnState
-            )] };
+            )],
+        };
         var control = DocumentWithFamily(family: Family());
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(

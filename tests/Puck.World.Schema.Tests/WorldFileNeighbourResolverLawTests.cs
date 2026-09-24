@@ -48,8 +48,8 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
         WriteDocument(
             relativePath: "hub.world.json",
             documentId: "hub",
-            ("nw", "shards/nw.world.json"),
-            ("ne", "shards/ne.world.json")
+            ("nw", "shards/nw"),
+            ("ne", "shards/ne")
         );
         WriteDocument(
             relativePath: Path.Combine(
@@ -57,14 +57,14 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
                 path2: "nw.world.json"
             ),
             documentId: "nw",
-            ("hub", "../hub.world.json")
+            ("hub", "../hub")
         );
 
         var shards = Path.Combine(
             path1: m_root,
             path2: "shards"
         );
-        var resolution = new WorldFileNeighbourResolver(baseDirectory: () => shards).Resolve(document: "../hub.world.json");
+        var resolution = new WorldFileNeighbourResolver(baseDirectory: () => shards).Resolve(document: "../hub");
 
         Assert.Equal(
             actual: resolution.Kind,
@@ -75,7 +75,7 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
                 definition: resolution.Definition!,
                 name: "ne"
             ),
-            expected: "ne.world.json"
+            expected: "ne"
         );
     }
     [Fact]
@@ -83,7 +83,7 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
         WriteDocument(
             relativePath: "hub.world.json",
             documentId: "hub",
-            ("nw", "shards/nw.world.json")
+            ("nw", "shards/nw")
         );
         WriteDocument(
             relativePath: Path.Combine(
@@ -91,8 +91,8 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
                 path2: "nw.world.json"
             ),
             documentId: "nw",
-            ("ne", "ne.world.json"),
-            ("hub", "../hub.world.json")
+            ("ne", "ne"),
+            ("hub", "../hub")
         );
         WriteDocument(
             relativePath: Path.Combine(
@@ -103,7 +103,7 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
         );
 
         var resolver = new WorldFileNeighbourResolver(baseDirectory: () => m_root);
-        var resolution = resolver.Resolve(document: "shards/nw.world.json");
+        var resolution = resolver.Resolve(document: "shards/nw");
 
         Assert.Equal(
             actual: resolution.Kind,
@@ -117,14 +117,14 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
                 definition: neighbour,
                 name: "ne"
             ),
-            expected: "shards/ne.world.json"
+            expected: "shards/ne"
         );
         Assert.Equal(
             actual: Locator(
                 definition: neighbour,
                 name: "hub"
             ),
-            expected: "hub.world.json"
+            expected: "hub"
         );
         // The re-expressed locator is what the reader resolves next, from the same base.
         Assert.Equal(
@@ -140,15 +140,15 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
         WriteDocument(
             relativePath: "a.world.json",
             documentId: "a",
-            ("b", "b.world.json")
+            ("b", "b")
         );
         WriteDocument(
             relativePath: "b.world.json",
             documentId: "b",
-            ("a", "a.world.json")
+            ("a", "a")
         );
 
-        var resolution = new WorldFileNeighbourResolver(baseDirectory: () => m_root).Resolve(document: "b.world.json");
+        var resolution = new WorldFileNeighbourResolver(baseDirectory: () => m_root).Resolve(document: "b");
 
         Assert.Equal(
             actual: resolution.Kind,
@@ -159,7 +159,7 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
                 definition: resolution.Definition!,
                 name: "a"
             ),
-            expected: "a.world.json"
+            expected: "a"
         );
     }
     public void Dispose() {

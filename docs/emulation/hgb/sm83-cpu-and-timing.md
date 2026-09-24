@@ -123,4 +123,4 @@ On Game Boy Color hardware, the CPU can operate at **8.388608 MHz** (double spee
 1. Software writes `0x01` to register `KEY1` (`0xFF4D`), arming the speed switch.
 2. Software executes the `STOP` instruction.
 3. The oscillator PLL locks onto the high frequency, pausing for approximately 2,050 M-cycles while the hardware re-locks clocks.
-4. Execution resumes with bit 7 of `KEY1` set (`CurrentSpeed = 1`). In double speed, CPU M-cycles take only 2 base master clock cycles instead of 4, while the PPU and APU remain locked to their standard 4.194304 MHz clock domains.
+4. Execution resumes with bit 7 of `KEY1` (the current-speed bit) set; the core reads it as `IsDoubleSpeed`. In double speed, CPU M-cycles take only 2 base master clock cycles instead of 4, while the PPU and APU remain locked to their standard 4.194304 MHz clock domains.

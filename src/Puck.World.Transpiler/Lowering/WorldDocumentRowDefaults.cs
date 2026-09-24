@@ -16,13 +16,7 @@ public static class WorldDocumentRowDefaults {
     // `{"scale": 1}` are told apart by the text rather than by a switch here. `$index` is the one positional
     // default: a shape's own place in its array.
     private static JsonNode? Resolve(string keyword, string key, int index) {
-        if (!WorldConstructs.Table.TryGet(
-            construct: out var construct,
-            keyword: keyword
-        )) {
-            throw new InvalidOperationException(message: $"'{keyword}' is not a described construct.");
-        }
-        if (construct!.DefaultFor(key: key) is not { } text) {
+        if (DefaultText(key: key, keyword: keyword) is not { } text) {
             return null;
         }
         if (string.Equals(
@@ -35,6 +29,21 @@ public static class WorldDocumentRowDefaults {
 
         return JsonNode.Parse(json: text);
     }
+
+    // The emitter asks for a row's defaults once per row it writes, so each construct's description is read once
+    // per key rather than searched again for every row.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Keyword, string Key), string?> Defaults = new();
+
+    private static string? DefaultText(string keyword, string key) => Defaults.GetOrAdd(
+        key: (keyword, key),
+        valueFactory: static entry => (WorldConstructs.Table.TryGet(
+            construct: out var construct,
+            keyword: entry.Keyword
+        )
+            ? construct!.DefaultFor(key: entry.Key)
+            : throw new InvalidOperationException(message: $"'{entry.Keyword}' is not a described construct.")
+        )
+    );
     private static IReadOnlyList<string> KeysWithDefaults(string keyword) => (WorldConstructs.Table.TryGet(
         construct: out var construct,
         keyword: keyword

@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 
 namespace Puck.World.Server;
@@ -7,19 +9,34 @@ namespace Puck.World.Server;
 /// <remarks>Construction, document installation, and checkpoint restoration validate the complete state section.
 /// Pool storage is admitted through its typed snapshot; ordinary rows use <see cref="StateArena.TryLoad"/>.</remarks>
 public sealed partial class WorldServer {
+    // The arena's and the search's counters as the World registers them: the instance behind each is replaced when a
+    // definition install adopts a new arena, and the forwarder carries the retired one's totals so neither goes down.
+    private readonly ForwardingWorkCounterSource m_arenaWork = new(
+        kinds: ArenaWork.Kinds,
+        name: ArenaWork.SourceName
+    );
+    private readonly ForwardingWorkCounterSource m_searchWork = new(
+        kinds: SearchWorkKinds.Kinds,
+        name: SearchWorkKinds.SourceName
+    );
     private StateArena m_arena = null!;
+
     private StateCatalog? m_arenaCatalog;
+
     private string[] m_drawSites = [];
     // Each row's version as of the last time the installed document and the arena agreed on it: when the arena was
     // seeded from the document, and when the row was last published. A row whose version has moved past this is
     // what the next publication carries, whenever the write happened.
     private ulong[] m_publishedVersions = [];
+
     // A seeded arena holds the document's rows as authored, and a published row is the arena's own spelling of it:
     // a row holding no cell carries none rather than an empty list. The first publication after a seed therefore
     // carries every row, so the installed document is in one spelling from then on.
     private bool m_publishEveryRow;
+
     // One flag per catalog ordinal: the rows an open scope has written, as of the proposal in flight.
     private bool[] m_openRows = [];
+
     // What the last exports moved that a consumer outside the arena keeps its own copy of, until SettleStateConsumers
     // brings them up to date.
     private bool m_bodyScaleOwed;
@@ -33,31 +50,12 @@ public sealed partial class WorldServer {
 
     /// <summary>Gets the columnar store every state read and write of the tick in flight addresses.</summary>
     public StateArena Arena => m_arena;
-
-    // The site descriptor a draw's seed ladder folds. It must stay the document's own "state.<row>" spelling: the
-    // seed, and therefore every shuffle permutation and random transfer, is a function of this string.
-    internal static string[] DrawSitesOf(StateCatalog catalog) {
-        var sites = new string[catalog.Count];
-
-        for (var ordinal = 0; (ordinal < catalog.Count); ordinal++) {
-            var descriptor = catalog.Descriptors[ordinal];
-
-            sites[ordinal] = ((descriptor.Lane == StateLane.Document)
-                ? WorldDrawSites.StateRow(rowName: CellName.Parse(candidate: descriptor.Name))
-                : descriptor.Name
-            );
-        }
-
-        return sites;
-    }
-
-    /// <summary>Returns the descriptor a draw site's seed ladder and stream id fold.</summary>
-    /// <param name="rowOrdinal">The site row's catalog ordinal.</param>
-    /// <returns>The site descriptor.</returns>
-    public string DrawSite(int rowOrdinal) => ((((uint)rowOrdinal) < ((uint)m_drawSites.Length))
-        ? m_drawSites[rowOrdinal]
-        : string.Empty
-    );
+    /// <summary>Gets the <c>state.arena</c> counters over every arena this server has held: the current arena's counts
+    /// on top of the totals of each one a definition install retired, so a reading never goes down.</summary>
+    public IWorkCounterSource ArenaWorkSource => m_arenaWork;
+    /// <summary>Gets the <c>state.search</c> counters over every search this server has held, carried forward across
+    /// each arena replacement the same way as <see cref="ArenaWorkSource"/>.</summary>
+    public IWorkCounterSource SearchWorkSource => m_searchWork;
 
     // Refuses a document the arena cannot hold. A document the validator passed and the arena refuses is a
     // validator hole, never an authoring error reaching this far.
@@ -80,103 +78,17 @@ public sealed partial class WorldServer {
         // its session lanes through the same routine as a prepared replacement.
         m_arena?.CopyLanesTo(target: built);
         m_arena = built;
+        m_arenaWork.Retarget(target: built);
         AdoptLayout(definition: definition);
     }
-    // An install is a birth: the arena's load settles a clock on every cell whose effective behavior is timed and
-    // whose installed record carries none, so a rotation, an accumulation, or an ease runs from the tick the cell
-    // was installed at rather than from the origin, and recomputes every derived board from its own tokens and
-    // codes rows. A clockless cell's clock and a derived board's cells are all this adopts — every other field of
-    // every row stays the document's own, which is why this settles through the export rather than replacing the
-    // section with it. Construction-time callers leave a refused seed unchanged; a prepared mutation uses the
-    // refusing form below so the refusal lands before its document is installed.
+    // Settles against a seed taken at this host's current tick pair. Construction-time and load-time callers settle
+    // before their one admission instead, so the document the receipt names is the document that installs.
     private WorldDefinition SettleInstalledRows(WorldDefinition definition) {
-        var rows = definition.State;
-
-        if (rows.Count == 0) {
-            return definition;
-        }
-
         var time = m_ruleHost.Time;
 
-        if (!StateArena.TryCreate(
-            arena: out var seeded,
-            catalog: definition.StateCatalog,
-            options: WorldSlotLanes.Options(definition: definition),
-            reason: out _,
-            section: definition.StateRaw,
-            time: in time
-        )) {
-            return definition;
-        }
-
-        return SettleInstalledRows(
+        return WorldStateSettlement.Settle(
             definition: definition,
-            seeded: seeded
-        );
-    }
-    private static WorldDefinition SettleInstalledRows(WorldDefinition definition, StateArena seeded) {
-        var rows = definition.AuthoredState;
-        var exported = seeded.ToRows();
-        List<WorldStateRow>? settled = null;
-
-        for (var index = 0; (index < rows.Count); index++) {
-            var row = rows[index];
-
-            if (StateRows.FindStateRow(
-                rows: exported,
-                name: row.Name.Value
-            ) is not { } born) {
-                continue;
-            }
-            // A derived board's cells are the arena's own recompute, never the document's — the board is never
-            // authored, only derived. A board the recompute agrees with is left as the very object the install
-            // handed over, so an install that changed no board keeps the definition it was given and its
-            // compilation receipt with it.
-            if (row.Inverse is not null) {
-                if (SameBoardCells(
-                    left: row.Cells,
-                    right: born.Cells
-                )) {
-                    continue;
-                }
-
-                settled ??= new List<WorldStateRow>(collection: rows);
-                settled[index] = (row with { Cells = born.Cells });
-
-                continue;
-            }
-            if (row.Cells is not { Count: > 0 } cells) {
-                continue;
-            }
-
-            List<StateCell>? bornCells = null;
-
-            for (var cell = 0; (cell < cells.Count); cell++) {
-                if (
-                    (cells[cell].Clock is not null) ||
-                    (StateRows.FindCell(
-                    cells: born.Cells,
-                    key: cells[cell].Key
-                )?.Clock is not { } clock)
-                ) {
-                    continue;
-                }
-
-                bornCells ??= new List<StateCell>(collection: cells);
-                bornCells[cell] = (cells[cell] with { Clock = clock });
-            }
-
-            if (bornCells is null) {
-                continue;
-            }
-
-            settled ??= new List<WorldStateRow>(collection: rows);
-            settled[index] = (row with { Cells = bornCells });
-        }
-
-        return ((settled is null)
-            ? definition
-            : definition.WithWorldState(rows: settled)
+            time: in time
         );
     }
 
@@ -200,7 +112,7 @@ public sealed partial class WorldServer {
 
         prepared = built;
 
-        settled = SettleInstalledRows(
+        settled = WorldStateSettlement.SettleFrom(
             definition: definition,
             seeded: prepared
         );
@@ -218,50 +130,35 @@ public sealed partial class WorldServer {
     }
     internal void AdoptPreparedArena(StateArena arena, WorldDefinition definition) {
         m_arena = arena;
-        m_search = CreateSearch(arena: arena);
+        m_arenaWork.Retarget(target: arena);
+        AdoptSearch(arena: arena);
         AdoptLayout(definition: definition);
         m_ruleHost.InvalidateArenaScheduling();
     }
 
-    private ArenaSearch CreateSearch(StateArena arena) => new(
-        arena: arena,
-        narrate: (channel, text) => {
-            if (m_output.HasNarrationSink) {
-                m_output.Narrate(channel: channel, text: text);
+    // Builds the search over an arena, makes it the one the server steps, and points the search counters at it.
+    [MemberNotNull(member: nameof(m_search))]
+    private void AdoptSearch(StateArena arena) {
+        m_search = new ArenaSearch(
+            arena: arena,
+            narrate: (channel, text) => {
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: channel, text: text);
+                }
             }
-        }
-    );
-
-    // A board is a key and a value per occupied cell; nothing else about its cells is derived, so nothing else
-    // decides whether the recompute moved it.
-    private static bool SameBoardCells(IReadOnlyList<StateCell>? left, IReadOnlyList<StateCell>? right) {
-        var authored = (left ?? []);
-        var derived = (right ?? []);
-
-        if (authored.Count != derived.Count) {
-            return false;
-        }
-
-        for (var index = 0; (index < authored.Count); index++) {
-            if (
-                (authored[index].Key != derived[index].Key) ||
-                (authored[index].Value != derived[index].Value)
-            ) {
-                return false;
-            }
-        }
-
-        return true;
+        );
+        m_searchWork.Retarget(target: m_search);
     }
     // Rebinds everything addressed by catalog ordinal after the arena's layout moved: the draw sites the seed
     // ladder folds, the per-row version marks, the bodies' action-state slot lanes, and the host that carries them.
     private void AdoptLayout(WorldDefinition definition) {
         m_arenaCatalog = definition.StateCatalog;
-        m_drawSites = DrawSitesOf(catalog: m_arenaCatalog);
+        m_drawSites = WorldDrawSites.Of(catalog: m_arenaCatalog);
         m_documentRowCount = m_arenaCatalog.Lane(lane: StateLane.Document).Count;
         m_publishedVersions = new ulong[m_arena.Layout.RowCount];
         MarkPublished();
         m_publishEveryRow = true;
+        m_movedEverything = true;
         m_population.BindActionStateLane(
             arena: m_arena,
             definition: definition
@@ -351,7 +248,16 @@ public sealed partial class WorldServer {
             m_publishedVersions = new ulong[rows];
         }
         for (var ordinal = 0; (ordinal < rows); ordinal++) {
-            m_publishedVersions[ordinal] = m_arena.RowVersion(rowOrdinal: ordinal);
+            var version = m_arena.RowVersion(rowOrdinal: ordinal);
+
+            if (m_publishedVersions[ordinal] != version) {
+                NoteMovedRow(
+                    ordinal: ordinal,
+                    rowCount: rows
+                );
+            }
+
+            m_publishedVersions[ordinal] = version;
         }
     }
     // The rows a document value reads by name. The set is a function of the document's own non-state sections, so
@@ -596,6 +502,7 @@ public sealed partial class WorldServer {
             dynamics: definition.Dynamics,
             generators: definition.Generators,
             instanceIdentity: InstanceIdentity,
+            sites: m_drawSites,
             ticksPerSecond: definition.SimulationRateHz
         );
 
@@ -630,6 +537,7 @@ public sealed partial class WorldServer {
     // The placement ordinal a 'placement:<id>'/'placement:$each' reference resolves to: the id's index in the
     // document's own placements list, rebuilt when the list is a new reference.
     private IReadOnlyList<WorldPlacement>? m_placementOrdinalsFrom;
+
     private Dictionary<string, int> m_placementOrdinals = [];
 
     internal int PlacementOrdinalOf(string id) {
@@ -765,7 +673,7 @@ public sealed partial class WorldServer {
         } else {
             AdoptPreparedArena(arena: arena, definition: definition);
         }
-        m_ruleHost.ConfigureUndo(compilation!.Groups.Where(group => (group.Undo is not null)).Select(group => group.Undo!).ToArray());
+        m_ruleHost.ConfigureUndo(plans: compilation!.Groups.Where(predicate: group => (group.Undo is not null)).Select(selector: group => group.Undo!).ToArray());
         m_ruleHost.PruneLatches();
         m_tick.PruneBoardEnforcement(definition: definition);
         m_ruleHost.ReconcileDecisions();

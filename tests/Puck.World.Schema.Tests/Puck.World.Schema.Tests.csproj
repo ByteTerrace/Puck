@@ -9,16 +9,20 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <Compile Include="../Shared/AllocationWindow.cs" Link="AllocationWindow.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="JsonSchema.Net" Version="[7.*, )" />
+        <PackageReference Include="JsonSchema.Net" Version="[9.*, )" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
         <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <!-- The shipped worlds are read as the game resolves them: a document with a .puck source is that source,
+             compiled and composed through the transpiler's document composer. -->
+        <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The shipped world, read as-authored by BindingDocumentWireShapeTests: the binding sections it

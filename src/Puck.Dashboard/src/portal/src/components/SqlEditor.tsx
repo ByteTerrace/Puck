@@ -1,13 +1,15 @@
 import {
   autocompletion,
-  Completion,
+  type Completion,
   CompletionContext,
-  CompletionResult,
+  type CompletionResult,
 } from "@codemirror/autocomplete";
 import { sql } from "@codemirror/lang-sql";
 import { lineNumbers } from "@codemirror/view";
 import { EditorView, minimalSetup } from "codemirror";
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
+import { puckEditorTheme } from "../ui/codemirror";
+import classes from "./SqlEditor.module.css";
 
 const KEYWORDS = [
   "SELECT",
@@ -59,6 +61,7 @@ export interface SqlFileCompletion {
   url: string;
 }
 
+/** A SQL editor over DuckDB's dialect that completes keywords, readers, and the user's own file URLs. */
 export default function SqlEditor({
   files,
   onChange,
@@ -69,12 +72,10 @@ export default function SqlEditor({
   value: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const filesRef = useRef(files);
-  const onChangeRef = useRef(onChange);
   const viewRef = useRef<EditorView>(null);
-
-  filesRef.current = files;
-  onChangeRef.current = onChange;
+  // The editor outlives renders; these read the latest props from its own callbacks.
+  const currentFiles = useEffectEvent(() => files);
+  const emitChange = useEffectEvent((text: string) => onChange(text));
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -97,7 +98,7 @@ export default function SqlEditor({
           label: name,
           type: "function",
         })),
-        ...filesRef.current.map((file) => ({
+        ...currentFiles().map((file) => ({
           apply: `'${file.url}'`,
           detail: "your file",
           label: file.label,
@@ -116,30 +117,11 @@ export default function SqlEditor({
         autocompletion({ override: [completionSource] }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
-            onChangeRef.current(update.state.doc.toString());
+            emitChange(update.state.doc.toString());
           }
         }),
-        EditorView.theme({
-          "&": {
-            backgroundColor: "var(--mantine-color-body, #ffffff)",
-            border: "1px solid var(--mantine-color-default-border, #ced4da)",
-            borderRadius: "4px",
-            fontSize: "13px",
-          },
-          "&.cm-focused": {
-            borderColor: "var(--mantine-primary-color-filled, #228be6)",
-            outline: "none",
-          },
-          ".cm-content": {
-            fontFamily: "ui-monospace, Consolas, monospace",
-            minHeight: "96px",
-          },
-          ".cm-gutters": {
-            backgroundColor: "transparent",
-            border: "none",
-            color: "var(--mantine-color-dimmed, #adb5bd)",
-          },
-        }),
+        EditorView.contentAttributes.of({ "aria-label": "SQL query" }),
+        puckEditorTheme,
       ],
       parent: containerRef.current,
     });
@@ -151,7 +133,6 @@ export default function SqlEditor({
       view.destroy();
     };
     // The editor is created once; value sync happens below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     const view = viewRef.current;
@@ -163,5 +144,5 @@ export default function SqlEditor({
     }
   }, [value]);
 
-  return <div ref={containerRef} />;
+  return <div className={classes.editor} ref={containerRef} />;
 }

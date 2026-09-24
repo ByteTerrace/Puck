@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 using Puck.Hosting;
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -9,39 +11,19 @@ public sealed class WorldAuthorityCheckpointLawTests {
     [Fact]
     public void MalformedJournalBaseRefusesBeforeReplacingTheLiveDefinition() {
         using var fixture = Fixtures.FreshServer();
+
         fixture.Step();
-        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(hostRow: EmptyHostRow(),
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
         Assert.NotNull(@object: checkpoint);
         var before = fixture.Server.Definition;
         var hash = WorldStateHashComposition.HashAuthoritative(fixture.Server, tick: 0UL);
         var malformed = checkpoint with { Server = checkpoint.Server with { BaseDefinitionJson = "{"u8.ToArray() } };
+
         Assert.Throws<InvalidDataException>(testCode: () => fixture.Server.RestoreCheckpoint(checkpoint: malformed));
         Assert.Same(expected: before, actual: fixture.Server.Definition);
         Assert.Equal(expected: hash, actual: WorldStateHashComposition.HashAuthoritative(fixture.Server, tick: 0UL));
     }
-
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
-    private static WorldOwnedWorlds FreshProfiles(WorldDefinition definition) => new(
-        directory: Directory.CreateTempSubdirectory(prefix: "puck-checkpoint-tests-").FullName,
-        machineId: Guid.NewGuid(),
-        template: definition
-    );
-
     // activation-roundtrip-identity (§3.5): a single-authority, no-adjacency, code-built scenario — a producer-driven
     // census plus one scripted (untouched-live-input) seat. Runs 5000 ticks, captures, restores into a fresh server,
     // then runs both the restored and the uninterrupted server 5000 more ticks with the identical (empty) input
@@ -53,7 +35,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
@@ -66,7 +48,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var refusal
             ),
             userMessage: refusal
@@ -78,12 +60,13 @@ public sealed class WorldAuthorityCheckpointLawTests {
             engines: [],
             screens: definition.Screens
         );
+        using var restoredProfilesDirectory = new TemporaryDirectory(prefix: "puck-checkpoint-tests-");
 
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: FreshProfiles(definition: definition)
+            profiles: new WorldOwnedWorlds(directory: restoredProfilesDirectory.RootPath, machineId: Guid.NewGuid(), template: definition)
         );
 
         var uninterruptedElapsed = 0UL;
@@ -117,7 +100,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var uninterruptedFinal,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var uninterruptedRefusal
             ),
             userMessage: uninterruptedRefusal
@@ -125,7 +108,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.True(
             condition: restoredServer.TryCaptureCheckpoint(
                 checkpoint: out var restoredFinal,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var restoredRefusal
             ),
             userMessage: restoredRefusal
@@ -144,7 +127,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
@@ -155,7 +138,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out _
         ));
 
@@ -172,12 +155,13 @@ public sealed class WorldAuthorityCheckpointLawTests {
             engines: [],
             screens: definition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-checkpoint-tests-");
 
         Assert.Throws<InvalidOperationException>(testCode: () => WorldServer.FromCheckpoint(
             checkpoint: corrupted,
             instanceIdentity: "boot",
             machines: machines,
-            profiles: FreshProfiles(definition: definition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: definition)
         ));
     }
     [Fact]
@@ -205,7 +189,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         fixture.Step();
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var captured,
                 reason: out var reason
             ),
@@ -223,7 +207,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
             (entries.Length - 1)
         );
         entries[peer] = entries[peer] with {
-            Autonomy = new WorldPopulation.WorldPopulationAutonomyCheckpoint(
+            Autonomy = new WorldPopulationAutonomyCheckpoint(
             MotionElapsedTicks: 1UL,
             MotionPeriodTicks: 1UL,
             MotionRemainingTicks: 1UL,
@@ -303,7 +287,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
                 reason: out var reason,
-                hostRow: EmptyHostRow()
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty
             ),
             userMessage: reason
         );
@@ -350,7 +334,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         fixture.Step();
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var captured,
                 reason: out var reason
             ),

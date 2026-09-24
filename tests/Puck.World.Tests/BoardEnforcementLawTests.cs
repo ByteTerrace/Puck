@@ -1,9 +1,8 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Xunit;
 
-using Puck.SignedDistance;
-using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -128,37 +127,7 @@ public sealed class BoardEnforcementLawTests {
             PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
         });
     }
-    private static WorldPrototype BuildPieceCreation() {
-        var shape = new ShapeDocument(
-            Id: 0,
-            Name: null,
-            Type: SdfSolidPrimitive.Sphere,
-            Position: Vector3.Zero,
-            Rotation: Quaternion.Identity,
-            Scale: new Vector3(value: 0.2f),
-            Material: 0,
-            Blend: SdfBlendOp.Union,
-            Smooth: 0f,
-            Group: 0
-        );
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: "piece",
-            Palette: null,
-            Shapes: [shape],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: "piece"
-        );
-
-        return new WorldPrototype(
-            Id: "piece",
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
+    private static WorldPrototype BuildPieceCreation() => CreationFixtures.Sphere(id: "piece", scale: 0.2f);
     private static float CellCentreX(int cell) => ((cell + 0.5f) * CellSize);
     private static float CellCentreZ() => (0.5f * CellSize);
     private static int CellOf(WorldFixture fixture, WorldBody body) {
@@ -175,21 +144,6 @@ public sealed class BoardEnforcementLawTests {
             : -1
         );
     }
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     private static void MoveOnto(WorldFixture fixture, WorldBody body, int fromCell, int toCell) {
         body.Pose(
             x: CellCentreX(cell: toCell),
@@ -201,14 +155,14 @@ public sealed class BoardEnforcementLawTests {
         );
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: MoveRowName,
             Key: "from",
             Value: fromCell,
             Kind: WorldDocumentWriteKind.Set
         ));
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: MoveRowName,
             Key: "to",
             Value: toCell,
@@ -273,7 +227,7 @@ public sealed class BoardEnforcementLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason

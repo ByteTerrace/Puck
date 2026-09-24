@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -33,11 +34,11 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
         Assert.Equal(
             WorldAuthorityCheckpointCodec.Encode(checkpoint: before),
             WorldAuthorityCheckpointCodec.Encode(checkpoint: after with {
-            Server = after.Server with {
-                DefinitionJson = before.Server.DefinitionJson,
-                BaseDefinitionJson = before.Server.BaseDefinitionJson,
-            },
-        })
+                Server = after.Server with {
+                    DefinitionJson = before.Server.DefinitionJson,
+                    BaseDefinitionJson = before.Server.BaseDefinitionJson,
+                },
+            })
         );
     }
     private static Dictionary<string, JsonElement> Bag(string json) => JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)!;
@@ -124,14 +125,18 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
     }
     [Fact]
     public void CustomMembersMergeIndependentlyAndArraysRemainIndivisible() {
-        var a = Fixtures.BuildDocument() with { Metadata = new(
+        var a = Fixtures.BuildDocument() with {
+            Metadata = new(
             Tags: ["old"],
             Custom: Bag(json: "{\"nested\":{\"removed\":1,\"changed\":2}}")
-        ) };
-        var b = a with { Metadata = new(
+        ),
+        };
+        var b = a with {
+            Metadata = new(
             Tags: ["new"],
             Custom: Bag(json: "{\"nested\":{\"added\":3,\"changed\":4}}")
-        ) };
+        ),
+        };
         using var fixture = Fixtures.FreshServer(a with {
             Metadata = a.Metadata! with {
                 Custom = Bag(json: "{\"nested\":{\"removed\":1,\"changed\":2,\"player\":5},\"unrelated\":true}"),
@@ -239,16 +244,18 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
     }
     [Fact]
     public void MetadataUpgradeAndRollbackPreserveLatestGameplayAndUndoHistory() {
-        var a = Fixtures.BuildDocument() with { Metadata = new(
+        var a = Fixtures.BuildDocument() with {
+            Metadata = new(
             Title: "Release A",
             Description: "authored"
-        ) };
+        ),
+        };
         var b = a with { Metadata = a.Metadata! with { Title = "Release B" } };
         // A live metadata edit outside the authored delta and a normal journaled edit both survive.
         using var source = Fixtures.FreshServer(a with { Metadata = a.Metadata! with { Description = "operator note" } });
 
         source.Server.EnqueueMutation(new WorldMutation.SetRenderDefaults(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Render: source.Server.Definition.Render with { AmbientOcclusion = !source.Server.Definition.Render.AmbientOcclusion }
         ));
         source.Step();
@@ -322,7 +329,7 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
         restored.Server.RestoreCheckpoint(checkpoint: rolledBack);
         restored.Server.EnqueueUndo(
             1,
-            WorldPrincipal.Console
+            Principal.Console
         );
         restored.Step();
         Assert.Equal(
@@ -380,7 +387,7 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
             Server = checkpoint.Server with {
                 Pending = [new WorldPendingOpCheckpoint.Undo(
                 1,
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 0
             )],

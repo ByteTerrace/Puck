@@ -12,19 +12,26 @@ namespace Puck.Vulkan;
 /// </summary>
 public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDeviceApi {
     // VkPhysicalDeviceProperties field offsets: apiVersion(0), driverVersion(4), vendorID(8), deviceID(12),
-    // deviceType(16), deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE=256](20).
+    // deviceType(16), deviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE=256](20), pipelineCacheUUID[VK_UUID_SIZE=16](276).
     private const int PhysicalDeviceApiVersionOffset = 0;
+    private const int PhysicalDeviceDriverVersionOffset = sizeof(uint);
+    private const int PhysicalDeviceIdOffset = (sizeof(uint) * 3);
+    private const int PhysicalDeviceVendorIdOffset = (sizeof(uint) * 2);
+    // Vulkan 1.2, from which VkPhysicalDeviceDriverProperties is core.
+    private const uint VulkanVersion12 = (1U << 22) | (2U << 12);
+    private const int PhysicalDevicePipelineCacheUuidLength = 16;
+    private const int PhysicalDevicePipelineCacheUuidOffset = (PhysicalDeviceNameOffset + 256);
     // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
     private const int PhysicalDeviceFeatureCount = 55;
     private const int PhysicalDeviceNameOffset = (sizeof(uint) * 5);
     private const int PhysicalDevicePropertiesBufferSize = 2048;
     private const int PhysicalDeviceTypeOffset = (sizeof(uint) * 4);
+    private const uint StructureTypePhysicalDeviceDriverProperties = 1000196000;
     private const uint StructureTypePhysicalDeviceFeatures2 = 1000059000;
     private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
     private const uint StructureTypePhysicalDeviceProperties2 = 1000059001;
 
     private readonly IAllocator m_allocator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativePhysicalDeviceApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -35,63 +42,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         m_allocator = allocator;
     }
 
-    private InstancePointers GetPointers(nint instanceHandle) {
-        return m_pointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                EnumeratePhysicalDevices = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkEnumeratePhysicalDevices"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceProperties = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceProperties"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceQueueFamilyProperties = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceQueueFamilyProperties"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceSurfaceSupportKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceSurfaceCapabilitiesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceSurfaceFormatsKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceSurfacePresentModesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceFeatures = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceFeatures"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceFeatures2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
-                functionName: "vkGetPhysicalDeviceFeatures2"u8,
-                instanceHandle: handle
-            )),
-                GetPhysicalDeviceProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(
-                functionName: "vkGetPhysicalDeviceProperties2"u8,
-                instanceHandle: handle
-            )),
-                EnumerateDeviceExtensionProperties = ((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
-                functionName: "vkEnumerateDeviceExtensionProperties"u8,
-                instanceHandle: handle
-            )),
-            }
-        );
-    }
-    private static unsafe void ValidatePhysicalDeviceInputs(nint instanceHandle, nint physicalDeviceHandle) {
-        VulkanArgument.RequireHandle(
-            handle: instanceHandle,
-            handleDescription: "instance",
-            paramName: nameof(instanceHandle)
-        );
+    private static unsafe void ValidatePhysicalDeviceInputs(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
 
         VulkanArgument.RequireHandle(
             handle: physicalDeviceHandle,
@@ -100,12 +52,12 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         );
     }
     private static unsafe void ValidatePhysicalDeviceSurfaceInputs(
-        nint instanceHandle,
+        VulkanInstanceCommands instance,
         nint physicalDeviceHandle,
         nint surfaceHandle
     ) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
@@ -117,18 +69,14 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<nint> EnumeratePhysicalDevices(nint instanceHandle) {
-        VulkanArgument.RequireHandle(
-            handle: instanceHandle,
-            handleDescription: "instance",
-            paramName: nameof(instanceHandle)
-        );
+    public IReadOnlyList<nint> EnumeratePhysicalDevices(VulkanInstanceCommands instance) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
 
-        var enumeratePhysicalDevices = GetPointers(instanceHandle: instanceHandle).EnumeratePhysicalDevices;
+        var enumeratePhysicalDevices = instance.EnumeratePhysicalDevices;
 
         var physicalDeviceCount = 0U;
         var result = enumeratePhysicalDevices(
-            instanceHandle,
+            instance.Handle,
             ref physicalDeviceCount,
             0
         );
@@ -143,7 +91,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
         try {
             result = enumeratePhysicalDevices(
-                instanceHandle,
+                instance.Handle,
                 ref physicalDeviceCount,
                 deviceBuffer
             );
@@ -164,13 +112,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public uint GetDeviceApiVersion(nint instanceHandle, nint physicalDeviceHandle) {
+    public uint GetDeviceApiVersion(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
+        var getPhysicalDeviceProperties = instance.GetPhysicalDeviceProperties;
 
         var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
 
@@ -189,13 +137,86 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public long GetDeviceLuid(nint instanceHandle, nint physicalDeviceHandle) {
+    public GpuDeviceIdentity GetDeviceIdentity(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        var getPhysicalDeviceProperties2 = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties2;
+        var driverProperties = new VkPhysicalDeviceDriverProperties {
+            SType = StructureTypePhysicalDeviceDriverProperties,
+        };
+        var properties2 = new VkPhysicalDeviceProperties2 {
+            SType = StructureTypePhysicalDeviceProperties2,
+        };
+        var apiVersion = GetDeviceApiVersion(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+        var hasDriverProperties = (
+            (instance.GetPhysicalDeviceProperties2 is not null) && (
+                (apiVersion >= VulkanVersion12) ||
+                HasDeviceExtension(
+                    extensionName: "VK_KHR_driver_properties",
+                    instance: instance,
+                    physicalDeviceHandle: physicalDeviceHandle
+                )
+            )
+        );
+
+        if (hasDriverProperties) {
+            properties2.PNext = ((nint)(&driverProperties));
+            instance.GetPhysicalDeviceProperties2(
+                physicalDeviceHandle,
+                ((nint)(&properties2))
+            );
+        } else {
+            instance.GetPhysicalDeviceProperties(
+                physicalDeviceHandle,
+                ((nint)properties2.Properties)
+            );
+        }
+
+        var properties = properties2.Properties;
+        var driverVersion = *((uint*)(properties + PhysicalDeviceDriverVersionOffset));
+
+        return new GpuDeviceIdentity(
+            AdapterName: (Marshal.PtrToStringUTF8(ptr: ((nint)(properties + PhysicalDeviceNameOffset))) ?? string.Empty),
+            ApiVersion: GpuDeviceIdentity.FormatVulkanVersion(packed: *((uint*)(properties + PhysicalDeviceApiVersionOffset))),
+            Backend: "vulkan",
+            ConformanceVersion: (hasDriverProperties
+                ? $"{driverProperties.ConformanceMajor}.{driverProperties.ConformanceMinor}.{driverProperties.ConformanceSubminor}.{driverProperties.ConformancePatch}"
+                : string.Empty
+            ),
+            DeviceId: *((uint*)(properties + PhysicalDeviceIdOffset)),
+            DriverId: (hasDriverProperties
+                ? driverProperties.DriverId
+                : 0U
+            ),
+            DriverName: (hasDriverProperties
+                ? (Marshal.PtrToStringUTF8(ptr: ((nint)driverProperties.DriverName)) ?? string.Empty)
+                : string.Empty
+            ),
+            DriverVersion: (hasDriverProperties
+                ? (Marshal.PtrToStringUTF8(ptr: ((nint)driverProperties.DriverInfo)) ?? string.Empty)
+                : string.Empty
+            ),
+            DriverVersionRaw: driverVersion,
+            PipelineCacheUuid: Convert.ToHexStringLower(bytes: new ReadOnlySpan<byte>(
+                length: PhysicalDevicePipelineCacheUuidLength,
+                pointer: (properties + PhysicalDevicePipelineCacheUuidOffset)
+            )),
+            VendorId: *((uint*)(properties + PhysicalDeviceVendorIdOffset))
+        );
+    }
+    /// <inheritdoc/>
+    public long GetDeviceLuid(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+
+        var getPhysicalDeviceProperties2 = instance.GetPhysicalDeviceProperties2;
 
         if (getPhysicalDeviceProperties2 is null) {
             return 0;
@@ -223,13 +244,39 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         return *((long*)idProperties.DeviceLuid);
     }
     /// <inheritdoc/>
-    public string GetDeviceName(nint instanceHandle, nint physicalDeviceHandle) {
+    public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
+            physicalDeviceHandle: physicalDeviceHandle
+        );
+        instance.GetPhysicalDeviceMemoryProperties(
+            physicalDeviceHandle,
+            out var memory
+        );
+
+        return GpuMemoryProfile.FromVulkan(
+            deviceType: ((uint)GetPhysicalDeviceType(
+                instance: instance,
+                physicalDeviceHandle: physicalDeviceHandle
+            )),
+            memoryHeaps: new ReadOnlySpan<ulong>(
+                length: (((int)memory.MemoryHeapCount) * 2),
+                pointer: memory.MemoryHeapPairs
+            ),
+            memoryTypes: new ReadOnlySpan<uint>(
+                length: (((int)memory.MemoryTypeCount) * 2),
+                pointer: memory.MemoryTypePairs
+            )
+        );
+    }
+    /// <inheritdoc/>
+    public string GetDeviceName(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
+        ValidatePhysicalDeviceInputs(
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
+        var getPhysicalDeviceProperties = instance.GetPhysicalDeviceProperties;
 
         var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
 
@@ -249,13 +296,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public IReadOnlyList<bool> GetFeatureSupport(nint instanceHandle, nint physicalDeviceHandle) {
+    public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        var getPhysicalDeviceFeatures = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceFeatures;
+        var getPhysicalDeviceFeatures = instance.GetPhysicalDeviceFeatures;
         var featureBytes = (PhysicalDeviceFeatureCount * sizeof(uint));
         var buffer = m_allocator.Alloc(size: featureBytes);
 
@@ -280,13 +327,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public VkPhysicalDeviceType GetPhysicalDeviceType(nint instanceHandle, nint physicalDeviceHandle) {
+    public VkPhysicalDeviceType GetPhysicalDeviceType(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        var getPhysicalDeviceProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceProperties;
+        var getPhysicalDeviceProperties = instance.GetPhysicalDeviceProperties;
 
         var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
 
@@ -312,14 +359,18 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public IReadOnlyList<uint> GetPresentModes(nint instanceHandle, nint physicalDeviceHandle, nint surfaceHandle) {
+    public IReadOnlyList<uint> GetPresentModes(VulkanInstanceCommands instance, nint physicalDeviceHandle, nint surfaceHandle) {
         ValidatePhysicalDeviceSurfaceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle,
             surfaceHandle: surfaceHandle
         );
 
-        var getPresentModes = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfacePresentModesKhr;
+        var getPresentModes = instance.GetPhysicalDeviceSurfacePresentModesKhr;
+
+        if (getPresentModes is null) {
+            throw VulkanProcResolver.MissingInstanceProc(functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8);
+        }
 
         var modeCount = 0U;
         var result = getPresentModes(
@@ -363,13 +414,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         }
     }
     /// <inheritdoc/>
-    public IReadOnlyList<VkQueueFamilyInfo> GetQueueFamilies(nint instanceHandle, nint physicalDeviceHandle) {
+    public IReadOnlyList<VkQueueFamilyInfo> GetQueueFamilies(VulkanInstanceCommands instance, nint physicalDeviceHandle) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        var getQueueFamilyProperties = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceQueueFamilyProperties;
+        var getQueueFamilyProperties = instance.GetPhysicalDeviceQueueFamilyProperties;
 
         var queueFamilyCount = 0U;
 
@@ -415,17 +466,21 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
     /// <inheritdoc/>
     public VulkanSurfaceCapabilities GetSurfaceCapabilities(
-        nint instanceHandle,
+        VulkanInstanceCommands instance,
         nint physicalDeviceHandle,
         nint surfaceHandle
     ) {
         ValidatePhysicalDeviceSurfaceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle,
             surfaceHandle: surfaceHandle
         );
 
-        var getSurfaceCapabilities = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfaceCapabilitiesKhr;
+        var getSurfaceCapabilities = instance.GetPhysicalDeviceSurfaceCapabilitiesKhr;
+
+        if (getSurfaceCapabilities is null) {
+            throw VulkanProcResolver.MissingInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8);
+        }
 
         var result = getSurfaceCapabilities(
             physicalDeviceHandle,
@@ -450,17 +505,21 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
     /// <inheritdoc/>
     public IReadOnlyList<VulkanSurfaceFormat> GetSurfaceFormats(
-        nint instanceHandle,
+        VulkanInstanceCommands instance,
         nint physicalDeviceHandle,
         nint surfaceHandle
     ) {
         ValidatePhysicalDeviceSurfaceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle,
             surfaceHandle: surfaceHandle
         );
 
-        var getSurfaceFormats = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfaceFormatsKhr;
+        var getSurfaceFormats = instance.GetPhysicalDeviceSurfaceFormatsKhr;
+
+        if (getSurfaceFormats is null) {
+            throw VulkanProcResolver.MissingInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8);
+        }
 
         var formatCount = 0U;
         var result = getSurfaceFormats(
@@ -509,18 +568,22 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     }
     /// <inheritdoc/>
     public bool GetSurfaceSupport(
-        nint instanceHandle,
+        VulkanInstanceCommands instance,
         nint physicalDeviceHandle,
         uint queueFamilyIndex,
         nint surfaceHandle
     ) {
         ValidatePhysicalDeviceSurfaceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle,
             surfaceHandle: surfaceHandle
         );
 
-        var getSurfaceSupport = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceSurfaceSupportKhr;
+        var getSurfaceSupport = instance.GetPhysicalDeviceSurfaceSupportKhr;
+
+        if (getSurfaceSupport is null) {
+            throw VulkanProcResolver.MissingInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8);
+        }
 
         var result = getSurfaceSupport(
             physicalDeviceHandle,
@@ -533,93 +596,14 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         return (0 != supported);
     }
     /// <inheritdoc/>
-    public VulkanTimestampCapabilities GetTimestampCapabilities(
-        nint instanceHandle,
-        nint physicalDeviceHandle,
-        uint graphicsQueueFamilyIndex
-    ) {
+    public bool HasDeviceExtension(VulkanInstanceCommands instance, nint physicalDeviceHandle, string extensionName) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle
-        );
-
-        var pointers = GetPointers(instanceHandle: instanceHandle);
-
-        // timestampPeriod (nanoseconds per tick) lives deep in VkPhysicalDeviceLimits; read
-        // it through a fully-typed prefix so the compiler computes the offset from the field
-        // ABI (the hardcoded-offset style used for deviceType is fragile across that many
-        // 8-byte-aligned members).
-        var propertiesBuffer = m_allocator.Alloc(size: PhysicalDevicePropertiesBufferSize);
-        float timestampPeriod;
-
-        try {
-            pointers.GetPhysicalDeviceProperties(
-                physicalDeviceHandle,
-                propertiesBuffer
-            );
-            timestampPeriod = ((VkPhysicalDeviceProperties*)propertiesBuffer)->Limits.TimestampPeriod;
-        } finally {
-            m_allocator.Free(ptr: propertiesBuffer);
-        }
-
-        // Guard a layout/offset mistake from poisoning every measurement: timestampPeriod is
-        // a small positive float on real hardware (NVIDIA reports exactly 1.0). Anything
-        // outside a sane band means a misread — fall back to a 1 ns tick.
-        if (!((timestampPeriod > 0.0f) && (timestampPeriod < 100_000.0f))) {
-            timestampPeriod = 1.0f;
-        }
-
-        // timestampValidBits is per queue family; re-read the family table and pick the
-        // render (graphics) family's value (0 => the queue cannot timestamp).
-        var validBits = 0U;
-        var queueFamilyCount = 0U;
-
-        pointers.GetPhysicalDeviceQueueFamilyProperties(
-            physicalDeviceHandle,
-            ref queueFamilyCount,
-            0
-        );
-        if (queueFamilyCount > 0) {
-            var structureSize = Marshal.SizeOf<VkQueueFamilyProperties>();
-            var queueFamilyBuffer = m_allocator.Alloc(size: (structureSize * checked((int)queueFamilyCount)));
-
-            try {
-                pointers.GetPhysicalDeviceQueueFamilyProperties(
-                    physicalDeviceHandle,
-                    ref queueFamilyCount,
-                    queueFamilyBuffer
-                );
-                if (graphicsQueueFamilyIndex < queueFamilyCount) {
-                    var properties = Marshal.PtrToStructure<VkQueueFamilyProperties>(ptr: IntPtr.Add(
-                        offset: checked((((int)graphicsQueueFamilyIndex) * structureSize)),
-                        pointer: queueFamilyBuffer
-                    ));
-
-                    validBits = properties.TimestampValidBits;
-                }
-            } finally {
-                m_allocator.Free(ptr: queueFamilyBuffer);
-            }
-        }
-
-        return new VulkanTimestampCapabilities(
-            GraphicsQueueValidBits: validBits,
-            PeriodNanoseconds: timestampPeriod
-        );
-    }
-    /// <inheritdoc/>
-    public bool HasDeviceExtension(nint instanceHandle, nint physicalDeviceHandle, string extensionName) {
-        ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
         ArgumentException.ThrowIfNullOrEmpty(argument: extensionName);
 
-        var enumerateDeviceExtensionProperties = GetPointers(instanceHandle: instanceHandle).EnumerateDeviceExtensionProperties;
-
-        if (enumerateDeviceExtensionProperties is null) {
-            return false;
-        }
+        var enumerateDeviceExtensionProperties = instance.EnumerateDeviceExtensionProperties;
 
         var count = 0U;
 
@@ -670,13 +654,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         return false;
     }
     /// <inheritdoc/>
-    public bool IsExtensionFeatureSupported(nint instanceHandle, nint physicalDeviceHandle, uint structureType) {
+    public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) {
         ValidatePhysicalDeviceInputs(
-            instanceHandle: instanceHandle,
+            instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
         );
 
-        var getPhysicalDeviceFeatures2 = GetPointers(instanceHandle: instanceHandle).GetPhysicalDeviceFeatures2;
+        var getPhysicalDeviceFeatures2 = instance.GetPhysicalDeviceFeatures2;
 
         if (getPhysicalDeviceFeatures2 is null) {
             return false;
@@ -687,7 +671,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         // at offset 16 on the 64-bit ABI — probe it generically without naming the struct.
         const int FeatureFlagOffset = 16;
         // vkGetPhysicalDeviceFeatures2 writes the WHOLE *FeaturesKHR struct for this structureType, not just the first
-        // flag — and some run well past 24 bytes (e.g. VkPhysicalDeviceAccelerationStructureFeaturesKHR is 40+). A
+        // flag — and some run well past 24 bytes. A
         // 24-byte buffer let the driver write past the stack allocation; 256 matches the size already proven defensive
         // in VulkanNativeLogicalDeviceApi (which documents the same prior bug).
         const int FeatureBlockByteSize = 256;
@@ -709,19 +693,5 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             ((nint)(&features2))
         );
         return (0 != *((uint*)(featureBlock + FeatureFlagOffset)));
-    }
-
-    private unsafe struct InstancePointers {
-        public delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult> EnumeratePhysicalDevices;
-        public delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceProperties;
-        public delegate* unmanaged[Cdecl]<nint, ref uint, nint, void> GetPhysicalDeviceQueueFamilyProperties;
-        public delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult> GetPhysicalDeviceSurfaceSupportKhr;
-        public delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult> GetPhysicalDeviceSurfaceCapabilitiesKhr;
-        public delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult> GetPhysicalDeviceSurfaceFormatsKhr;
-        public delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult> GetPhysicalDeviceSurfacePresentModesKhr;
-        public delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceFeatures;
-        public delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceFeatures2;
-        public delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceProperties2;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult> EnumerateDeviceExtensionProperties;
     }
 }

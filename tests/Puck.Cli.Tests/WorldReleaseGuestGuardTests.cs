@@ -10,19 +10,25 @@ public sealed class WorldReleaseGuestGuardTests {
     [Fact]
     public async Task DelayedGuestEffectsRefuseChangedOperationsAndBootstrapRoles() {
         var token = TestContext.Current.CancellationToken;
-        var python = (Environment.GetEnvironmentVariable(variable: "PUCK_TEST_PYTHON") ?? (OperatingSystem.IsWindows()
+        var python = (OperatingSystem.IsWindows()
             ? "python"
-            : "python3"));
+            : "python3");
 
-        try { await CliProcess.RunCheckedAsync(
-            Environment.CurrentDirectory,
-            python,
-            ["--version"],
+        try {
+            await CliProcess.RunCheckedAsync(
+            workingDirectory: Environment.CurrentDirectory,
+            fileName: python,
+            arguments: ["--version"],
             capture: true,
             cancellationToken: token
-        ); } catch (System.ComponentModel.Win32Exception) { Assert.Skip(reason: "Install Python 3 or set PUCK_TEST_PYTHON to run the retained guest guard contract law."); return; }
+        );
+        } catch (Exception exception) when ((exception is System.ComponentModel.Win32Exception or FileNotFoundException or InvalidOperationException)) {
+            // Absent from PATH, or present only as a launcher stub that exits nonzero (Windows' Store alias exits 9009).
+            Assert.Skip(reason: "Install Python 3 on PATH to run the retained guest guard contract law.");
+            return;
+        }
         Assert.True(
-            condition: CliPaths.TryGetRepositoryRoot(out var root),
+            condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root),
             userMessage: "repository root is required"
         );
         var operation = Guid.NewGuid();
@@ -170,9 +176,9 @@ public sealed class WorldReleaseGuestGuardTests {
                 print('guest guard wire contract passed')
                 """;
             var result = await CliProcess.RunCheckedAsync(
-                directory.FullName,
-                python,
-                ["-c", Program, Path.Combine(
+                workingDirectory: directory.FullName,
+                fileName: python,
+                arguments: ["-c", Program, Path.Combine(
                         path1: root,
                         path2: "build/Guard-WorldRelease.py"
                     ), path],
@@ -181,9 +187,9 @@ public sealed class WorldReleaseGuestGuardTests {
             );
 
             Assert.Contains(
-                "guest guard wire contract passed",
-                result,
-                StringComparison.Ordinal
+                actualString: result,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "guest guard wire contract passed"
             );
         } finally { directory.Delete(recursive: true); }
     }

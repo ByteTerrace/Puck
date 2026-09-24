@@ -139,22 +139,25 @@ public sealed class IntentSourceJsonConverter : JsonConverter<IntentSource>, IJs
     /// <inheritdoc/>
     public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => new() {
         ["anyOf"] = new JsonArray(
-        new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(
+        new JsonObject {
+            ["type"] = "string",
+            ["enum"] = new JsonArray(
             "Live",
             "Idle"
-        ) },
+        ),
+        },
         new JsonObject {
-                ["type"] = "object",
-                ["properties"] = new JsonObject {
-                    ["$type"] = new JsonObject { ["const"] = "producer" },
-                    ["name"] = new JsonObject { ["type"] = "string" },
-                },
-                ["required"] = new JsonArray(
+            ["type"] = "object",
+            ["properties"] = new JsonObject {
+                ["$type"] = new JsonObject { ["const"] = "producer" },
+                ["name"] = new JsonObject { ["type"] = "string" },
+            },
+            ["required"] = new JsonArray(
             "$type",
             "name"
         ),
-                ["additionalProperties"] = false,
-            }
+            ["additionalProperties"] = false,
+        }
     ),
     };
     /// <inheritdoc/>

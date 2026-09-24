@@ -2,14 +2,14 @@ using System.Reflection;
 
 namespace Puck.World.Protocol;
 
-/// <summary>Declares one <see cref="WorldMutation"/> nested record's stable dispatch ordinal and the
+/// <summary>Declares one <see cref="WorldMutation"/> nested record's declared dispatch ordinal and the
 /// <see cref="WorldSection"/> it targets — the wire vocabulary <see cref="MutationKindMask"/> and the addon mutation
 /// door (<c>Server.WorldAddonMutationDecoder</c>) read off. Every nested record under <see cref="WorldMutation"/>
 /// carries exactly one of these, with an explicit ordinal (never inferred from declaration order — a reordered file
 /// must never silently renumber the wire). <see cref="WorldMutationKindCatalog"/> discovers every so-tagged record by
 /// reflection over this assembly and validates the whole set at boot, the same discovered-not-hand-kept posture
 /// <c>RefusalAttribute</c> uses for <c>world.refusals</c>.</summary>
-/// <param name="ordinal">The kind's stable dispatch ordinal, <c>0..</c><see cref="WorldMutationKindCatalog.MaxOrdinal"/>
+/// <param name="ordinal">The kind's declared dispatch ordinal, <c>0..</c><see cref="WorldMutationKindCatalog.MaxOrdinal"/>
 /// (one bit of the <see cref="MutationKindMask"/> lane). An ordinal past the lane is refused at boot rather than left
 /// to wrap: .NET masks a shift count by the operand's width, so an out-of-lane bit aliases a real kind and would
 /// admit the wrong door silently.</param>
@@ -18,7 +18,7 @@ namespace Puck.World.Protocol;
 /// project cannot reference Server; this attribute only records the declared pairing).</param>
 [AttributeUsage(validOn: AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class MutationKindAttribute(int ordinal, WorldSection section) : Attribute {
-    /// <summary>Gets the kind's stable dispatch ordinal.</summary>
+    /// <summary>Gets the kind's declared dispatch ordinal.</summary>
     public int Ordinal { get; } = ordinal;
     /// <summary>Gets the section this kind targets.</summary>
     public WorldSection Section { get; } = section;

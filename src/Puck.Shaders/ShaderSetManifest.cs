@@ -1,19 +1,21 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
 /// <summary>
 /// A <c>puck.shader.manifest.v1</c> shader-set manifest: one <c>&lt;id&gt;.puck.shader.json</c> beside its HLSL and compiled
-/// bytecode, and the whole declaration of a shader set — its stage stems, its descriptor bindings, its config
-/// schema (what a document may author for it), and its push-constant block (which fields, in what order, filled from
-/// which source). The binding layout is authored by hand and cross-checked against the pipeline description built
+/// bytecode, and the whole declaration of a shader set — its stage stems, its descriptor bindings, and its config
+/// schema (what a document may author for it). A set's config reaches its fragment stage through the set's frame
+/// block (<see cref="FrameLayout"/>), whose declarations the stage includes. The binding layout is authored by hand and
+/// cross-checked against the pipeline description built
 /// for the same set at <see cref="ValidateBindings(GpuGraphicsPipelineDescription)"/> /
 /// <see cref="ValidateBindings(GpuComputePipelineDescription)"/> time — never read from a native shader-reflection
 /// dependency. Bytecode freshness is the build's: the <c>.hash</c> sidecar beside every bytecode file is checked on
-/// every build against the source and the bytecode, so <see cref="Load"/> checks format only.
+/// every build against the source and the bytecode, so <see cref="Load(string)"/> checks format only.
 /// </summary>
 /// <param name="Schema">The schema tag; must equal <see cref="SchemaTag"/>.</param>
 /// <param name="Name">The shader set's id; must equal the manifest's file stem (the text before <see cref="FileSuffix"/>).</param>
@@ -23,7 +25,6 @@ namespace Puck.Shaders;
 /// <param name="Description">What the set does; carried into the emitted config JSON Schema.</param>
 /// <param name="Config">The config schema, name → field, in the order a schema emits them; <see langword="null"/> when
 /// the set takes no configuration.</param>
-/// <param name="PushConstants">The push-constant block; <see langword="null"/> when the set has none.</param>
 public sealed partial record ShaderSetManifest(
     [property: JsonPropertyName("$schema")] string Schema,
     string Name,
@@ -31,23 +32,35 @@ public sealed partial record ShaderSetManifest(
     IReadOnlyList<ShaderSetManifestBinding> Bindings,
     ShaderSetManifestTargetFloor TargetFloor,
     string? Description = null,
-    IReadOnlyDictionary<string, ShaderConfigField>? Config = null,
-    ShaderPushConstantBlock? PushConstants = null
+    IReadOnlyDictionary<string, ShaderConfigField>? Config = null
 ) {
     /// <summary>The file suffix every manifest carries; the text before it is the set's id.</summary>
     public const string FileSuffix = ".puck.shader.json";
     /// <summary>The required <c>$schema</c> value of every <see cref="ShaderSetManifest"/> document.</summary>
     public const string SchemaTag = "puck.shader.manifest.v1";
 
+    private static readonly IReadOnlyDictionary<string, ReadOnlyMemory<byte>> EmptyBytecode = new Dictionary<string, ReadOnlyMemory<byte>>(comparer: StringComparer.Ordinal);
+
+    /// <summary>Gets the bytecode <see cref="Load(string, WorkCounterSet)"/> read and validated, keyed by
+    /// <c>"&lt;stem&gt;&lt;extension&gt;"</c> (e.g. <c>"sdf-film-grain.frag.spv"</c>) exactly as
+    /// <see cref="BytecodePath"/> would combine them, one entry per stage's <c>.spv</c> and, when shipped, its sibling
+    /// <c>.dxil</c>. A consumer that builds an executor from this manifest reads a stage's bytes from here instead of
+    /// reading the file again.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, ReadOnlyMemory<byte>> Bytecode { get; private init; } = EmptyBytecode;
     /// <summary>Gets the directory the manifest was loaded from — where its stage stems resolve.</summary>
     [JsonIgnore]
     public string Directory { get; private init; } = "";
+
     /// <summary>Gets a value indicating whether the set is a vertex+fragment (graphics) set rather than a compute set.</summary>
     [JsonIgnore]
     public bool IsGraphics => (Stages.Compute is null);
-    /// <summary>Gets the resolved push-constant layout, or <see langword="null"/> when the set declares no block.</summary>
+
+    /// <summary>Gets the set's frame block: the frame interface named for the set over its config
+    /// (<see cref="ShaderFrameInterface"/>), whose generated declarations the set's stages include as
+    /// <c>&lt;name&gt;.interface.hlsli</c>.</summary>
     [JsonIgnore]
-    public ShaderPushConstantLayout? PushConstantLayout { get; private init; }
+    public ShaderPipelineParameterLayout FrameLayout { get; private init; } = null!;
 
     /// <summary>Returns the path of one stage's bytecode beside this manifest.</summary>
     /// <param name="stem">The stage's source stem (<see cref="Stages"/>).</param>
@@ -58,22 +71,76 @@ public sealed partial record ShaderSetManifest(
             path1: Directory,
             path2: $"{stem}{bytecodeExtension}"
         );
+    /// <summary>Reads a manifest's frame interface without its bytecode: the frame interface named for the set over its
+    /// config (<see cref="ShaderFrameInterface.For"/>), which <see cref="FrameLayout"/> lays out once the set loads.
+    /// A set's declarations are generated from this before its bytecode can be built.</summary>
+    /// <param name="manifestPath">The manifest file's path.</param>
+    /// <returns>The interface.</returns>
+    /// <exception cref="InvalidDataException">The manifest is malformed, its config schema is invalid, or its name or
+    /// a config field does not make a frame interface.</exception>
+    /// <exception cref="IOException">The manifest cannot be read.</exception>
+    public static ShaderInterface ReadFrameInterface(string manifestPath) {
+        ShaderSetManifest manifest;
+
+        try {
+            manifest = (JsonSerializer.Deserialize(
+                json: File.ReadAllText(path: manifestPath),
+                jsonTypeInfo: ShaderManifestJsonContext.Default.ShaderSetManifest
+            ) ?? throw new InvalidDataException(message: $"Shader set manifest is empty or 'null': {manifestPath}"));
+        } catch (JsonException exception) {
+            throw new InvalidDataException(
+                message: $"Shader set manifest '{manifestPath}' is malformed: {exception.Message}",
+                innerException: exception
+            );
+        }
+
+        manifest.ValidateConfigSchema();
+
+        return ShaderFrameInterface.For(
+            config: manifest.Config,
+            name: manifest.Name
+        );
+    }
     /// <summary>Reads, parses, and validates a manifest file: the <c>$schema</c> tag, the name against the file stem,
-    /// the stage shape, the config schema (defaults well-typed and in range), the push-constant block (sources
-    /// resolved, offsets computed), and — for every stage present — that the sibling <c>.spv</c> exists and it and
-    /// any sibling <c>.dxil</c> are well-formed bytecode (<see cref="ShaderBytecode.ValidateFormat"/>).</summary>
+    /// the stage shape, the config schema (defaults well-typed and in range), the frame block (the set's name an
+    /// interface name, no config field repeating a frame member's), and — for every stage present — that the sibling
+    /// <c>.spv</c> exists and it and
+    /// any sibling <c>.dxil</c> are well-formed bytecode (<see cref="ShaderBytecode.ValidateFormat"/>). The load and
+    /// the bytecode bytes it read are counted into <see cref="LoadWork"/>, and the validated bytes are kept on the
+    /// returned manifest's <see cref="Bytecode"/> so a consumer building an executor from it reads no file again.</summary>
     /// <param name="manifestPath">The manifest file's path.</param>
     /// <returns>The validated manifest.</returns>
     /// <exception cref="FileNotFoundException">The manifest, or a stage's <c>.spv</c>, does not exist.</exception>
     /// <exception cref="InvalidDataException">The manifest is malformed under any rule above, or a bytecode file fails
     /// format validation.</exception>
-    public static ShaderSetManifest Load(string manifestPath) {
+    public static ShaderSetManifest Load(string manifestPath) =>
+        Load(
+            manifestPath: manifestPath,
+            work: LoadWork
+        );
+    /// <summary>Reads, parses, and validates a manifest file as <see cref="Load(string)"/> does, counting the load and
+    /// the bytecode bytes it read into <paramref name="work"/> rather than the process's <see cref="LoadWork"/>.</summary>
+    /// <param name="manifestPath">The manifest file's path.</param>
+    /// <param name="work">The counts the load adds to; it must count <see cref="Loads"/> and
+    /// <see cref="BytecodeBytes"/>.</param>
+    /// <returns>The validated manifest.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="work"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="work"/> does not count <see cref="Loads"/> and
+    /// <see cref="BytecodeBytes"/>.</exception>
+    /// <exception cref="FileNotFoundException">The manifest, or a stage's <c>.spv</c>, does not exist.</exception>
+    /// <exception cref="InvalidDataException">The manifest is malformed under any rule <see cref="Load(string)"/>
+    /// checks, or a bytecode file fails format validation.</exception>
+    public static ShaderSetManifest Load(string manifestPath, WorkCounterSet work) {
+        ArgumentNullException.ThrowIfNull(argument: work);
+
         if (!File.Exists(path: manifestPath)) {
             throw new FileNotFoundException(
                 fileName: manifestPath,
                 message: $"Shader set manifest not found: {manifestPath}"
             );
         }
+
+        work.Count(kind: Loads);
 
         ShaderSetManifest manifest;
 
@@ -139,42 +206,46 @@ public sealed partial record ShaderSetManifest(
 
         manifest.ValidateConfigSchema();
 
-        var layout = ((manifest.PushConstants is { } block)
-            ? ShaderPushConstantLayout.Resolve(
-                block: block,
-                config: manifest.Config,
-                manifestName: manifest.Name
-            )
-            : null
+        var layout = ShaderPipelineParameterLayout.For(
+            config: manifest.Config,
+            interfaceName: manifest.Name
         );
 
+        var bytecode = new Dictionary<string, ReadOnlyMemory<byte>>(comparer: StringComparer.Ordinal);
+
         ValidateStage(
+            bytecode: bytecode,
             directory: directory,
             manifestName: manifest.Name,
             stem: manifest.Stages.Vertex,
-            stageName: "vertex"
+            stageName: "vertex",
+            work: work
         );
         ValidateStage(
+            bytecode: bytecode,
             directory: directory,
             manifestName: manifest.Name,
             stem: manifest.Stages.Fragment,
-            stageName: "fragment"
+            stageName: "fragment",
+            work: work
         );
         ValidateStage(
+            bytecode: bytecode,
             directory: directory,
             manifestName: manifest.Name,
             stem: manifest.Stages.Compute,
-            stageName: "compute"
+            stageName: "compute",
+            work: work
         );
 
-        return (manifest with { Directory = directory, PushConstantLayout = layout });
+        return (manifest with { Bytecode = bytecode, Directory = directory, FrameLayout = layout });
     }
     /// <summary>Refuses, naming the exact binding, when an authored <see cref="Bindings"/> entry disagrees with what
     /// <paramref name="description"/> actually requests. A graphics description carries no per-slot binding list
     /// (only a sampler count and a storage-buffer flag), so the check is coarse: the manifest's sampledImage-kind
     /// binding count must equal <see cref="GpuGraphicsPipelineDescription.TextureSamplerCount"/>, the manifest
     /// must declare a storageBuffer-kind binding if and only if <see cref="GpuGraphicsPipelineDescription.EnableStorageBuffer"/>
-    /// is set, and the push-constant range size must equal <see cref="PushConstantLayout"/>'s.</summary>
+    /// is set, and the push-constant range size must equal <see cref="FrameLayout"/>'s.</summary>
     /// <param name="description">The pipeline description built for this manifest's graphics set.</param>
     /// <exception cref="InvalidDataException">A binding disagrees with the description.</exception>
     public void ValidateBindings(GpuGraphicsPipelineDescription description) {
@@ -202,7 +273,7 @@ public sealed partial record ShaderSetManifest(
                 : "requests none")}.");
         }
 
-        var declaredPushBytes = (PushConstantLayout?.SizeBytes ?? 0);
+        var declaredPushBytes = FrameLayout.SizeBytes;
         var requestedPushBytes = (description.PushConstantBinding?.Size ?? 0);
 
         if (declaredPushBytes != requestedPushBytes) {
@@ -246,18 +317,18 @@ public sealed partial record ShaderSetManifest(
             ShaderSetManifestBindingKind.StorageBuffer => ((descriptionKind == GpuComputeBindingKind.StorageBufferRead) || (descriptionKind == GpuComputeBindingKind.StorageBufferReadWrite)),
             ShaderSetManifestBindingKind.SampledImage => (descriptionKind == GpuComputeBindingKind.SampledImage),
             ShaderSetManifestBindingKind.StorageImage => (descriptionKind == GpuComputeBindingKind.StorageImage),
-            ShaderSetManifestBindingKind.AccelerationStructure => (descriptionKind == GpuComputeBindingKind.AccelerationStructure),
             _ => false,
         };
     }
-    private static void ValidateStage(string directory, string manifestName, string? stem, string stageName) {
+    private static void ValidateStage(Dictionary<string, ReadOnlyMemory<byte>> bytecode, string directory, string manifestName, string? stem, string stageName, WorkCounterSet work) {
         if (stem is null) {
             return;
         }
 
+        var spirvName = $"{stem}.spv";
         var spirvPath = Path.Combine(
             path1: directory,
-            path2: $"{stem}.spv"
+            path2: spirvName
         );
 
         if (!File.Exists(path: spirvPath)) {
@@ -267,34 +338,46 @@ public sealed partial record ShaderSetManifest(
             );
         }
 
-        ValidateBytecodeFile(
+        bytecode[spirvName] = ValidateBytecodeFile(
             manifestName: manifestName,
             path: spirvPath,
-            stageName: stageName
+            stageName: stageName,
+            work: work
         );
 
+        var dxilName = $"{stem}.dxil";
         var dxilPath = Path.Combine(
             path1: directory,
-            path2: $"{stem}.dxil"
+            path2: dxilName
         );
 
         if (File.Exists(path: dxilPath)) {
-            ValidateBytecodeFile(
+            bytecode[dxilName] = ValidateBytecodeFile(
                 manifestName: manifestName,
                 path: dxilPath,
-                stageName: stageName
+                stageName: stageName,
+                work: work
             );
         }
     }
-    private static void ValidateBytecodeFile(string manifestName, string path, string stageName) {
+    private static ReadOnlyMemory<byte> ValidateBytecodeFile(string manifestName, string path, string stageName, WorkCounterSet work) {
+        var bytecode = File.ReadAllBytes(path: path);
+
+        work.Add(
+            amount: bytecode.LongLength,
+            kind: BytecodeBytes
+        );
+
         try {
-            ShaderBytecode.ValidateFormat(bytecode: File.ReadAllBytes(path: path));
+            ShaderBytecode.ValidateFormat(bytecode: bytecode);
         } catch (ArgumentException exception) {
             throw new InvalidDataException(
                 message: $"'{manifestName}' manifest's {stageName} bytecode failed format validation: {path} ({exception.Message})",
                 innerException: exception
             );
         }
+
+        return bytecode;
     }
 }
 

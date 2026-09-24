@@ -22,13 +22,13 @@ public sealed class WorldRuleTraceLawTests {
     // strike: dealt = minimum(damage, hp); hp -= dealt while hp > 0. The second evaluation binds dealt = 0 and its write
     // cannot move hp, which is the skipped outcome; the third closes the gate.
     private static WorldDefinition Document() => Fixtures.BuildDocument() with {
-        StateRaw = new WorldStateSection(World: [Slot(
+        StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
             name: "damage",
             value: 30L
-        ), Slot(
+        ), StateFixtures.IntSlot(
             name: "hp",
             value: 20L
-        ), Slot(
+        ), StateFixtures.IntSlot(
             name: "hits",
             value: 0L
         )]),
@@ -46,7 +46,7 @@ public sealed class WorldRuleTraceLawTests {
             ],
             Gate: new ActionPredicate.CompareState(
                 State: "hp",
-                Comparison: ActionStateComparison.GreaterOrEqual,
+                Comparison: ExpressionOp.GreaterOrEqual,
                 Value: 0m
             ),
             Locals: [new RuleLocal(
@@ -57,23 +57,6 @@ public sealed class WorldRuleTraceLawTests {
         )],
     };
     private static ExpressionProgram Expr(string text) => ExpressionProgram.Parse(text: text);
-    private static WorldStateRow Slot(string name, long value) =>
-        new(
-            CellName.Parse(candidate: name),
-            CellKind.Int,
-            Cells: [new StateCell(
-                    WorldStateRow.SlotKey,
-                    CellValue.Int(value: value)
-                )]
-        );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
 
     [Fact]
     public void ACaptureRecordsBindingsConjunctsAndEffectOutcomesAndStopsAtItsCount() {
@@ -134,29 +117,25 @@ public sealed class WorldRuleTraceLawTests {
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "hp"
+            fixture.SlotValue(row: "hp"
             )
         );
         Assert.Equal(
             3L,
-            Value(
-                fixture: fixture,
-                row: "hits"
+            fixture.SlotValue(row: "hits"
             )
         );
     }
     [Fact]
     public void AClosedGateAndARefusedBindingAreBothVisible() {
         var closed = Document() with {
-            StateRaw = new WorldStateSection(World: [Slot(
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
                 name: "damage",
                 value: 30L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "hp",
                 value: -1L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "hits",
                 value: 0L
             )]),
@@ -183,16 +162,16 @@ public sealed class WorldRuleTraceLawTests {
         );
 
         var dividing = Document() with {
-            StateRaw = new WorldStateSection(World: [Slot(
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
                 name: "damage",
                 value: 30L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "hp",
                 value: 20L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "hits",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "zero",
                 value: 0L
             )]),

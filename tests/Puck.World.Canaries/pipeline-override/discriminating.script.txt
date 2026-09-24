@@ -1,0 +1,10 @@
+# The same session, but the preview is never committed: the saved row carries no override.
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+world.row.set views.pipelines {"name":"ink","source":"{fixtures}/../../../src/Puck.World/Assets/pipelines/ink.pipeline.json","timeScale":0}
+pipeline.reload ink
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+pipeline.set ink visualize {"exposure":0}
+pipeline.overrides ink
+world.save {run}/override.world.json

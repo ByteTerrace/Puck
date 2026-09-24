@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.World.Server;
 using Xunit;
 
@@ -60,10 +61,12 @@ public sealed class WorldTickScheduleLawTests {
     }
     [Fact]
     public void PublishingAllocatesNothing() {
+        // A published row is claimed and never fires again, so every window publishes ticks of its own.
+        const ulong TicksPerWindow = 63UL;
         var schedule = new WorldTickSchedule<int>();
         var counter = new int[1];
 
-        for (var tick = 0UL; (tick < 64UL); tick++) {
+        for (var tick = 0UL; (tick <= (TicksPerWindow * AllocationWindow.MaximumWindows)); tick++) {
             schedule.Add(
                 row: 1,
                 tick: tick
@@ -76,23 +79,23 @@ public sealed class WorldTickScheduleLawTests {
             tick: 0UL
         );
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var tick = 1UL; (tick < 64UL); tick++) {
-            _ = schedule.Publish(
-                fire: Accumulate,
-                state: counter,
-                tick: tick
-            );
-        }
+        var next = 1UL;
 
         Assert.Equal(
-            actual: (GC.GetAllocatedBytesForCurrentThread() - before),
+            actual: AllocationWindow.Least(window: () => {
+                for (var end = (next + TicksPerWindow); (next < end); next++) {
+                    _ = schedule.Publish(
+                        fire: Accumulate,
+                        state: counter,
+                        tick: next
+                    );
+                }
+            }),
             expected: 0L
         );
         Assert.Equal(
-            actual: counter[0],
-            expected: 64
+            actual: ((ulong)counter[0]),
+            expected: next
         );
     }
 }

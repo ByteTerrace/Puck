@@ -531,10 +531,9 @@ public sealed class PresentedGroup<TValue, TOps>
             value: searchLimit,
             other: 1L
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: seedKey);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: seedKey,
-            other: m_algebra.Presentation.NormalFormCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: m_algebra.Presentation.NormalFormCount,
+            value: seedKey
         );
 
         var algebra = m_algebra;

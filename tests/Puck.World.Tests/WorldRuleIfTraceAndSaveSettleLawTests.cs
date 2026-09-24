@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -11,7 +13,7 @@ namespace Puck.World.Tests;
 /// here through the server-level primitives this project can reach) round-trips through serialize/deserialize and
 /// then continues its live trajectory identically to an uninterrupted session.</summary>
 public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
-    private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
+    private static readonly Principal Actor = Principal.Seat(slot: 0);
 
     private static WorldDefinition Document() {
         var flag = new WorldStateRow(
@@ -52,14 +54,14 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
                 Name: CellName.Parse(candidate: "branch"),
                 Gate: new ActionPredicate.CompareState(
                     State: "always",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1m
                 ),
                 Mode: ActionTriggerMode.Level,
                 Effects: [new ActionEffect.If(
                         Condition: new ActionPredicate.CompareState(
                             State: "flag",
-                            Comparison: ActionStateComparison.Equal,
+                            Comparison: ExpressionOp.Equal,
                             Value: 1m
                         ),
                         Then: [new ActionEffect.SetState(
@@ -178,7 +180,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
                 Name: CellName.Parse(candidate: "branch"),
                 Gate: new ActionPredicate.CompareState(
                     State: "always",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1m
                 ),
                 Mode: ActionTriggerMode.Level,
@@ -192,7 +194,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
                                 Instruction.Operand(name: "flag"),
                                 Instruction.Of(operation: ExpressionOp.Divide),
                             ]),
-                            Comparison: ActionStateComparison.Equal,
+                            Comparison: ExpressionOp.Equal,
                             Right: new ExpressionProgram(Instructions: [Instruction.Constant(value: 1m)])
                         ),
                         Then: [new ActionEffect.SetState(
@@ -227,8 +229,8 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             // unit loses nothing and the post-reload trajectory matches the uninterrupted one exactly rather than
             // merely up to the rate's own rounding.
             Advance: new StateAdvance(
-                PerSecondNumerator: unchecked((long)Puck.Hosting.EngineTicks.PerSecond),
-                PerSecondDenominator: 1
+                PerSecondDenominator: 1,
+                PerSecondNumerator: unchecked((long)Puck.Hosting.EngineTicks.PerSecond)
             ),
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
@@ -273,6 +275,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             engines: [],
             screens: reloadedDefinition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-save-settle-tests-");
         var population = new WorldPopulation(definition: reloadedDefinition);
         var reloaded = new WorldServer(
             definition: reloadedDefinition,
@@ -281,7 +284,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             narrationSink: new WorldConsoleNarrationSink(),
             population: population,
             profiles: new WorldOwnedWorlds(
-                directory: Directory.CreateTempSubdirectory(prefix: "puck-save-settle-tests-").FullName,
+                directory: profilesDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: reloadedDefinition
             )
@@ -299,8 +302,8 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
         ));
 
         Assert.Equal(
-            expected: liveValueAtSave,
-            actual: reloadedValueAtBoot
+            actual: reloadedValueAtBoot,
+            expected: liveValueAtSave
         );
 
         // Continuing both sessions by the same real engine-tick width from here on reproduces the identical
@@ -331,8 +334,8 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
             tick: (reloaded.NextInputTick - 1UL)
         ));
         Assert.Equal(
-            expected: liveValueLater,
-            actual: reloadedValueLater
+            actual: reloadedValueLater,
+            expected: liveValueLater
         );
     }
 }

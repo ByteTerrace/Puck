@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.World.Transpiler.Composition;
+using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Validation;
@@ -66,46 +67,30 @@ public static partial class PuckLinter {
     /// compose.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="machines">The selected host machine catalog used for provider composition.</param>
-    public static void LintReferences(JsonObject document, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, string catalogFingerprint = "", IMachineValidationCatalog? machines = null) {
+    /// <param name="composed">The document <see cref="WorldSemanticValidator.TryComposeWorld"/> already composed from
+    /// <paramref name="document"/>, so a diagnosis that validated it composes once; when omitted, this composes it
+    /// and reports a refused composition itself.</param>
+    public static void LintReferences(JsonObject document, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, string catalogFingerprint = "", IMachineValidationCatalog? machines = null, JsonObject? composed = null) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
 
         var isRoot = WorldSemanticValidator.IsRootDocument(loweredJson: document);
-        var catalogSource = document;
+        var catalogSource = composed;
 
         if (
-            (document["basis"] is not null) ||
-            (document["imports"] is not null)
-        ) {
-            var rootBytes = Encoding.UTF8.GetBytes(s: document.ToJsonString());
-
-            if (PuckDocumentComposer.TryComposeWorldDocument(
-                catalog: machines,
+            (catalogSource is null) &&
+            !WorldSemanticValidator.TryComposeWorld(
                 catalogFingerprint: catalogFingerprint,
-                chainBytes: out _,
-                composed: out var composed,
-                reason: out var reason,
-                rootBytes: rootBytes,
-                rootResolvedPath: sourcePath
-            )) {
-                catalogSource = (composed ?? document);
-            } else {
-                var span = (((sourceMap is not null) && sourceMap.TryGetSpan(
-                    jsonPointer: "/basis",
-                    span: out var basisSpan
-                ))
-                    ? basisSpan
-                    : SourceSpan.None
-                );
-
-                diagnostics.ReportError(
-                    code: PuckDiagnosticCodes.CompositionRefused,
-                    message: $"Basis/import composition refused: {reason}",
-                    span: span
-                );
-                return;
-            }
+                composed: out catalogSource,
+                diagnostics: diagnostics,
+                loweredJson: document,
+                machines: machines,
+                sourceMap: sourceMap,
+                sourcePath: sourcePath
+            )
+        ) {
+            return;
         }
 
         var references = new ReferenceCatalog(
@@ -125,6 +110,10 @@ public static partial class PuckLinter {
             SpawnPoints: CollectFieldValues(
                 array: (catalogSource["spawnPoints"] as JsonArray),
                 field: "id"
+            ),
+            Sets: CollectFieldValues(
+                array: (catalogSource["sets"] as JsonArray),
+                field: "name"
             )
         );
 
@@ -166,7 +155,8 @@ public static partial class PuckLinter {
         HashSet<string> Prototypes,
         HashSet<string> Placements,
         HashSet<string> Cameras,
-        HashSet<string> SpawnPoints
+        HashSet<string> SpawnPoints,
+        HashSet<string> Sets
     );
 
     private static HashSet<string> CollectRowNames(JsonObject? stateSection) {
@@ -447,12 +437,23 @@ public static partial class PuckLinter {
             sourceMap: sourceMap
         );
     }
-    // One registered site, read by its role. Only a state row's namespace is resolved here: a zone is a state row,
-    // and every other kind is refused by the engine's own validation with a better message than a lint could give.
+    // One registered site, read by its role. Only a state row's namespace is resolved here: a zone is a state row, a
+    // set of positions is a board row or a declared set, and every other kind is refused by the engine's own
+    // validation with a better message than a lint could give.
     private static void CheckRegisteredSite(JsonObject holder, string member, JsonNode value, WorldNameField field, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
+        // An interaction side names a property's row, or a region's placement (below), so its kind is Any.
         if (
             (field.Role == WorldNameRole.Declares) ||
-            (field.Kind is not (WorldNameKind.State or WorldNameKind.Zone))
+            ((field.Kind is not (WorldNameKind.State or WorldNameKind.Zone or WorldNameKind.Positions)) && (field.Owner != typeof(WorldInteraction)))
+        ) {
+            return;
+        }
+        if (
+            (field.Kind == WorldNameKind.Positions) &&
+            (value is JsonValue positions) &&
+            positions.TryGetValue(value: out string? setName) &&
+            (setName is not null) &&
+            catalog.Sets.Contains(item: setName)
         ) {
             return;
         }
@@ -615,16 +616,10 @@ public static partial class PuckLinter {
             return;
         }
 
-        var rest = token[BindingPrefix.Length..];
-        var dot = rest.IndexOf(value: '.');
-
         CheckRowName(
             catalog: catalog,
             diagnostics: diagnostics,
-            name: ((dot < 0)
-                ? rest
-                : rest[..dot]
-            ),
+            name: QualifiedName.Parse(text: token[BindingPrefix.Length..]).Head,
             pointer: pointer,
             resolveGlobalReferences: resolveGlobalReferences,
             sourceMap: sourceMap
@@ -678,14 +673,30 @@ public static partial class PuckLinter {
         }
     }
     private static void CheckRowName(string name, Func<string> pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
+        // No row name holds a dot, so a dotted name is a pool field written as text: `binding.field` reads a binding
+        // in scope, and `pool[slot].field` reads the pool's own row.
+        if ((QualifiedName.Parse(text: name) is { IsQualified: true, Head.Length: > 0 } dotted) && !IsSkippableName(name: name)) {
+            if ((name.IndexOf(value: '[') is var open and > 0) && (open < dotted.Head.Length)) {
+                CheckRowName(
+                    catalog: catalog,
+                    diagnostics: diagnostics,
+                    name: name[..open],
+                    pointer: pointer,
+                    resolveGlobalReferences: resolveGlobalReferences,
+                    sourceMap: sourceMap
+                );
+            }
+
+            return;
+        }
         if (IsSkippableName(name: name)) {
             // The channel-prefix typo check is purely local (a fixed known-prefix list, never the document's own
             // catalog), so it runs whether or not this document declares a basis.
             CheckChannelPrefixTypo(
-                name,
-                pointer,
-                sourceMap,
-                diagnostics
+                atPointer: pointer,
+                diagnostics: diagnostics,
+                name: name,
+                sourceMap: sourceMap
             );
 
             return;
@@ -722,7 +733,7 @@ public static partial class PuckLinter {
                     : end
                 );
                 _ = pointer.Append(value: '/').Append(
-                    count: (end - index - 1),
+                    count: ((end - index) - 1),
                     startIndex: (index + 1),
                     value: path
                 );
@@ -831,37 +842,14 @@ public static partial class PuckLinter {
         return true;
     }
     // The map registers the nodes the emitter lowered, which are rarely the leaf field a finding names, so the
-    // pointer is walked back up to the nearest enclosing node that does carry a span.
-    private static SourceSpan SpanOf(SourceMap? sourceMap, string pointer) {
-        if (sourceMap is null) {
-            return SourceSpan.None;
-        }
-
-        var candidate = pointer;
-
-        while (candidate.Length > 1) {
-            if (sourceMap.TryGetSpan(
-                jsonPointer: candidate,
-                span: out var span
-            )) {
-                return span;
-            }
-
-            var lastSegment = candidate.LastIndexOf(value: '/');
-
-            if (lastSegment <= 0) {
-                break;
-            }
-            candidate = candidate[..lastSegment];
-        }
-
-        return SourceSpan.None;
-    }
+    // origin is the nearest enclosing node that carries one; a node lowered from an imported module reports against
+    // that module's source.
     private static void Report(SourceMap? sourceMap, DiagnosticBag diagnostics, string pointer, string code, DiagnosticSeverity severity, string message) {
-        var span = SpanOf(
-            pointer: pointer,
-            sourceMap: sourceMap
-        );
+        var origin = (((sourceMap is not null) && sourceMap.TryGetOrigin(jsonPointer: pointer, origin: out var found))
+            ? found
+            : null);
+        var span = (origin?.Span ?? SourceSpan.None);
+        var start = diagnostics.Count;
 
         if (severity == DiagnosticSeverity.Warning) {
             diagnostics.ReportWarning(
@@ -876,5 +864,6 @@ public static partial class PuckLinter {
                 span: span
             );
         }
+        diagnostics.AttributeFrom(sourcePath: origin?.SourcePath, startIndex: start);
     }
 }

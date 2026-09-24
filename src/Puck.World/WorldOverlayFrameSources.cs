@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Puck.Overlays;
-using Puck.SdfVm;
+using Puck.Hosting;
 
 namespace Puck.World;
 
@@ -140,7 +140,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
         TryRecycle(key: key);
     }
     /// <inheritdoc/>
-    public bool TryAcquire(int key, out OverlayFrameLease lease) {
+    public bool TryAcquire(int key, out GpuImageLease lease) {
         if (
             (key < 0) ||
             (key >= m_sources.Count) ||
@@ -234,7 +234,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             }
         }
 
-        public OverlayFrameLease Retain(in SdfScreenSourceFrame frame) {
+        public GpuImageLease Retain(in GpuImageLease frame) {
             for (var token = 0; (token < m_slots.Length); token++) {
                 if (m_slots[token].Active) {
                     continue;
@@ -250,7 +250,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
                     ReleaseToken: frame.ReleaseToken
                 );
 
-                return new OverlayFrameLease(
+                return new GpuImageLease(
                     ImageViewHandle: frame.ImageViewHandle,
                     Release: m_release,
                     ReleaseToken: token

@@ -20,20 +20,22 @@ public sealed class TiltSensorComponent : ITiltSensor, ISnapshotable {
     private int m_y = Center;
 
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_x = reader.ReadInt32();
-        m_y = reader.ReadInt32();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
     public void Read(out int x, out int y) {
         x = m_x;
         y = m_y;
     }
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteInt32(value: m_x);
-        writer.WriteInt32(value: m_y);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Int32(value: ref m_x);
+        transfer.Int32(value: ref m_y);
     }
+
     /// <inheritdoc/>
     public void SetTilt(float x, float y) {
         m_x = (Center + ((int)(Math.Clamp(

@@ -1,0 +1,23 @@
+.card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+
+  @mixin hover {
+    border-color: var(--mantine-color-anchor);
+  }
+}
+
+.arrow {
+  flex-shrink: 0;
+  color: var(--mantine-color-anchor);
+}
+
+/* The embedded manual fills the rest of the viewport below the header and cards. */
+.frame {
+  display: block;
+  width: 100%;
+  height: calc(100dvh - rem(320px));
+  min-height: rem(400px);
+  border: 0;
+}

@@ -27,14 +27,21 @@ public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     /// <param name="dynamics">The declared dynamics rows a <see cref="StateDynamics"/> trait resolves against.</param>
     /// <param name="documentSeed">The document's own reroll lever, folded into every draw site's seed.</param>
     /// <param name="instanceIdentity">The running instance's identity, folded into every draw site's seed.</param>
+    /// <param name="sites">The site descriptor per catalog ordinal, the same table the live host draws with, so a
+    /// candidate's draw reproduces the draw the live host would make at the same cursor; <see langword="null"/>
+    /// names each site by its catalog row name.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog
+    /// ordinal of <paramref name="arena"/>.</exception>
     public ArenaSearchEffectHost(
-        StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = ""
+        StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null
     ) : base(
         arena: arena,
         documentSeed: documentSeed,
         dynamics: dynamics,
         generators: generators,
         instanceIdentity: instanceIdentity,
+        sites: sites,
         ticksPerSecond: ticksPerSecond
     ) { }
 

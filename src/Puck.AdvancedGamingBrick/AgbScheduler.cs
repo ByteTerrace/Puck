@@ -19,10 +19,14 @@ public sealed partial class AgbScheduler {
         public long When;
     }
 
+    private long m_now;
     private Event? m_root;
 
     /// <summary>The master clock: the current absolute time, advanced by the bus without crossing pending events.</summary>
-    public long Now { get; set; }
+    public long Now {
+        get => m_now;
+        set => m_now = value;
+    }
     /// <summary>The absolute time of the next scheduled event, or <see cref="long.MaxValue"/> if none is queued.</summary>
     public long NextWhen => (m_root?.When ?? long.MaxValue);
 

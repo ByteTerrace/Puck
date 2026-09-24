@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Abstractions.Machines;
 using Puck.World.Protocol;
 
@@ -211,7 +212,7 @@ public sealed partial class WorldServer {
         }
         var applied = TryApplyMutation(
             new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.World,
+                Principal: Principal.World,
                 Row: binding.Row,
                 Key: (binding.Key ?? WorldStateRow.SlotKey.Value),
                 Value: value,
@@ -230,7 +231,7 @@ public sealed partial class WorldServer {
                 observation: observation,
                 result: result
             );
-            m_output.DeliverState(definition: m_document.Definition);
+            m_document.DeliverPending();
         } else {
             Observe(
                 observation,

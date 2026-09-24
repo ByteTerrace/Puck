@@ -46,22 +46,6 @@ internal static class WhtClaims {
 
         return values;
     }
-    private static string? Refuses(Action action, Type type, string? parameterName, string what) {
-        try {
-            action();
-        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
-            if (parameterName is null) { return null; }
-
-            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
-                ? null
-                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'"
-            );
-        } catch (Exception thrown) {
-            return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
-        }
-
-        return $"{what} did not throw at all";
-    }
 
     /// <summary>Proves <see cref="WalshHadamardTransform.Forward{T}"/> matches <see cref="Oracles.WalshHadamardNatural"/>'s
     /// O(N^2) definition-form sum EXACTLY at every swept length — which also pins the ordering as Sylvester (natural),

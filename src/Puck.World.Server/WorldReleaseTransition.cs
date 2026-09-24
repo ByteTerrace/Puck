@@ -13,9 +13,9 @@ public static class WorldReleaseTransitionPolicy {
             change.BeforeHash
         )).ToArray();
     }
-    /// <summary>Computes the definition delta requiring package-bound qualification. Changed definitions
-    /// require a metadata-aware coordinator; the runner must verify the actual metadata-only preservation rule
-    /// in both directions. This manifest-level check does not authorize deployment.</summary>
+    /// <summary>Computes the definition delta requiring package-bound qualification. The runner must verify the
+    /// actual metadata-only preservation rule in both directions. This manifest-level check does not authorize
+    /// deployment.</summary>
     public static bool TryPrepare(WorldReleaseManifest source, WorldReleaseManifest target, out IReadOnlyList<WorldReleaseDefinitionChange> changes, out string reason) {
         if (
             !WorldReleaseManifest.TryValidate(
@@ -55,17 +55,6 @@ public static class WorldReleaseTransitionPolicy {
                     World: world
                 ));
             }
-        }
-        if (
-            (result.Count != 0) &&
-            !WorldReleaseCompatibility.TryRequireMetadataCoordinator(
-            reason: out reason,
-            source: source,
-            target: target
-        )
-        ) {
-            changes = [];
-            return false;
         }
         changes = result;
         reason = string.Empty;

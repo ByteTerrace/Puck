@@ -67,7 +67,6 @@ public sealed class WorldPlacementEffectCostLawTests {
                 Rows: placements
             ))
     );
-
     // What the compiler charges a `removePlacement` of an id: the declared row's own rebuild, or the document floor
     // when the id names no declared row (see WorldFactsCompiler's removePlacement arm).
     private static long RemovalCost(WorldDefinition definition, string id) => ((WorldDefinitionRows.FindPlacement(
@@ -147,6 +146,7 @@ public sealed class WorldPlacementEffectCostLawTests {
                 Count: 5
             )
         );
+
         Assert.Equal(
             3_072L,
             WorldPlacementEffectCost.Of(
@@ -162,6 +162,7 @@ public sealed class WorldPlacementEffectCostLawTests {
             Source: IntentSource.Idle,
             Count: 9_000
         );
+
         Assert.Equal(
             16_896L,
             WorldPlacementEffectCost.Of(
@@ -188,6 +189,7 @@ public sealed class WorldPlacementEffectCostLawTests {
             prototype: prototype,
             placements: [placement]
         );
+
         Assert.Equal(
             1_024L,
             RemovalCost(

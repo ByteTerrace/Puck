@@ -109,8 +109,11 @@ public readonly struct CellSet : IEquatable<CellSet> {
             tail
         );
     }
-
-    internal static CellSet Empty(int length) {
+    /// <summary>Returns the set over <paramref name="length"/> positions with no member.</summary>
+    /// <param name="length">The number of positions the set addresses.</param>
+    /// <returns>The empty set.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
+    public static CellSet Empty(int length) {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         return new(
             length,
@@ -123,6 +126,7 @@ public readonly struct CellSet : IEquatable<CellSet> {
                 : null)
         );
     }
+
     internal static int WordCount(int length) => ((length / 64) + (((length % 64) == 0) ? 0 : 1));
     internal ulong Word(int index) => index switch {
         0 => m_word0,

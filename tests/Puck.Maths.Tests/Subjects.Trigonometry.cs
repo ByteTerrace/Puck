@@ -30,13 +30,13 @@ internal static partial class Subjects {
                         guardBitCount: Oracles.GuardBitCount
                     );
 
-                    if (WithinEnvelope(
+                    if (Oracles.WithinEnvelope(
                         name: $"plan {kind}/{length}/{k} real",
                         subjectRaw: forward[k].Real.Value,
                         enclosure: expected.Cos,
                         toleranceUnits: SinCosToleranceUnits()
                     ) is { } real) { return real; }
-                    if (WithinEnvelope(
+                    if (Oracles.WithinEnvelope(
                         name: $"plan {kind}/{length}/{k} imaginary",
                         subjectRaw: forward[k].Imaginary.Value,
                         enclosure: expected.Sin,
@@ -121,13 +121,13 @@ internal static partial class Subjects {
             guardBitCount: Oracles.GuardBitCount
         );
 
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"turn sine {phase}",
             subjectRaw: actual.Sin.Value,
             enclosure: expected.Sin,
             toleranceUnits: SinCosToleranceUnits()
         ) is { } sine) { return sine; }
-        if (WithinEnvelope(
+        if (Oracles.WithinEnvelope(
             name: $"turn cosine {phase}",
             subjectRaw: actual.Cos.Value,
             enclosure: expected.Cos,
@@ -192,8 +192,8 @@ internal static partial class Subjects {
             ) is { } failure) { return failure; }
             foreach (var bits in ((ReadOnlySpan<int>)[17, 32])) {
                 var actual = ((bits == 17)
-                    ? FixedQ4816.SinCosHalfAngle(new(raw))
-                    : FixedQ4816.SinCosQ32(raw)
+                    ? FixedQ4816.SinCosHalfAngle(angle: new(Value: raw))
+                    : FixedQ4816.SinCosQ32(angleQ32: raw)
                 );
                 var expected = Oracles.EncloseSinCosScaled(
                     fractionBitCount: bits,
@@ -201,13 +201,13 @@ internal static partial class Subjects {
                     raw: raw
                 );
 
-                if (WithinEnvelope(
+                if (Oracles.WithinEnvelope(
                     name: $"Q{bits} sine {raw}",
                     subjectRaw: actual.Sin.Value,
                     enclosure: expected.Sin,
                     toleranceUnits: SinCosToleranceUnits()
                 ) is { } sine) { return sine; }
-                if (WithinEnvelope(
+                if (Oracles.WithinEnvelope(
                     name: $"Q{bits} cosine {raw}",
                     subjectRaw: actual.Cos.Value,
                     enclosure: expected.Cos,
@@ -222,13 +222,13 @@ internal static partial class Subjects {
                 raw: unsigned
             );
 
-            if (WithinEnvelope(
+            if (Oracles.WithinEnvelope(
                 name: $"unsigned sine {unsigned}",
                 subjectRaw: pair.Sin.Value,
                 enclosure: reference.Sin,
                 toleranceUnits: SinCosToleranceUnits()
             ) is { } s) { return s; }
-            if (WithinEnvelope(
+            if (Oracles.WithinEnvelope(
                 name: $"unsigned cosine {unsigned}",
                 subjectRaw: pair.Cos.Value,
                 enclosure: reference.Cos,

@@ -12,19 +12,18 @@ public static class VectorQuantizer {
     /// <param name="destination">Target buffer for signed byte components.</param>
     /// <returns>True if quantization and admission checks succeeded, false otherwise.</returns>
     public static bool TryQuantizeUnit(ReadOnlySpan<float> source, Span<sbyte> destination) {
-        if (source.Length == 0 || destination.Length != source.Length) {
+        if ((source.Length == 0) || (destination.Length != source.Length)) {
             return false;
         }
 
-        var doubles = (source.Length <= 1024 ? (Span<double>)stackalloc double[source.Length] : new double[source.Length]);
+        var doubles = ((source.Length <= 1024) ? (Span<double>)stackalloc double[source.Length] : new double[source.Length]);
 
-        for (var i = 0; i < source.Length; i++) {
+        for (var i = 0; (i < source.Length); i++) {
             doubles[i] = source[i];
         }
 
-        return SignedByteVectorFunctions.TryQuantizeUnit(source: doubles, destination: destination);
+        return SignedByteVectorFunctions.TryQuantizeUnit(destination: destination, source: doubles);
     }
-
     /// <summary>Quantizes an <see cref="Embedding{Single}"/> into a base64url-encoded signed-byte vector string.</summary>
     /// <param name="embedding">The source embedding.</param>
     /// <param name="base64UrlVector">The resulting base64url string on success.</param>
@@ -35,12 +34,13 @@ public static class VectorQuantizer {
         var floatSpan = embedding.Vector.Span;
         var sbyteBuffer = new sbyte[floatSpan.Length];
 
-        if (!TryQuantizeUnit(source: floatSpan, destination: sbyteBuffer)) {
+        if (!TryQuantizeUnit(destination: sbyteBuffer, source: floatSpan)) {
             base64UrlVector = string.Empty;
             return false;
         }
 
         var byteSpan = MemoryMarshal.AsBytes(span: sbyteBuffer.AsSpan());
+
         base64UrlVector = Base64Url.EncodeToString(source: byteSpan);
         return true;
     }

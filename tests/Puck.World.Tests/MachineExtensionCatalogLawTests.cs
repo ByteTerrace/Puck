@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.World.Machines;
 using Puck.World.Server;
@@ -16,13 +17,18 @@ public sealed class MachineExtensionCatalogLawTests {
 
     [Fact]
     public void AContentProviderWithoutAnEngineCannotBecomeAHostCatalog() {
-        var registry = new WorldMachineExtensionRegistry();
+        var extensions = PuckExtensionSet.Compose(extensions: [new TestExtension(
+            name: "orphan",
+            register: static registry => registry.Add<IMachineContentProvider>(
+                contribution: new TinyContentProvider(
+                    engineId: "missing",
+                    value: 1
+                ),
+                key: "missing"
+            )
+        )]);
 
-        registry.RegisterContentProvider(contentProvider: new TinyContentProvider(
-            engineId: "missing",
-            value: 1
-        ));
-        Assert.Throws<ArgumentException>(testCode: () => registry.Build());
+        Assert.Throws<ArgumentException>(testCode: () => WorldMachineCatalog.From(extensions: extensions));
     }
     [Fact]
     public void ADeviceWithoutPresentationInputOrRemovableContentStillAdvances() {
@@ -97,26 +103,33 @@ public sealed class MachineExtensionCatalogLawTests {
         }
     }
     [Fact]
-    public void AProviderForAnotherEngineRefusesWithoutRegisteringEitherHalf() {
-        var registry = new WorldMachineExtensionRegistry();
-
-        Assert.Throws<ArgumentException>(testCode: () => registry.RegisterEngine(
-            new TinyEngine(id: "first"),
-            new TinyContentProvider(
-                engineId: "second",
-                value: 1
+    public void AProviderForAnotherEngineRefusesTheWholeComposition() {
+        var refusal = Assert.Throws<PuckExtensionException>(testCode: () => PuckExtensionSet.Compose(extensions: [new TestExtension(
+            name: "tiny",
+            register: static registry => registry.AddMachineEngine(
+                contentProvider: new TinyContentProvider(
+                    engineId: "second",
+                    value: 1
+                ),
+                engine: new TinyEngine(id: "first")
             )
-        ));
-        Assert.Empty(collection: registry.Build().Engines);
-        Assert.Empty(collection: registry.Build().ContentProviders);
+        )]));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: "'second'"
+        );
     }
     [Fact]
     public void AnEmptyHostCannotPrepareAnEngineFromAnotherCatalog() {
-        var candidate = Fixtures.BuildDocument() with { ScreensRaw = null, MachinesRaw = [new WorldMachine(
+        var candidate = Fixtures.BuildDocument() with {
+            ScreensRaw = null,
+            MachinesRaw = [new WorldMachine(
                 "cabinet",
                 "gaming-brick",
                 JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast" })
-            )] };
+            )],
+        };
         using var empty = new WorldMachineHost(
             [],
             new WorldMachineCatalog([])
@@ -169,10 +182,13 @@ public sealed class MachineExtensionCatalogLawTests {
                 engineId: "tiny",
                 value: 73
             );
-            var firstDefinition = Fixtures.BuildDocument() with { ScreensRaw = null, MachinesRaw = [Machine(
+            var firstDefinition = Fixtures.BuildDocument() with {
+                ScreensRaw = null,
+                MachinesRaw = [Machine(
                     engine: "tiny",
                     path: path
-                )] };
+                )],
+            };
             using var first = new WorldMachineHost(
                 [],
                 new WorldMachineCatalog(
@@ -235,11 +251,14 @@ public sealed class MachineExtensionCatalogLawTests {
     }
     [Fact]
     public void OfflineChecksReportDeferralAndAdmissionUsesOnlyTheSuppliedCatalog() {
-        var candidate = Fixtures.BuildDocument() with { ScreensRaw = null, MachinesRaw = [new WorldMachine(
+        var candidate = Fixtures.BuildDocument() with {
+            ScreensRaw = null,
+            MachinesRaw = [new WorldMachine(
                 "cabinet",
                 "gaming-brick",
                 JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast" })
-            )] };
+            )],
+        };
         var errors = new List<string>();
         var deferred = new List<string>();
 
@@ -277,22 +296,30 @@ public sealed class MachineExtensionCatalogLawTests {
         );
     }
     [Fact]
-    public void RegistrationSnapshotsAreIndependentAndDuplicateIdsRefuse() {
-        var registry = new WorldMachineExtensionRegistry();
+    public void CatalogsAreIndependentAndDuplicateIdsRefuseByName() {
         var engine = new TinyEngine(id: "first");
-
-        registry.RegisterEngine(engine);
-        var before = registry.Build();
-
-        registry.RegisterEngine(new TinyEngine(id: "second"));
-        var after = registry.Build();
+        var first = new TestExtension(
+            name: "alpha",
+            register: registry => registry.AddMachineEngine(engine: engine)
+        );
+        var before = WorldMachineCatalog.From(extensions: PuckExtensionSet.Compose(extensions: [first]));
+        var after = WorldMachineCatalog.From(extensions: PuckExtensionSet.Compose(extensions: [first, new TestExtension(
+            name: "beta",
+            register: static registry => registry.AddMachineEngine(engine: new TinyEngine(id: "second"))
+        )]));
 
         Assert.False(condition: before.IsRegistered(engineId: "second"));
         Assert.True(condition: after.IsRegistered(engineId: "second"));
-        Assert.Throws<ArgumentException>(testCode: () => registry.RegisterEngine(new TinyEngine(id: "first")));
         Assert.Same(
             engine,
-            registry.Build().Engines["first"]
+            after.Engines["first"]
+        );
+        Assert.Equal(
+            "Extensions 'alpha' and 'beta' both register IMachineEngine 'first'.",
+            Assert.Throws<PuckExtensionException>(testCode: () => PuckExtensionSet.Compose(extensions: [new TestExtension(
+                name: "beta",
+                register: static registry => registry.AddMachineEngine(engine: new TinyEngine(id: "first"))
+            ), first])).Message
         );
     }
 
@@ -302,10 +329,12 @@ public sealed class MachineExtensionCatalogLawTests {
         public PreparedMachineContent Prepare(ReadOnlyMemory<byte> content) => new(
             Image: [value],
             SourceHash: WorldDefinitionFileSource.ComputeContentHash(content: content.Span),
-            Symbols: new Dictionary<string, MachineContentSymbol> { ["counter"] = new(
+            Symbols: new Dictionary<string, MachineContentSymbol> {
+                ["counter"] = new(
                 Address: value,
                 Space: "bus"
-            ) }
+            ),
+            }
         );
         public bool Recognizes(string contentPath) => contentPath.EndsWith(
             comparisonType: StringComparison.Ordinal,

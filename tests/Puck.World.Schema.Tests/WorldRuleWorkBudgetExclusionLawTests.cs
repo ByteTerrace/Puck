@@ -27,7 +27,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             )]),
         Rules: rules
     );
-    private static ActionPredicate Hp(ActionStateComparison comparison, long value) =>
+    private static ActionPredicate Hp(ExpressionOp comparison, long value) =>
         new ActionPredicate.CompareState(
             State: "sub",
             Comparison: comparison,
@@ -46,7 +46,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(
             State: "phase",
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Value: value
         );
     private static WorldRule Rule(string name, ActionPredicate? gate, string forEach = "many") =>
@@ -71,7 +71,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
     private static ActionPredicate SubIs(long value) =>
         new ActionPredicate.CompareState(
             State: "sub",
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Value: value
         );
     private static long Work(params WorldRule[] rules) => WorldRuleWorkBudget.Measure(definition: Document(rules)).WorkUnitsPerTick.Units;
@@ -177,10 +177,10 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
         var never = Document(Rule(
             "stuck",
             new ActionPredicate.All(Predicates: [Hp(
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     value: 0
                 ), Hp(
-                    comparison: ActionStateComparison.Greater,
+                    comparison: ExpressionOp.Greater,
                     value: 0
                 )])
         ));
@@ -202,10 +202,10 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             definition: Document(Rule(
                 "fine",
                 new ActionPredicate.All(Predicates: [Hp(
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         value: 0
                     ), Hp(
-                        comparison: ActionStateComparison.LessOrEqual,
+                        comparison: ExpressionOp.LessOrEqual,
                         value: 0
                     )])
             )),
@@ -280,21 +280,21 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
         var ruleA = Rule(
             "a",
             Hp(
-                comparison: ActionStateComparison.LessOrEqual,
+                comparison: ExpressionOp.LessOrEqual,
                 value: 0
             )
         );
         var ruleB = Rule(
             "b",
             Hp(
-                comparison: ActionStateComparison.Greater,
+                comparison: ExpressionOp.Greater,
                 value: 0
             )
         );
         var ruleC = Rule(
             "c",
             Hp(
-                comparison: ActionStateComparison.Equal,
+                comparison: ExpressionOp.Equal,
                 value: 0
             )
         );
@@ -319,7 +319,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 Rule(
                     "a",
                     Hp(
-                        comparison: ActionStateComparison.Less,
+                        comparison: ExpressionOp.Less,
                         value: 0
                     )
                 ),
@@ -334,14 +334,14 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 Rule(
                     "a",
                     Hp(
-                        comparison: ActionStateComparison.LessOrEqual,
+                        comparison: ExpressionOp.LessOrEqual,
                         value: 5
                     )
                 ),
                 Rule(
                     "b",
                     Hp(
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         value: 3
                     )
                 )
@@ -354,14 +354,14 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 Rule(
                     "a",
                     Hp(
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         value: 1
                     )
                 ),
                 Rule(
                     "b",
                     Hp(
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         value: 7
                     )
                 )
@@ -373,7 +373,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 Rule(
                     "a",
                     Hp(
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         value: 1
                     )
                 ),
@@ -450,7 +450,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 "a",
                 new ActionPredicate.All(Predicates: [PhaseIs(value: 0), new ActionPredicate.CompareState(
                         State: "count",
-                        Comparison: ActionStateComparison.Less,
+                        Comparison: ExpressionOp.Less,
                         Value: 9m
                     )])
             ),
@@ -458,7 +458,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 "b",
                 new ActionPredicate.All(Predicates: [PhaseIs(value: 1), new ActionPredicate.CompareState(
                         State: "count",
-                        Comparison: ActionStateComparison.Less,
+                        Comparison: ExpressionOp.Less,
                         Value: 9m
                     )])
             )

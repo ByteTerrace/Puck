@@ -1,12 +1,13 @@
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>
-/// Creates backend-neutral graphics pipelines from shaders and a render target.
+/// Creates backend-neutral graphics pipelines from shaders and the render pass they draw in.
 /// </summary>
 public interface IGpuPipelineFactory {
-    /// <summary>Creates a graphics pipeline sized to the given width and height.</summary>
+    /// <summary>Creates a graphics pipeline for a render pass, sized to the given width and height.</summary>
     /// <param name="deviceContext">The GPU device context.</param>
-    /// <param name="renderTarget">The render target the pipeline will render into.</param>
+    /// <param name="renderPass">The render pass the pipeline draws in; its attachment formats fix the pipeline's
+    /// outputs, and the pipeline draws in any framebuffer made for it.</param>
     /// <param name="vertexShaderModule">The vertex shader module.</param>
     /// <param name="fragmentShaderModule">The fragment shader module.</param>
     /// <param name="description">The pipeline's vertex input, sampler, storage-buffer, and push-constant shape.</param>
@@ -15,7 +16,7 @@ public interface IGpuPipelineFactory {
     /// <returns>A new, owning <see cref="IGpuPipeline"/>.</returns>
     IGpuPipeline Create(
         IGpuDeviceContext deviceContext,
-        IGpuRenderTarget renderTarget,
+        IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
         GpuGraphicsPipelineDescription description,

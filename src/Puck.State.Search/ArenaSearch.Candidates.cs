@@ -31,6 +31,7 @@ public sealed partial class ArenaSearch {
             token: token
         );
         job.Nodes++;
+        m_candidates.Increment();
         _ = job.Judge.Judge(view: View(ply: MovePly(job: job)));
     }
     // Opens one scope holding a chance draw's outcome instead of a candidate's move. The shape cursor is recorded
@@ -133,6 +134,7 @@ public sealed partial class ArenaSearch {
                 token: token
             );
             moves++;
+            m_candidates.Increment();
             _ = job.Judge.Judge(view: View(ply: moves));
         }
 
@@ -202,11 +204,12 @@ public sealed partial class ArenaSearch {
             ) &&
                 (standing == cell)
             ) {
-                _ = m_arena.TryWrite(
+                _ = m_arena.TryWriteLive(
                     key: job.TokenKeys[other],
                     operand: plan.Off,
                     reason: out _,
                     rowOrdinal: plan.TokensOrdinal,
+                    time: Time,
                     write: StateWriteKind.Set
                 );
             }
@@ -350,12 +353,12 @@ public sealed partial class ArenaSearch {
                     target: out target,
                     token: token
                 );
-            case SearchShapeKind.Pair: {
+            case SearchShapeKind.Tandem: {
                     if (candidateIndex == from) {
                         return false;
                     }
 
-                    var companion = shape.PairWithIndex;
+                    var companion = shape.CompanionIndex;
 
                     if (companion == token) {
                         return false;
@@ -529,11 +532,12 @@ public sealed partial class ArenaSearch {
             return;
         }
 
-        _ = m_arena.TryWrite(
+        _ = m_arena.TryWriteLive(
             key: job.TokenKeys[token],
             operand: target,
             reason: out _,
             rowOrdinal: plan.TokensOrdinal,
+            time: Time,
             write: StateWriteKind.Set
         );
 
@@ -555,12 +559,13 @@ public sealed partial class ArenaSearch {
                 );
 
                 break;
-            case SearchShapeKind.Pair:
-                _ = m_arena.TryWrite(
+            case SearchShapeKind.Tandem:
+                _ = m_arena.TryWriteLive(
                     key: job.TokenKeys[companionIndex],
                     operand: companionTarget,
                     reason: out _,
                     rowOrdinal: plan.TokensOrdinal,
+                    time: Time,
                     write: StateWriteKind.Set
                 );
 
@@ -573,11 +578,12 @@ public sealed partial class ArenaSearch {
                 );
 
                 if (plan.CodeOrdinals[shapeIndex] is >= 0 and var codes) {
-                    _ = m_arena.TryWrite(
+                    _ = m_arena.TryWriteLive(
                         key: job.TokenKeys[token],
                         operand: code,
                         reason: out _,
                         rowOrdinal: codes,
+                        time: Time,
                         write: StateWriteKind.Set
                     );
                 }

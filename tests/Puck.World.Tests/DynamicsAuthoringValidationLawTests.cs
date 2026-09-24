@@ -64,28 +64,24 @@ public sealed class DynamicsAuthoringValidationLawTests {
             userMessage: controlReason
         );
     }
-    [Fact]
-    public void DampingPastCeilingRefusesWhileWithinPasses() {
-        var denied = WithDynamics(rows: [Chase with { Damping = 16.5f }]);
-        var admitted = WithDynamics(rows: [Chase with { Damping = 16f }]);
+    // Each lane's admitted range: zeta [0, 16], f (0, 100], r [-4, 4]; the control sits on the admitted edge.
+    [InlineData("zeta", 16.5f, 16f, "dynamics[0].zeta 16.5 must be finite and within [0, 16].")]
+    [InlineData("zeta", -0.1f, 0f, "dynamics[0].zeta -0.1 must be finite and within [0, 16].")]
+    [InlineData("f", 101f, 100f, "dynamics[0].f 101 must be finite and within (0, 100].")]
+    [InlineData("f", 0f, 1f, "dynamics[0].f 0 must be finite and within (0, 100].")]
+    [InlineData("r", 4.1f, 4f, "dynamics[0].r 4.1 must be finite and within [-4, 4].")]
+    [Theory]
+    public void ALaneOutsideItsRangeRefusesWhileTheEdgePasses(string lane, float denied, float control, string refusal) {
+        DynamicsRow With(float value) => lane switch {
+            "zeta" => (Chase with { Damping = value }),
+            "f" => (Chase with { Frequency = value }),
+            _ => (Chase with { Response = value }),
+        };
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "dynamics[0].zeta 16.5 must be finite and within [0, 16]."
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
+        Laws.RefusalWithControl(
+            control: WithDynamics(rows: [With(value: control)]),
+            denied: WithDynamics(rows: [With(value: denied)]),
+            needle: refusal
         );
     }
     [Fact]
@@ -125,35 +121,6 @@ public sealed class DynamicsAuthoringValidationLawTests {
             actualString: deniedReason,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "dynamics[0] is required."
-        );
-    }
-    [Fact]
-    public void FrequencyPastCeilingRefusesWhileWithinPasses() {
-        var denied = WithDynamics(rows: [Chase with { Frequency = 101f }]);
-        var admitted = WithDynamics(rows: [Chase with { Frequency = 100f }]);
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "dynamics[0].f 101"
-        );
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "must be finite and within (0, 100]."
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
         );
     }
     [Fact]
@@ -225,54 +192,6 @@ public sealed class DynamicsAuthoringValidationLawTests {
         );
     }
     [Fact]
-    public void NegativeDampingRefusesWhileZeroPasses() {
-        var denied = WithDynamics(rows: [Chase with { Damping = -0.1f }]);
-        var admitted = WithDynamics(rows: [Chase with { Damping = 0f }]);
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "dynamics[0].zeta -0.1 must be finite and within [0, 16]."
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
-    [Fact]
-    public void NonPositiveFrequencyRefusesWhilePositivePasses() {
-        var denied = WithDynamics(rows: [Chase with { Frequency = 0f }]);
-        var admitted = WithDynamics(rows: [Chase]);
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "dynamics[0].f 0 must be finite and within (0, 100]."
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
-    [Fact]
     public void PartDynamicsOnCatalogSourceRefusesWhileAbsentOnCatalogPasses() {
         var document = WithDynamics(rows: [Chase]);
         var denied = document with {
@@ -303,30 +222,6 @@ public sealed class DynamicsAuthoringValidationLawTests {
             actualString: deniedReason,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "looks[0].motion.partDynamics cannot be set on a catalog source"
-        );
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: admitted,
-                neighbours: null,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
-    [Fact]
-    public void ResponseOutsideRangeRefusesWhileWithinPasses() {
-        var denied = WithDynamics(rows: [Chase with { Response = 4.1f }]);
-        var admitted = WithDynamics(rows: [Chase with { Response = 4f }]);
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: denied,
-            neighbours: null,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "dynamics[0].r 4.1 must be finite and within [-4, 4]."
         );
         Assert.True(
             condition: WorldDefinitionValidator.TryValidate(
@@ -386,8 +281,8 @@ public sealed class DynamicsAuthoringValidationLawTests {
                         Value: CellValue.Int(value: 0)
                     )],
                 Advance: new StateAdvance(
-                    PerSecondNumerator: 1,
-                    PerSecondDenominator: 1
+                    PerSecondDenominator: 1,
+                    PerSecondNumerator: 1
                 ),
                 Dynamics: new StateDynamics(
                     Row: "chase"
@@ -472,7 +367,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
         Assert.Contains(
             actualString: deniedReason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "state[0].dynamics.row 'missing' names no dynamics row."
+            expectedSubstring: "state.world[0].dynamics.row 'missing' names no dynamics row."
         );
         Assert.True(
             condition: WorldDefinitionValidator.TryValidate(

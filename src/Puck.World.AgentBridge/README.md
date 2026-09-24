@@ -13,19 +13,21 @@ MCP adapter share one authority boundary instead of growing separate game APIs.
 
 ## The boundary
 
-`WorldAgentBridge` controls one 0-based body index as one `WorldPrincipal`. Its
+`WorldAgentBridge` controls one 0-based body index as one `Principal`. Its
 constructor takes an `IPrincipalServerLink`, which is the explicit-principal
 form of Puck's in-process server link, an `IWorldAgentDispatcher`, and a
 function that returns the current `WorldChannelTable`.
 
-An agent-capable host explicitly calls `AddPuckWorldAgentBridge` to register
-`WorldAgentMailbox` as both that dispatcher and an `ISnapshotInputCapture`.
-The base `Puck.World` executable never references this project or performs that
-registration. Harness and model work stays on worker threads; the launcher
-drains only short link and live-definition operations during its existing
-per-frame capture pass on the single pump thread. The mailbox is bounded and
-refuses overflow rather than silently dropping actions or letting an agent
-create unbounded retained work.
+Puck's in-process link must be used from the simulation thread, so the usual
+dispatcher is a `WorldAgentMailbox`: the agent queues short link and
+live-definition operations, and the host calls `Drain` at its closed simulation
+boundaries. A hosted participant, such as the
+[agent harness](../Puck.World.AgentHarness/README.md#running-as-a-world-participant),
+owns one and drains it each time its host pumps it, the same way in a local
+World and a silo. Harness and model work stays on worker threads. The mailbox is
+bounded and refuses overflow rather than silently dropping actions or letting an
+agent create unbounded retained work. The base `Puck.World` executable never
+references this project.
 
 The channel function is evaluated for every affordance read and action. This
 matters after `world.reload` or another definition swap: channel names and their
@@ -85,16 +87,15 @@ not talk around the bridge or create a second authorization system.
 var bridge = new WorldAgentBridge(
     link: loopbackTransport,
     dispatcher: worldAgentMailbox,
-    principal: WorldPrincipal.Peer(index: bodyIndex, generation: generation),
+    principal: Principal.Peer(index: bodyIndex, generation: generation),
     bodyIndex: bodyIndex,
     channels: () => WorldChannelTable.Compile(server.Definition.Channels));
 ```
 
-An opt-in host calls `services.AddPuckWorldAgentBridge()` after registering its
-ordinary `LoopbackTransport`, then resolves that transport through
-`IPrincipalServerLink` and the mailbox through `IWorldAgentDispatcher`. The
-example shows the ownership shape, not a requirement to recompile on every
-call. A composition root may cache each immutable table and replace the
+A hosted participant receives its row's link and a live channel source from
+its host's `WorldParticipantContext` and drains its own mailbox when the host
+pumps it. The example shows the ownership shape, not a requirement to recompile
+on every call; a caller may cache each immutable table and replace the
 reference when the world definition changes.
 
 ## Verifying changes
@@ -103,7 +104,7 @@ Run the focused laws, then the architecture gate:
 
 ```powershell
 dotnet test tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj -c Release
-dotnet src/Puck.Cli/publish/Puck.Cli.dll architecture
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll architecture --check
 ```
 
 The focused suite checks principal stamping, coordinate translation, live

@@ -43,8 +43,9 @@ other processes and elevation levels. It is not a process sandbox or a remote
 service.
 
 The handshake uses `WireFrame` kind **0**, a 4096-byte JSON payload ceiling,
-source-generated JSON with depth eight and unknown-member refusal, and a
-five-second deadline.
+source-generated JSON with depth eight and unknown-member refusal. It has no
+deadline of its own: the caller bounds it, and Hosting's local control gives each
+side five seconds on its own clock.
 
 ## What it carries
 
@@ -56,9 +57,15 @@ five-second deadline.
   vocabulary belongs to the caller.
 - `WireReader`/`WireWriter`—a bounded, forward-only reader and its
   exact mirror writer, over fixed-point scalars/vectors/quaternions
-  (`Puck.Maths`), presentation floats/vectors/quaternions, length-prefixed
-  strings and blocks, and declared-count reads bounded against a caller
-  minimum/maximum. The reader latches the first refusal and every later read
+  (`Puck.Maths`), presentation floats/doubles/vectors/quaternions, 16-, 32-,
+  64-, and 128-bit integers, length-prefixed strings and blocks, and
+  declared-count reads bounded against a caller minimum/maximum. Composite
+  leaves ride the same pair: `WriteArray`/`ReadArray` (a bounded count, then
+  each item through a `WireReadItem<T>` delegate) and
+  `WriteOptional`/`ReadOptional` (a presence bit, then the value). Every
+  binary codec in the World family—the submission wire, the `.puckreplay`
+  tape, the authority checkpoint, and the federation frames—is built on this
+  one reader and writer. The reader latches the first refusal and every later read
   is inert, so a leaf decoder reads its whole shape and asks once
   (`TryFinish`) whether the bytes were honest. Nothing a peer sends makes the
   reader throw: a string whose bytes are not UTF-8 is validated before it is
@@ -115,6 +122,13 @@ five-second deadline.
   behind `ILaneProtocol`. Hello and authentication are paid once for the
   lane's lifetime; requests then queue behind whatever is in flight, which is
   what lets the peer answer without a correlation id on the wire.
+- `OperationDeadline`—one bounded operation's cancellation: its token cancels
+  when a timeout elapses on a supplied `TimeProvider` or when the caller's
+  token (and optionally an owner's lifetime) cancels, and `IsExpired` tells
+  expiry from the caller's own cancellation. The lane's per-request deadline,
+  the peer's control-stream, handshake, refusal-drain and send bounds, and the
+  bounded operations of every host above this package use it, so a host's one
+  clock, or a test clock, decides when each expires.
 
 ### What the lane promises
 
@@ -133,7 +147,10 @@ wants to wait less applies its own wait to the task `Enqueue` returns. Both
 `requestTimeout` and `connectRetryDelay` must lie in [0, 1 day]; the
 constructor refuses anything else with `ArgumentOutOfRangeException` naming
 the parameter, rather than letting an out-of-range timer fail every request
-the lane ever serves or make `Dispose` throw.
+the lane ever serves or make `Dispose` throw. The deadline, the retry delay,
+and the backoff window all read the constructor's optional `timeProvider`
+(system time by default), so a caller that supplies its own clock decides when
+each of them elapses.
 
 Only a failure to connect takes the lane out of service, and only after one
 retry (`connectRetryDelay` apart): the second failure answers
@@ -160,10 +177,13 @@ socket, and closes the queue behind the worker, so cancelling the lifetime
 token—with or without `Dispose`—releases the connection to the peer rather
 than holding it open until the finalizer runs, and a request enqueued
 afterwards is answered `LaneUnavailable` at once rather than parked in a
-channel nobody reads. `Dispose` is idempotent and never
+channel nobody reads. `Completion` settles once that exit has run.
+`Dispose` is idempotent and never
 throws: it cancels the lifetime, closes the queue, drops the socket first (so
 a worker parked in a read unblocks), joins the worker for at most
-`requestTimeout` plus one second, and abandons a join that outlasts that. A
+`requestTimeout` plus one second of wall time, and abandons a join that
+outlasts that. The join is the one wait `timeProvider` does not govern: it
+guards against a protocol that ignores its token, which no lane clock can end. A
 request enqueued after `Dispose` is answered `LaneUnavailable` at once.
 A response's `Body` is exactly the memory the protocol's `ReadResponseAsync`
 returned, and that contract forbids a buffer the protocol reuses, so a caller
@@ -193,10 +213,12 @@ link.
   directory) and `UnauthorizedAccessException` through; `Save` lets the same
   two through and refuses a null or empty path as `ArgumentException`. `Save`
   writes the unencrypted private key—possession of the file is the whole
-  identity—to a sibling `.tmp` file created fresh (owner read/write only on
-  Unix), flushes it to disk, then moves it over the target path, replacing
-  whatever was there, so a crash mid-write never leaves a truncated key behind
-  the real name; no encrypted export is offered, and a caller that needs one
+  identity—through `Puck.Assets`'s `AtomicFile`: a fresh temporary file beside
+  the target (owner read/write only on Unix), flushed to disk and moved over
+  the target path, replacing whatever was there and creating a missing parent
+  directory, so a crash mid-write never leaves a truncated key behind the real
+  name and a failed save leaves no temporary file; no encrypted export is
+  offered, and a caller that needs one
   wraps `ExportPkcs8PrivateKey`. `CreateTransportCertificate()` mints the
   self-signed X.509 certificate a TLS-bearing transport presents, over this
   same key, as a persisted (not exportable) key the operating system's TLS
@@ -223,7 +245,12 @@ link.
   handshake's. Each connection admits exactly one inbound bidirectional
   stream—the control stream is the only one a peer ever accepts, so a
   remote side cannot open further streams whose receive windows nobody
-  drains. `MaxDatagramBytes` is 0 on every connection: this runtime's
+  drains. The QUIC/TLS handshake itself runs on msquic's own wall-clock
+  timer, which no `TimeProvider` governs: the constructor's optional
+  `handshakeTimeout` bounds it on both the dialing and the accepting side,
+  and `DefaultHandshakeTimeout` (10 s) applies when none is named. In-process
+  tests pass a generous bound, since a loaded machine can stall a loopback
+  handshake and no law can drive that timer. `MaxDatagramBytes` is 0 on every connection: this runtime's
   `System.Net.Quic` exposes no RFC 9221 datagram API, so the slot exists on
   the seam and the QUIC transport reports the absence rather than emulating
   it. `IsSupported` is the platform guard a caller checks before
@@ -244,12 +271,16 @@ link.
   peer, bounded to 64 pending links. `Links` is a snapshot of every open link
   either direction produced. `HandshakeRefusals` carries inbound connections
   that passed the transport but were refused at the handshake. `DisposeAsync`
-  is idempotent.
+  is idempotent. The optional `timeProvider` is the clock every peer deadline
+  reads: `ControlStreamTimeout`, `HandshakeTimeout`, `RefusalDrainTimeout`,
+  and each link's `SendTimeout`.
 - `PeerLink`—one open connection. `SendAsync` signs a payload under this
   side's identity and sends it as one message frame. A payload is at most
   `PeerWireProtocol.MaxMessagePayloadBytes` (49,152 bytes). `Events` is a
   channel of `PeerEvent.Received`, `PeerEvent.Refused`, and `PeerEvent.Closed`,
-  bounded to `PeerLink.EventsCapacity` (32) pending events.
+  bounded to `PeerLink.EventsCapacity` (32) pending events. `Released`
+  completes once a closed link has disposed its connection and stream and left
+  its peer's `Links`.
 - `PeerRefusal`/`PeerFailure`/`PeerRefusedException`—the named refusal
   vocabulary a link or handshake returns instead of throwing over bytes
   another process controls.

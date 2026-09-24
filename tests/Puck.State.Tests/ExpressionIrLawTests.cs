@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using System.Reflection;
 using Xunit;
 

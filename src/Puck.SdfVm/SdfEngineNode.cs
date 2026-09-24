@@ -1,6 +1,5 @@
-using System.Diagnostics;
 using System.Numerics;
-using System.Text;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -49,9 +48,7 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
 /// </summary>
-public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequestTarget {
-    private const ulong TimingReportInterval = 60;
-
+public sealed partial class SdfEngineNode : IRenderNode, ICaptureRequestTarget {
     private readonly int m_brickPoolVoxelCapacity;
 
     // Not readonly: RegisterChild swaps the shared empty singleton for a private map on the first post-construction
@@ -62,7 +59,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     // answer ProduceChildren/StepChildren/the SetChildSource loop all share for "is this slot a child this frame".
     private uint m_childSlotMask;
 
-    private readonly Func<IGpuDeviceContext, IGpuStorageImage>? m_createStorageImage;
+    private readonly Func<IGpuDeviceContext, IGpuImage>? m_createStorageImage;
     private readonly string? m_debugLabel;
     private readonly int m_dynamicTransformCapacity;
     private readonly ISdfFrameSource m_frameSource;
@@ -146,33 +143,33 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     }
 
     /// <summary>Gets the current program-word capacity, or the initial reserve before engine initialization.</summary>
-    public int ProgramWordCapacity => m_engine?.ProgramWordCapacity ?? m_programWordCapacity;
+    public int ProgramWordCapacity => (m_engine?.ProgramWordCapacity ?? m_programWordCapacity);
 
     private readonly int m_programWordCapacity;
-    private readonly bool m_rayQueryEnabled;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
 
-    private SdfScreenSourceFrame[] m_pendingScreenSourceFrames = [];
-    private SdfScreenSourceFrame[][] m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: 0);
-    private readonly int[] m_retainedScreenSourceFrameCounts = new int[SdfWorldEngine.FrameRingSize];
-    private Dictionary<int, Func<SdfScreenSourceFrame>> m_screenSourceFrames = EmptyScreenSourceFrames;
+    // This frame's screen-source leases, moved into the frame-ring slot that samples them when the slot's fence has
+    // retired the leases it held before.
+    private LeaseRetireList m_pendingScreenSourceFrames = new();
+    private LeaseRetireList[] m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: 0);
+    private Dictionary<int, Func<GpuImageLease>> m_screenSourceFrames = EmptyScreenSourceFrames;
 
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly SdfViewGpuServices m_services;
-    private readonly bool? m_timingEnabled;
     private readonly int m_viewportCapacity;
     private readonly uint m_width;
 
     private readonly CapturePngWriter m_capturePng = new();
 
-    // [frame-timing] CPU-side sub-buckets: plain Stopwatch wall time (never a GPU query), so this digest still prints
-    // even when the backend has no usable GPU timestamps. Armed live off GpuTimingControl.Shared, so bench.run / the
-    // gpu.timing switch turn it on and off mid-session with no restart. Each digest reports the slowest node frame in
-    // its block rather than an arbitrary modulo-boundary sample, exposing intermittent CPU hitches without per-frame IO.
-    private ulong m_cpuTimingFrame;
-    private CpuFrameTiming m_cpuTimingWorst;
+    // Converted once: a lambda passed per frame would allocate a delegate on every produced frame.
+    private readonly Action<string> m_writeDebugCapture;
 
+    // Owned here rather than by the engine, so submission identities keep increasing across a device-loss rebuild.
+    private readonly GpuWorkLedger m_work = new(
+        framesInFlight: SdfWorldEngine.FrameRingSize,
+        name: "gpu.sdf-engine"
+    );
     private readonly CaptureRequestSlot m_debugCapture = new();
 
     private int m_debugMode;
@@ -181,46 +178,18 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     private SdfWorldEngine? m_engine;
     private bool m_glyphAtlasInitialized;
     private IGpuComputeServices? m_gpu;
+
+    // The lease on the pipeline set the engine records with, shared through the composition's pipeline cache, built off
+    // the frame thread and kept across engine rebuilds until a device loss or disposal releases it.
+    private readonly SdfWorldPipelineSource m_pipelines;
+
     private int m_produceFrameIndex;
-    private ulong m_timingFrame;
     private SdfGlyphAtlas? m_uploadedGlyphAtlas;
-
-    private readonly record struct CpuFrameTiming(
-        long CaptureFrameTicks,
-        long SetupTicks,
-        long ScreenPublishTicks,
-        long ViewRenderTicks,
-        long BindingsTicks,
-        long SubmitFrameTicks
-    ) {
-        public long TotalTicks => (((((CaptureFrameTicks + SetupTicks) + ScreenPublishTicks) + ViewRenderTicks) + BindingsTicks) + SubmitFrameTicks);
-    }
-    /// <summary>Brackets one CPU phase with <see cref="Stopwatch"/> only while <paramref name="enabled"/> is set;
-    /// disabled, <see cref="Stop"/> reads 0 without touching the clock.</summary>
-    private readonly ref struct CpuPhaseTimer(bool enabled, long startTicks) {
-        private readonly bool m_enabled = enabled;
-        private readonly long m_startTicks = startTicks;
-
-        public static CpuPhaseTimer Start(bool enabled) {
-            return new CpuPhaseTimer(
-                enabled: enabled,
-                startTicks: (enabled
-                ? Stopwatch.GetTimestamp()
-                : 0L)
-            );
-        }
-        public long Stop() {
-            return (m_enabled
-                ? (Stopwatch.GetTimestamp() - m_startTicks)
-                : 0L
-            );
-        }
-    }
 
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
     // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
     private static readonly Dictionary<string, IRenderNode> EmptyChildren = new(comparer: StringComparer.Ordinal);
-    private static readonly Dictionary<int, Func<SdfScreenSourceFrame>> EmptyScreenSourceFrames = new();
+    private static readonly Dictionary<int, Func<GpuImageLease>> EmptyScreenSourceFrames = new();
     private static readonly Dictionary<int, Func<nint>> EmptyScreenSources = new();
     private static readonly Dictionary<int, Func<Vector3>> EmptyScreenLights = new();
     private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
@@ -230,24 +199,24 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     );
     private Surface[] m_childSurfaces = [];
     private readonly Dictionary<IRenderNode, Surface> m_producedChildren = new(comparer: ReferenceEqualityComparer.Instance);
-
-    private int m_pendingScreenSourceFrameCount;
-
     private ISteppableRenderNode[] m_steppableChildren = [];
     private readonly HashSet<IRenderNode> m_preparedChildren = new(comparer: ReferenceEqualityComparer.Instance);
 
-    private static SdfScreenSourceFrame[][] BuildScreenSourceFrameRing(int capacity) {
-        var ring = new SdfScreenSourceFrame[SdfWorldEngine.FrameRingSize][];
+    private static LeaseRetireList[] BuildScreenSourceFrameRing(int capacity) {
+        var ring = new LeaseRetireList[SdfWorldEngine.FrameRingSize];
 
         for (var slot = 0; (slot < ring.Length); slot++) {
-            ring[slot] = new SdfScreenSourceFrame[capacity];
+            ring[slot] = new LeaseRetireList(capacity: capacity);
         }
 
         return ring;
     }
-    private void EnsureEngine(IGpuDeviceContext gpuDevice, SdfFrame frame) {
+    // Builds the engine once its pipelines are ready. The first call starts the pipeline build on the thread pool; until
+    // it completes this returns false and the node presents nothing new, so a cold driver cache delays the first frame
+    // rather than freezing the pump.
+    private bool EnsureEngine(IGpuDeviceContext gpuDevice, SdfFrame frame) {
         if (m_engine is not null) {
-            return;
+            return true;
         }
 
         // One cohesive compute-services bundle instead of resolving each granular factory; the granular interfaces
@@ -255,6 +224,16 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         // root's SdfViewGpuServices rather than re-resolved here.
         m_gpu ??= m_services.Gpu;
         m_deviceContext = gpuDevice;
+
+        if (m_pipelines.Poll(
+            device: gpuDevice,
+            gpu: m_gpu,
+            hostsOnDirectX: false,
+            includeBrickPipelines: (m_brickPoolVoxelCapacity > 0),
+            kernels: m_kernels
+        ) is not { } pipelines) {
+            return false;
+        }
 
         // The viewport CAPACITY: the first frame's count raised to the declared floor (the split-screen envelope —
         // the engine itself composites each frame's actual Views.Count, validated against this capacity).
@@ -267,19 +246,10 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             throw new ArgumentException(message: $"The world compositor supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {viewportCount}.");
         }
 
-        // GPU performance counters, LIVE-ARMED: always USE the timing seam when the backend registered it (it is part
-        // of the eagerly-resolved SdfViewGpuServices bundle now, not resolved granularly here). The engine creates its
-        // rotating pools lazily on the first ARMED frame and consults GpuTimingControl.Shared per frame, so bench.run
-        // / the gpu.timing switch turn it on mid-session with no rebuild — the resolved host.timing toggle only SEEDS
-        // that control (see the constructor). Absent the seam the backend simply cannot time.
-        var timingFactory = m_services.TimingFactory;
-        var timingRecorder = m_services.TimingRecorder;
-
         m_engine = new SdfWorldEngine(
             device: gpuDevice,
             gpu: m_gpu,
             height: m_height,
-            kernels: m_kernels,
             options: new SdfWorldEngineOptions(
                 BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
                 CreateOutputImage: m_createStorageImage,
@@ -291,33 +261,17 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                     val2: frame.DynamicTransforms.Count
                 ),
                 InstanceCapacity: m_instanceCapacity,
-                LiveArmedTiming: true,
                 Program: frame.Program,
                 ProgramWordCapacity: m_programWordCapacity,
-                TimingFactory: timingFactory,
-                TimingRecorder: timingRecorder,
-                ViewportCapacity: viewportCount
+                ViewportCapacity: viewportCount,
+                WorkLedger: m_work
             ),
+            pipelines: pipelines,
             width: m_width
         );
 
-        if (
-            (timingFactory is not null) &&
-            (timingRecorder is not null)
-        ) {
-            if (m_engine.TimingEnabled) {
-                var capabilities = m_engine.TimingCapabilities;
-
-                Console.Error.WriteLine(value: $"[world-timing] available (armed on demand{(GpuTimingControl.Shared.Armed
-                    ? "; ARMED"
-                    : "")}) | period {capabilities.PeriodNanoseconds:0.###}ns | validBits {capabilities.ValidBits}");
-            } else {
-                Console.Error.WriteLine(value: "[world-timing] the device reports no usable GPU timestamps; running untimed.");
-            }
-        }
+        return true;
     }
-    private static int Percent(double part, double whole) =>
-        ((int)Math.Round(a: ((100.0 * part) / whole)));
     // Which live viewport slots a hosted child backs THIS frame (the beam prepass and Stage 1 skip these; the source
     // for such a slot is the child's surface, not an SDF render): the frame's own SdfViewSnapshot.Child bindings
     // resolved by NAME against m_children. Re-derived every produced frame — a layout switch (view.override) can
@@ -449,60 +403,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         m_uploadedGlyphAtlas = glyphAtlas;
         m_glyphAtlasInitialized = true;
     }
-    // Throttled [frame-timing] digest for this node's CPU phases (independent of the GPU pass-timing digest above).
-    // The maximum total node time over each block is retained, so its buckets explain the same kind of intermittent
-    // tail that the launcher's worst-of-N digest surfaces one level up.
-    private void ReportCpuFrameTiming(CpuFrameTiming sample) {
-        if (sample.TotalTicks >= m_cpuTimingWorst.TotalTicks) {
-            m_cpuTimingWorst = sample;
-        }
-
-        if (0UL != (m_cpuTimingFrame % TimingReportInterval)) {
-            return;
-        }
-
-        static double Milliseconds(long ticks) =>
-            ((((double)ticks) * 1000.0) / Stopwatch.Frequency);
-
-        var worst = m_cpuTimingWorst;
-
-        m_cpuTimingWorst = default;
-
-        Console.Error.WriteLine(value: $"[frame-timing] sdf-engine worst-of-{TimingReportInterval} total {Milliseconds(ticks: worst.TotalTicks):0.000}ms | capture {Milliseconds(ticks: worst.CaptureFrameTicks):0.000} | setup {Milliseconds(ticks: worst.SetupTicks):0.000} | screen-publish {Milliseconds(ticks: worst.ScreenPublishTicks):0.000} | view-render {Milliseconds(ticks: worst.ViewRenderTicks):0.000} | bindings {Milliseconds(ticks: worst.BindingsTicks):0.000} | submit {Milliseconds(ticks: worst.SubmitFrameTicks):0.000}");
-    }
-    // Reads the newest COMPLETE frame's marks (frame N − FrameRingSize — the engine's own ring fence proves it
-    // retired, so no added stall) and prints a throttled per-pass digest: whole-frame GPU ms plus each pass's ms and
-    // share-of-frame.
-    private void ReportTiming() {
-        if (
-            (m_timingFrame == 0UL) ||
-            (0UL != (m_timingFrame % TimingReportInterval))
-        ) {
-            return;
-        }
-
-        Span<double> passMilliseconds = stackalloc double[SdfWorldEngine.PassTimingCount];
-
-        if (!m_engine!.TryReadPassTimings(
-            frame: out var frame,
-            passCount: out var passCount,
-            passMilliseconds: passMilliseconds
-        )) {
-            return;
-        }
-
-        var builder = new StringBuilder(value: $"[world-timing] frame {frame:0.000}ms");
-        var labels = SdfWorldEngine.PassTimingLabels;
-
-        for (var index = 0; (index < passCount); index++) {
-            _ = builder.Append(handler: $" | {labels[index]} {passMilliseconds[index]:0.000} ({Percent(
-                part: passMilliseconds[index],
-                whole: frame
-            )}%)");
-        }
-
-        Console.Error.WriteLine(value: builder.ToString());
-    }
     // Fleet stepping, task-per-node. The split enforces the timeline-access rule:
     // PrepareStep runs SERIALLY here on the render thread (shared-timeline cursors and shared input drainers), then
     // ExecuteStep — the simulation itself, the expensive half — fans out one task per node. Steppable children share
@@ -551,49 +451,32 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     }
     // A provider can acquire an externally-written image (the camera shared-target tier). Keep that acquisition with
     // the SDF frame-ring slot whose command buffer samples it, and retire the old contents only after that slot's fence
-    // signals. The fixed arrays avoid allocating a closure/list every produced frame.
+    // signals. The preallocated lists avoid allocating a closure/list every produced frame.
     private void RetireAndAdoptScreenSourceFrames(int frameSlot) {
         var retained = m_retainedScreenSourceFrames[frameSlot];
-        var retainedCount = m_retainedScreenSourceFrameCounts[frameSlot];
 
-        for (var index = 0; (index < retainedCount); index++) {
-            retained[index].Retire();
-            retained[index] = default;
-        }
-
-        m_pendingScreenSourceFrames.AsSpan(
-            length: m_pendingScreenSourceFrameCount,
-            start: 0
-        ).CopyTo(destination: retained);
-        m_retainedScreenSourceFrameCounts[frameSlot] = m_pendingScreenSourceFrameCount;
-        Array.Clear(
-            array: m_pendingScreenSourceFrames,
-            index: 0,
-            length: m_pendingScreenSourceFrameCount
-        );
-        m_pendingScreenSourceFrameCount = 0;
+        retained.RetireAll();
+        m_pendingScreenSourceFrames.MoveTo(destination: retained);
     }
-    private void RetirePendingScreenSourceFrames() {
-        for (var index = 0; (index < m_pendingScreenSourceFrameCount); index++) {
-            m_pendingScreenSourceFrames[index].Retire();
-            m_pendingScreenSourceFrames[index] = default;
+    private void WriteDebugCapture(string path) {
+        m_capturePng.ThrowIfUnavailable(path: path);
+
+        if (!m_capturePng.TryWrite(
+            height: ((int)m_height),
+            path: path,
+            rgba: m_engine!.ReadPixels().ToArray(),
+            width: ((int)m_width)
+        )) {
+            throw new NotSupportedException(message: "PNG capture is unavailable.");
         }
 
-        m_pendingScreenSourceFrameCount = 0;
+        Console.Error.WriteLine(value: $"[debug] captured frame {m_produceFrameIndex} -> {path}");
     }
     private void RetireAllScreenSourceFrames() {
-        RetirePendingScreenSourceFrames();
+        m_pendingScreenSourceFrames.RetireAll();
 
-        for (var slot = 0; (slot < m_retainedScreenSourceFrames.Length); slot++) {
-            var retained = m_retainedScreenSourceFrames[slot];
-            var count = m_retainedScreenSourceFrameCounts[slot];
-
-            for (var index = 0; (index < count); index++) {
-                retained[index].Retire();
-                retained[index] = default;
-            }
-
-            m_retainedScreenSourceFrameCounts[slot] = 0;
+        foreach (var retained in m_retainedScreenSourceFrames) {
+            retained.RetireAll();
         }
     }
 
@@ -616,6 +499,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
 
         m_engine?.Dispose();
         m_engine = null;
+        CancelShaderReload(reason: "the node was disposed");
+        m_pipelines.Release();
         RetireAllScreenSourceFrames();
     }
     /// <inheritdoc/>
@@ -632,23 +517,16 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         m_frameSource.NotifyDeviceLost();
         m_engine?.Dispose();
         m_engine = null;
+        // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
+        // device; the rebuilt engine builds its pipelines anew on the recreated one.
+        CancelShaderReload(reason: "the device was lost");
+        m_pipelines.Release();
+        m_work.Invalidate();
         RetireAllScreenSourceFrames();
         m_glyphAtlasInitialized = false;
         m_uploadedGlyphAtlas = null;
         m_deviceContext = null;
     }
-    /// <summary>Looks up a named pass's milliseconds in a <see cref="TryReadPassTimings"/> result — a passthrough of
-    /// <see cref="SdfWorldEngine.PassMilliseconds"/>.</summary>
-    /// <param name="passMilliseconds">A filled <see cref="TryReadPassTimings"/> result span.</param>
-    /// <param name="passCount">The entry count that read reported.</param>
-    /// <param name="label">One of <see cref="PassTimingLabels"/>.</param>
-    /// <returns>The pass's milliseconds, or 0 when the label is not present.</returns>
-    public static double PassMilliseconds(ReadOnlySpan<double> passMilliseconds, int passCount, string label) =>
-        SdfWorldEngine.PassMilliseconds(
-            label: label,
-            passCount: passCount,
-            passMilliseconds: passMilliseconds
-        );
     /// <inheritdoc/>
     public Surface ProduceFrame(in FrameContext context) {
         if (m_disposed) {
@@ -668,25 +546,33 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             m_frameSource.AdvanceBricks(bakes: m_engine);
         }
 
-        var cpuTimingEnabled = GpuTimingControl.Shared.Armed;
-        var captureFrameTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         var frame = m_frameSource.CaptureFrame(
             width: m_width,
             height: m_height,
             deltaSeconds: ((float)context.FrameDeltaSeconds),
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
-        var captureFrameTicks = captureFrameTimer.Stop();
-        var cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
-        // Decide this frame's child slots, produce each child viewport's surface (so its image-view is known before
-        // the source array is bound), then build/refresh the engine and hand it the mask + child views for this
-        // frame's source-array (re)bind.
+        // Decide this frame's child slots and produce each child viewport's surface (so its image-view is known before
+        // the source array is bound). Children need nothing from the engine, so they step and produce whether or not
+        // its pipelines are built yet: a hosted pane compiles and installs its own pipelines while the engine's build
+        // is still pending, instead of waiting behind it.
         m_childSlotMask = DeriveChildMask(frame: frame);
         ProduceChildren(
             context: in context,
             frame: frame
         );
+
+        // Until the engine's pipelines are built there is no engine and nothing new to present. The frame source still
+        // captured this frame and the children still produced theirs, so both keep pace.
+        if (!EnsureEngine(
+            frame: frame,
+            gpuDevice: gpuDevice
+        )) {
+            return default;
+        }
+
+        // Hand the engine the mask + child views for this frame's source-array (re)bind.
         // Empty is a valid result while an asynchronous child is waiting for its first successful compile.
         // Keep that slot on the initialized SDF path until it publishes an image; never bind a null GPU view.
         for (var slot = 0; (slot < frame.Views.Count); slot++) {
@@ -697,10 +583,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                 throw new InvalidOperationException(message: $"Child viewport {slot} must publish a same-device image surface.");
             }
         }
-        EnsureEngine(
-            frame: frame,
-            gpuDevice: gpuDevice
-        );
         m_engine!.SetChildMask(mask: m_childSlotMask);
         ApplyPendingShaderReload();
         ReconcileGlyphAtlas();
@@ -709,8 +591,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         if (m_debugLabel is not null) {
             m_engine.DebugLabel = m_debugLabel;
         }
-
-        var setupTicks = cpuPhaseTimer.Stop();
 
         for (var slot = 0; (slot < frame.Views.Count); slot++) {
             if (!TryChildForSlot(
@@ -730,25 +610,19 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         // Screen-source PREPARE: hand the frame source the live device + compute services so a CPU-pixel source can
         // upload THIS frame's image to a stable handle before the providers below are polled (they return that
         // handle). Mirrors AdvanceBricks — an engine seam, default no-op. m_gpu is set by EnsureEngine just above.
-        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         m_frameSource.PrepareScreenSources(
             deviceContext: gpuDevice,
             gpu: m_gpu!
         );
-        var screenPublishTicks = cpuPhaseTimer.Stop();
 
         // View RENDER: hand the frame source this frame's full context so a source hosting an offscreen ViewStack (a
         // diegetic camera / jumbotron) renders its views against the live device now — their handles fresh before the
         // screen-source poll below reads them. Mirrors PrepareScreenSources — an engine seam, default no-op.
-        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         m_frameSource.RenderViews(context: in context);
-        var viewRenderTicks = cpuPhaseTimer.Stop();
-
-        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
         // Screen sources: polled AFTER children have produced (a provider may read a just-produced child surface).
         // A provider returning 0 leaves the slot unbound this frame — the engine's material-shaded fallback applies.
-        RetirePendingScreenSourceFrames();
+        m_pendingScreenSourceFrames.RetireAll();
 
         foreach (var (screenIndex, provider) in m_screenSources) {
             m_engine!.SetScreenSource(
@@ -765,9 +639,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                 imageViewHandle: source.ImageViewHandle
             );
 
-            if (source.RequiresRetirement) {
-                m_pendingScreenSourceFrames[m_pendingScreenSourceFrameCount++] = source;
-            }
+            m_pendingScreenSourceFrames.Hold(lease: in source);
         }
 
         // Screen LIGHTS: the colored glow each screen emits into the room (parallel to the source poll above).
@@ -822,10 +694,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             LiveProgramFieldScopeClamps = frame.Program.FieldScopeClamps;
         }
 
-        var bindingsTicks = cpuPhaseTimer.Stop();
-
-        var submitFrameTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
-
         if (0 == m_screenSourceFrames.Count) {
             m_engine!.SubmitFrame(frame: frame);
         } else {
@@ -837,48 +705,13 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
 
         LiveVolumes = frame.Volumes.Count;
 
-        if (cpuTimingEnabled) {
-            ++m_cpuTimingFrame;
-            ReportCpuFrameTiming(sample: new CpuFrameTiming(
-                CaptureFrameTicks: captureFrameTicks,
-                SetupTicks: setupTicks,
-                ScreenPublishTicks: screenPublishTicks,
-                ViewRenderTicks: viewRenderTicks,
-                BindingsTicks: bindingsTicks,
-                SubmitFrameTicks: submitFrameTimer.Stop()
-            ));
-        }
-
         ++m_produceFrameIndex;
 
         // A debug verb (world.screenshot) arms a one-shot capture of whatever frame is produced next.
         m_debugCapture.Serve(
             failureLabel: "[debug] capture failed",
-            writer: path => {
-                m_capturePng.ThrowIfUnavailable(path: path);
-
-                if (!m_capturePng.TryWrite(
-                    height: ((int)m_height),
-                    path: path,
-                    rgba: m_engine.ReadPixels().ToArray(),
-                    width: ((int)m_width)
-                )) {
-                    throw new NotSupportedException(message: "PNG capture is unavailable.");
-                }
-
-                Console.Error.WriteLine(value: $"[debug] captured frame {m_produceFrameIndex} -> {path}");
-            }
+            writer: m_writeDebugCapture
         );
-
-        // Gate the [world-timing] digest on the live arming state (not just availability): a disarmed frame wrote no
-        // marks, so TryReadPassTimings would refuse anyway — this skips even the attempt.
-        if (
-            m_engine.TimingEnabled &&
-            GpuTimingControl.Shared.Armed
-        ) {
-            ReportTiming();
-            m_timingFrame++;
-        }
 
         // Export mode hands the host a shared NT handle (zero-copy cross-backend present); same-device mode hands it
         // an image view to sample directly.
@@ -910,8 +743,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         );
     }
     /// <summary>Reads the cadence gate's per-span diagnostics through the live engine (a passthrough of
-    /// <see cref="SdfWorldEngine.CadenceDiagnostics"/>, mirroring the <see cref="TryReadPassTimings"/> forwarder) — the
-    /// seam the <c>sdf.info</c> verb's cadence section reads without depending on the engine.</summary>
+    /// <see cref="SdfWorldEngine.CadenceDiagnostics"/>) — the seam the <c>sdf.info</c> verb's cadence section reads
+    /// without depending on the engine.</summary>
     /// <param name="diagnostics">Receives the latest diagnostics.</param>
     /// <returns>Whether the engine is built (false leaves <paramref name="diagnostics"/> at its default).</returns>
     public bool TryReadCadenceDiagnostics(out SdfCadenceDiagnostics diagnostics) {
@@ -925,26 +758,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
 
         return true;
     }
-    /// <summary>Reads the previous frame's per-pass GPU times through the live engine (a passthrough of
-    /// <see cref="SdfWorldEngine.TryReadPassTimings"/>, mirroring the <see cref="DebugMode"/> forwarder) — the seam an
-    /// <c>sdf.info</c>-style verb reads without depending on the engine. False when the engine is not yet built or
-    /// timing is off (arm it live via the gpu.timing switch / the world.timing verb, or the run-doc <c>host.timing</c>
-    /// field).</summary>
-    /// <param name="passMilliseconds">Receives each render pass's milliseconds, in <see cref="SdfWorldEngine.PassTimingLabels"/>
-    /// order; size it to <see cref="SdfWorldEngine.PassTimingCount"/>.</param>
-    /// <param name="passCount">The number of pass entries written (0 when timing is off or the engine is not built).</param>
-    /// <param name="frame">The whole-frame milliseconds.</param>
-    /// <returns>Whether timing is live and the previous frame's marks were readable.</returns>
-    public bool TryReadPassTimings(Span<double> passMilliseconds, out int passCount, out double frame) {
-        passCount = 0;
-        frame = 0.0;
-
-        return (m_engine?.TryReadPassTimings(
-            frame: out frame,
-            passCount: out passCount,
-            passMilliseconds: passMilliseconds
-        ) ?? false);
-    }
 
     /// <summary>Initializes a new instance of the <see cref="SdfEngineNode"/> class.</summary>
     /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) this node forwards
@@ -954,7 +767,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
-    /// <param name="createStorageImage">An optional factory for the output image. When it returns an <see cref="IGpuExportableStorageImage"/>, the node runs in <em>export</em> mode: it ends each frame in the cross-backend handoff layout, drains the producer queue, and emits a shared-handle <see cref="Surface"/> (for zero-copy cross-backend present) instead of a same-device image-view one. When <see langword="null"/>, a plain same-device storage image is created from the resolved <see cref="IGpuStorageImageFactory"/>.</param>
+    /// <param name="createStorageImage">An optional factory for the output image. When it returns an <see cref="IGpuExportableImage"/>, the node runs in <em>export</em> mode: it ends each frame in the cross-backend handoff layout, drains the producer queue, and emits a shared-handle <see cref="Surface"/> (for zero-copy cross-backend present) instead of a same-device image-view one. When <see langword="null"/>, a plain same-device storage image is created from the resolved <see cref="IGpuImageFactory"/>.</param>
     /// <param name="children">An optional map from a stable name to a child <see cref="IRenderNode"/> that supplies a
     /// viewport slot's surface instead of an SDF camera whenever the frame's own <see cref="SdfFrame.Views"/> binds that
     /// slot's <see cref="SdfViewSnapshot.Child"/> to the same name (see this class's remarks for the per-frame
@@ -993,19 +806,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// frame source whose per-frame view count grows past the first frame's (a split-screen host whose players join
     /// later). The engine composites each frame's actual view count up to the envelope; 0 keeps the pre-existing
     /// freeze-at-first-frame behavior.</param>
-    /// <param name="timingEnabled">The resolved <c>host.timing</c> toggle (per-pass GPU-ms timestamps), or
-    /// <see langword="null"/> for the disarmed default. The engine always receives the
-    /// timing seam and arms live off <see cref="GpuTimingControl.Shared"/> (arm it live via the demo's gpu.timing
-    /// switch / Puck.World's world.timing verb, or the run-doc <c>host.timing</c> field) — but seeds that shared
-    /// control at construction (the lowest precedence tier: a programmatic arm or the run-doc composition seed outrank
-    /// it).</param>
-    /// <param name="rayQueryEnabled">The resolved <c>host.rayQuery</c> document toggle (permit/deny the ray-query
-    /// path; the <c>world.host</c> verb echoes it). Exposed for parity with
-    /// <paramref name="timingEnabled"/> and read back via <see cref="RayQueryEnabled"/>; no current render path
-    /// consults it (the ray-query world's device-level feature probe is unconditional — see
-    /// <c>VulkanLogicalDeviceFactory</c>; it does not own a per-viewport ray-query render node because
-    /// rendering centralized here), but the toggle is threaded so a future ray-query consumer does not need another
-    /// config-plumbing pass.</param>
     /// <param name="debugLabel">An optional GPU-capture debug-group name for this engine's whole recorded frame (see
     /// <see cref="SdfWorldEngine.DebugLabel"/>); a nested view engine passes <c>view:&lt;name&gt;</c> so a capture
     /// distinguishes it. Defaults to the engine's own default (<c>world</c>) when omitted. Presentation-only.</param>
@@ -1015,7 +815,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, bool? timingEnabled = null, bool rayQueryEnabled = true, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, Func<IGpuDeviceContext, IGpuImage>? createStorageImage = null, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -1047,7 +847,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         m_frameSource = frameSource;
         m_height = height;
         m_kernels = kernels;
-        m_rayQueryEnabled = rayQueryEnabled;
         m_screenSources = ((screenSources is null)
             ? EmptyScreenSources
             : new Dictionary<int, Func<nint>>(collection: screenSources)
@@ -1060,37 +859,26 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             ? EmptyScreenSurfaceTransforms
             : new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(collection: screenSurfaceTransforms)
         );
+        m_pipelines = new SdfWorldPipelineSource(cache: services.Pipelines);
         m_services = services;
-        m_timingEnabled = timingEnabled;
         m_width = width;
-
-        // Seed the shared arming control from the resolved host.timing toggle (the lowest-precedence seed — a
-        // programmatic arm or the run-doc composition seed outrank it): it claims GpuTimingControl.Shared only when
-        // nothing higher-precedence already has — see GpuTimingControl. Live arming (bench.run, the demo's
-        // gpu.timing switch, Puck.World's world.timing verb) works regardless of this seed. Idempotent, so seeding
-        // here and at composition with the same value is harmless.
-        _ = GpuTimingControl.Shared.TrySeed(armed: (m_timingEnabled ?? false));
+        m_writeDebugCapture = WriteDebugCapture;
     }
 
     // Builder-only additive seam: keeps the longstanding public constructor's Func<nint> screenSources parameter
     // source-compatible while a render spec can opt particular indices into fence-retired frame acquisitions.
-    internal void SetScreenSourceFrames(IReadOnlyDictionary<int, Func<SdfScreenSourceFrame>>? screenSourceFrames) {
+    internal void SetScreenSourceFrames(IReadOnlyDictionary<int, Func<GpuImageLease>>? screenSourceFrames) {
         if (m_engine is not null) {
             throw new InvalidOperationException(message: "screen-source frame providers must be configured before the first produced frame");
         }
 
         m_screenSourceFrames = ((screenSourceFrames is null)
             ? EmptyScreenSourceFrames
-            : new Dictionary<int, Func<SdfScreenSourceFrame>>(collection: screenSourceFrames)
+            : new Dictionary<int, Func<GpuImageLease>>(collection: screenSourceFrames)
         );
-        m_pendingScreenSourceFrames = new SdfScreenSourceFrame[m_screenSourceFrames.Count];
+        m_pendingScreenSourceFrames = new LeaseRetireList(capacity: m_screenSourceFrames.Count);
         m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: m_screenSourceFrames.Count);
     }
-
-    /// <inheritdoc/>
-    int IPassTimingSource.PassCount => PassTimingCount;
-    /// <inheritdoc/>
-    ReadOnlySpan<string> IPassTimingSource.PassLabels => PassTimingLabels;
 
     /// <summary>Gets or sets the SDF debug view mode applied to the next submitted frame.</summary>
     public int DebugMode {
@@ -1103,22 +891,32 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             }
         }
     }
+    /// <summary>Gets the hosted children, keyed by the name each was constructed or registered under. Read it on the
+    /// thread that produces frames, as <see cref="RegisterChild"/> and <see cref="RemoveChild"/> change it there.</summary>
+    public IReadOnlyDictionary<string, IRenderNode> Children => m_children;
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
-    /// <summary>Reads the most recent produced frame's per-frame instance-grid rebuild CPU cost through the live engine
-    /// (a passthrough of <see cref="SdfWorldEngine.LastInstanceGridRebuildMilliseconds"/>) — the CPU-bound counterpart
-    /// to <see cref="TryReadPassTimings"/>'s GPU pass timings. <see langword="null"/> before the engine is built or
-    /// when the live program's instance grid is invariant (no per-frame rebuild).</summary>
-    public double? LastInstanceGridRebuildMilliseconds => m_engine?.LastInstanceGridRebuildMilliseconds;
-    /// <summary>Gets the pass count a <see cref="TryReadPassTimings"/> read reports — a passthrough of
-    /// <see cref="SdfWorldEngine.PassTimingCount"/> (the width a caller sizes its span to).</summary>
-    public static int PassTimingCount => SdfWorldEngine.PassTimingCount;
-    /// <summary>Gets the render-pass labels a <see cref="TryReadPassTimings"/> read fills, in order — a passthrough of
-    /// <see cref="SdfWorldEngine.PassTimingLabels"/> so a consumer holding only this node names no engine type.</summary>
-    public static ReadOnlySpan<string> PassTimingLabels => SdfWorldEngine.PassTimingLabels;
+    /// <summary>Gets whether the node's engine is built and producing frames. It is false until the pipeline build that
+    /// the first produced frame starts has completed, and again after a device loss until the rebuild completes; a
+    /// produced frame meanwhile returns an empty surface.</summary>
+    public bool IsReady => (m_engine is not null);
+    /// <summary>Gets why a capture armed on this node would not be served by the frame it produces now, phrased as the
+    /// refusal of a capture that waited on it reads: <c>the engine's pipelines never installed</c> until
+    /// <see cref="IsReady"/>, and <see langword="null"/> once it is.</summary>
+    public string? UnservedCaptureReason => ((m_engine is null)
+        ? "the engine's pipelines never installed"
+        : null
+    );
+    /// <summary>Gets the GPU work this node's engine recorded, per pass, for its newest completed submission (see
+    /// <see cref="SdfWorldEngine.Work"/>). Unavailable before the first frame completes and again after a device loss
+    /// until a frame of the rebuilt engine completes; submission identities keep increasing across the rebuild.</summary>
+    public IGpuWorkSource Work => m_work;
+    /// <summary>Gets the GPU objects this node's engines have created, over the node's whole life (see
+    /// <see cref="SdfWorldEngine.WorkLifetime"/>).</summary>
+    public IWorkCounterSource WorkLifetime => m_work;
+    /// <summary>Gets the render-pass labels, in submission order — a passthrough of <see cref="SdfWorldEngine.PassLabels"/>
+    /// so a consumer holding only this node names no engine type.</summary>
+    public static ReadOnlySpan<string> PassLabels => SdfWorldEngine.PassLabels;
     /// <inheritdoc/>
     public string? PendingCapturePath => m_debugCapture.PendingPath;
-    /// <summary>Gets a value indicating whether the resolved <c>host.rayQuery</c> toggle is enabled (the constructor
-    /// argument). See the constructor's <c>rayQueryEnabled</c> parameter doc for why nothing consumes this yet.</summary>
-    public bool RayQueryEnabled => m_rayQueryEnabled;
 }

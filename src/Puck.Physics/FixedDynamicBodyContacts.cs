@@ -58,7 +58,7 @@ public static class FixedDynamicBodyContacts {
         var delta = (leftCenter - rightCenter);
 
         Span<FixedVector3> axes = [
-            FixedAxisMath.UnitX, FixedAxisMath.UnitY, FixedAxisMath.UnitZ,
+            FixedVector3.UnitX, FixedVector3.UnitY, FixedVector3.UnitZ,
             leftAxisX, leftAxisY, leftAxisZ,
             rightAxisX, rightAxisY, rightAxisZ,
         ];
@@ -214,6 +214,7 @@ public static class FixedDynamicBodyContacts {
             var sphereOrientation = (sphereIsLeft ? leftOrientation : rightOrientation);
             var boxPosition = (sphereIsLeft ? rightPosition : leftPosition);
             var boxOrientation = (sphereIsLeft ? rightOrientation : leftOrientation);
+
             if (FixedSphereBoxContact.TryPush(
                 sphereCenter: (spherePosition + sphereOrientation.Rotate(vector: sphere.Center)),
                 radius: sphere.Radius,

@@ -52,15 +52,15 @@ public sealed class ExpressionCostLawTests {
     public void HeuristicOperationsRetainTheirExistingTierOrdering() {
         var alu = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Add).Units;
         var select = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Select).Units;
-        var popcnt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.PopCount).Units;
+        var popcnt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.SetBitCount).Units;
         var pext = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.ParallelBitExtract).Units;
         var mul = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Multiply).Units;
         var div = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Divide).Units;
-        var mod = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Modulo).Units;
+        var mod = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Remainder).Units;
         var sqrt = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.SquareRoot).Units;
         var trig = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Sine).Units;
         var gcd = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.GreatestCommonDivisor).Units;
-        var hilbert = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.Hilbert).Units;
+        var hilbert = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.HilbertIndex).Units;
         var isPrime = Rules.RuleWorkBudget.OperationCost(operation: ExpressionOp.IsPrime).Units;
 
         Assert.Equal(
@@ -105,7 +105,13 @@ public sealed class ExpressionCostLawTests {
     }
     [Fact]
     public void HeuristicWeightsCannotMasqueradeAsCalibratedCycles() {
-        var registered = ReferenceScheduleManifest.Coefficients.ToDictionary(
+        // A coefficient is keyed by vocabulary and operation together: an operation name is unique only within the
+        // vocabulary that registers it.
+        var registered = ReferenceScheduleManifest.Coefficients.Where(predicate: coefficient => string.Equals(
+            a: coefficient.Vocabulary,
+            b: "expression",
+            comparisonType: StringComparison.Ordinal
+        )).ToDictionary(
             comparer: StringComparer.Ordinal,
             elementSelector: coefficient => coefficient,
             keySelector: coefficient => coefficient.Operation

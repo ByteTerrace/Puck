@@ -13,7 +13,8 @@ namespace Puck.SdfVm;
 /// <param name="Probe">
 /// <see langword="true"/> for the one construction-time capacity probe (see <see cref="SdfCompositionFrameSource"/>):
 /// the emitter must take its largest legal form — every optional shape present, every modifier at its worst-case
-/// value — so the probed program/instance/dynamic-transform envelope is a true ceiling no live rebuild can exceed.
+/// value — so the probed dynamic-transform envelope is a true ceiling no live rebuild can exceed, and the probed
+/// program-word and instance counts size the engine's initial reserve.
 /// <see langword="false"/> for an ordinary live frame (the emitter's actual current state).
 /// </param>
 /// <param name="Time">The presentation clock (seconds), for time-based emission (a hover bob, an eased glow) —
@@ -56,11 +57,12 @@ public readonly record struct SdfEmitContext(
 /// have a branch that, when <c>context.Probe</c> is <see langword="true"/>, takes its largest legal form — every
 /// optional shape emitted, every modifier at its worst-case magnitude, every dynamic slot present — so the one
 /// construction-time probe <see cref="SdfCompositionFrameSource"/> runs (combining every emitter's probe form into a
-/// single program) freezes a program-word/instance/dynamic-transform envelope no live rebuild can ever exceed. A new
-/// optional emission an emitter grows must grow its own probe branch in the same change, or a live rebuild can outgrow
-/// the once-sized engine buffers and <see cref="SdfWorldEngine.UploadProgram"/> throws loudly at runtime (the
-/// capacity-probe doctrine — see the sdf-world skill). The probe branch of each emitter must dominate its live branch
-/// on its own — never reason about it across the whole composed program.
+/// single program) sizes the engine's dynamic-transform capacity, which never grows, and the initial program-word and
+/// instance reserve, which <see cref="SdfWorldEngine.UploadProgram"/> grows on demand. A new optional emission an
+/// emitter grows must grow its own probe branch in the same change: a live rebuild that needs more dynamic-transform
+/// slots than the probe reserved makes <see cref="SdfWorldEngine.UploadProgram"/> throw
+/// <see cref="ArgumentException"/>. The probe branch of each emitter must dominate its live branch on its own — never
+/// reason about it across the whole composed program.
 /// </para></summary>
 public interface ISdfSceneEmitter {
     /// <summary>Emits this source's content into <paramref name="builder"/> — the shared program under construction.
@@ -80,16 +82,24 @@ public interface ISdfSceneEmitter {
     /// bases).</summary>
     int DynamicSlotCount => 0;
 
-    /// <summary>Packs this frame's per-slot dynamic transforms into <paramref name="slots"/> — the full shared
-    /// per-frame buffer every emitter's slots share; write only <c>slots[context.SlotBase]</c> through
-    /// <c>slots[context.SlotBase + DynamicSlotCount - 1]</c>. The default no-op is correct for a <see cref="DynamicSlotCount"/>-0
-    /// emitter (there is nothing to pack). A slot this call doesn't actively use this frame should get
-    /// <see cref="SdfEmitContext.ParkPosition"/>, never a stale/zero transform (a parked slot must read as hidden, not
-    /// as identity-posed geometry at the origin).</summary>
-    /// <param name="slots">The shared per-frame dynamic-transform buffer.</param>
+    /// <summary>Packs this frame's moved dynamic transforms into <paramref name="slots"/> — the shared table every
+    /// emitter's slots live in, which keeps its contents across frames; write only <c>slots[context.SlotBase]</c>
+    /// through <c>slots[context.SlotBase + DynamicSlotCount - 1]</c>. The default no-op is correct for a
+    /// <see cref="DynamicSlotCount"/>-0 emitter (there is nothing to pack).
+    /// <para>
+    /// When <see cref="SdfMovedTransforms.Everything"/> holds, the host has parked the whole table at
+    /// <see cref="SdfEmitContext.ParkPosition"/> and the emitter packs every slot it uses. Otherwise the emitter packs
+    /// only the owners (an avatar's leaf range, a stamp's root and shapes) whose inputs moved or that are still
+    /// settling, settles each through <see cref="SdfMovedTransforms.Commit"/> with the slots' prior contents, and owes a
+    /// vacated owner's parked range through <see cref="SdfMovedTransforms.Owe"/>. Every slot an owner leaves unused
+    /// holds <see cref="SdfEmitContext.ParkPosition"/>, never a stale or zero transform: a parked slot must read as
+    /// hidden, not as identity-posed geometry at the origin.
+    /// </para></summary>
+    /// <param name="slots">The shared dynamic-transform table.</param>
     /// <param name="context">This call's context — supplies <see cref="SdfEmitContext.SlotBase"/>,
     /// <see cref="SdfEmitContext.ParkPosition"/>, and <see cref="SdfEmitContext.Time"/>.</param>
-    void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) { }
+    /// <param name="moved">The frame's moved set, which every repacked or vacated owner reports to.</param>
+    void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) { }
 
     /// <summary>Gets the number of independent revision counters this emitter watches (0 = never changes, the default
     /// — a purely static emitter). Read once by the composition host to lay out its revision vector, so — exactly like

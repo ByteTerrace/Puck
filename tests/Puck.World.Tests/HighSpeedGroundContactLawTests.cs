@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.World.Authoring;
@@ -81,7 +82,7 @@ public sealed class HighSpeedGroundContactLawTests {
     [Theory]
     public void AdjacencyContinuationSweepsDestinationTerrainBeforeAnotherAuthorityStep(int distance) {
         using var fixture = Fixtures.FreshServer(definition: ThinFloorDocument(requireField: true));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,
@@ -203,7 +204,7 @@ public sealed class HighSpeedGroundContactLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         for (var slot = 0; (slot < 4); slot++) {
-            var actor = WorldPrincipal.Seat(slot: slot);
+            var actor = Principal.Seat(slot: slot);
 
             Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
                 actor,
@@ -329,7 +330,7 @@ public sealed class HighSpeedGroundContactLawTests {
 
         static void AssertLanding(uint rateHz, ulong stepTicks, float startY, float x, float z) {
             using var fixture = Fixtures.FreshServer(definition: ThinFloorDocument(requireField: true));
-            var actor = WorldPrincipal.Seat(slot: 0);
+            var actor = Principal.Seat(slot: 0);
 
             Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
                 actor,

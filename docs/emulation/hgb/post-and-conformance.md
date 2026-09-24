@@ -64,6 +64,42 @@ The current project README lists the additional suites, probe kinds, ledger
 fields, and the exact recorded-outcome rules. Do not describe these external
 suites as an independent hardware oracle.
 
+## Refuted PPU schedule decompositions
+
+Do not re-derive the schedule by moving the PPU onto SameBoy's dots. All three
+decompositions of that idea are measured and refuted, the coupled one included.
+Moving both conventions together — a read taken at the machine cycle's drive
+instant, the first line after an LCD enable at 448 dots, and every calibrated
+constant re-derived so the CPU-observed edges land two dots earlier in the line
+and the pixel pipeline two dots earlier still — is reachable and holds the whole
+hardware tier: every mooneye acceptance group, blargg including `dmg_sound` and
+`cgb_sound`, sst-sm83, the boot handoff, and every Tier A and Tier C stage stay
+green, the `--cosim` `cpu` stream stays divergence-free, and the `ppu-pixel`
+stream on `lycint_dmgpalette_during_m3_1` becomes content-identical to SameBoy
+for 120 frames with both cores painting the mid-mode-3 palette from LY 1 x 157.
+It closes what it is for — `lycint_dmgpalette_during_m3_1`/`_2` go pixel-exact
+and `_3`/`_4` fall 429 → 143 — and loses far more than it closes: mealybug drops
+from 3 exact to 2 and its differing-pixel total goes 26,135 → 43,957 with all 33
+moved rows worse, AGE goes 2,886 → 8,462, and gambatte goes 285,900 → 427,834
+and 82 cases net. The cost is the pipeline's move and nothing else: restoring
+only the pipeline's absolute position (a longer mode-3 entry latency) returns
+mealybug bit-for-bit to its recorded ledger. Nor can the pipeline be held while
+the LYC interrupt moves in its place — a two-dot-later interrupt view takes
+`acceptance-ppu` from 34 to 20 — and holding the pipeline while moving only the
+read view blocks on `intr_2_mode0_timing_sprites` (DmgC and CgbE), first
+divergence at master cycle 11,218,088, `pc=0BDD`, an IF read returning 0xA3 on
+SameBoy and 0xA0 here. SameBoy's pixel dots and the screenshot corpus disagree
+by two dots, and the corpus is the gate. The two older decompositions fail
+sooner: shortening the first line to 449 and giving the register view a +3
+polled-event phase (carrying the polled mode lags with it) leaves the polled
+STAT and LY dots exactly where they are but moves the interrupt raise and the
+memory locks three dots early, which fails `hblank_ly_scx_timing`,
+`intr_2_mode0_timing`, `intr_2_mode0_timing_sprites`, `intr_2_mode3_timing`,
+`intr_2_oam_ok_timing`, `lcdon_timing` and `lcdon_write_timing`; moving only the
+pixel pipeline three dots early (`Mode3EntryLatency` 8→5 with the mode-0 group
+trailing the 160th pop) keeps every acceptance case green but takes the
+mealybug/AGE error from 65.7k to about 78k differing pixels.
+
 ## The BESS save state standard
 
 The Post executable exposes `--bess-export <path>` and `--bess-import <path>`

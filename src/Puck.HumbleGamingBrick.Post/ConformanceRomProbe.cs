@@ -51,9 +51,8 @@ internal static class ConformanceRomProbe {
 
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="romCase">The case to run.</param>
-    /// <param name="budget">The case's wall-clock budget.</param>
     /// <returns>The verdict and a one-line detail.</returns>
-    public static (ConformanceRomResult Result, string Detail) Run(RomCase romCase, CaseBudget budget) {
+    public static (ConformanceRomResult Result, string Detail) Run(RomCase romCase) {
         var rom = File.ReadAllBytes(path: romCase.FullPath);
 
         using var machine = PostMachine.Build(
@@ -70,7 +69,6 @@ internal static class ConformanceRomProbe {
 
         for (var frame = 0; (frame < romCase.FrameCap); ++frame) {
             PostMachine.RunFrames(
-                budget: budget,
                 frames: 1,
                 instance: machine
             );

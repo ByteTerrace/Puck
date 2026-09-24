@@ -166,7 +166,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         );
 
         if (D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST != m_textureState) {
-            var toCopyDestination = CreateTransition(
+            var toCopyDestination = DirectXBarriers.Transition(
                 after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
                 before: m_textureState,
                 resource: texture
@@ -210,7 +210,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             pSrcBox: ((D3D12_BOX?)null)
         );
 
-        var toShaderResource = CreateTransition(
+        var toShaderResource = DirectXBarriers.Transition(
             after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
             before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
             resource: texture
@@ -232,20 +232,6 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         WaitForGpu();
     }
 
-    private static D3D12_RESOURCE_BARRIER CreateTransition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
-        var barrier = new D3D12_RESOURCE_BARRIER {
-            Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        };
-
-        barrier.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            StateAfter = after,
-            StateBefore = before,
-            Subresource = 0xFFFFFFFF,
-            pResource = resource,
-        };
-
-        return barrier;
-    }
     // The byte size of one pixel for a supported upload format. Deriving it from the format (rather than assuming 4)
     // keeps the row-pitch + buffer-size math correct if a wider format is ever added — a hardcoded 4 would under-size
     // the upload buffer for, say, an R16G16B16A16 surface and overflow the copy.
@@ -280,78 +266,35 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         DisposeImageResources();
 
         var device = ((ID3D12Device*)m_deviceContext.Device.Handle);
-        var textureHeapProperties = new D3D12_HEAP_PROPERTIES {
-            Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
-        };
-        var textureDesc = new D3D12_RESOURCE_DESC {
-            DepthOrArraySize = 1,
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            Format = format,
-            Height = height,
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN,
-            MipLevels = 1,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            Width = width,
-        };
 
-        void* texture;
-        var resourceIid = ID3D12Resource.IID_Guid;
-
-        device->CreateCommittedResource(
-            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
-            pDesc: in textureDesc,
-            pHeapProperties: in textureHeapProperties,
-            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
-            ppvResource: &texture,
-            riidResource: in resourceIid
-        );
-        m_texture = ((nint)texture);
+        m_texture = ((nint)DirectXTextures.CreateCommitted(
+            device: device,
+            format: format,
+            height: height,
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            width: width
+        ));
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
 
         m_paddedRowPitch = AlignRowPitch(packedRowBytes: (width * FormatByteSize(format: format)));
 
-        var uploadHeapProperties = new D3D12_HEAP_PROPERTIES {
-            Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
-        };
-        var uploadDesc = new D3D12_RESOURCE_DESC {
-            DepthOrArraySize = 1,
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
-            Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
-            Height = 1,
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-            MipLevels = 1,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            Width = (((ulong)m_paddedRowPitch) * height),
-        };
-
-        void* uploadBuffer;
-
-        device->CreateCommittedResource(
-            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            pDesc: in uploadDesc,
-            pHeapProperties: in uploadHeapProperties,
-            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
-            ppvResource: &uploadBuffer,
-            riidResource: in resourceIid
-        );
-        m_uploadBuffer = ((nint)uploadBuffer);
+        m_uploadBuffer = ((nint)DirectXBuffers.CreateCommitted(
+            device: device,
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+            sizeBytes: (((ulong)m_paddedRowPitch) * height)
+        ));
 
         if (0 == m_srvHeap) {
-            var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
-                Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-                NumDescriptors = 1,
-                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            };
-
-            device->CreateDescriptorHeap(
-                pDescriptorHeapDesc: in heapDesc,
-                ppvHeap: out var srvHeap,
-                riid: ID3D12DescriptorHeap.IID_Guid
+            var srvHeap = DirectXDescriptorHeaps.Create(
+                count: 1,
+                device: device,
+                shaderVisible: true,
+                type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
             );
+
             m_srvHeap = ((nint)srvHeap);
-            m_gpuDescriptorPointer = GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)srvHeap)).ptr;
+            m_gpuDescriptorPointer = GetGpuHeapStart(heap: srvHeap).ptr;
         }
 
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
@@ -435,7 +378,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         m_disposed = true;
 
         // Drain only while the context is alive — at host shutdown it may already be disposed (CommandQueueHandle
-        // throws), and a dead queue has nothing left in flight (see DirectXGpuExportableStorageImage.Dispose).
+        // throws), and a dead queue has nothing left in flight (see DirectXGpuExportableImage.Dispose).
         if (
             m_deviceContext.IsInitialized &&
             (0 != m_deviceContext.CommandQueueHandle) &&

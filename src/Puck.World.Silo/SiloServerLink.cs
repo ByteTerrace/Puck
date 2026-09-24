@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -13,23 +14,23 @@ internal sealed class SiloServerLink(WorldSiloHost host) : IPrincipalServerLink 
         : throw new InvalidOperationException(message: "No principal-aware World link is bound to this command.")
     );
 
-    public void Query(WorldQuery query, WorldPrincipal principal, Action<QueryAnswer> completion) => Link.Query(
+    public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) => Link.Query(
         completion: completion,
         principal: principal,
         query: query
     );
     public void Query(WorldQuery query, Action<QueryAnswer> completion) => throw new NotSupportedException(message: "Silo queries require an explicit acting principal.");
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => Link.SubmitEnvelope(
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => Link.SubmitEnvelope(
         payload: payload,
         principal: principal
     );
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) =>
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) =>
         Link.SubmitEnvelope(
             operationId: operationId,
             payload: payload,
             principal: principal
         );
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) =>
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) =>
         Link.SubmitEnvelope(
             completion: completion,
             operationId: operationId,

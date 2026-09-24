@@ -6,6 +6,7 @@ using Puck.World;
 using Puck.World.Authoring;
 using Puck.World.Authoring.Sculpting;
 using Puck.World.Server;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Creation;
 
@@ -159,6 +160,7 @@ internal static partial class CreationCommand {
         if (!WorldDefinitionFileSource.TryLoadLocally(
             contentHash: out _,
             definition: out var definition,
+            documents: PuckDocumentComposer.Instance,
             path: fullPath,
             reason: out var reason
         )) {

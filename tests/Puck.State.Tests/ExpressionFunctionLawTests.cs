@@ -46,17 +46,17 @@ public sealed class ExpressionFunctionLawTests {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
-                text: text,
-                program: out var parsed
+                program: out var parsed,
+                text: text
             ),
             userMessage: error
         );
         return Rules.RuleCompiler.CompileExpression(
+            context: Context,
             expression: parsed,
             kind: kind,
             ruleName: "law",
-            verb: "law",
-            context: Context
+            verb: "law"
         );
     }
     private static long Eval(string text, CellKind kind = CellKind.Int) {
@@ -130,8 +130,8 @@ public sealed class ExpressionFunctionLawTests {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
                 error: out var error,
-                text: text,
-                program: out var parsed
+                program: out var parsed,
+                text: text
             ),
             userMessage: error
         );
@@ -475,18 +475,18 @@ public sealed class ExpressionFunctionLawTests {
         ));
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out _,
-            text: "replicationMask(8, 8)",
-            program: out _
+            program: out _,
+            text: "replicationMask(8, 8)"
         ));
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out _,
-            text: "repeatBits(1)",
-            program: out _
+            program: out _,
+            text: "repeatBits(1)"
         ));
         Assert.False(condition: ExpressionSpelling.TryParse(
             error: out _,
-            text: "hilbertIndex(1, 2)",
-            program: out _
+            program: out _,
+            text: "hilbertIndex(1, 2)"
         ));
     }
 }

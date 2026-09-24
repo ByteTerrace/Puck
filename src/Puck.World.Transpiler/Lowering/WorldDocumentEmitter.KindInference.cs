@@ -61,7 +61,12 @@ public static partial class WorldDocumentEmitter {
             }
 
             foreach (var argument in modifier.Arguments) {
-                if (ValueKind(scope: scope, value: argument.Value) == "Fixed") {
+                // A `bounds` range carries its two ends as one argument, so each end is read on its own.
+                ExpressionNode?[] ends = ((argument.Value is RangeExpressionNode range)
+                    ? [range.Start, range.End]
+                    : [argument.Value]);
+
+                if (ends.Any(predicate: end => (ValueKind(scope: scope, value: end) == "Fixed"))) {
                     modifierKind = "Fixed";
                 }
             }
@@ -101,10 +106,10 @@ public static partial class WorldDocumentEmitter {
                     ? LoweredValueKind(expr: value, scope: scope)
                     : null
                 );
-            case MemberAccessExpressionNode { Target: IdentifierExpressionNode target } member:
+            case MemberAccessExpressionNode { Target: IdentifierExpressionNode } member:
                 return (scope.TryLowerBinding(
                     fieldKey: null,
-                    name: $"{target.Name}.{member.Member}",
+                    name: QualifiedName.From(expression: member)!.ToString(),
                     value: out _
                 )
                     ? LoweredValueKind(expr: value, scope: scope)

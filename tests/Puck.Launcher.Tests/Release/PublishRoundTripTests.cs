@@ -26,7 +26,7 @@ public sealed class PublishRoundTripTests : IDisposable {
             Notes: null,
             Payloads: [new ReleasePayload(
                     Files: [new ReleasePayloadFile(
-                            Hash: hash,
+                            Hash: hash.ToString(),
                             Path: "Puck.World.exe",
                             Size: fileBytes.Length
                         )],
@@ -96,7 +96,7 @@ public sealed class PublishRoundTripTests : IDisposable {
         var found = await source.TryGetFileAsync(
             cancellationToken: TestContext.Current.CancellationToken,
             destination: destination,
-            hash: hash
+            pin: hash
         );
 
         Assert.True(condition: found);

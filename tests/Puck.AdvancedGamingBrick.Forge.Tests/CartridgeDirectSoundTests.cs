@@ -47,7 +47,7 @@ public sealed class CartridgeDirectSoundTests {
                 Name: "fire",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     right: CartridgeExpressions.Of(constant: 3)
                 ),
                 Body: [new CartridgeStatement(
@@ -59,7 +59,7 @@ public sealed class CartridgeDirectSoundTests {
                 Name: "tick",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 200)
                 ),
                 Body: [new CartridgeStatement(
@@ -110,15 +110,13 @@ public sealed class CartridgeDirectSoundTests {
                 Sample: [1, 2, 3]
             )],
         };
-        var errors = CartridgeDocuments.Validate(document: document);
 
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "digital sound path"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "digital sound path",
+            Name: "a recording on the colour machine",
+            Path: "sounds[0].sample"
+        ).Holds();
 
         var tooLoud = CartridgeDocuments.Create(
             target: "agb",
@@ -130,12 +128,11 @@ public sealed class CartridgeDirectSoundTests {
             )],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: tooLoud),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "signed eight-bit samples"
-            )
-        );
+        new CartridgeRefusal(
+            Document: tooLoud,
+            Fragment: "signed eight-bit samples",
+            Name: "a sample past eight bits",
+            Path: "sounds[0].sample"
+        ).Holds();
     }
 }

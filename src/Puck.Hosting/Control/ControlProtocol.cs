@@ -20,7 +20,7 @@ public static class ControlLimits {
 /// <param name="Id">Positive decimal sequence, starting at one.</param>
 /// <param name="Operation">The operation discriminator.</param>
 /// <param name="Command">One console line for exec; null for capture.</param>
-/// <param name="TimeoutMilliseconds">Wall-clock deadline, from one through the transport ceiling.</param>
+/// <param name="TimeoutMilliseconds">Deadline on the serving host's clock, from one through the transport ceiling.</param>
 public sealed record ControlRequest(long Id, string Operation, string? Command, int TimeoutMilliseconds);
 /// <summary>A correlated console result or completed PNG. Completion is never an authoritative mutation receipt.</summary>
 /// <param name="Id">The host request sequence, or zero for a local admission refusal that sent no request.</param>

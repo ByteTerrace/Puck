@@ -279,13 +279,13 @@ public sealed class SdfDetailShapeLawTests {
             actual: ShadingFlags(program: program)
         );
     }
-    /// <summary>Superellipsoids preserve Detail both at the ellipsoid delegation and at higher exponents. The
+    /// <summary>Superellipsoids preserve Detail at every exponent, the ellipsoid's exponent 2 included. The
     /// common packed flag does not depend on a shape-specific lane.</summary>
     [Theory]
-    [InlineData(2f, SdfShapeType.Ellipsoid)]
-    [InlineData(4f, SdfShapeType.Superellipsoid)]
-    [InlineData(8f, SdfShapeType.Superellipsoid)]
-    public void SuperellipsoidPreservesDetailAtEveryExponent(float exponent, SdfShapeType expectedShape) {
+    [InlineData(2f)]
+    [InlineData(4f)]
+    [InlineData(8f)]
+    public void SuperellipsoidPreservesDetailAtEveryExponent(float exponent) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -303,7 +303,7 @@ public sealed class SdfDetailShapeLawTests {
         var program = builder.Build();
 
         Assert.Equal(
-            expected: 0x80000000u | ((uint)expectedShape),
+            expected: 0x80000000u | ((uint)SdfShapeType.Superellipsoid),
             actual: program.Words[5]
         );
         var evaluator = new SdfFieldEvaluator(program: program);

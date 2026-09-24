@@ -14,7 +14,7 @@ public class RuleGroupSugarTests {
     [InlineData("workflow turn undo({ rows [\"board\"] depth: 8 }) { step move { board.unstable = 0 } }")]
     [Theory]
     public void UndoDeclarationAndRewindEffectRoundTrip(string group) {
-        var source = (("schema: \"puck.world.definition.v1\"\nstate { world { table board { unstable = 1 } } }\n" + group) + "\nrule undoMove { rewindTurn(turn) }");
+        var source = (("schema: \"puck.world.definition.v1\"\nstate { world { table board { unstable = 1 } } }\n" + group) + "\nrule undoMove { rewindGroup(turn) }");
         var document = Compile(source: source);
 
         Assert.Equal(8L, document["ruleGroups"]![0]!["undo"]!["depth"]!.GetValue<long>());
@@ -23,7 +23,7 @@ public class RuleGroupSugarTests {
 
         Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: " undo(");
         Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: Compile(source: printed)), userMessage: printed);
-        var formatted = PuckFormat.Format(source);
+        var formatted = PuckFormat.Format(source: source);
 
         Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: Compile(source: formatted)), userMessage: formatted);
     }
@@ -96,12 +96,12 @@ public class RuleGroupSugarTests {
         Assert.DoesNotContain(
             actualString: decompiled,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "rule \"settleBoard_collapse\""
+            expectedSubstring: "rule \"settleBoard$collapse\""
         );
         Assert.DoesNotContain(
             actualString: decompiled,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "turn_beginTurn"
+            expectedSubstring: "turn$beginTurn"
         );
         Assert.Equal(
             expected: document.ToJsonString(),

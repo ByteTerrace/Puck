@@ -117,12 +117,12 @@ internal static class FixedPointContractClaims {
 
         return null;
     }
-    // ---- BinaryIntegerFunctions: the signed narrow (short -> uint, BMI2) and wide (long -> Int128, SWAR) pairing branches ----
+    // ---- BinaryIntegerFunctions: the signed narrow (short -> uint) and wide (long -> Int128) pairings ----
 
     /// <summary>Interleaves the low sixteen bits of <paramref name="value"/> and <paramref name="other"/> one bit at
     /// a time, transcribed from the DEFINITION — value's bits at the even positions, other's at the odd ones —
-    /// sharing no line with <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/>'s
-    /// <c>Bmi2.ParallelBitDeposit</c> branch for <c>short</c>/<c>ushort</c>.</summary>
+    /// sharing no line with <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/>'s PDEP path or SWAR
+    /// ladder.</summary>
     private static uint NarrowBitwisePairReference(ushort value, ushort other) {
         var paired = 0U;
 
@@ -135,7 +135,7 @@ internal static class FixedPointContractClaims {
     }
     /// <summary>Interleaves the full sixty-four-bit two's-complement pattern of <paramref name="value"/> and
     /// <paramref name="other"/> one bit at a time, transcribed from the DEFINITION and sharing no line with
-    /// <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/>'s width-agnostic SWAR fallback for
+    /// <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/>'s PDEP path or SWAR ladder for
     /// <c>long</c>.</summary>
     private static Int128 WideBitwisePairReference(ulong value, ulong other) {
         var paired = UInt128.Zero;
@@ -150,8 +150,8 @@ internal static class FixedPointContractClaims {
 
     /// <summary>Proves <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/> and
     /// <see cref="BinaryIntegerFunctions.BitwiseUnpair{TInput,TResult}"/> at the two branches no existing law reaches:
-    /// the <c>short</c>/<c>ushort</c> <c>Bmi2.ParallelBitDeposit</c> path (distinct from the <c>int</c>/<c>uint</c>
-    /// branch <c>core.binary-integer-contracts</c> exercises), and negative operands on the SWAR fallback the
+    /// negative <c>short</c> operands into a 32-bit result, whose lanes must shed their sign extension before the
+    /// deposit or ladder spreads them, and negative operands on the 128-bit result the
     /// existing wide-carrier law only ever feeds non-negative <see langword="ulong"/> values. A sign-extension leak
     /// into the interleave — CreateTruncating widening a negative short or long before the deposit mask trims it back
     /// down — would show up as a wrong pattern here rather than a coincidentally-matching one.</summary>

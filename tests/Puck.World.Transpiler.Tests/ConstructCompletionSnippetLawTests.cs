@@ -60,8 +60,10 @@ public class ConstructCompletionSnippetLawTests {
         return output.ToString();
     }
     // Every label-and-snippet pair the real language server offers at document statement position.
-    private static IReadOnlyList<(string Label, string Snippet)> OfferedAtRoot() => [.. LanguageServerCompletions
-        .At(
+    private static IReadOnlyList<(string Label, string Snippet)> OfferedAtRoot() => RootOffers.Value;
+
+    private static readonly Lazy<IReadOnlyList<(string Label, string Snippet)>> RootOffers = new(valueFactory: static () => [.. LanguageServerClient
+        .CompletionsAt(
         character: 0,
         line: 2,
         source: Root
@@ -70,7 +72,8 @@ public class ConstructCompletionSnippetLawTests {
             Label: item.Label,
             Snippet: item.InsertText
         ))
-        .Where(predicate: static entry => (entry.Snippet.Length > 0))];
+        .Where(predicate: static entry => (entry.Snippet.Length > 0))]);
+
     // What the PARSER refuses about a source, which is the level a snippet is answerable at: a snippet's last
     // placeholder is where the author still has to type, so an empty rule body or an empty `match:` is not its
     // defect. A container spelled with a `:` (PUCK040) is, and the parser is what draws it.
@@ -101,15 +104,14 @@ public class ConstructCompletionSnippetLawTests {
                 word: label
             )) {
                 data.Add(
-                    label,
-                    snippet
+                    p1: label,
+                    p2: snippet
                 );
             }
         }
 
         return data;
     }
-
     [Fact]
     public void TheLanguageServerOffersTheArraySpellingOfARowConstruct() {
         var table = WorldConstructs.Table;

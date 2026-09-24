@@ -88,7 +88,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         m_screens = screens;
 
         var probes = definitionSource.Definition.Probes;
-        var documentDirectory = (Path.GetDirectoryName(path: Path.GetFullPath(path: definitionSource.SourcePath)) ?? "");
+        var documentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: definitionSource.SourcePath);
 
         m_rowIndexById = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         m_rows = new ProbeRowInfo[probes.Count];
@@ -318,7 +318,10 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     // enclosing instance's own seat — what a seat-less camera socket resolves against.
     private void AppendFrameSource(StringBuilder builder, WorldFrameSource source, int contextSeat) {
         switch (source) {
-            case WorldScreenSource.Camera camera:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CameraId } when WorldImageProducerSettings.TryCamera(
+                camera: out var camera,
+                source: source
+            ):
                 var seat = (camera.Seat ?? contextSeat);
                 var token = (m_screens.ResolvedCameraToken(seat: seat) ?? $"seat{seat}-unassigned");
 
@@ -333,10 +336,8 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
                 builder.Append(value: "probe:").Append(value: probe.Id);
 
                 break;
-            case WorldScreenSource.Capture capture:
-                builder.Append(value: "capture:").Append(value: ((capture.MonitorIndex is { } monitorIndex)
-                    ? $"monitor{monitorIndex}"
-                    : capture.WindowTitle));
+            case WorldScreenSource.Producer producer:
+                builder.Append(value: "producer:").Append(value: producer.Id);
 
                 break;
             default:
@@ -616,16 +617,22 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             : 0.0
         );
     }
-    // Parses a probe reference of the shape "<id>" or "<id>@<seat>" — the probe.set/probe.record addressing grammar.
-    // A malformed "@" suffix (non-numeric, or less than 1) is left folded into baseId, so it resolves to "no such
-    // probe" rather than silently falling back to the no-seat behavior.
+    // The key of a seat-relative row's instance at one seat: the generated name "<id>$<seat>", which no authored
+    // probe id can spell (the validator refuses one in the generated form), so an instance key never names a row.
+    private static string InstanceKey(string id, int seat) => GeneratedName.Join(
+        id,
+        seat.ToString(provider: CultureInfo.InvariantCulture)
+    );
+    // Parses a probe reference of the shape "<id>" or "<id>$<seat>" (InstanceKey) — the probe.set/probe.record
+    // addressing grammar. A malformed suffix (non-numeric, or less than 1) is left folded into baseId, so it resolves
+    // to "no such probe" rather than silently falling back to the no-seat behavior.
     private static void ParseInstanceRef(string probeRef, out string baseId, out int? seat) {
-        var at = probeRef.IndexOf(value: '@');
+        var joiner = probeRef.LastIndexOf(value: GeneratedName.Joiner);
 
         if (
-            (at < 0) ||
+            (joiner < 1) ||
             !CommandArgs.TryParseInt(
-            text: probeRef.AsSpan(start: (at + 1)),
+            text: probeRef.AsSpan(start: (joiner + 1)),
             value: out var parsedSeat
         ) ||
             (parsedSeat < 1)
@@ -636,7 +643,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             return;
         }
 
-        baseId = probeRef[..at];
+        baseId = probeRef[..joiner];
         seat = parsedSeat;
     }
     // The single-instance row's instance, or the seat-relative row's instance at contextSeat — the resolution every
@@ -652,7 +659,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             : null)
         : target.SingleInstance
     );
-    // Formats the known live instances of a row for a refusal message — "head@1, head@2", or "(no live instances)".
+    // Formats the known live instances of a row for a refusal message — "head$1, head$2", or "(no live instances)".
     private static string DescribeKnownInstances(ProbeRowInfo rowInfo) {
         if ((rowInfo.InstancesBySeat is not { Count: > 0 } bySeat)) {
             return " (no live instances)";
@@ -669,12 +676,12 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
                 builder.Append(value: ", ");
             }
 
-            builder.Append(value: rowInfo.Row.Id).Append(value: '@').Append(value: seats[index]);
+            builder.Append(value: InstanceKey(id: rowInfo.Row.Id, seat: seats[index]));
         }
 
         return builder.ToString();
     }
-    // probe.record's own resolution: a seat-relative row without an explicit @seat is ambiguous and refused (naming
+    // probe.record's own resolution: a seat-relative row without an explicit $seat is ambiguous and refused (naming
     // the live instances); every other case matches probe.set's single-instance resolution.
     private bool TryResolveRecordableInstance(string probeRef, out ProbeInstance instance, out string? reason) {
         ParseInstanceRef(
@@ -701,7 +708,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
                 target: rowInfo
             ) is not { } resolved) {
                 instance = null!;
-                reason = $"no live instance '{baseId}@{explicitSeat}'{DescribeKnownInstances(rowInfo: rowInfo)}";
+                reason = $"no live instance '{InstanceKey(id: baseId, seat: explicitSeat)}'{DescribeKnownInstances(rowInfo: rowInfo)}";
 
                 return false;
             }
@@ -764,15 +771,15 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public WorldCameraSensor? TriggerSensor { get; init; }
     }
     // One live probe instance: a row's own state for one seat (the row's single seat, or one occupied seat of a
-    // seat-relative row). Label is the probe.status/probe.record/probe.set address ("id" or "id@seat");
+    // seat-relative row). Label is the probe.status/probe.record/probe.set address ("id" or "id$seat");
     // OutputRingKey is the WorldScreenBinder output-ring key a texture-writing kind's ring is provisioned under —
     // seat 1's instance of a seat-relative row shares the row's bare id (so an authored screen/HUD `probe` source,
     // which carries no seat of its own, keeps resolving the same ring it always has) while every other seat gets its
-    // own "id@seat" ring. OutputSet null means the run is not currently attached (never started, or every socket is
+    // own "id$seat" ring. OutputSet null means the run is not currently attached (never started, or every socket is
     // being re-evaluated after an unready frame) — the next ready frame always attaches.
     private sealed class ProbeInstance {
         public List<AxisState> AxisBindings { get; } = [];
-        public List<WorldScreenSource.Camera> CameraDemands { get; } = [];
+        public List<WorldCameraSettings> CameraDemands { get; } = [];
         public required byte[] Constants { get; init; }
         public List<ControlState> ControlBindings { get; } = [];
         public string? Fault { get; set; }

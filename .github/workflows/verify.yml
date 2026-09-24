@@ -9,7 +9,8 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # so a ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries
 # are pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check`,
 # `puck registry --check`, `puck architecture --check`, and `puck branding --check` from the installed producer CLI artifact on every change, so
-# a document field added without regenerating the checked-in schema or the name registry, or a project declaration
+# a document field added without regenerating the checked-in schema, the dashboard portal's generated world types
+# (which `puck schema` writes and checks with the schema), or the name registry, or a project declaration
 # changed without regenerating the layering block in docs/project-map.md, fails the build here rather than only in a
 # manual verb run. The branding check also catches drift in distributed assets and their source wiring.
 
@@ -217,14 +218,4 @@ jobs:
         run: puck architecture --check
       - name: puck branding --check
         run: puck branding --check
-      - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.20.0
-      - name: Install the portal's pinned packages
-        run: npm ci
-        working-directory: src/Puck.Dashboard/src/portal
-      - name: The portal's generated world types match this run's schema
-        run: npm run check:types
-        working-directory: src/Puck.Dashboard/src/portal
     timeout-minutes: 15

@@ -183,8 +183,8 @@ public sealed class CommandBufferTests {
         ));
     }
 
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class FixedBindings : IInputBindings {
         private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: "buffered")];

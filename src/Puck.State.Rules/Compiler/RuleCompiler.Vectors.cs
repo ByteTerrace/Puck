@@ -161,7 +161,7 @@ public static partial class RuleCompiler {
             b: right.Space.Name.Value,
             comparisonType: StringComparison.Ordinal
         ) ||
-            !left.Space.HasSameIdentity(other: right.Space)
+            (left.Space.Identity != right.Space.Identity)
         ) {
             throw new RuleException(
                 detail: $"'{verb}' vector call spaces mismatch: left is '{left.Space.Name}', right is '{right.Space.Name}'",
@@ -206,7 +206,7 @@ public static partial class RuleCompiler {
             a: space.Name.Value,
             b: expectedSpace.Name.Value,
             comparisonType: StringComparison.Ordinal
-        ) || !space.HasSameIdentity(other: expectedSpace))
+        ) || (space.Identity != expectedSpace.Identity))
         ) {
             throw new RuleException(
                 detail: $"{where} vector space mismatch: row '{rowName}' is in space '{space.Name}', but expected space '{expectedSpace.Name}'",
@@ -257,8 +257,8 @@ public static partial class RuleCompiler {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
-            reference: key,
             keyFieldLabel: "key",
+            reference: key,
             ruleName: ruleName,
             verb: where
         )) {
@@ -390,7 +390,7 @@ public static partial class RuleCompiler {
         )));
 
         if (!StateVector.TryParseBase64Url(
-            dimensions: space.Dimensions,
+            dimensions: space.Identity.Dimensions,
             error: out var error,
             text: literal,
             vector: out var parsed
@@ -451,7 +451,7 @@ public static partial class RuleCompiler {
             b: intoSpace.Name.Value,
             comparisonType: StringComparison.Ordinal
         ) ||
-            !space.HasSameIdentity(other: intoSpace)
+            (space.Identity != intoSpace.Identity)
         ) {
             throw new RuleException(
                 detail: $"mean from space '{space.Name}' does not match into space '{intoSpace.Name}'",
@@ -462,7 +462,7 @@ public static partial class RuleCompiler {
 
         return new VectorMeanEffect(
             describe: $"mean {mean.From} -> {into.Spelling}",
-            dimensions: space.Dimensions,
+            dimensions: space.Identity.Dimensions,
             fromCapacity: fromRow.Capacity.GetValueOrDefault(),
             fromRowOrdinal: ResolveRowOrdinal(
                 context: context,
@@ -527,7 +527,7 @@ public static partial class RuleCompiler {
 
         return new VectorMixEffect(
             describe: $"mix {into.Spelling}",
-            dimensions: space.Dimensions,
+            dimensions: space.Identity.Dimensions,
             key: into.Key,
             keyFrom: into.KeyFrom,
             rowOrdinal: into.RowOrdinal,
@@ -672,8 +672,8 @@ public static partial class RuleCompiler {
             if (TryResolveDynamicKey(
                 cell: out var dynamicExclude,
                 context: context,
-                reference: excludeChannel,
                 keyFieldLabel: "exclude",
+                reference: excludeChannel,
                 ruleName: ruleName,
                 verb: "nearest"
             )) {
@@ -695,7 +695,7 @@ public static partial class RuleCompiler {
 
         return new VectorNearestEffect(
             describe: $"nearest {nearest.From} -> {nearest.Into}",
-            dimensions: space.Dimensions,
+            dimensions: space.Identity.Dimensions,
             excludeKey: excludeKey,
             excludeKeyFrom: excludeKeyFrom,
             farthest: nearest.Farthest,

@@ -1,3 +1,5 @@
+using Puck.Assets;
+
 namespace Puck.HumbleGamingBrick.Forge.Framework;
 
 /// <summary>The DMG shade-ramp registers a <c>DMGP</c> chunk carries (BGP, OBP0, OBP1). Parsed for wire-form
@@ -42,21 +44,18 @@ public sealed record PbakSpriteSet(byte[] Tiles2bpp, byte[] PaletteData, PbakDmg
     public int TileCount => (Tiles2bpp.Length / 16);
 }
 /// <summary>
-/// The framework-side reader of the bake's <c>PBAK</c> wire form — the inverse of the bake pipeline's writer, so the
-/// framework links exactly the bytes an external assembler would receive. Little-endian throughout: the header is
-/// <c>"PBAK"</c> + u16 version (1) + u16 chunk count, followed by <c>{fourcc, u32 byteLength, payload}</c> chunks in
-/// the FIXED order — the background's (TILE, MAPX, ATTR, PALB, DMGP) then each sprite set's (TILE, PALO, DMGP, META,
-/// ANIM). <see cref="Parse"/> works on raw bytes only (no bake types), preserving the framework's
-/// Sm83Emitter-plus-HgbImage-only dependency posture: a blob loaded from disk links identically to one straight out
-/// of the pipeline.
+/// The framework-side reader of the bake's <c>PBAK</c> wire form: the shared chunk container
+/// (<see cref="ChunkContainer"/>) with the magic <c>"PBAK"</c>, format version 1, an empty header, and version-1
+/// chunks in the FIXED order — the background's (TILE, MAPX, ATTR, PALB, DMGP) then each sprite set's (TILE, PALO,
+/// DMGP, META, ANIM). Chunk payloads are little-endian. <see cref="Parse"/> works on raw bytes only (no bake types), so
+/// a blob loaded from disk links identically to one straight out of a writer.
 /// </summary>
 /// <param name="Background">The background section, or <see langword="null"/>.</param>
 /// <param name="Sprites">The sprite sections, in wire order.</param>
 public sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<PbakSpriteSet> Sprites) {
-    private const int HeaderByteCount = 8;
     private const int MapByteCount = (MapSide * MapSide);
     private const int MapSide = 32;
-    private const ushort SupportedVersion = 1;
+    private const uint SupportedVersion = 1;
 
     private static byte[] Expect(List<(string FourCc, byte[] Payload)> chunks, ref int index, string fourCc) {
         if (
@@ -259,80 +258,34 @@ public sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<PbakSp
 
         return payload[2..];
     }
-    // Validates the header and slices the chunk list (fourcc + payload copy per chunk, bounds-checked).
+    // Decodes the shared container and lists its chunks in order (fourcc + payload per chunk).
     private static List<(string FourCc, byte[] Payload)> ReadChunks(byte[] blob) {
-        if (
-            (blob.Length < HeaderByteCount) ||
-            (blob[0] != ((byte)'P')) ||
-            (blob[1] != ((byte)'B')) ||
-            (blob[2] != ((byte)'A')) ||
-            (blob[3] != ((byte)'K'))
-        ) {
-            throw new InvalidDataException(message: "Not a PBAK blob (bad magic).");
-        }
-
-        var version = ReadU16(
-            blob: blob,
-            offset: 4
+        var container = ChunkContainer.Decode(
+            content: blob,
+            magic: "PBAK"u8
         );
 
-        if (version != SupportedVersion) {
-            throw new InvalidDataException(message: $"PBAK version {version} is not supported (expected {SupportedVersion}).");
+        if (container.FormatVersion != SupportedVersion) {
+            throw new InvalidDataException(message: $"PBAK version {container.FormatVersion} is not supported (expected {SupportedVersion}).");
         }
 
-        var chunkCount = ReadU16(
-            blob: blob,
-            offset: 6
-        );
-        var chunks = new List<(string FourCc, byte[] Payload)>(capacity: chunkCount);
-        var offset = HeaderByteCount;
+        if (!container.Header.IsEmpty) {
+            throw new InvalidDataException(message: $"A PBAK header is empty (got {container.Header.Length} bytes).");
+        }
 
-        for (var chunk = 0; (chunk < chunkCount); chunk++) {
-            if ((offset + 8) > blob.Length) {
-                throw new InvalidDataException(message: $"PBAK chunk {chunk} header overruns the blob ({blob.Length} bytes).");
+        var chunks = new List<(string FourCc, byte[] Payload)>(capacity: container.Chunks.Count);
+
+        foreach (var chunk in container.Chunks) {
+            if (chunk.Version != SupportedVersion) {
+                throw new InvalidDataException(message: $"PBAK chunk '{chunk.Code}' version {chunk.Version} is not supported (expected {SupportedVersion}).");
             }
 
-            var fourCc = string.Create(
-                length: 4,
-                state: (blob, offset),
-                action: static (span, state) => {
-                    for (var character = 0; (character < 4); character++) {
-                        span[character] = ((char)state.blob[(state.offset + character)]);
-                    }
-                }
-            );
-            var byteLength = ReadU32(
-                blob: blob,
-                offset: (offset + 4)
-            );
-
-            offset += 8;
-
-            if (
-                (byteLength > int.MaxValue) ||
-                ((offset + ((int)byteLength)) > blob.Length)
-            ) {
-                throw new InvalidDataException(message: $"PBAK chunk '{fourCc}' payload ({byteLength} bytes) overruns the blob.");
-            }
-
-            var payload = new byte[((int)byteLength)];
-
-            Array.Copy(
-                sourceArray: blob,
-                sourceIndex: offset,
-                destinationArray: payload,
-                destinationIndex: 0,
-                length: payload.Length
-            );
-            chunks.Add(item: (fourCc, payload));
-            offset += payload.Length;
+            chunks.Add(item: (chunk.Code.ToString(), chunk.Payload.ToArray()));
         }
 
         return chunks;
     }
     private static ushort ReadU16(byte[] blob, int offset) => ((ushort)(blob[offset] | (blob[(offset + 1)] << 8)));
-    private static uint ReadU32(byte[] blob, int offset) =>
-        ((uint)(blob[offset] | (blob[(offset + 1)] << 8) | (blob[(offset + 2)] << 16) | (blob[(offset + 3)] << 24)));
     private static byte[]? TryTake(List<(string FourCc, byte[] Payload)> chunks, ref int index, string fourCc) =>
         (((index < chunks.Count) && (chunks[index].FourCc == fourCc))
             ? chunks[index++].Payload

@@ -1,0 +1,9 @@
+# The boot row compiles the generated echo pass in the background.
+pipeline.wait echo compiled 40
+pipeline.wait echo installed 10
+# Every frame-block word carries its sentinel; the one initialization frame after a reset reads them back.
+pipeline.sentinels echo on
+pipeline.reset echo
+pipeline.wait echo submitted 1 10
+pipeline.capture echo {run}/echo.png
+pipeline.wait echo captured 10

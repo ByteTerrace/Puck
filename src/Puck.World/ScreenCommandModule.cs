@@ -24,7 +24,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
     private readonly IServerLink m_link = link;
 
     // The Control check over a screen subject, under whichever identity this dispatch's ingress door stamped.
-    private bool AllowsControl(WorldPrincipal principal, int index) =>
+    private bool AllowsControl(Principal principal, int index) =>
         m_server.Grants.Allows(
             principal: principal,
             capability: WorldCapability.Control,
@@ -108,7 +108,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         return null;
     }
-    private static CommandResult Denied(WorldPrincipal principal, string verb, int index) =>
+    private static CommandResult Denied(Principal principal, string verb, int index) =>
         CommandResult.Error(output: $"[{verb}: {principal.Describe()} lacks Control over screen {index} — grant it (world.grant {principal.Describe()} control screen:{index})]");
     private CommandResult EjectHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
@@ -122,7 +122,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             return CommandResult.Error(output: $"[screen.eject: index '{args[0].ToString()}' must be an integer]");
         }
 
-        var principal = context.ActingPrincipal();
+        var principal = context.Principal;
 
         if (!AllowsControl(
             index: index,
@@ -156,7 +156,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             : CommandResult.Error(output: $"[screen.eject: {message}]")
         );
     }
-    private void EjectMachineFirst(int index, WorldPrincipal principal) {
+    private void EjectMachineFirst(int index, Principal principal) {
         if (
             m_server.Machines.HasMachine(index: index) &&
             (DeclaredScreen(index: index)?.Source is not WorldScreenSource.Machine)
@@ -183,7 +183,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             return CommandResult.Error(output: $"[screen.insert: index '{args[0].ToString()}' must be an integer]");
         }
 
-        var principal = context.ActingPrincipal();
+        var principal = context.Principal;
 
         if (!AllowsControl(
             index: index,
@@ -372,7 +372,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             handler: $"[screen.peek: {index} 0x{address:X4}=0x{value:X2}]"
         ));
     }
-    private CommandResult SourceCamera(int index, WorldPrincipal principal, in WireArgs args) {
+    private CommandResult SourceCamera(int index, Principal principal, in WireArgs args) {
         if (args.Count > 5) {
             return CommandResult.Error(output: "[screen.source: camera expects [color|infrared] [seat N]]");
         }
@@ -455,7 +455,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceCapture(int index, WorldPrincipal principal, in WireArgs args) {
+    private CommandResult SourceCapture(int index, Principal principal, in WireArgs args) {
         if (args.Count < 3) {
             return CommandResult.Error(output: "[screen.source: capture expects <windowTitle...>]");
         }
@@ -489,7 +489,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceDesktop(int index, WorldPrincipal principal, in WireArgs args) {
+    private CommandResult SourceDesktop(int index, Principal principal, in WireArgs args) {
         if (args.Count is < 2 or > 3) {
             return CommandResult.Error(output: "[screen.source: desktop expects [monitorIndex]]");
         }
@@ -541,7 +541,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             return CommandResult.Error(output: $"[screen.source: index '{args[0].ToString()}' must be an integer]");
         }
 
-        var principal = context.ActingPrincipal();
+        var principal = context.Principal;
 
         if (!AllowsControl(
             index: index,
@@ -617,7 +617,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         return CommandResult.Error(output: $"[screen.source: '{args[1].ToString()}' must be camera, capture, desktop, qr, or view]");
     }
-    private CommandResult SourceProbe(int index, WorldPrincipal principal, in WireArgs args) {
+    private CommandResult SourceProbe(int index, Principal principal, in WireArgs args) {
         if (args.Count != 3) {
             return CommandResult.Error(output: "[screen.source: probe expects <probeId>]");
         }
@@ -640,7 +640,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceQr(int index, WorldPrincipal principal, in WireArgs args) {
+    private CommandResult SourceQr(int index, Principal principal, in WireArgs args) {
         if (args.Count is < 2 or > 5) {
             return CommandResult.Error(output: "[screen.source: qr expects [payload] [ecLevel] [quietZoneModules]]");
         }
@@ -692,7 +692,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceView(int index, WorldPrincipal principal, in WireArgs args) {
+    private CommandResult SourceView(int index, Principal principal, in WireArgs args) {
         if (args.Count != 3) {
             return CommandResult.Error(output: "[screen.source: view expects <cameraName>]");
         }

@@ -83,9 +83,9 @@ public sealed class TerminalConsoleSessions : IConsoleSessions {
 public sealed class ConsoleSessionCommandObserver(Func<ConsoleSessionBank> sessions, TerminalConsoleSessions terminalSessions) : Puck.Commands.ICommandObserver {
     /// <inheritdoc/>
     public void OnCommand(in Puck.Commands.CommandActivation activation) {
-        if (activation.Principal.Kind == Puck.Commands.CommandPrincipalKind.Seat) {
+        if (activation.Principal.Kind == Puck.Commands.PrincipalKind.Seat) {
             sessions().OnCommand(activation: in activation);
-        } else if (activation.Principal.Kind == Puck.Commands.CommandPrincipalKind.Console) {
+        } else if (activation.Principal.Kind == Puck.Commands.PrincipalKind.Console) {
             terminalSessions.RecordAdministrativeActivation(activation: in activation);
         }
     }

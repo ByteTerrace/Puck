@@ -94,6 +94,10 @@ public sealed class WorldInstance : IDisposable {
     public bool IsPaused { get; set; }
     /// <summary>This instance's own transport — see this type's constructor remarks.</summary>
     public IServerLink Link { get; }
+    /// <summary>The host-approved extension runtime acting on this row — operations, connections, observations,
+    /// embeddings, and participants — or <see langword="null"/> when the host configured none. Set by
+    /// <see cref="WorldConfiguredExtensions.Attach"/>; the host that attached it stops and disposes it.</summary>
+    public WorldConfiguredExtensions? Extensions { get; set; }
     /// <summary>The listener configuration for this activation; defaults to the server document. A hosting
     /// composition may supply its current endpoint independently of an older recovered checkpoint.</summary>
     public string? ListenEndpoint { get; init; }

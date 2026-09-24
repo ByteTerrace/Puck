@@ -39,7 +39,7 @@ public sealed class OfficialManifestTests {
                 DocumentId: "puck",
                 Hash: ContentHashA,
                 Identity: null,
-                Name: "puck.world.json",
+                Name: "puck",
                 Path: "objects/sha256/00/aaa",
                 Pin: ShortPin,
                 Size: 10
@@ -53,13 +53,14 @@ public sealed class OfficialManifestTests {
                 Hash: ContentHashA,
                 Imports: [new OfficialImportRef(
                         As: null,
-                        Document: "games/example.world.json"
+                        Document: "games/example"
                     )],
-                Name: "puck.world.json",
+                Name: "puck",
                 Path: "objects/sha256/00/aaa",
                 Pin: null,
                 Role: OfficialDocumentRoles.World,
-                Size: 10
+                Size: 10,
+                Source: "puck.world.json"
             ),
             new OfficialDocumentEntry(
                 ContentType: "application/json",
@@ -67,11 +68,12 @@ public sealed class OfficialManifestTests {
                 Exports: [],
                 Hash: ContentHashB,
                 Imports: [],
-                Name: "standard.basis.json",
+                Name: "standard",
                 Path: "objects/sha256/01/bbb",
                 Pin: ShortPin,
                 Role: OfficialDocumentRoles.Basis,
-                Size: 20
+                Size: 20,
+                Source: "standard.puck"
             ),
         ],
         Engine: new OfficialEngine(
@@ -88,6 +90,22 @@ public sealed class OfficialManifestTests {
         ),
         Schema: OfficialManifest.CurrentSchema,
         Signature: null,
+        Sources: [
+            new OfficialSourceEntry(
+                ContentType: OfficialSourceContentTypes.Json,
+                Hash: ContentHashA,
+                Name: "puck.world.json",
+                Path: "objects/sha256/00/aaa",
+                Size: 10
+            ),
+            new OfficialSourceEntry(
+                ContentType: OfficialSourceContentTypes.Puck,
+                Hash: ContentHashC,
+                Name: "standard.puck",
+                Path: "objects/sha256/02/ccc",
+                Size: 5
+            ),
+        ],
         WorldSchemaBundle: new OfficialObjectRef(
             ContentType: "application/json",
             Hash: ContentHashC,
@@ -133,7 +151,7 @@ public sealed class OfficialManifestTests {
             Assets = [
                 new OfficialAssetEntry(
                 ContentType: "application/json",
-                Family: OfficialAssetFamilies.Tune,
+                Family: AssetRowFamilies.Tune,
                 Hash: ContentHashA,
                 Name: "z",
                 Path: "objects/sha256/00/aaa",
@@ -143,7 +161,7 @@ public sealed class OfficialManifestTests {
             ),
                 new OfficialAssetEntry(
                 ContentType: "application/json",
-                Family: OfficialAssetFamilies.Music,
+                Family: AssetRowFamilies.Music,
                 Hash: ContentHashB,
                 Name: "a",
                 Path: "objects/sha256/01/bbb",
@@ -158,7 +176,7 @@ public sealed class OfficialManifestTests {
                 DocumentId: "b",
                 Hash: ContentHashA,
                 Identity: null,
-                Name: "b.world.json",
+                Name: "b",
                 Path: "objects/sha256/00/aaa",
                 Pin: null,
                 Size: 1
@@ -168,7 +186,7 @@ public sealed class OfficialManifestTests {
                 DocumentId: "a",
                 Hash: ContentHashB,
                 Identity: null,
-                Name: "a.world.json",
+                Name: "a",
                 Path: "objects/sha256/01/bbb",
                 Pin: null,
                 Size: 1
@@ -181,11 +199,12 @@ public sealed class OfficialManifestTests {
                 Exports: ["b", "a", "a"],
                 Hash: ContentHashA,
                 Imports: [],
-                Name: "z.world.json",
+                Name: "z",
                 Path: "objects/sha256/00/aaa",
                 Pin: null,
                 Role: OfficialDocumentRoles.Fragment,
-                Size: 1
+                Size: 1,
+                Source: "puck.world.json"
             ),
                 new OfficialDocumentEntry(
                 ContentType: "application/json",
@@ -193,22 +212,23 @@ public sealed class OfficialManifestTests {
                 Exports: [],
                 Hash: ContentHashB,
                 Imports: [],
-                Name: "a.world.json",
+                Name: "a",
                 Path: "objects/sha256/01/bbb",
                 Pin: null,
                 Role: OfficialDocumentRoles.Fragment,
-                Size: 1
+                Size: 1,
+                Source: "puck.world.json"
             ),
             ],
         };
         var normalized = OfficialCanonicalizer.Normalize(document: unordered);
 
         Assert.Equal(
-            expected: "a.world.json",
+            expected: "a",
             actual: normalized.Documents[0].Name
         );
         Assert.Equal(
-            expected: "z.world.json",
+            expected: "z",
             actual: normalized.Documents[1].Name
         );
         Assert.Equal(
@@ -216,20 +236,44 @@ public sealed class OfficialManifestTests {
             actual: normalized.Documents[1].Exports
         );
         Assert.Equal(
-            expected: "a.world.json",
+            expected: "a",
             actual: normalized.Composed[0].Name
         );
         Assert.Equal(
-            expected: "b.world.json",
+            expected: "b",
             actual: normalized.Composed[1].Name
         );
         Assert.Equal(
-            expected: OfficialAssetFamilies.Music,
+            expected: AssetRowFamilies.Music,
             actual: normalized.Assets[0].Family
         );
         Assert.Equal(
-            expected: OfficialAssetFamilies.Tune,
+            expected: AssetRowFamilies.Tune,
             actual: normalized.Assets[1].Family
+        );
+    }
+    [Fact]
+    public void Normalize_SortsSources() {
+        var unordered = ValidDocument() with { Sources = [.. ValidDocument().Sources.Reverse()] };
+        var normalized = OfficialCanonicalizer.Normalize(document: unordered);
+
+        Assert.Equal(
+            expected: ["puck.world.json", "standard.puck"],
+            actual: normalized.Sources.Select(selector: static entry => entry.Name)
+        );
+    }
+    [InlineData("")]
+    [InlineData("standard.world.json")]
+    [Theory]
+    public void Validate_RefusesADocumentSourceThatNamesNoSourceFile(string source) {
+        var bad = ValidDocument() with {
+            Documents = [ValidDocument().Documents[0], (ValidDocument().Documents[1] with { Source = source })],
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: static error => (error.Path == "documents[1].source")
         );
     }
     [Fact]
@@ -242,16 +286,61 @@ public sealed class OfficialManifestTests {
             actual: errors[0].Path
         );
     }
-    [Fact]
-    public void Validate_RefusesDuplicateDocumentName() {
+    /// <summary>A document name is unique ignoring case (<see cref="DocumentName"/>): two <c>documents[]</c> entries
+    /// naming one document, exactly or in another letter case, are refused with the refusal every door that admits
+    /// document names words, naming both carrying sources.</summary>
+    [Theory]
+    [InlineData("puck")]
+    [InlineData("Puck")]
+    [InlineData("PUCK")]
+    public void Validate_RefusesTwoDocumentsWhoseNamesAreOneIgnoringCase(string name) {
         var bad = ValidDocument() with {
-            Documents = [ValidDocument().Documents[0], (ValidDocument().Documents[1] with { Name = "puck.world.json" })],
+            Documents = [ValidDocument().Documents[0], (ValidDocument().Documents[1] with { Name = name })],
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+        var refusal = Assert.Single(
+            collection: errors,
+            predicate: static error => (error.Path == "documents[1].name")
+        );
+
+        Assert.Equal(
+            expected: DocumentName.Collision(
+                heldFile: "puck.world.json",
+                heldName: "puck",
+                otherFile: "standard.puck",
+                otherName: name
+            ),
+            actual: refusal.Message
+        );
+    }
+    [Fact]
+    public void Validate_RefusesTwoSourcesWhoseNamesDifferOnlyInCase() {
+        var bad = ValidDocument() with {
+            Sources = [ValidDocument().Sources[0], (ValidDocument().Sources[1] with { Name = "Puck.World.json" })],
         };
         var errors = OfficialCanonicalizer.Validate(document: bad);
 
         Assert.Contains(
             collection: errors,
-            filter: error => error.Message.Contains(value: "more than once")
+            filter: static error => (
+                (error.Path == "sources[1].name") &&
+                error.Message.Contains(value: "'puck.world.json' and 'Puck.World.json' differ only in letter case")
+            )
+        );
+    }
+    [Fact]
+    public void Validate_RefusesDuplicateSourceName() {
+        var bad = ValidDocument() with {
+            Sources = [ValidDocument().Sources[0], (ValidDocument().Sources[1] with { Name = "puck.world.json" })],
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: static error => (
+                (error.Path == "sources[1].name") &&
+                error.Message.Contains(value: "more than once")
+            )
         );
     }
     [Fact]
@@ -285,12 +374,94 @@ public sealed class OfficialManifestTests {
         );
     }
     [Fact]
+    public void Validate_RefusesAComposedNameThatNamesNoDocument() {
+        var bad = ValidDocument() with {
+            Composed = [(ValidDocument().Composed[0] with { Name = "puck.world.json" })],
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: static error => (
+                (error.Path == "composed[0].name") &&
+                error.Message.Contains(value: "does not name a document")
+            )
+        );
+    }
+    [InlineData("")]
+    [InlineData("../puck")]
+    [InlineData("games//klondike")]
+    [InlineData("/games/klondike")]
+    [Theory]
+    public void Validate_RefusesADocumentNameThatLeavesTheWorkspace(string name) {
+        var bad = ValidDocument() with {
+            Documents = [ValidDocument().Documents[0], (ValidDocument().Documents[1] with { Name = name })],
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: static error => (error.Path == "documents[1].name")
+        );
+    }
+    [InlineData("")]
+    [InlineData("/games/klondike.puck")]
+    [InlineData("../klondike.puck")]
+    [InlineData("games/../klondike.puck")]
+    [InlineData("games//klondike.puck")]
+    [InlineData("./klondike.puck")]
+    [InlineData("games\\klondike.puck")]
+    [InlineData("C:/klondike.puck")]
+    [Theory]
+    public void Validate_RefusesASourceNameThatLeavesTheWorkspace(string name) {
+        var bad = ValidDocument() with {
+            Sources = [ValidDocument().Sources[0], (ValidDocument().Sources[1] with { Name = name })],
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: static error => (error.Path == "sources[1].name")
+        );
+    }
+    [Fact]
     public void Validate_RefusesMalformedContentHash() {
         var bad = ValidDocument() with {
             WorldSchemaBundle = (ValidDocument().WorldSchemaBundle with { Hash = "not-a-hash" }),
         };
         var errors = OfficialCanonicalizer.Validate(document: bad);
 
+        Assert.Contains(
+            collection: errors,
+            filter: error => error.Path.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: ".hash"
+            )
+        );
+    }
+    [Fact]
+    public void Validate_RefusesUppercasePins() {
+        var bad = ValidDocument() with {
+            Documents = [ValidDocument().Documents[0], (ValidDocument().Documents[1] with { Pin = ShortPin.ToUpperInvariant().Replace(
+                newValue: "sha256-64/",
+                oldValue: "SHA256-64/"
+            ) })],
+            WorldSchemaBundle = (ValidDocument().WorldSchemaBundle with {
+                Hash = $"sha256/{new string(
+                c: 'A',
+                count: 64
+            )}",
+            }),
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: error => error.Path.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: ".pin"
+            )
+        );
         Assert.Contains(
             collection: errors,
             filter: error => error.Path.EndsWith(
@@ -312,6 +483,18 @@ public sealed class OfficialManifestTests {
                 comparisonType: StringComparison.Ordinal,
                 value: ".pin"
             )
+        );
+    }
+    [Fact]
+    public void Validate_RefusesMalformedSourceHash() {
+        var bad = ValidDocument() with {
+            Sources = [ValidDocument().Sources[0], (ValidDocument().Sources[1] with { Hash = "sha256/deadbeef" })],
+        };
+        var errors = OfficialCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: static error => (error.Path == "sources[1].hash")
         );
     }
     [Fact]

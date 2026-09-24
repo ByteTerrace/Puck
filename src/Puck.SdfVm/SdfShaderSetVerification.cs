@@ -1,11 +1,10 @@
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
 
 /// <summary>Verifies a device's loaded shader bytecode reports the SDF ISA version this build expects, once per
-/// device+shader-set.</summary>
+/// device and kernel set, the set identified by its <see cref="SdfWorldKernels.ContentKey"/>.</summary>
 public static class SdfShaderSetVerification {
     internal const uint ReportRequest = 0x53444656u;
 
@@ -30,30 +29,16 @@ public static class SdfShaderSetVerification {
     }
     internal static void VerifyShaderSet(IGpuDeviceContext device, in SdfWorldKernels kernels, Action verify) {
         var state = VerifiedDevices.GetOrCreateValue(key: device);
-        var shaderSetHash = ShaderSetHash(kernels: kernels);
+        var key = kernels.ContentKey();
 
         lock (state) {
-            if (state.VerifiedShaderSets.Contains(item: shaderSetHash)) {
+            if (state.VerifiedShaderSets.Contains(item: key)) {
                 return;
             }
 
             verify();
-            _ = state.VerifiedShaderSets.Add(item: shaderSetHash);
+            _ = state.VerifiedShaderSets.Add(item: key);
         }
-    }
-
-    private static string ShaderSetHash(in SdfWorldKernels kernels) {
-        using var hash = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
-
-        hash.AppendData(data: kernels.Beam.Span);
-        hash.AppendData(data: kernels.Primary.Span);
-        hash.AppendData(data: kernels.Surface.Span);
-        hash.AppendData(data: kernels.Ambient.Span);
-        hash.AppendData(data: kernels.Views.Span);
-        hash.AppendData(data: kernels.ViewsCore.Span);
-        hash.AppendData(data: kernels.ViewsFolds.Span);
-
-        return Convert.ToHexString(inArray: hash.GetHashAndReset());
     }
 
     private sealed class VerificationState {

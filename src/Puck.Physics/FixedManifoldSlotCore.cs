@@ -39,10 +39,9 @@ internal interface IManifoldSlotState : IManifoldSlotEvictionKey {
     /// <summary>Clears the impulse the slot warm starts from.</summary>
     void ClearWarmStart();
     /// <summary>Folds the slot's persistent state into a running digest.</summary>
-    /// <param name="digest">The running digest.</param>
+    /// <param name="digest">The running digest, advanced in place.</param>
     /// <param name="step">The current step ordinal, so the folded age is relative.</param>
-    /// <returns>The updated digest.</returns>
-    ulong Fold(ulong digest, int step);
+    void Fold(ref Fnv1aHash digest, int step);
 }
 /// <summary>One persistent manifold slot as <see cref="FixedManifoldSlotCore"/> associates it with one candidate
 /// type.</summary>
@@ -217,23 +216,20 @@ internal static class FixedManifoldSlotCore {
     }
     /// <summary>Folds every slot's persistent state into a running digest, in slot index order.</summary>
     /// <param name="slots">The slot array.</param>
-    /// <param name="digest">The running digest.</param>
+    /// <param name="digest">The running digest, advanced in place.</param>
     /// <param name="step">The current step ordinal, so the folded age is relative (<c>step - LastTouchedStep</c>)
     /// rather than absolute — two runs starting at different step offsets still fold the same age for the same
     /// history.</param>
     /// <param name="capacity">The number of slots to scan.</param>
-    /// <returns>The updated digest.</returns>
-    internal static ulong Fold<TSlot>(TSlot[] slots, ulong digest, int step, int capacity) where TSlot : struct, IManifoldSlotState {
+    internal static void Fold<TSlot>(TSlot[] slots, ref Fnv1aHash digest, int step, int capacity) where TSlot : struct, IManifoldSlotState {
         for (var index = 0; (index < capacity); ++index) {
             ref var slot = ref slots[index];
 
-            digest = slot.Fold(
-                digest: digest,
+            slot.Fold(
+                digest: ref digest,
                 step: step
             );
         }
-
-        return digest;
     }
     /// <summary>Selects, among the slots not already claimed this step, the one that yields to a new candidate: the
     /// least recently touched; a tie breaks toward the smaller accumulated impulse, and a further tie toward the

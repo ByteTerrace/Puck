@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 using static Puck.World.Tests.SolitaireFixtures;
@@ -11,9 +12,12 @@ public sealed class SolitaireLawTests {
         foreach (var hidden in new[] { true, false }) {
             using var f = Fixtures.FreshServer(Position(
                 "solitaireKlondike",
-                new() { [2] = (hidden
+                new() {
+                    [2] = (hidden
                 ? [4, 16]
-                : [4, 3]), [3] = [18] },
+                : [4, 3]),
+                    [3] = [18],
+                },
                 hidden: (hidden
                 ? [4]
                 : []),
@@ -389,13 +393,16 @@ public sealed class SolitaireLawTests {
     }
     [Fact]
     public void SpiderClearsCompleteSuitRunsAndCountsTheWin() {
-        var piles = new Dictionary<int, int[]> { [2] = Enumerable.Range(
+        var piles = new Dictionary<int, int[]> {
+            [2] = Enumerable.Range(
             count: 13,
             start: 0
-        ).Reverse().ToArray(), [12] = Enumerable.Range(
+        ).Reverse().ToArray(),
+            [12] = Enumerable.Range(
             count: 91,
             start: 13
-        ).ToArray() };
+        ).ToArray(),
+        };
         using var f = Fixtures.FreshServer(Position(
             "solitaireSpider",
             piles,
@@ -465,25 +472,25 @@ public sealed class SolitaireLawTests {
         using var f = Fixtures.FreshServer(Game(
             "solitaireSpider",
             source => {
-            Set(
-                game: "solitaireSpider",
-                key: "option",
-                source: source,
-                value: 4
-            );
-            Set(
-                game: "solitaireSpider",
-                key: "action",
-                source: source,
-                value: 1
-            );
-            Set(
-                game: "solitaireSpider",
-                key: "request",
-                source: source,
-                value: 1
-            );
-        }
+                Set(
+                    game: "solitaireSpider",
+                    key: "option",
+                    source: source,
+                    value: 4
+                );
+                Set(
+                    game: "solitaireSpider",
+                    key: "action",
+                    source: source,
+                    value: 1
+                );
+                Set(
+                    game: "solitaireSpider",
+                    key: "request",
+                    source: source,
+                    value: 1
+                );
+            }
         ));
 
         Steps(
@@ -491,7 +498,7 @@ public sealed class SolitaireLawTests {
             n: 2
         );
         f.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "solitaireSpider",
             Value: 1,
             Key: "option",
@@ -631,11 +638,15 @@ public sealed class SolitaireLawTests {
             action: 0
         );
 
-        definition = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(selector: r => ((r.Name.Value == "solitaireKlondike")
+        definition = definition with {
+            StateRaw = definition.StateRaw! with {
+                World = [.. definition.State.Select(selector: r => ((r.Name.Value == "solitaireKlondike")
             ? r with { Cells = [.. r.Cells!.Select(selector: c => ((c.Key.Value == "activeOption")
                 ? c with { Value = CellValue.Int(value: amount) }
                 : c))] }
-            : r))] } };
+            : r))],
+            },
+        };
         using var f = Fixtures.FreshServer(definition);
 
         Settle(f: f);
@@ -656,11 +667,13 @@ public sealed class SolitaireLawTests {
             f: f,
             game: "solitaireKlondike",
             pile: 0
-        ) > 0) { Request(
+        ) > 0) {
+            Request(
             f,
             "solitaireKlondike",
             3
-        ); }
+        );
+        }
         Assert.Equal(
             new[] { "0", "1", "2", "3", "4" },
             Row(
@@ -694,31 +707,31 @@ public sealed class SolitaireLawTests {
         using var f = Fixtures.FreshServer(Game(
             "solitaireKlondike",
             source => {
-            Set(
-                game: "solitaireKlondike",
-                key: "option",
-                source: source,
-                value: 3
-            );
-            Set(
-                game: "solitaireKlondike",
-                key: "action",
-                source: source,
-                value: 1
-            );
-            Set(
-                game: "solitaireKlondike",
-                key: "request",
-                source: source,
-                value: 1
-            );
-            Set(
-                game: "solitaire",
-                key: "table",
-                source: source,
-                value: 0
-            );
-        }
+                Set(
+                    game: "solitaireKlondike",
+                    key: "option",
+                    source: source,
+                    value: 3
+                );
+                Set(
+                    game: "solitaireKlondike",
+                    key: "action",
+                    source: source,
+                    value: 1
+                );
+                Set(
+                    game: "solitaireKlondike",
+                    key: "request",
+                    source: source,
+                    value: 1
+                );
+                Set(
+                    game: "solitaire",
+                    key: "table",
+                    source: source,
+                    value: 0
+                );
+            }
         ));
 
         Steps(
@@ -734,7 +747,7 @@ public sealed class SolitaireLawTests {
             )
         );
         f.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "solitaire",
             Value: 1,
             Key: "table",
@@ -745,7 +758,7 @@ public sealed class SolitaireLawTests {
             game: "solitaireKlondike"
         );
         f.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "solitaireKlondike",
             Value: 1,
             Key: "option",
@@ -777,19 +790,25 @@ public sealed class SolitaireLawTests {
     [InlineData("solitaireFreecell")]
     [Theory]
     public void TheLastFoundationMoveWinsAndFurtherMovesAreRefused(string game) {
-        var piles = new Dictionary<int, int[]> { [2] = [12], [10] = Enumerable.Range(
+        var piles = new Dictionary<int, int[]> {
+            [2] = [12],
+            [10] = Enumerable.Range(
             count: 12,
             start: 0
-        ).ToArray(), [11] = Enumerable.Range(
+        ).ToArray(),
+            [11] = Enumerable.Range(
             count: 13,
             start: 13
-        ).ToArray(), [12] = Enumerable.Range(
+        ).ToArray(),
+            [12] = Enumerable.Range(
             count: 13,
             start: 26
-        ).ToArray(), [13] = Enumerable.Range(
+        ).ToArray(),
+            [13] = Enumerable.Range(
             count: 13,
             start: 39
-        ).ToArray() };
+        ).ToArray(),
+        };
         using var f = Fixtures.FreshServer(Position(
             game,
             piles,

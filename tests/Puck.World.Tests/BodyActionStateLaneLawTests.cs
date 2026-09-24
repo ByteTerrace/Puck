@@ -2,7 +2,7 @@ using Xunit;
 
 using Puck.Maths;
 using Puck.Physics.Motion;
-using Puck.World.Protocol;
+using Puck.Testing;
 using Puck.World.Server;
 
 namespace Puck.World.Tests;
@@ -18,6 +18,7 @@ public sealed class BodyActionStateLaneLawTests {
     private const string CooldownSlot = "cooldown";
     private const string RangedSlot = "ranged";
     private const string SettedSlot = "setted";
+
     private static readonly FixedQ4816 AuthoredAmmo = FixedQ4816.FromInteger(value: 3);
     private static readonly FixedQ4816 CarriedAmmo = FixedQ4816.FromDouble(value: 7.5);
     private static readonly ulong AuthoredCooldownTicks = FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromInteger(value: 2));
@@ -25,7 +26,7 @@ public sealed class BodyActionStateLaneLawTests {
     [Fact]
     public void AJoinedBodyIsBornInBothSlotLanesAndReadsItsNamedStateBackThroughThem() {
         using var fixture = Fixtures.FreshServer(definition: Document());
-        var body = JoinSeat(fixture: fixture);
+        var body = fixture.JoinSeat();
         var arena = fixture.Server.Arena;
 
         Assert.True(
@@ -86,8 +87,8 @@ public sealed class BodyActionStateLaneLawTests {
             value: out var described
         ));
         Assert.Equal(
-            expected: CarriedAmmo,
-            actual: described
+            actual: described,
+            expected: CarriedAmmo
         );
 
         // Control: an entity index carrying no body holds no lane ordinal, so the roster discriminates occupancy
@@ -112,7 +113,7 @@ public sealed class BodyActionStateLaneLawTests {
     public void ACheckpointRoundTripRestoresBothSlotLanesExactly() {
         using var fixture = Fixtures.FreshServer(definition: Document());
 
-        _ = JoinSeat(fixture: fixture);
+        _ = fixture.JoinSeat();
         WriteLane(
             lane: StateLane.Participant,
             name: AmmoSlot,
@@ -131,7 +132,7 @@ public sealed class BodyActionStateLaneLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var refusal
             ),
             userMessage: refusal
@@ -150,11 +151,13 @@ public sealed class BodyActionStateLaneLawTests {
             engines: [],
             screens: restoredDefinition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-action-state-lane-");
+
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: decoded,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: FreshProfiles(definition: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
 
         Assert.Equal(
@@ -184,15 +187,15 @@ public sealed class BodyActionStateLaneLawTests {
             value: out var described
         ));
         Assert.Equal(
-            expected: CarriedAmmo,
-            actual: described
+            actual: described,
+            expected: CarriedAmmo
         );
 
         // Control: the same document booted fresh reads the authored initial, so the restore is carrying the
         // captured lane rather than reproducing a birth.
         using var reference = Fixtures.FreshServer(definition: Document());
 
-        _ = JoinSeat(fixture: reference);
+        _ = reference.JoinSeat();
         Assert.Equal(
             expected: AuthoredAmmo.Value,
             actual: LaneValue(
@@ -206,7 +209,7 @@ public sealed class BodyActionStateLaneLawTests {
     [Fact]
     public void AFederationArrivalLoadsItsCarriedRegistersIntoTheLaneRatherThanRebirthingThem() {
         using var fixture = Fixtures.FreshServer(definition: Document());
-        var body = JoinSeat(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.True(condition: fixture.Server.Population.ApplyMappedArrival(
             slot: 0,
@@ -219,10 +222,10 @@ public sealed class BodyActionStateLaneLawTests {
             actionContinuity: new WorldTransferActionContinuity(
                 Channels: [],
                 Registers: [new WorldTransferActionRegister(
-                        Name: AmmoSlot,
                         Kind: ActionStateKind.Counter,
-                        Value: CarriedAmmo,
-                        TimerTicks: 0UL
+                        Name: AmmoSlot,
+                        TimerTicks: 0UL,
+                        Value: CarriedAmmo
                     )]
             )
         ));
@@ -257,12 +260,11 @@ public sealed class BodyActionStateLaneLawTests {
             )
         );
     }
-
     [Fact]
     public void AnArrivalCarryingPastARangeEnvelopeClampsToThatRange() {
         using var fixture = Fixtures.FreshServer(definition: EnvelopeDocument());
 
-        _ = JoinSeat(fixture: fixture);
+        _ = fixture.JoinSeat();
         Arrive(
             carried: FixedQ4816.FromInteger(value: 99),
             fixture: fixture,
@@ -284,7 +286,7 @@ public sealed class BodyActionStateLaneLawTests {
     public void AnArrivalCarryingOutsideAClosedSetSettlesToTheAuthoredInitial() {
         using var fixture = Fixtures.FreshServer(definition: EnvelopeDocument());
 
-        _ = JoinSeat(fixture: fixture);
+        _ = fixture.JoinSeat();
         // The destination holds a value of its own, admitted by the set, so settling to the authored initial is
         // discriminable from keeping what this authority already held.
         WriteLane(
@@ -320,7 +322,6 @@ public sealed class BodyActionStateLaneLawTests {
             expected: FixedQ4816.FromDouble(value: 1.5).Value
         );
     }
-
     [Fact]
     public void TheLaneRosterIsTheEntityTablesOwnActiveSetAcrossEveryTransition() {
         using var fixture = Fixtures.FreshServer(definition: Document());
@@ -328,7 +329,7 @@ public sealed class BodyActionStateLaneLawTests {
 
         AssertRosterMatchesTheTable(fixture: fixture);
 
-        _ = JoinSeat(fixture: fixture);
+        _ = fixture.JoinSeat();
         AssertRosterMatchesTheTable(fixture: fixture);
 
         // A second activation of an occupied slot is idempotent: it neither re-joins nor re-births, so a value
@@ -417,10 +418,10 @@ public sealed class BodyActionStateLaneLawTests {
         actionContinuity: new WorldTransferActionContinuity(
             Channels: [],
             Registers: [new WorldTransferActionRegister(
-                    Name: name,
                     Kind: ActionStateKind.Counter,
-                    Value: carried,
-                    TimerTicks: 0UL
+                    Name: name,
+                    TimerTicks: 0UL,
+                    Value: carried
                 )]
         )
     ));
@@ -438,8 +439,8 @@ public sealed class BodyActionStateLaneLawTests {
                         Initial: 1f,
                         PlayerWritable: true,
                         Envelope: new ActionStateEnvelope.Range(
-                            Minimum: 0f,
-                            Maximum: 5f
+                            Maximum: 5f,
+                            Minimum: 0f
                         )
                     ),
                     new ActionStateSlot(
@@ -476,38 +477,6 @@ public sealed class BodyActionStateLaneLawTests {
                 World: baseDocument.State
             ),
         });
-    }
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
-    private static WorldOwnedWorlds FreshProfiles(WorldDefinition definition) => new(
-        directory: Directory.CreateTempSubdirectory(prefix: "puck-action-state-lane-").FullName,
-        machineId: Guid.NewGuid(),
-        template: definition
-    );
-    private static WorldBody JoinSeat(WorldFixture fixture) {
-        var actor = WorldPrincipal.Seat(slot: 0);
-
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: actor,
-            Slot: actor.Index,
-            IdentityName: null,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
-
-        return fixture.Server.Body(index: actor.Index)!;
     }
     private static long LaneValue(WorldServer server, StateLane lane, string name, int ordinal) {
         Assert.True(condition: server.Arena.TryReadSlot(

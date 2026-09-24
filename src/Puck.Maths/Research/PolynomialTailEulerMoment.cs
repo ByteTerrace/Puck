@@ -154,6 +154,58 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             EulerMomentTargetIsExcluded(certificate: certificate)
         );
     }
+
+    private delegate bool TryCreateEulerExclusionCertificateDelegate<TCertificate>(
+        BigInteger tailIndex,
+        BigInteger integerBoundary,
+        BigInteger signedRoot,
+        int maximumOrder,
+        out TCertificate certificate
+    );
+
+    private bool TryEulerHausdorffCertificateCore<TCertificate>(
+        BigInteger tailIndex,
+        BigInteger integerBoundary,
+        int maximumOrder,
+        string orderParamName,
+        TryCreateEulerExclusionCertificateDelegate<TCertificate> tryCreateCertificate,
+        out TCertificate certificate
+    ) {
+        PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
+        if (
+            (maximumOrder < 1) ||
+            (maximumOrder > MaximumEulerHausdorffMomentOrder)
+        ) {
+            throw new ArgumentOutOfRangeException(paramName: orderParamName);
+        }
+        certificate = default!;
+
+        if (!TryComputeIntegerDiscriminantRoot(root: out var root)) {
+            return false;
+        }
+
+        if (tryCreateCertificate(
+            tailIndex: tailIndex,
+            integerBoundary: integerBoundary,
+            signedRoot: root,
+            maximumOrder: maximumOrder,
+            certificate: out certificate
+        )) {
+            return true;
+        }
+
+        return (
+            !root.IsZero &&
+            tryCreateCertificate(
+                tailIndex: tailIndex,
+                integerBoundary: integerBoundary,
+                signedRoot: -root,
+                maximumOrder: maximumOrder,
+                certificate: out certificate
+            )
+        );
+    }
+
     /// <summary>Attempts to exclude an integer equality by generating its forced Euler moments and finding a failed
     /// Hausdorff inequality <c>E[t^k*(1-t)^j]&gt;0</c>.</summary>
     /// <remarks>Increasing <paramref name="maximumTotalOrder"/> gives a nested exact exclusion search; no numerical
@@ -162,46 +214,31 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         BigInteger tailIndex,
         BigInteger integerBoundary,
         int maximumTotalOrder,
-        out PolynomialTailEulerHausdorffExclusionCertificate certificate) {
-        PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
-        if (
-            (maximumTotalOrder < 1) ||
-            (maximumTotalOrder > MaximumEulerHausdorffMomentOrder)
-        ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(maximumTotalOrder));
-        }
-        certificate = default;
+        out PolynomialTailEulerHausdorffExclusionCertificate certificate) =>
+        TryEulerHausdorffCertificateCore(
+            tailIndex: tailIndex,
+            integerBoundary: integerBoundary,
+            maximumOrder: maximumTotalOrder,
+            orderParamName: nameof(maximumTotalOrder),
+            tryCreateCertificate: TryCreateEulerHausdorffIntegerExclusionCertificate,
+            certificate: out certificate
+        );
 
+    private bool TryComputeIntegerDiscriminantRoot(out BigInteger root) {
         var discriminant = (
             (Parameters.NumeratorLinear * Parameters.NumeratorLinear) -
             ((4 * Parameters.NumeratorQuadratic) * Parameters.NumeratorConstant)
         );
 
-        if (discriminant < BigInteger.Zero) { return false; }
-        var root = BigIntegerFunctions.SquareRoot(value: discriminant);
-
-        if ((root * root) != discriminant) { return false; }
-
-        if (TryCreateEulerHausdorffIntegerExclusionCertificate(
-            certificate: out certificate,
-            integerBoundary: integerBoundary,
-            maximumTotalOrder: maximumTotalOrder,
-            signedRoot: root,
-            tailIndex: tailIndex
-        )) {
-            return true;
+        if (discriminant < BigInteger.Zero) {
+            root = default;
+            return false;
         }
-        return (
-            !root.IsZero &&
-            TryCreateEulerHausdorffIntegerExclusionCertificate(
-            certificate: out certificate,
-            integerBoundary: integerBoundary,
-            maximumTotalOrder: maximumTotalOrder,
-            signedRoot: -root,
-            tailIndex: tailIndex
-        )
-        );
+
+        root = BigIntegerFunctions.SquareRoot(value: discriminant);
+        return ((root * root) == discriminant);
     }
+
     /// <summary>Recomputes the forced moment recurrence and the recorded failed Hausdorff inequality.</summary>
     public bool VerifyEulerHausdorffIntegerExclusionCertificate(
         PolynomialTailEulerHausdorffExclusionCertificate certificate) {
@@ -245,46 +282,15 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         BigInteger tailIndex,
         BigInteger integerBoundary,
         int maximumAdditionalOrder,
-        out PolynomialTailEulerRegularizedHausdorffExclusionCertificate certificate) {
-        PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
-        if (
-            (maximumAdditionalOrder < 1) ||
-            (maximumAdditionalOrder > MaximumEulerHausdorffMomentOrder)
-        ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(maximumAdditionalOrder));
-        }
-        certificate = default;
-
-        var discriminant = (
-            (Parameters.NumeratorLinear * Parameters.NumeratorLinear) -
-            ((4 * Parameters.NumeratorQuadratic) * Parameters.NumeratorConstant)
-        );
-
-        if (discriminant < BigInteger.Zero) { return false; }
-        var root = BigIntegerFunctions.SquareRoot(value: discriminant);
-
-        if ((root * root) != discriminant) { return false; }
-
-        if (TryCreateEulerRegularizedHausdorffIntegerExclusionCertificate(
-            certificate: out certificate,
+        out PolynomialTailEulerRegularizedHausdorffExclusionCertificate certificate) =>
+        TryEulerHausdorffCertificateCore(
+            tailIndex: tailIndex,
             integerBoundary: integerBoundary,
-            maximumAdditionalOrder: maximumAdditionalOrder,
-            signedRoot: root,
-            tailIndex: tailIndex
-        )) {
-            return true;
-        }
-        return (
-            !root.IsZero &&
-            TryCreateEulerRegularizedHausdorffIntegerExclusionCertificate(
-            certificate: out certificate,
-            integerBoundary: integerBoundary,
-            maximumAdditionalOrder: maximumAdditionalOrder,
-            signedRoot: -root,
-            tailIndex: tailIndex
-        )
+            maximumOrder: maximumAdditionalOrder,
+            orderParamName: nameof(maximumAdditionalOrder),
+            tryCreateCertificate: TryCreateEulerRegularizedHausdorffIntegerExclusionCertificate,
+            certificate: out certificate
         );
-    }
     /// <summary>Reconstructs the canonical positive chart and its failed sign-normalized Hausdorff inequality.</summary>
     public bool VerifyEulerRegularizedHausdorffIntegerExclusionCertificate(
         PolynomialTailEulerRegularizedHausdorffExclusionCertificate certificate) {

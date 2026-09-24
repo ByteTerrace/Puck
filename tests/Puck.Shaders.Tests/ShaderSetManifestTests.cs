@@ -1,8 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-using Puck.Hosting;
-
 namespace Puck.Shaders.Tests;
 
 public sealed class ShaderSetManifestTests {
@@ -119,13 +117,13 @@ public sealed class ShaderSetManifestTests {
             expected: "'seed' must be a non-negative integer."
         );
         Assert.False(condition: manifest.TryBindConfig(
-            config: Parse(json: """{ "flickerHz": 11 }"""),
+            config: Parse(json: """{ "flickerHz": 0 }"""),
             values: out _,
             reason: out reason
         ));
         Assert.Equal(
             actual: reason,
-            expected: $"'flickerHz' must be a positive integer that divides {EngineTicks.PerSecond} exactly."
+            expected: "'flickerHz' must be a non-negative integer greater than or equal to 1."
         );
         Assert.False(condition: manifest.TryBindConfig(
             config: Parse(json: """{ "grain": 1 }"""),
@@ -151,7 +149,7 @@ public sealed class ShaderSetManifestTests {
         var catalog = ShaderSetCatalog.Scan(rootDirectory: ShaderDirectory);
 
         Assert.Equal(
-            expected: ["push-constant-layout", "sdf-film-grain"],
+            expected: ["sdf-film-grain"],
             actual: catalog.Ids
         );
         Assert.True(condition: catalog.Contains(id: "sdf-film-grain"));
@@ -186,7 +184,7 @@ public sealed class ShaderSetManifestTests {
         }
     }
     [Fact]
-    public void Config_schema_emits_types_ranges_defaults_and_the_tick_divisor_enum() {
+    public void Config_schema_emits_types_ranges_and_defaults() {
         var manifest = ShaderSetManifest.Load(manifestPath: FilmGrainManifestPath);
         var schema = manifest.ConfigJsonSchema();
         var properties = schema["properties"]!.AsObject();
@@ -218,30 +216,9 @@ public sealed class ShaderSetManifestTests {
             actual: properties["seed"]!["maximum"]!.GetValue<double>()
         );
 
-        var divisors = properties["flickerHz"]!["enum"]!.AsArray().Select(selector: node => node!.GetValue<uint>()).ToList();
-
-        Assert.Contains(
-            collection: divisors,
-            expected: 1u
-        );
-        Assert.Contains(
-            collection: divisors,
-            expected: 24u
-        );
-        Assert.Contains(
-            collection: divisors,
-            expected: 50400u
-        );
-        Assert.DoesNotContain(
-            collection: divisors,
-            expected: 11u
-        );
-        Assert.All(
-            collection: divisors,
-            action: hz => Assert.Equal(
-                actual: (EngineTicks.PerSecond % hz),
-                expected: 0u
-            )
+        Assert.Equal(
+            expected: 1d,
+            actual: properties["flickerHz"]!["minimum"]!.GetValue<double>()
         );
     }
     [Fact]
@@ -267,23 +244,24 @@ public sealed class ShaderSetManifestTests {
             actual: manifest.Directory
         );
 
-        var layout = Assert.IsType<ShaderPushConstantLayout>(@object: manifest.PushConstantLayout);
+        var layout = manifest.FrameLayout;
 
+        // The frame members end at 92; the config follows in ordinal name order, and the block rounds up to a row.
         Assert.Equal(
-            expected: 16u,
+            expected: "sdf-film-grain",
+            actual: layout.Interface.Name
+        );
+        Assert.Equal(
+            expected: 112u,
             actual: layout.SizeBytes
         );
         Assert.Equal(
-            expected: [0u, 4u, 8u, 12u],
+            expected: [92u, 96u, 100u, 104u],
             actual: layout.Slots.Select(selector: slot => slot.Offset).ToArray()
         );
         Assert.Equal(
-            expected: ["intensity", "size", "grainFrame", "seed"],
+            expected: ["flickerHz", "intensity", "seed", "size"],
             actual: layout.Slots.Select(selector: slot => slot.Name).ToArray()
-        );
-        Assert.Equal(
-            expected: "flickerHz",
-            actual: layout.Slots[2].QuantizeHzConfigField
         );
     }
     [Fact]
@@ -360,7 +338,7 @@ public sealed class ShaderSetManifestTests {
         }
     }
     [Fact]
-    public void Push_constant_source_that_disagrees_with_the_config_type_refuses_at_load() {
+    public void A_config_field_named_for_a_frame_member_refuses_at_load() {
         var scratch = CopyShaders();
 
         try {
@@ -371,7 +349,7 @@ public sealed class ShaderSetManifestTests {
             );
             var node = JsonNode.Parse(json: File.ReadAllText(path: manifestPath))!.AsObject();
 
-            node["pushConstants"]!["fields"]![3]!["type"] = "float";
+            node["config"]!["time"] = JsonNode.Parse(json: """{ "type": "float", "default": 0 }""");
             File.WriteAllText(
                 path: manifestPath,
                 contents: node.ToJsonString()
@@ -380,7 +358,7 @@ public sealed class ShaderSetManifestTests {
             var exception = Assert.Throws<InvalidDataException>(testCode: () => ShaderSetManifest.Load(manifestPath: manifestPath));
 
             Assert.Contains(
-                expectedSubstring: "'seed' is float but its source config field 'seed' is uint",
+                expectedSubstring: "member 'time': the name is declared twice",
                 actualString: exception.Message,
                 comparisonType: StringComparison.Ordinal
             );
@@ -389,11 +367,24 @@ public sealed class ShaderSetManifestTests {
         }
     }
     [Fact]
-    public void Required_fields_and_vectors_bind_from_the_layout_fixture() {
-        var manifest = ShaderSetManifest.Load(manifestPath: Path.Combine(
-            path1: ShaderDirectory,
-            path2: "push-constant-layout.puck.shader.json"
-        ));
+    public void Required_fields_and_vectors_bind() {
+        var manifest = ShaderSetManifest.Load(manifestPath: FilmGrainManifestPath) with {
+            Config = new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
+                ["b"] = new(
+                    Default: Parse(json: "[1, 2]"),
+                    Max: 10,
+                    Min: 0,
+                    Type: ShaderValueType.Float2
+                ),
+                ["f"] = new(Type: ShaderValueType.Float),
+                ["i"] = new(
+                    Default: Parse(json: "-5"),
+                    Max: 10,
+                    Min: -10,
+                    Type: ShaderValueType.Int
+                ),
+            },
+        };
 
         Assert.False(condition: manifest.TryBindConfig(
             config: null,
@@ -426,15 +417,7 @@ public sealed class ShaderSetManifestTests {
             actual: reason,
             expected: "'b' must be an array of 2 numbers in [0, 10]."
         );
-        Assert.False(condition: manifest.TryBindConfig(
-            config: Parse(json: """{ "f": 2, "rate": 11 }"""),
-            values: out _,
-            reason: out reason
-        ));
-        Assert.Equal(
-            actual: reason,
-            expected: $"'rate' must be a positive integer that divides {EngineTicks.PerSecond} exactly."
-        );
+
         Assert.Contains(
             expected: "f",
             collection: manifest.ConfigJsonSchema()["required"]!.AsArray().Select(selector: node => node!.GetValue<string>())

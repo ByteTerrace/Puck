@@ -8,7 +8,7 @@ namespace Puck.Cli.Azure;
 internal static partial class AzureCommand {
     /// <summary>Retains and qualifies an exact package before entering the durable maintenance transaction.</summary>
     internal static async Task<WorldReleaseRunResult> DeployWorldReleaseAsync(string packageDirectory,
-        Guid? operationId, CancellationToken cancellationToken, string? resourceGroup = null) {
+        Guid? operationId, TimeProvider clock, CancellationToken cancellationToken) {
         if (operationId == Guid.Empty) {
             throw new ArgumentException(
                 message: "release operation ID must not be empty",
@@ -30,9 +30,6 @@ internal static partial class AzureCommand {
             packageDirectory: packageDirectory,
             reason: out var reason
         )) { throw new InvalidDataException(message: reason); }
-        if (manifest.CoordinatorContract != WorldReleaseManifest.CurrentCoordinatorContract) {
-            throw new InvalidDataException(message: "new official deployments require the closed-group restore coordinator contract");
-        }
         return await WithManagedWorldReleaseAsync(
             action: async (context, token) => {
                 var current = await context.Groups.LoadAsync(
@@ -63,6 +60,7 @@ internal static partial class AzureCommand {
                     ).ConfigureAwait(continueOnCapturedContext: false);
 
                     await TestWorldReleaseAsync(
+                        clock: context.Clock,
                         group: context.ResourceGroup,
                         image: active.Image,
                         scaleSet: context.Group
@@ -125,7 +123,8 @@ internal static partial class AzureCommand {
                 if (retained is null) {
                     retained = await PrepareWorldReleaseDeploymentAsync(
                         manifest,
-                        context.ResourceGroup
+                        context.ResourceGroup,
+                        context.Clock
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     await context.Deployments.SaveAsync(
                         cancellationToken: token,
@@ -160,7 +159,8 @@ internal static partial class AzureCommand {
                     Path.GetFullPath(path: "artifacts/world-release-qualification"),
                     (source?.Image ?? candidate.Image),
                     candidate.Image,
-                    archive: context.Archive
+                    archive: context.Archive,
+                    clock: context.Clock
                 );
                 var coordinator = new WorldReleaseCoordinator(groups: context.Groups);
                 var begun = ((source is null)
@@ -188,22 +188,7 @@ internal static partial class AzureCommand {
                 ).ConfigureAwait(continueOnCapturedContext: false);
             },
             cancellationToken: cancellationToken,
-            resourceGroup: resourceGroup
+            clock: clock
         ).ConfigureAwait(continueOnCapturedContext: false);
-    }
-
-    private static async Task DeployWorldAsync(string? group, string package, Guid? operation, CancellationToken token) {
-        var result = await DeployWorldReleaseAsync(
-            cancellationToken: token,
-            operationId: operation,
-            packageDirectory: package,
-            resourceGroup: group
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        Console.WriteLine(value: result.Detail);
-        if (
-            !result.Completed ||
-            result.SourceRecovered
-        ) { throw new InvalidOperationException(message: "release did not complete; inspect 'puck world release status' and resume its durable operation"); }
     }
 }

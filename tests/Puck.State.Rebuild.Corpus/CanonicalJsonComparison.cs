@@ -96,24 +96,6 @@ public static class CanonicalJsonComparison {
             Reparse(node: actual),
             label
         );
-    /// <summary>Returns the first canonical difference between a document and a document file's contents, or
-    /// <see langword="null"/> when they are canonically equal.</summary>
-    /// <param name="expectedPath">The absolute path of the reference document.</param>
-    /// <param name="actual">The document under test.</param>
-    /// <param name="label">The prefix reported differences are rooted at.</param>
-    /// <returns>A one-line description of the first difference, or <see langword="null"/>.</returns>
-    public static string? FirstDifferenceAgainstFile(string expectedPath, JsonNode actual, string label) {
-        var expected = JsonNode.Parse(json: File.ReadAllText(path: expectedPath));
-
-        return ((expected is null)
-            ? $"{label}: '{expectedPath}' parsed to null"
-            : FirstDifference(
-                actual: actual,
-                expected: expected,
-                label: label
-            )
-        );
-    }
 
     private static JsonNode? Reparse(JsonNode node) =>
         JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node)));

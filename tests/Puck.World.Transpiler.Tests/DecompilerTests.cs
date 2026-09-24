@@ -5,6 +5,18 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 public class DecompilerTests {
+    // A quoted name is printed in the reader's own string grammar, so a quote, a backslash, a line break or a control
+    // character in it reads back as itself.
+    [InlineData("say \"hi\"")]
+    [InlineData("back\\slash")]
+    [InlineData("two\nlines\tand\u0001")]
+    [Theory]
+    public void AQuotedRuleNameReadsBackAsItself(string name) {
+        var document = WorldSources.LowerClean(body: "state {\n    world {\n        slot flag = 0\n    }\n}\n\nrule \"r\" {\n    flag = 1\n}\n");
+
+        document["rules"]![0]!["name"] = name;
+        _ = WorldSources.AssertRoundTrips(original: document);
+    }
     [Fact]
     public void TestPipelineWorldDecompilationAndRoundTrip() {
         var jsonPath = Path.Combine(
@@ -121,13 +133,8 @@ public class DecompilerTests {
     }
     [Fact]
     public void TestSolitaireWorldDecompilationAndRoundTrip() {
-        var jsonPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: "games",
-            path3: "solitaire.world.json"
-        );
-        var originalJson = File.ReadAllText(path: jsonPath);
-        var originalNode = (JsonNode.Parse(originalJson) as JsonObject);
+        var originalNode = ShippedWorlds.Compile(relativePath: "games/solitaire.puck").RequireJson();
+        var originalJson = originalNode.ToJsonString();
 
         Assert.NotNull(@object: originalNode);
 
@@ -136,7 +143,7 @@ public class DecompilerTests {
 
         Assert.Contains(
             actualString: puck,
-            expectedSubstring: "import \"klondike.world.json\""
+            expectedSubstring: "import \"klondike\""
         );
         Assert.Contains(
             actualString: puck,

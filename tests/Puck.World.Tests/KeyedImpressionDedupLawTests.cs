@@ -1,6 +1,5 @@
 using Xunit;
 
-using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
 
@@ -68,7 +67,7 @@ public sealed class KeyedImpressionDedupLawTests {
                     Left: new ExpressionProgram(Instructions: [Instruction.Operand(key: "0",
                             name: "mark"
                         )]),
-                    Comparison: ActionStateComparison.NotEqual,
+                    Comparison: ExpressionOp.NotEqual,
                     Right: Packed(),
                     Kind: CellKind.Int
                 ),
@@ -92,7 +91,7 @@ public sealed class KeyedImpressionDedupLawTests {
                 Mode: ActionTriggerMode.Level,
                 Gate: new ActionPredicate.CompareState(
                     State: "origin",
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Value: 0
                 ),
                 Effects: [new ActionEffect.AddState(
@@ -119,22 +118,12 @@ public sealed class KeyedImpressionDedupLawTests {
             key: CellName.Parse(candidate: "0")
         )?.Value.AsFixed ?? 0L);
     }
-    private static WorldStateRow Slot(string name, long initial = 0, bool nonNegative = false) => new(
-        Name: CellName.Parse(candidate: name),
-        Kind: CellKind.Int,
-        Min: (nonNegative ? 0L : null),
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: initial)
-            )]
+    private static WorldStateRow Slot(string name, long initial = 0, bool nonNegative = false) => StateFixtures.IntSlot(
+        min: (nonNegative ? 0L : null),
+        name: name,
+        value: initial
     );
-    private static void Write(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-        Principal: WorldPrincipal.Console,
-        Row: row,
-        Key: WorldStateRow.SlotKey.Value,
-        Value: value,
-        Kind: WorldDocumentWriteKind.Set
-    ));
+    private static void Write(WorldFixture fixture, string row, long value) => fixture.WriteSlot(row: row, value: value);
 
     [Fact]
     public void StandingClaim_BlendsOnceThenHoldsWhileTheControlKeepsMovingEveryTick() {

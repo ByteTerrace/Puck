@@ -742,16 +742,6 @@ internal static partial class Subjects {
             left: left,
             parseStyle: FixedParseStyle
         );
-
-    private static string? Q1648ParseAll(string text, IFormatProvider provider, long expected) =>
-        SignedFixedPointSubject<FixedQ1648, Q1648Adapter>.ParseAll(
-            expected: expected,
-            includeStyledOverloads: false,
-            parseStyle: FixedParseStyle,
-            provider: provider,
-            text: text
-        );
-
     /// <summary>Proves the signed text contract refuses malformed spellings on every entry point, that the null
     /// string is refused (rather than accepted or defaulted) on both the throwing and the trying routes, and that the
     /// asymmetric integer extremes — <c>-32768</c> round-trips exactly, <c>32768</c> is refused as an overflow rather
@@ -892,61 +882,14 @@ internal static partial class Subjects {
     /// <c>1.5</c>; perturbing only the forty-ninth digit moves the remainder one part in <c>2·5⁴⁹</c> off the tie
     /// without touching the quotient.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Q1648TextParseTies() {
-        const string Below = "0.0000000000000053290705182007513940334320068359374";
-        const string Exact = "0.0000000000000053290705182007513940334320068359375";
-        const string Above = "0.0000000000000053290705182007513940334320068359376";
-
-        return
-            (Q1648CheckTie(
-            expectedRaw: 1,
-            text: Below
-        ) ??
-            (Q1648CheckTie(
-            expectedRaw: 2,
-            text: Exact
-        ) ??
-            Q1648CheckTie(
-            expectedRaw: 2,
-            text: Above
-        )));
-    }
-
-    // Re-derives the expected raw from the string with the same shared-nothing oracle Q1648TextRoundTrip uses (never
-    // through FixedQ1648.Parse), then proves every parse entry point agrees with the CALLER's expected raw — so a
-    // wrong expectedRaw in the test itself, not just a wrong subject, would still be caught.
-    private static string? Q1648CheckTie(string text, long expectedRaw) {
-        var point = text.IndexOf(value: '.');
-        var digits = string.Concat(
-            str0: text.AsSpan(
-                length: point,
-                start: 0
-            ),
-            str1: text.AsSpan(start: (point + 1))
+    public static string? Q1648TextParseTies() =>
+        SignedFixedPointSubject<FixedQ1648, Q1648Adapter>.TextParseTies(
+            above: "0.0000000000000053290705182007513940334320068359376",
+            below: "0.0000000000000053290705182007513940334320068359374",
+            exact: "0.0000000000000053290705182007513940334320068359375",
+            includeStyledOverloads: false,
+            parseStyle: FixedParseStyle
         );
-        var fractionDigitCount = ((text.Length - point) - 1);
-
-        var (inRange, quantized) = Oracles.DecimalToRaw(
-            numerator: BigInteger.Parse(
-                value: digits,
-                provider: CultureInfo.InvariantCulture
-            ),
-            decimalExponent: fractionDigitCount,
-            shift: FixedQ1648.FractionBitCount
-        );
-
-        if (
-            !inRange ||
-            (quantized != expectedRaw)
-        ) { return $"the oracle quantized '{text}' as {quantized} (in range: {inRange}), not the expected {expectedRaw}"; }
-
-        return Q1648ParseAll(
-            text: text,
-            provider: CultureInfo.InvariantCulture,
-            expected: expectedRaw
-        );
-    }
-
     /// <summary>Proves this carrier's FixedQ4816 (Q48.16) peer conversion. Narrowing
     /// (<see cref="FixedQ1648.ToFixedQ4816"/>) is a single ties-to-even rounding at the thirty-two-bit fraction
     /// difference and NEVER overflows, because Q16.48's whole range fits inside Q48.16's; widening
@@ -1463,61 +1406,14 @@ internal static partial class Subjects {
     /// <c>1.5</c>; perturbing only the thirty-third digit moves the remainder one part in <c>2·5³³</c> off the tie
     /// without touching the quotient.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Q3232TextParseTies() {
-        const string Below = "0.000000000349245965480804443359374";
-        const string Exact = "0.000000000349245965480804443359375";
-        const string Above = "0.000000000349245965480804443359376";
-
-        return
-            (Q3232CheckTie(
-            expectedRaw: 1,
-            text: Below
-        ) ??
-            (Q3232CheckTie(
-            expectedRaw: 2,
-            text: Exact
-        ) ??
-            Q3232CheckTie(
-            expectedRaw: 2,
-            text: Above
-        )));
-    }
-
-    // Re-derives the expected raw from the string with the same shared-nothing oracle Q3232TextRoundTrip uses (never
-    // through FixedQ3232.Parse), then proves every parse entry point agrees with the CALLER's expected raw — so a
-    // wrong expectedRaw in the test itself, not just a wrong subject, would still be caught.
-    private static string? Q3232CheckTie(string text, long expectedRaw) {
-        var point = text.IndexOf(value: '.');
-        var digits = string.Concat(
-            str0: text.AsSpan(
-                length: point,
-                start: 0
-            ),
-            str1: text.AsSpan(start: (point + 1))
+    public static string? Q3232TextParseTies() =>
+        SignedFixedPointSubject<FixedQ3232, Q3232Adapter>.TextParseTies(
+            above: "0.000000000349245965480804443359376",
+            below: "0.000000000349245965480804443359374",
+            exact: "0.000000000349245965480804443359375",
+            includeStyledOverloads: true,
+            parseStyle: Q3232DefaultParseStyle
         );
-        var fractionDigitCount = ((text.Length - point) - 1);
-
-        var (inRange, quantized) = Oracles.DecimalToRaw(
-            numerator: BigInteger.Parse(
-                value: digits,
-                provider: CultureInfo.InvariantCulture
-            ),
-            decimalExponent: fractionDigitCount,
-            shift: FixedQ3232.FractionBitCount
-        );
-
-        if (
-            !inRange ||
-            (quantized != expectedRaw)
-        ) { return $"the oracle quantized '{text}' as {quantized} (in range: {inRange}), not the expected {expectedRaw}"; }
-
-        return Q3232ParseAll(
-            text: text,
-            provider: CultureInfo.InvariantCulture,
-            expected: expectedRaw
-        );
-    }
-
     /// <summary>Proves this carrier's FixedQ4816 (Q48.16) peer conversion. Narrowing
     /// (<see cref="FixedQ3232.ToFixedQ4816"/>) is a single ties-to-even rounding at the sixteen-bit fraction
     /// difference and NEVER overflows, because Q32.32's whole range fits inside Q48.16's; widening
@@ -1726,135 +1622,72 @@ internal static partial class Subjects {
             ? ((ulong)exact)
             : 0UL));
     }
-    // All four styled signed entry points on one text: string and span, throwing and trying.
-    private static string? FixedStyledParseAll(string label, string text, bool inRange, long expected) {
+    // All four styled entry points of one carrier on one text: string and span, throwing and trying. Each is reached
+    // through INumberBase alone, where the string and span overloads are declared side by side, so a string argument
+    // binds to the string member.
+    private static string? StyledParseAll<T>(string kind, string label, string text, bool inRange, Int128 expected, Func<T, Int128> raw)
+        where T : INumberBase<T> {
         if (!inRange) {
             if (
-                FixedQ4816.TryParse(
+                T.TryParse(
                 s: text,
                 style: ExponentParseStyle,
                 provider: CultureInfo.InvariantCulture,
                 result: out var refusedString
             ) ||
                 (refusedString != default)
-            ) { return $"{label}: the signed string try-parse accepted it, or left raw {refusedString.Value} behind"; }
+            ) { return $"{label}: the {kind} string try-parse accepted it, or left raw {raw(arg: refusedString!)} behind"; }
             if (
-                FixedQ4816.TryParse(
+                T.TryParse(
                 s: text.AsSpan(),
                 style: ExponentParseStyle,
                 provider: CultureInfo.InvariantCulture,
                 result: out var refusedSpan
             ) ||
                 (refusedSpan != default)
-            ) { return $"{label}: the signed span try-parse accepted it, or left raw {refusedSpan.Value} behind"; }
-            if (!Throws<OverflowException>(action: () => _ = FixedQ4816.Parse(
+            ) { return $"{label}: the {kind} span try-parse accepted it, or left raw {raw(arg: refusedSpan!)} behind"; }
+            if (!Throws<OverflowException>(action: () => _ = T.Parse(
                 s: text,
                 style: ExponentParseStyle,
                 provider: CultureInfo.InvariantCulture
-            ))) { return $"{label}: the signed throwing string parse did not report an overflow"; }
-            if (!Throws<OverflowException>(action: () => _ = FixedQ4816.Parse(
+            ))) { return $"{label}: the {kind} throwing string parse did not report an overflow"; }
+            if (!Throws<OverflowException>(action: () => _ = T.Parse(
                 s: text.AsSpan(),
                 style: ExponentParseStyle,
                 provider: CultureInfo.InvariantCulture
-            ))) { return $"{label}: the signed throwing span parse did not report an overflow"; }
+            ))) { return $"{label}: the {kind} throwing span parse did not report an overflow"; }
 
             return null;
         }
 
-        if (FixedQ4816.Parse(
+        if (raw(arg: T.Parse(
             s: text,
             style: ExponentParseStyle,
             provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"{label}: the signed string parse did not return {expected}"; }
-        if (FixedQ4816.Parse(
+        )) != expected) { return $"{label}: the {kind} string parse did not return {expected}"; }
+        if (raw(arg: T.Parse(
             s: text.AsSpan(),
             style: ExponentParseStyle,
             provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"{label}: the signed span parse did not return {expected}"; }
+        )) != expected) { return $"{label}: the {kind} span parse did not return {expected}"; }
         if (
-            !FixedQ4816.TryParse(
+            !T.TryParse(
             s: text,
             style: ExponentParseStyle,
             provider: CultureInfo.InvariantCulture,
             result: out var fromString
         ) ||
-            (fromString.Value != expected)
-        ) { return $"{label}: the signed string try-parse did not return {expected}"; }
+            (raw(arg: fromString) != expected)
+        ) { return $"{label}: the {kind} string try-parse did not return {expected}"; }
         if (
-            !FixedQ4816.TryParse(
+            !T.TryParse(
             s: text.AsSpan(),
             style: ExponentParseStyle,
             provider: CultureInfo.InvariantCulture,
             result: out var fromSpan
         ) ||
-            (fromSpan.Value != expected)
-        ) { return $"{label}: the signed span try-parse did not return {expected}"; }
-
-        return null;
-    }
-    // The unsigned mirror of FixedStyledParseAll.
-    private static string? UnsignedStyledParseAll(string label, string text, bool inRange, ulong expected) {
-        if (!inRange) {
-            if (
-                UFixedQ4816.TryParse(
-                s: text,
-                style: ExponentParseStyle,
-                provider: CultureInfo.InvariantCulture,
-                result: out var refusedString
-            ) ||
-                (refusedString != default)
-            ) { return $"{label}: the unsigned string try-parse accepted it, or left raw {refusedString.Value} behind"; }
-            if (
-                UFixedQ4816.TryParse(
-                s: text.AsSpan(),
-                style: ExponentParseStyle,
-                provider: CultureInfo.InvariantCulture,
-                result: out var refusedSpan
-            ) ||
-                (refusedSpan != default)
-            ) { return $"{label}: the unsigned span try-parse accepted it, or left raw {refusedSpan.Value} behind"; }
-            if (!Throws<OverflowException>(action: () => _ = UFixedQ4816.Parse(
-                s: text,
-                style: ExponentParseStyle,
-                provider: CultureInfo.InvariantCulture
-            ))) { return $"{label}: the unsigned throwing string parse did not report an overflow"; }
-            if (!Throws<OverflowException>(action: () => _ = UFixedQ4816.Parse(
-                s: text.AsSpan(),
-                style: ExponentParseStyle,
-                provider: CultureInfo.InvariantCulture
-            ))) { return $"{label}: the unsigned throwing span parse did not report an overflow"; }
-
-            return null;
-        }
-
-        if (UFixedQ4816.Parse(
-            s: text,
-            style: ExponentParseStyle,
-            provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"{label}: the unsigned string parse did not return {expected}"; }
-        if (UFixedQ4816.Parse(
-            s: text.AsSpan(),
-            style: ExponentParseStyle,
-            provider: CultureInfo.InvariantCulture
-        ).Value != expected) { return $"{label}: the unsigned span parse did not return {expected}"; }
-        if (
-            !UFixedQ4816.TryParse(
-            s: text,
-            style: ExponentParseStyle,
-            provider: CultureInfo.InvariantCulture,
-            result: out var fromString
-        ) ||
-            (fromString.Value != expected)
-        ) { return $"{label}: the unsigned string try-parse did not return {expected}"; }
-        if (
-            !UFixedQ4816.TryParse(
-            s: text.AsSpan(),
-            style: ExponentParseStyle,
-            provider: CultureInfo.InvariantCulture,
-            result: out var fromSpan
-        ) ||
-            (fromSpan.Value != expected)
-        ) { return $"{label}: the unsigned span try-parse did not return {expected}"; }
+            (raw(arg: fromSpan) != expected)
+        ) { return $"{label}: the {kind} span try-parse did not return {expected}"; }
 
         return null;
     }
@@ -1929,16 +1762,20 @@ internal static partial class Subjects {
                 return $"{label}: the platform validator refused syntax this ladder expects to be accepted";
             }
 
-            if (FixedStyledParseAll(
+            if (StyledParseAll<FixedQ4816>(
                 expected: signedRaw,
                 inRange: signedInRange,
+                kind: "signed",
                 label: label,
+                raw: static value => value.Value,
                 text: text
             ) is { } signedDetail) { return signedDetail; }
-            if (UnsignedStyledParseAll(
+            if (StyledParseAll<UFixedQ4816>(
                 expected: unsignedRaw,
                 inRange: unsignedInRange,
+                kind: "unsigned",
                 label: label,
+                raw: static value => value.Value,
                 text: text
             ) is { } unsignedDetail) { return unsignedDetail; }
         }

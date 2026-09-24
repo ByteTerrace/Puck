@@ -34,8 +34,15 @@ public sealed class ProbeKernelTests {
         ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "ir-blob")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+            ),
             FinalizeEntry: "finalize",
             Constants: IrBlobConstants(),
             ChannelCount: 4,
@@ -81,8 +88,15 @@ public sealed class ProbeKernelTests {
         ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "ir-blob")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+            ),
             FinalizeEntry: "finalize",
             Constants: new byte[16],
             ChannelCount: 4,
@@ -133,8 +147,15 @@ public sealed class ProbeKernelTests {
 
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "ir-blob")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"
+            ),
             FinalizeEntry: "finalize",
             Constants: IrBlobConstants(),
             ChannelCount: 4,
@@ -181,8 +202,15 @@ public sealed class ProbeKernelTests {
 
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: BoundMaskProbeSource,
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: BoundMaskKernel
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: BoundMaskKernel
+            ),
             FinalizeEntry: "finalize",
             Constants: ReadOnlyMemory<byte>.Empty,
             ChannelCount: 1,
@@ -234,8 +262,15 @@ public sealed class ProbeKernelTests {
 
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "faerie")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             FinalizeEntry: "finalize",
             Constants: FaerieRelightingConstants(),
             ChannelCount: 4,
@@ -345,8 +380,15 @@ public sealed class ProbeKernelTests {
 
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "faerie")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             FinalizeEntry: "finalize",
             Constants: FaerieRelightingConstants(),
             ChannelCount: FaerieChannelCount,
@@ -489,8 +531,15 @@ public sealed class ProbeKernelTests {
         // The quad covers the wall's top-left region, x in [-0.9, -0.1] and y in [0.1, 0.9] in frame coordinates —
         // clear of the bright square at top-right (frame x in [0.5, 0.75], y in [0.75, 1]).
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "faerie")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             FinalizeEntry: "finalize",
             Constants: FaerieConstants(
                 ambient: 0.6f,
@@ -605,8 +654,15 @@ public sealed class ProbeKernelTests {
 
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "faerie")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/faerie"
+            ),
             FinalizeEntry: "finalize",
             Constants: FaerieConstants(
                 journey: journey,
@@ -672,8 +728,15 @@ public sealed class ProbeKernelTests {
         ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "ir-marker")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+            ),
             FinalizeEntry: "finalize",
             Constants: IrMarkerConstants(),
             ChannelCount: IrMarkerChannelCount,
@@ -753,8 +816,15 @@ public sealed class ProbeKernelTests {
         ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: KernelPath(name: "ir-marker")),
+            AccumulateBytecode: Bytecode(
+                entry: "accumulate",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+            ),
             AccumulateEntry: "accumulate",
+            FinalizeBytecode: Bytecode(
+                entry: "finalize",
+                kernel: "src/Puck.Shaders/Assets/Probes/ir-marker"
+            ),
             FinalizeEntry: "finalize",
             Constants: IrMarkerConstants(),
             ChannelCount: IrMarkerChannelCount,
@@ -803,28 +873,9 @@ public sealed class ProbeKernelTests {
     }
 
     // A minimal puck.probe.manifest.v1 kernel that ignores its unbound socket and writes the frame constants' boundMask
-    // straight into Channels[0], so a test can assert the bit a run was given without a real texture.
-    private const string BoundMaskProbeSource = """
-        cbuffer ProbeFrame : register(b1) {
-            float time;
-            float deltaTime;
-            uint frame;
-            uint boundMask;
-        };
-
-        RWStructuredBuffer<uint> Accumulate : register(u0);
-        RWStructuredBuffer<float> Channels : register(u1);
-
-        [numthreads(8, 8, 1)]
-        void accumulate(uint3 dispatchId : SV_DispatchThreadID) {
-        }
-
-        [numthreads(1, 1, 1)]
-        void finalize(uint3 dispatchId : SV_DispatchThreadID) {
-            Channels[0] = float(boundMask);
-            Channels[1] = 1.0;
-        }
-        """;
+    // straight into Channels[0], so a test can assert the bit a run was given without a real texture. The build compiles
+    // it beside its source, as it compiles every shipped kernel.
+    private const string BoundMaskKernel = "tests/Puck.Platform.Windows.Tests/Assets/Probes/bound-mask";
 
     private static void AssertBlobCentroid(in ProbeReading reading) {
         // Centroid of the square: u = (48 + 4) / 64, v = (8 + 4) / 64 → x = 2u - 1, y = 1 - 2v (y-up).
@@ -959,8 +1010,9 @@ public sealed class ProbeKernelTests {
 
         return block;
     }
-    private static string KernelPath(string name) =>
-        RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Probes/{name}.hlsl");
+    // One entry point's bytecode, which the build compiled beside the kernel's source as <source>.<entry>.dxbc.
+    private static byte[] Bytecode(string kernel, string entry) =>
+        File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"{kernel}.{entry}.dxbc"));
     private static int Luminance(byte[] pixels, int x, int y) {
         var offset = (((y * FrameWidth) + x) * 4);
 

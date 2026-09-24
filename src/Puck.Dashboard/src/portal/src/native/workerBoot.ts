@@ -1,7 +1,9 @@
 // The boot core shared by inline-mode boot (engineBoot.ts, running in the calling thread) and
 // worker-mode boot (engine.worker.ts, running inside its own Worker global scope): fetches and
 // hash-verifies every official engine file through the byte store, then boots Puck.World.Browser
-// entirely from those verified bytes. `main.mjs` is never fetched — its own relative
+// entirely from those verified bytes. The wasm is compiled once per session: a browser streams it with
+// its hash as SRI integrity, and a boot handed another engine's compiled module compiles nothing
+// (`engineWasmResponse`). `main.mjs` is never fetched — its own relative
 // `import "./_framework/dotnet.js"` cannot resolve against a content-addressed object URL (there
 // is no "_framework/" directory on the official server, only "objects/sha256/…") — so this module
 // replicates `main.mjs`'s own five-line `createEngine()` instead (see `bootEngineFromOfficialFiles`'s
@@ -11,10 +13,10 @@
 // `crypto`, all available in a Worker too — so this exact boot path is provable under Node with a
 // fake postMessage pair, proving `engine.worker.ts`'s own logic without a real Worker (see
 // tests/engineBoot.test.cjs's own worker-mode-under-Node case).
-import { createByteStore, type ByteStore } from "../official/byteStore";
+import { createByteStore, readThroughVerified, type ByteStore } from "../official/byteStore";
 import { OfficialRefusal, verifyBytes } from "../official/verify";
 import { wrapRawExports, dynamicImport, type RawBrowserExports } from "./inlineHost";
-import type { WorldEngine } from "./engineTypes";
+import type { EngineCore } from "./engineTypes";
 
 export type FetchLike = typeof fetch;
 
@@ -27,10 +29,16 @@ export interface BootEngineFileRef {
  * (e.g. "_framework/dotnet.js", "main.mjs"), exactly `OfficialLoad.engineFiles`'s own shape. */
 export interface BootRequest {
   readonly engineFiles: Readonly<Record<string, BootEngineFileRef>>;
+  /** The compiled `dotnet.native.wasm` another engine of this session already holds. A boot given one instantiates
+   * it and compiles nothing; a boot without one compiles the module once and hands it back on the engine. */
+  readonly wasmModule?: WebAssembly.Module;
 }
 
 const DOTNET_JS_NAME = "_framework/dotnet.js";
 const DOTNET_BOOT_JS_NAME = "_framework/dotnet.boot.js";
+const DOTNET_WASM_NAME = "dotnet.native.wasm";
+// The asset behavior dotnet.js gives its own download of that file.
+const DOTNET_WASM_BEHAVIOR = "dotnetwasm";
 // main.mjs's own hard-coded assembly name (Puck.World.Browser/main.mjs) — this boot path
 // replicates that file's own createEngine(), so the one constant it hard-codes is repeated here.
 const MAIN_ASSEMBLY = "Puck.World.Browser.dll";
@@ -68,20 +76,15 @@ async function fetchVerified(
   name: string,
   ref: BootEngineFileRef,
 ): Promise<Uint8Array> {
-  const stored = await byteStore.get(ref.hash);
-  if (stored) return stored;
-
-  const response = await fetchImpl(ref.url);
-  if (!response.ok) {
-    throw new OfficialRefusal(`engine boot: fetching engine file '${name}' failed: HTTP ${response.status}.`);
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  // A mismatch throws here, before the engine ever runs and before the byte store is touched —
-  // the same "verify before cache, never cache on refusal" discipline officialClient.ts's own
-  // fetchVerifiedBytes follows.
-  await verifyBytes(name, bytes, ref.hash);
-  await byteStore.put(ref.hash, bytes, contentTypeFor(name));
-  return bytes;
+  // A stored copy answers only while it matches the manifest, and a mismatch refuses before the engine ever runs —
+  // the same read-through discipline officialClient.ts's own fetchVerifiedBytes follows.
+  return readThroughVerified(byteStore, name, ref.hash, contentTypeFor(name), async () => {
+    const response = await fetchImpl(ref.url);
+    if (!response.ok) {
+      throw new OfficialRefusal(`engine boot: fetching engine file '${name}' failed: HTTP ${response.status}.`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  });
 }
 
 /** True only under Node's own test runner — the one environment whose ESM loader refuses to
@@ -144,6 +147,108 @@ async function moduleSpecifierFor(name: string, ref: BootEngineFileRef, bytes: U
   return isNodeRuntime() ? materializeToFileUrl(basenameOf(name), bytes) : ref.url;
 }
 
+/** The Subresource Integrity value for a manifest hash: `sha256/<hex>` becomes `sha256-<base64>`. */
+export function integrityFor(hash: string): string {
+  const hex = hash.slice(hash.indexOf("/") + 1);
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index++) bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  return `sha256-${bytesToBase64(bytes)}`;
+}
+
+/**
+ * What compiling one wasm response this boot handed dotnet.js should do: answer with a module another engine
+ * already compiled, or compile and report the module back.
+ */
+interface WasmResponsePlan {
+  readonly supplied?: WebAssembly.Module;
+  readonly compiled?: (module: WebAssembly.Module) => void;
+  /** Settles once the response's bytes are checked against the manifest's hash; the compile answers only then. */
+  readonly verified?: Promise<void>;
+}
+
+// The wasm responses this realm's boots handed dotnet.js, by identity.
+const wasmResponses = new WeakMap<Response, WasmResponsePlan>();
+let compilesSupervised = false;
+
+/**
+ * dotnet.js compiles `dotnet.native.wasm` itself, streaming the response the resource loader hands it, and binds its
+ * runtime's own imports before instantiating; a caller-supplied `instantiateWasm` skips that binding, so the module
+ * has to travel through dotnet.js' own compile. This wraps `WebAssembly.compileStreaming` once per realm: a response
+ * this boot planned answers with the supplied module and compiles nothing, or compiles and reports the module back.
+ * The compile streams while the bytes are hashed, and answers only once they match the manifest, so a hash mismatch
+ * is refused by name rather than by whatever the compiler makes of tampered bytes. Every other call passes through
+ * unchanged.
+ */
+function superviseWasmCompiles(): void {
+  if (compilesSupervised) return;
+  compilesSupervised = true;
+  const compileStreaming = WebAssembly.compileStreaming.bind(WebAssembly);
+  WebAssembly.compileStreaming = async (source: Response | PromiseLike<Response>) => {
+    const response = await source;
+    const plan = wasmResponses.get(response);
+    if (plan?.supplied) return plan.supplied;
+    const compiling = compileStreaming(response);
+    if (plan?.verified) {
+      compiling.catch(() => undefined);
+      await plan.verified;
+    }
+    const module = await compiling;
+    plan?.compiled?.(module);
+    return module;
+  };
+}
+
+/** Registers `response` as the wasm this boot hands dotnet.js, under `plan`. */
+function planWasmResponse(response: Response, plan: WasmResponsePlan): Response {
+  superviseWasmCompiles();
+  wasmResponses.set(response, plan);
+  return response;
+}
+
+const WASM_HEADERS = { "content-type": "application/wasm" };
+
+/**
+ * The wasm response for one boot. Given a module, an empty stand-in that compiles to it. Given verified bytes (Node,
+ * where the bytes were fetched and hash-checked up front), those bytes. In a browser, the content-addressed object
+ * URL fetched with the manifest's hash as its SRI integrity, so the browser verifies the bytes and the HTTP cache and
+ * the wasm code cache can apply. The studio checks the bytes against the manifest itself as well, with the official
+ * client's own `verifyBytes`, since a fetch may ignore `integrity`: the compile answers only once they match, and
+ * only matching bytes are stored. When the network fails, the stored copy is verified the same way before it answers.
+ * Every mismatch, and a failed fetch with nothing stored, is refused by name.
+ */
+export async function engineWasmResponse(
+  name: string,
+  ref: BootEngineFileRef,
+  fetchImpl: FetchLike,
+  byteStore: ByteStore,
+  supplied: WebAssembly.Module | undefined,
+  verifiedBytes: Uint8Array | undefined,
+  compiled: (module: WebAssembly.Module) => void,
+): Promise<Response> {
+  if (supplied) return planWasmResponse(new Response(new Uint8Array(0).buffer, { headers: WASM_HEADERS }), { supplied });
+  if (verifiedBytes) return planWasmResponse(new Response(verifiedBytes.slice().buffer, { headers: WASM_HEADERS }), { compiled });
+  const integrity = integrityFor(ref.hash);
+  try {
+    const response = await fetchImpl(ref.url, { integrity });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const verified = response.clone().arrayBuffer().then(async (buffer) => {
+      const bytes = await verifyBytes(name, new Uint8Array(buffer), ref.hash);
+      if (!(await byteStore.has(ref.hash))) await byteStore.put(ref.hash, bytes, "application/wasm");
+    });
+    return planWasmResponse(response, { compiled, verified });
+  } catch (error) {
+    const stored = await byteStore.get(ref.hash);
+    if (!stored) {
+      throw new OfficialRefusal(
+        `engine boot: engine file '${name}' could not be fetched with integrity '${integrity}', and no verified copy is ` +
+          `cached: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const bytes = await verifyBytes(name, stored, ref.hash);
+    return planWasmResponse(new Response(bytes.slice().buffer, { headers: WASM_HEADERS }), { compiled });
+  }
+}
+
 let sharedDefaultByteStore: ByteStore | undefined;
 /** The byte store `bootEngineFromOfficialFiles` falls back to when its caller supplies none —
  * one instance per JS realm (main thread, or a Worker's own separate global scope), so repeated
@@ -155,9 +260,9 @@ function defaultByteStore(): ByteStore {
 }
 
 /**
- * Fetches and hash-verifies every file in `request.engineFiles`, then boots Puck.World.Browser
- * from the verified `_framework/dotnet.js` bytes with a resourceLoader answered entirely from
- * those bytes — replicating `main.mjs`'s own five lines (`withResourceLoader` → `create()` →
+ * Fetches and hash-verifies every file in `request.engineFiles` (the wasm as `engineWasmResponse` says), then
+ * boots Puck.World.Browser from the verified `_framework/dotnet.js` bytes with a resourceLoader answered entirely
+ * from those bytes, and returns the engine with the module its runtime runs — replicating `main.mjs`'s own five lines (`withResourceLoader` → `create()` →
  * `getAssemblyExports("Puck.World.Browser.dll")` → `.Puck.World.Browser.Exports.BrowserExports`).
  *
  * `disposeCore`, when given, is invoked from the returned engine's own `dispose()` — used by
@@ -169,14 +274,14 @@ function defaultByteStore(): ByteStore {
  * ("Runtime module already loaded") — so a repeated boot of the same engine (React's StrictMode
  * double-mount, an HMR remount, a crashed-and-remounted actor) joins the existing boot instead. Under
  * Node every boot materializes a fresh temp file, so every boot there is its own instance. */
-const realmRuntimes = new Map<string, Promise<WorldEngine>>();
+const realmRuntimes = new Map<string, Promise<EngineCore>>();
 
 export async function bootEngineFromOfficialFiles(
   request: BootRequest,
   fetchImpl: FetchLike,
   byteStore: ByteStore = defaultByteStore(),
   disposeCore?: () => void,
-): Promise<WorldEngine> {
+): Promise<EngineCore> {
   const dotnetJsRef = request.engineFiles[DOTNET_JS_NAME];
   if (!dotnetJsRef) {
     throw new OfficialRefusal(`engine boot: official manifest names no engine file '${DOTNET_JS_NAME}'.`);
@@ -186,13 +291,23 @@ export async function bootEngineFromOfficialFiles(
   // first ask — so a tampered object is refused by name before the engine ever runs, and a warm
   // byte store answers every subsequent boot (including this one's own module imports below)
   // without a single further network fetch.
+  // The wasm is the exception: a boot handed a compiled module needs none of its bytes, and a browser streams it
+  // into dotnet.js' one compile (`engineWasmResponse`), verified by the browser against the manifest's hash.
+  const wasmName = Object.keys(request.engineFiles).find((name) => basenameOf(name) === DOTNET_WASM_NAME);
+  const streamsWasm = request.wasmModule !== undefined || !isNodeRuntime();
   const assets = new Map<string, VerifiedAsset>();
   await Promise.all(
     Object.entries(request.engineFiles).map(async ([name, ref]) => {
+      if (name === wasmName && streamsWasm) return;
       const bytes = await fetchVerified(fetchImpl, byteStore, name, ref);
       assets.set(name, { bytes, contentType: contentTypeFor(name) });
     }),
   );
+  if (!wasmName) {
+    throw new OfficialRefusal(`engine boot: official manifest names no engine file '${DOTNET_WASM_NAME}'.`);
+  }
+  const wasmFile: string = wasmName;
+  let compiled: WebAssembly.Module | undefined = request.wasmModule;
 
   const byBasename = new Map<string, VerifiedAsset>();
   for (const [name, asset] of assets) {
@@ -247,6 +362,11 @@ export async function bootEngineFromOfficialFiles(
       }
       return manifestConfig;
     }
+    if (behavior === DOTNET_WASM_BEHAVIOR) {
+      return engineWasmResponse(wasmFile, request.engineFiles[wasmFile], fetchImpl, byteStore, request.wasmModule, assets.get(wasmFile)?.bytes, (module) => {
+        compiled = module;
+      });
+    }
     if (STRING_URL_BEHAVIORS.has(behavior)) {
       const specifier = jsModuleSpecifiers.get(name);
       if (!specifier) {
@@ -278,7 +398,7 @@ export async function bootEngineFromOfficialFiles(
     const exports = (await getAssemblyExports(MAIN_ASSEMBLY)) as { Puck: { World: { Browser: { Exports: { BrowserExports: RawBrowserExports } } } } };
     const raw = exports.Puck.World.Browser.Exports.BrowserExports;
 
-    return wrapRawExports(raw, disposeCore);
+    return { ...wrapRawExports(raw, disposeCore), wasmModule: compiled };
   })();
   realmRuntimes.set(dotnetJsSpecifier, booted);
   booted.catch(() => {

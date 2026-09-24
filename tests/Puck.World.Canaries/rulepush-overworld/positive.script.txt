@@ -1,0 +1,91 @@
+# A fresh identity walks the rulepush overworld: east into Hedges, which it clears, and back; north into Rewrite,
+# which it clears, and back; then west, where a gate stands until both clears are on its
+# record, into Sink, which it clears too.
+identity.create impfan
+player.identity impfan
+world.wait 5
+# East across the border into Hedges.
+body.pose 9 1 0 0 0 0 0
+body.fly 0 1 0 0 0 0 2 0
+world.wait 75
+# Push STOP out of HEDGE IS STOP, walk through the hedge, and step onto the flower.
+body.press north
+world.wait 3
+body.press north
+world.wait 3
+body.press east
+world.wait 3
+body.press south
+world.wait 3
+body.press east
+world.wait 3
+body.press east
+world.wait 3
+body.press east
+world.wait 3
+body.press east
+world.wait 3
+body.press east
+world.wait 3
+body.press south
+world.wait 3
+world.wait 6
+identity.facts
+# West back across the border into the overworld; the west gate is still closed.
+body.fly 0 -1 0 0 0 0 3 0
+world.wait 110
+world.state westOpen
+# North across the border into Rewrite.
+body.pose 0 1 -9 0 0 0 0
+body.fly 1 0 0 0 0 0 2 0
+world.wait 75
+# Push the loose FLOWER word under BOULDER IS, then step onto a boulder that is now a flower.
+body.press south
+world.wait 3
+body.press south
+world.wait 3
+body.press south
+world.wait 3
+body.press south
+world.wait 3
+body.press east
+world.wait 3
+body.press east
+world.wait 3
+body.press south
+world.wait 3
+body.press east
+world.wait 3
+body.press east
+world.wait 3
+world.wait 6
+identity.facts
+# South back across the border into the overworld, where the record decides the west gate.
+body.fly -1 0 0 0 0 0 3 0
+world.wait 110
+world.state westOpen
+world.placements
+# West toward Sink: through the gate when it is open, into it when it is not.
+body.pose -9 1 0 0 0 0 0
+body.fly 0 -1 0 0 0 0 2 0
+world.wait 75
+# Sink the boulder in the mire and walk through the gap to the flower.
+body.press north
+world.wait 3
+body.press east
+world.wait 3
+body.press east
+world.wait 3
+body.press south
+world.wait 3
+body.press south
+world.wait 3
+body.press south
+world.wait 3
+body.press south
+world.wait 3
+body.press west
+world.wait 3
+world.wait 6
+identity.facts
+wire.errors

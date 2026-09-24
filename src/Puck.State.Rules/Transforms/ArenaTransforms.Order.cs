@@ -31,54 +31,6 @@ public static partial class ArenaTransforms {
 
         return Applied(refusal: out refusal);
     }
-    // The order an ordered zone's tokens take in their domain row, in zone order: the coordinates an arrangement
-    // rank is read and written in. Returns -1 when a token is one the domain does not declare.
-    private static int DomainOrdinals(StateArena arena, int rowOrdinal, int domainOrdinal, Span<int> ordinals) {
-        var count = arena.CellCount(rowOrdinal: rowOrdinal);
-
-        if (
-            (domainOrdinal < 0) ||
-            (count > ordinals.Length)
-        ) {
-            return -1;
-        }
-
-        var domainCount = arena.CellCount(rowOrdinal: domainOrdinal);
-
-        for (var position = 0; (position < count); position++) {
-            if (!arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            )) {
-                return -1;
-            }
-
-            var found = -1;
-
-            for (var candidate = 0; (candidate < domainCount); candidate++) {
-                if (
-                    arena.TryKeyAt(
-                    key: out var domainKey,
-                    position: candidate,
-                    rowOrdinal: domainOrdinal
-                ) &&
-                    (domainKey == key)
-                ) {
-                    found = candidate;
-
-                    break;
-                }
-            }
-            if (found < 0) {
-                return -1;
-            }
-
-            ordinals[position] = found;
-        }
-
-        return count;
-    }
     // Keys are column-major: column k occupies [k * count, (k + 1) * count). The original position is the final
     // tiebreak, which is what makes the sort stable.
     private static void SortOrder(ReadOnlySpan<long> keys, ReadOnlySpan<bool> descending, int count, Span<int> order) {

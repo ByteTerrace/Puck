@@ -18,6 +18,9 @@ internal static class Domains {
         65536L, -65536L, 32768L, -32768L, 256L, -256L,
     ];
 
+    // SplitMix64's state increment, the 64-bit golden-ratio odd constant.
+    private const ulong SplitMixIncrement = 0x9E3779B97F4A7C15UL;
+
     // The house stratified sampler's plane direction numbers, built once. SamplePlane maps a point index to a
     // two-dimensional Sobol' point (x, y) whose first 2^m points hit every dyadic box exactly once.
     private static readonly uint[] PlaneDirectionNumbers = BuildPlaneDirectionNumbers();
@@ -50,6 +53,32 @@ internal static class Domains {
         );
 
         return unchecked((long)((((ulong)x) << 32) | y));
+    }
+    /// <summary>Draws the next value of a SplitMix64 stream and advances its state, for a claim whose basis is a fixed
+    /// stream of its own rather than a <see cref="Domain"/>.</summary>
+    /// <param name="state">The stream state, advanced in place by the golden-ratio increment.</param>
+    /// <returns>The draw: <see cref="SplitMix64"/> of the state before the advance.</returns>
+    public static ulong NextSplitMix64(ref ulong state) {
+        var draw = SplitMix64(index: state);
+
+        state = unchecked((state + SplitMixIncrement));
+
+        return draw;
+    }
+    /// <summary>Maps an index through SplitMix64's output function — the golden-ratio increment and two
+    /// xor-shift-multiply rounds — written here from the published constants, so no claim that draws its own operand
+    /// stream borrows a Puck.Maths generator to produce the operands it then judges.</summary>
+    /// <param name="index">The index.</param>
+    /// <returns>The mixed value.</returns>
+    public static ulong SplitMix64(ulong index) {
+        unchecked {
+            var mixed = (index + SplitMixIncrement);
+
+            mixed = ((mixed ^ (mixed >> 30)) * 0xBF58476D1CE4E5B9UL);
+            mixed = ((mixed ^ (mixed >> 27)) * 0x94D049BB133111EBUL);
+
+            return mixed ^ (mixed >> 31);
+        }
     }
     /// <summary>Enumerates element-component pairs <c>(u, v)</c> for a domain: an edge battery, an edge-biased random
     /// batch, and the domain's frontier block.</summary>

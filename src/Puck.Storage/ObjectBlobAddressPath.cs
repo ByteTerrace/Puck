@@ -47,10 +47,12 @@ public static class ObjectBlobAddressPath {
     }
 
     private static string[] GetSegments(string path, string description) {
-        if (path.Length > 4096) { throw new ArgumentException(
+        if (path.Length > 4096) {
+            throw new ArgumentException(
             message: $"The {description} exceeds its length ceiling.",
             paramName: nameof(path)
-        ); }
+        );
+        }
         if (
             Path.IsPathRooted(path: path) ||
             path.StartsWith(value: '/') ||

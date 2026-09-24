@@ -117,7 +117,8 @@ public sealed record GeneratorWeightedNumeric(long Value, ulong Weight, [propert
 /// <c>markov</c>, <c>weightedNumeric</c> and <c>symmetryOrbit</c> draw through an alias table whose selection depends
 /// on the site's own drawn masks, so no single raw draw maps a scripted value back. Words past the script's length are
 /// the self-seeded table's own.</remarks>
-/// <param name="K">The extension table size: a power of two in <c>[2, 1024]</c>.</param>
+/// <param name="K">The extension table size: a power of two from <see cref="GeneratorCapacity.MinExtendedTableSize"/>
+/// to <see cref="GeneratorCapacity.MaxExtendedTableSize"/>.</param>
 /// <param name="Table">The whole extension table, exactly <see cref="K"/> words — or <see langword="null"/> when
 /// <see cref="Script"/> authors it instead.</param>
 /// <param name="Script">Up to <see cref="K"/> values in the source's own output space, authoring the site's first

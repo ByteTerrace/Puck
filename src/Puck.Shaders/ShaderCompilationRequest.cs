@@ -1,17 +1,17 @@
 using System.Collections.ObjectModel;
-using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
-/// <summary>Owns a snapshot of source stages, channel bindings, descriptor metadata, and parameter defaults for one asynchronous compilation.</summary>
+/// <summary>Owns a snapshot of the HLSL source stages one asynchronous compilation builds.</summary>
 public sealed record ShaderCompilationRequest {
-    public ShaderCompilationRequest(
-        string name,
-        IReadOnlyList<ShaderStageSource> stages,
-        IReadOnlyDictionary<string, uint>? channels = null,
-        GpuPixelFormat outputFormat = GpuPixelFormat.R8G8B8A8Unorm,
-        IReadOnlyDictionary<string, ShaderConfigField>? config = null,
-        IReadOnlyList<ShaderDescriptorBinding>? descriptorBindings = null) {
+    /// <summary>Initializes a request.</summary>
+    /// <param name="name">The compile's name, which names the <see cref="CompiledShader"/> it produces.</param>
+    /// <param name="stages">The stages, at most one of each <see cref="ShaderStage"/>.</param>
+    /// <param name="generatedIncludes">The text of each include the caller generates, by full path, which the compile
+    /// reads instead of a file at that path; <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentException">There is no stage, a stage is incomplete or undefined, or a stage is declared
+    /// twice.</exception>
+    public ShaderCompilationRequest(string name, IReadOnlyList<ShaderStageSource> stages, IReadOnlyDictionary<string, string>? generatedIncludes = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(stages);
         if (stages.Count == 0) {
@@ -26,13 +26,12 @@ public sealed record ShaderCompilationRequest {
             if (
                 (stage is null) ||
                 !Enum.IsDefined(value: stage.Stage) ||
-                !Enum.IsDefined(value: stage.Language) ||
                 string.IsNullOrWhiteSpace(value: stage.Path) ||
                 string.IsNullOrWhiteSpace(value: stage.EntryPoint) ||
                 (stage.Source is null)
             ) {
                 throw new ArgumentException(
-                    message: "Every stage requires a supported stage/language, source path, source text, and entry point.",
+                    message: "Every stage requires a supported stage, source path, source text, and entry point.",
                     paramName: nameof(stages)
                 );
             }
@@ -43,85 +42,21 @@ public sealed record ShaderCompilationRequest {
                 );
             }
         }
-        ShaderConfigBinding.ValidateSchema(
-            ownerName: name,
-            schema: config
-        );
         Name = name;
         Stages = new ReadOnlyCollection<ShaderStageSource>(list: stages.ToArray());
-        Channels = new ReadOnlyDictionary<string, uint>(dictionary: new Dictionary<string, uint>(
-            collection: (channels ?? new Dictionary<string, uint>()),
-            comparer: StringComparer.Ordinal
+        GeneratedIncludes = new ReadOnlyDictionary<string, string>(dictionary: new Dictionary<string, string>(
+            collection: (generatedIncludes ?? new Dictionary<string, string>()).Select(selector: static pair => new KeyValuePair<string, string>(
+                key: Path.GetFullPath(path: pair.Key),
+                value: pair.Value
+            )),
+            comparer: Puck.Abstractions.PuckPaths.Comparer
         ));
-        OutputFormat = outputFormat;
-        Config = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: (config ?? new Dictionary<string, ShaderConfigField>()).ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value with { Default = pair.Value.Default?.Clone() },
-            StringComparer.Ordinal
-        ));
-
-        if (descriptorBindings is null) {
-            DescriptorBindings = Array.Empty<ShaderDescriptorBinding>();
-        } else {
-            var bindings = new HashSet<uint>();
-
-            foreach (var binding in descriptorBindings) {
-                if (
-                    (binding is null) ||
-                    !Enum.IsDefined(value: binding.Kind) ||
-                    (binding.Count == 0) ||
-                    !bindings.Add(item: binding.VulkanBinding)
-                ) {
-                    throw new ArgumentException(
-                        message: "Descriptor metadata requires unique bindings, defined kinds, and non-zero counts.",
-                        paramName: nameof(descriptorBindings)
-                    );
-                }
-            }
-            DescriptorBindings = new ReadOnlyCollection<ShaderDescriptorBinding>(list: descriptorBindings.ToArray());
-        }
     }
-    public ShaderCompilationRequest(string name, IReadOnlyList<ShaderStageSource> stages, IReadOnlyList<ShaderChannelBinding> channels)
-        : this(
-        name,
-        stages,
-        channels.ToDictionary(
-            static channel => channel.Name,
-            static channel => channel.Binding,
-            StringComparer.Ordinal
-        )
-    ) { }
 
-    public IReadOnlyDictionary<string, uint> Channels { get; }
-    public IReadOnlyDictionary<string, ShaderConfigField> Config { get; }
-    /// <summary>Gets descriptors in the exact order used to build the runtime binding list.</summary>
-    public IReadOnlyList<ShaderDescriptorBinding> DescriptorBindings { get; }
+    /// <summary>Gets the text of each generated include, by full path.</summary>
+    public IReadOnlyDictionary<string, string> GeneratedIncludes { get; }
+    /// <summary>Gets the compile's name.</summary>
     public string Name { get; }
-    public GpuPixelFormat OutputFormat { get; }
+    /// <summary>Gets the stages, in the order they compile.</summary>
     public IReadOnlyList<ShaderStageSource> Stages { get; }
-
-    public static ShaderCompilationRequest Compute(
-        string name,
-        string sourcePath,
-        string sourceText,
-        ShaderSourceLanguage language = ShaderSourceLanguage.ShadertoyGlsl,
-        string entryPoint = "mainImage",
-        IReadOnlyDictionary<string, uint>? channels = null,
-        GpuPixelFormat outputFormat = GpuPixelFormat.R8G8B8A8Unorm,
-        IReadOnlyDictionary<string, ShaderConfigField>? config = null,
-        IReadOnlyList<ShaderDescriptorBinding>? descriptorBindings = null) =>
-        new(
-            name,
-            [new ShaderStageSource(
-                    ShaderStage.Compute,
-                    sourcePath,
-                    sourceText,
-                    language,
-                    entryPoint
-                )],
-            channels,
-            outputFormat,
-            config,
-            descriptorBindings
-        );
 }

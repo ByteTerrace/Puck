@@ -349,10 +349,6 @@ public sealed class ArenaLayoutLawTests {
         for (var ordinal = 0; (ordinal < arena.Layout.RowCount); ordinal++) {
             Assert.Equal(
                 expected: 0UL,
-                actual: arena.AppendGeneration(rowOrdinal: ordinal)
-            );
-            Assert.Equal(
-                expected: 0UL,
                 actual: arena.RowGeneration(rowOrdinal: ordinal)
             );
             Assert.Equal(

@@ -4,22 +4,26 @@
 // already-proven, integer-only, bit-identical across DXC's two targets.
 //
 // On Vulkan the texture+sampler fuse into one combined image sampler at set 0 binding 0; on Direct3D 12 they are
-// t0/s0 (a static sampler baked into the root signature). The push constant is 16 bytes, all-integer-safe: two
-// floats (intensity, size) and two uints (grainFrame, seed) — never a wall-clock or RNG value; grainFrame is the
-// caller's ElapsedTicks (the deterministic fixed-step simulation clock) quantized to the authored flicker period,
-// so the same fenced simulation moment hashes identically on every run, machine, and backend.
+// t0/s0 (a static sampler baked into the root signature). The frame block is the set's generated interface
+// (sdf-film-grain.interface.hlsli, regenerated with `puck shaders interface --write`): the engine tick, the tick rate
+// and the set's config. The grain frame is the tick quantized to the flicker period, never a wall-clock or RNG value,
+// so the same simulation moment hashes identically on every run, machine, and backend.
 #include "sdf-vm.hlsli"
+#include "sdf-film-grain.interface.hlsli"
 
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] Texture2D sourceTexture : register(t0);
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] SamplerState sourceSampler : register(s0);
 
-struct FilmGrainPushData {
-    float intensity;
-    float size;
-    uint grainFrame;
-    uint seed;
-};
-[[vk::push_constant]] ConstantBuffer<FilmGrainPushData> pc;
+// The low 32 bits of floor(tick / period) for the 64-bit tick (low word, high word) and a period below 2^16, divided
+// sixteen bits at a time so no intermediate leaves 32 bits.
+uint quantizeTick(uint2 tick, uint period) {
+    uint remainder = (tick.y % period);
+    uint upper = ((remainder << 16) | (tick.x >> 16));
+    uint quotientUpper = (upper / period);
+    uint lower = (((upper % period) << 16) | (tick.x & 0xFFFFu));
+
+    return ((quotientUpper << 16) + (lower / period));
+}
 
 float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint width;
@@ -33,10 +37,12 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     // Both backends floor the same half-pixel-centre SV_Position identically, so the cell index — and the hash it
     // keys — is bit-identical cross-backend. size >= 1 pixel; a caller-supplied size below that would divide by a
     // sub-pixel cell and is clamped here rather than trusted.
-    float cellSize = max(pc.size, 1.0);
+    float cellSize = max(frameGroup.size, 1.0);
     uint2 cell = uint2(floor(fragCoord.xy / cellSize));
-    uint3 hash = sdfPcg3d(uint3(cell.x, cell.y, (pc.grainFrame ^ pc.seed)));
+    uint period = max((frameGroup.tickRate / max(frameGroup.flickerHz, 1u)), 1u);
+    uint grainFrame = quantizeTick(frameGroup.tick, period);
+    uint3 hash = sdfPcg3d(uint3(cell.x, cell.y, (grainFrame ^ frameGroup.seed)));
     float noise = ((float(hash.x) / 4294967295.0) * 2.0 - 1.0);
 
-    return float4(saturate(sourceColor + (noise * pc.intensity)), 1.0);
+    return float4(saturate(sourceColor + (noise * frameGroup.intensity)), 1.0);
 }

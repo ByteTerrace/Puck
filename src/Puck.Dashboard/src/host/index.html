@@ -3,15 +3,22 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="color-scheme" content="light dark" />
+        <title>Puck</title>
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="icon" type="image/png" sizes="32x32" href="/puck-dark-32.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/puck-dark-192.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
-        <title>Puck Dashboard</title>
     </head>
     <body>
-        <div id="root"></div>
+        <!-- The loading screen from src/LoadingScreen.tsx, up while sign-in initializes and until the portal renders. -->
+        <div id="root">
+            <div class="host-screen" role="status">
+                <img alt="" height="48" src="/puck-dark-64.png" width="48" />
+                <p>Loading Puck</p>
+            </div>
+        </div>
         <script type="module" src="/src/main.tsx"></script>
     </body>
 </html>

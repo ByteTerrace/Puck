@@ -76,13 +76,13 @@ public sealed class StateDynamicsReadLawTests {
         foreach (var tick in ((ulong[])[0UL, 24UL, 48UL, 96UL, 192UL, 384UL, 768UL, 1500UL])) {
             Assert.True(condition: WorldStateReader.TryReadEased(
                 definition: definition,
+                engineTick: tick,
                 key: null,
                 rawValue: out var raw,
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick,
-                engineTick: tick
+                tick: tick
             ));
             Assert.True(
                 condition: (raw >= previous),
@@ -108,13 +108,13 @@ public sealed class StateDynamicsReadLawTests {
 
         Assert.True(condition: WorldStateReader.TryReadEased(
             definition: definition,
+            engineTick: 0UL,
             key: null,
             rawValue: out var raw,
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ));
         Assert.Equal(
             actual: raw,
@@ -136,13 +136,13 @@ public sealed class StateDynamicsReadLawTests {
 
         Assert.True(condition: WorldStateReader.TryReadEased(
             definition: definition,
+            engineTick: 0UL,
             key: null,
             rawValue: out var trough,
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ));
         Assert.Equal(
             actual: trough,
@@ -151,13 +151,13 @@ public sealed class StateDynamicsReadLawTests {
 
         Assert.True(condition: WorldStateReader.TryReadEased(
             definition: definition,
+            engineTick: 120UL,
             key: null,
             rawValue: out var peak,
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 120UL,
-            engineTick: 120UL
+            tick: 120UL
         ));
         Assert.InRange(
             actual: peak!.Value,
@@ -167,13 +167,13 @@ public sealed class StateDynamicsReadLawTests {
 
         Assert.True(condition: WorldStateReader.TryReadEased(
             definition: definition,
+            engineTick: 240UL,
             key: null,
             rawValue: out var fullPeriod,
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 240UL,
-            engineTick: 240UL
+            tick: 240UL
         ));
         Assert.InRange(
             actual: fullPeriod!.Value,
@@ -188,13 +188,13 @@ public sealed class StateDynamicsReadLawTests {
         // ζω·t·log2e >> 17 (the documented settle bound) at 1000 ticks / 240 Hz for f=1 Hz, ζ=1.
         Assert.True(condition: WorldStateReader.TryReadEased(
             definition: definition,
+            engineTick: 1000UL,
             key: null,
             rawValue: out var raw,
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 1000UL,
-            engineTick: 1000UL
+            tick: 1000UL
         ));
         Assert.Equal(
             actual: raw,
@@ -208,23 +208,23 @@ public sealed class StateDynamicsReadLawTests {
         foreach (var tick in ((ulong[])[0UL, 1UL, 500UL])) {
             Assert.True(condition: WorldStateReader.TryRead(
                 definition: definition,
+                engineTick: tick,
                 key: null,
                 rawValue: out var truth,
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick,
-                engineTick: tick
+                tick: tick
             ));
             Assert.True(condition: WorldStateReader.TryReadEased(
                 definition: definition,
+                engineTick: tick,
                 key: null,
                 rawValue: out var eased,
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick,
-                engineTick: tick
+                tick: tick
             ));
             Assert.Equal(
                 actual: eased,
@@ -239,13 +239,13 @@ public sealed class StateDynamicsReadLawTests {
         foreach (var tick in ((ulong[])[0UL, 1UL, 240UL, 1000UL])) {
             Assert.True(condition: WorldStateReader.TryRead(
                 definition: definition,
+                engineTick: tick,
                 key: null,
                 rawValue: out var raw,
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick,
-                engineTick: tick
+                tick: tick
             ));
             Assert.Equal(
                 actual: raw,

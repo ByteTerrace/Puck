@@ -29,7 +29,7 @@ public sealed record WorldSearchSection(IReadOnlyList<WorldSearchRow>? Jobs = nu
 [JsonDerivedType(typeof(WorldSearchShape.Relocate), "relocate")]
 [JsonDerivedType(typeof(WorldSearchShape.Drop), "drop")]
 [JsonDerivedType(typeof(WorldSearchShape.Jump), "jump")]
-[JsonDerivedType(typeof(WorldSearchShape.Paired), "pair")]
+[JsonDerivedType(typeof(WorldSearchShape.Tandem), "tandem")]
 [JsonDerivedType(typeof(WorldSearchShape.Promote), "promote")]
 [JsonDerivedType(typeof(WorldSearchShape.Transferred), "transfer")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -56,10 +56,10 @@ public abstract record WorldSearchShape {
     /// a cell key of <see cref="WorldSearchRow.Tokens"/> — relocates by the same lattice translation
     /// (<c>CompiledTopology.TryTranslation</c>: the axial step on a grid, ring, hex, or box), provided its own
     /// destination is empty. A graph or tiling has no translations and refuses the shape. The minimal two-token
-    /// primitive a castle's rook needs, not a general rule for every pair's own reach (see the schema README's
+    /// primitive a castle's rook needs, not a general rule for every companion's own reach (see the schema README's
     /// search section for the reasoning).</summary>
     /// <param name="With">The companion token's cell key in <see cref="WorldSearchRow.Tokens"/>.</param>
-    public sealed record Paired(string With) : WorldSearchShape;
+    public sealed record Tandem(string With) : WorldSearchShape;
     /// <summary>The walked token relocates onto any other cell, evicting what stood there, and its own code in
     /// <see cref="Codes"/> becomes one of <see cref="To"/> — one candidate per (cell, code). The judge decides where
     /// a code may change; the shape only offers the change.</summary>
@@ -80,7 +80,7 @@ public abstract record WorldSearchShape {
 /// by <see cref="Row"/>'s own draw — every one of its cells must carry a <c>draw</c> facet naming a
 /// <c>uniformRange</c> or <c>weightedNumeric</c> generator, enumerated as their cross product rather than sampled
 /// (two dice of <c>uniformRange 1..6</c> bakes 36 outcomes). Negamax computes the exact weighted average at
-/// <see cref="AtDepth"/>; a <see cref="SearchMethod.Tree"/> job instead draws one outcome per playout, from its own
+/// <see cref="AtDepth"/>; a <see cref="SearchMethod.MonteCarlo"/> job instead draws one outcome per playout, from its own
 /// stream, at the playout ply its own 1-based numbering reaches <see cref="AtDepth"/>.</summary>
 /// <param name="Row">The keyed integer row a chosen outcome writes.</param>
 /// <param name="AtDepth">Negamax: the absolute ply (0 = root) whose move choice is replaced, <c>0..depth-1</c>.
@@ -121,19 +121,19 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies —
 /// the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and <paramref name="Scores"/> is
 /// authored when a score is needed; required when <paramref name="Depth"/> exceeds one, or <paramref name="Best"/>
-/// is authored, and refused with <see cref="SearchMethod.Tree"/> unauthored alongside it.</param>
+/// is authored, and refused with <see cref="SearchMethod.MonteCarlo"/> unauthored alongside it.</param>
 /// <param name="Best">A keyed integer row receiving the deepest completed depth's answer: <c>token</c> (the mover's
 /// ordinal in <paramref name="Tokens"/>), <c>to</c> (its destination cell), and <c>score</c> (the negamax value, or,
 /// with <paramref name="Scores"/> authored, the root mover's own seat's value).</param>
 /// <param name="Method">How plies are compared by the score: <see cref="SearchMethod.Negamax"/> to the depth cap,
-/// or <see cref="SearchMethod.Tree"/>, which reads the score where no candidate is accepted or at the cap.</param>
-/// <param name="Iterations">How many tree iterations a <see cref="SearchMethod.Tree"/> job runs before it lands.</param>
+/// or <see cref="SearchMethod.MonteCarlo"/>, which reads the score where no candidate is accepted or at the cap.</param>
+/// <param name="Iterations">How many tree iterations a <see cref="SearchMethod.MonteCarlo"/> job runs before it lands.</param>
 /// <param name="Chance">The job's chance node, or <see langword="null"/> for a job with none.</param>
 /// <param name="Scores">A keyed integer row, one cell per seat in <paramref name="Turn"/>'s own ordinal order,
 /// holding each seat's own current score — the n-seat reading of what a ply is worth: a level maximizes the mover
 /// seat's own entry rather than negating the reply, so no seat's gain is assumed to be another's loss (max-n).
 /// Exactly one of this and <paramref name="Score"/> is authored when a score is needed; refused with
-/// <see cref="SearchMethod.Tree"/>, whose outcome backprop alternates sign along the path.</param>
+/// <see cref="SearchMethod.MonteCarlo"/>, whose outcome backprop alternates sign along the path.</param>
 /// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
 /// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -381,7 +381,7 @@ public static class WorldSearchCompilation {
                         Kind: SearchShapeKind.Transfer,
                         Displace: false,
                         Directions: [],
-                        PairWithIndex: -1,
+                        CompanionIndex: -1,
                         Selector: transfer.Selector,
                         InsertFirst: transfer.InsertFirst
                     );
@@ -392,7 +392,7 @@ public static class WorldSearchCompilation {
                         Kind: SearchShapeKind.Relocate,
                         Displace: relocate.Displace,
                         Directions: [],
-                        PairWithIndex: -1
+                        CompanionIndex: -1
                     );
 
                     break;
@@ -401,7 +401,7 @@ public static class WorldSearchCompilation {
                         Kind: SearchShapeKind.Drop,
                         Displace: false,
                         Directions: [],
-                        PairWithIndex: -1
+                        CompanionIndex: -1
                     );
 
                     break;
@@ -449,9 +449,9 @@ public static class WorldSearchCompilation {
                         }
                         if (
                             (jump.MaxHops > 1) &&
-                            (row.Method == SearchMethod.Tree)
+                            (row.Method == SearchMethod.MonteCarlo)
                         ) {
-                            reason = $"search '{row.Name}' shape[{index}] jump chains (maxHops > 1) are not resolved by the tree method's own root-move decoder; use negamax";
+                            reason = $"search '{row.Name}' shape[{index}] jump chains (maxHops > 1) are not resolved by the MonteCarlo method's own root-move decoder; use negamax";
 
                             return false;
                         }
@@ -460,7 +460,7 @@ public static class WorldSearchCompilation {
                             Kind: SearchShapeKind.Jump,
                             Displace: false,
                             Directions: directions,
-                            PairWithIndex: -1,
+                            CompanionIndex: -1,
                             MaxHops: jump.MaxHops
                         );
                         var chainCount = jumpShape.CandidateCount(cellCount: topology!.CellCount);
@@ -475,9 +475,9 @@ public static class WorldSearchCompilation {
 
                         break;
                     }
-                case WorldSearchShape.Paired pair: {
+                case WorldSearchShape.Tandem tandem: {
                         if (!topology!.HasTranslations) {
-                            reason = $"search '{row.Name}' shape[{index}] pair carries one translation to two tokens, and a {topology.Kind} board has no translations";
+                            reason = $"search '{row.Name}' shape[{index}] tandem carries one translation to two tokens, and a {topology.Kind} board has no translations";
 
                             return false;
                         }
@@ -488,7 +488,7 @@ public static class WorldSearchCompilation {
                             for (var t = 0; (t < tokenCells.Count); t++) {
                                 if (string.Equals(
                                     a: tokenCells[t].Key.Value,
-                                    b: pair.With,
+                                    b: tandem.With,
                                     comparisonType: StringComparison.Ordinal
                                 )) {
                                     companion = t;
@@ -498,16 +498,16 @@ public static class WorldSearchCompilation {
                             }
                         }
                         if (companion < 0) {
-                            reason = $"search '{row.Name}' shape[{index}] pair 'with' names no cell '{pair.With}' of '{row.Tokens}'";
+                            reason = $"search '{row.Name}' shape[{index}] tandem 'with' names no cell '{tandem.With}' of '{row.Tokens}'";
 
                             return false;
                         }
 
                         compiled[index] = new SearchShapePlan(
-                            Kind: SearchShapeKind.Pair,
+                            Kind: SearchShapeKind.Tandem,
                             Displace: false,
                             Directions: [],
-                            PairWithIndex: companion
+                            CompanionIndex: companion
                         );
 
                         break;
@@ -537,7 +537,7 @@ public static class WorldSearchCompilation {
                             Kind: SearchShapeKind.Promote,
                             Displace: true,
                             Directions: [],
-                            PairWithIndex: -1,
+                            CompanionIndex: -1,
                             Codes: promote.Codes,
                             PromoteTo: [.. promote.To]
                         );
@@ -1056,11 +1056,11 @@ public static class WorldSearchCompilation {
             return false;
         }
         if (
-            ((row.Depth > 1) || (row.Best is not null) || (row.Method == SearchMethod.Tree)) &&
+            ((row.Depth > 1) || (row.Best is not null) || (row.Method == SearchMethod.MonteCarlo)) &&
             (row.Score is null) &&
             (row.Scores is null)
         ) {
-            reason = $"search '{row.Name}' names no score or scores — a depth past one, a best row, or the tree method needs one to compare plies by";
+            reason = $"search '{row.Name}' names no score or scores — a depth past one, a best row, or the MonteCarlo method needs one to compare plies by";
 
             return false;
         }
@@ -1074,9 +1074,9 @@ public static class WorldSearchCompilation {
         }
         if (
             (row.Scores is not null) &&
-            (row.Method == SearchMethod.Tree)
+            (row.Method == SearchMethod.MonteCarlo)
         ) {
-            reason = $"search '{row.Name}' scores is a per-seat row the tree method's outcome backprop does not read; author score instead, or use negamax";
+            reason = $"search '{row.Name}' scores is a per-seat row the MonteCarlo method's outcome backprop does not read; author score instead, or use negamax";
 
             return false;
         }
@@ -1289,16 +1289,6 @@ public static class WorldSearchCompilation {
 
         return true;
     }
-    /// <summary>Derives every job's plan against the compiled rules, or names the first job that cannot run.</summary>
-    /// <param name="definition">The world.</param>
-    /// <param name="rules">The compiled rules.</param>
-    /// <param name="plans">The plans, in section order.</param>
-    /// <param name="judges">The rules each job's judge evaluates, in section order.</param>
-    /// <param name="scores">Each job's compiled score program, in section order; an entry is <see langword="null"/>
-    /// when the job declares none.</param>
-    /// <param name="reason">Why a job cannot run, or empty.</param>
-    public static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason) =>
-        TryPlanAll(definition, rules, out plans, out judges, out scores, out reason, recurringWork: null);
     /// <summary>Plans search from an existing compilation and its shared work sheet, without compiling rules or
     /// interactions again. The returned plans, judges, and scores follow the definition's search row order.</summary>
     /// <param name="compilation">The unchanged definition's compilation receipt.</param>
@@ -1313,7 +1303,9 @@ public static class WorldSearchCompilation {
             recurringWork: ((compilation.Definition.Search.Rows.Count == 0) ? RuleWork.Zero : compilation.WorkBudget.WorkUnitsPerTick));
     }
 
-    internal static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason, RuleWork? recurringWork) {
+    // Every job's plan against the compiled rules and the tick's work sheet, which the caller supplies from the one
+    // computation admission runs.
+    internal static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason, RuleWork recurringWork) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
@@ -1331,11 +1323,7 @@ public static class WorldSearchCompilation {
 
         var context = WorldFactsCompiler.Context(definition: definition);
         var frame = JudgeRules(rules: rules);
-        var sheet = (recurringWork ?? WorldRuleWorkBudget.Measure(
-            definition: definition,
-            rules: rules,
-            interactions: WorldFactsCompiler.CompileAllInteractions(definition: definition)
-        ).WorkUnitsPerTick);
+        var sheet = recurringWork;
 
         // A sheet no number bounds leaves no allowance to divide, and says why.
         if (!sheet.IsKnown) {

@@ -43,31 +43,50 @@ public static class WalshHadamardTransform {
             return;
         }
 
+        if (typeof(T) == typeof(short)) {
+            ButterflyVector(values: MemoryMarshal.Cast<T, short>(span: values));
+
+            return;
+        }
+
+        if (typeof(T) == typeof(sbyte)) {
+            ButterflyVector(values: MemoryMarshal.Cast<T, sbyte>(span: values));
+
+            return;
+        }
+
         ButterflyScalar(values: values);
     }
     private static void ButterflyScalar<T>(Span<T> values) where T : unmanaged, IBinaryInteger<T> {
         var n = values.Length;
 
         for (var half = 1; (half < n); half <<= 1) {
-            var length = (half << 1);
+            ButterflyStageScalar(
+                half: half,
+                n: n,
+                values: values
+            );
+        }
+    }
+    private static void ButterflyStageScalar<T>(Span<T> values, int half, int n) where T : unmanaged, IBinaryInteger<T> {
+        var length = (half << 1);
 
-            for (var i = 0; (i < n); i += length) {
-                var low = values.Slice(
-                    length: half,
-                    start: i
-                );
-                var high = values.Slice(
-                    length: half,
-                    start: (i + half)
-                );
+        for (var i = 0; (i < n); i += length) {
+            var low = values.Slice(
+                length: half,
+                start: i
+            );
+            var high = values.Slice(
+                length: half,
+                start: (i + half)
+            );
 
-                for (var j = 0; (j < low.Length); ++j) {
-                    var u = low[j];
-                    var v = high[j];
+            for (var j = 0; (j < low.Length); ++j) {
+                var u = low[j];
+                var v = high[j];
 
-                    low[j] = (u + v);
-                    high[j] = (u - v);
-                }
+                low[j] = (u + v);
+                high[j] = (u - v);
             }
         }
     }
@@ -79,26 +98,11 @@ public static class WalshHadamardTransform {
         var half = 1;
 
         for (; ((half < n) && (half < lanes)); half <<= 1) {
-            var length = (half << 1);
-
-            for (var i = 0; (i < n); i += length) {
-                var low = values.Slice(
-                    length: half,
-                    start: i
-                );
-                var high = values.Slice(
-                    length: half,
-                    start: (i + half)
-                );
-
-                for (var j = 0; (j < low.Length); ++j) {
-                    var u = low[j];
-                    var v = high[j];
-
-                    low[j] = (u + v);
-                    high[j] = (u - v);
-                }
-            }
+            ButterflyStageScalar(
+                half: half,
+                n: n,
+                values: values
+            );
         }
 
         for (; (half < n); half <<= 1) {

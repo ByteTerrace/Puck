@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Browser.Tests;
@@ -8,9 +9,9 @@ namespace Puck.World.Browser.Tests;
 /// <summary>The determinism canary's native half: computes <see cref="StateArena.ComputeHash"/> over a fixed
 /// document, tick, and write sequence, and compares it against the recorded baseline in <c>Fixtures/browser-parity/expected.json</c>
 /// — the same file the Node harness (<c>engine-wasm.test.cjs</c>) reads to prove the wasm build folds the identical
-/// bytes. Set <c>PUCK_BROWSER_PARITY_RECORD=1</c> to overwrite the baseline with freshly computed hashes instead of
-/// comparing against them.</summary>
-/// <remarks>Only <c>games/tictactoe.world.json</c> composes standalone under <c>standard.basis.json</c> among the
+/// bytes. The test writes the freshly computed baseline beside its assembly (<see cref="TestRecords"/>) before comparing,
+/// and <c>puck baselines browser-parity</c> promotes that copy over the committed one.</summary>
+/// <remarks>Only <c>games/tictactoe.world.json</c> composes standalone under <c>standard.world.json</c> among the
 /// fragments this suite sampled (bowling, billiards, poker, chess, dominoes, freecell, hexlines, klondike, mancala
 /// all refuse — each names a host register, a look, or a body motion program the island's own body supplies, never
 /// the bare basis alone); the two fixtures below are two independent scripted-write cases over that one document
@@ -19,23 +20,8 @@ namespace Puck.World.Browser.Tests;
 /// <see cref="Puck.World.Browser.Engine.BrowserExtensionVocabulary"/>).</remarks>
 public sealed class BrowserParityRecordingTests {
     private static byte[] ComposedTicTacToeBytes() {
-        var basisBytes = File.ReadAllBytes(path: Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "standard.basis.json"
-        ));
-        var fragmentBytes = File.ReadAllBytes(path: Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "games",
-            "tictactoe.world.json"
-        ));
+        var basisBytes = File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
+        var fragmentBytes = ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck"));
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryComposeFragmentBytes(
@@ -50,14 +36,7 @@ public sealed class BrowserParityRecordingTests {
 
         return Encoding.UTF8.GetBytes(s: composed!.ToJsonString());
     }
-    private static string ExpectedPath() => Path.Combine(
-        RepositoryRoot(),
-        "tests",
-        "Puck.World.Browser.Tests",
-        "Fixtures",
-        "browser-parity",
-        "expected.json"
-    );
+    private static string ExpectedPath() => RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json");
     private static BrowserSession NewSession() {
         var errors = new List<string>();
         var deferred = new List<string>();
@@ -76,23 +55,6 @@ public sealed class BrowserParityRecordingTests {
         );
 
         return new BrowserSession(definition: definition!);
-    }
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
     }
     // The fixed scripted sequence each fixture name reproduces exactly — a name change here moves the hash it
     // records, on purpose: the two cases are named apart so the Node harness runs the identical steps and compares
@@ -134,44 +96,35 @@ public sealed class BrowserParityRecordingTests {
         }
     }
 
-    [InlineData("tictactoe-write-then-judge")]
-    [InlineData("tictactoe-judge-twice")]
-    [Theory]
-    public void StateHash_matches_the_recorded_baseline(string fixture) {
-        var hash = RunFixture(name: fixture).ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
-        var path = ExpectedPath();
-        var recorded = (File.Exists(path: path)
-            ? (JsonSerializer.Deserialize<Dictionary<string, string>>(json: File.ReadAllText(path: path)) ?? [])
-            : []
-        );
+    // The scripted sequences, in the order the committed baseline lists them.
+    private static readonly string[] FixtureNames = ["tictactoe-write-then-judge", "tictactoe-judge-twice"];
 
-        if (RecordMode) {
-            recorded[fixture] = hash;
+    [Fact]
+    public void StateHashes_match_the_recorded_baseline() {
+        var computed = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
-            Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-            File.WriteAllText(
-                path: path,
-                contents: (JsonSerializer.Serialize(
-                    value: recorded,
-                    options: new JsonSerializerOptions { WriteIndented = true }
-                ) + Environment.NewLine)
-            );
-
-            return;
+        foreach (var fixture in FixtureNames) {
+            computed[fixture] = RunFixture(name: fixture).ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
         }
 
+        var path = ExpectedPath();
+        var rendered = (JsonSerializer.Serialize(
+            value: computed,
+            options: new JsonSerializerOptions { WriteIndented = true }
+        ).ReplaceLineEndings(replacementText: "\n") + "\n");
+
+        _ = TestRecords.Write(
+            artifact: "browser-parity",
+            bytes: Encoding.UTF8.GetBytes(s: rendered),
+            fileName: Path.GetFileName(path: path)
+        );
         Assert.True(
-            condition: recorded.TryGetValue(
-                key: fixture,
-                value: out var expected
-            ),
-            userMessage: $"no recorded baseline for '{fixture}' in {path} — run with PUCK_BROWSER_PARITY_RECORD=1 to record it."
+            condition: File.Exists(path: path),
+            userMessage: $"no recorded baseline at {path}; record it with puck baselines browser-parity."
         );
         Assert.Equal(
-            actual: hash,
-            expected: expected
+            actual: rendered,
+            expected: File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n")
         );
     }
-
-    private static bool RecordMode => (Environment.GetEnvironmentVariable(variable: "PUCK_BROWSER_PARITY_RECORD") == "1");
 }

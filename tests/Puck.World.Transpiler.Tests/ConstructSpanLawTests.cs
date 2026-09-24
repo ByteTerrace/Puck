@@ -127,6 +127,11 @@ public class ConstructSpanLawTests {
 
         return words;
     }
+    private static bool OpensObjectLiteral(string source, int line) {
+        var lines = source.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
+
+        return ((line >= 1) && (line <= lines.Length) && lines[(line - 1)].TrimStart().StartsWith(value: '{'));
+    }
     private static string OpeningWordAt(string source, int line) {
         var lines = source.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
         var text = (((line >= 1) && (line <= lines.Length))
@@ -251,24 +256,9 @@ public class ConstructSpanLawTests {
     [MemberData(nameof(ShippedSources))]
     [Theory]
     public void ADescribedConstructRegistersItsOwnLine(string relativePath) {
-        var sourcePath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-        var source = File.ReadAllText(path: sourcePath);
-        var sourceMap = new SourceMap();
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source,
-            sourceMap: sourceMap,
-            sourcePath: sourcePath
-        );
-
-        Assert.False(
-            condition: compilation.Diagnostics.HasErrors,
-            userMessage: compilation.Diagnostics.FormatReport(source)
-        );
-
+        var source = File.ReadAllText(path: ShippedWorlds.PathOf(relativePath: relativePath));
+        var compilation = ShippedWorlds.Compile(relativePath: relativePath);
+        var sourceMap = compilation.SourceMap;
         var document = compilation.RequireJson();
         var table = WorldConstructs.Table;
         var failures = new List<string>();
@@ -302,7 +292,9 @@ public class ConstructSpanLawTests {
                     source: source
                 );
 
-                if (!words.Contains(item: word)) {
+                // An element written as an object literal in its section's array form (`patterns [ { … } ]`) is
+                // mapped to that literal, whose line opens with its own `{`.
+                if (!words.Contains(item: word) && !OpensObjectLiteral(line: span.Line, source: source)) {
                     failures.Add(item: $"{construct.Keyword}: {pointer} resolves to line {span.Line}, which opens with '{word}'");
                 }
             }

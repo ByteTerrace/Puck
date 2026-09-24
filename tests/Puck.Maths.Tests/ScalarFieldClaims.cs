@@ -28,10 +28,12 @@ internal static class ScalarFieldClaims {
         return paired;
     }
     private static int JacobiRecurse(BigInteger value, BigInteger modulus) {
-        if (BigInteger.Zero == value) { return ((BigInteger.One == modulus)
+        if (BigInteger.Zero == value) {
+            return ((BigInteger.One == modulus)
             ? 1
             : 0
-        ); }
+        );
+        }
 
         var oddPart = value;
         var twoExponent = 0;

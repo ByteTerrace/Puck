@@ -116,15 +116,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: job.TokenCount);
         writer.WriteInt32(value: job.PassDepth);
         writer.WriteInt32(value: job.Active);
-        WriteArray(
+        writer.WriteArray(
             items: job.Levels,
-            writeItem: WriteSearchLevel,
-            writer: writer
+            writeItem: WriteSearchLevel
         );
-        WriteArray(
+        writer.WriteArray(
             items: job.Scopes,
-            writeItem: WriteSearchScope,
-            writer: writer
+            writeItem: WriteSearchScope
         );
         WriteULongArray(
             values: job.TtKey,
@@ -146,22 +144,19 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer.WriteInt32(value: tree.Count);
             writer.WriteInt32(value: tree.Iteration);
             writer.WriteUInt64(value: tree.Seed);
-            writer.WriteInt32(value: tree.ExpandShape);
-            writer.WriteInt32(value: tree.ExpandToken);
-            writer.WriteInt32(value: tree.ExpandTarget);
             writer.WriteInt32(value: tree.Scan);
             writer.WriteInt32(value: tree.Start);
             writer.WriteInt32(value: tree.PlayoutPlies);
             writer.WriteInt32(value: tree.PlayCount);
             writer.WriteInt32(value: tree.PathLength);
 
-            foreach (var values in new[] { tree.Parent, tree.FirstChild, tree.ChildCount, tree.Shape, tree.Token, tree.Target, tree.Path }) {
+            foreach (var values in new[] { tree.Parent, tree.FirstChild, tree.NextSibling, tree.ChildCount, tree.Shape, tree.Token, tree.Target, tree.Scanned, tree.ScanStart, tree.Path }) {
                 WriteIntArray(
                     values: values,
                     writer: writer
                 );
             }
-            foreach (var values in new[] { tree.Visits, tree.Total, tree.Expanded }) {
+            foreach (var values in new[] { tree.Visits, tree.Total }) {
                 WriteLongArray(
                     values: values,
                     writer: writer
@@ -197,15 +192,15 @@ public static partial class WorldAuthorityCheckpointCodec {
         var tokenCount = reader.ReadInt32();
         var passDepth = reader.ReadInt32();
         var active = reader.ReadInt32();
-        var levels = ReadArray(
+        var levels = reader.ReadArray(
             field: "search job levels",
-            reader: ref reader,
-            readItem: static (ref WireReader r) => ReadSearchLevel(reader: ref r)
+            readItem: static (ref WireReader r) => ReadSearchLevel(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var scopes = ReadArray(
+        var scopes = reader.ReadArray(
             field: "search job scopes",
-            reader: ref reader,
-            readItem: static (ref WireReader r) => ReadSearchScope(reader: ref r)
+            readItem: static (ref WireReader r) => ReadSearchScope(reader: ref r),
+            maximum: MaxCollectionCount
         );
         var ttKey = ReadULongArray(
             field: "search job transposition keys",
@@ -227,16 +222,13 @@ public static partial class WorldAuthorityCheckpointCodec {
             var treeCount = reader.ReadInt32();
             var iteration = reader.ReadInt32();
             var seed = reader.ReadUInt64();
-            var expandShape = reader.ReadInt32();
-            var expandToken = reader.ReadInt32();
-            var expandTarget = reader.ReadInt32();
             var scan = reader.ReadInt32();
             var start = reader.ReadInt32();
             var playoutPlies = reader.ReadInt32();
             var playCount = reader.ReadInt32();
             var pathLength = reader.ReadInt32();
-            var ints = new int[7][];
-            var longs = new long[3][];
+            var ints = new int[10][];
+            var longs = new long[2][];
 
             for (var index = 0; (index < ints.Length); index++) {
                 ints[index] = ReadIntArray(
@@ -253,26 +245,25 @@ public static partial class WorldAuthorityCheckpointCodec {
 
             tree = new ArenaSearchTreeCheckpoint(
                 Active: treeActive,
-                ChildCount: ints[2],
+                ChildCount: ints[3],
                 Count: treeCount,
-                ExpandShape: expandShape,
-                ExpandTarget: expandTarget,
-                ExpandToken: expandToken,
-                Expanded: longs[2],
                 FirstChild: ints[1],
                 Iteration: iteration,
+                NextSibling: ints[2],
                 Parent: ints[0],
-                Path: ints[6],
+                Path: ints[9],
                 PathLength: pathLength,
                 PlayCount: playCount,
                 PlayoutPlies: playoutPlies,
                 Phase: phase,
                 Scan: scan,
+                ScanStart: ints[8],
+                Scanned: ints[7],
                 Seed: seed,
-                Shape: ints[3],
+                Shape: ints[4],
                 Start: start,
-                Target: ints[5],
-                Token: ints[4],
+                Target: ints[6],
+                Token: ints[5],
                 Total: longs[1],
                 Visits: longs[0]
             );
@@ -288,11 +279,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             Name: name,
             Nodes: nodes,
             PassDepth: passDepth,
+            PeakStepWork: peakStepWork,
             Root: root,
             Running: running,
             Scopes: scopes,
             Stamp: stamp,
-            PeakStepWork: peakStepWork,
             TokenCount: tokenCount,
             Tree: tree,
             TtKey: ttKey,
@@ -305,20 +296,19 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static byte[] EncodeSearch(ArenaSearchCheckpoint section) {
         var writer = new WireWriter();
 
-        WriteArray(
+        writer.WriteArray(
             items: section.Jobs,
-            writeItem: WriteSearchJob,
-            writer: writer
+            writeItem: WriteSearchJob
         );
 
         return writer.ToArray();
     }
     private static bool TryDecodeSearch(byte[] bytes, out string reason, out ArenaSearchCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
-        var jobs = ReadArray(
+        var jobs = reader.ReadArray(
             field: "search jobs",
-            reader: ref reader,
-            readItem: static (ref WireReader r) => ReadSearchJob(reader: ref r)
+            readItem: static (ref WireReader r) => ReadSearchJob(reader: ref r),
+            maximum: MaxCollectionCount
         );
 
         if (!reader.TryFinish(failure: out var failure)) {

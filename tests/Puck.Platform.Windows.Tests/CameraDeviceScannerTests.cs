@@ -1,28 +1,29 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.Platform.Windows.Tests;
 
 public sealed class CameraDeviceScannerTests {
+    // Polls once, which queues a due scan, then awaits that scan and consumes it. A poll that neither queues nor
+    // finds a scan leaves nothing to await, so the final poll fails the test instead of waiting.
     private static async Task<CameraDeviceScanResult> Complete(CameraDeviceScanner scanner, long timestamp) {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        timeout.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 10));
-        while (true) {
-            if (scanner.TryPoll(
-                result: out var result,
-                timestamp: timestamp
-            )) { return result; }
-            await Task.Delay(
-                1,
-                timeout.Token
-            );
-        }
+        if (scanner.TryPoll(
+            result: out var result,
+            timestamp: timestamp
+        )) { return result; }
+        await scanner.ScanCompletion.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(condition: scanner.TryPoll(
+            result: out result,
+            timestamp: timestamp
+        ));
+        return result;
     }
 
     [Fact]
     public async Task BlockingDiscoveryNeverRunsOnTheCallerOrQueuesOverlappingScans() {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var release = new ManualResetEventSlim();
         var entered = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         var caller = Environment.CurrentManagedThreadId;
@@ -30,7 +31,7 @@ public sealed class CameraDeviceScannerTests {
         var service = new FakeService(enumerate: () => {
             worker = Environment.CurrentManagedThreadId;
             entered.TrySetResult();
-            if (!release.Wait(timeout: TimeSpan.FromSeconds(seconds: 10))) { throw new InvalidOperationException(message: "test release timed out"); }
+            release.Wait(cancellationToken: cancellationToken);
             return [new(
                     Id: "camera-a",
                     Name: "A",
@@ -52,18 +53,16 @@ public sealed class CameraDeviceScannerTests {
                 caller,
                 Volatile.Read(location: ref worker)
             );
-            await entered.Task.WaitAsync(
-                TimeSpan.FromSeconds(seconds: 10),
-                TestContext.Current.CancellationToken
-            );
-            var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            await entered.Task.WaitAsync(cancellationToken: cancellationToken);
             var unexpectedlyCompleted = false;
-
-            for (var index = 0; (index < 1000); index++) { unexpectedlyCompleted |= scanner.TryPoll(
-                result: out _,
-                timestamp: (10 * Stopwatch.Frequency)
-            ); }
-            var allocated = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+            var allocated = AllocationWindow.Least(window: () => {
+                for (var index = 0; (index < 1000); index++) {
+                    unexpectedlyCompleted |= scanner.TryPoll(
+                        result: out _,
+                        timestamp: (10 * Stopwatch.Frequency)
+                    );
+                }
+            });
 
             Assert.False(condition: unexpectedlyCompleted);
             Assert.Equal(
@@ -87,10 +86,14 @@ public sealed class CameraDeviceScannerTests {
             "camera-a",
             Assert.Single(collection: result.Devices).Id
         );
+        // Any scan queued from here on blocks until released, so a scan the cadence should not have started stays
+        // outstanding where the next assertion sees it.
+        release.Reset();
         Assert.False(condition: scanner.TryPoll(
             result: out _,
             timestamp: ((12 * Stopwatch.Frequency) - 1)
         ));
+        Assert.True(condition: scanner.ScanCompletion.IsCompleted);
         Assert.Equal(
             1,
             service.Calls
@@ -99,6 +102,8 @@ public sealed class CameraDeviceScannerTests {
             result: out _,
             timestamp: (12 * Stopwatch.Frequency)
         ));
+        Assert.False(condition: scanner.ScanCompletion.IsCompleted);
+        release.Set();
         await Complete(
             scanner: scanner,
             timestamp: (12 * Stopwatch.Frequency)
@@ -110,13 +115,14 @@ public sealed class CameraDeviceScannerTests {
     }
     [Fact]
     public async Task DisposalDoesNotWaitForOrPublishALateScanFailure() {
+        var cancellationToken = TestContext.Current.CancellationToken;
         using var release = new ManualResetEventSlim();
         var entered = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         var finished = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         var service = new FakeService(enumerate: () => {
             entered.TrySetResult();
             try {
-                if (!release.Wait(timeout: TimeSpan.FromSeconds(seconds: 10))) { throw new InvalidOperationException(message: "test release timed out"); }
+                release.Wait(cancellationToken: cancellationToken);
                 throw new NotSupportedException(message: "late platform failure");
             } finally {
                 finished.TrySetResult();
@@ -132,11 +138,10 @@ public sealed class CameraDeviceScannerTests {
                 result: out _,
                 timestamp: 0
             ));
-            await entered.Task.WaitAsync(
-                TimeSpan.FromSeconds(seconds: 10),
-                TestContext.Current.CancellationToken
-            );
+            await entered.Task.WaitAsync(cancellationToken: cancellationToken);
             scanner.Dispose();
+            // A disposed scanner has abandoned the scan, so nothing is left for a caller to wait on.
+            Assert.True(condition: scanner.ScanCompletion.IsCompleted);
             Assert.False(condition: scanner.TryPoll(
                 result: out _,
                 timestamp: (10 * Stopwatch.Frequency)
@@ -144,10 +149,7 @@ public sealed class CameraDeviceScannerTests {
         } finally {
             release.Set();
         }
-        await finished.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 10),
-            TestContext.Current.CancellationToken
-        );
+        await finished.Task.WaitAsync(cancellationToken: cancellationToken);
         Assert.False(condition: scanner.TryPoll(
             result: out _,
             timestamp: (20 * Stopwatch.Frequency)

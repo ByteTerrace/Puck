@@ -228,23 +228,12 @@ public struct Pcg32Extended : IDrawGenerator {
 
         return internalValue;
     }
-    // A nearly-divisionless bounded draw, built on this type's own NextUInt32 rather than the base generator's —
-    // the identical shape Pcg32XshRr.Sample uses over its own raw draw.
-    private uint Sample(uint exclusiveHigh) {
-        var product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-        var lowBits = unchecked((uint)product);
-
-        if (lowBits < exclusiveHigh) {
-            var threshold = unchecked((((uint)(-((int)exclusiveHigh))) % exclusiveHigh));
-
-            while (lowBits < threshold) {
-                product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-                lowBits = unchecked((uint)product);
-            }
-        }
-
-        return ((uint)(product >> 32));
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private uint Sample(uint exclusiveHigh) =>
+        BoundedRandomSampling.Sample(
+            exclusiveHigh: exclusiveHigh,
+            generator: ref this
+        );
     // Inverts x ^= x >> shift over a 32-bit word (pcg_extras::unxorshift). The forward map is I + S for the shift
     // matrix S, nilpotent over GF(2) with S^n = 0 once n·shift reaches the word, so its inverse is the finite series
     // I + S + S² + …, folded as (I + S)(I + S²)(I + S⁴)… — one xorshift per doubling of the shift.
@@ -410,18 +399,13 @@ public struct Pcg32Extended : IDrawGenerator {
 
         return unchecked(baseDraw ^ extensionWord);
     }
-    public uint NextUInt32(uint minimum, uint maximum) {
-        if (maximum < minimum) {
-            (minimum, maximum) = (maximum, minimum);
-        }
-
-        var range = (maximum - minimum);
-
-        return ((range != uint.MaxValue)
-            ? unchecked((Sample(exclusiveHigh: (range + 1U)) + minimum))
-            : NextUInt32()
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public uint NextUInt32(uint minimum, uint maximum) =>
+        BoundedRandomSampling.SampleRange(
+            generator: ref this,
+            maximum: maximum,
+            minimum: minimum
         );
-    }
     /// <summary>Draws a uniformly random fraction in <c>[0, 1)</c> at UQ0.16 resolution.</summary>
     /// <returns>A uniformly distributed <see cref="UnitFraction16"/> (the draw's top sixteen bits).</returns>
     public UnitFraction16 NextUnitFraction16() =>

@@ -5,8 +5,11 @@ using ModelContextProtocol.Protocol;
 
 namespace Puck.Mcp;
 
-internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string owner, int idleTimeout, RemoteMcpDiagnostics diagnostics, RemoteMcpHost host, RemoteMcpCaller caller) {
-    private static readonly JsonElement DetachInput = JsonElement.Parse("""{"type":"object","properties":{"attachmentId":{"type":"string"}},"required":["attachmentId"],"additionalProperties":false}""");
+internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string owner, int idleTimeout, RemoteMcpDiagnostics diagnostics, RemoteMcpHost host, RemoteMcpCaller caller, RemoteMcpChallenges challenges) {
+    private const string AttachmentIdDescription = "The attachmentId puck_attach returned.";
+    private const string Reauthenticate = "A downstream service rejected your delegated authorization after this call was dispatched. Sign in again: your next request is answered with an authorization challenge until a newly issued token is presented.";
+
+    private static readonly JsonElement DetachInput = JsonElement.Parse($$$"""{"type":"object","properties":{"attachmentId":{"type":"string","description":"{{{AttachmentIdDescription}}}"}},"required":["attachmentId"],"additionalProperties":false}""");
     private static readonly JsonElement AttachInput = JsonElement.Parse("""{"type":"object","additionalProperties":false}""");
     private static readonly JsonElement AttachmentOutput = JsonElement.Parse("""{"type":"object","properties":{"attachmentId":{"type":["string","null"]},"idleTimeoutSeconds":{"type":"integer"},"output":{"type":"string"},"isError":{"type":"boolean"}},"required":["attachmentId","idleTimeoutSeconds","output","isError"],"additionalProperties":false}""");
     private static readonly JsonElement ExecInput = AttachmentSchema(source: OperatorMcpServer.ExecTool());
@@ -15,7 +18,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
 
     internal async ValueTask<CallToolResult> CallAsync(CallToolRequestParams? parameters, CancellationToken token) {
         var service = ((parameters is not null) && host.GetServiceTools(caller: caller).Any(predicate: tool => (tool.Name == parameters.Name)));
-        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        var start = diagnostics.Timestamp();
         var tool = ((service || (parameters?.Name is "puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame" or "puck_state_vector_write"))
             ? parameters!.Name
             : "unknown"
@@ -52,6 +55,21 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
                 )) { requestId = id.GetString(); }
             }
             return result;
+        } catch (RemoteMcpAuthorizationException challenge) {
+            // The response may already be streaming, so the challenge is carried by this caller's next request.
+            challenges.Remember(
+                caller: caller,
+                encodedClaims: challenge.EncodedClaims
+            );
+            outcome = "challenged";
+            return ((tool == "puck_attach")
+                ? AttachmentResult(
+                    error: true,
+                    id: null,
+                    output: Reauthenticate
+                )
+                : new() { IsError = true, Content = [new TextContentBlock { Text = Reauthenticate }] }
+            );
         } catch (OperationCanceledException) { outcome = "cancelled"; throw; } finally {
             diagnostics.Completed(
             outcome: outcome,
@@ -73,12 +91,14 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (capabilities.CommandHelp.Length > 0) {
-                var exec = WithAttachment(
-                    OperatorMcpServer.ExecTool(),
-                    ExecInput
-                );
+                var exec = OperatorMcpServer.ExecTool();
 
-                exec.Description = ("Execute one delegated command using your attachmentId. Live World grants still authorize each operation; discovery grants no permission. No automatic replay of uncertain results. Available command syntax:\n" + capabilities.CommandHelp);
+                exec.Description = ("Execute one delegated console line. Live World grants still authorize each operation; discovery grants no permission. No automatic replay of uncertain results. " + OperatorMcpServer.StatusMeanings);
+                exec = WithAttachment(
+                    schema: ExecInput,
+                    source: exec
+                );
+                exec.Description += ("\nAvailable command syntax:\n" + capabilities.CommandHelp);
                 tools.Add(item: exec);
             }
             if (capabilities.SupportsCapture) {
@@ -87,7 +107,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
                 CaptureInput
             ));
             }
-            if (capabilities.CommandHelp.Contains("world.state.cell.set")) {
+            if (capabilities.CommandHelp.Contains(value: "world.state.cell.set")) {
                 tools.Add(item: WithAttachment(
                     StateVectorWriteTool(),
                     VectorWriteInput
@@ -114,7 +134,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
     private static JsonElement AttachmentSchema(Tool source) {
         var schema = JsonNode.Parse(source.InputSchema.GetRawText())!.AsObject();
 
-        schema["properties"]!.AsObject()["attachmentId"] = new JsonObject { ["type"] = "string" };
+        schema["properties"]!.AsObject()["attachmentId"] = new JsonObject { ["type"] = "string", ["description"] = AttachmentIdDescription };
         var required = (schema["required"]?.AsArray() ?? new JsonArray());
 
         required.Add(item: ((JsonNode?)JsonValue.Create("attachmentId")));

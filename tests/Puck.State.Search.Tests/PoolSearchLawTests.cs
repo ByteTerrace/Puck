@@ -31,7 +31,7 @@ public sealed class PoolSearchLawTests {
             Kind: SearchShapeKind.Relocate,
             Displace: false,
             Directions: [],
-            PairWithIndex: -1
+            CompanionIndex: -1
         )],
         Counts: "counts",
         Legal: "legal"

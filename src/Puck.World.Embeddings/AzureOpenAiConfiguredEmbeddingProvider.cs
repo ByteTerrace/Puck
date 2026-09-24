@@ -10,12 +10,12 @@ namespace Puck.World.Embeddings;
 /// <summary>Configured Azure OpenAI embedding provider authenticating strictly via passwordless TokenCredential (DefaultAzureCredential).</summary>
 public sealed class AzureOpenAiConfiguredEmbeddingProvider : IWorldConfiguredEmbeddingProvider {
     private readonly OpenAiEmbeddingOptions m_options;
-    private readonly Puck.World.Server.EmbeddingIdentity m_identity;
+    private readonly EmbeddingIdentity m_identity;
 
     /// <summary>Initializes a new instance of <see cref="AzureOpenAiConfiguredEmbeddingProvider"/>.</summary>
     /// <param name="options">Options for Azure OpenAI.</param>
     /// <param name="identity">Embedding space identity.</param>
-    public AzureOpenAiConfiguredEmbeddingProvider(OpenAiEmbeddingOptions options, Puck.World.Server.EmbeddingIdentity identity) {
+    public AzureOpenAiConfiguredEmbeddingProvider(OpenAiEmbeddingOptions options, EmbeddingIdentity identity) {
         m_options = options;
         m_identity = identity;
     }
@@ -38,11 +38,13 @@ public sealed class AzureOpenAiConfiguredEmbeddingProvider : IWorldConfiguredEmb
 
         var deployment = (settings.TryGetProperty(propertyName: "deployment", value: out var depEl) ? depEl.GetString() : null);
         var model = (settings.TryGetProperty(propertyName: "model", value: out var modelEl) ? modelEl.GetString() : deployment);
+
         if (string.IsNullOrWhiteSpace(value: model)) {
             throw new ArgumentException(message: "Azure OpenAI settings require 'model' or 'deployment'.");
         }
 
         var revision = (settings.TryGetProperty(propertyName: "revision", value: out var revEl) ? revEl.GetString() : "1");
+
         if (string.IsNullOrWhiteSpace(value: revision)) {
             throw new ArgumentException(message: "Revision must not be empty.");
         }
@@ -62,50 +64,53 @@ public sealed class AzureOpenAiConfiguredEmbeddingProvider : IWorldConfiguredEmb
             Model = (deployment ?? model),
             Dimensions = dimensions,
             OmitDimensions = omitDimensions,
-            Credential = new DefaultAzureCredential() // Strict passwordless authentication only
+            Credential = new DefaultAzureCredential(), // Strict passwordless authentication only
         };
 
-        var identity = new Puck.World.Server.EmbeddingIdentity(Model: model, Revision: revision, Dimensions: dimensions);
-        return new AzureOpenAiConfiguredEmbeddingProvider(options: options, identity: identity);
-    }
+        var identity = new EmbeddingIdentity(Dimensions: dimensions, Model: model, Revision: revision);
 
+        return new AzureOpenAiConfiguredEmbeddingProvider(identity: identity, options: options);
+    }
     /// <inheritdoc />
     public IWorldEmbeddingSource BindEmbedding(JsonElement settings) {
         var generator = OpenAiEmbeddingGeneratorFactory.Create(options: m_options);
+
         return new AzureOpenAiEmbeddingSource(generator: generator, identity: m_identity);
     }
-
     /// <inheritdoc />
     public void Dispose() { }
 
     private sealed class AzureOpenAiEmbeddingSource(
         IEmbeddingGenerator<string, Embedding<float>> generator,
-        Puck.World.Server.EmbeddingIdentity identity
+        EmbeddingIdentity identity
     ) : IWorldEmbeddingSource {
-        public Puck.World.Server.EmbeddingIdentity Identity => identity;
+        public EmbeddingIdentity Identity => identity;
 
         public async Task<IReadOnlyList<EmbeddingAnswer>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) {
             ArgumentNullException.ThrowIfNull(argument: texts);
             if (texts.Count == 0) { return []; }
 
             GeneratedEmbeddings<Embedding<float>> response;
+
             try {
                 response = await generator.GenerateAsync(values: texts, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (Exception ex) {
                 var message = ex.Message;
+
                 if (message.Length > 512) { message = message[..512]; }
-                return texts.Select(selector: _ => new EmbeddingAnswer(Vector: null, Refusal: message)).ToArray();
+                return texts.Select(selector: _ => new EmbeddingAnswer(Refusal: message, Vector: null)).ToArray();
             }
 
             if (response.Count != texts.Count) {
                 var error = $"Answer count mismatch: expected {texts.Count}, received {response.Count}.";
-                return texts.Select(selector: _ => new EmbeddingAnswer(Vector: null, Refusal: error)).ToArray();
+
+                return texts.Select(selector: _ => new EmbeddingAnswer(Refusal: error, Vector: null)).ToArray();
             }
 
             var answers = new List<EmbeddingAnswer>(capacity: texts.Count);
             var buffer = new sbyte[identity.Dimensions];
 
-            for (var i = 0; i < response.Count; i++) {
+            for (var i = 0; (i < response.Count); i++) {
                 var emb = response[i];
                 var span = emb.Vector.Span;
 
@@ -115,29 +120,30 @@ public sealed class AzureOpenAiConfiguredEmbeddingProvider : IWorldConfiguredEmb
                 }
 
                 var hasNonFinite = false;
-                for (var j = 0; j < span.Length; j++) {
-                    if (!float.IsFinite(span[j])) {
+
+                for (var j = 0; (j < span.Length); j++) {
+                    if (!float.IsFinite(f: span[j])) {
                         hasNonFinite = true;
                         break;
                     }
                 }
                 if (hasNonFinite) {
-                    answers.Add(item: new EmbeddingAnswer(Vector: null, Refusal: "Non-finite vector component encountered."));
+                    answers.Add(item: new EmbeddingAnswer(Refusal: "Non-finite vector component encountered.", Vector: null));
                     continue;
                 }
 
                 string? reason = null;
-                if (!VectorQuantizer.TryQuantizeUnit(source: span, destination: buffer) || !StateVector.TryCreate(components: buffer, vector: out var stateVector, error: out reason)) {
-                    answers.Add(item: new EmbeddingAnswer(Vector: null, Refusal: (reason ?? "Vector quantization failed.")));
+
+                if (!VectorQuantizer.TryQuantizeUnit(destination: buffer, source: span) || !StateVector.TryCreate(components: buffer, error: out reason, vector: out var stateVector)) {
+                    answers.Add(item: new EmbeddingAnswer(Refusal: (reason ?? "Vector quantization failed."), Vector: null));
                     continue;
                 }
 
-                answers.Add(item: new EmbeddingAnswer(Vector: stateVector, Refusal: null));
+                answers.Add(item: new EmbeddingAnswer(Refusal: null, Vector: stateVector));
             }
 
             return answers;
         }
-
         public void Dispose() {
             generator.Dispose();
         }

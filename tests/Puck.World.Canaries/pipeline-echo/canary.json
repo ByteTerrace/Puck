@@ -1,0 +1,54 @@
+{
+  "id": "pipeline-echo",
+  "title": "The generated echo pass reads every frame-block member back as the sentinel the host wrote at its offset",
+  "binding": "Both legs boot an offscreen 256x256 world whose one pipeline row runs a generated echo pass: frame.echo.hlsl reads every member of its pass's frame block (the thirteen frame members and four config fields of float3, uint, float2 and int) through the declarations the engine generates for the pass, compares each word with the sentinel pipeline.sentinels makes the host write at that word's offset, and writes pixel i of a 17x1 image green when member i reads back exactly and red otherwise. The positive leg captures the one initialization frame after a reset with sentinels on, and every pixel is green on both backends. The discriminating leg reloads the row onto perturbed.echo.hlsl, the same echo reading a hand-perturbed copy of the declarations in which time and timeDelta read each other's offset, so those two pixels are red and the all-green observation turns red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "echo.pipeline.json",
+    "frame.echo.hlsl",
+    "perturbed.pipeline.json",
+    "perturbed.echo.hlsl",
+    "perturbed-swapped.hlsli"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-echo/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.sentinels", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "sentinels are on", "stream": "stdout", "match": "exact", "text": "[pipeline.sentinels: echo on]", "present": true },
+      { "type": "imageRegion", "name": "every-member-reads-back-its-sentinel", "capture": "echo.png", "extent": [17, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-echo/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reload", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.sentinels", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "every-member-reads-back-its-sentinel", "capture": "echo.png", "extent": [17, 1], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": false },
+      { "type": "imageRegion", "name": "the-members-before-time-read-back", "capture": "echo.png", "extent": [17, 1], "region": [0, 0, 0.17, 1], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 0, "holds": true }
+    ]
+  }
+}

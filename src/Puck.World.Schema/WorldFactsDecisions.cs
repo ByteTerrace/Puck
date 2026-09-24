@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Text.Json;
 using Puck.Maths;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
@@ -9,7 +8,6 @@ using IRuleEffect = Puck.State.Rules.IRuleEffect;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
 using RuleCost = Puck.State.Rules.RuleCost;
 using RuleDataflow = Puck.State.Rules.RuleDataflow;
-using RuleRefusal = Puck.State.Rules.RuleRefusal;
 using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
 
 namespace Puck.World;
@@ -21,7 +19,7 @@ namespace Puck.World;
 public sealed record CompiledWorldFactsDecisionNeighbors(WorldDecisionNeighbors Source, FixedQ4816 Range, FixedQ4816 MinimumDot) {
     /// <summary>Gets the power-of-two raw grid width shared by ranges of the same scale, which bounds each query to
     /// 27 cells.</summary>
-    public FixedQ4816 CellWidth => FixedQ4816.FromRawBits(value: checked((long)BitOperations.RoundUpToPowerOf2(value: ((ulong)Range.Value))));
+    public FixedQ4816 CellWidth => FixedQ4816.FromRawBits(value: checked((long)((ulong)Range.Value).NextPowerOfTwo()));
 }
 /// <summary>One decision option compiled through the arena-addressed gate, expression, and effect compilers.</summary>
 /// <param name="Name">The option's authored name.</param>

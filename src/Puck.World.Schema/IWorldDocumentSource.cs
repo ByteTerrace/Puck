@@ -22,4 +22,22 @@ public interface IWorldDocumentSource {
     /// source's addressable space) — never empty on a <see langword="false"/> return.</param>
     /// <returns><see langword="true"/> when the document was read.</returns>
     bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason);
+
+    /// <summary>Gets whether this source resolves each name to a file beside its referrer, so a composition over it
+    /// can be held and reused by path and proved still standing through <see cref="StillReads"/>. A source naming
+    /// documents in a space of its own answers <see langword="false"/> and is never cached.</summary>
+    bool ResolvesFiles => false;
+
+    /// <summary>Returns whether reading <paramref name="resolvedName"/> now would yield <paramref name="content"/>
+    /// again: the proof a held composition still stands. The default compares the file's current bytes.</summary>
+    /// <param name="resolvedName">A name this source resolved earlier.</param>
+    /// <param name="content">The bytes that read produced.</param>
+    /// <returns><see langword="true"/> when the same read would produce the same bytes.</returns>
+    bool StillReads(string resolvedName, byte[] content) {
+        try {
+            return File.ReadAllBytes(path: resolvedName).AsSpan().SequenceEqual(other: content);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return false;
+        }
+    }
 }

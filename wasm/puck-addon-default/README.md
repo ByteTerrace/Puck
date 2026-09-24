@@ -3,7 +3,7 @@
 Puck's default addon—the dead-reckoning clamp-walk ghost that ships with the
 engine, and the worked example for authoring your own addon against
 [`puck-stdlib`](../puck-stdlib). The addon ABI contract lives in
-[`../../src/Puck.Scripting/README.md`](../../src/Puck.Scripting/README.md);
+[deterministic WASM scripting](../../docs/reference/scripting.md);
 [`../README.md`](../README.md) covers the build/test workflow and walks this
 crate's behaviour end to end.
 

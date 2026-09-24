@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Puck.Abstractions.Machines;
 
@@ -157,5 +158,62 @@ public static class MachineOperationValidation {
         }
         failure = default;
         return true;
+    }
+    /// <summary>Clones a JSON node into a detached JsonElement.</summary>
+    public static JsonElement CloneJson(JsonNode value) {
+        using var document = JsonDocument.Parse(value.ToJsonString());
+
+        return document.RootElement.Clone();
+    }
+    /// <summary>Updates a configuration element by removing the "content" property.</summary>
+    public static JsonElement RemoveContent(JsonElement configuration) {
+        var updated = JsonNode.Parse(configuration.GetRawText())!.AsObject();
+
+        updated.Remove(propertyName: "content");
+
+        return CloneJson(value: updated);
+    }
+    /// <summary>Updates a configuration element by setting the "content" property to an object containing the given path.</summary>
+    public static JsonElement ReplaceContent(JsonElement configuration, string path) {
+        var updated = JsonNode.Parse(configuration.GetRawText())!.AsObject();
+
+        updated["content"] = new JsonObject { ["path"] = path };
+
+        return CloneJson(value: updated);
+    }
+    /// <summary>Creates a Refusal preparation representing an unsupported operation for the specified provider.</summary>
+    public static MachineOperationPreparation Unsupported(string providerName, string id) =>
+        new MachineOperationPreparation.Refusal(result: new(
+            MachineOperationStatus.Unsupported,
+            reason: $"{providerName} does not support operation '{id}'"
+        ));
+    /// <summary>Validates and prepares standard operations (content.insert, content.eject, machine.reset) or falls back to custom handler or unsupported refusal.</summary>
+    public static MachineOperationPreparation PrepareStandardOperation(
+        MachineEngineDescriptor descriptor,
+        MachineCreationRequest current,
+        MachineOperationRequest request,
+        string providerName,
+        Func<MachineOperationRequest, MachineOperationPreparation>? handleCustom = null
+    ) {
+        ArgumentNullException.ThrowIfNull(current);
+
+        if (!TryValidate(
+            descriptor: descriptor,
+            failure: out var failure,
+            operation: out _,
+            request: request
+        )) {
+            return new MachineOperationPreparation.Refusal(result: failure);
+        }
+
+        return request.Id switch {
+            "content.insert" => new MachineOperationPreparation.Replacement(configuration: ReplaceContent(
+                configuration: current.Configuration,
+                path: request.Payload.GetProperty(propertyName: "content").GetProperty(propertyName: "path").GetString()!
+            )),
+            "content.eject" => new MachineOperationPreparation.Replacement(configuration: RemoveContent(configuration: current.Configuration)),
+            "machine.reset" => new MachineOperationPreparation.Replacement(configuration: current.Configuration.Clone()),
+            _ => (handleCustom?.Invoke(request) ?? Unsupported(id: request.Id, providerName: providerName)),
+        };
     }
 }

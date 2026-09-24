@@ -58,8 +58,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.base }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         id: format
-        name: Format the PR's changed C# files and verify convergence
-        run: puck format ci "$BASE_SHA" "$HEAD_SHA" artifacts/format
+        name: Format the PR's changed C# and .puck sources and verify convergence
+        run: puck pull-request format "$BASE_SHA" "$HEAD_SHA" --output artifacts/format
         shell: bash
       - if: steps.format.outputs.changed == 'true'
         name: Compile the formatted result

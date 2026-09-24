@@ -141,8 +141,8 @@ public sealed class BindingWheelSectorTextTests {
         );
     }
 
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;

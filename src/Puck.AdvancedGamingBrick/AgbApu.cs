@@ -31,31 +31,19 @@ public sealed partial class AgbApu : IAgbApu {
     private int m_directSoundB;
     private bool m_fifoARefill;
     private bool m_fifoBRefill;
-
-    private short[] m_outputRing = Array.Empty<short>();
-
-    private int m_outputWrite;
-    private int m_outputRead;
+    // One emulated second of stereo frames at the host rate; a stalled host loses the oldest frames, never the newest.
+    private StereoSampleRing m_output;
     private int m_sampleRate;
     private RationalRateAccumulator m_samplePhase;
 
     /// <inheritdoc/>
     public void ConfigureOutput(int sampleRate) {
-        if (sampleRate <= 0) {
-            m_outputRing = Array.Empty<short>();
-            m_sampleRate = 0;
-            m_samplePhase.Reset();
-            m_outputWrite = 0;
-            m_outputRead = 0;
-
-            return;
-        }
-
-        m_outputRing = new short[(sampleRate * 2)]; // ~1 second of stereo headroom
-        m_sampleRate = sampleRate;
+        m_sampleRate = Math.Max(
+            val1: sampleRate,
+            val2: 0
+        );
         m_samplePhase.Reset();
-        m_outputWrite = 0;
-        m_outputRead = 0;
+        m_output.Configure(capacityFrames: m_sampleRate);
     }
 
     /// <inheritdoc/>
@@ -63,19 +51,8 @@ public sealed partial class AgbApu : IAgbApu {
         m_sampleRate;
 
     /// <inheritdoc/>
-    public int DrainSamples(Span<short> destination) {
-        var written = 0;
-
-        while (
-            (written < destination.Length) &&
-            (m_outputRead != m_outputWrite)
-        ) {
-            destination[written++] = m_outputRing[m_outputRead];
-            m_outputRead = ((m_outputRead + 1) % m_outputRing.Length);
-        }
-
-        return written;
-    }
+    public int DrainSamples(Span<short> destination) =>
+        m_output.Read(destination: destination);
     /// <inheritdoc/>
     public void Step(int cycles) {
         m_pulse1.Step(cycles: cycles);
@@ -338,7 +315,7 @@ public sealed partial class AgbApu : IAgbApu {
         m_frameSequencerStep = (m_frameSequencerStep + 1) & 7;
     }
     private void GenerateSample() {
-        if (m_outputRing.Length == 0) {
+        if (m_output.CapacityFrames == 0) {
             return;
         }
 
@@ -434,10 +411,10 @@ public sealed partial class AgbApu : IAgbApu {
             ));
         }
 
-        m_outputRing[m_outputWrite] = left;
-        m_outputWrite = ((m_outputWrite + 1) % m_outputRing.Length);
-        m_outputRing[m_outputWrite] = right;
-        m_outputWrite = ((m_outputWrite + 1) % m_outputRing.Length);
+        m_output.Push(
+            left: left,
+            right: right
+        );
     }
     private static int CountBits(int nibble) =>
         ((((nibble & 1) + ((nibble >> 1) & 1)) + ((nibble >> 2) & 1)) + ((nibble >> 3) & 1));
@@ -483,19 +460,6 @@ public sealed partial class AgbApu : IAgbApu {
         /// <summary>The number of filled words currently in the ring (0..7).</summary>
         public int WordCount => m_count;
 
-        /// <summary>Restores the whole FIFO from <see cref="SaveState"/>'s image.</summary>
-        public void LoadState(StateReader reader) {
-            for (var i = 0; (i < RingWords); ++i) {
-                m_ring[i] = reader.ReadUInt32();
-            }
-
-            m_head = reader.ReadInt32();
-            m_count = reader.ReadInt32();
-            m_fillWord = reader.ReadUInt32();
-            m_fillBytes = reader.ReadInt32();
-            m_playing = reader.ReadUInt32();
-            m_playingBytes = reader.ReadInt32();
-        }
         /// <summary>Clears the whole FIFO — ring, fill accumulator, and playing buffer (a SOUNDCNT_H reset, or the
         /// auto-reset hardware performs on a write overrun).</summary>
         public void Reset() {
@@ -506,19 +470,6 @@ public sealed partial class AgbApu : IAgbApu {
             m_fillBytes = 0;
             m_playing = 0;
             m_playingBytes = 0;
-        }
-        /// <summary>Captures the whole FIFO — ring contents, cursors, fill accumulator, and playing buffer.</summary>
-        public void SaveState(StateWriter writer) {
-            for (var i = 0; (i < RingWords); ++i) {
-                writer.WriteUInt32(value: m_ring[i]);
-            }
-
-            writer.WriteInt32(value: m_head);
-            writer.WriteInt32(value: m_count);
-            writer.WriteUInt32(value: m_fillWord);
-            writer.WriteInt32(value: m_fillBytes);
-            writer.WriteUInt32(value: m_playing);
-            writer.WriteInt32(value: m_playingBytes);
         }
         /// <summary>A selected-timer overflow. Requests a DMA top-up when the ring has &#8805;4 empty words; refills
         /// the playing buffer from the ring when the buffer is empty; then hands the DAC one byte. Returns whether a
@@ -552,6 +503,19 @@ public sealed partial class AgbApu : IAgbApu {
             sample = 0;
 
             return false;
+        }
+        /// <summary>Moves the whole FIFO — ring contents, cursors, fill accumulator, and playing buffer — in the
+        /// transfer's direction.</summary>
+        /// <typeparam name="TTransfer">The direction: <see cref="StateSaveTransfer"/> or <see cref="StateLoadTransfer"/>.</typeparam>
+        /// <param name="transfer">The direction's writer or reader.</param>
+        public void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+            transfer.Block(values: m_ring);
+            transfer.Int32(value: ref m_head);
+            transfer.Int32(value: ref m_count);
+            transfer.UInt32(value: ref m_fillWord);
+            transfer.Int32(value: ref m_fillBytes);
+            transfer.UInt32(value: ref m_playing);
+            transfer.Int32(value: ref m_playingBytes);
         }
         /// <summary>Streams one byte into the FIFO. Bytes accumulate in write order; every fourth byte completes a
         /// word and pushes it into the ring. Pushing into a full ring auto-resets the FIFO to empty (hardware drops

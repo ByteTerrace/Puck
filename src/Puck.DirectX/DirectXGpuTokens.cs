@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.DirectX;
@@ -13,6 +12,9 @@ namespace Puck.DirectX;
 public sealed class DirectXCommandBufferState {
     internal List<IDisposable> RetainedResources { get; } = [];
 
+    /// <summary>Gets the buffer states explicit transitions recorded in this command list's current recording; both recorders reset it when a recording begins.</summary>
+    public DirectXBufferStates BufferStates { get; } = new();
+
     internal void ReleaseRetainedResources() {
         foreach (var resource in RetainedResources) { resource.Dispose(); }
         RetainedResources.Clear();
@@ -20,20 +22,13 @@ public sealed class DirectXCommandBufferState {
 
     public nint Allocator;
     public nint CommandList;
-    public nint CurrentRenderTargetHandle;
 
-    public D3D12_RESOURCE_STATES RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
-}
-/// <summary>
-/// Pairs a timestamp <c>ID3D12QueryHeap</c> with the READBACK buffer its resolved results land in, plus the query
-/// capacity. Stored in a <see cref="GCHandle"/> so the neutral timing pool handle is the GCHandle pointer, decoded
-/// by the timing recorder the same way command-buffer state is.
-/// </summary>
-[SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXTimingPoolState {
-    public nint QueryHeapHandle;
-    public nint ReadbackBufferHandle;
-    public uint Capacity;
+    /// <summary>Gets or sets the framebuffer of the render pass being recorded, which its end transitions; null outside
+    /// a render pass.</summary>
+    public DirectXGpuFramebuffer? CurrentFramebuffer { get; set; }
+
+    public static DirectXCommandBufferState Decode(nint commandBufferHandle) =>
+        ((DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!);
 }
 /// <summary>
 /// Packages a pipeline state object and its root signature alongside the parameter-index metadata the command
@@ -46,6 +41,7 @@ public sealed class DirectXTimingPoolState {
 public sealed class DirectXPipelineLayout : IDisposable {
     public nint PsoHandle;
     public nint RootSignatureHandle;
+    public byte[] RootSignatureBlob = [];
     public int DescriptorTableParamIndex = -1;
     public int RootConstantsParamIndex = -1;
     public uint RootConstantsCount;
@@ -118,16 +114,6 @@ public sealed class DirectXDescriptorSet {
     /// <summary>The owning layout's <see cref="DirectXPipelineLayout.SlotByBinding"/> packing, so each descriptor write
     /// lands at the same packed heap slot the root signature's range for that binding points at.</summary>
     public uint[] SlotByBinding = [];
-}
-/// <summary>
-/// Holds the three values needed to fill a <c>D3D12_VERTEX_BUFFER_VIEW</c>. Stored in a
-/// <see cref="GCHandle"/> so the raw pointer can serve as <see cref="IGpuVertexBuffer.BufferHandle"/>.
-/// </summary>
-[SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXVertexBufferView {
-    public ulong BufferLocation;
-    public uint SizeBytes;
-    public uint StrideBytes;
 }
 /// <summary>
 /// Pairs an <c>ID3D12Resource*</c> with its DXGI format so the descriptor allocator can create a typed SRV

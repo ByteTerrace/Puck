@@ -1,0 +1,58 @@
+{
+  "id": "pipeline-ink",
+  "title": "The shipped ink pipeline, held at its first frame, answers its exposure parameter in the regions its arithmetic predicts",
+  "binding": "The positive leg boots an offscreen 256x256 world showing the shipped ink pipeline with time scale zero and no pointer, so the pen sits at (0.77, 0.5). It sets both passes' parameters explicitly and captures the reset frame at exposure zero, where every pixel is at or below the background (0.018, 0.027, 0.060) within one code and the pen is dark, then at exposure one, where the pen region carries pigment and a distant region stays background under the finish vignette. The discriminating leg never sets exposure zero, so the first capture shows pigment at the pen and the at-or-below-background and dark-pen observations turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-ink/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "exposure-zero-at-or-below-background", "capture": "exposure-zero.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "exposure-zero-pen-dark", "capture": "exposure-zero.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "every", "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "exposure-one-pigment-at-pen", "capture": "exposure-one.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "mean", "minimum": [0, 0.5, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "exposure-one-distant-background", "capture": "exposure-one.png", "extent": [256, 256], "region": [0.2, 0.2, 0.3, 0.3], "reduce": "every", "minimum": [0.0162, 0.0243, 0.054, 1], "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-ink/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "authored-exposure-exceeds-background", "capture": "exposure-zero.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "authored-exposure-pen-is-lit", "capture": "exposure-zero.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "every", "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "exposure-one-pigment-at-pen", "capture": "exposure-one.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "mean", "minimum": [0, 0.5, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "exposure-one-distant-background", "capture": "exposure-one.png", "extent": [256, 256], "region": [0.2, 0.2, 0.3, 0.3], "reduce": "every", "minimum": [0.0162, 0.0243, 0.054, 1], "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  }
+}

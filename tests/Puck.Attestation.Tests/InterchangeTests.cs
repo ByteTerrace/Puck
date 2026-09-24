@@ -5,28 +5,32 @@ namespace Puck.Attestation.Tests;
 /// <summary>
 /// The test-only fixture-format check: <see cref="AttestationInterchangeHarness"/> mints a seven-file directory
 /// and verifies it. Every case mints a fresh fixture in-process; the round trip proves the harness is
-/// self-consistent, and the negative cases prove a corrupted claim or incomplete manifest is refused.
+/// self-consistent, and the negative cases prove a corrupted claim or incomplete manifest is refused for the
+/// reason each names, not merely refused.
 /// </summary>
 public sealed class InterchangeTests {
-    private static string ExportToTempDirectory() {
+    private static void WithExportedFixture(Action<string> body) {
         var directory = Path.Combine(
             path1: Path.GetTempPath(),
             path2: $"puck-attestation-interchange-{Guid.NewGuid():N}"
         );
 
-        Assert.Equal(
-            expected: 0,
-            actual: AttestationInterchangeHarness.Export(directory: directory)
-        );
-
-        return directory;
+        try {
+            AttestationInterchangeHarness.Export(directory: directory);
+            body(obj: directory);
+        } finally {
+            if (Directory.Exists(path: directory)) {
+                Directory.Delete(
+                    path: directory,
+                    recursive: true
+                );
+            }
+        }
     }
 
     [Fact]
-    public void CorruptedClaim_OneFlippedByte_IsRefused() {
-        var directory = ExportToTempDirectory();
-
-        try {
+    public void CorruptedClaim_OneFlippedByte_IsRefusedAsABadSignature() {
+        WithExportedFixture(body: directory => {
             var claimPath = Path.Combine(
                 path1: directory,
                 path2: "claim.attestation"
@@ -40,22 +44,31 @@ public sealed class InterchangeTests {
                 path: claimPath
             );
 
+            var findings = AttestationInterchangeHarness.Verify(directory: directory);
+
+            // The claim is refused on its signature. The harness's own tamper control flips the same byte
+            // back, so it restores the minted claim and is accepted — the second failure proves the control
+            // tampers exactly the byte this test did.
             Assert.Equal(
-                expected: 1,
-                actual: AttestationInterchangeHarness.Verify(directory: directory)
+                expected: [
+                    (InterchangeCheck.Claim, "claim signature does not verify against the pinned subject key"),
+                    (InterchangeCheck.TamperControl, "one flipped byte was accepted"),
+                ],
+                actual: findings.Where(predicate: finding => !finding.Passed).Select(selector: finding => (finding.Check, finding.Detail))
             );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
+            Assert.Contains(
+                collection: findings,
+                filter: finding => (finding is { Check: InterchangeCheck.ManifestAgreement, Passed: true })
             );
-        }
+            Assert.Contains(
+                collection: findings,
+                filter: finding => (finding is { Check: InterchangeCheck.Sealed, Passed: true })
+            );
+        });
     }
     [Fact]
-    public void MissingManifestKey_DroppingAudience_IsRefused() {
-        var directory = ExportToTempDirectory();
-
-        try {
+    public void MissingManifestKey_DroppingAudience_IsRefusedAsAMissingKey() {
+        WithExportedFixture(body: directory => {
             var manifestPath = Path.Combine(
                 path1: directory,
                 path2: "manifest.txt"
@@ -70,31 +83,41 @@ public sealed class InterchangeTests {
                 path: manifestPath
             );
 
+            var finding = Assert.Single(collection: AttestationInterchangeHarness.Verify(directory: directory));
+
             Assert.Equal(
-                expected: 1,
-                actual: AttestationInterchangeHarness.Verify(directory: directory)
+                expected: new InterchangeFinding(
+                    Check: InterchangeCheck.ManifestKeys,
+                    Detail: "audience",
+                    Passed: false
+                ),
+                actual: finding
             );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        });
     }
     [Fact]
     public void SelfRoundTrip_ExportedFixtureVerifiesAgainstItself() {
-        var directory = ExportToTempDirectory();
+        WithExportedFixture(body: directory => {
+            var findings = AttestationInterchangeHarness.Verify(directory: directory);
 
-        try {
+            Assert.All(
+                action: finding => Assert.True(
+                    condition: finding.Passed,
+                    userMessage: $"{finding.Check}: {finding.Detail}"
+                ),
+                collection: findings
+            );
             Assert.Equal(
-                expected: 0,
-                actual: AttestationInterchangeHarness.Verify(directory: directory)
+                expected: [
+                    InterchangeCheck.Claim,
+                    InterchangeCheck.ReplayContract,
+                    InterchangeCheck.ManifestAgreement,
+                    InterchangeCheck.TamperControl,
+                    InterchangeCheck.Sealed,
+                    InterchangeCheck.SealedAadControl,
+                ],
+                actual: findings.Select(selector: finding => finding.Check)
             );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        });
     }
 }

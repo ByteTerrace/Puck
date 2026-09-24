@@ -11,7 +11,7 @@ namespace Puck.SignedDistance.Tests;
 /// exact at its own zero set and its gradient never exceeds 1 in Euclidean norm — the field's own proof of
 /// admission, since sphere tracing only needs the packed distance to be a sound lower bound on true distance
 /// (equivalent, given the zero set is correct, to the field being 1-Lipschitz). The exponent's boundary case (e = 2)
-/// is the ellipsoid limit and must reduce to the SAME packed instruction the shipped Ellipsoid shape emits.
+/// is the ISA's one ellipsoid: packed as this same shape, on a pow-free fast path that computes the same gauge.
 /// </summary>
 public sealed class SuperellipsoidLawTests {
     private static FixedPosition Position(double x, double y, double z) =>
@@ -39,6 +39,7 @@ public sealed class SuperellipsoidLawTests {
     // read a 200-radius query as ~5.8 radii — a march starved to a crawl across every far field, and TryGroundHeight
     // answering "no ground" once the budget ran out.
     [Theory]
+    [InlineData(2f, 200.0)]
     [InlineData(2.5f, 200.0)]
     [InlineData(4f, 200.0)]
     [InlineData(8f, 200.0)]
@@ -201,56 +202,78 @@ public sealed class SuperellipsoidLawTests {
             exponent: 5f
         ));
     }
+    // THE LAW: exponent 2 is the ellipsoid, and the ISA has no other: the builder packs it as the Superellipsoid shape
+    // (never a separate approximate primitive), and the program carries no step clamp however eccentric its radii —
+    // the gauge is exactly 1-Lipschitz at e = 2 like every admitted exponent.
     [Fact]
-    public void ExponentTwoEqualsEllipsoidBitForBitThroughTheBuilder() {
+    public void ExponentTwoPacksTheExactGaugeWithNoStepClamp() {
         var radii = new Vector3(
             x: 1.3f,
-            y: 0.7f,
+            y: 0.05f,
             z: 2.1f
         );
-        var superellipsoidBuilder = new SdfProgramBuilder();
-        var superellipsoidMaterial = superellipsoidBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-        var superellipsoidProgram = superellipsoidBuilder.Superellipsoid(
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var program = builder.Superellipsoid(
             radii,
             SdfProgramBuilder.MinSuperellipsoidExponent,
-            superellipsoidMaterial
+            material
         ).Build();
-
-        var ellipsoidBuilder = new SdfProgramBuilder();
-        var ellipsoidMaterial = ellipsoidBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-        var ellipsoidProgram = ellipsoidBuilder.Ellipsoid(
-            radii,
-            ellipsoidMaterial
-        ).Build();
-
-        var superellipsoidInstruction = Assert.Single(collection: superellipsoidProgram.Instructions);
-        var ellipsoidInstruction = Assert.Single(collection: ellipsoidProgram.Instructions);
+        var instruction = Assert.Single(collection: program.Instructions);
 
         Assert.Equal(
-            ((uint)SdfShapeType.Ellipsoid),
-            superellipsoidInstruction.Shape
+            expected: ((uint)SdfShapeType.Superellipsoid),
+            actual: instruction.Shape
         );
         Assert.Equal(
-            ellipsoidInstruction.Shape,
-            superellipsoidInstruction.Shape
+            expected: SdfProgramBuilder.MinSuperellipsoidExponent,
+            actual: instruction.Data0.W
         );
         Assert.Equal(
-            ellipsoidInstruction.Data0,
-            superellipsoidInstruction.Data0
-        );
-        Assert.Equal(
-            ellipsoidInstruction.Data1,
-            superellipsoidInstruction.Data1
-        );
-        Assert.Equal(
-            ellipsoidInstruction.Blend,
-            superellipsoidInstruction.Blend
-        );
-        Assert.Equal(
-            ellipsoidInstruction.Material,
-            superellipsoidInstruction.Material
+            expected: 1f,
+            actual: program.StepScale
         );
     }
+    // THE LAW: the fixed-point mirror's e == 2 fast path is the same scaled L2 gauge (|p/r| - 1) * min(r) the general
+    // exponent path computes, read against an independent double-precision oracle off-axis, inside, and at the centre.
+    [Fact]
+    public void ExponentTwoFastPathIsTheScaledL2Gauge() {
+        var radii = new Vector3(
+            x: 1.3f,
+            y: 0.4f,
+            z: 2.1f
+        );
+        var evaluator = Superellipsoid(
+            exponent: SdfProgramBuilder.MinSuperellipsoidExponent,
+            radii: radii
+        );
+        double[][] points = [
+            [0.0, 0.0, 0.0], [0.3, 0.1, -0.4], [1.0, 0.5, 1.0], [-2.0, 0.7, 3.5], [0.0, 0.0, 2.1],
+        ];
+
+        foreach (var point in points) {
+            var qx = (point[0] / radii.X);
+            var qy = (point[1] / radii.Y);
+            var qz = (point[2] / radii.Z);
+            var expected = ((Math.Sqrt(d: (((qx * qx) + (qy * qy)) + (qz * qz))) - 1.0) * radii.Y);
+
+            Assert.True(condition: evaluator.TryDistance(
+                Position(
+                    x: point[0],
+                    y: point[1],
+                    z: point[2]
+                ),
+                out var distance,
+                out _
+            ));
+            Assert.Equal(
+                actual: ((double)distance),
+                expected: expected,
+                precision: 3
+            );
+        }
+    }
+    [InlineData(2f)]
     [InlineData(3f)]
     [InlineData(4f)]
     [InlineData(8f)]

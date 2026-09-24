@@ -30,8 +30,8 @@ public sealed class FirmwareCommandTests {
         );
 
         Assert.Equal(
-            expected: 1,
-            actual: result
+            actual: result,
+            expected: 1
         );
         Assert.Equal(
             expected: previous,
@@ -103,32 +103,32 @@ public sealed class FirmwareCommandTests {
         byte[] expected = [3, 1, 4, 1, 5];
 
         Assert.False(condition: FirmwareArtifact.WriteOrVerify(
-            path: image,
             bytes: expected,
-            verify: true,
-            machine: "test"
+            machine: "test",
+            path: image,
+            verify: true
         ));
         Assert.False(condition: Directory.Exists(path: missingDirectory));
         Assert.True(condition: FirmwareArtifact.WriteOrVerify(
-            path: image,
             bytes: expected,
-            verify: false,
-            machine: "test"
+            machine: "test",
+            path: image,
+            verify: false
         ));
         Assert.True(condition: FirmwareArtifact.WriteOrVerify(
-            path: image,
             bytes: expected,
-            verify: true,
-            machine: "test"
+            machine: "test",
+            path: image,
+            verify: true
         ));
 
         byte[] different = [3, 1, 4, 1, 6];
 
         Assert.False(condition: FirmwareArtifact.WriteOrVerify(
-            path: image,
             bytes: different,
-            verify: true,
-            machine: "test"
+            machine: "test",
+            path: image,
+            verify: true
         ));
         Assert.Equal(
             expected: expected,

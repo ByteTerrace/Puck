@@ -196,7 +196,7 @@ public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Adva
 /// <see cref="StateDomain.KeysOf"/> domain over <see cref="CellKind.Int"/> cells).</param>
 /// <param name="Inverse">Declares this row a board derived from a token row's current cells rather than authored
 /// directly — see <see cref="StateInverse"/>. Legitimate only alongside a <see cref="StateDomain.CellsOf"/> domain
-/// over <see cref="CellKind.Int"/> cells.</param>
+/// over <see cref="CellKind.Int"/> or <see cref="CellKind.Bool"/> cells (<see cref="TryProveDerivedDomain"/>).</param>
 /// <param name="Phase">A finite participant phase protocol and its persisted progression.</param>
 /// <param name="Visibility">An opt-in observation policy; empty readers retains the row at the authority.</param>
 /// <param name="Knowledge">The source and visibility mask of a remembered board layer.</param>
@@ -328,7 +328,8 @@ public record StateRow(
     public bool Generated { get; init; }
 
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
-    /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused
+    /// row name starting with it is refused on every row a document declares (only the catalog mints rows under it,
+    /// a pool's <c>$pool$…</c> rows); a cell key starting with it is refused
     /// unless the row's own shape mints one by that key (<see cref="MintsReservedCell"/>).
     /// Enforced by the document project's validator at boot, at every live mutation, and on undo-replay.</summary>
     public const string ReservedNamePrefix = "$";
@@ -615,11 +616,11 @@ public static class StateReservedCells {
 /// <remarks>
 /// A document project's gauge element may bind to <c>state.&lt;name&gt;</c>, legitimate only
 /// for a slot-shaped row (see <see cref="StateRow.IsSlot"/>). A <see cref="CellKind.Int"/>/
-/// <see cref="CellKind.Fixed"/> row either carries no <see cref="StateRow.Min"/>/<see cref="StateRow.Max"/>
-/// at all, or carries both together with <c>Min &lt; Max</c> and every cell's own value inside <c>[Min, Max]</c> — a
-/// half-declared range (one bound present, the other absent) is refused rather than guessed. A gauge bound to a row
-/// with no declared range, to a <see cref="CellKind.Bool"/>/<see cref="CellKind.Text"/> row (which carry no range at
-/// all), or to a keyed row (no single value to show) draws empty at render time rather than failing validation.
+/// <see cref="CellKind.Fixed"/> row may carry <see cref="StateRow.Min"/>, <see cref="StateRow.Max"/>, both, or
+/// neither — a one-sided range is legal — and when it carries both, <c>Min &lt; Max</c>. A gauge's fraction needs
+/// both bounds: a gauge bound to a row with no declared range or a one-sided one, to a
+/// <see cref="CellKind.Bool"/>/<see cref="CellKind.Text"/> row (which carry no range at all), or to a keyed row (no
+/// single value to show) draws empty at render time rather than failing validation.
 /// </remarks>
 public static class StateCapacity {
     /// <summary>The most simultaneously live lexical pool-instance bindings in one rule evaluation. Each host

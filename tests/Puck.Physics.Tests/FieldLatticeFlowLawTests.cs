@@ -183,10 +183,10 @@ public sealed class FieldLatticeFlowLawTests {
             tick: 1,
             bodyCount: 0,
             host: new SpillHost(onAddScalar: (row, amount) => {
-            written = row;
-            spilled = amount;
-            calls++;
-        })
+                written = row;
+                spilled = amount;
+                calls++;
+            })
         );
 
         // Flat height (waterHeightScale 0, no terrain): the two cells never pair-flow. Each spills its own

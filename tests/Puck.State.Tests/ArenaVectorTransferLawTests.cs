@@ -57,10 +57,10 @@ public sealed class ArenaVectorTransferLawTests {
                 ),
             ],
             Spaces: [new StateSpace(
-                Name: ArenaFixture.Name(value: "space8"),
-                Model: "model",
-                Revision: "r1",
-                Dimensions: 8
+                name: ArenaFixture.Name(value: "space8"),
+                model: "model",
+                revision: "r1",
+                dimensions: 8
             )]
         );
         var catalog = StateCatalog.Compile(section: section);

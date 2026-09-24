@@ -1,7 +1,7 @@
 {
   "schema": "puck.world.definition.v1",
   "documentId": "world-metadata-canary",
-  "basis": "../../../src/Puck.World/Assets/worlds/puck.world.json",
+  "basis": "../../../src/Puck.World/Assets/worlds/puck",
   "adjacencies": [],
   "metadata": {
     "title": "Nexus",

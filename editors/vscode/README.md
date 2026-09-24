@@ -14,7 +14,7 @@ Completion currently offers the server's keyword, section, function, and unit su
 
 ## Formatting and source references
 
-Puck files default to two-space indentation. User or workspace language settings can override `editor.tabSize`, `editor.insertSpaces`, and `editor.detectIndentation`; Format Document uses the active editor options. Objects put their properties on separate lines, while scalar arrays and vectors stay compact. `basis` suggestions point to `.puck` sources, which the world composer compiles when resolving inheritance.
+Format Document replaces the file with exactly the text `puck format` writes, so a formatted file never differs between the editor and the command line. A `.puck` source has one layout: two-space indentation, whatever `editor.tabSize` or `editor.insertSpaces` say, with each block body on its own lines and each array or object keeping the line breaks its author gave it. The extension sets two-space typing indentation for Puck files so what you type matches. `basis` suggestions point to `.puck` sources, which the world composer compiles when resolving inheritance.
 
 ## Syntax colors
 
@@ -38,6 +38,13 @@ An optional Puck palette is available by setting `puck.highlighting.consistentCo
 | Object and block delimiters | Theme bracket color 2 | `{}` outside string interpolation |
 
 Property names share one style whether followed by a colon, an array, or an object. Loop sources are variables, and expressions inside interpolated strings retain their code colors. Capitalized bare identifiers use enum styling unless a declaration identifies them as a type; highlighting does not resolve symbol types.
+
+The language server also answers semantic tokens, which VS Code layers over the grammar's colours once the server
+starts. They are classified by the engine's own lexer, so a string, comment or interpolation ends exactly where the
+compiler says it does, and they add what a grammar cannot see: a member read after a dot (`vitals.hp`) takes property
+styling, and a name a `let`, `for`, `template` or `module` declares carries the `declaration` modifier. Each token type
+maps to the grammar scope that already names its role (`semanticTokenScopes` in `package.json`), so a theme colours a
+word the same whichever of the two reached it. `editor.semanticHighlighting.enabled` turns the layer off.
 
 `puck.highlighting.consistentColors` defaults to `false`. Fixed container colors remain enabled to distinguish arrays from objects, but draw from the active theme’s bracket palette and follow theme changes. Set `puck.highlighting.containerColors` to `false` to restore the theme’s usual nesting-depth coloring. Matching and guides remain available. Switching a document to another language clears Puck decorations; switching back reapplies them.
 

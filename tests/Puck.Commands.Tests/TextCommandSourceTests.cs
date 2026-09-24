@@ -13,7 +13,7 @@ public sealed class TextCommandSourceTests {
 
         session = source.CreateSession(
             onResult: (line, _) => submitted.Add(item: line),
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         return source;
@@ -23,10 +23,10 @@ public sealed class TextCommandSourceTests {
     public async Task AFailedHostScopeCompletesTheOperationAndDoesNotStrandOtherSessions() {
         var source = new TextCommandSource(new CommandRegistry(modules: []));
         using var scoped = source.CreateSession(
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             scope: () => throw new IOException(message: "scope unavailable")
         );
-        using var other = source.CreateSession(principal: CommandPrincipal.Console);
+        using var other = source.CreateSession(principal: Principal.Console);
         var failed = scoped.InvokeAsync(
             () => 1,
             cancellationToken: TestContext.Current.CancellationToken
@@ -58,7 +58,7 @@ public sealed class TextCommandSourceTests {
         var source = new TextCommandSource(registry: registry);
         var session = source.CreateSession(
             onResult: (line, _) => submitted.Add(item: line),
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         source.HoldGate = () => held;
@@ -125,13 +125,12 @@ public sealed class TextCommandSourceTests {
             // here: what is under test is that the QUEUE is safe to write from another thread.
             sessions[producer] = source.CreateSession(
                 onResult: (line, _) => lines.Add(item: line),
-                principal: CommandPrincipal.Console
+                principal: Principal.Console
             );
         }
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 10));
+        // Cancelled when the test body leaves, so a failed collection releases every producer rather than stranding it.
+        using var producersStop = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
         var producers = new Task[Producers];
 
         for (var producer = 0; (producer < Producers); producer++) {
@@ -139,11 +138,11 @@ public sealed class TextCommandSourceTests {
 
             producers[producer] = Task.Factory.StartNew(
                 action: () => {
-                for (var line = 0; (line < LinesPerProducer); line++) {
-                    deadline.Token.ThrowIfCancellationRequested();
-                    sessions[index].Enqueue(line: $"probe {index} {line}");
-                }
-            },
+                    for (var line = 0; (line < LinesPerProducer); line++) {
+                        producersStop.Token.ThrowIfCancellationRequested();
+                        sessions[index].Enqueue(line: $"probe {index} {line}");
+                    }
+                },
                 cancellationToken: CancellationToken.None,
                 creationOptions: TaskCreationOptions.LongRunning,
                 scheduler: TaskScheduler.Default
@@ -152,14 +151,14 @@ public sealed class TextCommandSourceTests {
 
         try {
             while (!producers.All(predicate: static producer => producer.IsCompleted)) {
-                deadline.Token.ThrowIfCancellationRequested();
+                producersStop.Token.ThrowIfCancellationRequested();
                 source.Collect();
                 Thread.Yield();
             }
-            await Task.WhenAll(producers).WaitAsync(cancellationToken: deadline.Token);
+            await Task.WhenAll(producers).WaitAsync(cancellationToken: producersStop.Token);
             source.Collect();
         } finally {
-            deadline.Cancel();
+            producersStop.Cancel();
         }
 
         for (var producer = 0; (producer < Producers); producer++) {
@@ -183,9 +182,9 @@ public sealed class TextCommandSourceTests {
         using var cancellation = new CancellationTokenSource();
         var operation = session.InvokeAsync(
             () => {
-            cancellation.Cancel();
-            return 42;
-        },
+                cancellation.Cancel();
+                return 42;
+            },
             cancellation.Token
         );
 
@@ -205,10 +204,10 @@ public sealed class TextCommandSourceTests {
         );
         var source = new TextCommandSource(registry);
         using var session = source.CreateSession(
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             simulationSink: router.ConsoleTextSink
         );
-        using var other = source.CreateSession(principal: CommandPrincipal.Console);
+        using var other = source.CreateSession(principal: Principal.Console);
 
         session.Enqueue(line: "sim.defer payload");
         var ran = false;
@@ -250,7 +249,7 @@ public sealed class TextCommandSourceTests {
         TextCommandSession? observed = null;
         var registry = new CommandRegistry(modules: [new IdentityModule(observe: context => observed = context.TextSession)]);
         var source = new TextCommandSource(registry);
-        using var session = source.CreateSession(principal: CommandPrincipal.Console);
+        using var session = source.CreateSession(principal: Principal.Console);
 
         session.Enqueue(line: line);
         source.Collect();
@@ -331,7 +330,7 @@ public sealed class TextCommandSourceTests {
         var source = new TextCommandSource(registry: registry);
         var session = source.CreateSession(
             onResult: (line, _) => submitted.Add(item: line),
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             simulationSink: router.ConsoleTextSink
         );
         var held = false;
@@ -381,11 +380,11 @@ public sealed class TextCommandSourceTests {
         var sessionOne = source.CreateSession(
             hold: () => firstHeld,
             onResult: (line, _) => first.Add(item: line),
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
         var sessionTwo = source.CreateSession(
             onResult: (line, _) => second.Add(item: line),
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         sessionOne.Enqueue(line: "probe one");
@@ -440,8 +439,8 @@ public sealed class TextCommandSourceTests {
             );
         }
     }
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;

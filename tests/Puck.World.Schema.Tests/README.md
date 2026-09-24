@@ -18,6 +18,9 @@ allocations, and fresh analysis after a rule edit that keeps the same state cata
 nothing. The metadata cache holds declared schema members, never a growing list of misspelled source names.
 
 `ViewSlotDefaultsLawTests` keeps full-window defaults consistent between C# construction and JSON loading.
+`WorldScreenInputLawTests` refuses a screen route that declares `Passthrough` by name and maps a `Simulation` screen's
+pointer ray to its source pixel from the row alone, with the glass bezel mapping to no pixel.
+`WorldFactOperandLawTests` also checks that an identity fact reads its lane cell's live value at the evaluation's time.
 
 Run the focused suite from the repository root:
 

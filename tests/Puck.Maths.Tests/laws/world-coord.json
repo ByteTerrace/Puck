@@ -17,7 +17,7 @@
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",
-        "Name": "LogarithmBase10"
+        "Name": "DigitCount"
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",
@@ -76,7 +76,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "EnumerateDigits, LogarithmBase10, LeastSignificantDigit, MostSignificantDigit and DigitalRoot at int.MinValue, whose magnitude 2147483648 = 2^31 is not representable in int and so is the one operand each member's XML doc calls out as the reason it abs-es a remainder or a quotient rather than the whole value",
+        "Subject": "EnumerateDigits, DigitCount, LeastSignificantDigit, MostSignificantDigit and DigitalRoot at int.MinValue, whose magnitude 2147483648 = 2^31 is not representable in int and so is the one operand each member's XML doc calls out as the reason it abs-es a remainder or a quotient rather than the whole value",
         "Against": "the decimal expansion of 2^31 = 2,147,483,648 worked out on paper: ten digits, least-significant-first [8,4,6,3,8,4,7,4,1,2], leading digit 2, ones digit 8, and a digit sum 2+1+4+7+4+8+3+6+4+8=47 reducing to 4+7=11 to 1+1=2 -- arithmetic on the literal, independent of and prior to any of the subject's DivRem or modulo-nine-residue implementations",
         "Shared": "",
         "Citation": "",

@@ -1,4 +1,6 @@
+using Puck.Commands;
 using System.Diagnostics;
+using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -28,7 +30,7 @@ public sealed class WorldDecisionLawTests {
         );
     private static ActionPredicate Gate(string row, decimal value = 1) => new ActionPredicate.CompareState(
         row,
-        ActionStateComparison.Equal,
+        ExpressionOp.Equal,
         value
     );
     private static WorldRule Rule(WorldDecision policy, string name = "choose", string? forEach = null, ActionPredicate? gate = null) =>
@@ -48,25 +50,10 @@ public sealed class WorldDecisionLawTests {
         StateRaw = new(World: rows),
         Rules = [rule],
     };
-    private static WorldAuthorityHostRowCheckpoint Host() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     private static WorldAuthorityCheckpoint Capture(WorldFixture fixture) {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                Host(),
+                WorldAuthorityHostRowCheckpoint.Empty,
                 out var captured,
                 out var reason
             ),
@@ -84,7 +71,7 @@ public sealed class WorldDecisionLawTests {
         row
     )!.Cells![0].Value.AsInt;
     private static void Set(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
-        WorldPrincipal.Console,
+        Principal.Console,
         row,
         WorldStateRow.SlotKey.Value,
         value,
@@ -603,7 +590,7 @@ public sealed class WorldDecisionLawTests {
             Capture(fixture: fixture).Server.Decisions!.Select(selector: s => s.Key)
         );
         fixture.Server.EnqueueMutation(new WorldMutation.RemoveStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             "carriers",
             "1000000"
         ));
@@ -686,7 +673,7 @@ public sealed class WorldDecisionLawTests {
         var before = State(fixture);
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: Slot("unrelated")
         ));
         fixture.Step();
@@ -703,7 +690,7 @@ public sealed class WorldDecisionLawTests {
             State(fixture).Reconsiderations
         );
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertWorldRule(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Rule: rule with {
                 Decision = rule.Decision! with { Seed = 99 },
             }
@@ -756,7 +743,7 @@ public sealed class WorldDecisionLawTests {
         );
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            WorldPrincipal.Seat(slot: 0),
+            Principal.Seat(slot: 0),
             0,
             null,
             WorldProtocol.WireProtocolKey
@@ -997,18 +984,20 @@ public sealed class WorldDecisionLawTests {
                 tick: 0
             );
         }
-        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-        var start = Stopwatch.GetTimestamp();
+        var elapsed = TimeSpan.Zero;
+        var allocated = AllocationWindow.Measure(window: () => {
+            var start = Stopwatch.GetTimestamp();
 
-        for (var index = 0; (index < 16); index++) {
-            fixture.Step(stepTicks: 504);
-            _ = WorldStateHashComposition.HashAuthoritative(
-                server: fixture.Server,
-                tick: 0
-            );
-        }
-        var elapsed = Stopwatch.GetElapsedTime(startingTimestamp: start);
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+            for (var index = 0; (index < 16); index++) {
+                fixture.Step(stepTicks: 504);
+                _ = WorldStateHashComposition.HashAuthoritative(
+                    server: fixture.Server,
+                    tick: 0
+                );
+            }
+
+            elapsed = Stopwatch.GetElapsedTime(startingTimestamp: start);
+        });
 
         TestContext.Current.TestOutputHelper!.WriteLine(message: $"{(policyCount * 128)} bindings x 32 options, 16 full decision steps + authoritative hashes: {elapsed.TotalMilliseconds:F3} ms, {allocated} allocated bytes");
         using var baseline = Fixtures.FreshServer(fixture.Server.Definition with { Rules = [] });
@@ -1020,16 +1009,15 @@ public sealed class WorldDecisionLawTests {
                 tick: 0
             );
         }
-        var baselineBefore = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var index = 0; (index < 16); index++) {
-            baseline.Step(stepTicks: 504);
-            _ = WorldStateHashComposition.HashAuthoritative(
-                server: baseline.Server,
-                tick: 0
-            );
-        }
-        var baselineAllocated = (GC.GetAllocatedBytesForCurrentThread() - baselineBefore);
+        var baselineAllocated = AllocationWindow.Measure(window: () => {
+            for (var index = 0; (index < 16); index++) {
+                baseline.Step(stepTicks: 504);
+                _ = WorldStateHashComposition.HashAuthoritative(
+                    server: baseline.Server,
+                    tick: 0
+                );
+            }
+        });
 
         TestContext.Current.TestOutputHelper!.WriteLine(message: $"Same world without decisions: {baselineAllocated} allocated bytes");
         Assert.Equal(

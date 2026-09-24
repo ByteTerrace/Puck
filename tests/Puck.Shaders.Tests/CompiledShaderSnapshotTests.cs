@@ -35,40 +35,16 @@ public sealed class CompiledShaderSnapshotTests {
         var stage = new ShaderStageSource(
             ShaderStage.Compute,
             "main.hlsl",
-            "void main() {}",
-            ShaderSourceLanguage.Hlsl
+            "void main() {}"
         );
         var error = Assert.Throws<ArgumentException>(testCode: () => new ShaderCompilationRequest(
-            "duplicate",
-            [stage, stage]
+            name: "duplicate",
+            stages: [stage, stage]
         ));
 
         Assert.Contains(
             "more than once",
             error.Message
-        );
-    }
-    [Fact]
-    public void Request_owns_defaults_after_the_authoring_document_is_disposed() {
-        ShaderCompilationRequest request;
-
-        using (var document = System.Text.Json.JsonDocument.Parse("0.5")) {
-            var config = new Dictionary<string, ShaderConfigField> { ["gain"] = new(
-                ShaderValueType.Float,
-                document.RootElement
-            ) };
-
-            request = ShaderCompilationRequest.Compute(
-                "defaults",
-                "defaults.glsl",
-                "void mainImage(out vec4 c, in vec2 p) { c=vec4(gain); }",
-                config: config
-            );
-            config.Clear();
-        }
-        Assert.Equal(
-            0.5,
-            request.Config["gain"].Default!.Value.GetDouble()
         );
     }
 }

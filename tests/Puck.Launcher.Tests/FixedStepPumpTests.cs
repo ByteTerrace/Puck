@@ -24,7 +24,10 @@ public sealed class FixedStepPumpTests {
         // simulation — but the interface requires a value, so this names the same 240 Hz the module doc already
         // pins as "everywhere today".
         public uint RatePerSecond => 240U;
+        public bool AwaitsFrame => false;
 
+        public bool HoldsClock(ulong withheldTicks) => false;
+        public void SettleOwedFrames() { }
         public void Step(in FixedStepContext context, in CommandSnapshot commands) {
             Steps.Add(item: context);
         }
@@ -34,8 +37,8 @@ public sealed class FixedStepPumpTests {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
     // One fixed slot, one fixed principal — the tests probe tick/elapsed-tick bookkeeping, not principal routing.
-    private sealed class SingleSlotPrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class SingleSlotPrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
 
     private static (FixedStepPump Pump, RecordingSimulation Simulation) NewPump() {

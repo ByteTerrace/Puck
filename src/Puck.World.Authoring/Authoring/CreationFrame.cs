@@ -45,45 +45,45 @@ public static class CreationFrame {
             Frames = ConvertList(
             source: document.Frames,
             convert: frame => frame with {
-                    Transforms = (ConvertList(
+                Transforms = (ConvertList(
                 source: frame.Transforms,
                 convert: transform => transform with {
-                            Position = Flip(value: transform.Position),
-                            Rotation = Flip(value: transform.Rotation),
-                        }
-            ) ?? []),
+                    Position = Flip(value: transform.Position),
+                    Rotation = Flip(value: transform.Rotation),
                 }
+            ) ?? []),
+            }
         ),
             Shapes = ConvertList(
             source: document.Shapes,
             convert: shape => shape with {
-                    Position = Flip(value: shape.Position),
-                    Rotation = Flip(value: shape.Rotation),
-                    Joint = ((shape.Joint is { } joint)
+                Position = Flip(value: shape.Position),
+                Rotation = Flip(value: shape.Rotation),
+                Joint = ((shape.Joint is { } joint)
             ? Flip(value: joint)
             : null),
-                    Domain = ConvertList(
+                Domain = ConvertList(
                 source: shape.Domain,
                 convert: FlipDomainOp
             ),
-                    Slides = ConvertList(
+                Slides = ConvertList(
                 source: shape.Slides,
                 convert: FlipSlide
             ),
-                    Swings = ConvertList(
+                Swings = ConvertList(
                 source: shape.Swings,
                 convert: FlipSwing
             ),
-                }
+            }
         ),
             // A run riding a shape is expressed in that shape's local frame, which the shape's own conversion carries.
             TextRuns = ConvertList(
             source: document.TextRuns,
             convert: run => ((run.ShapeId is null)
             ? run with {
-                        Position = Flip(value: run.Position),
-                        Rotation = Flip(value: run.Rotation),
-                    }
+                Position = Flip(value: run.Position),
+                Rotation = Flip(value: run.Rotation),
+            }
             : run)
         ),
             // A volume riding a shape is expressed in that shape's local frame, which the shape's own conversion
@@ -92,9 +92,9 @@ public static class CreationFrame {
             source: document.Volumes,
             convert: volume => ((volume.Parent is null)
             ? volume with {
-                        Position = Flip(value: volume.Position),
-                        Rotation = Flip(value: volume.Rotation),
-                    }
+                Position = Flip(value: volume.Position),
+                Rotation = Flip(value: volume.Rotation),
+            }
             : volume)
         ),
         };

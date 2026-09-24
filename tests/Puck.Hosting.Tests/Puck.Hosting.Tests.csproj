@@ -16,4 +16,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
 </Project>

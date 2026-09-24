@@ -1,0 +1,50 @@
+// Two plots joined by a walkable border, and the tests that drive one of them and read the other. Compiling this
+// source writes `north.world.json` and `south.world.json`; `puck test` runs the composed run its root tests
+// generate, which is those two worlds again with a schedule arming the far one.
+
+import "plot.puck"
+
+entry world north = plot(centre: [0m, 0m, -12m], landingAt: [0, 0, -3], threshold: 3)
+world south = plot(centre: [0m, 0m, 12m], landingAt: [0, 0, 3], threshold: 7)
+
+border north.south, south.north {
+  height: 6m
+  hysteresis: 2m
+}
+
+test "a body that walks across the border is seen by the far world" {
+  when {
+    north {
+      seat1: body.pose 0 1 -2 0 0 0 0
+      seat1: body.fly -1 0 0 0 0 0 2 0
+    }
+    ticks 90
+  }
+  expect {
+    north {
+      visited == 1
+    }
+    south {
+      visited == 1
+    }
+  }
+}
+
+test "a charge lands in the world its step addressed" {
+  when {
+    north {
+      seat1: world.state.cell.set charge $value 5
+    }
+    ticks 6
+  }
+  expect {
+    north {
+      charge == 5
+      lit == 1
+    }
+    south {
+      charge == 0
+      lit == 0
+    }
+  }
+}

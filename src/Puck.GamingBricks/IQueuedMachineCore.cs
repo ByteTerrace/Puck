@@ -11,8 +11,14 @@ namespace Puck.GamingBricks;
 /// whole state and forks a lookahead for machine-neutral time-travel. Every member runs on the worker's single execution
 /// thread except construction and disposal, which the host arranges around <see cref="QueuedMachineWorker.Load"/>/
 /// <see cref="QueuedMachineWorker.Eject"/>.
+/// <para>
+/// The core's <see cref="IMachineMemoryPeek"/> surface is the worker-thread source of the host's own: the worker calls
+/// it on its execution thread between steps, so a peek observes a coherent inter-instruction snapshot rather than racing
+/// the running core, and a run read through <see cref="IMachineMemoryPeek.PeekBytes"/> is one such observation. A core
+/// with no debug memory window keeps the defaults, which read as 0 and ignore pokes.
+/// </para>
 /// </summary>
-public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, IDisposable {
+public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, IMachineMemoryPeek, IDisposable {
     /// <summary>Gets the full identity of the checkpoint encoding, immutable images, and behavioral configuration.
     /// A different identity refuses restoration before changing the core.</summary>
     string CheckpointIdentity { get; }
@@ -43,29 +49,16 @@ public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, I
     /// hardware; the default keeps every existing core source-compatible with no behavior change.</summary>
     float MotorLevel => 0f;
 
-    /// <summary>Reads one byte from the core's bus address space without side effects — the worker-thread source of a
-    /// host's <see cref="IMachineMemoryPeek.PeekByte"/>. The worker calls this on its own execution thread between
-    /// steps, so it observes a coherent inter-instruction snapshot rather than racing the running core. The default
-    /// reads as 0 (a core with no debug memory window).</summary>
+    /// <summary>Reads one byte from the core's bus address space without side effects. The default reads as 0, the
+    /// answer of a core with no debug memory window.</summary>
     /// <param name="address">A machine-defined bus address.</param>
     /// <returns>The byte at that address, or 0.</returns>
-    byte PeekByte(int address) => 0;
-    /// <summary>Reads a run of bytes from the core's bus address space without side effects — the worker-thread source of
-    /// a host's <see cref="IMachineMemoryPeek.PeekBytes"/>, answered as one coherent inter-instruction observation. The
-    /// default reads each byte through <see cref="PeekByte"/>.</summary>
-    /// <param name="address">The first machine-defined bus address.</param>
-    /// <param name="destination">Receives one byte per address, in order.</param>
-    void PeekBytes(int address, Span<byte> destination) {
-        for (var offset = 0; (offset < destination.Length); ++offset) {
-            destination[offset] = PeekByte(address: (address + offset));
-        }
-    }
-    /// <summary>Forces one byte into a writable region of the core's bus address space — the worker-thread source of a
-    /// host's <see cref="IMachineMemoryPeek.PokeByte"/>, a debug mutation outside replay determinism. The worker calls
-    /// this on its own execution thread between steps. The default is a no-op (a core with no debug memory window).</summary>
+    byte IMachineMemoryPeek.PeekByte(int address) => 0;
+    /// <summary>Forces one byte into a writable region of the core's bus address space, a debug mutation outside replay
+    /// determinism. The default is a no-op, the answer of a core with no debug memory window.</summary>
     /// <param name="address">A machine-defined bus address.</param>
     /// <param name="value">The byte to store.</param>
-    void PokeByte(int address, byte value) { }
+    void IMachineMemoryPeek.PokeByte(int address, byte value) { }
     /// <summary>Retargets the running core across its engine's options vocabulary WITHOUT a reboot — the worker-thread
     /// source of a host's <see cref="Puck.Abstractions.Machines.IReconfigurableMachine.TryReconfigure"/>. The worker
     /// calls this on its own execution thread between steps, so the swap observes a coherent inter-instruction boundary.

@@ -7,24 +7,6 @@ namespace Puck.World.Transpiler.Tests;
 
 // A container value is written as a block, a scalar takes a colon. One spelling per shape, at every depth.
 public class ContainerSpellingTests {
-    private static void AssertRefusesColon(string source, string spelling) {
-        Assert.Contains(
-            collection: ParseForDiagnostics(source: source),
-            filter: diagnostic =>
-            ((diagnostic.Code == PuckDiagnosticCodes.ColonBeforeContainer) && diagnostic.Message.Contains(value: spelling))
-        );
-    }
-    private static DiagnosticBag ParseForDiagnostics(string source) {
-        var diagnostics = new DiagnosticBag();
-
-        PuckParser.ParseDocumentWithDiagnostics(
-            source: source,
-            diagnostics: diagnostics
-        );
-
-        return diagnostics;
-    }
-
     [Fact]
     public void TestABareFlagIsNotSwallowedByTheBlockStatementBelowIt() {
         var document = PuckParser.ParseDocument("""
@@ -51,11 +33,11 @@ public class ContainerSpellingTests {
             Assert.IsType<BlockNode>(@object: placement.Statements[1]).Identifier
         );
     }
-    [Fact]
-    public void TestACallArgumentKeepsItsColon() {
-        var diagnostics = ParseForDiagnostics(source: """
-            schema: "puck.world.definition.v1"
 
+    // Sources whose colons are all legal: only a '{' or '[' literal after a colon is refused.
+    private static readonly Dictionary<string, string> KeptColons = new(comparer: StringComparer.Ordinal) {
+        // A named argument is call syntax, not a statement or an object-literal field.
+        ["a call argument keeps its colon"] = """
             cameras [
                 {
                     rig {
@@ -65,70 +47,91 @@ public class ContainerSpellingTests {
                     }
                 }
             ]
-            """);
-
-        // A named argument is call syntax, not a statement or an object-literal field.
-        Assert.DoesNotContain(
-            collection: diagnostics,
-            filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.ColonBeforeContainer)
-        );
-    }
-    [Fact]
-    public void TestAColonBeforeAContainerIsRefusedAtEveryDepth() {
-        AssertRefusesColon(
-            source: """
-            schema: "puck.world.definition.v1"
-
-            host: {
-                width: 1280
-            }
             """,
-            spelling: "host:"
-        );
-
-        AssertRefusesColon(
-            source: """
-            schema: "puck.world.definition.v1"
-
-            cameras: [
-                { name: "a" }
-            ]
-            """,
-            spelling: "cameras:"
-        );
-
-        AssertRefusesColon(
-            source: """
-            schema: "puck.world.definition.v1"
-
-            collision {
-                requirements: [
-                    "SmoothUnionContact"
-                ]
-            }
-            """,
-            spelling: "requirements:"
-        );
-    }
-    [Fact]
-    public void TestANameStandingForAContainerKeepsItsColon() {
-        var diagnostics = ParseForDiagnostics(source: """
-            schema: "puck.world.definition.v1"
-
+        // The rule is about the punctuation in front of a literal container, never about what the value turns out
+        // to be.
+        ["a name standing for a container keeps its colon"] = """
             let bounds = [0, 1, 0]
 
             screens [
                 { origin: bounds }
             ]
-            """);
+            """,
+        ["rule-body containers without a colon and scalars with one"] = """
+            rule "zoned" {
+                when score[0] > 0
+                mode: Edge
+                zones ["a"]
+                score[0] += 1
+            }
 
-        // The rule is about the punctuation in front of a literal container, never about what the value turns out
-        // to be: only '{' and '[' are refused after a colon.
-        Assert.DoesNotContain(
-            collection: diagnostics,
-            filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.ColonBeforeContainer)
-        );
-    }
+            rule "chooser" {
+                decision {
+                    periodSeconds: 1s
+                    option "o" {
+                        score: 1
+                        neighbors { range: 10 }
+                    }
+                }
+            }
+            """,
+    };
+
+    public static TheoryData<string> KeptColonNames() => new(values: KeptColons.Keys);
+    [MemberData(nameof(KeptColonNames))]
+    [Theory]
+    public void ALegalColonIsNotRefused(string name) => Assert.DoesNotContain(
+        collection: WorldSources.Parse(body: KeptColons[name]).Diagnostics,
+        filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.ColonBeforeContainer)
+    );
+
+    // A colon in front of a literal container, at every depth: each refusal names the spelling it refuses.
+    private static readonly Dictionary<string, Refusal> RefusedColons = new(comparer: StringComparer.Ordinal) {
+        ["a document block"] = new(
+            Body: "host: {\n    width: 1280\n}\n",
+            Code: PuckDiagnosticCodes.ColonBeforeContainer,
+            Needle: "host: {"
+        ) { Mentions = "host:" },
+        ["a document array"] = new(
+            Body: "cameras: [\n    { name: \"a\" }\n]\n",
+            Code: PuckDiagnosticCodes.ColonBeforeContainer,
+            Needle: "cameras: ["
+        ) { Mentions = "cameras:" },
+        ["an array inside a block"] = new(
+            Body: "collision {\n    requirements: [\n        \"SmoothUnionContact\"\n    ]\n}\n",
+            Code: PuckDiagnosticCodes.ColonBeforeContainer,
+            Needle: "requirements: ["
+        ) { Mentions = "requirements:" },
+        ["an array inside an object literal"] = new(
+            Body: "screens [\n    { index: 0, origin: [0, 1, 0] }\n]\n",
+            Code: PuckDiagnosticCodes.ColonBeforeContainer,
+            Needle: "origin: ["
+        ) { Mentions = "origin:" },
+        ["an array in a rule body"] = new(
+            Body: "rule \"zoned\" {\n    when score[0] > 0\n    zones: [\"a\"]\n    score[0] += 1\n}\n",
+            Code: PuckDiagnosticCodes.ColonBeforeContainer,
+            Needle: "zones: ["
+        ) { Mentions = "'zones: [' - a array is written without the ':': use 'zones ['" },
+        ["a block in a decision body"] = new(
+            Body: "rule \"chooser\" {\n    decision {\n        periodSeconds: 1s\n        tieBreak: { seed: 0 }\n        option \"o\" {\n            score: 1\n        }\n    }\n}\n",
+            Code: PuckDiagnosticCodes.ColonBeforeContainer,
+            Needle: "tieBreak: {"
+        ) { Mentions = "'tieBreak: {' - a block is written without the ':': use 'tieBreak {'" },
+        ["a block in an option body"] = new(
+            Body: "rule \"chooser\" {\n    decision {\n        periodSeconds: 1s\n        option \"o\" {\n            score: 1\n            neighbors: { range: 10 }\n        }\n    }\n}\n",
+            Code: PuckDiagnosticCodes.ColonBeforeContainer,
+            Needle: "neighbors: {"
+        ) { Mentions = "'neighbors: {' - a block is written without the ':': use 'neighbors {'" },
+    };
+
+    public static TheoryData<string> RefusedColonNames() => new(values: RefusedColons.Keys);
+    [MemberData(nameof(RefusedColonNames))]
+    [Theory]
+    public void AColonBeforeAContainerIsRefusedByName(string name) => WorldSources.AssertRefusedBy(
+        diagnostics: WorldSources.Parse(body: RefusedColons[name].Body).Diagnostics,
+        label: name,
+        refusal: RefusedColons[name]
+    );
     [Fact]
     public void TestANestedFieldBlockLowersLikeItsPropertySpelling() {
         var lowered = WorldCompiler.Compile(
@@ -148,19 +151,6 @@ public class ContainerSpellingTests {
         Assert.Equal(
             16L,
             policy["candidateCap"]?.GetValue<long>()
-        );
-    }
-    [Fact]
-    public void TestAnObjectLiteralFollowsTheSameRule() {
-        AssertRefusesColon(
-            source: """
-            schema: "puck.world.definition.v1"
-
-            screens [
-                { index: 0, origin: [0, 1, 0] }
-            ]
-            """,
-            spelling: "origin:"
         );
     }
     [Fact]
@@ -189,7 +179,7 @@ public class ContainerSpellingTests {
     }
     [Fact]
     public void TestFormattingNeverReintroducesTheColon() {
-        var formatted = PuckFormat.Format("""
+        var formatted = PuckFormat.Format(source: """
             schema: "puck.world.definition.v1"
             host:
             {
@@ -216,83 +206,6 @@ public class ContainerSpellingTests {
         Assert.DoesNotContain(
             actualString: formatted,
             expectedSubstring: "cells: ["
-        );
-    }
-    [Fact]
-    public void TestRuleBodyContainersWithoutAColonAndScalarsWithOneParseClean() {
-        var diagnostics = ParseForDiagnostics(source: """
-            schema: "puck.world.definition.v1"
-
-            rule "zoned" {
-                when score[0] > 0
-                mode: Edge
-                zones ["a"]
-                score[0] += 1
-            }
-
-            rule "chooser" {
-                decision {
-                    periodSeconds: 1s
-                    option "o" {
-                        score: 1
-                        neighbors { range: 10 }
-                    }
-                }
-            }
-            """);
-
-        Assert.DoesNotContain(
-            collection: diagnostics,
-            filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.ColonBeforeContainer)
-        );
-    }
-    [Fact]
-    public void TestRuleDecisionAndOptionBodiesFollowTheSameRule() {
-        AssertRefusesColon(
-            source: """
-            schema: "puck.world.definition.v1"
-
-            rule "zoned" {
-                when score[0] > 0
-                zones: ["a"]
-                score[0] += 1
-            }
-            """,
-            spelling: "'zones: [' - a array is written without the ':': use 'zones ['"
-        );
-
-        AssertRefusesColon(
-            source: """
-            schema: "puck.world.definition.v1"
-
-            rule "chooser" {
-                decision {
-                    periodSeconds: 1s
-                    tieBreak: { seed: 0 }
-                    option "o" {
-                        score: 1
-                    }
-                }
-            }
-            """,
-            spelling: "'tieBreak: {' - a block is written without the ':': use 'tieBreak {'"
-        );
-
-        AssertRefusesColon(
-            source: """
-            schema: "puck.world.definition.v1"
-
-            rule "chooser" {
-                decision {
-                    periodSeconds: 1s
-                    option "o" {
-                        score: 1
-                        neighbors: { range: 10 }
-                    }
-                }
-            }
-            """,
-            spelling: "'neighbors: {' - a block is written without the ':': use 'neighbors {'"
         );
     }
 }

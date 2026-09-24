@@ -98,12 +98,7 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        Span<FixedBodyColliderVolume> targetScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        Span<FixedBodyColliderVolume> otherScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        var targetVolumes = target.ScaledColliderVolumes(
-            volumes: targetCollider.Volumes,
-            scratch: targetScratch
-        );
+        var targetVolumes = target.ScaledColliderVolumes();
 
         for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
             if (
@@ -122,10 +117,7 @@ public sealed partial class WorldPopulation {
                 leftVolumes: targetVolumes,
                 rightPosition: other.FixedPosition,
                 rightOrientation: other.FixedOrientation,
-                rightVolumes: other.ScaledColliderVolumes(
-                    volumes: otherCollider.Volumes,
-                    scratch: otherScratch
-                ),
+                rightVolumes: other.ScaledColliderVolumes(),
                 tieBreaker: targetIndex ^ otherIndex,
                 correction: out _
             )) {
@@ -204,8 +196,6 @@ public sealed partial class WorldPopulation {
         }
 
         var half = FixedQ4816.FromInteger(value: 2L);
-        Span<FixedBodyColliderVolume> targetScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        Span<FixedBodyColliderVolume> otherScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
 
         for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
             if (
@@ -221,16 +211,10 @@ public sealed partial class WorldPopulation {
             if (!FixedDynamicBodyContacts.TryCorrection(
                 leftPosition: target.FixedPosition,
                 leftOrientation: target.FixedOrientation,
-                leftVolumes: target.ScaledColliderVolumes(
-                    volumes: targetCollider.Volumes,
-                    scratch: targetScratch
-                ),
+                leftVolumes: target.ScaledColliderVolumes(),
                 rightPosition: other.FixedPosition,
                 rightOrientation: other.FixedOrientation,
-                rightVolumes: other.ScaledColliderVolumes(
-                    volumes: otherCollider.Volumes,
-                    scratch: otherScratch
-                ),
+                rightVolumes: other.ScaledColliderVolumes(),
                 tieBreaker: targetIndex ^ otherIndex,
                 correction: out var correction
             )) {

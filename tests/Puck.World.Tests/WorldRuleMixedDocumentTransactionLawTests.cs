@@ -114,7 +114,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
                 Name: CellName.Parse(candidate: "mixed-document-transaction"),
                 Gate: new ActionPredicate.CompareState(
                     State: "stage",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 0m
                 ),
                 Effects: ruleEffects
@@ -125,7 +125,6 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         definition.State.Single(predicate: state => (state.Name.Value == row)).Cells!.Single().Value.Raw;
     private static string? Text(WorldDefinition definition, string row) =>
         definition.State.Single(predicate: state => (state.Name.Value == row)).Cells!.Single().Value.AsText;
-
     // One rule whose document arms depend on each other, gated to fire once.
     private static WorldDefinition Sequence(params ActionEffect[] arms) {
         var document = Fixtures.BuildCameraBodyDocument();
@@ -143,7 +142,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
                 Name: CellName.Parse(candidate: "document-sequence"),
                 Gate: new ActionPredicate.CompareState(
                     State: "stage",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 0m
                 ),
                 Effects: [

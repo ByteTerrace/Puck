@@ -14,6 +14,7 @@ public static partial class WorldDefinitionValidator {
         IWorldNeighbourResolver? neighbours, out string reason) {
         ArgumentNullException.ThrowIfNull(admission);
         var definition = admission.Definition;
+
         if (!admission.AppliesTo(definition: definition, machines: machines)) {
             reason = "the admission result belongs to a different machine catalog";
             return false;
@@ -28,16 +29,19 @@ public static partial class WorldDefinitionValidator {
             var (iconNames, iconsAuthored) = ValidateIconography(definition: definition, errors: errors);
             if (definition.BindingOverlays.Count != 0) {
                 var stateRows = definition.State.ToDictionary(row => row.Name.Value, StringComparer.Ordinal);
+
                 ValidateBindingOverlays(definition, definition.BindingOverlays,
                     WorldChannelTable.Compile(channels: definition.Channels), stateRows,
                     definition.SeatModes, iconNames, iconsAuthored, errors);
             }
             if (definition.ProbesRaw is { Count: > 0 }) {
                 var cameras = new HashSet<string>(collection: definition.Cameras.Select(selector: camera => camera.Name), comparer: StringComparer.Ordinal);
+
                 ValidateProbes(definition, cameras, errors, deferred: null);
             }
             if (definition.Adjacencies is { Count: > 0 }) {
                 var destinations = new HashSet<string>(collection: (definition.Destinations ?? []).Select(selector: destination => destination.Name.Value), comparer: StringComparer.Ordinal);
+
                 ValidateAdjacencies(definition, destinations, neighbours, proveNeighbours: true, errors);
             }
             RefuseCollected(errors: errors);

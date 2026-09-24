@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Puck.Maths;
 
@@ -93,23 +94,12 @@ public struct Pcg32XshRr : IDrawGenerator {
 
         return (((ulong)highWord) << 32) | lowWord;
     }
-    // A nearly-divisionless bounded draw: take the high 32 bits of draw·bound, rejecting the small biased
-    // window (threshold = 2^32 mod bound) so every value in [0, bound) is exactly equally likely.
-    private uint Sample(uint exclusiveHigh) {
-        var product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-        var lowBits = unchecked((uint)product);
-
-        if (lowBits < exclusiveHigh) {
-            var threshold = unchecked((((uint)(-((int)exclusiveHigh))) % exclusiveHigh));
-
-            while (lowBits < threshold) {
-                product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-                lowBits = unchecked((uint)product);
-            }
-        }
-
-        return ((uint)(product >> 32));
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private uint Sample(uint exclusiveHigh) =>
+        BoundedRandomSampling.Sample(
+            exclusiveHigh: exclusiveHigh,
+            generator: ref this
+        );
 
     /// <summary>Skips the generator forward by <paramref name="count"/> draws in logarithmic time.</summary>
     /// <param name="count">The number of single-draw advances to apply; <c>2⁶⁴ − n</c> steps backward by <c>n</c>.</param>
@@ -303,18 +293,13 @@ public struct Pcg32XshRr : IDrawGenerator {
     /// <returns>A uniformly distributed value in <c>[min(minimum, maximum), max(minimum, maximum)]</c>, unbiased.</returns>
     /// <remarks>Rejection sampling may consume more than one state advance per call (deterministically — the same
     /// state always draws the same value).</remarks>
-    public uint NextUInt32(uint minimum, uint maximum) {
-        if (maximum < minimum) {
-            (minimum, maximum) = (maximum, minimum);
-        }
-
-        var range = (maximum - minimum);
-
-        return ((range != uint.MaxValue)
-            ? unchecked((Sample(exclusiveHigh: (range + 1U)) + minimum))
-            : NextUInt32()
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public uint NextUInt32(uint minimum, uint maximum) =>
+        BoundedRandomSampling.SampleRange(
+            generator: ref this,
+            maximum: maximum,
+            minimum: minimum
         );
-    }
     /// <summary>Draws a uniformly random fraction in <c>[0, 1)</c> at UQ0.16 resolution.</summary>
     /// <returns>A uniformly distributed <see cref="UnitFraction16"/> (the draw's top sixteen bits).</returns>
     public UnitFraction16 NextUnitFraction16() =>

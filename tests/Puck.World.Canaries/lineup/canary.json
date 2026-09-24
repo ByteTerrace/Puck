@@ -1,0 +1,377 @@
+{
+  "id": "lineup",
+  "title": "A lineup seat that names the other seat's bust wins, and one that names any other loses",
+  "binding": "Boots the Parlor lineup world with the computer on seat 2 and sets seat 2's dealt bust to Finn so the script knows it. Seat 1 asks two questions through the act door and the computer answers each on its own turn, so both seats have asked twice; seat 1 then names Finn, the rules judge the name against seat 2's hidden bust, and seat 1 wins. The run is recorded and replays exactly. The discriminating leg names Gus instead: a wrong name loses, so seat 2 wins without naming anyone.",
+  "bootShape": "headless",
+  "requirements": [],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "expect": [
+      {
+        "name": "the-winner",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupTable'.'winner' value=1",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "the-game-is-over",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupTable'.'stage' value=2",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "seat-one-asked-twice",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupAsked'.'1' value=2",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "the-computer-answered-twice",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupAsked'.'2' value=2",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "replay-match",
+        "present": true,
+        "match": "contains",
+        "text": "[replay.verify: 'lineup' | MATCH",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "no-rule-refusal",
+        "present": false,
+        "match": "contains",
+        "text": "effect refused",
+        "stream": "stderr",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "replay.record",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 11
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 12
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 13
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "replay.stop",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "replay.verify",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "worlds/parlor/lineup.puck"
+  },
+  "discriminating": {
+    "expect": [
+      {
+        "name": "the-winner",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupTable'.'winner' value=2",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "the-game-is-over",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupTable'.'stage' value=2",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "seat-one-asked-twice",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupAsked'.'1' value=2",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "the-computer-answered-twice",
+        "present": true,
+        "match": "contains",
+        "text": "'lineupAsked'.'2' value=2",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "replay-match",
+        "present": true,
+        "match": "contains",
+        "text": "[replay.verify: 'lineup' | MATCH",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "no-rule-refusal",
+        "present": false,
+        "match": "contains",
+        "text": "effect refused",
+        "stream": "stderr",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "replay.record",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 11
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 12
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 13
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "replay.stop",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "replay.verify",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "worlds/parlor/lineup.puck"
+  }
+}

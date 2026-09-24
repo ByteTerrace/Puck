@@ -308,21 +308,10 @@ public sealed class AgbSoundDriver {
         _ => EffectDutyEnvelopeAddress,
     };
     private static uint StateOffset(CartridgeVoice voice) => ((uint)(((int)voice) * VoiceStateSize));
-    private void StoreHalf(uint address, uint value) {
-        m_emitter.LoadConstant(
-            destination: LowRegister.R0,
-            value: value
-        );
-        m_emitter.LoadConstant(
-            destination: LowRegister.R2,
-            value: address
-        );
-        m_emitter.StoreHalf(
-            baseRegister: LowRegister.R2,
-            byteOffset: 0,
-            source: LowRegister.R0
-        );
-    }
+    private void StoreHalf(uint address, uint value) => m_emitter.StoreHalfConstant(
+        address: address,
+        value: value
+    );
 
     /// <summary>Emits the sound unit's power-up: master on, both sides at full volume, legacy channels at full ratio.</summary>
     public void EmitBoot() {

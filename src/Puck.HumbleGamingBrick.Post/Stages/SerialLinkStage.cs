@@ -39,6 +39,9 @@ internal sealed class SerialLinkStage : IPostStage<PostContext> {
     }
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         m_name;
     /// <inheritdoc/>

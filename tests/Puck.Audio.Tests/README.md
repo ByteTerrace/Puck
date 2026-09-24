@@ -1,10 +1,10 @@
 # Puck.Audio.Tests
 
 This suite exercises the deterministic mixer and voice simulation in
-`Puck.Audio`. `AudioMixerTests` covers block mixing, while
-`VoiceSynthTests`, `VoiceSimulationTests`, and `MusicSimulationTests` cover
-voice state, seeded triggers, music clocks, transitions, layers, and
-embellishments using deterministic block sources.
+`Puck.Audio`. `WorldAudioMixerTests` covers block mixing, while
+`WorldVoiceSynthTests`, `VoiceBabblerTests`, `MusicClockTests`, and
+`MusicDirectorTests` cover voice state, seeded triggers, music clocks,
+transitions, layers, and embellishments using deterministic block sources.
 
 ## Running
 

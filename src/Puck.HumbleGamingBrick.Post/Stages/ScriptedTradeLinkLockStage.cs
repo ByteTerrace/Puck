@@ -28,7 +28,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// crossed the cable on both sides; (f) traffic fingerprints + final whole-machine snapshots + exported SRAMs are
 /// bit-identical across two fresh runs on the same budget schedule (the long, data-dependent commercial link workload
 /// adds no nondeterminism); and (g) a mid-run credit-preserving churn — suspend/snapshot/restore/reconnect at a
-/// transfer-idle boundary via <see cref="SerialLinkSession.Suspend"/> — reproduces the identical tail.
+/// transfer-idle boundary via <see cref="LinkSession{TPort}.Suspend"/> — reproduces the identical tail.
 /// </para>
 /// <para>
 /// The seat walk depends on VRAM reads becoming available with the mode-0 STAT transition at dot offset +4. The crafted
@@ -46,6 +46,9 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </para>
 /// </remarks>
 internal sealed class ScriptedTradeLinkLockStage : IPostStage<PostContext> {
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
     /// <inheritdoc/>
     public string Name =>
         "link-lock";

@@ -10,16 +10,16 @@ namespace Puck.Networking.Tests.Peers;
 /// <see cref="PeerLink.CloseFailure"/> always agrees with the event.</summary>
 public sealed class LinkClosureTests {
     private static async Task AssertHelloRefusedBodyClosesAsAsync(byte[] body, PeerRefusal expected) {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, controlStreamAtB) = await ConnectTappedAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, controlStreamAtB) = await ConnectTappedAsync(ct: ct);
 
         await using var disposeA = peerA;
         await using var disposeB = peerB;
 
         await WireFrame.WriteAsync(
             body: body,
-            ct: deadline.Token,
+            ct: ct,
             kind: ((byte)PeerFrameKind.HelloRefused),
             stream: controlStreamAtB
         );
@@ -35,14 +35,9 @@ public sealed class LinkClosureTests {
             actual: linkAtoB.CloseFailure
         );
         Assert.False(condition: linkAtoB.IsOpen);
-        await linkAtoB.Events.Completion.WaitAsync(cancellationToken: deadline.Token);
-
-        // The link publishes Closed and completes its events before it disposes its stream and connection, and only
-        // then unregisters from the peer; nothing this side can await spans that gap, so the law polls it.
-        await PeerTestSupport.WaitUntilAsync(
-            condition: () => (peerA.Links.Count == 0),
-            ct: deadline.Token
-        );
+        await linkAtoB.Events.Completion.WaitAsync(cancellationToken: ct);
+        await linkAtoB.Released.WaitAsync(cancellationToken: ct);
+        Assert.Empty(collection: peerA.Links);
     }
     /// <summary>Connects a plain peer A to a tapped peer B and hands back the control stream at B, so a law can
     /// write a raw frame onto the stream A's link reads.</summary>
@@ -63,9 +58,9 @@ public sealed class LinkClosureTests {
 
     [Fact]
     public async Task Closed_CarriesConnectionClosed_WhenThePeerDisposes() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;
 
@@ -82,20 +77,15 @@ public sealed class LinkClosureTests {
             actual: linkAtoB.CloseFailure
         );
         Assert.False(condition: linkAtoB.IsOpen);
-        await linkAtoB.Events.Completion.WaitAsync(cancellationToken: deadline.Token);
-
-        // The link publishes Closed and completes its events before it disposes its stream and connection, and only
-        // then unregisters from the peer; nothing this side can await spans that gap, so the law polls it.
-        await PeerTestSupport.WaitUntilAsync(
-            condition: () => (peerA.Links.Count == 0),
-            ct: deadline.Token
-        );
+        await linkAtoB.Events.Completion.WaitAsync(cancellationToken: ct);
+        await linkAtoB.Released.WaitAsync(cancellationToken: ct);
+        Assert.Empty(collection: peerA.Links);
     }
     [Fact]
     public async Task Closed_CarriesDisposed_WhenThisSideDisposesTheLink() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: ct);
 
         await using var disposeA = peerA;
         await using var disposeB = peerB;
@@ -113,7 +103,7 @@ public sealed class LinkClosureTests {
             actual: linkAtoB.CloseFailure
         );
         Assert.False(condition: linkAtoB.IsOpen);
-        await linkAtoB.Events.Completion.WaitAsync(cancellationToken: deadline.Token);
+        await linkAtoB.Events.Completion.WaitAsync(cancellationToken: ct);
         Assert.Empty(collection: peerA.Links);
     }
     [Fact]

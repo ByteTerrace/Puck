@@ -5,10 +5,8 @@
     "height": 64,
     "presentMode": "Immediate",
     "presentation": "None",
-    "rayQuery": false,
     "surfaceFormat": "r8g8b8a8",
     "targetHertz": 0,
-    "timing": false,
     "width": 64
   },
   "schema": "puck.world.definition.v1",

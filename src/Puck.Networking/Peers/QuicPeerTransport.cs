@@ -28,20 +28,35 @@ public sealed class QuicPeerTransport : IPeerTransport {
 
     private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(value: 10);
 
+    /// <summary>Gets the transport handshake bound a transport applies when its owner names none. The QUIC/TLS handshake
+    /// runs on msquic's own wall-clock timer, never on a <see cref="TimeProvider"/>, and must complete within it on both
+    /// the dialing and the accepting side; the peer handshake's own deadlines begin only once it has.</summary>
+    public static TimeSpan DefaultHandshakeTimeout { get; } = TimeSpan.FromSeconds(value: 10);
+
     // Only the control stream is ever accepted (Peer.AcceptOneAsync accepts one stream and nothing reads a second),
     // so admitting more would only let a remote side fill inbound receive windows nobody drains.
     private const int MaxInboundStreams = 1;
 
     private readonly X509Certificate2 m_certificate;
+    private readonly TimeSpan m_handshakeTimeout;
 
     /// <summary>Initializes the transport over the certificate this side presents on every connection it dials or
     /// accepts. The transport owns and disposes the certificate.</summary>
     /// <param name="certificate">A certificate with a private key; <see cref="PeerIdentity.CreateTransportCertificate"/>
     /// mints one over the identity's own key.</param>
-    public QuicPeerTransport(X509Certificate2 certificate) {
+    /// <param name="handshakeTimeout">The wall-clock bound on each connection's QUIC/TLS handshake, dialed or accepted;
+    /// <see langword="null"/> is <see cref="DefaultHandshakeTimeout"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="certificate"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="handshakeTimeout"/> is zero or negative.</exception>
+    public QuicPeerTransport(X509Certificate2 certificate, TimeSpan? handshakeTimeout = null) {
         ArgumentNullException.ThrowIfNull(argument: certificate);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            other: TimeSpan.Zero,
+            value: (handshakeTimeout ?? DefaultHandshakeTimeout)
+        );
 
         m_certificate = certificate;
+        m_handshakeTimeout = (handshakeTimeout ?? DefaultHandshakeTimeout);
     }
 
     /// <summary>Gets a value indicating whether QUIC is available on this host: an operating system this transport
@@ -82,6 +97,7 @@ public sealed class QuicPeerTransport : IPeerTransport {
                 },
                 DefaultCloseErrorCode = 0,
                 DefaultStreamErrorCode = 0,
+                HandshakeTimeout = m_handshakeTimeout,
                 KeepAliveInterval = KeepAliveInterval,
                 MaxInboundBidirectionalStreams = MaxInboundStreams,
                 RemoteEndPoint = endpoint,
@@ -107,6 +123,7 @@ public sealed class QuicPeerTransport : IPeerTransport {
                 ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(result: new QuicServerConnectionOptions {
                     DefaultCloseErrorCode = 0,
                     DefaultStreamErrorCode = 0,
+                    HandshakeTimeout = m_handshakeTimeout,
                     KeepAliveInterval = KeepAliveInterval,
                     MaxInboundBidirectionalStreams = MaxInboundStreams,
                     ServerAuthenticationOptions = new SslServerAuthenticationOptions {

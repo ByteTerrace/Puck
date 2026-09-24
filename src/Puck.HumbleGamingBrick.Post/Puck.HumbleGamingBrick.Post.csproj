@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <PuckLicenseKind>OpenSource</PuckLicenseKind>
+        <PuckLicenseKind>GamingBricks</PuckLicenseKind>
         <PuckKind>Validation</PuckKind>
         <PuckLayer>Validation</PuckLayer>
     </PropertyGroup>
@@ -12,6 +12,8 @@
         <!-- PngEncoder, which the diagnostics and link explorers write framebuffer dumps through. -->
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.GamingBricks.Post\Puck.GamingBricks.Post.csproj" />
+        <!-- ChildProcess, which the SameBoy co-simulation diagnostic runs sb-trace through. -->
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
         <!-- BootRomBuilder, whose authored boot images the boot-handoff stage and the diagnostics boot through. -->
         <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />

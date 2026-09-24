@@ -26,7 +26,7 @@ public sealed class ArenaSearchStampLawTests {
                     Kind: SearchShapeKind.Relocate,
                     Displace: false,
                     Directions: [],
-                    PairWithIndex: -1
+                    CompanionIndex: -1
                 )]
         ) {
             Scored = true,

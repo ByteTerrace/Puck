@@ -1,0 +1,146 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/tetromino.puck",
+  "host": {
+    "kind": "document"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "join": {
+        "seat": 1
+      }
+    },
+    {
+      "advance": 4
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "clockwise",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 5
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "left",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 5
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "left",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 5
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "drop",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "hold",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 5
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "right",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 5
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "down",
+        "value": 1,
+        "holdSeconds": 0.3
+      }
+    },
+    {
+      "advance": 12
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "drop",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "set": {
+        "row": "bag",
+        "key": "$value",
+        "value": 0
+      }
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "counter",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 5
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "drop",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 8
+    },
+    {
+      "press": {
+        "seat": 1,
+        "channel": "left",
+        "value": 1,
+        "holdSeconds": 0.1
+      }
+    },
+    {
+      "advance": 60
+    }
+  ]
+}

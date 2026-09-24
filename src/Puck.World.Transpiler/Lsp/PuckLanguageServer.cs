@@ -1,253 +1,133 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Editing;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Validation;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lsp;
 
-/// <summary>High-performance, Native AOT-compatible Language Server Protocol (LSP) implementation for the Puck authoring language.</summary>
-public sealed class PuckLanguageServer {
+/// <summary>The Language Server Protocol (LSP) implementation for the Puck authoring language: completion, hover,
+/// document symbols, formatting, semantic tokens and published diagnostics. <see cref="Handle"/> is the protocol and
+/// knows no transport; <see cref="RunAsync"/> serves it over stdio framing for <c>puck lsp</c>, and the browser engine
+/// hands it one message per call.</summary>
+public sealed partial class PuckLanguageServer {
     private readonly string m_catalogFingerprint;
     private readonly Func<DocumentNode, JsonArray?>? m_completeDocument;
     private readonly Func<DocumentNode, string?, DiagnosticBag, bool>? m_diagnoseDocument;
-    private readonly Stream m_input;
     private readonly IMachineValidationCatalog? m_machines;
-    private readonly Stream m_output;
 
     private readonly Dictionary<string, string> m_documents = new(comparer: StringComparer.OrdinalIgnoreCase);
     private bool m_running = true;
 
-    private static void AddCompletion(JsonArray items, string label, string insertText, string detail, int kind) {
-        AddNode(
-            array: items,
-            node: new JsonObject {
-                ["label"] = label,
-                ["kind"] = kind,
-                ["detail"] = detail,
-                ["insertText"] = insertText,
-                ["insertTextFormat"] = 2, // Snippet
-            }
-        );
-    }
+    private Action<JsonObject>? m_send;
+
     private static void AddNode(JsonArray array, JsonNode? node) {
         array.Add(item: node);
     }
-    private static JsonObject CreateRuleSymbol(RuleBlockNode rule) {
+    private static JsonObject CreateRuleSymbol(RuleBlockNode rule, string source) {
         var ruleSymbol = CreateSymbol(
-            $"rule \"{rule.Name}\"",
-            5,
-            (rule.Line - 1),
-            (rule.Column - 1),
-            rule.Length
+            kind: 5,
+            name: $"rule \"{rule.Name}\"",
+            node: rule,
+            source: source
         );
         var children = new JsonArray();
 
         foreach (var stmt in rule.Statements) {
-            switch (stmt) {
-                case WhenStatementNode when1:
-                    AddNode(
-                        array: children,
-                        node: CreateSymbol(
-                            "when",
-                            6,
-                            (when1.Line - 1),
-                            (when1.Column - 1),
-                            when1.Length
-                        )
-                    );
-                    break;
-                case LocalStatementNode localStmt:
-                    AddNode(
-                        array: children,
-                        node: CreateSymbol(
-                            $"local {localStmt.Name}",
-                            13,
-                            (localStmt.Line - 1),
-                            (localStmt.Column - 1),
-                            localStmt.Length
-                        )
-                    );
-                    break;
-                case DecisionBlockNode decisionStmt:
-                    AddNode(
-                        array: children,
-                        node: CreateSymbol(
-                            "decision",
-                            5,
-                            (decisionStmt.Line - 1),
-                            (decisionStmt.Column - 1),
-                            decisionStmt.Length
-                        )
-                    );
-                    break;
-                case PropertyNode propStmt:
-                    AddNode(
-                        array: children,
-                        node: CreateSymbol(
-                            propStmt.Name,
-                            7,
-                            (propStmt.Line - 1),
-                            (propStmt.Column - 1),
-                            propStmt.Length
-                        )
-                    );
-                    break;
+            var child = stmt switch {
+                WhenStatementNode => CreateSymbol(kind: 6, name: "when", node: stmt, source: source),
+                LocalStatementNode localStmt => CreateSymbol(kind: 13, name: $"local {localStmt.Name}", node: stmt, source: source),
+                DecisionBlockNode => CreateSymbol(kind: 5, name: "decision", node: stmt, source: source),
+                PropertyNode propStmt => CreateSymbol(kind: 7, name: propStmt.Name, node: stmt, source: source),
+                _ => null,
+            };
+
+            if (child is not null) {
+                AddNode(array: children, node: child);
             }
         }
         ruleSymbol["children"] = children;
         return ruleSymbol;
     }
-    private static JsonObject CreateStateWorldSymbol(BlockNode world) {
+    private static JsonObject CreateStateWorldSymbol(BlockNode world, string source) {
         var symbol = CreateSymbol(
-            "world",
-            5,
-            (world.Line - 1),
-            (world.Column - 1),
-            world.Length
+            kind: 5,
+            name: "world",
+            node: world,
+            source: source
         );
         var children = new JsonArray();
 
         foreach (var stmt in world.Statements) {
-            switch (stmt) {
-                case StateTableDeclarationNode table:
-                    AddNode(
-                        array: children,
-                        node: CreateStateTableSymbol(table: table)
-                    );
-                    break;
-                case StateSlotDeclarationNode slot:
-                    AddNode(
-                        array: children,
-                        node: CreateSymbol(
-                            $"slot {slot.Name}",
-                            8,
-                            (slot.Line - 1),
-                            (slot.Column - 1),
-                            slot.Length
-                        )
-                    );
-                    break;
-                case BlockNode { Identifier: "row" } rowBlock:
-                    AddNode(
-                        array: children,
-                        node: CreateSymbol(
-                            "row",
-                            8,
-                            (rowBlock.Line - 1),
-                            (rowBlock.Column - 1),
-                            rowBlock.Length
-                        )
-                    );
-                    break;
-                case StatePileDeclarationNode pile:
-                    AddNode(
-                        array: children,
-                        node: CreateStatePileSymbol(pile: pile)
-                    );
-                    break;
-                case StateGridDeclarationNode grid:
-                    AddNode(
-                        array: children,
-                        node: CreateSymbol(
-                            $"grid {grid.Name}",
-                            8,
-                            (grid.Line - 1),
-                            (grid.Column - 1),
-                            grid.Length
-                        )
-                    );
-                    break;
+            var child = stmt switch {
+                StateTableDeclarationNode table => CreateStateTableSymbol(source: source, table: table),
+                StateSlotDeclarationNode slot => CreateSymbol(kind: 8, name: $"slot {slot.Name}", node: stmt, source: source),
+                BlockNode { Identifier: "row" } => CreateSymbol(kind: 8, name: "row", node: stmt, source: source),
+                StatePileDeclarationNode pile => CreateStatePileSymbol(pile: pile, source: source),
+                StateGridDeclarationNode grid => CreateSymbol(kind: 8, name: $"grid {grid.Name}", node: stmt, source: source),
+                _ => null,
+            };
+
+            if (child is not null) {
+                AddNode(array: children, node: child);
             }
         }
 
         symbol["children"] = children;
         return symbol;
     }
-    private static JsonObject CreateStatePileSymbol(StatePileDeclarationNode pile) {
+    private static JsonObject CreateStatePileSymbol(StatePileDeclarationNode pile, string source) {
         var symbol = CreateSymbol(
-            $"pile {pile.Name} of {pile.TokenRow}",
-            8,
-            (pile.Line - 1),
-            (pile.Column - 1),
-            pile.Length
+            kind: 8,
+            name: $"pile {pile.Name} of {pile.TokenRow}",
+            node: pile,
+            source: source
         );
         var children = new JsonArray();
 
         foreach (var token in pile.Tokens) {
             AddNode(
                 array: children,
-                node: CreateSymbol(
-                    token.Key,
-                    7,
-                    (token.Line - 1),
-                    (token.Column - 1),
-                    token.Length
-                )
+                node: CreateSymbol(kind: 7, name: token.Key, node: token, source: source)
             );
         }
 
         symbol["children"] = children;
         return symbol;
     }
-    private static JsonObject CreateStateTableSymbol(StateTableDeclarationNode table) {
+    private static JsonObject CreateStateTableSymbol(StateTableDeclarationNode table, string source) {
         var symbol = CreateSymbol(
-            (string.IsNullOrEmpty(value: table.Kind) ? $"table {table.Name}" : $"table {table.Name} : {table.Kind}"),
-            8,
-            (table.Line - 1),
-            (table.Column - 1),
-            table.Length
+            kind: 8,
+            name: (string.IsNullOrEmpty(value: table.Kind) ? $"table {table.Name}" : $"table {table.Name} : {table.Kind}"),
+            node: table,
+            source: source
         );
         var children = new JsonArray();
 
         foreach (var cell in table.Cells) {
             AddNode(
                 array: children,
-                node: CreateSymbol(
-                    cell.Key,
-                    7,
-                    (cell.Line - 1),
-                    (cell.Column - 1),
-                    cell.Length
-                )
+                node: CreateSymbol(kind: 7, name: cell.Key, node: cell, source: source)
             );
         }
 
         symbol["children"] = children;
         return symbol;
     }
-    private static JsonObject CreateSymbol(string name, int kind, int line, int character, int length) {
-        return new JsonObject {
-            ["name"] = name,
-            ["kind"] = kind,
-            ["range"] = new JsonObject {
-                ["start"] = new JsonObject { ["line"] = line, ["character"] = character },
-                ["end"] = new JsonObject {
-                    ["line"] = line,
-                    ["character"] = (character + Math.Max(
-            val1: 1,
-            val2: length
-        )),
-                },
-            },
-            ["selectionRange"] = new JsonObject {
-                ["start"] = new JsonObject { ["line"] = line, ["character"] = character },
-                ["end"] = new JsonObject {
-                    ["line"] = line,
-                    ["character"] = (character + Math.Max(
-            val1: 1,
-            val2: length
-        )),
-                },
-            },
-        };
-    }
+    // A symbol's range is the whole construct, across however many lines it spans; so is its selection range.
+    private static JsonObject CreateSymbol(string name, int kind, SyntaxNode node, string source) => new() {
+        ["name"] = name,
+        ["kind"] = kind,
+        ["range"] = LspJson.Range(source: source, span: node.Span),
+        ["selectionRange"] = LspJson.Range(source: source, span: node.Span),
+    };
     // The words this vocabulary's own construct table does not describe: the document headers, the compile-time
     // layer the core owns, the unit suffixes, and the two cell kinds no described member enumerates on its own.
     private static string? GetDocumentationForWord(string word, string? enclosing, bool memberPosition) => (((
@@ -269,7 +149,7 @@ public sealed class PuckLanguageServer {
         "template" => "**`template` Definition**\n\nDeclares a reusable parametric template block expanded at compile time with default and named arguments.",
         "module" => "**`module` Definition**\n\nDeclares a typed compile-time module. Parameters may require points, angles, assets, modules, pools, rows, or gates.",
         "use" => "**`use` Instantiation**\n\nExpands a module at compile time; an `as` alias prefixes its declarations and internal references.",
-        "import" => "**`import` Declaration**\n\nLoads compile-time declarations from a `.puck` source, or composes a runtime `.world.json` document.",
+        "import" => "**`import` Declaration**\n\nLoads compile-time declarations from a `.puck` module, or composes a runtime world document named without a file extension (`import \"games/klondike\"`).",
         "export" => "**`export` Declaration**\n\nDeclares exported world facets (`action`, `binding`, `read`) exposed across the network and to client sessions.",
         "orbit" => "**`orbit(pitch:, yaw:, distance:)`**\n\nConfigures spherical orbit camera positioning relative to the focus target.",
         "fieldOfView" => "**`fieldOfView(degrees:)`**\n\nSets the camera vertical field-of-view in degrees.",
@@ -311,7 +191,7 @@ public sealed class PuckLanguageServer {
         }
         var start = Math.Clamp(value: offset, min: 0, max: text.Length);
 
-        while ((start > 0) && (char.IsLetterOrDigit(c: text[(start - 1)]) || (text[(start - 1)] == '_'))) {
+        while ((start > 0) && IdentifierSpelling.IsPart(character: text[(start - 1)])) {
             start--;
         }
         var end = Math.Min(val1: text.Length, val2: (start + word.Length));
@@ -338,10 +218,10 @@ public sealed class PuckLanguageServer {
             _ => false,
         });
     }
-    // Best-effort: lowers the open document and looks `word` up as a declared `state` row's name, reporting its
-    // kind. Swallows parse/lowering failures — a document mid-edit need not lower cleanly for hover to still work
-    // on the parts that do.
-    private string? GetStateRowHoverCard(string text, string word, string? sourcePath = null) {
+    // Best-effort: lowers the open document and looks `word` up among its `state` declarations: an enum, reporting its
+    // members, or a row, reporting its kind. Swallows parse/lowering failures — a document mid-edit need not lower
+    // cleanly for hover to still work on the parts that do.
+    private string? GetStateHoverCard(string text, string word, string? sourcePath = null) {
         try {
             if (LowerStateSection(
                 sourcePath: sourcePath,
@@ -349,7 +229,7 @@ public sealed class PuckLanguageServer {
             ) is not { } stateSection) {
                 return null;
             }
-            foreach (var (_, section) in stateSection) {
+            foreach (var (sectionName, section) in stateSection) {
                 if (section is not JsonArray rows) {
                     continue;
                 }
@@ -359,6 +239,13 @@ public sealed class PuckLanguageServer {
                         (rowObj["name"]?.ToString() != word)
                     ) {
                         continue;
+                    }
+                    // A row names its enum after `: ` as a record field does, so the name is hovered where it stands.
+                    if (sectionName == "enums") {
+                        return $"**`{word}`** — enum\n\nMembers: {string.Join(
+                            separator: ", ",
+                            values: ((rowObj["members"] as JsonArray) ?? []).Select(selector: static member => $"`{member}`")
+                        )}";
                     }
                     var kind = (rowObj["kind"]?.ToString() ?? "?");
                     var facets = new List<string>();
@@ -385,9 +272,6 @@ public sealed class PuckLanguageServer {
         }
         return null;
     }
-    // A 0-based offset into `text` for an LSP line/character pair.
-    private static int CursorOffset(string text, int line, int character) =>
-        (text.Split('\n').Take(count: line).Sum(selector: static part => (part.Length + 1)) + character);
     private static string? GetWordAtPosition(string text, int targetLine, int targetCol) {
         var lines = text.Split('\n');
 
@@ -407,7 +291,7 @@ public sealed class PuckLanguageServer {
             return null;
         }
 
-        var absolute = (lines.Take(count: targetLine).Sum(selector: part => (part.Length + 1)) + targetCol);
+        var absolute = LspJson.Offset(character: targetCol, line: targetLine, source: text);
 
         for (var index = 0; (index <= absolute); ++index) {
             var lexicalEnd = SourceLexemes.End(
@@ -428,14 +312,14 @@ public sealed class PuckLanguageServer {
                 index = (lexicalEnd - 1);
             }
         }
-        if (!(char.IsLetterOrDigit(c: lineText[targetCol]) || (lineText[targetCol] is '_' or '$'))) {
+        if (!IdentifierSpelling.IsNameCharacter(character: lineText[targetCol])) {
             return null;
         }
         var start = targetCol;
 
         while (
             (start > 0) &&
-            (char.IsLetterOrDigit(c: lineText[(start - 1)]) || (lineText[(start - 1)] == '_') || (lineText[(start - 1)] == '$'))
+            IdentifierSpelling.IsNameCharacter(character: lineText[(start - 1)])
         ) {
             start--;
         }
@@ -450,7 +334,7 @@ public sealed class PuckLanguageServer {
 
         while (
             (end < lineText.Length) &&
-            (char.IsLetterOrDigit(c: lineText[end]) || (lineText[end] == '_') || (lineText[end] == '$'))
+            IdentifierSpelling.IsNameCharacter(character: lineText[end])
         ) {
             end++;
         }
@@ -488,7 +372,7 @@ public sealed class PuckLanguageServer {
 
         while (
             (pos > 0) &&
-            (char.IsLetterOrDigit(c: lineText[(pos - 1)]) || (lineText[(pos - 1)] == '_'))
+            IdentifierSpelling.IsPart(character: lineText[(pos - 1)])
         ) {
             pos--;
         }
@@ -505,7 +389,7 @@ public sealed class PuckLanguageServer {
 
         while (
             (rowStart > 0) &&
-            (char.IsLetterOrDigit(c: lineText[(rowStart - 1)]) || (lineText[(rowStart - 1)] == '_'))
+            IdentifierSpelling.IsPart(character: lineText[(rowStart - 1)])
         ) {
             rowStart--;
         }
@@ -662,7 +546,7 @@ public sealed class PuckLanguageServer {
         return sb.ToString();
     }
     // Looks `rowName` up as a declared `state` row (world, body, or identity) and lists its cell keys as
-    // completion items — the dot-access counterpart to `GetStateRowHoverCard`'s row lookup. Returns null rather
+    // completion items — the dot-access counterpart to `GetStateHoverCard`'s row lookup. Returns null rather
     // than an empty array when the row can't be found or carries no cells, so the caller falls back to the
     // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
     private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset, string? sourcePath = null) {
@@ -699,7 +583,7 @@ public sealed class PuckLanguageServer {
                             (cell is JsonObject cellObj) &&
                             (cellObj["key"]?.ToString() is { } key)
                         ) {
-                            AddCompletion(
+                            LspJson.AddCompletion(
                                 detail: $"state cell — {rowName}.{key}",
                                 insertText: key,
                                 items: items,
@@ -716,7 +600,7 @@ public sealed class PuckLanguageServer {
         }
         return null;
     }
-    private async Task HandleCompletionAsync(JsonNode? id, JsonObject? @params) {
+    private void HandleCompletion(JsonNode? id, JsonObject? @params) {
         var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
 
         if (
@@ -728,10 +612,10 @@ public sealed class PuckLanguageServer {
             (PuckParser.ParseDocumentWithDiagnostics(source: source, vocabulary: m_vocabularyResolver.Resolve(source: source)).Value is { } document) &&
             (m_completeDocument(document) is { } specialized)
         ) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: new JsonObject { ["isIncomplete"] = false, ["items"] = specialized }
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
@@ -755,7 +639,7 @@ public sealed class PuckLanguageServer {
             text: text
         )
         ) {
-            var cursorOffset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
+            var cursorOffset = LspJson.Offset(character: col, line: line, source: text);
             string? completionSourcePath = null;
 
             if (TryGetLocalPath(path: out var localCompPath, uri: uri)) {
@@ -774,10 +658,10 @@ public sealed class PuckLanguageServer {
             ));
 
             if (keyItems is { Count: > 0 }) {
-                await SendResponseAsync(
+                SendResponse(
                     id: id,
                     result: new JsonObject { ["isIncomplete"] = false, ["items"] = keyItems }
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                );
                 return;
             }
         }
@@ -788,7 +672,7 @@ public sealed class PuckLanguageServer {
             value: out var docText
         )
         ) {
-            var offset = (docText.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
+            var offset = LspJson.Offset(character: col, line: line, source: docText);
 
             if (PuckSqlLsp.IsCursorInsideSqlBlock(
                 cursorOffset: offset,
@@ -797,10 +681,10 @@ public sealed class PuckLanguageServer {
             )) {
                 var sqlItems = PuckSqlLsp.GetSqlCompletions(resolver: m_vocabularyResolver, text: docText);
 
-                await SendResponseAsync(
+                SendResponse(
                     id: id,
                     result: new JsonObject { ["isIncomplete"] = false, ["items"] = sqlItems }
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                );
                 return;
             }
         }
@@ -818,10 +702,10 @@ public sealed class PuckLanguageServer {
         PuckEmbeddingLsp.AddCompletions(items: items);
         WorldConstructLanguageServices.AddCompletions(
             enclosing: WorldConstructLanguageServices.ConstructAt(
-                offset: CursorOffset(
+                offset: LspJson.Offset(
                     character: col,
                     line: line,
-                    text: completionText
+                    source: completionText
                 ),
                 table: WorldConstructs.Table,
                 text: completionText
@@ -833,63 +717,63 @@ public sealed class PuckLanguageServer {
         // What follows is everything the construct table does not describe: the document headers, the
         // compile-time layer the core owns, the camera and scalar function forms, the unit suffixes, the
         // plural array properties, and the `$type` call-form escape hatches.
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Directive: Schema declaration",
             insertText: "schema: \"puck.world.definition.v1\"",
             items: items,
             kind: 14,
             label: "schema"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Directive: Base world inheritance",
-            insertText: "basis: \"worlds/base.puck\"",
+            insertText: "basis: \"worlds/base\"",
             items: items,
             kind: 14,
             label: "basis"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Directive: Document ID tag",
             insertText: "documentId: \"my-world-id\"",
             items: items,
             kind: 14,
             label: "documentId"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Declare constant",
             insertText: "let ${1:name} = ${2:value}",
             items: items,
             kind: 14,
             label: "let"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Parametric template",
             insertText: "template ${1:name}(${2:params}) {\n    $0\n}",
             items: items,
             kind: 14,
             label: "template"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Typed module",
             insertText: "module ${1:name}(${2:params}) {\n    $0\n}",
             items: items,
             kind: 14,
             label: "module"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Instantiate module",
             insertText: "use ${1:module} as ${2:alias}(${3:arguments})",
             items: items,
             kind: 14,
             label: "use"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Module import",
             insertText: "import \"${1:path}\" as ${2:alias}",
             items: items,
             kind: 14,
             label: "import"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Facet export",
             insertText: "export ${1|action,binding,read|} ${2:names}",
             items: items,
@@ -899,21 +783,21 @@ public sealed class PuckLanguageServer {
 
         // The array spelling of a row construct. A container takes no `:` — `materials: [` is PUCK040 — so the
         // inserted text is what the language accepts, which `ConstructCompletionSnippetLawTests` parses.
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Section: Surface materials",
             insertText: "materials [\n    $0\n]",
             items: items,
             kind: 7,
             label: "materials"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Section: Reactive state rules",
             insertText: "rules [\n    $0\n]",
             items: items,
             kind: 7,
             label: "rules"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Section: WASM Addons",
             insertText: "addons [\n    $0\n]",
             items: items,
@@ -922,28 +806,28 @@ public sealed class PuckLanguageServer {
         );
 
 
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Camera orbit operation",
             insertText: "orbit(pitch: ${1:0deg}, yaw: ${2:0deg}, distance: ${3:2.5m})",
             items: items,
             kind: 3,
             label: "orbit"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Camera field-of-view operation",
             insertText: "fieldOfView(degrees: ${1:60})",
             items: items,
             kind: 3,
             label: "fieldOfView"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Bitwise lattice shift function",
             insertText: "boardShift(${1:mask}, ${2:lattice}, ${3:dir})",
             items: items,
             kind: 3,
             label: "boardShift"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Math clamp function",
             insertText: "clamp(${1:val}, ${2:min}, ${3:max})",
             items: items,
@@ -951,56 +835,56 @@ public sealed class PuckLanguageServer {
             label: "clamp"
         );
 
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Seconds",
             insertText: "s",
             items: items,
             kind: 11,
             label: "s"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Milliseconds",
             insertText: "ms",
             items: items,
             kind: 11,
             label: "ms"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Hertz (frequency)",
             insertText: "hz",
             items: items,
             kind: 11,
             label: "hz"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Radians",
             insertText: "rad",
             items: items,
             kind: 11,
             label: "rad"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Degrees",
             insertText: "deg",
             items: items,
             kind: 11,
             label: "deg"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Meters",
             insertText: "m",
             items: items,
             kind: 11,
             label: "m"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Centimeters",
             insertText: "cm",
             items: items,
             kind: 11,
             label: "cm"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Unit: Millimeters",
             insertText: "mm",
             items: items,
@@ -1008,42 +892,42 @@ public sealed class PuckLanguageServer {
             label: "mm"
         );
 
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Rule/option gate",
             insertText: "when ${1:condition}",
             items: items,
             kind: 14,
             label: "when"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Gate conjunction",
             insertText: "and",
             items: items,
             kind: 14,
             label: "and"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Gate disjunction",
             insertText: "or",
             items: items,
             kind: 14,
             label: "or"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Gate negation",
             insertText: "not ${1:condition}",
             items: items,
             kind: 14,
             label: "not"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: Comparison kind annotation — wrap in (...) beside and/or",
             insertText: "as ${1|Int,Fixed|}",
             items: items,
             kind: 14,
             label: "as"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Keyword: 'if' alternate branch",
             insertText: "else {\n    $0\n}",
             items: items,
@@ -1051,77 +935,77 @@ public sealed class PuckLanguageServer {
             label: "else"
         );
 
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Predicate: compareState",
             insertText: "compareState(state: \"${1:row}\", comparison: ${2|Equal,NotEqual,Less,LessOrEqual,Greater,GreaterOrEqual|}, value: ${3:0})",
             items: items,
             kind: 3,
             label: "compareState"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Predicate: compareValue",
             insertText: "compareValue(left: \"${1:expr}\", comparison: ${2|Equal,NotEqual,Less,LessOrEqual,Greater,GreaterOrEqual|}, right: \"${3:expr}\")",
             items: items,
             kind: 3,
             label: "compareValue"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Effect: setState",
             insertText: "setState(state: \"${1:row}\", value: ${2:0})",
             items: items,
             kind: 3,
             label: "setState"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Effect: addState",
             insertText: "addState(state: \"${1:row}\", value: ${2:0})",
             items: items,
             kind: 3,
             label: "addState"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Effect: pushState",
             insertText: "pushState(state: \"${1:row}\", value: ${2:0})",
             items: items,
             kind: 3,
             label: "pushState"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Effect: removeStateCell",
             insertText: "removeStateCell(state: \"${1:row}\")",
             items: items,
             kind: 3,
             label: "removeStateCell"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Effect: scheduleState",
             insertText: "scheduleState(state: \"${1:row}\", delaySeconds: ${2:1})",
             items: items,
             kind: 3,
             label: "scheduleState"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "CellKind: exact integer domain",
             insertText: "Int",
             items: items,
             kind: 13,
             label: "Int"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "CellKind: fixed-point domain",
             insertText: "Fixed",
             items: items,
             kind: 13,
             label: "Fixed"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "CellKind: boolean domain",
             insertText: "Bool",
             items: items,
             kind: 13,
             label: "Bool"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "CellKind: string domain",
             insertText: "Text",
             items: items,
@@ -1129,25 +1013,25 @@ public sealed class PuckLanguageServer {
             label: "Text"
         );
 
-        await SendResponseAsync(
+        SendResponse(
             id: id,
             result: new JsonObject {
                 ["isIncomplete"] = false,
                 ["items"] = items,
             }
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        );
     }
-    private async Task HandleDocumentSymbolAsync(JsonNode? id, JsonObject? @params) {
+    private void HandleDocumentSymbol(JsonNode? id, JsonObject? @params) {
         var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
 
         if (!m_documents.TryGetValue(
             key: uri,
             value: out var text
         )) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: new JsonArray()
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
@@ -1158,10 +1042,10 @@ public sealed class PuckLanguageServer {
         var docNode = parseResult.Value;
 
         if (docNode is null) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: new JsonArray()
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
@@ -1169,71 +1053,35 @@ public sealed class PuckLanguageServer {
 
         foreach (var stmt in docNode.Statements) {
             if (stmt is BlockNode block) {
-                var name = ((block.Name is not null)
-                    ? $"{block.Identifier} \"{block.Name}\""
-                    : block.Identifier
-                );
                 var blockSym = CreateSymbol(
-                    name,
-                    5,
-                    (block.Line - 1),
-                    (block.Column - 1),
-                    block.Length
+                    kind: 5,
+                    name: ((block.Name is not null) ? $"{block.Identifier} \"{block.Name}\"" : block.Identifier),
+                    node: block,
+                    source: text
                 );
                 var children = new JsonArray();
+                var inState = string.Equals(
+                    a: block.Identifier,
+                    b: "state",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                );
 
                 foreach (var child in block.Statements) {
-                    if (
-                        (child is BlockNode { Identifier: "world", Name: null, Target: null } worldBlock) &&
-                        string.Equals(
-                        a: block.Identifier,
-                        b: "state",
-                        comparisonType: StringComparison.OrdinalIgnoreCase
-                    )
-                    ) {
-                        AddNode(
-                            array: children,
-                            node: CreateStateWorldSymbol(world: worldBlock)
-                        );
-                    } else if (
-                        (child is BlockNode { Identifier: "spaces", Name: null, Target: null } spacesBlock) &&
-                        string.Equals(
-                        a: block.Identifier,
-                        b: "state",
-                        comparisonType: StringComparison.OrdinalIgnoreCase
-                    )
-                    ) {
-                        AddNode(
-                            array: children,
-                            node: PuckEmbeddingLsp.CreateSpacesSymbol(spaces: spacesBlock)
-                        );
-                    } else if (child is BlockNode childBlock) {
-                        var cName = ((childBlock.Name is not null)
-                            ? $"{childBlock.Identifier} \"{childBlock.Name}\""
-                            : childBlock.Identifier
-                        );
+                    var childSym = child switch {
+                        BlockNode { Identifier: "world", Name: null, Target: null } worldBlock when inState => CreateStateWorldSymbol(source: text, world: worldBlock),
+                        BlockNode { Identifier: "spaces", Name: null, Target: null } spacesBlock when inState => PuckEmbeddingLsp.CreateSpacesSymbol(source: text, spaces: spacesBlock),
+                        BlockNode childBlock => CreateSymbol(
+                            kind: 5,
+                            name: ((childBlock.Name is not null) ? $"{childBlock.Identifier} \"{childBlock.Name}\"" : childBlock.Identifier),
+                            node: childBlock,
+                            source: text
+                        ),
+                        PropertyNode childProp => CreateSymbol(kind: 7, name: childProp.Name, node: childProp, source: text),
+                        _ => null,
+                    };
 
-                        AddNode(
-                            array: children,
-                            node: CreateSymbol(
-                                cName,
-                                5,
-                                (childBlock.Line - 1),
-                                (childBlock.Column - 1),
-                                childBlock.Length
-                            )
-                        );
-                    } else if (child is PropertyNode childProp) {
-                        AddNode(
-                            array: children,
-                            node: CreateSymbol(
-                                childProp.Name,
-                                7,
-                                (childProp.Line - 1),
-                                (childProp.Column - 1),
-                                childProp.Length
-                            )
-                        );
+                    if (childSym is not null) {
+                        AddNode(array: children, node: childSym);
                     }
                 }
                 blockSym["children"] = children;
@@ -1241,119 +1089,77 @@ public sealed class PuckLanguageServer {
                     array: symbols,
                     node: blockSym
                 );
-            } else if (stmt is PropertyNode prop) {
-                AddNode(
-                    array: symbols,
-                    node: CreateSymbol(
-                        prop.Name,
-                        7,
-                        (prop.Line - 1),
-                        (prop.Column - 1),
-                        prop.Length
-                    )
-                );
-            } else if (stmt is LetNode letNode) {
-                AddNode(
-                    array: symbols,
-                    node: CreateSymbol(
-                        $"let {letNode.Name}",
-                        13,
-                        (letNode.Line - 1),
-                        (letNode.Column - 1),
-                        letNode.Length
-                    )
-                );
-            } else if (stmt is TemplateNode tmpl) {
-                AddNode(
-                    array: symbols,
-                    node: CreateSymbol(
-                        $"template {tmpl.Name}",
-                        11,
-                        (tmpl.Line - 1),
-                        (tmpl.Column - 1),
-                        tmpl.Length
-                    )
-                );
-            } else if (stmt is RuleBlockNode ruleBlock) {
-                AddNode(
-                    array: symbols,
-                    node: CreateRuleSymbol(rule: ruleBlock)
-                );
+                continue;
+            }
+
+            var symbol = stmt switch {
+                PropertyNode prop => CreateSymbol(kind: 7, name: prop.Name, node: prop, source: text),
+                LetNode letNode => CreateSymbol(kind: 13, name: $"let {letNode.Name}", node: letNode, source: text),
+                TemplateNode tmpl => CreateSymbol(kind: 11, name: $"template {tmpl.Name}", node: tmpl, source: text),
+                RuleBlockNode ruleBlock => CreateRuleSymbol(rule: ruleBlock, source: text),
+                _ => null,
+            };
+
+            if (symbol is not null) {
+                AddNode(array: symbols, node: symbol);
             }
         }
 
-        await SendResponseAsync(
+        SendResponse(
             id: id,
             result: symbols
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        );
     }
-    private async Task HandleFormattingAsync(JsonNode? id, JsonObject? @params) {
+    private void HandleFormatting(JsonNode? id, JsonObject? @params) {
         var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
 
         if (!m_documents.TryGetValue(
             key: uri,
             value: out var text
         )) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: new JsonArray()
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
-        var options = @params?["options"];
-        var tabSize = (options?["tabSize"]?.GetValue<int>() ?? 2);
-        var insertSpaces = (options?["insertSpaces"]?.GetValue<bool>() ?? true);
+        // The request's tabSize and insertSpaces are not read: a source has one layout, and the editor receives exactly
+        // the text `puck format` writes.
         var printed = PuckPrinter.Format(
-            options: new PuckPrintOptions {
-                InsertSpaces = insertSpaces,
-                TabSize = ((tabSize > 0)
-                    ? tabSize
-                    : 2),
-            },
             source: text,
             vocabulary: m_vocabularyResolver.Resolve(source: text)
         );
 
         // A document that does not parse has no tree to print, so the editor keeps what the author is typing.
         if (printed.Value is not { } formatted) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: new JsonArray()
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
 
             return;
         }
-
-        var lines = text.Split('\n');
-        var lastLine = Math.Max(
-            val1: 0,
-            val2: (lines.Length - 1)
-        );
-        var lastChar = ((lines.Length > 0)
-            ? lines[^1].Length
-            : 0
-        );
 
         var edits = new JsonArray();
 
         AddNode(
             array: edits,
             node: new JsonObject {
-                ["range"] = new JsonObject {
-                    ["start"] = new JsonObject { ["line"] = 0, ["character"] = 0 },
-                    ["end"] = new JsonObject { ["line"] = lastLine, ["character"] = lastChar },
-                },
+                ["range"] = LspJson.Range(
+                    end: LspJson.PositionOf(offset: text.Length, source: text),
+                    start: (0, 0)
+                ),
                 ["newText"] = formatted,
             }
         );
 
-        await SendResponseAsync(
+        SendResponse(
             id: id,
             result: edits
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        );
     }
-    private async Task HandleHoverAsync(JsonNode? id, JsonObject? @params) {
+    private void HandleHover(JsonNode? id, JsonObject? @params) {
         var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
         var line = (@params?["position"]?["line"]?.GetValue<int>() ?? 0);
         var col = (@params?["position"]?["character"]?.GetValue<int>() ?? 0);
@@ -1362,10 +1168,10 @@ public sealed class PuckLanguageServer {
             key: uri,
             value: out var text
         )) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: null
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
@@ -1375,10 +1181,10 @@ public sealed class PuckLanguageServer {
             text: text
         );
 
-        var offset = CursorOffset(
+        var offset = LspJson.Offset(
             character: col,
             line: line,
-            text: text
+            source: text
         );
         var enclosing = WorldConstructLanguageServices.ConstructAt(
             offset: offset,
@@ -1399,7 +1205,7 @@ public sealed class PuckLanguageServer {
         );
 
         if (embeddingCard is not null) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: new JsonObject {
                     ["contents"] = new JsonObject {
@@ -1407,15 +1213,15 @@ public sealed class PuckLanguageServer {
                         ["value"] = embeddingCard,
                     },
                 }
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
         if (string.IsNullOrEmpty(value: word)) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: null
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
@@ -1435,21 +1241,21 @@ public sealed class PuckLanguageServer {
             resolver: m_vocabularyResolver,
             source: text,
             word: word
-        ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(enclosing: enclosing, memberPosition: memberPosition, word: word) ?? GetStateRowHoverCard(
+        ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(enclosing: enclosing, memberPosition: memberPosition, word: word) ?? GetStateHoverCard(
             sourcePath: hoverSourcePath,
             text: text,
             word: word
         )))));
 
         if (docCard is null) {
-            await SendResponseAsync(
+            SendResponse(
                 id: id,
                 result: null
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            );
             return;
         }
 
-        await SendResponseAsync(
+        SendResponse(
             id: id,
             result: new JsonObject {
                 ["contents"] = new JsonObject {
@@ -1457,9 +1263,14 @@ public sealed class PuckLanguageServer {
                     ["value"] = docCard,
                 },
             }
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        );
     }
-    private async Task HandleInitializeAsync(JsonNode? id) {
+    private void HandleInitialize(JsonNode? id, JsonObject? @params) {
+        // `initializationOptions.diagnostics`: "source" runs the source tier alone; anything else, or nothing, is full.
+        m_depth = (((@params?["initializationOptions"]?["diagnostics"] is JsonValue depth) && depth.TryGetValue<string>(value: out var named) && (named == "source"))
+            ? PuckDiagnosticDepth.Source
+            : PuckDiagnosticDepth.Full
+        );
         var capabilities = new JsonObject {
             ["capabilities"] = new JsonObject {
                 ["textDocumentSync"] = 1, // Full
@@ -1478,6 +1289,13 @@ public sealed class PuckLanguageServer {
                 ["hoverProvider"] = true,
                 ["documentSymbolProvider"] = true,
                 ["documentFormattingProvider"] = true,
+                ["semanticTokensProvider"] = new JsonObject {
+                    ["legend"] = new JsonObject {
+                        ["tokenTypes"] = new JsonArray(items: [.. PuckSemanticTokens.TokenTypes.Select(selector: static name => ((JsonNode?)JsonValue.Create(value: name)))]),
+                        ["tokenModifiers"] = new JsonArray(items: [.. PuckSemanticTokens.TokenModifiers.Select(selector: static name => ((JsonNode?)JsonValue.Create(value: name)))]),
+                    },
+                    ["full"] = true,
+                },
             },
             ["serverInfo"] = new JsonObject {
                 ["name"] = "Puck Language Server",
@@ -1485,12 +1303,12 @@ public sealed class PuckLanguageServer {
             },
         };
 
-        await SendResponseAsync(
+        SendResponse(
             id: id,
             result: capabilities
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        );
     }
-    private async Task HandleMessageAsync(JsonObject msg) {
+    private void HandleMessage(JsonObject msg) {
         var id = msg["id"];
         var method = msg["method"]?.ToString();
         var @params = (msg["params"] as JsonObject);
@@ -1501,7 +1319,10 @@ public sealed class PuckLanguageServer {
 
         switch (method) {
             case "initialize":
-                await HandleInitializeAsync(id: id).ConfigureAwait(continueOnCapturedContext: false);
+                HandleInitialize(
+                    id: id,
+                    @params: @params
+                );
                 break;
 
             case "initialized":
@@ -1513,11 +1334,11 @@ public sealed class PuckLanguageServer {
                     var uri = (openDoc["uri"]?.ToString() ?? "");
                     var text = (openDoc["text"]?.ToString() ?? "");
 
-                    m_documents[uri] = text;
-                    await PublishDiagnosticsAsync(
+                    Edited(
                         text: text,
-                        uri: uri
-                    ).ConfigureAwait(continueOnCapturedContext: false);
+                        uri: uri,
+                        version: ReadVersion(document: openDoc)
+                    );
                 }
                 break;
 
@@ -1534,11 +1355,11 @@ public sealed class PuckLanguageServer {
                     ) {
                         var text = (lastChange["text"]?.ToString() ?? "");
 
-                        m_documents[uri] = text;
-                        await PublishDiagnosticsAsync(
+                        Edited(
                             text: text,
-                            uri: uri
-                        ).ConfigureAwait(continueOnCapturedContext: false);
+                            uri: uri,
+                            version: ReadVersion(document: changeDoc)
+                        );
                     }
                 }
                 break;
@@ -1547,51 +1368,63 @@ public sealed class PuckLanguageServer {
                 if (@params?["textDocument"] is JsonObject closeDoc) {
                     var uri = (closeDoc["uri"]?.ToString() ?? "");
 
-                    m_documents.Remove(key: uri);
-                    await SendNotificationAsync(
+                    _ = m_documents.Remove(key: uri);
+                    _ = m_versions.Remove(key: uri);
+                    _ = m_generations.Remove(key: uri);
+                    _ = m_pending.Remove(key: uri);
+                    _ = m_dependencies.Remove(key: uri);
+                    _ = m_semanticPending.Remove(key: uri);
+                    SendNotification(
                         method: "textDocument/publishDiagnostics",
                         @params: new JsonObject {
                             ["uri"] = uri,
                             ["diagnostics"] = new JsonArray(),
                         }
-                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    );
                 }
                 break;
 
             case "textDocument/completion":
-                await HandleCompletionAsync(
+                HandleCompletion(
                     id: id,
                     @params: @params
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                );
                 break;
 
             case "textDocument/hover":
-                await HandleHoverAsync(
+                HandleHover(
                     id: id,
                     @params: @params
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                );
                 break;
 
             case "textDocument/documentSymbol":
-                await HandleDocumentSymbolAsync(
+                HandleDocumentSymbol(
                     id: id,
                     @params: @params
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                );
                 break;
 
             case "textDocument/formatting":
-                await HandleFormattingAsync(
+                HandleFormatting(
                     id: id,
                     @params: @params
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                );
+                break;
+
+            case "textDocument/semanticTokens/full":
+                HandleSemanticTokens(
+                    id: id,
+                    @params: @params
+                );
                 break;
 
             case "shutdown":
                 m_running = false;
-                await SendResponseAsync(
+                SendResponse(
                     id: id,
                     result: null
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                );
                 break;
 
             case "exit":
@@ -1601,171 +1434,69 @@ public sealed class PuckLanguageServer {
             default:
                 if (id is not null) {
                     // Method not found
-                    await SendResponseAsync(
+                    SendResponse(
                         id: id,
                         result: null
-                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    );
                 }
                 break;
         }
     }
-    private async Task LogMessageAsync(string message) {
-        await SendNotificationAsync(
-            method: "window/logMessage",
-            @params: new JsonObject {
-                ["type"] = 4, // Info
-                ["message"] = message,
-            }
-        ).ConfigureAwait(continueOnCapturedContext: false);
-    }
-    private async Task PublishDiagnosticsAsync(string uri, string text) {
-        var diagnosticsBag = WorldSourceDiagnostics.Diagnose(
-            catalogFingerprint: m_catalogFingerprint,
-            foreign: m_diagnoseDocument,
-            machines: m_machines,
-            source: text,
-            sourcePath: (TryGetLocalPath(
-                path: out var sourcePath,
-                uri: uri
+    private void HandleSemanticTokens(JsonNode? id, JsonObject? @params) {
+        var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
+        var data = (m_documents.TryGetValue(
+            key: uri,
+            value: out var text
+        )
+            ? PuckSemanticTokens.Encode(
+                source: text,
+                tokens: PuckSemanticTokens.Classify(
+                    source: text,
+                    vocabulary: m_vocabularyResolver.Resolve(source: text)
+                )
             )
-                ? sourcePath
-                : null),
-            vocabularies: m_vocabularyResolver
+            : []
         );
 
-        var lspDiags = new JsonArray();
-
-        foreach (var diag in diagnosticsBag) {
-            var severity = diag.Severity switch {
-                DiagnosticSeverity.Error => 1,
-                DiagnosticSeverity.Warning => 2,
-                _ => 3
-            };
-
-            var startLine = Math.Max(
-                val1: 0,
-                val2: (diag.Span.Line - 1)
-            );
-            var startCol = Math.Max(
-                val1: 0,
-                val2: (diag.Span.Column - 1)
-            );
-            var endCol = (startCol + Math.Max(
-                val1: 1,
-                val2: diag.Span.Length
-            ));
-
-            AddNode(
-                array: lspDiags,
-                node: new JsonObject {
-                    ["range"] = new JsonObject {
-                        ["start"] = new JsonObject { ["line"] = startLine, ["character"] = startCol },
-                        ["end"] = new JsonObject { ["line"] = startLine, ["character"] = endCol },
-                    },
-                    ["severity"] = severity,
-                    ["code"] = diag.Code,
-                    ["source"] = "puck",
-                    ["message"] = diag.Message,
-                }
-            );
-        }
-
-        await SendNotificationAsync(
-            method: "textDocument/publishDiagnostics",
-            @params: new JsonObject {
-                ["uri"] = uri,
-                ["diagnostics"] = lspDiags,
-            }
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        SendResponse(
+            id: id,
+            result: new JsonObject { ["data"] = new JsonArray(items: [.. data.Select(selector: static value => ((JsonNode?)JsonValue.Create(value: value)))]) }
+        );
     }
-    private static async Task<string?> ReadMessageAsync(Stream stream, CancellationToken cancellationToken) {
-        var contentLength = -1;
-        var headerBuffer = new List<byte>();
-
-        while (true) {
-            var b = stream.ReadByte();
-
-            if (b == -1) {
-                return null;
-            }
-
-            headerBuffer.Add(item: ((byte)b));
-            if (
-                (headerBuffer.Count >= 4) &&
-                (headerBuffer[^4] == '\r') &&
-                (headerBuffer[^3] == '\n') &&
-                (headerBuffer[^2] == '\r') &&
-                (headerBuffer[^1] == '\n')
-            ) {
-                var headerText = Encoding.ASCII.GetString(bytes: headerBuffer.ToArray());
-
-                foreach (var line in headerText.Split(
-                    options: StringSplitOptions.RemoveEmptyEntries,
-                    separator: ["\r\n"]
-                )) {
-                    if (line.StartsWith(
-                        comparisonType: StringComparison.OrdinalIgnoreCase,
-                        value: "Content-Length:"
-                    )) {
-                        var lengthStr = line.Substring(startIndex: "Content-Length:".Length).Trim();
-
-                        int.TryParse(
-                            result: out contentLength,
-                            s: lengthStr
-                        );
-                    }
-                }
-                break;
-            }
-        }
-
-        if (contentLength <= 0) {
-            return null;
-        }
-
-        var bodyBuffer = new byte[contentLength];
-        var bytesRead = 0;
-
-        while (bytesRead < contentLength) {
-            var read = await stream.ReadAsync(
-                buffer: bodyBuffer.AsMemory(
-                    length: (contentLength - bytesRead),
-                    start: bytesRead
-                ),
-                cancellationToken: cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            if (read == 0) {
-                return null;
-            }
-            bytesRead += read;
-        }
-
-        return Encoding.UTF8.GetString(bytes: bodyBuffer);
-    }
-    private async Task SendNotificationAsync(string method, JsonObject @params) {
+    private void LogMessage(string message) => Send(message: LogNotification(message: message));
+    private static JsonObject LogNotification(string message) => new() {
+        ["jsonrpc"] = "2.0",
+        ["method"] = "window/logMessage",
+        ["params"] = new JsonObject {
+            ["type"] = 4, // Info
+            ["message"] = message,
+        },
+    };
+    private void SendNotification(string method, JsonObject @params) {
         var notification = new JsonObject {
             ["jsonrpc"] = "2.0",
             ["method"] = method,
             ["params"] = @params,
         };
 
-        await WriteMessageAsync(
-            m_output,
-            notification.ToJsonString()
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        Send(message: notification);
     }
-    private async Task SendResponseAsync(JsonNode? id, JsonNode? result) {
+    // Every outgoing message leaves through the sink the message being handled brought with it.
+    private void Send(JsonObject message) {
+        if (m_send is not { } send) {
+            throw new InvalidOperationException(message: "The language server sends only while it handles a message.");
+        }
+
+        send(obj: message);
+    }
+    private void SendResponse(JsonNode? id, JsonNode? result) {
         var response = new JsonObject {
             ["jsonrpc"] = "2.0",
             ["id"] = id?.DeepClone(),
             ["result"] = result,
         };
 
-        await WriteMessageAsync(
-            m_output,
-            response.ToJsonString()
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        Send(message: response);
     }
     private static bool TryGetLocalPath(string uri, out string path) {
         if (
@@ -1796,63 +1527,193 @@ public sealed class PuckLanguageServer {
         path = "";
         return false;
     }
-    private static async Task WriteMessageAsync(Stream stream, string json) {
-        var bytes = Encoding.UTF8.GetBytes(s: json);
-        var header = $"Content-Length: {bytes.Length}\r\n\r\n";
-        var headerBytes = Encoding.ASCII.GetBytes(s: header);
 
-        await stream.WriteAsync(headerBytes).ConfigureAwait(continueOnCapturedContext: false);
-        await stream.WriteAsync(bytes).ConfigureAwait(continueOnCapturedContext: false);
-        await stream.FlushAsync().ConfigureAwait(continueOnCapturedContext: false);
-    }
+    /// <summary>Gets whether the session is still open: a <c>shutdown</c> request or an <c>exit</c> notification closes
+    /// it, and a host stops handing it messages once it is closed.</summary>
+    public bool IsRunning => m_running;
 
-    /// <summary>Runs the Language Server loop until shutdown or EOF.</summary>
-    public async Task RunAsync(CancellationToken cancellationToken = default) {
-        while (
-            m_running &&
-            !cancellationToken.IsCancellationRequested
-        ) {
-            var message = await ReadMessageAsync(
-                cancellationToken: cancellationToken,
-                stream: m_input
-            ).ConfigureAwait(continueOnCapturedContext: false);
+    /// <summary>Handles one JSON-RPC message, handing every message it writes in reply — responses, and notifications
+    /// such as <c>textDocument/publishDiagnostics</c> — to <paramref name="send"/> in the order it writes them, before
+    /// returning. A message that is not JSON, or whose handling throws, is answered with a <c>window/logMessage</c>
+    /// notification naming the failure, and the session stays open.</summary>
+    /// <param name="message">One JSON-RPC 2.0 message, as text.</param>
+    /// <param name="send">Receives each outgoing message.</param>
+    /// <remarks>This is the whole protocol; a transport only carries messages in and out of it. <see cref="RunAsync"/>
+    /// is the stdio host (<c>puck lsp</c>), and the browser engine hands it one message per call. The server keeps its
+    /// open documents between calls and is not safe for concurrent use.</remarks>
+    /// <exception cref="InvalidOperationException">The server is already handling a message.</exception>
+    public void Handle(string message, Action<JsonObject> send) {
+        ArgumentNullException.ThrowIfNull(argument: message);
+        ArgumentNullException.ThrowIfNull(argument: send);
 
-            if (message is null) {
-                break;
-            }
+        if (m_send is not null) {
+            throw new InvalidOperationException(message: "The language server handles one message at a time.");
+        }
 
+        m_send = send;
+
+        try {
             try {
-                var jsonNode = JsonNode.Parse(message);
-
-                if (jsonNode is JsonObject requestObj) {
-                    await HandleMessageAsync(msg: requestObj).ConfigureAwait(continueOnCapturedContext: false);
+                if (JsonNode.Parse(json: message) is JsonObject request) {
+                    HandleMessage(msg: request);
                 }
             } catch (Exception ex) {
-                // Log and continue
-                await LogMessageAsync(message: $"LSP parse error: {ex.Message}").ConfigureAwait(continueOnCapturedContext: false);
+                LogMessage(message: $"LSP parse error: {ex.Message}");
             }
+        } finally {
+            m_send = null;
+        }
+    }
+    /// <summary>Serves the session over the Language Server Protocol's base framing (<see cref="LspFraming"/>) until
+    /// the session closes, <paramref name="input"/> ends, or <paramref name="input"/> breaks its framing.</summary>
+    /// <param name="input">The stream to read framed messages from (e.g. <c>Console.OpenStandardInput()</c>).</param>
+    /// <param name="output">The stream to write framed messages to (e.g. <c>Console.OpenStandardOutput()</c>).</param>
+    /// <param name="cancellationToken">Ends the loop.</param>
+    /// <returns>A task that completes when the loop ends and the diagnosis it started, if any, has returned.</returns>
+    /// <remarks>Messages are read ahead of handling, and each is handled as soon as it is read. Pending diagnostic
+    /// work runs, one document at a time, only while no read message waits, off the loop so a message arriving
+    /// meanwhile is handled at once; a message that marks the document being diagnosed again cancels that diagnosis.
+    /// When the input ends, the work still pending runs before the loop ends, since input that has ended is as quiet as
+    /// input can be. When the session closes, a running diagnosis is cancelled and awaited, never abandoned.</remarks>
+    public async Task RunAsync(Stream input, Stream output, CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(argument: input);
+        ArgumentNullException.ThrowIfNull(argument: output);
+
+        var inbox = System.Threading.Channels.Channel.CreateUnbounded<string>();
+        // The reader runs apart from the loop, so a read blocked on a quiet input never holds up diagnostic work, and is
+        // left behind when the session closes before the input ends.
+        _ = Task.Run(
+            cancellationToken: cancellationToken,
+            function: () => ReadAllAsync(
+                cancellationToken: cancellationToken,
+                inbox: inbox.Writer,
+                input: input
+            )
+        );
+        var outgoing = new List<JsonObject>();
+        DiagnosisRequest? request = null;
+        Task<Diagnosis>? diagnosing = null;
+        CancellationTokenSource? cancelDiagnosis = null;
+
+        async Task FlushAsync() {
+            foreach (var reply in outgoing) {
+                await LspFraming.WriteAsync(
+                    cancellationToken: cancellationToken,
+                    json: reply.ToJsonString(),
+                    stream: output
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            }
+            outgoing.Clear();
+        }
+
+        try {
+            while (
+                m_running &&
+                !cancellationToken.IsCancellationRequested
+            ) {
+                if (inbox.Reader.TryRead(item: out var message)) {
+                    Handle(
+                        message: message,
+                        send: outgoing.Add
+                    );
+                    await FlushAsync().ConfigureAwait(continueOnCapturedContext: false);
+
+                    if ((request is not null) && !IsCurrent(request: request)) {
+                        await cancelDiagnosis!.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+                    }
+                    continue;
+                }
+                if (diagnosing is not null) {
+                    if (!diagnosing.IsCompleted) {
+                        var waiting = inbox.Reader.WaitToReadAsync(cancellationToken: cancellationToken).AsTask();
+
+                        if (
+                            (await Task.WhenAny(
+                                task1: diagnosing,
+                                task2: waiting
+                            ).ConfigureAwait(continueOnCapturedContext: false) == waiting) &&
+                            !await waiting.ConfigureAwait(continueOnCapturedContext: false)
+                        ) {
+                            // The input has ended, so nothing can arrive to supersede the diagnosis.
+                            await ((Task)diagnosing).ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
+                        }
+                        continue;
+                    }
+                    try {
+                        _ = CompleteDiagnosis(
+                            diagnosis: await diagnosing.ConfigureAwait(continueOnCapturedContext: false),
+                            send: outgoing.Add
+                        );
+                    } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+                        // Superseded: the newer mark is taken on a later quiet turn.
+                    } catch (Exception exception) {
+                        outgoing.Add(item: LogNotification(message: $"LSP diagnosis error: {exception.Message}"));
+                    }
+                    await FlushAsync().ConfigureAwait(continueOnCapturedContext: false);
+                    cancelDiagnosis!.Dispose();
+                    (request, diagnosing, cancelDiagnosis) = (null, null, null);
+                    continue;
+                }
+                if (TakePendingDiagnosis() is { } next) {
+                    var cancel = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+
+                    (request, cancelDiagnosis) = (next, cancel);
+                    diagnosing = Task.Run(
+                        cancellationToken: cancel.Token,
+                        function: () => Diagnose(
+                            cancellationToken: cancel.Token,
+                            request: next
+                        )
+                    );
+                    continue;
+                }
+                if (!await inbox.Reader.WaitToReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)) {
+                    break;
+                }
+            }
+        } finally {
+            // The session ends only once the diagnosis it started has, so a host that exits when this returns never
+            // cuts short work the diagnosis cannot abandon midway, such as a compile cache's write.
+            if (cancelDiagnosis is not null) {
+                await cancelDiagnosis.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+                await (((Task?)diagnosing) ?? Task.CompletedTask).ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
+                cancelDiagnosis.Dispose();
+            }
+        }
+    }
+
+    // Reads framed messages into the inbox until the input ends or breaks its framing; a stream that breaks its
+    // framing cannot be resynchronized, so it ends the session as its end would.
+    private static async Task ReadAllAsync(Stream input, System.Threading.Channels.ChannelWriter<string> inbox, CancellationToken cancellationToken) {
+        try {
+            while (await LspFraming.ReadAsync(
+                cancellationToken: cancellationToken,
+                stream: input
+            ).ConfigureAwait(continueOnCapturedContext: false) is { } message) {
+                _ = inbox.TryWrite(item: message);
+            }
+        } catch (InvalidDataException) {
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+        } finally {
+            _ = inbox.TryComplete();
         }
     }
 
     private readonly DocumentVocabularyResolver m_vocabularyResolver;
 
-    /// <summary>Creates a new instance of the Puck Language Server over the given input and output streams.</summary>
-    /// <param name="input">The stream to read LSP JSON-RPC messages from (e.g. Console.OpenStandardInput()).</param>
-    /// <param name="output">The stream to write LSP JSON-RPC messages to (e.g. Console.OpenStandardOutput()).</param>
+    /// <summary>Creates a language server session with no document open.</summary>
     /// <param name="diagnoseDocument">An optional schema dispatcher; returns true when it supplies the document's diagnostics.</param>
     /// <param name="completeDocument">An optional schema completion provider; null retains World completions.</param>
     /// <param name="vocabularyResolver">An optional vocabulary resolver; null uses default World resolver.</param>
     /// <param name="machines">The deployment's machine vocabulary, which the engine's validation of a world reads.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
-    public PuckLanguageServer(Stream input, Stream output, Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
+    public PuckLanguageServer(Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
         Func<DocumentNode, JsonArray?>? completeDocument = null,
         DocumentVocabularyResolver? vocabularyResolver = null,
         IMachineValidationCatalog? machines = null,
         string catalogFingerprint = "") {
         m_catalogFingerprint = catalogFingerprint;
         m_machines = machines;
-        m_input = input;
-        m_output = output;
         m_diagnoseDocument = diagnoseDocument;
         m_completeDocument = completeDocument;
         m_vocabularyResolver = (vocabularyResolver ?? new DocumentVocabularyResolver(

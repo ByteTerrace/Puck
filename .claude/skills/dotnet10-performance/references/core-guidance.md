@@ -1,7 +1,7 @@
 # .NET 10 performance core guidance
 
-This preserves the cross-domain mental model, pattern changes, API shortlist,
-and folklore corrections. Domain detail remains in the sibling references.
+This file holds the cross-domain mental model, pattern changes, API shortlist,
+and folklore corrections; domain detail lives in the sibling references.
 
 ## Contents
 

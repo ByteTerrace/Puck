@@ -49,7 +49,7 @@ public sealed class FamilyAdmissionLawTests {
     public void ARangeRepeatingAnIndexIsRefusedAndAGappedOneExpands() {
         Assert.Contains(
             collection: Diagnose(declaration: "slot pile[0..3, 2..5] = 0"),
-            filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.FamilyMembersInvalid) && diagnostic.Message.Contains(value: "twice", comparisonType: StringComparison.Ordinal))
+            filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.FamilyMembersInvalid) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "twice"))
         );
         Assert.DoesNotContain(
             collection: Diagnose(declaration: "slot pile[0..3, 8..9] = 0"),

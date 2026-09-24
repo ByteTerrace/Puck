@@ -291,15 +291,16 @@ public sealed class WorldSpatialQueryIndex {
             start,
             count,
             Comparer<int>.Create(comparison: (left, right) => {
-            var leftCenter = volumes[left].Bounds.Center.X.Value;
-            var rightCenter = volumes[right].Bounds.Center.X.Value;
-            var comparison = leftCenter.CompareTo(value: rightCenter);
+                var leftCenter = volumes[left].Bounds.Center.X.Value;
+                var rightCenter = volumes[right].Bounds.Center.X.Value;
 
-            return ((comparison != 0)
-                ? comparison
-                : left.CompareTo(value: right)
-            );
-        })
+                return LexicographicOrder.Compare(
+                    leftPrimary: leftCenter,
+                    leftSecondary: left,
+                    rightPrimary: rightCenter,
+                    rightSecondary: right
+                );
+            })
         );
         var split = (count / 2);
         var leftChild = BuildBvh(
@@ -404,22 +405,10 @@ public sealed class WorldSpatialQueryIndex {
                 right: box.AxisZ
             )
         );
-        var closest = new FixedVector3(
-            X: FixedQ4816.Clamp(
-                local.X,
-                -box.HalfExtents.X,
-                box.HalfExtents.X
-            ),
-            Y: FixedQ4816.Clamp(
-                local.Y,
-                -box.HalfExtents.Y,
-                box.HalfExtents.Y
-            ),
-            Z: FixedQ4816.Clamp(
-                local.Z,
-                -box.HalfExtents.Z,
-                box.HalfExtents.Z
-            )
+        var closest = FixedVector3.Clamp(
+            value: local,
+            minimum: -box.HalfExtents,
+            maximum: box.HalfExtents
         );
         var delta = (local - closest);
 
@@ -685,29 +674,9 @@ public static class WorldSpatialQueryCompilation {
     // This is a numeric representability envelope, not a gameplay or world-size ceiling.
     private const long NarrowphaseRawLimit = (1L << 38);
 
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
     private static readonly ConditionalWeakTable<WorldPlacementsSection, StrongBox<WorldSpatialQueryIndex>> Cache = new();
     private static readonly WorldSpatialQueryIndex Empty = new([]);
 
-    private static FixedVector3 AddChecked(FixedVector3 left, FixedVector3 right) => new(
-        X: checked((left.X + right.X)),
-        Y: checked((left.Y + right.Y)),
-        Z: checked((left.Z + right.Z))
-    );
     private static FixedSpatialAabb BoundsFor(FixedSpatialShape shape) {
         if (shape.Kind == FixedSpatialShapeKind.Sphere) {
             return new FixedSpatialAabb(
@@ -738,16 +707,10 @@ public static class WorldSpatialQueryCompilation {
         );
     }
     private static FixedSpatialShape CompileShape(WorldSpatialShape authored, SpatialFrame frame) {
-        var center = AddChecked(
-            left: frame.Position,
-            right: Rotate(
-                vector: ScaleChecked(
-                    FixedVector3.FromVector3(value: authored.Center.Value),
-                    frame.Scale
-                ),
-                yaw: frame.YawRadians
-            )
-        );
+        var center = checked((frame.Position + Rotate(
+            vector: checked((FixedVector3.FromVector3(value: authored.Center.Value) * frame.Scale)),
+            yaw: frame.YawRadians
+        )));
         var yaw = checked((frame.YawRadians + FixedQ4816.FromDouble(value: (authored.YawDegrees * (Math.PI / 180d)))));
         var rotation = Yaw(radians: yaw);
 
@@ -755,25 +718,22 @@ public static class WorldSpatialQueryCompilation {
             return new FixedSpatialShape(
                 FixedSpatialShapeKind.Sphere,
                 center,
-                UnitX,
-                UnitY,
-                UnitZ,
+                FixedVector3.UnitX,
+                FixedVector3.UnitY,
+                FixedVector3.UnitZ,
                 default,
                 checked((FixedQ4816.FromDouble(value: authored.Radius) * frame.Scale))
             );
         }
 
-        var extents = ScaleChecked(
-            FixedVector3.FromVector3(value: authored.HalfExtents.Value),
-            frame.Scale
-        );
+        var extents = checked((FixedVector3.FromVector3(value: authored.HalfExtents.Value) * frame.Scale));
 
         return new FixedSpatialShape(
             FixedSpatialShapeKind.Box,
             center,
-            rotation.Rotate(vector: UnitX),
-            rotation.Rotate(vector: UnitY),
-            rotation.Rotate(vector: UnitZ),
+            rotation.Rotate(vector: FixedVector3.UnitX),
+            rotation.Rotate(vector: FixedVector3.UnitY),
+            rotation.Rotate(vector: FixedVector3.UnitZ),
             extents,
             FixedQ4816.Zero
         );
@@ -783,11 +743,6 @@ public static class WorldSpatialQueryCompilation {
         if (!WithinNarrowphaseRange(value: vector)) { throw new OverflowException(message: "Spatial rotation input exceeds the query range."); }
         return Yaw(radians: yaw).Rotate(vector: vector);
     }
-    private static FixedVector3 ScaleChecked(FixedVector3 value, FixedQ4816 scale) => new(
-        X: checked((value.X * scale)),
-        Y: checked((value.Y * scale)),
-        Z: checked((value.Z * scale))
-    );
     private static bool TryCompileGeometry(WorldSpatialShape authored, SpatialFrame frame,
         out FixedSpatialShape shape, out FixedSpatialAabb bounds, out string reason) {
         shape = default;
@@ -873,16 +828,10 @@ public static class WorldSpatialQueryCompilation {
                     frame = default;
                     return false;
                 }
-                position = AddChecked(
-                    left: parentFrame.Position,
-                    right: Rotate(
-                        vector: ScaleChecked(
-                            position,
-                            parentFrame.Scale
-                        ),
-                        yaw: parentFrame.YawRadians
-                    )
-                );
+                position = checked((parentFrame.Position + Rotate(
+                    vector: checked((position * parentFrame.Scale)),
+                    yaw: parentFrame.YawRadians
+                )));
                 scale = checked((scale * parentFrame.Scale));
                 yaw = checked((yaw + parentFrame.YawRadians));
             }
@@ -916,7 +865,7 @@ public static class WorldSpatialQueryCompilation {
         (WithinNarrowphaseRange(value: value.X) && WithinNarrowphaseRange(value: value.Y) && WithinNarrowphaseRange(value: value.Z));
     private static FixedQuaternion Yaw(FixedQ4816 radians) => FixedQuaternion.FromAxisAngle(
         angle: radians,
-        axis: UnitY
+        axis: FixedVector3.UnitY
     );
 
     /// <summary>Compiles all eligible rows in authored order.</summary>

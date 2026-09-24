@@ -117,68 +117,37 @@ public sealed class CreationStampEmitterUnitsLawTests {
     private static SdfInstruction ShapeBlendOf(SdfProgram program, uint blend = ((uint)SdfBlendOp.Union)) =>
         program.Instructions.Single(predicate: instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Blend == blend)));
 
-    [Fact]
-    public void AStampAtScaleOneEmitsTheAuthoredDilateVerbatim() {
-        var program = EmitOne(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                new Vector3(
-                    x: 0.3f,
-                    y: 0.2f,
-                    z: 0.3f
-                ),
-                dilate: 0.02f
-            ),
-            stampScale: 1f
+    // A stamp at scale one emits the authored field-op radius verbatim and a stamp at scale two doubles it.
+    [InlineData(SdfOp.Dilate, 1f)]
+    [InlineData(SdfOp.Dilate, 2f)]
+    [InlineData(SdfOp.Onion, 2f)]
+    [Theory]
+    public void AStampsScaleMultipliesTheAuthoredFieldOpRadius(SdfOp op, float stampScale) {
+        const float Authored = 0.02f;
+
+        var scale = new Vector3(
+            x: 0.3f,
+            y: 0.2f,
+            z: 0.3f
         );
-        var instruction = program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.Dilate));
+        var program = EmitOne(
+            shape: ((op == SdfOp.Dilate)
+                ? Shape(
+                    SdfSolidPrimitive.Box,
+                    scale,
+                    dilate: Authored
+                )
+                : Shape(
+                    SdfSolidPrimitive.Box,
+                    scale,
+                    onion: Authored
+                )),
+            stampScale: stampScale
+        );
+        var instruction = program.Instructions.Single(predicate: instruction => (instruction.Op == op));
 
         Assert.Equal(
-            0.02f,
-            instruction.Data0.X,
-            precision: 6
-        );
-    }
-    [Fact]
-    public void AStampAtScaleTwoDoublesTheEmittedDilate() {
-        var program = EmitOne(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                new Vector3(
-                    x: 0.3f,
-                    y: 0.2f,
-                    z: 0.3f
-                ),
-                dilate: 0.02f
-            ),
-            stampScale: 2f
-        );
-        var instruction = program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.Dilate));
-
-        Assert.Equal(
-            0.04f,
-            instruction.Data0.X,
-            precision: 6
-        );
-    }
-    [Fact]
-    public void AStampAtScaleTwoDoublesTheEmittedOnion() {
-        var program = EmitOne(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                new Vector3(
-                    x: 0.3f,
-                    y: 0.2f,
-                    z: 0.3f
-                ),
-                onion: 0.02f
-            ),
-            stampScale: 2f
-        );
-        var instruction = program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.Onion));
-
-        Assert.Equal(
-            0.04f,
+            (Authored * stampScale),
             instruction.Data0.X,
             precision: 6
         );

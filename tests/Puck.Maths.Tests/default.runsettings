@@ -2,6 +2,6 @@
 <!-- Bound as the project's default via RunSettingsFilePath: a plain `dotnet test` runs Smoke + Default only. -->
 <RunSettings>
     <RunConfiguration>
-        <TestCaseFilter>tier!=Deep&amp;tier!=Bench&amp;tier!=Exhaustive</TestCaseFilter>
+        <TestCaseFilter>tier!=Deep&amp;tier!=Exhaustive</TestCaseFilter>
     </RunConfiguration>
 </RunSettings>

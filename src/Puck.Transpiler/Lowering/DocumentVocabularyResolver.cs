@@ -22,7 +22,7 @@ public sealed class DocumentVocabularyResolver {
     /// <returns>The resolved vocabulary.</returns>
     public IDocumentVocabulary Resolve(string source) {
         if (!string.IsNullOrEmpty(value: source) &&
-            PuckParser.TryReadDocumentSchema(source: source, schema: out var schema) &&
+            PuckParser.TryReadDocumentSchema(schema: out var schema, source: source) &&
             !string.IsNullOrEmpty(value: schema) &&
             m_vocabularies.TryGetValue(key: schema, value: out var vocabulary)) {
             return vocabulary;

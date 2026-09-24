@@ -19,9 +19,10 @@ let screenUp = [0, 1, 0]
 let spread = 1.8
 let brick = "gaming-brick"
 let colorOptions = "cgb"
-let referenceRom = "../../../../../roms/tetris-world-rev1.gb"
-let authoredCartridge = "../../cartridges/tetris.cgb.cartridge.json"
+let authoredCartridge = "../../cartridges/tetromino.cgb.cartridge.json"
 
+// The reference machine boots empty: the repository never names a reference image. Whoever runs the comparison
+// supplies their own at the console with `screen.insert 0 <path>`.
 machines [
   {
     name: "reference"
@@ -29,7 +30,6 @@ machines [
     configuration {
       schema: "puck.gaming-brick.configuration.v1"
       model: "cgb"
-      content { path: referenceRom }
     }
   }
   {
@@ -54,10 +54,8 @@ host {
   listen: null
   presentMode: Immediate
   presentation: Windowed
-  rayQuery: true
   surfaceFormat: r8g8b8a8
   targetHertz: 60
-  timing: false
   width: viewWidth
 }
 

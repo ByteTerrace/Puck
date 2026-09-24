@@ -1,5 +1,4 @@
 using System.Globalization;
-using Puck.Physics.Motion;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using EffectFamily = Puck.State.Rules.EffectFamily;
 using GateToken = Puck.State.Rules.GateToken;
@@ -8,7 +7,6 @@ using KeyFamily = Puck.State.Rules.KeyFamily;
 using PredicateFamily = Puck.State.Rules.PredicateFamily;
 using RuleCompileContext = Puck.State.Rules.RuleCompileContext;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
-using RuleRefusal = Puck.State.Rules.RuleRefusal;
 using RuleVocabulary = Puck.State.Rules.RuleVocabulary;
 using TableSource = Puck.State.Rules.TableSource;
 
@@ -54,6 +52,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
         for (var index = 0; (index < rows.Count); index++) {
             sources[index] = (WorldAssetRowLoader.TryLoadTable(
                 document: out var document,
+                documentDirectory: definition.DocumentDirectory,
                 error: out var error,
                 row: rows[index]
             )
@@ -256,8 +255,8 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
         if (RuleCompiler.TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: this,
-            reference: reference,
             keyFieldLabel: "key",
+            reference: reference,
             ruleName: ruleName,
             verb: verb
         )) {
@@ -485,11 +484,11 @@ public static partial class WorldFactsVocabulary {
     /// <summary>Gets the one registry every world compile against the arena-addressed compiler shares.</summary>
     public static RuleVocabulary Instance { get; } = new(
         effects: [
-            BodyProgramArm<WorldEffect.SetVerticalVelocity>(discriminator: "setVerticalVelocity"),
-            BodyProgramArm<WorldEffect.ScaleVerticalVelocity>(discriminator: "scaleVerticalVelocity"),
-            BodyProgramArm<WorldEffect.PlanarImpulse>(discriminator: "planarImpulse"),
+            BodyMotionArm<WorldEffect.SetVerticalVelocity>(discriminator: "setVerticalVelocity"),
+            BodyMotionArm<WorldEffect.ScaleVerticalVelocity>(discriminator: "scaleVerticalVelocity"),
+            BodyMotionArm<WorldEffect.PlanarImpulse>(discriminator: "planarImpulse"),
             BodyProgramArm<WorldEffect.StartTimer>(discriminator: "startTimer"),
-            BodyProgramArm<WorldEffect.Designate>(discriminator: "designate"),
+            BodyMotionArm<WorldEffect.Designate>(discriminator: "designate"),
             new WorldFactsEffectArm(
                 compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveCue(
                     context: context,
@@ -500,39 +499,6 @@ public static partial class WorldFactsVocabulary {
                 effectType: typeof(WorldEffect.EmitCue)
             ),
             new WorldFactsEffectArm(
-                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveBodyVerticalVelocity(
-                    context: context,
-                    key: ((WorldEffect.SetBodyVerticalVelocity)effect).Key,
-                    operation: BodyMotionOp.SetVerticalVelocity,
-                    ruleName: ruleName,
-                    value: ((WorldEffect.SetBodyVerticalVelocity)effect).Velocity,
-                    verb: "setBodyVerticalVelocity"
-                ),
-                discriminator: "setBodyVerticalVelocity",
-                effectType: typeof(WorldEffect.SetBodyVerticalVelocity)
-            ),
-            new WorldFactsEffectArm(
-                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveBodyVerticalVelocity(
-                    context: context,
-                    key: ((WorldEffect.ScaleBodyVerticalVelocity)effect).Key,
-                    operation: BodyMotionOp.ScaleVerticalVelocity,
-                    ruleName: ruleName,
-                    value: ((WorldEffect.ScaleBodyVerticalVelocity)effect).Factor,
-                    verb: "scaleBodyVerticalVelocity"
-                ),
-                discriminator: "scaleBodyVerticalVelocity",
-                effectType: typeof(WorldEffect.ScaleBodyVerticalVelocity)
-            ),
-            new WorldFactsEffectArm(
-                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveBodyImpulse(
-                    context: context,
-                    effect: ((WorldEffect.ApplyBodyImpulse)effect),
-                    ruleName: ruleName
-                ),
-                discriminator: "applyBodyImpulse",
-                effectType: typeof(WorldEffect.ApplyBodyImpulse)
-            ),
-            new WorldFactsEffectArm(
                 compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveRigidImpulse(
                     context: context,
                     effect: ((WorldEffect.ApplyRigidImpulse)effect),
@@ -540,15 +506,6 @@ public static partial class WorldFactsVocabulary {
                 ),
                 discriminator: "applyRigidImpulse",
                 effectType: typeof(WorldEffect.ApplyRigidImpulse)
-            ),
-            new WorldFactsEffectArm(
-                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveBodyDesignation(
-                    context: context,
-                    effect: ((WorldEffect.DesignateBody)effect),
-                    ruleName: ruleName
-                ),
-                discriminator: "designateBody",
-                effectType: typeof(WorldEffect.DesignateBody)
             ),
             new WorldFactsEffectArm(
                 compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveFieldPaint(
@@ -606,7 +563,7 @@ public static partial class WorldFactsVocabulary {
                 effectType: typeof(WorldEffect.Save)
             ),
             new WorldFactsEffectArm(
-                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolvePoseCell((WorldEffect.PoseCell)effect, ruleName, context),
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolvePoseCell(context: context, effect: ((WorldEffect.PoseCell)effect), ruleName: ruleName),
                 discriminator: "poseCell",
                 effectType: typeof(WorldEffect.PoseCell)
             ),
@@ -651,6 +608,17 @@ public static partial class WorldFactsVocabulary {
         ]
     );
 
+    // A body-motion effect is one operation in both scopes: the rule compiler lowers it through the check a kit's
+    // action lowers through (WorldBodyEffects).
+    private static WorldFactsEffectArm BodyMotionArm<TEffect>(string discriminator) where TEffect : ActionEffect => new(
+        compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveBodyMotion(
+            context: context,
+            effect: effect,
+            ruleName: ruleName
+        ),
+        discriminator: discriminator,
+        effectType: typeof(TEffect)
+    );
     private static WorldFactsEffectArm BodyProgramArm<TEffect>(string discriminator) where TEffect : ActionEffect => new(
         compile: (effect, ruleName, context) => throw new RuleException(
             detail: $"'{discriminator}' has no world-scope meaning — it belongs to a kit's action programs",

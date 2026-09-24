@@ -75,25 +75,6 @@ internal static class QuantizationClaims {
             : quotient
         );
     }
-    /// <summary>The exact integer square root by bit-length seed and Newton descent, settled by exact squaring; independent of every <c>Puck.Maths</c> root.</summary>
-    private static BigInteger IntegerSquareRoot(BigInteger value) {
-        if (value.Sign <= 0) { return BigInteger.Zero; }
-
-        var root = (BigInteger.One << ((int)((value.GetBitLength() + 1L) / 2L)));
-
-        while (true) {
-            var next = ((root + (value / root)) >> 1);
-
-            if (next >= root) { break; }
-
-            root = next;
-        }
-
-        while ((root * root) > value) { root -= BigInteger.One; }
-        while (((root + BigInteger.One) * (root + BigInteger.One)) <= value) { root += BigInteger.One; }
-
-        return root;
-    }
     /// <summary>Compares <c>|a1 + b1·√d|</c> against <c>|a2 + b2·√d|</c> by comparing squares.</summary>
     private static int MagnitudeCompare(BigInteger a1, BigInteger b1, BigInteger a2, BigInteger b2, BigInteger d) {
         var rational = (((a1 * a1) + ((b1 * b1) * d)) - ((a2 * a2) + ((b2 * b2) * d)));
@@ -143,7 +124,7 @@ internal static class QuantizationClaims {
     }
     /// <summary>The exact <c>⌊n·(a + b·√d)/c⌋</c> for <c>b ≥ 0</c>, <c>c &gt; 0</c>, <c>n ≥ 0</c>.</summary>
     private static BigInteger ScaledFloor(long a, long b, long d, long c, BigInteger n) {
-        var surdPart = IntegerSquareRoot(value: (((n * n) * (b * b)) * d));
+        var surdPart = Oracles.IntegerSquareRoot(value: (((n * n) * (b * b)) * d));
 
         return FloorDivide(
             denominator: c,

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -7,7 +8,7 @@ namespace Puck.World.Tests;
 /// <summary>Proves an explicit write keeps the value it composed on a cell with a value-over-time behavior, and that
 /// switching a dynamics follower off freezes it at its sampled position rather than its target.</summary>
 public sealed class StateBehaviorWriteLawTests {
-    private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
+    private static readonly Principal Actor = Principal.Seat(slot: 0);
     private static readonly DynamicsRow KickZero = new(
         Damping: 1f,
         Frequency: 1f,
@@ -42,9 +43,9 @@ public sealed class StateBehaviorWriteLawTests {
         fixture.Step();
     }
 
-    [Theory]
     [InlineData(WorldDocumentWriteKind.Set, 100L, 100L)]
     [InlineData(WorldDocumentWriteKind.Add, 5L, 15L)]
+    [Theory]
     public void ExplicitWriteToAnAdvancingCell_KeepsTheComposedValue(WorldDocumentWriteKind kind, long operand, long expected) {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(cell: new StateCell(
             Key: CellName.Parse(candidate: "0"),
@@ -80,7 +81,6 @@ public sealed class StateBehaviorWriteLawTests {
             expected: expected
         );
     }
-
     [Fact]
     public void SwitchingDynamicsOff_FreezesAtTheSampledPositionRatherThanTheTarget() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(cell: new StateCell(
@@ -113,7 +113,7 @@ public sealed class StateBehaviorWriteLawTests {
         var clockBefore = StoredCell(definition: fixture.Server.Definition).Clock;
 
         Assert.True(
-            condition: (easedBefore > 20L) && (easedBefore < 100L),
+            condition: ((easedBefore > 20L) && (easedBefore < 100L)),
             userMessage: $"eased={easedBefore} value={StoredCell(definition: fixture.Server.Definition).Value} clock={clockBefore} next={fixture.Server.NextInputTick}"
         );
 
@@ -123,7 +123,7 @@ public sealed class StateBehaviorWriteLawTests {
         )!;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: (row with { Cells = [(StoredCell(definition: fixture.Server.Definition) with { Dynamics = null })] })
         ));
         fixture.Step();
@@ -144,7 +144,6 @@ public sealed class StateBehaviorWriteLawTests {
             expected: frozen.Value
         );
     }
-
     [Fact]
     public void SwitchingAnAdvancingCellToDynamics_RestsTheTargetOnTheLiveValue() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(cell: new StateCell(
@@ -179,7 +178,7 @@ public sealed class StateBehaviorWriteLawTests {
         )!;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: (row with { Cells = [(StoredCell(definition: fixture.Server.Definition) with { Advance = null, Dynamics = new StateDynamics(Row: "kickZero") })] })
         ));
         fixture.Step();
@@ -205,7 +204,6 @@ public sealed class StateBehaviorWriteLawTests {
             expected: switched.Value.AsInt
         );
     }
-
     [Fact]
     public void RetuningADynamicsFollower_KeepsTheTargetItWasEasingToward() {
         using var fixture = Fixtures.FreshServer(definition: (BuildDocument(cell: new StateCell(
@@ -230,7 +228,7 @@ public sealed class StateBehaviorWriteLawTests {
         )!;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: (row with { Cells = [(StoredCell(definition: fixture.Server.Definition) with { Dynamics = new StateDynamics(Row: "kickSlow") })] })
         ));
         fixture.Step();

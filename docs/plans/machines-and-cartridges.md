@@ -13,8 +13,6 @@ needs. The reasoning behind every decision is in
 
 ## Implementation status
 
-Checked against `state/rebuild` at `1d0d910c9`.
-
 - **Landed:** named machine identities, neutral hosting seams, ordered
   operations, and the machine host described by
   [its README](../../src/Puck.World.Machines/README.md); the mirror source
@@ -202,7 +200,8 @@ produce explicit skips, never a claim the path passed.
 
 **Owns:** `CartridgeDocument`, `CartridgeLimits`, both native emitters, the
 cartridge vocabulary in `Puck.GamingBricks.Transpiler`. Stage 1 adopts the
-rebuilt state row vocabulary once WP13 trues its names up.
+rebuilt state row vocabulary, whose names the
+[state data model](../reference/state/data-model.md) records.
 
 **Delivers, each stage authorable and verifiable on both machines before the
 next:**
@@ -259,10 +258,10 @@ the committed source is logic, not payload.
 dispatch, battle math, and an audio driver, composed through `import`.
 
 **Delivers:** the engines a retail game needs, authored as procedures over
-typed memory; nothing in it touches a forge project. Two language items it
-needs are the language programme's: a compile-time `for` inside a rule body,
-and diagnostics proven at depth through a module expanded inside an import
-inside a `for`; two transpiler constraints it needs fixed are the cubic
+typed memory; nothing in it touches a forge project. One language item it
+needs is the language programme's: diagnostics proven at depth through a
+module expanded inside an import inside a `for` (a compile-time `for` inside a
+rule body is available); two transpiler constraints it needs fixed are the cubic
 `let`-array re-lowering and an array-valued `let` used as a vector property
 lowering non-finite.
 
@@ -274,7 +273,7 @@ library on both machines under the determinism gate.
 | Step | Packages, in parallel | Why here |
 |---|---|---|
 | 1 — today | Asset ingestion; firmware and content policy | Neither touches the state substrate or the language. |
-| 2 — after the rebuild lands | The cabinet module | Its hardware consumers ride the rebuilt rule vocabulary, and its bindings name shapes only after [WP13](state-rebuild.md#wp13--documentation-and-skills) trues them up. |
+| 2 | The cabinet module | Its hardware consumers ride the rebuilt rule vocabulary, and its bindings name the shapes the [state reference](../reference/state.md) records. |
 | 3 — after the language's modules | Cabinet authoring and player experience | Needs `module`, `use` with an alias, and re-export from [S6](state-and-language.md#s6--modules-and-the-forcing-world), and the arcade's pool from [S7](state-and-language.md#s7--records-and-pools). |
 | 4 | The program model, its five stages in order | Stage 1 adopts the rebuilt row vocabulary. |
 | 5 | The content library; optional distribution | The library makes the cartridge retail-scale; the second provider makes the distribution optional. Together they close the artifact. |

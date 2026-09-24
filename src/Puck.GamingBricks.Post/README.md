@@ -19,7 +19,8 @@ signatures, parameters, return values, and exceptions.
 | `PostStageOutcome` | A verdict plus a one-line detail—what a stage returns. |
 | `PostStageResult` | A stage's name, tier, and outcome—one report row. |
 | `IPostStage<TContext>` | One battery stage: a name, a tier, and `Run(TContext)`. |
-| `PostBattery<TContext>` | Runs an ordered `IPostStage<TContext>` list, isolating each stage's exceptions as `Infra`, into a `PostReport`. |
+| `PostBattery<TContext>` | Runs an ordered `IPostStage<TContext>` list, isolating each stage's exceptions as `Infra`, into a `PostReport`: every `IsConcurrent` stage at once, then the rest (throughput and allocation measurements) alone on a quiet process; output keeps list order. |
+| `PostProgressGuard` | The battery's hang guard; see [The hang guard](#the-hang-guard). |
 | `PostReport` | The folded per-stage results, exit code, and rendered table for one battery run. |
 | `HashDivergenceReport` | Snapshot-hashes two machines and, on a mismatch, prints the component/offset localization and hex windows—the loop and `DescribeDivergence` stay per-brick. |
 | `CommandLineArguments` | `Value(args, name)` looks up a flag's following value; `TryValidateValues` rejects missing values for a known set of flags. |
@@ -34,8 +35,19 @@ deterministic compiler source paths do not affect corpus selection or ledger
 updates. A runner launched outside the checkout must use a working directory
 inside it.
 
-## Not shared
+## The hang guard
 
+A battery never cancels a stage for taking long, so a loaded or slow host
+changes how long a run takes and never its verdict. `PostProgressGuard`
+samples the run once a minute. A window counts as progress when any stage
+finished in it or the battery process spent at least one processor-second.
+A stage that is emulating, hashing or comparing always spends processor time;
+a deadlocked stage spends none. After one window without progress, the guard
+reports every unfinished stage as `Infra` with a `hung:` detail, and the
+runner writes the report and exits 2 with those stages still running. A stage
+that spins without finishing is not caught: it keeps spending processor time.
+
+## Not shared
 Each battery's `PostContext` (artifacts directory, corpus roots, BIOS image
 or console model), `PostMachine`, and stage list stay in the owning project —
 they diverge per machine and forcing one shape onto two genuinely different

@@ -53,16 +53,18 @@ public sealed class CffDistanceOracleTests {
                 6
             );
             var geometry = face.LoadGlyphGeometry(
-                ((ushort)row.GlyphId),
-                (32f / face.UnitsPerEm)
+                glyphId: ((ushort)row.GlyphId),
+                scale: (32f / face.UnitsPerEm)
             ).Geometry;
             float[] actualBounds = [geometry.Left, geometry.Top, geometry.Right, geometry.Bottom];
 
-            for (var i = 0; (i < 4); i++) { Assert.InRange(
+            for (var i = 0; (i < 4); i++) {
+                Assert.InRange(
                 Math.Abs(value: (actualBounds[i] - row.Bounds[i])),
                 0,
                 0.04
-            ); }
+            );
+            }
             var plane = glyph.PlaneBounds!.Value;
             var cell = glyph.AtlasBounds!.Value;
 

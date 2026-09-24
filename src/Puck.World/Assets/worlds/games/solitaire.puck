@@ -4,9 +4,9 @@
 // Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
 // 'for' in it, none of which the document carries.
 
-import "klondike.world.json"
-import "spider.world.json"
-import "freecell.world.json"
+import "klondike"
+import "spider"
+import "freecell"
 
 export action solitaire, solitaireFreecell, solitaireKlondike, solitaireSpider
 export binding solitaire, solitaireFreecell, solitaireKlondike, solitaireSpider

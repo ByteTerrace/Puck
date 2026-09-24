@@ -15,6 +15,28 @@ public sealed record StateEnum(CellName Name, IReadOnlyList<CellName> Members) {
     [JsonIgnore]
     public int Count => Members.Count;
 
+    /// <summary>Returns the enum a list of declarations declares under a name: the one lookup a row, a record field
+    /// or a console read resolves the enum it names through.</summary>
+    /// <param name="enums">The declared enums, or <see langword="null"/> for none; a null entry names nothing.</param>
+    /// <param name="name">The name to look up, or <see langword="null"/> for none.</param>
+    /// <returns>The first enum declared under <paramref name="name"/>, or <see langword="null"/> when
+    /// <paramref name="name"/> is absent or no enum carries it.</returns>
+    public static StateEnum? Named(IReadOnlyList<StateEnum?>? enums, CellName? name) {
+        if (
+            (enums is null) ||
+            (name is not { } named)
+        ) {
+            return null;
+        }
+
+        foreach (var candidate in enums) {
+            if (candidate?.Name == named) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
     /// <summary>Determines whether <paramref name="value"/> names one of the enum's members.</summary>
     /// <param name="value">The candidate stored value.</param>
     /// <returns><see langword="true"/> when the value is in range.</returns>

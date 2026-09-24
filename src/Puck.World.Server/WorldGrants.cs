@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using System.Text;
 using Puck.World.Protocol;
@@ -62,65 +63,61 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // The per-body-index own-body default sets, minted on first read and never mutated afterward — every
     // uncomposed participant shares its index's instance.
     private static readonly IReadOnlyList<ControlApplication>?[] OwnBodyApplications = new IReadOnlyList<ControlApplication>?[WorldBodiesLimits.CapacityCeiling];
-    private readonly Dictionary<WorldPrincipal, PrincipalGrants> m_byPrincipal = new();
+    private readonly Dictionary<Grantee, GranteeGrants> m_byGrantee = new();
     // Every principal that has COMPOSED an application set away from its own-body default. An absent row IS the
     // default (see DefaultApplications) — the single storage engagement lives in, distinct from the capability sets
     // above: a Control grant authorizes composing, it never mints an application, so a route and a latch can no
     // longer disagree.
-    private readonly Dictionary<WorldPrincipal, List<ControlApplication>> m_applications = new();
+    private readonly Dictionary<Principal, List<ControlApplication>> m_applications = new();
     // (capability, subject) -> the exclusive holder. Only exclusive grants appear here.
-    private readonly Dictionary<ExclusiveKey, WorldPrincipal> m_exclusive = new();
+    private readonly Dictionary<ExclusiveKey, Grantee> m_exclusive = new();
     // (principal, capability, subject) -> the row's per-tick dispatch budget. Written by TryGrant on every accepted
     // grant that carries one (last-write-wins), cleared by Revoke. Only an untrusted principal's (Addon/Peer)
     // metered row — Observe, Drive, or Mutate over a concrete section:<name> — ever has an entry here.
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject), ushort> m_budgets = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), ushort> m_budgets = new();
     // (principal, capability, subject) -> the row's per-tick event-push budget, independent of m_budgets: Budget
     // meters query dispatch, this meters event push volume. Written by TryGrant, cleared by Revoke.
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject), ushort> m_eventBudgets = new();
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject), long> m_holdCeilings = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), ushort> m_eventBudgets = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), long> m_holdCeilings = new();
     // Co-driving payload, split by writer: m_channelReach keys an untrusted contributor's Drive row to which channel
     // ordinals it may touch; m_poolCeilings keys the OCCUPYING SEAT'S OWN Drive row (seatN drive body:N) to one
     // ceiling per channel ordinal, bounding how far the pool may pull that channel. A ceiling is never derived from
     // contributor rows. Both are written unconditionally by TryGrant on every accepted grant that carries one
     // (last-write-wins) and cleared by Revoke.
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject), ChannelReachMask> m_channelReach = new();
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject), ChannelCeilings> m_poolCeilings = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), ChannelReachMask> m_channelReach = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), ChannelCeilings> m_poolCeilings = new();
     // (principal, capability, subject) -> the mutation-kind ordinals a Mutate-over-section or Edit-over-state row
     // may dispatch. A null mask on a re-grant of the same row CLEARS the entry, rather than leaving it untouched.
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject), MutationKindMask> m_kindMasks = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), MutationKindMask> m_kindMasks = new();
     // (principal, capability, subject) -> the WorldDocumentWriteKind operations a Mutate-over-state row may perform
     // on the cross-document durable-state channel. Separate table from m_kindMasks; same write/clear discipline.
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject), DocumentWriteMask> m_writeMasks = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), DocumentWriteMask> m_writeMasks = new();
     // The seeded per-section Mutate backdrop rows (principal + section subject), recorded at construction so an
     // exclusive acquisition never blocks on them. Revoke deletes the marker; a later re-grant is a deliberate hold.
     private readonly HashSet<SeededKey> m_seededSections = new();
     // (principal, capability) -> the lazily-built handle-table cache; a WorldHandleTable's own staleness check
     // (keyed off m_revision below) decides whether it re-projects, not this cache. Only Addon/Peer principals ever
     // get an entry — WorldHandleTable's constructor refuses Console/Seat.
-    private readonly Dictionary<(WorldPrincipal Principal, WorldCapability Capability), WorldHandleTable> m_handleTables = new();
+    private readonly Dictionary<(Principal Principal, WorldCapability Capability), WorldHandleTable> m_handleTables = new();
     // Group+membership+ownership indices, resynced wholesale from the live document's `groups` section on every
     // WorldServer.Install — never incrementally patched, so Allows always reads this tick's settled document.
     //
-    // m_groupMembership: principal -> the group ids it currently belongs to. Consulted by Allows' group-expansion
-    // step's legacy checkpoint/disclosure shape. Authority reads the role-scoped projection below, never this
-    // role-less compatibility list. Flat only — never itself keyed by a group principal on the value side.
-    private readonly Dictionary<WorldPrincipal, List<string>> m_groupMembership = new();
     // principal -> the group ids and declared capability reach of the exact role each current membership row carries.
     // Null or unknown roles have no entry, so malformed/role-less rows cannot widen authority. This is derived from
     // the live document and deliberately is not checkpointed; WorldServer rehydrates it after restoring that
     // document, while a direct WorldGrants.Restore remains fail-closed until its caller supplies the same sync.
-    private readonly Dictionary<WorldPrincipal, List<GroupRoleReach>> m_groupRoleMembership = new();
+    private readonly Dictionary<Principal, List<GroupRoleReach>> m_groupRoleMembership = new();
     // m_groupReach: group id -> the capabilities at least one of its kind's declared roles reaches. Consulted by
     // TryGrant's reachability check so a group grant that no role could ever exercise is refused.
     private readonly Dictionary<string, HashSet<WorldCapability>> m_groupReach = new();
     // m_ownedGroups: principal -> the group ids it currently owns, resynced in the same pass. Consulted by Allows'
     // ownership-expansion fallback. A group-owns-group row resolves one level at sync time against the owning
     // group's current roster — flat, never recursive.
-    private readonly Dictionary<WorldPrincipal, List<string>> m_ownedGroups = new();
+    private readonly Dictionary<Principal, List<string>> m_ownedGroups = new();
     // principal -> groups reached through a GROUP owner row, carrying the owning group's member-role reach. Direct
     // principal ownership stays in m_ownedGroups and is intentionally unrestricted; these two sources must never
     // collapse, or a group-owned subject would bypass its owning member's role.
-    private readonly Dictionary<WorldPrincipal, List<GroupRoleReach>> m_ownedGroupRoleReach = new();
+    private readonly Dictionary<Principal, List<GroupRoleReach>> m_ownedGroupRoleReach = new();
     // m_driveGates: 0-based body entity index -> the name of the first-in-document-order WorldStateRow declaring
     // GatesDrive whose per-body cell currently reads nonzero. Resynced wholesale by SyncState, alongside SyncGroups.
     // Consulted by WorldServer.ApplyIntentSubmission and world.why, never folded into Allows: a drive gate SUBTRACTS
@@ -139,7 +136,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // Drive grant can never legitimately name a body index the population does not actually hold (see
     // IsLegitimateSubject).
     private readonly int m_population;
-    private readonly Action<WorldPrincipal, GrantSubject?, GrantSubject?> m_routeTransition;
+    private readonly Action<Principal, GrantSubject?, GrantSubject?> m_routeTransition;
     // The server whose document, entity table and narration the grant-application, ownership-escrow and admission
     // halves of this facade run against. Null only for a table built standalone, which reaches the capability doors
     // below and nothing else.
@@ -177,7 +174,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="host">The server whose document, entity table and narration the grant-application, ownership-escrow
     /// and admission halves run against; <see langword="null"/> builds a table reaching its own capability doors only.</param>
     /// <exception cref="ArgumentNullException"><paramref name="routeTransition"/> is <see langword="null"/>.</exception>
-    public WorldGrants(int seatCount, int population, Action<WorldPrincipal, GrantSubject?, GrantSubject?> routeTransition, WorldServer? host = null) {
+    public WorldGrants(int seatCount, int population, Action<Principal, GrantSubject?, GrantSubject?> routeTransition, WorldServer? host = null) {
         ArgumentNullException.ThrowIfNull(argument: routeTransition);
 
         m_host = host;
@@ -185,11 +182,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         m_routeTransition = routeTransition;
 
         for (var slot = 0; (slot < seatCount); slot++) {
-            var seat = WorldPrincipal.Seat(slot: slot);
+            var seat = Principal.Seat(slot: slot);
 
             _ = TryGrant(
                 grant: new WorldGrant(
-                    Principal: seat,
+                    Grantee: seat,
                     Capability: WorldCapability.Drive,
                     Subject: GrantSubject.Body(index: slot),
                     Exclusive: false
@@ -199,10 +196,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             SeedDomain(principal: seat);
         }
 
-        SeedDomain(principal: WorldPrincipal.Console);
+        SeedDomain(principal: Principal.Console);
         _ = TryGrant(
             grant: new WorldGrant(
-                Principal: WorldPrincipal.Console,
+                Grantee: Principal.Console,
                 Capability: WorldCapability.Drive,
                 Subject: GrantSubject.All,
                 Exclusive: false
@@ -214,7 +211,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // would let a later occupant inherit an earlier session's authority.
     }
 
-    private void AddOwnedGroup(WorldPrincipal owner, string groupId) {
+    private void AddOwnedGroup(Principal owner, string groupId) {
         if (!m_ownedGroups.TryGetValue(
             key: owner,
             value: out var ownedOf
@@ -281,7 +278,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         // The world's own authority is structural — TryAdmitMutation admits it before this table is consulted — so
         // a row naming it would be an inert phantom grant. Refused here so an author learns why.
-        if (grant.Principal.Kind == PrincipalKind.World) {
+        if (grant.Grantee.Principal.Kind == PrincipalKind.World) {
             reason = "the world's own authored program holds no grants — its authority is structural (a rule's effects and a kit's generate effect are the document acting on itself, never an actor submitting); a row here would be accepted and inert";
 
             return true;
@@ -291,7 +288,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // (Server.WorldOwnedWorlds.Decide/TryReadDurableState consult definition.Grants directly), never off this
         // table; a live row here would be budget-less, mask-less, and consulted by nothing.
         // `world.grants document:<id>` echoes the document-authored rows instead.
-        if (grant.Principal.Kind == PrincipalKind.Document) {
+        if (grant.Grantee.Kind == GranteeKind.Document) {
             reason = "a document holds no LIVE grants — the cross-document durable-state write-back channel reads its rows off the OWNER'S DOCUMENT (world.grant.set authors them, world.grants document:<id> echoes them), so a row here would be accepted and inert";
 
             return true;
@@ -313,12 +310,12 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // Mutate over a body...) would resolve to no enforceable authority yet still render as a held row — refused
         // here rather than silently seating a principal that holds nothing enforceable.
         if (!IsLegitimateSubject(
-            principal: grant.Principal,
+            principal: grant.Grantee.Principal,
             capability: grant.Capability,
             subject: grant.Subject
         )) {
             reason = SubjectRule(
-                principal: grant.Principal,
+                principal: grant.Grantee.Principal,
                 capability: grant.Capability,
                 subject: grant.Subject
             );
@@ -326,18 +323,18 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             return true;
         }
 
-        // A grant naming a GROUP principal must not accept authority no role of its kind could ever exercise.
+        // A grant naming a GROUP grantee must not accept authority no role of its kind could ever exercise.
         // m_groupReach is resynced wholesale on every document swap, so this reads the current declared kind.
         if (
-            (grant.Principal.Kind == PrincipalKind.Group) &&
+            (grant.Grantee.Kind == GranteeKind.Group) &&
             (!m_groupReach.TryGetValue(
-            key: (grant.Principal.Name ?? string.Empty),
+            key: (grant.Grantee.Name ?? string.Empty),
             value: out var reach
         ) || !reach.Contains(item: grant.Capability))
         ) {
-            reason = (m_groupReach.ContainsKey(key: (grant.Principal.Name ?? string.Empty))
-                ? $"{grant.Principal.Describe()}'s kind declares no role reaching {Label(capability: grant.Capability)} — granting it would be accepted-and-inert; widen the kind's roles instead"
-                : $"{grant.Principal.Describe()} does not exist — form it first, or author its kind"
+            reason = (m_groupReach.ContainsKey(key: (grant.Grantee.Name ?? string.Empty))
+                ? $"{grant.Grantee.Describe()}'s kind declares no role reaching {Label(capability: grant.Capability)} — granting it would be accepted-and-inert; widen the kind's roles instead"
+                : $"{grant.Grantee.Describe()} does not exist — form it first, or author its kind"
             );
 
             return true;
@@ -348,7 +345,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // principal may not carry one, and budget:0 is refused outright. Mutate over a concrete state:<name> is a
         // different lane entirely (the cross-document durable-state write-back channel), gated by a write mask
         // rather than a budget, so a budget there is refused by name.
-        var untrustedPrincipal = !IsTrusted(principal: grant.Principal);
+        var untrustedPrincipal = !IsTrusted(principal: grant.Grantee.Principal);
         var meteredMutate = ((grant.Capability == WorldCapability.Mutate) && IsMutateDispatchSubject(subject: grant.Subject));
         var metered = ((grant.Capability is WorldCapability.Observe or WorldCapability.Drive) || meteredMutate);
 
@@ -363,7 +360,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             untrustedPrincipal &&
             (grant.Budget is null)
         ) {
-            reason = $"an untrusted {Label(capability: grant.Capability)} grant to {grant.Principal.Describe()} requires an explicit budget:<n> — a defaulted per-tick dispatch allowance would silently decide a denial-of-service ceiling";
+            reason = $"an untrusted {Label(capability: grant.Capability)} grant to {grant.Grantee.Describe()} requires an explicit budget:<n> — a defaulted per-tick dispatch allowance would silently decide a denial-of-service ceiling";
 
             return true;
         }
@@ -376,7 +373,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             }
 
             if (!untrustedPrincipal) {
-                reason = $"budget is refused on {grant.Principal.Describe()}'s grant — trusted reads/drives are unmetered (console/seat, WorldServer.Answer, and the draw paths all stay ungated)";
+                reason = $"budget is refused on {grant.Grantee.Describe()}'s grant — trusted reads/drives are unmetered (console/seat, WorldServer.Answer, and the draw paths all stay ungated)";
 
                 return true;
             }
@@ -387,7 +384,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // must say which kinds it reaches or be refused before it exists.
         //
         // An untrusted principal (Addon/Peer) is refused Mutate over section:rules or section:interactions outright:
-        // both desugar into effects that fire as WorldPrincipal.World, admitted structurally with no budget or mask
+        // both desugar into effects that fire as Principal.World, admitted structurally with no budget or mask
         // enforcement — one gated act would otherwise launder unbounded, unmetered writes.
         if (
             untrustedPrincipal &&
@@ -400,7 +397,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 : "interaction"
             );
 
-            reason = $"an untrusted mutate grant to {grant.Principal.Describe()} over {grant.Subject.Describe()} is refused — a {subjectNoun}'s EFFECTS act as the world's own program, which the admission door admits structurally and never meters, so authoring a {subjectNoun} launders every budget and verb mask this row carries through one gated act; a verb mask cannot bound what the row does not dispatch";
+            reason = $"an untrusted mutate grant to {grant.Grantee.Describe()} over {grant.Subject.Describe()} is refused — a {subjectNoun}'s EFFECTS act as the world's own program, which the admission door admits structurally and never meters, so authoring a {subjectNoun} launders every budget and verb mask this row carries through one gated act; a verb mask cannot bound what the row does not dispatch";
 
             return true;
         }
@@ -411,7 +408,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             IsMutateDispatchSubject(subject: grant.Subject) &&
             (grant.KindMask is null)
         ) {
-            reason = $"an untrusted mutate grant to {grant.Principal.Describe()} over {grant.Subject.Describe()} requires an explicit verbs:<name,...> — an absent kind mask means FULL REACH at the admission door (a trusted principal's maskless row is the seeded default), so a maskless untrusted row would silently admit every kind {grant.Subject.Describe()} declares";
+            reason = $"an untrusted mutate grant to {grant.Grantee.Describe()} over {grant.Subject.Describe()} requires an explicit verbs:<name,...> — an absent kind mask means FULL REACH at the admission door (a trusted principal's maskless row is the seeded default), so a maskless untrusted row would silently admit every kind {grant.Subject.Describe()} declares";
 
             return true;
         }
@@ -421,11 +418,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // seam designates a SECTION handle at its pre-flight and refuses any other subject as a stale handle, so a
         // row-scoped row granted to an addon could never dispatch: accepted-and-inert.
         if (
-            (grant.Principal.Kind == PrincipalKind.Addon) &&
+            (grant.Grantee.Principal.Kind == PrincipalKind.Addon) &&
             (grant.Capability == WorldCapability.Mutate) &&
             (grant.Subject.Kind is GrantSubjectKind.Creation or GrantSubjectKind.Placement)
         ) {
-            reason = $"a row-scoped mutate grant to {grant.Principal.Describe()} over {grant.Subject.Describe()} is refused — the addon mutation seam designates a section handle and refuses every other subject before decode, so this row would be accepted and inert; grant mutate section:{MaskSectionOf(subject: grant.Subject).ToString().ToLowerInvariant()} with budget:<n> verbs:<name,...> instead";
+            reason = $"a row-scoped mutate grant to {grant.Grantee.Describe()} over {grant.Subject.Describe()} is refused — the addon mutation seam designates a section handle and refuses every other subject before decode, so this row would be accepted and inert; grant mutate section:{MaskSectionOf(subject: grant.Subject).ToString().ToLowerInvariant()} with budget:<n> verbs:<name,...> instead";
 
             return true;
         }
@@ -473,7 +470,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             }
 
             if (!untrustedPrincipal) {
-                reason = $"events:<n> is refused on {grant.Principal.Describe()}'s grant — trusted reads are unmetered";
+                reason = $"events:<n> is refused on {grant.Grantee.Describe()}'s grant — trusted reads are unmetered";
 
                 return true;
             }
@@ -548,10 +545,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         if (grant.Ceiling is { } ceiling) {
             if (!IsOwnSeatBody(
-                principal: grant.Principal,
+                principal: grant.Grantee.Principal,
                 subject: grant.Subject
             )) {
-                reason = $"a pooled ceiling is authored by the occupying seat on its OWN body (seat<n> drive body:<n-1>), never on {grant.Principal.Describe()}'s row over {grant.Subject.Describe()} — the ceiling is one number per (seat, channel), never derived from contributor rows";
+                reason = $"a pooled ceiling is authored by the occupying seat on its OWN body (seat<n> drive body:<n-1>), never on {grant.Grantee.Describe()}'s row over {grant.Subject.Describe()} — the ceiling is one number per (seat, channel), never derived from contributor rows";
 
                 return true;
             }
@@ -582,9 +579,9 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             return true;
         } else if (
             (grant.Reach is not null) &&
-            (grant.Principal.Kind is PrincipalKind.Console or PrincipalKind.Seat)
+            (grant.Grantee.Principal.Kind is PrincipalKind.Console or PrincipalKind.Seat)
         ) {
-            reason = $"a bare channel reach is refused on {grant.Principal.Describe()}'s row — a trusted contributor adds OUTSIDE the pool and is never masked; a seat's own row must name channels WITH a ceiling";
+            reason = $"a bare channel reach is refused on {grant.Grantee.Describe()}'s row — a trusted contributor adds OUTSIDE the pool and is never masked; a seat's own row must name channels WITH a ceiling";
 
             return true;
         }
@@ -654,7 +651,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             foreach (var pair in m_exclusive) {
                 if (
                     (pair.Key.Capability == grant.Capability) &&
-                    (pair.Value != grant.Principal) &&
+                    (pair.Value != grant.Grantee) &&
                     SubjectsOverlap(
                     a: grant.Subject,
                     b: pair.Key.Subject
@@ -675,12 +672,12 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             grant.Exclusive &&
             (grant.Subject.Kind != GrantSubjectKind.All)
         ) {
-            foreach (var pair in m_byPrincipal) {
+            foreach (var pair in m_byGrantee) {
                 if (
-                    (pair.Key != grant.Principal) &&
+                    (pair.Key != grant.Grantee) &&
                     (pair.Value.For(capability: grant.Capability)?.Contains(item: grant.Subject) == true) &&
                     !m_seededSections.Contains(item: new SeededKey(
-                    Principal: pair.Key,
+                    Grantee: pair.Key,
                     Capability: grant.Capability,
                     Subject: grant.Subject
                 ))
@@ -698,7 +695,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // exclusive `all` reserves every concrete subject of the capability). Null when the subject is unreserved — the
     // normal wildcard/subject-set logic then applies. A query for `all` itself only matches an EXACT `all` reservation:
     // a concrete exclusive body does not lock the whole-domain query the permissive Edit check makes.
-    private WorldPrincipal? ExclusiveHolderOf(WorldCapability capability, GrantSubject subject) {
+    private Grantee? ExclusiveHolderOf(WorldCapability capability, GrantSubject subject) {
         if (m_exclusive.TryGetValue(
             key: new ExclusiveKey(
                 Capability: capability,
@@ -730,7 +727,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // row for Edit) is legitimate for any principal. The `all` wildcard is legitimate only for a principal inside
     // the local trust boundary for that capability — Console and Seat generally, plus Peer additionally for
     // Control. A Drive or Observe Body is additionally bounded to an index the population actually holds.
-    private bool IsLegitimateSubject(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
+    private bool IsLegitimateSubject(Principal principal, WorldCapability capability, GrantSubject subject) {
         var trustedWildcard = (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
 
         return capability switch {
@@ -768,7 +765,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     }
     // The occupying seat's own row — the pairing that may author a pooled ceiling, and the one a Seat actor may
     // administer at all. A local seat's binding to a body is fixed identity (slot n is body index n).
-    private static bool IsOwnSeatBody(WorldPrincipal principal, GrantSubject subject) {
+    private static bool IsOwnSeatBody(Principal principal, GrantSubject subject) {
         return (
             (principal.Kind == PrincipalKind.Seat) &&
             (subject.Kind == GrantSubjectKind.Body) &&
@@ -785,7 +782,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // own-body application when that leaves the set with nothing else. The own-body member itself is never dropped
     // here: an application set with no own body IS capture, and losing an unrelated grant must not capture an
     // avatar. Whoever revoked the hold already exercised the authority this teardown is a consequence of.
-    private void DissolveUnauthorizedApplications(WorldPrincipal principal) {
+    private void DissolveUnauthorizedApplications(Principal principal) {
         if (!m_applications.TryGetValue(
             key: principal,
             value: out var composed
@@ -825,7 +822,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // The application set a participant holds when it has composed nothing: its own body alone, passthrough over
     // every ordinal. Cached per body index so the per-tick fold's read allocates nothing; a principal with no body
     // of its own (Console, Addon, World) applies to nothing by default.
-    private static IReadOnlyList<ControlApplication> DefaultApplications(WorldPrincipal principal) {
+    private static IReadOnlyList<ControlApplication> DefaultApplications(Principal principal) {
         if (principal.Kind is not (PrincipalKind.Seat or PrincipalKind.Peer)) {
             return [];
         }
@@ -847,7 +844,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return false;
     }
-    private void NotifyApplicationTransition(WorldPrincipal principal, GrantSubject? previous, GrantSubject? current) {
+    private void NotifyApplicationTransition(Principal principal, GrantSubject? previous, GrantSubject? current) {
         if (previous == current) {
             return;
         }
@@ -874,10 +871,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // Non-Drive permissive defaults shared by seats and the console: Observe over every subject, Control over every
     // screen, Mutate over every section except Grants (the console alone is seeded over it, see below), and Edit
     // over the `all` wildcard (Edit's domain is state:<name>).
-    private void SeedDomain(WorldPrincipal principal) {
+    private void SeedDomain(Principal principal) {
         _ = TryGrant(
             grant: new WorldGrant(
-                Principal: principal,
+                Grantee: principal,
                 Capability: WorldCapability.Observe,
                 Subject: GrantSubject.All,
                 Exclusive: false
@@ -886,7 +883,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         );
         _ = TryGrant(
             grant: new WorldGrant(
-                Principal: principal,
+                Grantee: principal,
                 Capability: WorldCapability.Control,
                 Subject: GrantSubject.All,
                 Exclusive: false
@@ -895,7 +892,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         );
         _ = TryGrant(
             grant: new WorldGrant(
-                Principal: principal,
+                Grantee: principal,
                 Capability: WorldCapability.Edit,
                 Subject: GrantSubject.All,
                 Exclusive: false
@@ -907,7 +904,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // acquire it exclusively over this concrete subject to own the shot.
         _ = TryGrant(
             grant: new WorldGrant(
-                Principal: principal,
+                Grantee: principal,
                 Capability: WorldCapability.Control,
                 Subject: GrantSubject.Composition,
                 Exclusive: false
@@ -929,7 +926,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
             _ = TryGrant(
                 grant: new WorldGrant(
-                    Principal: principal,
+                    Grantee: principal,
                     Capability: WorldCapability.Mutate,
                     Subject: subject,
                     Exclusive: false
@@ -940,7 +937,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // acquisition rules) — the backdrop must never block a reservation, exactly like the ordinary `all` wildcard.
             _ = m_seededSections.Add(item: new SeededKey(
                 Capability: WorldCapability.Mutate,
-                Principal: principal,
+                Grantee: principal,
                 Subject: subject
             ));
         }
@@ -949,7 +946,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // actually admits for this (principal, capability), so the message can never claim a shape the rule does not
     // grant. Conflicts' `label` (built by the caller in WorldServer.Grant) already carries the rejected
     // principal/capability/subject, so this never repeats them.
-    private string SubjectRule(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
+    private string SubjectRule(Principal principal, WorldCapability capability, GrantSubject subject) {
         // The ONE illegitimate Body case for the three body-domain capabilities is an out-of-range index (a Body
         // subject is otherwise always legitimate for them, for any principal) — name the actual population ceiling
         // rather than the generic body:<n> shape the operator already spelled correctly.
@@ -1019,36 +1016,15 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// which refuses and is therefore scoped to the intent-admission door alone — see
     /// <see cref="GrantRule.DriveGated"/>): ownership only ever adds reach, so no existing caller's denial can flip
     /// to an unwanted allow, and no existing caller's allow is ever taken away.</para></remarks>
-    public GrantVerdict Allows(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
-        // The exclusivity override: a reserved subject answers for its reserver ALONE, so an exclusively-held body has
-        // exactly one effective driver even though the console still holds the seeded Drive/all wildcard.
-        if (ExclusiveHolderOf(
+    public GrantVerdict Allows(Principal principal, WorldCapability capability, GrantSubject subject) {
+        var own = Holds(
             capability: capability,
+            grantee: principal,
             subject: subject
-        ) is { } holder) {
-            return ((holder == principal)
-                ? new GrantVerdict(Rule: GrantRule.ReserverMatch)
-                : new GrantVerdict(
-                    Rule: GrantRule.BeatenByReserver,
-                    Reserver: holder
-                )
-            );
-        }
+        );
 
-        if (
-            m_byPrincipal.TryGetValue(
-            key: principal,
-            value: out var grants
-        ) &&
-            (grants.For(capability: capability) is { } subjects)
-        ) {
-            if (subjects.Contains(item: subject)) {
-                return new GrantVerdict(Rule: GrantRule.ConcreteHold);
-            }
-
-            if (subjects.Contains(item: GrantSubject.All)) {
-                return new GrantVerdict(Rule: GrantRule.WildcardHold);
-            }
+        if (own.Rule != GrantRule.NoHold) {
+            return own;
         }
 
         // Group-expansion fallback: a current member reaches a group row only when that row's exact declared role
@@ -1092,20 +1068,55 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return new GrantVerdict(Rule: GrantRule.NoHold);
     }
+    /// <inheritdoc/>
+    public GrantVerdict Holds(Grantee grantee, WorldCapability capability, GrantSubject subject) {
+        // The exclusivity override: a reserved subject answers for its reserver ALONE, so an exclusively-held body has
+        // exactly one effective driver even though the console still holds the seeded Drive/all wildcard.
+        if (ExclusiveHolderOf(
+            capability: capability,
+            subject: subject
+        ) is { } holder) {
+            return ((holder == grantee)
+                ? new GrantVerdict(Rule: GrantRule.ReserverMatch)
+                : new GrantVerdict(
+                    Rule: GrantRule.BeatenByReserver,
+                    Reserver: holder
+                )
+            );
+        }
+
+        if (
+            m_byGrantee.TryGetValue(
+            key: grantee,
+            value: out var grants
+        ) &&
+            (grants.For(capability: capability) is { } subjects)
+        ) {
+            if (subjects.Contains(item: subject)) {
+                return new GrantVerdict(Rule: GrantRule.ConcreteHold);
+            }
+
+            if (subjects.Contains(item: GrantSubject.All)) {
+                return new GrantVerdict(Rule: GrantRule.WildcardHold);
+            }
+        }
+
+        return new GrantVerdict(Rule: GrantRule.NoHold);
+    }
 
     // Direct ownership expansion: does any explicitly-owned group listed for `principal` hold (capability, subject)
-    // or its All wildcard, itself resolved fresh through m_byPrincipal on every call (never cached).
-    private bool TryGroupExpansion(Dictionary<WorldPrincipal, List<string>> groups, WorldPrincipal principal, WorldCapability capability, GrantSubject subject, GrantRule rule, out GrantVerdict verdict) {
+    // or its All wildcard, itself resolved fresh through m_byGrantee on every call (never cached).
+    private bool TryGroupExpansion(Dictionary<Principal, List<string>> groups, Principal principal, WorldCapability capability, GrantSubject subject, GrantRule rule, out GrantVerdict verdict) {
         if (groups.TryGetValue(
             key: principal,
             value: out var groupIds
         )) {
             foreach (var groupId in groupIds) {
-                var groupPrincipal = WorldPrincipal.Group(id: groupId);
+                var groupGrantee = Grantee.Group(id: groupId);
 
                 if (
-                    !m_byPrincipal.TryGetValue(
-                    key: groupPrincipal,
+                    !m_byGrantee.TryGetValue(
+                    key: groupGrantee,
                     value: out var groupGrants
                 ) ||
                     (groupGrants.For(capability: capability) is not { } groupSubjects)
@@ -1133,7 +1144,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     }
 
     /// <inheritdoc/>
-    public bool AllowsAllSections(WorldPrincipal principal, WorldCapability capability, out WorldSection deniedSection, out GrantVerdict denial) {
+    public bool AllowsAllSections(Principal principal, WorldCapability capability, out WorldSection deniedSection, out GrantVerdict denial) {
         foreach (var section in Enum.GetValues<WorldSection>()) {
             if (Allows(
                 principal: principal,
@@ -1153,7 +1164,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         return true;
     }
     /// <inheritdoc/>
-    public IReadOnlyList<ControlApplication> Applications(WorldPrincipal principal) {
+    public IReadOnlyList<ControlApplication> Applications(Principal principal) {
         return (m_applications.TryGetValue(
             key: principal,
             value: out var composed
@@ -1163,7 +1174,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         );
     }
     /// <inheritdoc/>
-    public bool ClearApplications(WorldPrincipal principal) {
+    public bool ClearApplications(Principal principal) {
         if (!m_applications.TryGetValue(
             key: principal,
             value: out var composed
@@ -1192,7 +1203,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         return true;
     }
     /// <inheritdoc/>
-    public void CollectApplicationHolders(GrantSubject target, List<WorldPrincipal> into) {
+    public void CollectApplicationHolders(GrantSubject target, List<Principal> into) {
         into.Clear();
 
         foreach (var pair in m_applications) {
@@ -1206,11 +1217,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
     }
     /// <inheritdoc/>
-    public string Describe(WorldPrincipal? filter) {
+    public string Describe(Grantee? filter) {
         var builder = new StringBuilder(value: "[world.grants:");
         var any = false;
 
-        foreach (var pair in m_byPrincipal) {
+        foreach (var pair in m_byGrantee) {
             if (
                 (filter is { } only) &&
                 (pair.Key != only)
@@ -1218,7 +1229,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 continue;
             }
 
-            var held = Held(principal: pair.Key);
+            var held = Held(grantee: pair.Key);
 
             if (held.Count == 0) {
                 continue;
@@ -1331,13 +1342,13 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         return builder.Append(value: ']').ToString();
     }
     /// <inheritdoc/>
-    public WorldPrincipal? ExclusiveHolder(WorldCapability capability, GrantSubject subject) =>
+    public Grantee? ExclusiveHolder(WorldCapability capability, GrantSubject subject) =>
         ExclusiveHolderOf(
             capability: capability,
             subject: subject
         );
     /// <inheritdoc/>
-    public WorldHandleTable HandleTable(WorldPrincipal principal, WorldCapability capability) {
+    public WorldHandleTable HandleTable(Principal principal, WorldCapability capability) {
         var key = (Principal: principal, Capability: capability);
 
         if (!m_handleTables.TryGetValue(
@@ -1355,9 +1366,9 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         return table;
     }
     /// <inheritdoc/>
-    public IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> Held(WorldPrincipal principal) {
-        if (!m_byPrincipal.TryGetValue(
-            key: principal,
+    public IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> Held(Grantee grantee) {
+        if (!m_byGrantee.TryGetValue(
+            key: grantee,
             value: out var grants
         )) {
             return [];
@@ -1386,21 +1397,22 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         return held;
     }
     /// <inheritdoc/>
-    public long HoldCeiling(WorldPrincipal principal, GrantSubject subject) {
+    public long HoldCeiling(Grantee grantee, GrantSubject subject) {
         return ((TryResolveDecidingGrant(
             capability: WorldCapability.Drive,
-            grantPrincipal: out var grantPrincipal,
+            grantHolder: out var grantHolder,
             grantSubject: out var grantSubject,
-            principal: principal,
+            grantee: grantee,
             subject: subject
         ) && m_holdCeilings.TryGetValue(
-            key: (grantPrincipal, WorldCapability.Drive, grantSubject),
+            key: (grantHolder, WorldCapability.Drive, grantSubject),
             value: out var ceiling
         ))
             ? ceiling
             : DefaultHoldCeiling
         );
     }
+
     /// <summary>Determines whether <paramref name="principal"/> may administer (grant or revoke) <paramref name="capability"/> over
     /// <paramref name="subject"/> — the <c>world.grant</c>/<c>world.revoke</c> actor test, distinct from
     /// <see cref="Allows"/>. Enforced only for principal kinds outside the trust boundary
@@ -1429,7 +1441,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// exactly what "enabling an addon on your own seat is the consent gesture" requires and nothing beyond it: a
     /// Seat actor administering any other subject (another seat's body, a section, a screen, a state row)
     /// refuses.</remarks>
-    private bool HoldsForAdministration(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
+    private bool HoldsForAdministration(Principal principal, WorldCapability capability, GrantSubject subject) {
         if (principal.Kind == PrincipalKind.Console) {
             return true;
         }
@@ -1441,7 +1453,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             );
         }
 
-        if (!m_byPrincipal.TryGetValue(
+        if (!m_byGrantee.TryGetValue(
             key: principal,
             value: out var grants
         )) {
@@ -1455,6 +1467,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             (subjects.Contains(item: GrantSubject.All) || subjects.Contains(item: subject))
         );
     }
+
     /// <summary>Determines whether any principal holds Drive concretely over <paramref name="body"/> — a possession, as
     /// distinct from the seeded Console <c>Drive/all</c> wildcard (which drives every body ambiently and answers
     /// <see cref="Allows"/> true for everything, but is not what "owned" means for a despawn guard). This type's own
@@ -1467,10 +1480,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="body">The 0-based entity index to test.</param>
     /// <param name="holder">The possessing principal, when one exists.</param>
     /// <returns><see langword="true"/> when a concrete Drive hold exists.</returns>
-    internal bool IsBodyPossessed(int body, out WorldPrincipal holder) {
+    internal bool IsBodyPossessed(int body, out Grantee holder) {
         var subject = GrantSubject.Body(index: body);
 
-        foreach (var pair in m_byPrincipal) {
+        foreach (var pair in m_byGrantee) {
             if (pair.Value.For(capability: WorldCapability.Drive)?.Contains(item: subject) == true) {
                 holder = pair.Key;
 
@@ -1482,6 +1495,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return false;
     }
+
     /// <summary>Determines whether a principal sits inside the local trust boundary for administration and metering — the
     /// boundary the grant door's budget/mask requirements and <see cref="WorldServer.TryAdmitMutation"/>'s budget gate
     /// both read.</summary>
@@ -1493,9 +1507,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// notes name explicitly — they diverge on <see cref="PrincipalKind.Addon"/>.</remarks>
     /// <param name="principal">The principal to classify.</param>
     /// <returns><see langword="true"/> for <see cref="PrincipalKind.Console"/> and <see cref="PrincipalKind.Seat"/>.</returns>
-    private static bool IsTrusted(WorldPrincipal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
+    private static bool IsTrusted(Principal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
+
     /// <inheritdoc/>
-    public ChannelCeilings PoolCeilings(WorldPrincipal seat, GrantSubject subject) =>
+    public ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject) =>
         (m_poolCeilings.TryGetValue(
             key: (seat, WorldCapability.Drive, subject),
             value: out var ceilings
@@ -1525,11 +1540,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// whole-domain subject is legitimate, real authority for some (principal, capability) pairs today (a peer's
     /// boot-seeded <c>Control</c>/<c>all</c> route, a seat's <c>Control</c>/<c>composition</c>) — it is refused only
     /// from projection, never from the grant table itself.</para></remarks>
-    public GrantSubject[] ProjectSubjects(WorldPrincipal principal, WorldCapability capability) {
+    public GrantSubject[] ProjectSubjects(Principal principal, WorldCapability capability) {
         var projectedSet = new HashSet<GrantSubject>();
 
         if (
-            m_byPrincipal.TryGetValue(
+            m_byGrantee.TryGetValue(
             key: principal,
             value: out var grants
         ) &&
@@ -1552,8 +1567,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 }
 
                 if (
-                    m_byPrincipal.TryGetValue(
-                    key: WorldPrincipal.Group(id: groupRow.GroupId),
+                    m_byGrantee.TryGetValue(
+                    key: Grantee.Group(id: groupRow.GroupId),
                     value: out var groupGrants
                 ) &&
                     (groupGrants.For(capability: capability) is { } groupSubjects)
@@ -1576,6 +1591,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return projected;
     }
+
     /// <summary>Clears every held row — concrete and wildcard holds, exclusive reservations, budgets, channel
     /// reach/ceilings, verb masks, the seeded-section marker set, and the handle-table cache — then re-seeds the
     /// permissive local-play defaults exactly as the constructor does, silently (via <see cref="TryGrant"/> directly,
@@ -1589,7 +1605,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// re-establishes it).</summary>
     /// <param name="seatCount">The reserved local-seat count — identical to the value passed at construction.</param>
     internal void Reset(int seatCount) {
-        var droppedApplications = new List<(WorldPrincipal Principal, GrantSubject Target)>();
+        var droppedApplications = new List<(Principal Principal, GrantSubject Target)>();
 
         foreach (var (principal, applications) in m_applications) {
             foreach (var application in applications) {
@@ -1598,7 +1614,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         m_applications.Clear();
-        m_byPrincipal.Clear();
+        m_byGrantee.Clear();
         m_exclusive.Clear();
         m_budgets.Clear();
         m_eventBudgets.Clear();
@@ -1609,7 +1625,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         m_writeMasks.Clear();
         m_seededSections.Clear();
         m_handleTables.Clear();
-        m_groupMembership.Clear();
         m_groupRoleMembership.Clear();
         m_groupReach.Clear();
         m_ownedGroups.Clear();
@@ -1624,11 +1639,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         for (var slot = 0; (slot < seatCount); slot++) {
-            var seat = WorldPrincipal.Seat(slot: slot);
+            var seat = Principal.Seat(slot: slot);
 
             _ = TryGrant(
                 grant: new WorldGrant(
-                    Principal: seat,
+                    Grantee: seat,
                     Capability: WorldCapability.Drive,
                     Subject: GrantSubject.Body(index: slot),
                     Exclusive: false
@@ -1638,10 +1653,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             SeedDomain(principal: seat);
         }
 
-        SeedDomain(principal: WorldPrincipal.Console);
+        SeedDomain(principal: Principal.Console);
         _ = TryGrant(
             grant: new WorldGrant(
-                Principal: WorldPrincipal.Console,
+                Grantee: Principal.Console,
                 Capability: WorldCapability.Drive,
                 Subject: GrantSubject.All,
                 Exclusive: false
@@ -1649,20 +1664,21 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             reason: out _
         );
     }
+
     /// <summary>Removes a grant (capability+subject) from a principal, and clears any matching exclusive reservation.
     /// A no-op that returns <see langword="false"/> when the principal did not hold it. Not part of
     /// <see cref="IWorldGrantsView"/>: this is an authority door, reached only through
     /// <see cref="WorldServer.Revoke"/>'s <see cref="HoldsForAdministration"/> actor check, never through the view a
     /// non-<see cref="WorldServer"/> caller holds.</summary>
-    /// <param name="principal">The acting identity.</param>
+    /// <param name="grantee">The row's holder.</param>
     /// <param name="capability">The capability to revoke.</param>
     /// <param name="subject">The subject to revoke.</param>
     /// <returns>Whether a grant was actually removed.</returns>
-    public bool Revoke(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
+    public bool Revoke(Grantee grantee, WorldCapability capability, GrantSubject subject) {
         var removed = false;
 
-        if (m_byPrincipal.TryGetValue(
-            key: principal,
+        if (m_byGrantee.TryGetValue(
+            key: grantee,
             value: out var grants
         )) {
             removed = grants.Remove(
@@ -1681,7 +1697,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             key: key,
             value: out var holder
         ) &&
-            (holder == principal)
+            (holder == grantee)
         ) {
             _ = m_exclusive.Remove(key: key);
         }
@@ -1690,25 +1706,25 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // acquisition like any other.
         _ = m_seededSections.Remove(item: new SeededKey(
             Capability: capability,
-            Principal: principal,
+            Grantee: grantee,
             Subject: subject
         ));
 
         // A revoked row's dispatch budget dies with it: a later re-grant that carries no budget must not inherit
         // one a prior, now-revoked hold left behind.
-        _ = m_budgets.Remove(key: (principal, capability, subject));
-        _ = m_eventBudgets.Remove(key: (principal, capability, subject));
-        _ = m_holdCeilings.Remove(key: (principal, capability, subject));
+        _ = m_budgets.Remove(key: (grantee, capability, subject));
+        _ = m_eventBudgets.Remove(key: (grantee, capability, subject));
+        _ = m_holdCeilings.Remove(key: (grantee, capability, subject));
 
         // A revoked row's co-driving reach and authored ceiling vector die with it too. Revoking the seat's own
         // Drive row is the only way to clear an authored ceiling — a ceiling gesture writes only the ordinals it
         // names and leaves the rest alone, and ceiling:0 is refused at the door.
-        _ = m_channelReach.Remove(key: (principal, capability, subject));
-        _ = m_poolCeilings.Remove(key: (principal, capability, subject));
+        _ = m_channelReach.Remove(key: (grantee, capability, subject));
+        _ = m_poolCeilings.Remove(key: (grantee, capability, subject));
 
         // A revoked row's masks die with it too, same as its budget/reach/ceiling.
-        _ = m_kindMasks.Remove(key: (principal, capability, subject));
-        _ = m_writeMasks.Remove(key: (principal, capability, subject));
+        _ = m_kindMasks.Remove(key: (grantee, capability, subject));
+        _ = m_writeMasks.Remove(key: (grantee, capability, subject));
 
         if (removed) {
             // A handle designating this (capability, subject) must resolve to nothing on its very next use — see
@@ -1720,22 +1736,26 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // application are separate storage, so nothing else would ever drop one whose authority has been
             // withdrawn. Re-testing (rather than matching the revoked subject) is what makes a WILDCARD revoke drop
             // the concrete applications it was the only basis for.
-            if (capability == WorldCapability.Control) {
+            if (
+                (capability == WorldCapability.Control) &&
+                grantee.TryGetPrincipal(principal: out var principal)
+            ) {
                 DissolveUnauthorizedApplications(principal: principal);
             }
         }
 
         return removed;
     }
+
     /// <summary>Snapshots the complete rows one peer principal currently holds, including every payload lane a peer
     /// may legally carry. Peer disconnect events carry this image so replay revokes the identical rows through the
     /// ordinary door.</summary>
     /// <param name="principal">The principal to snapshot.</param>
     /// <returns>The rows in stable capability/subject order.</returns>
-    internal IReadOnlyList<WorldGrant> Rows(WorldPrincipal principal) {
+    internal IReadOnlyList<WorldGrant> Rows(Principal principal) {
         var rows = new List<WorldGrant>();
 
-        foreach (var (capability, subject) in Held(principal: principal)) {
+        foreach (var (capability, subject) in Held(grantee: principal)) {
             var key = (principal, capability, subject);
             var exclusive = (m_exclusive.TryGetValue(
                 key: new ExclusiveKey(
@@ -1746,7 +1766,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             ) && (holder == principal));
 
             rows.Add(item: new WorldGrant(
-                Principal: principal,
+                Grantee: principal,
                 Capability: capability,
                 Subject: subject,
                 Exclusive: exclusive,
@@ -1785,8 +1805,9 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return rows;
     }
+
     /// <inheritdoc/>
-    public void SetApplications(WorldPrincipal principal, IReadOnlyList<ControlApplication> applications) {
+    public void SetApplications(Principal principal, IReadOnlyList<ControlApplication> applications) {
         ArgumentNullException.ThrowIfNull(argument: applications);
 
         var previous = Applications(principal: principal);
@@ -1829,16 +1850,18 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             }
         }
     }
+
     /// <summary>Collects stale generations for one peer index. The caller revokes their rows through
     /// <see cref="WorldServer.Revoke"/>; this method never bypasses that door.</summary>
     /// <param name="index">The peer body index.</param>
     /// <param name="currentGeneration">The newly admitted generation.</param>
     /// <returns>The stale peer identities.</returns>
-    internal IReadOnlyList<WorldPrincipal> StalePeerGenerations(int index, int currentGeneration) {
-        var stale = new List<WorldPrincipal>();
+    internal IReadOnlyList<Principal> StalePeerGenerations(int index, int currentGeneration) {
+        var stale = new List<Principal>();
 
-        foreach (var principal in m_byPrincipal.Keys) {
+        foreach (var grantee in m_byGrantee.Keys) {
             if (
+                grantee.TryGetPrincipal(principal: out var principal) &&
                 (principal.Kind == PrincipalKind.Peer) &&
                 (principal.Index == index) &&
                 (principal.Generation != currentGeneration)
@@ -1915,44 +1938,25 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             }
         }
     }
+
     /// <inheritdoc/>
-    public bool TryGetBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) {
-        if (TryResolveDecidingGrant(
+    public bool TryGetBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget) =>
+        TryGetGrantValue(
             capability: capability,
-            grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject,
-            principal: principal,
-            subject: subject
-        )) {
-            return m_budgets.TryGetValue(
-                key: (grantPrincipal, capability, grantSubject),
-                value: out budget
-            );
-        }
-
-        budget = default;
-
-        return false;
-    }
+            grantee: principal,
+            subject: subject,
+            table: m_budgets,
+            value: out budget
+        );
     /// <inheritdoc/>
-    public bool TryGetChannelReach(WorldPrincipal principal, GrantSubject subject, out ChannelReachMask mask) {
-        if (TryResolveDecidingGrant(
+    public bool TryGetChannelReach(Principal principal, GrantSubject subject, out ChannelReachMask mask) =>
+        TryGetGrantValue(
             capability: WorldCapability.Drive,
-            grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject,
-            principal: principal,
-            subject: subject
-        )) {
-            return m_channelReach.TryGetValue(
-                key: (grantPrincipal, WorldCapability.Drive, grantSubject),
-                value: out mask
-            );
-        }
-
-        mask = default;
-
-        return false;
-    }
+            grantee: principal,
+            subject: subject,
+            table: m_channelReach,
+            value: out mask
+        );
     /// <summary>Determines whether <paramref name="bodyIndex"/> is currently drive-gated — carries a nonzero cell on a state row
     /// declaring <see cref="WorldStateRow.GatesDrive"/> — and, when it is, which row decided it. Checked fresh every
     /// call against the index <see cref="SyncState"/> last resynced; never latched.</summary>
@@ -1974,62 +1978,58 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         return false;
     }
     /// <inheritdoc/>
-    public bool TryGetEventBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget) {
-        if (TryResolveDecidingGrant(
+    public bool TryGetEventBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget) =>
+        TryGetGrantValue(
             capability: capability,
-            grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject,
-            principal: principal,
-            subject: subject
-        )) {
-            return m_eventBudgets.TryGetValue(
-                key: (grantPrincipal, capability, grantSubject),
-                value: out budget
-            );
-        }
-
-        budget = default;
-
-        return false;
-    }
+            grantee: principal,
+            subject: subject,
+            table: m_eventBudgets,
+            value: out budget
+        );
     /// <inheritdoc/>
-    public bool TryGetKindMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out MutationKindMask mask) {
-        if (TryResolveDecidingGrant(
+    public bool TryGetKindMask(Grantee grantee, WorldCapability capability, GrantSubject subject, out MutationKindMask mask) =>
+        TryGetGrantValue(
             capability: capability,
-            grantPrincipal: out var grantPrincipal,
-            grantSubject: out var grantSubject,
-            principal: principal,
-            subject: subject
-        )) {
-            return m_kindMasks.TryGetValue(
-                key: (grantPrincipal, capability, grantSubject),
-                value: out mask
-            );
-        }
-
-        mask = default;
-
-        return false;
-    }
+            grantee: grantee,
+            subject: subject,
+            table: m_kindMasks,
+            value: out mask
+        );
     /// <inheritdoc/>
-    public bool TryGetWriteMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out DocumentWriteMask mask) {
+    public bool TryGetWriteMask(Grantee grantee, WorldCapability capability, GrantSubject subject, out DocumentWriteMask mask) =>
+        TryGetGrantValue(
+            capability: capability,
+            grantee: grantee,
+            subject: subject,
+            table: m_writeMasks,
+            value: out mask
+        );
+
+    private bool TryGetGrantValue<T>(
+        WorldCapability capability,
+        Grantee grantee,
+        GrantSubject subject,
+        Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), T> table,
+        out T value
+    ) {
         if (TryResolveDecidingGrant(
             capability: capability,
-            grantPrincipal: out var grantPrincipal,
+            grantHolder: out var grantHolder,
             grantSubject: out var grantSubject,
-            principal: principal,
+            grantee: grantee,
             subject: subject
         )) {
-            return m_writeMasks.TryGetValue(
-                key: (grantPrincipal, capability, grantSubject),
-                value: out mask
+            return table.TryGetValue(
+                key: (grantHolder, capability, grantSubject),
+                value: out value!
             );
         }
 
-        mask = default;
+        value = default!;
 
         return false;
     }
+
     /// <summary>Adds a grant, enforcing exclusivity in both orders. An incoming exclusive grant over the wildcard
     /// <see cref="GrantSubject.All"/> is rejected outright (an exclusive reservation must name a concrete subject). A
     /// grant is rejected outright when its subject is not one its capability legitimately admits (see
@@ -2065,26 +2065,26 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             m_exclusive[new ExclusiveKey(
                 Capability: grant.Capability,
                 Subject: grant.Subject
-            )] = grant.Principal;
+            )] = grant.Grantee;
         }
 
         if (grant.Budget is { } budget) {
             // Unconditional, last-write-wins: a re-grant naming a different budget IS the budget-update verb — no
             // separate grammar exists to change one in place.
-            m_budgets[(grant.Principal, grant.Capability, grant.Subject)] = budget;
+            m_budgets[(grant.Grantee, grant.Capability, grant.Subject)] = budget;
         }
 
         if (grant.EventBudget is { } eventBudget) {
             // Same last-write-wins shape as Budget, over the SAME key — the two are independent siblings, never one
             // widening the other.
-            m_eventBudgets[(grant.Principal, grant.Capability, grant.Subject)] = eventBudget;
+            m_eventBudgets[(grant.Grantee, grant.Capability, grant.Subject)] = eventBudget;
         }
 
         if (grant.HoldCeiling is { } holdCeiling) {
-            m_holdCeilings[(grant.Principal, grant.Capability, grant.Subject)] = holdCeiling;
+            m_holdCeilings[(grant.Grantee, grant.Capability, grant.Subject)] = holdCeiling;
         }
 
-        var key = (grant.Principal, grant.Capability, grant.Subject);
+        var key = (grant.Grantee, grant.Capability, grant.Subject);
 
         if (
             (grant.Consent is { } consent) &&
@@ -2133,8 +2133,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         ref var grants = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: m_byPrincipal,
-            key: grant.Principal,
+            dictionary: m_byGrantee,
+            key: grant.Grantee,
             exists: out _
         );
 
@@ -2152,227 +2152,9 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// removing <see cref="Revoke"/>, and the engagement-route helpers below — never by a read.</remarks>
     public int Revision => m_revision;
 
-    /// <summary>One principal's checkpointed capability rows — the five subject sets plus the route policy payload.
-    /// Excludes <see cref="m_handleTables"/>: a per-(principal, capability) handle table is a pure projection of
-    /// this table, re-derived lazily from <see cref="ProjectSubjects"/> the moment its own revision cache goes
-    /// stale, and every live handle a guest could hold is meaningless the instant that guest's own connection drops
-    /// — which every checkpoint restart already forces (the arm gate refuses a checkpoint of a server any addon has
-    /// ever pumped, and a remote human is parked, not left connected, across a restore) — the same "subscribers
-    /// re-attach" exclusion <see cref="WorldOutputHub"/>/<see cref="WorldPeerHost"/> connections already carry.</summary>
-    public sealed record WorldGrantsPrincipalCheckpoint(
-        WorldPrincipal Principal,
-        IReadOnlyList<GrantSubject> Drive,
-        IReadOnlyList<GrantSubject> Observe,
-        IReadOnlyList<GrantSubject> Control,
-        IReadOnlyList<GrantSubject> Mutate,
-        IReadOnlyList<GrantSubject> Edit,
-        IReadOnlyList<ControlApplication> Applications
-    );
-    /// <summary>The grant table's own checkpointed state — every table this class owns.</summary>
-    public sealed record WorldGrantsCheckpoint(
-        IReadOnlyList<WorldGrantsPrincipalCheckpoint> Principals,
-        IReadOnlyList<(WorldCapability Capability, GrantSubject Subject, WorldPrincipal Holder)> Exclusive,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ushort Budget)> Budgets,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ushort Budget)> EventBudgets,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, long Ceiling)> HoldCeilings,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ulong Bits)> ChannelReach,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, IReadOnlyList<(int Ordinal, long Ceiling)> Ceilings)> PoolCeilings,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, UInt128 Bits)> KindMasks,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ulong Bits)> WriteMasks,
-        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject)> SeededSections,
-        IReadOnlyList<(WorldPrincipal Principal, IReadOnlyList<string> Groups)> GroupMembership,
-        IReadOnlyList<(string Group, IReadOnlyList<WorldCapability> Reach)> GroupReach,
-        IReadOnlyList<(WorldPrincipal Principal, IReadOnlyList<string> Groups)> OwnedGroups,
-        IReadOnlyList<(int BodyIndex, string Reason)> DriveGates,
-        int Revision
-    );
-
-    /// <summary>Captures every table this class owns.</summary>
-    public WorldGrantsCheckpoint Capture() {
-        var principals = new List<WorldGrantsPrincipalCheckpoint>(capacity: m_byPrincipal.Count);
-
-        foreach (var (principal, grants) in m_byPrincipal) {
-            principals.Add(item: new WorldGrantsPrincipalCheckpoint(
-                Principal: principal,
-                Drive: [.. (grants.For(capability: WorldCapability.Drive) ?? [])],
-                Observe: [.. (grants.For(capability: WorldCapability.Observe) ?? [])],
-                Control: [.. (grants.For(capability: WorldCapability.Control) ?? [])],
-                Mutate: [.. (grants.For(capability: WorldCapability.Mutate) ?? [])],
-                Edit: [.. (grants.For(capability: WorldCapability.Edit) ?? [])],
-                Applications: [.. (m_applications.GetValueOrDefault(key: principal) ?? [])]
-            ));
-        }
-
-        // A principal may have composed an application set without holding any capability row of its own, so the
-        // application table is swept separately rather than assumed to be a subset of the capability table.
-        foreach (var (principal, applications) in m_applications) {
-            if (!m_byPrincipal.ContainsKey(key: principal)) {
-                principals.Add(item: new WorldGrantsPrincipalCheckpoint(
-                    Applications: [.. applications],
-                    Control: [],
-                    Drive: [],
-                    Edit: [],
-                    Mutate: [],
-                    Observe: [],
-                    Principal: principal
-                ));
-            }
-        }
-
-        return new WorldGrantsCheckpoint(
-            Principals: principals,
-            Exclusive: [.. m_exclusive.Select(selector: static pair => (pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            Budgets: [.. m_budgets.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            EventBudgets: [.. m_eventBudgets.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            HoldCeilings: [.. m_holdCeilings.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value))],
-            ChannelReach: [.. m_channelReach.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            PoolCeilings: [.. m_poolCeilings.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, CaptureCeilings(ceilings: pair.Value)))],
-            KindMasks: [.. m_kindMasks.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            WriteMasks: [.. m_writeMasks.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
-            SeededSections: [.. m_seededSections.Select(selector: static key => (key.Principal, key.Capability, key.Subject))],
-            GroupMembership: [.. m_groupMembership.Select(selector: static pair => (pair.Key, ((IReadOnlyList<string>)[.. pair.Value])))],
-            GroupReach: [.. m_groupReach.Select(selector: static pair => (pair.Key, ((IReadOnlyList<WorldCapability>)[.. pair.Value])))],
-            OwnedGroups: [.. m_ownedGroups.Select(selector: static pair => (pair.Key, ((IReadOnlyList<string>)[.. pair.Value])))],
-            DriveGates: [.. m_driveGates.Select(selector: static pair => (pair.Key, pair.Value))],
-            Revision: m_revision
-        );
-    }
-    /// <summary>Restores every table this class owns from a previously captured checkpoint — a wholesale replace,
-    /// never a merge onto whatever the boot-seed constructor already installed.</summary>
-    public void Restore(WorldGrantsCheckpoint checkpoint) {
-        ArgumentNullException.ThrowIfNull(argument: checkpoint);
-
-        m_applications.Clear();
-        m_byPrincipal.Clear();
-        m_exclusive.Clear();
-        m_budgets.Clear();
-        m_eventBudgets.Clear();
-        m_holdCeilings.Clear();
-        m_channelReach.Clear();
-        m_poolCeilings.Clear();
-        m_kindMasks.Clear();
-        m_writeMasks.Clear();
-        m_seededSections.Clear();
-        m_handleTables.Clear();
-        m_groupMembership.Clear();
-        m_groupRoleMembership.Clear();
-        m_groupReach.Clear();
-        m_ownedGroups.Clear();
-        m_ownedGroupRoleReach.Clear();
-        m_driveGates.Clear();
-
-        foreach (var row in checkpoint.Principals) {
-            var grants = new PrincipalGrants();
-
-            foreach (var subject in row.Drive) {
-                grants.Add(
-                    capability: WorldCapability.Drive,
-                    subject: subject
-                );
-            }
-            foreach (var subject in row.Observe) {
-                grants.Add(
-                    capability: WorldCapability.Observe,
-                    subject: subject
-                );
-            }
-            foreach (var subject in row.Control) {
-                grants.Add(
-                    capability: WorldCapability.Control,
-                    subject: subject
-                );
-            }
-            foreach (var subject in row.Mutate) {
-                grants.Add(
-                    capability: WorldCapability.Mutate,
-                    subject: subject
-                );
-            }
-            foreach (var subject in row.Edit) {
-                grants.Add(
-                    capability: WorldCapability.Edit,
-                    subject: subject
-                );
-            }
-
-            m_byPrincipal[row.Principal] = grants;
-
-            if (row.Applications.Count > 0) {
-                m_applications[row.Principal] = [.. row.Applications];
-            }
-        }
-
-        foreach (var row in checkpoint.Exclusive) {
-            m_exclusive[new ExclusiveKey(
-                Capability: row.Capability,
-                Subject: row.Subject
-            )] = row.Holder;
-        }
-        foreach (var row in checkpoint.Budgets) {
-            m_budgets[(row.Principal, row.Capability, row.Subject)] = row.Budget;
-        }
-        foreach (var row in checkpoint.EventBudgets) {
-            m_eventBudgets[(row.Principal, row.Capability, row.Subject)] = row.Budget;
-        }
-        foreach (var row in checkpoint.HoldCeilings) {
-            m_holdCeilings[(row.Principal, row.Capability, row.Subject)] = row.Ceiling;
-        }
-        foreach (var row in checkpoint.ChannelReach) {
-            m_channelReach[(row.Principal, row.Capability, row.Subject)] = new ChannelReachMask(Bits: row.Bits);
-        }
-        foreach (var row in checkpoint.PoolCeilings) {
-            m_poolCeilings[(row.Principal, row.Capability, row.Subject)] = RestoreCeilings(rows: row.Ceilings);
-        }
-        foreach (var row in checkpoint.KindMasks) {
-            m_kindMasks[(row.Principal, row.Capability, row.Subject)] = new MutationKindMask(Bits: row.Bits);
-        }
-        foreach (var row in checkpoint.WriteMasks) {
-            m_writeMasks[(row.Principal, row.Capability, row.Subject)] = new DocumentWriteMask(Bits: row.Bits);
-        }
-        foreach (var row in checkpoint.SeededSections) {
-            _ = m_seededSections.Add(item: new SeededKey(
-                Capability: row.Capability,
-                Principal: row.Principal,
-                Subject: row.Subject
-            ));
-        }
-        // Group membership, kind reach, and ownership rows in the checkpoint are legacy derived projections kept
-        // for wire compatibility. Do not restore them as authority: role reach must be rebuilt from the restored
-        // definition, and until WorldServer calls RestoreGroups every group-derived check remains deny-by-default.
-        foreach (var row in checkpoint.DriveGates) {
-            m_driveGates[row.BodyIndex] = row.Reason;
-        }
-
-        m_revision = checkpoint.Revision;
-    }
-
-    private static IReadOnlyList<(int Ordinal, long Ceiling)> CaptureCeilings(ChannelCeilings ceilings) {
-        var rows = new List<(int, long)>();
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if ((ceilings.Support.Bits & (1UL << ordinal)) != 0UL) {
-                rows.Add(item: (ordinal, ceilings[ordinal]));
-            }
-        }
-
-        return rows;
-    }
-    private static ChannelCeilings RestoreCeilings(IReadOnlyList<(int Ordinal, long Ceiling)> rows) {
-        var ceilings = default(ChannelCeilings);
-
-        foreach (var row in rows) {
-            ceilings = ceilings.WithCeiling(
-                ceiling: row.Ceiling,
-                channels: new ChannelConsentMask(Bits: (1UL << row.Ordinal))
-            );
-        }
-
-        return ceilings;
-    }
-
-    // One principal's five per-capability subject sets, allocated lazily. A struct held by ref in the dictionary; the
+    // One grantee's five per-capability subject sets, allocated lazily. A struct held by ref in the dictionary; the
     // sets are reference types so ref-mutation persists.
-    private struct PrincipalGrants {
+    private struct GranteeGrants {
         private HashSet<GrantSubject>? m_drive;
         private HashSet<GrantSubject>? m_observe;
         private HashSet<GrantSubject>? m_control;
@@ -2397,7 +2179,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                     throw new ArgumentOutOfRangeException(
                         paramName: nameof(capability),
                         actualValue: capability,
-                        message: $"WorldCapability.{capability} has no storage arm in PrincipalGrants.Set — add a field and a case here before granting it."
+                        message: $"WorldCapability.{capability} has no storage arm in GranteeGrants.Set — add a field and a case here before granting it."
                     );
             }
         }
@@ -2408,7 +2190,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // Exhaustive over WorldCapability's five declared members only — a future member has no storage field to
         // fall back to, so this throws rather than silently sharing m_edit's slot. This is defense-in-depth, not a
         // live gate: every data path is filtered by IsLegitimateSubject or a closed parse before storage is
-        // consulted, and Allows short-circuits on the m_byPrincipal miss first.
+        // consulted, and Allows short-circuits on the m_byGrantee miss first.
         public readonly HashSet<GrantSubject>? For(WorldCapability capability) => capability switch {
             WorldCapability.Drive => m_drive,
             WorldCapability.Observe => m_observe,
@@ -2418,7 +2200,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(capability),
             actualValue: capability,
-            message: $"WorldCapability.{capability} has no storage arm in PrincipalGrants.For — add a field and a case here before granting it."
+            message: $"WorldCapability.{capability} has no storage arm in GranteeGrants.For — add a field and a case here before granting it."
         ),
         };
         public readonly bool Remove(WorldCapability capability, GrantSubject subject) {
@@ -2427,6 +2209,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     }
     // The reverse-index key for the exclusive-holder table.
     private readonly record struct ExclusiveKey(WorldCapability Capability, GrantSubject Subject);
-    // The seed-marker key: one permissive-default row as constructed (principal + capability + subject).
-    private readonly record struct SeededKey(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject);
+    // The seed-marker key: one permissive-default row as constructed (grantee + capability + subject).
+    private readonly record struct SeededKey(Grantee Grantee, WorldCapability Capability, GrantSubject Subject);
 }

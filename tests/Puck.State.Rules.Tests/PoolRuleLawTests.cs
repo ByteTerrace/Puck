@@ -7,7 +7,7 @@ namespace Puck.State.Rules.Tests;
 public sealed class PoolRuleLawTests {
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static StateSection Section() => new(
-        Spaces: [new StateSpace(Name: Name(value: "pose"), Model: "test", Revision: "1", Dimensions: 16)],
+        Spaces: [new StateSpace(name: Name(value: "pose"), model: "test", revision: "1", dimensions: 16)],
         Rows: [new StateRow(Name: Name(value: "locked"), Kind: CellKind.Int, Min: 0L, Max: 0L, Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 0L))])],
         Records: [new StateRecord(Name: Name(value: "piece"), Fields: [
             new StatePoolField(Name: Name(value: "count"), Kind: CellKind.Int, Default: CellValue.Int(value: 7L)),
@@ -119,7 +119,7 @@ public sealed class PoolRuleLawTests {
             new ActionEffect.Claim(Pool: "pieces", Binding: Name(value: "piece"), Effects: [
                 new ActionEffect.ScheduleState(State: StateChannelRef.OfBindingField(binding: "piece", field: "count"), DelaySeconds: 1m),
             ]),
-            new ActionEffect.ScheduleState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 2, field: "count"), DelaySeconds: 2m),
+            new ActionEffect.ScheduleState(State: StateChannelRef.OfStaticPoolField(field: "count", pool: "pieces", slot: 2), DelaySeconds: 2m),
         ]));
         var host = new ArenaEffectHost(arena: arena);
         var evaluator = new RuleEvaluator(host: host);
@@ -148,8 +148,8 @@ public sealed class PoolRuleLawTests {
         var context = new RuleCompileContext(section: section, catalog: catalog, tables: null, patterns: null, generators: null, simulationRateHz: 60, vocabulary: RuleVocabulary.Core);
         var authored = new Rule(
             Name: Name(value: "staticField"),
-            Gate: new ActionPredicate.CompareState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 2, field: "count"), Comparison: ActionStateComparison.Equal, Value: 7m),
-            Effects: [new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 2, field: "count"), Value: 11m)]
+            Gate: new ActionPredicate.CompareState(State: StateChannelRef.OfStaticPoolField(field: "count", pool: "pieces", slot: 2), Comparison: ExpressionOp.Equal, Value: 7m),
+            Effects: [new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(field: "count", pool: "pieces", slot: 2), Value: 11m)]
         );
         var compiled = RuleCompiler.Compile(context: context, rule: authored);
         var evaluator = new RuleEvaluator(host: new ArenaEffectHost(arena: arena));
@@ -158,7 +158,7 @@ public sealed class PoolRuleLawTests {
         Assert.True(condition: runtimeCatalog.TryGetPool(name: Name(value: "pieces"), pool: out var pool));
         var seeded = runtimeCatalog.CreateInstanceHandle(poolOrdinal: pool!.Ordinal, slot: 2, generation: 0L);
 
-        Assert.True(condition: arena.TryRead(handle: seeded, fieldOrdinal: 0, value: out var value));
+        Assert.True(condition: arena.TryRead(fieldOrdinal: 0, handle: seeded, value: out var value));
         Assert.Equal(expected: 11L, actual: value.AsInt);
 
         Assert.True(condition: arena.TryRelease(handle: seeded, reason: out _));
@@ -174,11 +174,11 @@ public sealed class PoolRuleLawTests {
 
         var unknownField = Assert.Throws<RuleException>(testCode: () => RuleCompiler.Compile(context: context, rule: new Rule(
             Name: Name(value: "unknownField"),
-            Effects: [new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "missing"), Value: 1m)]
+            Effects: [new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(field: "missing", pool: "pieces", slot: 0), Value: 1m)]
         )));
         var outsideCapacity = Assert.Throws<RuleException>(testCode: () => RuleCompiler.Compile(context: context, rule: new Rule(
             Name: Name(value: "outsideCapacity"),
-            Effects: [new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 4, field: "count"), Value: 1m)]
+            Effects: [new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(field: "count", pool: "pieces", slot: 4), Value: 1m)]
         )));
         var releasedBinding = Assert.Throws<RuleException>(testCode: () => RuleCompiler.Compile(context: context, rule: new Rule(
             Name: Name(value: "releasedBinding"),
@@ -234,7 +234,7 @@ public sealed class PoolRuleLawTests {
             Pool: "pieces",
             Binding: Name(value: "noun"),
             Effects: [new ActionEffect.If(
-                Condition: new ActionPredicate.CompareState(State: field, Comparison: ActionStateComparison.Equal, Value: 1m),
+                Condition: new ActionPredicate.CompareState(State: field, Comparison: ExpressionOp.Equal, Value: 1m),
                 Then: [new ActionEffect.SetState(State: field, Value: 2m)]
             )]
         )]));

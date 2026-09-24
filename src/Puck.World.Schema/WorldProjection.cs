@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
@@ -75,7 +76,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Assignment">The body-to-kit assignment.</param>
 /// <param name="BindingOverlays">The world's binding layers — a visitor's seat composes over them.</param>
 /// <param name="Creations">The embedded creation documents rendering resolves shapes from.</param>
-/// <param name="Placements">The placement rows.</param>
+/// <param name="Placements">The placement rows, as the recipient's state disclosure deals them
+/// (<see cref="WorldStateDisclosure.Disclose"/>).</param>
 /// <param name="Speakers">The speaker rows.</param>
 /// <param name="Tunes">The tune assets.</param>
 /// <param name="Patches">The synth patch assets.</param>
@@ -98,6 +100,9 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Metadata">The title/description half of <c>metadata</c>, when the world authors one — see the type
 /// remarks.</param>
 /// <param name="Observations">Explicitly disclosed literal state observations, without executable or draw bookkeeping traits.</param>
+/// <param name="Spaces">The vector spaces the disclosed vector rows among <paramref name="Observations"/> name, and no
+/// other: a space declares only a model, a revision, and a dimension count, and a vector row loads only against its
+/// own.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -131,7 +136,8 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDestination>? Destinations = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdjacency>? Adjacencies = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldProjectedMetadata? Metadata = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldObservedRow>? Observations = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldObservedRow>? Observations = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSpace>? Spaces = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -211,13 +217,20 @@ public static class WorldProjection {
     /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
     /// <param name="arena">The authority's live store, which every disclosed value and audience is read from.</param>
     /// <param name="time">The clocks a disclosed cell's value-over-time trait is read at.</param>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, WorldPrincipal? recipient = null) {
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
             return null;
         }
 
+        // Placements cross as the recipient's disclosure deals them: a dealt placement reads the cells it was dealt
+        // from, so one dealt from a cell this recipient may not read is re-dealt without it.
+        var placements = WorldStateDisclosure.Disclose(
+            arena: arena,
+            definition: definition,
+            recipient: recipient
+        ).Definition.Placements;
         var kits = new WorldProjectedKit[definition.Kits.Count];
 
         for (var index = 0; (index < kits.Length); index++) {
@@ -252,7 +265,7 @@ public static class WorldProjection {
             Assignment: definition.Assignment,
             BindingOverlays: definition.BindingOverlays,
             Creations: definition.Creations,
-            Placements: definition.Placements,
+            Placements: placements,
             Speakers: definition.Speakers,
             Tunes: definition.Tunes,
             Patches: definition.Patches,
@@ -282,19 +295,48 @@ public static class WorldProjection {
             graph: projection,
             recipient: recipient
         );
-        projection = projection with {
-            Observations = WorldStateDisclosure.Compose(
+        var observations = WorldStateDisclosure.Compose(
             arena: arena,
             definition: definition,
             recipient: recipient,
             time: in time
-        ),
+        );
+
+        projection = projection with {
+            Observations = observations,
+            Spaces = SpacesOf(
+                observations: observations,
+                spaces: definition.StateRaw?.Spaces
+            ),
         };
         return Flatten(
             definition: definition,
             projection: projection
         );
     }
+
+    // The declared spaces a disclosed vector row names, in declaration order; null when no vector row was disclosed.
+    private static StateSpace[]? SpacesOf(IReadOnlyList<WorldObservedRow>? observations, IReadOnlyList<StateSpace>? spaces) {
+        if (
+            (observations is null) ||
+            (spaces is null)
+        ) {
+            return null;
+        }
+
+        var named = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var observed in observations) {
+            if (observed.Space is { } space) {
+                _ = named.Add(item: space);
+            }
+        }
+
+        return ((named.Count == 0)
+            ? null
+            : [.. spaces.Where(predicate: space => named.Contains(item: space.Name.Value))]);
+    }
+
     /// <summary>Serializes a projection to its canonical UTF-8 bytes.</summary>
     /// <param name="projection">The projection.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
@@ -366,12 +408,14 @@ public static class WorldProjection {
     }
     /// <summary>Rebuilds a locally-valid <see cref="WorldDefinition"/> from a projection — see the class remarks. Every
     /// undisclosed section arrives as its neutral built-in default, never as a fabricated stand-in for what the
-    /// composing authority actually authored.</summary>
+    /// composing authority actually authored. The <see cref="WorldProjectionDocument.Observations"/> the projection
+    /// was composed with arrive as plain <c>state.world</c> rows holding exactly the disclosed cells, since the
+    /// composition already chose them for this recipient, and a vector row arrives in the vector space
+    /// <see cref="WorldProjectionDocument.Spaces"/> carries for it.</summary>
     /// <remarks>
     /// The hydration runs the same document-value resolution pass a file load runs, so a delivered definition is
     /// indistinguishable from a loaded one. <see cref="Compose"/> flattens what it sends, so a peer that still names a
-    /// state cell is naming one this projection carries no section for: that refuses here rather than faulting later
-    /// at the first read of the value.
+    /// state cell no observed row carries refuses here rather than faulting later at the first read of the value.
     /// </remarks>
     /// <param name="projection">The projection.</param>
     /// <param name="definition">The hydrated definition on success.</param>
@@ -382,6 +426,29 @@ public static class WorldProjection {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
         definition = null;
+
+        var state = WorldFieldsSection.ToStateSection(composite: projection.Fields);
+
+        if (projection.Observations is { Count: > 0 } observations) {
+            var rows = new List<WorldStateRow>(collection: (state.World ?? []));
+
+            foreach (var observed in observations) {
+                if (!TryObservedRow(
+                    observed: observed,
+                    reason: out reason,
+                    row: out var row
+                )) {
+                    return false;
+                }
+
+                rows.Add(item: row);
+            }
+
+            state = (state with {
+                Spaces = projection.Spaces,
+                World = rows,
+            });
+        }
 
         var kits = new WorldKit[projection.Kits.Count];
 
@@ -434,7 +501,7 @@ public static class WorldProjection {
             DynamicsRaw: projection.Dynamics,
             GrantsRaw: [],
             HudRaw: projection.Hud,
-            StateRaw: WorldFieldsSection.ToStateSection(composite: projection.Fields),
+            StateRaw: state,
             InputHoldRaw: new WorldInputHoldAuthoring(
                 CeilingSeconds: 0f,
                 DefaultSeconds: 0f,
@@ -465,6 +532,78 @@ public static class WorldProjection {
         }
 
         definition = hydrated;
+
+        return true;
+    }
+
+    // An observed row crosses as a plain state row of the literals the recipient was disclosed: no trait, no
+    // visibility, and no placeholder cell, since a placeholder names no key and a withheld cell is simply absent.
+    private static bool TryObservedRow(WorldObservedRow observed, out WorldStateRow row, out string reason) {
+        row = null!;
+
+        if (!CellName.TryParse(
+            candidate: observed.Name,
+            name: out var name,
+            reason: out var nameReason
+        )) {
+            reason = $"projection observation row '{observed.Name}' {nameReason}";
+
+            return false;
+        }
+
+        if (!Enum.IsDefined(value: observed.Kind)) {
+            reason = $"projection observation row '{observed.Name}' carries kind '{observed.Kind}', which is no cell kind";
+
+            return false;
+        }
+
+        var cells = new List<StateCell>(capacity: observed.Cells.Count);
+
+        foreach (var cell in observed.Cells) {
+            if (cell.Hidden) {
+                continue;
+            }
+
+            if (!CellName.TryParse(
+                candidate: cell.Key,
+                name: out var key,
+                reason: out var keyReason
+            )) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' {keyReason}";
+
+                return false;
+            }
+
+            if (
+                (observed.Kind == CellKind.Vector) &&
+                (cell.Vector is null)
+            ) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' is a vector cell carrying no vector";
+
+                return false;
+            }
+
+            cells.Add(item: new StateCell(
+                Key: key,
+                Observation: cell.Observation,
+                Value: (observed.Kind switch {
+                    CellKind.Text => CellValue.Text(value: cell.Text),
+                    CellKind.Vector => CellValue.Vector(components: cell.Vector!.Memory),
+                    _ => CellValue.FromNumber(
+                        kind: observed.Kind,
+                        raw: cell.Value
+                    ),
+                })
+            ));
+        }
+
+        row = new WorldStateRow(
+            Cells: cells,
+            Kind: observed.Kind,
+            Name: name,
+            Space: observed.Space
+        );
+        reason = string.Empty;
 
         return true;
     }

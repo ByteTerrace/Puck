@@ -3,7 +3,6 @@
   "title": "A body that falls through a flat seam and flies back up through it arrives on every leg exactly where it crossed",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 28,
   "timeoutSeconds": 60,
   "fixtures": [
     "corner.world.json"

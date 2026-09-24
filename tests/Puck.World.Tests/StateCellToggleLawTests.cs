@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -11,7 +12,7 @@ public sealed class StateCellToggleLawTests {
     private const string RowName = "toggleProbe";
 
     private static void Cycle(LoopbackTransport transport, string[] tokens) => transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: RowName,
         Key: CellKey,
         Value: 0L,
@@ -27,20 +28,7 @@ public sealed class StateCellToggleLawTests {
                 Value: CellValue.Int(value: initial)
             )]
     );
-    private static long ReadNumeric(WorldFixture fixture) {
-        Assert.True(condition: WorldStateReader.TryRead(
-            definition: fixture.Server.Definition,
-            rowName: RowName,
-            key: CellKey,
-            tick: fixture.Server.NextInputTick,
-            engineTick: fixture.Server.CompletedEngineTicks,
-            row: out _,
-            rawValue: out var raw,
-            text: out _
-        ));
-
-        return Assert.IsType<long>(@object: raw);
-    }
+    private static long ReadNumeric(WorldFixture fixture) => fixture.ReadNumeric(key: CellKey, row: RowName);
     private static string ReadText(WorldFixture fixture) {
         Assert.True(condition: WorldStateReader.TryRead(
             definition: fixture.Server.Definition,

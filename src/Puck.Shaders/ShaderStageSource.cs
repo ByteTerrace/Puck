@@ -1,21 +1,13 @@
 namespace Puck.Shaders;
 
-/// <summary>One source stage and its compiler entry-point settings.</summary>
+/// <summary>One HLSL source stage and the entry point the compiler builds it from.</summary>
+/// <param name="Stage">The stage.</param>
+/// <param name="Path">The source's full path, which resolves its includes and names it in diagnostics.</param>
+/// <param name="Source">The source text.</param>
+/// <param name="EntryPoint">The entry point.</param>
 public sealed record ShaderStageSource(
     ShaderStage Stage,
     string Path,
     string Source,
-    ShaderSourceLanguage Language = ShaderSourceLanguage.Hlsl,
-    string EntryPoint = "main",
-    uint GroupSizeX = 8,
-    uint GroupSizeY = 8,
-    uint GroupSizeZ = 1) {
-    public ShaderStageSource(ShaderStage stage, string path, string source, string entryPoint)
-        : this(
-        stage,
-        path,
-        source,
-        ShaderSourceLanguage.Hlsl,
-        entryPoint
-    ) { }
-}
+    string EntryPoint = "main"
+);

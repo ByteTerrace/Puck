@@ -9,77 +9,47 @@ internal static partial class LawRegistry {
     );
 
     private static LawCase[] DynamicsCases() => [
-        Case(
+        SweptCase(
+            claim: Subjects.DynamicsCreateConstantsVsOracle,
+            domain: Dynamics,
             id: "dynamics.create-constants-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.DynamicsCreateConstantsVsOracle,
-                domain: Dynamics,
-                lawId: "dynamics.create-constants-vs-oracle",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.DynamicsStepVsEvaluate,
+            domain: Dynamics,
             id: "dynamics.step-vs-evaluate-close-agreement",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.DynamicsStepVsEvaluate,
-                domain: Dynamics,
-                lawId: "dynamics.step-vs-evaluate-close-agreement",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
-            id: "dynamics.critical-and-overdamped-never-overshoot",
-            run: () => Laws.Claim(
-                claim: Subjects.DynamicsCriticalAndOverdampedNeverOvershoot,
-                lawId: "dynamics.critical-and-overdamped-never-overshoot"
-            )
+        ClaimCase(
+            claim: Subjects.DynamicsCriticalAndOverdampedNeverOvershoot,
+            id: "dynamics.critical-and-overdamped-never-overshoot"
         ),
-        Case(
-            id: "dynamics.steady-state-exact",
-            run: () => Laws.Claim(
-                claim: Subjects.DynamicsSteadyStateExact,
-                lawId: "dynamics.steady-state-exact"
-            )
+        ClaimCase(
+            claim: Subjects.DynamicsSteadyStateExact,
+            id: "dynamics.steady-state-exact"
         ),
-        Case(
-            id: "dynamics.initial-response-sign",
-            run: () => Laws.Claim(
-                claim: Subjects.DynamicsInitialResponseSign,
-                lawId: "dynamics.initial-response-sign"
-            )
+        ClaimCase(
+            claim: Subjects.DynamicsInitialResponseSign,
+            id: "dynamics.initial-response-sign"
         ),
-        Case(
-            id: "dynamics.refusals-and-overflow",
-            run: () => Laws.Claim(
-                claim: Subjects.DynamicsRefusalsAndOverflow,
-                lawId: "dynamics.refusals-and-overflow"
-            )
+        ClaimCase(
+            claim: Subjects.DynamicsRefusalsAndOverflow,
+            id: "dynamics.refusals-and-overflow"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.DynamicsVectorLanesIndependent,
+            domain: Dynamics,
             id: "dynamics.vector-lanes-independent",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.DynamicsVectorLanesIndependent,
-                domain: Dynamics,
-                lawId: "dynamics.vector-lanes-independent",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
-            id: "dynamics.guard-scale-ties-vs-half-up",
-            run: () => Laws.Claim(
-                claim: GuardScaleTieDisciplineClaims.RoundToGuardScaleTiesVsHalfUpSurface,
-                lawId: "dynamics.guard-scale-ties-vs-half-up"
-            )
+        ClaimCase(
+            claim: GuardScaleTieDisciplineClaims.RoundToGuardScaleTiesVsHalfUpSurface,
+            id: "dynamics.guard-scale-ties-vs-half-up"
         ),
-        Case(
-            id: "dynamics.guard-scale-public-divergence-search",
-            run: () => Laws.Claim(
-                claim: GuardScaleTieDisciplineClaims.GuardScalePublicDivergenceSearchSurface,
-                lawId: "dynamics.guard-scale-public-divergence-search"
-            )
+        ClaimCase(
+            claim: GuardScaleTieDisciplineClaims.GuardScalePublicDivergenceSearchSurface,
+            id: "dynamics.guard-scale-public-divergence-search"
         ),
     ];
 }

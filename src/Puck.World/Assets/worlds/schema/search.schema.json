@@ -133,10 +133,10 @@
                   "title": "WorldSearchShapeJump"
                 },
                 {
-                  "description": "The walked token relocates to the target cell and a second, fixed token \u2014 named by With, a cell key of Tokens \u2014 relocates by the same lattice translation (CompiledTopology.TryTranslation: the axial step on a grid, ring, hex, or box), provided its own destination is empty. A graph or tiling has no translations and refuses the shape. The minimal two-token primitive a castle\u0027s rook needs, not a general rule for every pair\u0027s own reach (see the schema README\u0027s search section for the reasoning).",
+                  "description": "The walked token relocates to the target cell and a second, fixed token \u2014 named by With, a cell key of Tokens \u2014 relocates by the same lattice translation (CompiledTopology.TryTranslation: the axial step on a grid, ring, hex, or box), provided its own destination is empty. A graph or tiling has no translations and refuses the shape. The minimal two-token primitive a castle\u0027s rook needs, not a general rule for every companion\u0027s own reach (see the schema README\u0027s search section for the reasoning).",
                   "properties": {
                     "$type": {
-                      "const": "pair"
+                      "const": "tandem"
                     },
                     "with": {
                       "description": "The companion token\u0027s cell key in Tokens.",
@@ -147,7 +147,7 @@
                     "with"
                   ],
                   "additionalProperties": false,
-                  "title": "WorldSearchShapePaired"
+                  "title": "WorldSearchShapeTandem"
                 },
                 {
                   "description": "The walked token relocates onto any other cell, evicting what stood there, and its own code in Codes becomes one of To \u2014 one candidate per (cell, code). The judge decides where a code may change; the shape only offers the change.",
@@ -245,7 +245,7 @@
             "default": 1
           },
           "score": {
-            "description": "An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies \u2014 the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with Tree unauthored alongside it.",
+            "description": "An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies \u2014 the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with MonteCarlo unauthored alongside it.",
             "type": [
               "string",
               "null"
@@ -261,16 +261,16 @@
             "default": null
           },
           "method": {
-            "description": "How plies are compared by the score: Negamax to the depth cap, or Tree, which reads the score where no candidate is accepted or at the cap.",
+            "description": "How plies are compared by the score: Negamax to the depth cap, or MonteCarlo, which reads the score where no candidate is accepted or at the cap.",
             "enum": [
               "Negamax",
-              "Tree"
+              "MonteCarlo"
             ],
             "default": "Negamax",
             "title": "SearchMethod"
           },
           "iterations": {
-            "description": "How many tree iterations a Tree job runs before it lands.",
+            "description": "How many tree iterations a MonteCarlo job runs before it lands.",
             "type": "integer",
             "default": 256
           },
@@ -299,7 +299,7 @@
             "title": "WorldSearchChance"
           },
           "scores": {
-            "description": "A keyed integer row, one cell per seat in Turn\u0027s own ordinal order, holding each seat\u0027s own current score \u2014 the n-seat reading of what a ply is worth: a level maximizes the mover seat\u0027s own entry rather than negating the reply, so no seat\u0027s gain is assumed to be another\u0027s loss (max-n). Exactly one of this and Score is authored when a score is needed; refused with Tree, whose outcome backprop alternates sign along the path.",
+            "description": "A keyed integer row, one cell per seat in Turn\u0027s own ordinal order, holding each seat\u0027s own current score \u2014 the n-seat reading of what a ply is worth: a level maximizes the mover seat\u0027s own entry rather than negating the reply, so no seat\u0027s gain is assumed to be another\u0027s loss (max-n). Exactly one of this and Score is authored when a score is needed; refused with MonteCarlo, whose outcome backprop alternates sign along the path.",
             "type": [
               "string",
               "null"

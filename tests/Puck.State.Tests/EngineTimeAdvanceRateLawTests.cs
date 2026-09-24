@@ -46,8 +46,8 @@ public sealed class EngineTimeAdvanceRateLawTests {
             );
 
             Assert.Equal(
-                expected: expected,
-                actual: actual
+                actual: actual,
+                expected: expected
             );
         }
     }
@@ -75,8 +75,8 @@ public sealed class EngineTimeAdvanceRateLawTests {
             );
 
             Assert.Equal(
-                expected: expected,
-                actual: actual
+                actual: actual,
+                expected: expected
             );
         }
     }
@@ -104,8 +104,8 @@ public sealed class EngineTimeAdvanceRateLawTests {
             );
 
             Assert.Equal(
-                expected: expected,
-                actual: actual
+                actual: actual,
+                expected: expected
             );
         }
     }

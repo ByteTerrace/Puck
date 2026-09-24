@@ -29,14 +29,6 @@ public sealed class WorldBoardSymmetryLawTests {
         Rules = rules,
     };
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static WorldStateRow Slot(string name) => new(
-        Name(value: name),
-        CellKind.Int,
-        Cells: [new StateCell(
-                WorldStateRow.SlotKey,
-                CellValue.Int(value: 0L)
-            )]
-    );
     private static LatticeTopology Topology(TopologyKind kind, int width, int depth) => ((kind == TopologyKind.Hex)
         ? new LatticeTopology.Hex(
             "t",
@@ -60,14 +52,6 @@ public sealed class WorldBoardSymmetryLawTests {
             depth
         )
     );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
 
     [Fact]
     public void AnAuthoredAliasResolvesAlongsideTheCanonicalSpellingButElementNameAlwaysAnswersTheCanonicalOne() {
@@ -103,10 +87,12 @@ public sealed class WorldBoardSymmetryLawTests {
         );
 
         Assert.False(condition: TopologyCompilation.TryValidate(
-            square with { ElementAliases = [new(
+            square with {
+                ElementAliases = [new(
                     Element: "not-an-element",
                     Name: "rot90"
-                )] },
+                )],
+            },
             out var missingReason
         ));
         Assert.Contains(
@@ -114,10 +100,12 @@ public sealed class WorldBoardSymmetryLawTests {
             expectedSubstring: "names no element"
         );
         Assert.False(condition: TopologyCompilation.TryValidate(
-            square with { ElementAliases = [new(
+            square with {
+                ElementAliases = [new(
                     Element: "-z+x",
                     Name: "identity"
-                )] },
+                )],
+            },
             out var shadowReason
         ));
         Assert.Contains(
@@ -125,13 +113,15 @@ public sealed class WorldBoardSymmetryLawTests {
             expectedSubstring: "already a canonical element name"
         );
         Assert.False(condition: TopologyCompilation.TryValidate(
-            square with { ElementAliases = [new(
+            square with {
+                ElementAliases = [new(
                     Element: "-z+x",
                     Name: "rot90"
                 ), new(
                     Element: "+x-z",
                     Name: "rot90"
-                )] },
+                )],
+            },
             out var duplicateReason
         ));
         Assert.Contains(
@@ -165,7 +155,7 @@ public sealed class WorldBoardSymmetryLawTests {
             Domain: new StateDomain.CellsOf("map")
         );
         var definition = Document(
-            rows: [board, Slot(name: "print"), Slot(name: "imageMask")],
+            rows: [board, StateFixtures.IntSlot(name: "print"), StateFixtures.IntSlot(name: "imageMask")],
             rules: [
             new WorldRule(
                     Name(value: "print"),
@@ -181,8 +171,8 @@ public sealed class WorldBoardSymmetryLawTests {
                     [new ActionEffect.SetState(
                             State: "imageMask",
                             Expression: new ExpressionProgram(Instructions: [
-                Instruction.Operand(name: "$board:mask:board:1:2"), Instruction.Board(operation: ExpressionOp.BoardImage, 
-                                    index: "-z+x",
+                Instruction.Operand(name: "$board:mask:board:1:2"), Instruction.Board(index: "-z+x",
+                                    operation: ExpressionOp.BoardImage,
                                     topology: "map"
                                 ),
             ])
@@ -206,9 +196,7 @@ public sealed class WorldBoardSymmetryLawTests {
                 topology.Element(name: "-z+x"),
                 1
             )),
-            Value(
-                fixture: baseline,
-                row: "imageMask"
+            baseline.SlotValue(row: "imageMask"
             )
         );
 
@@ -237,25 +225,27 @@ public sealed class WorldBoardSymmetryLawTests {
                     )],
                 Domain: new StateDomain.CellsOf("map")
             );
-            var mappedDefinition = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(selector: r => ((r.Name.Value == "board")
+            var mappedDefinition = definition with {
+                StateRaw = definition.StateRaw! with {
+                    World = [.. definition.State.Select(selector: r => ((r.Name.Value == "board")
                 ? mirror
-                : r))] } };
+                : r))],
+                },
+            };
             using var fixture = Fixtures.FreshServer(definition: mappedDefinition);
 
             fixture.Step();
             Assert.Equal(
-                Value(
-                    fixture: baseline,
-                    row: "print"
+                baseline.SlotValue(row: "print"
                 ),
-                Value(
-                    fixture: fixture,
-                    row: "print"
+                fixture.SlotValue(row: "print"
                 )
             );
         }
 
-        var different = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(selector: r => ((r.Name.Value == "board")
+        var different = definition with {
+            StateRaw = definition.StateRaw! with {
+                World = [.. definition.State.Select(selector: r => ((r.Name.Value == "board")
             ? r with { Cells = [Cell(
                         key: "0",
                         value: 1
@@ -263,18 +253,16 @@ public sealed class WorldBoardSymmetryLawTests {
                         key: "5",
                         value: 2
                     )] }
-            : r))] } };
+            : r))],
+            },
+        };
         using var other = Fixtures.FreshServer(definition: different);
 
         other.Step();
         Assert.NotEqual(
-            Value(
-                fixture: baseline,
-                row: "print"
+            baseline.SlotValue(row: "print"
             ),
-            Value(
-                fixture: other,
-                row: "print"
+            other.SlotValue(row: "print"
             )
         );
 
@@ -293,15 +281,15 @@ public sealed class WorldBoardSymmetryLawTests {
             )
         );
         var badElement = Document(
-            rows: [board, Slot(name: "bad")],
+            rows: [board, StateFixtures.IntSlot(name: "bad")],
             rules: [
             new WorldRule(
                     Name(value: "bad"),
                     [new ActionEffect.SetState(
                             State: "bad",
                             Expression: new ExpressionProgram(Instructions: [
-                Instruction.Operand(name: "$board:mask:board:1:2"), Instruction.Board(operation: ExpressionOp.BoardImage, 
-                                    index: "rot45",
+                Instruction.Operand(name: "$board:mask:board:1:2"), Instruction.Board(index: "rot45",
+                                    operation: ExpressionOp.BoardImage,
                                     topology: "map"
                                 ),
             ])
@@ -311,6 +299,96 @@ public sealed class WorldBoardSymmetryLawTests {
         );
 
         Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: badElement));
+    }
+    // The fingerprint is the canonical fold's identity term: every image of a board under a non-trivial element reads
+    // the board's canonical form and, where the image moves a stone, a different fingerprint; the canonical form is
+    // the least fingerprint over the board's images; and an equal board reads an equal fingerprint.
+    [Fact]
+    public void TheFingerprintTellsAMirrorImageApartWhereTheCanonicalFormCannot() {
+        var topology = TopologyCompilation.Find(
+            new WorldStateSection(Lattices: [Topology(
+                    depth: 4,
+                    kind: TopologyKind.Grid,
+                    width: 4
+                )]),
+            "t"
+        )!;
+        var fingerprint = new BoardFingerprintQuery(topology: topology);
+        var canonical = new BoardCanonicalQuery(topology: topology);
+        var board = new long[topology.CellCount];
+
+        board[0] = 1;
+        board[1] = 2;
+        board[6] = 1;
+
+        var own = BoardQueries.Evaluate(
+            empty: 0L,
+            query: fingerprint,
+            source: 0,
+            values: board
+        );
+        var form = BoardQueries.Evaluate(
+            empty: 0L,
+            query: canonical,
+            source: 0,
+            values: board
+        );
+        var least = long.MaxValue;
+
+        for (var element = 0; (element < topology.ElementCount); element++) {
+            var image = new long[topology.CellCount];
+
+            for (var cell = 0; (cell < topology.CellCount); cell++) {
+                image[topology.Image(
+                    cell: cell,
+                    element: element
+                )] = board[cell];
+            }
+
+            var print = BoardQueries.Evaluate(
+                empty: 0L,
+                query: fingerprint,
+                source: 0,
+                values: image
+            );
+
+            least = ((((ulong)print) < ((ulong)least)) ? print : least);
+            Assert.Equal(
+                expected: form,
+                actual: BoardQueries.Evaluate(
+                    empty: 0L,
+                    query: canonical,
+                    source: 0,
+                    values: image
+                )
+            );
+
+            if (element == 0) {
+                Assert.Equal(
+                    actual: print,
+                    expected: own
+                );
+            } else {
+                Assert.NotEqual(
+                    actual: print,
+                    expected: own
+                );
+            }
+        }
+
+        Assert.Equal(
+            actual: form,
+            expected: least
+        );
+        Assert.Equal(
+            expected: own,
+            actual: BoardQueries.Evaluate(
+                empty: 0L,
+                query: fingerprint,
+                source: 0,
+                values: board.ToArray()
+            )
+        );
     }
     [InlineData(TopologyKind.Grid, 4, 4, 8)]
     [InlineData(TopologyKind.Grid, 4, 2, 4)]

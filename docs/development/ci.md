@@ -4,8 +4,7 @@ GitHub Actions validates each pull request and push to `main` through `azure.yml
 The **Release Azure** workflow produces each target's artifacts once, then passes
 them to verification and deployment jobs. A versioned **Release NuGet packages**
 run uses the same artifact producer before selecting and publishing its batch.
-Pushes have one production deployment path; the separate World workflow has
-been retired. Use Release Azure's manual dispatch for an explicit rollout or
+Pushes have one production deployment path. Use Release Azure's manual dispatch for an explicit rollout or
 validation-only run.
 
 All external actions are pinned to full commit SHAs, as required by this
@@ -23,7 +22,9 @@ holds a shell script only to glue a container or a step summary.
 ## Build and validate
 
 **Build release artifacts** (`artifacts.yml`) installs the .NET SDK from `global.json`, the `wasm-tools`
-workload, and a versioned, checksum-checked DXC archive on Windows. It restores
+workload, and a versioned, checksum-checked DXC archive on Windows. The SDK goes into a directory of its
+own: installing `wasm-tools` moves the workload set, and in the image's shared SDK directory that would
+also reinstall every workload the image ships. It restores
 the solution in locked mode and compiles Release with warnings as errors. It
 packages those assemblies with `puck nuget pack --no-build`, publishes the
 Functions and WebAssembly payloads without rebuilding managed assemblies, and
@@ -55,12 +56,13 @@ destinations. Restore validates the complete path and copy map before writing,
 then recreates ordinary independent files; symbols and runtime layouts are preserved.
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
 a fresh Windows checkout, verifies its commit and platform, and runs its test
-assembly manifest through `dotnet test <assembly.dll>`. This consumer does not
+assembly manifest through `dotnet test <assembly.dll>`, two assemblies at a time and largest first, so the
+longest suite runs alongside the others; each run's output is printed whole when it finishes. This consumer does not
 evaluate the solution, restore project dependencies, or install WASM workloads.
 Missing, duplicate, or empty test selections fail. CLI integration tests resolve the
 producer's browser AppBundle inside that checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
-Native and SDF culling timing benchmarks are tagged `Category=Performance` and
+SDF culling timing benchmarks are tagged `Category=Performance` and
 excluded from this shared-runner gate; their calibrated ceilings remain available
 locally. Deterministic SDF result-equivalence laws still run in CI. CLI process
 interop fixtures run without competing Roslyn/packaging test collections in the
@@ -90,7 +92,9 @@ deployment retains its separate serialization and is never cancelled by that rul
 and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
-distribution checks. `puck branding --check` verifies the canonical hashes,
+distribution checks. `puck schema --check` also compares the dashboard portal's
+generated world types, which `puck schema` writes from the same schema, so that
+check needs no Node.js or npm step. `puck branding --check` verifies the canonical hashes,
 active asset copies, and source wiring recorded in the
 [branding manifest](../../branding/manifest.json). The
 browser job fails if its input bundle
@@ -105,6 +109,13 @@ Linux world verification invokes each compiled assembly's portable xUnit
 runner directly, retains XML results, and refuses a filter that executes no tests.
 It does not require a Linux apphost or recompile the Windows-produced assemblies.
 
+No workflow runs the real-World canaries: their offscreen proofs need a GPU
+device on both backends, which the hosted runners do not have. The canary merge
+gate is `puck canary --merge`, run on a GPU machine before the owner merges. It
+runs the automatic set and every canary requiring `gpu`; a bare `puck canary`
+runs the automatic set alone and skips every GPU proof. See
+[the `puck canary` reference](../reference/cli.md#puck-canaryreal-world-behavioral-proofs).
+
 The Azure graph builds its two Linux container images independently of the Windows
 producer. Container verification loads the saved image archives; deployment loads
 those same archives after every required check passes. Application assembly copies
@@ -112,14 +123,17 @@ the producer's Functions and browser payloads, builds the dashboard and API docs
 then seals the deployment bundle. No deployment job compiles Puck or rebuilds an
 image. Artifact consumers download immutable artifacts from their own workflow
 run, and missing artifacts fail rather than starting a fallback build.
-The dashboard's schema generator and schema-driven tests share the installed
-candidate CLI; neither requires a second publish into `src/Puck.Cli/publish`.
+The dashboard's schema-driven tests use the installed candidate CLI and do not
+need a second publish into `src/Puck.Cli/publish`.
 Studio integration tests consume the stable official tree in the release bundle
 through `PUCK_TEST_OFFICIAL_MANIFEST`, avoiding a second development content build.
 The `compiler-analyzers` artifact supplies DocFX's Roslyn dependency to both
 application assembly and documentation generation. A standalone documentation
 run invokes the artifact producer first; a release reuses its existing producer.
-Infrastructure compilation likewise runs once. Deployment verifies the compiled
+Infrastructure compilation likewise runs once, after it has linted and
+format-checked every Bicep source; any diagnostic fails it
+([Bicep conventions](../../src/Puck.Azure.Resources/README.md#bicep-sources)).
+Deployment verifies the compiled
 template's source identity and binds the current deployment principal and
 existing Actors digest into its parameter document before the no-delete plan;
 it does not compile Bicep again.
@@ -142,7 +156,8 @@ flowchart LR
 ## Automatic PR formatting
 
 `format.yml` runs on every pull request. It builds the candidate Puck CLI and
-the solution, formats only the PR's added or modified C# files, verifies that a
+the solution, and `puck pull-request format` formats only the PR's added or modified C#
+and `.puck` sources, verifies that a
 second pass would make no further changes, and recompiles only when formatting
 changed files. Renamed
 files use their new paths. Generated source and `experimental/` are excluded.
@@ -162,12 +177,13 @@ capture reports locally so simulated PR actions cannot appear as real CI actions
 
 The formatter runs with a read-only token. A separate `workflow_run` job checks
 out the default branch, installs the CLI packed from that checkout through
-`setup-puck`, and runs `puck format submit`, which reads the artifact as data.
+`setup-puck`, and runs `puck pull-request submit-format`, which reads the artifact
+as data.
 Only default-branch code ever runs with the write token. Its
-`src/Puck.Cli/Format/FormatSubmission.cs` policy is covered by
+`src/Puck.Cli/PullRequest/FormatSubmission.cs` policy is covered by
 `tests/Puck.Cli.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
 and successful build job, limits artifact size and file count, and accepts only
-ordinary C# files already changed by that PR. The write token never reaches the
+ordinary C# and `.puck` sources already changed by that PR. The write token never reaches the
 PR's build or formatter.
 
 After committing, the submitter explicitly dispatches formatting and Release
@@ -199,7 +215,7 @@ explains stale, fork, or otherwise inapplicable results.
 The local equivalent, in a clean disposable checkout at the PR head, is:
 
 ```sh
-puck format ci <base-sha> <head-sha> artifacts/format
+puck pull-request format <base-sha> <head-sha> --output artifacts/format
 ```
 
 It prepares the validated artifact and patch without committing or pushing.
@@ -208,14 +224,19 @@ It prepares the validated artifact and patch without committing or pushing.
 
 Repository tools, verification projects, and the Azure bootstrap file app share
 `build/RepositoryPaths.cs`.
-It finds the checkout by walking from the executable directory, then the working
-directory, to `Puck.slnx`. Runtime data lookup therefore works with CI's mapped
+It finds the checkout by walking from the working directory, then the executable
+directory, to `Puck.slnx`, so a tool built in one checkout and run from another
+acts on the checkout it was run from. `FindRoot` returns the checkout or null;
+`RequireRoot` and `Resolve` throw one `DirectoryNotFoundException` naming both
+starting directories when there is none. Its `Ascend` is the upward marker walk
+every lookup that climbs from a start directory shares, such as the CLI's owning
+project and solution searches. Runtime data lookup therefore works with CI's mapped
 compiler source paths; it never treats a PDB path such as `/_/` as a disk path.
 
 The producer runs the same package validation a contributor can use locally:
 
 ```sh
-puck nuget pack artifacts/packages
+puck nuget pack --output artifacts/packages
 ```
 
 Run from the repository root and use an empty output directory. The CLI discovers
@@ -383,7 +404,9 @@ Repository and service setup is still required:
 
 Hosted validation does not prove GPU parity, licensed BIOS-dependent emulator
 stages, or end-user installation and self-update. Those remain separate release
-qualification work. The current release publishes NuGet libraries, the CLI tool, and the
+qualification work. The published World's GPU side is qualified on a GPU
+machine by [`puck qualify`](qualification.md), which takes the `artifacts/world`
+directory as it is. The current release publishes NuGet libraries, the CLI tool, and the
 documentation artifact; Azure deploys the website. Desktop builds are downloadable CI artifacts.
 
 ## Azure production deployment
@@ -491,8 +514,9 @@ The website owns `$web/index.html`. `/docs` selects its documentation page;
 `docs.byteterrace.com` opens that page directly, and `puck.byteterrace.com` opens
 World Studio. DocFX and the documentation overview occupy `/reference/`, with
 shared styles under `/_theme/`. They ship inside the application bundle, never
-from a competing Docs publisher. The dashboard staging script supplies Brotli
-host files. The publisher refuses a staged site missing an entry point, the
+from a competing Docs publisher. The dashboard staging script stores the host's
+and the portal's hashed assets, and the portal's DuckDB extensions, Brotli-compressed,
+and Front Door serves exactly those paths with `Content-Encoding: br`. The publisher refuses a staged site missing an entry point, the
 shell, or a hashed asset directory before it uploads anything. Official objects
 keep their manifest media types and immutable hash paths through AzCopy `copy`
 batched by media type, objects before the stable manifest, existing blobs
@@ -528,10 +552,21 @@ serves.
 
 The primary Puck world uses a Flexible VM scale set, `bytrcvmssp000`, at
 `play.puck.byteterrace.com:7825` (PUCK on a telephone keypad). A static public IP and UDP load balancer preserve
-the endpoint during worker replacement. The first release permits exactly one
-regular worker, with manual application upgrades, automatic guest patching, and
-automatic replacement after sustained simulation failure. It does not
-claim distributed placement, continuous availability, or Spot recovery.
+the endpoint during worker replacement. The release permits exactly one worker,
+with manual application upgrades, automatic guest patching, and automatic
+replacement after sustained simulation failure. It does not claim distributed
+placement or continuous availability.
+
+The worker runs at Spot priority when `compute.spot` is present in
+`main.bicepparam`, which is the default; omit it for a regular worker. Spot
+bills at most the regular rate and is evicted only when Azure reclaims capacity.
+Eviction deletes the VM and its disk; checkpoints and journals stay in blob
+storage. Azure's Try & Restore recreates the worker for up to
+`spot.restoreTimeout`, and the world is offline until it does. After that
+timeout, a World rollout redeploys the worker. Spot draws on the region's
+separate low-priority vCPU quota. Azure cannot change a scale set's priority in
+place, so a rollout that changes it deletes and recreates the scale set once the
+source has drained.
 
 `play` is the default entry alias. Reserve `w-<id>` for permanent world addresses
 and `h-<id>` for hosting services under `puck.byteterrace.com`; friendly world
@@ -562,12 +597,12 @@ twice to verify checkpoint recovery and QUIC. Deployment uses the existing `zzz`
 identity and production concurrency group. The runner's QUIC installer is the
 `setup-quic` action, pinned to Microsoft's checksum-verified Ubuntu 24.04 package
 source; the VM's pre-container host bootstrap (`build/Start-WorldSilo.sh`, which
-`puck azure deploy-world` templates) remains separate because it must run before
+`puck world release deploy` templates) remains separate because it must run before
 Docker and the runtime are ready.
 `puck azure deploy-world-platform` creates the
 runtime identity and its scoped grants. `puck azure prepare-world-release` binds
 the official endpoint and admission policy before hashing every composed world.
-`puck azure deploy-world` verifies this package and retains exact files, versioned
+`puck world release deploy artifacts/world-release` verifies this package and retains exact files, versioned
 Key Vault deployment inputs, and the compiled compute template. It protects the
 source and target ACR manifests from writes and deletion, checks their readability,
 and pulls both digests for qualification using temporary Docker credentials.
@@ -577,7 +612,7 @@ same commit instead of pushing through a retained release's write protection.
 Registry administrators can still change those protection settings; retention
 must remain part of the operator's storage policy.
 
-Deployment now enters the durable maintenance coordinator. The source freezes
+Deployment enters the durable maintenance coordinator. The source freezes
 and saves protected roots before its service stops. The candidate starts with
 admission closed, and the VM extension waits for private health. The coordinator
 verifies its identity and ownership before committing and opening admission.
@@ -596,13 +631,14 @@ fixture built from the package. The source's uncapturable state refuses deployme
 Explicit restore is implemented and undergoing local acceptance. Cloud interruption
 acceptance is still outstanding. Do not treat a successful local qualification
 control as production readiness. Command syntax and fixture requirements live in
-the [CLI reference](../../src/Puck.Cli/README.md#automation-commands).
+the [CLI reference](../reference/cli.md#automation-commands).
 
 ### World maintenance and recovery
 
 Run these commands from the repository root with the deployment outputs for the
 intended group and its Azure credentials. Use a CLI supporting the package's
-coordinator contract; new packages require `puck.world.release.restore.v1`.
+coordinator contract, `puck.world.release.restore.v1`; it is the only one a
+manifest may carry.
 Keep the deployment outputs and retained artifact/configuration references
 available to the next operator. Do not delete the previous image or protected
 recovery objects while accepting a release.
@@ -698,7 +734,7 @@ boundary is eligible; resume never selects an older point on its own.
 The image includes the [silo's runtime extensions](../../src/Puck.World.Silo/README.md#hosted-test-world)
 with their dependencies. The ordinary silo and optional MCP entry points discover
 the same installed Azure and Gaming Brick providers. Run `WorldReleasePackagedHostTests`
-with `PUCK_TEST_WORLD_IMAGE` set to the candidate image to check its entry points;
+with the candidate image tagged `puck/world-silo:candidate` to check its entry points;
 successful execution through the CLI alone cannot prove that the ordinary worker
 has its providers installed.
 
@@ -751,12 +787,16 @@ up to sixteen network players. The public `world-authentication.json` release
 artifact selects the client authentication extension and pins the server key.
 See [Puck's connection instructions](../../src/Puck.World/README.md#usage).
 
-Before enabling Spot or adding workers, implement and exercise exclusive world
-ownership, eligible placement, replacement capacity, and loss of the entire
-Spot cohort. Azure eviction notice is best effort; abrupt termination must also
-recover consistently. Measure Azure checkpoint latency and journal durability
-under representative player traffic. The first regular worker provides a public
-test target for this qualification rather than claiming those guarantees.
+A Spot eviction emits a `Preempt` event with a
+[30-second notice](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/scheduled-events#event-scheduling),
+which becomes the drain deadline; `terminateNotificationProfile` does not
+lengthen it. The notice is best effort, so abrupt termination must also recover
+from the last checkpoint and journal. Qualify a Spot worker with
+`az vm simulate-eviction`: the drain finishes inside the notice, Try & Restore
+recreates the worker, and the restored worker recovers the same state and
+reports healthy. Measure checkpoint latency and journal durability under
+representative player traffic. Before adding workers, implement and exercise
+exclusive world ownership, eligible placement, and replacement capacity.
 
 The silo identity `bytrcidp008` can read only `world-silo` in ACR and has a custom
 `Puck World Store` role on its own blob container: container read/create plus
@@ -776,7 +816,7 @@ Container Apps uses the current stable environment module with Log Analytics
 for platform logs. Actors already exports OpenTelemetry logs, traces and metrics
 directly through the Azure Monitor exporter with its managed identity. The
 environment agent is not part of that path. Microsoft's
-[2026 API change log](https://learn.microsoft.com/en-us/azure/templates/microsoft.app/change-log/managedenvironments)
+[API change log](https://learn.microsoft.com/en-us/azure/templates/microsoft.app/change-log/managedenvironments)
 removes the preview environment-agent settings from the stable API. The
 [managed agent documentation](https://learn.microsoft.com/en-us/azure/container-apps/opentelemetry-agents?tabs=azure-cli)
 still describes the preview API and requires local authentication for its

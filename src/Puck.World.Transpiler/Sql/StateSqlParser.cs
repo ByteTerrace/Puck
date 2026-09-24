@@ -10,53 +10,50 @@ namespace Puck.World.Transpiler.Sql;
 public sealed class StateSqlParser {
     private readonly IReadOnlyList<SqlToken> m_tokens;
     private readonly DiagnosticBag m_diagnostics;
+
     private int m_index;
 
     public StateSqlParser(IReadOnlyList<SqlToken> tokens, DiagnosticBag diagnostics) {
-        m_tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
-        m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+        m_tokens = (tokens ?? throw new ArgumentNullException(paramName: nameof(tokens)));
+        m_diagnostics = (diagnostics ?? throw new ArgumentNullException(paramName: nameof(diagnostics)));
         m_index = 0;
     }
 
-    private SqlToken Current => (m_index < m_tokens.Count) ? m_tokens[m_index] : m_tokens[^1];
+    private SqlToken Current => ((m_index < m_tokens.Count) ? m_tokens[m_index] : m_tokens[^1]);
     private bool IsAtEnd => (Current.Kind == SqlTokenKind.Eof);
 
     private SqlToken Peek(int offset = 1) {
-        var pos = m_index + offset;
-        return (pos < m_tokens.Count) ? m_tokens[pos] : m_tokens[^1];
-    }
+        var pos = (m_index + offset);
 
+        return ((pos < m_tokens.Count) ? m_tokens[pos] : m_tokens[^1]);
+    }
     private SqlToken Advance() {
         var tok = Current;
+
         if (!IsAtEnd) {
             m_index++;
         }
         return tok;
     }
-
     private bool Check(SqlTokenKind kind) => (Current.Kind == kind);
-
     private bool CheckKeyword(string keyword) =>
-        string.Equals(Current.Text, keyword, StringComparison.OrdinalIgnoreCase);
-
+        string.Equals(a: Current.Text, b: keyword, comparisonType: StringComparison.OrdinalIgnoreCase);
     private bool Match(SqlTokenKind kind) {
-        if (Check(kind)) {
+        if (Check(kind: kind)) {
             Advance();
             return true;
         }
         return false;
     }
-
     private bool MatchKeyword(string keyword) {
-        if (CheckKeyword(keyword)) {
+        if (CheckKeyword(keyword: keyword)) {
             Advance();
             return true;
         }
         return false;
     }
-
     private SqlToken Consume(SqlTokenKind kind, string message) {
-        if (Check(kind)) {
+        if (Check(kind: kind)) {
             return Advance();
         }
 
@@ -67,9 +64,8 @@ public sealed class StateSqlParser {
         );
         return Current;
     }
-
     private SqlToken ConsumeKeyword(string keyword, string message) {
-        if (CheckKeyword(keyword)) {
+        if (CheckKeyword(keyword: keyword)) {
             return Advance();
         }
 
@@ -80,7 +76,13 @@ public sealed class StateSqlParser {
         );
         return Current;
     }
+    private bool TryConsumeWord(string message, out SqlToken token) {
+        var admitted = (Current.Kind is SqlTokenKind.Identifier or SqlTokenKind.Keyword);
 
+        token = ConsumeWord(message: message);
+
+        return admitted;
+    }
     private SqlToken ConsumeWord(string message) {
         if ((Current.Kind is SqlTokenKind.Identifier or SqlTokenKind.Keyword)) {
             return Advance();
@@ -98,34 +100,39 @@ public sealed class StateSqlParser {
         var statements = new List<SqlStatement>();
 
         while (!IsAtEnd) {
-            if (Match(SqlTokenKind.Semicolon)) {
+            if (Match(kind: SqlTokenKind.Semicolon)) {
                 continue;
             }
 
             var startTok = Current;
 
-            if (CheckKeyword("CREATE")) {
+            if (CheckKeyword(keyword: "CREATE")) {
                 var stmt = ParseCreate();
+
                 if (stmt is not null) {
-                    statements.Add(stmt);
+                    statements.Add(item: stmt);
                 }
-            } else if (CheckKeyword("INSERT")) {
+            } else if (CheckKeyword(keyword: "INSERT")) {
                 var stmt = ParseInsert();
+
                 if (stmt is not null) {
-                    statements.Add(stmt);
+                    statements.Add(item: stmt);
                 }
-            } else if (CheckKeyword("DECLARE")) {
+            } else if (CheckKeyword(keyword: "DECLARE")) {
                 var stmt = ParseDeclareSlot();
+
                 if (stmt is not null) {
-                    statements.Add(stmt);
+                    statements.Add(item: stmt);
                 }
-            } else if (CheckKeyword("UPDATE") || CheckKeyword("DELETE") || CheckKeyword("BEGIN") || CheckKeyword("IF")) {
+            } else if (CheckKeyword(keyword: "UPDATE") || CheckKeyword(keyword: "DELETE") || CheckKeyword(keyword: "BEGIN") || CheckKeyword(keyword: "IF")) {
                 var stmt = ParseRuleBodyStatement();
+
                 if (stmt is not null) {
-                    statements.Add(stmt);
+                    statements.Add(item: stmt);
                 }
             } else if (IsUnsupportedClause(Current.Text, out var reason)) {
                 var tok = Advance();
+
                 m_diagnostics.ReportError(
                     code: PuckDiagnosticCodes.SqlUnsupportedClause,
                     message: $"'{tok.Text}' is unsupported in Puck state SQL dialect — {reason}",
@@ -148,6 +155,7 @@ public sealed class StateSqlParser {
 
     private static bool IsUnsupportedClause(string text, out string reason) {
         var upper = text.ToUpperInvariant();
+
         switch (upper) {
             case "GROUP":
             case "HAVING":
@@ -185,22 +193,22 @@ public sealed class StateSqlParser {
                 return false;
         }
     }
-
     private SqlStatement? ParseCreate() {
         var createTok = Advance(); // CREATE
 
-        if (MatchKeyword("TABLE")) {
-            return ParseCreateTable(createTok.Span);
+        if (MatchKeyword(keyword: "TABLE")) {
+            return ParseCreateTable(startSpan: createTok.Span);
         }
-        if (MatchKeyword("POLICY")) {
-            return ParseCreatePolicy(createTok.Span);
+        if (MatchKeyword(keyword: "POLICY")) {
+            return ParseCreatePolicy(startSpan: createTok.Span);
         }
-        if (MatchKeyword("RULE")) {
-            return ParseCreateRule(createTok.Span);
+        if (MatchKeyword(keyword: "RULE")) {
+            return ParseCreateRule(startSpan: createTok.Span);
         }
 
-        if (CheckKeyword("VIEW") || CheckKeyword("TRIGGER")) {
+        if (CheckKeyword(keyword: "VIEW") || CheckKeyword(keyword: "TRIGGER")) {
             var tok = Advance();
+
             m_diagnostics.ReportError(
                 code: PuckDiagnosticCodes.SqlUnsupportedClause,
                 message: $"'CREATE {tok.Text}' is unsupported in Puck state SQL dialect — use native declarations or rules instead",
@@ -218,32 +226,35 @@ public sealed class StateSqlParser {
         Synchronize();
         return null;
     }
-
     private SqlCreateTableStatement? ParseCreateTable(SourceSpan startSpan) {
-        var nameTok = ConsumeWord("Expected table name in CREATE TABLE");
+        var nameTok = ConsumeWord(message: "Expected table name in CREATE TABLE");
         var tableName = nameTok.Text;
 
-        Consume(SqlTokenKind.OpenParen, "Expected '(' after table name");
+        Consume(kind: SqlTokenKind.OpenParen, message: "Expected '(' after table name");
 
         var columns = new List<SqlColumnDefinition>();
         var hasPrimaryKey = false;
+        var malformedColumn = false;
 
-        while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
+        while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
             // Check for table constraint: PRIMARY KEY (col1, col2, ...)
-            if (CheckKeyword("PRIMARY")) {
+            if (CheckKeyword(keyword: "PRIMARY")) {
                 var pkTok = Advance();
-                ConsumeKeyword("KEY", "Expected 'KEY' after 'PRIMARY'");
-                var parenTok = Consume(SqlTokenKind.OpenParen, "Expected '(' after 'PRIMARY KEY'");
+
+                ConsumeKeyword(keyword: "KEY", message: "Expected 'KEY' after 'PRIMARY'");
+                var parenTok = Consume(kind: SqlTokenKind.OpenParen, message: "Expected '(' after 'PRIMARY KEY'");
 
                 var pkCols = new List<string>();
-                while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
-                    var colTok = ConsumeWord("Expected column name in PRIMARY KEY constraint");
-                    pkCols.Add(colTok.Text);
-                    if (!Match(SqlTokenKind.Comma)) {
+
+                while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
+                    var colTok = ConsumeWord(message: "Expected column name in PRIMARY KEY constraint");
+
+                    pkCols.Add(item: colTok.Text);
+                    if (!Match(kind: SqlTokenKind.Comma)) {
                         break;
                     }
                 }
-                var closeParen = Consume(SqlTokenKind.CloseParen, "Expected ')' closing PRIMARY KEY constraint");
+                var closeParen = Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing PRIMARY KEY constraint");
 
                 var pkSpan = SourceSpan.Combine(pkTok.Span, closeParen.Span);
 
@@ -262,8 +273,9 @@ public sealed class StateSqlParser {
                 } else if (pkCols.Count == 1) {
                     // Mark existing column as primary key
                     var found = false;
-                    for (var i = 0; i < columns.Count; i++) {
-                        if (string.Equals(columns[i].Name, pkCols[0], StringComparison.OrdinalIgnoreCase)) {
+
+                    for (var i = 0; (i < columns.Count); i++) {
+                        if (string.Equals(a: columns[i].Name, b: pkCols[0], comparisonType: StringComparison.OrdinalIgnoreCase)) {
                             columns[i] = columns[i] with { IsPrimaryKey = true };
                             hasPrimaryKey = true;
                             found = true;
@@ -279,44 +291,48 @@ public sealed class StateSqlParser {
                     }
                 }
 
-                Match(SqlTokenKind.Comma);
+                Match(kind: SqlTokenKind.Comma);
                 continue;
             }
 
-            var colDef = ParseColumnDefinition(tableName, ref hasPrimaryKey);
+            var colDef = ParseColumnDefinition(hasPrimaryKey: ref hasPrimaryKey, tableName: tableName);
+
             if (colDef is not null) {
-                columns.Add(colDef);
+                columns.Add(item: colDef);
+            } else {
+                malformedColumn = true;
             }
 
-            if (!Match(SqlTokenKind.Comma)) {
+            if (!Match(kind: SqlTokenKind.Comma)) {
                 break;
             }
         }
 
-        var closeParenTok = Consume(SqlTokenKind.CloseParen, "Expected ')' closing table column definitions");
+        var closeParenTok = Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing table column definitions");
 
         // Table options after ')'
         int? capacity = null;
         var isOrdered = false;
         var isEvicts = false;
 
-        while (!Check(SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword("CREATE") && !CheckKeyword("INSERT") && !CheckKeyword("DECLARE")) {
-            if (MatchKeyword("CAPACITY")) {
-                var capTok = Consume(SqlTokenKind.NumberLiteral, "Expected integer capacity value");
+        while (!Check(kind: SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword(keyword: "CREATE") && !CheckKeyword(keyword: "INSERT") && !CheckKeyword(keyword: "DECLARE")) {
+            if (MatchKeyword(keyword: "CAPACITY")) {
+                var capTok = Consume(kind: SqlTokenKind.NumberLiteral, message: "Expected integer capacity value");
+
                 if (capTok.Value is long l) {
-                    capacity = (int)l;
+                    capacity = ((int)l);
                 } else if (int.TryParse(capTok.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedCap)) {
                     capacity = parsedCap;
                 }
                 continue;
             }
 
-            if (MatchKeyword("ORDERED")) {
+            if (MatchKeyword(keyword: "ORDERED")) {
                 isOrdered = true;
                 continue;
             }
 
-            if (MatchKeyword("EVICTS")) {
+            if (MatchKeyword(keyword: "EVICTS")) {
                 isEvicts = true;
                 continue;
             }
@@ -324,13 +340,14 @@ public sealed class StateSqlParser {
             break;
         }
 
-        Match(SqlTokenKind.Semicolon);
+        Match(kind: SqlTokenKind.Semicolon);
 
         var endSpan = closeParenTok.Span;
-        var totalLength = (endSpan.Offset + endSpan.Length) - startSpan.Offset;
+        var totalLength = ((endSpan.Offset + endSpan.Length) - startSpan.Offset);
         var fullSpan = new SourceSpan(startSpan.Offset, totalLength, startSpan.Line, startSpan.Column);
 
-        if (!hasPrimaryKey) {
+        // A malformed column has been refused already, and may be the key its author meant.
+        if (!hasPrimaryKey && !malformedColumn) {
             m_diagnostics.ReportError(
                 code: PuckDiagnosticCodes.SqlSyntaxError,
                 message: $"Table '{tableName}' must declare a column as PRIMARY KEY",
@@ -338,7 +355,8 @@ public sealed class StateSqlParser {
             );
         }
 
-        var pkCol = columns.Find(c => c.IsPrimaryKey);
+        var pkCol = columns.Find(match: c => c.IsPrimaryKey);
+
         if (isOrdered && (pkCol?.ReferencesTable is null)) {
             m_diagnostics.ReportError(
                 code: PuckDiagnosticCodes.SqlUnsupportedClause,
@@ -356,39 +374,45 @@ public sealed class StateSqlParser {
         }
 
         return new SqlCreateTableStatement(
-            TableName: tableName,
-            Columns: columns,
             Capacity: capacity,
+            Columns: columns,
+            IsEvicts: isEvicts,
             IsOrdered: isOrdered,
             Span: fullSpan,
-            IsEvicts: isEvicts
+            TableName: tableName
         );
     }
-
+    // A column missing its name or its type is refused by that one fault and yields no definition, so nothing read
+    // after it — the type table, the table's primary key — is held against a column that was never written.
     private SqlColumnDefinition? ParseColumnDefinition(string tableName, ref bool hasPrimaryKey) {
-        var colNameTok = ConsumeWord("Expected column name");
+        if (!TryConsumeWord(message: "Expected column name", token: out var colNameTok)) {
+            return null;
+        }
         var colName = colNameTok.Text;
 
-        var typeTok = ConsumeWord("Expected column type (INT, FIXED, BOOL, TEXT, etc.)");
+        if (!TryConsumeWord(message: $"Column '{colName}' has no type; expected one of INT, FIXED, BOOL, TEXT, VECTOR", token: out var typeTok)) {
+            return null;
+        }
         var declaredType = typeTok.Text;
         var typeSpan = typeTok.Span;
 
         string? space = null;
-        if (string.Equals(declaredType, "VECTOR", StringComparison.OrdinalIgnoreCase)) {
-            if (Match(SqlTokenKind.OpenParen)) {
-                var spaceTok = ConsumeWord("Expected space name in VECTOR(...)");
+
+        if (string.Equals(a: declaredType, b: "VECTOR", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (Match(kind: SqlTokenKind.OpenParen)) {
+                var spaceTok = ConsumeWord(message: "Expected space name in VECTOR(...)");
+
                 space = spaceTok.Text;
-                Consume(SqlTokenKind.CloseParen, "Expected ')' closing VECTOR(space)");
+                Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing VECTOR(space)");
             }
-        } else if (Match(SqlTokenKind.OpenParen)) {
-            while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
+        } else if (Match(kind: SqlTokenKind.OpenParen)) {
+            while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
                 Advance();
             }
-            Consume(SqlTokenKind.CloseParen, "Expected ')' closing type parameters");
+            Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing type parameters");
         }
 
-        // Validate type against state model
-        ValidateType(declaredType, typeSpan);
+        ValidateType(type: typeTok);
 
         var isPrimaryKey = false;
         var isNotNull = false;
@@ -401,9 +425,9 @@ public sealed class StateSqlParser {
         string? referencesTable = null;
         var isOrdered = false;
 
-        while (!Check(SqlTokenKind.Comma) && !Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
-            if (MatchKeyword("PRIMARY")) {
-                ConsumeKeyword("KEY", "Expected 'KEY' after 'PRIMARY'");
+        while (!Check(kind: SqlTokenKind.Comma) && !Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
+            if (MatchKeyword(keyword: "PRIMARY")) {
+                ConsumeKeyword(keyword: "KEY", message: "Expected 'KEY' after 'PRIMARY'");
                 if (hasPrimaryKey) {
                     m_diagnostics.ReportError(
                         code: PuckDiagnosticCodes.SqlCompositePrimaryKey,
@@ -416,37 +440,39 @@ public sealed class StateSqlParser {
                 continue;
             }
 
-            if (MatchKeyword("NOT")) {
-                ConsumeKeyword("NULL", "Expected 'NULL' after 'NOT'");
+            if (MatchKeyword(keyword: "NOT")) {
+                ConsumeKeyword(keyword: "NULL", message: "Expected 'NULL' after 'NOT'");
                 isNotNull = true;
                 continue;
             }
 
-            if (MatchKeyword("NULL")) {
+            if (MatchKeyword(keyword: "NULL")) {
                 continue;
             }
 
-            if (MatchKeyword("ROW") || MatchKeyword("AS")) {
-                var rowNameTok = ConsumeWord("Expected custom row name after 'ROW' or 'AS'");
+            if (MatchKeyword(keyword: "ROW") || MatchKeyword(keyword: "AS")) {
+                var rowNameTok = ConsumeWord(message: "Expected custom row name after 'ROW' or 'AS'");
+
                 explicitRowName = rowNameTok.Text;
                 continue;
             }
 
-            if (MatchKeyword("DEFAULT")) {
+            if (MatchKeyword(keyword: "DEFAULT")) {
                 defaultValue = ParseDefaultValue();
                 continue;
             }
 
-            if (MatchKeyword("CHECK")) {
-                check = ParseCheckConstraint(colName, declaredType);
+            if (MatchKeyword(keyword: "CHECK")) {
+                check = ParseCheckConstraint(colType: declaredType, expectedColName: colName);
                 continue;
             }
 
-            if (MatchKeyword("ON")) {
-                ConsumeKeyword("OVERFLOW", "Expected 'OVERFLOW' after 'ON'");
-                var policyTok = ConsumeWord("Expected 'SATURATE' or 'REFUSE' after 'ON OVERFLOW'");
-                if (!string.Equals(policyTok.Text, "SATURATE", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(policyTok.Text, "REFUSE", StringComparison.OrdinalIgnoreCase)) {
+            if (MatchKeyword(keyword: "ON")) {
+                ConsumeKeyword(keyword: "OVERFLOW", message: "Expected 'OVERFLOW' after 'ON'");
+                var policyTok = ConsumeWord(message: "Expected 'SATURATE' or 'REFUSE' after 'ON OVERFLOW'");
+
+                if (!string.Equals(a: policyTok.Text, b: "SATURATE", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(a: policyTok.Text, b: "REFUSE", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                     m_diagnostics.ReportError(
                         code: PuckDiagnosticCodes.SqlSyntaxError,
                         message: $"ON OVERFLOW policy must be SATURATE or REFUSE, found '{policyTok.Text}'",
@@ -457,19 +483,21 @@ public sealed class StateSqlParser {
                 continue;
             }
 
-            if (MatchKeyword("ADVANCE")) {
+            if (MatchKeyword(keyword: "ADVANCE")) {
                 advance = ParseAdvanceClause();
                 continue;
             }
 
-            if (MatchKeyword("DYNAMICS")) {
-                var dynTok = ConsumeWord("Expected dynamics row name after 'DYNAMICS'");
+            if (MatchKeyword(keyword: "DYNAMICS")) {
+                var dynTok = ConsumeWord(message: "Expected dynamics row name after 'DYNAMICS'");
+
                 dynamicsName = dynTok.Text;
                 continue;
             }
 
-            if (MatchKeyword("REFERENCES")) {
-                var refTok = ConsumeWord("Expected referenced table name after 'REFERENCES'");
+            if (MatchKeyword(keyword: "REFERENCES")) {
+                var refTok = ConsumeWord(message: "Expected referenced table name after 'REFERENCES'");
+
                 if (!isPrimaryKey) {
                     m_diagnostics.ReportError(
                         code: PuckDiagnosticCodes.SqlUnsupportedClause,
@@ -481,7 +509,7 @@ public sealed class StateSqlParser {
                 continue;
             }
 
-            if (MatchKeyword("ORDERED")) {
+            if (MatchKeyword(keyword: "ORDERED")) {
                 if (!isPrimaryKey) {
                     m_diagnostics.ReportError(
                         code: PuckDiagnosticCodes.SqlUnsupportedClause,
@@ -505,80 +533,73 @@ public sealed class StateSqlParser {
         );
 
         return new SqlColumnDefinition(
-            Name: colName,
-            DeclaredType: declaredType,
-            IsPrimaryKey: isPrimaryKey,
-            IsNotNull: isNotNull,
-            ExplicitRowName: explicitRowName,
-            DefaultValue: defaultValue,
-            Check: check,
             Advance: advance,
+            Check: check,
+            DeclaredType: declaredType,
+            DefaultValue: defaultValue,
             DynamicsName: dynamicsName,
+            ExplicitRowName: explicitRowName,
+            IsNotNull: isNotNull,
+            IsOrdered: isOrdered,
+            IsPrimaryKey: isPrimaryKey,
+            Name: colName,
             OverflowPolicy: overflowPolicy,
             ReferencesTable: referencesTable,
-            IsOrdered: isOrdered,
+            Space: space,
             Span: colSpan,
-            TypeSpan: typeSpan,
-            Space: space
+            TypeSpan: typeSpan
         );
     }
 
-    private void ValidateType(string typeName, SourceSpan span) {
-        var upper = typeName.ToUpperInvariant();
-        switch (upper) {
-            case "REAL":
-            case "FLOAT":
-            case "DOUBLE":
-                m_diagnostics.ReportError(
-                    code: PuckDiagnosticCodes.SqlUnsupportedType,
-                    message: $"Type '{typeName}' is unsupported; state holds no floats — use 'FIXED' instead.",
-                    span: span
-                );
-                break;
-            case "INT":
-            case "INTEGER":
-            case "SMALLINT":
-            case "BIGINT":
-            case "TINYINT":
-            case "FIXED":
-            case "DECIMAL":
-            case "NUMERIC":
-            case "BOOL":
-            case "BOOLEAN":
-            case "TEXT":
-            case "VARCHAR":
-            case "CHAR":
-            case "STRING":
-            case "VECTOR":
-                // Admitted
-                break;
-            default:
-                m_diagnostics.ReportError(
-                    code: PuckDiagnosticCodes.SqlUnsupportedType,
-                    message: $"Type '{typeName}' is unrecognized or unsupported; admitted types are INT, FIXED, BOOL, TEXT, VECTOR.",
-                    span: span
-                );
-                break;
-        }
+    /// <summary>Returns the state cell kind a declared SQL type lowers to: the dialect's one type table, which the
+    /// parser refuses a declaration by and the lowering reads a declaration's kind from.</summary>
+    /// <param name="typeName">The declared type, in any case.</param>
+    /// <returns><c>Int</c>, <c>Fixed</c>, <c>Bool</c>, <c>Text</c> or <c>Vector</c>, or <see langword="null"/> for a
+    /// type the dialect does not admit.</returns>
+    public static string? KindOf(string typeName) {
+        ArgumentNullException.ThrowIfNull(argument: typeName);
+
+        return typeName.ToUpperInvariant() switch {
+            "INT" or "INTEGER" or "SMALLINT" or "BIGINT" or "TINYINT" => "Int",
+            "FIXED" or "DECIMAL" or "NUMERIC" => "Fixed",
+            "BOOL" or "BOOLEAN" => "Bool",
+            "TEXT" or "VARCHAR" or "CHAR" or "STRING" => "Text",
+            "VECTOR" => "Vector",
+            _ => null,
+        };
     }
 
+    private void ValidateType(SqlToken type) {
+        if (KindOf(typeName: type.Text) is not null) {
+            return;
+        }
+
+        m_diagnostics.ReportError(
+            code: PuckDiagnosticCodes.SqlUnsupportedType,
+            message: ((type.Text.ToUpperInvariant() is "REAL" or "FLOAT" or "DOUBLE")
+                ? $"Type '{type.Text}' is unsupported; state holds no floats — use 'FIXED' instead."
+                : $"Type '{type.Text}' is unrecognized or unsupported; admitted types are INT, FIXED, BOOL, TEXT, VECTOR."),
+            span: type.Span
+        );
+    }
     private object? ParseDefaultValue() {
-        if (Check(SqlTokenKind.NumberLiteral)) {
+        if (Check(kind: SqlTokenKind.NumberLiteral)) {
             return Advance().Value;
         }
-        if (Check(SqlTokenKind.StringLiteral)) {
+        if (Check(kind: SqlTokenKind.StringLiteral)) {
             return Advance().Value;
         }
-        if (Check(SqlTokenKind.BooleanLiteral)) {
+        if (Check(kind: SqlTokenKind.BooleanLiteral)) {
             return Advance().Value;
         }
-        if (Match(SqlTokenKind.NullLiteral)) {
+        if (Match(kind: SqlTokenKind.NullLiteral)) {
             return null;
         }
 
         // Unary minus for negative number
-        if (Match(SqlTokenKind.Minus)) {
-            var numTok = Consume(SqlTokenKind.NumberLiteral, "Expected number after '-'");
+        if (Match(kind: SqlTokenKind.Minus)) {
+            var numTok = Consume(kind: SqlTokenKind.NumberLiteral, message: "Expected number after '-'");
+
             if (numTok.Value is long l) {
                 return -l;
             }
@@ -588,62 +609,65 @@ public sealed class StateSqlParser {
         }
 
         var tok = Advance();
+
         return tok.Text;
     }
-
     private SqlCheckConstraint? ParseCheckConstraint(string expectedColName, string colType) {
-        var openParen = Consume(SqlTokenKind.OpenParen, "Expected '(' starting CHECK constraint");
+        var openParen = Consume(kind: SqlTokenKind.OpenParen, message: "Expected '(' starting CHECK constraint");
 
-        var colTok = ConsumeWord("Expected column name in CHECK constraint");
+        var colTok = ConsumeWord(message: "Expected column name in CHECK constraint");
         var colName = colTok.Text;
 
         SqlCheckKind kind;
         decimal? min = null;
         decimal? max = null;
 
-        var isInt = string.Equals(colType, "INT", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(colType, "INTEGER", StringComparison.OrdinalIgnoreCase);
+        var isInt = (string.Equals(a: colType, b: "INT", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a: colType, b: "INTEGER", comparisonType: StringComparison.OrdinalIgnoreCase));
 
-        if (MatchKeyword("IS")) {
-            var isNot = MatchKeyword("NOT");
-            var nullTok = ConsumeKeyword("NULL", "Expected 'NULL' after 'IS'");
-            var isSpan = CombineSpan(colTok.Span, nullTok.Span);
-            var clause = isNot ? "IS NOT NULL" : "IS NULL";
+        if (MatchKeyword(keyword: "IS")) {
+            var isNot = MatchKeyword(keyword: "NOT");
+            var nullTok = ConsumeKeyword(keyword: "NULL", message: "Expected 'NULL' after 'IS'");
+            var isSpan = CombineSpan(a: colTok.Span, b: nullTok.Span);
+            var clause = (isNot ? "IS NOT NULL" : "IS NULL");
+
             m_diagnostics.ReportError(
                 code: PuckDiagnosticCodes.SqlUnsupportedClause,
                 message: $"'{clause}' is unsupported in Puck state SQL dialect — state facts hold absent cells rather than three-valued NULL logic.",
                 span: isSpan
             );
-            while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
+            while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
                 Advance();
             }
-            Consume(SqlTokenKind.CloseParen, "Expected ')' closing CHECK constraint");
+            Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing CHECK constraint");
             return null;
         }
 
-        if (MatchKeyword("BETWEEN")) {
+        if (MatchKeyword(keyword: "BETWEEN")) {
             kind = SqlCheckKind.Between;
-            min = ParseDecimalValue("Expected minimum value in BETWEEN clause");
-            ConsumeKeyword("AND", "Expected 'AND' in BETWEEN clause");
-            max = ParseDecimalValue("Expected maximum value in BETWEEN clause");
-        } else if (Match(SqlTokenKind.GreaterOrEqual)) {
-            min = ParseDecimalValue("Expected number after '>=' in CHECK constraint");
-            if (MatchKeyword("AND")) {
-                var col2 = ConsumeWord("Expected column name after 'AND' in CHECK constraint");
-                Consume(SqlTokenKind.LessOrEqual, "Expected '<=' after column in CHECK constraint");
-                max = ParseDecimalValue("Expected maximum value after '<=' in CHECK constraint");
+            min = ParseDecimalValue(errorMessage: "Expected minimum value in BETWEEN clause");
+            ConsumeKeyword(keyword: "AND", message: "Expected 'AND' in BETWEEN clause");
+            max = ParseDecimalValue(errorMessage: "Expected maximum value in BETWEEN clause");
+        } else if (Match(kind: SqlTokenKind.GreaterOrEqual)) {
+            min = ParseDecimalValue(errorMessage: "Expected number after '>=' in CHECK constraint");
+            if (MatchKeyword(keyword: "AND")) {
+                var col2 = ConsumeWord(message: "Expected column name after 'AND' in CHECK constraint");
+
+                Consume(kind: SqlTokenKind.LessOrEqual, message: "Expected '<=' after column in CHECK constraint");
+                max = ParseDecimalValue(errorMessage: "Expected maximum value after '<=' in CHECK constraint");
                 kind = SqlCheckKind.Between;
             } else {
                 kind = SqlCheckKind.GreaterOrEqual;
             }
-        } else if (Match(SqlTokenKind.LessOrEqual)) {
-            max = ParseDecimalValue("Expected number after '<=' in CHECK constraint");
+        } else if (Match(kind: SqlTokenKind.LessOrEqual)) {
+            max = ParseDecimalValue(errorMessage: "Expected number after '<=' in CHECK constraint");
             kind = SqlCheckKind.LessOrEqual;
-        } else if (Match(SqlTokenKind.Greater)) {
-            var val = ParseDecimalValue("Expected number after '>' in CHECK constraint");
+        } else if (Match(kind: SqlTokenKind.Greater)) {
+            var val = ParseDecimalValue(errorMessage: "Expected number after '>' in CHECK constraint");
+
             if (isInt) {
                 kind = SqlCheckKind.Greater;
-                min = (val.HasValue ? val.Value + 1 : null);
+                min = (val.HasValue ? (val.Value + 1) : null);
             } else {
                 m_diagnostics.ReportError(
                     code: PuckDiagnosticCodes.SqlInvalidCheckShape,
@@ -653,11 +677,12 @@ public sealed class StateSqlParser {
                 kind = SqlCheckKind.GreaterOrEqual;
                 min = val;
             }
-        } else if (Match(SqlTokenKind.Less)) {
-            var val = ParseDecimalValue("Expected number after '<' in CHECK constraint");
+        } else if (Match(kind: SqlTokenKind.Less)) {
+            var val = ParseDecimalValue(errorMessage: "Expected number after '<' in CHECK constraint");
+
             if (isInt) {
                 kind = SqlCheckKind.Less;
-                max = (val.HasValue ? val.Value - 1 : null);
+                max = (val.HasValue ? (val.Value - 1) : null);
             } else {
                 m_diagnostics.ReportError(
                     code: PuckDiagnosticCodes.SqlInvalidCheckShape,
@@ -674,36 +699,37 @@ public sealed class StateSqlParser {
                 span: openParen.Span
             );
             // Skip until ')'
-            while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
+            while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
                 Advance();
             }
-            Consume(SqlTokenKind.CloseParen, "Expected ')' closing CHECK constraint");
+            Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing CHECK constraint");
             return null;
         }
 
-        var closeParen = Consume(SqlTokenKind.CloseParen, "Expected ')' closing CHECK constraint");
+        var closeParen = Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing CHECK constraint");
 
         var span = new SourceSpan(
             openParen.Span.Offset,
-            (closeParen.Span.Offset + closeParen.Span.Length) - openParen.Span.Offset,
+            ((closeParen.Span.Offset + closeParen.Span.Length) - openParen.Span.Offset),
             openParen.Span.Line,
             openParen.Span.Column
         );
 
-        return new SqlCheckConstraint(colName, kind, min, max, span);
+        return new SqlCheckConstraint(ColumnName: colName, Kind: kind, Max: max, Min: min, Span: span);
     }
-
     private decimal? ParseDecimalValue(string errorMessage) {
         var negative = false;
-        if (Match(SqlTokenKind.Minus)) {
+
+        if (Match(kind: SqlTokenKind.Minus)) {
             negative = true;
-        } else if (Match(SqlTokenKind.Plus)) {
+        } else if (Match(kind: SqlTokenKind.Plus)) {
             negative = false;
         }
 
-        if (Check(SqlTokenKind.NumberLiteral)) {
+        if (Check(kind: SqlTokenKind.NumberLiteral)) {
             var tok = Advance();
             decimal val;
+
             if (tok.Value is decimal d) {
                 val = d;
             } else if (tok.Value is long l) {
@@ -713,7 +739,7 @@ public sealed class StateSqlParser {
             } else {
                 val = 0m;
             }
-            return negative ? -val : val;
+            return (negative ? -val : val);
         }
 
         m_diagnostics.ReportError(
@@ -723,17 +749,18 @@ public sealed class StateSqlParser {
         );
         return null;
     }
-
     private SqlAdvanceClause? ParseAdvanceClause() {
         var advanceTok = Current;
-        var rateVal = ParseDecimalValue("Expected advance rate number");
+        var rateVal = ParseDecimalValue(errorMessage: "Expected advance rate number");
+
         if (!rateVal.HasValue) {
             return null;
         }
 
-        ConsumeKeyword("PER", "Expected 'PER' in ADVANCE clause");
-        var unitTok = ConsumeWord("Expected unit (e.g. 'SECOND') in ADVANCE clause");
-        if (!string.Equals(unitTok.Text, "SECOND", StringComparison.OrdinalIgnoreCase)) {
+        ConsumeKeyword(keyword: "PER", message: "Expected 'PER' in ADVANCE clause");
+        var unitTok = ConsumeWord(message: "Expected unit (e.g. 'SECOND') in ADVANCE clause");
+
+        if (!string.Equals(a: unitTok.Text, b: "SECOND", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             m_diagnostics.ReportError(
                 code: PuckDiagnosticCodes.SqlUnsupportedClause,
                 message: $"ADVANCE unit '{unitTok.Text}' is not supported; only 'SECOND' is admitted",
@@ -743,69 +770,73 @@ public sealed class StateSqlParser {
 
         var span = new SourceSpan(
             advanceTok.Span.Offset,
-            (unitTok.Span.Offset + unitTok.Span.Length) - advanceTok.Span.Offset,
+            ((unitTok.Span.Offset + unitTok.Span.Length) - advanceTok.Span.Offset),
             advanceTok.Span.Line,
             advanceTok.Span.Column
         );
 
         return new SqlAdvanceClause(rateVal.Value, unitTok.Text, span);
     }
-
     private SqlRuleBodyStatement? ParseInsert() {
         var insertTok = Advance(); // INSERT
-        ConsumeKeyword("INTO", "Expected 'INTO' after 'INSERT'");
 
-        var tableTok = ConsumeWord("Expected table name in INSERT statement");
+        ConsumeKeyword(keyword: "INTO", message: "Expected 'INTO' after 'INSERT'");
+
+        var tableTok = ConsumeWord(message: "Expected table name in INSERT statement");
         var tableName = tableTok.Text;
 
         List<string>? columns = null;
 
-        if (Match(SqlTokenKind.OpenParen)) {
+        if (Match(kind: SqlTokenKind.OpenParen)) {
             columns = new List<string>();
-            while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
-                var colTok = ConsumeWord("Expected column name in column list");
-                columns.Add(colTok.Text);
-                if (!Match(SqlTokenKind.Comma)) {
+            while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
+                var colTok = ConsumeWord(message: "Expected column name in column list");
+
+                columns.Add(item: colTok.Text);
+                if (!Match(kind: SqlTokenKind.Comma)) {
                     break;
                 }
             }
-            Consume(SqlTokenKind.CloseParen, "Expected ')' closing column list");
+            Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing column list");
         }
 
-        if (MatchKeyword("SELECT")) {
+        if (MatchKeyword(keyword: "SELECT")) {
             var selectList = new List<SqlExpression>();
-            while (!CheckKeyword("FROM") && !IsAtEnd) {
-                selectList.Add(ParseExpression());
-                if (!Match(SqlTokenKind.Comma)) {
+
+            while (!CheckKeyword(keyword: "FROM") && !IsAtEnd) {
+                selectList.Add(item: ParseExpression());
+                if (!Match(kind: SqlTokenKind.Comma)) {
                     break;
                 }
             }
 
-            ConsumeKeyword("FROM", "Expected 'FROM' in nearest query");
-            var fromTok = ConsumeWord("Expected source table name after 'FROM'");
+            ConsumeKeyword(keyword: "FROM", message: "Expected 'FROM' in nearest query");
+            var fromTok = ConsumeWord(message: "Expected source table name after 'FROM'");
             var fromTable = fromTok.Text;
 
             SqlExpression? whereExpr = null;
-            if (MatchKeyword("WHERE")) {
+
+            if (MatchKeyword(keyword: "WHERE")) {
                 whereExpr = ParseExpression();
             }
 
-            ConsumeKeyword("ORDER", "Expected 'ORDER BY' in nearest query");
-            ConsumeKeyword("BY", "Expected 'BY' after 'ORDER'");
+            ConsumeKeyword(keyword: "ORDER", message: "Expected 'ORDER BY' in nearest query");
+            ConsumeKeyword(keyword: "BY", message: "Expected 'BY' after 'ORDER'");
             var orderExpr = ParseExpression();
 
             var isDescending = false;
-            if (MatchKeyword("DESC")) {
+
+            if (MatchKeyword(keyword: "DESC")) {
                 isDescending = true;
             } else {
-                MatchKeyword("ASC");
+                MatchKeyword(keyword: "ASC");
             }
 
-            ConsumeKeyword("LIMIT", "Expected 'LIMIT' in nearest query");
-            var limitTok = Consume(SqlTokenKind.NumberLiteral, "Expected integer limit in nearest query");
-            var limit = Convert.ToInt32(limitTok.Value ?? int.Parse(limitTok.Text, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+            ConsumeKeyword(keyword: "LIMIT", message: "Expected 'LIMIT' in nearest query");
+            var limitTok = Consume(kind: SqlTokenKind.NumberLiteral, message: "Expected integer limit in nearest query");
+            var limit = Convert.ToInt32((limitTok.Value ?? int.Parse(limitTok.Text, CultureInfo.InvariantCulture)), CultureInfo.InvariantCulture);
 
-            Match(SqlTokenKind.Semicolon);
+            Match(kind: SqlTokenKind.Semicolon);
 
             var fullSpan = new SourceSpan(
                 insertTok.Span.Offset,
@@ -815,43 +846,44 @@ public sealed class StateSqlParser {
             );
 
             return new SqlInsertSelectStatement(
-                TargetTable: tableName,
-                TargetColumns: columns,
-                SelectList: selectList,
                 FromTable: fromTable,
-                Where: whereExpr,
-                OrderBy: orderExpr,
                 IsDescending: isDescending,
                 Limit: limit,
-                Span: fullSpan
+                OrderBy: orderExpr,
+                SelectList: selectList,
+                Span: fullSpan,
+                TargetColumns: columns,
+                TargetTable: tableName,
+                Where: whereExpr
             );
         }
 
-        ConsumeKeyword("VALUES", "Expected 'VALUES' in INSERT statement");
+        ConsumeKeyword(keyword: "VALUES", message: "Expected 'VALUES' in INSERT statement");
 
         var valuesRows = new List<IReadOnlyList<SqlExpression>>();
 
-        while (!Check(SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword("CREATE") && !CheckKeyword("INSERT") && !CheckKeyword("DECLARE")) {
-            var openParen = Consume(SqlTokenKind.OpenParen, "Expected '(' starting values row");
+        while (!Check(kind: SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword(keyword: "CREATE") && !CheckKeyword(keyword: "INSERT") && !CheckKeyword(keyword: "DECLARE")) {
+            var openParen = Consume(kind: SqlTokenKind.OpenParen, message: "Expected '(' starting values row");
             var rowVals = new List<SqlExpression>();
 
-            while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
+            while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
                 var expr = ParseExpression();
-                rowVals.Add(expr);
-                if (!Match(SqlTokenKind.Comma)) {
+
+                rowVals.Add(item: expr);
+                if (!Match(kind: SqlTokenKind.Comma)) {
                     break;
                 }
             }
 
-            Consume(SqlTokenKind.CloseParen, "Expected ')' closing values row");
-            valuesRows.Add(rowVals);
+            Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing values row");
+            valuesRows.Add(item: rowVals);
 
-            if (!Match(SqlTokenKind.Comma)) {
+            if (!Match(kind: SqlTokenKind.Comma)) {
                 break;
             }
         }
 
-        Match(SqlTokenKind.Semicolon);
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             insertTok.Span.Offset,
@@ -860,51 +892,52 @@ public sealed class StateSqlParser {
             insertTok.Span.Column
         );
 
-        return new SqlInsertStatement(tableName, columns, valuesRows, span);
+        return new SqlInsertStatement(Columns: columns, Span: span, TableName: tableName, ValuesRows: valuesRows);
     }
-
     private SqlDeclareSlotStatement? ParseDeclareSlot() {
         var declareTok = Advance(); // DECLARE
 
-        var nameTok = ConsumeWord("Expected slot name after DECLARE");
+        var nameTok = ConsumeWord(message: "Expected slot name after DECLARE");
         var slotName = nameTok.Text;
 
-        var typeTok = ConsumeWord("Expected slot type (INT, FIXED, BOOL, TEXT, etc.)");
+        var typeTok = ConsumeWord(message: "Expected slot type (INT, FIXED, BOOL, TEXT, etc.)");
         var declaredType = typeTok.Text;
         var typeSpan = typeTok.Span;
 
         string? space = null;
-        if (string.Equals(declaredType, "VECTOR", StringComparison.OrdinalIgnoreCase) && Match(SqlTokenKind.OpenParen)) {
-            if (!Check(SqlTokenKind.CloseParen)) {
-                var spaceTok = ConsumeWord("Expected space name in VECTOR(...)");
+
+        if (string.Equals(a: declaredType, b: "VECTOR", comparisonType: StringComparison.OrdinalIgnoreCase) && Match(kind: SqlTokenKind.OpenParen)) {
+            if (!Check(kind: SqlTokenKind.CloseParen)) {
+                var spaceTok = ConsumeWord(message: "Expected space name in VECTOR(...)");
+
                 space = spaceTok.Text;
-                Consume(SqlTokenKind.CloseParen, "Expected ')' closing VECTOR(space)");
+                Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing VECTOR(space)");
             }
-        } else if (Match(SqlTokenKind.OpenParen)) {
-            while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
+        } else if (Match(kind: SqlTokenKind.OpenParen)) {
+            while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
                 Advance();
             }
-            Consume(SqlTokenKind.CloseParen, "Expected ')' closing type parameters");
+            Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing type parameters");
         }
 
-        ValidateType(declaredType, typeSpan);
+        ValidateType(type: typeTok);
 
         SqlExpression? defaultValue = null;
         SqlCheckConstraint? check = null;
         SqlAdvanceClause? advance = null;
 
-        while (!Check(SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword("CREATE") && !CheckKeyword("INSERT") && !CheckKeyword("DECLARE")) {
-            if (MatchKeyword("DEFAULT")) {
+        while (!Check(kind: SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword(keyword: "CREATE") && !CheckKeyword(keyword: "INSERT") && !CheckKeyword(keyword: "DECLARE")) {
+            if (MatchKeyword(keyword: "DEFAULT")) {
                 defaultValue = ParseExpression();
                 continue;
             }
 
-            if (MatchKeyword("CHECK")) {
-                check = ParseCheckConstraint(slotName, declaredType);
+            if (MatchKeyword(keyword: "CHECK")) {
+                check = ParseCheckConstraint(colType: declaredType, expectedColName: slotName);
                 continue;
             }
 
-            if (MatchKeyword("ADVANCE")) {
+            if (MatchKeyword(keyword: "ADVANCE")) {
                 advance = ParseAdvanceClause();
                 continue;
             }
@@ -912,7 +945,7 @@ public sealed class StateSqlParser {
             break;
         }
 
-        Match(SqlTokenKind.Semicolon);
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             declareTok.Span.Offset,
@@ -922,53 +955,56 @@ public sealed class StateSqlParser {
         );
 
         return new SqlDeclareSlotStatement(
-            Name: slotName,
+            Advance: advance,
+            Check: check,
             DeclaredType: declaredType,
             DefaultValue: defaultValue,
-            Check: check,
-            Advance: advance,
+            Name: slotName,
+            Space: space,
             Span: span,
-            TypeSpan: typeSpan,
-            Space: space
+            TypeSpan: typeSpan
         );
     }
-
     private SqlCreatePolicyStatement? ParseCreatePolicy(SourceSpan startSpan) {
         // Optional policy name: CREATE POLICY [name] ON target ...
         string? policyName = null;
+
         if ((Current.Kind is SqlTokenKind.Identifier or SqlTokenKind.Keyword) &&
-            !CheckKeyword("ON")) {
+            !CheckKeyword(keyword: "ON")) {
             var nameTok = Advance();
+
             policyName = nameTok.Text;
         }
 
-        ConsumeKeyword("ON", "Expected 'ON' in CREATE POLICY");
-        var targetTok = ConsumeWord("Expected target table or row name in CREATE POLICY");
+        ConsumeKeyword(keyword: "ON", message: "Expected 'ON' in CREATE POLICY");
+        var targetTok = ConsumeWord(message: "Expected target table or row name in CREATE POLICY");
         var target = targetTok.Text;
 
-        ConsumeKeyword("FOR", "Expected 'FOR SELECT' in CREATE POLICY");
-        ConsumeKeyword("SELECT", "Expected 'SELECT' in CREATE POLICY");
-        ConsumeKeyword("TO", "Expected 'TO' in CREATE POLICY");
+        ConsumeKeyword(keyword: "FOR", message: "Expected 'FOR SELECT' in CREATE POLICY");
+        ConsumeKeyword(keyword: "SELECT", message: "Expected 'SELECT' in CREATE POLICY");
+        ConsumeKeyword(keyword: "TO", message: "Expected 'TO' in CREATE POLICY");
 
         List<string>? readers = null;
         string? readersFrom = null;
 
-        if (MatchKeyword("READERS")) {
-            ConsumeKeyword("FROM", "Expected 'FROM' after 'READERS'");
-            var fromTok = ConsumeWord("Expected readersFrom row name");
+        if (MatchKeyword(keyword: "READERS")) {
+            ConsumeKeyword(keyword: "FROM", message: "Expected 'FROM' after 'READERS'");
+            var fromTok = ConsumeWord(message: "Expected readersFrom row name");
+
             readersFrom = fromTok.Text;
         } else {
             readers = new List<string>();
-            while (!Check(SqlTokenKind.Semicolon) && !IsAtEnd) {
-                var rTok = ConsumeWord("Expected reader name");
-                readers.Add(rTok.Text);
-                if (!Match(SqlTokenKind.Comma)) {
+            while (!Check(kind: SqlTokenKind.Semicolon) && !IsAtEnd) {
+                var rTok = ConsumeWord(message: "Expected reader name");
+
+                readers.Add(item: rTok.Text);
+                if (!Match(kind: SqlTokenKind.Comma)) {
                     break;
                 }
             }
         }
 
-        Match(SqlTokenKind.Semicolon);
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             startSpan.Offset,
@@ -978,24 +1014,24 @@ public sealed class StateSqlParser {
         );
 
         return new SqlCreatePolicyStatement(
-            Target: target,
-            Role: "SELECT",
             Readers: readers,
             ReadersFrom: readersFrom,
-            Span: span
+            Role: "SELECT",
+            Span: span,
+            Target: target
         );
     }
-
     private SqlCreateRuleStatement? ParseCreateRule(SourceSpan startSpan) {
-        var nameTok = ConsumeWord("Expected rule name after CREATE RULE");
+        var nameTok = ConsumeWord(message: "Expected rule name after CREATE RULE");
         var ruleName = nameTok.Text;
 
         string firingMode;
-        if (MatchKeyword("EVERY")) {
-            ConsumeKeyword("TICK", "Expected 'TICK' after 'EVERY'");
+
+        if (MatchKeyword(keyword: "EVERY")) {
+            ConsumeKeyword(keyword: "TICK", message: "Expected 'TICK' after 'EVERY'");
             firingMode = "Level";
-        } else if (MatchKeyword("ON")) {
-            ConsumeKeyword("ENTER", "Expected 'ENTER' after 'ON'");
+        } else if (MatchKeyword(keyword: "ON")) {
+            ConsumeKeyword(keyword: "ENTER", message: "Expected 'ENTER' after 'ON'");
             firingMode = "Edge";
         } else {
             m_diagnostics.ReportError(
@@ -1006,23 +1042,25 @@ public sealed class StateSqlParser {
             firingMode = "Level";
         }
 
-        ConsumeKeyword("AS", "Expected 'AS' starting rule body");
+        ConsumeKeyword(keyword: "AS", message: "Expected 'AS' starting rule body");
 
         var statements = new List<SqlRuleBodyStatement>();
 
-        if (CheckKeyword("BEGIN")) {
+        if (CheckKeyword(keyword: "BEGIN")) {
             var atomicStmt = ParseAtomicStatement();
+
             if (atomicStmt is not null) {
-                statements.Add(atomicStmt);
+                statements.Add(item: atomicStmt);
             }
         } else {
             var bodyStmt = ParseRuleBodyStatement();
+
             if (bodyStmt is not null) {
-                statements.Add(bodyStmt);
+                statements.Add(item: bodyStmt);
             }
         }
 
-        Match(SqlTokenKind.Semicolon);
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             startSpan.Offset,
@@ -1032,27 +1070,27 @@ public sealed class StateSqlParser {
         );
 
         return new SqlCreateRuleStatement(
-            Name: ruleName,
             FiringMode: firingMode,
-            Statements: statements,
-            Span: span
+            Name: ruleName,
+            Span: span,
+            Statements: statements
         );
     }
 
     public SqlRuleBodyStatement? ParseRuleBodyStatement() {
-        if (CheckKeyword("UPDATE")) {
+        if (CheckKeyword(keyword: "UPDATE")) {
             return ParseUpdate();
         }
-        if (CheckKeyword("DELETE")) {
+        if (CheckKeyword(keyword: "DELETE")) {
             return ParseDelete();
         }
-        if (CheckKeyword("INSERT")) {
+        if (CheckKeyword(keyword: "INSERT")) {
             return ParseInsert();
         }
-        if (CheckKeyword("BEGIN")) {
+        if (CheckKeyword(keyword: "BEGIN")) {
             return ParseAtomicStatement();
         }
-        if (CheckKeyword("IF")) {
+        if (CheckKeyword(keyword: "IF")) {
             return ParseIfStatement();
         }
 
@@ -1068,26 +1106,27 @@ public sealed class StateSqlParser {
     private SqlUpdateStatement? ParseUpdate() {
         var updateTok = Advance(); // UPDATE
 
-        var tableTok = ConsumeWord("Expected table name in UPDATE statement");
+        var tableTok = ConsumeWord(message: "Expected table name in UPDATE statement");
         var tableName = tableTok.Text;
 
-        ConsumeKeyword("SET", "Expected 'SET' in UPDATE statement");
+        ConsumeKeyword(keyword: "SET", message: "Expected 'SET' in UPDATE statement");
 
         var assignments = new List<SqlAssignment>();
 
-        while (!Check(SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword("WHERE")) {
-            var colTok = ConsumeWord("Expected column name in SET clause");
+        while (!Check(kind: SqlTokenKind.Semicolon) && !IsAtEnd && !CheckKeyword(keyword: "WHERE")) {
+            var colTok = ConsumeWord(message: "Expected column name in SET clause");
             var colName = colTok.Text;
 
-            Consume(SqlTokenKind.Equal, "Expected '=' after column name in SET clause");
+            Consume(kind: SqlTokenKind.Equal, message: "Expected '=' after column name in SET clause");
 
             var valExpr = ParseExpression();
 
             // Detect `col = col + expr` or `col = col - expr`
             var op = SqlAssignmentOp.Assign;
+
             if (valExpr is SqlBinaryExpression { Operator: "+" or "-" } binExpr) {
-                if (binExpr.Left is SqlColumnRefExpression colRef &&
-                    string.Equals(colRef.ColumnName, colName, StringComparison.OrdinalIgnoreCase)) {
+                if ((binExpr.Left is SqlColumnRefExpression colRef) &&
+                    string.Equals(a: colRef.ColumnName, b: colName, comparisonType: StringComparison.OrdinalIgnoreCase)) {
                     op = SqlAssignmentOp.Add;
                     if (binExpr.Operator == "-") {
                         valExpr = new SqlUnaryExpression("-", binExpr.Right, binExpr.Span);
@@ -1099,24 +1138,25 @@ public sealed class StateSqlParser {
 
             var assignSpan = new SourceSpan(
                 colTok.Span.Offset,
-                (valExpr.Span.Offset + valExpr.Span.Length) - colTok.Span.Offset,
+                ((valExpr.Span.Offset + valExpr.Span.Length) - colTok.Span.Offset),
                 colTok.Span.Line,
                 colTok.Span.Column
             );
 
-            assignments.Add(new SqlAssignment(colName, op, valExpr, assignSpan));
+            assignments.Add(item: new SqlAssignment(Column: colName, Op: op, Span: assignSpan, Value: valExpr));
 
-            if (!Match(SqlTokenKind.Comma)) {
+            if (!Match(kind: SqlTokenKind.Comma)) {
                 break;
             }
         }
 
         SqlExpression? whereExpr = null;
-        if (MatchKeyword("WHERE")) {
+
+        if (MatchKeyword(keyword: "WHERE")) {
             whereExpr = ParseExpression();
         }
 
-        Match(SqlTokenKind.Semicolon);
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             updateTok.Span.Offset,
@@ -1125,22 +1165,23 @@ public sealed class StateSqlParser {
             updateTok.Span.Column
         );
 
-        return new SqlUpdateStatement(tableName, assignments, whereExpr, span);
+        return new SqlUpdateStatement(Assignments: assignments, Span: span, TableName: tableName, Where: whereExpr);
     }
-
     private SqlDeleteStatement? ParseDelete() {
         var deleteTok = Advance(); // DELETE
-        ConsumeKeyword("FROM", "Expected 'FROM' in DELETE statement");
 
-        var tableTok = ConsumeWord("Expected table name in DELETE statement");
+        ConsumeKeyword(keyword: "FROM", message: "Expected 'FROM' in DELETE statement");
+
+        var tableTok = ConsumeWord(message: "Expected table name in DELETE statement");
         var tableName = tableTok.Text;
 
         SqlExpression? whereExpr = null;
-        if (MatchKeyword("WHERE")) {
+
+        if (MatchKeyword(keyword: "WHERE")) {
             whereExpr = ParseExpression();
         }
 
-        Match(SqlTokenKind.Semicolon);
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             deleteTok.Span.Offset,
@@ -1149,154 +1190,169 @@ public sealed class StateSqlParser {
             deleteTok.Span.Column
         );
 
-        return new SqlDeleteStatement(tableName, whereExpr, span);
+        return new SqlDeleteStatement(Span: span, TableName: tableName, Where: whereExpr);
     }
-
     private SqlAtomicStatement? ParseAtomicStatement() {
         var beginTok = Advance(); // BEGIN
-        ConsumeKeyword("ATOMIC", "Expected 'ATOMIC' after 'BEGIN'");
+
+        ConsumeKeyword(keyword: "ATOMIC", message: "Expected 'ATOMIC' after 'BEGIN'");
 
         var mainStatements = new List<SqlRuleBodyStatement>();
 
-        while (!CheckKeyword("EXCEPTION") && !CheckKeyword("END") && !IsAtEnd) {
+        while (!CheckKeyword(keyword: "EXCEPTION") && !CheckKeyword(keyword: "END") && !IsAtEnd) {
             var stmt = ParseRuleBodyStatement();
+
             if (stmt is not null) {
-                mainStatements.Add(stmt);
+                mainStatements.Add(item: stmt);
             }
-            Match(SqlTokenKind.Semicolon);
+            Match(kind: SqlTokenKind.Semicolon);
         }
 
         List<SqlRuleBodyStatement>? exceptionStatements = null;
 
-        if (MatchKeyword("EXCEPTION")) {
+        if (MatchKeyword(keyword: "EXCEPTION")) {
             exceptionStatements = new List<SqlRuleBodyStatement>();
-            while (!CheckKeyword("END") && !IsAtEnd) {
+            while (!CheckKeyword(keyword: "END") && !IsAtEnd) {
                 var stmt = ParseRuleBodyStatement();
+
                 if (stmt is not null) {
-                    exceptionStatements.Add(stmt);
+                    exceptionStatements.Add(item: stmt);
                 }
-                Match(SqlTokenKind.Semicolon);
+                Match(kind: SqlTokenKind.Semicolon);
             }
         }
 
-        var endTok = ConsumeKeyword("END", "Expected 'END' closing BEGIN ATOMIC block");
-        Match(SqlTokenKind.Semicolon);
+        var endTok = ConsumeKeyword(keyword: "END", message: "Expected 'END' closing BEGIN ATOMIC block");
+
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             beginTok.Span.Offset,
-            (endTok.Span.Offset + endTok.Span.Length) - beginTok.Span.Offset,
+            ((endTok.Span.Offset + endTok.Span.Length) - beginTok.Span.Offset),
             beginTok.Span.Line,
             beginTok.Span.Column
         );
 
-        return new SqlAtomicStatement(mainStatements, exceptionStatements, span);
+        return new SqlAtomicStatement(ExceptionStatements: exceptionStatements, Span: span, Statements: mainStatements);
     }
-
     private SqlIfStatement? ParseIfStatement() {
         var ifTok = Advance(); // IF
 
         var condition = ParseExpression();
-        ConsumeKeyword("THEN", "Expected 'THEN' after IF condition");
+
+        ConsumeKeyword(keyword: "THEN", message: "Expected 'THEN' after IF condition");
 
         var thenStatements = new List<SqlRuleBodyStatement>();
-        while (!CheckKeyword("ELSIF") && !CheckKeyword("ELSE") && !CheckKeyword("END") && !IsAtEnd) {
+
+        while (!CheckKeyword(keyword: "ELSIF") && !CheckKeyword(keyword: "ELSE") && !CheckKeyword(keyword: "END") && !IsAtEnd) {
             var stmt = ParseRuleBodyStatement();
+
             if (stmt is not null) {
-                thenStatements.Add(stmt);
+                thenStatements.Add(item: stmt);
             }
-            Match(SqlTokenKind.Semicolon);
+            Match(kind: SqlTokenKind.Semicolon);
         }
 
         var elsifStatements = new List<(SqlExpression Condition, IReadOnlyList<SqlRuleBodyStatement> Statements)>();
 
-        while (MatchKeyword("ELSIF")) {
+        while (MatchKeyword(keyword: "ELSIF")) {
             var elsifCond = ParseExpression();
-            ConsumeKeyword("THEN", "Expected 'THEN' after ELSIF condition");
+
+            ConsumeKeyword(keyword: "THEN", message: "Expected 'THEN' after ELSIF condition");
             var stmts = new List<SqlRuleBodyStatement>();
-            while (!CheckKeyword("ELSIF") && !CheckKeyword("ELSE") && !CheckKeyword("END") && !IsAtEnd) {
+
+            while (!CheckKeyword(keyword: "ELSIF") && !CheckKeyword(keyword: "ELSE") && !CheckKeyword(keyword: "END") && !IsAtEnd) {
                 var stmt = ParseRuleBodyStatement();
+
                 if (stmt is not null) {
-                    stmts.Add(stmt);
+                    stmts.Add(item: stmt);
                 }
-                Match(SqlTokenKind.Semicolon);
+                Match(kind: SqlTokenKind.Semicolon);
             }
-            elsifStatements.Add((elsifCond, stmts));
+            elsifStatements.Add(item: (elsifCond, stmts));
         }
 
         List<SqlRuleBodyStatement>? elseStatements = null;
-        if (MatchKeyword("ELSE")) {
+
+        if (MatchKeyword(keyword: "ELSE")) {
             elseStatements = new List<SqlRuleBodyStatement>();
-            while (!CheckKeyword("END") && !IsAtEnd) {
+            while (!CheckKeyword(keyword: "END") && !IsAtEnd) {
                 var stmt = ParseRuleBodyStatement();
+
                 if (stmt is not null) {
-                    elseStatements.Add(stmt);
+                    elseStatements.Add(item: stmt);
                 }
-                Match(SqlTokenKind.Semicolon);
+                Match(kind: SqlTokenKind.Semicolon);
             }
         }
 
-        var endTok = ConsumeKeyword("END", "Expected 'END IF'");
-        ConsumeKeyword("IF", "Expected 'IF' after 'END'");
-        Match(SqlTokenKind.Semicolon);
+        var endTok = ConsumeKeyword(keyword: "END", message: "Expected 'END IF'");
+
+        ConsumeKeyword(keyword: "IF", message: "Expected 'IF' after 'END'");
+        Match(kind: SqlTokenKind.Semicolon);
 
         var span = new SourceSpan(
             ifTok.Span.Offset,
-            (endTok.Span.Offset + endTok.Span.Length) - ifTok.Span.Offset,
+            ((endTok.Span.Offset + endTok.Span.Length) - ifTok.Span.Offset),
             ifTok.Span.Line,
             ifTok.Span.Column
         );
 
-        return new SqlIfStatement(condition, thenStatements, elsifStatements, elseStatements, span);
+        return new SqlIfStatement(Condition: condition, ElseStatements: elseStatements, ElsifStatements: elsifStatements, Span: span, ThenStatements: thenStatements);
     }
 
-    // ---- Expression Parsing with Precedence -----------------------------------------------------------------
-
+    // SQL's own precedence, deliberately not the expression table's (ExpressionOperators' Binding column): its logic
+    // is the keywords OR, AND and NOT, with NOT looser than a comparison; every comparison, `<=>` included, shares
+    // one level and does not chain; equality is `=`; and it spells no bitwise operator. Its arithmetic keeps C's
+    // order, which is the table's.
     public SqlExpression ParseExpression() => ParseOr();
 
     private SqlExpression ParseOr() {
         var left = ParseAnd();
 
-        while (MatchKeyword("OR")) {
+        while (MatchKeyword(keyword: "OR")) {
             var right = ParseAnd();
-            var span = CombineSpan(left.Span, right.Span);
-            left = new SqlBinaryExpression("OR", left, right, span);
+            var span = CombineSpan(a: left.Span, b: right.Span);
+
+            left = new SqlBinaryExpression(Left: left, Operator: "OR", Right: right, Span: span);
         }
 
         return left;
     }
-
     private SqlExpression ParseAnd() {
         var left = ParseNot();
 
-        while (MatchKeyword("AND")) {
+        while (MatchKeyword(keyword: "AND")) {
             var right = ParseNot();
-            var span = CombineSpan(left.Span, right.Span);
-            left = new SqlBinaryExpression("AND", left, right, span);
+            var span = CombineSpan(a: left.Span, b: right.Span);
+
+            left = new SqlBinaryExpression(Left: left, Operator: "AND", Right: right, Span: span);
         }
 
         return left;
     }
-
     private SqlExpression ParseNot() {
-        if (MatchKeyword("NOT")) {
-            var opTok = m_tokens[m_index - 1];
+        if (MatchKeyword(keyword: "NOT")) {
+            var opTok = m_tokens[(m_index - 1)];
             var operand = ParseComparison();
-            var span = CombineSpan(opTok.Span, operand.Span);
-            return new SqlUnaryExpression("NOT", operand, span);
+            var span = CombineSpan(a: opTok.Span, b: operand.Span);
+
+            return new SqlUnaryExpression(Operand: operand, Operator: "NOT", Span: span);
         }
 
         return ParseComparison();
     }
-
     private SqlExpression ParseComparison() {
         var left = ParseAdditive();
 
         // Check for IS NULL / IS NOT NULL
-        if (MatchKeyword("IS")) {
-            var isSpan = m_tokens[m_index - 1].Span;
-            var isNot = MatchKeyword("NOT");
-            ConsumeKeyword("NULL", "Expected 'NULL' after 'IS'");
-            var clause = isNot ? "IS NOT NULL" : "IS NULL";
+        if (MatchKeyword(keyword: "IS")) {
+            var isSpan = m_tokens[(m_index - 1)].Span;
+            var isNot = MatchKeyword(keyword: "NOT");
+
+            ConsumeKeyword(keyword: "NULL", message: "Expected 'NULL' after 'IS'");
+            var clause = (isNot ? "IS NOT NULL" : "IS NULL");
+
             m_diagnostics.ReportError(
                 code: PuckDiagnosticCodes.SqlUnsupportedClause,
                 message: $"'{clause}' is unsupported in Puck state SQL dialect — state facts hold absent cells rather than three-valued NULL logic.",
@@ -1305,77 +1361,80 @@ public sealed class StateSqlParser {
             return left;
         }
 
-        if (Check(SqlTokenKind.Equal) || Check(SqlTokenKind.NotEqual) ||
-            Check(SqlTokenKind.Less) || Check(SqlTokenKind.LessOrEqual) ||
-            Check(SqlTokenKind.Greater) || Check(SqlTokenKind.GreaterOrEqual) ||
-            Check(SqlTokenKind.CosineDistance)) {
+        if (Check(kind: SqlTokenKind.Equal) || Check(kind: SqlTokenKind.NotEqual) ||
+            Check(kind: SqlTokenKind.Less) || Check(kind: SqlTokenKind.LessOrEqual) ||
+            Check(kind: SqlTokenKind.Greater) || Check(kind: SqlTokenKind.GreaterOrEqual) ||
+            Check(kind: SqlTokenKind.CosineDistance)) {
             var opTok = Advance();
             var op = opTok.Text;
             var right = ParseAdditive();
-            var span = CombineSpan(left.Span, right.Span);
-            return new SqlBinaryExpression(op, left, right, span);
+            var span = CombineSpan(a: left.Span, b: right.Span);
+
+            return new SqlBinaryExpression(Left: left, Operator: op, Right: right, Span: span);
         }
 
         return left;
     }
-
     private SqlExpression ParseAdditive() {
         var left = ParseMultiplicative();
 
-        while (Check(SqlTokenKind.Plus) || Check(SqlTokenKind.Minus)) {
+        while (Check(kind: SqlTokenKind.Plus) || Check(kind: SqlTokenKind.Minus)) {
             var opTok = Advance();
             var right = ParseMultiplicative();
-            var span = CombineSpan(left.Span, right.Span);
+            var span = CombineSpan(a: left.Span, b: right.Span);
+
             left = new SqlBinaryExpression(opTok.Text, left, right, span);
         }
 
         return left;
     }
-
     private SqlExpression ParseMultiplicative() {
         var left = ParseUnary();
 
-        while (Check(SqlTokenKind.Multiply) || Check(SqlTokenKind.Divide) || Check(SqlTokenKind.Modulo)) {
+        while (Check(kind: SqlTokenKind.Multiply) || Check(kind: SqlTokenKind.Divide) || Check(kind: SqlTokenKind.Modulo)) {
             var opTok = Advance();
             var right = ParseUnary();
-            var span = CombineSpan(left.Span, right.Span);
+            var span = CombineSpan(a: left.Span, b: right.Span);
+
             left = new SqlBinaryExpression(opTok.Text, left, right, span);
         }
 
         return left;
     }
-
     private SqlExpression ParseUnary() {
-        if (Check(SqlTokenKind.Minus) || Check(SqlTokenKind.Plus)) {
+        if (Check(kind: SqlTokenKind.Minus) || Check(kind: SqlTokenKind.Plus)) {
             var opTok = Advance();
             var operand = ParsePrimary();
-            var span = CombineSpan(opTok.Span, operand.Span);
+            var span = CombineSpan(a: opTok.Span, b: operand.Span);
+
             return new SqlUnaryExpression(opTok.Text, operand, span);
         }
 
         return ParsePrimary();
     }
-
     private SqlExpression ParsePrimary() {
         // Literals
-        if (Check(SqlTokenKind.NumberLiteral) || Check(SqlTokenKind.StringLiteral) ||
-            Check(SqlTokenKind.BooleanLiteral) || Check(SqlTokenKind.NullLiteral)) {
+        if (Check(kind: SqlTokenKind.NumberLiteral) || Check(kind: SqlTokenKind.StringLiteral) ||
+            Check(kind: SqlTokenKind.BooleanLiteral) || Check(kind: SqlTokenKind.NullLiteral)) {
             var tok = Advance();
+
             return new SqlLiteralExpression(tok.Value, tok.Span);
         }
 
         // Aggregate functions: COUNT, MIN, MAX, SUM
-        if (CheckKeyword("COUNT") || CheckKeyword("MIN") || CheckKeyword("MAX") || CheckKeyword("SUM")) {
+        if (CheckKeyword(keyword: "COUNT") || CheckKeyword(keyword: "MIN") || CheckKeyword(keyword: "MAX") || CheckKeyword(keyword: "SUM")) {
             var funcTok = Advance();
-            Consume(SqlTokenKind.OpenParen, $"Expected '(' after '{funcTok.Text}'");
+
+            Consume(kind: SqlTokenKind.OpenParen, message: $"Expected '(' after '{funcTok.Text}'");
             string? tbl = null;
-            var col = ConsumeWord("Expected column name in aggregate").Text;
-            if (Match(SqlTokenKind.Dot)) {
+            var col = ConsumeWord(message: "Expected column name in aggregate").Text;
+
+            if (Match(kind: SqlTokenKind.Dot)) {
                 tbl = col;
-                col = ConsumeWord("Expected column name after '.' in aggregate").Text;
+                col = ConsumeWord(message: "Expected column name after '.' in aggregate").Text;
             }
-            var closeParen = Consume(SqlTokenKind.CloseParen, "Expected ')' after aggregate column");
-            var aggSpan = CombineSpan(funcTok.Span, closeParen.Span);
+            var closeParen = Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' after aggregate column");
+            var aggSpan = CombineSpan(a: funcTok.Span, b: closeParen.Span);
 
             // Refuse row aggregate: Puck.State.ExpressionVocabulary has no row aggregates
             m_diagnostics.ReportError(
@@ -1388,101 +1447,119 @@ public sealed class StateSqlParser {
         }
 
         // Vector literals: embed('text' [, space: lore]) and vector('base64url')
-        if (CheckKeyword("embed") && (Peek().Kind == SqlTokenKind.OpenParen)) {
+        if (CheckKeyword(keyword: "embed") && (Peek().Kind == SqlTokenKind.OpenParen)) {
             var funcTok = Advance();
-            Consume(SqlTokenKind.OpenParen, "Expected '(' after 'embed'");
-            var textTok = Consume(SqlTokenKind.StringLiteral, "Expected string literal in embed(...)");
+
+            Consume(kind: SqlTokenKind.OpenParen, message: "Expected '(' after 'embed'");
+            var textTok = Consume(kind: SqlTokenKind.StringLiteral, message: "Expected string literal in embed(...)");
             string? space = null;
-            if (Match(SqlTokenKind.Comma)) {
-                ConsumeKeyword("space", "Expected 'space' named argument in embed(...)");
-                if (Match(SqlTokenKind.Colon) || Match(SqlTokenKind.Equal)) {
-                    var spaceTok = ConsumeWord("Expected space name in embed(...)");
+
+            if (Match(kind: SqlTokenKind.Comma)) {
+                ConsumeKeyword(keyword: "space", message: "Expected 'space' named argument in embed(...)");
+                if (Match(kind: SqlTokenKind.Colon) || Match(kind: SqlTokenKind.Equal)) {
+                    var spaceTok = ConsumeWord(message: "Expected space name in embed(...)");
+
                     space = spaceTok.Text;
                 }
             }
-            var closeParen = Consume(SqlTokenKind.CloseParen, "Expected ')' closing embed(...)");
-            return new SqlVectorLiteralExpression("embed", textTok.Text, space, CombineSpan(funcTok.Span, closeParen.Span));
+            var closeParen = Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing embed(...)");
+
+            return new SqlVectorLiteralExpression(Kind: "embed", Payload: textTok.Text, Space: space, Span: CombineSpan(a: funcTok.Span, b: closeParen.Span));
         }
 
-        if (CheckKeyword("vector") && (Peek().Kind == SqlTokenKind.OpenParen)) {
+        if (CheckKeyword(keyword: "vector") && (Peek().Kind == SqlTokenKind.OpenParen)) {
             var funcTok = Advance();
-            Consume(SqlTokenKind.OpenParen, "Expected '(' after 'vector'");
-            var textTok = Consume(SqlTokenKind.StringLiteral, "Expected base64url string literal in vector(...)");
-            var closeParen = Consume(SqlTokenKind.CloseParen, "Expected ')' closing vector(...)");
-            return new SqlVectorLiteralExpression("vector", textTok.Text, null, CombineSpan(funcTok.Span, closeParen.Span));
+
+            Consume(kind: SqlTokenKind.OpenParen, message: "Expected '(' after 'vector'");
+            var textTok = Consume(kind: SqlTokenKind.StringLiteral, message: "Expected base64url string literal in vector(...)");
+            var closeParen = Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing vector(...)");
+
+            return new SqlVectorLiteralExpression(Kind: "vector", Payload: textTok.Text, Space: null, Span: CombineSpan(a: funcTok.Span, b: closeParen.Span));
         }
 
         // Vector functions: similarity, dot, identical
-        if ((CheckKeyword("similarity") || CheckKeyword("dot") || CheckKeyword("identical")) && (Peek().Kind == SqlTokenKind.OpenParen)) {
+        if ((CheckKeyword(keyword: "similarity") || CheckKeyword(keyword: "dot") || CheckKeyword(keyword: "identical")) && (Peek().Kind == SqlTokenKind.OpenParen)) {
             var funcTok = Advance();
-            Consume(SqlTokenKind.OpenParen, $"Expected '(' after '{funcTok.Text}'");
+
+            Consume(kind: SqlTokenKind.OpenParen, message: $"Expected '(' after '{funcTok.Text}'");
             var args = new List<SqlExpression>();
-            while (!Check(SqlTokenKind.CloseParen) && !IsAtEnd) {
-                args.Add(ParseExpression());
-                if (!Match(SqlTokenKind.Comma)) {
+
+            while (!Check(kind: SqlTokenKind.CloseParen) && !IsAtEnd) {
+                args.Add(item: ParseExpression());
+                if (!Match(kind: SqlTokenKind.Comma)) {
                     break;
                 }
             }
-            var closeParen = Consume(SqlTokenKind.CloseParen, $"Expected ')' after '{funcTok.Text}' arguments");
-            return new SqlFunctionCallExpression(funcTok.Text.ToLowerInvariant(), args, CombineSpan(funcTok.Span, closeParen.Span));
+            var closeParen = Consume(kind: SqlTokenKind.CloseParen, message: $"Expected ')' after '{funcTok.Text}' arguments");
+
+            return new SqlFunctionCallExpression(funcTok.Text.ToLowerInvariant(), args, CombineSpan(a: funcTok.Span, b: closeParen.Span));
         }
 
         // Parentheses: grouping or scalar subquery
-        if (Match(SqlTokenKind.OpenParen)) {
-            var openParen = m_tokens[m_index - 1];
+        if (Match(kind: SqlTokenKind.OpenParen)) {
+            var openParen = m_tokens[(m_index - 1)];
 
             // Subquery: (SELECT c FROM other WHERE key = 'k')
-            if (MatchKeyword("SELECT")) {
-                var colTok = ConsumeWord("Expected column name in scalar subquery");
-                ConsumeKeyword("FROM", "Expected 'FROM' in scalar subquery");
-                var fromTok = ConsumeWord("Expected table name in scalar subquery");
-                ConsumeKeyword("WHERE", "Expected 'WHERE' in scalar subquery");
-                var keyColTok = ConsumeWord("Expected key column name in scalar subquery WHERE clause");
-                Consume(SqlTokenKind.Equal, "Expected '=' in scalar subquery WHERE clause");
+            if (MatchKeyword(keyword: "SELECT")) {
+                var colTok = ConsumeWord(message: "Expected column name in scalar subquery");
+
+                ConsumeKeyword(keyword: "FROM", message: "Expected 'FROM' in scalar subquery");
+                var fromTok = ConsumeWord(message: "Expected table name in scalar subquery");
+
+                ConsumeKeyword(keyword: "WHERE", message: "Expected 'WHERE' in scalar subquery");
+                var keyColTok = ConsumeWord(message: "Expected key column name in scalar subquery WHERE clause");
+
+                Consume(kind: SqlTokenKind.Equal, message: "Expected '=' in scalar subquery WHERE clause");
                 var valTok = Advance();
                 var keyVal = valTok.Text.Trim('\'', '"');
-                var closeParen = Consume(SqlTokenKind.CloseParen, "Expected ')' closing scalar subquery");
-                var subquerySpan = CombineSpan(openParen.Span, closeParen.Span);
+                var closeParen = Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' closing scalar subquery");
+                var subquerySpan = CombineSpan(a: openParen.Span, b: closeParen.Span);
+
                 return new SqlSubqueryExpression(fromTok.Text, colTok.Text, keyColTok.Text, keyVal, subquerySpan);
             }
 
             var inner = ParseExpression();
-            Consume(SqlTokenKind.CloseParen, "Expected ')' after parenthesized expression");
+
+            Consume(kind: SqlTokenKind.CloseParen, message: "Expected ')' after parenthesized expression");
             return inner;
         }
 
         // Column reference: col or table.col or col[key] or table.col[key]
-        if (Check(SqlTokenKind.Identifier) || Check(SqlTokenKind.Keyword)) {
+        if (Check(kind: SqlTokenKind.Identifier) || Check(kind: SqlTokenKind.Keyword)) {
             var firstTok = Advance();
             string? tbl = null;
             var col = firstTok.Text;
 
-            if (Match(SqlTokenKind.Dot)) {
+            if (Match(kind: SqlTokenKind.Dot)) {
                 tbl = firstTok.Text;
-                var secondTok = ConsumeWord("Expected column name after '.'");
+                var secondTok = ConsumeWord(message: "Expected column name after '.'");
+
                 col = secondTok.Text;
-                if (Match(SqlTokenKind.OpenBracket)) {
+                if (Match(kind: SqlTokenKind.OpenBracket)) {
                     var keyTok = Advance();
-                    var closeBracket = Consume(SqlTokenKind.CloseBracket, "Expected ']' after cell key");
+                    var closeBracket = Consume(kind: SqlTokenKind.CloseBracket, message: "Expected ']' after cell key");
                     var keyVal = keyTok.Text.Trim('\'', '"');
-                    var span = CombineSpan(firstTok.Span, closeBracket.Span);
-                    return new SqlSubqueryExpression(tbl, col, "id", keyVal, span);
+                    var span = CombineSpan(a: firstTok.Span, b: closeBracket.Span);
+
+                    return new SqlSubqueryExpression(ColumnName: col, KeyColumn: "id", KeyValue: keyVal, Span: span, TableName: tbl);
                 }
-                return new SqlColumnRefExpression(tbl, col, CombineSpan(firstTok.Span, secondTok.Span));
+                return new SqlColumnRefExpression(tbl, col, CombineSpan(a: firstTok.Span, b: secondTok.Span));
             }
 
-            if (Match(SqlTokenKind.OpenBracket)) {
+            if (Match(kind: SqlTokenKind.OpenBracket)) {
                 var keyTok = Advance();
-                var closeBracket = Consume(SqlTokenKind.CloseBracket, "Expected ']' after cell key");
+                var closeBracket = Consume(kind: SqlTokenKind.CloseBracket, message: "Expected ']' after cell key");
                 var keyVal = keyTok.Text.Trim('\'', '"');
-                var span = CombineSpan(firstTok.Span, closeBracket.Span);
-                return new SqlSubqueryExpression(col, "value", "id", keyVal, span);
+                var span = CombineSpan(a: firstTok.Span, b: closeBracket.Span);
+
+                return new SqlSubqueryExpression(ColumnName: "value", KeyColumn: "id", KeyValue: keyVal, Span: span, TableName: col);
             }
 
             return new SqlColumnRefExpression(null, col, firstTok.Span);
         }
 
         var errTok = Advance();
+
         m_diagnostics.ReportError(
             code: PuckDiagnosticCodes.SqlSyntaxError,
             message: $"Unexpected expression token '{errTok.Text}' in SQL dialect",
@@ -1490,13 +1567,12 @@ public sealed class StateSqlParser {
         );
         return new SqlLiteralExpression(null, errTok.Span);
     }
-
     private static SourceSpan CombineSpan(SourceSpan a, SourceSpan b) {
-        var start = Math.Min(a.Offset, b.Offset);
-        var end = Math.Max(a.Offset + a.Length, b.Offset + b.Length);
-        return new SourceSpan(start, end - start, a.Line, a.Column);
-    }
+        var start = Math.Min(val1: a.Offset, val2: b.Offset);
+        var end = Math.Max(val1: (a.Offset + a.Length), val2: (b.Offset + b.Length));
 
+        return new SourceSpan(start, (end - start), a.Line, a.Column);
+    }
     private void Synchronize() {
         while (!IsAtEnd) {
             if (Current.Kind == SqlTokenKind.Semicolon) {
@@ -1504,8 +1580,8 @@ public sealed class StateSqlParser {
                 return;
             }
 
-            if (CheckKeyword("CREATE") || CheckKeyword("INSERT") || CheckKeyword("DECLARE") ||
-                CheckKeyword("UPDATE") || CheckKeyword("DELETE") || CheckKeyword("BEGIN") || CheckKeyword("IF")) {
+            if (CheckKeyword(keyword: "CREATE") || CheckKeyword(keyword: "INSERT") || CheckKeyword(keyword: "DECLARE") ||
+                CheckKeyword(keyword: "UPDATE") || CheckKeyword(keyword: "DELETE") || CheckKeyword(keyword: "BEGIN") || CheckKeyword(keyword: "IF")) {
                 return;
             }
 

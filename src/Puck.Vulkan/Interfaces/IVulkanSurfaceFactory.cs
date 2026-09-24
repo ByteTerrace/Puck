@@ -8,8 +8,8 @@ namespace Puck.Vulkan.Interfaces;
 /// </summary>
 public interface IVulkanSurfaceFactory {
     /// <summary>Creates a presentation surface for a native window.</summary>
-    /// <param name="instanceHandle">The native <c>VkInstance</c> handle the surface belongs to.</param>
+    /// <param name="instance">The command table of the instance the surface belongs to.</param>
     /// <param name="binding">The platform-specific native window binding to create the surface from.</param>
     /// <returns>A new, owning <see cref="VulkanSurface"/>.</returns>
-    VulkanSurface Create(nint instanceHandle, NativeSurfaceBinding binding);
+    VulkanSurface Create(VulkanInstanceCommands instance, NativeSurfaceBinding binding);
 }

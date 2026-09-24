@@ -198,6 +198,7 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
             }
         }
     }
+
     // Drops every remembered verdict whose placement no longer carries a Return-enforced board binding — the same
     // surviving-name reasoning m_ruleGateHeld.Prune applies to compiled rule names.
     internal void PruneBoardEnforcement(WorldDefinition definition) {
@@ -227,6 +228,7 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
             }
         }
     }
+
     // Folds the latch into the state hash, sorted by placement id, so two servers holding the same latch hash the
     // same regardless of insertion order.
     void IWorldPersistedSection<WorldBoardEnforcementCheckpoint>.AppendStateHash(ref Fnv1aHash hash) {

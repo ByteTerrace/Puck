@@ -36,51 +36,13 @@ public sealed class ShapeDetailLawTests {
         Width: 0.05f
     );
 
-    private static void AssertCanonicalizerAccepts(CreationDocument document) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.Empty(collection: violations);
-    }
-    private static void AssertCanonicalizerRefusesNaming(CreationDocument document, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
-    private static CreationDocument Document(params ShapeDocument[] shapes) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: shapes,
-            Frames: null
-        );
+    private static CreationDocument Document(params ShapeDocument[] shapes) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: shapes
+    );
     // The render seam: both emission paths funnel every shape through SdfProgramBuilder's Shape() core, which packs
     // Detail as a real flag on the ShapeBlend instruction — never dropped, never approximated.
-    private static SdfProgram EmitStatic(ShapeDocument shape) {
-        var builder = new SdfProgramBuilder();
-        var albedo = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        CreationStampEmitter.Emit(
-            builder: builder,
-            document: Document(shape),
-            transform: new CreationStampTransform(
-                Origin: Vector3.Zero,
-                Rotation: Quaternion.Identity,
-                Scale: 1f,
-                ReflectionNormal: null
-            ),
-            materialFor: _ => albedo
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static SdfProgram EmitStatic(ShapeDocument shape) => CreationFixtures.EmitStatic(document: Document(shape));
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, bool? detail = null, ShapePanelDocument? panel = null, IReadOnlyList<ShapeTrimDocument>? trims = null, string? name = null, Vector3? position = null, int id = 0) =>
         new(
             Id: id,
@@ -105,14 +67,14 @@ public sealed class ShapeDetailLawTests {
     [InlineData(SdfSolidPrimitive.Capsule)]
     [Theory]
     public void ADetailShapeOfAnyPrimitiveTypeIsAccepted(SdfSolidPrimitive type) =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             type,
             PlateScale,
             detail: true
         )));
     [Fact]
     public void ADetailShapeWithAPanelIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -123,7 +85,7 @@ public sealed class ShapeDetailLawTests {
         );
     [Fact]
     public void ADetailShapeWithTrimsIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Shape(
                     SdfSolidPrimitive.Sphere,
@@ -144,7 +106,7 @@ public sealed class ShapeDetailLawTests {
         );
     [Fact]
     public void APanelOrTrimHostIsUnaffectedByAnUnrelatedDetailSibling() =>
-        AssertCanonicalizerAccepts(document: Document(
+        CreationFixtures.AssertAccepts(document: Document(
             Shape(
                 SdfSolidPrimitive.Sphere,
                 PlateScale,

@@ -1,5 +1,5 @@
-using System.Numerics;
 using Puck.Assets.Documents;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
@@ -50,7 +50,7 @@ public static partial class CreationCanonicalizer {
                 ));
             }
 
-            if (!IsFinite(value: volume.Position.Value)) {
+            if (!VectorFunctions.IsFinite(vector: volume.Position.Value)) {
                 errors.Add(item: new(
                     Message: "position must contain finite coordinates.",
                     Path: $"{path}.position"
@@ -76,7 +76,7 @@ public static partial class CreationCanonicalizer {
             var halfExtent = volume.HalfExtent.Value;
 
             if (
-                !IsFinite(value: halfExtent) ||
+                !VectorFunctions.IsFinite(vector: halfExtent) ||
                 (halfExtent.X <= 0f) ||
                 (halfExtent.Y <= 0f) ||
                 (halfExtent.Z <= 0f)
@@ -222,8 +222,6 @@ public static partial class CreationCanonicalizer {
                 ));
             }
         }
-
-        static bool IsFinite(Vector3 value) => (float.IsFinite(f: value.X) && float.IsFinite(f: value.Y) && float.IsFinite(f: value.Z));
 
         static void ValidateHexColor(string? value, string name, List<DocumentValidationError> errors, string path) {
             if (

@@ -31,6 +31,7 @@ public static class WasmModuleInspector {
     // before it is narrowed: a module is bytes an author points at, so nothing in it is trusted to be in range.
     private ref struct Reader(ReadOnlySpan<byte> bytes) {
         private readonly ReadOnlySpan<byte> m_bytes = bytes;
+
         private int m_offset;
 
         public readonly bool AtEnd => (m_offset >= m_bytes.Length);

@@ -227,7 +227,7 @@ public readonly struct PresentationCertificate<TValue> {
     /// the zero of any material this library carries.
     /// <para>"Not derived" covers three cases and does not separate them, so read it as the absence of a charge and
     /// never as a fact about the pair: the pair annihilates both ways and so constrains no coefficient; none of the
-    /// three candidates related the two cells; or the basis-law walk ran out of <c>overlapLimit</c> before reaching the pair at
+    /// three candidates related the two cells; or the basis-law walk ran out of <c>tupleLimit</c> before reaching the pair at
     /// all, which <see cref="Outcome"/> reports as <see cref="ClosureOutcome.SearchLimitReached"/>. A truncated
     /// certificate therefore reads zero at pairs a complete one charges, which is the budget showing through.</para>
     /// </remarks>

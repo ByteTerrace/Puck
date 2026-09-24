@@ -338,10 +338,14 @@ public sealed class ObserverDisclosureLawTests {
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(
+            definition: (document with {
+                PopulationRaw = (document.Population with {
+                    Disclosure = new WorldObserverDisclosure(
                 Mode: WorldObserverDisclosureMode.All,
                 Radius: 4f
-            ) }) }),
+            ),
+                }),
+            }),
             reason: out var strayRadius
         ));
         Assert.Contains(
@@ -353,10 +357,14 @@ public sealed class ObserverDisclosureLawTests {
         // The control: a well-formed policy validates, so the refusals above are about the shape, not the member.
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: (document with { PopulationRaw = (document.Population with { Disclosure = new WorldObserverDisclosure(
+                definition: (document with {
+                    PopulationRaw = (document.Population with {
+                        Disclosure = new WorldObserverDisclosure(
                     Mode: WorldObserverDisclosureMode.Radius,
                     Radius: 12f
-                ) }) }),
+                ),
+                    }),
+                }),
                 reason: out var wellFormed
             ),
             userMessage: wellFormed
@@ -399,6 +407,6 @@ public sealed class ObserverDisclosureLawTests {
             LastTick = snapshot.Tick;
             LastAuthority = snapshot.Authority;
         }
-        public void DeliverState(WorldDefinition definition) { }
+        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) { }
     }
 }

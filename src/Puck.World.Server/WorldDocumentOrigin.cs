@@ -1,4 +1,6 @@
+using Puck.Abstractions;
 using Puck.Abstractions.Machines;
+using Puck.Networking;
 using Puck.Storage;
 
 namespace Puck.World.Server;
@@ -19,14 +21,9 @@ public abstract class WorldDocumentOrigin {
     /// neighbour's own origin.</summary>
     public abstract bool TryResolveReference(string document, out WorldDocumentOrigin? sibling, out string reason);
 }
-/// <summary>A row loaded from a file on disk — a canonical full path plus the sibling-resolution probes
-/// (rooted/relative-to-source/base-directory/shipped-worlds) every desktop boot and instance start already uses.</summary>
+/// <summary>A row loaded from a file on disk — a canonical full path, whose neighbour references resolve beside it
+/// (<see cref="WorldDocumentPaths"/>).</summary>
 public sealed class WorldFileOrigin : WorldDocumentOrigin {
-    private static readonly StringComparison PathComparison = (OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal
-    );
-
     private readonly IMachineValidationCatalog? m_catalog;
     private readonly string m_catalogFingerprint;
 
@@ -46,9 +43,7 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
     public override string Identity { get; }
     /// <inheritdoc/>
     public override IWorldNeighbourResolver Neighbours => new WorldFileNeighbourResolver(
-        baseDirectory: () => ((Path.GetDirectoryName(path: Identity) is { Length: > 0 } directory)
-        ? directory
-        : AppContext.BaseDirectory),
+        baseDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: Identity),
         catalogFingerprint: m_catalogFingerprint,
         catalog: m_catalog
     );
@@ -58,7 +53,7 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
     public static bool IdentityEquals(string left, string right) => string.Equals(
         a: left,
         b: right,
-        comparisonType: PathComparison
+        comparisonType: PuckPaths.Comparison
     );
     /// <inheritdoc/>
     public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason) =>
@@ -71,40 +66,15 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
             catalogFingerprint: m_catalogFingerprint,
             catalog: m_catalog
         );
-    /// <summary>Resolves a path exactly like <c>--world</c>: tried directly (rooted, or relative to the current
-    /// directory), then relative to <see cref="AppContext.BaseDirectory"/>, then under the shipped worlds
-    /// directory — so a bare shipped-asset file name resolves regardless of the process's launch directory or
-    /// which document referenced it.</summary>
+    /// <summary>Resolves a path exactly like <c>--world</c>: rooted, or relative to the current directory, and naming
+    /// a file that exists. A path a document authors never reaches here relative; it is resolved beside that document
+    /// first (<see cref="WorldDocumentPaths"/>).</summary>
     public static bool TryResolveCanonicalPath(string path, out string resolved) {
         try {
             var direct = Path.GetFullPath(path: path);
 
             if (File.Exists(path: direct)) {
                 resolved = direct;
-
-                return true;
-            }
-
-            var fallback = Path.GetFullPath(path: Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: path
-            ));
-
-            if (File.Exists(path: fallback)) {
-                resolved = fallback;
-
-                return true;
-            }
-
-            var shippedWorlds = Path.GetFullPath(path: Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: "Assets",
-                path3: "worlds",
-                path4: path
-            ));
-
-            if (File.Exists(path: shippedWorlds)) {
-                resolved = shippedWorlds;
 
                 return true;
             }
@@ -118,31 +88,29 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
     }
     /// <inheritdoc/>
     public override bool TryResolveReference(string document, out WorldDocumentOrigin? sibling, out string reason) {
-        var resolvedDocument = document;
-
-        if (!Path.IsPathRooted(path: document)) {
-            try {
-                if (Path.GetDirectoryName(path: Identity) is { Length: > 0 } sourceDirectory) {
-                    var besideSource = Path.GetFullPath(path: Path.Combine(
-                        path1: sourceDirectory,
-                        path2: document
-                    ));
-
-                    if (File.Exists(path: besideSource)) {
-                        resolvedDocument = besideSource;
-                    }
-                }
-            } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-                // The canonicalization probe below owns the eventual by-name refusal for an unformable locator.
-            }
-        }
-
-        if (!TryResolveCanonicalPath(
-            path: resolvedDocument,
-            resolved: out var canonical
+        if (!WorldDocumentName.TryValidate(
+            name: document,
+            reason: out reason
         )) {
             sibling = null;
-            reason = $"no world document at '{document}', either as given or under {AppContext.BaseDirectory}";
+
+            return false;
+        }
+
+        if (
+            !WorldDocumentPaths.TryResolve(
+            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: Identity),
+            path: WorldDocumentName.DocumentFile(name: document),
+            reason: out reason,
+            resolved: out var besideSource
+        ) ||
+            !TryResolveCanonicalPath(
+            path: besideSource,
+            resolved: out var canonical
+        )
+        ) {
+            sibling = null;
+            reason = $"no world document at '{document}' beside {Identity}";
 
             return false;
         }
@@ -157,13 +125,13 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
         return true;
     }
 }
-/// <summary>A row loaded from cloud storage under an owner identity's own container — the composed
-/// <c>definition.json</c> a silo publishes, addressed and resolved through <see cref="WorldOwnedWorldSync.HostedAddressFor"/>
-/// and <see cref="WorldStorageNeighbourResolver"/>'s hosted arm. A hosted document is always stored already composed
-/// (basis folded), so <see cref="TryLoad"/> never resolves a chain.</summary>
+/// <summary>A row loaded from cloud storage under an owner identity's own container — the composed definition its
+/// authority root names (<see cref="WorldAuthorityBlobStore.RootAddress"/>), resolved through
+/// <see cref="WorldStorageNeighbourResolver"/>'s hosted arm. A hosted document is always stored already composed
+/// (basis folded), so <see cref="TryLoad"/> never resolves a chain, and it has no directory: a relative path it
+/// authors is refused by name (<see cref="WorldDocumentPaths"/>).</summary>
 public sealed class WorldHostedOrigin : WorldDocumentOrigin {
-    private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);
-
+    private readonly TimeProvider m_clock;
     private readonly Guid m_owner;
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
@@ -174,11 +142,14 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     /// <param name="world">The world id under that owner's container.</param>
     /// <param name="store">The blob store.</param>
     /// <param name="target">The storage target (the identity's own hosted endpoint).</param>
+    /// <param name="timeProvider">The host clock the definition read's <see cref="OperationTimeout"/> and every
+    /// neighbour read run on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
-    public WorldHostedOrigin(Guid owner, SafeName world, IObjectBlobStore store, ObjectStorageTarget target) {
+    public WorldHostedOrigin(Guid owner, SafeName world, IObjectBlobStore store, ObjectStorageTarget target, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
 
+        m_clock = (timeProvider ?? TimeProvider.System);
         m_owner = owner;
         m_store = store;
         m_target = target;
@@ -186,6 +157,8 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         Identity = $"owner/{owner:D}/{world.Value}";
     }
 
+    /// <summary>Gets the bound on reading the hosted definition, on the host clock.</summary>
+    public static TimeSpan OperationTimeout { get; } = TimeSpan.FromSeconds(seconds: 15);
     /// <inheritdoc/>
     public override string Identity { get; }
     /// <inheritdoc/>
@@ -193,7 +166,8 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         containerId: m_owner,
         @namespace: WorldStorageNamespace.Hosted,
         store: m_store,
-        target: m_target
+        target: m_target,
+        timeProvider: m_clock
     );
 
     /// <summary>Reads a hosted definition and its neighbours without blocking on storage I/O.</summary>
@@ -201,14 +175,15 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     /// <param name="cancellationToken">Cancels root and neighbour reads.</param>
     /// <returns>The fully validated document, or a named load refusal.</returns>
     public async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(string instanceIdentity, CancellationToken cancellationToken) {
-        var address = WorldOwnedWorldSync.HostedAddressFor(
-            containerId: m_owner,
-            leaf: "definition.json",
-            world: m_world
+        var address = WorldAuthorityBlobStore.RootAddress(identity: new WorldAuthorityIdentity(
+            Owner: m_owner,
+            World: m_world
+        ));
+        using var timeout = new OperationDeadline(
+            caller: cancellationToken,
+            timeout: OperationTimeout,
+            timeProvider: m_clock
         );
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-        timeout.CancelAfter(delay: OperationTimeout);
         ObjectBlobContent? content;
 
         try {
@@ -226,16 +201,19 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
             containerId: m_owner,
             @namespace: WorldStorageNamespace.Hosted,
             store: m_store,
-            target: m_target
+            target: m_target,
+            timeProvider: m_clock
         );
 
-        return await WorldDefinitionLoader.LoadAsync(
+        var loaded = await WorldDefinitionLoader.LoadAsync(
             found.Content,
             address.Key,
             instanceIdentity,
             neighbours.ResolveHostedAsync,
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return (loaded.Admission?.Definition, loaded.Reason);
     }
     /// <inheritdoc/>
     public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason) {
@@ -247,32 +225,12 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     }
     /// <inheritdoc/>
     public override bool TryResolveReference(string document, out WorldDocumentOrigin? sibling, out string reason) {
-        if (!document.EndsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: WorldOwnedWorldFileName.Suffix
+        if (!WorldDocumentName.TryParseId(
+            id: out var world,
+            name: document,
+            reason: out reason
         )) {
             sibling = null;
-            reason = $"'{document}' is not a canonical owned-world file name ending in '{WorldOwnedWorldFileName.Suffix}'";
-
-            return false;
-        }
-
-        var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
-
-        if (
-            !SafeName.TryParse(
-            candidate: candidateId,
-            name: out var world,
-            reason: out var nameReason
-        ) ||
-            !string.Equals(
-            a: document,
-            b: WorldOwnedWorldFileName.For(id: world),
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            sibling = null;
-            reason = $"'{document}' is not a canonical owned-world file name — {nameReason}";
 
             return false;
         }
@@ -281,6 +239,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
             owner: m_owner,
             store: m_store,
             target: m_target,
+            timeProvider: m_clock,
             world: world
         );
         reason = string.Empty;

@@ -1,4 +1,5 @@
 using Puck.Vulkan.Interfaces;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan;
 
@@ -31,6 +32,18 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             result |= VulkanAccessFlags.ColorAttachmentWrite;
         }
 
+        if (0 != (access & GpuComputeAccess.ColorAttachmentRead)) {
+            result |= VulkanAccessFlags.ColorAttachmentRead;
+        }
+
+        if (0 != (access & GpuComputeAccess.DepthAttachmentRead)) {
+            result |= VulkanAccessFlags.DepthStencilAttachmentRead;
+        }
+
+        if (0 != (access & GpuComputeAccess.DepthAttachmentWrite)) {
+            result |= VulkanAccessFlags.DepthStencilAttachmentWrite;
+        }
+
         return result;
     }
     private static uint ToVulkanLayout(GpuImageLayout layout) {
@@ -38,6 +51,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             GpuImageLayout.General => VulkanImageLayout.General,
             GpuImageLayout.ShaderReadOnly => VulkanImageLayout.ShaderReadOnlyOptimal,
             GpuImageLayout.RenderTarget => VulkanImageLayout.ColorAttachmentOptimal,
+            GpuImageLayout.DepthAttachment => VulkanImageLayout.DepthStencilAttachmentOptimal,
             // The cross-Vulkan external handoff layout an importing instance re-transitions from.
             GpuImageLayout.External => VulkanImageLayout.General,
             _ => VulkanImageLayout.Undefined,
@@ -70,6 +84,10 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             result |= VulkanPipelineStageFlags.ColorAttachmentOutput;
         }
 
+        if (0 != (stage & GpuComputeStage.FragmentTests)) {
+            result |= VulkanPipelineStageFlags.EarlyFragmentTests | VulkanPipelineStageFlags.LateFragmentTests;
+        }
+
         return result;
     }
 
@@ -77,13 +95,13 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) =>
         recordingApi.BeginCommandBuffer(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle)
         ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
     /// <inheritdoc/>
     public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) =>
         recordingApi.BeginDebugLabel(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             label: label
         );
     /// <inheritdoc/>
@@ -96,7 +114,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
         recordingApi.BindComputeDescriptorSets(
             commandBufferHandle: commandBufferHandle,
             descriptorSetHandles: descriptorSetHandles,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             pipelineLayoutHandle: pipelineLayoutHandle
         );
     }
@@ -104,7 +122,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) =>
         recordingApi.BindComputePipeline(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             pipelineHandle: pipelineHandle
         );
     /// <inheritdoc/>
@@ -126,7 +144,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
         recordingApi.FillBuffer(
             bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             sizeBytes: sizeBytes
         );
         // vkCmdFillBuffer writes in the transfer stage. The neutral compute barrier vocabulary has no transfer
@@ -135,7 +153,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: VulkanAccessFlags.ShaderRead | VulkanAccessFlags.ShaderWrite,
             destinationStageMask: VulkanPipelineStageFlags.ComputeShader,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             sourceAccessMask: VulkanAccessFlags.TransferWrite,
             sourceStageMask: VulkanPipelineStageFlags.Transfer
         );
@@ -150,7 +168,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             );
         }
         recordingApi.ClearColorImage(
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             commandBufferHandle: commandBufferHandle,
             imageHandle: imageHandle,
             imageLayout: ToVulkanLayout(layout: GpuImageLayout.General),
@@ -164,7 +182,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) =>
         recordingApi.Dispatch(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             groupCountX: groupCountX,
             groupCountY: groupCountY,
             groupCountZ: groupCountZ
@@ -174,20 +192,20 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
         recordingApi.DispatchIndirect(
             bufferHandle: argumentBufferHandle,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             offset: argumentBufferOffset
         );
     /// <inheritdoc/>
     public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) =>
         recordingApi.EndCommandBuffer(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle)
         ).ThrowIfFailed(operation: "vkEndCommandBuffer");
     /// <inheritdoc/>
     public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) =>
         recordingApi.EndDebugLabel(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle)
         );
     /// <inheritdoc/>
     public void MemoryBarrier(nint deviceHandle, nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
@@ -195,7 +213,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
             destinationStageMask: ToVulkanStage(stage: destinationStageMask),
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             sourceAccessMask: ToVulkanAccess(access: sourceAccessMask),
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
@@ -209,32 +227,38 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
         recordingApi.PushConstants(
             commandBufferHandle: commandBufferHandle,
             data: data,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             offset: offset,
             pipelineLayoutHandle: pipelineLayoutHandle,
             stageFlags: ((uint)stageFlags)
         );
     }
     /// <inheritdoc/>
+    /// <remarks>Records a buffer memory barrier over the whole buffer; Vulkan buffers carry no layout, so the accesses
+    /// and stages are the whole transition.</remarks>
     public void TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
-        // Vulkan needs no per-buffer transition for an indirect read — a global memory barrier over the same
-        // access/stage scopes (carrying VK_ACCESS_INDIRECT_COMMAND_READ_BIT / VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT)
-        // already orders the producing write before the indirect fetch. (Direct3D 12 is where a per-resource barrier matters.)
-        recordingApi.PipelineMemoryBarrier(
+        recordingApi.PipelineBufferBarrier(
+            bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
             destinationStageMask: ToVulkanStage(stage: destinationStageMask),
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             sourceAccessMask: ToVulkanAccess(access: sourceAccessMask),
             sourceStageMask: ToVulkanStage(stage: sourceStageMask)
         );
+    /// <inheritdoc/>
+    /// <remarks>A transition into or out of <see cref="GpuImageLayout.DepthAttachment"/> covers the depth aspect, since only
+    /// a depth image takes that layout; every other transition covers the color aspect.</remarks>
     public void TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) =>
         recordingApi.TransitionImageLayout(
+            aspectMask: (((oldLayout == GpuImageLayout.DepthAttachment) || (newLayout == GpuImageLayout.DepthAttachment))
+                ? VulkanGpuFormats.DepthAspect
+                : VulkanGpuFormats.ColorAspect),
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: ToVulkanAccess(access: destinationAccessMask),
             destinationStageMask: ToVulkanStage(stage: destinationStageMask),
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             imageHandle: imageHandle,
             mipLevelCount: 1,
             newLayout: ToVulkanLayout(layout: newLayout),

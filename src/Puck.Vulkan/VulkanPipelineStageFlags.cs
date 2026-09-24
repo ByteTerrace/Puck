@@ -12,8 +12,12 @@ public static class VulkanPipelineStageFlags {
     public const uint ComputeShader = 0x00000800;
     /// <summary>The <c>VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT</c> value (where indirect dispatch/draw args are consumed).</summary>
     public const uint DrawIndirect = 0x00000002;
+    /// <summary>The <c>VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT</c> value.</summary>
+    public const uint EarlyFragmentTests = 0x00000100;
     /// <summary>The <c>VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT</c> value.</summary>
     public const uint FragmentShader = 0x00000080;
+    /// <summary>The <c>VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT</c> value.</summary>
+    public const uint LateFragmentTests = 0x00000200;
     /// <summary>The <c>VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT</c> value.</summary>
     public const uint TopOfPipe = 0x00000001;
     /// <summary>The <c>VK_PIPELINE_STAGE_TRANSFER_BIT</c> value.</summary>

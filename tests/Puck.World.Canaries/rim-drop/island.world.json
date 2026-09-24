@@ -259,7 +259,7 @@
   "references": [
     {
       "name": "corner",
-      "document": "corner.world.json"
+      "document": "corner"
     }
   ],
   "destinations": [

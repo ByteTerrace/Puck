@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -69,17 +70,24 @@ public sealed partial class WorldDocument {
         var ordinal = WorldMutationKindCatalog.OrdinalOf(mutation: mutation);
         var section = SectionOf(mutation: mutation);
 
+        // A transform needs edit over every row it writes and observe over every row it only reads.
         if (mutation is WorldMutation.TransformState transform) {
-            foreach (var row in WorldArenaTransforms.Subjects(transform: transform.Transform)) {
-                if (!Host.TryAdmitMutation(
-                    mutation.Principal,
-                    section,
-                    ordinal,
-                    GrantSubject.State(name: row),
-                    null,
-                    false,
-                    out admission
-                )) {
+            foreach (var subject in transform.Transform.Subjects()) {
+                if (!((subject.Access == StateAccess.Read)
+                    ? TryAdmitGuardObservation(
+                        mutation.Principal,
+                        subject.Name,
+                        out admission
+                    )
+                    : Host.TryAdmitMutation(
+                        mutation.Principal,
+                        section,
+                        ordinal,
+                        GrantSubject.State(name: subject.Name),
+                        null,
+                        false,
+                        out admission
+                    ))) {
                     return false;
                 }
             }
@@ -94,9 +102,10 @@ public sealed partial class WorldDocument {
             out admission
         );
     }
-    private bool TryAdmitGuardObservation(WorldPrincipal principal, string row, out WorldMutationAdmission admission) {
+
+    private bool TryAdmitGuardObservation(Principal principal, string row, out WorldMutationAdmission admission) {
         admission = default;
-        if (principal == WorldPrincipal.World) { return true; }
+        if (principal == Principal.World) { return true; }
         var subject = GrantSubject.State(name: row);
         var verdict = Host.GrantTable.Allows(
             capability: WorldCapability.Observe,

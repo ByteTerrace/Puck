@@ -1,0 +1,74 @@
+// The overworld: a plain square the visitor walks, bordered on three sides by the levels. East and north are open
+// from the start; the west passage stands behind a gate that opens once the visitor's own record says both of the
+// other levels are cleared. The record is the visitor's identity, which each level writes on a win and which
+// crosses every border with the visitor, so the gate reads state that arrived with the body rather than anything a
+// host passed along.
+
+import "room.puck"
+
+let gateColour = "#4A3F52"
+
+module hub(centre: Point, size, westGate: Point) {
+  use room(centre: centre, size: size)
+
+  prototypes {
+    prototype "gateClosed" {
+      document {
+        name: "gateClosed"
+        palette [
+          {
+            color: gateColour
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "slab" {
+          material: 0
+          position [0, 0, 0]
+          rotation [0, 0, 0, 1]
+          scale [6.2, 2.4, 0.2]
+        }
+      }
+    }
+
+    prototype "gateOpen" {
+      document {
+        name: "gateOpen"
+        schema: "puck.creation.v1"
+      }
+    }
+  }
+
+  placements {
+    placement "westGate" {
+      prototype: "gateClosed"
+      position: westGate
+      yawDegrees: 90
+      solid
+      respond [
+        {
+          "when" {
+            $type: "state"
+            state: westOpen
+            comparison: GreaterOrEqual
+            value: 1
+          }
+          prototypeId: "gateOpen"
+        }
+      ]
+    }
+  }
+
+  state {
+    world {
+      table identity capacity(32)
+      slot westOpen = 0 bounds(0..1)
+    }
+  }
+
+  // The gate opens for a visitor whose record carries both clears; it stays open for the rest of the run.
+  rule "open-west" {
+    when identity(body, 0, pushCleared) >= 1 and identity(body, 0, rewriteCleared) >= 1
+    mode: Edge
+    westOpen = 1
+  }
+}

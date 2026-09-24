@@ -180,6 +180,10 @@ public static partial class WorldDocumentEmitter {
         }
 
         switch (statement) {
+            // The parser reported the statement it could not read where it read it; no section reports it again.
+            case ErrorStatementNode:
+                yield break;
+
             case ForStatementNode loop:
                 foreach (var (produced, iteration) in DocumentLowering.ExpandForStatements(
                     loop: loop,

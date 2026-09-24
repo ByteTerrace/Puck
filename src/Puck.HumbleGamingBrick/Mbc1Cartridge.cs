@@ -69,13 +69,6 @@ public sealed class Mbc1Cartridge : CartridgeBase {
     }
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_advancedMode = reader.ReadBoolean();
-        m_primaryBank = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_secondaryBank = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) {
         // A bank the physical RAM chip does not have wraps back onto one it does rather than reading open bus.
         var bank = (m_advancedMode
@@ -113,11 +106,11 @@ public sealed class Mbc1Cartridge : CartridgeBase {
         return ((highBank * RomBankSize) + (address - MemoryMap.RomBankNStart));
     }
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_advancedMode);
-        writer.WriteInt32(value: m_primaryBank);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_secondaryBank);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Boolean(value: ref m_advancedMode);
+        transfer.Int32(value: ref m_primaryBank);
+        transfer.Boolean(value: ref m_ramEnabled);
+        transfer.Int32(value: ref m_secondaryBank);
     }
 
     /// <inheritdoc/>

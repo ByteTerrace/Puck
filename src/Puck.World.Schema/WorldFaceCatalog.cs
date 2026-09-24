@@ -75,21 +75,6 @@ public sealed class WorldFaceCatalog {
     private static readonly FixedQ4816 FallbackHalfDepthFixed = FixedQ4816.FromDouble(value: FallbackHalfDepth);
     private static readonly FixedQ4816 FallbackHalfHeightFixed = FixedQ4816.FromDouble(value: FallbackHalfHeight);
     private static readonly FixedQ4816 FallbackHalfWidthFixed = FixedQ4816.FromDouble(value: FallbackHalfWidth);
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
 
     private WorldFaceCatalog(IReadOnlyList<WorldFaceRow> rows, IReadOnlyList<string> notices, int claimingFaceCount, int slotCapacity) {
         Rows = rows;
@@ -141,7 +126,7 @@ public sealed class WorldFaceCatalog {
                 (placement is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -256,7 +241,7 @@ public sealed class WorldFaceCatalog {
                     Normal: cardinalNormal,
                     Origin: origin,
                     Right: cardinalRight,
-                    Up: UnitY
+                    Up: FixedVector3.UnitY
                 );
             }
 
@@ -264,9 +249,9 @@ public sealed class WorldFaceCatalog {
             var halfCardinal = (FixedVector3.FromVector3(value: shape.Scale) * scale);
 
             return new WorldFaceFrame(
-                Origin: (((origin + (cardinalRight * local.X)) + (UnitY * local.Y)) + (cardinalNormal * local.Z)),
+                Origin: (((origin + (cardinalRight * local.X)) + (FixedVector3.UnitY * local.Y)) + (cardinalNormal * local.Z)),
                 Right: cardinalRight,
-                Up: UnitY,
+                Up: FixedVector3.UnitY,
                 Normal: cardinalNormal,
                 HalfWidth: FixedQ4816.Abs(value: halfCardinal.X),
                 HalfHeight: FixedQ4816.Abs(value: halfCardinal.Y),
@@ -276,15 +261,15 @@ public sealed class WorldFaceCatalog {
 
         var placementRotation = FixedQuaternion.FromAxisAngle(
             angle: (yawDegrees * WorldAngles.DegreesToRadians),
-            axis: UnitY
+            axis: FixedVector3.UnitY
         );
 
         if (shape is null) {
             return new WorldFaceFrame(
                 Origin: origin,
-                Right: placementRotation.Rotate(vector: UnitX).Normalize(),
-                Up: placementRotation.Rotate(vector: UnitY).Normalize(),
-                Normal: placementRotation.Rotate(vector: UnitZ).Normalize(),
+                Right: placementRotation.Rotate(vector: FixedVector3.UnitX).Normalize(),
+                Up: placementRotation.Rotate(vector: FixedVector3.UnitY).Normalize(),
+                Normal: placementRotation.Rotate(vector: FixedVector3.UnitZ).Normalize(),
                 HalfWidth: FallbackHalfWidthFixed,
                 HalfHeight: FallbackHalfHeightFixed,
                 HalfDepth: FallbackHalfDepthFixed
@@ -296,9 +281,9 @@ public sealed class WorldFaceCatalog {
 
         return new WorldFaceFrame(
             Origin: (origin + placementRotation.Rotate(vector: (FixedVector3.FromVector3(value: shape.Position) * scale))),
-            Right: surfaceRotation.Rotate(vector: UnitX).Normalize(),
-            Up: surfaceRotation.Rotate(vector: UnitY).Normalize(),
-            Normal: surfaceRotation.Rotate(vector: UnitZ).Normalize(),
+            Right: surfaceRotation.Rotate(vector: FixedVector3.UnitX).Normalize(),
+            Up: surfaceRotation.Rotate(vector: FixedVector3.UnitY).Normalize(),
+            Normal: surfaceRotation.Rotate(vector: FixedVector3.UnitZ).Normalize(),
             HalfWidth: FixedQ4816.Abs(value: half.X),
             HalfHeight: FixedQ4816.Abs(value: half.Y),
             HalfDepth: FixedQ4816.Abs(value: half.Z)
@@ -312,7 +297,7 @@ public sealed class WorldFaceCatalog {
                 (placement is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -380,9 +365,12 @@ public sealed class WorldFaceCatalog {
             b: "test",
             comparisonType: StringComparison.Ordinal
         )) {
-            return new WorldScreenSource.TestPattern(
-                Height: 192,
-                Width: 256
+            return WorldImageProducerSettings.SourceOf(
+                id: WorldImageProducerSettings.TestPatternId,
+                settings: new WorldTestPatternSettings(
+                    Height: 192,
+                    Width: 256
+                )
             );
         }
 
@@ -424,20 +412,20 @@ public sealed class WorldFaceCatalog {
 
         switch (yaw) {
             case 0L:
-                right = UnitX;
-                normal = UnitZ;
+                right = FixedVector3.UnitX;
+                normal = FixedVector3.UnitZ;
                 return true;
             case QuarterTurnRaw:
-                right = -UnitZ;
-                normal = UnitX;
+                right = -FixedVector3.UnitZ;
+                normal = FixedVector3.UnitX;
                 return true;
             case (QuarterTurnRaw * 2L):
-                right = -UnitX;
-                normal = -UnitZ;
+                right = -FixedVector3.UnitX;
+                normal = -FixedVector3.UnitZ;
                 return true;
             case (QuarterTurnRaw * 3L):
-                right = UnitZ;
-                normal = -UnitX;
+                right = FixedVector3.UnitZ;
+                normal = -FixedVector3.UnitX;
                 return true;
             default:
                 right = default;

@@ -36,34 +36,34 @@ public sealed class ArenaKeyOwnershipLawTests {
 
         var sibling = arena.BeginScope();
 
-        _ = arena.Keys.Intern(ArenaFixture.Name(value: "sibling"));
+        _ = arena.Keys.Intern(name: ArenaFixture.Name(value: "sibling"));
         arena.Rewind(mark: sibling);
 
-        Assert.True(arena.Keys.TryResolve(ArenaFixture.Name(value: "outer"), out _));
-        Assert.True(arena.Keys.TryResolve(ArenaFixture.Name(value: "inner"), out _));
-        Assert.False(arena.Keys.TryResolve(ArenaFixture.Name(value: "sibling"), out _));
+        Assert.True(condition: arena.Keys.TryResolve(ArenaFixture.Name(value: "outer"), out _));
+        Assert.True(condition: arena.Keys.TryResolve(ArenaFixture.Name(value: "inner"), out _));
+        Assert.False(condition: arena.Keys.TryResolve(ArenaFixture.Name(value: "sibling"), out _));
 
         arena.Rewind(mark: outer);
-        Assert.False(arena.Keys.TryResolve(ArenaFixture.Name(value: "outer"), out _));
-        Assert.False(arena.Keys.TryResolve(ArenaFixture.Name(value: "inner"), out _));
+        Assert.False(condition: arena.Keys.TryResolve(ArenaFixture.Name(value: "outer"), out _));
+        Assert.False(condition: arena.Keys.TryResolve(ArenaFixture.Name(value: "inner"), out _));
     }
     [Fact]
     public void KeyOnlyScopeRewindReleasesNamesAndEpochRejectsOrdinalReuse() {
         var (_, arena) = ArenaFixture.Build();
         var before = arena.Keys.Count;
         var mark = arena.BeginScope();
-        var stale = arena.Keys.Intern(ArenaFixture.Name(value: "key-only"));
+        var stale = arena.Keys.Intern(name: ArenaFixture.Name(value: "key-only"));
 
         Assert.Equal((before + 1), arena.Keys.Count);
 
         arena.Rewind(mark: mark);
         Assert.Equal(before, arena.Keys.Count);
-        Assert.False(arena.Keys.TryResolve(ArenaFixture.Name(value: "key-only"), out _));
+        Assert.False(condition: arena.Keys.TryResolve(ArenaFixture.Name(value: "key-only"), out _));
 
-        var reused = arena.Keys.Intern(ArenaFixture.Name(value: "key-only"));
+        var reused = arena.Keys.Intern(name: ArenaFixture.Name(value: "key-only"));
 
-        Assert.NotEqual(stale, reused);
-        Assert.False(condition: arena.TryRead(ArenaFixture.Tokens, stale, out _));
+        Assert.NotEqual(actual: reused, expected: stale);
+        Assert.False(condition: arena.TryRead(key: stale, rowOrdinal: ArenaFixture.Tokens, value: out _));
     }
     [Fact]
     public void RewoundKeysDoNotSurviveRingAddressCaches() {
@@ -84,16 +84,16 @@ public sealed class ArenaKeyOwnershipLawTests {
             time: ArenaTime.Origin
         );
         var mark = arena.BeginScope();
-        var stale = arena.Keys.Intern(ArenaFixture.Name(value: "0"));
+        var stale = arena.Keys.Intern(name: ArenaFixture.Name(value: "0"));
 
-        Assert.True(condition: arena.TryCellSlot(0, stale, out var staleSlot));
+        Assert.True(condition: arena.TryCellSlot(key: stale, rowOrdinal: 0, slot: out var staleSlot));
         arena.Rewind(mark: mark);
 
-        var current = arena.Keys.Intern(ArenaFixture.Name(value: "1"));
+        var current = arena.Keys.Intern(name: ArenaFixture.Name(value: "1"));
 
-        Assert.NotEqual(stale, current);
-        Assert.False(condition: arena.TryCellSlot(0, stale, out _));
-        Assert.True(condition: arena.TryCellSlot(0, current, out var currentSlot));
+        Assert.NotEqual(actual: current, expected: stale);
+        Assert.False(condition: arena.TryCellSlot(key: stale, rowOrdinal: 0, slot: out _));
+        Assert.True(condition: arena.TryCellSlot(key: current, rowOrdinal: 0, slot: out var currentSlot));
         Assert.NotEqual(actual: currentSlot, expected: staleSlot);
     }
     [Fact]
@@ -104,11 +104,11 @@ public sealed class ArenaKeyOwnershipLawTests {
         for (var index = 0; (index <= StateCapacity.MaxCellKeys); index++) {
             var mark = arena.BeginScope();
 
-            Assert.True(arena.Keys.TryIntern(
+            Assert.True(condition: arena.Keys.TryIntern(
                 ArenaFixture.Name(value: $"rewound-{index}"),
                 out _,
                 out var reason
-            ), reason);
+            ), userMessage: reason);
             arena.Rewind(mark: mark);
         }
 
@@ -175,7 +175,7 @@ public sealed class ArenaKeyOwnershipLawTests {
 
         Assert.False(condition: arena.TryLoad([refused], ArenaTime.Origin, out _));
         Assert.Equal(before, arena.Keys.Count);
-        Assert.False(arena.Keys.TryResolve(ArenaFixture.Name(value: "refused-a"), out _));
+        Assert.False(condition: arena.Keys.TryResolve(ArenaFixture.Name(value: "refused-a"), out _));
     }
     [Fact]
     public void LateCatalogKeyAtLocalCeilingCannotBypassMemberAdmission() {
@@ -184,11 +184,11 @@ public sealed class ArenaKeyOwnershipLawTests {
 
         _ = catalog.Keys.Intern(name: late);
         while (arena.Keys.Count < StateCapacity.MaxCellKeys) {
-            Assert.True(arena.Keys.TryIntern(
+            Assert.True(condition: arena.Keys.TryIntern(
                 ArenaFixture.Name(value: $"filled-{arena.Keys.Count}"),
                 out _,
                 out var fillReason
-            ), fillReason);
+            ), userMessage: fillReason);
         }
 
         var membersBefore = arena.CellCount(rowOrdinal: ArenaFixture.Bag);

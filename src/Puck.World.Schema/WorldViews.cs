@@ -25,15 +25,63 @@ public readonly record struct WorldViewSlot(float X = 0f, float Y = 0f, float Wi
 /// to the shader runtime and its host.</summary>
 /// <param name="Name">The pipeline's stable name (a <c>SafeName</c>, unique within the section) — what a
 /// <see cref="WorldViewSlot.Pipeline"/> names and a <c>pipeline.*</c> console verb addresses.</param>
-/// <param name="Source">The pipeline document or shader source file, resolved relative to the document's own directory (an author's
-/// document may point this at any path relative to itself — never the Content-copied
-/// <see cref="AppContext.BaseDirectory"/> convention <see cref="WorldAssetRowLoader"/>'s asset rows use).</param>
-/// <param name="Camera">The authored camera feeding the paired <c>iCameraPos</c>/<c>iCameraTarget</c>/<c>iCameraUp</c>/
-/// <c>iCameraFov</c> push constants under <c>PUCK_SHADERTOY</c>, or <see langword="null"/> for the pipeline's own <c>iMouse</c>
-/// orbit (the Shadertoy-dialect default).</param>
+/// <param name="Source">Where the pipeline comes from: a pipeline document, a one-off shader source file, or a
+/// <c>puck.shader.package.v1</c> package directory, which loads with its source tree gone. It resolves beside the
+/// document that authors it (<see cref="WorldDocumentPaths"/>), like every relative path a document authors.</param>
+/// <param name="Camera">The authored camera feeding the pipeline frame block's <c>cameraPosition</c>,
+/// <c>cameraTarget</c>, <c>cameraUp</c> and <c>cameraFov</c>, or <see langword="null"/>, which leaves <c>cameraFov</c>
+/// zero so a pipeline keeps its own pointer orbit.</param>
 /// <param name="TimeScale">The pipeline clock's rate multiplier — presentation only, never simulation state. Default 1;
 /// 0 freezes the clock.</param>
-public sealed record WorldViewPipeline(string Name, string Source, string? Camera = null, float TimeScale = 1f);
+/// <param name="Output">The image version the instance shows, or <see langword="null"/> for the source's first
+/// declared output.</param>
+/// <param name="Overrides">This instance's parameter overrides, keyed by pass name; each value is that pass's config
+/// object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one
+/// source differ only in what they override. The source's config schema binds them when a boot, a
+/// <c>world.load</c> or <c>world.reload</c>, a commit, or an upsert names them (the server reads the source, and
+/// refuses a value by name), and again when a graph installs (the host binds them into its passes).
+/// <see langword="null"/> overrides nothing.</param>
+public sealed record WorldViewPipeline(string Name, string Source, string? Camera = null, float TimeScale = 1f,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null);
+/// <summary>How often a <see cref="WorldViewGraph"/> instance refreshes: exactly one of <see cref="Divisor"/> and
+/// <see cref="Hertz"/>. Presentation only; nothing here reaches simulation state.</summary>
+/// <param name="Divisor">The instance renders at most once every this many presented frames, or <see langword="null"/>
+/// when <see cref="Hertz"/> states the rate.</param>
+/// <param name="Hertz">The most renders a second, or <see langword="null"/> when <see cref="Divisor"/> states the
+/// rate.</param>
+public sealed record WorldViewGraphRefresh(
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Divisor = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Hertz = null);
+/// <summary>One external version of a graph instance's document bound to another instance's output.</summary>
+/// <param name="Resource">The external version of the instance's graph document the binding fills.</param>
+/// <param name="Instance">The <c>views.graphs</c> row whose output fills it. Naming the row's own instance reads its
+/// previous frame.</param>
+/// <param name="PreviousFrame">Whether the read takes the producer's previous completed frame, which lets two instances
+/// show each other. Default <see langword="false"/>: the producer renders first in the same frame.</param>
+public sealed record WorldViewGraphInput(string Resource, string Instance, bool PreviousFrame = false);
+/// <summary>One named instance of a frame graph: a view rendered by a <c>puck.render.graph.v1</c> document, such as a
+/// pane, a game camera shown on a screen, or a nested world. The row carries authored intent; planning, scheduling and
+/// resources belong to the renderer.</summary>
+/// <param name="Name">The instance's stable name (a <c>SafeName</c>, unique within the section), which another row's
+/// input names.</param>
+/// <param name="Source">The graph document, resolved relative to the world document's own directory as a
+/// <see cref="WorldViewPipeline.Source"/> is.</param>
+/// <param name="Camera">The authored camera the instance renders from, or <see langword="null"/> for a graph that reads
+/// no camera.</param>
+/// <param name="Refresh">How often it refreshes, or <see langword="null"/> for every frame something visible reads
+/// it.</param>
+/// <param name="Inputs">The external versions of its graph bound to other instances' outputs, or
+/// <see langword="null"/> for none.</param>
+public sealed record WorldViewGraph(string Name, string Source,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Camera = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphRefresh? Refresh = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraphInput>? Inputs = null);
+/// <summary>The price ceiling the graph scheduler holds the instances the display does not show directly to.</summary>
+/// <param name="PassPixelsPerFrame">The pass-pixels (passes times rendered pixels) those instances may spend in one
+/// presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets
+/// no ceiling.</param>
+public sealed record WorldViewGraphBudget(long PassPixelsPerFrame = 0);
 /// <summary>One named window composition — an ordered list of <see cref="WorldViewSlot"/>s plus a transition envelope,
 /// selected for a given session shape by its <see cref="SeatCount"/> (0 = the catch-all for any joined-seat count). The
 /// data-side replacement for a compiled layout <c>switch</c>: an author can see it, change it, and add arrangements.</summary>
@@ -92,15 +140,18 @@ public enum WorldSeatYawReference : byte {
 /// avatar; no bespoke per-frame integrator reads this field.</param>
 /// <param name="Pipelines">The authored <c>views.pipelines</c> rows a <see cref="WorldViewSlot.Pipeline"/> may name (empty =
 /// no pipelines declared).</param>
-/// <param name="ShaderToolchain">The directory holding the pipeline compiler's <c>glslang</c>/<c>spirv-cross</c>/<c>dxc</c>
-/// tools, or <see langword="null"/> to resolve each by bare name through the ordinary executable search path — never
-/// an environment variable.</param>
+/// <param name="ShaderToolchain">The directory holding the pipeline compiler's <c>dxc</c>, or <see langword="null"/> to
+/// resolve it by bare name through the ordinary executable search path — never an environment variable.</param>
+/// <param name="Graphs">The authored <c>views.graphs</c> frame-graph instances (empty = none declared).</param>
+/// <param name="GraphBudget">The graph scheduler's price ceiling, or <see langword="null"/> for none.</param>
 public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatControl"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatViewControl? SeatControlRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? CameraRig = null,
     IReadOnlyList<WorldViewPipeline>? Pipelines = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ShaderToolchain = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ShaderToolchain = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraph>? Graphs = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphBudget? GraphBudget = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
     private readonly IReadOnlyList<WorldViewPipeline> m_pipelines = (Pipelines ?? []);
 

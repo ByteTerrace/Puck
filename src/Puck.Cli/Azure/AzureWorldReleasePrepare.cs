@@ -45,12 +45,12 @@ internal static partial class AzureCommand {
         var port = Text(value: configuration["port"]);
         var files = Directory.EnumerateFiles(
             path: sourceDirectory,
-            searchPattern: "*.world.json"
+            searchPattern: ("*" + WorldDocumentName.DocumentSuffix)
         ).Order(comparer: StringComparer.Ordinal).ToArray();
 
         if (
             (files.Length == 0) ||
-            !files.Any(predicate: file => (Path.GetFileName(path: file) == (primary + ".world.json")))
+            !files.Any(predicate: file => (Path.GetFileName(path: file) == WorldDocumentName.DocumentFile(name: primary)))
         ) {
             throw new InvalidDataException(message: "official package must contain the configured primary world and its complete composed inventory");
         }
@@ -94,7 +94,7 @@ internal static partial class AzureCommand {
             var rows = silo["worlds"]!.AsArray();
             var prototype = rows[0]!.DeepClone(); rows.Clear();
             foreach (var file in files) {
-                var name = Path.GetFileName(path: file)[..^".world.json".Length];
+                var name = WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: file));
 
                 _ = SafeName.Parse(candidate: name);
                 // A published definition can still contain boot draw sites; it is not a saved runtime document.
@@ -104,7 +104,8 @@ internal static partial class AzureCommand {
                     null,
                     false,
                     out var parsed,
-                    out var reason
+                    out var reason,
+                    documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: file)
                 )) {
                     throw new InvalidDataException(message: reason);
                 }
@@ -124,7 +125,8 @@ internal static partial class AzureCommand {
                             null,
                             false,
                             out parsed,
-                            out reason
+                            out reason,
+                            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: file)
                         )) {
                             throw new InvalidDataException(message: reason);
                         }

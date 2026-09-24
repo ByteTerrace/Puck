@@ -70,7 +70,7 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
     }
     [Fact]
     public void NonUnitWorldImpulse_RefusesBecauseRuntimeDoesNotNormalizeIt() => Refuses(
-        rule: Rule(effects: [new WorldEffect.ApplyBodyImpulse(
+        rule: Rule(effects: [new WorldEffect.PlanarImpulse(
                 Key: "0",
                 BodyDirection: new DocumentVector3(
                     x: 2f,
@@ -142,7 +142,7 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
     );
     [Fact]
     public void OutOfRangeWorldBodyScalar_RefusesByNameRatherThanThrowingOverflow() => Refuses(
-        rule: Rule(effects: [new WorldEffect.SetBodyVerticalVelocity(
+        rule: Rule(effects: [new WorldEffect.SetVerticalVelocity(
                 Key: "0",
                 Velocity: decimal.MaxValue
             )]),

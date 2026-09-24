@@ -47,7 +47,7 @@ public static partial class WorldDocumentEmitter {
             row["attribute"] = attribute;
         }
         if (pattern.Value is { } value) {
-            row["value"] = BindOperand(value, scope);
+            row["value"] = BindOperand(operand: value, scope: scope);
         }
         if (pattern.MaximumStates is { } budget) {
             row["maxStates"] = budget;

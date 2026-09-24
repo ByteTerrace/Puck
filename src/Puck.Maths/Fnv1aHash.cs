@@ -47,6 +47,21 @@ public struct Fnv1aHash {
     /// <param name="value">The value to fold.</param>
     public void Add(long value) =>
         Add(value: unchecked((ulong)value));
+    /// <summary>Folds a nullable string into the hash, prefixing with its length or <see cref="uint.MaxValue"/> for null.</summary>
+    /// <param name="value">The string to fold, or <see langword="null"/>.</param>
+    public void Add(string? value) {
+        if (value is null) {
+            Add(value: uint.MaxValue);
+
+            return;
+        }
+
+        Add(value: ((uint)value.Length));
+
+        foreach (var character in value) {
+            Add(value: ((uint)character));
+        }
+    }
     /// <summary>Computes the 64-bit FNV-1a hash of a byte span.</summary>
     /// <param name="values">The bytes to hash.</param>
     /// <returns>The hash value.</returns>

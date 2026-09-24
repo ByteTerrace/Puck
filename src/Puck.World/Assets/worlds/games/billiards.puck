@@ -4,6 +4,9 @@
 // Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
 // 'for' in it, none of which the document carries.
 
+// The bowling lane beside this table rolls the same ball.
+export read billiardBall
+
 kits {
   rows [
     {

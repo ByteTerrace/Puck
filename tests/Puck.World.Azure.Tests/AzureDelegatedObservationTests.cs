@@ -4,6 +4,7 @@ using System.Text.Json;
 using Azure.Core;
 using Azure.Core.Pipeline;
 using Azure.Identity;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Azure.Tests;
@@ -46,20 +47,44 @@ public sealed class AzureDelegatedObservationTests {
             : OnboardingSettings),
             new AssertionCredential(),
             new HttpClientTransport(client: http),
-            platform
+            platform,
+            clock: new VirtualClock(start: Now)
         );
+        // An Entra interaction requirement surfaces from the exchange itself, before any protected request; a
+        // downstream refusal of the exchanged token surfaces from the operation.
         var error = await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(testCode: async () => {
-            if (source == "arm") { await service.ReadAsync(
-                "inventory",
-                Subject,
-                "validated-user-assertion",
-                DateTimeOffset.UtcNow.AddMinutes(minutes: 1),
-                Token
-            ); } else { await service.EnsureOnboardedAsync(
-                "validated-user-assertion",
-                DateTimeOffset.UtcNow.AddMinutes(minutes: 1),
-                Token
-            ); }
+            if (source == "arm") {
+                var grant = await service.ExchangeObservationAsync(
+                    "inventory",
+                    Subject,
+                    "validated-user-assertion",
+                    Now.AddMinutes(minutes: 1),
+                    Token
+                );
+
+                await service.ReadAsync(
+                    "inventory",
+                    grant,
+                    Token
+                );
+            } else if (source == "exchange") {
+                await service.ExchangeOnboardingAsync(
+                    "validated-user-assertion",
+                    Now.AddMinutes(minutes: 1),
+                    Token
+                );
+            } else {
+                var grant = await service.ExchangeOnboardingAsync(
+                    "validated-user-assertion",
+                    Now.AddMinutes(minutes: 1),
+                    Token
+                );
+
+                await service.EnsureOnboardedAsync(
+                    grant,
+                    Token
+                );
+            }
         });
 
         Assert.Equal(
@@ -70,10 +95,12 @@ public sealed class AzureDelegatedObservationTests {
             "validated-user-assertion",
             error.ToString()
         );
-        if (source == "exchange") { Assert.Equal(
+        if (source == "exchange") {
+            Assert.Equal(
             actual: (platform.Calls + exchange.Reads),
             expected: 0
-        ); }
+        );
+        }
     }
     [Fact]
     public async Task ExchangesUserAndFederatedClientAssertionsInsteadOfForwardingEitherToArm() {
@@ -85,18 +112,29 @@ public sealed class AzureDelegatedObservationTests {
             Application,
             Settings,
             assertion,
-            new HttpClientTransport(client: http)
+            new HttpClientTransport(client: http),
+            clock: new VirtualClock(start: Now)
         );
 
         Assert.Equal(
             actual: assertion.Calls,
             expected: 0
         );
-        var result = await service.ReadAsync(
+        var grant = await service.ExchangeObservationAsync(
             "inventory",
             Subject,
             "validated-user-assertion",
-            DateTimeOffset.UtcNow.AddMinutes(minutes: 1),
+            Now.AddMinutes(minutes: 1),
+            Token
+        );
+
+        Assert.Equal(
+            actual: handler.Reads,
+            expected: 0
+        );
+        var result = await service.ReadAsync(
+            "inventory",
+            grant,
             Token
         );
 
@@ -116,6 +154,11 @@ public sealed class AzureDelegatedObservationTests {
             actual: handler.Reads,
             expected: 1
         );
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(testCode: async () => await service.ReadAsync(
+            "another",
+            grant,
+            Token
+        ));
     }
     [Fact]
     public async Task FailedConsentNeverFallsBackToTheHostCredential() {
@@ -127,14 +170,15 @@ public sealed class AzureDelegatedObservationTests {
             Application,
             Settings,
             assertion,
-            new HttpClientTransport(client: http)
+            new HttpClientTransport(client: http),
+            clock: new VirtualClock(start: Now)
         );
 
-        await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(testCode: async () => await service.ReadAsync(
+        await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(testCode: async () => await service.ExchangeObservationAsync(
             "inventory",
             Subject,
             "validated-user-assertion",
-            DateTimeOffset.UtcNow.AddMinutes(minutes: 1),
+            Now.AddMinutes(minutes: 1),
             Token
         ));
         Assert.Equal(
@@ -156,21 +200,22 @@ public sealed class AzureDelegatedObservationTests {
             Application,
             Settings,
             assertion,
-            new HttpClientTransport(client: http)
+            new HttpClientTransport(client: http),
+            clock: new VirtualClock(start: Now)
         );
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(testCode: async () => await service.ReadAsync(
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(testCode: async () => await service.ExchangeObservationAsync(
             "inventory",
             "mallory",
             "user",
-            DateTimeOffset.UtcNow.AddMinutes(minutes: 1),
+            Now.AddMinutes(minutes: 1),
             Token
         ));
-        await Assert.ThrowsAsync<AuthenticationFailedException>(testCode: async () => await service.ReadAsync(
+        await Assert.ThrowsAsync<AuthenticationFailedException>(testCode: async () => await service.ExchangeObservationAsync(
             "inventory",
             Subject,
             "user",
-            DateTimeOffset.UtcNow.AddSeconds(seconds: -1),
+            Now.AddSeconds(seconds: -1),
             Token
         ));
         Assert.Equal(
@@ -182,13 +227,59 @@ public sealed class AzureDelegatedObservationTests {
             expected: 0
         );
     }
+    // The assertion's remaining lifetime, capped at two minutes, is the deadline an in-flight exchange is cancelled at.
+    [InlineData(1, 60)]
+    [InlineData(10, 120)]
+    [Theory]
+    public async Task TheAssertionsRemainingLifetimeBoundsAnInFlightExchange(int lifetimeMinutes, int deadlineSeconds) {
+        var clock = new VirtualClock(start: Now);
+        using var handler = new ExchangeHandler { Stalled = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously) };
+        using var http = new HttpClient(handler: handler);
+        using var service = new AzureDelegatedServices(
+            Tenant,
+            Application,
+            Settings,
+            new AssertionCredential(),
+            new HttpClientTransport(client: http),
+            clock: clock
+        );
+        var exchange = service.ExchangeObservationAsync(
+            "inventory",
+            Subject,
+            "validated-user-assertion",
+            Now.AddMinutes(minutes: lifetimeMinutes),
+            Token
+        ).AsTask();
+
+        await Task.WhenAny(
+            task1: handler.Stalled.Task,
+            task2: exchange
+        ).WaitAsync(cancellationToken: Token);
+        Assert.False(
+            condition: exchange.IsCompleted,
+            userMessage: $"the exchange ended before its deadline fired: {exchange.Exception?.GetBaseException().Message}"
+        );
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: Token,
+            dueTime: TimeSpan.FromSeconds(seconds: deadlineSeconds)
+        );
+        clock.Advance(by: TimeSpan.FromSeconds(seconds: deadlineSeconds));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => exchange);
+        Assert.False(condition: Token.IsCancellationRequested);
+        Assert.Equal(
+            actual: handler.Reads,
+            expected: 0
+        );
+    }
     [Fact]
     public void ObservationDiscoveryDisclosesOnlyGrantedNames() {
         using var service = new AzureDelegatedServices(
             Tenant,
             Application,
             Settings,
-            new AssertionCredential()
+            new AssertionCredential(),
+            clock: new VirtualClock(start: Now)
         );
 
         Assert.Equal(
@@ -208,17 +299,18 @@ public sealed class AzureDelegatedObservationTests {
             OnboardingSettings,
             new AssertionCredential(),
             new HttpClientTransport(client: http),
-            platform
+            platform,
+            clock: new VirtualClock(start: Now)
         );
 
-        await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(testCode: async () => await service.EnsureOnboardedAsync(
+        await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(testCode: async () => await service.ExchangeOnboardingAsync(
             "validated-user-assertion",
-            DateTimeOffset.UtcNow.AddMinutes(minutes: 1),
+            Now.AddMinutes(minutes: 1),
             Token
         ));
-        await Assert.ThrowsAsync<AuthenticationFailedException>(testCode: async () => await service.EnsureOnboardedAsync(
+        await Assert.ThrowsAsync<AuthenticationFailedException>(testCode: async () => await service.ExchangeOnboardingAsync(
             "validated-user-assertion",
-            DateTimeOffset.UtcNow.AddSeconds(seconds: -1),
+            Now.AddSeconds(seconds: -1),
             Token
         ));
         Assert.Equal(
@@ -244,14 +336,24 @@ public sealed class AzureDelegatedObservationTests {
             OnboardingSettings,
             new AssertionCredential(),
             new HttpClientTransport(client: http),
-            platform
+            platform,
+            clock: new VirtualClock(start: Now)
+        );
+
+        var grant = await service.ExchangeOnboardingAsync(
+            "validated-user-assertion",
+            Now.AddMinutes(minutes: 1),
+            Token
         );
 
         Assert.Equal(
+            actual: platform.Calls,
+            expected: 0
+        );
+        Assert.Equal(
             state,
             await service.EnsureOnboardedAsync(
-                "validated-user-assertion",
-                DateTimeOffset.UtcNow.AddMinutes(minutes: 1),
+                grant,
                 Token
             )
         );
@@ -274,6 +376,18 @@ public sealed class AzureDelegatedObservationTests {
         }]}
         """);
     private static CancellationToken Token => TestContext.Current.CancellationToken;
+
+    // Every service's clock reads this instant until a law advances it, so an assertion's remaining lifetime is exactly
+    // what a law authors.
+    private static readonly DateTimeOffset Now = new(
+        day: 1,
+        hour: 0,
+        minute: 0,
+        month: 1,
+        offset: TimeSpan.Zero,
+        second: 0,
+        year: 2026
+    );
 
     private sealed class OnboardingHandler(string state) : HttpMessageHandler {
         internal int Calls;
@@ -324,12 +438,16 @@ public sealed class AzureDelegatedObservationTests {
         internal int Exchanges;
         internal string ExpectedScope = "https://management.azure.com//.default";
         internal int Reads;
+        // When set, the token exchange signals it and then waits for its request to be cancelled.
+        internal TaskCompletionSource? Stalled;
 
-        private static HttpResponseMessage Response(HttpStatusCode status, string body) => new(statusCode: status) { Content = new StringContent(
+        private static HttpResponseMessage Response(HttpStatusCode status, string body) => new(statusCode: status) {
+            Content = new StringContent(
             content: body,
             encoding: Encoding.UTF8,
             mediaType: "application/json"
-        ) };
+        ),
+        };
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             if (request.RequestUri!.Host == "login.microsoftonline.com") {
@@ -377,6 +495,13 @@ public sealed class AzureDelegatedObservationTests {
                     )
                 );
                 Exchanges++;
+                if (Stalled is { } stalled) {
+                    stalled.TrySetResult();
+                    await Task.Delay(
+                        cancellationToken: cancellationToken,
+                        delay: Timeout.InfiniteTimeSpan
+                    );
+                }
                 if (Challenge) {
                     return Response(
                         HttpStatusCode.BadRequest,

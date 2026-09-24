@@ -41,25 +41,31 @@ internal static partial class Subjects {
     }
     public static string? CombinatoricsCounts() {
         for (var n = 0; (n <= 128); ++n) {
-            for (var k = 0; (k <= (n + 1)); ++k) { CheckCount(
+            for (var k = 0; (k <= (n + 1)); ++k) {
+                CheckCount(
                 k: k,
                 n: n
-            ); }
+            );
+            }
         }
         foreach (var n in new[] { 65535, 1_000_000, int.MaxValue }) {
-            for (var k = 0; (k <= 8); ++k) { CheckCount(
+            for (var k = 0; (k <= 8); ++k) {
+                CheckCount(
                 k: k,
                 n: n
             ); CheckCount(
                 k: (n - k),
                 n: n
-            ); }
+            );
+            }
         }
         for (var n = 0; (n <= 21); ++n) {
-            if (n <= 20) { Assert.Equal(
+            if (n <= 20) {
+                Assert.Equal(
                 ((ulong)Oracles.PermutationCount(n: n)),
                 Combinatorics.Factorial(n: n)
-            ); } else { Assert.Throws<OverflowException>(testCode: () => Combinatorics.Factorial(n: n)); }
+            );
+            } else { Assert.Throws<OverflowException>(testCode: () => Combinatorics.Factorial(n: n)); }
         }
         Assert.Equal(
             2_598_960UL,
@@ -76,16 +82,20 @@ internal static partial class Subjects {
                 n: n
             );
 
-            if (expected > ulong.MaxValue) { Assert.Throws<OverflowException>(testCode: () => Combinatorics.Binomial(
+            if (expected > ulong.MaxValue) {
+                Assert.Throws<OverflowException>(testCode: () => Combinatorics.Binomial(
                 k: k,
                 n: n
-            )); } else { Assert.Equal(
+            ));
+            } else {
+                Assert.Equal(
                 ((ulong)expected),
                 Combinatorics.Binomial(
                     k: k,
                     n: n
                 )
-            ); }
+            );
+            }
         }
     }
     public static string? CombinatoricsOrder() {
@@ -126,7 +136,8 @@ internal static partial class Subjects {
                     length: k,
                     start: 0
                 )));
-                for (var i = 0; (i < k); ++i) { Assert.Equal(
+                for (var i = 0; (i < k); ++i) {
+                    Assert.Equal(
                     elements[i],
                     Combinatorics.CombinationElement(
                         index: i,
@@ -134,7 +145,8 @@ internal static partial class Subjects {
                         n: n,
                         rank: rank
                     )
-                ); }
+                );
+                }
             }
         }
         for (var n = 0; (n <= 8); ++n) {
@@ -255,11 +267,13 @@ internal static partial class Subjects {
                     n,
                     decoded.Take(count: n).Distinct().Count()
                 );
-                for (var i = 0; (i < n); ++i) { Assert.InRange(
+                for (var i = 0; (i < n); ++i) {
+                    Assert.InRange(
                     decoded[i],
                     0,
                     (n - 1)
-                ); }
+                );
+                }
             }
         }
         return null;
@@ -506,6 +520,39 @@ internal static partial class Subjects {
                 expected: -17
             )
         );
+        return null;
+    }
+    /// <summary>Proves <see cref="LexicographicOrder.Compare{TPrimary, TSecondary}"/> decides by the primary key and
+    /// falls to the secondary key only on a primary tie. Each draw is evaluated twice — as drawn, where the primary keys
+    /// almost always differ, and with the right primary key forced equal to the left one — so both paths run on every
+    /// draw rather than only where the sampler happens to land on a tie.</summary>
+    /// <param name="left">The first record's primary and secondary keys.</param>
+    /// <param name="right">The second record's primary and secondary keys.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? LexicographicOrderMatchesOracle(long[] left, long[] right) {
+        for (var forcedTie = 0; (forcedTie < 2); ++forcedTie) {
+            var rightPrimary = ((forcedTie == 0)
+                ? right[0]
+                : left[0]
+            );
+            var expected = (((BigInteger)left[0]) - rightPrimary).Sign;
+
+            if (expected == 0) {
+                expected = (((BigInteger)left[1]) - right[1]).Sign;
+            }
+
+            var actual = LexicographicOrder.Compare(
+                leftPrimary: left[0],
+                leftSecondary: left[1],
+                rightPrimary: rightPrimary,
+                rightSecondary: right[1]
+            );
+
+            if (actual != expected) {
+                return $"({left[0]}, {left[1]}) against ({rightPrimary}, {right[1]}) compared {actual}, expected {expected}";
+            }
+        }
+
         return null;
     }
 }

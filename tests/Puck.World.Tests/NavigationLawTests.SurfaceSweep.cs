@@ -23,7 +23,7 @@ public sealed partial class NavigationLawTests {
         );
         fixture.Step();
 
-        var route = Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
 
         Assert.Contains(
             expectedSubstring: "clear=16/16",

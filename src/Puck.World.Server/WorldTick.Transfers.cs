@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -156,8 +157,8 @@ public sealed partial class WorldTick {
             border: out border
         );
     /// <summary>Resolves the ordinary peer principal a committed federated transfer assigned.</summary>
-    internal bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) {
-        var resolved = default(WorldPrincipal);
+    internal bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out Principal principal) {
+        var resolved = default(Principal);
         var found = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.TryCommittedPrincipal(
             ordinal: ordinal,
             principal: out resolved,
@@ -169,8 +170,8 @@ public sealed partial class WorldTick {
         return found;
     }
     /// <summary>Resolves a stable incarnation/epoch credential without retaining its disposable transfer id.</summary>
-    internal bool TryTransferredPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out WorldPrincipal principal) {
-        var resolved = default(WorldPrincipal);
+    internal bool TryTransferredPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out Principal principal) {
+        var resolved = default(Principal);
         var credential = mobility;
         var found = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.TryMobilityPrincipal(
             mobility: in credential,

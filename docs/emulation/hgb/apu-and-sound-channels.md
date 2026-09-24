@@ -106,5 +106,9 @@ Audio mixing is controlled by two central registers:
 ## Sample rate and DC offset removal
 
 Puck's `AudioOutputComponent` converts the discrete digital channel samples into a linear PCM stream:
-1. **High-Pass Filter**: Removes DC offset drift caused by uncentered square waves.
-2. **Resampling Ring Buffer**: Collects samples for `WorldAudioDirector` spatial emission, holding continuous synchronization with video frame rendering without buffer underruns.
+1. **DC offset**: Each side's gated channel sum is recentered around zero by subtracting a fixed midpoint in integer
+   arithmetic. There is no analog-style high-pass filter.
+2. **Resampling**: The shared `RationalRateAccumulator` emits one stereo frame per output-rate interval of emulated
+   time, weighting each T-cycle by its half-dot width so the rate holds through a speed switch.
+3. **Output ring**: The shared `StereoSampleRing` holds one emulated second of frames. A host that falls behind loses
+   the oldest frames and finds the newest second waiting.

@@ -1,5 +1,4 @@
 using Puck.Maths;
-using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -122,11 +121,7 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        Span<FixedBodyColliderVolume> scratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        var volumes = ScaledColliderVolumes(
-            scratch: scratch,
-            volumes: collider.Volumes
-        );
+        var volumes = ScaledColliderVolumes();
         var probePosition = m_position;
         var probeVelocity = FixedVector3.Zero;
 
@@ -134,7 +129,7 @@ public sealed partial class WorldBody {
             orientation: in m_orientation,
             position: ref probePosition,
             previousPosition: in m_position,
-            up: in UnitY,
+            up: FixedVector3.UnitY,
             velocity: ref probeVelocity,
             volumes: volumes
         );
@@ -199,11 +194,7 @@ public sealed partial class WorldBody {
             (m_contactField is { } field) &&
             (m_collider is { } collider)
         ) {
-            Span<FixedBodyColliderVolume> scratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-            var volumes = ScaledColliderVolumes(
-                scratch: scratch,
-                volumes: collider.Volumes
-            );
+            var volumes = ScaledColliderVolumes();
             var sweptPosition = desiredPosition;
             var sweptVelocity = (desiredPosition - previousPosition);
 
@@ -211,7 +202,7 @@ public sealed partial class WorldBody {
                 orientation: in m_orientation,
                 position: ref sweptPosition,
                 previousPosition: in previousPosition,
-                up: in UnitY,
+                up: FixedVector3.UnitY,
                 velocity: ref sweptVelocity,
                 volumes: volumes
             );

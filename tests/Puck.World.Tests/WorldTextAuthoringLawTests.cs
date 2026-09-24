@@ -232,18 +232,21 @@ public sealed class WorldTextAuthoringLawTests {
         );
     }
     [Fact]
-    public void CatalogRejectsPathEscape() {
-        var definition = Fixtures.BuildDocument() with { Text = Catalog(source: "../outside.ttf") };
-
+    public void CatalogAdmitsASiblingDirectoryAndRejectsANonPortablePath() {
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(
+            definition: Fixtures.BuildDocument() with { Text = Catalog(source: "../fonts/body.ttf") },
+            neighbours: null,
+            reason: out _
+        ));
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: definition,
+            definition: Fixtures.BuildDocument() with { Text = Catalog(source: "..\\fonts\\body.ttf") },
             neighbours: null,
             reason: out var reason
         ));
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "contained beneath"
+            expectedSubstring: "must be a portable relative path"
         );
     }
     [Fact]

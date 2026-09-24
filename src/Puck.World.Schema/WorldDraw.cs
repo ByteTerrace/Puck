@@ -53,4 +53,28 @@ public static class WorldDrawSites {
     /// <param name="rowName">The site row's name.</param>
     /// <returns>The site descriptor.</returns>
     public static string StateRow(CellName rowName) => $"state.{rowName}";
+    /// <summary>Returns the site descriptor per catalog ordinal that every host drawing for this document is
+    /// constructed with: <see cref="StateRow"/> for a document row, and the catalog's own name for a slot-lane
+    /// row.</summary>
+    /// <param name="catalog">The document's compiled state catalog.</param>
+    /// <returns>One descriptor per catalog ordinal.</returns>
+    /// <remarks>The seed of every draw, and so every shuffle permutation and random transfer, is a function of
+    /// this string, so the live host, the search host, and every other host drawing for the document share this one
+    /// table.</remarks>
+    public static string[] Of(StateCatalog catalog) {
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+
+        var sites = new string[catalog.Count];
+
+        for (var ordinal = 0; (ordinal < catalog.Count); ordinal++) {
+            var descriptor = catalog.Descriptors[ordinal];
+
+            sites[ordinal] = ((descriptor.Lane == StateLane.Document)
+                ? StateRow(rowName: CellName.Parse(candidate: descriptor.Name))
+                : descriptor.Name
+            );
+        }
+
+        return sites;
+    }
 }

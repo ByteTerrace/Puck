@@ -2,6 +2,8 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Commands;
+using Puck.Maths;
 using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.Shaders;
@@ -79,6 +81,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // Null for a document/host with no live pipeline children (no views.pipelines row was registered at boot) — every
     // pipeline slot then falls through to its degenerate camera fallback below, never a null-reference.
     private readonly WorldPipelineRuntime? m_pipelines;
+    private readonly WorldBakeSchedule? m_bakes;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
@@ -144,6 +147,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // views.cameraRig's compiled-rig cache, one slot per seat. Slot-indexed rather than owned by WorldSeatViewState
     // because camera-mode framing is resolved here, not per-seat state.
     private readonly WorldCameraRigCompiler.Cache?[] m_cameraModeRigCache = new WorldCameraRigCompiler.Cache?[PlayerRoster.MaxSlots];
+    // Each seat's reads of its routed authority's state mirror that are not rig operands: the perceived body's live
+    // scale the chase framing follows.
+    private readonly WorldStateLease[] m_seatReads = NewSeatReads();
     // ResolveNamedCamera's compiled-rig cache, keyed by camera row name (several named cameras may resolve in one
     // frame — a camera-bearing layout slot).
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
@@ -217,30 +223,27 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_markerCandidates.Clear();
 
         var markers = definition.Markers;
-        var tick = m_client.Tick;
+        var mirror = m_client.StateMirror;
 
         for (var index = 0; (index < markers.Count); index++) {
             var marker = markers[index];
             var icon = m_resolveIcon(marker.Icon);
-            var chipAlpha = marker.Style.ChipAlpha.Resolve(
-                definition: definition,
+            var chipAlpha = mirror.Scalar(
                 fallback: 0f,
-                tick: tick
+                scalar: marker.Style.ChipAlpha
             );
             var wantsRing = (marker.Ring is not null);
             var ringColor = (wantsRing
                 ? ResolveMarkerColor(
                     color: marker.Style.RingColor,
-                    definition: definition,
-                    tick: tick
+                    mirror: mirror
                 )
                 : default
             );
             var ringAlpha = ((wantsRing && (marker.Style.RingAlpha is { } authoredRingAlpha))
-                ? authoredRingAlpha.Resolve(
-                    definition: definition,
+                ? mirror.Scalar(
                     fallback: 0f,
-                    tick: tick
+                    scalar: authoredRingAlpha
                 )
                 : 0f
             );
@@ -577,10 +580,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // independent of facing. m_client.Orientation (the sim body orientation) is never written — everything here is
         // a local presentation-only derivation.
         var definition = route.Endpoint.Definition;
+        var state = RouteState(route: route);
         var view = (m_roster.Seat(slot: slot)?.View ?? throw new InvalidOperationException(message: "joined view has no seat controller"));
         var chase = view.ResolveChase(
             bodyOrientation: bodyOrientation,
             definition: definition,
+            mirror: state,
             views: views
         );
 
@@ -597,6 +602,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             ? ResolveCameraModeRig(
                 cameraRig: cameraRig,
                 definition: definition,
+                mirror: state,
                 slot: slot
             )
             : chase
@@ -623,10 +629,16 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             objA: rig,
             objB: chase
         )) {
+            var reads = m_seatReads[slot];
+
+            reads.Bind(
+                bodyIndex: m_anchor.PerceivedBody(slot: slot),
+                mirror: state
+            );
+
             var liveScale = WorldGaitDrivers.LiveBodyScale(
-                definition: definition,
-                index: m_anchor.PerceivedBody(slot: slot),
-                tick: m_simulation.Tick
+                reads: reads,
+                scaleRow: definition.Population.ScaleRow
             );
 
             if (
@@ -776,11 +788,38 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 return (Vector3.Zero, Quaternion.Identity, 0f);
         }
     }
-    private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, int slot) =>
+    private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, WorldStateMirror mirror, int slot) =>
         (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
             definition: definition,
+            mirror: mirror,
             program: cameraRig
         );
+    private static WorldStateLease[] NewSeatReads() {
+        var reads = new WorldStateLease[PlayerRoster.MaxSlots];
+
+        for (var slot = 0; (slot < reads.Length); slot++) {
+            reads[slot] = new WorldStateLease();
+        }
+
+        return reads;
+    }
+    // The state mirror a seat's camera reads its rig's operands through: the rows of the authority the seat is routed
+    // to, the document the rig itself comes from. Another authority's mirror presents at that authority's own
+    // fraction through its delivered snapshot, or at the delivered tick when this presentation pins the fraction.
+    private WorldStateMirror RouteState(WorldAuthorityRoute route) {
+        var state = m_client.StateMirrorFor(endpoint: route.Endpoint);
+
+        if (!ReferenceEquals(
+            objA: state,
+            objB: m_client.StateMirror
+        )) {
+            state.Apply(fraction: (PinsStateFraction
+                ? 1f
+                : route.Endpoint.InterpolationAlpha));
+        }
+
+        return state;
+    }
     private SdfAnchor? ResolveLightAnchor(WorldAnchor anchor) =>
         WorldLightAnchorResolver.Resolve(
             anchor: anchor,
@@ -790,15 +829,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
     // Resolves a color field that may be absent (a marker row's style.ringColor, meaningful only when a ring is
     // authored) — Zero (transparent black) when absent, matching every other absence-is-meaning field.
-    private static RgbaColor ResolveMarkerColor(BindableColor? color, WorldDefinition definition, ulong tick) {
+    private static RgbaColor ResolveMarkerColor(BindableColor? color, WorldStateMirror mirror) {
         if (color is not { } bound) {
             return default;
         }
 
-        var resolved = bound.Resolve(
-            definition: definition,
-            fallback: default,
-            tick: tick
+        var resolved = mirror.Color(
+            color: bound,
+            fallback: default
         );
 
         return new RgbaColor(
@@ -808,6 +846,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             R: resolved.X
         );
     }
+    // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
+    // group, or null = world), motion, aim, lens, and group spread. Returns
+    // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
     private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera) {
         camera = default;
 
@@ -882,26 +923,25 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
 
         return cache.Resolve(
             definition: definition,
+            mirror: m_client.StateMirror,
             program: program
         );
     }
-    // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
-    // group, or null = world), motion, aim, lens, and group spread. Returns
-    // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
-    // A pipeline's iMouse this frame, Shadertoy's stateful convention in the slot's OWN pixel space (origin bottom-left,
-    // y up, matching the prelude's fragCoord flip): the pointer's CLIENT position maps to FRAME pixels by the same
-    // per-axis frame/client scale WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the
-    // whole back buffer), then into the slot by its region's pixel origin. No pointer feed (an offscreen boot) or no
-    // reported position yet leaves the value untouched — zero until the first motion.
-    private Vector4 ResolvePipelineMouse(WorldPipelineRuntime.Entry entry, NormalizedRect region, uint width, uint height) {
+    // Updates a pipeline instance's pointer state for this frame, in the slot's OWN pixel space (origin top-left, y
+    // down): the pointer's CLIENT position maps to FRAME pixels by the same per-axis frame/client scale
+    // WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the whole back buffer), then into
+    // the instance's pixels through its pane's published SourceMapping, which reports a point off the pane too, so a drag
+    // that leaves it keeps tracking. The position moves only while the pointer is pressed. No pointer feed (an offscreen
+    // boot), no reported position yet, or a pane with no area leaves the state untouched.
+    private void UpdatePipelinePointer(WorldPipelineRuntime.Entry entry, string name, NormalizedRect region, uint width, uint height) {
         if (m_pipelines?.ReadPointer is not { } readPointer) {
-            return Vector4.Zero;
+            return;
         }
 
         var sample = readPointer();
 
         if (!sample.HasPosition) {
-            return entry.Mouse;
+            return;
         }
 
         var framePosition = sample.ClientPosition;
@@ -918,33 +958,58 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             );
         }
 
-        var slotX = (framePosition.X - (region.X * width));
-        var slotY = ((region.Height * height) - (framePosition.Y - (region.Y * height)));
-        var previous = entry.Mouse;
-        var pressFrame = (sample.Pressed && !entry.MouseWasPressed);
-        var mouse = (sample.Pressed
-            ? new Vector4(
-                x: slotX,
-                y: slotY,
-                z: (pressFrame
-                ? slotX
-                : MathF.Abs(x: previous.Z)),
-                w: (pressFrame
-                ? slotY
-                : (-MathF.Abs(x: previous.W)))
-            )
-            : new Vector4(
-                x: previous.X,
-                y: previous.Y,
-                z: (-MathF.Abs(x: previous.Z)),
-                w: (-MathF.Abs(x: previous.W))
-            )
+        // The instance renders at the extent the slot's Resize gives it.
+        var sourceWidth = Math.Max(
+            val1: 1,
+            val2: ((int)(region.Width * width))
+        );
+        var sourceHeight = Math.Max(
+            val1: 1,
+            val2: ((int)(region.Height * height))
         );
 
-        entry.Mouse = mouse;
-        entry.MouseWasPressed = sample.Pressed;
+        if (
+            (entry.Pane is not { Placement: SourcePlacement.Pane { Region: var shown } } pane) ||
+            (shown != region) ||
+            (pane.SourceWidth != sourceWidth) ||
+            (pane.SourceHeight != sourceHeight)
+        ) {
+            pane = SourceMapping.WholePane(
+                height: sourceHeight,
+                region: region,
+                source: SourceHandle.Instance(name: name),
+                width: sourceWidth
+            );
 
-        return mouse;
+            // A pane with no area mid-transition maps no point.
+            if (!pane.TryValidate(refusal: out _)) {
+                return;
+            }
+
+            entry.Pane = pane;
+        }
+
+        var coordinate = pane.MapDisplayPoint(
+            displayHeight: ((int)height),
+            displayWidth: ((int)width),
+            point: new FixedVector2(
+                X: FixedQ4816.FromDouble(value: framePosition.X),
+                Y: FixedQ4816.FromDouble(value: framePosition.Y)
+            )
+        ).Coordinate;
+
+        if (sample.Pressed) {
+            entry.Pointer = new Vector2(
+                x: ((float)((double)coordinate.X)),
+                y: ((float)((double)coordinate.Y))
+            );
+
+            if (!entry.PointerWasDown) {
+                entry.PointerPresses++;
+            }
+        }
+
+        entry.PointerWasDown = sample.Pressed;
     }
     private SdfScreenDecalFrame? ResolveScreenDecal(int index) {
         if (
@@ -1095,6 +1160,12 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         // sub-steps holds a stable lerp (previous == current), no snap-back. Presentation only: every body.where
         // still reads the authoritative sim pose server-side.
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
+        // Bound state presents at this frame's position between the last two ticks before anything reads it: the
+        // program build, the transform pack (look lanes, drivers, poses, effectors, body scale), and the cameras,
+        // markers and HUD the dress resolves.
+        m_client.StateMirror.Apply(fraction: (PinsStateFraction
+            ? 1f
+            : interpolationAlpha));
 
         // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
         // program itself never rebuilds for a timeline step), and latch the same delta for the scene's own
@@ -1103,6 +1174,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_emitter.Tick(deltaSeconds: deltaSeconds);
 
         ReconcileDelivery();
+        m_bakes?.Pump(definition: m_client.Definition);
         return m_composed.CaptureFrame(
             deltaSeconds: deltaSeconds,
             height: height,
@@ -1110,8 +1182,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             width: width
         );
     }
+
+    /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather
+    /// than interpolated toward it — set for an offscreen presentation, whose captures pin the fraction to one.</summary>
+    public bool PinsStateFraction { get; init; }
+
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
@@ -1232,8 +1309,8 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                         pipelines: m_client.Definition.Views.Pipelines
                     );
                     // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the
-                    // pipeline iCameraFov 0 with zero vectors — the documented "no paired camera" signal a pipeline
-                    // branches on to keep its own Shadertoy iMouse orbit — never a made-up default eye.
+                    // pipeline a zero cameraFov with zero vectors — the documented "no paired camera" signal a pipeline
+                    // branches on to keep its own pointer orbit — never a made-up default eye.
                     var cameraPos = Vector3.Zero;
                     var cameraTarget = Vector3.Zero;
                     var cameraUp = Vector3.Zero;
@@ -1256,20 +1333,23 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                         cameraFov = (2f * MathF.Atan(x: pipelineCamera.TanHalfFieldOfView));
                     }
 
-                    entry.Node.Input = new ShaderFrameInput(
-                        Seconds: entry.ClockSeconds,
-                        DeltaSeconds: pipelineDeltaSeconds,
-                        Mouse: ResolvePipelineMouse(
-                            entry: entry,
-                            height: height,
-                            region: region,
-                            width: width
-                        ),
-                        Date: Vector4.Zero,
-                        CameraPos: cameraPos,
+                    UpdatePipelinePointer(
+                        entry: entry,
+                        height: height,
+                        name: pipelineName,
+                        region: region,
+                        width: width
+                    );
+                    entry.Node.Frame = new ShaderFrameValues(
+                        CameraFov: cameraFov,
+                        CameraPosition: cameraPos,
                         CameraTarget: cameraTarget,
                         CameraUp: cameraUp,
-                        CameraFov: cameraFov
+                        Pointer: entry.Pointer,
+                        PointerDown: entry.PointerWasDown,
+                        PointerPresses: entry.PointerPresses,
+                        Time: entry.ClockSeconds,
+                        TimeDelta: pipelineDeltaSeconds
                     );
                 }
 
@@ -1440,8 +1520,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var lighting = m_cycle.Resolve(
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
-            tick: m_client.Tick,
-            engineTick: m_client.EngineTick,
+            mirror: m_client.StateMirror,
             resolveLightAnchor: ResolveLightAnchor
         );
 
@@ -1477,6 +1556,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             // The far-field isolator (world.far-field) ships ON, so the frame's flag is the negated "disable" side.
             DisableFarBound = !m_settings.FarBound,
             DynamicTransforms = transforms,
+            MovedTransforms = moved,
+            // A frame whose render inputs match the previous one re-composites the retained image instead of
+            // re-marching it; any camera, program, pose, lever or twinkle change renders.
+            EnableCadenceGate = m_settings.CadenceGate,
             Volumes = m_volumes,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
@@ -1598,8 +1681,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <see langword="null"/> (every candidate condition then holds).</param>
     /// <param name="pipelines">The shared shader-pipeline runtime, or <see langword="null"/> for a document/host with no
     /// live pipeline children — every pipeline slot then falls through to its degenerate camera fallback.</param>
+    /// <param name="bakes">The schedule pumped once per captured frame to keep the definition's creation bakes current,
+    /// or <see langword="null"/> for a presentation that bakes nothing.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldPipelineRuntime? pipelines = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldPipelineRuntime? pipelines = null, WorldBakeSchedule? bakes = null) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -1653,6 +1738,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
         m_pipelines = pipelines;
+        m_bakes = bakes;
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
@@ -1775,6 +1861,9 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <summary>The frozen transform-slot count: maximum-sized catalog ranges for the detailed body band, one root
     /// slot per remaining crowd body, plus the reserved animated-placement replay pool.</summary>
     public int DynamicTransformCapacity { get; }
+    /// <summary>Gets the composed dynamic-transform table's moved set, whose <c>sdf.transforms</c> counters count the
+    /// rows every frame packed, compared and owed.</summary>
+    public SdfMovedTransforms MovedTransforms => m_composed.MovedTransforms;
     /// <inheritdoc/>
     public SdfGlyphAtlas? GlyphAtlas => m_text.GlyphAtlas;
     /// <summary>The worst-case (all avatars active) instance count — the spec's <c>InstanceCapacity</c> floor.</summary>

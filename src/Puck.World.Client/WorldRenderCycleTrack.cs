@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SdfVm;
 
@@ -7,10 +6,10 @@ namespace Puck.World.Client;
 
 /// <summary>Resolves a definition's environment each frame: the static <c>render.lighting</c>/<c>render.sky</c>
 /// written into an <see cref="SdfEnvironment"/>, or, when it authors a <c>render.cycle</c>, the two keys bracketing
-/// the state row's live value (through the one state read every consumer shares) blended lane by lane. Statics and
-/// keys are resolved once per definition revision — a live edit to either section, or to a state cell a colour binds
-/// to, lands on the next frame — each key holding every lane the previous key left it, starting from the statics,
-/// the last wrapping into the first.</summary>
+/// the state row's stored value (read through the client's <see cref="WorldStateMirror"/>) blended lane by lane.
+/// Statics and keys are resolved once per definition revision and once per move of a bound colour — a live edit to
+/// either section, or to a state cell a colour binds to, lands on the next frame — each key holding every lane the
+/// previous key left it, starting from the statics, the last wrapping into the first.</summary>
 public sealed class WorldRenderCycleTrack {
     private readonly SdfEnvironment[] m_output = [new SdfEnvironment(), new SdfEnvironment()];
     private readonly SdfEnvironment m_statics = new();
@@ -18,9 +17,12 @@ public sealed class WorldRenderCycleTrack {
     private float[][] m_keys = [];
     private float[] m_keyAts = [];
     private int m_revision = -1;
+    private int m_mirrorRevision = -1;
 
     private int m_outputIndex;
     private string? m_stateRow;
+
+    private int m_stateSlot = -1;
 
     // A point light's anchor rides the resolver's live dynamic-transform slot every call (never cached with the
     // statics/keys above, which move only once per revision) — an anchored placement's pool slot can differ from
@@ -51,10 +53,13 @@ public sealed class WorldRenderCycleTrack {
             output.SetLight(
                 index: index,
                 light: ((pose is { } frame)
-                ? light with { DynamicSlot = -1, Direction = (frame.Position + Vector3.Transform(
+                ? light with {
+                    DynamicSlot = -1,
+                    Direction = (frame.Position + Vector3.Transform(
                         light.Direction,
                         frame.Orientation
-                    )) }
+                    )),
+                }
                 : light with { DynamicSlot = -1, Weight = 0f })
             );
         }
@@ -110,7 +115,7 @@ public sealed class WorldRenderCycleTrack {
         Shadows: false
     ),
     });
-    private void Rebuild(WorldDefinition definition, WorldRenderCycle cycle) {
+    private void Rebuild(WorldStateMirror mirror, WorldRenderCycle cycle) {
         var keys = cycle.Keys;
         var resolved = new float[keys.Count][];
         var ats = new float[keys.Count];
@@ -123,7 +128,7 @@ public sealed class WorldRenderCycleTrack {
             for (var index = 0; (index < keys.Count); index++) {
                 Write(
                     carry: true,
-                    definition: definition,
+                    mirror: mirror,
                     into: carried,
                     lighting: keys[index].Lighting,
                     sky: keys[index].Sky
@@ -139,13 +144,13 @@ public sealed class WorldRenderCycleTrack {
     }
     // The render path is opaque — alpha plays no part in any environment colour, so every bound colour drops it here,
     // the one seam between BindableColor's Vector4 grammar and the lane table's three colour lanes.
-    private static Vector3 Rgb(BindableColor? color, WorldDefinition definition, Vector3 fallback) {
+    private static Vector3 Rgb(BindableColor? color, WorldStateMirror mirror, Vector3 fallback) {
         if (color is not { } bound) {
             return fallback;
         }
 
-        var resolved = bound.Resolve(
-            definition: definition,
+        var resolved = mirror.Color(
+            color: bound,
             fallback: new Vector4(
                 value: fallback,
                 w: 1f
@@ -164,7 +169,7 @@ public sealed class WorldRenderCycleTrack {
     // the previous key's lanes and an absent field keeps them. The sky is ENABLED by any layer that draws — a
     // gradient, the sun disc, stars, clouds — since each is miss-pixel content the shader composites only on the
     // authored path; fog alone leaves the pinned branch, which renders bit-identically to a world with no sky.
-    private static void Write(WorldDefinition definition, WorldRenderLighting? lighting, WorldRenderSky? sky, SdfEnvironment into, bool carry) {
+    private static void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, SdfEnvironment into, bool carry) {
         if (!carry) {
             into.CopyFrom(source: ((lighting?.Lights is null)
                 ? SdfEnvironment.Default()
@@ -192,7 +197,7 @@ public sealed class WorldRenderCycleTrack {
                             Direction = (directional.Direction ?? previous.Direction),
                             Color = Rgb(
                         color: directional.Color,
-                        definition: definition,
+                        mirror: mirror,
                         fallback: previous.Color
                     ),
                             Weight = (directional.Weight ?? previous.Weight),
@@ -206,7 +211,7 @@ public sealed class WorldRenderCycleTrack {
                             Direction = Vector3.Zero,
                             Color = Rgb(
                         color: hemisphere.Color,
-                        definition: definition,
+                        mirror: mirror,
                         fallback: previous.Color
                     ),
                             Weight = (hemisphere.Base ?? previous.Weight),
@@ -218,7 +223,7 @@ public sealed class WorldRenderCycleTrack {
                             Direction = Vector3.Zero,
                             Color = Rgb(
                         color: rim.Color,
-                        definition: definition,
+                        mirror: mirror,
                         fallback: previous.Color
                     ),
                             Weight = (rim.Weight ?? previous.Weight),
@@ -239,7 +244,7 @@ public sealed class WorldRenderCycleTrack {
                             Direction = (point.Position ?? previous.Direction),
                             Color = Rgb(
                         color: point.Color,
-                        definition: definition,
+                        mirror: mirror,
                         fallback: previous.Color
                     ),
                             Weight = (point.Weight ?? previous.Weight),
@@ -267,7 +272,7 @@ public sealed class WorldRenderCycleTrack {
             into.CurvatureInkHigh = (curvature.InkHigh ?? into.CurvatureInkHigh);
             into.CurvatureInkColor = Rgb(
                 color: curvature.InkColor,
-                definition: definition,
+                mirror: mirror,
                 fallback: into.CurvatureInkColor
             );
         }
@@ -302,7 +307,7 @@ public sealed class WorldRenderCycleTrack {
                                 index: index,
                                 color: Rgb(
                                     color: stop?.Color,
-                                    definition: definition,
+                                    mirror: mirror,
                                     fallback: previousColor
                                 ),
                                 elevation: (stop?.Elevation ?? previousElevation)
@@ -355,7 +360,7 @@ public sealed class WorldRenderCycleTrack {
                         into.CloudSeed = (clouds.Seed ?? into.CloudSeed);
                         into.CloudColor = Rgb(
                             color: clouds.Color,
-                            definition: definition,
+                            mirror: mirror,
                             fallback: into.CloudColor
                         );
                         into.CloudDrift = (clouds.Drift ?? into.CloudDrift);
@@ -373,7 +378,7 @@ public sealed class WorldRenderCycleTrack {
     // environment/tonemap field), so they are written directly onto the statics once per revision rather than
     // through Write's per-key carry — every cycle key inherits the same value via CopyFrom, so blending two
     // identical lane values (whatever SdfEnvironment.BlendOf classifies them as) is exact.
-    private static void WriteEnvironment(WorldDefinition definition, WorldRenderEnvironment? environment, SdfEnvironment into, WorldTonemap? tonemap) {
+    private static void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfEnvironment into, WorldTonemap? tonemap) {
         into.Tonemap = ((tonemap ?? WorldTonemap.None) switch {
             WorldTonemap.None => SdfTonemapMode.None,
             WorldTonemap.Filmic => SdfTonemapMode.Filmic,
@@ -398,7 +403,7 @@ public sealed class WorldRenderCycleTrack {
                     Direction: authored.Direction,
                     Color: Rgb(
                         color: authored.Color,
-                        definition: definition,
+                        mirror: mirror,
                         fallback: Vector3.One
                     ),
                     Weight: (authored.Weight ?? 1f),
@@ -411,12 +416,12 @@ public sealed class WorldRenderCycleTrack {
         into.SoftboxCount = count;
         into.HorizonLow = Rgb(
             color: environment?.Horizon?.Low,
-            definition: definition,
+            mirror: mirror,
             fallback: Vector3.Zero
         );
         into.HorizonHigh = Rgb(
             color: environment?.Horizon?.High,
-            definition: definition,
+            mirror: mirror,
             fallback: Vector3.Zero
         );
 
@@ -426,38 +431,54 @@ public sealed class WorldRenderCycleTrack {
     /// statics when the definition authors no cycle or the row cannot be read. The returned instance is reused every
     /// other call; a consumer that must hold one across frames copies it.</summary>
     /// <param name="definition">The live definition.</param>
-    /// <param name="revision">The definition revision (statics and keys are resolved once per revision).</param>
-    /// <param name="tick">The tick to read the state row as of.</param>
-    /// <param name="engineTick">The engine-tick coordinate <paramref name="tick"/> completed at.</param>
+    /// <param name="revision">The definition revision (statics and keys are resolved once per revision, and again
+    /// whenever <paramref name="mirror"/> moves, so a bound color follows its row).</param>
+    /// <param name="mirror">The state mirror bound colors and the cycle's state row read through.</param>
     /// <param name="resolveLightAnchor">Resolves a positional light anchor to its current pose.
     /// Missing targets return null and disable the light for this frame.</param>
-    public SdfEnvironment Resolve(WorldDefinition definition, int revision, ulong tick, ulong engineTick, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
+    public SdfEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: mirror);
 
         var cycle = definition.Render.Cycle;
 
-        if (revision != m_revision) {
+        if (
+            (revision != m_revision) ||
+            (mirror.ColorRevision != m_mirrorRevision)
+        ) {
             m_revision = revision;
+            m_stateSlot = -1;
             Write(
                 carry: false,
-                definition: definition,
                 into: m_statics,
                 lighting: definition.Render.Lighting,
+                mirror: mirror,
                 sky: definition.Render.Sky
             );
             WriteEnvironment(
-                definition: definition,
                 environment: definition.Render.Environment,
                 into: m_statics,
+                mirror: mirror,
                 tonemap: definition.Render.Tonemap
             );
 
             if (cycle is { Keys.Count: >= 2 }) {
                 Rebuild(
                     cycle: cycle,
-                    definition: definition
+                    mirror: mirror
+                );
+                // The cycle's position is the row's stored truth; the slot is registered once per rebuild.
+                m_stateSlot = mirror.Register(
+                    binding: new StateBinding(
+                    Key: null,
+                    Row: m_stateRow!,
+                    Target: true
+                ),
+                    conversion: WorldStateConversion.Number
                 );
             }
+
+            m_mirrorRevision = mirror.ColorRevision;
         }
 
         var output = m_output[m_outputIndex];
@@ -476,17 +497,11 @@ public sealed class WorldRenderCycleTrack {
         }
 
         if (
-            !WorldStateReader.TryRead(
-            definition: definition,
-            key: null,
-            rawValue: out var rawValue,
-            row: out var row,
-            rowName: m_stateRow!,
-            text: out _,
-            tick: tick,
-            engineTick: engineTick
-        ) ||
-            (rawValue is not { } raw)
+            (m_stateSlot < 0) ||
+            !mirror.TryValue(
+            slot: m_stateSlot,
+            value: out var value
+        )
         ) {
             output.CopyFrom(source: m_statics);
             ApplyAnchors(
@@ -498,10 +513,6 @@ public sealed class WorldRenderCycleTrack {
             return output;
         }
 
-        var value = ((row.Kind == CellKind.Fixed)
-            ? ((double)FixedQ4816.FromRawBits(value: raw))
-            : ((double)raw)
-        );
         var fraction = ((float)(value - Math.Floor(d: value)));
         var count = m_keys.Length;
         var index = 0;

@@ -1,21 +1,20 @@
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions;
+using Puck.Assets;
 using Puck.Storage;
 
 namespace Puck.World.Server;
 
 /// <summary>Immutable identity and compatibility claims for one hosted world release.</summary>
 public sealed record WorldReleaseManifest {
-    /// <summary>Also requires closed-group rewind boundary enforcement and resumable explicit restore.</summary>
+    /// <summary>The one coordinator contract a release manifest may carry: package-qualified metadata transformation,
+    /// atomic definition and checkpoint publication, receipt-preserving exports, closed-group rewind boundary
+    /// enforcement, and resumable explicit restore.</summary>
     public const string CurrentCoordinatorContract = "puck.world.release.restore.v1";
-    /// <summary>The first release manifest schema.</summary>
+    /// <summary>The release manifest schema.</summary>
     public const string CurrentSchema = "puck.world.release.v1";
-    /// <summary>Requires package-qualified metadata transformation and atomic definition/checkpoint publication.</summary>
-    public const string MetadataCoordinatorContract = "puck.world.release.metadata.v1";
-    /// <summary>Requires receipt-preserving exports and packaged lookup/duplicate qualification as well as metadata publication.</summary>
-    public const string ReceiptCoordinatorContract = "puck.world.release.receipts.v1";
 
     /// <summary>The manifest schema.</summary>
     [JsonPropertyName("schema")] public string Schema { get; init; } = CurrentSchema;
@@ -26,10 +25,9 @@ public sealed record WorldReleaseManifest {
     /// <summary>Required release artifact pins keyed by their package-relative path.</summary>
     [JsonPropertyName("artifacts")] public IReadOnlyDictionary<string, string> Artifacts { get; init; } = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 
-    /// <summary>Required coordinator behavior. Absence preserves existing engine-only manifest identities.
-    /// Older archive readers reject a manifest carrying an unknown canonical member before resuming it.</summary>
-    [JsonPropertyName("coordinatorContract"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CoordinatorContract { get; init; }
+    /// <summary>Required coordinator behavior; <see cref="TryValidate"/> admits only
+    /// <see cref="CurrentCoordinatorContract"/> and refuses any other value by name.</summary>
+    [JsonPropertyName("coordinatorContract")] public required string CoordinatorContract { get; init; }
     /// <summary>Immutable engine image digest.</summary>
     [JsonPropertyName("engineImageDigest")] public required string EngineImageDigest { get; init; }
     /// <summary>Returns the canonical, content-addressed identity of this manifest.</summary>
@@ -62,14 +60,14 @@ public sealed record WorldReleaseManifest {
         }
         return false;
     }
-    private static bool IsFullHash(string? value) => ((value is not null) && value.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "sha256/"
-    ) && (value.Length == 71) && value[7..].All(predicate: Uri.IsHexDigit));
+    // An OCI image digest spells the same full SHA-256 as "sha256:<hex64>"; its digits parse through ContentPin.
     private static bool IsImageDigest(string? value) => ((value is not null) && value.StartsWith(
         comparisonType: StringComparison.Ordinal,
         value: "sha256:"
-    ) && (value.Length == 71) && value[7..].All(predicate: Uri.IsHexDigit));
+    ) && ContentPin.TryParseHex(
+        hex: value.AsSpan(start: "sha256:".Length),
+        pin: out _
+    ));
     private static bool ValidateFilePath(string relativeName, string expected, string kind, out string reason) {
         if (string.IsNullOrWhiteSpace(value: relativeName)) { reason = $"release {kind} path is empty"; return false; }
         try {
@@ -87,7 +85,10 @@ public sealed record WorldReleaseManifest {
             reason = $"release {kind} path '{relativeName}' is not a portable relative path";
             return false;
         }
-        if (!IsFullHash(value: expected)) {
+        if (!ContentPin.TryParse(
+            pin: out _,
+            text: expected
+        )) {
             reason = $"release {kind} '{relativeName}' does not carry a full sha256 pin";
             return false;
         }
@@ -107,9 +108,7 @@ public sealed record WorldReleaseManifest {
         if (
             !path.StartsWith(
             packageRoot,
-            (OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal)
+            PuckPaths.Comparison
         ) ||
             !File.Exists(path: path)
         ) {
@@ -123,7 +122,7 @@ public sealed record WorldReleaseManifest {
             reason = $"release {kind} '{relativeName}' uses a symlink or reparse point";
             return false;
         }
-        var actual = ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: File.ReadAllBytes(path: path))));
+        var actual = ContentPin.OfFile(path: path).ToString();
 
         if (!string.Equals(
             a: actual,
@@ -149,7 +148,7 @@ public sealed record WorldReleaseManifest {
         ArgumentNullException.ThrowIfNull(manifest);
         var bytes = Canonicalize(manifest: manifest);
 
-        return ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
+        return ContentPin.Compute(content: bytes).ToString();
     }
     /// <summary>Validates manifest metadata, inventories, portable relative paths, and full content pins.</summary>
     /// <param name="manifest">The manifest to validate.</param>
@@ -164,11 +163,12 @@ public sealed record WorldReleaseManifest {
             reason = $"unsupported release manifest schema '{manifest.Schema}'";
             return false;
         }
-        if (
-            (manifest.CoordinatorContract is not null) &&
-            (manifest.CoordinatorContract is not (MetadataCoordinatorContract or ReceiptCoordinatorContract or CurrentCoordinatorContract))
-        ) {
-            reason = $"unsupported release coordinator contract '{manifest.CoordinatorContract}'; use tooling that supports this package";
+        if (!string.Equals(
+            a: manifest.CoordinatorContract,
+            b: CurrentCoordinatorContract,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"unsupported release coordinator contract '{manifest.CoordinatorContract}'; this tooling supports only '{CurrentCoordinatorContract}'";
             return false;
         }
         if (
@@ -211,7 +211,10 @@ public sealed record WorldReleaseManifest {
         )) {
             if (
                 string.IsNullOrWhiteSpace(value: pair.Key) ||
-                !IsFullHash(value: pair.Value)
+                !ContentPin.TryParse(
+                pin: out _,
+                text: pair.Value
+            )
             ) {
                 reason = $"release definition '{pair.Key}' has an invalid stable identity or hash";
                 return false;
@@ -303,6 +306,7 @@ public sealed record WorldReleaseManifest {
                 static pair => pair.Value,
                 StringComparer.Ordinal
             ),
+                ["coordinatorContract"] = manifest.CoordinatorContract,
                 ["engineImageDigest"] = manifest.EngineImageDigest,
                 ["label"] = manifest.Label,
                 ["peerProtocolContract"] = manifest.PeerProtocolContract,
@@ -311,7 +315,6 @@ public sealed record WorldReleaseManifest {
                 ["sourceRevision"] = manifest.SourceRevision,
             };
 
-            if (manifest.CoordinatorContract is not null) { root["coordinatorContract"] = manifest.CoordinatorContract; }
             return JsonSerializer.Serialize(
                 root,
                 new JsonSerializerOptions { WriteIndented = false }
@@ -322,7 +325,7 @@ public sealed record WorldReleaseManifest {
 /// <summary>Structural compatibility checks for the first official release workflow. Passing this check is not a
 /// qualification claim: packaged cross-release exercise evidence is still required before deployment.</summary>
 public static class WorldReleaseCompatibility {
-    private static bool SameInventory(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) => ((left.Count == right.Count) && left.All(predicate: item => (right.TryGetValue(
+    internal static bool SameInventory(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right) => ((left.Count == right.Count) && left.All(predicate: item => (right.TryGetValue(
         key: item.Key,
         value: out var value
     ) && string.Equals(
@@ -383,29 +386,6 @@ public static class WorldReleaseCompatibility {
         )
         ) {
             reason = "release artifact inventory or pins differ; engine and metadata transitions cannot change packaged dependencies";
-            return false;
-        }
-        reason = string.Empty;
-        return true;
-    }
-    /// <summary>Requires at least one immutable manifest in a metadata pair to exclude older coordinators.
-    /// Both manifests are loaded before runtime effects, so this also protects rollback to a legacy manifest.</summary>
-    public static bool TryRequireMetadataCoordinator(WorldReleaseManifest source, WorldReleaseManifest target, out string reason) {
-        if (
-            !WorldReleaseManifest.TryValidate(
-            manifest: source,
-            reason: out reason
-        ) ||
-            !WorldReleaseManifest.TryValidate(
-            manifest: target,
-            reason: out reason
-        )
-        ) { return false; }
-        if (
-            (source.CoordinatorContract is not (WorldReleaseManifest.MetadataCoordinatorContract or WorldReleaseManifest.ReceiptCoordinatorContract or WorldReleaseManifest.CurrentCoordinatorContract)) &&
-            (target.CoordinatorContract is not (WorldReleaseManifest.MetadataCoordinatorContract or WorldReleaseManifest.ReceiptCoordinatorContract or WorldReleaseManifest.CurrentCoordinatorContract))
-        ) {
-            reason = "metadata transitions require a package with the metadata coordinator contract; prepare the new release with current tooling";
             return false;
         }
         reason = string.Empty;

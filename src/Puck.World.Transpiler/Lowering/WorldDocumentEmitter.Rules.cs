@@ -3,7 +3,6 @@ using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -48,9 +47,18 @@ public static partial class WorldDocumentEmitter {
             );
         }
 
-        var ruleName = (string.IsNullOrEmpty(value: scopeContext?.Prefix)
-            ? written
-            : (string.IsNullOrEmpty(value: written) ? scopeContext.Prefix : $"{scopeContext.Prefix}_{written}"));
+        RefuseReservedScopedName(
+            name: written,
+            prefix: scopeContext?.Prefix,
+            scope: scope,
+            span: rule.Span
+        );
+
+        var ruleName = PrefixedName(
+            name: written,
+            prefix: scopeContext?.Prefix,
+            scope: scope
+        );
 
         // A local is read by its bare name wherever the rule spells an expression, whichever statement declares
         // it, so the names are gathered before any of the rule's text is parsed.
@@ -61,9 +69,16 @@ public static partial class WorldDocumentEmitter {
                 _ = localNames.Add(item: inheritedName);
             }
         }
-        foreach (var statement in rule.Statements) {
+        // A compile-time `for` in the body is unrolled first, so the locals it declares are known by their resolved
+        // names before any expression that reads them is bound.
+        var body = DocumentLowering.ExpandBody(
+            scope: scope,
+            statements: rule.Statements
+        ).ToList();
+
+        foreach (var (statement, statementScope) in body) {
             if (statement is LocalStatementNode declared) {
-                _ = localNames.Add(item: declared.Name);
+                _ = localNames.Add(item: DocumentLowering.ResolveLocalName(local: declared, scope: statementScope));
             }
         }
 
@@ -77,7 +92,7 @@ public static partial class WorldDocumentEmitter {
         var effects = new JsonArray();
         JsonArray? locals = null;
         var poolBindings = GetPoolBindings(scope: scope);
-        var addedPoolBinding = ((rule.PoolBinding is { } binding) && poolBindings.Add(binding));
+        var addedPoolBinding = ((rule.PoolBinding is { } binding) && poolBindings.Add(item: binding));
         var bindingPools = GetPoolBindingPools(scope: scope);
 
         if ((rule.PoolForEach is { } pool) && (rule.PoolBinding is { } poolBinding)) {
@@ -93,13 +108,13 @@ public static partial class WorldDocumentEmitter {
             }
         }
 
-        foreach (var stmt in rule.Statements) {
+        foreach (var (stmt, stmtScope) in body) {
             switch (stmt) {
                 case WhenStatementNode when1:
                     var ruleGate = LowerPredicate(
                         node: when1.Predicate,
                         ruleObj: obj,
-                        scope: scope
+                        scope: stmtScope
                     );
 
                     scope.SourceMap?.Register(
@@ -114,7 +129,7 @@ public static partial class WorldDocumentEmitter {
                         jsonPointer: $"{rulePointer}/locals/{locals.Count}",
                         span: local.Span
                     );
-                    locals.AppendNode(item: LowerLocal(local: local, scope: scope));
+                    locals.AppendNode(item: LowerLocal(local: local, scope: stmtScope));
                     break;
                 case DecisionBlockNode decision:
                     scope.SourceMap?.Register(
@@ -123,11 +138,11 @@ public static partial class WorldDocumentEmitter {
                     );
                     obj["decision"] = LowerDecisionBlock(
                         decision: decision,
-                        scope: scope
+                        scope: stmtScope
                     );
                     break;
                 case PropertyNode prop:
-                    var loweredProp = LowerModelMember(holder: typeof(WorldRule), property: prop, scope: scope);
+                    var loweredProp = LowerModelMember(holder: typeof(WorldRule), property: prop, scope: stmtScope);
                     DocumentLowering.AssignOrExtend(
                         obj,
                         prop.Name,
@@ -135,18 +150,13 @@ public static partial class WorldDocumentEmitter {
                     );
                     break;
                 case EffectStatementNode or ExpressionStatementNode:
-                    if (LowerEffectStatement(
-                        pointer: $"{rulePointer}/effects/{effects.Count}",
+                    AppendEffect(
+                        effects: effects,
+                        pointer: $"{rulePointer}/effects",
                         ruleObj: obj,
-                        scope: scope,
-                        stmt: stmt
-                    ) is { } effect) {
-                        scope.SourceMap?.Register(
-                            jsonPointer: $"{rulePointer}/effects/{effects.Count}",
-                            span: stmt.Span
-                        );
-                        effects.AppendNode(item: effect);
-                    }
+                        scope: stmtScope,
+                        statement: stmt
+                    );
                     break;
             }
         }
@@ -211,10 +221,10 @@ public static partial class WorldDocumentEmitter {
         value: property.Value
     );
     private static JsonObject LowerLocal(LocalStatementNode local, DocumentScope scope) {
-        var text = BindOperand(local.Expression, scope);
+        var text = BindOperand(operand: local.Expression, scope: scope);
 
         return new JsonObject {
-            ["name"] = local.Name,
+            ["name"] = DocumentLowering.ResolveLocalName(local: local, scope: scope),
             ["expression"] = DocumentExpression(text: text),
         };
     }
@@ -322,27 +332,16 @@ public static partial class WorldDocumentEmitter {
                     obj["interrupt"] = LowerModelMember(holder: DecisionModel, property: p, scope: scope);
                     break;
                 case OnNoChoiceBlockNode onNoChoice: {
-                        var arr = new JsonArray();
-
                         scope.SourceMap?.Register(
                             jsonPointer: $"{decisionPointer}/onNoChoice",
                             span: onNoChoice.Span
                         );
-
-                        foreach (var effect in onNoChoice.Effects) {
-                            if (LowerEffectStatement(
-                                pointer: $"{decisionPointer}/onNoChoice/{arr.Count}",
-                                scope: scope,
-                                stmt: effect
-                            ) is { } lowered) {
-                                scope.SourceMap?.Register(
-                                    jsonPointer: $"{decisionPointer}/onNoChoice/{arr.Count}",
-                                    span: effect.Span
-                                );
-                                arr.AppendNode(item: lowered);
-                            }
-                        }
-                        obj["onNoChoice"] = arr;
+                        obj["onNoChoice"] = LowerEffectList(
+                            pointer: $"{decisionPointer}/onNoChoice",
+                            ruleObj: null,
+                            scope: scope,
+                            statements: onNoChoice.Effects
+                        );
                         break;
                     }
                 case OptionBlockNode option:
@@ -416,23 +415,19 @@ public static partial class WorldDocumentEmitter {
                     );
                     break;
                 case ScoreStatementNode score:
-                    obj["score"] = DocumentExpression(text: BindOperand(score.Expression, scope));
+                    obj["score"] = DocumentExpression(text: BindOperand(operand: score.Expression, scope: scope));
                     break;
                 case PropertyNode p:
                     obj[p.Name] = LowerModelMember(holder: OptionModel, property: p, scope: scope);
                     break;
-                case EffectStatementNode or ExpressionStatementNode:
-                    if (LowerEffectStatement(
-                        pointer: $"{pointer}/effects/{effects.Count}",
+                case EffectStatementNode or ExpressionStatementNode or ForStatementNode:
+                    AppendEffect(
+                        effects: effects,
+                        pointer: $"{pointer}/effects",
+                        ruleObj: null,
                         scope: scope,
-                        stmt: stmt
-                    ) is { } effect) {
-                        scope.SourceMap?.Register(
-                            jsonPointer: $"{pointer}/effects/{effects.Count}",
-                            span: stmt.Span
-                        );
-                        effects.AppendNode(item: effect);
-                    }
+                        statement: stmt
+                    );
                     break;
             }
         }
@@ -514,26 +509,26 @@ public static partial class WorldDocumentEmitter {
         // vocabulary's operands already use.
         var authoredLeftText = cmp.Left.Text;
         var authoredRightText = cmp.Right.Text;
-        var leftText = BindOperand(cmp.Left, scope);
-        var rightText = BindOperand(cmp.Right, scope);
-        if (!PuckDslVocabulary.TryParseComparator(
+        var leftText = BindOperand(operand: cmp.Left, scope: scope);
+        var rightText = BindOperand(operand: cmp.Right, scope: scope);
+
+        if (!ExpressionComparisons.TryParseSymbol(
             cmp.Comparator,
             out var parsedComparison
         )) {
             throw new InvalidOperationException(message: $"'{cmp.Comparator}' is not a DSL comparison operator");
         }
-        var comparison = PuckDslVocabulary.NameOf(comparison: parsedComparison);
+        var comparison = Enum.GetName(value: parsedComparison)!;
 
         if (
-            TryTypedPoolFieldKind(kind: out var bindingKind, scope: scope, text: authoredLeftText) ||
-            TryTypedPoolFieldKind(kind: out bindingKind, scope: scope, text: authoredRightText)
+            TryTypedPoolFieldKind(kind: out _, scope: scope, text: authoredLeftText) ||
+            TryTypedPoolFieldKind(kind: out _, scope: scope, text: authoredRightText)
         ) {
             return new JsonObject {
                 ["$type"] = "compareValue",
                 ["comparison"] = comparison,
-                ["kind"] = bindingKind,
-                ["left"] = DocumentPoolFieldExpression(scope: scope, text: authoredLeftText),
-                ["right"] = DocumentPoolFieldExpression(scope: scope, text: authoredRightText),
+                ["left"] = DocumentPoolFieldExpression(scope: scope, text: leftText),
+                ["right"] = DocumentPoolFieldExpression(scope: scope, text: rightText),
             };
         }
 
@@ -577,39 +572,39 @@ public static partial class WorldDocumentEmitter {
                 return NewCompareState(
                     (((InstructionPayload.State)rightToken!.Payload!)).Name.Spelling,
                     (((InstructionPayload.State)rightToken!.Payload!)).Key?.Spelling,
-                    PuckDslVocabulary.NameOf(comparison: PuckDslVocabulary.Flip(comparison: parsedComparison)),
+                    Enum.GetName(value: parsedComparison.Flip())!,
                     value: (((InstructionPayload.Constant)leftToken!.Payload!)).Value
                 );
             default:
                 return new JsonObject {
                     ["$type"] = "compareValue",
                     ["comparison"] = comparison,
-                    ["kind"] = "Fixed",
                     ["left"] = DocumentExpression(text: leftText),
                     ["right"] = DocumentExpression(text: rightText),
                 };
         }
     }
-    private static bool IsPoolBindingField(string text, DocumentScope scope) {
-        var dot = text.IndexOf(value: '.');
+    // `binding.field`: a field of a record a lexical pool binding in scope holds.
+    private static bool TryPoolBindingField(string text, DocumentScope scope, out string binding, out string field) {
+        var name = QualifiedName.Parse(text: text);
+
+        (binding, field) = (name.Head, name.Last);
 
         return (
-            (dot > 0) &&
-            (dot == text.LastIndexOf(value: '.')) &&
-            (dot < (text.Length - 1)) &&
-            GetPoolBindings(scope: scope).Contains(item: text[..dot]) &&
-            text[(dot + 1)..].All(predicate: static c => (char.IsLetterOrDigit(c: c) || (c is '_' or '$')))
+            (name.Segments.Count == 2) &&
+            name.IsWellFormed &&
+            GetPoolBindings(scope: scope).Contains(item: binding) &&
+            IdentifierSpelling.IsName(text: field)
         );
     }
     private static bool TryTypedPoolFieldKind(string text, DocumentScope scope, out string kind) {
         kind = "Fixed";
-        var dot = text.IndexOf(value: '.');
         string? pool = null;
         string? fieldName = null;
 
-        if (IsPoolBindingField(scope: scope, text: text)) {
-            _ = GetPoolBindingPools(scope: scope).TryGetValue(key: text[..dot], value: out pool);
-            fieldName = text[(dot + 1)..];
+        if (TryPoolBindingField(binding: out var binding, field: out var bound, scope: scope, text: text)) {
+            _ = GetPoolBindingPools(scope: scope).TryGetValue(key: binding, value: out pool);
+            fieldName = bound;
         } else if (TryStaticPoolField(reference: out var staticField, scope: scope, text: text)) {
             pool = staticField.PoolField!.Pool;
             fieldName = staticField.PoolField.Field;
@@ -635,10 +630,8 @@ public static partial class WorldDocumentEmitter {
     private static JsonNode DocumentPoolFieldExpression(string text, DocumentScope scope) {
         StateChannelRef? reference = null;
 
-        if (IsPoolBindingField(scope: scope, text: text)) {
-            var dot = text.IndexOf(value: '.');
-
-            reference = StateChannelRef.OfBindingField(binding: text[..dot], field: text[(dot + 1)..]);
+        if (TryPoolBindingField(binding: out var binding, field: out var field, scope: scope, text: text)) {
+            reference = StateChannelRef.OfBindingField(binding: binding, field: field);
         } else if (TryStaticPoolField(reference: out var typed, scope: scope, text: text)) {
             reference = typed;
         }
@@ -650,7 +643,7 @@ public static partial class WorldDocumentEmitter {
         var close = text.IndexOf(value: ']');
         var dot = text.IndexOf(value: '.', startIndex: Math.Max(val1: 0, val2: close));
 
-        if ((open <= 0) || (close <= open) || (dot != (close + 1)) || !int.TryParse(text[(open + 1)..close], out var slot) || !GetOrCreateRecordPools(scope: scope).ContainsKey(key: text[..open])) {
+        if ((open <= 0) || (close <= open) || (dot != (close + 1)) || !int.TryParse(provider: System.Globalization.CultureInfo.InvariantCulture, result: out var slot, s: text[(open + 1)..close], style: System.Globalization.NumberStyles.Integer) || !GetOrCreateRecordPools(scope: scope).ContainsKey(key: text[..open])) {
             return false;
         }
         reference = StateChannelRef.OfStaticPoolField(pool: text[..open], slot: slot, field: text[(dot + 1)..]);
@@ -733,6 +726,45 @@ public static partial class WorldDocumentEmitter {
 
     // Null means "refused, and the refusal is already reported": a caller drops it rather than writing a null into
     // an effects array.
+    // Lowers one statement of an effect list onto the end of `effects`, whose own pointer is `pointer`, and maps
+    // the element to its span. A compile-time `for` lands the effects it produces, each under its iteration's
+    // bindings, so the list carries the unrolled effects and never the loop.
+    private static void AppendEffect(JsonArray effects, StatementNode statement, DocumentScope scope, string pointer, JsonObject? ruleObj) {
+        foreach (var (produced, iteration) in DocumentLowering.ExpandBody(
+            scope: scope,
+            statements: [statement]
+        )) {
+            var element = $"{pointer}/{effects.Count}";
+
+            if (LowerEffectStatement(
+                pointer: element,
+                ruleObj: ruleObj,
+                scope: iteration,
+                stmt: produced
+            ) is { } lowered) {
+                scope.SourceMap?.Register(
+                    jsonPointer: element,
+                    span: produced.Span
+                );
+                effects.AppendNode(item: lowered);
+            }
+        }
+    }
+    private static JsonArray LowerEffectList(IReadOnlyList<StatementNode> statements, DocumentScope scope, string pointer, JsonObject? ruleObj) {
+        var effects = new JsonArray();
+
+        foreach (var statement in statements) {
+            AppendEffect(
+                effects: effects,
+                pointer: pointer,
+                ruleObj: ruleObj,
+                scope: scope,
+                statement: statement
+            );
+        }
+
+        return effects;
+    }
     private static JsonNode? LowerEffectStatement(StatementNode stmt, DocumentScope scope, string pointer, JsonObject? ruleObj = null) => stmt switch {
         SetCellStatementNode s => LowerCellEffect(
             discriminator: "setState",
@@ -763,8 +795,8 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "transfer",
-                ["from"] = BindRowReference(text: draw.From, scope: scope),
-                ["to"] = BindRowReference(text: draw.To, scope: scope),
+                ["from"] = BindRowReference(scope: scope, span: draw.Span, text: draw.From),
+                ["to"] = BindRowReference(scope: scope, span: draw.Span, text: draw.To),
                 ["selector"] = "First",
             },
         },
@@ -772,8 +804,8 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "transfer",
-                ["from"] = BindRowReference(text: deal.From, scope: scope),
-                ["to"] = BindRowReference(text: deal.To, scope: scope),
+                ["from"] = BindRowReference(scope: scope, span: deal.Span, text: deal.From),
+                ["to"] = BindRowReference(scope: scope, span: deal.Span, text: deal.To),
                 ["selector"] = "First",
                 ["count"] = deal.Count,
             },
@@ -782,8 +814,8 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "shuffle",
-                ["row"] = BindRowReference(text: shuffle.Row, scope: scope),
-                ["draw"] = ((shuffle.Draw is not null) ? BindRowReference(text: shuffle.Draw, scope: scope) : null),
+                ["row"] = BindRowReference(scope: scope, span: shuffle.Span, text: shuffle.Row),
+                ["draw"] = ((shuffle.Draw is not null) ? BindRowReference(scope: scope, span: shuffle.Span, text: shuffle.Draw) : null),
             },
         },
         TransactionStatementNode transaction => LowerTransaction(
@@ -825,91 +857,90 @@ public static partial class WorldDocumentEmitter {
         PoolForEachStatementNode each => LowerPoolForEach(each: each, pointer: pointer, ruleObj: ruleObj, scope: scope),
         _ => throw new InvalidOperationException(message: $"unrecognized effect statement '{stmt.GetType()}'"),
     };
-    private static JsonObject LowerPoolClaim(ClaimStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) {
+    private static JsonArray LowerPoolScope(
+        string alias,
+        IReadOnlyList<StatementNode> body,
+        string pointer,
+        string? pool,
+        JsonObject? ruleObj,
+        DocumentScope scope,
+        SourceSpan span
+    ) {
         var effects = new JsonArray();
         var bindings = GetPoolBindings(scope: scope);
 
-        RefusePoolBindingRowCollision(alias: claim.Alias, scope: scope, span: claim.Span);
-        var added = bindings.Add(item: claim.Alias);
-        var bindingPools = GetPoolBindingPools(scope: scope);
+        RefusePoolBindingRowCollision(alias: alias, scope: scope, span: span);
+        var added = bindings.Add(item: alias);
+        Dictionary<string, string>? bindingPools = null;
 
-        bindingPools[claim.Alias] = claim.Pool;
+        if (pool is not null) {
+            bindingPools = GetPoolBindingPools(scope: scope);
+            bindingPools[alias] = pool;
+        }
 
         try {
-            foreach (var nested in claim.Body) {
-                if (LowerEffectStatement(nested, scope, $"{pointer}/effects/{effects.Count}", ruleObj) is { } lowered) {
-                    effects.Add(item: lowered);
-                }
+            foreach (var nested in body) {
+                AppendEffect(
+                    effects: effects,
+                    pointer: $"{pointer}/effects",
+                    ruleObj: ruleObj,
+                    scope: scope,
+                    statement: nested
+                );
             }
         } finally {
             if (added) {
-                bindings.Remove(item: claim.Alias);
-                bindingPools.Remove(key: claim.Alias);
+                bindings.Remove(item: alias);
+                bindingPools?.Remove(key: alias);
             }
         }
-        return new JsonObject {
-            ["$type"] = "claim",
-            ["pool"] = claim.Pool,
-            ["binding"] = claim.Alias,
-            ["effects"] = effects,
-        };
+
+        return effects;
     }
-    private static JsonObject LowerPoolForEach(PoolForEachStatementNode each, DocumentScope scope, string pointer, JsonObject? ruleObj) {
-        var effects = new JsonArray();
-        var bindings = GetPoolBindings(scope: scope);
-
-        RefusePoolBindingRowCollision(alias: each.Alias, scope: scope, span: each.Span);
-        var added = bindings.Add(item: each.Alias);
-        var bindingPools = GetPoolBindingPools(scope: scope);
-
-        bindingPools[each.Alias] = each.Pool;
-
-        try {
-            foreach (var nested in each.Body) {
-                if (LowerEffectStatement(nested, scope, $"{pointer}/effects/{effects.Count}", ruleObj) is { } lowered) {
-                    effects.Add(item: lowered);
-                }
-            }
-        } finally {
-            if (added) {
-                bindings.Remove(item: each.Alias);
-                bindingPools.Remove(key: each.Alias);
-            }
-        }
-        return new JsonObject {
-            ["$type"] = "forEachPool",
-            ["pool"] = each.Pool,
-            ["binding"] = each.Alias,
-            ["effects"] = effects,
-        };
-    }
-    private static JsonObject LowerPairPoolClaim(ClaimPairStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) {
-        var effects = new JsonArray();
-        var bindings = GetPoolBindings(scope: scope);
-
-        RefusePoolBindingRowCollision(alias: claim.Alias, scope: scope, span: claim.Span);
-        var added = bindings.Add(item: claim.Alias);
-
-        try {
-            foreach (var nested in claim.Body) {
-                if (LowerEffectStatement(nested, scope, $"{pointer}/effects/{effects.Count}", ruleObj) is { } lowered) {
-                    effects.Add(item: lowered);
-                }
-            }
-        } finally {
-            if (added) {
-                bindings.Remove(item: claim.Alias);
-            }
-        }
-        return new JsonObject {
-            ["$type"] = "claimPair",
-            ["pool"] = claim.Pool,
-            ["left"] = claim.Left,
-            ["right"] = claim.Right,
-            ["binding"] = claim.Alias,
-            ["effects"] = effects,
-        };
-    }
+    private static JsonObject LowerPoolClaim(ClaimStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) => new() {
+        ["$type"] = "claim",
+        ["pool"] = claim.Pool,
+        ["binding"] = claim.Alias,
+        ["effects"] = LowerPoolScope(
+            alias: claim.Alias,
+            body: claim.Body,
+            pointer: pointer,
+            pool: claim.Pool,
+            ruleObj: ruleObj,
+            scope: scope,
+            span: claim.Span
+        ),
+    };
+    private static JsonObject LowerPoolForEach(PoolForEachStatementNode each, DocumentScope scope, string pointer, JsonObject? ruleObj) => new() {
+        ["$type"] = "forEachPool",
+        ["pool"] = each.Pool,
+        ["binding"] = each.Alias,
+        ["effects"] = LowerPoolScope(
+            alias: each.Alias,
+            body: each.Body,
+            pointer: pointer,
+            pool: each.Pool,
+            ruleObj: ruleObj,
+            scope: scope,
+            span: each.Span
+        ),
+    };
+    private static JsonObject LowerPairPoolClaim(ClaimPairStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) => new() {
+        ["$type"] = "claimPair",
+        ["pool"] = claim.Pool,
+        ["left"] = claim.Left,
+        ["right"] = claim.Right,
+        ["binding"] = claim.Alias,
+        ["effects"] = LowerPoolScope(
+            alias: claim.Alias,
+            body: claim.Body,
+            pointer: pointer,
+            pool: null,
+            ruleObj: ruleObj,
+            scope: scope,
+            span: claim.Span
+        ),
+    };
     private static HashSet<string> GetPoolBindings(DocumentScope scope) {
         if (!scope.Annotations.TryGetValue(key: "WorldPoolBindings", value: out var value) || (value is not HashSet<string> bindings)) {
             bindings = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -917,13 +948,8 @@ public static partial class WorldDocumentEmitter {
         }
         return bindings;
     }
-    private static Dictionary<string, string> GetPoolBindingPools(DocumentScope scope) {
-        if (!scope.Annotations.TryGetValue(key: "WorldPoolBindingPools", value: out var value) || (value is not Dictionary<string, string> bindings)) {
-            bindings = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-            scope.Annotations["WorldPoolBindingPools"] = bindings;
-        }
-        return bindings;
-    }
+    private static Dictionary<string, string> GetPoolBindingPools(DocumentScope scope) =>
+        GetOrCreateScopeDictionary<string>(key: "WorldPoolBindingPools", scope: scope);
     private static void RefusePoolBindingRowCollision(string alias, DocumentScope scope, SourceSpan span) {
         if (
             !scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rootNode) ||
@@ -961,23 +987,12 @@ public static partial class WorldDocumentEmitter {
     // shape), so recursing through LowerEffectStatement nests it the same way with no separate case. `repeat` and
     // `break` still have nothing to lower onto in a straight-line rule body.
     private static JsonObject LowerIf(IfStatementNode ifStmt, DocumentScope scope, string pointer, JsonObject? ruleObj = null) {
-        var thenArr = new JsonArray();
-
-        foreach (var thenStmt in ifStmt.Then) {
-            if (LowerEffectStatement(
-                pointer: $"{pointer}/then/{thenArr.Count}",
-                ruleObj: ruleObj,
-                scope: scope,
-                stmt: thenStmt
-            ) is { } lowered) {
-                scope.SourceMap?.Register(
-                    jsonPointer: $"{pointer}/then/{thenArr.Count}",
-                    span: thenStmt.Span
-                );
-                thenArr.AppendNode(item: lowered);
-            }
-        }
-
+        var thenArr = LowerEffectList(
+            pointer: $"{pointer}/then",
+            ruleObj: ruleObj,
+            scope: scope,
+            statements: ifStmt.Then
+        );
         var obj = new JsonObject {
             ["$type"] = "if",
             ["condition"] = LowerPredicate(
@@ -989,23 +1004,12 @@ public static partial class WorldDocumentEmitter {
         };
 
         if (ifStmt.Else is { } elseStatements) {
-            var elseArr = new JsonArray();
-
-            foreach (var elseStmt in elseStatements) {
-                if (LowerEffectStatement(
-                    pointer: $"{pointer}/else/{elseArr.Count}",
-                    ruleObj: ruleObj,
-                    scope: scope,
-                    stmt: elseStmt
-                ) is { } lowered) {
-                    scope.SourceMap?.Register(
-                        jsonPointer: $"{pointer}/else/{elseArr.Count}",
-                        span: elseStmt.Span
-                    );
-                    elseArr.AppendNode(item: lowered);
-                }
-            }
-            obj["else"] = elseArr;
+            obj["else"] = LowerEffectList(
+                pointer: $"{pointer}/else",
+                ruleObj: ruleObj,
+                scope: scope,
+                statements: elseStatements
+            );
         }
         return obj;
     }
@@ -1022,67 +1026,21 @@ public static partial class WorldDocumentEmitter {
         return null;
     }
     private static JsonObject LowerCellEffect(string discriminator, RowRefNode target, RhsNode rhs, bool allowText, DocumentScope scope, JsonObject? ruleObj = null) {
-        var targetName = target.Name;
-        var targetKey = target.Key;
-        StateChannelRef? typedTarget = null;
+        var resolved = ResolveEffectTarget(scope: scope, target: target);
+        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = resolved.State };
 
-        if ((targetKey is not null) && GetPoolBindings(scope: scope).Contains(item: targetName)) {
-            typedTarget = StateChannelRef.OfBindingField(binding: targetName, field: targetKey);
-            targetName = $"{targetName}.{targetKey}";
-            targetKey = null;
-        }
-
-        var fullTarget = ((targetKey is null) ? targetName : $"{targetName}[{targetKey}]");
-        var originalTarget = fullTarget;
-
-        if ((typedTarget is null) && TryStaticPoolField(reference: out var staticTarget, scope: scope, text: originalTarget)) {
-            typedTarget = staticTarget;
-            targetKey = null;
-        }
-
-        if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
-            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
-                message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
-        }
-        var resolved = BindRowReference(scope: scope, text: fullTarget);
-
-        // A live row position stays one spelling, whatever it resolved from: the rule compiler selects the row from
-        // it and the remainder, if any, is the cell key inside that row.
-        if ((typedTarget is null) && TryLiveRowHead(head: out var liveHead, key: out var liveKey, scope: scope, text: resolved)) {
-            targetName = liveHead;
-            targetKey = liveKey;
-        } else if ((typedTarget is null) && (resolved != originalTarget)) {
-            var bracketIdx = resolved.IndexOf(value: '[');
-
-            if (bracketIdx < 0) {
-                targetName = resolved;
-                targetKey = null;
-            } else {
-                targetName = resolved[..bracketIdx];
-
-                var closeIdx = resolved.LastIndexOf(value: ']');
-
-                targetKey = ((closeIdx > 0) ? resolved[(bracketIdx + 1)..closeIdx] : resolved[(bracketIdx + 1)..]);
-            }
-        }
-        if ((targetName.Length >= 2) && (targetName[0] == '`') && (targetName[^1] == '`')) {
-            targetName = targetName[1..^1];
-        }
-
-        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = ((typedTarget is null) ? targetName : StateChannelRefJsonConverter.ToNode(value: typedTarget)) };
-
-        if ((typedTarget is null) && (targetKey is not null)) {
-            obj["key"] = targetKey;
+        if (resolved.Key is not null) {
+            obj["key"] = resolved.Key;
         }
 
         var rootObj = ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rObj) && (rObj is JsonObject ro)) ? ro : null);
-        var targetRowSpace = FindRowSpace(rootObj: rootObj, rowName: targetName);
+        var targetRowSpace = FindRowSpace(rootObj: rootObj, rowName: resolved.Row);
         var isVectorRow = (targetRowSpace is not null);
 
         if (isVectorRow && (discriminator != "setState")) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
-                message: $"Vector row '{targetName}' admits only assignment ('=' / setState), not '{discriminator}'.",
+                message: $"Vector row '{resolved.Row}' admits only assignment ('=' / setState), not '{discriminator}'.",
                 span: target.Span
             );
         }
@@ -1097,6 +1055,31 @@ public static partial class WorldDocumentEmitter {
             targetRowSpace: targetRowSpace
         );
         return obj;
+    }
+    // An assignment target's key is a key like any read's: a bare word is that key, and anything else is an
+    // expression whose compile-time bindings bind here, exactly as they do in a read of the same cell.
+    private static string BindTargetKey(string key, DocumentScope scope) {
+        // A key never holds a dot, so a dotted key over a pool binding is the field it reads, as it is in a read.
+        if ((QualifiedName.Parse(text: key) is { IsQualified: true, Head.Length: > 0 } dotted) && GetPoolBindings(scope: scope).Contains(item: dotted.Head)) {
+            key = (RuleFacts.ExpressionKeyPrefix + key);
+        }
+        if (!key.StartsWith(comparisonType: StringComparison.Ordinal, value: RuleFacts.ExpressionKeyPrefix)) {
+            return key;
+        }
+
+        var bound = BindOperand(
+            operand: Puck.Transpiler.Parsing.PuckParser.CreateOperand(
+                form: DocumentValueForm.Expression,
+                text: key[RuleFacts.ExpressionKeyPrefix.Length..]
+            ),
+            scope: scope
+        );
+
+        // The key is read again after the rule's locals leave scope, so a local keeps its explicit spelling here
+        // rather than the bare name the source dialect gives it.
+        return (RuleFacts.ExpressionKeyPrefix + ((ExpressionSpelling.TryParse(error: out _, program: out var program, text: bound) && ExpressionSpelling.TryPrint(program: program, text: out var printed))
+            ? printed
+            : bound));
     }
     // `allowText` gates whether an RhsTextNode's Text lands on the object — AddState carries no Text field at all;
     // a string RHS reaching it is already PUCK009 from the parser, and best-effort lowering here emits nothing for
@@ -1131,7 +1114,7 @@ public static partial class WorldDocumentEmitter {
                     scope: scope,
                     span: operand.Span,
                     targetRowSpace: targetRowSpace,
-                    text: BindOperand(operand.Expression, scope)
+                    text: BindOperand(operand: operand.Expression, scope: scope)
                 );
                 break;
         }
@@ -1165,27 +1148,9 @@ public static partial class WorldDocumentEmitter {
                     return;
                 }
                 if (vecOp is VectorOperand.Literal lit) {
-                    var rootObj = ((scope.Annotations.TryGetValue(key: "WorldDocumentRoot", value: out var rObj) && (rObj is JsonObject ro)) ? ro : null);
-                    var spaceInfo = FindSpaceInfo(parent: rootObj, spaceName: targetRowSpace);
-
-                    if (spaceInfo is not null) {
-                        if (!StateVector.TryParseBase64Url(lit.Value, spaceInfo.Value.Dimensions, out _, out var vErr)) {
-                            scope.Diagnostics.ReportError(
-                                code: PuckDiagnosticCodes.VectorLiteralInvalid,
-                                message: $"vector(...) literal is invalid: {vErr}",
-                                span: span
-                            );
-                            return;
-                        }
-                    } else if (!StateVector.TryParseBase64Url(lit.Value, out _, out var vErr)) {
-                        scope.Diagnostics.ReportError(
-                            code: PuckDiagnosticCodes.VectorLiteralInvalid,
-                            message: $"vector(...) literal is invalid: {vErr}",
-                            span: span
-                        );
-                        return;
+                    if (TryAdmitVectorLiteral(scope: scope, space: targetRowSpace, span: span, text: lit.Value)) {
+                        obj["vector"] = lit.Value;
                     }
-                    obj["vector"] = lit.Value;
                     return;
                 }
             } else if (text.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "vector(") || text.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "embed(")) {
@@ -1244,6 +1209,7 @@ public static partial class WorldDocumentEmitter {
             return names.DeepClone();
         }
         var text = BindOperand(operand: operand, scope: scope);
+
         switch (operand.Form) {
             case DocumentValueForm.Key:
                 if (ExpressionSpelling.TryParseKey(error: out var keyError, key: out var key, text: text)) {
@@ -1259,10 +1225,8 @@ public static partial class WorldDocumentEmitter {
                 return JsonValue.Create(value: text);
 
             case DocumentValueForm.Name:
-                if (IsPoolBindingField(scope: scope, text: text)) {
-                    var dot = text.IndexOf(value: '.');
-
-                    return StateChannelRefJsonConverter.ToNode(value: StateChannelRef.OfBindingField(binding: text[..dot], field: text[(dot + 1)..]));
+                if (TryPoolBindingField(binding: out var binding, field: out var bindingField, scope: scope, text: text)) {
+                    return StateChannelRefJsonConverter.ToNode(value: StateChannelRef.OfBindingField(binding: binding, field: bindingField));
                 }
                 if (TryStaticPoolField(reference: out var field, scope: scope, text: text)) {
                     return StateChannelRefJsonConverter.ToNode(value: field);
@@ -1277,8 +1241,6 @@ public static partial class WorldDocumentEmitter {
                 return JsonValue.Create(value: operand.Text);
         }
     }
-
-
     // A StateChannelRef member has one structural representation even when a binding or interpolation computed
     // its spelling. Dots in a name position denote pool fields, never ordinary row names. Keys and expressions
     // retain their separate grammars; their dotted reads need not mean a pool field.
@@ -1333,7 +1295,7 @@ public static partial class WorldDocumentEmitter {
         _ => text,
     };
     private static JsonObject LowerPush(PushStatementNode push, DocumentScope scope, JsonObject? ruleObj = null) {
-        var resolvedName = BindRowReference(text: push.RowName, scope: scope);
+        var resolvedName = BindRowReference(scope: scope, span: push.Span, text: push.RowName);
         var obj = new JsonObject { ["$type"] = "pushState", ["state"] = resolvedName };
         // PushState carries no Text/Key/ValueSeconds field; ApplyRhs's text/seconds arms would shape JSON it
         // cannot carry, so only the classified-operand arm applies here (the parser already refuses the others).
@@ -1342,121 +1304,137 @@ public static partial class WorldDocumentEmitter {
                 obj: obj,
                 ruleObj: ruleObj,
                 scope: scope,
-                text: BindOperand(operand.Expression, scope)
+                text: BindOperand(operand: operand.Expression, scope: scope)
             );
         }
         return obj;
     }
     private static JsonObject LowerRowOnlyEffect(string discriminator, RowRefNode target, DocumentScope scope, JsonObject? ruleObj = null) {
-        var fullTarget = ((target.Key is null) ? target.Name : $"{target.Name}[{target.Key}]");
-        StateChannelRef? typedTarget = null;
+        var resolved = ResolveEffectTarget(scope: scope, target: target);
+        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = resolved.State };
 
-        if ((target.Key is not null) && GetPoolBindings(scope: scope).Contains(item: target.Name)) {
-            typedTarget = StateChannelRef.OfBindingField(binding: target.Name, field: target.Key);
-        } else if (TryStaticPoolField(reference: out var staticTarget, scope: scope, text: fullTarget)) {
-            typedTarget = staticTarget;
-        }
-        var resolved = BindRowReference(scope: scope, text: fullTarget);
-        var targetName = resolved;
-        string? targetKey = null;
-
-        if (TryLiveRowHead(head: out var liveHead, key: out var liveKey, scope: scope, text: resolved)) {
-            targetName = liveHead;
-            targetKey = liveKey;
-        } else if (resolved.IndexOf(value: '[') is var bracketIdx and >= 0) {
-            targetName = resolved[..bracketIdx];
-
-            var closeIdx = resolved.IndexOf(startIndex: (bracketIdx + 1), value: ']');
-
-            targetKey = ((closeIdx > 0) ? resolved[(bracketIdx + 1)..closeIdx] : resolved[(bracketIdx + 1)..]);
-        }
-
-        var obj = new JsonObject { ["$type"] = discriminator, ["state"] = ((typedTarget is null) ? targetName : StateChannelRefJsonConverter.ToNode(value: typedTarget)) };
-
-        if ((typedTarget is null) && (targetKey is not null)) {
-            obj["key"] = targetKey;
+        if (resolved.Key is not null) {
+            obj["key"] = resolved.Key;
         }
         return obj;
     }
     private static JsonObject LowerSchedule(ScheduleStatementNode schedule, DocumentScope scope, JsonObject? ruleObj = null) {
-        var fullTarget = ((schedule.Target.Key is null) ? schedule.Target.Name : $"{schedule.Target.Name}[{schedule.Target.Key}]");
-        StateChannelRef? typedTarget = null;
-
-        if ((schedule.Target.Key is not null) && GetPoolBindings(scope: scope).Contains(item: schedule.Target.Name)) {
-            typedTarget = StateChannelRef.OfBindingField(binding: schedule.Target.Name, field: schedule.Target.Key);
-        } else if (TryStaticPoolField(reference: out var staticTarget, scope: scope, text: fullTarget)) {
-            typedTarget = staticTarget;
-        }
-        var resolved = BindRowReference(scope: scope, text: fullTarget);
-        var targetName = resolved;
-        string? targetKey = null;
-
-        if (TryLiveRowHead(head: out var liveHead, key: out var liveKey, scope: scope, text: resolved)) {
-            targetName = liveHead;
-            targetKey = liveKey;
-        } else if (resolved.IndexOf(value: '[') is var bracketIdx and >= 0) {
-            targetName = resolved[..bracketIdx];
-
-            var closeIdx = resolved.IndexOf(startIndex: (bracketIdx + 1), value: ']');
-
-            targetKey = ((closeIdx > 0) ? resolved[(bracketIdx + 1)..closeIdx] : resolved[(bracketIdx + 1)..]);
-        }
-
+        var resolved = ResolveEffectTarget(scope: scope, target: schedule.Target);
         var obj = new JsonObject {
             ["$type"] = "scheduleState",
-            ["state"] = ((typedTarget is null) ? targetName : StateChannelRefJsonConverter.ToNode(value: typedTarget)),
+            ["state"] = resolved.State,
             ["delaySeconds"] = schedule.DelaySeconds,
         };
 
-        if ((typedTarget is null) && (targetKey is not null)) {
-            obj["key"] = targetKey;
+        if (resolved.Key is not null) {
+            obj["key"] = resolved.Key;
         }
         return obj;
     }
-    private static JsonObject LowerTransaction(TransactionStatementNode transaction, DocumentScope scope, string pointer, JsonObject? ruleObj = null) {
-        var mainEffects = new JsonArray();
 
-        foreach (var stmt in transaction.MainEffects) {
-            if (LowerEffectStatement(
-                pointer: $"{pointer}/effects/{mainEffects.Count}",
-                ruleObj: ruleObj,
-                scope: scope,
-                stmt: stmt
-            ) is { } lowered) {
-                scope.SourceMap?.Register(
-                    jsonPointer: $"{pointer}/effects/{mainEffects.Count}",
-                    span: stmt.Span
-                );
-                mainEffects.AppendNode(item: lowered);
-            }
+    // The cell an effect writes. State is the document's spelling of the row: a pool field's structural reference,
+    // or the name a declared family's member or a live row position resolves to. Row is that row as a name, for
+    // reading what the document declares about it; Key is the bound cell key, when the target has one.
+    private readonly record struct EffectTarget(JsonNode State, string Row, string? Key);
+
+    // Every effect that addresses one cell resolves its target here, so an assignment, a removal and a schedule
+    // agree on what a target spelling means and refuse the same targets.
+    private static EffectTarget ResolveEffectTarget(RowRefNode target, DocumentScope scope) {
+        // A computed key is spelled first, exactly as the same atom in a read is, and the target is that key: a name
+        // the bare form cannot carry comes back backquoted, and the key is the name inside the quotes.
+        if (target.KeyAtom is { } atom) {
+            var spelled = Puck.Transpiler.Lowering.DocumentLowering.SpliceAtoms(
+                operand: Puck.Transpiler.Parsing.PuckParser.CreateOperand(
+                    expression: atom,
+                    form: DocumentValueForm.Expression
+                ),
+                scope: scope
+            );
+
+            target = (target with {
+                Key = (((spelled.Length >= 2) && (spelled[0] == '`') && (spelled[^1] == '`'))
+                    ? spelled[1..^1]
+                    : spelled
+                ),
+                KeyAtom = null,
+            });
         }
 
-        var obj = new JsonObject { ["$type"] = "transaction", ["effects"] = mainEffects };
+        var written = ((target.Key is null) ? target.Name : $"{target.Name}[{target.Key}]");
+
+        if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
+                message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
+        }
+        if ((target.Key is not null) && GetPoolBindings(scope: scope).Contains(item: target.Name)) {
+            return new EffectTarget(
+                Key: null,
+                Row: QualifiedName.Parse(text: target.Name).Append(member: target.Key).ToString(),
+                State: StateChannelRefJsonConverter.ToNode(value: StateChannelRef.OfBindingField(binding: target.Name, field: target.Key))
+            );
+        }
+        // A row a module instance of this scope declares, written `alias.name`.
+        if (target.FieldAccess && (target.Key is { } member) && scope.TryQualify(qualified: out var instanceRow, reference: QualifiedName.Parse(text: target.Name).Append(member: member).ToString())) {
+            return new EffectTarget(Key: null, Row: instanceRow, State: JsonValue.Create(value: instanceRow));
+        }
+        if (target.FieldAccess && (target.Key?.Contains(value: '.') == true)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
+                message: $"'{target.Name}.{target.Key}' names no module instance's row, and a typed lexical pool-field read admits exactly one dot", span: target.Span);
+            return new EffectTarget(Key: null, Row: target.Name, State: JsonValue.Create(value: target.Name));
+        }
+        if (TryStaticPoolField(reference: out var staticField, scope: scope, text: written)) {
+            return new EffectTarget(Key: null, Row: written, State: StateChannelRefJsonConverter.ToNode(value: staticField));
+        }
+
+        var resolved = BindRowReference(scope: scope, span: target.Span, text: written);
+        var row = target.Name;
+        var key = target.Key;
+
+        // A live row position stays one spelling, whatever it resolved from: the rule compiler selects the row from
+        // it and the remainder, if any, is the cell key inside that row.
+        if (TryLiveRowHead(head: out var liveHead, key: out var liveKey, scope: scope, text: resolved)) {
+            row = liveHead;
+            key = liveKey;
+        } else if (resolved != written) {
+            var open = resolved.IndexOf(value: '[');
+            var close = resolved.LastIndexOf(value: ']');
+
+            row = ((open < 0) ? resolved : resolved[..open]);
+            key = ((open < 0) ? null : ((close > open) ? resolved[(open + 1)..close] : resolved[(open + 1)..]));
+        }
+        if ((row.Length >= 2) && (row[0] == '`') && (row[^1] == '`')) {
+            row = row[1..^1];
+        }
+
+        return new EffectTarget(
+            Key: ((key is null) ? null : BindTargetKey(key: key, scope: scope)),
+            Row: row,
+            State: JsonValue.Create(value: row)
+        );
+    }
+    private static JsonObject LowerTransaction(TransactionStatementNode transaction, DocumentScope scope, string pointer, JsonObject? ruleObj = null) {
+        var obj = new JsonObject {
+            ["$type"] = "transaction",
+            ["effects"] = LowerEffectList(
+                pointer: $"{pointer}/effects",
+                ruleObj: ruleObj,
+                scope: scope,
+                statements: transaction.MainEffects
+            ),
+        };
 
         if (transaction.OnFailureEffects is { } onFailure) {
-            var onFailureArr = new JsonArray();
-
             // The `onFailure` block's own node is the array: its refusals name the array, never one element.
             scope.SourceMap?.Register(
                 jsonPointer: $"{pointer}/onFailure",
                 span: (transaction.OnFailureSpan ?? transaction.Span)
             );
-
-            foreach (var stmt in onFailure) {
-                if (LowerEffectStatement(
-                    pointer: $"{pointer}/onFailure/{onFailureArr.Count}",
-                    ruleObj: ruleObj,
-                    scope: scope,
-                    stmt: stmt
-                ) is { } lowered) {
-                    scope.SourceMap?.Register(
-                        jsonPointer: $"{pointer}/onFailure/{onFailureArr.Count}",
-                        span: stmt.Span
-                    );
-                    onFailureArr.AppendNode(item: lowered);
-                }
-            }
-            obj["onFailure"] = onFailureArr;
+            obj["onFailure"] = LowerEffectList(
+                pointer: $"{pointer}/onFailure",
+                ruleObj: ruleObj,
+                scope: scope,
+                statements: onFailure
+            );
         }
         return obj;
     }

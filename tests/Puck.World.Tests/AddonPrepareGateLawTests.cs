@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -43,7 +44,7 @@ public sealed class AddonPrepareGateLawTests {
                 Kind: WorldRebuildKind.Load,
                 PathHint: "addon-no-host-rebuild-probe.world.json"
             ),
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 
@@ -76,7 +77,7 @@ public sealed class AddonPrepareGateLawTests {
                 Fuel: 1000UL,
                 Enabled: true
             ),
-            Principal: WorldPrincipal.Console
+            Principal: Principal.Console
         ));
         fixture.Step();
     }
@@ -130,7 +131,7 @@ public sealed class AddonPrepareGateLawTests {
 
         fixture.Server.EnqueueMutation(
             mutation: new WorldMutation.UpsertStateRow(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: new WorldStateRow(
                     Name: CellName.Parse(candidate: "completion-token-probe-a"),
                     Kind: CellKind.Int
@@ -147,11 +148,11 @@ public sealed class AddonPrepareGateLawTests {
                 Fuel: 1000UL,
                 Enabled: true
             ),
-            Principal: WorldPrincipal.Console
+            Principal: Principal.Console
         ));
         fixture.Server.EnqueueMutation(
             mutation: new WorldMutation.UpsertStateRow(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: new WorldStateRow(
                     Name: CellName.Parse(candidate: "completion-token-probe-b"),
                     Kind: CellKind.Int
@@ -217,7 +218,7 @@ public sealed class AddonPrepareGateLawTests {
                         Fuel: 1000UL,
                         Enabled: true
                     ),
-                    Principal: WorldPrincipal.Console
+                    Principal: Principal.Console
                 ));
                 fixture.Step();
 
@@ -231,7 +232,7 @@ public sealed class AddonPrepareGateLawTests {
                 var before = fixture.DefinitionBytes();
 
                 fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: new WorldStateRow(
                         Name: CellName.Parse(candidate: "no-host-control-probe"),
                         Kind: CellKind.Int
@@ -311,7 +312,7 @@ public sealed class AddonPrepareGateLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 
@@ -385,7 +386,7 @@ public sealed class AddonPrepareGateLawTests {
         var before = fixture.DefinitionBytes();
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name: CellName.Parse(candidate: "addon-gate-probe"),
                 Kind: CellKind.Int
@@ -451,7 +452,7 @@ internal sealed class RecordingAddonHost : IWorldAddonHost {
     public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) =>
         CompletedMutations.Add(item: (addonInstanceId, actOrdinal, applied));
     /// <inheritdoc/>
-    public string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
+    public string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
     /// <inheritdoc/>
     public void Dispose() { }
     /// <inheritdoc/>

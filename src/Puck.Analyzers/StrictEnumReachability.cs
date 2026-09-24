@@ -239,7 +239,7 @@ internal sealed class StrictEnumReachability {
         if (IsExplicitlyConverted(type: type)) {
             // The whole value rides a converter that never touches System.Text.Json's own property serialization,
             // so nothing under this type is reachable through property serialization at all — this is what excuses
-            // GrantSubjectKind/PrincipalKind (nested inside GrantSubject/WorldPrincipal) and the Puck.World.Authoring
+            // GrantSubjectKind/PrincipalKind (nested inside GrantSubject/Principal) and the Puck.World.Authoring
             // document family (bridged through CreationDocumentJsonConverter and its siblings) with no allowlist.
             return;
         }
@@ -400,7 +400,7 @@ internal sealed class StrictEnumReachability {
     /// <c>StrictEnumConverter&lt;TEnum&gt;</c> registered on a context (rather than at the enum's own declaration,
     /// which is where every enum that CAN name the converter carries it) and the bespoke
     /// <c>WorldBackendPreferenceJsonConverter</c>/<c>SurfaceFormatJsonConverter</c>/<c>GrantSubjectJsonConverter</c>/
-    /// <c>WorldPrincipalJsonConverter</c>/<c>Vector3JsonConverter</c>/document-bridge converters all count as
+    /// <c>PrincipalJsonConverter</c>/<c>Vector3JsonConverter</c>/document-bridge converters all count as
     /// "explicitly converted" without this analyzer special-casing any of their names.
     /// </summary>
     public static HashSet<ITypeSymbol> CollectRegisteredConverters(INamedTypeSymbol context, StrictEnumKnownTypes knownTypes) {

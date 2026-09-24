@@ -72,71 +72,6 @@ public static partial class BrowserExports {
         value: BrowserParser.Canonicalize(utf8Json: Utf8(text: json)),
         info: BrowserExportsJsonContext.Default.BrowserParseResult
     );
-    /// <summary>Composes a whole basis-and-imports graph from an in-memory map of worlds-relative document names to
-    /// their JSON text, then parses and validates the result.</summary>
-    /// <param name="rootName">The root document's own worlds-relative name (a key of <paramref name="documentsJson"/>,
-    /// unless it is itself <paramref name="editedName"/>).</param>
-    /// <param name="documentsJson">Every document of the import tree as a JSON object mapping its worlds-relative
-    /// name to its JSON text.</param>
-    /// <param name="editedName">The document whose text <paramref name="editedJson"/> replaces during this
-    /// composition, or an empty string to compose <paramref name="documentsJson"/> unmodified.</param>
-    /// <param name="editedJson">The edited document's candidate JSON text; ignored when <paramref name="editedName"/>
-    /// is empty.</param>
-    /// <returns><c>{ok, composed, document, deferred[]}</c> on success, or <c>{ok:false, errors:[{path,message}], deferred[]}</c>.</returns>
-    [JSExport]
-    public static string ComposeTree(string rootName, string documentsJson, string editedName, string editedJson) {
-        Dictionary<string, string>? texts;
-
-        try {
-            texts = JsonSerializer.Deserialize(
-                json: documentsJson,
-                jsonTypeInfo: BrowserExportsJsonContext.Default.DictionaryStringString
-            );
-        } catch (JsonException exception) {
-            return Write(
-                value: new BrowserComposeExportResult(
-                    Ok: false,
-                    Composed: null,
-                    Document: null,
-                    Errors: [new BrowserErrorPath(
-                            Path: null,
-                            Message: $"documents is not valid JSON: {exception.Message}"
-                        )],
-                    Deferred: null
-                ),
-                info: BrowserExportsJsonContext.Default.BrowserComposeExportResult
-            );
-        }
-
-        var documents = (texts ?? []).ToDictionary(
-            keySelector: static entry => entry.Key,
-            elementSelector: static entry => Utf8(text: entry.Value),
-            comparer: StringComparer.Ordinal
-        );
-        var editedNameOrNull = (string.IsNullOrEmpty(value: editedName)
-            ? null
-            : editedName
-        );
-        var result = BrowserComposer.ComposeTree(
-            rootName: rootName,
-            documents: documents,
-            editedName: editedNameOrNull,
-            editedUtf8: ((editedNameOrNull is null)
-            ? null
-            : Utf8(text: editedJson))
-        );
-
-        return Write(
-            value: new BrowserComposeExportResult(
-                Ok: result.Ok,
-                Composed: result.Composed,
-                Document: result.Document,
-                Errors: result.Errors,
-                Deferred: result.Deferred
-            ),
-            info: BrowserExportsJsonContext.Default.BrowserComposeExportResult
-        );
-    }
     /// <summary>Parses, validates, and compiles a standalone document, installing it behind a fresh handle.</summary>
     /// <param name="json">The candidate document's UTF-8 JSON text.</param>
     /// <returns><c>{ok, handle}</c> on success, or <c>{ok:false, errors[]}</c>.</returns>
@@ -525,6 +460,93 @@ public static partial class BrowserExports {
             info: BrowserExportsJsonContext.Default.BrowserCellsResult
         );
     }
+    /// <summary>Replaces the whole mounted workspace under <see cref="BrowserWorkspace.MountRoot"/>: every file not
+    /// listed is removed.</summary>
+    /// <param name="filesJson">A JSON object mapping each file's workspace-relative path to its UTF-8 text.</param>
+    /// <returns><c>{ok, error?}</c>; a refused mount changes nothing.</returns>
+    [JSExport]
+    public static string MountSources(string filesJson) {
+        Dictionary<string, string>? files;
+
+        try {
+            files = JsonSerializer.Deserialize(
+                json: filesJson,
+                jsonTypeInfo: BrowserExportsJsonContext.Default.DictionaryStringString
+            );
+        } catch (JsonException exception) {
+            return Write(
+                value: new BrowserOutcome(
+                    Error: $"files is not valid JSON: {exception.Message}",
+                    Ok: false
+                ),
+                info: BrowserExportsJsonContext.Default.BrowserOutcome
+            );
+        }
+
+        var error = Workspace.Mount(files: (files ?? []));
+
+        return Write(
+            value: new BrowserOutcome(
+                Error: error,
+                Ok: (error is null)
+            ),
+            info: BrowserExportsJsonContext.Default.BrowserOutcome
+        );
+    }
+    /// <summary>Writes one file of the mounted workspace.</summary>
+    /// <param name="path">The file's workspace-relative path.</param>
+    /// <param name="text">The file's UTF-8 text.</param>
+    /// <returns><c>{ok, error?}</c>.</returns>
+    [JSExport]
+    public static string WriteSource(string path, string text) {
+        var error = Workspace.Write(
+            path: path,
+            text: text
+        );
+
+        return Write(
+            value: new BrowserOutcome(
+                Error: error,
+                Ok: (error is null)
+            ),
+            info: BrowserExportsJsonContext.Default.BrowserOutcome
+        );
+    }
+    /// <summary>Compiles one mounted source once and diagnoses it through both tiers, exactly as the language server does
+    /// at full depth; a <c>.world.json</c> document comes back as the canonical JSON it is.</summary>
+    /// <param name="path">The source's workspace-relative path.</param>
+    /// <returns><c>{ok, document, worlds:[{name, document, entry, sourceMap}], diagnostics:[{code, severity, message,
+    /// path, line, column, length}], sourceMap:{pointer: {path, line, column, length, module}}}</c>.</returns>
+    [JSExport]
+    public static string CompileSource(string path) => Write(
+        value: Workspace.Compile(path: path),
+        info: BrowserExportsJsonContext.Default.BrowserSourceCompileResult
+    );
+    /// <summary>Composes one mounted file's whole basis-and-imports graph — a <c>.puck</c> source compiled first, a
+    /// <c>.world.json</c> document as the JSON it is — and validates the composed world through the same semantic tier
+    /// the language server runs: the document a preview hands to <see cref="Compile"/>.</summary>
+    /// <param name="path">The file's workspace-relative path.</param>
+    /// <returns><c>{ok, composed, diagnostics:[{code, severity, message, path, line, column, length}]}</c>;
+    /// <c>composed</c> is present whenever composition succeeded, and <c>ok</c> means it also validated.</returns>
+    [JSExport]
+    public static string ComposeSource(string path) => Write(
+        value: Workspace.Compose(path: path),
+        info: BrowserExportsJsonContext.Default.BrowserSourceComposeResult
+    );
+    /// <summary>Hands one JSON-RPC message to the language server. Documents are addressed
+    /// <c>file:///worlds/&lt;path&gt;</c>; opening or changing one writes it into the mounted workspace. An edit never
+    /// diagnoses here: call <see cref="LspIdle"/> while the inbox is empty.</summary>
+    /// <param name="message">The message, as text.</param>
+    /// <returns>A JSON array of every message the server wrote in reply, in order.</returns>
+    [JSExport]
+    public static string Lsp(string message) => LanguageServer.Exchange(message: message);
+    /// <summary>Runs one unit of pending diagnostic work — the most recently edited document, at its latest text.</summary>
+    /// <returns><c>{ran, pending, messages}</c>; call again, yielding between calls, while <c>pending</c>.</returns>
+    [JSExport]
+    public static string LspIdle() => LanguageServer.Idle();
+
+    private static BrowserWorkspace Workspace { get; } = new(root: BrowserWorkspace.MountRoot);
+    private static BrowserLanguageServer LanguageServer { get; } = new(workspace: Workspace);
 
     private static byte[] Utf8(string text) => Encoding.UTF8.GetBytes(s: text);
     private static string Write<T>(T value, JsonTypeInfo<T> info) => JsonSerializer.Serialize(

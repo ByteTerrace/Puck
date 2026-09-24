@@ -4,11 +4,15 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using Puck.Storage;
+using Puck.World;
+using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
-    private static async Task TestWorldReleaseAsync(string? group, string? image, string? scaleSet) {
+    private static async Task TestWorldReleaseAsync(string? group, string? image, string? scaleSet, TimeProvider clock) {
         var outputs = (((group is not null) && (scaleSet is not null))
             ? null
             : Outputs()
@@ -30,10 +34,19 @@ internal static partial class AzureCommand {
 
         if (workers.Length != 1) { throw new InvalidOperationException(message: "This release requires exactly one authoritative world worker."); }
         if (outputs is not null) {
-            var expected = Value(
+            var compute = Value(
                 key: "worldSiloConfiguration",
                 outputs: outputs
-            )["compute"]!["imageReference"]!;
+            )["compute"]!;
+            var priority = WorldPriority(compute: compute);
+
+            if (!priority.Equals(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: (((string?)workers[0]!["priority"]) ?? "Regular")
+            )) {
+                throw new InvalidDataException(message: $"World worker priority differs from the declared {priority} release. Redeploy the world to recreate its scale set.");
+            }
+            var expected = compute["imageReference"]!;
             var actual = workers[0]!["storageProfile"]!["imageReference"]!;
 
             foreach (var field in new[] { "publisher", "offer", "sku", "version" }) {
@@ -98,12 +111,16 @@ internal static partial class AzureCommand {
                 }
             },
             attempts: 12,
+            clock: clock,
             seconds: 5
         );
         if (outputs?["worldMcpConfiguration"]?["value"]?["options"] is { } mcp) {
             await RetryAsync(
                 action: async () => {
-                    using var deadline = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 30));
+                    using var deadline = new CancellationTokenSource(
+                        delay: TimeSpan.FromSeconds(seconds: 30),
+                        timeProvider: clock
+                    );
                     using var response = await Http.GetAsync(
                         cancellationToken: deadline.Token,
                         requestUri: new Uri(
@@ -115,6 +132,7 @@ internal static partial class AzureCommand {
                     response.EnsureSuccessStatusCode();
                 },
                 attempts: 6,
+                clock: clock,
                 seconds: 5
             );
         }
@@ -280,7 +298,7 @@ internal static partial class AzureCommand {
             );
         }
     }
-    private static async Task TestProductionAsync(bool beforeStaticPublication, string commit) {
+    private static async Task TestProductionAsync(bool beforeStaticPublication, string commit, TimeProvider clock) {
         var outputs = Outputs();
         var configuration = Value(
             key: "worldSiloConfiguration",
@@ -315,6 +333,7 @@ internal static partial class AzureCommand {
                 ) { throw new InvalidOperationException(message: "Actors has not made the release revision ready."); }
                 if (Text(value: properties["template"]!["containers"]![0]!["image"]) != File.ReadAllText(path: "artifacts/web-actors.digest").Trim()) { throw new InvalidDataException(message: "Actors image digest differs from the release."); }
                 await TestWorldReleaseAsync(
+                    clock: clock,
                     group: null,
                     image: null,
                     scaleSet: null
@@ -410,6 +429,7 @@ internal static partial class AzureCommand {
                 }
             },
             attempts: 30,
+            clock: clock,
             seconds: 10
         );
         Console.WriteLine(value: $"PASS: production readiness for {commit}.");
@@ -441,7 +461,7 @@ internal static partial class AzureCommand {
             throw new InvalidDataException(message: $"Unexpected representation at {uri}: {response.Content.Headers.ContentType} with Cache-Control {response.Headers.CacheControl} and X-Cache {edge}.");
         }
     }
-    private static async Task TestWorldContainerAsync(string image) {
+    private static async Task TestWorldContainerAsync(string image, TimeProvider clock) {
         await DockerAsync(
             "run",
             "--rm",
@@ -504,25 +524,37 @@ internal static partial class AzureCommand {
                 "silo-source"
             );
         }
-        foreach (var source in Directory.EnumerateFiles(path: Path.Combine(
-            path1: fixture,
-            path2: "worlds"
-        ))) {
-            var name = Path.GetFileName(path: source).Replace(
-                comparisonType: StringComparison.Ordinal,
-                newValue: "",
-                oldValue: ".world.json"
-            );
-            var world = CliFiles.ReadJson(path: source);
+        var services = new ServiceCollection();
 
-            if (name == "puck") { world["host"]!["authority"] = $"localhost:{Port}"; world["host"]!["listen"] = $"0.0.0.0:{Port}"; }
-            CliFiles.WriteJson(
-                path: Path.Combine(
+        Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
+        using (var provider = services.BuildServiceProvider()) {
+            var authority = new WorldAuthorityBlobStore(
+                store: provider.GetRequiredService<IObjectBlobStore>(),
+                target: new DirectoryObjectStorageTarget(Path.Combine(
                     path1: fixture,
-                    path2: $"store/{Owner}/private/puck/hosted/{name}/definition.json"
-                ),
-                value: world
+                    path2: "store"
+                ))
             );
+
+            foreach (var source in Directory.EnumerateFiles(path: Path.Combine(
+                path1: fixture,
+                path2: "worlds"
+            ))) {
+                var name = WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: source));
+                var world = CliFiles.ReadJson(path: source);
+
+                if (name == "puck") { world["host"]!["authority"] = $"localhost:{Port}"; world["host"]!["listen"] = $"0.0.0.0:{Port}"; }
+                var published = await authority.PublishDefinitionBytesAsync(
+                    cancellationToken: CancellationToken.None,
+                    definition: Encoding.UTF8.GetBytes(s: world.ToJsonString()),
+                    identity: new(
+                        Owner: Guid.Parse(input: Owner),
+                        World: SafeName.Parse(candidate: name)
+                    )
+                );
+
+                if (!published.Ok) { throw new IOException(message: $"silo smoke-test definition '{name}' could not be published: {published.Detail}"); }
+            }
         }
         var silo = SiloDocument(
             keyFile: "/fixture/federation.pk8",
@@ -561,7 +593,7 @@ internal static partial class AzureCommand {
             "1654:1654",
             "/fixture"
         );
-        var pointer = $"/fixture/store/{Owner}/puck/hosted/puck/checkpoints/latest";
+        var root = $"/fixture/store/{Owner}/{WorldOwnedWorldSync.HostedPrivateNamespace}/puck/authority/root";
         var previous = "";
 
         for (var boot = 1; (boot <= 2); boot++) {
@@ -614,9 +646,9 @@ internal static partial class AzureCommand {
                         "silo-smoke",
                         "sh",
                         "-c",
-                        "if [ -f \"$1\" ]; then sha256sum \"$1\"; fi",
+                        "if [ -f \"$1\" ]; then grep -o '\"checkpointOrdinal\":[0-9][0-9]*' \"$1\" || true; fi",
                         "probe",
-                        pointer
+                        root
                     );
                     if (
                         (checkpoint.Length != 0) &&
@@ -630,7 +662,10 @@ internal static partial class AzureCommand {
                             if (health.IsSuccessStatusCode) { ready = true; break; }
                         } catch (HttpRequestException error) { healthReason = error.Message; }
                     }
-                    await Task.Delay(delay: TimeSpan.FromSeconds(seconds: 2));
+                    await Task.Delay(
+                        delay: TimeSpan.FromSeconds(seconds: 2),
+                        timeProvider: clock
+                    );
                 }
                 if (
                     (checkpoint.Length == 0) ||

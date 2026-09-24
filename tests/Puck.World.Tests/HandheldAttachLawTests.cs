@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.Maths;
@@ -21,7 +22,7 @@ namespace Puck.World.Tests;
 /// finding recorded in <c>modules/README.md</c>'s handheld section).
 ///
 /// Proven here against an isolated document first, then shipped for real in <c>modules/arcade.world.json</c>
-/// (<c>arcade_handheld-pickup</c>/<c>arcade_handheld-release</c> once composed under the island's <c>arcade</c>
+/// (<c>arcade$handheld-pickup</c>/<c>arcade$handheld-release</c> once composed under the island's <c>arcade</c>
 /// alias) — <see cref="RealArcadeModuleLawTests"/> below proves the shipped pair against the actual island document.
 /// An attach-only placement's <c>upsertPlacement</c> costs <see cref="Puck.World.WorldPlacementEffectCost.DocumentCost"/>
 /// (<see cref="Puck.World.WorldPlacementEffectCost.Of"/> derives from what the row's own facets would rebuild, never
@@ -154,17 +155,17 @@ public sealed class HandheldAttachLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         new ActionPredicate.CompareState(
                         State: HandheldRow,
-                        Comparison: ActionStateComparison.Equal,
+                        Comparison: ExpressionOp.Equal,
                         Value: 0m
                     ),
                         new ActionPredicate.CompareState(
                         State: $"{WorldRuleFacts.RegionPrefix}{StandRegion}",
-                        Comparison: ActionStateComparison.GreaterOrEqual,
+                        Comparison: ExpressionOp.GreaterOrEqual,
                         Value: 1m
                     ),
                         new ActionPredicate.CompareState(
                         State: $"{WorldRuleFacts.ChannelPrefix}1:{JumpChannel}",
-                        Comparison: ActionStateComparison.GreaterOrEqual,
+                        Comparison: ExpressionOp.GreaterOrEqual,
                         Value: 1m
                     ),
                     ]),
@@ -182,12 +183,12 @@ public sealed class HandheldAttachLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                         new ActionPredicate.CompareState(
                         State: HandheldRow,
-                        Comparison: ActionStateComparison.Equal,
+                        Comparison: ExpressionOp.Equal,
                         Value: 1m
                     ),
                         new ActionPredicate.CompareState(
                         State: $"{WorldRuleFacts.RegionPrefix}{StandRegion}",
-                        Comparison: ActionStateComparison.Less,
+                        Comparison: ExpressionOp.Less,
                         Value: 1m
                     ),
                     ]),
@@ -205,9 +206,8 @@ public sealed class HandheldAttachLawTests {
     }
     private static WorldPlacement Handheld(WorldFixture fixture) =>
         fixture.Server.Definition.Placements.Single(predicate: static placement => (placement.Id == "handheld"));
-    private static long HandheldHeldCell(WorldFixture fixture) =>
-        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == HandheldRow)).Cells!.Single().Value.Raw;
-    private static void SubmitChannel(WorldFixture fixture, WorldPrincipal actor, int ordinal, FixedQ4816 value) => fixture.Server.ApplyIntentSubmission(
+    private static long HandheldHeldCell(WorldFixture fixture) => fixture.Row(name: HandheldRow).Cells!.Single().Value.Raw;
+    private static void SubmitChannel(WorldFixture fixture, Principal actor, int ordinal, FixedQ4816 value) => fixture.Server.ApplyIntentSubmission(
         body: fixture.Server.Body(index: actor.Index)!,
         submission: new IntentSubmission(
             Tick: 0UL,
@@ -223,7 +223,7 @@ public sealed class HandheldAttachLawTests {
     [Fact]
     public void APressedChannelInsideTheStandsRegionAttachesTheHandheldToTheBody_WalkingOutReturnsItToTheStand() {
         using var fixture = Fixtures.FreshServer(definition: Document(includeRules: true));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -321,7 +321,7 @@ public sealed class HandheldAttachLawTests {
     [Fact]
     public void WithNoRulesDeclaredTheChannelAndRegionNeverMoveTheHandheld_TheDiscriminatingControl() {
         using var fixture = Fixtures.FreshServer(definition: Document(includeRules: false));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -355,11 +355,11 @@ public sealed class RealArcadeModuleLawTests {
 
         var pickup = Assert.Single(
             collection: definition.Rules!,
-            predicate: rule => (rule.Name.ToString() == "arcade_handheld-pickup")
+            predicate: rule => (rule.Name.ToString() == "arcade$handheld-pickup")
         );
         var release = Assert.Single(
             collection: definition.Rules!,
-            predicate: rule => (rule.Name.ToString() == "arcade_handheld-release")
+            predicate: rule => (rule.Name.ToString() == "arcade$handheld-release")
         );
 
         Assert.Contains(
@@ -373,7 +373,7 @@ public sealed class RealArcadeModuleLawTests {
 
         var stand = Assert.Single(
             collection: definition.Placements,
-            predicate: row => (row.Id == "handheldStand")
+            predicate: row => (row.Id == "arcade$handheldStand")
         );
 
         Assert.NotNull(@object: stand.Region);

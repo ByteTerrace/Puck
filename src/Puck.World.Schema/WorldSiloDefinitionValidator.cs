@@ -6,7 +6,8 @@ namespace Puck.World;
 
 /// <summary>The startup gate for a <see cref="WorldSiloDefinition"/> document, read once when a silo boots.</summary>
 /// <remarks>This validator proves everything a silo document alone can prove: key files parse and exist, no two
-/// rows share one, no two rows name the same world, and the declared door budget is not exceeded. It cannot prove a
+/// rows share one, no two rows share an extensions file, no two rows name the same world, and the declared door budget
+/// is not exceeded. It cannot prove a
 /// row's loaded world definition carries <c>host.authority</c> — that fact depends on the referenced document, not
 /// this one, and is refused by name at activation instead. Extension settings are opaque here; the selected installed provider validates them before startup.</remarks>
 public static class WorldSiloDefinitionValidator {
@@ -145,6 +146,7 @@ public static class WorldSiloDefinitionValidator {
         }
         var worldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
         var keyFiles = new Dictionary<string, SafeName>(comparer: StringComparer.OrdinalIgnoreCase);
+        var extensionFiles = new Dictionary<string, SafeName>(comparer: StringComparer.OrdinalIgnoreCase);
         var pinnedCount = 0;
 
         foreach (var world in definition.Worlds) {
@@ -187,6 +189,25 @@ public static class WorldSiloDefinitionValidator {
             }
 
             keyFiles[keyFileFull] = world.World;
+
+            if (world.Extensions is { } extensions) {
+                if (string.IsNullOrWhiteSpace(value: extensions)) {
+                    reason = $"world '{world.World}' names a blank extensions path";
+
+                    return false;
+                }
+                var extensionsFull = Path.GetFullPath(path: extensions);
+
+                if (extensionFiles.TryGetValue(
+                    key: extensionsFull,
+                    value: out var extensionsSharedWith
+                )) {
+                    reason = $"worlds '{extensionsSharedWith}' and '{world.World}' share the extensions file '{extensions}' — every row's configuration names its own world and lineage";
+
+                    return false;
+                }
+                extensionFiles[extensionsFull] = world.World;
+            }
 
             if (world.Pinned) {
                 pinnedCount++;

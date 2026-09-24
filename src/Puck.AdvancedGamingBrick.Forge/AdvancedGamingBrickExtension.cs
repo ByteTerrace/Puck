@@ -9,15 +9,15 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// <summary>
 /// Publishes the Advanced Gaming Brick engine and authored-content provider.
 /// </summary>
-public sealed class AdvancedGamingBrickExtension : IMachineExtension {
+public sealed class AdvancedGamingBrickExtension : IPuckExtension {
     /// <inheritdoc/>
-    public string Name => "AdvancedGamingBrick";
+    public string Name => "Puck.AdvancedGamingBrick.Forge";
 
     /// <inheritdoc/>
-    public void Initialize(IMachineExtensionRegistry registry) {
+    public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.RegisterEngine(
+        registry.AddMachineEngine(
             engine: new AdvancedGamingBrickEngine(),
             contentProvider: new AgbCartridgeCompiler()
         );

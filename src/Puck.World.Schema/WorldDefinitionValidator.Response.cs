@@ -38,6 +38,13 @@ public static partial class WorldDefinitionValidator {
             prototypeIds: prototypeIds
         );
 
+        if (
+            (placement.Holding < 0) ||
+            (placement.Holding >= (1 << Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)))
+        ) {
+            errors.Add(item: $"{placementPath}.holding {placement.Holding} marks an entry past the {responses.Count} response entries — bit i marks entry i.");
+        }
+
         for (var index = 0; (index < responses.Count); index++) {
             var response = responses[index];
             var entryPath = $"{path}[{index}]";
@@ -100,7 +107,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{entryPath}.when.field names field '{condition.Field}', which fields.fields does not declare.");
         }
 
-        if (!Enum.IsDefined(value: condition.Comparison)) {
+        if (!condition.Comparison.IsComparison()) {
             errors.Add(item: $"{entryPath}.when.comparison '{condition.Comparison}' is unknown.");
         }
 
@@ -166,7 +173,7 @@ public static partial class WorldDefinitionValidator {
         return declared.Kind;
     }
     private static void ValidateStateCondition(WorldPlacementResponseCondition.StateCondition condition, WorldDefinition definition, string entryPath, List<string> errors) {
-        if (!Enum.IsDefined(value: condition.Comparison)) {
+        if (!condition.Comparison.IsComparison()) {
             errors.Add(item: $"{entryPath}.when.comparison '{condition.Comparison}' is unknown.");
         }
 
@@ -219,7 +226,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{entryPath}.when '{condition.State}' is kind={primaryKind} but comparand '{condition.ComparandState}' is kind={otherKind} — mixed-kind comparisons are refused; author both sides the same kind.");
         }
     }
-    // A prototype a response facet could show at runtime (the row's own base id, or a response entry's target) must
+    // A prototype a response facet could show at runtime (the row's authored id, or a response entry's target) must
     // resolve to a declared creation carrying no timeline frames or drivers — a response only ever swaps between STATIC
     // creations, never animates a row that validated as a static stamp.
     private static void RequireStaticCreation(string prototypeId, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {

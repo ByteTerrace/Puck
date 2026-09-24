@@ -1,7 +1,7 @@
 import {
-  AuthenticationResult,
+  type AuthenticationResult,
   BrowserCacheLocation,
-  EventMessage,
+  type EventMessage,
   EventType,
   LogLevel,
   PublicClientApplication,
@@ -9,11 +9,15 @@ import {
 import { MsalProvider } from "@azure/msal-react";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { HostServiceProviders } from "../../shared/interfaces";
+import { createActor } from "xstate";
+import type { HostServiceProviders } from "../../shared/interfaces";
+import { onboardingMachine, selfOnboardRequest } from "../../shared/onboarding";
 import App from "./App";
+import "./host.css";
 import HostProvider from "./HostProvider";
-import { initializeModuleFederation, RemoteConfig } from "./remote";
+import { loadPortal, registerPortal } from "./remote";
 import { DefaultServiceProvider } from "./serviceProvider";
+import { PublicClientApplicationTokenCredential } from "./tokenCredential";
 
 // A share link carries a recipient-bound SAS in the fragment (never sent to
 // any server). Stash it before MSAL's redirect handling can clobber the hash,
@@ -104,29 +108,20 @@ const publicClientApplication = new PublicClientApplication({
   telemetry: {
     application: {
       appName: "Puck Dashboard",
-      appVersion: "0.0.1",
+      appVersion: __PUCK_DASHBOARD_VERSION__,
     },
   },
 });
-const remotes: RemoteConfig[] = [
-  {
-    baseUrl:
-      urlSearchParams.get("portalBaseUrl") ??
-      (import.meta.env.DEV
-        ? "http://localhost:61101"
-        : `${location.origin}/portal`),
-    name: "portal",
-    requestId: undefined,
-  },
-];
+// In production the portal is served beneath the host; in development it runs on its own dev server.
+const portalBaseUrl =
+  urlSearchParams.get("portalBaseUrl") ??
+  (import.meta.env.DEV ? "http://localhost:61101" : `${location.origin}/portal`);
 const serviceProvider = new DefaultServiceProvider<HostServiceProviders>();
-
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker
-    .register("/sw.js")
-    .then((registration) => registration.update())
-    .catch((error) => console.error("Failed to register service worker:", error));
-}
+const tokenCredential = new PublicClientApplicationTokenCredential(publicClientApplication);
+// Account setup lives as long as the page; the host starts it at sign-in and the portal shows (and retries) it.
+const onboarding = createActor(onboardingMachine, {
+  input: { request: selfOnboardRequest(tokenCredential, msalConfiguration.signInScopes) },
+}).start();
 
 publicClientApplication.addEventCallback((event: EventMessage) => {
   if (EventType.LOGIN_SUCCESS === event.eventType && event.payload) {
@@ -136,11 +131,22 @@ publicClientApplication.addEventCallback((event: EventMessage) => {
   }
 });
 
+// Start the portal download now, so it overlaps MSAL's start-up rather than following it.
+let initialPortalLoad: ReturnType<typeof loadPortal>;
+
+try {
+  registerPortal(portalBaseUrl);
+  initialPortalLoad = loadPortal();
+} catch (error) {
+  initialPortalLoad = Promise.reject(error);
+}
+
+// React attaches to this promise only once it renders; until then a failure is expected, not unhandled.
+initialPortalLoad.catch(() => undefined);
+
 // MSAL requires initialize() before any other API (getAllAccounts included).
-Promise.all([
-  initializeModuleFederation(remotes),
-  publicClientApplication.initialize(),
-])
+publicClientApplication
+  .initialize()
   .then(() => {
     const accounts = publicClientApplication.getAllAccounts();
 
@@ -151,21 +157,24 @@ Promise.all([
       <React.StrictMode>
         <MsalProvider instance={publicClientApplication}>
           <HostProvider
+            onboarding={onboarding}
             serviceProvider={serviceProvider}
             signInScopes={msalConfiguration.signInScopes}
+            tokenCredential={tokenCredential}
           >
-            <App />
+            <App initialLoad={initialPortalLoad} />
           </HostProvider>
         </MsalProvider>
       </React.StrictMode>,
     );
   })
   .catch((error) => {
-    console.error("Failed to initialize federation:", error);
+    console.error("Sign-in failed to initialize:", error);
     document.getElementById("root")!.innerHTML = `
-      <div style="padding: 2rem; color: red;">
-        <h1>Application Load Failed</h1>
-        <p>Could not initialize Module Federation. Please check the console for details.</p>
+      <div class="host-screen" role="alert">
+        <img alt="" height="48" src="/puck-dark-64.png" width="48" />
+        <h1>Puck could not start</h1>
+        <p>Sign-in could not start. Reload the page to try again; the browser console has the details.</p>
       </div>
     `;
   });

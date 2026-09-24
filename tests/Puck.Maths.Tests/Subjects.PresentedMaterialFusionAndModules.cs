@@ -937,7 +937,8 @@ internal static partial class Subjects {
             children: [left, right],
             symbol: Term.Product
         );
-    private static Generator[] SingleColourBasis(int count) {
+
+    internal static Generator[] SingleColourBasis(int count) {
         var generators = new Generator[count];
 
         for (var symbol = 0; (symbol < count); ++symbol) {
@@ -951,6 +952,7 @@ internal static partial class Subjects {
 
         return generators;
     }
+
     private static PresentedAlgebra<TValue, TOps>.Element PresentedBasis<TValue, TOps>(PresentedAlgebra<TValue, TOps> algebra, long key)
         where TOps : struct, IMaterialOps<TValue, TOps> =>
         algebra.FromSupport(
@@ -1533,16 +1535,6 @@ internal static partial class Subjects {
             symbol: Term.Product
         );
     }
-    private static void WriteOctonion(LeafOctonion value, Span<long> lanes) {
-        lanes[0] = value.Left.Left.Left.Value.Value;
-        lanes[1] = value.Left.Left.Right.Value.Value;
-        lanes[2] = value.Left.Right.Left.Value.Value;
-        lanes[3] = value.Left.Right.Right.Value.Value;
-        lanes[4] = value.Right.Left.Left.Value.Value;
-        lanes[5] = value.Right.Left.Right.Value.Value;
-        lanes[6] = value.Right.Right.Left.Value.Value;
-        lanes[7] = value.Right.Right.Right.Value.Value;
-    }
     // ---- the doubling tower as a witness, at every floor it ships ----
     //
     // The charge one ordered pair of unit basis elements carries, reached by MULTIPLYING both units out through the
@@ -1550,66 +1542,18 @@ internal static partial class Subjects {
     // presented product runs, and transcribes nothing: it is the second implementation, which is what a transcribed
     // charge oracle needs standing beside it. The tower ships four floors, and so does this.
 
-    private static FixedScalarRing UnitScalarAt(int index, int offset) =>
-        new(Value: ((offset == index)
-            ? FixedQ4816.One
-            : FixedQ4816.Zero));
-    private static LeafComplex UnitComplexAt(int index, int offset) =>
-        new(
-            Left: UnitScalarAt(
-                index: index,
-                offset: offset
-            ),
-            Right: UnitScalarAt(
-                index: index,
-                offset: (offset + 1)
-            )
-        );
-    private static LeafQuaternion UnitQuaternionAt(int index, int offset) =>
-        new(
-            Left: UnitComplexAt(
-                index: index,
-                offset: offset
-            ),
-            Right: UnitComplexAt(
-                index: index,
-                offset: (offset + 2)
-            )
-        );
-    private static LeafOctonion UnitOctonionAt(int index, int offset) =>
-        new(
-            Left: UnitQuaternionAt(
-                index: index,
-                offset: offset
-            ),
-            Right: UnitQuaternionAt(
-                index: index,
-                offset: (offset + 4)
-            )
-        );
-    private static LeafSedenion UnitSedenionAt(int index, int offset) =>
-        new(
-            Left: UnitOctonionAt(
-                index: index,
-                offset: offset
-            ),
-            Right: UnitOctonionAt(
-                index: index,
-                offset: (offset + 8)
-            )
-        );
     private static int DoublingTowerUnitCharge(int left, int right, int floors) {
         var lanes = new long[(1 << floors)];
 
         switch (floors) {
             case 1:
-                WriteComplexLanes(
+                DoublingTower.WriteComplexLanes(
                     value: LeafComplex.Multiply(
-                        left: UnitComplexAt(
+                        left: DoublingTower.UnitComplexAt(
                             index: left,
                             offset: 0
                         ),
-                        right: UnitComplexAt(
+                        right: DoublingTower.UnitComplexAt(
                             index: right,
                             offset: 0
                         )
@@ -1620,13 +1564,13 @@ internal static partial class Subjects {
 
                 break;
             case 2:
-                WriteQuaternionLanes(
+                DoublingTower.WriteQuaternionLanes(
                     value: LeafQuaternion.Multiply(
-                        left: UnitQuaternionAt(
+                        left: DoublingTower.UnitQuaternionAt(
                             index: left,
                             offset: 0
                         ),
-                        right: UnitQuaternionAt(
+                        right: DoublingTower.UnitQuaternionAt(
                             index: right,
                             offset: 0
                         )
@@ -1637,13 +1581,13 @@ internal static partial class Subjects {
 
                 break;
             case 3:
-                WriteOctonion(
+                DoublingTower.WriteOctonionLanes(
                     value: LeafOctonion.Multiply(
-                        left: UnitOctonionAt(
+                        left: DoublingTower.UnitOctonionAt(
                             index: left,
                             offset: 0
                         ),
-                        right: UnitOctonionAt(
+                        right: DoublingTower.UnitOctonionAt(
                             index: right,
                             offset: 0
                         )
@@ -1654,22 +1598,22 @@ internal static partial class Subjects {
                 break;
             default:
                 var sedenion = LeafSedenion.Multiply(
-                    left: UnitSedenionAt(
+                    left: DoublingTower.UnitSedenionAt(
                         index: left,
                         offset: 0
                     ),
-                    right: UnitSedenionAt(
+                    right: DoublingTower.UnitSedenionAt(
                         index: right,
                         offset: 0
                     )
                 );
 
-                WriteOctonionAt(
+                DoublingTower.WriteOctonionLanes(
                     value: sedenion.Left,
                     lanes: lanes,
                     offset: 0
                 );
-                WriteOctonionAt(
+                DoublingTower.WriteOctonionLanes(
                     value: sedenion.Right,
                     lanes: lanes,
                     offset: 8
@@ -1679,34 +1623,6 @@ internal static partial class Subjects {
         }
 
         return Math.Sign(value: lanes[left ^ right]);
-    }
-    private static void WriteComplexLanes(LeafComplex value, Span<long> lanes, int offset) {
-        lanes[offset] = value.Left.Value.Value;
-        lanes[(offset + 1)] = value.Right.Value.Value;
-    }
-    private static void WriteQuaternionLanes(LeafQuaternion value, Span<long> lanes, int offset) {
-        WriteComplexLanes(
-            value: value.Left,
-            lanes: lanes,
-            offset: offset
-        );
-        WriteComplexLanes(
-            value: value.Right,
-            lanes: lanes,
-            offset: (offset + 2)
-        );
-    }
-    private static void WriteOctonionAt(LeafOctonion value, Span<long> lanes, int offset) {
-        WriteQuaternionLanes(
-            value: value.Left,
-            lanes: lanes,
-            offset: offset
-        );
-        WriteQuaternionLanes(
-            value: value.Right,
-            lanes: lanes,
-            offset: (offset + 4)
-        );
     }
 
     // ---- phase 2: modules by presentation morphism ----

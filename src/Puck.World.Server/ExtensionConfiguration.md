@@ -5,10 +5,13 @@ with different identities, bind their operations, and connect them to game state
 without writing C#. Deterministic WASM modules remain selected by the world's
 existing `addons` rows. Both can participate in the same authored game.
 
-The shipped executable includes the `azure.resource` provider type. Run
-`world.extensions.catalog` to ask the running build which types it contains.
-Installing another service implementation means adding an approved adapter to
-the host distribution; configuration never loads DLLs or executes paths.
+Provider types come from the host's installed [extensions](../../docs/reference/extensions.md):
+`Puck.World.Azure` contributes `azure.resource`, and `Puck.World.Embeddings`
+contributes `embedding.fixture` and `embedding.azure-openai`. Participant types
+come the same way: `Puck.World.AgentHarness` contributes `agent.harness`. Run
+`world.extensions.catalog` to ask the running host which types it composed.
+Installing another service implementation means installing its extension beside
+the host; configuration never loads DLLs or executes paths.
 
 ## Select a deployment
 
@@ -26,6 +29,14 @@ The configuration's `world` must match that document's `documentId`. It applies
 to the boot authority; separately started world instances do not inherit its
 service access. A remote-client boot cannot enable it. Without the option,
 external services are disabled.
+
+A [silo](../Puck.World.Silo/README.md) reads the same document per row: a
+`worlds[]` row's `extensions` member names its file, and the row's world must
+match its `world`. The silo reads the file when the row activates and refuses the
+activation by name if the file or anything it selects is wrong. Both hosts attach
+the configuration through `WorldConfiguredExtensions.Attach`, so the same file
+selects the same providers and participants in either one. Give every row its own
+file and lineage; two rows naming one file are refused when the silo starts.
 
 The file is host approval, so keep it outside imported worlds and writable addon
 storage. Puck reads the explicitly selected file with the
@@ -196,6 +207,45 @@ mutation batches protected by `ExpectedCells` text guards: if request text chang
 in flight, the stale vector is safely discarded. During replay, recorded gameplay mutations reproduce all
 vectors deterministically without contacting any embedding provider.
 
+## Run an agent participant
+
+A `participants` entry runs an autonomous participant in the world. It names an
+installed participant type, the principal it acts as, the 0-based body it
+controls, and the type's own settings:
+
+```json
+"participants": [
+  {
+    "name": "guide",
+    "type": "agent.harness",
+    "principal": "addon:guide",
+    "body": 5,
+    "settings": {
+      "objective": "Help visitors reach the observatory without blocking the path.",
+      "provider": "azure.openai",
+      "providerSettings": {
+        "endpoint": "https://<resource>.openai.azure.com/",
+        "deployment": "<chat-deployment>"
+      },
+      "approval": "refuse",
+      "turnSeconds": 10
+    }
+  }
+]
+```
+
+The participant acts only through the world's grants. Its principal must be a
+seat, an addon, or a peer, never the console, and the world must grant it
+whatever it should observe and drive. The configuration grants nothing.
+
+The [agent harness](../Puck.World.AgentHarness/README.md) owns the
+`agent.harness` settings, and each model provider owns its own `providerSettings`;
+[Puck.World.AgentHarness.Azure](../Puck.World.AgentHarness.Azure/README.md)
+provides `azure.openai`. A participant starts with the host and stops when the
+host stops or the silo row retires. At most 16 participants may be configured.
+An unknown participant type, provider, or setting refuses the whole
+configuration by name before any work starts.
+
 ## Recovery, limits, and read-back
 
 `recovery: "checkpoint"` captures a settled authority checkpoint. Worlds that
@@ -205,8 +255,9 @@ pinned module assets. Stopping that recording prevents admission of new requests
 requiring a prefix. Recording and journal byte ceilings still apply; a growing
 recovery image can exhaust the configured journal budget.
 
-The journal lives under the host state root's `extensions` directory, isolated by
-lineage UUID, outside rewindable world saves. Live replay revokes existing
+A local World keeps the journal under the host state root's `extensions`
+directory; a silo row keeps it in the silo's configured store. Either way it is
+isolated by lineage UUID, outside rewindable world saves. Live replay revokes existing
 clients. Reopening service access requires explicit host recovery and fresh
 composition, never automatic reconnection to the original resources.
 
@@ -218,8 +269,9 @@ operation to enter durable history.
 
 `world.extensions` reports the host console's operation names, connection wiring,
 each observation's provider-declared kind, item counts, freshness ticks, read-back
-`applied` flags, submissions, failures, and the field name a value last refused to
-parse under; other callers see only their granted operations. Status tables reflect ordinary
+`applied` flags, submissions, failures, the field name a value last refused to
+parse under, and each participant's status line; other callers see only their
+granted operations. In a silo it reads the row the Console addresses. Status tables reflect ordinary
 authority admission: an external success can coexist with a refused gameplay
 write. The connection checks read-back and retries an unapplied projection while
 its request remains present. The ordinary mutation outcome stream explains

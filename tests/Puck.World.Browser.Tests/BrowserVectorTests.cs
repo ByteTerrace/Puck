@@ -13,10 +13,10 @@ public sealed class BrowserVectorTests {
     }
     private static StateSpace SampleSpace(string name = "lore", int dimensions = 32) =>
         new(
-            Dimensions: dimensions,
-            Model: "text-embedding-3-small",
-            Name: CellName.Parse(candidate: name),
-            Revision: "1"
+            dimensions: dimensions,
+            model: "text-embedding-3-small",
+            name: CellName.Parse(candidate: name),
+            revision: "1"
         );
     private static WorldDefinition BuildDefinition(
         WorldStateRow[] rows,
@@ -65,8 +65,8 @@ public sealed class BrowserVectorTests {
         var hash2 = session2.StateHash();
         var hash3 = session3.StateHash();
 
-        Assert.NotEqual(hash1, hash2);
-        Assert.Equal(hash1, hash3);
+        Assert.NotEqual(actual: hash2, expected: hash1);
+        Assert.Equal(actual: hash3, expected: hash1);
     }
     [Fact]
     public void Nearest_RanksIntoItsDestination() {
@@ -105,7 +105,7 @@ public sealed class BrowserVectorTests {
 
         var result = session.Judge(tick: 1UL);
 
-        Assert.Empty(result.Refusals);
+        Assert.Empty(collection: result.Refusals);
         Assert.Contains(
             collection: result.Writes,
             filter: write => string.Equals(
@@ -156,7 +156,7 @@ public sealed class BrowserVectorTests {
             row: "mem"
         );
 
-        Assert.Empty(result.Refusals);
+        Assert.Empty(collection: result.Refusals);
         Assert.True(condition: read.Found);
         Assert.Equal(
             expected: nameof(CellKind.Vector),

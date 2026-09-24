@@ -30,7 +30,7 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
     [Fact]
     public async Task StageAsync_NeverRefetches_AnAlreadyCachedFile() {
         var content = "shared bytes"u8.ToArray();
-        var hash = $"sha256/{ContentAddressedStore.ComputeHash(content: content)}";
+        var hash = ContentPin.Compute(content: content).ToString();
         var source = new RecordingReleaseSource(files: new Dictionary<string, byte[]> { [hash] = content });
         var cache = new ContentAddressedStore(root: Path.Combine(
             path1: m_root.RootPath,
@@ -143,11 +143,11 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
     private sealed class RecordingReleaseSource(IReadOnlyDictionary<string, byte[]> files) : IReleaseSource {
         public readonly List<string> Requested = [];
 
-        public Task<bool> TryGetFileAsync(string hash, Stream destination, CancellationToken cancellationToken) {
-            Requested.Add(item: hash);
+        public Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, CancellationToken cancellationToken) {
+            Requested.Add(item: pin.ToString());
 
             if (!files.TryGetValue(
-                key: hash,
+                key: pin.ToString(),
                 value: out var bytes
             )) {
                 return Task.FromResult(result: false);

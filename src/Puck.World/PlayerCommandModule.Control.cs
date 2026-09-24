@@ -187,7 +187,7 @@ internal sealed partial class PlayerCommandModule {
             }
 
             m_link.SubmitCommand(command: new WorldCommand.SetControl(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 EntityIndex: index,
                 Source: source
             ));
@@ -233,14 +233,14 @@ internal sealed partial class PlayerCommandModule {
             slot: context.Slot,
             value: value,
             behavior: behavior,
-            actingPrincipal: context.ActingPrincipal()
+            actingPrincipal: context.Principal
         );
 
         return CommandResult.None;
     }
-    // One of exactly two quantization doors (see CommandValueQuantization.QuantizeAxis's own remarks) — the router
-    // seam where a physical stick float first becomes command state. Everything below this call is fixed point;
-    // nothing downstream re-derives a conversion.
+    // The quantization door (see CommandValueQuantization's own remarks) — the router seam where a physical stick
+    // float first becomes command state. Everything below this call is fixed point; nothing downstream re-derives
+    // a conversion.
     private CommandResult MoveRouter(CommandContext context, WireArgs args, SeatMoveBehavior behavior, string verb) {
         if (!TryStickValue(
             args: in args,
@@ -255,7 +255,7 @@ internal sealed partial class PlayerCommandModule {
             slot: context.Slot,
             value: value,
             behavior: behavior,
-            actingPrincipal: context.ActingPrincipal()
+            actingPrincipal: context.Principal
         );
 
         return CommandResult.None;
@@ -405,7 +405,7 @@ internal sealed partial class PlayerCommandModule {
 
         if (routedLocation is { } route) {
             route.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.PressChannel(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 EntityIndex: route.EntityIndex,
                 ChannelOrdinal: ordinal,
                 Value: value,
@@ -431,7 +431,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         m_link.SubmitCommand(command: new WorldCommand.PressChannel(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: index,
             ChannelOrdinal: ordinal,
             Value: value,

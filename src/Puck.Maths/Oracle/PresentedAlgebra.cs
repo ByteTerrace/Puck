@@ -505,15 +505,14 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         return true;
     }
     /// <summary>Computes law certificates by bounded checks of the compiled product over its finite basis.</summary>
-    /// <param name="overlapLimit">The maximum number of basis tuples to examine across the certificate passes;
-    /// verification stops there and reports <see cref="ClosureOutcome.SearchLimitReached"/>. The parameter retains its
-    /// historical name for source compatibility; it does not count or enumerate overlaps between rewrite rules.</param>
+    /// <param name="tupleLimit">The maximum number of basis tuples to examine across the certificate passes;
+    /// verification stops there and reports <see cref="ClosureOutcome.SearchLimitReached"/>.</param>
     /// <returns>The certificate.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="overlapLimit"/> is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="tupleLimit"/> is negative.</exception>
     /// <remarks>A presentation with no finite basis reports <see cref="ClosureOutcome.SearchLimitReached"/> and no
     /// flags, because none of them has been proved.</remarks>
-    public PresentationCertificate<TValue> Certify(long overlapLimit) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: overlapLimit);
+    public PresentationCertificate<TValue> Certify(long tupleLimit) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: tupleLimit);
 
         if (!m_isDense) {
             return new(
@@ -539,7 +538,7 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         var basis = new Element[m_keyCount];
         var braidingCharge = new TValue[(m_keyCount * m_keyCount)];
         var braidings = new List<BraidingWitness<TValue>>();
-        var budget = overlapLimit;
+        var budget = tupleLimit;
         var comparer = EqualityComparer<TValue>.Default;
         var divisors = new List<ZeroDivisorWitness>();
         var field = (m_material as IFieldMaterial<TValue, TOps>);
@@ -927,9 +926,9 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         // regime is the one-key degenerate case of exactly this loop: where every derived charge is the material's one
         // both identities read one equals one times one at every triple, so no witness can exist and the span collapses
         // to a single budget unit. That collapse is proved by the charges the walk above measured, never assumed from
-        // the presentation's shape. Where it does NOT collapse the pass is keys-cubed and spends the same overlapLimit
-        // the passes above it spend, so it can truncate a call that a pre-braiding budget sized comfortably — a
-        // budget in that range returns a different, still-valid certificate rather than the prior one.
+        // the presentation's shape. Where it does NOT collapse the pass is keys-cubed and spends the same tupleLimit
+        // the passes above it spend, so a budget sized for those passes alone truncates here and returns a
+        // still-valid certificate that reports SearchLimitReached.
         if (
             !limitReached &&
             !TryProveHexagons(
@@ -1027,10 +1026,9 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// basis element, which is what makes the weight load-bearing rather than decorative.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The symbol names no generator.</exception>
     public Element Generator(int symbol) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: symbol,
-            other: m_generatorElements.Length
+        ArgumentRange.ThrowIfNotIndex(
+            count: m_generatorElements.Length,
+            value: symbol
         );
 
         return m_generatorElements[symbol];

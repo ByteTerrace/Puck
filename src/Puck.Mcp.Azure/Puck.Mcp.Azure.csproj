@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Optional extensions</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Mcp\Puck.Mcp.csproj" />
+        <ProjectReference Include="..\Puck.World.Azure\Puck.World.Azure.csproj" />
+    </ItemGroup>
+</Project>

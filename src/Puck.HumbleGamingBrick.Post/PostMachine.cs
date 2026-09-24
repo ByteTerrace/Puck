@@ -26,24 +26,13 @@ internal static class PostMachine {
             ),
             compose: static services => services.AddHumbleGamingBrickComponents()
         );
-    /// <summary>Advances a machine driver by a whole number of frames.</summary>
+    /// <summary>Advances a machine driver by a whole number of frames. The frame count bounds the work, so a case ends
+    /// at its frame cap however slowly the host runs it.</summary>
     /// <param name="machine">The machine driver to advance.</param>
     /// <param name="frames">The number of frames to run.</param>
-    public static void RunFrames(Machine machine, int frames) =>
-        RunFrames(
-            budget: CaseBudget.None,
-            frames: frames,
-            machine: machine
-        );
-    /// <summary>Advances a machine driver by a whole number of frames, checking the case's budget after each.</summary>
-    /// <param name="machine">The machine driver to advance.</param>
-    /// <param name="frames">The number of frames to run.</param>
-    /// <param name="budget">The case's wall-clock budget.</param>
-    /// <exception cref="CaseBudgetExceededException">The budget ran out before the frames did.</exception>
-    public static void RunFrames(Machine machine, int frames, CaseBudget budget) {
+    public static void RunFrames(Machine machine, int frames) {
         for (var frame = 0; (frame < frames); ++frame) {
             machine.Run(tCycles: ((ulong)TCyclesPerFrame));
-            budget.ThrowIfExceeded(framesRun: (frame + 1));
         }
     }
     /// <summary>Advances a machine by a whole number of frames.</summary>
@@ -51,18 +40,6 @@ internal static class PostMachine {
     /// <param name="frames">The number of frames to run.</param>
     public static void RunFrames(MachineInstance instance, int frames) =>
         RunFrames(
-            budget: CaseBudget.None,
-            frames: frames,
-            machine: instance.Machine
-        );
-    /// <summary>Advances a machine by a whole number of frames, checking the case's budget after each.</summary>
-    /// <param name="instance">The machine to advance.</param>
-    /// <param name="frames">The number of frames to run.</param>
-    /// <param name="budget">The case's wall-clock budget.</param>
-    /// <exception cref="CaseBudgetExceededException">The budget ran out before the frames did.</exception>
-    public static void RunFrames(MachineInstance instance, int frames, CaseBudget budget) =>
-        RunFrames(
-            budget: budget,
             frames: frames,
             machine: instance.Machine
         );

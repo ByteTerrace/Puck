@@ -1,13 +1,129 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers addressable array state and the arithmetic neither instruction set supplies directly.</summary>
 public sealed class CartridgeMemoryTests {
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "a write to an unknown array",
+            Document: Writing(
+                target: new CartridgeTarget(
+                    State: "missing",
+                    Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 0))
+                ),
+                operation: null,
+                value: 1
+            ),
+            Path: "rules[0].body[0].target",
+            Fragment: "Unknown array"
+        ),
+        new(
+            Name: "a literal index past the array",
+            Document: Writing(
+                target: new CartridgeTarget(
+                    State: "table",
+                    Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 5))
+                ),
+                operation: null,
+                value: 1
+            ),
+            Path: "rules[0].body[0].target.index",
+            Fragment: "outside array"
+        ),
+        new(
+            Name: "an array write without an index",
+            Document: Writing(
+                target: new CartridgeTarget(State: "table"),
+                operation: null,
+                value: 1
+            ),
+            Path: "rules[0].body[0].target",
+            Fragment: "requires an index"
+        ),
+        new(
+            Name: "an index on a slot",
+            Document: Writing(
+                target: new CartridgeTarget(
+                    Key: "0",
+                    State: "x"
+                ),
+                operation: null,
+                value: 1
+            ),
+            Path: "rules[0].body[0].target",
+            Fragment: "cannot carry an index"
+        ),
+        new(
+            Name: "a literal zero divisor",
+            Document: Writing(
+                target: new CartridgeTarget(State: "x"),
+                operation: ExpressionOp.Divide,
+                value: 0
+            ),
+            Path: "rules[0].body[0].value",
+            Fragment: "zero divisor"
+        ),
+        new(
+            Name: "a literal shift of a whole byte",
+            Document: Writing(
+                target: new CartridgeTarget(State: "x"),
+                operation: ExpressionOp.ShiftLeft,
+                value: 8
+            ),
+            Path: "rules[0].body[0].value",
+            Fragment: "eight or more"
+        ),
+        new(
+            Name: "an array named like a variable",
+            Document: Unsound() with { Arrays = [new CartridgeArray(
+                    Initial: [1],
+                    Name: "x"
+                )] },
+            Path: "arrays[0].name",
+            Fragment: "reuse a variable name"
+        ),
+        new(
+            Name: "arrays past the state budget",
+            Document: Unsound() with { Arrays = [.. Enumerable.Range(
+                    count: 29,
+                    start: 0
+                ).Select(selector: i => new CartridgeArray(
+                    Initial: new int[256],
+                    Name: $"big{i}"
+                ))] },
+            Path: "arrays",
+            Fragment: "state budget"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    // A slot x and a three-element table, the two shapes every refusal below writes at wrongly.
+    private static CartridgeDocument Unsound() => Blank(
+        target: "cgb",
+        title: "REFUSE"
+    ) with {
+        Variables = [new CartridgeVariable(
+            Name: "x",
+            Initial: 0
+        )],
+        Arrays = [new CartridgeArray(
+            Initial: [1, 2, 3],
+            Name: "table"
+        )],
+    };
+    private static CartridgeDocument Writing(CartridgeTarget target, ExpressionOp? operation, int value) => Unsound() with {
+        Rules = [Once(
+            name: "r",
+            actions: [new CartridgeStatement(
+                    Kind: "set",
+                    Target: target,
+                    Operation: operation,
+                    Value: CartridgeExpressions.Of(constant: value)
+                )]
+        )],
+    };
     private static CartridgeDocument Blank(string target, string title) => CartridgeDocuments.Create(
         target: target,
         title: title
@@ -21,7 +137,7 @@ public sealed class CartridgeMemoryTests {
         Name: name,
         When: CartridgeExpressions.Gate(
             left: CartridgeExpressions.Of(state: "done"),
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             right: CartridgeExpressions.Of(constant: 0)
         ),
         Body: [.. actions, new CartridgeStatement(
@@ -31,29 +147,6 @@ public sealed class CartridgeMemoryTests {
                 Value: CartridgeExpressions.Of(constant: 1)
             )]
     );
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
-    private static MachineProbe Run(CartridgeDocument document, int frames, out CartridgeCompilation result) {
-        ICartridgeCompiler compiler = ((document.Target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-
-        result = compiler.Compile(document: document);
-        var machine = new MachineProbe(result: result);
-
-        machine.Run(frames: frames);
-        return machine;
-    }
 
     [InlineData("cgb")]
     [InlineData("agb")]
@@ -101,27 +194,27 @@ public sealed class CartridgeMemoryTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: 12,
-            out var result
+            label: "memory"
         );
 
         Assert.Equal(
             expected: 6,
-            actual: machine.Read(address: result.Arrays["cells"])
+            actual: machine.Read(address: machine.Result.Arrays["cells"])
         );
         Assert.Equal(
             expected: 2,
-            actual: machine.Read(address: (result.Arrays["cells"] + 1))
+            actual: machine.Read(address: (machine.Result.Arrays["cells"] + 1))
         );
         Assert.Equal(
             expected: 42,
-            actual: machine.Read(address: (result.Arrays["cells"] + 2))
+            actual: machine.Read(address: (machine.Result.Arrays["cells"] + 2))
         );
         Assert.Equal(
             expected: 6,
-            actual: machine.Read(address: (result.Arrays["cells"] + 3))
+            actual: machine.Read(address: (machine.Result.Arrays["cells"] + 3))
         );
     }
     [InlineData("cgb")]
@@ -209,35 +302,35 @@ public sealed class CartridgeMemoryTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: 12,
-            out var result
+            label: "memory"
         );
 
         Assert.Equal(
             expected: 40,
-            actual: machine.Read(address: result.Variables["read"])
+            actual: machine.Read(variable: "read")
         );
         Assert.Equal(
             expected: 20,
-            actual: machine.Read(address: result.Variables["indirect"])
+            actual: machine.Read(variable: "indirect")
         );
         Assert.Equal(
             expected: 15,
-            actual: machine.Read(address: result.Arrays["table"])
+            actual: machine.Read(address: machine.Result.Arrays["table"])
         );
         Assert.Equal(
             expected: 99,
-            actual: machine.Read(address: (result.Arrays["table"] + 3))
+            actual: machine.Read(address: (machine.Result.Arrays["table"] + 3))
         );
         Assert.Equal(
             expected: 50,
-            actual: machine.Read(address: (result.Arrays["table"] + 4))
+            actual: machine.Read(address: (machine.Result.Arrays["table"] + 4))
         );
         Assert.Equal(
             expected: 4,
-            actual: machine.Read(address: result.Arrays["pointers"])
+            actual: machine.Read(address: machine.Result.Arrays["pointers"])
         );
     }
     [InlineData(ExpressionOp.Multiply, 13, 11, 143)]
@@ -250,11 +343,11 @@ public sealed class CartridgeMemoryTests {
     [InlineData(ExpressionOp.Divide, 7, 2, 3)]
     [InlineData(ExpressionOp.Divide, 3, 7, 0)]
     [InlineData(ExpressionOp.Divide, 100, 0, 0)]
-    [InlineData(ExpressionOp.Modulo, 143, 11, 0)]
-    [InlineData(ExpressionOp.Modulo, 7, 2, 1)]
-    [InlineData(ExpressionOp.Modulo, 3, 7, 3)]
-    [InlineData(ExpressionOp.Modulo, 255, 16, 15)]
-    [InlineData(ExpressionOp.Modulo, 100, 0, 0)]
+    [InlineData(ExpressionOp.Remainder, 143, 11, 0)]
+    [InlineData(ExpressionOp.Remainder, 7, 2, 1)]
+    [InlineData(ExpressionOp.Remainder, 3, 7, 3)]
+    [InlineData(ExpressionOp.Remainder, 255, 16, 15)]
+    [InlineData(ExpressionOp.Remainder, 100, 0, 0)]
     [InlineData(ExpressionOp.ShiftLeft, 5, 3, 40)]
     [InlineData(ExpressionOp.ShiftLeft, 255, 1, 254)]
     [InlineData(ExpressionOp.ShiftLeft, 1, 7, 128)]
@@ -296,15 +389,15 @@ public sealed class CartridgeMemoryTests {
                 ]
                 )],
             };
-            using var machine = Run(
+            using var machine = CartridgeProbe.Boot(
                 document: document,
                 frames: 12,
-                out var result
+                label: "memory"
             );
 
             Assert.Equal(
                 expected: expected,
-                actual: machine.Read(address: result.Variables["value"])
+                actual: machine.Read(variable: "value")
             );
         }
     }
@@ -358,170 +451,33 @@ public sealed class CartridgeMemoryTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: 12,
-            out var result
+            label: "memory"
         );
 
         Assert.Equal(
             expected: 0,
-            actual: machine.Read(address: result.Variables["read"])
+            actual: machine.Read(variable: "read")
         );
         Assert.Equal(
             expected: 1,
-            actual: machine.Read(address: result.Arrays["table"])
+            actual: machine.Read(address: machine.Result.Arrays["table"])
         );
         Assert.Equal(
             expected: 2,
-            actual: machine.Read(address: (result.Arrays["table"] + 1))
+            actual: machine.Read(address: (machine.Result.Arrays["table"] + 1))
         );
         Assert.Equal(
             expected: 3,
-            actual: machine.Read(address: (result.Arrays["table"] + 2))
+            actual: machine.Read(address: (machine.Result.Arrays["table"] + 2))
         );
     }
-    [Fact]
-    public void ValidationRefusesUnsoundMemoryAndArithmetic() {
-        var document = Blank(
-            target: "cgb",
-            title: "REFUSE"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "x",
-                Initial: 0
-            )],
-            Arrays = [new CartridgeArray(
-                Initial: [1, 2, 3],
-                Name: "table"
-            )],
-        };
-
-        Refuses(
-            document: document with { Rules = [Once(
-                    name: "r",
-                    actions: [new CartridgeStatement(
-                            Kind: "set",
-                            Target: new CartridgeTarget(
-                                State: "missing",
-                                Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 0))
-                            ),
-                            Operation: null,
-                            Value: CartridgeExpressions.Of(constant: 1)
-                        )]
-                )] },
-            fragment: "Unknown array"
-        );
-        Refuses(
-            document: document with { Rules = [Once(
-                    name: "r",
-                    actions: [new CartridgeStatement(
-                            Kind: "set",
-                            Target: new CartridgeTarget(
-                                State: "table",
-                                Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(constant: 5))
-                            ),
-                            Operation: null,
-                            Value: CartridgeExpressions.Of(constant: 1)
-                        )]
-                )] },
-            fragment: "outside array"
-        );
-        Refuses(
-            document: document with { Rules = [Once(
-                    name: "r",
-                    actions: [new CartridgeStatement(
-                            Kind: "set",
-                            Target: new CartridgeTarget(State: "table"),
-                            Operation: null,
-                            Value: CartridgeExpressions.Of(constant: 1)
-                        )]
-                )] },
-            fragment: "requires an index"
-        );
-        Refuses(
-            document: document with { Rules = [Once(
-                    name: "r",
-                    actions: [new CartridgeStatement(
-                            Kind: "set",
-                            Target: new CartridgeTarget(
-                                Key: "0",
-                                State: "x"
-                            ),
-                            Operation: null,
-                            Value: CartridgeExpressions.Of(constant: 1)
-                        )]
-                )] },
-            fragment: "cannot carry an index"
-        );
-        Refuses(
-            document: document with { Rules = [Once(
-                    name: "r",
-                    actions: [new CartridgeStatement(
-                            Kind: "set",
-                            Target: new CartridgeTarget(State: "x"),
-                            Operation: ExpressionOp.Divide,
-                            Value: CartridgeExpressions.Of(constant: 0)
-                        )]
-                )] },
-            fragment: "zero divisor"
-        );
-        Refuses(
-            document: document with { Rules = [Once(
-                    name: "r",
-                    actions: [new CartridgeStatement(
-                            Kind: "set",
-                            Target: new CartridgeTarget(State: "x"),
-                            Operation: ExpressionOp.ShiftLeft,
-                            Value: CartridgeExpressions.Of(constant: 8)
-                        )]
-                )] },
-            fragment: "eight or more"
-        );
-        Refuses(
-            document: document with { Arrays = [new CartridgeArray(
-                    Initial: [1],
-                    Name: "x"
-                )] },
-            fragment: "reuse a variable name"
-        );
-        Refuses(
-            document: document with { Arrays = [.. Enumerable.Range(
-                    count: 29,
-                    start: 0
-                ).Select(selector: i => new CartridgeArray(
-                    Initial: new int[256],
-                    Name: $"big{i}"
-                ))] },
-            fragment: "state budget"
-        );
-    }
-
-    private sealed class MachineProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public MachineProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "memory"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "memory"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationRefusesUnsoundMemoryAndArithmetic(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

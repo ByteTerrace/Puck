@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Storage;
 
 namespace Puck.World.Server;
@@ -26,7 +27,7 @@ public sealed partial class WorldAuthorityBlobStore {
             key: key,
             value: out var recoveryPin
         ) ||
-            (WorldReleaseFixtureArchive.Hash(bytes: checkpoint.Span) != row.Hash)
+            (ContentPin.Compute(content: checkpoint.Span).ToString() != row.Hash)
         ) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "restore request does not match the pinned group point");
         }
@@ -212,10 +213,12 @@ public sealed partial class WorldAuthorityBlobStore {
     /// this in its publication queue at first capture; subsequent activations may never silently remove it.</summary>
     public async Task<WorldAuthorityRootSnapshot> EstablishRewindBoundaryAsync(WorldAuthorityIdentity identity,
         WorldAuthorityFence fence, string boundary, CancellationToken cancellationToken = default) {
-        if (!WorldAuthorityRecoveryRootCodec.IsPin(pin: boundary)) { throw new ArgumentException(
+        if (!ContentPin.TryParse(pin: out _, text: boundary)) {
+            throw new ArgumentException(
             message: "invalid rewind boundary",
             paramName: nameof(boundary)
-        ); }
+        );
+        }
         var current = (await ReadRootSnapshotAsync(
             cancellationToken: cancellationToken,
             identity: identity

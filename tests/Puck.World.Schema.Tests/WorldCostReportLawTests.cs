@@ -37,10 +37,10 @@ public sealed class WorldCostReportLawTests {
         Assert.Equal(compilation.WorkBudget, report.WorkBudget);
         Assert.Equal(WorldRuleWorkBudget.Measure(definition: definition), report.WorkBudget);
         Assert.Equal(CostModel.Default.EvidenceDigest, report.EvidenceDigest);
-        Assert.False(condition: string.IsNullOrWhiteSpace(report.EvidenceDigest));
-        Assert.True(report.EditBurstBound.IsUnmodeled);
-        Assert.Null(report.Resources.MeasurementIssue);
-        Assert.NotNull(report.Resources.ArenaFootprintBytes);
+        Assert.False(condition: string.IsNullOrWhiteSpace(value: report.EvidenceDigest));
+        Assert.True(condition: report.EditBurstBound.IsUnmodeled);
+        Assert.Null(@object: report.Resources.MeasurementIssue);
+        Assert.NotNull(value: report.Resources.ArenaFootprintBytes);
         Assert.Contains(
             expectedSubstring: "Total memory is unmodeled",
             actualString: report.Resources.UnmodeledTotalMemoryReason
@@ -48,7 +48,7 @@ public sealed class WorldCostReportLawTests {
 
         var replacement = WorldRuleCompilation.Compile(definition: Document(rate: 30)).CostReport;
 
-        Assert.NotSame(report, replacement);
+        Assert.NotSame(actual: replacement, expected: report);
         Assert.Equal(240, report.SimulationRateHz);
         Assert.Equal(30, replacement.SimulationRateHz);
         Assert.Equal(report.HeuristicWorkUnitsPerTick, replacement.HeuristicWorkUnitsPerTick);
@@ -100,21 +100,21 @@ public sealed class WorldCostReportLawTests {
                             Value: CellValue.Int(value: 0L)
                         )],
                     Visibility: new StateVisibility(Readers: Enumerable.Repeat(
-                        element: "reader",
-                        count: (StateCapacity.MaxVisibilityReaders + 1)
+                        count: (StateCapacity.MaxVisibilityReaders + 1),
+                        element: "reader"
                     ).ToArray())
                 )]),
         };
         var resources = WorldResourceDimensions.Measure(definition: definition);
 
-        Assert.Null(resources.ArenaFootprintBytes);
-        Assert.Null(resources.RetainedVisibilityBytes);
-        Assert.NotNull(resources.MeasurementIssue);
+        Assert.Null(value: resources.ArenaFootprintBytes);
+        Assert.Null(value: resources.RetainedVisibilityBytes);
+        Assert.NotNull(@object: resources.MeasurementIssue);
         Assert.Contains(expectedSubstring: "reader limit", actualString: resources.MeasurementIssue);
     }
     [Fact]
     public void OverCeilingDraftRetainsItsExactArenaFootprintAndRefusal() {
-        var readers = Enumerable.Range(start: 0, count: StateCapacity.MaxVisibilityReaders)
+        var readers = Enumerable.Range(count: StateCapacity.MaxVisibilityReaders, start: 0)
             .Select(selector: index => new string(c: ((char)('a' + (index % 26))), count: StateCapacity.MaxVisibilityReaderLength))
             .ToArray();
         var visibility = new StateVisibility(Readers: readers);
@@ -135,9 +135,9 @@ public sealed class WorldCostReportLawTests {
             StateRaw: new WorldStateSection(World: rows)
         ));
 
-        Assert.NotNull(resources.ArenaFootprintBytes);
+        Assert.NotNull(value: resources.ArenaFootprintBytes);
         Assert.True(condition: (resources.ArenaFootprintBytes > resources.ArenaAdmissionCeilingBytes));
-        Assert.NotNull(resources.MeasurementIssue);
+        Assert.NotNull(@object: resources.MeasurementIssue);
         Assert.Contains(expectedSubstring: "past the", actualString: resources.MeasurementIssue);
     }
     [Fact]

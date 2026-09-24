@@ -121,9 +121,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// or <see langword="null"/> when no machine (or no capability) is available.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     IAudioMachine? AudioMachine(int index);
-    /// <summary>Returns the live cable-link set as derived groups (cable order preserved) — the <c>world.save</c>
-    /// fold source: each group folds back into its member screens rows' machine-source cable ports.</summary>
-    IReadOnlyList<WorldMachineCableGroup> CaptureLinks();
     /// <summary>Describes every live cable link in one line (the <c>screen.links</c> query), or <c>none</c>.</summary>
     string DescribeLinks();
     /// <summary>Returns the current same-device framebuffer image-view handle bound to a screen index, or 0 when unbound, not

@@ -3,7 +3,6 @@
   "title": "A body refused at a flat seam keeps falling under its own authority instead of hanging at the plane",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 28,
   "timeoutSeconds": 60,
   "fixtures": [
     "corner.world.json"

@@ -1,7 +1,8 @@
 namespace Puck.World.Transpiler.Vocabulary;
 
-// Composition constructs exist only while a source package is compiled. They expand into ordinary world
-// document fields, so a decompiler prints those fields rather than trying to reconstruct the composition source.
+// Composition constructs exist only while a source package is compiled. They expand into ordinary world document
+// fields, some of them under generated names: the decompiler reads a ground back from its prototype and placement,
+// and a composition's worlds decompiled together back into their world declarations, borders and doors.
 public static partial class WorldConstructs {
     private static WorldConstructMember CompositionMember(
         string name,
@@ -31,7 +32,7 @@ public static partial class WorldConstructs {
                     name: "name",
                     position: WorldMemberPosition.Header,
                     required: true,
-                    summary: "The output world's name, written as an identifier, a string, or an interpolated string evaluated in the current lexical scope."
+                    summary: "The output world's name, written as a name or a plain string and never computed, since a reader resolves a document name to the source that emits it from the source's parse alone (`WorldSourceDeclaration`)."
                 ),
                 CompositionMember(
                     kind: WorldMemberKind.Value,
@@ -45,8 +46,8 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Statement,
             Snippet: "world ${1:name} = ${2:module}()",
-            Sugar: WorldConstructSugar.None,
-            Summary: "Emits one named world document by invoking a module."
+            Sugar: WorldConstructSugar.ReadBack(condition: "the composition's worlds are decompiled together (`WorldDecompiler.DecompileComposition`), each world printing as a module of its own name"),
+            Summary: "Emits one named world document by invoking a module, declared at the top level of its source. Written `entry world`, it is the world `Puck.World --world` boots when it boots the source; a composition declares at most one."
         ),
         new(
             DocumentMember: "(nothing)",
@@ -65,7 +66,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Block,
             Snippet: "border ${1:left}.${2:endpoint}, ${3:right}.${4:endpoint} {\n    width: ${5:4m}\n    height: ${6:3m}\n}",
-            Sugar: WorldConstructSugar.None,
+            Sugar: WorldConstructSugar.ReadBack(condition: "the composition's worlds are decompiled together and the two adjacencies, references and destinations the border generated regenerate from it exactly"),
             Summary: "Connects two world boundaries with a bidirectional border window."
         ),
         new(
@@ -79,7 +80,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Statement,
             Snippet: "door ${1:left}.${2:face}, ${3:right}.${4:spawn}",
-            Sugar: WorldConstructSugar.None,
+            Sugar: WorldConstructSugar.ReadBack(condition: "the composition's worlds are decompiled together and the portals, return arch, references and destinations the door generated regenerate from it exactly"),
             Summary: "Connects a door face to a named arrival point in another world."
         ),
         new(
@@ -112,7 +113,7 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.CompileTime,
             Shape: WorldConstructShape.Block,
             Snippet: "ground ${1:name} {\n    size [${2:10m}, ${3:10m}]\n}",
-            Sugar: WorldConstructSugar.None,
+            Sugar: WorldConstructSugar.ReadBack(condition: "its `ground$name` prototype and `name` placement are exactly the rows the block writes, standing in the same order in both sections"),
             Summary: "Generates a solid ground prototype, its placement, and boundary geometry."
         ),
         new(
@@ -122,7 +123,6 @@ public static partial class WorldConstructs {
             Members: [
                 CompositionMember("name", WorldMemberPosition.Header, WorldMemberKind.Name, "the generated spawn point's id", "The arrival point's identity.", required: true),
                 CompositionMember("at", WorldMemberPosition.Property, WorldMemberKind.Point, "the generated spawn point's position", "The required arrival position.", required: true),
-                CompositionMember("position", WorldMemberPosition.Property, WorldMemberKind.Point, "the generated spawn point's position", "An alternative spelling of `at`."),
                 CompositionMember("yaw", WorldMemberPosition.Property, WorldMemberKind.Value, "the generated spawn point's yawDegrees", "The optional arrival heading, defaulting to zero."),
             ],
             RootArm: WorldRootArm.CompileTime,

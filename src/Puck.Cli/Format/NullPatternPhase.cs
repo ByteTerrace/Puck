@@ -2,57 +2,36 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
 using Puck.Cli.Format.Rewriters;
-using Puck.Cli.Source;
 
 namespace Puck.Cli.Format;
 
-// Compiler-backed disk phase for `null-pattern`. A syntax-only rewrite cannot distinguish reference
-// equality from an overloaded operator, dynamic binding, or a pointer comparison; the semantic model
-// supplies that boundary before any source is changed.
+// Compiler-backed pass behind `null-pattern`, run by SemanticPhases against each project's shared compilation. A
+// syntax-only rewrite cannot distinguish reference equality from an overloaded operator, dynamic binding, or a pointer
+// comparison; the semantic model supplies that boundary before any source is changed.
 internal static class NullPatternPhase {
     private static string Apply(SyntaxTree tree, CSharpCompilation compilation) {
         var model = compilation.GetSemanticModel(syntaxTree: tree);
 
         return new NullPatternRewriter(model: model).Visit(node: tree.GetRoot())!.ToFullString();
     }
-    private static void ProcessProject(
-        string projectRoot,
+
+    // Rewrites one project's target files against its compilation, accumulating drift, corruption and non-convergence
+    // into `outcome`. Returns each file it wrote with the text it wrote, so the caller can carry the compilation forward.
+    internal static List<(string Path, string Text)> Process(
+        CSharpCompilation compilation,
+        IReadOnlyDictionary<string, SyntaxTree> treesByPath,
         IEnumerable<string> targets,
-        string[] compilationFiles,
         CSharpParseOptions parseOptions,
-        bool whatIf,
-        bool verify,
-        List<string> drifted,
-        List<string> corrupted,
-        List<string> nonConvergent,
-        List<string> degradedProjects
+        bool check,
+        SemanticOutcome outcome
     ) {
-        var treesByPath = new Dictionary<string, SyntaxTree>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        foreach (var file in compilationFiles) {
-            treesByPath[Path.GetFullPath(path: file)] = CSharpSyntaxTree.ParseText(
-                text: File.ReadAllText(path: file),
-                options: parseOptions,
-                path: file
-            );
-        }
-
-        var compilation = NamedArgsPhase.BuildProjectCompilation(
-            projectRoot: projectRoot,
-            trees: treesByPath.Values,
-            parseOptions: parseOptions,
-            degraded: out var degraded
-        );
-
-        if (degraded) {
-            degradedProjects.Add(item: Path.GetFileName(path: projectRoot));
-
-            return;
-        }
+        var written = new List<(string Path, string Text)>();
 
         foreach (var file in targets) {
+            var path = Path.GetFullPath(path: file);
+
             if (!treesByPath.TryGetValue(
-                key: Path.GetFullPath(path: file),
+                key: path,
                 value: out var tree
             )) {
                 continue;
@@ -77,12 +56,12 @@ internal static class NullPatternPhase {
                 original: original,
                 rewritten: rewritten
             )) {
-                corrupted.Add(item: relative);
+                outcome.Corrupted.Add(item: relative);
 
                 continue;
             }
 
-            if (verify) {
+            if (check) {
                 var secondTree = CSharpSyntaxTree.ParseText(
                     text: rewritten,
                     options: parseOptions,
@@ -100,102 +79,48 @@ internal static class NullPatternPhase {
                     ),
                     b: rewritten
                 )) {
-                    nonConvergent.Add(item: relative);
+                    outcome.NonConvergent.Add(item: relative);
 
                     continue;
                 }
             }
 
-            drifted.Add(item: relative);
+            outcome.Drifted.Add(item: relative);
 
             if (
-                !whatIf &&
-                !verify
+                !check
             ) {
                 RewriteIo.WriteText(
                     file: file,
                     text: rewritten
                 );
+                written.Add(item: (path, rewritten));
             }
         }
+
+        return written;
     }
-
-    public static int Run(string rootArgument, bool whatIf, bool verify, string[]? targets = null) {
-        var targetFiles = targets;
-
-        if (
-            (targetFiles is null) &&
-            !SourceFiles.TryEnumerate(
-            files: out targetFiles,
-            rootArgument: rootArgument,
-            scanRoot: out _
-        )
-        ) {
-            return 2;
+    internal static int Report(SemanticOutcome outcome, string configuration, int fileCount, bool check) {
+        if (outcome.Ungrouped > 0) {
+            Console.Error.WriteLine(value: $"null-pattern: {outcome.Ungrouped} file(s) are compiled by no project the run found — skipped");
         }
 
-        var parseOptions = new CSharpParseOptions(languageVersion: LanguageVersion.Preview);
-        var byProject = targetFiles.GroupBy(
-            keySelector: static file => (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: Path.GetFullPath(path: file))!) ?? ""),
-            comparer: StringComparer.OrdinalIgnoreCase
-        );
-        var drifted = new List<string>();
-        var corrupted = new List<string>();
-        var nonConvergent = new List<string>();
-        var degradedProjects = new List<string>();
-        var ungrouped = 0;
-
-        foreach (var projectGroup in byProject) {
-            if (
-                (projectGroup.Key.Length == 0) ||
-                !SourceFiles.TryEnumerate(
-                rootArgument: projectGroup.Key,
-                scanRoot: out _,
-                files: out var compilationFiles
-            )
-            ) {
-                ungrouped += projectGroup.Count();
-
-                continue;
-            }
-
-            ProcessProject(
-                projectRoot: projectGroup.Key,
-                targets: projectGroup,
-                compilationFiles: compilationFiles,
-                parseOptions: parseOptions,
-                whatIf: whatIf,
-                verify: verify,
-                drifted: drifted,
-                corrupted: corrupted,
-                nonConvergent: nonConvergent,
-                degradedProjects: degradedProjects
-            );
-        }
-
-        if (ungrouped > 0) {
-            Console.Error.WriteLine(value: $"null-pattern: {ungrouped} file(s) had no owning project — skipped");
-        }
-
-        if (degradedProjects.Count > 0) {
-            Console.Error.WriteLine(value: $"null-pattern: {degradedProjects.Count} project(s) not built ({string.Join(
-                separator: ", ",
-                values: degradedProjects
-            )}) — their source was skipped. Build before formatting.");
+        foreach (var (project, reason) in outcome.RefusedProjects) {
+            Console.Error.WriteLine(value: $"null-pattern: {project}: {reason} — its source was skipped. Build it in {configuration} before formatting.");
         }
 
         return Math.Max(
-            val1: (((ungrouped > 0) || (degradedProjects.Count > 0))
+            val1: (((outcome.Ungrouped > 0) || (outcome.RefusedProjects.Count > 0))
             ? 1
             : 0),
             val2: RewriteIo.Report(
                 label: "null-pattern",
-                fileCount: targetFiles.Length,
-                drifted: drifted,
-                whatIf: (whatIf || verify),
+                fileCount: fileCount,
+                drifted: outcome.Drifted,
+                check: check,
                 problems: [
-                ("have syntax errors before or after rewriting — SKIPPED", corrupted),
-                ("do not converge — SKIPPED", nonConvergent),
+                ("have syntax errors before or after rewriting — SKIPPED", outcome.Corrupted),
+                ("do not converge — SKIPPED", outcome.NonConvergent),
             ]
             )
         );

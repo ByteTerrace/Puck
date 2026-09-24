@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -300,7 +301,7 @@ public static partial class WorldDefinitionValidator {
 
             switch (speaker) {
                 case WorldSpeaker.Fixed fixedSpeaker:
-                    if ((fixedSpeaker.Position is null) || !IsFinite(value: fixedSpeaker.Position)) {
+                    if ((fixedSpeaker.Position is null) || !VectorFunctions.IsFinite(vector: fixedSpeaker.Position)) {
                         errors.Add(item: $"{path}.position must contain finite coordinates.");
                     }
 
@@ -318,13 +319,13 @@ public static partial class WorldDefinitionValidator {
                         errors: errors
                     );
 
-                    if ((anchoredSpeaker.Offset is null) || !IsFinite(value: anchoredSpeaker.Offset)) {
+                    if ((anchoredSpeaker.Offset is null) || !VectorFunctions.IsFinite(vector: anchoredSpeaker.Offset)) {
                         errors.Add(item: $"{path}.offset must contain finite coordinates.");
                     }
 
                     break;
                 case WorldSpeaker.Bed bed:
-                    if ((bed.Center is null) || !IsFinite(value: bed.Center)) {
+                    if ((bed.Center is null) || !VectorFunctions.IsFinite(vector: bed.Center)) {
                         errors.Add(item: $"{path}.center must contain finite coordinates.");
                     }
 

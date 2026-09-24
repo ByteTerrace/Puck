@@ -1,0 +1,489 @@
+// Hidden ranks — a two-army game on a 10x10 board where each side sees only its
+// own pieces' ranks until they meet. Rule set: a 40-piece army of twelve ranks,
+// two impassable lakes, a strike that reveals both ranks and removes the weaker,
+// and the Spy/Marshal, Miner/Bomb and Scout exceptions. The reductions this
+// module makes deliberately are listed in the games README.
+//
+// This is a module fragment, not a bootable world: a host supplies the seats,
+// the `attack` channel the two ready presses arrive on, and the simulation rate.
+// tests/Puck.World.Tests/Fixtures/minimal-hiddenranks-host.world.json is that host.
+//
+// Ranks. 1 Marshal, 2 General, 3 Colonel, 4 Major, 5 Captain, 6 Lieutenant,
+// 7 Sergeant, 8 Miner, 9 Scout, 10 Spy, 11 Bomb, 12 Flag. A LOWER number wins,
+// so 1 beats 2. 11 and 12 never move; 1..10 do.
+//
+// Board. Cell ordinal = row * 10 + column, rows counted from red's back rank.
+// `hiddenRanksOwner` is the one public board: 0 empty, 1 red, 2 blue, 3 lake. The
+// lakes are authored as owner 3 and never change, so a ray pattern over
+// `hiddenRanksOwner` stops at a lake exactly as it stops at a piece.
+
+export action hiddenRanksFrom, hiddenRanksRequest, hiddenRanksTo
+export binding hiddenRanksMoves, hiddenRanksPhase, hiddenRanksResult, hiddenRanksTurn, hiddenRanksWinner
+// One line: `puck format` unindents a wrapped export continuation and the parser then
+// reads the facet as empty, so a wrapped list silently loses every name.
+export read hiddenRanksApplied, hiddenRanksBlueKnows, hiddenRanksBlueRank, hiddenRanksMoves, hiddenRanksOwner, hiddenRanksPhase, hiddenRanksReady, hiddenRanksRedKnows, hiddenRanksRedRank, hiddenRanksResult, hiddenRanksTurn, hiddenRanksWinner
+
+// Red's army, cell 0 (back rank, left) through cell 39 (front rank, right).
+let redSetup = [
+  11, 12, 11, 3, 6, 7, 5, 4, 6, 11,
+  7, 11, 7, 5, 2, 1, 5, 4, 6, 3,
+  8, 8, 10, 8, 5, 6, 4, 7, 8, 11,
+  9, 9, 9, 9, 8, 9, 9, 9, 9, 11
+]
+
+// Blue's army, cell 60 (front rank) through cell 99 (back rank), the same
+// forty pieces read the other way up.
+let blueSetup = [
+  11, 9, 9, 9, 9, 8, 9, 9, 9, 9,
+  11, 8, 7, 4, 6, 5, 8, 10, 8, 8,
+  3, 6, 4, 5, 1, 2, 5, 7, 11, 7,
+  11, 6, 4, 5, 7, 6, 3, 11, 12, 11
+]
+
+// The two 2x2 lakes, rows 4 and 5, columns 2-3 and 6-7.
+let lakeCells = [42, 43, 46, 47, 52, 53, 56, 57]
+
+patterns [
+  {
+    kind: Int
+    name: "hiddenRanksEmptyRun"
+    pattern: star(item: symbol(name: "vacant"))
+    symbols [
+      {
+        max: 0
+        min: 0
+        name: "vacant"
+      }
+    ]
+  }
+]
+
+// Each side declares its setup finished by holding its own seat's `attack`
+// control. Until both have, every move request is refused.
+rule "hiddenranks-red-ready" {
+  when hiddenRanksPhase == 0 and channel(1, attack) >= 1
+  mode: Edge
+  hiddenRanksReady[red] = 1
+}
+
+rule "hiddenranks-blue-ready" {
+  when hiddenRanksPhase == 0 and channel(2, attack) >= 1
+  mode: Edge
+  hiddenRanksReady[blue] = 1
+}
+
+rule "hiddenranks-begin" {
+  when hiddenRanksPhase == 0 and hiddenRanksReady[red] == 1 and hiddenRanksReady[blue] == 1
+  mode: Edge
+  hiddenRanksPhase = 1
+}
+
+// One judgement per pending request. Every later rule reads the slots this
+// writes, so the legality of a move is stated once rather than per outcome.
+rule "hiddenranks-judge" {
+  when hiddenRanksRequest != hiddenRanksApplied and hiddenRanksPhase == 1 and hiddenRanksWinner == 0
+  mode: Edge
+  local mover = hiddenRanksOwner[hiddenRanksFrom[$value]]
+  local rank = hiddenRanksTurn == 1 ? hiddenRanksRedRank[hiddenRanksFrom[$value]] : hiddenRanksBlueRank[hiddenRanksFrom[$value]]
+  local target = hiddenRanksOwner[hiddenRanksTo[$value]]
+  local dRow = hiddenRanksTo / 10 - hiddenRanksFrom / 10
+  local dCol = hiddenRanksTo % 10 - hiddenRanksFrom % 10
+  local dist = absolute(dRow) + absolute(dCol)
+  local line = ((dRow == 0) + (dCol == 0)) == 1
+  local blocker = dRow < 0 ? match(hiddenRanksEmptyRun, hiddenRanksOwner, N, distance)[hiddenRanksFrom[$value]] : (dRow > 0 ? match(hiddenRanksEmptyRun, hiddenRanksOwner, S, distance)[hiddenRanksFrom[$value]] : (dCol > 0 ? match(hiddenRanksEmptyRun, hiddenRanksOwner, E, distance)[hiddenRanksFrom[$value]] : match(hiddenRanksEmptyRun, hiddenRanksOwner, W, distance)[hiddenRanksFrom[$value]]))
+  local reach = rank == 9 ? (target == 0 ? ((blocker < 0) | (blocker > dist)) : (dist == 1)) : (dist == 1)
+  hiddenRanksMoveRank = rank
+  hiddenRanksTargetOwner = target
+  hiddenRanksDefRank = hiddenRanksTurn == 1 ? hiddenRanksBlueRank[hiddenRanksTo[$value]] : hiddenRanksRedRank[hiddenRanksTo[$value]]
+  hiddenRanksLegal = (mover == hiddenRanksTurn) & (rank >= 1) & (rank <= 10) & (target != hiddenRanksTurn) & (target != 3) & (line == 1) & reach
+}
+
+rule "hiddenranks-red-move" {
+  when hiddenRanksRequest != hiddenRanksApplied and hiddenRanksPhase == 1 and hiddenRanksWinner == 0 and hiddenRanksLegal == 1 and hiddenRanksTurn == 1 and hiddenRanksTargetOwner == 0
+  mode: Edge
+  local rank = hiddenRanksRedRank[hiddenRanksFrom[$value]]
+  local token = hiddenRanksRedToken[hiddenRanksFrom[$value]]
+  hiddenRanksOwner[hiddenRanksTo[$value]] = 1
+  hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+  hiddenRanksRedRank[hiddenRanksTo[$value]] = rank
+  remove hiddenRanksRedRank[hiddenRanksFrom[$value]]
+  hiddenRanksRedToken[hiddenRanksTo[$value]] = token
+  remove hiddenRanksRedToken[hiddenRanksFrom[$value]]
+  hiddenRanksPosition[token] = hiddenRanksTo
+  hiddenRanksTurn = 2
+  hiddenRanksMoves += 1
+  hiddenRanksResult = 1
+  hiddenRanksApplied = hiddenRanksRequest
+}
+
+rule "hiddenranks-blue-move" {
+  when hiddenRanksRequest != hiddenRanksApplied and hiddenRanksPhase == 1 and hiddenRanksWinner == 0 and hiddenRanksLegal == 1 and hiddenRanksTurn == 2 and hiddenRanksTargetOwner == 0
+  mode: Edge
+  local rank = hiddenRanksBlueRank[hiddenRanksFrom[$value]]
+  local token = hiddenRanksBlueToken[hiddenRanksFrom[$value]]
+  hiddenRanksOwner[hiddenRanksTo[$value]] = 2
+  hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+  hiddenRanksBlueRank[hiddenRanksTo[$value]] = rank
+  remove hiddenRanksBlueRank[hiddenRanksFrom[$value]]
+  hiddenRanksBlueToken[hiddenRanksTo[$value]] = token
+  remove hiddenRanksBlueToken[hiddenRanksFrom[$value]]
+  hiddenRanksPosition[token] = hiddenRanksTo
+  hiddenRanksTurn = 1
+  hiddenRanksMoves += 1
+  hiddenRanksResult = 1
+  hiddenRanksApplied = hiddenRanksRequest
+}
+
+// A strike reveals both pieces to each other before anything is removed: the
+// seen mask is raised over the one square each side learns about, `observe`
+// folds the source rank into that side's knowledge board with its own tick
+// stamp, and the mask is lowered again so a later strike elsewhere cannot
+// overwrite the memory with whatever stands on the square afterwards.
+rule "hiddenranks-red-strike" {
+  when hiddenRanksRequest != hiddenRanksApplied and hiddenRanksPhase == 1 and hiddenRanksWinner == 0 and hiddenRanksLegal == 1 and hiddenRanksTurn == 1 and hiddenRanksTargetOwner == 2
+  mode: Edge
+  local rank = hiddenRanksRedRank[hiddenRanksFrom[$value]]
+  local def = hiddenRanksBlueRank[hiddenRanksTo[$value]]
+  local token = hiddenRanksRedToken[hiddenRanksFrom[$value]]
+  local defToken = hiddenRanksBlueToken[hiddenRanksTo[$value]]
+  local outcome = def == 12 ? 1 : (def == 11 ? (rank == 8 ? 1 : -1) : (def == 10 ? 1 : (rank == 10 ? (def == 1 ? 1 : -1) : (rank < def ? 1 : (rank > def ? -1 : 0)))))
+  hiddenRanksRedSeen[hiddenRanksTo[$value]] = 1
+  hiddenRanksBlueSeen[hiddenRanksFrom[$value]] = 1
+  transform observe(row: hiddenRanksRedKnows)
+  transform observe(row: hiddenRanksBlueKnows)
+  hiddenRanksRedSeen[hiddenRanksTo[$value]] = 0
+  hiddenRanksBlueSeen[hiddenRanksFrom[$value]] = 0
+  if outcome == 1 {
+    remove hiddenRanksBlueRank[hiddenRanksTo[$value]]
+    remove hiddenRanksRedRank[hiddenRanksFrom[$value]]
+    hiddenRanksRedRank[hiddenRanksTo[$value]] = rank
+    hiddenRanksOwner[hiddenRanksTo[$value]] = 1
+    hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+    remove hiddenRanksBlueToken[hiddenRanksTo[$value]]
+    remove hiddenRanksPosition[defToken]
+    hiddenRanksRedToken[hiddenRanksTo[$value]] = token
+    remove hiddenRanksRedToken[hiddenRanksFrom[$value]]
+    hiddenRanksPosition[token] = hiddenRanksTo
+  } else if outcome == -1 {
+    remove hiddenRanksRedRank[hiddenRanksFrom[$value]]
+    hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+    remove hiddenRanksRedToken[hiddenRanksFrom[$value]]
+    remove hiddenRanksPosition[token]
+  } else {
+    remove hiddenRanksRedRank[hiddenRanksFrom[$value]]
+    remove hiddenRanksBlueRank[hiddenRanksTo[$value]]
+    hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+    hiddenRanksOwner[hiddenRanksTo[$value]] = 0
+    remove hiddenRanksRedToken[hiddenRanksFrom[$value]]
+    remove hiddenRanksBlueToken[hiddenRanksTo[$value]]
+    remove hiddenRanksPosition[token]
+    remove hiddenRanksPosition[defToken]
+  }
+  if def == 12 {
+    hiddenRanksWinner = 1
+    hiddenRanksPhase = 2
+    hiddenRanksReveal[red] = "seat2"
+    hiddenRanksReveal[blue] = "seat1"
+  }
+  hiddenRanksTurn = 2
+  hiddenRanksMoves += 1
+  hiddenRanksResult = 1
+  hiddenRanksApplied = hiddenRanksRequest
+}
+
+rule "hiddenranks-blue-strike" {
+  when hiddenRanksRequest != hiddenRanksApplied and hiddenRanksPhase == 1 and hiddenRanksWinner == 0 and hiddenRanksLegal == 1 and hiddenRanksTurn == 2 and hiddenRanksTargetOwner == 1
+  mode: Edge
+  local rank = hiddenRanksBlueRank[hiddenRanksFrom[$value]]
+  local def = hiddenRanksRedRank[hiddenRanksTo[$value]]
+  local token = hiddenRanksBlueToken[hiddenRanksFrom[$value]]
+  local defToken = hiddenRanksRedToken[hiddenRanksTo[$value]]
+  local outcome = def == 12 ? 1 : (def == 11 ? (rank == 8 ? 1 : -1) : (def == 10 ? 1 : (rank == 10 ? (def == 1 ? 1 : -1) : (rank < def ? 1 : (rank > def ? -1 : 0)))))
+  hiddenRanksBlueSeen[hiddenRanksTo[$value]] = 1
+  hiddenRanksRedSeen[hiddenRanksFrom[$value]] = 1
+  transform observe(row: hiddenRanksBlueKnows)
+  transform observe(row: hiddenRanksRedKnows)
+  hiddenRanksBlueSeen[hiddenRanksTo[$value]] = 0
+  hiddenRanksRedSeen[hiddenRanksFrom[$value]] = 0
+  if outcome == 1 {
+    remove hiddenRanksRedRank[hiddenRanksTo[$value]]
+    remove hiddenRanksBlueRank[hiddenRanksFrom[$value]]
+    hiddenRanksBlueRank[hiddenRanksTo[$value]] = rank
+    hiddenRanksOwner[hiddenRanksTo[$value]] = 2
+    hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+    remove hiddenRanksRedToken[hiddenRanksTo[$value]]
+    remove hiddenRanksPosition[defToken]
+    hiddenRanksBlueToken[hiddenRanksTo[$value]] = token
+    remove hiddenRanksBlueToken[hiddenRanksFrom[$value]]
+    hiddenRanksPosition[token] = hiddenRanksTo
+  } else if outcome == -1 {
+    remove hiddenRanksBlueRank[hiddenRanksFrom[$value]]
+    hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+    remove hiddenRanksBlueToken[hiddenRanksFrom[$value]]
+    remove hiddenRanksPosition[token]
+  } else {
+    remove hiddenRanksBlueRank[hiddenRanksFrom[$value]]
+    remove hiddenRanksRedRank[hiddenRanksTo[$value]]
+    hiddenRanksOwner[hiddenRanksFrom[$value]] = 0
+    hiddenRanksOwner[hiddenRanksTo[$value]] = 0
+    remove hiddenRanksBlueToken[hiddenRanksFrom[$value]]
+    remove hiddenRanksRedToken[hiddenRanksTo[$value]]
+    remove hiddenRanksPosition[token]
+    remove hiddenRanksPosition[defToken]
+  }
+  if def == 12 {
+    hiddenRanksWinner = 2
+    hiddenRanksPhase = 2
+    hiddenRanksReveal[red] = "seat2"
+    hiddenRanksReveal[blue] = "seat1"
+  }
+  hiddenRanksTurn = 1
+  hiddenRanksMoves += 1
+  hiddenRanksResult = 1
+  hiddenRanksApplied = hiddenRanksRequest
+}
+
+// An illegal move is acknowledged without moving a piece and without ending the
+// turn: the mover requests again.
+rule "hiddenranks-refuse" {
+  when hiddenRanksRequest != hiddenRanksApplied and hiddenRanksPhase == 1 and hiddenRanksWinner == 0 and hiddenRanksLegal == 0
+  mode: Edge
+  hiddenRanksResult = -1
+  hiddenRanksApplied = hiddenRanksRequest
+}
+
+rule "hiddenranks-refuse-closed" {
+  when hiddenRanksRequest != hiddenRanksApplied and (hiddenRanksPhase != 1 or hiddenRanksWinner != 0)
+  mode: Edge
+  hiddenRanksResult = -1
+  hiddenRanksApplied = hiddenRanksRequest
+}
+
+state {
+  lattices [
+    grid(cellSize: 1, depth: 10, name: "hiddenRanksField", origin: [0, 0, 0], width: 10)
+  ]
+
+  world {
+    // The one public board. `phaseOf` names the guarded submission stamp an
+    // external gameplay transform writing this board must present.
+    row {
+      cells: concat(concat(map(range(0, 40), i => {
+        key: $"{i}",
+        value: 1
+      }
+      ), map(range(0, 40), i => {
+        key: $"{60 + i}",
+        value: 2
+      }
+      )
+      ), map(lakeCells, c => {
+        key: $"{c}",
+        value: 3
+      }
+      )
+      )
+      domain: cellsOf(topology: hiddenRanksField)
+      kind: "Int"
+      name: "hiddenRanksOwner"
+      phaseOf: "hiddenRanksTurnGuard"
+    }
+
+    row {
+      kind: "Int"
+      name: "hiddenRanksTurnGuard"
+      phase {
+        sequence: 0
+      }
+    }
+
+    // Each side's own ranks, readable by that side alone until the armies
+    // are revealed through `hiddenRanksReveal` at the end of the game.
+    row {
+      cells: map(range(0, 40), i => {
+        key: $"{i}",
+        value: redSetup[i]
+      }
+      )
+      domain: cellsOf(topology: hiddenRanksField)
+      kind: "Int"
+      name: "hiddenRanksRedRank"
+      visibility {
+        readers [
+          "seat1"
+        ]
+        readersFrom: "hiddenRanksReveal"
+      }
+    }
+
+    // Stable piece identities back remembered ranks. The live rank boards above
+    // remain the cell-keyed combat surface; these rows preserve identity as a
+    // piece moves or leaves the board.
+    row {
+      capacity: 80
+      cells: map(range(1, 80), token => {
+        key: $"{token}",
+        value: token
+      }
+      )
+      kind: "Int"
+      name: "hiddenRanksPieces"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      capacity: 80
+      cells: concat(
+        map(range(1, 40), token => { key: $"{token}", value: redSetup[(token - 1) % 40] }),
+        map(range(41, 40), token => { key: $"{token}", value: blueSetup[(token - 41) % 40] })
+      )
+      domain: keysOf(row: hiddenRanksPieces)
+      kind: "Int"
+      name: "hiddenRanksPieceRank"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      capacity: 80
+      cells: concat(
+        map(range(1, 40), token => { key: $"{token}", value: token - 1 }),
+        map(range(41, 40), token => { key: $"{token}", value: token + 19 })
+      )
+      domain: keysOf(row: hiddenRanksPieces)
+      kind: "Int"
+      name: "hiddenRanksPosition"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      cells: map(range(0, 40), cell => { key: $"{cell}", value: cell + 1 })
+      domain: cellsOf(topology: hiddenRanksField)
+      kind: "Int"
+      name: "hiddenRanksRedToken"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      cells: map(range(60, 40), cell => { key: $"{cell}", value: cell - 19 })
+      domain: cellsOf(topology: hiddenRanksField)
+      kind: "Int"
+      name: "hiddenRanksBlueToken"
+      visibility {
+        readers []
+      }
+    }
+
+    row {
+      cells: map(range(0, 40), i => {
+        key: $"{60 + i}",
+        value: blueSetup[i]
+      }
+      )
+      domain: cellsOf(topology: hiddenRanksField)
+      kind: "Int"
+      name: "hiddenRanksBlueRank"
+      visibility {
+        readers [
+          "seat2"
+        ]
+        readersFrom: "hiddenRanksReveal"
+      }
+    }
+
+    // The observation masks: one square is raised for the duration of one
+    // strike and lowered again in the same rule.
+    row {
+      domain: cellsOf(topology: hiddenRanksField)
+      kind: "Bool"
+      name: "hiddenRanksRedSeen"
+    }
+
+    row {
+      domain: cellsOf(topology: hiddenRanksField)
+      kind: "Bool"
+      name: "hiddenRanksBlueSeen"
+    }
+
+    // What each side remembers of the other's ranks, keyed by stable piece.
+    row {
+      capacity: 80
+      domain: keysOf(row: hiddenRanksPieces)
+      kind: "Int"
+      knowledge {
+        mask: "hiddenRanksRedSeen"
+        positions: "hiddenRanksPosition"
+        source: "hiddenRanksPieceRank"
+      }
+      name: "hiddenRanksRedKnows"
+      visibility {
+        readers [
+          "seat1"
+        ]
+      }
+    }
+
+    row {
+      capacity: 80
+      domain: keysOf(row: hiddenRanksPieces)
+      kind: "Int"
+      knowledge {
+        mask: "hiddenRanksBlueSeen"
+        positions: "hiddenRanksPosition"
+        source: "hiddenRanksPieceRank"
+      }
+      name: "hiddenRanksBlueKnows"
+      visibility {
+        readers [
+          "seat2"
+        ]
+      }
+    }
+
+    // The live audience both rank boards widen through when the flag falls.
+    row {
+      capacity: 2
+      cells []
+      kind: "Text"
+      name: "hiddenRanksReveal"
+    }
+
+    table hiddenRanksReady {
+      red = 0
+      blue = 0
+    }
+
+    slot hiddenRanksPhase = 0 bounds(0..2)
+
+    slot hiddenRanksTurn = 1 bounds(1..2)
+
+    slot hiddenRanksFrom = 0 bounds(0..99)
+
+    slot hiddenRanksTo = 0 bounds(0..99)
+
+    slot hiddenRanksRequest = 0 bounds(0..)
+
+    slot hiddenRanksApplied = 0 bounds(0..)
+
+    slot hiddenRanksResult = 0 bounds(-1..1)
+
+    slot hiddenRanksLegal = 0 bounds(0..1)
+
+    slot hiddenRanksMoveRank = 0 bounds(0..12)
+
+    slot hiddenRanksDefRank = 0 bounds(0..12)
+
+    slot hiddenRanksTargetOwner = 0 bounds(0..3)
+
+    slot hiddenRanksMoves = 0 bounds(0..)
+
+    slot hiddenRanksWinner = 0 bounds(0..2)
+  }
+}

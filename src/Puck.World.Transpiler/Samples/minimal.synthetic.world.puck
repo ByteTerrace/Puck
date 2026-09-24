@@ -1,5 +1,5 @@
 schema: "puck.world.definition.v1"
-basis: "worlds/base.puck"
+basis: "worlds/base"
 
 host {
   width: 1280

@@ -3,12 +3,8 @@
     "rateHz": 60
   },
   "motion": {
-    "speed": {
-      "value": 4
-    },
-    "turn": {
-      "rate": 2.5
-    },
+    "moveSpeed": 4,
+    "turnSpeed": 2.5,
     "maxSmoothError": 3
   },
   "spawnPoints": [
@@ -67,6 +63,15 @@
       "renderScale": "Native"
     }
   },
+  "machines": [
+    {
+      "name": "runner-screen",
+      "engine": "advanced-gaming-brick",
+      "configuration": {
+        "schema": "puck.advanced-gaming-brick.config.v1"
+      }
+    }
+  ],
   "screens": [
     {
       "index": 0,
@@ -124,14 +129,16 @@
       "halfDepth": 0.12,
       "round": 0.08,
       "source": {
-        "$type": "capture",
-        "windowTitle": "Puck: World",
-        "profile": {
-          "width": 256,
-          "height": 192,
-          "refreshRateHz": 10
-        },
-        "monitorIndex": null
+        "$type": "producer",
+        "id": "capture",
+        "settings": {
+          "windowTitle": "Puck: World",
+          "profile": {
+            "width": 256,
+            "height": 192,
+            "refreshRateHz": 10
+          }
+        }
       },
       "route": {
         "engageable": false,
@@ -198,11 +205,14 @@
       "halfDepth": 0.14,
       "round": 0.1,
       "source": {
-        "$type": "camera",
-        "profile": {
-          "width": 320,
-          "height": 240,
-          "refreshRateHz": 15
+        "$type": "producer",
+        "id": "camera",
+        "settings": {
+          "profile": {
+            "width": 320,
+            "height": 240,
+            "refreshRateHz": 15
+          }
         }
       },
       "route": {
@@ -237,9 +247,8 @@
       "round": 0.1,
       "source": {
         "$type": "machine",
-        "engine": "advanced-gaming-brick",
-        "contentPath": "",
-        "options": "direct"
+        "instance": "runner-screen",
+        "output": "video"
       },
       "route": {
         "engageable": false,
@@ -273,10 +282,13 @@
       "halfDepth": 0.12,
       "round": 0.08,
       "source": {
-        "$type": "qr",
-        "payload": "https://example.invalid/puck/world/qr-demo",
-        "ecLevel": "M",
-        "quietZoneModules": 4
+        "$type": "producer",
+        "id": "qr",
+        "settings": {
+          "payload": "https://example.invalid/puck/world/qr-demo",
+          "ecLevel": "M",
+          "quietZoneModules": 4
+        }
       },
       "route": {
         "engageable": false,
@@ -297,7 +309,7 @@
       },
       "rig": {
         "name": "first-person",
-        "version": "puck.camera.v1",
+        "version": "puck.camera.program.v1",
         "operations": [
           {
             "$type": "offset",
@@ -312,7 +324,7 @@
             "subject": null
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 1.1868238
           }
         ]
@@ -325,7 +337,7 @@
       "anchor": null,
       "rig": {
         "name": "overhead",
-        "version": "puck.camera.v1",
+        "version": "puck.camera.program.v1",
         "operations": [
           {
             "$type": "anchor",
@@ -350,7 +362,7 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.9599311
           }
         ]
@@ -501,7 +513,7 @@
   "bodyMotionPrograms": [
     {
       "name": "grounded",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
@@ -517,7 +529,7 @@
     },
     {
       "name": "free",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "IntegrateLocalAttitude",
@@ -531,7 +543,7 @@
     },
     {
       "name": "wander",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Producer",
       "operations": [
         "ProduceSteeringIntent"
@@ -539,7 +551,7 @@
     },
     {
       "name": "attend",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Producer",
       "target": {
         "$type": "sensed",
@@ -556,7 +568,7 @@
     },
     {
       "name": "designated",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Producer",
       "target": {
         "$type": "designated",
@@ -1330,7 +1342,7 @@
   "addons": [
     {
       "name": "channelwalk",
-      "modulePath": "../../../../../wasm/puck-addon-channelwalk/dist/channelwalk.wasm",
+      "modulePath": "../dist/channelwalk.wasm",
       "hash": "sha256-64/89da458ae5fd26db",
       "fuel": 100000,
       "enabled": true,
@@ -1343,14 +1355,14 @@
     },
     {
       "name": "channelwalk-bound64",
-      "modulePath": "../../../../../wasm/puck-addon-channelwalk/dist/channelwalk-bound64.wasm",
+      "modulePath": "../dist/channelwalk-bound64.wasm",
       "hash": "sha256-64/403e305d834df59f",
       "fuel": 100000,
       "enabled": true
     },
     {
       "name": "channelwalk-bound65",
-      "modulePath": "../../../../../wasm/puck-addon-channelwalk/dist/channelwalk-bound65.wasm",
+      "modulePath": "../dist/channelwalk-bound65.wasm",
       "hash": "sha256-64/a66b449d612cc68d",
       "fuel": 100000,
       "enabled": true
@@ -1360,7 +1372,7 @@
     {
       "id": "gameplay-bindings",
       "document": {
-        "version": "puck.bindings.v1",
+        "version": "puck.input.bindings.v1",
         "modifiers": [],
         "chords": [
           {
@@ -1443,8 +1455,7 @@
           {
             "color": "#54853D",
             "emissive": 0,
-            "specular": 0,
-            "shininess": 0
+            "specular": 0
           }
         ],
         "shapes": [
@@ -1483,7 +1494,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "8fc62b00b6f29f725b83139affd724ff7656a5da7a8b690d2ac4d370adf5ae64"
+      "hash": "57e23bcef97bc5d2e1bff24b98de924a697223a9388f82a342984957658abc7b"
     },
     {
       "id": "boulder-1",
@@ -1496,8 +1507,7 @@
           {
             "color": "#8C8C94",
             "emissive": 0,
-            "specular": 0,
-            "shininess": 0
+            "specular": 0
           }
         ],
         "shapes": [
@@ -1536,7 +1546,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "bdff555f51a480dcebb8153d0e475c42ac60ddf8303bbc38b2b93b8b687776da"
+      "hash": "85548a2f89bfa5ca9a812e251ef23c78e71558203a94ba1e68a11a905e25b34c"
     },
     {
       "id": "boulder-2",
@@ -1549,8 +1559,7 @@
           {
             "color": "#8C8C94",
             "emissive": 0,
-            "specular": 0,
-            "shininess": 0
+            "specular": 0
           }
         ],
         "shapes": [
@@ -1589,7 +1598,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "8fcace2f4f95b6a913f1f779dd010005c974463b626c9a1e3504772900fb49bc"
+      "hash": "2bd62dbf911e01fdeca33ec74fcedae3d37de806ca94f958838dd92b8330fbeb"
     },
     {
       "id": "boulder-3",
@@ -1602,8 +1611,7 @@
           {
             "color": "#8C8C94",
             "emissive": 0,
-            "specular": 0,
-            "shininess": 0
+            "specular": 0
           }
         ],
         "shapes": [
@@ -1642,7 +1650,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "f2cb3176359084e34861b368ff4453492d475b3069c53bd05da882c8a97eb87a"
+      "hash": "ef32f4e0ca8aba7da54ccf2888aa4e8b97ce929ab825a2cb10d0ad6266d2f53c"
     },
     {
       "id": "boulder-4",
@@ -1655,8 +1663,7 @@
           {
             "color": "#8C8C94",
             "emissive": 0,
-            "specular": 0,
-            "shininess": 0
+            "specular": 0
           }
         ],
         "shapes": [
@@ -1695,7 +1702,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "3cae1b3a1d90fc5b144218384ed7512c8147b0e4a8bad0626c3e02cf29103743"
+      "hash": "ff028fd9ac93b323d4cddb7f526d3a655053702c8499a859b624263b495a9ba3"
     },
     {
       "id": "boulder-5",
@@ -1708,8 +1715,7 @@
           {
             "color": "#8C8C94",
             "emissive": 0,
-            "specular": 0,
-            "shininess": 0
+            "specular": 0
           }
         ],
         "shapes": [
@@ -1748,7 +1754,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "a7c15ebde24f2942d5ff33f92c9347c3e62ddc7673c21e3ebd0adb645db5acfd"
+      "hash": "462f0f6190c714c25b55783c6160c4bd7d532a0d4c31951fee2747c062371592"
     }
   ],
   "placements": {
@@ -1889,8 +1895,6 @@
     "presentMode": "Immediate",
     "targetHertz": 0,
     "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
     "genlock": null,
     "listen": null
   },
@@ -1902,7 +1906,7 @@
     },
     "seatRig": {
       "name": "seatChase",
-      "version": "puck.camera.v1",
+      "version": "puck.camera.program.v1",
       "operations": [
         {
           "$type": "orbit",
@@ -1927,7 +1931,7 @@
           ]
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.9599311
         }
       ]
@@ -1968,7 +1972,7 @@
       }
     ]
   },
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "documentId": "channel-walk-world",
   "seatDefaults": {
     "identities": [

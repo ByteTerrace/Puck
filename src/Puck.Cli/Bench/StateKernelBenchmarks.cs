@@ -83,9 +83,9 @@ public class StateArithmeticKernels {
             );
             m_right[i] = ((Outcome == KernelOutcome.Refused)
                 ? 0L
-                : (((OperandWidth == KernelOperands.Small)
+                : ((OperandWidth == KernelOperands.Small)
                 ? Operands.NarrowRaw(rng: rng)
-                : Operands.WideRaw(rng: rng)) | 1L)
+                : Operands.WideRaw(rng: rng)) | 1L
             );
             m_offsets[i] = ((Outcome == KernelOutcome.Refused)
                 ? 64L
@@ -161,16 +161,16 @@ public class StateArithmeticKernels {
     }
     /// <summary>Drives the unary entry point's magnitude arm.</summary>
     [Benchmark]
-    public long UnaryAbs() => Unary(operation: ExpressionOp.Abs);
+    public long UnaryAbs() => Unary(operation: ExpressionOp.Absolute);
     /// <summary>Drives the unary entry point's bit-reversal arm.</summary>
     [Benchmark]
-    public long UnaryBitReverse() => Unary(operation: ExpressionOp.BitReverse);
+    public long UnaryReverseBits() => Unary(operation: ExpressionOp.ReverseBits);
     /// <summary>Drives the unary entry point's negation arm.</summary>
     [Benchmark]
     public long UnaryNegate() => Unary(operation: ExpressionOp.Negate);
     /// <summary>Drives the unary entry point's set-bit-count arm.</summary>
     [Benchmark]
-    public long UnaryPopCount() => Unary(operation: ExpressionOp.PopCount);
+    public long UnaryPopCount() => Unary(operation: ExpressionOp.SetBitCount);
 
     private long Binary(ExpressionOp operation) {
         var kind = ((Kind == KernelKind.Int)

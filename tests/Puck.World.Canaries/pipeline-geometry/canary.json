@@ -1,0 +1,65 @@
+{
+  "id": "pipeline-geometry",
+  "title": "Two indexed, depth-tested geometry passes continue one color and one depth attachment, and a fullscreen pass samples by UV the right way up on both backends",
+  "binding": "The positive leg boots an offscreen world whose one pipeline draws two geometry passes into a 32x32 RGBA8 color chain (c0 then c1, which forwards it) and a D32Float depth chain (d0 then d1), then samples c1 by the fullscreen adapter's UV into the published image. The first pass clears both attachments (color to opaque black, depth to one) and draws the left half red at depth 1/4 from 16-bit indices listed out of order. The second loads both and draws, from 32-bit indices, a green quad over the top right quarter at depth 1/2 first and then a blue quad over the left three quarters at depth 3/4, both with depth test Less. Every expectation is derived from that geometry, not recorded: the left half stays red because the loaded depth rejects the blue quad, the top right stays green because the blue quad drawn after it is farther, columns 16 to 23 of the bottom half are blue, and columns 24 to 31 of the bottom half keep the first pass's cleared black through the load and store. Those regions cannot pin orientation, because the geometry pass and the fullscreen pass flip together. The same pipeline therefore also writes a compute image whose rows alone fix its orientation, top half red and bottom half blue, samples it by the same UV through a fullscreen pass into a second output, and captures that output: its top rows are red and its bottom rows blue exactly when clip-space +y is the top of the attachment, which Vulkan's negative-height viewport provides. The discriminating leg changes only the second geometry pass's depth test to Always, so the blue quad drawn last covers the left three quarters: the red and top-middle green oracles turn red, while the top right corner keeps green, the bottom right keeps black and the orientation holds.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "geometry.pipeline.json",
+    "always.pipeline.json",
+    "layers.hlsl",
+    "present.hlsl",
+    "stripes.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-geometry/fixture.world.json",
+    "script": "geometry.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.output", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the-graph-installs", "stream": "stderr", "match": "exact", "text": "[pipeline: geometry wait installed reached]", "present": true },
+      { "type": "imageRegion", "name": "left-half-keeps-the-near-red-through-the-loaded-depth", "capture": "image.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "top-right-keeps-the-nearer-green-drawn-first", "capture": "image.png", "extent": [32, 32], "region": [0.53125, 0.03125, 0.96875, 0.46875], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "bottom-middle-is-the-far-blue", "capture": "image.png", "extent": [32, 32], "region": [0.53125, 0.53125, 0.71875, 0.96875], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "bottom-right-keeps-the-first-pass-clear", "capture": "image.png", "extent": [32, 32], "region": [0.78125, 0.53125, 0.96875, 0.96875], "reduce": "every", "minimum": [0, 0, 0, 1], "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "oriented-top-rows-are-the-red-top-rows", "capture": "oriented.png", "extent": [32, 32], "region": [0.03125, 0, 0.96875, 0.46875], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "oriented-bottom-rows-are-the-blue-bottom-rows", "capture": "oriented.png", "extent": [32, 32], "region": [0.03125, 0.53125, 0.96875, 1], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-geometry/always.world.json",
+    "script": "geometry.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.time", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.output", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "imageRegion", "name": "left-half-is-the-blue-drawn-last", "capture": "image.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "left-half-is-not-the-near-red", "capture": "image.png", "extent": [32, 32], "region": [0.03125, 0.03125, 0.46875, 0.96875], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "top-middle-is-the-blue-drawn-last", "capture": "image.png", "extent": [32, 32], "region": [0.53125, 0.03125, 0.71875, 0.46875], "reduce": "every", "minimum": [0, 0, 1, 1], "maximum": [0, 0, 1, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "top-right-corner-keeps-green", "capture": "image.png", "extent": [32, 32], "region": [0.78125, 0.03125, 0.96875, 0.46875], "reduce": "every", "minimum": [0, 1, 0, 1], "maximum": [0, 1, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "bottom-right-keeps-the-clear", "capture": "image.png", "extent": [32, 32], "region": [0.78125, 0.53125, 0.96875, 0.96875], "reduce": "every", "minimum": [0, 0, 0, 1], "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "oriented-top-rows-stay-red", "capture": "oriented.png", "extent": [32, 32], "region": [0.03125, 0, 0.96875, 0.46875], "reduce": "every", "minimum": [1, 0, 0, 1], "maximum": [1, 0, 0, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  }
+}

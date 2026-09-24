@@ -83,11 +83,11 @@ public abstract record OverlayPredicate {
     public sealed record Near(OverlaySubject Subject, float Distance, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlaySubject? Of = null) : OverlayPredicate;
     /// <summary>A state cell compares to a literal: <paramref name="Binding"/> is <c>state.&lt;row&gt;[.&lt;key&gt;]</c>,
     /// and exactly one of <paramref name="Value"/> (numeric rows) or <paramref name="Text"/> (text rows, compared
-    /// ordinally; only <see cref="ActionStateComparison.Equal"/>/<see cref="ActionStateComparison.NotEqual"/>) is
+    /// ordinally; only <see cref="ExpressionOp.Equal"/>/<see cref="ExpressionOp.NotEqual"/>) is
     /// authored. The same cell a bar's <c>layoutCell</c> or a wheel sector writes.</summary>
     public sealed record State(
         string Binding,
-        ActionStateComparison Comparison = ActionStateComparison.Equal,
+        [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison = ExpressionOp.Equal,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
     ) : OverlayPredicate;

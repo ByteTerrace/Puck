@@ -25,6 +25,9 @@ internal sealed class ConformanceRomStage : IPostStage<PostContext> {
     }
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         $"conformance-{m_group}";
     /// <inheritdoc/>

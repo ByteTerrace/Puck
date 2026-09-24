@@ -230,7 +230,7 @@ public static partial class PuckParser {
 
         return sawComparator;
     }
-    // A bare `name(...)` gate, taken only when nothing comparison-shaped follows it: `min(a, b) == 3` is a
+    // A bare `name(...)` gate, taken only when nothing comparison-shaped follows it: `minimum(a, b) == 3` is a
     // comparison whose left operand happens to be a call, and reading the call as the whole gate would swallow the
     // comparator. The scan is speculative for that reason and rewinds when it guesses wrong -- including when the
     // arguments fail to parse as expressions at all, since a comparison operand is opaque text handed to

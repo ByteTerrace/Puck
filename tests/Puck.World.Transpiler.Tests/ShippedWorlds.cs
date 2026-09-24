@@ -1,18 +1,20 @@
+using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>The one enumeration of the shipped world corpus, and the one structural JSON comparison, that every
-/// corpus-wide gate in this assembly runs over.</summary>
-/// <remarks>Enumeration is recursive. <see cref="Sources"/> is every committed <c>.puck</c> world source; it is both
-/// the corpus of gates that judge a source as committed text — reference linting, formatter idempotence, formatting
-/// preserving what a source compiles to — and the corpus of the byte-identity regeneration gate, because every
-/// source's document is the compiler's own output. <see cref="Files"/> is every other committed world document, gated
-/// through its own decompilation: a generated document is the expansion of its source, so decompiling it tests an
-/// import nobody performs and can exceed the source-length limit. Three private copies of the walk could disagree
-/// about which documents each gate covers.</remarks>
+/// <summary>The one enumeration of the shipped world corpus, the one compilation of each committed source, and the one
+/// structural JSON comparison, that every corpus-wide gate in this assembly runs over.</summary>
+/// <remarks>Enumeration is recursive. <see cref="Sources"/> is every committed <c>.puck</c> world source, the corpus of
+/// gates that judge a source as committed text — reference linting, formatter idempotence, formatting preserving what
+/// a source compiles to. <see cref="Files"/> is every hand-authored world document, gated through its own
+/// decompilation. Three private copies of the walk could disagree about which documents each gate covers.</remarks>
 internal static class ShippedWorlds {
+    // A committed source is the largest thing the suite compiles and several gates judge the same compilation, so
+    // each source compiles once per run.
+    private static readonly ConcurrentDictionary<string, Lazy<WorldCompilation>> Compilations = new(comparer: StringComparer.Ordinal);
+
     private static IEnumerable<string> Enumerate(string pattern) {
         var worldsDirectory = FindDirectory();
 
@@ -31,27 +33,66 @@ internal static class ShippedWorlds {
             .Order(comparer: StringComparer.Ordinal);
     }
 
-    /// <summary>Returns the committed document a world source compiles to: the path <c>puck compile</c> writes
-    /// when no output is named.</summary>
-    /// <param name="sourcePath">A forward-slashed source path relative to the worlds directory.</param>
-    /// <returns>The forward-slashed document path relative to the worlds directory.</returns>
-    public static string DocumentOf(string sourcePath) =>
-        Path.ChangeExtension(
-            extension: ".world.json",
-            path: sourcePath
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
+    /// <summary>Returns a committed source compiled as <c>puck compile</c> compiles it, from its own path, failing the
+    /// test when it reports an error.</summary>
+    /// <param name="relativePath">A forward-slashed source path relative to the worlds directory.</param>
+    /// <returns>The compilation. Its document is the caller's own copy; its source map and diagnostics are shared
+    /// by every caller and are read, never written.</returns>
+    public static WorldCompilation Compile(string relativePath) {
+        var shared = Compilations.GetOrAdd(
+            key: relativePath,
+            valueFactory: static path => new Lazy<WorldCompilation>(valueFactory: () => {
+                var sourcePath = PathOf(relativePath: path);
+
+                return WorldCompiler.Compile(
+                    source: File.ReadAllText(path: sourcePath),
+                    sourcePath: sourcePath
+                );
+            })
+        ).Value;
+
+        Assert.False(
+            condition: shared.Diagnostics.HasErrors,
+            userMessage: $"{relativePath} does not compile:{Environment.NewLine}{shared.Diagnostics.FormatReport(File.ReadAllText(path: PathOf(relativePath: relativePath)))}"
         );
-    /// <summary>Returns every <c>*.world.json</c> under the worlds directory that is not a source's generated
-    /// output, recursively, as forward-slashed paths relative to it, in ordinal order.</summary>
-    /// <returns>The decompilation corpus as xUnit theory data.</returns>
-    public static IEnumerable<string> FilePaths() {
-        var generated = SourcePaths().Select(selector: DocumentOf).ToHashSet(comparer: StringComparer.Ordinal);
 
-        return Enumerate(pattern: "*.world.json").Where(predicate: path => !generated.Contains(item: path));
+        return (shared with { Json = ((JsonObject?)shared.Json?.DeepClone()) });
     }
+    /// <summary>Returns the absolute path of a file under the worlds directory.</summary>
+    /// <param name="relativePath">A forward-slashed path relative to the worlds directory.</param>
+    /// <returns>The absolute path.</returns>
+    public static string PathOf(string relativePath) => Path.Combine(
+        path1: FindDirectory(),
+        path2: relativePath
+    );
+    /// <summary>Returns every hand-authored <c>*.world.json</c> under the worlds directory, recursively, as
+    /// forward-slashed paths relative to it, in ordinal order: the documents no source carries
+    /// (<see cref="Composition.PuckDocumentComposer.TryCarriers"/>), since a document file sharing the name of a source
+    /// that emits a document is never read in the source's place.</summary>
+    /// <returns>The decompilation corpus.</returns>
+    public static IEnumerable<string> FilePaths() {
+        var worldsDirectory = FindDirectory();
 
+        if (!Composition.PuckDocumentComposer.TryCarriers(
+            carriers: out var carriers,
+            directory: worldsDirectory,
+            libraries: out _,
+            option: SearchOption.AllDirectories,
+            reason: out var reason
+        )) {
+            throw new InvalidDataException(message: reason);
+        }
+
+        return carriers
+            .Where(predicate: static carrier => !carrier.IsSource)
+            .Select(selector: carrier => Path.GetRelativePath(
+                path: carrier.Path,
+                relativeTo: worldsDirectory
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            ));
+    }
     public static TheoryData<string> Files() => new(values: FilePaths());
     /// <summary>Returns the absolute path of <c>src/Puck.World/Assets/worlds</c>, walked up from the test
     /// runner's own directory.</summary>

@@ -12,22 +12,22 @@ public sealed partial class WorldRuleHost {
     }
 
     /// <inheritdoc />
-    public void ConfigureUndo(IReadOnlyList<ArenaUndoPlan> plans) => Host.Arena.ConfigureUndo(plans);
+    public void ConfigureUndo(IReadOnlyList<ArenaUndoPlan> plans) => Host.Arena.ConfigureUndo(plans: plans);
     /// <inheritdoc />
-    public bool UndoTurnPending(string group) => Host.Arena.UndoTurnPending(group);
+    public bool UndoTurnPending(string group) => Host.Arena.UndoTurnPending(group: group);
     /// <inheritdoc />
-    public void BeginUndoTurn(string group) => Host.Arena.BeginUndoTurn(group);
+    public void BeginUndoTurn(string group) => Host.Arena.BeginUndoTurn(group: group);
     /// <inheritdoc />
-    public void BeginUndoPass(string group) => Host.Arena.BeginUndoPass(group);
+    public void BeginUndoPass(string group) => Host.Arena.BeginUndoPass(group: group);
     /// <inheritdoc />
-    public void EndUndoPass(string group) => Host.Arena.EndUndoPass(group);
+    public void EndUndoPass(string group) => Host.Arena.EndUndoPass(group: group);
     /// <inheritdoc />
-    public void CommitUndoTurn(string group) => Host.Arena.CommitUndoTurn(group);
+    public void CommitUndoTurn(string group) => Host.Arena.CommitUndoTurn(group: group);
     /// <inheritdoc />
-    public void CancelUndoTurn(string group) => Host.Arena.CancelUndoTurn(group);
+    public void CancelUndoTurn(string group) => Host.Arena.CancelUndoTurn(group: group);
     /// <inheritdoc />
-    public bool TryRewindTurn(string group, out string reason) {
-        if (!Host.Arena.TryRewindTurn(group, out reason)) {
+    public bool TryRewindGroup(string group, out string reason) {
+        if (!Host.Arena.TryRewindGroup(group: group, reason: out reason)) {
             return false;
         }
         InvalidateArenaScheduling();

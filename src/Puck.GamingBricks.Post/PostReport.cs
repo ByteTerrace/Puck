@@ -10,14 +10,16 @@ public sealed class PostReport {
     /// <summary>Initializes a new instance of the <see cref="PostReport"/> class, folding the per-stage verdicts into an
     /// exit code (any infra → 2, else any fail → 1, else 0; skips are neutral).</summary>
     /// <param name="banner">The table's first line — the caller's own battery/machine identification.</param>
-    /// <param name="results">The per-stage results, in run order.</param>
+    /// <param name="results">The per-stage results, in stage-list order.</param>
     /// <param name="duration">The whole run's wall-clock time.</param>
+    /// <param name="abandoned">Whether the hang guard abandoned the run with stages still running.</param>
     /// <exception cref="ArgumentException"><paramref name="banner"/> is null or empty.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="results"/> is <see langword="null"/>.</exception>
-    public PostReport(string banner, IReadOnlyList<PostStageResult> results, TimeSpan duration) {
+    public PostReport(string banner, IReadOnlyList<PostStageResult> results, TimeSpan duration, bool abandoned) {
         ArgumentException.ThrowIfNullOrEmpty(argument: banner);
         ArgumentNullException.ThrowIfNull(argument: results);
 
+        Abandoned = abandoned;
         Banner = banner;
         Duration = duration;
         Results = results;
@@ -41,13 +43,16 @@ public sealed class PostReport {
         ));
     }
 
+    /// <summary>Gets a value indicating whether the hang guard abandoned the run: every unfinished stage is reported as
+    /// hung and may still be running, so the caller ends the process once the report is written.</summary>
+    public bool Abandoned { get; }
     /// <summary>The table's first line — the caller's own battery/machine identification.</summary>
     public string Banner { get; }
     /// <summary>The whole run's wall-clock time.</summary>
     public TimeSpan Duration { get; }
     /// <summary>The process exit code folded from the per-stage verdicts.</summary>
     public int ExitCode { get; }
-    /// <summary>The per-stage results, in run order.</summary>
+    /// <summary>The per-stage results, in stage-list order.</summary>
     public IReadOnlyList<PostStageResult> Results { get; }
 
     private string Summarize() {

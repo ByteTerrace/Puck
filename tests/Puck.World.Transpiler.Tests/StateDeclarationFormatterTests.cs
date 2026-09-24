@@ -1,5 +1,3 @@
-using System.Text.Json.Nodes;
-using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Xunit;
 
@@ -47,47 +45,6 @@ public class StateDeclarationFormatterTests {
         }
 
         """;
-
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string source) {
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
-    }
-
-    [Fact]
-    public void FormattingEveryDeclarationFormTwiceIsIdempotent() {
-        var pass1 = PuckFormat.Format(DeclarationSource);
-        var pass2 = PuckFormat.Format(pass1);
-
-        Assert.Equal(
-            actual: pass2,
-            expected: pass1
-        );
-    }
-    [Fact]
-    public void FormattingPreservesWhatTheDeclarationsCompileTo() {
-        var (beforeJson, beforeDiagnostics) = Lower(source: DeclarationSource);
-        var formatted = PuckFormat.Format(DeclarationSource);
-
-        var (afterJson, afterDiagnostics) = Lower(source: formatted);
-
-        Assert.False(condition: beforeDiagnostics.HasErrors);
-        Assert.False(condition: afterDiagnostics.HasErrors);
-
-        var mismatch = JsonMismatch.Find(
-            actual: afterJson,
-            expected: beforeJson,
-            path: "$"
-        );
-
-        Assert.Null(@object: mismatch);
-    }
-
     private const string SqlDeclarationSource = """
         schema: "puck.world.definition.v1"
 
@@ -120,32 +77,11 @@ public class StateDeclarationFormatterTests {
 
         """;
 
-    [Fact]
-    public void FormattingSqlDeclarationTwiceIsIdempotent() {
-        var pass1 = PuckFormat.Format(SqlDeclarationSource);
-        var pass2 = PuckFormat.Format(pass1);
-
-        Assert.Equal(
-            actual: pass2,
-            expected: pass1
-        );
-    }
-    [Fact]
-    public void FormattingPreservesWhatSqlDeclarationsCompileTo() {
-        var (beforeJson, beforeDiagnostics) = Lower(source: SqlDeclarationSource);
-        var formatted = PuckFormat.Format(SqlDeclarationSource);
-
-        var (afterJson, afterDiagnostics) = Lower(source: formatted);
-
-        Assert.False(condition: beforeDiagnostics.HasErrors, userMessage: beforeDiagnostics.FormatReport(""));
-        Assert.False(condition: afterDiagnostics.HasErrors, userMessage: afterDiagnostics.FormatReport(""));
-
-        var mismatch = JsonMismatch.Find(
-            actual: afterJson,
-            expected: beforeJson,
-            path: "$"
-        );
-
-        Assert.Null(@object: mismatch);
-    }
+    [InlineData(nameof(DeclarationSource))]
+    [InlineData(nameof(SqlDeclarationSource))]
+    [Theory]
+    public void FormattingEveryDeclarationFormIsStable(string name) => PuckFormat.AssertStable(source: ((name == nameof(DeclarationSource))
+        ? DeclarationSource
+        : SqlDeclarationSource)
+    );
 }

@@ -32,10 +32,12 @@ public static class WorldReleaseMetadataTransition {
         if (Same(
             left: before,
             right: after
-        )) { return new(
+        )) {
+            return new(
             Exists: current.Exists,
             Value: current.Value?.DeepClone()
-        ); }
+        );
+        }
         if (
             (before.Value is null or JsonObject) &&
             (after.Value is null or JsonObject) &&

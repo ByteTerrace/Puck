@@ -9,7 +9,7 @@ public sealed class RuleCompilerLawTests {
         var context = RulesFixture.Context();
         var rule = RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Key: "a",
                 State: "codes",
                 Value: 0m
@@ -71,12 +71,12 @@ public sealed class RuleCompilerLawTests {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.All(Predicates: [
                 new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     State: "score",
                     Value: 0m
                 ),
                 new ActionPredicate.Not(Predicate: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     State: "score",
                     Value: 9m
                 )),
@@ -101,7 +101,7 @@ public sealed class RuleCompilerLawTests {
     public void AKeyedRowReadWithoutAKeyIsRefusedByName() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: "codes",
                 Value: 0m
             ),
@@ -113,7 +113,7 @@ public sealed class RuleCompilerLawTests {
     public void AnUndeclaredCellReadIsRefusedByName() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 Key: "zz",
                 State: "codes",
                 Value: 0m
@@ -242,7 +242,7 @@ public sealed class RuleCompilerLawTests {
                 )],
                 Gate: new ActionPredicate.CompareValue(
                     Kind: CellKind.Int,
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Left: RulesFixture.Program(text: "$local:next"),
                     Right: RulesFixture.Program(text: "2")
                 ),
@@ -397,7 +397,7 @@ public sealed class RuleCompilerLawTests {
     public void ALiveZoneReadResolvesThroughTheRulesOwnTable() {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Key: "a",
                 State: "$zones[$each]",
                 Value: 0m
@@ -422,7 +422,7 @@ public sealed class RuleCompilerLawTests {
             context: context,
             rule: RulesFixture.Rule(
                 gate: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     Key: StateRow.SlotKey.Value,
                     State: "slot[$each]",
                     Value: 0m
@@ -456,7 +456,7 @@ public sealed class RuleCompilerLawTests {
             context: context,
             rule: RulesFixture.Rule(
                 gate: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     State: "$reduce:count:codes:where:tokens",
                     Value: 0m
                 ),
@@ -530,7 +530,7 @@ public sealed class RuleCompilerLawTests {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             effects: [new ActionEffect.If(
                 Condition: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     State: "score",
                     Value: 0m
                 ),
@@ -602,7 +602,7 @@ public sealed class RuleCompilerLawTests {
             context: context,
             rule: RulesFixture.Rule(
                 gate: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     State: "$match:run:deck",
                     Value: 1m
                 ),
@@ -629,7 +629,7 @@ public sealed class RuleCompilerLawTests {
     public void ABoardQueryCompilesAgainstItsDeclaredTopology() {
         var compiled = RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.GreaterOrEqual,
+                Comparison: ExpressionOp.GreaterOrEqual,
                 Key: "0",
                 State: "$board:neighbour:board:E",
                 Value: 0m
@@ -706,7 +706,7 @@ public sealed class RuleCompilerLawTests {
     public void AMixedKindComparisonIsRefusedByName() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 ComparandState: "ratio",
                 State: "score"
             ),
@@ -718,7 +718,7 @@ public sealed class RuleCompilerLawTests {
     public void ATextRowComparedAsANumberIsRefusedByName() => Assert.Equal(
         actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: "label",
                 Value: 0m
             ),

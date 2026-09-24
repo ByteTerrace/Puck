@@ -38,62 +38,6 @@ internal static class PresentedDiagramClaims {
             keys: [key],
             coefficients: [BigInteger.One]
         );
-    // Transcribed from the construction presented.braiding-hexagon-witnessed's own QuantumTorusPresentation already
-    // exercises: two generators of the given order, both swapping at the given charge, over a prime field of the
-    // given modulus. This is SUBJECT construction (the same public ChargedPresentation.Create surface every
-    // Presentations.* factory in Puck.Maths itself calls), not oracle arithmetic, so re-authoring it here shares no
-    // evidence with the skew-pairing check above.
-    private static ChargedPresentation<ulong, PrimeFieldMaterial> QuantumTorus(int order, ulong modulus, ulong swapCharge) {
-        var first = new int[order];
-        var second = new int[order];
-
-        for (var index = 0; (index < order); ++index) { second[index] = 1; }
-
-        return ChargedPresentation<ulong, PrimeFieldMaterial>.Create(
-            generators: SingleColourBasis(count: 2),
-            rules: [
-                new(
-                    kind: RuleKind.Reassociate,
-                    pattern: ReadOnlyMemory<int>.Empty,
-                    replacement: RewriteRule<ulong>.PackReplacement(terms: [[]]),
-                    charges: new[] { 1UL }
-                ),
-                new(
-                    kind: RuleKind.Swap,
-                    pattern: new[] { 1, 0 },
-                    replacement: RewriteRule<ulong>.PackReplacement(terms: [[0, 1]]),
-                    charges: new[] { swapCharge }
-                ),
-                new(
-                    kind: RuleKind.Reduce,
-                    pattern: first,
-                    replacement: RewriteRule<ulong>.PackReplacement(terms: [[]]),
-                    charges: new[] { 1UL }
-                ),
-                new(
-                    kind: RuleKind.Reduce,
-                    pattern: second,
-                    replacement: RewriteRule<ulong>.PackReplacement(terms: [[]]),
-                    charges: new[] { 1UL }
-                ),
-            ],
-            material: PrimeFieldMaterial.Create(modulus: modulus)
-        );
-    }
-    private static Generator[] SingleColourBasis(int count) {
-        var generators = new Generator[count];
-
-        for (var symbol = 0; (symbol < count); ++symbol) {
-            generators[symbol] = new Generator(
-                degree: 1,
-                inputs: new int[] { 0 },
-                outputs: new int[] { 0 },
-                symbol: symbol
-            );
-        }
-
-        return generators;
-    }
     // The two exponents of a quantum-torus normal form, counted off its word rather than assumed from its key.
     private static (int Low, int High) TorusExponents(ChargedPresentation<ulong, PrimeFieldMaterial> presentation, long key) {
         var low = 0;
@@ -171,7 +115,7 @@ internal static class PresentedDiagramClaims {
         ];
 
         foreach (var (name, algebra) in instances) {
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
             var keys = algebra.MaximumSupportCount;
 
             for (var left = 0; (left < keys); ++left) {
@@ -319,8 +263,8 @@ internal static class PresentedDiagramClaims {
     /// multiplication — at three (order, modulus, swap-charge) configurations.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     /// <remarks>
-    /// The presentation construction (<see cref="QuantumTorus"/>) is transcribed from the same construction
-    /// <c>presented.braiding-hexagon-witnessed</c>'s <c>QuantumTorusPresentation</c> already builds and runs — that
+    /// The presentation is <see cref="Subjects.QuantumTorusPresentation"/>, the same construction
+    /// <c>presented.braiding-hexagon-witnessed</c> builds and runs — subject construction, not oracle arithmetic. That
     /// existing case checks only the IsBraided/IsSymmetric/witness flags at two of these three configurations, and
     /// <c>presented.braiding-hexagon-witnessed</c>'s quantum-torus-separates-the-flags leg checks the derived charge
     /// at exactly ONE pair of ONE configuration. Neither reaches the third configuration (order 3, modulus 13, swap
@@ -330,12 +274,12 @@ internal static class PresentedDiagramClaims {
     /// </remarks>
     public static string? QuantumTorusChargeMatchesSkewPairing() {
         foreach (var (order, modulus, swapCharge) in (((int Order, ulong Modulus, ulong SwapCharge)[])[(3, 7UL, 2UL), (3, 13UL, 3UL), (4, 5UL, 2UL)])) {
-            var algebra = PresentedAlgebra<ulong, PrimeFieldMaterial>.Create(presentation: QuantumTorus(
+            var algebra = PresentedAlgebra<ulong, PrimeFieldMaterial>.Create(presentation: Subjects.QuantumTorusPresentation(
                 modulus: modulus,
                 order: order,
                 swapCharge: swapCharge
             ));
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
             var keys = algebra.MaximumSupportCount;
 
             if (keys != (order * order)) {

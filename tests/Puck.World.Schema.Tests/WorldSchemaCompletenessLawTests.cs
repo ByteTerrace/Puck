@@ -1,8 +1,9 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using Json.Schema;
 
+using Puck.Testing;
+using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -34,24 +35,18 @@ public sealed class WorldSchemaCompletenessLawTests {
         "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/weight",
     };
     private static readonly Lazy<JsonObject> BundleHolder = new(valueFactory: BuildBundle);
-    private static readonly Lazy<JsonSchema> CompiledBundleHolder = new(valueFactory: () => JsonSchema.FromText(jsonText: Bundle.ToJsonString()));
+    private static readonly Lazy<JsonSchema> CompiledBundleHolder = new(valueFactory: () => SchemaVerdicts.Build(schema: Bundle));
+    private static readonly Lazy<JsonObject> ComposedIslandHolder = new(valueFactory: ComposeIsland);
 
     private static JsonObject Bundle => BundleHolder.Value;
     private static JsonSchema CompiledBundle => CompiledBundleHolder.Value;
+    // Composed once for every law that reads it; a law that changes it works on its own deep clone.
+    private static JsonObject ComposedIsland => ComposedIslandHolder.Value;
 
     private static void AssertValidatesAgainstBundle(JsonNode instance, string label) {
-        var results = CompiledBundle.Evaluate(
-            root: instance,
-            options: new EvaluationOptions { OutputFormat = OutputFormat.List }
-        );
-
-        Assert.True(
-            condition: results.IsValid,
-            userMessage: $"{label} failed schema validation:\n{JsonSerializer.Serialize(
-                value: results,
-                options: new JsonSerializerOptions { WriteIndented = true }
-            )}"
-        );
+        if (!CompiledBundle.Admits(instance: instance)) {
+            Assert.Fail(message: $"{label} failed schema validation:\n{CompiledBundle.Explain(instance: instance)}");
+        }
     }
     private static JsonObject BuildBundle() {
         var split = Puck.World.WorldSchema.Export(postRenderExtensions: []);
@@ -89,20 +84,28 @@ public sealed class WorldSchemaCompletenessLawTests {
         return false;
     }
     private static IEnumerable<object[]> FragmentPaths(string folder) =>
-        Directory.EnumerateFiles(
-            path: Path.Combine(
-                RepositoryRoot(),
-                "src",
-                "Puck.World",
-                "Assets",
-                "worlds",
-                folder
+        ShippedWorldDocuments.Files(
+            directory: Path.Combine(
+                path1: RepositoryPaths.Resolve(relativePath: ShippedWorldDocuments.WorldDirectory),
+                path2: folder
             ),
-            searchPattern: "*.world.json"
-        ).OrderBy(
-            keySelector: static path => path,
-            comparer: StringComparer.Ordinal
+            option: SearchOption.TopDirectoryOnly
         ).Select(selector: static path => new object[] { path });
+    private static JsonObject ComposeIsland() {
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
+                documents: PuckDocumentComposer.Instance,
+                path: IslandPath(),
+                tree: out var tree,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        return tree!;
+    }
+    private static string IslandPath() =>
+        RepositoryPaths.Resolve(relativePath: $"{ShippedWorldDocuments.WorldDirectory}/{WorldDocumentName.DocumentFile(name: "puck")}");
     private static bool IsClosedObject(JsonObject node) =>
         ((node["additionalProperties"] is JsonValue value) && value.TryGetValue<bool>(value: out var closed) && !closed);
     private static bool IsTyped(JsonObject node) =>
@@ -115,24 +118,7 @@ public sealed class WorldSchemaCompletenessLawTests {
         node.ContainsKey(propertyName: "$ref") ||
         node.ContainsKey(propertyName: "properties"));
     private static JsonNode ParseFragment(string path) =>
-        (JsonNode.Parse(json: File.ReadAllText(path: path)) ?? throw new InvalidDataException(message: $"{path} did not parse as JSON."));
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
+        (JsonNode.Parse(utf8Json: ShippedWorldDocuments.Read(path: path)) ?? throw new InvalidDataException(message: $"{path} did not parse as JSON."));
     // Follows a site straight to its shape: a bare "#/$defs/X" $ref resolves to that def's own content; a
     // nullable site ("anyOf": [{"$ref"}, {"type":"null"}], see WorldSchema.Bundle) resolves through its $ref arm.
     // A node that is neither is already a shape — returned as-is.
@@ -330,35 +316,12 @@ public sealed class WorldSchemaCompletenessLawTests {
     // declared.
     [Fact]
     public void ADocumentTheOldBundleRefusedStillRefuses() {
-        var path = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "puck.world.json"
-        );
-
-        Assert.True(
-            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-                path: path,
-                tree: out var tree,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-
-        var corrupted = ((JsonObject)tree!.DeepClone()!);
+        var corrupted = ((JsonObject)ComposedIsland.DeepClone());
 
         corrupted["thisPropertyWasNeverDeclaredByTheDocumentModel"] = true;
 
-        var results = CompiledBundle.Evaluate(
-            root: corrupted,
-            options: new EvaluationOptions { OutputFormat = OutputFormat.List }
-        );
-
         Assert.False(
-            condition: results.IsValid,
+            condition: CompiledBundle.Admits(instance: corrupted),
             userMessage: "an undeclared top-level property validated — additionalProperties:false regressed."
         );
     }
@@ -369,13 +332,13 @@ public sealed class WorldSchemaCompletenessLawTests {
         WalkBundle(
             bundle: Bundle,
             visit: (node, pointer) => {
-            if (
-                DeclaresArrayType(node: node) &&
-                !node.ContainsKey(propertyName: "items")
-            ) {
-                violations.Add(item: pointer);
+                if (
+                    DeclaresArrayType(node: node) &&
+                    !node.ContainsKey(propertyName: "items")
+                ) {
+                    violations.Add(item: pointer);
+                }
             }
-        }
         );
 
         Assert.True(
@@ -393,25 +356,25 @@ public sealed class WorldSchemaCompletenessLawTests {
         WalkBundle(
             bundle: Bundle,
             visit: (node, pointer) => {
-            if (
-                !IsClosedObject(node: node) ||
-                (node["properties"] is not JsonObject properties)
-            ) {
-                return;
-            }
-
-            foreach (var (name, value) in properties) {
-                var propertyPointer = $"{pointer}/properties/{name}";
-
                 if (
-                    (value is JsonObject propertyObject) &&
-                    !IsTyped(node: propertyObject) &&
-                    !UntypedAllowlist.Contains(item: propertyPointer)
+                    !IsClosedObject(node: node) ||
+                    (node["properties"] is not JsonObject properties)
                 ) {
-                    violations.Add(item: propertyPointer);
+                    return;
+                }
+
+                foreach (var (name, value) in properties) {
+                    var propertyPointer = $"{pointer}/properties/{name}";
+
+                    if (
+                        (value is JsonObject propertyObject) &&
+                        !IsTyped(node: propertyObject) &&
+                        !UntypedAllowlist.Contains(item: propertyPointer)
+                    ) {
+                        violations.Add(item: propertyPointer);
+                    }
                 }
             }
-        }
         );
 
         Assert.True(
@@ -473,50 +436,50 @@ public sealed class WorldSchemaCompletenessLawTests {
         WalkBundle(
             bundle: Bundle,
             visit: (node, pointer) => {
-            if (!node.ContainsKey(propertyName: "properties")) {
-                return;
-            }
+                if (!node.ContainsKey(propertyName: "properties")) {
+                    return;
+                }
 
-            if (string.Equals(
-                a: pointer,
-                b: "#",
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return;
-            }
+                if (string.Equals(
+                    a: pointer,
+                    b: "#",
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return;
+                }
 
-            if (
-                pointer.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "#/$defs/"
-            ) &&
-                !pointer["#/$defs/".Length..].Contains(value: '/')
-            ) {
-                return;
-            }
+                if (
+                    pointer.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "#/$defs/"
+                ) &&
+                    !pointer["#/$defs/".Length..].Contains(value: '/')
+                ) {
+                    return;
+                }
 
-            // A node carrying its own "$id" IS its own schema root (a self-contained embedded document, e.g.
-            // puck.creation.v1 — see WorldSchema.Bundle and Walk's own "$id" stop); Walk never recurses past it,
-            // so this is the one site such a node is ever visited from.
-            if (node.ContainsKey(propertyName: "$id")) {
-                return;
-            }
+                // A node carrying its own "$id" IS its own schema root (a self-contained embedded document, e.g.
+                // puck.creation.v1 — see WorldSchema.Bundle and Walk's own "$id" stop); Walk never recurses past it,
+                // so this is the one site such a node is ever visited from.
+                if (node.ContainsKey(propertyName: "$id")) {
+                    return;
+                }
 
-            // WorldStateRow's own shape is hand-assembled by StateRowJsonConverter<TRow> (an
-            // IJsonSchemaNodeConverter) — its "allOf"/"if"/"then" kind-conditional structure and every property
-            // nested under it are constructed directly in C#, never through Transform, so none of it carries a
-            // CLR type StampTitle could name. The def itself is still a def; only its OWN interior is exempt.
-            if (
-                pointer.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "#/$defs/WorldStateRow/"
-            )
-            ) {
-                return;
-            }
+                // WorldStateRow's own shape is hand-assembled by StateRowJsonConverter<TRow> (an
+                // IJsonSchemaNodeConverter) — its "allOf"/"if"/"then" kind-conditional structure and every property
+                // nested under it are constructed directly in C#, never through Transform, so none of it carries a
+                // CLR type StampTitle could name. The def itself is still a def; only its OWN interior is exempt.
+                if (
+                    pointer.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "#/$defs/WorldStateRow/"
+                )
+                ) {
+                    return;
+                }
 
-            violations.Add(item: pointer);
-        }
+                violations.Add(item: pointer);
+            }
         );
 
         Assert.True(
@@ -536,23 +499,23 @@ public sealed class WorldSchemaCompletenessLawTests {
             node: Bundle,
             pointer: "#",
             visit: (refValue, pointer) => {
-            const string Prefix = "#/$defs/";
+                const string Prefix = "#/$defs/";
 
-            if (!refValue.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Prefix
-            )) {
-                violations.Add(item: $"{pointer}: $ref '{refValue}' is not a bundle-local #/$defs/ pointer");
+                if (!refValue.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: Prefix
+                )) {
+                    violations.Add(item: $"{pointer}: $ref '{refValue}' is not a bundle-local #/$defs/ pointer");
 
-                return;
+                    return;
+                }
+
+                var name = refValue[Prefix.Length..];
+
+                if (!defs.ContainsKey(propertyName: name)) {
+                    violations.Add(item: $"{pointer}: $ref '{refValue}' names no $defs entry");
+                }
             }
-
-            var name = refValue[Prefix.Length..];
-
-            if (!defs.ContainsKey(propertyName: name)) {
-                violations.Add(item: $"{pointer}: $ref '{refValue}' names no $defs entry");
-            }
-        }
         );
 
         Assert.True(
@@ -620,22 +583,22 @@ public sealed class WorldSchemaCompletenessLawTests {
         WalkBundle(
             bundle: Bundle,
             visit: (node, pointer) => {
-            if (node["properties"] is not JsonObject properties) {
-                return;
-            }
+                if (node["properties"] is not JsonObject properties) {
+                    return;
+                }
 
-            foreach (var (name, value) in properties) {
-                var propertyPointer = $"{pointer}/properties/{name}";
+                foreach (var (name, value) in properties) {
+                    var propertyPointer = $"{pointer}/properties/{name}";
 
-                if (
-                    UntypedAllowlist.Contains(item: propertyPointer) &&
-                    (value is JsonObject propertyObject) &&
-                    IsTyped(node: propertyObject)
-                ) {
-                    typed.Add(item: propertyPointer);
+                    if (
+                        UntypedAllowlist.Contains(item: propertyPointer) &&
+                        (value is JsonObject propertyObject) &&
+                        IsTyped(node: propertyObject)
+                    ) {
+                        typed.Add(item: propertyPointer);
+                    }
                 }
             }
-        }
         );
 
         Assert.True(
@@ -647,29 +610,11 @@ public sealed class WorldSchemaCompletenessLawTests {
         );
     }
     [Fact]
-    public void TheComposedIslandValidatesAgainstTheBundle() {
-        var path = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "puck.world.json"
-        );
-
-        Assert.True(
-            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-                path: path,
-                tree: out var tree,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
+    public void TheComposedIslandValidatesAgainstTheBundle() =>
         AssertValidatesAgainstBundle(
-            instance: tree!,
-            label: path
+            instance: ComposedIsland,
+            label: IslandPath()
         );
-    }
     [Fact]
     public void UnconstrainedDefinitionsStayExplicit() {
         var gaps = Bundle["$defs"]!.AsObject()

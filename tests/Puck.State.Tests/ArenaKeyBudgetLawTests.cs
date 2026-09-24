@@ -64,7 +64,7 @@ public sealed class ArenaKeyBudgetLawTests {
         for (var index = 0; (arena.Keys.Count < StateCapacity.MaxCellKeys); index++) {
             var name = ArenaFixture.Name(value: $"budget-key-{index}-{new string(c: 'x', count: 220)}");
 
-            if (!arena.Keys.TryIntern(name, out _, out _)) {
+            if (!arena.Keys.TryIntern(key: out _, name: name, reason: out _)) {
                 break;
             }
         }
@@ -81,7 +81,7 @@ public sealed class ArenaKeyBudgetLawTests {
             );
             var name = ArenaFixture.Name(value: $"aggregate-{arena.Keys.Count}-{new string(c: 'q', count: length)}");
 
-            if (!arena.Keys.TryIntern(name, out _, out _)) {
+            if (!arena.Keys.TryIntern(key: out _, name: name, reason: out _)) {
                 break;
             }
         }
@@ -132,8 +132,8 @@ public sealed class ArenaKeyBudgetLawTests {
             ArenaFixture.Name(value: new string(c: 'b', count: 255)),
         };
 
-        Assert.False(arena.TryRestoreKeys(names, out var restoreReason));
-        Assert.Contains("budget", restoreReason, StringComparison.OrdinalIgnoreCase);
+        Assert.False(condition: arena.TryRestoreKeys(names: names, reason: out var restoreReason));
+        Assert.Contains(actualString: restoreReason, comparisonType: StringComparison.OrdinalIgnoreCase, expectedSubstring: "budget");
         Assert.Equal(beforeCount, arena.Keys.Count);
         Assert.Equal(beforeBytes, arena.Bytes);
 
@@ -166,12 +166,12 @@ public sealed class ArenaKeyBudgetLawTests {
         var mark = arena.BeginScope();
         var name = ArenaFixture.Name(value: $"rewind-{new string(c: 'r', count: 220)}");
 
-        Assert.True(arena.Keys.TryIntern(name, out _, out var reason), reason);
+        Assert.True(condition: arena.Keys.TryIntern(key: out _, name: name, reason: out var reason), userMessage: reason);
         Assert.True(condition: (arena.Bytes > beforeBytes));
 
         arena.Rewind(mark: mark);
         Assert.Equal(beforeBytes, arena.Bytes);
         Assert.Equal(beforeCount, arena.Keys.Count);
-        Assert.False(arena.Keys.TryResolve(name, out _));
+        Assert.False(condition: arena.Keys.TryResolve(key: out _, name: name));
     }
 }

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
-        <Description>Authors puck.cartridge.v1 cartridge documents in the Puck DSL: a source file with named constants, parametric templates, branches, counted loops and infix conditions compiles to the canonical cartridge JSON both GamingBrick forges consume, and decompiles back the other way. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <Description>Authors puck.cartridge.v1 cartridge documents in the Puck DSL: a source file with named constants, parametric templates, branches, counted loops and infix conditions compiles to the canonical cartridge JSON both GamingBrick forges consume, and decompiles back the other way. Licensed under the Apache License 2.0.</Description>
         <IsAotCompatible>true</IsAotCompatible>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.GamingBricks.Transpiler</PackageId>

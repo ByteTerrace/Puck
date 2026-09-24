@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -13,15 +15,15 @@ namespace Puck.World.Tests;
 /// (<see cref="WorldMutation.UpsertStateCell"/>) and an equivalent rule <see cref="ActionEffect.AddState"/> effect
 /// rebase the cell's clock identically.</summary>
 public sealed class EngineTimeClockSequenceLawTests {
-    private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
+    private static readonly Principal Actor = Principal.Seat(slot: 0);
     private static readonly ulong OtherRateStepTicks = Puck.Hosting.EngineTicks.PerRate(ratePerSecond: 60U);
 
     private static WorldStateRow ClockRow(long value = 0) => new(
         Name: CellName.Parse(candidate: "clock"),
         Kind: CellKind.Int,
         Advance: new StateAdvance(
-            PerSecondNumerator: 1000,
-            PerSecondDenominator: 1
+            PerSecondDenominator: 1,
+            PerSecondNumerator: 1000
         ),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
@@ -87,8 +89,8 @@ public sealed class EngineTimeClockSequenceLawTests {
 
         Write(
             fixture: fixture,
-            value: 200,
-            stepTicks: OtherRateStepTicks
+            stepTicks: OtherRateStepTicks,
+            value: 200
         );
 
         Assert.Equal(
@@ -100,7 +102,7 @@ public sealed class EngineTimeClockSequenceLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 2,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step(stepTicks: OtherRateStepTicks);
 
@@ -121,7 +123,7 @@ public sealed class EngineTimeClockSequenceLawTests {
 
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var checkpoint,
                 reason: out var captureReason
             ),
@@ -134,12 +136,14 @@ public sealed class EngineTimeClockSequenceLawTests {
             engines: [],
             screens: restoredDefinition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-engine-time-sequence-tests-");
+
         var (restored, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "engine-time-sequence-restore",
             machines: machines,
             profiles: new WorldOwnedWorlds(
-                directory: Directory.CreateTempSubdirectory(prefix: "puck-engine-time-sequence-tests-").FullName,
+                directory: profilesDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: restoredDefinition
             )
@@ -188,7 +192,7 @@ public sealed class EngineTimeClockSequenceLawTests {
                 Name: CellName.Parse(candidate: "push"),
                 Gate: new ActionPredicate.CompareState(
                     State: "trigger",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1m
                 ),
                 Mode: ActionTriggerMode.Edge,
@@ -236,19 +240,4 @@ public sealed class EngineTimeClockSequenceLawTests {
         );
     }
 
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
 }

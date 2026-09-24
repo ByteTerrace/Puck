@@ -67,11 +67,13 @@ public sealed partial class WorldInstanceHost {
                 ) {
                     Refuse(reason: "remote destination needs a valid endpoint and definition");
                 }
-                try { definition = WorldDefinitionSerialization.Deserialize(utf8Json: record.DestinationDefinitionJson!); } catch (InvalidDataException exception) { throw new ArgumentException(
+                try { definition = WorldDefinitionSerialization.Deserialize(utf8Json: record.DestinationDefinitionJson!); } catch (InvalidDataException exception) {
+                    throw new ArgumentException(
                     "invalid forwarding destination definition",
                     nameof(records),
                     exception
-                ); }
+                );
+                }
             } else if (record.DestinationDefinitionJson is not null) { Refuse(reason: "local destination cannot carry a remote definition"); }
             var destination = new WorldForwardingDestination(
                 record.DestinationAddress.Authority,
@@ -88,10 +90,13 @@ public sealed partial class WorldInstanceHost {
         }
         return result;
     }
-    private WorldRemoteAuthority RecoveryRemoteAuthority(WorldInstance source, string sourceAuthority,
+    // Null when the source row is local-only: it holds no peer network to dial the recovered destination through, so
+    // the binding stays deferred exactly as it does for a row that is not admitted yet.
+    private WorldRemoteAuthority? RecoveryRemoteAuthority(WorldInstance source, string sourceAuthority,
         string authority, string endpoint, WorldDefinition definition) {
         var key = (sourceAuthority, authority, endpoint);
 
+        if (source.Federation.Network is null) { return null; }
         if (!m_recoveredRemoteAuthorities.TryGetValue(
             key: key,
             value: out var remote
@@ -136,13 +141,13 @@ public sealed partial class WorldInstanceHost {
                 ));
 
                 if (source is null) { continue; }
-                var remote = RecoveryRemoteAuthority(
+                if (RecoveryRemoteAuthority(
                     source,
                     description.SourceAuthority,
                     description.DestinationAuthority,
                     endpoint,
                     definition
-                );
+                ) is not { } remote) { continue; }
 
                 deferred.TryBind(current: new WorldRemoteForwardedAuthority(
                     authority: remote,

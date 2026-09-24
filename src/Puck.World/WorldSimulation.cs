@@ -27,6 +27,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         peerHost: peerHost,
         replayTape: replayTape,
         scheduleRunner: scheduleRunner,
+        seatRouter: seatRouter,
         server: server,
         waitGate: waitGate
     );
@@ -39,6 +40,14 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     public WorldAddonRuntime Addons { get; } = addons;
 
     private Action? m_afterInstances;
+
+    /// <inheritdoc/>
+    public bool AwaitsFrame => m_step.AwaitsFrame;
+
+    /// <inheritdoc/>
+    public bool HoldsClock(ulong withheldTicks) => m_step.HoldsClock(withheldTicks: withheldTicks);
+    /// <inheritdoc/>
+    public void SettleOwedFrames() => m_step.SettleOwedFrames();
 
     /// <inheritdoc/>
     public ulong ElapsedTicks => m_step.ElapsedTicks;
@@ -55,15 +64,11 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     // channel-list references before doing any work.
     private void PublishSeats() {
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-            if (m_seatRouter.TryRoute(slot: slot) is { } route) {
-                m_seatBindings.SyncSeat(
-                    slot: slot,
-                    definition: route.Endpoint.Definition,
-                    engineTick: route.Endpoint.EngineTick,
-                    entityIndex: route.EntityIndex,
-                    nextInputTick: route.Endpoint.NextInputTick
-                );
-            }
+            m_seatBindings.SyncRoute(
+                client: m_client,
+                routes: m_seatRouter,
+                slot: slot
+            );
         }
 
         WorldSeatContextSync.Publish(

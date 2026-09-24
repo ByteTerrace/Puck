@@ -6,33 +6,28 @@ namespace Puck.Cli.Shaders;
 /// <summary>Compiles a source stage using the same compiler as live pipelines.</summary>
 internal static class CompileShaderCommand {
     public static Command Create() {
-        var source = new Argument<string>(name: "source") { Description = "Shader source path (.glsl defaults to Shadertoy; .hlsl to HLSL)." };
+        var source = new Argument<string>(name: "source") { Description = "HLSL source path." };
         var name = new Option<string?>("--name");
         var output = new Option<string>("--out") { Description = "SPIR-V and DXIL output directory.", Required = true };
         var toolchain = new Option<string?>("--toolchain");
-        var language = new Option<string?>("--language") { Description = "hlsl, glsl, or shadertoy." };
         var stage = new Option<string>("--stage") { DefaultValueFactory = _ => "compute", Description = "compute, vertex, or fragment." };
-        var entry = new Option<string?>("--entry") { Description = "Defaults to main, or mainImage for Shadertoy." };
+        var entry = new Option<string>("--entry") { DefaultValueFactory = _ => "main", Description = "The entry point." };
         var command = new Command(
             description: "Compile one shader stage for Vulkan and Direct3D 12.",
             name: "compile"
-        ) { source, name, output, toolchain, language, stage, entry };
+        ) { source, name, output, toolchain, stage, entry };
 
         command.SetAction(action: async (result, cancellationToken) => {
             var path = Path.GetFullPath(path: result.GetRequiredValue(argument: source));
-            var languageText = (result.GetValue(option: language) ?? (Path.GetExtension(path: path).Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: ".glsl"
-            )
-                ? "shadertoy"
-                : "hlsl"));
-            var sourceLanguage = languageText switch { "hlsl" => ShaderSourceLanguage.Hlsl, "glsl" => ShaderSourceLanguage.Glsl, "shadertoy" => ShaderSourceLanguage.ShadertoyGlsl, _ => ((ShaderSourceLanguage)(-1)) };
             var shaderStage = result.GetRequiredValue(option: stage) switch { "compute" => ShaderStage.Compute, "vertex" => ShaderStage.Vertex, "fragment" => ShaderStage.Fragment, _ => ((ShaderStage)255) };
 
-            if (
-                !Enum.IsDefined(value: sourceLanguage) ||
-                !Enum.IsDefined(value: shaderStage)
-            ) { Console.Error.WriteLine(value: "shaders compile: invalid --language or --stage"); return 1; }
+            if (!Enum.IsDefined(value: shaderStage)) {
+                return CliExit.Refuse(
+                    verb: "shaders compile",
+                    what: $"--stage {result.GetRequiredValue(option: stage)}",
+                    why: "--stage is compute, vertex, or fragment."
+                );
+            }
             try {
                 var directory = Path.GetFullPath(path: result.GetRequiredValue(option: output));
 
@@ -50,15 +45,12 @@ internal static class CompileShaderCommand {
                     path: path
                 );
                 var request = new ShaderCompilationRequest(
-                    shaderName,
-                    [new ShaderStageSource(
+                    name: shaderName,
+                    stages: [new ShaderStageSource(
                             shaderStage,
                             path,
                             text,
-                            sourceLanguage,
-                            (result.GetValue(option: entry) ?? ((sourceLanguage == ShaderSourceLanguage.ShadertoyGlsl)
-                    ? "mainImage"
-                    : "main"))
+                            result.GetRequiredValue(option: entry)
                         )]
                 );
                 var compiled = await compiler.CompileAsync(
@@ -74,7 +66,7 @@ internal static class CompileShaderCommand {
 
                     writer.WriteLine(value: $"{(diagnostic.Path ?? path)}:{diagnostic.Line}:{diagnostic.Column}: {diagnostic.Message}");
                 }
-                if (!compiled.IsSuccess) { return 1; }
+                if (!compiled.IsSuccess) { return CliExit.Failed; }
                 var suffix = shaderStage switch { ShaderStage.Vertex => "vert", ShaderStage.Fragment => "frag", _ => "comp" };
                 var spirvPath = Path.Combine(
                     path1: directory,
@@ -96,9 +88,13 @@ internal static class CompileShaderCommand {
                     cancellationToken
                 );
                 Console.WriteLine(value: $"shaders compile: wrote {spirvPath} and {dxilPath}");
-                return 0;
+                return CliExit.Success;
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or ShaderToolMissingException)) {
-                Console.Error.WriteLine(value: $"shaders compile: {exception.Message}"); return 1;
+                return CliExit.Refuse(
+                    verb: "shaders compile",
+                    what: CliPaths.ToDisplay(fullPath: path),
+                    why: exception.Message.ReplaceLineEndings(replacementText: " ")
+                );
             }
         });
         return command;

@@ -48,7 +48,13 @@ public sealed class RuleLatch {
     // depends on them, only on whether re-deriving it can be skipped — so neither is hashed, flattened or restored.
     private readonly Dictionary<string, Dictionary<LatchKey, GateVersionEntry>> m_gateVersions = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<LatchKey, BindingMemo?[]>> m_bindingMemos = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<LatchKey> m_touched = [];
+    // The sweep each binding was last touched in. Opening a sweep advances the counter instead of emptying a set, so
+    // an open costs nothing however many bindings earlier sweeps touched; an entry leaves with the binding a sweep
+    // closes, so the table holds at most the bindings some rule still carries.
+    private readonly Dictionary<LatchKey, ulong> m_touched = [];
+
+    private ulong m_sweep;
+
     private readonly List<KeyValuePair<LatchKey, bool>> m_hashScratch = [];
 
     /// <summary>Gets how many bound entries the latch holds across every rule.</summary>
@@ -132,7 +138,7 @@ public sealed class RuleLatch {
     }
     /// <summary>Opens a sweep over one rule's bindings; entries the sweep does not <see cref="Touch"/> are closed by
     /// <see cref="EndSweep(Dictionary{LatchKey, bool})"/>.</summary>
-    public void BeginSweep() => m_touched.Clear();
+    public void BeginSweep() => m_sweep++;
     /// <summary>Returns one rule's per-ordinal binding memo array, sized to <paramref name="count"/>. A stale array
     /// — a recompile changed the binding count — is replaced, discarding its cached values.</summary>
     /// <param name="name">The rule's name.</param>
@@ -191,12 +197,14 @@ public sealed class RuleLatch {
         }
 
         m_gateVersions.Clear();
+        m_touched.Clear();
     }
     /// <summary>Forgets every entry, including the scheduler's own caches.</summary>
     public void Clear() {
         m_bindingMemos.Clear();
         m_byRule.Clear();
         m_gateVersions.Clear();
+        m_touched.Clear();
     }
     /// <summary>Forgets scheduler observations while preserving every edge-held binding.</summary>
     /// <remarks>Use this when the backing arena is replaced by an equivalent layout whose row-version counters
@@ -225,8 +233,9 @@ public sealed class RuleLatch {
 
         // Dictionary.Remove does not invalidate an in-flight enumerator.
         foreach (var pair in bindings) {
-            if (!m_touched.Contains(item: pair.Key)) {
+            if (!Touched(binding: pair.Key)) {
                 _ = bindings.Remove(key: pair.Key);
+                _ = m_touched.Remove(key: pair.Key);
             }
         }
     }
@@ -242,7 +251,7 @@ public sealed class RuleLatch {
             value: out var versions
         )) {
             foreach (var entry in versions) {
-                if (!m_touched.Contains(item: entry.Key)) {
+                if (!Touched(binding: entry.Key)) {
                     _ = versions.Remove(key: entry.Key);
                 }
             }
@@ -252,7 +261,7 @@ public sealed class RuleLatch {
             value: out var memos
         )) {
             foreach (var entry in memos) {
-                if (!m_touched.Contains(item: entry.Key)) {
+                if (!Touched(binding: entry.Key)) {
                     _ = memos.Remove(key: entry.Key);
                 }
             }
@@ -374,5 +383,10 @@ public sealed class RuleLatch {
     }
     /// <summary>Marks a binding as evaluated in the open sweep.</summary>
     /// <param name="binding">The binding.</param>
-    public void Touch(LatchKey binding) => m_touched.Add(item: binding);
+    public void Touch(LatchKey binding) => m_touched[binding] = m_sweep;
+
+    private bool Touched(LatchKey binding) => (m_touched.TryGetValue(
+        key: binding,
+        value: out var sweep
+    ) && (sweep == m_sweep));
 }

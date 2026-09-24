@@ -32,12 +32,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    // Version 11 stores retained pool row offsets at fixed identity slots, including holes.
-    public const ushort SupportedVersion = 11;
-
-    private delegate T ReadItem<T>(ref WireReader reader);
-    private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;
-    private delegate T ReadClassItem<T>(ref WireReader reader) where T : class;
+    // Version 13 keys every grant row by its grantee and carries no group projection derived from the document.
+    public const ushort SupportedVersion = 13;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>
@@ -66,9 +62,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         var writer = new WireWriter();
 
         writer.WriteUInt32(value: Magic);
-        WriteUInt16(
-            value: SupportedVersion,
-            writer: writer
+        writer.WriteUInt16(
+            value: SupportedVersion
         );
         // A whole-body content pin, over everything the envelope frames — the per-section decoders below also pin
         // the definition specifically (by its own sha256-64), but a corruption landing outside the definition bytes
@@ -101,7 +96,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             );
         }
 
-        var version = ReadUInt16(reader: ref reader);
+        var version = reader.ReadUInt16();
 
         if (
             !reader.Failed &&

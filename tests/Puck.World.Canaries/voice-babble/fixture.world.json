@@ -180,7 +180,7 @@
   "patches": [
     {
       "name": "stinger",
-      "source": "Assets/worlds/patches/stinger.synth.json",
+      "source": "../../../src/Puck.World/Assets/worlds/patches/stinger.synth.json",
       "hash": "5126a83fc5816863b6ecf981ef238ef346653c028a589520d766ec4ab82260ca"
     }
   ],

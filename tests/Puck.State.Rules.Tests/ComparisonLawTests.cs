@@ -5,7 +5,7 @@ namespace Puck.State.Rules.Tests;
 /// <summary>One comparison semantics: a literal compared against a cell lowers through one conversion table,
 /// whichever spelling the author reached for.</summary>
 public sealed class ComparisonLawTests {
-    private static GateToken CompareState(ActionStateComparison comparison, decimal literal, string row = "score") => RulesFixture.Compile(rule: RulesFixture.Rule(
+    private static GateToken CompareState(ExpressionOp comparison, decimal literal, string row = "score") => RulesFixture.Compile(rule: RulesFixture.Rule(
         gate: new ActionPredicate.CompareState(
             Comparison: comparison,
             State: row,
@@ -13,7 +13,7 @@ public sealed class ComparisonLawTests {
         ),
         name: "compare"
     )).Gate[0];
-    private static GateToken CompareValue(ActionStateComparison comparison, decimal literal, string row = "score") => RulesFixture.Compile(rule: RulesFixture.Rule(
+    private static GateToken CompareValue(ExpressionOp comparison, decimal literal, string row = "score") => RulesFixture.Compile(rule: RulesFixture.Rule(
         gate: new ActionPredicate.CompareValue(
             Comparison: comparison,
             Kind: CellKind.Int,
@@ -26,17 +26,17 @@ public sealed class ComparisonLawTests {
     [Fact]
     public void TheCounterexampleYieldsOneAnswerUnderBothSpellings() {
         var state = CompareState(
-            comparison: ActionStateComparison.Less,
+            comparison: ExpressionOp.Less,
             literal: 0.5m
         );
         var value = CompareValue(
-            comparison: ActionStateComparison.Less,
+            comparison: ExpressionOp.Less,
             literal: 0.5m
         );
 
         Assert.Equal(
             actual: state.Comparison,
-            expected: ActionStateComparison.LessOrEqual
+            expected: ExpressionOp.LessOrEqual
         );
         Assert.Equal(
             actual: state.RightSource.RawValue,
@@ -44,21 +44,21 @@ public sealed class ComparisonLawTests {
         );
         Assert.Equal(
             actual: value.Comparison,
-            expected: ActionStateComparison.LessOrEqual
+            expected: ExpressionOp.LessOrEqual
         );
         Assert.Equal(
             actual: value.Constant(),
             expected: 0L
         );
     }
-    [InlineData(ActionStateComparison.Greater, 1.5, ActionStateComparison.GreaterOrEqual, 2L)]
-    [InlineData(ActionStateComparison.GreaterOrEqual, 1.5, ActionStateComparison.GreaterOrEqual, 2L)]
-    [InlineData(ActionStateComparison.Less, 1.5, ActionStateComparison.LessOrEqual, 1L)]
-    [InlineData(ActionStateComparison.LessOrEqual, 1.5, ActionStateComparison.LessOrEqual, 1L)]
-    [InlineData(ActionStateComparison.Equal, 1.5, ActionStateComparison.Greater, long.MaxValue)]
-    [InlineData(ActionStateComparison.NotEqual, 1.5, ActionStateComparison.GreaterOrEqual, long.MinValue)]
+    [InlineData(ExpressionOp.Greater, 1.5, ExpressionOp.GreaterOrEqual, 2L)]
+    [InlineData(ExpressionOp.GreaterOrEqual, 1.5, ExpressionOp.GreaterOrEqual, 2L)]
+    [InlineData(ExpressionOp.Less, 1.5, ExpressionOp.LessOrEqual, 1L)]
+    [InlineData(ExpressionOp.LessOrEqual, 1.5, ExpressionOp.LessOrEqual, 1L)]
+    [InlineData(ExpressionOp.Equal, 1.5, ExpressionOp.Greater, long.MaxValue)]
+    [InlineData(ExpressionOp.NotEqual, 1.5, ExpressionOp.GreaterOrEqual, long.MinValue)]
     [Theory]
-    public void AFractionalLiteralAgainstAnIntCellLowersToTheExactIntegerComparison(ActionStateComparison authored, double literal, ActionStateComparison lowered, long raw) {
+    public void AFractionalLiteralAgainstAnIntCellLowersToTheExactIntegerComparison(ExpressionOp authored, double literal, ExpressionOp lowered, long raw) {
         var token = CompareState(
             comparison: authored,
             literal: ((decimal)literal)
@@ -76,13 +76,13 @@ public sealed class ComparisonLawTests {
     [Fact]
     public void AnIntegralLiteralKeepsItsAuthoredComparison() {
         var token = CompareState(
-            comparison: ActionStateComparison.Less,
+            comparison: ExpressionOp.Less,
             literal: 2m
         );
 
         Assert.Equal(
             actual: token.Comparison,
-            expected: ActionStateComparison.Less
+            expected: ExpressionOp.Less
         );
         Assert.Equal(
             actual: token.RightSource.RawValue,
@@ -92,14 +92,14 @@ public sealed class ComparisonLawTests {
     [Fact]
     public void AFixedCellKeepsItsExactFixedPointLiteral() {
         var token = CompareState(
-            comparison: ActionStateComparison.Less,
+            comparison: ExpressionOp.Less,
             literal: 0.5m,
             row: "ratio"
         );
 
         Assert.Equal(
             actual: token.Comparison,
-            expected: ActionStateComparison.Less
+            expected: ExpressionOp.Less
         );
         Assert.Equal(
             actual: token.RightSource.RawValue,
@@ -109,7 +109,7 @@ public sealed class ComparisonLawTests {
     [Fact]
     public void BothSpellingsLowerThroughTheOneConversionTable() {
         var (raw, lowered) = RuleCompiler.LowerConstantComparison(
-            comparison: ActionStateComparison.Less,
+            comparison: ExpressionOp.Less,
             kind: CellKind.Int,
             literal: 0.5m,
             ruleName: "table"
@@ -117,11 +117,33 @@ public sealed class ComparisonLawTests {
 
         Assert.Equal(
             actual: lowered,
-            expected: ActionStateComparison.LessOrEqual
+            expected: ExpressionOp.LessOrEqual
         );
         Assert.Equal(
             actual: raw,
             expected: 0L
+        );
+    }
+    // A comparison is an ExpressionOp from the comparison subset; a gate built in code around any other operation is
+    // refused by name at compile, under both spellings, rather than evaluated as some comparison.
+    [Fact]
+    public void AGateNamingAnOperationThatIsNotAComparisonIsRefused() {
+        var state = Assert.Throws<RuleException>(testCode: static () => CompareState(
+            comparison: ExpressionOp.Add,
+            literal: 1m
+        ));
+        var value = Assert.Throws<RuleException>(testCode: static () => CompareValue(
+            comparison: ExpressionOp.Add,
+            literal: 1m
+        ));
+
+        Assert.Equal(
+            actual: state.Refusal,
+            expected: RuleRefusal.PredicateKindInadmissible
+        );
+        Assert.Equal(
+            actual: value.Refusal,
+            expected: RuleRefusal.PredicateKindInadmissible
         );
     }
 }

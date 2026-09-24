@@ -105,6 +105,31 @@ public sealed class AgbVerifyMachineDriver : IDisposable {
             _ = m_machine.RunFrame();
         }
     }
+    /// <summary>Runs whole frames with a key set held until a condition holds, checking it after every frame.</summary>
+    /// <param name="keys">The active-high keys held on every frame.</param>
+    /// <param name="until">The condition, read after each frame.</param>
+    /// <param name="limit">The most frames the condition may take; reaching it without the condition is a failure.</param>
+    /// <param name="awaited">What the condition waits for, named in the failure.</param>
+    /// <returns>The frames run, from one to <paramref name="limit"/>.</returns>
+    /// <exception cref="InvalidOperationException">The condition did not hold within <paramref name="limit"/> frames.</exception>
+    /// <remarks>A caller pays only for the frames its fact needs; the limit is the failure guard, not a duration.</remarks>
+    public int RunFramesUntil(AgbKeys keys, Func<AgbVerifyMachineDriver, bool> until, int limit, string awaited) {
+        ArgumentNullException.ThrowIfNull(argument: until);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: limit);
+
+        for (var frame = 1; (frame <= limit); frame++) {
+            RunFrames(
+                frames: 1,
+                keys: keys
+            );
+
+            if (until(arg: this)) {
+                return frame;
+            }
+        }
+
+        throw new InvalidOperationException(message: $"{m_label} ROM verification failed: {awaited} did not happen within {limit} frames.");
+    }
     /// <summary>Executes single instructions (for emitter probes that assert per-instruction effects).</summary>
     /// <param name="count">The number of instructions to step.</param>
     public void StepInstructions(int count) {

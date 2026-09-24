@@ -21,4 +21,7 @@ public enum GpuComputeStage : uint {
     Transfer = 0x10,
     /// <summary>Color attachment output writes from a graphics pass.</summary>
     ColorAttachmentOutput = 0x20,
+    /// <summary>The depth tests of a graphics pass, before and after its fragment shader, which read and write its depth
+    /// attachment.</summary>
+    FragmentTests = 0x40,
 }

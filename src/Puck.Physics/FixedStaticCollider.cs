@@ -104,17 +104,17 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
             (overlapX <= overlapZ)
         ) {
             push = new FixedContactPush(
-                Normal: (FixedAxisMath.UnitX * FixedAxisMath.Sign(value: delta.X)),
+                Normal: (FixedVector3.UnitX * FixedAxisMath.Sign(value: delta.X)),
                 Penetration: overlapX
             );
         } else if (overlapY <= overlapZ) {
             push = new FixedContactPush(
-                Normal: (FixedAxisMath.UnitY * FixedAxisMath.Sign(value: delta.Y)),
+                Normal: (FixedVector3.UnitY * FixedAxisMath.Sign(value: delta.Y)),
                 Penetration: overlapY
             );
         } else {
             push = new FixedContactPush(
-                Normal: (FixedAxisMath.UnitZ * FixedAxisMath.Sign(value: delta.Z)),
+                Normal: (FixedVector3.UnitZ * FixedAxisMath.Sign(value: delta.Z)),
                 Penetration: overlapZ
             );
         }

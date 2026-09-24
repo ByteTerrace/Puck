@@ -421,29 +421,10 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.lighting",
+        yield return authority.CreateServerQueryCommand(
             description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the state row a render.cycle keys them on. An unauthored field reads 'default' — the engine's pinned value for it, not zero.",
-            handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.lighting"
-                ) is { } refusal) {
-                    return refusal;
-                }
-
-                if (!authority.TryResolveServer(
-                    context: context,
-                    error: out var error,
-                    server: out var server,
-                    verb: "world.lighting"
-                )) {
-                    return error;
-                }
-
-                return new CommandResult(Output: DescribeLighting(definition: server.Definition));
-            }
+            describe: server => DescribeLighting(definition: server.Definition),
+            name: "world.lighting"
         );
     }
 }

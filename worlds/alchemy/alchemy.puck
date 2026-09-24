@@ -1,0 +1,383 @@
+// Alchemy: the combine-two-things discovery game, single player.
+//
+// You start knowing four elements. Put one known element in each hand of the cauldron; if the pair is a
+// recipe, the cauldron makes its result, and the first time it makes something you have discovered it. A
+// pair that is no recipe fizzles, and a hand holding an element you have not discovered is refused. The
+// book is complete when every element has been discovered.
+//
+// A recipe is an unordered pair, so the book stores each pair once, smaller element first, in one cell of a
+// size x size grid: key = minimum(a, b) * size + maximum(a, b). Cells no recipe fills read Nothing, so a
+// lookup is one cell read. What the player knows is a set of fewer than 63 elements, so it is one Int
+// whose bit e is set when element e is known.
+//
+// The player writes `left` and `right` and nothing else; every other row belongs to the rules.
+
+schema: "puck.world.definition.v1"
+documentId: "alchemy"
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "state:left"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "state:right"
+  }
+]
+
+// House is the last Element member.
+let size = House + 1
+
+let starters = [Air, Earth, Fire, Water]
+
+// [first, second, makes]. Some results have several recipes, so a stuck player has more than one way on.
+let recipes = [
+  [Fire, Water, Steam]
+  [Earth, Water, Mud]
+  [Earth, Fire, Lava]
+  [Air, Earth, Dust]
+  [Air, Fire, Energy]
+  [Air, Steam, Cloud]
+  [Cloud, Water, Rain]
+  [Water, Water, Sea]
+  [Lava, Water, Stone]
+  [Air, Lava, Stone]
+  [Air, Stone, Sand]
+  [Fire, Sand, Glass]
+  [Lightning, Sand, Glass]
+  [Fire, Stone, Metal]
+  [Earth, Rain, Plant]
+  [Mud, Plant, Swamp]
+  [Energy, Swamp, Life]
+  [Energy, Sea, Life]
+  [Lightning, Swamp, Life]
+  [Cloud, Energy, Lightning]
+  [Earth, Plant, Tree]
+  [Metal, Tree, Wood]
+  [Fire, Plant, Ash]
+  [Fire, Wood, Ash]
+  [Life, Swamp, Bacteria]
+  [Earth, Life, Animal]
+  [Life, Sea, Fish]
+  [Air, Animal, Bird]
+  [Mud, Sand, Clay]
+  [Clay, Life, Human]
+  [Human, Metal, Tool]
+  [Tool, Wood, House]
+]
+
+state {
+  enum Element {
+    Nothing
+    Air
+    Earth
+    Fire
+    Water
+    Steam
+    Mud
+    Lava
+    Dust
+    Energy
+    Cloud
+    Rain
+    Sea
+    Stone
+    Sand
+    Glass
+    Metal
+    Plant
+    Swamp
+    Life
+    Lightning
+    Tree
+    Wood
+    Ash
+    Bacteria
+    Animal
+    Fish
+    Bird
+    Clay
+    Human
+    Tool
+    House
+  }
+
+  lattices [
+    grid(name: "pairs", origin: [0, 0, 0], cellSize: 1, width: size, depth: size, wrap: None)
+    grid(name: "elements", origin: [0, 0, 0], cellSize: 1, width: size, depth: 1, wrap: None)
+  ]
+
+  world {
+    row {
+      name: "recipe"
+      kind: "Int"
+      enum: Element
+      domain: cellsOf(topology: pairs)
+      cells: map(recipes, r => {
+        key: $"{minimum(r[0], r[1]) * size + maximum(r[0], r[1])}",
+        value: r[2]
+      }
+      )
+    }
+
+    // 1 for an element no recipe takes as an ingredient: discovering it opens nothing new.
+    row {
+      name: "final"
+      kind: "Int"
+      domain: cellsOf(topology: elements)
+      cells: map(range(1, size - 1), e => {
+        key: $"{e}",
+        value: length(filter(recipes, r => (r[0] == e) + (r[1] == e))) == 0
+      }
+      )
+    }
+
+    slot known = reduce(starters, 0, (mask, e) => mask | (1 << e))
+
+    slot discovered = length(starters) bounds(0..size - 1)
+
+    // The two hands, the last mix's result, and the newest discovery.
+    slot left: Element = Nothing
+    slot right: Element = Nothing
+    slot made: Element = Nothing
+    slot newest: Element = Nothing
+
+    // 1 when the last mix discovered what it made.
+    slot fresh = 0 bounds(0..1)
+
+    // Recipes whose ingredients are known and whose result is not: how many ways forward remain.
+    slot hints = 0 bounds(0..)
+
+    // The `known` the hint count was last taken over.
+    slot hintsFor = 0
+
+    slot mixes = 0 bounds(0..)
+    slot fizzles = 0 bounds(0..)
+    slot refused = 0 bounds(0..)
+    slot complete = 0 bounds(0..1)
+  }
+}
+
+rule "mix" {
+  when left != Nothing and right != Nothing and ((known >> left) & (known >> right) & 1) == 1
+  local result = recipe[minimum(left, right) * size + maximum(left, right)]
+  local isNew = (result != Nothing) * (1 - ((known >> result) & 1))
+  if result == Nothing {
+    fizzles += 1
+  } else if isNew == 1 {
+    known = known | (1 << result)
+    newest = result
+  }
+  made = result
+  fresh = isNew
+  mixes += 1
+  discovered = setBitCount(known)
+  complete = setBitCount(known) == size - 1
+  left = Nothing
+  right = Nothing
+}
+
+rule "refuse-unknown" {
+  when left != Nothing and right != Nothing and ((known >> left) & (known >> right) & 1) == 0
+  refused += 1
+  made = Nothing
+  fresh = 0
+  left = Nothing
+  right = Nothing
+}
+
+rule "count-hints" {
+  when hintsFor != known
+  hints = 0
+  for r in recipes {
+    hints += ((known >> r[0]) & (known >> r[1]) & 1) * (1 - ((known >> r[2]) & 1))
+  }
+  hintsFor = known
+}
+
+test "fire and water make steam" {
+  given {
+    left = Fire
+    right = Water
+  }
+  expect {
+    made == Steam
+    newest == Steam
+    fresh == 1
+    discovered == 5
+  }
+}
+
+test "the order of the hands does not matter" {
+  given {
+    left = Water
+    right = Fire
+  }
+  expect {
+    made == Steam
+  }
+}
+
+test "an element can be mixed with itself" {
+  given {
+    left = Water
+    right = Water
+  }
+  expect {
+    made == Sea
+  }
+}
+
+test "a pair that is no recipe fizzles" {
+  given {
+    left = Air
+    right = Water
+  }
+  expect {
+    made == Nothing
+    fizzles == 1
+    mixes == 1
+    discovered == 4
+  }
+}
+
+test "an undiscovered element is refused" {
+  given {
+    left = Steam
+    right = Air
+  }
+  expect {
+    refused == 1
+    mixes == 0
+    discovered == 4
+  }
+}
+
+test "the starting hints count the recipes open from the four starters" {
+  expect {
+    hints == 6
+  }
+}
+
+test "a second route to a known element discovers nothing" {
+  when {
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Earth
+    ticks 1
+    seat1: world.state.cell.set left $value Lava
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Lava
+    seat1: world.state.cell.set right $value Air
+    ticks 1
+  }
+  expect {
+    made == Stone
+    fresh == 0
+    newest == Stone
+    discovered == 6
+  }
+}
+
+// One route through the whole book, one mix per tick.
+test "the whole book can be completed" {
+  when {
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Fire
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Earth
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Fire
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Steam
+    ticks 1
+    seat1: world.state.cell.set left $value Cloud
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Water
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Lava
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Stone
+    ticks 1
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Sand
+    ticks 1
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Stone
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Rain
+    ticks 1
+    seat1: world.state.cell.set left $value Mud
+    seat1: world.state.cell.set right $value Plant
+    ticks 1
+    seat1: world.state.cell.set left $value Energy
+    seat1: world.state.cell.set right $value Sea
+    ticks 1
+    seat1: world.state.cell.set left $value Cloud
+    seat1: world.state.cell.set right $value Energy
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Plant
+    ticks 1
+    seat1: world.state.cell.set left $value Metal
+    seat1: world.state.cell.set right $value Tree
+    ticks 1
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Plant
+    ticks 1
+    seat1: world.state.cell.set left $value Life
+    seat1: world.state.cell.set right $value Swamp
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Life
+    ticks 1
+    seat1: world.state.cell.set left $value Life
+    seat1: world.state.cell.set right $value Sea
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Animal
+    ticks 1
+    seat1: world.state.cell.set left $value Mud
+    seat1: world.state.cell.set right $value Sand
+    ticks 1
+    seat1: world.state.cell.set left $value Clay
+    seat1: world.state.cell.set right $value Life
+    ticks 1
+    seat1: world.state.cell.set left $value Human
+    seat1: world.state.cell.set right $value Metal
+    ticks 1
+    seat1: world.state.cell.set left $value Tool
+    seat1: world.state.cell.set right $value Wood
+    ticks 1
+  }
+  expect {
+    complete == 1
+    discovered == 31
+    hints == 0
+    mixes == 27
+    fizzles == 0
+    refused == 0
+  }
+}

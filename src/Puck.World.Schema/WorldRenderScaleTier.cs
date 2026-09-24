@@ -58,6 +58,16 @@ public static class WorldRenderScaleTiers {
         values: Names
     );
 
+    /// <summary>Returns the tier whose <see cref="Scale"/> lies nearest a continuous render scale, the reverse of
+    /// <see cref="Scale"/>: a tier's own scale maps back to that tier exactly, and a continuous scale between tiers
+    /// quantizes to the closer one (the tier declared first on a tie).</summary>
+    /// <param name="scale">The continuous render scale, where 1 is native.</param>
+    /// <returns>The nearest tier.</returns>
+    public static WorldRenderScaleTier Nearest(float scale) => NearestTier.Of(
+        scale: static tier => Scale(tier: tier),
+        unordered: WorldRenderScaleTier.Native,
+        value: scale
+    );
     /// <summary>The canonical (lower-case) name of a tier.</summary>
     /// <param name="tier">The tier.</param>
     /// <returns>The canonical name.</returns>

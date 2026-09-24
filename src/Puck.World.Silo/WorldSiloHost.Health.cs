@@ -1,8 +1,7 @@
 namespace Puck.World.Silo;
 
 public sealed partial class WorldSiloHost {
-    private readonly TimeProvider m_clock = TimeProvider.System;
-    private long m_progressTimestamp = TimeProvider.System.GetTimestamp();
+    private long m_progressTimestamp;
 
     /// <summary>Checks pump progress independently of storage availability; retirement is intentionally not live.</summary>
     public bool Live => (Ready && !IsDraining && (m_clock.GetElapsedTime(startingTimestamp: Volatile.Read(location: ref m_progressTimestamp)) <
@@ -22,10 +21,12 @@ public sealed partial class WorldSiloHost {
     );
 
     private async Task<string> CheckHealthCoreAsync(bool requireAdmission, CancellationToken cancellationToken) {
-        if (!Live) { return (IsDraining
+        if (!Live) {
+            return (IsDraining
             ? "draining"
             : "simulation is not progressing"
-        ); }
+        );
+        }
         if (
             requireAdmission &&
             !ReleaseAdmissionOpen
@@ -33,7 +34,7 @@ public sealed partial class WorldSiloHost {
         if (!m_pendingReleases.IsEmpty) { return "world release is not durably committed"; }
         var completion = new TaskCompletionSource<string>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             if (cancellationToken.IsCancellationRequested) { completion.TrySetCanceled(cancellationToken: cancellationToken); return; }
             var policy = m_definition.Lifecycle;
 

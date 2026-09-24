@@ -31,8 +31,9 @@ public sealed class FrameCaptureRequest {
     /// <summary>Gets the requested PNG path.</summary>
     public string Path { get; }
 
-    /// <summary>Refuses an unserved request, for example during renderer disposal. A write that has started
-    /// retains ownership of its outcome.</summary>
+    /// <summary>Refuses an unserved request: a renderer being disposed, or the requester withdrawing a capture it
+    /// will no longer wait for, which a <see cref="CaptureRequestSlot"/> still holding it then drops. A write that
+    /// has started retains ownership of its outcome.</summary>
     /// <param name="error">The reason no capture will be written.</param>
     /// <returns>Whether this call completed the request.</returns>
     public bool TryFail(Exception error) {

@@ -13,7 +13,7 @@ public static class WorldPoolBodyBindings {
         }
         var carrier = carriers[0];
         var field = pool.Fields.FirstOrDefault(predicate: field => (field.Name == carrier.Field));
-        var domain = (definition.StateRaw?.Enums ?? []).FirstOrDefault(predicate: domain => (domain.Name == field.Declaration?.Enum));
+        var domain = ((field.Declaration is { } declaration) ? definition.EnumOf(field: declaration) : null);
 
         if ((field.Name != carrier.Field) || (field.Kind != CellKind.Int) || (domain is null) || (field.Declaration.Advance is not null)) {
             throw new InvalidOperationException(message: $"Pool carrier '{pool.Name}' field '{carrier.Field}' must name an enum field without automatic advance on its record.");

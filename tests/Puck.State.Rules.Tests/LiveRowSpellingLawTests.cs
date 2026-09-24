@@ -20,7 +20,7 @@ public sealed class LiveRowSpellingLawTests {
     public void ABracketedRowPositionThatNamesNoFamilyRefusesByName(string spelling) {
         var failure = Assert.Throws<RuleException>(testCode: () => RulesFixture.Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 State: spelling,
                 Value: 0m
             ),

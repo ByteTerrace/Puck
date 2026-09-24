@@ -25,11 +25,11 @@ namespace Puck.World;
 /// the verb would otherwise split the object, and the raw line the handler parses is reconstructed from the submitted
 /// text. The verbs read that raw line, so quotes survive.
 /// <para>Every mutation here carries the identity its ingress door stamped
-/// (see <see cref="WorldPrincipalMapping"/>) — Console for a typed line, the pressing seat's own claim for a bound
+/// (see <see cref="CommandContext.Principal"/>) — Console for a typed line, the pressing seat's own claim for a bound
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -63,7 +63,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 return link.Submit(mutation: new WorldMutation.SetDefaultSeatKit(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Name: args[0].ToString()
                 ));
             }
@@ -108,7 +108,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // This verb owns the census figures alone; the spawn policy is world.population.spawn's, and each composes
                 // against the population row at application time, so the two never revert each other.
                 return link.Submit(mutation: new WorldMutation.SetPopulationCensus(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     SeatActivation: seatActivation,
                     NetworkPlayers: network
                 ));
@@ -143,7 +143,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.grant.set",
-            description: "Upserts a document-authored grant row (see WorldDefinition.Grants) — the FULL world.grant token grammar, masks included: world.grant.set <principal> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>] [verbs:<name,...>] [writes:<name,...>]. Each mask still obeys its own carriage rule (verbs: only on mutate section:<name> or edit state:<name>; writes: only on mutate state:<name>), refused by name at the same door a live grant hits. Additionally accepts a document:<id> principal, which world.grant refuses: a document principal is meaningless in the LIVE table (the cross-document durable-state write-back channel reads its grants off the owner's document), so this verb is the ONLY place that capability is authorable — in session, through the ordered domain and the journal, like every other document mutation. DOCUMENT-ONLY, like world.row.set addons: applies at the NEXT BOOT through the identical WorldServer.Grant path world.grant itself submits through, so an illegitimate or conflicting row (including a missing/refused budget or a missing verb mask on an untrusted mutate row) prints the same loud accept/reject line an operator would see typing it live — this verb never touches the LIVE grant table world.grant/world.revoke administer. Replaces the row matching the SAME (principal, capability, subject); a bare re-set changes only the trailing tokens actually supplied.",
+            description: "Upserts a document-authored grant row (see WorldDefinition.Grants) — the FULL world.grant token grammar, masks included: world.grant.set <grantee> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>] [verbs:<name,...>] [writes:<name,...>]. Each mask still obeys its own carriage rule (verbs: only on mutate section:<name> or edit state:<name>; writes: only on mutate state:<name>), refused by name at the same door a live grant hits. Additionally accepts a document:<id> grantee, which world.grant refuses: a document grantee is meaningless in the LIVE table (the cross-document durable-state write-back channel reads its grants off the owner's document), so this verb is the ONLY place that capability is authorable — in session, through the ordered domain and the journal, like every other document mutation. DOCUMENT-ONLY, like world.row.set addons: applies at the NEXT BOOT through the identical WorldServer.Grant path world.grant itself submits through, so an illegitimate or conflicting row (including a missing/refused budget or a missing verb mask on an untrusted mutate row) prints the same loud accept/reject line an operator would see typing it live — this verb never touches the LIVE grant table world.grant/world.revoke administer. Replaces the row matching the SAME (grantee, capability, subject); a bare re-set changes only the trailing tokens actually supplied.",
             handler: (context, args) => {
                 // verbsAllowed: the write-back channel's mask had no in-session author before this — the ONLY way to
                 // set one was hand-editing an owned world's JSON outside the process, which the unification contract
@@ -163,14 +163,14 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 return link.Submit(mutation: new WorldMutation.UpsertGrant(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Row: grant
                 ));
             }
         );
         yield return Simulation(
             name: "world.grant.remove",
-            description: "Removes a document-authored grant row by (principal, capability, subject) — exclusive is ignored, matching world.revoke's own shape: world.grant.remove <principal> <capability> <subject>. DOCUMENT-ONLY; the live grant table world.grant/world.revoke administer is untouched.",
+            description: "Removes a document-authored grant row by (grantee, capability, subject) — exclusive is ignored, matching world.revoke's own shape: world.grant.remove <grantee> <capability> <subject>. DOCUMENT-ONLY; the live grant table world.grant/world.revoke administer is untouched.",
             handler: (context, args) => {
                 if (!WorldGrantCommandModule.TryParseGrant(
                     args: args,
@@ -183,7 +183,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 return link.Submit(mutation: new WorldMutation.RemoveGrant(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     Target: grant
                 ));
             }
@@ -200,7 +200,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         PathHint: null,
                         Force: false
                     ),
-                    principal: context.ActingPrincipal(),
+                    principal: context.Principal,
                     verb: "world.reset"
                 );
             }
@@ -261,7 +261,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         Kind: WorldRebuildKind.Load,
                         PathHint: fullPath
                     ),
-                    principal: context.ActingPrincipal(),
+                    principal: context.Principal,
                     verb: "world.load"
                 );
             }
@@ -313,7 +313,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         Kind: WorldRebuildKind.Reload,
                         PathHint: path
                     ),
-                    principal: context.ActingPrincipal(),
+                    principal: context.Principal,
                     verb: "world.reload"
                 );
             }
@@ -345,14 +345,14 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     echoes: echoes,
                     verb: "world.undo",
                     count: count,
-                    principal: context.ActingPrincipal()
+                    principal: context.Principal
                 );
             }
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.save",
-            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the live definition (mutations included) with session state folded into its document homes — the live render levers into Render, the live census + peer-source default into Population, and runtime screen inserts into the screens' Machine sources. No argument writes back to the loaded world file. A .puck target — including a .puck loaded world with no argument — is refused by name, since the canonical JSON would overwrite its source; name a JSON path instead. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
+            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target — including a .puck loaded world with no argument — is refused by name, since the canonical JSON would overwrite its source; name a JSON path instead. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
             handler: (context, args) => {
                 if (WorldScheduleRoot.RefuseInsideArmedRun(
                     definition: server.Definition,
@@ -382,7 +382,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // save still serializes the live values of that very section to disk — the revoke would hold live and
                 // leak durably.
                 if (!server.Grants.AllowsAllSections(
-                    principal: context.ActingPrincipal(),
+                    principal: context.Principal,
                     capability: WorldCapability.Mutate,
                     deniedSection: out var savedSection,
                     denial: out var saveVerdict
@@ -393,18 +393,14 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 try {
                     // The same completed-tick derivation WorldStateCommandModule's own read-backs use (NextInputTick
                     // is m_lastCompletedTick + 1, and Step is its one writer) — the instant every cycling/dynamics
-                    // state cell settles at in the snapshot; CompletedEngineTicks is the same instant's engine-tick
-                    // coordinate, the one an advancing cell settles against (see WorldSessionCapture's remarks).
-                    var snapshot = WorldSessionCapture.Capture(
-                        definition: server.Definition,
-                        render: renderSettings,
-                        population: server.Population,
-                        binder: screenBinder,
+                    // state cell settles at in the snapshot.
+                    var snapshot = WorldSaveSnapshot.Compose(
                         audio: audioDirector,
                         bindingBar: bindingBarVisibility,
                         pacing: pacing,
-                        tick: (server.NextInputTick - 1UL),
-                        engineTick: server.CompletedEngineTicks
+                        render: renderSettings,
+                        server: server,
+                        tick: (server.NextInputTick - 1UL)
                     );
                     var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                         basisPath: out var basisPath,
@@ -508,12 +504,14 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var dirty = server.JournalLength;
                 var drift = WorldSessionCapture.DescribeDrift(
                     definition: definition,
-                    render: renderSettings,
-                    population: server.Population,
-                    binder: screenBinder,
-                    audio: audioDirector,
-                    bindingBar: bindingBarVisibility,
-                    pacing: pacing
+                    snapshot: WorldSaveSnapshot.Compose(
+                        audio: audioDirector,
+                        bindingBar: bindingBarVisibility,
+                        pacing: pacing,
+                        render: renderSettings,
+                        server: server,
+                        tick: (server.NextInputTick - 1UL)
+                    )
                 );
                 var audioCurve = (string.Equals(
                     a: definition.Audio.DefaultCurve,
@@ -550,7 +548,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // and its own basis all naming one island turns into.
                 var documents = string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"composed {WorldDefinitionFileSource.DocumentsComposed} shared {WorldDefinitionFileSource.DocumentCompositionsShared} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
+                    handler: $"composed {WorldBootWork.Current.Read(kind: WorldBootWork.Compositions)} shared {WorldBootWork.Current.Read(kind: WorldBootWork.CompositionsShared)} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
                 );
                 var journalDepth = definition.Host.JournalDepth;
                 var journalDepthText = ((journalDepth > 0)

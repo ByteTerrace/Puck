@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.State.Topology.Tests;
@@ -45,13 +46,15 @@ public sealed class ArenaWordLawTests {
 
         Assert.Equal(
             actual: arena.ReadWord(
+                time: ArenaTime.Origin,
                 rowOrdinal: TopologyArenaFixture.Pile,
                 word: buffer
-            ).Letters.ToArray(),
+            ).ToArray(),
             expected: values
         );
 
         var tail = arena.ReadWord(
+            time: ArenaTime.Origin,
             rowOrdinal: TopologyArenaFixture.Pile,
             start: 2,
             word: buffer
@@ -62,28 +65,21 @@ public sealed class ArenaWordLawTests {
             expected: 2
         );
         Assert.Equal(
-            actual: tail.Letters.ToArray(),
+            actual: tail.ToArray(),
             expected: [1L, 3L]
-        );
-        Assert.Equal(
-            actual: tail.Source.Start,
-            expected: 2
         );
 
         // The same pile read through the attribute row is that row's value for each of the pile's keys.
         var through = arena.ReadWord(
+            time: ArenaTime.Origin,
             attributeOrdinal: TopologyArenaFixture.Attribute,
             rowOrdinal: TopologyArenaFixture.Pile,
             word: buffer
         );
 
         Assert.Equal(
-            actual: through.Letters.ToArray(),
+            actual: through.ToArray(),
             expected: [0L, 1L, 2L, 3L]
-        );
-        Assert.Equal(
-            actual: through.Source.AttributeOrdinal,
-            expected: TopologyArenaFixture.Attribute
         );
         Assert.True(condition: arena.TryWrite(
             key: catalog.Keys.Intern(name: TopologyArenaFixture.Name(value: "t0")),
@@ -94,10 +90,11 @@ public sealed class ArenaWordLawTests {
         ));
         Assert.Equal(
             actual: arena.ReadWord(
+                time: ArenaTime.Origin,
                 attributeOrdinal: TopologyArenaFixture.Attribute,
                 rowOrdinal: TopologyArenaFixture.Pile,
                 word: buffer
-            ).Letters[0],
+            )[0],
             expected: 9L
         );
     }
@@ -108,6 +105,7 @@ public sealed class ArenaWordLawTests {
 
         Assert.Equal(
             actual: arena.ReadWord(
+                time: ArenaTime.Origin,
                 rowOrdinal: TopologyArenaFixture.History,
                 word: buffer
             ).Length,
@@ -123,20 +121,16 @@ public sealed class ArenaWordLawTests {
         }
 
         var ring = arena.ReadWord(
+            time: ArenaTime.Origin,
             rowOrdinal: TopologyArenaFixture.History,
             start: 2,
             word: buffer
         );
 
+        // A ring reads its whole live span whatever start it is handed.
         Assert.Equal(
-            actual: ring.Letters.ToArray(),
+            actual: ring.ToArray(),
             expected: [3L, 4L, 5L, 6L]
-        );
-
-        // The ring read the whole ring whatever start it was handed, so its source claims none.
-        Assert.Equal(
-            actual: ring.Source.Start,
-            expected: 0
         );
     }
     [Fact]
@@ -157,9 +151,10 @@ public sealed class ArenaWordLawTests {
 
         Assert.Equal(
             actual: arena.ReadWord(
+                time: ArenaTime.Origin,
                 rowOrdinal: TopologyArenaFixture.Board,
                 word: buffer
-            ).Letters.ToArray(),
+            ).ToArray(),
             expected: scratch
         );
 
@@ -184,17 +179,8 @@ public sealed class ArenaWordLawTests {
             word: buffer
         ), userMessage: reason);
         Assert.Equal(
-            actual: ray.Letters.ToArray(),
+            actual: ray.ToArray(),
             expected: expected[..expectedLength]
-        );
-        Assert.Equal(
-            actual: ray.Source,
-            expected: new WordSource(
-                AttributeOrdinal: -1,
-                Direction: direction,
-                RowOrdinal: TopologyArenaFixture.Board,
-                Start: 0
-            )
         );
 
         // A ray steps in one of the topology's directions, so no ray reads the word a row read answers.
@@ -261,18 +247,14 @@ public sealed class ArenaWordLawTests {
         );
     }
     [Fact]
-    public void ARawReadAnswersOnlyForANumericCellThatIsPresent() {
+    public void ANumberReadAnswersOnlyForANumericCellThatIsPresent() {
         var (catalog, arena) = TopologyArenaFixture.Build();
+        var time = ArenaTime.Origin;
 
-        Assert.False(condition: arena.TryReadRawAt(
-            position: 0,
-            raw: out var absent,
-            rowOrdinal: TopologyArenaFixture.Pile
-        ));
-        Assert.Equal(
-            actual: absent,
-            expected: 0L
-        );
+        Assert.False(condition: arena.TryReadRawAt(position: 0, raw: out var absent, rowOrdinal: TopologyArenaFixture.Pile));
+        Assert.False(condition: arena.TryReadLiveNumberAt(position: 0, rowOrdinal: TopologyArenaFixture.Pile, time: time, value: out var absentLive));
+        Assert.Equal(actual: absent, expected: 0L);
+        Assert.Equal(actual: absentLive, expected: 0L);
         Assert.True(condition: arena.TryMint(
             key: out var key,
             name: TopologyArenaFixture.Name(value: "t7"),
@@ -280,19 +262,15 @@ public sealed class ArenaWordLawTests {
             rowOrdinal: TopologyArenaFixture.Pile,
             value: CellValue.Int(value: 5L)
         ));
-        Assert.True(condition: arena.TryReadRaw(
-            key: key,
-            raw: out var raw,
-            rowOrdinal: TopologyArenaFixture.Pile
-        ));
-        Assert.Equal(
-            actual: raw,
-            expected: 5L
-        );
-        Assert.False(condition: arena.TryReadRaw(
+        Assert.True(condition: arena.TryReadLiveNumber(key: key, rowOrdinal: TopologyArenaFixture.Pile, time: time, value: out var keyed));
+        Assert.True(condition: arena.TryReadLiveNumberAt(position: 0, rowOrdinal: TopologyArenaFixture.Pile, time: time, value: out var positioned));
+        Assert.True(condition: arena.TryReadRawAt(position: 0, raw: out var stored, rowOrdinal: TopologyArenaFixture.Pile));
+        Assert.Equal(actual: new long[] { keyed, positioned, stored }, expected: new long[] { 5L, 5L, 5L });
+        Assert.False(condition: arena.TryReadLiveNumber(
             key: catalog.Keys.Intern(name: TopologyArenaFixture.Name(value: "t8")),
-            raw: out _,
-            rowOrdinal: TopologyArenaFixture.Pile
+            rowOrdinal: TopologyArenaFixture.Pile,
+            time: time,
+            value: out _
         ));
     }
 }

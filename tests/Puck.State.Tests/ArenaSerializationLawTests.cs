@@ -810,6 +810,7 @@ public sealed class ArenaSerializationLawTests {
             write: StateWriteKind.Set
         ), userMessage: reason);
     }
+
     // Two imported rows under one name would both load onto the same ordinal, the second over the first's member
     // tables, so the import refuses the pair by name and leaves the arena as it was.
     [Fact]

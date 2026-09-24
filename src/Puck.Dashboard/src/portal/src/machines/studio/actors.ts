@@ -1,39 +1,48 @@
 /**
- * Async engine/store operations and session lifetime actors for the studio statechart.
- * Promise rejections become onError transitions; local edit reducers are handled synchronously
- * by the machine. These actors have no dependency on the machine's setup builder.
+ * The studio machine's outside work, one invoked actor each: engine boots, opening a workspace, the compiled view,
+ * geometry, the preview's engine calls, draft writes, and the two streams that run while a workspace is open.
+ * Promise rejections become `onError` transitions. The streams are the machine's RxJS seam: each is a
+ * `fromEventObservable` actor whose events (DIAGNOSTICS, ISLAND_CHECKED) the machine records with pure `assign`.
  */
-import { fromCallback, fromPromise } from "xstate";
-import { validateDocument, type ValidationOutcome } from "./document";
+import { type AnyActorRef, fromCallback, fromEventObservable, fromPromise } from "xstate";
+import { catchError, distinctUntilChanged, EMPTY, filter, map, Observable, of } from "rxjs";
+import { islandChecks, type IslandRequest } from "./islandCheck";
+import { sourceDiagnostics } from "./sourceDiagnostics";
+import { checkWorkspace, openWorkspace, revisionClean, workspaceTexts, writeChangedSources, type OpenedWorkspace } from "./workspace";
 import { computeGeometry, type GeometryOutcome } from "./geometry";
 import { compilePreview, releasePreview, replayPreview, tickPreview, writePreviewRow, type PreviewOutcome } from "./preview";
-import type { DocumentState, PreviewScriptStep, PreviewSnapshot, StudioMachineInput } from "./types";
-import type { StudioDraft } from "../../document/localDrafts";
-import { loadOfficial } from "../../official/officialClient";
-import type { RowInfo, WorldEngine } from "../../native/engineTypes";
+import type { IslandCheck, PreviewScriptStep, PreviewSnapshot, StudioContext, StudioEvent, StudioMachineInput, WorkspaceState } from "./types";
+import { readDraftListing, type DraftListing, type LocalDraftStore } from "../../document/localDrafts";
+import { loadOfficial, type OfficialLoad } from "../../official/officialClient";
+import type { LanguageServerChannel, RowInfo, SourceCompileResult, WorldEngine } from "../../native/engineTypes";
 
-export interface EditInput {
-  readonly perform: () => DocumentState | Promise<DocumentState>;
-}
-export const editActor = fromPromise<DocumentState, EditInput>(async ({ input }) => input.perform());
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-export interface BootOutput {
-  readonly officialLoad: Awaited<ReturnType<typeof loadOfficial>>;
-  readonly engine: WorldEngine;
-  readonly version: { readonly schemaVersion: string; readonly engine: string; readonly commit: string };
-}
+/** The loaded official build, and the language engine with its language server, or why that engine refused to boot. */
+export type BootOutput =
+  | { readonly officialLoad: OfficialLoad; readonly engine: WorldEngine; readonly channel: LanguageServerChannel; readonly languageRefusal: null }
+  | { readonly officialLoad: OfficialLoad; readonly engine: null; readonly channel: null; readonly languageRefusal: string };
+/** Loads the official build and boots the language engine from its verified bytes, then opens its language server.
+ * An official build that does not load refuses the boot; a language engine that does not boot is an answer, so the
+ * workspace still opens without it. */
 export const bootActor = fromPromise<BootOutput, StudioMachineInput>(async ({ input, signal }) => {
-  let engine: WorldEngine | null = null;
   try {
     const officialLoad = await loadOfficial(input.official, input.fetchImpl, input.byteStore);
     signal.throwIfAborted();
-    engine = await input.bootEngine(officialLoad, { mode: input.engineMode, fetchImpl: input.fetchImpl, signal });
-    signal.throwIfAborted();
-    const version = await engine.version();
-    signal.throwIfAborted();
-    return { officialLoad, engine, version };
+    let engine: WorldEngine | null = null;
+    try {
+      engine = await input.bootEngine(officialLoad, { mode: input.engineMode, fetchImpl: input.fetchImpl, signal });
+      signal.throwIfAborted();
+      // The engine's first answer: an engine that cannot give it did not boot.
+      await engine.version();
+      signal.throwIfAborted();
+      return { officialLoad, engine, channel: engine.languageServer(), languageRefusal: null };
+    } catch (error) {
+      await engine?.dispose();
+      if (signal.aborted) throw error;
+      return { officialLoad, engine: null, channel: null, languageRefusal: message(error) };
+    }
   } catch (error) {
-    await engine?.dispose();
     // @xstate/react rehydrates stopped actors during StrictMode effect replay. An old
     // cancelled promise must not deliver its rejection to that actor's new invocation.
     if (signal.aborted) return new Promise<never>(() => {});
@@ -41,13 +50,108 @@ export const bootActor = fromPromise<BootOutput, StudioMachineInput>(async ({ in
   }
 });
 
-export interface ValidateInput {
-  readonly engine: WorldEngine;
-  readonly official: BootOutput["officialLoad"];
-  readonly document: Pick<DocumentState, "name" | "role" | "text" | "value">;
+export interface WorldBootInput {
+  readonly official: OfficialLoad;
+  readonly machineInput: StudioMachineInput;
+  /** The language engine's compiled module, when it has one: the world engine instantiates it rather than compiling. */
+  readonly wasmModule?: WebAssembly.Module;
 }
-export const validateActor = fromPromise<ValidationOutcome, ValidateInput>(async ({ input }) =>
-  validateDocument(input.engine, input.official, input.document));
+/** Boots the world engine from the same verified official bytes as the language engine, and from its compiled module. */
+export const worldBootActor = fromPromise<WorldEngine, WorldBootInput>(async ({ input, signal }) => {
+  const engine = await input.machineInput.bootEngine(input.official, {
+    mode: input.machineInput.engineMode, fetchImpl: input.machineInput.fetchImpl, signal, wasmModule: input.wasmModule,
+  });
+  if (signal.aborted) {
+    await engine.dispose();
+    return new Promise<never>(() => {});
+  }
+  return engine;
+});
+
+/** Where an opened workspace comes from: an official document, or a draft over the official build. */
+export type OpenInput =
+  | { readonly source: "official"; readonly official: OfficialLoad | null; readonly engine: WorldEngine | null; readonly name: string }
+  | { readonly source: "draft"; readonly official: OfficialLoad | null; readonly engine: WorldEngine | null; readonly store: LocalDraftStore; readonly id: string };
+export interface OpenOutput {
+  readonly workspace: OpenedWorkspace;
+  /** Why the language engine could not mount the workspace, when it could not. */
+  readonly mountRefusal: string | null;
+}
+export const openActor = fromPromise<OpenOutput, OpenInput>(async ({ input }) => {
+  if (!input.official) throw new Error("cannot open a document before the official build has loaded.");
+  let workspace: OpenedWorkspace;
+  if (input.source === "draft") {
+    const draft = input.store.load(input.id);
+    if (!draft) throw new Error(`no local draft named '${input.id}'.`);
+    workspace = await openWorkspace(input.official, draft.documentName, draft);
+  } else {
+    workspace = await openWorkspace(input.official, input.name, null);
+  }
+  if (!input.engine) return { workspace, mountRefusal: "the language engine is not running, so the source has no diagnostics." };
+  try {
+    await input.engine.mountSources(workspaceTexts(workspace.files));
+    return { workspace, mountRefusal: null };
+  } catch (error) {
+    return { workspace, mountRefusal: `the language engine could not mount the workspace: ${message(error)}` };
+  }
+});
+
+export interface CompiledInput {
+  readonly engine: WorldEngine;
+  readonly workspace: WorkspaceState;
+}
+export interface CompiledOutput {
+  readonly workspaceId: number;
+  readonly path: string;
+  readonly revision: number;
+  readonly result: SourceCompileResult;
+}
+/** Compiles the open source on the language engine, after writing the editor's changes into it. */
+export const compiledActor = fromPromise<CompiledOutput, CompiledInput>(async ({ input }) => {
+  await writeChangedSources(input.engine, input.workspace);
+  const result = await input.engine.compileSource(input.workspace.active);
+  return { workspaceId: input.workspace.id, path: input.workspace.active, revision: input.workspace.revision, result };
+});
+
+/** The language server's diagnostics, as DIAGNOSTICS events, for as long as a workspace is open. A failed channel
+ * becomes one LANGUAGE_FAILED event rather than an error the machine must catch. */
+export const diagnosticsActor = fromEventObservable<StudioEvent, { channel: LanguageServerChannel | null }>(({ input }) =>
+  input.channel
+    ? sourceDiagnostics(input.channel.messages()).pipe(
+      map((published): StudioEvent => ({ type: "DIAGNOSTICS", path: published.path, version: published.version, diagnostics: published.diagnostics })),
+      catchError((error) => of<StudioEvent>({ type: "LANGUAGE_FAILED", message: message(error) })),
+    )
+    : EMPTY);
+
+/** The parent machine's snapshots, starting with the current one. */
+function snapshots(parent: AnyActorRef): Observable<{ context: StudioContext }> {
+  return new Observable((subscriber) => {
+    subscriber.next(parent.getSnapshot());
+    const subscription = parent.subscribe({ next: (snapshot) => subscriber.next(snapshot) });
+    return () => subscription.unsubscribe();
+  });
+}
+
+/** Island checks, as ISLAND_CHECKED events, for as long as a workspace is open. The requests follow the machine's
+ * own context: a revision is ready once it is diagnosed clean, the workspace has a root, and the world engine runs. */
+export const islandActor = fromEventObservable<StudioEvent, { parent: AnyActorRef }>(({ input }) => {
+  const requests$ = snapshots(input.parent).pipe(
+    map(({ context }): IslandRequest<Omit<IslandCheck, "value">> | null => {
+      const workspace = context.workspace;
+      if (!workspace) return null;
+      const engine = context.worldEngine;
+      const root = workspace.root;
+      const ready = engine !== null && root !== null && revisionClean(workspace);
+      return { revision: workspace.revision, run: ready ? () => checkWorkspace(engine, workspace, root) : null };
+    }),
+    filter((request): request is IslandRequest<Omit<IslandCheck, "value">> => request !== null),
+    distinctUntilChanged((left, right) => left.revision === right.revision && (left.run === null) === (right.run === null)),
+  );
+  return islandChecks(requests$).pipe(
+    map(({ outcome }): StudioEvent => ({ type: "ISLAND_CHECKED", check: outcome })),
+    catchError((error) => of<StudioEvent>({ type: "WORLD_FAILED", message: message(error) })),
+  );
+});
 
 export interface GeometryInput {
   readonly engine: WorldEngine;
@@ -58,17 +162,22 @@ export const geometryActor = fromPromise<GeometryOutcome, GeometryInput>(async (
 
 export interface CompileInput {
   readonly engine: WorldEngine;
-  readonly sourceJson: string;
+  readonly composed: string;
 }
 export type CompileOutput = PreviewOutcome & { readonly snapshot: PreviewSnapshot | null };
-export const compileActor = fromPromise<CompileOutput, CompileInput>(async ({ input, signal }) => compilePreview(input.engine, input.sourceJson, signal));
+export const compileActor = fromPromise<CompileOutput, CompileInput>(async ({ input, signal }) => compilePreview(input.engine, input.composed, signal));
 
-/** Releases the accepted preview handle and its engine when the studio actor stops. */
-export const sessionLifetimeActor = fromCallback<{ type: "unused" }, { engine: WorldEngine | null; handle: () => string | null }>(({ input }) =>
+/** Releases the language channel and engine when the studio stops. */
+export const sessionLifetimeActor = fromCallback<{ type: "unused" }, { engine: WorldEngine | null; channel: LanguageServerChannel | null }>(({ input }) =>
   () => {
-    if (!input.engine) return;
-    void releasePreview(input.engine, input.handle());
-    void input.engine.dispose().catch(() => undefined);
+    input.channel?.close();
+    void input.engine?.dispose().catch(() => undefined);
+  });
+
+/** Releases the accepted preview handle and the world engine when the studio stops. */
+export const worldLifetimeActor = fromCallback<{ type: "unused" }, { engine: WorldEngine; handle: () => string | null }>(({ input }) =>
+  () => {
+    void releasePreview(input.engine, input.handle()).finally(() => input.engine.dispose().catch(() => undefined));
   });
 
 export interface WriteInput {
@@ -102,7 +211,7 @@ export const tickActor = fromPromise<TickOutput, TickInput>(async ({ input }) =>
 
 export interface ReplayInput {
   readonly engine: WorldEngine;
-  readonly sourceJson: string;
+  readonly composed: string;
   readonly script: readonly PreviewScriptStep[];
   readonly upTo: number;
   readonly index: number;
@@ -110,18 +219,33 @@ export interface ReplayInput {
 }
 export type ReplayOutput = PreviewOutcome & { readonly index: number };
 export const replayActor = fromPromise<ReplayOutput, ReplayInput>(async ({ input, signal }) => {
-  const outcome = await replayPreview(input.engine, input.sourceJson, input.script, input.upTo, signal, input.expectedHash);
+  const outcome = await replayPreview(input.engine, input.composed, input.script, input.upTo, signal, input.expectedHash);
   return { ...outcome, index: input.index };
 });
 
 export interface SaveDraftInput {
-  readonly perform: () => StudioDraft;
-  readonly text: string;
+  readonly store: LocalDraftStore;
+  readonly id: string;
+  readonly title: string;
+  readonly documentName: string;
+  readonly files: Readonly<Record<string, string>>;
 }
-export type SaveDraftOutput = { readonly draft: StudioDraft; readonly text: string };
-export const saveDraftActor = fromPromise<SaveDraftOutput, SaveDraftInput>(async ({ input }) => ({ draft: input.perform(), text: input.text }));
+/** The library as it stands after the save, and the id the draft was saved under. */
+export interface SaveDraftOutput {
+  readonly id: string;
+  readonly drafts: DraftListing;
+}
+export const saveDraftActor = fromPromise<SaveDraftOutput, SaveDraftInput>(async ({ input }) => {
+  const changed = Object.keys(input.files).length;
+  input.store.save(input.id, input.title, input.documentName, input.files, `${changed} changed file${changed === 1 ? "" : "s"}`);
+  return { id: input.id, drafts: readDraftListing(input.store) };
+});
 
 export interface DeleteDraftInput {
-  readonly perform: () => boolean;
+  readonly store: LocalDraftStore;
+  readonly id: string;
 }
-export const deleteDraftActor = fromPromise<boolean, DeleteDraftInput>(async ({ input }) => input.perform());
+export const deleteDraftActor = fromPromise<DraftListing, DeleteDraftInput>(async ({ input }) => {
+  input.store.delete(input.id);
+  return readDraftListing(input.store);
+});

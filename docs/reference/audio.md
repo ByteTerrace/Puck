@@ -35,6 +35,15 @@ window is an authored `compareState` range over the `$clock:<music>:phaseError`
 world-rule operand (the signed tick distance from `MusicClock`'s current
 position to the nearest beat) rather than a dedicated grader type.
 
+A world names its score, tunes and patches by rows (`music`, `tunes`,
+`patches`, like `tables`), each a name, a `source` and a SHA-256 pin of the
+referenced document's canonical bytes. `WorldAssetRowLoader` reads the source
+beside the world document that authored the row
+([paths a document names](../architecture/worlds.md#paths-a-document-names)),
+so a fixture outside `src/Puck.World/Assets` names a shipped tune as
+`../../../src/Puck.World/Assets/worlds/tunes/ambient-tune.audio.json`, and a
+fixture-only score sits beside the fixture.
+
 `VoiceBabbler` is the same tier's third primitive: `ComputeTriggerTicks`
 turns a caller-estimated syllable count plus an identity's authored cadence
 into the trigger tick of each syllable's short pitched voice—cadence-spaced,
@@ -49,7 +58,7 @@ fires one seeded `VoiceSynth` trigger per syllable as its delay elapses
 (`AdvanceBabbleSchedule`) through the reserved `voice.babble` cue token
 (`WorldAudioCue.EventTokens`)—never one sustained tone for the whole
 utterance (proved by `WorldVoiceSynthTests.BabbleUtteranceFiresOneDistinctSeededTriggerPerSyllableBitIdenticalAcrossTwoFreshPairings`
-and `...NeverCollapsesToASingleSustainedToneForMultipleSyllables`). `voice.state`/
+and `BabbleUtteranceNeverCollapsesToASingleSustainedToneForMultipleSyllables`). `voice.state`/
 `voice.babble` are its read-back/debug-trigger verbs. Two things stay open,
 both later work outside this wiring: no producer yet estimates an utterance's
 syllable count from dialogue/caption text (a presentation/content concern),
@@ -87,18 +96,23 @@ end: triggering an identity's babble fires four DISTINCT syllable triggers
 (never collapsing to one) and the mix produces measurable signal
 (`audio.state`'s `peak`); the discriminating leg (no trigger) proves neither
 ever happens on its own.
-`tests/Puck.World.Canaries/music-region-transition` proves a region crossing
-fires exactly one segment transition, with the tick it fired on, and that the
-transition fires the `music.transition` cue token (`WorldServer.MusicTransitionTap`,
-wired to `WorldAudioDirector.SubmitCue` in `WorldPostBuildWiring`)—the crossing a
-world's `audio.cues` table binds a stinger patch to.
+It declares the `audio-output` capability, so on a machine with no default
+render endpoint (`audio.state` reports `device=silent` with an endpoint fault, or
+`device=unsupported` where no platform backend exists) the leg is reported
+unsupported rather than failed; a device that opens but produces no signal still
+fails.
+A region crossing fires one segment transition, and the transition fires the
+`music.transition` cue token (`WorldServer.MusicTransitionTap`, wired to
+`WorldAudioDirector.SubmitCue` in `WorldPostBuildWiring`)—the crossing a
+world's `audio.cues` table binds a stinger patch to. No canary or test proves
+that crossing end to end.
 `tests/Puck.World.Canaries/music-conditional-layer-and-embellishment` proves a
 director embellishment fires exactly once off a matching sense edge (the
 `music.embellishment` cue token, keyed by the embellishment's own authored
 patch id—never an `audio.cues` row, since that table can only bind one
 patch per token) and that an unconditional layer stays active throughout; a
 conditional layer's own per-tick activation is proved with exact tick control
-by `MusicDirectorTests` and `MusicJudgeReplayReDerivabilityLawTests`, not
+by `MusicDirectorTests` and `MusicReplayReDerivabilityLawTests`, not
 re-proved against a canary's wall-clock-uncertain pacing.
 
 ## Documentation

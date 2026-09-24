@@ -36,7 +36,7 @@ internal static partial class Subjects {
                 basisRelabelling: [],
                 material: default
             ));
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
             var dimension = (1 << floors);
 
             for (var left = 0; (left < dimension); ++left) {
@@ -90,7 +90,7 @@ internal static partial class Subjects {
                 negativeCount: negative,
                 positiveCount: positive
             ));
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
             var name = $"clifford({positive},{negative},{degenerate})";
 
             for (var left = 0; (left < binding.KeyToLane.Length); ++left) {
@@ -228,7 +228,7 @@ internal static partial class Subjects {
             permutations: [0, 1, 2, 1, 0, 2, 0, 2, 1, 2, 1, 0, 1, 2, 0, 2, 0, 1],
             pointCount: 3
         ));
-        var permutationCertificate = permutation.Certify(overlapLimit: (1L << 22));
+        var permutationCertificate = permutation.Certify(tupleLimit: (1L << 22));
 
         if (
             permutationCertificate.IsBraided ||
@@ -271,9 +271,9 @@ internal static partial class Subjects {
             ),
             material: default
         ));
-        var countingCertificate = counting.Certify(overlapLimit: (1L << 22));
-        var integerCertificate = integer.Certify(overlapLimit: (1L << 22));
-        var rationalCertificate = rational.Certify(overlapLimit: (1L << 22));
+        var countingCertificate = counting.Certify(tupleLimit: (1L << 22));
+        var integerCertificate = integer.Certify(tupleLimit: (1L << 22));
+        var rationalCertificate = rational.Certify(tupleLimit: (1L << 22));
 
         // The window annihilates every product past degree two, and a pair that annihilates BOTH ways constrains no
         // coefficient at any material, since every charge relates the two zeros. That is the FLOOR each uncharged
@@ -349,7 +349,7 @@ internal static partial class Subjects {
             material: default,
             negativeCount: 0,
             positiveCount: 3
-        )).Certify(overlapLimit: 4L);
+        )).Certify(tupleLimit: 4L);
 
         if (
             truncated.IsBraided ||
@@ -365,7 +365,7 @@ internal static partial class Subjects {
             bonds: [1, 3, 3, 3, 1, 3, 3, 3, 1],
             material: default,
             rank: 3
-        )).Certify(overlapLimit: (1L << 20));
+        )).Certify(tupleLimit: (1L << 20));
 
         if (
             unbounded.IsBraided ||
@@ -426,7 +426,7 @@ internal static partial class Subjects {
         for (var index = 0; (index < BraidingNontrivialFloors.Length); ++index) {
             var (name, minimum) = BraidingNontrivialFloors[index];
             var algebra = subjects[index];
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
             var keys = algebra.MaximumSupportCount;
             var nontrivial = 0;
 
@@ -489,7 +489,7 @@ internal static partial class Subjects {
     // order in the field. Its cells are a twisted group algebra of the square of a cyclic group, so its commutation
     // charges are the skew pairing q^(bc − ad) — a bicharacter that is NOT its own mirror, which is the whole reason
     // this instance exists. Every catalogue entry's braiding is a sign, and a sign cannot separate the two flags.
-    private static ChargedPresentation<ulong, PrimeFieldMaterial> QuantumTorusPresentation(int order, ulong modulus, ulong swapCharge) {
+    internal static ChargedPresentation<ulong, PrimeFieldMaterial> QuantumTorusPresentation(int order, ulong modulus, ulong swapCharge) {
         var first = new int[order];
         var second = new int[order];
 
@@ -526,6 +526,7 @@ internal static partial class Subjects {
             material: PrimeFieldMaterial.Create(modulus: modulus)
         );
     }
+
     // Two letters that swap at a charge of two, windowed at degree two so the basis is finite. The mirror of that pair
     // needs one HALF, which is the smallest statement that separates the field derivation from the two signs.
     private static ChargedPresentation<TValue, TOps> HalvedSwapPresentation<TValue, TOps>(TValue one, TValue swapCharge, TOps material)
@@ -624,7 +625,7 @@ internal static partial class Subjects {
     // product is not a basis element disagrees with this.
     private static string? HexagonsMatchReadout<TValue, TOps>(string name, PresentedAlgebra<TValue, TOps> algebra, bool braided, bool symmetric)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        var certificate = algebra.Certify(overlapLimit: (1L << 22));
+        var certificate = algebra.Certify(tupleLimit: (1L << 22));
         var comparer = EqualityComparer<TValue>.Default;
         var keys = algebra.MaximumSupportCount;
         var material = algebra.Presentation.Material;
@@ -812,7 +813,7 @@ internal static partial class Subjects {
             order: 3,
             swapCharge: 2UL
         ));
-        var certificate = algebra.Certify(overlapLimit: (1L << 22));
+        var certificate = algebra.Certify(tupleLimit: (1L << 22));
         var material = algebra.Presentation.Material;
         var first = HalvedSwapLetter(
             algebra: algebra,

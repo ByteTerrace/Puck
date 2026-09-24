@@ -2,7 +2,6 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
-using Puck.Physics;
 using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
@@ -191,7 +190,7 @@ public sealed partial class WorldBody {
 
         m_position += correction;
         var normal = correction.Normalize();
-        var velocity = (m_planarVelocity + (UnitY * m_verticalVelocity));
+        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
         var inward = FixedVector3.Dot(
             left: velocity,
             right: normal
@@ -375,16 +374,16 @@ public sealed partial class WorldBody {
         // MoveUp literal world Y, keeping an upright hover body's ascent independent of its rendered facing. Heading
         // retains true 6DOF body-local flight.
         var facing = ((m_tuning.MoveFrame == MotionMoveFrame.World)
-            ? -UnitZ
-            : scratch.Orientation.Rotate(vector: -UnitZ)
+            ? -FixedVector3.UnitZ
+            : scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ)
         );
         var right = ((m_tuning.MoveFrame == MotionMoveFrame.World)
-            ? UnitX
-            : scratch.Orientation.Rotate(vector: UnitX)
+            ? FixedVector3.UnitX
+            : scratch.Orientation.Rotate(vector: FixedVector3.UnitX)
         );
         var up = ((m_tuning.MoveFrame == MotionMoveFrame.World)
-            ? UnitY
-            : scratch.Orientation.Rotate(vector: UnitY)
+            ? FixedVector3.UnitY
+            : scratch.Orientation.Rotate(vector: FixedVector3.UnitY)
         );
 
         var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
@@ -729,7 +728,7 @@ public sealed partial class WorldBody {
         SeatToHold(stepTicks: stepTicks);
     }
     private static FixedQ4816 ExtractYaw(FixedQuaternion orientation) {
-        var forward = orientation.Rotate(vector: -UnitZ);
+        var forward = orientation.Rotate(vector: -FixedVector3.UnitZ);
 
         return FixedQ4816.Atan2(
             y: -forward.X,
@@ -791,15 +790,15 @@ public sealed partial class WorldBody {
             elapsedTicks: scratch.StepTicks
         );
         var delta = ((FixedQuaternion.FromAxisAngle(
-            axis: UnitY,
+            axis: FixedVector3.UnitY,
             angle: angularStep.X
         )
             * FixedQuaternion.FromAxisAngle(
-            axis: UnitX,
+            axis: FixedVector3.UnitX,
             angle: angularStep.Y
         ))
             * FixedQuaternion.FromAxisAngle(
-            axis: UnitZ,
+            axis: FixedVector3.UnitZ,
             angle: angularStep.Z
         ));
 
@@ -910,15 +909,15 @@ public sealed partial class WorldBody {
     private static FixedQuaternion OrientationFromEuler(FixedQ4816 yaw, FixedQ4816 pitch, FixedQ4816 roll) {
         return ((FixedQuaternion.FromAxisAngle(
             angle: yaw,
-            axis: UnitY
+            axis: FixedVector3.UnitY
         )
             * FixedQuaternion.FromAxisAngle(
             angle: pitch,
-            axis: UnitX
+            axis: FixedVector3.UnitX
         ))
             * FixedQuaternion.FromAxisAngle(
             angle: roll,
-            axis: UnitZ
+            axis: FixedVector3.UnitZ
         )).Normalize();
     }
     private static FixedQ4816 PerStep(FixedQ4816 value, ulong stepTicks) {
@@ -1167,11 +1166,7 @@ public sealed partial class WorldBody {
             (m_collider is { } collider)
         ) {
             var resolvedVelocity = scratch.Velocity;
-            Span<FixedBodyColliderVolume> volumeScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-            var volumes = ScaledColliderVolumes(
-                volumes: collider.Volumes,
-                scratch: volumeScratch
-            );
+            var volumes = ScaledColliderVolumes();
             var contactResolution = ((field is IEntityContactField entityField)
                 ? entityField.ResolveEntitySweep(
                     entityIndex: scratch.EntityIndex,
@@ -1302,7 +1297,7 @@ public sealed partial class WorldBody {
             // Only a surface that is not world-level needs it: on flat ground contact already holds the body, and an
             // imposed inward speed there only eats into the margin a marginal handoff (an adjacency seam strip) has to
             // work with. A level floor keeps its previous behaviour exactly.
-            var settled = ((m_grounded && (m_up != UnitY) && (resolvedNormal > -StickSpeed))
+            var settled = ((m_grounded && (m_up != FixedVector3.UnitY) && (resolvedNormal > -StickSpeed))
                 ? -StickSpeed
                 : resolvedNormal
             );
@@ -1552,7 +1547,7 @@ public sealed partial class WorldBody {
 
         // Shaping runs after every frame op, so the one-tick-old velocity/attitude is the deterministic witness
         // available here.
-        var previousFacing = m_orientation.Rotate(vector: -UnitZ);
+        var previousFacing = m_orientation.Rotate(vector: -FixedVector3.UnitZ);
         var longitudinal = FixedVector3.Dot(
             left: m_planarVelocity,
             right: previousFacing
@@ -1624,23 +1619,23 @@ public sealed partial class WorldBody {
         var attitude = ((m_drivePitch == FixedQ4816.Zero)
             ? FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
-                axis: UnitY
+                axis: FixedVector3.UnitY
             )
             : (FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
-                axis: UnitY
+                axis: FixedVector3.UnitY
             ) * FixedQuaternion.FromAxisAngle(
                 angle: m_drivePitch,
-                axis: UnitX
+                axis: FixedVector3.UnitX
             )).Normalize()
         );
 
-        scratch.Orientation = ((scratch.Up == UnitY)
+        scratch.Orientation = ((scratch.Up == FixedVector3.UnitY)
             ? attitude
             : (m_frame * attitude)
         );
-        scratch.Facing = scratch.Orientation.Rotate(vector: -UnitZ);
-        scratch.Right = scratch.Orientation.Rotate(vector: UnitX);
+        scratch.Facing = scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ);
+        scratch.Right = scratch.Orientation.Rotate(vector: FixedVector3.UnitX);
     }
     // The grounded integration — planar math for the horizontal axes plus the bound vertical action on the other.
     // Horizontal: under MotionMoveFrame.Heading (the default, tank controls) turn the heading, step along the fresh
@@ -1708,10 +1703,10 @@ public sealed partial class WorldBody {
             // a flat world integrates exactly as before.
             var worldAttitude = FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
-                axis: UnitY
+                axis: FixedVector3.UnitY
             );
 
-            scratch.Orientation = ((scratch.Up == UnitY)
+            scratch.Orientation = ((scratch.Up == FixedVector3.UnitY)
                 ? worldAttitude
                 : (m_frame * worldAttitude)
             );
@@ -1727,13 +1722,13 @@ public sealed partial class WorldBody {
             // the same world-frame stick vector), and the basis is what "forward" and "strafe" MEAN. Composing the
             // basis from the up frame alone keeps a planetoid walker travelling its own tangent while leaving a flat
             // world's axes exactly the hardcoded -Z/+X they were.
-            scratch.Facing = ((scratch.Up == UnitY)
-                ? -UnitZ
-                : m_frame.Rotate(vector: -UnitZ)
+            scratch.Facing = ((scratch.Up == FixedVector3.UnitY)
+                ? -FixedVector3.UnitZ
+                : m_frame.Rotate(vector: -FixedVector3.UnitZ)
             );
-            scratch.Right = ((scratch.Up == UnitY)
-                ? UnitX
-                : m_frame.Rotate(vector: UnitX)
+            scratch.Right = ((scratch.Up == FixedVector3.UnitY)
+                ? FixedVector3.UnitX
+                : m_frame.Rotate(vector: FixedVector3.UnitX)
             );
 
             return;
@@ -1754,15 +1749,15 @@ public sealed partial class WorldBody {
         m_yaw += angleStep.X;
         var yawRotation = FixedQuaternion.FromAxisAngle(
             angle: m_yaw,
-            axis: UnitY
+            axis: FixedVector3.UnitY
         );
 
-        scratch.Orientation = ((scratch.Up == UnitY)
+        scratch.Orientation = ((scratch.Up == FixedVector3.UnitY)
             ? yawRotation
             : (m_frame * yawRotation)
         );
-        scratch.Facing = scratch.Orientation.Rotate(vector: -UnitZ);
-        scratch.Right = scratch.Orientation.Rotate(vector: UnitX);
+        scratch.Facing = scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ);
+        scratch.Right = scratch.Orientation.Rotate(vector: FixedVector3.UnitX);
     }
     private void SenseTarget(BodySensorTarget candidate, ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
@@ -2055,7 +2050,7 @@ public sealed partial class WorldBody {
     private static void SnapFacing(ref BodyMotionScratch scratch, FixedQ4816 yaw) {
         var attitude = FixedQuaternion.FromAxisAngle(
             angle: yaw,
-            axis: UnitY
+            axis: FixedVector3.UnitY
         );
 
         // The snapped heading is a yaw about the axis the body's ATTITUDE stands against, so it composes under the
@@ -2063,10 +2058,10 @@ public sealed partial class WorldBody {
         // world-upright attitude mid-stride. That axis is ordinarily the contact axis and differs from it only where
         // a hold's lean has put the drawn body on a face the solver still measures against gravity — composing about
         // the contact axis there would flatten the lean out again on the very next phase.
-        scratch.Orientation = ((scratch.AttitudeUp == UnitY)
+        scratch.Orientation = ((scratch.AttitudeUp == FixedVector3.UnitY)
             ? attitude
             : (FixedQuaternion.FromTo(
-                from: UnitY,
+                from: FixedVector3.UnitY,
                 to: scratch.AttitudeUp
             ) * attitude)
         );

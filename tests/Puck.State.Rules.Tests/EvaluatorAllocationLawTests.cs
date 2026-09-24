@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Rules.Tests;
@@ -5,20 +8,19 @@ namespace Puck.State.Rules.Tests;
 /// <summary>CONTRACT UNDER TEST: after warm-up an evaluation allocates nothing — a firing's scope, its gate, its
 /// bindings and its effects all run over reused scratch, whether the gate holds or closes.</summary>
 public sealed class EvaluatorAllocationLawTests {
-    private static long Measure(Action action) {
+    // Warms the evaluation twice, then reads the least allocation of a 64-evaluation window.
+    private static long Measure(Action action, [CallerMemberName] string name = "") {
         action();
         action();
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var repeat = 0; (repeat < 64); repeat++) {
-            action();
-        }
-
-        return (GC.GetAllocatedBytesForCurrentThread() - before);
+        return AllocationWindow.Least(
+            name: name,
+            window: () => {
+                for (var repeat = 0; (repeat < 64); repeat++) {
+                    action();
+                }
+            }
+        );
     }
 
     [Fact]
@@ -36,7 +38,7 @@ public sealed class EvaluatorAllocationLawTests {
                         Name: RulesFixture.Name(value: "step")
                     )],
                 Gate: EvaluatorFixture.Compare(
-                    comparison: ActionStateComparison.GreaterOrEqual,
+                    comparison: ExpressionOp.GreaterOrEqual,
                     row: "other",
                     value: 0m
                 )
@@ -48,7 +50,7 @@ public sealed class EvaluatorAllocationLawTests {
                         value: 1m
                     )],
                 Gate: EvaluatorFixture.Compare(
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     row: "flag",
                     value: 1m
                 )

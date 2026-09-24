@@ -313,8 +313,8 @@ public sealed partial class WorldDocument {
 
         if (!TryOpenComposeArena(
             arena: out arena,
-            reason: out reason,
             definition: working,
+            reason: out reason,
             time: in time
         )) {
             return false;

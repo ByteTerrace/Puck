@@ -24,12 +24,12 @@ public sealed class StateRowEnvelopeLawTests {
             (exact > upper)
         ) {
             return ((overflow == StateOverflow.Saturate)
-                ? (true, (long)((exact < lower) ? lower : upper))
+                ? (true, ((long)((exact < lower) ? lower : upper)))
                 : (false, 0L)
             );
         }
 
-        return (true, (long)exact);
+        return (true, ((long)exact));
     }
     private static StateRow Row(long? min, long? max, StateOverflow overflow = StateOverflow.Refuse) => new(
         Name: CellName.Parse(candidate: "gauge"),
@@ -45,15 +45,15 @@ public sealed class StateRowEnvelopeLawTests {
     private static void Verify(long current, long operand, StateWriteKind write, long? min, long? max, StateOverflow overflow) {
         var (expectedAdmitted, expectedStored) = Oracle(
             current: current,
-            operand: operand,
-            write: write,
-            min: min,
             max: max,
-            overflow: overflow
+            min: min,
+            operand: operand,
+            overflow: overflow,
+            write: write
         );
         var row = Row(
-            min: min,
             max: max,
+            min: min,
             overflow: overflow
         );
         var admitted = row.TryAdmitWrite(
@@ -65,19 +65,19 @@ public sealed class StateRowEnvelopeLawTests {
         );
 
         Assert.Equal(
-            expected: expectedAdmitted,
-            actual: admitted
+            actual: admitted,
+            expected: expectedAdmitted
         );
         Assert.Equal(
-            expected: expectedStored,
-            actual: stored
+            actual: stored,
+            expected: expectedStored
         );
         Assert.Equal(
+            actual: reason,
             expected: (admitted
                 ? string.Empty
                 : reason
-            ),
-            actual: reason
+            )
         );
         Assert.Equal(
             expected: admitted,
@@ -99,11 +99,11 @@ public sealed class StateRowEnvelopeLawTests {
     public void ARowWithBothBoundsRefusesOutOfRangeAndAdmitsInRange(long current, long operand, StateWriteKind write, long min, long max) {
         Verify(
             current: current,
-            operand: operand,
-            write: write,
-            min: min,
             max: max,
-            overflow: StateOverflow.Refuse
+            min: min,
+            operand: operand,
+            overflow: StateOverflow.Refuse,
+            write: write
         );
     }
     // Saturate clamps the true (exact, unwrapped) result to whichever authored bound it crossed, for Set and Add.
@@ -117,16 +117,16 @@ public sealed class StateRowEnvelopeLawTests {
     public void SaturateClampsTheExactResultToTheCrossedBound(long current, long operand, StateWriteKind write, long? min, long? max, long expectedStored) {
         Verify(
             current: current,
-            operand: operand,
-            write: write,
-            min: min,
             max: max,
-            overflow: StateOverflow.Saturate
+            min: min,
+            operand: operand,
+            overflow: StateOverflow.Saturate,
+            write: write
         );
 
         var row = Row(
-            min: min,
             max: max,
+            min: min,
             overflow: StateOverflow.Saturate
         );
 
@@ -138,8 +138,8 @@ public sealed class StateRowEnvelopeLawTests {
             reason: out _
         ));
         Assert.Equal(
-            expected: expectedStored,
-            actual: stored
+            actual: stored,
+            expected: expectedStored
         );
     }
     // A one-sided range (a floor with no ceiling, or the reverse) is legal — the undeclared side behaves as if
@@ -153,16 +153,16 @@ public sealed class StateRowEnvelopeLawTests {
     public void AOneSidedRangeBoundsOnlyItsDeclaredSide(long current, long operand, StateWriteKind write, long? min, long? max, bool expectedAdmitted, long expectedStored) {
         Verify(
             current: current,
-            operand: operand,
-            write: write,
-            min: min,
             max: max,
-            overflow: StateOverflow.Refuse
+            min: min,
+            operand: operand,
+            overflow: StateOverflow.Refuse,
+            write: write
         );
 
         var row = Row(
-            min: min,
             max: max,
+            min: min,
             overflow: StateOverflow.Refuse
         );
 
@@ -177,8 +177,8 @@ public sealed class StateRowEnvelopeLawTests {
             )
         );
         Assert.Equal(
-            expected: expectedStored,
-            actual: stored
+            actual: stored,
+            expected: expectedStored
         );
     }
     // A one-sided range saturates only on its declared side; the undeclared side still clamps to the 64-bit limit.
@@ -186,27 +186,27 @@ public sealed class StateRowEnvelopeLawTests {
     public void AOneSidedRangeSaturatesItsDeclaredSideAndTheUndeclaredSideAtTheStorageLimit() {
         Verify(
             current: 5L,
-            operand: -100L,
-            write: StateWriteKind.Add,
-            min: 0L,
             max: null,
-            overflow: StateOverflow.Saturate
+            min: 0L,
+            operand: -100L,
+            overflow: StateOverflow.Saturate,
+            write: StateWriteKind.Add
         );
         Verify(
             current: long.MaxValue,
-            operand: 1L,
-            write: StateWriteKind.Add,
-            min: 0L,
             max: null,
-            overflow: StateOverflow.Saturate
+            min: 0L,
+            operand: 1L,
+            overflow: StateOverflow.Saturate,
+            write: StateWriteKind.Add
         );
         Verify(
             current: -5L,
-            operand: 100L,
-            write: StateWriteKind.Set,
-            min: null,
             max: 10L,
-            overflow: StateOverflow.Saturate
+            min: null,
+            operand: 100L,
+            overflow: StateOverflow.Saturate,
+            write: StateWriteKind.Set
         );
     }
     // A row declaring no envelope at all still refuses a genuine 64-bit arithmetic overflow under Refuse — the
@@ -219,16 +219,16 @@ public sealed class StateRowEnvelopeLawTests {
     public void ARowWithNoBoundsStillRefusesA64BitOverflow(long current, long operand) {
         Verify(
             current: current,
-            operand: operand,
-            write: StateWriteKind.Add,
-            min: null,
             max: null,
-            overflow: StateOverflow.Refuse
+            min: null,
+            operand: operand,
+            overflow: StateOverflow.Refuse,
+            write: StateWriteKind.Add
         );
 
         var row = Row(
-            min: null,
             max: null,
+            min: null,
             overflow: StateOverflow.Refuse
         );
 
@@ -240,8 +240,8 @@ public sealed class StateRowEnvelopeLawTests {
             reason: out var reason
         ));
         Assert.Equal(
-            expected: 0L,
-            actual: stored
+            actual: stored,
+            expected: 0L
         );
         Assert.Contains(
             actualString: reason,
@@ -261,16 +261,16 @@ public sealed class StateRowEnvelopeLawTests {
     public void ARowWithNoBoundsAdmitsExactlyAtTheStorageLimits(long current, long operand, StateWriteKind write) {
         Verify(
             current: current,
-            operand: operand,
-            write: write,
-            min: null,
             max: null,
-            overflow: StateOverflow.Refuse
+            min: null,
+            operand: operand,
+            overflow: StateOverflow.Refuse,
+            write: write
         );
 
         var row = Row(
-            min: null,
             max: null,
+            min: null,
             overflow: StateOverflow.Refuse
         );
 
@@ -282,10 +282,10 @@ public sealed class StateRowEnvelopeLawTests {
             reason: out _
         ));
         Assert.Equal(
+            actual: stored,
             expected: ((write == StateWriteKind.Add)
                 ? (current + operand)
-                : operand),
-            actual: stored
+                : operand)
         );
     }
     // A refusal's reason distinguishes a genuine 64-bit overflow from an ordinary out-of-declared-range result.

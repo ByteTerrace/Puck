@@ -1,0 +1,34 @@
+/* The canvas sits in the workbench's sunken well; the scene's own colors are resolved from the theme at runtime. */
+.viewport {
+  height: clamp(rem(360px), 49vh, rem(620px));
+  background-color: var(--puck-surface-sunken);
+  touch-action: none;
+
+  & canvas {
+    display: block;
+  }
+
+  @mixin smaller-than $mantine-breakpoint-sm {
+    height: rem(380px);
+  }
+}
+
+/* drei's Html wrapper for the selection chip (drei centers it on the cell inline): transparent to the pointer. */
+.labelAnchor {
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* The chip itself, lifted above the cell it names. */
+.label {
+  display: inline-block;
+  transform: translateY(rem(-32px));
+  padding: rem(4px) var(--mantine-spacing-xs);
+  border: 1px solid var(--accent-2);
+  border-radius: var(--mantine-radius-sm);
+  background-color: var(--puck-surface-raised);
+  box-shadow: var(--mantine-shadow-sm);
+  color: var(--mantine-color-text);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+}

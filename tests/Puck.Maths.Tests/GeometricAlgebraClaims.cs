@@ -587,42 +587,6 @@ internal static class GeometricAlgebraClaims {
             v1: v1,
             v2: v2
         );
-    public static (long U, long V) FixedComplexLanes(long u1, long v1, long u2, long v2) {
-        var product = (new FixedComplex(
-            Real: FixedQ4816.FromRawBits(value: u1),
-            Imaginary: FixedQ4816.FromRawBits(value: v1)
-        ) *
-            new FixedComplex(
-            Real: FixedQ4816.FromRawBits(value: u2),
-            Imaginary: FixedQ4816.FromRawBits(value: v2)
-        ));
-
-        return (product.Real.Value, product.Imaginary.Value);
-    }
-    public static (long U, long V) FixedDualLanes(long u1, long v1, long u2, long v2) {
-        var product = (new FixedDual<FixedQ4816>(
-            Real: FixedQ4816.FromRawBits(value: u1),
-            Dual: FixedQ4816.FromRawBits(value: v1)
-        ) *
-            new FixedDual<FixedQ4816>(
-            Real: FixedQ4816.FromRawBits(value: u2),
-            Dual: FixedQ4816.FromRawBits(value: v2)
-        ));
-
-        return (product.Real.Value, product.Dual.Value);
-    }
-    public static (long U, long V) FixedSplitLanes(long u1, long v1, long u2, long v2) {
-        var product = (new FixedSplit(
-            U: FixedQ4816.FromRawBits(value: u1),
-            V: FixedQ4816.FromRawBits(value: v1)
-        ) *
-            new FixedSplit(
-            U: FixedQ4816.FromRawBits(value: u2),
-            V: FixedQ4816.FromRawBits(value: v2)
-        ));
-
-        return (product.U.Value, product.V.Value);
-    }
     public static string? GeometricMotorRigidTransformSurface(long[] left, long[] right) {
         var rotation = BoundedRotation(
             x: left[0],
@@ -777,30 +741,40 @@ internal static class GeometricAlgebraClaims {
     // twin is witnessed by the SAME Oracles.QuadraticMultiply call the corresponding planar family's own law already
     // uses (complex.mul-vs-oracle, split.mul-vs-oracle, dual.mul-vs-oracle) — reused, not duplicated.
 
-    public static (long U, long V) GeometricPlanarComplexSubject(long u1, long v1, long u2, long v2) {
-        var product = ComplexAlgebra.GeometricProduct(
+    public static (long U, long V) GeometricPlanarComplexSubject(long u1, long v1, long u2, long v2) =>
+        PlanarGeometricProduct(
+            algebra: ComplexAlgebra,
+            u1: u1,
+            u2: u2,
+            v1: v1,
+            v2: v2
+        );
+    public static (long U, long V) GeometricPlanarDualSubject(long u1, long v1, long u2, long v2) =>
+        PlanarGeometricProduct(
+            algebra: DualAlgebra,
+            u1: u1,
+            u2: u2,
+            v1: v1,
+            v2: v2
+        );
+    public static (long U, long V) GeometricPlanarSplitSubject(long u1, long v1, long u2, long v2) =>
+        PlanarGeometricProduct(
+            algebra: SplitAlgebra,
+            u1: u1,
+            u2: u2,
+            v1: v1,
+            v2: v2
+        );
+
+    private static (long U, long V) PlanarGeometricProduct(GeometricAlgebra algebra, long u1, long v1, long u2, long v2) {
+        var product = algebra.GeometricProduct(
             left: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u1), FixedQ4816.FromRawBits(value: v1)]),
             right: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u2), FixedQ4816.FromRawBits(value: v2)])
         );
 
         return (product[0].Value, product[1].Value);
     }
-    public static (long U, long V) GeometricPlanarDualSubject(long u1, long v1, long u2, long v2) {
-        var product = DualAlgebra.GeometricProduct(
-            left: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u1), FixedQ4816.FromRawBits(value: v1)]),
-            right: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u2), FixedQ4816.FromRawBits(value: v2)])
-        );
 
-        return (product[0].Value, product[1].Value);
-    }
-    public static (long U, long V) GeometricPlanarSplitSubject(long u1, long v1, long u2, long v2) {
-        var product = SplitAlgebra.GeometricProduct(
-            left: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u1), FixedQ4816.FromRawBits(value: v1)]),
-            right: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u2), FixedQ4816.FromRawBits(value: v2)])
-        );
-
-        return (product[0].Value, product[1].Value);
-    }
     // ================================ (4) the quaternion even subalgebra ================================
     // The even (3,0,0) embedding of two quaternions reproduces the Hamilton product, full raw range, and never leaves
     // the even subalgebra. GeometricQuaternionEvenFirst also cross-checks its recovered quaternion against an exact
@@ -1404,19 +1378,23 @@ internal static class GeometricAlgebraClaims {
             );
 
             while (0UL != exponent) {
-                if (0UL != (exponent & 1UL)) { result = Multiply(
+                if (0UL != (exponent & 1UL)) {
+                    result = Multiply(
                     left: result,
                     modulus: modulus,
                     right: power
-                ); }
+                );
+                }
 
                 exponent >>>= 1;
 
-                if (0UL != exponent) { power = Multiply(
+                if (0UL != exponent) {
+                    power = Multiply(
                     left: power,
                     modulus: modulus,
                     right: power
-                ); }
+                );
+                }
             }
 
             return result;
@@ -1457,10 +1435,12 @@ internal static class GeometricAlgebraClaims {
             for (var columnIndex = 0; (columnIndex < n); ++columnIndex) {
                 for (var rowIndex = 0; (rowIndex < n); ++rowIndex) { matrix[((rowIndex * n) + columnIndex)] = column[rowIndex]; }
 
-                if (columnIndex < (n - 1)) { column = MultiplyByRoot(
+                if (columnIndex < (n - 1)) {
+                    column = MultiplyByRoot(
                     modulus: modulus,
                     value: column
-                ); }
+                );
+                }
             }
 
             return CofactorDeterminant(

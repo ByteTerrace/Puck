@@ -75,11 +75,7 @@ public static class WorldColor {
     public static bool IsAuthorable(WorldDefinition definition, string? value) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        if (!TryParseBinding(
-            key: out var key,
-            row: out var row,
-            value: value
-        )) {
+        if (StateBinding.Parse(token: value) is not (var row, var key, _)) {
             return HexColor.TryParse(
                 rgb: out _,
                 value: value
@@ -89,13 +85,13 @@ public static class WorldColor {
         return (
             WorldStateReader.TryRead(
             definition: definition,
+            engineTick: 0UL,
             key: key,
             rawValue: out _,
             row: out var stateRow,
             rowName: row,
             text: out var text,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParse(
@@ -113,11 +109,7 @@ public static class WorldColor {
     public static Vector3 Resolve(WorldDefinition definition, string? value, Vector3 fallback) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        if (!TryParseBinding(
-            key: out var key,
-            row: out var row,
-            value: value
-        )) {
+        if (StateBinding.Parse(token: value) is not (var row, var key, _)) {
             return HexColor.Parse(
                 fallback: fallback,
                 value: value
@@ -126,13 +118,13 @@ public static class WorldColor {
 
         return ((WorldStateReader.TryRead(
             definition: definition,
+            engineTick: 0UL,
             key: key,
             rawValue: out _,
             row: out var stateRow,
             rowName: row,
             text: out var text,
-            tick: 0UL,
-            engineTick: 0UL
+            tick: 0UL
         ) && (stateRow.Kind == CellKind.Text))
             ? HexColor.Parse(
                 fallback: fallback,
@@ -179,17 +171,6 @@ public static class WorldColor {
     public static float SequenceHue(int index, WorldSequence sequence) => WorldSequenceSampling.Scalar(
         index: index,
         sequence: sequence
-    );
-    /// <summary>Parses the state-binding arm of the color grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
-    /// <c>state.&lt;row&gt;.&lt;key&gt;</c>. A hex literal, or anything else, is not a binding. Delegates to
-    /// <see cref="BindableState.TryParseBinding"/> — the shared grammar every bindable document token speaks.</summary>
-    /// <param name="value">The authored color.</param>
-    /// <param name="row">The bound row name.</param>
-    /// <param name="key">The bound cell key, or <see langword="null"/> for the row's slot cell.</param>
-    public static bool TryParseBinding(string? value, out string row, out string? key) => BindableState.TryParseBinding(
-        key: out key,
-        row: out row,
-        value: value
     );
 
     /// <summary>The refusal every color-bearing field shares.</summary>

@@ -23,6 +23,7 @@ public static partial class WorldDefinitionValidator {
         try {
             var compilation = ValidateCore(definition, neighbours, proveNeighbours, retainCompilation: true,
                 throwOnErrors: true, errorSink: null, deferredSink: null, machines: machines);
+
             admission = new WorldDefinitionAdmission(compilation: compilation!, machines: machines);
             reason = string.Empty;
             return true;

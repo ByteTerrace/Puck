@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Xunit;
 
@@ -135,17 +136,15 @@ public sealed class WorldGeneratorExhaustionLawTests {
             cursor: 0L,
             masks: [new(Word0: Mask)]
         );
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var cursor = 0L; (cursor < 1024L); cursor++) {
-            _ = Fire(
-                generator: generator,
-                cursor: cursor,
-                masks: [new(Word0: Mask)]
-            );
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        var allocated = AllocationWindow.Measure(window: () => {
+            for (var cursor = 0L; (cursor < 1024L); cursor++) {
+                _ = Fire(
+                    generator: generator,
+                    cursor: cursor,
+                    masks: [new(Word0: Mask)]
+                );
+            }
+        });
 
         // One tiny returned mask plus the test's one-element input mask are expected; rebuilding an AliasTable per
         // draw formerly allocated several arrays and exceeded this bound by orders of magnitude.

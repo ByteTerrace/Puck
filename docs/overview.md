@@ -77,7 +77,6 @@ or cartridge workflow. For implementation work, follow
 
 The current rendering path and the proposed hybrid mesh/SDF work are described
 separately in the [rendering guide](rendering/README.md) and
-[rendering programme](plans/rendering.md). Proposed features
-and dated verification results are not a promise that every configuration is
-supported. Check the relevant subsystem guide for restrictions before depending
-on a capability.
+[rendering programme](plans/rendering.md). Proposed features are not a
+promise that every configuration is supported. Check the relevant subsystem
+guide for restrictions before depending on a capability.

@@ -95,6 +95,16 @@
               "string",
               "null"
             ]
+          },
+          "input": {
+            "description": "Where a pointer hit on the screen\u0027s source goes: Presentation for hover and highlight, or Simulation for a pointer ray mapped in fixed point from this row, such as a light gun (WorldScreenMappings). Passthrough is refused by name: host passthrough exists only for a source the local user opened on their own machine, and a world document can never create one or send it input. null (the default) is Presentation. Omitted from the wire when null.",
+            "enum": [
+              "Presentation",
+              "Simulation",
+              "Passthrough",
+              null
+            ],
+            "title": "SourceDestination"
           }
         },
         "additionalProperties": false,
@@ -129,25 +139,13 @@
                   "$ref": "./common.schema.json#/$defs/WorldScreenSourceNone"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceTestPattern"
-                },
-                {
                   "$ref": "./common.schema.json#/$defs/WorldScreenSourceMachine"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceCamera"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceProducer"
                 },
                 {
                   "$ref": "./common.schema.json#/$defs/WorldScreenSourceView"
-                },
-                {
-                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceCapture"
-                },
-                {
-                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceConsole"
-                },
-                {
-                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceQr"
                 },
                 {
                   "$ref": "./common.schema.json#/$defs/WorldScreenSourceSession"
@@ -163,7 +161,7 @@
             }
           },
           "selected": {
-            "description": "The 0-based entry the selector starts on (what screen.select advances from), not what the screen boots showing \u2014 a screen always wakes on its declared Source (the one-live-console ceiling depends on this). Live selection drifts from this and is folded back by world.save (see Puck.World.WorldSessionCapture).",
+            "description": "The 0-based entry the selector starts on (what screen.select advances from), not what the screen boots showing \u2014 a screen always wakes on its declared Source (the one-live-console ceiling depends on this). Live selection drifts from this and is folded back by world.save (see Puck.World.Server.WorldSessionCapture).",
             "type": "integer",
             "default": 0
           },

@@ -14,29 +14,25 @@ public sealed class VulkanSurface : IDisposable {
     public NativeDisplayKind DisplayKind { get; }
     /// <summary>Gets the native <c>VkSurfaceKHR</c> handle, or zero once the surface has been disposed.</summary>
     public nint Handle { get; private set; }
-    /// <summary>Gets the native <c>VkInstance</c> handle that owns the surface.</summary>
-    public nint InstanceHandle { get; }
+    /// <summary>Gets the command table of the instance that owns the surface.</summary>
+    public VulkanInstanceCommands Instance { get; }
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSurface"/> class, taking ownership of an existing native surface handle.</summary>
-    /// <param name="instanceHandle">The native <c>VkInstance</c> handle that owns the surface.</param>
+    /// <param name="instance">The command table of the instance that owns the surface.</param>
     /// <param name="surfaceHandle">The native <c>VkSurfaceKHR</c> handle to own.</param>
     /// <param name="displayKind">The native display kind the surface was created for.</param>
     /// <param name="surfaceApi">The API used to destroy the surface on disposal.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="surfaceApi"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="instanceHandle"/> or <paramref name="surfaceHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> or <paramref name="surfaceApi"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="surfaceHandle"/> is zero.</exception>
     public VulkanSurface(
-        nint instanceHandle,
+        VulkanInstanceCommands instance,
         nint surfaceHandle,
         NativeDisplayKind displayKind,
         IVulkanSurfaceApi surfaceApi
     ) {
         ArgumentNullException.ThrowIfNull(argument: surfaceApi);
 
-        VulkanArgument.RequireHandle(
-            handle: instanceHandle,
-            handleDescription: "instance",
-            paramName: nameof(instanceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: instance);
 
         VulkanArgument.RequireHandle(
             handle: surfaceHandle,
@@ -44,7 +40,7 @@ public sealed class VulkanSurface : IDisposable {
             paramName: nameof(surfaceHandle)
         );
 
-        InstanceHandle = instanceHandle;
+        Instance = instance;
         Handle = surfaceHandle;
         DisplayKind = displayKind;
         m_surfaceApi = surfaceApi;
@@ -56,14 +52,11 @@ public sealed class VulkanSurface : IDisposable {
             return;
         }
 
-        if (0 != Handle) {
-            m_surfaceApi.DestroySurface(
-                instanceHandle: InstanceHandle,
-                surfaceHandle: Handle
-            );
-            Handle = 0;
-        }
-
+        m_surfaceApi.DestroySurface(
+            instance: Instance,
+            surfaceHandle: Handle
+        );
+        Handle = 0;
         m_disposed = true;
     }
 }

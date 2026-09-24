@@ -26,9 +26,8 @@ internal static class GbMicrotestProbe {
 
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="romCase">The case to run.</param>
-    /// <param name="budget">The case's wall-clock budget.</param>
     /// <returns>The verdict and a one-line detail.</returns>
-    public static (GbMicrotestResult Result, string Detail) Run(RomCase romCase, CaseBudget budget) {
+    public static (GbMicrotestResult Result, string Detail) Run(RomCase romCase) {
         var rom = File.ReadAllBytes(path: romCase.FullPath);
 
         using var machine = PostMachine.Build(
@@ -40,7 +39,6 @@ internal static class GbMicrotestProbe {
 
         for (var frame = 0; (frame < romCase.FrameCap); ++frame) {
             PostMachine.RunFrames(
-                budget: budget,
                 frames: 1,
                 instance: machine
             );

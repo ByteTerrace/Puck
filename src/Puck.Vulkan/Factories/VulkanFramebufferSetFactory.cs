@@ -22,39 +22,35 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
     }
 
     private void CleanupHandles(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         IReadOnlyList<nint> framebufferHandles,
         IReadOnlyList<nint> imageViewHandles
     ) {
         foreach (var framebufferHandle in framebufferHandles) {
-            if (0 != framebufferHandle) {
-                m_framebufferSetApi.DestroyFramebuffer(
-                    deviceHandle: deviceHandle,
-                    framebufferHandle: framebufferHandle
-                );
-            }
+            m_framebufferSetApi.DestroyFramebuffer(
+                device: device,
+                framebufferHandle: framebufferHandle
+            );
         }
 
         foreach (var imageViewHandle in imageViewHandles) {
-            if (0 != imageViewHandle) {
-                m_framebufferSetApi.DestroyImageView(
-                    deviceHandle: deviceHandle,
-                    imageViewHandle: imageViewHandle
-                );
-            }
+            m_framebufferSetApi.DestroyImageView(
+                device: device,
+                imageViewHandle: imageViewHandle
+            );
         }
     }
     private nint CreateFramebuffer(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint renderPassHandle,
         nint imageViewHandle,
         uint width,
         uint height
     ) {
         var request = new VulkanFramebufferCreateRequest(
-            DeviceHandle: deviceHandle,
+            Device: device,
             Height: height,
-            ImageViewHandle: imageViewHandle,
+            ImageViewHandles: [imageViewHandle],
             RenderPassHandle: renderPassHandle,
             Width: width
         );
@@ -72,12 +68,12 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
         return framebufferHandle;
     }
     private nint CreateImageView(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         uint format,
         nint imageHandle
     ) {
         var request = new VulkanImageViewCreateRequest(
-            DeviceHandle: deviceHandle,
+            Device: device,
             Format: format,
             ImageHandle: imageHandle
         );
@@ -106,7 +102,7 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
         ArgumentNullException.ThrowIfNull(argument: swapchain);
 
         var swapchainImages = m_framebufferSetApi.GetSwapchainImages(
-            deviceHandle: logicalDevice.Handle,
+            device: logicalDevice.Commands,
             swapchainHandle: swapchain.Handle
         );
 
@@ -120,12 +116,12 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
         try {
             for (var index = 0; (index < swapchainImages.Count); ++index) {
                 imageViewHandles[index] = CreateImageView(
-                    deviceHandle: logicalDevice.Handle,
+                    device: logicalDevice.Commands,
                     format: swapchain.ImageFormat,
                     imageHandle: swapchainImages[index]
                 );
                 framebufferHandles[index] = CreateFramebuffer(
-                    deviceHandle: logicalDevice.Handle,
+                    device: logicalDevice.Commands,
                     height: swapchain.ImageExtentHeight,
                     imageViewHandle: imageViewHandles[index],
                     renderPassHandle: renderPass.Handle,
@@ -134,7 +130,7 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
             }
 
             return new(
-                deviceHandle: logicalDevice.Handle,
+                device: logicalDevice.Commands,
                 framebufferHandles: framebufferHandles,
                 framebufferSetApi: m_framebufferSetApi,
                 imageHandles: swapchainImages,
@@ -142,7 +138,7 @@ public sealed class VulkanFramebufferSetFactory : IVulkanFramebufferSetFactory {
             );
         } catch {
             CleanupHandles(
-                deviceHandle: logicalDevice.Handle,
+                device: logicalDevice.Commands,
                 framebufferHandles: framebufferHandles,
                 imageViewHandles: imageViewHandles
             );

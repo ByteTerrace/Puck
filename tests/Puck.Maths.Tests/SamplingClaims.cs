@@ -40,7 +40,7 @@ internal static class SamplingClaims {
     /// (<paramref name="pointCount"/> * 2^32) is <c>max_i max((i+1)/N - x_i, x_i - i/N)</c> with no rounding
     /// anywhere — BigInteger cross-multiplication in place of a <see langword="double"/> sort-and-scan, so no float
     /// enters this oracle.</summary>
-    private static (BigInteger Numerator, BigInteger Denominator) ExactStarDiscrepancy(CertifiedLowDiscrepancy sequence, int pointCount) {
+    internal static (BigInteger Numerator, BigInteger Denominator) ExactStarDiscrepancy(CertifiedLowDiscrepancy sequence, int pointCount) {
         var points = new uint[pointCount];
 
         for (var i = 0; (i < pointCount); ++i) { points[i] = sequence.Point(index: ((ulong)(i + 1))).Value; }
@@ -60,6 +60,7 @@ internal static class SamplingClaims {
 
         return (numerator, denominator);
     }
+
     private static long NextSignedRaw(ref Pcg32XshRr generator) {
         var high = generator.NextUInt32();
         var low = generator.NextUInt32();

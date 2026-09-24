@@ -20,18 +20,10 @@ public sealed class VolumeLawTests {
         z: 0.3f
     );
 
-    private static void AssertRefusesNaming(CreationDocument document, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Path.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
+    private static void AssertRefusesNaming(CreationDocument document, string needle) => CreationFixtures.AssertRefusesAt(
+        document: document,
+        path: needle
+    );
     private static CreationDocument Document(params VolumeDocument[] volumes) => new(
         Schema: CreationDocument.CurrentSchema,
         Name: "jet",
@@ -164,7 +156,7 @@ public sealed class VolumeLawTests {
             creation: creation,
             scale: 2f
         );
-        var client = CreationDomainParentLawTests.Client(definition: definition);
+        var client = ClientFixtures.Client(definition: definition);
         var pool = CreationDomainParentLawTests.Pool(
             creation: creation,
             scale: 2f
@@ -333,9 +325,9 @@ public sealed class VolumeLawTests {
     public void InvalidCloudDensityControlsAreRefused(float coverage, float softness) =>
         AssertRefusesNaming(
             document: Document(Flow(kind: VolumeDocument.CloudKind) with {
-            Coverage = coverage,
-            Softness = softness,
-        }),
+                Coverage = coverage,
+                Softness = softness,
+            }),
             needle: "volumes[0]"
         );
     [Fact]
@@ -360,7 +352,7 @@ public sealed class VolumeLawTests {
             creation: creation,
             scale: 1f
         );
-        var client = CreationDomainParentLawTests.Client(definition: definition);
+        var client = ClientFixtures.Client(definition: definition);
         var pool = CreationDomainParentLawTests.Pool(
             creation: creation,
             scale: 1f

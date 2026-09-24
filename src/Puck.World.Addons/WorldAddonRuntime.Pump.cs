@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Scripting;
 using Puck.World.Protocol;
@@ -55,7 +56,7 @@ public sealed partial class WorldAddonRuntime {
     // (added outside the pool), but still gated by its OWN declared Reach (WorldGrants.TryGetChannelReach) — there is
     // no occupying-seat ceiling to consult, unlike a genuinely untrusted (pooled) contributor. Recomputed here rather
     // than read back from the fold, because ApplyIntentSubmission's verdict answers Drive authority only.
-    private bool ContributionAccepted(int bodyIndex, WorldPrincipal principal, in ChannelValues values) {
+    private bool ContributionAccepted(int bodyIndex, Principal principal, in ChannelValues values) {
         if (!m_server.Grants.TryGetChannelReach(
             principal: principal,
             subject: GrantSubject.Body(index: bodyIndex),

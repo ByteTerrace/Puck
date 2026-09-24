@@ -16,17 +16,24 @@ reasoning behind every decision is in
 
 ## Implementation status
 
-Checked against `state/rebuild` at `1d0d910c9`.
-
 - **Landed:** the baked solid query, `WorldSolidField`, `WorldOutputHub`
-  narration, and `WorldDeadlineTable`; the release manifest, group store,
+  narration, and `WorldDeadlineTable`; the `WorldServer` facade split and its
+  constraints (every record the checkpoint codec reads sits at the top level of
+  its namespace, and the file-length and comment-smell ratchet ledgers are
+  enforced at build time, with the file-length ceiling at 2,000 lines); the
+  release manifest, group store,
   coordinator, CLI verbs, and the maintenance-and-recovery sequence (owned by
   [the server README](../../src/Puck.World.Server/README.md#hosted-release-records)
   and [the deployment guide](../development/ci.md#world-maintenance-and-recovery));
-  `CartridgeStateLayout`, `CartridgeEffects`, and `DocumentEvaluationBudget`.
-- **Not started:** the product tree, the ledger, compiled worlds, release-pair
-  qualification, and the evidence package. The `WorldServer` facade split rides
-  the state rebuild's [WP11b](state-rebuild.md#wp11b--the-remainder).
+  `CartridgeStateLayout`, `CartridgeEffects`, and `DocumentEvaluationBudget`;
+  the ledger's first and fourth steps (the cartridge's image tooling deleted,
+  `puck cartridge-cost`, and the `tetromino` cartridge renamed and re-themed);
+  and, of compiled worlds, the one validated load, the container with its
+  header, and the `DEFN`, `ASST` and `BAKE` chunks (owned by
+  [the worlds manual](../architecture/worlds.md#compiled-worlds)); `BAKE` is the
+  rendering programme's creation bakes.
+- **Not started:** the product tree, the rest of the ledger, the rest of the
+  compiled-world chunks, release-pair qualification, and the evidence package.
 - **Not started, and partly defective where it exists:** the presentation view.
   `WorldProjection` composes and hydrates a document for a federated neighbour,
   but `Compose` never sets `Fields` and `TryToDefinition` never reads
@@ -61,7 +68,7 @@ repeats with an interrupted deployment and an interrupted rollback.
 ### The product tree
 
 **Owns:** `content/<id>/`, `product.json` (`puck.product.v1`), content
-resolution in `Puck.World`, `puck product` (renamed from `puck official`),
+resolution in `Puck.World`, `puck official` renamed to `puck product`,
 `puck world prepare`, `puck world release prepare`, `puck azure build`, the
 silo image, and the eviction of everything under `src/Puck.World/Assets`.
 
@@ -80,7 +87,7 @@ silo image, and the eviction of everything under `src/Puck.World/Assets`.
    application id), `name`, branding, root worlds, every document and asset
    with a family and a manifest-relative path, `channels`, `engines`, and the
    runtime extensions its hosted worlds require; the asset families are the
-   official manifest's (music, table, tune, patch; audio, synth, font reserved)
+   official manifest's (music, table, tune, patch)
    plus `cartridge`, `addon`, `pipeline`, and `compiled`. `Puck.World --product
    <root>` resolves every path against the root and nothing against the
    executable's directory or the repository layout; `--world <path>` stays for
@@ -113,16 +120,16 @@ cites `src/Puck.World/Assets`.
 
 **Owns:** `roms/manifest.json` (`puck.roms.v1`) and its README; `puck roms`
 (`--check`, `fetch`, `locate <id>`); `CorpusManifest`; one public resolver for
-verification ROMs; the Tetris tooling's deletion; the cartridges' move into the
-product; `tetromino`.
+verification ROMs; the cartridges' move into the product.
 
-**Delivers, in this order, as one landing:**
+**Delivers, in this order:**
 
-1. `TetrisExport`, `TetrisLook`, `TetrisShots`, `TetrisSideBySide`,
-   `hgb-compare.puck` and its generated document are deleted, with the stale
-   `verification/authority` rule in `.gitignore`, the unread `PUCK_AGB_*`
-   documentation, and the made-up `roms/tetris.agb` path;
-   `CartridgeCostMeasurement` becomes a `puck` verb keeping its bisection.
+1. Landed: the cartridge's image-export, text-look, and screenshot harnesses
+   are deleted, with the stale `verification/authority` rule in `.gitignore`,
+   the unread `PUCK_AGB_*` documentation, and a made-up ROM path in a
+   transpiler test; `CartridgeCostMeasurement` is public in
+   `Puck.GamingBricks.Forge` and `puck cartridge-cost` runs its bisection on
+   both machines.
 2. The ledger: every entry has `id`, `kind`, `sha256`; `firmware` entries
    (bytes in git beside their source and license, with the `puck firmware`
    generator), `corpus` entries (fetched into the local cache; `version`,
@@ -137,9 +144,15 @@ product; `tetromino`.
 3. The cartridges move into `content/puck/cartridges` and its manifest;
    `pip.agb.puck` is committed beside its document; `CartridgeRoundTripTests`
    enumerates cartridges from product manifests.
-4. `tetris.cgb` becomes `tetromino.cgb` in source, document, tests, and prose,
-   re-themed so its presentation no longer resembles the commercial game;
-   everything pinning its hash is re-recorded.
+4. Landed: the CGB cartridge is `tetromino.cgb` in source, document, tests,
+   and prose, re-themed so its presentation no longer resembles the commercial
+   game while its rules, piece shapes, scoring, and speeds stay. The re-theme
+   is a chalkboard: a slate backdrop and seven pastel chalks in place of the
+   familiar piece colours; a rounded chalk cell and a ruler-ticked well side;
+   the panel moved left of the well; the modes named `ENDLESS` and `RUBBLE`;
+   a `TETROMINO` title; original endless-mode and title music; and a balloon
+   in place of the rocket that ends the second mode. Nothing outside the
+   cartridge's own tests pinned its hash.
 5. External images resolve from one local store beside the corpus cache, keyed
    by id; `--bios`, `--games`, `--ags`, `--accuracy-suite`, `--link-game`,
    `--solar-rom`, `--link-rom`, `--trade-rom`, both `--boot` spellings, the
@@ -147,9 +160,8 @@ product; `tetromino`.
    an image with an unaccepted hash refuses it by entry id and a stage missing
    one skips naming the id.
 
-**Check:** `puck search -M 0 PUCK_TETRIS`, `puck search -M 0 tetris-world`, and
-`puck search -M 0 -i tetris` (outside git history and `experimental/`) return
-nothing; no test returns early on an environment variable; `puck roms --check`
+**Check:** a case-insensitive `puck search -M 0` for the commercial game's name
+(outside git history and `experimental/`) finds nothing; no test returns early on an environment variable; `puck roms --check`
 passes and fails on each seeded defect (hash drift, missing file, unregistered
 ROM); both batteries fetch through the verb and run their asset-free lanes
 unchanged; the round-trip gate covers all three cartridges from the manifest;
@@ -157,11 +169,13 @@ the official world boots with every arcade cabinet inserted.
 
 ### Compiled worlds
 
-A compiled world (`.pwc`, a working name) is a chunk container in the shape
-`PbakBundle` uses: a header, then chunks of a four-character code, length,
-content hash, and 8-byte-aligned payload, with the canonical variable-length
-integers of `AutomaticSequenceCodec`, whose writer and reader move from
-`Puck.Assets` to a shared public home. The header records the format version,
+A compiled world (`<name>.puckb`) is a chunk container in the shape `PbakBundle`
+reads: a header, then chunks of a four-character code, length, content hash, and
+8-byte-aligned payload, with the canonical variable-length integers
+`AutomaticIntegerSequenceCodec` writes. The writer and reader
+(`CanonicalBinaryWriterExtensions`, `CanonicalBinaryReader`) and the container
+(`ChunkContainer`) are public in `Puck.Assets`, and `PbakBundle` reads the same
+container. The header records the format version,
 the engine build, the machine catalog fingerprint, the definition hash over the
 canonical JSON bytes (so the existing `sha256-64` pins keep their meaning), and
 the instance identity. Each chunk records its derivation, the derivation's
@@ -175,6 +189,7 @@ projections and neighbour solids, and the live scene program are never stored.
 |---|---|---|
 | `DEFN` | the drawn, resolved definition, as compact canonical JSON | header only |
 | `ASST` | content hashes of every asset file read | asset files |
+| `BAKE` | the keys of the creation bakes at the shipped tier and the path of the build's one bake pack that holds them; not derived on boot | `DEFN` |
 | `PLCE` | placement frames, spatial index, distribution offsets | `DEFN` |
 | `SOLD` | the server solid program, evaluator, and a fully baked distance grid | `DEFN`, kits |
 | `NAVB` | navigation bake arrays per domain | `SOLD` |
@@ -196,34 +211,77 @@ every product derived fresh equals the product loaded from the compiled world
 byte for byte; a deliberate change to a derivation moves the chunk version and
 re-records the compiled worlds in the same change.
 
-**One validated load.** Owns `WorldDefinitionValidator.ValidateCore`'s callers
-and `WorldServer.RecompileRules`'s. Delivers one validation receipt that the
-server constructor, the machine host, and post-build wiring accept, extended
-from mutation and reload to boot, checkpoint restore, and separate hazard and
-budget requests with explicit ownership, since catalog shape alone is not a
-safe cache key. Check: a desktop boot, instance start, and checkpoint restore
-each run `ValidateCore` once and compile rules once, with state hashes
-unchanged.
+**One validated load (landed).** Owns `WorldDefinitionValidator.ValidateCore`'s
+callers and `WorldServer.RecompileRules`'s. One validation receipt reaches the
+server constructor, the machine host, and post-build wiring, across mutation,
+reload, boot, checkpoint restore, and separate hazard and budget requests with
+explicit ownership; catalog shape alone is not a safe cache key, so nothing is
+keyed on it.
 
-Installed hazard and budget requests now reuse one compilation and its analysis.
-Server construction carries its validation's programs and tables into
-installation when row settlement keeps the definition unchanged, and hands the
-same operation's local admission proof to machine preparation.
-Construction settles clocks and inverse boards from the
-initial arena and installs it directly, without seeding a second arena. Checkpoint restore
-retains its deserialized admission through construction, retained-turn checks and
-installation; a distinct journal base is separately validated. File/DSL loaders now
-retain their final receipt through boot and local instance preparation; post-build
-wiring rechecks environment-dependent sections without recompiling rules. Bytes, file,
-and asynchronous loaders now prepare first-fill draws and retained document bindings
-before their one full admission; draw inputs use the existing source and row validators.
-Row settlement, receipt propagation beyond hosted asynchronous loaders, and boot
-overrides still need the once-per-load acceptance check above; the item remains open.
+Installed hazard and budget requests reuse one compilation and its analysis.
+Every loader prepares first-fill draws, retained document bindings, host
+overrides, and state-row settlement (`WorldStateSettlement`) before its one full
+admission, so the document the receipt names is the document that installs and
+construction neither validates nor compiles again; draw inputs use the existing
+source and row validators, and a section no arena can hold is handed on
+unchanged for the admission to refuse by name. A constructor handed no receipt
+settles before admitting for itself. Construction exports clocks and inverse
+boards from the initial arena and installs it directly, without seeding a second
+arena, and hands the same operation's local admission proof to machine
+preparation. Checkpoint restore retains its deserialized admission through
+construction, retained-turn checks and installation; a distinct journal base is
+separately validated. File/DSL boot, local instance preparation, and the hosted
+asynchronous read each carry their receipt into construction, which accepts it
+when it names that document and the catalog the host validates against;
+post-build wiring rechecks environment-dependent sections without recompiling
+rules. Neighbour resolution reduces a neighbour to seam facts and admits
+nothing, so it carries no receipt.
 
-**Container, header, `DEFN`, `ASST`.** Owns the container codec's shared home,
-`puck compile`, `WorldAssets.targets`, the runtime cache. Check: `Puck.World`
-boots every shipped world from a compiled world; a mismatched header is
-ignored and a mismatched chunk re-derived, each with a law.
+Two doors validate a document twice by design. A hosted reload reads and
+validates the published definition to refuse it early, then submits it to the
+rebuild door, which admits it again at its own tick: a rebuild settles clocks at
+the tick it applies, so a receipt earned at boot time does not name the document
+it installs. A replay drive deserializes its embedded definition with provider
+checks deferred, and construction admits it against the drive's machine catalog;
+a receipt is bound to the catalog it was earned against, so the first does not
+stand in for the second.
+
+Check: a desktop boot, an instance start, and a checkpoint restore each run
+`ValidateCore` once and compile rules once, with state hashes unchanged —
+`WorldValidatedLoadLawTests` in `tests/Puck.World.Tests` and
+`tests/Puck.World.Schema.Tests`, counting through the `world.boot` work source's
+`world.boot.validations` and `world.boot.rule-compilations` kinds (`WorldBootWork`).
+
+**Container, header, `DEFN`, `ASST` (landed).** Owns the container codec's
+shared home, `puck compile`, `WorldAssets.targets`, the runtime cache. The
+codec, the header, the chunk registry (`CompiledWorldChunks`), both chunks,
+the three producers, and the boot's use of them are in place, and
+[the worlds manual](../architecture/worlds.md#compiled-worlds) owns their
+contract. Check: `CompiledWorldLawTests` in `tests/Puck.World.Tests` boots
+every compiled world the build shipped and counts a hit through the
+`world.boot` work source's `world.boot.compiled-hits`, ignores a mismatched
+header, re-derives a chunk whose version or asset input moved while keeping the
+rest, admits byte for byte the definition a fresh draw admits, and pins each
+derivation's product to its version; `WorldDocumentOutputLawTests` in
+`tests/Puck.Cli.Tests` holds every shipped compiled world to what its document
+derives fresh, byte for byte. Still open:
+
+- A hit still validates and compiles rules like a miss. Admitting a compiled
+  world's definition without validating again needs the validation receipt to
+  travel in the compiled world, which the trust decision allows for a local
+  boot and nothing stores yet.
+- A hit still compiles, composes, parses and serializes the authored document
+  to compute the header's definition hash, so `DEFN` saves the draw alone; the
+  boot-time win arrives with the simulation chunks.
+- A derivation that reads an earlier chunk's product declares it in
+  `DependsOn`, and a boot re-derives it when that chunk is re-derived; a chunk
+  that reads a neighbour document or the CPU identity records it as an input
+  through `ReadInput`, which no chunk does yet.
+- The hosted asynchronous load and the replay drive draw without a compiled
+  world, and checkpoints, replay tapes, and instance starts do not yet
+  reference one by its header.
+- The per-user compiled-world cache keeps one compiled world per document
+  path and never evicts one whose document was deleted.
 
 **Simulation chunks** (`PLCE`, `SOLD`, `NAVB`, `TOPO`, `POPL`, `TBLS`). Owns
 the caches those derivations sit behind, which are `ConditionalWeakTable` and
@@ -303,14 +361,17 @@ same subject the by-reference client picks, on the real executable; a peer
 sizes the same screen and placement reservations as the authority for the same
 document, with a law over both the derived and the authored policy.
 
-**Bound state crosses as per-recipient observations.** Owns `WorldStateReader`'s
-reads, the observation channel's regions, and
+**Bound state crosses as per-recipient observations.** Owns the
+`IWorldStateView` implementation, the observation channel's regions, and
 `WorldStateDisclosure.ValidateBindings`' reach. Delivers the presentation
-manifest's rows crossing as observations filtered per recipient, and
-`WorldStateReader` — the one surface every presentation `state.*` consumer reads
-through, from the HUD binding resolver and the binding bar to the overlay,
-wheel, gait, render-cycle, and seat-binding paths — reading the view instead of
-a document, which is one file's methods rather than each consumer. Public rows
+manifest's rows crossing as observations filtered per recipient, and the view's
+`IWorldStateView` — the interface the state mirror (`WorldStateMirror`) reads
+every presentation read of state through, from the HUD binding resolver, the
+binding bar and the radial wheel to the overlay predicates, camera operands,
+markers, render colors, theme, seat-binding contexts, and a body's look lanes,
+gait drivers, poses, effectors and scale — answering from the view instead of
+the delivered document, which is one implementation rather than each
+consumer. Public rows
 share one region, restricted rows get one region per recipient in use, and an
 audience is re-evaluated when a row it reads moves or a slot's seat changes.
 `ValidateBindings` walks for `IDocumentStateValue`, and `BindableScalar` and
@@ -319,7 +380,7 @@ invisible to the compose-time gate; they become document state values or the
 walk learns their shape. A binding its recipient may not read draws its literal
 fallback and narrates once, and a row whose audience comes from whichever
 ordered zone holds a token is not reachable from a document, so a binding to one
-refuses at validation rather than being half-enforced. Check: a Stratego canary
+refuses at validation rather than being half-enforced. Check: a `hiddenranks` canary
 — a HUD gauge bound to the opposing rank row draws its fallback, the owning
 seat's draws the value, and a rule writing the reveal row mid-run flips the
 first; a law that `ValidateBindings` refuses a `BindableScalar` naming a
@@ -383,9 +444,8 @@ qualification evidence.
 Last, against one named candidate, because every row is evidence about the
 same candidate.
 
-**Owns:** `CartridgeStateLayout`, `CartridgeEffects`, both forge suites, the
-language tool suites, the milestone record in
-[game development milestones](../development/game-milestones.md).
+**Owns:** `CartridgeStateLayout`, `CartridgeEffects`, both forge suites, and
+the language tool suites.
 
 **Delivers:** an audit of metadata still reconstructed in several consumers,
 extending the two homes rather than building a general IR, so every admitted
@@ -410,39 +470,15 @@ repeated execution proves repeatability; independent expected results prove
 both targets did not repeat one mistake.
 
 **Check:** both forge suites and the language tools pass against the candidate;
-every shipped source and document pair agrees; the commands and results are
-recorded against the candidate in the milestone record.
-
-### Constraints that ride the rebuild
-
-The `WorldServer` facade split and its maintenance constraints are the state
-rebuild's [WP11b](state-rebuild.md#wp11b--the-remainder), which rewrites the
-same partials. The clustering it executes:
-
-| Object | Absorbs | Owns |
-|---|---|---|
-| `WorldDocument` | mutation compose and apply, generate, state-transform admission, admission | definition, base, journal, pending ops, preflight scopes, budget meter, solids, the delivery decision |
-| `WorldTick` | step, contributions, channels, engagement, transfers, fields, music, responses, board enforcement, lattice draws | intents, channel fold scratch, federated intents, the music clock |
-| `WorldRuleHost` | rule host, queries, patterns, decisions, trace, diagnostics, flock affinities | evaluator, compiled rules, tables, latches |
-| `WorldExtensions` | extensions, the recorded-extension epoch, the external-operation dispatcher and journal | epoch, suppression; the addon and machine hosts hang off it |
-| `WorldGrants` | grants, ownership, the admission half of admission | grants, owner base, the drive-denied latch |
-| `WorldPersistence` | checkpoint, state hash, replay | nothing; it walks the others |
-
-Bodies stay behind `IWorldGrantsView` and handles, so nothing under `Bodies/`
-names `WorldServer`; the federation and checkpoint codecs' records nested in
-server classes are un-nested by the facade. With it: one deadline primitive
-(escrows, transfer escrows, contribution tenure, placement deals and
-responses, reflow reviews, and parks swept once per tick from
-`WorldDeadlineTable`, without LINQ), a comment ledger for
-`puck scan -Only comment-smells` whose counts per file may only shrink, and a
-lower file-length ceiling once the largest files are split.
+every shipped source and document pair agrees; the landing commit message
+carries the commands and results against the candidate.
 
 ## Sequencing
 
 | Step | Packages, in parallel | Why here |
 |---|---|---|
 | 1 — today | The product tree; the ledger; the view's mechanism defects and conformance law | Neither of the first two reads `Puck.State`. The root must exist before anything is named relative to it, and the ledger before cartridges leave the engine tree. The two projection defects are `Puck.World.Schema` alone, and the law they are written with is what every later cut is measured by. |
-| 2 — after the rebuild lands | The facade in WP11b; one validated load; the container; the view's static sections | The facade rewrites the partials the rebuild is rewriting; validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable. |
+| 2 | One validated load; the container; the view's static sections | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable. |
 | 3 | Simulation chunks; target registers and the authoring envelope | Content-keyed caches first; the widest slice of the boot profile. The two by-design members need a decision before state crosses, because both change what a client submits or recomputes. |
 | 4 | Everything else in the compiled world; release pairs; bound state as observations | `RULE` needs the rebuilt vocabulary's ordinal operands; a qualified pair needs a packaged product; the observation channel needs the rebuilt substrate's delivery seam. |
 | 5 | The primary client onto the view | Last of the view's cuts: until the four above are settled it would either darken presentation or keep a raw-document escape hatch, which is what it exists to remove. |
@@ -479,7 +515,7 @@ dotnet test tests/Puck.World.Tests -c Release
 ```
 
 ```bash
-puck doc-links
+puck docs links
 ```
 
 ---

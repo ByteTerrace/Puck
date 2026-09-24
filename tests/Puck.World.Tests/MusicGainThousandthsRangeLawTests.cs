@@ -1,6 +1,6 @@
+using Puck.Testing;
 using Xunit;
 
-using Puck.Assets.Documents;
 using Puck.World.Authoring;
 
 namespace Puck.World.Tests;
@@ -15,87 +15,13 @@ public sealed class MusicGainThousandthsRangeLawTests {
     private static readonly int MaxGainThousandths = ((int)(CreationSoundDocument.MaxLevel * 1000f));
 
     private static void WithDocument(Action<WorldDefinition> assert, MusicSegmentDocument segment) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-music-gain-law-").FullName;
+        using var directory = new TemporaryDirectory();
 
-        try {
-            var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
-                Schema: MusicDocument.CurrentSchema,
-                Name: "gain-law",
-                Tempo: new MusicTempoDocument(
-                    BeatsPerBar: 4,
-                    TicksPerBeat: 2100
-                ),
-                Segments: [segment]
-            ));
-            var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(
-                Effects: null,
-                Name: "bed",
-                Order: null,
-                Patterns: null,
-                Schema: AudioDocument.CurrentSchema,
-                Tempo: null
-            ));
-            var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(
-                Schema: SynthPatchDocument.CurrentSchema,
-                Name: "stinger",
-                Oscillator: null,
-                DutyThousandths: null,
-                Polynomial: null,
-                AttackFrames: null,
-                DecayFrames: null,
-                SustainThousandths: null,
-                ReleaseFrames: null,
-                PitchMillihertz: 440_000
-            ));
-            var musicPath = Path.Combine(
-                path1: directory,
-                path2: "gain-law.puck.music.v1.json"
-            );
-            var tunePath = Path.Combine(
-                path1: directory,
-                path2: "bed-tune.puck.tune.v1.json"
-            );
-            var patchPath = Path.Combine(
-                path1: directory,
-                path2: "stinger.puck.synthesizer-patch.v1.json"
-            );
-
-            File.WriteAllBytes(
-                path: musicPath,
-                bytes: music.Bytes
-            );
-            File.WriteAllBytes(
-                path: tunePath,
-                bytes: tune.Bytes
-            );
-            File.WriteAllBytes(
-                path: patchPath,
-                bytes: patch.Bytes
-            );
-
-            assert(obj: Fixtures.BuildDocument() with {
-                Music = [new WorldMusicRow(
-                    Name: "gain-law",
-                    Source: musicPath,
-                    Hash: music.Hash
-                )],
-                PatchesRaw = [new WorldPatch(
-                    Name: "stinger",
-                    Source: patchPath,
-                    Hash: patch.Hash
-                )],
-                TunesRaw = [new WorldTune(
-                    Name: "bed-tune",
-                    Source: tunePath,
-                    Hash: tune.Hash
-                )],
-            });
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        assert(obj: AudioAssetFixtures.ScoredDocument(
+            directory: directory,
+            musicName: "gain-law",
+            segment: segment
+        ));
     }
 
     [Fact]

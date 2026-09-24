@@ -52,14 +52,6 @@
       "description": "Seconds before the world auto-exits; 0 runs until the window is closed.",
       "type": "integer"
     },
-    "rayQuery": {
-      "description": "Whether the SDF renderer may use the ray-query hardware path.",
-      "type": "boolean"
-    },
-    "timing": {
-      "description": "Whether GPU per-pass timing boots armed; the world.timing live lever owns it thereafter.",
-      "type": "boolean"
-    },
     "genlock": {
       "description": "The external-clock election policy, consumed at boot by the clock registry (which tolerates an unknown source id): null for the launcher\u0027s automatic election, or a non-whitespace source id / off. Shape-only validation (null or non-whitespace); the registry, not the validator, interprets the id.",
       "type": [
@@ -69,7 +61,7 @@
       "default": null
     },
     "listen": {
-      "description": "The QUIC listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract \u2014 the --listen CLI flag reflects it for a single run without editing the document. Shape-only validation (null or a non-whitespace host:port pair); Server.WorldPeerHost is what actually parses and binds it.",
+      "description": "The QUIC listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract \u2014 the --listen CLI flag reflects it for a single run without editing the document. Shape-only validation (null or a non-whitespace host:port pair with a port 0..65535, where 0 binds any free port and the [world.listen: bound \u2026] narration names the one bound); Server.WorldPeerHost is what actually parses and binds it.",
       "type": [
         "string",
         "null"
@@ -100,7 +92,7 @@
       ]
     },
     "backendRow": {
-      "description": "A scalar kind=Text state row whose slot names the backend token, read at boot after literal Backend. A boot-only site (HostBackend): the resolver draws it once at composition, writes the settled preference into Backend, clears this facet, and narrates the settlement on stderr \u2014 the only surface that can say the backend was drawn at all, since a settled field is indistinguishable from an authored one thereafter. Its natural spelling is a weighted text source over the backend tokens (auto/directx/ vulkan \u2014 a one-context Markov table with bound 1, the degenerate flat weighted draw), parsed through ParseBackend at settle. A token naming no backend refuses by name. Drawing the name rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is inserted, and reads at the authoring site as a number nothing explains. Declared together with Backend it is refused by name \u2014 this record is a class, so presence is honestly observable here, unlike bodies.capacityRow\u0027s struct-typed site.",
+      "description": "A scalar kind=Text state row whose slot names the backend token, read at boot after state first-fills. Declaring this beside a literal Backend is refused. This boot-only site (HostBackend) writes the settled preference into Backend, clears this facet, and narrates the settlement on stderr. The source row retains its value and draw bookkeeping. Its natural spelling is a weighted text source over the backend tokens (auto/directx/ vulkan \u2014 a one-context Markov table with bound 1, the degenerate flat weighted draw), parsed through ParseBackend at settle. A token naming no backend refuses by name. Drawing the name rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is inserted, and reads at the authoring site as a number nothing explains. Declared together with Backend it is refused by name \u2014 this record is a class, so presence is honestly observable here, unlike bodies.capacityRow\u0027s struct-typed site.",
       "type": [
         "string",
         "null"
@@ -137,9 +129,7 @@
     "fullscreen",
     "presentMode",
     "targetHertz",
-    "exitAfterSeconds",
-    "rayQuery",
-    "timing"
+    "exitAfterSeconds"
   ],
   "additionalProperties": false,
   "default": null,

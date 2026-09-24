@@ -1,5 +1,5 @@
 {
-  "description": "Gets the stable document id used when this world submits to another document.",
+  "description": "Gets the stable document id used when this world submits to another document, or null when the document authors none.",
   "type": [
     "string",
     "null"

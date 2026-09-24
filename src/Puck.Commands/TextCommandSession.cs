@@ -27,7 +27,7 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
 
     internal TextCommandSession(
         TextCommandSource source,
-        CommandPrincipal principal,
+        Principal principal,
         int slot,
         CommandInjectionSink? simulationSink,
         Action<string, CommandResult>? onResult,
@@ -70,7 +70,7 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     /// varying number of ticks later.</summary>
     public bool DueNextTick { get; }
     /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>
-    public CommandPrincipal Principal { get; }
+    public Principal Principal { get; }
     /// <summary>Gets the logical player slot this ingress targets.</summary>
     public int Slot { get; }
     /// <summary>Gets the number of result callbacks that threw. A reporting failure cannot cancel command execution.</summary>

@@ -1,32 +1,20 @@
 using System.Numerics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace Puck.Maths.Tests;
 
 internal static partial class Subjects {
     public static string? FermatMaskBitOracle() =>
-        (FermatMaskBitOracle<byte>() ?? (FermatMaskBitOracle<sbyte>() ??
-        (FermatMaskBitOracle<ushort>() ?? (FermatMaskBitOracle<short>() ??
-        (FermatMaskBitOracle<uint>() ?? (FermatMaskBitOracle<int>() ??
-        (FermatMaskBitOracle<ulong>() ?? (FermatMaskBitOracle<long>() ??
-        (FermatMaskBitOracle<UInt128>() ?? (FermatMaskBitOracle<Int128>() ??
-        (FermatMaskBitOracle<nuint>() ?? FermatMaskBitOracle<nint>())))))))))));
+        AtEveryIntegerWidth<FermatMaskBitOracleWidths>();
 
     private static string? FermatMaskBitOracle<T>() where T : IBinaryInteger<T> {
-        // Resolve the internal kernel directly so its complete finite exponent domain is exercised, including
-        // the final half-word mask that ReverseBits implements with a separate final swap.
-        var subject = typeof(BinaryIntegerFunctions).GetMethod(
-            bindingAttr: BindingFlags.Static | BindingFlags.NonPublic,
-            name: "NthFermatMask"
-        )!
-            .MakeGenericMethod(typeArguments: typeof(T)).CreateDelegate<Func<int, T>>();
+        // The complete finite exponent domain, including the final half-word mask that ReverseBits never reads.
         var bits = (Unsafe.SizeOf<T>() * 8);
         var wordMask = ((BigInteger.One << bits) - 1);
 
         for (var exponent = 0; ((1 << exponent) < bits); ++exponent) {
             var block = (1 << exponent);
-            var actual = BigInteger.CreateChecked(value: subject(exponent)) & wordMask;
+            var actual = BigInteger.CreateChecked(value: exponent.NthFermatMask<T>()) & wordMask;
             var expected = Oracles.RepeatPatternBits(
                 pattern: ((BigInteger.One << block) - 1),
                 blockWidth: (block * 2),
@@ -40,20 +28,14 @@ internal static partial class Subjects {
     }
 
     public static string? ReplicationMaskBitOracle() =>
-        (ReplicationMaskBitOracle<byte>() ?? (ReplicationMaskBitOracle<sbyte>() ??
-        (ReplicationMaskBitOracle<ushort>() ?? (ReplicationMaskBitOracle<short>() ??
-        (ReplicationMaskBitOracle<uint>() ?? (ReplicationMaskBitOracle<int>() ??
-        (ReplicationMaskBitOracle<ulong>() ?? (ReplicationMaskBitOracle<long>() ??
-        (ReplicationMaskBitOracle<UInt128>() ?? (ReplicationMaskBitOracle<Int128>() ??
-        (ReplicationMaskBitOracle<nuint>() ?? ReplicationMaskBitOracle<nint>())))))))))));
+        AtEveryIntegerWidth<ReplicationMaskBitOracleWidths>();
 
     private static string? ReplicationMaskBitOracle<T>() where T : IBinaryInteger<T> {
         var bits = (Unsafe.SizeOf<T>() * 8);
         var wordMask = ((BigInteger.One << bits) - 1);
 
+        // Every width, dividing or not: a block that does not divide the word still marks its truncated last copy.
         for (var width = 1; (width <= bits); ++width) {
-            if ((bits % width) != 0) { continue; }
-
             var actual = BigInteger.CreateChecked(value: width.ReplicationMask<T>()) & wordMask;
             var expected = Oracles.RepeatPatternBits(
                 pattern: BigInteger.One,
@@ -117,7 +99,7 @@ internal static partial class Subjects {
 
     private static string? RepeatBitsBitOracle<T>(BigInteger raw, ulong selector) where T : IBinaryInteger<T> {
         var bits = (Unsafe.SizeOf<T>() * 8);
-        var width = (1 << ((int)(selector % ((ulong)(BitOperations.Log2(value: ((uint)bits)) + 1)))));
+        var width = (1 + ((int)(selector % ((ulong)bits))));
 
         return CheckRepeatedPattern<T>(
             pattern: raw & ((BigInteger.One << width) - 1),
@@ -141,17 +123,12 @@ internal static partial class Subjects {
     }
 
     public static string? PeriodicMaskBoundaries() {
-        var failure = (PeriodicMaskBoundaries<byte>() ?? (PeriodicMaskBoundaries<sbyte>() ??
-            (PeriodicMaskBoundaries<ushort>() ?? (PeriodicMaskBoundaries<short>() ??
-            (PeriodicMaskBoundaries<uint>() ?? (PeriodicMaskBoundaries<int>() ??
-            (PeriodicMaskBoundaries<ulong>() ?? (PeriodicMaskBoundaries<long>() ??
-            (PeriodicMaskBoundaries<UInt128>() ?? (PeriodicMaskBoundaries<Int128>() ??
-            (PeriodicMaskBoundaries<nuint>() ?? PeriodicMaskBoundaries<nint>())))))))))));
+        var failure = AtEveryIntegerWidth<PeriodicMaskBoundariesWidths>();
 
         if (failure is not null) { return failure; }
 
-        // Every valid byte pattern, including the signed full-word patterns.
-        for (var width = 1; (width <= 8); width *= 2) {
+        // Every valid byte pattern at every width, including the signed full-word patterns and truncated last copies.
+        for (var width = 1; (width <= 8); ++width) {
             for (var pattern = 0; (pattern < (1 << width)); ++pattern) {
                 failure = (CheckRepeatedPattern<byte>(
                     pattern: pattern,
@@ -178,8 +155,7 @@ internal static partial class Subjects {
         for (var width = -1; (width <= (bits + 1)); ++width) {
             if (
                 (width <= 0) ||
-                (width > bits) ||
-                ((bits % width) != 0)
+                (width > bits)
             ) {
                 var refusal = (MagicConstantRefusal<ArgumentOutOfRangeException>(
                     action: () => width.ReplicationMask<T>(),
@@ -246,4 +222,24 @@ internal static partial class Subjects {
 
         return $"expected {typeof(TException).Name}, but the call returned";
     }
+
+    // A statement made once per binary-integer carrier: every signed and unsigned width from a byte to 128 bits, plus
+    // the two native widths, first failure wins.
+    private interface IIntegerWidthClaim {
+        static abstract string? At<T>() where T : IBinaryInteger<T>;
+    }
+    private readonly struct FermatMaskBitOracleWidths : IIntegerWidthClaim {
+        public static string? At<T>() where T : IBinaryInteger<T> => FermatMaskBitOracle<T>();
+    }
+    private readonly struct ReplicationMaskBitOracleWidths : IIntegerWidthClaim {
+        public static string? At<T>() where T : IBinaryInteger<T> => ReplicationMaskBitOracle<T>();
+    }
+    private readonly struct PeriodicMaskBoundariesWidths : IIntegerWidthClaim {
+        public static string? At<T>() where T : IBinaryInteger<T> => PeriodicMaskBoundaries<T>();
+    }
+
+    private static string? AtEveryIntegerWidth<TClaim>()
+        where TClaim : IIntegerWidthClaim =>
+        (TClaim.At<byte>() ?? (TClaim.At<sbyte>() ?? (TClaim.At<ushort>() ?? (TClaim.At<short>() ?? (TClaim.At<uint>() ?? (TClaim.At<int>() ??
+            (TClaim.At<ulong>() ?? (TClaim.At<long>() ?? (TClaim.At<UInt128>() ?? (TClaim.At<Int128>() ?? (TClaim.At<nuint>() ?? TClaim.At<nint>())))))))))));
 }

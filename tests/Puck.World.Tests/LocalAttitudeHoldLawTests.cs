@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using System.Numerics;
 
@@ -122,7 +123,7 @@ public sealed class LocalAttitudeHoldLawTests {
                 ]
             ),
             ActionsRaw: new Dictionary<string, ActionSpec> {
-                ["dash"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new WorldEffect.SetVerticalVelocity(Velocity: 5.5f)])),
+                ["dash"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new WorldEffect.SetVerticalVelocity(Velocity: 5.5m)])),
             },
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["roam"] = Fixtures.TravelerRoamParameters,
@@ -150,7 +151,7 @@ public sealed class LocalAttitudeHoldLawTests {
     );
     private static string[] LocalAttitudeTrace(WorldDefinition definition, int ticks) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

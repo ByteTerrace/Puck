@@ -114,6 +114,12 @@ internal sealed partial class WorldScreenBinder {
             content: view,
             band: ScreenSlotPriority.Ambient
         );
+        RegisterViewWork(
+            lifetime: view.WorkLifetime,
+            name: feed.RegistrationName,
+            transforms: frameSource.MovedTransforms,
+            work: view.Work
+        );
         feed.Stack = m_viewStack;
         feed.View = view;
         feed.Emitter = emitter;
@@ -151,7 +157,7 @@ internal sealed partial class WorldScreenBinder {
     // NEVER touched here, per docs/architecture/worlds.md: "releasing an observation lease alone never advances the
     // generation — the resolver owns lifecycle").
     private void ReleaseSession(SessionFeed feed, int index, string reason) {
-        m_viewStack?.Release(name: feed.RegistrationName);
+        ReleaseView(name: feed.RegistrationName);
         feed.Dispose();
 
         Console.Error.WriteLine(value: $"[world.screen: session {index} -> destination '{feed.Destination}' released ({reason})]");
@@ -238,7 +244,7 @@ internal sealed partial class WorldScreenBinder {
             generationId: resolvedSession.GenerationId,
             mirror: mirror,
             lease: lease,
-            registrationName: $"{SessionRegistrationPrefix}{slot.Index}",
+            registrationName: WorldViewNames.Session(screen: slot.Index),
             projection: session.Projection,
             resolution: session.Resolution
         );

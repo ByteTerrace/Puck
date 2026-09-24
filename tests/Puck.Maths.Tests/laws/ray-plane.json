@@ -1,0 +1,44 @@
+[
+  {
+    "Id": "vector.ray-plane-known-hits",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryIntersectPlane"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.TryIntersectPlane on nine hand-built rays in whole units: an axis plane met straight on, the same plane under the flipped normal, a direction of length two, a plane behind the origin, a ray parallel to the plane, a zero direction, an origin lying on the plane, a tilted plane met along a diagonal, and a parameter of one third that must round",
+        "Against": "Exact inline expectations read off the geometry (5, 5, 2.5, refusal, refusal, refusal, 0, 2, and 21845 as the one ties-to-even rounding of 65536/3), each written as a raw and shared with no kernel. ENVELOPE: the ladder stays far inside the carrier, so it pins the sign rule, the parallel and zero refusals, the orientation independence and one rounding, never an overflow; vector.ray-plane-vs-oracle sweeps the carrier",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.ray-plane-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "TryIntersectPlane"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.TryIntersectPlane over the full carrier: the wrapping plane offset, FixedVector3.Dot's narrow and Int128 accumulators for both dot products, the sign rule on the exact quotient, and FusedArithmetic.TryDivideMagnitudeRounded's restoring division narrowed by TryNarrowSignedMagnitude",
+        "Against": "Oracles.RayPlaneDistance: the offset wrapped from an exact BigInteger difference, both dot products through Oracles.FusedDot (one Oracles.RoundDyadic of the exact BigInteger product sum), the sign rule read from the two dot raws, and one Oracles.RoundedRational of the exact quotient, which scales by a BigInteger power and decides the tie by doubling the remainder rather than by the subject's restoring loop, refusing rather than wrapping. ENVELOPE: on this full-range domain the offset and both dot products wrap as the contract states, so agreement pins the wrapped arithmetic rather than geometric meaning, and a quotient past the carrier is reached only where the denominator's raw is small; vector.ray-plane-known-hits pins the geometric meaning on hand geometry",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

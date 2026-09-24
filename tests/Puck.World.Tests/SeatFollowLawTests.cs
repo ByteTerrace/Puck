@@ -16,40 +16,29 @@ public sealed class SeatFollowLawTests {
         return (document with { ViewsRaw = document.Views with { SeatControlRaw = control } });
     }
 
-    [Fact]
-    public void FollowRate_NonPositive_Refuses_ControlPositiveClean() {
+    // A follow needs a positive rate and the world yaw reference; each denial breaks one, and the control is the
+    // world-referenced follow at rate four.
+    [InlineData("views.seatControl.follow-rate-positive", WorldSeatYawReference.World, 0f)]
+    [InlineData("views.seatControl.follow-needs-world-yaw", WorldSeatYawReference.Body, 4f)]
+    [Theory]
+    public void AnUnfollowableSeatControl_Refuses_ControlWorldRateFourClean(string lawId, WorldSeatYawReference yawReference, float rate) {
+        static WorldDefinition With(WorldSeatYawReference yawReference, float rate) => WithControl(control: new WorldSeatViewControl(
+            YawReference: yawReference,
+            MinPitch: -0.5f,
+            MaxPitch: 1f,
+            Follow: new WorldSeatFollow(Rate: rate)
+        ));
+
         Laws.RefusalWithControl(
-            lawId: "views.seatControl.follow-rate-positive",
-            deniedOutcome: static () => TryValidate(definition: WithControl(control: new WorldSeatViewControl(
-                YawReference: WorldSeatYawReference.World,
-                MinPitch: -0.5f,
-                MaxPitch: 1f,
-                Follow: new WorldSeatFollow(Rate: 0f)
-            ))),
-            controlOutcome: static () => TryValidate(definition: WithControl(control: new WorldSeatViewControl(
-                YawReference: WorldSeatYawReference.World,
-                MinPitch: -0.5f,
-                MaxPitch: 1f,
-                Follow: new WorldSeatFollow(Rate: 4f)
-            )))
-        );
-    }
-    [Fact]
-    public void FollowUnderABodyYawReference_Refuses_ControlWorldClean() {
-        Laws.RefusalWithControl(
-            lawId: "views.seatControl.follow-needs-world-yaw",
-            deniedOutcome: static () => TryValidate(definition: WithControl(control: new WorldSeatViewControl(
-                YawReference: WorldSeatYawReference.Body,
-                MinPitch: -0.5f,
-                MaxPitch: 1f,
-                Follow: new WorldSeatFollow(Rate: 4f)
-            ))),
-            controlOutcome: static () => TryValidate(definition: WithControl(control: new WorldSeatViewControl(
-                YawReference: WorldSeatYawReference.World,
-                MinPitch: -0.5f,
-                MaxPitch: 1f,
-                Follow: new WorldSeatFollow(Rate: 4f)
-            )))
+            lawId: lawId,
+            deniedOutcome: () => TryValidate(definition: With(
+                rate: rate,
+                yawReference: yawReference
+            )),
+            controlOutcome: static () => TryValidate(definition: With(
+                rate: 4f,
+                yawReference: WorldSeatYawReference.World
+            ))
         );
     }
 }

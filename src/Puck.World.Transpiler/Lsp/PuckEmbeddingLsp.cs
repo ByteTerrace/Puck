@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Editing;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Lowering;
@@ -11,111 +12,101 @@ namespace Puck.World.Transpiler.Lsp;
 
 /// <summary>Language Server Protocol support for state embeddings, spaces, transforms, and vector operations.</summary>
 internal static class PuckEmbeddingLsp {
-    private static void AddCompletion(JsonArray items, string label, string insertText, string detail, int kind) {
-        items.Add(item: new JsonObject {
-            ["label"] = label,
-            ["kind"] = kind,
-            ["detail"] = detail,
-            ["insertText"] = insertText,
-            ["insertTextFormat"] = 2,
-        });
-    }
-
     /// <summary>Adds embedding, space, and vector keyword completions to the LSP completion list.</summary>
     /// <param name="items">The destination completion items array.</param>
     internal static void AddCompletions(JsonArray items) {
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Block: embedding spaces definition",
             insertText: "spaces {\n\tspace ${1:lore} { model: \"${2:text-embedding-3-small}\" revision: \"${3:1}\" dimensions: ${4:256} }\n}",
             items: items,
             kind: 14,
             label: "spaces"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Declaration: embedding space definition",
             insertText: "space ${1:lore} { model: \"${2:text-embedding-3-small}\" revision: \"${3:1}\" dimensions: ${4:256} }",
             items: items,
             kind: 14,
             label: "space"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Cell kind: normalized signed 8-bit embedding vector",
             insertText: "Vector",
             items: items,
             kind: 7,
             label: "Vector"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Table modifier: capacity eviction policy",
             insertText: "evicts",
             items: items,
             kind: 14,
             label: "evicts"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Table modifier: companion vector table",
             insertText: "embeds(${1:companionVectorTable})",
             items: items,
             kind: 14,
             label: "embeds"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Function: embed string literal into vector",
             insertText: "embed(\"${1:text}\")",
             items: items,
             kind: 3,
             label: "embed"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Function: vector literal from base64url",
             insertText: "vector(\"${1:base64url}\")",
             items: items,
             kind: 3,
             label: "vector"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Function: integer dot product of two vectors",
             insertText: "dot(${1:a}, ${2:b})",
             items: items,
             kind: 3,
             label: "dot"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Function: cosine similarity of two vectors",
             insertText: "similarity(${1:a}, ${2:b})",
             items: items,
             kind: 3,
             label: "similarity"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Predicate: whether two vectors are identical",
             insertText: "identical(${1:a}, ${2:b})",
             items: items,
             kind: 3,
             label: "identical"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Transform: normalized weighted sum of vector terms",
             insertText: "mix(into: \"${1:target}\", terms: [\n\t{ from: ${2:source}, weight: ${3:1} }\n])",
             items: items,
             kind: 3,
             label: "mix"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Transform: normalized mean of candidate vectors",
             insertText: "mean(from: ${1:table}, into: \"${2:target}\")",
             items: items,
             kind: 3,
             label: "mean"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Transform: find k nearest vector cells",
             insertText: "nearest(from: ${1:table}, query: ${2:vector}, into: ${3:dest}, k: ${4:1})",
             items: items,
             kind: 3,
             label: "nearest"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "Transform: insert or reinforce a vector memory",
             insertText: "remember(from: ${1:table}, query: ${2:vector})",
             items: items,
@@ -125,55 +116,31 @@ internal static class PuckEmbeddingLsp {
     }
     /// <summary>Creates a document symbol for a <c>spaces { ... }</c> block.</summary>
     /// <param name="spaces">The spaces block AST node.</param>
+    /// <param name="source">The text the block was parsed from.</param>
     /// <returns>A document symbol JSON object representing the spaces block and its defined spaces.</returns>
-    internal static JsonObject CreateSpacesSymbol(BlockNode spaces) {
-        var symbol = new JsonObject {
-            ["name"] = "spaces",
-            ["kind"] = 5, // Class
-            ["range"] = new JsonObject {
-                ["start"] = new JsonObject { ["line"] = (spaces.Line - 1), ["character"] = (spaces.Column - 1) },
-                ["end"] = new JsonObject { ["line"] = (spaces.Line - 1), ["character"] = ((spaces.Column - 1) + spaces.Length) },
-            },
-            ["selectionRange"] = new JsonObject {
-                ["start"] = new JsonObject { ["line"] = (spaces.Line - 1), ["character"] = (spaces.Column - 1) },
-                ["end"] = new JsonObject { ["line"] = (spaces.Line - 1), ["character"] = ((spaces.Column - 1) + spaces.Identifier.Length) },
-            },
-        };
-
+    internal static JsonObject CreateSpacesSymbol(BlockNode spaces, string source) {
         var children = new JsonArray();
 
         foreach (var stmt in spaces.Statements) {
             if (stmt is BlockNode spaceBlock) {
-                var spaceName = (spaceBlock.Name ?? (spaceBlock.Target ?? spaceBlock.Identifier));
-                var childSymbol = new JsonObject {
-                    ["name"] = $"space {spaceName}",
-                    ["kind"] = 5,
-                    ["range"] = new JsonObject {
-                        ["start"] = new JsonObject { ["line"] = (spaceBlock.Line - 1), ["character"] = (spaceBlock.Column - 1) },
-                        ["end"] = new JsonObject { ["line"] = (spaceBlock.Line - 1), ["character"] = ((spaceBlock.Column - 1) + spaceBlock.Length) },
-                    },
-                    ["selectionRange"] = new JsonObject {
-                        ["start"] = new JsonObject { ["line"] = (spaceBlock.Line - 1), ["character"] = (spaceBlock.Column - 1) },
-                        ["end"] = new JsonObject { ["line"] = (spaceBlock.Line - 1), ["character"] = ((spaceBlock.Column - 1) + spaceBlock.Identifier.Length) },
-                    },
-                };
-
+                var childSymbol = Symbol(
+                    kind: 5,
+                    name: $"space {(spaceBlock.Name ?? (spaceBlock.Target ?? spaceBlock.Identifier))}",
+                    node: spaceBlock,
+                    selectionLength: spaceBlock.Identifier.Length,
+                    source: source
+                );
                 var propChildren = new JsonArray();
 
                 foreach (var s in spaceBlock.Statements) {
                     if (s is PropertyNode prop) {
-                        propChildren.Add(item: new JsonObject {
-                            ["name"] = prop.Name,
-                            ["kind"] = 7, // Property
-                            ["range"] = new JsonObject {
-                                ["start"] = new JsonObject { ["line"] = (prop.Line - 1), ["character"] = (prop.Column - 1) },
-                                ["end"] = new JsonObject { ["line"] = (prop.Line - 1), ["character"] = ((prop.Column - 1) + prop.Length) },
-                            },
-                            ["selectionRange"] = new JsonObject {
-                                ["start"] = new JsonObject { ["line"] = (prop.Line - 1), ["character"] = (prop.Column - 1) },
-                                ["end"] = new JsonObject { ["line"] = (prop.Line - 1), ["character"] = ((prop.Column - 1) + prop.Name.Length) },
-                            },
-                        });
+                        propChildren.Add(item: Symbol(
+                            kind: 7, // Property
+                            name: prop.Name,
+                            node: prop,
+                            selectionLength: prop.Name.Length,
+                            source: source
+                        ));
                     }
                 }
 
@@ -185,9 +152,26 @@ internal static class PuckEmbeddingLsp {
             }
         }
 
+        var symbol = Symbol(
+            kind: 5, // Class
+            name: "spaces",
+            node: spaces,
+            selectionLength: spaces.Identifier.Length,
+            source: source
+        );
+
         symbol["children"] = children;
         return symbol;
     }
+
+    // A symbol spans its whole construct; its selection is the name the construct opens with.
+    private static JsonObject Symbol(string name, int kind, SyntaxNode node, int selectionLength, string source) => new() {
+        ["name"] = name,
+        ["kind"] = kind,
+        ["range"] = LspJson.Range(source: source, span: node.Span),
+        ["selectionRange"] = LspJson.Range(source: source, span: (node.Span with { Length = selectionLength })),
+    };
+
     /// <summary>Gets a hover card for an embedding keyword or an embedded text under the cursor.</summary>
     /// <param name="offset">The character offset of the cursor in source text.</param>
     /// <param name="text">The complete document source text.</param>
@@ -214,52 +198,52 @@ internal static class PuckEmbeddingLsp {
     /// <returns>A markdown documentation card, or null.</returns>
     internal static string? GetKeywordHoverCard(string word) {
         return word switch {
-            "Vector" => Card(
+            "Vector" => PuckHoverInfo.Card(
                 declaration: "table memories space(lore) = ...\nslot query space(lore) = ...",
                 description: "A vector state row whose cells hold normalized `sbyte` embedding vectors within a declared space; a `space(...)` modifier is what infers the Vector kind.",
                 title: "`Vector` Cell Kind"
             ),
-            "embed" => Card(
+            "embed" => PuckHoverInfo.Card(
                 declaration: "embed(\"text\", [space: \"lore\"])",
                 description: "Embeds a text literal into a vector using the specified or default space. Resolved and locked at bake time via `puck embed`.",
                 title: "`embed` Function"
             ),
-            "vector" => Card(
+            "vector" => PuckHoverInfo.Card(
                 declaration: "vector(\"base64url\")",
                 description: "A raw vector literal encoded as unpadded URL-safe base64 `sbyte` components.",
                 title: "`vector` Literal"
             ),
-            "dot" => Card(
+            "dot" => PuckHoverInfo.Card(
                 declaration: "dot(vectorA, vectorB)",
                 description: "Computes the exact integer dot product of two vectors in the same space.",
                 title: "`dot` Function"
             ),
-            "similarity" => Card(
+            "similarity" => PuckHoverInfo.Card(
                 declaration: "similarity(vectorA, vectorB)",
                 description: "Computes the cosine similarity of two normalized vectors in the same space as a `Fixed` decimal value.",
                 title: "`similarity` Function"
             ),
-            "identical" => Card(
+            "identical" => PuckHoverInfo.Card(
                 declaration: "identical(vectorA, vectorB)",
                 description: "Evaluates to `true` if two vectors have identical components, `false` otherwise.",
                 title: "`identical` Predicate Function"
             ),
-            "mix" => Card(
+            "mix" => PuckHoverInfo.Card(
                 declaration: "transform mix(into: \"current\", terms: [\n    { from: \"stance[$each]\", weight: 3 }\n    { from: embed(\"calm\"), weight: -1 }\n])",
                 description: "Writes the normalized weighted sum of 1 to 8 vector terms into a destination vector cell.",
                 title: "`mix` Transform"
             ),
-            "mean" => Card(
+            "mean" => PuckHoverInfo.Card(
                 declaration: "transform mean(from: memories, into: \"self\", where: important)",
                 description: "Writes the normalized mean vector of candidate cells in a table into a destination vector cell.",
                 title: "`mean` Transform"
             ),
-            "nearest" => Card(
+            "nearest" => PuckHoverInfo.Card(
                 declaration: "transform nearest(from: memories, query: \"situation\", into: recalled, k: 3)",
                 description: "Finds the `k` nearest cells in a vector table to a query vector, scoring by dot/similarity or writing the best key into a Text slot.",
                 title: "`nearest` Transform"
             ),
-            "remember" => Card(
+            "remember" => PuckHoverInfo.Card(
                 declaration: "transform remember(from: memories, query: \"situation\", threshold: 0.8)",
                 description: "Inserts or reinforces a vector memory in an evicting vector table.",
                 title: "`remember` Transform"
@@ -280,9 +264,7 @@ internal static class PuckEmbeddingLsp {
             return null;
         }
 
-        var path = new List<SyntaxNode>();
-
-        FindPath(node: doc, offset: offset, path: path);
+        var path = SyntaxWalk.PathAt(offset: offset, root: doc);
 
         string? embeddedText = null;
         string? explicitSpace = null;
@@ -400,20 +382,20 @@ internal static class PuckEmbeddingLsp {
             }
         }
 
-        var textHash = EmbeddingLock.ComputeTextHash(text: embeddedText);
+        var textHash = EmbeddingText.Hash(text: embeddedText).Hex;
 
         if (!space.Entries.TryGetValue(key: textHash, value: out var currentEntry)) {
             sb.AppendLine(value: "- **Lock status:** Not locked (run `puck embed`)");
-            sb.AppendLine(handler: $"- **Space:** `{resolvedSpace}` (`{space.Model}`, rev: `{space.Revision}`, dims: {space.Dimensions})");
+            sb.AppendLine(handler: $"- **Space:** `{resolvedSpace}` (`{space.Identity.Model}`, rev: `{space.Identity.Revision}`, dims: {space.Identity.Dimensions})");
             return sb.ToString().TrimEnd();
         }
 
         sb.AppendLine(value: "- **Lock status:** Locked");
-        sb.AppendLine(handler: $"- **Model:** `{space.Model}` (rev: `{space.Revision}`, dims: {space.Dimensions})");
+        sb.AppendLine(handler: $"- **Model:** `{space.Identity.Model}` (rev: `{space.Identity.Revision}`, dims: {space.Identity.Dimensions})");
         sb.AppendLine(handler: $"- **Vector:** `{currentEntry.Vector}`\n");
 
         // Find three nearest locked texts
-        if (StateVector.TryParseBase64Url(currentEntry.Vector, space.Dimensions, out var currentVector, out _)) {
+        if (StateVector.TryParseBase64Url(currentEntry.Vector, space.Identity.Dimensions, out var currentVector, out _)) {
             var nearestList = new List<(string Text, long Score)>();
 
             foreach (var other in space.Entries.Values) {
@@ -421,7 +403,7 @@ internal static class PuckEmbeddingLsp {
                     continue;
                 }
 
-                if (StateVector.TryParseBase64Url(other.Vector, space.Dimensions, out var otherVector, out _)) {
+                if (StateVector.TryParseBase64Url(other.Vector, space.Identity.Dimensions, out var otherVector, out _)) {
                     var dot = SignedByteVectorFunctions.Dot(left: currentVector.Components, right: otherVector.Components);
 
                     nearestList.Add(item: (other.Text, dot));
@@ -472,80 +454,5 @@ internal static class PuckEmbeddingLsp {
             }
         }
         return false;
-    }
-    private static string Card(string title, string declaration, string? description = null) {
-        var fence = "```";
-
-        while (declaration.Contains(comparisonType: StringComparison.Ordinal, value: fence)) {
-            fence += "`";
-        }
-
-        return ($"{title}\n\n{fence}puck\n{declaration}\n{fence}" + (string.IsNullOrWhiteSpace(value: description)
-            ? ""
-            : $"\n\n{description}"));
-    }
-    private static bool Contains(SyntaxNode node, int offset) =>
-        ((offset >= node.Offset) && (offset < (node.Offset + node.Length)));
-    private static IEnumerable<SyntaxNode> Children(SyntaxNode node) => node switch {
-        DocumentNode document => document.Statements,
-        BlockNode block => block.Statements,
-        TemplateNode template => [.. template.Parameters, template.Body],
-        TemplateParameterNode { DefaultValue: { } value } => [value],
-        LetNode constant => [constant.Value],
-        PropertyNode property => [property.Value],
-        ExpressionStatementNode statement => [statement.Expression],
-        ForStatementNode loop => [loop.Sequence, .. loop.Body],
-        RepeatStatementNode repeat => [repeat.Count, .. repeat.Body],
-        RuleBlockNode rule => rule.Statements,
-        DecisionBlockNode decision => decision.Statements,
-        OptionBlockNode option => option.Statements,
-        OnNoChoiceBlockNode fallback => fallback.Effects,
-        TransactionStatementNode transaction => [.. transaction.MainEffects, .. (transaction.OnFailureEffects ?? [])],
-        IfStatementNode branch => [.. branch.Then, .. (branch.Else ?? [])],
-        TransformStatementNode transform => [transform.Transform],
-        SetCellStatementNode setCell => [setCell.Target, setCell.Rhs],
-        AddCellStatementNode addCell => [addCell.Target, addCell.Rhs],
-        CompoundAssignStatementNode compAssign => [compAssign.Target, compAssign.Rhs],
-        PushStatementNode push => [push.Rhs],
-        WhenStatementNode whenStmt => [whenStmt.Predicate],
-        AndPredicateNode andPred => andPred.Operands,
-        OrPredicateNode orPred => orPred.Operands,
-        NotPredicateNode notPred => [notPred.Operand],
-        CallExpressionNode call => call.Arguments,
-        ArgumentNode argument => [argument.Value],
-        StateTableDeclarationNode table => [.. table.Modifiers, .. table.Cells],
-        StateSlotDeclarationNode { Value: { } slotValue } slot => [.. slot.Modifiers, slotValue],
-        StateSlotDeclarationNode slot => slot.Modifiers,
-        StatePileDeclarationNode pile => pile.Modifiers,
-        StateGridDeclarationNode grid => [.. grid.Modifiers, .. grid.Cells],
-        StateCellEntryNode cell => [cell.Value, .. cell.Modifiers],
-        StateModifierNode modifier => modifier.Arguments,
-        LambdaExpressionNode lambda => [lambda.Body],
-        ArrayExpressionNode array => array.Elements,
-        ObjectExpressionNode obj => obj.Properties,
-        BinaryExpressionNode binary => [binary.Left, binary.Right],
-        UnaryExpressionNode unary => [unary.Operand],
-        IndexExpressionNode index => [index.Target, index.Index],
-        MemberAccessExpressionNode member => [member.Target],
-        RangeExpressionNode range => [.. OptionalRangeChildren(range: range)],
-        _ => []
-    };
-    private static IEnumerable<SyntaxNode> OptionalRangeChildren(RangeExpressionNode range) {
-        if (range.Start is { } start) { yield return start; }
-        if (range.End is { } end) { yield return end; }
-    }
-    private static bool FindPath(SyntaxNode node, int offset, List<SyntaxNode> path) {
-        if (!Contains(node: node, offset: offset)) {
-            return false;
-        }
-
-        path.Add(item: node);
-        foreach (var child in Children(node: node)) {
-            if (FindPath(node: child, offset: offset, path: path)) {
-                break;
-            }
-        }
-
-        return true;
     }
 }

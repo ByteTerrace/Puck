@@ -25,8 +25,7 @@ D3D12_COMMAND_QUEUE_DESC
 D3D12_DESCRIPTOR_HEAP_DESC
 D3D12_RESOURCE_BARRIER
 
-// Direct3D 12: HLSL compilation, root signatures, pipeline state, and geometry rendering.
-D3DCompile
+// Direct3D 12: root signatures, pipeline state, and geometry rendering.
 ID3DBlob
 D3D12SerializeRootSignature
 ID3D12RootSignature
@@ -52,25 +51,6 @@ D3D12_SRV_DIMENSION
 D3D12_DESCRIPTOR_RANGE_TYPE
 D3D12_SHADER_VISIBILITY
 D3D12_DESCRIPTOR_HEAP_FLAGS
-
-// Direct3D 12: DXR 1.1 inline ray tracing — newer device/command-list interfaces, acceleration-structure build
-// inputs, AABB geometry, instance descriptors, and the OPTIONS5 ray-tracing-tier feature query.
-ID3D12Device5
-ID3D12GraphicsCommandList4
-D3D12_FEATURE_DATA_D3D12_OPTIONS5
-D3D12_RAYTRACING_TIER
-D3D12_RAYTRACING_AABB
-D3D12_RAYTRACING_GEOMETRY_DESC
-D3D12_RAYTRACING_INSTANCE_DESC
-D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS
-D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC
-D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO
-D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE
-D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS
-D3D12_RAYTRACING_GEOMETRY_TYPE
-D3D12_RAYTRACING_GEOMETRY_FLAGS
-D3D12_RAYTRACING_INSTANCE_FLAGS
-D3D12_ELEMENTS_LAYOUT
 
 // Direct3D 12: Enhanced Barriers (scoped sync/access + first-class image layouts, the Vulkan-barrier peer).
 ID3D12GraphicsCommandList7
@@ -114,11 +94,24 @@ D3D12_QUERY_DATA_PIPELINE_STATISTICS
 D3D12_FEATURE_DATA_SHADER_MODEL
 D3D_SHADER_MODEL
 
-// Direct3D 12: debug layer + info queue (validation message surfacing).
+// Direct3D 12: the device's identity (GpuDeviceIdentity) — the highest feature level it supports, recorded beside
+// counted work and never branched on. The adapter's name, PCI identifiers and user-mode driver version come from
+// IDXGIAdapter1::GetDesc1 and IDXGIAdapter::CheckInterfaceSupport(IDXGIDevice).
+D3D12_FEATURE_DATA_FEATURE_LEVELS
+
+// Direct3D 12: the device's memory profile (GpuMemoryProfile), which residency selection branches on — the
+// architecture's UMA and CacheCoherentUMA, and options 16's GPU upload heap support, beside the adapter's dedicated
+// and shared memory from IDXGIAdapter1::GetDesc1.
+D3D12_FEATURE_DATA_ARCHITECTURE
+D3D12_FEATURE_DATA_D3D12_OPTIONS16
+
+// Direct3D 12: debug layer + info queue (validation message surfacing), and the live-object report at teardown.
 D3D12GetDebugInterface
 ID3D12Debug
+ID3D12DebugDevice
 ID3D12InfoQueue
 D3D12_MESSAGE_SEVERITY
+D3D12_RLDO_FLAGS
 
 // Win32 event-based GPU fence waiting.
 CreateEventW
@@ -158,3 +151,9 @@ IDXGIResource
 IDXGIResource1
 D3D11_MAPPED_SUBRESOURCE
 D3D11_MAP
+
+// Direct3D 12: the persistent pipeline library (ID3D12Device1::CreatePipelineLibrary, Load*Pipeline, StorePipeline,
+// Serialize) and the adapter identity its file is keyed by (vendor and device IDs, the user-mode driver version).
+ID3D12Device1
+ID3D12PipelineLibrary
+DXGI_ADAPTER_DESC1

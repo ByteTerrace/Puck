@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/tetromino.puck",
+  "simulationRateHz": 30,
+  "ticks": 130,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 14,
+      "interactionRows": 0,
+      "evaluationSlots": 14,
+      "workUnitsPerTick": 109099,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 14,
+      "interactionRows": 0,
+      "evaluationSlots": 14,
+      "workUnitsPerTick": 109099,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

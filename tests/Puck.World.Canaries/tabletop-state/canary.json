@@ -3,7 +3,7 @@
   "title": "Atomic tabletop and tactics state with replay",
   "binding": "A world-authored move rule spends two points along a live pathCost only while the request stays affordable and reachable; a bracketed ray flips discs; a stable card moves between ordered zones; a guarded ray action advances the phase generation. The occupied-destination control leaves position, allowance, and occupancy exactly where they were: the rule's gate never opens, so nothing fires and nothing is rejected. The positive boot recording must MATCH.",
   "bootShape": "headless",
-  "requirements": [], "seconds": 4, "timeoutSeconds": 35, "fixtures": [],
+  "requirements": [], "timeoutSeconds": 35, "fixtures": [],
   "positive": {
     "world": "tests/Puck.World.Canaries/tabletop-state/fixture.world.json",
     "script": "positive.script.txt",

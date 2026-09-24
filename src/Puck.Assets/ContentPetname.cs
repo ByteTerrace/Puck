@@ -53,9 +53,9 @@ public static class ContentPetname {
 
         var hex = (hashHex.StartsWith(
             comparisonType: StringComparison.Ordinal,
-            value: "sha256/"
+            value: ContentPin.Prefix
         )
-            ? hashHex["sha256/".Length..]
+            ? hashHex[ContentPin.Prefix.Length..]
             : hashHex
         );
 

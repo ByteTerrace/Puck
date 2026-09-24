@@ -36,7 +36,7 @@ internal sealed class InfraredResumeCreditGuardStage : IPostStage<PostContext> {
         // Larger than any freshly booted machine's cycle count could ever satisfy — the token does not fit either
         // machine, the signature a reordered/substituted or otherwise corrupted token leaves behind. The oversized credit
         // sits on the SECOND side so the guard is proven on both constructor arguments, not just the first.
-        var bogusToken = new IrLinkResumeToken(
+        var bogusToken = new LinkResumeToken(
             FirstCredit: 0UL,
             SecondCredit: (ulong.MaxValue / 2)
         );

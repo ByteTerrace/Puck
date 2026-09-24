@@ -12,11 +12,16 @@ declared door budget, checkpoint/journal/definition store target, state
 directory, and clustering. The generated schema is
 `Assets/puck.silo.configuration.v1.schema.json`.
 
-Optional host services are supplied by an outer composition through
-`WorldSiloApplication.RunAsync`. The silo exposes fixed-row Console sessions as
-`IControlSessionHost`; it has no MCP project or package dependency. The host admits the validated issuer/subject through explicit OAuth admission and stamps the resulting Peer generation on commands. Replica disclosure authorizes text reads; writes require ordinary row grants. Remote sessions cannot use local administrative verbs. The CLI can
-install [Puck.Mcp](../Puck.Mcp/README.md#host-extension) with
-`puck mcp --silo <path> --http <remote.json>`. Row retirement closes all of its
+Optional capabilities are installed [extensions](../../docs/reference/extensions.md),
+discovered from `--extensions-dir`, or from `extensions` under the working
+directory and beside the silo when it is absent; the silo's one built-in
+contributes `directory` storage. An installation it cannot use, or a conflict
+between extensions, refuses startup by name. The silo exposes fixed-row Console
+sessions as `IControlSessionHost`; it has no MCP project or package dependency.
+`--mcp <remote.json>` names the control configuration for
+the installed hosted control, [Puck.Mcp](../Puck.Mcp/README.md#host-extension),
+and is refused when none is installed; `puck mcp --silo <path> --http <remote.json>`
+runs the same composition. The host admits the validated issuer/subject through explicit OAuth admission and stamps the resulting Peer generation on commands. Replica disclosure authorizes text reads; writes require ordinary row grants. Remote sessions cannot use local administrative verbs. Row retirement closes all of its
 attached Console sessions, including queued commands and waits.
 Discovery runs on the ordinary command pump and filters registered help through
 the same remote command guard. It requires Replica admission and advertises no
@@ -30,22 +35,26 @@ The document loader validates against that same registry before host constructio
 Other providers are refused until eligible world placement and exclusive ownership are implemented.
 See [deployment](../../docs/development/ci.md) for the production endpoint and release process.
 
-The official Docker image publishes Azure, Humble Gaming Brick, Advanced Gaming
-Brick, and MCP into separate named directories under `/app/worlds/extensions`,
-including each extension's dependencies and dependency manifest. Both the default
-silo entry point and the optional CLI MCP entry point discover that directory from
-their working directory. Merely placing assemblies beside the CLI does not install
-them into the silo. Provider registration does not enable optional services: the
-silo and MCP documents still select their configured behavior.
+The official Docker image publishes `Puck.World.Azure`, both Gaming Brick forges,
+`Puck.Mcp`, and `Puck.Mcp.Azure` into separate named directories under
+`/app/worlds/extensions`, including each extension's dependencies and dependency
+manifest. Both the default silo entry point and the optional CLI MCP entry point
+discover that directory from their working directory. Merely placing assemblies
+beside the CLI does not install them into the silo. Registering a provider does
+not enable it: the silo and MCP documents still select their configured behavior.
 Extensions using .NET hosted services retain their lifecycle callbacks and
 background-task supervision. A fault stops the worker and returns a failure exit
-code, including when the world itself was otherwise healthy.
+code, including when the world itself was otherwise healthy. A listener the silo
+cannot bind — a row's QUIC door, the lifecycle health port, or the hosted MCP
+endpoint — exits 2 with one `[silo.host: unsupported: <transport> listener
+<endpoint> unavailable: <reason>]` line, the shape World reports for an
+environment that cannot run its boot.
 Discovered providers remain loaded for the process lifetime; changing their code
 requires restarting the worker with the selected release image.
 
-The schema selects installed extensions by `type` and opaque object `settings`.
-The composition root's `WorldSiloExtensions` catalog uses `WorldExtensionRegistry`;
-world documents cannot install code. For a local host:
+The schema selects installed extensions' contributions by `type` and opaque object
+`settings`; `world.extensions.catalog` lists what the silo composed, and world
+documents cannot install code. For a local host:
 
 ```json
 "store": { "type": "directory", "settings": { "path": "/world-store" } },
@@ -56,11 +65,27 @@ world documents cannot install code. For a local host:
 }
 ```
 
+A `worlds[]` row may add `extensions`, the path of its own host-approved
+extension configuration: the same `puck.world.extensions.v1` document a local
+World reads through `--extensions-config-file`, attached through the same
+`WorldConfiguredExtensions.Attach`. The row's configured operations, connections,
+observations, embeddings, and
+[participants](../Puck.World.Server/ExtensionConfiguration.md#run-an-agent-participant)
+select installed providers by type, run once release admission is open, are
+pumped after the rows step, and stop before the row retires. The silo reads the
+file at activation, and an unreadable file, a mismatched `world`, or an unknown
+or ambiguous provider type refuses the activation by name. No two rows may share
+a file. `world.extensions` reads back the addressed row's runtime.
+
 Persistence enters `WorldSiloHost` as an `ObjectStorageTarget`. An optional
 `lifecycle.observer` selects an `IWorldHostRetirementObserver`, which supplies a
 UTC deadline to the same `WorldSiloHost.DrainAsync` operation used by shutdown and
 loopback-only `POST /drain`. Provider settings and metadata protocols belong to
 the extension; the silo schema and lifecycle service do not interpret them.
+Every host deadline — each lifecycle route's, a retirement's, shutdown's, storage
+calls', and the peer network's — and the health age windows read one clock,
+`WorldSiloHost.Clock`, which the host's constructor accepts and which defaults to
+system time. `WorldSiloDeadlineLawTests` drives each on a virtual clock.
 The [Azure extension](../Puck.World.Azure/README.md#silo-hosting) owns its provider keys.
 
 `GET /healthz` returns 200 only after all pinned worlds have activated and
@@ -196,7 +221,7 @@ activation's fence and requires recovery.
   tape carries for its own offline re-drive seam; the silo mounts no addon
   guests, so nothing ever calls it.
 - `WorldSiloBareInputBindings`/`WorldSiloBarePrincipalResolver`—the minimal
-  `IInputBindings`/`ICommandPrincipalResolver` pair `Puck.Launcher`'s
+  `IInputBindings`/`IPrincipalResolver` pair `Puck.Launcher`'s
   simulation/router pairing rule needs; the silo embodies no local seats.
 - `SiloCommandModule`—`silo.status`, `silo.grains`, `silo.publish <key>
   <path>`, `silo.activate <key>`, `silo.deactivate <key>`,
@@ -230,7 +255,8 @@ activation's fence and requires recovery.
   narration written straight to `Console.Out`/`Console.Error` is tagged by
   `SiloNarrationWriter`, installed once at startup via `Console.SetOut`/
   `SetError`, reading `WorldNarrationScope.Current` at write time. The
-  desktop installs neither writer and tags nothing.
+  desktop installs neither writer and tags nothing. Host log lines, at every
+  level, go to stderr in both hosts, so stdout carries only answers.
 
 ## Live journaling
 

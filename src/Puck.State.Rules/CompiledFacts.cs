@@ -177,6 +177,20 @@ public abstract class RuleEffect : IRuleEffect {
     public virtual void CollectReads(List<CellAccess> into) { }
     /// <inheritdoc/>
     public virtual void CollectWrites(List<CellAccess> into) { }
+
+    /// <summary>Appends a write access record for an addressed effect.</summary>
+    protected static void CollectWriteAccess(IStateAddressedEffect effect, List<CellAccess> into, bool isSet = true) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        into.Add(item: new CellAccess(
+            IsSet: isSet,
+            Key: ((effect.KeyFrom is null)
+            ? effect.Key
+            : default),
+            RowOrdinal: effect.RowOrdinal
+        ));
+    }
+
     /// <inheritdoc/>
     public abstract RuleWork Cost(IRuleCostContext context);
     /// <summary>Fires an arm the evaluator does not apply itself. The default hands the effect to the host, which
@@ -272,7 +286,13 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
 
         into.AddFact(fact: custom);
 
-        if (custom is LocalKeyFact { Source: { } source }) {
+        var source = (custom switch {
+            LocalKeyFact local => local.Source,
+            EffectKeyFact effect => effect.Source,
+            _ => null,
+        });
+
+        if (source is not null) {
             RuleDataflow.CollectExpressionSchedulingFacts(
                 into: into,
                 tokens: source

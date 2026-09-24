@@ -132,10 +132,10 @@ internal static partial class CanaryCommand {
         }
 
         var boot1 = LaunchStub(
+            budget: budget,
             arguments: [
                 "--world", leg.WorldPath,
                 "--update-config-file", updateConfigPath,
-                "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                 "--state-dir", Path.Combine(
                     path1: runDirectory,
                     path2: "state-boot1"
@@ -147,12 +147,12 @@ internal static partial class CanaryCommand {
                 runDirectory: runDirectory
             ),
             installDirectory: installDirectory,
-            timeout: bootTimeout
+            manifest: manifest
         );
         var boot2 = LaunchStub(
+            budget: budget,
             arguments: [
                 "--update-config-file", updateConfigPath,
-                "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                 "--state-dir", Path.Combine(
                     path1: runDirectory,
                     path2: "state-boot2"
@@ -161,7 +161,7 @@ internal static partial class CanaryCommand {
             ],
             input: string.Empty,
             installDirectory: installDirectory,
-            timeout: bootTimeout
+            manifest: manifest
         );
 
         WriteLegConfirmationFixtures(
@@ -255,10 +255,10 @@ internal static partial class CanaryCommand {
         }
 
         var boot1 = LaunchStub(
+            budget: budget,
             // --world is never read: the stub refuses the missing executable before starting any child process.
             arguments: [
                 "--world", leg.WorldPath,
-                "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                 "--state-dir", Path.Combine(
                     path1: runDirectory,
                     path2: "state-boot1"
@@ -270,11 +270,11 @@ internal static partial class CanaryCommand {
                 runDirectory: runDirectory
             ),
             installDirectory: installDirectory,
-            timeout: bootTimeout
+            manifest: manifest
         );
         var boot2 = LaunchStub(
+            budget: budget,
             arguments: [
-                "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                 "--state-dir", Path.Combine(
                     path1: runDirectory,
                     path2: "state-boot2"
@@ -283,7 +283,7 @@ internal static partial class CanaryCommand {
             ],
             input: string.Empty,
             installDirectory: installDirectory,
-            timeout: bootTimeout
+            manifest: manifest
         );
 
         WriteLegConfirmationFixtures(
@@ -368,16 +368,27 @@ internal static partial class CanaryCommand {
             Transcript: transcript
         );
     }
-    private static CliProcessResult LaunchStub(IReadOnlyList<string> arguments, string input, string installDirectory, TimeSpan timeout) =>
-        CliProcess.RunCaptured(
+    // Every stub boot ends the World it launches the way every other leg does: the runner's quit follows the boot's
+    // input, and --exit-after-seconds at the leg's own timeout stops a World this runner can no longer kill.
+    private static CliProcessResult LaunchStub(IReadOnlyList<string> arguments, string input, string installDirectory, CanaryManifest manifest, CanaryBudget budget) {
+        var result = CliProcess.RunCaptured(
+            arguments: [
+                .. arguments,
+                "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
+            ],
+            cancellationToken: budget.Cancellation,
             fileName: Path.Combine(
                 path1: installDirectory,
                 path2: "Puck.Launcher.Stub.exe"
             ),
-            arguments: arguments,
-            input: input,
-            timeout: timeout
+            input: (input + RunnerQuit),
+            timeout: TimeSpan.FromSeconds(value: manifest.TimeoutSeconds)
         );
+
+        budget.Tally.StubLaunched(result: result);
+
+        return result;
+    }
     private static string ReadScriptWithSubstitution(CanaryLeg leg, string runDirectory) {
         var input = File.ReadAllText(path: leg.ScriptPath)
             .Replace(
@@ -493,7 +504,7 @@ internal static partial class CanaryCommand {
         var publishExit = PublishCommand.Create().Parse(args: [
             "--rid", UpdateService.CurrentRid(),
             "--input", payloadDirectory,
-            "--out", dryRunDirectory,
+            "--output", dryRunDirectory,
             "--app", StubAppId,
             "--channel", StubReleaseChannel,
             "--version", StubReleaseVersion,

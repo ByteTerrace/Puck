@@ -1,5 +1,5 @@
 extension 'br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:1.0.0'
-import { worldMcpType } from './worldMcp.bicep'
+import { worldMcpConfigurationType, worldMcpType } from './worldMcp.bicep'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
@@ -14,8 +14,8 @@ import {
 
 import {
   subnetType
-} from 'ts/bvm:ptn_network_basic-topology:0.0.3'
-import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.5'
+} from 'ts/bvm:ptn_network_basic-topology:0.0.4'
+import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.6'
 
 import {
   groupType
@@ -626,10 +626,7 @@ var storage = {
       }
     ]
   }
-  storageAccountPublicSecondaryEndpoints: reference(
-    resourceId('Microsoft.Storage/storageAccounts', publicStorageAccounts[0].name),
-    '2019-04-01'
-  ).secondaryEndpoints
+  storageAccountPublicSecondaryEndpoints: publicStorageWebsite.properties.secondaryEndpoints
   vsMarketplaceSettings: {
     extensions: {
       fileShareName: 'vsmarketplace-extensions'
@@ -685,7 +682,7 @@ resource frontDoor_bootstrap 'Microsoft.Cdn/profiles@2025-06-01' = {
   }
 }
 
-module basicNetworkTopology 'ts/bvm:ptn_network_basic-topology:0.0.3' = {
+module basicNetworkTopology 'ts/bvm:ptn_network_basic-topology:0.0.4' = {
   params: {
     devOpsInfrastructureServicePrincipalId: devOpsInfrastructure_servicePrincipal.id
     enableTelemetry: enableTelemetry
@@ -1408,7 +1405,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
               {
                 name: 'UrlPath'
                 parameters: {
-                  matchValues: ['^(assets|portal\\/assets)\\/']
+                  matchValues: ['^(assets|portal\\/assets|portal\\/duckdb-extensions)\\/']
                   negateCondition: false
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1443,7 +1440,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
               {
                 name: 'UrlPath'
                 parameters: {
-                  matchValues: ['^(assets|portal\\/assets)\\/']
+                  matchValues: ['^(assets|portal\\/assets|portal\\/duckdb-extensions)\\/']
                   negateCondition: true
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1499,7 +1496,9 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
               {
                 name: 'UrlFileExtension'
                 parameters: {
-                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$']
+                  matchValues: [
+                    '^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$'
+                  ]
                   negateCondition: false
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1545,7 +1544,9 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
               {
                 name: 'UrlFileExtension'
                 parameters: {
-                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$']
+                  matchValues: [
+                    '^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$'
+                  ]
                   negateCondition: true
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1582,7 +1583,8 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
               {
                 name: 'UrlPath'
                 parameters: {
-                  matchValues: ['^(assets\\/.*|index\\.html)$']
+                  // Exactly the paths scripts/stageDeploy.mjs stores Brotli-compressed.
+                  matchValues: ['^((portal\\/)?assets\\/.*|portal\\/duckdb-extensions\\/.*|index\\.html)$']
                   negateCondition: false
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1961,7 +1963,7 @@ module applicationInsightsFrontDoor 'br/public:avm/res/insights/component:0.8.0'
     workspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
   }
 }
-module configurationStore 'br/public:avm/res/app-configuration/configuration-store:0.10.0' = {
+module configurationStore 'br/public:avm/res/app-configuration/configuration-store:0.10.1' = {
   params: {
     createMode: 'Default'
     customerManagedKey: defaultCustomerManagedKeySettingsWithAutoRotation
@@ -2058,7 +2060,6 @@ module containerEnvironment 'br/public:avm/res/app/managed-environment:0.16.0' =
   }
 }
 module containerEnvironment_privateEndpoint 'br/public:avm/res/network/private-endpoint:0.12.1' = if (forcePrivateNetworking) {
-  name: '${uniqueString(deployment().name, location)}-managedEnvironments-PrivateEndpoint-0'
   params: {
     enableTelemetry: enableTelemetry
     location: basicNetworkTopology.outputs.location
@@ -2088,7 +2089,7 @@ module containerEnvironment_privateEndpoint 'br/public:avm/res/network/private-e
     subnetResourceId: subnetResourceIdMap.privateEndpoints
   }
 }
-module containerRegistry 'br/public:avm/res/container-registry/registry:0.13.0' = if (enabled.containerRegistry) {
+module containerRegistry 'br/public:avm/res/container-registry/registry:0.13.1' = if (enabled.containerRegistry) {
   params: {
     acrAdminUserEnabled: false
     acrSku: resources.containerRegistry!.sku
@@ -2195,7 +2196,7 @@ module diskEncryptionSet 'br/public:avm/res/compute/disk-encryption-set:0.6.1' =
     tags: union(tags, resources.diskEncryptionSet.?tags ?? {})
   }
 }
-module keyVault 'br/public:avm/res/key-vault/vault:0.14.0' = {
+module keyVault 'br/public:avm/res/key-vault/vault:0.14.2' = {
   params: {
     createMode: 'default'
     diagnosticSettings: defaultAuditDiagnosticSettings
@@ -2493,7 +2494,7 @@ module logAnalyticsWorkspace 'br/public:avm/res/operational-insights/workspace:0
     tags: union(tags, resources.logAnalyticsWorkspace.?tags ?? {})
   }
 }
-module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.16.0' = if (enabled.postgreSql) {
+module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.16.1' = if (enabled.postgreSql) {
   params: {
     administrators: resources.postgresFlexibleServer!.administrators
     authConfig: {
@@ -2559,7 +2560,7 @@ module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.16.0' 
     version: resources.postgresFlexibleServer!.version
   }
 }
-module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.4' = {
+module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.5' = {
   params: {
     customerManagedKey: defaultCustomerManagedKeySettings
     enableTelemetry: enableTelemetry
@@ -2634,13 +2635,13 @@ module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.4' = {
 // outright (the Blob.List clause has no OR branch) so this identity can never enumerate a
 // container. The host identities need no extra grants here — their conditioned "ByteTerrace
 // Storage User" assignments already cover every non-private/ path, including public/*.
-resource publicStorageWebsite 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
+resource publicStorageWebsite 'Microsoft.Storage/storageAccounts@2026-04-01' existing = {
   name: publicStorageAccounts[0].name
 }
 // Each publish overwrites mutable website files and deletes retired ones; versioning keeps
 // the superseded bytes for the soft-delete window. Age counts from a version's creation,
 // so a long-lived file loses its rollback version soon after it is replaced.
-resource publicStorageWebsite_lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2024-01-01' = {
+resource publicStorageWebsite_lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2026-04-01' = {
   dependsOn: [publicFlexApi]
   name: 'default'
   parent: publicStorageWebsite
@@ -2672,7 +2673,7 @@ resource publicStorageWebsite_lifecycle 'Microsoft.Storage/storageAccounts/manag
     }
   }
 }
-module publicFlexApi_publicFilesRoleAssignmentFrontDoor './avm-temp/resource-role-assignment/main.bicep' = [
+module publicFlexApi_publicFilesRoleAssignmentFrontDoor './avm/resource-role-assignment/main.bicep' = [
   for account in publicStorageAccounts: {
     dependsOn: [publicFlexApi]
     params: {
@@ -2688,10 +2689,10 @@ module publicFlexApi_publicFilesRoleAssignmentFrontDoor './avm-temp/resource-rol
 ]
 // Official content: the CI publishing identity gets write access to exactly its own prefix, in
 // the platform's own container (named by the Front Door identity's principal id — the same
-// container avm-temp/ptn/platform/public-flex-api/main.bicep provisions for platform-owned public
+// container avm/ptn/platform/public-flex-api/main.bicep provisions for platform-owned public
 // content such as favicon.ico). Scoped to that one container, never the account, so a broadened
 // publisher grant can never reach a tenant's data.
-module publicFlexApi_officialContentRoleAssignmentPublisher './avm-temp/resource-role-assignment/main.bicep' = {
+module publicFlexApi_officialContentRoleAssignmentPublisher './avm/resource-role-assignment/main.bicep' = {
   dependsOn: [publicFlexApi]
   params: {
     condition: officialContentPublisherCondition()
@@ -2709,7 +2710,7 @@ module publicFlexApi_officialContentRoleAssignmentPublisher './avm-temp/resource
   }
 }
 // Azure CI publishes the website and its embedded documentation through the single CI identity.
-module publicFlexApi_staticSiteRoleAssignmentPublishing './avm-temp/resource-role-assignment/main.bicep' = {
+module publicFlexApi_staticSiteRoleAssignmentPublishing './avm/resource-role-assignment/main.bicep' = {
   dependsOn: [publicFlexApi]
   params: {
     description: 'Azure workflow: static-site container only.'
@@ -2906,7 +2907,7 @@ module actors_containerEnvironmentDefaultDomainDnsZone 'br/public:avm/res/networ
 resource actors_graphServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' existing = {
   appId: '00000003-0000-0000-c000-000000000000' // Microsoft Graph
 }
-resource actors_natGatewayPublicIpPrefix 'Microsoft.Network/publicIPPrefixes@2024-05-01' existing = {
+resource actors_natGatewayPublicIpPrefix 'Microsoft.Network/publicIPPrefixes@2025-07-01' existing = {
   name: resources.natGateway.publicIpPrefix.name
 }
 // The Functions edge authenticates to the silo with an app-only token carrying this role.
@@ -3241,7 +3242,7 @@ module worldSiloIdentity 'br/public:avm/res/managed-identity/user-assigned-ident
     tags: union(tags, resources.worldSilo.userAssignedIdentity.?tags ?? {})
   }
 }
-module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.5' = {
+module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.6' = {
   dependsOn: [publicFlexApi, containerRegistry]
   params: {
     configuration: resources.worldSilo
@@ -3253,11 +3254,7 @@ module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.5' = {
     publishingPrincipalId: userAssignedIdentityPublishing.properties.principalId
   }
 }
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// Outputs
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 module mcp './worldMcp.bicep' = if (worldMcp != null) {
-  name: 'world-mcp'
   params: {
     settings: worldMcp!
     configuration: worldSilo.outputs.deploymentConfiguration
@@ -3272,12 +3269,16 @@ module mcp './worldMcp.bicep' = if (worldMcp != null) {
     tags: tags
   }
 }
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Outputs
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 output worldSiloIdentityResourceId string = worldSiloIdentity.outputs.resourceId
 output worldSiloClientId string = worldSiloIdentity.outputs.clientId
 output worldSiloOwner string = worldSiloIdentity.outputs.principalId
 output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
 output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
-output worldMcpConfiguration object = worldMcp == null ? {} : mcp!.outputs.worldMcpConfiguration
+output worldMcpConfiguration worldMcpConfigurationType? = worldMcp == null ? null : mcp!.outputs.worldMcpConfiguration
 output deploymentLocation string = location
 output deploymentLockKind string = lockKind
 output deploymentTags tagsType = tags

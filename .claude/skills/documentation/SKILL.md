@@ -23,7 +23,7 @@ The guide also owns README organization, documentation placement, and restrained
 navigation symbols. Inspect package rendering and brand distribution consumers
 when changing those surfaces; do not create a second package copy of the prose.
 
-## Non-negotiable ownership rules
+## Ownership rules
 
 - Give each fact one authoritative home. Other surfaces summarize and link.
 - When prose moves or disappears, run an orphan audit: incoming links, anchors,
@@ -31,6 +31,13 @@ when changing those surfaces; do not create a second package copy of the prose.
 - Entry points route; owner documents hold depth.
 - If behavior and prose disagree, verify the behavior before choosing an owner.
   `maths-laws` owns the mechanics for pinning a Maths divergence.
+- Name no date and no commit SHA in docs, plans, skills, or READMEs. State
+  current behavior, limitations, and open work in the present tense; the
+  verification evidence lives in the commit message that lands the change.
+  Legal effective dates, upstream provenance pins, and external protocol
+  version strings are exempt; the
+  [guide](../../../docs/development/documentation.md#leave-out-dates-and-commit-shas)
+  owns the rule.
 - Preserve the user's requested meaning. This skill governs register and proof,
   not product decisions.
 

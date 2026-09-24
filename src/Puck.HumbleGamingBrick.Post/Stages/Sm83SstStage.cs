@@ -44,6 +44,9 @@ internal sealed class Sm83SstStage : IPostStage<PostContext> {
     private sealed record FamilyResult(string Name, int Vectors, int Failed, string? FirstFailure, string? SkipReason, TimeSpan Duration);
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "sst-sm83";
     /// <inheritdoc/>

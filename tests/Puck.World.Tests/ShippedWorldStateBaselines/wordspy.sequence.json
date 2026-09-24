@@ -1,0 +1,250 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/wordspy.puck",
+  "host": {
+    "kind": "fixture",
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.world.json"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "join": {
+        "seat": 1
+      }
+    },
+    {
+      "join": {
+        "seat": 2
+      }
+    },
+    {
+      "join": {
+        "seat": 3
+      }
+    },
+    {
+      "join": {
+        "seat": 4
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 0
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 1
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 2
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 2
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 4
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 12
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 12
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 20
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "seat",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "wordSpyAct",
+        "key": "word",
+        "value": 3
+      }
+    },
+    {
+      "add": {
+        "row": "wordSpyAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 12
+    }
+  ]
+}

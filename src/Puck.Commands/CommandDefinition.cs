@@ -70,6 +70,10 @@ public sealed record CommandDefinition {
     /// registration shape: every argument-bearing verb is wire-native, so wire-nativeness distinguishes nothing.
     /// </remarks>
     public bool AcknowledgementOnly { get; init; }
+    /// <summary>Gets who the command answers. Defaults to <see cref="CommandAudience.Anyone"/>; an
+    /// <see cref="CommandAudience.Operator"/> command is refused by the registry for every principal but the
+    /// console, before its handler runs.</summary>
+    public CommandAudience Audience { get; init; }
     /// <summary>Gets whether a binding document may name this command as a destination.</summary>
     public CommandBindability Bindability { get; init; }
     /// <summary>Gets the human-readable description shown in help output.</summary>
@@ -90,7 +94,8 @@ public sealed record CommandDefinition {
         InputScope: InputScope,
         Map: Map,
         Held: Held,
-        AcceptsWireArgs: (WireArgsHandler is not null)
+        AcceptsWireArgs: (WireArgsHandler is not null),
+        Audience: Audience
     );
     /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
     public string Name { get; internal init; }
@@ -127,6 +132,7 @@ public sealed record CommandDefinition {
     /// </param>
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
+    /// <param name="audience">Who the command answers (see <see cref="Audience"/>).</param>
     /// <returns>A new <see cref="CommandDefinition"/> backed by a bare-verb text command.</returns>
     public static CommandDefinition Verb(
         string name,
@@ -138,7 +144,8 @@ public sealed record CommandDefinition {
         IReadOnlyList<string>? aliases = null,
         CommandRouting routing = CommandRouting.Immediate,
         CommandInputScope inputScope = CommandInputScope.Focused,
-        bool held = false
+        bool held = false,
+        CommandAudience audience = CommandAudience.Anyone
     ) {
         // A composition-root mistake refuses HERE, naming the parameter that was wrong. A null handler used to
         // construct and register happily and then surface as `[boom: handler threw NullReferenceException]` on the
@@ -161,6 +168,7 @@ public sealed record CommandDefinition {
             Map: map
         ) {
             Aliases = (aliases ?? []),
+            Audience = audience,
             Held = held,
             InputScope = inputScope,
             Routing = routing,
@@ -200,6 +208,7 @@ public sealed record CommandDefinition {
     /// call carries the same kind a bound one would.</param>
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
     /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
+    /// <param name="audience">Who the command answers (see <see cref="Audience"/>).</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
     public static CommandDefinition WithWireArgs(
         string name,
@@ -211,7 +220,8 @@ public sealed record CommandDefinition {
         bool ackOnly = false,
         CommandValueKind valueKind = CommandValueKind.Digital,
         CommandInputScope inputScope = CommandInputScope.Focused,
-        bool held = false
+        bool held = false,
+        CommandAudience audience = CommandAudience.Anyone
     ) {
         // See Verb: the registration is refused where it is written rather than reported as a handler fault on the
         // first line that reaches it.
@@ -248,6 +258,7 @@ public sealed record CommandDefinition {
             Map: map
         ) {
             AcknowledgementOnly = ackOnly,
+            Audience = audience,
             Held = held,
             InputScope = inputScope,
             Routing = routing,

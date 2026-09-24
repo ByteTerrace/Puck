@@ -9,7 +9,7 @@ It intentionally omits implementation chronology and review provenance.
 | Fold-safe step bounds | Required for discontinuous domain folds | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Per-composition chamfer bound | Required; a per-program or per-chain chamfer factor is unsound | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Conservative non-convergence on CPU query verbs | Required, and directed per verb by what its true half asserts: an obstruction verb folds "gave up" to a hit, a surface verb to "not found" | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
-| Step scale on every marcher over the stream, GPU and CPU | Required; a rigid-only op subset does not license a raw advance, because chamfer blends and eccentric ellipsoids overestimate | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
+| Step scale on every marcher over the stream, GPU and CPU | Required; a rigid-only op subset does not license a raw advance, because chamfer blends overestimate | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Iteration budget derived from the step scale | Required; a fixed budget shortens a clamped march's reach in proportion | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Cell-local field evaluation behind a hierarchical position | Not applicable; a world-space seam must rebase or refuse | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Uniform-grid instance culling | Shipped default | [Hierarchical and instance acceleration](hierarchical-and-instance-acceleration.md) |

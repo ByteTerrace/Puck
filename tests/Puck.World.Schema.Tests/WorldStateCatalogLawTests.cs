@@ -374,10 +374,10 @@ public sealed class WorldStateCatalogLawTests {
             ],
             Spaces: [
                 new StateSpace(
-                    Name: CellName.Parse(candidate: "lore"),
-                    Model: "puck-fixture",
-                    Revision: "1",
-                    Dimensions: 16
+                    name: CellName.Parse(candidate: "lore"),
+                    model: "puck-fixture",
+                    revision: "1",
+                    dimensions: 16
                 )
             ]
         );

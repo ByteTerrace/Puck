@@ -36,6 +36,9 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     private const int Frames = 1200;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "link-game-replay";
     /// <inheritdoc/>

@@ -28,7 +28,7 @@ public sealed class ConstantFoldingLawTests {
     [InlineData("1 ? 7 : 1 / 0")]
     [InlineData("0 ? repeatBits(256, 8) : 3")]
     [InlineData("9223372036854775807 + 1")]
-    [InlineData("replicationMask(3)")]
+    [InlineData("replicationMask(65)")]
     [InlineData("1 << 64")]
     [Theory]
     public void ConstantDomainFaultsStillRefuseAtRuntime(string text) {

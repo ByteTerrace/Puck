@@ -1,8 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-using Puck.Hosting;
-
 namespace Puck.Shaders;
 
 public sealed partial record ShaderSetManifest {
@@ -28,13 +26,11 @@ public sealed partial record ShaderSetManifest {
     public JsonObject ConfigJsonSchema() =>
         ShaderConfigBinding.JsonSchema(
             schema: Config,
-            description: Description,
-            quantizeRateFields: QuantizeRateConfigFields()
+            description: Description
         );
     /// <summary>Validates a document's <c>config</c> against this set's config schema and resolves every absent field
     /// to its default: an unknown property, a value of the wrong shape or type, a component outside its inclusive
-    /// range, a missing field without a default, or a tick-quantization rate that does not divide
-    /// <see cref="EngineTicks.PerSecond"/> refuses, naming the field.</summary>
+    /// range, or a missing field without a default refuses, naming the field.</summary>
     /// <param name="config">The authored configuration, or <see langword="null"/> when the document supplied none.</param>
     /// <param name="values">The bound values, set only when this returns <see langword="true"/>.</param>
     /// <param name="reason">The refusal reason naming the field, set only when this returns <see langword="false"/>.</param>
@@ -45,23 +41,9 @@ public sealed partial record ShaderSetManifest {
             config: config,
             ownerName: Name,
             values: out values,
-            reason: out reason,
-            quantizeRateFields: QuantizeRateConfigFields()
+            reason: out reason
         );
 
-    private HashSet<string> QuantizeRateConfigFields() {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        if (PushConstantLayout is { } layout) {
-            foreach (var slot in layout.Slots) {
-                if (slot.QuantizeHzConfigField is { } name) {
-                    names.Add(item: name);
-                }
-            }
-        }
-
-        return names;
-    }
     private void ValidateConfigSchema() =>
         ShaderConfigBinding.ValidateSchema(
             schema: Config,

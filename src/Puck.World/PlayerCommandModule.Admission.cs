@@ -23,7 +23,7 @@ internal sealed partial class PlayerCommandModule {
 
         var targetSlot = PlayerRoster.SlotFromDisplay(number: player);
 
-        // context.ActingPrincipal() is the ingress-stamped identity for the PRESSING device's own lane — a handler
+        // context.Principal is the ingress-stamped identity for the PRESSING device's own lane — a handler
         // reads this, it never constructs one (CommandContext.Principal's own rule). AssignDevice decides whether
         // this identity (an already-bound device relocating) or self-provisioning (an unbound device's bootstrap)
         // governs the target — see its own remarks.
@@ -32,7 +32,7 @@ internal sealed partial class PlayerCommandModule {
             outcome: m_roster.AssignDevice(
                 device: context.DeviceId,
                 targetSlot: targetSlot,
-                actingPrincipal: context.ActingPrincipal()
+                actingPrincipal: context.Principal
             ),
             slot: targetSlot
         );
@@ -63,14 +63,14 @@ internal sealed partial class PlayerCommandModule {
                 outcome: ConfirmOutcome.Seated,
                 slot: context.Slot,
                 device: null,
-                actingPrincipal: context.ActingPrincipal()
+                actingPrincipal: context.Principal
             );
         }
 
-        // context.ActingPrincipal() names the real submitter either way: for the physical/lane-addressed branch it
+        // context.Principal names the real submitter either way: for the physical/lane-addressed branch it
         // resolves through PrincipalOf(context.Slot) — the pressing lane's own identity, correct self-service; for
         // the text/device-keyed branch it is Console, the operator confirming context.DeviceId on its behalf.
-        var actingPrincipal = context.ActingPrincipal();
+        var actingPrincipal = context.Principal;
 
         var (outcome, slot) = ((context.Origin == CommandOrigin.Binding)
             ? ConfirmInputSlot(
@@ -91,7 +91,7 @@ internal sealed partial class PlayerCommandModule {
             actingPrincipal: actingPrincipal
         );
     }
-    private (ConfirmOutcome Outcome, int Slot) ConfirmInputSlot(int slot, WorldPrincipal actingPrincipal, InputDeviceId device) {
+    private (ConfirmOutcome Outcome, int Slot) ConfirmInputSlot(int slot, Principal actingPrincipal, InputDeviceId device) {
         if (!m_roster.IsJoined(slot: slot)) {
             return (m_roster.JoinPending(
                 actingPrincipal: actingPrincipal,
@@ -111,13 +111,13 @@ internal sealed partial class PlayerCommandModule {
         );
     }
     private CommandResult CycleHandler(CommandContext context) {
-        // context.ActingPrincipal() is the ingress-stamped identity for THIS lane (the pressing device's own
+        // context.Principal is the ingress-stamped identity for THIS lane (the pressing device's own
         // current/source seat, if any) — consumed here, never reconstructed. CycleDevice/AssignDevice decide
         // internally whether it or self-provisioning governs the target, since only they know whether the device
         // was already bound (see AssignDevice's own remarks).
         var (outcome, slot) = m_roster.CycleDevice(
             device: context.DeviceId,
-            actingPrincipal: context.ActingPrincipal()
+            actingPrincipal: context.Principal
         );
 
         return DescribeAssign(
@@ -135,7 +135,7 @@ internal sealed partial class PlayerCommandModule {
         slot: slot,
         verb: verb
     );
-    private CommandResult DescribeConfirm(ConfirmOutcome outcome, int slot, InputDeviceId? device, WorldPrincipal actingPrincipal) {
+    private CommandResult DescribeConfirm(ConfirmOutcome outcome, int slot, InputDeviceId? device, Principal actingPrincipal) {
 
         return (outcome switch {
             ConfirmOutcome.Confirmed => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} confirmed] {m_roster.Describe()}"),
@@ -208,7 +208,7 @@ internal sealed partial class PlayerCommandModule {
                 : null
             );
             var joinReply = instance.Server.ApplySession(request: new SessionRequest.Join(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 Slot: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 IdentityName: instanceIdentity,
                 WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -254,7 +254,7 @@ internal sealed partial class PlayerCommandModule {
 
         // A named profile joins directly ACTIVE (one-shot); no profile joins PENDING (a candidate is chosen, then
         // confirm). The profile must exist and not already be in use by another active player.
-        var actingPrincipal = context.ActingPrincipal();
+        var actingPrincipal = context.Principal;
 
         if (profileName is not null) {
             if (m_roster.FindProfile(name: profileName) is not { } profile) {
@@ -339,7 +339,7 @@ internal sealed partial class PlayerCommandModule {
             )) {
                 if (!m_roster.Leave(
                     slot: rosterSlot,
-                    actingPrincipal: context.ActingPrincipal()
+                    actingPrincipal: context.Principal
                 )) {
                     return CommandResult.Error(output: $"[player.leave: '{instance.Name}' seat {instanceSlot} is followed by player {PlayerRoster.DisplayNumber(slot: rosterSlot)}, which cannot leave or the actor was denied]");
                 }
@@ -348,7 +348,7 @@ internal sealed partial class PlayerCommandModule {
             }
 
             var leaveReply = instance.Server.ApplySession(request: new SessionRequest.Leave(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 Slot: WorldPopulation.EntityFromDisplay(number: instanceSlot)
             ));
 
@@ -380,7 +380,7 @@ internal sealed partial class PlayerCommandModule {
 
         return (m_roster.Leave(
             slot: PlayerRoster.SlotFromDisplay(number: n),
-            actingPrincipal: context.ActingPrincipal()
+            actingPrincipal: context.Principal
         )
             ? new CommandResult(Output: $"[player.leave: player {n} left] {m_roster.Describe()}")
             : CommandResult.Error(output: $"[player.leave: player {n} is not joined, or the actor was denied — see wire.errors/world.why]")
@@ -411,11 +411,11 @@ internal sealed partial class PlayerCommandModule {
         return (m_roster.SetProfile(
             slot: PlayerRoster.SlotFromDisplay(number: index),
             profile: profile,
-            actingPrincipal: context.ActingPrincipal()
+            actingPrincipal: context.Principal
         ) switch {
             SetProfileOutcome.NotJoined => CommandResult.Error(output: $"[player.identity: player {index} is not joined — see world.players]"),
             SetProfileOutcome.InUse => CommandResult.Error(output: $"[player.identity: identity '{profile.Name}' is already in use — see world.players]"),
-            SetProfileOutcome.Denied => CommandResult.Error(output: $"[player.identity: {context.ActingPrincipal().Describe()} cannot set player {index}'s identity — see world.why]"),
+            SetProfileOutcome.Denied => CommandResult.Error(output: $"[player.identity: {context.Principal.Describe()} cannot set player {index}'s identity — see world.why]"),
             _ => new CommandResult(Output: $"[player.identity: player {index} is now {profile.Name}] {m_roster.Describe()}"),
         });
     }
@@ -423,7 +423,7 @@ internal sealed partial class PlayerCommandModule {
     // "the actor was refused" into the same "roster is full" line the QUIBBLE named). slot is the specific slot for
     // an explicit-target request, or the attempted/resolved slot for a next-free one (-1 only for Full, where no
     // slot was ever found to name).
-    private CommandResult ReportJoin(JoinResult result, int slot, bool active, WorldPrincipal actingPrincipal) {
+    private CommandResult ReportJoin(JoinResult result, int slot, bool active, Principal actingPrincipal) {
         return (result switch {
             JoinResult.Ok => new CommandResult(Output: $"[player.join: player {PlayerRoster.DisplayNumber(slot: slot)} {(active
             ? "joined active"

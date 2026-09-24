@@ -539,5 +539,48 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "integer.try-add-and-try-narrow-vs-exact",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "TryAdd"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "TryNarrow"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.TryAdd over swept raw pairs at long, and the same pairs truncated to int, ulong and byte, widened into two Int128 values, and lifted to BigInteger",
+        "Against": "The exact BigInteger sum compared against each carrier's range: the verdict must be true exactly when the sum is representable, the sum left must be exact when it is and the carrier's two's-complement wrap when it is not, and the BigInteger add must always accept. The subject decides signed overflow by the addends' and the sum's sign bits and unsigned overflow by the wrapped sum falling below an addend; the claim shares neither test",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BinaryIntegerFunctions.TryNarrow from Int128 and BigInteger to long, from long to int and ulong, and from ulong to long, over values built from the swept pairs",
+        "Against": "The exact BigInteger value compared against the destination's range: the verdict must be true exactly when the value is in range, leaving it exactly, and false otherwise, leaving zero. The subject decides by a saturating conversion and its saturating round trip; the claim shares neither",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the seams: every pair of the long extremes, their neighbours, -1, 0 and 1 through the full lane battery; the long range's boundaries and the Int128 extremes narrowed to long; BigInteger values one past each long extreme and at plus and minus 2^200; and ulong.MaxValue + 1",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -6,7 +7,6 @@ using Xunit;
 
 using Puck.Abstractions.Machines;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
 using Puck.Hosting;
 using Puck.Physics.Fields;
 using Puck.Maths;
@@ -71,41 +71,9 @@ internal static class Fixtures {
     /// band.</summary>
     public const int TestPatternScreenIndex = 0;
 
-    /// <summary>Builds the ONE code-built creation <see cref="GradientUpContactLawTests"/> needs: a single Sphere
-    /// shape scaled so the placed ball's surface radius is exactly <see cref="BallSurfaceRadius"/>. The hash is
-    /// COMPILER-MAINTAINED — computed through the same pipeline <c>WorldDefinitionValidator.ValidateCreations</c>
-    /// re-derives and compares against, never hand-pinned (this suite's whole point).</summary>
-    private static WorldPrototype BuildBallCreation() {
-        var shape = new ShapeDocument(
-            Id: 0,
-            Name: null,
-            Type: SdfSolidPrimitive.Sphere,
-            Position: Vector3.Zero,
-            Rotation: Quaternion.Identity,
-            Scale: new Vector3(value: (BallSurfaceRadius / SphereLocalRadius)),
-            Material: 0,
-            Blend: SdfBlendOp.Union,
-            Smooth: 0f,
-            Group: 0
-        );
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: "ball",
-            Palette: null,
-            Shapes: [shape],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: "ball"
-        );
-
-        return new WorldPrototype(
-            Id: "ball",
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
+    // The one creation GradientUpContactLawTests needs: a single sphere scaled so the placed ball's surface radius is
+    // exactly BallSurfaceRadius, its hash computed by the canonicalizer rather than hand-pinned.
+    private static WorldPrototype BuildBallCreation() => CreationFixtures.Sphere(id: "ball", scale: (BallSurfaceRadius / SphereLocalRadius));
     /// <summary>The parameterized core every <see cref="WorldDefinition"/> fixture in this suite builds from — the
     /// pieces that vary across the two callers (<see cref="BuildDocument"/>, <see cref="BuildGradientUpDocument"/>)
     /// are parameters; everything else is the one shared literal, never forked.</summary>
@@ -288,9 +256,12 @@ internal static class Fixtures {
             HalfHeight: 1f,
             HalfDepth: 0.1f,
             Round: 0f,
-            Source: new WorldScreenSource.TestPattern(
-                Height: 240,
-                Width: 320
+            Source: WorldImageProducerSettings.SourceOf(
+                id: WorldImageProducerSettings.TestPatternId,
+                settings: new WorldTestPatternSettings(
+                    Height: 240,
+                    Width: 320
+                )
             ),
             // Passive: EngageAuthorityLawTests calls Server.Engagement.Engage directly (the authority door itself),
             // never the screen-policy precheck (proximity/auto-insert/machine-presence) WorldServer.ApplyCommand
@@ -456,6 +427,63 @@ internal static class Fixtures {
     /// <summary>Builds the <c>admission</c> row that authorizes travelers from any authenticated federation
     /// authority, minting the same three rows a driven arrival needs: <c>Control</c>/<c>all</c>, and exclusive
     /// <c>Drive</c> plus <c>Observe</c> over the body admission assigns (an absent subject).</summary>
+    /// <summary>The code-built document with <paramref name="networkPlayers"/> peer slots beyond the local seats and
+    /// an admission entry accepting arrivals from any authority — the destination shape every transfer law boots.</summary>
+    /// <param name="networkPlayers">The number of network peer slots.</param>
+    /// <returns>The document.</returns>
+    public static WorldDefinition PeerPopulationDocument(int networkPlayers) {
+        var document = BuildDocument();
+
+        return document with {
+            PopulationRaw = document.Population with {
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + networkPlayers),
+                NetworkPlayers = networkPlayers,
+            },
+            Admission = [AnyAuthorityArrivals()],
+        };
+    }
+    /// <summary>Formats one body's raw fixed-point motion state as a recorded-trace line: position, planar velocity,
+    /// vertical velocity, and yaw, each as sixteen lowercase hex digits, space-separated.</summary>
+    /// <param name="body">The body to read.</param>
+    /// <returns>The trace line.</returns>
+    public static string TraceLine(WorldBody body) {
+        static string Hex(FixedQ4816 value) => value.Value.ToString(
+            format: "x16",
+            provider: System.Globalization.CultureInfo.InvariantCulture
+        );
+
+        var state = body.CaptureTransferState();
+        var position = body.FixedPosition;
+
+        return string.Join(
+            separator: ' ',
+            value: [
+                Hex(value: position.X), Hex(value: position.Y), Hex(value: position.Z),
+                Hex(value: state.PlanarVelocity.X), Hex(value: state.PlanarVelocity.Y), Hex(value: state.PlanarVelocity.Z),
+                Hex(value: state.VerticalVelocity), Hex(value: body.FixedYaw),
+            ]
+        );
+    }
+    /// <summary>Builds the exact fixed-point position with integer components.</summary>
+    /// <param name="x">The X component, in world units.</param>
+    /// <param name="y">The Y component, in world units.</param>
+    /// <param name="z">The Z component, in world units.</param>
+    /// <returns>The position.</returns>
+    public static FixedVector3 FixedPoint(int x, int y = 0, int z = 0) => new(
+        X: FixedQ4816.FromInteger(value: x),
+        Y: FixedQ4816.FromInteger(value: y),
+        Z: FixedQ4816.FromInteger(value: z)
+    );
+    /// <summary>Builds the fixed-point position nearest the given components.</summary>
+    /// <param name="x">The X component, in world units.</param>
+    /// <param name="y">The Y component, in world units.</param>
+    /// <param name="z">The Z component, in world units.</param>
+    /// <returns>The position.</returns>
+    public static FixedVector3 FixedPoint(double x, double y, double z) => new(
+        X: FixedQ4816.FromDouble(value: x),
+        Y: FixedQ4816.FromDouble(value: y),
+        Z: FixedQ4816.FromDouble(value: z)
+    );
     public static WorldAdmissionEntry AnyAuthorityArrivals() => new(
         Domain: WorldAdmissionEntry.AnyAuthority,
         Subject: null,
@@ -529,7 +557,7 @@ internal static class Fixtures {
     /// ADDING a row through <c>UpsertStateRow</c>, so no row needs to pre-exist;</description></item>
     /// <item><description>the default 4-seat population (<see cref="AuthorityAdministrationLawTests"/> needs
     /// Seat(1)/Seat(2), body indices 0 and 1 — bodies 1 and 2 in this 0-based scheme);</description></item>
-    /// <item><description>a <see cref="WorldScreen"/> carrying a <see cref="WorldScreenSource.TestPattern"/> source
+    /// <item><description>a <see cref="WorldScreen"/> carrying a <c>testPattern</c> producer source
     /// (the simplest engageable-shaped source that needs no booted machine) at
     /// <see cref="TestPatternScreenIndex"/> — <see cref="EngageAuthorityLawTests"/>'s target.</description></item>
     /// </list>
@@ -549,7 +577,7 @@ internal static class Fixtures {
         section: definition.StateRaw,
         time: ArenaTime.Origin
     );
-    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, WorldPrincipal? recipient) {
+    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, Principal? recipient) {
         var time = ArenaTime.At(
             engineTick: 0UL,
             tick: 0UL
@@ -562,7 +590,7 @@ internal static class Fixtures {
             time: in time
         );
     }
-    public static WorldProjectionDocument? Project(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
+    public static WorldProjectionDocument? Project(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
         var time = ArenaTime.At(
             engineTick: 0UL,
             tick: 0UL
@@ -737,7 +765,8 @@ internal static class Fixtures {
             : WorldDefinitionSerialization.Serialize(definition: definition)
         );
 
-        definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+        // The round trip keeps the directory the document's relative paths resolve beside.
+        definition = WorldDefinitionSerialization.Deserialize(documentDirectory: definition?.DocumentDirectory, utf8Json: bytes);
 
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
@@ -746,9 +775,9 @@ internal static class Fixtures {
             documentPath: (documentPath ?? Path.Combine(AuthoredGameFixtures.Root, "src", "Puck.World", "Assets", "worlds", "puck.world.json"))
         );
         // A PATH, not a directory: WorldOwnedWorlds creates and enumerates it itself, so pre-creating it here was a
-        // second round trip to disk for nothing. It sits under one run-wide root that is removed once, rather than
-        // being recursively deleted per fixture — four filesystem operations a test, for a directory exactly one
-        // test file ever reads.
+        // second round trip to disk for nothing. WorldFixture.Dispose deletes it; nesting it under one run-wide
+        // ScratchRoot is only the backstop for a fixture a law never got to dispose (a test that throws before its
+        // own using completes).
         var stateDirectory = Path.Combine(
             path1: ScratchRoot.Value,
             path2: Guid.NewGuid().ToString(format: "N")
@@ -798,24 +827,29 @@ internal static class Fixtures {
     /// <c>presentation</c> was silently filled with enum 0 and the document lost the argument. Starts from the
     /// canonical writer's own output (<see cref="DefaultWorldBytes"/>), so the removal is the only thing that could
     /// make it refuse.</summary>
-    public static byte[] MissingHostPresentationBytes() {
-        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
-
-        _ = node["host"]!.AsObject().Remove(propertyName: "presentation");
-
-        return node.ToJsonBytes();
-    }
+    public static byte[] MissingHostPresentationBytes() => DefaultWorldBytesWithout(
+        member: "presentation",
+        section: "host"
+    );
     /// <summary>Serializes the code-built document and REMOVES <c>playerDefaults.seatLook</c>, returning the
     /// re-serialized bytes — proves the member parses absent and resolves through <see cref="WorldSeatCameraFeel.Default"/>.
     /// Starts from the canonical writer's own output (<see cref="DefaultWorldBytes"/>), so the removal is the only
     /// difference from a document known to parse clean.</summary>
-    public static byte[] MissingSeatLookBytes() {
+    public static byte[] MissingSeatLookBytes() => DefaultWorldBytesWithout(
+        member: "seatCameraFeel",
+        section: "seatDefaults"
+    );
+
+    // The canonical writer's own bytes with one member of one top-level section removed, so the removal is the only
+    // thing that could make a parse refuse.
+    private static byte[] DefaultWorldBytesWithout(string section, string member) {
         var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
 
-        _ = node["seatDefaults"]!.AsObject().Remove(propertyName: "seatCameraFeel");
+        _ = node[section]!.AsObject().Remove(propertyName: member);
 
         return node.ToJsonBytes();
     }
+
     /// <summary>Serializes the code-built document, injects <c>bogusField: true</c> into the first row of
     /// <c>addons</c> (mirroring <c>docs/verification/strict-definition-parse</c>'s own choice of a
     /// <see cref="WorldAddonRow"/> as the target — the row the strict-parse gap was originally named against), and
@@ -975,8 +1009,6 @@ internal static class Fixtures {
         PresentMode: Puck.Abstractions.Presentation.PresentMode.Immediate,
         TargetHertz: 0.0,
         ExitAfterSeconds: 0,
-        RayQuery: true,
-        Timing: false,
         Genlock: null,
         Listen: null,
         Authority: null
@@ -1169,7 +1201,52 @@ internal sealed class WorldFixture : IDisposable {
     /// before/after an apply attempt.</summary>
     public byte[] DefinitionBytes() => WorldDefinitionSerialization.Serialize(definition: Server.Definition);
     /// <inheritdoc/>
-    public void Dispose() => m_machines.Dispose();
+    public void Dispose() {
+        m_machines.Dispose();
+
+        // Best-effort: a fixture built over FreshServer's own scratch path never materializes it on disk unless a
+        // law actually saved an identity, and a locked handle on a slow CI disk must never fail the law that already
+        // ran.
+        try {
+            Directory.Delete(
+                path: m_stateDirectory,
+                recursive: true
+            );
+        } catch (DirectoryNotFoundException) {
+        } catch (IOException) {
+        } catch (UnauthorizedAccessException) {
+        }
+    }
+    /// <summary>Steps until the first search reports done or <paramref name="maxTicks"/> steps have run, whichever is
+    /// first, and returns that search's last status.</summary>
+    /// <param name="maxTicks">The step bound.</param>
+    /// <returns>The search's status after the last step.</returns>
+    public ArenaSearchStatus SettleSearch(int maxTicks = 4000) {
+        var status = Server.SearchStatus()[0];
+
+        for (var tick = 0; ((tick < maxTicks) && !status.Done); tick++) {
+            Step();
+            status = Server.SearchStatus()[0];
+        }
+
+        return status;
+    }
+    /// <summary>Joins local seat <paramref name="slot"/> through the ordinary session door, asserting it is
+    /// accepted, and returns the body it drives.</summary>
+    /// <param name="slot">The 0-based seat slot, which is also the body index.</param>
+    /// <returns>The joined body.</returns>
+    public WorldBody JoinSeat(int slot = 0) {
+        var actor = Principal.Seat(slot: slot);
+
+        Assert.True(condition: Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+
+        return Server.Body(index: actor.Index)!;
+    }
     /// <summary>Drains one authority step through the normal buffered mutation pipeline. Uses the same
     /// authority-owned advancement as the production step shell, including checkpoint rewinds.</summary>
     /// <remarks>The default width is one SIMULATION tick of the document this fixture booted from, so a law that
@@ -1204,7 +1281,7 @@ internal sealed class NullAddonHost : IWorldAddonHost {
     /// <inheritdoc/>
     public void CompleteMutation(long addonInstanceId, ushort actOrdinal, bool applied) { }
     /// <inheritdoc/>
-    public string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
+    public string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
     /// <inheritdoc/>
     public void Dispose() { }
     /// <inheritdoc/>

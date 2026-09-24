@@ -17,15 +17,17 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
     public CompiledExpressionToken[] Expression { get; } = expression;
     /// <summary>Gets the displacement from the cell centre.</summary>
     public FixedVector3 Offset { get; } = offset;
+
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;
+
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         RuleDataflow.CollectExpression(into: into, tokens: Expression);
         if (Body.RowOrdinal >= 0) {
-            into.Add(new CellAccess(IsSet: false, Key: Body.Key, RowOrdinal: Body.RowOrdinal));
+            into.Add(item: new CellAccess(IsSet: false, Key: Body.Key, RowOrdinal: Body.RowOrdinal));
         }
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => 1L + RuleWorkBudget.ExpressionCost(Expression, context);
+    public override RuleWork Cost(IRuleCostContext context) => (1L + RuleWorkBudget.ExpressionCost(Expression, context));
 }

@@ -1,5 +1,4 @@
 using System.Text;
-using Puck.World.Transpiler.Decompiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
@@ -58,17 +57,17 @@ public class FormatterSugarTests {
 
     [Fact]
     public void DerivedOperandsKeepReservedChannelsInsideCalls() {
-        const string Source = "derive legal = select($local:actor == turn, select($local:suit == led, 1, $local:void), 0)\n";
-        var formatted = PuckFormat.Format(Source);
-        Assert.Equal(Source.Trim(), formatted.Trim());
-        Assert.Equal(formatted, PuckFormat.Format(formatted));
-    }
+        const string Source = "derive legal = maximum($local:actor == turn, minimum($local:suit == led, $local:void))\n";
+        var formatted = PuckFormat.Format(source: Source);
 
+        Assert.Equal(Source.Trim(), formatted.Trim());
+        Assert.Equal(formatted, PuckFormat.Format(source: formatted));
+    }
     [Fact]
     public void FormattingIsIdempotentOnAGateWithMixedChannelsAndKindSuffix() {
         var source = "rule \"r\" {\n    when solitaireFreecell[from] != solitaireFreecell[to] : Int\n}\n";
-        var pass1 = PuckFormat.Format(source);
-        var pass2 = PuckFormat.Format(pass1);
+        var pass1 = PuckFormat.Format(source: source);
+        var pass2 = PuckFormat.Format(source: pass1);
 
         Assert.Equal(
             actual: pass2,
@@ -80,28 +79,6 @@ public class FormatterSugarTests {
             expectedSubstring: "solitaireFreecell[from]"
         );
     }
-    [MemberData(nameof(ShippedWorldFiles))]
-    [Theory]
-    public void FormattingTheDecompiledFormOfEveryShippedWorldIsIdempotent(string relativePath) {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-
-        Assert.True(
-            condition: File.Exists(path: fullPath),
-            userMessage: $"Shipped world file not found: {fullPath}"
-        );
-        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
-
-        var pass1 = PuckFormat.Format(decompiled);
-        var pass2 = PuckFormat.Format(pass1);
-
-        Assert.Equal(
-            actual: pass2,
-            expected: pass1
-        );
-    }
     [InlineData("when $physics:quiescent == 1 and settleHold < 60")]
     [InlineData("when $upright:placement:$each >= 0.5")]
     [InlineData("when $zones[solitaireFreecell[from]][solitaireFreecell[card]] == 1")]
@@ -109,7 +86,7 @@ public class FormatterSugarTests {
     [Theory]
     public void ReservedChannelTokensSurviveFormattingUnsplit(string line) {
         var source = $"rule \"r\" {{\n    {line}\n}}\n";
-        var formatted = PuckFormat.Format(source);
+        var formatted = PuckFormat.Format(source: source);
 
         // Every `$name:segment` token in the input must reappear in the output with no space inserted around its
         // internal colons — the regression this guards is `$physics:quiescent` splicing into `$physics: quiescent`.
@@ -158,10 +135,10 @@ public class FormatterSugarTests {
             userMessage: parsed.Diagnostics.FormatReport(source)
         );
 
-        var formatted = PuckFormat.Format(source);
+        var formatted = PuckFormat.Format(source: source);
 
         Assert.Equal(
-            actual: PuckFormat.Format(formatted),
+            actual: PuckFormat.Format(source: formatted),
             expected: formatted
         );
         var reparsed = PuckParser.ParseDocumentWithDiagnostics(formatted);
@@ -176,21 +153,5 @@ public class FormatterSugarTests {
         );
     }
 
-    public static TheoryData<string> ShippedWorldFiles => new() {
-        "games/backgammon.world.json",
-        "games/billiards.world.json",
-        "games/bowling.world.json",
-        "games/dominoes.world.json",
-        "games/freecell.world.json",
-        "games/hexlines.world.json",
-        "games/klondike.world.json",
-        "games/mancala.world.json",
-        "games/poker.world.json",
-        "games/solitaire.world.json",
-        "games/spider.world.json",
-        "games/tictactoe.world.json",
-        "pipeline.world.json",
-        "puck.world.json",
-    };
 
 }

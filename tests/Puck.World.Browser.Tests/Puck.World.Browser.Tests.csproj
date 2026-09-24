@@ -19,6 +19,9 @@
         <ProjectReference Include="..\..\src\Puck.State\Puck.State.csproj" />
         <ProjectReference Include="..\..\src\Puck.State.Rules\Puck.State.Rules.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <!-- The shipped worlds a browser composes are compiled from their .puck sources, as the official build publishes
+             them. -->
+        <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- A browser-wasm exe (Puck.World.Browser itself) cannot be referenced as an ordinary assembly — its
@@ -26,6 +29,8 @@
              host. Engine/*.cs carries no JS-interop attribute at all (only Exports/ does), so it links unmodified
              as source and runs under the ordinary net10.0 test host, proving the same code the AppBundle ships. -->
         <Compile Include="..\..\src\Puck.World.Browser\Engine\**\*.cs" LinkBase="Engine" />
+        <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

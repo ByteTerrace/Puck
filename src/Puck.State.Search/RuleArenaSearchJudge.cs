@@ -2,22 +2,20 @@ using Puck.State.Rules;
 
 namespace Puck.State;
 
-/// <summary>A judge that runs compiled rules: one candidate's verdict is <see cref="Puck.State.Rules.RuleEvaluator"/> evaluating the
+/// <summary>A judge that runs compiled rules: one candidate's verdict is <see cref="RuleEvaluator"/> evaluating the
 /// job's judge rules over the scoped arena through an <see cref="IEffectHost"/>, and its score is a compiled
 /// expression read over the same host.</summary>
 /// <remarks>
 /// <para>The latch is cleared before each run, so a candidate's verdict depends on the position it reached and
 /// never on the candidate judged before it.</para>
-/// <para>Rules types are spelled in full here while the old compiler still declares the same names in
-/// <c>Puck.State</c>; the enclosing namespace would otherwise bind them to it.</para>
 /// </remarks>
 public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
-    private readonly Puck.State.Rules.RuleEvaluator m_evaluator;
+    private readonly RuleEvaluator m_evaluator;
     private readonly ArenaSearchEffectHost m_host;
     private readonly int[] m_keyRows;
-    private readonly Puck.State.Rules.RuleLatch m_latch = new();
-    private readonly Puck.State.Rules.CompiledRule[] m_rules;
-    private readonly Puck.State.Rules.CompiledExpressionToken[]? m_score;
+    private readonly RuleLatch m_latch = new();
+    private readonly CompiledRule[] m_rules;
+    private readonly CompiledExpressionToken[]? m_score;
     private readonly bool m_readsTick;
 
     /// <summary>Initializes a judge over the rules one search job judges its candidates with.</summary>
@@ -27,11 +25,11 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     /// <see langword="null"/> for a job that compares no plies.</param>
     /// <exception cref="ArgumentNullException"><paramref name="host"/> or <paramref name="rules"/> is
     /// <see langword="null"/>.</exception>
-    public RuleArenaSearchJudge(ArenaSearchEffectHost host, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledExpressionToken[]? score = null) {
+    public RuleArenaSearchJudge(ArenaSearchEffectHost host, CompiledRule[] rules, CompiledExpressionToken[]? score = null) {
         ArgumentNullException.ThrowIfNull(argument: host);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
-        m_evaluator = new Puck.State.Rules.RuleEvaluator(host: host);
+        m_evaluator = new RuleEvaluator(host: host);
         m_host = host;
         m_rules = rules;
         m_score = score;
@@ -105,8 +103,8 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
         foreach (var rule in m_rules) {
-            if (ContainsTurnRewind(effects: rule.Effects)) {
-                refusal = $"search '{plan.Name}' judges with rule '{rule.Name}', whose rewindTurn effect requires a settled authoritative turn boundary";
+            if (RuleEffects.ContainsRewind(effects: rule.Effects)) {
+                refusal = $"search '{plan.Name}' judges with rule '{rule.Name}', whose rewindGroup effect requires a settled authoritative turn boundary";
                 return false;
             }
             if (!RuleNeeds.Admit(
@@ -125,18 +123,9 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         return true;
     }
 
-    private static bool ContainsTurnRewind(IEnumerable<Puck.State.Rules.IRuleEffect> effects) {
-        foreach (var effect in effects) {
-            if (effect is Puck.State.Rules.RewindTurnEffect) { return true; }
-            foreach (var arm in effect.Arms) {
-                if (ContainsTurnRewind(effects: arm)) { return true; }
-            }
-        }
-        return false;
-    }
     // Every row a verdict can depend on: what the rules read, what they write (a judge rule's own scratch row is a
     // later rule's input), and what the score reads.
-    private static int[] KeyRowsOf(Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledExpressionToken[]? score) {
+    private static int[] KeyRowsOf(CompiledRule[] rules, CompiledExpressionToken[]? score) {
         var accesses = new List<CellAccess>();
         var rows = new SortedSet<int>();
 
@@ -154,7 +143,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
 
         accesses.Clear();
 
-        Puck.State.Rules.RuleDataflow.CollectExpression(
+        RuleDataflow.CollectExpression(
             into: accesses,
             tokens: score
         );
@@ -169,16 +158,16 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     }
     // Tick is an operand rather than a state row, so the row reach above cannot express this dependency. Rules
     // carry compiler-owned needs; a standalone score has no rule needs, so walk its already-bounded token DAG.
-    private static bool ReadsTickOf(Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledExpressionToken[]? score) {
+    private static bool ReadsTickOf(CompiledRule[] rules, CompiledExpressionToken[]? score) {
         if (rules.Any(predicate: static rule => rule.Needs.ReadsTick)) {
             return true;
         }
 
         return ContainsTick(tokens: score);
     }
-    private static bool ContainsTick(Puck.State.Rules.CompiledExpressionToken[]? tokens) {
+    private static bool ContainsTick(CompiledExpressionToken[]? tokens) {
         foreach (var token in (tokens ?? [])) {
-            if (token.Operand is Puck.State.Rules.TickOperand) {
+            if (token.Operand is TickOperand) {
                 return true;
             }
             if (

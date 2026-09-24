@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -15,35 +17,29 @@ namespace Puck.World.Tests;
 /// targets turns the assertion red (verified by hand while landing each one; see the report for the transcript).
 /// </summary>
 [Collection(name: ConsoleRedirectionCollection.Name)]
-public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
-    private static WorldServer Restore(WorldAuthorityCheckpoint checkpoint, string instanceIdentity = "boot") {
+public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposable {
+    // Every Restore call's own machine host and profile-catalog scratch directory, released together when the test
+    // instance is (a fresh instance per [Fact], xUnit's default) — a control routinely restores twice per test to
+    // compare an honest checkpoint against a corrupted one, so the scratch directory cannot be scoped to one call.
+    private readonly List<IDisposable> m_scratch = [];
+
+    private WorldServer Restore(WorldAuthorityCheckpoint checkpoint, string instanceIdentity = "boot") {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
         var machines = new WorldMachineHost(
             engines: [],
             screens: definition.Screens
         );
+        var profilesDirectory = new TemporaryDirectory(prefix: "puck-host-roundtrip-control-tests-");
+
+        m_scratch.Add(item: machines);
+        m_scratch.Add(item: profilesDirectory);
 
         var (server, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: instanceIdentity,
             machines: machines,
             profiles: new WorldOwnedWorlds(
-                directory: Directory.CreateTempSubdirectory(prefix: "puck-host-roundtrip-control-tests-").FullName,
+                directory: profilesDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: definition
             )
@@ -52,14 +48,20 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         return server;
     }
 
-    // Control 1 — corrupt one IntegrationResidue remainder by one raw unit.
+    /// <inheritdoc/>
+    public void Dispose() {
+        foreach (var disposable in m_scratch) {
+            disposable.Dispose();
+        }
+    }
+    // Control 1 — corrupt one WorldBodyIntegrationResidue remainder by one raw unit.
     [Fact]
     public void Control_CorruptedIntegrationResidueRemainder_ReadsRed() {
         using var fixture = Fixtures.FreshServer();
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
@@ -70,7 +72,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out _
         ));
 
@@ -111,7 +113,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
                 Name: ruleName,
                 Gate: new ActionPredicate.CompareState(
                     State: "$population",
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     Value: long.MaxValue
                 ),
                 Effects: [new WorldEffect.Save()]
@@ -127,7 +129,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out _
         ));
         var held = new WorldRuleLatchEntry(
@@ -174,7 +176,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
@@ -185,7 +187,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out _
         ));
 
@@ -246,7 +248,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out _
         ));
         Assert.False(condition: checkpoint!.Population.Entries.Single(predicate: e => (e.Index == PeerSlot)).Parked);
@@ -310,7 +312,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out _
         ));
 
@@ -361,7 +363,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     // reused id.
     [Fact]
     public void Control_ResetNextTransferId_CollidesWithAnAppliedId_RefusesByName() {
-        var (host, rowA, rowB, machineId) = HostRoundtripFixture.BuildCommittedScenario();
+        var (host, rowA, rowB, machineId, stateRoot) = HostRoundtripFixture.BuildCommittedScenario();
+        using var disposeHost = host;
+        using var disposeStateRoot = stateRoot;
         using var disposeA = rowA;
         using var disposeB = rowB;
 
@@ -386,11 +390,13 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: corruptedA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+        var (restoredHost, restoredA, restoredB, restoredStateRoot) = HostRoundtripFixture.RestoreBoth(
             checkpointA: decodedA,
             checkpointB: decodedB,
             machineId: machineId
         );
+        using var disposeRestoredHost = restoredHost;
+        using var disposeRestoredStateRoot = restoredStateRoot;
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -407,7 +413,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         try {
             _ = restoredHost.EnqueueTransfer(
-                actingPrincipal: WorldPrincipal.Console,
+                actingPrincipal: Principal.Console,
                 destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
                 scope: WorldInstanceHost.TransferScope.Body,
                 sourceInstance: "row-a",
@@ -430,7 +436,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     // sits Reserved at the destination (leaked) while the body is nowhere active on either restored row (lost).
     [Fact]
     public void Control_DroppedInDoubtEntry_LeaksTheReservationAndLosesTheBody() {
-        var (host, rowA, rowB, machineId, transferId) = HostRoundtripFixture.BuildInDoubtScenario();
+        var (host, rowA, rowB, machineId, transferId, stateRoot) = HostRoundtripFixture.BuildInDoubtScenario();
+        using var disposeHost = host;
+        using var disposeStateRoot = stateRoot;
         using var disposeA = rowA;
         using var disposeB = rowB;
 
@@ -448,11 +456,13 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: droppedA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+        var (restoredHost, restoredA, restoredB, restoredStateRoot) = HostRoundtripFixture.RestoreBoth(
             checkpointA: decodedA,
             checkpointB: decodedB,
             machineId: machineId
         );
+        using var disposeRestoredHost = restoredHost;
+        using var disposeRestoredStateRoot = restoredStateRoot;
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -474,7 +484,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     // A malformed retry payload must refuse the host restore before any installed state or live peer call changes.
     [Fact]
     public void Control_EmptiedCommitMembers_RestoreRefusesByName() {
-        var (host, rowA, rowB, _, _) = HostRoundtripFixture.BuildInDoubtScenario();
+        var (host, rowA, rowB, _, _, stateRoot) = HostRoundtripFixture.BuildInDoubtScenario();
+        using var disposeHost = host;
+        using var disposeStateRoot = stateRoot;
         using var disposeA = rowA;
         using var disposeB = rowB;
 

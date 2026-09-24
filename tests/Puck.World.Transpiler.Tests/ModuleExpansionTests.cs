@@ -23,7 +23,7 @@ public sealed class ModuleExpansionTests {
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-        Assert.Equal(["left_score", "right_score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+        Assert.Equal(["left$score", "right$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
     }
     [Fact]
     public void ModuleArgumentsRequireTheirDeclaredExportsAndNestedUsesPrefixRecursively() {
@@ -42,7 +42,7 @@ public sealed class ModuleExpansionTests {
         Assert.False(condition: good.Diagnostics.HasErrors, userMessage: good.Diagnostics.FormatReport(""));
         var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: good.RequireJson()["state"])["world"]);
 
-        Assert.Equal("box_child_score", Assert.Single(collection: rows)!["name"]!.ToString());
+        Assert.Equal("box$child$score", Assert.Single(collection: rows)!["name"]!.ToString());
 
         var bad = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module hidden() { state { world { slot secret = 0 } } }
@@ -125,13 +125,13 @@ public sealed class ModuleExpansionTests {
     public void FormattingPreservesModuleUseTypesAndReExports() {
         const string Source = "module wrapper(part: Module exporting score) { export part.score }\nuse wrapper as one(part: counter)";
         var document = PuckParser.ParseDocument(Source);
-        var formatted = PuckPrinter.Print(document);
+        var formatted = PuckPrinter.Print(document: document);
         var reparsed = PuckParser.ParseDocument(formatted);
 
         Assert.Contains(actualString: formatted, comparisonType: StringComparison.Ordinal, expectedSubstring: "module wrapper(part: Module exporting score)");
         Assert.Contains(actualString: formatted, comparisonType: StringComparison.Ordinal, expectedSubstring: "export part.score");
         Assert.Contains(actualString: formatted, comparisonType: StringComparison.Ordinal, expectedSubstring: "use wrapper as one(part: counter)");
-        Assert.Equal(formatted, PuckPrinter.Print(reparsed));
+        Assert.Equal(formatted, PuckPrinter.Print(document: reparsed));
     }
     [InlineData("Point", "[1, nope, 3]")]
     [InlineData("Asset", "42")]
@@ -172,7 +172,7 @@ public sealed class ModuleExpansionTests {
             Assert.Null(@object: compilation.RequireJson()["imports"]);
             var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["left_score", "right_score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+            Assert.Equal(["left$score", "right$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
         } finally {
             directory.Delete(recursive: true);
         }
@@ -215,7 +215,7 @@ public sealed class ModuleExpansionTests {
             Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
             var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["left_child_score", "right_child_score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+            Assert.Equal(["left$child$score", "right$child$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
             Assert.All(rows, static row => Assert.Equal("7", row!["value"]!.ToString()));
         } finally {
             directory.Delete(recursive: true);
@@ -251,7 +251,7 @@ public sealed class ModuleExpansionTests {
             use counter as left(value: 3)
             """;
         var first = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Source);
-        var printed = PuckPrinter.Print(PuckParser.ParseDocument(Source));
+        var printed = PuckPrinter.Print(document: PuckParser.ParseDocument(Source));
         var second = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: printed);
 
         Assert.False(condition: first.Diagnostics.HasErrors, userMessage: first.Diagnostics.FormatReport(""));
@@ -301,10 +301,10 @@ public sealed class ModuleExpansionTests {
             var compilation = WorldCompiler.CompileFile(rootPath, sourceMap: sourceMap, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            Assert.True(sourceMap.TryGetOrigin("/state/world/0", out var firstRow));
-            Assert.True(sourceMap.TryGetOrigin("/rules/0", out var firstRule));
-            Assert.True(sourceMap.TryGetOrigin("/state/world/1", out var secondRow));
-            Assert.True(sourceMap.TryGetOrigin("/rules/1", out var secondRule));
+            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/state/world/0", origin: out var firstRow));
+            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/rules/0", origin: out var firstRule));
+            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/state/world/1", origin: out var secondRow));
+            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/rules/1", origin: out var secondRule));
             Assert.All(new[] { firstRow, firstRule, secondRow, secondRule }, origin => Assert.Equal(modulePath, origin.SourcePath));
             Assert.Equal("first", firstRow.ModuleInstancePath);
             Assert.Equal("first", firstRule.ModuleInstancePath);
@@ -351,11 +351,11 @@ public sealed class ModuleExpansionTests {
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-        Assert.Equal(["score", "one_score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+        Assert.Equal(["score", "one$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
         var rule = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: compilation.RequireJson()["rules"])));
 
         Assert.Contains("score", rule["gate"]!.ToJsonString(), StringComparison.Ordinal);
-        Assert.DoesNotContain("one_score", rule["gate"]!.ToJsonString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("one$score", rule["gate"]!.ToJsonString(), StringComparison.Ordinal);
     }
     [Fact]
     public void TypedDefaultsResolveEarlierBoundParameters() {
@@ -393,13 +393,13 @@ public sealed class ModuleExpansionTests {
               }
             }
             use source as first()
-            use consumer as second(condition: first_enabled)
+            use consumer as second(condition: first.enabled)
             """);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var rule = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: compilation.RequireJson()["rules"])));
 
-        Assert.Contains("first_enabled", rule["gate"]!.ToJsonString(), StringComparison.Ordinal);
+        Assert.Contains("first$enabled", rule["gate"]!.ToJsonString(), StringComparison.Ordinal);
     }
     [Fact]
     public void TypedReferenceDefaultsPreserveTheEarlierExternalBinding() {
@@ -438,7 +438,7 @@ public sealed class ModuleExpansionTests {
             Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
             var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["left_score", "right_score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+            Assert.Equal(["left$score", "right$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
             Assert.All(rows, static row => Assert.Equal(5L, row!["value"]!.GetValue<long>()));
         } finally {
             directory.Delete(recursive: true);
@@ -584,7 +584,7 @@ public sealed class ModuleExpansionTests {
             Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
             var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["lower_score", "upper_score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+            Assert.Equal(["lower$score", "upper$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
         } finally {
             directory.Delete(recursive: true);
         }

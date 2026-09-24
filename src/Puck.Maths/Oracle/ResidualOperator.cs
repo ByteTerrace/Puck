@@ -75,17 +75,15 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
             value: value,
             paramName: nameof(value)
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: symbol,
-            other: generatorCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: generatorCount,
+            value: symbol
         );
 
         if (ResidualTwist.ShiftGenerator == twist) {
-            ArgumentOutOfRangeException.ThrowIfNegative(value: shiftSymbol);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-                value: shiftSymbol,
-                other: generatorCount
+            ArgumentRange.ThrowIfNotIndex(
+                count: generatorCount,
+                value: shiftSymbol
             );
         }
 

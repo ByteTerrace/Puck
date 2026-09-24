@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -30,7 +32,7 @@ public sealed partial class StateArena {
 
                     for (var start = layout.CellStart; (start < end);) {
                         var bits = Math.Min(val1: (64 - (start & 63)), val2: (end - start));
-                        var mask = ((bits == 64) ? ulong.MaxValue : ((1UL << bits) - 1UL));
+                        var mask = bits.LowMask<ulong>();
 
                         present += System.Numerics.BitOperations.PopCount(value: (m_presence[(start >> 6)] >> (start & 63)) & mask);
                         start += bits;
@@ -120,7 +122,7 @@ public sealed partial class StateArena {
     /// <param name="key">The held cell's key, or the invalid default on exhaustion or an invalid row.</param>
     /// <returns><see langword="true"/> when another held cell exists.</returns>
     /// <remarks>Visits every stored row shape without allocating or minting names. Ring traversal uses physical
-    /// slot order; <see cref="ReadWord(int, Span{long}, int)"/> supplies chronological history instead.
+    /// slot order; <see cref="ReadWord(int, in ArenaTime, Span{long}, int)"/> supplies chronological history instead.
     /// Structural edits and relayout invalidate an active cursor; snapshot keys before changing membership.</remarks>
     public bool TryNextCell(int rowOrdinal, ref int cursor, out CellKey key) {
         key = default;
@@ -150,13 +152,7 @@ public sealed partial class StateArena {
                 break;
             }
             position = (slot - layout.CellStart);
-            if (layout.Shape == RowShape.Lattice) {
-                _ = m_keys.TryResolve(name: layout.Topology!.NameOf(cell: position), key: out key);
-            } else if (layout.Shape == RowShape.Ring) {
-                key = m_catalog.RingKey(position: position);
-            } else if (m_memberKeys[slot] >= 0) {
-                key = m_keys.KeyAt(ordinal: m_memberKeys[slot]);
-            }
+            key = KeyAtSlot(layout: in layout, slot: slot);
             position++;
             if (key.IsValid) {
                 cursor = position;
@@ -167,6 +163,25 @@ public sealed partial class StateArena {
         return false;
     }
 
+    // The key a stored slot answers to: a lattice cell's topology name, a ring slot's positional key, or the
+    // member key a keyed, ordered, or pool row holds there — the invalid default for a slot no member holds.
+    private CellKey KeyAtSlot(in ArenaRowLayout layout, int slot) {
+        var position = (slot - layout.CellStart);
+
+        if (layout.Shape == RowShape.Lattice) {
+            _ = m_keys.TryResolve(name: layout.Topology!.NameOf(cell: position), key: out var key);
+
+            return key;
+        }
+        if (layout.Shape == RowShape.Ring) {
+            return m_catalog.RingKey(position: position);
+        }
+
+        return ((m_memberKeys[slot] >= 0)
+            ? m_keys.KeyAt(ordinal: m_memberKeys[slot])
+            : default
+        );
+    }
     private void RequirePositionalRow(int rowOrdinal) {
         if (m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
             throw new InvalidOperationException(message: "Pool rows have identities, not member positions; use a pool handle or TryNextCell.");
@@ -182,6 +197,7 @@ public sealed partial class StateArena {
     /// <exception cref="InvalidOperationException">The row belongs to a pool; use a handle or held-cell cursor.</exception>
     public bool TryKeyAt(int rowOrdinal, int position, out CellKey key) {
         RequirePositionalRow(rowOrdinal: rowOrdinal);
+        Visit(lanes: 1L);
         if (TryRowLayout(
             layout: out var layout,
             rowOrdinal: rowOrdinal
@@ -584,15 +600,18 @@ public sealed partial class StateArena {
 
         return true;
     }
+    // The one slot reader. A vector case aliases the arena's own storage; ArenaExport copies it instead, because an
+    // exported row outlives the arena it was read from.
     private CellValue ValueAt(in ArenaRowLayout layout, int slot) => (layout.Kind switch {
-        CellKind.Int => CellValue.Int(value: m_numbers[slot]),
-        CellKind.Fixed => CellValue.Fixed(rawBits: m_numbers[slot]),
-        CellKind.Bool => CellValue.Bool(value: (m_numbers[slot] != 0L)),
         CellKind.Text => CellValue.Text(value: m_texts?[slot]),
-        _ => CellValue.Vector(components: VectorMemory(
-        layout: layout,
-        slot: slot
-    )),
+        CellKind.Vector => CellValue.Vector(components: VectorMemory(
+            layout: layout,
+            slot: slot
+        )),
+        _ => CellValue.FromNumber(
+            kind: layout.Kind,
+            raw: m_numbers[slot]
+        ),
     });
     private void StoreNumber(int rowOrdinal, int slot, long previous, long next) {
         WriteNumber(

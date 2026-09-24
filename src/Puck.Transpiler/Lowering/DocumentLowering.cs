@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Units;
@@ -10,19 +11,49 @@ namespace Puck.Transpiler.Lowering;
 /// units, arithmetic, template invocation, and canonical key order. What a SECTION means is a vocabulary's own
 /// emitter; what <c>1.5m</c>, <c>-spread</c> or <c>2 * 3</c> mean is here.</summary>
 public static partial class DocumentLowering {
+    // The placeholders refused reads lowered to (DocumentScope.TryRefuseRead), each its own node.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<JsonNode, object> RefusedReads = new();
+
+    /// <summary>Returns whether <paramref name="value"/> is the placeholder a refused read lowered to: a name whose
+    /// value no read may take (<see cref="DocumentScope.BindRefused"/>) was reported where it was read, and the
+    /// placeholder stands in its place. A check downstream skips it rather than report the same mistake again as a
+    /// value of the wrong kind.</summary>
+    /// <param name="value">The lowered value.</param>
+    /// <returns><see langword="true"/> when the value answers for a refused read.</returns>
+    public static bool IsRefusedRead(JsonNode? value) => (
+        (value is not null) &&
+        RefusedReads.TryGetValue(
+            key: value,
+            value: out _
+        )
+    );
+
     // Internal evaluation returns borrowed, read-only values. Clone when constructing an output container, never
     // merely to inspect a value or select one element of a cached array.
-    internal static JsonNode? EvaluateValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) {
+    internal static JsonNode? EvaluateValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) => Evaluate(
+        expr: expr,
+        fieldKey: fieldKey,
+        owned: out _,
+        scope: scope
+    );
+
+    // Evaluates an expression and says whether the result is owned: a value this evaluation built from nothing any
+    // binding, cache, builtin or vocabulary holds, so it can go into output as it stands. Everything else is
+    // borrowed, and output takes a copy.
+    private static JsonNode? Evaluate(ExpressionNode expr, DocumentScope scope, string? fieldKey, out bool owned) {
         ArgumentNullException.ThrowIfNull(expr);
         ArgumentNullException.ThrowIfNull(scope);
         using var evaluation = scope.Budget.Enter(span: expr.Span);
 
+        owned = false;
         if (scope.Vocabulary.TryLowerValue(
             expression: expr,
             fieldKey: fieldKey,
             scope: scope,
             value: out var specialized
         )) { return specialized; }
+
+        owned = true;
 
         switch (expr) {
             case LiteralExpressionNode lit:
@@ -64,11 +95,23 @@ public static partial class DocumentLowering {
                 return JsonValue.Create(value: color.Hex);
 
             case IdentifierExpressionNode ident:
+                if (scope.TryRefuseRead(name: ident.Name, span: ident.Span)) {
+                    var placeholder = JsonValue.Create(value: 0L);
+
+                    RefusedReads.AddOrUpdate(
+                        key: placeholder,
+                        value: placeholder
+                    );
+
+                    return placeholder;
+                }
                 if (scope.TryEvaluateBinding(
                     ident.Name,
                     fieldKey,
                     out var bound
                 )) {
+                    owned = false;
+
                     return bound;
                 }
                 if (string.Equals(
@@ -99,19 +142,67 @@ public static partial class DocumentLowering {
                 )) {
                     return JsonValue.Create(value: "auto");
                 }
+                // A dotted name whose head is a binding holding an object reads down its members, as
+                // `binding["member"]` does; any other dotted name stays the name it spells.
+                if ((QualifiedName.Parse(text: ident.Name) is { IsQualified: true, Head.Length: > 0 } path) &&
+                    scope.TryEvaluateBinding(fieldKey: null, name: path.Head, value: out var head) && (head is JsonObject)) {
+                    var walked = head;
+
+                    foreach (var segment in path.Segments.Skip(count: 1)) {
+                        walked = (((walked is JsonObject level) && level.TryGetPropertyValue(jsonNode: out var next, propertyName: segment)) ? next : null);
+                    }
+                    owned = false;
+
+                    return walked;
+                }
+                if (scope.TryQualify(qualified: out var instanceName, reference: ident.Name)) {
+                    return JsonValue.Create(value: instanceName);
+                }
 
                 return JsonValue.Create(value: ident.Name);
 
             case MemberAccessExpressionNode memberAccess when (memberAccess.Target is IdentifierExpressionNode targetId):
-                var qualified = $"{targetId.Name}.{memberAccess.Member}";
+                var qualified = QualifiedName.From(expression: memberAccess)!.ToString();
                 if (scope.TryEvaluateBinding(
                     fieldKey: fieldKey,
                     name: qualified,
                     value: out var qBound
                 )) {
+                    owned = false;
+
                     return qBound;
                 }
+                // A binding holding an object reads its member, as `binding["member"]` does.
+                if (scope.TryEvaluateBinding(fieldKey: null, name: targetId.Name, value: out var target) && (target is JsonObject members)) {
+                    owned = false;
+
+                    return (members.TryGetPropertyValue(jsonNode: out var member, propertyName: memberAccess.Member) ? member : null);
+                }
+                // A name a module instance of this scope declares: `alias.name`.
+                if (scope.TryQualify(qualified: out var instanceMember, reference: qualified)) {
+                    return JsonValue.Create(value: instanceMember);
+                }
                 return JsonValue.Create(value: qualified);
+
+            case MemberAccessExpressionNode memberAccess: {
+                    // A name a nested module instance declares: `outer.inner.name`.
+                    if ((QualifiedName.From(expression: memberAccess) is { } dotted) && scope.TryQualify(qualified: out var nestedMember, reference: dotted.ToString())) {
+                        return JsonValue.Create(value: nestedMember);
+                    }
+                    // Any other object read at compile time, such as `legend[glyph].noun`, reads its member the same way.
+                    if (EvaluateValue(expr: memberAccess.Target, scope: scope) is JsonObject read) {
+                        owned = false;
+
+                        return (read.TryGetPropertyValue(jsonNode: out var readMember, propertyName: memberAccess.Member) ? readMember : null);
+                    }
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.IndexRefused,
+                        message: $"only an object read at compile time has a member '{memberAccess.Member}'",
+                        span: memberAccess.Span
+                    );
+
+                    return null;
+                }
 
             case ArrayExpressionNode arr: {
                     scope.Budget.Collection(
@@ -138,12 +229,14 @@ public static partial class DocumentLowering {
                     // A discriminated object and its call spelling share one member contract. Choose the arm
                     // before lowering any value, even when the discriminator is the object's last property.
                     var discriminator = obj.Properties.FirstOrDefault(predicate: static property => (property.Name == "$type"));
+
                     if (discriminator is not null) {
                         var name = discriminator.Value switch {
                             IdentifierExpressionNode identifier => identifier.Name,
                             LiteralExpressionNode { Value: string text } => text,
                             _ => null,
                         };
+
                         if (name is not null) { holder = (scope.Vocabulary.CallContext(callName: name, context: holder) ?? holder); }
                     }
 
@@ -172,6 +265,8 @@ public static partial class DocumentLowering {
                         result: out var builtin,
                         scope: scope
                     )) {
+                        owned = false;
+
                         return builtin;
                     }
 
@@ -189,7 +284,7 @@ public static partial class DocumentLowering {
                         // Classified by the qualified `call.argument` key, so a unit reads against the argument's own
                         // dimension rather than whatever a same-named block property elsewhere means.
                         jsonObj[key] = LowerMember(
-                            fieldKey: $"{call.Name}.{key}",
+                            fieldKey: QualifiedName.Parse(text: call.Name).Append(member: key).ToString(),
                             holder: arm,
                             holderName: call.Name,
                             memberName: key,
@@ -208,6 +303,8 @@ public static partial class DocumentLowering {
                 return JsonValue.Create(value: SpliceAtoms(operand: operand, scope: scope));
 
             case IndexExpressionNode indexed:
+                owned = false;
+
                 return EvaluateIndex(
                     fieldKey: fieldKey,
                     indexed: indexed,
@@ -218,6 +315,18 @@ public static partial class DocumentLowering {
                 return EvaluateBinary(
                     bin: bin,
                     fieldKey: fieldKey,
+                    scope: scope
+                );
+
+            // The condition reads as a truth value, and only the arm it selects is lowered, so an arm the condition
+            // rules out is never evaluated.
+            case ConditionalExpressionNode conditional:
+                return Evaluate(
+                    expr: (IsTruthy(node: EvaluateValue(expr: conditional.Condition, scope: scope, fieldKey: fieldKey))
+                        ? conditional.WhenTrue
+                        : conditional.WhenFalse),
+                    fieldKey: fieldKey,
+                    owned: out owned,
                     scope: scope
                 );
 
@@ -287,12 +396,13 @@ public static partial class DocumentLowering {
 
         return At(
             context: scope.Vocabulary.MemberContext(context: holder, memberName: memberName),
-            lower: () => scope.Vocabulary.NormalizeMemberValue(
-                form: form,
-                scope: scope,
-                value: LowerValue(expr: Operand(form: form, value: value), fieldKey: fieldKey, scope: scope)
+            lower: static member => member.Scope.Vocabulary.NormalizeMemberValue(
+                form: member.Form,
+                scope: member.Scope,
+                value: LowerValue(expr: Operand(form: member.Form, value: member.Value), fieldKey: member.FieldKey, scope: member.Scope)
             ),
-            scope: scope
+            scope: scope,
+            state: (Scope: scope, Form: form, Value: value, FieldKey: fieldKey)
         );
     }
     /// <summary>Runs <paramref name="lower"/> with <paramref name="context"/> as the position its values fill.</summary>
@@ -303,6 +413,26 @@ public static partial class DocumentLowering {
     /// <returns>What <paramref name="lower"/> returned.</returns>
     public static T At<T>(DocumentScope scope, object? context, Func<T> lower) {
         ArgumentNullException.ThrowIfNull(argument: lower);
+
+        return At(
+            context: context,
+            lower: static run => run(),
+            scope: scope,
+            state: lower
+        );
+    }
+    /// <summary>Runs <paramref name="lower"/> over <paramref name="state"/> with <paramref name="context"/> as the
+    /// position its values fill.</summary>
+    /// <typeparam name="TState">What <paramref name="lower"/> reads.</typeparam>
+    /// <typeparam name="T">What <paramref name="lower"/> returns.</typeparam>
+    /// <param name="scope">The lowering scope.</param>
+    /// <param name="context">The position, in the vocabulary's own terms.</param>
+    /// <param name="state">The values <paramref name="lower"/> reads, so a hot caller passes a static lambda
+    /// rather than building a closure per value.</param>
+    /// <param name="lower">The lowering to run.</param>
+    /// <returns>What <paramref name="lower"/> returned.</returns>
+    public static T At<TState, T>(DocumentScope scope, object? context, TState state, Func<TState, T> lower) {
+        ArgumentNullException.ThrowIfNull(argument: lower);
         ArgumentNullException.ThrowIfNull(argument: scope);
 
         var outer = MemberContext(scope: scope);
@@ -310,7 +440,7 @@ public static partial class DocumentLowering {
         scope.Annotations[MemberContextKey] = context;
 
         try {
-            return lower();
+            return lower(arg: state);
         } finally {
             scope.Annotations[MemberContextKey] = outer;
         }
@@ -321,10 +451,13 @@ public static partial class DocumentLowering {
     private static ExpressionNode Operand(ExpressionNode value, DocumentValueForm form) => (value switch {
         _ when (form is not (DocumentValueForm.Name or DocumentValueForm.Key or DocumentValueForm.Expression)) => value,
         OperandExpressionNode operand => (operand with { Form = form }),
-        ArrayExpressionNode array => (array with { Elements = [.. array.Elements.Select(selector: element => Operand(form: form, value: element))] }),
+        ArrayExpressionNode array => OperandElements(array: array, form: form),
         LiteralExpressionNode { Value: string } or InterpolatedStringNode or ObjectExpressionNode or IdentifierExpressionNode { Name: "null" } => value,
         _ => Parsing.PuckParser.CreateOperand(expression: value, form: form),
     });
+    // Its own method so the closure is built only for an array, never for every member value on the way past.
+    private static ArrayExpressionNode OperandElements(ArrayExpressionNode array, DocumentValueForm form) =>
+        (array with { Elements = [.. array.Elements.Select(selector: element => Operand(form: form, value: element))] });
 
     /// <summary>Refuses every argument of <paramref name="call"/> that is not written in its one spelling.</summary>
     /// <param name="call">The call.</param>
@@ -430,9 +563,16 @@ public static partial class DocumentLowering {
             if (written.Contains(value: '`')) {
                 return ("$" + Parsing.PuckStrings.Write(value: written.Replace(comparisonType: StringComparison.Ordinal, newValue: "{{", oldValue: "{").Replace(comparisonType: StringComparison.Ordinal, newValue: "}}", oldValue: "}")));
             }
-            return ((Puck.State.ExpressionSpelling.IsBareName(name: written) || (Puck.State.StateChannelRef.Parse(spelling: written).Call is not null) || long.TryParse(result: out _, s: written))
+            if ((Puck.State.StateChannelRef.Parse(spelling: written).Call is not null) || long.TryParse(provider: System.Globalization.CultureInfo.InvariantCulture, result: out _, s: written, style: System.Globalization.NumberStyles.Integer)) {
+                return Puck.State.ExpressionSpelling.ToSourceDialect(text: written);
+            }
+
+            var printed = Puck.State.ExpressionSpelling.PrintName(name: written);
+
+            // A name that prints bare is written in the source dialect, which respells a reserved colon spelling.
+            return ((printed.Length == written.Length)
                 ? Puck.State.ExpressionSpelling.ToSourceDialect(text: written)
-                : $"`{written}`"
+                : printed
             );
         }
         if (form != DocumentValueForm.Key) {
@@ -452,26 +592,114 @@ public static partial class DocumentLowering {
             scope: scope,
             fieldKey: fieldKey
         );
+
+        if (bin.Operator == "??") {
+            return (leftNode ?? EvaluateValue(
+                expr: bin.Right,
+                scope: scope,
+                fieldKey: fieldKey
+            ));
+        }
+
         var rightNode = EvaluateValue(
             expr: bin.Right,
             scope: scope,
             fieldKey: fieldKey
         );
 
-        if ((bin.Operator is "+" or "-") && (leftNode is JsonArray leftPoint) && (rightNode is JsonArray rightPoint) &&
+        // The operator's row is the one description of what it means, in a value as in a rule. A binary node the
+        // table does not spell was built by something other than the parser, and it has no value to fold to.
+        if (
+            !ExpressionOperators.TryFindSymbol(
+                descriptor: out var row,
+                symbol: bin.Operator
+            ) ||
+            (row!.Binding == 0)
+        ) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{bin.Operator}' is not an infix operator of the expression language.",
+                span: bin.Span
+            );
+
+            return null;
+        }
+
+        // An operator the table defines over Int alone is the engine's to evaluate, as an integer function is
+        // (DocumentScalars), so a value and a rule cannot disagree on it.
+        if (row.Signature == ExpressionSignature.Int) {
+            return EvaluateIntegerBinary(
+                bin: bin,
+                leftNode: leftNode,
+                operation: row.Operation,
+                rightNode: rightNode,
+                scope: scope
+            );
+        }
+
+        if ((row.Operation is ExpressionOp.Add or ExpressionOp.Subtract) && (leftNode is JsonArray leftPoint) && (rightNode is JsonArray rightPoint) &&
             (leftPoint.Count is 2 or 3) && (leftPoint.Count == rightPoint.Count)) {
             scope.Budget.Collection(count: leftPoint.Count, span: bin.Span);
             var result = new JsonArray();
 
             for (var index = 0; (index < leftPoint.Count); index++) {
-                result.AppendNode(EvaluateNumberBinary(bin, scope, leftPoint[index], rightPoint[index]));
+                result.AppendNode(item: EvaluateNumberBinary(bin: bin, leftNode: leftPoint[index], rightNode: rightPoint[index], row: row, scope: scope));
             }
             return result;
         }
-        return EvaluateNumberBinary(bin: bin, leftNode: leftNode, rightNode: rightNode, scope: scope);
-    }
-    private static JsonNode? EvaluateNumberBinary(BinaryExpressionNode bin, DocumentScope scope, JsonNode? leftNode, JsonNode? rightNode) {
+        // Two strings are equal when their UTF-16 code units are, the unit length(value) and indexing count; a
+        // string has no order, so only equality reads one.
+        if ((row.Operation is ExpressionOp.Equal or ExpressionOp.NotEqual) && (leftNode is JsonValue leftText) && leftText.TryGetValue<string>(value: out var leftString) &&
+            (rightNode is JsonValue rightText) && rightText.TryGetValue<string>(value: out var rightString)) {
+            var equal = string.Equals(a: leftString, b: rightString, comparisonType: StringComparison.Ordinal);
 
+            return JsonValue.Create(value: (((row.Operation == ExpressionOp.Equal) == equal) ? 1L : 0L));
+        }
+        return EvaluateNumberBinary(bin: bin, leftNode: leftNode, rightNode: rightNode, row: row, scope: scope);
+    }
+    private static JsonNode? EvaluateIntegerBinary(BinaryExpressionNode bin, ExpressionOp operation, JsonNode? leftNode, JsonNode? rightNode, DocumentScope scope) {
+        if (
+            !DocumentNumbers.TryInteger(
+                node: leftNode,
+                number: out var left
+            ) ||
+            !DocumentNumbers.TryInteger(
+                node: rightNode,
+                number: out var right
+            )
+        ) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{bin.Operator}' reads signed 64-bit whole numbers known at compile time.",
+                span: bin.Span
+            );
+
+            return null;
+        }
+        if (!ExpressionArithmetic.TryBinary(
+            kind: CellKind.Int,
+            left: left,
+            operation: operation,
+            right: right,
+            value: out var value
+        )) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{bin.Operator}' is not defined for {left} and {right}; a shift counts 0 to 63.",
+                span: bin.Span
+            );
+
+            return null;
+        }
+
+        return JsonValue.Create(value: value);
+    }
+    // A document number is an exact rational, held as a whole number, an authored decimal or a computed double, and
+    // an operator means what its row means over the reals: the rule language's Fixed reading of it, carried at the
+    // precision the document holds rather than quantized to Q48.16. Whole operands with a whole result evaluate
+    // through the Int arm of the rule evaluator itself, so a whole-number fold is the rule's own answer; `/` of two
+    // whole numbers whose quotient is not whole is the real quotient, where an Int rule truncates.
+    private static JsonNode? EvaluateNumberBinary(BinaryExpressionNode bin, ExpressionOperator row, DocumentScope scope, JsonNode? leftNode, JsonNode? rightNode) {
         if (
             !TryReadNumber(
             node: leftNode,
@@ -492,68 +720,70 @@ public static partial class DocumentLowering {
 
         // A comparison is worth 1 or 0, never a JSON boolean — the rule language has no boolean either, so this is
         // what keeps `cleared + (row > 0)` meaning the same thing on both sides of the compiler. `IsTruthy` reads a
-        // non-zero number as true, so a comparison still reads as a condition wherever one is wanted.
-        var order = DocumentNumbers.Compare(
-            left: leftNode,
-            right: rightNode
-        );
-        var comparison = bin.Operator switch {
-            "==" => (order == 0),
-            "!=" => (order != 0),
-            "<" => (order < 0),
-            "<=" => (order <= 0),
-            ">" => (order > 0),
-            ">=" => (order >= 0),
-            _ => ((bool?)null),
-        };
+        // non-zero number as true, so a comparison still reads as a condition wherever one is wanted. The exact
+        // order of the two numbers is compared against zero by the rule evaluator's own comparison.
+        if (row.Signature == ExpressionSignature.Comparison) {
+            _ = ExpressionArithmetic.TryBinary(
+                kind: CellKind.Int,
+                left: DocumentNumbers.Compare(
+                    left: leftNode,
+                    right: rightNode
+                ),
+                operation: row.Operation,
+                right: 0L,
+                value: out var verdict
+            );
 
-        if (comparison is { } verdict) {
-            return JsonValue.Create(value: (verdict
-                ? 1L
-                : 0L));
+            return JsonValue.Create(value: verdict);
+        }
+        if (row.Operation is not (ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.Multiply or ExpressionOp.Divide or ExpressionOp.Remainder)) {
+            throw new InvalidOperationException(message: $"The operator table gained the numeric infix operator '{row.Symbol}', which a document value does not fold.");
+        }
+
+        // A zero divisor leaves no quotient and no remainder; the rule evaluator faults on one, and a value refuses it.
+        if ((row.Operation is ExpressionOp.Divide or ExpressionOp.Remainder) && (rNum == 0)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{bin.Operator}' by zero has no value.",
+                span: bin.Span
+            );
+
+            return null;
         }
 
         if (
             DocumentNumbers.TryInteger(
-            node: leftNode,
-            number: out var left
-        ) &&
+                node: leftNode,
+                number: out var left
+            ) &&
             DocumentNumbers.TryInteger(
-            node: rightNode,
-            number: out var right
-        )
+                node: rightNode,
+                number: out var right
+            ) &&
+            ((row.Operation != ExpressionOp.Divide) || (right == -1L) || ((left % right) == 0L))
         ) {
-            try {
-                long? exact = bin.Operator switch {
-                    "+" => checked((left + right)),
-                    "-" => checked((left - right)),
-                    "*" => checked((left * right)),
-                    "%" => ((right is 0 or -1)
-                    ? 0
-                    : (left % right)),
-                    "/" when (right == 0) => 0,
-                    "/" when (right == -1) => checked(-left),
-                    "/" when ((left % right) == 0) => (left / right),
-                    _ => null,
-                };
-
-                if (exact is { } result) {
-                    return JsonValue.Create(result);
-                }
-            } catch (OverflowException) {
+            if (!ExpressionArithmetic.TryBinary(
+                kind: CellKind.Int,
+                left: left,
+                operation: row.Operation,
+                right: right,
+                value: out var whole
+            )) {
                 throw new DocumentEvaluationException(
                     "Integer arithmetic exceeds the signed 64-bit range.",
                     bin.Span,
                     PuckDiagnosticCodes.InvalidValue
                 );
             }
+
+            return JsonValue.Create(value: whole);
         }
 
         // A sum, a difference and a product of exact operands stay decimal when a decimal holds the result exactly.
         // One it would overflow on or round, a product too small for its scale included, is computed in double
         // below, which keeps the magnitude a rounded decimal would lose.
         if (
-            (bin.Operator is "+" or "-" or "*") &&
+            (row.Operation is ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.Multiply) &&
             DocumentNumbers.TryExact(
                 node: leftNode,
                 number: out var exactLeft
@@ -564,7 +794,7 @@ public static partial class DocumentLowering {
             ) &&
             DocumentNumbers.TryExactArithmetic(
                 left: exactLeft,
-                operation: bin.Operator,
+                operation: row.Operation,
                 result: out var exactResult,
                 right: exactRight
             )
@@ -573,21 +803,15 @@ public static partial class DocumentLowering {
         }
 
         return NumberNode(
-            value: bin.Operator switch {
-                "+" => (lNum + rNum),
-                "-" => (lNum - rNum),
-                "*" => (lNum * rNum),
-                "/" => ((rNum != 0)
-                ? (lNum / rNum)
-                : 0),
+            value: row.Operation switch {
+                ExpressionOp.Add => (lNum + rNum),
+                ExpressionOp.Subtract => (lNum - rNum),
+                ExpressionOp.Multiply => (lNum * rNum),
+                ExpressionOp.Divide => (lNum / rNum),
                 // There is deliberately no `//` for integer division: `//` opens a line comment, so `a // b` can only
                 // ever read as `a` followed by a comment. `floor(a / b)` is the spelling, and it is the rule language's
                 // own `floor` — the same name, the same rounding — rather than a second one invented here.
-                // A zero divisor yields zero rather than failing, matching division.
-                "%" => ((rNum != 0)
-                ? (lNum % rNum)
-                : 0),
-                _ => 0,
+                _ => (lNum % rNum),
             },
             span: bin.Span
         );
@@ -615,10 +839,14 @@ public static partial class DocumentLowering {
             return member;
         }
 
-        if (target is not JsonArray arr) {
+        // A string indexes like the array of its UTF-16 code units, the unit length(value) counts, and yields the
+        // one-unit string at that position.
+        var text = (((target is JsonValue textValue) && textValue.TryGetValue<string>(value: out var read)) ? read : null);
+
+        if ((target is not JsonArray) && (text is null)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.IndexRefused,
-                message: "only an array or an object can be indexed",
+                message: "only an array, an object or a string can be indexed",
                 span: indexed.Span
             );
 
@@ -631,27 +859,31 @@ public static partial class DocumentLowering {
         )) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.IndexRefused,
-                message: "an array index is a whole number known at compile time",
+                message: $"{((text is null) ? "an array" : "a string")} index is a whole number known at compile time",
                 span: indexed.Span
             );
 
             return null;
         }
+
+        var count = ((target is JsonArray items) ? items.Count : text!.Length);
 
         if (
             (ordinal < 0) ||
-            (ordinal >= arr.Count)
+            (ordinal >= count)
         ) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.IndexRefused,
-                message: $"index {ordinal} is outside the array's 0..{(arr.Count - 1)}",
+                message: $"index {ordinal} is outside the {((text is null) ? "array" : "string")}'s 0..{(count - 1)}",
                 span: indexed.Span
             );
 
             return null;
         }
 
-        return arr[((int)ordinal)];
+        return ((target is JsonArray arr)
+            ? arr[((int)ordinal)]
+            : JsonValue.Create(value: text!.Substring(length: 1, startIndex: ((int)ordinal))));
     }
     // The operand is lowered under the SAME fieldKey, so a unit inside it converts against the field the sign is
     // written for; the sign is then applied to the converted number.
@@ -661,6 +893,31 @@ public static partial class DocumentLowering {
             scope,
             fieldKey
         );
+
+        if (un.Operator == "~") {
+            if (
+                !DocumentNumbers.TryInteger(
+                    node: operand,
+                    number: out var bits
+                ) ||
+                !ExpressionArithmetic.TryUnary(
+                    kind: CellKind.Int,
+                    operand: bits,
+                    operation: ExpressionOp.BitNot,
+                    value: out var complement
+                )
+            ) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.InvalidValue,
+                    message: "'~' reads a signed 64-bit whole number known at compile time.",
+                    span: un.Span
+                );
+
+                return null;
+            }
+
+            return JsonValue.Create(value: complement);
+        }
 
         if (DocumentNumbers.TryInteger(
             node: operand,
@@ -714,7 +971,8 @@ public static partial class DocumentLowering {
             return (node?.ToJsonString() ?? string.Empty);
         }
 
-        if (value.TryGetValue<string>(value: out var text)) {
+        // Asking a number for text boxes it, so only a value that is text is asked.
+        if ((value.GetValueKind() == System.Text.Json.JsonValueKind.String) && value.TryGetValue<string>(value: out var text)) {
             return text;
         }
 
@@ -907,38 +1165,56 @@ public static partial class DocumentLowering {
 
         target[key] = value;
     }
-    /// <summary>Recursively canonicalizes a JSON node by sorting every object's properties ordinally.</summary>
-    /// <param name="node">The node to canonicalize.</param>
-    /// <returns>A new canonicalized node, or <see langword="null"/> when the input was null.</returns>
+    /// <summary>Canonicalizes a JSON node in place by sorting every object's properties ordinally.</summary>
+    /// <param name="node">The node to canonicalize; the caller owns it, and it is reordered where it stands.</param>
+    /// <returns><paramref name="node"/> itself, or <see langword="null"/> when the input was null.</returns>
+    /// <remarks>The document being canonicalized is the lowering's own output, so it is reordered rather than
+    /// rebuilt: rebuilding it copied every node of a document that is discarded the moment the copy exists. An
+    /// object already in order is left untouched.</remarks>
     public static JsonNode? Canonicalize(JsonNode? node) {
-        if (node is null) {
-            return null;
+        switch (node) {
+            case JsonObject obj:
+                if (!IsOrdinallySorted(obj: obj)) {
+                    var entries = new KeyValuePair<string, JsonNode?>[obj.Count];
+
+                    for (var index = 0; (index < entries.Length); index++) {
+                        entries[index] = obj.GetAt(index: index);
+                    }
+                    Array.Sort(
+                        array: entries,
+                        comparison: static (left, right) => string.CompareOrdinal(strA: left.Key, strB: right.Key)
+                    );
+                    obj.Clear();
+                    foreach (var entry in entries) {
+                        obj.Add(property: entry);
+                    }
+                }
+                for (var index = 0; (index < obj.Count); index++) {
+                    _ = Canonicalize(node: obj.GetAt(index: index).Value);
+                }
+
+                return obj;
+
+            case JsonArray arr:
+                for (var index = 0; (index < arr.Count); index++) {
+                    _ = Canonicalize(node: arr[index]);
+                }
+
+                return arr;
+
+            default:
+                return node;
         }
 
-        if (node is JsonObject obj) {
-            var sorted = new JsonObject();
-
-            foreach (var entry in obj.OrderBy(
-                keySelector: static pair => pair.Key,
-                comparer: StringComparer.Ordinal
-            ).ToList()) {
-                sorted[entry.Key] = Canonicalize(node: entry.Value);
+        static bool IsOrdinallySorted(JsonObject obj) {
+            for (var index = 1; (index < obj.Count); index++) {
+                if (string.CompareOrdinal(strA: obj.GetAt(index: (index - 1)).Key, strB: obj.GetAt(index: index).Key) > 0) {
+                    return false;
+                }
             }
 
-            return sorted;
+            return true;
         }
-
-        if (node is JsonArray arr) {
-            var canonicalArr = new JsonArray();
-
-            foreach (var item in arr) {
-                canonicalArr.AppendNode(item: Canonicalize(node: item));
-            }
-
-            return canonicalArr;
-        }
-
-        return node.DeepClone();
     }
     /// <summary>Expands a <c>for</c> block, emitting its body once per element of the sequence.</summary>
     /// <param name="loop">The loop as written.</param>
@@ -1219,14 +1495,14 @@ public static partial class DocumentLowering {
             var result = false;
 
             foreach (var exportName in candidate.Body.Statements.OfType<ExportNode>().SelectMany(selector: static export => export.Names)) {
-                var dot = exportName.IndexOf(value: '.');
+                var exported = QualifiedName.Parse(text: exportName);
 
-                if (dot < 0) {
+                if (!exported.IsQualified) {
                     if ((exportName == required) && declared.Contains(item: exportName)) { result = true; break; }
                     continue;
                 }
-                var alias = exportName[..dot];
-                var member = exportName[(dot + 1)..];
+                var alias = exported.Head;
+                var member = exported.Tail;
 
                 if ((member != required) || !uses.TryGetValue(key: alias, value: out var usedName)) { continue; }
 
@@ -1280,7 +1556,7 @@ public static partial class DocumentLowering {
 
         return captured;
     }
-    /// <summary>Reads a node as a truth value: the condition `select` branches on and `filter` keeps by. A boolean is
+    /// <summary>Reads a node as a truth value: the condition a conditional branches on and `filter` keeps by. A boolean is
     /// itself; a number is true when non-zero, which is how a comparison's 1/0 reads; a string is true when non-empty;
     /// and a present container is true.</summary>
     /// <param name="node">The lowered node.</param>
@@ -1343,15 +1619,21 @@ public static partial class DocumentLowering {
     /// through an array, object, range, arithmetic or <c>let</c> indirection) validates against the field it
     /// actually lands on. <see langword="null"/> when no such key applies.</param>
     /// <returns>The lowered node, or <see langword="null"/> for a null literal or an unrecognized expression.</returns>
-    public static JsonNode? LowerValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) =>
-        scope.Budget.Copy(
-            EvaluateValue(
-                expr: expr,
-                fieldKey: fieldKey,
-                scope: scope
-            ),
-            expr.Span
+    /// <remarks>A value the evaluation built itself goes into output as it stands; only a borrowed one is copied.
+    /// Either way the budget is charged for the whole value.</remarks>
+    public static JsonNode? LowerValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) {
+        var value = Evaluate(
+            expr: expr,
+            fieldKey: fieldKey,
+            owned: out var owned,
+            scope: scope
         );
+
+        return (owned
+            ? scope.Budget.Adopt(value: value, span: expr.Span)
+            : scope.Budget.Copy(value: value, span: expr.Span)
+        );
+    }
     /// <summary>Narrows an integral result back to a long, so arithmetic and a written literal reach the document as
     /// the same JSON kind.</summary>
     /// <param name="value">The folded number.</param>
@@ -1402,6 +1684,72 @@ public static partial class DocumentLowering {
             scope: scope,
             written: rule.Name
         );
+    }
+    /// <summary>Returns a local's name, resolving an interpolated name the way a rule's is.</summary>
+    /// <param name="local">The local statement.</param>
+    /// <param name="scope">The lowering scope, carrying any loop bindings the name reads.</param>
+    /// <returns>The resolved name, or the written one when the statement carries no interpolation.</returns>
+    public static string ResolveLocalName(LocalStatementNode local, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(local);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        return (ResolveHeaderName(
+            nameExpression: local.NameExpression,
+            scope: scope,
+            written: local.Name
+        ) ?? local.Name);
+    }
+    /// <summary>Flattens a rule body's compile-time <c>for</c> loops into the statements they produce, each paired
+    /// with the scope its loop bindings are live in; every other statement stands in the enclosing scope.</summary>
+    /// <param name="statements">The body as written: a rule's, a step's, a branch's or a transaction's.</param>
+    /// <param name="scope">The enclosing scope.</param>
+    /// <returns>The statements in order, loops unrolled, nested loops included.</returns>
+    /// <remarks>A loop repeats locals and effects. A <c>when</c>, a <c>decision</c> or a nested <c>rule</c> inside
+    /// one is refused as <see cref="PuckDiagnosticCodes.ForRepeatsARuleMember"/> and produces nothing, since a rule
+    /// carries one of each; a field assignment is refused by <see cref="ValidateForBody"/>, and a sequence not known
+    /// at compile time by <see cref="PuckDiagnosticCodes.ForSequenceRefused"/>. Every produced statement is lowered
+    /// and priced like one written out by hand.</remarks>
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandBody(IReadOnlyList<StatementNode> statements, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(statements);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        foreach (var statement in statements) {
+            if (statement is not ForStatementNode loop) {
+                yield return (statement, scope);
+
+                continue;
+            }
+
+            foreach (var member in loop.Body) {
+                if (member is WhenStatementNode or DecisionBlockNode or RuleBlockNode) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.ForRepeatsARuleMember,
+                        message: (member switch {
+                            WhenStatementNode => "a 'for' inside a rule repeats its locals and effects, and a rule has one 'when'; write the condition in that 'when', or in an 'if' inside the loop",
+                            DecisionBlockNode => "a 'for' inside a rule repeats its locals and effects, and a rule has one 'decision'; write the decision beside the loop",
+                            _ => "a 'for' inside a rule repeats its locals and effects; a 'rule' is stamped by a 'for' outside any rule body",
+                        }),
+                        span: member.Span
+                    );
+                }
+            }
+
+            foreach (var (produced, iteration) in ExpandForStatements(
+                loop: loop,
+                scope: scope
+            )) {
+                if (produced is WhenStatementNode or DecisionBlockNode or RuleBlockNode) {
+                    continue;
+                }
+
+                foreach (var flattened in ExpandBody(
+                    scope: iteration,
+                    statements: [produced]
+                )) {
+                    yield return flattened;
+                }
+            }
+        }
     }
 
     private static string? ResolveHeaderName(ExpressionNode? nameExpression, string? written, DocumentScope scope) {

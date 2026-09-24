@@ -38,11 +38,11 @@ namespace Puck.Attestation.Tests;
 /// nobody can decrypt with proves nothing, so this one is minted fresh per export, used for one sealed
 /// payload, and has only the self-certifying throwaway id carried by that payload. Nothing here is a key
 /// management pattern.</para>
-/// <para><b>Neither verb may crash.</b> Every file in the directory is input, and input that is missing,
-/// truncated, corrupt, or simply not what it claims to be is a failed check with a name and a non-zero exit
-/// — never an unhandled exception. A cross-checking implementer reading a stack trace cannot tell "your
-/// bytes are bad" from "your tool fell over", and those are different verdicts under this harness contract.
-/// That is why every step here runs through <see cref="TryStep{T}"/>.</para>
+/// <para><b>Verification never throws and never prints; it reports.</b> Every file in the directory is input,
+/// and input that is missing, truncated, corrupt, or simply not what it claims to be is a failed
+/// <see cref="InterchangeFinding"/> naming its <see cref="InterchangeCheck"/> — never an unhandled exception.
+/// A test asserts the exact findings it expects, so a refusal for the wrong reason fails as loudly as an
+/// acceptance. That is why every step here runs through <see cref="TryStep{T}"/>.</para>
 /// </remarks>
 internal static class AttestationInterchangeHarness {
     private const string BindingOneFileName = "binding-1.attestation";
@@ -95,17 +95,19 @@ internal static class AttestationInterchangeHarness {
     /// <param name="codec">The serialisation to decode with.</param>
     /// <param name="claimBytes">The wire bytes of the attestation carrying the claim.</param>
     /// <param name="manifest">The parsed manifest.</param>
-    /// <returns>The number of failures.</returns>
-    private static int CheckClaimHeader(IAttestationCodec codec, byte[] claimBytes, Dictionary<string, string> manifest) {
+    /// <param name="findings">The report the outcome is added to.</param>
+    private static void CheckClaimHeader(IAttestationCodec codec, byte[] claimBytes, Dictionary<string, string> manifest, List<InterchangeFinding> findings) {
         if (!TryStep(
-            check: $"cross-verify manifest agreement: decoding {ClaimFileName}",
+            check: InterchangeCheck.ManifestAgreement,
+            step: $"decoding {ClaimFileName}",
             body: () => InterchangeProfile.DecodeAttestation(
                 codec: codec,
                 wire: claimBytes
             ),
+            findings: findings,
             value: out var claim
         )) {
-            return 1;
+            return;
         }
 
         var expectedSequence = manifest["sequence"];
@@ -152,17 +154,23 @@ internal static class AttestationInterchangeHarness {
         }
 
         if (disagreements.Count != 0) {
-            Console.WriteLine(value: $"[FAIL] cross-verify manifest agreement: {ClaimFileName} disagrees with {ManifestFileName} on {string.Join(
-                separator: "; ",
-                values: disagreements
-            )}");
+            Fail(
+                check: InterchangeCheck.ManifestAgreement,
+                detail: $"{ClaimFileName} disagrees with {ManifestFileName} on {string.Join(
+                    separator: "; ",
+                    values: disagreements
+                )}",
+                findings: findings
+            );
 
-            return 1;
+            return;
         }
 
-        Console.WriteLine(value: $"[PASS] cross-verify manifest agreement: {ClaimFileName}'s header carries exactly what {ManifestFileName} names, sequence included");
-
-        return 0;
+        Pass(
+            check: InterchangeCheck.ManifestAgreement,
+            detail: $"{ClaimFileName}'s header carries exactly what {ManifestFileName} names, sequence included",
+            findings: findings
+        );
     }
     private static string Describe(Exception exception) => $"{exception.GetType().Name}: {exception.Message}";
     /// <summary>Applies the fixture's three value escapes: a backslash, a line feed, and a carriage return. Nothing else is escaped — <c>=</c> needs no escape, because only the first one on a line splits.</summary>
@@ -186,34 +194,704 @@ internal static class AttestationInterchangeHarness {
     /// are the same outcome here — §0's "refuse" is a negative verdict, and throw-or-return is a language
     /// choice — so both pass and only an acceptance fails.
     /// </summary>
-    /// <param name="check">The check's name.</param>
-    /// <param name="detail">What was done to the input, for the report line.</param>
+    /// <param name="check">The control.</param>
+    /// <param name="detail">What was done to the input, for the finding.</param>
     /// <param name="body">The control. Returning a <see cref="AttestationVerifyResult"/> that verified is an acceptance; returning anything else is too.</param>
-    /// <returns>The number of failures — 0 when the control refused.</returns>
-    private static int ExpectRefusal(string check, string detail, Func<object?> body) {
+    /// <param name="findings">The report the outcome is added to — a pass when the control refused.</param>
+    private static void ExpectRefusal(InterchangeCheck check, string detail, Func<object?> body, List<InterchangeFinding> findings) {
+        string refusal;
+
         try {
-            if (body() is not AttestationVerifyResult result) {
-                Console.WriteLine(value: $"[FAIL] {check}: {detail} was ACCEPTED");
+            if (
+                (body() is not AttestationVerifyResult result) ||
+                result.Verified
+            ) {
+                Fail(
+                    check: check,
+                    detail: $"{detail} was accepted",
+                    findings: findings
+                );
 
-                return 1;
+                return;
             }
 
-            if (result.Verified) {
-                Console.WriteLine(value: $"[FAIL] {check}: {detail} was ACCEPTED");
-
-                return 1;
-            }
-
-            Console.WriteLine(value: $"[PASS] {check}: {detail} refused — {result.RefusalReason}");
-
-            return 0;
+            refusal = result.RefusalReason!;
         } catch (Exception exception) {
-            Console.WriteLine(value: $"[PASS] {check}: {detail} refused — {Describe(exception: exception)}");
+            refusal = Describe(exception: exception);
+        }
 
-            return 0;
+        Pass(
+            check: check,
+            detail: $"{detail} refused — {refusal}",
+            findings: findings
+        );
+    }
+    private static void Fail(InterchangeCheck check, string detail, List<InterchangeFinding> findings) => findings.Add(item: new InterchangeFinding(
+        Check: check,
+        Detail: detail,
+        Passed: false
+    ));
+    private static TimeSpan ParseReplayHorizon(string value) {
+        if (
+            !long.TryParse(
+            s: value,
+            style: System.Globalization.NumberStyles.None,
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            result: out var seconds
+        ) ||
+            (seconds <= 0)
+        ) {
+            throw new FormatException(message: $"manifest.txt's replay-horizon-seconds must be a positive whole-second integer, but '{value}' arrived.");
+        }
+
+        try {
+            return TimeSpan.FromSeconds(value: seconds);
+        } catch (OverflowException exception) {
+            throw new FormatException(
+                innerException: exception,
+                message: "manifest.txt's replay-horizon-seconds is outside TimeSpan's representable range."
+            );
         }
     }
-    private static int ExportCore(string directory) {
+    private static void Pass(InterchangeCheck check, string detail, List<InterchangeFinding> findings) => findings.Add(item: new InterchangeFinding(
+        Check: check,
+        Detail: detail,
+        Passed: true
+    ));
+    /// <summary>
+    /// Reads the fixture manifest. Empty lines are ignored; every other line must hold a
+    /// <c>key=value</c> pair split at its first <c>=</c>; a repeated key refuses rather than resolving by
+    /// order. Silently skipping a line that does not parse is what makes a typo'd key read as an absent one,
+    /// which is a fixture that quietly checks less than it claims.
+    /// </summary>
+    /// <param name="path">The manifest path.</param>
+    /// <returns>The parsed keys, values already unescaped.</returns>
+    /// <exception cref="FormatException">A line does not parse, a key repeats, or a value carries an escape the format does not define.</exception>
+    private static Dictionary<string, string> ReadManifest(string path) {
+        var manifest = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var text = File.ReadAllText(
+            encoding: ManifestEncoding,
+            path: path
+        );
+        var lineNumber = 0;
+
+        foreach (var rawLine in text.Split(separator: '\n')) {
+            // A CR immediately before the LF is tolerated and discarded, so a manifest written by a CRLF
+            // platform still reads. Nothing else about the line is trimmed — whitespace inside a value is
+            // part of the value.
+            var line = (rawLine.EndsWith(value: '\r')
+                ? rawLine[..^1]
+                : rawLine
+            );
+
+            lineNumber += 1;
+
+            if (line.Length == 0) {
+                continue;
+            }
+
+            var separator = line.IndexOf(value: '=');
+
+            if (separator < 1) {
+                throw new FormatException(message: $"{ManifestFileName} line {lineNumber} is neither empty nor a 'key=value' pair: '{line}'.");
+            }
+
+            var key = line[..separator];
+
+            if (!manifest.TryAdd(
+                key: key,
+                value: UnescapeManifestValue(
+                    value: line[(separator + 1)..],
+                    key: key
+                )
+            )) {
+                throw new FormatException(message: $"{ManifestFileName} names the key '{key}' more than once (line {lineNumber}); which one governs is undefined, so the manifest is refused rather than resolved by order.");
+            }
+        }
+
+        return manifest;
+    }
+    /// <summary>
+    /// Runs one fixture step and turns every way it can fail into a failed finding rather than an escaping
+    /// exception. The catch is deliberately unfiltered: a step's whole job is to interpret bytes that arrived
+    /// from somewhere else, so there is no exception type it could raise that is a better outcome than a
+    /// reported failure. A crash and a refusal are different verdicts, and a stack trace cannot tell them apart.
+    /// </summary>
+    /// <typeparam name="T">What the step produces.</typeparam>
+    /// <param name="check">The check the step belongs to, named by a failure.</param>
+    /// <param name="step">What the step does, for a failure's detail.</param>
+    /// <param name="body">The step.</param>
+    /// <param name="findings">The report a failure is added to. Completion adds nothing: a step is a precondition, not a verdict.</param>
+    /// <param name="value">What the step produced, or <see langword="default"/> when it failed.</param>
+    /// <param name="note">An optional sentence appended to a failure's detail, telling the reader what to suspect.</param>
+    /// <returns><see langword="true"/> when the step completed.</returns>
+    private static bool TryStep<T>(InterchangeCheck check, string step, Func<T> body, List<InterchangeFinding> findings, out T value, string? note = null) {
+        try {
+            value = body();
+
+            return true;
+        } catch (Exception exception) {
+            Fail(
+                check: check,
+                detail: $"{step}: {Describe(exception: exception)}{((note is null)
+                    ? string.Empty
+                    : $" {note}")}",
+                findings: findings
+            );
+
+            value = default!;
+
+            return false;
+        }
+    }
+    /// <summary>Reverses <see cref="EscapeManifestValue"/>, refusing an escape the format does not define rather than passing the backslash through — one escaped value must have exactly one unescaped reading.</summary>
+    /// <param name="value">The escaped value.</param>
+    /// <param name="key">The key it belongs to, for the refusal message.</param>
+    /// <exception cref="FormatException">The value ends in a lone backslash, or names an escape outside the three.</exception>
+    private static string UnescapeManifestValue(string value, string key) {
+        if (!value.Contains(value: '\\')) {
+            return value;
+        }
+
+        var builder = new StringBuilder(capacity: value.Length);
+
+        for (var index = 0; (index < value.Length); index += 1) {
+            if (value[index] != '\\') {
+                _ = builder.Append(value: value[index]);
+
+                continue;
+            }
+
+            index += 1;
+
+            if (index == value.Length) {
+                throw new FormatException(message: $"{ManifestFileName}'s '{key}' value ends with a lone backslash; the format defines exactly three escapes (\\\\, \\n, \\r).");
+            }
+
+            _ = value[index] switch {
+                '\\' => builder.Append(value: '\\'),
+                'n' => builder.Append(value: '\n'),
+                'r' => builder.Append(value: '\r'),
+                var other => throw new FormatException(message: $"{ManifestFileName}'s '{key}' value carries the escape '\\{other}', which is not one of the three the format defines (\\\\, \\n, \\r)."),
+            };
+        }
+
+        return builder.ToString();
+    }
+    private static void VerifyCore(string directory, List<InterchangeFinding> findings) {
+        var codec = new CborAttestationCodec();
+
+        if (!TryStep(
+            check: InterchangeCheck.Manifest,
+            step: $"reading {ManifestFileName}",
+            body: () => ReadManifest(path: Path.Combine(
+                path1: directory,
+                path2: ManifestFileName
+            )),
+            findings: findings,
+            value: out var manifest
+        )) {
+            return;
+        }
+
+        var missingKeys = RequiredManifestKeys.Where(predicate: key => (!manifest.TryGetValue(
+            key: key,
+            value: out var value
+        ) || (value.Length == 0))).ToArray();
+
+        if (missingKeys.Length != 0) {
+            Fail(
+                check: InterchangeCheck.ManifestKeys,
+                detail: string.Join(
+                    separator: ", ",
+                    values: missingKeys
+                ),
+                findings: findings
+            );
+
+            return;
+        }
+
+        var algorithm = manifest["algorithm"];
+
+        if (!AttestationAlgorithms.IsKnown(algorithm: algorithm)) {
+            Fail(
+                check: InterchangeCheck.Manifest,
+                detail: $"the manifest names algorithm '{algorithm}', which is not in the §4 registry",
+                findings: findings
+            );
+
+            return;
+        }
+
+        var expectedPurpose = manifest["purpose"];
+
+        if (string.Equals(
+            a: expectedPurpose,
+            b: AttestationPurposes.KeyBinding,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            Fail(
+                check: InterchangeCheck.Manifest,
+                detail: $"the manifest names purpose '{AttestationPurposes.KeyBinding}', which is reserved and can never be a claim's purpose (§8)",
+                findings: findings
+            );
+
+            return;
+        }
+
+        if (
+            !TryStep(
+            check: InterchangeCheck.Files,
+            step: $"reading {RootKeyFileName}",
+            body: () => File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: RootKeyFileName
+            )),
+            findings: findings,
+            value: out var rootSpki
+        ) ||
+            !TryStep(
+            check: InterchangeCheck.Files,
+            step: $"reading {ClaimFileName}",
+            body: () => File.ReadAllBytes(path: Path.Combine(
+                path1: directory,
+                path2: ClaimFileName
+            )),
+            findings: findings,
+            value: out var claimBytes
+        )
+        ) {
+            return;
+        }
+
+        var rootId = KeyId.ForRoot(
+            algorithm: algorithm,
+            subjectPublicKeyInfo: rootSpki
+        );
+
+        if (!string.Equals(
+            a: rootId.Domain,
+            b: manifest["domain"],
+            comparisonType: StringComparison.Ordinal
+        )) {
+            Fail(
+                check: InterchangeCheck.Domain,
+                detail: $"the manifest names domain {manifest["domain"]}, but the exported root key hashes to {rootId.Domain}",
+                findings: findings
+            );
+
+            return;
+        }
+
+        if (!TryStep(
+            check: InterchangeCheck.Manifest,
+            step: "parsing replay-horizon-seconds",
+            body: () => ParseReplayHorizon(value: manifest["replay-horizon-seconds"]),
+            findings: findings,
+            value: out var replayHorizon
+        )) {
+            return;
+        }
+
+        if (!TryStep(
+            check: InterchangeCheck.TrustList,
+            step: "pinning the exported root",
+            body: () => new TrustList(
+                entries: [
+                    new TrustListEntry(
+                        PinnedId: rootId,
+                        PublicKeySubjectPublicKeyInfo: rootSpki,
+                        Mode: AttestationTrustMode.Vouches,
+                        Reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:interchange" },
+                        MaximumAge: null
+                    ),
+                ],
+                defaultMaximumAge: null,
+                defaultRootBindingMaximumAge: null,
+                defaultSubjectBindingMaximumAge: null,
+                replayAcceptanceHorizon: replayHorizon
+            ),
+            findings: findings,
+            value: out var trustList
+        )) {
+            return;
+        }
+
+        if (!TryStep(
+            check: InterchangeCheck.Chain,
+            step: $"decoding {BindingOneFileName} and {BindingTwoFileName}",
+            body: () => new[] {
+                InterchangeProfile.DecodeAttestation(
+                codec: codec,
+                wire: File.ReadAllBytes(path: Path.Combine(
+                    path1: directory,
+                    path2: BindingOneFileName
+                ))
+            ),
+                InterchangeProfile.DecodeAttestation(
+                codec: codec,
+                wire: File.ReadAllBytes(path: Path.Combine(
+                    path1: directory,
+                    path2: BindingTwoFileName
+                ))
+            ),
+            },
+            findings: findings,
+            value: out var chain
+        )) {
+            return;
+        }
+
+        // Reading the clock here is legitimate where it would not be in the engine: this test-only fixture
+        // is minted and consumed outside simulation state, so there is no tape to replay and no tick to be
+        // inside (README.md §9). Verification is pure; the fixture checks the replay-commit requirement
+        // rather than committing it to production state.
+        AttestationVerifyResult VerifyClaimBytes(byte[] wire, string expected) =>
+            InterchangeProfile.VerifyChain(
+                codec: codec,
+                claim: InterchangeProfile.DecodeAttestation(
+                    codec: codec,
+                    wire: wire
+                ),
+                chain: chain,
+                trustList: trustList,
+                now: DateTimeOffset.UtcNow,
+                expectedPurpose: expected,
+                expectedAudience: manifest["audience"]
+            );
+
+        if (TryStep(
+            check: InterchangeCheck.Claim,
+            step: $"verifying {ClaimFileName}",
+            body: () => VerifyClaimBytes(
+                expected: expectedPurpose,
+                wire: claimBytes
+            ),
+            findings: findings,
+            value: out var result
+        )) {
+            if (result.Verified) {
+                Pass(
+                    check: InterchangeCheck.Claim,
+                    detail: $"the imported chain and claim verify against the pinned root — reach [{string.Join(
+                        separator: ", ",
+                        values: result.Reach!
+                    )}]",
+                    findings: findings
+                );
+
+                var claim = InterchangeProfile.DecodeAttestation(
+                    codec: codec,
+                    wire: claimBytes
+                );
+                var replay = result.ReplayCommit;
+                var horizonSeconds = checked((long)trustList.ReplayAcceptanceHorizon!.Value.TotalSeconds);
+                var expectedEpoch = Math.DivRem(
+                    a: claim.Header.NotBefore,
+                    b: horizonSeconds,
+                    result: out var remainder
+                );
+
+                if (remainder < 0) {
+                    expectedEpoch--;
+                }
+
+                expectedEpoch = checked((expectedEpoch * horizonSeconds));
+
+                if (
+                    (replay is null) ||
+                    !string.Equals(
+                    a: replay.Domain,
+                    b: claim.Header.Domain,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                    !string.Equals(
+                    a: replay.Subject,
+                    b: claim.Header.Subject,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                    (replay.Sequence != claim.Header.Sequence) ||
+                    (replay.EpochStartUnixSeconds != expectedEpoch) ||
+                    (replay.RetainThroughUnixSeconds != checked(((expectedEpoch + (2 * horizonSeconds)) - 1)))
+                ) {
+                    Fail(
+                        check: InterchangeCheck.ReplayContract,
+                        detail: "the sequenced claim did not return the exact epoch-scoped commit requirement §8 derives",
+                        findings: findings
+                    );
+                } else {
+                    Pass(
+                        check: InterchangeCheck.ReplayContract,
+                        detail: $"epoch {replay.EpochStartUnixSeconds}, sequence {replay.Sequence}, retain through {replay.RetainThroughUnixSeconds}",
+                        findings: findings
+                    );
+                }
+            } else {
+                // The detail is the verifier's own refusal reason, verbatim, so a test can name the refusal it expects.
+                Fail(
+                    check: InterchangeCheck.Claim,
+                    detail: result.RefusalReason!,
+                    findings: findings
+                );
+            }
+        }
+
+        CheckClaimHeader(
+            claimBytes: claimBytes,
+            codec: codec,
+            findings: findings,
+            manifest: manifest
+        );
+
+        // One flipped byte inside the claim's signature: the bytes still decode, so this lands on the
+        // signature check rather than on the parser, which is what makes it a control for the case above.
+        var tampered = ((byte[])claimBytes.Clone());
+
+        tampered[^1] ^= 0xFF;
+
+        ExpectRefusal(
+            check: InterchangeCheck.TamperControl,
+            detail: "one flipped byte",
+            body: () => VerifyClaimBytes(
+                expected: expectedPurpose,
+                wire: tampered
+            ),
+            findings: findings
+        );
+        VerifySealed(
+            chain: chain,
+            codec: codec,
+            directory: directory,
+            findings: findings,
+            manifest: manifest,
+            trustList: trustList
+        );
+    }
+    /// <summary>
+    /// Verifies the sealed artifact: the attestation's signature by the ordinary chain walk, then the AEAD
+    /// open itself. This is the only part of the fixture that exercises §14's key derivation, and it is the
+    /// only way an implementation can discover it disagrees about the salt, the info label, the output
+    /// length, the tag length, or raw-versus-hashed agreement — none of which is visible in any signed
+    /// attestation.
+    /// </summary>
+    /// <param name="codec">The serialisation to decode with.</param>
+    /// <param name="directory">The interchange directory.</param>
+    /// <param name="manifest">The parsed manifest.</param>
+    /// <param name="trustList">The trust list pinning the exported root.</param>
+    /// <param name="chain">The two verified bindings.</param>
+    /// <param name="findings">The report the outcomes are added to — a <see cref="InterchangeCheck.Sealed"/> pass when the sealed claim verifies and opens to the expected plaintext, and a <see cref="InterchangeCheck.SealedAadControl"/> pass when a one-field-different header refuses.</param>
+    private static void VerifySealed(
+        IAttestationCodec codec,
+        string directory,
+        Dictionary<string, string> manifest,
+        TrustList trustList,
+        IReadOnlyList<SignedAttestation> chain,
+        List<InterchangeFinding> findings
+    ) {
+        var sealedPath = Path.Combine(
+            path1: directory,
+            path2: SealedFileName
+        );
+        var keyPath = Path.Combine(
+            path1: directory,
+            path2: RecipientSealingKeyFileName
+        );
+
+        if (
+            !File.Exists(path: sealedPath) ||
+            !File.Exists(path: keyPath)
+        ) {
+            Fail(
+                check: InterchangeCheck.Sealed,
+                detail: $"the fixture is missing {SealedFileName} or {RecipientSealingKeyFileName} — §14 cannot be cross-verified without ciphertext one side actually opens",
+                findings: findings
+            );
+
+            return;
+        }
+
+        if (!TryStep(
+            check: InterchangeCheck.Sealed,
+            step: $"decoding {SealedFileName}",
+            body: () => InterchangeProfile.DecodeAttestation(
+                codec: codec,
+                wire: File.ReadAllBytes(path: sealedPath)
+            ),
+            findings: findings,
+            value: out var sealedClaim
+        )) {
+            return;
+        }
+
+        if (!TryStep(
+            check: InterchangeCheck.Sealed,
+            step: "walking the sealed attestation's own chain",
+            body: () => InterchangeProfile.VerifyChain(
+                codec: codec,
+                claim: sealedClaim,
+                chain: chain,
+                trustList: trustList,
+                now: DateTimeOffset.UtcNow,
+                expectedPurpose: manifest["sealed-purpose"],
+                expectedAudience: manifest["audience"]
+            ),
+            findings: findings,
+            value: out var result
+        )) {
+            return;
+        }
+
+        if (!result.Verified) {
+            Fail(
+                check: InterchangeCheck.Sealed,
+                detail: $"the sealed attestation's own signature was refused — {result.RefusalReason}",
+                findings: findings
+            );
+
+            return;
+        }
+
+        if (sealedClaim.PayloadKind != AttestationPayloadKind.Sealed) {
+            Fail(
+                check: InterchangeCheck.Sealed,
+                detail: $"the sealed attestation declares payload kind '{sealedClaim.PayloadKind}', expected '{AttestationPayloadKind.Sealed}'",
+                findings: findings
+            );
+
+            return;
+        }
+
+        // The fixture fixes the sealed attestation's audience and sequence rather than adding manifest keys for them:
+        // an unsigned hint about a signed field is a second source of truth, and a sequence here would make
+        // the SECOND verification of the same file a legitimate replay refusal.
+        if (
+            !string.Equals(
+            a: sealedClaim.Header.Audience,
+            b: manifest["audience"],
+            comparisonType: StringComparison.Ordinal
+        ) ||
+            (sealedClaim.Header.Sequence is not null)
+        ) {
+            Fail(
+                check: InterchangeCheck.Sealed,
+                detail: $"the sealed attestation carries audience '{(sealedClaim.Header.Audience ?? "(none)")}' and sequence '{(sealedClaim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}'; the fixture requires the manifest's audience '{manifest["audience"]}' and no sequence",
+                findings: findings
+            );
+
+            return;
+        }
+
+        if (!TryStep(
+            check: InterchangeCheck.Sealed,
+            step: $"importing {RecipientSealingKeyFileName}",
+            body: () => {
+                var recipientKey = ECDiffieHellman.Create();
+
+                try {
+                    recipientKey.ImportPkcs8PrivateKey(
+                        source: File.ReadAllBytes(path: keyPath),
+                        bytesRead: out _
+                    );
+                } catch {
+                    recipientKey.Dispose();
+
+                    throw;
+                }
+
+                return recipientKey;
+            },
+            findings: findings,
+            value: out var recipientKey
+        )) {
+            return;
+        }
+
+        using (recipientKey) {
+            if (!TryStep(
+                check: InterchangeCheck.Sealed,
+                step: "decoding the sealed payload",
+                body: () => codec.DecodeSealedPayload(bytes: sealedClaim.PayloadBytes.Span),
+                findings: findings,
+                value: out var payload
+            )) {
+                return;
+            }
+
+            var expected = manifest["sealed-plaintext"];
+
+            if (TryStep(
+                check: InterchangeCheck.Sealed,
+                step: "opening the sealed payload",
+                body: () => Encoding.UTF8.GetString(bytes: SealedAttestation.Unseal(
+                    recipientPrivateKey: recipientKey,
+                    payload: payload,
+                    associatedData: codec.EncodeHeader(header: sealedClaim.Header)
+                )),
+                findings: findings,
+                value: out var plaintext,
+                note: "This is what a §14 derivation disagreement looks like (salt, info label, output length, tag length, or raw-versus-hashed agreement); it is indistinguishable from tampering, so check all five before suspecting the bytes."
+            )) {
+                if (string.Equals(
+                    a: plaintext,
+                    b: expected,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    Pass(
+                        check: InterchangeCheck.Sealed,
+                        detail: $"the imported sealed payload opens to '{plaintext}' — §14's derivation agrees on both sides",
+                        findings: findings
+                    );
+                } else {
+                    Fail(
+                        check: InterchangeCheck.Sealed,
+                        detail: $"opened to '{plaintext}', the manifest expects '{expected}'",
+                        findings: findings
+                    );
+                }
+            }
+
+            // The AAD control: the same ciphertext against a header that differs by one field must fail.
+            // Without this, an implementation that passed the wrong associated data — or none — would look
+            // correct.
+            ExpectRefusal(
+                check: InterchangeCheck.SealedAadControl,
+                detail: "the same ciphertext under a one-field-different header",
+                body: () => _ = SealedAttestation.Unseal(
+                    recipientPrivateKey: recipientKey,
+                    payload: payload,
+                    associatedData: codec.EncodeHeader(header: (sealedClaim.Header with { Audience = "world:elsewhere" }))
+                ),
+                findings: findings
+            );
+        }
+    }
+    /// <summary>
+    /// Writes the fixture manifest as UTF-8 with no byte-order mark, one <c>key=value</c> per
+    /// line, LF line terminators including a final one, and the three backslash escapes applied to values.
+    /// LF rather than the platform's newline, because a fixture crossing between implementations is bytes
+    /// and the platform it was minted on is not part of the contract.
+    /// </summary>
+    /// <param name="path">The manifest path.</param>
+    /// <param name="entries">The key/value pairs to write, already in the order they should appear.</param>
+    private static void WriteManifest(string path, IReadOnlyList<(string Key, string Value)> entries) {
+        var builder = new StringBuilder();
+
+        foreach (var (key, value) in entries) {
+            _ = builder.Append(value: key).Append(value: '=').Append(value: EscapeManifestValue(value: value)).Append(value: '\n');
+        }
+
+        File.WriteAllText(
+            path: path,
+            contents: builder.ToString(),
+            encoding: ManifestEncoding
+        );
+    }
+
+    /// <summary>Mints a root, an issuing key, a subject key, both bindings, one claim, and one sealed claim, and writes them all to <paramref name="directory"/>.</summary>
+    /// <param name="directory">The interchange directory to write. Created if absent.</param>
+    /// <remarks>Minting is the test's own setup, not input under test, so a failure here propagates as the exception that caused it.</remarks>
+    public static void Export(string directory) {
         var codec = new CborAttestationCodec();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var notBefore = (now - 3_600L);
@@ -375,611 +1053,6 @@ internal static class AttestationInterchangeHarness {
                 ("subject", InterchangeSubject),
             ]
         );
-
-        Console.WriteLine(value: $"exported a Puck-minted chain to {directory}");
-        Console.WriteLine(value: $"  domain  {rootId.Domain}");
-        Console.WriteLine(value: $"  subject {InterchangeSubject}");
-        Console.WriteLine(value: $"  sealed  {SealedFileName} opens with {RecipientSealingKeyFileName} to '{InterchangeSealedPlaintext}'");
-
-        return 0;
-    }
-    private static TimeSpan ParseReplayHorizon(string value) {
-        if (
-            !long.TryParse(
-            s: value,
-            style: System.Globalization.NumberStyles.None,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out var seconds
-        ) ||
-            (seconds <= 0)
-        ) {
-            throw new FormatException(message: $"manifest.txt's replay-horizon-seconds must be a positive whole-second integer, but '{value}' arrived.");
-        }
-
-        try {
-            return TimeSpan.FromSeconds(value: seconds);
-        } catch (OverflowException exception) {
-            throw new FormatException(
-                innerException: exception,
-                message: "manifest.txt's replay-horizon-seconds is outside TimeSpan's representable range."
-            );
-        }
-    }
-    /// <summary>
-    /// Reads the fixture manifest. Empty lines are ignored; every other line must hold a
-    /// <c>key=value</c> pair split at its first <c>=</c>; a repeated key refuses rather than resolving by
-    /// order. Silently skipping a line that does not parse is what makes a typo'd key read as an absent one,
-    /// which is a fixture that quietly checks less than it claims.
-    /// </summary>
-    /// <param name="path">The manifest path.</param>
-    /// <returns>The parsed keys, values already unescaped.</returns>
-    /// <exception cref="FormatException">A line does not parse, a key repeats, or a value carries an escape the format does not define.</exception>
-    private static Dictionary<string, string> ReadManifest(string path) {
-        var manifest = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-        var text = File.ReadAllText(
-            encoding: ManifestEncoding,
-            path: path
-        );
-        var lineNumber = 0;
-
-        foreach (var rawLine in text.Split(separator: '\n')) {
-            // A CR immediately before the LF is tolerated and discarded, so a manifest written by a CRLF
-            // platform still reads. Nothing else about the line is trimmed — whitespace inside a value is
-            // part of the value.
-            var line = (rawLine.EndsWith(value: '\r')
-                ? rawLine[..^1]
-                : rawLine
-            );
-
-            lineNumber += 1;
-
-            if (line.Length == 0) {
-                continue;
-            }
-
-            var separator = line.IndexOf(value: '=');
-
-            if (separator < 1) {
-                throw new FormatException(message: $"{ManifestFileName} line {lineNumber} is neither empty nor a 'key=value' pair: '{line}'.");
-            }
-
-            var key = line[..separator];
-
-            if (!manifest.TryAdd(
-                key: key,
-                value: UnescapeManifestValue(
-                    value: line[(separator + 1)..],
-                    key: key
-                )
-            )) {
-                throw new FormatException(message: $"{ManifestFileName} names the key '{key}' more than once (line {lineNumber}); which one governs is undefined, so the manifest is refused rather than resolved by order.");
-            }
-        }
-
-        return manifest;
-    }
-    /// <summary>
-    /// Runs one fixture step and turns every way it can fail into a named <c>[FAIL]</c> line rather than an
-    /// escaping exception. The catch is deliberately unfiltered: a step's whole job is to interpret bytes
-    /// that arrived from somewhere else, so there is no exception type it could raise that is a better
-    /// outcome than a reported failure. The harness contract distinguishes a crash from a refusal — they are
-    /// different verdicts, and a cross-checking implementer cannot tell them apart from a stack trace.
-    /// </summary>
-    /// <typeparam name="T">What the step produces.</typeparam>
-    /// <param name="check">The check's name, printed with the failure.</param>
-    /// <param name="body">The step.</param>
-    /// <param name="value">What the step produced, or <see langword="default"/> when it failed.</param>
-    /// <param name="note">An optional sentence appended to the failure line, telling the reader what to suspect.</param>
-    /// <returns><see langword="true"/> when the step completed.</returns>
-    private static bool TryStep<T>(string check, Func<T> body, out T value, string? note = null) {
-        try {
-            value = body();
-
-            return true;
-        } catch (Exception exception) {
-            Console.WriteLine(value: $"[FAIL] {check}: {Describe(exception: exception)}{((note is null)
-                ? string.Empty
-                : $" {note}")}");
-
-            value = default!;
-
-            return false;
-        }
-    }
-    /// <summary>Reverses <see cref="EscapeManifestValue"/>, refusing an escape the format does not define rather than passing the backslash through — one escaped value must have exactly one unescaped reading.</summary>
-    /// <param name="value">The escaped value.</param>
-    /// <param name="key">The key it belongs to, for the refusal message.</param>
-    /// <exception cref="FormatException">The value ends in a lone backslash, or names an escape outside the three.</exception>
-    private static string UnescapeManifestValue(string value, string key) {
-        if (!value.Contains(value: '\\')) {
-            return value;
-        }
-
-        var builder = new StringBuilder(capacity: value.Length);
-
-        for (var index = 0; (index < value.Length); index += 1) {
-            if (value[index] != '\\') {
-                _ = builder.Append(value: value[index]);
-
-                continue;
-            }
-
-            index += 1;
-
-            if (index == value.Length) {
-                throw new FormatException(message: $"{ManifestFileName}'s '{key}' value ends with a lone backslash; the format defines exactly three escapes (\\\\, \\n, \\r).");
-            }
-
-            _ = value[index] switch {
-                '\\' => builder.Append(value: '\\'),
-                'n' => builder.Append(value: '\n'),
-                'r' => builder.Append(value: '\r'),
-                var other => throw new FormatException(message: $"{ManifestFileName}'s '{key}' value carries the escape '\\{other}', which is not one of the three the format defines (\\\\, \\n, \\r)."),
-            };
-        }
-
-        return builder.ToString();
-    }
-    private static int VerifyCore(string directory) {
-        var codec = new CborAttestationCodec();
-        var failures = 0;
-
-        if (!TryStep(
-            check: $"cross-verify manifest: reading {ManifestFileName}",
-            body: () => ReadManifest(path: Path.Combine(
-                path1: directory,
-                path2: ManifestFileName
-            )),
-            value: out var manifest
-        )) {
-            return 1;
-        }
-
-        var missingKeys = RequiredManifestKeys.Where(predicate: key => (!manifest.TryGetValue(
-            key: key,
-            value: out var value
-        ) || (value.Length == 0))).ToArray();
-
-        if (missingKeys.Length != 0) {
-            Console.WriteLine(value: $"[FAIL] cross-verify manifest: {ManifestFileName} is missing (or leaves empty) the required key(s) {string.Join(
-                separator: ", ",
-                values: missingKeys
-            )} — the fixture requires all {RequiredManifestKeys.Length}");
-
-            return 1;
-        }
-
-        var algorithm = manifest["algorithm"];
-
-        if (!AttestationAlgorithms.IsKnown(algorithm: algorithm)) {
-            Console.WriteLine(value: $"[FAIL] cross-verify manifest: the manifest names algorithm '{algorithm}', which is not in the §4 registry");
-
-            return 1;
-        }
-
-        var expectedPurpose = manifest["purpose"];
-
-        if (string.Equals(
-            a: expectedPurpose,
-            b: AttestationPurposes.KeyBinding,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            Console.WriteLine(value: $"[FAIL] cross-verify manifest: the manifest names purpose '{AttestationPurposes.KeyBinding}', which is reserved and can never be a claim's purpose (§8)");
-
-            return 1;
-        }
-
-        if (
-            !TryStep(
-            check: $"cross-verify root key: reading {RootKeyFileName}",
-            body: () => File.ReadAllBytes(path: Path.Combine(
-                path1: directory,
-                path2: RootKeyFileName
-            )),
-            value: out var rootSpki
-        ) ||
-            !TryStep(
-            check: $"cross-verify claim: reading {ClaimFileName}",
-            body: () => File.ReadAllBytes(path: Path.Combine(
-                path1: directory,
-                path2: ClaimFileName
-            )),
-            value: out var claimBytes
-        )
-        ) {
-            return 1;
-        }
-
-        var rootId = KeyId.ForRoot(
-            algorithm: algorithm,
-            subjectPublicKeyInfo: rootSpki
-        );
-
-        Console.WriteLine(value: $"verifying a chain minted by '{manifest.GetValueOrDefault(
-            defaultValue: "(unstated)",
-            key: "minted-by"
-        )}' from {directory}");
-        Console.WriteLine(value: $"  domain recomputed from {RootKeyFileName}: {rootId.Domain}");
-
-        if (!string.Equals(
-            a: rootId.Domain,
-            b: manifest["domain"],
-            comparisonType: StringComparison.Ordinal
-        )) {
-            Console.WriteLine(value: $"[FAIL] cross-verify: the manifest names domain {manifest["domain"]}, but the exported root key hashes to {rootId.Domain}");
-
-            return 1;
-        }
-
-        if (!TryStep(
-            check: "cross-verify manifest: parsing replay-horizon-seconds",
-            body: () => ParseReplayHorizon(value: manifest["replay-horizon-seconds"]),
-            value: out var replayHorizon
-        )) {
-            return 1;
-        }
-
-        if (!TryStep(
-            check: "cross-verify trust list: pinning the exported root",
-            body: () => new TrustList(
-                entries: [
-                    new TrustListEntry(
-                        PinnedId: rootId,
-                        PublicKeySubjectPublicKeyInfo: rootSpki,
-                        Mode: AttestationTrustMode.Vouches,
-                        Reach: new HashSet<string>(comparer: StringComparer.Ordinal) { "slot:interchange" },
-                        MaximumAge: null
-                    ),
-                ],
-                defaultMaximumAge: null,
-                defaultRootBindingMaximumAge: null,
-                defaultSubjectBindingMaximumAge: null,
-                replayAcceptanceHorizon: replayHorizon
-            ),
-            value: out var trustList
-        )) {
-            return 1;
-        }
-
-        if (!TryStep(
-            check: $"cross-verify chain: decoding {BindingOneFileName} and {BindingTwoFileName}",
-            body: () => new[] {
-                InterchangeProfile.DecodeAttestation(
-                codec: codec,
-                wire: File.ReadAllBytes(path: Path.Combine(
-                    path1: directory,
-                    path2: BindingOneFileName
-                ))
-            ),
-                InterchangeProfile.DecodeAttestation(
-                codec: codec,
-                wire: File.ReadAllBytes(path: Path.Combine(
-                    path1: directory,
-                    path2: BindingTwoFileName
-                ))
-            ),
-            },
-            value: out var chain
-        )) {
-            return 1;
-        }
-
-        // Reading the clock here is legitimate where it would not be in the engine: this test-only fixture
-        // is minted and consumed outside simulation state, so there is no tape to replay and no tick to be
-        // inside (README.md §9). Verification is pure; the fixture checks the replay-commit requirement
-        // rather than committing it to production state.
-        AttestationVerifyResult VerifyClaimBytes(byte[] wire, string expected) =>
-            InterchangeProfile.VerifyChain(
-                codec: codec,
-                claim: InterchangeProfile.DecodeAttestation(
-                    codec: codec,
-                    wire: wire
-                ),
-                chain: chain,
-                trustList: trustList,
-                now: DateTimeOffset.UtcNow,
-                expectedPurpose: expected,
-                expectedAudience: manifest["audience"]
-            );
-
-        if (TryStep(
-            check: "cross-verify",
-            body: () => VerifyClaimBytes(
-                expected: expectedPurpose,
-                wire: claimBytes
-            ),
-            value: out var result
-        )) {
-            if (result.Verified) {
-                Console.WriteLine(value: $"[PASS] cross-verify: the imported chain and claim verify against the pinned root — reach [{string.Join(
-                    separator: ", ",
-                    values: result.Reach!
-                )}]");
-
-                var claim = InterchangeProfile.DecodeAttestation(
-                    codec: codec,
-                    wire: claimBytes
-                );
-                var replay = result.ReplayCommit;
-                var horizonSeconds = checked((long)trustList.ReplayAcceptanceHorizon!.Value.TotalSeconds);
-                var expectedEpoch = Math.DivRem(
-                    a: claim.Header.NotBefore,
-                    b: horizonSeconds,
-                    result: out var remainder
-                );
-
-                if (remainder < 0) {
-                    expectedEpoch--;
-                }
-
-                expectedEpoch = checked((expectedEpoch * horizonSeconds));
-
-                if (
-                    (replay is null) ||
-                    !string.Equals(
-                    a: replay.Domain,
-                    b: claim.Header.Domain,
-                    comparisonType: StringComparison.Ordinal
-                ) ||
-                    !string.Equals(
-                    a: replay.Subject,
-                    b: claim.Header.Subject,
-                    comparisonType: StringComparison.Ordinal
-                ) ||
-                    (replay.Sequence != claim.Header.Sequence) ||
-                    (replay.EpochStartUnixSeconds != expectedEpoch) ||
-                    (replay.RetainThroughUnixSeconds != checked(((expectedEpoch + (2 * horizonSeconds)) - 1)))
-                ) {
-                    failures += 1;
-                    Console.WriteLine(value: "[FAIL] cross-verify replay contract: the sequenced claim did not return the exact epoch-scoped commit requirement §8 derives");
-                } else {
-                    Console.WriteLine(value: $"[PASS] cross-verify replay contract: epoch {replay.EpochStartUnixSeconds}, sequence {replay.Sequence}, retain through {replay.RetainThroughUnixSeconds}");
-                }
-            } else {
-                failures += 1;
-
-                Console.WriteLine(value: $"[FAIL] cross-verify: the imported chain was refused — {result.RefusalReason}");
-            }
-        } else {
-            failures += 1;
-        }
-
-        failures += CheckClaimHeader(
-            claimBytes: claimBytes,
-            codec: codec,
-            manifest: manifest
-        );
-
-        // One flipped byte inside the claim's signature: the bytes still decode, so this lands on the
-        // signature check rather than on the parser, which is what makes it a control for the case above.
-        var tampered = ((byte[])claimBytes.Clone());
-
-        tampered[^1] ^= 0xFF;
-
-        failures += ExpectRefusal(
-            check: "cross-verify tamper",
-            detail: "one flipped byte",
-            body: () => VerifyClaimBytes(
-                expected: expectedPurpose,
-                wire: tampered
-            )
-        );
-
-        failures += VerifySealed(
-            chain: chain,
-            codec: codec,
-            directory: directory,
-            manifest: manifest,
-            trustList: trustList
-        );
-
-        return ((failures == 0)
-            ? 0
-            : 1
-        );
-    }
-    /// <summary>
-    /// Verifies the sealed artifact: the attestation's signature by the ordinary chain walk, then the AEAD
-    /// open itself. This is the only part of the fixture that exercises §14's key derivation, and it is the
-    /// only way an implementation can discover it disagrees about the salt, the info label, the output
-    /// length, the tag length, or raw-versus-hashed agreement — none of which is visible in any signed
-    /// attestation.
-    /// </summary>
-    /// <param name="codec">The serialisation to decode with.</param>
-    /// <param name="directory">The interchange directory.</param>
-    /// <param name="manifest">The parsed manifest.</param>
-    /// <param name="trustList">The trust list pinning the exported root.</param>
-    /// <param name="chain">The two verified bindings.</param>
-    /// <returns>The number of failures — 0 when the sealed claim verifies and opens to the expected plaintext.</returns>
-    private static int VerifySealed(
-        IAttestationCodec codec,
-        string directory,
-        Dictionary<string, string> manifest,
-        TrustList trustList,
-        IReadOnlyList<SignedAttestation> chain
-    ) {
-        var sealedPath = Path.Combine(
-            path1: directory,
-            path2: SealedFileName
-        );
-        var keyPath = Path.Combine(
-            path1: directory,
-            path2: RecipientSealingKeyFileName
-        );
-
-        if (
-            !File.Exists(path: sealedPath) ||
-            !File.Exists(path: keyPath)
-        ) {
-            Console.WriteLine(value: $"[FAIL] cross-verify sealed: the fixture is missing {SealedFileName} or {RecipientSealingKeyFileName} — §14 cannot be cross-verified without ciphertext one side actually opens");
-
-            return 1;
-        }
-
-        if (!TryStep(
-            check: $"cross-verify sealed: decoding {SealedFileName}",
-            body: () => InterchangeProfile.DecodeAttestation(
-                codec: codec,
-                wire: File.ReadAllBytes(path: sealedPath)
-            ),
-            value: out var sealedClaim
-        )) {
-            return 1;
-        }
-
-        if (!TryStep(
-            check: "cross-verify sealed: walking the sealed attestation's own chain",
-            body: () => InterchangeProfile.VerifyChain(
-                codec: codec,
-                claim: sealedClaim,
-                chain: chain,
-                trustList: trustList,
-                now: DateTimeOffset.UtcNow,
-                expectedPurpose: manifest["sealed-purpose"],
-                expectedAudience: manifest["audience"]
-            ),
-            value: out var result
-        )) {
-            return 1;
-        }
-
-        if (!result.Verified) {
-            Console.WriteLine(value: $"[FAIL] cross-verify sealed: the sealed attestation's own signature was refused — {result.RefusalReason}");
-
-            return 1;
-        }
-
-        if (sealedClaim.PayloadKind != AttestationPayloadKind.Sealed) {
-            Console.WriteLine(value: $"[FAIL] cross-verify sealed: the sealed attestation declares payload kind '{sealedClaim.PayloadKind}', expected '{AttestationPayloadKind.Sealed}'");
-
-            return 1;
-        }
-
-        // The fixture fixes the sealed attestation's audience and sequence rather than adding manifest keys for them:
-        // an unsigned hint about a signed field is a second source of truth, and a sequence here would make
-        // the SECOND verification of the same file a legitimate replay refusal.
-        if (
-            !string.Equals(
-            a: sealedClaim.Header.Audience,
-            b: manifest["audience"],
-            comparisonType: StringComparison.Ordinal
-        ) ||
-            (sealedClaim.Header.Sequence is not null)
-        ) {
-            Console.WriteLine(value: $"[FAIL] cross-verify sealed: the sealed attestation carries audience '{(sealedClaim.Header.Audience ?? "(none)")}' and sequence '{(sealedClaim.Header.Sequence?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "(none)")}'; the fixture requires the manifest's audience '{manifest["audience"]}' and no sequence");
-
-            return 1;
-        }
-
-        if (!TryStep(
-            check: $"cross-verify sealed: importing {RecipientSealingKeyFileName}",
-            body: () => {
-                var recipientKey = ECDiffieHellman.Create();
-
-                try {
-                    recipientKey.ImportPkcs8PrivateKey(
-                        source: File.ReadAllBytes(path: keyPath),
-                        bytesRead: out _
-                    );
-                } catch {
-                    recipientKey.Dispose();
-
-                    throw;
-                }
-
-                return recipientKey;
-            },
-            value: out var recipientKey
-        )) {
-            return 1;
-        }
-
-        using (recipientKey) {
-            if (!TryStep(
-                check: "cross-verify sealed: decoding the sealed payload",
-                body: () => codec.DecodeSealedPayload(bytes: sealedClaim.PayloadBytes.Span),
-                value: out var payload
-            )) {
-                return 1;
-            }
-
-            var expected = manifest["sealed-plaintext"];
-            var failures = 0;
-
-            if (TryStep(
-                check: "cross-verify sealed",
-                body: () => Encoding.UTF8.GetString(bytes: SealedAttestation.Unseal(
-                    recipientPrivateKey: recipientKey,
-                    payload: payload,
-                    associatedData: codec.EncodeHeader(header: sealedClaim.Header)
-                )),
-                value: out var plaintext,
-                note: "This is what a §14 derivation disagreement looks like (salt, info label, output length, tag length, or raw-versus-hashed agreement); it is indistinguishable from tampering, so check all five before suspecting the bytes."
-            )) {
-                if (string.Equals(
-                    a: plaintext,
-                    b: expected,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    Console.WriteLine(value: $"[PASS] cross-verify sealed: the imported sealed payload opens to '{plaintext}' — §14's derivation agrees on both sides");
-                } else {
-                    failures += 1;
-
-                    Console.WriteLine(value: $"[FAIL] cross-verify sealed: opened to '{plaintext}', the manifest expects '{expected}'");
-                }
-            } else {
-                failures += 1;
-            }
-
-            // The AAD control: the same ciphertext against a header that differs by one field must fail.
-            // Without this, an implementation that passed the wrong associated data — or none — would look
-            // correct.
-            failures += ExpectRefusal(
-                check: "cross-verify sealed AAD",
-                detail: "the same ciphertext under a one-field-different header",
-                body: () => _ = SealedAttestation.Unseal(
-                    recipientPrivateKey: recipientKey,
-                    payload: payload,
-                    associatedData: codec.EncodeHeader(header: (sealedClaim.Header with { Audience = "world:elsewhere" }))
-                )
-            );
-
-            return failures;
-        }
-    }
-    /// <summary>
-    /// Writes the fixture manifest as UTF-8 with no byte-order mark, one <c>key=value</c> per
-    /// line, LF line terminators including a final one, and the three backslash escapes applied to values.
-    /// LF rather than the platform's newline, because a fixture crossing between implementations is bytes
-    /// and the platform it was minted on is not part of the contract.
-    /// </summary>
-    /// <param name="path">The manifest path.</param>
-    /// <param name="entries">The key/value pairs to write, already in the order they should appear.</param>
-    private static void WriteManifest(string path, IReadOnlyList<(string Key, string Value)> entries) {
-        var builder = new StringBuilder();
-
-        foreach (var (key, value) in entries) {
-            _ = builder.Append(value: key).Append(value: '=').Append(value: EscapeManifestValue(value: value)).Append(value: '\n');
-        }
-
-        File.WriteAllText(
-            path: path,
-            contents: builder.ToString(),
-            encoding: ManifestEncoding
-        );
-    }
-
-    /// <summary>Mints a root, an issuing key, a subject key, both bindings, one claim, and one sealed claim, and writes them all to <paramref name="directory"/>.</summary>
-    /// <param name="directory">The interchange directory to write. Created if absent.</param>
-    /// <returns>0 when the fixture was written; 1 when it could not be.</returns>
-    public static int Export(string directory) {
-        try {
-            return ExportCore(directory: directory);
-        } catch (Exception exception) {
-            Console.WriteLine(value: $"[FAIL] interchange export: the fixture could not be written to {directory} — {Describe(exception: exception)}");
-
-            return 1;
-        }
     }
     /// <summary>
     /// Pins the exported root and verifies the imported chain, then tampers one byte of the claim and
@@ -987,21 +1060,68 @@ internal static class AttestationInterchangeHarness {
     /// one that accepts everything would pass the first.
     /// </summary>
     /// <param name="directory">The interchange directory to read.</param>
-    /// <returns>0 when every check held, 1 when at least one failed.</returns>
+    /// <returns>Every finding in the order the checks ran. A fixture that holds yields only passes, one per
+    /// verdict (<see cref="InterchangeCheck.Claim"/>, <see cref="InterchangeCheck.ReplayContract"/>,
+    /// <see cref="InterchangeCheck.ManifestAgreement"/>, <see cref="InterchangeCheck.TamperControl"/>,
+    /// <see cref="InterchangeCheck.Sealed"/>, <see cref="InterchangeCheck.SealedAadControl"/>); a failed
+    /// precondition ends the run at its one failed finding.</returns>
     /// <remarks>
     /// This method never propagates an exception, whatever is in <paramref name="directory"/>. A corrupt
-    /// <c>claim.attestation</c> is reported as a failed check rather than escaping as an unhandled
+    /// <c>claim.attestation</c> is reported as a failed finding rather than escaping as an unhandled
     /// <see cref="FormatException"/>, because a crash is indistinguishable from the harness itself being broken.
     /// </remarks>
-    public static int Verify(string directory) {
-        try {
-            return VerifyCore(directory: directory);
-        } catch (Exception exception) {
-            // The backstop. Nothing should reach here — every step below is guarded — but "should" is not a
-            // verdict, and an escaping exception would be the exact defect this method exists to not have.
-            Console.WriteLine(value: $"[FAIL] cross-verify: an unguarded failure while reading the fixture at {directory} — {Describe(exception: exception)}");
+    public static IReadOnlyList<InterchangeFinding> Verify(string directory) {
+        var findings = new List<InterchangeFinding>();
 
-            return 1;
+        try {
+            VerifyCore(
+                directory: directory,
+                findings: findings
+            );
+        } catch (Exception exception) {
+            // The backstop. Nothing should reach here — every step is guarded — but "should" is not a
+            // verdict, and an escaping exception would be the exact defect this method exists to not have.
+            Fail(
+                check: InterchangeCheck.Unguarded,
+                detail: Describe(exception: exception),
+                findings: findings
+            );
         }
+
+        return findings;
     }
 }
+/// <summary>What an <see cref="AttestationInterchangeHarness"/> finding is about. Preconditions fail at most once and end the run; verdicts each report a pass or a failure.</summary>
+internal enum InterchangeCheck {
+    /// <summary>A precondition: <c>manifest.txt</c> reads, parses, names a registered algorithm and a claim purpose, and carries a positive replay horizon.</summary>
+    Manifest,
+    /// <summary>A precondition: the manifest carries every required key with a non-empty value. A failure's detail lists the missing keys, comma-separated, in registry order.</summary>
+    ManifestKeys,
+    /// <summary>A precondition: the root key and claim files read.</summary>
+    Files,
+    /// <summary>A precondition: the domain recomputed from the root key matches the manifest's.</summary>
+    Domain,
+    /// <summary>A precondition: the exported root pins into a trust list.</summary>
+    TrustList,
+    /// <summary>A precondition: both key bindings decode.</summary>
+    Chain,
+    /// <summary>The verdict that the claim verifies against the pinned root. A refusal's detail is the verifier's refusal reason, verbatim.</summary>
+    Claim,
+    /// <summary>The verdict that a verified sequenced claim returns the exact epoch-scoped replay commit §8 derives.</summary>
+    ReplayContract,
+    /// <summary>The verdict that the claim's header carries exactly what the manifest names.</summary>
+    ManifestAgreement,
+    /// <summary>The control that the claim with its last byte flipped is refused.</summary>
+    TamperControl,
+    /// <summary>The verdict that the sealed claim verifies and opens to the manifest's plaintext.</summary>
+    Sealed,
+    /// <summary>The control that the sealed ciphertext refuses to open under a one-field-different header.</summary>
+    SealedAadControl,
+    /// <summary>An exception escaped a guarded step — a harness defect, never a fixture verdict.</summary>
+    Unguarded,
+}
+/// <summary>One outcome of <see cref="AttestationInterchangeHarness.Verify"/>.</summary>
+/// <param name="Check">What the finding is about.</param>
+/// <param name="Passed">Whether the check held.</param>
+/// <param name="Detail">What happened, in words; <see cref="InterchangeCheck"/> documents where the detail is exact.</param>
+internal sealed record InterchangeFinding(InterchangeCheck Check, bool Passed, string Detail);

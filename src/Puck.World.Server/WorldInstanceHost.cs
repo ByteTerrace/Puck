@@ -1,4 +1,6 @@
+using Puck.Commands;
 using System.Collections.Concurrent;
+using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.Hosting;
 using Puck.World.Client;
@@ -72,12 +74,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>The reserved name of a desktop host's boot row (<c>--world</c>, or the shipped default). A start
     /// request naming it is refused rather than shadowing it.</summary>
     public const string BootInstanceName = WorldDefinitionLoader.BootInstanceName;
-
-    // Path containment is decided the way the platform decides it: case-insensitively where file names are.
-    private static readonly StringComparison PathComparison = (OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal
-    );
 
     // Whether TryStart may mint a brand-new, file-backed row. True for a desktop (its console/resolver spawn arms are
     // the only mint doors); false for a hosted silo, where a row exists only through the grain activation door — a
@@ -155,21 +151,15 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // has. BodyIndex is the destination-local slot a forwarded payload is rebound to.
     private readonly record struct ForwardedBody(IWorldForwardedAuthority Authority, int BodyIndex);
 
-    // Mirrors WorldDefinitionLoader.TryResolve's explicit-path handling, plus a shipped-asset fallback so a
-    // console verb can name "Assets/worlds/jump.world.json" regardless of the process's current directory
-    // (the boot path needs the fallback only for its own default document; a named instance is always
-    // explicit, so it needs both). A third probe under the shipped worlds directory itself is what lets a
-    // portal facet's destination resolve a `references` row authored as a bare shipped-world filename
-    // ("dive.world.json", exactly how nexus.world.json's own references section spells it). A rooted or
-    // already-relative-enough path resolves at the first two probes; this one only fires for a bare
-    // filename neither of those found.
+    // Mirrors WorldDefinitionLoader.TryResolve's explicit-path handling: a rooted path, or one relative to the current
+    // directory. A document-authored reference is resolved beside its document first (ResolveReferenceDocument).
     //
     // WorldSessionResolver's own cache-key document identity: the resolver stays I/O-free by construction,
     // so the host canonicalizes once, here, and threads the same canonical string into every resolver call
     // (TryResolve, TryGetActive, TryAdopt, DescribeActive) — never the raw WorldReference.Document string a
     // destination row spells, since two documents naming the identical underlying file through different
-    // spellings ("dive.world.json" vs "Assets/worlds/dive.world.json") would otherwise mint two separate
-    // resolver cache entries even though WorldFileOrigin.TryResolveCanonicalPath's own probes already prove them identical.
+    // spellings ("dive.world.json" beside it vs "../modules/dive.world.json") would otherwise mint two separate
+    // resolver cache entries even though they resolve to one file.
     // A path this probe cannot resolve to an existing file falls back to the raw string unchanged — the
     // resolver still needs some stable identity for its cache key, and an unresolvable document is about to
     // fail this transfer outright at TryStart regardless.
@@ -184,24 +174,30 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // A references row's locator is relative to the document that AUTHORS it, never to the process's output
     // directory. This is the one host-side fold shared by observed previews and traveler entry; both must name the
     // same physical origin or the resolver can assign two generations to one seamless circuit.
-    public static string ResolveReferenceDocument(WorldInstance source, string documentPath) {
+    // A local key is a document name (WorldDocumentName) and resolves to its document file; an owner-form key names
+    // no file and passes through as the resolver's identity.
+    public static string ResolveReferenceDocument(WorldInstance source, string neighbourKey) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
-        if (!Path.IsPathRooted(path: documentPath)) {
-            try {
-                if (Path.GetDirectoryName(path: source.SourcePath) is { Length: > 0 } sourceDirectory) {
-                    var besideSource = Path.GetFullPath(path: Path.Combine(
-                        path1: sourceDirectory,
-                        path2: documentPath
-                    ));
+        var documentPath = (neighbourKey.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldReference.OwnerKeyPrefix
+        )
+            ? neighbourKey
+            : WorldDocumentName.DocumentFile(name: neighbourKey)
+        );
 
-                    if (File.Exists(path: besideSource)) {
-                        return besideSource;
-                    }
-                }
-            } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-                // The ordinary resolver below owns the eventual by-name refusal for an unformable locator.
-            }
+        if (
+            !Path.IsPathRooted(path: documentPath) &&
+            (source.SourcePath is { Length: > 0 } sourcePath) &&
+            WorldDocumentPaths.TryResolve(
+            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: sourcePath),
+            path: documentPath,
+            reason: out _,
+            resolved: out var besideSource
+        )
+        ) {
+            documentPath = besideSource;
         }
 
         return CanonicalDocumentIdentity(documentPath: documentPath);
@@ -227,7 +223,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The one leave-standing predicate both the party pre-check and the detach itself ask. A World principal is
     // admitted structurally over a body it authors — it holds no grant row by construction — and refused by name
     // over any body a seat or an admitted peer drives.
-    private static bool AllowsLeave(WorldServer server, WorldPrincipal principal, int slot, out string denial) {
+    private static bool AllowsLeave(WorldServer server, Principal principal, int slot, out string denial) {
         if (principal.Kind == PrincipalKind.World) {
             denial = "that body is driven by a seat or an admitted peer, and the world's own program never travels on their behalf";
 
@@ -260,7 +256,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // dissolves here after its ordinary slot/occupancy guard. The authoritative body leaves the CURRENT routed
     // instance first; only an accepted reply clears held input, vacates the local participant, and resets the
     // presentation route. Reaping runs last, after the route no longer makes TryStop's traveler guard fire.
-    private bool LeaveRosterSeat(int rosterSlot, WorldPrincipal actingPrincipal) {
+    private bool LeaveRosterSeat(int rosterSlot, Principal actingPrincipal) {
         // Only ever wired through m_seats.ConfigureLeave, and only AdmitBoot ever calls that — a boot-free host
         // installs no leave callback, so this can only fire once a boot row is admitted.
         var boot = Boot!;
@@ -877,15 +873,40 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="name">The console-facing name, which is also the directory segment this instance's owned worlds
     /// live in; refused if empty, reserved, not a single safe path segment, already running, or resolving its store
     /// outside the instances root.</param>
-    /// <param name="path">The world document path, resolved like <c>--world</c>: tried directly (rooted, or relative
-    /// to the current directory), then relative to <see cref="AppContext.BaseDirectory"/>, so a shipped
-    /// <c>Assets/worlds/*.json</c> path resolves regardless of the process's launch directory.</param>
+    /// <param name="path">The world document path, resolved like <c>--world</c>: rooted, or relative to the current
+    /// directory.</param>
     /// <param name="instance">The started instance, when this returns <see langword="true"/>.</param>
     /// <param name="reason">The refusal reason, naming which rule fired — a running count belongs in neither this
     /// sentence nor the verb's description, since one of them always goes stale first.</param>
     /// <returns><see langword="true"/> when the instance started and was admitted.</returns>
     public bool TryStart(string name, string path, out WorldInstance? instance, out string reason) =>
         TryStartCore(name: name, path: path, instance: out instance, reason: out reason);
+    /// <summary>Starts an instance under a name an operator wrote: refuses one carrying
+    /// <see cref="GeneratedName.FileJoiner"/>, the character the engine joins the names of the instances it starts
+    /// itself with (<see cref="WorldSessionResolver.FreshInstanceName"/>), and otherwise does what
+    /// <see cref="TryStart"/> does.</summary>
+    /// <param name="name">The operator's instance name.</param>
+    /// <param name="path">The world document path, resolved as <see cref="TryStart"/> resolves it.</param>
+    /// <param name="instance">The started instance, when this returns <see langword="true"/>.</param>
+    /// <param name="reason">The refusal reason, naming which rule fired.</param>
+    /// <returns><see langword="true"/> when the instance started and was admitted.</returns>
+    public bool TryStartAuthored(string name, string path, out WorldInstance? instance, out string reason) {
+        if (!GeneratedName.TryValidateAuthoredFile(
+            name: name,
+            reason: out reason
+        )) {
+            instance = null;
+
+            return false;
+        }
+
+        return TryStart(
+            instance: out instance,
+            name: name,
+            path: path,
+            reason: out reason
+        );
+    }
 
     // A private, exclusively owned load from this observation call, already validated and drawn for this exact
     // instance name and origin. It has not been published to a server or a remote observer.
@@ -945,7 +966,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         if (!ownedWorlds.StartsWith(
-            comparisonType: PathComparison,
+            comparisonType: PuckPaths.Comparison,
             value: instancesRoot
         )) {
             reason = $"'{name}' resolves its owned worlds to {ownedWorlds}, outside the instances root {instancesRoot}";
@@ -957,7 +978,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             path: path,
             resolved: out var resolvedPath
         )) {
-            reason = $"no file at '{path}', either as given or under {AppContext.BaseDirectory}";
+            reason = $"no file at '{path}'";
 
             return false;
         }
@@ -967,9 +988,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // WorldDefinitionLoader.TryResolve). No cloud-backed half here; a neighbour reachable only through
         // the cloud refuses by name like any other unreachable resolver.
         var instanceNeighbours = new WorldFileNeighbourResolver(
-            baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } instanceDirectory)
-            ? instanceDirectory
-            : AppContext.BaseDirectory),
+            baseDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: resolvedPath),
             catalogFingerprint: m_catalogFingerprint,
             catalog: m_machineCatalog
         );
@@ -978,7 +997,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // than a trace of what it did: a held image standing for this path is what the load is about to compose from.
         if ((prepared is not null) && (
             !string.Equals(a: prepared.Name, b: name, comparisonType: StringComparison.Ordinal) ||
-            !string.Equals(a: prepared.Path, b: resolvedPath, comparisonType: PathComparison)
+            !string.Equals(a: prepared.Path, b: resolvedPath, comparisonType: PuckPaths.Comparison)
         )) {
             reason = "the prepared document belongs to a different instance or origin";
             return false;
@@ -1042,8 +1061,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 envelope: new WorldRenderEnvelope(),
                 machines: machines,
                 instanceIdentity: name,
-                // A loader with no selected catalog deferred provider admission. The concrete host must prove it.
-                admission: ((m_machineCatalog is null) ? null : admission)
+                // The receipt travels when it names this exact document and the catalog this host validates
+                // against; a loader that deferred provider admission to a different catalog leaves construction
+                // to prove it.
+                admission: (admission!.AppliesTo(definition: definition!, machines: machines.ValidationCatalog)
+                    ? admission
+                    : null)
             );
             var adjacencies = new WorldAdjacencyFields(
                 instances: this,

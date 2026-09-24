@@ -28,7 +28,6 @@
         TaskName="PuckArchitectureGate"
     >
         <ParameterGroup>
-            <BackendExceptions ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <DeclaredReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <Kind ParameterType="System.String" />
             <Kinds ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
@@ -95,7 +94,6 @@
         BeforeTargets="CoreCompile"
     >
         <PuckArchitectureGate
-            BackendExceptions="@(PuckArchitectureBackendException)"
             DeclaredReferences="@(ProjectReference)"
             Kind="$(PuckKind)"
             Kinds="@(PuckArchitectureKind)"

@@ -190,22 +190,10 @@ public static class FixedSurfaceQuery {
     // or three) — see the type's remarks.
     private static (FixedVector3 Point, FixedVector3 Normal) NearestOnBox(FixedVector3 center, FixedVector3 halfExtents, FixedVector3 probe) {
         var local = (probe - center);
-        var clamped = new FixedVector3(
-            X: FixedQ4816.Clamp(
-                value: local.X,
-                minimum: -halfExtents.X,
-                maximum: halfExtents.X
-            ),
-            Y: FixedQ4816.Clamp(
-                value: local.Y,
-                minimum: -halfExtents.Y,
-                maximum: halfExtents.Y
-            ),
-            Z: FixedQ4816.Clamp(
-                value: local.Z,
-                minimum: -halfExtents.Z,
-                maximum: halfExtents.Z
-            )
+        var clamped = FixedVector3.Clamp(
+            maximum: halfExtents,
+            minimum: -halfExtents,
+            value: local
         );
         var delta = (local - clamped);
         var clampedX = (delta.X != FixedQ4816.Zero);
@@ -226,21 +214,21 @@ public static class FixedSurfaceQuery {
                 !clampedY &&
                 !clampedZ
             ) {
-                return (Point: point, Normal: (FixedAxisMath.UnitX * FixedAxisMath.Sign(value: delta.X)));
+                return (Point: point, Normal: (FixedVector3.UnitX * FixedAxisMath.Sign(value: delta.X)));
             }
             if (
                 clampedY &&
                 !clampedX &&
                 !clampedZ
             ) {
-                return (Point: point, Normal: (FixedAxisMath.UnitY * FixedAxisMath.Sign(value: delta.Y)));
+                return (Point: point, Normal: (FixedVector3.UnitY * FixedAxisMath.Sign(value: delta.Y)));
             }
             if (
                 clampedZ &&
                 !clampedX &&
                 !clampedY
             ) {
-                return (Point: point, Normal: (FixedAxisMath.UnitZ * FixedAxisMath.Sign(value: delta.Z)));
+                return (Point: point, Normal: (FixedVector3.UnitZ * FixedAxisMath.Sign(value: delta.Z)));
             }
 
             // Edge or corner: `delta` already points from the nearest boundary point straight at the probe, which
@@ -294,7 +282,7 @@ public static class FixedSurfaceQuery {
         // The center itself has no defined gradient; report the canonical up rather than an arbitrary or
         // discontinuous direction (see the type's remarks).
         if (normal == FixedVector3.Zero) {
-            normal = FixedAxisMath.UnitY;
+            normal = FixedVector3.UnitY;
         }
 
         return (Point: (center + (normal * radius)), Normal: normal);

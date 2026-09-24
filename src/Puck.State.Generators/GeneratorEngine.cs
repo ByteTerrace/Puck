@@ -45,7 +45,7 @@ namespace Puck.State;
 /// cache holds the built extended generator beside the cursor it was built for, so a site drawn every tick draws IN
 /// PLACE with no rebuild and no allocation; a cursor mismatch rebuilds once.</para>
 /// </remarks>
-public static class GeneratorEngine {
+public static partial class GeneratorEngine {
     /// <summary>The engine-wide constant folded into every site's seed — the ladder's first rung.</summary>
     private const ulong EngineConstant = 0x5075636B44726177UL; // "PuckDraw", ASCII, as a fixed 64-bit constant.
     /// <summary>The largest <c>Pcg32XshRr</c> stream id a site descriptor maps onto — see this type's remarks.</summary>
@@ -342,7 +342,7 @@ public static class GeneratorEngine {
     // two random advances are deliberately identical, so every stream is a pure function of the entries and the seed.
     private static int SampleAlias<TGenerator>(ReadOnlySpan<(int Element, ulong Weight)> entries, ref TGenerator generator) where TGenerator : struct, IDrawGenerator {
         var count = entries.Length;
-        var columnCount = ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)count)));
+        var columnCount = ((int)((uint)count).NextPowerOfTwo());
         Span<UInt128> scaled = stackalloc UInt128[columnCount];
         Span<uint> thresholds = stackalloc uint[columnCount];
         Span<int> aliases = stackalloc int[columnCount];
@@ -671,6 +671,9 @@ public static class GeneratorEngine {
 
         return true;
     }
+    // Named rather than Enum.IsDefined, which reads a type cache the runtime holds only weakly and allocates it again
+    // after every collection, on a check every firing makes.
+    private static bool IsDefinedMode(GeneratorMode mode) => (mode is (GeneratorMode.WithReplacement or GeneratorMode.WithoutReplacement or GeneratorMode.RestartOnExhaustion));
     private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason, long skip = 0L) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
@@ -694,7 +697,7 @@ public static class GeneratorEngine {
             return false;
         }
 
-        if (!Enum.IsDefined(value: generator.Mode)) {
+        if (!IsDefinedMode(mode: generator.Mode)) {
             reason = $"mode '{generator.Mode}' is not a defined GeneratorMode";
 
             return false;
@@ -810,6 +813,94 @@ public static class GeneratorEngine {
 
         return true;
     }
+    // One depth-first descent of a Markov source's reachable graph, from `ordinal` with `tokens` already emitted:
+    // appends every distinct emission the subtree can produce to `found`, or returns the reason the subtree's
+    // language cannot be enumerated. `onPath` carries the contexts already open on this descent, so a walk that can
+    // re-enter one is reported as the unbounded language it is rather than explored forever; `budget` bounds the
+    // path count, which a diamond-shaped graph grows faster than the distinct emissions do.
+    private static string? WalkEmissions(IReadOnlyList<GeneratorContext> contexts, IReadOnlyDictionary<CellName, int> ordinals, int ordinal, List<string> tokens, bool[] onPath, List<string> found, int bound, int ceiling, ref int budget) {
+        var alternatives = ((contexts[ordinal]?.Alternatives) ?? []);
+
+        if (alternatives.Count == 0) {
+            var emission = string.Join(
+                separator: ' ',
+                values: tokens
+            );
+
+            if (found.Contains(item: emission)) {
+                return null;
+            }
+
+            if (found.Count >= ceiling) {
+                return $"source emits more than {ceiling} distinct values";
+            }
+
+            found.Add(item: emission);
+
+            return null;
+        }
+
+        if (tokens.Count >= bound) {
+            return $"source reaches its emission bound of {bound} without terminating";
+        }
+
+        onPath[ordinal] = true;
+
+        for (var index = 0; (index < alternatives.Count); index++) {
+            if (alternatives[index] is not { } alternative) {
+                continue;
+            }
+
+            if (budget <= 0) {
+                onPath[ordinal] = false;
+
+                return "source walks more distinct paths than this proof admits";
+            }
+
+            budget--;
+
+            if (!ordinals.TryGetValue(
+                key: alternative.Next,
+                value: out var next
+            )) {
+                onPath[ordinal] = false;
+
+                return $"source moves to context '{alternative.Next}', which it does not declare";
+            }
+
+            if (onPath[next]) {
+                onPath[ordinal] = false;
+
+                return $"source can re-enter context '{alternative.Next}', so its emissions are unbounded";
+            }
+
+            tokens.Add(item: alternative.Token);
+
+            var refusal = WalkEmissions(
+                bound: bound,
+                budget: ref budget,
+                ceiling: ceiling,
+                contexts: contexts,
+                found: found,
+                onPath: onPath,
+                ordinal: next,
+                ordinals: ordinals,
+                tokens: tokens
+            );
+
+            tokens.RemoveAt(index: (tokens.Count - 1));
+
+            if (refusal is not null) {
+                onPath[ordinal] = false;
+
+                return refusal;
+            }
+        }
+
+        onPath[ordinal] = false;
+
+        return null;
+    }
 
     /// <summary>Returns how many <c>Pcg32XshRr</c> advances one sample of <paramref name="source"/> costs — the fixed-cost
     /// figure cursor seeking depends on being exact.</summary>
@@ -832,9 +923,32 @@ public static class GeneratorEngine {
     /// <param name="instanceIdentity">The running instance's own identity.</param>
     /// <param name="site">The site descriptor.</param>
     /// <returns>The <c>Pcg32XshRr.Create</c> <c>state</c> argument.</returns>
-    public static ulong ComputeSeedState(ulong documentSeed, string instanceIdentity, string site) {
+    public static ulong ComputeSeedState(ulong documentSeed, string instanceIdentity, string site) => ComputeSiteSeed(
+        instance: FoldInstance(
+            documentSeed: documentSeed,
+            instanceIdentity: instanceIdentity
+        ),
+        site: site
+    );
+    /// <summary>Returns a site's seed-ladder fold and stream id together — the pair every draw of the site seeks
+    /// from.</summary>
+    /// <param name="documentSeed">The document's own reroll lever.</param>
+    /// <param name="instanceIdentity">The running instance's own identity.</param>
+    /// <param name="site">The site descriptor.</param>
+    /// <returns>The site's seed.</returns>
+    public static DrawSeed ComputeDrawSeed(ulong documentSeed, string instanceIdentity, string site) => new(
+        State: ComputeSeedState(
+            documentSeed: documentSeed,
+            instanceIdentity: instanceIdentity,
+            site: site
+        ),
+        Stream: ComputeStreamId(site: site)
+    );
+
+    // The ladder's first three rungs, which every site of one running instance shares, folded once so a host that
+    // seeds many sites folds the instance identity once rather than once per site.
+    internal static Fnv1aHash FoldInstance(ulong documentSeed, string instanceIdentity) {
         ArgumentNullException.ThrowIfNull(argument: instanceIdentity);
-        ArgumentNullException.ThrowIfNull(argument: site);
 
         var hash = Fnv1aHash.Create();
 
@@ -844,13 +958,22 @@ public static class GeneratorEngine {
             hash: ref hash,
             text: instanceIdentity
         );
+
+        return hash;
+    }
+    // The ladder's last rung over the instance's own fold; the fold is a value, so every site continues from the
+    // same three rungs.
+    internal static ulong ComputeSiteSeed(Fnv1aHash instance, string site) {
+        ArgumentNullException.ThrowIfNull(argument: site);
+
         FoldDelimited(
-            hash: ref hash,
+            hash: ref instance,
             text: site
         );
 
-        return hash.Value;
+        return instance.Value;
     }
+
     /// <summary>Derives a site's <c>Pcg32XshRr</c> stream id from its descriptor alone, masked small — see this
     /// type's remarks.</summary>
     /// <param name="site">The site descriptor.</param>
@@ -1264,6 +1387,170 @@ public static class GeneratorEngine {
                 return false;
         }
     }
+    /// <summary>Returns every distinct text emission <paramref name="generator"/> can produce, independent of seed,
+    /// instance identity, cursor and drawn masks.</summary>
+    /// <remarks>Weight is not read: an alternative the source declares is an outcome this walk reports, the same
+    /// reading a numeric site's domain narrowing takes of a zero-weight outcome. The enumeration is exact for a
+    /// source whose reachable graph is acyclic and inside <paramref name="ceiling"/>; anything else refuses by name
+    /// rather than reporting a truncated set a caller could mistake for the whole language.</remarks>
+    /// <param name="generator">The resolved source, which must write text.</param>
+    /// <param name="ceiling">The most distinct emissions this walk may report before refusing by name.</param>
+    /// <param name="emissions">Every distinct emission, in walk order, on success.</param>
+    /// <param name="reason">Why the language cannot be enumerated, on failure.</param>
+    /// <returns><see langword="true"/> when the whole language was enumerated.</returns>
+    public static bool TryEnumerateEmissions(StateGenerator generator, int ceiling, out string[] emissions, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        emissions = [];
+
+        if (!WritesText(source: generator.Source)) {
+            reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} writes no text";
+
+            return false;
+        }
+
+        var contexts = (generator.Contexts ?? []);
+        var ordinals = new Dictionary<CellName, int>(capacity: contexts.Count);
+
+        for (var index = 0; (index < contexts.Count); index++) {
+            if (contexts[index] is { } context) {
+                ordinals[context.Key] = index;
+            }
+        }
+
+        if (
+            (generator.Start is not { } start) ||
+            !ordinals.TryGetValue(
+            key: start,
+            value: out var startOrdinal
+        )
+        ) {
+            reason = "source declares no start context to walk from";
+
+            return false;
+        }
+
+        var found = new List<string>(capacity: Math.Min(
+            val1: ceiling,
+            val2: GeneratorCapacity.MaxAlternativesPerContext
+        ));
+        var budget = (ceiling * GeneratorCapacity.MaxAlternativesPerContext);
+        var refusal = WalkEmissions(
+            bound: generator.Bound,
+            budget: ref budget,
+            ceiling: ceiling,
+            contexts: contexts,
+            found: found,
+            onPath: new bool[contexts.Count],
+            ordinal: startOrdinal,
+            ordinals: ordinals,
+            tokens: new List<string>(capacity: generator.Bound)
+        );
+
+        if (refusal is not null) {
+            reason = refusal;
+
+            return false;
+        }
+
+        emissions = [.. found];
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Returns every distinct numeric value <paramref name="generator"/> can produce, independent of seed,
+    /// instance identity, cursor and drawn masks.</summary>
+    /// <remarks>Weight is not read, for the reason <see cref="TryEnumerateEmissions"/> states.
+    /// <see cref="GeneratorSource.StreamDraw"/> spans the whole raw 32-bit band and is refused by name: a consuming
+    /// field cannot be proven over it, and a bounded source is what an author writes instead.</remarks>
+    /// <param name="generator">The resolved source, which must write numbers.</param>
+    /// <param name="targetKind">The site's declared cell kind, which fixes an orbit node's encoding.</param>
+    /// <param name="ceiling">The most distinct values this enumeration may report before refusing by name.</param>
+    /// <param name="outcomes">Every distinct value, ascending, on success.</param>
+    /// <param name="reason">Why the outcome set cannot be enumerated, on failure.</param>
+    /// <returns><see langword="true"/> when the whole outcome set was enumerated.</returns>
+    public static bool TryEnumerateOutcomes(StateGenerator generator, CellKind targetKind, int ceiling, out long[] outcomes, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        outcomes = [];
+
+        var values = new SortedSet<long>();
+
+        switch (generator.Source) {
+            case GeneratorSource.UniformRange:
+                if (
+                    (generator.RangeMin is not { } rangeMin) ||
+                    (generator.RangeMax is not { } rangeMax) ||
+                    (rangeMin > rangeMax)
+                ) {
+                    reason = "source declares no closed range to enumerate";
+
+                    return false;
+                }
+
+                if (((rangeMax - rangeMin) + 1L) > ceiling) {
+                    reason = $"source draws {rangeMin}..{rangeMax}, more than the {ceiling} distinct values this proof admits";
+
+                    return false;
+                }
+
+                for (var value = rangeMin; (value <= rangeMax); value++) {
+                    _ = values.Add(item: value);
+                }
+
+                break;
+            case GeneratorSource.WeightedNumeric:
+                if (generator.Weighted is not { Count: > 0 } weighted) {
+                    reason = "source declares no weighted outcome to enumerate";
+
+                    return false;
+                }
+
+                foreach (var outcome in weighted) {
+                    if (outcome is null) {
+                        reason = "source declares a missing weighted outcome";
+
+                        return false;
+                    }
+
+                    _ = values.Add(item: outcome.Value);
+                }
+
+                break;
+            case GeneratorSource.SymmetryOrbit:
+                if (!TryResolveOrbit(
+                    generator: generator,
+                    nodes: out var nodes,
+                    reason: out reason
+                )) {
+                    return false;
+                }
+
+                foreach (var node in nodes) {
+                    _ = values.Add(item: EncodeNode(
+                        node: node,
+                        targetKind: targetKind
+                    ));
+                }
+
+                break;
+            default:
+                reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} spans a band no consuming field can be proven over";
+
+                return false;
+        }
+
+        if (values.Count > ceiling) {
+            reason = $"source draws {values.Count} distinct values, more than the {ceiling} this proof admits";
+
+            return false;
+        }
+
+        outcomes = [.. values];
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Fires one emission of <paramref name="generator"/> at a site already seeked to
     /// <paramref name="cursor"/>.</summary>
     /// <param name="generator">The resolved source.</param>
@@ -1283,41 +1570,18 @@ public static class GeneratorEngine {
 
         result = default;
 
-        if (cursor < 0) {
-            reason = $"cursor {cursor} is negative — a draw cursor is a non-negative sample count";
-
-            return false;
-        }
-
-        if (skip < 0) {
-            reason = $"skip {skip} is negative — an authored seek is a non-negative offset";
-
-            return false;
-        }
-
-        if (!Enum.IsDefined(value: generator.Mode)) {
-            reason = $"mode '{generator.Mode}' is not a defined GeneratorMode";
-
-            return false;
-        }
-
-        if (!TryCheckTargetKind(
-            source: generator.Source,
-            targetKind: targetKind,
-            reason: out reason
+        if (!TryCheckFire(
+            cursor: cursor,
+            generator: generator,
+            reason: out reason,
+            secret: secret,
+            skip: skip,
+            targetKind: targetKind
         )) {
             return false;
         }
 
         if (secret is { } key) {
-            if (
-                key.IsEmpty ||
-                (generator.Source != GeneratorSource.StreamDraw) ||
-                (targetKind != CellKind.Int) ||
-                (generator.Mode != GeneratorMode.WithReplacement)
-            ) {
-                reason = "secret draws require a nonzero key and an integer streamDraw source with replacement"; return false;
-            }
             result = new(
                 null,
                 PrivateDraw.Sample(

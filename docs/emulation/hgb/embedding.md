@@ -33,10 +33,12 @@ owns threading, pacing, output buffers, snapshots, and queued execution.
   `IMachineRuntime`/`IQueuedMachineRuntime`/`IAudioMachine`/`IFeedbackMachine`
   surface to `Puck.GamingBricks`'s `QueuedMachineWorker`, converting engine
   ticks to LCD-dot budgets through a remainder-carrying accumulator.
-- *Deterministic peripheral link:* `SerialLinkSession`, `IrLinkSession`, and
-  `GamePrinterLinkSession` interleave two machines' link edges
-  instruction-atomically, so a cable, infrared, or printer session replays
-  identically.
+- *Deterministic peripheral link:* `SerialLinkSession` and `IrLinkSession`
+  interleave two machines instruction-atomically, and `GamePrinterLinkSession`
+  hands one machine's budget to the printer, so a cable, infrared, or printer
+  session replays identically. The serial and infrared sessions are the one
+  `LinkSession<TPort>` over their port, so both carry the same pacing credits
+  through a suspend or a coupled rewind.
 - *Exact timing:* `TickResolution` runs the timeline at sub-cycle granularity
   (quarter ticks by default), and `Ppu`/`HdmaController` reproduce the
   STAT/memory-lock schedule dot for dot.
@@ -93,7 +95,7 @@ The [shared linked-group contract](../shared/machine-hosting.md#cable-linked-gro
 owns lending, per-seat input, publication, backpressure, severing, and coupled
 time travel.
 
-The group snapshot includes both machine snapshots, SerialLinkSession.PacingCredits,
+The group snapshot includes both machine snapshots, the session's `PacingCredits`,
 and the medium’s completed-transfer count and traffic fingerprint. Those group
 values are absent from either machine’s snapshot, so saving the members alone
 cannot resume the cable. Cross-process transport is not implemented.
@@ -160,9 +162,11 @@ with custom registrations. Forks retain the configuration and composition.
 
 The bus hosts a cartridge (`RomOnlyCartridge`/`Mbc1`–`Mbc7`/`HuC1`/`HuC3`/
 `Mmm01`, selected by `Cartridge.Load` from the ROM header) plus the serial
-port, infrared port, and OAM/HDMA DMA controllers. `InfraredPort` and
-`GamePrinterDevice`/`GamePrinterLinkSession` model the infrared peer and
-thermal-printer protocols on the same serial substrate the cable link uses.
+port, infrared port, and OAM/HDMA DMA controllers. `InfraredPort` is the one
+infrared transceiver the CGB RP register and the HuC1/HuC3 cartridge IR windows
+share; it carries a light level rather than a clocked bit, so it is a medium of
+its own beside the serial cable. `GamePrinterDevice`/`GamePrinterLinkSession`
+model the thermal printer as a device peer on the serial cable.
 `CameraCartridge`/`GradientCameraSensor`/`SensorImage` and
 `TiltSensorComponent` model the sensor-cartridge peripherals; `BootDivPrediction`
 reproduces the per-revision boot-DIV seed a game can read to detect the console
@@ -180,7 +184,7 @@ that has to satisfy it read the same data.
 | Video | `Ppu`, `HdmaController`, `Framebuffer` | The STAT-accurate pixel pipeline and DMA-driven video RAM transfer. |
 | Audio | `ApuComponent`, `ApuGeneratorClock`, `AudioOutputComponent` | The four-channel APU and its host-facing output ring. |
 | Cartridges | `Cartridge`, `CartridgeHeader`, `CartridgeBase`, `MapperKind`, `RomOnlyCartridge`, `Mbc1Cartridge`…`Mbc7Cartridge`, `HuC1Cartridge`, `HuC3Cartridge`, `Mmm01Cartridge`, `CameraCartridge` | Header-selected mapper implementations and the camera peripheral. |
-| Link | `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IInfraredPeer`, `IInfraredCartridge`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions. |
+| Link | `LinkSession<TPort>`, `LinkResumeToken`, `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IrLinkSession`, `IInfraredPeer`, `IInfraredCartridge`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions. |
 | Hosting | `MachineHost`, `GamingBrickEngine`, `HumbleGamingBrickCore`, `BrickPad`, `HumbleGamingBrickLookahead`, `SerialLinkGroupCore` | The `IMachineEngine`/`IMachineLinkingEngine` adapter over `Puck.GamingBricks`'s queued-host and cable-link substrate. |
 
 ## Verification and further reading

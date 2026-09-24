@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using Puck.State;
+using Puck.Transpiler.Formatting;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -47,7 +48,7 @@ public static partial class WorldDecompiler {
 
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
-                $"{indent}set {QuotedName(name: (row["name"]?.ToString() ?? string.Empty))}: {TryPrintCellSet(row: row)}"
+                $"{indent}set {PuckPrinter.PrintName(name: (row["name"]?.ToString() ?? string.Empty))}: {TryPrintCellSet(row: row)}"
             );
         }
     }

@@ -8,30 +8,24 @@ using Puck.Transpiler.Parsing;
 
 namespace Puck.Transpiler.Formatting;
 
-/// <summary>How a printed source is laid out.</summary>
-public sealed record PuckPrintOptions {
-    /// <summary>The options a source prints with when a caller names none.</summary>
-    public static readonly PuckPrintOptions Default = new();
-
-    /// <summary>Gets the number of spaces one indentation level costs.</summary>
-    public int TabSize { get; init; } = 2;
-    /// <summary>Gets a value indicating whether one level indents with spaces rather than with a single tab.</summary>
-    public bool InsertSpaces { get; init; } = true;
-}
 /// <summary>Prints a syntax tree back as <c>.puck</c> source.</summary>
-/// <remarks>Printing is the only formatter: <c>puck fmt</c>, the language server's formatting request, and a
+/// <remarks>Printing is the only formatter: <c>puck format</c>, the language server's formatting request, and a
 /// decompiler's output all parse and then print, so a formatted source can never mean something its author did not
-/// write. The layout a node prints in is the printer's own, except for the comments, blank lines, and array or
-/// object line breaks the parse carried in on <see cref="SyntaxTrivia"/>.</remarks>
-public static class PuckPrinter {
+/// write, and every one of them produces the same text. The layout a node prints in is the printer's own, except for
+/// the comments, blank lines, and array or object line breaks the parse carried in on
+/// <see cref="SyntaxTrivia"/>.</remarks>
+public static partial class PuckPrinter {
+    /// <summary>The spaces one indentation level costs. A <c>.puck</c> source has exactly one layout, so no caller,
+    /// editor setting, or command-line option changes it.</summary>
+    public const int IndentWidth = 2;
+
     /// <summary>Returns <paramref name="document"/> printed as source text.</summary>
     /// <param name="document">The tree to print.</param>
-    /// <param name="options">The layout to print with, or <see langword="null"/> for the default.</param>
     /// <returns>The printed source, ending in a single newline.</returns>
-    public static string Print(DocumentNode document, PuckPrintOptions? options = null) {
+    public static string Print(DocumentNode document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var writer = new Writer(options: (options ?? PuckPrintOptions.Default));
+        var writer = new Writer();
 
         writer.Document(document: document);
 
@@ -40,12 +34,11 @@ public static class PuckPrinter {
     /// <summary>Returns <paramref name="document"/> printed as source text, or <see langword="null"/> when the tree
     /// carries a statement the parse failed on and the printer would silently drop.</summary>
     /// <param name="document">The tree to print.</param>
-    /// <param name="options">The layout to print with, or <see langword="null"/> for the default.</param>
     /// <returns>The printed source, or <see langword="null"/>.</returns>
-    public static string? TryPrint(DocumentNode document, PuckPrintOptions? options = null) {
+    public static string? TryPrint(DocumentNode document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var writer = new Writer(options: (options ?? PuckPrintOptions.Default));
+        var writer = new Writer();
 
         writer.Document(document: document);
 
@@ -56,14 +49,13 @@ public static class PuckPrinter {
     }
     /// <summary>Returns <paramref name="predicate"/> printed as the gate expression an author would write.</summary>
     /// <param name="predicate">The gate to print.</param>
-    /// <param name="options">The layout to print with, or <see langword="null"/> for the default.</param>
     /// <returns>The printed gate, on one line and with no trailing newline.</returns>
     /// <remarks>Printed from the tree rather than copied from source, so the text is the same before and after a
     /// format — which is what lets a lowering carry a gate's own spelling into a document.</remarks>
-    public static string PrintGate(PredicateNode predicate, PuckPrintOptions? options = null) {
+    public static string PrintGate(PredicateNode predicate) {
         ArgumentNullException.ThrowIfNull(argument: predicate);
 
-        var writer = new Writer(options: (options ?? PuckPrintOptions.Default));
+        var writer = new Writer();
 
         writer.Gate(predicate: predicate);
 
@@ -71,12 +63,11 @@ public static class PuckPrinter {
     }
     /// <summary>Returns <paramref name="expression"/> printed as an author would write it.</summary>
     /// <param name="expression">The expression to print.</param>
-    /// <param name="options">The layout to print with, or <see langword="null"/> for the default.</param>
     /// <returns>The printed expression, with no trailing newline.</returns>
-    public static string PrintExpression(ExpressionNode expression, PuckPrintOptions? options = null) {
+    public static string PrintExpression(ExpressionNode expression) {
         ArgumentNullException.ThrowIfNull(argument: expression);
 
-        var writer = new Writer(options: (options ?? PuckPrintOptions.Default));
+        var writer = new Writer();
 
         writer.Value(expression: expression);
 
@@ -84,11 +75,10 @@ public static class PuckPrinter {
     }
     /// <summary>Parses <paramref name="source"/> and prints it back.</summary>
     /// <param name="source">The source text to format.</param>
-    /// <param name="options">The layout to print with, or <see langword="null"/> for the default.</param>
     /// <param name="vocabulary">The vocabulary whose embedded languages the parse must recognize, or
     /// <see langword="null"/>.</param>
     /// <returns>The formatted source, or a null value with the diagnostics that stopped the parse.</returns>
-    public static CompilationResult<string> Format(string source, PuckPrintOptions? options = null, IDocumentVocabulary? vocabulary = null) {
+    public static CompilationResult<string> Format(string source, IDocumentVocabulary? vocabulary = null) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         if (source.AsSpan().IsWhiteSpace()) {
@@ -107,90 +97,71 @@ public static class PuckPrinter {
             Value: ((parsed.Value is null)
                 ? null
                 : TryPrint(
-                    document: parsed.Value,
-                    options: options
+                    document: parsed.Value
                 ))
         );
     }
 
-    // A PROPERTY name a statement reader would take for the keyword it spells, because nothing in `name:` defeats
-    // the match. A keyword whose own reader first demands a name (`table x :`, `enum X {`, `rules x {`) is not one
-    // of these: `table: 1` already reads as a property, so quoting it buys nothing.
-    private static readonly HashSet<string> PropertyKeywords = new(comparer: StringComparer.Ordinal) {
-        "break", "countdown", "deal", "decision", "draw", "export", "for", "if", "import", "interrupt", "let",
-        "local", "onNoChoice", "option", "push", "remove", "repeat", "request", "rule", "schedule", "score",
-        "shuffle", "template", "transaction", "transform", "watchMemory", "when",
-    };
-    // `schema:` and `basis:` are the document's own headers, and only at the top level; inside any block they are
-    // ordinary properties.
-    private static readonly HashSet<string> DocumentHeaders = new(comparer: StringComparer.Ordinal) { "basis", "schema" };
+    /// <summary>Gets the words a statement reader takes for the keyword it spells when one opens a line, because
+    /// nothing in <c>name:</c> defeats the match, so a property spelling one prints quoted. A keyword whose own reader
+    /// first demands a name (<c>table x</c>, <c>enum X</c>, <c>rules x</c>) is not one of these: <c>table: 1</c>
+    /// already reads as a property.</summary>
+    // One set at every depth, though `when`, `if` and `local` are keywords only in rule, scope and test bodies: the
+    // decompiler prints a nested member knowing its depth and not its enclosing construct.
+    public static IReadOnlySet<string> PropertyKeywords { get; } = System.Collections.Frozen.FrozenSet.ToFrozenSet(
+        comparer: StringComparer.Ordinal,
+        source: [
+            "break", "deal", "decision", "draw", "export", "for", "if", "import", "interrupt", "let",
+            "local", "onNoChoice", "option", "push", "remove", "repeat", "request", "rule", "schedule", "score",
+            "shuffle", "template", "transaction", "transform", "watchMemory", "when",
+        ]
+    );
+    /// <summary>Gets the document's own headers, <c>schema</c> and <c>basis</c>, which a property at the top level
+    /// spelling one prints quoted. Inside any block they are ordinary properties.</summary>
+    public static IReadOnlySet<string> DocumentHeaders { get; } = System.Collections.Frozen.FrozenSet.ToFrozenSet(
+        comparer: StringComparer.Ordinal,
+        source: ["basis", "schema"]
+    );
 
-    private static bool IsBareName(string name) {
-        if (name.Length == 0) {
-            return false;
-        }
-        if (
-            !char.IsLetter(c: name[0]) &&
-            (name[0] != '_') &&
-            (name[0] != '$')
-        ) {
-            return false;
-        }
-
-        foreach (var character in name) {
-            if (
-                !char.IsLetterOrDigit(c: character) &&
-                (character != '_') &&
-                (character != '$')
-            ) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     // The reader's own grammar, so what the printer writes is what the reader reads back.
     private static string Quote(string text) => PuckStrings.Write(value: text);
-    // A name prints bare when the reader that takes it back would read the same string; otherwise it is quoted.
-    private static string Name(string name) => (IsBareName(name: name)
+
+    /// <summary>Returns a name as the reader takes it back: bare when it is one name by
+    /// <see cref="IdentifierSpelling"/>, and a quoted string otherwise.</summary>
+    /// <param name="name">The name.</param>
+    /// <returns>The name's spelling.</returns>
+    public static string PrintName(string name) => (IdentifierSpelling.IsName(text: name)
         ? name
         : Quote(text: name)
     );
-    private static string ExportName(string name) => string.Join(separator: '.', values: name.Split('.').Select(selector: Name));
-    // A property name is quoted only where printing it bare would open a different production.
-    private static string PropertyName(string name, int level) => ((IsBareName(name: name) &&
+
+    private static string ExportName(string name) => QualifiedName.Parse(text: name).Print(segment: PrintName);
+
+    /// <summary>Returns a property name as a statement reader takes it back: bare when it is one name that opens no
+    /// other production where it stands — one of <see cref="PropertyKeywords"/>, or at the top level one of
+    /// <see cref="DocumentHeaders"/> — and a quoted string otherwise.</summary>
+    /// <param name="name">The property name.</param>
+    /// <param name="level">The nesting depth the property stands at; 0 is the document's top level.</param>
+    /// <returns>The property name's spelling.</returns>
+    public static string PrintPropertyName(string name, int level) => ((IdentifierSpelling.IsName(text: name) &&
         !PropertyKeywords.Contains(item: name) &&
         ((level > 0) || !DocumentHeaders.Contains(item: name)))
         ? name
         : Quote(text: name)
     );
 
-    private sealed class Writer {
+    private sealed partial class Writer {
         private readonly StringBuilder m_builder = new();
-        private readonly PuckPrintOptions m_options;
-
-        public Writer(PuckPrintOptions options) {
-            m_options = options;
-        }
 
         /// <summary>Whether the tree carried a statement the parse failed on, which has no spelling to print.</summary>
         public bool Incomplete { get; private set; }
 
         public override string ToString() => m_builder.ToString();
 
-        private void Indent(int level) {
-            if (m_options.InsertSpaces) {
-                m_builder.Append(
-                    repeatCount: (level * m_options.TabSize),
-                    value: ' '
-                );
-            } else {
-                m_builder.Append(
-                    repeatCount: level,
-                    value: '\t'
-                );
-            }
-        }
+        private void Indent(int level) => m_builder.Append(
+            repeatCount: (level * IndentWidth),
+            value: ' '
+        );
         private void EndLine() => m_builder.Append(value: '\n');
         private void Trailing(SyntaxTrivia trivia) {
             if (trivia.Trailing is not null) {
@@ -249,6 +220,66 @@ public static class PuckPrinter {
                 value: "//"
             )
         );
+        // One world block inside a test's `given`, `when` or `expect`: the world's own name in place of a keyword.
+        private void TestWorldBlock(string world, int level, SyntaxTrivia trivia, Action write) => TestBlock(
+            keyword: world,
+            level: level,
+            trivia: trivia,
+            write: write
+        );
+        private void TestGivenCell(TestGivenNode cell, int level) {
+            Leading(
+                level: level,
+                trivia: cell.Trivia
+            );
+            Indent(level: level);
+            Row(row: cell.Target);
+            m_builder.Append(value: " = ");
+            Rhs(
+                level: level,
+                rhs: cell.Value
+            );
+            Trailing(trivia: cell.Trivia);
+        }
+        private void TestWhenStep(TestStepNode step, int level) {
+            Leading(
+                level: level,
+                trivia: step.Trivia
+            );
+            Indent(level: level);
+            switch (step) {
+                case TestTicksStepNode ticks:
+                    m_builder.Append(value: "ticks ").Append(value: ticks.Ticks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+
+                    break;
+                case TestSeatStepNode seat:
+                    m_builder.Append(value: "seat").Append(value: seat.Seat.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+                    if (seat.Refused) {
+                        m_builder.Append(value: " refused");
+                        if (seat.Refusal is { } refusal) {
+                            m_builder.Append(value: ' ').Append(value: PuckStrings.Write(value: refusal));
+                        }
+                    }
+                    m_builder.Append(value: ": ").Append(value: seat.Command);
+
+                    break;
+                default:
+                    break;
+            }
+            Trailing(trivia: step.Trivia);
+        }
+        private void TestExpectation(TestExpectationNode expectation, int level) {
+            Leading(
+                level: level,
+                trivia: expectation.Trivia
+            );
+            Indent(level: level);
+            Predicate(
+                parenthesize: false,
+                predicate: expectation.Predicate
+            );
+            Trailing(trivia: expectation.Trivia);
+        }
         // One of a test's three blocks: the keyword, its own body, and the trivia standing before its closing brace.
         private void TestBlock(string keyword, int level, SyntaxTrivia trivia, Action write) {
             Leading(
@@ -356,7 +387,10 @@ public static class PuckPrinter {
             Indent(level: level);
             switch (statement) {
                 case WorldDeclarationNode world: {
-                        m_builder.Append(value: "world ");
+                        m_builder.Append(value: (world.Entry
+                            ? "entry world "
+                            : "world "
+                        ));
                         Expression(expression: world.Name, level: level);
                         m_builder.Append(value: " = ");
                         Expression(expression: world.Module, level: level);
@@ -461,13 +495,16 @@ public static class PuckPrinter {
                         break;
                     }
                 case BlockNode block: {
-                        m_builder.Append(value: block.Identifier);
+                        m_builder.Append(value: (block.IdentifierQuoted
+                            ? Quote(text: block.Identifier)
+                            : PrintName(name: block.Identifier)
+                        ));
                         InlineHeader(trivia: block.Trivia);
-                        if (block.Target is not null) { m_builder.Append(value: ' ').Append(value: Name(name: block.Target)); }
+                        if (block.Target is not null) { m_builder.Append(value: ' ').Append(value: PrintName(name: block.Target)); }
                         if (block.Name is not null) {
                             m_builder.Append(value: ' ').Append(value: (block.NameQuoted
                                 ? Quote(text: block.Name)
-                                : Name(name: block.Name)
+                                : PrintName(name: block.Name)
                             ));
                         } else if (block.NameExpression is not null) {
                             m_builder.Append(value: ' ');
@@ -544,12 +581,21 @@ public static class PuckPrinter {
                         break;
                     }
                 case ScoreStatementNode score: {
-                        m_builder.Append(value: "score: ").Append(value: score.Expression.Text);
+                        m_builder.Append(value: "score: ").Append(value: OperandKeys(text: score.Expression.Text));
 
                         break;
                     }
                 case LocalStatementNode local: {
-                        m_builder.Append(value: "local ").Append(value: local.Name).Append(value: " = ").Append(value: local.Expression.Text);
+                        m_builder.Append(value: "local ");
+                        if (local.NameExpression is not null) {
+                            Expression(
+                                expression: local.NameExpression,
+                                level: level
+                            );
+                        } else {
+                            m_builder.Append(value: local.Name);
+                        }
+                        m_builder.Append(value: " = ").Append(value: OperandKeys(text: local.Expression.Text));
 
                         break;
                     }
@@ -580,7 +626,7 @@ public static class PuckPrinter {
                 case RuleScopeNode scope: {
                         m_builder.Append(value: "rules");
                         InlineHeader(trivia: scope.Trivia);
-                        m_builder.Append(value: ' ').Append(value: Name(name: scope.Name));
+                        m_builder.Append(value: ' ').Append(value: PrintName(name: scope.Name));
                         if (scope.HeaderWhen is not null) {
                             m_builder.Append(value: " when ");
                             Predicate(
@@ -600,7 +646,7 @@ public static class PuckPrinter {
                 case StabilizeGroupNode group: {
                         m_builder.Append(value: "stabilize");
                         InlineHeader(trivia: group.Trivia);
-                        m_builder.Append(value: ' ').Append(value: Name(name: group.Name));
+                        m_builder.Append(value: ' ').Append(value: PrintName(name: group.Name));
                         if (group.Undo is { } undo) {
                             m_builder.Append(value: " undo(");
                             Expression(expression: undo, level: level);
@@ -633,7 +679,7 @@ public static class PuckPrinter {
                 case WorkflowNode workflow: {
                         m_builder.Append(value: "workflow");
                         InlineHeader(trivia: workflow.Trivia);
-                        m_builder.Append(value: ' ').Append(value: Name(name: workflow.Name));
+                        m_builder.Append(value: ' ').Append(value: PrintName(name: workflow.Name));
                         if (workflow.Undo is { } undo) {
                             m_builder.Append(value: " undo(");
                             Expression(expression: undo, level: level);
@@ -651,7 +697,7 @@ public static class PuckPrinter {
                 case WorkflowStepNode step: {
                         switch (step.Kind) {
                             case WorkflowStepKind.Repeat: {
-                                    m_builder.Append(value: "repeatStep ").Append(value: Name(name: step.Name));
+                                    m_builder.Append(value: "repeatStep ").Append(value: PrintName(name: step.Name));
                                     if (step.UntilCondition is { } until) {
                                         m_builder.Append(value: " until ");
                                         Predicate(
@@ -674,7 +720,7 @@ public static class PuckPrinter {
                                     break;
                                 }
                             default: {
-                                    m_builder.Append(value: "step ").Append(value: Name(name: step.Name));
+                                    m_builder.Append(value: "step ").Append(value: PrintName(name: step.Name));
                                     if (step.Skip) { m_builder.Append(value: " skip"); }
 
                                     break;
@@ -824,7 +870,17 @@ public static class PuckPrinter {
                 case TestDeclarationNode declaration: {
                         m_builder.Append(value: "test");
                         InlineHeader(trivia: declaration.Trivia);
-                        m_builder.Append(value: ' ').Append(value: Quote(text: declaration.Name)).Append(value: " {");
+                        m_builder.Append(value: ' ').Append(value: Quote(text: declaration.Name));
+                        if (declaration.Subject is { } subject) {
+                            m_builder.Append(value: " with ").Append(value: subject.Name).Append(value: '(');
+                            Arguments(arguments: subject.Arguments, level: level, multiLine: subject.Trivia.MultiLine);
+                            if (subject.Trivia.MultiLine) {
+                                EndLine();
+                                Indent(level: level);
+                            }
+                            m_builder.Append(value: ')');
+                        }
+                        m_builder.Append(value: " {");
                         EndLine();
                         if (declaration.Given is { } given) {
                             TestBlock(
@@ -832,19 +888,34 @@ public static class PuckPrinter {
                                 level: (level + 1),
                                 trivia: given.Trivia,
                                 write: () => {
-                                    foreach (var cell in given.Cells) {
-                                        Leading(
-                                            level: (level + 2),
-                                            trivia: cell.Trivia
-                                        );
-                                        Indent(level: (level + 2));
-                                        Row(row: cell.Target);
-                                        m_builder.Append(value: " = ");
-                                        Rhs(
-                                            level: (level + 2),
-                                            rhs: cell.Value
-                                        );
-                                        Trailing(trivia: cell.Trivia);
+                                    foreach (var item in given.Cells) {
+                                        switch (item) {
+                                            case TestGivenNode cell:
+                                                TestGivenCell(
+                                                    cell: cell,
+                                                    level: (level + 2)
+                                                );
+
+                                                break;
+                                            case TestGivenWorldNode addressed:
+                                                TestWorldBlock(
+                                                    level: (level + 2),
+                                                    trivia: addressed.Trivia,
+                                                    world: addressed.World,
+                                                    write: () => {
+                                                        foreach (var cell in addressed.Cells) {
+                                                            TestGivenCell(
+                                                                cell: cell,
+                                                                level: (level + 3)
+                                                            );
+                                                        }
+                                                    }
+                                                );
+
+                                                break;
+                                            default:
+                                                break;
+                                        }
                                     }
                                 }
                             );
@@ -856,24 +927,27 @@ public static class PuckPrinter {
                                 trivia: when.Trivia,
                                 write: () => {
                                     foreach (var step in when.Steps) {
-                                        Leading(
-                                            level: (level + 2),
-                                            trivia: step.Trivia
-                                        );
-                                        Indent(level: (level + 2));
-                                        switch (step) {
-                                            case TestTicksStepNode ticks:
-                                                m_builder.Append(value: "ticks ").Append(value: ticks.Ticks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+                                        if (step is TestWhenWorldNode addressed) {
+                                            TestWorldBlock(
+                                                level: (level + 2),
+                                                trivia: addressed.Trivia,
+                                                world: addressed.World,
+                                                write: () => {
+                                                    foreach (var seat in addressed.Steps) {
+                                                        TestWhenStep(
+                                                            level: (level + 3),
+                                                            step: seat
+                                                        );
+                                                    }
+                                                }
+                                            );
 
-                                                break;
-                                            case TestSeatStepNode seat:
-                                                m_builder.Append(value: "seat").Append(value: seat.Seat.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)).Append(value: ": ").Append(value: seat.Command);
-
-                                                break;
-                                            default:
-                                                break;
+                                            continue;
                                         }
-                                        Trailing(trivia: step.Trivia);
+                                        TestWhenStep(
+                                            level: (level + 2),
+                                            step: step
+                                        );
                                     }
                                 }
                             );
@@ -884,17 +958,34 @@ public static class PuckPrinter {
                                 level: (level + 1),
                                 trivia: expect.Trivia,
                                 write: () => {
-                                    foreach (var expectation in expect.Expectations) {
-                                        Leading(
-                                            level: (level + 2),
-                                            trivia: expectation.Trivia
-                                        );
-                                        Indent(level: (level + 2));
-                                        Predicate(
-                                            parenthesize: false,
-                                            predicate: expectation.Predicate
-                                        );
-                                        Trailing(trivia: expectation.Trivia);
+                                    foreach (var item in expect.Expectations) {
+                                        switch (item) {
+                                            case TestExpectationNode expectation:
+                                                TestExpectation(
+                                                    expectation: expectation,
+                                                    level: (level + 2)
+                                                );
+
+                                                break;
+                                            case TestExpectWorldNode addressed:
+                                                TestWorldBlock(
+                                                    level: (level + 2),
+                                                    trivia: addressed.Trivia,
+                                                    world: addressed.World,
+                                                    write: () => {
+                                                        foreach (var expectation in addressed.Expectations) {
+                                                            TestExpectation(
+                                                                expectation: expectation,
+                                                                level: (level + 3)
+                                                            );
+                                                        }
+                                                    }
+                                                );
+
+                                                break;
+                                            default:
+                                                break;
+                                        }
                                     }
                                 }
                             );
@@ -909,7 +1000,7 @@ public static class PuckPrinter {
                         break;
                     }
                 case CellSetDeclarationNode declaration: {
-                        m_builder.Append(value: "set ").Append(value: Name(name: declaration.Name)).Append(value: ": ").Append(value: declaration.Expression);
+                        m_builder.Append(value: "set ").Append(value: PrintName(name: declaration.Name)).Append(value: ": ").Append(value: declaration.Expression);
 
                         break;
                     }
@@ -930,11 +1021,7 @@ public static class PuckPrinter {
                             members: table.FamilyMembers,
                             size: table.FamilySize
                         );
-                        // A cell kind is never printed — WorldDocumentEmitter infers it. A non-empty `Kind` here
-                        // names a record type the table still expands into one row per field.
-                        if (!string.IsNullOrEmpty(value: table.Kind)) {
-                            m_builder.Append(value: ": ").Append(value: table.Kind);
-                        }
+                        EnumAnnotation(name: table.Enum);
                         Modifiers(
                             level: level,
                             modifiers: table.Modifiers
@@ -965,6 +1052,7 @@ public static class PuckPrinter {
                             members: grid.FamilyMembers,
                             size: grid.FamilySize
                         );
+                        EnumAnnotation(name: grid.Enum);
                         Modifiers(
                             level: level,
                             modifiers: grid.Modifiers
@@ -986,6 +1074,7 @@ public static class PuckPrinter {
                             members: slot.FamilyMembers,
                             size: slot.FamilySize
                         );
+                        EnumAnnotation(name: slot.Enum);
                         if (slot.Value is { } value) {
                             m_builder.Append(value: " = ");
                             Expression(
@@ -1030,7 +1119,7 @@ public static class PuckPrinter {
                         EndLine();
                         foreach (var token in pile.Tokens) {
                             Indent(level: (level + 1));
-                            m_builder.Append(value: Name(name: token.Key));
+                            m_builder.Append(value: PrintName(name: token.Key));
                             EndLine();
                         }
                         Indent(level: level);
@@ -1234,7 +1323,7 @@ public static class PuckPrinter {
             }
         }
         private void Property(PropertyNode property, int level) {
-            var name = PropertyName(
+            var name = PrintPropertyName(
                 level: level,
                 name: property.Name
             );
@@ -1278,6 +1367,10 @@ public static class PuckPrinter {
                 m_builder.Append(value: '.').Append(value: row.Key);
                 return;
             }
+            if (row.KeyAtom is { } atom) {
+                m_builder.Append(value: '[').Append(value: PrintExpression(expression: atom)).Append(value: ']');
+                return;
+            }
             // A key reads back in the document's own spelling — `$cell:row:key`, `$expr:<infix>` — which is not
             // what an author writes. `Puck.State` owns that fold, so it does it.
             m_builder.Append(value: '[');
@@ -1300,7 +1393,7 @@ public static class PuckPrinter {
                         break;
                     }
                 case RhsOperandNode operand: {
-                        m_builder.Append(value: operand.Expression.Text);
+                        m_builder.Append(value: OperandKeys(text: operand.Expression.Text));
 
                         break;
                     }
@@ -1382,7 +1475,7 @@ public static class PuckPrinter {
                     trivia: cell.Trivia
                 );
                 Indent(level: (level + 1));
-                m_builder.Append(value: Name(name: cell.Key)).Append(value: " = ");
+                m_builder.Append(value: PrintName(name: cell.Key)).Append(value: " = ");
                 Expression(
                     expression: cell.Value,
                     level: (level + 1)
@@ -1444,7 +1537,7 @@ public static class PuckPrinter {
                         var annotated = (comparison.Kind is not null);
 
                         if (annotated) { m_builder.Append(value: '('); }
-                        m_builder.Append(value: comparison.Left.Text).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: comparison.Right.Text);
+                        m_builder.Append(value: OperandKeys(text: comparison.Left.Text)).Append(value: ' ').Append(value: comparison.Comparator).Append(value: ' ').Append(value: OperandKeys(text: comparison.Right.Text));
                         if (annotated) { m_builder.Append(value: " : ").Append(value: comparison.Kind).Append(value: ')'); }
 
                         break;
@@ -1500,430 +1593,12 @@ public static class PuckPrinter {
             }
             if (parenthesize) { m_builder.Append(value: ')'); }
         }
-        private void Arguments(IReadOnlyList<ArgumentNode> arguments, int level, bool multiLine = false) {
-            for (var index = 0; (index < arguments.Count); index++) {
-                var argument = arguments[index];
-                var breaks = (multiLine && (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0)));
-
-                if (
-                    (index > 0) &&
-                    !breaks
-                ) {
-                    m_builder.Append(value: ", ");
-                }
-                if (breaks) {
-                    EndLine();
-                    Leading(
-                        level: (level + 1),
-                        trivia: argument.Trivia
-                    );
-                    Indent(level: (level + 1));
-                }
-                if (argument.Name is { } name) { m_builder.Append(value: name).Append(value: ": "); }
-                Expression(
-                    expression: argument.Value,
-                    level: ((level + (breaks
-                        ? 1
-                        : 0)))
-                );
-                if (
-                    argument.Trivia.Separated &&
-                    (((index + 1) >= arguments.Count) || arguments[(index + 1)].Trivia.OnNewLine || (arguments[(index + 1)].Trivia.Leading.Count > 0))
-                ) {
-                    m_builder.Append(value: ',');
-                }
-                if (argument.Trivia.Trailing is not null) { m_builder.Append(value: ' ').Append(value: argument.Trivia.Trailing); }
-            }
-        }
-        private void Array(ArrayExpressionNode array, int level) {
-            if (array.Elements.Count == 0) {
-                m_builder.Append(value: ((array.Trivia.Inner.Count == 0)
-                    ? "[]"
-                    : "["
-                ));
-                if (array.Trivia.Inner.Count == 0) { return; }
-                EndLine();
-                Inner(
-                    level: (level + 1),
-                    trivia: array.Trivia
-                );
-                Indent(level: level);
-                m_builder.Append(value: ']');
-
-                return;
-            }
-            if (!array.Trivia.MultiLine) {
-                m_builder.Append(value: '[');
-                for (var index = 0; (index < array.Elements.Count); index++) {
-                    if (index > 0) { m_builder.Append(value: ", "); }
-                    Expression(
-                        expression: array.Elements[index],
-                        level: level
-                    );
-                }
-                m_builder.Append(value: ']');
-
-                return;
-            }
-            // The author's own line breaks decide where the rows fall, so a board written eight to a row keeps its
-            // rows and a list written one to a line keeps its lines.
-            m_builder.Append(value: '[');
-            if (array.Trivia.Opening is not null) { m_builder.Append(value: ' ').Append(value: array.Trivia.Opening); }
-            for (var index = 0; (index < array.Elements.Count); index++) {
-                var element = array.Elements[index];
-                var breaks = (element.Trivia.OnNewLine || (element.Trivia.Leading.Count > 0));
-                var joins = (
-                    ((index + 1) < array.Elements.Count) &&
-                    !(array.Elements[(index + 1)].Trivia.OnNewLine || (array.Elements[(index + 1)].Trivia.Leading.Count > 0))
-                );
-
-                if (
-                    (index > 0) &&
-                    !breaks
-                ) {
-                    m_builder.Append(value: ", ");
-                }
-                if (breaks) {
-                    EndLine();
-                    Leading(
-                        level: (level + 1),
-                        trivia: element.Trivia
-                    );
-                    Indent(level: (level + 1));
-                }
-                Expression(
-                    expression: element,
-                    level: (level + 1)
-                );
-                // A line break does not end an expression: a following element opening with a sign or a parenthesis
-                // would read as this one's continuation, so one takes a separator whether its author wrote it or not.
-                if (!joins && (
-                    element.Trivia.Separated ||
-                    (((index + 1) < array.Elements.Count) &&
-                    ContinuesPreviousElement(element: array.Elements[(index + 1)], level: (level + 1)))
-                )) {
-                    m_builder.Append(value: ',');
-                }
-                if (element.Trivia.Trailing is not null) {
-                    m_builder.Append(value: ' ').Append(value: element.Trivia.Trailing);
-                }
-            }
-            EndLine();
-            Inner(
-                level: (level + 1),
-                trivia: array.Trivia
-            );
-            Indent(level: level);
-            m_builder.Append(value: ']');
-        }
-        private void Object(ObjectExpressionNode @object, int level) {
-            if (@object.Properties.Count == 0) {
-                m_builder.Append(value: "{}");
-
-                return;
-            }
-            if (!@object.Trivia.MultiLine) {
-                m_builder.Append(value: "{ ");
-                for (var index = 0; (index < @object.Properties.Count); index++) {
-                    if (index > 0) { m_builder.Append(value: ", "); }
-                    Property(
-                        level: level,
-                        property: @object.Properties[index]
-                    );
-                }
-                m_builder.Append(value: " }");
-
-                return;
-            }
-            m_builder.Append(value: '{');
-            if (@object.Trivia.Opening is not null) { m_builder.Append(value: ' ').Append(value: @object.Trivia.Opening); }
-            for (var index = 0; (index < @object.Properties.Count); index++) {
-                var property = @object.Properties[index];
-                var breaks = (property.Trivia.OnNewLine || (property.Trivia.Leading.Count > 0));
-                var joins = (
-                    ((index + 1) < @object.Properties.Count) &&
-                    !(@object.Properties[(index + 1)].Trivia.OnNewLine || (@object.Properties[(index + 1)].Trivia.Leading.Count > 0))
-                );
-
-                if (
-                    (index > 0) &&
-                    !breaks
-                ) {
-                    m_builder.Append(value: ", ");
-                }
-                if (breaks) {
-                    EndLine();
-                    Leading(
-                        level: (level + 1),
-                        trivia: property.Trivia
-                    );
-                    Indent(level: (level + 1));
-                }
-                Property(
-                    level: (level + 1),
-                    property: property
-                );
-                if (!joins && property.Trivia.Separated) { m_builder.Append(value: ','); }
-                if (property.Trivia.Trailing is not null) {
-                    m_builder.Append(value: ' ').Append(value: property.Trivia.Trailing);
-                }
-            }
-            EndLine();
-            Inner(
-                level: (level + 1),
-                trivia: @object.Trivia
-            );
-            Indent(level: level);
-            m_builder.Append(value: '}');
-        }
-
-        public void Value(ExpressionNode expression) => this.Expression(expression: expression, level: 0);
-
-        private void Expression(ExpressionNode expression, int level) {
-            if (expression.Parenthesized) {
-                m_builder.Append(value: '(');
-                Expression(expression: expression with { Parenthesized = false }, level: level);
-                m_builder.Append(value: ')');
-                return;
-            }
-            switch (expression) {
-                case AssetExpressionNode asset: {
-                        m_builder.Append(value: "asset ").Append(value: Quote(text: asset.Path));
-
-                        break;
-                    }
-                case LiteralExpressionNode literal: {
-                        m_builder.Append(value: Literal(literal: literal));
-
-                        break;
-                    }
-                case ColorExpressionNode color: {
-                        m_builder.Append(value: color.Hex);
-
-                        break;
-                    }
-                case IdentifierExpressionNode identifier: {
-                        m_builder.Append(value: identifier.Name);
-
-                        break;
-                    }
-                case MemberAccessExpressionNode member: {
-                        Expression(
-                            expression: member.Target,
-                            level: level
-                        );
-                        m_builder.Append(value: '.').Append(value: member.Member);
-
-                        break;
-                    }
-                case CallExpressionNode call: {
-                        m_builder.Append(value: call.Name).Append(value: '(');
-                        Arguments(
-                            arguments: call.Arguments,
-                            level: level,
-                            multiLine: call.Trivia.MultiLine
-                        );
-                        if (call.Trivia.MultiLine) {
-                            EndLine();
-                            Indent(level: level);
-                        }
-                        m_builder.Append(value: ')');
-
-                        break;
-                    }
-                case BinaryExpressionNode binary: {
-                        Operand(
-                            level: level,
-                            operand: binary.Left,
-                            parenthesize: (Precedence(@operator: binary.Left) < Precedence(@operator: binary))
-                        );
-                        m_builder.Append(value: ' ').Append(value: binary.Operator).Append(value: ' ');
-                        Operand(
-                            level: level,
-                            operand: binary.Right,
-                            parenthesize: (Precedence(@operator: binary.Right) <= Precedence(@operator: binary))
-                        );
-
-                        break;
-                    }
-                case UnaryExpressionNode unary: {
-                        m_builder.Append(value: unary.Operator);
-                        Operand(
-                            level: level,
-                            operand: unary.Operand,
-                            parenthesize: (Precedence(@operator: unary.Operand) < PrimaryPrecedence)
-                        );
-
-                        break;
-                    }
-                case IndexExpressionNode index: {
-                        Expression(
-                            expression: index.Target,
-                            level: level
-                        );
-                        m_builder.Append(value: '[');
-                        Expression(
-                            expression: index.Index,
-                            level: level
-                        );
-                        m_builder.Append(value: ']');
-
-                        break;
-                    }
-                case OperandExpressionNode operand: {
-                        m_builder.Append(value: operand.Text);
-
-                        break;
-                    }
-                case RangeExpressionNode range: {
-                        if (range.Start is { } start) {
-                            Expression(expression: start, level: level);
-                        }
-                        m_builder.Append(value: "..");
-                        if (range.End is { } end) {
-                            Expression(expression: end, level: level);
-                        }
-
-                        break;
-                    }
-                case LambdaExpressionNode lambda: {
-                        if (lambda.Parameters.Count == 1) {
-                            m_builder.Append(value: lambda.Parameters[0]);
-                        } else {
-                            m_builder.Append(value: '(').Append(value: string.Join(
-                                separator: ", ",
-                                values: lambda.Parameters
-                            )).Append(value: ')');
-                        }
-                        m_builder.Append(value: " => ");
-                        Expression(
-                            expression: lambda.Body,
-                            level: level
-                        );
-
-                        break;
-                    }
-                case ArrayExpressionNode array: {
-                        Array(
-                            array: array,
-                            level: level
-                        );
-
-                        break;
-                    }
-                case ObjectExpressionNode @object: {
-                        Object(
-                            level: level,
-                            @object: @object
-                        );
-
-                        break;
-                    }
-                case InterpolatedStringNode interpolated: {
-                        Interpolated(
-                            interpolated: interpolated,
-                            level: level
-                        );
-
-                        break;
-                    }
-                default: {
-                        break;
-                    }
-            }
-        }
-        private void Operand(ExpressionNode operand, bool parenthesize, int level) {
-            parenthesize &= !operand.Parenthesized;
-            if (parenthesize) { m_builder.Append(value: '('); }
-            Expression(
-                expression: operand,
-                level: level
-            );
-            if (parenthesize) { m_builder.Append(value: ')'); }
-        }
-        // An interpolated string's holes are read out of the string's DECODED text, so the whole body — hole
-        // expressions included — is composed first and escaped once. Escaping a hole's own string arguments is what
-        // keeps `$"{row["key"]}"` one string rather than three.
-        private void Interpolated(InterpolatedStringNode interpolated, int level) {
-            var body = new StringBuilder();
-
-            foreach (var segment in interpolated.Segments) {
-                switch (segment) {
-                    case InterpolationSegment.Literal literal: {
-                            foreach (var character in literal.Text) {
-                                switch (character) {
-                                    case '{': { body.Append(value: "{{"); break; }
-                                    case '}': { body.Append(value: "}}"); break; }
-                                    default: { body.Append(value: character); break; }
-                                }
-                            }
-
-                            break;
-                        }
-                    case InterpolationSegment.Hole hole: {
-                            body.Append(value: '{').Append(value: Capture(expression: hole.Expression, level: level)).Append(value: '}');
-
-                            break;
-                        }
-                    default: {
-                            break;
-                        }
-                }
-            }
-
-            var text = body.ToString();
-
-            // A fence carries no escapes, so it is the spelling only when it reads back exactly.
-            if (
-                interpolated.RawFenced &&
-                PuckStrings.CanFence(text: text)
-            ) {
-                m_builder.Append(value: "$\"\"\"").Append(value: text).Append(value: "\"\"\"");
-
-                return;
-            }
-            m_builder.Append(value: "$\"");
-            PuckStrings.Escape(
-                into: m_builder,
-                text: text
-            );
-            m_builder.Append(value: '"');
-        }
-        private bool ContinuesPreviousElement(ExpressionNode element, int level) {
-            var text = Capture(
-                expression: element,
-                level: level
-            );
-
-            return ((text.Length > 0) && (text[0] is '-' or '+' or '('));
-        }
-        private string Capture(ExpressionNode expression, int level) {
-            var start = m_builder.Length;
-
-            Expression(
-                expression: expression,
-                level: level
-            );
-
-            var text = m_builder.ToString(
-                length: (m_builder.Length - start),
-                startIndex: start
-            );
-
-            m_builder.Length = start;
-
-            return text;
-        }
-
-        private const int PrimaryPrecedence = 5;
-
         private static int Precedence(ExpressionNode @operator) => (@operator switch {
-            BinaryExpressionNode { Operator: "==" or "!=" or "<" or "<=" or ">" or ">=" } => 1,
-            RangeExpressionNode => 2,
-            BinaryExpressionNode { Operator: "+" or "-" } => 3,
-            BinaryExpressionNode { Operator: "*" or "/" or "%" } => 4,
+            BinaryExpressionNode binary => PuckParser.InfixLevel(symbol: binary.Operator),
+            RangeExpressionNode => PuckParser.RangeLevel,
+            ConditionalExpressionNode => PuckParser.ConditionalLevel,
             LambdaExpressionNode => 0,
-            _ => PrimaryPrecedence,
+            _ => PuckParser.PrimaryLevel,
         });
         private static string Number(decimal value) => value.ToString(provider: CultureInfo.InvariantCulture);
         private static string Literal(LiteralExpressionNode literal) {

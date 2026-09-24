@@ -14,6 +14,9 @@ internal static class ParityManifestLoader {
     private const int MaxDepth = 16;
 
     private static readonly Func<string, Exception> Refusal = static message => new ParityDocumentRefusal(message: message);
+    // The capture producer's refusal vocabulary, spelled as the producer writes it (Puck.World's WorldCaptureRefusal,
+    // camelCase). A kind outside it is drift between producer and comparator, refused rather than guessed at.
+    private static readonly string[] RefusalKinds = ["cameraInside", "busy", "stale", "failed", "unserved"];
 
     private static bool IsStateHash(string value) {
         if (value.Length != 16) {
@@ -52,7 +55,8 @@ internal static class ParityManifestLoader {
             "frame",
             "stateHash",
             "census",
-            "cameraInside"
+            "refusal",
+            "detail"
         );
 
         var station = CliStrictJson.ReadRequiredString(
@@ -77,11 +81,6 @@ internal static class ParityManifestLoader {
             throw new ParityDocumentRefusal(message: $"{context} stateHash '{stateHash}' is not 16 lower-case hex digits.");
         }
 
-        var cameraInside = ReadRequiredBool(
-            context: context,
-            element: row,
-            member: "cameraInside"
-        );
         var hasFrame = row.TryGetProperty(
             propertyName: "frame",
             value: out _
@@ -90,19 +89,44 @@ internal static class ParityManifestLoader {
             propertyName: "census",
             value: out _
         );
+        var hasRefusal = row.TryGetProperty(
+            propertyName: "refusal",
+            value: out _
+        );
+        var hasDetail = row.TryGetProperty(
+            propertyName: "detail",
+            value: out _
+        );
 
-        if (cameraInside) {
+        if (hasRefusal) {
             if (
                 hasFrame ||
                 hasCensus
             ) {
-                throw new ParityDocumentRefusal(message: $"{context} cameraInside is true, so frame and census must be absent.");
+                throw new ParityDocumentRefusal(message: $"{context} carries a refusal, so frame and census must be absent.");
+            }
+
+            var refusal = CliStrictJson.ReadRequiredString(
+                context: context,
+                element: row,
+                member: "refusal",
+                refusal: Refusal
+            );
+
+            if (!RefusalKinds.Contains(value: refusal)) {
+                throw new ParityDocumentRefusal(message: $"{context} refusal '{refusal}' is not one of {string.Join(separator: ", ", values: RefusalKinds)}.");
             }
 
             return new ParityManifestCapture(
-                CameraInside: true,
                 Census: null,
+                Detail: CliStrictJson.ReadRequiredString(
+                    context: context,
+                    element: row,
+                    member: "detail",
+                    refusal: Refusal
+                ),
                 Frame: null,
+                Refusal: refusal,
                 StateHash: stateHash,
                 Station: station,
                 Tick: tick
@@ -111,9 +135,10 @@ internal static class ParityManifestLoader {
 
         if (
             !hasFrame ||
-            !hasCensus
+            !hasCensus ||
+            hasDetail
         ) {
-            throw new ParityDocumentRefusal(message: $"{context} cameraInside is false, so frame and census are required.");
+            throw new ParityDocumentRefusal(message: $"{context} carries no refusal, so frame and census are required and detail must be absent.");
         }
 
         var frame = CliStrictJson.ReadRequiredString(
@@ -133,9 +158,10 @@ internal static class ParityManifestLoader {
         );
 
         return new ParityManifestCapture(
-            CameraInside: false,
             Census: census,
+            Detail: null,
             Frame: frame,
+            Refusal: null,
             StateHash: stateHash,
             Station: station,
             Tick: tick
@@ -157,19 +183,6 @@ internal static class ParityManifestLoader {
         }
 
         return census;
-    }
-    private static bool ReadRequiredBool(JsonElement element, string member, string context) {
-        if (
-            !element.TryGetProperty(
-            propertyName: member,
-            value: out var value
-        ) ||
-            ((value.ValueKind != JsonValueKind.True) && (value.ValueKind != JsonValueKind.False))
-        ) {
-            throw new ParityDocumentRefusal(message: $"{context} {member} is required and must be true or false.");
-        }
-
-        return (value.ValueKind == JsonValueKind.True);
     }
     private static ulong ReadRequiredUInt64(JsonElement element, string member, string context) {
         if (

@@ -2,8 +2,8 @@
     <PropertyGroup>
         <EnableDynamicLoading>true</EnableDynamicLoading>
         <PuckKind>Production</PuckKind>
-        <!-- A configured service adapter consumed by the normal composition root, alongside the WASM adapter. -->
-        <PuckLayer>Engine services</PuckLayer>
+        <!-- Installed beside a host and discovered, never referenced by one: the top row keeps every ranked host off it. -->
+        <PuckLayer>Optional extensions</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Azure.Identity" Version="[1.*, )" />

@@ -1,14 +1,17 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Puck.Abstractions;
 
 /// <summary>
-/// Marks an assembly as providing one or more dynamically discoverable Puck extensions.
-/// The host loader queries this metadata attribute for fast activation without expensive assembly-wide type reflection.
+/// Declares the <see cref="IPuckExtension"/> entry types an installed extension assembly provides. Discovery reads only
+/// this attribute: an assembly without it is refused rather than scanned for types.
 /// </summary>
+/// <param name="extensionType">The concrete type that implements <see cref="IPuckExtension"/> and has a public
+/// parameterless constructor.</param>
 [AttributeUsage(validOn: AttributeTargets.Assembly, AllowMultiple = true)]
-public sealed class PuckExtensionAttribute(Type extensionType) : Attribute {
-    /// <summary>
-    /// Gets the concrete type of the extension that implements an extension interface (such as
-    /// <c>IMachineExtension</c> or <c>IWorldExtension</c>).
-    /// </summary>
+public sealed class PuckExtensionAttribute([DynamicallyAccessedMembers(memberTypes: DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type extensionType) : Attribute {
+    /// <summary>Gets the concrete type that implements <see cref="IPuckExtension"/> and has a public parameterless
+    /// constructor.</summary>
+    [DynamicallyAccessedMembers(memberTypes: DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public Type ExtensionType { get; } = extensionType;
 }

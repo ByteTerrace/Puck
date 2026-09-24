@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Net;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -44,8 +43,8 @@ public static partial class RemoteMcpServer {
                 listen.Port,
                 endpoint => {
                     if (listen.Scheme == "https") {
-                        var password = ((options.CertificatePasswordEnvironmentVariable is { } name)
-                            ? (Environment.GetEnvironmentVariable(variable: name) ?? throw new InvalidOperationException(message: "The configured certificate-password environment variable is unset."))
+                        var password = ((options.CertificatePasswordFile is { } passwordFile)
+                            ? File.ReadAllText(path: passwordFile).TrimEnd(trimChar: '\n').TrimEnd(trimChar: '\r')
                             : null
                         );
 
@@ -87,6 +86,7 @@ public static partial class RemoteMcpServer {
 
         services.AddSingleton(implementationInstance: options);
         services.AddSingleton(implementationInstance: access);
+        services.AddSingleton<RemoteMcpChallenges>();
         services.AddSingleton<RemoteMcpDiagnostics>();
         services.TryAddSingleton<RemoteMcpHost, UnconfiguredRemoteMcpHost>();
         services.TryAddSingleton(instance: TimeProvider.System);
@@ -187,32 +187,18 @@ public static partial class RemoteMcpServer {
             http.SessionMode = HttpServerSessionMode.Stateless;
             http.ConfigureSessionOptions = async (context, server, configurationToken) => {
                 var remoteHost = context.RequestServices.GetRequiredService<RemoteMcpHost>();
-                var caller = new RemoteMcpCaller(
-                    SingleClaim(
-                        context.User,
-                        options.SubjectClaim
-                    )!,
-                    options.Issuer,
-                    options.TenantId,
-                    DateTimeOffset.FromUnixTimeSeconds(seconds: long.Parse(
-                        SingleClaim(
-                            context.User,
-                            "exp"
-                        )!,
-                        CultureInfo.InvariantCulture
-                    )),
-                    ((await context.GetTokenAsync(
-                        scheme: AuthenticationScheme,
-                        tokenName: "access_token"
-                    ).ConfigureAwait(continueOnCapturedContext: false)) ?? throw new InvalidOperationException(message: "The validated caller token is unavailable."))
-                );
+                var caller = await CallerAsync(
+                    context: context,
+                    options: options
+                ).ConfigureAwait(continueOnCapturedContext: false);
                 var tools = new RemoteMcpTools(
                     context.RequestServices.GetRequiredService<RemoteAttachmentPool>(),
                     caller.Subject,
                     options.IdleTimeoutSeconds,
                     context.RequestServices.GetRequiredService<RemoteMcpDiagnostics>(),
                     remoteHost,
-                    caller
+                    caller,
+                    context.RequestServices.GetRequiredService<RemoteMcpChallenges>()
                 );
 
                 server.ServerInfo = new() {
@@ -227,28 +213,10 @@ public static partial class RemoteMcpServer {
                     : "Request-scoped Puck services. Each tool runs under this request's authenticated caller and explicit grants. No Console attachments or durable background operations are available."
                 );
                 server.Handlers.ListToolsHandler = (_, token) => tools.ListAsync(token: token);
-                server.Handlers.CallToolHandler = async (request, token) => {
-                    try {
-                        return await tools.CallAsync(
-                        parameters: request.Params,
-                        token: token
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-                    } catch (RemoteMcpAuthorizationException challenge) {
-                        // Latest-protocol SDK transport defers headers until the first result. These services send no progress before authorization.
-                        if (context.Response.HasStarted) { context.Abort(); throw; }
-                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                        var claims = ((challenge.EncodedClaims is { } value)
-                            ? $", error=\"insufficient_claims\", claims=\"{value}\""
-                            : ", error=\"invalid_token\""
-                        );
-
-                        context.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{new Uri(
-                            baseUri: new Uri(uriString: options.PublicUrl),
-                            relativeUri: "/.well-known/oauth-protected-resource/mcp"
-                        )}\", scope=\"{(options.AuthorizationScope ?? options.Scope)}\"{claims}";
-                        return new() { IsError = true, Content = [new ModelContextProtocol.Protocol.TextContentBlock { Text = "User authorization is required. Follow the HTTP bearer challenge; no host credentials were substituted." }] };
-                    }
-                };
+                server.Handlers.CallToolHandler = (request, token) => tools.CallAsync(
+                    parameters: request.Params,
+                    token: token
+                );
                 server.Filters.Message.IncomingFilters.Add(item: next => (message, token) => {
                     OperatorMcpJson.ValidateParameters(message: message.JsonRpcMessage);
                     return next(
@@ -286,9 +254,11 @@ public static partial class RemoteMcpServer {
             .Append(element: resource.GetLeftPart(part: UriPartial.Authority)).ToFrozenSet(comparer: StringComparer.OrdinalIgnoreCase);
         var access = app.ApplicationServices.GetRequiredService<RemoteMcpAccessPolicy>();
         var stopping = app.ApplicationServices.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping;
+        var clock = app.ApplicationServices.GetRequiredService<TimeProvider>();
 
         UseAdmission(
             app: app,
+            clock: clock,
             stopping: stopping
         );
         app.Use(middleware: async (context, next) => {
@@ -351,8 +321,7 @@ public static partial class RemoteMcpServer {
             await next(context).ConfigureAwait(continueOnCapturedContext: false);
         });
         app.Use(middleware: async (context, next) => {
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: context.RequestAborted);
-            var maximum = TimeSpan.FromSeconds(seconds: 125);
+            var maximum = RequestDeadline;
 
             if (
                 (SingleClaim(
@@ -366,13 +335,22 @@ public static partial class RemoteMcpServer {
                 out var seconds
             )
             ) {
-                var now = DateTimeOffset.UtcNow;
+                var now = clock.GetUtcNow();
 
                 if (seconds <= now.ToUnixTimeSeconds()) { context.Response.StatusCode = StatusCodes.Status401Unauthorized; return; }
-                if (seconds < (now.ToUnixTimeSeconds() + 125)) { maximum = (DateTimeOffset.FromUnixTimeSeconds(seconds: seconds) - now); }
+                var remaining = (DateTimeOffset.FromUnixTimeSeconds(seconds: seconds) - now);
+
+                if (remaining < maximum) { maximum = remaining; }
             }
             if (maximum <= TimeSpan.Zero) { context.Response.StatusCode = StatusCodes.Status401Unauthorized; return; }
-            deadline.CancelAfter(delay: maximum);
+            using var lifetime = new CancellationTokenSource(
+                delay: maximum,
+                timeProvider: clock
+            );
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+                token1: context.RequestAborted,
+                token2: lifetime.Token
+            );
             var original = context.RequestAborted;
 
             context.RequestAborted = deadline.Token;
@@ -399,6 +377,10 @@ public static partial class RemoteMcpServer {
                 ).ConfigureAwait(continueOnCapturedContext: false);
             } finally { access.Changed -= Revoke; context.RequestAborted = original; }
         });
+        UseDelegatedAuthorization(
+            app: app,
+            options: options
+        );
         app.UseEndpoints(configure: endpoints => {
             endpoints.MapMcp(pattern: resource.AbsolutePath).RequireAuthorization("PuckMcp");
             endpoints.MapGet(

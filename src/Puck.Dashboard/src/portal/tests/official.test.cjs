@@ -1,19 +1,15 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const fs = require('node:fs');
-const ts = require('typescript');
 
 // Exercise the shipped TypeScript through Node's test runner, without a second bundler — same
 // pattern as tests/offline-preview.test.cjs.
-require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, file);
+require('./support/register.cjs');
 
 const { resolveOfficial, OfficialConfigError } = require('../src/official/officialBase.ts');
-const { parseManifest, ManifestRefusal } = require('../src/official/manifest.ts');
+const { parseManifest, ManifestRefusal, describeTree, NO_COMMIT } = require('../src/official/manifest.ts');
 const { sha256Hex, toHashName, verifyBytes, OfficialRefusal } = require('../src/official/verify.ts');
 const { createByteStore } = require('../src/official/byteStore.ts');
-const { loadOfficial } = require('../src/official/officialClient.ts');
+const { loadOfficial, generatorCommit } = require('../src/official/officialClient.ts');
 
 const OFFICIAL_ENV = { VITE_PUCK_OFFICIAL_BASE: 'https://official.test/off', VITE_PUCK_OFFICIAL_CHANNEL: 'dev' };
 
@@ -31,6 +27,10 @@ async function buildFixture() {
   const documentText = JSON.stringify({ schema: 'puck.world.definition.v1', documentId: 'puck' });
   const documentBytes = textBytes(documentText);
   const documentHash = toHashName(await sha256Hex(documentBytes));
+
+  const sourceText = 'schema: "puck.world.definition.v1"\n';
+  const sourceBytes = textBytes(sourceText);
+  const sourceHash = toHashName(await sha256Hex(sourceBytes));
 
   const composedText = JSON.stringify({ schema: 'puck.world.definition.v1', composed: true });
   const composedBytes = textBytes(composedText);
@@ -57,11 +57,14 @@ async function buildFixture() {
         { name: '_framework/dotnet.js', path: 'objects/sha256/cc/dotnetjs', hash: dotnetJsHash, size: dotnetJsBytes.length, contentType: 'text/javascript' },
       ],
     },
+    sources: [
+      { name: 'games/tictactoe.puck', path: 'objects/sha256/ab/source', hash: sourceHash, size: sourceBytes.length, contentType: 'text/x-puck; charset=utf-8' },
+    ],
     documents: [
-      { name: 'games/tictactoe.world.json', role: 'fragment', documentId: null, imports: [], exports: ['tictactoe'], path: 'objects/sha256/dd/document', hash: documentHash, size: documentBytes.length, contentType: 'application/json', pin: 'sha256-64/0011223344556677' },
+      { name: 'games/tictactoe', source: 'games/tictactoe.puck', role: 'fragment', documentId: null, imports: [], exports: ['tictactoe'], path: 'objects/sha256/dd/document', hash: documentHash, size: documentBytes.length, contentType: 'application/json', pin: 'sha256-64/0011223344556677' },
     ],
     composed: [
-      { documentId: 'puck', name: 'puck.world.json', path: 'objects/sha256/ee/composed', hash: composedHash, size: composedBytes.length, contentType: 'application/json', pin: 'sha256-64/8899aabbccddeeff', identity: null },
+      { documentId: 'puck', name: 'puck', path: 'objects/sha256/ee/composed', hash: composedHash, size: composedBytes.length, contentType: 'application/json', pin: 'sha256-64/8899aabbccddeeff', identity: null },
     ],
     assets: [
       { family: 'music', name: 'theme', source: 'music/theme.json', path: 'objects/sha256/ff/asset', hash: assetHash, size: assetBytes.length, contentType: 'application/json', pin: null },
@@ -76,6 +79,7 @@ async function buildFixture() {
     byUrl.set(official.objectUrl(path).href, () => ({ ok: true, status: 200, arrayBuffer: async () => bytes.buffer }));
   };
   registerObject(manifest.worldSchemaBundle.path, schemaBundleBytes);
+  registerObject(manifest.sources[0].path, sourceBytes);
   registerObject(manifest.documents[0].path, documentBytes);
   registerObject(manifest.composed[0].path, composedBytes);
   registerObject(manifest.assets[0].path, assetBytes);
@@ -93,7 +97,7 @@ async function buildFixture() {
 
   return {
     official, manifest, manifestText, fakeFetch, byUrl,
-    documentText, documentHash, composedText, assetText,
+    documentText, documentHash, sourceText, composedText, assetText,
     documentPath: manifest.documents[0].path,
   };
 }
@@ -115,7 +119,7 @@ test('officialBase.resolveOfficial joins root/channel/objects without import.met
   assert.throws(() => resolveOfficial({ VITE_PUCK_OFFICIAL_BASE: '/official' }), OfficialConfigError);
 });
 
-test('manifest.parseManifest refuses an unknown schema and a foreign build.worldSchema by name', () => {
+test('manifest.parseManifest refuses an unknown schema, a foreign build.worldSchema, and a manifest with no sources[] by name', () => {
   assert.throws(() => parseManifest('not json'), ManifestRefusal);
   assert.throws(
     () => parseManifest(JSON.stringify({ schema: 'not.a.real.schema', build: { worldSchema: 'puck.world.definition.v1' } })),
@@ -125,6 +129,51 @@ test('manifest.parseManifest refuses an unknown schema and a foreign build.world
     () => parseManifest(JSON.stringify({ schema: 'puck.official.manifest.v1', build: { worldSchema: 'not.a.real.schema' } })),
     /not\.a\.real\.schema/,
   );
+  assert.throws(
+    () => parseManifest(JSON.stringify({ schema: 'puck.official.manifest.v1', build: { worldSchema: 'puck.world.definition.v1' } })),
+    /sources\[\]/,
+  );
+});
+
+test('manifest.parseManifest refuses an object hash that is not sha256 over 64 lowercase hex digits, naming its field', () => {
+  const lower = `sha256/${'ab'.repeat(32)}`;
+  const manifestWith = (patch) => JSON.stringify({
+    schema: 'puck.official.manifest.v1',
+    build: { worldSchema: 'puck.world.definition.v1' },
+    worldSchemaBundle: { path: 'objects/sha256/aa/bundle', hash: lower },
+    engine: { entry: 'main.mjs', files: [{ name: 'main.mjs', path: 'objects/sha256/bb/main', hash: lower }] },
+    sources: [{ name: 'counter.puck', path: 'objects/sha256/cc/source', hash: lower }],
+    documents: [], composed: [], assets: [],
+    ...patch,
+  });
+
+  assert.doesNotThrow(() => parseManifest(manifestWith({})));
+  assert.throws(
+    () => parseManifest(manifestWith({ sources: [{ name: 'counter.puck', path: 'objects/sha256/cc/source', hash: `sha256/${'AB'.repeat(32)}` }] })),
+    /sources\[0\]\.hash .*64 lowercase hex/,
+  );
+  assert.throws(
+    () => parseManifest(manifestWith({ engine: { entry: 'main.mjs', files: [{ name: 'main.mjs', path: 'objects/sha256/bb/main', hash: `sha256/${'ab'.repeat(31)}` }] } })),
+    /engine\.files\[0\]\.hash/,
+  );
+  assert.throws(
+    () => parseManifest(manifestWith({ worldSchemaBundle: { path: 'objects/sha256/aa/bundle', hash: `sha512/${'ab'.repeat(32)}` } })),
+    /worldSchemaBundle\.hash/,
+  );
+});
+
+test('manifest.describeTree names the worlds tree a build was read from, and says so when no commit holds it', () => {
+  assert.equal(describeTree({ commit: '590e07499670c8e9686bd8a9384d184ace52fa2e', dirty: false }), 'commit 590e07499670');
+  assert.equal(describeTree({ commit: '590e07499670c8e9686bd8a9384d184ace52fa2e', dirty: true }), 'commit 590e07499670 + local edits');
+  assert.equal(describeTree({ commit: NO_COMMIT, dirty: true }), 'worlds tree outside git');
+  assert.equal(NO_COMMIT, 'none');
+});
+
+test('officialClient.generatorCommit reads the schema bundle\'s own x-puck.commit, never build.commit', () => {
+  assert.equal(generatorCommit({ schemaBundle: { 'x-puck': { schemaVersion: 'puck.world.definition.v1', commit: 'feedface' } } }), 'feedface');
+  assert.equal(generatorCommit({ schemaBundle: { 'x-puck': { schemaVersion: 'puck.world.definition.v1' } } }), null);
+  assert.equal(generatorCommit({ schemaBundle: null }), null);
+  assert.equal(generatorCommit({ schemaBundle: { 'x-puck': { commit: 7 } } }), null);
 });
 
 test('verify.verifyBytes hashes with crypto.subtle and refuses a mismatch by name', async () => {
@@ -143,7 +192,7 @@ test('verify.verifyBytes hashes with crypto.subtle and refuses a mismatch by nam
   );
 });
 
-test('loadOfficial happy path: schemaBundle, documents, composed, assets, and engine files all verify', async () => {
+test('loadOfficial happy path: schemaBundle, sources, documents, composed, assets, and engine files all verify', async () => {
   const fixture = await buildFixture();
   const store = createByteStore();
   const result = await loadOfficial(fixture.official, fixture.fakeFetch, store);
@@ -152,11 +201,14 @@ test('loadOfficial happy path: schemaBundle, documents, composed, assets, and en
   assert.equal(result.build.commit, 'abc123');
   assert.deepEqual(result.schemaBundle, { 'x-puck': { schemaVersion: 'puck.world.definition.v1' } });
 
-  assert.deepEqual(result.documents.names(), ['games/tictactoe.world.json']);
-  assert.equal(await result.documents.get('games/tictactoe.world.json'), fixture.documentText);
+  assert.deepEqual(result.sources.names(), ['games/tictactoe.puck']);
+  assert.equal(await result.sources.get('games/tictactoe.puck'), fixture.sourceText);
 
-  assert.deepEqual(result.composed.names(), ['puck.world.json']);
-  assert.equal(await result.composed.get('puck.world.json'), fixture.composedText);
+  assert.deepEqual(result.documents.names(), ['games/tictactoe']);
+  assert.equal(await result.documents.get('games/tictactoe'), fixture.documentText);
+
+  assert.deepEqual(result.composed.names(), ['puck']);
+  assert.equal(await result.composed.get('puck'), fixture.composedText);
 
   assert.deepEqual(result.assets.names(), ['music/theme']);
   assert.equal(await result.assets.get('music/theme'), fixture.assetText);
@@ -176,7 +228,7 @@ test('a hash mismatch refuses by name and caches nothing in the byte store', asy
   const store = createByteStore();
   const result = await loadOfficial(fixture.official, fixture.fakeFetch, store);
 
-  await assert.rejects(result.documents.get('games/tictactoe.world.json'), (error) => {
+  await assert.rejects(result.documents.get('games/tictactoe'), (error) => {
     assert.ok(error instanceof OfficialRefusal);
     assert.equal(error.objectPath, fixture.documentPath);
     assert.equal(error.expectedHash, fixture.documentHash);
@@ -185,6 +237,43 @@ test('a hash mismatch refuses by name and caches nothing in the byte store', asy
   });
 
   assert.equal(await store.get(fixture.documentHash), undefined);
+});
+
+test('a tampered stored copy is fetched again and replaced, never served', async () => {
+  const fixture = await buildFixture();
+  const store = createByteStore();
+  await store.put(fixture.documentHash, textBytes('tampered in the store'), 'application/json');
+  let documentFetches = 0;
+  const countingFetch = (input) => {
+    if ((typeof input === 'string' ? input : input.href) === fixture.official.objectUrl(fixture.documentPath).href) documentFetches += 1;
+    return fixture.fakeFetch(input);
+  };
+
+  const result = await loadOfficial(fixture.official, countingFetch, store);
+  assert.equal(await result.documents.get('games/tictactoe'), fixture.documentText);
+  assert.equal(documentFetches, 1, 'the tampered copy sent the read to the network');
+  assert.equal(new TextDecoder().decode(await store.get(fixture.documentHash)), fixture.documentText, 'the good bytes replace it');
+});
+
+test('a tampered stored copy with no network to replace it is refused by name', async () => {
+  const fixture = await buildFixture();
+  const store = createByteStore();
+  const loaded = await loadOfficial(fixture.official, fixture.fakeFetch, store);
+  await store.put(fixture.documentHash, textBytes('tampered in the store'), 'application/json');
+  const objectsOffline = (input) => ((typeof input === 'string' ? input : input.href).includes('/objects/')
+    ? Promise.reject(new Error('offline'))
+    : fixture.fakeFetch(input));
+
+  const offline = await loadOfficial(fixture.official, objectsOffline, store);
+  assert.equal(loaded.manifest.documents.length, offline.manifest.documents.length);
+  await assert.rejects(offline.documents.get('games/tictactoe'), (error) => {
+    assert.ok(error instanceof OfficialRefusal);
+    assert.equal(error.objectPath, fixture.documentPath);
+    assert.equal(error.expectedHash, fixture.documentHash);
+    assert.match(error.message, /failed verification/);
+    assert.match(error.message, /offline/);
+    return true;
+  });
 });
 
 test('a manifest fetch failure falls back to a previously verified offline copy', async () => {

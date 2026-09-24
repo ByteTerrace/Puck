@@ -44,20 +44,20 @@ public sealed class WorldReleaseReceiptProofTests {
             );
             var token = TestContext.Current.CancellationToken;
 
-            await Assert.ThrowsAsync<InvalidDataException>(() => WorldReleaseReceiptProof.ReadAsync(
-                store,
-                definition,
-                false,
-                token
+            await Assert.ThrowsAsync<InvalidDataException>(testCode: () => WorldReleaseReceiptProof.ReadAsync(
+                allowMissingRoots: false,
+                definition: definition,
+                store: store,
+                token: token
             ));
             var empty = await WorldReleaseReceiptProof.ReadAsync(
-                store,
-                definition,
-                true,
-                token
+                allowMissingRoots: true,
+                definition: definition,
+                store: store,
+                token: token
             );
 
-            Assert.Empty(Assert.Single(empty).Value);
+            Assert.Empty(collection: Assert.Single(collection: empty).Value);
             var applied = new WorldAuthorityOperationReceipt(
                 Guid.NewGuid(),
                 "editor",
@@ -88,20 +88,21 @@ public sealed class WorldReleaseReceiptProofTests {
             Assert.True(condition: (await store.RecordReceiptAsync(
                 identity,
                 refused,
-                token
+                token,
+                WorldAuthorityFence.Unowned
             )).Ok);
             var expected = await WorldReleaseReceiptProof.ReadAsync(
-                store,
-                definition,
-                false,
-                token
+                allowMissingRoots: false,
+                definition: definition,
+                store: store,
+                token: token
             );
 
             Assert.Equal(
                 2,
-                Assert.Single(expected).Value.Count
+                Assert.Single(collection: expected).Value.Count
             );
-            var hash = WorldReleaseReceiptProof.Hash(expected);
+            var hash = WorldReleaseReceiptProof.Hash(inventory: expected);
             var root = await store.LoadRootAsync(
                 cancellationToken: token,
                 identity: identity
@@ -110,11 +111,11 @@ public sealed class WorldReleaseReceiptProofTests {
             Assert.Equal(
                 hash,
                 await WorldReleaseReceiptProof.VerifyAsync(
-                    store,
-                    definition,
-                    expected,
-                    true,
-                    token
+                    definition: definition,
+                    expected: expected,
+                    store: store,
+                    testDuplicates: true,
+                    token: token
                 )
             );
             Assert.Equal(
@@ -127,25 +128,26 @@ public sealed class WorldReleaseReceiptProofTests {
             Assert.True(condition: (await store.RecordReceiptAsync(
                 identity,
                 refused with { OperationId = Guid.NewGuid(), PayloadDigest = "new" },
-                token
+                token,
+                WorldAuthorityFence.Unowned
             )).Ok);
             Assert.Equal(
                 hash,
                 await WorldReleaseReceiptProof.VerifyAsync(
-                    store,
-                    definition,
-                    expected,
-                    true,
-                    token
+                    definition: definition,
+                    expected: expected,
+                    store: store,
+                    testDuplicates: true,
+                    token: token
                 )
             );
             Assert.NotEqual(
                 hash,
-                WorldReleaseReceiptProof.Hash(await WorldReleaseReceiptProof.ReadAsync(
-                    store,
-                    definition,
-                    false,
-                    token
+                WorldReleaseReceiptProof.Hash(inventory: await WorldReleaseReceiptProof.ReadAsync(
+                    allowMissingRoots: false,
+                    definition: definition,
+                    store: store,
+                    token: token
                 ))
             );
             _ = await store.AcquireActivationAsync(
@@ -155,32 +157,32 @@ public sealed class WorldReleaseReceiptProofTests {
             Assert.Equal(
                 hash,
                 await WorldReleaseReceiptProof.VerifyAsync(
-                    store,
-                    definition,
-                    expected,
-                    false,
-                    token
+                    definition: definition,
+                    expected: expected,
+                    store: store,
+                    testDuplicates: false,
+                    token: token
                 )
             );
             Assert.Contains(
                 "drained",
-                (await Assert.ThrowsAsync<InvalidDataException>(() => WorldReleaseReceiptProof.VerifyAsync(
-                    store,
-                    definition,
-                    expected,
-                    true,
-                    token
+                (await Assert.ThrowsAsync<InvalidDataException>(testCode: () => WorldReleaseReceiptProof.VerifyAsync(
+                    definition: definition,
+                    expected: expected,
+                    store: store,
+                    testDuplicates: true,
+                    token: token
                 ))).Message
             );
-            expected[Assert.Single(expected).Key][applied.OperationId] = applied with { DecisionCode = "changed" };
+            expected[Assert.Single(collection: expected).Key][applied.OperationId] = applied with { DecisionCode = "changed" };
             Assert.Contains(
                 "lost or changed",
-                (await Assert.ThrowsAsync<InvalidDataException>(() => WorldReleaseReceiptProof.VerifyAsync(
-                    store,
-                    definition,
-                    expected,
-                    false,
-                    token
+                (await Assert.ThrowsAsync<InvalidDataException>(testCode: () => WorldReleaseReceiptProof.VerifyAsync(
+                    definition: definition,
+                    expected: expected,
+                    store: store,
+                    testDuplicates: false,
+                    token: token
                 ))).Message
             );
         } finally { temporary.Delete(recursive: true); }

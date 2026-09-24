@@ -1,7 +1,7 @@
 namespace Puck.Cli.Scan;
 
 // The analyzer output contract: stream a lone analyzer's JSONL to stdout, or write
-// <OutDir>/<name>.jsonl (+ <name>.grouped.json) for a batch.
+// <output>/<name>.jsonl (+ <name>.grouped.json) for a batch.
 internal static class ScanSink {
     public static void Emit(string name, string jsonl, string grouped, ScanOptions options) {
         if (options.SingleStdout) {
@@ -21,7 +21,7 @@ internal static class ScanSink {
             contents: jsonl,
             path: jsonlPath
         );
-        Console.Error.WriteLine(value: $"scan: wrote {jsonlPath}");
+        Console.Error.WriteLine(value: $"scan: wrote {CliPaths.ToDisplay(fullPath: jsonlPath)}");
 
         if (options.Grouped) {
             var groupedPath = Path.Combine(
@@ -33,7 +33,7 @@ internal static class ScanSink {
                 contents: grouped,
                 path: groupedPath
             );
-            Console.Error.WriteLine(value: $"scan: wrote {groupedPath}");
+            Console.Error.WriteLine(value: $"scan: wrote {CliPaths.ToDisplay(fullPath: groupedPath)}");
         }
     }
 }

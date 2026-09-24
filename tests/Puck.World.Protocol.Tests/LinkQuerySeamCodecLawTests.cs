@@ -72,14 +72,14 @@ public sealed class LinkQuerySeamCodecLawTests {
     public void GrantAllows_RoundTrips() {
         var subject = GrantSubject.Body(index: 2);
         var decoded = Assert.IsType<WorldQuery.GrantAllows>(@object: RoundTripQuery(query: new WorldQuery.GrantAllows(
-            Principal: WorldPrincipal.Seat(slot: 1),
+            Principal: Principal.Seat(slot: 1),
             Capability: WorldCapability.Drive,
             Subject: subject
         )));
 
         Assert.Equal(
             actual: decoded.Principal,
-            expected: WorldPrincipal.Seat(slot: 1)
+            expected: Principal.Seat(slot: 1)
         );
         Assert.Equal(
             actual: decoded.Capability,
@@ -93,14 +93,14 @@ public sealed class LinkQuerySeamCodecLawTests {
     [Fact]
     public void GrantHandleMint_RoundTrips() {
         var decoded = Assert.IsType<WorldQuery.GrantHandleMint>(@object: RoundTripQuery(query: new WorldQuery.GrantHandleMint(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Capability: WorldCapability.Observe,
             Index: 3
         )));
 
         Assert.Equal(
             actual: decoded.Principal,
-            expected: WorldPrincipal.Seat(slot: 0)
+            expected: Principal.Seat(slot: 0)
         );
         Assert.Equal(
             actual: decoded.Capability,
@@ -116,7 +116,7 @@ public sealed class LinkQuerySeamCodecLawTests {
         var handle = new WorldHandle(
             Index: 5,
             Generation: 7,
-            TablePrincipal: WorldPrincipal.Seat(slot: 2),
+            TablePrincipal: Principal.Seat(slot: 2),
             TableCapability: WorldCapability.Drive
         );
         var decoded = Assert.IsType<WorldQuery.GrantHandleResolve>(@object: RoundTripQuery(query: new WorldQuery.GrantHandleResolve(Handle: handle)));
@@ -154,14 +154,14 @@ public sealed class LinkQuerySeamCodecLawTests {
             Persistence: InputDeviceIdentityPersistence.Reconnect
         );
         var decoded = Assert.IsType<SessionRequest.RememberPreferredController>(@object: RoundTripSession(request: new SessionRequest.RememberPreferredController(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Device: device,
             IdentityName: "p2"
         )));
 
         Assert.Equal(
             actual: decoded.Principal,
-            expected: WorldPrincipal.Seat(slot: 0)
+            expected: Principal.Seat(slot: 0)
         );
         Assert.Equal(
             actual: decoded.Device,

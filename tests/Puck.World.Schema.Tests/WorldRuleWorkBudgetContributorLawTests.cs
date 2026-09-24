@@ -31,7 +31,7 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(
             State: "phase",
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Value: value
         );
     private static WorldDefinition RegionDocument(float regionRadius, params WorldKit[] kits) => new(
@@ -193,6 +193,7 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
     [Fact]
     public void AdmissionRefusesABoundWithNoNumberAndAdmitsOnlyAKnownOneUnderTheCeiling() {
         var asked = 0;
+
         IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Lines() {
             asked++;
 
@@ -204,8 +205,8 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
             work: RuleWork.Known(units: RuleCapacity.MaxWorkUnitsPerTick)
         ));
         Assert.Equal(
-            0,
-            asked
+            actual: asked,
+            expected: 0
         );
         Assert.Contains(
             expectedSubstring: "exceeding the maximum",
@@ -222,8 +223,8 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
             );
 
             Assert.Contains(
-                expectedSubstring: "no bound on their work per tick",
-                actualString: refusal
+                actualString: refusal,
+                expectedSubstring: "no bound on their work per tick"
             );
             Assert.Contains(
                 expectedSubstring: unbounded.ToString(),

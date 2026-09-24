@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Abstractions;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -321,7 +323,7 @@ public sealed partial class WorldInstanceHost {
             // alone, so this verifies it was started from the same document — two doors authoring the
             // identical name against different reference documents would otherwise silently route a
             // traveler into whichever world happened to claim the name first. Resolve both sides through
-            // the same probe TryStart itself uses (rooted/relative/base-directory/shipped-worlds), so a
+            // the same probe TryStart itself uses (rooted, or relative to the current directory), so a
             // spelling difference alone never false-refuses.
             if (
                 !WorldFileOrigin.TryResolveCanonicalPath(
@@ -335,7 +337,7 @@ public sealed partial class WorldInstanceHost {
                 !string.Equals(
                 a: expectedPath,
                 b: actualPath,
-                comparisonType: PathComparison
+                comparisonType: PuckPaths.Comparison
             )
             ) {
                 reason = $"'{resolvedName}' is already running from '{resolved.SourcePath}', not the document this destination names ('{documentPath}') — a stable-named destination must resolve the same document everywhere it is authored";
@@ -481,7 +483,7 @@ public sealed partial class WorldInstanceHost {
                 !string.Equals(
                 a: targetPath,
                 b: candidatePath,
-                comparisonType: PathComparison
+                comparisonType: PuckPaths.Comparison
             )
             ) {
                 continue;
@@ -611,9 +613,7 @@ public sealed partial class WorldInstanceHost {
         )
         ) {
             var neighbours = new WorldFileNeighbourResolver(
-                baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
-                ? directory
-                : AppContext.BaseDirectory),
+                baseDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: resolvedPath),
                 catalogFingerprint: m_catalogFingerprint,
                 catalog: m_machineCatalog
             );
@@ -665,7 +665,7 @@ public sealed partial class WorldInstanceHost {
                     spawned = false;
                     reason = string.Empty;
                     return true;
-                } catch (FormatException exception) {
+                } catch (Exception exception) when ((exception is FormatException or InvalidOperationException)) {
                     authority = default;
                     spawned = false;
                     reason = exception.Message;
@@ -752,12 +752,12 @@ public sealed partial class WorldInstanceHost {
         }
 
         var cohort = new[] { new WorldSessionResolver.CohortMember(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             IdentityId: null
         ) };
         var referencedDocument = ResolveReferenceDocument(
             source: source,
-            documentPath: reference.NeighbourKey
+            neighbourKey: reference.NeighbourKey
         );
         var canonicalDocument = CanonicalDocumentIdentity(documentPath: referencedDocument);
 
@@ -856,12 +856,12 @@ public sealed partial class WorldInstanceHost {
         }
 
         var cohort = new[] { new WorldSessionResolver.CohortMember(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             IdentityId: null
         ) };
         var referencedDocument = ResolveReferenceDocument(
             source: source,
-            documentPath: reference.NeighbourKey
+            neighbourKey: reference.NeighbourKey
         );
         var canonicalDocument = CanonicalDocumentIdentity(documentPath: referencedDocument);
 
@@ -941,9 +941,7 @@ public sealed partial class WorldInstanceHost {
         }
 
         var neighbours = new WorldFileNeighbourResolver(
-            baseDirectory: () => ((Path.GetDirectoryName(path: resolvedPath) is { Length: > 0 } directory)
-            ? directory
-            : AppContext.BaseDirectory),
+            baseDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: resolvedPath),
             catalogFingerprint: m_catalogFingerprint,
             catalog: m_machineCatalog
         );
@@ -969,6 +967,7 @@ public sealed partial class WorldInstanceHost {
         }
 
         var loaded = admission.Definition;
+
         if (loaded.Host.Authority is { Length: > 0 } endpoint) {
             try {
                 var remote = new WorldRemoteAuthority(
@@ -986,7 +985,7 @@ public sealed partial class WorldInstanceHost {
                 attach = remote.AttachSink;
                 reason = string.Empty;
                 return true;
-            } catch (FormatException exception) {
+            } catch (Exception exception) when ((exception is FormatException or InvalidOperationException)) {
                 reason = exception.Message;
                 return false;
             }

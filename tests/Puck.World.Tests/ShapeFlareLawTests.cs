@@ -2,7 +2,6 @@ using System.Numerics;
 
 using Puck.SignedDistance;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -24,23 +23,6 @@ public sealed class ShapeFlareLawTests {
         Top: 0.5f
     );
 
-    private static void AssertCanonicalizerAccepts(CreationDocument document) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.Empty(collection: violations);
-    }
-    private static void AssertCanonicalizerRefusesNaming(CreationDocument document, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
     private static void AssertFlareIsScoped(SdfProgram program) {
         var instructions = program.Instructions.ToList();
         var flareIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.AxialProfile));
@@ -78,92 +60,23 @@ public sealed class ShapeFlareLawTests {
             filter: static instruction => (instruction.Op == SdfOp.PopField)
         );
     }
-    private static CreationDocument Document(params ShapeDocument[] shapes) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: shapes,
-            Frames: null
-        );
+    private static CreationDocument Document(params ShapeDocument[] shapes) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: shapes
+    );
     // --- Pool emission path (WorldStampPool.EmitShape's twist/bend/flare prefix) ---
 
-    private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale, bool probeWorstCase = false) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: [new(
-                        "#AAAAAA",
-                        null,
-                        null,
-                        null
-                    )],
-                Shapes: [shape],
-                Frames: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: bodyScale,
-                Motion: WorldLookMotion.Default
-            )],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: probeWorstCase,
-            maxPlacementScale: bodyScale,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale) => CreationFixtures.EmitPool(
+        bodyScale: bodyScale,
+        name: PrototypeId,
+        shapes: [shape]
+    );
     // --- Static emission path (CreationStampEmitter.EmitShapeChain's BuildTransformChain) ---
 
-    private static SdfProgram EmitStatic(ShapeDocument shape, float stampScale) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        CreationStampEmitter.Emit(
-            builder: builder,
-            document: Document(shape),
-            materialFor: _ => material,
-            transform: new CreationStampTransform(
-                Origin: Vector3.Zero,
-                Rotation: Quaternion.Identity,
-                Scale: stampScale,
-                ReflectionNormal: null
-            )
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static SdfProgram EmitStatic(ShapeDocument shape, float stampScale) => CreationFixtures.EmitStatic(
+        document: Document(shape),
+        stampScale: stampScale
+    );
     private static SdfInstruction FlareInstruction(SdfProgram program) =>
         program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.AxialProfile));
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, ShapeFlareDocument? flare, int id = 0, IReadOnlyList<ShapeDomainOp>? domain = null) =>
@@ -249,80 +162,65 @@ public sealed class ShapeFlareLawTests {
             ).StepScale
         );
     }
-    [Fact]
-    public void ANonFiniteAmountIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
-            document: Document(Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                (Flare with { Amount = float.NaN })
-            )),
-            needle: "flare"
-        );
-    [Fact]
-    public void ANonFiniteBulgeIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
-            document: Document(Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                (Flare with { Bulge = float.NaN })
-            )),
-            needle: "flare"
-        );
-    [Fact]
-    public void ANonFiniteTopIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
-            document: Document(Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                (Flare with { Top = float.NaN })
-            )),
-            needle: "flare"
-        );
-    [InlineData(0f)]
-    [InlineData(-1f)]
-    [InlineData(float.NaN)]
-    [InlineData(float.PositiveInfinity)]
-    [InlineData(float.NegativeInfinity)]
+    [InlineData("amount", float.NaN)]
+    [InlineData("bulge", float.NaN)]
+    [InlineData("span", 0f)]
+    [InlineData("span", -1f)]
+    [InlineData("span", float.NaN)]
+    [InlineData("span", float.PositiveInfinity)]
+    [InlineData("span", float.NegativeInfinity)]
+    [InlineData("top", float.NaN)]
     [Theory]
-    public void ANonPositiveOrNonFiniteSpanIsRefusedByName(float span) =>
-        AssertCanonicalizerRefusesNaming(
+    public void AFlareLaneOutsideItsAdmittedRangeIsRefusedByName(string lane, float value) =>
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 Vector3.One,
-                (Flare with { Span = span })
+                lane switch {
+                    "amount" => (Flare with { Amount = value }),
+                    "bulge" => (Flare with { Bulge = value }),
+                    "span" => (Flare with { Span = value }),
+                    _ => (Flare with { Top = value }),
+                }
             )),
             needle: "flare"
         );
     [Fact]
     public void ANormalFlareIsAccepted() =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Box,
             Vector3.One,
             Flare
         )));
     // Sweep is not a closed solid: its curve facet refuses the warp facets by name (ShapeCurveLawTests), so this
     // every-primitive admission law ranges over the closed set only.
-    public static IEnumerable<object[]> EveryPrimitive() =>
-        Enum.GetValues<SdfSolidPrimitive>().Where(predicate: static type => (type != SdfSolidPrimitive.Sweep)).Select(selector: static type => new object[] { type });
+    public static TheoryData<SdfSolidPrimitive> EveryPrimitive() => CreationFixtures.EveryPrimitiveExcept(excluded: SdfSolidPrimitive.Sweep);
     [MemberData(memberName: nameof(EveryPrimitive))]
     [Theory]
     public void FlareIsAdmittedOnEveryPrimitive(SdfSolidPrimitive type) =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             type,
             Vector3.One,
             Flare
         )));
-    [Fact]
-    public void ThePoolEmitsTheAuthoredValuesVerbatimAtBodyScaleOne() {
-        var instruction = FlareInstruction(program: EmitPool(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                Flare
-            ),
-            bodyScale: 1f
-        ));
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void BothPathsEmitTheAuthoredValuesVerbatimAtScaleOne(bool pooled) {
+        var shape = Shape(
+            SdfSolidPrimitive.Box,
+            Vector3.One,
+            Flare
+        );
+        var instruction = FlareInstruction(program: (pooled
+            ? EmitPool(
+                bodyScale: 1f,
+                shape: shape
+            )
+            : EmitStatic(
+                shape: shape,
+                stampScale: 1f
+            )));
 
         Assert.Equal(
             expected: Flare.Amount,
@@ -421,9 +319,9 @@ public sealed class ShapeFlareLawTests {
                 SdfSolidPrimitive.Box,
                 Vector3.One,
                 (Flare with {
-                Span = (Flare.Span * 2f),
-                Top = (Flare.Top!.Value * 2f),
-            })
+                    Span = (Flare.Span * 2f),
+                    Top = (Flare.Top!.Value * 2f),
+                })
             ),
             bodyScale: 1f
         ));
@@ -465,55 +363,6 @@ public sealed class ShapeFlareLawTests {
             expected: (plain.Radius * factor),
             actual: flared.Radius,
             precision: 4
-        );
-    }
-    [Fact]
-    public void ThePoolsProbeEmitsAFlareInstructionEvenWithoutOneAuthored() {
-        var program = EmitPool(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                flare: null
-            ),
-            bodyScale: 1f,
-            probeWorstCase: true
-        );
-
-        Assert.Contains(
-            collection: program.Instructions,
-            filter: static instruction => (instruction.Op == SdfOp.AxialProfile)
-        );
-    }
-    [Fact]
-    public void TheStaticPathEmitsTheAuthoredValuesVerbatimAtScaleOne() {
-        var instruction = FlareInstruction(program: EmitStatic(
-            shape: Shape(
-                SdfSolidPrimitive.Box,
-                Vector3.One,
-                Flare
-            ),
-            stampScale: 1f
-        ));
-
-        Assert.Equal(
-            expected: Flare.Amount,
-            actual: instruction.Data0.X,
-            precision: 6
-        );
-        Assert.Equal(
-            expected: Flare.Bulge,
-            actual: instruction.Data0.Y,
-            precision: 6
-        );
-        Assert.Equal(
-            expected: Flare.Top!.Value,
-            actual: instruction.Data0.Z,
-            precision: 6
-        );
-        Assert.Equal(
-            expected: (1f / Flare.Span),
-            actual: instruction.Data0.W,
-            precision: 6
         );
     }
     // The static chain converts the point into creation units through its own Scale(transform.Scale) op BEFORE the

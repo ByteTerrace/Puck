@@ -488,15 +488,8 @@ public readonly partial record struct UFixedQ4816(ulong Value)
     /// <param name="obj">The object to compare with this instance, or <see langword="null"/>.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="obj"/>; a <see langword="null"/> <paramref name="obj"/> sorts first.</returns>
     /// <exception cref="ArgumentException"><paramref name="obj"/> is neither <see langword="null"/> nor a <see cref="UFixedQ4816"/>.</exception>
-    public int CompareTo(object? obj) {
-        if (obj is null) { return 1; }
-        if (obj is UFixedQ4816 other) { return CompareTo(other: other); }
-
-        throw new ArgumentException(
-            message: $"Object must be of type {nameof(UFixedQ4816)}.",
-            paramName: nameof(obj)
-        );
-    }
+    public int CompareTo(object? obj) =>
+        SignedFixedPointArithmetic.CompareToObject(obj: obj, self: this);
     /// <summary>Compares this instance with another <see cref="UFixedQ4816"/> and indicates their relative order.</summary>
     /// <param name="other">The value to compare with this instance.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="other"/>.</returns>
@@ -508,17 +501,8 @@ public readonly partial record struct UFixedQ4816(ulong Value)
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
     /// <returns>The value represented by <paramref name="s"/>.</returns>
     /// <exception cref="FormatException"><paramref name="s"/> is not a valid, in-range <see cref="UFixedQ4816"/> literal.</exception>
-    public static UFixedQ4816 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        if (!TryParseCore(
-            provider: provider,
-            result: out var result,
-            s: s
-        )) {
-            throw new FormatException(message: $"The input span was not in a valid {nameof(UFixedQ4816)} format.");
-        }
-
-        return result;
-    }
+    public static UFixedQ4816 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
+        SignedFixedPointArithmetic.Parse<UFixedQ4816>(provider: provider, s: s, tryParse: TryParseCore);
     /// <summary>Parses a string into a <see cref="UFixedQ4816"/>.</summary>
     /// <param name="s">The string to parse, an unsigned decimal number such as <c>"123.5"</c>.</param>
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
@@ -549,19 +533,8 @@ public readonly partial record struct UFixedQ4816(ulong Value)
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
     /// <param name="result">When this method returns, the parsed value on success or the default value on failure.</param>
     /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>. A <see langword="null"/> <paramref name="s"/> returns <see langword="false"/>.</returns>
-    public static bool TryParse(string? s, IFormatProvider? provider, out UFixedQ4816 result) {
-        if (s is null) {
-            result = default;
-
-            return false;
-        }
-
-        return TryParseCore(
-            s: s.AsSpan(),
-            provider: provider,
-            result: out result
-        );
-    }
+    public static bool TryParse(string? s, IFormatProvider? provider, out UFixedQ4816 result) =>
+        SignedFixedPointArithmetic.TryParseString(provider: provider, result: out result, s: s, tryParse: TryParseCore);
 
     // The default unsigned surface speaks the BCL unsigned grammar — a leading sign is admitted — and rejects any
     // text whose exact value lies outside [0, MaxValue] BEFORE rounding, at BOTH ends: a negative magnitude refuses

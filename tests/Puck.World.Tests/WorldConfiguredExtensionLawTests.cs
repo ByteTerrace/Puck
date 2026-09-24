@@ -1,5 +1,7 @@
+using Puck.Commands;
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -55,20 +57,20 @@ public sealed class WorldConfiguredExtensionLawTests {
                 Json(json: "{}")
             )],
         [new(
-                WorldPrincipal.Console.Describe(),
+                Principal.Console.Describe(),
                 ["delete-a", "delete-b"],
                 Requests()
             )],
         [new(
                 "a",
-                WorldPrincipal.Console.Describe(),
+                Principal.Console.Describe(),
                 "delete-a",
                 "requests-a",
                 "status-a"
             ),
          new(
                 "b",
-                WorldPrincipal.Console.Describe(),
+                Principal.Console.Describe(),
                 "delete-b",
                 "requests-b",
                 "status-b"
@@ -135,15 +137,13 @@ public sealed class WorldConfiguredExtensionLawTests {
         Visibility: new()
     );
     private static DirectoryObjectStorageTarget Target() => new("unused");
-    private static WorldExtensionRegistry<WorldExtensionProviderType> Types(List<Provider> providers) => new(
-        extensions: [
-        new(
-                "fake",
-                settings => { var provider = new Provider(identity: settings.GetProperty(propertyName: "identity").GetString()!); providers.Add(item: provider); return provider; }
-            ),
-    ],
-        keyOf: type => type.Type
-    );
+    private static PuckExtensionSet Types(List<Provider> providers) => PuckExtensionSet.Compose(extensions: [new TestExtension(
+        name: "fake",
+        register: registry => registry.AddOperation(provider: new(
+            "fake",
+            settings => { var provider = new Provider(identity: settings.GetProperty(propertyName: "identity").GetString()!); providers.Add(item: provider); return provider; }
+        ))
+    )]);
     private static long? Value(WorldServer server, string row) => server.Definition.State.First(predicate: r => (r.Name.Value == row))
         .Cells?.FirstOrDefault(predicate: cell => (cell.Key.Value == "incarnation-1"))?.Value.AsInt;
 
@@ -166,7 +166,7 @@ public sealed class WorldConfiguredExtensionLawTests {
         );
         using var edit = new WorldRecordedExtension(
             world.Server,
-            WorldPrincipal.Console,
+            Principal.Console,
             [new(
                     Capability: WorldCapability.Mutate,
                     Subject: GrantSubject.Section(section: WorldSection.State)
@@ -175,7 +175,7 @@ public sealed class WorldConfiguredExtensionLawTests {
         );
 
         edit.Submit(mutation: new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             "requests-a",
             "incarnation-1",
             0,
@@ -183,7 +183,7 @@ public sealed class WorldConfiguredExtensionLawTests {
             Text: "{\"changed\":true}"
         ));
         edit.Submit(mutation: new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             "requests-b",
             "incarnation-2",
             0,
@@ -250,9 +250,9 @@ public sealed class WorldConfiguredExtensionLawTests {
             store,
             Target(),
             () => {
-            pumpThread = Environment.CurrentManagedThreadId;
-            return world.Server.CaptureExternalOperationCause(hostRow: WorldAuthorityHostRowCheckpoint.Empty);
-        }
+                pumpThread = Environment.CurrentManagedThreadId;
+                return world.Server.CaptureExternalOperationCause(hostRow: WorldAuthorityHostRowCheckpoint.Empty);
+            }
         )) {
             var initialThread = Environment.CurrentManagedThreadId;
 
@@ -344,10 +344,12 @@ public sealed class WorldConfiguredExtensionLawTests {
         );
         Assert.All(
             providers,
-            provider => { Assert.True(condition: provider.Disposed); Assert.Equal(
+            provider => {
+                Assert.True(condition: provider.Disposed); Assert.Equal(
             actual: provider.Executions,
             expected: 0
-        ); }
+        );
+            }
         );
     }
     [Fact]
@@ -362,7 +364,7 @@ public sealed class WorldConfiguredExtensionLawTests {
             Target(),
             () => "unused"
         );
-        var client = runtime.Client(principal: WorldPrincipal.Console);
+        var client = runtime.Client(principal: Principal.Console);
 
         world.Server.SuppressRecordedExtensions();
         runtime.Pump(completedTick: 1);
@@ -392,12 +394,12 @@ public sealed class WorldConfiguredExtensionLawTests {
         ));
         Assert.Throws<ArgumentException>(testCode: () => WorldConfiguredExtensions.Create(
             Configuration() with {
-            Providers = [new(
+                Providers = [new(
                     "first",
                     "../evil.dll",
                     Json(json: "{}")
                 )],
-        },
+            },
             types,
             world.Server,
             new FakeObjectBlobStore(),

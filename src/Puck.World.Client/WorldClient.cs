@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
@@ -56,6 +57,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private ulong m_tick;
     private ulong m_engineTick;
 
+    private readonly WorldStateMirror m_stateMirror;
+
     /// <summary>The number of active non-seat entities in the latest snapshot — the client's view of the simulated
     /// census (drives the fleet-tier auto quality levers).</summary>
     public int ActivePeerCount => m_activePeerCount;
@@ -79,6 +82,29 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>The latest snapshot's engine tick — what a <c>StateAdvance</c> row's live value is computed at;
     /// never derived from <see cref="Tick"/> at a simulation rate.</summary>
     public ulong EngineTick => m_engineTick;
+    /// <summary>Gets the state mirror every presentation binding of this client reads through, refreshed at each
+    /// state delivery and each tick, and resolved to row ordinals at each definition delivery.</summary>
+    public WorldStateMirror StateMirror => m_stateMirror;
+
+    /// <summary>Returns the state mirror presentation reads an authority's rows through: this client's own
+    /// <see cref="StateMirror"/> for the authority this client observes, and the authority's own followed mirror
+    /// (<see cref="WorldAuthorityEndpoint.FollowState"/>) for any other, so a seat routed to another authority reads the
+    /// rows of the document its rig names, at that authority's delivered tick.</summary>
+    /// <param name="endpoint">The authority whose rows are read.</param>
+    /// <returns>The mirror over that authority's delivered rows.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> is <see langword="null"/>.</exception>
+    public WorldStateMirror StateMirrorFor(WorldAuthorityEndpoint endpoint) {
+        ArgumentNullException.ThrowIfNull(argument: endpoint);
+
+        return (string.Equals(
+            a: endpoint.Authority,
+            b: m_authority,
+            comparisonType: StringComparison.Ordinal
+        )
+            ? m_stateMirror
+            : endpoint.FollowState()
+        );
+    }
 
     // The shared per-seat live orbit. Camera-relative movement reads only its already-integrated yaw while composing
     // a world-frame intent; the deterministic simulation still receives ordinary fixed-point role channels and has
@@ -139,6 +165,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         );
         m_composition = composition;
         m_levers = null;
+        m_stateMirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => m_definition));
 
         for (var index = 0; (index < EntityCapacity); index++) {
             m_previousOrientation[index] = Quaternion.Identity;
@@ -765,6 +792,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
             channelCount: m_channels.ChannelCount
         );
         m_definitionRevision++;
+        m_stateMirror.Install(
+            engineTick: m_engineTick,
+            tick: m_tick
+        );
     }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -876,15 +907,21 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         m_tick = snapshot.Tick;
         m_engineTick = snapshot.EngineTick;
         m_authority = snapshot.Authority;
+        // A tick no state delivery refreshed still moves every bound cell whose value-over-time trait has not rested.
+        m_stateMirror.Advance(
+            engineTick: m_engineTick,
+            tick: m_tick
+        );
     }
     /// <inheritdoc/>
-    public void DeliverState(WorldDefinition definition) {
+    /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
+    /// definition is stored for state-value reads without bumping the frame source's rebuild-watch revision, and the
+    /// state mirror refreshes the slots bound to the rows the stamp names.</remarks>
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        // A value-only mutation cannot have changed channels, target registers, or scene shape: store the fresh
-        // definition for state-value reads (cell contents, HUD bindings) without bumping the frame source's
-        // rebuild-watch revision or recompiling anything DeliverDefinition would.
         m_definition = definition;
+        m_stateMirror.Refresh(stamp: in stamp);
     }
     /// <summary>The complete durable address of the active occupant in a local slot.</summary>
     public WorldEntityAddress EntityAddress(int index) => new(
@@ -937,7 +974,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// inputs drive the profile picker, not locomotion), and a seat submits only under
     /// <see cref="IntentSource.Live"/> — off-Live the devices are inert and the server-side source fills the gaps.
     /// The submission's acting identity is <see cref="PlayerRoster.PrincipalOf"/> — the slot's own
-    /// <see cref="WorldPrincipal.Seat"/> ordinarily, or whatever identity a <see cref="PlayerRoster.TryClaimSlot"/> call
+    /// <see cref="Principal.Seat"/> ordinarily, or whatever identity a <see cref="PlayerRoster.TryClaimSlot"/> call
     /// overrode it to (e.g. a replay device's) — so a claimed slot's submission is checked under its own principal, never
     /// silently promoted to the seat's. The submission's target is <see cref="PlayerRoster.DriveTarget"/> — the slot
     /// itself for an ordinary unclaimed seat, or a claimed slot's principal's own granted body (or

@@ -220,7 +220,7 @@ internal sealed class HostPersistenceStage : IPostStage<PostContext> {
         Require(
             condition: (Directory.GetFiles(
                 path: directory,
-                searchPattern: ".agb-save-*.tmp"
+                searchPattern: "*.tmp"
             ).Length == 0),
             detail: "save replacement leaked temporary files"
         );

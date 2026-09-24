@@ -1,10 +1,9 @@
 # Authority — the grant table, principals, and the co-driving fold
 
 ONE server-side table authorizes every write: `WorldGrants`
-(`src/Puck.World.Server/WorldGrants.cs`). Protocol vocabulary:
-`src/Puck.World.Schema/WorldGrant.cs`, `WorldPrincipal.cs`,
-`ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. The capability-channels model is implemented directly in the code above — read the CODE for current rulings, and `docs/game/design.md` for what remains as work.
-
+(`src/Puck.World.Server/WorldGrants.cs`). Vocabulary: the actor
+`src/Puck.Commands/Principal.cs`, and in `src/Puck.World.Schema` `WorldGrant.cs`,
+`Grantee.cs`, `PrincipalTokens.cs` and `ChannelPolicy.cs`. The capability-channels model is implemented directly in the code above — read the CODE for current rulings, and `docs/game/design.md` for what remains as work.
 ## Contents
 
 - Vocabulary
@@ -24,24 +23,30 @@ ONE server-side table authorizes every write: `WorldGrants`
 ## Vocabulary
 
 - `WorldCapability` (5 members): `Drive`, `Observe`, `Control`, `Mutate`,
-  `Edit`. There is no `Present`; ABI capability bit 2 is a permanently
-  reserved hole (see [addons.md](addons.md)).
-- `WorldPrincipal` (`PrincipalKind`, 7 members): `Seat` (index 0–3), `Console`,
-  `Addon(name)`, `Peer(index, generation)`, `Document(id)`, `World`, `Group(id)`
-  (the group/ownership wave's addition — a group never ACTS: nothing stamps it
-  as an ingress's acting principal, so it never reaches
-  `WorldPrincipalMapping` or the wire codec as a submitter; it exists only as
-  a grant TARGET and a membership-row value, expanded fresh on every
-  `Allows` check — see "`Allows` returns a verdict" below). Admitted peers occupy indices
-  the document's authored local-seat count through its population ceiling and
-  carry a positive generation. A zero-seat world can admit peer 0. Shared
-  console/JSON and wire parsers check only the representation bound through
-  `WorldBodiesLimits.IsBodyIndex`; the receiving authority owns census,
-  occupancy, and generation checks. Tokens: `seat1..seat4` (1-based),
-  `console`, `addon:<name>`, `peer:<n>:<generation>`; `Describe()` emits the
-  same generation-bearing peer token. `Document(id)` (`document:<id>`) is the
-  fifth kind: ANOTHER world document asking this document's authority to act,
-  and it only ever appears as a grant ROW in the `grants` section — the
+  `Edit`, each with one ABI capability bit (see [addons.md](addons.md)).
+- `Principal` (`Puck.Commands`, `PrincipalKind`): who is acting — the one
+  identity a command context, a submission envelope, a mutation, an intent and
+  a replay entry carry. Kinds: `Unspecified` (0, no door stamped it — never an
+  identity; `CommandContext` refuses one at construction), `Console`,
+  `Seat` (index 0–3), `Addon(name)`, `Peer(index, generation)`, `World`.
+  Admitted peers occupy indices the document's authored local-seat count
+  through its population ceiling and carry a positive generation. A zero-seat
+  world can admit peer 0. Shared console/JSON and wire parsers check only the
+  representation bound through `WorldBodiesLimits.IsBodyIndex`; the receiving
+  authority owns census, occupancy, and generation checks. Tokens
+  (`PrincipalTokens`, the inverse of `Principal.Describe()`): `seat1..seat4`
+  (1-based), `console`, `world`, `addon:<name>`, `peer:<n>:<generation>`.
+- `Grantee` (`Puck.World.Schema`, `GranteeKind`): what a grant row names as its
+  holder — a `Principal`, a `Group(id)` or a `Document(id)`. Every principal
+  converts implicitly to a grantee. A group or a document never acts, and the
+  types make that structural: no acting surface takes a `Grantee`. The grant
+  row's document member is `grantee`; tokens extend the principal grammar with
+  `group:<id>` and `document:<id>` (`Grantee.TokenGrammar`). A group grant is
+  held by every current member at check time, expanded fresh on every `Allows`
+  check — see "`Allows` returns a verdict" below. Group membership rows name
+  principals (`WorldMemberRef`), never groups.
+- A `document:<id>` grantee is ANOTHER world document asking this document's
+  authority to act, and it only ever appears as a grant ROW in the `grants` section — the
   cross-document durable-state write-back channel reads its rows off the
   OWNER IDENTITY's own DOCUMENT (`WorldOwnedWorlds.Decide`/
   `TryReadDurableState`), never off the runtime table, and never off the visited
@@ -49,32 +54,33 @@ ONE server-side table authorizes every write: `WorldGrants`
   both document-`grants` replays skip a `document:` row
   (`WorldServer.IsDocumentChannelRow`) and the grant door refuses one by name
   (`Conflicts` rule (-1b)), because a live row would be budget-less, mask-less,
-  and read by nothing. The live wire refuses it BY NAME, pointing at
+  and read by nothing. The live wire has no value for it and refuses it BY NAME, pointing at
   the document's own authored `grants` section as where a `document:` capability
   lives — `world.grant.set`/`world.grant.remove` edit the VISITED world's own
   `grants`. But the cross-document write-back channel reads the RECIPIENT
   identity's OWN document `grants` (a separate owned-world file), which
-  `identity.create` seeds `grants: []` and does not itself author. **CLOSED (C-CHAT core lane):** `Puck.World`'s `ChatCommandModule`
-  (`chat.inbox` declares a recipient's own bounded, evicting `chat-log`/
-  `chat-inbox` state rows; `chat.allow`/`chat.block` grant/revoke a sender
-  `document:<id>` Mutate+`state:chat-inbox`, Set-only) is the in-session door —
-  gated OWNER-ONLY at that one door (`context.ActingPrincipal()` must hold
+  `identity.create` seeds `grants: []` and does not itself author. `Puck.World`'s `ChatCommandModule`
+  (`chat.inbox` declares a recipient's own bounded, evicting `chat$log`/
+  `chat$inbox` state rows; `chat.allow`/`chat.block` grant/revoke a sender
+  `document:<id>` Mutate+`state:chat$inbox`, Set-only) is the in-session door —
+  gated OWNER-ONLY at that one door (`context.Principal` must hold
   `Drive` over the target player's body, never trusted from the verb's own
   arguments). `chat.whisper` is the real cross-document whisper verb (source id
   derived from the acting player's own identity, submitted through the same
   `WorldOwnedWorlds.Submit`/`Decide` pair `identity.deliver`'s dev harness
   exercised). A companion widening lets `Decide`'s text arm land in a bounded, evicting KEYED row, not just a slot. `world.grants` echoes the
   document-authored rows in their own `[world.grants.document: …]` group so the
-  skip is not a disappearance. `World` (`world`) is the sixth kind: THE WORLD'S OWN
+  skip is not a disappearance.
+- `Principal.World` (`world`) is THE WORLD'S OWN
   AUTHORED PROGRAM — a `rules` effect, or a kit's `generate` effect. It holds no
   grant rows (the grant door refuses one by name, the DOCUMENT VALIDATOR refuses
   an authored one so a document cannot validate against itself, and the wire
   refuses one as a nested row: a row for it would be accepted-and-inert), it
   never crosses the wire as an actor, and
   `TryAdmitMutation` admits it STRUCTURALLY before consulting the table. That is
-  the same standing a per-body `ActionEffect` always had — an authored program
-  has no submitter — now named because these effects write the DOCUMENT, which
-  has a door. `TryParse` accepts the `world` token so `world.why world …` can
+  the same standing a per-body `ActionEffect` has — an authored program
+  has no submitter — named because these effects write the DOCUMENT, which
+  has a door. `PrincipalTokens.TryParse` accepts the `world` token so `world.why world …` can
   answer for it (`allowed (structural)`), never so an ingress can stamp it.
 - `GrantSubject` (`GrantSubjectKind`): `all`, `body:<n>` (0-based entity
   index), `screen:<n>`, `section:<name>`, `state:<name>` (string-keyed,
@@ -99,10 +105,14 @@ ONE server-side table authorizes every write: `WorldGrants`
   legitimate for UNTRUSTED principals only (see references/addons.md's
   "World events" section) — no trusted principal reads the Observation
   cells they gate.
-- A grant row is `WorldGrant(Principal, Capability, Subject, Exclusive,
-  Budget?, Reach?, Consent?, Ceiling?, VerbMask?, EventBudget?)`. The key is
-  the triple; the rest is payload. A `VerbMask` narrows a concrete-section
-  Mutate row to declared mutation-kind ordinals; `EventBudget` is the world-
+- A grant row is `WorldGrant(Grantee, Capability, Subject, Exclusive,
+  Budget?, Reach?, Consent?, Ceiling?, KindMask?, EventBudget?, HoldCeiling?,
+  WriteMask?)`. The key is the triple; the rest is payload. A `KindMask`
+  (`MutationKindMask`) narrows a concrete Section/Creation/Placement Mutate
+  row, or a concrete State Edit row, to declared mutation-kind ordinals; a
+  `WriteMask` (`DocumentWriteMask`) narrows a concrete State Mutate row's
+  cross-document write-back operations; `HoldCeiling` bounds a Drive row's
+  timed channel presses; `EventBudget` is the world-
   events feed's nonzero admission gate, a sibling of `Budget` (dispatch)
   over the same row. Its numeric value is not consumed as a rate. See
   [addons.md](addons.md).
@@ -110,7 +120,9 @@ ONE server-side table authorizes every write: `WorldGrants`
 ## `Allows` returns a verdict, never a bool
 
 `WorldGrants.Allows(principal, capability, subject)` → `GrantVerdict(Rule,
-Reserver?, Group?, GateRow?)`; `GrantRule` (8 members) = `NoHold`,
+Reserver?, Group?, GateRow?)` for an acting principal; `WorldGrants.Holds(grantee, …)`
+is the first half alone — reservation, concrete, wildcard over the grantee's own
+rows — which `Allows` asks first and `world.why group:<id> …` asks directly; `GrantRule` (8 members) = `NoHold`,
 `BeatenByReserver` (both denials in the `grant.authority` refusal door),
 `ReserverMatch`, `ConcreteHold`, `WildcardHold`, `GroupHold`, `OwnershipHold`
 (these five are the ALLOWING rules — `GrantVerdict.IsAllowed`), plus
@@ -173,7 +185,7 @@ narrowing beneath an already deny-by-default capability, never a second
 authority check. Untrusted strictness lives at the GRANT door instead
 (`Conflicts` refuses a maskless untrusted `Mutate`/`section:<name>` row), so an
 unmasked untrusted row is unreachable rather than permissive. `world.why`'s
-`verbs:` diagnosis states exactly this rule and now agrees with every door.
+`verbs:` diagnosis states exactly this rule and agrees with every door.
 
 **Two call sites, one rule.** `WorldServer.TryApplyMutation` covers the whole
 ordered domain — loopback, console, and the `WorldPeerHost` peer door all
@@ -183,7 +195,7 @@ the same code. The addon seam
 refuses before decode so a guest cannot probe the decoder for free. It passes
 `rowScopedEditSubject: null` (a row name is only knowable after decode, so gate
 3 runs later at apply) and `meter: true`; the apply path then passes
-`preMetered: true` for that op (`PendingOp.Mutate.SourceAddonInstanceId`) so one
+`preMetered: true` for that op (`WorldPendingOp.Mutate.SourceAddonInstanceId`) so one
 guest dispatch is never charged twice. Call-site duplication is fine; rule
 reimplementation is the defect class this predicate closed.
 
@@ -205,7 +217,7 @@ every mounted addon is still `PrincipalKind.Addon`, still budgeted
 still never wildcarded, still never ceiling-carrying (a `Ceiling` may only
 ride a `Seat`'s own body row — see `IsOwnSeatBody`).
 
-**The fold's OWN contributor-trust predicate** (`WorldServer.StageContribution`,
+**The fold's OWN contributor-trust predicate** (`WorldTick.StageContribution`,
 `WorldAddonRuntime.ContributionAccepted`) **keys on HOST LOCUS, not principal
 kind by coincidence of vocabulary.** `Console` and `Seat` are trusted exactly
 as before — a human's own tool, added outside the pool, wholly unmasked. A
@@ -242,7 +254,7 @@ other section's mutation checks Mutate alone.
 `TryGrant` rule ladder (highlights): a `world` or `document:` principal holds no
 live row at all (rules (-1)/(-1b), above); an UNTRUSTED principal is REFUSED
 `Mutate`/`section:rules` outright (owner ruling — a rule's EFFECTS act as
-`WorldPrincipal.World`, which the admission door admits structurally and never
+`Principal.World`, which the admission door admits structurally and never
 meters, so one gated authoring act launders every budget and verb mask the row
 carries, and a verb mask cannot bound what the row does not dispatch; trusted
 principals are unaffected); exclusive-over-`all` refused outright;
@@ -270,7 +282,7 @@ clear authored ceilings.
 
 ## One admission door, every ingress
 
-`WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
+`WorldGrants.TryAdmitVerifiedParticipant` is the only path from an ingress to a
 population body plus grant rows, and it takes a `WorldAdmissionVerdict` — never
 raw `WorldGrant` rows. Only `Protocol.WorldAdmissionDoor` mints a verdict:
 `TryAdmit` (a verified attestation claim at the QUIC hello), `TryMatchEntry` (an
@@ -307,7 +319,7 @@ principal, the verdict's templates for a live peer arrival, and source support
 alone for an autonomous traveller, which has no driver at all.
 
 A body that is neither a local seat nor an admitted peer travels as
-`WorldPrincipal.World` (`WorldInstanceHost.TravelPrincipal`), which holds no
+`Principal.World` (`WorldInstanceHost.TravelPrincipal`), which holds no
 grant row and is admitted structurally only over a body the world's own program
 authors — never `Console`, whose `Drive/all` would also cover every seat and
 peer.
@@ -370,7 +382,7 @@ Addon).
 Routing in `ApplyIntentSubmission`: the OWNING seat (or any principal on an
 unoccupied body — a bot at full authority by construction) overwrites
 directly with contention tracking. Everything else stages
-(`WorldServer.StageContribution`), three ways: Console/Seat deltas sum unmasked and unpooled
+(`WorldTick.StageContribution`), three ways: Console/Seat deltas sum unmasked and unpooled
 (`outsidePoolDeltaRaw` — a human's own tool is never bounded by consent); a
 document-mounted Addon's deltas ALSO sum into `outsidePoolDeltaRaw` (trusted,
 outside the pool) but only for ordinals its OWN declared Reach contains — no
@@ -380,7 +392,7 @@ contains it — no consent authored means the delta is refused AT STAGING and
 never reaches the fold. Only the THIRD (pooled) branch latches
 `m_untrustedAcceptedMask`, so `body.channels` can prove the pool ran;
 `body.channels`'s `trusted=[...]`/`untrusted=[...]` contributor tags follow
-the SAME three-way split (a document-mounted addon now lists under
+the SAME three-way split (a document-mounted addon lists under
 `trusted=[...]`).
 
 `FoldChannelContributions` computes, per
@@ -398,15 +410,15 @@ of sign; World's concrete contributor set is much smaller.
 
 Every submission carries its acting principal: envelopes carry
 `SubmissionEnvelope.Principal`; console text carries
-`CommandContext.Principal`, stamped `CommandPrincipal.Console` by the text
+`CommandContext.Principal`, stamped `Principal.Console` by the text
 door in `Puck.Commands.CommandRegistry` (both the fast path and the full
 parse), by the snapshot mixer for pad lanes, and by injection sinks with
 their constructed identity. **Handlers READ the stamp via
-`context.ActingPrincipal()`** (`WorldPrincipalMapping` — the one seam that
-mints a `WorldPrincipal` from anything other than a read; it throws on
-`Unspecified` because that means a dispatch skipped a door). A handler that
-constructs a principal is asserting an identity rather than carrying one —
-the laundering defect class. `WorldPrincipal.Seat(n)`'s doc enumerates its
+`context.Principal`** — the same `Principal` type every world surface carries,
+so there is no conversion seam. `CommandContext` refuses an `Unspecified`
+principal at construction, because that means a dispatch skipped a door. A
+handler that constructs a principal is asserting an identity rather than carrying one —
+the laundering defect class. `Principal.Seat(n)`'s doc enumerates its
 only legitimate direct callers; do not add one to attribute an action.
 Client code never mutates local state before the server's verdict —
 completions, not discarded replies.
@@ -443,8 +455,9 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   the row), `[world.mutation rejected: …]`, contention
   `[world.grant: body:<n> driven by both … this tick — …]`.
 - `world.refusals [door]` prints the DECLARED refusal catalog
-  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`) across the doors: `addon.mutate`,
+  (`src/Puck.State/RuleRefusal.cs` + `RefusalCatalog.cs`) across the doors: `addon.mutate`,
   `grant.authority`, `hud.validate`, `replay.tape`, `sdf.decode`,
+  `state.rule.compile`, `state.rule.fire`, `state.transform`,
   `world.rule.compile`, `world.interaction.compile`, `world.rule.effect` — run
   `puck search "\[Refusal\(" src -M 0` for the current declaration count per
   door rather than trusting a written-down number. It does NOT cover console-tier text refusals (parse
@@ -468,7 +481,7 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   row hold alone`). `world.why document:<id> …` answers `not-in-this-table`
   with where the capability actually lives, the sibling of the `world`
   principal's `allowed (structural)` branch.
-- `world.grant` grammar: `<principal> <capability> <subject> [exclusive]
+- `world.grant` grammar: `<grantee> <capability> <subject> [exclusive]
   [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>]
   [verbs:<name,...>]`; trailing tokens may appear in any
   order, each at most once. `channels:` with `ceiling:` authors consent;
@@ -491,6 +504,21 @@ prove a new assertion once by breaking it.
 `Observe` also admits a concrete `state:<row>` subject. The
 `StateObservations(row)` query still filters values by the row/cell audience
 using the authenticated envelope principal, and cannot select another recipient.
-`TransformState` needs edit authority over every written row, including its
-random draw site. A row's `phaseOf` requires the matching guard on external
-transforms; capability grants remain necessary alongside phase eligibility.
+`TransformState` needs edit authority over every row its operation writes and
+observe authority over every row it only reads (`StateTransform.Subjects()`,
+abstract on the union, so an arm cannot compile without it, answers each
+subject's `StateAccess`). Written: every row the operation changes, a random draw
+site, and a `pushRay`'s pool (`state:<pool>`; pools share the rows' namespace).
+Read: a sort's key rows, a source board, mask, rank row, vector table or operand.
+`TransformAuthorityLawTests` holds the pool case and the sort case (observe over
+the key rows, no edit, admits the sort). Authority is not disclosure: whatever
+the actor holds, a transform whose written row some reader sees while a read row
+(or one of its declared cells) withholds from that reader is refused
+`TransformWidensAudience` (`StateVisibility.Encloses`, checked in
+`RuleCompiler`'s transform resolution, so the same check refuses an authored
+rule at validation and a submitted transform at compose).
+`TransformDisclosureLawTests` holds both doors. A transform never declassifies; a
+rule that shows a hidden value writes it through its own `setState` (word spy's
+clue word). A row's `phaseOf` requires the matching
+guard on external transforms that write it; capability grants remain necessary
+alongside phase eligibility.

@@ -61,19 +61,9 @@ public static class ShadowTiers {
     /// <see cref="Scale"/>, used when <c>world.save</c> folds the live reach back into the document's tiered
     /// <see cref="WorldRenderDefaults.Shadows"/> boot default. Round-trips exactly for the four tier scales (0/.25/.5/1);
     /// a continuous authoring override quantizes to its closest tier (the document holds only tiers).</summary>
-    public static ShadowTier Tier(float reach) {
-        var best = ShadowTier.High;
-        var bestDelta = float.MaxValue;
-
-        foreach (var tier in Enum.GetValues<ShadowTier>()) {
-            var delta = MathF.Abs(x: (reach - Scale(tier: tier)));
-
-            if (delta < bestDelta) {
-                best = tier;
-                bestDelta = delta;
-            }
-        }
-
-        return best;
-    }
+    public static ShadowTier Tier(float reach) => NearestTier.Of(
+        scale: static tier => Scale(tier: tier),
+        unordered: ShadowTier.High,
+        value: reach
+    );
 }

@@ -12,10 +12,10 @@ runtime truth for every cell in the document lane and the per-participant
 lanes; the document's row list is its serialization, produced by export and
 consumed by import; a hypothetical is a journal scope on the same arena, and
 installing a mutation is committing one. Search, the browser session, and the
-server run the same code over the same structure, so there is no `RowStore`,
-no `FrameHost` distinct from the host, and no transform with a document-path
-twin. A host-owned row is one a document project declares as served by a
-named facet: the arena holds its descriptor and no columns, a rule that reads
+server run the same code over the same structure, so there is no second row
+store, no frame host distinct from the host, and no transform with a
+document-path twin. A host-owned row is one a document project declares as
+served by a named facet: the arena holds its descriptor and no columns, a rule that reads
 it names the facet in its needs, no rule writes it, the arena hash excludes
 it, and its owner (the server, for the physics lattice) folds it into the
 world hash itself. Only `Lattice` and `Slot` shapes may be host-owned, because
@@ -107,8 +107,8 @@ shares; `Puck.State.Rules` the front ends, folder, compiler, evaluator, latch,
 budget, and dataflow; `Puck.State.Generators`, `Puck.State.Vectors`, and
 `Puck.State.Search` what their names say; `Puck.State.Topology` the board-query
 and pattern-automaton layer over an arena — rays and board shapes through one
-span kernel, and the compiled pattern machine's incremental resume over an
-arena-read word. Compiled lattice adjacency, tilings, and the pattern
+span kernel, and the compiled pattern machine's walk over an arena-read
+word. Compiled lattice adjacency, tilings, and the pattern
 algebra's own authored tree stay in core: a lattice row's column layout, a
 board's inverse recompute, and a `.puck` pattern's infix parse and print each
 read that declaration from inside `Puck.State` itself, so moving it would put
@@ -162,10 +162,10 @@ and bounded repetition by Brzozowski derivatives into a bounded machine over
 at most 32 numeric symbol classes, with no external regex engine. The same
 operator vocabulary spells patterns in `.puck`, cell sets (a family, a board, a
 zone, or a filter over one), and match facets read from one derivative walk.
-Derivatives step one symbol at a time, so a pattern over an ordered zone
-resumes past its memoized state only when the row's append generation, a
-counter that moves on any mutation other than a tail push, proves the prefix
-unchanged; a row version alone never proves a prefix.
+A match walks its word from the first letter on every read and keeps
+nothing between reads: each read re-reads the whole word off the arena, so a
+remembered prefix state would save only steps that cost no more than the read
+that precedes them.
 
 **D15 — Verification is replay of exported state, not hash equality.** With
 one execution path there is nothing to compare against itself, and the
@@ -231,7 +231,7 @@ every cell slot, a text for every slot of a text row. `StateArena.Bytes` adds
 the bounded visibility payload held by declaration and live state;
 `ArenaCapacity.MaxBytes` bounds that total. Layout overflow refuses before
 column allocation, and visibility admission checks construction, imports and
-writes. See [work budgets](../reference/state/hosting.md#work-budgets).
+writes. See [byte accounting](../reference/state/arena.md#byte-accounting).
 A count of cells
 cannot stand in for it: a cell slot costs about 250 bytes once every column a
 row may use is allocated, and lanes, draw masks and vectors are not cells. The
@@ -272,7 +272,7 @@ declared set of rows. A turn that wrote outside the set cannot be undone, and
 a group that declares undo may hold no irreversible arm and no host-owned
 write, refused at load. The retained ring is state: hashed, checkpointed, and
 dropped by a relayout. Undo carries no engine policy of its own: who may undo
-is the gate of the rule that fires `rewindTurn`, so one world lets the player
+is the gate of the rule that fires `rewindGroup`, so one world lets the player
 undo, another requires both seats, and a third never opens the gate. Depth is
 bounded in bytes by the journal ceiling, refused at load naming both figures
 when a declared depth's worst-case turns cannot fit; there is no separate
@@ -390,7 +390,8 @@ identity capacity remains distinct from the live-count limit. Generic positional
 reads may encounter holes; snapshots return only live handles in slot order.
 Generation checks remain mandatory on every handle read, using direct slot
 addressing. Free-slot scans and dependent-pair cascades remain bounded work.
-Checkpoint version 11 rejects the earlier compact-position undo format.
+The checkpoint codec refuses any version but its current one, so the
+compact-position undo format is never read.
 
 **Pool generations are continuation state.** Releasing a slot advances its
 generation even while the slot is dead. The arena hash therefore includes the
@@ -458,10 +459,10 @@ disguised as measurements.
 "correct" needs no design discussion; Ribbon is original because no known game
 uses an aperiodic board, and states its complete rules. A game that needs a
 construct the transpiler refuses waits for the package that lands it; no
-package authors a hand-rolled substitute. Codenames resolves its embeddings
+package authors a hand-rolled substitute. Word spy resolves its embeddings
 through `puck embed` with the fixture generator, never a network service.
 
-**Three games are scheduled and six deferred.** Go, Tetris, and Baba Is You
+**Three games are scheduled and six deferred.** Go, tetromino, and rulepush
 carry the constructs the forcing world cannot reach on its own; the rest are
 scheduled unchanged when a capability they force is otherwise unproven.
 

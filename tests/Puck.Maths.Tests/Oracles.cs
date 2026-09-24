@@ -631,14 +631,18 @@ internal static partial class Oracles {
         // Only a₀ is dropped — a large integer part shifts the value without clumping its fractional points — so
         // the supremum runs over the pre-period tail a₁.. and over the whole repeating block, which recurs at
         // arbitrarily large indices and therefore contributes every one of its terms even when it starts at a₀.
-        for (var index = 1; (index < periodStart); ++index) { maximum = BigInteger.Max(
+        for (var index = 1; (index < periodStart); ++index) {
+            maximum = BigInteger.Max(
             left: maximum,
             right: quotients[index]
-        ); }
-        for (var index = periodStart; (index < quotients.Count); ++index) { maximum = BigInteger.Max(
+        );
+        }
+        for (var index = periodStart; (index < quotients.Count); ++index) {
+            maximum = BigInteger.Max(
             left: maximum,
             right: quotients[index]
-        ); }
+        );
+        }
 
         return ((long)maximum);
     }
@@ -996,25 +1000,31 @@ internal static partial class Oracles {
         if (
             !leftHigh &&
             !rightHigh
-        ) { return CayleyDicksonCharge(
+        ) {
+            return CayleyDicksonCharge(
             floors: (floors - 1),
             leftIndex: leftLow,
             rightIndex: rightLow
-        ); }
+        );
+        }
 
         // (a, 0)·(0, d) = (0, d·a).
-        if (!leftHigh) { return CayleyDicksonCharge(
+        if (!leftHigh) {
+            return CayleyDicksonCharge(
             floors: (floors - 1),
             leftIndex: rightLow,
             rightIndex: leftLow
-        ); }
+        );
+        }
 
         // (0, b)·(c, 0) = (0, b·c̄).
-        if (!rightHigh) { return (ConjugationSign(index: rightLow) * CayleyDicksonCharge(
+        if (!rightHigh) {
+            return (ConjugationSign(index: rightLow) * CayleyDicksonCharge(
             floors: (floors - 1),
             leftIndex: leftLow,
             rightIndex: rightLow
-        )); }
+        ));
+        }
 
         // (0, b)·(0, d) = (−d̄·b, 0).
         return (-ConjugationSign(index: rightLow) * CayleyDicksonCharge(
@@ -1791,11 +1801,13 @@ internal static partial class Oracles {
                     y: arcs[((vertex * order) + next)]
                 );
 
-                if (0UL != stepped) { Extend(
+                if (0UL != stepped) {
+                    Extend(
                     source: source,
                     value: stepped,
                     vertex: next
-                ); }
+                );
+                }
             }
 
             visited[vertex] = false;
@@ -1870,11 +1882,13 @@ internal static partial class Oracles {
 
                 var excess = ((new BigInteger(value: value) + arcs[((vertex * order) + next)]) - one);
 
-                if (excess.Sign > 0) { Extend(
+                if (excess.Sign > 0) {
+                    Extend(
                     source: source,
                     value: ((ulong)excess),
                     vertex: next
-                ); }
+                );
+                }
             }
 
             visited[vertex] = false;

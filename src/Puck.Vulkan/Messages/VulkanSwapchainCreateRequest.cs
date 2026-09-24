@@ -1,10 +1,11 @@
+using Puck.Vulkan.Interop;
 namespace Puck.Vulkan.Messages;
 
 /// <summary>
 /// Describes a swapchain to create: the device and surface it binds, and the resolved image, transform, and
 /// presentation parameters.
 /// </summary>
-/// <param name="DeviceHandle">The native <c>VkDevice</c> handle.</param>
+/// <param name="Device">The command table of the logical device.</param>
 /// <param name="SurfaceHandle">The native <c>VkSurfaceKHR</c> handle the swapchain presents to.</param>
 /// <param name="CompositeAlpha">The composite-alpha mode, as a <c>VkCompositeAlphaFlagBitsKHR</c> value.</param>
 /// <param name="ImageExtentWidth">The width, in pixels, of the swapchain images.</param>
@@ -18,7 +19,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="QueueFamilyIndices">The queue family indices that access the images when sharing is concurrent.</param>
 /// <param name="SharingMode">The image sharing mode across queue families, as a <c>VkSharingMode</c> value.</param>
 public readonly record struct VulkanSwapchainCreateRequest(
-    nint DeviceHandle,
+    VulkanDeviceCommands Device,
     nint SurfaceHandle,
     uint CompositeAlpha,
     uint ImageExtentWidth,

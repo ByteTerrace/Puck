@@ -74,7 +74,7 @@ internal sealed partial class WorldProbes {
         ShaderSetManifest extensionManifest;
 
         try {
-            extensionManifest = WorldPostRenderExtensions.Shipped.Load(id: extension.Id);
+            extensionManifest = ShaderSetCatalog.Shipped.Load(id: extension.Id);
         } catch (Exception exception) {
             throw new InvalidOperationException(
                 message: $"{path}.target.id '{extension.Id}' failed to load: {exception.Message}",
@@ -205,8 +205,8 @@ internal sealed partial class WorldProbes {
     /// <see cref="ServiceParameters"/> performs for a <c>probe</c>-target parameter binding, driven instead by the
     /// <c>probe.set</c> verb. Bound only by the field's own declared range, never a binding's authored one; a
     /// <c>parameter</c> binding targeting the same field overwrites this write on its own next changed reading. With
-    /// no <c>@seat</c> suffix, a seat-relative probe's every live instance is written.</summary>
-    /// <param name="probeRef">The declared probe id, optionally suffixed <c>@&lt;seat&gt;</c> to name one instance
+    /// no <c>$seat</c> suffix, a seat-relative probe's every live instance is written.</summary>
+    /// <param name="probeRef">The declared probe id, optionally suffixed <c>$&lt;seat&gt;</c> to name one instance
     /// of a seat-relative row.</param>
     /// <param name="field">The probe kind's float config field name.</param>
     /// <param name="value">The value to write.</param>
@@ -270,7 +270,7 @@ internal sealed partial class WorldProbes {
                 contextSeat: explicitSeat,
                 target: rowInfo
             ) is not { } instance) {
-                reason = $"no live instance '{baseId}@{explicitSeat}'{DescribeKnownInstances(rowInfo: rowInfo)}";
+                reason = $"no live instance '{InstanceKey(id: baseId, seat: explicitSeat)}'{DescribeKnownInstances(rowInfo: rowInfo)}";
 
                 return false;
             }

@@ -1,6 +1,6 @@
 # The `state` section
 
-Part of [`puck.world.def.v1`](documents.md). Field names, `kind`/`domain`
+Part of [`puck.world.definition.v1`](documents.md). Field names, `kind`/`domain`
 enums, and numeric ceilings are generated (`puck schema`, or
 `Assets/worlds/schema/state.schema.json`); this file is the decision/derivation
 prose the schema cannot state. `rules` — the primitive that reads and writes
@@ -132,9 +132,8 @@ sugar only when the whole row (and, for `grid`, its `state.lattices` topology)
 is representable without loss and falling back to `row { }` (the explicit
 form) otherwise.
 
-There is **no `$type`** and no `rows` member — both are retired spellings of
-the pre-collapse shape and refuse as unmapped members like any other stale
-field. `kind` is `Int`|`Fixed`|`Bool`|`Text`; never float, the determinism
+There is **no `$type`** and no `rows` member; both refuse as unmapped members.
+`kind` is `Int`|`Fixed`|`Bool`|`Text`; never float, the determinism
 contract. A `Fixed` value (`value`, `min`, `max`, or a cell's own `value`) is
 a **DECIMAL STRING** through `FixedQ4816.TryParse`/`ToString`, never the raw
 Q48.16 bit pattern — only the per-cell mutation wire (`UpsertStateCell`) and
@@ -152,10 +151,11 @@ method every write path decides through, and it is what the row-shape's own
 all call. Both `min`/`max` and `overflow` are legitimate only on `Int`/`Fixed`
 rows. The row `name` and every
 cell `key` are `CellName` (`Puck.State/SafeName.cs`) — a
-validated type that cannot hold an empty, unsafe, or DOTTED value, refused at
-JSON parse naming the character; the dot-free rule is what makes
+validated type that cannot hold an empty, unsafe, DOTTED or backquoted value,
+refused at JSON parse naming the character; the dot-free rule is what makes
 `state.<row>.<key>` parse unambiguously (the engine-minted `"$value"` slot
-key is the one reserved exception). Declaring `min: 0` is a per-row floor ANY
+key is the one reserved exception), and the backquote-free rule lets an
+expression write every row and key in its escape-free backquotes. Declaring `min: 0` is a per-row floor ANY
 numeric row may declare; `int` + `min: 0` IS a timer, never
 a fifth kind, and the cross-document write-back channel
 (`Server.WorldOwnedWorlds.Decide`) reads that same row envelope through
@@ -185,7 +185,7 @@ dropped key is named on that write's `[world.mutation: …]` echo,
 `"(evicted '<key>')"` — never a silent drop), and
 `WorldIdentity.TryAppendEvictingText` composes through an arena over the owned
 identity's document, outside the ordered mutation domain (a self-authored `chat.log`, or a cross-document
-`chat.whisper` landing in a bounded inbox — see `authority.md`'s C-CHAT entry)
+`chat.whisper` landing in a bounded inbox — see `authority.md`'s `ChatCommandModule` entry)
 — one composition, never two readings of the eviction rule.
 
 **A row's trait is the default for every cell it carries, including a key a
@@ -263,14 +263,18 @@ start), so `world.save` writing it verbatim would leave a reloaded document
 reading FROZEN at its stored base until the new session's own engine-tick
 counter climbed back past the old epoch — the fix: **settle at save, in the
 serialized PROJECTION only.** `WorldSessionCapture.Capture` (the `world.save`
-fold, `src/Puck.World/WorldSessionCapture.cs`) writes every advancing cell's
+fold, `src/Puck.World.Server/WorldSessionCapture.cs`) writes every advancing cell's
 base as its LIVE value (`StateAdvance.ComputeCurrentValue`) at the server's
 completed engine tick, and projects `clock.epochEngineTick: 0` (alongside
 `clock.epochTick: 0` for the same cell's dynamics/cycle epoch, when it carries
 one) — never touching the live in-memory document, exactly like the
 render-lever/population/screens folds this same class already does. Engine
 tick 0 of the reloaded session therefore already reads what the save observed
-and keeps advancing immediately with no freeze.
+and keeps advancing immediately with no freeze. A cell whose clock already
+starts at epoch 0 and whose reading has not moved keeps its authored form, a
+document with no `state` section gets none, and only authored rows settle: a
+pool's generated storage rows keep their live state in the pool's own
+continuation and are never written into `state.world`.
 
 Authority is TWO holds, both decided by the one admission predicate
 (`WorldServer.TryAdmitMutation`): `Mutate`/`section:state` gates the four
@@ -294,9 +298,14 @@ on demand (`WorldStateReader.TryReadEased`), through
 `Puck.Maths.SecondOrderDynamics.Evaluate` — no per-tick write, no journal
 entry, so a `dynamics` cell costs nothing between reads. `world.state`'s row
 and cell lines report the authored trait and its live `eased=` value beside
-`value=`; the HUD's `state.<row>[.<key>]` binding reads the SAME eased value,
-while an explicit trailing `.$target` facet reads truth (see
-[hud.md](hud.md)). `world.save` settles a `dynamics` cell's clock the
+`value=`; every presentation `state.<row>[.<key>]` read (HUD, camera
+operand, marker, render and theme color, binding bar, overlay predicate, a
+body's look lanes, gait drivers and scale) reads
+the SAME eased value through the client's `WorldStateMirror`, interpolated
+between tick samples at the frame's fraction, while an explicit trailing
+`.$target` facet reads truth (see [hud.md](hud.md)). The mirror refreshes a
+slot only when a delivery's `WorldStateStamp` names its row as moved or while
+its trait is still moving. `world.save` settles a `dynamics` cell's clock the
 identical way it settles `advance`'s: `y0`/`v0` become the live eased sample
 at the saved tick and `epochTick` projects to `0`, so a reloaded session
 keeps easing with no freeze. A cell composed with a `dynamics` behavior but no
@@ -324,7 +333,7 @@ the rotation was displaying, never its phase, so removing a rotation leaves a
 reader's number where it was; settling from one cycle into another carries the
 phase, which the new rotation re-derives its own output from. Both per the
 behavior transitions in
-[Model state with rows and cells](../../../../docs/reference/state/data-model.md#choose-behavior-deliberately).
+[Row and cell behavior](../../../../docs/reference/state/traits.md#re-authoring-settles-cells).
 `world.state` echoes
 `cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n>[+<substepTicks>] order=<n>`;
 `world.save` settles the value to the current index/node at epoch `0`. Read
@@ -341,10 +350,9 @@ console verb refuse by the same code, with the verb naming it at the verb. A
 keeps `$tick`/`$population`/`$region:` from being shadowed), and so is a
 `$`-prefixed RULE name. A `$`-prefixed CELL key is refused unless it is exactly
 the key that row's shape mints — `$value` on a slot-addressable row, and nothing
-else. (The rule used to police VALUES too, because a generator's draw position
-and drawn masks were CELLS an author could hand-write; draw bookkeeping now lives
-in typed row FIELDS at the site (`drawCursor`/`drawnMasks`), refused by the
-field's own range check instead of by a carve-out in the cell namespace.)
+else. Draw bookkeeping lives in typed row FIELDS at the site
+(`drawCursor`/`drawnMasks`), refused by the field's own range check, not by
+the cell namespace.
 
 ## `state.lattices` + the `lattice` row trait — the lattice (scalar rows, reactions, lattice-derived geometry)
 
@@ -384,7 +392,7 @@ uses; which storage a `cellsOf` row gets is an implementation choice keyed on
 carries only what is left once the topology moves to `domain`.
 `WorldFieldsSection.Compile` assembles the runtime composite
 the engine consumes (`WorldDefinition.Fields` is that compiled view — never
-an authored section; there is no top-level `fields` member any more). A cell
+an authored section; there is no top-level `fields` member). A cell
 write against a lattice row (`world.state.cell.set`) refuses through
 whole-document revalidation — the lattice's cells are simulation state, not
 authored cells. Rows are seeded by their trait's `paint` rectangles and
@@ -435,6 +443,33 @@ beside an ice glacier; a burning body emits heat, heat ignites grass, fire emits
 heat and consumes grass, heat melts ice into water, water quenches fire — no
 interaction names the boundary.
 
+### The tabletop primitive (`board` facet)
+
+The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
+anchors a discrete `Grid` `state.lattices` topology (only `Grid` carries the
+rectangular X/Z frame `$board:cellOf`/`offset` resolve against; `Ring`/`Hex`
+refuse the facet) to a physical row/body game (`$board:cellOf`/`offset`,
+`world.tabletop`). A `Grid` topology's `cellSize` must quantize to a
+positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
+positions against, so a zero or negative edge is refused at validation, not
+left to crash the per-tick rule path. A rule firing is one journal scope: any
+refused effect rewinds the whole firing, a `transaction` effect is a savepoint
+inside it, and an `if` effect branches to one of two effect lists (see
+[documents-rules.md](documents-rules.md)). A piece resolving to no
+cell of its own (captured, lifted off) never itself registers as the mover
+on either side of a settle. Chess's candidate source and destination
+(`trailingZeroCount` of a mask) clamp an empty mask to `-1` rather
+than writing the mask's own bit width (64), which the cell's envelope
+refuses. `$upright:<bodyRef>` (a body's own up
+axis dotted against gravity-up) is the reserved channel a piece's own
+occupancy derive gates on, so a knocked-over piece reads as displaced
+rather than occupying its last resting cell. `$fact:<bodyRef>:<fact>` reads
+one live `BodyFacts` bit (`Airborne`, `Grounded`, …) as 1/0 — the door a
+rule writes a body's transient into a world row through (an eased
+`airPose` cell a creation's drivers then read), where `$identity:` is the
+persisted fact lane.
+See `Puck.World.Schema/README.md`'s tabletop-primitive section; the garden's `chessBoard` is the worked example.
+
 ## Authored randomness — SOURCE x SITE x MOMENT
 
 One primitive, three separable parts. A **source** is a shape, a **site** is a
@@ -472,7 +507,8 @@ per-cell lattice draw. It is one whole-field pass of the row's stream
 `drawCursor + k`, mask threaded cell to cell), painted at boot by `WorldServer`
 at the pass the row's `drawCursor`/`drawnMasks` name, and advanced one pass plus
 repainted by `world.generate <row>` (`TryComposeGenerate`'s lattice arm, then
-`RepaintLatticeDrawAfterGenerate`). Draw keeps its authored position in the
+`WorldTick.RepaintChangedLatticeDraws`, which repaints only a row whose draw
+position or fill moved). Draw keeps its authored position in the
 paint list: it overwrites earlier fills and later fills overwrite it. Whole-
 document rebuild/load/reset repaint every draw row; undo repaints only a row
 whose cursor/mask position rewound, preserving unrelated reaction-evolved
@@ -504,7 +540,7 @@ INDEPENDENT sequences**. That is what makes a reference safe.
 
 **Moment** (`timing`): `boot` (drawn once at first fill; a later `generate`
 refuses by name), `tickPeriod`, `event`. The latter two redraw through the SAME
-`WorldMutation.Generate` (ordinal 51) / `world.generate <row> [key ...]` — the
+`WorldMutation.Generate` (ordinal 49) / `world.generate <row> [key ...]` — the
 site owns its whole draw; a keyed site (a dice tray) redraws every cell, or the
 named cells alone with the rest held. Cadence is an ordinary `$tick`-scheduled or
 event-gated rule, so timing costs no mutation ordinal.
@@ -523,7 +559,7 @@ rejection-sampled bounded draw), so resuming at cursor `n` is one `Advance` —
 O(1). There is NO per-tick cadence ceiling.
 
 **A source may declare `extended`** (`GeneratorExtended`): an authored
-`Pcg32Extended` table replacing that generator's own self-seeding — `{"k": 2..1024
+`Pcg32Extended` table replacing that generator's own self-seeding — `{"k": 2..4096
 (power of two), "table": [k uint32 words]}` verbatim, or `{"k": …, "script": [up
 to k values in the source's own OUTPUT space]}`, compiled at boot resolution
 (word `i` is `wanted_i XOR base_i`; words past the script are the self-seeded
@@ -579,7 +615,7 @@ carried by `TryOffset`: grid, ring, hex, or box; a graph or tiling refuses it; i
 destination empty), and `promote` (`codes`: an int row keyed
 by the tokens; `to`: up to sixteen codes — relocate and change the token's code to each in turn) are the other
 arms. `relocate` with `displace: false` leaves the standing token in place rather than evicting it. A job
-with a score keeps a transposition table (`WorldSearchCapacity.TranspositionEntries`
+with a score keeps a transposition table (`SearchCapacity.TranspositionEntries`
 slots keyed by relevant state and effective move ply) that rides the checkpoint
 and hash. Preserve the move-ply component when changing cache probes or stores:
 judges may read `$search:ply`, and chance scopes do not advance it. When scoping
@@ -616,14 +652,32 @@ deepest completed depth's answer. Iterative-deepening negamax with alpha-beta:
 each accepted root candidate recurses one more ply (negated — the value is
 from the perspective of the side that just moved) while plies remain, else
 `score` evaluates directly; a position with no accepted relocation scores
-`-WorldSearchCapacity.MateScore`. Alpha-beta prunes every ply past the root
-only. `method: tree` searches the same `score` by UCB1 instead: `iterations` rounds over a
-`WorldSearchCapacity.TreeNodes` pool, playouts drawn from a SplitMix64 stream seeded by the job's stamp, the
+`-SearchCapacity.MateScore`. Alpha-beta prunes every ply past the root
+only. `method: MonteCarlo` searches the same `score` by UCB1 instead: `iterations` rounds over a
+`SearchCapacity.TreeNodes` pool, each growing at most one node (a node scans its own candidates from a drawn start
+until one is accepted, and holds at most one child more than the square root of its visits), playouts drawn from a SplitMix64 stream seeded by the plan's `DrawSeed` (zero for world jobs), the
 score read from the mover's side at a dead end or the `depth` cap, landing the most-visited root move. The recursion is an explicit stack (one journal scope per ply beyond the
 root), not the call stack, so it suspends at any node across a tick boundary
 and checkpoints byte-for-byte.
 
 ## `navigation` — bounded surface, flight, and medium routes
+
+**Navigation is authored world truth.** `navigation.domains` owns bounded
+`surface`, collision-free `volume`, and live-field-constrained `medium` grids.
+A `BodyTargetSource.Navigated` producer points at one domain and one ordinary
+authority-checked target register. Keep A* fixed-point, budgeted, stable-tied,
+checkpointed, and hashed; bake static solid clearance once (a surface edge's
+sweeps run from `maxStepHeight` above the foot to the head — a sweep skimming
+the floor advances one contact skin per march step and exhausts on a
+diagonal), but recheck a
+medium field before traversing its cached edge — a medium's free surface
+(value × heightScale) is bounded by the shared lattice's body-coupling
+ceiling, not by its topology's own layer count, so a shallow `layers: 1`
+topology under a deep medium still resolves correctly
+(`Puck.Physics.Fields.FieldLattice.IsInsideMedium`/`IsSegmentInsideMedium`). Extend this
+vocabulary for
+engine-integral movement semantics; addons/agent extensions remain the home
+for arbitrary policy and planning, not collision/path correctness.
 
 An optional `parent` names a static unit-scale placement frame (including its ancestors). Origin and grid X/Z
 axes follow that frame's position/yaw; surface probes remain vertical. `world.navigation` echoes the resolved
@@ -681,3 +735,36 @@ canonical empty state at checkpoint/hash time. Restore field values before
 restoring navigation's derived invalidation stamps. This is not incremental
 repair, hierarchical routing, crowd collision avoidance, or group membership;
 see the server README's Navigation section for the current limits.
+
+## Records, pools, and retained turns
+
+Use the current [records and pools](../../../../docs/reference/state/records-and-pools.md)
+and [rule groups](../../../../docs/reference/state/rule-groups.md) references when editing records,
+pools, token knowledge, or retained turns. A pool-field reference is structural:
+`StateChannelRef.PoolField` carries either binding + field or pool + slot + field;
+the `.puck` printer may show `piece.health` or `pieces[0].health`, but document code
+must not recover those parts by splitting a dotted string. A lexical reference
+holds its generation-checked handle. A static slot reference resolves the current
+live occupant and therefore follows release/reclaim.
+
+World body carriers are record enum fields plus `properties.carriers`. Map every
+enum member exactly once to one single-inhabitant placement, one local seat, or an
+explicit detached entry. Store no physical body index in a record, and do not add
+a generation-pinned attachment path beside carriers. Arena and Paddleball are the
+shipped examples: both author enum roles; Arena also keeps fighter health,
+respawn, and pickup state in records. Interaction geometry resolves the logical
+role to a body, while effects read or write the same instance through lexical
+bindings.
+
+Pool lifetime tests must include release/reclaim and export/reload, including a
+reclaimed nonzero generation and pair carriers. Exercise module read/action
+exports through lexical bindings and include lossless compile/decompile laws.
+For retained turns, declare the complete pool closure (domain, generation, and
+field rows), account for depth plus one pending segment, and cover claim/release,
+advancing-field clocks, checkpoint/hash continuation, outside-row invalidation,
+and atomic `rewindGroup`. A write outside the closure makes the turn unrewindable;
+it must never be silently omitted from a compact retained record.
+
+After changing this surface, regenerate schema, vocabulary, and name-registry
+outputs with their CLI owners and run the affected State, Rules, World, and
+World.Transpiler suites. A generated projection probe must cover every new arm.

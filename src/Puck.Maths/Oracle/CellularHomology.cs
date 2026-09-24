@@ -73,10 +73,9 @@ public sealed class FieldHomology<TValue, TOps>
     /// <returns>The Betti number.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
     public int BettiNumber(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degree,
-            other: Dimension
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: Dimension,
+            value: degree
         );
 
         return m_betti[degree];
@@ -87,10 +86,9 @@ public sealed class FieldHomology<TValue, TOps>
     /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
     /// <remarks>Degree zero and one past the top are both the zero map, and both are answered rather than refused.</remarks>
     public int BoundaryRank(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degree,
-            other: (Dimension + 1)
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: (Dimension + 1),
+            value: degree
         );
 
         return m_ranks[degree];
@@ -227,10 +225,9 @@ public sealed class IntegerHomology {
     /// <returns>The Betti number.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
     public int BettiNumber(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degree,
-            other: Dimension
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: Dimension,
+            value: degree
         );
 
         return m_betti[degree];
@@ -240,10 +237,9 @@ public sealed class IntegerHomology {
     /// <returns>The rank.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
     public int BoundaryRank(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degree,
-            other: (Dimension + 1)
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: (Dimension + 1),
+            value: degree
         );
 
         return m_ranks[degree];
@@ -254,10 +250,9 @@ public sealed class IntegerHomology {
     /// the cyclic torsion summands.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
     public ReadOnlySpan<BigInteger> Torsion(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degree,
-            other: Dimension
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: Dimension,
+            value: degree
         );
 
         return m_torsion[degree];
@@ -272,10 +267,9 @@ public sealed class IntegerHomology {
     /// rank zero and no divisors, and there is no matrix to reduce, so it carries no certificate rather than an empty
     /// one.</remarks>
     public bool TryBoundary(int degree, out SmithNormalForm form) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degree,
-            other: (Dimension + 1)
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: (Dimension + 1),
+            value: degree
         );
 
         var stored = m_boundaries[degree];

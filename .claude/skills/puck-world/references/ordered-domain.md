@@ -24,7 +24,7 @@ Every non-intent submission crosses the client/server boundary as ONE
 ## The envelope
 
 `SubmissionEnvelope(int ConnectionId, int SessionGeneration, long Sequence,
-long CorrelationId, WorldPrincipal Principal, WorldSubmissionPayload Payload)`.
+long CorrelationId, Principal Principal, WorldSubmissionPayload Payload)`.
 
 - `SubmissionEnvelope.LocalConnectionId = 0` — the local stdin/loopback
   connection. `WorldPeerHost` assigns positive connection ids to admitted
@@ -34,7 +34,7 @@ long CorrelationId, WorldPrincipal Principal, WorldSubmissionPayload Payload)`.
   `Sequence`). `LoopbackTransport.TryNextEnvelope` mints both as plain counters.
 - `Principal` is the acting identity — stamped by the transport from what its
   ingress door resolved, validated against the connection's admitted set once
-  a wire exists. `LoopbackTransport.Query` stamps `WorldPrincipal.Console`;
+  a wire exists. `LoopbackTransport.Query` stamps `Principal.Console`;
   `WorldPeerHost` stamps its admitted peer on the envelope.
 
 ## The payload union: exactly 12 kinds
@@ -62,8 +62,7 @@ intents ride their own buffer (below).
 `WorldSubmissionKind` wire discriminants are fixed: `Command = 1`,
 `Grant = 2`, `Revoke = 3`, `Session = 4`, `Rebuild = 5`, `Mutation = 6`,
 `Undo = 7`, `Composition = 8`, `Lever = 9`, `Query = 10`,
-`ScreenOp = 12`, `Designation = 13` — `11` (the retired addon-lifecycle leaf)
-is unassigned and never reused.
+`ScreenOp = 12`, `Designation = 13`; `11` is unassigned.
 
 Each kind has exactly one canonical encoder/decoder pair in
 `WorldSubmissionCodec.cs`. `WorldFrameCodec.cs` wraps a leaf as little-endian
@@ -94,7 +93,7 @@ drain rather than recursing). Per-kind application:
 | Kind | Applies |
 |---|---|
 | Command, Grant, Revoke, Session, Composition, Lever, Query, ScreenOp, Designation | synchronously at ordered-domain submit |
-| Rebuild, Mutation, Undo | buffer (`PendingOp.Rebuild`/`Mutate`/`Undo`) to the tick boundary; drained FIFO by `DrainPendingOps` at the top of `Step`, before intents |
+| Rebuild, Mutation, Undo | buffer (`WorldPendingOp.Rebuild`/`Mutate`/`Undo`) to the tick boundary; drained FIFO by `DrainPendingOps` at the top of `Step`, before intents |
 
 Consequences for scripts: within one stdin batch, a grant submitted before a
 command is visible to that command (grant-then-warp applies the warp against
@@ -136,8 +135,8 @@ door resolved, never the one the client's bytes claimed.
 
 v1 is strictly request-then-response per connection (no correlation id on the
 wire); the downstream reply is a NEW small grammar
-(`Server/WorldPeerWireFormat.cs`) carrying exactly the Completion lane
-(`WorldSubmissionResult`), not one of `WorldSubmissionCodec`'s twelve leaves,
+(`src/Puck.World.Protocol/Codecs/WorldPeerWireFormat.cs`) carrying exactly the Completion lane
+(`WorldSubmissionResult`), not one of `WorldSubmissionCodec`'s thirteen leaves,
 and not the streamed snapshot/definition/composition/lever lanes `WorldOutputHub`
 scaffolds. `--connect <host:port>` does not speak this door as a client: it
 enqueues a federation transfer (`WorldInstanceHost.EnqueueTransfer` with
@@ -153,7 +152,7 @@ shared secret), a separate dialect from the Hello + leaf-codec grammar above.
 CorrelationId)` (top of `WorldServer.cs`; `WorldEditEchoKind`: `Mutation`,
 `DocumentDefaults`, `GrantTable`). `ApplyEnvelope` stamps the envelope's
 connection/correlation identity onto every apply method; the BUFFERED kinds
-carry it inside their `PendingOp`, because their echo fires later (from
+carry it inside their `WorldPendingOp`, because their echo fires later (from
 `DrainPendingOps`) than their submission. The correlation IS consumed
 locally: `IServerLink.SubmitEnvelope` returns the minted correlation id
 (`0` = none — a codec refusal, a federated link), a buffered-mutation verb
@@ -166,8 +165,11 @@ verdict takes its entry silently.
 
 ## The link
 
-- `IServerLink`: the client-facing 13-method surface (`SubmitIntent` plus
-  one `Submit*`/`Query` per payload kind, 12 of those today).
+- `IServerLink`: the client-facing surface — `SubmitIntent`, `SubmitEnvelope`
+  (the one member an implementation writes for every fire-and-forget
+  payload), `SubmitSession`, and `Query`. Each per-kind `Submit*` is a
+  `ServerLinkSubmissions` extension method over `SubmitEnvelope`, so it
+  resolves through a variable of the concrete link type too.
 - `IWorldServerHost` — deliberately 3 members (`AttachSink`, `EnqueueIntent`,
   `Submit`), so the transport never names `WorldServer`.
 - `IClientSink` — 6 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
@@ -193,7 +195,7 @@ verdict takes its entry silently.
 
 ## Intents — the separate buffer
 
-`PlayerIntent` (`Protocol/PlayerIntent.cs`) is a fixed 16-slot vector of
+`PlayerIntent` (`src/Puck.World.Schema/PlayerIntent.cs`) is a fixed 16-slot vector of
 `FixedQ4816` channel values (`ChannelLimits.MaxChannels = 16`,
 `RoleCount = 6`, so 10 composition channels). `ChannelRole` occupies fixed
 ordinals 0–5: `MoveAdvance, MoveStrafe, Turn, MoveUp, Pitch, Roll`; ordinals

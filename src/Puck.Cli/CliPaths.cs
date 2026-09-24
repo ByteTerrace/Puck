@@ -2,27 +2,16 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Puck.Cli;
 
-// Path resolution and presentation for every verb: repository-root discovery (scan anchors its artifact
-// and shader-referent defaults there — arguments always resolve against the working directory), and the
-// relative, forward-slashed form that every printed path and every glob comparison uses, so output is
-// stable regardless of where the tree sits.
+// Path presentation for every verb: the relative, forward-slashed form that every printed path and every glob
+// comparison uses, so output is stable regardless of where the tree sits, and the exit-2 form of repository-root
+// discovery (scan anchors its artifact and shader-referent defaults there — arguments always resolve against the
+// working directory). The walk itself is RepositoryPaths.Ascend.
 internal static class CliPaths {
     private static readonly string? Root = RepositoryPaths.FindRoot();
     // No verb changes the working directory, so it is captured once: the display form is computed per
     // candidate file per glob during a walk and again per emitted record.
     private static readonly string WorkingDirectory = Directory.GetCurrentDirectory();
 
-    // The marker walk every verb that ascends from a start directory shares: try `probe` at `start`, then each
-    // parent in turn, stopping at the first non-null result (or the file system root).
-    public static string? AscendUntil(string start, Func<DirectoryInfo, string?> probe) {
-        for (var directory = new DirectoryInfo(path: start); (directory is not null); directory = directory.Parent) {
-            if (probe(directory) is { } match) {
-                return match;
-            }
-        }
-
-        return null;
-    }
     // The form a path glob matches against (identical to ToDisplay; named for intent at the glob call sites).
     public static string RelForGlob(string fullPath) =>
         ToDisplay(fullPath: fullPath);
@@ -49,7 +38,7 @@ internal static class CliPaths {
         repositoryRoot = Root;
 
         if (repositoryRoot is null) {
-            Console.Error.WriteLine(value: $"ERROR: could not locate the repository root (no Puck.slnx above {AppContext.BaseDirectory} or {Environment.CurrentDirectory}).");
+            Console.Error.WriteLine(value: $"ERROR: could not locate the repository root (no Puck.slnx above {Environment.CurrentDirectory} or {AppContext.BaseDirectory}).");
 
             return false;
         }

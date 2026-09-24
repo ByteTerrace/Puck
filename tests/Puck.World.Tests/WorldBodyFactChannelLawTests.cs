@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Xunit;
@@ -19,8 +20,6 @@ public sealed class WorldBodyFactChannelLawTests {
     private const string AirborneRow = "airborne";
     private const string GroundedRow = "grounded";
 
-    private static long Cell(WorldFixture fixture, string row) =>
-        fixture.Server.Definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single().Value.Raw;
     // The platform floor a walker settles on (the same floor BodyScaleLawTests grounds its bodies on).
     private static WorldDefinition FactDocument(string? airborneChannel = null) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
@@ -91,7 +90,7 @@ public sealed class WorldBodyFactChannelLawTests {
                 Scale: 1f,
                 Solid: new WorldSolid(Margin: 0f)
             )],
-            StateRaw = new WorldStateSection(World: [IntRow(name: AirborneRow), IntRow(name: GroundedRow), IntRow(name: AbsentRow)]),
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(name: AirborneRow), StateFixtures.IntSlot(name: GroundedRow), StateFixtures.IntSlot(name: AbsentRow)]),
             Rules = [
                 new WorldRule(
                 Name: CellName.Parse(candidate: "airborne-mirror"),
@@ -117,19 +116,11 @@ public sealed class WorldBodyFactChannelLawTests {
             ],
         };
     }
-    private static WorldStateRow IntRow(string name) => new(
-        Name: CellName.Parse(candidate: name),
-        Kind: CellKind.Int,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: 0L)
-            )]
-    );
 
     [Fact]
     public void AGroundedBodyReadsGroundedAndAPosedBodyReadsAirborne_ControlAnAbsentBodyReadsZero() {
         using var fixture = Fixtures.FreshServer(definition: FactDocument());
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -154,24 +145,18 @@ public sealed class WorldBodyFactChannelLawTests {
         }
 
         Assert.True(
-            condition: (Cell(
-                fixture: fixture,
-                row: GroundedRow
+            condition: (fixture.SlotValue(row: GroundedRow
             ) == 1L),
             userMessage: $"facts after settling: {body.Facts} at y={body.Position.Y}"
         );
         Assert.Equal(
             expected: 0L,
-            actual: Cell(
-                fixture: fixture,
-                row: AirborneRow
+            actual: fixture.SlotValue(row: AirborneRow
             )
         );
         Assert.Equal(
             expected: 0L,
-            actual: Cell(
-                fixture: fixture,
-                row: AbsentRow
+            actual: fixture.SlotValue(row: AbsentRow
             )
         );
 
@@ -187,23 +172,17 @@ public sealed class WorldBodyFactChannelLawTests {
 
         Assert.Equal(
             expected: 1L,
-            actual: Cell(
-                fixture: fixture,
-                row: AirborneRow
+            actual: fixture.SlotValue(row: AirborneRow
             )
         );
         Assert.Equal(
             expected: 0L,
-            actual: Cell(
-                fixture: fixture,
-                row: GroundedRow
+            actual: fixture.SlotValue(row: GroundedRow
             )
         );
         Assert.Equal(
             expected: 0L,
-            actual: Cell(
-                fixture: fixture,
-                row: AbsentRow
+            actual: fixture.SlotValue(row: AbsentRow
             )
         );
     }

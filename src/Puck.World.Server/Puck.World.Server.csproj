@@ -7,6 +7,7 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Audio\Puck.Audio.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
@@ -23,9 +24,5 @@
     <ItemGroup>
         <Using Include="Puck.State" />
         <Using Include="Puck.State.Rules" />
-        <!-- Both namespaces declare these two refusal families: the rule compiler's own, and the one the vector
-             kernel raises from Puck.State (which cannot reference Puck.State.Rules, since Rules depends on it). -->
-        <Using Include="Puck.State.Rules.RuleEffectRefusal" Alias="RuleEffectRefusal" />
-        <Using Include="Puck.State.Rules.RuleRefusal" Alias="RuleRefusal" />
     </ItemGroup>
 </Project>

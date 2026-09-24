@@ -2,16 +2,15 @@ using System.Numerics;
 
 using Puck.SignedDistance;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>
-/// THE LAW: an eccentric creation shape (a non-uniformly scaled sphere, baked as an ellipsoid) never taxes the whole
-/// program's step scale. Every stamper that emits creation shapes wraps it in a field scope of its own, or rides the
-/// caller's, so its Lipschitz factor clamps its own candidate at the pop and <see cref="SdfProgram.StepScale"/> stays
-/// exactly 1. Each arm pairs the eccentric document with a control differing only in the sphere's scale.
+/// THE LAW: an eccentric creation shape (a non-uniformly scaled sphere) bakes its radii into the exact exponent-2
+/// superellipsoid gauge, which is 1-Lipschitz, so it neither taxes the whole program's step scale nor opens a field
+/// scope of its own: <see cref="SdfProgram.StepScale"/> stays exactly 1 and every stamper emits exactly the scopes the
+/// round control does. Each arm pairs the eccentric document with a control differing only in the sphere's scale.
 /// </summary>
 public sealed class CreationEccentricityLawTests {
     private const string PrototypeId = "squash";
@@ -49,55 +48,13 @@ public sealed class CreationEccentricityLawTests {
             Noise: null
         );
     // The dynamic emission path a body-stamped creation renders through (the shipped avatars' path).
-    private static SdfProgram EmitPool(Vector3 scale, CreationDocument? document = null) {
-        var canonical = CreationCanonicalizer.Canonicalize(
+    private static SdfProgram EmitPool(Vector3 scale, CreationDocument? document = null) => CreationFixtures.EmitPool(
+        bodyScale: 1f,
+        creation: CreationFixtures.Prototype(
             document: (document ?? Document(scale: scale)),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [
-                new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: 1f,
-                Motion: WorldLookMotion.Default
-            ),
-            ],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [
-                new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: 1f,
-                    Motion: WorldLookMotion.Default
-                ),
-            ]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: false,
-            maxPlacementScale: 1f,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+            id: PrototypeId
+        )
+    );
     private static SdfProgram EmitStatic(Vector3 scale, bool inScope, CreationDocument? document = null) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -132,6 +89,15 @@ public sealed class CreationEccentricityLawTests {
 
         return builder.Build(buildInstanceGrid: false);
     }
+    private static void AssertEmitsTheGauge(SdfProgram program) =>
+        Assert.Contains(
+            collection: program.Instructions,
+            filter: instruction => (
+                (instruction.Op == SdfOp.ShapeBlend) &&
+                (instruction.Shape == ((uint)SdfShapeType.Superellipsoid)) &&
+                (instruction.Data0.W == SdfProgramBuilder.MinSuperellipsoidExponent)
+            )
+        );
     private static int ScopeCount(SdfProgram program) =>
         program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField));
     private static ShapeDocument Sphere(int id, Vector3 scale, int group = 0) =>
@@ -159,7 +125,7 @@ public sealed class CreationEccentricityLawTests {
             scale: EccentricScale
         );
 
-        // The caller's one scope, and its pop carries the clamp: the global step scale is still 1.
+        // The caller's one scope and nothing else; the global step scale is still 1.
         Assert.Equal(
             expected: 1,
             actual: ScopeCount(program: program)
@@ -221,7 +187,7 @@ public sealed class CreationEccentricityLawTests {
         );
     }
     [Fact]
-    public void TheDynamicPoolScopesTheUngroupedShapeAndTheGroup() {
+    public void TheDynamicPoolOpensNoScopeForEccentricity() {
         var eccentric = EmitPool(scale: EccentricScale);
         var round = EmitPool(scale: Vector3.One);
 
@@ -230,18 +196,18 @@ public sealed class CreationEccentricityLawTests {
             actual: eccentric.StepScale
         );
         Assert.Null(value: eccentric.StepScaleBinder);
-        // Pass 1 scopes the ungrouped eccentric shape; pass 2 scopes the group once for both members.
         Assert.Equal(
-            expected: (ScopeCount(program: round) + 2),
+            expected: ScopeCount(program: round),
             actual: ScopeCount(program: eccentric)
         );
+        AssertEmitsTheGauge(program: eccentric);
         Assert.Equal(
             expected: 1f,
             actual: round.StepScale
         );
     }
     [Fact]
-    public void TheStaticStampScopesEachEccentricShape() {
+    public void TheStaticStampOpensNoScopeForEccentricity() {
         var eccentric = EmitStatic(
             inScope: false,
             scale: EccentricScale
@@ -256,11 +222,11 @@ public sealed class CreationEccentricityLawTests {
             actual: eccentric.StepScale
         );
         Assert.Null(value: eccentric.StepScaleBinder);
-        // Two eccentric shapes, two scopes; the round control opens none.
         Assert.Equal(
-            expected: 2,
+            expected: 0,
             actual: ScopeCount(program: eccentric)
         );
+        AssertEmitsTheGauge(program: eccentric);
         Assert.Equal(
             expected: 0,
             actual: ScopeCount(program: round)

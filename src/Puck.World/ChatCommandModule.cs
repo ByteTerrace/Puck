@@ -17,7 +17,7 @@ namespace Puck.World;
 /// <remarks>
 /// <para><b>The owner-only constraint, enforced at one door.</b> Every mutating verb here resolves its target
 /// identity from a <c>player</c> argument (the same 1-based convention <see cref="IdentityCommandModule"/> uses,
-/// via <see cref="PlayerRoster.ProfileAt(int)"/>) and then checks that <c>context.ActingPrincipal()</c> — never the
+/// via <see cref="PlayerRoster.ProfileAt(int)"/>) and then checks that <c>context.Principal</c> — never the
 /// verb's own arguments — holds <see cref="WorldCapability.Drive"/> over that player's body: the same primitive
 /// <c>player.identity</c>'s own authorization already uses (<c>Server.WorldServer</c>'s <c>SessionRequest.SetIdentity</c>
 /// arm) to decide who may administer a seat's identity. A principal that does not hold Drive over the seat cannot
@@ -37,8 +37,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     /// script, large enough to be a plausible chat window.</summary>
     private const int ChatCapacity = 8;
 
-    private static readonly CellName LogRowName = CellName.Parse(candidate: "chat-log");
-    private static readonly CellName InboxRowName = CellName.Parse(candidate: "chat-inbox");
+    private static readonly CellName LogRowName = WorldIdentityRows.ChatLog;
+    private static readonly CellName InboxRowName = WorldIdentityRows.ChatInbox;
     private readonly WorldOwnedWorlds m_worlds = worlds;
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
@@ -76,10 +76,10 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             return CommandResult.Error(output: $"[chat.allow: p{player} world:{identity.Id} has no '{InboxRowName}' row — declare it first with chat.inbox]");
         }
 
-        var principal = WorldPrincipal.Document(id: senderId);
+        var sender = Grantee.Document(id: senderId);
         var subject = GrantSubject.State(name: InboxRowName);
         var grant = new WorldGrant(
-            Principal: principal,
+            Grantee: sender,
             Capability: WorldCapability.Mutate,
             Subject: subject,
             Exclusive: false,
@@ -88,7 +88,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         var candidate = (document with {
             GrantsRaw = [.. WithoutGrantRow(
                 grants: document.Grants,
-                principal: principal,
+                grantee: sender,
                 subject: subject
             ), grant],
         });
@@ -133,11 +133,11 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             return CommandResult.Error(output: $"[chat.block: p{player} world:{identity.Id} has no owned document to persist into]");
         }
 
-        var principal = WorldPrincipal.Document(id: senderId);
+        var sender = Grantee.Document(id: senderId);
         var subject = GrantSubject.State(name: InboxRowName);
         var without = WithoutGrantRow(
             grants: document.Grants,
-            principal: principal,
+            grantee: sender,
             subject: subject
         );
         var removed = (without.Count != document.Grants.Count);
@@ -357,12 +357,12 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         return new CommandResult(Output: $"[chat.read: p{player} world:{identity!.Id} log=[{log}] inbox=[{inbox}]]");
     }
     // THE owner-only constraint, at the ONE call site every mutating (and, for privacy, every reading) verb in this
-    // module routes through: context.ActingPrincipal() — never a verb argument — must hold Drive over the target
+    // module routes through: context.Principal — never a verb argument — must hold Drive over the target
     // player's body, the SAME primitive player.identity's own authorization already checks
     // (Server.WorldServer's SessionRequest.SetIdentity arm: "the ACTOR's Drive over the target body").
     private bool TryAuthorize(CommandContext context, int player, string verb, out string error) {
         var slot = PlayerRoster.SlotFromDisplay(number: player);
-        var acting = context.ActingPrincipal();
+        var acting = context.Principal;
         var verdict = m_server.Grants.Allows(
             principal: acting,
             capability: WorldCapability.Drive,
@@ -502,19 +502,19 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             ? "accepted"
             : "refused")} reason={receipt.Reason}]");
     }
-    // The document-authored grant row set with any row matching (principal, Mutate, subject) removed — the
+    // The document-authored grant row set with any row matching (grantee, Mutate, subject) removed — the
     // upsert-by-key half chat.allow's re-grant and chat.block's revoke both need, since neither goes through the
     // LIVE table's own TryGrant re-grant merge (a document-authored row is edited directly, like identity.hud edits
     // the Hud section directly).
-    private static IReadOnlyList<WorldGrant> WithoutGrantRow(IReadOnlyList<WorldGrant> grants, WorldPrincipal principal, GrantSubject subject) =>
-        [.. grants.Where(predicate: grant => !((grant.Principal == principal) && (grant.Capability == WorldCapability.Mutate) && (grant.Subject == subject)))];
+    private static IReadOnlyList<WorldGrant> WithoutGrantRow(IReadOnlyList<WorldGrant> grants, Grantee grantee, GrantSubject subject) =>
+        [.. grants.Where(predicate: grant => !((grant.Grantee == grantee) && (grant.Capability == WorldCapability.Mutate) && (grant.Subject == subject)))];
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.inbox",
-            description: "Declares this player's OWN chat rows on their owned identity document — a bounded, evicting 'chat-log' row (appended to by chat.log) and a bounded, evicting 'chat-inbox' row (delivered into by a whisper from a sender this player later allows via chat.allow): chat.inbox [player]. [player] defaults to 1. Idempotent — a row already declared is left untouched. Owner-only: context.ActingPrincipal() must hold Drive over the target player's body (the SAME check player.identity uses) — a non-owner is refused by name.",
+            description: "Declares this player's OWN chat rows on their owned identity document — a bounded, evicting 'chat-log' row (appended to by chat.log) and a bounded, evicting 'chat-inbox' row (delivered into by a whisper from a sender this player later allows via chat.allow): chat.inbox [player]. [player] defaults to 1. Idempotent — a row already declared is left untouched. Owner-only: context.Principal must hold Drive over the target player's body (the SAME check player.identity uses) — a non-owner is refused by name.",
             handler: Inbox,
             routing: CommandRouting.Simulation
         );

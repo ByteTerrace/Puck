@@ -1,6 +1,8 @@
+using Puck.Commands;
 using System.Numerics;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -20,16 +22,16 @@ public sealed class SeamCrossingOrchestrationLawTests {
     // path every other two-row law drives), so this suite builds its own rows over a REAL file path — the exact
     // shape HostRow.Build uses, with the one field (WorldInstance.SourcePath, read from `origin`, not
     // `documentOrigin`) that a file-canonicalized origin match needs.
-    private static (WorldInstance Instance, WorldServer Server) BuildFileBackedRow(string name, string path, WorldDefinition definition) {
+    private static (WorldInstance Instance, WorldServer Server, TemporaryDirectory StateDirectory) BuildFileBackedRow(string name, string path, WorldDefinition definition) {
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
             screens: definition.Screens,
             engines: []
         );
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-seam-crossing-tests-{name}-").FullName;
+        var stateDirectory = new TemporaryDirectory(prefix: $"puck-seam-crossing-tests-{name}-");
         var profiles = new WorldOwnedWorlds(
             template: definition,
-            directory: stateDirectory,
+            directory: stateDirectory.RootPath,
             machineId: Guid.NewGuid()
         );
         var server = new WorldServer(
@@ -55,7 +57,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
             documentOrigin: new WorldFileOrigin(resolvedPath: path)
         );
 
-        return (instance, server);
+        return (instance, server, stateDirectory);
     }
     private static Puck.Maths.FixedQ4816 FixedQ4816(float value) => Puck.Maths.FixedQ4816.FromDouble(value: value);
     // References resolve relative to the authoring document's own file, and adjacency adoption matches a running
@@ -81,7 +83,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
         return document with {
             References = [new WorldReference(
                 Name: SafeName.Parse(candidate: "neighbour"),
-                Document: neighbourFileName
+                Document: WorldDocumentName.OfDocumentFile(path: neighbourFileName)
             )],
             Destinations = [new WorldDestination(
                 Name: SafeName.Parse(candidate: "neighbour"),
@@ -109,7 +111,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
         Boundary: new WorldAdjacencyBoundary(Vector3.Zero, yaw, 0f, 8f, 8f), Hysteresis: hysteresis
     );
     private static WorldDefinition ProjectionRow((string Name, string Path)[] neighbours, params WorldAdjacency[] edges) => Fixtures.BuildDocument() with {
-        References = neighbours.Select(selector: neighbour => new WorldReference(SafeName.Parse(candidate: neighbour.Name), neighbour.Path)).ToArray(),
+        References = neighbours.Select(selector: neighbour => new WorldReference(SafeName.Parse(candidate: neighbour.Name), WorldDocumentName.OfDocumentFile(path: neighbour.Path))).ToArray(),
         Destinations = neighbours.Select(selector: neighbour => new WorldDestination(SafeName.Parse(candidate: neighbour.Name), neighbour.Name, WorldDestinationDurability.Persisted, WorldDestinationScope.Global)).ToArray(),
         Adjacencies = edges,
     };
@@ -126,15 +128,17 @@ public sealed class SeamCrossingOrchestrationLawTests {
         var southDefinition = ProjectionRow([("source", sourcePath), ("corner", cornerPath)], ProjectionEdge("north", "source", "south", 180f), ProjectionEdge("east", "corner", "west", 90f));
         var cornerDefinition = ProjectionRow([("east", eastPath), ("south", southPath)], ProjectionEdge(counterpart: "south", destination: "east", hysteresis: 8f, name: "north", yaw: 180f), ProjectionEdge("west", "south", "east", -90f));
         var authored = Puck.Maths.FixedQ4816.FromDouble(value: 8d);
-        Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(local: eastDefinition, neighbour: cornerDefinition, depth: out var derived, reason: out var reason), reason);
-        Assert.True(derived < authored);
+
+        Assert.True(condition: WorldAdjacencyPolicy.TryDeriveOverlap(depth: out var derived, local: eastDefinition, neighbour: cornerDefinition, reason: out var reason), userMessage: reason);
+        Assert.True(condition: (derived < authored));
 
         SeamFiles(rowA: sourceDefinition, rowAPath: sourcePath, rowB: eastDefinition, rowBPath: eastPath);
         SeamFiles(rowA: southDefinition, rowAPath: southPath, rowB: cornerDefinition, rowBPath: cornerPath);
+        using var hostStateRoot = new TemporaryDirectory(prefix: "puck-corner-projection-host-");
         using var host = new WorldInstanceHost(
             applicationStopping: CancellationToken.None, admitsSpawn: true, machineHostFactory: Fixtures.MachineHostFactory,
             machineId: Guid.NewGuid(), resolver: new WorldSessionResolver(), seats: WorldEmbodiedSeats.None,
-            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-corner-projection-host-").FullName
+            stateRoot: hostStateRoot.RootPath
         );
         var rows = new[] {
             BuildFileBackedRow(definition: sourceDefinition, name: "source", path: sourcePath), BuildFileBackedRow(definition: eastDefinition, name: "east", path: eastPath),
@@ -149,7 +153,10 @@ public sealed class SeamCrossingOrchestrationLawTests {
             Assert.Equal(expected: authored, actual: projection.Path[0].OverlapDepth);
             Assert.Equal(expected: authored, actual: projection.OverlapDepth);
         } finally {
-            foreach (var row in rows) { row.Instance.Dispose(); }
+            foreach (var row in rows) {
+                row.Instance.Dispose();
+                row.StateDirectory.Dispose();
+            }
             try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
         }
     }
@@ -158,13 +165,13 @@ public sealed class SeamCrossingOrchestrationLawTests {
     [InlineData(2f, 2.1f, true)]
     [Theory]
     public void ScanTriggeredCrossingHonoursTheAuthoredOwnershipThreshold(float hysteresis, float position, bool shouldCross) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-seam-crossing-tests-files-").FullName;
+        using var filesDirectory = new TemporaryDirectory(prefix: "puck-seam-crossing-tests-files-");
         var rowAPath = Path.Combine(
-            path1: directory,
+            path1: filesDirectory.RootPath,
             path2: "row-a.world.json"
         );
         var rowBPath = Path.Combine(
-            path1: directory,
+            path1: filesDirectory.RootPath,
             path2: "row-b.world.json"
         );
         var rowADefinition = SeamRow(
@@ -190,6 +197,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
         );
 
         var machineId = Guid.NewGuid();
+        using var hostStateRoot = new TemporaryDirectory(prefix: "puck-seam-crossing-tests-host-");
         using var host = new WorldInstanceHost(
             applicationStopping: CancellationToken.None,
             admitsSpawn: true,
@@ -197,15 +205,15 @@ public sealed class SeamCrossingOrchestrationLawTests {
             machineId: machineId,
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-seam-crossing-tests-host-").FullName
+            stateRoot: hostStateRoot.RootPath
         );
 
-        var (rowAInstance, rowAServer) = BuildFileBackedRow(
+        var (rowAInstance, rowAServer, rowAStateDirectory) = BuildFileBackedRow(
             definition: rowADefinition,
             name: "row-a",
             path: rowAPath
         );
-        var (rowBInstance, rowBServer) = BuildFileBackedRow(
+        var (rowBInstance, rowBServer, rowBStateDirectory) = BuildFileBackedRow(
             definition: rowBDefinition,
             name: "row-b",
             path: rowBPath
@@ -215,7 +223,7 @@ public sealed class SeamCrossingOrchestrationLawTests {
             host.Admit(row: rowAInstance);
             host.Admit(row: rowBInstance);
 
-            var actor = WorldPrincipal.Seat(slot: 0);
+            var actor = Principal.Seat(slot: 0);
 
             Assert.True(condition: rowAServer.ApplySession(request: new SessionRequest.Join(
                 IdentityName: null,
@@ -283,7 +291,9 @@ public sealed class SeamCrossingOrchestrationLawTests {
             );
         } finally {
             rowAInstance.Dispose();
+            rowAStateDirectory.Dispose();
             rowBInstance.Dispose();
+            rowBStateDirectory.Dispose();
         }
     }
 }

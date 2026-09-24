@@ -79,6 +79,18 @@ internal sealed class WorldBindingBarControl {
 
         return m_compiled[slot];
     }
+    // A layout or model cell's text, or null when the token is absent, is no binding, or its cell holds no text.
+    private string? CellText(string? token) {
+        var slot = m_client.StateMirror.RegisterToken(
+            conversion: WorldStateConversion.Number,
+            token: token
+        );
+
+        return (((slot >= 0) && (m_client.StateMirror.Sample(slot: slot).Value is { Kind: CellKind.Text } text))
+            ? text.AsText
+            : null
+        );
+    }
     private (WorldBindingBarAuthoring Authoring, string Source) ResolveAuthoring(int slot) {
         if (m_roster.ProfileAt(slot: slot)?.Document?.BindingOverlays.FirstOrDefault()?.BindingBar is { } profile) {
             return (profile, "identity");
@@ -126,41 +138,14 @@ internal sealed class WorldBindingBarControl {
         }
 
         var preferences = m_bindings.ProfileBindings(slot: slot)?.BindingBar;
-        // Which layout is live is a state cell's answer, read now: the bar's shape is data the player can flip.
-        var layout = authoring.LayoutNamed(name: (((authoring.LayoutCell is { } layoutCell) && BindableState.TryParseBinding(
-            key: out var layoutKey,
-            row: out var layoutRow,
-            value: layoutCell
-        ) && WorldStateReader.TryRead(
-            definition: m_client.Definition,
-            key: layoutKey,
-            rawValue: out _,
-            row: out _,
-            rowName: layoutRow,
-            text: out var layoutName,
-            tick: m_client.Tick,
-            engineTick: m_client.EngineTick
-        ))
-            ? layoutName
-            : null));
-        var stacked = !((authoring.ModelCell is { } modelCell) && BindableState.TryParseBinding(
-            key: out var modelKey,
-            row: out var modelRow,
-            value: modelCell
-        ) && WorldStateReader.TryRead(
-            definition: m_client.Definition,
-            key: modelKey,
-            rawValue: out _,
-            row: out _,
-            rowName: modelRow,
-            text: out var modelName,
-            tick: m_client.Tick,
-            engineTick: m_client.EngineTick
-        ) && string.Equals(
-            a: modelName,
+        // Which layout is live is a state cell's answer, read through the state mirror: the bar's shape is data the
+        // player can flip.
+        var layout = authoring.LayoutNamed(name: CellText(token: authoring.LayoutCell));
+        var stacked = !string.Equals(
+            a: CellText(token: authoring.ModelCell),
             b: WorldBindingBarAuthoring.SingleModel,
             comparisonType: StringComparison.Ordinal
-        ));
+        );
         var effectiveScale = 1f;
         var presence = ((hidden || (liveOverride is true))
             ? (hidden

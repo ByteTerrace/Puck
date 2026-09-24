@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -13,21 +15,6 @@ namespace Puck.World.Tests;
 /// captured at any point still restores the live definition bit-identically.
 /// </summary>
 public sealed class JournalDepthLawTests {
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     private static WorldDefinition WithDepth(int depth) {
         var source = Fixtures.BuildDocument();
 
@@ -60,7 +47,7 @@ public sealed class JournalDepthLawTests {
 
         for (var index = 0; (index < 30); index++) {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: row
             ));
             fixture.Step();
@@ -84,11 +71,11 @@ public sealed class JournalDepthLawTests {
 
         for (var index = 0; (index < MutationCount); index++) {
             // Alternates the console door with the one structural principal a world's own rule effect submits
-            // under (see WorldServer.TryAdmitMutation's remarks on WorldPrincipal.World), so both origins land in
+            // under (see WorldServer.TryAdmitMutation's remarks on Principal.World), so both origins land in
             // the same journal this law bounds.
             var principal = (((index % 2) == 0)
-                ? WorldPrincipal.Console
-                : WorldPrincipal.World
+                ? Principal.Console
+                : Principal.World
             );
 
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
@@ -110,7 +97,7 @@ public sealed class JournalDepthLawTests {
         );
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var checkpoint,
                 reason: out var captureReason
             ),
@@ -123,13 +110,15 @@ public sealed class JournalDepthLawTests {
             screens: restoredDefinition.Screens
         );
 
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-journal-depth-tests-");
+
         try {
             var (restored, _) = WorldServer.FromCheckpoint(
                 checkpoint: checkpoint,
                 instanceIdentity: "journal-depth-restore",
                 machines: machines,
                 profiles: new WorldOwnedWorlds(
-                    directory: Directory.CreateTempSubdirectory(prefix: "puck-journal-depth-tests-").FullName,
+                    directory: profilesDirectory.RootPath,
                     machineId: Guid.NewGuid(),
                     template: restoredDefinition
                 )
@@ -162,7 +151,7 @@ public sealed class JournalDepthLawTests {
             );
 
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: row
             ));
             fixture.Step();
@@ -181,7 +170,7 @@ public sealed class JournalDepthLawTests {
 
                 fixture.Server.EnqueueUndo(
                     count: (Depth + 1),
-                    principal: WorldPrincipal.Console
+                    principal: Principal.Console
                 );
                 fixture.Step();
 
@@ -192,7 +181,7 @@ public sealed class JournalDepthLawTests {
 
                 fixture.Server.EnqueueUndo(
                     count: 1,
-                    principal: WorldPrincipal.Console
+                    principal: Principal.Console
                 );
                 fixture.Step();
 

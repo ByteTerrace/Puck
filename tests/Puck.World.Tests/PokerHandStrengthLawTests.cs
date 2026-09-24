@@ -1,9 +1,10 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins the garden's heads-up fixed-limit hold'em table (games/poker.world.json) by running the SHIPPED rules
+/// <summary>Pins the garden's heads-up fixed-limit hold'em table (games/poker.puck) by running the SHIPPED rules
 /// over a real server — never a reimplementation. The seven-card evaluator is fed authored hands through seat 1's own
 /// hole mask (the rules read <c>private1.hole | table.boardMask</c>, so a whole hand may sit in the hole word) and must
 /// produce the exact strength word <c>category &lt;&lt; 28 | primary &lt;&lt; 14 | secondary</c>; a full hand then
@@ -88,7 +89,7 @@ public sealed class PokerHandStrengthLawTests {
     private static long Strength(int category, long primary, long secondary) => (((long)category) << 28) | (primary << 14) | secondary;
     private static int Suit(char c) => c switch { 'C' => 1, 'D' => 2, 'H' => 3, 'S' => 4, _ => throw new ArgumentOutOfRangeException(paramName: nameof(c)) };
     private static void Write(WorldFixture fixture, string row, string key, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: row,
         Key: key,
         Value: value,
@@ -335,7 +336,7 @@ public sealed class PokerHandStrengthLawTests {
         );
         Assert.Null(@object: Fixtures.Disclose(
             definition: dealt,
-            recipient: WorldPrincipal.Seat(slot: 1)
+            recipient: Principal.Seat(slot: 1)
         )?.SingleOrDefault(predicate: r => (r.Name == "hand1"))); // seat 2 cannot see hand 1
 
         Act(
@@ -513,14 +514,14 @@ public sealed class PokerHandStrengthLawTests {
             2,
             Fixtures.Disclose(
                 definition: shown,
-                recipient: WorldPrincipal.Seat(slot: 1)
+                recipient: Principal.Seat(slot: 1)
             )?.SingleOrDefault(predicate: r => (r.Name == "hand1"))?.Cells.Count
         ); // revealed to seat 2
         Assert.Equal(
             2,
             Fixtures.Disclose(
                 definition: shown,
-                recipient: WorldPrincipal.Seat(slot: 0)
+                recipient: Principal.Seat(slot: 0)
             )?.SingleOrDefault(predicate: r => (r.Name == "hand2"))?.Cells.Count
         ); // and hand 2 to seat 1
 

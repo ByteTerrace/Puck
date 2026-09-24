@@ -35,6 +35,9 @@ internal sealed class ScriptedTradeContinueStage : IPostStage<PostContext> {
     private const ushort SerialControlAddress = 0xFF02;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "trade-continue";
     /// <inheritdoc/>

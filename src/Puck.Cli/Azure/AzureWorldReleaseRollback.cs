@@ -6,7 +6,7 @@ namespace Puck.Cli.Azure;
 internal static partial class AzureCommand {
     /// <summary>Qualifies the retained predecessor against current source state, then rolls back through the
     /// ordinary drain and cutover transaction. It never selects an earlier gameplay checkpoint.</summary>
-    internal static Task<WorldReleaseRunResult> RollbackWorldReleaseAsync(Guid? operationId, CancellationToken cancellationToken) {
+    internal static Task<WorldReleaseRunResult> RollbackWorldReleaseAsync(Guid? operationId, TimeProvider clock, CancellationToken cancellationToken) {
         if (operationId == Guid.Empty) {
             throw new ArgumentException(
                 message: "release operation ID must not be empty",
@@ -62,7 +62,8 @@ internal static partial class AzureCommand {
                     Path.GetFullPath(path: "artifacts/world-release-qualification"),
                     active.Image,
                     previous.Image,
-                    archive: context.Archive
+                    archive: context.Archive,
+                    clock: context.Clock
                 );
                 var begun = await new WorldReleaseCoordinator(groups: context.Groups).BeginRollbackAsync(
                     current,
@@ -79,6 +80,7 @@ internal static partial class AzureCommand {
                     token: token
                 ).ConfigureAwait(continueOnCapturedContext: false);
             },
+            clock,
             cancellationToken
         );
     }

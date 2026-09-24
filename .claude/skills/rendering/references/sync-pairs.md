@@ -1,0 +1,105 @@
+# C# ↔ HLSL sync pairs
+
+The C# program model and the shader interpreter are one contract written twice.
+Change either side only with its partner, in the same change. Back to
+[../SKILL.md](../SKILL.md).
+
+**Nothing checks these mechanically.** No test reads the `.hlsli` files. The one
+runtime guard is the ISA version handshake: at initialization and on shader
+reload, `SdfWorldEngine.VerifyIsaVersion` dispatches each march pipeline's
+report branch and reads back its `SDF_ISA_VERSION`;
+`SdfShaderSetVerification.ValidateReport` checks the bytes and caches each
+verified device and shader set by hash. It compares the version only, never op,
+shape, or layout values, so an enum drift with an unchanged version renders
+wrong silently. Host-side law tests
+(`PackEnvironmentLawTests`, `SdfViewsKernelVariantLawTests`,
+`WorldRenderEnvelopeLawTests`) pin only their C# half.
+
+C# symbols live in `src/Puck.SignedDistance` unless they belong to
+`SdfWorldEngine`, `SdfEngineNode`, `SdfViewsKernelVariants`,
+`SdfShaderSetVerification`, or `DebugViewModes`, which live in `src/Puck.SdfVm`.
+HLSL paths are under `src/Puck.SdfVm/Assets/Shaders/Sdf`. "Word" means a 32-bit
+uint; "uint4" and "float4" name 16-byte vectors.
+
+## Identity and vocabulary
+
+| C# | HLSL | Contract |
+|---|---|---|
+| `SdfIsa.Version`; `SdfShaderSetVerification.ReportRequest` | `SDF_ISA_VERSION`, `SDF_ISA_REPORT_REQUEST` in `sdf-isa.hlsli`; the report branch in `sdf-beam.comp.hlsl` and the views source every other march kernel includes | Bump both versions when existing bytecode would misread an encoding. Rebuilding with an unchanged version cannot detect a mismatch. Unknown host opcodes refuse by id and instruction index; unknown GPU opcodes return the diagnostic material. |
+| `SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfLift`, `SdfNoiseFlavor` | `SDF_OP_*`, `SDF_SHAPE_*`, `SDF_BLEND_*`, `SDF_LIFT_*`, `SDF_NOISE_*` in `sdf-vm.hlsli` | Numeric values match one to one. The unassigned ids — ops 6, 7, 10, 13–15, 19, 20, 33 and shape 6 — stay unassigned; a new instruction takes a fresh id. |
+| `SdfWallpaperGroup` and its plane-axis enum | `SDF_WPG_*` and the `sdfWallpaperFoldCell` axis decode | Groups 0..16 (all 17 IUC groups). |
+| `SdfViewsKernelVariants.FirstHeavyTouch` / `FirstExoticTouch` | `SDF_STRIP_HEAVY` / `SDF_STRIP_ALL_EXOTIC` guards, defined in `sdf-vm.hlsli` from the `SDF_FOLD_OPS` / `SDF_CORE_OPS` macros that `sdf-world-views-folds.comp.hlsl` and `sdf-world-views-core.comp.hlsl` set | Any case a strip macro removes must route a program that uses it to a fuller variant. Selection walks Full → Folds → CoreOps at `UploadProgram`. |
+
+## Program layout
+
+| C# | HLSL | Contract |
+|---|---|---|
+| `SdfProgram` packed `Words` | the layout comment at the top of `sdf-vm.hlsli` and its decoders | The first uint4 = (instructionCount, materialCount, dataOffset, materialOffset). Each instruction is a uint4 header (op, shape, blend, material) plus two float4 data vectors. Then materials, the bounds table, segment directory, instance directory, world segments, instance grid, rigid-leaf plan, and side tables. |
+| Shape-lane flags on `SdfInstruction` | `sdfShapeEnabled` and the flag masks in `sdf-vm.hlsli` | Detail = 0x80000000, NoSecondary = 0x40000000, type mask = 0x3FFFFFFF. Rigid fast paths test the original header, then mask the flags before dispatch. Instance header `.z` bit 0 is `NoDetailShapesFlag`. |
+| `SdfProgram.BoundModeStatic` / `BoundModeDynamic`; `SegmentRigidPlanFlag`; parked bound | `SDF_BOUND_*`, `SDF_SEGMENT_RIGID_PLAN`, `SegmentEndMask` | Bound modes 0/1/2. Rigid-plan segment flag 0x80000000. A parked instance packs radius −1. |
+| `SdfProgram.RigidLeafMaxFoldRun`; folded rigid leaves | `SDF_RIGID_LEAF_FOLDED`, `sdfRigidFoldPoint` / `sdfRigidFoldGradient` in both rigid walks | A fold run of at most 8 instructions packs an extension slot (pre-run pose, quaternion, run length) and a negative bound. |
+| `SdfProgram.PartPrograms.cs` (`IndependentPartTracingFlag`, entry/leaf/binding runs) | `sdf-parts.hlsli`, `sdfCanTracePartsIndependently` | The instance-directory header `.y` holds the part-table offset (zero when absent). The part-table header `.x` bits 0..30 = compiled-instance count, bit 31 = independent primary tracing. One uint4 per instance names leaf run, binding run, leaf count (high bit = dynamic), scope correction. Its geometry key must include every parameter that changes the field. |
+| `SdfWorldEngine.PartBoundFloatCount` | `SdfPartBoundFloatCount` in `sdf-part-bounds.hlsli` | 12 floats per instance per viewport (two six-float bands), after the tile planes. |
+| `SdfInstanceGrid.HeaderWords`, `MaxDimension` | `SDF_GRID_HEADER_WORDS`, `SDF_GRID_MAX_DIM` | 16 header words; 64 cells per axis. |
+| `SdfMaterial` packing, `SdfMaterial.DefaultRoughness` | `SDF_MATERIAL_VECTORS_PER_ENTRY`, `SdfRoughnessFloorSquared` | 20 float4 per material. |
+| `SdfPathProfile` / `SdfPathCompiler` / `SdfProgram.Path` | `SDF_SHAPE_PATH`, `sdfPathSolid` | Shape 21. Data0 = (table offset as float bits, edge count, enclosing 2D radius, half-depth); Data1 = (smooth, stroke mode, 0, 0). At most 128 edges, two uint4 each: (A.xy, B.xy), (radiusA, radiusB, 0, 0). Full kernel only; the fixed-point evaluator refuses it. |
+| ConvexPolygon and Sweep side tables | `sdf-vm.hlsli` polygon and sweep decoders | Polygon packs `(offset << 4) | count`. Sweep packs three uint4 per record (`SweepCurveVectorsPerEntry`). |
+
+## Instruction semantics shared by both interpreters
+
+| C# | HLSL | Contract |
+|---|---|---|
+| `SdfBlendOp.GrooveUnion` 10, `PipeUnion` 11, `GrooveSubtraction` 13, `PipeSubtraction` 14; `SdfProgram.ComposeLipschitz`; `SdfFieldEvaluator.Compose` | `blendShape` / `blendShapeDual` | Radius r = Data1.x. With h = sqrt(a² + b²): groove = max(min(a,b), r − h), pipe = min(min(a,b), h − r); the subtraction forms use max(a, −b). Tube gradient = (a·∇a + b·∇b)/h, negated for groove. Compose bound hypot(La, Lb), never a program-wide √2. |
+| `SdfBlendOp.Morph` 12, `StairsUnion` 15, `StairsSubtraction` 16; `PushFieldMorph` / `PushFieldStairs` | the PopField compose tail in `mapCore` / `mapGradCore` | PopField only; a ShapeBlend carrying one is refused. Morph lerps saved→candidate by a lane ramp, winner at t ≥ 0.5. Stairs: r = Data1.x > 0 (builder and `SdfProgram` refuse r ≤ 0, since a zero radius is a plain Union/Subtraction pop), n = Data1.z ≥ 1; its material winner follows the union or subtraction rule and drops the seam weight only when the candidate wins. Both bound as max(La, Lb). The fixed-point evaluator reads every lane as zero. |
+| `SdfOp.RotatePlane` 5 | `SDF_OP_ROTATE_PLANE`, scalar and dual | Shape selects the plane (XY/YZ/XZ), Blend the driver axis, Data0 = (rate, origin). `BendX/Y/Z` and `TwistY` are builder methods over it. |
+| `SdfOp.LaneErode` 34 | `SDF_OP_LANE_ERODE`, scalar and dual | Data0 = (lane 0..3, from, to, noiseScale), Data1.x = target reach. t ≥ 1 skips the next shape; the ragged term scales by 4t(1 − t). Render-only. |
+| `SdfProgram.Lipschitz.cs` per-op factors | `sdfStepScale()` and `mapCore`'s final multiply in `sdf-vm.hlsli`; the de-scaling readers in `sdf-occlusion.hlsli`, `sdf-surface.hlsli`, `sdf-primary.hlsli`, `sdf-world.hlsli` | `Displace` and `DomainWarp` use 1 + amp · max\|freqᵢ\| (infinity norm); flare uses `FlareOperatorNorm`. The program `stepScale` is the reciprocal of the worst unscoped factor. |
+| `SdfFieldEvaluator` supported sets | the full GPU vocabulary | The evaluator interprets a subset of ops and shapes and refuses everything else by name, including Path, the warps, the noise family, several folds, dynamic transforms, multi-strand sweeps, and non-uniform `Scale`. Read the current sets from its `IsSupported*` switches rather than from a list. `Overlap` resolves a failed world-origin rebase toward occupied. |
+| Superellipsoid (shape 18) | `sdfSuperellipsoid` / `sdfSuperellipsoidGradient`, e == 2 fast paths `sdfEllipsoidGauge` / `sdfEllipsoidGaugeGradient` | Every ellipsoid is shape 18 at exponent 2, mirrored by the e == 2 branch of `SdfFieldEvaluator`. Only the e == 2 path compiles in the Folds tier. |
+| `Pcg3dLatticeNoise.Pcg3d` in `Puck.Maths`; `ShaderIsa.Pcg3d` in `Puck.ShaderVm` | `sdfPcg3d` in `sdf-vm.hlsli`; `shaderVmPcg3d` in `shader-vm.hlsli` | One hash, four implementations. |
+
+## Engine buffers, push constants, and bindings
+
+| C# (`SdfWorldEngine` unless noted) | HLSL | Contract |
+|---|---|---|
+| `PushConstantByteLength` = 36 | `CompositeParams` in `sdf-world.hlsli` | Nine words: extent, tileGrid, viewportCount, childMask, screenMask, instanceMaskWordCount, sampleIndex. |
+| `CompositePushByteLength`; `BuildCompositePush` | `CompositeParams2` in `sdf-world-composite.comp.hlsl` | Viewport rects, `scaleQPacked`, `sharpnessQPacked`; word 3 = `childMask`. |
+| `ViewportByteLength` = 96; `PackViewports` | `ViewportData`, `worldRenderDims`, `worldFarDistance` | Six float4 rows; the last (row 5) = (render-scale q byte, asymmetric-frustum offset xy, far distance). Reduced extent = max(1, (dim·q + 127)/255) in integer math, identical in beam, cull, and views; q = 255 is the exact-copy path. |
+| `SdfProgram.InstanceMaskWordCount`; push word 7 | `sdfInstanceMaskWordCount`, `worldInstanceMaskBase` | Width W = max(1, ceil(n/32)). Each tile stores W words plus ceil(W/32) summary words written by `sdf-instance-cull.comp.hlsl`. Indexing is host-pushed, never shader-derived. |
+| `SdfProgramBuilder.MaxInstances` = 65536 | `SDF_MAX_INSTANCES`, `SDF_SHADOW_MASK_WORDS` | At most 2048 mask words per tile; the shadow and ambient gathers each hold a 2048-word groupshared mask. |
+| `TilePlaneCount` = 4 | `WorldTilePlaneCount` and its four plane accessors | Planes: march start, first exit, second entry, far bound. Stride = tileGrid.x · tileGrid.y · viewportCount. Adding a plane touches both counts and adds an accessor on each side. |
+| `DynamicTransformByteLength` = 48 | `sdfDynamicTransforms` (binding 9, t2) | Three float4: position + shadow participation, quaternion, four render lanes. |
+| `SdfProgramBuilder.MaxScreenSurfaces` = 32; `ScreenMaterialId` = 65535; `ScreenSurfaceByteLength` = 48 | `SdfScreenSurfaceCount`, `SdfScreenLightEnv`, `SdfDecalDescriptorCount`; `SDF_SCREEN_MATERIAL`; `screenSurfaces` (binding 10, t4) | Screen sources at bindings 12 + i, registers t5 + i / s(i), derived from `ScreenSourceBindingBase`. The material sentinel band `ScreenMaterialId + 1 + i` is closed on both sides; `sampleScreenSurface` bounds the index. Right/Up are unit and orthogonal and half-extents positive, because the shader divides by them. |
+| `WorldScreenMappings.Bezel` = 0.03 and its `GlassPass` warp (`src/Puck.World.Schema`) | `CrtBezel` and the zero `CrtCurvature` in `sdf-world.hlsli`'s screen shading | The published screen mapping inverts the glass pass as an inset of `Bezel` on every side, `uv' = 0.5 + (uv − 0.5)/(1 − 2·Bezel)`, which is exact only while the curvature is zero. Changing either constant, or raising the curvature, changes the mapping in the same change: a nonzero curvature needs a radial `SourceWarpInverse` arm. |
+| `ScreenLightByteLength` = (MaxScreenSurfaces + 8 + `SdfEnvironment.RowCount`) float4; `PackScreenLights` | `sdfScreenLights` (binding 11, t38) | Rows 0..31 screens; 32 env (ambient/sun scale, slice axis/offset); 33..36 grid overlay (36.zw = tap-normal and shadow-cull toggles); 37 bench levers; 38 shadow proxy; 39 far field; 40+ `SdfEnvironment` rows (`SdfEnvBase`). Row 32 doubles as the screen-count loop bound, so it never moves. |
+| `SdfEnvironment` lights and tonemap | `SdfEnvLight*`, `SdfTonemap*` | At most 8 lights × 3 rows; `SdfLightKind` 0..4 (Occluder is 4). |
+| `SdfVolume.VectorsPerEntry` = 11; `SdfProgramBuilder.MaxVolumes` = 64; `PackVolumes` | `shade-volumes.hlsli`; `sdfVolumes` (binding 48, t43); `SdfVolumeCount` = 64 | Family 5.z, density ramp rows 6–9, cloud coverage/softness 10.xy. The shader stops at the zeroed trailing entry and composites intersecting volumes far to near. |
+| `PrimaryHitByteLength` = 80; `PrimaryHitBindingIndex`, `PrimaryHitReadBindingIndex` | `sdf-visibility.hlsli`'s `sdfVisibilityRecords`: binding 49, u5 read-write in primary, surface and ambient; binding 50, t45 read-only in views | One buffer, two bindings in the views layout. Twenty words per pixel in five rows, V, C, L, N and S, read and written only through that module's typed functions. V's identity carries the kind in bits 31..30 (0 background, 1 SDF, 2 mesh) and the source in bits 29..0; V's flags pack march steps (bits 0..7) and the saturated primary query count (8..30). |
+| Brick pool; `BrickBakeRequestHeaderFloat4Count`; the brick and frame-upload push lengths | binding 46 (t41 in views, t4 in beam); `sdf-brick-bake.comp.hlsl`, `sdf-brick-upload.comp.hlsl`, `sdf-frame-upload.comp.hlsl` | `SdfBrickPoolLayout` = 8 bricks × 128³. Upload pushes are 16 bytes. The frame-upload push is `(count, runCount, offset, tableBase)` in uints (`RecordFrameUpload`). The staging buffer is a `FrameUploadRunTableWords` run-table reserve then the table; two or more runs stage `(table offset, prefix)` pairs at its front (`WriteOwedWords`). |
+| Instance grid buffer | binding 47 (t42; t3 in the instance-cull pass) | |
+| `TileBindingIndex`; `TilePlaneCount`, `PartBoundFloatCount` | `tiles`: binding 3, u0 in the beam, t0 in `sdf-cull-args.comp.hlsl`, t44 in `sdf-world-views.comp.hlsl` | The beam is the only writer; `SDF_TILES_READ_WRITE` compiles `sdfWritePartBound` there alone. The composite binds no cull buffer. |
+| `ViewSourceBindingIndex`; `CompositeSourceBindingIndex` | `sources[5]`: binding 4, u0..u4 in the views layout (views and sky); binding 1, u1..u5 in the composite | |
+| Glyph atlas; decal cells | binding 44 (t39, s32); binding 45 (t40) | |
+| `sdfInstanceMasks` | t37 by default; t3 in the beam via `SDF_INSTANCE_MASKS_REGISTER` | The register is per consumer. |
+| `DebugViewModes.Names` | `DebugViewModeCount` and mode ids in `sdf-world.hlsli`, `sdf-surface.hlsli`, `sdf-beam.comp.hlsl` | Eleven modes, the same order on both sides. |
+| `PrimaryMarchSteps` = 128 | `MaxSteps` in `sdf-world.hlsli` | |
+| `ConeNear` = 0.02 | `ConeNear` in `sdf-world.hlsli` | The camera cone's start and the near plane a `ViewProjection` for the same view is created with, so rasterized depth and the march agree on where a view begins. |
+| `SdfProgram.MaxDynamicTransformSlot` = int.MaxValue − 1 | the `TransformDynamic` slot decode | `slot + 1` must fit. The C# validation compares the float lane in double, because `(float)int.MaxValue` rounds up to 2³¹. |
+
+## Puck.ShaderVm
+
+`ShaderIsa`, `ShaderOp`, `ShaderInput`, and `ShaderInstruction` pair with the
+constants in `src/Puck.ShaderVm/Assets/Shaders/ShaderVm/shader-vm.hlsli`: magic
+0x4D564853, four header words, 8-bit opcode plus 24-bit operand, and the stack,
+local, instruction, and constant ceilings. `ShaderInterpreter` is the reference
+semantics. No kernel includes the HLSL half, so a divergence there is invisible
+until one does.
+
+## Image sources
+
+| C# (`Puck.Abstractions.Sources`) | HLSL (`src/Puck.Shaders/Assets/Shaders/Sources`) | Contract |
+|---|---|---|
+| `ImageSourceUploadLayout`, `ImageSourceUploadHeader` | `ImageSourceHeader`, `imageSourceHeader` in `image-source.hlsli` | Eight little-endian uints: width, height, format code, color word, plane 0 offset and stride, plane 1 offset and stride. The color word packs matrix, range, transfer and primaries in bytes 0 to 3. |
+| `ImagePixelFormat`, `ImageYuvMatrix`, `ImageYuvRange`, `ImageTransferFunction` codes | `IMAGE_FORMAT_*`, `IMAGE_MATRIX_*`, `IMAGE_RANGE_*`, `IMAGE_TRANSFER_*` | Numeric values match one to one; format code 0 is never a format. |
+| `ImageSourceConversion.YuvToRgb`, `PqToNits`, `SrgbToLinear`, `ReferenceWhiteNits` | `imageSourceYuvToRgb`, `imageSourcePqToNits`, `imageSourceSrgbToLinear`, `IMAGE_REFERENCE_WHITE_NITS` | The CPU reference is double precision; a kernel agrees within one 8-bit code, which the `source-conversion` canary's tolerance allows. |
+| `ImageSourceConversion.PassOf` and its pass names | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` `.comp.hlsl` | Region at binding 0 (`ByteAddressBuffer`, t0), image at binding 1 (u0), 8×8 threads a group, one thread a pixel. |

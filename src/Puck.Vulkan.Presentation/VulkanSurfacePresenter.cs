@@ -10,7 +10,7 @@ namespace Puck.Vulkan.Presentation;
 /// fullscreen surface blit), so the host loop drives Vulkan presentation through the backend-neutral seam
 /// without referencing either concrete type.
 /// </summary>
-public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable, IPresentationSkipFeedback {
+public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable {
     private readonly SurfaceCompositor m_compositor;
     private readonly VulkanRenderer m_renderer;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
@@ -133,6 +133,4 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
             )
             : PresentTimingSample.Unavailable
         );
-    /// <inheritdoc/>
-    public ulong SkippedPresentCount => m_renderer.SkippedPresentCount;
 }

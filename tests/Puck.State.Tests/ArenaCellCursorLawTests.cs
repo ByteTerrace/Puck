@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Xunit;
 
@@ -31,9 +31,9 @@ public sealed class ArenaCellCursorLawTests {
         var beforeHash = arena.ComputeHash();
         var cursor = 0;
 
-        Assert.True(condition: arena.TryNextCell(rowOrdinal: 0, cursor: ref cursor, key: out var key));
+        Assert.True(condition: arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: 0));
         Assert.Equal(expected: "0", actual: arena.Keys[key].Value);
-        Assert.True(condition: arena.TryReadRaw(rowOrdinal: 0, key: key, raw: out var raw));
+        Assert.True(condition: arena.TryReadLiveNumber(rowOrdinal: 0, key: key, time: ArenaTime.Origin, value: out var raw));
         Assert.Equal(actual: raw, expected: 42L);
         Assert.Equal(expected: beforeKeys, actual: arena.Keys.Count);
         Assert.Equal(expected: beforeHash, actual: arena.ComputeHash());
@@ -68,16 +68,16 @@ public sealed class ArenaCellCursorLawTests {
         var cursor = 0;
         var visited = new List<string>();
 
-        while (arena.TryNextCell(rowOrdinal: row, cursor: ref cursor, key: out var key)) {
+        while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: row)) {
             visited.Add(item: arena.Keys[key].Value);
         }
 
         Assert.Equal(actual: visited, expected: new[] { "64", "129" });
         Assert.Equal(expected: arena.CellCount(rowOrdinal: row), actual: visited.Count);
-        Assert.False(condition: arena.TryNextCell(rowOrdinal: row, cursor: ref cursor, key: out var end));
-        Assert.Equal(expected: default, actual: end);
-        Assert.False(condition: arena.TryNextCell(rowOrdinal: -1, cursor: ref cursor, key: out var invalid));
-        Assert.Equal(expected: default, actual: invalid);
+        Assert.False(condition: arena.TryNextCell(cursor: ref cursor, key: out var end, rowOrdinal: row));
+        Assert.Equal(actual: end, expected: default);
+        Assert.False(condition: arena.TryNextCell(cursor: ref cursor, key: out var invalid, rowOrdinal: -1));
+        Assert.Equal(actual: invalid, expected: default);
     }
     [Fact]
     public void ACursorCountsAnImportedSparseRingByPresenceRatherThanItsHistoryCursor() {
@@ -167,7 +167,7 @@ public sealed class ArenaCellCursorLawTests {
             }
         });
 
-        Assert.Equal(expected: 0L, actual: before);
+        Assert.Equal(actual: before, expected: 0L);
         Assert.Equal(actual: count, expected: 1024);
         Assert.Equal(expected: beforeKeys, actual: arena.Keys.Count);
         Assert.Equal(expected: beforeHash, actual: arena.ComputeHash());
@@ -177,7 +177,7 @@ public sealed class ArenaCellCursorLawTests {
         var cursor = 0;
         var count = 0;
 
-        while (arena.TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out _)) {
+        while (arena.TryNextCell(cursor: ref cursor, key: out _, rowOrdinal: rowOrdinal)) {
             count++;
         }
 
@@ -187,7 +187,7 @@ public sealed class ArenaCellCursorLawTests {
         var cursor = 0;
         var names = new List<string>();
 
-        while (arena.TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out var key)) {
+        while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
             names.Add(item: arena.Keys[key].Value);
         }
 
@@ -199,8 +199,8 @@ public sealed class ArenaCellCursorLawTests {
         var cursor = 0;
         var values = new List<long>();
 
-        while (arena.TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out var key)) {
-            Assert.True(condition: arena.TryReadRaw(rowOrdinal: rowOrdinal, key: key, raw: out var raw));
+        while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+            Assert.True(condition: arena.TryReadLiveNumber(rowOrdinal: rowOrdinal, key: key, time: ArenaTime.Origin, value: out var raw));
             values.Add(item: raw);
         }
 

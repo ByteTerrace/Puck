@@ -7,7 +7,10 @@ public sealed class RemoteMcpAccessPolicy {
     private readonly Lock m_gate = new();
     private FrozenSet<string> m_subjects = Array.Empty<string>().ToFrozenSet(comparer: StringComparer.Ordinal);
 
-    internal event Action? Changed;
+    /// <summary>Occurs after <see cref="Replace"/> changes the granted subjects, while the new grants are already
+    /// visible to <see cref="Allows"/>; a replacement with the same subjects raises nothing. Handlers run under the
+    /// policy's lock and must not call <see cref="Replace"/>.</summary>
+    public event Action? Changed;
 
     /// <summary>Checks the current grant, using the configured issuer's subject namespace.</summary>
     /// <param name="subject">A validated subject.</param>

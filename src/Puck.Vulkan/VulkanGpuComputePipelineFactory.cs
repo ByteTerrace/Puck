@@ -26,20 +26,20 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
         ArgumentNullException.ThrowIfNull(bindings);
         GpuComputeBinding.ValidateSet(bindings: bindings);
 
-        var deviceHandle = ((IVulkanDeviceContext)deviceContext).LogicalDevice.Handle;
+        var logicalDevice = ((IVulkanDeviceContext)deviceContext).LogicalDevice;
+        var device = logicalDevice.Commands;
         var descriptorBindings = new VkDescriptorSetLayoutBinding[bindings.Count];
 
         for (var index = 0; (index < bindings.Count); index++) {
             descriptorBindings[index] = new VkDescriptorSetLayoutBinding {
                 Binding = bindings[index].Binding,
                 DescriptorCount = bindings[index].Count,
-                // A storage image and an acceleration structure are each their own type; both storage-buffer kinds
-                // (read and read-write) are a Vulkan storage buffer — the read/write distinction only matters to the
-                // Direct3D 12 SRV/UAV split.
+                // A storage image and a sampled image are each their own type; both storage-buffer kinds (read and
+                // read-write) are a Vulkan storage buffer — the read/write distinction only matters to the Direct3D 12
+                // SRV/UAV split.
                 DescriptorType = bindings[index].Kind switch {
                     GpuComputeBindingKind.StorageImage => VulkanDescriptorType.StorageImage,
                     GpuComputeBindingKind.SampledImage => VulkanDescriptorType.CombinedImageSampler,
-                    GpuComputeBindingKind.AccelerationStructure => VulkanDescriptorType.AccelerationStructure,
                     _ => VulkanDescriptorType.StorageBuffer,
                 },
                 StageFlags = ((uint)GpuShaderStage.Compute),
@@ -48,9 +48,10 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
 
         computePipelineApi.CreateComputePipeline(
             request: new VulkanComputePipelineCreateRequest(
-                DeviceHandle: deviceHandle,
+                Device: device,
                 ShaderModuleHandle: computeShaderModule.Handle,
                 DescriptorBindings: descriptorBindings,
+                PipelineCache: logicalDevice.PipelineCache,
                 PushConstantSize: (pushConstantBinding?.Size ?? 0u),
                 PushConstantStageFlags: ((uint)(pushConstantBinding?.StageFlags ?? GpuShaderStage.None))
             ),
@@ -62,7 +63,7 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
         return new VulkanGpuComputePipeline(
             api: computePipelineApi,
             descriptorSetLayoutHandle: setLayout,
-            deviceHandle: deviceHandle,
+            device: device,
             layoutHandle: pipelineLayout,
             pipelineHandle: pipeline
         );

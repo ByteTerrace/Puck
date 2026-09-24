@@ -10,56 +10,17 @@ namespace Puck.Cli.Tests.Creation;
 /// <summary><c>puck creation</c>: the shipped sculpt registry is empty, an unknown sculpt name and a malformed
 /// world file both refuse without writing, and <c>stats</c> reports the moth prototype's shape budget.</summary>
 public sealed class CreationCommandTests {
-    private static (int ExitCode, string Output) Invoke(params string[] args) {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        using var output = new StringWriter();
-
-        Console.SetOut(newOut: output);
-        Console.SetError(newError: output);
-
-        try {
-            return (PuckRootCommand.Invoke(args: args), output.ToString());
-        } finally {
-            Console.SetOut(newOut: originalOut);
-            Console.SetError(newError: originalError);
-        }
-    }
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
+    private static (int ExitCode, string Output) Invoke(params string[] args) =>
+        ConsoleCapture.Run(run: () => PuckRootCommand.Invoke(args: args));
     private static string TempWorldCopy() {
-        var source = Path.Combine(
-            RepoRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "avatars",
-            "moth.world.json"
-        );
         var target = Path.Combine(
             path1: Path.GetTempPath(),
             path2: $"puck-creation-cli-{Guid.NewGuid():N}.world.json"
         );
 
-        File.Copy(
-            destFileName: target,
-            sourceFileName: source
+        File.WriteAllBytes(
+            bytes: Puck.Testing.ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/avatars/moth.puck")),
+            path: target
         );
 
         return target;
@@ -195,17 +156,17 @@ public sealed class CreationCommandTests {
                     SdfPrismProfileKind.Convex,
                     Vertices: [
                     new(
-                            -1f,
-                            -1f
+                            x: -1f,
+                            y: -1f
                         ), new(
-                            -1f,
-                            1f
+                            x: -1f,
+                            y: 1f
                         ), new(
-                            1f,
-                            1f
+                            x: 1f,
+                            y: 1f
                         ), new(
-                            1f,
-                            -1f
+                            x: 1f,
+                            y: -1f
                         ),
                 ]
                 )
@@ -220,12 +181,12 @@ public sealed class CreationCommandTests {
 
             WorldDefinitionSerialization.Save(
                 definition: definition with {
-                CreationsRaw = [.. definition.Creations, new WorldPrototype(
+                    CreationsRaw = [.. definition.Creations, new WorldPrototype(
                         "contact-proof",
                         canonical.Document,
                         canonical.Hash
                     )],
-                PlacementRowsRaw = [.. definition.Placements, new WorldPlacement(
+                    PlacementRowsRaw = [.. definition.Placements, new WorldPlacement(
                         Id: "contact-proof",
                         PrototypeId: "contact-proof",
                         Position: new Vector3(
@@ -239,7 +200,7 @@ public sealed class CreationCommandTests {
                 ? new WorldSolid(Margin: 0f)
                 : null)
                     )],
-            },
+                },
                 path: path
             );
             var before = File.ReadAllBytes(path: path);
@@ -314,12 +275,12 @@ public sealed class CreationCommandTests {
 
             WorldDefinitionSerialization.Save(
                 definition: definition with {
-                CreationsRaw = [.. definition.Creations, new WorldPrototype(
+                    CreationsRaw = [.. definition.Creations, new WorldPrototype(
                         "scope-proof",
                         canonical.Document,
                         canonical.Hash
                     )],
-            },
+                },
                 path: path
             );
             var before = File.ReadAllBytes(path: path);

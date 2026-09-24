@@ -9,12 +9,14 @@ namespace Puck.Maths.Tests;
 /// so the next run takes the adjacent window and consecutive runs sweep contiguous ground. Persistence is
 /// <c>frontier.json</c> — stable key order, written only by a GREEN run that actually consumed a domain — so successive
 /// runs sweep fresh operands without re-covering ground, without churning the tree when nothing ran, and without ever
-/// stepping the window past a failure.
+/// stepping the window past a failure. A run reads the counters its own ledger output last left, else the committed
+/// file, and writes them to its own output; only a recording run advances the committed file
+/// (<see cref="TestPaths.Output"/>).
 /// </summary>
 internal static class Frontier {
     private static readonly Lock Gate = new();
     private static readonly ConcurrentDictionary<string, byte> ConsumedKeys = new();
-    private static readonly Model State = (ArtifactJson.ReadOrDefault<Model>(path: TestPaths.Artifact(fileName: "frontier.json")) ?? new Model());
+    private static readonly Model State = (ArtifactJson.ReadOrDefault<Model>(path: TestPaths.Previous(fileName: "frontier.json")) ?? new Model());
 
     /// <summary>Advances the block counter of every domain consumed this run by one and rewrites the artifact when any
     /// counter moved — but only on a GREEN run. Two runs own nothing here: one that consumed no domain, and one in
@@ -56,7 +58,7 @@ internal static class Frontier {
             ));
 
             _ = ArtifactJson.WriteIfChanged(
-                path: TestPaths.Artifact(fileName: "frontier.json"),
+                path: TestPaths.Output(fileName: "frontier.json"),
                 content: ArtifactJson.Serialize(value: State)
             );
 

@@ -1,29 +1,28 @@
 using System.Threading.Channels;
-using Puck.Commands;
 
 namespace Puck.World.Agents;
 
-/// <summary>A bounded agent-to-host mailbox drained through Puck's existing per-frame input-capture seam.</summary>
+/// <summary>A bounded agent-to-host mailbox the host drains at its closed simulation boundaries.</summary>
 /// <remarks>
 /// Model inference and Harness orchestration remain on their worker threads. Only the small delegates queued through
-/// <see cref="InvokeAsync{TResult}"/> run in <see cref="CaptureFrame"/>, on the same launcher pump thread that owns
-/// loopback submission and query ordering. Capacity and per-frame limits bound both retained work and host-thread
+/// <see cref="InvokeAsync{TResult}"/> run in <see cref="Drain"/>, on the one simulation thread that owns loopback
+/// submission and query ordering. Capacity and per-drain limits bound both retained work and host-thread
 /// cost. A full mailbox refuses new work instead of silently dropping or indefinitely buffering an agent action.
 /// </remarks>
-public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCapture, IDisposable {
+public sealed class WorldAgentMailbox : IWorldAgentDispatcher, IDisposable {
     private readonly Channel<WorkItem> m_channel;
     private readonly object m_drainGate = new();
-    private readonly int m_maximumOperationsPerFrame;
+    private readonly int m_maximumOperationsPerDrain;
 
     private int m_disposed;
 
     /// <summary>Initializes a bounded mailbox.</summary>
     /// <param name="capacity">Maximum queued operations.</param>
-    /// <param name="maximumOperationsPerFrame">Maximum operations executed by one host-frame capture.</param>
+    /// <param name="maximumOperationsPerDrain">Maximum operations executed by one <see cref="Drain"/>.</param>
     /// <exception cref="ArgumentOutOfRangeException">A limit is not positive.</exception>
-    public WorldAgentMailbox(int capacity = 256, int maximumOperationsPerFrame = 32) {
+    public WorldAgentMailbox(int capacity = 256, int maximumOperationsPerDrain = 32) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: capacity);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: maximumOperationsPerFrame);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: maximumOperationsPerDrain);
 
         m_channel = Channel.CreateBounded<WorkItem>(options: new BoundedChannelOptions(capacity: capacity) {
             AllowSynchronousContinuations = false,
@@ -31,10 +30,10 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
             SingleReader = true,
             SingleWriter = false,
         });
-        m_maximumOperationsPerFrame = maximumOperationsPerFrame;
+        m_maximumOperationsPerDrain = maximumOperationsPerDrain;
     }
 
-    /// <summary>Gets the approximate number of operations waiting for a host-frame drain.</summary>
+    /// <summary>Gets the approximate number of operations waiting for a drain.</summary>
     public int PendingCount => m_channel.Reader.Count;
 
     private void RefuseRemainingOnShutdown() {
@@ -45,13 +44,10 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
         }
     }
 
-    /// <summary>Executes up to the configured per-frame limit on the calling launcher thread.</summary>
-    /// <param name="frameKey">The monotonically increasing host-frame key; ordering is supplied by the mailbox, so
-    /// the value is not otherwise needed.</param>
+    /// <summary>Executes up to the configured per-drain limit on the calling simulation thread.</summary>
     /// <exception cref="InvalidOperationException">More than one thread attempts to drain the single-reader
     /// mailbox concurrently.</exception>
-    public void CaptureFrame(ulong frameKey) {
-        _ = frameKey;
+    public void Drain() {
         if (Volatile.Read(location: ref m_disposed) != 0) {
             return;
         }
@@ -67,7 +63,7 @@ public sealed class WorldAgentMailbox : IWorldAgentDispatcher, ISnapshotInputCap
             for (
                 var operationIndex = 0;
                 ((Volatile.Read(location: ref m_disposed) == 0) &&
-                    (operationIndex < m_maximumOperationsPerFrame) &&
+                    (operationIndex < m_maximumOperationsPerDrain) &&
                     m_channel.Reader.TryRead(item: out var item));
                 operationIndex++
             ) {

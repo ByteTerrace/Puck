@@ -47,11 +47,8 @@ See [acknowledgments](ACKNOWLEDGMENTS.md) for the work Puck builds on.
 
 ## License
 
-Puck is **source-available and dual-licensed** — not open source. Noncommercial
-use (including by individuals, schools, universities, and government bodies) is
-free under the [PolyForm Noncommercial License 1.0.0](LICENSE.md); commercial use
-requires a paid license. See [LICENSING.md](LICENSING.md) for who needs what and
-how to obtain a commercial license.
+Puck is open source under the [Apache License 2.0](LICENSE.md). Anyone may use,
+modify, and redistribute it, commercially or not, on that license's terms.
 
 Separately licensed components, including the bundled GamingBrick firmware,
 retain their own terms; see the [license inventory](THIRD-PARTY-NOTICES.md).

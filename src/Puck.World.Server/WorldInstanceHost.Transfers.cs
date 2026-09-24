@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Client;
@@ -825,7 +826,7 @@ public sealed partial class WorldInstanceHost {
         );
         var referencedDocument = ResolveReferenceDocument(
             source: instance,
-            documentPath: reference.NeighbourKey
+            neighbourKey: reference.NeighbourKey
         );
         var canonicalDocument = CanonicalDocumentIdentity(documentPath: referencedDocument);
 
@@ -965,7 +966,7 @@ public sealed partial class WorldInstanceHost {
         // different origins.
         var referencedDocument = ResolveReferenceDocument(
             source: instance,
-            documentPath: group.ReferenceDocument
+            neighbourKey: group.ReferenceDocument
         );
         var canonicalDocument = CanonicalDocumentIdentity(documentPath: referencedDocument);
 
@@ -1065,7 +1066,7 @@ public sealed partial class WorldInstanceHost {
         // thread. The specific choice among a merged group's several triggering seats is immaterial —
         // MemberTravelPrincipal already re-derives every other member's own Seat principal independently, so
         // whichever seat is named here only affects itself.
-        var actingPrincipal = WorldPrincipal.Seat(slot: cohortSlots[0]);
+        var actingPrincipal = Principal.Seat(slot: cohortSlots[0]);
         var transferId = EnqueueTransfer(
             sourceInstance: instance.Name,
             scope: group.Scope,
@@ -1197,8 +1198,11 @@ public sealed partial class WorldInstanceHost {
             var followed = (member.FollowedSeatMask != 0);
 
             for (var followedSlot = 0; (followedSlot < m_seats.SeatCount); followedSlot++) {
+                // The seat ceiling is the host's, not the world's: a world declaring fewer local seats never
+                // publishes a route for the ones it did not declare, and asking such a slot for its entity is a
+                // refusal rather than an absence. The endpoint answers null for an unrouted slot, so it is what
+                // decides whether this slot has anything to follow.
                 var locationEndpoint = m_seats.RoutedEndpoint(slot: followedSlot);
-                var locationEntity = m_seats.RoutedEntity(slot: followedSlot);
 
                 if (
                     ((member.FollowedSeatMask & (1 << followedSlot)) == 0) ||
@@ -1207,9 +1211,14 @@ public sealed partial class WorldInstanceHost {
                     a: locationEndpoint.Identity,
                     b: transfer.SourceInstance,
                     comparisonType: StringComparison.Ordinal
-                ) ||
-                    (locationEntity.Index != member.SourceSlot)
+                )
                 ) {
+                    continue;
+                }
+
+                var locationEntity = m_seats.RoutedEntity(slot: followedSlot);
+
+                if (locationEntity.Index != member.SourceSlot) {
                     continue;
                 }
 
@@ -1522,10 +1531,9 @@ public sealed partial class WorldInstanceHost {
     // source's), so a `party` member other than the one that actually crossed can never be authorized under
     // the crossing seat's identity — it travels under its own Seat identity instead. The crossing member
     // itself, and every member under a Console-kind acting principal (whose Drive/all wildcard already
-    // covers them all), keep the original acting principal. Used for the reservation, the pre-leave
-    // standing check, and the leave+join itself, so none of the three can ever disagree on who a member
-    // travels as.
-    private static WorldPrincipal MemberTravelPrincipal(WorldServer server, in PendingTransfer transfer, int slot) =>
+    // covers them all), keep the original acting principal. Used for the reservation, the pre-leave standing
+    // check, and the leave+join itself, so none of the three can ever disagree on who a member travels as.
+    private static Principal MemberTravelPrincipal(WorldServer server, in PendingTransfer transfer, int slot) =>
         (((transfer.ActingPrincipal.Kind == PrincipalKind.Seat) && (transfer.ActingPrincipal.Index != slot))
             ? TravelPrincipal(
                 server: server,
@@ -1533,7 +1541,8 @@ public sealed partial class WorldInstanceHost {
             )
             : transfer.ActingPrincipal
         );
-    // The next deterministic fresh-instance name for a SITE: "<site>-<n>", n the site's own draw counter (see
+    // The next deterministic fresh-instance name for a SITE: the generated "<site>~<n>", n the site's own draw
+    // counter (see
     // m_freshCounters). Never wall-clock, RNG, or tick-of-entry — see that field's own remarks for why this is
     // deterministic within one process run rather than "replay-stable" (the tape does not cover this queue).
     private string MintFreshInstanceName(string site) {
@@ -1541,7 +1550,10 @@ public sealed partial class WorldInstanceHost {
 
         m_freshCounters[site] = (ordinal + 1);
 
-        return $"{site}-{ordinal}";
+        return WorldSessionResolver.FreshInstanceName(
+            ordinal: ordinal,
+            site: site
+        );
     }
     // Deterministic, resolver-ordered — the ONE place a transfer id is minted, scoped to the SOURCE ROW's own
     // counter (ids are already scoped (SourceInstance, TransferId) in m_appliedTransferIds and by sourceAuthority on
@@ -1673,7 +1685,7 @@ public sealed partial class WorldInstanceHost {
                 foreach (var grant in member.SourceGrants) {
                     source.Server.Grant(
                         grant: grant,
-                        actor: WorldPrincipal.Console
+                        actor: Principal.Console
                     );
                 }
             }
@@ -1801,14 +1813,14 @@ public sealed partial class WorldInstanceHost {
         return hash.Value;
     }
     // A body that is neither a local seat nor an admitted peer has no external driver: the world's own authored
-    // program moves it, so it travels as WorldPrincipal.World, which holds no grant row at all. Console would also
+    // program moves it, so it travels as Principal.World, which holds no grant row at all. Console would also
     // resolve here and would carry the table's only Drive/all — authority over every seat and peer besides.
-    private static WorldPrincipal TravelPrincipal(WorldServer server, int slot) =>
+    private static Principal TravelPrincipal(WorldServer server, int slot) =>
         ((slot < server.Population.LocalSeatCount)
-            ? WorldPrincipal.Seat(slot: slot)
+            ? Principal.Seat(slot: slot)
             : (server.Population.IsAdmittedPeer(bodyIndex: slot)
                 ? server.Population.PeerPrincipal(index: slot)
-                : WorldPrincipal.World
+                : Principal.World
         ));
     // Leave(source) with its pose captured before the detach discards it — the abort-restoration half of an
     // atomic body transfer. Never player.leave <slot> instance:<name> / ReapIfEmpty / ApplySession(Leave):
@@ -1816,7 +1828,7 @@ public sealed partial class WorldInstanceHost {
     // source out from under a transfer still in flight) — see WorldPopulation.TryDetachSeatForTransfer. The
     // Drive/leave standing re-check here is defensive: ApplyTransfer's own pre-check loop already proved it
     // for every still-active member immediately before this runs, and is never load-bearing on its own.
-    private static bool TryDetachAndCaptureMember(WorldInstance source, int sourceSlot, string sourceName, WorldPrincipal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBody.TransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMember(WorldInstance source, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         var captured = source.Server.ExecuteAuthorityOperation(operation: () => {
             var success = TryDetachAndCaptureMemberCore(
                 actingPrincipal: actingPrincipal,
@@ -1848,7 +1860,7 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = captured.SourceGrants;
         return captured.Success;
     }
-    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, int sourceSlot, string sourceName, WorldPrincipal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBody.TransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         profile = null;
         bodyColor = default;
         position = default;
@@ -1970,7 +1982,7 @@ public sealed partial class WorldInstanceHost {
         foreach (var grant in sourceGrants) {
             source.Server.Revoke(
                 grant: grant,
-                actor: WorldPrincipal.Console
+                actor: Principal.Console
             );
         }
 
@@ -2049,7 +2061,7 @@ public sealed partial class WorldInstanceHost {
     /// <returns>The transfer id this call's queued crossing will carry (freshly minted unless
     /// <paramref name="explicitTransferId"/> was supplied) — so a caller that wants to echo or later retry it has the
     /// value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, WorldPrincipal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
         var transferId = (explicitTransferId ?? MintTransferId(sourceInstance: sourceInstance));
 
         m_pendingTransfers.Enqueue(item: new PendingTransfer(
@@ -2277,7 +2289,7 @@ public sealed partial class WorldInstanceHost {
         TransferScope Scope,
         int SourceSlot,
         TransferDestination Destination,
-        WorldPrincipal ActingPrincipal,
+        Principal ActingPrincipal,
         WorldDestination? ResolvedDestinationRow,
         IReadOnlyList<int>? FrozenCohortSlots,
         string? FrozenScopeKey,
@@ -2303,7 +2315,7 @@ public sealed partial class WorldInstanceHost {
     // aborts after it already joined the destination. Body color/position/yaw/dynamic state/designations are all
     // captured before TryDetachSeatForTransfer runs (which discards them). See
     // WorldPopulation.RestoreDetachedSeat for why position+yaw alone reconstructs a grounded-model body's
-    // orientation bit-for-bit, WorldBody.TransferState for what dynamic state carries (velocity, dash
+    // orientation bit-for-bit, WorldBodyTransferState for what dynamic state carries (velocity, dash
     // overlay, in-flight timed presses), and WorldPopulation.CaptureDesignations for why designations need
     // their own separate capture.
     private readonly record struct LandedMember(
@@ -2313,12 +2325,12 @@ public sealed partial class WorldInstanceHost {
         Vector3 BodyColor,
         FixedVector3 Position,
         FixedQ4816 Yaw,
-        WorldBody.TransferState DynamicState,
+        WorldBodyTransferState DynamicState,
         WorldTargetDesignation[] Designations,
         WorldPeerEventEntry? Peer,
         IReadOnlyList<WorldAdmissionGrant> AdmissionGrants,
         IReadOnlyList<WorldGrant> SourceGrants,
-        WorldPrincipal SourcePrincipal,
+        Principal SourcePrincipal,
         WorldMobilityIdentity Mobility,
         byte FollowedSeatMask = 0
     );

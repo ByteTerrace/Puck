@@ -27,11 +27,6 @@ public static class SdfDomainExpansion {
 
     private static readonly FixedQ4816 MinimumSpacing = FixedQ4816.FromDouble(value: 0.001);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
 
     // The product of the two reflections H(a)H(b) as a unit quaternion (b × a, b · a) — the integer-only route from a
     // mirror to the proper rotation left once H(x̂) is factored out, with no matrix-to-quaternion reconstruction and so
@@ -61,13 +56,13 @@ public static class SdfDomainExpansion {
     }
     private static FixedQuaternion MirrorRemainder(FixedVector3 unitNormal) {
         var vector = FixedVector3.Cross(
-            left: UnitX,
+            left: FixedVector3.UnitX,
             right: unitNormal
         );
 
         return new FixedQuaternion(
             W: FixedVector3.Dot(
-                left: UnitX,
+                left: FixedVector3.UnitX,
                 right: unitNormal
             ),
             X: vector.X,

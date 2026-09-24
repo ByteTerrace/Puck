@@ -18,7 +18,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// Two proofs. (a) Determinism: two fresh runs on the identical budget schedule produce a bit-identical connect phase,
 /// per-side traffic fingerprint, and final snapshots — the exchange and its pair-stepping interleave add no
 /// nondeterminism. (b) Churn: at the first transfer-idle budget boundary mid-exchange (SC bit 7 clear on both ports,
-/// asserted), the session is <see cref="SerialLinkSession.Suspend">suspended</see> for its resume token, both machines
+/// asserted), the session is <see cref="LinkSession{TPort}.Suspend">suspended</see> for its resume token, both machines
 /// are snapshotted, restored into fresh machines, and reconnected with the token; the remaining identical budgets then
 /// produce a traffic tail and final snapshots bit-identical to the unchurned run. The token is what makes this exact: a
 /// naive reconnect re-anchors targets at the current instant and discards each machine's instruction-overshoot credit,
@@ -34,6 +34,9 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
     private const int StepCount = 512;
     private const byte TransferCount = 16;
 
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
     /// <inheritdoc/>
     public string Name =>
         "link-churn";

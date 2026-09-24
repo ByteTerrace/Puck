@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -76,12 +76,7 @@ public sealed class SolidFieldGridLawTests {
         (AuthoredGameFixtures.Nexus with {
             CollisionRaw = (AuthoredGameFixtures.Nexus.Collision with { GridCellSize = gridCellSize }),
         });
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        );
+    private static FixedVector3 Vector(double x, double y, double z) => Fixtures.FixedPoint(x: x, y: y, z: z);
 
     [Fact]
     public void TheBakeHashNamesTheBakeAndACollisionEditKeepsTheGrid() {
@@ -115,7 +110,7 @@ public sealed class SolidFieldGridLawTests {
         var collision = fixture.Server.Definition.Collision;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetCollision(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Collision: (collision with { ContactSkin = 0.03f })
         ));
         fixture.Step();
@@ -125,7 +120,7 @@ public sealed class SolidFieldGridLawTests {
         );
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetCollision(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Collision: (collision with { GridCellSize = 1f })
         ));
         fixture.Step();
@@ -139,7 +134,7 @@ public sealed class SolidFieldGridLawTests {
         );
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetCollision(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Collision: (collision with { GridCellSize = 0f })
         ));
         fixture.Step();
@@ -288,32 +283,24 @@ public sealed class SolidFieldGridLawTests {
         Assert.True(condition: (casts > 2_000));
         Assert.True(condition: (gridded.Grid.BakedCornerCount > 0L));
     }
-    // Two boots of the shipped world under no input reach the same authoritative hash at the same ticks: the grid's
-    // bake and every bound it answers are pure functions of the program, so the mapping reproduces.
+    // Two boots of the shipped world under no input reach the same authoritative hash at every tick: the grid's bake
+    // and every bound it answers are pure functions of the program, so the mapping reproduces.
     [Fact]
     public void TheShippedWorldReproducesItsAuthoritativeHashTraceAcrossBoots() {
-        ulong[] Trace() {
-            using var fixture = Fixtures.FreshServer(definition: Shipped(gridCellSize: 0.5f));
-            var stepTicks = EngineTicks.PerRate(ratePerSecond: ((uint)fixture.Server.Definition.SimulationRateHz));
-            var trace = new ulong[3];
-
-            for (var tick = 1; (tick <= 90); tick++) {
-                fixture.Step(stepTicks: stepTicks);
-
-                if ((tick % 30) == 0) {
-                    trace[((tick / 30) - 1)] = WorldStateHashComposition.HashAuthoritative(
-                        server: fixture.Server,
-                        tick: ((ulong)tick)
-                    );
-                }
-            }
-
-            return trace;
-        }
+        var first = ShippedWorldIdleRuns.First;
+        var second = ShippedWorldIdleRuns.Second;
 
         Assert.Equal(
-            expected: Trace(),
-            actual: Trace()
+            expected: 0.5,
+            actual: first.GridCellSize
+        );
+        Assert.Equal(
+            expected: first.GridCellSize,
+            actual: second.GridCellSize
+        );
+        Assert.Equal(
+            expected: first.Authoritative[..second.Authoritative.Length],
+            actual: second.Authoritative
         );
     }
 }

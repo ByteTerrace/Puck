@@ -19,11 +19,17 @@ public enum GpuPixelFormat : uint {
     R16G16B16A16Float = 3,
     /// <summary>Four 32-bit floating-point channels.</summary>
     R32G32B32A32Float = 4,
+    /// <summary>One 32-bit floating-point depth channel, for a depth attachment.</summary>
+    D32Float = 5,
 }
 /// <summary>
 /// Conversions into the <see cref="GpuPixelFormat"/> vocabulary.
 /// </summary>
 public static class GpuPixelFormats {
+    /// <summary>Gets whether a format holds depth rather than color.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns><see langword="true"/> for a depth format.</returns>
+    public static bool IsDepth(GpuPixelFormat format) => (format == GpuPixelFormat.D32Float);
     /// <summary>Converts a <see cref="SurfaceFormat"/> to its <see cref="GpuPixelFormat"/> equivalent.</summary>
     public static GpuPixelFormat FromSurfaceFormat(SurfaceFormat format) {
         return format switch {

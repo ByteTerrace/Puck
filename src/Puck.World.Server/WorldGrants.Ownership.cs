@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -12,7 +13,7 @@ public sealed partial class WorldGrants {
     private WorldDefinition? m_ownershipDeadlineSource;
 
     /// <summary>Reclaims every ownership escrow whose deadline has passed with no accept, firing one ordinary
-    /// <c>SettleOwnership(Reclaim: true)</c> under <see cref="WorldPrincipal.World"/> per subject.</summary>
+    /// <c>SettleOwnership(Reclaim: true)</c> under <see cref="Principal.World"/> per subject.</summary>
     /// <param name="tick">The simulation tick being swept.</param>
     /// <remarks>The table is rebuilt once per document revision, before any mutation in this pass swaps the live
     /// definition, so a subject an earlier dequeue already reclaimed this tick is not read again.</remarks>
@@ -45,7 +46,7 @@ public sealed partial class WorldGrants {
         )) {
             _ = Host.TryApplyMutation(
                 mutation: new WorldMutation.SettleOwnership(
-                    Principal: WorldPrincipal.World,
+                    Principal: Principal.World,
                     Subject: subject,
                     Reclaim: true
                 ),

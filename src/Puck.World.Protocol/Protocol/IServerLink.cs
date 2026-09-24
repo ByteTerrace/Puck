@@ -15,7 +15,7 @@ namespace Puck.World.Protocol;
 /// before intents (they are tick-aligned edits, not synchronous commands) — the envelope model does not change that
 /// timing, only how the submission reaches it. Every fire-and-forget non-completion submission
 /// (<c>Submit*</c> beside <see cref="SubmitSession"/>) is a <see cref="ServerLinkSubmissions"/> extension method over
-/// <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, WorldPrincipal)"/> — the ONE member an implementation actually writes for all of them — rather than a
+/// <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, Principal)"/> — the ONE member an implementation actually writes for all of them — rather than a
 /// member of this interface: a default interface method resolves only through an <see cref="IServerLink"/>-typed
 /// reference, never through a variable declared as the concrete implementing type, and callers throughout this
 /// codebase hold the concrete type. An extension method resolves either way.</summary>
@@ -33,14 +33,14 @@ public interface IServerLink {
     /// <returns>The correlation id the submission's envelope minted — the coordinate a deferred verdict's
     /// <c>WorldEditEcho</c> carries back — or <c>0</c> when none exists (a codec refusal, a link whose envelope is
     /// minted remotely).</returns>
-    long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal);
+    long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal);
     /// <summary>Submits one payload while carrying a caller-preserved operation id for a mutation. Implementations
     /// that predate operation metadata retain the two-argument path for non-mutations; a mutation with an empty id is
     /// refused by the canonical frame codec.</summary>
     /// <param name="payload">The submission payload.</param>
     /// <param name="principal">The stamped acting identity.</param>
     /// <param name="operationId">The caller's retry identity.</param>
-    long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) =>
+    long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) =>
         ((payload is WorldSubmissionPayload.Mutation)
             ? 0L
             : SubmitEnvelope(
@@ -50,7 +50,7 @@ public interface IServerLink {
         );
     /// <summary>Submits a payload with an operation id and receives its eventual typed result. Cancellation of the
     /// caller's wait does not withdraw a mutation already admitted to the ordered domain.</summary>
-    long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+    long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
         if (payload is WorldSubmissionPayload.Mutation) {
             completion?.Invoke(new WorldSubmissionResult.Refusal(
                 Code: "world.transport.operation_metadata_unsupported",
@@ -82,7 +82,7 @@ public interface IServerLink {
     void Query(WorldQuery query, Action<QueryAnswer> completion);
 }
 /// <summary>An <see cref="IServerLink"/> that can attribute an in-process query to an explicit
-/// <see cref="WorldPrincipal"/>. Use this boundary for embedded automation whose reads must cross the same
+/// <see cref="Principal"/>. Use this boundary for embedded automation whose reads must cross the same
 /// <see cref="WorldCapability.Observe"/> gate as its writes; the ordinary <see cref="IServerLink.Query"/> remains the
 /// trusted local-console convenience surface.</summary>
 public interface IPrincipalServerLink : IServerLink {
@@ -90,10 +90,10 @@ public interface IPrincipalServerLink : IServerLink {
     /// <param name="query">The read-back query.</param>
     /// <param name="principal">The acting identity whose Observe grant is checked.</param>
     /// <param name="completion">Invoked once with the composed answer.</param>
-    void Query(WorldQuery query, WorldPrincipal principal, Action<QueryAnswer> completion);
+    void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion);
 }
 /// <summary>The ten fire-and-forget <see cref="IServerLink"/> submission members — every one a thin
-/// <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, WorldPrincipal)"/> wrapper that differs from the next only in which
+/// <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, Principal)"/> wrapper that differs from the next only in which
 /// <see cref="WorldSubmissionPayload"/> leaf it wraps its argument in and which of its parameters is the acting
 /// principal.</summary>
 public static class ServerLinkSubmissions {
@@ -146,7 +146,7 @@ public static class ServerLinkSubmissions {
     /// <param name="link">The link.</param>
     /// <param name="composition">The composition override.</param>
     /// <param name="principal">The acting identity the override is checked against.</param>
-    public static void SubmitComposition(this IServerLink link, WorldComposition composition, WorldPrincipal principal) => link.SubmitEnvelope(
+    public static void SubmitComposition(this IServerLink link, WorldComposition composition, Principal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Composition(Value: composition),
         principal: principal
     );
@@ -155,19 +155,19 @@ public static class ServerLinkSubmissions {
     /// <param name="link">The link.</param>
     /// <param name="designation">The proposed target-register write.</param>
     /// <param name="principal">The acting identity.</param>
-    public static void SubmitDesignation(this IServerLink link, WorldDesignation designation, WorldPrincipal principal) => link.SubmitEnvelope(
+    public static void SubmitDesignation(this IServerLink link, WorldDesignation designation, Principal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Designation(Value: designation),
         principal: principal
     );
     /// <summary>Grants a capability to a principal — the <c>world.grant</c> half. Applies synchronously at submit (like a
     /// command), so the next tick's checks observe it. <paramref name="actor"/> is the principal asking, distinct from
-    /// <see cref="WorldGrant.Principal"/> (the principal receiving it); the server refuses an actor that does not itself
+    /// <see cref="WorldGrant.Grantee"/> (the principal receiving it); the server refuses an actor that does not itself
     /// hold <see cref="WorldGrant.Capability"/> over <see cref="WorldGrant.Subject"/> — no privilege escalation through
     /// the grant path. An exclusive grant a different principal already holds exclusively is rejected with a loud line.</summary>
     /// <param name="link">The link.</param>
     /// <param name="grant">The grant to add.</param>
     /// <param name="actor">The acting identity the grant is checked against.</param>
-    public static void SubmitGrant(this IServerLink link, WorldGrant grant, WorldPrincipal actor) => link.SubmitEnvelope(
+    public static void SubmitGrant(this IServerLink link, WorldGrant grant, Principal actor) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Grant(Value: grant),
         principal: actor
     );
@@ -176,7 +176,7 @@ public static class ServerLinkSubmissions {
     /// <param name="operation">The named instance, expected generation, operation id, and detached payload.</param>
     /// <param name="principal">The acting identity checked for Control over the named machine.</param>
     /// <returns>The ordered submission correlation id.</returns>
-    public static long SubmitMachineOperation(this IServerLink link, WorldMachineOperation operation, WorldPrincipal principal) => link.SubmitEnvelope(
+    public static long SubmitMachineOperation(this IServerLink link, WorldMachineOperation operation, Principal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Operation(Value: operation),
         principal: principal
     );
@@ -190,11 +190,11 @@ public static class ServerLinkSubmissions {
     /// <param name="link">The link.</param>
     /// <param name="request">The rebuild request.</param>
     /// <param name="principal">The acting identity the rebuild is checked against.</param>
-    public static void SubmitRebuild(this IServerLink link, WorldRebuildRequest request, WorldPrincipal principal) => link.SubmitEnvelope(
+    public static void SubmitRebuild(this IServerLink link, WorldRebuildRequest request, Principal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Rebuild(Value: request),
         principal: principal
     );
-    /// <summary>Submits a rebuild like <see cref="SubmitRebuild(IServerLink, WorldRebuildRequest, WorldPrincipal)"/>
+    /// <summary>Submits a rebuild like <see cref="SubmitRebuild(IServerLink, WorldRebuildRequest, Principal)"/>
     /// and registers the submitting verb against the minted correlation id for the local authority's echo.</summary>
     /// <param name="link">The link.</param>
     /// <param name="request">The rebuild request.</param>
@@ -202,7 +202,7 @@ public static class ServerLinkSubmissions {
     /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
     /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
     /// <returns>A result with no output of its own that settles with the tick-boundary verdict.</returns>
-    public static CommandResult SubmitRebuild(this IServerLink link, WorldRebuildRequest request, WorldPrincipal principal, WorldDeferredVerbEchoes echoes, string verb) =>
+    public static CommandResult SubmitRebuild(this IServerLink link, WorldRebuildRequest request, Principal principal, WorldDeferredVerbEchoes echoes, string verb) =>
         SubmitDeferred(link, new WorldSubmissionPayload.Rebuild(Value: request), principal, echoes, verb);
     /// <summary>Submits an undo and waits for its local tick-boundary verdict.</summary>
     /// <param name="link">The server link.</param>
@@ -211,10 +211,10 @@ public static class ServerLinkSubmissions {
     /// <param name="echoes">The local authority's pending verdict table.</param>
     /// <param name="verb">The submitting verb.</param>
     /// <returns>A result settling with the undo verdict or a transport refusal.</returns>
-    public static CommandResult SubmitUndo(this IServerLink link, int count, WorldPrincipal principal, WorldDeferredVerbEchoes echoes, string verb) =>
+    public static CommandResult SubmitUndo(this IServerLink link, int count, Principal principal, WorldDeferredVerbEchoes echoes, string verb) =>
         SubmitDeferred(link, new WorldSubmissionPayload.Undo(Count: count), principal, echoes, verb);
 
-    private static CommandResult SubmitDeferred(IServerLink link, WorldSubmissionPayload payload, WorldPrincipal principal, WorldDeferredVerbEchoes echoes, string verb) {
+    private static CommandResult SubmitDeferred(IServerLink link, WorldSubmissionPayload payload, Principal principal, WorldDeferredVerbEchoes echoes, string verb) {
         var settlement = new CommandSettlement();
         var correlation = link.SubmitEnvelope(
             completion: result => {
@@ -227,7 +227,7 @@ public static class ServerLinkSubmissions {
             principal: principal
         );
 
-        return echoes.Register(correlationId: correlation, verb: verb, settlement: settlement);
+        return echoes.Register(correlationId: correlation, settlement: settlement, verb: verb);
     }
 
     /// <summary>Revokes a capability from a principal — the <c>world.revoke</c> half. Applies synchronously at submit;
@@ -237,7 +237,7 @@ public static class ServerLinkSubmissions {
     /// <param name="link">The link.</param>
     /// <param name="grant">The grant (capability + subject) to revoke.</param>
     /// <param name="actor">The acting identity the revoke is checked against.</param>
-    public static void SubmitRevoke(this IServerLink link, WorldGrant grant, WorldPrincipal actor) => link.SubmitEnvelope(
+    public static void SubmitRevoke(this IServerLink link, WorldGrant grant, Principal actor) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Revoke(Value: grant),
         principal: actor
     );
@@ -252,7 +252,7 @@ public static class ServerLinkSubmissions {
     /// <param name="link">The link.</param>
     /// <param name="op">The screen op.</param>
     /// <param name="principal">The acting identity the op is checked against.</param>
-    public static void SubmitScreenOp(this IServerLink link, WorldScreenOp op, WorldPrincipal principal) => link.SubmitEnvelope(
+    public static void SubmitScreenOp(this IServerLink link, WorldScreenOp op, Principal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.ScreenOp(Value: op),
         principal: principal
     );
@@ -265,7 +265,7 @@ public static class ServerLinkSubmissions {
     /// <param name="link">The link.</param>
     /// <param name="lever">The lever write.</param>
     /// <param name="principal">The acting identity the lever is checked against.</param>
-    public static void SubmitSessionLever(this IServerLink link, WorldSessionLever lever, WorldPrincipal principal) => link.SubmitEnvelope(
+    public static void SubmitSessionLever(this IServerLink link, WorldSessionLever lever, Principal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Lever(Value: lever),
         principal: principal
     );
@@ -277,7 +277,7 @@ public static class ServerLinkSubmissions {
     /// <param name="link">The link.</param>
     /// <param name="count">How many trailing mutations to undo (at least 1).</param>
     /// <param name="principal">The acting identity the undo is checked against.</param>
-    public static void SubmitUndo(this IServerLink link, int count, WorldPrincipal principal) => link.SubmitEnvelope(
+    public static void SubmitUndo(this IServerLink link, int count, Principal principal) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Undo(Count: count),
         principal: principal
     );
@@ -289,7 +289,7 @@ public static class ServerLinkSubmissions {
     /// <param name="mutation">The world mutation to apply.</param>
     /// <param name="operationId">The caller-preserved retry identity, or empty to mint one for this submission.</param>
     /// <param name="completion">The eventual typed result, including a named ingress refusal.</param>
-    /// <returns>The minted correlation id (see <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, WorldPrincipal, System.Guid)"/>).</returns>
+    /// <returns>The minted correlation id (see <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, Principal, System.Guid)"/>).</returns>
     public static long SubmitWorldMutation(this IServerLink link, WorldMutation mutation, Guid operationId = default, Action<WorldSubmissionResult>? completion = null) => link.SubmitEnvelope(
         payload: new WorldSubmissionPayload.Mutation(Value: mutation),
         principal: mutation.Principal,

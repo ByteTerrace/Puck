@@ -64,8 +64,14 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     /// <summary>Gets the compiled rule groups.</summary>
     internal CompiledRuleGroup[] Groups => m_groups;
-    /// <summary>Gets each open group's pass or step progress.</summary>
-    internal RuleGroupState GroupState => m_groupState;
+
+    /// <summary>Gets each open group's pass or step progress, the simulation state the checkpoint and the hash carry
+    /// beside the latch.</summary>
+    public RuleGroupState GroupState => m_groupState;
+    /// <summary>Gets the counts of the work this host's rule evaluator has done, under the
+    /// <see cref="RuleWorkKinds"/> kinds.</summary>
+    public Puck.Abstractions.Counting.IWorkCounterSource RuleWork => m_evaluator;
+
     /// <summary>Gets the compiled <c>interactions</c> section — a second array evaluated after the rules, never
     /// merged into them: an interaction occupies its own name namespace.</summary>
     internal CompiledRule[] Interactions => m_interactions;

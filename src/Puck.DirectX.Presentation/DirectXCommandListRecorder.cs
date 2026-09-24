@@ -2,7 +2,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
-using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX.Presentation;
 
@@ -26,7 +25,7 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
         var commandList = ((ID3D12GraphicsCommandList*)commandListHandle);
         var backBuffer = ((ID3D12Resource*)backBufferHandle);
 
-        var toRenderTarget = CreateTransition(
+        var toRenderTarget = DirectXBarriers.Transition(
             after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
             before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT,
             resource: backBuffer
@@ -116,21 +115,6 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
                 );
             }
 
-            if (command.VertexBufferHandle != 0) {
-                var view = ((DirectXVertexBufferView)GCHandle.FromIntPtr(value: command.VertexBufferHandle).Target!);
-                var vbView = new D3D12_VERTEX_BUFFER_VIEW {
-                    BufferLocation = view.BufferLocation,
-                    SizeInBytes = view.SizeBytes,
-                    StrideInBytes = view.StrideBytes,
-                };
-
-                commandList->IASetVertexBuffers(
-                    NumViews: 1,
-                    StartSlot: 0,
-                    pViews: &vbView
-                );
-            }
-
             var rootConstants = command.RootConstants;
 
             if (
@@ -159,7 +143,7 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             );
         }
 
-        var toPresent = CreateTransition(
+        var toPresent = DirectXBarriers.Transition(
             after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT,
             before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
             resource: backBuffer
@@ -169,24 +153,5 @@ public sealed unsafe class DirectXCommandListRecorder : IDirectXCommandListRecor
             NumBarriers: 1,
             pBarriers: &toPresent
         );
-    }
-
-    private static D3D12_RESOURCE_BARRIER CreateTransition(
-        ID3D12Resource* resource,
-        D3D12_RESOURCE_STATES before,
-        D3D12_RESOURCE_STATES after
-    ) {
-        var barrier = new D3D12_RESOURCE_BARRIER {
-            Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        };
-
-        barrier.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            StateAfter = after,
-            StateBefore = before,
-            Subresource = AllSubresources,
-            pResource = resource,
-        };
-
-        return barrier;
     }
 }

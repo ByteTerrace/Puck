@@ -1,10 +1,9 @@
 /**
  * Int64-faithful JSON text <-> document value round trip. `JSON.parse`/`JSON.stringify` alone
  * round an integer literal outside `[Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]` to the
- * nearest representable double — the exact corruption `games/tictactoe.world.json`'s own
- * `state.world[].min`/`max` sentinels (Int64.MinValue/MaxValue) hit on every prior
- * EDIT_DOCUMENT/PAINT_CELLS round trip. This module is the one place a document's text and its
- * in-memory value cross that boundary for the studio: an out-of-range integer literal survives
+ * nearest representable double — the corruption an Int64 sentinel (a `state.world[].min`/`max` of
+ * Int64.MinValue/MaxValue) would suffer on its way into a view. This module is the one place compiled or composed
+ * JSON and its in-memory value cross that boundary for the studio: an out-of-range integer literal survives
  * {@link parseDocumentText} as a `bigint` leaf, and a `bigint` leaf serializes back out through
  * {@link serializeDocumentText} as the identical bare integer literal — never a quoted string,
  * never rounded.

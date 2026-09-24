@@ -273,15 +273,8 @@ public readonly record struct UnitFraction32(uint Value)
     /// <param name="obj">The object to compare with this instance, or <see langword="null"/>.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="obj"/>; a <see langword="null"/> <paramref name="obj"/> sorts first.</returns>
     /// <exception cref="ArgumentException"><paramref name="obj"/> is neither <see langword="null"/> nor a <see cref="UnitFraction32"/>.</exception>
-    public int CompareTo(object? obj) {
-        if (obj is null) { return 1; }
-        if (obj is UnitFraction32 other) { return CompareTo(other: other); }
-
-        throw new ArgumentException(
-            message: $"Object must be of type {nameof(UnitFraction32)}.",
-            paramName: nameof(obj)
-        );
-    }
+    public int CompareTo(object? obj) =>
+        SignedFixedPointArithmetic.CompareToObject(obj: obj, self: this);
     /// <summary>Compares this instance with another <see cref="UnitFraction32"/> and indicates their relative order.</summary>
     /// <param name="other">The value to compare with this instance.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="other"/>.</returns>
@@ -342,17 +335,8 @@ public readonly record struct UnitFraction32(uint Value)
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
     /// <returns>The value represented by <paramref name="s"/>.</returns>
     /// <exception cref="FormatException"><paramref name="s"/> is not a valid, in-range <see cref="UnitFraction32"/> literal.</exception>
-    public static UnitFraction32 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        if (!TryParseCore(
-            provider: provider,
-            result: out var result,
-            s: s
-        )) {
-            throw new FormatException(message: $"The input span was not in a valid {nameof(UnitFraction32)} format.");
-        }
-
-        return result;
-    }
+    public static UnitFraction32 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
+        SignedFixedPointArithmetic.Parse<UnitFraction32>(provider: provider, s: s, tryParse: TryParseCore);
     /// <summary>Parses a string into a <see cref="UnitFraction32"/>.</summary>
     /// <param name="s">The string to parse, an unsigned decimal fraction such as <c>"0.5"</c> whose exact value is at most <see cref="MaxValue"/>. A literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding, even when rounding would land it back on the grid.</param>
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
@@ -423,17 +407,6 @@ public readonly record struct UnitFraction32(uint Value)
     /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
     /// <param name="result">When this method returns, the parsed value on success or the default value on failure.</param>
     /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>. A <see langword="null"/> <paramref name="s"/> returns <see langword="false"/>.</returns>
-    public static bool TryParse(string? s, IFormatProvider? provider, out UnitFraction32 result) {
-        if (s is null) {
-            result = default;
-
-            return false;
-        }
-
-        return TryParseCore(
-            s: s.AsSpan(),
-            provider: provider,
-            result: out result
-        );
-    }
+    public static bool TryParse(string? s, IFormatProvider? provider, out UnitFraction32 result) =>
+        SignedFixedPointArithmetic.TryParseString(provider: provider, result: out result, s: s, tryParse: TryParseCore);
 }

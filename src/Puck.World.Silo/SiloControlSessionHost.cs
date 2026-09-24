@@ -23,11 +23,13 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
         );
     }
     private async Task DisconnectAsync(string target, WorldServer server, WorldPeerEventEntry peer) {
-        try { await routing.InvokeAsync(
+        try {
+            await routing.InvokeAsync(
             target,
             () => { server.DisconnectPeerConnection(peer: peer); return true; },
             CancellationToken.None
-        ).ConfigureAwait(continueOnCapturedContext: false); } catch (Exception error) when ((error is ObjectDisposedException or InvalidOperationException or OperationCanceledException)) { /* Retirement discards the row and its peer table. */ }
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception error) when ((error is ObjectDisposedException or InvalidOperationException or OperationCanceledException)) { /* Retirement discards the row and its peer table. */ }
     }
     private static bool IsRemoteCommand(string name) => (name is "world.wait" or "world.peers" or "world.admission" or "world.links" or
         "world.state" or "world.state.cell.set" or "world.state.cell.remove" or "world.state.similar");
@@ -40,55 +42,55 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
         return routing.InvokeAsync(
             target,
             () => {
-            if (
-                !silo.Instances.TryGet(
-                instance: out var instance,
-                name: target
-            ) ||
-                (instance is null) ||
-                silo.IsDraining
-            ) { throw new InvalidOperationException(message: "World unavailable."); }
-            var server = instance.Server;
-            var entries = server.Definition.Admission;
+                if (
+                    !silo.Instances.TryGet(
+                    instance: out var instance,
+                    name: target
+                ) ||
+                    (instance is null) ||
+                    silo.IsDraining
+                ) { throw new InvalidOperationException(message: "World unavailable."); }
+                var server = instance.Server;
+                var entries = server.Definition.Admission;
 
-            if (
-                !WorldAdmissionDoor.TryMatchOAuthEntry(
-                entries: entries,
-                issuer: identity.Issuer,
-                subject: identity.Subject,
-                verdict: out var verdict
-            ) ||
-                (verdict.Tier != WorldDisclosureTier.Replica)
-            ) {
-                throw new UnauthorizedAccessException(message: "The caller needs explicit OAuth admission and replica disclosure for text commands in this World.");
-            }
-            if (!server.TryAdmitPeerConnection(
-                admitted: out var peer,
-                expectedAdmissionEntries: entries,
-                refusal: out var refusal,
-                verdict: verdict
-            )) { throw new UnauthorizedAccessException(message: refusal); }
-            try {
-                return routing.CreateControlSession(
-                    target,
-                    CommandPrincipal.Peer(
-                        peer.BodyIndex,
-                        peer.Generation
-                    ),
-                    command => Allows(
-                        command: command,
-                        identity: identity,
-                        peer: peer,
-                        server: server
-                    ),
-                    () => _ = DisconnectAsync(
-                        peer: peer,
-                        server: server,
-                        target: target
-                    )
-                );
-            } catch { server.DisconnectPeerConnection(peer: peer); throw; }
-        },
+                if (
+                    !WorldAdmissionDoor.TryMatchOAuthEntry(
+                    entries: entries,
+                    issuer: identity.Issuer,
+                    subject: identity.Subject,
+                    verdict: out var verdict
+                ) ||
+                    (verdict.Tier != WorldDisclosureTier.Replica)
+                ) {
+                    throw new UnauthorizedAccessException(message: "The caller needs explicit OAuth admission and replica disclosure for text commands in this World.");
+                }
+                if (!server.TryAdmitPeerConnection(
+                    admitted: out var peer,
+                    expectedAdmissionEntries: entries,
+                    refusal: out var refusal,
+                    verdict: verdict
+                )) { throw new UnauthorizedAccessException(message: refusal); }
+                try {
+                    return routing.CreateControlSession(
+                        target,
+                        Principal.Peer(
+                            peer.BodyIndex,
+                            peer.Generation
+                        ),
+                        command => Allows(
+                            command: command,
+                            identity: identity,
+                            peer: peer,
+                            server: server
+                        ),
+                        () => _ = DisconnectAsync(
+                            peer: peer,
+                            server: server,
+                            target: target
+                        )
+                    );
+                } catch { server.DisconnectPeerConnection(peer: peer); throw; }
+            },
             cancellationToken
         );
     }
@@ -98,23 +100,23 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
         return routing.InvokeAsync(
             target,
             () => {
-            if (
-                !silo.Instances.TryGet(
-                instance: out var instance,
-                name: target
-            ) ||
-                (instance is null) ||
-                silo.IsDraining ||
-                !WorldAdmissionDoor.TryMatchOAuthEntry(
-                entries: instance.Server.Definition.Admission,
-                issuer: identity.Issuer,
-                subject: identity.Subject,
-                verdict: out var verdict
-            ) ||
-                (verdict.Tier != WorldDisclosureTier.Replica)
-            ) { return new ControlCapabilities(""); }
-            return new ControlCapabilities(routing.DescribeCommands(include: command => IsRemoteCommand(name: command.Name)));
-        },
+                if (
+                    !silo.Instances.TryGet(
+                    instance: out var instance,
+                    name: target
+                ) ||
+                    (instance is null) ||
+                    silo.IsDraining ||
+                    !WorldAdmissionDoor.TryMatchOAuthEntry(
+                    entries: instance.Server.Definition.Admission,
+                    issuer: identity.Issuer,
+                    subject: identity.Subject,
+                    verdict: out var verdict
+                ) ||
+                    (verdict.Tier != WorldDisclosureTier.Replica)
+                ) { return new ControlCapabilities(""); }
+                return new ControlCapabilities(routing.DescribeCommands(include: command => IsRemoteCommand(name: command.Name)));
+            },
             cancellationToken
         );
     }

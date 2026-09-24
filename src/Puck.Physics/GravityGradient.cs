@@ -11,11 +11,6 @@ internal readonly record struct GravityGradient(
     long Yz,
     long Zz
 ) {
-    private static bool TryAddComponent(long left, long right, out long sum) {
-        sum = unchecked((left + right));
-
-        return ((((left ^ sum) & (right ^ sum)) >= 0L));
-    }
     private static bool TryOuterComponent(long first, long second, ulong softenedDistanceSquaredRaw, long baseRaw, out long component) {
         var ratioRaw = GravityKernel.RoundDivide(
             numerator: checked((((Int128)first) * second)),
@@ -64,32 +59,32 @@ internal readonly record struct GravityGradient(
     /// <summary>Sums two gradients, declining instead of throwing when any entry would leave the Q32.32 grid.</summary>
     public static bool TryAdd(GravityGradient left, GravityGradient right, out GravityGradient sum) {
         if (
-            TryAddComponent(
+            BinaryIntegerFunctions.TryAdd(
             left: left.Xx,
             right: right.Xx,
             sum: out var xx
         ) &&
-            TryAddComponent(
+            BinaryIntegerFunctions.TryAdd(
             left: left.Xy,
             right: right.Xy,
             sum: out var xy
         ) &&
-            TryAddComponent(
+            BinaryIntegerFunctions.TryAdd(
             left: left.Xz,
             right: right.Xz,
             sum: out var xz
         ) &&
-            TryAddComponent(
+            BinaryIntegerFunctions.TryAdd(
             left: left.Yy,
             right: right.Yy,
             sum: out var yy
         ) &&
-            TryAddComponent(
+            BinaryIntegerFunctions.TryAdd(
             left: left.Yz,
             right: right.Yz,
             sum: out var yz
         ) &&
-            TryAddComponent(
+            BinaryIntegerFunctions.TryAdd(
             left: left.Zz,
             right: right.Zz,
             sum: out var zz

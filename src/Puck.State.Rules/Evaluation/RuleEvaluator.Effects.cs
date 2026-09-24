@@ -47,10 +47,10 @@ public sealed partial class RuleEvaluator {
     public RuleOutcome FireEffects(IRuleEffect[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied) {
         ArgumentNullException.ThrowIfNull(argument: effects);
 
-        if (effects is [RewindTurnEffect rewind]) {
+        if (effects is [RewindGroupEffect rewind]) {
             var reason = "host has no retained undo arena";
 
-            applied = ((m_host is IArenaUndoHost undo) && undo.TryRewindTurn(group: rewind.Group, reason: out reason));
+            applied = ((m_host is IArenaUndoHost undo) && undo.TryRewindGroup(group: rewind.Group, reason: out reason));
             if (!applied) {
                 ReportRefusal(detail: ((m_host is IArenaUndoHost) ? reason : "host has no retained undo arena"), effect: rewind.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: ruleName, tick: tick);
                 return RuleOutcome.Refused;
@@ -749,30 +749,8 @@ public sealed partial class RuleEvaluator {
     private bool FireTransform(TransformStateEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
 
-        var value = 0L;
-        var bindsValue = false;
-
-        if (
-            (effect.Value is { IsLiteral: false } source) &&
-            (effect.Arena is ArenaTransform.Push push)
-        ) {
-            if (!TryReadValue(
-                effect: effect,
-                firing: in firing,
-                kind: ((effect.Arena is ArenaTransform.Push history) ? KindOf(rowOrdinal: history.RowOrdinal) : CellKind.Int),
-                raw: out value,
-                refused: out var refused,
-                source: source
-            )) {
-                return !refused;
-            }
-
-            bindsValue = true;
-        }
-
         var binding = new ArenaTransformBinding(
             bindsKey: (effect.KeyRef is not null),
-            bindsValue: bindsValue,
             fromRowOrdinal: RowOrdinal(row: effect.FromRow),
             key: ((effect.KeyRef is { } indirection)
             ? RuleReads.ResolveReference(
@@ -781,7 +759,6 @@ public sealed partial class RuleEvaluator {
             )
             : default),
             toRowOrdinal: RowOrdinal(row: effect.ToRow),
-            value: value,
             bindsInstance: ((effect.Arena is ArenaTransform.PushRay ray) && (((uint)ray.OriginBindingSlot) < ((uint)m_host.InstanceBindings.Length))),
             instance: (((effect.Arena is ArenaTransform.PushRay pushRay) && (((uint)pushRay.OriginBindingSlot) < ((uint)m_host.InstanceBindings.Length))) ? m_host.InstanceBindings[pushRay.OriginBindingSlot] : default)
         );

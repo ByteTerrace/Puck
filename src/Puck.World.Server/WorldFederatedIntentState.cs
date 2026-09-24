@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -9,4 +10,4 @@ namespace Puck.World.Server;
 /// <param name="Submission">The latest image, republished on every authority tick until the stream changes it or
 /// disconnects.</param>
 /// <param name="Active">Whether the slot currently holds a live stream.</param>
-public readonly record struct WorldFederatedIntentState(long LeaseId, WorldPrincipal Principal, IntentSubmission Submission, bool Active);
+public readonly record struct WorldFederatedIntentState(long LeaseId, Principal Principal, IntentSubmission Submission, bool Active);

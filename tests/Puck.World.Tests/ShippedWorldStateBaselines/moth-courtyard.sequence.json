@@ -1,9 +1,8 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "moth-courtyard.world.json",
+  "world": "moth-courtyard.puck",
   "host": {
-    "kind": "document",
-    "rewriteBasis": "avatars/moth.world.json"
+    "kind": "document"
   },
   "expectsStateChange": true,
   "steps": [

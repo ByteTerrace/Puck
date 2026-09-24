@@ -8,7 +8,7 @@ namespace Puck.World.Server;
 /// <summary>
 /// Owns every declared named machine's live runtime: booting, stepping, memory-peeking, and provider operations are
 /// server-side, so machine state is simulation state and a headless boot runs exactly like a windowed one. Physical
-/// screens are consumers only: camera/capture/window-capture/jumbotron-view/test-pattern sources remain genuinely
+/// screens are consumers only: producer, jumbotron-view, probe and session sources remain genuinely
 /// presentation, composed by <c>Puck.World.WorldScreenBinder</c>, which reads this type's named machine outputs
 /// (framebuffer handle, light, audio) as a pure reader. Screen-indexed operation slots remain only as a temporary
 /// forwarding seam for the subsequent operations migration. Engines and content providers come from this host's
@@ -30,8 +30,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// become readable) refuses by name, exactly like a changed hash does.</summary>
     public const string ContentAbsentSignature = "absent";
 
-    private readonly WorldExtensionRegistry<IMachineEngine> m_engines;
-    private readonly WorldExtensionRegistry<IMachineContentProvider> m_compilers;
     private readonly IMachineContentAdmissionPolicy m_contentAdmissionPolicy;
 
     /// <summary>Gets this host's immutable registration catalog.</summary>
@@ -110,14 +108,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         m_narrationHub = narrationHub;
         m_contentAdmissionPolicy = (contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
 
-        m_engines = new WorldExtensionRegistry<IMachineEngine>(
-            extensions: catalog.Engines.Values,
-            keyOf: static engine => engine.Id
-        );
-        m_compilers = new WorldExtensionRegistry<IMachineContentProvider>(
-            extensions: catalog.ContentProviders.Values,
-            keyOf: static compiler => compiler.EngineId
-        );
         m_documentDirectory = DocumentDirectory(documentPath: documentPath);
 
         foreach (var screen in screens) {
@@ -148,7 +138,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         );
     }
     private static string? DocumentDirectory(string? documentPath) => ((documentPath is { Length: > 0 } path)
-        ? Path.GetDirectoryName(path: Path.GetFullPath(path: path))
+        ? WorldDocumentPaths.DirectoryOf(documentPath: path)
         : null
     );
     // The sparse pad lookup: WorldEngagement.BuildPadSnapshot() carries one entry per screen with at least one
@@ -400,9 +390,9 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     // Providers own format recognition, parsing, compilation, and exported addresses. The host pins the input
     // bytes and the executable image without depending on a provider's source-document or compiler types.
     private bool TryResolveContent(IMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
-        _ = m_compilers.TryGet(
+        _ = Catalog.ContentProviders.TryGetValue(
             key: engine.Id,
-            extension: out var compiler
+            value: out var compiler
         );
 
         if (
@@ -410,6 +400,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             compiler.Recognizes(contentPath: contentPath)
         ) {
             try {
+                WorldBootWork.Count(kind: WorldBootWork.AssetLoads);
                 compilation = compiler.Prepare(content: content);
                 bytes = compilation.Image;
                 cartridge = new WorldMachineCartridge(
@@ -464,9 +455,9 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 engineId = id;
 
                 if (
-                    m_engines.TryGet(
-                    extension: out var engine,
-                    key: id
+                    Catalog.Engines.TryGetValue(
+                    key: id,
+                    value: out var engine
                 ) &&
                     (engine is IMachineLinkingEngine linking)
                 ) {
@@ -616,19 +607,27 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         string resolvedPath;
 
-        try {
-            resolvedPath = ((documentRelative && !Path.IsPathFullyQualified(path: contentPath) && (m_documentDirectory is { } directory))
-                ? Path.GetFullPath(path: Path.Combine(
-                    path1: directory,
-                    path2: contentPath
-                ))
-                : Path.GetFullPath(path: contentPath)
-            );
-        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-            content = [];
-            fault = $"content '{contentPath}' cannot be resolved ({exception.Message})";
+        if (documentRelative) {
+            if (!WorldDocumentPaths.TryResolve(
+                documentDirectory: m_documentDirectory,
+                path: contentPath,
+                reason: out var unresolved,
+                resolved: out resolvedPath
+            )) {
+                content = [];
+                fault = $"content {unresolved}";
 
-            return false;
+                return false;
+            }
+        } else {
+            try {
+                resolvedPath = Path.GetFullPath(path: contentPath);
+            } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
+                content = [];
+                fault = $"content '{contentPath}' cannot be resolved ({exception.Message})";
+
+                return false;
+            }
         }
 
         if (!File.Exists(path: resolvedPath)) {
@@ -652,9 +651,9 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
     private bool TryResolveEngine(string? engineId, out IMachineEngine engine, out string error) {
         if (engineId is { } id) {
-            if (m_engines.TryGet(
-                extension: out var named,
-                key: id
+            if (Catalog.Engines.TryGetValue(
+                key: id,
+                value: out var named
             )) {
                 engine = named;
                 error = "";
@@ -668,19 +667,19 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             return false;
         }
 
-        if (m_engines.Count == 1) {
-            engine = m_engines.Values.First();
+        if (Catalog.Engines.Count == 1) {
+            engine = Catalog.Engines.Values[0];
             error = "";
 
             return true;
         }
 
         engine = null!;
-        error = ((m_engines.Count == 0)
+        error = ((Catalog.Engines.Count == 0)
             ? "no screen-machine engine registered"
-            : $"which engine? {m_engines.Count} registered — name one of: {string.Join(
+            : $"which engine? {Catalog.Engines.Count} registered — name one of: {string.Join(
                 separator: ", ",
-                values: m_engines.Keys
+                values: Catalog.Engines.Keys.Order(comparer: StringComparer.Ordinal)
             )}"
         );
 
@@ -782,23 +781,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             : null
         );
     /// <inheritdoc/>
-    public IReadOnlyList<WorldMachineCableGroup> CaptureLinks() {
-        if (m_links.Count == 0) {
-            return [];
-        }
-
-        var captured = new List<WorldMachineCableGroup>(capacity: m_links.Count);
-
-        foreach (var entry in m_links.Values) {
-            captured.Add(item: new WorldMachineCableGroup(
-                Name: entry.Name,
-                Screens: [.. entry.Members]
-            ));
-        }
-
-        return captured;
-    }
-    /// <inheritdoc/>
     public string DescribeLinks() {
         if (m_links.Count == 0) {
             return "none";
@@ -832,7 +814,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <inheritdoc/>
     public nint Handle(int index) => (VideoOutput(index: index)?.NativeImageViewHandle ?? 0);
     /// <inheritdoc/>
-    public bool HasEngine(string engineId) => m_engines.IsRegistered(key: engineId);
+    public bool HasEngine(string engineId) => Catalog.Engines.ContainsKey(key: engineId);
     /// <inheritdoc/>
     public bool HasMachine(int index) => (ResolveMachine(screenIndex: index).Runtime is not null);
     /// <inheritdoc/>

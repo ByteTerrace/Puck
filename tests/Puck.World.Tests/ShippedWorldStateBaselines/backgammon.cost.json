@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-cost.v1",
-  "world": "games/backgammon.world.json",
+  "world": "games/backgammon.puck",
   "simulationRateHz": 30,
   "ticks": 630,
   "workUnits": {

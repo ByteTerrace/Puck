@@ -7,7 +7,7 @@ side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 `src/Puck.Overlays/HudWriter.cs`, `UnifiedOverlayNode.cs`,
 `OverlayChannels.cs`, `OverlayFrameBuilder.cs`. Verbs:
 `src/Puck.World/WorldHudCommandModule.cs`. Mutation kinds: see
-[mutations.md](mutations.md) (ordinals 41–45).
+[mutations.md](mutations.md) (ordinals 39–43).
 
 ## Contents
 
@@ -24,10 +24,12 @@ side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 
 `WorldHudSection(Defaults, Panels)`; `WorldHudDefaults(Enabled, Cursor?)` is
 a world-level kill switch plus the drawn pointer cursor's per-world policy —
-`WorldHudCursor(HoverRadius, SizePx, Role)` (hover reach in world units, ring
-radius in px, the bare cursor's `WorldHudCursorRole` hue token; null falls
-back to `WorldHudCursor.Default`, the optional-section convention; whole-row
-replace semantics on `SetHudDefaults`). Validated by `hud.CursorInvalid`;
+`WorldHudCursor(HoverRadius, SizePx, Role, Visible?)` (hover reach in world
+units, ring radius in px, the bare cursor's `WorldHudCursorRole` hue token, an
+optional visibility predicate; null draws no cursor at all, since the engine
+has none of its own and the standard policy is authored in
+`Assets/worlds/standard.world.json`; whole-row replace semantics on
+`SetHudDefaults`, so a defaults row authored without it clears the cursor). Validated by `hud.CursorInvalid`;
 echoed RESOLVED by `world.hud`; the live pointer state (position, visibility
 verdict, hover target) echoes through `world.view.pointer`
 ([views.md](views.md)). `WorldHudPanel(Id, Rect, Layer, Style, Elements)` —
@@ -55,12 +57,13 @@ label, so a template resolving many long `state` cells clips as the writer's
 own attributed refusal rather than over-running the Hud reservation and
 DROPPING element records). Schema declares no render cost.
 Enforced by
-`WorldDefinitionValidator.ValidateHudCore` throwing `HudValidationException`
-with an enum `HudRefusal` (`TooManyPanels`, `DuplicatePanelId`,
-`TooManyElements`, `TooManyFrameSources`, `DuplicateElementId`, `InvalidRect`, `UnknownBinding`,
-`SeatPanelReplaceRefused`, `MalformedTemplate`, `UnknownTemplatePlaceholder`,
-`TemplateBindingConflict`, under door `hud.validate` in `world.refusals`; a blank
-id folds into the duplicate reason). `ValidateHudCore` takes an `isIdentityScope`
+`WorldDefinitionValidator.ValidateHudCore`, which appends every violation as a
+`hud.<reason>: …` line through `HudRowValidation.Refuse` (never throwing, so one
+bad row does not hide the rest) with an enum `HudRefusal` reason
+(`src/Puck.World.Schema/HudValidation.cs`; the enum is the whole vocabulary,
+panel and element counts, ids, rects, bindings, templates, the cursor, frame
+sources and the `visible` predicate, under door `hud.validate` in
+`world.refusals`; a blank id folds into the duplicate reason). `ValidateHudCore` takes an `isIdentityScope`
 flag (`definition.Identity is not null` at its one call site) that swaps
 `MaxWorldPanels`/`MaxElementsPerPanel` for the tighter
 `MaxSeatPanels`/`MaxElementsPerSeatPanel` (a second seat panel refuses as
@@ -78,7 +81,10 @@ after `state.` is unambiguous because a row/cell name can never itself hold a
 dot (`CellName`). Refused by name at validation (`UnknownBinding`); an
 empty-string binding reads as unbound rather than refused. The SAME `TryParse`
 serves the validator and the render resolver, so a document can never carry a
-binding the renderer silently treats as unbound.
+binding the renderer silently treats as unbound; `StateBinding.TryParse` is its
+`state.*` arm, the one parse every bindable token (`BindableScalar`,
+`BindableColor`, `WorldColor`, overlay and binding-bar cells) goes through, and a
+bindable stores the parsed `StateBinding` rather than re-parsing per read.
 
 Either `state.*` form may carry a trailing `.$target` facet —
 `state.<row>.$target` or `state.<row>.<key>.$target` — reading the addressed
@@ -91,7 +97,7 @@ row before `.$target` (`state.$target`) refuses. A cell with no `dynamics`
 trait resolves the SAME value through either spelling, since truth and the
 eased read agree when nothing is easing. The `seat.<n>.position.*`
 family resolves its body index through the per-seat PERCEPTION ANCHOR
-(`Client/WorldPerceptionAnchor.cs` — the seat's bound body, slot n-1, or the
+(`src/Puck.World.Client/WorldPerceptionAnchor.cs` — the seat's bound body, slot n-1, or the
 routed body while possessing), the same resolution point the camera anchor
 pose and the audio listener derive through, so all three follow a possession
 anchor swap together, published every tick by `WorldSeatContextSync.Publish`
@@ -101,7 +107,7 @@ the anchor (`anchor=body:<n>`, 0-based) for local seats.
 
 A `state.<row>`/`state.<row>.<key>` binding's EXISTENCE — the row, and for the
 cell form the key — is validated wherever a real `state` section exists to
-check against: `WorldDefinitionValidator.ValidateState` now returns the
+check against: `WorldDefinitionValidator.ValidateState` returns the
 declared rows BY NAME (not just the name set) and threads that into the HUD
 checks (`HudRowValidation.ValidateElement`'s `stateRows` parameter), so an
 unknown row OR an unknown key on a real row refuses by the SAME `UnknownBinding`
@@ -112,12 +118,14 @@ is a full `WorldDefinition`, not a separate document family, so there is no
 distinct "cannot verify existence" scope in this codebase today;
 `HudRowValidation`'s `stateRows: null` parameter default exists for a caller
 with no such document to check against, but nothing currently calls it that
-way. Render-side, `state.<row>`/`state.<row>.<key>` reads
-`WorldClient.Definition.State` directly (no engine fact backs it — the
-document holds the value): a cell carrying a `dynamics` trait resolves the
-LIVE eased value (`WorldStateReader.TryReadEased`) unless the token carries
-the `.$target` facet above, in which case it resolves truth
-(`WorldStateReader.TryRead`) exactly like a cell with no trait always does. A
+way. Render-side, `WorldHudBindingResolver` parses each token once and
+registers a `state.*` token's slot with the client's state mirror
+(`WorldClient.StateMirror`, `WorldStateMirror`), the one path every
+presentation binding reads through: a cell carrying a `dynamics` trait
+presents its eased follower, interpolated at the frame's fraction, unless the
+token carries the `.$target` facet above, in which case it presents stored truth
+exactly like a cell with no trait always does. The text shows the value read at
+the delivered tick. A
 bound TEXT element renders the resolved cell's
 value; a bound GAUGE element's fraction is `(value − min) / (max − min)`
 clamped to `[0, 1]` off the ROW's OWN `min`/`max` (cells carry no envelope of
@@ -233,7 +241,7 @@ BEFORE anything resolves, so a bad placeholder refuses the whole call by name.
 This is the read-back rule's second half for templating: `world.state`
 already echoed an authored text table (see [documents.md](documents.md)'s
 `state` section — a `text`-kind row IS the table substrate, keyed cells and
-all); `world.hud`'s existing per-element echo now ALSO resolves a document
+all); `world.hud`'s per-element echo also resolves a document
 Template (reusing `HudTemplate.TryParse`, no second parser needed inside
 `Puck.World`); `world.hud.template` covers the one case neither already did —
 a template with no document row behind it at all.
@@ -277,14 +285,16 @@ its own boundary, never costs another channel), with two separately-latched
 narrations: reservation overflow vs a writer's own declared cap refusal.
 Binding-bar visibility, layout, and scale do not change this arithmetic. The
 slot reservation DOES scale with the authored vocabulary: it is
-`WorldBindingBarCapacity.MaxBanks` (5 — the WoW-addon original's five chord
+`WorldBindingBarCapacity.MaxBanks` (5 — five chord
 banks: resting/LT/RT/LT>RT/RT>LT) times `MaxSlots` (32 — the declared ceiling on
-one bar's authored slot set, now that it names input source ids) slots, plus
-the fixed one label, eight modifiers, and eight hint lines every bar draws
-once regardless of bank count — `OverlayCapacity.BindingBarMaxBanks`/
+one bar's authored slot set of input source ids) slots, plus
+the one label, `WorldBindingBarCapacity.MaxModifiers` (16) modifier
+indicators (`OverlayCapacity.BindingBarMaxModifiers`), and
+`BindingBarWriter.MaxHintLines` (8) hint lines every bar draws once regardless
+of bank count — `OverlayCapacity.BindingBarMaxBanks`/
 `BindingBarMaxSlotsPerBank`, composed the same way the Hud ceilings are.
-`OverlayFrameBuilder.MaxElements` was raised (1024 → 2048) to fit this
-reservation beside the others.
+`OverlayFrameBuilder.MaxElements` (2048) is sized to fit this reservation
+beside the others.
 
 ## Bands — what `replace` replaces
 
@@ -365,9 +375,8 @@ WORLD-scope section; an identity's private panel is edited through the owned
 identity's own door — `identity.hud <panel-json> [player]`
 (`IdentityCommandModule`) — not through this module and not through a
 `WorldMutation`. UNGATED, like `identity.motion`: an owned world is edited by
-its own door with no `Edit`/subject grant check (the player-document family
-and its grant subjects were deleted in `ad5935ae` — there is no `profile:<id>`
-subject any more). It validates the candidate document through the SAME
+its own door with no `Edit`/subject grant check (there is no `profile:<id>`
+grant subject). It validates the candidate document through the SAME
 `WorldDefinitionValidator.TryValidate` any owned world loads and saves
 through, then fires INLINE over loopback (unlike the writes above): the
 verb's own `CommandResult` carries the applied/refused outcome synchronously,

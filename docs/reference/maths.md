@@ -174,6 +174,7 @@ for the detailed contract.
 | To fold a per-tick state hash for a determinism or replay check | `Fnv1aHash`—allocation-free, endianness-independent | [below](#root-level-types) |
 | A restriction that can only narrow—a capability mask under AND, a quantity under minimum, or both paired as one value | `MeetMask64`, `MeetQuantity64`, `MeetProduct<TFirst, TSecond>` | [below](#root-level-types) |
 | Bit tricks, GCD, integer roots, pairing functions, prime factorization | `BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions` | [below](#root-level-types) |
+| A low-bit mask exact at zero and the full width, power-of-two alignment, a bit scatter or gather, or a 2-D or 3-D Morton code | `LowMask`, `AlignUp`/`AlignDown`, `ParallelBitDeposit`/`ParallelBitExtract`, `BitwisePair`/`BitwiseTriple` and their inverses on `BinaryIntegerFunctions` | [below](#bit-kit) |
 | Integer square roots, inverses, primality, or factorization beyond 64 bits | `BigIntegerFunctions`; its API documentation states where primality and factorization are proved or refused | [below](#root-level-types) |
 
 ---
@@ -315,8 +316,9 @@ surface, including parameters, return values, and exceptions.
 | `MonotonicPartitioner` / `MonotonicPartitionerMetrics` | Route a value to one of 1–1024 buckets while minimizing movement when another bucket is added, and report when that value moves. |
 | `CyclicRotation` / `SymmetryLattice` / `SymmetryWord` | Provide a bit-exact rotation loop (the thirty-step table, or any order's root of unity), the fixed, symmetric node set behind it in eight dimensions with its exact root pairing and ring walks, and a word of its reflections baked to a permutation with a derived order and a constant-time counted power. |
 | `Fnv1aHash` | Accumulate an explicit, stable 64-bit digest for replay and determinism checks. |
+| `LexicographicOrder` | Compare two records by a primary key and break a primary tie by a secondary key: the total order a deterministic sort needs. |
 | `IMeetSemilattice<TSelf>` / `MeetMask64` / `MeetQuantity64` / `MeetProduct<TFirst, TSecond>` | Combine restrictions so the result never grants more than either input, whether the restriction is a bit mask, a quantity, or a pair of both. |
-| `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, and exact 32-bit primality and factorization. |
+| `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, an add that reports overflow (`TryAdd`), a narrowing that refuses an out-of-range value (`TryNarrow`), and exact 32-bit primality and factorization. |
 | `SignedByteVectorFunctions` | Quantized signed 8-bit vector arithmetic normalized on radius 127: unit sphere admission, dot product, Q48.16 cosine similarity, unit normalization, and weighted combination. |
 
 The chooser above is the quickest way into these types. The API reference is
@@ -338,20 +340,65 @@ For example, `2u.ElegantPair<uint, ulong>(1u)` is `5UL`; its swap is `7UL`,
 translation by one is `13UL`, and scale by two is `18UL`. These operations
 act on coordinates; adding two raw indices does not add their coordinates.
 
+### Bit kit
+
+`BinaryIntegerFunctions` works on any `IBinaryInteger<T>` as a bit pattern, so
+a signed carrier gives the same bits as its unsigned counterpart. A hardware
+instruction replaces the portable formulation only where both give the same
+bits, and the law suite checks both on every host.
+
+`PDEP` and `PEXT` need more than the instructions existing. AMD processors
+before Zen 3, including the Zen 2 cores in the Steam Deck, run them in
+microcode: their latency grows with the number of set mask bits and reaches
+hundreds of cycles, which is slower than the portable loop and SWAR ladders.
+Hygon's Dhyana, a licensed Zen 1, does the same.
+Agner Fog's instruction tables and uops.info record these measurements.
+`BitManipulation.HasFastParallelBits` reads the CPUID vendor and family once. It
+is true when BMI2 is present, unless the processor is AMD or Hygon below family
+`0x19` (Zen 3). `ParallelBitDeposit`, `ParallelBitExtract` and the four Morton members
+take the hardware path only when it is true. `BitManipulation.IsParallelBitsFast`
+makes the same decision as a pure function of vendor, family and BMI2 support.
+The gate changes speed only, because both paths return the same bits. The JIT
+folds the field to a constant, so a fast host runs the same code it would
+without the gate.
+
+| Member | Result |
+|---|---|
+| `LowMask<T>(count)` | the low `count` ones; exact at zero and at the full width, where `(1 << count) - 1` fails |
+| `NthPowerOfTwo<T>(exponent)` | the word with only bit `exponent` set; a signed carrier's top exponent is its minimum |
+| `NthFermatMask<T>(exponent)` | alternating blocks of `2^exponent` ones and zeros: `0x5555…`, `0x3333…`, `0x0F0F…` |
+| `AlignDown` / `AlignUp` | the nearest multiple of a positive power-of-two alignment; `AlignUp` wraps past the carrier's top |
+| `ParallelBitDeposit` / `ParallelBitExtract` | scatter low bits into a mask's positions, or gather them back (x86 `PDEP`/`PEXT`) |
+| `BitwisePair` / `BitwiseUnpair` | the 2-D Morton code, bit `i` of each operand at `2i` and `2i + 1` |
+| `BitwiseTriple` / `BitwiseUntriple` | the 3-D Morton code, bit `i` of each operand at `3i`, `3i + 1` and `3i + 2` |
+| `SmearBelowHighestSetBit` | every bit from the highest set bit down; the dual of `FillFromLowestSetBit` |
+| `BitLength` / `DigitCount` | the one-based position of the highest set bit, and the number of decimal digits |
+
+Operand bits that would land outside a Morton result are dropped. A 64-bit
+result holds 32 bits of each operand of a pair, and 22, 21 and 21 bits of the
+three operands of a triple. Invalid counts, exponents and alignments throw
+`ArgumentOutOfRangeException`. Members that need a fixed word width refuse
+`BigInteger` with `NotSupportedException`. `LowMask`, `NthPowerOfTwo` and both
+alignment members accept it.
+
 For repeating bit patterns, `BinaryIntegerFunctions.ReplicationMask<T>` places
 one bit at the bottom of each block: `8.ReplicationMask<uint>()` gives
 `0x01010101`. Multiplying by a pattern that fits in one block copies it across
-the word; `0xABu.RepeatBits(8)` gives `0xABABABAB`. Both functions require a block
-width that divides the fixed word width exactly. Signed types carry the same
-bits, so the repeated result can be negative; a whole-word block returns the
-input unchanged. `BigInteger` has no fixed word width and is refused. The
+the word; `0xABu.RepeatBits(8)` gives `0xABABABAB`. Any block width from one
+through the word width is accepted. When the width does not divide the word,
+the last copy is cut off at the top: `3.ReplicationMask<byte>()` gives `0x49`,
+the one-in-three pattern the 3-D Morton ladder builds its masks from. Signed
+types carry the same bits, so the repeated result can be negative; a
+whole-word block returns the input unchanged. `BigInteger` has no fixed word
+width and is refused. The
 [source documentation](../../src/Puck.Maths/BinaryIntegerFunctions.cs) derives the replication
 constant from a geometric series.
 
-The internal Fermat masks used by bit permutations share these repetition
-primitives. For 128-bit words, proper blocks repeat within a 64-bit half first,
-then that half is copied. This keeps wide division and multiplication out of
-mask construction and allows constant masks to fold into constant loads.
+The Fermat masks that drive the bit permutations are built from these
+repetition primitives. For 128-bit words, a block dividing 64 repeats within a
+64-bit half first, then that half is copied. This keeps wide division and
+multiplication out of mask construction and allows constant masks to fold into
+constant loads.
 
 ### Combination and permutation ranks
 
@@ -415,7 +462,7 @@ The registered laws compare ordering against independent enumeration, check
 large counts with `BigInteger`, and exercise invalid inputs and unchanged
 destinations on failure. The Deep tier checks every five-card hand.
 `CombinationQueries` and `PermutationQueries` in the
-[Maths benchmark harness](../../src/Puck.Cli/README.md#puck-benchthe-puckmaths-microscope)
+[Maths benchmark harness](cli.md#puck-benchthe-puckmaths-microscope)
 measure representative small and wide spaces, including an independent
 quadratic permutation-ranking baseline.
 

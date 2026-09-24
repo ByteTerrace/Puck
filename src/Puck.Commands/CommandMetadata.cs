@@ -20,6 +20,7 @@ namespace Puck.Commands;
 /// as a channel destination does; an author binds it once and never authors a release twin.</param>
 /// <param name="AcceptsWireArgs">Whether the command accepts trailing wire arguments — required when a binding row
 /// carries <see cref="BindingPageEntryDefinition.Text"/>.</param>
+/// <param name="Audience">Who the command answers: any stamped principal, or the console alone.</param>
 public readonly record struct CommandMetadata(
     string Name,
     CommandValueKind ValueKind,
@@ -28,5 +29,6 @@ public readonly record struct CommandMetadata(
     CommandInputScope InputScope = CommandInputScope.Focused,
     string Map = CommandMaps.Global,
     bool Held = false,
-    bool AcceptsWireArgs = false
+    bool AcceptsWireArgs = false,
+    CommandAudience Audience = CommandAudience.Anyone
 );

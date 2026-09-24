@@ -270,7 +270,7 @@
   "references": [
     {
       "name": "island",
-      "document": "island.world.json"
+      "document": "island"
     }
   ],
   "destinations": [

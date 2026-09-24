@@ -20,16 +20,17 @@ public sealed class OpenAiEmbeddingOptions {
     public TokenCredential? Credential { get; init; }
     /// <summary>When true, omits the dimensions field from requests.</summary>
     public bool OmitDimensions { get; init; }
+
     /// <summary>Maximum retries on failure. Defaults to 3.</summary>
     public int MaxRetries { get; init; } = 3;
     /// <summary>HTTP pipeline timeout. Defaults to 60 seconds.</summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(value: 60);
+
     /// <summary>Optional custom HttpClient for testing or custom transports.</summary>
     public HttpClient? HttpClient { get; init; }
     /// <summary>Optional custom client options for testing.</summary>
     public AzureOpenAIClientOptions? ClientOptions { get; init; }
 }
-
 /// <summary>Factory to create configured Azure OpenAI embedding generators using identity authentication.</summary>
 public static class OpenAiEmbeddingGeneratorFactory {
     /// <summary>Creates a configured <see cref="IEmbeddingGenerator{TInput, TEmbedding}"/> for Azure OpenAI endpoints.</summary>
@@ -43,7 +44,7 @@ public static class OpenAiEmbeddingGeneratorFactory {
         var credential = (options.Credential ?? new DefaultAzureCredential());
         var clientOptions = (options.ClientOptions ?? new AzureOpenAIClientOptions {
             NetworkTimeout = options.Timeout,
-            RetryPolicy = new ClientRetryPolicy(maxRetries: Math.Max(0, options.MaxRetries)),
+            RetryPolicy = new ClientRetryPolicy(maxRetries: Math.Max(val1: 0, val2: options.MaxRetries)),
         });
 
         if (options.HttpClient is not null) {
@@ -57,7 +58,7 @@ public static class OpenAiEmbeddingGeneratorFactory {
         );
 
         var dimensions = (options.OmitDimensions ? (int?)null : options.Dimensions);
-        var embeddingClient = client.GetEmbeddingClient(options.Model);
+        var embeddingClient = client.GetEmbeddingClient(deploymentName: options.Model);
 
         return new AzureOpenAiEmbeddingGenerator(
             client: embeddingClient,
@@ -83,9 +84,10 @@ public static class OpenAiEmbeddingGeneratorFactory {
             CancellationToken cancellationToken = default
         ) {
             ArgumentNullException.ThrowIfNull(argument: values);
-            var inputList = (values as IReadOnlyList<string> ?? values.ToList());
+            var inputList = ((values as IReadOnlyList<string>) ?? values.ToList());
 
             var genOptions = new OpenAI.Embeddings.EmbeddingGenerationOptions();
+
             if (expectedDimensions.HasValue) {
                 genOptions.Dimensions = expectedDimensions.Value;
             }
@@ -94,13 +96,15 @@ public static class OpenAiEmbeddingGeneratorFactory {
 
             try {
                 var response = await client.GenerateEmbeddingsAsync(
+                    cancellationToken: cancellationToken,
                     inputs: inputList,
-                    options: genOptions,
-                    cancellationToken: cancellationToken
+                    options: genOptions
                 ).ConfigureAwait(continueOnCapturedContext: false);
+
                 rawCollection = response.Value;
             } catch (ClientResultException crex) {
-                var body = crex.GetRawResponse()?.Content?.ToString() ?? "";
+                var body = (crex.GetRawResponse()?.Content?.ToString() ?? "");
+
                 if (body.Length > 512) {
                     body = body[..512];
                 }
@@ -116,7 +120,7 @@ public static class OpenAiEmbeddingGeneratorFactory {
                 );
             }
 
-            var orderedEmbeddings = rawCollection.OrderBy(static e => e.Index).ToList();
+            var orderedEmbeddings = rawCollection.OrderBy(keySelector: static e => e.Index).ToList();
 
             if (orderedEmbeddings.Count != inputList.Count) {
                 throw new InvalidOperationException(
@@ -126,7 +130,7 @@ public static class OpenAiEmbeddingGeneratorFactory {
 
             var result = new List<Embedding<float>>(capacity: orderedEmbeddings.Count);
 
-            for (var i = 0; i < orderedEmbeddings.Count; i++) {
+            for (var i = 0; (i < orderedEmbeddings.Count); i++) {
                 var item = orderedEmbeddings[i];
                 var floats = item.ToFloats();
                 var span = floats.Span;
@@ -137,15 +141,15 @@ public static class OpenAiEmbeddingGeneratorFactory {
                     );
                 }
 
-                for (var j = 0; j < span.Length; j++) {
-                    if (!float.IsFinite(span[j])) {
+                for (var j = 0; (j < span.Length); j++) {
+                    if (!float.IsFinite(f: span[j])) {
                         throw new InvalidOperationException(
                             message: "Non-finite embedding component encountered."
                         );
                     }
                 }
 
-                result.Add(new Embedding<float>(vector: floats));
+                result.Add(item: new Embedding<float>(vector: floats));
             }
 
             return new GeneratedEmbeddings<Embedding<float>>(embeddings: result);
@@ -163,8 +167,7 @@ public static class OpenAiEmbeddingGeneratorFactory {
         }
 
         public object? GetService(Type serviceType, object? serviceKey = null) =>
-            serviceType == typeof(EmbeddingGeneratorMetadata) ? Metadata : null;
-
+            ((serviceType == typeof(EmbeddingGeneratorMetadata)) ? Metadata : null);
         public void Dispose() { }
     }
 }

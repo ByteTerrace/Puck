@@ -59,9 +59,10 @@ SdfPrimaryHit sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float 
     // cross-backend parity reference; the auto-relaxed step's division never rides the strict gate. The four-bound
     // teleport runs in BOTH paths.
     //
-    // Footprint-hit biases (both conservative toward the camera — fatten a silhouette, never drop geometry):
-    // (1) pixelFootprint * traveled is the pixel's full world DIAMETER (2x Keinert's radius); (2) `radius` is
-    // Lipschitz-clamped, so the test fires at true distance threshold/stepScale.
+    // Footprint hit threshold: pixelFootprint * traveled is the pixel's full world DIAMETER (2x Keinert's radius),
+    // compared against the Lipschitz-clamped field, so it fires at true distance threshold/stepScale. A sample inside
+    // it is accepted only after near-miss refinement (PrimaryConvergeFraction), so it bounds step termination rather
+    // than widening features by a pixel.
 #ifdef SDF_STRICT_MARCH
     float omega = SphereTraceOmega;
 #else
@@ -69,6 +70,7 @@ SdfPrimaryHit sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float 
 #endif
     float previousRadius = 0.0;
     float stepLength = 0.0;
+    int refineSteps = 0;
 
     [loop]
     for (marchStep = 0; (marchStep < MaxSteps); marchStep++) {
@@ -128,7 +130,18 @@ SdfPrimaryHit sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float 
         // here — an overshoot-retreat sample is never tested (there is nothing new to accept this iteration),
         // and the coverage-AA epilogue's terminal-state capture (terminalRadius/terminalHitThreshold) lives in
         // ONE place instead of duplicated per path.
+        // Inside the footprint shell the ray refines with plain steps until it converges or spends its refinement
+        // budget (see PrimaryConvergeFraction): a near miss is decided by where the ray goes, not by step phase.
+        bool refine = false;
+
         if (!overshoot && (fieldDistance < hitThreshold)) {
+            refine = ((fieldDistance >= (hitThreshold * PrimaryConvergeFraction)) && (refineSteps < PrimaryRefineSteps));
+        }
+
+        if (refine) {
+            refineSteps++;
+        }
+        else if (!overshoot && (fieldDistance < hitThreshold)) {
             hitSurface = true;
             material = hit.material;
             hitLanes = hit.lanes;
@@ -147,6 +160,10 @@ SdfPrimaryHit sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float 
         float stepFrom = traveled;
 
 #ifdef SDF_STRICT_MARCH
+        if (refine) {
+            stepLength = radius;
+        }
+
         traveled += stepLength;
 #else
         // Update the slope EMA from the step that reached this sample (skip the very first sample; an
@@ -158,7 +175,9 @@ SdfPrimaryHit sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float 
         }
 
         precise float denominator = (1.0 - min(slopeM, SlopeCap));
-        precise float omega = max(1.0, (2.0 / denominator));
+        precise float omega = (refine
+            ? 1.0
+            : max(1.0, (2.0 / denominator)));
         precise float advance = (radius * omega);
         previousRadius = radius;
         stepLength = advance;

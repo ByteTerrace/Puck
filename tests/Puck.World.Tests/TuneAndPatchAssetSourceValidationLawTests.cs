@@ -1,6 +1,6 @@
+using Puck.Testing;
 using Xunit;
 
-using Puck.Assets.Documents;
 
 namespace Puck.World.Tests;
 
@@ -11,171 +11,48 @@ namespace Puck.World.Tests;
 /// not resolve must refuse on that load, the same discipline <c>CheckMusic</c> already proves for music rows.
 /// </summary>
 public sealed class TuneAndPatchAssetSourceValidationLawTests {
-    private static WorldPatch BuildPatchRow(string assetDirectory, string name) {
-        var patch = SynthPatchCanonicalizer.Canonicalize(document: new SynthPatchDocument(
-            Schema: SynthPatchDocument.CurrentSchema,
-            Name: name,
-            Oscillator: null,
-            DutyThousandths: null,
-            Polynomial: null,
-            AttackFrames: null,
-            DecayFrames: null,
-            SustainThousandths: null,
-            ReleaseFrames: null,
-            PitchMillihertz: 440_000
-        ));
-        var path = Path.Combine(
-            path1: assetDirectory,
-            path2: $"{name}.puck.synthesizer-patch.v1.json"
-        );
+    // Each arm pairs the denial (a row naming a source that does not resolve) with the control (the same section
+    // naming a written, hash-pinned source).
+    [InlineData("patches", "does-not-exist.puck.synthesizer-patch.v1.json")]
+    [InlineData("tunes", "does-not-exist.puck.tune.v1.json")]
+    [Theory]
+    public void AnUnresolvableSourceRefusesByPathWhereAWrittenOnePasses(string section, string missing) {
+        const string AbsentHash = "0000000000000000000000000000000000000000000000000000000000000000";
 
-        File.WriteAllBytes(
-            path: path,
-            bytes: patch.Bytes
-        );
-
-        return new WorldPatch(
-            Name: name,
-            Source: path,
-            Hash: patch.Hash
-        );
-    }
-    private static WorldTune BuildTuneRow(string assetDirectory, string name) {
-        var tune = AudioCanonicalizer.Canonicalize(document: new AudioDocument(
-            Effects: null,
-            Name: name,
-            Order: null,
-            Patterns: null,
-            Schema: AudioDocument.CurrentSchema,
-            Tempo: null
-        ));
-        var path = Path.Combine(
-            path1: assetDirectory,
-            path2: $"{name}.puck.tune.v1.json"
-        );
-
-        File.WriteAllBytes(
-            path: path,
-            bytes: tune.Bytes
-        );
-
-        return new WorldTune(
-            Name: name,
-            Source: path,
-            Hash: tune.Hash
-        );
-    }
-
-    [Fact]
-    public void MissingPatchSourceRefusesByPath() {
-        var document = Fixtures.BuildDocument() with {
-            PatchesRaw = [new WorldPatch(
-                Hash: "0000000000000000000000000000000000000000000000000000000000000000",
-                Name: "missing-patch",
-                Source: "does-not-exist.puck.synthesizer-patch.v1.json"
-            )],
-        };
+        using var directory = new TemporaryDirectory();
+        var patches = (section == "patches");
+        var refused = (patches
+            ? Fixtures.BuildDocument() with { PatchesRaw = [new WorldPatch(Hash: AbsentHash, Name: "missing", Source: missing)] }
+            : Fixtures.BuildDocument() with { TunesRaw = [new WorldTune(Hash: AbsentHash, Name: "missing", Source: missing)] });
+        var admitted = (patches
+            ? Fixtures.BuildDocument() with { PatchesRaw = [AudioAssetFixtures.Write(directory: directory, document: AudioAssetFixtures.Tone(name: "real-patch"))] }
+            : Fixtures.BuildDocument() with { TunesRaw = [AudioAssetFixtures.Write(directory: directory, document: AudioAssetFixtures.SilentTune(name: "real-tune"))] });
 
         Assert.False(
             condition: WorldDefinitionValidator.TryValidate(
-                definition: document,
+                definition: refused,
                 neighbours: null,
                 reason: out var reason
             ),
-            userMessage: "a patch row naming an unresolvable source was expected to refuse"
+            userMessage: $"a {section} row naming an unresolvable source was expected to refuse"
         );
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "patches[0]"
+            expectedSubstring: $"{section}[0]"
         );
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "does-not-exist.puck.synthesizer-patch.v1.json"
+            expectedSubstring: missing
         );
-    }
-    [Fact]
-    public void MissingTuneSourceRefusesByPath() {
-        var document = Fixtures.BuildDocument() with {
-            TunesRaw = [new WorldTune(
-                Hash: "0000000000000000000000000000000000000000000000000000000000000000",
-                Name: "missing-tune",
-                Source: "does-not-exist.puck.tune.v1.json"
-            )],
-        };
-
-        Assert.False(
+        Assert.True(
             condition: WorldDefinitionValidator.TryValidate(
-                definition: document,
+                definition: admitted,
                 neighbours: null,
-                reason: out var reason
+                reason: out var admittedReason
             ),
-            userMessage: "a tune row naming an unresolvable source was expected to refuse"
+            userMessage: admittedReason
         );
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "tunes[0]"
-        );
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "does-not-exist.puck.tune.v1.json"
-        );
-    }
-    [Fact]
-    public void ValidPatchSourceControl() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-patch-source-law-").FullName;
-
-        try {
-            var document = Fixtures.BuildDocument() with {
-                PatchesRaw = [BuildPatchRow(
-                    assetDirectory: directory,
-                    name: "real-patch"
-                )],
-            };
-
-            Assert.True(
-                condition: WorldDefinitionValidator.TryValidate(
-                    definition: document,
-                    neighbours: null,
-                    reason: out var reason
-                ),
-                userMessage: reason
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
-    }
-    [Fact]
-    public void ValidTuneSourceControl() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-tune-source-law-").FullName;
-
-        try {
-            var document = Fixtures.BuildDocument() with {
-                TunesRaw = [BuildTuneRow(
-                    assetDirectory: directory,
-                    name: "real-tune"
-                )],
-            };
-
-            Assert.True(
-                condition: WorldDefinitionValidator.TryValidate(
-                    definition: document,
-                    neighbours: null,
-                    reason: out var reason
-                ),
-                userMessage: reason
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
     }
 }

@@ -120,12 +120,18 @@ internal sealed partial class WorldProbes {
             }
             if (
                 (socket.Class == ProbeSocketClass.StrobePair) &&
-                ((source is not WorldScreenSource.Camera camera) || (camera.Sensor != WorldCameraSensor.Infrared))
+                (!WorldImageProducerSettings.TryCamera(
+                    camera: out var camera,
+                    source: source
+                ) || (camera.Sensor != WorldCameraSensor.Infrared))
             ) {
                 throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'] is a strobePair socket; it must bind a camera source with sensor Infrared.");
             }
             if (
-                (source is WorldScreenSource.Camera cameraSource) &&
+                WorldImageProducerSettings.TryCamera(
+                    camera: out var cameraSource,
+                    source: source
+                ) &&
                 (cameraSource.Seat is null)
             ) {
                 isSeatRelative = true;
@@ -168,14 +174,20 @@ internal sealed partial class WorldProbes {
             key: triggerSocket.Name,
             value: out var triggerSource
         ) ||
-            (triggerSource is not WorldScreenSource.Camera triggerCamera)
+            !WorldImageProducerSettings.TryCamera(
+                camera: out var triggerCamera,
+                source: triggerSource
+            )
         ) {
             throw new InvalidOperationException(message: $"{path}.inputs['{triggerSocket.Name}'] is the trigger socket; it must bind a camera source (kernels are hosted by a camera graph).");
         }
 
         foreach (var (socketName, source) in inputs) {
             if (
-                (source is WorldScreenSource.Camera camera) &&
+                WorldImageProducerSettings.TryCamera(
+                    camera: out var camera,
+                    source: source
+                ) &&
                 (camera.Seat != triggerCamera.Seat)
             ) {
                 throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'].camera.seat must match trigger socket '{triggerSocket.Name}' seat; one kernel run can bind only one camera graph.");
@@ -206,10 +218,10 @@ internal sealed partial class WorldProbes {
     // conditioned step rather than at boot. A track-input row is never seat-relative, so this document is played
     // back by exactly one instance's ProbeTrackPlayer, built once ReconcileInstances creates it.
     private static ProbeTrackDocument LoadTrackDocument(int channelCount, string documentDirectory, string path, string trackPath) {
-        var resolvedPath = Path.GetFullPath(path: Path.Combine(
-            path1: documentDirectory,
-            path2: trackPath
-        ));
+        var resolvedPath = WorldDocumentPaths.Resolve(
+            documentDirectory: documentDirectory,
+            path: trackPath
+        );
         ProbeTrackDocument document;
 
         try {
@@ -366,18 +378,20 @@ internal sealed partial class WorldProbes {
     // Builds one row's instance at one seat: a fresh reading ring, its own copy of the row's constants template, its
     // output ring key (seat 1 of a seat-relative row shares the row's bare id, so an authored screen/HUD `probe`
     // source — which carries no seat of its own — keeps resolving the same ring it always has; every other seat gets
-    // its own "id@seat" ring), its track player when the row plays one back, and every one of its bindings' live
+    // its own "id$seat" ring), its track player when the row plays one back, and every one of its bindings' live
     // state (built from the row's already-validated templates — never re-validated per instance).
     private ProbeInstance CreateInstance(ProbeRowInfo rowInfo, int seat) {
         var ring = new ProbeReadingRing();
         var isSeatRelative = rowInfo.IsSeatRelative;
+        var key = (isSeatRelative
+            ? InstanceKey(id: rowInfo.Row.Id, seat: seat)
+            : rowInfo.Row.Id
+        );
         var instance = new ProbeInstance {
             Constants = [.. rowInfo.ConstantsTemplate],
-            Label = (isSeatRelative
-            ? $"{rowInfo.Row.Id}@{seat}"
-            : rowInfo.Row.Id),
-            OutputRingKey = ((isSeatRelative && (seat != 1))
-            ? $"{rowInfo.Row.Id}@{seat}"
+            Label = key,
+            OutputRingKey = ((seat != 1)
+            ? key
             : rowInfo.Row.Id),
             Inputs = new ProbeKernelInput[rowInfo.Manifest.Inputs.Count],
             ResolvedGenerations = new object?[rowInfo.Manifest.Inputs.Count],
@@ -399,7 +413,10 @@ internal sealed partial class WorldProbes {
             var retainedViews = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var source in inputs.Values) {
-                if (source is WorldScreenSource.Camera camera) {
+                if (WorldImageProducerSettings.TryCamera(
+                    camera: out var camera,
+                    source: source
+                )) {
                     m_screens.RetainProbeCameraDemand(
                         camera: camera,
                         contextSeat: seat
@@ -569,7 +586,10 @@ internal sealed partial class WorldProbes {
         }
 
         switch (source) {
-            case WorldScreenSource.Camera camera:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CameraId } when WorldImageProducerSettings.TryCamera(
+                camera: out var camera,
+                source: source
+            ):
                 var socketSeat = (camera.Seat ?? contextSeat);
 
                 if (!m_screens.TryGetCameraAttachment(
@@ -659,8 +679,8 @@ internal sealed partial class WorldProbes {
                 }
 
                 return (viewRing, viewGeneration, (viewRing.Width, viewRing.Height), null);
-            case WorldScreenSource.Capture:
-                return (UnboundKernelInput, null, null, "capture probe inputs are rejected during world validation");
+            case WorldScreenSource.Producer producer:
+                return (UnboundKernelInput, null, null, $"producer '{producer.Id}' probe inputs are rejected during world validation");
             default:
                 return (UnboundKernelInput, null, null, "unrecognized frame source");
         }
@@ -734,17 +754,29 @@ internal sealed partial class WorldProbes {
             return;
         }
 
-        var kernel = (instance.RowInfo.Manifest.Kernel ?? throw new InvalidOperationException(message: $"probe kind '{instance.RowInfo.Manifest.Name}' is kernel-class but declares no kernel block."));
+        var manifest = instance.RowInfo.Manifest;
+        var kernel = (manifest.Kernel ?? throw new InvalidOperationException(message: $"probe kind '{manifest.Name}' is kernel-class but declares no kernel block."));
+        var accumulatePath = manifest.KernelBytecodePath(entry: kernel.Accumulate);
+        var finalizePath = manifest.KernelBytecodePath(entry: kernel.Finalize);
+
+        // The build compiles a kernel; the camera's device only creates it from the bytecode.
+        if (
+            !File.Exists(path: accumulatePath) ||
+            !File.Exists(path: finalizePath)
+        ) {
+            instance.Fault = $"probe kind '{manifest.Name}' has no precompiled kernel bytecode beside its source; a Windows build writes '{Path.GetFileName(path: accumulatePath)}' and '{Path.GetFileName(path: finalizePath)}'";
+
+            return;
+        }
+
         // The camera graph keeps this request on its worker thread for the whole run. The per-instance Inputs array
         // above is render-thread scratch, rewritten on every service pass, so attach an immutable snapshot: a later
         // generation resolve must never substitute new ring handles beneath an older run's already-opened SRVs.
         var attachedInputs = inputs.ToArray();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: Path.Combine(
-                path1: instance.RowInfo.Manifest.Directory,
-                path2: kernel.Source
-            )),
+            AccumulateBytecode: File.ReadAllBytes(path: accumulatePath),
             AccumulateEntry: kernel.Accumulate,
+            FinalizeBytecode: File.ReadAllBytes(path: finalizePath),
             FinalizeEntry: kernel.Finalize,
             Constants: instance.Constants,
             ChannelCount: instance.RowInfo.Manifest.Channels.Count,

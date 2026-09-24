@@ -37,97 +37,43 @@ public sealed class BindingBarPreferencesValidationLawTests {
             ),
             userMessage: reason
         );
-    public static IEnumerable<object[]> ContrastBoostCases() {
-        yield return [1f, true];
-        yield return [2f, true];
-        yield return [1.5f, true];
-        yield return [0.99f, false];
-        yield return [2.01f, false];
-        yield return [float.NaN, false];
-    }
-    [MemberData(nameof(ContrastBoostCases))]
+    // Each lane's admitted range: contrastBoost [1, 2], scale finite and positive, uiScale [0.5, 2].
+    public static TheoryData<string, float, bool> Cases() => new() {
+        { "contrastBoost", 1f, true },
+        { "contrastBoost", 2f, true },
+        { "contrastBoost", 1.5f, true },
+        { "contrastBoost", 0.99f, false },
+        { "contrastBoost", 2.01f, false },
+        { "contrastBoost", float.NaN, false },
+        { "scale", 1.5f, true },
+        { "scale", 0.01f, true },
+        { "scale", 0f, false },
+        { "scale", -1f, false },
+        { "scale", float.NaN, false },
+        { "scale", float.PositiveInfinity, false },
+        { "uiScale", 0.5f, true },
+        { "uiScale", 2f, true },
+        { "uiScale", 1f, true },
+        { "uiScale", 0.49f, false },
+        { "uiScale", 2.01f, false },
+        { "uiScale", float.PositiveInfinity, false },
+    };
+    [MemberData(memberName: nameof(Cases))]
     [Theory]
-    public void ProfileContrastBoostRefusesOutOfRangeByName(float contrastBoost, bool valid) {
-        var definition = WithPreferences(preferences: new BindingBarPreferences(ContrastBoost: contrastBoost));
-        var admitted = WorldDefinitionValidator.TryValidate(
-            definition: definition,
-            neighbours: null,
-            reason: out var reason
-        );
+    public void AProfileLookLaneOutsideItsRangeRefusesByName(string lane, float value, bool valid) {
+        var definition = WithPreferences(preferences: lane switch {
+            "contrastBoost" => new BindingBarPreferences(ContrastBoost: value),
+            "scale" => new BindingBarPreferences(Scale: value),
+            _ => new BindingBarPreferences(UiScale: value),
+        });
 
-        Assert.Equal(
-            actual: admitted,
-            expected: valid
-        );
-
-        if (!valid) {
-            Assert.Contains(
-                actualString: reason,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "bindingOverlays[0].document.bindingBar.contrastBoost"
-            );
+        if (valid) {
+            Laws.Validates(definition: definition);
+            return;
         }
-    }
-    [MemberData(nameof(ScaleCases))]
-    [Theory]
-    public void ProfileScaleRefusesOutOfRangeByName(float scale, bool valid) {
-        var definition = WithPreferences(preferences: new BindingBarPreferences(Scale: scale));
-        var admitted = WorldDefinitionValidator.TryValidate(
+        Laws.Refuses(
             definition: definition,
-            neighbours: null,
-            reason: out var reason
+            needle: $"bindingOverlays[0].document.bindingBar.{lane}"
         );
-
-        Assert.Equal(
-            actual: admitted,
-            expected: valid
-        );
-
-        if (!valid) {
-            Assert.Contains(
-                actualString: reason,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "bindingOverlays[0].document.bindingBar.scale"
-            );
-        }
-    }
-    [MemberData(nameof(UiScaleCases))]
-    [Theory]
-    public void ProfileUiScaleRefusesOutOfRangeByName(float uiScale, bool valid) {
-        var definition = WithPreferences(preferences: new BindingBarPreferences(UiScale: uiScale));
-        var admitted = WorldDefinitionValidator.TryValidate(
-            definition: definition,
-            neighbours: null,
-            reason: out var reason
-        );
-
-        Assert.Equal(
-            actual: admitted,
-            expected: valid
-        );
-
-        if (!valid) {
-            Assert.Contains(
-                actualString: reason,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "bindingOverlays[0].document.bindingBar.uiScale"
-            );
-        }
-    }
-    public static IEnumerable<object[]> ScaleCases() {
-        yield return [1.5f, true];
-        yield return [0.01f, true];
-        yield return [0f, false];
-        yield return [-1f, false];
-        yield return [float.NaN, false];
-        yield return [float.PositiveInfinity, false];
-    }
-    public static IEnumerable<object[]> UiScaleCases() {
-        yield return [0.5f, true];
-        yield return [2f, true];
-        yield return [1f, true];
-        yield return [0.49f, false];
-        yield return [2.01f, false];
-        yield return [float.PositiveInfinity, false];
     }
 }

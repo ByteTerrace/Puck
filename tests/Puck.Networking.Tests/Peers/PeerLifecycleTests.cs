@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Puck.Networking.Peers;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Networking.Tests.Peers;
@@ -13,7 +13,6 @@ namespace Puck.Networking.Tests.Peers;
 /// disposal returns, however close to the accept the disposal landed.</summary>
 public sealed class PeerLifecycleTests {
     private const int ConnectionsOfferedDuringDisposal = 32;
-    private const int MessagesSentToAnUnreadLink = 100;
     private const int SendsBeforeDisposal = 4;
 
     /// <summary>Sends the largest admissible payload over and over until the link refuses, signalling
@@ -71,58 +70,34 @@ public sealed class PeerLifecycleTests {
         Assert.Null(@object: peer.ListenerFault);
     }
     [Fact]
-    public async Task PeerDisposeAsync_WhenTheRemoteNeverAcknowledgesTheStreamShutdown_CompletesWithinTheSocketBudget_AndThePeerObservesConnectionClosed() {
-        using var deadline = Laws.SocketDeadline();
+    public async Task PeerDisposeAsync_WhenTheRemoteNeverAcknowledgesTheStreamShutdown_NeverWaitsForIt_AndThePeerObservesConnectionClosed() {
+        var ct = TestContext.Current.CancellationToken;
 
-        var identityA = PeerIdentity.Create();
-        var identityB = PeerIdentity.Create();
+        var (peerA, peerB, linkAtoB, linkBtoA, connectionAtA, connectionAtB) = await PeerTestSupport.ConnectInMemoryAsync(ct: ct);
 
-        var (connectionAtA, connectionAtB) = InMemoryPeerConnection.Pair(
-            keyProvedByA: identityA.SubjectPublicKeyInfo,
-            keyProvedByB: identityB.SubjectPublicKeyInfo
-        );
-        var transportB = new FakePeerTransport(dial: static _ => throw new InvalidOperationException(message: "this law never dials from B"));
+        await using var disposeB = peerB;
 
-        await using var peerB = new Peer(
-            identity: identityB,
-            transport: transportB
-        );
+        // Nothing calls connectionAtA.AcknowledgeShutdowns() while the law runs: the remote has vanished as far as
+        // A's stream shutdown is concerned. The connection is closed first, and that is what lets the stream's
+        // dispose finish; a stream shut down while the connection is still open parks on the acknowledgement
+        // instead, and the connection reports that before the dispose could ever return.
+        var disposing = peerA.DisposeAsync().AsTask();
 
-        var peerA = new Peer(
-            identity: identityA,
-            transport: new FakePeerTransport(dial: _ => connectionAtA)
-        );
+        try {
+            Assert.Same(
+                expected: disposing,
+                actual: await Task.WhenAny(
+                    task1: disposing,
+                    task2: connectionAtA.ShutdownParked
+                ).WaitAsync(cancellationToken: ct)
+            );
+        } finally {
+            // Whatever the verdict, the law is over: release any shutdown still parked so both peers can be torn down.
+            connectionAtA.AcknowledgeShutdowns();
+            connectionAtB.AcknowledgeShutdowns();
+        }
 
-        await peerB.ListenAsync(
-            ct: deadline.Token,
-            endpoint: PeerTestSupport.Loopback()
-        );
-        transportB.Accept(connection: connectionAtB);
-
-        var linkAtoB = await peerA.DialAsync(
-            ct: deadline.Token,
-            endpoint: PeerTestSupport.Loopback(port: 2)
-        );
-        var linkBtoA = await peerB.IncomingLinks.ReadAsync(cancellationToken: deadline.Token);
-
-        Assert.Equal(
-            expected: identityB.Id.Domain,
-            actual: linkAtoB.RemoteId.Domain
-        );
-
-        // Nothing ever calls connectionAtA.AcknowledgeShutdowns(): the remote has vanished as far as A's stream
-        // shutdown is concerned, so a close that waited for it would sit until the deadline. The connection is
-        // closed first, and that is what lets the stream's dispose finish.
-        var clock = Stopwatch.StartNew();
-
-        await peerA.DisposeAsync().AsTask().WaitAsync(cancellationToken: deadline.Token);
-
-        clock.Stop();
-
-        Assert.True(
-            condition: (clock.Elapsed < Laws.SocketBudget),
-            userMessage: $"disposing the peer took {clock.Elapsed}"
-        );
+        await disposing;
         Assert.True(condition: connectionAtA.IsDisposed);
         Assert.False(condition: linkAtoB.IsOpen);
         Assert.Equal(
@@ -140,50 +115,54 @@ public sealed class PeerLifecycleTests {
     }
     [Fact]
     public async Task PeerDisposeAsync_WhileADialIsInFlight_UnwindsTheDialAsDisposed_BeforeReturning() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
+        // Never advanced: no handshake deadline can expire, so whatever ends the dial is the disposal.
+        var clock = new VirtualClock();
 
         var connection = new SilentPeerConnection();
         var peer = new Peer(
             identity: PeerIdentity.Create(),
+            timeProvider: clock,
             transport: new FakePeerTransport(dial: _ => connection)
         );
 
-        // The silent stream swallows the offer and answers nothing, so the dial is parked inside its handshake by
-        // the time DialAsync hands back its task.
+        // The silent stream swallows the offer and answers nothing, so the dial parks inside its handshake, under a
+        // deadline armed on the clock.
         var dialing = peer.DialAsync(
-            ct: deadline.Token,
+            ct: ct,
             endpoint: PeerTestSupport.Loopback(port: 1)
         );
-        var clock = Stopwatch.StartNew();
 
-        await peer.DisposeAsync().AsTask().WaitAsync(cancellationToken: deadline.Token);
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: ct,
+            dueTime: PeerWireProtocol.HandshakeTimeout
+        );
+        await peer.DisposeAsync().AsTask().WaitAsync(cancellationToken: ct);
 
-        clock.Stop();
-
-        // Disposal waited for the dial to unwind — its connection is already released when DisposeAsync returns —
-        // and did not wait out the handshake clock to do it.
+        // Disposal waited for the dial to unwind — its connection is already released when DisposeAsync returns.
         Assert.True(
             condition: connection.IsDisposed,
             userMessage: "the peer was disposed while its dial still held the connection"
         );
-        Assert.True(
-            condition: (clock.Elapsed < PeerWireProtocol.HandshakeTimeout),
-            userMessage: $"disposing the peer took {clock.Elapsed}; the dial should have been cancelled, not timed out at {PeerWireProtocol.HandshakeTimeout}"
-        );
 
-        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => dialing.WaitAsync(cancellationToken: deadline.Token));
+        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => dialing.WaitAsync(cancellationToken: ct));
 
         Assert.Equal(
             expected: PeerRefusal.Disposed,
             actual: thrown.Failure.Refusal
         );
+        Assert.Equal(
+            expected: TimeSpan.Zero,
+            actual: clock.Elapsed
+        );
         Assert.Empty(collection: peer.Links);
     }
     [Fact]
-    public async Task PeerDisposeAsync_WhileASendLoopRuns_CompletesWithinTheSocketBudget_AndTheLoopIsRefusedAsConnectionClosed() {
-        using var deadline = Laws.SocketDeadline();
+    public async Task PeerDisposeAsync_WhileASendLoopRuns_Completes_AndTheLoopIsRefusedAsConnectionClosed() {
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, _) = await PeerTestSupport.ConnectAsync(ct: ct);
 
         await using var disposeB = peerB;
 
@@ -191,15 +170,15 @@ public sealed class PeerLifecycleTests {
         // transport's flow control: the loop is either mid-write or about to write when the peer is disposed.
         var enoughSent = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         var sending = SendUntilRefusedAsync(
-            ct: deadline.Token,
+            ct: ct,
             enoughSent: enoughSent,
             link: linkAtoB
         );
 
-        await enoughSent.Task.WaitAsync(cancellationToken: deadline.Token);
-        await peerA.DisposeAsync().AsTask().WaitAsync(cancellationToken: deadline.Token);
+        await enoughSent.Task.WaitAsync(cancellationToken: ct);
+        await peerA.DisposeAsync().AsTask().WaitAsync(cancellationToken: ct);
 
-        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => sending.WaitAsync(cancellationToken: deadline.Token));
+        var thrown = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => sending.WaitAsync(cancellationToken: ct));
 
         Assert.Equal(
             expected: PeerRefusal.ConnectionClosed,
@@ -214,7 +193,7 @@ public sealed class PeerLifecycleTests {
     }
     [Fact]
     public async Task PeerDisposeAsync_WhileConnectionsAreStillBeingAccepted_ReturnsOnlyOnceEveryAcceptedConnectionIsDisposed() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
         var transport = new FakePeerTransport(dial: static _ => throw new InvalidOperationException(message: "this law never dials"));
         var peer = new Peer(
@@ -223,7 +202,7 @@ public sealed class PeerLifecycleTests {
         );
 
         await peer.ListenAsync(
-            ct: deadline.Token,
+            ct: ct,
             endpoint: PeerTestSupport.Loopback()
         );
 
@@ -231,7 +210,7 @@ public sealed class PeerLifecycleTests {
         // taken but not yet counted as a handshake — at some point close to the disposal. Each one parks in its
         // handshake (no control stream ever opens), and disposal must not return while any it took is live.
         var offering = Task.Run(
-            cancellationToken: deadline.Token,
+            cancellationToken: ct,
             function: async () => {
                 for (var i = 0; (i < ConnectionsOfferedDuringDisposal); i++) {
                     transport.Accept(connection: new SilentPeerConnection());
@@ -242,8 +221,8 @@ public sealed class PeerLifecycleTests {
         );
 
         await Task.Yield();
-        await peer.DisposeAsync().AsTask().WaitAsync(cancellationToken: deadline.Token);
-        await offering.WaitAsync(cancellationToken: deadline.Token);
+        await peer.DisposeAsync().AsTask().WaitAsync(cancellationToken: ct);
+        await offering.WaitAsync(cancellationToken: ct);
 
         Assert.Null(@object: peer.ListenerFault);
 
@@ -258,27 +237,31 @@ public sealed class PeerLifecycleTests {
         );
     }
     [Fact]
-    public async Task PeerDisposeAsync_WhileTheEventsConsumerNeverReads_CompletesWithinTheSocketBudget_AndCloseFailureIsDisposed() {
-        using var deadline = Laws.SocketDeadline();
+    public async Task PeerDisposeAsync_WhileTheEventsConsumerNeverReads_CompletesWithCloseFailureDisposed() {
+        var ct = TestContext.Current.CancellationToken;
 
-        var (peerA, peerB, linkAtoB, linkBtoA) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (peerA, peerB, linkAtoB, linkBtoA, connectionAtA, connectionAtB) = await PeerTestSupport.ConnectInMemoryAsync(ct: ct);
 
         await using var disposeA = peerA;
 
-        for (var i = 0; (i < MessagesSentToAnUnreadLink); i++) {
+        for (var i = 0; (i <= PeerLink.EventsCapacity); i++) {
             await linkAtoB.SendAsync(
-                ct: deadline.Token,
+                ct: ct,
                 payload: "never read"u8.ToArray()
             );
         }
 
-        // Nobody reads linkBtoA.Events, so its read loop fills the channel and then parks on the next publish; the
-        // law disposes the peer in exactly that state.
-        await PeerTestSupport.WaitUntilAsync(
-            condition: () => (linkBtoA.Events.Count == PeerLink.EventsCapacity),
-            ct: deadline.Token
+        // Nobody reads linkBtoA.Events. Once B has read every byte A wrote, its read loop has taken one message more
+        // than the channel holds, so it is parked on that publish; the law disposes the peer in exactly that state.
+        await connectionAtB.ReadThroughAsync(
+            bytes: connectionAtA.BytesWritten,
+            ct: ct
         );
-        await peerB.DisposeAsync().AsTask().WaitAsync(cancellationToken: deadline.Token);
+        Assert.Equal(
+            expected: PeerLink.EventsCapacity,
+            actual: linkBtoA.Events.Count
+        );
+        await peerB.DisposeAsync().AsTask().WaitAsync(cancellationToken: ct);
 
         Assert.False(condition: linkBtoA.IsOpen);
         Assert.Equal(
@@ -290,11 +273,11 @@ public sealed class PeerLifecycleTests {
         // because the channel was full, which is exactly why CloseFailure exists.
         var pending = new List<PeerEvent>();
 
-        await foreach (var @event in linkBtoA.Events.ReadAllAsync(cancellationToken: deadline.Token)) {
+        await foreach (var @event in linkBtoA.Events.ReadAllAsync(cancellationToken: ct)) {
             pending.Add(item: @event);
         }
 
-        await linkBtoA.Events.Completion.WaitAsync(cancellationToken: deadline.Token);
+        await linkBtoA.Events.Completion.WaitAsync(cancellationToken: ct);
 
         Assert.Equal(
             expected: PeerLink.EventsCapacity,

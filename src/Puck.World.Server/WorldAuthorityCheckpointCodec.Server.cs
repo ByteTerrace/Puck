@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Audio.Simulation;
 using Puck.Networking;
 using Puck.Physics;
@@ -97,38 +98,12 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static void WriteIntentSubmission(WireWriter writer, IntentSubmission submission) {
-        writer.WriteUInt64(value: submission.Tick);
-        writer.WriteInt32(value: submission.EntityIndex);
-        WorldWireCodec.WriteIntent(
-            intent: submission.Intent,
+        if (!WorldWireCodec.TryWriteIntentSubmission(
+            submission: in submission,
             writer: writer
-        );
-        WritePrincipal(
-            writer: writer,
-            principal: submission.Principal
-        );
-        WorldWireCodec.WriteIntent(
-            intent: submission.HeldChannels,
-            writer: writer
-        );
-        writer.WriteInt32(value: submission.MeasuredHoldTicks);
-    }
-    private static IntentSubmission ReadIntentSubmission(ref WireReader reader) {
-        var tick = reader.ReadUInt64();
-        var entityIndex = reader.ReadInt32();
-        var intent = WorldWireCodec.ReadIntent(reader: ref reader);
-        var principal = ReadPrincipal(reader: ref reader);
-        var heldChannels = WorldWireCodec.ReadIntent(reader: ref reader);
-        var measuredHoldTicks = reader.ReadInt32();
-
-        return new IntentSubmission(
-            EntityIndex: entityIndex,
-            HeldChannels: heldChannels,
-            Intent: intent,
-            MeasuredHoldTicks: measuredHoldTicks,
-            Principal: principal,
-            Tick: tick
-        );
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(PrincipalKind)}.{submission.Principal.Kind} has no live wire value");
+        }
     }
     private static void WriteDocumentSubmission(WireWriter writer, WorldDocumentSubmission submission) {
         writer.WriteString(value: submission.SourceDocumentId);
@@ -269,8 +244,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 writer.WriteInt32(value: value.ConnectionId);
                 writer.WriteInt64(value: value.CorrelationId);
                 writer.WriteInt64(value: value.SourceAddonInstanceId);
-                WriteUInt16(
-                    writer: writer,
+                writer.WriteUInt16(
                     value: value.ActOrdinal
                 );
                 break;
@@ -317,7 +291,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     var connectionId = reader.ReadInt32();
                     var correlationId = reader.ReadInt64();
                     var sourceAddonInstanceId = reader.ReadInt64();
-                    var actOrdinal = ReadUInt16(reader: ref reader);
+                    var actOrdinal = reader.ReadUInt16();
 
                     return new WorldPendingOpCheckpoint.Mutate(
                         ActOrdinal: actOrdinal,
@@ -333,7 +307,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                         reader: ref reader,
                         tryDecode: WorldSubmissionCodec.TryDecodeRebuild
                     );
-                    var principal = ReadPrincipal(reader: ref reader);
+                    var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
                     var connectionId = reader.ReadInt32();
                     var correlationId = reader.ReadInt64();
                     var expectedContentHash = reader.ReadNullableString(
@@ -356,7 +330,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 }
             case 2: {
                     var count = reader.ReadInt32();
-                    var principal = ReadPrincipal(reader: ref reader);
+                    var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
                     var connectionId = reader.ReadInt32();
                     var correlationId = reader.ReadInt64();
 
@@ -367,7 +341,6 @@ public static partial class WorldAuthorityCheckpointCodec {
                         Principal: principal
                     );
                 }
-            // Discriminant 3 (the retired pending addon-lifecycle op) is unassigned and never reused.
             default:
                 if (!reader.Failed) {
                     reader.Fail(
@@ -392,14 +365,15 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBlock(value: section.DefinitionJson);
         writer.WriteBlock(value: section.BaseDefinitionJson);
         writer.WriteString(value: section.BaseOrigin);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.ArenaKeys,
             writeItem: WriteArenaKey
         );
-        WriteOptionalClass(writer, section.Undo, WriteUndoHistory);
-        WriteArray(
-            writer: writer,
+        writer.WriteOptionalClass(
+            value: section.Undo,
+            writeValue: WriteUndoHistory
+        );
+        writer.WriteArray(
             items: section.Journal,
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
@@ -414,23 +388,19 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: section.LastCompletedTick);
         writer.WriteUInt64(value: section.LastCompletedEngineTicks);
         writer.WriteUInt64(value: section.LastStepTicks);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Intents,
             writeItem: WriteIntentSubmission
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Pending,
             writeItem: WritePendingOp
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.RuleGateHeld,
             writeItem: WriteRuleLatchEntry
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.RuleGroups,
             writeItem: static (w, row) => {
                 w.WriteString(value: row.Group);
@@ -439,10 +409,9 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteBoolean(value: row.Breached);
             }
         );
-        WriteArray(
-            writer,
-            section.Decisions,
-            static (w, s) => {
+        writer.WriteArray(
+            items: section.Decisions,
+            writeItem: static (w, s) => {
                 w.WriteString(value: s.Rule); w.WriteInt32(value: s.Key); w.WriteInt32(value: s.Generation); w.WriteInt32(value: s.Selected);
                 w.WriteBoolean(value: s.Evaluated); w.WriteBoolean(value: s.InterruptHeld);
                 w.WriteUInt64(value: s.PeriodRemaining); w.WriteUInt64(value: s.CommitmentRemaining); w.WriteUInt64(value: s.RandomState);
@@ -450,39 +419,33 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteInt32(value: s.Candidate); w.WriteInt32(value: s.CandidateGeneration);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.InteractionGateHeld,
             writeItem: WriteRuleLatchEntry
         );
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: section.LastDocumentReceipt,
             writeValue: WriteDocumentReceipt
         );
         writer.WriteInt32(value: section.SolidRevision);
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: section.MusicClockElapsedTicks,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
         writer.WriteNullableString(value: section.MusicDirectorCurrentSegmentId);
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: section.MusicDirectorArmed,
             writeValue: WriteMusicTransition
         );
         writer.WriteUInt64(value: section.MusicDirectorTransitionCount);
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: section.MusicDirectorLastTransitionTick,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
         writer.WriteNullableString(value: section.MusicDirectorLastTransitionFromSegmentId);
         writer.WriteNullableString(value: section.MusicDirectorLastTransitionToSegmentId);
         writer.WriteNullableString(value: section.MusicDirectorLastEmbellishmentPatchId);
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: section.MusicDirectorLastEmbellishmentTick,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
@@ -518,8 +481,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "server base origin",
             maxBytes: MaxStringBytes
         );
-        var arenaKeys = ReadArray(
-            reader: ref reader,
+        var arenaKeys = reader.ReadArray(
             field: "server arena keys",
             maximum: StateCapacity.MaxCellKeys,
             readItem: static (ref WireReader r) => ReadArenaKey(reader: ref r)
@@ -539,9 +501,10 @@ public static partial class WorldAuthorityCheckpointCodec {
                 }
             }
         }
-        var undo = ReadOptionalClass(readValue: ReadUndoHistory, reader: ref reader);
-        var journal = ReadArray(
-            reader: ref reader,
+        var undo = reader.ReadOptionalClass(
+            readValue: ReadUndoHistory
+        );
+        var journal = reader.ReadArray(
             field: "server journal",
             readItem: static (ref WireReader r) => {
                 var tick = r.ReadUInt64();
@@ -553,31 +516,31 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
 
                 return (tick, engineTick, mutation!);
-            }
+            },
+            maximum: MaxCollectionCount
         );
         var lastCompletedTick = reader.ReadUInt64();
         var lastCompletedEngineTicks = reader.ReadUInt64();
         var lastStepTicks = reader.ReadUInt64();
-        var intents = ReadArray(
-            reader: ref reader,
+        var intents = reader.ReadArray(
             field: "server intents",
-            readItem: static (ref WireReader r) => ReadIntentSubmission(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var pending = ReadArray(
-            reader: ref reader,
+        var pending = reader.ReadArray(
             field: "server pending",
-            readItem: static (ref WireReader r) => ReadPendingOp(reader: ref r)
+            readItem: static (ref WireReader r) => ReadPendingOp(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var ruleGateHeld = ReadArray(
-            reader: ref reader,
+        var ruleGateHeld = reader.ReadArray(
             field: "server rule gate held",
             readItem: static (ref WireReader r) => ReadRuleLatchEntry(
                 field: "rule gate",
                 reader: ref r
-            )
+            ),
+            maximum: MaxCollectionCount
         );
-        var ruleGroups = ReadArray(
-            reader: ref reader,
+        var ruleGroups = reader.ReadArray(
             field: "server rule groups",
             readItem: static (ref WireReader r) => new WorldRuleGroupEntry(
                 Group: r.ReadString(
@@ -587,12 +550,12 @@ public static partial class WorldAuthorityCheckpointCodec {
                 Step: r.ReadInt32(),
                 Running: r.ReadBoolean(),
                 Breached: r.ReadBoolean()
-            )
+            ),
+            maximum: MaxCollectionCount
         );
-        var decisions = ReadArray(
-            ref reader,
-            "server decisions",
-            static (ref WireReader r) => new WorldDecisionCheckpoint(
+        var decisions = reader.ReadArray(
+            field: "server decisions",
+            readItem: static (ref WireReader r) => new WorldDecisionCheckpoint(
                 r.ReadString(
                     field: "decision rule",
                     maxBytes: MaxStringBytes
@@ -610,36 +573,33 @@ public static partial class WorldAuthorityCheckpointCodec {
                 r.ReadInt64(),
                 r.ReadInt32(),
                 r.ReadInt32()
-            )
+            ),
+            maximum: MaxCollectionCount
         );
-        var interactionGateHeld = ReadArray(
-            reader: ref reader,
+        var interactionGateHeld = reader.ReadArray(
             field: "server interaction gate held",
             readItem: static (ref WireReader r) => ReadRuleLatchEntry(
                 field: "interaction gate",
                 reader: ref r
-            )
+            ),
+            maximum: MaxCollectionCount
         );
-        var lastDocumentReceipt = ReadOptional(
-            reader: ref reader,
+        var lastDocumentReceipt = reader.ReadOptional(
             readValue: static (ref WireReader r) => ReadDocumentReceipt(reader: ref r)
         );
         var solidRevision = reader.ReadInt32();
-        var musicClockElapsedTicks = ReadOptional(
-            reader: ref reader,
+        var musicClockElapsedTicks = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
         var musicDirectorCurrentSegmentId = reader.ReadNullableString(
             field: "music director segment",
             maxBytes: MaxStringBytes
         );
-        var musicDirectorArmed = ReadOptional(
-            reader: ref reader,
+        var musicDirectorArmed = reader.ReadOptional(
             readValue: static (ref WireReader r) => ReadMusicTransition(reader: ref r)
         );
         var musicDirectorTransitionCount = reader.ReadUInt64();
-        var musicDirectorLastTransitionTick = ReadOptional(
-            reader: ref reader,
+        var musicDirectorLastTransitionTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
         var musicDirectorLastTransitionFromSegmentId = reader.ReadNullableString(
@@ -654,8 +614,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "music director last embellishment patch",
             maxBytes: MaxStringBytes
         );
-        var musicDirectorLastEmbellishmentTick = ReadOptional(
-            reader: ref reader,
+        var musicDirectorLastEmbellishmentTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
 
@@ -668,7 +627,6 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         section = new WorldServerCheckpoint(
             ArenaKeys: arenaKeys,
-            Undo: undo,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,
@@ -692,7 +650,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             Pending: pending,
             RuleGateHeld: ruleGateHeld,
             RuleGroups: ruleGroups,
-            SolidRevision: solidRevision
+            SolidRevision: solidRevision,
+            Undo: undo
         );
         reason = string.Empty;
 
@@ -700,7 +659,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     // ---- population section ----
 
-    private static void WriteTransferState(WireWriter writer, WorldBody.TransferState state) {
+    private static void WriteTransferState(WireWriter writer, WorldBodyTransferState state) {
         writer.WriteFixedVector(value: state.PlanarVelocity);
         writer.WriteFixed(value: state.VerticalVelocity);
         writer.WriteFixedQuaternion(value: state.Orientation);
@@ -778,8 +737,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             values: state.ActionStateDirty
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: state.ActionStateDirtyKind,
             writeItem: static (w, v) => w.WriteByte(value: ((byte)v))
         );
@@ -804,8 +762,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             values: state.DurableInputWriters
         );
         writer.WriteUInt64(value: state.DurableInputTick);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: state.TapeIntents,
             writeItem: WorldWireCodec.WriteIntent
         );
@@ -813,13 +770,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             values: state.TapeRemainingTicks
         );
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: state.PendingContinuum,
             writeValue: WriteContinuum
         );
     }
-    private static WorldBody.TransferState ReadTransferState(ref WireReader reader) {
+    private static WorldBodyTransferState ReadTransferState(ref WireReader reader) {
         var planarVelocity = reader.ReadFixedVector();
         var verticalVelocity = reader.ReadFixed();
         var orientation = reader.ReadFixedQuaternion();
@@ -838,7 +794,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "body motion program name",
             maxBytes: MaxStringBytes
         );
-        var source = ReadIntentSource(reader: ref reader);
+        var source = WorldWireCodec.ReadIntentSource(reader: ref reader);
         var previousChannelBit = ReadBoolArray(
             field: "previous channel bit",
             reader: ref reader
@@ -894,8 +850,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "action state dirty",
             reader: ref reader
         );
-        var actionStateDirtyKind = ReadArray(
-            reader: ref reader,
+        var actionStateDirtyKind = reader.ReadArray(
             field: "action state dirty kind",
             readItem: static (ref WireReader r) => {
                 var kind = ((WorldDocumentWriteKind)r.ReadByte());
@@ -911,7 +866,8 @@ public static partial class WorldAuthorityCheckpointCodec {
                 }
 
                 return kind;
-            }
+            },
+            maximum: MaxCollectionCount
         );
         var actionStateDirtyOperand = ReadFixedArray(
             field: "action state dirty operand",
@@ -934,21 +890,20 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader
         );
         var durableInputTick = reader.ReadUInt64();
-        var tapeIntents = ReadArray(
-            reader: ref reader,
+        var tapeIntents = reader.ReadArray(
             field: "tape intents",
-            readItem: static (ref WireReader r) => WorldWireCodec.ReadIntent(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadIntent(reader: ref r),
+            maximum: MaxCollectionCount
         );
         var tapeRemainingTicks = ReadULongArray(
             field: "tape remaining ticks",
             reader: ref reader
         );
-        var pendingContinuum = ReadOptional(
-            reader: ref reader,
+        var pendingContinuum = reader.ReadOptional(
             readValue: static (ref WireReader r) => ReadContinuum(reader: ref r)
         );
 
-        return new WorldBody.TransferState(
+        return new WorldBodyTransferState(
             ActionState: actionState,
             ActionStateDirty: actionStateDirty,
             ActionStateDirtyKind: actionStateDirtyKind,
@@ -1035,7 +990,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return rows;
     }
-    private static void WriteResidue(WireWriter writer, WorldBody.IntegrationResidue residue) {
+    private static void WriteResidue(WireWriter writer, WorldBodyIntegrationResidue residue) {
         writer.WriteFixedVector(value: residue.PreviousPosition);
         writer.WriteInt64(value: residue.PositionRemainderX);
         writer.WriteInt64(value: residue.PositionRemainderY);
@@ -1052,8 +1007,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer
         );
         writer.WriteBoolean(value: residue.OrdinaryAdvanceAdmitted);
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: residue.ContinuumConsumedThroughEngineTick,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
@@ -1090,7 +1044,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: residue.Carrying);
         writer.WriteInt32(value: residue.CarriedBy);
     }
-    private static WorldBody.IntegrationResidue ReadResidue(ref WireReader reader) {
+    private static WorldBodyIntegrationResidue ReadResidue(ref WireReader reader) {
         var previousPosition = reader.ReadFixedVector();
         var positionRemainderX = reader.ReadInt64();
         var positionRemainderY = reader.ReadInt64();
@@ -1104,8 +1058,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var engaged = reader.ReadBoolean();
         var engagedIntent = WorldWireCodec.ReadIntent(reader: ref reader);
         var ordinaryAdvanceAdmitted = reader.ReadBoolean();
-        var continuumConsumedThroughEngineTick = ReadOptional(
-            reader: ref reader,
+        var continuumConsumedThroughEngineTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
         var affectingSubject = reader.ReadInt32();
@@ -1138,7 +1091,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var carrying = reader.ReadInt32();
         var carriedBy = reader.ReadInt32();
 
-        return new WorldBody.IntegrationResidue(
+        return new WorldBodyIntegrationResidue(
             AffectingSubject: affectingSubject,
             AsleepSinceTick: asleepSinceTick,
             AttitudeLeaned: attitudeLeaned,
@@ -1185,7 +1138,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             VerticalVelocityRemainder: verticalVelocityRemainder
         );
     }
-    private static void WriteTetherResidue(WireWriter writer, WorldBody.TetherResidue residue) {
+    private static void WriteTetherResidue(WireWriter writer, WorldBodyTetherResidue residue) {
         writer.WriteBoolean(value: residue.AttachPreviousBit);
         writer.WriteBoolean(value: residue.DetachPreviousBit);
         writer.WriteBoolean(value: residue.Tether.HasValue);
@@ -1199,7 +1152,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: residue.TetherAnchorBodyIndex);
         writer.WriteFixedVector(value: residue.TetherAnchorPointOrLocalOffset);
     }
-    private static WorldBody.TetherResidue ReadTetherResidue(ref WireReader reader) {
+    private static WorldBodyTetherResidue ReadTetherResidue(ref WireReader reader) {
         var attachPreviousBit = reader.ReadBoolean();
         var detachPreviousBit = reader.ReadBoolean();
         var tether = (reader.ReadBoolean()
@@ -1213,7 +1166,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var tetherAnchorBodyIndex = reader.ReadInt32();
         var tetherAnchorPointOrLocalOffset = reader.ReadFixedVector();
 
-        return new WorldBody.TetherResidue(
+        return new WorldBodyTetherResidue(
             AttachPreviousBit: attachPreviousBit,
             DetachPreviousBit: detachPreviousBit,
             Tether: tether,

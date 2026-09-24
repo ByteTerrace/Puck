@@ -111,16 +111,16 @@ public static partial class WorldConstructs {
             RootArm: WorldRootArm.Rules,
             Shape: WorldConstructShape.Block,
             Snippet: "rules ${1:name} {\n    rule \"${2:member}\" {\n        $0\n    }\n}",
-            Sugar: new(Fallback: "one `rule` block per member, each carrying its own copy of the shared header", Open: true, Printed: false),
+            Sugar: WorldConstructSugar.ReadBack(condition: "a rule's or group's name joins scope names to its own with `$` and every part is a name: each member prints inside one `rules` scope per part, carrying its own copy of the shared header"),
             Summary: "A shared header for several rules: its gate, locals and properties apply to every member."
         ),
         new(
             DocumentMember: "ruleGroups[]",
-            Grammar: "stabilize name [undo({ rows: [row], depth: n })] [maxPasses(n)] [until Gate] { rule \"name\" { … } … }",
+            Grammar: "stabilize name [undo({ rows [row] depth: n })] [maxPasses(n)] [until Gate] { rule \"name\" { … } … }",
             Keyword: "stabilize",
             Members: [
                 RowName(summary: "The group's name, prefixed onto every rule it claims."),
-                new(DocumentKeys: ["undo"], Kind: WorldMemberKind.Value, Name: "undo", Position: WorldMemberPosition.Modifier, Summary: "The rows and bounded number of completed turns retained for rewindTurn."),
+                new(DocumentKeys: ["undo"], Kind: WorldMemberKind.Value, Name: "undo", Position: WorldMemberPosition.Modifier, Summary: "The rows and bounded number of completed turns retained for rewindGroup."),
                 new(
                     DocumentKeys: ["passes"],
                     Kind: WorldMemberKind.Number,
@@ -141,7 +141,7 @@ public static partial class WorldConstructs {
                     Name: "members",
                     Position: WorldMemberPosition.Body,
                     Required: true,
-                    Summary: "The rules the group claims, named `<group>_<rule>`; a group with no member is refused."
+                    Summary: "The rules the group claims, named `<group>$<rule>`; a group with no member is refused."
                 ),
             ],
             RootArm: WorldRootArm.RuleGroups,
@@ -158,11 +158,11 @@ public static partial class WorldConstructs {
         ),
         new(
             DocumentMember: "ruleGroups[]",
-            Grammar: "workflow name [undo({ rows: [row], depth: n })] { step name [skip] { … } … }",
+            Grammar: "workflow name [undo({ rows [row] depth: n })] { step name [skip] { … } … }",
             Keyword: "workflow",
             Members: [
                 RowName(summary: "The group's name, prefixed onto every step it claims."),
-                new(DocumentKeys: ["undo"], Kind: WorldMemberKind.Value, Name: "undo", Position: WorldMemberPosition.Modifier, Summary: "The rows and bounded number of completed turns retained for rewindTurn."),
+                new(DocumentKeys: ["undo"], Kind: WorldMemberKind.Value, Name: "undo", Position: WorldMemberPosition.Modifier, Summary: "The rows and bounded number of completed turns retained for rewindGroup."),
                 new(
                     DocumentKeys: ["steps"],
                     Kind: WorldMemberKind.Statements,
@@ -486,14 +486,14 @@ public static partial class WorldConstructs {
                 ),
             ],
             snippet: "push ${1:row} = ${2:value}",
-            summary: "Appends a value to an ordered row, minting its key."
+            summary: "Appends a value to a history ring, overwriting the oldest slot when the ring is full."
         ),
         Effect(
             documentMember: "rules[].effects[][removeStateCell]",
             grammar: "remove row[key]",
             keyword: "remove",
             snippet: "remove ${1:row}",
-            summary: "Drops a cell, so later reads see it absent rather than zero."
+            summary: "Drops a cell from its row; a later read of that key reads zero."
         ),
         Effect(
             documentMember: "rules[].effects[][scheduleState]",
@@ -674,7 +674,7 @@ public static partial class WorldConstructs {
                 Condition: "the algebra reads the row back and prints it, and its name reads as a bare identifier",
                 Fallback: "the generic value path, for the whole `sets` array"
             ),
-            Summary: "One named set over the positions of a board, a zone, or a family."
+            Summary: "One named set over the positions of a board, a zone, or a family, which `boardCombine` and `writeSet` read by name."
         ),
         new(
             DocumentMember: "(nothing)",

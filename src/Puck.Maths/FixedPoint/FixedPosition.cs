@@ -113,48 +113,16 @@ public readonly record struct FixedPosition
 
         return true;
     }
-    private static bool TryAdd(long left, long right, out long result) {
-        result = unchecked((left + right));
-
-        return (((left ^ result) & (right ^ result)) >= 0L);
-    }
-    private static bool TryCreateFromRaw(long cellX, long cellY, long cellZ, long localX, long localY, long localZ, out FixedPosition result) {
-        if (
-            !TryNormalizeComponent(
-            cell: cellX,
-            localRaw: localX,
-            normalizedCell: out var normalizedCellX,
-            normalizedLocalRaw: out var normalizedLocalX
-        ) ||
-            !TryNormalizeComponent(
-            cell: cellY,
-            localRaw: localY,
-            normalizedCell: out var normalizedCellY,
-            normalizedLocalRaw: out var normalizedLocalY
-        ) ||
-            !TryNormalizeComponent(
-            cell: cellZ,
-            localRaw: localZ,
-            normalizedCell: out var normalizedCellZ,
-            normalizedLocalRaw: out var normalizedLocalZ
-        )
-        ) {
-            result = Zero;
-
-            return false;
-        }
-
-        result = CreateCanonical(
-            cellX: normalizedCellX,
-            cellY: normalizedCellY,
-            cellZ: normalizedCellZ,
-            localX: normalizedLocalX,
-            localY: normalizedLocalY,
-            localZ: normalizedLocalZ
+    private static bool TryCreateFromRaw(long cellX, long cellY, long cellZ, long localX, long localY, long localZ, out FixedPosition result) =>
+        TryCreateFromRaw(
+            cellX: cellX,
+            cellY: cellY,
+            cellZ: cellZ,
+            localX: ((Int128)localX),
+            localY: ((Int128)localY),
+            localZ: ((Int128)localZ),
+            result: out result
         );
-
-        return true;
-    }
     private static bool TryCreateFromRaw(long cellX, long cellY, long cellZ, Int128 localX, Int128 localY, Int128 localZ, out FixedPosition result) {
         if (
             !TryNormalizeComponent(
@@ -375,20 +343,20 @@ public readonly record struct FixedPosition
     /// <returns><see langword="true"/> when the translated position has a canonical representation.</returns>
     public bool TryTranslate(FixedVector3 delta, out FixedPosition result) {
         if (
-            TryAdd(
+            BinaryIntegerFunctions.TryAdd(
             left: Local.X.Value,
             right: delta.X.Value,
-            result: out var localX
+            sum: out var localX
         ) &&
-            TryAdd(
+            BinaryIntegerFunctions.TryAdd(
             left: Local.Y.Value,
             right: delta.Y.Value,
-            result: out var localY
+            sum: out var localY
         ) &&
-            TryAdd(
+            BinaryIntegerFunctions.TryAdd(
             left: Local.Z.Value,
             right: delta.Z.Value,
-            result: out var localZ
+            sum: out var localZ
         )
         ) {
             return TryCreateFromRaw(

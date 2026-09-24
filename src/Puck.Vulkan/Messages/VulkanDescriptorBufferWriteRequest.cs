@@ -1,3 +1,4 @@
+using Puck.Vulkan.Interop;
 namespace Puck.Vulkan.Messages;
 
 /// <summary>
@@ -10,7 +11,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="BufferRange">The size, in bytes, of the bound region, or <c>VK_WHOLE_SIZE</c>.</param>
 /// <param name="DescriptorSetHandle">The native <c>VkDescriptorSet</c> handle being updated.</param>
 /// <param name="DescriptorType">The type of the descriptor, as a <c>VkDescriptorType</c> value.</param>
-/// <param name="DeviceHandle">The native <c>VkDevice</c> handle.</param>
+/// <param name="Device">The command table of the logical device.</param>
 public readonly record struct VulkanDescriptorBufferWriteRequest(
     uint ArrayElement,
     uint Binding,
@@ -19,5 +20,5 @@ public readonly record struct VulkanDescriptorBufferWriteRequest(
     ulong BufferRange,
     nint DescriptorSetHandle,
     uint DescriptorType,
-    nint DeviceHandle
+    VulkanDeviceCommands Device
 );

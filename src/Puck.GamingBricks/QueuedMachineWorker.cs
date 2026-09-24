@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 
 namespace Puck.GamingBricks;
 
@@ -32,8 +31,6 @@ public sealed class QueuedMachineWorker : IDisposable {
     // ~5 seconds at 59.73 fps between battery-save disk writes while dirty; counted in native frames, not work items.
     private const int SaveFlushIntervalFrames = 300;
 
-    private readonly int m_audioCapacityFrames;
-    private readonly short[] m_audioRing;
     private readonly int m_audioSampleRate;
     private readonly int m_frameByteLength;
     private readonly int m_height;
@@ -42,13 +39,14 @@ public sealed class QueuedMachineWorker : IDisposable {
     private readonly int m_width;
     private readonly string m_workerName;
 
-    private int m_audioFrameCount;
-    private int m_audioReadFrame;
-    private int m_audioWriteFrame;
+    // One emulated second of stereo frames, empty while detached. Guarded by m_audioLock: the worker thread pushes and a
+    // consumer reads from any thread.
+    private StereoSampleRing m_audioRing;
     private nint m_boundSourceView;
     private long m_checkpointCompletedSteps;
     private IQueuedMachineCore? m_core;
-    private ulong m_cycleRemainder;
+    // The host tick-to-cycle phase: the remainder each engine-tick budget carries into the next conversion.
+    private RationalRateAccumulator m_cyclePhase;
     private int m_disposed;
     private Vector3 m_emittedLight;
     private long m_frameVersion;
@@ -124,19 +122,12 @@ public sealed class QueuedMachineWorker : IDisposable {
         m_frameByteLength = ((width * height) * 4);
         m_maximumPendingSteps = maximumPendingSteps;
         m_audioSampleRate = audioSampleRate;
-        m_audioCapacityFrames = Math.Max(
-            val1: audioSampleRate,
-            val2: 1
-        ); // one emulated second of stereo frames, unused (empty ring) while detached
+        m_audioRing.Configure(capacityFrames: audioSampleRate);
         m_workerName = workerName;
         m_lifecycle = new QueuedWorkerLifecycle<WorkItem>(
             maximumPendingSteps: maximumPendingSteps,
             role: "worker",
             workerName: workerName
-        );
-        m_audioRing = ((audioSampleRate > 0)
-            ? new short[(m_audioCapacityFrames * 2)]
-            : []
         );
         m_rgbaFront = new byte[m_frameByteLength];
         m_rgbaBack = new byte[m_frameByteLength];
@@ -240,7 +231,9 @@ public sealed class QueuedMachineWorker : IDisposable {
             written = core.DrainAudioSamples(destination: scratch);
 
             if (written > 0) {
-                PushAudioFrames(samples: scratch[..written]);
+                lock (m_audioLock) {
+                    m_audioRing.Push(interleaved: scratch[..written]);
+                }
             }
         } while (written == scratch.Length);
     }
@@ -272,7 +265,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 buffer: restore.CoreState,
                 length: restore.CoreState.Length
             );
-            m_cycleRemainder = restore.CycleRemainder;
+            m_cyclePhase = new RationalRateAccumulator(phase: checked((long)restore.CycleRemainder));
             Interlocked.Exchange(
                 location1: ref m_checkpointCompletedSteps,
                 value: restore.CompletedSteps
@@ -298,7 +291,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         request.Result = new(
             core.CheckpointIdentity,
             bytes[..length],
-            m_cycleRemainder,
+            ((ulong)m_cyclePhase.Phase),
             CompletedSteps,
             status.FastForwardFactor,
             status.RunaheadFrames
@@ -385,7 +378,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                     // produced under (atomic with the core, so identical future ticks buy identical budgets — H-04),
                     // clear the host audio ring and republish the motor level from the restored core so no consumer
                     // hears samples or feels rumble from the abandoned future (M-01), then re-stage the landed frame.
-                    m_cycleRemainder = landedAccumulator;
+                    m_cyclePhase = landedAccumulator;
 
                     ResetAudioRing();
 
@@ -430,25 +423,6 @@ public sealed class QueuedMachineWorker : IDisposable {
 
             m_emittedLight = light;
             ++m_frameVersion;
-        }
-    }
-    // Appends drained stereo frames to the worker's ring; when full, the oldest frame is dropped so the ring always
-    // holds the newest emulated second (mirrors the cores' own ring-drop-oldest discipline).
-    private void PushAudioFrames(ReadOnlySpan<short> samples) {
-        lock (m_audioLock) {
-            for (var index = 0; (index < samples.Length); index += 2) {
-                if (m_audioFrameCount == m_audioCapacityFrames) {
-                    m_audioReadFrame = ((m_audioReadFrame + 1) % m_audioCapacityFrames);
-                    --m_audioFrameCount;
-                }
-
-                var writeIndex = (m_audioWriteFrame * 2);
-
-                m_audioRing[writeIndex] = samples[index];
-                m_audioRing[(writeIndex + 1)] = samples[(index + 1)];
-                m_audioWriteFrame = ((m_audioWriteFrame + 1) % m_audioCapacityFrames);
-                ++m_audioFrameCount;
-            }
         }
     }
     // Repack the framebuffer's 0x00RRGGBB pixels as opaque R,G,B,A bytes into the reused staging array and compute the
@@ -524,9 +498,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     // never replay stale output across a cart swap.
     private void ResetAudioRing() {
         lock (m_audioLock) {
-            m_audioFrameCount = 0;
-            m_audioReadFrame = 0;
-            m_audioWriteFrame = 0;
+            m_audioRing.Clear();
         }
     }
     private QueuedMachineCheckpoint RunCheckpoint(QueuedMachineCheckpoint? restore) {
@@ -641,16 +613,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             body: () => WorkerLoop(core: core),
             resetCounters: resetCounters
         );
-    // Consume a tick budget against the exact integer accumulator and return the machine-cycle budget it buys under the
-    // core's current rate. Carried on the worker thread so a rate that tracks emulated state (a clock-multiplier latch) is
-    // read consistently with the cycles it gates.
-    private ulong TakeCycleBudget(IQueuedMachineCore core, ulong ticks) {
-        var scaled = checked(((ticks * core.CyclesPerSecond) + m_cycleRemainder));
-
-        m_cycleRemainder = (scaled % EngineTicks.PerSecond);
-
-        return (scaled / EngineTicks.PerSecond);
-    }
     private void ThrowIfLent(string operation) {
         if (m_lent) {
             throw new InvalidOperationException(message: $"The {m_workerName} core is lent to a cable link; sever the link before attempting to {operation} it.");
@@ -688,16 +650,18 @@ public sealed class QueuedMachineWorker : IDisposable {
                         // RunCycles call. The accumulator carries across each sub-step, so every rewind record owns the
                         // exact budget and phase that produced it while the framebuffer is still staged only once below.
                         for (var i = 0; (i < factor); ++i) {
-                            var budget = checked((long)TakeCycleBudget(
-                                core: core,
+                            // The rate is read here, on the worker thread, so a rate that tracks emulated state (a
+                            // clock-multiplier latch) is read consistently with the cycles it gates.
+                            var budget = m_cyclePhase.TakeCycleBudget(
+                                cyclesPerSecond: core.CyclesPerSecond,
                                 ticks: current.DeltaTicks
-                            ));
+                            );
 
                             core.ApplyInput(input: in input);
                             core.RunCycles(cycles: budget);
                             m_timeTravel?.Record(
                                 budget: budget,
-                                hostAccumulator: m_cycleRemainder,
+                                hostAccumulator: m_cyclePhase,
                                 input: in input
                             );
                         }
@@ -933,7 +897,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 core: core,
                 cyclesPerSecond: core.CyclesPerSecond
             );
-            m_cycleRemainder = 0UL;
+            m_cyclePhase.Reset();
             Interlocked.Exchange(
                 location1: ref m_checkpointCompletedSteps,
                 value: 0
@@ -1094,22 +1058,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
 
         lock (m_audioLock) {
-            var frames = Math.Min(
-                val1: (destination.Length / 2),
-                val2: m_audioFrameCount
-            );
-
-            for (var frame = 0; (frame < frames); ++frame) {
-                var index = (m_audioReadFrame * 2);
-
-                destination[(frame * 2)] = m_audioRing[index];
-                destination[((frame * 2) + 1)] = m_audioRing[(index + 1)];
-                m_audioReadFrame = ((m_audioReadFrame + 1) % m_audioCapacityFrames);
-            }
-
-            m_audioFrameCount -= frames;
-
-            return (frames * 2);
+            return m_audioRing.Read(destination: destination);
         }
     }
     /// <summary>Reconfigures the attached core live across the engine's options vocabulary (marshaled between steps), so a
@@ -1176,7 +1125,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// the core is about to be torn down.</summary>
     /// <param name="hostAccumulator">The link's tick-to-cycle accumulator phase at the sever, adopted as this worker's
     /// own so the conversion carries no drift across the seam.</param>
-    public void ReturnCore(ulong hostAccumulator) {
+    public void ReturnCore(RationalRateAccumulator hostAccumulator) {
         // A lender's own teardown (LinkedMachineGroup.Dispose) calls this for every member, including one that is
         // concurrently severing itself through its own Dispose/DetachCore — which holds m_lifecycleLock for that
         // whole call, cascading into the lender's Dispose while still holding it. Bailing out here on the volatile
@@ -1201,7 +1150,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 return;
             }
 
-            m_cycleRemainder = hostAccumulator;
+            m_cyclePhase = hostAccumulator;
             m_timeTravel = new MachineTimeTravel<MachinePadState>(
                 core: core,
                 cyclesPerSecond: core.CyclesPerSecond

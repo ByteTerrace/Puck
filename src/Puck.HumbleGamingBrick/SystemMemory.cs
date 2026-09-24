@@ -66,14 +66,8 @@ public sealed class SystemMemory : ISnapshotable {
         m_workRamBank = 1;
     }
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_videoRamBank = reader.ReadInt32();
-        m_workRamBank = reader.ReadInt32();
-        reader.ReadBytes(destination: m_videoRam);
-        reader.ReadBytes(destination: m_workRam);
-        reader.ReadBytes(destination: m_objectAttributeMemory);
-        reader.ReadBytes(destination: m_highRam);
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <summary>Writes one byte at a CPU-space address, but ONLY into work RAM (0xC000–0xFDFF, echo folded) or high RAM
     /// (0xFF80–0xFFFE) — the live device swap's flag-poke seam. Any other address (ROM, I/O, VRAM, OAM) is ignored, so a
     /// mode recipe can never reach outside the game's own scratch state.</summary>
@@ -127,14 +121,18 @@ public sealed class SystemMemory : ISnapshotable {
     public byte ReadWorkRam(ushort address) =>
         m_workRam[WorkRamOffset(address: address)];
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteInt32(value: m_videoRamBank);
-        writer.WriteInt32(value: m_workRamBank);
-        writer.WriteBytes(value: m_videoRam);
-        writer.WriteBytes(value: m_workRam);
-        writer.WriteBytes(value: m_objectAttributeMemory);
-        writer.WriteBytes(value: m_highRam);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Int32(value: ref m_videoRamBank);
+        transfer.Int32(value: ref m_workRamBank);
+        transfer.Block(values: m_videoRam);
+        transfer.Block(values: m_workRam);
+        transfer.Block(values: m_objectAttributeMemory);
+        transfer.Block(values: m_highRam);
     }
+
     /// <summary>Writes a byte of high RAM.</summary>
     /// <param name="address">An address in <c>[0xFF80, 0xFFFE]</c>.</param>
     /// <param name="value">The byte to store.</param>

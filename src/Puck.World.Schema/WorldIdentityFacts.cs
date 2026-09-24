@@ -30,6 +30,65 @@ public static class WorldIdentityFactLane {
     /// <see cref="CellName"/> admits that a decimal body index never contains.</summary>
     public const char Separator = '-';
 
+    /// <summary>Refuses a lane row that declares a value-over-time trait — <c>advance</c>, <c>dynamics</c>, or
+    /// <c>cycle</c>, on the row or on any of its cells — naming each one.</summary>
+    /// <param name="row">The declared lane row.</param>
+    /// <param name="reason">The refusal naming every trait the row declares, or empty when it declares none.</param>
+    /// <returns><see langword="true"/> when the row declares no trait.</returns>
+    /// <remarks>A fact is a stored integer: the server compares and persists the lane's stored value, while a rule
+    /// operand reads the live one. A trait would make the two differ, so a rule would read a value that is never
+    /// compared or persisted. The validator and the rule compiler both refuse through this one check.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
+    public static bool TryAdmitTraits(StateRow row, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        List<string>? traits = null;
+
+        Collect(
+            advance: row.Advance,
+            cycle: row.Cycle,
+            dynamics: row.Dynamics,
+            prefix: string.Empty,
+            traits: ref traits
+        );
+
+        foreach (var cell in (row.Cells ?? [])) {
+            if (cell is not null) {
+                Collect(
+                    advance: cell.Advance,
+                    cycle: cell.Cycle,
+                    dynamics: cell.Dynamics,
+                    prefix: $"cells['{cell.Key}'].",
+                    traits: ref traits
+                );
+            }
+        }
+
+        if (traits is null) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        reason = $"state.world row '{RowName}' is the reserved identity fact lane and declares {string.Join(
+            separator: ", ",
+            values: traits
+        )}; a fact is a stored integer, so the lane carries no value-over-time trait.";
+
+        return false;
+
+        static void Collect(StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, string prefix, ref List<string>? traits) {
+            if (advance is not null) {
+                (traits ??= []).Add(item: $"{prefix}advance");
+            }
+            if (dynamics is not null) {
+                (traits ??= []).Add(item: $"{prefix}dynamics");
+            }
+            if (cycle is not null) {
+                (traits ??= []).Add(item: $"{prefix}cycle");
+            }
+        }
+    }
     /// <summary>Returns whether a lane key belongs to <paramref name="bodyIndex"/>.</summary>
     /// <param name="key">The lane key.</param>
     /// <param name="bodyIndex">The body index.</param>

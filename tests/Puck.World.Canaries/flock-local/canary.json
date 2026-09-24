@@ -4,7 +4,6 @@
   "binding": "128 live bodies use frozen-image steering with at most 16 inspected candidates and 8 retained neighbors per perception update. Authored cadence staggers later updates; an asynchronous console read need not observe the first tick's work counters. The read-back confirms the live follower count and profile limits, and a one-second fence observes movement. A recording started at boot must replay with MATCH. The same world with an idle source has no followers and no movement. Exact candidate-work bounds are pinned by kernel and server laws. This is headless integration evidence, not a rendering or thousand-body performance claim.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 4,
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {

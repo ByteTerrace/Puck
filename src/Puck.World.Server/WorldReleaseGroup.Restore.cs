@@ -30,14 +30,14 @@ public sealed partial class WorldReleaseGroupStore {
         }
         var history = ((old.PendingOperationId is { } previous)
             ? old.History.Append(element: new WorldReleaseGroupHistoryEntry {
-            OperationId = previous,
-            RecoveryRoots = old.RecoveryRoots,
-            RestorePoint = old.RestorePoint,
-            Result = "committed",
-            Revision = old.Revision,
-            SourceRelease = old.PendingSourceRelease,
-            TargetRelease = old.PendingTargetRelease!,
-        }).ToArray()
+                OperationId = previous,
+                RecoveryRoots = old.RecoveryRoots,
+                RestorePoint = old.RestorePoint,
+                Result = "committed",
+                Revision = old.Revision,
+                SourceRelease = old.PendingSourceRelease,
+                TargetRelease = old.PendingTargetRelease!,
+            }).ToArray()
             : old.History
         );
         var next = old with {

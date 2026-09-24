@@ -61,7 +61,6 @@ public static partial class RuleCompiler {
             verb: verb
         );
     }
-
     // Validation precedes folding: every authored operand, kind, and token still has to be legal. Only a
     // successful reader-free subtree becomes a raw constant. A domain refusal stays in the program, including an
     // unselected ternary branch: expressions are eager, so folding must not hide that refusal.
@@ -135,29 +134,6 @@ public static partial class RuleCompiler {
             : output[..count]
         );
     }
-    private static ExpressionOp Flip(ExpressionOp operation) => (operation switch {
-        ExpressionOp.Less => ExpressionOp.Greater,
-        ExpressionOp.LessOrEqual => ExpressionOp.GreaterOrEqual,
-        ExpressionOp.Greater => ExpressionOp.Less,
-        ExpressionOp.GreaterOrEqual => ExpressionOp.LessOrEqual,
-        _ => operation,
-    });
-    private static ActionStateComparison ComparisonOf(ExpressionOp operation) => (operation switch {
-        ExpressionOp.Equal => ActionStateComparison.Equal,
-        ExpressionOp.NotEqual => ActionStateComparison.NotEqual,
-        ExpressionOp.Less => ActionStateComparison.Less,
-        ExpressionOp.LessOrEqual => ActionStateComparison.LessOrEqual,
-        ExpressionOp.Greater => ActionStateComparison.Greater,
-        _ => ActionStateComparison.GreaterOrEqual,
-    });
-    private static ExpressionOp OperationOf(ActionStateComparison comparison) => (comparison switch {
-        ActionStateComparison.Equal => ExpressionOp.Equal,
-        ActionStateComparison.NotEqual => ExpressionOp.NotEqual,
-        ActionStateComparison.Less => ExpressionOp.Less,
-        ActionStateComparison.LessOrEqual => ExpressionOp.LessOrEqual,
-        ActionStateComparison.Greater => ExpressionOp.Greater,
-        _ => ExpressionOp.GreaterOrEqual,
-    });
     // The one walk every program, subprogram and fold body enters through. `memberKind` is the kind a bound family
     // member reads as inside a fold body; `argumentKinds` are the kinds a subprogram's own operands carry;
     // `calling` is the chain of subprograms already open, which is what makes the call graph a proven DAG; and
@@ -299,14 +275,14 @@ public static partial class RuleCompiler {
                 }
 
                 flipped = true;
-                operation = Flip(operation: operation);
+                operation = operation.Flip();
                 slot = left;
             } else if (decimal.Truncate(d: literals[right]) == literals[right]) {
                 return operation;
             }
 
             var (raw, lowered) = LowerConstantComparison(
-                comparison: ComparisonOf(operation: operation),
+                comparison: operation,
                 kind: CellKind.Int,
                 literal: literals[slot],
                 ruleName: ruleName
@@ -318,8 +294,8 @@ public static partial class RuleCompiler {
             );
 
             return (flipped
-                ? Flip(operation: OperationOf(comparison: lowered))
-                : OperationOf(comparison: lowered)
+                ? lowered.Flip()
+                : lowered
             );
         }
         RuleException Malformed(string detail) => new(
@@ -377,7 +353,7 @@ public static partial class RuleCompiler {
         CompiledExpressionToken ResolveBoard(ExpressionOp operation, InstructionPayload.Board board) {
             var (verbPhrase, indexKind) = (operation switch {
                 ExpressionOp.BoardShift => ("shifts", "direction"),
-                ExpressionOp.BoardFill => ("fills", "direction"),
+                ExpressionOp.BoardRay => ("extends", "direction"),
                 ExpressionOp.BoardImage => ("carries", "symmetry element"),
                 _ => throw Malformed(detail: $"instruction '{operation}' is not a board query"),
             });
@@ -499,18 +475,20 @@ public static partial class RuleCompiler {
                 subprogram: fold.Subprogram
             );
 
+            var folded = ResolveRowOrdinal(
+                context: context,
+                name: fold.Family
+            );
+
             return Push(
                 new CompiledExpressionToken(
                     Fold: new CompiledFold(
                         Body: body,
+                        Cells: context.RowCapacity(rowOrdinal: folded),
                         Describe: fold.Family,
                         MemberKind: member,
-                        Members: (family.Cells?.Count ?? 0),
                         Operation: operation,
-                        RowOrdinal: ResolveRowOrdinal(
-                            context: context,
-                            name: fold.Family
-                        )
+                        RowOrdinal: folded
                     ),
                     Operation: operation
                 ),

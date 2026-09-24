@@ -156,7 +156,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "BitwisePair<short,uint> over an eight-row ladder of negative, boundary and index-derived short pairs — both lanes at short.MinValue, MinValue against zero either side, MaxValue against MinValue, both lanes at −1, and two bit-derived patterns (0xACE5, 0x53A1) exercising every nibble",
-        "Against": "a bit-by-bit interleave reference formed over the LOW SIXTEEN BITS of each operand's two's-complement pattern — value's bits at the even positions, other's at the odd ones — sharing no line with BinaryIntegerFunctions.BitwisePair's Bmi2.ParallelBitDeposit branch for the `case short: case ushort:` arm, a DISTINCT code path from the `case int: case uint:` arm core.binary-integer-contracts exercises and the width-agnostic SWAR default path scalar.binary-integer-wide-carrier-vs-oracle exercises",
+        "Against": "a bit-by-bit interleave reference formed over the LOW SIXTEEN BITS of each operand's two's-complement pattern — value's bits at the even positions, other's at the odd ones — sharing no line with BinaryIntegerFunctions.BitwisePair's PDEP path at a 32-bit result, taken where BitManipulation.HasFastParallelBits holds, nor with the SWAR ladder taken elsewhere",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -165,7 +165,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "BitwisePair<long,Int128> over the same eight-row shape at the wide width — both lanes at long.MinValue, MinValue against zero either side, MaxValue against MinValue, both lanes at −1, and one bit-derived pattern",
-        "Against": "a bit-by-bit interleave reference over the full sixty-four-bit two's-complement pattern of each operand, assembled in UInt128 and cast to Int128 through the same unchecked bit reinterpretation the subject's SWAR fallback performs, sharing no loop and no idea with it",
+        "Against": "a bit-by-bit interleave reference over the full sixty-four-bit two's-complement pattern of each operand, assembled in UInt128 and cast to Int128 through the same unchecked bit reinterpretation the subject performs, sharing no loop and no idea with its PDEP path or SWAR ladder",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -384,6 +384,15 @@
         "Flavor": "None",
         "Subject": "FixedSaturate.Add over swept raw pairs at width 4, and FixedSaturate.ToInt64 over an Int128 accumulator built from each pair (the left raw shifted one bit past the long range plus the right raw), so every pair exercises an in-range and a far-out narrowing",
         "Against": "Exact BigInteger addition clamped to [long.MinValue, long.MaxValue] in the claim: no Int128 comparison is shared with the subject, which decides on Int128 against the long extremes",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSaturate.Add over FixedVector3, built from the first three lanes of each swept operand",
+        "Against": "The same exact BigInteger sum clamped to the long range, lane by lane: a lane that saturates must leave its neighbours exact, and a transposed or shared lane fails",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

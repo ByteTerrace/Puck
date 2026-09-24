@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -62,7 +62,7 @@ public sealed class ArenaAllocationLawTests {
             }
         });
 
-        Assert.Equal(expected: 0L, actual: before);
+        Assert.Equal(actual: before, expected: 0L);
     }
     [Fact]
     public void WarmedPairCascadeAndRewindAllocateNothing() {
@@ -93,7 +93,7 @@ public sealed class ArenaAllocationLawTests {
             }
         });
 
-        Assert.Equal(expected: 0L, actual: before);
+        Assert.Equal(actual: before, expected: 0L);
     }
     [Fact]
     public void AScalarReadAllocatesNothing() {
@@ -119,8 +119,8 @@ public sealed class ArenaAllocationLawTests {
         });
 
         Assert.Equal(
-            expected: 0L,
-            actual: before
+            actual: before,
+            expected: 0L
         );
     }
     [Fact]
@@ -211,8 +211,8 @@ public sealed class ArenaAllocationLawTests {
         });
 
         Assert.Equal(
-            expected: 0L,
-            actual: before
+            actual: before,
+            expected: 0L
         );
     }
     private static void Cycle(StateArena arena, CellKey key, int rowOrdinal, long value) {

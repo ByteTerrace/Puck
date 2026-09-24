@@ -61,7 +61,6 @@ public static class BrowserParser {
             errors.Add(item: $"schema '{(parsed.Schema ?? "(absent)")}' is not '{WorldDefinition.SchemaVersion}'.");
             return false;
         }
-        parsed = WorldDefinitionMigrations.Apply(definition: parsed);
         if (!WorldDrawBootResolver.TryResolve(definition: parsed, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out var drawReason, resolved: out var drawn)) {
             errors.Add(item: drawReason);
             return false;

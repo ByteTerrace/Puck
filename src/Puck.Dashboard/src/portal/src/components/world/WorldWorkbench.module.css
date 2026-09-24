@@ -1,0 +1,148 @@
+/*
+  The spatial workbench: explorer | viewport | inspector on one raised surface, divided by hairlines. The viewport's
+  stage is the sunken well both views draw into. Below the large breakpoint the explorer folds above the viewport;
+  on a phone everything stacks.
+*/
+
+.workspace {
+  display: grid;
+  grid-template-columns: rem(232px) minmax(0, 1fr) rem(288px);
+  border: 1px solid var(--puck-line);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--puck-surface-raised);
+  overflow: clip;
+}
+
+.explorer,
+.inspector {
+  min-width: 0;
+  padding: var(--mantine-spacing-md);
+}
+
+.explorer {
+  padding-inline: var(--mantine-spacing-xs);
+
+  & > :first-child {
+    padding-inline: var(--mantine-spacing-xs);
+  }
+}
+
+.groupLabel {
+  margin-bottom: rem(4px);
+  padding-inline: var(--mantine-spacing-xs);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: rem(10px);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.kind {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.viewport {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-inline: 1px solid var(--puck-line);
+}
+
+.toolbar,
+.footer {
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+}
+
+.toolbar {
+  border-bottom: 1px solid var(--puck-line);
+}
+
+.footer {
+  border-top: 1px solid var(--puck-line);
+}
+
+.heading {
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: rem(360px);
+  background-color: var(--puck-surface-sunken);
+}
+
+.disclosure {
+  & > summary {
+    min-height: rem(36px);
+    padding-block: var(--mantine-spacing-xs);
+    font-size: var(--mantine-font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+  }
+}
+
+.footer .disclosure {
+  margin-top: var(--mantine-spacing-xs);
+}
+
+.inspectorSection {
+  margin-top: var(--mantine-spacing-lg);
+  padding-top: var(--mantine-spacing-md);
+  border-top: 1px solid var(--puck-line);
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+}
+
+.number {
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+@mixin smaller-than $mantine-breakpoint-lg {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) rem(272px);
+  }
+
+  .explorer {
+    grid-column: 1 / -1;
+    max-height: rem(240px);
+    overflow-y: auto;
+    border-bottom: 1px solid var(--puck-line);
+  }
+
+  .viewport {
+    border-inline-start: 0;
+  }
+}
+
+@mixin smaller-than $mantine-breakpoint-sm {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .viewport {
+    border-inline: 0;
+  }
+
+  .inspector {
+    border-top: 1px solid var(--puck-line);
+  }
+}

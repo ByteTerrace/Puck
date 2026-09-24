@@ -1,25 +1,10 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers images larger than one bank: the switchable window pages correctly and the fixed window survives it.</summary>
 public sealed class CartridgeBankingTests {
-    private static Puck.Assets.Documents.AudioDocument Track() => new(
-        Schema: Puck.Assets.Documents.AudioDocument.CurrentSchema,
-        Name: "t",
-        Tempo: 4,
-        Patterns: [[new Puck.Assets.Documents.AudioRowDocument(
-                    Duty: null,
-                    Envelope: null,
-                    Note: "C4"
-                )]],
-        Order: [0],
-        Effects: null
-    );
-
     [InlineData("cgb")]
     [InlineData("agb")]
     [Theory]
@@ -67,7 +52,7 @@ public sealed class CartridgeBankingTests {
             // Music and array seeds live in the fixed window; a stranded bank would leave both unreadable.
             Sounds = [new CartridgeSound(
                 Name: "theme",
-                Music: [CartridgeCostMeasurement.Lead(part: CartridgeCostMeasurement.Track())]
+                Music: [CartridgeCostMeasurement.Lead]
             )],
             Rules = [new CartridgeRule(
                 Name: "run",
@@ -88,15 +73,11 @@ public sealed class CartridgeBankingTests {
             ]
             )],
         };
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
+        using var machine = CartridgeProbe.Boot(
+            document: document,
+            frames: 20,
+            label: "bank"
         );
-        var result = compiler.Compile(document: document);
-
-        using var machine = new BankProbe(result: result);
-
-        machine.Run(frames: 20);
 
         // The banked tiles reached video memory, and the fixed window's array seed and music both still work.
         Assert.NotEqual(
@@ -108,11 +89,11 @@ public sealed class CartridgeBankingTests {
         );
         Assert.Equal(
             expected: 4,
-            actual: machine.Read(address: result.Variables["beat"])
+            actual: machine.Read(variable: "beat")
         );
         Assert.NotEqual(
             expected: 0u,
-            actual: machine.Status() & 2u
+            actual: machine.SoundStatus() & 2u
         );
     }
     [Fact]
@@ -135,45 +116,6 @@ public sealed class CartridgeBankingTests {
         Assert.Equal(
             expected: 0x00,
             actual: small.Rom[0x0148]
-        );
-    }
-
-    private sealed class BankProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public BankProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "bank"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "bank"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public uint Pixel(int x, int y) => (m_agb?.ReadPixel(
-            x: x,
-            y: y
-        ) ?? m_hgb!.ReadPixel(
-            x: x,
-            y: y
-        ));
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-        public uint Status() => ((m_agb is { } agb)
-            ? agb.ReadHalf(address: 0x04000084u)
-            : m_hgb!.Read(address: 0xFF26)
         );
     }
 }

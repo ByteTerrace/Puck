@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -11,35 +12,43 @@ namespace Puck.World.Tests;
 /// when stale; a basis surviving to validation refuses; and
 /// <see cref="WorldDefinitionSerialization.SavePreservingBasis"/> writes a proved delta that round-trips.</summary>
 public sealed class DocumentBasisLawTests {
-    [Fact]
-    public void BasisCycle_RefusesByName() {
-        using var files = new TempWorldDirectory();
-
-        var firstPath = files.WriteText(
-            name: "first.world.json",
-            text: /*lang=json*/ """{ "basis": "second.world.json" }"""
-        );
-
-        files.WriteText(
-            name: "second.world.json",
-            text: /*lang=json*/ """{ "basis": "first.world.json" }"""
-        );
-
+    // Loads the document at a path, asserting it refuses, and returns the one-line reason.
+    private static string RefusalOf(string path) {
         Assert.False(condition: WorldDefinitionFileSource.TryLoad(
-            path: firstPath,
+            path: path,
             definition: out _,
             contentHash: out _,
             reason: out var reason
         ));
+
+        return reason;
+    }
+
+    // Two documents naming each other refuse by name, whether the edge is a basis or an import.
+    [InlineData(/*lang=json*/ """{ "basis": "second" }""", /*lang=json*/ """{ "basis": "first" }""")]
+    [InlineData(/*lang=json*/ """{ "imports": [{ "document": "second" }] }""", /*lang=json*/ """{ "imports": [{ "document": "first" }] }""")]
+    [Theory]
+    public void ACompositionCycle_RefusesByName(string first, string second) {
+        using var files = new TemporaryDirectory();
+
+        var firstPath = files.WriteText(
+            name: "first.world.json",
+            text: first
+        );
+
+        files.WriteText(
+            name: "second.world.json",
+            text: second
+        );
         Assert.Contains(
-            actualString: reason,
+            actualString: RefusalOf(path: firstPath),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "cycle"
         );
     }
     [Fact]
     public void BasisSurvivingToValidation_Refuses() {
-        var stray = (Fixtures.BuildDocument() with { Basis = "basis.world.json" });
+        var stray = (Fixtures.BuildDocument() with { Basis = "basis" });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
             definition: stray,
@@ -60,13 +69,13 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void ChainContentPin_MovesWhenTheBasisMoves() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        var basisPath = files.WriteFlatDocument(name: "basis.world.json");
+        var basisPath = files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "motion": { "moveSpeed": 6.5 } }
+            { "basis": "basis", "motion": { "moveSpeed": 6.5 } }
             """
         );
 
@@ -103,25 +112,21 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void ComposedTree_StillCrossesTheStrictParse() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         // The typo lives only in the delta's authored override; it must still refuse by member name after
         // composition, proving the composed tree crosses the same strict gate a flat file does.
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "motion": { "moveSpede": 6.5 } }
+            { "basis": "basis", "motion": { "moveSpede": 6.5 } }
             """
         );
 
-        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
-            path: deltaPath,
-            definition: out _,
-            contentHash: out _,
-            reason: out var reason
-        ));
+        var reason = RefusalOf(path: deltaPath);
+
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -130,9 +135,9 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void DeltaOverBasis_InheritsOmittedAndMergesAuthored() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        var basisPath = files.WriteFlatDocument(name: "basis.world.json");
+        var basisPath = files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryLoad(
@@ -148,7 +153,7 @@ public sealed class DocumentBasisLawTests {
             name: "delta.world.json",
             text: /*lang=json*/ """
             {
-              "basis": "basis.world.json",
+              "basis": "basis",
               "motion": { "moveSpeed": 6.5 },
               "spawnPoints": [ { "id": "seat-2", "position": [9, 0, 0] } ]
             }
@@ -342,34 +347,8 @@ public sealed class DocumentBasisLawTests {
         ));
     }
     [Fact]
-    public void Imports_CycleRefusedByName() {
-        using var files = new TempWorldDirectory();
-
-        var firstPath = files.WriteText(
-            name: "first.world.json",
-            text: /*lang=json*/ """{ "imports": [{ "document": "second.world.json" }] }"""
-        );
-
-        files.WriteText(
-            name: "second.world.json",
-            text: /*lang=json*/ """{ "imports": [{ "document": "first.world.json" }] }"""
-        );
-
-        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
-            path: firstPath,
-            definition: out _,
-            contentHash: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "cycle"
-        );
-    }
-    [Fact]
     public void Imports_HeadlessBoot_BothFragmentsOwnRulesFire() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
         // The shared basis carries every ordinary section (kits, population, screens, ...); the two fragments each
         // own one disjoint slice — one state row and one rule that sets it — proving a world composed entirely from
@@ -403,7 +382,7 @@ public sealed class DocumentBasisLawTests {
         var rootPath = files.WriteText(
             name: "root.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "fragmentA.world.json" }, { "document": "fragmentB.world.json" }] }
+            { "basis": "basis", "imports": [{ "document": "fragmentA" }, { "document": "fragmentB" }] }
             """
         );
 
@@ -442,9 +421,9 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void Imports_OrderedFanIn_MergesEachImportInListOrder() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
         files.WriteText(
             name: "importA.world.json",
             text: /*lang=json*/ """{ "spawnPoints": [ { "id": "from-a", "position": [1, 0, 0] } ] }"""
@@ -457,7 +436,7 @@ public sealed class DocumentBasisLawTests {
         var rootPath = files.WriteText(
             name: "root.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "importA.world.json" }, { "document": "importB.world.json" }] }
+            { "basis": "basis", "imports": [{ "document": "importA" }, { "document": "importB" }] }
             """
         );
 
@@ -480,9 +459,9 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void Imports_SiblingCollision_RefusedByName_UnlessTheImportingFileRestates() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
         files.WriteText(
             name: "importA.world.json",
             text: /*lang=json*/ """{ "metadata": { "title": "from-a" } }"""
@@ -495,16 +474,12 @@ public sealed class DocumentBasisLawTests {
         var collidingPath = files.WriteText(
             name: "colliding.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "importA.world.json" }, { "document": "importB.world.json" }] }
+            { "basis": "basis", "imports": [{ "document": "importA" }, { "document": "importB" }] }
             """
         );
 
-        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
-            path: collidingPath,
-            definition: out _,
-            contentHash: out _,
-            reason: out var reason
-        ));
+        var reason = RefusalOf(path: collidingPath);
+
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -522,8 +497,8 @@ public sealed class DocumentBasisLawTests {
             name: "restated.world.json",
             text: /*lang=json*/ """
             {
-              "basis": "basis.world.json",
-              "imports": [{ "document": "importA.world.json" }, { "document": "importB.world.json" }],
+              "basis": "basis",
+              "imports": [{ "document": "importA" }, { "document": "importB" }],
               "metadata": { "title": "root" }
             }
             """
@@ -545,9 +520,9 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void Imports_StackDiff_RoundTrips_ThroughSavePreservingBasis() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        var basisPath = files.WriteFlatDocument(name: "basis.world.json");
+        var basisPath = files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryLoad(
@@ -566,7 +541,7 @@ public sealed class DocumentBasisLawTests {
 
         var rootPath = files.WriteText(
             name: "root.world.json",
-            text: /*lang=json*/ """{ "basis": "basis.world.json", "imports": [{ "document": "importA.world.json" }] }"""
+            text: /*lang=json*/ """{ "basis": "basis", "imports": [{ "document": "importA" }] }"""
         );
 
         Assert.True(
@@ -622,7 +597,7 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void KeyedCellMerge_RefinesByKey_AndAControlStillReplacesWholesale() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
         var baseNode = ((JsonObject)JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()))!);
 
@@ -639,7 +614,7 @@ public sealed class DocumentBasisLawTests {
         var refinedPath = files.WriteText(
             name: "refined.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "Int", "cells": [ { "key": "a", "value": 9 } ] } ] } }
+            { "basis": "basis", "state": { "world": [ { "name": "keyed-refine", "kind": "Int", "cells": [ { "key": "a", "value": 9 } ] } ] } }
             """
         );
 
@@ -677,7 +652,7 @@ public sealed class DocumentBasisLawTests {
         var replacedPath = files.WriteText(
             name: "replaced.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "Int", "cells": [ { "$replace": true }, { "key": "a", "value": 9 } ] } ] } }
+            { "basis": "basis", "state": { "world": [ { "name": "keyed-refine", "kind": "Int", "cells": [ { "$replace": true }, { "key": "a", "value": 9 } ] } ] } }
             """
         );
 
@@ -707,15 +682,15 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void KeyedList_AppendsNewRows_AndTombstonesThemDownChain() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         var appendPath = files.WriteText(
             name: "append.world.json",
             text: /*lang=json*/ """
             {
-              "basis": "basis.world.json",
+              "basis": "basis",
               "spawnPoints": [ { "id": "extra", "position": [5, 0, 5] } ]
             }
             """
@@ -744,7 +719,7 @@ public sealed class DocumentBasisLawTests {
             name: "drop.world.json",
             text: /*lang=json*/ """
             {
-              "basis": "append.world.json",
+              "basis": "append",
               "spawnPoints": [ { "id": "extra", "$drop": true } ]
             }
             """
@@ -768,23 +743,20 @@ public sealed class DocumentBasisLawTests {
             filter: static row => (row.Id == "extra")
         );
     }
-    [Fact]
-    public void MalformedJsonNamingBasis_StillRefusesFromTheStrictParse() {
-        using var files = new TempWorldDirectory();
+    // Text containing the literal substring `"basis"` trips the cheap substring gate even when it never parses as a
+    // document (malformed JSON) or its root is not an object (an array): TryComposeChain must decline to compose
+    // rather than throw, leaving the strict parse to own the wording.
+    [InlineData(/*lang=json*/ """{ "basis": "x", """)]
+    [InlineData(/*lang=json*/ """[ "basis" ]""")]
+    [Theory]
+    public void TextNamingBasisThatIsNoDocument_RefusesFromTheStrictParse(string text) {
+        using var files = new TemporaryDirectory();
 
-        // The literal substring `"basis"` appears inside malformed JSON that never parses at all — TryComposeChain
-        // must decline to compose (composed == null) rather than throw, leaving the strict parse to own the wording.
-        var deltaPath = files.WriteText(
+        var reason = RefusalOf(path: files.WriteText(
             name: "delta.world.json",
-            text: /*lang=json*/ """{ "basis": "x.world.json", """
-        );
-
-        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
-            path: deltaPath,
-            definition: out _,
-            contentHash: out _,
-            reason: out var reason
+            text: text
         ));
+
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -832,42 +804,14 @@ public sealed class DocumentBasisLawTests {
         );
     }
     [Fact]
-    public void NonObjectRootNamingBasis_FallsThroughToTheStrictParse() {
-        using var files = new TempWorldDirectory();
-
-        // A JSON array containing the literal substring `"basis"` still trips the cheap substring gate, but the
-        // root itself is not a JsonObject — TryComposeChain must decline to compose, not throw.
-        var deltaPath = files.WriteText(
-            name: "delta.world.json",
-            text: /*lang=json*/ """[ "basis" ]"""
-        );
-
-        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
-            path: deltaPath,
-            definition: out _,
-            contentHash: out _,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "is not a valid"
-        );
-        Assert.DoesNotContain(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "basis composition refused"
-        );
-    }
-    [Fact]
     public void SavePreservingBasis_DegradesToFlatWhenTheBasisIsGone() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        var basisPath = files.WriteFlatDocument(name: "basis.world.json");
+        var basisPath = files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "motion": { "moveSpeed": 6.5 } }
+            { "basis": "basis", "motion": { "moveSpeed": 6.5 } }
             """
         );
 
@@ -910,14 +854,14 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void SavePreservingBasis_WritesAProvedDeltaThatRoundTrips() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "motion": { "moveSpeed": 6.5 } }
+            { "basis": "basis", "motion": { "moveSpeed": 6.5 } }
             """
         );
 
@@ -951,7 +895,7 @@ public sealed class DocumentBasisLawTests {
         var written = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: deltaPath))!);
 
         Assert.Equal(
-            expected: "basis.world.json",
+            expected: "basis",
             actual: written[propertyName: WorldDocumentBasis.BasisMemberName]!.GetValue<string>()
         );
         Assert.False(condition: written.ContainsKey(propertyName: "kits"));
@@ -976,26 +920,22 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void StaleTombstone_RefusesByName() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
 
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: /*lang=json*/ """
             {
-              "basis": "basis.world.json",
+              "basis": "basis",
               "spawnPoints": [ { "id": "seat-9", "$drop": true } ]
             }
             """
         );
 
-        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
-            path: deltaPath,
-            definition: out _,
-            contentHash: out _,
-            reason: out var reason
-        ));
+        var reason = RefusalOf(path: deltaPath);
+
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -1009,19 +949,19 @@ public sealed class DocumentBasisLawTests {
     }
     [Fact]
     public void ThreeLinkChain_ComposesInResolutionOrder_AndEditingTheDeepestLinkMovesTheHash() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "root-basis.world.json");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "root-basis.world.json");
         files.WriteText(
             name: "mid.world.json",
             text: /*lang=json*/ """
-            { "basis": "root-basis.world.json", "motion": { "moveSpeed": 5.5 } }
+            { "basis": "root-basis", "motion": { "moveSpeed": 5.5 } }
             """
         );
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: /*lang=json*/ """
-            { "basis": "mid.world.json", "motion": { "turnSpeed": 3.25 } }
+            { "basis": "mid", "motion": { "turnSpeed": 3.25 } }
             """
         );
 

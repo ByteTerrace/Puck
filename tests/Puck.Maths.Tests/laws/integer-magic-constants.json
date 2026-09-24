@@ -2,13 +2,18 @@
   {
     "Id": "integer.fermat-mask-bit-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "NthFermatMask"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "The internal NthFermatMask<T> kernel, invoked directly by a reflection-created delegate for every legal exponent in all twelve built-in fixed-width integer carriers, including both 128-bit signs and the final half-word mask.",
-        "Against": "Oracles.RepeatPatternBits assembles individual destination bits from a block of ones in BigInteger. It shares no Fermat quotient, replication multiplication, machine-word decomposition or subject helper. ENVELOPE: the internal kernel requires valid exponents; invalid indices and custom carriers are outside this statement.",
+        "Subject": "NthFermatMask<T> for every legal exponent in all twelve built-in fixed-width integer carriers, including both 128-bit signs and the final half-word mask no SWAR ladder reads.",
+        "Against": "Oracles.RepeatPatternBits assembles individual destination bits from a block of ones in BigInteger. It shares no Fermat quotient, replication multiplication, machine-word decomposition or subject helper. ENVELOPE: exponent refusals belong to integer.bit-kernel-refusals; custom carriers are outside this statement.",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -28,7 +33,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "ReplicationMask<T> for every legal block width over all twelve built-in fixed-width integer carriers, signed and unsigned through 128 bits including native integers.",
+        "Subject": "ReplicationMask<T> for every block width from one through the word width, dividing or not, over all twelve built-in fixed-width integer carriers, signed and unsigned through 128 bits including native integers; a non-dividing width marks its truncated last block.",
         "Against": "Oracles.RepeatPatternBits assembles individual destination bits by their block position from pattern one; no geometric-series division, signed-halving trick, or subject helper is shared. ENVELOPE: native widths follow the executing host; custom IBinaryInteger implementations are not instantiated.",
         "Shared": "",
         "Citation": "",
@@ -49,7 +54,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "RepeatBits<T> over all twelve built-in fixed-width integer carriers; two domain words supply up to 128 pattern bits and another chooses a legal block width. The pattern is masked to its admitted block before the subject is called.",
+        "Subject": "RepeatBits<T> over all twelve built-in fixed-width integer carriers; two domain words supply up to 128 pattern bits and another chooses any block width from one through the word width, so non-dividing widths with a truncated last copy are swept too. The pattern is masked to its admitted block before the subject is called.",
         "Against": "Oracles.RepeatPatternBits copies each source bit to its periodic destinations using BigInteger; it does not multiply by a replication mask or call a subject. The separate periodic-mask-boundaries case checks rejected patterns and every legal width. ENVELOPE: seeded and rolling domain samples, not a full-width exhaustive sweep.",
         "Shared": "",
         "Citation": "",
@@ -74,7 +79,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "RepeatBits<T> at zero, one, an all-ones block and its top bit for every legal width in all twelve carriers; every legal byte pattern is also checked as byte and sbyte.",
+        "Subject": "RepeatBits<T> at zero, one, an all-ones block and its top bit for every width from one through the word width in all twelve carriers; every byte pattern at every byte width, dividing or not, is also checked as byte and sbyte.",
         "Against": "Oracles.RepeatPatternBits assembles bits independently; whole-word signed negative patterns and repeated patterns setting the sign bit are compared as exact word bits.",
         "Shared": "",
         "Citation": "",
@@ -83,7 +88,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Both mask members refuse nonpositive, oversized and non-dividing widths with ArgumentOutOfRangeException naming blockWidth. RepeatBits refuses spilling patterns with the same exception naming value. BigInteger is refused with NotSupportedException because no word width exists. Extreme int widths also exercise the replication guard.",
+        "Subject": "Both mask members refuse nonpositive and oversized widths with ArgumentOutOfRangeException naming blockWidth; a non-dividing width is accepted and truncates its last copy. RepeatBits refuses spilling patterns with the same exception naming value. BigInteger is refused with NotSupportedException because no word width exists. Extreme int widths also exercise the replication guard.",
         "Against": "",
         "Shared": "",
         "Citation": "",

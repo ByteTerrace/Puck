@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -207,7 +208,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         return accepted.Accepted;
     }
-    private bool TryResolvePrincipal(out WorldPrincipal principal, out string reason) {
+    private bool TryResolvePrincipal(out Principal principal, out string reason) {
         if (!m_server.TryTransferredPrincipal(
             mobility: in m_mobility,
             principal: out principal,
@@ -236,7 +237,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <param name="principal">The body's owning principal.</param>
     /// <returns>The route description.</returns>
     /// <exception cref="InvalidOperationException">The principal names no body.</exception>
-    public static WorldAuthorityRouteDescription DescribeRoute(WorldServer server, string endpoint, WorldPrincipal principal) =>
+    public static WorldAuthorityRouteDescription DescribeRoute(WorldServer server, string endpoint, Principal principal) =>
         DescribeRoute(
             server: server,
             endpoint: endpoint,
@@ -288,7 +289,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <param name="server">The authority holding the population.</param>
     /// <param name="principal">The principal to test.</param>
     /// <returns><see langword="true"/> when the principal is the live owner of its body index.</returns>
-    public static bool IsLiveTransferredPrincipal(WorldServer server, WorldPrincipal principal) {
+    public static bool IsLiveTransferredPrincipal(WorldServer server, Principal principal) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         return (
@@ -302,7 +303,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <param name="payload">The decoded payload.</param>
     /// <param name="principal">The acting principal.</param>
     /// <returns>The payload carrying <paramref name="principal"/>.</returns>
-    public static WorldSubmissionPayload StampPrincipal(WorldSubmissionPayload payload, WorldPrincipal principal) => payload switch {
+    public static WorldSubmissionPayload StampPrincipal(WorldSubmissionPayload payload, Principal principal) => payload switch {
         WorldSubmissionPayload.Command command => new WorldSubmissionPayload.Command(Value: (command.Value with { Principal = principal })),
         WorldSubmissionPayload.Session session => new WorldSubmissionPayload.Session(Value: (session.Value with { Principal = principal })),
         WorldSubmissionPayload.Mutation mutation => new WorldSubmissionPayload.Mutation(Value: (mutation.Value with { Principal = principal })),
@@ -432,10 +433,12 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             reason: out reason,
             scope: out var scope
         )) { route = default; return false; }
-        using (scope) { return TryDescribeRouteCore(
+        using (scope) {
+            return TryDescribeRouteCore(
             reason: out reason,
             route: out route
-        ); }
+        );
+        }
     }
     /// <inheritdoc/>
     public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
@@ -443,10 +446,12 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             reason: out reason,
             scope: out var scope
         )) { return false; }
-        using (scope) { return TryForwardIntentCore(
+        using (scope) {
+            return TryForwardIntentCore(
             reason: out reason,
             submission: in submission
-        ); }
+        );
+        }
     }
     /// <inheritdoc/>
     public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) => TryForwardSubmission(

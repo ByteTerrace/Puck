@@ -1,11 +1,14 @@
 using System.Buffers.Binary;
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 
 using Xunit;
 
 using Puck.Attestation;
 using Puck.Networking;
+using Puck.Networking.Peers;
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -27,6 +30,18 @@ internal static class AdmissionWireFixture {
     /// <summary>The 0-based body index every admission law admits its remote peer onto — the ONE peer slot
     /// <see cref="BuildAdmissionDocument"/> adds beyond the four local seats.</summary>
     public const int PeerBodyIndex = WorldBodiesLimits.LocalSeatCount;
+
+    /// <summary>The admission instant every host from <see cref="StartHost"/> verifies claims at, and the instant
+    /// <see cref="WriteIdentityResponseAsync"/> signs its one-second-either-side validity window around.</summary>
+    public static readonly DateTimeOffset ClaimInstant = new(
+        day: 1,
+        hour: 0,
+        minute: 0,
+        month: 1,
+        offset: TimeSpan.Zero,
+        second: 0,
+        year: 2026
+    );
 
     /// <summary>Overlays ONE admission entry onto <see cref="Fixtures.BuildDocument"/>'s shared shape, widening
     /// population capacity by exactly one peer slot (body index 4) and admitting exactly one remote human — the
@@ -117,6 +132,22 @@ internal static class AdmissionWireFixture {
             client?.Dispose();
         }
     }
+    /// <summary>Admits <paramref name="identity"/> through <see cref="ConnectAndAdmitAsync"/> under a pump that is
+    /// stopped before this returns, so the caller may step <paramref name="fixture"/> directly afterwards.</summary>
+    /// <returns>The admitted peer; the caller owns its client.</returns>
+    public static async Task<AdmittedPeer> AdmitAsync(WorldFixture fixture, WorldPeerHost host, TestIdentity identity, WorldReplayTape? tape = null) {
+        await using (StartPump(
+            fixture: fixture,
+            host: host,
+            tape: tape
+        )) {
+            return await ConnectAndAdmitAsync(
+                ct: TestContext.Current.CancellationToken,
+                host: host,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+    }
     public static TestIdentity GenerateIdentity(string subject) {
         var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var spki = key.ExportSubjectPublicKeyInfo();
@@ -129,28 +160,86 @@ internal static class AdmissionWireFixture {
             Subject: subject
         );
     }
-    /// <summary>Drains <see cref="WorldPeerHost"/>'s tick-thread work queue and steps the fixture at a short, fixed
-    /// cadence — the SAME pairing the composition root's own per-tick loop performs
+    /// <summary>Drains <see cref="WorldPeerHost"/>'s tick-thread work queue and then steps the fixture once, each time
+    /// a connection queues work — the SAME drain-then-step pairing the composition root's own per-tick loop performs
     /// (<see cref="WorldPeerHost.DrainPending"/>'s own remarks: "MUST run on the tick thread, before
-    /// <c>WorldServer.Step</c>"), reproduced here since this test project has no composition-root loop to borrow.
-    /// Callers MUST stop this (cancel, then await) before making any further direct <see cref="WorldFixture.Step"/>
-    /// call themselves — <see cref="Server.WorldServer"/> carries no lock, so two threads stepping it concurrently
-    /// is a real race, not a theoretical one.</summary>
-    public static async Task RunPumpAsync(WorldFixture fixture, WorldPeerHost host, CancellationToken ct, WorldReplayTape? tape = null) {
+    /// <c>WorldServer.Step</c>"), driven by <see cref="WorldPeerHost.WaitForPendingWorkAsync"/> rather than a
+    /// cadence, since this test project has no composition-root loop to borrow. The step after each drain is the
+    /// tick that resolves a submission queued by that drain. Callers MUST stop this (dispose it) before
+    /// making any further direct <see cref="WorldFixture.Step"/> call themselves — <see cref="Server.WorldServer"/>
+    /// carries no lock, so two threads stepping it concurrently is a real race, not a theoretical one.</summary>
+    /// <returns>The running pump; disposing it cancels the loop and awaits its exit.</returns>
+    public static IAsyncDisposable StartPump(WorldFixture fixture, WorldPeerHost host, WorldReplayTape? tape = null) =>
+        new Pump(
+            fixture: fixture,
+            host: host,
+            tape: tape
+        );
+
+    private static async Task RunPumpAsync(WorldFixture fixture, WorldPeerHost host, WorldReplayTape? tape, CancellationToken ct) {
         try {
-            while (!ct.IsCancellationRequested) {
+            while (true) {
+                await host.WaitForPendingWorkAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
                 host.DrainPending();
                 fixture.Step();
                 tape?.NoteTick();
-
-                await Task.Delay(
-                    delay: TimeSpan.FromMilliseconds(value: 5),
-                    cancellationToken: ct
-                ).ConfigureAwait(continueOnCapturedContext: false);
             }
-        } catch (OperationCanceledException) {
+        } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
             // Expected teardown — the caller cancelled ct once it no longer needs the pump.
         }
+    }
+
+    /// <summary>Starts a listening <see cref="WorldPeerHost"/> over <paramref name="server"/> on an ephemeral loopback
+    /// port, on a host clock that reads <see cref="ClaimInstant"/> until a law advances it — so neither a claim's
+    /// validity, the handshake deadline, nor the refusal drain is decided by how long a law runs.</summary>
+    /// <param name="server">The authoritative server the host admits into.</param>
+    /// <param name="clock">The host's clock, which only the law advances.</param>
+    /// <returns>The started host; the caller owns disposal.</returns>
+    public static WorldPeerHost StartHost(WorldServer server, out VirtualClock clock) {
+        clock = new VirtualClock(start: ClaimInstant);
+
+        var host = new WorldPeerHost(
+            server: server,
+            timeProvider: clock,
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
+        );
+
+        host.Start(listen: "127.0.0.1:0");
+
+        return host;
+    }
+    /// <summary>Waits for the server to close <paramref name="stream"/> while expiring, on <paramref name="clock"/>,
+    /// what holds it open: first <see cref="WorldPeerHost.HandshakeDeadline"/> when <paramref name="handshakeDeadline"/>
+    /// is set (a connection that never finishes its pre-admission handshake), then the
+    /// <see cref="PeerWireProtocol.RefusalDrainTimeout"/> drain the host waits out for the peer to close first. Each is
+    /// expired through <see cref="VirtualClock.ExpireAsync"/>, so the connection is still open one tick before each due
+    /// instant and the close comes exactly when the drain expires.</summary>
+    /// <param name="clock">The host's clock from <see cref="StartHost"/>.</param>
+    /// <param name="stream">The client's stream, whose inbound direction the server has not yet closed.</param>
+    /// <param name="handshakeDeadline">Whether the handshake deadline must expire before the drain begins.</param>
+    /// <param name="ct">The test's own cancellation.</param>
+    /// <returns>Whether the server closed the connection without sending any further bytes.</returns>
+    public static async Task<bool> ExpireUntilClosedAsync(VirtualClock clock, Stream stream, bool handshakeDeadline, CancellationToken ct) {
+        var closed = WaitForCloseAsync(
+            ct: ct,
+            stream: stream
+        );
+
+        if (handshakeDeadline) {
+            await clock.ExpireAsync(
+                ct: ct,
+                dueTime: WorldPeerHost.HandshakeDeadline,
+                pending: closed
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+
+        await clock.ExpireAsync(
+            ct: ct,
+            dueTime: PeerWireProtocol.RefusalDrainTimeout,
+            pending: closed
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return await closed.ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Encodes <paramref name="query"/>, writes it over the admitted socket, and decodes the
     /// Completion-lane reply — the wire round trip itself, refusals included.</summary>
@@ -192,9 +281,25 @@ internal static class AdmissionWireFixture {
 
         return ((WorldSubmissionResult.Query)result!).Answer;
     }
+    /// <summary>Reads one byte from <paramref name="stream"/> to learn how the server ended the connection.</summary>
+    /// <param name="stream">The client's stream.</param>
+    /// <param name="ct">The test's own cancellation.</param>
+    /// <returns>Whether the server closed the connection without sending any further bytes.</returns>
+    public static async Task<bool> WaitForCloseAsync(Stream stream, CancellationToken ct) {
+        var probe = new byte[1];
+
+        try {
+            return (await stream.ReadAsync(
+                buffer: probe,
+                cancellationToken: ct
+            ).ConfigureAwait(continueOnCapturedContext: false) == 0);
+        } catch (Exception exception) when ((exception is IOException or SocketException)) {
+            return true;
+        }
+    }
     public static Task WriteIdentityResponseAsync(Stream stream, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct) {
         var codec = new CborAttestationCodec();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = ClaimInstant.ToUnixTimeSeconds();
         var claim = AttestationSigner.SignClaim(
             codec: codec,
             domain: identity.Domain,
@@ -202,8 +307,8 @@ internal static class AdmissionWireFixture {
             signerKey: identity.Key,
             signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
             purpose: WorldAdmissionDoor.Purpose,
-            notBefore: (now - 60L),
-            notAfter: (now + 60L),
+            notBefore: (now - 1L),
+            notAfter: (now + 1L),
             audience: WorldAdmissionDoor.Audience,
             sequence: null,
             claimBytes: challenge
@@ -215,5 +320,25 @@ internal static class AdmissionWireFixture {
             claim: codec.EncodeAttestation(attestation: claim),
             ct: ct
         );
+    }
+
+    private sealed class Pump : IAsyncDisposable {
+        private readonly CancellationTokenSource m_stop = new();
+        private readonly Task m_loop;
+
+        public Pump(WorldFixture fixture, WorldPeerHost host, WorldReplayTape? tape) {
+            m_loop = RunPumpAsync(
+                ct: m_stop.Token,
+                fixture: fixture,
+                host: host,
+                tape: tape
+            );
+        }
+
+        public async ValueTask DisposeAsync() {
+            await m_stop.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+            await m_loop.ConfigureAwait(continueOnCapturedContext: false);
+            m_stop.Dispose();
+        }
     }
 }

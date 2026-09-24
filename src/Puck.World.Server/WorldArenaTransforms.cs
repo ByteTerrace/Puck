@@ -1,4 +1,4 @@
-using Puck.World.Protocol;
+using Puck.Commands;
 
 namespace Puck.World.Server;
 
@@ -7,28 +7,6 @@ namespace Puck.World.Server;
 /// candidate document; the scope is always rewound, so a caller's store is exactly as it was and the ordinary
 /// mutation pipeline installs the candidate.</summary>
 public static class WorldArenaTransforms {
-    /// <summary>Lists every state row whose edit capability an operation needs.</summary>
-    /// <param name="transform">The operation.</param>
-    /// <returns>The addressed row names.</returns>
-    public static IEnumerable<string> Subjects(StateTransform transform) => transform switch {
-        StateTransform.Transfer transfer => ((transfer.Draw is null)
-        ? [transfer.From.Spelling, transfer.To.Spelling]
-        : [transfer.From.Spelling, transfer.To.Spelling, transfer.Draw.Spelling]),
-        StateTransform.SetRay ray => [ray.Row.Spelling],
-        StateTransform.Observe observe => [observe.Row.Spelling],
-        StateTransform.Shuffle shuffle => [shuffle.Row.Spelling, shuffle.Draw.Spelling],
-        StateTransform.Sort sort => [sort.Row.Spelling, .. sort.By.Select(selector: key => key.Row.Spelling)],
-        StateTransform.WriteSet writeSet => [writeSet.Row.Spelling],
-        StateTransform.BoardCombine combine => [combine.Row.Spelling],
-        StateTransform.Arrange arrange => [arrange.Row.Spelling],
-        StateTransform.Push push => [push.Row.Spelling],
-        StateTransform.ClearEnclosed enclosed => [enclosed.Row.Spelling],
-        StateTransform.Mix mix => SpellingSubject(spelling: mix.Into),
-        StateTransform.Mean mean => SpellingSubject(spelling: mean.Into),
-        StateTransform.Nearest nearest => SpellingSubject(spelling: nearest.Into.Spelling),
-        StateTransform.Remember remember => SpellingSubject(spelling: remember.Into.Spelling),
-        _ => [],
-    };
     /// <summary>Composes one operation without changing the supplied definition.</summary>
     /// <param name="definition">The validated current definition.</param>
     /// <param name="transform">The operation.</param>
@@ -40,7 +18,7 @@ public static class WorldArenaTransforms {
     /// <param name="guard">The submitted phase guard, or <see langword="null"/>. A matching guard both admits the
     /// operation and completes it: the composed candidate carries its phase row advanced by one.</param>
     /// <returns>Whether the operation composed.</returns>
-    public static bool TryApply(WorldDefinition definition, StateTransform transform, WorldPrincipal actor, ulong tick, string instance, out WorldDefinition candidate, out string reason, PhaseGuard? guard = null) {
+    public static bool TryApply(WorldDefinition definition, StateTransform transform, Principal actor, ulong tick, string instance, out WorldDefinition candidate, out string reason, PhaseGuard? guard = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: transform);
 
@@ -48,22 +26,23 @@ public static class WorldArenaTransforms {
         // A row declaring a phase admits an outside operation only under that phase's own guard; the world's own
         // rules write it unguarded.
         if (
-            (actor != WorldPrincipal.World) &&
-            Subjects(transform: transform).Any(predicate: name =>
+            (actor != Principal.World) &&
+            transform.Subjects().Any(predicate: subject =>
+            ((subject.Access == StateAccess.Write) &&
             ((WorldDefinitionRows.FindStateRow(
             rows: definition.State,
-            name: name
-        )?.PhaseOf is { } required) && (guard?.Row != required)))
+            name: subject.Name
+        )?.PhaseOf is { } required) && (guard?.Row != required))))
         ) {
             reason = "operation requires its declared phase guard";
 
             return false;
         }
         if (
-            (actor != WorldPrincipal.World) &&
-            (Subjects(transform: transform).Select(selector: name => WorldDefinitionRows.FindStateRow(
+            (actor != Principal.World) &&
+            (transform.Subjects().Where(predicate: static subject => (subject.Access == StateAccess.Write)).Select(selector: subject => WorldDefinitionRows.FindStateRow(
             rows: definition.State,
-            name: name
+            name: subject.Name
         )).FirstOrDefault(predicate: static subject => (subject?.IsRuleWritten ?? false)) is { } verdictRow)
         ) {
             reason = WorldVerdict.RefuseWrite(row: verdictRow);
@@ -74,7 +53,7 @@ public static class WorldArenaTransforms {
         // ingress that stamped the acting principal, before the operation is resolved against any store.
         if (
             (transform is StateTransform.Observe) &&
-            (actor != WorldPrincipal.World)
+            (actor != Principal.World)
         ) {
             reason = "observe is a world-authored operation";
 
@@ -109,7 +88,7 @@ public static class WorldArenaTransforms {
             dynamics: definition.Dynamics,
             generators: definition.Generators,
             instanceIdentity: instance,
-            sites: WorldServer.DrawSitesOf(catalog: arena.Catalog),
+            sites: WorldDrawSites.Of(catalog: arena.Catalog),
             ticksPerSecond: definition.SimulationRateHz,
             verdicts: WorldVerdictStamp.From(
                 catalog: arena.Catalog,
@@ -141,7 +120,7 @@ public static class WorldArenaTransforms {
                     name: admission.Row
                 )?.Phase is null) ||
                     (arena.PhaseSequence(rowOrdinal: phase.Ordinal) != admission.Sequence) ||
-                    ((admission.Participant is not null) && (actor != WorldPrincipal.World))
+                    ((admission.Participant is not null) && (actor != Principal.World))
                 ) {
                     reason = "phase admission refused";
 
@@ -196,37 +175,5 @@ public static class WorldArenaTransforms {
         } finally {
             arena.Rewind(mark: mark);
         }
-    }
-
-    // A vector operand spells its destination as a row name or as "<row>[<key>]"; a literal vector names no row.
-    private static IEnumerable<string> SpellingSubject(string? spelling) {
-        if (string.IsNullOrWhiteSpace(value: spelling)) {
-            return [];
-        }
-
-        var trimmed = spelling.Trim();
-
-        if (trimmed.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "vector("
-        )) {
-            return [];
-        }
-
-        var bracket = trimmed.IndexOf(value: '[');
-
-        if (
-            (bracket > 0) &&
-            trimmed.EndsWith(value: ']')
-        ) {
-            var row = trimmed[..bracket].Trim();
-
-            return ((row.Length == 0)
-                ? []
-                : new[] { row }
-            );
-        }
-
-        return [trimmed];
     }
 }

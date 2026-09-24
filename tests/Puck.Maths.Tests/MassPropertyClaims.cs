@@ -246,20 +246,20 @@ internal static class MassPropertyClaims {
         var fi = FoldScale(raw: left[8]);
 
         var subjectOk = FixedMassProperties.TryCompound(
-            parts: parts,
-            fractionBitsMass: fm,
-            fractionBitsLength: fl,
-            fractionBitsInertia: fi,
-            mass: out var mass,
             centerX: out var centerX,
             centerY: out var centerY,
             centerZ: out var centerZ,
+            fractionBitsInertia: fi,
+            fractionBitsLength: fl,
+            fractionBitsMass: fm,
             ixx: out var ixx,
-            iyy: out var iyy,
-            izz: out var izz,
             ixy: out var ixy,
             ixz: out var ixz,
-            iyz: out var iyz
+            iyy: out var iyy,
+            iyz: out var iyz,
+            izz: out var izz,
+            mass: out var mass,
+            parts: parts
         );
         var center = new long[3];
         var tensor = new long[6];
@@ -295,16 +295,16 @@ internal static class MassPropertyClaims {
         var fi = FoldScale(raw: right[3]);
 
         var subjectOk = FixedMassProperties.TryCylinderBody(
+            axial: out var axial,
             density: density,
             fractionBitsDensity: fd,
-            radius: radius,
-            height: height,
+            fractionBitsInertia: fi,
             fractionBitsLength: fl,
             fractionBitsMass: fm,
-            fractionBitsInertia: fi,
+            height: height,
             mass: out var mass,
-            axial: out var axial,
-            perpendicular: out var perpendicular
+            perpendicular: out var perpendicular,
+            radius: radius
         );
         var oracleOk = Oracles.TryCylinderBody(
             axial: out var expectedAxial,
@@ -320,11 +320,11 @@ internal static class MassPropertyClaims {
         );
 
         return Compare(
-            subjectOk: subjectOk,
+            expected: [expectedMass, expectedAxial, expectedPerpendicular],
+            operands: $"cylinder (density {density}@{fd}, radius {radius}, height {height} @{fl} -> mass @{fm}, inertia @{fi})",
             oracleOk: oracleOk,
             subject: [mass, axial, perpendicular],
-            expected: [expectedMass, expectedAxial, expectedPerpendicular],
-            operands: $"cylinder (density {density}@{fd}, radius {radius}, height {height} @{fl} -> mass @{fm}, inertia @{fi})"
+            subjectOk: subjectOk
         );
     }
     /// <summary>The bound <see cref="FixedMassProperties.MaximumFractionBitCount"/> states in its own remarks: every
@@ -667,37 +667,37 @@ internal static class MassPropertyClaims {
             switch (shape) {
                 case 0:
                     subjectOk = FixedMassProperties.TrySphereVolume(
-                        radius: first,
                         fractionBitsLength: fractionBitsLength,
                         fractionBitsVolume: fractionBitsVolume,
+                        radius: first,
                         volume: out candidate
                     );
                     break;
                 case 1:
                     subjectOk = FixedMassProperties.TryBoxVolume(
+                        fractionBitsLength: fractionBitsLength,
+                        fractionBitsVolume: fractionBitsVolume,
                         halfX: first,
                         halfY: second,
                         halfZ: third,
-                        fractionBitsLength: fractionBitsLength,
-                        fractionBitsVolume: fractionBitsVolume,
                         volume: out candidate
                     );
                     break;
                 case 2:
                     subjectOk = FixedMassProperties.TryCylinderVolume(
-                        radius: first,
-                        height: second,
                         fractionBitsLength: fractionBitsLength,
                         fractionBitsVolume: fractionBitsVolume,
+                        height: second,
+                        radius: first,
                         volume: out candidate
                     );
                     break;
                 default:
                     subjectOk = FixedMassProperties.TryCapsuleVolume(
-                        radius: first,
                         centerDistance: second,
                         fractionBitsLength: fractionBitsLength,
                         fractionBitsVolume: fractionBitsVolume,
+                        radius: first,
                         volume: out candidate
                     );
                     break;

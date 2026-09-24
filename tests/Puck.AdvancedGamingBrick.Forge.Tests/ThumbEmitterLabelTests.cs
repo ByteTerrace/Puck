@@ -3,46 +3,30 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 /// <summary>Pins the Thumb emitter's half of the shared forge label table: ids allocated in order, and each branch
 /// family refusing an unbound target under its own mnemonic rather than patching a zero displacement.</summary>
 public sealed class ThumbEmitterLabelTests {
-    [Fact]
-    public void AnUnboundCallTargetIsRefusedByMnemonic() {
-        var emitter = new ThumbEmitter();
-
-        emitter.Call(label: emitter.NewLabel());
-
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray(baseAddress: 0x08000000u));
-
-        Assert.Equal(
-            actual: refusal.Message,
-            expected: "bl targets an unbound label 0."
-        );
-    }
-    [Fact]
-    public void AnUnboundConditionalTargetIsRefusedByMnemonic() {
-        var emitter = new ThumbEmitter();
-
-        emitter.Branch(
+    // Each branch family, keyed by the mnemonic its refusal names.
+    private static readonly Dictionary<string, Action<ThumbEmitter, int>> Branches = new(comparer: StringComparer.Ordinal) {
+        ["bl"] = static (emitter, label) => emitter.Call(label: label),
+        ["b<cond>"] = static (emitter, label) => emitter.Branch(
             condition: ThumbCondition.Equal,
-            label: emitter.NewLabel()
-        );
+            label: label
+        ),
+        ["b"] = static (emitter, label) => emitter.Branch(label: label),
+    };
 
-        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray(baseAddress: 0x08000000u));
-
-        Assert.Equal(
-            actual: refusal.Message,
-            expected: "b<cond> targets an unbound label 0."
-        );
-    }
-    [Fact]
-    public void AnUnboundUnconditionalTargetIsRefusedByMnemonic() {
+    [InlineData("bl")]
+    [InlineData("b<cond>")]
+    [InlineData("b")]
+    [Theory]
+    public void AnUnboundTargetIsRefusedByItsMnemonic(string mnemonic) {
         var emitter = new ThumbEmitter();
 
-        emitter.Branch(label: emitter.NewLabel());
+        Branches[mnemonic](arg1: emitter, arg2: emitter.NewLabel());
 
         var refusal = Assert.Throws<InvalidOperationException>(testCode: () => emitter.ToArray(baseAddress: 0x08000000u));
 
         Assert.Equal(
             actual: refusal.Message,
-            expected: "b targets an unbound label 0."
+            expected: $"{mnemonic} targets an unbound label 0."
         );
     }
     [Fact]

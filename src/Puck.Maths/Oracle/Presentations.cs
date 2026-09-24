@@ -478,10 +478,9 @@ public static class Presentations {
     /// relabelling is neither empty nor one entry per basis index.</exception>
     public static ChargedPresentation<TValue, TOps> CayleyDickson<TValue, TOps>(int floors, ReadOnlySpan<int> basisRelabelling, TOps material, bool liveAssociator = false)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: floors);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: floors,
-            other: 5
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: 5,
+            value: floors
         );
 
         var dimension = (1 << floors);
@@ -942,10 +941,9 @@ public static class Presentations {
     /// <paramref name="windowDegree"/> is negative.</exception>
     public static ChargedPresentation<TValue, TOps> FreeMonoid<TValue, TOps>(int letterCount, TOps material, int windowDegree = 0)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: letterCount);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: letterCount,
-            other: 64
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: 64,
+            value: letterCount
         );
 
         return ChargedPresentation<TValue, TOps>.Create(
@@ -1642,10 +1640,9 @@ public static class Presentations {
     /// </remarks>
     public static ChargedPresentation<TValue, TOps> Shift<TValue, TOps>(int degreeBound, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degreeBound);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degreeBound,
-            other: 511
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: 511,
+            value: degreeBound
         );
 
         var modulus = new TValue[(degreeBound + 1)];
@@ -1730,15 +1727,13 @@ public static class Presentations {
     /// </remarks>
     public static ChargedPresentation<TValue, TOps> Shuffle<TValue, TOps>(int letterCount, int windowDegree, TOps material, ReadOnlySpan<int> letterProduct = default)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: letterCount);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: letterCount,
-            other: MaximumShuffleWords
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: MaximumShuffleWords,
+            value: letterCount
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: windowDegree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: windowDegree,
-            other: (MaximumShuffleWords - 1)
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: (MaximumShuffleWords - 1),
+            value: windowDegree
         );
 
         var merges = (0 != letterProduct.Length);

@@ -28,7 +28,7 @@ public sealed class FormatLineEndingTests {
     // The disk phase's pipeline: apply each pass in order, re-parsing between them, and take the full text back.
     private static string ApplyAll(string text, IReadOnlyList<FormatPass> passes) {
         foreach (var pass in passes) {
-            text = pass.Apply!(arg: CSharpSyntaxTree.ParseText(text: text).GetRoot()).ToFullString();
+            text = pass.Apply(node: CSharpSyntaxTree.ParseText(text: text).GetRoot()).ToFullString();
         }
 
         return text;
@@ -72,7 +72,7 @@ public sealed class FormatLineEndingTests {
     [Fact]
     public void TheDefaultPipelineLeavesAnLfFileFreeOfCarriageReturns() {
         var rewritten = ApplyAll(
-            passes: FormatPasses.All.Where(predicate: static pass => (pass.Default && !pass.Semantic)).ToList(),
+            passes: FormatPasses.All.Where(predicate: static pass => (pass.Default && pass.Syntactic)).ToList(),
             text: LineFeedFixture
         );
 

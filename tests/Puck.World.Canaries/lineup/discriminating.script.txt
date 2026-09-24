@@ -1,0 +1,25 @@
+# The same game, but seat 1 names Gus (6) instead of Finn: a wrong name loses, so seat 2 wins without naming anyone.
+replay.record lineup
+world.wait 5
+world.state.cell.set lineupSecret2 $value 5
+world.wait 2
+world.state.cell.set lineupAct seat 1
+world.state.cell.set lineupAct kind 1
+world.state.cell.set lineupAct value 9
+world.state.cell.set lineupAct request 1 add
+world.wait 45
+world.state.cell.set lineupAct seat 1
+world.state.cell.set lineupAct kind 1
+world.state.cell.set lineupAct value 8
+world.state.cell.set lineupAct request 1 add
+world.wait 45
+world.state.cell.set lineupAct seat 1
+world.state.cell.set lineupAct kind 2
+world.state.cell.set lineupAct value 6
+world.state.cell.set lineupAct request 1 add
+world.wait 5
+world.state lineupTable winner
+world.state lineupTable stage
+world.state lineupAsked
+replay.stop
+replay.verify lineup

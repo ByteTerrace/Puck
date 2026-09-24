@@ -236,8 +236,8 @@ public static class AttestationTestSupport {
 
         return SignedAttestation.FromSignedPortion(
             header: header,
-            payloadKind: AttestationPayloadKind.Opaque,
             payloadBytes: claimBytes,
+            payloadKind: AttestationPayloadKind.Opaque,
             signature: signature,
             signedPortion: signedPortion
         );

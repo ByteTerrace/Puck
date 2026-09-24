@@ -68,8 +68,8 @@ public sealed record WorldLookCue(
 /// resolved transform with its own personality, layered ON TOP of <see cref="Dynamics"/>. Legitimate only on a
 /// creation source (a catalog rig exports no parts); each key must name a part the creation's own part table
 /// declares.</param>
-/// <param name="Poses">A creation frame name to <c>state.&lt;row&gt;[.&lt;key&gt;]</c> map (<c>$body</c> in the key
-/// is the wearing body's index): the frame holds while its cell's stored value is nonzero, and the first holding
+/// <param name="Poses">A creation frame name to <c>state.&lt;row&gt;[.&lt;key&gt;]</c> map (a key that is exactly
+/// <c>$body</c> is the wearing body's index): the frame holds while its cell's stored value is nonzero, and the first holding
 /// frame in declaration order overrides the cue and replay cursor — a blink, a wince, a mouth shape the simulation
 /// schedules. Legitimate only on a creation source.</param>
 /// <param name="Lanes">Up to four optional expressions, in x/y/z/w order. Missing entries read zero.

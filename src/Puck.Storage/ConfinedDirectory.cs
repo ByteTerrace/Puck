@@ -88,13 +88,15 @@ internal sealed partial class ConfinedDirectory : IDisposable {
                     write: false
                 );
             }
-        } else { next = OpenLinux(
+        } else {
+            next = OpenLinux(
             Fd(handle: Handle),
             segment,
             directory: true,
             create,
             write: false
-        ); }
+        );
+        }
         if (next is null) { return false; }
         m_handles.Add(item: next);
         m_path = nextPath;
@@ -140,11 +142,13 @@ internal sealed partial class ConfinedDirectory : IDisposable {
 
         while (true) {
             cancellationToken.ThrowIfCancellationRequested();
-            try { return OpenFile(
+            try {
+                return OpenFile(
                 ".puck-lock",
                 create: true,
                 exclusive: true
-            )!; } catch (IOException exception) when (((exception.InnerException is Win32Exception native) &&
+            )!;
+            } catch (IOException exception) when (((exception.InnerException is Win32Exception native) &&
                                                                                        (native.NativeErrorCode is 11 or 32 or 33) && ((Environment.TickCount64 - started) < 5000))) { Thread.Sleep(millisecondsTimeout: 1); }
         }
     }
@@ -158,13 +162,15 @@ internal sealed partial class ConfinedDirectory : IDisposable {
     }
     internal ConfinedDirectory? Child(string name) {
         // Keep the parent capability alive in the caller. Linux must use its descriptor, not its old path.
-        if (OperatingSystem.IsWindows()) { return Open(
+        if (OperatingSystem.IsWindows()) {
+            return Open(
             Path.Combine(
                 path1: m_path,
                 path2: name
             ),
             create: false
-        ); }
+        );
+        }
         var handle = OpenLinux(
             Fd(handle: Handle),
             name,
@@ -174,10 +180,12 @@ internal sealed partial class ConfinedDirectory : IDisposable {
         );
 
         if (handle is null) { return null; }
-        var child = new ConfinedDirectory { m_path = Path.Combine(
+        var child = new ConfinedDirectory {
+            m_path = Path.Combine(
             path1: m_path,
             path2: name
-        ) };
+        ),
+        };
 
         child.m_handles.Add(item: handle);
         return child;
@@ -208,10 +216,12 @@ internal sealed partial class ConfinedDirectory : IDisposable {
         }
     }
     internal void RemoveTemporary(string name) {
-        if (OperatingSystem.IsWindows()) { File.Delete(path: Path.Combine(
+        if (OperatingSystem.IsWindows()) {
+            File.Delete(path: Path.Combine(
             path1: m_path,
             path2: name
-        )); } else if (
+        ));
+        } else if (
             (UnlinkAt(
             Fd(handle: Handle),
             name,

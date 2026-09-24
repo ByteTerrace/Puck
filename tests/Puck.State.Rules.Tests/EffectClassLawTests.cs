@@ -11,7 +11,6 @@ namespace Puck.State.Rules.Tests;
 public sealed class EffectClassLawTests {
     private sealed record Seal : ActionEffect;
     private sealed record Post(string Name, bool Refuses = false) : ActionEffect;
-
     private sealed class Ledger {
         public List<string> Log { get; } = [];
         public bool RefuseUnit { get; set; }
@@ -76,7 +75,7 @@ public sealed class EffectClassLawTests {
                     new Arm<Seal>(
                         discriminator: "seal",
                         ledger: ledger,
-                        needs: (EffectNeeds.Irreversible | EffectNeeds.Transactional)
+                        needs: EffectNeeds.Irreversible | EffectNeeds.Transactional
                     ),
                     new Arm<Post>(
                         discriminator: "post",

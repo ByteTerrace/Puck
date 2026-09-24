@@ -2,7 +2,7 @@
 
 > These Terms cover content people **create with and share through** ByteTerrace.Puck (the hub).
 > They sit alongside:
-> - [`LICENSE.md`](LICENSE.md) / [`LICENSING.md`](LICENSING.md) — the license for the ByteTerrace.Puck **engine**.
+> - [`LICENSE.md`](LICENSE.md) — the license for the ByteTerrace.Puck **engine** (the Apache License 2.0).
 > - [`CLA.md`](CLA.md) — for code/assets contributed **into** the engine.
 >
 > This page is a plain-language summary followed by the binding Terms. Where the two differ, the
@@ -182,7 +182,7 @@ its conflict-of-laws rules.
 
 | Document | Covers | Direction |
 | --- | --- | --- |
-| [`LICENSE.md`](LICENSE.md) / [`LICENSING.md`](LICENSING.md) | The ByteTerrace.Puck **engine** | ByteTerrace → users of the engine |
+| [`LICENSE.md`](LICENSE.md) | The ByteTerrace.Puck **engine** (Apache License 2.0) | ByteTerrace → users of the engine |
 | [`CLA.md`](CLA.md) | Code/assets contributed **into** the engine | Contributors → ByteTerrace |
 | **`PLATFORM-TERMS.md`** (this file) | Content **created with** ByteTerrace.Puck and shared on the hub | Creators ↔ ByteTerrace ↔ other users |
 

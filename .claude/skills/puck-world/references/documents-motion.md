@@ -1,6 +1,6 @@
 # A kit's `motion` row: holds and shaping
 
-Part of [`puck.world.def.v1`](documents.md). Field names and defaults are
+Part of [`puck.world.definition.v1`](documents.md). Field names and defaults are
 generated (`puck schema`, or `Assets/worlds/schema/kits.schema.json`); this
 file is the decision/derivation prose the schema cannot state.
 
@@ -21,8 +21,8 @@ LIST is mandatory — the hold list is the only spelling of a vertical channel,
 so a Motion-kind kit authoring none refuses by name — while
 `ResolveHold`/`ApplyHold` are selected like any other op) and `Shaping`
 (required only when the program selects `ShapeVelocity`). Two more optional
-rows on `WorldMotion` itself carry feel the engine used to hardcode, each
-defaulting to the old constant bit-for-bit when omitted: `upTurn`
+rows on `WorldMotion` itself carry feel tuning, each taking its record's
+default when omitted: `upTurn`
 (`WorldUpTurnRates`: `field`/`contact`, the half-angle-per-second ceilings on
 how fast a solved gravity field, respectively a measured ground-contact
 normal, may turn the body's up axis) and `obstruction`
@@ -554,7 +554,7 @@ example.
 Read back with `body.hold` (`[body.hold: body:<n> hold=<name|none>
 normal=(x, y, z) spend=<left|n/a>]`). The current row index, its anchor and
 normal, and the spend accumulator's remainder are simulation state: captured in
-`IntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
+`WorldBodyIntegrationResidue`, carried through `WorldAuthorityCheckpointCodec`, and part
 of the replay hash.
 
 **A kit's `tether` facet (`WorldTether` → `FixedWorldTether`) — an aimed

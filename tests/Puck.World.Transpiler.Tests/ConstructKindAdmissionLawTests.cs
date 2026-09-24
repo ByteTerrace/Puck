@@ -1,5 +1,4 @@
 using Puck.State;
-using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Vocabulary;
 using Xunit;
 
@@ -43,29 +42,10 @@ public class ConstructKindAdmissionLawTests {
         ("table", "embeds", _) => $"table probe embeds(probeVectors, space: lore) {{\n            a = {Value(kind: kind)}\n        }}",
         _ => "",
     });
-    // The one embeddable literal a probe ever writes ("x"), locked so the `embeds` facet's admitted case compiles
-    // without a live embedding call.
-    private static EmbeddingLock CreateProbeLock() {
-        var lockFile = new EmbeddingLock();
-        var space = new EmbeddingLockSpace(
-            dimensions: 8,
-            model: "puck-fixture",
-            revision: "1"
-        );
-        var hash = EmbeddingLock.ComputeTextHash(text: "x");
-
-        space.Entries[hash] = new EmbeddingLockEntry(
-            Text: "x",
-            Vector: "fwAAAAAAAAA"
-        );
-        lockFile.Spaces["lore"] = space;
-
-        return lockFile;
-    }
     private static string Report(string source) {
         var compilation = WorldCompiler.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
-            embeddings: CreateProbeLock(),
+            embeddings: WorldSources.LoreLock("puck-fixture", "x"),
             source: source
         );
 

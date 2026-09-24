@@ -17,8 +17,10 @@ public abstract record ActionPredicate {
     /// <param name="Left">Left numeric expression.</param>
     /// <param name="Comparison">The comparison operation.</param>
     /// <param name="Right">Right numeric expression.</param>
-    /// <param name="Kind">The common Int or Fixed domain; no implicit conversion is performed.</param>
-    public sealed record CompareValue(ExpressionProgram Left, ActionStateComparison Comparison, ExpressionProgram Right, CellKind Kind = CellKind.Fixed) : ActionPredicate;
+    /// <param name="Kind">The common Int or Fixed domain, or <see langword="null"/> to infer it the way a local's is:
+    /// Int, unless both sides are constants alone and one holds a fraction, and the other domain when the first does
+    /// not compile. No implicit conversion is performed between the sides.</param>
+    public sealed record CompareValue(ExpressionProgram Left, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, ExpressionProgram Right, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellKind? Kind = null) : ActionPredicate;
     /// <summary>Compares a named state cell against either a fixed authored value, or another named state
     /// cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of
     /// <paramref name="Value"/> and <paramref name="ComparandState"/> may be present (refused by name when both or
@@ -43,7 +45,7 @@ public abstract record ActionPredicate {
     /// <paramref name="Key"/>. Refused when <paramref name="ComparandState"/> names a reserved channel or is absent.</param>
     public sealed record CompareState(
         StateChannelRef State,
-        ActionStateComparison Comparison,
+        [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
         decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandState = null,

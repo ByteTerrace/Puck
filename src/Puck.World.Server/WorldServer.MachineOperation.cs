@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using Puck.Abstractions.Machines;
 using Puck.World.Protocol;
@@ -14,7 +15,7 @@ public sealed partial class WorldServer {
     /// confused with live runtime application.</returns>
     public MachineOperationResult ApplyMachineOperation(
         WorldMachineOperation operation,
-        WorldPrincipal principal,
+        Principal principal,
         int connectionId,
         long correlationId
     ) {

@@ -2214,10 +2214,7 @@ internal static partial class Subjects {
                 tiles: streamed
             );
 
-            if (!IsFactor(
-                haystack: streamed,
-                needle: walk
-            )) {
+            if (!(((ReadOnlySpan<bool>)streamed).IndexOf(value: walk) >= 0)) {
                 return $"the chain walk word of √{d} is not a factor of the streamed substitution word";
             }
         }

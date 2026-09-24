@@ -12,9 +12,9 @@ without keys cannot carry a claim, and an unverifiable claim is refused.
 
 The engine has a one-way flow with explicit ownership at each boundary:
 
-1. **Document.** A versioned `puck.world.def.v1` document is the durable input.
+1. **Document.** A versioned `puck.world.definition.v1` document is the durable input.
    The [world data guide](../../src/Puck.World/README.md#the-world-as-data)
-   and [schema guide](../../src/Puck.World.Schema/README.md#puckworlddefv1the-world-definition)
+   and [schema guide](../../src/Puck.World.Schema/README.md#puckworlddefinitionv1the-world-definition)
    describe its fields and serialization.
 2. **Validation.** `WorldDefinitionValidator` checks the complete composed
    candidate document before it can become live. Builders consume a valid
@@ -41,6 +41,147 @@ the server owns accepted simulation state, snapshots own transportable observati
 presentation owns timing and visual choices. A layer may consume the previous
 layer output through its contract, but it does not reach around that contract
 to mutate another layer state.
+
+## Paths a document names
+
+Every relative path a world document authors resolves beside that document,
+through one resolver (`WorldDocumentPaths`): a `basis` or `imports` entry, a
+`references` row, the music, table, tune and patch rows' `source`, an addon's
+`modulePath`, a pipeline or graph `source`, a probe's `track`, a machine's
+configured content, `host.icon`, and a `schedule` instance's `document`. An
+absolute path is honored as written. A document and its files therefore move
+together: the build copies the `Assets` tree beside the executable with its
+layout intact, a staged composition or test world re-expresses its paths from
+its source directory to the staging directory, and `world.save` to another
+directory re-expresses them from the loaded document's directory to the
+target's.
+
+A loaded definition carries its directory as `WorldDefinition.DocumentDirectory`:
+the file's directory for a document read from disk, the source's directory for
+a compiled `.puck` world, and the recorded document's directory for a replay
+re-drive. It is not document content, so it never enters a hash, a pin, or a
+compiled world's key. A document with no directory (standard input, an
+in-memory build, a hosted or peer-delivered document) resolves only absolute
+paths: validation refuses a relative asset row by name, and mounting refuses a
+relative addon module by name. When a basis or an import in another directory
+is merged, its file paths are re-expressed relative to the document that merges
+it, so each path still names the file its author meant; that covers asset rows,
+addon modules, pipeline and graph sources, probe tracks, text fonts, and the
+window icon. Document names (`references`, `schedule` instances) stay as
+written: worlds staged together reach each other by name. A `captures`
+directory the document names also resolves beside it. A `schedule` names no
+output directory at all: `--schedule-dir` both arms it and says where it writes.
+
+Files the engine ships (the default world, fonts, shaders, probe kinds) resolve
+beside the executable through `PuckPaths.Shipped`. Neither resolver falls back
+to the other.
+
+## Compiled worlds
+
+A compiled world stores what a boot derives from a document, so a later boot of
+the same document can take it instead of deriving it again. It is a cache with a
+strong key, never a source of truth: the document stays the durable input, and a
+boot that finds no compiled world derives everything and runs the same world.
+
+**The file.** A compiled world is a [chunk container](../reference/assets.md#chunk-containers)
+with the magic `PWLD` and format version 1, named `<name>.puckb` after its
+document (`moth.puck` and `moth.world.json` both map to `moth.puckb`). Its header
+holds, in order, four keys, and a boot whose own four keys differ ignores the
+whole file:
+
+| Key | Holds |
+|---|---|
+| Engine build | The `sha256-64` pin over the module version id of every `Puck.*` assembly the document model's assembly reaches, so any change to code a derivation can run moves it. |
+| Catalog fingerprint | The composition fingerprint of the machine catalog the document composed under. |
+| Definition hash | The 64-bit content hash of the composed, undrawn definition's canonical JSON (`WorldDefinitionSerialization.Serialize`), the same `sha256-64` pin every other door computes over a definition. A `.puck` source and the document it compiles to key one compiled world. |
+| Instance identity | The instance the definition's draws were seeded for; the desktop boot and `puck compile` use `boot`. |
+
+Each chunk is one registered derivation's product, and each code appears once.
+A chunk records the version of its derivation and the content hash of every
+input it read beyond the definition, and a boot keeps a stored chunk only while
+its version is the derivation's own, every input still reads as recorded, and
+no chunk it depends on was derived afresh. Otherwise the boot derives that chunk
+and keeps the rest, except a chunk too heavy for a boot's critical path, which
+declares that it does not derive on boot: a boot that finds no compiled world
+holding it leaves it out of the boot and of the compiled world it writes, and
+names it as deferred. Nothing is repaired or adapted.
+
+| Code | Holds | Inputs |
+|---|---|---|
+| `DEFN` | The drawn, resolved definition as compact canonical JSON: the composed definition after its first-fill draws and the state references they fill, before host overrides, which every boot applies. Loading it parses the JSON in place of drawing again. | None |
+| `ASST` | For every music, table, tune, and patch row, in order of family then name: the family, row name, authored source, and the source file's 64-bit content hash, or its absence. | Each distinct asset source, by its authored spelling, read beside the document ([paths a document names](#paths-a-document-names)) |
+| `BAKE` | The path of the bake pack relative to the document's directory, then every distinct bake key of the drawn definition's prototypes at the standard tier, as the key's pin, in ordinal order. The outcomes live in the pack, not here ([creation bakes](#creation-bakes)). Its version is the baker's. It does not derive on boot. | None; it reads `DEFN` |
+
+`CompiledWorldChunks` lists the derivations in the order they derive and load,
+`DEFN` first; a later package registers its chunk with `With`, and the
+container and header do not change. Live and per-device products are never
+stored: GPU objects, machine instances, mounted addons, adjacency projections
+and neighbour solids, and the live scene program.
+
+**Where compiled worlds come from.** `puck compile` writes one beside each world
+document it writes, and a `.world.json` path given to it contributes its compiled
+world alone. The game's build runs the same compile over every shipped world
+(`build/WorldAssets.targets`) and ships each compiled world beside its document
+in `Assets/worlds`. A module fragment, which does not parse and draw as a world
+on its own, has none. A boot looks beside its document first and then in the
+per-user `compiled-worlds` cache, which every boot on the device shares whatever
+its [state root](../../src/Puck.World/README.md), takes the first compiled world
+whose header is its own, and, when it derived any chunk, writes the whole
+compiled world into that cache, named by the `sha256-64` hex of
+the document's full path; it never writes beside the document. A file that
+cannot be read or written costs a derivation and nothing else. The boot prints
+one `[world] compiled world:` line after its `[world] definition:` line, naming
+where it read the compiled world, the chunks it kept, derived and deferred, and
+where it wrote one.
+
+**What a boot counts.** The `world.boot` work source counts
+`world.boot.compiled-hits`, one per boot whose drawn definition came from a
+`DEFN` chunk, and `world.boot.chunk-derivations`, one per chunk derived afresh.
+Both depend on what a boot finds on disk, so both are pacing-class.
+
+A boot from a compiled world still validates the definition and compiles its
+rules, and still composes, parses and serializes the authored document to
+compute the definition hash, so `DEFN` saves the draw alone. The hosted
+asynchronous load and the replay drive draw without a compiled world. The work
+still open, and the chunks that follow, are in
+[the runtime and delivery plan](../plans/runtime-and-delivery.md#compiled-worlds).
+
+### Creation bakes
+
+A creation bake is a prototype's presentation assets: an indexed mesh, its
+surface textures, and an octahedral impostor
+([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
+keyed by the creation's pin (the prototype row's hash), the baker's version, and
+the quality tier, and one key is one set of bytes. Bakes are presentation only:
+contact, queries and simulation keep reading the field, and nothing draws a bake
+yet.
+
+A build output ships each bake once. `puck compile --tree` writes one bake pack,
+`bakes.puckbake`, at the root of its output: a chunk container
+(`WorldBakePack`, magic `PWBK`) holding, for each key the run's compiled worlds
+name, the encoded bake or the refusal of a creation that has none. Each
+compiled world's `BAKE` chunk names only its keys and the pack's path, so a
+creation many worlds share is baked once per run and stored once. A compile
+without `--tree` writes the pack beside the compiled world and keeps the
+outcomes an earlier compile left in it. The same tree run writes the
+[package store](../reference/shaders.md#the-builds-package-store), `packages/`,
+holding the compiled shader package of every pipeline source its worlds'
+`views.pipelines` rows name, so a released world compiles no shader on the
+player's device either.
+
+One cache, `WorldBakeStore`, is filled two ways. A boot that keeps a `BAKE` chunk
+holds, in memory and without copying, every outcome it names that the pack
+beside it carries, so a released world bakes nothing on the player's device. A
+key the pack lacks, or a pack that is missing or unreadable, is left to the
+presentation. A presentation's `WorldBakeSchedule` looks up every prototype's
+key whenever the delivered definition changes and queues each one the cache
+lacks. It resolves the queue one key at a time on the thread pool: a key an
+earlier run kept in the per-user `bakes` cache is read back, and any
+other is baked and kept there, so editing one prototype bakes that prototype
+alone. A prototype draws through its field until its bake is ready. The
+`sdf.bakes` work source counts the keys the cache held, the keys scheduled, the
+bakes made, the refusals, and the field evaluations spent; every kind is
+pacing-class, because what the cache already holds decides it.
 
 ## World relationships
 
@@ -364,9 +505,10 @@ and every other positive divisor is equally expressible.
 
 The divisibility rule stops at the engine-time boundary. A consumer whose own clock does not divide
 evenly by the world rate carries its remainder across steps; it never constrains the authored rate to
-make its own division convenient. Audio's historical `FramesPerSimStep = 200` is exactly such a
-leaked 240 Hz shortcut: continuous audio stepping uses a remainder-carry accumulator so 90 Hz emits
-the exact long-run 533, 533, 534, … frame sequence rather than rounding or refusing the rate. The
+make its own division convenient. Continuous audio stepping therefore uses a remainder-carry
+accumulator (`AudioMixer.AdvanceStepFrames`) so 90 Hz emits the exact long-run 533, 533, 534, …
+frame sequence rather than rounding or refusing the rate; the fixed 240 Hz
+`AudioMixer.FramesPerSimStep` is exact only at that rate. The
 same rule applies to every derived subsystem.
 
 Authors express motion, acceleration, durations and other time quantities in seconds (`u/s`,
@@ -422,7 +564,7 @@ source-authored destination
 = materialized session capabilities
 ```
 
-`VerifiedClaims` is evidence normalized by the local or remote authentication boundary, never ids
+Verified claims are evidence normalized by the local or remote authentication boundary, never ids
 asserted by a serialized request. Remote evidence carries issuer-qualified authority, document, user
 and group identities plus audience, expiry, replay protection or channel binding, and membership
 proof. The target reads its own durable policy before any participant authority exists.
@@ -655,5 +797,5 @@ reopen it.
 
 ### Trust and attestation
 
-Attestation's rejected shapes live with the project:
-[src/Puck.Attestation/README.md, "Ruled out"](../../src/Puck.Attestation/README.md#ruled-out).
+Attestation's rejected shapes live in its reference:
+[Offline attestation, "Ruled out"](../reference/attestation.md#ruled-out).

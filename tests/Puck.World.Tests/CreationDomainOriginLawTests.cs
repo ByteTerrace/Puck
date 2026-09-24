@@ -55,28 +55,15 @@ public sealed class CreationDomainOriginLawTests {
         z: 0f
     );
 
-    private static void AssertCanonicalizerAccepts(ShapeDocument shape) =>
-        Assert.Empty(collection: CreationCanonicalizer.Validate(document: Document(shape: shape)));
-    private static void AssertCanonicalizerRefusesNaming(ShapeDocument shape, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: Document(shape: shape));
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
-    private static CreationDocument Document(ShapeDocument shape) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: [shape],
-            Frames: null
-        );
+    private static void AssertCanonicalizerAccepts(ShapeDocument shape) => CreationFixtures.AssertAccepts(document: Document(shape: shape));
+    private static void AssertCanonicalizerRefusesNaming(ShapeDocument shape, string needle) => CreationFixtures.AssertRefusesNaming(
+        document: Document(shape: shape),
+        needle: needle
+    );
+    private static CreationDocument Document(ShapeDocument shape) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: [shape]
+    );
     private static SdfProgram Emit(ShapeDocument shape) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

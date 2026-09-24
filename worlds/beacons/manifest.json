@@ -1,0 +1,18 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "beacons",
+  "name": "Puck Beacons",
+  "version": "0.1.0",
+  "basis": "beacon.puck",
+  "worlds": [
+    {
+      "id": "beacons",
+      "source": "beacons.puck"
+    }
+  ],
+  "files": [
+    "README.md",
+    "beacon.puck",
+    "beacons.puck"
+  ]
+}

@@ -25,17 +25,17 @@ and emulator stop conditions can change a reported total.
 
 ## Running the optional suites
 
-```powershell
-$env:PUCK_AGB_BIOS = '<16-KiB retail BIOS>'
-$env:PUCK_AGB_TESTROMS = '<corpus root>'
-$env:PUCK_AGB_ACCURACY_SUITE = '<mGBA suite ROM>'
-$env:PUCK_AGB_AGS = '<TCHK10 AGS cartridge>'
+The battery takes every input on its command line:
 
-dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --tier B
+```powershell
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --tier B `
+    --bios '<16-KiB retail BIOS>' --accuracy-suite '<mGBA suite ROM>' --ags '<TCHK10 AGS cartridge>'
 ```
 
-Commercial render and link stages additionally use `PUCK_AGB_GAMES` and
-`PUCK_AGB_LINK_GAME`. Missing assets produce skips.
+Commercial render and link stages additionally use `--games` and
+`--link-game`. Missing assets produce skips. The
+[battery README](../../../src/Puck.AdvancedGamingBrick.Post/README.md) lists
+every option, including `--corpus-cache` for the fetched test-ROM corpora.
 
 ## AGS aging cartridge
 

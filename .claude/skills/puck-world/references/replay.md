@@ -7,13 +7,13 @@ re-drives a tape into the LIVE session at the recorded rate, and
 `replay.fork` fast-forwards a tape into the live session and keeps recording
 from there into a standalone child. Files (all in
 `src/Puck.World.Server/`, namespace `Puck.World`): `WorldReplayTape.cs` +
-`WorldReplayTape.Drive.cs` (the live drive), `WorldReplaySnapshot.cs`,
-`WorldReplayRefusal.cs`, `WorldReplayVerdict.cs`,
-`WorldReplayCodecException.cs`, the read-back in `WorldReplayInspector.cs` +
-`WorldReplayEntryDescriber.cs`; the verb surface (`WorldReplayCommandModule.cs`,
-`.Drive.cs`, `.Inspect.cs`) lives in `src/Puck.World.Console/` instead — it
-reaches the tape and the read-back by their public surface, the same way
-every other module moved out of `Puck.World`.
+`WorldReplayTape.Drive.cs` (the live drive), `WorldReplayTape.Extensions.cs`,
+`WorldReplaySnapshot.cs`, `WorldReplayRefusal.cs`, `WorldReplayVerdict.cs`, the
+read-back in `WorldReplayInspector.cs` + `WorldReplayEntryDescriber.cs`;
+`WorldReplayCodecException.cs` is in `src/Puck.World.Protocol/Codecs/`. The verb
+surface (`WorldReplayCommandModule.cs`, `.Drive.cs`, `.Inspect.cs`) lives in
+`src/Puck.World.Console/` and reaches the tape and the read-back by their public
+surface.
 
 ## Contents
 
@@ -30,7 +30,7 @@ every other module moved out of `Puck.World`.
 
 - Extension `.puckreplay`, stored under `<WorldStateRoot.Resolve()>/Replays`
   (so `--state-dir` isolates replays too).
-- `Magic = 0x5052_4C57` ("WLRP" in wire byte order) + `ShapeToken = 1`.
+- `Magic = 0x5052_4C57` ("WLRP" in wire byte order) + `ShapeToken`.
   The current key includes authoritative state-system hashes, local flock
   perception state, full slot generations, and shared navigation trees/pending work.
   Shared tree nodes fold through canonical 64-cell block digests and a cached
@@ -39,8 +39,7 @@ every other module moved out of `Puck.World`.
   Tree eviction ages are unique, contiguous recency ranks, not saturated counters.
   Decision policies additionally hash their sorted binding keys, generations,
   selected options/body incarnations, cadence/commitment timers, interrupt latches, and local PCG
-  states/counters. The authority checkpoint codec carries these rows as well
-  (version 1).
+  states/counters. The authority checkpoint codec carries these rows as well.
   Host recovery rows persist rollback-only and commit-confirmed phases; the two
   cannot coexist. Partial rollback removes paired body/profile rows without
   allowing a partial commit retry. Confirmed commits retain source histories and
@@ -65,7 +64,13 @@ every other module moved out of `Puck.World`.
   The fork-provenance slot remains `(bool present,
   string parentName, int32 tick)` right behind `SimulationRate`, read back as
   `WorldReplaySnapshot.ForkedFrom` (`WorldReplayForkProvenance`), refused by
-  name when it claims more copied ticks than the tape holds.
+  name when it claims more copied ticks than the tape holds. Right behind it,
+  a nullable string carries the directory the recording server's pipeline
+  source reader resolved `views.pipelines` rows against
+  (`WorldReplaySnapshot.PipelineSourceDirectory`); `Drive` attaches a
+  `WorldPipelineSources` over it to the shadow server, so a recorded
+  `CommitViewPipeline` binds against the same sources and re-drives to the
+  recorded outcome.
   World remains at version 1 during development (owner instruction). Change the
   current format directly; do not bump versions or accumulate retired magic values
   for development edits. Re-record verification tapes against the current code.
@@ -80,15 +85,22 @@ every other module moved out of `Puck.World`.
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
-- Command/grant/revoke/session bodies are length-prefixed instances of the same
-  canonical `WorldSubmissionCodec` leaves used by the frame grammar and
-  loopback. That leaf owns exhaustive two-direction wire maps and preserves
-  the retired capability value 2. Tape-only metadata retains its own pinned
-  maps. Mounted-addon receipts contain name, hash, and fuel; no obsolete lane placeholder is stored.
-- `WriteFile` encodes to memory first and writes one complete buffer — a
-  codec throw never truncates the destination. Read-side: every untrusted
-  length prefix is validated against bytes remaining before sizing an
-  allocation.
+- The tape is one `Puck.Networking` `WireWriter` leaf read back by one bounded
+  `WireReader` — the stack the submission wire, the authority checkpoint, and
+  the federation frames share, with the same u16-prefixed UTF-8 strings.
+  Command/grant/revoke/session/designation/mutation/composition/query/screen-op
+  bodies are length-prefixed blocks holding the same canonical
+  `WorldSubmissionCodec` leaves the frame grammar and loopback use; the
+  principal, intent-submission, and rebuild-kind lanes are the shared
+  `WorldWireCodec` leaves; the peer-event rows are the `WorldWireLeaves` leaf
+  the checkpoint also carries. Every enum crosses through `WorldWireTags`; an
+  undeclared byte is refused like any other malformed value, and a command
+  vector with a non-finite lane is refused at decode. Mounted-addon receipts
+  contain name, hash, and fuel.
+- `Encode` builds the whole tape in memory; `WriteFile` writes that one
+  complete buffer, so a codec throw never truncates the destination.
+  Read-side: every untrusted count is bounded by the bytes remaining before it
+  sizes an allocation, and bytes after the tape are refused.
 
 ## What the tape records — and does not
 
@@ -98,7 +110,7 @@ module content hash, fuel/tick — copied from the instances that MOUNTED,
 never the document rows), and the active local seats with a pinned profile
 (`WorldReplayProfilePin(Name, MoveSpeed, TurnSpeed)`, raw fixed-point, never
 float accessors). There is no captured identity/profile catalog on the tape —
-owned identities are ordinary `puck.world.def.v1` documents on disk, outside
+owned identities are ordinary `puck.world.definition.v1` documents on disk, outside
 the tape's scope. `Drive(profiles, engines, addonHostFactory)` re-resolves each seat by pinned
 `Name` against the LIVE `WorldOwnedWorlds` catalog handed to it at replay
 time; the pin's own rates are what make that safe even when the live
@@ -110,15 +122,13 @@ session's.
 Per tick: ONE ordered authority/server-event list plus the intent list
 (`WorldReplayTickInput`). `WorldReplayEntry` discriminants:
 `Command` (0), `Grant(grant, actor)` (1), `Revoke(grant, actor)` (2),
-`PeerAdmitted` (3), `PeerDisconnected` (4) — discriminant 5 (the retired
-`AddonLifecycle` entry) is unassigned and never reused, matching
-`WorldMutationKindCatalog`'s own retired-ordinal precedent — `Rebuild(kind,
-pathHint, force, contentHash, actor)` (6), `ScreenOp(op, contentSignature,
-actor)` (7), `Session(request)` (8), `Designation(designation, actor)` (9),
-`RateLever(paused)` (10), `Transfer` (11),
-`Mutation(mutation, actor, outcome)` (12), `Undo(count, actor)` (13),
-`Composition(composition, actor)` (14), `Query(query, actor)` (15), and
-`LinkDelivery(adjacencyName)` (16). The
+`PeerAdmitted` (3), `PeerDisconnected` (4), `Rebuild(kind,
+pathHint, force, contentHash, actor)` (5), `ScreenOp(op, contentSignature,
+actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
+`RateLever(paused)` (9), `Transfer` (10),
+`Mutation(mutation, actor, outcome)` (11), `Undo(count, actor)` (12),
+`Composition(composition, actor)` (13), `Query(query, actor)` (14), and
+`LinkDelivery(adjacencyName)` (15). The
 peer events
 carry generation-bearing identities and
 the grants minted/revoked through the ordinary server doors. The
@@ -208,7 +218,7 @@ re-derived pads. Pixels, camera rigs, overlays, and audio remain excluded.
 
 **Replay verification is side-effect-free.** Replay
 is faithful re-execution of the captured submission/intent stream from a
-boot-anchored snapshot. A mid-session document edit IS re-applied now, through
+boot-anchored snapshot. A mid-session document edit IS re-applied, through
 the same buffered mutation door the live session used — which is re-execution,
 not a stored effect being replayed, so the side-effect-free property is
 unchanged: the pipeline touches the shadow server's own document only. A rule-fired `ActionEffect.Save` DOES re-derive deterministically
@@ -268,11 +278,11 @@ checkpoint comparison. A kit's `dynamics`-shaped planar follower state rides alo
 tracked pose derives from every tick), so a follower divergence still surfaces
 as a hash MISMATCH on the very next tick it moves the pose — but the follower
 raws themselves are not independently hashed; they cross only through
-`TransferState`/`WorldAuthorityCheckpointCodec` (see
+`WorldBodyTransferState`/`WorldAuthorityCheckpointCodec` (see
 [mutations.md](mutations.md)'s body-motion notes), never the replay tape.
 Checkpoint continuation also carries the follower seed latches, arbitrary-up
 frame/reseat/turn fractions, and same-world tether state through
-`WorldBody.IntegrationResidue`; none is independently covered by this population
+`WorldBodyIntegrationResidue`; none is independently covered by this population
 hash before it changes a later pose.
 Across a session request, MATCH proves that re-executing the request reproduced
 the same hashed authoritative trajectory. It does not directly prove the request's reply,
@@ -303,7 +313,8 @@ and fed the recorded ticks, with local seat input masked at the loopback.
   failed `Select` can still move its selector; authority denials return
   before dispatch and do not latch it. Guest and machine accumulated state
   and pre-arm screen operations are not in the record-start image. The
-  grant/revoke leaf carries `WorldGrant.VerbMask` on tape.
+  grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`
+  and `WriteMask` included.
 - `replay.stop` — persists FIRST (the tape is evidence of the capture),
   detaches taps on every exit path, then re-drives once and echoes the
   verdict. A post-persist drive failure reports "the LIVE TREE moved past
@@ -335,8 +346,8 @@ for every world that authors no `simulation` section, or whatever rate the
 recorded world authored), hash.
 
 - The recorded rate is checked right after deserializing the embedded
-  definition — as early as it CAN run now that the rate is authored per
-  world rather than one build-wide constant: a tape's `SimulationRate`
+  definition — as early as it can run, since the rate is authored per
+  world: a tape's `SimulationRate`
   disagreeing with that SAME embedded definition's own `SimulationRateHz`
   refuses by name (`RateMismatch`) rather than re-driving at the wrong step
   size — that would produce a genuinely different trajectory that reports as
@@ -513,8 +524,10 @@ from child tick 30. Omitted, a drive runs to the tape's end.
 - Tape byte-layout and semantic changes update the first format in place. Regenerate
   relevant verification recordings; do not add compatibility readers or version bumps.
 - The authored float fields in commands round-trip bit-exactly through the
-  shared command leaf; keep its explicit two-direction discriminant map and
-  the command apply sites current together when touching a command shape.
+  shared command leaf, and its vector fields cross only when every lane is
+  finite (refused on both encode and decode); keep its explicit two-direction
+  discriminant map and the command apply sites current together when touching
+  a command shape.
 - A new `WorldReplayEntry`/command discriminant needs both switch sides;
   the drive's `default:` arm throws `WorldReplayCodecException`
   rather than dropping an unhandled kind.

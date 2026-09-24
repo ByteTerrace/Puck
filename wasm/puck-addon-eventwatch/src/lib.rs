@@ -48,9 +48,9 @@ puck_stdlib::channels! {
 /// name has no ordinal to strand; see `puck-addon-arcade`'s identical fix for the full account.
 const HUD_SECTION_NAME: &str = "Hud";
 
-/// `[MutationKind(ordinal: 44, section: WorldSection.Hud)] WorldMutation.UpsertHudPanel`'s declared
+/// `[MutationKind(ordinal: 39, section: WorldSection.Hud)] WorldMutation.UpsertHudPanel`'s declared
 /// dispatch ordinal.
-const KIND_UPSERT_HUD_PANEL: u8 = 41;
+const KIND_UPSERT_HUD_PANEL: u8 = 39;
 
 /// The one HUD panel this guest ever writes — a single text row, overwritten (whole-row upsert, never
 /// a field poke) on every edge.

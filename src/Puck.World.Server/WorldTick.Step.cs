@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -65,6 +66,7 @@ public sealed partial class WorldTick {
 
         return true;
     }
+
     /// <summary>Dispatches one server-authored event, either inline or through the ordered domain.</summary>
     /// <param name="serverEvent">The event.</param>
     /// <param name="ordered">Whether to enqueue it on the ordered domain rather than apply it inline.</param>
@@ -194,6 +196,7 @@ public sealed partial class WorldTick {
 
         return applied;
     }
+
     // Build and deliver the tick's snapshot to every typed-lane subscriber. Skipped with no subscriber attached.
     private void EmitSnapshot(ulong tick, ulong stepTicks) {
         if (!Host.Output.HasTypedSubscribers) {
@@ -227,7 +230,6 @@ public sealed partial class WorldTick {
             DrainOrdered();
         }
     }
-
     // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
     // advanced is one refresh. An authored row the source could not resolve contributes no projection at all, which
     // is exactly "nothing was delivered" — the staleness count rises and the grace comparison decides. Replay drives
@@ -348,7 +350,7 @@ public sealed partial class WorldTick {
         foreach (var designation in Host.Population.DesignationOutputs) {
             _ = Host.Document.ApplyDesignationCore(
                 designation: designation,
-                principal: WorldPrincipal.Console,
+                principal: Principal.Console,
                 knownSubject: true,
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0
@@ -360,11 +362,11 @@ public sealed partial class WorldTick {
         // pipeline for the NEXT tick's drain — the same door a console world.generate and a world rule both use, so
         // one mechanism covers all three rather than three. The one-tick latency is real and reported: this is the
         // first ActionEffect to write the DOCUMENT rather than per-body state, so it is the first to pay the
-        // pipeline's own round trip. The acting principal is WorldPrincipal.World whichever body fired it — the
+        // pipeline's own round trip. The acting principal is Principal.World whichever body fired it — the
         // effect is the world's authored program acting, not the seat (see that principal's remarks).
         foreach (var invocation in Host.Population.GeneratorInvocationOutputs) {
             Host.EnqueueMutation(mutation: new WorldMutation.Generate(
-                Principal: WorldPrincipal.World,
+                Principal: Principal.World,
                 Row: invocation.Row
             ));
         }
@@ -401,7 +403,7 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            var principal = WorldPrincipal.Seat(slot: slot);
+            var principal = Principal.Seat(slot: slot);
             var target = GrantSubject.Screen(index: engageProbeScreens[slot]);
 
             if (Host.Engagement.Compose(
@@ -673,7 +675,7 @@ public sealed partial class WorldTick {
                         foreach (var row in Host.GrantTable.Rows(principal: stale)) {
                             Host.Revoke(
                                 grant: row,
-                                actor: WorldPrincipal.Console
+                                actor: Principal.Console
                             );
                         }
                     }
@@ -684,7 +686,7 @@ public sealed partial class WorldTick {
                 foreach (var grant in admitted.MintedGrants) {
                     if (Host.GrantTable.TryApplyGrant(
                         grant: grant,
-                        actor: WorldPrincipal.Console
+                        actor: Principal.Console
                     )) {
                         installedGrants.Add(item: grant);
                     }
@@ -725,7 +727,7 @@ public sealed partial class WorldTick {
                 foreach (var grant in disconnected.RevokedGrants) {
                     Host.Revoke(
                         grant: grant,
-                        actor: WorldPrincipal.Console
+                        actor: Principal.Console
                     );
                 }
 
@@ -835,6 +837,7 @@ public sealed partial class WorldTick {
             Completion: completion,
             Envelope: envelope
         ));
+
     /// <summary>Runs every tick-driven deadline recovery through its own sorted <see cref="WorldDeadlineTable{T}"/>:
     /// ownership escrow reclaim, transfer-lease expiry, contribution-tenure retraction and reconnect-park
     /// teardown.</summary>

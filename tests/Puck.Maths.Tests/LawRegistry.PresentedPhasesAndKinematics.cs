@@ -71,12 +71,9 @@ internal static partial class LawRegistry {
             )
         ),
 
-        Case(
-            id: "presented.certification-scopes-associativity-not-confluence",
-            run: () => Laws.Claim(
-                claim: Subjects.CertificationScopesAssociativityNotConfluence,
-                lawId: "presented.certification-scopes-associativity-not-confluence"
-            )
+        ClaimCase(
+            claim: Subjects.CertificationScopesAssociativityNotConfluence,
+            id: "presented.certification-scopes-associativity-not-confluence"
         ),
 
         // The conformal (4,1,0) world has five generators and thirty-two blades, which the four-generator
@@ -148,22 +145,16 @@ internal static partial class LawRegistry {
         // The associator stops being only a readout and becomes a rule charge the normalizer APPLIES. The oracle is the
         // bracketing's own nested products, which re-associate nothing, so agreement is route-independence measured
         // rather than asserted; the certificate's quadruple identity is the same statement about the charges alone.
-        Case(
-            id: "presented.reassociation-route-coherent",
-            run: () => Laws.Claim(
-                claim: Subjects.ReassociationRouteCoherent,
-                lawId: "presented.reassociation-route-coherent"
-            )
+        ClaimCase(
+            claim: Subjects.ReassociationRouteCoherent,
+            id: "presented.reassociation-route-coherent"
         ),
 
         // The other half of the same change: a uniform charge of one leaves a term's brackets inert, which is what every
         // phase-1 and phase-2 gate pins and what a splice charge leaking into the uniform regime would break.
-        Case(
-            id: "presented.reassociation-brackets-inert",
-            run: () => Laws.Claim(
-                claim: Subjects.ReassociationBracketsInert,
-                lawId: "presented.reassociation-brackets-inert"
-            )
+        ClaimCase(
+            claim: Subjects.ReassociationBracketsInert,
+            id: "presented.reassociation-brackets-inert"
         ),
 
         // The canary and the twin the coherence slice owed. The canary pins an ABSOLUTE floor on how far a live charge
@@ -172,12 +163,9 @@ internal static partial class LawRegistry {
         // quadruple's five bracketings, so a mis-oriented pentagon inside Certify has something to disagree with. The
         // separating instance is a coherent 3-cocycle over a product that ASSOCIATES: coherence holds, faithfulness does
         // not, and the two are measured apart rather than described apart.
-        Case(
-            id: "presented.coherence-route-independence",
-            run: () => Laws.Claim(
-                claim: Subjects.CoherenceIsRouteIndependence,
-                lawId: "presented.coherence-route-independence"
-            )
+        ClaimCase(
+            claim: Subjects.CoherenceIsRouteIndependence,
+            id: "presented.coherence-route-independence"
         ),
 
     ];
@@ -187,35 +175,26 @@ internal static partial class LawRegistry {
         // The boundary map's group row, made an instance rather than a note: a reflection world enters as measured
         // lattice data, its order is pinned twice by constructions that share no step, and everything the row promises —
         // inverses under a unit witness per generator, orbit enumeration — is a bounded attempt with an honest refusal.
-        Case(
-            id: "presented.group-orders-exact",
-            run: () => Laws.Claim(
-                claim: Subjects.GroupOrdersExact,
-                lawId: "presented.group-orders-exact"
-            )
+        ClaimCase(
+            claim: Subjects.GroupOrdersExact,
+            id: "presented.group-orders-exact"
         ),
 
         // The world no enumeration reaches is gated by its ACTION instead: every relation the presentation declares
         // moves no node at all, and the word that reads the mirrors once is the lattice's own cycle, of the period the
         // rotation surface and the ray factorisation already carry.
-        Case(
-            id: "presented.reflection-action-lattice",
-            run: () => Laws.Claim(
-                claim: Subjects.ReflectionActionMatchesLattice,
-                lawId: "presented.reflection-action-lattice"
-            )
+        ClaimCase(
+            claim: Subjects.ReflectionActionMatchesLattice,
+            id: "presented.reflection-action-lattice"
         ),
 
         // The twin the group slice owed: the presented PRODUCT is the lattice action. One compiled cell, one composite
         // permutation and one pair of reflections applied in sequence must name the same element, and the pinned power
         // ladder says the same thing about repeated multiplication. The oracle is SymmetryLattice.Reflect composed by
         // hand, which runs no step the algebra runs.
-        Case(
-            id: "presented.reflection-product-twins-action",
-            run: () => Laws.Claim(
-                claim: Subjects.ReflectionProductTwinsAction,
-                lawId: "presented.reflection-product-twins-action"
-            )
+        ClaimCase(
+            claim: Subjects.ReflectionProductTwinsAction,
+            id: "presented.reflection-product-twins-action"
         ),
 
         // The refusals, and the pair that is the whole point of the row: inverses SURVIVE where enumeration refuses.
@@ -237,23 +216,17 @@ internal static partial class LawRegistry {
         // guarded star of the negated strict zeta and the Euler characteristic of a complex is the Möbius value of the
         // one interval spanning its bounded face order — answered to by an alternating cell count and by three
         // hand-computed numbers.
-        Case(
-            id: "presented.incidence-euler-mass",
-            run: () => Laws.Claim(
-                claim: Subjects.IncidenceEulerMass,
-                lawId: "presented.incidence-euler-mass"
-            )
+        ClaimCase(
+            claim: Subjects.IncidenceEulerMass,
+            id: "presented.incidence-euler-mass"
         ),
 
         // The Dirichlet window IS this order's reduced incidence algebra, so the two mus agree interval for interval
         // through the interval type — and the two bases do NOT, which is what keeps the window a quotient rather than
         // a specialization.
-        Case(
-            id: "presented.incidence-mobius-vs-window",
-            run: () => Laws.Claim(
-                claim: Subjects.IncidenceMobiusMatchesWindow,
-                lawId: "presented.incidence-mobius-vs-window"
-            )
+        ClaimCase(
+            claim: Subjects.IncidenceMobiusMatchesWindow,
+            id: "presented.incidence-mobius-vs-window"
         ),
 
         // Stokes' identity is the adjunction, and the adjunction is one product read two ways: the boundary is the
@@ -281,22 +254,16 @@ internal static partial class LawRegistry {
         // the carrier — which is exactly why one material proves less than it looks. The teeth are the non-degeneracy
         // count: the ordered basis pairs Stokes does not annihilate are precisely the declared incidences, so a
         // collapsed boundary fails here instead of passing on an identity between two zeros.
-        Case(
-            id: "presented.stokes-material-sweep",
-            run: () => Laws.Claim(
-                claim: Subjects.StokesMaterialSweep,
-                lawId: "presented.stokes-material-sweep"
-            )
+        ClaimCase(
+            claim: Subjects.StokesMaterialSweep,
+            id: "presented.stokes-material-sweep"
         ),
 
         // The refusals: data that names no order and no complex is turned away at construction, and Möbius inversion
         // over a material with no signs is refused rather than approximated.
-        Case(
-            id: "presented.incidence-limits-refuse",
-            run: () => Laws.Claim(
-                claim: Subjects.IncidenceLimitsRefuse,
-                lawId: "presented.incidence-limits-refuse"
-            )
+        ClaimCase(
+            claim: Subjects.IncidenceLimitsRefuse,
+            id: "presented.incidence-limits-refuse"
         ),
 
     ];
@@ -310,54 +277,39 @@ internal static partial class LawRegistry {
 
         // The derivation reproduces both endpoint tests cell for cell, predicted from the argument data rather than
         // from the entry, with the boundary comparison restated here and required to agree with the annihilations.
-        Case(
-            id: "presented.boundary-composition-unmoved",
-            run: () => Laws.Claim(
-                claim: Subjects.BoundaryCompositionUnmoved,
-                lawId: "presented.boundary-composition-unmoved"
-            )
+        ClaimCase(
+            claim: Subjects.BoundaryCompositionUnmoved,
+            id: "presented.boundary-composition-unmoved"
         ),
 
         // The basis: block by block against the tabulated Catalan numbers AND against the ballot difference, which
         // reaches the same value without a Catalan recursion, so a mis-transcribed table fails beside a mis-enumeration.
-        Case(
-            id: "presented.tangle-basis-counts",
-            run: () => Laws.Claim(
-                claim: Subjects.TangleBasisCounts,
-                lawId: "presented.tangle-basis-counts"
-            )
+        ClaimCase(
+            claim: Subjects.TangleBasisCounts,
+            id: "presented.tangle-basis-counts"
         ),
 
         // The three algebraic relations, asserted on the DERIVED product at three materials. Nothing in the catalogue
         // entry mentions them, so a mis-traced arc or a mis-counted loop breaks one of the three.
-        Case(
-            id: "presented.tangle-relations-hold",
-            run: () => Laws.Claim(
-                claim: Subjects.TangleRelationsHold,
-                lawId: "presented.tangle-relations-hold"
-            )
+        ClaimCase(
+            claim: Subjects.TangleRelationsHold,
+            id: "presented.tangle-relations-hold"
         ),
 
         // The width cap is derived from the 512 normal forms a finite basis holds, so the width past the last admitted
         // one is refused rather than admitted and then found unusable. That the last admitted width is REACHED, at its
         // 377 diagrams, is asserted where a width-six presentation is already built: deep.presented-tangle-sweep. This
         // case costs one throw per refusal and builds nothing.
-        Case(
-            id: "presented.tangle-limits-refuse",
-            run: () => Laws.Claim(
-                claim: Subjects.TangleLimitsRefuse,
-                lawId: "presented.tangle-limits-refuse"
-            )
+        ClaimCase(
+            claim: Subjects.TangleLimitsRefuse,
+            id: "presented.tangle-limits-refuse"
         ),
 
         // The canary: composing two diagrams must actually strand off closed loops, and those loops must actually be
         // charged. Every other statement in this slice holds just as well at a loop charge silently equal to one.
-        Case(
-            id: "presented.tangle-loop-charge-canary",
-            run: () => Laws.Claim(
-                claim: Subjects.TangleLoopChargeCanary,
-                lawId: "presented.tangle-loop-charge-canary"
-            )
+        ClaimCase(
+            claim: Subjects.TangleLoopChargeCanary,
+            id: "presented.tangle-loop-charge-canary"
         ),
 
     ];
@@ -371,12 +323,9 @@ internal static partial class LawRegistry {
 
         // The charges against two constructions that read no cell: the doubling recursion and the bubble-sort sign
         // oracle, and — at every floor the tower ships — the shipped nested tower multiplying both orderings out.
-        Case(
-            id: "presented.braiding-derived-vs-doubling",
-            run: () => Laws.Claim(
-                claim: Subjects.BraidingDerivedVsDoubling,
-                lawId: "presented.braiding-derived-vs-doubling"
-            )
+        ClaimCase(
+            claim: Subjects.BraidingDerivedVsDoubling,
+            id: "presented.braiding-derived-vs-doubling"
         ),
 
         // Coherence of the braiding is a mathematical fact about the data, so it is witnessed rather than thrown: the
@@ -385,34 +334,25 @@ internal static partial class LawRegistry {
         // derivation never finishes and no identity is stated to fail. Both routes to a false flag are covered, and
         // the two are kept apart. The quantum torus is the instance that separates the two flags, since every
         // catalogue braiding is a sign and a sign is its own mirror.
-        Case(
-            id: "presented.braiding-hexagon-witnessed",
-            run: () => Laws.Claim(
-                claim: Subjects.BraidingHexagonWitnessed,
-                lawId: "presented.braiding-hexagon-witnessed"
-            )
+        ClaimCase(
+            claim: Subjects.BraidingHexagonWitnessed,
+            id: "presented.braiding-hexagon-witnessed"
         ),
 
         // The limit, and the pair that is the whole point of the row: the SAME presentation shape issues no charge at a
         // material that cannot name one half and issues it at a field material that can. A missing flag is not a
         // failure, and it is not the budget either.
-        Case(
-            id: "presented.braiding-limits-issue-no-flag",
-            run: () => Laws.Claim(
-                claim: Subjects.BraidingLimitsIssueNoFlag,
-                lawId: "presented.braiding-limits-issue-no-flag"
-            )
+        ClaimCase(
+            claim: Subjects.BraidingLimitsIssueNoFlag,
+            id: "presented.braiding-limits-issue-no-flag"
         ),
 
         // The canary: the derived charges must actually be nontrivial on more pairs than the measured floor, and each
         // of those pairs must re-multiply. A braiding that collapsed to the trivial one satisfies both hexagons, the
         // symmetric flag and every refusal case, so only a floor catches it.
-        Case(
-            id: "presented.braiding-nontrivial-canary",
-            run: () => Laws.Claim(
-                claim: Subjects.BraidingNontrivialCanary,
-                lawId: "presented.braiding-nontrivial-canary"
-            )
+        ClaimCase(
+            claim: Subjects.BraidingNontrivialCanary,
+            id: "presented.braiding-nontrivial-canary"
         ),
 
     ];
@@ -436,45 +376,33 @@ internal static partial class LawRegistry {
             }
         ),
 
-        Case(
-            id: "presented.element-ownership-is-uniform",
-            run: () => Laws.Claim(
-                claim: OracleOwnershipClaims.ForeignElementsAreRejectedUniformly,
-                lawId: "presented.element-ownership-is-uniform"
-            )
+        ClaimCase(
+            claim: OracleOwnershipClaims.ForeignElementsAreRejectedUniformly,
+            id: "presented.element-ownership-is-uniform"
         ),
 
         // The refusal, re-derived from the obstruction's own data: the named rule is folded through the images by hand
         // and must really fail, and the named basis pair — the annihilation a degree window states and no rule
         // carries — must really be one the images do not preserve.
-        Case(
-            id: "presented.functor-refuses-witness",
-            run: () => Laws.Claim(
-                claim: Subjects.FunctorRefusesWitness,
-                lawId: "presented.functor-refuses-witness"
-            )
+        ClaimCase(
+            claim: Subjects.FunctorRefusesWitness,
+            id: "presented.functor-refuses-witness"
         ),
 
         // A substitution system IS a morphism of free monoids, and its word must never be an element: the composed
         // letter images at √13 and √19 run 52 and 411 symbols, past what a mixed-radix key holds, so only MapWord
         // reaches them. The shipped quasicrystal streamer shares the period and the substitution recipe with the
         // subject, so the leg that stands outside both is the mechanical word of the same slope.
-        Case(
-            id: "presented.substitution-twins-quasicrystal",
-            run: () => Laws.Claim(
-                claim: Subjects.SubstitutionTwinsQuasicrystal,
-                lawId: "presented.substitution-twins-quasicrystal"
-            )
+        ClaimCase(
+            claim: Subjects.SubstitutionTwinsQuasicrystal,
+            id: "presented.substitution-twins-quasicrystal"
         ),
 
         // The abelianization against the inflation lens, with the orientation pinned: counting occurrences gives the
         // TRANSPOSE of the substitution matrix, which four of the six periods separate from the direct reading.
-        Case(
-            id: "presented.substitution-matrix-vs-inflation",
-            run: () => Laws.Claim(
-                claim: Subjects.SubstitutionMatrixVsInflation,
-                lawId: "presented.substitution-matrix-vs-inflation"
-            )
+        ClaimCase(
+            claim: Subjects.SubstitutionMatrixVsInflation,
+            id: "presented.substitution-matrix-vs-inflation"
         ),
 
     ];
@@ -488,44 +416,32 @@ internal static partial class LawRegistry {
         // The recursion against an enumeration that shares no step with it: the oracle forms no power, takes no trace
         // and divides nowhere, while the subject does all three. The order-two case is a third route again, through a
         // continued-fraction period folded as convergent matrices.
-        Case(
-            id: "presented.zeta-charpoly-vs-minors",
-            run: () => Laws.Claim(
-                claim: Subjects.ZetaCharacteristicVsMinors,
-                lawId: "presented.zeta-charpoly-vs-minors"
-            )
+        ClaimCase(
+            claim: Subjects.ZetaCharacteristicVsMinors,
+            id: "presented.zeta-charpoly-vs-minors"
         ),
 
         // The power sums ARE closed-walk counts, which is what makes the polynomial a graph invariant rather than a
         // matrix identity. Length zero is part of the statement: it is the order's worth of ones the recursion runs at.
-        Case(
-            id: "presented.zeta-traces-vs-walk-counts",
-            run: () => Laws.Claim(
-                claim: Subjects.ZetaTracesVsWalkCounts,
-                lawId: "presented.zeta-traces-vs-walk-counts"
-            )
+        ClaimCase(
+            claim: Subjects.ZetaTracesVsWalkCounts,
+            id: "presented.zeta-traces-vs-walk-counts"
         ),
 
         // The reciprocal, under a nilpotence certificate the star ISSUES rather than assumes, checked in both orders and
         // at degree bounds above, at and below the order — an inverse modulo t^(d+1) depends on nothing above that
         // degree, so truncating the polynomial does not truncate the statement.
-        Case(
-            id: "presented.zeta-reciprocal-round-trip",
-            run: () => Laws.Claim(
-                claim: Subjects.ZetaReciprocalRoundTrip,
-                lawId: "presented.zeta-reciprocal-round-trip"
-            )
+        ClaimCase(
+            claim: Subjects.ZetaReciprocalRoundTrip,
+            id: "presented.zeta-reciprocal-round-trip"
         ),
 
         // The licence, measured on both sides: the recursion divides by every index up to the order, so a material that
         // certifies no inverses stops at index one and a field of characteristic p stops at p — and the same modulus
         // answers at the order below p. Over the house scalar nothing is offered at all, which is what exact-only means.
-        Case(
-            id: "presented.zeta-limits-refuse",
-            run: () => Laws.Claim(
-                claim: Subjects.ZetaLimitsRefuse,
-                lawId: "presented.zeta-limits-refuse"
-            )
+        ClaimCase(
+            claim: Subjects.ZetaLimitsRefuse,
+            id: "presented.zeta-limits-refuse"
         ),
 
     ];
@@ -539,46 +455,34 @@ internal static partial class LawRegistry {
         // Every cell against a brute enumeration that generates every step-kind sequence and TESTS it, where the entry
         // reads three shorter cells; and the certificate, which COMPUTES commutativity and associativity, following the
         // letter product to false wherever the letter product is not itself both.
-        Case(
-            id: "presented.shuffle-vs-enumeration",
-            run: () => Laws.Claim(
-                claim: Subjects.ShuffleMatchesEnumeration,
-                lawId: "presented.shuffle-vs-enumeration"
-            )
+        ClaimCase(
+            claim: Subjects.ShuffleMatchesEnumeration,
+            id: "presented.shuffle-vs-enumeration"
         ),
 
         // The binomial coefficients, read twice out of the same entry — as the multiplicity one letter's shuffle
         // carries, and as the number of words two different letters interleave into — against a Pascal's triangle built
         // by addition alone, which reaches them without a factorial, a product or a division.
-        Case(
-            id: "presented.shuffle-vs-binomial",
-            run: () => Laws.Claim(
-                claim: Subjects.ShuffleMatchesBinomials,
-                lawId: "presented.shuffle-vs-binomial"
-            )
+        ClaimCase(
+            claim: Subjects.ShuffleMatchesBinomials,
+            id: "presented.shuffle-vs-binomial"
         ),
 
         // The degenerate case, pinned from both sides: the default argument IS the empty letter product, no collision
         // term leaks into it, and a collision adds exactly the shortened terms while leaving the shuffle's own cell
         // untouched at the top length.
-        Case(
-            id: "presented.quasishuffle-degenerates-to-shuffle",
-            run: () => Laws.Claim(
-                claim: Subjects.QuasiShuffleDegeneratesToShuffle,
-                lawId: "presented.quasishuffle-degenerates-to-shuffle"
-            )
+        ClaimCase(
+            claim: Subjects.QuasiShuffleDegeneratesToShuffle,
+            id: "presented.quasishuffle-degenerates-to-shuffle"
         ),
 
         // A word over one letter names an iterated sum, and multiplying two iterated sums merges their index sets — the
         // interleavings where no index coincides, the collisions where they do. So the identity holds for the
         // quasi-shuffle and FAILS for the shuffle, which is what makes the collision term load-bearing. The sequences
         // come from the antidifference of a different presentation entirely, and are pinned against Pascal first.
-        Case(
-            id: "presented.quasishuffle-vs-prefix-sums",
-            run: () => Laws.Claim(
-                claim: Subjects.QuasiShuffleMatchesPrefixSums,
-                lawId: "presented.quasishuffle-vs-prefix-sums"
-            )
+        ClaimCase(
+            claim: Subjects.QuasiShuffleMatchesPrefixSums,
+            id: "presented.quasishuffle-vs-prefix-sums"
         ),
 
         // The caps, which are the 512 normal forms a finite basis holds read at each argument, and the one refusal that
@@ -587,23 +491,17 @@ internal static partial class LawRegistry {
         // and cost nothing; the tuples BUILT here stay at a window of four or below, and the near-cap ones are left to
         // presented.shuffle-near-cap-basis, since each of those emits one rule per ordered pair of its 511 or 512 words
         // under the compiled basis this case reads.
-        Case(
-            id: "presented.shuffle-limits-refuse",
-            run: () => Laws.Claim(
-                claim: Subjects.ShuffleLimitsRefuse,
-                lawId: "presented.shuffle-limits-refuse"
-            )
+        ClaimCase(
+            claim: Subjects.ShuffleLimitsRefuse,
+            id: "presented.shuffle-limits-refuse"
         ),
 
         // The canary: the interleaving must actually split a product into several words and actually carry the
         // multiplicity each is reached with. A second product that quietly degenerated to concatenation satisfies every
         // flag, the degeneracy claim and every refusal above, and only a floor catches it.
-        Case(
-            id: "presented.shuffle-multiterm-canary",
-            run: () => Laws.Claim(
-                claim: Subjects.ShuffleMultiTermCanary,
-                lawId: "presented.shuffle-multiterm-canary"
-            )
+        ClaimCase(
+            claim: Subjects.ShuffleMultiTermCanary,
+            id: "presented.shuffle-multiterm-canary"
         ),
 
     ];
@@ -617,66 +515,48 @@ internal static partial class LawRegistry {
 
         // The braid relations hold on the images although the free source imposed none of them, and the loop charge is
         // what makes them hold: at any other charge the crossing and its mirror stop composing to the identity.
-        Case(
-            id: "presented.braid-relation-holds",
-            run: () => Laws.Claim(
-                claim: Subjects.BraidRelationHolds,
-                lawId: "presented.braid-relation-holds"
-            )
+        ClaimCase(
+            claim: Subjects.BraidRelationHolds,
+            id: "presented.braid-relation-holds"
         ),
 
         // The published bracket of the unknot, of both trefoil chiralities and of the figure-eight, carried as integer
         // Laurent coefficients and folded by Horner, answering over the rationals and over three prime fields — which is
         // what multi-point evaluation buys instead of a coefficient ring holding a formal variable.
-        Case(
-            id: "presented.state-sum-vs-tabulated",
-            run: () => Laws.Claim(
-                claim: Subjects.StateSumMatchesTabulated,
-                lawId: "presented.state-sum-vs-tabulated"
-            )
+        ClaimCase(
+            claim: Subjects.StateSumMatchesTabulated,
+            id: "presented.state-sum-vs-tabulated"
         ),
 
         // The second oracle, and the reason there are two: the enumeration builds each state's whole closed diagram as
         // one graph and counts its components, knowing nothing about knots, so it catches a mis-transcribed table where
         // the table catches a wrong construction. It runs out to eight crossings, where two-to-the-crossings still fits.
-        Case(
-            id: "presented.state-sum-vs-smoothing-enumeration",
-            run: () => Laws.Claim(
-                claim: Subjects.StateSumMatchesSmoothingEnumeration,
-                lawId: "presented.state-sum-vs-smoothing-enumeration"
-            )
+        ClaimCase(
+            claim: Subjects.StateSumMatchesSmoothingEnumeration,
+            id: "presented.state-sum-vs-smoothing-enumeration"
         ),
 
         // The moves, all three, with the first one stated honestly: the second and third leave the value fixed and the
         // first multiplies it by minus the crossing charge cubed, so the readout is an invariant of the DIAGRAM.
-        Case(
-            id: "presented.state-sum-move-invariant",
-            run: () => Laws.Claim(
-                claim: Subjects.StateSumMoveInvariant,
-                lawId: "presented.state-sum-move-invariant"
-            )
+        ClaimCase(
+            claim: Subjects.StateSumMoveInvariant,
+            id: "presented.state-sum-move-invariant"
         ),
 
         // What is refused and what is merely not claimed, kept apart: an odd plat and a plat past the width cap are
         // refused; the braid group's finite basis does not exist and every basis-dependent readout says so; its word
         // problem is a BUDGET, reported as one; and equal values are not equal knots, witnessed by a curl.
-        Case(
-            id: "presented.knot-limits-refuse",
-            run: () => Laws.Claim(
-                claim: Subjects.KnotLimitsRefuse,
-                lawId: "presented.knot-limits-refuse"
-            )
+        ClaimCase(
+            claim: Subjects.KnotLimitsRefuse,
+            id: "presented.knot-limits-refuse"
         ),
 
         // The strongest canary in the phase. An invariant collapsed to a constant satisfies every twin, every relation,
         // every refusal and every move claim above, because all of those hold just as well of a constant — only a floor
         // on how many declared pairs the values separate catches it, and only the two trefoils prove it sees chirality.
-        Case(
-            id: "presented.state-sum-separates-canary",
-            run: () => Laws.Claim(
-                claim: Subjects.StateSumSeparatesCanary,
-                lawId: "presented.state-sum-separates-canary"
-            )
+        ClaimCase(
+            claim: Subjects.StateSumSeparatesCanary,
+            id: "presented.state-sum-separates-canary"
         ),
 
     ];
@@ -707,12 +587,9 @@ internal static partial class LawRegistry {
         // The bound, kept honest rather than asserted: a ten-by-ten matrix of single-digit entries drives intermediate
         // coefficients into the kilobits, the ceiling refuses that reduction where it is set low and answers the same
         // matrix where it is set high, and the smallest-pivot rule is MEASURED against a first-nonzero foil.
-        Case(
-            id: "presented.smith-growth-refuses",
-            run: () => Laws.Claim(
-                claim: Subjects.SmithGrowthBounded,
-                lawId: "presented.smith-growth-refuses"
-            )
+        ClaimCase(
+            claim: Subjects.SmithGrowthBounded,
+            id: "presented.smith-growth-refuses"
         ),
 
         // The re-multiplication the second kernel owed at scale: the swept case is three-by-three and square, so square
@@ -720,12 +597,9 @@ internal static partial class LawRegistry {
         // inverted both ways in this file. The one matrix whose answer is a classical fact rather than a recomputation
         // is the reflection lattice's own Cartan matrix, built from the group slice's MEASURED bond diagram: its
         // determinant is one, so its elementary divisors are eight ones and nothing else.
-        Case(
-            id: "presented.smith-remultiplies-at-scale",
-            run: () => Laws.Claim(
-                claim: Subjects.SmithRemultipliesAtScale,
-                lawId: "presented.smith-remultiplies-at-scale"
-            )
+        ClaimCase(
+            claim: Subjects.SmithRemultipliesAtScale,
+            id: "presented.smith-remultiplies-at-scale"
         ),
 
         // The two consumers the obstruction promised. The elementary divisors ARE the integral torsion coefficients, so
@@ -736,12 +610,9 @@ internal static partial class LawRegistry {
         // a one-cell complex labelled a billion asked for roughly 12 GB and int.MaxValue overflowed the top. Both
         // halves are stated: an oversized label is refused, and the widest grading the 84-cell cap allows is admitted
         // whole, so the bound is reachable rather than a wall.
-        Case(
-            id: "presented.cell-dimension-bounded-by-cells",
-            run: () => Laws.Claim(
-                claim: Subjects.CellDimensionBoundHolds,
-                lawId: "presented.cell-dimension-bounded-by-cells"
-            )
+        ClaimCase(
+            claim: Subjects.CellDimensionBoundHolds,
+            id: "presented.cell-dimension-bounded-by-cells"
         ),
 
         Case(
@@ -967,52 +838,36 @@ internal static partial class LawRegistry {
         // test and distributivity at every swept raw pair. It also carries the suite's ONLY absolute statement of the
         // fused term's single rounding — three interior factors against the triple-product oracle — because every other
         // fused fold here charges its terms with one, where the one-rounding and two-rounding disciplines coincide.
-        Case(
+        SweptCase(
+            claim: Subjects.UnitIntervalSemiringsExact,
+            domain: ClosedUnit,
             id: "presented.unit-interval-semirings-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitIntervalSemiringsExact,
-                domain: ClosedUnit,
-                lawId: "presented.unit-interval-semirings-vs-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
 
         // The star licence, proved rather than inherited: the SHIPPED idempotent certificate carries all three closures
         // with no new certificate code, on a graph where the counting material refuses forever.
-        Case(
-            id: "presented.unit-interval-star-licensing",
-            run: () => Laws.Claim(
-                claim: Subjects.UnitIntervalStarLicensing,
-                lawId: "presented.unit-interval-star-licensing"
-            )
+        ClaimCase(
+            claim: Subjects.UnitIntervalStarLicensing,
+            id: "presented.unit-interval-star-licensing"
         ),
 
-        Case(
-            id: "presented.material-contract-boundaries",
-            run: () => Laws.Claim(
-                claim: Subjects.OracleMaterialContractBoundaries,
-                lawId: "presented.material-contract-boundaries"
-            )
+        ClaimCase(
+            claim: Subjects.OracleMaterialContractBoundaries,
+            id: "presented.material-contract-boundaries"
         ),
 
-        Case(
-            id: "presented.finite-basis-outcome-is-typed",
-            run: () => Laws.Claim(
-                claim: OracleClaims.FiniteBasisCapacityIsTyped,
-                lawId: "presented.finite-basis-outcome-is-typed"
-            )
+        ClaimCase(
+            claim: OracleClaims.FiniteBasisCapacityIsTyped,
+            id: "presented.finite-basis-outcome-is-typed"
         ),
 
         // The first complement beyond Boolean. The pattern lens's complement was a two-valued surface because only one
         // material carried a De Morgan involution; the fuzzy material carries the exact one minus x, so a complemented
         // pattern is GRADED — the same spans at the complementary weights — and the lens needed no new code to say so.
-        Case(
-            id: "presented.fuzzy-complement-lens",
-            run: () => Laws.Claim(
-                claim: Subjects.FuzzyComplementLens,
-                lawId: "presented.fuzzy-complement-lens"
-            )
+        ClaimCase(
+            claim: Subjects.FuzzyComplementLens,
+            id: "presented.fuzzy-complement-lens"
         ),
 
         // The canary. Every other law here says two things agree; this one says the fused accumulate is load-bearing by
@@ -1069,15 +924,11 @@ internal static partial class LawRegistry {
         ),
 
         // The material contract every fused kernel rests on, at every material in the set.
-        Case(
+        SweptCase(
+            claim: Subjects.MaterialFusedIdentities,
+            domain: Presented,
             id: "presented.material-fused-identities",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.MaterialFusedIdentities,
-                domain: Presented,
-                lawId: "presented.material-fused-identities",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
 
     ];
@@ -1195,22 +1046,16 @@ internal static partial class LawRegistry {
         // Ledger row 18: Dirichlet convolution IS the product at a divisibility window, so mu is the guarded star of
         // the negated strict zeta and mu ⋆ zeta is the unit. Cross-checked against the shipped factorization and
         // prime-counting kernels, which share nothing with any convolution.
-        Case(
-            id: "presented.mobius-star-round-trip",
-            run: () => Laws.Claim(
-                claim: Subjects.MobiusStarRoundTrip,
-                lawId: "presented.mobius-star-round-trip"
-            )
+        ClaimCase(
+            claim: Subjects.MobiusStarRoundTrip,
+            id: "presented.mobius-star-round-trip"
         ),
 
         // Ledger rows 16 and 17: derivative matching at a finite alphabet, weighted and Boolean, against a
         // shared-nothing backtracking oracle over a pattern TREE — a construction the subject does not have at all.
-        Case(
-            id: "presented.matcher-vs-backtracking-oracle",
-            run: () => Laws.Claim(
-                claim: Subjects.MatcherMatchesBacktrackingOracle,
-                lawId: "presented.matcher-vs-backtracking-oracle"
-            )
+        ClaimCase(
+            claim: Subjects.MatcherMatchesBacktrackingOracle,
+            id: "presented.matcher-vs-backtracking-oracle"
         ),
 
         // The weight a scaled pattern gives a span, read back out. Every other pattern statement quantifies over
@@ -1218,70 +1063,49 @@ internal static partial class LawRegistry {
         // would return perfectly valid elements and leave all of them green. This one names the value, at a counting
         // material where the scale multiplies and at a tropical one where it adds, so nothing about it can be faked.
         // Only the members it genuinely drives are credited; the rest of the pattern surface has its own creditors.
-        Case(
-            id: "presented.pattern-scale-weights",
-            run: () => Laws.Claim(
-                claim: Subjects.PatternScaleWeights,
-                lawId: "presented.pattern-scale-weights"
-            )
+        ClaimCase(
+            claim: Subjects.PatternScaleWeights,
+            id: "presented.pattern-scale-weights"
         ),
 
         // The declared second axis (O2): a predicate algebra supplies conjunction, complement and satisfiability, one
         // shared loop cuts the partition, and the kernel receives a letter count and a mask — never a predicate.
-        Case(
-            id: "presented.alphabet-refinement-partitions",
-            run: () => Laws.Claim(
-                claim: Subjects.AlphabetRefinementPartitions,
-                lawId: "presented.alphabet-refinement-partitions"
-            )
+        ClaimCase(
+            claim: Subjects.AlphabetRefinementPartitions,
+            id: "presented.alphabet-refinement-partitions"
         ),
 
-        Case(
-            id: "presented.matcher-binds-alphabet-identity",
-            run: () => Laws.Claim(
-                claim: OracleClaims.MatcherRejectsDifferentAlphabetIdentity,
-                lawId: "presented.matcher-binds-alphabet-identity"
-            )
+        ClaimCase(
+            claim: OracleClaims.MatcherRejectsDifferentAlphabetIdentity,
+            id: "presented.matcher-binds-alphabet-identity"
         ),
 
         // Ledger row 20: exact machine equivalence by pairing radical, decided against brute word enumeration to the
         // Myhill bound, and the quotient proved canonical — same behavior, minimal dimension, idempotent.
-        Case(
-            id: "presented.machine-equivalence-vs-enumeration",
-            run: () => Laws.Claim(
-                claim: Subjects.MachineEquivalenceMatchesEnumeration,
-                lawId: "presented.machine-equivalence-vs-enumeration"
-            )
+        ClaimCase(
+            claim: Subjects.MachineEquivalenceMatchesEnumeration,
+            id: "presented.machine-equivalence-vs-enumeration"
         ),
 
         // Ledger row 21: a substochastic chain's powers neither vanish nor stabilize, so the iterative star refuses
         // forever and the resolvent answers in one solve. The proof is re-multiplication, not a truncation.
-        Case(
-            id: "presented.resolvent-remultiplies",
-            run: () => Laws.Claim(
-                claim: Subjects.ResolventRemultiplies,
-                lawId: "presented.resolvent-remultiplies"
-            )
+        ClaimCase(
+            claim: Subjects.ResolventRemultiplies,
+            id: "presented.resolvent-remultiplies"
         ),
 
         // Ledger row 22: the antidifference is the guarded star of the shift on degree-bounded jets, and it reproduces
         // the shipped exactly-inverted prefix sums place for place.
-        Case(
-            id: "presented.antidifference-vs-layer-sequence",
-            run: () => Laws.Claim(
-                claim: Subjects.AntidifferenceMatchesLayerSequence,
-                lawId: "presented.antidifference-vs-layer-sequence"
-            )
+        ClaimCase(
+            claim: Subjects.AntidifferenceMatchesLayerSequence,
+            id: "presented.antidifference-vs-layer-sequence"
         ),
 
         // Ledger row 7: uniform prime-power fields. Degree two against the shipped extension field, above it against a
         // schoolbook polynomial oracle, since nothing in the tree constructs those fields at all.
-        Case(
-            id: "presented.monogenic-twins-prime-extension",
-            run: () => Laws.Claim(
-                claim: Subjects.PrimeExtensionTwinsMonogenic,
-                lawId: "presented.monogenic-twins-prime-extension"
-            )
+        ClaimCase(
+            claim: Subjects.PrimeExtensionTwinsMonogenic,
+            id: "presented.monogenic-twins-prime-extension"
         ),
 
         // Ledger row 10: the companion quiver's product IS the projective step, so a matrix step through the shared
@@ -1324,30 +1148,21 @@ internal static partial class LawRegistry {
 
         // Ledger row 11: orientation is the top-grade coefficient of a triple join, and the join is non-metric — no
         // signature enters it — so an independent determinant is the whole cross-check.
-        Case(
-            id: "presented.orientation-twins-determinant",
-            run: () => Laws.Claim(
-                claim: Subjects.OrientationTwinsDeterminant,
-                lawId: "presented.orientation-twins-determinant"
-            )
+        ClaimCase(
+            claim: Subjects.OrientationTwinsDeterminant,
+            id: "presented.orientation-twins-determinant"
         ),
 
-        Case(
-            id: "presented.complement-admission-proves-inverses",
-            run: () => Laws.Claim(
-                claim: OracleClaims.ComplementAdmissionRequiresMutualInverses,
-                lawId: "presented.complement-admission-proves-inverses"
-            )
+        ClaimCase(
+            claim: OracleClaims.ComplementAdmissionRequiresMutualInverses,
+            id: "presented.complement-admission-proves-inverses"
         ),
 
         // Ledger row 19: a continued fraction is a word run through the codiscrete quiver on two objects, which IS the
         // two-by-two matrix algebra, so the convergent recurrence needs no transfer-matrix code of its own.
-        Case(
-            id: "presented.transfer-twins-convergents",
-            run: () => Laws.Claim(
-                claim: Subjects.TransferTwinsConvergents,
-                lawId: "presented.transfer-twins-convergents"
-            )
+        ClaimCase(
+            claim: Subjects.TransferTwinsConvergents,
+            id: "presented.transfer-twins-convergents"
         ),
 
     ];
@@ -1356,66 +1171,45 @@ internal static partial class LawRegistry {
 
         // The equidistribution certificate is not a measured statistic but the largest partial quotient of the
         // generator's continued fraction, so the oracle is that fraction walked independently in BigInteger.
-        Case(
-            id: "certified.certificate-vs-partial-quotients",
-            run: () => Laws.Claim(
-                claim: Subjects.CertificateMatchesPartialQuotients,
-                lawId: "certified.certificate-vs-partial-quotients"
-            )
+        ClaimCase(
+            claim: Subjects.CertificateMatchesPartialQuotients,
+            id: "certified.certificate-vs-partial-quotients"
         ),
 
         // Ring-coordinate random access and the streamed substitution are two implementations of ONE tiling: the walk
         // inverts and steps by a tile vector, Contains equals the walked vertex set over a covered box, and the walk
         // word is a factor of the streamed word.
-        Case(
-            id: "quasicrystal.chain-walk-vs-streamed-word",
-            run: () => Laws.Claim(
-                claim: Subjects.ChainWalkMatchesStreamedWord,
-                lawId: "quasicrystal.chain-walk-vs-streamed-word"
-            )
+        ClaimCase(
+            claim: Subjects.ChainWalkMatchesStreamedWord,
+            id: "quasicrystal.chain-walk-vs-streamed-word"
         ),
 
         // Quantization certificates: the nearest grid value, the exact first index where a rounded slope's Beatty
         // floors betray the true ones, the Stern-Brocot minimal fraction behind it, and the convergents as the
         // closest-approach record indices.
-        Case(
-            id: "quantization.quantize-nearest-vs-cleared-comparison",
-            run: () => Laws.Claim(
-                claim: QuantizationClaims.QuantizeNearestMatchesIntegerOracle,
-                lawId: "quantization.quantize-nearest-vs-cleared-comparison"
-            )
+        ClaimCase(
+            claim: QuantizationClaims.QuantizeNearestMatchesIntegerOracle,
+            id: "quantization.quantize-nearest-vs-cleared-comparison"
         ),
-        Case(
-            id: "quantization.first-divergence-vs-brute-force",
-            run: () => Laws.Claim(
-                claim: QuantizationClaims.FirstDivergenceMatchesBruteForce,
-                lawId: "quantization.first-divergence-vs-brute-force"
-            )
+        ClaimCase(
+            claim: QuantizationClaims.FirstDivergenceMatchesBruteForce,
+            id: "quantization.first-divergence-vs-brute-force"
         ),
-        Case(
-            id: "quantization.simplest-rational-minimality",
-            run: () => Laws.Claim(
-                claim: QuantizationClaims.SimplestRationalIsMinimalInInterval,
-                lawId: "quantization.simplest-rational-minimality"
-            )
+        ClaimCase(
+            claim: QuantizationClaims.SimplestRationalIsMinimalInInterval,
+            id: "quantization.simplest-rational-minimality"
         ),
-        Case(
-            id: "quantization.convergents-are-closest-approach-records",
-            run: () => Laws.Claim(
-                claim: QuantizationClaims.ConvergentsAreClosestApproachRecords,
-                lawId: "quantization.convergents-are-closest-approach-records"
-            )
+        ClaimCase(
+            claim: QuantizationClaims.ConvergentsAreClosestApproachRecords,
+            id: "quantization.convergents-are-closest-approach-records"
         ),
 
         // Public automatic-sequence infrastructure and the first verified radical shadow-tower slice: canonical
         // positional/Ostrowski addressing, identical BigInteger/ulong reads, an opaque verifier boundary, and the
         // exact-affine family whose correction language is identically zero.
-        Case(
-            id: "core.automatic-sequence-and-radical-shadow-exactness",
-            run: () => Laws.Claim(
-                claim: AutomaticSequenceClaims.NumerationAutomatonAndRadicalTowerAreExact,
-                lawId: "core.automatic-sequence-and-radical-shadow-exactness"
-            )
+        ClaimCase(
+            claim: AutomaticSequenceClaims.NumerationAutomatonAndRadicalTowerAreExact,
+            id: "core.automatic-sequence-and-radical-shadow-exactness"
         ),
 
     ];
@@ -1492,28 +1286,20 @@ internal static partial class LawRegistry {
                 );
             }
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.VectorComponentwiseMatchesOracle,
+            domain: Vector,
             id: "vector.componentwise-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.VectorComponentwiseMatchesOracle,
-                domain: Vector,
-                lawId: "vector.componentwise-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
         // Each swept case is evaluated TWICE — once on the full-range operands, which mostly drive the refusal path,
         // and once on narrow-folded ones, which mostly drive the success path — so both branches of both norms are
         // covered at every draw rather than only where the sampler happens to land.
-        Case(
+        SweptCase(
+            claim: Subjects.VectorNormMatchesOracle,
+            domain: VectorNorm,
             id: "vector.norm-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.VectorNormMatchesOracle,
-                domain: VectorNorm,
-                lawId: "vector.norm-vs-oracle",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
         // The family's cross-type seam: the plane embeds in the space EXACTLY. Doc-anchored — FixedVector2.Wedge's
         // remark calls itself the planar restriction of FixedVector3.Cross, and Cross's returns clause points back at
@@ -1546,32 +1332,21 @@ internal static partial class LawRegistry {
         // unconditional: a cross lane stays under 2⁴¹, a nested cross and a scaled dot under 2⁵⁴, and the Jacobi sum
         // under 3·2⁵⁴ — all inside the signed carrier, so nothing wraps. Note the INNER cross runs on the narrow lane
         // and the OUTER one on the Int128 lane, so a single exact identity exercises both accumulators.
-        Case(
+        SweptCase(
+            claim: Subjects.VectorExactAlgebra,
+            domain: VectorLattice,
             id: "vector.exact-algebra-on-the-sublattice",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.VectorExactAlgebra,
-                domain: VectorLattice,
-                lawId: "vector.exact-algebra-on-the-sublattice",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.VectorIdentityAndNegation,
+            domain: Vector,
             id: "vector.identity-and-negation",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.VectorIdentityAndNegation,
-                domain: Vector,
-                lawId: "vector.identity-and-negation",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
-            id: "vector.construction-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.VectorConstructionAndRefusals,
-                lawId: "vector.construction-and-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.VectorConstructionAndRefusals,
+            id: "vector.construction-and-refusals"
         ),
         // Normalization is a THREE-STAGE pipeline: a common power-of-two precondition at leading bit forty-five, a
         // Q16-scaled nearest root as the one common denominator, and one ties-to-even ratio per component. Its distance
@@ -1579,32 +1354,21 @@ internal static partial class LawRegistry {
         // exact ratio by at most 2⁻⁴⁶ where it is a left shift and at most 2⁻²⁸ where it is a rounding right shift, and
         // both are far below a half, so the two disciplines can part only at a ratio within 2⁻²⁸ of a half-integer and
         // then by exactly one raw.
-        Case(
+        SweptCase(
+            claim: Subjects.VectorNormalizeMatchesOracles,
+            domain: VectorDirection,
             id: "vector.normalize-vs-ideal-and-staged",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.VectorNormalizeMatchesOracles,
-                domain: VectorDirection,
-                lawId: "vector.normalize-vs-ideal-and-staged",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.VectorOrthonormalBasisIsOrthogonalAndDeterministic,
+            domain: VectorOrthonormalBasis,
             id: "vector.orthonormal-basis-is-orthogonal-and-deterministic",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.VectorOrthonormalBasisIsOrthogonalAndDeterministic,
-                domain: VectorOrthonormalBasis,
-                lawId: "vector.orthonormal-basis-is-orthogonal-and-deterministic",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
-            id: "vector.orthonormal-basis-tracks-non-unit-magnitude",
-            run: () => Laws.Claim(
-                claim: Subjects.VectorOrthonormalBasisTracksNonUnitMagnitude,
-                lawId: "vector.orthonormal-basis-tracks-non-unit-magnitude"
-            )
+        ClaimCase(
+            claim: Subjects.VectorOrthonormalBasisTracksNonUnitMagnitude,
+            id: "vector.orthonormal-basis-tracks-non-unit-magnitude"
         ),
 
         // The other member quaternion.exp-log-seam declared uncovered. Its DIRECTION output turned out to have indirect
@@ -1612,43 +1376,28 @@ internal static partial class LawRegistry {
         // half stated here as an exact identity rather than a tolerance: the returned raw magnitude IS the nearest
         // integer root of the exact BigInteger squared sum, which is stronger than any ULP bound a float reference
         // could set.
-        Case(
-            id: "vector.normalize-with-magnitude-full-unsigned-width",
-            run: () => Laws.Claim(
-                claim: TransformKernelClaims.NormalizeWithMagnitudeFullUnsignedWidthSurface,
-                lawId: "vector.normalize-with-magnitude-full-unsigned-width"
-            )
+        ClaimCase(
+            claim: TransformKernelClaims.NormalizeWithMagnitudeFullUnsignedWidthSurface,
+            id: "vector.normalize-with-magnitude-full-unsigned-width"
         ),
-        Case(
-            id: "vector.normalize-ideal-bound-full-width-sweep",
-            run: () => Laws.Claim(
-                claim: TransformKernelClaims.NormalizeIdealBoundWidthSweepSurface,
-                lawId: "vector.normalize-ideal-bound-full-width-sweep"
-            )
+        ClaimCase(
+            claim: TransformKernelClaims.NormalizeIdealBoundWidthSweepSurface,
+            id: "vector.normalize-ideal-bound-full-width-sweep"
         ),
-        Case(
-            id: "vector.presentation-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.VectorPresentationMatchesLadder,
-                lawId: "vector.presentation-ladder"
-            )
+        ClaimCase(
+            claim: Subjects.VectorPresentationMatchesLadder,
+            id: "vector.presentation-ladder"
         ),
         // The inbound seam, the mirror of the row above. Its own ladder, not a round trip through that one:
         // ToVector3 is lossy, so a round trip would pin only the rows that survive it and would silently stop
         // discriminating exactly where the narrowing is interesting.
-        Case(
-            id: "vector.adoption-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.VectorAdoptionMatchesLadder,
-                lawId: "vector.adoption-ladder"
-            )
+        ClaimCase(
+            claim: Subjects.VectorAdoptionMatchesLadder,
+            id: "vector.adoption-ladder"
         ),
-        Case(
-            id: "vector.record-print-is-components-only",
-            run: () => Laws.Claim(
-                claim: Subjects.VectorRecordPrintsComponentsOnly,
-                lawId: "vector.record-print-is-components-only"
-            )
+        ClaimCase(
+            claim: Subjects.VectorRecordPrintsComponentsOnly,
+            id: "vector.record-print-is-components-only"
         ),
         // The canary. A fused kernel that quietly rounded each product before summing would satisfy every algebraic
         // identity above, both antisymmetries and every identity-element statement; only a floor catches it. Run on the
@@ -1694,59 +1443,37 @@ internal static partial class LawRegistry {
     ];
     private static LawCase[] FixedPositionCases() => [
         // ---- FixedPosition: the hierarchical world coordinate, an EXACT type throughout ----
-        Case(
+        SweptCase(
+            claim: Subjects.PositionCanonicalExact,
+            domain: Position,
             id: "position.canonical-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.PositionCanonicalExact,
-                domain: Position,
-                lawId: "position.canonical-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.PositionDeltaExact,
+            domain: PositionDelta,
             id: "position.delta-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.PositionDeltaExact,
-                domain: PositionDelta,
-                lawId: "position.delta-vs-oracle",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.PositionTranslateExact,
+            domain: PositionTranslate,
             id: "position.translate-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.PositionTranslateExact,
-                domain: PositionTranslate,
-                lawId: "position.translate-vs-oracle",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.PositionGroupStructureExact,
+            domain: PositionTranslate,
             id: "position.group-structure-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.PositionGroupStructureExact,
-                domain: PositionTranslate,
-                lawId: "position.group-structure-exact",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
-            id: "position.render-relative-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.PositionRenderRelativeLadder,
-                lawId: "position.render-relative-ladder"
-            )
+        ClaimCase(
+            claim: Subjects.PositionRenderRelativeLadder,
+            id: "position.render-relative-ladder"
         ),
-        Case(
-            id: "position.print-members-invariant-cells",
-            run: () => Laws.Claim(
-                claim: Subjects.PositionPrintsInvariantCells,
-                lawId: "position.print-members-invariant-cells"
-            )
+        ClaimCase(
+            claim: Subjects.PositionPrintsInvariantCells,
+            id: "position.print-members-invariant-cells"
         ),
 
     ];
@@ -1763,580 +1490,354 @@ internal static partial class LawRegistry {
                 width: 8
             )
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RigidIdentityAndInverseExact,
+            domain: Rigid,
             id: "rigid.identity-and-inverse-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RigidIdentityAndInverseExact,
-                domain: Rigid,
-                lawId: "rigid.identity-and-inverse-exact",
-                tier: Tier.Default,
-                width: 8
-            )
+            width: 8
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RigidTranslationExact,
+            domain: Rigid,
             id: "rigid.translation-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RigidTranslationExact,
-                domain: Rigid,
-                lawId: "rigid.translation-vs-oracle",
-                tier: Tier.Default,
-                width: 8
-            )
+            width: 8
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RigidFromRotationTranslation,
+            domain: Rigid,
             id: "rigid.from-rotation-translation",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RigidFromRotationTranslation,
-                domain: Rigid,
-                lawId: "rigid.from-rotation-translation",
-                tier: Tier.Default,
-                width: 8
-            )
+            width: 8
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RigidNormalizeUnitConstraints,
+            domain: RigidDirection,
             id: "rigid.normalize-unit-constraints",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RigidNormalizeUnitConstraints,
-                domain: RigidDirection,
-                lawId: "rigid.normalize-unit-constraints",
-                tier: Tier.Default,
-                width: 8
-            )
+            width: 8
         ),
-        Case(
-            id: "rigid.from-dual-quaternion-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.RigidFromDualQuaternionRefusals,
-                lawId: "rigid.from-dual-quaternion-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.RigidFromDualQuaternionRefusals,
+            id: "rigid.from-dual-quaternion-refusals"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RigidComposeNormalizedTwin,
+            domain: Rigid,
             id: "rigid.compose-normalized-twin",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RigidComposeNormalizedTwin,
-                domain: Rigid,
-                lawId: "rigid.compose-normalized-twin",
-                tier: Tier.Default,
-                width: 8
-            )
+            width: 8
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RigidTransformPointExact,
+            domain: RigidPoint,
             id: "rigid.transform-point-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RigidTransformPointExact,
-                domain: RigidPoint,
-                lawId: "rigid.transform-point-vs-oracle",
-                tier: Tier.Default,
-                width: 8
-            )
+            width: 8
         ),
-        Case(
-            id: "rigid.exp-log-seam",
-            run: () => Laws.Claim(
-                claim: Subjects.RigidExpLogSeam,
-                lawId: "rigid.exp-log-seam"
-            )
+        ClaimCase(
+            claim: Subjects.RigidExpLogSeam,
+            id: "rigid.exp-log-seam"
         ),
-        Case(
-            id: "rigid.sclerp-endpoints-and-screw",
-            run: () => Laws.Claim(
-                claim: Subjects.RigidScLerpEndpointsAndScrew,
-                lawId: "rigid.sclerp-endpoints-and-screw"
-            )
+        ClaimCase(
+            claim: Subjects.RigidScLerpEndpointsAndScrew,
+            id: "rigid.sclerp-endpoints-and-screw"
         ),
 
     ];
     private static LawCase[] RateAccumulatorCases() => [
         // ---- FixedRateAccumulator and FixedVector3RateAccumulator: an EXACT rational ledger ----
-        Case(
+        SweptCase(
+            claim: Subjects.RateScheduleVsLedger,
+            domain: Rate,
             id: "rate.schedule-vs-ledger",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RateScheduleVsLedger,
-                domain: Rate,
-                lawId: "rate.schedule-vs-ledger",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
-            id: "rate.construction-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.RateConstructionAndRefusals,
-                lawId: "rate.construction-and-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.RateConstructionAndRefusals,
+            id: "rate.construction-and-refusals"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RateUnitAdvanceExact,
+            domain: Rate,
             id: "rate.unit-advance-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RateUnitAdvanceExact,
-                domain: Rate,
-                lawId: "rate.unit-advance-exact",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.RateVectorAxesIndependent,
+            domain: Rate,
             id: "rate.vector-axes-independent",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.RateVectorAxesIndependent,
-                domain: Rate,
-                lawId: "rate.vector-axes-independent",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
-            id: "rate.vector-construction-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.RateVectorConstructionAndRefusals,
-                lawId: "rate.vector-construction-and-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.RateVectorConstructionAndRefusals,
+            id: "rate.vector-construction-and-refusals"
         ),
 
     ];
     private static LawCase[] SymmetricSolveCases() => [
         // ---- FixedSymmetricSolve: scale-free 2×2/3×3 symmetric solve and invert (internal — see the type's own
         // remarks for the bit budget and the Invert-only refusal envelope) ----
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Solve2VsOracle,
+            domain: SymmetricSolve2,
             id: "symmetric-solve.solve2-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Solve2VsOracle,
-                domain: SymmetricSolve2,
-                lawId: "symmetric-solve.solve2-vs-oracle",
-                tier: Tier.Default,
-                width: 5
-            )
+            width: 5
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Solve3VsOracle,
+            domain: SymmetricSolve3,
             id: "symmetric-solve.solve3-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Solve3VsOracle,
-                domain: SymmetricSolve3,
-                lawId: "symmetric-solve.solve3-vs-oracle",
-                tier: Tier.Default,
-                width: 9
-            )
+            width: 9
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Invert2VsOracle,
+            domain: SymmetricInvert2,
             id: "symmetric-solve.invert2-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Invert2VsOracle,
-                domain: SymmetricInvert2,
-                lawId: "symmetric-solve.invert2-vs-oracle",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Invert3VsOracle,
+            domain: SymmetricInvert3,
             id: "symmetric-solve.invert3-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Invert3VsOracle,
-                domain: SymmetricInvert3,
-                lawId: "symmetric-solve.invert3-vs-oracle",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Solve2VsBareiss,
+            domain: SymmetricSolve2,
             id: "symmetric-solve.solve2-vs-bareiss",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Solve2VsBareiss,
-                domain: SymmetricSolve2,
-                lawId: "symmetric-solve.solve2-vs-bareiss",
-                tier: Tier.Default,
-                width: 5
-            )
+            width: 5
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Solve3VsBareiss,
+            domain: SymmetricSolve3,
             id: "symmetric-solve.solve3-vs-bareiss",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Solve3VsBareiss,
-                domain: SymmetricSolve3,
-                lawId: "symmetric-solve.solve3-vs-bareiss",
-                tier: Tier.Default,
-                width: 9
-            )
+            width: 9
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Invert2VsBareiss,
+            domain: SymmetricInvert2,
             id: "symmetric-solve.invert2-vs-bareiss",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Invert2VsBareiss,
-                domain: SymmetricInvert2,
-                lawId: "symmetric-solve.invert2-vs-bareiss",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Invert3VsBareiss,
+            domain: SymmetricInvert3,
             id: "symmetric-solve.invert3-vs-bareiss",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Invert3VsBareiss,
-                domain: SymmetricInvert3,
-                lawId: "symmetric-solve.invert3-vs-bareiss",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
-            id: "symmetric-solve.solve3-extreme-magnitude-agrees",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.Solve3ExtremeMagnitudeAgrees,
-                lawId: "symmetric-solve.solve3-extreme-magnitude-agrees"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.Solve3ExtremeMagnitudeAgrees,
+            id: "symmetric-solve.solve3-extreme-magnitude-agrees"
         ),
-        Case(
-            id: "symmetric-solve.singular-matrices-refuse",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.SingularMatricesRefuse,
-                lawId: "symmetric-solve.singular-matrices-refuse"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.SingularMatricesRefuse,
+            id: "symmetric-solve.singular-matrices-refuse"
         ),
-        Case(
-            id: "symmetric-solve.invert-large-magnitude-envelope-refuses",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.InvertLargeMagnitudeEnvelopeRefuses,
-                lawId: "symmetric-solve.invert-large-magnitude-envelope-refuses"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.InvertLargeMagnitudeEnvelopeRefuses,
+            id: "symmetric-solve.invert-large-magnitude-envelope-refuses"
         ),
-        Case(
-            id: "symmetric-solve.lossy-rank-one-singular-refuses",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.LossyRankOneSingularRefuses,
-                lawId: "symmetric-solve.lossy-rank-one-singular-refuses"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.LossyRankOneSingularRefuses,
+            id: "symmetric-solve.lossy-rank-one-singular-refuses"
         ),
-        Case(
-            id: "symmetric-solve.lossless-boundary-is-exact",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.LosslessBoundaryIsExact,
-                lawId: "symmetric-solve.lossless-boundary-is-exact"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.LosslessBoundaryIsExact,
+            id: "symmetric-solve.lossless-boundary-is-exact"
         ),
-        Case(
-            id: "symmetric-solve.divide-magnitude-rounded-full-width-agrees",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.DivideMagnitudeRoundedFullWidthAgrees,
-                lawId: "symmetric-solve.divide-magnitude-rounded-full-width-agrees"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.DivideMagnitudeRoundedFullWidthAgrees,
+            id: "symmetric-solve.divide-magnitude-rounded-full-width-agrees"
         ),
-        Case(
-            id: "symmetric-solve.refusal-leaves-no-stale-output",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.RefusalLeavesNoStaleOutput,
-                lawId: "symmetric-solve.refusal-leaves-no-stale-output"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.RefusalLeavesNoStaleOutput,
+            id: "symmetric-solve.refusal-leaves-no-stale-output"
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Solve2ResidualWithinEnvelope,
+            domain: SymmetricSolve2,
             id: "symmetric-solve.solve2-residual-within-envelope",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Solve2ResidualWithinEnvelope,
-                domain: SymmetricSolve2,
-                lawId: "symmetric-solve.solve2-residual-within-envelope",
-                tier: Tier.Default,
-                width: 5
-            )
+            width: 5
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Solve3ResidualWithinEnvelope,
+            domain: SymmetricSolve3,
             id: "symmetric-solve.solve3-residual-within-envelope",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Solve3ResidualWithinEnvelope,
-                domain: SymmetricSolve3,
-                lawId: "symmetric-solve.solve3-residual-within-envelope",
-                tier: Tier.Default,
-                width: 9
-            )
+            width: 9
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Invert2ResidualWithinEnvelope,
+            domain: SymmetricInvert2,
             id: "symmetric-solve.invert2-residual-within-envelope",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Invert2ResidualWithinEnvelope,
-                domain: SymmetricInvert2,
-                lawId: "symmetric-solve.invert2-residual-within-envelope",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Invert3ResidualWithinEnvelope,
+            domain: SymmetricInvert3,
             id: "symmetric-solve.invert3-residual-within-envelope",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Invert3ResidualWithinEnvelope,
-                domain: SymmetricInvert3,
-                lawId: "symmetric-solve.invert3-residual-within-envelope",
-                tier: Tier.Default,
-                width: 6
-            )
+            width: 6
         ),
-        Case(
-            id: "symmetric-solve.solve3-non-diagonal-exact-value",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.Solve3NonDiagonalExactValue,
-                lawId: "symmetric-solve.solve3-non-diagonal-exact-value"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.Solve3NonDiagonalExactValue,
+            id: "symmetric-solve.solve3-non-diagonal-exact-value"
         ),
-        Case(
-            id: "symmetric-solve.solve3-all-cofactors-exact-value",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.Solve3AllCofactorsExactValue,
-                lawId: "symmetric-solve.solve3-all-cofactors-exact-value"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.Solve3AllCofactorsExactValue,
+            id: "symmetric-solve.solve3-all-cofactors-exact-value"
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Apply2VsOracle,
+            domain: SymmetricApply2,
             id: "symmetric-solve.apply2-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Apply2VsOracle,
-                domain: SymmetricApply2,
-                lawId: "symmetric-solve.apply2-vs-oracle",
-                tier: Tier.Default,
-                width: 5
-            )
+            width: 5
         ),
-        Case(
+        SweptCase(
+            claim: SymmetricSolveClaims.Apply3VsOracle,
+            domain: SymmetricApply3,
             id: "symmetric-solve.apply3-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: SymmetricSolveClaims.Apply3VsOracle,
-                domain: SymmetricApply3,
-                lawId: "symmetric-solve.apply3-vs-oracle",
-                tier: Tier.Default,
-                width: 9
-            )
+            width: 9
         ),
-        Case(
-            id: "symmetric-solve.apply-refusal-and-symmetry",
-            run: () => Laws.Claim(
-                claim: SymmetricSolveClaims.ApplyRefusalAndSymmetry,
-                lawId: "symmetric-solve.apply-refusal-and-symmetry"
-            )
+        ClaimCase(
+            claim: SymmetricSolveClaims.ApplyRefusalAndSymmetry,
+            id: "symmetric-solve.apply-refusal-and-symmetry"
         ),
 
     ];
     private static LawCase[] MixedScaleCases() => [
         // ---- FusedArithmetic: public refusing mixed-scale operations and their internal wrapping siblings ----
-        Case(
+        SweptCase(
+            claim: MixedScaleClaims.ProductVsOracle,
+            domain: MixedScale,
             id: "mixed-scale.product-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MixedScaleClaims.ProductVsOracle,
-                domain: MixedScale,
-                lawId: "mixed-scale.product-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: MixedScaleClaims.CheckedProductMatchesRepresentability,
+            domain: MixedScale,
             id: "mixed-scale.checked-product-matches-representability",
-            run: () => Laws.SweptClaim(
-                claim: MixedScaleClaims.CheckedProductMatchesRepresentability,
-                domain: MixedScale,
-                lawId: "mixed-scale.checked-product-matches-representability",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: MixedScaleClaims.TripleProductVsOracle,
+            domain: MixedScaleTriple,
             id: "mixed-scale.triple-product-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MixedScaleClaims.TripleProductVsOracle,
-                domain: MixedScaleTriple,
-                lawId: "mixed-scale.triple-product-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: MixedScaleClaims.DotProductVsOracle,
+            domain: MixedScale,
             id: "mixed-scale.dot-product-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MixedScaleClaims.DotProductVsOracle,
-                domain: MixedScale,
-                lawId: "mixed-scale.dot-product-vs-oracle",
-                tier: Tier.Default,
-                width: 5
-            )
+            width: 5
         ),
-        Case(
+        SweptCase(
+            claim: MixedScaleClaims.ScaledReciprocalVsOracle,
+            domain: MixedScale,
             id: "mixed-scale.scaled-reciprocal-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MixedScaleClaims.ScaledReciprocalVsOracle,
-                domain: MixedScale,
-                lawId: "mixed-scale.scaled-reciprocal-vs-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
-            id: "mixed-scale.scaled-reciprocal-invalid-inputs-refuse",
-            run: () => Laws.Claim(
-                claim: MixedScaleClaims.ScaledReciprocalInvalidInputsRefuse,
-                lawId: "mixed-scale.scaled-reciprocal-invalid-inputs-refuse"
-            )
+        ClaimCase(
+            claim: MixedScaleClaims.ScaledReciprocalInvalidInputsRefuse,
+            id: "mixed-scale.scaled-reciprocal-invalid-inputs-refuse"
         ),
-        Case(
-            id: "mixed-scale.extreme-scale-counts-are-congruent",
-            run: () => Laws.Claim(
-                claim: MixedScaleClaims.ExtremeScaleCountsAreCongruent,
-                lawId: "mixed-scale.extreme-scale-counts-are-congruent"
-            )
+        ClaimCase(
+            claim: MixedScaleClaims.ExtremeScaleCountsAreCongruent,
+            id: "mixed-scale.extreme-scale-counts-are-congruent"
         ),
 
     ];
     private static LawCase[] DirectedRoundingCases() => [
         // ---- FixedDirectedRounding: the conservative upper bounds (public — Puck.World.Data's first production caller) ----
-        Case(
+        SweptCase(
+            claim: DirectedRoundingClaims.CeilingSquareRootIsLeastUpperBound,
+            domain: DirectedRoot,
             id: "directed-rounding.ceiling-square-root-is-least-upper-bound",
-            run: () => Laws.SweptClaim(
-                claim: DirectedRoundingClaims.CeilingSquareRootIsLeastUpperBound,
-                domain: DirectedRoot,
-                lawId: "directed-rounding.ceiling-square-root-is-least-upper-bound",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: DirectedRoundingClaims.CeilingProductIsLeastUpperBound,
+            domain: DirectedProduct,
             id: "directed-rounding.ceiling-product-is-least-upper-bound",
-            run: () => Laws.SweptClaim(
-                claim: DirectedRoundingClaims.CeilingProductIsLeastUpperBound,
-                domain: DirectedProduct,
-                lawId: "directed-rounding.ceiling-product-is-least-upper-bound",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: DirectedRoundingClaims.CeilingQuotientIsLeastUpperBound,
+            domain: DirectedQuotient,
             id: "directed-rounding.ceiling-quotient-is-least-upper-bound",
-            run: () => Laws.SweptClaim(
-                claim: DirectedRoundingClaims.CeilingQuotientIsLeastUpperBound,
-                domain: DirectedQuotient,
-                lawId: "directed-rounding.ceiling-quotient-is-least-upper-bound",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: DirectedRoundingClaims.CeilingProductSumIsLeastUpperBound,
+            domain: DirectedProductSum,
             id: "directed-rounding.ceiling-product-sum-is-least-upper-bound",
-            run: () => Laws.SweptClaim(
-                claim: DirectedRoundingClaims.CeilingProductSumIsLeastUpperBound,
-                domain: DirectedProductSum,
-                lawId: "directed-rounding.ceiling-product-sum-is-least-upper-bound",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: DirectedRoundingClaims.CeilingMagnitudeIsLeastUpperBound,
+            domain: DirectedMagnitude,
             id: "directed-rounding.ceiling-magnitude-is-least-upper-bound",
-            run: () => Laws.SweptClaim(
-                claim: DirectedRoundingClaims.CeilingMagnitudeIsLeastUpperBound,
-                domain: DirectedMagnitude,
-                lawId: "directed-rounding.ceiling-magnitude-is-least-upper-bound",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
-            id: "directed-rounding.negative-operands-refuse",
-            run: () => Laws.Claim(
-                claim: DirectedRoundingClaims.NegativeOperandsRefuse,
-                lawId: "directed-rounding.negative-operands-refuse"
-            )
+        ClaimCase(
+            claim: DirectedRoundingClaims.NegativeOperandsRefuse,
+            id: "directed-rounding.negative-operands-refuse"
         ),
 
     ];
     private static LawCase[] MassPropertiesCases() => [
         // ---- FixedMassProperties: volumes, bodies, transfer, compound and the inversions (internal) ----
-        Case(
+        SweptCase(
+            claim: MassPropertyClaims.VolumesVsOracle,
+            domain: MassVolume,
             id: "mass-properties.volumes-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MassPropertyClaims.VolumesVsOracle,
-                domain: MassVolume,
-                lawId: "mass-properties.volumes-vs-oracle",
-                tier: Tier.Default,
-                width: 3
-            )
+            width: 3
         ),
-        Case(
+        SweptCase(
+            claim: MassPropertyClaims.SphereVsOracle,
+            domain: MassSphere,
             id: "mass-properties.sphere-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MassPropertyClaims.SphereVsOracle,
-                domain: MassSphere,
-                lawId: "mass-properties.sphere-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: MassPropertyClaims.BoxVsOracle,
+            domain: MassBox,
             id: "mass-properties.box-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MassPropertyClaims.BoxVsOracle,
-                domain: MassBox,
-                lawId: "mass-properties.box-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: MassPropertyClaims.CylinderVsOracle,
+            domain: MassCylinder,
             id: "mass-properties.cylinder-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MassPropertyClaims.CylinderVsOracle,
-                domain: MassCylinder,
-                lawId: "mass-properties.cylinder-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: MassPropertyClaims.CapsuleVsOracle,
+            domain: MassCapsule,
             id: "mass-properties.capsule-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MassPropertyClaims.CapsuleVsOracle,
-                domain: MassCapsule,
-                lawId: "mass-properties.capsule-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: MassPropertyClaims.ParallelAxisVsOracle,
+            domain: MassParallelAxis,
             id: "mass-properties.parallel-axis-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MassPropertyClaims.ParallelAxisVsOracle,
-                domain: MassParallelAxis,
-                lawId: "mass-properties.parallel-axis-vs-oracle",
-                tier: Tier.Default,
-                width: 10
-            )
+            width: 10
         ),
-        Case(
+        SweptCase(
+            claim: MassPropertyClaims.CompoundVsOracle,
+            domain: MassCompound,
             id: "mass-properties.compound-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: MassPropertyClaims.CompoundVsOracle,
-                domain: MassCompound,
-                lawId: "mass-properties.compound-vs-oracle",
-                tier: Tier.Default,
-                width: 10
-            )
+            width: 10
         ),
-        Case(
-            id: "mass-properties.capsule-degenerates-to-sphere",
-            run: () => Laws.Claim(
-                claim: MassPropertyClaims.CapsuleDegeneratesToSphere,
-                lawId: "mass-properties.capsule-degenerates-to-sphere"
-            )
+        ClaimCase(
+            claim: MassPropertyClaims.CapsuleDegeneratesToSphere,
+            id: "mass-properties.capsule-degenerates-to-sphere"
         ),
-        Case(
-            id: "mass-properties.inversion-refuses-below-resolution",
-            run: () => Laws.Claim(
-                claim: MassPropertyClaims.InversionRefusesBelowResolution,
-                lawId: "mass-properties.inversion-refuses-below-resolution"
-            )
+        ClaimCase(
+            claim: MassPropertyClaims.InversionRefusesBelowResolution,
+            id: "mass-properties.inversion-refuses-below-resolution"
         ),
-        Case(
-            id: "mass-properties.fraction-bit-count-bound",
-            run: () => Laws.Claim(
-                claim: MassPropertyClaims.FractionBitCountBoundIsPinned,
-                lawId: "mass-properties.fraction-bit-count-bound"
-            )
+        ClaimCase(
+            claim: MassPropertyClaims.FractionBitCountBoundIsPinned,
+            id: "mass-properties.fraction-bit-count-bound"
         ),
-        Case(
-            id: "mass-properties.pinned-pi-is-correctly-rounded",
-            run: () => Laws.Claim(
-                claim: MassPropertyClaims.PinnedPiIsCorrectlyRounded,
-                lawId: "mass-properties.pinned-pi-is-correctly-rounded"
-            )
+        ClaimCase(
+            claim: MassPropertyClaims.PinnedPiIsCorrectlyRounded,
+            id: "mass-properties.pinned-pi-is-correctly-rounded"
         ),
 
     ];

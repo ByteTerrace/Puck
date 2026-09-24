@@ -17,14 +17,18 @@ public sealed class ArbiterTests {
 
         manager.Start();
 
-        source.PlayerOne!.Publish(state: GamepadState.Neutral with { LeftStick = new Vector2(
+        source.PlayerOne!.Publish(state: GamepadState.Neutral with {
+            LeftStick = new Vector2(
             x: 0.75f,
             y: 0f
-        ), });
-        source.PlayerZero!.Publish(state: GamepadState.Neutral with { LeftStick = new Vector2(
+        ),
+        });
+        source.PlayerZero!.Publish(state: GamepadState.Neutral with {
+            LeftStick = new Vector2(
             x: 0.25f,
             y: 0f
-        ), });
+        ),
+        });
 
         var arbiter = new InputArbiter(manager: manager);
         var lane = arbiter.RegisterLane(policy: InputLanePolicy.Multicast);

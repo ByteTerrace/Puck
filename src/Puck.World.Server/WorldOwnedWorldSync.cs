@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Storage;
 using System.Text;
 using System.Text.Json;
@@ -21,7 +22,7 @@ public readonly record struct WorldSyncOutcome(string Id, bool Ok, string Detail
 /// boots. A fresh session therefore reports dirty until its first fully successful whole-catalog push or pull, which
 /// errs on the side that prompts a sync rather than the side that fakes one. Per-world detail lines are the truth;
 /// the cursor is the catalog-level approximation.
-/// <para>One blob name per world id means the id must name the blob unambiguously. <see cref="WorldOwnedWorldFileName"/>
+/// <para>One blob name per world id means the id must name the blob unambiguously. <see cref="WorldDocumentName"/>
 /// escapes nothing, so the whole of that rule is <see cref="SafeName"/>: an id that does not parse as one is
 /// refused by name at both push and pull (<c>KeyRefusal</c>) rather than quietly sharing a stranger's key, and two
 /// parsed ids can never collide on one cloud key, whose namespace is case-SENSITIVE. The LOCAL catalog's directory is
@@ -57,7 +58,7 @@ public sealed class WorldOwnedWorldSync {
     // read this constant rather than each re-spelling "puck/worlds/basis".
     internal const string BasisNamespace = (WorldsNamespace + "/basis");
     // A sibling of WorldsNamespace, never a child of it, so the desktop catalog's puck/worlds/-prefixed List can
-    // never discover a hosted checkpoint or journal page as a phantom owned world.
+    // never discover a hosted world's leaf as a phantom owned world.
     internal const string HostedNamespace = "puck/hosted";
     // Engine-owned data sits under a puck/ root so the per-user container stays shared with the platform's own
     // namespaces (private/keys, private/message.txt) rather than colonizing the container root. Internal (not
@@ -68,16 +69,14 @@ public sealed class WorldOwnedWorldSync {
     // Bounds a discovery transport exception's message to one flat console line — see DiscoverCloudIds' catch.
     private const int DiscoveryDetailLengthLimit = 200;
 
-    // The platform's public content edge rewrites a /public/* GET onto this prefix in the account, so a hosted
-    // definition or projection meant to be publicly reachable has to live under it; every other hosted leaf (a
-    // checkpoint, a journal page) is simulation state and stays under HostedNamespace, reachable only with the
-    // identity's own storage token.
     /// <summary>Account-relative namespace for hosted authority state and release bookkeeping. Access requires
     /// the owning identity's storage authorization; credential values themselves belong in the secret store.</summary>
     public const string HostedPrivateNamespace = ("private/" + HostedNamespace);
 
-    private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);
+    /// <summary>Gets the bound on each storage operation a sync makes, on the host clock.</summary>
+    public static TimeSpan OperationTimeout { get; } = TimeSpan.FromSeconds(seconds: 15);
 
+    private readonly TimeProvider m_clock;
     private readonly Guid m_containerId;
     private readonly ICounterpartPublisher? m_publisher;
     private readonly string m_stateFilePath;
@@ -100,13 +99,16 @@ public sealed class WorldOwnedWorldSync {
     /// <param name="stateFilePath">The sidecar file the tokens and cursor persist in.</param>
     /// <param name="publisher">Publishes this world's own counterpart claim after each successful push;
     /// <see langword="null"/> leaves that half of a push a no-op (the document write is unaffected either way).</param>
+    /// <param name="timeProvider">The host clock every <see cref="OperationTimeout"/> runs on; <see langword="null"/> is
+    /// <see cref="TimeProvider.System"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="worlds"/>, <paramref name="store"/>, or <paramref name="target"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="stateFilePath"/> is <see langword="null"/> or whitespace.</exception>
-    public WorldOwnedWorldSync(WorldOwnedWorlds worlds, IObjectBlobStore store, ObjectStorageTarget target, Guid containerId, string stateFilePath, ICounterpartPublisher? publisher = null) {
+    public WorldOwnedWorldSync(WorldOwnedWorlds worlds, IObjectBlobStore store, ObjectStorageTarget target, Guid containerId, string stateFilePath, ICounterpartPublisher? publisher = null, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(argument: worlds);
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: stateFilePath);
+        m_clock = (timeProvider ?? TimeProvider.System);
         m_containerId = containerId;
         m_publisher = publisher;
         m_stateFilePath = stateFilePath;
@@ -142,7 +144,7 @@ public sealed class WorldOwnedWorldSync {
     }
     /// <summary>Lists the cloud <c>puck/worlds/</c> namespace and adds any id this catalog does not already know about to
     /// <paramref name="ids"/>. An id is only recoverable when re-escaping the candidate extracted from a blob name
-    /// reproduces that exact name through <see cref="WorldOwnedWorldFileName.For"/>. A name that does not is one
+    /// reproduces that exact name through <see cref="WorldDocumentName.For"/>. A name that does not is one
     /// nothing here could have written — this engine refuses to push such an id in the first place — so it was placed
     /// by something that does not share this mapping, and no owned-world id addresses it. It is surfaced as a named
     /// refusal in <paramref name="refusals"/> rather than silently skipped, because "you have a cloud object this
@@ -151,7 +153,10 @@ public sealed class WorldOwnedWorldSync {
         IReadOnlyList<string> keys;
 
         try {
-            using var timeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var timeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
 
             keys = m_store.ListAsync(
                 cancellationToken: timeout.Token,
@@ -205,12 +210,12 @@ public sealed class WorldOwnedWorldSync {
 
             if (!fileName.EndsWith(
                 comparisonType: StringComparison.Ordinal,
-                value: WorldOwnedWorldFileName.Suffix
+                value: WorldDocumentName.DocumentSuffix
             )) {
                 continue; // not a world document — some other blob sharing the puck/worlds/ prefix, not this discovery's concern.
             }
 
-            var candidateId = fileName[..^WorldOwnedWorldFileName.Suffix.Length];
+            var candidateId = fileName[..^WorldDocumentName.DocumentSuffix.Length];
 
             if (!SafeName.TryParse(
                 candidate: candidateId,
@@ -248,7 +253,7 @@ public sealed class WorldOwnedWorldSync {
     /// character) exactly like every other door in this family — the id arrives here untyped (a console-verb
     /// argument, a sidecar-tracked key, or a candidate <see cref="DiscoverCloudIds"/> extracted from a cloud blob
     /// name), so this is the one place left that still validates rather than trusts. Once parsed, two distinct safe
-    /// ids can never collide on one cloud key — <see cref="WorldOwnedWorldFileName"/> escapes nothing and the object
+    /// ids can never collide on one cloud key — <see cref="WorldDocumentName"/> escapes nothing and the object
     /// namespace is case-sensitive — so there is no separate "shares a key with a stranger" check left to run here.
     /// The local catalog's own case-insensitive uniqueness rule is held where the document lands, in
     /// <see cref="WorldOwnedWorlds.ReplaceFromSync"/>.</summary>
@@ -356,7 +361,10 @@ public sealed class WorldOwnedWorldSync {
         ObjectBlobContent content;
 
         try {
-            using var timeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var timeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
             var read = m_store.ReadAsync(
                 address: AddressFor(
                     containerId: m_containerId,
@@ -396,11 +404,12 @@ public sealed class WorldOwnedWorldSync {
         var neighbours = new WorldStorageNeighbourResolver(
             containerId: m_containerId,
             store: m_store,
-            target: m_target
+            target: m_target,
+            timeProvider: m_clock
         );
         var path = Path.Combine(
             path1: m_worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: safe)
+            path2: WorldDocumentName.For(id: safe)
         );
         var probePath = $"{path}.pull-probe";
 
@@ -408,7 +417,10 @@ public sealed class WorldOwnedWorldSync {
         IReadOnlyList<byte[]> chainBytes;
 
         try {
-            using var timeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var timeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
 
             if (!WorldDefinitionFileSource.TryComposeChain(
                 source: new WorldStorageDocumentSource(
@@ -443,9 +455,9 @@ public sealed class WorldOwnedWorldSync {
             );
         }
 
-        // A flat cloud copy (composed is null) writes its own bytes unchanged, exactly as before this seam existed;
-        // a chain-bearing copy writes the FLATTENED composition, so the probe — and the boot gate it crosses — sees
-        // a self-contained document either way.
+        // A flat cloud copy (composed is null) writes its own bytes unchanged; a chain-bearing copy writes the
+        // FLATTENED composition, so the probe — and the boot gate it crosses — sees a self-contained document either
+        // way.
         var probeBytes = ((composed is not null)
             ? Encoding.UTF8.GetBytes(s: composed.ToJsonString())
             : content.Content.ToArray()
@@ -487,7 +499,7 @@ public sealed class WorldOwnedWorldSync {
                 return new WorldSyncOutcome(
                     Id: id,
                     Ok: false,
-                    Detail: $"the cloud object '{WorldsNamespace}/{WorldOwnedWorldFileName.For(id: safe)}' holds a document declaring id '{incoming.Id}', not '{id}' — adopting it would file it under one id and track it under another; push it to its own key, or rename its identity to '{id}'"
+                    Detail: $"the cloud object '{WorldsNamespace}/{WorldDocumentName.For(id: safe)}' holds a document declaring id '{incoming.Id}', not '{id}' — adopting it would file it under one id and track it under another; push it to its own key, or rename its identity to '{id}'"
                 );
             }
             // A chain-derived cloud copy adopts as a DELTA, never a flattened document: each ancestor lands in this
@@ -549,9 +561,22 @@ public sealed class WorldOwnedWorldSync {
         write = WorldAuthorityStoreOutcomeKind.Failed;
 
         var label = $"{name} (basis)";
+
+        if (!WorldDocumentName.TryParseId(
+            id: out var id,
+            name: name,
+            reason: out var nameReason
+        )) {
+            return new WorldSyncOutcome(
+                Detail: $"cannot address the basis link in the cloud — {nameReason}",
+                Id: label,
+                Ok: false
+            );
+        }
+
         var address = BasisAddressFor(
             containerId: m_containerId,
-            name: name
+            id: id
         );
         var tracked = m_basisTokens.TryGetValue(
             key: name,
@@ -559,7 +584,10 @@ public sealed class WorldOwnedWorldSync {
         );
 
         try {
-            using var timeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var timeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
             var result = m_store.WriteAsync(
                 address: address,
                 cancellationToken: timeout.Token,
@@ -644,7 +672,7 @@ public sealed class WorldOwnedWorldSync {
         var safe = identitySection.Id;
         var path = Path.Combine(
             path1: m_worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: safe)
+            path2: WorldDocumentName.For(id: safe)
         );
 
         if (
@@ -670,7 +698,10 @@ public sealed class WorldOwnedWorldSync {
         WorldSyncOutcome tipOutcome;
 
         try {
-            using var timeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var timeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
             var result = m_store.WriteAsync(
                 address: AddressFor(
                     containerId: m_containerId,
@@ -756,7 +787,10 @@ public sealed class WorldOwnedWorldSync {
         ObjectBlobContent? existing;
 
         try {
-            using var readTimeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var readTimeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
 
             existing = m_store.ReadAsync(
                 address: address,
@@ -792,42 +826,39 @@ public sealed class WorldOwnedWorldSync {
     }
     private void SaveState() {
         try {
-            var swapPath = $"{m_stateFilePath}.swap";
+            AtomicFile.Write(
+                path: m_stateFilePath,
+                write: stream => {
+                    using var writer = new Utf8JsonWriter(
+                        utf8Json: stream,
+                        options: new JsonWriterOptions { Indented = true }
+                    );
 
-            using (var stream = File.Create(path: swapPath))
-            using (var writer = new Utf8JsonWriter(
-                utf8Json: stream,
-                options: new JsonWriterOptions { Indented = true }
-            )) {
-                writer.WriteStartObject();
-                writer.WriteStartObject(propertyName: "worlds");
-                foreach (var (id, token) in m_tokens.OrderBy(
-                    keySelector: static entry => entry.Key,
-                    comparer: StringComparer.Ordinal
-                )) {
-                    writer.WriteString(
-                        propertyName: id,
-                        value: token
-                    );
+                    writer.WriteStartObject();
+                    writer.WriteStartObject(propertyName: "worlds");
+                    foreach (var (id, token) in m_tokens.OrderBy(
+                        keySelector: static entry => entry.Key,
+                        comparer: StringComparer.Ordinal
+                    )) {
+                        writer.WriteString(
+                            propertyName: id,
+                            value: token
+                        );
+                    }
+                    writer.WriteEndObject();
+                    writer.WriteStartObject(propertyName: "basis");
+                    foreach (var (name, token) in m_basisTokens.OrderBy(
+                        keySelector: static entry => entry.Key,
+                        comparer: StringComparer.Ordinal
+                    )) {
+                        writer.WriteString(
+                            propertyName: name,
+                            value: token
+                        );
+                    }
+                    writer.WriteEndObject();
+                    writer.WriteEndObject();
                 }
-                writer.WriteEndObject();
-                writer.WriteStartObject(propertyName: "basis");
-                foreach (var (name, token) in m_basisTokens.OrderBy(
-                    keySelector: static entry => entry.Key,
-                    comparer: StringComparer.Ordinal
-                )) {
-                    writer.WriteString(
-                        propertyName: name,
-                        value: token
-                    );
-                }
-                writer.WriteEndObject();
-                writer.WriteEndObject();
-            }
-            File.Move(
-                destFileName: m_stateFilePath,
-                overwrite: true,
-                sourceFileName: swapPath
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
@@ -884,11 +915,11 @@ public sealed class WorldOwnedWorldSync {
             }
 
             for (var index = 1; (index < chainBytes.Count); index++) {
-                File.WriteAllBytes(
+                AtomicFile.WriteAllBytes(
                     bytes: chainBytes[index],
                     path: Path.Combine(
                         path1: basisDirectory,
-                        path2: names[(index - 1)]
+                        path2: WorldDocumentName.DocumentFile(name: names[(index - 1)])
                     )
                 );
             }
@@ -896,7 +927,7 @@ public sealed class WorldOwnedWorldSync {
             var tip = ((JsonObject)JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: chainBytes[0]))!);
 
             tip[propertyName: WorldDocumentBasis.BasisMemberName] = $"basis/{names[0]}";
-            File.WriteAllBytes(
+            AtomicFile.WriteAllBytes(
                 bytes: Encoding.UTF8.GetBytes(s: tip.ToJsonString()),
                 path: path
             );
@@ -918,38 +949,30 @@ public sealed class WorldOwnedWorldSync {
     /// <returns>The blob address.</returns>
     public static ObjectBlobAddress AddressFor(Guid containerId, SafeName id) => new(
         ObjectId: containerId,
-        Key: $"{WorldsNamespace}/{WorldOwnedWorldFileName.For(id: id)}"
+        Key: $"{WorldsNamespace}/{WorldDocumentName.For(id: id)}"
     );
-    /// <summary>Computes the blob address a basis-chain link's bare file name addresses — the ONE writer-side
+    /// <summary>Computes the blob address a basis-chain link's document name addresses — the one writer-side
     /// encoding every basis push/read goes through, under its own <c>basis/</c> namespace segment so
-    /// <see cref="DiscoverCloudIds"/> can never mistake a chain link for a pullable owned world. <paramref
-    /// name="name"/> is already canonical (see <see cref="WorldStorageDocumentSource"/>'s own name check) — this
-    /// method does not re-validate it.</summary>
+    /// <see cref="DiscoverCloudIds"/> can never mistake a chain link for a pullable owned world.</summary>
     /// <param name="containerId">The per-user container id.</param>
-    /// <param name="name">The chain link's own canonical file name.</param>
+    /// <param name="id">The chain link's document name, an owned world id (<see cref="WorldDocumentName.TryParseId"/>).</param>
     /// <returns>The blob address.</returns>
-    public static ObjectBlobAddress BasisAddressFor(Guid containerId, string name) => new(
-        Key: $"{BasisNamespace}/{name}",
+    public static ObjectBlobAddress BasisAddressFor(Guid containerId, SafeName id) => new(
+        Key: $"{BasisNamespace}/{WorldDocumentName.For(id: id)}",
         ObjectId: containerId
     );
-    /// <summary>Computes the blob address one hosted world's leaf addresses — <c>definition.json</c>/<c>projection.json</c>
-    /// under <see cref="HostedPrivateNamespace"/> (the publishable pair), every other leaf (a checkpoint,
-    /// <c>checkpoints/latest</c>, a journal page) under <see cref="HostedNamespace"/>.</summary>
+    /// <summary>Computes the blob address of one hosted world's leaf under <c>puck/hosted/{world}/</c>. A hosted
+    /// world's authority state lives under <see cref="HostedPrivateNamespace"/>, addressed by
+    /// <see cref="WorldAuthorityBlobStore"/>, never through this method.</summary>
     /// <param name="containerId">The owning identity's per-user container id.</param>
     /// <param name="world">The hosted world's own id.</param>
-    /// <param name="leaf">The leaf path under the world's own hosted namespace segment (e.g. <c>"definition.json"</c>,
-    /// <c>"checkpoints/latest"</c>).</param>
+    /// <param name="leaf">The leaf path under the world's own hosted namespace segment (e.g. <c>"release"</c>).</param>
     /// <returns>The blob address.</returns>
     public static ObjectBlobAddress HostedAddressFor(Guid containerId, SafeName world, string leaf) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: leaf);
 
-        var root = ((leaf is "definition.json" or "projection.json")
-            ? HostedPrivateNamespace
-            : HostedNamespace
-        );
-
         return new ObjectBlobAddress(
-            Key: $"{root}/{world.Value}/{leaf}",
+            Key: $"{HostedNamespace}/{world.Value}/{leaf}",
             ObjectId: containerId
         );
     }

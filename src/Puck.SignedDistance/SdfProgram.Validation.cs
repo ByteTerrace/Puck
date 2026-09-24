@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Puck.Maths;
+
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
@@ -25,10 +27,6 @@ public sealed partial class SdfProgram {
 
     private static readonly string[] OperandLaneNames = ["Data0.x", "Data0.y", "Data0.z", "Data0.w", "Data1.x", "Data1.y", "Data1.z", "Data1.w"];
 
-    private static bool IsFinite(Vector3 value) =>
-        (float.IsFinite(f: value.X) &&
-        float.IsFinite(f: value.Y) &&
-        float.IsFinite(f: value.Z));
     private bool DeclaresScreenIndex(int screenIndex) {
         foreach (var surface in m_screenSurfaces) {
             if (surface.ScreenIndex == screenIndex) {
@@ -281,7 +279,7 @@ public sealed partial class SdfProgram {
             var material = materials[index];
 
             if (
-                !IsFinite(value: material.Albedo) ||
+                !VectorFunctions.IsFinite(vector: material.Albedo) ||
                 (material.Albedo.X < 0f) ||
                 (material.Albedo.Y < 0f) ||
                 (material.Albedo.Z < 0f) ||
@@ -307,7 +305,7 @@ public sealed partial class SdfProgram {
                 !float.IsFinite(f: material.Soften) ||
                 (material.Soften < 0f) ||
                 (material.Soften > 1f) ||
-                !IsFinite(value: material.Bounce) ||
+                !VectorFunctions.IsFinite(vector: material.Bounce) ||
                 (material.Bounce.X < 0f) ||
                 (material.Bounce.Y < 0f) ||
                 (material.Bounce.Z < 0f) ||
@@ -585,6 +583,20 @@ public sealed partial class SdfProgram {
                             paramName: instructionsParamName
                         );
                     }
+
+                    // Both interpreters take their stairs branch only for r > 0; a zero radius would fall through to
+                    // blend tails that disagree on it, and is exactly a plain Union/Subtraction pop anyway.
+                    var radius = instruction.Data1.X;
+
+                    if (
+                        !float.IsFinite(f: radius) ||
+                        (radius <= 0f)
+                    ) {
+                        throw new ArgumentException(
+                            message: $"Instruction {index} is a PopField Stairs carrying radius {radius} in Data1.x; it must be finite and greater than zero (a zero radius is a plain Union or Subtraction pop).",
+                            paramName: instructionsParamName
+                        );
+                    }
                 }
 
                 continue;
@@ -686,7 +698,7 @@ public sealed partial class SdfProgram {
 
             seenScreenIndices |= bit;
 
-            if (!IsFinite(value: surface.Origin)) {
+            if (!VectorFunctions.IsFinite(vector: surface.Origin)) {
                 throw new ArgumentOutOfRangeException(
                     paramName: screenSurfacesParamName,
                     message: $"A screen surface's origin must be finite; got {surface.Origin}."
@@ -727,7 +739,7 @@ public sealed partial class SdfProgram {
                 );
             }
             if (
-                !IsFinite(value: instance.Center) ||
+                !VectorFunctions.IsFinite(vector: instance.Center) ||
                 !float.IsFinite(f: instance.Radius) ||
                 (instance.Radius < 0f)
             ) {

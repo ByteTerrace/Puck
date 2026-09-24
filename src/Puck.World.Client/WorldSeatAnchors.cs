@@ -1,4 +1,3 @@
-using System.Globalization;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 
@@ -6,11 +5,9 @@ namespace Puck.World.Client;
 
 /// <summary>Resolves the seat-relative anchor kinds — <see cref="WorldAnchor.Seat"/> (through the seat's perceived
 /// body, so possession follows) and <see cref="WorldAnchor.RecentSpeaker"/> (through <see cref="WorldSpeechClock"/>)
-/// — and names the per-seat view registration a seat-relative camera renders under. The one resolver the binder's
+/// — and resolves the view registration a camera renders under for a seat. The one resolver the binder's
 /// offscreen views, the main-window presenter, and the audio director share.</summary>
 public static class WorldSeatAnchors {
-    private const string SeatQualifier = "@seat:";
-
     private static SdfAnchor RootPose(int body, WorldClient client) => new(
         Orientation: client.Orientation(index: body),
         Position: client.Position(index: body)
@@ -59,17 +56,17 @@ public static class WorldSeatAnchors {
         _ => null,
     };
     /// <summary>Returns the view registration name a camera renders under for <paramref name="seat"/>: a
-    /// seat-relative camera (<see cref="WorldCamera.IsSeatRelative"/>) registers one view per seat under a
-    /// seat-qualified name; any other camera registers once under its own name.</summary>
+    /// seat-relative camera (<see cref="WorldCamera.IsSeatRelative"/>) registers one view per seat under its generated
+    /// seat view name (<see cref="WorldViewNames.Seat"/>); any other camera registers once under its own name.</summary>
     /// <param name="camera">The camera row.</param>
     /// <param name="seat">The 1-based seat.</param>
     public static string RegistrationName(WorldCamera camera, int seat) {
         ArgumentNullException.ThrowIfNull(argument: camera);
 
         return (camera.IsSeatRelative
-            ? string.Create(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"{camera.Name}{SeatQualifier}{seat}"
+            ? WorldViewNames.Seat(
+                camera: camera.Name,
+                seat: seat
             )
             : camera.Name
         );

@@ -1,0 +1,115 @@
+{
+    "format": 1,
+    "exemptions": [
+        {
+            "command": "architecture",
+            "package": "C",
+            "rule": "one-line-description"
+        },
+        {
+            "command": "cartridge-cost",
+            "package": "C",
+            "rule": "one-line-description"
+        },
+        {
+            "command": "compile",
+            "package": "C",
+            "rule": "no-alias"
+        },
+        {
+            "command": "decompile",
+            "package": "C",
+            "rule": "no-alias"
+        },
+        {
+            "command": "embed",
+            "package": "C",
+            "rule": "no-argument-with-subcommands"
+        },
+        {
+            "command": "embed probe",
+            "package": "C",
+            "rule": "described"
+        },
+        {
+            "command": "embed probe",
+            "package": "C",
+            "rule": "usage-name"
+        },
+        {
+            "command": "firmware agb",
+            "package": "C",
+            "rule": "banned-name"
+        },
+        {
+            "command": "firmware hgb",
+            "package": "C",
+            "rule": "banned-name"
+        },
+        {
+            "command": "font-atlas",
+            "package": "C",
+            "rule": "no-alias"
+        },
+        {
+            "command": "font-atlas",
+            "package": "C",
+            "rule": "one-line-description"
+        },
+        {
+            "command": "lint",
+            "package": "C",
+            "rule": "no-alias"
+        },
+        {
+            "command": "migrate",
+            "package": "C",
+            "rule": "no-alias"
+        },
+        {
+            "command": "packages",
+            "package": "C",
+            "rule": "check-is-bool"
+        },
+        {
+            "command": "packages",
+            "package": "C",
+            "rule": "one-line-description"
+        },
+        {
+            "command": "registry",
+            "package": "C",
+            "rule": "one-line-description"
+        },
+        {
+            "command": "shaders compile",
+            "package": "C",
+            "rule": "banned-name"
+        },
+        {
+            "command": "shaders compile",
+            "package": "C",
+            "rule": "described"
+        },
+        {
+            "command": "shaders pipeline",
+            "package": "C",
+            "rule": "described"
+        },
+        {
+            "command": "test",
+            "package": "C",
+            "rule": "one-line-description"
+        },
+        {
+            "command": "vocabulary",
+            "package": "C",
+            "rule": "one-line-description"
+        },
+        {
+            "command": "wasm-stdlib",
+            "package": "C",
+            "rule": "one-line-description"
+        }
+    ]
+}

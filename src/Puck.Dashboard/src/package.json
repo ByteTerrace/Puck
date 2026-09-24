@@ -1,16 +1,20 @@
 {
-    "name": "workspace",
-    "private": true,
-    "workspaces": [
-        "host",
-        "portal"
-    ],
-    "scripts": {
-        "build": "npm --prefix host run build && npm --prefix portal run build",
-        "restore": "npm ci",
-        "stage": "node ../scripts/stageDeploy.mjs"
-    },
-    "devDependencies": {
-        "@rolldown/binding-win32-x64-msvc": "^1.2.7"
+  "name": "puck-dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "host",
+    "portal"
+  ],
+  "scripts": {
+    "build": "npm --prefix host run build && npm --prefix portal run build",
+    "restore": "npm ci",
+    "stage": "node ../scripts/stageDeploy.mjs"
+  },
+  "overrides": {
+    "@module-federation/dts-plugin": {
+      "adm-zip": "0.6.1"
     }
+  }
 }

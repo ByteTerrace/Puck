@@ -124,11 +124,11 @@ public static partial class ExpressionArithmetic {
                     if (arguments[0] < 0L) { return false; }
                     value = ((long)((ulong)arguments[0]).ElegantSwap());
                     return true;
-                case ExpressionOp.PairMax:
+                case ExpressionOp.PairMaximum:
                     if (arguments[0] < 0L) { return false; }
                     value = ((long)((ulong)arguments[0]).ElegantMaximum());
                     return true;
-                case ExpressionOp.PairMin:
+                case ExpressionOp.PairMinimum:
                     if (arguments[0] < 0L) { return false; }
                     value = ((long)((ulong)arguments[0]).ElegantMinimum());
                     return true;
@@ -171,7 +171,7 @@ public static partial class ExpressionArithmetic {
                         value = ((long)((ulong)pair).ElegantScale(factor: ((ulong)factor)));
                         return true;
                     }
-                case ExpressionOp.Morton: {
+                case ExpressionOp.MortonIndex: {
                         var x = arguments[0];
                         var y = arguments[1];
 
@@ -194,7 +194,7 @@ public static partial class ExpressionArithmetic {
                         );
                         return true;
                     }
-                case ExpressionOp.Hilbert: {
+                case ExpressionOp.HilbertIndex: {
                         var order = arguments[0];
                         var x = arguments[1];
                         var y = arguments[2];
@@ -659,14 +659,14 @@ public static partial class ExpressionArithmetic {
                         : 0L
                     );
                     return true;
-                case ExpressionOp.Prime:
+                case ExpressionOp.PrimeAt:
                     if (
                         (arguments[0] < 0L) ||
                         (arguments[0] >= Primes.Length)
                     ) { return false; }
                     value = Primes[arguments[0]];
                     return true;
-                case ExpressionOp.Choose:
+                case ExpressionOp.BinomialCoefficient:
                     if (
                         !IsInt(value: arguments[0]) ||
                         !IsInt(value: arguments[1])
@@ -732,8 +732,11 @@ public static partial class ExpressionArithmetic {
                         return true;
                     }
                 case ExpressionOp.SubsetMember:
+                    // One member of the subset SubsetAt decodes, so it is defined exactly where SubsetAt is: a
+                    // universe a mask can hold. That also bounds the decode, whose walk is linear in the universe.
                     if (
-                        !IsInt(value: arguments[0]) ||
+                        (arguments[0] < 0L) ||
+                        (arguments[0] > MaskBits) ||
                         !IsInt(value: arguments[1]) ||
                         (arguments[2] < 0L) ||
                         !IsInt(value: arguments[3])

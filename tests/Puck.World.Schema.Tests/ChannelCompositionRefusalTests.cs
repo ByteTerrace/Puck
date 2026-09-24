@@ -21,6 +21,6 @@ public sealed class ChannelCompositionRefusalTests {
             reason: out var reason
         ));
         Assert.Null(@object: composed);
-        Assert.Contains(expectedSubstring: "channel", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "channel");
     }
 }

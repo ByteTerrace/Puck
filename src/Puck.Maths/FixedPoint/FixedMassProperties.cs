@@ -216,8 +216,8 @@ public static class FixedMassProperties {
 
         // The exact composite centre is (momentX, momentY, momentZ) / totalMass in raw units; the reported centre is
         // its one rounding, and the tensor below reads the exact rational instead.
-        var okMass = TryNarrow(
-            result: out var roundedMass,
+        var okMass = BinaryIntegerFunctions.TryNarrow(
+            result: out long roundedMass,
             value: totalMass
         );
         var okX = TryRoundExact(
@@ -522,18 +522,6 @@ public static class FixedMassProperties {
             second: second,
             third: third
         ) && ScaleValid(fractionBitCount: fourth));
-    private static bool TryNarrow(BigInteger value, out long result) {
-        if (
-            (value < long.MinValue) ||
-            (value > long.MaxValue)
-        ) {
-            result = 0L;
-            return false;
-        }
-
-        result = ((long)value);
-        return true;
-    }
     // The exact rational value (numerator · 2^numeratorShift) / (denominatorFactor · 2^denominatorShift), rounded
     // once. The two shifts are folded onto whichever side keeps both exponents non-negative, so nothing is rounded
     // before the single division.

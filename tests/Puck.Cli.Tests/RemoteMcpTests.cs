@@ -26,13 +26,6 @@ public sealed class RemoteMcpTests {
         );
         return result.StructuredContent!.Value.GetProperty(propertyName: "attachmentId").GetString()!;
     }
-    private static async Task Eventually(Func<bool> predicate) {
-        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: Token); stop.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 5));
-        while (!predicate()) { await Task.Delay(
-            10,
-            stop.Token
-        ); }
-    }
     private static Task<CallToolResult> Exec(McpClient client, string id, string command) => Exec(
         client,
         id,
@@ -64,6 +57,12 @@ public sealed class RemoteMcpTests {
         );
         var first = await Attach(client: client); var second = await Attach(client: client);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+
+        // The subject holds two leases: the slow call keeps one, so each call beside it waits for the last to leave.
+        await fixture.WhenInFlightAsync(
+            count: 0,
+            ct: Token
+        );
         var wait = Exec(
             client,
             first,
@@ -73,10 +72,7 @@ public sealed class RemoteMcpTests {
 
         Assert.Equal(
             "wait",
-            await fixture.Entered.Reader.ReadAsync(cancellationToken: Token).AsTask().WaitAsync(
-                TimeSpan.FromSeconds(seconds: 5),
-                Token
-            )
+            await fixture.Entered.Reader.ReadAsync(cancellationToken: Token)
         );
         Assert.True(condition: (await Exec(
             client,
@@ -84,6 +80,10 @@ public sealed class RemoteMcpTests {
             "read",
             Token
         )).IsError);
+        await fixture.WhenInFlightAsync(
+            count: 1,
+            ct: Token
+        );
         Assert.False(condition: (await Exec(
             client,
             second,
@@ -92,15 +92,15 @@ public sealed class RemoteMcpTests {
         )).IsError);
         cancel.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => wait);
-        await Eventually(predicate: () => (Volatile.Read(location: ref fixture.Active) == 1));
+        await fixture.WhenAsync(condition: () => (fixture.Active == 1), ct: Token);
         Assert.True(condition: (await Exec(
             client,
             first,
             "read",
             Token
         )).IsError);
-        fixture.Clock.Advance(time: TimeSpan.FromSeconds(seconds: 20));
-        await Eventually(predicate: () => (Volatile.Read(location: ref fixture.Active) == 0));
+        fixture.Clock.Advance(by: TimeSpan.FromSeconds(seconds: 20));
+        await fixture.WhenAsync(condition: () => (fixture.Active == 0), ct: Token);
         Assert.True(condition: (await Exec(
             client,
             second,
@@ -211,6 +211,12 @@ public sealed class RemoteMcpTests {
         );
         var bobIds = new[] { await Attach(client: bob), await Attach(client: bob) };
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+
+        // The four slow calls must find all four of the host's leases free, whatever the attach calls still hold.
+        await fixture.WhenInFlightAsync(
+            count: 0,
+            ct: Token
+        );
         var pending = ids.Select(selector: id => Exec(
             client,
             id,
@@ -224,10 +230,7 @@ public sealed class RemoteMcpTests {
         ))).ToArray();
 
         try {
-            for (var i = 0; (i < 4); i++) { await fixture.Entered.Reader.ReadAsync(cancellationToken: Token).AsTask().WaitAsync(
-                TimeSpan.FromSeconds(seconds: 5),
-                Token
-            ); }
+            for (var i = 0; (i < 4); i++) { await fixture.Entered.Reader.ReadAsync(cancellationToken: Token); }
             using var refused = await http.GetAsync(
                 "/.well-known/oauth-protected-resource/mcp",
                 Token
@@ -245,8 +248,8 @@ public sealed class RemoteMcpTests {
             cancel.Cancel();
             foreach (var request in pending) { await Record.ExceptionAsync(testCode: () => request); }
         }
-        await Eventually(predicate: () => (Volatile.Read(location: ref fixture.Active) == 0));
-        await Eventually(predicate: () => (fixture.App.Services.GetRequiredKeyedService<System.Threading.RateLimiting.ConcurrencyLimiter>(serviceKey: "PuckMcp").GetStatistics()!.CurrentAvailablePermits == 4));
+        await fixture.WhenAsync(condition: () => (fixture.Active == 0), ct: Token);
+        await fixture.WhenAsync(condition: () => (fixture.App.Services.GetRequiredKeyedService<System.Threading.RateLimiting.ConcurrencyLimiter>(serviceKey: "PuckMcp").GetStatistics()!.CurrentAvailablePermits == 4), ct: Token);
         using var recovered = await http.GetAsync(
             "/.well-known/oauth-protected-resource/mcp",
             Token
@@ -290,7 +293,7 @@ public sealed class RemoteMcpTests {
             expected: 4
         );
         await fixture.StopGatewayAsync(token: Token);
-        await Eventually(predicate: () => (Volatile.Read(location: ref fixture.Active) == 0));
+        await fixture.WhenAsync(condition: () => (fixture.Active == 0), ct: Token);
     }
     [InlineData("missing", 401)]
     [InlineData("signature", 401)]
@@ -329,14 +332,18 @@ public sealed class RemoteMcpTests {
             actual: fixture.Opened,
             expected: 0
         );
-        if (status == 401) { Assert.Contains(
+        if (status == 401) {
+            Assert.Contains(
             "resource_metadata=\"https://mcp.example.test/.well-known/oauth-protected-resource/mcp\"",
             response.Headers.WwwAuthenticate.ToString()
-        ); }
-        if (failure == "scope") { Assert.Contains(
+        );
+        }
+        if (failure == "scope") {
+            Assert.Contains(
             "insufficient_scope",
             response.Headers.WwwAuthenticate.ToString()
-        ); }
+        );
+        }
     }
     [Fact]
     public async Task OfficialHttpClientPreservesIdentityAttachmentsAndImages() {
@@ -472,6 +479,7 @@ public sealed class RemoteMcpTests {
     public async Task StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused() {
         if (!SupportedPlatform()) { return; }
         await using var fixture = new RemoteMcpFixture();
+
         fixture.CommandHelp = "read; set <value>; wait; world.state.cell.set <row> <key> <value>";
         fixture.UseRealWorldSession = true;
         await fixture.StartAsync(Token);
@@ -490,12 +498,13 @@ public sealed class RemoteMcpTests {
         );
 
         var tools = await alice.ListToolsAsync(cancellationToken: Token);
-        Assert.Contains("puck_state_vector_write", tools.Select(tool => tool.Name));
+
+        Assert.Contains("puck_state_vector_write", tools.Select(selector: tool => tool.Name));
 
         var aliceAttachment = await Attach(client: alice);
         var bobAttachment = await Attach(client: bob);
 
-        Assert.True(StateVector.TryCreate(components: [127, 0, 0, 0, 0, 0, 0, 0], vector: out var sampleVector, error: out var err), err);
+        Assert.True(condition: StateVector.TryCreate(components: [127, 0, 0, 0, 0, 0, 0, 0], error: out var err, vector: out var sampleVector), userMessage: err);
         var validVector = sampleVector!.ToBase64Url();
 
         var aliceResult = await alice.CallToolAsync(
@@ -504,10 +513,11 @@ public sealed class RemoteMcpTests {
                 ["attachmentId"] = aliceAttachment,
                 ["row"] = "embedding",
                 ["key"] = "g1",
-                ["vector"] = validVector
+                ["vector"] = validVector,
             },
             cancellationToken: Token
         );
+
         Assert.False(condition: aliceResult.IsError, userMessage: aliceResult.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text);
 
         var aliceSlotResult = await alice.CallToolAsync(
@@ -515,10 +525,11 @@ public sealed class RemoteMcpTests {
             new Dictionary<string, object?> {
                 ["attachmentId"] = aliceAttachment,
                 ["row"] = "slot_embedding",
-                ["vector"] = validVector
+                ["vector"] = validVector,
             },
             cancellationToken: Token
         );
+
         Assert.False(condition: aliceSlotResult.IsError);
 
         var bobResult = await bob.CallToolAsync(
@@ -527,10 +538,11 @@ public sealed class RemoteMcpTests {
                 ["attachmentId"] = bobAttachment,
                 ["row"] = "embedding",
                 ["key"] = "u1",
-                ["vector"] = validVector
+                ["vector"] = validVector,
             },
             cancellationToken: Token
         );
+
         Assert.False(condition: bobResult.IsError);
 
         var server = fixture.RealWorldServer!;
@@ -539,16 +551,16 @@ public sealed class RemoteMcpTests {
 
         var embeddingRow = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "embedding");
 
-        Assert.NotNull(embeddingRow);
-        Assert.Contains(embeddingRow.Cells ?? [], cell => (cell.Key.Value == "g1"));
-        Assert.DoesNotContain(embeddingRow.Cells ?? [], cell => (cell.Key.Value == "u1"));
+        Assert.NotNull(@object: embeddingRow);
+        Assert.Contains(collection: (embeddingRow.Cells ?? []), filter: cell => (cell.Key.Value == "g1"));
+        Assert.DoesNotContain(collection: (embeddingRow.Cells ?? []), filter: cell => (cell.Key.Value == "u1"));
 
         var slotRow = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "slot_embedding");
 
-        Assert.NotNull(slotRow);
-        var slotCell = Assert.Single(slotRow.Cells ?? []);
+        Assert.NotNull(@object: slotRow);
+        var slotCell = Assert.Single(collection: (slotRow.Cells ?? []));
 
-        Assert.True(slotCell.Value.AsVector.Span.SequenceEqual(other: sampleVector.Components));
+        Assert.True(condition: slotCell.Value.AsVector.Span.SequenceEqual(other: sampleVector.Components));
 
         var crossResult = await bob.CallToolAsync(
             "puck_state_vector_write",
@@ -556,10 +568,11 @@ public sealed class RemoteMcpTests {
                 ["attachmentId"] = aliceAttachment,
                 ["row"] = "embedding",
                 ["key"] = "cell1",
-                ["vector"] = validVector
+                ["vector"] = validVector,
             },
             cancellationToken: Token
         );
+
         Assert.True(condition: crossResult.IsError);
 
         var invalidVectorResult = await alice.CallToolAsync(
@@ -568,10 +581,11 @@ public sealed class RemoteMcpTests {
                 ["attachmentId"] = aliceAttachment,
                 ["row"] = "embedding",
                 ["key"] = "cell1",
-                ["vector"] = "b64u:AQID"
+                ["vector"] = "b64u:AQID",
             },
             cancellationToken: Token
         );
+
         Assert.True(condition: invalidVectorResult.IsError);
         Assert.Contains(
             expectedSubstring: "invalid vector",

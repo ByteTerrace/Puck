@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.World.Protocol;
 using Xunit;
@@ -39,8 +40,8 @@ public sealed class DynamicBodyContactLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with { KitRowsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = mode }).ToArray() };
         var fixture = Fixtures.FreshServer(definition: definition);
-        var left = WorldPrincipal.Seat(slot: 0);
-        var right = WorldPrincipal.Seat(slot: 1);
+        var left = Principal.Seat(slot: 0);
+        var right = Principal.Seat(slot: 1);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             left,

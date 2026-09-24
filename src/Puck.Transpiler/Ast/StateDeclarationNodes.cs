@@ -1,3 +1,5 @@
+using Puck.Transpiler.Diagnostics;
+
 namespace Puck.Transpiler.Ast;
 
 /// <summary>One item of a family's bracketed member list — either an index range (<c>2..12</c>, or a single index
@@ -74,7 +76,7 @@ public sealed record StateCellEntryNode(
     Line,
     Column
 );
-/// <summary>A <c>table</c> declaration: <c>table name [modifier]* { cellEntry* }</c> — the keyed-row
+/// <summary>A <c>table</c> declaration: <c>table name [: Enum] [modifier]* { cellEntry* }</c> — the keyed-row
 /// sugar. Legal only where the owning vocabulary admits a state-row declaration (<c>state.world</c> alone, for the
 /// world vocabulary).</summary>
 /// <param name="Name">The declared row's name.</param>
@@ -85,6 +87,8 @@ public sealed record StateCellEntryNode(
 /// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
 /// bare count, or null.</param>
 /// <param name="Initializer">The optional compile-time collection initializer expression (e.g. range(0, 52)), or null when cells are authored individually.</param>
+/// <param name="Enum">The enum the row's cells are drawn from, written <c>: Enum</c> after the name, or
+/// <see langword="null"/> for a row whose cells are plain values. The owning vocabulary resolves the name.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -97,6 +101,7 @@ public sealed record StateTableDeclarationNode(
     ExpressionNode? FamilySize = null,
     IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
     ExpressionNode? Initializer = null,
+    string? Enum = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -106,17 +111,23 @@ public sealed record StateTableDeclarationNode(
     Length,
     Line,
     Column
-);
-/// <summary>A <c>slot</c> declaration: <c>slot name : Kind [= value] [modifier]*</c> — the scalar-row sugar. Legal
+) {
+    /// <summary>Gets the span of the <see cref="Enum"/> name as written, so a fault in the name points at it rather
+    /// than at the whole declaration. Empty when no enum is named.</summary>
+    public SourceSpan EnumSpan { get; init; }
+}
+/// <summary>A <c>slot</c> declaration: <c>slot name [: Enum] [= value] [modifier]*</c> — the scalar-row sugar. Legal
 /// only where the owning vocabulary admits a state-row declaration.</summary>
 /// <param name="Name">The declared row's name.</param>
-/// <param name="Kind">The declared cell kind, exactly as written.</param>
+/// <param name="Kind">The inferred cell kind, or an empty string before the owning vocabulary lowers the declaration.</param>
 /// <param name="Value">The optional default value expression, or <see langword="null"/> for an uninitialized
 /// slot (a row that gains its cell only once something writes it).</param>
 /// <param name="Modifiers">The row-level modifier calls, in written order.</param>
 /// <param name="FamilySize">The optional compile-time family count expression (e.g. [3]), or null for a single row.</param>
 /// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
 /// bare count, or null.</param>
+/// <param name="Enum">The enum the row's cells are drawn from, written <c>: Enum</c> after the name, or
+/// <see langword="null"/> for a row whose cells are plain values. The owning vocabulary resolves the name.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -128,6 +139,7 @@ public sealed record StateSlotDeclarationNode(
     IReadOnlyList<StateModifierNode> Modifiers,
     ExpressionNode? FamilySize = null,
     IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
+    string? Enum = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -137,7 +149,10 @@ public sealed record StateSlotDeclarationNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <inheritdoc cref="StateTableDeclarationNode.EnumSpan"/>
+    public SourceSpan EnumSpan { get; init; }
+}
 /// <summary>One bare token entry inside a <c>pile</c> declaration's body — just the token's key, e.g. <c>king</c> or
 /// <c>"queen of hearts"</c>. Unlike <see cref="StateCellEntryNode"/> it carries no value or modifiers: a pile
 /// member's cell is always the boolean presence flag <c>true</c>, so there is nothing else to spell.</summary>
@@ -194,13 +209,13 @@ public sealed record StatePileDeclarationNode(
     Line,
     Column
 );
-/// <summary>A <c>grid</c> declaration: <c>grid name : Kind [modifier]* [{ cellEntry* }]</c> — the physical-lattice
+/// <summary>A <c>grid</c> declaration: <c>grid name [: Enum] [modifier]* [{ cellEntry* }]</c> — the physical-lattice
 /// occupancy sugar. It mints both a <c>state.lattices</c> Grid topology (named identically to the declared row) and
 /// the row itself, over a <c>cellsOf</c> domain lying on that topology. Legal only where the owning vocabulary
 /// admits a state-row declaration.</summary>
 /// <param name="Name">The declared row's name, reused as the topology's own name.</param>
-/// <param name="Kind">The declared cell kind, exactly as written (a board admits only <c>Int</c>/<c>Bool</c> — the
-/// owning vocabulary's own refusal, not a parse error).</param>
+/// <param name="Kind">The inferred cell kind, or an empty string before the owning vocabulary lowers the declaration
+/// (a board admits only <c>Int</c>/<c>Bool</c> — the owning vocabulary's own refusal, not a parse error).</param>
 /// <param name="Modifiers">The row- and topology-level modifier calls, in written order.</param>
 /// <param name="Cells">The declared initial cell entries, in written order — empty for a derived (<c>inverse</c>)
 /// board, which authors no cells of its own.</param>
@@ -209,6 +224,8 @@ public sealed record StatePileDeclarationNode(
 /// <param name="FamilySize">The optional compile-time family count expression, or null for a single row.</param>
 /// <param name="FamilyMembers">The optional bracketed member list (e.g. [0, 2..12]) the family declares instead of a
 /// bare count, or null.</param>
+/// <param name="Enum">The enum the row's cells are drawn from, written <c>: Enum</c> after the name, or
+/// <see langword="null"/> for a row whose cells are plain values. The owning vocabulary resolves the name.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
@@ -221,6 +238,7 @@ public sealed record StateGridDeclarationNode(
     bool HasBody,
     ExpressionNode? FamilySize = null,
     IReadOnlyList<FamilyMemberNode>? FamilyMembers = null,
+    string? Enum = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -230,7 +248,10 @@ public sealed record StateGridDeclarationNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <inheritdoc cref="StateTableDeclarationNode.EnumSpan"/>
+    public SourceSpan EnumSpan { get; init; }
+}
 /// <summary>One member of an <c>enum</c> declaration. It is a node rather than a bare name so the comments and
 /// blank lines around it have somewhere to ride.</summary>
 /// <param name="Name">The member's name; its ordinal is its position in the declaration.</param>
@@ -333,7 +354,8 @@ public sealed record RecordDeclarationNode(
     Line,
     Column
 );
-/// <summary><c>derive name = expression</c>. Compile-time macro inlining or cached derived state.</summary>
+/// <summary><c>derive name = expression</c>: a compile-time name for operand text, expanded wherever an operand
+/// reads it; the document carries the expansion, never the name.</summary>
 public sealed record DerivedStateNode(
     string Name,
     OperandExpressionNode Expression,

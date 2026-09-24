@@ -12,3 +12,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** The absolute URL of the DuckDB extension repository the portal serves itself (`src/build/duckdbExtensions.ts`). */
+declare module "virtual:duckdb-extension-repository" {
+  const repository: string;
+  export default repository;
+}

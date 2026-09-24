@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Maths;
 
 namespace Puck.State.Rules;
 
@@ -309,26 +310,26 @@ public static partial class RuleWorkBudget {
 
             var value = predicate.RightSource.RawValue;
             (long Low, long High) range = (predicate.Comparison switch {
-                ActionStateComparison.Equal => (value, value),
-                ActionStateComparison.Less => (long.MinValue, ((value == long.MinValue)
+                ExpressionOp.Equal => (value, value),
+                ExpressionOp.Less => (long.MinValue, ((value == long.MinValue)
                 ? long.MinValue
                 : (value - 1L))),
-                ActionStateComparison.LessOrEqual => (long.MinValue, value),
-                ActionStateComparison.Greater => (((value == long.MaxValue)
+                ExpressionOp.LessOrEqual => (long.MinValue, value),
+                ExpressionOp.Greater => (((value == long.MaxValue)
                 ? long.MaxValue
                 : (value + 1L)), long.MaxValue),
-                ActionStateComparison.GreaterOrEqual => (value, long.MaxValue),
+                ExpressionOp.GreaterOrEqual => (value, long.MaxValue),
                 _ => (long.MinValue, long.MaxValue),
             });
 
             if (
-                (predicate.Comparison == ActionStateComparison.Less) &&
+                (predicate.Comparison == ExpressionOp.Less) &&
                 (value == long.MinValue)
             ) {
                 range = (1L, 0L);
             }
             if (
-                (predicate.Comparison == ActionStateComparison.Greater) &&
+                (predicate.Comparison == ExpressionOp.Greater) &&
                 (value == long.MaxValue)
             ) {
                 range = (1L, 0L);
@@ -371,11 +372,11 @@ public static partial class RuleWorkBudget {
         Array.Sort(
             array: result,
             comparison: static (left, right) => {
-                var byRow = left.RowOrdinal.CompareTo(value: right.RowOrdinal);
-
-                return ((byRow != 0)
-                    ? byRow
-                    : left.Key.Ordinal.CompareTo(value: right.Key.Ordinal)
+                return LexicographicOrder.Compare(
+                    leftPrimary: left.RowOrdinal,
+                    leftSecondary: left.Key.Ordinal,
+                    rightPrimary: right.RowOrdinal,
+                    rightSecondary: right.Key.Ordinal
                 );
             }
         );

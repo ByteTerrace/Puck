@@ -58,10 +58,10 @@ distinct:
   `RemoveAddon` mutation—there is no separate addon-lifecycle leaf), undo,
   composition, lever, query, screen-op
   (`screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink`),
-  designation (`player.designate`)—
+  named-machine operation, designation (`body.designate`)—
   travels as one `SubmissionEnvelope` (`SubmissionEnvelope.cs`) carrying the
-  closed `WorldSubmissionPayload` union (12 kinds) and the acting
-  `WorldPrincipal`, and resolves to a typed `WorldSubmissionResult` through
+  closed `WorldSubmissionPayload` union (13 kinds) and the acting
+  `Principal`, and resolves to a typed `WorldSubmissionResult` through
   an inline completion callback. The server drains envelopes through one
   ordered domain in submission order; definition swaps, mutations, and undo
   buffer to the tick boundary, every other kind—including
@@ -71,10 +71,11 @@ distinct:
 The named vocabularies: `WorldCommand.cs` (the closed drive-a-body command
 hierarchy), `WorldMutation.cs` with `WorldMutationKindCatalog.cs` (every
 mutation kind carries a declared ordinal, validated for uniqueness and range
-at boot—never inferred from file order), `WorldGrant`/`WorldPrincipal` (in
-`Puck.World.Schema`: capabilities, subjects, principals, and their token
-grammar—`TryParse` lives on the protocol types so the console and the JSON
-converters share one parser; `GrantSubjectKind.Region`/`Seat` and
+at boot—never inferred from file order), `WorldGrant`/`Grantee`/`PrincipalTokens` (in
+`Puck.World.Schema`: capabilities, subjects, grantees, and the principal and
+grantee token grammars—the console and the JSON converters share one parser;
+the acting `Principal` itself is `Puck.Commands`' type, carried unchanged from
+the command router to the wire; `GrantSubjectKind.Region`/`Seat` and
 `WorldGrant.EventBudget` are the world-events feed's grant vocabulary, both
 untrusted-principal-only), `ChannelPolicy.cs` (in Schema: the reach and
 consent masks the co-driving fold consumes), `SessionRequest.cs` (join/leave/
@@ -89,16 +90,20 @@ vocabulary insert/eject/select/options/link/unlink, each CAS-pinned where it
 names on-disk content), and `WorldSubmissionResult.cs`.
 
 `WorldSubmissionCodec.cs` is the single encoder/decoder owner for each of the
-twelve payload leaves (`WorldSubmissionKind`'s ordinal 11—the retired
-addon-lifecycle leaf—is unassigned and never reused; `TryEncodeCommittedMutation`/
-`TryDecodeCommittedMutation` are a separate entry-point pair for persisted
-journal entries, not a thirteenth leaf). `WorldWireCodec.cs` holds the leaf layouts it shares
-byte for byte with `Puck.World.Server`'s `.puckreplay` tape, authority
-checkpoint, and federation frames—nullable string, channel vector,
-`IntentSource`, `WorldPrincipal`. Each layout carries two overloads, one over
-`BinaryReader`/`BinaryWriter` and one over `Puck.Networking`'s
-`WireReader`/`WireWriter`, because the framing differs while the bytes do not;
-both are `Try`-shaped so each codec raises its own refusal in its own wording. `WorldFrameCodec.cs` wraps a leaf as little-endian
+thirteen payload leaves (`TryEncodeCommittedMutation`/`TryDecodeCommittedMutation`
+are a separate entry-point pair for persisted journal entries, not another
+leaf). Every binary leaf reads and writes through `Puck.Networking`'s
+`WireReader`/`WireWriter`: a read latches its first refusal and the codec
+maps it onto a `WorldCodecRefusal`, and a command's presentation vector
+crosses only when every lane is finite. `WorldWireCodec.cs` holds the leaves
+the submission wire shares byte for byte with `Puck.World.Server`'s
+`.puckreplay` tape, authority checkpoint, and federation frames—channel
+vector, `IntentSource`, `Principal`, `Grantee`, capability, grant subject, section,
+rebuild kind, snap mode, and `IntentSubmission`. Its reads latch an undeclared
+byte as `EnumValueUnknown`; its writes are `Try`-shaped so each codec raises
+its own refusal in its own wording. `WorldWireTags.cs` is the one enum-to-byte
+table every one of those codecs maps through; a byte it does not name is
+refused like any other undeclared value. `WorldFrameCodec.cs` wraps a leaf as little-endian
 `[u32 following-length][u8 kind][payload]` with a hard per-kind cap over
 `Puck.Networking`'s transport-neutral frame grammar; malformed caller state
 and bytes return a `WorldCodecRefusal` name. Loopback always round-trips
@@ -118,7 +123,19 @@ server surface the transport calls, so the transport never holds a concrete
 or scene/HUD shape (the client recompiles those tables and bumps its rebuild-
 watch revision), `DeliverState` after a value-only write (a cell write,
 removal, transform, or draw-site fire—the client stores the fresh
-definition for state reads and recompiles nothing).
+definition for state reads and recompiles nothing). A state delivery carries a
+`WorldStateStamp`: the tick and engine tick the values hold as of, and the
+catalog ordinals of the rows whose values moved, whose memory is the sender's
+and valid only for the call. `IWorldStateView.cs` is the state half of the
+presentation view: the narrow reader, one cell by row ordinal, that the state
+mirror reads every presentation read of state through. `WorldStateMirror.cs` is
+that mirror, a flat slot table refreshed from each delivery's stamp, and
+`WorldDocumentStateView.cs` the view over a delivered definition. A
+`WorldSessionMirror` keeps the rows its state deliveries moved until
+`FollowState` takes them, so a session view or a seat routed to that authority
+(through `WorldAuthorityEndpoint.FollowState`) reads only moved slots; the
+capture scheduler reads a camera `select` key through its own mirror at the armed
+tick.
 
 `WorldAdmissionDoor` (the admission section's identity door, verified against
 a document's own trust list) lives in `Puck.World.Schema`—a
@@ -145,10 +162,9 @@ over a plain record or a parameter the caller supplies:
   handshake verified against a document's own `admission` trust list
   (`WorldAdmissionEntry`, in `Puck.World.Schema`), never a shared secret.
   `LocalKeySigningOracle` is the offline, locally-held-key oracle shape.
-- `WorldAuthorityStoreWireCodec.cs`—the legacy checkpoint-pointer and
-  whole-page `WorldMutationJournalEntry` shapes retained as migration inputs;
-  the authoritative private root and its immutable content-addressed metadata
-  are owned by `Puck.World.Server` and do not redesign these payloads.
+- `WorldAuthorityStoreWireCodec.cs`—the whole-page `WorldMutationJournalEntry`
+  journal codec. `Puck.World.Server`'s authority root names each page as an
+  immutable content-addressed blob beside the checkpoint it extends.
 - `WorldReplayCodecException.cs`—the tape codec's own host-bug exception
   type, deliberately not derived from `InvalidOperationException` so no
   existing broad catch absorbs it by accident.

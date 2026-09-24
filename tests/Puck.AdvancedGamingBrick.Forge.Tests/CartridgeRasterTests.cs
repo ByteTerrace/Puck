@@ -1,40 +1,50 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers scroll changes applied part way down the picture, which split it into independently moving bands.</summary>
 public sealed class CartridgeRasterTests {
-    private static int AdvancedColumn(AgbVerifyMachineDriver machine, int y) {
-        var backdrop = machine.ReadPixel(
-            x: 100,
-            y: y
-        );
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "a line past the picture",
+            Document: Rows(lines: [200]),
+            Path: "raster[0].line",
+            Fragment: "scanline in 1..143"
+        ),
+        new(
+            Name: "rows out of order",
+            Document: Rows(lines: [80, 40]),
+            Path: "raster[1].line",
+            Fragment: "ascending scanline order"
+        ),
+    ];
 
-        for (var x = 0; (x < 240); ++x) {
-            if (machine.ReadPixel(
-                x: x,
-                y: y
-            ) != backdrop) {
-                return x;
-            }
-        }
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
 
-        return -1;
-    }
+    private static CartridgeDocument Rows(int[] lines) => CartridgeDocuments.Create(
+        target: "cgb",
+        title: "RASTERBAD"
+    ) with {
+        Raster = [.. lines.Select(selector: static line => new CartridgeRasterRow(
+            Line: line,
+            ScrollX: CartridgeExpressions.Of(constant: 0),
+            ScrollY: CartridgeExpressions.Of(constant: 0)
+        ))],
+    };
     // Where the solid run starts on the given scanline, or -1 when it is not on screen. The backdrop is sampled far
     // from the run, because the run itself can sit at column zero once a band has scrolled.
-    private static int Column(VerifyMachineDriver machine, int y) {
-        var backdrop = machine.ReadPixel(
+    private static int Column(CartridgeProbe machine, int y) {
+        var width = ((machine.Result.Target == "agb")
+            ? 240
+            : 160
+        );
+        var backdrop = machine.Pixel(
             x: 100,
             y: y
         );
 
-        for (var x = 0; (x < 160); ++x) {
-            if (machine.ReadPixel(
+        for (var x = 0; (x < width); ++x) {
+            if (machine.Pixel(
                 x: x,
                 y: y
             ) != backdrop) {
@@ -44,20 +54,11 @@ public sealed class CartridgeRasterTests {
 
         return -1;
     }
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
 
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
-
-    [Fact]
-    public void ABandBelowTheRowScrollsIndependentlyOfTheOneAbove() {
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    [Theory]
+    public void ABandBelowTheRowScrollsIndependentlyOfTheOneAbove(string target) {
         // A column of solid cells: scrolling a band sideways moves where that column lands on those scanlines.
         var cells = new int[1024];
 
@@ -66,7 +67,7 @@ public sealed class CartridgeRasterTests {
         }
 
         var document = CartridgeDocuments.Create(
-            target: "cgb",
+            target: target,
             title: "RASTER"
         ) with {
             Tiles = [
@@ -92,48 +93,43 @@ public sealed class CartridgeRasterTests {
                 ScrollY: CartridgeExpressions.Of(constant: 0)
             )],
         };
-        var result = new HgbCartridgeCompiler().Compile(document: document);
+        var result = CartridgeProbe.Compile(document: document);
 
-        // The status vector must name the handler, or the row never fires.
-        Assert.Equal(
-            expected: 0xC3,
-            actual: result.Rom[0x0048]
+        // The Color machine splits from an interrupt, so its status vector must name the handler or the row never
+        // fires; the advanced machine fills a per-line table instead and needs no handler.
+        if (target == "cgb") {
+            Assert.Equal(
+                expected: 0xC3,
+                actual: result.Rom[0x0048]
+            );
+        }
+
+        using var machine = new CartridgeProbe(
+            label: "raster",
+            result: result
         );
 
-        using var machine = new VerifyMachineDriver(
-            rom: result.Rom,
-            label: "raster"
-        );
-
-        machine.RunFrames(
-            buttons: JoypadButtons.None,
-            frames: 16
-        );
+        machine.Run(frames: ((target == "agb")
+            ? 8
+            : 16));
 
         // Above the row the column sits at its authored place; below it the band has shifted left by the scroll.
-        var above = Column(
-            machine: machine,
-            y: 40
-        );
-        var below = Column(
-            machine: machine,
-            y: 120
-        );
-
-        Assert.NotEqual(
-            actual: below,
-            expected: above
-        );
         Assert.Equal(
-            actual: above,
+            actual: Column(
+                machine: machine,
+                y: 40
+            ),
             expected: 32
         );
         Assert.Equal(
-            actual: below,
+            actual: Column(
+                machine: machine,
+                y: 120
+            ),
             expected: 0
         );
 
-        // The match fires before the line is drawn, so the authored line is the first shifted one.
+        // The authored line is the first shifted one: never the line before it, and never one line late.
         Assert.Equal(
             expected: 32,
             actual: Column(
@@ -208,193 +204,18 @@ public sealed class CartridgeRasterTests {
 
         const int Frames = 40;
 
-        if (target == "agb") {
-            var built = new AgbCartridgeCompiler().Compile(document: document);
-            using var advanced = new AgbVerifyMachineDriver(
-                rom: built.Rom,
-                label: "raster-full"
-            );
-
-            advanced.RunFrames(
-                frames: Frames,
-                keys: AgbKeys.None
-            );
-            Assert.True(condition: (advanced.ReadByte(address: built.Variables["ticks"]) >= (Frames - 4)));
-            return;
-        }
-
-        var result = new HgbCartridgeCompiler().Compile(document: document);
-        using var machine = new VerifyMachineDriver(
-            rom: result.Rom,
+        using var machine = CartridgeProbe.Boot(
+            document: document,
+            frames: Frames,
             label: "raster-full"
         );
 
-        machine.RunFrames(
-            buttons: JoypadButtons.None,
-            frames: Frames
-        );
-        Assert.True(condition: (machine.Read(address: ((ushort)result.Variables["ticks"])) >= (Frames - 4)));
+        Assert.True(condition: (machine.Read(variable: "ticks") >= (Frames - 4)));
     }
-    [Fact]
-    public void TheAdvancedMachineSplitsTheSameWayWithoutAnInterruptHandler() {
-        var cells = new int[1024];
-
-        for (var row = 0; (row < 32); ++row) {
-            cells[((row * 32) + 4)] = 1;
-        }
-
-        var document = CartridgeDocuments.Create(
-            target: "agb",
-            title: "RASTER"
-        ) with {
-            Tiles = [
-                new CartridgeTile(
-                Name: "blank",
-                Pixels: [.. Enumerable.Repeat(
-                        count: 8,
-                        element: "00000000"
-                    )]
-            ),
-                new CartridgeTile(
-                Name: "solid",
-                Pixels: [.. Enumerable.Repeat(
-                        count: 8,
-                        element: "11111111"
-                    )]
-            ),
-            ],
-            Map = cells,
-            Raster = [new CartridgeRasterRow(
-                Line: 80,
-                ScrollX: CartridgeExpressions.Of(constant: 32),
-                ScrollY: CartridgeExpressions.Of(constant: 0)
-            )],
-        };
-        var result = new AgbCartridgeCompiler().Compile(document: document);
-
-        using var machine = new AgbVerifyMachineDriver(
-            rom: result.Rom,
-            label: "raster"
-        );
-
-        machine.RunFrames(
-            frames: 8,
-            keys: AgbKeys.None
-        );
-
-        var above = AdvancedColumn(
-            machine: machine,
-            y: 40
-        );
-        var below = AdvancedColumn(
-            machine: machine,
-            y: 120
-        );
-
-        Assert.Equal(
-            actual: above,
-            expected: 32
-        );
-        Assert.Equal(
-            actual: below,
-            expected: 0
-        );
-    }
-    [Fact]
-    public void TheBandBoundaryLandsOnTheAuthoredScanline() {
-        var cells = new int[1024];
-
-        for (var row = 0; (row < 32); ++row) {
-            cells[((row * 32) + 4)] = 1;
-        }
-
-        var document = CartridgeDocuments.Create(
-            target: "agb",
-            title: "RASTEREDGE"
-        ) with {
-            Tiles = [
-                new CartridgeTile(
-                Name: "blank",
-                Pixels: [.. Enumerable.Repeat(
-                        count: 8,
-                        element: "00000000"
-                    )]
-            ),
-                new CartridgeTile(
-                Name: "solid",
-                Pixels: [.. Enumerable.Repeat(
-                        count: 8,
-                        element: "11111111"
-                    )]
-            ),
-            ],
-            Map = cells,
-            Raster = [new CartridgeRasterRow(
-                Line: 80,
-                ScrollX: CartridgeExpressions.Of(constant: 32),
-                ScrollY: CartridgeExpressions.Of(constant: 0)
-            )],
-        };
-        var result = new AgbCartridgeCompiler().Compile(document: document);
-
-        using var machine = new AgbVerifyMachineDriver(
-            rom: result.Rom,
-            label: "raster-edge"
-        );
-
-        machine.RunFrames(
-            frames: 8,
-            keys: AgbKeys.None
-        );
-
-        // The burst for one scanline governs the next, so the authored line is the first shifted one — never the one
-        // before it, and never one line late.
-        Assert.Equal(
-            expected: 32,
-            actual: AdvancedColumn(
-                machine: machine,
-                y: 79
-            )
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: AdvancedColumn(
-                machine: machine,
-                y: 80
-            )
-        );
-    }
-    [Fact]
-    public void ValidationChecksRowOrderAndRange() {
-        var document = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "RASTERBAD"
-        );
-
-        Refuses(
-            document: document with { Raster = [new CartridgeRasterRow(
-                    Line: 200,
-                    ScrollX: CartridgeExpressions.Of(constant: 0),
-                    ScrollY: CartridgeExpressions.Of(constant: 0)
-                )] },
-            fragment: "scanline in 1..143"
-        );
-        Refuses(
-            document: document with {
-                Raster = [
-                    new CartridgeRasterRow(
-                    Line: 80,
-                    ScrollX: CartridgeExpressions.Of(constant: 0),
-                    ScrollY: CartridgeExpressions.Of(constant: 0)
-                ),
-                    new CartridgeRasterRow(
-                    Line: 40,
-                    ScrollX: CartridgeExpressions.Of(constant: 0),
-                    ScrollY: CartridgeExpressions.Of(constant: 0)
-                ),
-                ],
-            },
-            fragment: "ascending scanline order"
-        );
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationChecksRowOrderAndRange(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

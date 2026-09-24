@@ -13,25 +13,30 @@ the work.
 
 ## Implementation status
 
-The following list records the earlier landing. Package status below also
-describes subsequent work on the integration branch; it does not imply that
-every package is complete or merged to `main`.
+Package status below describes the code as it stands; it does not imply that
+every package is complete.
 
-- **The rebuild.** The sweep that deletes the old substrate, the relocation
-  into `Puck.State.Topology` and `Puck.State.Generators`, and the documentation
-  true-up are merged. `tests/Puck.World.Tests` fails nothing on a built tree.
-  [The landing record](state-rebuild.md#where-the-sweep-stands) holds what it
-  measured.
-- **Games.** Seven of sixteen are landed: Reversi, Stratego,
-  Hearts, Snake, Codenames, Pong, Arena.
+- **The rebuild** is landed on `main`: the sweep that deleted the old
+  substrate, the relocation into `Puck.State.Topology` and
+  `Puck.State.Generators`, and the documentation true-up.
+  [The landing record](state-rebuild.md#what-the-landing-settled) holds what it
+  settled.
+- **Games.** Ten of sixteen are landed: Reversi, Hidden ranks, Hearts, Snake,
+  Word spy, Paddleball, Arena, Rulepush, Tetromino, and Go. Lineup landed
+  outside the sixteen, in the [Parlor package](../../worlds/parlor/README.md#lineup).
 - **Embeddings** is done. The reference schedule's evidence is landed:
-  `src/Puck.State/ReferenceSchedule.json` pins eight targets
-  across two ISA families, prices the fourteen unary expression operations,
-  and names every other coefficient — the binary, function, program and fold
-  kernels, the ten effect arms, and the whole memory profile — as unmodeled,
-  with a law that refuses a registered operation carrying neither. Pricing
-  those remains C1's, as reviewed loop formulas per implementation family and
-  a published-configuration memory profile.
+  `src/Puck.State/ReferenceSchedule.json` pins eight targets across two ISA
+  families and prices the unary, binary, bit-field and bit-insert expression
+  operations. Every other reachable operation is registered with its named size
+  parameters and an explicit unmodeled reason — the function, program and fold
+  kernels,
+  the fourteen effect arms, the fifteen arena transforms, the five draw
+  sources, the two search methods and six candidate shapes, and the whole
+  memory profile — each enumerated against the code that owns it, so a new
+  operation cannot escape registration, and `puck bench state-evidence`
+  reports the priced and unmodeled counts per vocabulary. Pricing them remains
+  C1's, as reviewed loop formulas per implementation family and a
+  published-configuration memory profile.
 - **S1** is landed: `WorldCompiler.Compile` is the one door, and
   `ProjectionLawTests` holds over every shipped source and a generated corpus
   of every registered construct. `puck lint` and the language server both
@@ -39,7 +44,7 @@ every package is complete or merged to `main`.
   and then runs the lint, the engine's validation of the composed world and the
   reference lint, so an editor refuses what `puck lint` refuses, by the same
   code, text and line.
-- **S2** is landed: the syntax tree carries trivia, `puck fmt`,
+- **S2** is landed: the syntax tree carries trivia, `puck format`,
   the language server and `puck decompile` are parse-then-print through
   `PuckPrinter`, the text formatter is gone, and formatting every shipped
   source is a fixed point that moves no document.
@@ -59,7 +64,7 @@ every package is complete or merged to `main`.
   another vocabulary's. `PuckLinter.References` resolves a row name at every
   site `WorldNameRegistry` registers, read by the site's role, so it holds no
   field list of its own.
-- **S3** holds on the integration branch: an operand is a call or a bare
+- **S3** is landed: an operand is a call or a bare
   name, a document holds a reserved channel as a node, and no shipped source
   spells a colon channel outside an interpolated string. A member has one
   spelling wherever it stands, read from the document model through the
@@ -84,18 +89,27 @@ every package is complete or merged to `main`.
   only a rule's firing writes a verdict and the firing tick says so, every row
   declares the outcome it expects, and a scheduled run refuses to pretend it is
   resumable. The browser host is not covered.
-- **S8's `test` construct for a world** is landed:
-  `test "name" { given when expect }` at a world's root, described
-  once in the construct table, lowering through `WorldCompiler.Compile` to one
-  generated test world per block, and `puck test <file.puck | directory>`
-  running them. A world compiled without `puck test` is byte-identical to the
-  same source with its tests deleted, and the CLI suite runs every test a
-  shipped world authors. `with module(arguments)` remains outside the test
-  runner; module expansion alone does not implement module tests. The `given`/`when` vocabulary the drafted pages
-  below use — standing at a place, walking, pressing a channel, reading a body's
-  own position — waits on the operands a rule can read those through.
-- **The forcing world** is drafted below, and two canaries hold what today's
-  engine already does for it. The package sections distinguish completed
+- **S8's `test` construct** is landed:
+  `test "name" [with module(arguments)] { given when expect }` at the root of a
+  world document or of a module body, described once in the construct table,
+  lowering through `WorldCompiler.Compile` to one generated test world per block,
+  and `puck test <file.puck | directory>` running them. A test written with a
+  module stands that module up alone under the test's own arguments; a test
+  written inside a module body runs once per distinct instantiation, under that
+  instantiation's arguments, named for the instance. A world compiled without
+  `puck test` is byte-identical to the same source with its tests deleted,
+  whether or not a module it uses brings tests, and the CLI suite runs every test
+  a shipped world and asset package authors. A subjectless test at the root of a
+  source that emits several worlds is the composed run: `<world> { … }` inside
+  `given`, `when` and `expect` says which world a line is about, the first
+  declared world boots and arms the rest, and a body crossing a `border` is
+  asserted on the far side by the destination world's own rule. The
+  `given`/`when` vocabulary the drafted pages below use — standing at a place,
+  walking, pressing a channel, reading a body's own position — waits on the
+  operands a rule can read those through.
+- **The forcing world** is drafted below, and four canaries (`rim-drop`,
+  `rim-refused`, `rim-round-trip`, `traveller-kit`) hold what the engine
+  already does for it. The package sections distinguish completed
   capabilities from the remaining integration and evidence work.
 
 ## The forcing world
@@ -156,10 +170,10 @@ rows and two devices; the projection law holds over every source in it; every
 module in it ships tests, the movement kit's among them, and `puck test` is
 green over them on both hosts.
 
-Three games finish the proof the world cannot reach on its own. **Baba Is
-You** forces a match that answers *where*, a push along a ray, a write across a
+Three games finish the proof the world cannot reach on its own. **Rulepush**
+forces a match that answers *where*, a push along a ray, a write across a
 set, and undo across turns. **Go at 19×19** forces the cell-set carriers past
-256 cells. **Tetris** is the one proof of a staged `workflow` with a drawn bag
+256 cells. **Tetromino** is the one proof of a staged `workflow` with a drawn bag
 and a saturating score. Six more games are deferred until a capability they
 force is otherwise unproven; the table at the end says what each would prove.
 
@@ -186,31 +200,32 @@ schedule and its activation from [costing](abstract-machine-costing.md).
 
 **Delivers:** two real limits, the per-tick work budget and per-document memory
 bounds; every surviving count names the bytes it sizes or the budget share it
-multiplies, and a count that protects nothing is deleted (`MaxJumpHops`,
-`MaxSortKeys` as a copy of `MaxRows`, `PatternMemo.MaxEntries`,
-`MaxTotalCells` replaced by a byte ceiling). No `stackalloc` sized by a
-document: the board transforms take scratch from `BoardScratch`, the
+multiplies, and a count that protects nothing is deleted (the jump-hop count,
+the sort-key count that copied `MaxRows`, the pattern memo's entry count, and
+the total-cell count, replaced by a byte ceiling). No `stackalloc` sized by a
+document: the board transforms take scratch the arena owns, the
 expression evaluator from a host buffer; the gate nesting depth is its own
 constant; the pattern table is capped as one byte figure; `MaxSymbols` is
-bounded so its alphabet runs fit the letter mask. The raises:
+bounded so its alphabet runs fit the letter mask. The raises, each landed at
+its target:
 
-| Limit | Now | Target |
-|---|---|---|
-| `MaxBindingsPerRule` (becomes `MaxLocalsPerRule`) | 16 | 64 |
-| `MaxExpressionTokens`, `MaxSubprograms` | 64, 16 | 256, 64 |
-| `MaxEffectsPerRule`, `MaxTransactionEffects` | 64 | 256 |
-| `MaxPredicateTokens` | 256 | 1,024 tokens, 64 nesting |
-| `MaxRows`; `MaxEnumMembers` / `MaxEnums` / `MaxFamilies` | 256; 256 / 64 / 64 | 1,024; 1,024 / 256 / 256 |
-| `MaxTextValueLength`; `MaxTopologies` | 256; 16 | 1,024; 64 |
-| `MaxVectorSpaces`, `MaxNearestResults`, `MaxMixTerms` | 16, 64, 8 | 64, 256, 32 |
-| Pattern `MaxRepeat` / `MaxRows` / `MaxStates` | 64 / 64 / 256 | 128 / 256 / 1,024 under the byte cap |
-| Lane widths, `MaxDrawnMasks`, `MaxContexts` | 64, 64, 32 | 256, 256, 64 |
-| Generator sources, emission bound, extended table | 64, 64, 1,024 | 256, 256, 4,096 |
-| Search depth, jobs, shapes, promotions, chance outcomes | 32, 8, 8, 8, 64 | 64, 16, 16, 16, 256 |
-| `TranspositionEntries`, `TreeNodes` | 1,024, 2,048 | 8,192, 8,192 |
-| Group members, passes | 64, 64 | 256, 256, their product priced |
-| `RuleExpressions.MaxArguments`, `MaxTraceEvaluations` | 8, 32 | 16, 256 |
-| `ExpressionSpelling.MaxLength` | 4,096 | 16,384 |
+| Limit | Value |
+|---|---|
+| `RuleCapacity.MaxLocalsPerRule` | 64 |
+| `RuleCapacity.MaxExpressionTokens`, `MaxSubprograms` | 256, 64 |
+| `RuleCapacity.MaxEffectsPerRule`, `MaxTransactionEffects` | 256 |
+| `RuleCapacity.MaxPredicateTokens`, `MaxPredicateNesting` | 1,024 tokens, 64 nesting |
+| `StateCapacity.MaxRows`; `MaxEnumMembers` / `MaxEnums` / `MaxFamilies` | 1,024; 1,024 / 256 / 256 |
+| `StateCapacity.MaxTextValueLength`; `TopologyCompilation.MaxTopologies` | 1,024; 64 |
+| `StateCapacity.MaxVectorSpaces`, `MaxNearestResults`, `MaxMixTerms` | 64, 256, 32 |
+| `PatternCapacity.MaxRepeat` / `MaxRows` / `MaxStates` | 128 / 256 / 1,024 under the byte cap |
+| Lane widths (`ArenaCapacity.DefaultIdentities`, `DefaultParticipants`), `ArenaCapacity.MaxDrawnMasks`, `GeneratorCapacity.MaxContexts` | 256, 256, 64 |
+| `GeneratorCapacity.MaxDeclaredSources`, `MaxEmissionBound`, `MaxExtendedTableSize` | 256, 256, 4,096 |
+| `SearchCapacity.MaxDepth`, `MaxJobs`, `MaxShapesPerJob`, `MaxPromotions`, `MaxChanceOutcomes` | 64, 16, 16, 16, 256 |
+| `SearchCapacity.TranspositionEntries`, `TreeNodes` | 8,192, 8,192 |
+| `RuleGroupCapacity.MaxMembers`, `MaxPasses` | 256, 256 |
+| `RuleExpressions.MaxArguments`, the evaluator's `MaxTraceEvaluations` | 16, 256 |
+| `ExpressionSpelling.MaxLength` | 16,384 |
 
 `TopologyCompilation.MaxCells` stays 4,096 until a document asks. Every
 ceiling is per document, counted after modules expand: a module used twice
@@ -233,12 +248,12 @@ shipped world; validator, console, search plans, `BrowserExports`, and the
 portal worker read one report with source-path attribution. The method is
 [costing §3 to §7](abstract-machine-costing.md#3-price-schedule-and-evidence).
 
-**Status:** the scratch changes are landed. `ArenaScratch` is the arena's
-working storage, leased and returned in order: the board transforms, the sorts,
+**Status:** the scratch changes are landed. `ArenaScratch` is the
+arena's working storage, leased and returned in order: the board transforms, the sorts,
 `arrange`, a jump chain's visited cells, and all four vector transforms (each of
 which allocated on every call, not `Nearest` alone) take their buffers from it,
 and the expression evaluator leases its value stack at the program's own length
-through `IStateReader.Scratch`, which replaces `BoardScratch`. The generator
+through `IStateReader.Scratch`. The generator
 engine keeps its stack buffers: they are sized by `MaxEntriesPerSet`, a constant,
 and the engine is a pure surface with no arena behind it. The compiled-operand
 slot did not survive its profile. Cell reads are about 43% of a judged
@@ -249,16 +264,18 @@ the row's key ordinals rather than a dictionary. A slot held on the operand was
 rejected: compiled rules are shared by every arena they run over. Chinese
 Checkers measures 4.15 ms a tick against 5.1.
 
-Three of the four counts that protected nothing are gone. `MaxJumpHops` bounded
-nothing the node ceiling did not: a chain over even one direction enumerates
-8,192 candidates a token at thirteen hops against the 4,096 a job judges in a
-tick, and that check is the one that refuses, overflowing counts included.
-`MaxSortKeys` was a copy of `MaxRows` under a check that already requires
-distinct rows. `PatternMemo.MaxEntries` dropped the memo at 256 walks, which a
-board read from every cell in every direction passes at once; it is one
-mebibyte, 16,384 walks at the 64 bytes each occupies. Both storage paths of `sort` lease their key buffers instead of allocating them per firing.
-`MaxTotalCells` is gone with the fourth, and so is an unnamed 262,144-cell
-budget beside it: the document's memory bound is `StateArena.Bytes` against
+All four counts that protected nothing are gone. The jump-hop
+count bounded nothing the node ceiling did not: a chain over even one direction
+enumerates 8,192 candidates a token at thirteen hops against the 4,096 a job
+judges in a tick, and that check is the one that refuses, overflowing counts
+included. The sort-key count was a copy of `MaxRows` under a check that already
+requires distinct rows. The pattern memo's entry count dropped the memo at 256
+walks, which a board read from every cell in every direction passes at once;
+the memo itself is deleted, and a `match` operand walks its word
+from the first letter at every read. Both storage paths of `sort` lease their
+key buffers instead of allocating them per firing. The total-cell count is gone,
+and so is an unnamed 262,144-cell budget beside it: the document's memory bound
+is `StateArena.Bytes` against
 `ArenaCapacity.MaxBytes` (64 MiB), measured over every column at its full width
 plus the bounded visibility payload in declaration and live state, with
 admission at construction, import and write. The largest shipped world lays out to
@@ -297,17 +314,27 @@ condition the chance ply's exact average rests on; the outcome count never
 was.
 
 The reference schedule and shared report are implemented in part. The manifest
-pins the evidence targets and unary prices; `puck bench state-evidence` can
-reproduce the pinned instruction-service rows. A compilation retains one work
-sheet and cost report for server and console consumers; the browser and portal
-worker expose the same analysis with exact cycle strings and explicit unresolved
-bounds. Draft analysis preserves validation refusals alongside a report; resource
-dimensions expose the measured arena admission footprint without claiming a total
-memory bound. Contributor locations retain JSON pointers and, for standalone
-source analysis, defining source lines and module instances. C1 is still open:
-full kernel/helper and memory-service evidence, synchronous edit-cycle bounds,
-and reference-cycle admission remain outstanding. An instruction-table replay
-alone does not establish those prices.
+pins the evidence targets, prices the unary, binary, bit-field and bit-insert
+expression operations, and registers every other reachable
+operation with its size parameters and an explicit unmodeled reason;
+`puck bench state-evidence` reproduces the pinned instruction-service rows and
+reports the priced and unmodeled counts per vocabulary. A compilation retains
+one work sheet and cost report for server and console consumers; the browser and
+portal worker expose the same analysis with exact cycle strings and explicit
+unresolved bounds. Draft analysis preserves validation refusals alongside a
+report; resource dimensions expose the measured arena admission footprint
+without claiming a total memory bound. Contributor locations retain JSON
+pointers and, for standalone source analysis, defining source lines and module
+instances. C1 is still open: kernel and helper prices, the memory-service
+profile, synchronous edit-cycle bounds, and reference-cycle admission remain
+outstanding, and admission still runs on the heuristic work-unit sheet. The
+capture that a kernel price is derived from is a verb:
+`puck bench state-evidence --capture <dir>` compiles both pinned lowerings,
+walks each declared kernel's maximum permitted path under its declared loop
+bounds, and renders the manifest sections it establishes, naming every
+difference from what is pinned. What the capture cannot supply is what remains:
+reference kernels for the unpriced vocabularies, declared bounds for the helper
+loops that leave a kernel unresolved, and memory-service measurements.
 
 **Check:** the state, rules, search, and World schema suites green with a law
 at each raised edge for the two ceilings that bind today (locals, expression
@@ -333,21 +360,21 @@ lowering, the search's `Legal` and reach paths, the browser's board-mask export.
 set wider than a word lives in a board row, one cell per cell, combined with
 `boardCombine` and the cell-set algebra at a width taken from its topology,
 with an inline path for sets of at most 256 cells so today's documents pay
-nothing. `$board:mask`, `writeSet` from an Int cell, and the search's `Legal`
+nothing. `board(mask, …)`, `writeSet` from an Int cell, and the search's `Legal`
 row remain the convenience for boards of at most 64 cells and say so; the
 reach board is the general form a wider plan must declare. Generator drawn
 masks stay 256 wide.
 
 **Check:** the cell-set algebra laws run at 64, 256, 361, and 594 cells; a
 19×19 board's enclosure and a 33×18 board's per-noun sets compute through the
-same operators; existing hashes do not move.
+same operators.
 
 ### C3 — A match answers where
 
 **Status:** implemented. Occurrence laws cover both board axes; knowledge follows
-token identities in the shipped Stratego world.
+token identities in the shipped `hiddenranks` world.
 
-**Owns:** the `$match` operand family, its spelling and decompiler.
+**Owns:** the `match(…)` operand family, its spelling and decompiler.
 
 **Delivers:** beside `count` and `distance`, a match answers `at` (the cell
 where the nth match along a ray or across a board begins) and `length`; a rule
@@ -404,19 +431,19 @@ as one.
 
 **Status:** implemented. Retained journals are admitted against the byte ceiling,
 validated before checkpoint installation, and covered by multi-turn, checkpoint,
-relayout, and allocation laws. See the [current undo contract](../reference/state/rules.md)
+relayout, and allocation laws. See the [current undo contract](../reference/state/rule-groups.md)
 for the boundary between selected state rows and host continuation state.
 
 **Owns:** the arena's journal retention, the rule-group `undo` declaration, a
-`rewindTurn` effect, the hash, the checkpoint codec.
+`rewindGroup` effect, the hash, the checkpoint codec.
 
 **Delivers:** a rule group declares `undo` over a set of rows with a depth;
 each committed turn keeps its journal entries for those rows as a closed
 segment in a ring of that depth, and no scope stays open between ticks.
-`rewindTurn` restores the newest segment and drops it, refused by name when
+`rewindGroup` restores the newest segment and drops it, refused by name when
 the ring is empty. A group declaring undo holds no irreversible arm and no
 host-owned write; a turn that wrote outside the set marks its segment
-unrewindable. Who may undo is the gate of the rule that fires `rewindTurn`.
+unrewindable. Who may undo is the gate of the rule that fires `rewindGroup`.
 Depth is bounded in bytes by the journal ceiling, refused at load when its
 worst case cannot fit. The ring folds into the hash and the checkpoint and is
 dropped by a relayout.
@@ -445,7 +472,7 @@ arm is removed, shown once.
 **Owns:** `src/Puck.Transpiler/Parsing`, `Ast`, `Formatting`.
 
 **Delivers:** the syntax tree keeps comments, blank lines, and the author's
-line breaks; `puck fmt` is parse then print, and the text formatter is
+line breaks; `puck format` is parse then print for `.puck`, and the text formatter is
 deleted. The parser's identifier, string, and interpolated-name reads become
 one routine.
 
@@ -466,8 +493,7 @@ in a document is a string with its own grammar. Kinds are inferred from the
 cell and the unit, so `Kind` leaves the surface; rates and durations are
 spelled in seconds and the engine places each trait on its tick coordinate;
 one timing effect, an absolute deadline. Every shipped source is rewritten
-once through S5; the old spellings are refused with a diagnostic naming the
-new form.
+once through S5, and the parser stops reading the old spellings.
 
 **Check:** the projection law; no shipped source contains a colon channel, an
 authored `Kind`, a tick-counted duration, or a second timing effect; every
@@ -514,7 +540,7 @@ parameters of kind `Point`, `Angle`, `Asset`, `Module`, `Pool`, `Row`,
 `border`, `asset` with its lock file, and the forcing world itself under the
 product tree.
 
-**Expander status (2026-09-20):** the source module slice is implemented:
+**Expander status:** the source module slice is implemented:
 typed arguments, required exports and re-exports, aliased recursive naming,
 lexically closed imported modules and constants, hygienic external row/pool/gate
 arguments, bounded expansion, formatter projection, and diagnostic/source-map
@@ -525,8 +551,9 @@ are shared across the source. Borders support derived ground sides and explicit
 pitched frames, including an authored minimum ownership deadband. Doors generate
 return arches from self-contained placement faces. Asset pins are checked during
 ordinary compilation and refreshed only by an explicit successful update.
-The forcing-world migration and shipped-world conversion work remains open;
-composition-level distributed tests also remain outside this slice. Current
+The forcing-world migration and shipped-world conversion work remains open.
+A composition is tested as one run: `schedule.instances` arms its sibling
+worlds and each is exported ([S8](#s8--tests-are-worlds)). Current
 syntax and constraints live in [authoring](../authoring/README.md#composing-neighbouring-worlds).
 
 **Delivers:** what [the pages](#the-forcing-world-drafted) require. `use`
@@ -565,7 +592,7 @@ generation storage. Rules claim, release, and iterate generation-checked lexical
 bindings. Pair pools own bounded relationships and cascade release atomically.
 World interactions attach logical pool lifetimes to named placements or seats;
 geometry remains a host concern. An identity explicitly selects its capacity-one
-record pools for transfer, preserving private document state. Pong and Arena
+record pools for transfer, preserving private document state. Paddleball and Arena
 exercise the model; rows with timed traits remain rows until records support
 those traits without changing their semantics.
 
@@ -591,9 +618,11 @@ rows, `expect` as rules whose gate is the expectation and whose effect writes
 a verdict row folding the values the gate saw. `puck test` boots each test
 world headless to its last scheduled tick and reads the verdicts from exported
 state; the same world's hash through the server and the browser host is the
-parity and cross-host determinism check. A module's tests run once wherever it
-is used, and a `use` of a module whose tests fail is a compile refusal. A
-module's parameters are its test seam.
+parity and cross-host determinism check. A module's tests run once per distinct
+instantiation, wherever it is used, and `puck test` is the door that runs them:
+the transpiler cannot boot a world, so `puck compile` stays a pure lowering and
+a `use` of a module whose tests fail is not a compile refusal. A module's
+parameters are its test seam.
 
 A module's tests run wherever it is used, its author's or not, so a green
 result has to be evidence and a test world can do nothing but simulate. A
@@ -611,10 +640,9 @@ and reads as never evaluated without one; a verdict that failed once stays
 failed and names the first failing tick. Each row states the outcome it
 expects, submitted unless the test is about a refusal, and any other outcome
 fails the run; a handler that throws is a host failure with its own exit
-code. A checkpoint or a save inside an armed run is refused. A test over several `world` statements
-boots the set as the federation canaries do and reads its verdict in the
-destination world. The export-hash baseline stays as the determinism check
-only.
+code. A checkpoint or a save inside an armed run is refused. A test over several
+`world` statements boots the set in one process and reads its verdict in the
+destination world. The export-hash baseline stays as the determinism check only.
 
 **Check:** every module in the forcing world ships tests, green on both hosts;
 the C# laws that pinned a shipped game's behavior are deleted with the tests
@@ -647,6 +675,34 @@ byte. The manifest records only facts a rerun reproduces. A scheduled run
 refuses `world.save`/`world.load`/`world.reload`/`world.undo` by name: a schedule
 carries no cursor, so a restored world would submit every row again from tick 1.
 
+A composed run is one source. `schedule.instances` arms sibling worlds beside the
+booted one through the same `WorldInstanceHost.TryStart` that
+`world.instance.start` takes, every armed world is exported at the one host step
+the booted world's export tick falls on, and `puck test` reads each world's
+verdicts out of its own export and compares every world's bytes across two legs.
+A subjectless `test` at the root of a source that emits several worlds lowers to
+that set: one generated document per world, the entry world carrying the
+schedule that arms the rest and naming each sibling by the document the run
+writes beside it. Inside `given`, `when` and `expect`, a `<world> { … }` block
+says which world a run of lines is about; there is no default world, so a line
+that names none is refused, as is one naming a world the source does not declare.
+The tick grid stays outside every such block, since one grid carries the whole
+run. A far world's verdict rule fires one tick before the booted world's export
+tick — an instance armed at boot counts from its own zero — and the lowering
+derives that rather than leaving it to the author.
+
+What a step can address is narrower than what a block can: a row's `world` member
+rides the trailing `instance:` token a verb's own grammar reads, which
+`player.join`, `player.leave`, `body.fly`, `body.pose` and `body.stop` carry and
+the `world.*` state verbs do not, so a step addressing another world with one of
+those is refused at compile time by the same rule the validator applies. Driving
+a far world's state therefore means driving what crosses into it:
+`tests/Puck.World.Verdicts/composition` flies the seat standing in the booted
+world over a `border`, and the destination world's own rule writes the row the
+test expects when its `placements` region reads as occupied. The seat is embodied
+by the module's own `bodies.seatSpawns`, so the composed worlds carry the kit,
+collision and seat rig a body needs rather than inheriting them from a basis.
+
 Two gaps stay open. The browser host cannot run a leg at all — it has no
 command ingress, no acting principal and no authoritative server — so
 `--host browser` is refused by name and cross-host determinism is unproven. A
@@ -657,19 +713,38 @@ no row expected is printed rather than failing the run, and a rule operand over
 recorded refusals would let a world assert on its own refusal directly instead of
 on the refusal's consequence.
 
-The construct is what a world's own behaviour is written as. `test "name"
-{ given { } when { } expect { } }` stands at a world's root, is described once in
-the construct table, and lowers through `WorldCompiler.Compile` to one generated
-test world per block — the enclosing document unchanged, plus the `given` cells,
-plus `when` as `schedule` rows on a tick grid, plus one verdict row and one rule
-per `expect` line, the rule gated on the export tick alone so it fires once.
-`puck test <file.puck | directory>` compiles the source and runs those worlds,
-and `--keep <dir>` leaves each of them on disk as an ordinary world document.
-What it cannot yet say: `with module(arguments)` is refused by name until `use`
-exists, an expectation reads what a rule reads (a state row, never a body's own
-pose or position), and a generated verdict row carries no `Generated` mark
-because no document member does — the verdict trait is what says the row is
-machinery.
+The construct is what behaviour is written as. `test "name" [with
+module(arguments)] { given { } when { } expect { } }` stands at the root of a
+world document or of a module body, is described once in the construct table,
+and lowers through `WorldCompiler.Compile` to one generated test world per block
+— the `given` cells, plus `when` as `schedule` rows on a tick grid, plus one
+verdict row and one rule per `expect` line, the rule gated on the export tick
+alone so it fires once. What that is added to is the test's subject: the
+enclosing document unchanged for a test written at a world's root, and the named
+module expanded with the test's own arguments, standing alone, for a test
+written with one. `puck test <file.puck | directory>` compiles the source and
+runs those worlds, and `--keep <dir>` leaves each of them on disk as an ordinary
+world document.
+
+A module's parameters are its test seam, and a module's tests run once per
+distinct instantiation. A `test` written inside a module body is carried to
+every `use` and every `world name = module(arguments)` that stamps that module,
+restated there as a test with that instantiation's own module and arguments, and
+named for the instance it ran for. Two instantiations that read identically run
+it once; two that differ run it twice, against what each asked for. The
+enforcement is `puck test` and nothing else: the transpiler cannot boot a world,
+so `puck compile` stays a pure lowering and a `use` of a module whose tests fail
+is not a compile refusal. A source whose modules are never run through
+`puck test` has no verdict from them.
+
+What it cannot yet say. An expectation reads what a rule reads — a state row,
+never a body's own pose or position. A generated verdict row carries no
+`Generated` mark because no document member does; the verdict trait is what says
+the row is machinery. A `test` written inside a module body reaches only the
+module's own names, so a claim about a `let` the enclosing source declares is
+written beside that source instead. And a composed test drives its far worlds
+only through the verbs whose grammar carries a world token, so a claim about a
+far world's own state is written as a claim about what crossed into it.
 
 A verdict row is an Int row, so what a gate read of a `Fixed` or a `Bool` row
 is written by the same firing to a `witness` row of that kind: a row trait
@@ -750,18 +825,39 @@ reference schedule, reference-cycle admission, and the shared report are C1's.
 applying each transform); weak tests made to fail when their subject breaks;
 `puck embed` exits 2 without writing when lowering has errors and collects
 texts from both dialects; `Puck.World.Transpiler` stops referencing
-`Puck.Embeddings` (lock spaces keyed by `StateSpace` identity); `PruneEntries`
+`Puck.Embeddings` (lock spaces carry `Puck.State`'s `EmbeddingIdentity`); `PruneEntries`
 and `PruneSpaces` are called; `EmbedCommandTests` compares a fixture lock byte
 for byte. The measurement reported with the change: flagship tick timing
-unregressed, `nearest` over 256 × 256 under 100 µs in Release.
+unregressed, `nearest` over 256 × 256 under 100 µs in Release
+(`puck bench kernels --filter '*VectorNearest*'`, on a quiet machine).
 
 **Check:** `puck embed --check` offline with fixture locks regenerating
 byte-identically; both authored samples boot and trace their rules; neither
 `packages.lock.json` lists a provider package.
 
-### G4 — Tetris
+### G4 — Tetromino
 
-**Owns:** `games/tetris.puck`, baselines. Constructs: `workflow`,
+**Status:** implemented as [games/tetromino.puck](../../src/Puck.World/Assets/worlds/games/tetromino.puck),
+the falling-block game under the name the decision record gives it. A piece's
+life is the `piece` workflow (spawn, fall, lock, clear); gravity is a `cycle`
+row a level; the lock delay is a `schedule` deadline; the full-row pattern reads
+the well's line masks and its occurrences drive the clear; the bag is a
+weighted source drawn without replacement with its drawn mask, restarted every
+seven; the score row saturates. Turns take the published wall-kick tests from
+static rows, and hold, soft and hard drops are ordinary rules. Its `test` blocks
+lock three pieces and clear one row, clear four at once, deal a bag of seven,
+expire a lock delay, saturate the score and end a game on a blocked spawn, and
+reproduce byte for byte; the `tetromino-clear` canary plays the three-piece
+clear through the real `Puck.World`, `TetrominoTickLawTests` pins a piece's
+life by counters, and the worst-case tick prices at about 109,000 work units.
+The generated [corpus inventory](../../tests/Puck.State.Rebuild.Corpus/inventory.md)
+counts every claimed construct in the game's own source, and a law holds it to
+the claim. The package exposed two language gaps, each closed with laws: a
+compile-time `for` could not stand inside a rule, step or effect list (a step
+parsed it and dropped it), and a computed name that named a rule's local read a
+row of that name instead. The well is simulated but not drawn.
+
+**Owns:** `games/tetromino.puck`, baselines. Constructs: `workflow`,
 `scheduleState`, `cycle`, row patterns, 7-bag draw, `overflow: saturate`.
 Spawn, fall, lock, clear as a `workflow`; gravity as a `cycle`; lock delay as
 a scheduled deadline; a full-row pattern that clears; a 7-bag generator with a
@@ -770,17 +866,41 @@ clears one line; the corpus inventory counts every claimed construct.
 
 ### G1 — Go
 
+**Status:** implemented as [games/go.puck](../../src/Puck.World/Assets/worlds/games/go.puck)
+at 19x19. Its `test` blocks show an atari, a single and a group capture, a
+suicide refusal, a ko refusal and the exchange that lifts it, the area count,
+and one CPU move, each in the export, and reproduce byte for byte. The
+`go-capture` canary plays into a capture and the CPU's reply through the real
+`Puck.World`, and `GoMoveLawTests` pins the work by counters. The package
+exposed four engine faults, each fixed with laws: a tree search judged every
+candidate of a node when it expanded, so a 19x19 pool filled after about
+twenty expansions (it now grows one node an iteration under progressive
+widening); the canonical fingerprint folds mirror images, so the ko check
+reads the exact `board(fingerprint, …)`; a fold was scheduled and priced by
+its row's authored cells, so a fold over a row written at run time was stale in
+a memoized local; and an assignment target could not take the `$"…"` key a
+read takes. Capture is `clearEnclosed`, the placement's own liberty flood. The
+CPU's score is material alone.
+
 **Owns:** `games/go.puck`, its host fixture, baselines. Constructs:
-`clearEnclosed`, `writeSet`, `$board:component`, `$board:boundary`,
-`$board:enclosedAt`, `boardCombine`, `stabilize`, `$history` for ko, UCT
+`clearEnclosed`, `writeSet`, `board(component, …)`, `board(boundary, …)`,
+`board(enclosedAt, …)`, `boardCombine`, `stabilize`, `history(row, age)` for ko, UCT
 search. A 19×19 board (after C2); capture by liberty fixpoint; ko refusal
 through the history ring; territory count; a `search` row that plays one CPU
 move. **Check:** an atari, a capture, and a ko refusal, each visible in the
 export.
 
-### G16 — Baba Is You
+### G16 — Rulepush
 
-**Owns:** `games/baba.puck`, its host fixture, baselines. The published rule
+**Status:** implemented as the [rulepush package](../../worlds/rulepush/README.md). The
+rules are one module and each level is only its map; an overworld borders the
+three levels and opens a gate from the visitor's own record. The package's
+`test` blocks cover the check below except the hash comparison. The
+`rulepush-undo` canary covers that comparison against the real `Puck.World`,
+and `rulepush-overworld` plays from the overworld into the levels and back. The
+board is simulated but not drawn.
+
+**Owns:** `worlds/rulepush/`, its canaries, and the turn cost laws. The rule
 set: a row or column of three text tiles is an active rule while it stands;
 `YOU` moves on a press; `PUSH` moves with it, whole line or none; `STOP`
 blocks; `SINK` destroys both; `DEFEAT` destroys a `YOU`; `YOU` on `WIN` ends
@@ -802,18 +922,19 @@ unproven elsewhere; the constructs are the ones no shipped world exercises.
 
 | Game | Would prove | Check |
 |---|---|---|
-| Monopoly | ring topology, records and enums, escrowed trade, dice chance, jail countdown, `overflow: refuse`, join and leave mid-game, `sort` | one trade and one refused overdraft |
-| Wordle | text cells, pattern algebra over letters, `observe` feedback, a guess ring | two wrong guesses and one right |
+| Landlord | ring topology, records and enums, escrowed trade, dice chance, a countdown that holds a player out of turns, `overflow: refuse`, join and leave mid-game, `sort` | one trade and one refused overdraft |
+| Wordguess | text cells, pattern algebra over letters, `observe` feedback, a guess ring | two wrong guesses and one right |
 | Match-3 | `stabilize` cascades under a `workflow`, run patterns, refill draws | a cascade of two |
-| Catan | Hex plus Graph topology, longest road as a component, staged turn, hidden development cards, `derive` for victory points, UCT with chance | one trade and one longest-road change |
-| Tower defense | `$nav`, `$board:pathCost`, wave generators with cursors, a flow-field `stabilize`, families of tower slots | one wave routed around a placed tower |
-| Ribbon (original: a connection game on a seeded Penrose patch, sliding along de Bruijn ribbons, enclosure fill) | the tiling generator as a seeded board source, ribbon rows, graph adjacency over an aperiodic patch, `$match` along a ribbon, enclosure past 64 cells, UCT with a territory judge | six stones, one full-length slide, one enclosed pocket, one connection |
+| Hexcolony | Hex plus Graph topology, the longest connected route as a component, staged turn, hidden action cards, `derive` for victory points, UCT with chance | one trade and one longest-route change |
+| Tower defense | `nav(…)`, `board(pathCost, …)`, wave generators with cursors, a flow-field `stabilize`, families of tower slots | one wave routed around a placed tower |
+| Ribbon (original: a connection game on a seeded Penrose patch, sliding along de Bruijn ribbons, enclosure fill) | the tiling generator as a seeded board source, ribbon rows, graph adjacency over an aperiodic patch, `match(…)` along a ribbon, enclosure past 64 cells, UCT with a territory judge | six stones, one full-length slide, one enclosed pocket, one connection |
 
-Landed games with an unproved claim: Stratego's and Hearts' `phaseOf` advance
-(the baseline runner cannot submit a guarded transform; S8 replaces the
-runner), Codenames' optional `nearest` arguments, Arena's leave (no leave
-step). Reversi landed without its `search` row and gains it when WP11a's judge
-cost folds exclusions.
+Landed games with an unproved claim: Hidden ranks' and Hearts' `phaseOf` advance
+(a `schedule` step can submit the guarded transform, `world.state.act`, but no
+test in either game does), Word spy's optional `nearest` arguments (the world
+has no tests), and Arena's leave (a `schedule` step can submit `player.leave`,
+but the world has no tests). Reversi landed without its `search` row; its flips
+are two rules, and no job has been authored or planned against them.
 
 ## Sequencing
 
@@ -825,9 +946,9 @@ module its `use`.
 
 | Step | In parallel | Why here |
 |---|---|---|
-| 1 | [The landing](state-rebuild.md): the sweep, WP8, WP13, WP14; S4's remainder; S8's runner and its `test` construct for a world | The critical path. Everything below edits the new substrate and is verified with `puck test`. |
+| 1 (landed) | [The landing](state-rebuild.md): the sweep, WP8, WP13, WP14; S4's remainder; S8's runner and its `test` construct for a world | The critical path. Everything below edits the new substrate and is verified with `puck test`. |
 | 2 | S3, S7a, S7b, S6's expander; C1 and the costing correction | Each language package adds spellings and follows S4's table; S7a is state work; C1 is what every later package allocates under, and the correction needs the rebuilt operator table. |
-| 3 | S6's remainder, S8's module tests, and the shipped island, districts, and shards onto the modules | Needs the language proven by step 2. |
+| 3 | S6's remainder, S8's distributed tests, and the shipped island, districts, and shards onto the modules | Needs the language proven by step 2. |
 
 After the landing a package branches from `main` and lands as its own squash.
 `puck test` runs on the server host; running the same test world through the
@@ -836,7 +957,7 @@ browser host is not scheduled.
 ### Deferred with the games that force them
 
 C2 to C6 exist for three acceptance games: C2's variable-width cell sets for Go
-at 19×19, and C3 to C6 for Baba Is You; Tetris needs none of them and proves the
+at 19×19, and C3 to C6 for Rulepush; tetromino needs none of them and proves the
 same substrate the landed games already exercise. The five capabilities and the
 three games (G4, G1, G16) are scheduled together, after step 3, with each game
 verified by its own `test` blocks. Their packages above stay as written.
@@ -880,7 +1001,7 @@ puck schema --check
 ```
 
 ```bash
-puck fmt src/Puck.World/Assets/worlds --check
+puck format src/Puck.World/Assets/worlds --only puck --check
 ```
 
 ```bash
@@ -910,7 +1031,7 @@ declaration a value.
 | A reusable part | `module name(parameters) { }` | nothing until used | replaces `template` |
 | Using one | `use name(arguments)` stamps the body where it stands; `use name as alias(arguments)` also prefixes every name the body declares | the module's statements once per `use` | the import-alias rewrite plus template substitution, made recursive |
 | Another file's modules | `import "path"` brings names into scope | nothing | the import resolver |
-| A name inside a part | the bare name; from outside, `alias.name` | the flat prefixed name | the same rewrite |
+| A name inside a part | the bare name; from outside, `alias.name` | the generated name `alias$name` | the same rewrite |
 | What a part shows | `export read\|action\|binding name`; `export alias.name` passes one upward | the `exports` member | exists; re-export is new |
 | One definition, many live instances | `record Name { field: Kind ... }`, `pool name of Record capacity(n)` | the `pools` member, then keyed rows | S7 |
 | A rule over instances | `rule name for each x in pool { }` with `x.field` | one rule iterating live keys | `forEach` |
@@ -1002,7 +1123,7 @@ re-export; `tokens` is a pool a rule fills and empties; the test is a world.
 // quilt/corner.puck
 module corner(name: Name, center: Point, biome: Module exporting ascent) {
   documentId: $"quilt-{name}"
-  basis: "island.puck"
+  basis: "island"
   simulation { rate: 60hz }
 
   ground terrain { center: center  size: [132m, 132m] }
@@ -1237,28 +1358,32 @@ window because a feel regression is otherwise invisible until someone plays
 it. A press on the seventh tick still leaves the ground behind, but as the
 double jump, which is why it spends the air jump.
 
-The `rim-drop` and `traveller-kit` canaries under `tests/Puck.World.Canaries`
-hold what today's engine already does, measured on the real executable. A body
-that walks off a deck through a border lying flat beneath it is handed to the
-world below while airborne, still falling, with its per-body registers intact.
-A kit authored at 60 Hz has coyote time (the recency predicate), a buffered
-press (a trigger's latch), the jump cut, a dash of exactly 5 m on the ground,
-instant acceleration (a shaping row with no rate), air charges restored on
-contact (a slot's reset fact), timers, and unequal rise and fall gravity. What
-these pages still ask of the engine:
+The `rim-drop`, `rim-refused`, `rim-round-trip` and `traveller-kit` canaries
+under `tests/Puck.World.Canaries` hold what the engine already does, measured
+on the real executable. A body that walks off a deck through a border lying
+flat beneath it is handed to the world below while airborne, still falling,
+directly beneath the point it fell from and with no turn, with its per-body
+registers intact. A floor border's ownership deadband is sized from one step at
+the kit's fastest hold or fall, so a body hovering at the plane keeps one
+authority; an authored `hysteresis` takes the larger of itself and that floor.
+A crossing refused through a floor keeps the body falling; only a refusal
+through a wall clamps it and zeroes its velocity. A `schedule` step places a
+press (`body.press`) or an impulse (`body.impulse`) on an authored tick. A kit
+authored at 60 Hz has coyote time (the recency predicate), a buffered press (a
+trigger's latch), the jump cut, a dash of exactly 5 m on the ground, instant
+acceleration (a shaping row with no rate), air charges restored on contact (a
+slot's reset fact), timers, and unequal rise and fall gravity. What these pages
+still ask of the engine:
 
 | Ask | Why |
 |---|---|
-| A flat border maps a body straight down | Today the arrival is mirrored across one horizontal axis and turned 180°, because the map reverses the boundary frame's right and normal, which is right for a wall and wrong for a floor; the pair validator proves only that world up survives, so nothing refuses it |
-| A pitched border's hysteresis sized for a hovering body | Its deadband is sized for a settling body, about 0.03 m at 60 Hz, so a jetpack held at the plane can change authority repeatedly |
-| A refused crossing keeps a falling body's velocity | Every refusal clamps the body inside the boundary and zeroes its velocity |
-| A press placed on an authored tick | A console press lands on whatever tick the pump drains, so no feel test can say "tick 6"; the test runner's schedule is where it belongs |
+| A flat border pair refused when it is authored wrong | The pair validator proves only that world up survives, so a hand-authored flat pair at one yaw arrives turned 180° without a refusal; the `border` lowering writes the reciprocal frame itself |
 | An impulse that suspends gravity | A dash in the air covers its 5 m and keeps falling |
 | Two actions on one button, chosen by a gate | A kit has one press trigger per channel and refuses `if` in a body action, so a jump and a double jump cannot differ in launch speed |
 | An action gated on a held role channel and a state row | The jetpack is only expressible as a lift hold that spends a row, with no gate of its own |
 | A duration that is not a whole tick is refused | A dash of 0.22 s is accepted and ends on a partial step; the state engine refuses the same mistake by name |
-| Read-backs for a body's velocity, a hold's spend, and a body's state on a named instance | A test can see that an arrival is falling but not how fast |
-| `kit`, `action`, and `timer` as constructs | Today a kit is an open block of document members |
+| Read-backs for a body's velocity and a body's state on a named instance | A test can see that an arrival is falling but not how fast: `body.where` prints no velocity, and `body.state` follows only the routed seat. A hold's spend is read back by `body.hold`, which is not a schedule read |
+| `kit`, `action`, and `timer` as constructs | A kit is an open block of document members |
 
 ### Page 4 — Snake's step, as a check on the small scale
 
@@ -1283,9 +1408,9 @@ module snake(width: Int = 8) {
 }
 ```
 
-The same rule today is one line of four nested conditionals over
-`$bind:rw * 8`, and every name carries a `snake` prefix because the source
-has no namespace.
+The shipped rule is one line of four nested conditionals over `rw * 8`, where
+`rw` is a `local`, and every name carries a `snake` prefix because the source
+declares no module.
 
 ---
 

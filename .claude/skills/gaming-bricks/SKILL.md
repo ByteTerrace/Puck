@@ -71,10 +71,12 @@ Post stages are authoritative; update stale skill guidance in the same change.
   for current tiers, assets, ARM/GBA diagnostics, co-simulation normalization,
   and the accuracy workflow.
 - For a rendered side-by-side accuracy comparison rather than a Post stage,
-  boot `src/Puck.World/Assets/worlds/tools/hgb-compare.puck` (a reference ROM
-  and an authored cartridge on two screens) or `hgb-mirror.puck` (a cartridge's
-  live memory bound into world state beside an SDF diorama reading the same
-  state) with `--world <path>.puck`; both are evidence, not gates.
+  boot `src/Puck.World/Assets/worlds/tools/hgb-compare.puck` (an authored
+  cartridge beside a reference machine that boots empty until the runner
+  supplies an image with `screen.insert 0 <path>`) or `hgb-mirror.puck` (a
+  cartridge's live memory bound into world state beside an SDF diorama reading
+  the same state) with `--world <path>.puck`; both are evidence, not gates.
+  No test, tool, or asset names a licensed image, not even as a default path.
 
 ## Route adjacent work
 

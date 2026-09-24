@@ -1,0 +1,54 @@
+{
+  "$schema": "puck.shader.pipeline.v1",
+  "name": "conversion",
+  "resources": [
+    {
+      "name": "palette-region",
+      "kind": "Buffer",
+      "sizeBytes": 2080
+    },
+    {
+      "name": "nv12-region",
+      "kind": "Buffer",
+      "sizeBytes": 1568
+    },
+    {
+      "name": "palette",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    },
+    {
+      "name": "nv12",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    }
+  ],
+  "passes": [
+    {
+      "name": "seed",
+      "source": "seed-discriminating.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [ { "name": "palette-region", "binding": 0 }, { "name": "nv12-region", "binding": 1 } ]
+    },
+    {
+      "name": "convert-palette",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Sources/source-palette.comp.hlsl",
+      "entryPoint": "CSMain",
+      "kind": "Compute",
+      "inputs": [ { "name": "palette-region", "binding": 0 } ],
+      "outputs": [ { "name": "palette", "binding": 1 } ]
+    },
+    {
+      "name": "convert-nv12",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Sources/source-nv12.comp.hlsl",
+      "entryPoint": "CSMain",
+      "kind": "Compute",
+      "inputs": [ { "name": "nv12-region", "binding": 0 } ],
+      "outputs": [ { "name": "nv12", "binding": 1 } ]
+    }
+  ],
+  "outputs": ["palette", "nv12"]
+}

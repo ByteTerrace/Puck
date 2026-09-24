@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Launcher;
@@ -183,12 +184,12 @@ public sealed class SessionLeverLawTests {
         using var fixture = Fixtures.FreshServer();
         var sink = new RecordingClientSink();
         // Actor and target differ: seat 0 drives the lever, seat 1's bar is what it moves.
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
         var subject = GrantSubject.Section(section: WorldSection.Bindings);
         var hold = new WorldGrant(
             Capability: WorldCapability.Mutate,
             Exclusive: false,
-            Principal: actor,
+            Grantee: actor,
             Subject: subject
         );
 
@@ -216,7 +217,7 @@ public sealed class SessionLeverLawTests {
 
         // One grant different: revoking the section refuses the identical lever before any client sees it.
         fixture.Server.Revoke(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: hold
         );
 
@@ -276,6 +277,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.AmbientOcclusion,
             WorldSessionLevers.AmbientOcclusionQuality,
             WorldSessionLevers.BindingBar,
+            WorldSessionLevers.CadenceGate,
             WorldSessionLevers.FarBound,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.RenderScale,
@@ -293,8 +295,9 @@ public sealed class SessionLeverLawTests {
     }
 
     private sealed class RecordingAudioLever : IWorldAudioLever {
-        public void SetMasterVolume(float value) {
-        }
+        public float? SessionMasterVolume { get; private set; }
+
+        public void SetMasterVolume(float value) => SessionMasterVolume = value;
     }
     private sealed class RecordingClientSink : IClientSink {
         public List<WorldSessionLever> Levers { get; } = [];
@@ -308,7 +311,7 @@ public sealed class SessionLeverLawTests {
         public void DeliverSessionLever(WorldSessionLever lever) => Levers.Add(item: lever);
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
         }
-        public void DeliverState(WorldDefinition definition) {
+        public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) {
         }
     }
 }

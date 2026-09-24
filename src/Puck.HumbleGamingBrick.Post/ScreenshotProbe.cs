@@ -32,9 +32,8 @@ internal static class ScreenshotProbe {
         ledgerCase.ExpectedImageCandidates?.FirstOrDefault(predicate: File.Exists);
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedImageCandidates"/> must be non-empty.</param>
-    /// <param name="budget">The case's wall-clock budget.</param>
     /// <returns>The probe outcome, carrying the differing-pixel count and both images on a pixel mismatch.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase, CaseBudget budget) {
+    public static ProbeOutcome Run(LedgerCase ledgerCase) {
         var candidates = ledgerCase.ExpectedImageCandidates;
 
         if (
@@ -68,7 +67,6 @@ internal static class ScreenshotProbe {
         using var liveness = LivenessGate.Attach(cpu: machine.GetRequiredService<Sm83>());
 
         PostMachine.RunFrames(
-            budget: budget,
             frames: ledgerCase.FrameCap,
             instance: machine
         );

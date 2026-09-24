@@ -634,19 +634,19 @@ internal static class OracleOwnershipClaims {
             fromInclusive: 0,
             toExclusive: 32,
             body: _ => {
-            var reader = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: presentation);
-            var value = reader.Generator(symbol: 0);
+                var reader = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: presentation);
+                var value = reader.Generator(symbol: 0);
 
-            if (!reader.AreEqual(
-                left: reader.Multiply(
-                    left: value,
+                if (!reader.AreEqual(
+                    left: reader.Multiply(
+                        left: value,
+                        right: value
+                    ),
                     right: value
-                ),
-                right: value
-            )) {
-                Interlocked.Increment(location: ref failures);
+                )) {
+                    Interlocked.Increment(location: ref failures);
+                }
             }
-        }
         );
 
         if (0 != failures) {
@@ -764,15 +764,6 @@ internal static class OracleOwnershipClaims {
                 values: actual
             )}]"
         );
-    }
-    private static string? RefusedParameter(Action action) {
-        try {
-            action();
-
-            return null;
-        } catch (ArgumentException exception) {
-            return exception.ParamName;
-        }
     }
     private static PresentedAlgebra<ulong, PrimeFieldMaterial>.Element Scale(
         PresentedAlgebra<ulong, PrimeFieldMaterial> algebra,

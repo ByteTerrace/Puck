@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-cost.v1",
-  "world": "games/bowling.world.json",
+  "world": "games/bowling.puck",
   "simulationRateHz": 30,
   "ticks": 600,
   "workUnits": {

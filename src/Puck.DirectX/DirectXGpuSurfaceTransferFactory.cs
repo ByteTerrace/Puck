@@ -3,7 +3,6 @@ using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
-using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
@@ -226,32 +225,13 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         var packedRowBytes = (width * bytesPerPixel);
         var paddedRowPitch = AlignRowPitch(packedRowBytes: packedRowBytes);
         var readbackByteLength = (((ulong)paddedRowPitch) * height);
-        var heapProperties = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK };
-        var bufferDesc = new D3D12_RESOURCE_DESC {
-            DepthOrArraySize = 1,
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
-            Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
-            Height = 1,
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-            MipLevels = 1,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            Width = readbackByteLength,
-        };
 
-        void* buf;
-        var resourceIid = ID3D12Resource.IID_Guid;
-
-        device->CreateCommittedResource(
-            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
-            pDesc: in bufferDesc,
-            pHeapProperties: in heapProperties,
-            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
-            ppvResource: &buf,
-            riidResource: in resourceIid
-        );
-
-        m_readbackBuffer = ((nint)buf);
+        m_readbackBuffer = ((nint)DirectXBuffers.CreateCommitted(
+            device: device,
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK,
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            sizeBytes: readbackByteLength
+        ));
         m_readbackSize = readbackByteLength;
         m_paddedRowPitch = paddedRowPitch;
         m_currentWidth = width;
@@ -295,16 +275,11 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         var cmdList = ((ID3D12GraphicsCommandList*)commandList);
         var sourceResource = ((ID3D12Resource*)sourceImageHandle);
 
-        var toCopySource = new D3D12_RESOURCE_BARRIER {
-            Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        };
-
-        toCopySource.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
-            StateBefore = sourceState,
-            Subresource = 0xFFFFFFFF,
-            pResource = sourceResource,
-        };
+        var toCopySource = DirectXBarriers.Transition(
+            after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
+            before: sourceState,
+            resource: sourceResource
+        );
 
         cmdList->ResourceBarrier(
             NumBarriers: 1,
@@ -342,16 +317,11 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             pSrcBox: ((D3D12_BOX?)null)
         );
 
-        var toShaderResource = new D3D12_RESOURCE_BARRIER {
-            Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        };
-
-        toShaderResource.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            StateAfter = sourceState,
-            StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
-            Subresource = 0xFFFFFFFF,
-            pResource = sourceResource,
-        };
+        var toShaderResource = DirectXBarriers.Transition(
+            after: sourceState,
+            before: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE,
+            resource: sourceResource
+        );
 
         cmdList->ResourceBarrier(
             NumBarriers: 1,

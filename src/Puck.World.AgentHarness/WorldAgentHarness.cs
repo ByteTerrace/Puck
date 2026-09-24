@@ -7,16 +7,39 @@ namespace Puck.World.Agents.Harness;
 
 /// <summary>Builds Microsoft's Agent Framework Harness around a constrained set of typed Puck world tools.</summary>
 public static class WorldAgentHarness {
-    private static string InstructionsFor(WorldAgentBridge bridge) => $"""
-        You are an autonomous participant embodied in Puck body {bridge.BodyIndex} as principal {bridge.Principal.Describe()}.
-        Puck is authoritative. Use only the provided puck_* tools to observe or affect the world.
-        Call puck_get_affordances before your first action and whenever a grant or world reload may have changed what you can do.
+    private const string ActingInstructions = """
         Observe before acting. Prefer short, bounded actions, then observe again before choosing the next action.
         A submission receipt proves only that Puck received an envelope; it never proves the action was authorized or applied.
         Never report an action as applied until a later observation supports that conclusion.
-        Harness approval is human consent to invoke a tool. Puck's grants are the independent authorization boundary and may still refuse it.
-        Do not invent channel names. Use the exact channel vocabulary returned by puck_get_affordances.
         """;
+
+    private static string InstructionsFor(WorldAgentBridge bridge, WorldAgentActions actions) {
+        var identity = $"""
+            You are an autonomous participant embodied in Puck body {bridge.BodyIndex} as principal {bridge.Principal.Describe()}.
+            Puck is authoritative. Use only the provided puck_* tools to observe or affect the world.
+            """;
+
+        return actions switch {
+            WorldAgentActions.None => $"""
+                {identity}
+                This deployment offers no action tools: you can observe the world but not change it.
+                """,
+            WorldAgentActions.RequireApproval => $"""
+                {identity}
+                {ActingInstructions}
+                Harness approval is human consent to invoke a tool. Puck's grants are the independent authorization boundary and may still refuse it.
+                """,
+            WorldAgentActions.Unattended => $"""
+                {identity}
+                {ActingInstructions}
+                """,
+            _ => throw new ArgumentOutOfRangeException(
+                actualValue: actions,
+                message: "Unknown world-agent action mode.",
+                paramName: nameof(actions)
+            ),
+        };
+    }
 
     /// <summary>Creates a Harness agent over an injected model client and an already scoped Puck bridge.</summary>
     /// <param name="chatClient">Any Microsoft.Extensions.AI-compatible model client.</param>
@@ -26,7 +49,8 @@ public static class WorldAgentHarness {
     /// <param name="services">Optional services used to resolve Agent Framework dependencies.</param>
     /// <returns>A stateful Harness agent. Create and retain an <see cref="AgentSession"/> across turns.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="chatClient"/> or <paramref name="bridge"/> is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The iteration limit is not positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The iteration limit is not positive, or the action mode is not a
+    /// defined <see cref="WorldAgentActions"/> value.</exception>
     public static HarnessAgent Create(
         IChatClient chatClient,
         WorldAgentBridge bridge,
@@ -41,7 +65,11 @@ public static class WorldAgentHarness {
             value: options.MaximumIterationsPerRequest,
             paramName: nameof(options.MaximumIterationsPerRequest)
         );
-        var tools = new WorldAgentTools(bridge: bridge).CreateFunctions(requireActionApproval: options.RequireActionApproval);
+        var instructions = InstructionsFor(
+            actions: options.Actions,
+            bridge: bridge
+        );
+        var tools = new WorldAgentTools(bridge: bridge).CreateFunctions(actions: options.Actions);
 
         return new HarnessAgent(
             chatClient: chatClient,
@@ -59,7 +87,7 @@ public static class WorldAgentHarness {
                 DisableOpenTelemetry = !options.EnableOpenTelemetry,
                 DisableTodoProvider = !options.EnablePlanning,
                 DisableWebSearch = true,
-                HarnessInstructions = InstructionsFor(bridge: bridge),
+                HarnessInstructions = instructions,
                 Id = options.Id,
                 MaximumIterationsPerRequest = options.MaximumIterationsPerRequest,
                 Name = options.Name,
@@ -71,18 +99,16 @@ public static class WorldAgentHarness {
     private sealed class WorldAgentTools(WorldAgentBridge bridge) {
         private readonly WorldAgentBridge m_bridge = bridge;
 
-        [Description("Read this body's live channels and the principal's Observe and Drive grants.")]
         private ValueTask<WorldAgentAffordances> GetAffordancesAsync(CancellationToken cancellationToken) =>
             m_bridge.GetAffordancesAsync(cancellationToken: cancellationToken);
-        [Description("Submit a bounded six-axis motion segment.")]
         private ValueTask<WorldAgentActionReceipt> MoveAsync(
-            [Description("Forward/backward value.")] double forward,
-            [Description("Left/right strafe value.")] double strafe,
-            [Description("Up/down value.")] double up,
-            [Description("Yaw/turn value.")] double yaw,
-            [Description("Pitch value.")] double pitch,
-            [Description("Roll value.")] double roll,
-            [Description("Positive simulation duration in seconds.")] double seconds,
+            [Description("MoveAdvance role value: a decimal in its channel's shape range.")] double forward,
+            [Description("MoveStrafe role value: a decimal in its channel's shape range.")] double strafe,
+            [Description("MoveUp role value: a decimal in its channel's shape range.")] double up,
+            [Description("Turn role value: a decimal in its channel's shape range.")] double yaw,
+            [Description("Pitch role value: a decimal in its channel's shape range.")] double pitch,
+            [Description("Roll role value: a decimal in its channel's shape range.")] double roll,
+            [Description("Positive finite simulation duration, in seconds.")] double seconds,
             CancellationToken cancellationToken
         ) => m_bridge.MoveAsync(
             cancellationToken: cancellationToken,
@@ -94,7 +120,6 @@ public static class WorldAgentHarness {
             up: up,
             yaw: yaw
         );
-        [Description("Read one authoritative aspect of the controlled Puck body.")]
         private ValueTask<WorldAgentObservation> ObserveAsync(
             [Description("pose, channels, state, targets, contacts, or properties")]
             string aspect,
@@ -116,11 +141,10 @@ public static class WorldAgentHarness {
                 kind: kind
             );
         }
-        [Description("Submit a named channel press.")]
         private ValueTask<WorldAgentActionReceipt> PressAsync(
             [Description("Exact authored channel name from puck_get_affordances.")] string channel,
-            [Description("Raw channel value.")] double value,
-            [Description("Positive simulation duration, or null for one host step.")] double? holdSeconds,
+            [Description("A decimal in the channel's shape range (Bipolar -1 to 1, Unipolar 0 to 1, Binary 0 or 1); authority applies the shape and grant ceilings.")] double value,
+            [Description("Positive finite simulation duration in seconds, or null for one host step.")] double? holdSeconds,
             CancellationToken cancellationToken
         ) => m_bridge.PressAsync(
             cancellationToken: cancellationToken,
@@ -128,55 +152,58 @@ public static class WorldAgentHarness {
             holdSeconds: holdSeconds,
             value: value
         );
-        private static AIFunction RequiringApprovalIfConfigured(AIFunction function, bool required) => (required
+        private static AIFunction RequiringApprovalIfConfigured(AIFunction function, WorldAgentActions actions) => ((actions == WorldAgentActions.RequireApproval)
             ? new ApprovalRequiredAIFunction(innerFunction: function)
             : function
         );
-        [Description("Clear the controlled body's movement tape and held channels.")]
         private ValueTask<WorldAgentActionReceipt> StopAsync(CancellationToken cancellationToken) =>
             m_bridge.StopAsync(cancellationToken: cancellationToken);
 
-        public IList<AITool> CreateFunctions(bool requireActionApproval) {
+        public IList<AITool> CreateFunctions(WorldAgentActions actions) {
             var observe = AIFunctionFactory.Create(
                 method: ((Func<string, CancellationToken, ValueTask<WorldAgentObservation>>)ObserveAsync),
                 name: "puck_observe_body",
-                description: "Read one authoritative aspect of this body: pose, channels, state, targets, contacts, or properties."
+                description: "Read one authoritative aspect of this body as this principal: pose (position and orientation), channels (resolved channel contributions and values), state (named action-state registers), targets (target registers and the latest designation refusal), contacts (grounded and contact witnesses), or properties (the live property set). Returns the server-composed text and whether authority refused the read. The read runs at the simulation's next closed boundary. An unknown aspect is an error that lists the valid ones."
             );
             var affordances = AIFunctionFactory.Create(
                 method: ((Func<CancellationToken, ValueTask<WorldAgentAffordances>>)GetAffordancesAsync),
                 name: "puck_get_affordances",
-                description: "Read the principal's current Observe/Drive grants and the live world's exact channel vocabulary."
+                description: "Read the principal's current Observe/Drive grants and the live world's exact channel vocabulary. Call it before the first action and again after a grant change or world reload, because channel names and grants can change; the other tools refuse a channel name it does not list."
             );
+
+            if (actions == WorldAgentActions.None) {
+                return [observe, affordances];
+            }
             var move = AIFunctionFactory.Create(
                 method: ((Func<double, double, double, double, double, double, double, CancellationToken, ValueTask<WorldAgentActionReceipt>>)MoveAsync),
                 name: "puck_move",
-                description: "Submit a short, timed six-axis motion segment to the controlled body. Values are forward, strafe, up, yaw, pitch, roll, and positive simulation seconds."
+                description: "Submit a timed six-axis motion segment to the controlled body. Each axis drives the world's channel for one motion role (forward: MoveAdvance, strafe: MoveStrafe, up: MoveUp, yaw: Turn, pitch: Pitch, roll: Roll) and takes a decimal in that channel's shape range as puck_get_affordances reports it (Bipolar -1 to 1, Unipolar 0 to 1, Binary 0 or 1), quantized to Puck fixed-point on submission; zero leaves an axis idle. Authority applies the authored input shape and grant ceilings, so the applied motion can be smaller than requested or refused. seconds is a positive finite simulation duration. Returns a submission receipt only; observe the body's pose afterwards to learn what happened. Non-finite values are refused."
             );
             var press = AIFunctionFactory.Create(
                 method: ((Func<string, double, double?, CancellationToken, ValueTask<WorldAgentActionReceipt>>)PressAsync),
                 name: "puck_press_channel",
-                description: "Submit a press of an exact channel name returned by puck_get_affordances, optionally for a positive simulation duration."
+                description: "Submit a press of one exact channel name returned by puck_get_affordances. value is a decimal in that channel's shape range (Bipolar -1 to 1, Unipolar 0 to 1, Binary 0 or 1), quantized to Puck fixed-point on submission; authority applies the channel's authored shape and grant ceilings. holdSeconds is a positive finite simulation duration, or null for a single host step. Returns a submission receipt only; observe channels or state afterwards to learn the effect. A blank or undeclared channel, or a non-finite value, is refused."
             );
             var stop = AIFunctionFactory.Create(
                 method: ((Func<CancellationToken, ValueTask<WorldAgentActionReceipt>>)StopAsync),
                 name: "puck_stop",
-                description: "Submit a command that clears the body's movement tape and releases every held channel."
+                description: "Submit a stop for the controlled body: clears its queued movement segments and releases every held channel, ending a puck_move segment or held puck_press_channel before its duration runs out. Returns a submission receipt only; authority can still refuse it, so observe pose or channels to confirm."
             );
 
             return [
                 observe,
                 affordances,
                 RequiringApprovalIfConfigured(
-                    function: move,
-                    required: requireActionApproval
+                    actions: actions,
+                    function: move
                 ),
                 RequiringApprovalIfConfigured(
-                    function: press,
-                    required: requireActionApproval
+                    actions: actions,
+                    function: press
                 ),
                 RequiringApprovalIfConfigured(
-                    function: stop,
-                    required: requireActionApproval
+                    actions: actions,
+                    function: stop
                 ),
             ];
         }

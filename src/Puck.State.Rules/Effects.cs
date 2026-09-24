@@ -1,19 +1,20 @@
 namespace Puck.State.Rules;
 
 /// <summary>Restores the newest retained turn of a named undo group.</summary>
-public sealed class RewindTurnEffect(string group) : RuleEffect(describe: $"rewindTurn {group}") {
+public sealed class RewindGroupEffect(string group) : RuleEffect(describe: $"rewindGroup {group}") {
     /// <summary>Gets the stable target group name.</summary>
     public string Group { get; } = group;
 
-    // Bound by group compilation before the compiled document is published. Standalone effect compilation keeps
-    // the full arena journal ceiling as its conservative price.
-    internal long WorkUnits { get; set; } = ArenaCapacity.MaxJournalBytes;
+    // Bound by group compilation, before the compiled document is published, to the work of restoring the group's
+    // widest retained turn (StateArena.EstimateRewindWork). A rewind compiled without its groups has no number, so
+    // no sheet can price it by any other path.
+    internal RuleWork Work { get; set; } = RuleWork.Unmodeled(reason: "rewindGroup is priced by its undo group's compilation");
 
     /// <inheritdoc/>
     public override EffectNeeds Needs => EffectNeeds.ReadsTick;
 
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => WorkUnits;
+    public override RuleWork Cost(IRuleCostContext context) => Work;
 }
 /// <summary>A state cell write — <c>setState</c>/<c>addState</c>, a literal, a live copy, an expression, or (for a
 /// kind=Text row) a text literal.</summary>
@@ -74,13 +75,11 @@ public sealed class WriteEffect : RuleEffect, IStateWriteEffect, IValueSourcedEf
             return;
         }
 
-        into.Add(item: new CellAccess(
-            IsSet: (Write == StateWriteKind.Set),
-            Key: ((KeyFrom is null)
-            ? Key
-            : default),
-            RowOrdinal: RowOrdinal
-        ));
+        CollectWriteAccess(
+            effect: this,
+            into: into,
+            isSet: (Write == StateWriteKind.Set)
+        );
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => (512L + Source.Cost(context: context));
@@ -114,7 +113,7 @@ public sealed class GenerateEffect : RuleEffect, IStateAddressedEffect {
         ));
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => 4_096L;
+    public override RuleWork Cost(IRuleCostContext context) => TransformWork.GeneratorFiring;
 }
 /// <summary>Removes an addressed state cell.</summary>
 public sealed class RemoveStateCellEffect : RuleEffect, IStateAddressedEffect {
@@ -142,17 +141,8 @@ public sealed class RemoveStateCellEffect : RuleEffect, IStateAddressedEffect {
         reference: KeyFrom
     );
     /// <inheritdoc/>
-    public override void CollectWrites(List<CellAccess> into) {
-        ArgumentNullException.ThrowIfNull(argument: into);
-
-        into.Add(item: new CellAccess(
-            IsSet: true,
-            Key: ((KeyFrom is null)
-            ? Key
-            : default),
-            RowOrdinal: RowOrdinal
-        ));
-    }
+    public override void CollectWrites(List<CellAccess> into) =>
+        CollectWriteAccess(effect: this, into: into);
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 512L;
 }
@@ -190,17 +180,8 @@ public sealed class ScheduleStateEffect : RuleEffect, IStateWriteEffect {
         reference: KeyFrom
     );
     /// <inheritdoc/>
-    public override void CollectWrites(List<CellAccess> into) {
-        ArgumentNullException.ThrowIfNull(argument: into);
-
-        into.Add(item: new CellAccess(
-            IsSet: true,
-            Key: ((KeyFrom is null)
-            ? Key
-            : default),
-            RowOrdinal: RowOrdinal
-        ));
-    }
+    public override void CollectWrites(List<CellAccess> into) =>
+        CollectWriteAccess(effect: this, into: into);
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 512L;
 }
@@ -258,12 +239,9 @@ public sealed class TransactionEffect : RuleEffect {
             effects: OnFailure
         );
 
-        // A success preflights the main effects and commits them. A refusal preflights them as far as the member
-        // that refuses, then preflights and commits the failure branch.
-        return (1L + RuleWork.Max(
-            left: (2L * main),
-            right: (main + (2L * failure))
-        ));
+        // A savepoint fires its steps once, in its own scope: a success commits them where they stand, and a refusal
+        // rewinds the steps before it and fires the failure branch once in the firing's scope.
+        return ((1L + main) + failure);
     }
 }
 /// <summary>Pushes one evaluated value into a history row's ring.</summary>
@@ -380,8 +358,7 @@ public sealed class TransformStateEffect : RuleEffect {
     /// <param name="keyRef">The live key indirection the transform's one dynamic key resolves through.</param>
     /// <param name="fromRow">The live row a transfer's source resolves through.</param>
     /// <param name="toRow">The live row a transfer's destination resolves through.</param>
-    /// <param name="value">The compiled value source a push's value resolves through.</param>
-    public TransformStateEffect(StateTransform transform, ArenaTransform arena, string describe, int[] reads, int[] writes, RuleWork cost, CompiledCellRef? keyRef = null, LiveRow? fromRow = null, LiveRow? toRow = null, CompiledValueSource? value = null) : base(describe: describe) {
+    public TransformStateEffect(StateTransform transform, ArenaTransform arena, string describe, int[] reads, int[] writes, RuleWork cost, CompiledCellRef? keyRef = null, LiveRow? fromRow = null, LiveRow? toRow = null) : base(describe: describe) {
         ArgumentNullException.ThrowIfNull(argument: arena);
         ArgumentNullException.ThrowIfNull(argument: reads);
         ArgumentNullException.ThrowIfNull(argument: transform);
@@ -393,7 +370,6 @@ public sealed class TransformStateEffect : RuleEffect {
         Price = cost;
         ToRow = toRow;
         Transform = transform;
-        Value = value;
         m_reads = reads;
         m_writes = writes;
     }
@@ -411,8 +387,6 @@ public sealed class TransformStateEffect : RuleEffect {
     public LiveRow? ToRow { get; }
     /// <summary>Gets the authored transform.</summary>
     public StateTransform Transform { get; }
-    /// <summary>Gets the compiled value source a push's value resolves through, or <see langword="null"/>.</summary>
-    public CompiledValueSource? Value { get; }
 
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
@@ -429,7 +403,6 @@ public sealed class TransformStateEffect : RuleEffect {
             into: into,
             reference: KeyRef
         );
-        Value?.CollectReads(into: into);
         FromRow?.CollectIndexReads(into: into);
         ToRow?.CollectIndexReads(into: into);
     }

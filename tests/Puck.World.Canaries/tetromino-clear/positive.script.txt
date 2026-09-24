@@ -1,0 +1,34 @@
+# The bottom row starts with columns 6 to 9 filled and the next three pieces set to O. The first O moves four
+# columns left and drops into columns 0 and 1, the second moves two left and drops into columns 2 and 3, and the
+# third drops where it appears, over columns 4 and 5, which fills the bottom row: it clears, and the row above drops
+# into its place. The recorded run replays to the same state.
+replay.record tetromino-clear
+world.state.cell.set well 23 65031
+world.state.cell.set bag $value 1
+world.wait 2
+body.press left 1 0.1
+world.wait 5
+body.press left 1 0.1
+world.wait 5
+body.press left 1 0.1
+world.wait 5
+body.press left 1 0.1
+world.wait 5
+world.state.cell.set bag $value 1
+body.press drop 1 0.1
+world.wait 8
+body.press left 1 0.1
+world.wait 5
+body.press left 1 0.1
+world.wait 5
+world.state.cell.set bag $value 1
+body.press drop 1 0.1
+world.wait 8
+body.press drop 1 0.1
+world.wait 8
+world.state locked
+world.state lines
+world.state well 23
+replay.stop
+replay.verify tetromino-clear
+wire.errors

@@ -3,7 +3,7 @@ using Puck.World.Authoring;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // Structural only: station uniqueness, tick ordering/uniqueness within a station, and a parseable palette. Which
+    // Structural only: station uniqueness and spelling, tick ordering/uniqueness within a station, and a parseable palette. Which
     // camera a station's ticks actually show is a document DECISION (state + rules + a camera program's select op),
     // never checked here — a station name is a label, not a reference.
     private static void ValidateCaptures(WorldDefinition definition, List<string> errors) {
@@ -11,8 +11,11 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(value: captures.Directory)) {
-            errors.Add(item: "captures.directory is required.");
+        if (
+            (captures.Directory is not null) &&
+            string.IsNullOrWhiteSpace(value: captures.Directory)
+        ) {
+            errors.Add(item: "captures.directory is blank; omit it to write captures under the run's state directory.");
         }
 
         var rows = (captures.Rows ?? []);
@@ -22,6 +25,9 @@ public static partial class WorldDefinitionValidator {
         }
 
         var stations = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // A station names its frame files, and a case-insensitive file system (Windows, macOS) writes two stations
+        // that differ only in case to the same file, so a station is unique ignoring case.
+        var stationFiles = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
@@ -35,6 +41,20 @@ public static partial class WorldDefinitionValidator {
 
             if (!stations.Add(item: row.Station.Value)) {
                 errors.Add(item: $"{path}.station '{row.Station}' is declared more than once.");
+            } else if (!stationFiles.TryAdd(
+                key: row.Station.Value,
+                value: row.Station.Value
+            )) {
+                errors.Add(item: $"{path}.station '{row.Station}' differs from station '{stationFiles[row.Station.Value]}' only in case, and both would write the same capture files on a case-insensitive file system.");
+            }
+
+            // A station is the first part of each capture's generated file name (WorldCaptureRow.CaptureName), which
+            // cannot join a part carrying the file joiner.
+            if (!GeneratedName.TryValidateAuthoredFile(
+                name: row.Station.Value,
+                reason: out var stationReason
+            )) {
+                errors.Add(item: $"{path}.station {stationReason}.");
             }
 
             ValidateCaptureTicks(

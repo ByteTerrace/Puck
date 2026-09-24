@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using System.Text;
 
@@ -60,7 +61,7 @@ public sealed class IdentityProjectionWireLawTests {
             ]),
             GrantsRaw = [
                 new WorldGrant(
-                Principal: WorldPrincipal.Document(id: PrivateChatPeer),
+                Grantee: Grantee.Document(id: PrivateChatPeer),
                 Capability: WorldCapability.Mutate,
                 Subject: GrantSubject.Section(section: WorldSection.State),
                 Exclusive: false
@@ -106,7 +107,7 @@ public sealed class IdentityProjectionWireLawTests {
             PeerAdmission: true,
             Members: [
                 new WorldTransferReservationMember(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     PreferredSlot: 0,
                     Identity: identity,
                     Source: default,
@@ -171,7 +172,7 @@ public sealed class IdentityProjectionWireLawTests {
             PeerAdmission: true,
             Members: [
                 new WorldTransferReservationMember(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     PreferredSlot: 0,
                     Identity: identity,
                     Source: default,

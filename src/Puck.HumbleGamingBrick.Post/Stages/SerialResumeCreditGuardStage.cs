@@ -33,7 +33,7 @@ internal sealed class SerialResumeCreditGuardStage : IPostStage<PostContext> {
         );
         // Larger than any freshly booted machine's cycle count could ever satisfy — the token does not fit either
         // machine, the signature a reordered/substituted or otherwise corrupted token leaves behind.
-        var bogusToken = new SerialLinkResumeToken(
+        var bogusToken = new LinkResumeToken(
             FirstCredit: (ulong.MaxValue / 2),
             SecondCredit: 0UL
         );

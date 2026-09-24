@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Xunit;
@@ -19,8 +20,6 @@ public sealed class WorldUprightFactLawTests {
     private const string AbsentRow = "absent";
     private const string UprightRow = "upright";
 
-    private static long Cell(WorldFixture fixture, string row) =>
-        fixture.Server.Definition.State.Single(predicate: r => (r.Name.Value == row)).Cells!.Single().Value.Raw;
     // A flat floor plus a rigid-kit seat body — the same rigid shape TabletopBoardLawTests rides, trimmed to just
     // what an orientation read needs (no board, no tabletop rules): a body whose FixedOrientation persists exactly
     // as posed rather than being re-aligned to ground every tick the way a grounded walker's would.
@@ -71,11 +70,13 @@ public sealed class WorldUprightFactLawTests {
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(
+            GravityRaw = source.Gravity with {
+                Uniform = new DocumentVector3(value: new Vector3(
             x: 0f,
             y: -9.8f,
             z: 0f
-        )) },
+        )),
+            },
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 BodyContact = WorldBodyContactMode.Solid,
                 Collider = new WorldCollider.Sphere(Radius: 0.15f),
@@ -129,7 +130,7 @@ public sealed class WorldUprightFactLawTests {
     [Fact]
     public void AnUprightBodyReadsOneAndAKnockedOverBodyReadsNearZero_ControlAnAbsentBodyReadsTheSentinel() {
         using var fixture = Fixtures.FreshServer(definition: RigidBodyDocument());
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -152,9 +153,7 @@ public sealed class WorldUprightFactLawTests {
 
         Assert.Equal(
             expected: FixedQ4816.One.Value,
-            actual: Cell(
-                fixture: fixture,
-                row: UprightRow
+            actual: fixture.SlotValue(row: UprightRow
             )
         );
         // Control: a body reference naming no live body (body 3, a declared but never-joined slot) reads the SAME
@@ -162,9 +161,7 @@ public sealed class WorldUprightFactLawTests {
         // coincidental zero.
         Assert.Equal(
             expected: FixedQ4816.One.Value,
-            actual: Cell(
-                fixture: fixture,
-                row: AbsentRow
+            actual: fixture.SlotValue(row: AbsentRow
             )
         );
 
@@ -180,9 +177,7 @@ public sealed class WorldUprightFactLawTests {
         );
         fixture.Step();
 
-        var tipped = (((float)Cell(
-            fixture: fixture,
-            row: UprightRow
+        var tipped = (((float)fixture.SlotValue(row: UprightRow
         )) / 65536f);
 
         Assert.InRange(
@@ -192,9 +187,7 @@ public sealed class WorldUprightFactLawTests {
         );
         Assert.Equal(
             expected: FixedQ4816.One.Value,
-            actual: Cell(
-                fixture: fixture,
-                row: AbsentRow
+            actual: fixture.SlotValue(row: AbsentRow
             )
         );
     }

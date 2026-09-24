@@ -1,3 +1,4 @@
+using Puck.Networking;
 namespace Puck.World.Server;
 
 public sealed partial class WorldExtensionHost {
@@ -14,15 +15,19 @@ public sealed partial class WorldExtensionHost {
 
     private async Task WorkAsync() {
         while (!m_stop.IsCancellationRequested) {
-            try { await RunOnceAsync(cancellationToken: m_stop.Token).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (m_stop.IsCancellationRequested) { return; } catch (Exception exception) { Volatile.Write(
+            try { await RunOnceAsync(cancellationToken: m_stop.Token).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (m_stop.IsCancellationRequested) { return; } catch (Exception exception) {
+                Volatile.Write(
                 location: ref m_lastFailure,
                 value: exception.GetType().Name
-            ); }
-            try { await Task.Delay(
+            );
+            }
+            try {
+                await Task.Delay(
                 m_options.PollInterval,
                 m_time,
                 m_stop.Token
-            ).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (m_stop.IsCancellationRequested) { return; }
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (OperationCanceledException) when (m_stop.IsCancellationRequested) { return; }
         }
     }
 
@@ -35,10 +40,12 @@ public sealed partial class WorldExtensionHost {
         try {
             WorldExtensionClient[] clients;
 
-            lock (m_gate) { ObjectDisposedException.ThrowIf(
+            lock (m_gate) {
+                ObjectDisposedException.ThrowIf(
                 condition: m_disposed,
                 instance: this
-            ); clients = m_clients.Values.ToArray(); }
+            ); clients = m_clients.Values.ToArray();
+            }
             var entries = await m_journal.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             var now = m_time.GetUtcNow();
             var ready = new List<(WorldExtensionClient Client, WorldExternalOperationEntry Entry)>();
@@ -94,14 +101,11 @@ public sealed partial class WorldExtensionHost {
     }
 
     private async Task ProcessAsync(WorldExtensionClient client, WorldExternalOperationEntry entry, CancellationToken cancellationToken) {
-        using var timeout = new CancellationTokenSource(
-            delay: m_options.OperationTimeout,
+        using var linked = new OperationDeadline(
+            caller: cancellationToken,
+            lifetime: m_stop.Token,
+            timeout: m_options.OperationTimeout,
             timeProvider: m_time
-        );
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            timeout.Token,
-            m_stop.Token
         );
 
         try {
@@ -116,11 +120,13 @@ public sealed partial class WorldExtensionHost {
                 ).ConfigureAwait(continueOnCapturedContext: false)
             );
             // Concurrent network calls finish independently; scheduling state is shared only under this lock.
-            lock (m_due) { m_due[entry.Operation.Id] = NextPoll(
+            lock (m_due) {
+                m_due[entry.Operation.Id] = NextPoll(
                 client.Operations[entry.Operation.Binding],
                 result,
                 m_time.GetUtcNow()
-            ); }
+            );
+            }
         } catch (Exception exception) when (((exception is not OperationCanceledException) || !cancellationToken.IsCancellationRequested)) {
             Volatile.Write(
                 location: ref m_lastFailure,

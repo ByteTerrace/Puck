@@ -87,31 +87,19 @@ public sealed class MotionShapingValidationLawTests {
             userMessage: dynamicsReason
         );
     }
-    [Fact]
-    public void DanglingDynamicsNameRefusesWhileResolvingPasses() {
+    [InlineData("missing", "'missing' names no dynamics row.")]
+    [InlineData("", ".dynamics is empty — name a dynamics row or omit it.")]
+    [Theory]
+    public void AShapingDynamicsNameThatResolvesNoRowRefusesWhileANamedRowPasses(string dynamics, string refusal) {
         var document = WithDynamics(rows: [Chase]);
         var kit = document.Kits[0];
         var motion = kit.Motion;
         var row = motion.Shaping![0];
 
-        var denied = document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "missing" }] } }] };
-        var admitted = document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "chase" }] } }] };
-
-        Assert.False(condition: TryValidate(
-            definition: denied,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "'missing' names no dynamics row."
-        );
-        Assert.True(
-            condition: TryValidate(
-                definition: admitted,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
+        Laws.RefusalWithControl(
+            control: document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "chase" }] } }] },
+            denied: document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = dynamics }] } }] },
+            needle: refusal
         );
     }
     [Fact]
@@ -133,33 +121,6 @@ public sealed class MotionShapingValidationLawTests {
             actualString: deniedReason,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "cannot compile — the world authors no simulation rate (simulation.rateHz)"
-        );
-        Assert.True(
-            condition: TryValidate(
-                definition: admitted,
-                reason: out var controlReason
-            ),
-            userMessage: controlReason
-        );
-    }
-    [Fact]
-    public void EmptyDynamicsNameRefusesWhileANamedRowPasses() {
-        var document = WithDynamics(rows: [Chase]);
-        var kit = document.Kits[0];
-        var motion = kit.Motion;
-        var row = motion.Shaping![0];
-
-        var denied = document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "" }] } }] };
-        var admitted = document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "chase" }] } }] };
-
-        Assert.False(condition: TryValidate(
-            definition: denied,
-            reason: out var deniedReason
-        ));
-        Assert.Contains(
-            actualString: deniedReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: ".dynamics is empty — name a dynamics row or omit it."
         );
         Assert.True(
             condition: TryValidate(
@@ -210,10 +171,13 @@ public sealed class MotionShapingValidationLawTests {
         var kit = document.Kits[0];
         var motion = kit.Motion;
         var row = motion.Shaping![0];
-        var clean = row with { Along = new WorldShapingAlong(
+        var clean = row with {
+            Along = new WorldShapingAlong(
             Engage: 8f,
             Release: 8f
-        ), Across = null };
+        ),
+            Across = null,
+        };
         var withReversalRate = clean with { Along = clean.Along! with { ReversalRate = 0f } };
         var withBackwardSpeed = clean with { Along = clean.Along! with { BackwardSpeed = 0f } };
 

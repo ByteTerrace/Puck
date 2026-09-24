@@ -6,9 +6,9 @@ namespace Puck.Networking.Tests.Peers;
 public sealed class PeerStreamTests {
     [Fact]
     public async Task ConcurrentWritesKeepEverySegmentOfEachWriteTogether() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: ct);
         await using var ownerA = a; await using var ownerB = b;
         await using var sender = new PeerStream(link: ab); await using var receiver = new PeerStream(link: ba);
         var first = new byte[(3 * PeerWireProtocol.MaxMessagePayloadBytes)];
@@ -24,17 +24,17 @@ public sealed class PeerStreamTests {
         var actual = new byte[(first.Length + second.Length)];
         var read = receiver.ReadExactlyAsync(
             buffer: actual,
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         ).AsTask();
 
         await Task.WhenAll(
             sender.WriteAsync(
                 buffer: first,
-                cancellationToken: deadline.Token
+                cancellationToken: ct
             ).AsTask(),
             sender.WriteAsync(
                 buffer: second,
-                cancellationToken: deadline.Token
+                cancellationToken: ct
             ).AsTask()
         );
         await read;
@@ -46,14 +46,14 @@ public sealed class PeerStreamTests {
     }
     [Fact]
     public async Task DisposalUnblocksThePendingRead() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: ct);
         await using var ownerA = a; await using var ownerB = b;
         await using var sender = new PeerStream(link: ab); await using var receiver = new PeerStream(link: ba);
         var read = receiver.ReadAsync(
             buffer: new byte[1],
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         ).AsTask();
 
         Assert.False(condition: read.IsCompleted);
@@ -64,7 +64,7 @@ public sealed class PeerStreamTests {
         );
         await Assert.ThrowsAsync<ObjectDisposedException>(testCode: () => receiver.ReadAsync(
             buffer: new byte[1],
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         ).AsTask());
     }
     [InlineData(1)]
@@ -73,9 +73,9 @@ public sealed class PeerStreamTests {
     [InlineData(((8 * 1024) * 1024))]
     [Theory]
     public async Task SegmentedStreamPreservesEveryByteAcrossTheBoundedMessageQueue(int size) {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: ct);
         await using var ownerA = a; await using var ownerB = b;
         await using var sender = new PeerStream(link: ab); await using var receiver = new PeerStream(link: ba);
         var expected = new byte[size];
@@ -84,35 +84,35 @@ public sealed class PeerStreamTests {
         var actual = new byte[size];
         var read = receiver.ReadExactlyAsync(
             buffer: actual,
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         ).AsTask();
 
         await sender.WriteAsync(
             buffer: expected,
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         await read;
         Assert.Equal(
             actual: actual,
             expected: expected
         );
-        await sender.CompleteWritesAsync(ct: deadline.Token);
+        await sender.CompleteWritesAsync(ct: ct);
         Assert.Equal(
             0,
             await receiver.ReadAsync(
                 buffer: new byte[1],
-                cancellationToken: deadline.Token
+                cancellationToken: ct
             )
         );
         await receiver.WriteAsync(
             buffer: new byte[] { 42 },
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         var reply = new byte[1];
 
         await sender.ReadExactlyAsync(
             buffer: reply,
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         Assert.Equal(
             42,
@@ -120,14 +120,14 @@ public sealed class PeerStreamTests {
         );
         await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => sender.WriteAsync(
             buffer: new byte[] { 1 },
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         ).AsTask());
     }
     [Fact]
     public async Task SmallReadsCrossMessageBoundariesAndCancelledReadLosesNoBytes() {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: ct);
         await using var ownerA = a; await using var ownerB = b;
         await using var sender = new PeerStream(link: ab); await using var receiver = new PeerStream(link: ba);
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
@@ -137,11 +137,11 @@ public sealed class PeerStreamTests {
         ).AsTask());
         await sender.WriteAsync(
             buffer: new byte[] { 1, 2, 3 },
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         await sender.WriteAsync(
             buffer: new byte[] { 4, 5 },
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         var values = new byte[5];
 
@@ -153,7 +153,7 @@ public sealed class PeerStreamTests {
                         length: 1,
                         start: i
                     ),
-                    cancellationToken: deadline.Token
+                    cancellationToken: ct
                 )
             );
         }
@@ -163,11 +163,11 @@ public sealed class PeerStreamTests {
         );
         await sender.WriteAsync(
             buffer: ReadOnlyMemory<byte>.Empty,
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         await sender.WriteAsync(
             buffer: new byte[] { 6 },
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         Assert.Equal(
             1,
@@ -176,7 +176,7 @@ public sealed class PeerStreamTests {
                     length: 1,
                     start: 0
                 ),
-                cancellationToken: deadline.Token
+                cancellationToken: ct
             )
         );
         Assert.Equal(
@@ -188,26 +188,26 @@ public sealed class PeerStreamTests {
     [InlineData(true)]
     [Theory]
     public async Task TerminalDrainWaitsPastHalfCloseForTheFinalReply(bool cancelDrain) {
-        using var deadline = Laws.SocketDeadline();
+        var ct = TestContext.Current.CancellationToken;
 
-        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: deadline.Token);
+        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(ct: ct);
         await using var ownerA = a; await using var ownerB = b;
         await using var client = new PeerStream(link: ab); await using var server = new PeerStream(link: ba);
 
-        await client.CompleteWritesAsync(ct: deadline.Token);
+        await client.CompleteWritesAsync(ct: ct);
         Assert.Equal(
             0,
             await server.ReadAsync(
                 buffer: new byte[1],
-                cancellationToken: deadline.Token
+                cancellationToken: ct
             )
         );
 
         await server.WriteAsync(
             buffer: new byte[] { 42 },
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
-        using var drainLifetime = CancellationTokenSource.CreateLinkedTokenSource(token: deadline.Token);
+        using var drainLifetime = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
         var draining = StreamDrain.UntilClosedAsync(
             server,
             drainLifetime.Token
@@ -221,7 +221,7 @@ public sealed class PeerStreamTests {
 
         await client.ReadExactlyAsync(
             buffer: reply,
-            cancellationToken: deadline.Token
+            cancellationToken: ct
         );
         Assert.Equal(
             42,
@@ -229,6 +229,6 @@ public sealed class PeerStreamTests {
         );
 
         if (cancelDrain) { drainLifetime.Cancel(); } else { await client.DisposeAsync(); }
-        await draining.WaitAsync(cancellationToken: deadline.Token);
+        await draining.WaitAsync(cancellationToken: ct);
     }
 }

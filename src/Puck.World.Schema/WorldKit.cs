@@ -183,6 +183,7 @@ public readonly record struct FixedWorldKit(
 
         return slots.ToArray();
     }
+
     private static CompiledActionStateEnvelope? CompileEnvelope(ActionStateSlot state) {
         long Compile(float value) => ((state.Kind == ActionStateKind.Counter)
             ? FixedQ4816.FromDouble(value: value).Value

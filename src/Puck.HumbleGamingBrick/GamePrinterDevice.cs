@@ -393,41 +393,31 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
         }
     }
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_state = ((ParseState)reader.ReadByte());
-        m_bitsReceived = reader.ReadByte();
-        m_byteBeingReceived = reader.ReadByte();
-        m_commandId = reader.ReadByte();
-        m_commandLength = reader.ReadInt32();
-        m_compression = reader.ReadBoolean();
-        m_compressionRunLength = reader.ReadByte();
-        m_compressionRunIsCompressed = reader.ReadBoolean();
-        m_checksum = reader.ReadUInt16();
-        m_imageOffset = reader.ReadInt32();
-        m_lengthLeft = reader.ReadUInt16();
-        m_remainingBusyCycles = reader.ReadUInt64();
-        m_sendByte = reader.ReadByte();
-        m_status = reader.ReadByte();
-        reader.ReadBlock<byte>(destination: m_commandData);
-        reader.ReadBlock<byte>(destination: m_image);
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: ((byte)m_state));
-        writer.WriteByte(value: m_bitsReceived);
-        writer.WriteByte(value: m_byteBeingReceived);
-        writer.WriteByte(value: m_commandId);
-        writer.WriteInt32(value: m_commandLength);
-        writer.WriteBoolean(value: m_compression);
-        writer.WriteByte(value: m_compressionRunLength);
-        writer.WriteBoolean(value: m_compressionRunIsCompressed);
-        writer.WriteUInt16(value: m_checksum);
-        writer.WriteInt32(value: m_imageOffset);
-        writer.WriteUInt16(value: m_lengthLeft);
-        writer.WriteUInt64(value: m_remainingBusyCycles);
-        writer.WriteByte(value: m_sendByte);
-        writer.WriteByte(value: m_status);
-        writer.WriteBlock<byte>(values: m_commandData);
-        writer.WriteBlock<byte>(values: m_image);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        var state = ((byte)m_state);
+
+        transfer.Byte(value: ref state);
+        m_state = ((ParseState)state);
+        transfer.Byte(value: ref m_bitsReceived);
+        transfer.Byte(value: ref m_byteBeingReceived);
+        transfer.Byte(value: ref m_commandId);
+        transfer.Int32(value: ref m_commandLength);
+        transfer.Boolean(value: ref m_compression);
+        transfer.Byte(value: ref m_compressionRunLength);
+        transfer.Boolean(value: ref m_compressionRunIsCompressed);
+        transfer.UInt16(value: ref m_checksum);
+        transfer.Int32(value: ref m_imageOffset);
+        transfer.UInt16(value: ref m_lengthLeft);
+        transfer.UInt64(value: ref m_remainingBusyCycles);
+        transfer.Byte(value: ref m_sendByte);
+        transfer.Byte(value: ref m_status);
+        transfer.Block(values: m_commandData);
+        transfer.Block(values: m_image);
     }
 }

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
 
@@ -44,7 +45,7 @@ public interface IWorldEmbodiedSeats {
     /// <paramref name="tick"/>.</summary>
     void SubmitAuthorityIntents(WorldAuthorityEndpoint endpoint, ulong tick);
     /// <summary>Wires the roster's one leave-transaction door.</summary>
-    void ConfigureLeave(Func<int, WorldPrincipal, bool> leave);
+    void ConfigureLeave(Func<int, Principal, bool> leave);
 }
 /// <summary>The inert <see cref="IWorldEmbodiedSeats"/> a host with no local seats passes — every member no-op or
 /// answering the empty/absent case.</summary>
@@ -58,7 +59,7 @@ public static class WorldEmbodiedSeats {
         public void AdvanceSeatViews(float deltaSeconds) { }
         public void ClearAnalog() { }
         public void ClearHeld(int slot) { }
-        public void ConfigureLeave(Func<int, WorldPrincipal, bool> leave) { }
+        public void ConfigureLeave(Func<int, Principal, bool> leave) { }
         public bool IsOccupied(int slot) => false;
         public bool OccupySeat(int slot, WorldIdentity? profile) => false;
         public void PublishRoute(int slot, WorldAuthorityEndpoint endpoint, in WorldEntityAddress entity) { }

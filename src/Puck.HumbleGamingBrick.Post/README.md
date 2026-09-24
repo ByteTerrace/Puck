@@ -18,8 +18,10 @@ measures every row.
 The xUnit gate launches the already-built battery directly from the test output
 directory and drains both output streams while it runs. Cancelling that test
 terminates and reaps the child process, so an interrupted run cannot leave an
-orphaned battery consuming CPU. A two-minute outer failure deadline also bounds
-a deadlocked self-contained stage; ordinary successful gate runs take seconds.
+orphaned battery consuming CPU. The test sets no deadline of its own: a loaded
+machine only makes the run slower, and a deadlocked stage is caught by the
+battery's own [hang guard](../Puck.GamingBricks.Post/README.md#the-hang-guard),
+which exits 2 naming the stage.
 
 The queued-memory probe preserves both full-frame replay schedules and all 400
 concurrent poke/peek round-trips. Its concurrency-only producer uses exact 480 Hz
@@ -85,10 +87,10 @@ substrate probes explicitly select fast startup so their timing budgets measure
 the cartridge and host behavior, not startup animation. Bundled cold startup
 has its own [`bundled-firmware` stage](#the-authored-boot-rom).
 
-Every case has a wall-clock budget derived from its frame cap—real time for
-the frames plus a fixed allowance—and a case that exceeds it is an `error`
-row, which fails the stage and blocks an accept, rather than a hung run.
-Cases inside a stage run on every processor at once; the
+Every case's work is bounded by its frame cap, never by elapsed time, so a
+slow host changes how long a case takes and never its row. Cases inside a stage run on every processor at once, alongside the other
+concurrent stages; only `trio-lockstep`, `throughput`, and `zero-alloc`, whose
+results measure the processor, run alone after them. The
 `ledger-parallel-equivalence` stage proves the measured rows do not depend on
 that.
 
@@ -258,7 +260,7 @@ manifest; they are named per run with `--link-rom` and `--trade-rom`.
 
 ## The authored boot ROM
 
-Puck's [firmware authoring contract](../Puck.HumbleGamingBrick.Forge/README.md#the-authored-boot-roms)
+Puck's [firmware authoring contract](../../docs/emulation/hgb/forge.md#the-authored-boot-roms)
 describes the native artwork, cartridge compatibility, and exact handoff.
 The `bundled-firmware` Tier-A stage checks all 14 packaged images against their
 generator and proves each retrieval returns a private copy. For every revision
@@ -501,7 +503,7 @@ Pass `--display` to only recompile `Core/display.c` when the rest of `Core` is
 already built. Note that `trace_main.c` sits outside `Core/`, so a change there
 needs its own compile before the link.
 
-Historical per-dot investigations used additional `Core/display.c`
+Per-dot investigations can add further `Core/display.c`
 instrumentation in that external checkout: pushed pixels, fetcher steps,
 STAT changes and interrupts, and LCDC/WX/palette/scroll writes stamped with
 the exact master T-cycle. This instrumentation is not shipped or configured

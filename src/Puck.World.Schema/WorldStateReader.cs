@@ -199,18 +199,16 @@ public static class WorldStateReader {
 
         return resolved;
     }
+
     // The row's kind decides which of a cell record's sibling payloads is the live one, so the carrier is composed
     // here rather than at each reader: a caller switching on CellValue.Kind cannot reach a payload the row does not
     // declare, and an absent cell is the carrier holding no case rather than a neutral zero.
     private static CellValue Compose(WorldStateRow row, string? key, long? rawValue, string? text) => row.Kind switch {
-        CellKind.Int => ((rawValue is { } number)
-            ? CellValue.Int(value: number)
-            : default),
-        CellKind.Fixed => ((rawValue is { } bits)
-            ? CellValue.Fixed(rawBits: bits)
-            : default),
-        CellKind.Bool => ((rawValue is { } flag)
-            ? CellValue.Bool(value: (flag != 0L))
+        CellKind.Int or CellKind.Fixed or CellKind.Bool => ((rawValue is { } raw)
+            ? CellValue.FromNumber(
+                kind: row.Kind,
+                raw: raw
+            )
             : default),
         // Presence is the raw read's, not the payload's: a scalar reader answers a raw value for every non-vector
         // cell that exists, and a text cell holding no string is present with a null payload, not absent.
@@ -267,13 +265,13 @@ public static class WorldStateReader {
     ) {
         var resolved = TryRead(
             definition: definition,
+            engineTick: engineTick,
             key: key,
             rawValue: out var rawValue,
             row: out row,
             rowName: rowName,
             text: out var text,
-            tick: tick,
-            engineTick: engineTick
+            tick: tick
         );
 
         value = (resolved
@@ -310,13 +308,13 @@ public static class WorldStateReader {
     ) {
         var resolved = TryReadEased(
             definition: definition,
+            engineTick: engineTick,
             key: key,
             rawValue: out var rawValue,
             row: out row,
             rowName: rowName,
             text: out var text,
-            tick: tick,
-            engineTick: engineTick
+            tick: tick
         );
 
         value = (resolved

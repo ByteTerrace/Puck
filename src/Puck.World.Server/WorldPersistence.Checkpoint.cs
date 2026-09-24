@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -10,7 +11,7 @@ public sealed partial class WorldPersistence {
     // needed). The replay is ALL-OR-NOTHING: any entry failing any gate refuses the undo outright, names the failing
     // entry's index and reason on stderr, and installs NOTHING — a validated prefix is not a validated document, and no
     // general admissibility invariant lets a partially-replayed journal stand in for one that fully replayed.
-    internal bool ApplyUndo(int count, WorldPrincipal principal, int connectionId, long correlationId) {
+    internal bool ApplyUndo(int count, Principal principal, int connectionId, long correlationId) {
         // Journal control is Mutate territory over every section (a replay can rebuild any).
         if (!Host.GrantTable.AllowsAllSections(
             capability: WorldCapability.Mutate,
@@ -163,7 +164,7 @@ public sealed partial class WorldPersistence {
         // succeeds, mirroring TryApplyMutation's identical gate-then-commit shape.
         IWorldAddonPreparedPlan? addonPlan = null;
         int[]? newTickWrittenEntity = null;
-        WorldPrincipal[]? newTickWrittenPrincipal = null;
+        Principal[]? newTickWrittenPrincipal = null;
         bool[]? newTickCollided = null;
         var addonPlanCommitted = false;
         IWorldMachinePreparedPlan? machinePlan = null;
@@ -317,7 +318,7 @@ public sealed partial class WorldPersistence {
     /// <param name="principal">The acting identity the undo is checked against.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    internal void EnqueueUndo(int count, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
+    internal void EnqueueUndo(int count, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
         Host.Document.Pending.Enqueue(item: new WorldPendingOp.Undo(
             ConnectionId: connectionId,
             CorrelationId: correlationId,
@@ -489,7 +490,7 @@ public sealed partial class WorldPersistence {
 
         server.Adjacencies = adjacencies;
 
-        server.Persistence.RestoreCheckpointCore(checkpoint: checkpoint, admission: admission);
+        server.Persistence.RestoreCheckpointCore(admission: admission, checkpoint: checkpoint);
 
         return (server, population);
     }
@@ -584,7 +585,7 @@ public sealed partial class WorldPersistence {
             }
 
             var server = new WorldServerCheckpoint(
-                Undo: (Host.RuleHost.Groups.Any(group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
+                Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 ArenaKeys: [.. Host.Arena.Keys.Names.OrderBy(
                     keySelector: static name => name.Value,
                     comparer: StringComparer.Ordinal
@@ -641,8 +642,9 @@ public sealed partial class WorldPersistence {
     internal void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
-            utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
-        RestoreCheckpointCore(checkpoint: checkpoint, admission: admission);
+            documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
+
+        RestoreCheckpointCore(admission: admission, checkpoint: checkpoint);
     }
 
     private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission) {
@@ -790,7 +792,7 @@ public sealed partial class WorldPersistence {
             foreach (var row in Host.GrantTable.Rows(principal: Host.Population.PeerPrincipal(index: index))) {
                 Host.GrantTable.ApplyRevoke(
                     grant: row,
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 );
             }
         }
@@ -808,7 +810,7 @@ public sealed partial class WorldPersistence {
         )) {
             throw new InvalidOperationException(message: $"the checkpoint's arena keys do not survive restored rule compilation: {arenaKeyReason}");
         }
-        if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot([])), out var undoReason)) {
+        if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
         }
         RestoreLatch(
@@ -829,6 +831,7 @@ public sealed partial class WorldPersistence {
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
     }
+
     /// <summary>Re-applies one mutation from a hosted row's persisted journal tail — the mutations recorded after
     /// the checkpoint <see cref="FromCheckpoint"/> restored from, replayed in order to bring the server current. Runs
     /// the same admission/compose/validate path <c>TryApplyMutation</c> takes for any live mutation; a tail entry was

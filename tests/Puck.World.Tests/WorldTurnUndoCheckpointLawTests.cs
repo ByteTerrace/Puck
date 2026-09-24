@@ -37,17 +37,17 @@ public sealed class WorldTurnUndoCheckpointLawTests {
         original.Step();
         var checkpoint = Capture(fixture: original);
 
-        Assert.NotNull(Assert.Single(checkpoint.Server.Undo!.Groups).Pending);
+        Assert.NotNull(@object: Assert.Single(collection: checkpoint.Server.Undo!.Groups).Pending);
         restored.Server.RestoreCheckpoint(checkpoint: checkpoint);
         Assert.Equal(original.Server.Arena.ComputeHash(), restored.Server.Arena.ComputeHash());
         original.Step();
         restored.Step();
         Assert.Equal(original.Server.Arena.ComputeHash(), restored.Server.Arena.ComputeHash());
-        Assert.True(original.Server.Arena.TryRewindTurn("turn", out var reason), reason);
-        Assert.True(restored.Server.Arena.TryRewindTurn("turn", out reason), reason);
+        Assert.True(condition: original.Server.Arena.TryRewindGroup(group: "turn", reason: out var reason), userMessage: reason);
+        Assert.True(condition: restored.Server.Arena.TryRewindGroup(group: "turn", reason: out reason), userMessage: reason);
         Assert.Equal(original.Server.Arena.ComputeHash(), restored.Server.Arena.ComputeHash());
-        Assert.False(restored.Server.Arena.TryRewindTurn("turn", out reason));
-        Assert.Contains("no retained turn", reason, StringComparison.Ordinal);
+        Assert.False(condition: restored.Server.Arena.TryRewindGroup(group: "turn", reason: out reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "no retained turn");
     }
     [Fact]
     public void EightTurnsAndWireRestoreRewindToInitialArenaHash() {
@@ -57,10 +57,10 @@ public sealed class WorldTurnUndoCheckpointLawTests {
         for (var tick = 0; (tick < 16); tick++) { fixture.Step(); }
         var checkpoint = Capture(fixture: fixture);
 
-        Assert.Equal(8, Assert.Single(checkpoint.Server.Undo!.Groups).Segments.Count);
+        Assert.Equal(8, Assert.Single(collection: checkpoint.Server.Undo!.Groups).Segments.Count);
         fixture.Server.RestoreCheckpoint(checkpoint: checkpoint);
         for (var turn = 0; (turn < 8); turn++) {
-            Assert.True(fixture.Server.Arena.TryRewindTurn("turn", out var reason), reason);
+            Assert.True(condition: fixture.Server.Arena.TryRewindGroup(group: "turn", reason: out var reason), userMessage: reason);
         }
         Assert.Equal(before, fixture.Server.Arena.ComputeHash());
     }
@@ -71,15 +71,15 @@ public sealed class WorldTurnUndoCheckpointLawTests {
         fixture.Step();
         fixture.Step();
         var checkpoint = Capture(fixture: fixture);
-        var group = Assert.Single(checkpoint.Server.Undo!.Groups);
-        var segment = Assert.Single(group.Segments);
+        var group = Assert.Single(collection: checkpoint.Server.Undo!.Groups);
+        var segment = Assert.Single(collection: group.Segments);
         var corrupted = segment with {
-            Entries = segment.Entries.Select(entry => ((entry.Column == ArenaColumn.Number) ? entry with { Number = 101 } : entry)).ToArray(),
+            Entries = segment.Entries.Select(selector: entry => ((entry.Column == ArenaColumn.Number) ? entry with { Number = 101 } : entry)).ToArray(),
         };
 
         checkpoint = checkpoint with {
             Server = checkpoint.Server with {
-                Undo = new ArenaUndoSnapshot([group with { Segments = [corrupted] }]),
+                Undo = new ArenaUndoSnapshot(Groups: [group with { Segments = [corrupted] }]),
             },
         };
         fixture.Step();
@@ -99,8 +99,8 @@ public sealed class WorldTurnUndoCheckpointLawTests {
             ]),
             Rules = [
                 new WorldRule(Name: Name(value: "advance"), Effects: [new ActionEffect.AddState(State: "score", Value: 1)]),
-                new WorldRule(Name: Name(value: "rewind"), Effects: [new ActionEffect.RewindTurn(Group: Name(value: "turn"))],
-                    Gate: new ActionPredicate.CompareState(State: "undo", Comparison: ActionStateComparison.Equal, Value: 1), Mode: ActionTriggerMode.Edge),
+                new WorldRule(Name: Name(value: "rewind"), Effects: [new ActionEffect.RewindGroup(Group: Name(value: "turn"))],
+                    Gate: new ActionPredicate.CompareState(State: "undo", Comparison: ExpressionOp.Equal, Value: 1), Mode: ActionTriggerMode.Edge),
             ],
             RuleGroupsRaw = [new RuleGroupDeclaration(Name: Name(value: "turn"), Shape: RuleGroupShape.Staged,
                 Steps: [new RuleGroupStep(Name(value: "advance"))], Undo: new RuleGroupUndo([Name(value: "score")], 2))],
@@ -114,7 +114,7 @@ public sealed class WorldTurnUndoCheckpointLawTests {
 
         fixture.Step();
         Assert.Equal(0L, ReadSlot(fixture: fixture, row: "score"));
-        Assert.False(fixture.Server.Arena.UndoTurnPending("turn"));
+        Assert.False(condition: fixture.Server.Arena.UndoTurnPending(group: "turn"));
 
         fixture.Step();
         Assert.Equal(1L, ReadSlot(fixture: fixture, row: "score"));

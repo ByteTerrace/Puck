@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 using Puck.World.Authoring;
@@ -10,104 +11,51 @@ namespace Puck.World.Tests;
 /// than boot silently truncated.
 /// </summary>
 public sealed class MusicRowCapLawTests {
-    private static WorldMusicRow BuildMusicRow(string assetDirectory, string name) {
-        var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
-            Schema: MusicDocument.CurrentSchema,
-            Name: name,
-            Tempo: new MusicTempoDocument(
-                BeatsPerBar: 4,
-                TicksPerBeat: 2100
-            ),
-            Segments: [new MusicSegmentDocument(
-                    Id: "calm",
-                    Transitions: null
-                )]
-        ));
-        var path = Path.Combine(
-            path1: assetDirectory,
-            path2: $"{name}.puck.music.v1.json"
+    // One row is the control: the same row-building path, so a clean validation proves the refusal is the cap
+    // firing, never a fault a row cannot resolve.
+    [InlineData(1, null)]
+    [InlineData(2, "music declares 2 rows")]
+    [Theory]
+    public void MusicRowsPastOneRefuseByName(int rows, string? refusal) {
+        using var directory = new TemporaryDirectory();
+        var document = Fixtures.BuildDocument() with {
+            Music = [.. Enumerable.Range(
+                count: rows,
+                start: 0
+            ).Select(selector: index => AudioAssetFixtures.Write(
+                directory: directory,
+                document: AudioAssetFixtures.Score(
+                    name: $"score-{index}",
+                    segments: [new MusicSegmentDocument(
+                        Id: "calm",
+                        Transitions: null
+                    )]
+                )
+            ))],
+        };
+        var valid = WorldDefinitionValidator.TryValidate(
+            definition: document,
+            neighbours: null,
+            reason: out var reason
         );
 
-        File.WriteAllBytes(
-            path: path,
-            bytes: music.Bytes
-        );
-
-        return new WorldMusicRow(
-            Name: name,
-            Source: path,
-            Hash: music.Hash
-        );
-    }
-
-    [Fact]
-    public void OneMusicRowControl() {
-        // The identical row-building helper, called once instead of twice — isolates the refusal above to the cap
-        // itself: this document is otherwise the same shape, so a clean validation here proves the denial is the
-        // cap firing, never a coincidental fault a shared row can't resolve.
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-music-cap-law-").FullName;
-
-        try {
-            var document = Fixtures.BuildDocument() with {
-                Music = [BuildMusicRow(
-                    assetDirectory: directory,
-                    name: "score-a"
-                )],
-            };
-
+        if (refusal is null) {
             Assert.True(
-                condition: WorldDefinitionValidator.TryValidate(
-                    definition: document,
-                    neighbours: null,
-                    reason: out var reason
-                ),
+                condition: valid,
                 userMessage: reason
             );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
+            return;
         }
-    }
-    [Fact]
-    public void TwoMusicRowsRefuseByName() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-music-cap-law-").FullName;
-
-        try {
-            var document = Fixtures.BuildDocument() with {
-                Music = [BuildMusicRow(
-                    assetDirectory: directory,
-                    name: "score-a"
-                ), BuildMusicRow(
-                    assetDirectory: directory,
-                    name: "score-b"
-                )],
-            };
-
-            Assert.False(
-                condition: WorldDefinitionValidator.TryValidate(
-                    definition: document,
-                    neighbours: null,
-                    reason: out var reason
-                ),
-                userMessage: "a second authored music row was expected to refuse"
-            );
-            Assert.Contains(
-                actualString: reason,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "music declares 2 rows"
-            );
-            Assert.Contains(
-                actualString: reason,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "at most one"
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.False(condition: valid);
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: refusal
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "at most one"
+        );
     }
 }

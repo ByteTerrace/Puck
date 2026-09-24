@@ -117,8 +117,8 @@ internal sealed class LockAnalyzer : ISourceAnalyzer {
             ? condensed
             : string.Concat(
                 str0: condensed.AsSpan(
-                    start: 0,
-                    length: 197
+                    length: 197,
+                    start: 0
                 ),
                 str1: "..."
             )

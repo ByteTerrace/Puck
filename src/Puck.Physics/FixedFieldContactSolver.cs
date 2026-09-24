@@ -33,12 +33,8 @@ public sealed class FixedFieldContactSolver(
     int maxIterations,
     bool gradientUp
 ) : IContactField {
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
     private static readonly FixedQ4816 CoreInset = FixedQ4816.FromDouble(value: 0.002);
+
     private readonly IFieldEvaluator m_field = field;
     private readonly FixedQ4816 m_gradientProbe = gradientProbe;
     private readonly bool m_gradientUp = gradientUp;
@@ -928,7 +924,7 @@ public sealed class FixedFieldContactSolver(
         // disabled this provider answers +Y at zero field-query cost; a caller may still pass another resolved up to
         // the contact solve (for example, one opposed to authored gravity).
         if (!m_gradientUp) {
-            up = UnitY;
+            up = FixedVector3.UnitY;
 
             return true;
         }
@@ -945,7 +941,7 @@ public sealed class FixedFieldContactSolver(
             return true;
         }
 
-        up = UnitY;
+        up = FixedVector3.UnitY;
 
         return false;
     }

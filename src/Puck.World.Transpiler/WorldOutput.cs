@@ -9,4 +9,6 @@ namespace Puck.World.Transpiler;
 /// <param name="Json">The canonical world definition.</param>
 /// <param name="SourceMap">This world's source origins.</param>
 /// <param name="TestWorlds">The tests declared by this world.</param>
-public sealed record WorldOutput(string Name, JsonObject Json, SourceMap SourceMap, IReadOnlyList<WorldTestWorld> TestWorlds);
+/// <param name="Entry">Whether the world is its composition's declared entry (<c>entry world</c>), the one a boot of the
+/// composition source starts in.</param>
+public sealed record WorldOutput(string Name, JsonObject Json, SourceMap SourceMap, IReadOnlyList<WorldTestWorld> TestWorlds, bool Entry = false);

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -24,7 +25,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
     /// <summary>Gets how many copied contributions are awaiting the simulation pump.</summary>
     public int PendingCount => m_server.ExecuteAuthorityOperation(operation: () => m_pendingContributions);
     /// <summary>Gets the provider's acting identity, fixed for this runtime instance.</summary>
-    public WorldPrincipal Principal { get; }
+    public Principal Principal { get; }
     /// <inheritdoc/>
     public WorldExtensionReplayPolicy ReplayPolicy => WorldExtensionReplayPolicy.Recorded;
 
@@ -117,7 +118,7 @@ public sealed class WorldRecordedExtension : IWorldExtensionRuntime {
     /// <param name="principal">The provider identity resolved by the trusted composition root.</param>
     /// <param name="requests">The same capability manifest shape used by WASM addon rows.</param>
     /// <param name="maximumPendingContributions">Bounds queued work before the ordinary apply-time grant budgets run.</param>
-    public WorldRecordedExtension(WorldServer server, WorldPrincipal principal, IEnumerable<WorldCapabilityRequest> requests, int maximumPendingContributions) {
+    public WorldRecordedExtension(WorldServer server, Principal principal, IEnumerable<WorldCapabilityRequest> requests, int maximumPendingContributions) {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(requests);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPendingContributions);

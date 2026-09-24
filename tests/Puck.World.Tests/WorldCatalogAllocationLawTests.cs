@@ -139,10 +139,12 @@ public sealed class WorldCatalogAllocationLawTests {
                 selected,
                 WorldLookSource.Catalog.DefaultIndex(entityIndex: index)
             );
-            if (index < WorldLookSource.Catalog.RigCount) { Assert.Equal(
+            if (index < WorldLookSource.Catalog.RigCount) {
+                Assert.Equal(
                 actual: selected,
                 expected: index
-            ); }
+            );
+            }
         }
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => WorldLookSource.Catalog.DefaultIndex(entityIndex: -1));
     }
@@ -194,7 +196,8 @@ public sealed class WorldCatalogAllocationLawTests {
                         switch (instruction.Op) {
                             case SdfOp.ResetPoint: localOffset = Vector3.Zero; break;
                             case SdfOp.TransformDynamic: slot = ((int)instruction.Data0.X); break;
-                            case SdfOp.Translate: localOffset += new Vector3(
+                            case SdfOp.Translate:
+                                localOffset += new Vector3(
                                 x: instruction.Data0.X,
                                 y: instruction.Data0.Y,
                                 z: instruction.Data0.Z

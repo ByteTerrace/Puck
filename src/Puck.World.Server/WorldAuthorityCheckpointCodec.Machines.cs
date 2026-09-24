@@ -9,14 +9,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: section.Revision);
         writer.WriteUInt64(value: section.NextGeneration);
         writer.WriteBoolean(value: section.AnyEverPumped);
-        WriteArray(
-            writer,
-            section.Instances,
-            static (w, row) => {
-            w.WriteString(value: row.Name); w.WriteString(value: row.Engine);
-            w.WriteUInt64(value: row.Generation); w.WriteInt64(value: row.CompletedSteps);
-            w.WriteBlock(value: row.RuntimeState);
-        }
+        writer.WriteArray(
+            items: section.Instances,
+            writeItem: static (w, row) => {
+                w.WriteString(value: row.Name); w.WriteString(value: row.Engine);
+                w.WriteUInt64(value: row.Generation); w.WriteInt64(value: row.CompletedSteps);
+                w.WriteBlock(value: row.RuntimeState);
+            }
         );
         return writer.ToArray();
     }
@@ -25,10 +24,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         var revision = reader.ReadUInt64();
         var next = reader.ReadUInt64();
         var pumped = reader.ReadBoolean();
-        var instances = ReadArray(
-            ref reader,
-            "machine instances",
-            static (ref WireReader r) => new WorldMachineCheckpoint(
+        var instances = reader.ReadArray(
+            field: "machine instances",
+            readItem: static (ref WireReader r) => new WorldMachineCheckpoint(
                 r.ReadRequiredString(
                     field: "machine name",
                     maxBytes: MaxStringBytes
@@ -43,7 +41,8 @@ public static partial class WorldAuthorityCheckpointCodec {
                     field: "machine runtime",
                     maxBytes: MaxSectionBytes
                 )
-            )
+            ),
+            maximum: MaxCollectionCount
         );
 
         section = null!;

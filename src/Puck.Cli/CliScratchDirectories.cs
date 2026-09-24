@@ -1,29 +1,23 @@
 namespace Puck.Cli;
 
-// The scratch-directory lifecycle a proof runner needs: a fresh randomly-named run directory under the temp root,
-// and a best-effort age-bounded sweep of stale siblings left by an earlier run that never got to clean up after
-// itself (a crash, a killed process). Shared by every runner that stamps its scratch directories with its own prefix.
+// The scratch-directory lifecycle a proof runner needs beyond Directory.CreateTempSubdirectory, which makes each
+// fresh, prefixed run directory under the temp root: best-effort removal of a directory a run is done with, and a
+// best-effort age-bounded sweep of stale siblings left by an earlier run that never got to clean up after itself (a
+// crash, a killed process). Shared by every runner that stamps its scratch directories with its own prefix.
 internal static class CliScratchDirectories {
-    // A fresh, empty, randomly-named directory under the temp root, prefixed for SweepScratch to find later.
-    public static string CreateRunDirectory(string scratchPrefix) {
-        var temp = Path.GetTempPath();
-
-        for (var attempt = 0; (attempt < 8); attempt++) {
-            var path = Path.Combine(
-                path1: temp,
-                path2: $"{scratchPrefix}{Guid.NewGuid():N}"
-            );
-
+    // Best-effort removal of a directory this run created; what survives is left to SweepScratch's age bound or to the
+    // owner's own later cleanup.
+    public static void TryDelete(string path) {
+        try {
             if (Directory.Exists(path: path)) {
-                continue;
+                Directory.Delete(
+                    path: path,
+                    recursive: true
+                );
             }
-
-            Directory.CreateDirectory(path: path);
-
-            return path;
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // A file still held open (an antivirus scan, a lingering child) is swept on a later run.
         }
-
-        throw new IOException(message: $"Could not create a fresh random '{scratchPrefix}' scratch directory after 8 attempts.");
     }
     public static void SweepScratch(string scratchPrefix) {
         var threshold = DateTime.UtcNow.AddHours(value: -6);

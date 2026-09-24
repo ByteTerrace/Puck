@@ -69,11 +69,11 @@ public sealed class MachineAuthoringTests {
             userMessage: rightReason
         );
         Assert.Equal(
-            "left_brook",
+            "left$brook",
             left["machines"]![0]!["name"]!.GetValue<string>()
         );
         Assert.Equal(
-            "right_brook",
+            "right$brook",
             right["machines"]![0]!["name"]!.GetValue<string>()
         );
         Assert.Equal(

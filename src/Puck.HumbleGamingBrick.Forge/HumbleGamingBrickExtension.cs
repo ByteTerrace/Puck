@@ -10,18 +10,18 @@ namespace Puck.HumbleGamingBrick.Forge;
 /// <summary>
 /// Publishes the Humble Gaming Brick engines and authored-content provider.
 /// </summary>
-public sealed class HumbleGamingBrickExtension : IMachineExtension {
+public sealed class HumbleGamingBrickExtension : IPuckExtension {
     /// <inheritdoc/>
-    public string Name => "HumbleGamingBrick";
+    public string Name => "Puck.HumbleGamingBrick.Forge";
 
     /// <inheritdoc/>
-    public void Initialize(IMachineExtensionRegistry registry) {
+    public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.RegisterEngine(
+        registry.AddMachineEngine(
             engine: new GamingBrickEngine(),
             contentProvider: new HgbCartridgeCompiler()
         );
-        registry.RegisterEngine(engine: new TuneInstrumentEngine());
+        registry.AddMachineEngine(engine: new TuneInstrumentEngine());
     }
 }

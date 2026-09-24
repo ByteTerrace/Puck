@@ -1,4 +1,5 @@
 using Puck.Assets.Documents;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
@@ -68,19 +69,19 @@ public static partial class CreationCanonicalizer {
             ));
         }
 
-        if (!IsFinite(vector: curve.A)) {
+        if (!VectorFunctions.IsFinite(vector: curve.A)) {
             errors.Add(item: new(
                 Message: "a is non-finite.",
                 Path: $"{path}.a"
             ));
         }
-        if (!IsFinite(vector: curve.B)) {
+        if (!VectorFunctions.IsFinite(vector: curve.B)) {
             errors.Add(item: new(
                 Message: "b is non-finite.",
                 Path: $"{path}.b"
             ));
         }
-        if (!IsFinite(vector: curve.C)) {
+        if (!VectorFunctions.IsFinite(vector: curve.C)) {
             errors.Add(item: new(
                 Message: "c is non-finite.",
                 Path: $"{path}.c"

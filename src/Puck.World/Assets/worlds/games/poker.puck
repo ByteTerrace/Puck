@@ -116,16 +116,16 @@ rule "poker-check-call" {
     compareState(comparison: GreaterOrEqual, key: street, state: phase, value: 1)
     compareState(comparison: LessOrEqual, key: street, state: phase, value: 4)
     compareValue(comparison: Equal, kind: Int, left: (table[bettor] == 1 ? betAction1[act] : betAction2[act]), right: 0)
-    compareValue(comparison: GreaterOrEqual, kind: Int, left: stack[(table[bettor])], right: streetBet[(3 - table[bettor])] - streetBet[(table[bettor])])
+    compareValue(comparison: GreaterOrEqual, kind: Int, left: stack[(table[bettor])], right: streetBet[3 - table[bettor]] - streetBet[(table[bettor])])
   ]
   )
-  local toCall = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]
+  local toCall = streetBet[3 - table[bettor]] - streetBet[(table[bettor])]
   mode: Level
   push bets = phase[street] * 100 + table[bettor] * 10 + 0
   transaction {
     addState(expression: 0 - toCall, key: (table[bettor]), state: stack)
     addState(expression: toCall, key: pot, state: table)
-    setState(expression: streetBet[(3 - table[bettor])], key: (table[bettor]), state: streetBet)
+    setState(expression: streetBet[3 - table[bettor]], key: (table[bettor]), state: streetBet)
     table[acted] += 1
     betAction1[act] = -1
     betAction2[act] = -1
@@ -139,17 +139,17 @@ rule "poker-raise" {
     compareState(comparison: LessOrEqual, key: street, state: phase, value: 4)
     compareValue(comparison: Equal, kind: Int, left: (table[bettor] == 1 ? betAction1[act] : betAction2[act]), right: 1)
     compareState(comparandKey: maxRaises, comparandState: house, comparison: Less, key: raises, state: table)
-    compareValue(comparison: GreaterOrEqual, kind: Int, left: stack[(table[bettor])], right: streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1))
+    compareValue(comparison: GreaterOrEqual, kind: Int, left: stack[(table[bettor])], right: streetBet[3 - table[bettor]] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1))
   ]
   )
-  local pay = streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
+  local pay = streetBet[3 - table[bettor]] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
   local bet = house[bigBlind] * (phase[street] >= 3 ? 2 : 1)
   mode: Level
   push bets = phase[street] * 100 + table[bettor] * 10 + 1
   transaction {
     addState(expression: 0 - pay, key: (table[bettor]), state: stack)
     addState(expression: pay, key: pot, state: table)
-    setState(expression: streetBet[(3 - table[bettor])] + bet, key: (table[bettor]), state: streetBet)
+    setState(expression: streetBet[3 - table[bettor]] + bet, key: (table[bettor]), state: streetBet)
     table[acted] = 1
     table[raises] += 1
     betAction1[act] = -1

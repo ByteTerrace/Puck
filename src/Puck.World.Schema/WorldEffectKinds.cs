@@ -23,7 +23,7 @@ public static class WorldPlacementEffectCost {
     private static long ShapeCount(WorldPlacement placement, WorldDefinition definition) =>
         (WorldDefinitionRows.FindCreation(
             creations: definition.Creations,
-            id: placement.PrototypeId
+            id: placement.ShownPrototypeId
         )?.Document.Shapes?.Count ?? 1);
 
     /// <summary>Returns what installing <paramref name="placement"/> actually rebuilds: <see cref="DocumentCost"/>

@@ -504,10 +504,9 @@ public readonly struct GeometricAlgebra : IEquatable<GeometricAlgebra> {
             value: value,
             paramName: nameof(value)
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: grade);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: grade,
-            other: GeneratorCount
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: GeneratorCount,
+            value: grade
         );
 
         var dimension = BladeCount;
@@ -598,10 +597,9 @@ public readonly struct GeometricAlgebra : IEquatable<GeometricAlgebra> {
     /// <returns>The generator's square as an integer.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="generatorIndex"/> is outside the generator range.</exception>
     public int Square(int generatorIndex) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: generatorIndex);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: generatorIndex,
-            other: GeneratorCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: GeneratorCount,
+            value: generatorIndex
         );
 
         return GeneratorSquare(

@@ -30,7 +30,7 @@ further refinements use the previous box's farthest corner to tighten the depth
 limit. Each refinement still contains every possible accepted point.
 
 The implementation in `sdf-part-bounds.hlsli` bounds spheres, capsules, tori,
-ellipsoids, sweeps, superellipsoids, boxes, screen slabs and supported extruded
+sweeps, superellipsoids (every ellipsoid included), boxes, screen slabs and supported extruded
 or revolved profiles, with optional scale, axial profile or shear. Unknown
 formulae publish an unbounded sentinel and preserve the original local march.
 This cache changes primary sample positions within the existing hit band; it

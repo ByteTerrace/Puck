@@ -60,10 +60,10 @@ internal static class NuGetReleaseCommand {
         return path;
     }
     private static async Task<int> GateAsync() {
-        var root = NuGetCommand.Root();
+        var root = RepositoryPaths.RequireRoot();
         var tag = Version(root: root);
-        var reference = CliGitHub.EnvironmentVariable(name: "GITHUB_REF");
-        var commit = CliGitHub.EnvironmentVariable(name: "GITHUB_SHA");
+        var reference = CliGitHub.Ref;
+        var commit = CliGitHub.Sha;
 
         if (
             (reference != "refs/heads/main") &&
@@ -92,8 +92,8 @@ internal static class NuGetReleaseCommand {
     private static async Task<string> GitAsync(string root, params string[] arguments) => (await CliProcess.RunCheckedAsync(
         arguments: arguments,
         capture: true,
-        executable: "git",
-        root: root
+        fileName: "git",
+        workingDirectory: root
     )).Trim();
     private static async Task<string> InstallAsync(string configFile, string directory, string root, string version) {
         var tool = Path.Combine(
@@ -103,8 +103,8 @@ internal static class NuGetReleaseCommand {
 
         await CliProcess.RunCheckedAsync(
             arguments: ["tool", "install", Package, "--version", version, "--tool-path", tool, "--configfile", configFile, "--no-http-cache"],
-            executable: "dotnet",
-            root: root
+            fileName: "dotnet",
+            workingDirectory: root
         );
         var executable = Path.Combine(
             path1: tool,
@@ -115,8 +115,8 @@ internal static class NuGetReleaseCommand {
         var actual = (await CliProcess.RunCheckedAsync(
             arguments: ["--version"],
             capture: true,
-            executable: executable,
-            root: root
+            fileName: executable,
+            workingDirectory: root
         )).Trim();
 
         if (
@@ -130,8 +130,8 @@ internal static class NuGetReleaseCommand {
         return executable;
     }
     private static async Task<int> PinAsync(string version) {
-        var root = NuGetCommand.Root();
-        var directory = CliScratchDirectories.CreateRunDirectory(scratchPrefix: "puck-official-install-");
+        var root = RepositoryPaths.RequireRoot();
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-official-install-").FullName;
 
         try {
             // The published package is proven in an empty tool path before tracked configuration changes.
@@ -147,8 +147,8 @@ internal static class NuGetReleaseCommand {
 
             await CliProcess.RunCheckedAsync(
                 arguments: ["nuget", "--help"],
-                executable: executable,
-                root: root
+                fileName: executable,
+                workingDirectory: root
             );
             var manifestPath = Path.Combine(
                 path1: root,
@@ -172,8 +172,8 @@ internal static class NuGetReleaseCommand {
         return 0;
     }
     private static async Task<int> PinPublishedAsync(string packages, string patch) {
-        var root = NuGetCommand.Root();
-        var version = NuGetCommand.ExpectedVersion(root: root);
+        var root = RepositoryPaths.RequireRoot();
+        var version = NuGetCommand.ReadVersion(root: root);
 
         if (!File.Exists(path: Path.Combine(
             path1: packages,
@@ -200,9 +200,9 @@ internal static class NuGetReleaseCommand {
         return 0;
     }
     private static async Task<int> ReleaseAsync(string manifest) {
-        var root = NuGetCommand.Root();
+        var root = RepositoryPaths.RequireRoot();
         var tag = Version(root: root);
-        var existing = CliProcess.RunCapturedRaw(
+        var existing = await CliProcess.RunAsync(
             arguments: ["release", "view", tag, "--json", "tagName"],
             fileName: "gh"
         );
@@ -224,12 +224,12 @@ internal static class NuGetReleaseCommand {
 
             await CliProcess.RunCheckedAsync(
                 arguments: ["release", "create", tag, "--verify-tag", "--title", tag, "--generate-notes", .. prerelease],
-                executable: "gh",
-                root: root
+                fileName: "gh",
+                workingDirectory: root
             );
         }
         // An existing release receives each additional batch as its own manifest asset.
-        var copy = $"release-{CliGitHub.EnvironmentVariable(name: "GITHUB_RUN_ID")}-{CliGitHub.EnvironmentVariable(name: "GITHUB_RUN_ATTEMPT")}.json";
+        var copy = $"release-{CliGitHub.RunId}-{CliGitHub.RunAttempt}.json";
 
         File.Copy(
             destFileName: copy,
@@ -238,19 +238,19 @@ internal static class NuGetReleaseCommand {
         );
         await CliProcess.RunCheckedAsync(
             arguments: ["release", "upload", tag, copy],
-            executable: "gh",
-            root: root
+            fileName: "gh",
+            workingDirectory: root
         );
         return 0;
     }
     private static async Task<int> SmokeAsync(string packages) {
-        var root = NuGetCommand.Root();
+        var root = RepositoryPaths.RequireRoot();
         var package = Directory.GetFiles(
             path: packages,
             searchPattern: "ByteTerrace.Puck.Cli.*.nupkg"
         ).Single();
         var version = Path.GetFileName(path: package)["ByteTerrace.Puck.Cli.".Length..^".nupkg".Length];
-        var directory = CliScratchDirectories.CreateRunDirectory(scratchPrefix: "puck-package-smoke-");
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-package-smoke-").FullName;
 
         try {
             var executable = await InstallAsync(
@@ -269,26 +269,26 @@ internal static class NuGetReleaseCommand {
 
             await CliProcess.RunCheckedAsync(
                 arguments: ["nuget", "--help"],
-                executable: executable,
-                root: root
+                fileName: executable,
+                workingDirectory: root
             );
             await CliProcess.RunCheckedAsync(
                 arguments: ["nuget", "version"],
-                executable: executable,
-                root: root
+                fileName: executable,
+                workingDirectory: root
             );
             await CliProcess.RunCheckedAsync(
                 arguments: ["search", "PackAsTool", project, "-M", "0"],
-                executable: executable,
-                root: root
+                fileName: executable,
+                workingDirectory: root
             );
             await CliProcess.RunCheckedAsync(
                 arguments: ["declarations", Path.Combine(
                         path1: root,
                         path2: "src/Puck.Cli/NuGet/NuGetCommand.cs"
                     ), "--members"],
-                executable: executable,
-                root: root
+                fileName: executable,
+                workingDirectory: root
             );
             // Workspace build-host packaging is exercised against a tiny standalone project.
             var probe = Path.Combine(
@@ -319,16 +319,16 @@ internal static class NuGetReleaseCommand {
                         path1: root,
                         path2: "nuget.config"
                     )],
-                executable: "dotnet",
-                root: root
+                fileName: "dotnet",
+                workingDirectory: root
             );
             await CliProcess.RunCheckedAsync(
                 arguments: ["build", Path.Combine(
                         path1: probe,
                         path2: "Probe.csproj"
                     ), "-c", "Release", "--no-restore"],
-                executable: "dotnet",
-                root: root
+                fileName: "dotnet",
+                workingDirectory: root
             );
             var references = await CliProcess.RunCheckedAsync(
                 arguments: ["references", "Value", "--project", Path.Combine(
@@ -336,8 +336,8 @@ internal static class NuGetReleaseCommand {
                         path2: "Probe.csproj"
                     )],
                 capture: true,
-                executable: executable,
-                root: root
+                fileName: executable,
+                workingDirectory: root
             );
 
             if (!references.Contains(
@@ -355,9 +355,9 @@ internal static class NuGetReleaseCommand {
         return 0;
     }
     private static async Task<int> TagAsync() {
-        var root = NuGetCommand.Root();
+        var root = RepositoryPaths.RequireRoot();
         var tag = Version(root: root);
-        var commit = CliGitHub.EnvironmentVariable(name: "GITHUB_SHA");
+        var commit = CliGitHub.Sha;
 
         if (await TagCommitAsync(
             root: root,
@@ -367,9 +367,9 @@ internal static class NuGetReleaseCommand {
             return 0;
         }
         await CliProcess.RunCheckedAsync(
-            arguments: ["api", "--method", "POST", $"repos/{CliGitHub.EnvironmentVariable(name: "GITHUB_REPOSITORY")}/git/refs", "--raw-field", ("ref=refs/tags/" + tag), "--raw-field", ("sha=" + commit)],
-            executable: "gh",
-            root: root
+            arguments: ["api", "--method", "POST", $"repos/{CliGitHub.Repository}/git/refs", "--raw-field", ("ref=refs/tags/" + tag), "--raw-field", ("sha=" + commit)],
+            fileName: "gh",
+            workingDirectory: root
         );
         return 0;
     }
@@ -390,7 +390,7 @@ internal static class NuGetReleaseCommand {
             )
         );
     }
-    private static string Version(string root) => ("v" + NuGetCommand.ExpectedVersion(root: root));
+    private static string Version(string root) => ("v" + NuGetCommand.ReadVersion(root: root));
 
     public static Command Gate() {
         var command = new Command(
@@ -401,50 +401,65 @@ internal static class NuGetReleaseCommand {
         command.SetAction(action: (_, _) => GateAsync());
         return command;
     }
-    public static Command Pin() {
-        var versionArgument = new Argument<string>(name: "version") { Description = "The published CLI version to adopt." };
-        var command = new Command(
-            description: "Install a published CLI version in isolation to prove it, then pin it in the tool manifest.",
-            name: "pin"
-        ) { versionArgument };
 
-        command.SetAction(action: (parseResult, _) => PinAsync(version: parseResult.GetRequiredValue(argument: versionArgument)));
+    private static Command CreateSingleArgumentCommand(
+        Func<string, Task<int>> action,
+        string argumentDescription,
+        string argumentName,
+        string commandDescription,
+        string commandName
+    ) {
+        var argument = new Argument<string>(name: argumentName) { Description = argumentDescription };
+        var command = new Command(
+            description: commandDescription,
+            name: commandName
+        ) { argument };
+
+        command.SetAction(action: (parseResult, _) => action(parseResult.GetRequiredValue(argument: argument)));
         return command;
     }
+
+    public static Command Pin() =>
+        CreateSingleArgumentCommand(
+            action: static version => PinAsync(version: version),
+            argumentDescription: "The published CLI version to adopt.",
+            argumentName: "version",
+            commandDescription: "Install a published CLI version in isolation to prove it, then pin it in the tool manifest.",
+            commandName: "pin"
+        );
     public static Command PinPublished() {
         var packagesArgument = new Argument<string>(name: "packages") { Description = "The pushed batch directory; the pin runs only when it holds the CLI package." };
-        var patchArgument = new Argument<string>(name: "patch") { Description = "Where to write the tool-manifest diff for adoption." };
+        var patchOption = CliOptions.Output(
+            description: "The file the tool-manifest diff for adoption is written to.",
+            required: true
+        );
         var command = new Command(
             description: "Wait for the just-published CLI to become installable, pin it, and write the manifest diff.",
             name: "pin-published"
-        ) { packagesArgument, patchArgument };
+        ) { packagesArgument, patchOption };
 
         command.SetAction(action: (parseResult, _) => PinPublishedAsync(
             packages: parseResult.GetRequiredValue(argument: packagesArgument),
-            patch: parseResult.GetRequiredValue(argument: patchArgument)
+            patch: parseResult.GetRequiredValue(option: patchOption)
         ));
         return command;
     }
-    public static Command Release() {
-        var manifestArgument = new Argument<string>(name: "manifest") { Description = "The batch's release.json." };
-        var command = new Command(
-            description: "Create the GitHub Release for v<version> when missing, then upload the batch manifest named for the run and attempt.",
-            name: "release"
-        ) { manifestArgument };
-
-        command.SetAction(action: (parseResult, _) => ReleaseAsync(manifest: parseResult.GetRequiredValue(argument: manifestArgument)));
-        return command;
-    }
-    public static Command Smoke() {
-        var packagesArgument = new Argument<string>(name: "packages") { Description = "The directory holding the packed CLI." };
-        var command = new Command(
-            description: "Install the packed CLI into a temporary tool path from an exclusive feed and exercise its verbs, including the Roslyn workspace host over a probe project.",
-            name: "smoke"
-        ) { packagesArgument };
-
-        command.SetAction(action: (parseResult, _) => SmokeAsync(packages: parseResult.GetRequiredValue(argument: packagesArgument)));
-        return command;
-    }
+    public static Command Release() =>
+        CreateSingleArgumentCommand(
+            action: static manifest => ReleaseAsync(manifest: manifest),
+            argumentDescription: "The batch's release.json.",
+            argumentName: "manifest",
+            commandDescription: "Create the GitHub Release for v<version> when missing, then upload the batch manifest named for the run and attempt.",
+            commandName: "release"
+        );
+    public static Command Smoke() =>
+        CreateSingleArgumentCommand(
+            action: static packages => SmokeAsync(packages: packages),
+            argumentDescription: "The directory holding the packed CLI.",
+            argumentName: "packages",
+            commandDescription: "Install the packed CLI into a temporary tool path from an exclusive feed and exercise its verbs, including the Roslyn workspace host over a probe project.",
+            commandName: "smoke"
+        );
     public static Command Tag() {
         var command = new Command(
             description: "Bind v<version> to GITHUB_SHA, or verify the existing tag already binds it.",

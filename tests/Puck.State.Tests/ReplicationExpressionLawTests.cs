@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.State.Tests;
 
-/// <summary>Periodic mask expressions agree with a bit-by-bit oracle and refuse invalid widths and patterns.</summary>
+/// <summary>Periodic mask expressions agree with a bit-by-bit oracle at every width from 1 through 64, truncating the last block of a width that does not divide the word, and refuse invalid widths and patterns.</summary>
 public sealed class ReplicationExpressionLawTests {
     private static long Repeat(long pattern, int width) {
         var expected = 0UL;
@@ -39,10 +39,16 @@ public sealed class ReplicationExpressionLawTests {
     }
     [InlineData(1)]
     [InlineData(2)]
+    [InlineData(3)]
     [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(7)]
     [InlineData(8)]
+    [InlineData(9)]
     [InlineData(16)]
+    [InlineData(31)]
     [InlineData(32)]
+    [InlineData(63)]
     [InlineData(64)]
     [Theory]
     public void EveryWidthReplicatesEachBitAndKeepsTheSignBit(int width) {
@@ -79,14 +85,35 @@ public sealed class ReplicationExpressionLawTests {
         );
     }
     [Fact]
+    public void AWidthThatDoesNotDivideTheWordTruncatesItsLastBlock() {
+        // Blocks start at every multiple of three, so the twenty-second begins at bit 63 and keeps one bit.
+        Assert.Equal(
+            unchecked((long)0x9249249249249249UL),
+            ExpressionFunctionLawTests.EvalPublic(text: "replicationMask(3)")
+        );
+        Assert.Equal(
+            unchecked((long)0xB6DB6DB6DB6DB6DBUL),
+            ExpressionFunctionLawTests.EvalPublic(text: "repeatBits(3, 3)")
+        );
+        for (var width = 1; (width <= 64); width++) {
+            Assert.Equal(
+                Repeat(
+                    pattern: 1,
+                    width: width
+                ),
+                ExpressionFunctionLawTests.EvalPublic(text: $"replicationMask({width})")
+            );
+        }
+    }
+    [Fact]
     public void InvalidArgumentsRefuseWithoutNarrowingOrTruncatingThem() {
-        long[] widths = [long.MinValue, -1, 0, 3, 7, 9, 31, 63, 65, 128, 4_294_967_304L, long.MaxValue];
+        long[] widths = [long.MinValue, -1, 0, 65, 128, 4_294_967_304L, long.MaxValue];
 
         foreach (var width in widths) {
             Assert.False(condition: ExpressionFunctionLawTests.TryEvalPublic(text: $"replicationMask({width})"));
             Assert.False(condition: ExpressionFunctionLawTests.TryEvalPublic(text: $"repeatBits(1, {width})"));
         }
-        foreach (var width in new[] { 1, 2, 4, 8, 16, 32 }) {
+        foreach (var width in new[] { 1, 2, 3, 4, 8, 16, 32, 63 }) {
             Assert.False(condition: ExpressionFunctionLawTests.TryEvalPublic(text: $"repeatBits({(1L << width)}, {width})"));
             Assert.False(condition: ExpressionFunctionLawTests.TryEvalPublic(text: $"repeatBits(-1, {width})"));
         }

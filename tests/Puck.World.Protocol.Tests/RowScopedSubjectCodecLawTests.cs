@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Protocol.Tests;
@@ -6,21 +7,21 @@ namespace Puck.World.Protocol.Tests;
 /// The wire law for the name-keyed grant subjects: <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c>/
 /// <c>adjacency:&lt;name&gt;</c> survive the
 /// SAME grant leaf the live submission path and the replay tape both ride, id lane intact — a subject whose id was
-/// dropped in transit would seat a hold over the empty row nothing can ever match. The paired refusal is the
-/// retirement convention: wire value 8 (the former <c>Table</c> kind) must stay undecodable rather than aliasing a
-/// successor, which is exactly what reassigning it would do silently.
+/// dropped in transit would seat a hold over the empty row nothing can ever match. The paired refusal: a subject kind
+/// byte the wire table does not name is refused at decode, never read as some other kind, which is what a cast from
+/// the byte would do silently.
 /// </summary>
 public sealed class RowScopedSubjectCodecLawTests {
-    /// <summary>The retired discriminant — never reassigned, and the control that proves the decode side is a closed
-    /// map rather than a cast.</summary>
-    private const byte RetiredTableWireValue = 8;
+    /// <summary>The first byte past the last declared subject kind — the control that proves the decode side is a
+    /// closed map rather than a cast.</summary>
+    private static readonly byte UndeclaredSubjectWireValue = checked((byte)Enum.GetValues<GrantSubjectKind>().Length);
 
     private static byte[] EncodeGrant(GrantSubject subject) {
         // Console, not World: the codec refuses World as a SUBMITTER by design, which is not what this law is about.
         var grant = new WorldGrant(
             Capability: WorldCapability.Mutate,
             Exclusive: false,
-            Principal: WorldPrincipal.Console,
+            Grantee: Principal.Console,
             Subject: subject
         );
 
@@ -80,22 +81,26 @@ public sealed class RowScopedSubjectCodecLawTests {
     }
 
     [Fact]
-    public void RetiredSubjectWireValueRefuses_WhileItsSuccessorsDecode() {
+    public void UndeclaredSubjectWireValueRefuses_WhileDeclaredKindsDecode() {
         var placement = EncodeGrant(subject: GrantSubject.Placement(id: "slot-nw"));
         var kindOffset = FindSubjectKindOffset(bytes: placement);
 
-        // The one reversed fact: the same bytes with the subject's kind discriminant rewritten to the retired value.
+        // The one reversed fact: the same bytes with the subject's kind discriminant rewritten to an undeclared value.
         var sabotaged = placement.ToArray();
 
-        sabotaged[kindOffset] = RetiredTableWireValue;
+        sabotaged[kindOffset] = UndeclaredSubjectWireValue;
 
         Assert.False(
             condition: WorldSubmissionCodec.TryDecodeGrant(
                 bytes: sabotaged,
-                failure: out _,
+                failure: out var refusal,
                 grant: out _
             ),
-            userMessage: "wire value 8 is retired and must never decode — reassigning it would silently alias a successor kind"
+            userMessage: $"subject kind byte {UndeclaredSubjectWireValue} names no kind and must never decode"
+        );
+        Assert.Equal(
+            actual: refusal.Refusal,
+            expected: WorldCodecRefusal.EnumValueUnknown
         );
         Assert.True(
             condition: WorldSubmissionCodec.TryDecodeGrant(

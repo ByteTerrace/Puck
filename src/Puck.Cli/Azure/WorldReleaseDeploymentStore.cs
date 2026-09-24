@@ -1,7 +1,7 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.Assets;
 using Puck.Storage;
 using Puck.World.Server;
 
@@ -30,12 +30,15 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
     private ObjectBlobAddress Address(string group, string release) {
         if (
             (owner == Guid.Empty) ||
-            !IsHash(pin: release)
+            !ContentPin.TryParse(
+            pin: out var releasePin,
+            text: release
+        )
         ) { throw new InvalidDataException(message: "deployment retention requires an owner and full release identity"); }
         _ = SafeName.Parse(candidate: group);
         return new(
             owner,
-            $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/deployments/{group}/{release[7..]}.json"
+            $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/deployments/{group}/{releasePin.Hex}.json"
         );
     }
     private async Task<WorldReleaseDeploymentConfiguration> DecodeAsync(ReadOnlyMemory<byte> bytes, WorldReleaseManifest manifest,
@@ -47,9 +50,12 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
             (reference.Schema != Schema) ||
             (reference.Release != manifest.Identity) ||
             (reference.Group != group) ||
-            !IsHash(reference.ContentHash) ||
-            string.IsNullOrWhiteSpace(reference.SecretVersion) ||
-            !Encode(reference).AsSpan().SequenceEqual(bytes.Span) ||
+            !ContentPin.TryParse(
+            pin: out _,
+            text: reference.ContentHash
+        ) ||
+            string.IsNullOrWhiteSpace(value: reference.SecretVersion) ||
+            !Encode(value: reference).AsSpan().SequenceEqual(other: bytes.Span) ||
             ((expectedHash is not null) && (expectedHash != reference.ContentHash))
         ) {
             throw new InvalidDataException(message: "retained deployment reference is malformed or conflicts with this release's immutable configuration");
@@ -61,7 +67,7 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
 
         if (
             (secret.Length > (1024 * 1024)) ||
-            (Hash(secret.Span) != reference.ContentHash)
+            (ContentPin.Compute(content: secret.Span).ToString() != reference.ContentHash)
         ) {
             throw new InvalidDataException(message: "retained deployment secret does not match its full content pin");
         }
@@ -69,23 +75,18 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
             ?? throw new InvalidDataException(message: "retained deployment secret is empty"));
 
         Validate(
-            manifest,
-            configuration
+            configuration: configuration,
+            manifest: manifest
         );
         if (
             (configuration.Group != group) ||
-            !Encode(configuration).AsSpan().SequenceEqual(secret.Span)
+            !Encode(value: configuration).AsSpan().SequenceEqual(other: secret.Span)
         ) {
             throw new InvalidDataException(message: "retained deployment secret is not canonical or belongs to another group");
         }
         return configuration;
     }
     private static byte[] Encode<T>(T value) => CanonicalJsonDocument.Serialize(node: Sort(node: JsonSerializer.SerializeToNode(value))!);
-    private static string Hash(ReadOnlySpan<byte> bytes) => ("sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes)));
-    private static bool IsHash(string? pin) => ((pin is { Length: 71 }) && pin.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "sha256/"
-    ) && (pin.AsSpan(7).IndexOfAnyExcept("0123456789abcdef") < 0));
     private static JsonNode? Sort(JsonNode? node) => node switch {
         JsonObject obj => new JsonObject(obj.OrderBy(
         pair => pair.Key,
@@ -153,7 +154,7 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
         var bytes = Encode(value: configuration);
 
         if (bytes.Length > (1024 * 1024)) { throw new InvalidDataException(message: "deployment configuration exceeds its byte budget"); }
-        var pin = Hash(bytes);
+        var pin = ContentPin.Compute(content: bytes).ToString();
         var address = Address(
             group: configuration.Group,
             release: manifest.Identity
@@ -179,13 +180,13 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (string.IsNullOrWhiteSpace(version)) { throw new InvalidDataException(message: "deployment secret backend returned no immutable version"); }
+        if (string.IsNullOrWhiteSpace(value: version)) { throw new InvalidDataException(message: "deployment secret backend returned no immutable version"); }
         var readBack = await secrets.ReadAsync(
-            version,
-            cancellationToken
+            cancellationToken: cancellationToken,
+            version: version
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (!readBack.Span.SequenceEqual(bytes)) { throw new InvalidDataException(message: "retained deployment secret failed read-back verification"); }
+        if (!readBack.Span.SequenceEqual(other: bytes)) { throw new InvalidDataException(message: "retained deployment secret failed read-back verification"); }
         var reference = Encode(value: new Reference(
             Schema,
             manifest.Identity,

@@ -320,4 +320,24 @@ public sealed class FlareLawTests {
             );
         }
     }
+    /// <summary>THE LAW: <see cref="SdfProgram.PortableAcos"/> agrees with the platform arccosine to within a few units
+    /// in the last place over [-1, 1], hits the endpoints and the midpoint exactly, and is monotonic, so a flare's
+    /// extrema move by at most a rounding step while carrying the same bits on every machine.</summary>
+    [Fact]
+    public void PortableAcosTracksTheArccosineAndIsExactAtItsEndpoints() {
+        Assert.Equal(expected: 0.0, actual: SdfProgram.PortableAcos(x: 1.0));
+        Assert.Equal(expected: Math.PI, actual: SdfProgram.PortableAcos(x: -1.0));
+        Assert.Equal(expected: (0.5 * Math.PI), actual: SdfProgram.PortableAcos(x: 0.0));
+
+        var previous = double.PositiveInfinity;
+
+        for (var i = -4096; (i <= 4096); i++) {
+            var x = (i / 4096.0);
+            var actual = SdfProgram.PortableAcos(x: x);
+
+            Assert.InRange(actual: Math.Abs(value: (actual - Math.Acos(d: x))), high: 1e-14, low: 0.0);
+            Assert.True(condition: (actual <= previous), userMessage: $"acos is not monotonic at {x}");
+            previous = actual;
+        }
+    }
 }

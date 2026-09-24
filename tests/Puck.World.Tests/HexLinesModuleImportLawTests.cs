@@ -8,7 +8,7 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// THE LAW: <c>games/hexlines.world.json</c> is a self-contained, placement-addressed module any host can import and
+/// THE LAW: <c>games/hexlines.puck</c> is a self-contained, placement-addressed module any host can import and
 /// position with one restated placement.
 /// The board is a radius-4 hexagonal disk of 61 pointy-top tiles on a hexagonal table with two stone trays; every
 /// tile, tray, and stone composes over <c>hexTable</c>, and the <c>hexLinesBoard</c> topology's origin is the board's
@@ -199,27 +199,8 @@ public sealed class HexLinesModuleImportLawTests {
         y: 0f,
         z: ((CellSize * cell.R) * (MathF.Sqrt(x: 3f) / 2f))
     ));
-    private static WorldDefinition Load(params string[] segments) {
-        var path = Path.Combine([RepoRoot(), .. segments]);
-
-        Assert.True(
-            condition: WorldDefinitionLoader.TryLoadFile(
-                path,
-                out var definition,
-                out var reason
-            ),
-            userMessage: reason
-        );
-
-        return definition!;
-    }
     private static WorldDefinition LoadGarden() => AuthoredGameFixtures.Nexus;
-    private static WorldDefinition LoadMinimalHost() => Load(
-        "tests",
-        "Puck.World.Tests",
-        "Fixtures",
-        "minimal-hexlines-host.world.json"
-    );
+    private static WorldDefinition LoadMinimalHost() => AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-hexlines-host.world.json");
     private static WorldPlacement Placement(WorldDefinition definition, string id) {
         var placement = definition.Placements.SingleOrDefault(predicate: p => string.Equals(
             a: p.Id,
@@ -230,23 +211,6 @@ public sealed class HexLinesModuleImportLawTests {
         Assert.NotNull(@object: placement);
 
         return placement!;
-    }
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
     }
     private static HashSet<string> RowKeys(WorldDefinition definition, string rowName) {
         var row = WorldDefinitionRows.FindStateRow(
@@ -271,33 +235,21 @@ public sealed class HexLinesModuleImportLawTests {
             )
         ).Position;
 
-    [Fact]
-    public void GardenImportsSixtyOneTilesInRingOrderOverTheTable() {
-        var definition = LoadGarden();
+    // The garden imports sixty-one tiles in ring order over its table; a minimal host restates the table elsewhere
+    // and the board follows it.
+    [InlineData("garden", 14f, -26f)]
+    [InlineData("minimal", 20f, -12f)]
+    [Theory]
+    public void TheBoardFollowsTheHostsTable(string host, float x, float z) {
+        var definition = ((host == "garden")
+            ? LoadGarden()
+            : LoadMinimalHost());
 
         Assert.Equal(
             new Vector3(
-                x: 14f,
+                x: x,
                 y: -0.5f,
-                z: -26f
-            ),
-            WorldPosition(
-                definition: definition,
-                id: "hexTable"
-            )
-        );
-        AssertTilesFollowTheTable(definition: definition);
-        AssertTopologyIsCentredOnTheTable(definition: definition);
-    }
-    [Fact]
-    public void MinimalHostRestatesTheTableAndTheBoardFollows() {
-        var definition = LoadMinimalHost();
-
-        Assert.Equal(
-            new Vector3(
-                x: 20f,
-                y: -0.5f,
-                z: -12f
+                z: z
             ),
             WorldPosition(
                 definition: definition,

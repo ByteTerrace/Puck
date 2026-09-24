@@ -95,11 +95,11 @@ public sealed class ReferenceScheduleInstructionServiceLawTests {
         foreach (var source in ReferenceScheduleManifest.PublishedSources) {
             Assert.False(condition: string.IsNullOrWhiteSpace(value: source.Name));
             Assert.True(
-                condition: Uri.TryCreate(
+                condition: (Uri.TryCreate(
                     result: out var url,
                     uriKind: UriKind.Absolute,
                     uriString: source.Url
-                ) && (url.Scheme == Uri.UriSchemeHttps),
+                ) && (url.Scheme == Uri.UriSchemeHttps)),
                 userMessage: source.Name
             );
             if (source.Redistribution is { } terms) {

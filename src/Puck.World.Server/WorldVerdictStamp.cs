@@ -139,27 +139,12 @@ public sealed class WorldVerdictStamp {
     public static bool Stamp(StateArena arena, int rowOrdinal, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        var key = arena.Keys.Intern(name: WorldVerdict.FiredTickKey);
-
-        return (arena.TryCellSlot(
-            key: key,
+        return arena.TryWriteOrMint(
+            evicted: out _,
+            key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey),
+            reason: out _,
             rowOrdinal: rowOrdinal,
-            slot: out _
-        )
-            ? arena.TryWrite(
-                key: key,
-                operand: ((long)tick),
-                reason: out _,
-                rowOrdinal: rowOrdinal,
-                write: StateWriteKind.Set
-            )
-            : arena.TryMint(
-                key: out _,
-                name: WorldVerdict.FiredTickKey,
-                reason: out _,
-                rowOrdinal: rowOrdinal,
-                value: CellValue.Int(value: ((long)tick))
-            )
+            value: CellValue.Int(value: ((long)tick))
         );
     }
 }

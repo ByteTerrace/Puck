@@ -46,7 +46,7 @@ public sealed class LatchAndTriggerLawTests {
                 value: 1m
             )],
         Gate: EvaluatorFixture.Compare(
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             row: "flag",
             value: 1m
         ),
@@ -330,7 +330,7 @@ public sealed class LatchAndTriggerLawTests {
                             value: 1m
                         )],
                     Gate: EvaluatorFixture.Compare(
-                        comparison: ActionStateComparison.GreaterOrEqual,
+                        comparison: ExpressionOp.GreaterOrEqual,
                         row: "other",
                         value: 2m
                     )
@@ -349,7 +349,7 @@ public sealed class LatchAndTriggerLawTests {
                             value: 1m
                         )],
                     Gate: EvaluatorFixture.Compare(
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         row: "flag",
                         value: 1m
                     )

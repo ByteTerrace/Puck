@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Puck.Commands;
 using Puck.Input.Hid;
 using Puck.Input.Output;
@@ -18,14 +17,14 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private readonly GamepadOutputQueue m_outputQueue = new();
     private long m_rumbleExpiry = long.MaxValue;
 
-    private const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
+    internal const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
+    internal const int SteadyStatePollMilliseconds = 16;     // services output/schedules even when input reports pause
+
     private const int MaximumOutputCommandsPerIteration = 32;
     private const int ReceiverSilenceTimeoutMilliseconds = 1000;
     private const int ReportBufferSize = 64;            // fallback when the device reports no input length
     private const int StartupPollMilliseconds = 100;    // bound reads before streaming starts so the watchdog can fire
-    private const int SteadyStatePollMilliseconds = 16; // services output/schedules even when input reports pause
-
-    private static readonly long StreamingDeadlineTicks = (5L * Stopwatch.Frequency);  // fault if never streaming
+    private const int StreamingDeadlineSeconds = 5;     // fault if never streaming
 
     private readonly bool m_activateOnStream;
     private readonly IInputClock m_clock;
@@ -35,6 +34,8 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private readonly IGamepadParser m_parser;
     private readonly byte[] m_readBuffer;
     private readonly long m_receiverSilenceTimeoutTicks;
+    private readonly long m_streamingDeadlineTicks;
+    private readonly TimeProvider m_time;
 
     private bool m_disposed;
     private volatile bool m_faulted;
@@ -48,6 +49,19 @@ internal sealed class GamepadDevice : IGamepadConnection {
     private ulong m_sequence;
     private bool m_started;
 
+    /// <summary>Creates a device over an opened transport. The loop does not run until <see cref="Start"/>.</summary>
+    /// <param name="hid">The opened transport; the device owns it and disposes it with itself.</param>
+    /// <param name="parser">The family parser; the device owns it and disposes it once the loop has stopped.</param>
+    /// <param name="deviceId">The device's stable identity.</param>
+    /// <param name="playerIndex">The zero-based player slot, or <c>-1</c> for a deferred-activation device.</param>
+    /// <param name="clock">The capture clock that stamps report arrival and times scheduled trigger effects.</param>
+    /// <param name="diagnostics">The optional lifecycle diagnostic sink.</param>
+    /// <param name="activateOnStream">Whether the device claims its slot on first streamed state.</param>
+    /// <param name="receiverSilenceTimeoutMilliseconds">The parsed-stream silence, in milliseconds, after which a
+    /// deferred-activation device parks its slot.</param>
+    /// <param name="timeProvider">The clock for the device's own deadlines — receiver silence, rumble expiry, the
+    /// streaming deadline, and the bounded join at disposal — or <see langword="null"/> for
+    /// <see cref="TimeProvider.System"/>. Timed transport reads keep their own timeouts.</param>
     public GamepadDevice(
         IHidDevice hid,
         IGamepadParser parser,
@@ -56,7 +70,8 @@ internal sealed class GamepadDevice : IGamepadConnection {
         IInputClock clock,
         Action<string>? diagnostics = null,
         bool activateOnStream = false,
-        int receiverSilenceTimeoutMilliseconds = ReceiverSilenceTimeoutMilliseconds
+        int receiverSilenceTimeoutMilliseconds = ReceiverSilenceTimeoutMilliseconds,
+        TimeProvider? timeProvider = null
     ) {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(hid);
@@ -64,6 +79,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: receiverSilenceTimeoutMilliseconds);
 
         var inputLength = hid.InputReportByteLength;
+        var time = (timeProvider ?? TimeProvider.System);
 
         DeviceId = deviceId;
         PlayerIndex = playerIndex;
@@ -78,7 +94,9 @@ internal sealed class GamepadDevice : IGamepadConnection {
             accepting: !activateOnStream
         );
         m_parser = parser;
-        m_receiverSilenceTimeoutTicks = ((receiverSilenceTimeoutMilliseconds * Stopwatch.Frequency) / 1000L);
+        m_receiverSilenceTimeoutTicks = ((receiverSilenceTimeoutMilliseconds * time.TimestampFrequency) / 1000L);
+        m_streamingDeadlineTicks = (StreamingDeadlineSeconds * time.TimestampFrequency);
+        m_time = time;
         // Size the read buffer from the device's declared input report length (Bluetooth reports exceed 64);
         // over-sizing is harmless since ReadAsync returns the actual byte count.
         m_readBuffer = new byte[Math.Max(
@@ -154,7 +172,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
             m_rumbleExpiry = long.MaxValue;
         } else {
             m_rumbleActive = true;
-            m_rumbleExpiry = (Stopwatch.GetTimestamp() + ((long)(applied.DurationMilliseconds * (Stopwatch.Frequency / 1000.0))));
+            m_rumbleExpiry = (m_time.GetTimestamp() + ((long)(applied.DurationMilliseconds * (m_time.TimestampFrequency / 1000.0))));
         }
     }
     private static GamepadOutputCapabilities CapabilitiesFor(IGamepadParser parser) {
@@ -234,7 +252,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
         // Honor a finite rumble duration by returning the motors to rest once it elapses.
         if (
             m_rumbleActive &&
-            (Stopwatch.GetTimestamp() >= m_rumbleExpiry)
+            (m_time.GetTimestamp() >= m_rumbleExpiry)
         ) {
             await ApplyRumbleAsync(
                 cancellationToken: cancellationToken,
@@ -284,14 +302,14 @@ internal sealed class GamepadDevice : IGamepadConnection {
         // suspended and the coalescer and parser already reset.
         m_hasStream = false;
     }
-    private static int RemainingMilliseconds(long expiryTimestamp) {
-        var remaining = (expiryTimestamp - Stopwatch.GetTimestamp());
+    private int RemainingMilliseconds(long expiryTimestamp) {
+        var remaining = (expiryTimestamp - m_time.GetTimestamp());
 
         if (remaining <= 0L) {
             return 1;
         }
 
-        var milliseconds = ((remaining * 1000L) / Stopwatch.Frequency);
+        var milliseconds = ((remaining * 1000L) / m_time.TimestampFrequency);
 
         return ((milliseconds < 1L)
             ? 1
@@ -315,8 +333,8 @@ internal sealed class GamepadDevice : IGamepadConnection {
             m_diagnostics?.Invoke($"[gamepad] {Type} init complete; awaiting reports");
 
             var buffer = m_readBuffer;
-            var streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
-            var lastParsedTimestamp = Stopwatch.GetTimestamp();
+            var streamingDeadline = (m_time.GetTimestamp() + m_streamingDeadlineTicks);
+            var lastParsedTimestamp = m_time.GetTimestamp();
 
             while (!cancellationToken.IsCancellationRequested) {
                 await DrainOutputAsync(cancellationToken: cancellationToken);
@@ -375,7 +393,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
                     }
 
                     if (parsed) {
-                        lastParsedTimestamp = Stopwatch.GetTimestamp();
+                        lastParsedTimestamp = m_time.GetTimestamp();
                         // Stamp the report's arrival on the I/O thread — the earliest accurate point — and a
                         // per-device sequence, so the coalescer can carry true sub-frame edge times forward and a
                         // drain can order what it folded. The parser stays pure; timing is layered on here.
@@ -412,7 +430,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
                             await ParkReceiverSlotAsync(cancellationToken: cancellationToken);
                             firstParsed = false;
-                            streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
+                            streamingDeadline = (m_time.GetTimestamp() + m_streamingDeadlineTicks);
 
                             await m_parser.InitializeAsync(
                                 cancellationToken: cancellationToken,
@@ -424,7 +442,7 @@ internal sealed class GamepadDevice : IGamepadConnection {
                             // (and the refreshed deadline keeps a non-deferred device's watchdog honest).
                             await ParkReceiverSlotAsync(cancellationToken: cancellationToken);
                             firstParsed = false;
-                            streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
+                            streamingDeadline = (m_time.GetTimestamp() + m_streamingDeadlineTicks);
                             m_diagnostics?.Invoke($"[gamepad] {Type} receiver slot unpaired; parking");
                         } else if (!loggedUnparsed) {
                             // Data is arriving but not in the expected report shape — e.g. the report-mode
@@ -438,11 +456,11 @@ internal sealed class GamepadDevice : IGamepadConnection {
                 if (
                     firstParsed &&
                     m_activateOnStream &&
-                    ((Stopwatch.GetTimestamp() - lastParsedTimestamp) >= m_receiverSilenceTimeoutTicks)
+                    ((m_time.GetTimestamp() - lastParsedTimestamp) >= m_receiverSilenceTimeoutTicks)
                 ) {
                     await ParkReceiverSlotAsync(cancellationToken: cancellationToken);
                     firstParsed = false;
-                    streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
+                    streamingDeadline = (m_time.GetTimestamp() + m_streamingDeadlineTicks);
                     m_diagnostics?.Invoke($"[gamepad] {Type} receiver stream silent; releasing slot and parking");
                 }
 
@@ -451,12 +469,12 @@ internal sealed class GamepadDevice : IGamepadConnection {
                 if (
                     !firstParsed &&
                     !m_activateOnStream &&
-                    (Stopwatch.GetTimestamp() > streamingDeadline)
+                    (m_time.GetTimestamp() > streamingDeadline)
                 ) {
                     // Initialized but never produced a parseable report (a stuck handshake, or a controller still
                     // on its simple 0x3F report). Fault so the manager prunes it and the rescan reopens and
                     // re-initializes it, instead of leaving a zombie that holds a player slot forever.
-                    throw new TimeoutException(message: $"{Type} did not begin streaming within {(StreamingDeadlineTicks / Stopwatch.Frequency)}s of init");
+                    throw new TimeoutException(message: $"{Type} did not begin streaming within {StreamingDeadlineSeconds}s of init");
                 }
             }
         } catch (OperationCanceledException) {
@@ -483,17 +501,23 @@ internal sealed class GamepadDevice : IGamepadConnection {
             : "dormant receiver slot"
         );
     }
-    private static bool TryJoinLoop(Task? loop) {
+    // A canceled or faulted loop is as terminal as a completed one, so teardown may continue after any of them.
+    private bool TryJoinLoop(Task? loop) {
         if (loop is null) {
             return true;
         }
 
-        try {
-            return loop.Wait(timeout: TimeSpan.FromMilliseconds(value: DisposeJoinTimeoutMilliseconds));
-        } catch (AggregateException) {
-            // Wait wraps a canceled or faulted loop. Either state is terminal, so teardown may continue.
-            return true;
-        }
+        using var joined = new CancellationTokenSource();
+        var deadline = Task.Delay(
+            cancellationToken: joined.Token,
+            delay: TimeSpan.FromMilliseconds(value: DisposeJoinTimeoutMilliseconds),
+            timeProvider: m_time
+        );
+
+        _ = Task.WaitAny(tasks: [deadline, loop]);
+        joined.Cancel();
+
+        return loop.IsCompleted;
     }
 
     public void Dispose() {

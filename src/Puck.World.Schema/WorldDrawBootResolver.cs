@@ -21,8 +21,11 @@ namespace Puck.World;
 /// <para><b>Why the backend draws a NAME.</b> The host backend's natural spelling is a weighted TEXT source over the
 /// backend tokens, parsed through <see cref="WorldHostTokens.ParseBackend"/> here. A numeric draw over the enum's
 /// ordinals would read at the authoring site as a number nothing explains, and would silently re-point itself the day
-/// a member is inserted. Validation already refuses a token naming no backend, so the refusal below is a loud guard
-/// against that check ever going soft, not the primary door.</para>
+/// a member is inserted.</para>
+/// <para><b>What the settle-time refusals still own.</b> Admission proves a DRAWN row over every outcome its source
+/// can produce, so neither refusal below can fire for a value a draw settled. They remain the door for the value a
+/// row carries by another route — an authored literal cell, a checkpoint, a live write — whose single outcome no
+/// source check can see.</para>
 /// </remarks>
 public static class WorldDrawBootResolver {
     // Shared with boot-input validation: a persisted site that will not fire needs only final admission.
@@ -31,13 +34,6 @@ public static class WorldDrawBootResolver {
 
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
-    // A numeric draw's own raw encoding, by the site's declared kind — Fixed carries raw FixedQ4816 bits, Bool its
-    // 0/1 reading, and Int the plain value.
-    private static CellValue NumericCellValue(CellKind kind, long raw) => kind switch {
-        CellKind.Fixed => CellValue.Fixed(rawBits: raw),
-        CellKind.Bool => CellValue.Bool(value: (raw != 0L)),
-        _ => CellValue.Int(value: raw),
-    };
     private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
         fired = default;
 
@@ -173,7 +169,7 @@ public static class WorldDrawBootResolver {
         }
 
         for (var slot = 0; (slot < selected.Count); slot++) {
-            cells[selected[slot]] = cells[selected[slot]] with { Value = NumericCellValue(kind: row.Kind, raw: values[slot]) };
+            cells[selected[slot]] = cells[selected[slot]] with { Value = CellValue.FromNumber(kind: row.Kind, raw: values[slot]) };
         }
 
         filled = row with {
@@ -267,7 +263,7 @@ public static class WorldDrawBootResolver {
                     // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
                     // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill
                     // all share.
-                    Value: NumericCellValue(kind: row.Kind, raw: fired.Numeric!.Value)
+                    Value: CellValue.FromNumber(kind: row.Kind, raw: fired.Numeric!.Value)
                 )
             );
 
@@ -351,6 +347,7 @@ public static class WorldDrawBootResolver {
             // An absent section is not an authored default row. A state-only draw must not materialize the host's
             // absent sentinel (whose dimensions are deliberately zero) and turn a valid document into an invalid one.
             var drawn = ((state is null) ? definition : definition.WithWorldState(rows: state));
+
             resolved = drawn with {
                 PopulationRaw = ((population == definition.Population) ? definition.PopulationRaw : population),
                 HostRaw = (ReferenceEquals(objA: host, objB: definition.Host) ? definition.HostRaw : host),

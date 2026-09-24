@@ -1,6 +1,5 @@
 using Xunit;
 
-using RuleEffectRefusal = Puck.State.Rules.RuleEffectRefusal;
 using RuleGroupDeclaration = Puck.State.Rules.RuleGroupDeclaration;
 using RuleGroupShape = Puck.State.Rules.RuleGroupShape;
 using RuleGroupStep = Puck.State.Rules.RuleGroupStep;
@@ -14,13 +13,11 @@ namespace Puck.World.Tests;
 /// group, never a second time as ordinary rules.
 /// </summary>
 public sealed class RuleGroupServerLawTests {
-    private const string ScoreRow = "score";
     private const int Ceiling = 2;
+    private const string ScoreRow = "score";
     private const int Ticks = 6;
 
-    private static long ScoreCell(WorldFixture fixture) =>
-        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == ScoreRow)).Cells!.Single().Value.Raw;
-
+    private static long ScoreCell(WorldFixture fixture) => fixture.Row(name: ScoreRow).Cells!.Single().Value.Raw;
     private static WorldStateRow Score(long max) => new(
         Name: CellName.Parse(candidate: ScoreRow),
         Kind: CellKind.Int,
@@ -31,37 +28,24 @@ public sealed class RuleGroupServerLawTests {
                 Value: CellValue.Int(value: 0L)
             )]
     );
-
-    // Two members that undo one another every pass, so the group's write set moves on every pass and the fixpoint
-    // never closes.
+    // One member that inverts the score every pass, so every pass leaves the group's write set different from where
+    // it began and the fixpoint never closes.
     private static WorldDefinition OscillatingDocument() {
         var document = Fixtures.BuildDocument();
 
         return document with {
             StateRaw = new WorldStateSection(World: [Score(max: 1L)]),
-            Rules = [
-                new WorldRule(
-                Name: CellName.Parse(candidate: "flip-up"),
+            Rules = [new WorldRule(
+                Name: CellName.Parse(candidate: "toggle"),
                 Effects: [new ActionEffect.SetState(
-                        State: ScoreRow,
-                        Value: 1m
+                        Expression: ExpressionProgram.Parse(text: $"1 - {ScoreRow}"),
+                        State: ScoreRow
                     )]
-            ),
-                new WorldRule(
-                Name: CellName.Parse(candidate: "flip-down"),
-                Effects: [new ActionEffect.SetState(
-                        State: ScoreRow,
-                        Value: 0m
-                    )]
-            ),
-            ],
+            )],
             RuleGroupsRaw = [new RuleGroupDeclaration(
                 Name: CellName.Parse(candidate: "flip"),
                 Shape: RuleGroupShape.Fixpoint,
-                Steps: [
-                    new RuleGroupStep(Rule: CellName.Parse(candidate: "flip-up")),
-                    new RuleGroupStep(Rule: CellName.Parse(candidate: "flip-down")),
-                ],
+                Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "toggle"))],
                 Passes: Ceiling
             )],
         };
@@ -112,7 +96,6 @@ public sealed class RuleGroupServerLawTests {
             expected: "flip"
         );
     }
-
     // A group naming a rule the section does not declare cannot compile. On this host that is a validation line, so
     // the document does not install at all and no member of the group runs. KEEP IN SYNC with the browser session,
     // which drops the same members from its direct pass.
@@ -143,7 +126,6 @@ public sealed class RuleGroupServerLawTests {
             expectedSubstring: "missing"
         );
     }
-
     [Fact]
     public void TheUngroupedPartitionKeepsAGroupsMemberOutOfTheDirectPass() {
         using var grouped = Fixtures.FreshServer(definition: TallyDocument(group: true));

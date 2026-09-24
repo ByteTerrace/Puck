@@ -59,9 +59,12 @@ public sealed class WorldFaceCatalogLawTests {
                 Scale: 1f,
                 FaceSources: [new WorldPlacementFace(
                         Face: DoorFace,
-                        Source: new WorldScreenSource.TestPattern(
-                            Height: 64,
-                            Width: 64
+                        Source: WorldImageProducerSettings.SourceOf(
+                            id: WorldImageProducerSettings.TestPatternId,
+                            settings: new WorldTestPatternSettings(
+                                Height: 64,
+                                Width: 64
+                            )
                         )
                     )]
             );
@@ -176,7 +179,7 @@ public sealed class WorldFaceCatalogLawTests {
             PlacementRowsRaw = [placement],
             References = [new WorldReference(
                 Name: SafeName.Parse(candidate: ReferenceName),
-                Document: "worlds/dest.world.json"
+                Document: "worlds/dest"
             )],
             Destinations = [new WorldDestination(
                 Name: SafeName.Parse(candidate: DestinationName),
@@ -210,10 +213,12 @@ public sealed class WorldFaceCatalogLawTests {
         );
         var placements = new List<WorldPlacement>(collection: dark.Placements);
 
-        placements[0] = (placements[0] with { FaceSources = [new WorldPlacementFace(
+        placements[0] = (placements[0] with {
+            FaceSources = [new WorldPlacementFace(
                 Face: DoorFace,
                 Source: new WorldScreenSource.None()
-            )] });
+            )],
+        });
 
         var catalog = WorldFaceCatalog.For(definition: (dark with { PlacementRowsRaw = placements }));
 

@@ -51,7 +51,6 @@ public sealed class ExpressionNestingLawTests {
         "nested indices",
         "nested arguments"
     );
-
     [MemberData(nameof(Shapes))]
     [Theory]
     public void ASpellingNestedPastTheCeilingIsRefusedByName(string shape) {
@@ -67,8 +66,8 @@ public sealed class ExpressionNestingLawTests {
             text: text
         ));
         Assert.Contains(
-            expectedSubstring: $"nests more than {ExpressionSpelling.MaxNesting} deep",
-            actualString: error
+            actualString: error,
+            expectedSubstring: $"nests more than {ExpressionSpelling.MaxNesting} deep"
         );
     }
     [MemberData(nameof(Shapes))]

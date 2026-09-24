@@ -28,7 +28,7 @@ namespace Puck.World;
 /// conversion (writes the exact declared member name, refuses a numeric token on read) at the enum's OWN
 /// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="Puck.Physics.Motion.BodyMotionOp"/>,
 /// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="Puck.Physics.Motion.ActionFact"/>,
-/// <see cref="ActionStateComparison"/>, <see cref="ChannelRole"/>, <see cref="ShadowTier"/>,
+/// <see cref="ExpressionOp"/>, <see cref="ChannelRole"/>, <see cref="ShadowTier"/>,
 /// <see cref="WorldRenderScaleTier"/>, <see cref="Puck.Abstractions.Presentation.PresentMode"/>,
 /// <see cref="Puck.World.Protocol.WorldCapability"/>, and every <c>Puck.Commands</c> binding enum) — never on this
 /// context's converter list. That is the point rather than a tidiness: a converter listed on a context binds THAT
@@ -41,8 +41,8 @@ namespace Puck.World;
 /// as <c>[x, y]</c>/<c>[x, y, z]</c>/<c>[x, y, z, w]</c> arrays — the same converters and spelling
 /// <see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/> registers for every other document family, so a
 /// vector never carries two spellings depending which document it sits in — and
-/// <see cref="Puck.World.Protocol.GrantSubject"/>/<see cref="Puck.World.Protocol.WorldPrincipal"/>
-/// each ride a token converter (<see cref="GrantSubjectJsonConverter"/>/<see cref="WorldPrincipalJsonConverter"/>) so a
+/// <see cref="Puck.World.Protocol.GrantSubject"/>/<see cref="Principal"/>/<see cref="Puck.World.Protocol.Grantee"/>
+/// each ride a token converter (<see cref="GrantSubjectJsonConverter"/>/<see cref="PrincipalJsonConverter"/>/<see cref="GranteeJsonConverter"/>) so a
 /// document-authored grant reads the same compact <c>world.grant</c> tokens rather than a raw field object.
 /// </summary>
 [JsonSerializable(typeof(WorldDefinition))]
@@ -188,6 +188,13 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldProbeParameterTarget.Extension), TypeInfoPropertyName = "WorldProbeParameterTargetExtension")]
 [JsonSerializable(typeof(WorldProbeParameterTarget.Probe), TypeInfoPropertyName = "WorldProbeParameterTargetProbe")]
 [JsonSerializable(typeof(WorldScreenSource.Probe), TypeInfoPropertyName = "WorldScreenSourceProbe")]
+// The shipped image producers' settings shapes, which a producer source's settings object binds to
+// (WorldImageProducerSettings.Bind). None is reachable from WorldDefinition: a producer's settings are the producer's,
+// not the document model's.
+[JsonSerializable(typeof(WorldCameraSettings))]
+[JsonSerializable(typeof(WorldCaptureSettings))]
+[JsonSerializable(typeof(WorldQrSettings))]
+[JsonSerializable(typeof(WorldTestPatternSettings))]
 // The host-section defaults row (the world.row.set host payload shape + the document `host` section). WorldBackendPreference
 // and SurfaceFormat ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit
 // "directX" / "r8G8B8A8Unorm"; PresentMode keeps the generic camelCase converter (immediate/adaptive/…).
@@ -269,11 +276,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.StartTimer))]
 [JsonSerializable(typeof(WorldEffect.Designate))]
 [JsonSerializable(typeof(WorldEffect.EmitCue))]
-[JsonSerializable(typeof(WorldEffect.SetBodyVerticalVelocity))]
-[JsonSerializable(typeof(WorldEffect.ScaleBodyVerticalVelocity))]
-[JsonSerializable(typeof(WorldEffect.ApplyBodyImpulse))]
 [JsonSerializable(typeof(WorldEffect.ApplyRigidImpulse))]
-[JsonSerializable(typeof(WorldEffect.DesignateBody))]
 [JsonSerializable(typeof(WorldEffect.PaintField))]
 [JsonSerializable(typeof(WorldEffect.UpsertHudPanel))]
 [JsonSerializable(typeof(WorldEffect.RemoveHudPanel))]
@@ -320,12 +323,15 @@ namespace Puck.World;
 // never embedded in or referenced from a world document), sharing this context's strictness and naming policy so
 // its own JSON Schema generation rides the same exporter machinery as every world-document family.
 [JsonSerializable(typeof(WorldSiloDefinition))]
+// The counters report (puck.counters.report.v1) — the document `puck counters` writes and compares, sharing this
+// context's strictness so a foreign or damaged report is refused by name, and its schema rides the same exporter.
+[JsonSerializable(typeof(WorldCountersReport))]
 [JsonSourceGenerationOptions(
     // Puck.Commands' own types are absent from this list deliberately: CommandValue and every binding enum carry
     // their converter at their own declaration now (Puck.Commands references Puck.Abstractions for exactly that),
     // so this context and Puck.Commands.BindingProfileJsonContext read the shape off the TYPE rather than each
     // repeating a registration the other could drift from.
-    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(SafeNameJsonConverter), typeof(CellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CreationDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(PrincipalJsonConverter), typeof(GranteeJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(SafeNameJsonConverter), typeof(CellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
@@ -348,7 +354,8 @@ internal sealed partial class WorldJsonSourceContext : JsonSerializerContext {
 
 /// <summary>The serializer every world document, verb payload, and wire codec reads and writes through: the
 /// source-generated metadata of <see cref="WorldJsonSourceContext"/> plus the arms the document adds at runtime to
-/// the engine's polymorphic bases (<see cref="WorldJsonVocabulary"/>). The typed accessors mirror the generated
+/// the engine's polymorphic bases (<see cref="WorldJsonVocabulary"/>) and the flat spelling of a vector space
+/// (<see cref="StateSpace.ExtendJson"/>). The typed accessors mirror the generated
 /// context's, resolved through <see cref="Options"/> so every nested shape sees the same extended resolver.</summary>
 public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     /// <summary>Gets the type info for <see cref="BindingProfileDocument"/>.</summary>
@@ -449,6 +456,11 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldSeatCameraFeel> WorldSeatCameraFeel => Get<WorldSeatCameraFeel>();
     /// <summary>Gets the type info for <see cref="WorldSeatViewControl"/>.</summary>
     public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => Get<WorldSeatViewControl>();
+    /// <summary>Gets the type info for <see cref="WorldCountersReport"/>.</summary>
+    public JsonTypeInfo<WorldCountersReport> WorldCountersReport => Get<WorldCountersReport>();
+    /// <summary>Gets the type info for <see cref="GpuDeviceIdentity"/>, as a counters report and <c>world.counters</c>
+    /// spell it.</summary>
+    public JsonTypeInfo<Puck.Abstractions.Gpu.GpuDeviceIdentity> GpuDeviceIdentity => Get<Puck.Abstractions.Gpu.GpuDeviceIdentity>();
     /// <summary>Gets the type info for <see cref="WorldSiloDefinition"/>.</summary>
     public JsonTypeInfo<WorldSiloDefinition> WorldSiloDefinition => Get<WorldSiloDefinition>();
     /// <summary>Gets the type info for <see cref="WorldSpawnPoint"/> arrays.</summary>
@@ -468,7 +480,9 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
 
     private WorldJsonContext() {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {
-            TypeInfoResolver = WorldJsonSourceContext.Default.WithAddedModifier(modifier: WorldJsonVocabulary.Extend),
+            TypeInfoResolver = WorldJsonSourceContext.Default
+                .WithAddedModifier(modifier: WorldJsonVocabulary.Extend)
+                .WithAddedModifier(modifier: StateSpace.ExtendJson),
         };
 
         options.MakeReadOnly();
@@ -988,7 +1002,7 @@ internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConver
 }
 /// <summary>
 /// Reads and writes a <see cref="GrantSubject"/> as the same compact token <c>world.grant</c> takes — <c>all</c>,
-/// <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>, <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>,
+/// <c>composition</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>, <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>,
 /// <c>creation:&lt;id&gt;</c>, <c>placement:&lt;id&gt;</c> — rather than
 /// this context's member policies, which would emit a raw <c>{"kind":0,"value":5,"id":null}</c> object and a bare
 /// numeric <see cref="WorldSection"/> ordinal for a section subject (opaque without the enum's declaration order open
@@ -998,8 +1012,7 @@ internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConver
 /// <c>Value</c>/<c>Id</c> the wildcard or section kinds never carry), which is exactly what would have seated a
 /// phantom grant a HashSet/dictionary lookup can never match. Writing rides <see cref="GrantSubject.Describe"/> — the
 /// same label the console's own accept/reject lines print, so a saved document and a printed line never disagree on
-/// spelling. <see cref="GrantSubjectKind.Composition"/> is never emitted (nothing constructs it outside the grant
-/// table's own boot seed) and is rejected on read like any other token the grammar does not recognize.
+/// spelling.
 /// </summary>
 internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<GrantSubject> {
     /// <inheritdoc/>
@@ -1019,28 +1032,26 @@ internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<Gr
         }
 
         value = default;
-        reason = "must be 'all', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'";
+        reason = "must be 'all', 'composition', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'";
 
         return false;
     }
 }
 /// <summary>
-/// Reads and writes a <see cref="WorldPrincipal"/> as the same compact token <c>world.grant</c> takes —
-/// <c>seat1</c>..<c>seat4</c>, <c>console</c>, <c>addon:&lt;name&gt;</c>, <c>peer:&lt;n&gt;:&lt;generation&gt;</c> — rather than this
-/// context's member policies, which would emit a raw <c>{"kind":0,"index":0,"name":null}</c> object. Parsing rides
-/// <see cref="WorldPrincipal.TryParse"/> — the identical grammar the console itself grants through —
-/// so a document-sourced principal (a <see cref="WorldGrant.Principal"/> row) can only ever be the same canonical
-/// shape a live grant uses, matching <see cref="GrantSubjectJsonConverter"/>'s reasoning exactly. Writing rides
-/// <see cref="WorldPrincipal.Describe"/>, the same label the console's own accept/reject lines print.
+/// Reads and writes a <see cref="Principal"/> as its <see cref="Principal.Describe"/> label —
+/// <c>seat1</c>..<c>seat4</c>, <c>console</c>, <c>world</c>, <c>addon:&lt;name&gt;</c>, <c>peer:&lt;n&gt;:&lt;generation&gt;</c> —
+/// rather than this context's member policies, which would emit a raw field object. Parsing rides
+/// <see cref="PrincipalTokens.TryParse"/>, the identical grammar the console parses through, so a document-sourced
+/// principal can only ever be the same canonical shape a live one uses.
 /// </summary>
-internal sealed class WorldPrincipalJsonConverter : TryParseStringJsonConverter<WorldPrincipal> {
+internal sealed class PrincipalJsonConverter : TryParseStringJsonConverter<Principal> {
     /// <inheritdoc/>
-    protected override string ToValue(WorldPrincipal value) => value.Describe();
+    protected override string ToValue(Principal value) => value.Describe();
     /// <inheritdoc/>
-    protected override bool TryParse(string? candidate, out WorldPrincipal value, out string reason) {
+    protected override bool TryParse(string? candidate, out Principal value, out string reason) {
         if (
             (candidate is not null) &&
-            WorldPrincipal.TryParse(
+            PrincipalTokens.TryParse(
             principal: out value,
             token: candidate
         )
@@ -1051,7 +1062,35 @@ internal sealed class WorldPrincipalJsonConverter : TryParseStringJsonConverter<
         }
 
         value = default;
-        reason = "must be 'seat1'..'seat4', 'console', 'addon:<name>', 'peer:<n>:<generation>', or 'document:<id>'";
+        reason = $"must be one of {PrincipalTokens.Grammar}";
+
+        return false;
+    }
+}
+/// <summary>
+/// Reads and writes a <see cref="Grantee"/> — a <see cref="WorldGrant.Grantee"/> row's holder — as its
+/// <see cref="Grantee.Describe"/> label: a principal's own label, <c>group:&lt;id&gt;</c>, or <c>document:&lt;id&gt;</c>.
+/// Parsing rides <see cref="Grantee.TryParse"/>, the grammar <c>world.grant</c> parses through.
+/// </summary>
+internal sealed class GranteeJsonConverter : TryParseStringJsonConverter<Grantee> {
+    /// <inheritdoc/>
+    protected override string ToValue(Grantee value) => value.Describe();
+    /// <inheritdoc/>
+    protected override bool TryParse(string? candidate, out Grantee value, out string reason) {
+        if (
+            (candidate is not null) &&
+            Grantee.TryParse(
+            grantee: out value,
+            token: candidate
+        )
+        ) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        value = default;
+        reason = $"must be one of {Grantee.TokenGrammar}";
 
         return false;
     }
@@ -1180,22 +1219,25 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
 /// the file byte-for-byte and world files stay diffable and git-friendly.
 /// </summary>
 public static partial class WorldDefinitionSerialization {
-    /// <summary>Deserializes, migrates, and validates a definition from its canonical UTF-8 JSON bytes — the inverse
+    // The document root's member carrying WorldDefinition.Schema.
+    private const string SchemaMemberName = "schema";
+
+    /// <summary>Deserializes and validates a definition from its canonical UTF-8 JSON bytes — the inverse
     /// of <see cref="Serialize"/> for an in-memory round-trip (the replay recording's rehydration path). The bytes
     /// ride a file a user can hand-edit or truncate, so every malformed, incomplete, or invalid document arrives as
-    /// one <see cref="InvalidDataException"/> the caller reports rather than an escaping parse fault.
-    /// <see cref="WorldDefinitionMigrations.Apply"/> runs before validation, exactly as it does in
-    /// <see cref="WorldDefinitionFileSource.TryLoad"/>, so a stale embedded document from before a field existed
-    /// validates the same way a stale file does.</summary>
+    /// one <see cref="InvalidDataException"/> the caller reports rather than an escaping parse fault.</summary>
     /// <param name="utf8Json">The canonical UTF-8 JSON bytes.</param>
+    /// <param name="documentDirectory">The directory the document's relative paths resolve beside
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>) when the caller knows the file it came from, or
+    /// <see langword="null"/> for a document with none.</param>
     /// <returns>The deserialized, validated definition.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The bytes are not a valid <c>puck.world.definition.v1</c> document.</exception>
-    public static WorldDefinition Deserialize(byte[] utf8Json) {
+    public static WorldDefinition Deserialize(byte[] utf8Json, string? documentDirectory = null) {
         ArgumentNullException.ThrowIfNull(argument: utf8Json);
 
         try {
-            var definition = ParseEmbedded(utf8Json: utf8Json);
+            var definition = ParseEmbedded(documentDirectory: documentDirectory, utf8Json: utf8Json);
 
             // An embedded document already crossed a boundary that proved its cross-document claims (a boot load,
             // replay recording, identity issue, or authority projection). This storage-free rehydration cannot
@@ -1213,7 +1255,8 @@ public static partial class WorldDefinitionSerialization {
             throw InvalidEmbedded(exception: exception);
         }
     }
-    /// <summary>Writes a definition to <paramref name="path"/> in canonical form (the <c>world.save</c> path).</summary>
+    /// <summary>Writes a definition to <paramref name="path"/> in canonical form (the <c>world.save</c> path), through
+    /// <see cref="Puck.Assets.AtomicFile"/>, so a failed write leaves the previous file complete.</summary>
     /// <param name="definition">The definition to write.</param>
     /// <param name="path">The destination file path.</param>
     /// <returns>The number of bytes written.</returns>
@@ -1223,9 +1266,9 @@ public static partial class WorldDefinitionSerialization {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
-        var bytes = Serialize(definition: definition);
+        var bytes = SerializeBeside(definition: definition, path: path);
 
-        File.WriteAllBytes(
+        Puck.Assets.AtomicFile.WriteAllBytes(
             bytes: bytes,
             path: path
         );
@@ -1239,7 +1282,8 @@ public static partial class WorldDefinitionSerialization {
     /// derived or composed world's save stays derived. The computed delta is proved by re-merging before anything is
     /// written; a delta that cannot reproduce the document — or a stack that cannot be peeked or composed —
     /// degrades to the flat <see cref="Save"/> with <paramref name="note"/> naming why. A target file that does not
-    /// exist, or declares neither, is the ordinary flat save.</summary>
+    /// exist, or declares neither, is the ordinary flat save. Either write goes through
+    /// <see cref="Puck.Assets.AtomicFile"/>, so a failed write leaves the previous file complete.</summary>
     /// <param name="definition">The definition to write.</param>
     /// <param name="path">The destination file path — also the file whose derivation is preserved.</param>
     /// <param name="basisPath">The absolute basis path the write preserved, or <see langword="null"/> when the
@@ -1318,48 +1362,30 @@ public static partial class WorldDefinitionSerialization {
             );
         }
 
-        var targetTree = ((JsonObject)JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: Serialize(definition: definition)))!);
+        // The target is canonical, so it is diffed against the stack's own canonical form: a row the save left alone
+        // then spells identically on both sides and stays out of the delta, instead of being restated with every
+        // member the canonical form writes out (which would also restate an imported module's private rows in the
+        // host, where the composer refuses them).
+        var targetBytes = SerializeBeside(definition: definition, path: path);
         var delta = WorldDocumentBasis.Diff(
-            basis: stackTree!,
-            target: targetTree
+            basis: (CanonicalTree(tree: stackTree!) ?? stackTree!),
+            target: ((JsonObject)JsonNode.Parse(utf8Json: targetBytes)!)
         );
 
-        if (
-            !WorldDocumentBasis.TryMerge(
-            basis: stackTree!,
-            composed: out var proved,
-            overlay: delta,
-            reason: out var mergeReason
-        ) ||
-            !JsonNode.DeepEquals(
-            node1: proved,
-            node2: targetTree
-        )
-        ) {
-            note = $"saved flat: the computed delta could not reproduce the document over its basis/imports stack{((mergeReason is { Length: > 0 })
-                ? $" ({mergeReason})"
-                : "")}.";
-
-            return Save(
-                definition: definition,
-                path: path
-            );
-        }
-
         // `basis`/`imports` lead the written document so a reader knows it is composed before reading anything
-        // else. The authored spelling is the target-relative path with forward slashes — portable across the
-        // checked-in assets and a copied state directory alike.
+        // else. Each is written as the document name relative to the target, with forward slashes (WorldDocumentName)
+        // — portable across the checked-in assets and a copied state directory alike.
         var targetDirectory = (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? ".");
         var output = new JsonObject();
 
         if (peekedBasis is { } basis) {
-            output[propertyName: WorldDocumentBasis.BasisMemberName] = Path.GetRelativePath(
+            output[propertyName: WorldDocumentBasis.BasisMemberName] = WorldDocumentName.OfDocumentFile(path: Path.GetRelativePath(
                 path: basis,
                 relativeTo: targetDirectory
             ).Replace(
                 newChar: '/',
                 oldChar: '\\'
-            );
+            ));
         }
 
         if (peekedImports.Count > 0) {
@@ -1367,13 +1393,13 @@ public static partial class WorldDefinitionSerialization {
 
             foreach (var (importPath, alias) in peekedImports) {
                 var entry = new JsonObject {
-                    [propertyName: WorldImport.DocumentMemberName] = Path.GetRelativePath(
+                    [propertyName: WorldImport.DocumentMemberName] = WorldDocumentName.OfDocumentFile(path: Path.GetRelativePath(
                     path: importPath,
                     relativeTo: targetDirectory
                 ).Replace(
                     newChar: '/',
                     oldChar: '\\'
-                ),
+                )),
                 };
 
                 if (alias is not null) {
@@ -1392,7 +1418,25 @@ public static partial class WorldDefinitionSerialization {
 
         var bytes = CanonicalJsonDocument.Serialize(node: output);
 
-        File.WriteAllBytes(
+        if (!ComposesTo(
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint,
+            path: path,
+            reason: out var proofReason,
+            target: targetBytes,
+            written: bytes
+        )) {
+            note = $"saved flat: the computed delta could not reproduce the document over its basis/imports stack{((proofReason.Length > 0)
+                ? $" ({proofReason})"
+                : "")}.";
+
+            return Save(
+                definition: definition,
+                path: path
+            );
+        }
+
+        Puck.Assets.AtomicFile.WriteAllBytes(
             bytes: bytes,
             path: path
         );
@@ -1401,6 +1445,93 @@ public static partial class WorldDefinitionSerialization {
 
         return bytes.LongLength;
     }
+
+    // The canonical form of a composed basis/imports layer, or null when the layer is not a document the model parses
+    // on its own. A layer of imports alone carries no schema tag of its own, so the tag is supplied for the parse and
+    // left out of the result, where the delta then carries it.
+    private static JsonObject? CanonicalTree(JsonObject tree) {
+        var candidate = ((JsonObject)tree.DeepClone());
+        var tagged = candidate.ContainsKey(propertyName: SchemaMemberName);
+
+        if (!tagged) {
+            candidate[propertyName: SchemaMemberName] = WorldDefinition.SchemaVersion;
+        }
+
+        if (!WorldDefinitionFileSource.TryParseDocument(
+            definition: out var parsed,
+            json: candidate.ToJsonString(),
+            reason: out _,
+            sourceName: "the basis/imports stack"
+        )) {
+            return null;
+        }
+
+        var canonical = ((JsonObject)JsonNode.Parse(utf8Json: Serialize(definition: parsed!))!);
+
+        if (!tagged) {
+            _ = canonical.Remove(propertyName: SchemaMemberName);
+        }
+
+        return canonical;
+    }
+    // Proves a delta before it is written, by the path a reload takes: the written bytes compose through the same
+    // document source and composer a load uses, which refuses a host naming what an import does not export, and the
+    // composition must parse to the target's canonical bytes. The document is compared, not the tree's spelling: the
+    // canonical form writes some absent members as an explicit null, which an overlay cannot restate because an
+    // overlay's null removes a member.
+    private static bool ComposesTo(byte[] written, string path, byte[] target, string catalogFingerprint, IMachineValidationCatalog? catalog, out string reason) {
+        if (!WorldDefinitionFileSource.TryComposeChainWithImports(
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint,
+            chainBytes: out _,
+            composed: out var composed,
+            reason: out reason,
+            rootBytes: written,
+            rootResolvedName: Puck.Abstractions.PuckPaths.Normalize(path: path),
+            source: WorldDefinitionFileSource.LocalDocuments
+        )) {
+            return false;
+        }
+
+        if (!WorldDefinitionFileSource.TryParseDocument(
+            definition: out var parsed,
+            json: (composed ?? []).ToJsonString(),
+            reason: out reason,
+            sourceName: path
+        )) {
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return Serialize(definition: parsed!).AsSpan().SequenceEqual(other: target);
+    }
+    // The canonical bytes a definition is written as at `path`: every relative path it authors is re-expressed from
+    // the directory it was loaded from to the target's, so a document saved elsewhere still names the files it named.
+    private static byte[] SerializeBeside(WorldDefinition definition, string path) {
+        var bytes = Serialize(definition: definition);
+
+        if (definition.DocumentDirectory is not { } origin) {
+            return bytes;
+        }
+
+        var target = WorldDocumentPaths.DirectoryOf(documentPath: path);
+
+        if (Puck.Abstractions.PuckPaths.Comparer.Equals(x: origin, y: target)) {
+            return bytes;
+        }
+
+        var tree = ((JsonObject)JsonNode.Parse(utf8Json: bytes)!);
+
+        WorldDocumentPaths.RelocateDocumentFields(
+            module: tree,
+            sourceDocumentPath: $"{origin}/{Path.GetFileName(path: path)}",
+            targetDocumentPath: Path.GetFullPath(path: path)
+        );
+
+        return CanonicalJsonDocument.Serialize(node: tree);
+    }
+
     /// <summary>Serializes a definition to its canonical UTF-8 bytes (no BOM, LF newlines, one trailing newline).</summary>
     /// <param name="definition">The definition to serialize.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
@@ -1409,6 +1540,19 @@ public static partial class WorldDefinitionSerialization {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return CanonicalJsonDocument.Serialize(
+            jsonTypeInfo: WorldJsonContext.Default.WorldDefinition,
+            value: definition
+        );
+    }
+    /// <summary>Serializes a definition to its compact canonical UTF-8 bytes: <see cref="Serialize"/>'s document with
+    /// no whitespace, the form a compiled world stores.</summary>
+    /// <param name="definition">The definition to serialize.</param>
+    /// <returns>The compact canonical UTF-8 byte form.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static byte[] SerializeCompact(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return CanonicalJsonDocument.SerializeCompact(
             jsonTypeInfo: WorldJsonContext.Default.WorldDefinition,
             value: definition
         );

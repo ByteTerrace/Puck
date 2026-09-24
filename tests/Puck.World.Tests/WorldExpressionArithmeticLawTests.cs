@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Xunit;
 
@@ -97,13 +98,14 @@ public sealed class WorldExpressionArithmeticLawTests {
         }
         var expected = Run();
 
-        for (var index = 0; (index < 8); index++) { Assert.Equal(
+        for (var index = 0; (index < 8); index++) {
+            Assert.Equal(
             expected,
             Run()
-        ); }
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var actual = Run();
-        var bytes = (GC.GetAllocatedBytesForCurrentThread() - before);
+        );
+        }
+        var actual = 0L;
+        var bytes = AllocationWindow.Least(window: () => actual = Run());
 
         Assert.Equal(
             actual: actual,

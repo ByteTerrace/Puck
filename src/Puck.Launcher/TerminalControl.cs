@@ -43,6 +43,11 @@ public sealed class TerminalControl : ITerminalControl, IInputFocus {
             }
         }
     }
+
+    /// <summary>Gets a value indicating whether an exit has been requested and not yet consumed. A host reads it to
+    /// stop stepping inside the call that ran the request, before its loop consumes the exit.</summary>
+    public bool IsExitRequested => m_exitRequested;
+
     /// <inheritdoc />
     public void RequestExit() {
         m_exitRequested = true;

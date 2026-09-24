@@ -153,6 +153,13 @@ internal static class OfficialServeCommand {
                 )] = file.ContentType;
             }
 
+            foreach (var entry in manifest.Sources) {
+                map[entry.Path.Replace(
+                    newChar: '/',
+                    oldChar: '\\'
+                )] = entry.ContentType;
+            }
+
             foreach (var entry in manifest.Documents) {
                 map[entry.Path.Replace(
                     newChar: '/',
@@ -228,16 +235,16 @@ internal static class OfficialServeCommand {
         var portOption = new Option<int>(name: "--port") { DefaultValueFactory = _ => DefaultPort, Description = "The port to listen on." };
         var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root.", Required = true };
         var command = new Command(
-            description: """
-            A minimal static HTTP server over a puck.official.manifest.v1 tree.
+            description: "Serve a puck.official.manifest.v1 tree over local HTTP until Ctrl+C.",
+            name: "serve"
+        ) { portOption, treeOption };
 
+        command.Detail(detail: """
             Serves every file under <tree> by its path (a channel or builds manifest.json, and every object under
             objects/sha256/...). Content-Type comes from the enclosing manifest's own per-object contentType when one
             names the object; Cache-Control is immutable for an object, max-age=60 for a manifest.json. CORS is
             permissive (Access-Control-Allow-Origin: *). Prints the base URL and blocks until Ctrl+C.
-            """,
-            name: "serve"
-        ) { portOption, treeOption };
+            """);
 
         command.SetAction(action: parseResult => Run(
             port: parseResult.GetRequiredValue(option: portOption),

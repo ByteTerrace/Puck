@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Editing;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
@@ -12,16 +13,6 @@ namespace Puck.World.Transpiler.Lsp;
 
 /// <summary>Language Server Protocol support for the embedded State SQL dialect.</summary>
 internal static class PuckSqlLsp {
-    private static void AddCompletion(JsonArray items, string label, string insertText, string detail, int kind) {
-        items.Add(item: new JsonObject {
-            ["label"] = label,
-            ["kind"] = kind,
-            ["detail"] = detail,
-            ["insertText"] = insertText,
-            ["insertTextFormat"] = 2,
-        });
-    }
-
     private static string Capitalize(string text) {
         if (string.IsNullOrEmpty(value: text)) {
             return text;
@@ -29,7 +20,6 @@ internal static class PuckSqlLsp {
 
         return (char.ToUpperInvariant(c: text[0]) + text.Substring(startIndex: 1));
     }
-
     private static string GetColTraits(SqlColumnDefinition col) {
         var traits = new List<string>();
 
@@ -65,7 +55,6 @@ internal static class PuckSqlLsp {
             )}]"
             : ""));
     }
-
     private static string GetMappedRowName(string tableName, SqlColumnDefinition col) {
         if (col.ExplicitRowName is not null) {
             return col.ExplicitRowName;
@@ -77,7 +66,6 @@ internal static class PuckSqlLsp {
 
         return $"{tableName}{Capitalize(text: col.Name)}";
     }
-
     private static List<SqlStatement> ParseSqlBlock(EmbeddedBlockNode eb) {
         try {
             var lexer = new StateSqlLexer(
@@ -97,12 +85,11 @@ internal static class PuckSqlLsp {
             return [];
         }
     }
-
     private static List<SqlStatement> ParseAllSqlStatements(string text, DocumentVocabularyResolver? resolver = null) {
         var statements = new List<SqlStatement>();
 
         try {
-            var vocabulary = (resolver?.Resolve(text) ?? WorldDocumentVocabulary.Instance);
+            var vocabulary = (resolver?.Resolve(source: text) ?? WorldDocumentVocabulary.Instance);
             var document = PuckParser.ParseDocumentWithDiagnostics(
                 source: text,
                 vocabulary: vocabulary
@@ -133,30 +120,21 @@ internal static class PuckSqlLsp {
 
     internal static bool IsCursorInsideSqlBlock(string text, int cursorOffset, DocumentVocabularyResolver? resolver = null) {
         try {
-            var vocabulary = (resolver?.Resolve(text) ?? WorldDocumentVocabulary.Instance);
+            var vocabulary = (resolver?.Resolve(source: text) ?? WorldDocumentVocabulary.Instance);
             var document = PuckParser.ParseDocumentWithDiagnostics(
                 source: text,
                 vocabulary: vocabulary
             ).Value;
 
             if (document is not null) {
-                foreach (var stmt in document.Statements) {
-                    if (
-                        (stmt is EmbeddedBlockNode eb) &&
-                        string.Equals(
-                            a: eb.Language,
-                            b: "sql",
-                            comparisonType: StringComparison.OrdinalIgnoreCase
-                        )
-                    ) {
-                        if (
-                            (cursorOffset >= eb.Offset) &&
-                            (cursorOffset <= (eb.Offset + eb.Length))
-                        ) {
-                            return true;
-                        }
-                    }
-                }
+                return SyntaxWalk.PathAt(offset: cursorOffset, root: document).Any(predicate: static node => (
+                    (node is EmbeddedBlockNode eb) &&
+                    string.Equals(
+                        a: eb.Language,
+                        b: "sql",
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )
+                ));
             }
         } catch {
             // Ignore parse failures
@@ -164,215 +142,214 @@ internal static class PuckSqlLsp {
 
         return false;
     }
-
     internal static JsonArray GetSqlCompletions(string text, DocumentVocabularyResolver? resolver = null) {
         var items = new JsonArray();
 
         // 1. Statements & Keywords
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL statement: Query rows",
             insertText: "SELECT ${1:*} FROM ${2:table};",
             items: items,
             kind: 14,
             label: "SELECT"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL statement: Insert row(s)",
             insertText: "INSERT INTO ${1:table} (${2:columns}) VALUES (${3:values});",
             items: items,
             kind: 14,
             label: "INSERT INTO"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL statement: Update row(s)",
             insertText: "UPDATE ${1:table} SET ${2:col} = ${3:val} WHERE ${4:cond};",
             items: items,
             kind: 14,
             label: "UPDATE"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL statement: Delete row(s)",
             insertText: "DELETE FROM ${1:table} WHERE ${2:cond};",
             items: items,
             kind: 14,
             label: "DELETE FROM"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL statement: Create table",
             insertText: "CREATE TABLE ${1:name} (\n    ${2:id} KEY(${3:16}),\n    $0\n);",
             items: items,
             kind: 14,
             label: "CREATE TABLE"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL statement: Declare scalar slot",
             insertText: "DECLARE ${1:name} ${2|INT,FLOAT,BOOL,TEXT|};",
             items: items,
             kind: 14,
             label: "DECLARE"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL block: Atomic transaction",
             insertText: "BEGIN TRANSACTION;\n    $0\nCOMMIT;",
             items: items,
             kind: 14,
             label: "BEGIN TRANSACTION"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL keyword: Commit transaction",
             insertText: "COMMIT;",
             items: items,
             kind: 14,
             label: "COMMIT"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL keyword: Rollback transaction",
             insertText: "ROLLBACK;",
             items: items,
             kind: 14,
             label: "ROLLBACK"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL clause: Filter condition",
             insertText: "WHERE ${1:condition}",
             items: items,
             kind: 14,
             label: "WHERE"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL clause: Assign column values",
             insertText: "SET ${1:col} = ${2:val}",
             items: items,
             kind: 14,
             label: "SET"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL clause: Row values",
             insertText: "VALUES (${1:values})",
             items: items,
             kind: 14,
             label: "VALUES"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL clause: Copy values from table",
             insertText: "VALUES FROM ${1:table}",
             items: items,
             kind: 14,
             label: "VALUES FROM"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL clause: Event gate condition",
             insertText: "WHEN ${1:event}",
             items: items,
             kind: 14,
             label: "WHEN"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL clause: Level gate condition",
             insertText: "IF ${1:condition}",
             items: items,
             kind: 14,
             label: "IF"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL table option: Ordered pile",
             insertText: "ORDERED",
             items: items,
             kind: 14,
             label: "ORDERED"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL option: Table key capacity",
             insertText: "CAPACITY ${1:16}",
             items: items,
             kind: 14,
             label: "CAPACITY"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL constraint: Primary key",
             insertText: "PRIMARY KEY",
             items: items,
             kind: 14,
             label: "PRIMARY KEY"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL constraint: Foreign table reference",
             insertText: "REFERENCES ${1:table}",
             items: items,
             kind: 14,
             label: "REFERENCES"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL constraint: Default column value",
             insertText: "DEFAULT ${1:value}",
             items: items,
             kind: 14,
             label: "DEFAULT"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL constraint: Check expression",
             insertText: "CHECK (${1:condition})",
             items: items,
             kind: 14,
             label: "CHECK"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL predicate: Range between",
             insertText: "BETWEEN ${1:min} AND ${2:max}",
             items: items,
             kind: 14,
             label: "BETWEEN"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL trait: Saturating overflow",
             insertText: "ON OVERFLOW SATURATE",
             items: items,
             kind: 14,
             label: "ON OVERFLOW SATURATE"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL trait: Rate advancement",
             insertText: "ADVANCE ${1:1} PER SECOND",
             items: items,
             kind: 14,
             label: "ADVANCE"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL trait: Dynamics physics source",
             insertText: "DYNAMICS ${1:row}",
             items: items,
             kind: 14,
             label: "DYNAMICS"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL type: 64-bit integer",
             insertText: "INT",
             items: items,
             kind: 14,
             label: "INT"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL type: 32-bit floating point",
             insertText: "FLOAT",
             items: items,
             kind: 14,
             label: "FLOAT"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL type: Boolean flag",
             insertText: "BOOL",
             items: items,
             kind: 14,
             label: "BOOL"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL type: UTF-8 text string",
             insertText: "TEXT",
             items: items,
             kind: 14,
             label: "TEXT"
         );
-        AddCompletion(
+        LspJson.AddCompletion(
             detail: "SQL type: Primary key with capacity",
             insertText: "KEY(${1:16})",
             items: items,
@@ -386,7 +363,7 @@ internal static class PuckSqlLsp {
         foreach (var stmt in stmts) {
             switch (stmt) {
                 case SqlCreateTableStatement table:
-                    AddCompletion(
+                    LspJson.AddCompletion(
                         detail: $"SQL table ({table.Columns.Count} columns)",
                         insertText: table.TableName,
                         items: items,
@@ -395,7 +372,7 @@ internal static class PuckSqlLsp {
                     );
 
                     foreach (var col in table.Columns) {
-                        AddCompletion(
+                        LspJson.AddCompletion(
                             detail: $"SQL column — {table.TableName}.{col.Name} ({col.DeclaredType})",
                             insertText: col.Name,
                             items: items,
@@ -405,7 +382,7 @@ internal static class PuckSqlLsp {
                     }
                     break;
                 case SqlDeclareSlotStatement slot:
-                    AddCompletion(
+                    LspJson.AddCompletion(
                         detail: $"SQL scalar slot — {slot.Name} ({slot.DeclaredType})",
                         insertText: slot.Name,
                         items: items,
@@ -418,9 +395,8 @@ internal static class PuckSqlLsp {
 
         return items;
     }
-
     internal static JsonArray? GetSqlTableColumnCompletions(string text, string tableName, DocumentVocabularyResolver? resolver = null) {
-        var stmts = ParseAllSqlStatements(text: text, resolver: resolver);
+        var stmts = ParseAllSqlStatements(resolver: resolver, text: text);
 
         foreach (var stmt in stmts) {
             if (
@@ -434,7 +410,7 @@ internal static class PuckSqlLsp {
                 var items = new JsonArray();
 
                 foreach (var col in table.Columns) {
-                    AddCompletion(
+                    LspJson.AddCompletion(
                         detail: $"SQL column — {table.TableName}.{col.Name} ({col.DeclaredType})",
                         insertText: col.Name,
                         items: items,
@@ -449,13 +425,12 @@ internal static class PuckSqlLsp {
 
         return null;
     }
-
     internal static string? GetSqlHoverCard(string text, string word, int offset, DocumentVocabularyResolver? resolver = null) {
-        if (!IsCursorInsideSqlBlock(text: text, cursorOffset: offset, resolver: resolver)) {
+        if (!IsCursorInsideSqlBlock(cursorOffset: offset, resolver: resolver, text: text)) {
             return null;
         }
 
-        var stmts = ParseAllSqlStatements(text: text, resolver: resolver);
+        var stmts = ParseAllSqlStatements(resolver: resolver, text: text);
 
         // 1. Check declared tables
         foreach (var stmt in stmts) {
@@ -484,10 +459,10 @@ internal static class PuckSqlLsp {
                     }
 
                     if (table.IsOrdered) {
-                        sb.AppendLine("- Mode: `ORDERED` (pile)");
+                        sb.AppendLine(value: "- Mode: `ORDERED` (pile)");
                     }
 
-                    sb.AppendLine("- Columns:");
+                    sb.AppendLine(value: "- Columns:");
                     foreach (var col in table.Columns) {
                         var mapped = GetMappedRowName(
                             col: col,
@@ -538,6 +513,7 @@ internal static class PuckSqlLsp {
                             var capStr = ((table.Capacity is int cap)
                                 ? $" (capacity: {cap})"
                                 : "");
+
                             sb.AppendLine(
                                 CultureInfo.InvariantCulture,
                                 $"- Primary key{capStr}"

@@ -1,7 +1,8 @@
 # Puck.SdfVm.Tests
 
 This xUnit v3 suite checks SDF view and camera laws, curve paths, pack
-environment behavior, and deterministic follower helpers in `Puck.SdfVm`.
+environment behavior, the engine's declared buffer transitions, and
+deterministic follower helpers in `Puck.SdfVm`.
 These tests exercise CPU-side contracts and packed data; GPU parity and live
 world rendering use the rendering workflow.
 

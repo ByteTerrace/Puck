@@ -108,17 +108,17 @@ public sealed class WorldFieldFlowLawTests {
                 width: 2,
                 depth: 2
             ) with {
-            Fields = [new WorldFieldRow(
+                Fields = [new WorldFieldRow(
                     Name: "water",
                     Min: 0f,
                     Max: 1f
                 )],
-            Reactions = [new WorldReaction.Flow(
+                Reactions = [new WorldReaction.Flow(
                     Field: "water",
                     Rate: 1f,
                     Over: ["missing"]
                 )],
-        }
+            }
         );
         var selfReferencing = Fixtures.WithLattice(
             definition: Fixtures.BuildDocument(),
@@ -126,12 +126,12 @@ public sealed class WorldFieldFlowLawTests {
                 width: 2,
                 depth: 2
             ) with {
-            Reactions = [new WorldReaction.Flow(
+                Reactions = [new WorldReaction.Flow(
                     Field: "water",
                     Rate: 1f,
                     Over: ["water"]
                 )],
-        }
+            }
         );
         var duplicated = Fixtures.WithLattice(
             definition: Fixtures.BuildDocument(),
@@ -139,12 +139,12 @@ public sealed class WorldFieldFlowLawTests {
                 width: 2,
                 depth: 2
             ) with {
-            Reactions = [new WorldReaction.Flow(
+                Reactions = [new WorldReaction.Flow(
                     Field: "water",
                     Rate: 1f,
                     Over: ["ground", "ground"]
                 )],
-        }
+            }
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(

@@ -47,28 +47,22 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
     /// <inheritdoc/>
     public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) {
         var device = ((ID3D12Device*)deviceHandle);
-        // An acceleration-structure SRV is just another CBV_SRV_UAV heap slot, so it adds to the total like the rest.
-        var totalDescriptors = (((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount) + sizes.AccelerationStructureCount);
-        var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
-            Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-            NumDescriptors = ((totalDescriptors > 0)
+        var totalDescriptors = ((sizes.CombinedImageSamplerCount + sizes.StorageBufferCount) + sizes.StorageImageCount);
+        var capacity = ((totalDescriptors > 0)
             ? totalDescriptors
-            : 1),
-            Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        };
-
-        device->CreateDescriptorHeap(
-            pDescriptorHeapDesc: in heapDesc,
-            ppvHeap: out var heap,
-            riid: ID3D12DescriptorHeap.IID_Guid
+            : 1
         );
-
-        var heapPtr = ((ID3D12DescriptorHeap*)heap);
+        var heapPtr = DirectXDescriptorHeaps.Create(
+            count: capacity,
+            device: device,
+            shaderVisible: true,
+            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
+        );
         var descriptorSize = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         var pool = new DirectXDescriptorPool {
-            HeapHandle = ((nint)heap),
+            HeapHandle = ((nint)heapPtr),
             DescriptorSize = descriptorSize,
-            Capacity = heapDesc.NumDescriptors,
+            Capacity = capacity,
             CpuBase = GetCpuHeapStart(heap: heapPtr).ptr,
             GpuBase = GetGpuHeapStart(heap: heapPtr).ptr,
         };
@@ -128,49 +122,65 @@ public sealed unsafe class DirectXGpuDescriptorAllocator : IGpuDescriptorAllocat
             pResource: ((ID3D12Resource*)imageView.ResourceHandle)
         );
     }
-    /// <summary>Writes a top-level acceleration structure (TLAS) SRV into a set, identifying it by its GPU virtual
-    /// address. On Direct3D 12 the TLAS binds as a <c>RaytracingAccelerationStructure</c> SRV, created with a null
-    /// resource and the AS's GPU VA (passed as the neutral backend-defined reference).</summary>
-    /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle.</param>
-    /// <param name="descriptorSetHandle">The descriptor-set token to write into.</param>
-    /// <param name="binding">The binding index within the set (its heap slot).</param>
-    /// <param name="accelerationStructureReference">The TLAS GPU virtual address (the Direct3D 12 backend reference).</param>
-    public void WriteAccelerationStructure(
+    /// <inheritdoc/>
+    public void WriteRawBuffer(
         nint deviceHandle,
         nint descriptorSetHandle,
         uint binding,
-        nint accelerationStructureReference
+        nint bufferHandle,
+        ulong bufferSize,
+        bool writable
     ) {
-        // The acceleration-structure SRV path is DXR (Windows 10 1809+); a caller only reaches it after the
-        // acceleration structure reported supported, which implies that OS, so an older OS is a no-op.
-        if (!OperatingSystem.IsWindowsVersionAtLeast(
-            10,
-            0,
-            17763
-        )) {
-            return;
-        }
-
         var device = ((ID3D12Device*)deviceHandle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
             ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
         };
+        // A raw view counts 32-bit words and must be R32_TYPELESS with the RAW flag and no structure stride; a
+        // (RW)ByteAddressBuffer declaration reads nothing else.
+        var elements = ((uint)(bufferSize / sizeof(uint)));
+
+        if (writable) {
+            var uavDesc = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
+                Format = Windows.Win32.Graphics.Dxgi.Common.DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS,
+                ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER,
+            };
+
+            uavDesc.Anonymous.Buffer = new D3D12_BUFFER_UAV {
+                CounterOffsetInBytes = 0,
+                FirstElement = 0,
+                Flags = D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_RAW,
+                NumElements = elements,
+                StructureByteStride = 0,
+            };
+
+            device->CreateUnorderedAccessView(
+                DestDescriptor: cpuHandle,
+                pCounterResource: ((ID3D12Resource*)null),
+                pDesc: &uavDesc,
+                pResource: ((ID3D12Resource*)bufferHandle)
+            );
+
+            return;
+        }
+
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
-            Format = Windows.Win32.Graphics.Dxgi.Common.DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
+            Format = Windows.Win32.Graphics.Dxgi.Common.DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS,
             Shader4ComponentMapping = DefaultShader4ComponentMapping,
-            ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
+            ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_BUFFER,
         };
 
-        srvDesc.Anonymous.RaytracingAccelerationStructure = new D3D12_RAYTRACING_ACCELERATION_STRUCTURE_SRV {
-            Location = ((ulong)accelerationStructureReference),
+        srvDesc.Anonymous.Buffer = new D3D12_BUFFER_SRV {
+            FirstElement = 0,
+            Flags = D3D12_BUFFER_SRV_FLAGS.D3D12_BUFFER_SRV_FLAG_RAW,
+            NumElements = elements,
+            StructureByteStride = 0,
         };
 
-        // An acceleration-structure SRV is identified solely by its GPU VA — the resource argument MUST be null.
         device->CreateShaderResourceView(
             DestDescriptor: cpuHandle,
             pDesc: &srvDesc,
-            pResource: ((ID3D12Resource*)null)
+            pResource: ((ID3D12Resource*)bufferHandle)
         );
     }
     /// <inheritdoc/>

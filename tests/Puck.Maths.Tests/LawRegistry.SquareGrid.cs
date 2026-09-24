@@ -9,52 +9,33 @@ internal static partial class LawRegistry {
     );
 
     private static LawCase[] SquareGridCases() => [
-        Case(
+        SweptCase(
+            claim: Subjects.SquareCoordinateOperations,
+            domain: SquareGrid,
             id: "integer.square-coordinate",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.SquareCoordinateOperations,
-                domain: SquareGrid,
-                lawId: "integer.square-coordinate",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.SquareIndexOperations,
+            domain: SquareGrid,
             id: "integer.square-index",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.SquareIndexOperations,
-                domain: SquareGrid,
-                lawId: "integer.square-index",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
-            id: "integer.square-grid-boundaries",
-            run: () => Laws.Claim(
-                claim: Subjects.SquareGridBoundaries,
-                lawId: "integer.square-grid-boundaries"
-            )
+        ClaimCase(
+            claim: Subjects.SquareGridBoundaries,
+            id: "integer.square-grid-boundaries"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.SquareCoordinateOperations,
+            domain: SquareGrid,
             id: "deep.square-coordinate",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.SquareCoordinateOperations,
-                domain: SquareGrid,
-                lawId: "deep.square-coordinate",
-                tier: Tier.Deep,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.SquareIndexOperations,
+            domain: SquareGrid,
             id: "deep.square-index",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.SquareIndexOperations,
-                domain: SquareGrid,
-                lawId: "deep.square-index",
-                tier: Tier.Deep,
-                width: 2
-            )
+            width: 2
         ),
     ];
 }

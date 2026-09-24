@@ -1,0 +1,212 @@
+// One plot of ground with a seat already standing on it: the seam the composition beside this file joins two of
+// them along. The kit, the collision and the seat rig are here so a body exists to walk across that seam, and the
+// `landing` region is what a rule in the destination world reads when a traveller arrives on it.
+
+module plot(centre: Point, landingAt: Point, threshold) {
+  grants [
+    {
+      capability: Mutate
+      grantee: "seat1"
+      subject: "section:state"
+    }
+    {
+      capability: Edit
+      grantee: "seat1"
+      subject: "all"
+    }
+    {
+      capability: Control
+      grantee: "seat1"
+      subject: "all"
+    }
+    {
+      capability: Drive
+      grantee: "seat1"
+      subject: "all"
+    }
+  ]
+
+  ground plot {
+    center: centre
+    size [24m, 24m]
+  }
+
+  spawn arrival {
+    at: centre + [0m, 2m, 0m]
+    yaw: 0deg
+  }
+
+  channels [
+    { name: "forward", role: MoveAdvance, shape: Bipolar, frame: Heading }
+    { name: "strafe", role: MoveStrafe, shape: Bipolar, frame: Heading }
+    { name: "turn", role: Turn, shape: Bipolar }
+  ]
+
+  views {
+    seatControl {
+      maxPitch: 1.2
+      minPitch: -0.35
+      yawReference: "World"
+    }
+
+    seatRig "seatChase" {
+      version: "puck.camera.program.v1"
+      operations [
+        orbit(distance: 5.4626, pitch: 0.4145, yaw: 0)
+        lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.9599)
+      ]
+    }
+  }
+
+  bodyMotionPrograms [
+    {
+      kind: Motion
+      name: "walk"
+      operations [
+        ResolveYawAttitudeAndPlanarFrame
+        ResolveHold
+        ComputePlanarTargetVelocity
+        ShapeVelocity
+        SnapYawToPlanarIntent
+        RunActionTriggers
+        ApplyHold
+        IntegratePlanarAndVerticalVelocity
+        CommitPose
+      ]
+      version: "puck.body.program.v1"
+    }
+  ]
+
+  collision {
+    contactSkin: 0.02
+    gradientProbe: 0
+    maxIterations: 4
+    maxSlopeDegrees: 60
+    requirements [
+      SmoothUnionContact
+    ]
+  }
+
+  gravity {
+    attractors []
+    gravitationalConstant: 0
+    softeningLength: 0.5
+    solver: Pairwise
+    uniform [0, -46, 0]
+  }
+
+  bodies {
+    capacity: 2
+    localSeats: 1
+    seatSpawns [
+      "arrival"
+    ]
+    sleepAfterSeconds: 0
+  }
+
+  defaultSeatKit: "walker"
+
+  kits {
+    rows [
+      {
+        bodyContact: Solid
+        bodyMotionProgram: "walk"
+        collider: capsule(endpoint: [0, 1, 0], radius: 0.35)
+        motion {
+          facingSnap: false
+          holds [
+            {
+              bond: Surface
+              cone [0, 60]
+              envelope {
+                sinkSpeed: 40
+              }
+              gravity {
+                fall: 46
+                rise: 28
+              }
+              hold: Gravity
+              name: "ground"
+              reach: 1.2
+            }
+            {
+              bond: Free
+              envelope {
+                sinkSpeed: 40
+              }
+              gravity {
+                fall: 46
+                rise: 28
+              }
+              hold: Gravity
+              name: "air"
+            }
+          ]
+          shaping [
+            {
+              along {}
+            }
+          ]
+          speed {
+            value: 4
+          }
+          turn {
+            rate: 2.5
+          }
+        }
+        name: "walker"
+      }
+    ]
+  }
+
+  prototypes {
+    prototype "marker" {
+      document {
+        name: "marker"
+        palette [
+          {
+            color: "#FFB000"
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "post" {
+          material: 0
+          position [0, 0, 0]
+          rotation [0, 0, 0, 1]
+          scale [0.2, 0.2, 0.2]
+        }
+      }
+    }
+  }
+
+  placements {
+    placement "landing" {
+      prototype: "marker"
+      position: landingAt
+      region {
+        radius: 6
+      }
+    }
+  }
+
+  state {
+    world {
+      slot charge = 0
+      slot lit = 0
+      slot visited = 0
+    }
+  }
+
+  rule "light" {
+    when charge >= threshold
+    mode: Level
+    lit = 1
+  }
+
+  rule "visited" {
+    when region(landing) >= 1
+    mode: Level
+    visited = 1
+  }
+}

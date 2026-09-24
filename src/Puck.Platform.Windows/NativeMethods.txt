@@ -44,11 +44,9 @@ DISPLAYCONFIG_TARGET_DEVICE_NAME
 // Foundation DXGI device manager and WinRT graphics-device bridge stay hand-rolled beside the generated interop.
 CreateDXGIFactory1
 D3D11CreateDevice
-D3DCompile
 D3D11_SDK_VERSION
 IUnknown
 ID3D10Multithread
-ID3DBlob
 ID3D11Device1
 ID3D11DeviceContext
 ID3D11ComputeShader

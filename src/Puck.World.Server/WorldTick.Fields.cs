@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics.Fields;
 using Puck.World.Protocol;
@@ -101,7 +102,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
 
         _ = Host.TryApplyMutation(
             mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.World,
+                Principal: Principal.World,
                 Row: declared.Name,
                 Key: WorldStateRow.SlotKey,
                 Value: clamped,
@@ -113,7 +114,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             correlationId: 0,
             preMetered: false
         );
-        Host.Output.DeliverState(definition: Host.Document.Definition);
+        Host.Document.DeliverPending();
     }
     // Placement response traits are authored outside the field reaction program and therefore name their row rather
     // than carrying a compiled handle; resolves through the document catalog's name -> handle dictionary and then the
@@ -160,7 +161,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
 
         _ = Host.TryApplyMutation(
             mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.World,
+                Principal: Principal.World,
                 Row: catalog[row].Name,
                 Key: body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                 Value: value,
@@ -172,6 +173,6 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             correlationId: 0,
             preMetered: false
         );
-        Host.Output.DeliverState(definition: Host.Document.Definition);
+        Host.Document.DeliverPending();
     }
 }

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -8,25 +9,6 @@ namespace Puck.World.Tests;
 /// <summary>Pins the in-place shuffle's determinism and cursor accounting, and what a hidden cell leaves behind
 /// under each disclosure policy.</summary>
 public sealed class WorldDeckAndDisclosureLawTests {
-    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
-        Assert.True(
-            condition: WorldArenaTransforms.TryApply(
-                definition,
-                transform,
-                WorldPrincipal.World,
-                1,
-                "test",
-                out var candidate,
-                out var reason
-            ),
-            userMessage: reason
-        );
-        return candidate!;
-    }
-    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
-        Name(value: key),
-        ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0L)) : CellValue.Int(value: value))
-    );
     private static WorldDefinition Deck(int count) {
         var keys = Enumerable.Range(
             count: count,
@@ -38,13 +20,13 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 new(
                 Name(value: "cards"),
                 CellKind.Int,
-                Cells: keys.Select(selector: k => Cell(k)).ToArray(),
+                Cells: keys.Select(selector: k => StateFixtures.Cell(k)).ToArray(),
                 Capacity: count
             ),
                 new(
                 Name(value: "deck"),
                 CellKind.Bool,
-                Cells: keys.Select(selector: k => Cell(key: k, kind: CellKind.Bool)).ToArray(),
+                Cells: keys.Select(selector: k => StateFixtures.Cell(key: k, kind: CellKind.Bool)).ToArray(),
                 Domain: new StateDomain.KeysOf(
                     CellName.Parse(candidate: "cards"),
                     Ordered: true
@@ -72,10 +54,10 @@ public sealed class WorldDeckAndDisclosureLawTests {
             new(
             Name(value: "cards"),
             CellKind.Int,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "ace",
                     value: 101
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "king",
                     value: 202
                 )],
@@ -84,7 +66,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
             new(
             Name(value: "hand"),
             CellKind.Bool,
-            Cells: [Cell(key: "ace", kind: CellKind.Bool) with { Visibility = new(["seat1"]) }, Cell(key: "king", kind: CellKind.Bool) with { Visibility = new(["seat1"]) }],
+            Cells: [StateFixtures.Cell(key: "ace", kind: CellKind.Bool) with { Visibility = new(["seat1"]) }, StateFixtures.Cell(key: "king", kind: CellKind.Bool) with { Visibility = new(["seat1"]) }],
             Domain: new StateDomain.KeysOf(
                 CellName.Parse(candidate: "cards"),
                 Ordered: true
@@ -102,11 +84,11 @@ public sealed class WorldDeckAndDisclosureLawTests {
             var definition = Hand(hidden: policy);
             var opponent = Fixtures.Disclose(
                 definition: definition,
-                recipient: WorldPrincipal.Seat(slot: 1)
+                recipient: Principal.Seat(slot: 1)
             )!.Single(predicate: r => (r.Name == "hand"));
             var owner = Fixtures.Disclose(
                 definition: definition,
-                recipient: WorldPrincipal.Seat(slot: 0)
+                recipient: Principal.Seat(slot: 0)
             )!.Single(predicate: r => (r.Name == "hand"));
 
             Assert.Equal(
@@ -140,7 +122,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 WorldDisclosureTier.Presentation,
                 "test",
                 1,
-                WorldPrincipal.Seat(slot: 1)
+                Principal.Seat(slot: 1)
             )!));
 
             Assert.DoesNotContain(
@@ -202,7 +184,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                     Draw: "dice",
                     Row: "deck"
                 ),
-                WorldPrincipal.World,
+                Principal.World,
                 0,
                 "test",
                 out _,
@@ -233,7 +215,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 Draw: "dice",
                 Row: "deck"
             ),
-            WorldPrincipal.World,
+            Principal.World,
             0,
             "test",
             out _,
@@ -259,7 +241,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
                 Draw: "dice",
                 Row: "deck"
             ),
-            WorldPrincipal.World,
+            Principal.World,
             0,
             "test",
             out _,
@@ -306,7 +288,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
     public void ShuffleIsAPermutationThatSpendsOneSamplePerPositionAndReplaysExactly() {
         var definition = Deck(count: 52);
 
-        var shuffled = Apply(
+        var shuffled = StateFixtures.Apply(
             definition: definition,
             transform: new StateTransform.Shuffle(
                 Draw: "dice",
@@ -341,7 +323,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
             ).DrawCursor
         );
 
-        var again = Apply(
+        var again = StateFixtures.Apply(
             definition: definition,
             transform: new StateTransform.Shuffle(
                 Draw: "dice",
@@ -357,7 +339,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
             ).Cells!.Select(selector: c => c.Key.Value)
         );
 
-        var later = Apply(
+        var later = StateFixtures.Apply(
             definition: shuffled,
             transform: new StateTransform.Shuffle(
                 Draw: "dice",

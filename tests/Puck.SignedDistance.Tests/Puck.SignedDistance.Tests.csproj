@@ -16,4 +16,8 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.SignedDistance\Puck.SignedDistance.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- The bake sampling fixture BakeSamplingFixtureLawTests holds to a fresh bake. -->
+        <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

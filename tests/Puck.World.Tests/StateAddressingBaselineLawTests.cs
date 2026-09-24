@@ -1,5 +1,3 @@
-using Puck.Hosting;
-using Puck.World.Server;
 using Xunit;
 
 using BoardOperand = Puck.State.Rules.BoardOperand;
@@ -16,36 +14,9 @@ namespace Puck.World.Tests;
 public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
     [Fact]
     public void ShippedWorldStateHashesAndOperandDistribution() {
-        const string WorldPath = "src/Puck.World/Assets/worlds/puck.world.json";
-        var catalog = TestHookInstaller.CreateMachineCatalog();
-        var definition = AuthoredGameFixtures.Load(catalog: catalog, relativePath: WorldPath);
-        var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
-
-        using var fixture = Fixtures.FreshServer(
-            definition: definition,
-            machineCatalog: catalog,
-            documentPath: Path.Combine(path1: AuthoredGameFixtures.Root, path2: WorldPath)
-        );
-
-        var hash31 = 0UL;
-        var hash151 = 0UL;
-
-        for (var tick = 1; (tick <= 151); tick++) {
-            fixture.Step(stepTicks: width);
-            if (tick == 31) {
-                hash31 = WorldStateHashComposition.Hash(
-                    scope: WorldStateHashScope.Capture,
-                    server: fixture.Server,
-                    tick: 31
-                );
-            } else if (tick == 151) {
-                hash151 = WorldStateHashComposition.Hash(
-                    scope: WorldStateHashScope.Capture,
-                    server: fixture.Server,
-                    tick: 151
-                );
-            }
-        }
+        var definition = AuthoredGameFixtures.Nexus;
+        var hash31 = ShippedWorldIdleRuns.First.Capture[31];
+        var hash151 = ShippedWorldIdleRuns.First.Capture[151];
 
         output.WriteLine(message: $"puck.world.json state hash at tick 31:  {hash31:x16}");
         output.WriteLine(message: $"puck.world.json state hash at tick 151: {hash151:x16}");

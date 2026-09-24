@@ -1,6 +1,4 @@
-using System.Diagnostics;
-using System.Globalization;
-using System.Runtime.InteropServices;
+using Puck.Commands;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Hosting;
@@ -14,40 +12,45 @@ namespace Puck.World.Tests;
 /// <summary>Replays each shipped world's committed scripted input sequence and compares the canonical state export
 /// and the tick-cost record against the committed baselines under
 /// <c>tests/Puck.World.Tests/ShippedWorldStateBaselines</c>.</summary>
-/// <remarks>Setting <c>PUCK_RECORD_STATE_BASELINES=1</c> turns <see cref="RecordShippedWorldStateBaselines"/> from
-/// a skip into the recorder that rewrites every export and cost file; it runs each sequence twice and refuses to
-/// write when the two runs differ. <c>PUCK_RECORD_STATE_BASELINE_WALL_TIME=1</c> additionally rewrites the
-/// machine-scoped advisory wall-time record, which is deliberately not rewritten by an ordinary re-record.</remarks>
+/// <remarks>Each law writes the fresh export or cost record beside the test assembly
+/// (<see cref="Puck.Testing.TestRecords"/>) before comparing. <c>puck baselines state</c> runs this class twice,
+/// refuses when the two runs' records differ, and promotes them over the committed files.</remarks>
 public sealed class ShippedWorldStateBaselineTests {
     public static TheoryData<string> Names() => new(values: ShippedWorldStateBaselines.Names());
-    [MemberData(nameof(Names))]
-    [Theory]
-    public void TheRecordedExportReproduces(string name) {
-        var run = ShippedWorldStateBaselines.Run(name: name);
-        var recorded = File.ReadAllBytes(path: ShippedWorldStateBaselines.PathOf(
-            name: name,
-            suffix: "state.json"
-        ));
 
+    // The export and the cost record are separate laws so a state regression and a cost regression name themselves;
+    // both read the one cached run.
+    private static void AssertReproducesRecorded(string name, string suffix, byte[] actual) {
+        var committed = ShippedWorldStateBaselines.PathOf(
+            name: name,
+            suffix: suffix
+        );
+
+        _ = Puck.Testing.TestRecords.Write(
+            artifact: ShippedWorldStateBaselines.RecordArtifact,
+            bytes: actual,
+            fileName: Path.GetFileName(path: committed)
+        );
         Assert.Equal(
-            expected: ShippedWorldStateBaselines.Text(bytes: recorded),
-            actual: ShippedWorldStateBaselines.Text(bytes: run.Export)
+            expected: ShippedWorldStateBaselines.Text(bytes: File.ReadAllBytes(path: committed)),
+            actual: ShippedWorldStateBaselines.Text(bytes: actual)
         );
     }
+
     [MemberData(nameof(Names))]
     [Theory]
-    public void TheRecordedTickCostReproduces(string name) {
-        var run = ShippedWorldStateBaselines.Run(name: name);
-        var recorded = File.ReadAllBytes(path: ShippedWorldStateBaselines.PathOf(
-            name: name,
-            suffix: "cost.json"
-        ));
-
-        Assert.Equal(
-            expected: ShippedWorldStateBaselines.Text(bytes: recorded),
-            actual: ShippedWorldStateBaselines.Text(bytes: run.Cost)
-        );
-    }
+    public void TheRecordedExportReproduces(string name) => AssertReproducesRecorded(
+        actual: ShippedWorldStateBaselines.Run(name: name).Export,
+        name: name,
+        suffix: "state.json"
+    );
+    [MemberData(nameof(Names))]
+    [Theory]
+    public void TheRecordedTickCostReproduces(string name) => AssertReproducesRecorded(
+        actual: ShippedWorldStateBaselines.Run(name: name).Cost,
+        name: name,
+        suffix: "cost.json"
+    );
     // A sequence that leaves the world's state substrate exactly as it booted proves nothing about the rules it was
     // written to exercise. Each sequence declares whether it must move the world-scope state hash.
     [MemberData(nameof(Names))]
@@ -69,14 +72,6 @@ public sealed class ShippedWorldStateBaselineTests {
             actual: run.FinalWorldHash
         );
     }
-    [Fact]
-    public void RecordShippedWorldStateBaselines() {
-        Assert.SkipUnless(
-            condition: (Environment.GetEnvironmentVariable(variable: "PUCK_RECORD_STATE_BASELINES") == "1"),
-            reason: "set PUCK_RECORD_STATE_BASELINES=1 to re-record the shipped-world state baselines"
-        );
-        ShippedWorldStateBaselines.Record(wallTime: (Environment.GetEnvironmentVariable(variable: "PUCK_RECORD_STATE_BASELINE_WALL_TIME") == "1"));
-    }
 }
 
 /// <summary>Boots a shipped world, replays its committed scripted input sequence, and renders the canonical state
@@ -84,15 +79,18 @@ public sealed class ShippedWorldStateBaselineTests {
 internal static class ShippedWorldStateBaselines {
     private const string SequenceSuffix = ".sequence.json";
 
+    /// <summary>The <c>puck baselines</c> artifact name of the export and cost records.</summary>
+    public const string RecordArtifact = "state";
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<BaselineRun>> Runs = new(comparer: StringComparer.Ordinal);
+
     private static WorldDefinition Compose(JsonObject sequence) {
         var host = sequence[propertyName: "host"]!.AsObject();
 
         return (host[propertyName: "kind"]!.GetValue<string>() switch {
-            "document" => LoadDocument(
-                relativePath: ("src/Puck.World/Assets/worlds/" + sequence[propertyName: "world"]!.GetValue<string>()),
-                rewriteBasis: (host[propertyName: "rewriteBasis"]?.GetValue<string>())
-            ),
+            "document" => LoadDocument(relativePath: ("src/Puck.World/Assets/worlds/" + sequence[propertyName: "world"]!.GetValue<string>())),
             "fixture" => LoadDocument(relativePath: host[propertyName: "path"]!.GetValue<string>()),
+            "source" => AuthoredGameFixtures.Load(relativePath: host[propertyName: "path"]!.GetValue<string>()),
             "spliced" => Splice(
                 host: host,
                 sequence: sequence
@@ -110,47 +108,12 @@ internal static class ShippedWorldStateBaselines {
             ["final"] = Measured(budget: final),
         },
     };
-    private static WorldDefinition LoadDocument(string relativePath, string? rewriteBasis = null) {
-        var authored = Path.Combine(
-            path1: AuthoredGameFixtures.Root,
-            path2: relativePath
-        );
-        var directory = (Path.GetDirectoryName(path: authored) ?? AuthoredGameFixtures.Root);
-        // A document whose basis names a `.puck` source cannot be composed here: this project holds no transpiler.
-        // The sequence names the generated twin instead, absolute so the copy still resolves it beside the original.
-        var path = ((rewriteBasis is null)
-            ? authored
-            : RewrittenBasisCopy(
-                authored: authored,
-                basis: Path.Combine(
-                    path1: directory,
-                    path2: rewriteBasis
-                )
-            )
-        );
-        var neighbours = new GeneratedTwinNeighbourResolver(inner: new WorldFileNeighbourResolver(baseDirectory: () => directory));
-
-        Assert.True(
-            condition: WorldDefinitionLoader.TryLoadFile(
-                path,
-                out var definition,
-                out var reason,
-                neighbours: neighbours,
-                catalog: TestHookInstaller.CreateMachineCatalog()
-            ),
-            userMessage: $"{relativePath}: {reason}"
-        );
-
-        return definition!;
-    }
-    private static string MachineDescription() => string.Join(
-        separator: "; ",
-        values: [
-            RuntimeInformation.OSDescription,
-            RuntimeInformation.ProcessArchitecture.ToString(),
-            $"{Environment.ProcessorCount} logical processor(s)",
-            RuntimeInformation.FrameworkDescription,
-        ]
+    // The document is compiled when it is a `.puck` source and composed the way the host boots it, so a basis or
+    // import naming a `.puck`-sourced document resolves to that source. A supplied catalog keeps the load uncached:
+    // every replay boots its own definition.
+    private static WorldDefinition LoadDocument(string relativePath) => AuthoredGameFixtures.Load(
+        catalog: TestHookInstaller.CreateMachineCatalog(),
+        relativePath: relativePath
     );
     private static JsonObject Measured(WorldRuleWorkBudget budget) => new() {
         ["ruleRows"] = budget.RuleRows,
@@ -197,7 +160,7 @@ internal static class ShippedWorldStateBaselines {
     // human-occupied: WorldServer.ReadChannelValue answers zero for an unoccupied seat.
     private static void Join(WorldFixture fixture, JsonObject step) {
         var slot = (step[propertyName: "seat"]!.GetValue<int>() - 1);
-        var principal = WorldPrincipal.Seat(slot: slot);
+        var principal = Principal.Seat(slot: slot);
 
         Assert.True(
             condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
@@ -316,30 +279,12 @@ internal static class ShippedWorldStateBaselines {
             value: FixedQ4816.FromDouble(value: step[propertyName: "value"]!.GetValue<double>())
         );
     }
-    private static string RewrittenBasisCopy(string authored, string basis) {
-        var tree = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: authored))!.AsObject();
-        var copy = Path.Combine(
-            path1: System.IO.Directory.CreateTempSubdirectory(prefix: "puck-state-baseline-").FullName,
-            path2: Path.GetFileName(path: authored)
-        );
-
-        tree[propertyName: "basis"] = basis.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
-        File.WriteAllBytes(
-            bytes: Puck.Abstractions.Documents.CanonicalJsonDocument.Serialize(node: tree),
-            path: copy
-        );
-
-        return copy;
-    }
     private static JsonObject Sequence(string name) => JsonNode.Parse(utf8Json: File.ReadAllBytes(path: PathOf(
         name: name,
         suffix: "sequence.json"
     )))!.AsObject();
     private static WorldDefinition Splice(JsonObject host, JsonObject sequence) {
-        var source = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: Path.Combine(
+        var source = JsonNode.Parse(utf8Json: Puck.Testing.ShippedWorldDocuments.Read(path: Path.Combine(
             path1: AuthoredGameFixtures.Root,
             path2: ("src/Puck.World/Assets/worlds/" + sequence[propertyName: "world"]!.GetValue<string>())
         )))!.AsObject();
@@ -375,19 +320,6 @@ internal static class ShippedWorldStateBaselines {
 
         return WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: composed.ToJsonString()));
     }
-    private static void Write(string path, byte[] bytes) {
-        if (
-            File.Exists(path: path) &&
-            File.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: bytes)
-        ) {
-            return;
-        }
-
-        File.WriteAllBytes(
-            bytes: bytes,
-            path: path
-        );
-    }
 
     /// <summary>Gets the absolute path of the baseline directory.</summary>
     public static string Directory { get; } = Path.Combine(
@@ -413,72 +345,19 @@ internal static class ShippedWorldStateBaselines {
         path1: Directory,
         path2: $"{name}.{suffix}"
     );
-    /// <summary>Replays every sequence twice, refuses on any run-to-run difference, and rewrites the export and
-    /// cost baselines.</summary>
-    /// <param name="wallTime">Whether to additionally rewrite the advisory wall-time record.</param>
-    public static void Record(bool wallTime) {
-        var walls = new List<(string Name, BaselineRun Run)>();
-
-        foreach (var name in Names()) {
-            var first = Run(name: name);
-            var second = Run(name: name);
-
-            Assert.Equal(
-                expected: Text(bytes: first.Export),
-                actual: Text(bytes: second.Export)
-            );
-            Assert.Equal(
-                expected: Text(bytes: first.Cost),
-                actual: Text(bytes: second.Cost)
-            );
-            Write(
-                bytes: first.Export,
-                path: PathOf(
-                    name: name,
-                    suffix: "state.json"
-                )
-            );
-            Write(
-                bytes: first.Cost,
-                path: PathOf(
-                    name: name,
-                    suffix: "cost.json"
-                )
-            );
-            walls.Add(item: (name, second));
-        }
-
-        if (!wallTime) {
-            return;
-        }
-
-        var report = new StringBuilder();
-
-        report.Append(value: "# Advisory tick wall time\n\n");
-        report.Append(value: "Wall time is advisory: it is machine- and load-dependent and is not part of the\n");
-        report.Append(value: "byte-for-byte baseline. The work units in each `*.cost.json` are the exact record.\n\n");
-        report.Append(value: $"Machine: {MachineDescription()}\n\n");
-        report.Append(value: "| World | Ticks | Median tick (us) | Mean tick (us) |\n");
-        report.Append(value: "|---|---|---|---|\n");
-
-        foreach (var (name, run) in walls) {
-            report.Append(value: string.Create(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"| {name} | {run.Ticks} | {run.MedianTickMicroseconds:F1} | {run.MeanTickMicroseconds:F1} |\n"
-            ));
-        }
-        Write(
-            bytes: Encoding.UTF8.GetBytes(s: report.ToString()),
-            path: Path.Combine(
-                path1: Directory,
-                path2: "wall-time.md"
-            )
-        );
-    }
+    /// <summary>Returns one world's replay, replaying its sequence on the first request and sharing that run with
+    /// every later one: a replay is a pure function of the committed sequence, so every law reading the same world
+    /// reads the same run.</summary>
+    /// <param name="name">The world slug.</param>
+    /// <returns>The completed run.</returns>
+    public static BaselineRun Run(string name) => Runs.GetOrAdd(
+        key: name,
+        value: new Lazy<BaselineRun>(valueFactory: () => Replay(name: name))
+    ).Value;
     /// <summary>Boots one world, replays its sequence, and renders its export and cost record.</summary>
     /// <param name="name">The world slug.</param>
     /// <returns>The completed run.</returns>
-    public static BaselineRun Run(string name) {
+    public static BaselineRun Replay(string name) {
         var sequence = Sequence(name: name);
         var definition = Compose(sequence: sequence);
 
@@ -496,7 +375,7 @@ internal static class ShippedWorldStateBaselines {
             server: fixture.Server,
             tick: (fixture.Server.NextInputTick - 1UL)
         );
-        var elapsed = new List<long>();
+        var ticks = 0;
 
         foreach (var node in sequence[propertyName: "steps"]!.AsArray()) {
             var step = node!.AsObject();
@@ -505,11 +384,10 @@ internal static class ShippedWorldStateBaselines {
                 var count = advance.GetValue<int>();
 
                 for (var tick = 0; (tick < count); tick++) {
-                    var before = Stopwatch.GetTimestamp();
-
                     fixture.Server.Advance(stepTicks: stepTicks);
-                    elapsed.Add(item: (Stopwatch.GetTimestamp() - before));
                 }
+
+                ticks += count;
 
                 continue;
             }
@@ -542,7 +420,7 @@ internal static class ShippedWorldStateBaselines {
                 ?? throw new InvalidOperationException(message: $"{name}: a step must carry advance, set, add, pose, join or press")).AsObject();
 
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: write[propertyName: "row"]!.GetValue<string>(),
                 Key: write[propertyName: "key"]!.GetValue<string>(),
                 Value: write[propertyName: "value"]!.GetValue<long>(),
@@ -553,8 +431,6 @@ internal static class ShippedWorldStateBaselines {
         }
 
         var finalDefinition = fixture.Server.Definition;
-        var ordered = elapsed.Order().ToArray();
-        var scale = (1_000_000.0 / Stopwatch.Frequency);
 
         return new BaselineRun(
             BootWorldHash: bootHash,
@@ -563,7 +439,7 @@ internal static class ShippedWorldStateBaselines {
                 final: WorldRuleWorkBudget.Measure(definition: finalDefinition),
                 rateHz: rateHz,
                 sequence: sequence,
-                ticks: ordered.Length
+                ticks: ticks
             )),
             ExpectsStateChange: (sequence[propertyName: "expectsStateChange"]?.GetValue<bool>() ?? true),
             Export: WorldStateExport.ToCanonicalJson(server: fixture.Server),
@@ -571,14 +447,7 @@ internal static class ShippedWorldStateBaselines {
                 scope: WorldStateHashScope.World,
                 server: fixture.Server,
                 tick: (fixture.Server.NextInputTick - 1UL)
-            ),
-            MeanTickMicroseconds: ((ordered.Length == 0)
-                ? 0.0
-                : ((ordered.Sum() * scale) / ordered.Length)),
-            MedianTickMicroseconds: ((ordered.Length == 0)
-                ? 0.0
-                : (ordered[(ordered.Length / 2)] * scale)),
-            Ticks: ordered.Length
+            )
         );
     }
     /// <summary>Returns a baseline file's bytes as text with its line endings normalized, so a comparison failure
@@ -587,36 +456,16 @@ internal static class ShippedWorldStateBaselines {
     /// <returns>The normalized text.</returns>
     public static string Text(byte[] bytes) => Encoding.UTF8.GetString(bytes: bytes).ReplaceLineEndings(replacementText: "\n");
 }
-/// <summary>Redirects a <c>.puck</c> neighbour locator to the generated <c>.world.json</c> twin
-/// <c>build/WorldAssets.targets</c> writes beside it, which this project can read without the transpiler.</summary>
-/// <param name="inner">The resolver the redirected locator is read through.</param>
-internal sealed class GeneratedTwinNeighbourResolver(IWorldNeighbourResolver inner) : IWorldNeighbourResolver {
-    private const string SourceExtension = ".puck";
-
-    /// <inheritdoc/>
-    public WorldNeighbourResolution Resolve(string document) => inner.Resolve(document: (document.EndsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: SourceExtension
-    )
-        ? (document[..^SourceExtension.Length] + ".world.json")
-        : document));
-}
 /// <summary>One replayed sequence's results.</summary>
 /// <param name="BootWorldHash">The world-scope state hash before the first step.</param>
 /// <param name="Cost">The canonical tick-cost record.</param>
 /// <param name="ExpectsStateChange">Whether the sequence declares that it must move the world-scope state hash.</param>
 /// <param name="Export">The canonical state export.</param>
 /// <param name="FinalWorldHash">The world-scope state hash after the last step.</param>
-/// <param name="MeanTickMicroseconds">The advisory mean wall time of one simulation tick.</param>
-/// <param name="MedianTickMicroseconds">The advisory median wall time of one simulation tick.</param>
-/// <param name="Ticks">How many simulation ticks the sequence advanced.</param>
 internal readonly record struct BaselineRun(
     ulong BootWorldHash,
     byte[] Cost,
     bool ExpectsStateChange,
     byte[] Export,
-    ulong FinalWorldHash,
-    double MeanTickMicroseconds,
-    double MedianTickMicroseconds,
-    int Ticks
+    ulong FinalWorldHash
 );

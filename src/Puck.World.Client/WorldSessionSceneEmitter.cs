@@ -66,6 +66,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
     private readonly bool[] m_avatarPoseSeeded = new bool[WorldBodiesLimits.CapacityCeiling];
+    private readonly WorldTransformOwners m_avatarOwners = new(capacity: WorldBodiesLimits.CapacityCeiling);
     private readonly WorldEntityAddress[] m_avatarMotionAddresses = new WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
     private readonly int[] m_emittedRigs = new int[WorldBodiesLimits.CapacityCeiling];
     private readonly float[] m_emittedScales = new float[WorldBodiesLimits.CapacityCeiling];
@@ -159,6 +160,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             );
             var rig = WorldCameraRigCompiler.Compile(
                 definition: definition,
+                mirror: m_mirror.FollowState(),
                 program: cameraRow.Rig
             );
             var anchor = new SdfAnchor(
@@ -269,7 +271,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var programChanged = !ReferenceEquals(
             objA: program,
             objB: m_lastProgram
@@ -301,6 +303,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             WarpAmount: 0f
         ) {
             DynamicTransforms = transforms,
+            MovedTransforms = moved,
             // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound here costs real GPU
             // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture
             // SdfCameraView's own jumbotron rig already takes.
@@ -354,20 +357,27 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
     /// <inheritdoc/>
     /// <remarks>Packs every mirrored-active avatar's interpolated pose into its frozen catalog leaf slots (see
-    /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase; every other slot
-    /// is left untouched, which the composition host already parks at <see cref="SdfEmitContext.ParkPosition"/> before
-    /// any emitter's <see cref="PackDynamicTransforms"/> runs (see <c>WorldSceneEmitter</c>'s identical
-    /// remark).</remarks>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
-        var avatars = slots.Slice(
-            start: context.SlotBase,
-            length: WorldRigCatalog.DynamicTransformCapacity
-        );
+    /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase, repacking
+    /// an avatar only while that pose moves; an avatar that stops being mirrored parks its range once.</remarks>
+    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         var alpha = m_mirror.InterpolationAlpha;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             if (!m_mirror.IsActive(index: index)) {
                 m_avatarPoseSeeded[index] = false;
+
+                if (m_avatarOwners.Vacate(
+                    moved: moved,
+                    owner: index
+                )) {
+                    WorldTransformOwners.ParkBody(
+                        avatar: index,
+                        catalogBase: context.SlotBase,
+                        moved: moved,
+                        parkPosition: context.ParkPosition,
+                        table: slots
+                    );
+                }
 
                 continue;
             }
@@ -384,9 +394,24 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 quaternion2: m_mirror.CurrentOrientation(index: index),
                 amount: alpha
             );
+            var address = m_mirror.Address(index: index);
+
+            if (!m_avatarOwners.Wake(
+                castsSoftShadow: false,
+                discontinuity: (
+                !m_avatarPoseSeeded[index] ||
+                (m_avatarMotionAddresses[index] != address)
+            ),
+                moved: moved,
+                orientation: orientation,
+                owner: index,
+                position: position
+            )) {
+                continue;
+            }
 
             WorldMirroredAvatarBand.AdvanceGait(
-                address: m_mirror.Address(index: index),
+                address: address,
                 gaitPhase: ref m_avatarGaitPhases[index],
                 lastAddress: ref m_avatarMotionAddresses[index],
                 lastPosition: ref m_avatarPreviousPositions[index],
@@ -394,17 +419,23 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 seeded: ref m_avatarPoseSeeded[index]
             );
 
-            WorldRigCatalog.PackTransforms(
+            m_avatarOwners.Settle(
+                deltaSeconds: 1f,
+                moved: WorldTransformOwners.PackBody(
                 avatar: index,
-                rootPosition: position,
-                rootOrientation: orientation,
-                gaitPhase: (m_avatarGaitPhases[index] * m_emittedGaitAmplitudes[index]),
                 // A session view disables soft shadows entirely (see Dress below), so crowd-radius participation has
                 // no observer — false is exact, not an approximation.
                 castsSoftShadow: false,
-                transforms: avatars,
+                catalogBase: context.SlotBase,
+                gaitPhase: (m_avatarGaitPhases[index] * m_emittedGaitAmplitudes[index]),
+                moved: moved,
                 rig: m_emittedRigs[index],
-                scale: m_emittedScales[index]
+                rootOrientation: orientation,
+                rootPosition: position,
+                scale: m_emittedScales[index],
+                table: slots
+            ),
+                owner: index
             );
         }
     }

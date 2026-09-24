@@ -53,7 +53,7 @@ internal static partial class AzureCommand {
             }
             """)!;
     }
-    private static async Task<WorldReleaseDeploymentConfiguration> PrepareWorldReleaseDeploymentAsync(WorldReleaseManifest manifest, string? group) {
+    private static async Task<WorldReleaseDeploymentConfiguration> PrepareWorldReleaseDeploymentAsync(WorldReleaseManifest manifest, string? group, TimeProvider clock) {
         var outputs = Outputs();
         var configuration = Value(
             key: "worldSiloConfiguration",
@@ -94,13 +94,9 @@ internal static partial class AzureCommand {
                 "-o",
                 "json"
             );
-        });
-        var temporary = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-silo-{Guid.NewGuid():N}"
-        );
+        }, clock: clock);
+        var temporary = Directory.CreateTempSubdirectory(prefix: "puck-silo-").FullName;
 
-        Directory.CreateDirectory(path: temporary);
         try {
             var encodedKey = await LoadWorldSigningKeyAsync(
                 vault,
@@ -257,6 +253,7 @@ internal static partial class AzureCommand {
                 pattern: "__[A-Z_]+__"
             )) { throw new InvalidDataException(message: "Unresolved VM bootstrap placeholder."); }
             var workers = await StableWorkersAsync(
+                clock: clock,
                 group: group,
                 scaleSet: scaleSet
             );
@@ -331,7 +328,9 @@ internal static partial class AzureCommand {
             );
         }
     }
-    private static async Task ApplyWorldComputeAsync(string group, string parameters, string scaleSet, string? retainedTemplate = null) {
+    /// <summary>Deploys the world compute template, first recreating the scale set when its priority differs from the declared <c>Regular</c> or <c>Spot</c>.</summary>
+    /// <remarks>Callers reach this only after the source worker has drained and stopped.</remarks>
+    private static async Task ApplyWorldComputeAsync(string group, string parameters, string scaleSet, string priority, TimeProvider clock, string? retainedTemplate = null) {
         const string CompiledCompute = "artifacts/production-world-compute.json";
 
         if (
@@ -339,6 +338,43 @@ internal static partial class AzureCommand {
             CliGitHub.IsActions &&
             !File.Exists(path: CompiledCompute)
         ) { throw new FileNotFoundException(message: "CI world deployment requires its compiled compute template."); }
+        var existing = (await AzJsonAsync(
+            "vmss",
+            "list",
+            "-g",
+            group,
+            "--query",
+            $"[?name=='{scaleSet}'].virtualMachineProfile.priority",
+            "-o",
+            "json"
+        )).AsArray();
+
+        // Azure refuses to change priority in place. Drained state lives in blob storage, so the scale set is disposable.
+        if (
+            (existing.Count == 1) &&
+            !string.Equals(
+                a: Text(value: existing[0]),
+                b: priority,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+        ) {
+            Console.WriteLine(value: $"Recreating {scaleSet} to change its priority from {Text(value: existing[0])} to {priority}.");
+            await AzAsync(
+                "vmss",
+                "delete",
+                "-g",
+                group,
+                "--name",
+                scaleSet,
+                "-o",
+                "none"
+            );
+            if ((await StableWorkersAsync(
+                clock: clock,
+                group: group,
+                scaleSet: scaleSet
+            )).Length != 0) { throw new InvalidOperationException(message: "Deleting the scale set left workers behind; no release was applied."); }
+        }
         await AzAsync(
             "deployment",
             "group",
@@ -405,6 +441,12 @@ internal static partial class AzureCommand {
             }
         } finally { File.Delete(path: path); }
     }
+    /// <summary>Returns the Azure priority a world compute configuration declares.</summary>
+    /// <returns><c>Spot</c> when <c>compute.spot</c> is present; otherwise <c>Regular</c>.</returns>
+    private static string WorldPriority(JsonNode compute) => ((compute["spot"] is null)
+        ? "Regular"
+        : "Spot"
+    );
     private static async Task<JsonNode?[]> WorkersAsync(string group, string scaleSet) {
         var workers = await AzJsonAsync(
             "vm",
@@ -420,8 +462,10 @@ internal static partial class AzureCommand {
             value: ("/" + scaleSet)
         ) == true)).ToArray();
     }
-    private static async Task<JsonNode?[]> StableWorkersAsync(string group, string scaleSet) {
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+    // Waits, on clock, for Azure's own worker replacement to settle, polling every WorkerSettlePoll and refusing after
+    // WorkerSettleTimeout.
+    private static async Task<JsonNode?[]> StableWorkersAsync(string group, string scaleSet, TimeProvider clock) {
+        var started = clock.GetTimestamp();
         var announced = false;
 
         while (true) {
@@ -432,11 +476,17 @@ internal static partial class AzureCommand {
             var transitioning = workers.Any(predicate: worker => (((string?)worker?["provisioningState"]) is "Creating" or "Updating" or "Deleting"));
 
             if (!transitioning) { return workers; }
-            if (System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started) >= TimeSpan.FromMinutes(minutes: 10)) {
+            if (clock.GetElapsedTime(startingTimestamp: started) >= WorkerSettleTimeout) {
                 throw new InvalidOperationException(message: "Azure worker replacement did not settle within ten minutes; no release was applied.");
             }
             if (!announced) { Console.WriteLine(value: "Waiting for Azure's existing worker replacement to settle before selecting the authoritative worker."); announced = true; }
-            await Task.Delay(delay: TimeSpan.FromSeconds(seconds: 5));
+            await Task.Delay(
+                delay: WorkerSettlePoll,
+                timeProvider: clock
+            );
         }
     }
+
+    private static readonly TimeSpan WorkerSettlePoll = TimeSpan.FromSeconds(seconds: 5);
+    private static readonly TimeSpan WorkerSettleTimeout = TimeSpan.FromMinutes(minutes: 10);
 }

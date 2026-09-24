@@ -1,14 +1,14 @@
 {
-  "basis": "../phase-fixture.world.json",
+  "basis": "../phase-fixture",
   "grants": [
     {
       "capability": "Mutate",
-      "principal": "seat1",
+      "grantee": "seat1",
       "subject": "section:state"
     },
     {
       "capability": "Edit",
-      "principal": "seat1",
+      "grantee": "seat1",
       "subject": "all"
     }
   ],
@@ -53,7 +53,6 @@
     }
   ],
   "schedule": {
-    "directory": "out",
     "rows": [
       {
         "command": "body.press nosuchchannel",

@@ -1,7 +1,6 @@
 using System.Globalization;
 using Puck.Commands;
 using Puck.World.Client;
-using Puck.World.Protocol;
 using Puck.World.Server;
 using static Puck.World.WorldCommandDefinition;
 
@@ -140,7 +139,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Simulation(
             name: "world.instance.start",
-            description: "Starts another world running in THIS process from a world document and admits it under a name: world.instance.start <name> <path>. The instance ticks every fixed step alongside the boot world (its own zero-based tick count, own definition, own population, own owned-world store — nothing shared) but has no seats, no addons, no replay tape and no machines: a document declaring machine-sourced screens starts anyway with every one of them dark, and the echo counts them. Reachable only through world.instance.status/stop. Refuses, naming which: an empty name, the reserved name 'boot', a name that is not a single safe path segment (the name IS the directory its owned worlds live in), a name already running, a name whose owned-world directory would land outside the instances root, a path resolving to no file, a document the validator rejects, or an owned-world store that cannot be opened.",
+            description: "Starts another world running in THIS process from a world document and admits it under a name: world.instance.start <name> <path>. The instance ticks every fixed step alongside the boot world (its own zero-based tick count, own definition, own population, own owned-world store — nothing shared) but has no seats, no addons, no replay tape and no machines: a document declaring machine-sourced screens starts anyway with every one of them dark, and the echo counts them. Reachable only through world.instance.status/stop. Refuses, naming which: an empty name, the reserved name 'boot', a name carrying '~' (the character joining the instance names the engine generates), a name that is not a single safe path segment (the name IS the directory its owned worlds live in), a name already running, a name whose owned-world directory would land outside the instances root, a path resolving to no file, a document the validator rejects, or an owned-world store that cannot be opened.",
             handler: (_, args) => {
                 if (args.Count < 2) {
                     return CommandResult.Error(output: "[world.instance.start: expected <name> <path>]");
@@ -149,7 +148,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 var name = args[0].ToString();
 
                 if (
-                    !m_instances.TryStart(
+                    !m_instances.TryStartAuthored(
                     name: name,
                     path: args.Tail(start: 1),
                     instance: out var started,
@@ -429,7 +428,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     : WorldInstanceHost.TransferScope.Body),
                     sourceSlot: bodyIndex,
                     destination: destination,
-                    actingPrincipal: context.ActingPrincipal(),
+                    actingPrincipal: context.Principal,
                     explicitTransferId: explicitTransferId,
                     testForceJoinRefusalOrdinal: forceJoinRefusalOrdinal
                 );

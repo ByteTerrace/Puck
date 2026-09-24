@@ -10,12 +10,6 @@ namespace Puck.World.Tests;
 public sealed class BatchComposeLawTests {
     private const string GroupReference = "state.bindingGroups.actionGroup";
 
-    private static StateCell Cell(string key, long value, CellKind kind = CellKind.Int) => new(
-        Key: Name(value: key),
-        Value: ((kind == CellKind.Bool)
-            ? CellValue.Bool(value: (value != 0))
-            : CellValue.Int(value: value))
-    );
     private static string ComposedGroup(WorldDefinition definition) => WorldBindingComposer.Compose(definition.BindingOverlays[0].Document).Chords[0].Group.Value;
     // The reference arm of a document identifier is the JSON converter's, so the fixture round-trips its bytes to
     // hold the same bound value a hand-authored world does.
@@ -60,13 +54,13 @@ public sealed class BatchComposeLawTests {
                 Name(value: "bag"),
                 CellKind.Int,
                 Capacity: 4,
-                Cells: [Cell(
+                Cells: [StateFixtures.Cell(
                         key: "a",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "b",
                         value: 2
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c",
                         value: 3
                     )]
@@ -78,7 +72,7 @@ public sealed class BatchComposeLawTests {
                 Cells: [.. Enumerable.Range(
                         count: 8,
                         start: 0
-                    ).Select(selector: index => Cell(
+                    ).Select(selector: index => StateFixtures.Cell(
                         key: $"c{index}",
                         value: index
                     ))]
@@ -91,22 +85,22 @@ public sealed class BatchComposeLawTests {
                     Ordered: true
                 ),
                 Capacity: 4,
-                Cells: [Cell(
+                Cells: [StateFixtures.Cell(
                         key: "c0",
-                        value: 1,
-                        kind: CellKind.Bool
-                    ), Cell(
+                        kind: CellKind.Bool,
+                        value: 1
+                    ), StateFixtures.Cell(
                         key: "c1",
-                        value: 1,
-                        kind: CellKind.Bool
-                    ), Cell(
+                        kind: CellKind.Bool,
+                        value: 1
+                    ), StateFixtures.Cell(
                         key: "c2",
-                        value: 1,
-                        kind: CellKind.Bool
-                    ), Cell(
+                        kind: CellKind.Bool,
+                        value: 1
+                    ), StateFixtures.Cell(
                         key: "c3",
-                        value: 1,
-                        kind: CellKind.Bool
+                        kind: CellKind.Bool,
+                        value: 1
                     )]
             ),
                 new WorldStateRow(
@@ -126,22 +120,22 @@ public sealed class BatchComposeLawTests {
                     Ordered: true
                 ),
                 Capacity: 4,
-                Cells: [Cell(
+                Cells: [StateFixtures.Cell(
                         key: "c4",
-                        value: 1,
-                        kind: CellKind.Bool
-                    ), Cell(
+                        kind: CellKind.Bool,
+                        value: 1
+                    ), StateFixtures.Cell(
                         key: "c5",
-                        value: 1,
-                        kind: CellKind.Bool
-                    ), Cell(
+                        kind: CellKind.Bool,
+                        value: 1
+                    ), StateFixtures.Cell(
                         key: "c6",
-                        value: 1,
-                        kind: CellKind.Bool
-                    ), Cell(
+                        kind: CellKind.Bool,
+                        value: 1
+                    ), StateFixtures.Cell(
                         key: "c7",
-                        value: 1,
-                        kind: CellKind.Bool
+                        kind: CellKind.Bool,
+                        value: 1
                     )]
             ),
                 new WorldStateRow(
@@ -177,14 +171,14 @@ public sealed class BatchComposeLawTests {
     // arm below): each still must compose exactly as it would applied on its own.
     private static WorldMutation[] Members() => [
         new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "counter",
             Key: WorldStateRow.SlotKey.Value,
             Value: 5,
             Kind: WorldDocumentWriteKind.Set
         ),
         new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "bindingGroups",
             Key: "actionGroup",
             Value: 0,
@@ -192,33 +186,33 @@ public sealed class BatchComposeLawTests {
             Text: "beta"
         ),
         new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "counter",
             Key: WorldStateRow.SlotKey.Value,
             Value: 3,
             Kind: WorldDocumentWriteKind.Add
         ),
         new WorldMutation.RemoveStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "bag",
             Key: "b"
         ),
         new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "bag",
             Key: "d",
             Value: 4,
             Kind: WorldDocumentWriteKind.Set
         ),
         new WorldMutation.TransformState(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Transform: new StateTransform.Shuffle(
                 Draw: "dice",
                 Row: "deck"
             )
         ),
         new WorldMutation.TransformState(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Transform: new StateTransform.Transfer(
                 From: "deck",
                 To: "randomPile",
@@ -227,7 +221,7 @@ public sealed class BatchComposeLawTests {
             )
         ),
         new WorldMutation.TransformState(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Transform: new StateTransform.Transfer(
                 From: "run",
                 To: "slicePile",
@@ -252,7 +246,7 @@ public sealed class BatchComposeLawTests {
         batched.Server.MutationJournalTap = (_, _, _) => journal++;
 
         batched.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: Members()
         ));
         batched.Step();
@@ -339,7 +333,7 @@ public sealed class BatchComposeLawTests {
                     )]
             );
             members[index] = new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: $"crossRow{index}",
                 Key: WorldStateRow.SlotKey.Value,
                 Value: (index * 7),
@@ -356,7 +350,7 @@ public sealed class BatchComposeLawTests {
         batched.Server.MutationJournalTap = (_, _, _) => journal++;
 
         batched.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: members
         ));
         batched.Step();
@@ -395,11 +389,11 @@ public sealed class BatchComposeLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: [
             .. Members(),
             new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: "absent",
                     Key: WorldStateRow.SlotKey.Value,
                     Value: 1,
@@ -434,10 +428,10 @@ public sealed class BatchComposeLawTests {
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: [
             .. new[] { "d", "e" }.Select(selector: key => new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: "bag",
                     Key: key,
                     Value: 9,

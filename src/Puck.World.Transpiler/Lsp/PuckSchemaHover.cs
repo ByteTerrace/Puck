@@ -216,19 +216,23 @@ internal sealed class PuckSchemaHover {
         if (
             (enumeration is not null) &&
             (enumValue is null)
-        ) { lines.Add(item: $"Allowed values: {string.Join(
+        ) {
+            lines.Add(item: $"Allowed values: {string.Join(
             separator: ", ",
             values: enumeration.Select(selector: value => $"`{value}`")
-        )}."); }
+        )}.");
+        }
         var defaultNode = variants.FirstOrDefault(predicate: value => value.Node.AsObject().ContainsKey(propertyName: "default"));
 
         if (defaultNode.Node is not null) { lines.Add(item: $"Default: `{(defaultNode.Node["default"]?.ToJsonString() ?? "null")}`."); }
         var dimension = WorldDocumentVocabulary.Instance.ClassifyField(fieldKey: name);
 
-        if (dimension != UnitDimension.None) { lines.Add(item: $"Units: {string.Join(
+        if (dimension != UnitDimension.None) {
+            lines.Add(item: $"Units: {string.Join(
             ", ",
             UnitConversion.AcceptedUnits(dimension: dimension)
-        )} ({dimension})."); }
+        )} ({dimension}).");
+        }
         return string.Join(
             separator: "\n\n",
             values: lines

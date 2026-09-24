@@ -99,7 +99,7 @@ internal sealed partial class PlayerCommandModule {
             var instanceChannels = WorldChannelTable.Compile(channels: instance.Server.Definition.Channels);
 
             instance.Server.ApplyCommand(command: new WorldCommand.EnqueueSegment(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 Intent: instanceChannels.RoleOrdinals.Intent(
                     moveAdvance: FixedQ4816.FromDouble(value: iForward),
@@ -167,7 +167,7 @@ internal sealed partial class PlayerCommandModule {
                 var routedChannels = WorldChannelTable.Compile(channels: m_instances.ResolveRoutedDefinition(slot: rosterSlot).Channels);
 
                 location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.EnqueueSegment(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     EntityIndex: location.EntityIndex,
                     Intent: routedChannels.RoleOrdinals.Intent(
                         moveAdvance: FixedQ4816.FromDouble(value: forward),
@@ -211,7 +211,7 @@ internal sealed partial class PlayerCommandModule {
         // The fly channel order (forward, strafe, up, yaw, pitch, roll) maps onto PlayerIntent (MoveAdvance, MoveStrafe,
         // Turn, MoveUp, Pitch, Roll) — the "yaw" channel is the Turn rate.
         m_link.SubmitCommand(command: new WorldCommand.EnqueueSegment(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: resolvedIndex,
             Intent: m_channels.RoleOrdinals.Intent(
                 moveAdvance: FixedQ4816.FromDouble(value: forward),
@@ -256,7 +256,7 @@ internal sealed partial class PlayerCommandModule {
             }
 
             m_link.SubmitCommand(command: new WorldCommand.SetBodyMotion(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 EntityIndex: index,
                 BodyMotionProgram: program
             ));
@@ -319,7 +319,7 @@ internal sealed partial class PlayerCommandModule {
             }
 
             instance.Server.ApplyCommand(command: new WorldCommand.SnapPose(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 Position: new Vector3(
                     x: ix,
@@ -378,7 +378,7 @@ internal sealed partial class PlayerCommandModule {
                     Vector3 routedSpawnPosition = routedPoint.Position;
 
                     location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SnapPose(
-                        Principal: context.ActingPrincipal(),
+                        Principal: context.Principal,
                         EntityIndex: location.EntityIndex,
                         Position: routedSpawnPosition,
                         YawRadians: (routedPoint.YawDegrees * (MathF.PI / 180f)),
@@ -418,7 +418,7 @@ internal sealed partial class PlayerCommandModule {
             Vector3 spawnPosition = point.Position;
 
             m_link.SubmitCommand(command: new WorldCommand.SnapPose(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 EntityIndex: spawnIndex,
                 Position: spawnPosition,
                 YawRadians: (point.YawDegrees * (MathF.PI / 180f)),
@@ -490,7 +490,7 @@ internal sealed partial class PlayerCommandModule {
                 const float RoutedToRadians = (MathF.PI / 180f);
 
                 location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SnapPose(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     EntityIndex: location.EntityIndex,
                     Position: new Vector3(
                         x: rx,
@@ -543,7 +543,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         m_link.SubmitCommand(command: new WorldCommand.SnapPose(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: index,
             Position: new Vector3(
                 x: x,
@@ -623,7 +623,7 @@ internal sealed partial class PlayerCommandModule {
         );
 
         m_link.SubmitCommand(command: new WorldCommand.Reconcile(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: index,
             X: x,
             Z: z,
@@ -672,7 +672,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         m_link.SubmitCommand(command: new WorldCommand.RigidImpulse(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: index,
             Impulse: new Vector3(
                 x: impulse[0],
@@ -722,7 +722,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         m_link.SubmitCommand(command: new WorldCommand.CarryBody(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: carrierIndex,
             TargetIndex: targetIndex
         ));
@@ -750,7 +750,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         m_link.SubmitCommand(command: new WorldCommand.ReleaseCarry(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: index
         ));
 
@@ -790,7 +790,7 @@ internal sealed partial class PlayerCommandModule {
             }
 
             instance.Server.ApplyCommand(command: new WorldCommand.Stop(
-                Principal: context.ActingPrincipal(),
+                Principal: context.Principal,
                 EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot)
             ));
 
@@ -828,7 +828,7 @@ internal sealed partial class PlayerCommandModule {
             )
             ) {
                 route.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.Stop(
-                    Principal: context.ActingPrincipal(),
+                    Principal: context.Principal,
                     EntityIndex: route.EntityIndex
                 ));
                 m_roster.Seat(slot: routedSlot)?.ReleaseAllHeld();
@@ -858,7 +858,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         m_link.SubmitCommand(command: new WorldCommand.Stop(
-            Principal: context.ActingPrincipal(),
+            Principal: context.Principal,
             EntityIndex: index
         ));
 

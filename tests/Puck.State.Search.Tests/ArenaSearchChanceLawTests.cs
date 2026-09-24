@@ -46,7 +46,7 @@ public sealed class ArenaSearchChanceLawTests {
                     Kind: SearchShapeKind.Relocate,
                     Displace: true,
                     Directions: [],
-                    PairWithIndex: -1
+                    CompanionIndex: -1
                 )],
             Chance: new SearchChancePlan(
                 AtDepth: 0,
@@ -191,7 +191,7 @@ public sealed class ArenaSearchChanceLawTests {
                         Kind: SearchShapeKind.Relocate,
                         Displace: false,
                         Directions: [],
-                        PairWithIndex: -1
+                        CompanionIndex: -1
                     )],
                 Chance: new SearchChancePlan(
                     AtDepth: 1,
@@ -218,6 +218,7 @@ public sealed class ArenaSearchChanceLawTests {
             filter: write => (write == ("best", "score", 30L))
         );
     }
+
     private static StateRow[] PieceAndLuck() => [
         Keyed(
             name: "piece",
@@ -260,7 +261,7 @@ public sealed class ArenaSearchChanceLawTests {
                     Kind: SearchShapeKind.Relocate,
                     Displace: false,
                     Directions: [],
-                    PairWithIndex: -1
+                    CompanionIndex: -1
                 )],
             Chance: new SearchChancePlan(
                 AtDepth: atDepth,
@@ -439,10 +440,10 @@ public sealed class ArenaSearchChanceLawTests {
                             Kind: SearchShapeKind.Relocate,
                             Displace: true,
                             Directions: [],
-                            PairWithIndex: -1
+                            CompanionIndex: -1
                         )],
                     Iterations: 32,
-                    Method: SearchMethod.Tree,
+                    Method: SearchMethod.MonteCarlo,
                     Chance: new SearchChancePlan(
                         AtDepth: 1,
                         CellCount: 1,

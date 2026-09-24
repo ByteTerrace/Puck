@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Abstractions.Machines;
 using Puck.World.Protocol;
 
@@ -39,6 +40,7 @@ public sealed partial class WorldServer {
 
         return boundary;
     }
+
     /// <summary>Returns the engine screen index the local seat currently holds a <see cref="GrantSubjectKind.Screen"/>
     /// application to, or <see langword="null"/> when the slot is out of range or the seat holds no screen
     /// application. A seat with more than one screen application (never authored today) reports the first, in the
@@ -52,7 +54,7 @@ public sealed partial class WorldServer {
             return null;
         }
 
-        foreach (var application in Grants.Applications(principal: WorldPrincipal.Seat(slot: seatSlot))) {
+        foreach (var application in Grants.Applications(principal: Principal.Seat(slot: seatSlot))) {
             if (application.Target.Kind == GrantSubjectKind.Screen) {
                 return application.Target.Value;
             }
@@ -60,6 +62,7 @@ public sealed partial class WorldServer {
 
         return null;
     }
+
     // The instrument.state echo: which screen (if any) the routed seat is engaged with, whether that screen carries
     // an instrument machine, and its authored tempo — "driving" always mirrors "instrument=yes" today, since holding
     // the application IS the clock-fold gate (see InstrumentClockBoundary's own remarks); the field stays a distinct
@@ -76,6 +79,7 @@ public sealed partial class WorldServer {
 
         return $"[instrument.state: screen={screenIndex} instrument=yes ticksPerBeat={ticksPerBeat} driving=y]";
     }
+
     private long? InstrumentTicksPerBeat(int screenIndex) {
         var screen = m_document.Definition.Screens.FirstOrDefault(predicate: candidate => (candidate?.Index == screenIndex));
 

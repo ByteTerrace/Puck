@@ -1,6 +1,4 @@
-using System.Reflection;
 using System.Text;
-using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Rewriting;
 using Xunit;
@@ -91,94 +89,6 @@ public class DescentChildLawTests {
         }
     }
 
-    private static Type Concrete(Type declared) => (declared switch {
-        _ when (declared == typeof(ExpressionNode)) => typeof(LiteralExpressionNode),
-        _ when (declared == typeof(PredicateNode)) => typeof(ComparisonPredicateNode),
-        _ when (declared == typeof(RhsNode)) => typeof(RhsTextNode),
-        _ when (declared == typeof(StatementNode)) => typeof(FlagStatementNode),
-        _ when (declared == typeof(TestStepNode)) => typeof(TestTicksStepNode),
-        _ => declared,
-    });
-    private static SyntaxNode Instance(Type type, List<SyntaxNode>? planted) {
-        var constructor = type.GetConstructors().Single();
-
-        return ((SyntaxNode)constructor.Invoke(parameters: [.. constructor.GetParameters().Select(selector: parameter => Seed(
-            parameter: parameter,
-            planted: planted
-        ))]));
-    }
-    // Every syntax-node position, and a one-element list in every list position, is filled with a node recorded in
-    // `planted`; a default is taken only for a position that carries no child.
-    private static object? Seed(ParameterInfo parameter, List<SyntaxNode>? planted) {
-        var type = parameter.ParameterType;
-
-        if (type == typeof(string)) {
-            return "x";
-        }
-        if (type == typeof(PatternNode)) {
-            return new PatternNode.Nothing();
-        }
-        if (typeof(SyntaxNode).IsAssignableFrom(c: type)) {
-            var node = Instance(
-                planted: null,
-                type: Concrete(declared: type)
-            );
-
-            planted?.Add(item: node);
-
-            return node;
-        }
-        if (
-            type.IsGenericType &&
-            (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))
-        ) {
-            var element = type.GetGenericArguments()[0];
-
-            if (typeof(SyntaxNode).IsAssignableFrom(c: element)) {
-                var array = Array.CreateInstance(
-                    elementType: element,
-                    length: 1
-                );
-                var node = Instance(
-                    planted: null,
-                    type: Concrete(declared: element)
-                );
-
-                array.SetValue(
-                    index: 0,
-                    value: node
-                );
-                planted?.Add(item: node);
-
-                return array;
-            }
-
-            if (element == typeof(InterpolationSegment)) {
-                var hole = Instance(
-                    planted: null,
-                    type: typeof(LiteralExpressionNode)
-                );
-
-                planted?.Add(item: hole);
-
-                return new InterpolationSegment[] { new InterpolationSegment.Hole(Expression: ((ExpressionNode)hole)) };
-            }
-
-            return Array.CreateInstance(
-                elementType: element,
-                length: 0
-            );
-        }
-        if (type.IsEnum) {
-            return Enum.GetValues(enumType: type).GetValue(index: 0);
-        }
-        if (parameter.HasDefaultValue) {
-            return parameter.DefaultValue;
-        }
-
-        return (Activator.CreateInstance(type: type) ?? throw new InvalidOperationException(message: $"no seed for {type.Name}"));
-    }
-
     [Fact]
     public void EveryDescentArmRebuildsEveryChildTheNodeDeclares() {
         var carriers = 0;
@@ -186,7 +96,7 @@ public class DescentChildLawTests {
 
         foreach (var kind in SyntaxNodeKinds.All()) {
             var planted = new List<SyntaxNode>();
-            var root = Instance(
+            var root = SyntaxNodeKinds.Instance(
                 planted: planted,
                 type: kind
             );

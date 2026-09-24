@@ -53,46 +53,54 @@ public sealed class AttestationProfile {
     public string Name { get; }
 
     /// <summary>Checks an authenticated binding's nested profile constraints before its target key is used for the next cryptographic hop.</summary>
-    internal bool TryValidateKeyBindingPayload(KeyBindingPayload payload, string label, out string? refusal) {
-        if (!AllowsAlgorithm(algorithm: payload.TargetId.Algorithm)) {
-            refusal = $"{label}'s target names algorithm '{payload.TargetId.Algorithm}', which verifier profile '{Name}' does not enable";
-
-            return false;
-        }
-
-        if (payload.PublicKeySubjectPublicKeyInfo.Length > AttestationResourceLimits.SubjectPublicKeyInfoBytes) {
-            refusal = $"{label}'s target SPKI is {payload.PublicKeySubjectPublicKeyInfo.Length} bytes; profile '{Name}' permits at most {AttestationResourceLimits.SubjectPublicKeyInfoBytes}";
-
-            return false;
-        }
-
-        return ValidateKeyIdText(
+    internal bool TryValidateKeyBindingPayload(KeyBindingPayload payload, string label, out string? refusal) =>
+        TryValidateKeyPayload(
             id: payload.TargetId,
-            label: $"{label}'s target",
-            refusal: out refusal
+            keyRole: "target",
+            label: label,
+            refusal: out refusal,
+            spkiLength: payload.PublicKeySubjectPublicKeyInfo.Length,
+            spkiRole: "target"
         );
-    }
     /// <summary>Checks a verified sealed claim payload's nested profile constraints — called by the verifier on the payload it already decoded, so the sealed payload is decoded once per claim.</summary>
-    internal bool TryValidateSealedPayload(SealedPayload payload, string label, out string? refusal) {
-        if (!AllowsAlgorithm(algorithm: payload.RecipientId.Algorithm)) {
-            refusal = $"{label}'s recipient names algorithm '{payload.RecipientId.Algorithm}', which verifier profile '{Name}' does not enable";
+    internal bool TryValidateSealedPayload(SealedPayload payload, string label, out string? refusal) =>
+        TryValidateKeyPayload(
+            id: payload.RecipientId,
+            keyRole: "recipient",
+            label: label,
+            refusal: out refusal,
+            spkiLength: payload.EphemeralPublicKeySubjectPublicKeyInfo.Length,
+            spkiRole: "ephemeral"
+        );
+
+    private bool TryValidateKeyPayload(
+        KeyId id,
+        string keyRole,
+        string label,
+        out string? refusal,
+        int spkiLength,
+        string spkiRole
+    ) {
+        var roleLabel = $"{label}'s {keyRole}";
+
+        if (!AllowsAlgorithm(algorithm: id.Algorithm)) {
+            refusal = $"{roleLabel} names algorithm '{id.Algorithm}', which verifier profile '{Name}' does not enable";
 
             return false;
         }
 
-        if (payload.EphemeralPublicKeySubjectPublicKeyInfo.Length > AttestationResourceLimits.SubjectPublicKeyInfoBytes) {
-            refusal = $"{label}'s ephemeral SPKI is {payload.EphemeralPublicKeySubjectPublicKeyInfo.Length} bytes; profile '{Name}' permits at most {AttestationResourceLimits.SubjectPublicKeyInfoBytes}";
+        if (spkiLength > AttestationResourceLimits.SubjectPublicKeyInfoBytes) {
+            refusal = $"{label}'s {spkiRole} SPKI is {spkiLength} bytes; profile '{Name}' permits at most {AttestationResourceLimits.SubjectPublicKeyInfoBytes}";
 
             return false;
         }
 
         return ValidateKeyIdText(
-            id: payload.RecipientId,
-            label: $"{label}'s recipient",
+            id: id,
+            label: roleLabel,
             refusal: out refusal
         );
     }
-
     private bool AllowsCodec(IAttestationCodec codec) => (codec is CborAttestationCodec);
     private static string BuildName(AttestationExtensions extensions) {
         if (extensions == AttestationExtensions.None) {

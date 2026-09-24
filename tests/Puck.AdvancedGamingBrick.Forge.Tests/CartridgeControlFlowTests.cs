@@ -1,13 +1,79 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers nested branches, counted loops and loop exits, and pins the per-frame reservation against real hardware.</summary>
 public sealed class CartridgeControlFlowTests {
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "a break outside a repeat",
+            Document: Refused(statement: new CartridgeStatement(Kind: "break")),
+            Path: "rules[0].body[0]",
+            Fragment: "inside a repeat"
+        ),
+        new(
+            Name: "a repeat of zero",
+            Document: Refused(statement: Repeat(
+                count: 0,
+                index: "i",
+                body: [Set(
+                        target: "x",
+                        operation: ExpressionOp.Add,
+                        value: CartridgeExpressions.Of(constant: 1)
+                    )]
+            )),
+            Path: "rules[0].body[0].count",
+            Fragment: "iteration count"
+        ),
+        new(
+            Name: "an unknown loop index",
+            Document: Refused(statement: Repeat(
+                count: 4,
+                index: "missing",
+                body: [Set(
+                        target: "x",
+                        operation: ExpressionOp.Add,
+                        value: CartridgeExpressions.Of(constant: 1)
+                    )]
+            )),
+            Path: "rules[0].body[0].index",
+            Fragment: "Unknown state variable"
+        ),
+        new(
+            Name: "a count on a set step",
+            Document: Refused(statement: new CartridgeStatement(
+                Kind: "set",
+                Target: new CartridgeTarget(State: "x"),
+                Operation: null,
+                Value: CartridgeExpressions.Of(constant: 1),
+                Count: 3
+            )),
+            Path: "rules[0].body[0].count",
+            Fragment: "cannot carry 'count'"
+        ),
+        new(
+            Name: "an unknown step kind",
+            Document: Refused(statement: new CartridgeStatement(Kind: "loop")),
+            Path: "rules[0].body[0].kind",
+            Fragment: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    private static CartridgeDocument Refused(CartridgeStatement statement) => Blank(
+        target: "cgb",
+        title: "REFUSE"
+    ) with {
+        Variables = [new CartridgeVariable(
+            Name: "i",
+            Initial: 0
+        ), new CartridgeVariable(
+            Name: "x",
+            Initial: 0
+        )],
+        Rules = [Rule(body: [statement])],
+    };
     private static CartridgeDocument Blank(string target, string title) => CartridgeDocuments.Create(
         target: target,
         title: title
@@ -36,7 +102,7 @@ public sealed class CartridgeControlFlowTests {
         Name: name,
         When: CartridgeExpressions.Gate(
             left: CartridgeExpressions.Of(state: "done"),
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             right: CartridgeExpressions.Of(constant: 0)
         ),
         Body: [.. body, Set(
@@ -45,17 +111,6 @@ public sealed class CartridgeControlFlowTests {
                 value: CartridgeExpressions.Of(constant: 1)
             )]
     );
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
     private static CartridgeStatement Repeat(int count, string index, CartridgeStatement[] body) =>
         new(
             Kind: "repeat",
@@ -67,18 +122,6 @@ public sealed class CartridgeControlFlowTests {
         Name: "rule",
         Body: body
     );
-    private static MachineProbe Run(CartridgeDocument document, int frames, out CartridgeCompilation result) {
-        ICartridgeCompiler compiler = ((document.Target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-
-        result = compiler.Compile(document: document);
-        var machine = new MachineProbe(result: result);
-
-        machine.Run(frames: frames);
-        return machine;
-    }
     private static CartridgeStatement Set(string target, ExpressionOp? operation, ExpressionProgram value) =>
         new(
             Kind: "set",
@@ -206,12 +249,12 @@ public sealed class CartridgeControlFlowTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: Frames,
-            out var result
+            label: "control"
         );
-        var ticks = machine.Read(address: result.Variables["ticks"]);
+        var ticks = machine.Read(variable: "ticks");
 
         Assert.InRange(
             actual: ticks,
@@ -259,7 +302,7 @@ public sealed class CartridgeControlFlowTests {
                                         state: "cells",
                                         key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot"))
                                     ),
-                                    comparison: ActionStateComparison.Equal,
+                                    comparison: ExpressionOp.Equal,
                                     right: CartridgeExpressions.Of(constant: 0)
                                 ),
                                 Then: [new CartridgeStatement(Kind: "break")]
@@ -274,19 +317,19 @@ public sealed class CartridgeControlFlowTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: 12,
-            out var result
+            label: "control"
         );
 
         Assert.Equal(
             expected: 2,
-            actual: machine.Read(address: result.Variables["slot"])
+            actual: machine.Read(variable: "slot")
         );
         Assert.Equal(
             expected: 2,
-            actual: machine.Read(address: result.Variables["seen"])
+            actual: machine.Read(variable: "seen")
         );
     }
     [InlineData("cgb")]
@@ -352,7 +395,7 @@ public sealed class CartridgeControlFlowTests {
                                         Kind: "if",
                                         When: CartridgeExpressions.Gate(
                                             left: CartridgeExpressions.Of(state: "inner"),
-                                            comparison: ActionStateComparison.Less,
+                                            comparison: ExpressionOp.Less,
                                             right: CartridgeExpressions.Of(constant: 2)
                                         ),
                                         Then: [Set(
@@ -378,28 +421,28 @@ public sealed class CartridgeControlFlowTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: 12,
-            out var result
+            label: "control"
         );
 
         Assert.Equal(
             expected: 12,
-            actual: machine.Read(address: result.Variables["cursor"])
+            actual: machine.Read(variable: "cursor")
         );
         Assert.Equal(
             expected: 6,
-            actual: machine.Read(address: result.Variables["evens"])
+            actual: machine.Read(variable: "evens")
         );
         Assert.Equal(
             expected: 6,
-            actual: machine.Read(address: result.Variables["odds"])
+            actual: machine.Read(variable: "odds")
         );
         for (var cell = 0; (cell < 12); ++cell) {
             Assert.Equal(
                 expected: cell,
-                actual: machine.Read(address: (result.Arrays["grid"] + ((uint)cell)))
+                actual: machine.Read(address: (machine.Result.Arrays["grid"] + ((uint)cell)))
             );
         }
     }
@@ -449,80 +492,27 @@ public sealed class CartridgeControlFlowTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: 12,
-            out var result
+            label: "control"
         );
 
         Assert.Equal(
             expected: 21,
-            actual: machine.Read(address: result.Variables["total"])
+            actual: machine.Read(variable: "total")
         );
         Assert.Equal(
             expected: 6,
-            actual: machine.Read(address: result.Variables["row"])
+            actual: machine.Read(variable: "row")
         );
     }
-    [Fact]
-    public void ValidationRefusesUnboundedAndMalformedControlFlow() {
-        var document = Blank(
-            target: "cgb",
-            title: "REFUSE"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "i",
-                Initial: 0
-            ), new CartridgeVariable(
-                Name: "x",
-                Initial: 0
-            )],
-        };
-
-        Refuses(
-            document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "break")])] },
-            fragment: "inside a repeat"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(body: [Repeat(
-                        count: 0,
-                        index: "i",
-                        body: [Set(
-                                target: "x",
-                                operation: ExpressionOp.Add,
-                                value: CartridgeExpressions.Of(constant: 1)
-                            )]
-                    )])] },
-            fragment: "iteration count"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(body: [new CartridgeStatement(
-                        Kind: "repeat",
-                        Count: 4,
-                        Index: "missing",
-                        Body: [Set(
-                                target: "x",
-                                operation: ExpressionOp.Add,
-                                value: CartridgeExpressions.Of(constant: 1)
-                            )]
-                    )])] },
-            fragment: "Unknown state variable"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(body: [new CartridgeStatement(
-                        Kind: "set",
-                        Target: new CartridgeTarget(State: "x"),
-                        Operation: null,
-                        Value: CartridgeExpressions.Of(constant: 1),
-                        Count: 3
-                    )])] },
-            fragment: "cannot carry 'count'"
-        );
-        Refuses(
-            document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "loop")])] },
-            fragment: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend"
-        );
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationRefusesUnboundedAndMalformedControlFlow(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 
     // The widest sweep the estimate still puts inside the reservation, found by bisection rather than a pinned number that would drift
     // the moment a cost constant moves. The sweep nests: one count is bounded at 255 by the schema, which is well
@@ -530,32 +520,4 @@ public sealed class CartridgeControlFlowTests {
     // Inner iterations per band. Small enough that the outer count lands well inside the schema's cap on either
     // machine, so the bisection is bounded by the reservation.
     private const int SweepInner = 20;
-
-    private sealed class MachineProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public MachineProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "control"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "control"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-    }
 }

@@ -56,9 +56,10 @@ internal static partial class Subjects {
             high: high,
             low: low
         ) | BigInteger.One;
+
     // The fixed region content: a deterministic, operand-free affine walk spread across the element space by the two
     // odd mixing constants the suite already uses, salted so a source region and a destination region never coincide.
-    private static T BinaryFieldRegionWalk<T>(int index, ulong salt) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
+    internal static T BinaryFieldRegionWalk<T>(int index, ulong salt) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var seed = unchecked((((ulong)index) + salt));
         var low = unchecked((seed * 0x9E3779B97F4A7C15UL));
         var high = unchecked(((seed ^ 0xD1B54A32D192ED03UL) * 0xBF58476D1CE4E5B9UL));

@@ -15,6 +15,10 @@
         <PublishReadyToRun Condition="'$(PublishReadyToRun)' == '' and '$(PublishAot)' != 'true'">true</PublishReadyToRun>
         <TieredPGO>false</TieredPGO>
     </PropertyGroup>
+    <!-- A coverage-recording build (puck affected, record mode) stamps the metadata WorldMethodRecorder looks for. -->
+    <ItemGroup Condition="'$(PuckRecordMethods)' == 'true'">
+        <AssemblyMetadata Include="PuckRecordMethods" Value="true" />
+    </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
         <PackageReference Include="System.CommandLine" Version="[2.*, )" />
@@ -56,11 +60,6 @@
         <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
     </ItemGroup>
-     <ItemGroup>
-        <Content Include="Assets\**" Exclude="Assets\worlds\avatars\moth.world.json;Assets\worlds\games\backgammon.world.json;Assets\worlds\games\billiards.world.json;Assets\worlds\games\bowling.world.json;Assets\worlds\games\dominoes.world.json;Assets\worlds\games\hexlines.world.json;Assets\worlds\games\mancala.world.json;Assets\worlds\games\poker.world.json;Assets\worlds\games\tictactoe.world.json;Assets\worlds\games\freecell.world.json;Assets\worlds\games\klondike.world.json;Assets\worlds\games\solitaire.world.json;Assets\worlds\games\spider.world.json;Assets\worlds\moth-courtyard.world.json;Assets\worlds\tools\hgb-compare.world.json;Assets\worlds\tools\hgb-mirror.world.json;Assets\worlds\tools\shader-compare.world.json" CopyToOutputDirectory="PreserveNewest" />
-        <!-- Explicit items exist even when generation occurs after project evaluation. -->
-        <Content Include="Assets\worlds\avatars\moth.world.json;Assets\worlds\games\backgammon.world.json;Assets\worlds\games\billiards.world.json;Assets\worlds\games\bowling.world.json;Assets\worlds\games\dominoes.world.json;Assets\worlds\games\hexlines.world.json;Assets\worlds\games\mancala.world.json;Assets\worlds\games\poker.world.json;Assets\worlds\games\tictactoe.world.json;Assets\worlds\games\freecell.world.json;Assets\worlds\games\klondike.world.json;Assets\worlds\games\solitaire.world.json;Assets\worlds\games\spider.world.json;Assets\worlds\moth-courtyard.world.json;Assets\worlds\tools\hgb-compare.world.json;Assets\worlds\tools\hgb-mirror.world.json;Assets\worlds\tools\shader-compare.world.json" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
     <!-- The pinned SDK normally reuses build deps during publish. CI reuses portable IL for a RID-specific
          publish, so that manifest names the wrong runtime asset paths. Regenerate only publish metadata,
          in the publish directory, preserving the portable build and avoiding another C# compilation.
@@ -75,8 +74,5 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
-    <ItemGroup>
-        <!-- Build-time world generation only; the CLI is not a runtime dependency. -->
-        <ProjectReference Include="..\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
-    </ItemGroup>
+    <Import Project="..\..\build\WorldAssets.targets" />
 </Project>

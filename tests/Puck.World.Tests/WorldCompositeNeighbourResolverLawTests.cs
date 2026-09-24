@@ -15,9 +15,9 @@ public sealed class WorldCompositeNeighbourResolverLawTests {
                 BodyReachRaw: 0L,
                 HysteresisRaw: 0L,
                 InteractionReachRaw: 0L,
-                VerticalOwnershipDeadbandRaw: 0L,
                 SimulationRateHz: 60,
-                SpeedCeilingRaw: 0L
+                SpeedCeilingRaw: 0L,
+                VerticalOwnershipDeadbandRaw: 0L
             )
         );
 

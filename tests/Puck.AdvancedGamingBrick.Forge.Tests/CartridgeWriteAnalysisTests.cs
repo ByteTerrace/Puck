@@ -179,10 +179,12 @@ public sealed class CartridgeWriteAnalysisTests {
             expected: new[] { "array", "kept", "scene" },
             actual: result.Order(comparer: StringComparer.Ordinal).ToArray()
         );
-        foreach (var name in new[] { "left", "loop", "scene" }) { Assert.True(condition: CartridgeEffects.Writes(
+        foreach (var name in new[] { "left", "loop", "scene" }) {
+            Assert.True(condition: CartridgeEffects.Writes(
             body,
             name
-        )); }
+        ));
+        }
         Assert.False(condition: CartridgeEffects.Writes(
             body,
             "array"

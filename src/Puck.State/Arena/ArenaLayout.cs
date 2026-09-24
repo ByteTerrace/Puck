@@ -218,7 +218,7 @@ public sealed class ArenaLayout {
         // compiler read a row by.
         if (string.IsNullOrEmpty(value: name)) {
             return (((spaces.Count == 1) && (spaces[0] is { } only))
-                ? only.Dimensions
+                ? only.Identity.Dimensions
                 : throw new InvalidOperationException(message: $"State row '{row.Name.Value}' is a vector row naming no space, and the section declares {spaces.Count}; a row may leave its space out only when there is exactly one.")
             );
         }
@@ -232,13 +232,21 @@ public sealed class ArenaLayout {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                return space.Dimensions;
+                return space.Identity.Dimensions;
             }
         }
 
         throw new InvalidOperationException(message: $"State row '{row.Name.Value}' names vector space '{name}', which the section does not declare.");
     }
-    private static bool HasTraits(StateRow row) {
+
+    /// <summary>Returns whether a row or any of its cells declares a value-over-time trait or overrides its cell
+    /// behavior, which is what makes a live write rebase the cell's clock lanes.</summary>
+    /// <param name="row">The row.</param>
+    /// <returns><see langword="true"/> when the row's layout carries traits.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
+    public static bool HasTraits(StateRow row) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
         if (
             (row.Advance is not null) ||
             (row.Cycle is not null) ||
@@ -258,6 +266,7 @@ public sealed class ArenaLayout {
 
         return false;
     }
+
     private static long Measure(long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long poolCount, long poolWords, long vectorBytes) {
         var bytes = vectorBytes;
 

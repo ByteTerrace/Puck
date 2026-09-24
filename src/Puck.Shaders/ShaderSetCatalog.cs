@@ -16,6 +16,14 @@ public sealed class ShaderSetCatalog : ManifestCatalog<ShaderSetManifest> {
     /// <inheritdoc/>
     protected override ShaderSetManifest LoadManifest(string manifestPath) => ShaderSetManifest.Load(manifestPath: manifestPath);
 
+    /// <summary>Gets the shader sets this build ships: the manifests under <c>Assets/Shaders</c> beside the executable.
+    /// The scan reads file names only; a manifest is parsed when its set is loaded.</summary>
+    public static ShaderSetCatalog Shipped { get; } = Scan(rootDirectory: Path.Combine(
+        path1: AppContext.BaseDirectory,
+        path2: "Assets",
+        path3: "Shaders"
+    ));
+
     /// <summary>Scans a directory tree for shader-set manifests. A missing root yields an empty catalog.</summary>
     /// <param name="rootDirectory">The root to scan.</param>
     /// <returns>The catalog.</returns>

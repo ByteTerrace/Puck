@@ -32,15 +32,19 @@ public sealed class AzureResourceOperationTests {
     private static HttpResponseMessage Reply(int status, string? body = null, (string Name, string Value)[]? headers = null) {
         var response = new HttpResponseMessage(statusCode: ((HttpStatusCode)status));
 
-        if (body is not null) { response.Content = new StringContent(
+        if (body is not null) {
+            response.Content = new StringContent(
             content: body,
             encoding: Encoding.UTF8,
             mediaType: "application/json"
-        ); }
-        foreach (var (name, value) in (headers ?? [])) { response.Headers.TryAddWithoutValidation(
+        );
+        }
+        foreach (var (name, value) in (headers ?? [])) {
+            response.Headers.TryAddWithoutValidation(
             name: name,
             value: value
-        ); }
+        );
+        }
         return response;
     }
 
@@ -278,9 +282,12 @@ public sealed class AzureResourceOperationTests {
         using var wire = new Wire(Reply(204));
         using var provider = Provider(
             wire,
-            Binding(method: method) with { Action = ((method == AzureResourceMethod.Post)
+            Binding(method: method) with {
+                Action = ((method == AzureResourceMethod.Post)
             ? "restart"
-            : null), IfMatch = "\"etag-3\"" }
+            : null),
+                IfMatch = "\"etag-3\"",
+            }
         );
         var operation = provider.CreateOperation(
             id: "world/entity/generation",
@@ -372,10 +379,12 @@ public sealed class AzureResourceOperationTests {
             )
         );
 
-        if (expectedSeconds < 0) { Assert.Null(value: delay); } else { Assert.Equal(
+        if (expectedSeconds < 0) { Assert.Null(value: delay); } else {
+            Assert.Equal(
             TimeSpan.FromTicks(value: (expectedSeconds * TimeSpan.TicksPerSecond)),
             delay
-        ); }
+        );
+        }
         Assert.Single(collection: wire.Requests);
     }
     [InlineData("{}")]

@@ -2,7 +2,7 @@
     <PropertyGroup>
         <AssemblyName>Puck.State.Topology</AssemblyName>
         <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
-        <Description>The board-query and pattern layer over a Puck.State arena: BoardQuery/BoardQueries/BoardCombination read a ray or a board shape off arena columns through one span kernel, CompiledPattern/PatternRow/PatternMemo walk a compiled automaton over an arena-read word with incremental resume, and ArenaBoards is the arena-facing door both run through. Every entry point addresses a row by catalog ordinal and reads through the arena's own columns, so a query or a pattern walk answers the same over an arena as over a document row. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <Description>The board-query and pattern layer over a Puck.State arena: BoardQuery/BoardQueries/BoardCombination read a ray or a board shape off arena columns through one span kernel, CompiledPattern/PatternRow compile a regular language over cell values to a transition table and walk it over a word of values read from the arena, and ArenaBoards is the arena-facing door both run through, addressing a row by catalog ordinal and reading the arena's own columns. Licensed under the Apache License 2.0.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.State.Topology</PackageId>
         <PackageTags>determinism;patterns;simulation;state;topology</PackageTags>
@@ -11,10 +11,10 @@
         <RootNamespace>Puck.State</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <!-- Puck.State carries the arena, the catalog, the compiled lattice topology (CompiledTopology/LatticeTopology/
-             TopologyCompilation stay there — see the project README for why), and the arena word a pattern walks
-             (ArenaWord/WordSource); Puck.Maths carries the fixed-point and bitset kernels the board and pattern reads
-             fold through. Nothing else, and nothing points back. -->
+        <!-- Puck.State carries the arena, the catalog, and the compiled lattice topology (CompiledTopology/
+             LatticeTopology/TopologyCompilation stay there; docs/plans/state-rebuild.md, "What the landing settled",
+             says why); Puck.Maths carries the fixed-point and bitset kernels the board and pattern reads fold through.
+             Nothing else, and nothing points back. -->
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
     </ItemGroup>

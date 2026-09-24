@@ -7,10 +7,10 @@ not bypass the document's rules.
 | Task | Guide and example |
 |---|---|
 | Author a world in the Puck DSL | [World vocabulary](../../src/Puck.World.Transpiler/README.md) and its [generated construct table](../reference/world-vocabulary.md), with [language syntax](../../src/Puck.Transpiler/README.md) for expressions, templates and collections. |
-| Test a world's behaviour in its own language | [Testing a world](testing-a-world.md) — `test { given when expect }` and `puck test`. |
+| Test a world's or a module's behaviour in its own language | [Testing a world](testing-a-world.md) — `test [with module(arguments)] { given when expect }` and `puck test`. |
 | Inspect or edit a running world | [World console](../../src/Puck.World/README.md), including document mutations, reload and saved state. |
 | Understand document fields | [World schema](../../src/Puck.World.Schema/README.md). |
-| Write one shader or a multi-pass effect | [Live shader workflow](../../src/Puck.World/README.md#shader-pipelines), then the [pipeline contract](../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development). |
+| Write one shader or a multi-pass effect | [Live shader workflow](../../src/Puck.World/README.md#shader-pipelines), then the [pipeline contract](../reference/shaders.md#shader-pipelines-and-live-development). |
 | Build a cartridge | [Cartridge DSL](../../src/Puck.GamingBricks.Transpiler/README.md) and [forge workflow](../../src/Puck.GamingBricks.Forge/README.md). |
 | Author shapes or audio | [World authoring library](../../src/Puck.World.Authoring/README.md) and [Example documents](../examples/README.md). |
 
@@ -28,6 +28,12 @@ resulting content is admitted. Native cartridge compilation and shader
 compilation add their own target requirements.
 
 ## Pinning file assets
+
+Every relative path a world document names resolves beside the document that
+names it, never beside the executable: an asset row's `source`, an addon's
+`modulePath`, a pipeline source, a machine's content. A document and its files
+move together, and a document read from no file resolves only absolute paths
+([paths a document names](../architecture/worlds.md#paths-a-document-names)).
 
 Use `asset "path"` when a world value names bytes that live beside the source,
 for example a machine cartridge:
@@ -71,6 +77,36 @@ the compiled paths remain relative to that location. Each output and the lock
 is replaced atomically as its own file. Publication spans several files, so an
 I/O failure partway through cannot make the whole set atomic.
 
+## Using a module more than once
+
+`use counter()` stamps a module's body where it stands, so its names are the using source's own. `use counter as
+left()` makes an instance instead: every name the body declares, its rows, rules, placements, prototypes and grounds
+included, belongs to the instance, and two instances of one module stand side by side.
+
+```puck
+module counter(start: Angle) {
+  state { world { slot score = start } }
+  export read score
+  export action score
+}
+
+use counter as left(start: 0)
+use counter as right(start: 3)
+
+rule balance {
+  when left.score < right.score
+  left.score = left.score + 1
+}
+```
+
+Inside the module the names stay bare. From the source that uses it, an instance's name is written through its
+alias, `left.score`, in every position a name stands, and a module that uses another reads through both aliases
+(`box.child.score`). The compiled document spells the name `left$score`, a generated name no author can write, so
+a name the host declares can never collide with one an instance declares; a JSON host and the console read it in
+that spelling (`world.state left$score`). Spawn points, kits, looks and cameras are not per instance: every
+instance declares the same name, so declare them in the using source, or give each instance its own through a
+module argument.
+
 ## Composing neighbouring worlds
 
 One `.puck` source can emit several sibling documents and connect them without repeating topology rows:
@@ -86,7 +122,12 @@ world east = patch(origin: [12m, 0m, 0m])
 border west.east, east.west { height: 6m  hysteresis: 2m }
 ```
 
-Each `world` becomes `<name>.world.json`. A `border` writes reciprocal references, persisted global destinations,
+Each `world` becomes `<name>.world.json`, and a basis or import elsewhere names it
+by that name, whatever the source file is called. Declare each world at the top
+level of the source under a written name, never inside a `for` or computed, so a
+reader finds it without compiling the source. Write one of them `entry world west = patch(...)` to name the world
+`Puck.World --world <source>.puck` starts in; the game stages every declared world first, so each border finds its
+neighbour, and `--entry <name>` starts in another declared world instead. A `border` writes reciprocal references, persisted global destinations,
 and adjacency rows. A bare cardinal endpoint selects the side of the world's only ground; with several grounds,
 write the ground name too, such as `west.floor.east`. The selected edges must have equal size and meet at the same
 composition coordinate. `width` may narrow both edges around their centres; it cannot exceed either edge.
@@ -103,6 +144,11 @@ border island.under, cavern.sky {
 The reciprocal frame reverses yaw and pitch. `hysteresis` is a minimum ownership deadband in world units; the
 runtime uses the larger of this value and its collider/motion-derived safety threshold, and reciprocal rows must
 agree.
+
+A module's behaviour is stated the same way a world's is. A `test` written inside the module body runs at every
+`use` and every `world` statement that stamps it, under that instantiation's arguments; a `test "name" with
+module(arguments)` chooses its own arguments and stands the module up alone. Both run through `puck test` — see
+[Testing a world](testing-a-world.md).
 
 `door island.arch1, parlor.arrival` connects an authored placement face (`arch1/portal` by default) to the named
 spawn and creates a return copy of that arch in the destination. Travel maps through the two face frames in both

@@ -132,60 +132,23 @@ public sealed class FixedRigidBody {
     /// <summary>The AUTHORED direction the recovery path extracts a deeply overlapping body along. It is authored
     /// rather than derived because a body embedded past a thin solid's midplane has a nearest surface on the wrong
     /// side, and a normal read off that surface would extract it further in.</summary>
-    public FixedVector3 EscapeDirection { get; set; } = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
+    public FixedVector3 EscapeDirection { get; set; } = FixedVector3.UnitY;
 
     /// <summary>Folds the persistent simulation state into a running digest in a fixed order — linear velocity,
     /// angular velocity, then orientation — leaving the per-step accumulators and the authored escape direction
     /// outside the digest.</summary>
-    /// <param name="digest">The running digest.</param>
-    /// <returns>The updated digest.</returns>
-    public ulong Fold(ulong digest) {
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: LinearVelocity.X.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: LinearVelocity.Y.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: LinearVelocity.Z.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: AngularVelocity.X.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: AngularVelocity.Y.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: AngularVelocity.Z.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: Orientation.X.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: Orientation.Y.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: Orientation.Z.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: Orientation.W.Value
-        );
-
-        return digest;
+    /// <param name="digest">The running digest, advanced in place.</param>
+    public void Fold(ref Fnv1aHash digest) {
+        digest.Add(value: LinearVelocity.X.Value);
+        digest.Add(value: LinearVelocity.Y.Value);
+        digest.Add(value: LinearVelocity.Z.Value);
+        digest.Add(value: AngularVelocity.X.Value);
+        digest.Add(value: AngularVelocity.Y.Value);
+        digest.Add(value: AngularVelocity.Z.Value);
+        digest.Add(value: Orientation.X.Value);
+        digest.Add(value: Orientation.Y.Value);
+        digest.Add(value: Orientation.Z.Value);
+        digest.Add(value: Orientation.W.Value);
     }
     /// <summary>Clears the per-step displacement accumulators.</summary>
     public void ResetStepAccumulators() {

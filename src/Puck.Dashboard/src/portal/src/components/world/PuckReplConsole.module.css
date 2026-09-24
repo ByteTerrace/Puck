@@ -1,0 +1,30 @@
+/* The expression console: a sunken monospaced well of prompts and answers above the input line. */
+.log {
+  margin: 0;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  list-style: none;
+}
+
+.entry + .entry {
+  margin-top: var(--mantine-spacing-xs);
+}
+
+.line {
+  display: grid;
+  grid-template-columns: rem(40px) minmax(0, 1fr) auto;
+  gap: var(--mantine-spacing-xs);
+  align-items: baseline;
+}
+
+.prompt {
+  color: var(--mantine-color-anchor);
+  font-weight: 500;
+}
+
+.value {
+  overflow-wrap: anywhere;
+}
+
+.input {
+  font-family: var(--mantine-font-family-monospace);
+}

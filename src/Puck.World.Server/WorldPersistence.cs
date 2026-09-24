@@ -12,7 +12,6 @@ public sealed partial class WorldPersistence {
     /// <summary>Gets the server whose document, tick, grants, rule host, population and machine host this facade
     /// captures and restores.</summary>
     private WorldServer Host => m_host;
-
     // The sections whose owning facade serves them through IWorldPersistedSection alone.
     private IWorldPersistedSection<WorldBoardEnforcementCheckpoint> BoardEnforcement => m_host.Tick;
     private IWorldPersistedDecisions Decisions => m_host.RuleHost;

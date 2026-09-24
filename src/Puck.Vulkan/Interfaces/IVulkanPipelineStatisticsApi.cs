@@ -1,4 +1,5 @@
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -8,12 +9,12 @@ namespace Puck.Vulkan.Interfaces;
 /// </summary>
 public interface IVulkanPipelineStatisticsApi {
     /// <summary>Determines whether pipeline executable statistics can be queried on the given device.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="device">The command table of the logical device.</param>
     /// <returns><see langword="true"/> if the device supports pipeline executable statistics; otherwise, <see langword="false"/>.</returns>
-    bool IsSupported(nint deviceHandle);
+    bool IsSupported(VulkanDeviceCommands device);
     /// <summary>Queries the executable statistics of a pipeline.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="device">The command table of the logical device.</param>
     /// <param name="pipelineHandle">The native <c>VkPipeline</c> handle to query.</param>
     /// <returns>The statistics reported for each of the pipeline's executables.</returns>
-    IReadOnlyList<VulkanPipelineExecutableStatistic> QueryStatistics(nint deviceHandle, nint pipelineHandle);
+    IReadOnlyList<VulkanPipelineExecutableStatistic> QueryStatistics(VulkanDeviceCommands device, nint pipelineHandle);
 }

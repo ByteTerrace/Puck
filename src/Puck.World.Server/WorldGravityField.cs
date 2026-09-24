@@ -80,9 +80,12 @@ public sealed class WorldGravityField {
                     rotation: m_areaRotations[index]
                 );
 
+                // Composition is the one place independently valid accelerations meet. Saturating componentwise
+                // prevents an overlap from wrapping toward the opposite direction; the fixed extreme is deterministic
+                // and Replace can still reset it before a later Combine.
                 acceleration = ((area.Mode == WorldGravityAreaMode.Replace)
                     ? contribution
-                    : Compose(
+                    : FixedSaturate.Add(
                         left: acceleration,
                         right: contribution
                     )
@@ -99,23 +102,6 @@ public sealed class WorldGravityField {
             TargetCount: targets.Count
         );
     }
-    // Composition is the one place independently valid accelerations meet. Saturating componentwise prevents an
-    // overlap from wrapping toward the opposite direction; the fixed extreme is deterministic and Replace can still
-    // reset it before a later Combine.
-    private static FixedVector3 Compose(FixedVector3 left, FixedVector3 right) => new(
-        X: FixedSaturate.Add(
-            left: left.X,
-            right: right.X
-        ),
-        Y: FixedSaturate.Add(
-            left: left.Y,
-            right: right.Y
-        ),
-        Z: FixedSaturate.Add(
-            left: left.Z,
-            right: right.Z
-        )
-    );
 
     /// <summary>Refreshes areas riding attached placements from the current authoritative body poses.</summary>
     /// <param name="population">The live population used by the established placement-attachment resolver.</param>
@@ -243,7 +229,7 @@ public sealed class WorldGravityField {
 
         // The attractors' own accelerations are discarded: they ride a placement transform and never move.
         for (var slot = 0; (slot < m_bodyCount); slot++) {
-            m_accelerations[m_entityBySlot[slot]] = Compose(
+            m_accelerations[m_entityBySlot[slot]] = FixedSaturate.Add(
                 left: solved[(attractorCount + slot)],
                 right: m_compiled.Uniform
             );

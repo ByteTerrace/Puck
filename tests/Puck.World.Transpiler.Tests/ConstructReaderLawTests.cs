@@ -11,21 +11,6 @@ namespace Puck.World.Transpiler.Tests;
 public class ConstructReaderLawTests {
     private const string GeneratedDocument = "docs/reference/world-vocabulary.md";
 
-    private static string FindRepositoryRoot() {
-        var directory = AppContext.BaseDirectory;
-
-        while (directory is not null) {
-            if (File.Exists(path: Path.Combine(
-                path1: directory,
-                path2: "Puck.slnx"
-            ))) {
-                return directory;
-            }
-            directory = Path.GetDirectoryName(path: directory);
-        }
-
-        throw new DirectoryNotFoundException(message: "Could not locate the repository root from the test runner.");
-    }
     private static IReadOnlySet<string> CompletionLabels(WorldConstructTable table) {
         var items = new JsonArray();
 
@@ -38,7 +23,6 @@ public class ConstructReaderLawTests {
     }
 
     public static TheoryData<string> Described() => new(values: WorldConstructs.Table.Keywords);
-
     [Fact]
     public void CompletionOffersEveryDescribedConstruct() {
         var labels = CompletionLabels(table: WorldConstructs.Table);
@@ -53,10 +37,7 @@ public class ConstructReaderLawTests {
     }
     [Fact]
     public void TheGeneratedManualTableOnDiskMatchesTheTable() {
-        var path = Path.Combine(
-            path1: FindRepositoryRoot(),
-            path2: GeneratedDocument
-        );
+        var path = RepositoryPaths.Resolve(relativePath: GeneratedDocument);
 
         Assert.True(
             condition: File.Exists(path: path),
@@ -81,10 +62,10 @@ public class ConstructReaderLawTests {
 
         Assert.Equal(
             actual: ((line < actual.Length)
-                ? $"{GeneratedDocument}:{line + 1}: {actual[line]}"
+                ? $"{GeneratedDocument}:{(line + 1)}: {actual[line]}"
                 : ""),
             expected: ((line < expected.Length)
-                ? $"{GeneratedDocument}:{line + 1}: {expected[line]}"
+                ? $"{GeneratedDocument}:{(line + 1)}: {expected[line]}"
                 : "")
         );
     }
@@ -129,9 +110,9 @@ public class ConstructReaderLawTests {
 
             Assert.NotNull(@object: memberCard);
             Assert.Contains(
-                expectedSubstring: $"A `{keyword}` member",
                 actualString: memberCard!,
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: $"A `{keyword}` member"
             );
         }
     }

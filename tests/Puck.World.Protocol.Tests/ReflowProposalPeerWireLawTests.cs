@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Server;
 using Xunit;
 
@@ -19,9 +20,9 @@ public sealed class ReflowProposalPeerWireLawTests {
     [Fact]
     public void OversizedProposalIsAnExplicitRefusalFrame() {
         var batch = new WorldMutation.Batch(
-            WorldPrincipal.Console,
+            Principal.Console,
             [new WorldMutation.UpsertStateCell(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     "selected",
                     "$value",
                     1,
@@ -98,9 +99,9 @@ public sealed class ReflowProposalPeerWireLawTests {
             )
         );
         var batch = new WorldMutation.Batch(
-            WorldPrincipal.Console,
+            Principal.Console,
             [new WorldMutation.UpsertStateCell(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     "selected",
                     "$value",
                     1,
@@ -155,9 +156,9 @@ public sealed class ReflowProposalPeerWireLawTests {
             MaxYRaw: 32768
         );
         var batch = new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: [new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: "selected",
                     Key: "$value",
                     Value: 1,

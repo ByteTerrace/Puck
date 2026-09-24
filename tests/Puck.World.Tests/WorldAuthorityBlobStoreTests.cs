@@ -7,7 +7,7 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 /// <summary>Hermetic laws for <see cref="WorldAuthorityBlobStore"/> over <see cref="FakeObjectBlobStore"/> — the
-/// checkpoint content-address/create-only path, the <c>checkpoints/latest</c> compare-and-swap, the journal's
+/// checkpoint content-address/create-only path, the authority root compare-and-swap, the journal's
 /// read-modify-write append, and the published-definition round trip.</summary>
 public sealed class WorldAuthorityBlobStoreTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
@@ -62,8 +62,8 @@ public sealed class WorldAuthorityBlobStoreTests {
                 cancellationToken: cancellationToken,
                 entry: new WorldMutationJournalEntry(
                     Encoded: new byte[] { ((byte)index) },
-                    Tick: ((ulong)(200 + index)),
-                    EngineTick: ((ulong)(200 + index))
+                    EngineTick: ((ulong)(200 + index)),
+                    Tick: ((ulong)(200 + index))
                 ),
                 identity: identity
             );
@@ -184,97 +184,25 @@ public sealed class WorldAuthorityBlobStoreTests {
             tail.Entries[0].Encoded.Span[0]
         );
     }
-    [Fact]
-    public async Task FirstUnownedDefinitionPublication_MigratesLegacyCheckpointAndTailBeforeRootCas() {
-        var fake = new FakeObjectBlobStore();
-        var store = new WorldAuthorityBlobStore(
-            store: fake,
-            target: Target
-        );
-        var identity = Identity();
-        var cancellationToken = TestContext.Current.CancellationToken;
-        var checkpoint = "legacy-checkpoint"u8.ToArray();
-        var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(content: checkpoint);
-        var checkpointHex = checkpointHash["sha256-64/".Length..];
-
-        fake.Seed(
-            identity.Owner,
-            WorldOwnedWorldSync.HostedAddressFor(
-                identity.Owner,
-                identity.World,
-                "checkpoints/latest"
-            ).Key,
-            WorldAuthorityStoreWireCodec.EncodeLatestPointer(
-                hash: checkpointHash,
-                ordinal: 0,
-                tick: 10
-            )
-        );
-        fake.Seed(
-            identity.Owner,
-            WorldOwnedWorldSync.HostedAddressFor(
-                identity.Owner,
-                identity.World,
-                $"checkpoints/000000000000-{checkpointHex}.pckp"
-            ).Key,
-            checkpoint
-        );
-        var legacyTail = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldMutationJournalEntry(
-                11,
-                11,
-                "legacy-tail"u8.ToArray()
-            )]);
-
-        fake.Seed(
-            identity.Owner,
-            WorldOwnedWorldSync.HostedAddressFor(
-                identity.Owner,
-                identity.World,
-                "journal/000000000000.bin"
-            ).Key,
-            legacyTail
-        );
-
-        var published = await store.PublishDefinitionAsync(
-            identity,
-            Fixtures.BuildDocument(),
-            cancellationToken
-        );
-
-        Assert.True(
-            condition: published.Ok,
-            userMessage: published.Detail
-        );
-        Assert.Equal(
-            checkpoint,
-            (await store.LoadLatestAsync(
-                cancellationToken: cancellationToken,
-                identity: identity
-            ))!.Value.Encoded.ToArray()
-        );
-        var tail = await store.LoadJournalTailAsync(
-            afterOrdinal: 0,
-            cancellationToken: cancellationToken,
-            identity: identity
-        );
-
-        Assert.Single(collection: tail.Entries);
-        Assert.Equal(
-            "legacy-tail"u8[0],
-            tail.Entries[0].Encoded.Span[0]
-        );
-    }
-    [Fact]
-    public async Task LoadDefinitionAsync_NeverPublished_ReturnsNull() {
+    // An identity nothing was ever published or checkpointed under reads back as absent, never as an error.
+    [InlineData("definition")]
+    [InlineData("latest")]
+    [Theory]
+    public async Task ALoadOfANeverWrittenIdentity_ReturnsNull(string load) {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
             target: Target
         );
 
-        Assert.Null(@object: await store.LoadDefinitionAsync(
-            cancellationToken: TestContext.Current.CancellationToken,
-            identity: Identity()
-        ));
+        Assert.Null(@object: ((load == "definition")
+            ? await store.LoadDefinitionAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                identity: Identity()
+            )
+            : await store.LoadLatestAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                identity: Identity()
+            )));
     }
     [Fact]
     public async Task LoadJournalTailAsync_WithNoAppends_IsEmptyNotAFault() {
@@ -337,18 +265,6 @@ public sealed class WorldAuthorityBlobStoreTests {
         await Assert.ThrowsAsync<InvalidDataException>(testCode: () => store.LoadLatestAsync(
             cancellationToken: cancellationToken,
             identity: identity
-        ));
-    }
-    [Fact]
-    public async Task LoadLatestAsync_WithNoCheckpointWritten_ReturnsNull() {
-        var store = new WorldAuthorityBlobStore(
-            store: new FakeObjectBlobStore(),
-            target: Target
-        );
-
-        Assert.Null(@object: await store.LoadLatestAsync(
-            cancellationToken: TestContext.Current.CancellationToken,
-            identity: Identity()
         ));
     }
     [Fact]
@@ -596,7 +512,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         );
     }
     [Fact]
-    public async Task WriteCheckpointAsync_RetriedWithIdenticalBytesAfterThePointerNeverAdvanced_IsIdempotent() {
+    public async Task WriteCheckpointAsync_RetriedWithIdenticalBytesAfterTheRootNeverAdvanced_IsIdempotent() {
         var fake = new FakeObjectBlobStore();
         var store = new WorldAuthorityBlobStore(
             store: fake,
@@ -608,15 +524,11 @@ public sealed class WorldAuthorityBlobStoreTests {
         var hash = WorldDefinitionFileSource.ComputeContentHash(content: encoded);
         var hex = hash["sha256-64/".Length..];
 
-        // Simulates a writer that landed the content-addressed checkpoint blob but crashed before the pointer CAS —
+        // Simulates a writer that landed the content-addressed checkpoint candidate but crashed before the root CAS —
         // the retry recomputes the SAME ordinal+hash and must recognize the identical content rather than refusing.
         fake.Seed(
             bytes: encoded,
-            key: WorldOwnedWorldSync.HostedAddressFor(
-                containerId: identity.Owner,
-                leaf: $"checkpoints/000000000000-{hex}.pckp",
-                world: identity.World
-            ).Key,
+            key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/{identity.World.Value}/authority/checkpoints/000000000000-{hex}.pckp",
             objectId: identity.Owner
         );
 

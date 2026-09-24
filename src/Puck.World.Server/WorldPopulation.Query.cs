@@ -329,6 +329,11 @@ public sealed partial class WorldPopulation {
     public int NavigationRetainedDomainCount => m_navigation.RetainedDomainCount;
     /// <summary>Gets the number of navigation domains rebuilt by the most recent population compile.</summary>
     public int NavigationRebuiltDomainCount => m_navigation.RebuiltDomainCount;
+    /// <summary>Gets the number of navigation domains whose occupancy and edges have been baked. A domain bakes on its
+    /// first route request or read-back, never at compile; reading this never bakes.</summary>
+    public int NavigationBakedDomainCount => m_navigation.BakedDomainCount;
+    /// <summary>Gets the number of compiled navigation domains.</summary>
+    public int NavigationDomainCount => m_navigation.Count;
     /// <summary>Gets the compiled navigation cell total.</summary>
     public long NavigationCellCount => m_navigation.CellCount;
     /// <summary>Gets the fixed domain-search workspace allocated at compile time.</summary>

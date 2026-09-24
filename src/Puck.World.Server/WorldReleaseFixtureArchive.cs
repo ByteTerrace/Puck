@@ -1,24 +1,22 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Assets;
 using Puck.Storage;
 
 namespace Puck.World.Server;
 
 /// <summary>One complete row captured at the host's shared simulation boundary.</summary>
-public sealed record WorldReleaseFixtureCheckpoint(byte[] Encoded, ulong Tick, WorldAuthorityReceiptSnapshot? Receipts = null);
-/// <summary>A checkpoint object's exact identity and captured row tick.</summary>
-public sealed record WorldReleaseFixtureRow(string Hash, ulong Tick) {
-    /// <summary>The exact receipt snapshot pin. Absence identifies an older, incomplete qualification export.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? ReceiptsHash { get; init; }
-}
+public sealed record WorldReleaseFixtureCheckpoint(byte[] Encoded, ulong Tick, WorldAuthorityReceiptSnapshot Receipts);
+/// <summary>A checkpoint object's exact identity, its captured row tick, and the exact pin of the receipt snapshot
+/// captured with it.</summary>
+public sealed record WorldReleaseFixtureRow(string Hash, ulong Tick, string ReceiptsHash);
 /// <summary>Immutable inventory for a coherent qualification snapshot. It contains no production signing keys.</summary>
 public sealed record WorldReleaseFixtureManifest(string Schema, Guid RequestId, string Group, string Release,
     Guid Owner, Guid MachineId, IReadOnlyDictionary<string, WorldReleaseFixtureRow> Worlds) {
     /// <summary>Host capture time for the coherent group, distinct from each world's simulation tick.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DateTimeOffset? CapturedAt { get; init; }
     /// <summary>Full digest of the canonical inventory, including every row's checkpoint hash.</summary>
-    [JsonIgnore] public string Identity => WorldReleaseFixtureArchive.Hash(bytes: WorldReleaseFixtureArchive.Canonicalize(manifest: this));
+    [JsonIgnore] public string Identity => ContentPin.Compute(content: WorldReleaseFixtureArchive.Canonicalize(manifest: this)).ToString();
     /// <summary>Enforced policy/inventory proof. Its absence means this fixture is not an intentional recovery point.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? RewindBoundary { get; init; }
 }
@@ -39,17 +37,16 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         StringComparer.Ordinal
     ),
     });
-    internal static string Hash(ReadOnlySpan<byte> bytes) => ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
 
     private ObjectBlobAddress CheckpointAddress(string hash) => new(
         owner,
         $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/fixtures/content/{Digest(pin: hash)}.pckp"
     );
-    private static string Digest(string pin) => (((pin is { Length: 71 }) && pin.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "sha256/"
-    ) && (pin.AsSpan(start: 7).IndexOfAnyExcept(values: "0123456789abcdef") < 0))
-        ? pin[7..]
+    private static string Digest(string? pin) => (ContentPin.TryParse(
+        pin: out var parsed,
+        text: pin
+    )
+        ? parsed.Hex
         : throw new InvalidDataException(message: "release fixture requires full lowercase SHA-256 pins")
     );
     private ObjectBlobAddress ManifestAddress(Guid requestId) {
@@ -87,15 +84,13 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
                 manifest.Group,
                 manifest.Worlds.Keys
             )) ||
-                (manifest.CapturedAt is null) ||
-                manifest.Worlds.Values.Any(predicate: row => (row.ReceiptsHash is null))
+                (manifest.CapturedAt is null)
             ) {
                 throw new InvalidDataException(message: "recovery point has an incomplete capture or boundary proof");
             }
         } else if (manifest.CapturedAt is not null) { throw new InvalidDataException(message: "recovery time requires boundary proof"); }
         foreach (var row in manifest.Worlds) {
-            _ = SafeName.Parse(candidate: row.Key); _ = Digest(pin: row.Value.Hash);
-            if (row.Value.ReceiptsHash is { } receipts) { _ = Digest(pin: receipts); }
+            _ = SafeName.Parse(candidate: row.Key); _ = Digest(pin: row.Value.Hash); _ = Digest(pin: row.Value.ReceiptsHash);
         }
     }
     private async Task WriteImmutableAsync(ObjectBlobAddress address, ReadOnlyMemory<byte> bytes, CancellationToken token) {
@@ -167,29 +162,25 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
 
         if (
             (result.Content.Length is 0 or > MaximumCheckpointBytes) ||
-            (Hash(bytes: result.Content.Span) != row.Hash)
+            (ContentPin.Compute(content: result.Content.Span).ToString() != row.Hash)
         ) {
             throw new InvalidDataException(message: "retained release checkpoint is corrupt or exceeds its byte budget");
         }
         return result.Content;
     }
-    /// <summary>Reads the complete pinned receipt graph; an older export without this proof refuses explicitly.</summary>
+    /// <summary>Reads the complete pinned receipt graph captured with one row.</summary>
     /// <param name="manifest">The retained fixture inventory.</param>
     /// <param name="world">The exact row to read.</param>
     /// <param name="cancellationToken">Cancels the storage read.</param>
     /// <returns>The validated receipt graph and captured root provenance.</returns>
-    /// <exception cref="InvalidDataException">Receipt proof is absent, incomplete, corrupt or names another world.</exception>
+    /// <exception cref="InvalidDataException">The inventory is malformed, or the receipt snapshot is missing, corrupt, oversized or names another world.</exception>
     public async Task<WorldAuthorityReceiptSnapshot> ReadReceiptsAsync(WorldReleaseFixtureManifest manifest, string world, CancellationToken cancellationToken = default) {
         Validate(manifest: manifest);
-        if (
-            !manifest.Worlds.TryGetValue(
+        if (!manifest.Worlds.TryGetValue(
             key: world,
             value: out var row
-        ) ||
-            (row.ReceiptsHash is not { } pin)
-        ) {
-            throw new InvalidDataException(message: "release fixture has no receipt history proof; request a fresh export from a source worker with receipt history support");
-        }
+        )) { throw new InvalidDataException(message: "world is absent from the release fixture"); }
+        var pin = row.ReceiptsHash;
         var content = (await store.ReadAsync(
             target,
             ReceiptsAddress(hash: pin),
@@ -199,7 +190,7 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
 
         if (
             (content.Content.Length > WorldAuthorityReceiptSnapshot.MaximumEncodedBytes) ||
-            (Hash(bytes: content.Content.Span) != pin)
+            (ContentPin.Compute(content: content.Content.Span).ToString() != pin)
         ) {
             throw new InvalidDataException(message: "retained release receipt snapshot is corrupt or oversized");
         }
@@ -216,35 +207,27 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         IReadOnlyDictionary<string, WorldReleaseFixtureCheckpoint> checkpoints, CancellationToken cancellationToken = default,
         string? rewindBoundary = null, DateTimeOffset? capturedAt = null) {
         // Take ownership before the first await; a caller cannot change bytes behind their published hashes.
-        var captured = new SortedDictionary<string, WorldReleaseFixtureCheckpoint>(comparer: StringComparer.Ordinal);
-        var receipts = new SortedDictionary<string, byte[]>(comparer: StringComparer.Ordinal);
+        var captured = new SortedDictionary<string, (byte[] Encoded, ulong Tick, byte[] Receipts)>(comparer: StringComparer.Ordinal);
 
         foreach (var row in checkpoints) {
+            var history = (row.Value.Receipts ?? throw new InvalidDataException(message: "release fixture row has no receipt snapshot"));
+
+            if (
+                (rewindBoundary is not null) &&
+                (history.Source.Root.RewindBoundary != rewindBoundary)
+            ) {
+                throw new InvalidDataException(message: "recovery point has no matching durable boundary proof");
+            }
+            if (
+                (history.Owner != owner) ||
+                (history.World != row.Key)
+            ) { throw new InvalidDataException(message: "release fixture receipt snapshot belongs to another world"); }
             captured.Add(
                 key: row.Key,
-                value: new(
-                    row.Value.Encoded.ToArray(),
-                    row.Value.Tick
-                )
+                value: (row.Value.Encoded.ToArray(), row.Value.Tick, history.Encode())
             );
-            if (row.Value.Receipts is { } history) {
-                if (
-                    (rewindBoundary is not null) &&
-                    (history.Source.Root.RewindBoundary != rewindBoundary)
-                ) {
-                    throw new InvalidDataException(message: "recovery point has no matching durable boundary proof");
-                }
-                if (
-                    (history.Owner != owner) ||
-                    (history.World != row.Key)
-                ) { throw new InvalidDataException(message: "release fixture receipt snapshot belongs to another world"); }
-                receipts.Add(
-                    key: row.Key,
-                    value: history.Encode()
-                );
-            }
         }
-        if ((captured.Values.Sum(selector: row => ((long)row.Encoded.Length)) + receipts.Values.Sum(selector: bytes => ((long)bytes.Length))) > MaximumCaptureBytes) { throw new InvalidDataException(message: "release fixture exceeds its capture budget"); }
+        if (captured.Values.Sum(selector: row => (((long)row.Encoded.Length) + row.Receipts.Length)) > MaximumCaptureBytes) { throw new InvalidDataException(message: "release fixture exceeds its capture budget"); }
         var rows = new SortedDictionary<string, WorldReleaseFixtureRow>(comparer: StringComparer.Ordinal);
 
         foreach (var row in captured) {
@@ -252,14 +235,10 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
             rows.Add(
                 key: row.Key,
                 value: new(
-                    Hash: Hash(bytes: row.Value.Encoded),
+                    Hash: ContentPin.Compute(content: row.Value.Encoded).ToString(),
+                    ReceiptsHash: ContentPin.Compute(content: row.Value.Receipts).ToString(),
                     Tick: row.Value.Tick
-                ) { ReceiptsHash = (receipts.TryGetValue(
-                    key: row.Key,
-                    value: out var receiptBytes
                 )
-                ? Hash(bytes: receiptBytes)
-                : null) }
             );
         }
         var manifest = new WorldReleaseFixtureManifest(
@@ -284,16 +263,11 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
                 bytes: row.Value.Encoded,
                 token: cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
-            if (receipts.TryGetValue(
-                key: row.Key,
-                value: out var receiptBytes
-            )) {
-                await WriteImmutableAsync(
-                    address: ReceiptsAddress(hash: rows[row.Key].ReceiptsHash!),
-                    bytes: receiptBytes,
-                    token: cancellationToken
-                ).ConfigureAwait(continueOnCapturedContext: false);
-            }
+            await WriteImmutableAsync(
+                address: ReceiptsAddress(hash: rows[row.Key].ReceiptsHash),
+                bytes: row.Value.Receipts,
+                token: cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false);
         }
         await WriteImmutableAsync(
             address: ManifestAddress(requestId: requestId),

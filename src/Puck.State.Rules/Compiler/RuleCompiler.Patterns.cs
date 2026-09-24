@@ -63,7 +63,7 @@ public static partial class RuleCompiler {
 
         if (
             (tokens.Length < 3) ||
-            ((tokens.Length < 4) && (tokens[1] != "canonical"))
+            ((tokens.Length < 4) && (tokens[1] is not ("canonical" or "fingerprint")))
         ) {
             throw Invalid(detail: "board query requires $board:<operation>:<row>:<arguments>");
         }
@@ -83,6 +83,7 @@ public static partial class RuleCompiler {
             "jumpDistance" => BoardQueryKind.JumpDistance,
             "mask" => BoardQueryKind.Mask,
             "canonical" => BoardQueryKind.Canonical,
+            "fingerprint" => BoardQueryKind.Fingerprint,
             "offset" => BoardQueryKind.Offset,
             "attacks" => BoardQueryKind.Attacks,
             "component" => BoardQueryKind.Component,
@@ -109,7 +110,7 @@ public static partial class RuleCompiler {
         CompiledCellRef? pathTargetFrom = null;
         var literalKey = default(CellKey);
 
-        if (kind is not (BoardQueryKind.Mask or BoardQueryKind.Canonical)) {
+        if (kind is not (BoardQueryKind.Mask or BoardQueryKind.Canonical or BoardQueryKind.Fingerprint)) {
             if (TryResolveDynamicKey(
                 cell: out var dynamicKey,
                 context: context,
@@ -139,12 +140,15 @@ public static partial class RuleCompiler {
 
         BoardQuery query;
 
-        if (kind == BoardQueryKind.Canonical) {
+        if (kind is (BoardQueryKind.Canonical or BoardQueryKind.Fingerprint)) {
             if (tokens.Length != 3) {
-                throw Invalid(detail: "canonical takes no arguments beyond the row");
+                throw Invalid(detail: $"{tokens[1]} takes no arguments beyond the row");
             }
 
-            query = new BoardCanonicalQuery(topology: topology);
+            query = ((kind == BoardQueryKind.Canonical)
+                ? new BoardCanonicalQuery(topology: topology)
+                : new BoardFingerprintQuery(topology: topology)
+            );
         } else if (kind == BoardQueryKind.Mask) {
             if (
                 (tokens.Length != 5) ||

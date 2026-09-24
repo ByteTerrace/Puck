@@ -18,13 +18,6 @@ public readonly record struct CompiledPlacementFrame(Vector3 Position, float Yaw
 public static class WorldPlacementFrameCompilation {
     private static readonly IReadOnlyDictionary<string, CompiledPlacementFrame> Empty = new Dictionary<string, CompiledPlacementFrame>(comparer: StringComparer.Ordinal);
     private static readonly ConditionalWeakTable<WorldPlacementsSection, StrongBox<IReadOnlyDictionary<string, CompiledPlacementFrame>>> Cache = new();
-    // The SAME degrees-to-fixed-radians/UnitY idiom WorldColliderSet/WorldPlacementAttachment already use for a
-    // placement's yaw — kept once here so a chain of composed rotations reads identically to a single one.
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
 
     private static float NormalizeDegrees(float degrees) {
         var wrapped = (degrees % 360f);
@@ -144,10 +137,12 @@ public static class WorldPlacementFrameCompilation {
     /// <param name="degrees">Yaw in degrees.</param>
     /// <returns>The rotated vector at the document boundary.</returns>
     public static Vector3 RotateY(Vector3 vector, float degrees) {
+        // The same degrees-to-fixed-radians yaw about the Y axis WorldColliderSet and WorldPlacementAttachment use for
+        // a placement's yaw, kept once here so a chain of composed rotations reads identically to a single one.
         var angle = FixedQ4816.FromDouble(value: (degrees * (Math.PI / 180.0)));
         var rotation = FixedQuaternion.FromAxisAngle(
             angle: angle,
-            axis: UnitY
+            axis: FixedVector3.UnitY
         );
 
         return rotation.Rotate(vector: FixedVector3.FromVector3(value: vector)).ToVector3();

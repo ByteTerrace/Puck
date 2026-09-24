@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 
 namespace Puck.Maths.Tests;
@@ -39,6 +38,241 @@ internal static class SymmetricSolveClaims {
     /// covered by its own dedicated claims instead of leaking into these.</summary>
     private static long FoldModerate(long raw) => unchecked((long)((int)raw));
     private static int OutputShift(long raw) => ((int)(((ulong)raw) % 49UL));
+
+    // The four kernel shapes, each spelled once: the subject and both independent references share it, so one
+    // comparison body per shape runs the subject against whichever reference a law names. The references stay distinct
+    // implementations — only the comparison is shared.
+    private delegate bool Invert2Kernel(long a, long b, long d, int outputFractionShift, out long invA, out long invB, out long invD);
+    private delegate bool Invert3Kernel(long a, long b, long c, long d, long e, long f, int outputFractionShift, out long invA, out long invB, out long invC, out long invD, out long invE, out long invF);
+    private delegate bool Solve2Kernel(long a, long b, long d, long rhsX, long rhsY, int outputFractionShift, out long x, out long y);
+    private delegate bool Solve3Kernel(long a, long b, long c, long d, long e, long f, long rhsX, long rhsY, long rhsZ, int outputFractionShift, out long x, out long y, out long z);
+
+    // Runs the subject and the reference on one folded draw and reports the first disagreement: the two outcomes, then
+    // the refusal contract ("false AND every output zero") checked directly against the subject even when both refuse,
+    // since a reference could share the same defect, then the outputs.
+    private static string Render(string names, ReadOnlySpan<long> values) {
+        var labels = names.Split(separator: ' ');
+        var parts = new string[values.Length];
+
+        for (var index = 0; (index < values.Length); ++index) {
+            parts[index] = $"{labels[index]}={values[index]}";
+        }
+
+        return $"({string.Join(separator: ", ", value: parts)})";
+    }
+    private static string? Compare(string label, string operandNames, ReadOnlySpan<long> operands, bool subjectOk, bool referenceOk, ReadOnlySpan<long> subject, ReadOnlySpan<long> reference) {
+        if (subjectOk != referenceOk) { return $"{label} outcome mismatch for {Render(names: operandNames, values: operands)}: subject={subjectOk} reference={referenceOk}"; }
+        if (!subjectOk) {
+            return ((subject.IndexOfAnyExcept(value: 0L) < 0)
+                ? null
+                : $"{label}: refused for {Render(names: operandNames, values: operands)} but left a non-zero output: ({string.Join(separator: ",", values: subject.ToArray())})"
+            );
+        }
+
+        return (subject.SequenceEqual(other: reference)
+            ? null
+            : $"{label} mismatch for {Render(names: operandNames, values: operands)}: subject=({string.Join(separator: ",", values: subject.ToArray())}) reference=({string.Join(separator: ",", values: reference.ToArray())})"
+        );
+    }
+    // Solves one hand-derived system at output fraction shift sixteen and demands the hand-derived rounded solution
+    // exactly: the witness names the matrix, and the teeth say which cofactor defect the constant is there to catch.
+    private static string? Solve3PinnedValue(long a, long b, long c, long d, long e, long f, long rhsX, long rhsY, long rhsZ, long expectedX, long expectedY, long expectedZ, string witness, string teeth) {
+        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric3(
+            a: a,
+            b: b,
+            c: c,
+            d: d,
+            e: e,
+            f: f,
+            outputFractionShift: 16,
+            rhsX: rhsX,
+            rhsY: rhsY,
+            rhsZ: rhsZ,
+            x: out var x,
+            y: out var y,
+            z: out var z
+        );
+
+        if (!subjectOk) { return $"{witness} refused, but the matrix is non-singular and the true solution is representable at this scale"; }
+
+        return (((x == expectedX) && (y == expectedY) && (z == expectedZ))
+            ? null
+            : $"{witness} answered ({x},{y},{z}), expected exactly ({expectedX},{expectedY},{expectedZ}): {teeth}"
+        );
+    }
+    private static string? Invert2Against(long[] left, long[] right, Invert2Kernel reference, string label) {
+        var a = FoldModerate(raw: left[0]);
+        var b = FoldModerate(raw: left[1]);
+        var d = FoldModerate(raw: left[2]);
+        var shift = OutputShift(raw: right[0]);
+        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(
+            a: a,
+            b: b,
+            d: d,
+            invA: out var sa,
+            invB: out var sb,
+            invD: out var sd,
+            outputFractionShift: shift
+        );
+        var referenceOk = reference(
+            a,
+            b,
+            d,
+            shift,
+            out var ra,
+            out var rb,
+            out var rd
+        );
+
+        return Compare(
+            label: label,
+            operandNames: "a b d shift",
+            operands: [a, b, d, shift],
+            reference: [ra, rb, rd],
+            referenceOk: referenceOk,
+            subject: [sa, sb, sd],
+            subjectOk: subjectOk
+        );
+    }
+    private static string? Invert3Against(long[] left, long[] right, Invert3Kernel reference, string label) {
+        var a = FoldModerate(raw: left[0]);
+        var b = FoldModerate(raw: left[1]);
+        var c = FoldModerate(raw: left[2]);
+        var d = FoldModerate(raw: left[3]);
+        var e = FoldModerate(raw: left[4]);
+        var f = FoldModerate(raw: left[5]);
+        var shift = OutputShift(raw: right[0]);
+        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric3(
+            a: a,
+            b: b,
+            c: c,
+            d: d,
+            e: e,
+            f: f,
+            invA: out var sa,
+            invB: out var sb,
+            invC: out var sc,
+            invD: out var sd,
+            invE: out var se,
+            invF: out var sf,
+            outputFractionShift: shift
+        );
+        var referenceOk = reference(
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            shift,
+            out var ra,
+            out var rb,
+            out var rc,
+            out var rd,
+            out var re,
+            out var rf
+        );
+
+        return Compare(
+            label: label,
+            operandNames: "a b c d e f shift",
+            operands: [a, b, c, d, e, f, shift],
+            reference: [ra, rb, rc, rd, re, rf],
+            referenceOk: referenceOk,
+            subject: [sa, sb, sc, sd, se, sf],
+            subjectOk: subjectOk
+        );
+    }
+    private static string? Solve2Against(long[] left, long[] right, Solve2Kernel reference, string label) {
+        var a = FoldModerate(raw: left[0]);
+        var b = FoldModerate(raw: left[1]);
+        var d = FoldModerate(raw: left[2]);
+        var rhsX = FoldModerate(raw: left[3]);
+        var rhsY = FoldModerate(raw: left[4]);
+        var shift = OutputShift(raw: right[0]);
+        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric2(
+            a: a,
+            b: b,
+            d: d,
+            outputFractionShift: shift,
+            rhsX: rhsX,
+            rhsY: rhsY,
+            x: out var sx,
+            y: out var sy
+        );
+        var referenceOk = reference(
+            a,
+            b,
+            d,
+            rhsX,
+            rhsY,
+            shift,
+            out var rx,
+            out var ry
+        );
+
+        return Compare(
+            label: label,
+            operandNames: "a b d rhsX rhsY shift",
+            operands: [a, b, d, rhsX, rhsY, shift],
+            reference: [rx, ry],
+            referenceOk: referenceOk,
+            subject: [sx, sy],
+            subjectOk: subjectOk
+        );
+    }
+    private static string? Solve3Against(long[] left, long[] right, Solve3Kernel reference, string label) {
+        var a = FoldModerate(raw: left[0]);
+        var b = FoldModerate(raw: left[1]);
+        var c = FoldModerate(raw: left[2]);
+        var d = FoldModerate(raw: left[3]);
+        var e = FoldModerate(raw: left[4]);
+        var f = FoldModerate(raw: left[5]);
+        var rhsX = FoldModerate(raw: left[6]);
+        var rhsY = FoldModerate(raw: left[7]);
+        var rhsZ = FoldModerate(raw: left[8]);
+        var shift = OutputShift(raw: right[0]);
+        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric3(
+            a: a,
+            b: b,
+            c: c,
+            d: d,
+            e: e,
+            f: f,
+            outputFractionShift: shift,
+            rhsX: rhsX,
+            rhsY: rhsY,
+            rhsZ: rhsZ,
+            x: out var sx,
+            y: out var sy,
+            z: out var sz
+        );
+        var referenceOk = reference(
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            rhsX,
+            rhsY,
+            rhsZ,
+            shift,
+            out var rx,
+            out var ry,
+            out var rz
+        );
+
+        return Compare(
+            label: label,
+            operandNames: "a b c d e f rhsX rhsY rhsZ shift",
+            operands: [a, b, c, d, e, f, rhsX, rhsY, rhsZ, shift],
+            reference: [rx, ry, rz],
+            referenceOk: referenceOk,
+            subject: [sx, sy, sz],
+            subjectOk: subjectOk
+        );
+    }
 
     /// <summary>The symmetric 2×2 apply against the independent oracle, at swept operand scales. No fold is applied to
     /// the entries or the vector: unlike Solve, Apply has no preconditioning envelope to stay inside — its per-component
@@ -250,9 +484,10 @@ internal static class SymmetricSolveClaims {
     /// <summary>Pins <see cref="FusedArithmetic.TryDivideMagnitudeRounded"/>'s full-width contract directly,
     /// independent of any symmetric-solve kernel's own operand bounds (the four kernels' proven determinant budgets
     /// keep every caller comfortably inside the safe region, so this exercises the helper's OWN documented edges):
-    /// negative counts (<c>-1</c> and <see cref="int.MinValue"/>) must refuse promptly with a cleared output before
-    /// either the masked starting shift or the restoring loop can observe them; a requested fraction bit count that
-    /// needs a bit the starting integer quotient's own zero-ness must not hide (129 fraction bits over a numerator
+    /// negative counts (<c>-1</c> and <see cref="int.MinValue"/>) must refuse with a cleared output — past the guard,
+    /// <c>-1</c> reaches a masked starting shift and <see cref="int.MinValue"/> wraps the restoring loop's start
+    /// index, and both then report a wrapped success, so the refusal itself is the evidence and no duration is; a
+    /// requested fraction bit count that needs a bit the starting integer quotient's own zero-ness must not hide (129 fraction bits over a numerator
     /// smaller than its denominator); the SAME operands one bit inside the legal margin (127) must still answer
     /// exactly; and a numerator/denominator pair whose restoring-division remainder would double past
     /// <see cref="UInt128"/>'s own ceiling under an unconditional-double loop shape.
@@ -261,7 +496,6 @@ internal static class SymmetricSolveClaims {
     /// defect cannot pass both.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? DivideMagnitudeRoundedFullWidthAgrees() {
-        var refusalStart = Stopwatch.GetTimestamp();
         var minimumOk = FusedArithmetic.TryDivideMagnitudeRounded(
             numeratorMagnitude: UInt128.One,
             denominatorMagnitude: UInt128.One,
@@ -274,7 +508,6 @@ internal static class SymmetricSolveClaims {
             fractionBitCount: -1,
             quotient: out var negativeOneQuotient
         );
-        var refusalElapsed = Stopwatch.GetElapsedTime(startingTimestamp: refusalStart);
 
         if (
             minimumOk ||
@@ -290,9 +523,6 @@ internal static class SymmetricSolveClaims {
             return $"TryDivideMagnitudeRounded accepted -1 or left a stale output instead of refusing: ok={negativeOneOk}, quotient={negativeOneQuotient}";
         }
 
-        if (refusalElapsed >= TimeSpan.FromSeconds(value: 1.0)) {
-            return $"TryDivideMagnitudeRounded took {refusalElapsed.TotalMilliseconds:F3} ms to refuse negative fraction counts; the guard must run before the restoring loop is initialized";
-        }
 
         var smallNumerator = (UInt128.One << 121);
         var smallDenominator = (UInt128.One << 122);
@@ -414,93 +644,24 @@ internal static class SymmetricSolveClaims {
     /// <param name="left">Lanes 0..2 = a, b, d, each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Invert2VsBareiss(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var d = FoldModerate(raw: left[2]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            invA: out var sa,
-            invB: out var sb,
-            invD: out var sd,
-            outputFractionShift: shift
+    public static string? Invert2VsBareiss(long[] left, long[] right) =>
+        Invert2Against(
+            label: "invert2 vs Bareiss",
+            left: left,
+            reference: Oracles.TryBareissInvertSymmetric2,
+            right: right
         );
-        var bareissOk = Oracles.TryBareissInvertSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            invA: out var ba,
-            invB: out var bb,
-            invD: out var bd,
-            outputFractionShift: shift
-        );
-
-        if (subjectOk != bareissOk) {
-            return $"invert2 vs Bareiss outcome mismatch at shift {shift} for (a={a}, b={b}, d={d}): subject={subjectOk} bareiss={bareissOk}";
-        }
-
-        if (!subjectOk) {
-            return (((sa == 0L) && (sb == 0L) && (sd == 0L))
-                ? null
-                : $"invert2 vs Bareiss: refused at shift {shift} for (a={a}, b={b}, d={d}) but left a non-zero output: ({sa},{sb},{sd})"
-            );
-        }
-
-        return (((sa == ba) && (sb == bb) && (sd == bd))
-            ? null
-            : $"invert2 vs Bareiss mismatch at shift {shift} for (a={a}, b={b}, d={d}): subject=({sa},{sb},{sd}) bareiss=({ba},{bb},{bd})"
-        );
-    }
     /// <summary>Invert2 against the independent oracle, over <see cref="FoldModerate"/>'s moderate band.</summary>
     /// <param name="left">Lanes 0..2 = a, b, d, each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Invert2VsOracle(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var d = FoldModerate(raw: left[2]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            invA: out var sa,
-            invB: out var sb,
-            invD: out var sd,
-            outputFractionShift: shift
+    public static string? Invert2VsOracle(long[] left, long[] right) =>
+        Invert2Against(
+            label: "invert2 vs the adjugate oracle",
+            left: left,
+            reference: Oracles.TryInvertSymmetric2,
+            right: right
         );
-        var oracleOk = Oracles.TryInvertSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            invA: out var oa,
-            invB: out var ob,
-            invD: out var od,
-            outputFractionShift: shift
-        );
-
-        if (subjectOk != oracleOk) {
-            return $"invert2 outcome mismatch at shift {shift} for (a={a}, b={b}, d={d}): subject={subjectOk} oracle={oracleOk}";
-        }
-
-        // See Solve2VsOracle's own note: checked directly against the subject even when both refuse.
-        if (!subjectOk) {
-            return (((sa == 0L) && (sb == 0L) && (sd == 0L))
-                ? null
-                : $"invert2 refused at shift {shift} for (a={a}, b={b}, d={d}) but left a non-zero output: ({sa},{sb},{sd})"
-            );
-        }
-
-        return (((sa == oa) && (sb == ob) && (sd == od))
-            ? null
-            : $"invert2 mismatch at shift {shift} for (a={a}, b={b}, d={d}): subject=({sa},{sb},{sd}) oracle=({oa},{ob},{od})"
-        );
-    }
     /// <summary>The 3×3 sibling of <see cref="Invert2ResidualWithinEnvelope"/> — see it for the envelope
     /// derivation.</summary>
     /// <param name="left">Lanes 0..5 = a, b, c, d, e, f, each folded.</param>
@@ -522,13 +683,13 @@ internal static class SymmetricSolveClaims {
             d: d,
             e: e,
             f: f,
-            outputFractionShift: shift,
             invA: out var invA,
             invB: out var invB,
             invC: out var invC,
             invD: out var invD,
             invE: out var invE,
-            invF: out var invF
+            invF: out var invF,
+            outputFractionShift: shift
         );
 
         if (!subjectOk) {
@@ -582,123 +743,24 @@ internal static class SymmetricSolveClaims {
     /// <param name="left">Lanes 0..5 = a, b, c, d, e, f, each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Invert3VsBareiss(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var c = FoldModerate(raw: left[2]);
-        var d = FoldModerate(raw: left[3]);
-        var e = FoldModerate(raw: left[4]);
-        var f = FoldModerate(raw: left[5]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            outputFractionShift: shift,
-            invA: out var sa,
-            invB: out var sb,
-            invC: out var sc,
-            invD: out var sd,
-            invE: out var se,
-            invF: out var sf
+    public static string? Invert3VsBareiss(long[] left, long[] right) =>
+        Invert3Against(
+            label: "invert3 vs Bareiss",
+            left: left,
+            reference: Oracles.TryBareissInvertSymmetric3,
+            right: right
         );
-        var bareissOk = Oracles.TryBareissInvertSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            invA: out var ba,
-            invB: out var bb,
-            invC: out var bc,
-            invD: out var bd,
-            invE: out var be,
-            invF: out var bf,
-            outputFractionShift: shift
-        );
-
-        if (subjectOk != bareissOk) {
-            return $"invert3 vs Bareiss outcome mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}): subject={subjectOk} bareiss={bareissOk}";
-        }
-
-        if (!subjectOk) {
-            return (((sa == 0L) && (sb == 0L) && (sc == 0L) && (sd == 0L) && (se == 0L) && (sf == 0L))
-                ? null
-                : $"invert3 vs Bareiss: refused at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}) but left a non-zero output: ({sa},{sb},{sc},{sd},{se},{sf})"
-            );
-        }
-
-        return (((sa == ba) && (sb == bb) && (sc == bc) && (sd == bd) && (se == be) && (sf == bf))
-            ? null
-            : $"invert3 vs Bareiss mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}): subject=({sa},{sb},{sc},{sd},{se},{sf}) bareiss=({ba},{bb},{bc},{bd},{be},{bf})"
-        );
-    }
     /// <summary>Invert3 against the independent oracle, over <see cref="FoldModerate"/>'s moderate band.</summary>
     /// <param name="left">Lanes 0..5 = a, b, c, d, e, f, each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Invert3VsOracle(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var c = FoldModerate(raw: left[2]);
-        var d = FoldModerate(raw: left[3]);
-        var e = FoldModerate(raw: left[4]);
-        var f = FoldModerate(raw: left[5]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            outputFractionShift: shift,
-            invA: out var sa,
-            invB: out var sb,
-            invC: out var sc,
-            invD: out var sd,
-            invE: out var se,
-            invF: out var sf
+    public static string? Invert3VsOracle(long[] left, long[] right) =>
+        Invert3Against(
+            label: "invert3 vs the adjugate oracle",
+            left: left,
+            reference: Oracles.TryInvertSymmetric3,
+            right: right
         );
-        var oracleOk = Oracles.TryInvertSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            invA: out var oa,
-            invB: out var ob,
-            invC: out var oc,
-            invD: out var od,
-            invE: out var oe,
-            invF: out var of,
-            outputFractionShift: shift
-        );
-
-        if (subjectOk != oracleOk) {
-            return $"invert3 outcome mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}): subject={subjectOk} oracle={oracleOk}";
-        }
-
-        // See Solve2VsOracle's own note: checked directly against the subject even when both refuse.
-        if (!subjectOk) {
-            return (((sa == 0L) && (sb == 0L) && (sc == 0L) && (sd == 0L) && (se == 0L) && (sf == 0L))
-                ? null
-                : $"invert3 refused at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}) but left a non-zero output: ({sa},{sb},{sc},{sd},{se},{sf})"
-            );
-        }
-
-        return (((sa == oa) && (sb == ob) && (sc == oc) && (sd == od) && (se == oe) && (sf == of))
-            ? null
-            : $"invert3 mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}): subject=({sa},{sb},{sc},{sd},{se},{sf}) oracle=({oa},{ob},{oc},{od},{oe},{of})"
-        );
-    }
     /// <summary>Pins Invert's conservative large-magnitude refusal envelope (documented in
     /// <see cref="FixedSymmetricSolve"/>'s type remarks): a DIAGONAL matrix with every entry at
     /// <see cref="long.MinValue"/> — magnitude exactly <c>2⁶³</c>, the largest a raw <see cref="long"/> can carry —
@@ -723,13 +785,13 @@ internal static class SymmetricSolveClaims {
             d: Huge,
             e: 0L,
             f: Huge,
-            outputFractionShift: OutputFractionShift,
             invA: out var ia,
             invB: out var ib,
             invC: out var ic,
             invD: out var id,
             invE: out var ie,
-            invF: out var iff
+            invF: out var iff,
+            outputFractionShift: OutputFractionShift
         ) ||
             (ia != 0L) ||
             (ib != 0L) ||
@@ -771,10 +833,10 @@ internal static class SymmetricSolveClaims {
             d: Huge,
             e: 0L,
             f: Huge,
+            outputFractionShift: OutputFractionShift,
             rhsX: Huge,
             rhsY: Huge,
             rhsZ: Huge,
-            outputFractionShift: OutputFractionShift,
             x: out var sx,
             y: out var sy,
             z: out var sz
@@ -835,9 +897,9 @@ internal static class SymmetricSolveClaims {
             a: A,
             b: B,
             d: D,
+            outputFractionShift: OutputFractionShift,
             rhsX: 1L,
             rhsY: BelowRhsY,
-            outputFractionShift: OutputFractionShift,
             x: out var belowX,
             y: out var belowY
         ) ||
@@ -852,9 +914,9 @@ internal static class SymmetricSolveClaims {
             a: A,
             b: B,
             d: D,
+            outputFractionShift: OutputFractionShift,
             rhsX: 1L,
             rhsY: AtRhsY,
-            outputFractionShift: OutputFractionShift,
             x: out var atX,
             y: out var atY
         ) ||
@@ -885,9 +947,9 @@ internal static class SymmetricSolveClaims {
             a: A,
             b: B,
             d: D,
+            outputFractionShift: 0,
             rhsX: A,
             rhsY: D,
-            outputFractionShift: 0,
             x: out var sx,
             y: out var sy
         ) ||
@@ -928,9 +990,9 @@ internal static class SymmetricSolveClaims {
             a: 1L,
             b: 0L,
             d: 1L,
+            outputFractionShift: 48,
             rhsX: 1L,
             rhsY: 1048576L,
-            outputFractionShift: 48,
             x: out var x,
             y: out var y
         ) ||
@@ -952,9 +1014,9 @@ internal static class SymmetricSolveClaims {
             a: 0L,
             b: 0L,
             d: 0L,
+            outputFractionShift: 16,
             rhsX: 5L,
             rhsY: 7L,
-            outputFractionShift: 16,
             x: out var zx,
             y: out var zy
         ) ||
@@ -987,9 +1049,9 @@ internal static class SymmetricSolveClaims {
             a: 4L,
             b: 6L,
             d: 9L,
+            outputFractionShift: 16,
             rhsX: 1L,
             rhsY: 1L,
-            outputFractionShift: 16,
             x: out var rx,
             y: out var ry
         ) ||
@@ -1025,10 +1087,10 @@ internal static class SymmetricSolveClaims {
             d: 0L,
             e: 0L,
             f: 0L,
+            outputFractionShift: 16,
             rhsX: 1L,
             rhsY: 2L,
             rhsZ: 3L,
-            outputFractionShift: 16,
             x: out var s3x,
             y: out var s3y,
             z: out var s3z
@@ -1048,13 +1110,13 @@ internal static class SymmetricSolveClaims {
             d: 0L,
             e: 0L,
             f: 0L,
-            outputFractionShift: 16,
             invA: out var i3a,
             invB: out var i3b,
             invC: out var i3c,
             invD: out var i3d,
             invE: out var i3e,
-            invF: out var i3f
+            invF: out var i3f,
+            outputFractionShift: 16
         ) ||
             (i3a != 0L) ||
             (i3b != 0L) ||
@@ -1076,10 +1138,10 @@ internal static class SymmetricSolveClaims {
             d: 2L,
             e: 3L,
             f: 6L,
+            outputFractionShift: 16,
             rhsX: 1L,
             rhsY: 1L,
             rhsZ: 1L,
-            outputFractionShift: 16,
             x: out var rk3x,
             y: out var rk3y,
             z: out var rk3z
@@ -1099,13 +1161,13 @@ internal static class SymmetricSolveClaims {
             d: 2L,
             e: 3L,
             f: 6L,
-            outputFractionShift: 16,
             invA: out var rk3ia,
             invB: out var rk3ib,
             invC: out var rk3ic,
             invD: out var rk3id,
             invE: out var rk3ie,
-            invF: out var rk3if
+            invF: out var rk3if,
+            outputFractionShift: 16
         ) ||
             (rk3ia != 0L) ||
             (rk3ib != 0L) ||
@@ -1158,9 +1220,9 @@ internal static class SymmetricSolveClaims {
             a: a,
             b: b,
             d: d,
+            outputFractionShift: shift,
             rhsX: rhsX,
             rhsY: rhsY,
-            outputFractionShift: shift,
             x: out var x,
             y: out var y
         );
@@ -1204,103 +1266,25 @@ internal static class SymmetricSolveClaims {
     /// <param name="left">Lane 0 = a, 1 = b, 2 = d, 3 = rhsX, 4 = rhsY, each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Solve2VsBareiss(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var d = FoldModerate(raw: left[2]);
-        var rhsX = FoldModerate(raw: left[3]);
-        var rhsY = FoldModerate(raw: left[4]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            outputFractionShift: shift,
-            x: out var sx,
-            y: out var sy
+    public static string? Solve2VsBareiss(long[] left, long[] right) =>
+        Solve2Against(
+            label: "solve2 vs Bareiss",
+            left: left,
+            reference: Oracles.TryBareissSolveSymmetric2,
+            right: right
         );
-        var bareissOk = Oracles.TryBareissSolveSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            outputFractionShift: shift,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            x: out var bx,
-            y: out var by
-        );
-
-        if (subjectOk != bareissOk) {
-            return $"solve2 vs Bareiss outcome mismatch at shift {shift} for (a={a}, b={b}, d={d}, rhsX={rhsX}, rhsY={rhsY}): subject={subjectOk} bareiss={bareissOk}";
-        }
-
-        if (!subjectOk) {
-            return (((sx == 0L) && (sy == 0L))
-                ? null
-                : $"solve2 vs Bareiss: refused at shift {shift} for (a={a}, b={b}, d={d}, rhsX={rhsX}, rhsY={rhsY}) but left a non-zero output: ({sx},{sy})"
-            );
-        }
-
-        return (((sx == bx) && (sy == by))
-            ? null
-            : $"solve2 vs Bareiss mismatch at shift {shift} for (a={a}, b={b}, d={d}, rhsX={rhsX}, rhsY={rhsY}): subject=({sx},{sy}) bareiss=({bx},{by})"
-        );
-    }
     /// <summary>Solve2 against the independent oracle, at a caller-chosen output scale swept from the domain's own
     /// second lane vector, over <see cref="FoldModerate"/>'s moderate band.</summary>
     /// <param name="left">Lane 0 = a, 1 = b, 2 = d, 3 = rhsX, 4 = rhsY, each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Solve2VsOracle(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var d = FoldModerate(raw: left[2]);
-        var rhsX = FoldModerate(raw: left[3]);
-        var rhsY = FoldModerate(raw: left[4]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            outputFractionShift: shift,
-            x: out var sx,
-            y: out var sy
+    public static string? Solve2VsOracle(long[] left, long[] right) =>
+        Solve2Against(
+            label: "solve2 vs the adjugate oracle",
+            left: left,
+            reference: Oracles.TrySolveSymmetric2,
+            right: right
         );
-        var oracleOk = Oracles.TrySolveSymmetric2(
-            a: a,
-            b: b,
-            d: d,
-            outputFractionShift: shift,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            x: out var ox,
-            y: out var oy
-        );
-
-        if (subjectOk != oracleOk) {
-            return $"solve2 outcome mismatch at shift {shift} for (a={a}, b={b}, d={d}, rhsX={rhsX}, rhsY={rhsY}): subject={subjectOk} oracle={oracleOk}";
-        }
-
-        // The refusal contract is "false AND every output zero" — checked directly against the subject here
-        // (never merely against the oracle, which could share the same defect) even when both refuse.
-        if (!subjectOk) {
-            return (((sx == 0L) && (sy == 0L))
-                ? null
-                : $"solve2 refused at shift {shift} for (a={a}, b={b}, d={d}, rhsX={rhsX}, rhsY={rhsY}) but left a non-zero output: ({sx},{sy})"
-            );
-        }
-
-        return (((sx == ox) && (sy == oy))
-            ? null
-            : $"solve2 mismatch at shift {shift} for (a={a}, b={b}, d={d}, rhsX={rhsX}, rhsY={rhsY}): subject=({sx},{sy}) oracle=({ox},{oy})"
-        );
-    }
     /// <summary>Pins an EXACT Solve3 value on a matrix where EVERY ONE of the six adjugate cofactors
     /// (<c>C11..C33</c>) is individually nonzero AND load-bearing — <see cref="Solve3NonDiagonalExactValue"/>
     /// exercises <c>C12</c> and <c>C22</c>: its matrix has <c>C11 = 3</c>, <c>C22 = 2</c>, and <c>C33 = 5</c>, but
@@ -1318,46 +1302,23 @@ internal static class SymmetricSolveClaims {
     /// than relying on a swept domain's random draws to happen to land on a case where the flip is
     /// observable.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Solve3AllCofactorsExactValue() {
-        const long A = 2L;
-        const long B = 1L;
-        const long C = 1L;
-        const long D = 3L;
-        const long E = 1L;
-        const long F = 2L;
-        const long RhsX = 1L;
-        const long RhsY = 2L;
-        const long RhsZ = 3L;
-        const int OutputFractionShift = 16;
-        const long ExpectedX = -28087L;
-        const long ExpectedY = 18725L;
-        const long ExpectedZ = 102985L;
-
-        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric3(
-            a: A,
-            b: B,
-            c: C,
-            d: D,
-            e: E,
-            f: F,
-            rhsX: RhsX,
-            rhsY: RhsY,
-            rhsZ: RhsZ,
-            outputFractionShift: OutputFractionShift,
-            x: out var x,
-            y: out var y,
-            z: out var z
+    public static string? Solve3AllCofactorsExactValue() =>
+        Solve3PinnedValue(
+            a: 2L,
+            b: 1L,
+            c: 1L,
+            d: 3L,
+            e: 1L,
+            expectedX: -28087L,
+            expectedY: 18725L,
+            expectedZ: 102985L,
+            f: 2L,
+            rhsX: 1L,
+            rhsY: 2L,
+            rhsZ: 3L,
+            teeth: "every one of C11..C33 is nonzero and load-bearing, so no single cofactor sign flip can leave this constant unchanged",
+            witness: "all-cofactors exact-value solve3 at K = [[2,1,1],[1,3,1],[1,1,2]] (det = 7)"
         );
-
-        if (!subjectOk) {
-            return "all-cofactors exact-value solve3 refused, but K = [[2,1,1],[1,3,1],[1,1,2]] is non-singular (det = 7) and the true solution is representable at this scale";
-        }
-
-        return (((x == ExpectedX) && (y == ExpectedY) && (z == ExpectedZ))
-            ? null
-            : $"all-cofactors exact-value solve3 answered ({x},{y},{z}), expected exactly ({ExpectedX},{ExpectedY},{ExpectedZ}) at a matrix where every one of C11..C33 is nonzero and load-bearing — no single cofactor sign flip should be able to leave this constant unchanged"
-        );
-    }
     /// <summary>Proves the preconditioning earns its place: at these entries, an UNPRECONDITIONED triple product
     /// (three raw longs near <see cref="long.MaxValue"/>, multiplied directly at whatever width they landed in)
     /// would overflow — three factors near 2⁶³ multiply to roughly 2¹⁸⁹, sixty-two bits past even
@@ -1385,10 +1346,10 @@ internal static class SymmetricSolveClaims {
             d: D,
             e: E,
             f: F,
+            outputFractionShift: OutputFractionShift,
             rhsX: RhsX,
             rhsY: RhsY,
             rhsZ: RhsZ,
-            outputFractionShift: OutputFractionShift,
             x: out var sx,
             y: out var sy,
             z: out var sz
@@ -1432,46 +1393,23 @@ internal static class SymmetricSolveClaims {
     /// <c>outputFractionShift = 16</c> rounds ties-to-even to <c>(-13107, 26214, 0)</c>
     /// (<c>-65536/5 = -13107.2</c> rounds down; <c>131072/5 = 26214.4</c> rounds down).</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Solve3NonDiagonalExactValue() {
-        const long A = 2L;
-        const long B = 1L;
-        const long C = 0L;
-        const long D = 3L;
-        const long E = 0L;
-        const long F = 1L;
-        const long RhsX = 0L;
-        const long RhsY = 1L;
-        const long RhsZ = 0L;
-        const int OutputFractionShift = 16;
-        const long ExpectedX = -13107L;
-        const long ExpectedY = 26214L;
-        const long ExpectedZ = 0L;
-
-        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric3(
-            a: A,
-            b: B,
-            c: C,
-            d: D,
-            e: E,
-            f: F,
-            rhsX: RhsX,
-            rhsY: RhsY,
-            rhsZ: RhsZ,
-            outputFractionShift: OutputFractionShift,
-            x: out var x,
-            y: out var y,
-            z: out var z
+    public static string? Solve3NonDiagonalExactValue() =>
+        Solve3PinnedValue(
+            a: 2L,
+            b: 1L,
+            c: 0L,
+            d: 3L,
+            e: 0L,
+            expectedX: -13107L,
+            expectedY: 26214L,
+            expectedZ: 0L,
+            f: 1L,
+            rhsX: 0L,
+            rhsY: 1L,
+            rhsZ: 0L,
+            teeth: "the C12 cofactor is -1, not 0, so a cofactor sign transcription shared with an oracle would be invisible to the VsOracle laws but not to this pinned constant",
+            witness: "non-diagonal exact-value solve3 at K = [[2,1,0],[1,3,0],[0,0,1]] (det = 5)"
         );
-
-        if (!subjectOk) {
-            return "non-diagonal exact-value solve3 refused, but K = [[2,1,0],[1,3,0],[0,0,1]] is non-singular (det = 5) and the true solution is representable at this scale";
-        }
-
-        return (((x == ExpectedX) && (y == ExpectedY) && (z == ExpectedZ))
-            ? null
-            : $"non-diagonal exact-value solve3 answered ({x},{y},{z}), expected exactly ({ExpectedX},{ExpectedY},{ExpectedZ}) at a matrix whose C12 cofactor is -1, not 0 — a cofactor sign transcription shared with an oracle would be invisible to the VsOracle laws but not to this pinned constant"
-        );
-    }
     /// <summary>The 3×3 sibling of <see cref="Solve2ResidualWithinEnvelope"/> — see it for the envelope derivation
     /// AND the caveat that this bound is necessary, not sufficient: it cannot discriminate a shared cofactor sign
     /// transcription (a small residual does not imply small component error under cancellation).
@@ -1500,10 +1438,10 @@ internal static class SymmetricSolveClaims {
             d: d,
             e: e,
             f: f,
+            outputFractionShift: shift,
             rhsX: rhsX,
             rhsY: rhsY,
             rhsZ: rhsZ,
-            outputFractionShift: shift,
             x: out var x,
             y: out var y,
             z: out var z
@@ -1551,128 +1489,23 @@ internal static class SymmetricSolveClaims {
     /// <param name="left">Lanes 0..5 = a, b, c, d, e, f; lanes 6..8 = rhsX, rhsY, rhsZ; each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Solve3VsBareiss(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var c = FoldModerate(raw: left[2]);
-        var d = FoldModerate(raw: left[3]);
-        var e = FoldModerate(raw: left[4]);
-        var f = FoldModerate(raw: left[5]);
-        var rhsX = FoldModerate(raw: left[6]);
-        var rhsY = FoldModerate(raw: left[7]);
-        var rhsZ = FoldModerate(raw: left[8]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            rhsZ: rhsZ,
-            outputFractionShift: shift,
-            x: out var sx,
-            y: out var sy,
-            z: out var sz
+    public static string? Solve3VsBareiss(long[] left, long[] right) =>
+        Solve3Against(
+            label: "solve3 vs Bareiss",
+            left: left,
+            reference: Oracles.TryBareissSolveSymmetric3,
+            right: right
         );
-        var bareissOk = Oracles.TryBareissSolveSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            outputFractionShift: shift,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            rhsZ: rhsZ,
-            x: out var bx,
-            y: out var by,
-            z: out var bz
-        );
-
-        if (subjectOk != bareissOk) {
-            return $"solve3 vs Bareiss outcome mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}, rhs=({rhsX},{rhsY},{rhsZ})): subject={subjectOk} bareiss={bareissOk}";
-        }
-
-        if (!subjectOk) {
-            return (((sx == 0L) && (sy == 0L) && (sz == 0L))
-                ? null
-                : $"solve3 vs Bareiss: refused at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}, rhs=({rhsX},{rhsY},{rhsZ})) but left a non-zero output: ({sx},{sy},{sz})"
-            );
-        }
-
-        return (((sx == bx) && (sy == by) && (sz == bz))
-            ? null
-            : $"solve3 vs Bareiss mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}, rhs=({rhsX},{rhsY},{rhsZ})): subject=({sx},{sy},{sz}) bareiss=({bx},{by},{bz})"
-        );
-    }
     /// <summary>Solve3 against the independent oracle — the primary demonstration of the six-term triple-product
     /// determinant's bit budget, over <see cref="FoldModerate"/>'s moderate band.</summary>
     /// <param name="left">Lanes 0..5 = a, b, c, d, e, f; lanes 6..8 = rhsX, rhsY, rhsZ; each folded.</param>
     /// <param name="right">Lane 0 drives the requested output fraction shift.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? Solve3VsOracle(long[] left, long[] right) {
-        var a = FoldModerate(raw: left[0]);
-        var b = FoldModerate(raw: left[1]);
-        var c = FoldModerate(raw: left[2]);
-        var d = FoldModerate(raw: left[3]);
-        var e = FoldModerate(raw: left[4]);
-        var f = FoldModerate(raw: left[5]);
-        var rhsX = FoldModerate(raw: left[6]);
-        var rhsY = FoldModerate(raw: left[7]);
-        var rhsZ = FoldModerate(raw: left[8]);
-        var shift = OutputShift(raw: right[0]);
-
-        var subjectOk = FixedSymmetricSolve.TrySolveSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            rhsZ: rhsZ,
-            outputFractionShift: shift,
-            x: out var sx,
-            y: out var sy,
-            z: out var sz
+    public static string? Solve3VsOracle(long[] left, long[] right) =>
+        Solve3Against(
+            label: "solve3 vs the adjugate oracle",
+            left: left,
+            reference: Oracles.TrySolveSymmetric3,
+            right: right
         );
-        var oracleOk = Oracles.TrySolveSymmetric3(
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            e: e,
-            f: f,
-            outputFractionShift: shift,
-            rhsX: rhsX,
-            rhsY: rhsY,
-            rhsZ: rhsZ,
-            x: out var ox,
-            y: out var oy,
-            z: out var oz
-        );
-
-        if (subjectOk != oracleOk) {
-            return $"solve3 outcome mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}, rhs=({rhsX},{rhsY},{rhsZ})): subject={subjectOk} oracle={oracleOk}";
-        }
-
-        // See Solve2VsOracle's own note: checked directly against the subject even when both refuse.
-        if (!subjectOk) {
-            return (((sx == 0L) && (sy == 0L) && (sz == 0L))
-                ? null
-                : $"solve3 refused at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}, rhs=({rhsX},{rhsY},{rhsZ})) but left a non-zero output: ({sx},{sy},{sz})"
-            );
-        }
-
-        return (((sx == ox) && (sy == oy) && (sz == oz))
-            ? null
-            : $"solve3 mismatch at shift {shift} for (a={a}, b={b}, c={c}, d={d}, e={e}, f={f}, rhs=({rhsX},{rhsY},{rhsZ})): subject=({sx},{sy},{sz}) oracle=({ox},{oy},{oz})"
-        );
-    }
 }

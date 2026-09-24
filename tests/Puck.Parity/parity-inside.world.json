@@ -11,8 +11,6 @@
     "presentMode": "Immediate",
     "targetHertz": 0,
     "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
     "genlock": null,
     "listen": null
   },
@@ -77,7 +75,6 @@
     ]
   },
   "captures": {
-    "directory": "captures",
     "rows": [
       {
         "station": "inside",

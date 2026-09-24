@@ -22,9 +22,8 @@ deps       Puck.Assets, Puck.Maths + Wasmtime [44.0.0] (exact pin)
 Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neutral core of
 [capability channels](../game/design.md)' assembly split. The ABI owns its own
 verdict, subject-kind, channel-kind, cell-kind, and channel-value-shape sets, and its own
-capability-mask bits, all frozen independently of any consumer enum. There is no phase any more: a
-channel act is per-tick and declarative, so the two low verb bits that used to carry one are now
-required-zero. The World-lane vocabulary seam (`WorldAddonChannelResolver`'s world-document channel
+capability-mask bits, all defined independently of any consumer enum. A channel act carries no
+phase: it is per-tick and declarative, and the two low verb bits are required-zero. The World-lane vocabulary seam (`WorldAddonChannelResolver`'s world-document channel
 table) lives in `Puck.World`, which is also where authority decisions live; `Puck.World.Addons`'
 `AddonSimulationPump` still owns the vocabulary layer between the core's structural decode and the
 World's authority checks.
@@ -94,13 +93,13 @@ host.Add(descriptor: new AddonDescriptor(
 | `ScriptingModuleInfo` | `sealed record` | The immutable load result: path, content hash, byte length, compiled module. |
 | `AddonModuleValidator` | `static class` | Static export-shape and zero-import check against the ABI before instantiation. |
 | `AddonDescriptor` | `readonly record struct` | A neutral mount request (keeps the consumer's document model out of the deps). |
-| `AddonChannelKind` | `enum : byte` | The channel kind wire values: `Input`/`Request`/`Response`. Ordinals 4/5 (formerly `Geometry`/`Overlay`, a Presentation-lane pair that never shipped a host) are RETIRED PERMANENTLY. |
+| `AddonChannelKind` | `enum : byte` | The channel kind wire values: `Input`/`Request`/`Response`. |
 | `AddonChannelDescriptor` / `AddonChannelTableReader` | `readonly record struct` / `static` | One decoded 16-byte descriptor; the structural table decoder. |
 | `AddonOutCellKind` / `AddonOutCell` / `AddonOutCellReader` | `enum : byte` / `readonly record struct` / `static` | The guest→host cell: `Act` or `Ask`, decoded structurally, whole-batch-or-nothing. |
 | `AddonInCellKind` / `AddonInCell` / `AddonInCellWriter` | `enum : byte` / `readonly record struct` / `static` | The host→guest cell: `Tick`, `Answer`, or `Observation`, and its single serializer. |
 | `AddonVerdict` / `AddonVerdicts` | `enum : byte` / `static` | The authorization outcome carried on an `Answer`, and the pinned allowed/denied predicate. |
 | `AddonSubjectKind` | `enum : byte` | What an `Ask` may name. `Body` and `Section` are admitted today. |
-| `AddonCapabilityMask` | `static class` | The capability bits an `Ask` requests, frozen independently of `WorldCapability` ordinals. |
+| `AddonCapabilityMask` | `static class` | The capability bits an `Ask` requests, defined independently of `WorldCapability` ordinals. |
 | `IAddonChannelResolver` | `interface` | The injected channel-name resolution seam: `TryResolve` for (ordinal, shape). Resolution failure is never a mount fault. |
 | `AddonChannelBinding` / `AddonChannelValueShape` | `readonly record struct` / `enum` | One resolved declared-channel entry (or an unresolved sentinel); the three scalar shapes (`Bipolar`/`Binary`/`Unipolar`). |
 | `AddonChannelNameTableReader` | `static class` | The desync-proof, VARIABLE-stride reader for the packed length-prefixed channel-name table. |
@@ -251,10 +250,8 @@ fields are unused and must be zero.
 | `Request` | 2 | yes |
 | `Response` | 3 | yes |
 
-Ordinals 4 and 5 (formerly `Geometry`/`Overlay`, a Presentation-lane pair pinned but never served by
-any host) are permanently retired as part of the lane-axis removal—never
-reused. A descriptor naming either byte refuses the mount as an undefined channel kind, through the
-ordinary decode check every unrecognized kind already goes through.
+A descriptor naming any other byte refuses the mount as an undefined channel kind, through the
+ordinary decode check.
 
 A guest declares any subset of these kinds, at least one descriptor, with two structural
 pairing rules:
@@ -377,8 +374,7 @@ optimistically as allowed.
 
 The decode-valid set is `{1, 3}`: `Body = 1` (pairs with the `Drive`/`Observe` mask bits) and
 `Section = 3` (pairs with `Mutate` alone—the addon mutation seam's own handle shape). `Screen = 2`
-and `Profile = 4` are number-pinned reservations, not admitted, so growth is a range change rather
-than a break. **No wildcard ordinal exists**—the wire has no spelling for asking for one.
+and `Profile = 4` are declared but not admitted. **No wildcard ordinal exists**—the wire has no spelling for asking for one.
 
 ### `AddonCapabilityMask`—an `Ask`'s `B` lane, `u64`
 
@@ -386,16 +382,13 @@ than a break. **No wildcard ordinal exists**—the wire has no spelling for aski
 |---|---|---|
 | `1` | `Drive` | yes |
 | `2` | `Observe` | yes |
-| `4` | `Reserved` | no—permanently reserved hole; formerly `Present`, deleted with the rest of the lane axis; never compacted, never reused |
-| `8` | `Control` | no |
-| `16` | `Mutate` | no |
-| `32` | `Edit` | no |
-| `0x3F` | `All` | host-side attenuation arithmetic only—never valid **on** an `Ask` |
+| `4` | `Control` | no |
+| `8` | `Mutate` | with a `Section` subject only |
+| `16` | `Edit` | no |
+| `0x1F` | `All` | host-side attenuation arithmetic only—never valid **on** an `Ask` |
 
-Frozen independently of `WorldCapability` ordinals. **An `Ask`'s mask must have exactly one bit
-set**—one capability, one handle, one answer. The `u64` width stays so multi-capability asks can
-be admitted later under multi-part framing without a break; it is not permission to set two bits
-today.
+Defined independently of `WorldCapability` ordinals. **An `Ask`'s mask must have exactly one bit
+set**—one capability, one handle, one answer.
 
 ---
 
@@ -403,8 +396,8 @@ today.
 
 ### `Input` channel—`Act` cells
 
-An input-channel act's verb packs the declared channel ordinal with two REQUIRED-ZERO low bits—
-there is no phase any more:
+An input-channel act's verb packs the declared channel ordinal with two REQUIRED-ZERO low bits; an
+act carries no phase:
 
 ```text
 Verb = (declaredOrdinal << AddonAbi.InputVerbReservedBits)
@@ -423,7 +416,7 @@ guest declared)—`B` and `C` are always required-zero on every channel act:
 | Shape | `A` | `B` | `C` |
 |---|---|---|---|
 | `Bipolar` | `\|A\| ≤ One` | `0` | `0` |
-| `Binary` | exactly `0` or `One`—a **fixed-point literal**, never the old `{0, 1}` boolean convention | `0` | `0` |
+| `Binary` | exactly `0` or `One`—a **fixed-point literal**, never the integer `1` | `0` | `0` |
 | `Unipolar` | `0 ≤ A ≤ One` | `0` | `0` |
 
 **Unresolvable declared names are report-and-inert, never a mount fault.** A guest may declare any
@@ -434,23 +427,22 @@ mount names every such declaration, and an act naming that ordinal answers
 `AddonVerdict.AttenuatedToEmpty`—the same verdict an unrequested subject gets—rather than
 faulting the instance.
 
-A resolved name lands on one of two ordinal spans: a fixed `ChannelRole` slot (`0..5`—the motion
-model reads these directly) when the world document's row claims a role, or the next free
-composition ordinal (`6` up, in declaration order) when it does not—a kit's own `Actions` binding
-decides what a composition channel does. The shipped default world (`Assets/worlds/nexus.world.json`)
-declares:
+A resolved name lands on its row's document-order ordinal in the world's `channels` section,
+counting from `0`. A row that claims a `ChannelRole` also resolves that role to its ordinal, which
+is how the motion model finds the channel it reads (`RoleChannelOrdinals`); a row that claims no
+role is a composition channel, and a kit's own `Actions` binding decides what it does. The moth
+avatar (`src/Puck.World/Assets/worlds/avatars/moth.puck`) declares:
 
-| Channel | Shape | Intent effect, host-side (play world) |
-|---|---|---|
-| `forward` | `Bipolar` | `PlayerIntent.MoveAdvance = A` (role `MoveAdvance`) |
-| `strafe` | `Bipolar` | `PlayerIntent.MoveStrafe = A` (role `MoveStrafe`) |
-| `turn` | `Bipolar` | `PlayerIntent.Turn = A` (role `Turn`)—no host-side sign flip; the channel's documented convention IS the wire convention |
-| `up` | `Bipolar` | `PlayerIntent.MoveUp = A` (role `MoveUp`, free program only) |
-| `pitch` | `Bipolar` | `PlayerIntent.Pitch = A` (role `Pitch`, free program only) |
-| `roll` | `Bipolar` | `PlayerIntent.Roll = A` (role `Roll`, free program only) |
-| `jump` | `Binary` | composition ordinal `6`; play's grounded kit binds it to the vertical impulse, pressed iff `A == One` THIS tick |
-| `dash` | `Binary` | composition ordinal `7`; per-kit binding (declared, unbound by play's own kit), pressed iff `A == One` THIS tick |
-| `run` | `Binary` | composition ordinal `8`; the `promenader` kit's `speed.held.channel`—scales commanded planar speed by its `multiplier` (`1.3`) while held (a HELD, not edge-triggered, read) |
+| Ordinal | Channel | Shape | What the host does with `A` |
+|---|---|---|---|
+| `0` | `forward` | `Bipolar` | Drives the `MoveAdvance` role, in the body's heading frame. |
+| `1` | `strafe` | `Bipolar` | Drives the `MoveStrafe` role, in the body's heading frame. |
+| `2` | `turn` | `Bipolar` | Drives the `Turn` role, with no host-side sign flip: the channel's convention is the wire convention. |
+| `3` | `faceX` | `Bipolar` | Drives the `FaceX` role. |
+| `4` | `faceZ` | `Bipolar` | Drives the `FaceZ` role. |
+| `5` | `faceY` | `Bipolar` | Drives the `FaceY` role. |
+| `6` | `jump` | `Binary` | A composition channel the seat's kit binds; pressed when `A == One` this tick. |
+| `7` | `rise` | `Bipolar` | Drives the `MoveUp` role. |
 
 A different world document declares a different table—same resolver class, a different
 `WorldChannelTable` constructor argument.
@@ -458,21 +450,19 @@ A different world document declares a different table—same resolver class, a d
 **Every channel is per-tick and declarative, uniformly—analog and digital alike.** The host holds
 NO lane state between ticks on any channel: an addon that stops emitting an act on a channel simply
 stops contributing on it, the same tick, exactly like a seat's own analog-clear behavior. There is
-no sticky press/release pair any more—a "held" digital control is re-emitted every tick it should
-read held.
+no sticky press/release pair: a "held" digital control is re-emitted every tick it should read held.
 
 **Two acts naming the same DECLARED ordinal in one batch is a protocol fault, not a "later wins"
-overwrite.** Under the old phase-based model a later act silently overwrote an earlier one on the
-same axis; under the per-tick declarative model that would be ambiguous (which one "declares" the
-channel this tick?), so `AddonSimulationPump` refuses the whole batch—the same posture as any
-other malformed record—the moment a declared ordinal repeats.
+overwrite.** Under the per-tick declarative model a second act would leave ambiguous which one
+declares the channel this tick, so `AddonSimulationPump` refuses the whole batch—the same posture
+as any other malformed record—the moment a declared ordinal repeats.
 
 ### `Request` channel—query `Act`s through a handle
 
 | Verb | Name | Args | Answer |
 |---|---|---|---|
 | 0 | `BodyPose` | none (`A = B = C = 0`) | **4 parts**: `(posX, posY)`, `(posZ, 0)`, `(quatX, quatY)`, `(quatZ, quatW)`—all `FixedQ4816` raw bits |
-| 1 | `SubmitMutation` | through a **Mutate** handle over a document SECTION (never Observe/Body): `A` = the declared `WorldMutation` kind ordinal (`0..63`, `MutationKindAttribute.Ordinal`), `B` = an UNSIGNED guest-memory pointer, `C` = an UNSIGNED byte length (both cross the ABI as signed `i64` lanes reinterpreted) | **1 cell**: `AddonVerdict.Applied` or a refusal (`AttenuatedToEmpty`/`QuotaExhausted`/`StaleHandle`/`NoHold`/`BeatenByReserver`/`MalformedPayload`/`PayloadTooLarge`/`Rejected`) |
+| 1 | `SubmitMutation` | through a **Mutate** handle over a document SECTION (never Observe/Body): `A` = the declared `WorldMutation` kind ordinal (`0..127`, `MutationKindAttribute.Ordinal`), `B` = an UNSIGNED guest-memory pointer, `C` = an UNSIGNED byte length (both cross the ABI as signed `i64` lanes reinterpreted) | **1 cell**: `AddonVerdict.Applied` or a refusal (`AttenuatedToEmpty`/`QuotaExhausted`/`StaleHandle`/`NoHold`/`BeatenByReserver`/`MalformedPayload`/`PayloadTooLarge`/`Rejected`) |
 | 2 | `Designate` | through a **Drive** handle over the source BODY: `A` = target body index, `B` = authored target-register index, `C = 0`; the target must also be requested and held through **Observe** | **1 cell**: `AddonVerdict.Applied` or a refusal |
 
 Orientation is the body's canonical `FixedQuaternion`, never a yaw scalar; any derived heading
@@ -566,10 +556,10 @@ remains for re-requests by name.
 | `MaxStackBytes` | 512 KiB | |
 | `One` | `0x1_0000` | The `FixedQ4816` raw value of `1.0`. |
 
-**New handshake relation:** `puck_in_cap - 1 >= puck_out_cap`, or the mount refuses `BadExport`,
+**Handshake relation:** `puck_in_cap - 1 >= puck_out_cap`, or the mount refuses `BadExport`,
 naming the relation. Every refusable act needs a same-tick verdict slot in the guest's OWN declared
-input capacity, and the old 64/64 ring geometry gave only 63 answer slots against up to 64 acts—
-`MaxOutCells` moved to 63 so the ceiling itself proves the relation is satisfiable.
+input capacity, and a 64-slot input ring leaves 63 answer slots, so `MaxOutCells` is 63 and the
+ceiling itself proves the relation is satisfiable.
 
 Simulation quota is the fixed-and-variable regions—both rings, the descriptor table, the
 channel-name table—reserved (or, for the variable-length name table, bounds-checked as decoded) in
@@ -664,8 +654,7 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   owns vocabulary and `Puck.World` owns authority; this project never references `Puck.World` and
   never maps a channel name to gameplay itself.
 - **The channel table is host-owned, and it enters through a seam.** The core validates and resolves
-  declared names through the injected `IAddonChannelResolver`, but—unlike the retired source-id
-  vocabulary—a resolution MISS is never something the core (or the adapter) refuses; it decodes to
+  declared names through the injected `IAddonChannelResolver`, but a resolution MISS is never something the core (or the adapter) refuses; it decodes to
   a sentinel and crosses as data. `Puck.World`'s one implementation, `WorldAddonChannelResolver`, is
   constructed over the boot world document's compiled `WorldChannelTable`; a different world's
   channels section produces a different table through the SAME class, never a second

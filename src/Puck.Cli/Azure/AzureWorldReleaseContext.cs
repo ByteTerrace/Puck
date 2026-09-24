@@ -8,10 +8,10 @@ namespace Puck.Cli.Azure;
 internal static partial class AzureCommand {
     private sealed record WorldReleaseContext(JsonNode Outputs, Guid Owner, string Group, string ResourceGroup,
         WorldReleaseGroupStore Groups, WorldReleaseArchive Archive, WorldReleaseDeploymentStore Deployments, WorldAuthorityBlobStore Authority,
-        IObjectBlobStore Blobs, WorldReleaseFixtureArchive Fixtures);
+        IObjectBlobStore Blobs, WorldReleaseFixtureArchive Fixtures, TimeProvider Clock);
 
     private static async Task<T> WithManagedWorldReleaseAsync<T>(Func<WorldReleaseContext, CancellationToken, Task<T>> action,
-        CancellationToken cancellationToken, string? resourceGroup = null) {
+        TimeProvider clock, CancellationToken cancellationToken) {
         var outputs = Outputs();
         var configuration = Value(
             key: "worldSiloConfiguration",
@@ -42,10 +42,10 @@ internal static partial class AzureCommand {
                     outputs,
                     owner,
                     group,
-                    (resourceGroup ?? Text(value: Value(
+                    Text(value: Value(
                         key: "deploymentResourceGroupName",
                         outputs: outputs
-                    ))),
+                    )),
                     new(
                         owner: owner,
                         store: blobs,
@@ -70,14 +70,16 @@ internal static partial class AzureCommand {
                     ),
                     new(
                         store: blobs,
-                        target: target
+                        target: target,
+                        timeProvider: clock
                     ),
                     blobs,
                     new(
                         owner: owner,
                         store: blobs,
                         target: target
-                    )
+                    ),
+                    clock
                 );
 
                 return await action(
@@ -85,6 +87,7 @@ internal static partial class AzureCommand {
                     token
                 ).ConfigureAwait(continueOnCapturedContext: false);
             },
+            clock,
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
     }

@@ -1,8 +1,11 @@
+using Puck.Commands;
 using System.Numerics;
 
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -15,7 +18,11 @@ namespace Puck.World.Tests;
 /// <see cref="WorldCommand.ReleaseCarry"/> wire leaves, <c>WorldBody.TryBeginCarry</c>'s refusal set, and
 /// <see cref="WorldPopulation.UpdateCarriedBodies"/>'s per-tick pose-follow.</summary>
 [Collection(name: ConsoleRedirectionCollection.Name)]
-public sealed class WorldCarryCommandLawTests {
+public sealed class WorldCarryCommandLawTests : IDisposable {
+    // Every FreshProfiles call's own scratch directory, released together when the test instance is (a fresh
+    // instance per [Fact], xUnit's default) — one restore law calls it four times against the same fixture.
+    private readonly List<IDisposable> m_scratch = [];
+
     private const int CarrierIndex = 0;
     private const int BallIndex = WorldBodiesLimits.LocalSeatCount;
 
@@ -253,14 +260,8 @@ public sealed class WorldCarryCommandLawTests {
     }
     private static WorldFixture JoinedCarrier(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
-        var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            seat,
-            seat.Index,
-            null,
-            WorldProtocol.WireProtocolKey
-        )).Accepted);
+        _ = fixture.JoinSeat();
 
         return fixture;
     }
@@ -483,16 +484,14 @@ public sealed class WorldCarryCommandLawTests {
             fixture.Server.Population.UpdateCarriedBodies();
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var iteration = 0; (iteration < 1_000); iteration++) {
-            fixture.Server.Population.PrepareCarriedBodies();
-            fixture.Server.Population.UpdateCarriedBodies();
-        }
-
         Assert.Equal(
             expected: 0L,
-            actual: (GC.GetAllocatedBytesForCurrentThread() - before)
+            actual: AllocationWindow.Least(window: () => {
+                for (var iteration = 0; (iteration < 1_000); iteration++) {
+                    fixture.Server.Population.PrepareCarriedBodies();
+                    fixture.Server.Population.UpdateCarriedBodies();
+                }
+            })
         );
     }
     [Fact]
@@ -681,7 +680,7 @@ public sealed class WorldCarryCommandLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var refusal
             ),
             userMessage: refusal
@@ -811,31 +810,28 @@ public sealed class WorldCarryCommandLawTests {
         );
     }
 
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
-    private static WorldOwnedWorlds FreshProfiles(WorldDefinition definition) => new(
-        directory: Directory.CreateTempSubdirectory(prefix: "puck-carry-tests-").FullName,
-        machineId: Guid.NewGuid(),
-        template: definition
-    );
+    private WorldOwnedWorlds FreshProfiles(WorldDefinition definition) {
+        var profilesDirectory = new TemporaryDirectory(prefix: "puck-carry-tests-");
 
+        m_scratch.Add(item: profilesDirectory);
+
+        return new(
+            directory: profilesDirectory.RootPath,
+            machineId: Guid.NewGuid(),
+            template: definition
+        );
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        foreach (var disposable in m_scratch) {
+            disposable.Dispose();
+        }
+    }
     [Fact]
     public void CarryBodyWireLeafRoundTripsThroughSubmissionCodec() {
         var command = new WorldCommand.CarryBody(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             EntityIndex: CarrierIndex,
             TargetIndex: BallIndex
         );
@@ -875,7 +871,7 @@ public sealed class WorldCarryCommandLawTests {
     [Fact]
     public void ReleaseCarryWireLeafRoundTripsThroughSubmissionCodec() {
         var command = new WorldCommand.ReleaseCarry(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             EntityIndex: CarrierIndex
         );
 

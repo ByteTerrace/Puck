@@ -19,7 +19,7 @@ the median nor filtering should be treated as an exact or universally
 1-Lipschitz marchable distance.
 The generator resolves overlapping contours into filled boundaries before
 coloring; its approximation and refusal limits are documented in
-[Puck.Text](../../../../src/Puck.Text/README.md#generation-options-and-glyph-selection).
+[the text reference](../../../reference/text.md#generation-options-and-glyph-selection).
 World and CLI authors can select a zero-based TTC/OTC face; CFF2 variable outlines
 currently use default design coordinates. Pair kerning is flattened from GPOS pair
 positioning (the `kern` feature, PairPos formats 1 and 2, extension lookups included)

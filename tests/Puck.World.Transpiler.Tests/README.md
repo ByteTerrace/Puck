@@ -33,7 +33,7 @@ usage linting and refusal of malformed operands.
 `ProjectionLawTests` is the projection law: compile, print, compile again and the two documents are equal; format,
 compile and the document is unchanged. It runs over every shipped `.puck` source and over `ConstructCorpus`, one
 generated source per construct `ConstructRegistry` reads out of the registries themselves — the polymorphic `$type`
-tables in `Puck.State` and `PuckDslVocabulary`'s comparison operators and kinds — so a construct the generator does
+tables in `Puck.State`, `ExpressionComparisons`' comparison operators and `PuckDslVocabulary`'s kinds — so a construct the generator does
 not cover, or one the printer cannot reproduce, fails under its own name. `OneDoorTests` keeps every harness on
 `WorldCompiler`, the vocabulary's one compile entry point.
 
@@ -45,6 +45,17 @@ print against the source: the construct corpus is authored with four-space inden
 the rewrite from the printer.) `DescentChildLawTests` asks the stronger question the reach law cannot — that each
 arm rebuilds every syntax-node child its node declares — and `SyntaxNodeKinds` is the one type enumeration both run
 over. `MigrationDeclarationLawTests` holds a migration to what it declares it reshapes.
+
+## Writing a test
+
+Compile world source through `WorldSources`: `LowerClean` for a body under the world schema header that must compile
+clean, `Lower` when the diagnostics matter too, `Parse` for the tree alone, and `AssertRoundTrips` for the
+decompile-and-recompile law. A refusal is a `Refusal` row — body, code, and a needle whose line the diagnostic must
+name — that holds the code to exactly one report at that line (`Alone` further holds it to be the source's only error),
+added to its file's table and held by `WorldSources.AssertRefused` (compile) or `AssertRefusedBy` (parse), so a
+failure names the case. Every committed source compiles once per run through `ShippedWorlds.Compile`. Drive the
+language server through `LanguageServerClient`, which frames with the product's own `LspFraming` and returns
+everything the server wrote; `MarkedSource` reads a `|` in a source as the cursor.
 
 ## Verification
 

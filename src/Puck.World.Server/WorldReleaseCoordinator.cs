@@ -1,3 +1,5 @@
+using Puck.Assets;
+
 namespace Puck.World.Server;
 
 /// <summary>
@@ -15,13 +17,54 @@ public sealed record WorldReleaseQualificationReceipt {
     public required string TargetRelease { get; init; }
     public required string TargetStateHash { get; init; }
 }
+/// <summary>
+/// The outcome of one packaged qualification run: the receipt when every leg proved its claims, or the claim a leg
+/// failed. A runner that cannot run at all (bad input, an unsupported pair, unavailable infrastructure) throws instead,
+/// so a failure here always means the packaged pair was exercised and did not qualify.
+/// </summary>
+public sealed record WorldReleaseQualificationResult {
+    private WorldReleaseQualificationResult(WorldReleaseQualificationReceipt? receipt, string? failure) {
+        Failure = failure;
+        Receipt = receipt;
+    }
+
+    /// <summary>Gets the claim a leg failed, or <see langword="null"/> when the pair qualified.</summary>
+    public string? Failure { get; }
+    /// <summary>Gets the qualified pair's receipt, or <see langword="null"/> when a leg failed.</summary>
+    public WorldReleaseQualificationReceipt? Receipt { get; }
+
+    /// <summary>Creates the result of a run in which a leg failed its claim.</summary>
+    /// <param name="failure">The claim the leg failed, as one sentence.</param>
+    /// <returns>A result carrying <paramref name="failure"/> and no receipt.</returns>
+    /// <exception cref="ArgumentException"><paramref name="failure"/> is <see langword="null"/>, empty, or white space.</exception>
+    public static WorldReleaseQualificationResult Failed(string failure) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(failure);
+
+        return new(
+            failure: failure,
+            receipt: null
+        );
+    }
+    /// <summary>Creates the result of a run in which every leg proved its claims.</summary>
+    /// <param name="receipt">The qualified pair's receipt.</param>
+    /// <returns>A result carrying <paramref name="receipt"/> and no failure.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="receipt"/> is <see langword="null"/>.</exception>
+    public static WorldReleaseQualificationResult Qualified(WorldReleaseQualificationReceipt receipt) {
+        ArgumentNullException.ThrowIfNull(receipt);
+
+        return new(
+            failure: null,
+            receipt: receipt
+        );
+    }
+}
 /// <summary>Runner that performs the packaged, ordered pair qualification outside the deployment transaction.</summary>
 public interface IWorldReleaseQualificationRunner {
-    Task<WorldReleaseQualificationReceipt?> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default);
+    Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default);
 }
 /// <summary>Runner that qualifies a candidate against an empty bootstrap source.</summary>
 public interface IWorldReleaseBootstrapQualificationRunner {
-    Task<WorldReleaseQualificationReceipt?> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default);
+    Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default);
 }
 /// <summary>Result returned by a local or Azure release runtime driver.</summary>
 public readonly record struct WorldReleaseRuntimeResult(
@@ -69,11 +112,10 @@ public sealed class WorldReleaseCoordinator {
             current.Record with { PendingPhase = phase, Revision = checked((current.Record.Revision + 1)) },
             cancellationToken
         );
-    private static bool FullPin(string? value) => ((value is { Length: 71 }) && value.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "sha256/"
-    ) &&
-        (value.AsSpan(start: 7).IndexOfAnyExcept(values: "0123456789abcdef") < 0));
+    private static bool FullPin(string? value) => ContentPin.TryParse(
+        pin: out _,
+        text: value
+    );
     private async Task<WorldReleaseRunResult> RecoverPreCommitAsync(WorldReleaseGroupSnapshot state, IWorldReleaseRuntime runtime, string failure, CancellationToken cancellationToken) {
         if (state.Record.RecoveryRoots.Count == 0) {
             return RefusedRun(reason: $"pre-commit failure before protected roots; retry drain without reopening an older checkpoint: {failure}");
@@ -190,10 +232,15 @@ public sealed class WorldReleaseCoordinator {
         if (qualificationRunner is null) {
             return Refused(reason: "bootstrap requires a qualification runner for the candidate release");
         }
-        var receipt = await qualificationRunner.RunAsync(
+        var qualification = await qualificationRunner.RunAsync(
             cancellationToken: cancellationToken,
             target: target
         ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (qualification.Failure is { } failure) {
+            return Refused(reason: $"bootstrap qualification failed: {failure}");
+        }
+        var receipt = qualification.Receipt;
 
         if (
             (receipt is null) ||
@@ -240,8 +287,11 @@ public sealed class WorldReleaseCoordinator {
             ).ConfigureAwait(continueOnCapturedContext: false)
         );
 
+        if (qualification?.Failure is { } failure) {
+            return Refused(reason: $"release pair qualification failed: {failure}");
+        }
         if (!TryQualifyPair(
-            evidence: qualification,
+            evidence: qualification?.Receipt,
             reason: out var reason,
             source: source,
             target: target
@@ -288,8 +338,11 @@ public sealed class WorldReleaseCoordinator {
             ).ConfigureAwait(continueOnCapturedContext: false)
         );
 
+        if (qualification?.Failure is { } failure) {
+            return Refused(reason: $"rollback pair qualification failed: {failure}");
+        }
         if (!TryQualifyPair(
-            evidence: qualification,
+            evidence: qualification?.Receipt,
             reason: out var reason,
             source: active,
             target: predecessor
@@ -354,8 +407,8 @@ public sealed class WorldReleaseCoordinator {
         return m_groups.AdvanceAsync(
             current,
             current.Record with {
-            PendingPhase = current.Record.PendingPhase,
-            RecoveryRoots = new SortedDictionary<string, string>(
+                PendingPhase = current.Record.PendingPhase,
+                RecoveryRoots = new SortedDictionary<string, string>(
                 recoveryRoots.ToDictionary(
                     static item => item.Key,
                     static item => item.Value,
@@ -363,8 +416,8 @@ public sealed class WorldReleaseCoordinator {
                 ),
                 StringComparer.Ordinal
             ),
-            Revision = checked((current.Record.Revision + 1)),
-        },
+                Revision = checked((current.Record.Revision + 1)),
+            },
             cancellationToken
         );
     }
@@ -383,9 +436,9 @@ public sealed class WorldReleaseCoordinator {
         return m_groups.AdvanceAsync(
             current,
             current.Record with {
-            PendingPhase = WorldReleaseOperationPhase.Drain,
-            Admission = WorldReleaseAdmissionState.Closed,
-            RecoveryRoots = new SortedDictionary<string, string>(
+                PendingPhase = WorldReleaseOperationPhase.Drain,
+                Admission = WorldReleaseAdmissionState.Closed,
+                RecoveryRoots = new SortedDictionary<string, string>(
                 recoveryRoots.ToDictionary(
                     static item => item.Key,
                     static item => item.Value,
@@ -393,8 +446,8 @@ public sealed class WorldReleaseCoordinator {
                 ),
                 StringComparer.Ordinal
             ),
-            Revision = checked((current.Record.Revision + 1)),
-        },
+                Revision = checked((current.Record.Revision + 1)),
+            },
             cancellationToken
         );
     }
@@ -403,10 +456,10 @@ public sealed class WorldReleaseCoordinator {
         m_groups.AdvanceAsync(
             current,
             current.Record with {
-            PendingPhase = WorldReleaseOperationPhase.Drain,
-            Admission = WorldReleaseAdmissionState.Closed,
-            Revision = checked((current.Record.Revision + 1)),
-        },
+                PendingPhase = WorldReleaseOperationPhase.Drain,
+                Admission = WorldReleaseAdmissionState.Closed,
+                Revision = checked((current.Record.Revision + 1)),
+            },
             cancellationToken
         );
     /// <summary>Records private verification without opening public admission.</summary>
@@ -496,12 +549,14 @@ public sealed class WorldReleaseCoordinator {
                                 cancellationToken
                             ).ConfigureAwait(continueOnCapturedContext: false);
 
-                            if (!started.Succeeded) { return await RecoverPreCommitAsync(
+                            if (!started.Succeeded) {
+                                return await RecoverPreCommitAsync(
                                 state,
                                 runtime,
                                 started.Detail,
                                 cancellationToken
-                            ).ConfigureAwait(continueOnCapturedContext: false); }
+                            ).ConfigureAwait(continueOnCapturedContext: false);
+                            }
                             var advanced = await RecordVerificationAsync(
                                 cancellationToken: cancellationToken,
                                 current: state
@@ -517,23 +572,27 @@ public sealed class WorldReleaseCoordinator {
                                 cancellationToken
                             ).ConfigureAwait(continueOnCapturedContext: false);
 
-                            if (!started.Succeeded) { return await RecoverPreCommitAsync(
+                            if (!started.Succeeded) {
+                                return await RecoverPreCommitAsync(
                                 state,
                                 runtime,
                                 started.Detail,
                                 cancellationToken
-                            ).ConfigureAwait(continueOnCapturedContext: false); }
+                            ).ConfigureAwait(continueOnCapturedContext: false);
+                            }
                             var verified = await runtime.VerifyCandidatePrivatelyAsync(
                                 state.Record,
                                 cancellationToken
                             ).ConfigureAwait(continueOnCapturedContext: false);
 
-                            if (!verified.Succeeded) { return await RecoverPreCommitAsync(
+                            if (!verified.Succeeded) {
+                                return await RecoverPreCommitAsync(
                                 state,
                                 runtime,
                                 verified.Detail,
                                 cancellationToken
-                            ).ConfigureAwait(continueOnCapturedContext: false); }
+                            ).ConfigureAwait(continueOnCapturedContext: false);
+                            }
                             var fences = await runtime.ReadFenceCensusAsync(
                                 state.Record,
                                 cancellationToken
@@ -566,12 +625,14 @@ public sealed class WorldReleaseCoordinator {
                                 cancellationToken
                             ).ConfigureAwait(continueOnCapturedContext: false);
 
-                            if (publication == WorldReleaseRuntimePublication.Private) { return new(
+                            if (publication == WorldReleaseRuntimePublication.Private) {
+                                return new(
                                 CandidatePrivate: true,
                                 Completed: false,
                                 Detail: "candidate remains private until the group publication barrier succeeds",
                                 Snapshot: state
-                            ); }
+                            );
+                            }
                             if (publication != WorldReleaseRuntimePublication.Opened) { return RefusedRun(reason: "committed target admission publication was refused"); }
                             return new(
                                 true,
@@ -604,10 +665,12 @@ public sealed class WorldReleaseCoordinator {
         } catch (Exception error) when ((error is not OperationCanceledException)) {
             WorldReleaseGroupSnapshot? latest;
 
-            try { latest = await m_groups.LoadAsync(
+            try {
+                latest = await m_groups.LoadAsync(
                 state.Record.DeploymentGroup,
                 cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false); } catch (Exception readError) when ((readError is not OperationCanceledException)) {
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (Exception readError) when ((readError is not OperationCanceledException)) {
                 return RefusedRun(reason: $"cannot establish the durable commit boundary; restore nothing and retry status: {readError.Message}");
             }
             if (

@@ -10,15 +10,15 @@ public sealed class SourceMapOriginTests {
     public void EqualSpansFromDifferentImportsRetainDistinctDefinitionPaths() {
         var map = new SourceMap();
 
-        using (map.PushOrigin(sourcePath: "first.puck", moduleInstance: "first")) {
+        using (map.PushOrigin(moduleInstance: "first", sourcePath: "first.puck")) {
             map.Register(jsonPointer: "/state/world/0", span: SharedSpan);
         }
-        using (map.PushOrigin(sourcePath: "second.puck", moduleInstance: "second")) {
+        using (map.PushOrigin(moduleInstance: "second", sourcePath: "second.puck")) {
             map.Register(jsonPointer: "/state/world/1", span: SharedSpan);
         }
 
-        Assert.True(map.TryGetOrigin("/state/world/0", out var first));
-        Assert.True(map.TryGetOrigin("/state/world/1", out var second));
+        Assert.True(condition: map.TryGetOrigin(jsonPointer: "/state/world/0", origin: out var first));
+        Assert.True(condition: map.TryGetOrigin(jsonPointer: "/state/world/1", origin: out var second));
         Assert.Equal(SharedSpan, first.Span);
         Assert.Equal(SharedSpan, second.Span);
         Assert.Equal("first.puck", first.SourcePath);
@@ -28,15 +28,15 @@ public sealed class SourceMapOriginTests {
     public void InstancesOfOneDefinitionRetainDistinctInstancePaths() {
         var map = new SourceMap();
 
-        using (map.PushOrigin(sourcePath: "shared.puck", moduleInstance: "left")) {
+        using (map.PushOrigin(moduleInstance: "left", sourcePath: "shared.puck")) {
             map.Register(jsonPointer: "/state/world/0", span: SharedSpan);
         }
-        using (map.PushOrigin(sourcePath: "shared.puck", moduleInstance: "right")) {
+        using (map.PushOrigin(moduleInstance: "right", sourcePath: "shared.puck")) {
             map.Register(jsonPointer: "/state/world/1", span: SharedSpan);
         }
 
-        Assert.True(map.TryGetOrigin("/state/world/0", out var left));
-        Assert.True(map.TryGetOrigin("/state/world/1", out var right));
+        Assert.True(condition: map.TryGetOrigin(jsonPointer: "/state/world/0", origin: out var left));
+        Assert.True(condition: map.TryGetOrigin(jsonPointer: "/state/world/1", origin: out var right));
         Assert.Equal("shared.puck", left.SourcePath);
         Assert.Equal("shared.puck", right.SourcePath);
         Assert.Equal("left", left.ModuleInstancePath);
@@ -46,29 +46,29 @@ public sealed class SourceMapOriginTests {
     public void NestedScopesAndSnapshotsRestoreCompleteOrigins() {
         var map = new SourceMap();
 
-        using (map.PushOrigin(sourcePath: "outer.puck", moduleInstance: "outer")) {
+        using (map.PushOrigin(moduleInstance: "outer", sourcePath: "outer.puck")) {
             map.Register(jsonPointer: "/before", span: SharedSpan);
             var snapshot = map.Snapshot();
 
-            using (map.PushOrigin(sourcePath: "inner.puck", moduleInstance: "inner")) {
+            using (map.PushOrigin(moduleInstance: "inner", sourcePath: "inner.puck")) {
                 map.Register(jsonPointer: "/nested", span: SharedSpan);
             }
-            map.Restore(snapshot);
+            map.Restore(snapshot: snapshot);
             map.Register(jsonPointer: "/after", span: SharedSpan);
         }
 
-        Assert.False(map.TryGetOrigin("/nested", out _));
-        Assert.True(map.TryGetOrigin("/before", out var before));
-        Assert.True(map.TryGetOrigin("/after", out var after));
+        Assert.False(condition: map.TryGetOrigin(jsonPointer: "/nested", origin: out _));
+        Assert.True(condition: map.TryGetOrigin(jsonPointer: "/before", origin: out var before));
+        Assert.True(condition: map.TryGetOrigin(jsonPointer: "/after", origin: out var after));
         Assert.Equal("outer.puck", before.SourcePath);
         Assert.Equal("outer", before.ModuleInstancePath);
-        Assert.Equal(before, after);
+        Assert.Equal(actual: after, expected: before);
 
-        using (map.PushOrigin(sourcePath: "outer.puck", moduleInstance: "outer"))
-        using (map.PushOrigin(sourcePath: "inner.puck", moduleInstance: "inner")) {
+        using (map.PushOrigin(moduleInstance: "outer", sourcePath: "outer.puck"))
+        using (map.PushOrigin(moduleInstance: "inner", sourcePath: "inner.puck")) {
             map.Register(jsonPointer: "/nestedAgain", span: SharedSpan);
         }
-        Assert.True(map.TryGetOrigin("/nestedAgain", out var nested));
+        Assert.True(condition: map.TryGetOrigin(jsonPointer: "/nestedAgain", origin: out var nested));
         Assert.Equal("inner.puck", nested.SourcePath);
         Assert.Equal("outer/inner", nested.ModuleInstancePath);
     }
@@ -78,7 +78,7 @@ public sealed class SourceMapOriginTests {
 
         map.Register(jsonPointer: "/root", span: SharedSpan);
 
-        Assert.Throws<InvalidOperationException>((Action)(() => {
+        Assert.Throws<InvalidOperationException>(testCode: ((Action)(() => {
             using (map.PushIsolatedEntries()) {
                 map.Register(jsonPointer: "/outer", span: SharedSpan);
                 using (map.PushIsolatedEntries()) {
@@ -90,7 +90,7 @@ public sealed class SourceMapOriginTests {
                 Assert.False(condition: map.TryGetSpan(jsonPointer: "/inner", span: out _));
                 throw new InvalidOperationException(message: "exercise restoration");
             }
-        }));
+        })));
 
         Assert.True(condition: map.TryGetSpan(jsonPointer: "/root", span: out _));
         Assert.False(condition: map.TryGetSpan(jsonPointer: "/outer", span: out _));

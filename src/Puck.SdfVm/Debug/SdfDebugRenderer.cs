@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm.Debug;
@@ -62,41 +61,22 @@ public sealed class SdfDebugRenderer {
         y: 0.18f,
         z: 0.22f
     );
-    // ── SDF perf-bench workload emitters ────────────────────────────────────────────────────────────────────────────
-    // These emit one BENCH configuration's program (a takeover, like the debug subject) so the bench runner can measure
-    // its per-pass GPU cost. World-level for shapes/ops (one always-evaluated subject); a real instance grid for the
-    // instance workloads (BeginInstance/EndInstance with covering bounds, so the beam's tile cull is exercised).
-
-    private static readonly Vector3 BenchAlbedo = new(
-        x: 0.78f,
-        y: 0.75f,
-        z: 0.70f
-    );
-    // The fixed subject for the ops workload — a plain torus (its default params), so each op's marginal cost reads
-    // against the Baseline row (a bare torus behind an identity Translate).
-    private static readonly float[] BenchTorusParams = [1f, 0.35f];
 
     // The ground plane sits a little below the subject (its surface at y = -FloorDrop), so a ~1-unit shape rests on it.
     // Internal: the meteor shower (SdfDebugScene.TickMeteor) lands floor craters relative to this surface height.
     internal const float FloorDrop = 1.3f;
 
-    private const float BenchCarveFloorDrop = 2.2f; // the floor sits below the subject so grounded scatter carves can bite it
-    private const float BenchCarveRadius = 0.35f;   // matches the live default — the honest per-carve footprint
-    private const float BenchCarveSmoothK = 0.15f;
-    // The carve bench's fixed subject: a ~2-unit sphere at the origin (radius 1.6 → ~3.2 across) plus a floor below it,
-    // that the carve pool subtracts from. A FIXED subject means the bench camera never reframes across the ladder (the
-    // subject only shrinks as carves bite it, so it stays in frame at SingleShapeDistance — see SdfBenchScene).
-    private const float BenchCarveSubjectRadius = 1.6f;
-    private const float BenchRoughness = 0.613f; // = 1 - sqrt((40 - 2) / 254), the roughness whose exponent is 40
-    private const float BenchScatterExtent = 12f;   // the scatter cube's full side (empty-space + floor spread, subject-dwarfing)
-    private const float BenchSpecular = 0.35f;
+    // The carve-ceiling exhibit's fixed scene: a ~2-unit sphere at the origin (radius 1.6 → ~3.2 across) plus a floor
+    // below it, bitten by a golden-angle cluster of hard carves at the live default radius.
+    private const int CarveCeilingCount = 256;
+    private const float CarveCeilingFloorDrop = 2.2f;
+    private const float CarveCeilingSubjectRadius = 1.6f;
     private const float SubjectRoughness = 0.613f; // = 1 - sqrt((40 - 2) / 254), the roughness whose exponent is 40
     private const float SubjectSpecular = 0.35f;
 
     // Appends ONE primitive from the shared catalog: `kind`/`parameters` select it (shape 1 or shape 2 — same
     // catalog), `lift`/`liftAmount` supply the shared 2D-family lift, and `blend`/`smooth` ride the primitive
-    // instruction (shape 1 passes the default Union-against-empty; shape 2 passes the authored pair blend). Shared by
-    // the debug subject (Emit) and the bench workloads (EmitBench).
+    // instruction (shape 1 passes the default Union-against-empty; shape 2 passes the authored pair blend).
     internal static SdfProgramBuilder AppendShape(SdfProgramBuilder builder, SdfDebugShapeKind kind, IReadOnlyList<float> parameters, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         var p = parameters;
 
@@ -181,7 +161,8 @@ public sealed class SdfDebugRenderer {
             blend: blend,
             smooth: smooth
         ),
-            SdfDebugShapeKind.Ellipsoid => builder.Ellipsoid(
+            SdfDebugShapeKind.Ellipsoid => builder.Superellipsoid(
+            exponent: SdfProgramBuilder.MinSuperellipsoidExponent,
             radii: new Vector3(
                 x: At(
                     fallback: 1f,
@@ -325,41 +306,6 @@ public sealed class SdfDebugRenderer {
         ),
         };
     }
-    /// <summary>Builds the deterministic carve list one <see cref="SdfBenchWorkload.Carves"/> rung bites its subject with
-    /// (golden-angle clustered / R2-scattered placement, no RNG) — the shared source of truth both this emitter and the
-    /// bench's carve-bake planner (<see cref="SdfBenchScene"/>) read, so the planner's binning matches the emission. The
-    /// count is clamped to <see cref="SdfDebugScene.MaxCarves"/>.</summary>
-    /// <param name="family">The placement family (clustered / scattered / smooth).</param>
-    /// <param name="count">The requested carve count (clamped to the pool cap).</param>
-    /// <returns>The carve list, in deterministic index order.</returns>
-    internal static IReadOnlyList<SdfCarve> BuildBenchCarves(SdfBenchCarveFamily family, int count) {
-        var n = Math.Clamp(
-            max: SdfDebugScene.MaxCarves,
-            min: 0,
-            value: count
-        );
-        var smooth = (family == SdfBenchCarveFamily.Smooth);
-        var carves = new List<SdfCarve>(capacity: n);
-
-        for (var index = 0; (index < n); index++) {
-            var center = ((family == SdfBenchCarveFamily.Scattered)
-                ? ScatteredCarveCenter(index: index)
-                : ClusteredCarveCenter(
-                    count: n,
-                    index: index
-                )
-            );
-
-            carves.Add(item: new SdfCarve(
-                Center: center,
-                Radius: BenchCarveRadius,
-                Smooth: smooth,
-                SmoothK: BenchCarveSmoothK
-            ));
-        }
-
-        return carves;
-    }
     internal static void EmitCarve(SdfProgramBuilder builder, SdfCarve carve, int material) {
         var blend = (carve.Smooth
             ? SdfBlendOp.SmoothSubtraction
@@ -384,8 +330,8 @@ public sealed class SdfDebugRenderer {
     // carve position (ResetPoint + Translate) that SUBTRACTS from the running accumulator (hard Subtraction, or
     // SmoothSubtraction with k when Smooth). Carves don't move, so the instance is STATIC (no dynamic slot). Bound =
     // carve radius EXACTLY — the packer adds float-safety padding and the smooth halo, so passing the radius alone is
-    // correct (double-inflating would over-cull the cavity's seam tiles). Shared by the live subject (Emit) and the
-    // carve bench (EmitBenchCarves) and folded worst-case by EmitProbe.
+    // correct (double-inflating would over-cull the cavity's seam tiles). Shared by the carve-ceiling exhibit
+    // (EmitCarveCeiling) and folded worst-case by EmitProbe.
     internal static void EmitCarves(SdfProgramBuilder builder, IReadOnlyList<SdfCarve> carves, int material) {
         foreach (var carve in carves) {
             EmitCarve(
@@ -465,7 +411,7 @@ public sealed class SdfDebugRenderer {
     }
     // A carve center ON the subject surface via the Fibonacci (golden-angle) sphere — a deterministic even spread. At
     // high counts the carves densely overlap (footprint sum >> the subject's surface area), so many share the same
-    // screen tiles: the honest views-cost worst case (every overlapping carve is evaluated for each covered tile).
+    // screen tiles.
     private static Vector3 ClusteredCarveCenter(int index, int count) {
         const float GoldenAngle = 2.399963f; // π · (3 − √5)
         var t = ((index + 0.5f) / MathF.Max(
@@ -484,105 +430,36 @@ public sealed class SdfDebugRenderer {
             z: (ring * MathF.Sin(x: phi))
         );
 
-        return (direction * BenchCarveSubjectRadius);
+        return (direction * CarveCeilingSubjectRadius);
     }
-    // A fixed torus + EXACTLY ONE op (point ops fold the point before the shape; field ops shell the field after it).
-    // The Baseline is the bare torus behind an identity Translate, so every op row measures one extra instruction.
-    private static void EmitBenchOp(SdfProgramBuilder builder, SdfBenchOp op, int material) {
-        var chain = builder.ResetPoint();
-
-        // POINT-class ops warp the evaluation point BEFORE the shape.
-        chain = op switch {
-            SdfBenchOp.Baseline => chain.Translate(offset: Vector3.Zero),
-            SdfBenchOp.Twist => chain.TwistY(rate: 1.0f),
-            SdfBenchOp.BendX => chain.BendX(rate: 0.5f),
-            SdfBenchOp.Elongate => chain.Elongate(extents: new Vector3(
-            x: 0.3f,
-            y: 0f,
-            z: 0f
-        )),
-            SdfBenchOp.Repeat => chain.Repeat(spacing: new Vector3(
-            x: 3f,
-            y: 3f,
-            z: 3f
-        )),
-            SdfBenchOp.RepeatLimited => chain.RepeatLimited(
-            spacing: new Vector3(
-                x: 3f,
-                y: 3f,
-                z: 3f
-            ),
-            limit: new Vector3(
-                x: 1f,
-                y: 1f,
-                z: 1f
-            )
-        ),
-            SdfBenchOp.Polar => chain.RepeatPolar(
-            count: 6,
-            axis: SdfPolarAxis.Y
-        ),
-            SdfBenchOp.Symmetry => chain.SymmetryPlane(normal: Vector3.UnitX),
-            SdfBenchOp.Wallpaper => chain.WallpaperFold(
-            group: SdfWallpaperGroup.P4M,
-            cell: new Vector2(
-                x: 2.5f,
-                y: 2.5f
-            ),
-            limit: new Vector2(
-                x: 2f,
-                y: 2f
-            ),
-            plane: SdfWallpaperPlane.XZ
-        ),
-            SdfBenchOp.LogSphere => chain.LogSphere(shellRatio: 2f),
-            SdfBenchOp.CellJitter => chain.CellJitter(
-            spacing: new Vector3(
-                x: 3f,
-                y: 3f,
-                z: 3f
-            ),
-            jitter: 0.5f
-        ),
-            SdfBenchOp.DomainWarp => chain.DomainWarp(
-            frequency: new Vector3(
-                x: 2f,
-                y: 2f,
-                z: 2f
-            ),
-            amplitude: 0.15f
-        ),
-            SdfBenchOp.Scale => chain.Scale(scale: new Vector3(
-            x: 0.8f,
-            y: 0.8f,
-            z: 0.8f
-        )),
-            _ => chain, // field ops apply after the shape (below) — no point fold
-        };
-
-        chain = AppendShape(
-            builder: chain,
-            kind: SdfDebugShapeKind.Torus,
-            parameters: BenchTorusParams,
-            lift: SdfLift.Revolve,
-            liftAmount: 0.5f,
+    // The carve-ceiling exhibit: a world-level subject sphere + floor, then CarveCeilingCount hard carves clustered on
+    // the subject surface as static analytic instances. Placement is golden-angle (no RNG), so the exhibit reproduces.
+    private static void EmitCarveCeiling(SdfProgramBuilder builder, int material) {
+        _ = builder.ResetPoint().Sphere(
+            radius: CarveCeilingSubjectRadius,
+            material: material
+        );
+        _ = builder.ResetPoint().Plane(
+            normal: Vector3.UnitY,
+            offset: CarveCeilingFloorDrop,
             material: material
         );
 
-        // FIELD-class ops shell/inflate/displace the accumulated field AFTER the shape.
-        _ = op switch {
-            SdfBenchOp.Displace => chain.Displace(
-            frequency: new Vector3(
-                x: 6f,
-                y: 6f,
-                z: 6f
-            ),
-            amplitude: 0.08f
-        ),
-            SdfBenchOp.Onion => chain.Onion(thickness: 0.05f),
-            SdfBenchOp.Dilate => chain.Dilate(radius: 0.1f),
-            _ => chain,
-        };
+        for (var index = 0; (index < CarveCeilingCount); index++) {
+            EmitCarve(
+                builder: builder,
+                carve: new SdfCarve(
+                    Center: ClusteredCarveCenter(
+                        count: CarveCeilingCount,
+                        index: index
+                    ),
+                    Radius: SdfDebugScene.DefaultCarveRadius,
+                    Smooth: false,
+                    SmoothK: SdfDebugScene.DefaultCarveSmoothK
+                ),
+                material: material
+            );
+        }
     }
     // The gallery's ground plane (its own dimmer neutral material), at the same drop the debug subject's floor uses.
     private void EmitGalleryFloor(SdfProgramBuilder builder) {
@@ -628,77 +505,7 @@ public sealed class SdfDebugRenderer {
             );
         }
     }
-    private static float Frac(float value) => (value - MathF.Floor(x: value));
-    // Compact per-shape params so an instanced copy's bound stays under InstanceBoundRadius (no neighbour overlap at
-    // InstanceSpacing). The lifted 2D family uses a small revolve offset (set at the call site).
-    private static float[] InstanceParams(SdfDebugShapeKind kind) {
-        return kind switch {
-            SdfDebugShapeKind.Sphere => [0.4f],
-            SdfDebugShapeKind.Box => [0.3f, 0.3f, 0.3f, 0.03f],
-            SdfDebugShapeKind.Torus => [0.3f, 0.1f],
-            SdfDebugShapeKind.Capsule => [0.22f, 0.12f],
-            SdfDebugShapeKind.Cylinder => [0.28f, 0.3f],
-            SdfDebugShapeKind.Ellipsoid => [0.4f, 0.3f, 0.25f],
-            SdfDebugShapeKind.Vesica => [0.4f, 0.18f],
-            SdfDebugShapeKind.RoundCone => [0.28f, 0.12f, 0.4f],
-            SdfDebugShapeKind.RoundedRect => [0.35f, 0.25f, 0.08f],
-            SdfDebugShapeKind.Polygon => [6f, 0.35f],
-            SdfDebugShapeKind.Star => [5f, 0.38f, 2.6f],
-            SdfDebugShapeKind.Trapezoid => [0.32f, 0.18f, 0.3f],
-            SdfDebugShapeKind.Ellipse => [0.4f, 0.28f],
-            _ => [0.4f],
-        };
-    }
-    // A carve center in a large cube (empty space + the floor) via the R2 low-discrepancy sequence (an additive
-    // recurrence with plastic-number alphas) — deterministic, hash-free, evenly spread with no clumping. Most land far from
-    // the ~2-unit subject and mask out (max(acc, −sphere) = acc where nothing is near), so views stays flat while the
-    // beam's per-tile instance scan grows O(n): the beam-wall control.
-    private static Vector3 ScatteredCarveCenter(int index) {
-        // Fractional parts of 1/plastic^k (k = 1..3) — the canonical 3D R2 basis.
-        const float A1 = 0.8191725f;
-        const float A2 = 0.6710436f;
-        const float A3 = 0.5497005f;
-        var i = (index + 1);
-        var x = Frac(value: (0.5f + (A1 * i)));
-        var y = Frac(value: (0.5f + (A2 * i)));
-        var z = Frac(value: (0.5f + (A3 * i)));
 
-        return new Vector3(
-            x: ((x - 0.5f) * BenchScatterExtent),
-            y: ((y - 0.5f) * BenchScatterExtent),
-            z: ((z - 0.5f) * BenchScatterExtent)
-        );
-    }
-
-    /// <summary>Advances a carve-bake planner one produced frame for a <see cref="SdfBenchWorkload.Carves"/> config — the
-    /// headless synthetic bench's brick-advance hook (the interactive <c>sdf.bench</c> ladder uses the equivalent
-    /// <see cref="SdfBenchScene.AdvanceCarveBake"/>). It feeds the planner the identical deterministic carve list
-    /// <see cref="EmitBench"/> emits (<see cref="BuildBenchCarves"/> is a pure function of family/count), so the planner's
-    /// binning matches the emission exactly; any non-carves config feeds an empty pool so a stale brick is released.
-    /// Returns whether the adopted set changed (the caller rebuilds + re-arms its takeover program).</summary>
-    /// <param name="config">The active bench configuration.</param>
-    /// <param name="planner">The scene's settle-0 carve-bake planner.</param>
-    /// <param name="carveRevision">A monotonic content revision (constant for a fixed synthetic workload).</param>
-    /// <param name="bakes">The engine's brick-bake service.</param>
-    /// <returns>Whether the emit plan changed.</returns>
-    public bool AdvanceBenchCarveBake(SdfBenchConfig config, SdfCarveBakePlanner planner, int carveRevision, ISdfBrickBakeService bakes) {
-        ArgumentNullException.ThrowIfNull(planner);
-        ArgumentNullException.ThrowIfNull(bakes);
-
-        var carves = ((config.Workload == SdfBenchWorkload.Carves)
-            ? BuildBenchCarves(
-                family: config.CarveFamily,
-                count: config.InstanceCount
-            )
-            : Array.Empty<SdfCarve>()
-        );
-
-        return planner.Advance(
-            bakes: bakes,
-            carveRevision: carveRevision,
-            carves: carves
-        );
-    }
     /// <summary>Emits the debug subject (+ optional floor) for a live render.</summary>
     /// <param name="builder">The program builder (the program is only this subject while the mode is up).</param>
     /// <param name="scene">The debug scene state.</param>
@@ -825,236 +632,8 @@ public sealed class SdfDebugRenderer {
             );
         }
     }
-    /// <summary>Emits one bench configuration's workload into <paramref name="builder"/> (a takeover — the room is
-    /// replaced). Dispatched by <see cref="SdfBenchWorkload"/>. A <paramref name="carvePlanner"/> (the bench's settle-0
-    /// planner) routes the <see cref="SdfBenchWorkload.Carves"/> workload through the carve-bake pipeline — adopted bins
-    /// emit as bricks, the rest analytic; null keeps carves fully analytic.</summary>
-    public void EmitBench(SdfProgramBuilder builder, SdfBenchConfig config, SdfCarveBakePlanner? carvePlanner = null) {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        var material = builder.AddMaterial(material: new SdfMaterial(
-            Albedo: BenchAlbedo,
-            Specular: BenchSpecular,
-            Roughness: BenchRoughness
-        ));
-
-        switch (config.Workload) {
-            case SdfBenchWorkload.Shapes:
-                _ = AppendShape(
-                    builder: builder.ResetPoint(),
-                    kind: config.Shape,
-                    parameters: SdfDebugScene.DefaultParams(kind: config.Shape),
-                    lift: SdfLift.Revolve,
-                    liftAmount: 0.5f,
-                    material: material
-                );
-
-                break;
-            case SdfBenchWorkload.Ops:
-                EmitBenchOp(
-                    builder: builder,
-                    op: config.Op,
-                    material: material
-                );
-
-                break;
-            case SdfBenchWorkload.Instances:
-                EmitInstances(
-                    builder: builder,
-                    shape: config.Shape,
-                    count: config.InstanceCount,
-                    material: material
-                );
-
-                break;
-            case SdfBenchWorkload.Rigs:
-                EmitRigs(
-                    builder: builder,
-                    count: config.InstanceCount,
-                    material: material
-                );
-
-                break;
-            case SdfBenchWorkload.Carves:
-                EmitBenchCarves(
-                    builder: builder,
-                    family: config.CarveFamily,
-                    count: config.InstanceCount,
-                    material: material,
-                    carvePlanner: carvePlanner
-                );
-
-                break;
-            case SdfBenchWorkload.Storm:
-                if (config.StormMode == SdfBenchStormMode.Motion) {
-                    // The MOTION rung: N DYNAMIC instances riding the per-frame transform buffer (the always-list cliff).
-                    EmitStorm(
-                        builder: builder,
-                        count: config.InstanceCount,
-                        material: material
-                    );
-                } else {
-                    // The REBUILD + CAMERA rungs: N STATIC instances (grid-cullable) — rebuild bumps the revision every
-                    // frame (upload/pack cost), camera sweeps the pose (re-cull cost); neither moves the geometry.
-                    EmitInstances(
-                        builder: builder,
-                        shape: config.Shape,
-                        count: config.InstanceCount,
-                        material: material
-                    );
-                }
-
-                break;
-            case SdfBenchWorkload.DynamicMatrix:
-                EmitDynamicMatrix(
-                    builder: builder,
-                    placement: config.Placement,
-                    moving: config.Moving,
-                    count: config.InstanceCount,
-                    material: material
-                );
-
-                break;
-            default:
-                _ = builder.ResetPoint().Sphere(
-                    radius: 1f,
-                    material: material
-                );
-
-                break;
-        }
-    }
-    /// <summary>Emits the carve bench workload: a fixed ~2-unit subject sphere + a floor (world-level), then
-    /// <paramref name="count"/> carves in the given <paramref name="family"/> — <see cref="SdfBenchCarveFamily.Clustered"/>
-    /// (packed on the subject surface, densely overlapping the same tiles: the honest views-cost worst case),
-    /// <see cref="SdfBenchCarveFamily.Scattered"/> (spread through empty space + the floor, mostly masking out: the
-    /// beam-wall control where beam grows O(n) while views stays flat), or <see cref="SdfBenchCarveFamily.Smooth"/>
-    /// (clustered SmoothSubtraction — halo × mask-width pressure). Placement is deterministic (golden-angle /
-    /// low-discrepancy, no RNG), so a run reproduces bit-for-bit across sessions.</summary>
-    public void EmitBenchCarves(SdfProgramBuilder builder, SdfBenchCarveFamily family, int count, int material, SdfCarveBakePlanner? carvePlanner = null) {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        // The subject the carves bite — a large sphere at the origin unioned with a floor plane. Both are WORLD-level
-        // (always evaluated); the carves are the instances the bench actually measures.
-        _ = builder.ResetPoint().Sphere(
-            radius: BenchCarveSubjectRadius,
-            material: material
-        );
-        _ = builder.ResetPoint().Plane(
-            normal: Vector3.UnitY,
-            offset: BenchCarveFloorDrop,
-            material: material
-        );
-
-        var carves = BuildBenchCarves(
-            count: count,
-            family: family
-        );
-
-        // With a planner (the sdf.carves workload) route through the carve-bake pipeline: adopted clusters emit as
-        // bricks, the rest analytic. Without one (the gallery's carve-ceiling exhibit) stay fully
-        // analytic. The planner is fed the IDENTICAL list by SdfBenchScene.AdvanceCarveBake (BuildBenchCarves is a pure
-        // function of family/count), so its binning at Advance matches this emission exactly.
-        if (carvePlanner is not null) {
-            carvePlanner.Emit(
-                builder: builder,
-                carves: carves,
-                material: material
-            );
-        } else {
-            EmitCarves(
-                builder: builder,
-                carves: carves,
-                material: material
-            );
-        }
-    }
-    /// <summary>Folds the bench worst case into the frame source's capacity probe: <see cref="SdfProgramBuilder.MaxInstances"/>
-    /// instances of the wordiest single shape (a lifted Star bakes the most constants) — so <c>sdf.bench instances 4096</c>
-    /// always fits the frozen program/instance envelope. Never rendered.
-    /// <para>Storm does not grow this probe. Its worst rung is 4096 dynamic spheres
-    /// (<see cref="SdfBenchScene.MaxStormInstances"/>); 4096 &lt; 65536 (MaxInstances) on the instance axis, and a
-    /// dynamic sphere instance (BeginInstanceDynamic + ResetPoint + TransformDynamic + Sphere) is fewer words than a
-    /// lifted Star, so 65536 Stars dominates both the word and instance dimensions this probe already reserves. The one
-    /// axis storm does grow is dynamic-transform capacity — 4096 moving slots vs the room's few dozen — but that floor
-    /// is a separate render-assembly reservation (the frame source's WorstCaseDynamicTransformCapacity →
-    /// SdfWorldRenderSpec.DynamicTransformCapacity), not this word/instance probe, so nothing here changes for it.</para></summary>
-    public void EmitBenchProbe(SdfProgramBuilder builder) {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        var material = builder.AddMaterial(material: new SdfMaterial(
-            Albedo: BenchAlbedo,
-            Specular: BenchSpecular,
-            Roughness: BenchRoughness
-        ));
-
-        EmitInstances(
-            builder: builder,
-            count: SdfProgramBuilder.MaxInstances,
-            material: material,
-            shape: SdfDebugShapeKind.Star
-        );
-
-        // The sdf.carves workload can adopt up to MaxBricks bricks on top of its analytic carves;
-        // fold that worst mixed case into the bench probe so a baked carves rung fits the frozen envelope. Negligible
-        // against the 65536 Star instances above, which already dominate both the word and instance dimensions.
-        SdfCarveBakePlanner.EmitWorstCaseBricks(
-            builder: builder,
-            material: material
-        );
-    }
-    /// <summary>Emits the dynamic-matrix bench workload:
-    /// <paramref name="count"/> compact spheres laid out by <paramref name="placement"/>
-    /// (<see cref="SdfBenchScene.DynamicMatrixBasePosition"/>), either baked static (a plain <c>BeginInstance</c> at
-    /// its base position — grid-invariant, no per-frame CPU rebuild) or moving (one dynamic-transform slot per
-    /// instance, orbiting its base position every produced frame via <see cref="SdfBenchScene.TryPackStormTransforms"/>
-    /// — forces <see cref="SdfProgram.RequiresFrameInstanceGridRebuild"/>). Every op stays core (Sphere + Translate/
-    /// TransformDynamic only), so <see cref="SdfViewsKernelVariants.FirstExoticTouch"/> selects the CoreOps views
-    /// kernel variant regardless of N/placement/moving.</summary>
-    public void EmitDynamicMatrix(SdfProgramBuilder builder, SdfBenchPlacement placement, bool moving, int count, int material) {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        var n = Math.Clamp(
-            max: SdfProgramBuilder.MaxInstances,
-            min: 0,
-            value: count
-        );
-
-        for (var index = 0; (index < n); index++) {
-            var basePosition = SdfBenchScene.DynamicMatrixBasePosition(
-                count: n,
-                index: index,
-                placement: placement
-            );
-
-            if (moving) {
-                // boundOffset zero: the per-frame packer bakes the base position + orbit displacement into the slot's
-                // POSITION, so the bound (center = slot position + offset) tracks the mover — see EmitStorm.
-                builder.BeginInstanceDynamic(
-                    slot: index,
-                    boundOffset: Vector3.Zero,
-                    boundRadius: SdfBenchScene.StormBoundRadius
-                );
-                _ = builder.ResetPoint().TransformDynamic(slot: index).Sphere(
-                    radius: SdfBenchScene.StormInstanceRadius,
-                    material: material
-                );
-            } else {
-                builder.BeginInstance(
-                    boundCenter: basePosition,
-                    boundRadius: SdfBenchScene.StormBoundRadius
-                );
-                _ = builder.ResetPoint().Translate(offset: basePosition).Sphere(
-                    radius: SdfBenchScene.StormInstanceRadius,
-                    material: material
-                );
-            }
-
-            builder.EndInstance();
-        }
-    }
     // ── SDF gallery (the torture museum) exhibit emitters ───────────────────────────────────────────────────────────
-    // Each emits ONE hand-authored known-nasty scene (a takeover, like the debug subject / bench workload), reusing the
+    // Each emits ONE hand-authored known-nasty scene (a takeover, like the debug subject), reusing the
     // shared shape/carve emitters where it can. Deterministic and parameterized — no wall clock, no RNG — so every
     // exhibit's breakdown reproduces run to run. The camera pose + plaque live in SdfGalleryScene.
 
@@ -1183,12 +762,10 @@ public sealed class SdfDebugRenderer {
 
                 break;
             case SdfGalleryExhibit.CarveCeiling:
-                // ~256 clustered hard carves on a subject sphere + floor — the honest destruction budget made visible
-                // (reuses the carve bench emitter). Watch with debug.view.mask.
-                EmitBenchCarves(
+                // ~256 clustered hard carves on a subject sphere + floor — the honest destruction budget made visible.
+                // Watch with debug.view.mask.
+                EmitCarveCeiling(
                     builder: builder,
-                    family: SdfBenchCarveFamily.Clustered,
-                    count: 256,
                     material: material
                 );
 
@@ -1213,47 +790,6 @@ public sealed class SdfDebugRenderer {
                 );
 
                 break;
-        }
-    }
-    /// <summary>Emits <paramref name="count"/> real instances of <paramref name="shape"/> in a centred 3D grid (each a
-    /// BeginInstance/EndInstance pair with a covering bound, Active=true), sized so neighbours don't overlap and the
-    /// whole grid fits the render range. The bench camera (see <see cref="SdfBenchScene.CameraFrame"/>) pulls back to
-    /// frame it.</summary>
-    public void EmitInstances(SdfProgramBuilder builder, SdfDebugShapeKind shape, int count, int material) {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        var n = Math.Clamp(
-            max: SdfProgramBuilder.MaxInstances,
-            min: 0,
-            value: count
-        );
-        var grid = SdfBenchScene.GridDimension(count: n);
-        var half = (((grid - 1) * SdfBenchScene.InstanceSpacing) * 0.5f);
-        var parameters = InstanceParams(kind: shape);
-
-        for (var index = 0; (index < n); index++) {
-            var ix = (index % grid);
-            var iy = ((index / grid) % grid);
-            var iz = (index / (grid * grid));
-            var center = new Vector3(
-                x: ((ix * SdfBenchScene.InstanceSpacing) - half),
-                y: ((iy * SdfBenchScene.InstanceSpacing) - half),
-                z: ((iz * SdfBenchScene.InstanceSpacing) - half)
-            );
-
-            builder.BeginInstance(
-                boundCenter: center,
-                boundRadius: SdfBenchScene.InstanceBoundRadius
-            );
-            _ = AppendShape(
-                builder: builder.ResetPoint().Translate(offset: center),
-                kind: shape,
-                parameters: parameters,
-                lift: SdfLift.Revolve,
-                liftAmount: 0.12f,
-                material: material
-            );
-            builder.EndInstance();
         }
     }
     /// <summary>Emits the worst-case debug program (a full <see cref="SdfDebugScene.MaxOps"/> stack of single-word ops
@@ -1342,11 +878,7 @@ public sealed class SdfDebugRenderer {
         // Sphere) + one instance-directory entry (2 vectors = 8 words). The debug subject + floor are WORLD-level (0
         // instances), so the LIVE debug program tops out at MaxCarves = 4096 instances — well inside MaxInstances =
         // 65536. This probe over-covers by folding the 4096 carves ON TOP OF the room's own instances (a few dozen), so
-        // the subject probe is (room + 4096) << 65536. The BENCH probe (EmitBenchProbe: 65536 lifted-Star instances) is
-        // a SEPARATE probe MAX-folded against this one (OverworldFrameSource.MeasureWorstCaseEnvelope) and DOMINATES
-        // both dimensions — 65536 > room + 4096 instances, and 65536 wordy Stars > 4096 carve spheres + the op stack —
-        // so the frozen envelope stays bench-bound and carves do not grow it. Folding them here keeps the subject probe
-        // honest regardless of which probe wins the MAX.
+        // the subject probe is (room + 4096) << 65536.
         var carveMaterial = builder.AddMaterial(material: new SdfMaterial(
             Albedo: CarveAlbedo,
             Specular: SubjectSpecular,
@@ -1377,134 +909,13 @@ public sealed class SdfDebugRenderer {
             material: carveMaterial
         );
     }
-    /// <summary>Emits heterogeneous walking-style articulated rigs: 12..36 independent dynamic bone slots per avatar
-    /// (60..180 authored instructions) and five rigid instructions per leaf. Puck.Maths low-discrepancy samples vary
-    /// counts, shape order, dimensions, and poses without RNG state; every avatar owns distinct instruction records.</summary>
-    public void EmitRigs(SdfProgramBuilder builder, int count, int material) {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        var avatars = Math.Clamp(
-            max: SdfBenchScene.MaxRigAvatars,
-            min: 1,
-            value: count
-        );
-        var slotBase = 0;
-
-        for (var avatar = 0; (avatar < avatars); avatar++) {
-            var boneCount = SdfBenchScene.RigBoneCountForAvatar(avatar: avatar);
-
-            for (var bone = 0; (bone < boneCount); bone++, slotBase++) {
-                var variation = LowDiscrepancy.R2(index: ((ulong)(((avatar * SdfBenchScene.MaxRigBoneCount) + bone) + 1)));
-                var poseX = ((float)((double)variation.X));
-                var poseY = ((float)((double)variation.Y));
-                var side = (((bone & 1) == 0)
-                    ? -1f
-                    : 1f
-                );
-                var band = (bone / 4);
-                var authoredRotation = Quaternion.CreateFromYawPitchRoll(
-                    pitch: (side * ((0.06f + (0.03f * poseY)) + (0.008f * band))),
-                    roll: ((poseY - 0.5f) * 0.10f),
-                    yaw: ((poseX - 0.5f) * 0.22f)
-                );
-                var leafOffset = new Vector3(
-                    x: 0f,
-                    y: ((poseX - 0.5f) * 0.03f),
-                    z: 0f
-                );
-                var scale = (0.85f + (0.30f * poseY));
-                var shape = ((int)((((ulong)variation.X.Value) * 4u) >> 32));
-
-                // One cull bit per lowered rigid leaf. This is execution metadata, not an authored ISA expansion: the
-                // avatar still owns only its authored five-op chains, but a tile touching its hand no longer admits
-                // every other bone (or every bone of every neighboring avatar).
-                builder.BeginInstanceDynamic(
-                    slot: slotBase,
-                    boundOffset: Vector3.Zero,
-                    boundRadius: SdfBenchScene.RigBoneBoundRadius
-                );
-                var chain = builder
-                    .ResetPoint()
-                    .TransformDynamic(slot: slotBase)
-                    .Translate(offset: leafOffset)
-                    .Rotate(rotation: authoredRotation);
-
-                _ = shape switch {
-                    0 => chain.Box(
-                    halfExtents: new Vector3(
-                        x: (0.11f * scale),
-                        y: (0.18f * scale),
-                        z: (0.09f * scale)
-                    ),
-                    round: (0.04f * scale),
-                    material: material
-                ),
-                    1 => chain.Capsule(
-                    endpoint: new Vector3(
-                        x: 0f,
-                        y: (0.28f * scale),
-                        z: 0f
-                    ),
-                    radius: (0.07f * scale),
-                    material: material
-                ),
-                    2 => chain.Cylinder(
-                    radius: (0.085f * scale),
-                    halfHeight: (0.16f * scale),
-                    material: material
-                ),
-                    _ => chain.Sphere(
-                    radius: (0.11f * scale),
-                    material: material
-                ),
-                };
-
-                builder.EndInstance();
-            }
-        }
-    }
-    /// <summary>Emits <paramref name="count"/> dynamic instances of a compact sphere, each on its own dynamic-transform
-    /// slot (instance i rides slot i), so all move per produced frame purely through the frame's dynamic-transform buffer
-    /// — no program rebuild. The ring-local frame grid resolves and bins their moving centers; this workload exposes the
-    /// per-frame grid-build/upload and moving-instance mask cost. Its per-frame
-    /// transforms come from <see cref="SdfBenchScene.TryPackStormTransforms"/> (deterministic: instance index +
-    /// produced-frame counter). The count is clamped to the storm ceiling, which the render assembly reserves dynamic-
-    /// transform capacity for (<see cref="SdfBenchScene.MaxStormInstances"/>).</summary>
-    public void EmitStorm(SdfProgramBuilder builder, int count, int material) {
-        ArgumentNullException.ThrowIfNull(builder);
-
-        var n = Math.Clamp(
-            value: count,
-            min: 0,
-            max: Math.Min(
-                val1: SdfBenchScene.MaxStormInstances,
-                val2: SdfProgramBuilder.MaxInstances
-            )
-        );
-
-        for (var index = 0; (index < n); index++) {
-            // boundOffset zero: the whole orbit+bob displacement is baked into the slot's per-frame position, so the
-            // instance's bound (center = slot position + offset) tracks the mover and need only cover the sphere.
-            builder.BeginInstanceDynamic(
-                slot: index,
-                boundOffset: Vector3.Zero,
-                boundRadius: SdfBenchScene.StormBoundRadius
-            );
-            _ = builder.ResetPoint().TransformDynamic(slot: index).Sphere(
-                radius: SdfBenchScene.StormInstanceRadius,
-                material: material
-            );
-            builder.EndInstance();
-        }
-    }
 }
 /// <summary>Adapts <see cref="SdfDebugMode"/> — the composition facade that already owns the "which takeover is live"
-/// dispatch (a bench workload, a gallery exhibit, or the plain debug subject — see <see cref="SdfDebugMode.Emit"/>) —
-/// onto the <see cref="ISdfSceneEmitter"/> contract, so a composition host can register the whole SDF-debug surface as
-/// one emitter without re-deriving that dispatch. The gallery/bench emitters
-/// (<see cref="SdfDebugRenderer.EmitGallery"/>/<see cref="SdfDebugRenderer.EmitBench"/>) stay ordinary methods
-/// <see cref="SdfDebugMode.Emit"/> calls internally — this type adds nothing beyond the two probe branches and the
-/// dynamic-transform/revision plumbing every emitter needs.
+/// dispatch (a gallery exhibit or the plain debug subject — see <see cref="SdfDebugMode.Emit"/>) — onto the
+/// <see cref="ISdfSceneEmitter"/> contract, so a composition host can register the whole SDF-debug surface as one
+/// emitter without re-deriving that dispatch. The gallery emitter (<see cref="SdfDebugRenderer.EmitGallery"/>) stays an
+/// ordinary method <see cref="SdfDebugMode.Emit"/> calls internally — this type adds nothing beyond the probe branch
+/// and the revision plumbing. Every takeover program is static, so the emitter owns no dynamic-transform slots.
 /// <para>
 /// A takeover, not a composable layer: the debug mode replaces the rest of a scene while active (see
 /// <see cref="SdfDebugMode.Active"/>) — a composition host swaps this emitter into an alternate emitter list for the
@@ -1525,26 +936,8 @@ public sealed class SdfDebugEmitter(SdfDebugMode mode) : ISdfSceneEmitter {
         m_mode.Emit(builder: builder);
     }
     /// <inheritdoc/>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
-        if (!m_mode.TryPackBenchDynamicTransforms(transforms: out var transforms)) {
-            return; // Not a storm-motion bench rung: every reserved slot stays parked (the composition host already
-                    // fills the whole shared buffer with SdfEmitContext.ParkPosition before any emitter packs).
-        }
-
-        var count = Math.Min(
-            val1: transforms.Count,
-            val2: (slots.Length - context.SlotBase)
-        );
-
-        for (var index = 0; (index < count); index++) {
-            slots[(context.SlotBase + index)] = transforms[index];
-        }
-    }
-    /// <inheritdoc/>
     public void WriteRevision(Span<int> destination) => m_mode.WriteRevision(destination: destination);
 
-    /// <inheritdoc/>
-    public int DynamicSlotCount => m_mode.WorstCaseDynamicTransformCapacity;
     /// <inheritdoc/>
     public int RevisionComponentCount => SdfDebugMode.RevisionComponentCount;
 }

@@ -25,9 +25,10 @@ public static partial class ArenaTransforms {
             );
         }
         if (
-            !arena.TryRead(
+            !arena.TryReadLive(
             key: binding.KeyOr(own: arrange.FromKey),
             rowOrdinal: arrange.FromRowOrdinal,
+            time: context.Time,
             value: out var cell
         ) ||
             (cell.Kind != CellKind.Int)
@@ -39,10 +40,10 @@ public static partial class ArenaTransforms {
             );
         }
 
-        using var ordinalsLease = context.Arena.Scratch.Rent<int>(length: RuleReads.MaxArrangementTokens);
+        using var ordinalsLease = context.Arena.Scratch.Rent<int>(length: StateReader.MaxArrangementTokens);
 
         var ordinals = ordinalsLease.Span;
-        var count = DomainOrdinals(
+        var count = StateReader.DomainOrdinals(
             arena: arena,
             domainOrdinal: arrange.DomainRowOrdinal,
             ordinals: ordinals,
@@ -52,7 +53,7 @@ public static partial class ArenaTransforms {
         if (count < 0) {
             return Refuse(
                 code: TransformRefusal.ArrangeShape,
-                reason: $"arrange requires an ordered zone of at most {RuleReads.MaxArrangementTokens} tokens, every one declared by its domain",
+                reason: $"arrange requires an ordered zone of at most {StateReader.MaxArrangementTokens} tokens, every one declared by its domain",
                 refusal: out refusal
             );
         }
@@ -73,9 +74,10 @@ public static partial class ArenaTransforms {
             return Applied(refusal: out refusal);
         }
 
-        using var relativeLease = context.Arena.Scratch.Rent<int>(length: RuleReads.MaxArrangementTokens);
+        using var relativeLease = context.Arena.Scratch.Rent<int>(length: StateReader.MaxArrangementTokens);
 
         var relative = relativeLease.Span;
+
         StateReader.RelativeOrder(
             ordinals: ordinals[..count],
             relative: relative[..count]
@@ -85,13 +87,15 @@ public static partial class ArenaTransforms {
         // arranged position takes.
         using var sortedLease = context.Arena.Scratch.Rent<int>(length: count);
         var sorted = sortedLease.Span;
+
         for (var position = 0; (position < count); position++) {
             sorted[relative[position]] = position;
         }
 
-        using var permutationLease = context.Arena.Scratch.Rent<int>(length: RuleReads.MaxArrangementTokens);
+        using var permutationLease = context.Arena.Scratch.Rent<int>(length: StateReader.MaxArrangementTokens);
 
         var permutation = permutationLease.Span;
+
         Puck.Maths.Combinatorics.PermutationUnrank(
             destination: permutation[..count],
             rank: ((ulong)rank)
@@ -100,6 +104,7 @@ public static partial class ArenaTransforms {
         using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
         var order = orderLease.Span;
+
         for (var position = 0; (position < count); position++) {
             order[position] = sorted[permutation[position]];
         }

@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Numerics;
-using System.Text;
 using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
 
@@ -124,10 +122,6 @@ public sealed class ViewStack : IDisposable {
     private bool m_disposed;
     private int m_nextId;
     private int m_refreshCursor;
-    // [view-timing] (armed GPU timing): this stack's own produced-frame counter, gating the throttled digest — separate
-    // from any host's produced-frame count so a ViewStack used standalone (a test, a future non-overworld host) still
-    // reports on its own cadence.
-    private ulong m_timingFrame;
 
     private sealed class Entry {
         public ScreenSlotPriority Band;
@@ -146,9 +140,6 @@ public sealed class ViewStack : IDisposable {
         public Func<bool>? IsLive;
         public Vector3 LastGlow;
         public nint LastHandle;
-        // [view-timing] (armed GPU timing): this entry's most recent Resolve wall time — 0 until it has resolved at
-        // least once, or always 0 when ViewTiming.Enabled is false.
-        public long LastResolveTicks;
         public required string Name;
         public IReadOnlySet<int> WiredScreens = EmptyScreenSet;
     }
@@ -193,7 +184,7 @@ public sealed class ViewStack : IDisposable {
     // call, which is what "holds the last completed image" means for content that has no narrower recovery of its
     // own; WorldSessionView's own upload/capacity catch (this wave's other half) is the narrower, self-healing case
     // that this backstop never needs to see.
-    private static void RenderEntry(Entry entry, in ViewRenderContext context, bool timingEnabled) {
+    private static void RenderEntry(Entry entry, in ViewRenderContext context) {
         var baseline = context;
         var scoped = ((entry.WiredScreens.Count == 0)
             ? baseline
@@ -203,13 +194,6 @@ public sealed class ViewStack : IDisposable {
                 : baseline.ResolveScreenSource(arg: screenIndex))),
             })
         );
-        // [view-timing]: wall time of THIS view content's own Resolve — a camera/nested-world's offscreen submit, or a
-        // guest surface's cheap state read. Reported per-view (not tiled against anything) since views resolve at
-        // different cadences (unbudgeted every frame, budgeted round-robin).
-        var start = (timingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
 
         try {
             entry.LastHandle = entry.Content.Resolve(context: in scoped);
@@ -218,38 +202,7 @@ public sealed class ViewStack : IDisposable {
             entry.Disabled = true;
 
             Console.Error.WriteLine(value: $"[view-stack] view '{entry.Name}' ({entry.Content.GetType().Name}) threw in Resolve — disabled (holding its last resolved image, handle={entry.LastHandle}): {exception}");
-
-            return;
         }
-
-        if (timingEnabled) {
-            entry.LastResolveTicks = (Stopwatch.GetTimestamp() - start);
-        }
-    }
-    // Throttled [view-timing] digest: one line naming every LIVE view's most recent resolve time (a round-robin view
-    // not refreshed this call still shows its last real measurement, not a stale zero, since it persists in the Entry
-    // until its next refresh — the same "last resolved" contract Resolve()/ResolveGlow() already expose).
-    private void ReportViewTiming(bool timingEnabled) {
-        if (!timingEnabled) {
-            return;
-        }
-
-        m_timingFrame++;
-
-        if (
-            (m_timingFrame == 0UL) ||
-            (0UL != (m_timingFrame % ViewTiming.ReportInterval))
-        ) {
-            return;
-        }
-
-        var builder = new StringBuilder(value: "[view-timing] stack");
-
-        foreach (var entry in m_order) {
-            _ = builder.Append(value: $" | {entry.Name} {ViewTiming.Milliseconds(ticks: entry.LastResolveTicks):0.000}ms");
-        }
-
-        Console.Error.WriteLine(value: builder.ToString());
     }
 
     /// <inheritdoc/>
@@ -377,8 +330,6 @@ public sealed class ViewStack : IDisposable {
 
         m_budgetedScratch.Clear();
 
-        var timingEnabled = ViewTiming.Enabled;
-
         foreach (var entry in m_order) {
             if (entry.Disabled) {
                 continue;
@@ -389,8 +340,7 @@ public sealed class ViewStack : IDisposable {
             } else {
                 RenderEntry(
                     context: in context,
-                    entry: entry,
-                    timingEnabled: timingEnabled
+                    entry: entry
                 );
             }
         }
@@ -398,8 +348,6 @@ public sealed class ViewStack : IDisposable {
         var budgetedCount = m_budgetedScratch.Count;
 
         if (budgetedCount == 0) {
-            ReportViewTiming(timingEnabled: timingEnabled);
-
             return;
         }
 
@@ -436,15 +384,12 @@ public sealed class ViewStack : IDisposable {
 
             RenderEntry(
                 context: in context,
-                entry: entry,
-                timingEnabled: timingEnabled
+                entry: entry
             );
             rendered++;
         }
 
         m_refreshCursor = cursor;
-
-        ReportViewTiming(timingEnabled: timingEnabled);
     }
     /// <summary>The image-view handle named view <paramref name="name"/> resolved to as of the most recent
     /// <see cref="RenderFrame"/> (the frame it was last refreshed on — see the round-robin remarks), or 0 when no

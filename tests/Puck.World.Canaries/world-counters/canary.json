@@ -1,0 +1,163 @@
+{
+  "id": "world-counters",
+  "title": "world.counters gpu reports the world engine's counted work for its newest completed submission, pass by pass in order, identically on both backends",
+  "binding": "The positive leg boots a still offscreen world with one SDF view and reads the gpu section of world.counters after sixty completed ticks and again after thirty more. The world node's line in each response carries its submission, and the second read's is greater: a later submission. The world node's ten pass lines appear in pass order: upload executes one copy, of the one viewport row the frame's presentation time moved, and the work outside every pass writes that row's 96 bytes, the only host-visible write a still frame makes; sky through views read skipped because the cadence gate re-composites the still frame, and composite executes its one indirect dispatch; the work outside every pass and the node's created objects follow, with no pipeline or shader module among them, because the shared SDF pipeline cache creates and counts those under gpu.sdf-pipelines. The exact lines hold on Vulkan and Direct3D 12 alike, which is the cross-backend proof. The discriminating leg reads world.counters gpu twice before the first tick, when no submission has completed, so neither read shows a pass line and the positive's exact lines turn red.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/world-counters/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "first-read",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "first",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "second-read",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "second",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "a-later-read-sees-a-later-submission",
+        "operator": "greater",
+        "left": {
+          "value": "second"
+        },
+        "right": {
+          "value": "first"
+        }
+      },
+      {
+        "type": "lines",
+        "name": "the-world-passes-arrive-in-pass-order",
+        "stream": "stdout",
+        "match": "exact",
+        "lines": [
+          "  work upload executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=16 descriptor-writes=0 uploads.host-visible=0 clears=0",
+          "  work sky skipped",
+          "  work mask skipped",
+          "  work beam skipped",
+          "  work cull-args skipped",
+          "  work primary skipped",
+          "  work surface skipped",
+          "  work ambient skipped",
+          "  work views skipped",
+          "  work composite executed: dispatches=0 dispatches.indirect=1 draws=0 render-passes=0 command-buffers=0 barriers.image=1 barriers.memory=0 barriers.buffer=0 binds.pipeline=1 binds.descriptor-set=1 push-constants=112 descriptor-writes=0 uploads.host-visible=0 clears=0",
+          "  work outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=1 barriers.memory=1 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=96 clears=0",
+          "  work lifetime: created.pipelines=0 created.shader-modules=0 created.images=8 created.buffers=35 created.descriptor-pools=1 created.descriptor-sets=25"
+        ]
+      },
+      {
+        "type": "line",
+        "name": "composite-dispatches-indirectly-once",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "work composite executed: dispatches=0 dispatches.indirect=1 ",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/world-counters/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "both-reads-answer",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": []
+      },
+      {
+        "type": "line",
+        "name": "no-upload-pass-before-a-completion",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "work upload executed:",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-composite-pass-before-a-completion",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "work composite executed:",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-submission-before-a-completion",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "submission=",
+        "present": false
+      }
+    ]
+  }
+}

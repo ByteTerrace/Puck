@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -14,7 +15,7 @@ namespace Puck.World.Server;
 /// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
 /// look authoring may deliberately override it; ordinary admission may not.</param>
 /// <param name="Mobility">The traveler's immutable incarnation and current committed ownership epoch.</param>
-public readonly record struct WorldTransferReservationMember(WorldPrincipal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
+public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -133,7 +134,7 @@ public sealed partial class WorldTransferEscrow {
         Members = [.. request.Members],
     };
 
-    private readonly record struct MobilityAdmission(ulong Epoch, WorldPrincipal Principal);
+    private readonly record struct MobilityAdmission(ulong Epoch, Principal Principal);
     private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
 
     private readonly WorldServer m_server;
@@ -146,7 +147,7 @@ public sealed partial class WorldTransferEscrow {
     private readonly Dictionary<WorldTransferKey, Lease> m_leases = new();
     private readonly HashSet<WorldTransferKey> m_committed = new();
     private readonly Dictionary<WorldTransferKey, WorldTransferCommitMember[]> m_committedMembers = new();
-    private readonly Dictionary<WorldTransferKey, WorldPrincipal[]> m_committedPrincipals = new();
+    private readonly Dictionary<WorldTransferKey, Principal[]> m_committedPrincipals = new();
     private readonly Dictionary<WorldTransferKey, HashSet<WorldEntityAddress>> m_committedIncarnations = new();
     private readonly Dictionary<WorldEntityAddress, WorldTransferKey> m_latestCommittedTransfer = new();
     private readonly Dictionary<WorldEntityAddress, MobilityLease> m_mobilityLeases = new();
@@ -158,20 +159,6 @@ public sealed partial class WorldTransferEscrow {
     private readonly Dictionary<int, string> m_borderAdmissions = new();
 
     public WorldTransferEscrow(WorldServer server) => m_server = server;
-
-    /// <summary>One outstanding (reserved, not yet committed) lease's checkpointed state.</summary>
-    public sealed record WorldTransferLeaseCheckpoint(WorldTransferKey Key, WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, byte[] DestinationDefinitionJson, WorldAdmissionVerdict? Arrival);
-    /// <summary>One committed transfer's checkpointed member/principal/incarnation rows.</summary>
-    public sealed record WorldTransferCommittedCheckpoint(WorldTransferKey Key, WorldTransferCommitMember[] Members, WorldPrincipal[] Principals, IReadOnlyList<WorldEntityAddress> Incarnations);
-    /// <summary>The escrow's own checkpointed state — every table this row's slice owns.</summary>
-    public sealed record WorldTransferEscrowCheckpoint(
-        IReadOnlyList<WorldTransferLeaseCheckpoint> Leases,
-        IReadOnlyList<WorldTransferCommittedCheckpoint> Committed,
-        IReadOnlyList<(WorldEntityAddress Incarnation, WorldTransferKey Transfer)> LatestCommittedTransfer,
-        IReadOnlyList<(WorldEntityAddress Incarnation, WorldTransferKey Transfer, ulong ExpectedEpoch)> MobilityLeases,
-        IReadOnlyList<(string SourceAuthority, WorldEntityAddress Incarnation, ulong Epoch, WorldPrincipal Principal)> MobilityAdmissions,
-        IReadOnlyList<(int Slot, string Border)> BorderAdmissions
-    );
 
     /// <summary>Captures every table this escrow owns.</summary>
     public WorldTransferEscrowCheckpoint Capture() {
@@ -646,12 +633,14 @@ public sealed partial class WorldTransferEscrow {
             }
         }
 
-        try { return CommitLease(
+        try {
+            return CommitLease(
             key: key,
             lease: lease,
             members: members,
             reason: out reason
-        ); } finally { ReleaseLease(key: key); }
+        );
+        } finally { ReleaseLease(key: key); }
     }
 
     private bool CommitLease(WorldTransferKey key, Lease lease, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
@@ -1158,7 +1147,7 @@ public sealed partial class WorldTransferEscrow {
             key: bodyIndex,
             value: out border!
         );
-    public bool TryCommittedPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) {
+    public bool TryCommittedPrincipal(string sourceAuthority, ulong transferId, int ordinal, out Principal principal) {
         if (
             m_committedPrincipals.TryGetValue(
             key: new WorldTransferKey(
@@ -1176,7 +1165,7 @@ public sealed partial class WorldTransferEscrow {
         principal = default;
         return false;
     }
-    public bool TryMobilityPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out WorldPrincipal principal) {
+    public bool TryMobilityPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out Principal principal) {
         if (
             m_mobilityAdmissions.TryGetValue(
             key: (sourceAuthority, mobility.Incarnation),

@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using System.Text.Json;
+using Puck.Assets;
 using Puck.World;
 using Puck.World.Server;
 
@@ -9,7 +9,7 @@ namespace Puck.Cli.Automation;
 /// The outer runner independently computes the expected input hash before starting each container.</summary>
 internal static class WorldReleaseReceiptProof {
     public static string Hash(SortedDictionary<string, SortedDictionary<Guid, WorldAuthorityOperationReceipt>> inventory) =>
-        ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: JsonSerializer.SerializeToUtf8Bytes(inventory))));
+        ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(inventory)).ToString();
     public static async Task<SortedDictionary<string, SortedDictionary<Guid, WorldAuthorityOperationReceipt>>> ReadAsync(
         WorldAuthorityBlobStore store, WorldSiloDefinition definition, bool allowMissingRoots, CancellationToken token) {
         var inventory = new SortedDictionary<string, SortedDictionary<Guid, WorldAuthorityOperationReceipt>>(comparer: StringComparer.Ordinal);

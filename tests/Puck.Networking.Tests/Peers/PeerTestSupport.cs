@@ -7,10 +7,6 @@ namespace Puck.Networking.Tests.Peers;
 
 /// <summary>Shared support for a peer law: every peer runs over the real QUIC transport on loopback.</summary>
 internal static class PeerTestSupport {
-    public static readonly TimeSpan EventTimeout = TimeSpan.FromSeconds(value: 5);
-
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(value: 10);
-
     private static QuicPeerTransport NewTransport(PeerIdentity certificateOwner) => NewTransport(certificate: certificateOwner.CreateTransportCertificate());
 
     /// <summary>Dials a fresh listening peer from another fresh peer and takes the accepted link, so a law that
@@ -26,6 +22,42 @@ internal static class PeerTestSupport {
         var linkBtoA = await peerB.IncomingLinks.ReadAsync(cancellationToken: ct);
 
         return (peerA, peerB, linkAtoB, linkBtoA);
+    }
+    /// <summary>Connects two fresh peers over one <see cref="InMemoryPeerConnection"/> pair — A dials, B accepts —
+    /// and takes the accepted link, for a law that needs a transport fact loopback QUIC never shows on cue. The
+    /// caller owns both peers; <paramref name="clockA"/> is peer A's deadline clock.</summary>
+    public static async Task<(Peer PeerA, Peer PeerB, PeerLink LinkAtoB, PeerLink LinkBtoA, InMemoryPeerConnection ConnectionAtA, InMemoryPeerConnection ConnectionAtB)> ConnectInMemoryAsync(CancellationToken ct, TimeProvider? clockA = null) {
+        var identityA = PeerIdentity.Create();
+        var identityB = PeerIdentity.Create();
+
+        var (connectionAtA, connectionAtB) = InMemoryPeerConnection.Pair(
+            keyProvedByA: identityA.SubjectPublicKeyInfo,
+            keyProvedByB: identityB.SubjectPublicKeyInfo
+        );
+        var transportB = new FakePeerTransport(dial: static _ => throw new InvalidOperationException(message: "this law never dials from B"));
+        var peerA = new Peer(
+            identity: identityA,
+            timeProvider: clockA,
+            transport: new FakePeerTransport(dial: _ => connectionAtA)
+        );
+        var peerB = new Peer(
+            identity: identityB,
+            transport: transportB
+        );
+
+        await peerB.ListenAsync(
+            ct: ct,
+            endpoint: Loopback()
+        );
+        transportB.Accept(connection: connectionAtB);
+
+        var linkAtoB = await peerA.DialAsync(
+            ct: ct,
+            endpoint: Loopback(port: 2)
+        );
+        var linkBtoA = await peerB.IncomingLinks.ReadAsync(cancellationToken: ct);
+
+        return (peerA, peerB, linkAtoB, linkBtoA, connectionAtA, connectionAtB);
     }
     public static Task<IPEndPoint> ListenLoopbackAsync(Peer peer) => peer.ListenAsync(
         ct: TestContext.Current.CancellationToken,
@@ -44,8 +76,9 @@ internal static class PeerTestSupport {
     );
     /// <summary>Creates a peer over <paramref name="identity"/> whose transport certificate is minted from a
     /// different identity — a channel whose proven key is not the identity the peer offers.</summary>
-    public static Peer NewPeerWithMismatchedCertificate(PeerIdentity identity, PeerIdentity certificateOwner) => new(
+    public static Peer NewPeerWithMismatchedCertificate(PeerIdentity identity, PeerIdentity certificateOwner, TimeProvider? timeProvider = null) => new(
         identity: identity,
+        timeProvider: timeProvider,
         transport: NewTransport(certificateOwner: certificateOwner)
     );
     /// <summary>Creates a peer over <paramref name="identity"/> whose transport is tapped, so a law can write raw
@@ -67,28 +100,11 @@ internal static class PeerTestSupport {
 
         return new QuicPeerTransport(certificate: certificate);
     }
-    public static async Task<PeerEvent> NextEventAsync(PeerLink link) {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        cts.CancelAfter(delay: EventTimeout);
-
-        try {
-            return await link.Events.ReadAsync(cancellationToken: cts.Token);
-        } catch (OperationCanceledException) when (!TestContext.Current.CancellationToken.IsCancellationRequested) {
-            throw new TimeoutException(message: $"no event arrived from {link.RemoteId.Domain} within {EventTimeout}");
-        }
-    }
-    public static async Task<PeerHandshakeRefused> NextHandshakeRefusalAsync(Peer peer) {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        cts.CancelAfter(delay: EventTimeout);
-
-        try {
-            return await peer.HandshakeRefusals.ReadAsync(cancellationToken: cts.Token);
-        } catch (OperationCanceledException) when (!TestContext.Current.CancellationToken.IsCancellationRequested) {
-            throw new TimeoutException(message: $"no handshake refusal was recorded by {peer.Id.Domain} within {EventTimeout}");
-        }
-    }
+    /// <summary>Reads the next event <paramref name="link"/> publishes, bounded only by the test's own token: a law
+    /// calls this for an event that must arrive, so no wall-clock budget can decide it.</summary>
+    public static ValueTask<PeerEvent> NextEventAsync(PeerLink link) => link.Events.ReadAsync(cancellationToken: TestContext.Current.CancellationToken);
+    /// <summary>Reads the next handshake refusal <paramref name="peer"/> records, bounded only by the test's own token.</summary>
+    public static ValueTask<PeerHandshakeRefused> NextHandshakeRefusalAsync(Peer peer) => peer.HandshakeRefusals.ReadAsync(cancellationToken: TestContext.Current.CancellationToken);
     /// <summary>Writes one already-encoded-or-garbage message frame verbatim onto <paramref name="controlStream"/>,
     /// bypassing signing — the shape a refusal law needs to drive an unsigned, wrongly-signed, or tampered
     /// message onto an otherwise-honest link.</summary>
@@ -103,16 +119,6 @@ internal static class PeerTestSupport {
             kind: ((byte)PeerFrameKind.Message),
             stream: controlStream
         );
-    }
-    /// <summary>Polls until <paramref name="condition"/> holds — for a precondition a law can only observe, never
-    /// await, such as a link's event channel having filled. Bounded by <paramref name="ct"/>.</summary>
-    public static async Task WaitUntilAsync(Func<bool> condition, CancellationToken ct) {
-        while (!condition()) {
-            await Task.Delay(
-                cancellationToken: ct,
-                delay: PollInterval
-            );
-        }
     }
 }
 /// <summary>An <see cref="IPeerTransport"/> decorator that records every control stream a connection opens or

@@ -188,6 +188,63 @@ public class AlgebraSpellingLawTests {
         ));
         Assert.NotEmpty(collection: error);
     }
+    // Every refusal names its reason, whichever step of the grammar refuses: an empty quoted row name included.
+    [Theory]
+    [InlineData("board(\"\", 0..1)")]
+    [InlineData("board(\"pile, 0..1)")]
+    [InlineData("board(, 0..1)")]
+    [InlineData("board(pile 0..1)")]
+    [InlineData("board(pile, x..1)")]
+    [InlineData("board(pile, 0.1)")]
+    [InlineData("board(pile, 0..)")]
+    [InlineData("board(pile, 0..1")]
+    [InlineData("board pile")]
+    [InlineData("tile(pile, 0..1)")]
+    [InlineData("(all")]
+    [InlineData("all none")]
+    [InlineData("all |")]
+    [InlineData("~")]
+    [InlineData(" ")]
+    public void AMalformedCellSetIsRefusedWithAReason(string text) {
+        Assert.False(condition: CellSetSpelling.TryParse(
+            error: out var error,
+            expression: out var expression,
+            text: text
+        ));
+        Assert.Null(@object: expression);
+        Assert.NotEmpty(collection: error);
+    }
+    [Fact]
+    public void AnEmptyQuotedRowNameSaysWhy() {
+        Assert.False(condition: CellSetSpelling.TryParse(
+            error: out var error,
+            expression: out _,
+            text: "board(\"\", 0..1)"
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "row name between the quotes"
+        );
+    }
+    // A cell-set row name escapes its quotes and backslashes the way a pattern symbol does, through one quoting.
+    [Fact]
+    public void AQuotedRowNameReadsBackAsItWasPrinted() {
+        var expression = new CellSetExpression.Board(
+            High: 1,
+            Low: 0,
+            Row: CellName.Parse(candidate: "pile one")
+        );
+        var text = CellSetSpelling.Print(expression: expression);
+
+        Assert.Equal(
+            actual: text,
+            expected: "board(\"pile one\", 0..1)"
+        );
+        Assert.Equal(
+            text,
+            CellSetSpelling.Print(expression: Reparse(expression: expression))
+        );
+    }
     [Fact]
     public void AnNaryNodeCarryingOneItemHasNoSpelling() {
         Assert.False(condition: PatternSpelling.TryPrint(

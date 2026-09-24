@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.State;
 using Xunit;
 
@@ -8,24 +9,25 @@ public sealed class BatchMutationCodecLawTests {
     [Fact]
     public void ABatchRoundTripsWithEveryMemberKind() {
         var batch = new WorldMutation.Batch(
-            Principal: WorldPrincipal.World,
+            Principal: Principal.World,
             Mutations: [
                 new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.World,
+                    Principal: Principal.World,
                     Row: "gold",
                     Key: "$value",
                     Value: 5L,
                     Kind: WorldDocumentWriteKind.Add
                 ),
                 new WorldMutation.RemoveStateCell(
-                    Principal: WorldPrincipal.World,
+                    Principal: Principal.World,
                     Row: "hand",
                     Key: "7"
                 ),
                 new WorldMutation.TransformState(
-                    WorldPrincipal.World,
-                    new StateTransform.Push(
+                    Principal.World,
+                    new StateTransform.WriteSet(
                         Row: "history",
+                        Set: "mask",
                         Value: 3L
                     )
                 ),
@@ -65,24 +67,24 @@ public sealed class BatchMutationCodecLawTests {
             "hand",
             Assert.IsType<WorldMutation.RemoveStateCell>(@object: round.Mutations[1]).Row
         );
-        var push = Assert.IsType<StateTransform.Push>(@object: Assert.IsType<WorldMutation.TransformState>(@object: round.Mutations[2]).Transform);
+        var write = Assert.IsType<StateTransform.WriteSet>(@object: Assert.IsType<WorldMutation.TransformState>(@object: round.Mutations[2]).Transform);
 
         Assert.Equal(
-            ("history", 3L),
-            (push.Row, push.Value)
+            ("history", "mask", 3L),
+            (write.Row.Spelling, write.Set.Spelling, write.Value)
         );
     }
     [Fact]
     public void GuardsRoundTripAndNestedActorsCannotEscalate() {
         var member = new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             "gold",
             "$value",
             1,
             WorldDocumentWriteKind.Add
         );
         var valid = new WorldMutation.Batch(
-            WorldPrincipal.Console,
+            Principal.Console,
             [member],
             new string(
                 c: 'A',
@@ -90,7 +92,7 @@ public sealed class BatchMutationCodecLawTests {
             ),
             [new WorldStateExpectation(
                     Change: 1,
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Key: null,
                     Kind: CellKind.Int,
                     Row: "gold",
@@ -143,7 +145,7 @@ public sealed class BatchMutationCodecLawTests {
             valid.ExpectedSpatialReads,
             round.ExpectedSpatialReads
         );
-        var wrongActor = valid with { Principal = WorldPrincipal.Seat(slot: 0) };
+        var wrongActor = valid with { Principal = Principal.Seat(slot: 0) };
 
         Assert.False(condition: WorldSubmissionCodec.TryEncodeMutation(
             bytes: out _,

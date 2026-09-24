@@ -11,6 +11,28 @@ namespace Puck.World.Tests;
 /// refuses by name. Every claim pairs a denied case with a one-value-different passing control.
 /// </summary>
 public sealed class WorldRowFieldStepperLawTests {
+    // Steps one field, asserting the stepper admits it and reports the field's text before and after.
+    private static void AssertSteps(float delta, string expectedNew, string expectedOld, string fieldPath, JsonNode root) {
+        Assert.True(condition: WorldRowFieldStepper.TryStep(
+            delta: delta,
+            error: out var error,
+            fieldPath: fieldPath,
+            newText: out var newText,
+            oldText: out var oldText,
+            root: root,
+            rowType: typeof(TestRow)
+        ));
+        Assert.Null(@object: error);
+        Assert.Equal(
+            actual: oldText,
+            expected: expectedOld
+        );
+        Assert.Equal(
+            actual: newText,
+            expected: expectedNew
+        );
+    }
+
     private enum TestMode {
         Alpha,
         Beta,
@@ -77,23 +99,12 @@ public sealed class WorldRowFieldStepperLawTests {
     public void BooleanField_TogglesOnAnyNonzeroDelta(float delta) {
         var row = Row(enabled: false);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(
+        AssertSteps(
             delta: delta,
-            error: out var error,
+            expectedNew: "true",
+            expectedOld: "false",
             fieldPath: "enabled",
-            newText: out var newText,
-            oldText: out var oldText,
-            root: row,
-            rowType: typeof(TestRow)
-        ));
-        Assert.Null(@object: error);
-        Assert.Equal(
-            actual: oldText,
-            expected: "false"
-        );
-        Assert.Equal(
-            actual: newText,
-            expected: "true"
+            root: row
         );
         Assert.True(condition: ((bool)row["enabled"]!));
     }
@@ -101,23 +112,12 @@ public sealed class WorldRowFieldStepperLawTests {
     public void DoubleField_AddsFractionalDelta() {
         var row = Row(ratio: 1.5);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(
+        AssertSteps(
             delta: 0.25f,
-            error: out var error,
+            expectedNew: "1.75",
+            expectedOld: "1.5",
             fieldPath: "ratio",
-            newText: out var newText,
-            oldText: out var oldText,
-            root: row,
-            rowType: typeof(TestRow)
-        ));
-        Assert.Null(@object: error);
-        Assert.Equal(
-            actual: oldText,
-            expected: "1.5"
-        );
-        Assert.Equal(
-            actual: newText,
-            expected: "1.75"
+            root: row
         );
     }
     [Fact]
@@ -165,23 +165,12 @@ public sealed class WorldRowFieldStepperLawTests {
     public void EnumField_PositiveDeltaCyclesForwardAndWraps() {
         var row = Row(mode: TestMode.Gamma);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(
+        AssertSteps(
             delta: 1f,
-            error: out var error,
+            expectedNew: "Alpha",
+            expectedOld: "Gamma",
             fieldPath: "mode",
-            newText: out var newText,
-            oldText: out var oldText,
-            root: row,
-            rowType: typeof(TestRow)
-        ));
-        Assert.Null(@object: error);
-        Assert.Equal(
-            actual: oldText,
-            expected: "Gamma"
-        );
-        Assert.Equal(
-            actual: newText,
-            expected: "Alpha"
+            root: row
         );
     }
     [Fact]
@@ -244,46 +233,24 @@ public sealed class WorldRowFieldStepperLawTests {
         // `8`), so keying on the JSON kind would take an integer step (8 + 0.5 -> 9). The CLR type is authoritative.
         var row = RowWithRatioLiteral(ratioJson: "8");
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(
+        AssertSteps(
             delta: 0.5f,
-            error: out var error,
+            expectedNew: "8.5",
+            expectedOld: "8",
             fieldPath: "ratio",
-            newText: out var newText,
-            oldText: out var oldText,
-            root: row,
-            rowType: typeof(TestRow)
-        ));
-        Assert.Null(@object: error);
-        Assert.Equal(
-            actual: oldText,
-            expected: "8"
-        );
-        Assert.Equal(
-            actual: newText,
-            expected: "8.5"
+            root: row
         );
     }
     [Fact]
     public void IndexedArrayElementField_Steps() {
         var row = Row(items: [10L, 20L, 30L]);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(
+        AssertSteps(
             delta: 5f,
-            error: out var error,
+            expectedNew: "25",
+            expectedOld: "20",
             fieldPath: "items[1].count",
-            newText: out var newText,
-            oldText: out var oldText,
-            root: row,
-            rowType: typeof(TestRow)
-        ));
-        Assert.Null(@object: error);
-        Assert.Equal(
-            actual: oldText,
-            expected: "20"
-        );
-        Assert.Equal(
-            actual: newText,
-            expected: "25"
+            root: row
         );
         // The untouched neighbors are unaffected.
         Assert.Equal(
@@ -329,23 +296,12 @@ public sealed class WorldRowFieldStepperLawTests {
     public void IntegerField_AddsDeltaAndReportsOldNew() {
         var row = Row(count: 3L);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(
+        AssertSteps(
             delta: 4f,
-            error: out var error,
+            expectedNew: "7",
+            expectedOld: "3",
             fieldPath: "count",
-            newText: out var newText,
-            oldText: out var oldText,
-            root: row,
-            rowType: typeof(TestRow)
-        ));
-        Assert.Null(@object: error);
-        Assert.Equal(
-            actual: oldText,
-            expected: "3"
-        );
-        Assert.Equal(
-            actual: newText,
-            expected: "7"
+            root: row
         );
         Assert.Equal(
             expected: 7L,
@@ -358,23 +314,12 @@ public sealed class WorldRowFieldStepperLawTests {
         // to 100000000 (a silent no-op). Integer arithmetic keeps the current value exact.
         var row = Row(count: 100_000_000L);
 
-        Assert.True(condition: WorldRowFieldStepper.TryStep(
+        AssertSteps(
             delta: 1f,
-            error: out var error,
+            expectedNew: "100000001",
+            expectedOld: "100000000",
             fieldPath: "count",
-            newText: out var newText,
-            oldText: out var oldText,
-            root: row,
-            rowType: typeof(TestRow)
-        ));
-        Assert.Null(@object: error);
-        Assert.Equal(
-            actual: oldText,
-            expected: "100000000"
-        );
-        Assert.Equal(
-            actual: newText,
-            expected: "100000001"
+            root: row
         );
     }
     [Fact]

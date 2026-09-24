@@ -1,3 +1,6 @@
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Imports
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 /*
     The single source of truth for ByteTerrace access-management data, shared by
     main.bicepparam (nested under resources.accessManagement) and the standalone
@@ -13,6 +16,9 @@ import {
   roleAssignmentType
 } from './accessManagement.bicep'
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Functions
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 @export()
 func byteTerraceAccessManagementGroups() groupType[] => [
   {
@@ -100,4 +106,3 @@ func byteTerraceAccessManagementRoleAssignments(prefix string, partitionCount in
       }
     ]
   )
-

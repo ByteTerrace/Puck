@@ -46,11 +46,7 @@ public static class TopologyCompilation {
                 key: cell.Id,
                 value: index
             );
-            centres[index] = new FixedVector3(
-                X: FixedQ4816.FromDouble(value: cell.Centre.X),
-                Y: FixedQ4816.FromDouble(value: cell.Centre.Y),
-                Z: FixedQ4816.FromDouble(value: cell.Centre.Z)
-            );
+            centres[index] = FixedVector3.FromVector3(value: cell.Centre);
         }
         var slots = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var directionNames = new string[directionCount];

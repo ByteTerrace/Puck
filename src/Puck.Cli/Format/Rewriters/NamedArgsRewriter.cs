@@ -1,10 +1,12 @@
+using System.Collections.Immutable;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Puck.Cli.Format.Rewriters;
 
-// The named-argument normalizer (the `named-args` pass). SEMANTIC: it resolves each call's method symbol
+// The named-argument normalizer (the `named-args` pass). Semantic: it resolves each call's method symbol
 // to read parameter names, so it runs against a Compilation (NamedArgsPhase) rather than the syntactic
 // pipeline. Every real method/ctor call gets its arguments named (`name: value`) and sorted
 // alphabetically by parameter name — the house convention. A call written fully named is already past
@@ -14,9 +16,16 @@ namespace Puck.Cli.Format.Rewriters;
 // separator, or when the sort would move a side-effecting argument (see ExpressionSafety) — the cases
 // where naming-and-reordering is unsafe or ambiguous. An out/ref/in keyword rides with its argument
 // (named arguments allow it: `value: out x`). A call whose target has a [DynamicallyAccessedMembers]
-// parameter is named but NEVER sorted: ILLink's trim dataflow binds arguments to parameters by
-// POSITION even when they are named, so moving the annotated argument out of its declared slot turns
+// parameter is named but never sorted: ILLink's trim dataflow binds arguments to parameters by
+// position even when they are named, so moving the annotated argument out of its declared slot turns
 // a clean build into IL2072 under IsAotCompatible.
+//
+// A rewrite may never move a call to another overload, so the named and reordered argument list is
+// speculatively re-bound before it is emitted and dropped unless it still resolves to the same method
+// symbol. Naming makes overloads applicable that the written positions excluded, and alphabetizing can do
+// the same, so agreement is checked rather than assumed. Unresolved code needs no separate guard: an
+// invocation whose arguments or receiver carry an error type resolves to candidates rather than to a
+// symbol, which the symbol check above already declines.
 internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
     private readonly SemanticModel m_model;
 
@@ -29,6 +38,164 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
     private static bool HasTrimAnnotation(IParameterSymbol parameter) => parameter.GetAttributes().Any(predicate: static attribute =>
         ((attribute.AttributeClass is { Name: "DynamicallyAccessedMembersAttribute" } attributeClass)
         && (attributeClass.ContainingNamespace.ToDisplayString() == "System.Diagnostics.CodeAnalysis")));
+    // The written arguments carrying their parameter names, permuted into `order`. The same construction
+    // produces the emitted list and the list the speculative re-bind is run against, so the two can never
+    // disagree about which name lands on which expression.
+    private static ArgumentSyntax[] NameAndOrder(SeparatedSyntaxList<ArgumentSyntax> arguments, ImmutableArray<IParameterSymbol> parameters, int[] order) {
+        var named = new ArgumentSyntax[arguments.Count];
+
+        for (var index = 0; (index < arguments.Count); index++) {
+            // An already-named argument is carried as written — its name colon and expression are already
+            // in house shape; only its slot (and that slot's trivia) may move.
+            named[index] = ((arguments[index].NameColon is not null)
+                ? arguments[index]
+                : WithParameterName(
+                    argument: arguments[index],
+                    parameterName: parameters[index].Name
+                )
+            );
+        }
+
+        return Array.ConvertAll(
+            array: order,
+            converter: index => named[index]
+        );
+    }
+    // A parameter declared as a verbatim identifier (`object? @object`) has the bare keyword as its symbol
+    // name; written back without the `@` it is a keyword again, not an argument name. The token therefore
+    // carries the escaped spelling as its text and the parameter's own name as its value — binding reads
+    // the value, so a token built from the escaped spelling alone matches no parameter. An out/ref/in
+    // keyword rides with its argument, which named arguments allow (`value: out x`).
+    private static ArgumentSyntax WithParameterName(ArgumentSyntax argument, string parameterName) {
+        var identifier = SyntaxFactory.Identifier(
+            leading: default,
+            contextualKind: SyntaxKind.IdentifierToken,
+            text: ((SyntaxFacts.GetKeywordKind(text: parameterName) != SyntaxKind.None)
+            ? $"@{parameterName}"
+            : parameterName),
+            trailing: default,
+            valueText: parameterName
+        );
+
+        return SyntaxFactory.Argument(
+            expression: argument.Expression.WithoutLeadingTrivia().WithoutTrailingTrivia(),
+            nameColon: SyntaxFactory
+                .NameColon(name: SyntaxFactory.IdentifierName(identifier: identifier))
+                .WithColonToken(colonToken: SyntaxFactory.Token(kind: SyntaxKind.ColonToken).WithTrailingTrivia(trivia: SyntaxFactory.Space)),
+            refKindKeyword: (argument.RefKindKeyword.IsKind(kind: SyntaxKind.None)
+                ? default
+                : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space)
+            )
+        );
+    }
+    // True when the rewritten call still resolves to `method`. The probe is built from the call's own
+    // expressions so only the names and their order differ from what is already bound; a target-typed
+    // `new(...)` is probed through its resolved type, because speculative binding carries no target type.
+    // An object or collection initializer is dropped from the probe: it cannot change which constructor is
+    // chosen, and it can reference members the speculative position does not see. A call anywhere inside a `?.`
+    // chain (`x?.M(...)`, `x?.y!.M(...)`) binds only within that access, so it is re-bound in place.
+    private bool BindsToSameMethod(SyntaxNode originalCall, IMethodSymbol method, ArgumentListSyntax arguments) {
+        if (
+            (originalCall is InvocationExpressionSyntax bound) &&
+            (ConditionalAccessRoot(node: bound) is not null)
+        ) {
+            return SymbolEqualityComparer.Default.Equals(
+                x: SpeculativeSymbolInPlace(
+                    arguments: arguments,
+                    call: bound
+                ),
+                y: method
+            );
+        }
+
+        ExpressionSyntax? probe = originalCall switch {
+            InvocationExpressionSyntax invocation => invocation.WithArgumentList(argumentList: arguments),
+            ObjectCreationExpressionSyntax creation => creation.WithArgumentList(argumentList: arguments).WithInitializer(initializer: null),
+            ImplicitObjectCreationExpressionSyntax => SyntaxFactory.ObjectCreationExpression(
+            argumentList: arguments,
+            initializer: null,
+            type: SyntaxFactory.ParseTypeName(text: method.ContainingType.ToDisplayString(format: SymbolDisplayFormat.FullyQualifiedFormat))
+        ),
+            _ => null,
+        };
+
+        return ((probe is not null)
+            && SymbolEqualityComparer.Default.Equals(
+            x: m_model.GetSpeculativeSymbolInfo(
+                position: originalCall.SpanStart,
+                expression: probe,
+                bindingOption: SpeculativeBindingOption.BindAsExpression
+            ).Symbol,
+            y: method
+        ));
+    }
+    // Binds the call with its argument list replaced, in place: the enclosing statement, expression body, or initializer
+    // is re-bound speculatively with the swap made, and the swapped call's symbol is read back. Null when the call sits
+    // somewhere no speculative model can be rooted, which leaves it positional.
+    private ISymbol? SpeculativeSymbolInPlace(InvocationExpressionSyntax call, ArgumentListSyntax arguments) {
+        var marker = new SyntaxAnnotation();
+        var replacement = call.WithArgumentList(argumentList: arguments).WithAdditionalAnnotations(marker);
+
+        foreach (var ancestor in call.Ancestors()) {
+            SemanticModel? speculative = null;
+            SyntaxNode? rooted = null;
+
+            switch (ancestor) {
+                case StatementSyntax statement when m_model.TryGetSpeculativeSemanticModel(
+                    position: statement.SpanStart,
+                    speculativeModel: out speculative,
+                    statement: ((StatementSyntax)(rooted = statement.ReplaceNode(
+                        newNode: replacement,
+                        oldNode: call
+                    )))
+                ):
+                case ArrowExpressionClauseSyntax arrow when m_model.TryGetSpeculativeSemanticModel(
+                    expressionBody: ((ArrowExpressionClauseSyntax)(rooted = arrow.ReplaceNode(
+                        newNode: replacement,
+                        oldNode: call
+                    ))),
+                    position: arrow.SpanStart,
+                    speculativeModel: out speculative
+                ):
+                case EqualsValueClauseSyntax initializer when m_model.TryGetSpeculativeSemanticModel(
+                    initializer: ((EqualsValueClauseSyntax)(rooted = initializer.ReplaceNode(
+                        newNode: replacement,
+                        oldNode: call
+                    ))),
+                    position: initializer.SpanStart,
+                    speculativeModel: out speculative
+                ):
+                    var swapped = rooted!.GetAnnotatedNodes(syntaxAnnotation: marker).Single();
+
+                    return speculative!.GetSymbolInfo(node: swapped).Symbol;
+                case MemberDeclarationSyntax:
+                    return null;
+            }
+        }
+
+        return null;
+    }
+    // The outermost conditional access whose `WhenNotNull` chain holds the node: `a?.b?.M()` nests one access
+    // inside the other's `WhenNotNull`, and only the outermost carries a receiver that binds on its own.
+    private static ConditionalAccessExpressionSyntax? ConditionalAccessRoot(SyntaxNode node) {
+        ConditionalAccessExpressionSyntax? root = null;
+        var current = node;
+
+        while (current.Parent is { } parent) {
+            if (
+                (parent is ConditionalAccessExpressionSyntax access) &&
+                access.WhenNotNull.Span.Contains(span: current.Span)
+            ) {
+                root = access;
+            } else if (root is not null) {
+                break;
+            }
+
+            current = parent;
+        }
+
+        return root;
+    }
     // SemanticModel only accepts nodes from its own syntax tree. Child visits may have rebuilt the
     // argument list already, so evaluation-safety is always inspected on the original bound call.
     private static SeparatedSyntaxList<ArgumentSyntax> OriginalArguments(SyntaxNode call) => call switch {
@@ -61,7 +228,7 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
         var namedCount = arguments.Count(predicate: static argument => (argument.NameColon is not null));
 
         // A partly named call is declined: naming its positional remainder needs the argument-to-
-        // parameter mapping the mix obscures. A FULLY named call is only sorted, never renamed.
+        // parameter mapping the mix obscures. A fully named call is only sorted, never renamed.
         if (
             (arguments.Count != parameters.Length) ||
             parameters.Any(predicate: static parameter => parameter.IsParams) ||
@@ -70,7 +237,7 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
             return null;
         }
 
-        // Trivia is reassigned by SLOT while the arguments move — separators included — so a comment
+        // Trivia is reassigned by slot while the arguments move — separators included — so a comment
         // written above one argument, or after one argument's comma, would end up documenting whichever
         // argument lands in that slot. Leave the call positional.
         if (RewriteShaping.IsAnnotated(list: arguments)) {
@@ -104,62 +271,51 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
             return null;
         }
 
-        // Content (name + expression) is built per ORIGINAL position, then reordered; the per-slot trivia
-        // is reassigned afterwards so the call's existing single-line or one-argument-per-line layout
-        // survives the reorder unchanged. An out/ref/in keyword is carried with its argument (named args
-        // allow it: `value: out x`).
-        var entries = new (string Name, ArgumentSyntax Argument)[arguments.Count];
+        // Slots are addressed by original position and then permuted; the per-slot trivia is reassigned
+        // afterwards so the call's existing single-line or one-argument-per-line layout survives the
+        // reorder unchanged.
+        var order = Enumerable.Range(
+            count: arguments.Count,
+            start: 0
+        ).ToArray();
 
-        for (var index = 0; (index < arguments.Count); index++) {
-            var argument = arguments[index];
-
-            // An already-named argument is carried as written — its name colon and expression are
-            // already in house shape; only its slot (and that slot's trivia) may move.
-            if (argument.NameColon is not null) {
-                entries[index] = (writtenNames[index], argument);
-
-                continue;
-            }
-
-            // A parameter declared as a verbatim identifier (`object? @object`) has the bare keyword as its
-            // symbol name; written back without the `@` it is a keyword again, not an argument name.
-            var parameterName = parameters[index].Name;
-            var identifier = ((SyntaxFacts.GetKeywordKind(text: parameterName) != SyntaxKind.None)
-                ? $"@{parameterName}"
-                : parameterName
-            );
-            var nameColon = SyntaxFactory
-                .NameColon(name: SyntaxFactory.IdentifierName(name: identifier))
-                .WithColonToken(colonToken: SyntaxFactory.Token(kind: SyntaxKind.ColonToken).WithTrailingTrivia(trivia: SyntaxFactory.Space));
-            var refKind = (argument.RefKindKeyword.IsKind(kind: SyntaxKind.None)
-                ? default
-                : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space)
-            );
-            var bareExpression = argument.Expression.WithoutLeadingTrivia().WithoutTrailingTrivia();
-
-            entries[index] = (parameters[index].Name, SyntaxFactory.Argument(
-                expression: bareExpression,
-                nameColon: nameColon,
-                refKindKeyword: refKind
-            ));
+        if (sortable) {
+            order = [.. order.OrderBy(
+                keySelector: index => writtenNames[index],
+                comparer: StringComparer.Ordinal
+            )];
         }
 
-        var ordered = (sortable
-            ? entries
-                .OrderBy(
-                keySelector: static entry => entry.Name,
-                comparer: StringComparer.Ordinal
-            )
-                .Select(selector: static entry => entry.Argument)
-                .ToArray()
-            : Array.ConvertAll(
-                array: entries,
-                converter: static entry => entry.Argument
-            )
-        );
+        // A call that is already fully named and already in order has nothing to rewrite, so it never
+        // reaches the re-bind probe.
+        if (
+            (namedCount == arguments.Count) &&
+            order.SequenceEqual(second: Enumerable.Range(
+            count: arguments.Count,
+            start: 0
+        ))
+        ) {
+            return null;
+        }
+
+        if (!BindsToSameMethod(
+            arguments: SyntaxFactory.ArgumentList(arguments: SyntaxFactory.SeparatedList(nodes: NameAndOrder(
+                arguments: originalArguments,
+                order: order,
+                parameters: parameters
+            ))),
+            method: method,
+            originalCall: originalCall
+        )) {
+            return null;
+        }
 
         return visitedList.WithArguments(arguments: RewriteShaping.ReorderInPlace(
-            ordered: ordered,
+            ordered: NameAndOrder(
+                arguments: arguments,
+                order: order,
+                parameters: parameters
+            ),
             original: arguments
         ));
     }

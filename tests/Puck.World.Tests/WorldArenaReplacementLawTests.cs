@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -16,7 +17,7 @@ public sealed class WorldArenaReplacementLawTests {
 
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "bag",
             Key: "fresh-member",
             Value: 1L,
@@ -49,7 +50,7 @@ public sealed class WorldArenaReplacementLawTests {
         var keyBytes = arena.Keys.Bytes;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name: Name(value: "added"),
                 Kind: CellKind.Int,
@@ -81,7 +82,7 @@ public sealed class WorldArenaReplacementLawTests {
         var keyBytes = before.Keys.Bytes;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name: Name(value: "added"),
                 Kind: CellKind.Int,
@@ -94,7 +95,7 @@ public sealed class WorldArenaReplacementLawTests {
         fixture.Step();
 
         Assert.NotSame(expected: before, actual: fixture.Server.Arena);
-        Assert.True(condition: fixture.Server.Arena.Keys.TryResolve(name: orphan, key: out _));
+        Assert.True(condition: fixture.Server.Arena.Keys.TryResolve(key: out _, name: orphan));
         Assert.Equal(expected: keyCount, actual: fixture.Server.Arena.Keys.Count);
         Assert.Equal(expected: keyBytes, actual: fixture.Server.Arena.Keys.Bytes);
         Assert.NotNull(@object: WorldDefinitionRows.FindStateRow(

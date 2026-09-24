@@ -252,7 +252,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             return CommandResult.Error(output: error);
         }
 
-        var acting = context.ActingPrincipal();
+        var acting = context.Principal;
 
         if (
             (acting.Kind == PrincipalKind.Seat) &&

@@ -148,26 +148,26 @@ public static class WorldStateDocumentValues {
     private static Traversal Plan(Type type) => TraversalCache.GetOrAdd(
         key: type,
         valueFactory: static type => {
-        if (!CanContainValue(
-            exactType: true,
-            path: [],
-            type: type
-        )) {
+            if (!CanContainValue(
+                exactType: true,
+                path: [],
+                type: type
+            )) {
+                return new Traversal(
+                    Properties: [],
+                    Skip: true
+                );
+            }
             return new Traversal(
-                Properties: [],
-                Skip: true
-            );
-        }
-        return new Traversal(
-            Skip: false,
-            Properties: (typeof(IEnumerable).IsAssignableFrom(c: type)
-            ? []
-            : [.. Properties(type: type).Where(predicate: static property => CanContainValue(
+                Skip: false,
+                Properties: (typeof(IEnumerable).IsAssignableFrom(c: type)
+                ? []
+                : [.. Properties(type: type).Where(predicate: static property => CanContainValue(
                         type: property.PropertyType,
                         path: []
                     ))])
-        );
-    }
+            );
+        }
     );
     private static PropertyInfo[] Properties(Type type) => PropertyCache.GetOrAdd(
         key: type,
@@ -203,11 +203,7 @@ public static class WorldStateDocumentValues {
                 return true;
             }
 
-            if (!WorldColor.TryParseBinding(
-                key: out var key,
-                row: out var row,
-                value: reference
-            )) {
+            if (StateBinding.Parse(token: reference) is not (var row, var key, _)) {
                 // A reference that names no row is still a reference the document retains: a search for any reference
                 // finds it, so its holder is resolved and refused by name rather than read as though it held a value.
                 if (walk == Walk.Find) {
@@ -235,13 +231,13 @@ public static class WorldStateDocumentValues {
 
             if (!WorldStateReader.TryRead(
                 definition: definition,
+                engineTick: 0UL,
                 key: key,
                 rawValue: out var rawValue,
                 row: out var stateRow,
                 rowName: row,
                 text: out var text,
-                tick: 0UL,
-                engineTick: 0UL
+                tick: 0UL
             )) {
                 reason = $"{path} reference '{reference}' must name a declared state cell";
                 return false;
@@ -559,12 +555,13 @@ public static class WorldStateDocumentValues {
     /// <returns><see langword="true"/> when every reference in the copy resolved.</returns>
     public static bool TryRehydrate(WorldDefinition definition, out WorldDefinition refreshed, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        WorldBootWork.Count(kind: WorldBootWork.Parses);
 
         try {
-            refreshed = (JsonSerializer.Deserialize(
+            refreshed = ((JsonSerializer.Deserialize(
                 utf8Json: WorldDefinitionSerialization.Serialize(definition: definition),
                 jsonTypeInfo: WorldJsonContext.Default.WorldDefinition
-            ) ?? throw new InvalidOperationException(message: "the refreshed world definition deserialized to null."));
+            ) ?? throw new InvalidOperationException(message: "the refreshed world definition deserialized to null.")) with { DocumentDirectory = definition.DocumentDirectory });
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
             refreshed = definition;
             reason = exception.Message.ReplaceLineEndings(replacementText: " ");

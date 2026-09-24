@@ -1,5 +1,5 @@
 {
-  "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
+  "basis": "../../../src/Puck.World/Assets/worlds/standard",
   "bodies": {
     "capacity": 4,
     "localSeats": 2
@@ -69,7 +69,7 @@
   },
   "imports": [
     {
-      "document": "../../../src/Puck.World/Assets/worlds/games/arena.world.json"
+      "document": "../../../src/Puck.World/Assets/worlds/games/arena"
     }
   ],
   "kits": {

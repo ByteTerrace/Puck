@@ -32,6 +32,12 @@
         <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <!-- The camera frame converter's conversion kernels, compiled to cs_5_0 DXBC beside the source at build
+             (CompileDirect3D11Kernels in build/Shaders.targets) and shipped as content: a camera device creates them
+             and compiles nothing. -->
+        <Direct3D11KernelSource Include="Assets\Shaders\camera-conversion.hlsl" Entries="packed;planar;infrared" />
+    </ItemGroup>
+    <ItemGroup>
         <Using Include="Puck.Abstractions.Capture" />
         <Using Include="Puck.Abstractions.Memory" />
         <Using Include="Puck.Abstractions.Pacing" />

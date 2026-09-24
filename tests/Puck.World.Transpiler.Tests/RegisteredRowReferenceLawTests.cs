@@ -7,7 +7,8 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 /// <summary>CONTRACT UNDER TEST: the reference lint resolves a state row's name wherever
-/// <see cref="WorldNameRegistry"/> says a document holds one. Each probe is built from a registered site's own
+/// <see cref="WorldNameRegistry"/> says a document holds one, and a declared cell set's name wherever it says a
+/// document holds a set of positions. Each probe is built from a registered site's own
 /// path, so a member registered later is held here without an edit.</summary>
 public class RegisteredRowReferenceLawTests {
     private const string Missing = "missingRow";
@@ -34,8 +35,8 @@ public class RegisteredRowReferenceLawTests {
 
             if (index == (segments.Length - 1)) {
                 Assert.Equal(
-                    string.Empty,
-                    suffix
+                    actual: suffix,
+                    expected: string.Empty
                 );
                 holder[member] = (asList
                     ? new JsonArray(name)
@@ -60,7 +61,7 @@ public class RegisteredRowReferenceLawTests {
             }
             if (isElement) {
                 holder[member] ??= new JsonArray(next);
-                next = (JsonObject)((JsonArray)holder[member]!)[0]!;
+                next = ((JsonObject)((JsonArray)holder[member]!)[0]!);
             } else {
                 holder[member] ??= next;
             }
@@ -108,7 +109,7 @@ public class RegisteredRowReferenceLawTests {
         foreach (var site in WorldNameRegistry.Sites) {
             if (
                 (site.Field.Role != WorldNameRole.Names) ||
-                (site.Field.Kind is not (WorldNameKind.State or WorldNameKind.Zone)) ||
+                (site.Field.Kind is not (WorldNameKind.State or WorldNameKind.Zone or WorldNameKind.Positions)) ||
                 site.Path.Contains(value: '{') ||
                 site.Path.Contains(value: '…') ||
                 !seen.Add(item: (site.Field.Owner, site.Field.Member))
@@ -119,15 +120,14 @@ public class RegisteredRowReferenceLawTests {
             var type = site.Field.Owner.GetProperty(name: site.Field.Member)!.PropertyType;
 
             data.Add(
-                site.Path,
-                $"{site.Field.Owner.Name}.{site.Field.Member}",
-                ((type != typeof(string)) && typeof(IEnumerable).IsAssignableFrom(c: type))
+                p1: site.Path,
+                p2: $"{site.Field.Owner.Name}.{site.Field.Member}",
+                p3: ((type != typeof(string)) && typeof(IEnumerable).IsAssignableFrom(c: type))
             );
         }
 
         return data;
     }
-
     [MemberData(nameof(Sites))]
     [Theory]
     public void ARowNameNothingDeclaresIsReportedAtEveryRegisteredSiteAndADeclaredOneIsNot(string path, string member, bool asList) {
@@ -194,6 +194,44 @@ public class RegisteredRowReferenceLawTests {
             PuckDiagnosticCodes.LintUnresolvedPlacementParent,
             refusal.Code
         );
+    }
+    [Fact]
+    public void ASetOfPositionsSiteResolvesADeclaredCellSetAndNothingElse() {
+        const string Contested = "contested";
+        var sites = WorldNameRegistry.Sites.Where(predicate: static site =>
+            ((site.Field.Kind == WorldNameKind.Positions) &&
+            (site.Field.Role == WorldNameRole.Names) &&
+            !site.Path.Contains(value: '{') &&
+            !site.Path.Contains(value: '…'))
+        ).ToList();
+
+        Assert.NotEmpty(collection: sites);
+
+        foreach (var site in sites) {
+            var undeclared = Probe(
+                asList: false,
+                name: Contested,
+                path: site.Path
+            );
+            var declared = Probe(
+                asList: false,
+                name: Contested,
+                path: site.Path
+            );
+
+            declared["sets"] = new JsonArray(new JsonObject {
+                ["name"] = Contested,
+                ["set"] = new JsonObject {
+                    ["$type"] = "all",
+                },
+            });
+
+            Assert.Single(collection: Unresolved(document: undeclared));
+            Assert.True(
+                condition: (Unresolved(document: declared).Count == 0),
+                userMessage: $"{site.Path} reports a set the document declares"
+            );
+        }
     }
     [Fact]
     public void TheRegistryListsSitesForTheLawToHold() =>

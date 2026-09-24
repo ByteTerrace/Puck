@@ -71,7 +71,7 @@ public static partial class PuckParser {
                 }
 
                 // Identifiers / keywords
-                if (char.IsLetter(c: c) || (c == '_') || (c == '$')) {
+                if (IdentifierSpelling.IsStart(character: c) || (c == IdentifierSpelling.Sigil)) {
                     if ((braceDepth == 0) && TryMatchKeyword(context: context, keyword: "schema")) {
                         SkipWhiteSpace(context: context);
                         if (TryConsume(c: ':', context: context)) {
@@ -275,6 +275,33 @@ public static partial class PuckParser {
             return new ErrorStatementNode(ex.Message, startOffset, len, line, col);
         }
     }
+    // Recovers a rule-body statement one level inside the rule's own '{', mirroring ParseStatement above. Recovering
+    // here rather than letting a fault escape to ParseStatement's own catch matters: that catch resynchronizes
+    // assuming it sits at the block it started in, so a fault surfacing there from one level inside a rule body
+    // leaves the rule's own closing '}' unconsumed for the document loop to mis-report as a second, spurious
+    // "unexpected closing brace" (ParseFaultReportLawTests). Defined in PuckParser.Rules.cs: ParseRuleBodyStatementCore.
+    private static StatementNode ParseRuleBodyStatement(ParseContext context, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        var startOffset = cursor.Offset;
+
+        var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
+
+        try {
+            return ParseRuleBodyStatementCore(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
+        } catch (Exception ex) when ((diagnostics is not null)) {
+            var (code, offset, faultLine, faultCol) = (((ex as PuckParseException) is { } pex)
+                ? (pex.Code, pex.Offset, pex.Line, pex.Column)
+                : (PuckDiagnosticCodes.Syntax, startOffset, line, col)
+            );
+
+            diagnostics.ReportError(code: code, message: ex.Message, span: new SourceSpan(offset, Math.Max(val1: 1, val2: (cursor.Offset - offset)), faultLine, faultCol));
+            SynchronizeToStatementBoundary(context: context);
+
+            return new ErrorStatementNode(ex.Message, startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col);
+        }
+    }
     private static StatementNode ParseStatementCore(ParseContext context, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null) {
         SkipWhiteSpace(context: context);
         var cursor = context.Scanner.Cursor;
@@ -283,9 +310,24 @@ public static partial class PuckParser {
 
         var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
 
+        // `entry world name = module(...)` marks the world a composition boots; `entry` alone is an ordinary name.
+        var entry = false;
+
+        if (TryMatchKeyword(context: context, keyword: "entry")) {
+            SkipWhiteSpace(context: context);
+            var worldPosition = cursor.Position;
+
+            if (TryMatchKeyword(context: context, keyword: "world")) {
+                cursor.ResetPosition(position: worldPosition);
+                entry = true;
+            } else {
+                cursor.ResetPosition(position: startPosition);
+            }
+        }
+
         if (TryMatchKeyword(context: context, keyword: "world")) {
             SkipWhiteSpace(context: context);
-            if (cursor.Current is ':' or '[' or '{') {
+            if (!entry && (cursor.Current is ':' or '[' or '{')) {
                 cursor.ResetPosition(position: startPosition);
             } else {
                 var name = ParseExpression(context: context);
@@ -297,7 +339,7 @@ public static partial class PuckParser {
                 if (ParseExpression(context: context) is not CallExpressionNode module) {
                     throw CreateException(context: context, message: "Expected module invocation after '='");
                 }
-                return new WorldDeclarationNode(name, module, startOffset, (cursor.Offset - startOffset), line, col);
+                return new WorldDeclarationNode(name, module, entry, startOffset, (cursor.Offset - startOffset), line, col);
             }
         }
 
@@ -368,15 +410,7 @@ public static partial class PuckParser {
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var moduleName)) {
                 throw CreateException(context: context, message: "Expected module name after 'use'");
             }
-            while (true) {
-                SkipWhiteSpace(context: context);
-                if (!TryConsume(c: '.', context: context)) { break; }
-                SkipWhiteSpace(context: context);
-                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
-                    throw CreateException(context: context, message: "Expected module name after '.'");
-                }
-                moduleName += $".{member}";
-            }
+            moduleName = ReadDottedIdentifier(context: context, expectedAfterDotMessage: "Expected module name after '.'", initialName: moduleName);
             string? alias = null;
 
             SkipWhiteSpace(context: context);
@@ -426,17 +460,8 @@ public static partial class PuckParser {
             var facetExplicit = (facet is "read" or "reads" or "action" or "actions" or "binding" or "bindings");
 
             if (!facetExplicit) {
-                var exportName = facet;
+                var exportName = ReadDottedIdentifier(context: context, expectedAfterDotMessage: "Expected export name after '.'", initialName: facet);
 
-                while (true) {
-                    SkipWhiteSpace(context: context);
-                    if (!TryConsume(c: '.', context: context)) { break; }
-                    SkipWhiteSpace(context: context);
-                    if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
-                        throw CreateException(context: context, message: "Expected export name after '.'");
-                    }
-                    exportName += $".{member}";
-                }
                 names.Add(item: exportName);
                 facet = "read";
                 SkipWhiteSpace(context: context);
@@ -445,15 +470,7 @@ public static partial class PuckParser {
                     if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var nextName)) {
                         throw CreateException(context: context, message: "Expected export name after ','");
                     }
-                    while (true) {
-                        SkipWhiteSpace(context: context);
-                        if (!TryConsume(c: '.', context: context)) { break; }
-                        SkipWhiteSpace(context: context);
-                        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
-                            throw CreateException(context: context, message: "Expected export name after '.'");
-                        }
-                        nextName += $".{member}";
-                    }
+                    nextName = ReadDottedIdentifier(context: context, expectedAfterDotMessage: "Expected export name after '.'", initialName: nextName);
                     names.Add(item: nextName);
                     SkipWhiteSpace(context: context);
                 }
@@ -713,7 +730,7 @@ public static partial class PuckParser {
         }
 
         // Identifier or string starting token
-        if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out var firstId)) {
+        if (!TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var firstSpelling, text: out var firstId)) {
             throw CreateException(context: context, message: $"Unexpected token '{cursor.Current}' while parsing statement");
         }
 
@@ -762,7 +779,7 @@ public static partial class PuckParser {
                 return ParseEmbeddedBlock(col: col, context: context, diagnostics: diagnostics, language: firstId, line: line, startOffset: startOffset);
             }
 
-            return ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+            return (ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary) with { IdentifierQuoted = firstSpelling.Quoted });
         }
 
         // Bare keyword statement: `firstId` ended its own line, so nothing can belong to it — e.g. the `solid`
@@ -784,7 +801,7 @@ public static partial class PuckParser {
                 if (cursor.Current == '{') {
                     var interpolated = ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
 
-                    return (interpolated with { NameExpression = nameExpr });
+                    return (interpolated with { IdentifierQuoted = firstSpelling.Quoted, NameExpression = nameExpr });
                 }
             }
 
@@ -798,7 +815,7 @@ public static partial class PuckParser {
         if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var secondSpelling, text: out var secondId)) {
             SkipWhiteSpace(context: context);
             if (cursor.Current == '{') {
-                return (ParseBlock(context, identifier: firstId, name: secondId, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics) with { NameQuoted = secondSpelling.Quoted });
+                return (ParseBlock(context, identifier: firstId, name: secondId, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics) with { IdentifierQuoted = firstSpelling.Quoted, NameQuoted = secondSpelling.Quoted });
             }
 
             if ((cursor.Current == '$') && (cursor.PeekNext() == '"')) {
@@ -808,7 +825,7 @@ public static partial class PuckParser {
                     if (cursor.Current == '{') {
                         var interpolated = ParseBlock(context, identifier: firstId, name: null, target: secondId, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
 
-                        return (interpolated with { NameExpression = targetedName });
+                        return (interpolated with { IdentifierQuoted = firstSpelling.Quoted, NameExpression = targetedName });
                     }
                 }
 
@@ -818,7 +835,7 @@ public static partial class PuckParser {
             if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var thirdSpelling, text: out var thirdId)) {
                 SkipWhiteSpace(context: context);
                 if (cursor.Current == '{') {
-                    return (ParseBlock(context, identifier: firstId, name: thirdId, target: secondId, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics) with { NameQuoted = thirdSpelling.Quoted });
+                    return (ParseBlock(context, identifier: firstId, name: thirdId, target: secondId, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics) with { IdentifierQuoted = firstSpelling.Quoted, NameQuoted = thirdSpelling.Quoted });
                 }
             }
         }
@@ -846,7 +863,9 @@ public static partial class PuckParser {
         );
     }
     // `for item in sequence { … }` and `for (item, index) in sequence { … }`.
-    private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null) {
+    // `body` parses one statement of the loop's body where the loop stands somewhere other than a document block,
+    // such as a rule group's body; null parses document statements.
+    private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null, Func<ParseContext, DiagnosticBag?, StatementNode?>? body = null) {
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);
@@ -895,12 +914,14 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Expected '{' starting a 'for' body");
         }
 
-        var body = new List<StatementNode>();
+        var statements = new List<StatementNode>();
 
         SkipWhiteSpace(context: context);
 
         while (!cursor.Eof && (cursor.Current != '}')) {
-            body.Add(item: ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary));
+            if (((body is null) ? ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary) : body(arg1: context, arg2: diagnostics)) is { } statement) {
+                statements.Add(item: statement);
+            }
             ConsumeSeparator(context: context);
             SkipWhiteSpace(context: context);
         }
@@ -909,7 +930,7 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Expected '}' closing a 'for' body");
         }
 
-        return new ForStatementNode(item, index, sequence, body, startOffset, (cursor.Offset - startOffset), line, col);
+        return new ForStatementNode(item, index, sequence, statements, startOffset, (cursor.Offset - startOffset), line, col);
     }
     private static BlockNode ParseBlock(ParseContext context, string identifier, string? name, string? target, int startOffset, int line, int col, DiagnosticBag? diagnostics = null, string? schema = null, IDocumentVocabulary? vocabulary = null) {
         if (!TryConsume(c: '{', context: context)) {
@@ -1132,207 +1153,6 @@ public static partial class PuckParser {
         }
         SkipWhiteSpace(context: context);
     }
-    private static ExpressionNode ParseExpression(ParseContext context) {
-        if (TryParseLambda(context: context) is { } lambda) {
-            return lambda;
-        }
-
-        return ParseComparisonExpression(context: context);
-    }
-    // Comparisons sit above the range so `0..4` still reads as one span, and produce a boolean — the shape
-    // `filter`'s lambda is written to return.
-    private static ExpressionNode ParseComparisonExpression(ParseContext context) {
-        var left = ParseRangeExpression(context: context);
-
-        SkipWhiteSpace(context: context);
-
-        var matched = LongestMatchingPunctuation(context.Scanner.Buffer, context.Scanner.Cursor.Offset, ComparisonOperators);
-
-        if (matched is null) {
-            return left;
-        }
-
-        context.Scanner.Cursor.Advance(count: matched.Length);
-
-        var right = ParseRangeExpression(context: context);
-
-        return new BinaryExpressionNode(Left: left, Operator: matched, Right: right, Offset: left.Offset, Length: (context.Scanner.Cursor.Offset - left.Offset), Line: left.Line, Column: left.Column);
-    }
-    // `item => body` and `(running, item) => body`. Tried before anything else an expression could be, and rewound
-    // when the arrow is absent, because the parameter list is indistinguishable from an ordinary operand until it
-    // arrives: `(a, b)` alone is a parenthesized expression and `item` alone is an identifier.
-    private static ExpressionNode? TryParseLambda(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var savedPosition = cursor.Position;
-
-        SkipWhiteSpace(context: context);
-
-        var startOffset = cursor.Offset;
-
-        var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
-        var parameters = new List<string>();
-
-        if (cursor.Current == '(') {
-            cursor.Advance();
-            SkipWhiteSpace(context: context);
-
-            while (!cursor.Eof && (cursor.Current != ')')) {
-                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var parameter)) {
-                    cursor.ResetPosition(position: savedPosition);
-
-                    return null;
-                }
-
-                parameters.Add(item: parameter);
-                SkipWhiteSpace(context: context);
-
-                if (cursor.Current == ',') {
-                    cursor.Advance();
-                    SkipWhiteSpace(context: context);
-                }
-            }
-
-            if (!TryConsume(c: ')', context: context)) {
-                cursor.ResetPosition(position: savedPosition);
-
-                return null;
-            }
-        } else if (TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var single)) {
-            parameters.Add(item: single);
-        } else {
-            cursor.ResetPosition(position: savedPosition);
-
-            return null;
-        }
-
-        SkipWhiteSpace(context: context);
-
-        if ((cursor.Current != '=') || (cursor.PeekNext() != '>')) {
-            cursor.ResetPosition(position: savedPosition);
-
-            return null;
-        }
-
-        cursor.Advance(count: 2);
-
-        var body = ParseExpression(context: context);
-
-        return new LambdaExpressionNode(Parameters: parameters, Body: body, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
-    }
-
-    // Longest-first, so a scan never reads "<=" as "<".
-    private static readonly string[] ComparisonOperators = ["==", "!=", "<=", ">=", "<", ">"];
-
-    private static ExpressionNode ParseRangeExpression(ParseContext context) {
-        SkipWhiteSpace(context: context);
-        var cursor = context.Scanner.Cursor;
-
-        if ((cursor.Current == '.') && (cursor.PeekNext() == '.')) {
-            var startOffset = cursor.Offset;
-
-            var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
-
-            cursor.Advance(count: 2);
-            SkipWhiteSpace(context: context);
-            var right = ((cursor.Current is ')' or ',')
-                ? null
-                : ParseAdditiveExpression(context: context)
-            );
-
-            return new RangeExpressionNode(Start: null, End: right, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
-        }
-
-        var left = ParseAdditiveExpression(context: context);
-
-        SkipWhiteSpace(context: context);
-
-        if ((context.Scanner.Cursor.Current == '.') && (context.Scanner.Cursor.PeekNext() == '.')) {
-            context.Scanner.Cursor.Advance(count: 2);
-            SkipWhiteSpace(context: context);
-            var right = ((context.Scanner.Cursor.Current is ')' or ',')
-                ? null
-                : ParseAdditiveExpression(context: context)
-            );
-            var len = (context.Scanner.Cursor.Offset - left.Offset);
-
-            return new RangeExpressionNode(Start: left, End: right, Offset: left.Offset, Length: len, Line: left.Line, Column: left.Column);
-        }
-
-        return left;
-    }
-    private static ExpressionNode ParseAdditiveExpression(ParseContext context) {
-        var left = ParseMultiplicativeExpression(context: context);
-
-        while (true) {
-            SkipWhiteSpace(context: context);
-            var cur = context.Scanner.Cursor.Current;
-
-            if ((cur != '+') && (cur != '-')) {
-                break;
-            }
-
-            var op = cur.ToString();
-
-            context.Scanner.Cursor.Advance();
-            var right = ParseMultiplicativeExpression(context: context);
-            var len = (context.Scanner.Cursor.Offset - left.Offset);
-
-            left = new BinaryExpressionNode(Left: left, Operator: op, Right: right, Offset: left.Offset, Length: len, Line: left.Line, Column: left.Column);
-        }
-
-        return left;
-    }
-    private static ExpressionNode ParseMultiplicativeExpression(ParseContext context) {
-        var left = ParseUnaryExpression(context);
-
-        while (true) {
-            SkipWhiteSpace(context: context);
-            var cur = context.Scanner.Cursor.Current;
-
-            if ((cur != '*') && (cur != '/') && (cur != '%')) {
-                break;
-            }
-
-            var op = cur.ToString();
-
-            context.Scanner.Cursor.Advance();
-            var right = ParseUnaryExpression(context);
-            var len = (context.Scanner.Cursor.Offset - left.Offset);
-
-            left = new BinaryExpressionNode(Left: left, Operator: op, Right: right, Offset: left.Offset, Length: len, Line: left.Line, Column: left.Column);
-        }
-
-        return left;
-    }
-    // A sign in front of anything that is not a number: `-spread`, `-scale(2)`, `-(a + b)`. A number keeps its own
-    // signed-literal reader (ParsePrimaryExpression), because folding the sign into the literal is what lets a unit
-    // suffix read against the value it signs; intercepting `-1.5m` here would sign a unit-converted quantity instead.
-    private static ExpressionNode ParseUnaryExpression(ParseContext context, int depth = 0) {
-        if (depth >= 64) { throw CreateException(context: context, message: "Unary expressions nest at most 64 levels"); }
-        SkipWhiteSpace(context: context);
-        var cursor = context.Scanner.Cursor;
-
-        if (cursor.Current is not ('-' or '+')) {
-            return ParsePostfixExpression(context: context);
-        }
-
-        var next = cursor.PeekNext();
-
-        if (char.IsDigit(c: next) || (next == '.')) {
-            return ParsePostfixExpression(context: context);
-        }
-
-        var startOffset = cursor.Offset;
-
-        var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
-        var op = cursor.Current.ToString();
-
-        cursor.Advance();
-
-        var operand = ParseUnaryExpression(context: context, depth: (depth + 1));
-
-        return new UnaryExpressionNode(Operator: op, Operand: operand, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
-    }
     private static ExpressionNode ParsePostfixExpression(ParseContext context) {
         var expr = ParsePrimaryExpression(context: context);
 
@@ -1380,8 +1200,8 @@ public static partial class PuckParser {
                 expr = ParseCallExpression(context, identExpr.Name, identExpr.Offset, identExpr.Line, identExpr.Column);
                 continue;
             }
-            if ((cur == '(') && (expr is MemberAccessExpressionNode memberCall) && TryQualifiedName(expression: memberCall, name: out var qualifiedName)) {
-                expr = ParseCallExpression(context, qualifiedName, memberCall.Offset, memberCall.Line, memberCall.Column);
+            if ((cur == '(') && (expr is MemberAccessExpressionNode memberCall) && (QualifiedName.From(expression: memberCall) is { } qualifiedName)) {
+                expr = ParseCallExpression(context, qualifiedName.ToString(), memberCall.Offset, memberCall.Line, memberCall.Column);
                 continue;
             }
 
@@ -1389,24 +1209,6 @@ public static partial class PuckParser {
         }
 
         return expr;
-    }
-    private static bool TryQualifiedName(MemberAccessExpressionNode expression, out string name) {
-        var members = new Stack<string>();
-        ExpressionNode current = expression;
-
-        while (current is MemberAccessExpressionNode member) {
-            members.Push(item: member.Member);
-            current = member.Target;
-        }
-        if (current is not IdentifierExpressionNode identifier) {
-            name = string.Empty;
-            return false;
-        }
-        name = identifier.Name;
-        while (members.TryPop(result: out var member)) {
-            name += $".{member}";
-        }
-        return true;
     }
     private static ExpressionNode ParsePrimaryExpression(ParseContext context) {
         SkipWhiteSpace(context: context);
@@ -1464,7 +1266,7 @@ public static partial class PuckParser {
         }
 
         // Number literal: integer or decimal, optionally negative
-        if (char.IsDigit(c: cursor.Current) || (((cursor.Current == '-') || (cursor.Current == '+')) && (char.IsDigit(c: cursor.PeekNext()) || (cursor.PeekNext() == '.')))) {
+        if (char.IsDigit(c: cursor.Current) || ((cursor.Current == '-') && (char.IsDigit(c: cursor.PeekNext()) || (cursor.PeekNext() == '.')))) {
             return ParseNumberWithOptionalUnit(context: context);
         }
 
@@ -1500,8 +1302,6 @@ public static partial class PuckParser {
 
         if (cursor.Current == '-') {
             isNegative = true;
-            cursor.Advance();
-        } else if (cursor.Current == '+') {
             cursor.Advance();
         }
 
@@ -1798,13 +1598,46 @@ public static partial class PuckParser {
         if (nextOffset < cursor.Buffer.Length) {
             var nextChar = cursor.Buffer[nextOffset];
 
-            if (char.IsLetterOrDigit(c: nextChar) || (nextChar == '_') || (nextChar == '$')) {
+            if (IdentifierSpelling.IsPart(character: nextChar)) {
                 return false;
             }
         }
 
         cursor.Advance(count: keyword.Length);
         return true;
+    }
+    private static bool TryMatchKeywordFollowedByName(ParseContext context, string keyword, NameForms admitted) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+
+        if (TryMatchKeyword(context: context, keyword: keyword) && SkipSpacesOnLine(context: context)) {
+            if (TryReadName(admitted: admitted, context: context, spelling: out _, text: out _)) {
+                cursor.ResetPosition(position: saved);
+
+                return TryMatchKeyword(context: context, keyword: keyword);
+            }
+        }
+
+        cursor.ResetPosition(position: saved);
+
+        return false;
+    }
+    private static string ReadDottedIdentifier(ParseContext context, string initialName, string expectedAfterDotMessage) {
+        var result = initialName;
+
+        while (true) {
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: '.', context: context)) {
+                break;
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
+                throw CreateException(context: context, message: expectedAfterDotMessage);
+            }
+            result += $".{member}";
+        }
+
+        return result;
     }
     private static bool TryConsume(ParseContext context, char c) {
         SkipWhiteSpace(context: context);
@@ -1869,8 +1702,9 @@ public static partial class PuckParser {
             var span = new SourceSpan(start, (cursor.Offset - start), line, column);
 
             var operand = CreateOperand(column: column, form: form, length: span.Length, line: line, offset: start, text: text);
+
             if (form == DocumentValueForm.Expression) {
-                ValidateOperand(operand, owned.Diagnostics);
+                operand = ValidateOperand(operand, owned.Diagnostics);
             } else {
                 var respelled = ExpressionSpelling.ToSourceDialect(text: text);
 
@@ -1925,6 +1759,7 @@ public static partial class PuckParser {
         var held = ScanOperandSpan(context: context, sawComparator: out _, stopAtComparator: false, stopKeywords: null);
 
         var operand = CreateOperand(column: column, form: DocumentValueForm.Unclassified, length: (cursor.Offset - position.Offset), line: line, offset: position.Offset, text: held);
+
         if ((held.Length > 0) && (operand.Syntax is not null)) {
             return operand;
         }
@@ -2011,7 +1846,6 @@ public static partial class PuckParser {
         ("local", "rule", PuckDiagnosticCodes.DecisionStructure, false),
         ("interrupt", "decision", PuckDiagnosticCodes.DecisionStructure, false),
         ("push", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
-        ("countdown", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
         ("remove", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
         ("schedule", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
     ];
@@ -2034,7 +1868,7 @@ public static partial class PuckParser {
             if (!string.Equals(a: identifier, b: keyword, comparisonType: StringComparison.Ordinal)) {
                 continue;
             }
-            var shapeMatches = (quoted ? (next == '"') : (char.IsLetter(c: next) || (next is '_' or '$' or '`')));
+            var shapeMatches = (quoted ? (next == '"') : (IdentifierSpelling.IsStart(character: next) || (next is IdentifierSpelling.Sigil or '`')));
 
             if (!shapeMatches) {
                 return;

@@ -36,13 +36,12 @@ public static class RuleDataflow {
 
         foreach (var token in (tokens ?? [])) {
             token.Operand?.CollectReads(into: into);
+            // A fold reads every cell of its one row, whatever cells the row was authored with.
             if (token.Fold is { } fold) {
-                for (var ordinal = fold.RowOrdinal; (ordinal < (fold.RowOrdinal + fold.Members)); ordinal++) {
-                    into.Add(item: new CellAccess(
-                        Key: default,
-                        RowOrdinal: ordinal
-                    ));
-                }
+                into.Add(item: new CellAccess(
+                    Key: default,
+                    RowOrdinal: fold.RowOrdinal
+                ));
 
                 CollectExpression(
                     into: into,
@@ -80,6 +79,7 @@ public static class RuleDataflow {
             tokens: tokens
         );
     }
+
     private static void CollectExpressionFacts(CompiledExpressionToken[]? tokens, RuleNeedsBuilder into, bool includeKeyDependencies) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
@@ -123,6 +123,7 @@ public static class RuleDataflow {
             }
         }
     }
+
     /// <summary>Appends every state cell a compiled gate reads.</summary>
     /// <param name="gate">The compiled postfix gate.</param>
     /// <param name="into">The read set being collected.</param>

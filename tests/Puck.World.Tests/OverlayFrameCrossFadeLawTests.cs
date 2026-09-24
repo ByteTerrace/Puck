@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Puck.Hosting;
 using Puck.Overlays;
 
 using Xunit;
@@ -217,14 +218,14 @@ public sealed class OverlayFrameCrossFadeLawTests {
     }
 
     private sealed class FixedFrameSources(int refuseKey) : IOverlayFrameSources {
-        public bool TryAcquire(int key, out OverlayFrameLease lease) {
+        public bool TryAcquire(int key, out GpuImageLease lease) {
             if (key == refuseKey) {
                 lease = default;
 
                 return false;
             }
 
-            lease = new OverlayFrameLease(
+            lease = new GpuImageLease(
                 ImageViewHandle: (key + 1),
                 Release: static _ => { },
                 ReleaseToken: key

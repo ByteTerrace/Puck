@@ -16,7 +16,7 @@
         "type": "string"
       },
       "as": {
-        "description": "The alias, or null to compose the fragment\u0027s names unchanged. An alias is a bare identifier \u2014 a letter or underscore, then letters, digits, and underscores \u2014 so an aliased name still lexes as one bare name inside an infix expression and still parses as a CellName (TryValidateAlias).",
+        "description": "The alias, or null to compose the fragment\u0027s names unchanged. An alias is a bare identifier \u2014 a letter or underscore, then letters, digits, and underscores \u2014 so it heads the generated name alias$name each of the fragment\u0027s declarations composes as, and a source reads it as alias.name (TryValidateAlias).",
         "type": [
           "string",
           "null"

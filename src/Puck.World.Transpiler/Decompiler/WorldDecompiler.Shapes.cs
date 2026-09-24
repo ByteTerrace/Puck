@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Vocabulary;
 
@@ -14,12 +15,12 @@ public static partial class WorldDecompiler {
     // description. A row missing one is a basis-merge patch (an `{ id, ... }` row naming only the facets it
     // overrides on a base document's shape) and prints through the generic value path rather than having a type
     // guessed from its name.
-    private static readonly IReadOnlyList<string> ShapeRequiredKeys = WorldConstructs.Table.TryGet(
+    private static readonly IReadOnlyList<string> ShapeRequiredKeys = (WorldConstructs.Table.TryGet(
         construct: out var shapeConstruct,
         keyword: "shape"
     )
         ? shapeConstruct!.RequiredKeys
-        : throw new InvalidOperationException(message: "'shape' is not a described construct.");
+        : throw new InvalidOperationException(message: "'shape' is not a described construct."));
 
     private static bool CanSugarShapes(JsonArray shapes) {
         foreach (var item in shapes) {
@@ -76,7 +77,7 @@ public static partial class WorldDecompiler {
         if (name is not null) {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
-                $"{indent}shape {type} \"{EscapeString(s: name)}\" {{"
+                $"{indent}shape {type} {PuckStrings.Write(value: name)} {{"
             );
         } else {
             sb.AppendLine(

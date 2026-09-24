@@ -1,0 +1,154 @@
+/*
+  Files | editor | outline on one raised surface, at one fixed height: each pane scrolls inside itself, so opening a
+  file, a diagnostic arriving, or the outline filling in never moves anything around it. Below the large breakpoint
+  the outline folds under the editor; on a phone the three stack, each keeping its own height.
+*/
+
+.workspace {
+  --source-height: clamp(rem(420px), 70dvh, rem(820px));
+
+  display: grid;
+  grid-template-columns: rem(224px) minmax(0, 1fr) rem(224px);
+  height: var(--source-height);
+  border: 1px solid var(--puck-line);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--puck-surface-raised);
+  overflow: clip;
+}
+
+.files,
+.outline {
+  min-width: 0;
+  min-height: 0;
+  padding: var(--mantine-spacing-md) var(--mantine-spacing-xs);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.files {
+  border-inline-end: 1px solid var(--puck-line);
+}
+
+.outline {
+  border-inline-start: 1px solid var(--puck-line);
+}
+
+.editorPane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  min-width: 0;
+  height: rem(32px);
+  padding-inline: var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--puck-line);
+}
+
+.path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.editorFrame {
+  min-height: 0;
+  padding: var(--mantine-spacing-xs);
+}
+
+.editor {
+  height: 100%;
+
+  & :global(.cm-editor) {
+    height: 100%;
+  }
+}
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: rem(2px);
+}
+
+.directory {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-xs) rem(2px);
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+}
+
+/* Every row reserves the mark's width, so a file gaining unsaved changes shifts nothing. */
+.changed {
+  display: inline-block;
+  width: 1ch;
+  color: var(--mantine-color-anchor);
+  text-align: center;
+}
+
+.symbols {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.symbol {
+  display: block;
+  width: 100%;
+  padding-block: rem(4px);
+  padding-inline-end: var(--mantine-spacing-xs);
+  overflow: hidden;
+  border-radius: var(--mantine-radius-sm);
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  @mixin hover {
+    color: var(--mantine-color-text);
+    background-color: color-mix(in oklab, var(--mantine-color-text) 5%, transparent);
+  }
+}
+
+@mixin smaller-than $mantine-breakpoint-lg {
+  .workspace {
+    grid-template-columns: rem(208px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) rem(160px);
+    height: calc(var(--source-height) + rem(160px));
+  }
+
+  .files {
+    grid-row: 1 / -1;
+  }
+
+  .outline {
+    border-inline-start: 0;
+    border-top: 1px solid var(--puck-line);
+  }
+}
+
+@mixin smaller-than $mantine-breakpoint-sm {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: rem(160px) var(--source-height) rem(160px);
+    height: auto;
+  }
+
+  .files {
+    grid-row: auto;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--puck-line);
+  }
+}

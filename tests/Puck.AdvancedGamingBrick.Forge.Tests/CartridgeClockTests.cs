@@ -7,17 +7,75 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers the battery-backed clock reaching authored state.</summary>
 public sealed class CartridgeClockTests {
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
+    // The two machines carry different clocks, so each refuses the other's fields rather than inventing a value.
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "a clock step without a clock",
+            Document: Bad(target: "cgb") with { Rules = [new CartridgeRule(
+                    Name: "r",
+                    Body: [new CartridgeStatement(Kind: "clock")]
+                )] },
+            Path: "rules[0].body[0]",
+            Fragment: "requires a declared clock"
+        ),
+        new(
+            Name: "an unknown slot",
+            Document: Bad(target: "cgb") with { Clock = new CartridgeClock(
+                Seconds: "missing",
+                Minutes: null,
+                Hours: null,
+                Days: null
+            ) },
+            Path: "clock.seconds",
+            Fragment: "Unknown state variable"
+        ),
+        new(
+            Name: "a clock filling nothing",
+            Document: Bad(target: "cgb") with { Clock = new CartridgeClock(
+                Seconds: null,
+                Minutes: null,
+                Hours: null,
+                Days: null
+            ) },
+            Path: "clock",
+            Fragment: "at least one state slot"
+        ),
+        new(
+            Name: "a day count on the advanced machine",
+            Document: Bad(target: "agb") with { Clock = new CartridgeClock(
+                Seconds: "x",
+                Minutes: null,
+                Hours: null,
+                Days: "x"
+            ) },
+            Path: "clock.days",
+            Fragment: "calendar date rather than a day count"
+        ),
+        new(
+            Name: "a calendar month on the colour machine",
+            Document: Bad(target: "cgb") with { Clock = new CartridgeClock(
+                Seconds: "x",
+                Minutes: null,
+                Hours: null,
+                Days: null,
+                Month: "x"
+            ) },
+            Path: "clock.month",
+            Fragment: "calendar month needs the advanced machine"
+        ),
+    ];
 
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    private static CartridgeDocument Bad(string target) => CartridgeDocuments.Create(
+        target: target,
+        title: "CLOCKBAD"
+    ) with {
+        Variables = [new CartridgeVariable(
+            Name: "x",
+            Initial: 0
+        )],
+    };
 
     [Fact]
     public void AClockStepFillsTheNamedSlots() {
@@ -229,84 +287,22 @@ public sealed class CartridgeClockTests {
         );
         var first = machine.ReadByte(address: result.Variables["sec"]);
 
-        machine.RunFrames(
-            frames: 140,
-            keys: AgbKeys.None
+        // Within two seconds of frames the reading must move, or the read is returning a frozen value.
+        machine.RunFramesUntil(
+            awaited: "the seconds reading moving",
+            keys: AgbKeys.None,
+            limit: 140,
+            until: running => (running.ReadByte(address: result.Variables["sec"]) != first)
         );
-
-        // Over two seconds of frames the reading must have moved, or the read is returning a frozen value.
         Assert.NotEqual(
             expected: first,
             actual: machine.ReadByte(address: result.Variables["sec"])
         );
     }
-    [Fact]
-    public void ValidationGatesTheClockOnDeclarationAndTarget() {
-        var document = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "CLOCKBAD"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "x",
-                Initial: 0
-            )],
-        };
-
-        Refuses(
-            document: document with { Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [new CartridgeStatement(Kind: "clock")]
-                )] },
-            fragment: "requires a declared clock"
-        );
-        Refuses(
-            document: document with { Clock = new CartridgeClock(
-                Seconds: "missing",
-                Minutes: null,
-                Hours: null,
-                Days: null
-            ) },
-            fragment: "Unknown state variable"
-        );
-        Refuses(
-            document: document with { Clock = new CartridgeClock(
-                Seconds: null,
-                Minutes: null,
-                Hours: null,
-                Days: null
-            ) },
-            fragment: "at least one state slot"
-        );
-
-        // The two machines carry different clocks, so each refuses the other's fields rather than inventing a value.
-        var advanced = CartridgeDocuments.Create(
-            target: "agb",
-            title: "CLOCKAGB"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "x",
-                Initial: 0
-            )],
-        };
-
-        Refuses(
-            document: advanced with { Clock = new CartridgeClock(
-                Seconds: "x",
-                Minutes: null,
-                Hours: null,
-                Days: "x"
-            ) },
-            fragment: "calendar date rather than a day count"
-        );
-        Refuses(
-            document: document with { Clock = new CartridgeClock(
-                Seconds: "x",
-                Minutes: null,
-                Hours: null,
-                Days: null,
-                Month: "x"
-            ) },
-            fragment: "calendar month needs the advanced machine"
-        );
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationGatesTheClockOnDeclarationAndTarget(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

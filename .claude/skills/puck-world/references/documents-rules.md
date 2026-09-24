@@ -1,6 +1,6 @@
 # The `rules` section
 
-Part of [`puck.world.def.v1`](documents.md). Field names, defaults, and the
+Part of [`puck.world.definition.v1`](documents.md). Field names, defaults, and the
 `ActionPredicate`/`ActionEffect` `$type` union list are generated
 (`puck schema`, or `Assets/worlds/schema/rules.schema.json`); this file is the
 decision/derivation prose the schema cannot state.
@@ -9,14 +9,18 @@ decision/derivation prose the schema cannot state.
 world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
 `ActionTriggerMode` primitive a kit's per-body actions use, one level up.
 Optional deliberately: a new REQUIRED section would refuse every existing
-document at boot for declaring nothing. Only `all`/`any`/`not`/`compareState`
-predicates and `setState`/`addState`/`generate`/`pose`/`save`/`if`
-effects are admissible at world scope — plus,
-each admitting an EXISTING `WorldMutation` kind into the rule effect set (riding
-the exact seam `generate` proved, never a new door), `upsertHudPanel`/
+document at boot for declaring nothing. The admissible predicates and effects
+are the generated `$type` lists: the state engine's own (`ActionPredicate`,
+`ActionEffect`) plus the world arms `WorldFactsVocabulary` registers, among
+them `pose`, `save`, and, each admitting an EXISTING `WorldMutation` kind into
+the rule effect set (never a new door), `upsertHudPanel`/
 `removeHudPanel` (a world-scoped HUD row) and `upsertPlacement`/`removePlacement`
-(a placement row); the rest read or write per-body state (velocity/impulse/
-designate/timer) and are refused BY NAME by `WorldFactsCompiler`. `pose` is the
+(a placement row). The four body-motion effects — `setVerticalVelocity`,
+`scaleVerticalVelocity`, `planarImpulse`, `designate` — are one operation in a
+kit's action and a rule: a kit's action acts on its own body, a rule names the
+body with `key` and refuses a `target`, and both lower through
+`WorldBodyEffects`. `startTimer` writes a kit's own timer slot and is refused BY
+NAME by `WorldFactsCompiler`. `pose` is the
 rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 `position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two),
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
@@ -56,20 +60,20 @@ A placement's `parent` composes its frame over another's, and a
 `board`-named Grid topology anchors its origin to that placement. `$local:<name>` reads a value the
 enclosing rule's `locals` list computed for this evaluation (feed-forward,
 declared order, never stored). Any `expression`/`left`/`right`/`score`/affinity
-member accepts an infix string (`"min(damage, hp[$each]) * 2"`, C precedence,
+member accepts an infix string (`"minimum(damage, hp[$each]) * 2"`, C precedence,
 named forms as calls, `row[key]`/`row.key` reads (the dot form takes exactly one
 dot on an unreserved, unquoted name — a reserved or backquoted name never
 splits at a dot), `$table:t:col[key]` and nested
 `buffs[minion[$each]]` (the `$cell:` indirection), backquoted names, `0x`
 literals) as
 well as the postfix `{ "tokens": [...] }` object; the string parses to the same
-tokens (`ExpressionSpelling`) and writes back as a string. Beside arithmetic, comparison, bit ops, `select`,
-and the board ops, the call vocabulary carries one Maths family per prefix: `pair(x, y)`/`pairX`/`pairY` and
+tokens (`ExpressionSpelling`) and writes back as a string. Beside arithmetic, comparison, bit ops, the conditional
+`c ? a : b`, and the board ops, the call vocabulary carries one Maths family per prefix: `pair(x, y)`/`pairX`/`pairY` and
 the Szudzik algebra (`pairSwap`, `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
 `pairScale`); `morton`/`mortonX`/`mortonY`; `hilbert(order, x, y)`/`hilbertX`/`hilbertY`; the hex family
 over `HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`, `hexDistance`, `hexNeighbor`,
 `hexRotate`, `hexMirror`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`); the
-square family over `SquareIndex` on the same spellings (`square(x, y)`, `squareX`/`squareY`, `squareRadius`
+square family over `SquareIndex` on the same spellings (`squareIndex(x, y)`, `squareX`/`squareY`, `squareRadius`
 (Chebyshev), `squareLength`/`squareDistance` (Manhattan), `squareChebyshev`, `squareNeighbor` E/N/W/S,
 `squareRotate` quarter turns, …) — a shell-ordered index over Z², not a grid topology's row-major ordinal, so a
 grid cell still bridges through `%`/`/` or `$board:offset`; `gcd`/`lcm` (`gcd(dx, dy) == 1` is a lattice line
@@ -96,29 +100,34 @@ truncation (`(pit - 1) % 14` reads -1), so a circular index is `mod(pit - 1, 14)
 arithmetic shift that drags the sign bit through a mask with bit 63 set, so a bitboard shifts with `>>>`;
 `pair(x, y)` admits components up to 3,037,000,498 (a hash or a Q48.16 raw does not pair); a Gödel multiset
 holds the first 15 primes at count one (their product is 6.1e17) and overflows at the 16th (`* 53`), and every
-count multiplies, so cap the row or the item set; `$board:mask`/`writeSet` stop at 64 cells while a topology
-admits 4,096 — a wider board's set algebra is the `boardCombine` transform (and/or/xor/andNot/not/shift/image
-over whole board rows, one journaled mutation each); a `transfer` of `count > 1` takes `first`/`last`/`random`,
+count multiplies, so cap the row or the item set; `$board:mask` and `writeSet` from an Int mask stop at 64 cells
+while a topology admits 4,096 — a wider board's set algebra is the `boardCombine` transform (and/or/xor/andNot/not/shift/image
+over whole board rows, one journaled mutation each) and a declared `set` (`sets[]`), which `boardCombine`'s
+`left`/`right` and `writeSet`'s `set` read by bare name, lowered from arena values at the written board's width
+(`CellSetLowering`); a set name never equals a `state.world` row, an unknown name or a set with a `setKey` refuses
+at compile, and a width mismatch refuses per firing as `BoardCombineOperands`/`WriteSetSource`; a `transfer` of `count > 1` takes `first`/`last`/`random`,
 and an interior run is `slice`: the keyed token and everything after it, in order; a pile's order is one integer
 through `$reduce:arrangementRank:<zone>` (k ≤ 20) and the `arrange` transform puts it back. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
 integer literal, a `$cell:` indirection, `$each`, or an int `$local:`; a missing
-dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
-state effect is its own boundary; only a `transaction` groups effects
-atomically, and it journals once (a `Batch` mutation whose replay composes its
-members in order), so three `boardCombine`s in one transaction are one entry. Branches use ordinary `ActionEffect`
-records; `EffectFamily.AllowsTransaction` opts registered arms in, while the compiler rejects nesting and `save`.
+dynamic key reads as absent: a gate or expression over it reads false and
+refuses as `Arithmetic` unless `isAbsent`/`??` answer it. A rule firing is atomic:
+any refused effect rewinds the whole firing. A `transaction`
+(`ActionEffect.Transaction`: `effects`, optional `onFailure`, each 1..`RuleCapacity.MaxTransactionEffects`) is
+a savepoint inside the firing: when a main-branch effect refuses, the savepoint rewinds so none of its effects
+apply and `onFailure` runs instead. The compiler refuses an empty main branch and a transaction anywhere inside
+another, including through an intervening `if` (`RuleCompiler.Effects.cs`).
 `if` (`{"$type":"if","condition":<predicate>,"then":[...],"else":[...]}`) branches a rule's own effects on the SAME
 predicate grammar a gate compiles: `then` fires when it holds, `else` (optional) when it does not — a false
 condition is not a failure. A condition that fails to evaluate (an arithmetic fault, a missing table key) runs
-NEITHER branch and reports through `world.rule.failures` on the same terms a failing top-level effect does. Each
-branch effect is its own boundary, exactly like a top-level effect (or, inside a `transaction`, any other step) — a
-branch is not itself a transaction. `if` may sit inside a `transaction`; a `transaction` may sit inside an `if` only
-when that `if` is not itself inside one, since transactions never nest either way; `save` is refused inside any `if`
-branch at any depth (`EffectFamily.AllowsInsideBranch`). `world.rule.trace` narrates the taken branch (`then`/`else`/
-`neither`/`condition failed`) beside the `if`'s own applied/refused/skipped verdict. `if` is refused by name in a
-kit's per-body actions (`ActionSpec`/`WorldBodyMotionProgram`) — a per-body action compiles to a flat instruction
-stream with no branch of its own, the same terms `transaction` and the other world-only effects are refused there.
+NEITHER branch and reports through `world.rule.failures` on the same terms a failing top-level effect does. A
+branch compiles as an ordinary effect list and is not itself a savepoint. `if` may sit inside a `transaction`; a
+`transaction` may sit inside an `if` only when that `if` is not itself inside one. An effect family carries no
+transaction or branch admission of its own (`AnEffectFamilyCarriesNoTransactionOrBranchAdmission`).
+`world.rule.trace` narrates the taken branch (`then`/`else`/`neither`/`condition failed`) beside the `if`'s own
+applied/refused/skipped verdict. `if`, `save`, `pose` and the world-row effects are refused by name in a kit's
+per-body actions (`ActionSpec`, compiled by `BodyActionSpecFactory` in `WorldBodyMotionProgram.cs`): a per-body
+action compiles to a flat instruction stream with no branch of its own.
 `BoardCombination` owns the compile-time-fold and live-arena board operation contract; `copy` preserves all source values,
 including its empty value when the target's differs. `$symmetry:<function>[:<argument>]:<row>`
 reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
@@ -136,17 +145,18 @@ node's orbit). A `symmetryOrbit` generator source draws a node uniformly over
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
 ties to the lowest index) — the arena module's `auto-target` rule is
 `setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT
-terms again: like `pose`, it has no `WorldMutation` ordinal — it writes a
-session snapshot to the world's own loaded file
+terms again: like `pose`, it has no `WorldMutation` ordinal — it writes the
+same snapshot `world.save` does to the world's own loaded file
 (`WorldDefinitionSource.SourcePath`, the SAME target the console's no-argument
 `world.save` resolves; no authored path, and no homeless-world refusal exists
 because every boot shape is file-backed), composing no candidate and journaling
 nothing, so the sim state after a tick that fires it is bit-identical to a tick
 that does not — a replay hash cannot see it. It rides `WorldServer.
 FireWorldRuleEffect` directly through a NEW `WorldServer.SaveEffectTap` (mirroring
-`EchoTap`) that the composition root wires to the identical `WorldSessionCapture.
-Capture` fold `world.save` itself runs, since `Puck.World.Server` cannot reach the
-render/screen/audio/pacing state that fold needs. No throttle beyond the ordinary
+`EchoTap`) that the composition root wires to the identical `WorldSaveSnapshot.
+Compose` `world.save` itself runs, since `Puck.World.Server` folds only its own half
+(`WorldSessionCapture.Capture`) and cannot reach the render/audio/pacing levers the
+other half (`WorldSessionLevers.Fold`) needs. No throttle beyond the ordinary
 `Level`/`Edge` vocabulary — a `Level` gate fires it every tick held, the same
 footgun a level-triggered `addState` already carries (see `WorldRule.Mode`'s own
 remarks); a write failure is caught at the tap and narrated on stderr by name,
@@ -181,7 +191,7 @@ refuses the reserved `$` prefix — `$` marks what the engine mints, and nothing
 mints a rule. Read back with `world.rules`, whose `latch=held|open` column is the
 gate-held latch (`held` = the gate held at the last evaluation, so an edge rule
 will not fire again until it lets go). Authored with `world.row.set rules`/
-`world.row.remove rules` (ordinals 52/53) under `Mutate`/`section:rules` — a hold
+`world.row.remove rules` (ordinals 50/51) under `Mutate`/`section:rules` — a hold
 UNTRUSTED principals are refused outright (see [authority.md](authority.md)).
 An optional `decision` facet requires Level mode and owns its own cadence,
 commitment, and rising-edge interruption instead of the ordinary latch.
@@ -203,14 +213,14 @@ through the same walk — sees an earlier rule's SAME-TICK write; a rule ADDED b
 this tick's effects starts on the next tick. Declaration order is therefore the
 whole answer to "does the copy see the pre-write or post-write value", and it is
 the same answer on every run. A rule's EFFECTS are a different question: they
-act as `WorldPrincipal.World` (see [authority.md](authority.md)).
+act as `Principal.World` (see [authority.md](authority.md)).
 
 A `setState`/`addState` effect is submitted only when it could MOVE the
 destination (`WorldServer.FireWorldRuleEffect`): the resolved value already
 matching the cell has always skipped, and so does a value the destination row's
 declared envelope (`min`/`max`) pins where the cell already sits, under its
 authored `overflow` policy (`Refuse`, the default, or `Saturate`) —
-`WorldStateRow.TryAdmitWrite` is the one door every write path decides
+`StateRow.TryAdmitWrite` is the one door every write path decides
 through, and answers both the admission and the no-op test. That is what keeps
 a `Level` rule pointed at a floored row from composing a candidate the
 whole-document validator refuses once per TICK for the life of the session (a
@@ -286,23 +296,26 @@ remains full authority trust. Test socket observations using authenticated
 submission stamps, and check exact topology and query work bounds at preflight.
 
 A `patterns` section row is a regular language over cell values
-(`Puck.State/PatternRow.cs` + `CompiledPattern.cs`: symbols as value ranges, a closed node vocabulary with
+(`src/Puck.State.Topology/PatternRow.cs` + `CompiledPattern.cs`: symbols as value ranges, a closed node vocabulary with
 complement and intersection, a derivative machine inside a state budget of at
 most 256) compiled at validation;
 rules read it through `$match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:count]` over a board
 ray, a zone's attribute word or per-token `value` expression (`$token` and `$previous` keys; a word starts at the
 operand's `key` token when one is given, so a cascade's legality from a card is one read),
 a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
-`$board:mask`, the `boardShift`/`boardFill`/`boardImage` expression ops (a fill is the union of
+`$board:mask`, the `boardShift`/`boardRay`/`boardImage` expression ops (a fill is the union of
 repeated shifts to the edge: a file or a rank from one seed bit, never a hand-written wrap constant), and the
 `writeSet` transform carry the one cell-set vocabulary up to 64 cells, and the
-`boardCombine` transform carries it over boards of any size; a group and its
+`boardCombine` transform and a declared `set` read by `boardCombine`/`writeSet` carry it over boards of any
+size; a group and its
 breathing room are `$board:component:<row>:<min>:<max>:<maxVisits>` and
 `$board:boundary:<row>:<min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits>`
 from a key cell (a flood under a settled-cell budget, -2 when it runs out); a placement's legality is
 `$board:boundaryAt` (the placed value's own boundary, the key cell excluded) and `$board:enclosedAt` (the cells of
 adjacent components whose only boundary cell is the key cell) keyed on the empty cell — admissible iff
 `boundaryAt > 0 || enclosedAt > 0` — and the `clearEnclosed` transform sweeps those components once the value lands;
+a position's exact identity is `$board:fingerprint:<row>` (`$board:canonical` folds symmetric images together, so a
+ko check against a `history` ring reads the fingerprint; `games/go.puck` is the worked example);
 `world.match` narrates one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.

@@ -6,18 +6,19 @@ For an introduction, start with the [engine overview](../overview.md) or the
 
 | Reference | Contents |
 |---|---|
-| [State and rules](state.md) | A worked introduction, then chapters on data, expressions, rules, frames, generators, search, and hosting. |
+| [State and rules overview](state.md) | A quickstart, then articles on the data model, the arena, expressions and patterns, rules and transforms, generators, vectors, search, hosting, and state in Puck.World, with limits and a glossary. |
 | [Commands and input](commands.md) | Fixed-step input, bindings, text sessions, dispatch identity, and ordering. |
 | [Device input](input.md) | Device acquisition, controller motion, haptics, lighting, and platform integration. |
 | [Physics kernels](physics.md) | Gravity, motion, contacts, tethers, perception, navigation, and fields. |
 | [Deterministic numerics](maths.md) | Worked examples, primitive selection, and the boundary between reproducible simulation and other numeric work. |
 | [Seam abstractions](abstractions.md) | Neutral presentation, windowing, machine, and platform contracts. |
 | [Hosting and simulation](hosting.md) | Host loop, render nodes, fixed-step clocks, and capability trees. |
+| [Extensions](extensions.md) | The one extension contract, keyed contributions, discovery and load contexts, and how every host composes and refuses them. |
 | [Wire framing and substrate](networking.md) | Dialect-agnostic length-prefixed framing and local token authentication. |
 | [Offline attestation](attestation.md) | Signed claims, key bindings, deterministic CBOR envelopes, and trust pinning. |
 | [Capture and recording](recording.md) | Matroska/WebM muxing, Opus audio lanes, frame observers, and overlays. |
 | [Scripting and addon ABI](scripting.md) | Deterministic WebAssembly host, 32-byte cell ring ABI, and zero ambient authority. |
-| [Content addressing and assets](assets.md) | Content-addressed storage, LRU caching, PNG/APNG, QR, and automatic sequences. |
+| [Content addressing and assets](assets.md) | Content-addressed storage, LRU caching, PNG/APNG, QR, automatic sequences, and the shared chunk container. |
 | [Audio and music direction](audio.md) | Fixed-point mixing, 32-voice synthesizer, music clocks, and babble schedules. |
 | [Text and font atlases](text.md) | OpenType readers, MTSDF generation, layout, and distance-field sampling. |
 | [Puck CLI](cli.md) | Repository commands, compilation, inspection, and verification tools. Run a command with `--help` for its options. |

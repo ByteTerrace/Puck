@@ -1,3 +1,4 @@
+using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Syntax = Puck.State.ExpressionSpelling;
 
@@ -7,11 +8,11 @@ public static partial class PuckLinter {
     private static void CollectOperandReferences(Syntax.SyntaxNode node, DocumentValueForm form, HashSet<string> references, string? binder = null) {
         switch (node) {
             case Syntax.SourceName { Quoted: false } name when ((form != DocumentValueForm.Key) && (name.Name != binder)):
-                references.Add(name.Name);
+                references.Add(item: name.Name);
                 break;
             case Syntax.SourceGroup group: CollectOperandReferences(group.Value, DocumentValueForm.Expression, references, binder); break;
             case Syntax.SourceAccess access:
-                if (Qualified(access) is { } qualified) { references.Add(item: qualified); }
+                if (QualifiedName.From(syntax: access) is { } qualified) { references.Add(item: qualified.ToString()); }
                 CollectOperandReferences(access.Target, DocumentValueForm.Name, references, binder);
                 break;
             case Syntax.SourceIndex index:
@@ -36,10 +37,4 @@ public static partial class PuckLinter {
             case Syntax.SourceLambda lambda: CollectOperandReferences(lambda.Body, DocumentValueForm.Expression, references, lambda.Binder); break;
         }
     }
-
-    private static string? Qualified(Syntax.SyntaxNode node) => node switch {
-        Syntax.SourceName { Quoted: false } name => name.Name,
-        Syntax.SourceAccess access when (Qualified(access.Target) is { } prefix) => $"{prefix}.{access.Member}",
-        _ => null,
-    };
 }

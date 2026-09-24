@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text;
 using System.Text.Json;
 using Puck.Attestation;
@@ -339,23 +340,6 @@ public static partial class WorldFederationCodec {
             facts
         );
     }
-    private static IntentSource ReadIntentSource(ref WireReader reader) {
-        if (!WorldWireCodec.TryReadIntentSource(
-            producerNameField: "intent source producer name",
-            reader: ref reader,
-            source: out var source,
-            wire: out var tag
-        )) {
-            reader.Fail(
-                detail: $"intent source tag {tag} is not declared",
-                refusal: WireRefusal.EnumValueUnknown
-            );
-
-            return IntentSource.Idle;
-        }
-
-        return source;
-    }
     private static bool TryDeserializeDefinition(byte[] bytes, string field, out WorldDefinition? definition, out WireFailure failure) {
         try {
             definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
@@ -399,7 +383,7 @@ public static partial class WorldFederationCodec {
             );
         }
 
-        var source = ReadIntentSource(reader: ref reader);
+        var source = WorldWireCodec.ReadIntentSource(reader: ref reader);
         var bodyColor = reader.ReadFiniteVector(field: $"traveler {(ordinal + 1)} body color");
         var catalogRig = reader.ReadByte();
         WorldIdentity? identity = null;
@@ -429,7 +413,7 @@ public static partial class WorldFederationCodec {
         }
 
         member = new WorldTransferReservationMember(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             PreferredSlot: preferred,
             Identity: identity,
             Source: source,
@@ -548,7 +532,7 @@ public static partial class WorldFederationCodec {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tier"/> is
     /// <see cref="WorldDisclosureTier.Frames"/>, which carries no document at all.</exception>
     /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
-    public static byte[] EncodeDocument(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
+    public static byte[] EncodeDocument(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
         // The document being encoded is whatever the caller holds — a traveller's destination world as often as
         // this authority's own — so its store is loaded here through the one import door rather than borrowed from
         // a server that may not own it.
@@ -717,14 +701,15 @@ public static partial class WorldFederationCodec {
         return writer.ToArray();
     }
     /// <summary>Encodes the final observable authority epoch for one traveler, disclosing the carried document at
-    /// <paramref name="tier"/>.</summary>
+    /// <paramref name="tier"/> to the traveler itself: the peer principal owning the route's
+    /// <see cref="WorldAuthorityRouteDescription.Entity"/> at its final authority, which is the identity that
+    /// authority's transfer table resolves the traveler's credential to.</summary>
     /// <param name="route">The route description.</param>
     /// <param name="tier">The tier the admission door decided for the asking peer.</param>
     /// <param name="authority">The composing authority's addressable namespace.</param>
     /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
-    /// <param name="recipient">The observation principal whose presentation-visible state is composed, or null for an unembodied observer.</param>
-    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
+    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision) {
         var writer = new WireWriter(capacity: 4096);
 
         writer.WriteString(value: route.Endpoint);
@@ -745,7 +730,10 @@ public static partial class WorldFederationCodec {
             tier: tier,
             authority: authority,
             revision: revision,
-            recipient: recipient
+            recipient: Principal.Peer(
+                generation: route.Entity.Generation,
+                index: route.Entity.Index
+            )
         ));
 
         return writer.ToArray();
@@ -1125,7 +1113,7 @@ public static partial class WorldFederationCodec {
             tick,
             -1,
             intent,
-            WorldPrincipal.Console,
+            Principal.Console,
             held,
             measured
         );

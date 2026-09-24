@@ -47,7 +47,6 @@ public sealed record WorldConstruct(
 
     /// <summary>Gets every member the construct describes.</summary>
     public IReadOnlyList<WorldConstructMember> Members { get; init; } = (Members ?? []);
-
     /// <summary>Gets every key the spelling can carry on the construct's own document node: the described members'
     /// keys and the keys the emitter adds.</summary>
     /// <remarks>A node carrying a key outside this set has no spelling and takes
@@ -84,7 +83,6 @@ public sealed record WorldConstruct(
     ))
         .Distinct(comparer: StringComparer.Ordinal)
         .Order(comparer: StringComparer.Ordinal)];
-
     /// <summary>Gets the names of the <c>name(args)</c> modifiers the construct's header admits.</summary>
     public IReadOnlyList<string> ModifierNames => Names(members: Members.Where(predicate: static member => (member.Position == WorldMemberPosition.Modifier)));
     /// <summary>Gets the names of the modifiers one entry of the construct's cell body admits — its optional cell
@@ -113,7 +111,7 @@ public sealed record WorldConstruct(
     /// <param name="key">A key on the construct's document node.</param>
     /// <returns>The default as canonical JSON text, or <see langword="null"/> when the key carries none.</returns>
     public string? DefaultFor(string key) => Members
-        .Where(predicate: member => (member.Default is not null) && member.DocumentKeys.Contains(value: key, comparer: StringComparer.Ordinal))
+        .Where(predicate: member => ((member.Default is not null) && member.DocumentKeys.Contains(value: key, comparer: StringComparer.Ordinal)))
         .Select(selector: static member => member.Default)
         .FirstOrDefault();
 }

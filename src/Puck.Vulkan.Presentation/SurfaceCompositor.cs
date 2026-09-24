@@ -29,6 +29,7 @@ public sealed class SurfaceCompositor : IDisposable {
 
     private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
 
+    private readonly IVulkanBufferApi m_bufferApi;
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
     private readonly VulkanDescriptorAllocator m_descriptorAllocator;
@@ -42,8 +43,6 @@ public sealed class SurfaceCompositor : IDisposable {
     private readonly string m_shaderDirectory;
     private readonly IVulkanShaderModuleFactory m_shaderModuleFactory;
     private readonly IShaderModuleLoader m_shaderModuleLoader;
-    private readonly IVulkanStorageBufferFactory m_storageBufferFactory;
-    private readonly IVulkanVertexBufferFactory m_vertexBufferFactory;
 
     private VulkanShaderModule? m_blitFragmentShader;
     private VulkanGraphicsPipeline? m_blitPipeline;
@@ -58,7 +57,7 @@ public sealed class SurfaceCompositor : IDisposable {
     private VulkanSurfaceUpload? m_rootUpload;
     private nint m_sampler;
     private VulkanSurfaceImport? m_sharedImport;
-    private VulkanVertexBuffer? m_vertexBuffer;
+    private VulkanBuffer? m_vertexBuffer;
     private VulkanShaderModule? m_vertexShader;
 
     public SurfaceCompositor(
@@ -67,16 +66,16 @@ public sealed class SurfaceCompositor : IDisposable {
         IShaderModuleLoader shaderModuleLoader,
         IVulkanShaderModuleFactory shaderModuleFactory,
         IVulkanGraphicsPipelineFactory graphicsPipelineFactory,
-        IVulkanVertexBufferFactory vertexBufferFactory,
+        IVulkanBufferApi bufferApi,
         IVulkanDescriptorApi descriptorApi,
         IVulkanExternalMemoryApi externalMemoryApi,
         IVulkanOffscreenImageApi offscreenImageApi,
         IVulkanFramebufferSetApi framebufferSetApi,
-        IVulkanStorageBufferFactory storageBufferFactory,
         IVulkanCommandResourcesFactory commandResourcesFactory,
         IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
         VulkanQueueSubmitter queueSubmitter
     ) {
+        ArgumentNullException.ThrowIfNull(bufferApi);
         ArgumentNullException.ThrowIfNull(commandBufferRecordingApi);
         ArgumentNullException.ThrowIfNull(commandResourcesFactory);
         ArgumentNullException.ThrowIfNull(descriptorApi);
@@ -89,9 +88,8 @@ public sealed class SurfaceCompositor : IDisposable {
         ArgumentNullException.ThrowIfNull(shaderDirectory);
         ArgumentNullException.ThrowIfNull(shaderModuleFactory);
         ArgumentNullException.ThrowIfNull(shaderModuleLoader);
-        ArgumentNullException.ThrowIfNull(storageBufferFactory);
-        ArgumentNullException.ThrowIfNull(vertexBufferFactory);
 
+        m_bufferApi = bufferApi;
         m_commandBufferRecordingApi = commandBufferRecordingApi;
         m_commandResourcesFactory = commandResourcesFactory;
         m_descriptorAllocator = new VulkanDescriptorAllocator(descriptorApi: descriptorApi);
@@ -104,8 +102,6 @@ public sealed class SurfaceCompositor : IDisposable {
         m_shaderDirectory = shaderDirectory;
         m_shaderModuleFactory = shaderModuleFactory;
         m_shaderModuleLoader = shaderModuleLoader;
-        m_storageBufferFactory = storageBufferFactory;
-        m_vertexBufferFactory = vertexBufferFactory;
     }
 
     private void CreateDeviceResources(VulkanLogicalDevice device) {
@@ -127,11 +123,14 @@ public sealed class SurfaceCompositor : IDisposable {
             logicalDevice: device,
             stageInfo: blitFragmentShaderInfo
         );
-        m_vertexBuffer = m_vertexBufferFactory.Create(
-            logicalDevice: device,
-            vertexData: FullscreenTriangleVertexData,
-            vulkanInstance: m_renderer.Instance
+        m_vertexBuffer = VulkanBuffer.Create(
+            bufferApi: m_bufferApi,
+            device: m_renderer,
+            memory: VulkanBufferMemory.HostCoherent,
+            sizeBytes: ((ulong)FullscreenTriangleVertexData.Length),
+            usage: VulkanBufferUsageFlags.VertexBuffer
         );
+        m_vertexBuffer.Write<byte>(data: FullscreenTriangleVertexData);
         m_sampler = m_descriptorAllocator.CreateSampler(request: new VulkanSamplerCreateRequest(
             AddressModeU: VulkanSamplerAddressMode.ClampToEdge,
             AddressModeV: VulkanSamplerAddressMode.ClampToEdge,
@@ -140,7 +139,7 @@ public sealed class SurfaceCompositor : IDisposable {
             BorderColor: 0,
             CompareEnable: 0,
             CompareOp: 0,
-            DeviceHandle: device.Handle,
+            Device: device.Commands,
             Flags: 0,
             MagFilter: VulkanFilter.Linear,
             MaxAnisotropy: 0f,
@@ -153,14 +152,11 @@ public sealed class SurfaceCompositor : IDisposable {
         ));
     }
     private void DisposeDeviceResources(VulkanLogicalDevice device) {
-        if (0 != m_sampler) {
-            m_descriptorAllocator.DestroySampler(
-                deviceHandle: device.Handle,
-                samplerHandle: m_sampler
-            );
-            m_sampler = 0;
-        }
-
+        m_descriptorAllocator.DestroySampler(
+            device: device.Commands,
+            samplerHandle: m_sampler
+        );
+        m_sampler = 0;
         m_vertexBuffer?.Dispose();
         m_vertexBuffer = null;
         m_blitFragmentShader?.Dispose();
@@ -169,15 +165,12 @@ public sealed class SurfaceCompositor : IDisposable {
         m_vertexShader = null;
     }
     private void DisposeFrameResources(VulkanLogicalDevice device) {
-        if (0 != m_descriptorPool) {
-            m_descriptorAllocator.DestroyPool(
-                deviceHandle: device.Handle,
-                poolHandle: m_descriptorPool
-            );
-            m_descriptorPool = 0;
-            Array.Clear(array: m_descriptorSets);
-        }
-
+        m_descriptorAllocator.DestroyPool(
+            device: device.Commands,
+            poolHandle: m_descriptorPool
+        );
+        m_descriptorPool = 0;
+        Array.Clear(array: m_descriptorSets);
         m_drawCommandsPerSet = null;
         m_graphicsPipelines = null;
         m_blitPipeline?.Dispose();
@@ -193,7 +186,7 @@ public sealed class SurfaceCompositor : IDisposable {
         } else {
             DisposeFrameResources(device: m_resourceDevice);
 
-            if (m_resourceDevice.Handle != device.Handle) {
+            if (m_resourceDevice.Commands != device.Commands) {
                 DisposeDeviceResources(device: m_resourceDevice);
                 CreateDeviceResources(device: device);
             }
@@ -217,7 +210,7 @@ public sealed class SurfaceCompositor : IDisposable {
             vertexShaderModule: m_vertexShader!
         );
         m_descriptorPool = m_descriptorAllocator.CreatePool(
-            deviceHandle: device.Handle,
+            device: device.Commands,
             maxSets: DescriptorSetRingSize,
             poolSizes: new VulkanDescriptorPoolSize[]
             {
@@ -234,7 +227,7 @@ public sealed class SurfaceCompositor : IDisposable {
 
         for (var setIndex = 0; (setIndex < DescriptorSetRingSize); setIndex++) {
             m_descriptorSets[setIndex] = m_descriptorAllocator.AllocateSet(
-                deviceHandle: device.Handle,
+                device: device.Commands,
                 descriptorSetLayoutHandle: m_blitPipeline.DescriptorSetLayoutHandle,
                 poolHandle: m_descriptorPool
             );
@@ -314,7 +307,7 @@ public sealed class SurfaceCompositor : IDisposable {
                 framebufferSetApi: m_framebufferSetApi,
                 offscreenImageApi: m_offscreenImageApi,
                 queueSubmitter: m_queueSubmitter,
-                storageBufferFactory: m_storageBufferFactory
+                bufferApi: m_bufferApi
             );
             imageViewHandle = m_rootUpload.Upload(
                 deviceContext: m_renderer,
@@ -334,7 +327,7 @@ public sealed class SurfaceCompositor : IDisposable {
                 arrayElement: 0,
                 binding: SamplerBindingIndex,
                 descriptorSetHandle: m_descriptorSets[m_descriptorSetIndex],
-                deviceHandle: m_renderer.Device.Handle,
+                device: m_renderer.Device.Commands,
                 imageViewHandle: imageViewHandle,
                 samplerHandle: m_sampler
             );

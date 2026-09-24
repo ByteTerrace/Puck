@@ -212,26 +212,21 @@ public static class CreationStampEmitter {
             (margin == 0f)
         ) {
             var panel = shape.Panel;
-            // An eccentric primitive (a non-uniformly scaled sphere baked as an ellipsoid) outside any scope would fold
-            // its Lipschitz factor into the whole program's step scale, and every march in the frame would pay it. Its
-            // own scope clamps that factor onto its candidate at the pop instead (SdfProgram.AnalyzeLipschitz); inside
-            // a caller's scope (one-deep by contract) the caller's pop already does. KEEP IN SYNC with the static
-            // stamper's per-shape probe reservation (Client.WorldPlacementStamper.EmitProbe), which reserves the pair.
-            // Dilate/Onion need the same isolation for a different reason — unscoped, a field op would inflate or
-            // hollow every shape emitted before it in the whole program, not just this one. A panel ALSO needs its
-            // own scope: its subtraction/union must bite only this shape's own candidate, never a sibling composed
-            // before it — validation refuses a panel wherever inScope would be true here (RequiresScope/Group), so
-            // this branch is unreachable for a panelled shape.
-            // A flare/shear/bump/erode (each a warp, or an erosion whose noise term folds the same way — see
-            // SdfProgram.Lipschitz.cs's LaneErode case) joins the eccentric case for the same reason: unscoped,
-            // its Lipschitz factor would fold into the whole program's step scale.
+            // Dilate/Onion need their own scope — unscoped, a field op would inflate or hollow every shape emitted
+            // before it in the whole program, not just this one; inside a caller's scope (one-deep by contract) the
+            // caller's pop already isolates it. KEEP IN SYNC with the static stamper's per-shape probe reservation
+            // (Client.WorldPlacementStamper.EmitProbe), which reserves the pair. A panel ALSO needs its own scope: its
+            // subtraction/union must bite only this shape's own candidate, never a sibling composed before it —
+            // validation refuses a panel wherever inScope would be true here (RequiresScope/Group), so this branch is
+            // unreachable for a panelled shape.
+            // A flare/shear/bump/erode/cells (each a warp, or a relief whose term folds the same way — see
+            // SdfProgram.Lipschitz.cs's LaneErode case) needs its own scope for a different reason: unscoped, its
+            // Lipschitz factor would fold into the whole program's step scale. A primitive never does — every one is
+            // 1-Lipschitz, a non-uniformly scaled sphere or ellipsoid included (the exact exponent-2 superellipsoid
+            // gauge), so no primitive opens a scope for its shape alone.
             var ownScope = (
                 !inScope &&
-                (wantsDilate || wantsOnion ||
-                (SdfSolidGeometry.StepFactor(
-                scale: shapeScale,
-                type: shape.Type
-            ) > 1f) || (panel is not null) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null))
+                (wantsDilate || wantsOnion || (panel is not null) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null))
             );
 
             if (ownScope) {
@@ -418,7 +413,7 @@ public static class CreationStampEmitter {
     }
     // Render path only (mirrors EmitPanelCopy's own guard) — the deterministic fixed-point contact evaluator never
     // reads Trims, so a solid placement's collider is unchanged by them. Runs after EmitShapeChain has fully closed
-    // the host's own emission (including any scope panel/dilate/onion/eccentricity opened), so each trim's own
+    // the host's own emission (including any scope a panel/dilate/onion/warp opened), so each trim's own
     // PushField/PopField pair is sequential with that scope, never nested inside it. inScope true means the CALLER
     // already holds the whole-creation scope RequiresScope forces — ValidateTrims refuses Trims on that document, so
     // this is a defensive no-op, never reached by a validated document.
@@ -538,7 +533,7 @@ public static class CreationStampEmitter {
         // reflected basis back into the proper frame the float emitter has always authored. If b = R*x, that frame is
         // H(n) R H(x) = H(n) H(b) R. The product of the two reflections H(n)H(b) is the unit quaternion
         // (b x n, b . n), so no matrix-to-quaternion reconstruction (and therefore no platform sqrt/libm) is needed.
-        var reflectedXAxis = rotation.Rotate(vector: UnitX).Normalize();
+        var reflectedXAxis = rotation.Rotate(vector: FixedVector3.UnitX).Normalize();
         var reflectionPairVector = FixedVector3.Cross(
             left: reflectedXAxis,
             right: unitNormal
@@ -651,8 +646,8 @@ public static class CreationStampEmitter {
     /// <param name="contactMargin">An optional per-shape signed contact margin. Null emits the raw render stream;
     /// a nonzero value scopes each primitive so dilation applies before its authored blend.</param>
     /// <param name="inScope">Whether the caller already holds an open field scope around this emission (the
-    /// whole-creation stamp of <see cref="RequiresScope"/>). A scope nests at most one deep, so an eccentric shape
-    /// then rides the caller's scope instead of opening its own.</param>
+    /// whole-creation stamp of <see cref="RequiresScope"/>). A scope nests at most one deep, so a shape whose field
+    /// op or warp would otherwise open its own scope then rides the caller's instead.</param>
     public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
@@ -1382,9 +1377,9 @@ public static class CreationStampEmitter {
                 var placed = frame.Compose(inner: local);
                 // A rotation applied to a vector IS the scaled sum of its transformed unit axes, so the primitive's
                 // world-axis extent falls out of the three axis images without ever forming a matrix.
-                var shapeAxisX = placed.Rotation.Rotate(vector: UnitX);
-                var shapeAxisY = placed.Rotation.Rotate(vector: UnitY);
-                var shapeAxisZ = placed.Rotation.Rotate(vector: UnitZ);
+                var shapeAxisX = placed.Rotation.Rotate(vector: FixedVector3.UnitX);
+                var shapeAxisY = placed.Rotation.Rotate(vector: FixedVector3.UnitY);
+                var shapeAxisZ = placed.Rotation.Rotate(vector: FixedVector3.UnitZ);
                 var localBoundsCenter = (placed.Position + (
                     ((shapeAxisX * (boundsCenter.X * shapeScale.X))
                     + (shapeAxisY * (boundsCenter.Y * shapeScale.Y)))
@@ -1416,21 +1411,6 @@ public static class CreationStampEmitter {
     // value a result is read off, so the quantization is immaterial. A product of two floors still underflows to zero,
     // which yields a zero-extent (inert) collider rather than the float path's vanishingly thin one.
     private static readonly FixedQ4816 MinimumTransformExtentFixed = FixedQ4816.FromDouble(value: MinimumTransformExtent);
-    private static readonly FixedVector3 UnitX = new(
-        X: FixedQ4816.One,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-    private static readonly FixedVector3 UnitZ = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.Zero,
-        Z: FixedQ4816.One
-    );
 }
 /// <summary>Materializes the same placement pattern and reflected copies consumed by creation stamp emission.</summary>
 public static class CreationStampLattice {

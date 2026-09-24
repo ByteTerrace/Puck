@@ -1,0 +1,62 @@
+// One beacon, as a module: a plot of ground, an arrival point on it, a charge a seat can raise, and the rule that
+// lights the beacon once the charge reaches the threshold this instance was given. The threshold is the module's
+// test seam. The tests below hold for every threshold the module admits, so they run as they stand wherever it is
+// used; a claim about one particular threshold is written beside the instance that chooses it.
+
+module beacon(centre: Point, threshold) {
+  grants [
+    {
+      capability: Mutate
+      grantee: "seat1"
+      subject: "section:state"
+    }
+    {
+      capability: Edit
+      grantee: "seat1"
+      subject: "state:charge"
+    }
+  ]
+
+  ground plot {
+    center: centre
+    size [24m, 24m]
+  }
+
+  spawn arrival {
+    at: centre + [0m, 2m, 0m]
+    yaw: 0deg
+  }
+
+  state {
+    world {
+      slot charge = 0
+      slot lit = 0
+    }
+  }
+
+  rule "light" {
+    when charge >= threshold
+    mode: Level
+    lit = 1
+  }
+
+  test "a beacon boots dark" {
+    when {
+      ticks 2
+    }
+    expect {
+      charge == 0
+      lit == 0
+    }
+  }
+
+  test "a charge past every admitted threshold lights the beacon" {
+    when {
+      seat1: world.state.cell.set charge $value 1000000
+      ticks 1
+    }
+    expect {
+      lit == 1
+    }
+  }
+}

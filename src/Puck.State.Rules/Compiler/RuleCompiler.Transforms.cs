@@ -44,6 +44,64 @@ public static partial class RuleCompiler {
         }
     }
 
+    // A transform writes what it read into rows other readers see: a sort's order spells its keys, a mean its members, an
+    // arrangement its rank. So no row it writes may be seen by a reader some row it reads withholds from, judged over
+    // the declared row and cell policies (StateVisibility.Encloses). A transform never declassifies; a rule that means
+    // to show a hidden value writes it through its own setState. A subject the context declares no row for (a pool, a
+    // live zone selection) states no policy here.
+    private static void RequireEnclosedAudience(StateTransform transform, string ruleName, RuleCompileContext context) {
+        var subjects = transform.Subjects();
+
+        foreach (var written in subjects) {
+            if (
+                (written.Access != StateAccess.Write) ||
+                (context.FindRow(name: written.Name) is not { } target)
+            ) {
+                continue;
+            }
+
+            foreach (var read in subjects) {
+                if (
+                    (read.Access != StateAccess.Read) ||
+                    (context.FindRow(name: read.Name) is not { } source)
+                ) {
+                    continue;
+                }
+
+                var withholding = (StateVisibility.Encloses(
+                    audience: target.Visibility,
+                    policy: source.Visibility
+                )
+                    ? (source.Cells ?? []).FirstOrDefault(predicate: cell => ((cell is not null) && !StateVisibility.Encloses(
+                        audience: target.Visibility,
+                        policy: cell.Visibility
+                    )))?.Visibility
+                    : source.Visibility);
+
+                if (withholding is not null) {
+                    throw new RuleException(
+                        detail: $"it writes '{target.Name}' ({DescribeAudience(visibility: target.Visibility)}) from '{source.Name}' ({DescribeAudience(visibility: withholding)}), so what it writes would show '{source.Name}' to readers it withholds from; give '{target.Name}' an audience '{source.Name}' encloses, or disclose through a rule's own write",
+                        refusal: RuleRefusal.TransformWidensAudience,
+                        ruleName: ruleName
+                    );
+                }
+            }
+        }
+    }
+    private static string DescribeAudience(StateVisibility? visibility) {
+        if (
+            (visibility is null) ||
+            visibility.IsPublic
+        ) {
+            return "public";
+        }
+
+        var readers = $"readers [{string.Join(separator: ", ", values: (visibility.Readers ?? []))}]";
+
+        return ((visibility.ReadersFrom is { } live)
+            ? $"{readers} and readersFrom '{live}'"
+            : readers);
+    }
     private static IRuleEffect ResolveStateTransform(StateTransform transform, string ruleName, RuleCompileContext context) => ResolveStateTransform(
         context: context,
         resolved: out _,
@@ -64,12 +122,16 @@ public static partial class RuleCompiler {
         var reads = new List<int>();
         var writes = new List<int>();
         CompiledCellRef? keyRef = null;
-        CompiledValueSource? pushValue = null;
         LiveRow? fromRow = null;
         LiveRow? toRow = null;
         var sourceCost = RuleWork.Zero;
 
         resolved = null;
+        RequireEnclosedAudience(
+            context: context,
+            ruleName: ruleName,
+            transform: transform
+        );
 
         switch (transform) {
             case StateTransform.Mix mix:
@@ -350,10 +412,12 @@ public static partial class RuleCompiler {
                 }
             case StateTransform.Sort sort: {
                     var target = sort.Row.Spelling;
-                    if ((sort.By is not { Count: >= 1 }) || sort.By.Any(key => (key is null))) {
+
+                    if ((sort.By is not { Count: >= 1 }) || sort.By.Any(predicate: key => (key is null))) {
                         throw Invalid(message: "sort requires one or more numeric attribute keys, each carrying its own direction");
                     }
                     var targetOrdinal = Ordinal(name: target);
+
                     if ((sort.By.Count == 1) && (sort.By[0].Row.Spelling == target)) {
                         // A board position or ring slot is an address, not an order to permute.
                         if (Row(name: target) is not { Shape: RowShape.Keyed or RowShape.Ordered, Kind: CellKind.Int or CellKind.Fixed }) {
@@ -369,15 +433,18 @@ public static partial class RuleCompiler {
                     }
                     var names = new HashSet<string>(comparer: StringComparer.Ordinal);
                     var keys = new ArenaSortKey[sort.By.Count];
+
                     for (var index = 0; (index < keys.Length); index++) {
                         var key = sort.By[index];
                         var name = key.Row.Spelling;
-                        if (!names.Add(name) || (name == target) ||
+
+                        if (!names.Add(item: name) || (name == target) ||
                             (Row(name: name) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } attribute) ||
                             (attribute.EffectiveDomain is not StateDomain.KeysOf domain) || (domain.Row != zone.Row)) {
                             throw Invalid(message: "sort requires distinct numeric attribute keys over the zone's token domain; an own-value key must stand alone");
                         }
                         var ordinal = Ordinal(name: name);
+
                         reads.Add(item: ordinal);
                         keys[index] = new ArenaSortKey(RowOrdinal: ordinal, Descending: key.Descending);
                     }
@@ -413,10 +480,56 @@ public static partial class RuleCompiler {
 
                     break;
                 }
+            case StateTransform.WriteSet writeSet when (DeclaredSet(
+                context: context,
+                member: "set",
+                reference: writeSet.Set,
+                ruleName: ruleName,
+                verb: "writeSet"
+            ) is { } declaredSet): {
+                    var writeSetRow = writeSet.Row.Spelling;
+                    var written = Row(name: writeSetRow);
+
+                    if (writeSet.SetKey is not null) {
+                        throw Invalid(message: $"writeSet reads declared set '{declaredSet.Name.Value}', which has no cell for 'setKey' to address");
+                    }
+                    if (
+                        (written.EffectiveDomain is not StateDomain.CellsOf writtenBoard) ||
+                        (context.FindTopology(name: writtenBoard.Topology) is not { } writtenTopology) ||
+                        !written.TryAdmitWrite(
+                        current: 0L,
+                        operand: writeSet.Value,
+                        reason: out _,
+                        stored: out _,
+                        write: StateWriteKind.Set
+                    ) ||
+                        ((written.Kind == CellKind.Bool) && (writeSet.Value is not (0 or 1)))
+                    ) {
+                        throw Invalid(message: "writeSet requires a board row and an admitted value");
+                    }
+
+                    sourceCost += CellSetReads(
+                        cells: writtenTopology.CellCount,
+                        context: context,
+                        reads: reads,
+                        ruleName: ruleName,
+                        set: declaredSet
+                    );
+                    writes.Add(item: Ordinal(name: writeSetRow));
+                    resolved = new ArenaTransform.WriteSet(
+                        RowOrdinal: Ordinal(name: writeSetRow),
+                        Set: declaredSet,
+                        SetKey: default,
+                        SetRowOrdinal: -1,
+                        Value: writeSet.Value
+                    );
+
+                    break;
+                }
             case StateTransform.WriteSet writeSet: {
                     var writeSetSet = writeSet.Set.Spelling;
                     var writeSetRow = writeSet.Row.Spelling;
-                    var setSource = Row(name: writeSetSet);
+                    var setSource = (context.FindRow(name: writeSetSet) ?? throw Invalid(message: $"writeSet 'set' names '{writeSetSet}', which is neither a state row nor a declared set"));
                     var written = Row(name: writeSetRow);
 
                     if (
@@ -500,15 +613,44 @@ public static partial class RuleCompiler {
                         throw Invalid(message: combineReason);
                     }
 
-                    foreach (var sourceChannel in new[] { combine.Left, combine.Right }) {
+                    CellSetRow? leftSet = null;
+                    CellSetRow? rightSet = null;
+
+                    foreach (var (sourceChannel, member) in new[] { (combine.Left, "left"), (combine.Right, "right") }) {
                         if (sourceChannel is not { } source) {
+                            continue;
+                        }
+                        if (DeclaredSet(
+                            context: context,
+                            member: member,
+                            reference: source,
+                            ruleName: ruleName,
+                            verb: "boardCombine"
+                        ) is { } declared) {
+                            sourceCost += CellSetReads(
+                                cells: targetTopology.CellCount,
+                                context: context,
+                                reads: reads,
+                                ruleName: ruleName,
+                                set: declared
+                            );
+                            if (member == "left") {
+                                leftSet = declared;
+                            } else {
+                                rightSet = declared;
+                            }
+
                             continue;
                         }
 
                         var sourceName = source.Spelling;
 
-                        if ((Row(name: sourceName).EffectiveDomain is not StateDomain.CellsOf sourceBoard) || (sourceBoard.Topology != targetBoard.Topology)) {
-                            throw Invalid(message: $"boardCombine source '{sourceName}' must be a board over '{targetBoard.Topology}'");
+                        if (
+                            ((context.FindRow(name: sourceName) ?? throw Invalid(message: $"boardCombine '{member}' names '{sourceName}', which is neither a state row nor a declared set"))
+                            .EffectiveDomain is not StateDomain.CellsOf sourceBoard) ||
+                            (sourceBoard.Topology != targetBoard.Topology)
+                        ) {
+                            throw Invalid(message: $"boardCombine source '{sourceName}' must be a board over '{targetBoard.Topology}' or a declared set");
                         }
 
                         reads.Add(item: Ordinal(name: sourceName));
@@ -528,13 +670,15 @@ public static partial class RuleCompiler {
                     resolved = new ArenaTransform.BoardCombine(
                         Direction: combineDirection,
                         Element: combineElement,
-                        LeftRowOrdinal: ((combine.Left is { } leftChannel)
+                        LeftRowOrdinal: (((leftSet is null) && (combine.Left is { } leftChannel))
                         ? Ordinal(name: leftChannel.Spelling)
                         : -1),
+                        LeftSet: leftSet,
                         Operation: combine.Operation,
-                        RightRowOrdinal: ((combine.Right is { } rightChannel)
+                        RightRowOrdinal: (((rightSet is null) && (combine.Right is { } rightChannel))
                         ? Ordinal(name: rightChannel.Spelling)
                         : -1),
+                        RightSet: rightSet,
                         RowOrdinal: Ordinal(name: combineRow),
                         Value: combineValue
                     );
@@ -572,35 +716,6 @@ public static partial class RuleCompiler {
                         ),
                         FromRowOrdinal: Ordinal(name: arrangeFrom),
                         RowOrdinal: Ordinal(name: arrangeRow)
-                    );
-
-                    break;
-                }
-            case StateTransform.Push push: {
-                    var pushRow = push.Row.Spelling;
-                    var ring = Row(name: pushRow);
-
-                    if (ring.EffectiveDomain is not StateDomain.Ring) {
-                        throw Invalid(message: "push requires a history row");
-                    }
-
-                    var pushed = ResolvePushValue(
-                        context: context,
-                        push: push,
-                        ring: ring,
-                        ruleName: ruleName
-                    );
-
-                    pushValue = pushed;
-                    sourceCost = pushed.Cost(
-                        context: context,
-                        kind: ring.Kind
-                    );
-                    writes.Add(item: Ordinal(name: pushRow));
-                    resolved = new ArenaTransform.Push(
-                        Bound: !pushed.IsLiteral,
-                        RowOrdinal: Ordinal(name: pushRow),
-                        Value: pushed.RawValue
                     );
 
                     break;
@@ -664,9 +779,10 @@ public static partial class RuleCompiler {
         return new TransformStateEffect(
             arena: resolved!,
             cost: (TransformCost(
+                arena: resolved!,
                 context: context,
                 fromRow: fromRow,
-                transform: transform
+                toRow: toRow
             ) + sourceCost),
             describe: DescribeTransform(transform: transform),
             fromRow: fromRow,
@@ -674,76 +790,113 @@ public static partial class RuleCompiler {
             reads: [.. reads],
             toRow: toRow,
             transform: transform,
-            value: pushValue,
             writes: [.. writes]
         );
     }
-    // push takes the value spellings pushState takes, so the two land the same number: the raw literal converted
-    // once here, or one live source compiled through the write resolver and evaluated per firing.
-    private static CompiledValueSource ResolvePushValue(StateTransform.Push push, StateRow ring, string ruleName, RuleCompileContext context) {
-        RuleException Ambiguous(string message) => new(
-            detail: message,
-            refusal: RuleRefusal.EffectSourceAmbiguous,
-            ruleName: ruleName
-        );
-        var hasExpression = (push.Expression is not null);
-        var hasFrom = (push.FromState is not null);
-
+    // A transform operand that reads a set of positions names a board row or a declared cell set, and the two never
+    // share a name: a plain name that is a declared set resolves to it, and one that is also a state row refuses.
+    private static CellSetRow? DeclaredSet(RuleCompileContext context, StateChannelRef reference, string verb, string member, string ruleName) {
         if (
-            !hasExpression &&
-            !hasFrom
+            (reference.Name is not { } name) ||
+            !context.TryCellSet(
+            name: name,
+            set: out var declared
+        )
         ) {
-            if (!ring.TryAdmitWrite(
-                current: 0L,
-                operand: push.Value,
-                reason: out _,
-                stored: out _,
-                write: StateWriteKind.Set
-            )) {
-                throw new RuleException(
-                    detail: $"push writes {push.Value} into '{push.Row}', which its history row does not admit",
-                    refusal: RuleRefusal.EffectKindInadmissible,
-                    ruleName: ruleName
-                );
-            }
-
-            return CompiledValueSource.Constant(rawValue: push.Value);
+            return null;
         }
-        if (hasExpression && hasFrom) {
-            throw Ambiguous(message: "push names both 'fromState' and 'expression' — a push spells exactly one value source");
-        }
-        if (push.Value != 0L) {
-            throw Ambiguous(message: $"push names a live value source beside 'value' {push.Value} — a push spells exactly one value source");
-        }
-
-        // A Vector row's write resolves to a vector effect, not a WriteEffect, and a history ring never holds one.
-        var resolved = ResolveWrite(
-            context: context,
-            expression: push.Expression,
-            fromKey: push.FromKey,
-            fromState: push.FromState,
-            key: StateChannelRef.OfName(name: "0"),
-            rowName: push.Row,
-            ruleName: ruleName,
-            target: ActionTarget.Self,
-            text: null,
-            value: null,
-            valueSeconds: null,
-            verb: "push",
-            write: StateWriteKind.Set
-        );
-
-        if (resolved is not WriteEffect write) {
+        if (context.FindRow(name: name) is not null) {
             throw new RuleException(
-                detail: $"push writes '{push.Row}', whose kind carries no single value a history ring can hold",
-                refusal: RuleRefusal.EffectSourceKindMismatch,
+                detail: $"{verb} '{member}' names '{name}', which is both a state row and a declared set",
+                refusal: RuleRefusal.EffectKindInadmissible,
                 ruleName: ruleName
             );
         }
 
-        return write.Source;
+        return declared;
     }
-    private static int BoardCells(RuleCompileContext context, string row) => (((context.FindRow(name: row)?.EffectiveDomain is StateDomain.CellsOf board) && (context.FindTopology(name: board.Topology) is { } topology))
+    // Adds every row a declared set's sources read to the transform's reads and prices one lowering at the board's
+    // width: each source visits its own positions (a token family visits the domain once per member), and each
+    // operator visits the board once.
+    private static RuleWork CellSetReads(RuleCompileContext context, CellSetRow set, int cells, List<int> reads, string ruleName) {
+        RuleException Unknown(string what) => new(
+            detail: $"declared set '{set.Name.Value}' reads {what}, which the section does not declare",
+            refusal: RuleRefusal.StateRowUnknown,
+            ruleName: ruleName
+        );
+        int SourceRow(CellName row, string what) {
+            if (context.FindRow(name: row.Value) is null) {
+                throw Unknown(what: $"{what} '{row.Value}'");
+            }
+
+            var ordinal = ResolveRowOrdinal(
+                context: context,
+                name: row.Value
+            );
+
+            reads.Add(item: ordinal);
+
+            return ordinal;
+        }
+        long Walk(CellSetExpression expression) {
+            switch (expression) {
+                case CellSetExpression.Board board:
+                    _ = SourceRow(
+                        row: board.Row,
+                        what: "board"
+                    );
+
+                    return BoardCells(
+                        context: context,
+                        row: context.FindRow(name: board.Row.Value)
+                    );
+                case CellSetExpression.Zone zone:
+                    return context.RowCapacity(rowOrdinal: SourceRow(
+                        row: zone.Row,
+                        what: "zone"
+                    ));
+                case CellSetExpression.Family family: {
+                        if (!context.Catalog.TryGetFamily(
+                            family: out var range,
+                            name: family.Name
+                        )) {
+                            throw Unknown(what: $"family '{family.Name.Value}'");
+                        }
+
+                        var units = 0L;
+
+                        foreach (var ordinal in range.Ordinals()) {
+                            reads.Add(item: ordinal);
+                            if (
+                                (context.FindRowAt(rowOrdinal: ordinal)?.EffectiveDomain is StateDomain.KeysOf keys) &&
+                                (context.FindRow(name: keys.Row.Value) is not null)
+                            ) {
+                                units += context.RowCapacity(rowOrdinal: SourceRow(
+                                    row: keys.Row,
+                                    what: "token domain"
+                                ));
+                            } else {
+                                units++;
+                            }
+                        }
+
+                        return units;
+                    }
+                case CellSetExpression.Any any:
+                    return (any.Items.Sum(selector: Walk) + cells);
+                case CellSetExpression.Both both:
+                    return (both.Items.Sum(selector: Walk) + cells);
+                case CellSetExpression.Complement complement:
+                    return (Walk(expression: complement.Item) + cells);
+                default:
+                    return cells;
+            }
+        }
+
+        return RuleWork.Known(units: Walk(expression: set.Set));
+    }
+    // A board row's cell count, read from its topology; zero for a row that is not a board.
+    private static int BoardCells(RuleCompileContext context, StateRow? row) => (((row?.EffectiveDomain is StateDomain.CellsOf board) && (context.FindTopology(name: board.Topology) is { } topology))
         ? topology.CellCount
         : 0
     );
@@ -751,105 +904,277 @@ public static partial class RuleCompiler {
         StateTransform.Transfer transfer => $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector}",
         _ => $"transformState {transform.GetType().Name}",
     });
-    private static RuleWork TransformCost(StateTransform transform, RuleCompileContext context, LiveRow? fromRow) {
-        var storage = 0L;
+    // One firing's price beyond its authored sources: the fixed door, then what the resolved kernel leases, visits and
+    // writes, every term sized by the rows and topology the transform addresses. See TransformWork for the unit.
+    private static RuleWork TransformCost(ArenaTransform arena, RuleCompileContext context, LiveRow? fromRow, LiveRow? toRow) {
+        long Cells(int rowOrdinal) => BoardCells(
+            context: context,
+            row: context.FindRowAt(rowOrdinal: rowOrdinal)
+        );
+        // A live end can select any row its table or family names; a literal end is its own row.
+        int[] Ends(LiveRow? live, int own) {
+            if (live is null) {
+                return [own];
+            }
 
-        foreach (var row in context.Rows) {
-            storage += row.CellCeiling;
+            var rows = new List<CellAccess>();
+
+            live.CollectRows(
+                into: rows,
+                isSet: false
+            );
+
+            return [.. rows.Select(selector: static access => access.RowOrdinal).Distinct()];
         }
 
-        var cost = RuleWork.Known(units: (4_096L + storage));
+        var board = TransformWork.BoardWrite;
+        var door = TransformWork.Door;
+        var work = arena switch {
+            // Three leases, the board read, the walk (a step and two copies a cell), the accepted prefix, and a store
+            // per cell of it.
+            ArenaTransform.SetRay ray => RuleWork.Known(units: (Cells(rowOrdinal: ray.RowOrdinal) * ((7L + TransformWork.PatternStep(pattern: ray.Pattern)) + board))),
+            ArenaTransform.PushRay push => PushRayWork(
+                context: context,
+                push: push
+            ),
+            ArenaTransform.Observe observe => ObserveWork(
+                context: context,
+                observe: observe
+            ),
+            // The declared-set lowering is the source price the caller adds; the kernel tests every cell of the
+            // lowered set and stores each member. A mask reads one cell and walks at most its 64 bits.
+            ArenaTransform.WriteSet write => ((write.Set is not null)
+                ? (Cells(rowOrdinal: write.RowOrdinal) * (1L + board))
+                : ((door + 64L) + (Math.Min(
+                    val1: Cells(rowOrdinal: write.RowOrdinal),
+                    val2: 64L
+                ) * board))),
+            // Three leases, one pass per source (a board read or a set's fill), the target's fill and combine, and a
+            // store per cell.
+            ArenaTransform.BoardCombine combine => (Cells(rowOrdinal: combine.RowOrdinal) * (((5L + (BoardCombination.NeedsLeft(operation: combine.Operation)
+                ? 1L
+                : 0L)) + (BoardCombination.NeedsRight(operation: combine.Operation)
+                ? 1L
+                : 0L)) + board)),
+            ArenaTransform.ClearEnclosed enclosed => ClearEnclosedWork(
+                context: context,
+                enclosed: enclosed
+            ),
+            // The rank read, five leases, the domain lookup of every token, the relative order and the unranking (each
+            // quadratic in at most twenty tokens), and the reorder.
+            ArenaTransform.Arrange arrange => ArrangeWork(
+                arrange: arrange,
+                context: context
+            ),
+            // The order lease and its fill, a select and swap a position, the reorder, and the site's stream.
+            ArenaTransform.Shuffle shuffle => ShuffleWork(
+                context: context,
+                shuffle: shuffle
+            ),
+            // Two leases, the row's word, the insertion sort, and the reorder.
+            ArenaTransform.SortKeyed sort => ((((2L + door) * context.RowCapacity(rowOrdinal: sort.RowOrdinal)) + RuleWorkBudget.InsertionSortWork(
+                count: context.RowCapacity(rowOrdinal: sort.RowOrdinal),
+                keys: 1
+            )) + TransformWork.Reorder(
+                context: context,
+                members: context.RowCapacity(rowOrdinal: sort.RowOrdinal),
+                rowOrdinal: sort.RowOrdinal
+            )),
+            // A key column lease and read per attribute, the direction and order leases, the insertion sort, and the
+            // reorder.
+            ArenaTransform.SortZone sort => ((((((sort.By.Count * (1L + door)) + 1L) * context.RowCapacity(rowOrdinal: sort.RowOrdinal)) + sort.By.Count) + RuleWorkBudget.InsertionSortWork(
+                count: context.RowCapacity(rowOrdinal: sort.RowOrdinal),
+                keys: sort.By.Count
+            )) + TransformWork.Reorder(
+                context: context,
+                members: context.RowCapacity(rowOrdinal: sort.RowOrdinal),
+                rowOrdinal: sort.RowOrdinal
+            )),
+            ArenaTransform.Transfer transfer => TransferWork(
+                context: context,
+                froms: Ends(
+                    live: fromRow,
+                    own: transfer.FromRowOrdinal
+                ),
+                tos: Ends(
+                    live: toRow,
+                    own: transfer.ToRowOrdinal
+                ),
+                transfer: transfer
+            ),
+            _ => RuleWork.Unmodeled(reason: $"arena transform '{arena.GetType().Name}' has no work formula"),
+        };
 
-        switch (transform) {
-            case StateTransform.SetRay ray:
-                var rayCells = BoardCells(
-                    context: context,
-                    row: ray.Row.Spelling
-                );
+        return (TransformWork.Call + work);
+    }
+    // Three board-wide and five pool-wide leases, the snapshot and its occupancy words, linking each live token to its
+    // cell, the walk, both passes over every token the walk meets (its read and its stop and push patterns), the run's
+    // pattern, and every mover's read, step and store.
+    private static long PushRayWork(RuleCompileContext context, ArenaTransform.PushRay push) {
+        var pool = context.Catalog.Pools[push.PoolOrdinal];
+        var cells = ((long)push.Topology.CellCount);
+        var tokens = ((long)pool.Capacity);
+        var door = TransformWork.Door;
+        var leases = (((3L * cells) + (5L * tokens)) + 1L);
+        var snapshot = (tokens + ((tokens + 63L) / 64L));
+        var link = (tokens * (door + 1L));
+        var walk = cells;
+        var occupants = (tokens * ((door + 4L) + (TransformWork.PatternStep(pattern: push.StopPattern) + (2L * TransformWork.PatternStep(pattern: push.PushPattern)))));
+        var run = ((tokens + 1L) * TransformWork.PatternStep(pattern: push.Pattern));
+        var movers = (tokens * ((door + 1L) + TransformWork.LiveWrite(
+            context: context,
+            rowOrdinal: pool.Fields[push.CellFieldOrdinal].RowOrdinal
+        )));
 
-                cost += (((long)rayCells) * (rayCells + 2));
+        return ((((((leases + snapshot) + link) + walk) + occupants) + run) + movers);
+    }
+    // A board projection leases and reads the mask and the source, hides every stamp, and stores and stamps each
+    // visible cell. A token projection leases and reads the mask, hides every remembered token, then reads each
+    // positioned token's cell and value and stores and stamps it.
+    private static long ObserveWork(RuleCompileContext context, ArenaTransform.Observe observe) {
+        var door = TransformWork.Door;
+        var cells = (((context.FindRowAt(rowOrdinal: observe.MaskRowOrdinal)?.EffectiveDomain is StateDomain.CellsOf mask) && (context.FindTopology(name: mask.Topology) is { } topology))
+            ? topology.CellCount
+            : 0L
+        );
+        var stamp = (door + 1L);
 
-                break;
-            case StateTransform.PushRay pushRay:
-                var pushPool = context.Catalog.Pools.FirstOrDefault(predicate: pool => (pool.Name == pushRay.Pool));
-                // Snapshot/index leases and their population cost five pool-width passes. A ray resolves each
-                // occupant once, walks its linked occupants once, and writes each mover at most once; leave two
-                // pool widths for the journal and pattern machinery. Visited/head/tail buffers cost three board
-                // widths. The previous bound charged a complete pool scan for every board cell.
-                cost += ((pushPool is null) ? 0L : (12L * pushPool.Capacity));
-                cost += (3L * (context.FindTopology(name: pushRay.Topology.Value)?.CellCount ?? 0));
-                break;
-            case StateTransform.Transfer transfer:
-                // A live source is priced at the widest row it can name.
-                cost += (((transfer.Selector == ZoneSelector.Slice)
-                    ? 2L
-                    : ((long)transfer.Count)) * (fromRow?.SelectionCapacity ?? context.RowCapacity(name: transfer.From.Spelling)));
+        if (observe.PositionsRowOrdinal < 0) {
+            return (((4L * cells) + (cells * (1L + stamp))) + (cells * ((1L + TransformWork.BoardWrite) + stamp)));
+        }
 
-                break;
-            case StateTransform.BoardCombine combine:
-                cost += (3L * BoardCells(
-                    context: context,
-                    row: combine.Row.Spelling
+        return ((((2L * cells) + (context.RowCapacity(rowOrdinal: observe.RowOrdinal) * (1L + stamp))) + (context.RowCapacity(rowOrdinal: observe.PositionsRowOrdinal) * (((1L + (2L * door)) + TransformWork.LiveWrite(
+            context: context,
+            rowOrdinal: observe.RowOrdinal
+        )) + stamp))));
+    }
+    // A lease and the board read; the flood clears its marks, seeds one group per direction, visits each cell once and
+    // tests its neighbours, and empties each enclosed member; then every cell is read back and each cleared one stored.
+    private static long ClearEnclosedWork(RuleCompileContext context, ArenaTransform.ClearEnclosed enclosed) {
+        var topology = ((context.FindRowAt(rowOrdinal: enclosed.RowOrdinal)?.EffectiveDomain is StateDomain.CellsOf board)
+            ? context.FindTopology(name: board.Topology)
+            : null
+        );
+        var cells = ((long)(topology?.CellCount ?? 0));
+        var directions = ((long)(topology?.DirectionCount ?? 0));
+        var flood = (((cells + directions) + (cells * (2L + (3L * directions)))) + cells);
+
+        return (((2L * cells) + flood) + (cells * (TransformWork.Door + TransformWork.BoardWrite)));
+    }
+    private static long ArrangeWork(RuleCompileContext context, ArenaTransform.Arrange arrange) {
+        var tokens = Math.Min(
+            val1: context.RowCapacity(rowOrdinal: arrange.RowOrdinal),
+            val2: StateReader.MaxArrangementTokens
+        );
+        var leases = ((3L * StateReader.MaxArrangementTokens) + (2L * tokens));
+        var lookup = (tokens * (1L + context.RowCapacity(rowOrdinal: arrange.DomainRowOrdinal)));
+
+        return (((((TransformWork.Door + leases) + lookup) + (3L * tokens)) + (2L * (tokens * tokens))) + TransformWork.Reorder(
+            context: context,
+            members: tokens,
+            rowOrdinal: arrange.RowOrdinal
+        ));
+    }
+    private static long ShuffleWork(RuleCompileContext context, ArenaTransform.Shuffle shuffle) {
+        var members = context.RowCapacity(rowOrdinal: shuffle.RowOrdinal);
+        var samples = Math.Max(
+            val1: 0L,
+            val2: (members - 1L)
+        );
+
+        return ((((2L * members) + (samples * 3L)) + TransformWork.Reorder(
+            context: context,
+            members: members,
+            rowOrdinal: shuffle.RowOrdinal
+        )) + TransformWork.Draws(
+            context: context,
+            rowOrdinal: shuffle.DrawRowOrdinal,
+            samples: samples
+        ));
+    }
+    // Every token is selected afresh (a sample for a random transfer), then either moves between the two zones or,
+    // onto its own zone, costs an order lease, its fill and a reorder; a slice moves the keyed token's whole run and
+    // reorders its own zone once. A removal closes its gap by shifting every later member down a cell, and the pile
+    // shrinks by one each time, so n removals shift at most n x (F - 1) - n x (n - 1) / 2 cells; taking the last
+    // member, or a slice walked back from its tail, shifts none. An insertion at the head shifts every member already
+    // there; one at the tail shifts none. Either end may be live, so every pair of rows it can select is priced and
+    // the costliest kept.
+    private static long TransferWork(RuleCompileContext context, ArenaTransform.Transfer transfer, int[] froms, int[] tos) {
+        var door = TransformWork.Door;
+        var slice = (transfer.Selector == ZoneSelector.Slice);
+        var random = (transfer.Selector == ZoneSelector.Random);
+        var literal = ((froms.Length == 1) && (tos.Length == 1));
+        var widest = 0L;
+
+        foreach (var from in froms) {
+            var fromMembers = context.RowCapacity(rowOrdinal: from);
+            var tokens = Math.Min(
+                val1: fromMembers,
+                val2: (slice
+                    ? fromMembers
+                    : transfer.Count)
+            );
+            var removalShifts = (((transfer.Selector == ZoneSelector.Last) || (slice && transfer.InsertFirst))
+                ? 0L
+                : Math.Max(
+                    val1: 0L,
+                    val2: ((tokens * (fromMembers - 1L)) - ((tokens * (tokens - 1L)) / 2L))
                 ));
+            var reorder = ((2L * fromMembers) + TransformWork.Reorder(
+                context: context,
+                members: fromMembers,
+                rowOrdinal: from
+            ));
+            var within = (slice
+                ? reorder
+                : (transfer.Count * reorder));
 
-                break;
-            case StateTransform.Arrange arrange:
-                cost += (4L * context.RowCapacity(name: arrange.Row.Spelling));
-
-                break;
-            case StateTransform.Sort sort:
-                cost += RuleWorkBudget.InsertionSortWork(
-                    count: context.RowCapacity(name: sort.Row.Spelling),
-                    keys: Math.Max(
-                        val1: 1,
-                        val2: sort.By.Count
-                    )
-                );
-
-                break;
-            case StateTransform.Shuffle shuffle:
-                cost += (2L * context.RowCapacity(name: shuffle.Row.Spelling));
-
-                break;
-            case StateTransform.WriteSet writeSet:
-                var writtenCells = BoardCells(
+            foreach (var to in tos) {
+                var toMembers = context.RowCapacity(rowOrdinal: to);
+                var across = (((tokens * (door + TransformWork.Move(
                     context: context,
-                    row: writeSet.Row.Spelling
-                );
-
-                cost += (((long)writtenCells) * (writtenCells + 1));
-
-                break;
-            case StateTransform.Push push:
-                cost += (2L * ((context.FindRow(name: push.Row.Spelling)?.EffectiveDomain as StateDomain.Ring)?.Capacity ?? 1));
-
-                break;
-            case StateTransform.ClearEnclosed enclosed:
-                var directions = ((context.FindRow(name: enclosed.Row.Spelling)?.EffectiveDomain is StateDomain.CellsOf enclosedBoardRow)
-                    ? (context.FindTopology(name: enclosedBoardRow.Topology)?.DirectionCount ?? 0)
-                    : 0
-                );
-                var enclosedCells = BoardCells(
+                    fromMembers: fromMembers,
+                    fromOrdinal: from,
+                    toMembers: toMembers,
+                    toOrdinal: to
+                ))) + (removalShifts * TransformWork.Cell(
                     context: context,
-                    row: enclosed.Row.Spelling
+                    rowOrdinal: from
+                ))) + (transfer.InsertFirst
+                    ? ((tokens * Math.Max(
+                        val1: 0L,
+                        val2: (toMembers - 1L)
+                    )) * TransformWork.Cell(
+                        context: context,
+                        rowOrdinal: to
+                    ))
+                    : 0L));
+                var pair = (literal
+                    ? ((from == to)
+                        ? within
+                        : across)
+                    : Math.Max(
+                        val1: within,
+                        val2: across
+                    ));
+
+                widest = Math.Max(
+                    val1: widest,
+                    val2: pair
                 );
-
-                cost += (((long)enclosedCells) * (directions + 2));
-
-                break;
-            case StateTransform.Observe observe:
-                var observedCells = BoardCells(
-                    context: context,
-                    row: observe.Row.Spelling
-                );
-
-                cost += (((long)observedCells) * (observedCells + 3));
-
-                break;
-            default:
-                break;
+            }
         }
 
-        return cost;
+        var selections = (slice
+            ? door
+            : (transfer.Count * door));
+
+        return ((((2L * door) + selections) + widest) + (random
+            ? TransformWork.Draws(
+                context: context,
+                rowOrdinal: transfer.DrawRowOrdinal,
+                samples: transfer.Count
+            )
+            : 0L));
     }
 }

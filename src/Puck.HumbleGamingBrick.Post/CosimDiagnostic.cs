@@ -1,4 +1,5 @@
-using System.Diagnostics;
+using System.Globalization;
+using Puck.Hosting;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
@@ -453,33 +454,26 @@ internal static class CosimDiagnostic {
     }
     // Spawns sb-trace in events mode: `sb-trace events <rom> <bootrom> <dmg|cgb> <frames> <cpu|ppu|pcm|all> <outfile>`.
     private static int RunSameBoy(string sameboyExe, string romPath, string bootPath, ConsoleModel model, int frames, string kindArg, string outputPath) {
-        var psi = new ProcessStartInfo {
-            CreateNoWindow = true,
-            FileName = sameboyExe,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
+        var run = ChildProcess.RunAsync(
+            arguments: [
+                "events",
+                romPath,
+                bootPath,
+                ((model == ConsoleModel.CgbE)
+                    ? "cgb"
+                    : "dmg"),
+                frames.ToString(provider: CultureInfo.InvariantCulture),
+                kindArg,
+                outputPath,
+            ],
+            fileName: sameboyExe
+        ).GetAwaiter().GetResult();
 
-        psi.ArgumentList.Add(item: "events");
-        psi.ArgumentList.Add(item: romPath);
-        psi.ArgumentList.Add(item: bootPath);
-        psi.ArgumentList.Add(item: ((model == ConsoleModel.CgbE)
-            ? "cgb"
-            : "dmg"));
-        psi.ArgumentList.Add(item: frames.ToString());
-        psi.ArgumentList.Add(item: kindArg);
-        psi.ArgumentList.Add(item: outputPath);
-
-        using var process = Process.Start(startInfo: psi)!;
-
-        process.WaitForExit();
-
-        if (process.ExitCode != 0) {
-            Console.WriteLine(value: $"    sb-trace stderr: {process.StandardError.ReadToEnd()}");
+        if (run.ExitCode != 0) {
+            Console.WriteLine(value: $"    sb-trace stderr: {run.Stderr}");
         }
 
-        return process.ExitCode;
+        return run.ExitCode;
     }
     private static bool TryParseKind(string kindArg, out bool wantCpu, out bool wantPpu, out bool wantPcm) {
         switch (kindArg.ToLowerInvariant()) {

@@ -12,10 +12,12 @@ public sealed partial class WorldSiloHost {
     /// <param name="cancellationToken">Cancels capture or upload; an incomplete upload cannot be loaded as a fixture.</param>
     /// <returns>The retained inventory, including the full digest to verify after download.</returns>
     public async Task<WorldReleaseFixtureManifest> ExportReleaseFixtureAsync(Guid requestId, CancellationToken cancellationToken = default) {
-        if (requestId == Guid.Empty) { throw new ArgumentException(
+        if (requestId == Guid.Empty) {
+            throw new ArgumentException(
             message: "fixture request must not be empty",
             paramName: nameof(requestId)
-        ); }
+        );
+        }
         var managed = (m_releaseManagement ?? throw new InvalidOperationException(message: "fixture export requires a managed release"));
 
         await RequireFixtureSourceAsync(token: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
@@ -38,7 +40,7 @@ public sealed partial class WorldSiloHost {
         var capture = new TaskCompletionSource<IReadOnlyDictionary<string, ReleaseFixtureCapture>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         DateTimeOffset? capturedAt = null;
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             try {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (
@@ -57,7 +59,7 @@ public sealed partial class WorldSiloHost {
                 ) {
                     throw new InvalidOperationException(message: "rewind capture requires exactly the declared world inventory");
                 }
-                capturedAt = DateTimeOffset.UtcNow;
+                capturedAt = m_clock.GetUtcNow();
                 foreach (var declared in m_definition.Worlds) {
                     if (
                         (declared.Owner != managed.Owner) ||
@@ -125,7 +127,8 @@ public sealed partial class WorldSiloHost {
         var boundary = await capture.Task.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         var receiptStore = new WorldAuthorityBlobStore(
             store: m_blobStore,
-            target: m_storageTarget
+            target: m_storageTarget,
+            timeProvider: m_clock
         );
         var captured = new SortedDictionary<string, WorldReleaseFixtureCheckpoint>(comparer: StringComparer.Ordinal);
 
@@ -187,7 +190,8 @@ public sealed partial class WorldSiloHost {
         return (ClosedGroupRewind
             ? await new WorldAuthorityBlobStore(
                 store: m_blobStore,
-                target: m_storageTarget
+                target: m_storageTarget,
+                timeProvider: m_clock
             ).EstablishRewindBoundaryAsync(
                 identity,
                 bookkeeping.Fence,

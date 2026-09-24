@@ -19,6 +19,7 @@ public sealed partial class StateArena {
             return false;
         }
 
+        Visit(lanes: layout.CellCapacity);
         for (var cell = 0; (cell < layout.CellCapacity); cell++) {
             var slot = (layout.CellStart + cell);
 
@@ -50,6 +51,7 @@ public sealed partial class StateArena {
         ) {
             var slot = (layout.CellStart + cell);
 
+            Visit(lanes: 1L);
             value = (Bit(
                 index: slot,
                 words: m_presence
@@ -214,6 +216,7 @@ public sealed partial class StateArena {
         var count = (sparseTokens ? tokens.CellCapacity : ((int)m_memberCounts[board.InverseTokensOrdinal]));
         var winner = -1;
 
+        Visit(lanes: count);
         for (var position = 0; (position < count); position++) {
             if ((m_numbers[(tokens.CellStart + position)] == cell) && (!sparseTokens || Bit(words: m_presence, index: (tokens.CellStart + position)))) {
                 winner = position;

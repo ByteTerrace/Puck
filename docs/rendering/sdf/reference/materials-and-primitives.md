@@ -21,6 +21,9 @@ a seam. A losing scope restores the parent's state; a winning hard-union scope
 keeps its internal material seam. A smooth outer composition creates a new
 two-material seam. Without this isolation, a smooth join inside a character can
 tint unrelated ground pixels even when the ground wins the distance comparison.
+To check a change here, render contrasting scoped materials beside an unrelated
+ground surface: a losing scope must not tint the ground, and a winning
+hard-union scope must keep its internal seam.
 
 ## Primitive contract
 
@@ -100,7 +103,7 @@ trims are refused; use the outline itself for corner shaping. They are
 presentation geometry: deterministic field-contact requests refuse them by
 name. Author a separate supported contact shape when needed.
 
-The [path fixture](../../../../tests/Puck.Parity/paths.world.json) exercises
+The [path fixture](../../../../tests/Puck.Parity/paths.puck) exercises
 arcs, a concave sheared outline, a hole, cubic curves, and smooth width changes.
 It has its own [cross-backend contract](../../../../tests/Puck.Parity/paths.contract.json).
 

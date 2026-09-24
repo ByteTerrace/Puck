@@ -1,16 +1,17 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Sources;
 using Puck.Commands;
-using Puck.SdfVm;
+using Puck.Hosting;
 using Puck.World.Client;
 using Puck.SdfVm.Views;
 
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    // Standalone Capture sources declared through DeclareFrameSource, keyed by the source record itself (WorldFrameSource
-    // equality — Camera/View/Probe already have a stable identity elsewhere: EnsureCameraFeed keys by sensor,
-    // RegisterCameraView by camera name, GetOrAddProbeFeed by probe id; a Capture carries no such name, so the record IS
-    // its own key). Populated only on success — a source the platform cannot ever open (no window-capture support at
+    // Standalone capture producer sources declared through DeclareFrameSource, keyed by the source record itself
+    // (a producer source is equal to another naming the same id and settings — a camera, a view and a probe already
+    // have a stable identity elsewhere: EnsureCameraFeed keys by sensor, RegisterCameraView by camera name,
+    // GetOrAddProbeFeed by probe id; a capture carries no such name, so the record is its own key). Populated only on success — a source the platform cannot ever open (no window-capture support at
     // all) records no entry and is retried the next time DeclareFrameSource sees it (cheap: HUD structure rebuilds run
     // at most once per definition revision plus once per edited identity).
     private readonly Dictionary<WorldFrameSource, CaptureFeed> m_frameCaptures = new();
@@ -44,7 +45,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         switch (source) {
-            case WorldScreenSource.Camera:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CameraId }:
                 // ReconcileCameraDemand derives demand straight from live consumer state every publish — nothing to
                 // declare imperatively here.
                 break;
@@ -61,7 +62,10 @@ internal sealed partial class WorldScreenBinder {
                 _ = GetOrAddProbeFeed(id: probe.Id);
 
                 break;
-            case WorldScreenSource.Capture capture:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CaptureId } when WorldImageProducerSettings.TryCapture(
+                capture: out var capture,
+                source: source
+            ):
                 if (
                     !m_frameCaptures.ContainsKey(key: source) &&
                     (TryCreateCaptureFeed(
@@ -100,7 +104,7 @@ internal sealed partial class WorldScreenBinder {
         m_frameSourceReferences[key] = 1;
 
         switch (source) {
-            case WorldScreenSource.Camera:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CameraId }:
                 // This table's membership feeds ReconcileCameraDemand directly at the next publish — nothing to
                 // open imperatively here.
                 break;
@@ -138,7 +142,7 @@ internal sealed partial class WorldScreenBinder {
         _ = m_frameSourceReferences.Remove(key: key);
 
         switch (source) {
-            case WorldScreenSource.Camera:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CameraId }:
                 // This table's membership drops out of ReconcileCameraDemand's next recompute — nothing to release
                 // imperatively here.
                 break;
@@ -150,8 +154,6 @@ internal sealed partial class WorldScreenBinder {
                     seat: seat
                 ));
 
-                break;
-            case WorldScreenSource.Capture:
                 break;
         }
     }
@@ -174,7 +176,7 @@ internal sealed partial class WorldScreenBinder {
                 ));
 
                 break;
-            case WorldScreenSource.Capture:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CaptureId }:
                 if (
                     !HasRetainedCapture(source: source) &&
                     m_frameCaptures.Remove(
@@ -224,7 +226,7 @@ internal sealed partial class WorldScreenBinder {
             val2: right.RefreshRateHz
         )
     );
-    private void RetainProbeCameraDemandCore(WorldScreenSource.Camera camera, int contextSeat) {
+    private void RetainProbeCameraDemandCore(WorldCameraSettings camera, int contextSeat) {
         var key = ((camera.Seat ?? contextSeat), camera.Sensor);
         var requested = (camera.Profile ?? WorldFeedProfile.Default);
 
@@ -241,7 +243,7 @@ internal sealed partial class WorldScreenBinder {
 
         demands.Add(item: requested);
     }
-    private void ReleaseProbeCameraDemandCore(WorldScreenSource.Camera camera, int contextSeat) {
+    private void ReleaseProbeCameraDemandCore(WorldCameraSettings camera, int contextSeat) {
         var key = ((camera.Seat ?? contextSeat), camera.Sensor);
 
         if (!m_probeCameraDemand.TryGetValue(
@@ -312,7 +314,7 @@ internal sealed partial class WorldScreenBinder {
         );
     private static void MergeCameraDemand(
         Dictionary<(int Seat, WorldCameraSensor Sensor), WorldFeedProfile> demands,
-        WorldScreenSource.Camera camera,
+        WorldCameraSettings camera,
         int fallbackSeat
     ) {
         var key = ((camera.Seat ?? fallbackSeat), camera.Sensor);
@@ -343,15 +345,15 @@ internal sealed partial class WorldScreenBinder {
         m_cameraDemand.Clear();
 
         foreach (var slot in m_slots.Values) {
-            if (
-                (slot.CameraSeat is not { } seat) ||
-                (slot.CameraSensorKind is not { } sensor)
-            ) {
+            if (slot.LiveFeed is not CameraSlotFeed { Seat: var seat, Sensor: var sensor }) {
                 continue;
             }
 
             var requested = ((
-                (slot.DeclaredSource is WorldScreenSource.Camera declared) &&
+                WorldImageProducerSettings.TryCamera(
+                    camera: out var declared,
+                    source: slot.DeclaredSource
+                ) &&
                 ((declared.Seat ?? seat) == seat) &&
                 (declared.Sensor == sensor)
             )
@@ -388,7 +390,10 @@ internal sealed partial class WorldScreenBinder {
         }
 
         foreach (var entry in m_frameSourceReferences.Keys) {
-            if (entry.Source is WorldScreenSource.Camera camera) {
+            if (WorldImageProducerSettings.TryCamera(
+                camera: out var camera,
+                source: entry.Source
+            )) {
                 MergeCameraDemand(
                     camera: camera,
                     demands: m_cameraDemand,
@@ -474,18 +479,31 @@ internal sealed partial class WorldScreenBinder {
     /// <summary>Acquires the current frame for a previously-declared <see cref="WorldFrameSource"/> — the render-thread,
     /// per-frame counterpart of <see cref="DeclareFrameSource"/>. Reads the same shared feed a screen slot naming the
     /// identical source would (a camera seat/sensor, a named view, a probe id, or a standalone capture), so a HUD
-    /// frame and a diegetic screen filming the same source see the same image.</summary>
+    /// frame and a diegetic screen filming the same source see the same image, and resolves an external source (a
+    /// camera, a capture, a probe of either) through the same capture gate a screen does.</summary>
     /// <param name="source">The frame source to sample.</param>
     /// <param name="seat">The 1-based enclosing seat scope a camera source with no authored <c>Seat</c> resolves
     /// against.</param>
     /// <param name="frame">The acquired frame, set only when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the source is live this frame.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public bool TryAcquireFrame(WorldFrameSource source, int seat, out SdfScreenSourceFrame frame) {
+    public bool TryAcquireFrame(WorldFrameSource source, int seat, out GpuImageLease frame) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        if (
+            FillsExternal &&
+            IsExternal(source: source)
+        ) {
+            frame = FillImage(rgba: ImageSourceDescriptor.DefaultCaptureFill);
+
+            return (0 != frame.ImageViewHandle);
+        }
+
         switch (source) {
-            case WorldScreenSource.Camera camera:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CameraId } when WorldImageProducerSettings.TryCamera(
+                camera: out var camera,
+                source: source
+            ):
                 if (TryResolveCamera(
                     seat: (camera.Seat ?? seat),
                     sensor: camera.Sensor,
@@ -523,7 +541,7 @@ internal sealed partial class WorldScreenBinder {
                 }
 
                 break;
-            case WorldScreenSource.Capture:
+            case WorldScreenSource.Producer { Id: WorldImageProducerSettings.CaptureId }:
                 if (m_frameCaptures.TryGetValue(
                     key: source,
                     value: out var captureFeed
@@ -543,6 +561,16 @@ internal sealed partial class WorldScreenBinder {
         return false;
     }
 
+    // Whether a frame source's content is external: a producer whose registered shape says so, or a probe, which
+    // processes a camera's frames.
+    private static bool IsExternal(WorldFrameSource source) => source switch {
+        WorldScreenSource.Producer producer => (WorldImageProducerVocabulary.TryGet(
+            id: producer.Id,
+            shape: out var shape
+        ) && (shape.Content == ImageContentClass.External)),
+        WorldScreenSource.Probe => true,
+        _ => false,
+    };
     // Standalone captures ride the same per-frame pull cadence a slot-owned capture does, from Publish (below), and
     // the same device-lost/dispose sweeps every other feed this binder owns gets.
     private void PublishFrameCaptures(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {

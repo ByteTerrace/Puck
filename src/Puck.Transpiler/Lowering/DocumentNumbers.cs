@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json.Nodes;
+using Puck.State;
 
 namespace Puck.Transpiler.Lowering;
 
@@ -35,11 +36,11 @@ public static class DocumentNumbers {
                 destination: bits
             );
 
-            var magnitude = ((((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((uint)bits[0]));
+            var magnitude = (((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((uint)bits[0]);
 
             return Of(
                 denominator: BigInteger.Pow(
-                    exponent: ((bits[3] >> 16) & 0xFF),
+                    exponent: (bits[3] >> 16) & 0xFF,
                     value: 10
                 ),
                 numerator: ((bits[3] < 0)
@@ -53,10 +54,10 @@ public static class DocumentNumbers {
         public static Rational Of(double value) {
             var bits = BitConverter.DoubleToInt64Bits(value: value);
             var biased = ((int)((bits >> 52) & 0x7FF));
-            var fraction = (bits & 0xFFFFFFFFFFFFFL);
+            var fraction = bits & 0xFFFFFFFFFFFFFL;
             var significand = ((BigInteger)((biased == 0)
                 ? fraction
-                : (fraction | (1L << 52))
+                : fraction | (1L << 52)
             ));
             var exponent = (((biased == 0)
                 ? 1
@@ -78,7 +79,6 @@ public static class DocumentNumbers {
                 )
             );
         }
-
         public int CompareTo(Rational other) => (Numerator * other.Denominator).CompareTo(other: (other.Numerator * Denominator));
     }
 
@@ -122,6 +122,31 @@ public static class DocumentNumbers {
             )
         ) {
             return first.CompareTo(value: second);
+        }
+
+        // Two values held the same way order exactly in that representation; only a decimal against a double needs
+        // the rational both are.
+        if (
+            TryExact(
+                node: left,
+                number: out var leftExact
+            ) &&
+            TryExact(
+                node: right,
+                number: out var rightExact
+            )
+        ) {
+            return leftExact.CompareTo(value: rightExact);
+        }
+        if (
+            (left is JsonValue leftValue) &&
+            (right is JsonValue rightValue) &&
+            leftValue.TryGetValue<double>(value: out var leftReal) &&
+            rightValue.TryGetValue<double>(value: out var rightReal) &&
+            double.IsFinite(d: leftReal) &&
+            double.IsFinite(d: rightReal)
+        ) {
+            return leftReal.CompareTo(value: rightReal);
         }
 
         _ = TryRational(
@@ -174,21 +199,22 @@ public static class DocumentNumbers {
     }
     /// <summary>Computes a sum, a difference or a product of two exact numbers, when a decimal holds the result
     /// exactly.</summary>
-    /// <param name="operation">One of <c>+</c>, <c>-</c> and <c>*</c>.</param>
+    /// <param name="operation">One of <see cref="ExpressionOp.Add"/>, <see cref="ExpressionOp.Subtract"/> and
+    /// <see cref="ExpressionOp.Multiply"/>.</param>
     /// <param name="left">The left operand.</param>
     /// <param name="right">The right operand.</param>
     /// <param name="result">The result.</param>
     /// <returns><see langword="false"/> when the result overflows a decimal or a decimal would round it, a product
     /// too small for its scale included: decimal arithmetic rounds without saying so, and a rounded result is not
     /// an exact one.</returns>
-    public static bool TryExactArithmetic(string operation, decimal left, decimal right, out decimal result) {
-        ArgumentNullException.ThrowIfNull(argument: operation);
-
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="operation"/> is not a sum, a difference or a
+    /// product.</exception>
+    public static bool TryExactArithmetic(ExpressionOp operation, decimal left, decimal right, out decimal result) {
         try {
             result = (operation switch {
-                "+" => (left + right),
-                "-" => (left - right),
-                "*" => (left * right),
+                ExpressionOp.Add => (left + right),
+                ExpressionOp.Subtract => (left - right),
+                ExpressionOp.Multiply => (left * right),
                 _ => throw new ArgumentOutOfRangeException(
                     actualValue: operation,
                     message: "Exact arithmetic is a sum, a difference or a product.",
@@ -204,11 +230,11 @@ public static class DocumentNumbers {
         var first = Rational.Of(value: left);
         var second = Rational.Of(value: right);
         var expected = (operation switch {
-            "+" => Rational.Of(
+            ExpressionOp.Add => Rational.Of(
                 denominator: (first.Denominator * second.Denominator),
                 numerator: ((first.Numerator * second.Denominator) + (second.Numerator * first.Denominator))
             ),
-            "-" => Rational.Of(
+            ExpressionOp.Subtract => Rational.Of(
                 denominator: (first.Denominator * second.Denominator),
                 numerator: ((first.Numerator * second.Denominator) - (second.Numerator * first.Denominator))
             ),

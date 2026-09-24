@@ -542,8 +542,10 @@ public sealed class ProbeKindManifestTests {
         try {
             var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
+            // The strict enum converter refuses the name, and the refusal says where the value sits.
+            Assert.IsType<JsonException>(@object: exception.InnerException);
             Assert.Contains(
-                expectedSubstring: "Unrecognized probe kind class 'sniff'",
+                expectedSubstring: "$.class",
                 actualString: exception.Message,
                 comparisonType: StringComparison.Ordinal
             );

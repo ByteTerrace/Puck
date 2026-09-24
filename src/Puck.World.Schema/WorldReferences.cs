@@ -13,13 +13,17 @@ namespace Puck.World;
 /// string every <see cref="IWorldNeighbourResolver"/> call site already passes around.
 /// </summary>
 /// <param name="Name">The reference's own name — <see cref="SafeName"/>-shaped, unique within the section.</param>
-/// <param name="Document">The referenced world's document path (e.g. <c>"dive.world.json"</c>), authored verbatim.
+/// <param name="Document">The referenced world's document name (e.g. <c>"modules/dive"</c>, see
+/// <see cref="WorldDocumentName"/>), authored verbatim and relative to the referring document.
 /// Mutually exclusive with <see cref="Owner"/>/<see cref="World"/>.</param>
 /// <param name="Owner">The remote world's owning platform user id (a UUID) — worlds ARE users, so naming the
 /// owner names the world's account. Required together with <see cref="World"/>; refused alone.</param>
 /// <param name="World">The remote world's own <see cref="SafeName"/>-shaped id within its owner's account.
 /// Required together with <see cref="Owner"/>; refused alone.</param>
 public sealed record WorldReference(SafeName Name, string? Document = null, Guid? Owner = null, SafeName? World = null) {
+    /// <summary>The prefix every owner-named <see cref="NeighbourKey"/> carries, and no <see cref="Document"/> may.</summary>
+    public const string OwnerKeyPrefix = "owner/";
+
     /// <summary>
     /// Gets the opaque key every <see cref="IWorldNeighbourResolver"/> call site resolves against — the authored
     /// <see cref="Document"/> path verbatim, or, for the owner-named arm, <c>"owner/{Owner:D}/{World}"</c>. Never
@@ -29,5 +33,5 @@ public sealed record WorldReference(SafeName Name, string? Document = null, Guid
     /// otherwise satisfy an owner-shaped key with no signature ever checked).
     /// </summary>
     [JsonIgnore]
-    public string NeighbourKey => (Document ?? $"owner/{Owner:D}/{World}");
+    public string NeighbourKey => (Document ?? $"{OwnerKeyPrefix}{Owner:D}/{World}");
 }

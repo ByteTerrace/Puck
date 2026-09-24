@@ -179,19 +179,25 @@ public sealed partial class Sm83 {
             m_componentClock.Invalidate();
         }
     }
-    private byte ReadNextByte() {
-        var value = ReadCycle(address: m_programCounter);
+    // Operand fetch and POP are one bus pattern over different pointers: one read machine cycle per byte at the
+    // pointer, which then steps up by one — low byte first for a word, with no internal cycle between the two reads.
+    private byte ReadAndStep(ref ushort pointer) {
+        var value = ReadCycle(address: pointer);
 
-        m_programCounter = ((ushort)(m_programCounter + 1));
+        pointer = ((ushort)(pointer + 1));
 
         return value;
     }
-    private ushort ReadNextWord() {
-        var low = ReadNextByte();
-        var high = ReadNextByte();
+    private ushort ReadWordAndStep(ref ushort pointer) {
+        var low = ReadAndStep(pointer: ref pointer);
+        var high = ReadAndStep(pointer: ref pointer);
 
         return ((ushort)((high << 8) | low));
     }
+    private byte ReadNextByte() =>
+        ReadAndStep(pointer: ref m_programCounter);
+    private ushort ReadNextWord() =>
+        ReadWordAndStep(pointer: ref m_programCounter);
     // The implicit SP move behind PUSH's two-byte write reports to the OAM corruption bug once, against SP's value
     // before either decrement (see PushWord) — a plain register-bump write-corruption trigger. The two byte writes
     // that follow are each a direct CPU write in their own right, which the bus arms for the SAME bug independently
@@ -217,19 +223,8 @@ public sealed partial class Sm83 {
     // POP's implicit SP++ carries no register-bump trigger of its own on this hardware — its share of the OAM
     // corruption bug comes entirely from each byte's own read (NoteBlockedOamRead off SystemBus.ReadByte) landing in
     // OAM range.
-    private byte PopStackByte() {
-        var value = ReadCycle(address: m_stackPointer);
-
-        m_stackPointer = ((ushort)(m_stackPointer + 1));
-
-        return value;
-    }
-    private ushort PopWord() {
-        var low = PopStackByte();
-        var high = PopStackByte();
-
-        return ((ushort)((high << 8) | low));
-    }
+    private ushort PopWord() =>
+        ReadWordAndStep(pointer: ref m_stackPointer);
     private byte ReadOperand(int index) =>
         index switch {
             0 => m_b,

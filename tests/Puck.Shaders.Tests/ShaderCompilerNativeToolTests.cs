@@ -1,42 +1,14 @@
-using Puck.Abstractions.Gpu;
-
 namespace Puck.Shaders.Tests;
 
-/// <summary>Exercises the compiler against the installed DXC/glslang/spirv-cross toolchain.</summary>
+/// <summary>Exercises the compiler against the installed DXC.</summary>
 public sealed class ShaderCompilerNativeToolTests {
-    private static string? Find(params string[] names) {
-        var path = Environment.GetEnvironmentVariable(variable: "PATH");
-
-        if (string.IsNullOrWhiteSpace(value: path)) { return null; }
-        foreach (var directory in path.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: Path.PathSeparator
-        )) {
-            foreach (var name in names) {
-                var candidate = Path.Combine(
-                    path1: directory,
-                    path2: name
-                );
-
-                if (File.Exists(path: candidate)) { return candidate; }
-                if (File.Exists(path: (candidate + ".exe"))) { return (candidate + ".exe"); }
-            }
-        }
-        return null;
-    }
-
     [Fact]
-    public async Task Native_tools_compile_hlsl_compute_graphics_and_shadertoy_channels_for_both_backends() {
-        var dxc = Find("dxc");
-        var glslang = Find(
-            "glslangValidator",
-            "glslang"
-        );
-        var cross = Find("spirv-cross");
+    public async Task Dxc_compiles_hlsl_compute_and_graphics_for_both_backends() {
+        var toolchain = new ShaderToolchain();
 
         Assert.SkipWhen(
-            condition: ((dxc is null) || (glslang is null) || (cross is null)),
-            reason: "DXC, glslangValidator, and spirv-cross are required for this native compiler test."
+            condition: (toolchain.Locate(name: ShaderCompiler.DxcTool) is null),
+            reason: "DXC is required for this native compiler test."
         );
 
         var root = Path.Combine(
@@ -58,10 +30,6 @@ public sealed class ShaderCompilerNativeToolTests {
                 path1: root,
                 path2: "native.comp.hlsl"
             );
-            var toyPath = Path.Combine(
-                path1: root,
-                path2: "native.glsl"
-            );
 
             await File.WriteAllTextAsync(
                 vertexPath,
@@ -78,11 +46,6 @@ public sealed class ShaderCompilerNativeToolTests {
                 "[numthreads(4, 2, 1)] void customEntry(uint3 id : SV_DispatchThreadID) { }",
                 TestContext.Current.CancellationToken
             );
-            await File.WriteAllTextAsync(
-                toyPath,
-                "void mainImage(out vec4 color, in vec2 fragCoord) { color = vec4(gain, bias); color += texture(iChannelHeat, fragCoord / iResolution.xy); }",
-                TestContext.Current.CancellationToken
-            );
 
             var compiler = new ShaderCompiler(Path.Combine(
                 path1: root,
@@ -90,8 +53,8 @@ public sealed class ShaderCompilerNativeToolTests {
             ));
             var compute = await compiler.CompileAsync(
                 new ShaderCompilationRequest(
-                    "native-compute",
-                    [
+                    name: "native-compute",
+                    stages: [
                 new ShaderStageSource(
                             ShaderStage.Compute,
                             computePath,
@@ -99,11 +62,7 @@ public sealed class ShaderCompilerNativeToolTests {
                                 computePath,
                                 TestContext.Current.CancellationToken
                             ),
-                            ShaderSourceLanguage.Hlsl,
-                            "customEntry",
-                            4,
-                            2,
-                            1
+                            "customEntry"
                         )
             ]
                 ),
@@ -120,8 +79,8 @@ public sealed class ShaderCompilerNativeToolTests {
 
             var graphics = await compiler.CompileAsync(
                 new ShaderCompilationRequest(
-                    "native-graphics",
-                    [
+                    name: "native-graphics",
+                    stages: [
                 new ShaderStageSource(
                             ShaderStage.Vertex,
                             vertexPath,
@@ -129,7 +88,6 @@ public sealed class ShaderCompilerNativeToolTests {
                                 vertexPath,
                                 TestContext.Current.CancellationToken
                             ),
-                            ShaderSourceLanguage.Hlsl,
                             "main"
                         ),
                 new ShaderStageSource(
@@ -139,7 +97,6 @@ public sealed class ShaderCompilerNativeToolTests {
                                 fragmentPath,
                                 TestContext.Current.CancellationToken
                             ),
-                            ShaderSourceLanguage.Hlsl,
                             "main"
                         )
             ]
@@ -164,49 +121,13 @@ public sealed class ShaderCompilerNativeToolTests {
             );
             Assert.NotEmpty(collection: graphics.SpirvByStage[ShaderStage.Vertex].ToArray());
             Assert.NotEmpty(collection: graphics.DxilByStage[ShaderStage.Fragment].ToArray());
-
-            var toy = await compiler.CompileAsync(
-                new ShaderCompilationRequest(
-                    "native-toy",
-                    [
-                new ShaderStageSource(
-                            ShaderStage.Compute,
-                            toyPath,
-                            await File.ReadAllTextAsync(
-                                toyPath,
-                                TestContext.Current.CancellationToken
-                            ),
-                            ShaderSourceLanguage.ShadertoyGlsl,
-                            "mainImage",
-                            8,
-                            8,
-                            1
-                        )
-            ],
-                    new Dictionary<string, uint> { ["iChannelHeat"] = 1 },
-                    GpuPixelFormat.R16G16B16A16Float,
-                    new Dictionary<string, ShaderConfigField> {
-                ["gain"] = new(ShaderValueType.Float3),
-                ["bias"] = new(ShaderValueType.Float),
-            }
-                ),
-                TestContext.Current.CancellationToken
-            );
-
-            Assert.True(
-                condition: toy.IsSuccess,
-                userMessage: string.Join(
-                    separator: Environment.NewLine,
-                    values: toy.Diagnostics.Select(selector: static d => d.Message)
-                )
-            );
-            Assert.NotEmpty(collection: toy.Spirv.ToArray());
-            Assert.NotEmpty(collection: toy.Dxil.ToArray());
         } finally {
-            try { Directory.Delete(
+            try {
+                Directory.Delete(
                 root,
                 recursive: true
-            ); } catch (IOException) { }
+            );
+            } catch (IOException) { }
         }
     }
 }

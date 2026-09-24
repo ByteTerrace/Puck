@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
@@ -497,10 +498,12 @@ public sealed class NamedMachineLifetimeLawTests {
             output: "wide"
         );
         using var host = Host(engine: engine);
-        var screen = Panel() with { Source = new WorldScreenSource.Machine(
+        var screen = Panel() with {
+            Source = new WorldScreenSource.Machine(
             Instance: "clock",
             Output: "wide"
-        ) };
+        ),
+        };
 
         Install(
             host,
@@ -617,7 +620,7 @@ public sealed class NamedMachineLifetimeLawTests {
         );
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
-            WorldPrincipal.Console,
+            Principal.Console,
             Row("clock")
         ));
         fixture.Step();
@@ -626,7 +629,7 @@ public sealed class NamedMachineLifetimeLawTests {
         Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "clock"));
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
-            WorldPrincipal.Console,
+            Principal.Console,
             Row(
                 name: "clock",
                 seed: -1
@@ -641,7 +644,7 @@ public sealed class NamedMachineLifetimeLawTests {
         );
 
         fixture.Server.EnqueueMutation(new WorldMutation.RemoveMachine(
-            WorldPrincipal.Console,
+            Principal.Console,
             "clock"
         ));
         fixture.Step();
@@ -650,7 +653,7 @@ public sealed class NamedMachineLifetimeLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
         Assert.NotNull(value: fixture.Server.Machines.InstanceState(name: "clock"));
@@ -664,10 +667,12 @@ public sealed class NamedMachineLifetimeLawTests {
     public void PassiveFirstDisplayDoesNotMaskAnEngagedSecondDisplay_AndRemovalReleasesInput() {
         var engine = new InputEngine(portCount: 1);
         using var host = Host(engine: engine);
-        var first = Panel() with { Source = new WorldScreenSource.Machine(
+        var first = Panel() with {
+            Source = new WorldScreenSource.Machine(
             Instance: "controls",
             Output: "video"
-        ) };
+        ),
+        };
         var second = first with { Index = 1 };
         var document = Document(InputRow(name: "controls")) with { ScreensRaw = [first, second] };
 
@@ -792,14 +797,14 @@ public sealed class NamedMachineLifetimeLawTests {
         };
 
         fixture.Server.EnqueueMutation(new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: [
                 new WorldMutation.SetCollision(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Collision: candidateCollision
                 ),
                 new WorldMutation.UpsertMachine(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Machine: Row(
                         name: "broken",
                         seed: -1

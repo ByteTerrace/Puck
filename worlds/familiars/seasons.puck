@@ -1,0 +1,153 @@
+// The default familiars ruleset: twelve elements, each one season and one form. A world takes it whole with
+// `use seasons()`; a game with its own setting stamps rules.puck with its own data instead.
+//
+// The chart is two rules and four exceptions, so a player can hold all of it in their head:
+//
+//   - Within a season the forms are a triangle: Stone blocks Stream, Stream douses Spark, Spark shatters Stone.
+//   - Within a form the seasons are a ring: each season overcomes the one before it, and the opposite seasons are
+//     rivals that hit each other hard both ways.
+//   - An element resists itself. Every other pairing is neutral.
+//   - Four immunities, one per season: Tide takes nothing from Blaze, Aurora from Gale, Root from Ice, Mire from Tide.
+//
+// Every element hits three elements hard, resists three, and is hit hard by three.
+
+import "rules.puck"
+
+let seasonList = [
+  { name: "Spring" }
+  { name: "Summer" }
+  { name: "Autumn" }
+  { name: "Winter" }
+]
+
+// Element e belongs to season floor(e / 3) and form e % 3, the forms in the order Stone, Stream, Spark.
+let elementNames = ["Root", "Rain", "Swarm", "Dune", "Tide", "Blaze", "Husk", "Mire", "Gale", "Ice", "Snow", "Aurora"]
+let elements = map(elementNames, (n, e) => { name: n, season: floor(e / 3) })
+let noElement = length(elementNames)
+let chartWidth = noElement + 1
+
+// [attacker, defender]
+let immunities = [
+  [5, 4]
+  [8, 11]
+  [9, 0]
+  [4, 7]
+]
+
+let pairs = map(range(0, chartWidth * chartWidth), i => { a: floor(i / chartWidth), d: floorModulo(i, chartWidth) })
+let chart = map(pairs, p => (((p.a == noElement) + (p.d == noElement)) ? 4 : length(filter(immunities, x => (x[0] == p.a) * (x[1] == p.d))) ? 0 : (p.a == p.d) ? 2 : (floor(p.a / 3) == floor(p.d / 3)) ? ((floorModulo(floorModulo(p.a, 3) + 1, 3) == floorModulo(p.d, 3)) ? 8 : 2) : (floorModulo(p.a, 3) == floorModulo(p.d, 3)) ? ((floorModulo(floor(p.d / 3) - floor(p.a / 3), 4) == 1) ? 2 : 8) : 4)
+)
+
+let statuses = [
+  { name: "Wounded", seconds: 4 }
+  { name: "Stunned", seconds: 2 }
+]
+
+// Every element has a quick basic move and a slow special. A Stone special hits hardest; a Stream special stuns and a
+// Spark special wounds, each only on a strong hit.
+let moveNames = [
+  ["Thornlash", "Deep Grip"]
+  ["Drizzle", "Downpour"]
+  ["Sting", "Swarmcloud"]
+  ["Sandspit", "Dune Crash"]
+  ["Splash", "Undertow"]
+  ["Singe", "Wildfire"]
+  ["Shell Bash", "Husk Slam"]
+  ["Muck", "Sinking Mire"]
+  ["Gust", "Tempest"]
+  ["Frost Nip", "Glacier Fall"]
+  ["Flurry", "Whiteout"]
+  ["Glimmer", "Starfall"]
+]
+let specialPower = [30, 20, 20]
+let specialStatus = [0, 2, 1]
+let moves = concat(
+  reduce(range(0, noElement), [], (all, e) => concat(all, [
+    { name: moveNames[e][0], element: e, power: 12, seconds: 1.5, status: 0 }
+    { name: moveNames[e][1], element: e, power: specialPower[floorModulo(e, 3)], seconds: 8, status: specialStatus[floorModulo(e, 3)] }
+  ]
+  )
+  ),
+  [{ name: "Strike", element: noElement, power: 10, seconds: 1, status: 0 }]
+)
+
+// A species' basic move is its first element's; its special is its second element's, or its first's when it has one.
+// `acquire`: 1 catching, 2 taming, 4 befriending.
+let roster = [
+  { name: "Rootmole", first: 0, second: noElement, health: 240, power: 10, guard: 14, acquire: 3, catchRate: 45 }
+  { name: "Puddlepup", first: 1, second: noElement, health: 220, power: 11, guard: 11, acquire: 7, catchRate: 55 }
+  { name: "Buzzlet", first: 2, second: noElement, health: 180, power: 13, guard: 9, acquire: 1, catchRate: 60 }
+  { name: "Dunecrab", first: 3, second: noElement, health: 260, power: 11, guard: 14, acquire: 1, catchRate: 40 }
+  { name: "Tidefin", first: 4, second: noElement, health: 220, power: 12, guard: 11, acquire: 3, catchRate: 50 }
+  { name: "Emberfox", first: 5, second: noElement, health: 200, power: 14, guard: 10, acquire: 2, catchRate: 45 }
+  { name: "Husknut", first: 6, second: noElement, health: 280, power: 9, guard: 15, acquire: 3, catchRate: 50 }
+  { name: "Bogtoad", first: 7, second: noElement, health: 240, power: 11, guard: 12, acquire: 1, catchRate: 55 }
+  { name: "Galehawk", first: 8, second: noElement, health: 200, power: 13, guard: 10, acquire: 2, catchRate: 40 }
+  { name: "Iceback", first: 9, second: noElement, health: 300, power: 10, guard: 15, acquire: 3, catchRate: 35 }
+  { name: "Snowhare", first: 10, second: noElement, health: 200, power: 12, guard: 11, acquire: 4, catchRate: 50 }
+  { name: "Glimmerwing", first: 11, second: noElement, health: 190, power: 14, guard: 10, acquire: 4, catchRate: 30 }
+  { name: "Mossgator", first: 7, second: 0, health: 300, power: 12, guard: 13, acquire: 3, catchRate: 30 }
+  { name: "Cinderbee", first: 5, second: 2, health: 200, power: 14, guard: 10, acquire: 1, catchRate: 40 }
+  { name: "Frostowl", first: 8, second: 10, health: 220, power: 13, guard: 11, acquire: 6, catchRate: 30 }
+  { name: "Sunadder", first: 3, second: 5, health: 240, power: 13, guard: 12, acquire: 2, catchRate: 30 }
+  { name: "Tidewhale", first: 4, second: 9, health: 340, power: 11, guard: 14, acquire: 3, catchRate: 20 }
+  { name: "Auroramoth", first: 11, second: 2, health: 190, power: 14, guard: 10, acquire: 4, catchRate: 25 }
+]
+let species = map(roster, s => {
+  name: s.name,
+  first: s.first,
+  second: s.second,
+  health: s.health,
+  power: s.power,
+  guard: s.guard,
+  basic: s.first * 2,
+  special: (s.second == noElement ? s.first * 2 + 1 : s.second * 2 + 1),
+  acquire: s.acquire,
+  catchRate: s.catchRate,
+  treat: floor(s.first / 3)
+}
+)
+
+// rateHz: the simulation rate. slots: combatant slots, the player included. stable: most familiars the player
+// keeps. wild: most wild familiars about at once. starters: species the player begins with, in slots 1 onward.
+// Seconds: a season's length, the wait between summons, a tame's channel, the player's respawn. tameBelow: the
+// percentage of health a wild familiar must be at or under to be tamed. obey: the loyalty below which a familiar
+// ignores orders. Loyalty: a familiar joins at catchLoyalty, tameLoyalty or befriendLoyalty and starters at
+// starterLoyalty; it loses faintLoyalty for fainting, gains winLoyalty for a defeat it fought for and treatLoyalty for
+// a treat, never above loyaltyMost, and at zero it leaves. A treat gives a wild familiar treatAffection, double for
+// the treat it loves, and it joins at befriendAt. statusCatchBonus is added to the catch chance of a familiar with a
+// status. inSeasonWeight: how many times an in-season species is dealt into the forage bag. The bag starts with
+// lures, tonics and, of each season, treats.
+let tuning = {
+  rateHz: 30,
+  slots: 16,
+  stable: 6,
+  wild: 4,
+  starters [1],
+  starterLoyalty: 50,
+  seasonSeconds: 180,
+  swapSeconds: 3,
+  tameSeconds: 4,
+  tameBelow: 50,
+  respawnSeconds: 5,
+  obey: 25,
+  catchLoyalty: 20,
+  tameLoyalty: 50,
+  befriendLoyalty: 80,
+  loyaltyMost: 100,
+  faintLoyalty: 10,
+  winLoyalty: 3,
+  treatLoyalty: 5,
+  befriendAt: 100,
+  treatAffection: 20,
+  statusCatchBonus: 15,
+  inSeasonWeight: 3,
+  lures: 5,
+  tonics: 3,
+  treats: 3,
+  player { health: 200, power: 10, guard: 10 }
+}
+
+module seasons() {
+  use rules(elements: elements, chart: chart, seasons: seasonList, statuses: statuses, moves: moves, species: species, tuning: tuning)
+}

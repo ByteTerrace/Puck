@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
@@ -8,15 +9,17 @@ namespace Puck.World.Server;
 /// <summary>The owned world documents available as player identities.</summary>
 /// <remarks>Every id in this catalog addresses exactly one storage location, and that rests on TWO rules, not one.
 /// The character rule is carried by the type: every id here is a <see cref="SafeName"/>, so
-/// <see cref="WorldOwnedWorldFileName"/> escapes nothing and distinct ids map to distinct file-name strings. The
+/// <see cref="WorldDocumentName"/> escapes nothing and distinct ids map to distinct file-name strings. The
 /// second rule is this catalog's own, because a file-name string is not a storage location: the directory is stored
-/// on a case-insensitive filesystem, so ids are unique IGNORING CASE and every comparison here that addresses the
-/// directory — the file-name match, <see cref="FindById"/>, <see cref="Create"/>'s collision guard,
-/// <see cref="ReplaceFromSync"/>'s match — is <see cref="StringComparison.OrdinalIgnoreCase"/>. A file whose
+/// on a case-insensitive filesystem, so an id is a document name held to the one rule for when two are one
+/// (<see cref="DocumentName"/>): every comparison here that addresses the directory — the file-name match,
+/// <see cref="FindById"/>, <see cref="Create"/>'s collision guard, <see cref="ReplaceFromSync"/>'s match — is
+/// <see cref="DocumentName.Comparer"/>, and a refused case-only collision says so in
+/// <see cref="DocumentName.Collision"/>'s words. A file whose
 /// name differs from its declared id only in case is therefore ADMITTED (it is the one file that id addresses) and
 /// keeps the name it already carries: a save writes through the id's spelling, which the filesystem resolves onto
 /// the existing entry without renaming it. The same case-insensitive rule is held one door earlier over an authored
-/// seed list by <c>WorldDefinitionValidator.ValidatePlayerDefaults</c>.</remarks>
+/// seed list by <c>WorldDefinitionValidator.ValidateIdentitySeeds</c>.</remarks>
 public sealed class WorldOwnedWorlds {
     /// <summary>The subdirectory an unadmittable document is moved into — a name outside this catalog's own
     /// <c>*.world.json</c> top-directory glob, exactly like the hand-placed <c>basis/</c> directory, so a disposed
@@ -35,8 +38,8 @@ public sealed class WorldOwnedWorlds {
     private WorldDocumentSubmissionReceipt? m_lastReceipt;
     private long m_revision = 1;
 
-    private static readonly CellName MoveSpeedState = CellName.Parse(candidate: "identity-move-speed");
-    private static readonly CellName TurnSpeedState = CellName.Parse(candidate: "identity-turn-speed");
+    private static readonly CellName MoveSpeedState = WorldIdentityRows.MoveSpeed;
+    private static readonly CellName TurnSpeedState = WorldIdentityRows.TurnSpeed;
 
     /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
     /// <param name="template">The document every seeded identity derives from.</param>
@@ -67,11 +70,11 @@ public sealed class WorldOwnedWorlds {
         var paths = Directory.GetFiles(
             path: directory,
             searchOption: SearchOption.TopDirectoryOnly,
-            searchPattern: $"*{WorldOwnedWorldFileName.Suffix}"
+            searchPattern: $"*{WorldDocumentName.DocumentSuffix}"
         ).Order(comparer: StringComparer.Ordinal).ToArray();
         var present = new HashSet<string>(
             collection: paths.Select(selector: Path.GetFileName)!,
-            comparer: StringComparer.OrdinalIgnoreCase
+            comparer: DocumentName.Comparer
         );
 
         var unloadable = new List<(string Path, string Reason)>();
@@ -103,12 +106,11 @@ public sealed class WorldOwnedWorlds {
             // case-insensitive because the filesystem's own resolution is: a name differing from the addressed one
             // only in case IS the file that id addresses, and refusing it would wedge a catalog no save could repair.
             var fileName = Path.GetFileName(path: path);
-            var addressed = WorldOwnedWorldFileName.For(id: document.Identity.Id);
+            var addressed = WorldDocumentName.For(id: document.Identity.Id);
 
-            if (!string.Equals(
-                a: fileName,
-                b: addressed,
-                comparisonType: StringComparison.OrdinalIgnoreCase
+            if (!DocumentName.Comparer.Equals(
+                x: fileName,
+                y: addressed
             )) {
                 RefuseInPlace(
                     fileName: fileName,
@@ -146,7 +148,7 @@ public sealed class WorldOwnedWorlds {
                 // filesystem's own, so it answers for the name in whatever case the entry actually carries.
                 var occupied = Path.Combine(
                     path1: directory,
-                    path2: WorldOwnedWorldFileName.For(id: seed.Id)
+                    path2: WorldDocumentName.For(id: seed.Id)
                 );
 
                 if (
@@ -230,12 +232,6 @@ public sealed class WorldOwnedWorlds {
     /// <param name="FileName">The file name it carries in the catalog directory.</param>
     /// <param name="Reason">Why it could not be admitted.</param>
     public sealed record WorldOwnedWorldRefusal(string FileName, string Reason);
-    /// <summary>The catalog's checkpointed state — the identities as document data plus the mutation counter.
-    /// Excludes <see cref="FilePath"/> (host state — the state directory a fresh instance's own construction
-    /// resolves) and <see cref="LastReceipt"/> (a read-back-only diagnostic of the most recent submission, the same
-    /// exclusion class as a body's <c>PressOutcome</c>/<c>StopOutcome</c> — nothing but a read-back verb consults
-    /// it, and the next real submission repopulates it).</summary>
-    public sealed record WorldOwnedWorldsCheckpoint(IReadOnlyList<byte[]> IdentityDocumentsJson, long Revision);
 
     // THE CONTRACT SPLIT this door's text extension reveals: the DOOR — a grant naming
     // Principal==Document(source) && Capability==Mutate && Subject==State(slot), plus a WriteMask admitting the
@@ -270,10 +266,10 @@ public sealed class WorldOwnedWorlds {
             );
         }
 
-        var principal = WorldPrincipal.Document(id: submission.SourceDocumentId);
+        var principal = Grantee.Document(id: submission.SourceDocumentId);
         var subject = GrantSubject.State(name: submission.Slot);
         var grant = document.Grants.FirstOrDefault(predicate: candidate =>
-            ((candidate.Principal == principal) &&
+            ((candidate.Grantee == principal) &&
             (candidate.Capability == WorldCapability.Mutate) &&
             (candidate.Subject == subject)));
         // The WRITE mask, never the kind mask: this door's vocabulary is WorldDocumentWriteKind (replace vs.
@@ -282,7 +278,7 @@ public sealed class WorldOwnedWorlds {
         // (unlike an Edit row's optional narrowing), because a foreign document's write is deny-by-default and the
         // mask is the whole of what admits it.
         if (
-            (grant.Principal != principal) ||
+            (grant.Grantee != principal) ||
             (grant.WriteMask is not { } writes) ||
             !writes.Contains(kind: submission.Kind)
         ) {
@@ -687,7 +683,9 @@ public sealed class WorldOwnedWorlds {
         Revision: m_revision
     );
     /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="SafeName"/>, so
-    /// what is left to refuse here is a collision, in either of the two places one can live: an id or display name
+    /// what is left to refuse here is a name carrying either <see cref="GeneratedName"/> joiner, which the id's
+    /// directory spellings could not keep apart from a generated name, and a collision, in either of the two places
+    /// one can live: an id or display name
     /// this catalog already holds (<c>FindById</c>/<c>Find</c>, both ignoring case), or an entry occupying the id's
     /// catalog path that this boot did not admit — a refused document, a failed disposal, or a directory. The second
     /// check reads the directory rather than the identity list, because a boot that admitted nothing leaves the list
@@ -698,6 +696,29 @@ public sealed class WorldOwnedWorlds {
     /// <param name="reason">Why creation was refused, or empty on success.</param>
     /// <returns>The created identity, or <see langword="null"/> with <paramref name="reason"/> set.</returns>
     public WorldIdentity? Create(SafeName name, string colorHex, out string reason) {
+        // An owned identity's id is spelled into directory names — its catalog file and every user-scoped instance
+        // (WorldSessionResolver.MintInstanceName) — so it may carry neither joiner: '$' is expanded by a shell and
+        // spells a generated document name, '~' spells a generated file name.
+        if (name.Value.AsSpan().IndexOfAny(value0: GeneratedName.Joiner, value1: GeneratedName.FileJoiner) >= 0) {
+            reason = $"'{name}' carries '{GeneratedName.Joiner}' or '{GeneratedName.FileJoiner}', the characters Puck reserves for the names it generates; an owned identity's id is spelled into directory names, so write one without either";
+            return null;
+        }
+        if (
+            (FindById(id: name) is { } held) &&
+            !string.Equals(
+                a: held.Id,
+                b: name.Value,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            reason = DocumentName.Collision(
+                heldFile: WorldDocumentName.DocumentFile(name: held.Id),
+                heldName: held.Id,
+                otherFile: WorldDocumentName.For(id: name),
+                otherName: name
+            );
+            return null;
+        }
         if (
             (Find(name: name) is not null) ||
             (FindById(id: name) is not null)
@@ -708,7 +729,7 @@ public sealed class WorldOwnedWorlds {
 
         var occupied = Path.Combine(
             path1: m_directory,
-            path2: WorldOwnedWorldFileName.For(id: name)
+            path2: WorldDocumentName.For(id: name)
         );
 
         if (
@@ -743,10 +764,9 @@ public sealed class WorldOwnedWorlds {
     ));
     /// <summary>Finds an identity by owned-world id, ignoring case — two spellings differing only in case name one
     /// storage location, so they name one identity.</summary>
-    public WorldIdentity? FindById(string id) => m_identities.FirstOrDefault(predicate: identity => string.Equals(
-        a: identity.Id,
-        b: id,
-        comparisonType: StringComparison.OrdinalIgnoreCase
+    public WorldIdentity? FindById(string id) => m_identities.FirstOrDefault(predicate: identity => DocumentName.Comparer.Equals(
+        x: identity.Id,
+        y: id
     ));
     /// <summary>Resolves a reconnect-stable controller from state-slot references in the owned worlds.</summary>
     public WorldIdentity? PreferredProfile(InputDeviceId device) {
@@ -800,10 +820,9 @@ public sealed class WorldOwnedWorlds {
         ) {
             return;
         }
-        var key = device.Value.ToString(format: "N");
         var slots = new WorldControllerStateSlots(
-            MachineState: CellName.Parse(candidate: $"controller-{key}-machine"),
-            DeviceState: CellName.Parse(candidate: $"controller-{key}-device")
+            MachineState: WorldIdentityRows.ControllerMachine(device: device.Value),
+            DeviceState: WorldIdentityRows.ControllerDevice(device: device.Value)
         );
 
         profile.WriteState(row: new WorldStateRow(
@@ -848,10 +867,9 @@ public sealed class WorldOwnedWorlds {
             document: document,
             defaults: Defaults
         );
-        var index = m_identities.FindIndex(match: candidate => string.Equals(
-            a: candidate.Id,
-            b: incoming.Id,
-            comparisonType: StringComparison.OrdinalIgnoreCase
+        var index = m_identities.FindIndex(match: candidate => DocumentName.Comparer.Equals(
+            x: candidate.Id,
+            y: incoming.Id
         ));
 
         if (index >= 0) {
@@ -860,7 +878,12 @@ public sealed class WorldOwnedWorlds {
                 b: incoming.Id,
                 comparisonType: StringComparison.Ordinal
             )) {
-                reason = $"id '{incoming.Id}' differs from the owned world '{m_identities[index].Id}' in case only, and both address one local file — push it to the local spelling's own key, or rename its identity to '{m_identities[index].Id}'";
+                reason = DocumentName.Collision(
+                    heldFile: WorldDocumentName.DocumentFile(name: m_identities[index].Id),
+                    heldName: m_identities[index].Id,
+                    otherFile: WorldDocumentName.DocumentFile(name: incoming.Id),
+                    otherName: incoming.Id
+                );
                 return false;
             }
             m_identities[index] = incoming;
@@ -906,7 +929,7 @@ public sealed class WorldOwnedWorlds {
         }
         var path = Path.Combine(
             path1: m_directory,
-            path2: WorldOwnedWorldFileName.For(id: identitySection.Id)
+            path2: WorldDocumentName.For(id: identitySection.Id)
         );
         // A change detector, never a correctness input: the write below happens either way, and a file this process
         // cannot read right now is indistinguishable from one whose bytes are about to differ, so an unreadable
@@ -972,10 +995,10 @@ public sealed class WorldOwnedWorlds {
             reason = $"owner world '{ownerId}' is unavailable";
             return false;
         }
-        var principal = WorldPrincipal.Document(id: sourceDocumentId);
+        var principal = Grantee.Document(id: sourceDocumentId);
         var subject = GrantSubject.State(name: slot);
 
-        if (!document.Grants.Any(predicate: grant => ((grant.Principal == principal) && (grant.Capability == WorldCapability.Observe) && (grant.Subject == subject)))) {
+        if (!document.Grants.Any(predicate: grant => ((grant.Grantee == principal) && (grant.Capability == WorldCapability.Observe) && (grant.Subject == subject)))) {
             reason = $"{principal.Describe()} has no read grant for {subject.Describe()}";
             return false;
         }

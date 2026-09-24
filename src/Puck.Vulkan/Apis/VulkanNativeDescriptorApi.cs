@@ -14,45 +14,9 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
     private const uint StructureTypeDescriptorSetAllocateInfo = 34;
     private const uint StructureTypeSamplerCreateInfo = 31;
     private const uint StructureTypeWriteDescriptorSet = 35;
-    private const uint StructureTypeWriteDescriptorSetAccelerationStructureKhr = 1000150007;
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AllocateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkAllocateDescriptorSets"u8
-            )),
-                CreateDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateDescriptorPool"u8
-            )),
-                CreateSampler = ((delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateSampler"u8
-            )),
-                DestroyDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyDescriptorPool"u8
-            )),
-                DestroySampler = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroySampler"u8
-            )),
-                UpdateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkUpdateDescriptorSets"u8
-            )),
-            }
-        );
-    }
 
     /// <inheritdoc/>
     public nint AllocateSet(VulkanDescriptorSetAllocateRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
         var layoutHandle = request.DescriptorSetLayoutHandle;
         nint setHandle;
 
@@ -63,8 +27,8 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             SType = StructureTypeDescriptorSetAllocateInfo,
         };
 
-        pointers.AllocateDescriptorSets(
-            request.DeviceHandle,
+        request.Device.AllocateDescriptorSets(
+            request.Device.Handle,
             in allocateInfo,
             ((nint)(&setHandle))
         ).ThrowIfFailed(operation: "vkAllocateDescriptorSets");
@@ -73,7 +37,6 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
     }
     /// <inheritdoc/>
     public nint CreatePool(VulkanDescriptorPoolCreateRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
         var poolSizes = request.PoolSizes.Span;
         Span<VkDescriptorPoolSize> sizes = stackalloc VkDescriptorPoolSize[poolSizes.Length];
 
@@ -93,8 +56,8 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
                 SType = StructureTypeDescriptorPoolCreateInfo,
             };
 
-            pointers.CreateDescriptorPool(
-                request.DeviceHandle,
+            request.Device.CreateDescriptorPool(
+                request.Device.Handle,
                 in createInfo,
                 0,
                 out var poolHandle
@@ -105,7 +68,6 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
     }
     /// <inheritdoc/>
     public nint CreateSampler(VulkanSamplerCreateRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
         var createInfo = new VkSamplerCreateInfo {
             AddressModeU = request.AddressModeU,
             AddressModeV = request.AddressModeV,
@@ -126,8 +88,8 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             UnnormalizedCoordinates = request.UnnormalizedCoordinates,
         };
 
-        pointers.CreateSampler(
-            request.DeviceHandle,
+        request.Device.CreateSampler(
+            request.Device.Handle,
             in createInfo,
             0,
             out var samplerHandle
@@ -136,68 +98,19 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
         return samplerHandle;
     }
     /// <inheritdoc/>
-    public void DestroyPool(nint deviceHandle, nint poolHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == poolHandle)
-        ) {
-            return;
-        }
-
-        GetPointers(deviceHandle: deviceHandle).DestroyDescriptorPool(
-            deviceHandle,
-            poolHandle,
-            0
+    public void DestroyPool(VulkanDeviceCommands device, nint poolHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyDescriptorPool,
+            handle: poolHandle
         );
-    }
     /// <inheritdoc/>
-    public void DestroySampler(nint deviceHandle, nint samplerHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == samplerHandle)
-        ) {
-            return;
-        }
-
-        GetPointers(deviceHandle: deviceHandle).DestroySampler(
-            deviceHandle,
-            samplerHandle,
-            0
+    public void DestroySampler(VulkanDeviceCommands device, nint samplerHandle) =>
+        device?.Destroy(
+            destroy: device.DestroySampler,
+            handle: samplerHandle
         );
-    }
-    /// <inheritdoc/>
-    public void WriteAccelerationStructure(VulkanDescriptorAccelerationStructureWriteRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
-        // The acceleration structure handle is not passed through an info array; it rides a dedicated
-        // pNext-chained struct (the descriptor type carries no PImageInfo/PBufferInfo). Both the handle and
-        // the chain struct are kept alive on the stack for the duration of the vkUpdateDescriptorSets call.
-        var accelerationStructureHandle = request.AccelerationStructureHandle;
-        var accelerationWrite = new VkWriteDescriptorSetAccelerationStructureKhr {
-            AccelerationStructureCount = 1,
-            PAccelerationStructures = ((nint)(&accelerationStructureHandle)),
-            SType = StructureTypeWriteDescriptorSetAccelerationStructureKhr,
-        };
-        var write = new VkWriteDescriptorSet {
-            DescriptorCount = 1,
-            DescriptorType = VulkanDescriptorType.AccelerationStructure,
-            DstArrayElement = 0,
-            DstBinding = request.Binding,
-            DstSet = request.DescriptorSetHandle,
-            PNext = ((nint)(&accelerationWrite)),
-            SType = StructureTypeWriteDescriptorSet,
-        };
-
-        pointers.UpdateDescriptorSets(
-            request.DeviceHandle,
-            1,
-            ((nint)(&write)),
-            0,
-            0
-        );
-    }
     /// <inheritdoc/>
     public void WriteBuffer(VulkanDescriptorBufferWriteRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
         var bufferInfo = new VkDescriptorBufferInfo {
             Buffer = request.BufferHandle,
             Offset = request.BufferOffset,
@@ -213,8 +126,8 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             SType = StructureTypeWriteDescriptorSet,
         };
 
-        pointers.UpdateDescriptorSets(
-            request.DeviceHandle,
+        request.Device.UpdateDescriptorSets(
+            request.Device.Handle,
             1,
             ((nint)(&write)),
             0,
@@ -223,7 +136,6 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
     }
     /// <inheritdoc/>
     public void WriteImage(VulkanDescriptorImageWriteRequest request) {
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
         var imageInfo = new VkDescriptorImageInfo {
             ImageLayout = request.ImageLayout,
             ImageView = request.ImageViewHandle,
@@ -239,21 +151,12 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             SType = StructureTypeWriteDescriptorSet,
         };
 
-        pointers.UpdateDescriptorSets(
-            request.DeviceHandle,
+        request.Device.UpdateDescriptorSets(
+            request.Device.Handle,
             1,
             ((nint)(&write)),
             0,
             0
         );
-    }
-
-    private struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult> AllocateDescriptorSets;
-        public delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult> CreateDescriptorPool;
-        public delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult> CreateSampler;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyDescriptorPool;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroySampler;
-        public delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void> UpdateDescriptorSets;
     }
 }

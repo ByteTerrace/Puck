@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text;
 using Puck.World.Protocol;
 
@@ -28,9 +29,9 @@ public sealed class WorldInputHoldRuntime {
         ((submission.EntityIndex >= 0) && (submission.EntityIndex < m_participants.Length) &&
          (((submission.Principal.Kind == PrincipalKind.Seat) && (submission.Principal.Index == submission.EntityIndex)) ||
           ((submission.Principal.Kind == PrincipalKind.Peer) && (submission.Principal.Index == submission.EntityIndex))));
-    private static WorldPrincipal ParticipantPrincipal(WorldPopulation population, int bodyIndex) =>
+    private static Principal ParticipantPrincipal(WorldPopulation population, int bodyIndex) =>
         ((bodyIndex < population.LocalSeatCount)
-            ? WorldPrincipal.Seat(slot: bodyIndex)
+            ? Principal.Seat(slot: bodyIndex)
             : population.PeerPrincipal(index: bodyIndex)
         );
 
@@ -233,21 +234,6 @@ public sealed class WorldInputHoldRuntime {
         }
     }
 
-    /// <summary>One participant slot's checkpointed hold state — see <see cref="Capture"/>.</summary>
-    public readonly record struct WorldInputHoldParticipantCheckpoint(
-        bool Active,
-        WorldPrincipal Principal,
-        int Measured,
-        int Target,
-        int Applied,
-        int LowerTarget,
-        int LowerStableTicks,
-        int HistoryStart,
-        IReadOnlyList<WorldSubmittedInput> History
-    );
-    /// <summary>The runtime's own checkpointed state — see <see cref="Capture"/>.</summary>
-    public sealed record WorldInputHoldCheckpoint(int MaximumSetter, IReadOnlyList<WorldInputHoldParticipantCheckpoint> Participants);
-
     private sealed class ParticipantState {
         private readonly List<WorldSubmittedInput> m_history = [];
 
@@ -258,7 +244,7 @@ public sealed class WorldInputHoldRuntime {
         public bool Active { get; set; }
         public int Applied { get; private set; }
         public int Measured { get; set; }
-        public WorldPrincipal Principal { get; set; }
+        public Principal Principal { get; set; }
         public int Target { get; set; }
 
         public WorldInputHoldParticipantCheckpoint Capture() => new(

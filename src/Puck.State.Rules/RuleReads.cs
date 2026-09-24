@@ -5,10 +5,6 @@ namespace Puck.State.Rules;
 /// <summary>The arena-facing reads every compiled operand shares: resolving a live key or index, reading one cell as
 /// a fact, and reducing a row. Every address is a catalog row ordinal and an interned cell key.</summary>
 public static class RuleReads {
-    /// <summary>The most tokens an ordered zone's arrangement rank covers; 20! is the largest factorial inside the
-    /// unsigned 64-bit rank carrier.</summary>
-    public const int MaxArrangementTokens = 20;
-
     /// <summary>Reads one cell as a fact at the reader's own tick pair: the absent fact when the address named no
     /// cell at all, zero for a cell no row holds, and the live value otherwise.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -174,80 +170,29 @@ public static class RuleReads {
         });
     }
     /// <summary>Returns the Lehmer rank of an ordered zone's token order relative to its token domain's cell order —
-    /// over k! for k tokens — or <c>-1</c> when the zone holds more than <see cref="MaxArrangementTokens"/> tokens or
-    /// holds a token its domain does not declare.</summary>
+    /// over k! for k tokens — read off the live arena: <see cref="StateReader.DomainOrdinals(StateArena, int, int, Span{int})"/>
+    /// ranked by <see cref="StateReader.ArrangementRank(ReadOnlySpan{int})"/>.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The ordered zone's catalog ordinal.</param>
-    /// <param name="domainOrdinal">The token domain row's catalog ordinal.</param>
-    /// <returns>The rank, or <c>-1</c>.</returns>
+    /// <param name="domainOrdinal">The token domain row's catalog ordinal, or <c>-1</c>.</param>
+    /// <returns>The rank, or <c>-1</c> when <paramref name="domainOrdinal"/> names no row, the zone holds more than
+    /// <see cref="StateReader.MaxArrangementTokens"/> tokens, or it holds a token its domain does not
+    /// declare.</returns>
     public static long ArrangementRank(IStateReader reader, int rowOrdinal, int domainOrdinal) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        if (domainOrdinal < 0) {
-            return -1L;
-        }
+        Span<int> ordinals = stackalloc int[StateReader.MaxArrangementTokens];
+        var count = StateReader.DomainOrdinals(
+            arena: reader.Arena,
+            domainOrdinal: domainOrdinal,
+            ordinals: ordinals,
+            rowOrdinal: rowOrdinal
+        );
 
-        var arena = reader.Arena;
-        var count = arena.CellCount(rowOrdinal: rowOrdinal);
-
-        if (count > MaxArrangementTokens) {
-            return -1L;
-        }
-
-        Span<int> ordinals = stackalloc int[MaxArrangementTokens];
-        var domainCount = arena.CellCount(rowOrdinal: domainOrdinal);
-
-        for (var position = 0; (position < count); position++) {
-            if (!arena.TryKeyAt(
-                key: out var key,
-                position: position,
-                rowOrdinal: rowOrdinal
-            )) {
-                return -1L;
-            }
-
-            var found = -1;
-
-            for (var candidate = 0; (candidate < domainCount); candidate++) {
-                if (
-                    arena.TryKeyAt(
-                    key: out var domainKey,
-                    position: candidate,
-                    rowOrdinal: domainOrdinal
-                ) &&
-                    (domainKey == key)
-                ) {
-                    found = candidate;
-
-                    break;
-                }
-            }
-
-            if (found < 0) {
-                return -1L;
-            }
-
-            ordinals[position] = found;
-        }
-
-        Span<int> relative = stackalloc int[MaxArrangementTokens];
-
-        for (var index = 0; (index < count); index++) {
-            var rank = 0;
-
-            for (var other = 0; (other < count); other++) {
-                if (
-                    (ordinals[other] < ordinals[index]) ||
-                    ((ordinals[other] == ordinals[index]) && (other < index))
-                ) {
-                    rank++;
-                }
-            }
-
-            relative[index] = rank;
-        }
-
-        return unchecked((long)Combinatorics.PermutationRank(permutation: relative[..count]));
+        return ((count < 0)
+            ? -1L
+            : StateReader.ArrangementRank(domainOrdinals: ordinals[..count])
+        );
     }
     /// <summary>Resolves the interned key a compiled address names for the evaluation in flight: a literal key, a
     /// bound key token, another cell's value read as a key, or a compiled key fact.</summary>

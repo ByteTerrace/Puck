@@ -229,7 +229,6 @@
     }
   ],
   "captures": {
-    "directory": "captures",
     "rows": [
       {
         "palette": [
@@ -340,10 +339,8 @@
     "listen": null,
     "presentMode": "Immediate",
     "presentation": "offscreen",
-    "rayQuery": true,
     "surfaceFormat": "r8g8b8a8",
     "targetHertz": 0,
-    "timing": false,
     "width": 640
   },
   "placements": {

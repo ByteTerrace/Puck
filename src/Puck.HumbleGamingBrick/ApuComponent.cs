@@ -1786,67 +1786,8 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         m_isColor = model.SupportsColor();
     }
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_powered = reader.ReadBoolean();
-        m_divDivider = reader.ReadByte();
-        m_lastDivApuBit = reader.ReadBoolean();
-        m_generatorHalfStep = reader.ReadBoolean();
-        m_lfDiv = reader.ReadInt32();
-        m_skipDivEvent = reader.ReadInt32();
-        m_pendingEnvelopeDelay = reader.ReadInt32();
-        m_channel1CompletedAddend = reader.ReadInt32();
-        m_channel1RestartHold = reader.ReadInt32();
-        m_shadowSweepSampleLength = reader.ReadInt32();
-        m_squareSweepCountdown = reader.ReadInt32();
-        m_sweepCalculateCountdown = reader.ReadInt32();
-        m_sweepCalculateReloadTimer = reader.ReadInt32();
-        m_sweepLengthAddend = reader.ReadInt32();
-        m_sweepInstantCalculationDone = reader.ReadBoolean();
-        m_unshiftedSweep = reader.ReadBoolean();
-        m_waveEnable = reader.ReadBoolean();
-        m_waveFormJustRead = reader.ReadBoolean();
-        m_wavePulsed = reader.ReadBoolean();
-        m_waveSampleByte = reader.ReadByte();
-        m_waveSampleCountdown = reader.ReadInt32();
-        m_waveSampleIndex = reader.ReadInt32();
-        m_waveSampleLength = reader.ReadInt32();
-        m_waveShift = reader.ReadInt32();
-        m_noiseAlignment = reader.ReadInt32();
-        m_noiseBackgroundCounterActive = reader.ReadBoolean();
-        m_noiseCounter = reader.ReadInt32();
-        m_noiseCounterActive = reader.ReadBoolean();
-        m_noiseCounterCountdown = reader.ReadInt32();
-        m_noiseCountdownReloaded = reader.ReadBoolean();
-        m_noiseCurrentLfsrSample = reader.ReadBoolean();
-        m_noiseDidStepCounter = reader.ReadBoolean();
-        m_noiseLfsr = reader.ReadInt32();
-        m_noiseNarrow = reader.ReadBoolean();
-        m_noiseStartedWithDacDisabled = reader.ReadBoolean();
-        reader.ReadBytes(destination: m_registers);
-        reader.ReadBytes(destination: m_waveRam);
-
-        for (var channel = 0; (channel < ChannelCount); ++channel) {
-            m_channelActive[channel] = reader.ReadBoolean();
-            m_lengthEnabled[channel] = reader.ReadBoolean();
-            m_pulseLength[channel] = reader.ReadInt32();
-            m_sample[channel] = reader.ReadInt32();
-            m_envelopeVolume[channel] = reader.ReadInt32();
-            m_envelopeCountdown[channel] = reader.ReadInt32();
-            m_envelopeClock[channel] = reader.ReadBoolean();
-            m_envelopeLocked[channel] = reader.ReadBoolean();
-            m_envelopeShouldLock[channel] = reader.ReadBoolean();
-        }
-
-        for (var channel = 0; (channel < 2); ++channel) {
-            m_squareSampleLength[channel] = reader.ReadInt32();
-            m_squareSampleCountdown[channel] = reader.ReadInt32();
-            m_squareSampleIndex[channel] = reader.ReadInt32();
-            m_squareSampleSuppressed[channel] = reader.ReadBoolean();
-            m_squareDelay[channel] = reader.ReadInt32();
-            m_squareDidTick[channel] = reader.ReadBoolean();
-            m_squareJustReloaded[channel] = reader.ReadBoolean();
-        }
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <summary>Returns how many further T-cycles the frame sequencer and the generators can absorb as plain
     /// countdowns: none with an envelope step pending, else every cycle before the DIV-APU bit next toggles and
     /// before any active generator's counter expires.</summary>
@@ -1944,67 +1885,71 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         return ((byte)(m_registers[offset] | ReadMasks[offset]));
     }
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBoolean(value: m_powered);
-        writer.WriteByte(value: m_divDivider);
-        writer.WriteBoolean(value: m_lastDivApuBit);
-        writer.WriteBoolean(value: m_generatorHalfStep);
-        writer.WriteInt32(value: m_lfDiv);
-        writer.WriteInt32(value: m_skipDivEvent);
-        writer.WriteInt32(value: m_pendingEnvelopeDelay);
-        writer.WriteInt32(value: m_channel1CompletedAddend);
-        writer.WriteInt32(value: m_channel1RestartHold);
-        writer.WriteInt32(value: m_shadowSweepSampleLength);
-        writer.WriteInt32(value: m_squareSweepCountdown);
-        writer.WriteInt32(value: m_sweepCalculateCountdown);
-        writer.WriteInt32(value: m_sweepCalculateReloadTimer);
-        writer.WriteInt32(value: m_sweepLengthAddend);
-        writer.WriteBoolean(value: m_sweepInstantCalculationDone);
-        writer.WriteBoolean(value: m_unshiftedSweep);
-        writer.WriteBoolean(value: m_waveEnable);
-        writer.WriteBoolean(value: m_waveFormJustRead);
-        writer.WriteBoolean(value: m_wavePulsed);
-        writer.WriteByte(value: m_waveSampleByte);
-        writer.WriteInt32(value: m_waveSampleCountdown);
-        writer.WriteInt32(value: m_waveSampleIndex);
-        writer.WriteInt32(value: m_waveSampleLength);
-        writer.WriteInt32(value: m_waveShift);
-        writer.WriteInt32(value: m_noiseAlignment);
-        writer.WriteBoolean(value: m_noiseBackgroundCounterActive);
-        writer.WriteInt32(value: m_noiseCounter);
-        writer.WriteBoolean(value: m_noiseCounterActive);
-        writer.WriteInt32(value: m_noiseCounterCountdown);
-        writer.WriteBoolean(value: m_noiseCountdownReloaded);
-        writer.WriteBoolean(value: m_noiseCurrentLfsrSample);
-        writer.WriteBoolean(value: m_noiseDidStepCounter);
-        writer.WriteInt32(value: m_noiseLfsr);
-        writer.WriteBoolean(value: m_noiseNarrow);
-        writer.WriteBoolean(value: m_noiseStartedWithDacDisabled);
-        writer.WriteBytes(value: m_registers);
-        writer.WriteBytes(value: m_waveRam);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Boolean(value: ref m_powered);
+        transfer.Byte(value: ref m_divDivider);
+        transfer.Boolean(value: ref m_lastDivApuBit);
+        transfer.Boolean(value: ref m_generatorHalfStep);
+        transfer.Int32(value: ref m_lfDiv);
+        transfer.Int32(value: ref m_skipDivEvent);
+        transfer.Int32(value: ref m_pendingEnvelopeDelay);
+        transfer.Int32(value: ref m_channel1CompletedAddend);
+        transfer.Int32(value: ref m_channel1RestartHold);
+        transfer.Int32(value: ref m_shadowSweepSampleLength);
+        transfer.Int32(value: ref m_squareSweepCountdown);
+        transfer.Int32(value: ref m_sweepCalculateCountdown);
+        transfer.Int32(value: ref m_sweepCalculateReloadTimer);
+        transfer.Int32(value: ref m_sweepLengthAddend);
+        transfer.Boolean(value: ref m_sweepInstantCalculationDone);
+        transfer.Boolean(value: ref m_unshiftedSweep);
+        transfer.Boolean(value: ref m_waveEnable);
+        transfer.Boolean(value: ref m_waveFormJustRead);
+        transfer.Boolean(value: ref m_wavePulsed);
+        transfer.Byte(value: ref m_waveSampleByte);
+        transfer.Int32(value: ref m_waveSampleCountdown);
+        transfer.Int32(value: ref m_waveSampleIndex);
+        transfer.Int32(value: ref m_waveSampleLength);
+        transfer.Int32(value: ref m_waveShift);
+        transfer.Int32(value: ref m_noiseAlignment);
+        transfer.Boolean(value: ref m_noiseBackgroundCounterActive);
+        transfer.Int32(value: ref m_noiseCounter);
+        transfer.Boolean(value: ref m_noiseCounterActive);
+        transfer.Int32(value: ref m_noiseCounterCountdown);
+        transfer.Boolean(value: ref m_noiseCountdownReloaded);
+        transfer.Boolean(value: ref m_noiseCurrentLfsrSample);
+        transfer.Boolean(value: ref m_noiseDidStepCounter);
+        transfer.Int32(value: ref m_noiseLfsr);
+        transfer.Boolean(value: ref m_noiseNarrow);
+        transfer.Boolean(value: ref m_noiseStartedWithDacDisabled);
+        transfer.Block(values: m_registers);
+        transfer.Block(values: m_waveRam);
 
         for (var channel = 0; (channel < ChannelCount); ++channel) {
-            writer.WriteBoolean(value: m_channelActive[channel]);
-            writer.WriteBoolean(value: m_lengthEnabled[channel]);
-            writer.WriteInt32(value: m_pulseLength[channel]);
-            writer.WriteInt32(value: m_sample[channel]);
-            writer.WriteInt32(value: m_envelopeVolume[channel]);
-            writer.WriteInt32(value: m_envelopeCountdown[channel]);
-            writer.WriteBoolean(value: m_envelopeClock[channel]);
-            writer.WriteBoolean(value: m_envelopeLocked[channel]);
-            writer.WriteBoolean(value: m_envelopeShouldLock[channel]);
+            transfer.Boolean(value: ref m_channelActive[channel]);
+            transfer.Boolean(value: ref m_lengthEnabled[channel]);
+            transfer.Int32(value: ref m_pulseLength[channel]);
+            transfer.Int32(value: ref m_sample[channel]);
+            transfer.Int32(value: ref m_envelopeVolume[channel]);
+            transfer.Int32(value: ref m_envelopeCountdown[channel]);
+            transfer.Boolean(value: ref m_envelopeClock[channel]);
+            transfer.Boolean(value: ref m_envelopeLocked[channel]);
+            transfer.Boolean(value: ref m_envelopeShouldLock[channel]);
         }
 
         for (var channel = 0; (channel < 2); ++channel) {
-            writer.WriteInt32(value: m_squareSampleLength[channel]);
-            writer.WriteInt32(value: m_squareSampleCountdown[channel]);
-            writer.WriteInt32(value: m_squareSampleIndex[channel]);
-            writer.WriteBoolean(value: m_squareSampleSuppressed[channel]);
-            writer.WriteInt32(value: m_squareDelay[channel]);
-            writer.WriteBoolean(value: m_squareDidTick[channel]);
-            writer.WriteBoolean(value: m_squareJustReloaded[channel]);
+            transfer.Int32(value: ref m_squareSampleLength[channel]);
+            transfer.Int32(value: ref m_squareSampleCountdown[channel]);
+            transfer.Int32(value: ref m_squareSampleIndex[channel]);
+            transfer.Boolean(value: ref m_squareSampleSuppressed[channel]);
+            transfer.Int32(value: ref m_squareDelay[channel]);
+            transfer.Boolean(value: ref m_squareDidTick[channel]);
+            transfer.Boolean(value: ref m_squareJustReloaded[channel]);
         }
     }
+
     /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed, after the divider
     /// has advanced: the DIV-APU sample follows the counter, and every active generator's countdown drops by the
     /// generator ticks the generator calls carried.</summary>

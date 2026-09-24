@@ -1,0 +1,21 @@
+# Compilation, then installation; paused and reset, the instance renders its one initialization frame.
+pipeline.wait shapes compiled 40
+pipeline.wait shapes installed 10
+pipeline.time shapes pause
+pipeline.reset shapes
+pipeline.wait shapes submitted 1 10
+# The final RGBA8 image, drawn by the fullscreen stage through the POSITION adapter.
+pipeline.capture shapes {run}/image.png
+pipeline.wait shapes captured 10
+# Each float intermediate through the float preview, paused: the second compute stage, then the first.
+pipeline.output shapes mixed
+pipeline.capture shapes {run}/mixed.png
+pipeline.wait shapes captured 10
+pipeline.output shapes field
+pipeline.capture shapes {run}/field.png
+pipeline.wait shapes captured 10
+# Active: resumed, a float output captures a produced frame; nothing in this graph depends on the frame count.
+pipeline.time shapes resume
+pipeline.wait shapes submitted 4 10
+pipeline.capture shapes {run}/field-active.png
+pipeline.wait shapes captured 10

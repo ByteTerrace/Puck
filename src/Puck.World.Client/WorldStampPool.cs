@@ -79,6 +79,12 @@ public sealed partial class WorldStampPool {
         // null deliberately: FindBody keys the one-per-body creation-look registration, and an attached row rides a body
         // WITHOUT owning its look or its part namespace.
         public int? BodyIndex;
+
+        // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
+        // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
+        // the registration retires, so the mirror stops reading what no body wears any more.
+        public readonly WorldStateLease Reads = new();
+
         public float Clock;
         public required WorldPrototype Creation;
         public int FrameCursor;
@@ -124,7 +130,6 @@ public sealed partial class WorldStampPool {
         // new catalog while the creation hash (and so this Registration) survives, and a layout against the old
         // atlas must not be served against the new one.
         public object? CachedTextLayoutCatalog;
-        public required string Key;
         public required AuthoredPartTable Parts;
         // The row-rooted placement (an ANIMATED or an ATTACHED one), or null for a body-rooted stamp.
         public WorldPlacement? Row;
@@ -571,7 +576,7 @@ public sealed partial class WorldStampPool {
     }
     // One shape's emission: ResetPoint + TransformDynamic + [domain ops + static local pose, OR the per-shape slot's
     // own pre-composed pose] + [twist/bend point ops] + the scaled primitive + [dilate/onion field ops, scoped
-    // outside a group; an eccentric primitive takes the same scope for its Lipschitz factor] — the fixed op sequence over the canonical CreationGeometry dimensions. probeWorstCase emits
+    // outside a group; a warp or cells relief takes the same scope for its Lipschitz factor] — the fixed op sequence over the canonical CreationGeometry dimensions. probeWorstCase emits
     // EVERY op unconditionally (the probe binding rule).
     //
     // A domain-bearing shape rides its OWN per-shape slot, like any other shape — but PackTransforms packs that slot
@@ -591,7 +596,7 @@ public sealed partial class WorldStampPool {
     // chain. placementScale converts the panel's creation-unit Inset/Depth into the world units `scale` is already
     // in, and is the Scale op a domain-bearing shape's chain carries (above).
     private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, bool secondary = true, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, SdfSweepParameters? curve = null, ShapeErodeDocument? erode = null, ShapeCellsDocument? cells = null) {
-        if (probeWorstCase) { builder.ReservePathTables(1); }
+        if (probeWorstCase) { builder.ReservePathTables(shapeCount: 1); }
         // The worst-case reservation for a Sweep's fixed 3-uvec4 curve table entry — any admitted curve costs the
         // SAME table words (unlike ConvexPolygon's variable vertex count), so one representative curve inside the
         // admitted envelope (SdfProgramBuilder.MaxSweepBulgeRatio et al.) reserves it.
@@ -722,22 +727,16 @@ public sealed partial class WorldStampPool {
         var chain = BuildChain(withDomain: true);
         var wantsDilate = (probeWorstCase || (dilate != 0f));
         var wantsOnion = (probeWorstCase || (onion != 0f));
-        // An eccentric primitive (SdfSolidGeometry.StepFactor > 1: a non-uniformly scaled sphere baked as an ellipsoid)
-        // takes the same per-shape scope the field ops do, so its Lipschitz factor clamps its own candidate at the pop
-        // instead of the whole program's step scale. Inside a group the group's scope already covers it
-        // (GroupNeedsScope); the probe always emits the scope, so the envelope is unchanged. A panel takes the SAME
-        // scope for a different reason — its subtraction/union must bite only this shape's own candidate — and, like
-        // Group, is refused at validation whenever inGroupScope would apply here.
-        var eccentric = (SdfSolidGeometry.StepFactor(
-            scale: scale,
-            type: type
-        ) > 1f);
+        // A panel takes the per-shape scope the field ops do — its subtraction/union must bite only this shape's own
+        // candidate — and, like Group, is refused at validation whenever inGroupScope would apply here. A primitive
+        // alone never needs one: every primitive is 1-Lipschitz, a non-uniformly scaled sphere or ellipsoid included
+        // (the exact exponent-2 superellipsoid gauge).
         var wantsPanel = (probeWorstCase || (panel is not null));
         // A flare/shear/bump/erode is a warp (or, for erode, a noise-perturbed candidate whose Lipschitz factor
         // folds the same way — SdfProgram.Lipschitz.cs's LaneErode case), so its factor
         // (SdfProgram.FlareOperatorNorm/ShearOperatorNorm/GaussianPushLipschitz/NoiseDisplaceStepFactor) would
         // otherwise fold into the WHOLE program's step scale; its own scope clamps it onto this candidate at the pop
-        // instead, exactly as an eccentric primitive's factor is. (The probe already emits the scope
+        // instead. Inside a group the group's scope already covers it (GroupNeedsScope). (The probe already emits the scope
         // unconditionally, so the envelope is unchanged.)
         var wantsFlare = (flare is not null);
         var wantsShear = (shear is not null);
@@ -745,7 +744,7 @@ public sealed partial class WorldStampPool {
         var wantsErode = (erode is not null);
 
         if (
-            (wantsDilate || wantsOnion || eccentric || wantsPanel || wantsFlare || wantsShear || wantsBumps || wantsErode || (cells is not null)) &&
+            (wantsDilate || wantsOnion || wantsPanel || wantsFlare || wantsShear || wantsBumps || wantsErode || (cells is not null)) &&
             !inGroupScope
         ) {
             var scoped = SdfSolidGeometry.AppendScaledPrimitive(
@@ -969,11 +968,11 @@ public sealed partial class WorldStampPool {
         for (var member = fromIndex; (member < shapes.Count); member++) {
             var shape = shapes[member];
 
-            // An eccentric member (a squashed sphere) taxes every march in the frame unless its chain sits inside a
-            // scope, whose pop clamps the group's own 1/L onto its candidate instead (SdfProgram.AnalyzeLipschitz).
+            // A warp or relief member taxes every march in the frame unless its chain sits inside a scope, whose pop
+            // clamps the group's own 1/L onto its candidate instead (SdfProgram.AnalyzeLipschitz).
             if (
                 ((shape.Group ?? 0) == groupId) &&
-                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (SdfSolidGeometry.StepFactor(type: shape.Type, scale: shape.Scale) > 1f))
+                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null))
             ) {
                 return true;
             }
@@ -997,7 +996,6 @@ public sealed partial class WorldStampPool {
     }
     private static Registration RegisterBody(BodyStamp stamp) {
         var registration = new Registration {
-            Key = $"body:{stamp.BodyIndex}",
             BodyIndex = stamp.BodyIndex,
             Creation = stamp.Creation,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
@@ -1122,79 +1120,6 @@ public sealed partial class WorldStampPool {
             scale
         );
     }
-    private static int SelectPose(WorldClient client, Registration live) => SelectPoseFrame(
-        bodyIndex: (live.BodyIndex ?? -1),
-        definition: client.Definition,
-        references: live.PoseReferences,
-        tick: client.Tick,
-        timelineFrames: live.PoseFrames
-    );
-    // A look's poses against its creation's timeline: each pose's state reference and its 1-based frame (0 = the
-    // pose names no frame, which the validator refuses before a document reaches here).
-    private static void ResolvePoses(IReadOnlyDictionary<string, string> poses, IReadOnlyList<FrameDocument?> frames, out string[] references, out int[] timelineFrames) {
-        references = new string[poses.Count];
-        timelineFrames = new int[poses.Count];
-
-        var pose = 0;
-
-        foreach (var (frameName, reference) in poses) {
-            references[pose] = reference;
-
-            for (var frame = 0; (frame < frames.Count); frame++) {
-                if (string.Equals(a: frames[frame]?.Name, b: frameName, comparisonType: StringComparison.Ordinal)) {
-                    timelineFrames[pose] = (frame + 1);
-
-                    break;
-                }
-            }
-
-            pose++;
-        }
-    }
-
-    /// <summary>Selects the timeline frame a look's <c>poses</c> hold this frame: the first pose, in declaration
-    /// order, whose state cell reads nonzero, as a 1-based frame index; 0 when none holds.</summary>
-    /// <param name="definition">The live definition.</param>
-    /// <param name="poses">The look's frame-name to state-reference map.</param>
-    /// <param name="frames">The creation's timeline.</param>
-    /// <param name="bodyIndex">The wearing body's index, substituted for <c>$body</c>.</param>
-    /// <param name="tick">The tick the cells are read at.</param>
-    public static int SelectPoseFrame(WorldDefinition definition, IReadOnlyDictionary<string, string> poses, IReadOnlyList<FrameDocument?> frames, int bodyIndex, ulong tick) {
-        ResolvePoses(
-            frames: frames,
-            poses: poses,
-            references: out var references,
-            timelineFrames: out var timelineFrames
-        );
-
-        return SelectPoseFrame(
-            bodyIndex: bodyIndex,
-            definition: definition,
-            references: references,
-            tick: tick,
-            timelineFrames: timelineFrames
-        );
-    }
-
-    private static int SelectPoseFrame(WorldDefinition definition, string[] references, int[] timelineFrames, int bodyIndex, ulong tick) {
-        for (var pose = 0; (pose < references.Length); pose++) {
-            if (
-                (timelineFrames[pose] > 0) &&
-                WorldGaitDrivers.TryReadStateTruth(
-                bodyIndex: bodyIndex,
-                definition: definition,
-                reference: references[pose],
-                tick: tick,
-                value: out var value
-            ) &&
-                (value != 0f)
-            ) {
-                return timelineFrames[pose];
-            }
-        }
-
-        return 0;
-    }
     // The rest before a cue's next self-fire: a uniform draw in min..max keyed by (body, fire count) — the same body
     // blinks the same way on every run, and no two bodies in step (each body is its own stream). Infinity for a
     // demand-only cue.
@@ -1248,7 +1173,6 @@ public sealed partial class WorldStampPool {
         ));
     }
     private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new() {
-        Key = row.Id,
         Row = row,
         Creation = creation,
         Parts = CreationPartCompiler.Compile(document: creation.Document),
@@ -1360,269 +1284,6 @@ public sealed partial class WorldStampPool {
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     public bool HasBodyRegistration(int bodyIndex) => (FindBody(bodyIndex: bodyIndex) is not null);
-    /// <summary>Packs the pool's per-frame transforms: each live registration's root rides its placement pose (animated),
-    /// the client's interpolated body pose (body-rooted), or that pose composed with the attach facet's local offset
-    /// (attached), and each shape holds its current frame's snapshot (composed root ∘ per-shape pose, positions scaled by
-    /// the registration scale); unused slots — and an attached row whose target body is not live this frame — hide below
-    /// the floor.</summary>
-    /// <param name="transforms">The unified dynamic-transform buffer (the pool writes its own slot range).</param>
-    /// <param name="client">The client whose interpolated body poses root the body-rooted and attached stamps.</param>
-    /// <param name="slotBase">The pool's first dynamic-transform slot in <paramref name="transforms"/>, supplied by the
-    /// emitter that owns the pool (see <see cref="Emit"/>).</param>
-    /// <param name="parkPosition">Where an unused slot — or an attached row whose target body is not live this
-    /// frame — parks, hidden below the floor (<see cref="SdfEmitContext.ParkPosition"/>).</param>
-    public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, int slotBase, Vector3 parkPosition) {
-        m_packedSlotBase = slotBase;
-        m_volumes.Clear();
-
-        var deltaSeconds = m_pendingDeltaSeconds;
-
-        m_pendingDeltaSeconds = 0f;
-
-        for (var index = 0; (index < m_pool.Length); index++) {
-            var rootSlot = (slotBase + (index * SlotsPerPlacement));
-            var live = m_pool[index];
-
-            // An attached row whose body is not active contributes nothing this frame — the presentation mirror of
-            // WorldPlacementAttachment.TryResolve's inactive-body verdict (which world.attachments echoes by reason).
-            // The registration keeps its slot: occupancy changes tick to tick and a rebuild is not owed for one. The
-            // range test is a belt-and-braces guard, not a live gap: WorldBodiesLimits.CapacityCeiling is
-            // WorldClient.EntityCapacity, so the document validator's bound on population.capacity already keeps
-            // every body index inside this client's view — this stays as the one place that still checks it
-            // directly rather than trusting an upstream invariant transitively.
-            if (
-                (live is { Row.Attach: { } parked }) &&
-                ((((uint)parked.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: parked.BodyIndex))
-            ) {
-                live = null;
-            }
-
-            if (live is null) {
-                var hidden = new DynamicTransform(
-                    Orientation: Quaternion.Identity,
-                    Position: parkPosition
-                );
-
-                for (var slot = rootSlot; (slot < (rootSlot + SlotsPerPlacement)); slot++) {
-                    transforms[slot] = hidden;
-                }
-
-                continue;
-            }
-
-            var (rootPosition, rootRotation, placementScale) = RootPose(
-                client: client,
-                live: live
-            );
-
-            // The pose-continuity watch is read for EVERY body-rooted registration, not only a follower-bearing one:
-            // a teleport or a reused body slot invalidates a latched contact point the same way it invalidates a
-            // follower — the world point a foot was planted at belongs to where the body WAS.
-            if (live.BodyIndex is { } watched) {
-                var epoch = client.PoseEpoch(index: watched);
-                var address = client.EntityAddress(index: watched);
-
-                if ((live.RootEpoch != epoch) || (live.RootAddress != address)) {
-                    live.RootPositionFollower.Reseed();
-                    live.RootOrientationFollower.Reseed();
-                    live.RootEpoch = epoch;
-                    live.RootAddress = address;
-
-                    for (var shapeSlot = 0; (shapeSlot < WorldPlacementPolicy.MaxAnimatedStampShapes); shapeSlot++) {
-                        live.PartFollower[shapeSlot].Reseed();
-                    }
-
-                    Array.Clear(array: live.EffectorPlanted);
-                }
-            }
-
-            if (live.HasRootDynamics) {
-                StepRootFollower(
-                    deltaSeconds: deltaSeconds,
-                    live: live,
-                    targetPosition: rootPosition,
-                    targetRotation: rootRotation
-                );
-                (rootPosition, rootRotation) = (live.FollowedPosition, live.FollowedOrientation);
-            } else {
-                live.RootPositionFollower.Reseed();
-                live.RootOrientationFollower.Reseed();
-                live.FollowedPosition = rootPosition;
-                live.FollowedOrientation = rootRotation;
-            }
-
-            // The look's anonymous render lanes (WorldLookMotion.Lanes), evaluated fresh every frame against live
-            // state and carried on EVERY dynamic slot this registration owns — root and every shape — so whichever
-            // slot a shape's own erode/wear reads (SDF_OP_LANE_ERODE's TransformDynamic, shade-wear.hlsli) sees the
-            // current value regardless of which slot it rides.
-            var lanes = WorldLookLaneEvaluator.EvaluateLanes(live.Lanes, client.Definition, client.Tick, (live.BodyIndex ?? -1));
-
-            transforms[rootSlot] = new DynamicTransform(
-                Lanes: lanes,
-                Orientation: rootRotation,
-                Position: rootPosition
-            );
-
-            var document = live.Creation.EngineDocument;
-            var drivers = document.Drivers;
-
-            live.PoseFrame = SelectPose(client: client, live: live);
-
-            WorldGaitDrivers.Advance(
-                address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
-                deltaSeconds: deltaSeconds,
-                drivers: drivers,
-                facts: ((live.BodyIndex is { } factBody) ? client.Facts(index: factBody) : default),
-                easedSpeed: ref live.DriverSpeed,
-                lastAddress: ref live.DriverAddress,
-                lastOrientation: ref live.DriverOrientation,
-                lastPosition: ref live.DriverPosition,
-                orientation: rootRotation,
-                phases: live.DriverPhase,
-                position: rootPosition,
-                seeded: ref live.DriverSeeded,
-                weights: live.DriverWeight,
-                definition: client.Definition,
-                tick: client.Tick
-            );
-
-            var shapes = (document.Shapes ?? []);
-            var poses = FramePoses(
-                frameCursor: live.EffectiveCursor,
-                live: live
-            );
-            var shapeCount = Math.Min(
-                val1: shapes.Count,
-                val2: WorldPlacementPolicy.MaxAnimatedStampShapes
-            );
-
-            // The animated facets compose in the creation's own space, on top of whichever rest/frame pose the write
-            // pass chooses — a uniform placement scale commutes with a rotation about a scaled pivot, so scaling there
-            // is the same pose either way. A shape's own delta chains under its parent's (already composed: a parent
-            // is validated to precede its children), and is kept for the children that follow.
-            if (!live.PartParentsResolved) {
-                ResolvePartParents(
-                    live: live,
-                    shapes: shapes
-                );
-            }
-
-            for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
-                WorldGaitDrivers.ComposeDelta(
-                    drivers: drivers,
-                    phases: live.DriverPhase,
-                    rotation: out var ownRotation,
-                    shape: shapes[shapeIndex],
-                    translation: out var ownTranslation,
-                    weights: live.DriverWeight,
-                    definition: client.Definition
-                );
-
-                live.PartOwnRotation[shapeIndex] = ownRotation;
-                live.PartOwnTranslation[shapeIndex] = ownTranslation;
-            }
-
-            ChainPartDeltas(
-                live: live,
-                shapeCount: shapeCount
-            );
-            // The effectors correct the driver-posed chain, then everything downstream of a corrected bone re-chains
-            // off the corrected own delta — so a hand parented to a solved forearm rides the solve with no effector
-            // of its own.
-            if (ApplyEffectors(
-                client: client,
-                deltaSeconds: deltaSeconds,
-                document: document,
-                live: live,
-                placementScale: placementScale,
-                poses: poses,
-                rootPosition: rootPosition,
-                rootRotation: rootRotation,
-                shapeCount: shapeCount,
-                shapes: shapes
-            )) {
-                ChainPartDeltas(
-                    live: live,
-                    shapeCount: shapeCount
-                );
-            }
-
-            for (var shapeIndex = 0; (shapeIndex < WorldPlacementPolicy.MaxAnimatedStampShapes); shapeIndex++) {
-                var slot = ((rootSlot + 1) + shapeIndex);
-
-                if (shapeIndex >= shapeCount) {
-                    transforms[slot] = new DynamicTransform(
-                        Orientation: Quaternion.Identity,
-                        Position: parkPosition
-                    );
-
-                    continue;
-                }
-
-                var shape = shapes[shapeIndex];
-
-                // A domain-bearing shape's own slot carries the RIGID DELTA its parent chain imparts to creation
-                // space (identity when it has no parent) rather than a composed pose — EmitShape rides this slot
-                // for its TransformDynamic, applies its domain ops against it, and bakes its own rest-pose local
-                // translate/rotate afterward. The canonicalizer refuses an own swing/slide or a named frame pose on
-                // a domain-bearing shape, so PartOwnRotation/Translation is always identity/zero here and
-                // PartDeltaRotation/Translation[shapeIndex] IS exactly the parent's chained delta (ChainPartDeltas).
-                // The delta's translation is in creation units, like every other shape's, so it takes the placement
-                // scale here — the same product the ordinary path folds into `position * placementScale` below.
-                if (shape.Domain is { Count: > 0 }) {
-                    transforms[slot] = new DynamicTransform(
-                        Lanes: lanes,
-                        Orientation: Quaternion.Normalize(value: (rootRotation * live.PartDeltaRotation[shapeIndex])),
-                        Position: (rootPosition + Vector3.Transform(
-                            rotation: rootRotation,
-                            value: (live.PartDeltaTranslation[shapeIndex] * placementScale)
-                        ))
-                    );
-
-                    continue;
-                }
-
-                var (position, rotation) = BasePose(
-                    poses: poses,
-                    shape: shape
-                );
-
-                WorldGaitDrivers.Apply(
-                    deltaRotation: live.PartDeltaRotation[shapeIndex],
-                    deltaTranslation: live.PartDeltaTranslation[shapeIndex],
-                    position: ref position,
-                    rotation: ref rotation
-                );
-
-                var worldPosition = (rootPosition + Vector3.Transform(
-                    rotation: rootRotation,
-                    value: (position * placementScale)
-                ));
-
-                if (live.PartFollows[shapeIndex]) {
-                    worldPosition = StepPartFollower(
-                        deltaSeconds: deltaSeconds,
-                        live: live,
-                        shapeSlot: shapeIndex,
-                        target: worldPosition
-                    );
-                }
-
-                transforms[slot] = new DynamicTransform(
-                    Lanes: lanes,
-                    Orientation: Quaternion.Normalize(value: (rootRotation * rotation)),
-                    Position: worldPosition
-                );
-            }
-
-            AppendVolumes(
-                document: document,
-                placementScale: placementScale,
-                rootSlot: rootSlot,
-                shapeCount: shapeCount
-            );
-        }
-    }
 
     /// <summary>Gets the bounded volumes the pool's live registrations author, as packed by the latest
     /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot.</summary>
@@ -1759,7 +1420,7 @@ public sealed partial class WorldStampPool {
             ) is not { } presentRow) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: presentRow.PrototypeId
+                id: presentRow.ShownPrototypeId
             ) is not { } presentCreation) ||
                 !PoolRooted(
                 creation: presentCreation,
@@ -1779,7 +1440,7 @@ public sealed partial class WorldStampPool {
                 continue;
             }
 
-            m_pool[index] = ((live.BodyIndex is not null)
+            var reconciled = ((live.BodyIndex is not null)
                 ? KeyedReconciler.Reconcile(
                     live: live,
                     tryFindRow: TryFindBodyStamp,
@@ -1827,6 +1488,15 @@ public sealed partial class WorldStampPool {
                     }
                 )
             );
+
+            if (!ReferenceEquals(
+                objA: reconciled,
+                objB: live
+            )) {
+                live.Reads.Release();
+            }
+
+            m_pool[index] = reconciled;
         }
 
         // Pass 2 — admit new row-rooted (animated or attached) rows into free slots (the validator holds the ceiling; a
@@ -1835,7 +1505,7 @@ public sealed partial class WorldStampPool {
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation) ||
                 !PoolRooted(
                 creation: creation,

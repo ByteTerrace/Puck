@@ -347,14 +347,14 @@ public static class FixedQ4816RustPort {
         sb.Append(value: "];\n\n");
         return sb.ToString();
     }
-    private static string FormatI64Array(string name, IReadOnlyList<long> values, int perLine, string comment) {
+    private static string FormatNumericArray<T>(string typeName, string name, IReadOnlyList<T> values, int perLine, string comment) where T : IFormattable {
         var sb = new StringBuilder();
 
         sb.Append(value: "// ").Append(value: comment).Append(value: '\n');
-        sb.Append(value: "const ").Append(value: name).Append(value: ": [i64; ").Append(value: values.Count).Append(value: "] = [\n");
+        sb.Append(value: "const ").Append(value: name).Append(value: ": [").Append(value: typeName).Append(value: "; ").Append(value: values.Count).Append(value: "] = [\n");
 
         for (var index = 0; (index < values.Count); index += perLine) {
-            var line = values.Skip(count: index).Take(count: perLine).Select(selector: static value => value.ToString(provider: CultureInfo.InvariantCulture));
+            var line = values.Skip(count: index).Take(count: perLine).Select(selector: static value => value.ToString(format: null, formatProvider: CultureInfo.InvariantCulture));
 
             sb.Append(value: "    ").Append(value: string.Join(
                 separator: ", ",
@@ -365,24 +365,22 @@ public static class FixedQ4816RustPort {
         sb.Append(value: "];\n\n");
         return sb.ToString();
     }
-    private static string FormatU64Array(string name, IReadOnlyList<ulong> values, int perLine, string comment) {
-        var sb = new StringBuilder();
-
-        sb.Append(value: "// ").Append(value: comment).Append(value: '\n');
-        sb.Append(value: "const ").Append(value: name).Append(value: ": [u64; ").Append(value: values.Count).Append(value: "] = [\n");
-
-        for (var index = 0; (index < values.Count); index += perLine) {
-            var line = values.Skip(count: index).Take(count: perLine).Select(selector: static value => value.ToString(provider: CultureInfo.InvariantCulture));
-
-            sb.Append(value: "    ").Append(value: string.Join(
-                separator: ", ",
-                values: line
-            )).Append(value: ",\n");
-        }
-
-        sb.Append(value: "];\n\n");
-        return sb.ToString();
-    }
+    private static string FormatI64Array(string name, IReadOnlyList<long> values, int perLine, string comment) =>
+        FormatNumericArray(
+            comment: comment,
+            name: name,
+            perLine: perLine,
+            typeName: "i64",
+            values: values
+        );
+    private static string FormatU64Array(string name, IReadOnlyList<ulong> values, int perLine, string comment) =>
+        FormatNumericArray(
+            comment: comment,
+            name: name,
+            perLine: perLine,
+            typeName: "u64",
+            values: values
+        );
     private static string FormatUnaryVectors(string functionName, string arrayName, string testName, IReadOnlyList<(long Input, long Expected)> rows) {
         var sb = new StringBuilder();
 

@@ -16,14 +16,21 @@ namespace Puck.Hosting.Tests;
 public sealed class ControlTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static async Task EventuallyAsync(Func<bool> ready) {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+    // Ends on the directory's own deletion event. The watcher is armed before the first check, so a deletion that
+    // lands between the two is seen by the check, and one after it by the event; an overflowed watcher only prompts
+    // another check.
+    private static async Task WhenDeletedAsync(string directory) {
+        var deleted = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        using var watcher = new FileSystemWatcher(path: Path.GetDirectoryName(path: directory)!) {
+            Filter = Path.GetFileName(path: directory),
+            NotifyFilter = NotifyFilters.DirectoryName,
+        };
 
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 5));
-        while (!ready()) { await Task.Delay(
-            10,
-            deadline.Token
-        ); }
+        watcher.Deleted += (_, _) => deleted.TrySetResult();
+        watcher.Error += (_, _) => { if (!Directory.Exists(path: directory)) { deleted.TrySetResult(); } };
+        watcher.EnableRaisingEvents = true;
+        if (!Directory.Exists(path: directory)) { return; }
+        await deleted.Task.WaitAsync(cancellationToken: Token);
     }
     private static async Task<TcpClient> RawConnectAsync(string attachment, bool wrongSecret) {
         using var capability = new FileStream(
@@ -125,10 +132,7 @@ public sealed class ControlTests {
             cancellationToken: stop.Token
         );
 
-        await entered.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 5),
-            Token
-        );
+        await entered.Task.WaitAsync(cancellationToken: Token);
         var busy = client.ExecuteAsync(
             "exec",
             "must-not-run",
@@ -143,10 +147,7 @@ public sealed class ControlTests {
         );
         stop.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => active);
-        await cancelled.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 5),
-            Token
-        );
+        await cancelled.Task.WaitAsync(cancellationToken: Token);
         await Assert.ThrowsAsync<ObjectDisposedException>(testCode: () => client.ExecuteAsync(
             "exec",
             "must-not-reconnect",
@@ -177,11 +178,13 @@ public sealed class ControlTests {
         cancel.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => operation);
         Assert.True(condition: Directory.Exists(path: Path.GetDirectoryName(path: armed.Path)));
+        var cleaned = WhenDeletedAsync(directory: Path.GetDirectoryName(path: armed.Path)!);
+
         armed.Write(writer: path => File.WriteAllBytes(
             bytes: [1, 2, 3],
             path: path
         ));
-        await EventuallyAsync(ready: () => !Directory.Exists(path: Path.GetDirectoryName(path: armed.Path)));
+        await cleaned;
 
         var calls = 0;
         using var queued = new ConsoleControlSession(
@@ -363,7 +366,7 @@ public sealed class ControlTests {
         );
         var humanReply = new TaskCompletionSource<CommandResult>();
         using var human = source.CreateSession(
-            CommandPrincipal.Console,
+            Principal.Console,
             onResult: (_, result) => humanReply.SetResult(result: result)
         );
 
@@ -386,10 +389,12 @@ public sealed class ControlTests {
                 includeExplicit: true,
                 includeInherited: true,
                 targetType: typeof(SecurityIdentifier)
-            )) { Assert.Equal(
+            )) {
+                Assert.Equal(
                 user.User,
                 rule.IdentityReference
-            ); }
+            );
+            }
         }
         var png = Convert.FromBase64String(s: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5p8AAAAASUVORK5CYII=");
 
@@ -423,10 +428,7 @@ public sealed class ControlTests {
             ControlLimits.RequestBytes,
             Token
         );
-        await entered.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 5),
-            Token
-        );
+        await entered.Task.WaitAsync(cancellationToken: Token);
         await WriteFrameAsync(
             client.GetStream(),
             "{\"id\":2,\"operation\":\"exec\",\"command\":\"must-not-run\",\"timeoutMilliseconds\":10000}"u8.ToArray(),
@@ -438,17 +440,18 @@ public sealed class ControlTests {
             ControlLimits.ResponseBytes,
             Token
         ));
-        await cancelled.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 5),
-            Token
-        );
+        await cancelled.Task.WaitAsync(cancellationToken: Token);
     }
     [Fact]
     public async Task RealAttachmentRejectsWrongSecretDuplicateIdsAndReconnectsWithoutStoppingHost() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         var sessions = 0;
         var disposed = 0;
-        using var server = new LocalControlServer(createSession: () => { Interlocked.Increment(location: ref sessions); return new EchoSession(disposed: () => Interlocked.Increment(location: ref disposed)); });
+        var firstDisposed = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = new LocalControlServer(createSession: () => {
+            Interlocked.Increment(location: ref sessions);
+            return new EchoSession(disposed: () => { Interlocked.Increment(location: ref disposed); firstDisposed.TrySetResult(); });
+        });
 
         using (var client = await LocalControlClient.ConnectAsync(
             attachmentPath: server.AttachmentPath,
@@ -506,7 +509,11 @@ public sealed class ControlTests {
                 )).Output
             );
         }
-        await EventuallyAsync(ready: () => (disposed == 1));
+        await firstDisposed.Task.WaitAsync(cancellationToken: Token);
+        Assert.Equal(
+            actual: Volatile.Read(location: ref disposed),
+            expected: 1
+        );
         using var raw = await RawConnectAsync(
             server.AttachmentPath,
             wrongSecret: true
@@ -589,10 +596,7 @@ public sealed class ControlTests {
             ControlLimits.ResponseBytes,
             Token
         ));
-        await closed.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 5),
-            Token
-        );
+        await closed.Task.WaitAsync(cancellationToken: Token);
         Assert.Equal(
             actual: calls,
             expected: 0
@@ -614,10 +618,12 @@ public sealed class ControlTests {
         public void Dispose() { }
         public async Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) {
             entered.SetResult();
-            try { await Task.Delay(
+            try {
+                await Task.Delay(
                 cancellationToken: cancellationToken,
                 millisecondsDelay: Timeout.Infinite
-            ); } finally { cancelled.TrySetResult(); }
+            );
+            } finally { cancelled.TrySetResult(); }
             throw new InvalidOperationException(message: "Unreachable.");
         }
     }
@@ -634,7 +640,7 @@ public sealed class ControlTests {
             yield return CommandDefinition.WithWireArgs(
                 "probe",
                 "Check principal.",
-                (context, _) => new(((context.Principal == CommandPrincipal.Console)
+                (context, _) => new(((context.Principal == Principal.Console)
                 ? "operator"
                 : "wrong")),
                 bindability: CommandBindability.Unbindable

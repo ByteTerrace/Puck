@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -26,7 +27,7 @@ public sealed class WorldAgentBridge {
     public WorldAgentBridge(
         IPrincipalServerLink link,
         IWorldAgentDispatcher dispatcher,
-        WorldPrincipal principal,
+        Principal principal,
         int bodyIndex,
         Func<WorldChannelTable> channels
     ) {
@@ -56,7 +57,7 @@ public sealed class WorldAgentBridge {
     /// <summary>Gets the 0-based body this bridge controls.</summary>
     public int BodyIndex { get; }
     /// <summary>Gets the identity stamped on every bridge operation.</summary>
-    public WorldPrincipal Principal { get; }
+    public Principal Principal { get; }
 
     private WorldChannelTable CurrentChannels() => (m_channels() ?? throw new InvalidOperationException(message: "The live world channel source returned null."));
     private IReadOnlyList<WorldAgentChannel> DescribeChannels() {
@@ -203,12 +204,13 @@ public sealed class WorldAgentBridge {
         );
     }
     /// <summary>Submits a timed six-axis motion segment using the live world's declared motion roles.</summary>
-    /// <param name="forward">MoveAdvance in fixed-point input units.</param>
-    /// <param name="strafe">MoveStrafe in fixed-point input units.</param>
-    /// <param name="up">MoveUp in fixed-point input units.</param>
-    /// <param name="yaw">Turn in fixed-point input units.</param>
-    /// <param name="pitch">Pitch in fixed-point input units.</param>
-    /// <param name="roll">Roll in fixed-point input units.</param>
+    /// <param name="forward">The MoveAdvance role value, in the range of its channel's shape; quantized to
+    /// <see cref="FixedQ4816"/> on submission.</param>
+    /// <param name="strafe">The MoveStrafe role value, in the range of its channel's shape.</param>
+    /// <param name="up">The MoveUp role value, in the range of its channel's shape.</param>
+    /// <param name="yaw">The Turn role value, in the range of its channel's shape.</param>
+    /// <param name="pitch">The Pitch role value, in the range of its channel's shape.</param>
+    /// <param name="roll">The Roll role value, in the range of its channel's shape.</param>
     /// <param name="seconds">Positive simulation duration.</param>
     /// <param name="cancellationToken">Cancels the action while it is waiting in the dispatcher.</param>
     /// <returns>A submission receipt. Read back the body to learn the resulting authoritative state.</returns>
@@ -316,7 +318,8 @@ public sealed class WorldAgentBridge {
     }
     /// <summary>Submits a named channel press using the current live channel table.</summary>
     /// <param name="channel">The authored channel name.</param>
-    /// <param name="value">The raw channel value; authority applies the authored shape and grant ceilings.</param>
+    /// <param name="value">The channel value, in the range of the channel's shape and quantized to
+    /// <see cref="FixedQ4816"/> on submission; authority applies the authored shape and grant ceilings.</param>
     /// <param name="holdSeconds">A positive simulation duration, or null for one host step.</param>
     /// <param name="cancellationToken">Cancels the action while it is waiting in the dispatcher.</param>
     /// <returns>A submission receipt. Read back channels/state to learn the resulting authoritative state.</returns>

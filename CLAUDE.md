@@ -13,12 +13,14 @@ Use forward slashes for Puck paths on every platform and prefer current APIs tha
 ## Enforcement
 
 The build, the architecture gate, determinism checks, calibrated ceilings, and
-the file-length ledger (`FileLengths.json`, LEN001–LEN004: no source file over
-2500 lines unless already recorded, and a recorded file may only shrink —
-`puck lengths`) are enforced. **POST is quarantined** — `Puck.Post` is in
-`experimental/` and out of the build, so nothing it used to gate is enforced
-today; do not cite it, run it, or write a stage for it. The engine-contract
-verification story it carried is a live gap, not a live gate — except the one
+the two ratchet ledgers are enforced. In a ratchet ledger a recorded per-file
+count may only fall. `FileLengths.json` (LEN001–LEN004, `puck lengths`) allows
+no source file over 2000 lines unless already recorded.
+`CommentSmells.json` (SMELL001–SMELL004, `puck comment-smells`) allows no
+comment smell in a file it does not record, and a recorded file's smell count
+may only fall. `Puck.Post` is quarantined in `experimental/`
+and out of the build: do not cite it, run it, or write a stage for it. The
+engine contract it covered is a live gap, not a live gate — except the one
 narrow slice `puck parity` covers: it boots the authored parity world
 (`tests/Puck.Parity/parity.world.json`) offscreen once per backend, the
 world's own tick-scheduled `captures` rows write a manifest, and each capture
@@ -45,7 +47,7 @@ Use the topic relevant to the task; game plans are not prerequisite reading for 
 | [docs/overview.md](docs/overview.md) and [docs/architecture/README.md](docs/architecture/README.md) | What the engine does and how its runtime boundaries fit together. |
 | [docs/plans/README.md](docs/plans/README.md) and [docs/game/README.md](docs/game/README.md) | Proposed engineering work and the reference game, when the task concerns them. |
 | [docs/architecture/worlds.md](docs/architecture/worlds.md) and [src/Puck.World.Server/README.md](src/Puck.World.Server/README.md) | How Puck represents and runs worlds today: documents, authoritative simulation, and the server's current structure. |
-| [docs/plans/runtime-and-delivery.md](docs/plans/runtime-and-delivery.md) | The product tree, compiled worlds, the ROM ledger, release pairs, and the `WorldServer` facade split that rides the state rebuild — proposed work, not where architecture questions belong. |
+| [docs/plans/runtime-and-delivery.md](docs/plans/runtime-and-delivery.md) | The product tree, compiled worlds, the ROM ledger, release pairs, the presentation view, and the `WorldServer` facade's remaining constraints — proposed work, not where architecture questions belong. |
 | [docs/plans/machines-and-cartridges.md](docs/plans/machines-and-cartridges.md) | Hosted machines with named identity, the cabinet module, and what `puck.cartridge.v1` needs before a retail-scale game is authorable as data. |
 
 Use [Writing documentation](docs/development/documentation.md) for human prose,
@@ -56,21 +58,18 @@ library usage and shared workflows belong in the manual. Repair consumers when
 an owning explanation or asset moves.
 
 The manual must explain current behavior and limitations without requiring a
-source investigation first. Keep that explanation separate from verification
-claims: a dated test result is evidence for its recorded candidate, not permanent
-certification. Generate inventories that the code owns, including the project
+source investigation first. Docs name no dates and no commit SHAs: they state
+current behavior, limitations, and open work in the present tense, and
+verification evidence belongs in the commit message that lands a change. Generate inventories that the code owns, including the project
 layering map and schema/name registries. Plans record requested work and its
 completion conditions; preserve meaningful decisions and unresolved ideas when
 moving or consolidating documents. Update incoming links and navigation in the
 same change, including agent routing and documentation tooling.
 
-For an area's settled contract facts, load its skill: `sdf-world`,
-`gaming-bricks`, `rom-forge`, `symbol-analysis`, `maths-usage`,
-`maths-laws`, `documentation`, `boy-scout`. There is deliberately no
-verification-routing skill: the one that existed described `Puck.Post` and was
-deleted with it. The two emulator batteries (`gaming-bricks`),
-`tests/Puck.Maths.Tests` (`maths-laws`), and the narrow deterministic
-real-World canaries run by `puck landing` are the live gates.
+For an area's settled contract facts, load the skill that owns it (rule 8).
+No skill routes verification; the live gates are the two emulator batteries
+(`gaming-bricks`), `tests/Puck.Maths.Tests` (`maths-laws`), `puck parity`, and
+the deterministic real-World canaries run by `puck canary`.
 
 ## `InternalsVisibleTo` is not endorsed — publicity is the better option
 
@@ -78,8 +77,8 @@ real-World canaries run by `puck landing` are the live gates.
 have the wrong accessibility, not a solution to it: if another project needs a
 member, **make the member public**. A TEST project is the one arguable
 exception. This holds in both of IVT's forms — the `Properties/AssemblyInfo.cs`
-attribute and the csproj `<InternalsVisibleTo>` item — and scanning for one form
-alone returns a confident wrong answer, measured by getting it wrong.
+attribute and the csproj `<InternalsVisibleTo>` item — so search for both; a scan
+for one form alone misses the other.
 
 Widen the member, not the assembly: a grant hands a whole assembly's internals
 to a friend forever, which is strictly more than the caller needed and invisible
@@ -120,28 +119,20 @@ correct them where they live.
    change you've been asked to make, it is stale; update it in the same change
    rather than watering the change down. Gates prove *observable* behavior
    (pixels, hashes, parity, determinism), never internal structure.
-3. **The game is greenfield; Post gates the engine.** `Puck.World` — the
+3. **The game is greenfield.** `Puck.World` — the
    overworld and everything under `src/Puck.World/` — is the playground: expected
-   to churn, never settled precedent. (`Puck.Demo` was retired and its capabilities
-   live in `Puck.World`'s districts and the brick forges, or nowhere; see
-   `experimental/README.md`.) Verify game/overworld changes by RUNNING `Puck.World`
+   to churn, never settled precedent. Verify game/overworld changes by RUNNING `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
    0 or less runs until the window is closed). Narrow deterministic headless
-   canaries MAY gate `puck landing` only by launching that real executable and
+   canaries (`puck canary`) gate game behavior only by launching that real executable and
    observing its normal stdin/stdout/stderr contract; never substitute a
    build-only gate, add a `--validate-*` flag, or add a Post stage for a game
-   feature. **`Puck.Post` is QUARANTINED** (`experimental/Puck.Post`)
-   — it is not built, not run, and not cited; the shared engine contract it
-   used to gate (cross-backend render path, SDF VM ISA, document schemas,
-   deterministic numerics) currently has no automated gate; the one narrow
-   on-demand check is `puck parity`, which boots the authored parity world
-   offscreen (no window) once per backend and renders three verdicts per
-   tick-scheduled capture: content gate (a degenerate frame never reaches
-   comparison), exact `stateHash`, and per-tile pixels under
-   `tests/Puck.Parity/parity.contract.json`. Say the rest is uncovered plainly when
+   feature. The shared engine contract (cross-backend render path, SDF VM ISA,
+   document schemas, deterministic numerics) has no automated gate beyond
+   `puck parity` (see Enforcement); say the rest is uncovered plainly when
    it matters rather than implying coverage. Emulator changes use the
    `Puck.HumbleGamingBrick.Post`/`Puck.AdvancedGamingBrick.Post` batteries,
-   which are still in the build.
+   which are in the build.
 4. **Determinism is a feature — it pins the mapping, not the values.** No
    wall-clock, RNG, or float in simulation state; input becomes per-tick
    `CommandSnapshot`s; fixed-point math comes from `Puck.Maths`. The guarantee
@@ -149,7 +140,8 @@ correct them where they live.
    bit-identical state on every run, machine, and backend. It is NOT output
    stability across code versions — a deliberate correction to math or logic
    is EXPECTED to change state hashes. When one does: make the correction,
-   re-run the relevant Post tier to prove determinism still holds (the gates
+   re-run the relevant gates (`puck test --reproduce`, `puck parity`, the
+   canaries, and the emulator batteries) to prove determinism still holds (the gates
    are self-referential; they pin no historical values), and re-record any
    persisted replays or baselines the correction invalidates in the same
    change. Never preserve a wrong result to keep a hash stable, and never add
@@ -162,8 +154,9 @@ correct them where they live.
    deprecation ceremonies, no migration shims, no read-side tolerance for
    retired data shapes — migrate data once and delete the old path. The only
    stability contract is observable behavior under the gates.
-6. **Merges** land on `main` as one squash commit with a hand-written summary —
-   no WIP noise, no merge bubbles, no `Co-Authored-By` trailers.
+6. **Merges happen when the owner asks.** The owner says what merges and onto
+   which branch; an agent never lands work on another branch on its own
+   initiative.
 7. **Branded code is settled — changing it is a deliberate act, not a silent
    one.** A member carrying `[VerifiedCode("id", …)]` has been proven correct
    over its whole input space, and `VerifiedCode.json` seals the source that
@@ -185,23 +178,18 @@ correct them where they live.
    deciding the brand still holds. VER003 means the fingerprint cannot cover the
    declaration's shape honestly — `partial`, a preprocessor directive, or a brand
    that does not sit inside what it brands; restructure rather than suppress.
-   The rest of the family exists so a brand can never stand unenforced: VER006
-   refuses the ledger itself when it is missing, unreadable, off-schema,
-   ambiguous, or carries an entry that cannot be trusted — a broken manifest
-   fails the build on the manifest, never by passing as an empty one; VER007
-   refuses a brand where nothing can record it (a local function or lambda);
-   VER008 refuses a declaration claiming an entry recorded for another symbol;
-   VER009 refuses an entry claimed more than once; and VER010 refuses an entry
-   naming a dependency that resolves to nothing, to more than one declaration,
-   or to a shape the walk cannot cover — folding it as nothing would leave the
-   seal narrower than the entry claims. Each entry records the `assembly` that
+   VER004–VER010 exist so a brand can never stand unenforced: they refuse a
+   brand that disagrees with its manifest entry, and a ledger or entry that
+   cannot be trusted, rather than reading it as empty or narrower than it
+   claims. Each message names its fix. Each entry records the `assembly` that
    owns it, and that assembly's compilation is the one that sweeps it.
 8. **Assume the system already exists; find it before building it.** This
    repository is deep and much of it is settled, so a "new" mechanism is
    usually an existing one wearing a different name. Before authoring, load
-   the skill that owns the area — `sdf-world`, `puck-world`, `maths-usage`,
-   `maths-laws`, `gaming-bricks`, `rom-forge`, `symbol-analysis`,
-   `content-search`, `documentation`, `boy-scout` — and then ask the CODE with
+   the skill that owns the area — `puck-world`, `puck-dsl`, `rendering`,
+   `sdf-authoring`, `maths-usage`, `maths-laws`, `gaming-bricks`, `rom-forge`,
+   `dotnet10-performance`, `symbol-analysis`, `content-search`, `documentation`,
+   `boy-scout` — and then ask the CODE with
    a mechanical control (`puck references`, `puck declarations`,
    `puck search -M 0`) rather than guessing from a name. `experimental/` is
    one of the places to look. A second implementation of something already
@@ -230,15 +218,44 @@ commit when another task may have staged work.
 
 When delegation is authorized, inventory the work first, assign explicit file
 ownership and applicable skills, and sequence edits to shared files. Give each
-assignment a concrete verification step and observable success condition. The
-integrator must inspect the shared result and run its checks; a worker's report
-is supporting evidence, not a substitute for verification. Check reported defects
-against the current files and commits before acting, and correct reports that
-became stale during concurrent work.
+assignment the whole task in one brief, a finish line (the command that must
+pass or the state that must hold), and a stopping condition. The integrator must
+inspect the shared result and run its checks; a worker's report is supporting
+evidence, not a substitute for verification, so check its evidence before
+accepting it. Check reported defects against the current files and commits
+before acting, and correct reports that became stale during concurrent work. A
+review brief asks only for problems that would block the merge, each with the
+file and line, why it is wrong, and how to show it fails.
 
 Verify the operation itself, including its outputs and exit status. After moving
-a tool or document, exercise the real consumer at its new location. Run performance
-measurements without competing builds or GPU workloads.
+a tool or document, exercise the real consumer at its new location. Judge
+performance by the code, its disassembly, and load-independent counts
+(allocations, evaluations, frames, dispatches, process spawns). Wall-clock timing
+is deferred: when the owner asks for one, it runs once, serially, on an idle
+machine through `puck bench`. Run correctness GPU work (`puck parity`, the GPU
+canaries) without competing builds or GPU workloads.
+
+## Running long tasks
+
+When a step doesn't need the owner's input, keep going, and put status notes in
+the same message as the next action. Stop and ask only when the work cannot
+continue without the owner, or before anything destructive or outward-facing:
+deleting data or branches, force-pushing, pushing or publishing, deploying to
+Azure, or changing anything outside this repository. Choosing the structurally
+right fix over a cheaper patch is not the owner's call to make; if it is large,
+delegate it rather than calling it too costly.
+
+For a run with many parts, keep a checklist in the session scratchpad
+(`TASKS.md`), tick each item as it finishes, and add what you find along the way.
+Once the owner has settled a question, treat it as settled; raise it again only
+when new evidence contradicts it, and say what the evidence is.
+
+End a run with three headings, in this order: **Needs you** (decisions or
+approvals waiting on the owner), **Changed** (what landed and how it was
+verified), and **Found** (defects, risks, or follow-ups discovered). In research
+and investigation reports, mark anything you could not confirm and say where you
+looked.
+
 ## Repository automation
 
 Repository automation is Puck CLI. Every operation is a verb on the one
@@ -286,6 +303,7 @@ host-dependent behavior by running the actual application.
 ## Controller input
 
 Switch Pro / Xbox Series / DualSense, all flowing through `Puck.Commands`, live
-in `src/Puck.Input`. Its [README](src/Puck.Input/README.md) is the handoff doc —
-architecture, cross-family feature matrix, hardware-verified status, deferred
-work, debugging notes.
+in `src/Puck.Input`. Its [README](src/Puck.Input/README.md) routes to
+[Device input](docs/reference/input.md), which owns the architecture,
+cross-family feature matrix, hardware-verified status, deferred work, and
+debugging notes.

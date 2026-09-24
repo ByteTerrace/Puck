@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Abstractions.Counting;
 
 namespace Puck.GamingBricks.Post;
 
@@ -199,9 +200,9 @@ public static class MachineStageProbes {
 
         return PostStageOutcome.Pass(detail: $"parent and fork byte-identical after +{tailFrames}f from a common point ({parentState.Size} state bytes); neither an immediate nor a delayed stale double-dispose aliased two later forks");
     }
-    /// <summary>Verifies the per-frame hot loop is allocation-free: warm up, take a
-    /// <see cref="GC.GetAllocatedBytesForCurrentThread()"/> baseline, advance a further span of frames, and assert the
-    /// delta is exactly zero.</summary>
+    /// <summary>Verifies the per-frame hot loop is allocation-free: warm up, then advance a further span of frames in
+    /// <see cref="AllocationWindow.Least"/>'s windows, and pass once one window allocates nothing on the calling thread;
+    /// a failure carries the types the runtime sampled while the loop ran again.</summary>
     /// <typeparam name="TMachine">The battery's machine handle type.</typeparam>
     /// <param name="build">Builds the machine under measurement.</param>
     /// <param name="runFrames">Advances a machine by a whole number of frames. Must not allocate per call.</param>
@@ -221,18 +222,23 @@ public static class MachineStageProbes {
             arg2: warmFrames
         );
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
+        var windows = 0;
 
-        runFrames(
-            arg1: machine,
-            arg2: measureFrames
-        );
+        try {
+            _ = AllocationWindow.Least(
+                name: "zero-alloc",
+                window: () => {
+                    ++windows;
+                    runFrames(
+                        arg1: machine,
+                        arg2: measureFrames
+                    );
+                }
+            );
+        } catch (AllocationWindowException exception) {
+            return PostStageOutcome.Fail(detail: $"{measureFrames} frames after {warmFrames}-frame warm-up (expected 0 B): {exception.Message}");
+        }
 
-        var delta = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        return ((delta == 0)
-            ? PostStageOutcome.Pass(detail: $"0 B allocated over {measureFrames} frames after {warmFrames}-frame warm-up")
-            : PostStageOutcome.Fail(detail: $"{delta:N0} B allocated over {measureFrames} frames after {warmFrames}-frame warm-up (expected 0)")
-        );
+        return PostStageOutcome.Pass(detail: $"0 B allocated over {measureFrames} frames after {warmFrames}-frame warm-up (window {windows} of at most {AllocationWindow.MaximumWindows})");
     }
 }

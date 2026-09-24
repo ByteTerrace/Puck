@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World;
@@ -18,11 +19,11 @@ internal static class WorldCameraApplication {
     /// <param name="actingPrincipal">The principal the dissolve submission is stamped with — the server's Control
     /// gate checks it against each applied target exactly as <c>body.disengage</c> does.</param>
     /// <param name="slot">The 0-based seat slot.</param>
-    public static void Deactivate(IServerLink link, WorldPrincipal actingPrincipal, int slot) {
+    public static void Deactivate(IServerLink link, Principal actingPrincipal, int slot) {
         link.SubmitCommand(command: new WorldCommand.DissolveControl(
             EntityIndex: slot,
             Principal: actingPrincipal,
-            TargetPrincipal: WorldPrincipal.Seat(slot: slot)
+            TargetPrincipal: Principal.Seat(slot: slot)
         ));
     }
 }

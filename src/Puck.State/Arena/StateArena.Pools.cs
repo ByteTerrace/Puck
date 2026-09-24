@@ -260,27 +260,8 @@ public sealed partial class StateArena {
             return true;
         }
         _ = TryPoolKey(key: out var key, slot: handle.Slot);
-        value = NumericValue(kind: m_layout[field.RowOrdinal].Kind, raw: LiveNumberAt(rowOrdinal: field.RowOrdinal, slot: cell, key: key, time: in time));
+        value = CellValue.FromNumber(kind: m_layout[field.RowOrdinal].Kind, raw: LiveNumberAt(rowOrdinal: field.RowOrdinal, slot: cell, key: key, time: in time));
         return true;
-    }
-    /// <summary>Attempts to read one numeric field's stored number without materializing a carrier.</summary>
-    /// <param name="handle">The generation-checked instance.</param>
-    /// <param name="fieldOrdinal">The field's ordinal in the pool's record.</param>
-    /// <param name="raw">The stored number, or zero when the read fails.</param>
-    /// <returns><see langword="true"/> when the instance is live and the field is numeric.</returns>
-    /// <remarks>The number is raw in the field's own kind, exactly as
-    /// <see cref="TryReadRaw(int, CellKey, out long)"/> answers for a row. A text or vector field holds no number
-    /// and answers <see langword="false"/>.</remarks>
-    public bool TryReadRaw(StateInstanceHandle handle, int fieldOrdinal, out long raw) {
-        if (
-            TryFieldSlot(cell: out var cell, field: out var field, fieldOrdinal: fieldOrdinal, handle: handle) &&
-            (field.Read != ArenaPoolFieldRead.Carrier)
-        ) {
-            raw = m_numbers[cell];
-            return true;
-        }
-        raw = 0L;
-        return false;
     }
     /// <summary>Attempts to read one numeric field's effective number at <paramref name="time"/> without
     /// materializing a carrier.</summary>
@@ -289,6 +270,10 @@ public sealed partial class StateArena {
     /// <param name="time">The evaluation time a traited field advances to.</param>
     /// <param name="raw">The effective number, or zero when the read fails.</param>
     /// <returns><see langword="true"/> when the instance is live and the field is numeric.</returns>
+    /// <remarks>The number is raw in the field's own kind: the value for an <see cref="CellKind.Int"/> field, the
+    /// <c>FixedQ4816</c> bits for a <see cref="CellKind.Fixed"/> one, and zero or one for a
+    /// <see cref="CellKind.Bool"/> one. A text or vector field holds no number and answers
+    /// <see langword="false"/>.</remarks>
     public bool TryReadLiveRaw(StateInstanceHandle handle, int fieldOrdinal, in ArenaTime time, out long raw) {
         if (TryFieldSlot(cell: out var cell, field: out var field, fieldOrdinal: fieldOrdinal, handle: handle)) {
             if (field.Read == ArenaPoolFieldRead.Stored) {
@@ -492,6 +477,8 @@ public sealed partial class StateArena {
 
         var occupancy = m_poolOccupancy[pool.Ordinal];
 
+        Visit(lanes: (occupancy.Length + CellCount(rowOrdinal: pool.DomainRowOrdinal)));
+
         for (var word = 0; (word < occupancy.Length); word++) {
             var occupied = occupancy[word];
 
@@ -614,14 +601,14 @@ public sealed partial class StateArena {
         ref readonly var layout = ref m_layout[rowOrdinal];
         var slot = (layout.CellStart + position);
 
-        ClearCell(rowOrdinal: rowOrdinal, slot: slot, tailPush: false);
+        ClearCell(rowOrdinal: rowOrdinal, slot: slot);
         WriteNumber(column: ArenaColumn.MemberKey, index: slot, value: key.Ordinal);
         WriteNumber(column: ArenaColumn.MemberCount, index: rowOrdinal, value: (m_memberCounts[rowOrdinal] + 1));
-        StoreValueRaw(layout: layout, slot: slot, tailPush: false, value: value);
+        StoreValueRaw(layout: layout, slot: slot, value: value);
         RecomputeMembership(rowOrdinal: rowOrdinal);
     }
     private void RemovePoolCell(int rowOrdinal, int position) {
-        ClearCell(rowOrdinal: rowOrdinal, slot: (m_layout[rowOrdinal].CellStart + position), tailPush: false);
+        ClearCell(rowOrdinal: rowOrdinal, slot: (m_layout[rowOrdinal].CellStart + position));
         WriteNumber(column: ArenaColumn.MemberCount, index: rowOrdinal, value: (m_memberCounts[rowOrdinal] - 1));
         RecomputeMembership(rowOrdinal: rowOrdinal);
     }

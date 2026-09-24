@@ -9,6 +9,7 @@ internal static class DirectXGpuFormats {
         GpuPixelFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
         GpuPixelFormat.R16G16B16A16Float => DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT,
         GpuPixelFormat.R32G32B32A32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT,
+        GpuPixelFormat.D32Float => DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT,
         _ => throw new ArgumentOutOfRangeException(
         actualValue: gpuPixelFormat,
         message: null,
@@ -30,6 +31,9 @@ internal static class DirectXGpuFormats {
                 return true;
             case GpuImageLayout.RenderTarget:
                 resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
+                return true;
+            case GpuImageLayout.DepthAttachment:
+                resourceState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
                 return true;
             default:
                 resourceState = default;

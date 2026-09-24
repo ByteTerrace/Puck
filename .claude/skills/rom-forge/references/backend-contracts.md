@@ -114,7 +114,7 @@ lowered document. None of this is author-facing DSL syntax — it has no DSL spe
   while retaining firmware services. The lower-level builder accepts an optional
   caller-supplied logo for retail BIOS boot; document output does not claim it.
 - A rule's comparison and a `set` step's operation are named from `Puck.State`
-  (`puck declarations ActionStateComparison`/`ExpressionOp` list the exact members), not from a forge
+  (`puck declarations ExpressionOp`/`ExpressionComparisons` list the exact members), not from a forge
   list. An ABSENT operation assigns — the one combination no opcode spells, so the field
   is omitted rather than carrying a name. `CartridgeOperations` holds the
   emittable subset; KEEP IN SYNC with both backends' operation switches.

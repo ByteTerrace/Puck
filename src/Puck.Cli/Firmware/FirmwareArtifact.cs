@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Puck.Assets;
 
 namespace Puck.Cli.Firmware;
 
@@ -21,22 +22,10 @@ internal static class FirmwareArtifact {
                 return false;
             }
         } else {
-            Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-            var temporary = (path + $".{Guid.NewGuid():N}.tmp");
-
-            try {
-                File.WriteAllBytes(
-                    bytes: bytes,
-                    path: temporary
-                );
-                File.Move(
-                    destFileName: path,
-                    overwrite: true,
-                    sourceFileName: temporary
-                );
-            } finally {
-                File.Delete(path: temporary);
-            }
+            AtomicFile.WriteAllBytes(
+                bytes: bytes,
+                path: path
+            );
         }
 
         Console.Out.WriteLine(value: $"firmware {machine}: {(verify

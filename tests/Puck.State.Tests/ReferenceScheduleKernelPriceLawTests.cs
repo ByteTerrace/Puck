@@ -20,7 +20,7 @@ public sealed class ReferenceScheduleKernelPriceLawTests {
         var right = ordered[middle];
 
         return Reduce(
-            denominator: (2 * left.Denominator * right.Denominator),
+            denominator: ((2 * left.Denominator) * right.Denominator),
             numerator: ((left.Numerator * right.Denominator) + (right.Numerator * left.Denominator))
         );
     }

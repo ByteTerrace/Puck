@@ -41,18 +41,24 @@ internal static class ParityComparator {
             );
         }
         if (
-            leftCapture.CameraInside ||
-            rightCapture.CameraInside
+            (leftCapture.Refusal is not null) ||
+            (rightCapture.Refusal is not null)
         ) {
-            var side = ((leftCapture.CameraInside && rightCapture.CameraInside)
-                ? "both"
-                : (leftCapture.CameraInside
-                    ? "left"
-                    : "right"
-            ));
+            var refusals = new List<string>(capacity: 2);
+
+            if (leftCapture.Refusal is { } leftRefusal) {
+                refusals.Add(item: $"{leftRefusal}: refused on left ({leftCapture.Detail})");
+            }
+
+            if (rightCapture.Refusal is { } rightRefusal) {
+                refusals.Add(item: $"{rightRefusal}: refused on right ({rightCapture.Detail})");
+            }
 
             return GateFailure(
-                reason: $"cameraInside: refused on {side}",
+                reason: string.Join(
+                    separator: "; ",
+                    values: refusals
+                ),
                 station: station,
                 tick: tick
             );

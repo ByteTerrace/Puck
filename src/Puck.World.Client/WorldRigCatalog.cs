@@ -168,6 +168,15 @@ public static class WorldRigCatalog {
     /// <summary>Gets the frozen transform-range width reserved for one detailed body's animated parts.</summary>
     public static int TransformSlotsPerBody => MaxLeafCount;
 
+    /// <summary>Returns a body's reserved transform range, relative to the catalog's first slot: a detailed body's
+    /// maximum-sized leaf range, or a coarse body's one root slot.</summary>
+    /// <param name="avatar">The 0-based body index.</param>
+    /// <returns>The range's first slot and its length.</returns>
+    public static (int Start, int Count) BodySlots(int avatar) => (BodySlotBase(avatar: avatar), (IsDetailed(avatar: avatar)
+        ? MaxLeafCount
+        : CoarseTransformSlotsPerBody
+    ));
+
     private static int BodySlotBase(int avatar) {
         ArgumentOutOfRangeException.ThrowIfNegative(avatar);
         return ((avatar < DetailedAvatarCapacity)

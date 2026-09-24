@@ -9,4 +9,3 @@ var prefix = 'bytrc'
 
 param groups = byteTerraceAccessManagementGroups()
 param roleAssignments = byteTerraceAccessManagementRoleAssignments(prefix, partitionCount)
-

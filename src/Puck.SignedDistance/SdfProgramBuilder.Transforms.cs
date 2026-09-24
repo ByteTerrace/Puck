@@ -460,7 +460,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="extents">The per-axis elongation half-extents (0 on an axis = no stretch there).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="extents"/> is not finite and non-negative.</exception>
     public SdfProgramBuilder Elongate(Vector3 extents) {
-        // The decoder is `p -= clamp(p, -extents, extents)` (SDF_OP_ELONGATE, and ClampComponents in
+        // The decoder is `p -= clamp(p, -extents, extents)` (SDF_OP_ELONGATE, and FixedVector3.Clamp in
         // SdfFieldEvaluator): a negative component inverts the clamp bounds, which is undefined in HLSL and
         // backend-dependent, so the half-extents must be non-negative.
         RequireNonNegative(
@@ -993,8 +993,8 @@ public sealed partial class SdfProgramBuilder {
 
         // Mirrors the shader's `if (instructionHeader.w != 0u) parityMaterialDelta = cellKey * stride` (a zero stride
         // leaves parityMaterialDelta — and this mirror — untouched, exactly like the shader's own guard). cellKey's
-        // range is sdfWallpaperCellKey's: 0..2 (3-coloring) for a hex group (P3 and up), 0..1 (parity) otherwise — see
-        // the sdf-world skill's C#↔HLSL contract table — so the largest per-unit-stride reach is known HERE, at
+        // range is sdfWallpaperCellKey's: 0..2 (3-coloring) for a hex group (P3 and up), 0..1 (parity) otherwise — so
+        // the largest per-unit-stride reach is known HERE, at
         // WallpaperFold's own call site, without waiting for the shape that eventually uses this fold's material.
         if (materialStride != 0) {
             var maxCellKey = ((group >= SdfWallpaperGroup.P3)

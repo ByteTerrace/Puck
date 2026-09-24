@@ -163,9 +163,10 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
         if (m_measureComposed is { } measure) {
             int words;
             int instances;
+
             try {
                 (words, instances) = measure(program);
-            } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+            } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
                 throw new SdfDocumentException(
                     message: exception.Message,
                     reason: SdfRefusal.BuilderRejectedProgram
@@ -179,7 +180,8 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
                 );
             }
 
-            var instanceLimit = m_allowGrowth ? SdfProgramBuilder.MaxInstances : m_instanceCapacity;
+            var instanceLimit = (m_allowGrowth ? SdfProgramBuilder.MaxInstances : m_instanceCapacity);
+
             if (instances > instanceLimit) {
                 throw new SdfDocumentException(
                     message: $"document: composed with the live world scene, instances {instances} exceed the render limit {instanceLimit} — the previously loaded document (if any) keeps rendering unchanged.",

@@ -1,0 +1,14 @@
+/* Shared by the account and documentation pages. Paths, sizes, ids, and times: monospace figures that line up. */
+.data {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.path {
+  word-break: break-all;
+}
+
+.nowrap {
+  white-space: nowrap;
+}

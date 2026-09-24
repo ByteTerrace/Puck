@@ -1,7 +1,4 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -11,16 +8,6 @@ public sealed class CartridgeSpriteTests {
         target: target,
         title: title
     );
-    private static SpriteProbe Run(CartridgeDocument document, int frames) {
-        ICartridgeCompiler compiler = ((document.Target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-        var machine = new SpriteProbe(result: compiler.Compile(document: document));
-
-        machine.Run(frames: frames);
-        return machine;
-    }
 
     [InlineData("cgb")]
     [InlineData("agb")]
@@ -63,9 +50,10 @@ public sealed class CartridgeSpriteTests {
             ),
             ],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
-            frames: 20
+            frames: 20,
+            label: "sprite"
         );
 
         // The unmirrored sprite is solid at its left edge and clear at its right; the mirrored one is the reverse.
@@ -144,9 +132,10 @@ public sealed class CartridgeSpriteTests {
                 Visible: CartridgeExpressions.Of(constant: 1)
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
-            frames: 20
+            frames: 20,
+            label: "sprite"
         );
         var top = machine.Pixel(
             x: 4,
@@ -167,39 +156,5 @@ public sealed class CartridgeSpriteTests {
                 y: 20
             )
         );
-    }
-
-    private sealed class SpriteProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public SpriteProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "sprite"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "sprite"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public uint Pixel(int x, int y) => (m_agb?.ReadPixel(
-            x: x,
-            y: y
-        ) ?? m_hgb!.ReadPixel(
-            x: x,
-            y: y
-        ));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
     }
 }

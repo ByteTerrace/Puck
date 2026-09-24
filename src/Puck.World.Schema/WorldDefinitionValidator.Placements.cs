@@ -312,9 +312,9 @@ public static partial class WorldDefinitionValidator {
         WorldCollider.Sphere sphere => (float.IsFinite(f: sphere.Radius) && (sphere.Radius > 0f)),
         WorldCollider.Capsule capsule => (float.IsFinite(f: capsule.Radius) &&
             (capsule.Radius > 0f) &&
-            IsFinite(value: capsule.Endpoint) &&
+            VectorFunctions.IsFinite(vector: capsule.Endpoint) &&
             (capsule.Endpoint.LengthSquared() > 0f)),
-        WorldCollider.Box box => (IsFinite(value: box.HalfExtents) &&
+        WorldCollider.Box box => (VectorFunctions.IsFinite(vector: box.HalfExtents) &&
             (box.HalfExtents.X > 0f) &&
             (box.HalfExtents.Y > 0f) &&
             (box.HalfExtents.Z > 0f) &&
@@ -327,7 +327,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (!IsFinite(value: carry.Offset)) {
+        if (!VectorFunctions.IsFinite(vector: carry.Offset)) {
             errors.Add(item: $"{path}.offset must be finite.");
         }
 
@@ -470,7 +470,7 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 if (
-                    !IsFinite(value: capsule.Endpoint) ||
+                    !VectorFunctions.IsFinite(vector: capsule.Endpoint) ||
                     (capsule.Endpoint.LengthSquared() <= 0f)
                 ) {
                     errors.Add(item: $"{path}.endpoint must be finite and nonzero; use a sphere for a zero-length capsule.");
@@ -478,7 +478,7 @@ public static partial class WorldDefinitionValidator {
                 break;
             case WorldCollider.Box box:
                 if (
-                    !IsFinite(value: box.HalfExtents) ||
+                    !VectorFunctions.IsFinite(vector: box.HalfExtents) ||
                     (box.HalfExtents.X <= 0f) ||
                     (box.HalfExtents.Y <= 0f) ||
                     (box.HalfExtents.Z <= 0f)
@@ -585,11 +585,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
             if (
-                !WorldColor.TryParseBinding(
-                key: out _,
-                row: out var targetRow,
-                value: (target.Reference ?? string.Empty)
-            ) ||
+                (StateBinding.Parse(token: target.Reference) is not (var targetRow, _, _)) ||
                 (WorldDefinitionRows.FindStateRow(
                 rows: definition.State,
                 name: targetRow
@@ -623,11 +619,7 @@ public static partial class WorldDefinitionValidator {
     // checked against the row's cells, since '$body' resolves per reading body and an absent cell reads zero.
     private static void RequireNumericStateReference(WorldDefinition definition, string reference, List<string> errors, string path, string subject) {
         if (
-            !WorldColor.TryParseBinding(
-            key: out _,
-            row: out var rowName,
-            value: reference
-        ) ||
+            (StateBinding.Parse(token: reference) is not (var rowName, _, _)) ||
             (WorldDefinitionRows.FindStateRow(
             rows: definition.State,
             name: rowName
@@ -1596,6 +1588,15 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.id '{placement.Id}' spells the dealt-child separator '{WorldPlacementDeal.ChildSeparator}' — only a deal sweep mints an id of that shape (<template>{WorldPlacementDeal.ChildSeparator}<cellKey> under a parent carrying .deal); author the id without it.");
             }
+            if (
+                (placement.Id is not null) &&
+                !WorldPlacement.TryValidateId(
+                id: placement.Id,
+                reason: out var idReason
+            )
+            ) {
+                errors.Add(item: $"{path}.id: {idReason}.");
+            }
 
             RequireDeclared(
                 value: placement.PrototypeId,
@@ -1611,7 +1612,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!IsFinite(value: placement.Position)) {
+            if (!VectorFunctions.IsFinite(vector: placement.Position)) {
                 errors.Add(item: $"{path}.position must contain finite coordinates.");
             }
 
@@ -1655,7 +1656,7 @@ public static partial class WorldDefinitionValidator {
 
             if (placement.Mirror is { } mirror) {
                 if (
-                    !IsFinite(value: mirror.Normal) ||
+                    !VectorFunctions.IsFinite(vector: mirror.Normal) ||
                     (mirror.Normal.LengthSquared() <= 0f)
                 ) {
                     errors.Add(item: $"{path}.mirror.normal must be finite and nonzero.");
@@ -1945,7 +1946,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.attach.bodyIndex {attach.BodyIndex} is outside 0..{(definition.Population.Capacity - 1)} for the authored population capacity (0-based entity index — body:1 is player.* seat 2, not body index 1).");
                 }
 
-                if (!IsFinite(value: attach.LocalOffset)) {
+                if (!VectorFunctions.IsFinite(vector: attach.LocalOffset)) {
                     errors.Add(item: $"{path}.attach.localOffset must contain finite coordinates.");
                 }
 
@@ -2000,6 +2001,8 @@ public static partial class WorldDefinitionValidator {
                     placementPath: path,
                     prototypeIds: prototypeIds
                 );
+            } else if (placement.Holding != 0) {
+                errors.Add(item: $"{path}.holding is {placement.Holding} on a row without respond — it records which response entries hold.");
             }
 
             // The deal facet: the row is a template whose children are dealt from a keyed state row (see
@@ -2341,9 +2344,9 @@ public static partial class WorldDefinitionValidator {
                     value: "/"
                 ) ||
                     portableSource.Contains(value: ':') ||
-                    segments.Any(predicate: static segment => (segment is "" or "." or ".."))
+                    segments.Any(predicate: static segment => (segment is "" or "."))
                 ) {
-                    errors.Add(item: $"{path}.source '{font.Source}' must be a portable relative path contained beneath the world document directory (forward slashes, no empty/dot/parent segments).");
+                    errors.Add(item: $"{path}.source '{font.Source}' must be a portable relative path, resolved beside the document (forward slashes, no empty or dot segments).");
                 }
             }
 

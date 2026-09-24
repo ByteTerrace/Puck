@@ -14,64 +14,50 @@ namespace Puck.World;
 /// </summary>
 public sealed class WorldUpdateCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     /// <inheritdoc/>
+    private static string DescribeUpdate(WorldServer server) {
+        var update = server.Definition.Update;
+
+        if (update is null) {
+            return "[world.update: none]";
+        }
+
+        var channel = (update.Channel ?? "none");
+        var cacheRoot = (update.CacheRoot ?? "none");
+        var checkIntervalSeconds = ((update.CheckIntervalSeconds is { } seconds)
+            ? seconds.ToString()
+            : "none"
+        );
+        var keepVersions = ((update.KeepVersions is { } count)
+            ? count.ToString()
+            : "none"
+        );
+
+        return CommandEcho.Open(verb: "world.update")
+            .Field(
+            key: "channel",
+            value: channel
+        )
+            .Field(
+            key: "cacheRoot",
+            value: cacheRoot
+        )
+            .Field(
+            key: "checkIntervalSeconds",
+            value: checkIntervalSeconds
+        )
+            .Field(
+            key: "keepVersions",
+            value: keepVersions
+        )
+            .Close();
+    }
+
+    /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.update",
+        yield return authority.CreateServerQueryCommand(
+            describe: DescribeUpdate,
             description: "Reads the update section back: the authored channel/cacheRoot/checkIntervalSeconds/keepVersions, or 'none' when the section is absent (the app runs its own hardcoded self-update defaults). Authored data only — see update.status for the resolved, live configuration.",
-            handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.update"
-                ) is { } refusal) {
-                    return refusal;
-                }
-
-                if (!authority.TryResolveServer(
-                    context: context,
-                    error: out var error,
-                    server: out var server,
-                    verb: "world.update"
-                )) {
-                    return error;
-                }
-
-                var update = server.Definition.Update;
-
-                if (update is null) {
-                    return new CommandResult(Output: "[world.update: none]");
-                }
-
-                var channel = (update.Channel ?? "none");
-                var cacheRoot = (update.CacheRoot ?? "none");
-                var checkIntervalSeconds = ((update.CheckIntervalSeconds is { } seconds)
-                    ? seconds.ToString()
-                    : "none"
-                );
-                var keepVersions = ((update.KeepVersions is { } count)
-                    ? count.ToString()
-                    : "none"
-                );
-
-                return new CommandResult(Output: CommandEcho.Open(verb: "world.update")
-                    .Field(
-                    key: "channel",
-                    value: channel
-                )
-                    .Field(
-                    key: "cacheRoot",
-                    value: cacheRoot
-                )
-                    .Field(
-                    key: "checkIntervalSeconds",
-                    value: checkIntervalSeconds
-                )
-                    .Field(
-                    key: "keepVersions",
-                    value: keepVersions
-                )
-                    .Close());
-            }
+            name: "world.update"
         );
     }
 }

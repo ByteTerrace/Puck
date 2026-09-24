@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
@@ -10,7 +11,7 @@ public static partial class WorldDocumentEmitter {
     /// <summary>Lowers a <c>stabilize</c> group into a fixpoint entry of the document's <c>ruleGroups</c> array and
     /// its member rules into <c>rules</c>.</summary>
     /// <remarks>The body is a rule scope: its <c>when</c>, <c>local</c> and property statements apply to every member,
-    /// and each <c>rule</c> block becomes one member named <c>&lt;group&gt;_&lt;rule&gt;</c>. <c>maxPasses(N)</c> is
+    /// and each <c>rule</c> block becomes one member named <c>&lt;group&gt;$&lt;rule&gt;</c>. <c>maxPasses(N)</c> is
     /// the pass ceiling whose breach is a counted refusal; <c>until</c> arms the group while its gate reads false, so
     /// it lowers to the gate's negation.</remarks>
     private static void LowerStabilizeGroup(
@@ -19,9 +20,17 @@ public static partial class WorldDocumentEmitter {
         DocumentScope scope,
         RuleScopeContext? parentContext = null
     ) {
+        RefuseReservedScopedName(
+            name: stabilizeNode.Name,
+            prefix: parentContext?.Prefix,
+            scope: scope,
+            span: stabilizeNode.Span
+        );
+
         var groupName = PrefixedName(
             name: stabilizeNode.Name,
-            prefix: parentContext?.Prefix
+            prefix: parentContext?.Prefix,
+            scope: scope
         );
 
         if (string.IsNullOrEmpty(value: groupName)) {
@@ -43,28 +52,25 @@ public static partial class WorldDocumentEmitter {
         );
         var steps = new JsonArray();
 
-        foreach (var statement in stabilizeNode.Statements) {
-            if (statement is not RuleBlockNode member) {
-                continue;
-            }
-
+        foreach (var (member, memberScope) in GroupMembers(scope: scope, statements: stabilizeNode.Statements)) {
             // A member's name is whatever the rule lowering resolves it to, so an interpolated name reaches the step
             // rather than the empty string the header wrote.
             var memberName = (DocumentLowering.ResolveRuleName(
                 rule: member,
-                scope: scope
+                scope: memberScope
             ) ?? member.Name);
 
             LowerRuleBlock(
                 parent: parent,
                 rule: member,
-                scope: scope,
+                scope: memberScope,
                 scopeContext: context
             );
             steps.AppendNode(item: new JsonObject {
                 ["rule"] = JsonValue.Create(value: PrefixedName(
                     name: memberName,
-                    prefix: groupName
+                    prefix: groupName,
+                    scope: scope
                 )),
             });
         }
@@ -119,6 +125,41 @@ public static partial class WorldDocumentEmitter {
             scope: scope,
             span: stabilizeNode.Span
         );
+    }
+    // A group's members, in source order, each with the scope it lowers under: a `rule` block as written, and the
+    // rules a compile-time `for` or a template invocation in the body stamps, which lower under the loop's or the
+    // template's bindings exactly as the same statements would at a document's top level.
+    private static IEnumerable<(RuleBlockNode Member, DocumentScope Scope)> GroupMembers(IReadOnlyList<StatementNode> statements, DocumentScope scope) {
+        foreach (var statement in statements) {
+            switch (statement) {
+                case RuleBlockNode member:
+                    yield return (member, scope);
+                    break;
+                case ForStatementNode loop:
+                    foreach (var (expanded, iteration) in DocumentLowering.ExpandForStatements(loop: loop, scope: scope)) {
+                        foreach (var nested in GroupMembers(scope: iteration, statements: [expanded])) {
+                            yield return nested;
+                        }
+                    }
+                    break;
+                case ExpressionStatementNode { IsUse: false, Expression: CallExpressionNode call } when (scope.Templates.TryGetValue(key: call.Name, value: out var template) && !template.IsModule): {
+                        var stamped = new List<(StatementNode Statement, DocumentScope Scope)>();
+
+                        DocumentLowering.ExpandTemplate(
+                            call: call,
+                            scope: scope,
+                            sink: (body, _, invocation) => stamped.Add(item: (body, invocation)),
+                            target: new JsonObject()
+                        );
+                        foreach (var (body, invocation) in stamped) {
+                            foreach (var nested in GroupMembers(scope: invocation, statements: [body])) {
+                                yield return nested;
+                            }
+                        }
+                        break;
+                    }
+            }
+        }
     }
     /// <summary>Folds a group body's shared <c>when</c>, <c>local</c> and property statements into the scope context
     /// its member rules lower under.</summary>
@@ -216,16 +257,52 @@ public static partial class WorldDocumentEmitter {
         );
         groups.AppendNode(item: group);
     }
-    /// <summary>Joins a scope prefix to a name the way a rule scope names its member rules.</summary>
+    /// <summary>Joins a scope prefix to a name the way a rule scope names what it holds: the generated
+    /// <c>prefix$name</c> (<see cref="GeneratedName.Append"/>), which no author-written rule or group can spell.</summary>
     /// <param name="prefix">The enclosing prefix, or <see langword="null"/>/empty for none.</param>
-    /// <param name="name">The name being prefixed.</param>
+    /// <param name="name">The name being prefixed. One carrying <c>$</c> is refused where it was written
+    /// (<see cref="RefuseReservedScopedName"/>) and is returned unjoined.</param>
+    /// <param name="scope">The document scope, which records the joined name as one this compilation generated.</param>
     /// <returns>The joined name.</returns>
-    private static string PrefixedName(string? prefix, string name) => (string.IsNullOrEmpty(value: prefix)
+    private static string PrefixedName(string? prefix, string name, DocumentScope scope) => ((string.IsNullOrEmpty(value: prefix) || name.Contains(value: GeneratedName.Joiner))
         ? name
         : (string.IsNullOrEmpty(value: name)
             ? prefix
-            : $"{prefix}_{name}")
+            : Generated(
+                name: GeneratedName.Append(
+                name: prefix,
+                part: name
+            ),
+                scope: scope
+            ))
     );
+    /// <summary>Reports PUCK113 for a rule, scope or group name the author wrote in the spelling Puck reserves for
+    /// the names it generates: a <c>$</c> inside it, or, beneath a scope, a <c>$</c> anywhere, since the scope joins
+    /// its own name to it with one. A name refused here is refused once: the document-wide check that follows
+    /// lowering passes over it.</summary>
+    /// <param name="name">The name as written.</param>
+    /// <param name="prefix">The enclosing scope's prefix, or <see langword="null"/>/empty at the top level.</param>
+    /// <param name="scope">The document scope.</param>
+    /// <param name="span">The span that wrote the name.</param>
+    private static void RefuseReservedScopedName(string name, string? prefix, DocumentScope scope, SourceSpan span) {
+        if (GeneratedName.TryValidateAuthored(
+            name: name,
+            reason: out var reason
+        )) {
+            if (string.IsNullOrEmpty(value: prefix) || !name.Contains(value: GeneratedName.Joiner)) {
+                return;
+            }
+
+            reason = $"'{name}' carries '{GeneratedName.Joiner}', which the enclosing scope '{prefix}' would join its own name to it with; write a name without '{GeneratedName.Joiner}'";
+        }
+
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.GeneratedNameReserved,
+            message: reason,
+            span: span
+        );
+        _ = GetOrCreateGeneratedNames(scope: scope).Add(item: name);
+    }
     /// <summary>Evaluates a group's authored pass ceiling at compile time.</summary>
     /// <param name="expression">The authored ceiling.</param>
     /// <param name="name">The group's name, for the refusal.</param>

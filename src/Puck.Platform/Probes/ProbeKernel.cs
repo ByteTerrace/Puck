@@ -58,13 +58,16 @@ public static class ProbeKernelInputLimits {
 /// <param name="SharedTargetHandles">The ring's shared textures (opaque NT handles on Windows), two or more.</param>
 /// <param name="Slots">The publication the consumer acquires completed slots from; configured for the ring's size.</param>
 public readonly record struct ProbeKernelOutput(int Width, int Height, SurfaceFormat TargetFormat, IReadOnlyList<nint> SharedTargetHandles, LatestSlotPublication Slots);
-/// <summary>One kernel-class probe's request: what to compile, the packed constant-buffer bytes bound from the
-/// kind's config, its declared sockets, which camera sensor's frame triggers a cycle, and its optional texture
-/// output. The kernel runs on the camera graph's own device and worker thread.</summary>
-/// <param name="KernelSource">The kernel's HLSL source text.</param>
-/// <param name="AccumulateEntry">The per-pixel entry point, dispatched over the output extent when an output is
-/// declared, else over the trigger input's extent.</param>
-/// <param name="FinalizeEntry">The single-dispatch entry point that writes the reading's channels.</param>
+/// <summary>One kernel-class probe's request: the kernel's precompiled entry points, the packed constant-buffer bytes
+/// bound from the kind's config, its declared sockets, which camera sensor's frame triggers a cycle, and its optional
+/// texture output. The kernel runs on the camera graph's own device and worker thread, which creates it from the
+/// bytecode and compiles nothing.</summary>
+/// <param name="AccumulateEntry">The name of the per-pixel entry point, dispatched over the output extent when an
+/// output is declared, else over the trigger input's extent.</param>
+/// <param name="AccumulateBytecode">The per-pixel entry point's Direct3D 11 compute bytecode (<c>cs_5_0</c>), as the
+/// build compiles it.</param>
+/// <param name="FinalizeEntry">The name of the single-dispatch entry point that writes the reading's channels.</param>
+/// <param name="FinalizeBytecode">The single-dispatch entry point's Direct3D 11 compute bytecode.</param>
 /// <param name="Constants">The packed constant-buffer bytes, in the kind manifest's declared field order.</param>
 /// <param name="ChannelCount">The number of channels the kind declares.</param>
 /// <param name="RateHz">The cycle ceiling; trigger frames arriving faster are skipped.</param>
@@ -73,9 +76,10 @@ public readonly record struct ProbeKernelOutput(int Width, int Height, SurfaceFo
 /// <param name="Trigger">The sensor whose new frame starts a cycle; must be one of <paramref name="Inputs"/>' sensors.</param>
 /// <param name="Output">The texture output, or <see langword="null"/> for a readings-only kernel.</param>
 public readonly record struct ProbeKernelRequest(
-    string KernelSource,
     string AccumulateEntry,
+    ReadOnlyMemory<byte> AccumulateBytecode,
     string FinalizeEntry,
+    ReadOnlyMemory<byte> FinalizeBytecode,
     ReadOnlyMemory<byte> Constants,
     int ChannelCount,
     uint RateHz,
@@ -87,7 +91,7 @@ public readonly record struct ProbeKernelRequest(
 /// runs after each trigger frame's conversion with that frame and the other declared inputs bound, and publishes
 /// readings (and its output slot) before the worker moves on.</summary>
 public interface ICameraKernelHost {
-    /// <summary>Tries to attach a kernel. Compilation happens on the worker; a refusal after attachment surfaces as
+    /// <summary>Tries to attach a kernel. Its shaders are created on the worker; a refusal after attachment surfaces as
     /// the run's <see cref="IProbeKernelRun.Fault"/> with <see cref="IProbeKernelRun.IsEnded"/> set.</summary>
     /// <param name="request">The kernel request.</param>
     /// <param name="ring">The ring the kernel publishes readings into.</param>

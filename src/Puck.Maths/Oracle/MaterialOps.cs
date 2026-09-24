@@ -49,7 +49,9 @@ public interface IMaterialOps<TValue, TSelf>
     /// <param name="value">The value to canonicalize.</param>
     /// <returns>The canonical representation. Materials whose whole carrier is canonical return the value unchanged.</returns>
     /// <remarks>Every public coefficient-admission seam calls this before support pruning or equality decisions. The
-    /// default identity implementation keeps caller-authored whole-carrier materials source-compatible.</remarks>
+    /// identity is the canonical map of a material whose every carrier value is a member; a material whose members are
+    /// a proper subset of its carrier (a residue, a natural count, a nonnegative weight, a rational surd) overrides it to reduce or
+    /// refuse.</remarks>
     TValue Canonicalize(TValue value) =>
         value;
     /// <summary>Indicates whether a value is the material's additive identity.</summary>
@@ -311,30 +313,25 @@ public readonly struct CountingMaterial : IExactSemiringMaterial<BigInteger, Cou
     /// <param name="values">The per-term values.</param>
     /// <param name="lane">Ignored; the counting material is exact.</param>
     /// <returns>The folded value.</returns>
-    public BigInteger FusedChargedLinear(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> values, ChargeLane lane) {
-        var accumulator = BigInteger.Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator += (charges[index] * values[index]);
-        }
-
-        return accumulator;
-    }
+    public BigInteger FusedChargedLinear(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> values, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedLinear(
+            charges: charges,
+            material: this,
+            values: values
+        );
     /// <summary>Folds <c>Σ charges[i]·left[i]·right[i]</c> exactly.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="left">The per-term left coefficients.</param>
     /// <param name="right">The per-term right coefficients.</param>
     /// <param name="lane">Ignored; the counting material is exact.</param>
     /// <returns>The folded value.</returns>
-    public BigInteger FusedChargedSum(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> left, ReadOnlySpan<BigInteger> right, ChargeLane lane) {
-        var accumulator = BigInteger.Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator += (charges[index] * (left[index] * right[index]));
-        }
-
-        return accumulator;
-    }
+    public BigInteger FusedChargedSum(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> left, ReadOnlySpan<BigInteger> right, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedSum(
+            charges: charges,
+            left: left,
+            material: this,
+            right: right
+        );
     /// <summary>Indicates whether a count is zero.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when the count is zero.</returns>
@@ -591,30 +588,25 @@ public readonly struct IntegerMaterial : ISignedMaterial<BigInteger, IntegerMate
     /// <param name="values">The per-term values.</param>
     /// <param name="lane">Ignored; the integer material is exact.</param>
     /// <returns>The folded value.</returns>
-    public BigInteger FusedChargedLinear(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> values, ChargeLane lane) {
-        var accumulator = BigInteger.Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator += (charges[index] * values[index]);
-        }
-
-        return accumulator;
-    }
+    public BigInteger FusedChargedLinear(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> values, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedLinear(
+            charges: charges,
+            material: this,
+            values: values
+        );
     /// <summary>Folds <c>Σ charges[i]·left[i]·right[i]</c> exactly.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="left">The per-term left coefficients.</param>
     /// <param name="right">The per-term right coefficients.</param>
     /// <param name="lane">Ignored; the integer material is exact.</param>
     /// <returns>The folded value.</returns>
-    public BigInteger FusedChargedSum(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> left, ReadOnlySpan<BigInteger> right, ChargeLane lane) {
-        var accumulator = BigInteger.Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator += (charges[index] * (left[index] * right[index]));
-        }
-
-        return accumulator;
-    }
+    public BigInteger FusedChargedSum(ReadOnlySpan<BigInteger> charges, ReadOnlySpan<BigInteger> left, ReadOnlySpan<BigInteger> right, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedSum(
+            charges: charges,
+            left: left,
+            material: this,
+            right: right
+        );
     /// <summary>Indicates whether an integer is zero.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when the value is zero.</returns>
@@ -679,30 +671,25 @@ public readonly struct RationalMaterial : IFieldMaterial<RealQuadratic, Rational
     /// <param name="values">The per-term values.</param>
     /// <param name="lane">Ignored; the rational material is exact.</param>
     /// <returns>The folded value.</returns>
-    public RealQuadratic FusedChargedLinear(ReadOnlySpan<RealQuadratic> charges, ReadOnlySpan<RealQuadratic> values, ChargeLane lane) {
-        var accumulator = RealQuadratic.Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator += (charges[index] * values[index]);
-        }
-
-        return accumulator;
-    }
+    public RealQuadratic FusedChargedLinear(ReadOnlySpan<RealQuadratic> charges, ReadOnlySpan<RealQuadratic> values, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedLinear(
+            charges: charges,
+            material: this,
+            values: values
+        );
     /// <summary>Folds <c>Σ charges[i]·left[i]·right[i]</c> exactly.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="left">The per-term left coefficients.</param>
     /// <param name="right">The per-term right coefficients.</param>
     /// <param name="lane">Ignored; the rational material is exact.</param>
     /// <returns>The folded value.</returns>
-    public RealQuadratic FusedChargedSum(ReadOnlySpan<RealQuadratic> charges, ReadOnlySpan<RealQuadratic> left, ReadOnlySpan<RealQuadratic> right, ChargeLane lane) {
-        var accumulator = RealQuadratic.Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator += (charges[index] * (left[index] * right[index]));
-        }
-
-        return accumulator;
-    }
+    public RealQuadratic FusedChargedSum(ReadOnlySpan<RealQuadratic> charges, ReadOnlySpan<RealQuadratic> left, ReadOnlySpan<RealQuadratic> right, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedSum(
+            charges: charges,
+            left: left,
+            material: this,
+            right: right
+        );
     /// <summary>Indicates whether a rational is zero.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when the value is zero.</returns>
@@ -915,21 +902,12 @@ public readonly struct MostLikelyPathMaterial : IMaterialOps<UnitInterval32, Mos
     /// <param name="values">The per-term values.</param>
     /// <param name="lane">Ignored; the fold has no wide accumulator to classify.</param>
     /// <returns>The folded value.</returns>
-    public UnitInterval32 FusedChargedLinear(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> values, ChargeLane lane) {
-        var accumulator = Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = UnitInterval32.Max(
-                x: accumulator,
-                y: UnitInterval32.Multiply(
-                    x: charges[index],
-                    y: values[index]
-                )
-            );
-        }
-
-        return accumulator;
-    }
+    public UnitInterval32 FusedChargedLinear(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> values, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedLinear(
+            charges: charges,
+            material: this,
+            values: values
+        );
     /// <summary>Folds <c>max over i of (charges[i]·left[i]·right[i])</c>, with one rounding per term.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="left">The per-term left coefficients.</param>
@@ -1004,47 +982,25 @@ public readonly struct FuzzyMaterial : IComplementedMaterial<UnitInterval32, Fuz
     /// <param name="values">The per-term values.</param>
     /// <param name="lane">Ignored; the fuzzy material never rounds.</param>
     /// <returns>The folded value.</returns>
-    public UnitInterval32 FusedChargedLinear(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> values, ChargeLane lane) {
-        var accumulator = Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = UnitInterval32.Max(
-                x: accumulator,
-                y: UnitInterval32.Min(
-                    x: charges[index],
-                    y: values[index]
-                )
-            );
-        }
-
-        return accumulator;
-    }
+    public UnitInterval32 FusedChargedLinear(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> values, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedLinear(
+            charges: charges,
+            material: this,
+            values: values
+        );
     /// <summary>Folds <c>max over i of min(charges[i], left[i], right[i])</c>, exactly.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="left">The per-term left coefficients.</param>
     /// <param name="right">The per-term right coefficients.</param>
     /// <param name="lane">Ignored; the fuzzy material never rounds.</param>
     /// <returns>The folded value.</returns>
-    public UnitInterval32 FusedChargedSum(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> left, ReadOnlySpan<UnitInterval32> right, ChargeLane lane) {
-        var accumulator = Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            var term = UnitInterval32.Min(
-                x: UnitInterval32.Min(
-                    x: charges[index],
-                    y: left[index]
-                ),
-                y: right[index]
-            );
-
-            accumulator = UnitInterval32.Max(
-                x: accumulator,
-                y: term
-            );
-        }
-
-        return accumulator;
-    }
+    public UnitInterval32 FusedChargedSum(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> left, ReadOnlySpan<UnitInterval32> right, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedSum(
+            charges: charges,
+            left: left,
+            material: this,
+            right: right
+        );
     /// <summary>Indicates whether a membership degree is zero.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when the value is <see cref="UnitInterval32.Zero"/>.</returns>
@@ -1090,47 +1046,25 @@ public readonly struct BoundedSumMaterial : IIdempotentMaterial<UnitInterval32, 
     /// <param name="values">The per-term values.</param>
     /// <param name="lane">Ignored; the bounded-sum material never rounds.</param>
     /// <returns>The folded value.</returns>
-    public UnitInterval32 FusedChargedLinear(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> values, ChargeLane lane) {
-        var accumulator = Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = UnitInterval32.Max(
-                x: accumulator,
-                y: UnitInterval32.SumExcess(
-                    x: charges[index],
-                    y: values[index]
-                )
-            );
-        }
-
-        return accumulator;
-    }
+    public UnitInterval32 FusedChargedLinear(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> values, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedLinear(
+            charges: charges,
+            material: this,
+            values: values
+        );
     /// <summary>Folds <c>max over i of (charges[i] ⊙ left[i] ⊙ right[i])</c>, exactly.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="left">The per-term left coefficients.</param>
     /// <param name="right">The per-term right coefficients.</param>
     /// <param name="lane">Ignored; the bounded-sum material never rounds.</param>
     /// <returns>The folded value.</returns>
-    public UnitInterval32 FusedChargedSum(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> left, ReadOnlySpan<UnitInterval32> right, ChargeLane lane) {
-        var accumulator = Zero;
-
-        for (var index = 0; (index < charges.Length); ++index) {
-            var term = UnitInterval32.SumExcess(
-                x: UnitInterval32.SumExcess(
-                    x: charges[index],
-                    y: left[index]
-                ),
-                y: right[index]
-            );
-
-            accumulator = UnitInterval32.Max(
-                x: accumulator,
-                y: term
-            );
-        }
-
-        return accumulator;
-    }
+    public UnitInterval32 FusedChargedSum(ReadOnlySpan<UnitInterval32> charges, ReadOnlySpan<UnitInterval32> left, ReadOnlySpan<UnitInterval32> right, ChargeLane lane) =>
+        TermwiseMaterialFold.ChargedSum(
+            charges: charges,
+            left: left,
+            material: this,
+            right: right
+        );
     /// <summary>Indicates whether a value is zero.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when the value is <see cref="UnitInterval32.Zero"/>.</returns>
@@ -1145,4 +1079,64 @@ public readonly struct BoundedSumMaterial : IIdempotentMaterial<UnitInterval32, 
             x: left,
             y: right
         );
+}
+
+/// <summary>
+/// The fused sums of a material that folds them term by term through its own <see cref="IMaterialOps{TValue, TSelf}.Add"/>
+/// and <see cref="IMaterialOps{TValue, TSelf}.Multiply"/>.
+/// </summary>
+/// <remarks>
+/// A term-by-term fold is the fused sum's one-rounding contract exactly when every step it takes is exact, so the
+/// three-factor fold is offered only to an exact semiring. The linear fold is also the whole contract of a material that
+/// rounds once per term by definition, such as <see cref="MostLikelyPathMaterial"/>.
+/// </remarks>
+internal static class TermwiseMaterialFold {
+    /// <summary>Folds <c>Σ charges[i]·values[i]</c> through the material's addition and multiplication.</summary>
+    /// <typeparam name="TValue">The carrier.</typeparam>
+    /// <typeparam name="TOps">The material.</typeparam>
+    /// <param name="material">The material.</param>
+    /// <param name="charges">The per-term charges.</param>
+    /// <param name="values">The per-term values; the same length as <paramref name="charges"/>.</param>
+    /// <returns>The folded value; <see cref="IMaterialOps{TValue, TSelf}.Zero"/> for empty spans.</returns>
+    internal static TValue ChargedLinear<TValue, TOps>(TOps material, ReadOnlySpan<TValue> charges, ReadOnlySpan<TValue> values) where TOps : struct, IMaterialOps<TValue, TOps> {
+        var accumulator = material.Zero;
+
+        for (var index = 0; (index < charges.Length); ++index) {
+            accumulator = material.Add(
+                left: accumulator,
+                right: material.Multiply(
+                    left: charges[index],
+                    right: values[index]
+                )
+            );
+        }
+
+        return accumulator;
+    }
+    /// <summary>Folds <c>Σ charges[i]·left[i]·right[i]</c> through the material's addition and multiplication.</summary>
+    /// <typeparam name="TValue">The carrier.</typeparam>
+    /// <typeparam name="TOps">The material.</typeparam>
+    /// <param name="material">The material.</param>
+    /// <param name="charges">The per-term charges.</param>
+    /// <param name="left">The per-term left coefficients; the same length as <paramref name="charges"/>.</param>
+    /// <param name="right">The per-term right coefficients; the same length as <paramref name="charges"/>.</param>
+    /// <returns>The folded value; <see cref="IMaterialOps{TValue, TSelf}.Zero"/> for empty spans.</returns>
+    internal static TValue ChargedSum<TValue, TOps>(TOps material, ReadOnlySpan<TValue> charges, ReadOnlySpan<TValue> left, ReadOnlySpan<TValue> right) where TOps : struct, IExactSemiringMaterial<TValue, TOps> {
+        var accumulator = material.Zero;
+
+        for (var index = 0; (index < charges.Length); ++index) {
+            accumulator = material.Add(
+                left: accumulator,
+                right: material.Multiply(
+                    left: charges[index],
+                    right: material.Multiply(
+                        left: left[index],
+                        right: right[index]
+                    )
+                )
+            );
+        }
+
+        return accumulator;
+    }
 }

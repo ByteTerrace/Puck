@@ -1,8 +1,8 @@
 using System.CommandLine;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Assets;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
@@ -32,23 +32,16 @@ internal static class WorldReleaseExerciseCommand {
             )) {
                 throw new InvalidDataException(message: $"qualification capture refused for '{row.World}': {reason}");
             }
-            state[$"{row.Owner:D}/{row.World}"] = ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!))));
+            state[$"{row.Owner:D}/{row.World}"] = ContentPin.Compute(content: WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!)).ToString();
         }
         return state;
     }
-    private static string Hash(SortedDictionary<string, string> hashes) => ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: JsonSerializer.SerializeToUtf8Bytes(hashes))));
-    private static async Task PumpAsync(WorldSiloHost host, Task operation, CancellationToken cancellationToken) {
-        while (!operation.IsCompleted) {
-            cancellationToken.ThrowIfCancellationRequested();
-            host.DrainActivationMailbox();
-            await Task.Delay(
-                cancellationToken: cancellationToken,
-                millisecondsDelay: 1
-            ).ConfigureAwait(continueOnCapturedContext: false);
-        }
-        await operation.ConfigureAwait(continueOnCapturedContext: false);
-        host.DrainActivationMailbox();
-    }
+    private static string Hash(SortedDictionary<string, string> hashes) => ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(hashes)).ToString();
+    private static Task PumpAsync(WorldSiloHost host, Task operation, CancellationToken cancellationToken) => WorldSiloHost.PumpActivationMailboxesAsync(
+        cancellationToken: cancellationToken,
+        hosts: [host],
+        operation: operation
+    );
     private static WorldInstance RequireRow(WorldSiloHost host, string name) => ((host.Instances.TryGet(
         instance: out var instance,
         name: name
@@ -254,17 +247,16 @@ internal static class WorldReleaseExerciseCommand {
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
         var report = new WorldReleaseExerciseResult(
-            "puck.world.qualification-exercise.v2",
-            Hash(hashes: imported),
-            Hash(hashes: continued),
-            initialTicks,
-            finalTicks,
-            steps
-        ) {
-            ContinuedReceiptHash = continuedReceiptHash,
-            ImportedReceiptHash = importedReceiptHash,
-            ReceiptSeedHash = receiptSeedHash,
-        };
+            ContinuedReceiptHash: continuedReceiptHash,
+            ContinuedStateHash: Hash(hashes: continued),
+            ContinuedTicks: finalTicks,
+            ImportedReceiptHash: importedReceiptHash,
+            ImportedStateHash: Hash(hashes: imported),
+            ImportedTicks: initialTicks,
+            ReceiptSeedHash: receiptSeedHash,
+            Schema: WorldReleaseExerciseResult.CurrentSchema,
+            Steps: steps
+        );
 
         await File.WriteAllBytesAsync(
             resultPath,
@@ -276,30 +268,31 @@ internal static class WorldReleaseExerciseCommand {
     }
 
     public static Command Create() {
-        var fixture = new Argument<string>(name: "fixture-directory");
+        var fixture = new Argument<string>(name: "fixture-directory") { Description = "The marked disposable fixture this leg restores, advances, and reports into." };
         var steps = new Option<int>("--steps") { DefaultValueFactory = _ => 60, Description = "Exact simulation steps in this isolated qualification leg (1–1024)." };
         var command = new Command(
             description: "Run one packaged release qualification leg in a marked disposable fixture.",
             name: "exercise"
         ) { fixture, steps };
 
-        command.SetAction(action: (parse, token) => WorldReleaseCommand.RunAsync(() => RunAsync(
+        command.SetAction(action: (parse, token) => RunAsync(
             Path.GetFullPath(path: parse.GetRequiredValue(argument: fixture)),
             parse.GetValue(option: steps),
             token
-        )));
+        ));
         return command;
     }
 }
 
 /// <summary>Evidence from one independently executed packaged engine; separate hashes cover its complete encoded
-/// checkpoint inventory and the original operation receipts checked through its storage API.</summary>
+/// checkpoint inventory and the original operation receipts checked through its storage API. The three receipt
+/// hashes are the packaged store's complete receipt inventory before activation
+/// (<paramref name="ReceiptSeedHash"/>), the exact original receipts found through the packaged lookup API after
+/// import (<paramref name="ImportedReceiptHash"/>), and the original receipts after continued gameplay with duplicate
+/// and conflicting retries checked (<paramref name="ContinuedReceiptHash"/>).</summary>
 public sealed record WorldReleaseExerciseResult(string Schema, string ImportedStateHash, string ContinuedStateHash,
-    IReadOnlyDictionary<string, ulong> ImportedTicks, IReadOnlyDictionary<string, ulong> ContinuedTicks, int Steps) {
-    /// <summary>Original receipts after continued gameplay, with duplicate and conflicting retries checked.</summary>
-    public string? ContinuedReceiptHash { get; init; }
-    /// <summary>Exact original receipts found through the packaged lookup API after import.</summary>
-    public string? ImportedReceiptHash { get; init; }
-    /// <summary>The packaged store's complete receipt inventory before activation.</summary>
-    public string? ReceiptSeedHash { get; init; }
+    IReadOnlyDictionary<string, ulong> ImportedTicks, IReadOnlyDictionary<string, ulong> ContinuedTicks, int Steps,
+    string ReceiptSeedHash, string ImportedReceiptHash, string ContinuedReceiptHash) {
+    /// <summary>The schema every exercise report carries; the qualification runner refuses any other.</summary>
+    public const string CurrentSchema = "puck.world.qualification-exercise.v1";
 }

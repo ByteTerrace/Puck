@@ -4,7 +4,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions;
 using Puck.Abstractions.Machines;
+using Puck.Assets;
 
 namespace Puck.World;
 
@@ -26,16 +28,15 @@ public static partial class WorldDefinitionFileSource {
     // fingerprint, freshness is content: no clock takes part in either.
     private static readonly ConcurrentDictionary<string, ComposedDocument> ComposedDocuments = new(comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static long DocumentCompositionsSharedValue;
-    private static long DocumentsComposedValue;
-
     // One file a composition read, with the bytes it read from it.
     private readonly record struct ComposedDocumentLink(string Path, byte[] Bytes);
 
-    private static string CacheKey(string path, string fingerprint) => ((path.Replace(
+    // An image is held per document path, catalog fingerprint and source: two sources may resolve one path's graph
+    // differently (the directory source refuses what the composer compiles), so neither answers for the other.
+    private static string CacheKey(string path, string fingerprint, IWorldDocumentSource source) => ((((path.Replace(
         newChar: '/',
         oldChar: '\\'
-    ) + "\0") + fingerprint);
+    ) + "\0") + fingerprint) + "\0") + source.GetType().FullName);
     // Mirrors File.ReadAllText's own encoding detection (BOM-sniffed, UTF-8 default), so a chain link read through
     // any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
     private static string DecodeJson(byte[] bytes) {
@@ -47,6 +48,22 @@ public static partial class WorldDefinitionFileSource {
 
         return reader.ReadToEnd();
     }
+    // Every document a load or a composition reads comes through here, so the boot ledger counts each read once.
+    private static bool TryReadDocument(IWorldDocumentSource source, string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
+        if (!source.TryRead(
+            content: out content,
+            name: name,
+            reason: out reason,
+            referrerName: referrerName,
+            resolvedName: out resolvedName
+        )) {
+            return false;
+        }
+
+        WorldBootWork.Count(kind: WorldBootWork.DocumentsRead);
+
+        return true;
+    }
     private static string DescribeImport(string resolvedName, string? alias) =>
         ((alias is null)
             ? resolvedName
@@ -54,10 +71,10 @@ public static partial class WorldDefinitionFileSource {
         );
     // The one writer of s_composedDocuments: both of TryComposeLayers' success exits hold what they are about to
     // return, so the next reader of the same path meets an image recorded together with the chain it was composed
-    // from. A composition over any byte source other than the directory one is never held — its names are not paths
-    // this class could re-read to prove the image still stands.
+    // from. A composition over a source whose names are not files beside their referrers is never held: nothing
+    // could prove its image still stands.
     private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach) {
-        if (source is not DirectoryDocumentSource) {
+        if (!source.ResolvesFiles) {
             return;
         }
 
@@ -72,38 +89,35 @@ public static partial class WorldDefinitionFileSource {
 
         ComposedDocuments[CacheKey(
             fingerprint: catalogFingerprint,
-            path: resolvedPath
+            path: resolvedPath,
+            source: source
         )] = new ComposedDocument(
             Chain: chain,
             ComposedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
             Reach: reach
         );
     }
-    // Whether a held image still answers for a reader whose own bytes are `ownBytes`: every file the image read
-    // must still hold the bytes it read. The image's own document is the chain's first link and the reader has
-    // already read it, so that link is compared against what the reader holds rather than read a second time.
+    // Whether a held image still answers for a reader whose own bytes are `ownBytes`: every document the image read
+    // must still read the same through its source (a .puck link recompiles). The image's own document is the chain's
+    // first link; a reader that has already read it passes its bytes, and one that has not reads it through the
+    // source like every other link.
     // This one question also settles the cycle rule, which the walk above no longer gets to ask on a reuse: a
     // document already on the reader's resolution path can only appear inside an image if that document reaches
     // back into the image's own root, and an image exists only for a document whose own walk COMPLETED — a walk
     // that would have met exactly that cycle and refused. The only way the two could disagree is a file that has
     // changed since, which is what this check is.
-    private static bool ImageStillStands(ComposedDocument image, byte[] ownBytes) {
+    private static bool ImageStillStands(ComposedDocument image, IWorldDocumentSource source, byte[]? ownBytes) {
         for (var index = 0; (index < image.Chain.Count); index++) {
             var link = image.Chain[index];
+            var stands = (((index == 0) && (ownBytes is not null))
+                ? ownBytes.AsSpan().SequenceEqual(other: link.Bytes)
+                : source.StillReads(
+                    content: link.Bytes,
+                    resolvedName: link.Path
+                )
+            );
 
-            byte[] current;
-
-            if (index == 0) {
-                current = ownBytes;
-            } else {
-                try {
-                    current = File.ReadAllBytes(path: link.Path);
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    return false;
-                }
-            }
-
-            if (!current.AsSpan().SequenceEqual(other: link.Bytes)) {
+            if (!stands) {
                 return false;
             }
         }
@@ -276,7 +290,7 @@ public static partial class WorldDefinitionFileSource {
             stack = new JsonObject();
             composed = ((JsonObject)root.DeepClone());
             reason = string.Empty;
-            _ = Interlocked.Increment(location: ref DocumentsComposedValue);
+            WorldBootWork.Count(kind: WorldBootWork.Compositions);
             HoldComposedImage(
                 catalogFingerprint: catalogFingerprint,
                 composed: composed,
@@ -302,17 +316,18 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var basisName) ||
                 (basisName.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty file path string.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty document name.";
 
                 return false;
             }
 
-            if (!source.TryRead(
+            if (!TryReadDocument(
                 content: out var basisContent,
                 name: basisName,
                 reason: out reason,
                 referrerName: resolvedPath,
-                resolvedName: out var basisResolvedName
+                resolvedName: out var basisResolvedName,
+                source: source
             )) {
                 return false;
             }
@@ -336,6 +351,11 @@ public static partial class WorldDefinitionFileSource {
             }
 
             basisComposed = basisResult!;
+            WorldDocumentPaths.RelocateDocumentFields(
+                module: basisComposed,
+                sourceDocumentPath: basisResolvedName,
+                targetDocumentPath: resolvedPath
+            );
             if (
                 (catalog is not null) &&
                 !WorldModuleNamespace.TryRelocateConfigurationAssets(
@@ -388,12 +408,13 @@ public static partial class WorldDefinitionFileSource {
                     return false;
                 }
 
-                if (!source.TryRead(
+                if (!TryReadDocument(
                     content: out var importContent,
                     name: importName,
                     reason: out reason,
                     referrerName: resolvedPath,
-                    resolvedName: out var importResolvedName
+                    resolvedName: out var importResolvedName,
+                    source: source
                 )) {
                     return false;
                 }
@@ -419,6 +440,11 @@ public static partial class WorldDefinitionFileSource {
                 reach = Math.Max(
                     val1: reach,
                     val2: (importReach + 1)
+                );
+                WorldDocumentPaths.RelocateDocumentFields(
+                    module: importResult!,
+                    sourceDocumentPath: importResolvedName,
+                    targetDocumentPath: resolvedPath
                 );
 
                 if (
@@ -534,7 +560,7 @@ public static partial class WorldDefinitionFileSource {
 
         composed = final;
         reason = string.Empty;
-        _ = Interlocked.Increment(location: ref DocumentsComposedValue);
+        WorldBootWork.Count(kind: WorldBootWork.Compositions);
         HoldComposedImage(
             catalogFingerprint: catalogFingerprint,
             composed: composed!,
@@ -588,17 +614,18 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var basisName) ||
                 (basisName.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty file path string.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty document name.";
 
                 return false;
             }
 
-            if (!source.TryRead(
+            if (!TryReadDocument(
                 content: out var basisContent,
                 name: basisName,
                 reason: out reason,
                 referrerName: resolvedPath,
-                resolvedName: out var basisResolvedName
+                resolvedName: out var basisResolvedName,
+                source: source
             )) {
                 return false;
             }
@@ -637,12 +664,13 @@ public static partial class WorldDefinitionFileSource {
                     return false;
                 }
 
-                if (!source.TryRead(
+                if (!TryReadDocument(
                     content: out var importContent,
                     name: importName,
                     reason: out reason,
                     referrerName: resolvedPath,
-                    resolvedName: out var importResolvedName
+                    resolvedName: out var importResolvedName,
+                    source: source
                 )) {
                     return false;
                 }
@@ -710,7 +738,6 @@ public static partial class WorldDefinitionFileSource {
     private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents) =>
         TryLoadCore(admission: out _, catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out contentHash, definition: out definition, documents: documents,
             neighbours: neighbours, path: path, reason: out reason, validateAdjacencyClaims: validateAdjacencyClaims);
-
     private static bool TryLoadCore(string path, out WorldDefinition? definition, out string contentHash, out string reason, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents, out WorldDefinitionAdmission? admission) {
         definition = null;
         admission = null;
@@ -738,6 +765,7 @@ public static partial class WorldDefinitionFileSource {
         string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null) {
         definition = null;
         contentHash = string.Empty;
+        WorldBootWork.Count(kind: WorldBootWork.Loads);
 
         if (!File.Exists(path: path)) {
             reason = $"no file at {path}";
@@ -747,12 +775,14 @@ public static partial class WorldDefinitionFileSource {
 
         byte[] bytes;
 
-        if (documents is not null) {
-            // A supplied source owns how the root reads — a .puck root lowers to its document — so the pin below covers
-            // the document that source produces, not the file's raw bytes.
-            if (!documents.TryRead(
+        if (WorldDocumentName.IsSourceFile(path: path)) {
+            // A supplied source owns how a .puck root reads — it lowers to its document, named by the path without
+            // its suffix — so the pin below covers the document that source produces, not the file's raw bytes. Any
+            // other root is the file the caller named, read as it stands.
+            if (!TryReadDocument(
+                source: (documents ?? LocalDocuments),
                 content: out var read,
-                name: path,
+                name: WorldDocumentName.OfSourceFile(path: Path.GetFullPath(path: path)),
                 reason: out var readReason,
                 referrerName: path,
                 resolvedName: out _
@@ -775,6 +805,8 @@ public static partial class WorldDefinitionFileSource {
 
                 return false;
             }
+
+            WorldBootWork.Count(kind: WorldBootWork.DocumentsRead);
         }
 
         string json;
@@ -814,11 +846,8 @@ public static partial class WorldDefinitionFileSource {
         )
         ) {
             if (!TryComposeChainWithImports(
-                source: (documents ?? new DirectoryDocumentSource()),
-                rootResolvedName: Path.GetFullPath(path: path).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
+                source: (documents ?? LocalDocuments),
+                rootResolvedName: PuckPaths.Normalize(path: path),
                 rootBytes: bytes,
                 composed: out var composed,
                 chainBytes: out var chainBytes,
@@ -854,7 +883,7 @@ public static partial class WorldDefinitionFileSource {
                 ? ComputeContentHash(content: bytes)
                 : ComputeChainContentHash(chain: chain)
             );
-            definition = parsed;
+            definition = (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
 
             return true;
         } catch (Exception exception) {
@@ -863,6 +892,7 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
     }
+
     // The one reader of an `imports` entry: an object naming its `document`, optionally an `as` alias, and nothing
     // else — shared by the composer, the describer, and the save-side peek so the three refuse one shape identically.
     private static bool TryReadImportEntry(JsonNode? entry, string referrerPath, out string document, out string? alias, out string reason) {
@@ -870,7 +900,7 @@ public static partial class WorldDefinitionFileSource {
         alias = null;
 
         if (entry is not JsonObject entryObject) {
-            reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {referrerPath} must hold only entries of the form {{\"{WorldImport.DocumentMemberName}\": \"<path>\"}} with an optional \"{WorldImport.AsMemberName}\".";
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {referrerPath} must hold only entries of the form {{\"{WorldImport.DocumentMemberName}\": \"<name>\"}} with an optional \"{WorldImport.AsMemberName}\".";
 
             return false;
         }
@@ -903,7 +933,7 @@ public static partial class WorldDefinitionFileSource {
             !documentValue.TryGetValue<string>(value: out var documentText) ||
             (documentText.Length == 0)
         ) {
-            reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} must name a non-empty '{WorldImport.DocumentMemberName}' file path.";
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} must name a non-empty '{WorldImport.DocumentMemberName}' document.";
 
             return false;
         }
@@ -947,32 +977,27 @@ public static partial class WorldDefinitionFileSource {
 
         if (
             (basisNode is not JsonValue value) ||
-            !value.TryGetValue<string>(value: out var relative) ||
-            (relative.Length == 0)
+            !value.TryGetValue<string>(value: out var name) ||
+            (name.Length == 0)
         ) {
-            reason = $"'{WorldDocumentBasis.BasisMemberName}' in {referrerPath} must be a non-empty file path string.";
+            reason = $"'{WorldDocumentBasis.BasisMemberName}' in {referrerPath} must be a non-empty document name.";
 
             return false;
         }
 
-        try {
-            var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: referrerPath)) ?? ".");
-
-            basisPath = Path.GetFullPath(path: Path.Combine(
-                path1: directory,
-                path2: relative
-            )).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
-            reason = string.Empty;
-
-            return true;
-        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-            reason = $"cannot resolve basis path '{relative}' from {referrerPath}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
+        if (!TryResolveDocumentBeside(
+            documentPath: out var documentPath,
+            name: name,
+            reason: out reason,
+            referrerName: referrerPath,
+            sourcePath: out _
+        )) {
             return false;
         }
+
+        basisPath = documentPath;
+
+        return true;
     }
     // The one reader of s_composedDocuments on the composition path. A held image answers only when it still stands
     // for this reader (ImageStillStands) and its subtree still fits under the depth rule from where this reader
@@ -988,11 +1013,12 @@ public static partial class WorldDefinitionFileSource {
         reach = 0;
 
         if (
-            (source is not DirectoryDocumentSource) ||
+            !source.ResolvesFiles ||
             !ComposedDocuments.TryGetValue(
             key: CacheKey(
                 fingerprint: catalogFingerprint,
-                path: resolvedPath
+                path: resolvedPath,
+                source: source
             ),
             value: out var image
         )
@@ -1004,7 +1030,8 @@ public static partial class WorldDefinitionFileSource {
             ((ancestors.Count + image.Reach) >= WorldDocumentBasis.MaxChainDepth) ||
             !ImageStillStands(
             image: image,
-            ownBytes: bytes
+            ownBytes: bytes,
+            source: source
         )
         ) {
             return false;
@@ -1022,7 +1049,8 @@ public static partial class WorldDefinitionFileSource {
             _ = ComposedDocuments.TryRemove(
                 key: CacheKey(
                     fingerprint: catalogFingerprint,
-                    path: resolvedPath
+                    path: resolvedPath,
+                    source: source
                 ),
                 value: out _
             );
@@ -1037,7 +1065,7 @@ public static partial class WorldDefinitionFileSource {
 
         composed = tree;
         reach = image.Reach;
-        _ = Interlocked.Increment(location: ref DocumentCompositionsSharedValue);
+        WorldBootWork.Count(kind: WorldBootWork.CompositionsShared);
 
         return true;
     }
@@ -1082,17 +1110,18 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var name) ||
                 (name.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {currentResolvedName} must be a non-empty file path string.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {currentResolvedName} must be a non-empty document name.";
 
                 return false;
             }
 
-            if (!source.TryRead(
+            if (!TryReadDocument(
                 content: out var content,
                 name: name,
                 reason: out var readReason,
                 referrerName: currentResolvedName,
-                resolvedName: out var resolvedName
+                resolvedName: out var resolvedName,
+                source: source
             )) {
                 reason = readReason;
 
@@ -1138,13 +1167,132 @@ public static partial class WorldDefinitionFileSource {
         }
     }
 
+    private static readonly Lock LocalDocumentsInstall = new();
+
+    private static IWorldDocumentSource? InstalledLocalDocuments;
+
+    /// <summary>Gets the source that resolves each document name to its <c>.world.json</c> file beside the referrer and
+    /// nothing else: a name whose <c>.puck</c> source stands there is refused by name, since this source cannot compile
+    /// it and a document file beside a source is never read in its place.</summary>
+    public static IWorldDocumentSource DirectoryDocuments { get; } = new DirectoryDocumentSource();
+
+    /// <summary>Gets the source every local file load resolves a <c>basis</c> or an <c>imports[].document</c> through
+    /// when its caller names none: the one a host installed (<see cref="UseLocalDocuments"/>), or
+    /// <see cref="DirectoryDocuments"/> in a host that installed none. The game, the CLI and the test hosts install the
+    /// transpiler's document composer, so a document with a <c>.puck</c> source resolves to that source in every local
+    /// load they make.</summary>
+    public static IWorldDocumentSource LocalDocuments => (Volatile.Read(location: ref InstalledLocalDocuments) ?? DirectoryDocuments);
+
+    /// <summary>Installs the source every later local file load resolves through when its caller names none. A process
+    /// installs one: installing the same instance again changes nothing.</summary>
+    /// <param name="source">The source; it must resolve names beside the referring file, as the directory source does.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A different source is already installed.</exception>
+    public static void UseLocalDocuments(IWorldDocumentSource source) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        lock (LocalDocumentsInstall) {
+            if (InstalledLocalDocuments is { } installed) {
+                if (!ReferenceEquals(
+                    objA: installed,
+                    objB: source
+                )) {
+                    throw new InvalidOperationException(message: $"the local document source is already installed as {installed.GetType().FullName}; a process installs one, so {source.GetType().FullName} is refused.");
+                }
+
+                return;
+            }
+
+            Volatile.Write(
+                location: ref InstalledLocalDocuments,
+                value: source
+            );
+        }
+    }
+    /// <summary>Resolves an authored document reference beside the file that names it: the one place a directory-backed
+    /// source turns a document name into the two files that can carry it (<see cref="WorldDocumentName"/>).</summary>
+    /// <param name="referrerName">The referring document's own resolved file path.</param>
+    /// <param name="name">The authored document name, exactly as the document spells it.</param>
+    /// <param name="documentPath">The full, forward-slashed path of the document's <c>.world.json</c> file on success,
+    /// or <paramref name="name"/> on failure.</param>
+    /// <param name="sourcePath">The full, forward-slashed path of the document's <c>.puck</c> source on success, or
+    /// empty on failure.</param>
+    /// <param name="reason">The named refusal (a file-form spelling, or a path the platform cannot form), or empty on
+    /// success.</param>
+    /// <returns><see langword="true"/> when both paths resolved. Neither file is required to exist.</returns>
+    public static bool TryResolveDocumentBeside(string referrerName, string name, out string documentPath, out string sourcePath, out string reason) {
+        string directory;
+
+        try {
+            directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: referrerName)) ?? ".");
+        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
+            documentPath = name;
+            sourcePath = string.Empty;
+            reason = $"cannot resolve document '{name}' from {referrerName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (TryResolveDocumentIn(
+            directory: directory,
+            documentPath: out documentPath,
+            name: name,
+            reason: out reason,
+            sourcePath: out sourcePath
+        )) {
+            return true;
+        }
+
+        reason = $"{reason} (named by {referrerName})";
+
+        return false;
+    }
+    /// <summary>Resolves a document name inside <paramref name="directory"/> to the two files that can carry it
+    /// (<see cref="WorldDocumentName"/>).</summary>
+    /// <param name="directory">The directory the name is relative to.</param>
+    /// <param name="name">The document name, exactly as authored.</param>
+    /// <param name="documentPath">The full, forward-slashed path of the document's <c>.world.json</c> file on success,
+    /// or <paramref name="name"/> on failure.</param>
+    /// <param name="sourcePath">The full, forward-slashed path of the document's <c>.puck</c> source on success, or
+    /// empty on failure.</param>
+    /// <param name="reason">The named refusal (a file-form spelling, or a path the platform cannot form), or empty on
+    /// success.</param>
+    /// <returns><see langword="true"/> when both paths resolved. Neither file is required to exist.</returns>
+    public static bool TryResolveDocumentIn(string directory, string name, out string documentPath, out string sourcePath, out string reason) {
+        documentPath = name;
+        sourcePath = string.Empty;
+
+        if (!WorldDocumentName.TryValidate(
+            name: name,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        try {
+            var named = PuckPaths.Normalize(path: Path.Combine(
+                path1: directory,
+                path2: name
+            ));
+
+            documentPath = WorldDocumentName.DocumentFile(name: named);
+            sourcePath = WorldDocumentName.SourceFile(name: named);
+
+            return true;
+        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
+            reason = $"cannot resolve document '{name}' in {directory}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+    }
     /// <summary>Combines <paramref name="name"/> against <paramref name="referrerName"/>'s own directory and
     /// normalizes "."/".." segments — the same relative resolution <see cref="DirectoryDocumentSource"/> performs
     /// through <see cref="Path.Combine(string,string)"/>/<see cref="Path.GetFullPath(string)"/>, replayed over
     /// forward-slash-separated keys with no filesystem underneath, so a caller resolving a reference by name alone
     /// (a browser runtime discovering which alias a document composed under) resolves it exactly as a directory load
-    /// would (a <c>games/*.world.json</c> fragment importing a sibling by bare name, a <c>shards/*.world.json</c>
-    /// shard naming its basis as <c>"../puck.world.json"</c>).</summary>
+    /// would (a <c>games/</c> fragment importing a sibling by bare name, a <c>shards/</c> shard naming its basis as
+    /// <c>"../puck"</c>). The result is the combined document name; <see cref="WorldDocumentName.DocumentFile"/> names
+    /// its file.</summary>
     /// <param name="referrerName">The referring document's own resolved name.</param>
     /// <param name="name">The authored reference, exactly as the document spells it.</param>
     /// <returns>The resolved, normalized document name.</returns>
@@ -1195,78 +1343,88 @@ public static partial class WorldDefinitionFileSource {
 
         Span<byte> hash = stackalloc byte[32];
 
-        sha.GetHashAndReset(destination: hash);
-
-        var value = BitConverter.ToUInt64(value: hash[..8]);
-
-        return $"sha256-64/{value:x16}";
+        _ = sha.GetHashAndReset(destination: hash);
+        return AssetContentHash.FromDigest(digest: hash).ToString();
     }
     /// <summary>Computes the canonical <c>sha256-64/{16 lowercase hex}</c> content-address pin of
-    /// <paramref name="content"/> — the leading 64 bits of its SHA-256, matching
-    /// <c>Puck.Assets.AssetContentHash</c>'s algorithm and <c>WorldDefinitionValidator.IsValidAddonHash</c>'s wire
-    /// form exactly, so every "sha256-64/" pin in the tree reads the same bytes the same way.</summary>
+    /// <paramref name="content"/>: the text form of <see cref="AssetContentHash"/>, which every "sha256-64/" pin in the
+    /// tree computes and parses through.</summary>
     /// <param name="content">The bytes to hash.</param>
     /// <returns>The canonical content-address string.</returns>
-    public static string ComputeContentHash(ReadOnlySpan<byte> content) {
-        Span<byte> hash = stackalloc byte[32];
-
-        SHA256.HashData(
-            destination: hash,
-            source: content
-        );
-
-        var value = BitConverter.ToUInt64(value: hash[..8]);
-
-        return $"sha256-64/{value:x16}";
-    }
-    /// <summary>Drops every held composed image and zeroes the composition accounting — the door a host teardown
-    /// and a law that needs a genuinely first composition both reach for. Correctness never rests on it: an image
-    /// is re-proved against its chain's bytes before every reuse regardless.</summary>
-    public static void ForgetComposedDocuments() {
+    public static string ComputeContentHash(ReadOnlySpan<byte> content) =>
+        AssetContentHash.Compute(content: content).ToString();
+    /// <summary>Drops every held composed image — the door a host teardown and a law that needs a genuinely first
+    /// composition both reach for. Correctness never rests on it: an image is re-proved against its chain's bytes
+    /// before every reuse regardless. The composition counts (<see cref="WorldBootWork.Compositions"/>,
+    /// <see cref="WorldBootWork.CompositionsShared"/>) are monotonic and are not touched.</summary>
+    public static void ForgetComposedDocuments() =>
         ComposedDocuments.Clear();
-        _ = Interlocked.Exchange(
-            location1: ref DocumentsComposedValue,
-            value: 0L
-        );
-        _ = Interlocked.Exchange(
-            location1: ref DocumentCompositionsSharedValue,
-            value: 0L
-        );
-    }
     /// <summary>Whether this process already holds a composed image for <paramref name="resolvedPath"/> and the selected catalog fingerprint whose whole
     /// chain still carries the bytes it composed from — so the next composition of that path is answered from the
     /// image instead of merging again. The fact a read-back names per neighbour: asked before a load, it says
     /// whether that load's document will be shared or composed fresh.</summary>
     /// <param name="resolvedPath">The absolute, normalized path a composition would resolve against.</param>
     /// <param name="catalogFingerprint">Stable metadata fingerprint used to select the host-specific image.</param>
-    /// <returns><see langword="true"/> when a held image stands for the path.</returns>
-    public static bool HoldsComposedDocument(string resolvedPath, string catalogFingerprint = "") {
+    /// <returns><see langword="true"/> when a held image, composed through <see cref="LocalDocuments"/>, stands for
+    /// the path.</returns>
+    public static bool HoldsComposedDocument(string resolvedPath, string catalogFingerprint = "") =>
+        TryGetComposedImage(
+            catalogFingerprint: catalogFingerprint,
+            composedJson: out _,
+            resolvedPath: resolvedPath
+        );
+    /// <summary>Returns the composed document this process holds for <paramref name="resolvedPath"/> and the selected
+    /// catalog fingerprint, when every file its composition read still carries the bytes it composed from — the
+    /// image the next composition of that path is answered from.</summary>
+    /// <param name="resolvedPath">The absolute, normalized path a composition would resolve against.</param>
+    /// <param name="composedJson">The held image's composed document as UTF-8 JSON, the same array for as long as the
+    /// image is held and never to be written; <see langword="null"/> when no standing image is held.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to select the host-specific image.</param>
+    /// <returns><see langword="true"/> when a held image, composed through <see cref="LocalDocuments"/>, stands for
+    /// the path.</returns>
+    public static bool TryGetComposedImage(string resolvedPath, out byte[]? composedJson, string catalogFingerprint = "") {
+        var source = LocalDocuments;
+
+        composedJson = null;
+
         if (
             string.IsNullOrEmpty(value: resolvedPath) ||
             !ComposedDocuments.TryGetValue(
             key: CacheKey(
                 fingerprint: catalogFingerprint,
-                path: resolvedPath
+                path: resolvedPath,
+                source: source
             ),
             value: out var image
+        ) ||
+            !ImageStillStands(
+            image: image,
+            ownBytes: null,
+            source: source
         )
         ) {
             return false;
         }
 
-        byte[] bytes;
+        composedJson = image.ComposedJson;
 
-        try {
-            bytes = File.ReadAllBytes(path: resolvedPath);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return false;
-        }
-
-        return ImageStillStands(
-            image: image,
-            ownBytes: bytes
-        );
+        return true;
     }
+
+    // The image a composition of `resolvedPath` just held, read without proving its chain again: the caller composed
+    // it a moment ago through the same local source.
+    internal static byte[]? PeekComposedImage(string resolvedPath, string catalogFingerprint) => (ComposedDocuments.TryGetValue(
+        key: CacheKey(
+            fingerprint: catalogFingerprint,
+            path: resolvedPath,
+            source: LocalDocuments
+        ),
+        value: out var image
+    )
+        ? image.ComposedJson
+        : null
+    );
+
     /// <summary>Collapses "."/".." segments in a forward-slash-separated relative document name.</summary>
     /// <param name="path">The combined, not-yet-normalized relative path.</param>
     /// <returns>The normalized path.</returns>
@@ -1437,7 +1595,7 @@ public static partial class WorldDefinitionFileSource {
         return true;
     }
     /// <summary>Loads the document at <paramref name="path"/> as its composed raw JSON tree — its basis chain and
-    /// its own imports resolved and merged, both consumed members stripped — without parsing, migrating, or
+    /// its own imports resolved and merged, both consumed members stripped — without parsing or
     /// validating it. A flat document returns its own tree. The seam the derivation-preserving save uses to obtain
     /// the basis/imports side of its diff, where a referenced document may be a partial fragment no model parse
     /// could admit on its own.</summary>
@@ -1446,8 +1604,10 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
     /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
+    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for the
+    /// directory source, which reads each named document's <c>.world.json</c> file.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph composed.</returns>
-    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+    public static bool TryComposeDocumentTree(string path, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, IWorldDocumentSource? documents = null) {
         tree = null;
 
         try {
@@ -1456,11 +1616,8 @@ public static partial class WorldDefinitionFileSource {
             return TryComposeDocumentTreeCore(
                 bytes: bytes,
                 reason: out reason,
-                resolvedPath: Path.GetFullPath(path: path).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
-                source: new DirectoryDocumentSource(),
+                resolvedPath: PuckPaths.Normalize(path: path),
+                source: (documents ?? LocalDocuments),
                 tree: out tree,
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog
@@ -1471,34 +1628,6 @@ public static partial class WorldDefinitionFileSource {
 
             return false;
         }
-    }
-    /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph purely from memory —
-    /// <paramref name="resolver"/> answers every reference instead of a real filesystem, resolved by the SAME
-    /// relative-combination rule <c>TryComposeDocumentTree</c> applies on
-    /// disk (a reference is combined against its referrer's own directory and "."/".." segments are collapsed), so a
-    /// caller holding an import tree's documents keyed by their worlds-relative names (<c>"puck.world.json"</c>,
-    /// <c>"games/tictactoe.world.json"</c>) composes identically to a directory load of the same tree.</summary>
-    /// <param name="rootName">The root document's own worlds-relative name — seeds relative resolution for its own
-    /// basis/imports references and cycle detection.</param>
-    /// <param name="rootBytes">The root document's own raw bytes.</param>
-    /// <param name="resolver">Resolves every basis/imports reference the root's graph names, by its resolved name.</param>
-    /// <param name="tree">The composed tree (basis/imports members stripped) on success; <see langword="null"/> on failure.</param>
-    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
-    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
-    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
-    /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
-    public static bool TryComposeDocumentTree(string rootName, ReadOnlyMemory<byte> rootBytes, WorldDocumentResolver resolver, out JsonObject? tree, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
-        ArgumentNullException.ThrowIfNull(argument: resolver);
-
-        return TryComposeDocumentTreeCore(
-            bytes: rootBytes.ToArray(),
-            reason: out reason,
-            resolvedPath: NormalizeRelativeDocumentName(path: rootName),
-            source: new ResolverDocumentSource(resolver: resolver),
-            tree: out tree,
-            catalogFingerprint: catalogFingerprint,
-            catalog: catalog
-        );
     }
     /// <summary>Composes <paramref name="fragmentBytes"/> under <paramref name="hostBytes"/> entirely in memory —
     /// no file system read — the way a directory load composes an aliased <c>imports</c> entry
@@ -1511,7 +1640,7 @@ public static partial class WorldDefinitionFileSource {
     /// carrying one refuses by name through the same <see cref="TryComposeLayers"/> path a directory load runs.
     /// </summary>
     /// <param name="hostBytes">The host document's raw bytes (the basis the fragment composes under — e.g. an
-    /// official <c>standard.basis.json</c> fetched by the caller).</param>
+    /// official <c>standard.world.json</c> fetched by the caller).</param>
     /// <param name="fragmentBytes">The fragment's raw bytes (a district or game document carrying <c>exports</c>).</param>
     /// <param name="alias">The alias the fragment composes under — every row it declares appears in the result as
     /// <c>&lt;alias&gt;_&lt;name&gt;</c>.</param>
@@ -1576,12 +1705,9 @@ public static partial class WorldDefinitionFileSource {
                 composed: out _,
                 reach: out _,
                 reason: out reason,
-                resolvedPath: Path.GetFullPath(path: path).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
+                resolvedPath: PuckPaths.Normalize(path: path),
                 serveHeldImage: false,
-                source: new DirectoryDocumentSource(),
+                source: LocalDocuments,
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog,
                 stack: out var result,
@@ -1624,11 +1750,8 @@ public static partial class WorldDefinitionFileSource {
                 bytes: bytes,
                 layers: collected,
                 reason: out reason,
-                resolvedPath: Path.GetFullPath(path: path).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ),
-                source: new DirectoryDocumentSource()
+                resolvedPath: PuckPaths.Normalize(path: path),
+                source: LocalDocuments
             )) {
                 layers = collected;
 
@@ -1645,12 +1768,9 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
     }
-    /// <summary>Loads, migrates, and validates a world document from <paramref name="path"/>, returning the
+    /// <summary>Loads and validates a world document from <paramref name="path"/>, returning the
     /// canonical <c>sha256-64/{hex}</c> content-address pin of the exact bytes consumed — never a re-serialization
-    /// of the parsed document, so a byte the parse ignores (whitespace, member order) still moves the pin, and
-    /// never a re-serialization of a migrated document either: <see cref="WorldDefinitionMigrations.Apply"/> runs
-    /// on the in-memory parse only, between parsing and validating, so a pre-field save on disk still hashes to
-    /// what its bytes actually are. A document naming a <c>basis</c> and/or <c>imports</c> composes its whole graph
+    /// of the parsed document, so a byte the parse ignores (whitespace, member order) still moves the pin. A document naming a <c>basis</c> and/or <c>imports</c> composes its whole graph
     /// first (see <see cref="WorldDocumentBasis"/>) and pins every touched file's raw bytes
     /// (<see cref="ComputeChainContentHash"/>), so an edit to a template or an imported fragment moves every
     /// dependent document's pin.
@@ -1714,33 +1834,9 @@ public static partial class WorldDefinitionFileSource {
             reason: out reason,
             validateAdjacencyClaims: false
         );
-    /// <summary>Parses, migrates, and validates an already-decoded, already-composed document string — the shared
-    /// middle of every load path once its own bytes/basis handling has produced flat JSON: a directory load
-    /// (composed above) and a bytes-only load with no directory to resolve a chain against
-    /// (<c>WorldDefinitionLoader.TryLoad</c>,
-    /// which refuses a <c>basis</c> member outright rather than composing one). The validation class answers under
-    /// its own wording, never the strict parse's: a validation refusal can rest on facts outside this call — an
-    /// adjacency claim resolved through <paramref name="neighbours"/> against documents this caller may itself be
-    /// about to move — so it is retryable in a way "these bytes are not a puck.world.definition.v1 document" never is, and
-    /// a caller classifying on <paramref name="reason"/> must be able to tell them apart (see <see cref="TryLoad"/>'s
-    /// own remarks for the exact classified prefixes).</summary>
-    /// <param name="json">The already-decoded, already-composed document JSON.</param>
-    /// <param name="sourceName">The document's source name, echoed in every refusal.</param>
-    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads.</param>
-    /// <param name="validateAdjacencyClaims">Whether to prove cross-document adjacency claims
-    /// (<see cref="WorldDefinitionValidator.TryValidate"/>) or validate only document-local facts
-    /// (<see cref="WorldDefinitionValidator.TryValidateLocally(WorldDefinition, out string)"/>).</param>
-    /// <param name="definition">The parsed, migrated, validated definition on success; <see langword="null"/> on failure.</param>
-    /// <param name="reason">The one-line failure reason, or empty on success.</param>
-    /// <param name="catalog">The selected host machine catalog used for provider validation, or null for structural parsing.</param>
-    /// <returns><see langword="true"/> when the document parsed, migrated, and validated.</returns>
-    public static bool TryParseComposed(string json, string sourceName, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, out WorldDefinition? definition, out string reason, IMachineValidationCatalog? catalog = null) {
-        var accepted = TryParseComposedForAdmission(admission: out var admission, catalog: catalog, json: json, neighbours: neighbours,
-            reason: out reason, sourceName: sourceName, validateAdjacencyClaims: validateAdjacencyClaims);
-        definition = admission?.Definition;
-        return accepted;
-    }
-    /// <summary>Parses an already composed document, binds authored state expressions and applies migrations.</summary>
+    /// <summary>Parses an already composed document, binds authored state expressions. A
+    /// document holding an authored name that carries <see cref="GeneratedName.FileJoiner"/> is refused by name
+    /// (<see cref="WorldAuthoredNames.TryRefuseFileJoiner"/>).</summary>
     /// <param name="json">The composed JSON text.</param>
     /// <param name="sourceName">The source name echoed in failures.</param>
     /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
@@ -1748,6 +1844,8 @@ public static partial class WorldDefinitionFileSource {
     /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
     public static bool TryParseDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
         definition = null;
+
+        WorldBootWork.Count(kind: WorldBootWork.Parses);
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
@@ -1773,7 +1871,17 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        parsed = WorldDefinitionMigrations.Apply(definition: parsed);
+        if (
+            (JsonNode.Parse(json: json) is JsonObject tree) &&
+            !WorldAuthoredNames.TryRefuseFileJoiner(
+            document: tree,
+            reason: out var nameReason
+        )
+        ) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {nameReason}";
+
+            return false;
+        }
 
         definition = parsed;
         reason = string.Empty;
@@ -1914,8 +2022,8 @@ public static partial class WorldDefinitionFileSource {
     /// <c>ToJsonString()</c>, so a pushed root's bytes are not its authored file's own bytes, and its
     /// content-address pin (<see cref="ComputeChainContentHash"/>) differs from the local chain's.</summary>
     /// <param name="path">The file to walk.</param>
-    /// <param name="chain">Each chain link's own file NAME (<see cref="Path.GetFileName(string?)"/>, not the full
-    /// path) paired with its raw bytes, derived document first.</param>
+    /// <param name="chain">Each chain link's own document name (<see cref="WorldDocumentName"/>, its file name without
+    /// the directory or the document suffix) paired with its raw bytes, derived document first.</param>
     /// <param name="reason">The one-line refusal reason (unreadable, cycle, depth, an ancestor outside the basis
     /// subdirectory), or empty on success.</param>
     /// <returns><see langword="true"/> when the chain resolved.</returns>
@@ -1938,13 +2046,10 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        var rootResolvedName = Path.GetFullPath(path: path).Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
+        var rootResolvedName = PuckPaths.Normalize(path: path);
 
         if (!TryWalkChain(
-            source: new DirectoryDocumentSource(),
+            source: DirectoryDocuments,
             rootResolvedName: rootResolvedName,
             rootBytes: bytes,
             chain: out var links,
@@ -1975,16 +2080,16 @@ public static partial class WorldDefinitionFileSource {
 
             // The root's own authored `basis` spelling crosses from the owned-worlds directory into its `basis/`
             // subdirectory (a LOCAL-only spelling, meaningless in the cloud's flat namespace) — rewritten to the
-            // deeper link's own bare file name before push. Every deeper link already names its own basis, if any,
+            // deeper link's own bare document name before push. Every deeper link already names its own basis, if any,
             // as a bare sibling (every link lives in the SAME `basis/` directory per the check above), so only the
             // root needs rewriting.
             var rootObject = links[0].Parsed!;
 
-            rootObject[propertyName: WorldDocumentBasis.BasisMemberName] = Path.GetFileName(path: links[1].ResolvedName);
+            rootObject[propertyName: WorldDocumentBasis.BasisMemberName] = WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: links[1].ResolvedName));
             links[0] = (links[0].ResolvedName, Encoding.UTF8.GetBytes(s: rootObject.ToJsonString()), rootObject);
         }
 
-        chain = [.. links.Select(selector: static link => (Path.GetFileName(path: link.ResolvedName), link.Bytes))];
+        chain = [.. links.Select(selector: static link => (WorldDocumentName.OfDocumentFile(path: Path.GetFileName(path: link.ResolvedName)), link.Bytes))];
 
         return true;
     }
@@ -2022,33 +2127,28 @@ public static partial class WorldDefinitionFileSource {
     /// that costs is <see cref="ComposedDocumentBytes"/>, which the boot narration and <c>world.status</c> both
     /// read, and <see cref="ForgetComposedDocuments"/> drops the lot.</summary>
     public static int ComposedDocumentsHeld => ComposedDocuments.Count;
-    /// <summary>Gets how many document compositions this process answered from an image it had already composed,
-    /// rather than merging the same tree again.</summary>
-    public static long DocumentCompositionsShared => Interlocked.Read(location: ref DocumentCompositionsSharedValue);
-    /// <summary>Gets how many document compositions this process has performed — one per document whose basis and
-    /// imports were merged, counting every document a composition walked into, not only the ones a caller named.</summary>
-    public static long DocumentsComposed => Interlocked.Read(location: ref DocumentsComposedValue);
 
     // The directory-backed IWorldDocumentSource every local load walks over — the one place Path.Combine/
     // Path.GetFullPath/File.Exists/File.ReadAllBytes for a basis reference live, so TryLoad's directory behavior and
     // TryResolveChainFiles' push-side walk can never drift apart.
     private sealed class DirectoryDocumentSource : IWorldDocumentSource {
+        public bool ResolvesFiles => true;
+
         public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
             content = null;
 
-            try {
-                var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: referrerName)) ?? ".");
+            if (!TryResolveDocumentBeside(
+                documentPath: out resolvedName,
+                name: name,
+                reason: out reason,
+                referrerName: referrerName,
+                sourcePath: out var sourcePath
+            )) {
+                return false;
+            }
 
-                resolvedName = Path.GetFullPath(path: Path.Combine(
-                    path1: directory,
-                    path2: name
-                )).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                );
-            } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-                resolvedName = name;
-                reason = $"cannot resolve basis path '{name}' from {referrerName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            if (File.Exists(path: sourcePath)) {
+                reason = $"document '{name}' (named by {referrerName}) has a .puck source at {sourcePath}, and no composer is installed to compile it; this host resolves .world.json documents only.";
 
                 return false;
             }
@@ -2067,43 +2167,6 @@ public static partial class WorldDefinitionFileSource {
                 return false;
             }
 
-            reason = string.Empty;
-
-            return true;
-        }
-    }
-
-    /// <summary>Resolves one document name — already combined against its referrer's directory and normalized (see
-    /// <see cref="ResolverDocumentSource"/>) — to its raw bytes, for the resolver-taking
-    /// <c>TryComposeDocumentTree</c>
-    /// overload. Used by a caller with no filesystem of its own (a browser runtime holding every document of an
-    /// import tree in memory, keyed by its worlds-relative name).</summary>
-    /// <param name="resolvedName">The already-resolved document name.</param>
-    /// <param name="content">The document's raw bytes on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="resolvedName"/> names a document the caller holds.</returns>
-    public delegate bool WorldDocumentResolver(string resolvedName, out ReadOnlyMemory<byte> content);
-
-    // The IWorldDocumentSource backing the resolver-taking TryComposeDocumentTree overload: resolves a reference
-    // exactly like DirectoryDocumentSource (relative combination against the referrer, normalized), then hands the
-    // final resolved name to the caller's own resolver instead of touching a real filesystem.
-    private sealed class ResolverDocumentSource(WorldDocumentResolver resolver) : IWorldDocumentSource {
-        public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-            resolvedName = CombineRelativeDocumentName(
-                name: name,
-                referrerName: referrerName
-            );
-
-            if (!resolver(
-                resolvedName,
-                out var bytes
-            )) {
-                content = null;
-                reason = $"document {resolvedName} (named by {referrerName}) resolves to nothing this caller can supply.";
-
-                return false;
-            }
-
-            content = bytes.ToArray();
             reason = string.Empty;
 
             return true;

@@ -1,5 +1,6 @@
-using System.Diagnostics;
+using Puck.Commands;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Puck.Physics.Fields;
 using Puck.Maths;
@@ -260,7 +261,7 @@ public sealed partial class NavigationLawTests {
         };
     }
     private static WorldBody JoinNavigator(WorldFixture fixture, FixedVector3 goal, int slot = 0) {
-        var actor = WorldPrincipal.Seat(slot: slot);
+        var actor = Principal.Seat(slot: slot);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -282,21 +283,6 @@ public sealed partial class NavigationLawTests {
         ));
         return body;
     }
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
 
     [Fact]
     public void SurfaceVolumeAndMediumDomainsAreDistinctValidAuthoringKinds() {
@@ -461,7 +447,7 @@ public sealed partial class NavigationLawTests {
         fixture.Step();
 
         var checkpoint = fixture.Server.Population.Capture();
-        var navigation = Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: checkpoint.Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var navigation = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: checkpoint.Entries.Single(predicate: row => (row.Index == 0)).Navigation);
 
         Assert.Contains(
             expectedSubstring: "clear=16/16",
@@ -501,7 +487,7 @@ public sealed partial class NavigationLawTests {
         );
         fixture.Step();
 
-        var route = Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
 
         Assert.True(
             condition: (route.Path.Length > 4),
@@ -530,12 +516,12 @@ public sealed partial class NavigationLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var captured,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
         );
-        var route = Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Navigation);
+        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Navigation);
 
         Assert.NotEmpty(collection: route.Path);
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: captured);
@@ -592,7 +578,7 @@ public sealed partial class NavigationLawTests {
             var floor = fixture.Server.Definition.Placements.Single(predicate: placement => (placement.Id == "navigation-floor"));
 
             fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-                WorldPrincipal.Console,
+                Principal.Console,
                 floor with {
                     Position = new Vector3(
                     x: 0f,
@@ -639,12 +625,12 @@ public sealed partial class NavigationLawTests {
         Assert.True(
             condition: source.Server.TryCaptureCheckpoint(
                 checkpoint: out var captured,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
         );
-        Assert.NotEmpty(collection: Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Navigation).Path);
+        Assert.NotEmpty(collection: Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: captured!.Population.Entries.Single(predicate: row => (row.Index == 0)).Navigation).Path);
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecode(
                 bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: captured),
@@ -973,19 +959,18 @@ public sealed partial class NavigationLawTests {
             to: to
         ));
         }
-        var allocated = GC.GetAllocatedBytesForCurrentThread();
         var allWet = true;
-
-        for (var index = 0; (index < 4096); index++) {
-            allWet &= fields.IsSegmentInsideMedium(
-            clearance: clearance,
-            field: 0,
-            from: from,
-            maximumSubdivisions: 32,
-            to: to
-        );
-        }
-        var bytes = (GC.GetAllocatedBytesForCurrentThread() - allocated);
+        var bytes = AllocationWindow.Least(window: () => {
+            for (var index = 0; (index < 4096); index++) {
+                allWet &= fields.IsSegmentInsideMedium(
+                    clearance: clearance,
+                    field: 0,
+                    from: from,
+                    maximumSubdivisions: 32,
+                    to: to
+                );
+            }
+        });
 
         Assert.True(condition: allWet);
         Assert.Equal(
@@ -1064,7 +1049,7 @@ public sealed partial class NavigationLawTests {
             using var fixture = Fixtures.FreshServer(definition);
 
             Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-                WorldPrincipal.Seat(slot: 0),
+                Principal.Seat(slot: 0),
                 0,
                 null,
                 WorldProtocol.WireProtocolKey
@@ -1083,7 +1068,7 @@ public sealed partial class NavigationLawTests {
             );
             body.SetIntentSource(source: IntentSource.Producer(name: "flock"));
             Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-                WorldPrincipal.Seat(slot: 1),
+                Principal.Seat(slot: 1),
                 1,
                 null,
                 WorldProtocol.WireProtocolKey
@@ -1260,13 +1245,13 @@ public sealed partial class NavigationLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var captured,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
         );
         var entry = captured!.Population.Entries.Single(predicate: row => (row.Index == 0));
-        var route = Assert.IsType<WorldPopulation.WorldPopulationNavigationCheckpoint>(@object: entry.Navigation);
+        var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: entry.Navigation);
         var malformedEntry = entry with { Navigation = route with { Path = [int.MaxValue] } };
         var malformed = captured with {
             Population = captured.Population with {
@@ -1311,7 +1296,7 @@ public sealed partial class NavigationLawTests {
                 Name: CellName.Parse(candidate: "observe-route"),
                 Gate: new ActionPredicate.CompareState(
                     State: "$nav:body:0:hasPath",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1m
                 ),
                 Effects: [new ActionEffect.SetState(
@@ -1338,21 +1323,41 @@ public sealed partial class NavigationLawTests {
             actual: fixture.Server.Definition.State.Single(predicate: row => (row.Name == observed)).Cells![0].Value.Raw
         );
     }
-    // The island authors a dozen navigation domains; a construction that eagerly sweeps every one of their
-    // occupancy and edge bakes against the shipped solid field costs a full minute (`puck bench world`'s own
-    // construction row). Lazy baking measures under two seconds on an otherwise idle machine; the bound below sits
-    // an order of magnitude under the eager cost so a reintroduced eager bake fails it unmistakably, while staying
-    // loose enough to absorb ordinary machine contention rather than flake on it.
+    // The island authors a dozen navigation domains, and sweeping one's occupancy and edges against the shipped
+    // solid field is the expensive part of navigation (`puck bench world`'s construction row measures it). Server
+    // construction bakes none of them; the first route request or read-back bakes the domain it reads. The control
+    // routes a navigator through a small fixture domain and must find it baked, so the count is known to move.
     [Fact]
     public void TheIslandsNavigationDomainsConstructWithoutSweepingTheSolidFieldUpFront() {
-        var stopwatch = Stopwatch.StartNew();
-        using var fixture = Fixtures.FreshServer(definition: AuthoredGameFixtures.Nexus);
+        using (var island = Fixtures.FreshServer(definition: AuthoredGameFixtures.Nexus)) {
+            Assert.True(
+                condition: (island.Server.Population.NavigationDomainCount > 1),
+                userMessage: $"the island compiled {island.Server.Population.NavigationDomainCount} navigation domain(s)"
+            );
+            Assert.Equal(
+                actual: island.Server.Population.NavigationBakedDomainCount,
+                expected: 0
+            );
+        }
 
-        stopwatch.Stop();
+        using var routed = Fixtures.FreshServer(definition: NavigationDocument(domain: VolumeDomain()));
 
-        Assert.True(
-            condition: (stopwatch.Elapsed < TimeSpan.FromSeconds(value: 20)),
-            userMessage: $"server construction against the shipped world took {stopwatch.Elapsed.TotalSeconds:F1} s"
+        Assert.Equal(
+            actual: routed.Server.Population.NavigationBakedDomainCount,
+            expected: 0
+        );
+        _ = JoinNavigator(
+            fixture: routed,
+            goal: new FixedVector3(
+                X: FixedQ4816.FromInteger(value: 4),
+                Y: FixedQ4816.FromInteger(value: 4),
+                Z: FixedQ4816.Zero
+            )
+        );
+        routed.Step();
+        Assert.Equal(
+            actual: routed.Server.Population.NavigationBakedDomainCount,
+            expected: 1
         );
     }
 }

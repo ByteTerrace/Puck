@@ -2,7 +2,7 @@ namespace Puck.Abstractions.Gpu;
 
 /// <summary>
 /// A cohesive bundle of the backend-neutral GPU services a compute render node drives — the compute pipeline,
-/// storage-image/buffer, shader-module, and command-pool factories plus the recorder, descriptor allocator, queue
+/// image, storage-buffer, shader-module, and command-pool factories plus the recorder, descriptor allocator, queue
 /// submitter, and surface-transfer factory. A node injects (or resolves) this ONE service instead of the nine
 /// individual factories, folding the per-node constructor/resolution sprawl. The granular <c>IGpu*Factory</c>
 /// interfaces remain registered and injectable on their own — this is an additive convenience over them, not a
@@ -10,7 +10,7 @@ namespace Puck.Abstractions.Gpu;
 /// <para>
 /// Exposed as properties (rather than a multiply-inherited role interface) because the granular factories each have
 /// a <c>Create</c> method: a property bundle keeps every <c>Create</c> call unambiguous at the call site
-/// (<c>services.StorageImageFactory.Create(...)</c>).
+/// (<c>services.ImageFactory.Create(...)</c>).
 /// </para>
 /// </summary>
 public interface IGpuComputeServices {
@@ -28,8 +28,8 @@ public interface IGpuComputeServices {
     IGpuShaderModuleFactory ShaderModuleFactory { get; }
     /// <summary>The storage-buffer factory.</summary>
     IGpuStorageBufferFactory StorageBufferFactory { get; }
-    /// <summary>The storage-image factory.</summary>
-    IGpuStorageImageFactory StorageImageFactory { get; }
+    /// <summary>The image factory.</summary>
+    IGpuImageFactory ImageFactory { get; }
     /// <summary>The surface-transfer factory (readback/upload).</summary>
     IGpuSurfaceTransferFactory SurfaceTransferFactory { get; }
 }

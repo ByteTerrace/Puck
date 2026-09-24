@@ -147,7 +147,7 @@ public sealed class RuleReadsTruthLawTests {
 
         var rule = RulesFixture.Rule(
             gate: EvaluatorFixture.Compare(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 row: "eased",
                 value: 100m
             ),
@@ -398,7 +398,7 @@ public sealed class RuleReadsTruthLawTests {
             expected: 300L
         );
     }
-    // The other laws author the trait on the row, the way pong authors pongSpin; a keyed cell may carry its own.
+    // The other laws author the trait on the row, the way paddleball authors paddleballSpin; a keyed cell may carry its own.
     [Fact]
     public void AGateOverACellCarryingItsOwnDynamicsTraitReadsStoredTruth() {
         var (host, evaluator, context, arena) = Arrange();
@@ -422,7 +422,7 @@ public sealed class RuleReadsTruthLawTests {
             context: context,
             rules: [RulesFixture.Rule(
                 gate: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Key: "0",
                     State: "cellEased",
                     Value: 50m
@@ -513,7 +513,7 @@ public sealed class RuleReadsTruthLawTests {
             context: context,
             rules: [RulesFixture.Rule(
                 gate: EvaluatorFixture.Compare(
-                    comparison: ActionStateComparison.GreaterOrEqual,
+                    comparison: ExpressionOp.GreaterOrEqual,
                     row: "advancing",
                     value: 10m
                 ),
@@ -552,7 +552,7 @@ public sealed class RuleReadsTruthLawTests {
             context: context,
             rules: [RulesFixture.Rule(
                 gate: EvaluatorFixture.Compare(
-                    comparison: ActionStateComparison.GreaterOrEqual,
+                    comparison: ExpressionOp.GreaterOrEqual,
                     row: "cycling",
                     value: 1m
                 ),

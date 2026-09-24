@@ -38,6 +38,14 @@ public sealed class RuleGroupEvaluationLawTests {
 
         return hash.Value;
     }
+    // Every pass leaves `score` different from what it held when the pass began, so the group never settles.
+    private static Rule Toggle() => new(
+        Name: RulesFixture.Name(value: "toggle"),
+        Effects: [new ActionEffect.SetState(
+                Expression: RulesFixture.Program(text: "1 - score"),
+                State: "score"
+            )]
+    );
 
     [Fact]
     public void AFixpointGroupClosesWhenAPassLeavesItsWriteSetUnchanged() {
@@ -54,7 +62,7 @@ public sealed class RuleGroupEvaluationLawTests {
                             value: 1m
                         )],
                     Gate: EvaluatorFixture.Compare(
-                        comparison: ActionStateComparison.Less,
+                        comparison: ExpressionOp.Less,
                         row: "score",
                         value: 3m
                     )
@@ -88,6 +96,35 @@ public sealed class RuleGroupEvaluationLawTests {
             expected: default
         );
     }
+    // One member clears the row and the next rebuilds it: every pass moves the row's version twice, and leaves it as
+    // it found it, which is no progress.
+    [Fact]
+    public void AFixpointGroupWhoseMembersClearAndRebuildARowSettlesOnTheSecondPass() {
+        var (host, evaluator, rules, groups, state, latch) = Arrange(
+            groups: [new RuleGroupDeclaration(
+                    Name: RulesFixture.Name(value: "rebuild"),
+                    Passes: 2,
+                    Shape: RuleGroupShape.Fixpoint,
+                    Steps: [
+                        new RuleGroupStep(Rule: RulesFixture.Name(value: "clear")),
+                        new RuleGroupStep(Rule: RulesFixture.Name(value: "fill")),
+                    ]
+                )],
+            rules: [
+                new Rule(Name: RulesFixture.Name(value: "clear"), Effects: [EvaluatorFixture.Set(row: "score", value: 0m)]),
+                new Rule(Name: RulesFixture.Name(value: "fill"), Effects: [EvaluatorFixture.Set(row: "score", value: 1m)]),
+            ]
+        );
+
+        for (var tick = 0UL; (tick < 6UL); tick++) {
+            host.Advance(engineTick: tick, tick: tick);
+            _ = evaluator.EvaluateGroups(groups: groups, latch: latch, rules: rules, state: state, stepTicks: 1UL);
+        }
+
+        Assert.Empty(collection: evaluator.Diagnostics());
+        Assert.Equal(actual: EvaluatorFixture.Cell(host: host, row: "score"), expected: 1L);
+        Assert.Equal(actual: state.Progress(name: "rebuild"), expected: default);
+    }
     [Fact]
     public void AnOscillatingTriggerlessFixpointGroupReArmsAfterEveryCeilingBreach() {
         var (host, evaluator, rules, groups, state, latch) = Arrange(
@@ -95,27 +132,9 @@ public sealed class RuleGroupEvaluationLawTests {
                     Name: RulesFixture.Name(value: "flip"),
                     Passes: 2,
                     Shape: RuleGroupShape.Fixpoint,
-                    Steps: [
-                        new RuleGroupStep(Rule: RulesFixture.Name(value: "up")),
-                        new RuleGroupStep(Rule: RulesFixture.Name(value: "down")),
-                    ]
+                    Steps: [new RuleGroupStep(Rule: RulesFixture.Name(value: "toggle"))]
                 )],
-            rules: [
-                new Rule(
-                    Name: RulesFixture.Name(value: "up"),
-                    Effects: [EvaluatorFixture.Set(
-                            row: "score",
-                            value: 1m
-                        )]
-                ),
-                new Rule(
-                    Name: RulesFixture.Name(value: "down"),
-                    Effects: [EvaluatorFixture.Set(
-                            row: "score",
-                            value: 0m
-                        )]
-                ),
-            ]
+            rules: [Toggle()]
         );
 
         for (var tick = 0UL; (tick < 6UL); tick++) {
@@ -155,32 +174,14 @@ public sealed class RuleGroupEvaluationLawTests {
                     Name: RulesFixture.Name(value: "flip"),
                     Passes: 2,
                     Shape: RuleGroupShape.Fixpoint,
-                    Steps: [
-                        new RuleGroupStep(Rule: RulesFixture.Name(value: "up")),
-                        new RuleGroupStep(Rule: RulesFixture.Name(value: "down")),
-                    ],
+                    Steps: [new RuleGroupStep(Rule: RulesFixture.Name(value: "toggle"))],
                     Trigger: EvaluatorFixture.Compare(
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         row: "flag",
                         value: 0m
                     )
                 )],
-            rules: [
-                new Rule(
-                    Name: RulesFixture.Name(value: "up"),
-                    Effects: [EvaluatorFixture.Set(
-                            row: "score",
-                            value: 1m
-                        )]
-                ),
-                new Rule(
-                    Name: RulesFixture.Name(value: "down"),
-                    Effects: [EvaluatorFixture.Set(
-                            row: "score",
-                            value: 0m
-                        )]
-                ),
-            ]
+            rules: [Toggle()]
         );
 
         void Flag(long value) => Assert.True(condition: host.Arena.TryWrite(
@@ -272,7 +273,7 @@ public sealed class RuleGroupEvaluationLawTests {
                         ),
                     ],
                     Gate: EvaluatorFixture.Compare(
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         row: "flag",
                         value: 0m
                     )

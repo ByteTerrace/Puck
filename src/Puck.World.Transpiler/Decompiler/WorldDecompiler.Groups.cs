@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
+using Puck.Transpiler.Formatting;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -11,25 +12,6 @@ namespace Puck.World.Transpiler.Decompiler;
 // spell back (a member whose name does not carry its group's prefix, a staged trigger, a fixpoint trigger that is
 // not a negation) sends both sections through the generic value path instead, which carries them unchanged.
 public static partial class WorldDecompiler {
-    // A name the `stabilize`/`workflow`/`step` header can carry bare; anything else is quoted, and the sugar
-    // refuses a name no quoting can spell back.
-    internal static bool IsBareName(string name) {
-        if ((name.Length == 0) || !(char.IsLetter(c: name[0]) || (name[0] == '_'))) {
-            return false;
-        }
-
-        foreach (var character in name) {
-            if (!(char.IsLetterOrDigit(c: character) || (character == '_'))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-    internal static string QuotedName(string name) => (IsBareName(name: name)
-        ? name
-        : $"\"{EscapeString(s: name)}\""
-    );
     // A header name is one line of source, quoted or bare, so a name carrying a line break has no spelling at all
     // and sends its whole section down the generic value path.
     internal static bool IsSpellableName(string name) => !name.AsSpan().ContainsAny(value0: '\r', value1: '\n');
@@ -114,8 +96,8 @@ public static partial class WorldDecompiler {
                 }
 
                 if (
-                    !member.StartsWith(comparisonType: StringComparison.Ordinal, value: $"{groupName}_") ||
-                    (member.Length == (groupName.Length + 1)) ||
+                    !GeneratedName.TryStripHead(head: groupName, name: member, rest: out var local) ||
+                    local.Contains(value: GeneratedName.Joiner) ||
                     !byName.TryGetValue(key: member, value: out var rule) ||
                     !claimed.TryAdd(key: member, value: rule)
                 ) {
@@ -151,38 +133,75 @@ public static partial class WorldDecompiler {
             );
         }
     }
+    // A group a rule scope holds (`outer$settle`, its members `outer$settle$calm`) prints inside that scope under its
+    // own last part, and its members still strip the whole name.
     private static void AppendRuleGroupBlock(StringBuilder sb, JsonObject group, IReadOnlyDictionary<string, JsonObject> claimed, int indentLevel) {
+        var name = (group["name"]?.ToString() ?? "");
+
+        if (
+            TrySplitScopedName(
+            local: out var local,
+            name: name,
+            scopes: out var scopes
+        ) &&
+            (scopes.Length > 0)
+        ) {
+            AppendScoped(
+                body: level => AppendRuleGroupBlock(
+                    claimed: claimed,
+                    group: group,
+                    header: local,
+                    indentLevel: level,
+                    sb: sb
+                ),
+                indentLevel: indentLevel,
+                sb: sb,
+                scopes: scopes
+            );
+
+            return;
+        }
+
+        AppendRuleGroupBlock(
+            claimed: claimed,
+            group: group,
+            header: name,
+            indentLevel: indentLevel,
+            sb: sb
+        );
+    }
+    private static void AppendRuleGroupBlock(StringBuilder sb, JsonObject group, IReadOnlyDictionary<string, JsonObject> claimed, int indentLevel, string header) {
         var indent = new string(
             c: ' ',
             count: (indentLevel * 4)
         );
         var name = (group["name"]?.ToString() ?? "");
         var staged = (group["shape"]?.ToString() == "Staged");
-        var header = new StringBuilder();
+        var opening = new StringBuilder();
 
-        _ = header.Append(value: indent)
+        _ = opening.Append(value: indent)
             .Append(value: (staged
                 ? "workflow "
                 : "stabilize "))
-            .Append(value: QuotedName(name: name));
+            .Append(value: PuckPrinter.PrintName(name: header));
 
         if (group["undo"] is { } undo) {
-            _ = header.Append(value: " undo(").Append(value: FormatUndo(indentLevel: indentLevel, node: undo)).Append(value: ')');
+            _ = opening.Append(value: " undo(").Append(value: FormatUndo(indentLevel: indentLevel, node: undo)).Append(value: ')');
         }
 
         if (!staged) {
             if (group["passes"]?.ToString() is { Length: > 0 } passes) {
-                _ = header.Append(value: $" maxPasses({passes})");
+                _ = opening.Append(value: $" maxPasses({passes})");
             }
             if ((group["trigger"] is JsonObject trigger) && (trigger["predicate"] is JsonObject predicate)) {
-                _ = header.Append(value: " until ")
+                _ = opening.Append(value: " until ")
                     .Append(value: FormatPredicate(node: predicate));
             }
         }
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{header} {{"
+            $"{opening} {{"
         );
 
         var firstStep = true;
@@ -209,7 +228,7 @@ public static partial class WorldDecompiler {
                 using (ExpressionSpelling.WithLocals(locals: RuleLocalNames(rule: rule))) {
                     stepBlock.AppendLine(
                         CultureInfo.InvariantCulture,
-                        $"{new string(c: ' ', count: ((indentLevel + 1) * 4))}step {QuotedName(name: local)}{((stepObj["onRefusal"]?.ToString() == "Skip") ? " skip" : "")} {{"
+                        $"{new string(c: ' ', count: ((indentLevel + 1) * 4))}step {PuckPrinter.PrintName(name: local)}{((stepObj["onRefusal"]?.ToString() == "Skip") ? " skip" : "")} {{"
                     );
                     AppendRuleBody(
                         indentLevel: (indentLevel + 2),

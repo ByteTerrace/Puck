@@ -3,7 +3,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    private ReadOnlyMemory<byte> DispatchIsaReport(IGpuComputePipeline viewsPipeline, IGpuStorageImage reportImage, IGpuStorageImage sampledImage, IGpuSurfaceReadback readback, bool initializeImages) {
+    private ReadOnlyMemory<byte> DispatchIsaReport(IGpuComputePipeline viewsPipeline, IGpuImage reportImage, IGpuImage sampledImage, IGpuSurfaceReadback readback, bool initializeImages) {
         var commandBuffer = m_commandPools[0].CommandBufferHandle;
         var recorder = m_gpu.ComputeRecorder;
 
@@ -11,6 +11,7 @@ public sealed partial class SdfWorldEngine {
             commandBufferHandle: commandBuffer,
             deviceHandle: m_deviceHandle
         );
+        m_bufferHazards.Reset();
 
         if (initializeImages) {
             recorder.TransitionImageLayout(
@@ -45,6 +46,10 @@ public sealed partial class SdfWorldEngine {
         );
 
         if (initializeImages) {
+            RecordBufferBarriers(
+                commandBuffer: commandBuffer,
+                pass: SdfFramePass.Beam
+            );
             recorder.BindComputePipeline(
                 commandBufferHandle: commandBuffer,
                 deviceHandle: m_deviceHandle,
@@ -71,16 +76,14 @@ public sealed partial class SdfWorldEngine {
                 groupCountY: 1,
                 groupCountZ: 1
             );
-            recorder.MemoryBarrier(
-                commandBufferHandle: commandBuffer,
-                destinationAccessMask: GpuComputeAccess.ShaderRead,
-                destinationStageMask: GpuComputeStage.ComputeShader,
-                deviceHandle: m_deviceHandle,
-                sourceAccessMask: GpuComputeAccess.ShaderWrite,
-                sourceStageMask: GpuComputeStage.ComputeShader
-            );
         }
 
+        // Every hit kernel reads the beam's ISA word from the cull buffer through the views layout's read-only
+        // binding, so the views pass's transitions order the beam's write before the report.
+        RecordBufferBarriers(
+            commandBuffer: commandBuffer,
+            pass: SdfFramePass.Views
+        );
         recorder.BindComputePipeline(
             commandBufferHandle: commandBuffer,
             deviceHandle: m_deviceHandle,
@@ -138,16 +141,18 @@ public sealed partial class SdfWorldEngine {
         );
     }
     private void VerifyIsaVersion() {
-        using var reportImage = m_gpu.StorageImageFactory.Create(
+        using var reportImage = m_gpu.ImageFactory.Create(
             deviceContext: m_deviceContext,
             format: Format,
             height: 1,
+            usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         );
-        using var sampledImage = m_gpu.StorageImageFactory.Create(
+        using var sampledImage = m_gpu.ImageFactory.Create(
             deviceContext: m_deviceContext,
             format: Format,
             height: 1,
+            usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: 1
         );
         using var readback = m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);

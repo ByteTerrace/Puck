@@ -59,8 +59,8 @@ internal static partial class LawRegistry {
             run: () => Laws.ScalarBinaryMatchesOracle(
                 domain: SmokeDomain,
                 lawId: "smoke.unit-fraction32-mul-ties-to-even",
-                oracle: Subjects.UnitFraction32MultiplyOracle,
-                subject: Subjects.UnitFraction32Multiply,
+                oracle: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.MultiplyOracle,
+                subject: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.Multiply,
                 tier: Tier.Smoke
             )
         ),
@@ -166,12 +166,9 @@ internal static partial class LawRegistry {
         ),
         // The refusal is the law: an unguarded star over a cyclic counting quiver must RETURN its obstruction, never
         // throw and never invent a certificate, while the exact finite truncation stays available beside it.
-        Case(
-            id: "smoke.presented-star-unguarded-refuses",
-            run: () => Laws.Claim(
-                claim: Subjects.UnguardedStarRefuses,
-                lawId: "smoke.presented-star-unguarded-refuses"
-            )
+        ClaimCase(
+            claim: Subjects.UnguardedStarRefuses,
+            id: "smoke.presented-star-unguarded-refuses"
         ),
         // The zero-allocation overload is the SAME loop writing caller buffers, so it is a twin rather than a variant.
         Case(
@@ -208,70 +205,46 @@ internal static partial class LawRegistry {
         ),
         // Co-arity greater than one at its smallest: the six planar diagrams of width two, their whole composition
         // table against the arc-tracing oracle, and the sum of the identity diagrams fixing every one of them.
-        Case(
-            id: "smoke.presented-tangle-composes",
-            run: () => Laws.Claim(
-                claim: Subjects.TangleComposesAtSmokeWidth,
-                lawId: "smoke.presented-tangle-composes"
-            )
+        ClaimCase(
+            claim: Subjects.TangleComposesAtSmokeWidth,
+            id: "smoke.presented-tangle-composes"
         ),
         // Ledger row 19's transfer, named: the morphism out of the free monoid on one letter per partial quotient,
         // carrying each to that quotient's digit element, reaches the element the transfer's own fold reaches and the
         // entries its module run reads out.
-        Case(
-            id: "smoke.presented-functor-twin",
-            run: () => Laws.Claim(
-                claim: Subjects.FunctorTwinsTransfer,
-                lawId: "smoke.presented-functor-twin"
-            )
+        ClaimCase(
+            claim: Subjects.FunctorTwinsTransfer,
+            id: "smoke.presented-functor-twin"
         ),
         // The second product at its smallest: the seven words of two letters at a window of two, their whole table
         // against the interleaving enumeration, and the one-letter quasi-shuffle whose collisions are already there.
-        Case(
-            id: "smoke.presented-shuffle-twin",
-            run: () => Laws.Claim(
-                claim: Subjects.ShuffleComposesAtSmokeWindow,
-                lawId: "smoke.presented-shuffle-twin"
-            )
+        ClaimCase(
+            claim: Subjects.ShuffleComposesAtSmokeWindow,
+            id: "smoke.presented-shuffle-twin"
         ),
 
     ];
     private static LawCase[] RootCoreCases() => [
         // ---- Root Core/Sampling public-surface laws ----
-        Case(
-            id: "sampling.bit-mix-constants-invert",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BitMixConstantsInvertSurface,
-                lawId: "sampling.bit-mix-constants-invert"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BitMixConstantsInvertSurface,
+            id: "sampling.bit-mix-constants-invert"
         ),
-        Case(
-            id: "sampling.bit-mix-is-a-permutation",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BitMixIsAPermutationSurface,
-                lawId: "sampling.bit-mix-is-a-permutation"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BitMixIsAPermutationSurface,
+            id: "sampling.bit-mix-is-a-permutation"
         ),
-        Case(
-            id: "scalar.cyclic-rotation-closes-its-loop",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.CyclicRotationStructureSurface,
-                lawId: "scalar.cyclic-rotation-closes-its-loop"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.CyclicRotationStructureSurface,
+            id: "scalar.cyclic-rotation-closes-its-loop"
         ),
-        Case(
-            id: "core.big-integer-is-prime-vs-oracle",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BigIntegerIsPrimeSurface,
-                lawId: "core.big-integer-is-prime-vs-oracle"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BigIntegerIsPrimeSurface,
+            id: "core.big-integer-is-prime-vs-oracle"
         ),
-        Case(
-            id: "core.big-integer-prime-factors-vs-word-kernel",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BigIntegerPrimeFactorsSurface,
-                lawId: "core.big-integer-prime-factors-vs-word-kernel"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BigIntegerPrimeFactorsSurface,
+            id: "core.big-integer-prime-factors-vs-word-kernel"
         ),
 
         // The full-carrier scale the case above only samples, plus the Jacobi statement it cannot make. The Jacobi law
@@ -281,132 +254,81 @@ internal static partial class LawRegistry {
         // the same wrong value as the subject by running the library's own sibling descent on both sides.
         // The two the factorization surface could not make before: it took the gate's word at the one value the twelve
         // bases decide wrongly, and its depth was the operand's multiplicity rather than the heap.
-        Case(
-            id: "core.witness-set-boundary-factors-exactly",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.WitnessSetBoundaryFactorsExactly,
-                lawId: "core.witness-set-boundary-factors-exactly"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.WitnessSetBoundaryFactorsExactly,
+            id: "core.witness-set-boundary-factors-exactly"
         ),
-        Case(
-            id: "core.prime-counting-is-dense-against-a-sieve",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.PrimeCountingIsDenseAgainstASieve,
-                lawId: "core.prime-counting-is-dense-against-a-sieve"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.PrimeCountingIsDenseAgainstASieve,
+            id: "core.prime-counting-is-dense-against-a-sieve"
         ),
-        Case(
-            id: "core.deep-multiplicity-factors-without-stack-growth",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.DeepMultiplicityFactorsWithoutStackGrowth,
-                lawId: "core.deep-multiplicity-factors-without-stack-growth"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.DeepMultiplicityFactorsWithoutStackGrowth,
+            id: "core.deep-multiplicity-factors-without-stack-growth"
         ),
 
-        Case(
-            id: "core.jacobi-symbol-cross-carrier",
-            run: () => Laws.Claim(
-                claim: PrimalityScaleClaims.JacobiSymbolSurface,
-                lawId: "core.jacobi-symbol-cross-carrier"
-            )
+        ClaimCase(
+            claim: PrimalityScaleClaims.JacobiSymbolSurface,
+            id: "core.jacobi-symbol-cross-carrier"
         ),
 
         // Descriptors and elements that compared unequal to themselves, and an exponential that answered outside the
         // subdomain it documents instead of refusing. All three were silent: array identity masquerading as value
         // equality, and a closed form read off the scalar lane of a square that was not scalar.
-        Case(
-            id: "algebra.clifford-descriptor-identity-is-the-signature",
-            run: () => Laws.Claim(
-                claim: GeometricAlgebraClaims.CliffordDescriptorIdentitySurface,
-                lawId: "algebra.clifford-descriptor-identity-is-the-signature"
-            )
+        ClaimCase(
+            claim: GeometricAlgebraClaims.CliffordDescriptorIdentitySurface,
+            id: "algebra.clifford-descriptor-identity-is-the-signature"
         ),
-        Case(
-            id: "algebra.clifford-exponential-scalar-square-domain",
-            run: () => Laws.Claim(
-                claim: GeometricAlgebraClaims.CliffordExponentialDomainSurface,
-                lawId: "algebra.clifford-exponential-scalar-square-domain"
-            )
+        ClaimCase(
+            claim: GeometricAlgebraClaims.CliffordExponentialDomainSurface,
+            id: "algebra.clifford-exponential-scalar-square-domain"
         ),
-        Case(
-            id: "algebra.monogenic-identity-is-tail-and-coordinates",
-            run: () => Laws.Claim(
-                claim: GeometricAlgebraClaims.MonogenicIdentitySurface,
-                lawId: "algebra.monogenic-identity-is-tail-and-coordinates"
-            )
+        ClaimCase(
+            claim: GeometricAlgebraClaims.MonogenicIdentitySurface,
+            id: "algebra.monogenic-identity-is-tail-and-coordinates"
         ),
 
         // Carriers that admitted values they advertise they do not hold, a letter mask that broadened a split predicate
         // into a false positive, and colour indices that were never checked at all.
-        Case(
-            id: "presented.rational-material-admits-only-rationals",
-            run: () => Laws.Claim(
-                claim: OracleClaims.RationalMaterialAdmitsOnlyRationals,
-                lawId: "presented.rational-material-admits-only-rationals"
-            )
+        ClaimCase(
+            claim: OracleClaims.RationalMaterialAdmitsOnlyRationals,
+            id: "presented.rational-material-admits-only-rationals"
         ),
-        Case(
-            id: "presented.counting-material-admits-only-naturals",
-            run: () => Laws.Claim(
-                claim: OracleClaims.CountingMaterialAdmitsOnlyNaturals,
-                lawId: "presented.counting-material-admits-only-naturals"
-            )
+        ClaimCase(
+            claim: OracleClaims.CountingMaterialAdmitsOnlyNaturals,
+            id: "presented.counting-material-admits-only-naturals"
         ),
-        Case(
-            id: "presented.letter-mask-refuses-a-split-block",
-            run: () => Laws.Claim(
-                claim: OracleClaims.LetterMaskRefusesASplitBlock,
-                lawId: "presented.letter-mask-refuses-a-split-block"
-            )
+        ClaimCase(
+            claim: OracleClaims.LetterMaskRefusesASplitBlock,
+            id: "presented.letter-mask-refuses-a-split-block"
         ),
-        Case(
-            id: "presented.generator-colours-are-bounded-indices",
-            run: () => Laws.Claim(
-                claim: OracleClaims.GeneratorColoursAreBoundedIndices,
-                lawId: "presented.generator-colours-are-bounded-indices"
-            )
+        ClaimCase(
+            claim: OracleClaims.GeneratorColoursAreBoundedIndices,
+            id: "presented.generator-colours-are-bounded-indices"
         ),
-        Case(
-            id: "core.factorization-full-width-sweep",
-            run: () => Laws.Claim(
-                claim: PrimalityScaleClaims.FactorizationFullWidthSurface,
-                lawId: "core.factorization-full-width-sweep"
-            )
+        ClaimCase(
+            claim: PrimalityScaleClaims.FactorizationFullWidthSurface,
+            id: "core.factorization-full-width-sweep"
         ),
-        Case(
-            id: "core.big-integer-square-root-vs-unsigned",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BigIntegerSquareRootSurface,
-                lawId: "core.big-integer-square-root-vs-unsigned"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BigIntegerSquareRootSurface,
+            id: "core.big-integer-square-root-vs-unsigned"
         ),
-        Case(
-            id: "core.big-integer-to-double-vs-exact-neighbours",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BigIntegerToDoubleSurface,
-                lawId: "core.big-integer-to-double-vs-exact-neighbours"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BigIntegerToDoubleSurface,
+            id: "core.big-integer-to-double-vs-exact-neighbours"
         ),
-        Case(
-            id: "core.big-integer-modular-inverse-vs-hensel",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BigIntegerModularInverseSurface,
-                lawId: "core.big-integer-modular-inverse-vs-hensel"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BigIntegerModularInverseSurface,
+            id: "core.big-integer-modular-inverse-vs-hensel"
         ),
-        Case(
-            id: "core.big-integer-modular-square-root-vs-prime-field",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BigIntegerModularSquareRootSurface,
-                lawId: "core.big-integer-modular-square-root-vs-prime-field"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BigIntegerModularSquareRootSurface,
+            id: "core.big-integer-modular-square-root-vs-prime-field"
         ),
-        Case(
-            id: "core.binary-integer-contracts",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.BinaryIntegerSurface,
-                lawId: "core.binary-integer-contracts"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.BinaryIntegerSurface,
+            id: "core.binary-integer-contracts"
         ),
         Case(
             id: "core.discrete-measure-exact-and-compiled",
@@ -421,54 +343,33 @@ internal static partial class LawRegistry {
                 );
             }
         ),
-        Case(
-            id: "core.number-theory-contracts",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.NumberTheorySurface,
-                lawId: "core.number-theory-contracts"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.NumberTheorySurface,
+            id: "core.number-theory-contracts"
         ),
-        Case(
-            id: "core.real-quadratic-field-descriptor",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.RealQuadraticFieldSurface,
-                lawId: "core.real-quadratic-field-descriptor"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.RealQuadraticFieldSurface,
+            id: "core.real-quadratic-field-descriptor"
         ),
-        Case(
-            id: "core.real-quadratic-field-and-conversion",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.RealQuadraticSurface,
-                lawId: "core.real-quadratic-field-and-conversion"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.RealQuadraticSurface,
+            id: "core.real-quadratic-field-and-conversion"
         ),
-        Case(
-            id: "core.prime-extensions-vs-trial-division",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.PrimeExtensionsSurface,
-                lawId: "core.prime-extensions-vs-trial-division"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.PrimeExtensionsSurface,
+            id: "core.prime-extensions-vs-trial-division"
         ),
-        Case(
-            id: "core.unsigned-integer-contracts",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.UnsignedIntegerSurface,
-                lawId: "core.unsigned-integer-contracts"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.UnsignedIntegerSurface,
+            id: "core.unsigned-integer-contracts"
         ),
-        Case(
-            id: "core.fnv1a-published-vector",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.Fnv1aSurface,
-                lawId: "core.fnv1a-published-vector"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.Fnv1aSurface,
+            id: "core.fnv1a-published-vector"
         ),
-        Case(
-            id: "core.monotonic-partitioner-fast-invariants",
-            run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.MonotonicPartitionerSurface,
-                lawId: "core.monotonic-partitioner-fast-invariants"
-            )
+        ClaimCase(
+            claim: CoreSurfaceClaims.MonotonicPartitionerSurface,
+            id: "core.monotonic-partitioner-fast-invariants"
         ),
 
     ];
@@ -503,47 +404,32 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
-            id: "scalar.grid-and-construction",
-            run: () => Laws.Claim(
-                claim: Subjects.FixedGridAndConstruction,
-                lawId: "scalar.grid-and-construction"
-            )
+        ClaimCase(
+            claim: Subjects.FixedGridAndConstruction,
+            id: "scalar.grid-and-construction"
         ),
         // The OUTWARD double seam. It was waived as presentation-only for the whole of this suite's life; the waiver's
         // premise does not survive its own siblings, because unit-fraction16/32.double-projection-exact pin the same
         // conversion exactly and unsigned-scalar.double-seam pins the unsigned twin of THIS one — a Q48.16 narrowing with
         // genuine precision loss — against a hand ladder. Inexact is not unspecified: the map is a total function of the
         // raw and every value it takes is decidable in integers.
-        Case(
+        SweptCase(
+            claim: Subjects.FixedDoubleProjectionExact,
+            domain: Scalar,
             id: "scalar.double-projection-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedDoubleProjectionExact,
-                domain: Scalar,
-                lawId: "scalar.double-projection-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedAdditiveOpsExact,
+            domain: Scalar,
             id: "scalar.additive-ops-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedAdditiveOpsExact,
-                domain: Scalar,
-                lawId: "scalar.additive-ops-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedCheckedOpsRefuse,
+            domain: Scalar,
             id: "scalar.checked-ops-refuse",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedCheckedOpsRefuse,
-                domain: Scalar,
-                lawId: "scalar.checked-ops-refuse",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
         Case(
             id: "scalar.divide-vs-oracle",
@@ -555,211 +441,127 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedModulusExact,
+            domain: Scalar,
             id: "scalar.modulus-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedModulusExact,
-                domain: Scalar,
-                lawId: "scalar.modulus-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedOrderExact,
+            domain: Scalar,
             id: "scalar.order-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedOrderExact,
-                domain: Scalar,
-                lawId: "scalar.order-vs-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedMagnitudeSelectionExact,
+            domain: Scalar,
             id: "scalar.magnitude-selection-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedMagnitudeSelectionExact,
-                domain: Scalar,
-                lawId: "scalar.magnitude-selection-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedIntegralPartsExact,
+            domain: Scalar,
             id: "scalar.integral-parts-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedIntegralPartsExact,
-                domain: Scalar,
-                lawId: "scalar.integral-parts-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedPredicatesClassify,
+            domain: Scalar,
             id: "scalar.predicates-classify",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedPredicatesClassify,
-                domain: Scalar,
-                lawId: "scalar.predicates-classify",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedLerpEndpointsAndOracle,
+            domain: Scalar,
             id: "scalar.lerp-endpoints-and-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedLerpEndpointsAndOracle,
-                domain: Scalar,
-                lawId: "scalar.lerp-endpoints-and-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedTextRoundTrip,
+            domain: ScalarText,
             id: "scalar.text-round-trip",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedTextRoundTrip,
-                domain: ScalarText,
-                lawId: "scalar.text-round-trip",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "scalar.text-ladder-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.FixedTextLadderAndRefusals,
-                lawId: "scalar.text-ladder-and-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.FixedTextLadderAndRefusals,
+            id: "scalar.text-ladder-and-refusals"
         ),
-        Case(
-            id: "scalar.styled-exponent-compensation",
-            run: () => Laws.Claim(
-                claim: Subjects.StyledExponentCompensation,
-                lawId: "scalar.styled-exponent-compensation"
-            )
+        ClaimCase(
+            claim: Subjects.StyledExponentCompensation,
+            id: "scalar.styled-exponent-compensation"
         ),
-        Case(
-            id: "scalar.generic-conversion-modes",
-            run: () => Laws.Claim(
-                claim: Subjects.GenericConversionModes,
-                lawId: "scalar.generic-conversion-modes"
-            )
+        ClaimCase(
+            claim: Subjects.GenericConversionModes,
+            id: "scalar.generic-conversion-modes"
         ),
-        Case(
-            id: "scalar.culture-token-ambiguity-refused",
-            run: () => Laws.Claim(
-                claim: Subjects.CultureTokenAmbiguityRefused,
-                lawId: "scalar.culture-token-ambiguity-refused"
-            )
+        ClaimCase(
+            claim: Subjects.CultureTokenAmbiguityRefused,
+            id: "scalar.culture-token-ambiguity-refused"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedSqrtExact,
+            domain: ScalarTranscendental,
             id: "scalar.sqrt-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedSqrtExact,
-                domain: ScalarTranscendental,
-                lawId: "scalar.sqrt-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedLog2WithinEnvelope,
+            domain: ScalarTranscendental,
             id: "scalar.log2-vs-series",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedLog2WithinEnvelope,
-                domain: ScalarTranscendental,
-                lawId: "scalar.log2-vs-series",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedExp2WithinEnvelope,
+            domain: ScalarTranscendental,
             id: "scalar.exp2-vs-series",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedExp2WithinEnvelope,
-                domain: ScalarTranscendental,
-                lawId: "scalar.exp2-vs-series",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "scalar.trigonometry-twiddles",
-            run: () => Laws.Claim(
-                claim: Subjects.TrigonometryTwiddles,
-                lawId: "scalar.trigonometry-twiddles"
-            )
+        ClaimCase(
+            claim: Subjects.TrigonometryTwiddles,
+            id: "scalar.trigonometry-twiddles"
         ),
-        Case(
-            id: "scalar.trigonometry-constants",
-            run: () => Laws.Claim(
-                claim: Subjects.TrigonometryConstants,
-                lawId: "scalar.trigonometry-constants"
-            )
+        ClaimCase(
+            claim: Subjects.TrigonometryConstants,
+            id: "scalar.trigonometry-constants"
         ),
-        Case(
-            id: "scalar.trigonometry-seams",
-            run: () => Laws.Claim(
-                claim: Subjects.TrigonometrySeams,
-                lawId: "scalar.trigonometry-seams"
-            )
+        ClaimCase(
+            claim: Subjects.TrigonometrySeams,
+            id: "scalar.trigonometry-seams"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.TrigonometryTurns,
+            domain: ScalarTranscendental,
             id: "scalar.trigonometry-turns",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.TrigonometryTurns,
-                domain: ScalarTranscendental,
-                lawId: "scalar.trigonometry-turns",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.TrigonometryTurns,
+            domain: ScalarTranscendental,
             id: "scalar.trigonometry-turns-deep",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.TrigonometryTurns,
-                domain: ScalarTranscendental,
-                lawId: "scalar.trigonometry-turns-deep",
-                tier: Tier.Deep,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedSinCosWithinEnvelope,
+            domain: ScalarTranscendental,
             id: "scalar.sincos-vs-series",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedSinCosWithinEnvelope,
-                domain: ScalarTranscendental,
-                lawId: "scalar.sincos-vs-series",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedAtan2WithinEnvelope,
+            domain: ScalarTranscendental,
             id: "scalar.atan2-vs-series",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedAtan2WithinEnvelope,
-                domain: ScalarTranscendental,
-                lawId: "scalar.atan2-vs-series",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "scalar.pow-exact-lattice",
-            run: () => Laws.Claim(
-                claim: Subjects.FixedPowExactLattice,
-                lawId: "scalar.pow-exact-lattice"
-            )
+        ClaimCase(
+            claim: Subjects.FixedPowExactLattice,
+            id: "scalar.pow-exact-lattice"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.FixedPowWithinEnvelope,
+            domain: ScalarTranscendental,
             id: "scalar.pow-envelope",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.FixedPowWithinEnvelope,
-                domain: ScalarTranscendental,
-                lawId: "scalar.pow-envelope",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
 
     ];
@@ -796,32 +598,21 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
-            id: "q1648.grid-and-construction",
-            run: () => Laws.Claim(
-                claim: Subjects.Q1648GridAndConstruction,
-                lawId: "q1648.grid-and-construction"
-            )
+        ClaimCase(
+            claim: Subjects.Q1648GridAndConstruction,
+            id: "q1648.grid-and-construction"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648AdditiveOpsExact,
+            domain: Q1648Scalar,
             id: "q1648.additive-ops-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648AdditiveOpsExact,
-                domain: Q1648Scalar,
-                lawId: "q1648.additive-ops-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648CheckedOpsRefuse,
+            domain: Q1648Scalar,
             id: "q1648.checked-ops-refuse",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648CheckedOpsRefuse,
-                domain: Q1648Scalar,
-                lawId: "q1648.checked-ops-refuse",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
         Case(
             id: "q1648.divide-vs-oracle",
@@ -833,117 +624,71 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648ModulusExact,
+            domain: Q1648Scalar,
             id: "q1648.modulus-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648ModulusExact,
-                domain: Q1648Scalar,
-                lawId: "q1648.modulus-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648OrderExact,
+            domain: Q1648Scalar,
             id: "q1648.order-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648OrderExact,
-                domain: Q1648Scalar,
-                lawId: "q1648.order-vs-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648MagnitudeSelectionExact,
+            domain: Q1648Scalar,
             id: "q1648.magnitude-selection-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648MagnitudeSelectionExact,
-                domain: Q1648Scalar,
-                lawId: "q1648.magnitude-selection-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648IntegralPartsExact,
+            domain: Q1648Scalar,
             id: "q1648.integral-parts-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648IntegralPartsExact,
-                domain: Q1648Scalar,
-                lawId: "q1648.integral-parts-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648PredicatesClassify,
+            domain: Q1648Scalar,
             id: "q1648.predicates-classify",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648PredicatesClassify,
-                domain: Q1648Scalar,
-                lawId: "q1648.predicates-classify",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648LerpEndpointsAndOracle,
+            domain: Q1648Scalar,
             id: "q1648.lerp-endpoints-and-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648LerpEndpointsAndOracle,
-                domain: Q1648Scalar,
-                lawId: "q1648.lerp-endpoints-and-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q1648TextRoundTrip,
+            domain: Q1648Scalar,
             id: "q1648.text-round-trip",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q1648TextRoundTrip,
-                domain: Q1648Scalar,
-                lawId: "q1648.text-round-trip",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "q1648.text-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.Q1648TextRefusals,
-                lawId: "q1648.text-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.Q1648TextRefusals,
+            id: "q1648.text-refusals"
         ),
-        Case(
-            id: "q1648.styled-parse-is-genuine",
-            run: () => Laws.Claim(
-                claim: Subjects.Q1648StyledParseIsGenuine,
-                lawId: "q1648.styled-parse-is-genuine"
-            )
+        ClaimCase(
+            claim: Subjects.Q1648StyledParseIsGenuine,
+            id: "q1648.styled-parse-is-genuine"
         ),
-        Case(
-            id: "q1648.text-parse-ties",
-            run: () => Laws.Claim(
-                claim: Subjects.Q1648TextParseTies,
-                lawId: "q1648.text-parse-ties"
-            )
+        ClaimCase(
+            claim: Subjects.Q1648TextParseTies,
+            id: "q1648.text-parse-ties"
         ),
-        Case(
-            id: "q1648.decimal-conversion-modes",
-            run: () => Laws.Claim(
-                claim: Subjects.Q1648DecimalConversionModes,
-                lawId: "q1648.decimal-conversion-modes"
-            )
+        ClaimCase(
+            claim: Subjects.Q1648DecimalConversionModes,
+            id: "q1648.decimal-conversion-modes"
         ),
-        Case(
-            id: "core.scale-decimal-wide-reaches-canonical-core",
-            run: () => Laws.Claim(
-                claim: Subjects.ScaleDecimalWideReachesCanonicalCore,
-                lawId: "core.scale-decimal-wide-reaches-canonical-core"
-            )
+        ClaimCase(
+            claim: Subjects.ScaleDecimalWideReachesCanonicalCore,
+            id: "core.scale-decimal-wide-reaches-canonical-core"
         ),
-        Case(
-            id: "q1648.peer-conversion-vs-fixedq4816",
-            run: () => Laws.Claim(
-                claim: Subjects.Q1648PeerConversionExact,
-                lawId: "q1648.peer-conversion-vs-fixedq4816"
-            )
+        ClaimCase(
+            claim: Subjects.Q1648PeerConversionExact,
+            id: "q1648.peer-conversion-vs-fixedq4816"
         ),
 
     ];
@@ -981,32 +726,21 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
-            id: "q3232.grid-and-construction",
-            run: () => Laws.Claim(
-                claim: Subjects.Q3232GridAndConstruction,
-                lawId: "q3232.grid-and-construction"
-            )
+        ClaimCase(
+            claim: Subjects.Q3232GridAndConstruction,
+            id: "q3232.grid-and-construction"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232AdditiveOpsExact,
+            domain: Q3232Scalar,
             id: "q3232.additive-ops-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232AdditiveOpsExact,
-                domain: Q3232Scalar,
-                lawId: "q3232.additive-ops-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232CheckedOpsRefuse,
+            domain: Q3232Scalar,
             id: "q3232.checked-ops-refuse",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232CheckedOpsRefuse,
-                domain: Q3232Scalar,
-                lawId: "q3232.checked-ops-refuse",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
         Case(
             id: "q3232.divide-vs-oracle",
@@ -1018,110 +752,67 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232ModulusExact,
+            domain: Q3232Scalar,
             id: "q3232.modulus-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232ModulusExact,
-                domain: Q3232Scalar,
-                lawId: "q3232.modulus-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232OrderExact,
+            domain: Q3232Scalar,
             id: "q3232.order-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232OrderExact,
-                domain: Q3232Scalar,
-                lawId: "q3232.order-vs-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232MagnitudeSelectionExact,
+            domain: Q3232Scalar,
             id: "q3232.magnitude-selection-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232MagnitudeSelectionExact,
-                domain: Q3232Scalar,
-                lawId: "q3232.magnitude-selection-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232IntegralPartsExact,
+            domain: Q3232Scalar,
             id: "q3232.integral-parts-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232IntegralPartsExact,
-                domain: Q3232Scalar,
-                lawId: "q3232.integral-parts-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232PredicatesClassify,
+            domain: Q3232Scalar,
             id: "q3232.predicates-classify",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232PredicatesClassify,
-                domain: Q3232Scalar,
-                lawId: "q3232.predicates-classify",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232LerpEndpointsAndOracle,
+            domain: Q3232Scalar,
             id: "q3232.lerp-endpoints-and-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232LerpEndpointsAndOracle,
-                domain: Q3232Scalar,
-                lawId: "q3232.lerp-endpoints-and-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.Q3232TextRoundTrip,
+            domain: Q3232Scalar,
             id: "q3232.text-round-trip",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.Q3232TextRoundTrip,
-                domain: Q3232Scalar,
-                lawId: "q3232.text-round-trip",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "q3232.text-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.Q3232TextRefusals,
-                lawId: "q3232.text-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.Q3232TextRefusals,
+            id: "q3232.text-refusals"
         ),
-        Case(
-            id: "q3232.styled-parse-is-genuine",
-            run: () => Laws.Claim(
-                claim: Subjects.Q3232StyledParseIsGenuine,
-                lawId: "q3232.styled-parse-is-genuine"
-            )
+        ClaimCase(
+            claim: Subjects.Q3232StyledParseIsGenuine,
+            id: "q3232.styled-parse-is-genuine"
         ),
-        Case(
-            id: "q3232.text-parse-ties",
-            run: () => Laws.Claim(
-                claim: Subjects.Q3232TextParseTies,
-                lawId: "q3232.text-parse-ties"
-            )
+        ClaimCase(
+            claim: Subjects.Q3232TextParseTies,
+            id: "q3232.text-parse-ties"
         ),
-        Case(
-            id: "q3232.decimal-conversion-modes",
-            run: () => Laws.Claim(
-                claim: Subjects.Q3232DecimalConversionModes,
-                lawId: "q3232.decimal-conversion-modes"
-            )
+        ClaimCase(
+            claim: Subjects.Q3232DecimalConversionModes,
+            id: "q3232.decimal-conversion-modes"
         ),
-        Case(
-            id: "q3232.peer-conversion-vs-fixedq4816",
-            run: () => Laws.Claim(
-                claim: Subjects.Q3232PeerConversionExact,
-                lawId: "q3232.peer-conversion-vs-fixedq4816"
-            )
+        ClaimCase(
+            claim: Subjects.Q3232PeerConversionExact,
+            id: "q3232.peer-conversion-vs-fixedq4816"
         ),
 
     ];
@@ -1175,60 +866,37 @@ internal static partial class LawRegistry {
                 );
             }
         ),
-        Case(
+        SweptCase(
+            claim: FixedContributionFoldClaims.AnalogPoolBound,
+            domain: ContributionFoldAnalog,
             id: "contribution-fold.analog-pool-bound",
-            run: () => Laws.SweptClaim(
-                claim: FixedContributionFoldClaims.AnalogPoolBound,
-                domain: ContributionFoldAnalog,
-                lawId: "contribution-fold.analog-pool-bound",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
-            id: "contribution-fold.binary-flip-bound-sharp",
-            run: () => Laws.Claim(
-                claim: FixedContributionFoldClaims.BinaryFlipBoundAndSharpness,
-                lawId: "contribution-fold.binary-flip-bound-sharp"
-            )
+        ClaimCase(
+            claim: FixedContributionFoldClaims.BinaryFlipBoundAndSharpness,
+            id: "contribution-fold.binary-flip-bound-sharp"
         ),
-        Case(
-            id: "contribution-fold.binary-composition-induction",
-            run: () => Laws.Claim(
-                claim: FixedContributionFoldClaims.BinaryCompositionByInduction,
-                lawId: "contribution-fold.binary-composition-induction"
-            )
+        ClaimCase(
+            claim: FixedContributionFoldClaims.BinaryCompositionByInduction,
+            id: "contribution-fold.binary-composition-induction"
         ),
-        Case(
+        SweptCase(
+            claim: FixedContributionFoldClaims.TerminalQuantizationIdempotence,
+            domain: ContributionFoldQuantization,
             id: "contribution-fold.terminal-quantization-idempotent",
-            run: () => Laws.SweptClaim(
-                claim: FixedContributionFoldClaims.TerminalQuantizationIdempotence,
-                domain: ContributionFoldQuantization,
-                lawId: "contribution-fold.terminal-quantization-idempotent",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
-            id: "contribution-fold.overflow-boundary-exact",
-            run: () => Laws.Claim(
-                claim: FixedContributionFoldClaims.OverflowBoundaryExact,
-                lawId: "contribution-fold.overflow-boundary-exact"
-            )
+        ClaimCase(
+            claim: FixedContributionFoldClaims.OverflowBoundaryExact,
+            id: "contribution-fold.overflow-boundary-exact"
         ),
-        Case(
-            id: "contribution-fold.configuration-refusals",
-            run: () => Laws.Claim(
-                claim: FixedContributionFoldClaims.ConfigurationRefusals,
-                lawId: "contribution-fold.configuration-refusals"
-            )
+        ClaimCase(
+            claim: FixedContributionFoldClaims.ConfigurationRefusals,
+            id: "contribution-fold.configuration-refusals"
         ),
-        Case(
-            id: "contribution-fold.discriminating-examples",
-            run: () => Laws.Claim(
-                claim: FixedContributionFoldClaims.DiscriminatingExamples,
-                lawId: "contribution-fold.discriminating-examples"
-            )
+        ClaimCase(
+            claim: FixedContributionFoldClaims.DiscriminatingExamples,
+            id: "contribution-fold.discriminating-examples"
         ),
         Case(
             id: "contribution-fold.site-composition-distribution-known-false",
@@ -1270,106 +938,65 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedUncheckedKernelsExact,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.unchecked-kernels-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedUncheckedKernelsExact,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.unchecked-kernels-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedWrappingAlgebraExact,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.wrapping-algebra-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedWrappingAlgebraExact,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.wrapping-algebra-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedCheckedOperatorsRefuse,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.checked-operators-refuse",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedCheckedOperatorsRefuse,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.checked-operators-refuse",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedSaturatingAndSelectionExact,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.saturating-and-selection-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedSaturatingAndSelectionExact,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.saturating-and-selection-exact",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedIntegerDecompositionExact,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.integer-decomposition-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedIntegerDecompositionExact,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.integer-decomposition-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedOrderAndComparisonExact,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.order-and-comparison-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedOrderAndComparisonExact,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.order-and-comparison-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedNumberPredicatesExact,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.number-predicates-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedNumberPredicatesExact,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.number-predicates-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "unsigned-scalar.construction-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.UnsignedConstructionAndRefusals,
-                lawId: "unsigned-scalar.construction-and-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.UnsignedConstructionAndRefusals,
+            id: "unsigned-scalar.construction-and-refusals"
         ),
-        Case(
-            id: "unsigned-scalar.double-seam",
-            run: () => Laws.Claim(
-                claim: Subjects.UnsignedDoubleSeam,
-                lawId: "unsigned-scalar.double-seam"
-            )
+        ClaimCase(
+            claim: Subjects.UnsignedDoubleSeam,
+            id: "unsigned-scalar.double-seam"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.UnsignedTextRoundTrip,
+            domain: UnsignedScalar,
             id: "unsigned-scalar.text-round-trip",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnsignedTextRoundTrip,
-                domain: UnsignedScalar,
-                lawId: "unsigned-scalar.text-round-trip",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "unsigned-scalar.text-ladder-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.UnsignedTextLadderAndRefusals,
-                lawId: "unsigned-scalar.text-ladder-and-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.UnsignedTextLadderAndRefusals,
+            id: "unsigned-scalar.text-ladder-and-refusals"
         ),
 
     ];
@@ -1387,57 +1014,38 @@ internal static partial class LawRegistry {
         ),
         // The point of spending the thirty-third bit: both absorbing elements act EXACTLY, at every raw region and at
         // both endpoints, so nothing about the interval's closure is a rounding accident.
-        Case(
+        SweptCase(
+            claim: Subjects.ClosedUnitUnitAndZeroExact,
+            domain: ClosedUnit,
             id: "closed-unit.unit-and-zero-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ClosedUnitUnitAndZeroExact,
-                domain: ClosedUnit,
-                lawId: "closed-unit.unit-and-zero-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.ClosedUnitBoundedOpsExact,
+            domain: ClosedUnit,
             id: "closed-unit.bounded-ops-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ClosedUnitBoundedOpsExact,
-                domain: ClosedUnit,
-                lawId: "closed-unit.bounded-ops-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
         // The kinship contract: the sampler's half-open grid embeds with no representation event, and the Q48.16 seam
         // states its one rounding out loud.
-        Case(
+        SweptCase(
+            claim: Subjects.ClosedUnitKinshipExact,
+            domain: ClosedUnit,
             id: "closed-unit.kinship-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ClosedUnitKinshipExact,
-                domain: ClosedUnit,
-                lawId: "closed-unit.kinship-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "closed-unit.construction-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.ClosedUnitConstructionAndRefusals,
-                lawId: "closed-unit.construction-and-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.ClosedUnitConstructionAndRefusals,
+            id: "closed-unit.construction-and-refusals"
         ),
         // The three-factor product exists because a fused sum's term is a charge times two coefficients and the contract
         // is ONE rounding per returned coefficient, not one per pair. Its statement is the same one the pairwise product
         // makes, at the tripled scale.
-        Case(
+        SweptCase(
+            claim: Subjects.ClosedUnitTripleProductExact,
+            domain: ClosedUnit,
             id: "closed-unit.triple-product-one-rounding",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ClosedUnitTripleProductExact,
-                domain: ClosedUnit,
-                lawId: "closed-unit.triple-product-one-rounding",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
 
     ];
@@ -1448,8 +1056,8 @@ internal static partial class LawRegistry {
             run: () => Laws.ScalarBinaryMatchesOracle(
                 domain: UnitFraction16Domain,
                 lawId: "unit-fraction16.mul-vs-oracle",
-                oracle: Subjects.UnitFraction16MultiplyOracle,
-                subject: Subjects.UnitFraction16Multiply,
+                oracle: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.MultiplyOracle,
+                subject: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.Multiply,
                 tier: Tier.Default
             )
         ),
@@ -1458,72 +1066,50 @@ internal static partial class LawRegistry {
             run: () => Laws.ScalarBinaryMatchesOracle(
                 domain: UnitFraction16Domain,
                 lawId: "unit-fraction16.div-vs-oracle",
-                oracle: Subjects.UnitFraction16DivideOracle,
-                subject: Subjects.UnitFraction16Divide,
+                oracle: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.DivideOracle,
+                subject: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.Divide,
                 tier: Tier.Default
             )
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.ExactOpsAndOrder,
+            domain: UnitFraction16Domain,
             id: "unit-fraction16.exact-ops-and-order",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction16ExactOpsAndOrder,
-                domain: UnitFraction16Domain,
-                lawId: "unit-fraction16.exact-ops-and-order",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.ShiftsMatchOracle,
+            domain: UnitFraction16Domain,
             id: "unit-fraction16.shifts-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction16ShiftsMatchOracle,
-                domain: UnitFraction16Domain,
-                lawId: "unit-fraction16.shifts-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "unit-fraction16.construction-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.UnitFraction16ConstructionAndRefusals,
-                lawId: "unit-fraction16.construction-and-refusals"
-            )
+        ClaimCase(
+            claim: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.ConstructionAndRefusals,
+            id: "unit-fraction16.construction-and-refusals"
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.TextMatchesOracle,
+            domain: UnitFraction16Domain,
             id: "unit-fraction16.text-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction16TextMatchesOracle,
-                domain: UnitFraction16Domain,
-                lawId: "unit-fraction16.text-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "unit-fraction16.parse-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.UnitFraction16ParseLadderHolds,
-                lawId: "unit-fraction16.parse-ladder"
-            )
+        ClaimCase(
+            claim: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.ParseLadderHolds,
+            id: "unit-fraction16.parse-ladder"
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction16Width, UnitFraction16>.DoubleProjectionExact,
+            domain: UnitFraction16Domain,
             id: "unit-fraction16.double-projection-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction16DoubleProjectionExact,
-                domain: UnitFraction16Domain,
-                lawId: "unit-fraction16.double-projection-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
         Case(
             id: "unit-fraction32.mul-vs-oracle",
             run: () => Laws.ScalarBinaryMatchesOracle(
                 domain: UnitFraction32Domain,
                 lawId: "unit-fraction32.mul-vs-oracle",
-                oracle: Subjects.UnitFraction32MultiplyOracle,
-                subject: Subjects.UnitFraction32Multiply,
+                oracle: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.MultiplyOracle,
+                subject: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.Multiply,
                 tier: Tier.Default
             )
         ),
@@ -1532,76 +1118,50 @@ internal static partial class LawRegistry {
             run: () => Laws.ScalarBinaryMatchesOracle(
                 domain: UnitFraction32Domain,
                 lawId: "unit-fraction32.div-vs-oracle",
-                oracle: Subjects.UnitFraction32DivideOracle,
-                subject: Subjects.UnitFraction32Divide,
+                oracle: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.DivideOracle,
+                subject: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.Divide,
                 tier: Tier.Default
             )
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.ExactOpsAndOrder,
+            domain: UnitFraction32Domain,
             id: "unit-fraction32.exact-ops-and-order",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction32ExactOpsAndOrder,
-                domain: UnitFraction32Domain,
-                lawId: "unit-fraction32.exact-ops-and-order",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.ShiftsMatchOracle,
+            domain: UnitFraction32Domain,
             id: "unit-fraction32.shifts-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction32ShiftsMatchOracle,
-                domain: UnitFraction32Domain,
-                lawId: "unit-fraction32.shifts-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "unit-fraction32.construction-and-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.UnitFraction32ConstructionAndRefusals,
-                lawId: "unit-fraction32.construction-and-refusals"
-            )
+        ClaimCase(
+            claim: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.ConstructionAndRefusals,
+            id: "unit-fraction32.construction-and-refusals"
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.TextMatchesOracle,
+            domain: UnitFraction32Domain,
             id: "unit-fraction32.text-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction32TextMatchesOracle,
-                domain: UnitFraction32Domain,
-                lawId: "unit-fraction32.text-vs-oracle",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
-        Case(
-            id: "unit-fraction32.parse-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.UnitFraction32ParseLadderHolds,
-                lawId: "unit-fraction32.parse-ladder"
-            )
+        ClaimCase(
+            claim: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.ParseLadderHolds,
+            id: "unit-fraction32.parse-ladder"
         ),
-        Case(
+        SweptCase(
+            claim: UnitFractionClaims<UnitFraction32Width, UnitFraction32>.DoubleProjectionExact,
+            domain: UnitFraction32Domain,
             id: "unit-fraction32.double-projection-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction32DoubleProjectionExact,
-                domain: UnitFraction32Domain,
-                lawId: "unit-fraction32.double-projection-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
         // The seam the closed interval's remarks describe in prose, stated from the FRACTION side. closed-unit.kinship-exact
         // already pins the embedding and its refusal at one from the interval side; this case does not restate them.
-        Case(
+        SweptCase(
+            claim: Subjects.UnitFraction32KinshipExact,
+            domain: UnitFraction32Domain,
             id: "unit-fraction32.kinship-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.UnitFraction32KinshipExact,
-                domain: UnitFraction32Domain,
-                lawId: "unit-fraction32.kinship-exact",
-                tier: Tier.Default,
-                width: 1
-            )
+            width: 1
         ),
 
     ];
@@ -1846,25 +1406,17 @@ internal static partial class LawRegistry {
     ];
     private static LawCase[] ComplexRestCases() => [
         // ---- FixedComplex: the rest of the planar rotation type ----
-        Case(
+        SweptCase(
+            claim: Subjects.ComplexAdditiveGroupExact,
+            domain: Complex,
             id: "complex.additive-group-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ComplexAdditiveGroupExact,
-                domain: Complex,
-                lawId: "complex.additive-group-exact",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.ComplexPresentationSeam,
+            domain: Complex,
             id: "complex.presentation-seam",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ComplexPresentationSeam,
-                domain: Complex,
-                lawId: "complex.presentation-seam",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
         Case(
             id: "complex.div-vs-oracle",
@@ -1876,49 +1428,35 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
-            id: "complex.div-refusal-and-unit",
-            run: () => Laws.Claim(
-                claim: Subjects.ComplexDivRefusalAndUnit,
-                lawId: "complex.div-refusal-and-unit"
-            )
+        ClaimCase(
+            claim: Subjects.ComplexDivRefusalAndUnit,
+            id: "complex.div-refusal-and-unit"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.ComplexMagnitudeExact,
+            domain: ComplexDirection,
             id: "complex.magnitude-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ComplexMagnitudeExact,
-                domain: ComplexDirection,
-                lawId: "complex.magnitude-vs-oracle",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.ComplexNormalizeUnitDirection,
+            domain: ComplexDirection,
             id: "complex.normalize-unit-direction",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ComplexNormalizeUnitDirection,
-                domain: ComplexDirection,
-                lawId: "complex.normalize-unit-direction",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.ComplexFromToDirection,
+            domain: ComplexDirection,
             id: "complex.from-to-direction",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.ComplexFromToDirection,
-                domain: ComplexDirection,
-                lawId: "complex.from-to-direction",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
-            id: "complex.angle-seam",
-            run: () => Laws.Claim(
-                claim: Subjects.ComplexAngleSeam,
-                lawId: "complex.angle-seam"
-            )
+        ClaimCase(
+            claim: Subjects.ComplexAngleSeam,
+            id: "complex.angle-seam"
+        ),
+        ClaimCase(
+            claim: Subjects.ComplexMultiplyRoutesAllocateNothing,
+            id: "complex.multiply-routes-allocate-nothing"
         ),
         Case(
             id: "complex.rotate-vs-oracle",
@@ -1937,15 +1475,11 @@ internal static partial class LawRegistry {
     ];
     private static LawCase[] SplitRestCases() => [
         // ---- FixedSplit: the rest of the hyperbolic sibling ----
-        Case(
+        SweptCase(
+            claim: Subjects.SplitAdditiveGroupExact,
+            domain: Split,
             id: "split.additive-group-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.SplitAdditiveGroupExact,
-                domain: Split,
-                lawId: "split.additive-group-exact",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
         Case(
             id: "split.div-vs-oracle",
@@ -1957,15 +1491,11 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.SplitUnitAndDivision,
+            domain: Split,
             id: "split.unit-and-division",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.SplitUnitAndDivision,
-                domain: Split,
-                lawId: "split.unit-and-division",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
         Case(
             id: "split.transform-vs-oracle",
@@ -1980,36 +1510,25 @@ internal static partial class LawRegistry {
                 )
             )
         ),
-        Case(
-            id: "split.rapidity-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.SplitRapidityLadderClaim,
-                lawId: "split.rapidity-ladder"
-            )
+        ClaimCase(
+            claim: Subjects.SplitRapidityLadderClaim,
+            id: "split.rapidity-ladder"
         ),
 
     ];
     private static LawCase[] DualRestCases() => [
         // ---- FixedDual: the rest of the dual construction, INCLUDING the two kernels the covered member id hides ----
-        Case(
+        SweptCase(
+            claim: Subjects.DualAdditiveGroupExact,
+            domain: Dual,
             id: "dual.additive-group-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.DualAdditiveGroupExact,
-                domain: Dual,
-                lawId: "dual.additive-group-exact",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.DualSeedsAndIdentities,
+            domain: Dual,
             id: "dual.seeds-and-identities",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.DualSeedsAndIdentities,
-                domain: Dual,
-                lawId: "dual.seeds-and-identities",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
         Case(
             id: "dual.divide-vs-oracle",
@@ -2021,22 +1540,15 @@ internal static partial class LawRegistry {
                 tier: Tier.Default
             )
         ),
-        Case(
-            id: "dual.divide-refusals",
-            run: () => Laws.Claim(
-                claim: Subjects.DualDivideRefusals,
-                lawId: "dual.divide-refusals"
-            )
+        ClaimCase(
+            claim: Subjects.DualDivideRefusals,
+            id: "dual.divide-refusals"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.DualTranscendentalLifts,
+            domain: Dual,
             id: "dual.transcendental-lifts",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.DualTranscendentalLifts,
-                domain: Dual,
-                lawId: "dual.transcendental-lifts",
-                tier: Tier.Default,
-                width: 2
-            )
+            width: 2
         ),
         Case(
             id: "dual.quaternion-mul-vs-oracle",
@@ -2075,109 +1587,68 @@ internal static partial class LawRegistry {
                 width: 4
             )
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionDotExact,
+            domain: Quaternion,
             id: "quaternion.dot-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionDotExact,
-                domain: Quaternion,
-                lawId: "quaternion.dot-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionScaleExact,
+            domain: Quaternion,
             id: "quaternion.scale-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionScaleExact,
-                domain: Quaternion,
-                lawId: "quaternion.scale-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionAdditiveGroupExact,
+            domain: Quaternion,
             id: "quaternion.additive-group-exact",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionAdditiveGroupExact,
-                domain: Quaternion,
-                lawId: "quaternion.additive-group-exact",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionConjugateAntiautomorphism,
+            domain: QuaternionSublattice,
             id: "quaternion.conjugate-antiautomorphism",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionConjugateAntiautomorphism,
-                domain: QuaternionSublattice,
-                lawId: "quaternion.conjugate-antiautomorphism",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionNormExact,
+            domain: QuaternionDirection,
             id: "quaternion.norm-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionNormExact,
-                domain: QuaternionDirection,
-                lawId: "quaternion.norm-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionInverseExact,
+            domain: QuaternionDirection,
             id: "quaternion.inverse-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionInverseExact,
-                domain: QuaternionDirection,
-                lawId: "quaternion.inverse-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionNormalizeUnitDirection,
+            domain: QuaternionDirection,
             id: "quaternion.normalize-unit-direction",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionNormalizeUnitDirection,
-                domain: QuaternionDirection,
-                lawId: "quaternion.normalize-unit-direction",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionRotateExact,
+            domain: QuaternionRotate,
             id: "quaternion.rotate-vs-oracle",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionRotateExact,
-                domain: QuaternionRotate,
-                lawId: "quaternion.rotate-vs-oracle",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
-            id: "quaternion.axis-angle-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.QuaternionAxisAngleLadderClaim,
-                lawId: "quaternion.axis-angle-ladder"
-            )
+        ClaimCase(
+            claim: Subjects.QuaternionAxisAngleLadderClaim,
+            id: "quaternion.axis-angle-ladder"
         ),
         // The inbound seam. Judged against the SAME ladder as vector.adoption-ladder, deliberately: the two doors
         // must agree, and sharing the table is what would catch them drifting apart. Its second leg states what a
         // three-lane ladder cannot — that the seam does not renormalize.
-        Case(
-            id: "quaternion.adoption-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.QuaternionAdoptionMatchesLadder,
-                lawId: "quaternion.adoption-ladder"
-            )
+        ClaimCase(
+            claim: Subjects.QuaternionAdoptionMatchesLadder,
+            id: "quaternion.adoption-ladder"
         ),
-        Case(
-            id: "quaternion.exp-log-seam",
-            run: () => Laws.Claim(
-                claim: Subjects.QuaternionExpLogSeam,
-                lawId: "quaternion.exp-log-seam"
-            )
+        ClaimCase(
+            claim: Subjects.QuaternionExpLogSeam,
+            id: "quaternion.exp-log-seam"
         ),
 
         // SinCosRaw was gated by nothing until these two cases: the case above says so in its own leg text. It is
@@ -2186,48 +1657,32 @@ internal static partial class LawRegistry {
         // angle-addition identity, with the envelope derived from |c - 2^64/2pi| <= 1/2 rather than fitted to what the
         // subject happens to do. Proved by masking the top angle bit — the exact defect the member exists to avoid —
         // which reddens these two and NOTHING else in the tier.
-        Case(
-            id: "quaternion.sincos-raw-full-unsigned-width",
-            run: () => Laws.Claim(
-                claim: TransformKernelClaims.SinCosRawFullUnsignedWidthSurface,
-                lawId: "quaternion.sincos-raw-full-unsigned-width"
-            )
+        ClaimCase(
+            claim: TransformKernelClaims.SinCosRawFullUnsignedWidthSurface,
+            id: "quaternion.sincos-raw-full-unsigned-width"
         ),
-        Case(
-            id: "quaternion.sincos-raw-width-sweep",
-            run: () => Laws.Claim(
-                claim: TransformKernelClaims.SinCosRawWidthSweepSurface,
-                lawId: "quaternion.sincos-raw-width-sweep"
-            )
+        ClaimCase(
+            claim: TransformKernelClaims.SinCosRawWidthSweepSurface,
+            id: "quaternion.sincos-raw-width-sweep"
         ),
-        Case(
+        SweptCase(
+            claim: Subjects.QuaternionFromToShortestArc,
+            domain: QuaternionDirection,
             id: "quaternion.from-to-shortest-arc",
-            run: () => Laws.SweptClaim(
-                claim: Subjects.QuaternionFromToShortestArc,
-                domain: QuaternionDirection,
-                lawId: "quaternion.from-to-shortest-arc",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
-        Case(
-            id: "quaternion.slerp-endpoints-and-arc",
-            run: () => Laws.Claim(
-                claim: Subjects.QuaternionSlerpEndpointsAndArc,
-                lawId: "quaternion.slerp-endpoints-and-arc"
-            )
+        ClaimCase(
+            claim: Subjects.QuaternionSlerpEndpointsAndArc,
+            id: "quaternion.slerp-endpoints-and-arc"
         ),
 
         // The renderer's seam, and the one member of this type an algebra law cannot reach: the argument ORDER into
         // System.Numerics.Quaternion. Swapping X and W in ToQuaternion leaves every other case in this suite green,
         // which is exactly why the waiver that stood here — 'the algebra laws pin the exact raw contract instead' — was
         // false about the only thing this member decides on its own.
-        Case(
-            id: "quaternion.presentation-ladder",
-            run: () => Laws.Claim(
-                claim: Subjects.QuaternionPresentationMatchesLadder,
-                lawId: "quaternion.presentation-ladder"
-            )
+        ClaimCase(
+            claim: Subjects.QuaternionPresentationMatchesLadder,
+            id: "quaternion.presentation-ladder"
         ),
 
     ];

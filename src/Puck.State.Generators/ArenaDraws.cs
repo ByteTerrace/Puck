@@ -80,9 +80,7 @@ public static class ArenaDraws {
     /// <param name="arena">The arena holding the site.</param>
     /// <param name="rowOrdinal">The site row's catalog ordinal.</param>
     /// <param name="generator">The site's resolved source.</param>
-    /// <param name="documentSeed">The document's own reroll lever.</param>
-    /// <param name="instanceIdentity">The running instance's identity.</param>
-    /// <param name="site">The site descriptor the seed ladder and the stream id fold.</param>
+    /// <param name="seed">The site's seed.</param>
     /// <param name="result">The emission, on success.</param>
     /// <param name="reason">Why the emission was refused, or empty on success.</param>
     /// <param name="secret">The site's authority-provisioned secret, when it declares one.</param>
@@ -92,7 +90,7 @@ public static class ArenaDraws {
     /// <see langword="null"/>.</exception>
     /// <remarks>The write-back is two arena writes, so a caller that wants the draw to rewind with a refused firing
     /// fires it inside a journal scope.</remarks>
-    public static bool TryFire(StateArena arena, int rowOrdinal, StateGenerator generator, ulong documentSeed, string instanceIdentity, string site, out GeneratorEngine.FireResult result, out string reason, ClosedBitset256? secret = null, long skip = 0L) {
+    public static bool TryFire(StateArena arena, int rowOrdinal, StateGenerator generator, DrawSeed seed, out GeneratorEngine.FireResult result, out string reason, ClosedBitset256? secret = null, long skip = 0L) {
         ArgumentNullException.ThrowIfNull(argument: arena);
         ArgumentNullException.ThrowIfNull(argument: generator);
 
@@ -117,13 +115,9 @@ public static class ArenaDraws {
             reason: out reason,
             result: out result,
             secret: secret,
-            seedState: GeneratorEngine.ComputeSeedState(
-                documentSeed: documentSeed,
-                instanceIdentity: instanceIdentity,
-                site: site
-            ),
+            seedState: seed.State,
             skip: skip,
-            stream: GeneratorEngine.ComputeStreamId(site: site),
+            stream: seed.Stream,
             targetKind: arena.Layout[rowOrdinal].Kind
         )) {
             return false;
@@ -141,6 +135,59 @@ public static class ArenaDraws {
             rowOrdinal: rowOrdinal
         );
     }
+    /// <summary>Opens a draw site's stream at the cursor the arena holds, for a caller that draws several samples in
+    /// one pass: the site is sought once, and each sample after that is constant work.</summary>
+    /// <param name="arena">The arena holding the site.</param>
+    /// <param name="rowOrdinal">The site row's catalog ordinal.</param>
+    /// <param name="generator">The site's resolved numeric source.</param>
+    /// <param name="seed">The site's seed.</param>
+    /// <param name="stream">The positioned stream, on success.</param>
+    /// <param name="reason">Why the stream was refused, or empty on success.</param>
+    /// <param name="secret">The site's authority-provisioned secret, when it declares one.</param>
+    /// <param name="skip">The site's authored seek.</param>
+    /// <returns><see langword="true"/> when the stream is positioned.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> or <paramref name="generator"/> is
+    /// <see langword="null"/>.</exception>
+    /// <remarks>Nothing is written until <see cref="TryClose"/> stores the advanced cursor, so a caller that refuses
+    /// between the two leaves the site where it was.</remarks>
+    public static bool TryOpen(StateArena arena, int rowOrdinal, StateGenerator generator, DrawSeed seed, out GeneratorEngine.DrawStream stream, out string reason, ClosedBitset256? secret = null, long skip = 0L) {
+        ArgumentNullException.ThrowIfNull(argument: arena);
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        stream = default;
+
+        return (TryMasks(
+            arena: arena,
+            generator: generator,
+            masks: out var masks,
+            reason: out reason,
+            rowOrdinal: rowOrdinal
+        ) && GeneratorEngine.DrawStream.TryOpen(
+            cursor: arena.DrawCursor(rowOrdinal: rowOrdinal),
+            generator: generator,
+            masks: masks,
+            reason: out reason,
+            secret: secret,
+            seed: seed,
+            skip: skip,
+            stream: out stream,
+            targetKind: arena.Layout[rowOrdinal].Kind
+        ));
+    }
+    /// <summary>Stores a stream's advanced cursor and the drawn masks its source persists back into the site.</summary>
+    /// <param name="arena">The arena holding the site.</param>
+    /// <param name="rowOrdinal">The site row's catalog ordinal.</param>
+    /// <param name="stream">The stream <see cref="TryOpen"/> positioned at this site.</param>
+    /// <param name="reason">Why the store was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the site's state was stored.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
+    public static bool TryClose(StateArena arena, int rowOrdinal, in GeneratorEngine.DrawStream stream, out string reason) => TryWrite(
+        arena: arena,
+        cursor: stream.Cursor,
+        masks: stream.MasksAfter,
+        reason: out reason,
+        rowOrdinal: rowOrdinal
+    );
     /// <summary>Writes a draw site's cursor and drawn masks back into the arena.</summary>
     /// <param name="arena">The arena holding the site.</param>
     /// <param name="rowOrdinal">The site row's catalog ordinal.</param>

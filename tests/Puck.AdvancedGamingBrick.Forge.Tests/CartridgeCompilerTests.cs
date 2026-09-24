@@ -1,9 +1,5 @@
 using System.Text;
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -40,45 +36,39 @@ public sealed class CartridgeCompilerTests {
             pointer: "/sprites/-"
         );
         var doc = draft.Check();
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
+        var compiler = CartridgeProbe.Compiler(target: target);
         var result = compiler.Compile(document: doc);
 
         Assert.Equal(
             expected: result.Rom,
             actual: compiler.Compile(document: CartridgeDocuments.Parse(utf8: CartridgeDocuments.Canonicalize(document: doc).Bytes)).Rom
         );
-        using var machine = new MachineProbe(result: result);
-
-        machine.Run(
-            frames: 12,
-            pressed: false
+        using var machine = new CartridgeProbe(
+            label: "document",
+            result: result
         );
+
+        machine.Run(frames: 12);
         Assert.Equal(
             expected: 255,
-            actual: machine.Read(address: result.Variables["x"])
+            actual: machine.Read(variable: "x")
         );
         machine.Run(
             frames: 5,
-            pressed: true
+            keys: AgbKeys.Right
         );
         Assert.Equal(
             expected: 1,
-            actual: machine.Read(address: result.Variables["x"])
+            actual: machine.Read(variable: "x")
         );
         Assert.Equal(
             expected: 42,
-            actual: machine.Read(address: result.Variables["compared"])
+            actual: machine.Read(variable: "compared")
         );
-        machine.Run(
-            frames: 5,
-            pressed: false
-        );
+        machine.Run(frames: 5);
         Assert.Equal(
             expected: 1,
-            actual: machine.Read(address: result.Variables["released"])
+            actual: machine.Read(variable: "released")
         );
         var spriteX = ((target == "agb")
             ? 0x07000002u
@@ -146,7 +136,7 @@ public sealed class CartridgeCompilerTests {
                     Name: "once",
                     When: CartridgeExpressions.Gate(
                         left: CartridgeExpressions.Of(state: "done"),
-                        comparison: ActionStateComparison.Equal,
+                        comparison: ExpressionOp.Equal,
                         right: CartridgeExpressions.Of(constant: 0)
                     ),
                     Body: [
@@ -213,53 +203,48 @@ public sealed class CartridgeCompilerTests {
                 ]
                 )],
             };
-            ICartridgeCompiler compiler = ((target == "agb")
-                ? new AgbCartridgeCompiler()
-                : new HgbCartridgeCompiler()
-            );
-            var result = compiler.Compile(document: document);
-            using var machine = new MachineProbe(result: result);
-
-            machine.Run(
+            using var machine = CartridgeProbe.Boot(
+                document: document,
                 frames: 12,
-                pressed: false
+                label: "document"
             );
+
             Assert.Equal(
                 expected: 1,
-                actual: machine.Read(address: result.Variables["add"])
+                actual: machine.Read(variable: "add")
             );
             Assert.Equal(
                 expected: 255,
-                actual: machine.Read(address: result.Variables["sub"])
+                actual: machine.Read(variable: "sub")
             );
             Assert.Equal(
                 expected: 48,
-                actual: machine.Read(address: result.Variables["and"])
+                actual: machine.Read(variable: "and")
             );
             Assert.Equal(
                 expected: 252,
-                actual: machine.Read(address: result.Variables["or"])
+                actual: machine.Read(variable: "or")
             );
             Assert.Equal(
                 expected: 204,
-                actual: machine.Read(address: result.Variables["xor"])
+                actual: machine.Read(variable: "xor")
             );
         }
     }
-    [InlineData(ActionStateComparison.Equal, 128, 128, true)]
-    [InlineData(ActionStateComparison.Equal, 128, 127, false)]
-    [InlineData(ActionStateComparison.NotEqual, 128, 128, false)]
-    [InlineData(ActionStateComparison.NotEqual, 128, 127, true)]
-    [InlineData(ActionStateComparison.Less, 127, 128, true)]
-    [InlineData(ActionStateComparison.Less, 128, 128, false)]
-    [InlineData(ActionStateComparison.LessOrEqual, 128, 128, true)]
-    [InlineData(ActionStateComparison.LessOrEqual, 129, 128, false)]
-    [InlineData(ActionStateComparison.Greater, 255, 128, true)]
-    [InlineData(ActionStateComparison.Greater, 128, 128, false)]
-    [InlineData(ActionStateComparison.GreaterOrEqual, 127, 128, false)]
-    [InlineData(ActionStateComparison.GreaterOrEqual, 128, 128, true)]
+    [InlineData(ExpressionOp.Equal, 128, 128, true)]
+    [InlineData(ExpressionOp.Equal, 128, 127, false)]
+    [InlineData(ExpressionOp.NotEqual, 128, 128, false)]
+    [InlineData(ExpressionOp.NotEqual, 128, 127, true)]
+    [InlineData(ExpressionOp.Less, 127, 128, true)]
+    [InlineData(ExpressionOp.Less, 128, 128, false)]
+    [InlineData(ExpressionOp.LessOrEqual, 128, 128, true)]
+    [InlineData(ExpressionOp.LessOrEqual, 129, 128, false)]
+    [InlineData(ExpressionOp.Greater, 255, 128, true)]
+    [InlineData(ExpressionOp.Greater, 128, 128, false)]
+    [InlineData(ExpressionOp.GreaterOrEqual, 127, 128, false)]
+    [InlineData(ExpressionOp.GreaterOrEqual, 128, 128, true)]
     [Theory]
-    public void ComparisonsAreUnsignedAndAgree(ActionStateComparison comparison, int left, int right, bool matches) {
+    public void ComparisonsAreUnsignedAndAgree(ExpressionOp comparison, int left, int right, bool matches) {
         foreach (var target in new[] { "cgb", "agb" }) {
             var document = CartridgeDocuments.Create(
                 target: target,
@@ -284,22 +269,17 @@ public sealed class CartridgeCompilerTests {
                         )]
                 )],
             };
-            ICartridgeCompiler compiler = ((target == "agb")
-                ? new AgbCartridgeCompiler()
-                : new HgbCartridgeCompiler()
-            );
-            var result = compiler.Compile(document: document);
-            using var machine = new MachineProbe(result: result);
-
-            machine.Run(
+            using var machine = CartridgeProbe.Boot(
+                document: document,
                 frames: 12,
-                pressed: false
+                label: "document"
             );
+
             Assert.Equal(
                 expected: (matches
                 ? 1
                 : 0),
-                actual: machine.Read(address: result.Variables["result"])
+                actual: machine.Read(variable: "result")
             );
         }
     }
@@ -349,44 +329,5 @@ public sealed class CartridgeCompilerTests {
             newValue: "\"typo\":",
             oldValue: "\"schema\":"
         ))));
-    }
-
-    private sealed class MachineProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public MachineProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "document"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "document"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public uint Pixel(int x, int y) => (m_agb?.ReadPixel(
-            x: x,
-            y: y
-        ) ?? m_hgb!.ReadPixel(
-            x: x,
-            y: y
-        ));
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(bool pressed, int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: (pressed
-                ? AgbKeys.Right
-                : AgbKeys.None)
-            );
-            m_hgb?.RunFrames(
-                buttons: (pressed
-                ? JoypadButtons.Right
-                : JoypadButtons.None),
-                frames: frames
-            );
-        }
     }
 }

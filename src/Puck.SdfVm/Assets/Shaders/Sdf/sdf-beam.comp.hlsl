@@ -39,7 +39,9 @@
 #define SDF_SAMPLED_REGIONS
 #define SDF_BRICK_POOL_REGISTER t4
 #define SDF_PART_RAY_BOUNDS
-// The tile planes and appended per-view part bounds share one device-local buffer.
+// The tile planes and appended per-view part bounds share one device-local buffer. The beam is its only writer;
+// cull-args and the hit passes bind it read-only.
+#define SDF_TILES_READ_WRITE
 [[vk::binding(3, 0)]] RWStructuredBuffer<float> tiles : register(u0);
 #include "sdf-world.hlsli"
 
@@ -62,9 +64,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // A child viewport shows another node's surface — there is no SDF camera to cone-march. No consumer reads this
     // slot's cull entry: sdf-cull-args skips child viewports in its surviving-tile bbox reduction, Stage 1 returns
-    // for a child viewport before it ever reads the tile buffer, and the compositor no longer consults the cull
-    // buffer at all (the sky pre-pass fills every source pixel, so it needs no tile-empty test). Leaving the slot's
-    // bits alone is safe.
+    // for a child viewport before it ever reads the tile buffer, and the compositor does not bind the cull buffer
+    // (the sky pre-pass fills every source pixel, so it needs no tile-empty test). Leaving the slot's bits alone is
+    // safe.
     if (isChildViewport(id.z)) {
         return;
     }
@@ -130,8 +132,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     tiles[worldTileMarchStartIndex(tileIndex)] = bounds.entry;
-    // The four-bound teleport's extra planes + the F1 far bound (Stage 1 reads them; cull-args + the compositor ignore
-    // them). Always written so the device-local buffer holds a defined, total-function gap AND far bound for every
+    // The four-bound teleport's extra planes + the F1 far bound (Stage 1 reads them; cull-args ignores them). Always written so the device-local buffer holds a defined, total-function gap AND far bound for every
     // (viewport, tile) this frame.
     tiles[worldTileFirstExitIndex(tileIndex)] = bounds.firstExit;
     tiles[worldTileSecondEntryIndex(tileIndex)] = bounds.secondEntry;

@@ -23,6 +23,7 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Application storage — one table, one derivation
 - `Compose` = check Control → rebuild the set → sync the latch
 - `WorldScreenRoute.EngageChannel` — the context-sensitive button
+- `WorldScreenRoute.Input` — where a pointer hit on the screen goes
 - `Dissolve` — three outcomes, no repair
 - The one fold
 - `body.engage` grammar
@@ -73,7 +74,7 @@ the channel) and `pad` (channel name → `WorldPadElement`, what a MACHINE does
 with it). Same rows, same channel names, one kit. A screen names one by
 `screens[*].route.kit`; the validator refuses a route naming a kit with no `pad`
 map, and refuses a `pad` entry naming an undeclared channel or an undefined
-element. There is no per-screen translation table any more.
+element.
 
 Button elements compare the RAW `FixedQ4816` value against
 `WorldChannelTable.DefaultBinaryThreshold`, never a float round-trip; stick axes
@@ -85,7 +86,7 @@ only: their faces render their resolved sources, nothing engages them.
 
 ## The command kinds
 
-`WorldCommand(WorldPrincipal Principal, int EntityIndex)` — the closed
+`WorldCommand(Principal Principal, int EntityIndex)` — the closed
 drive-a-body sealed hierarchy (read `WorldCommand.cs` for the cases);
 `ComposeControl(Target: GrantSubject,
 Exclusive: bool, TargetPrincipal)` and `DissolveControl(TargetPrincipal)` branch
@@ -106,7 +107,7 @@ confers no authority to actually move the target.
 
 **A Control grant never mints an application.** Authority to apply and the
 application itself are separate storage, so a bare
-`world.grant … control screen:0` no longer produces a phantom route. The reverse
+`world.grant … control screen:0` produces no route. The reverse
 coupling is enforced instead: `WorldGrants.Revoke` of any Control row re-tests
 every application the principal stands on and dissolves each one whose target it
 no longer holds Control over (which is what makes a WILDCARD revoke drop the
@@ -118,7 +119,7 @@ grant must not capture an avatar.
 
 A seat whose set OMITS its own-body application and names another BODY perceives
 its ENTIRE world from that body: camera eye, spatial-audio listener, and every
-`seat.<n>.position.*` HUD binding. `Client/WorldPerceptionAnchor.cs` is the ONE
+`seat.<n>.position.*` HUD binding. `src/Puck.World.Client/WorldPerceptionAnchor.cs` is the ONE
 resolution point every seat-relative presentation derivation resolves through
 (`PerceivedBody(slot)`); `WorldSeatContextSync.Publish` writes it every tick (and
 once at boot) from the SAME `Applications` loopback read that publishes the
@@ -137,7 +138,7 @@ never authority or simulation.
 
 ## Application storage — one table, one derivation
 
-`WorldGrants` holds `Dictionary<WorldPrincipal, List<ControlApplication>>`,
+`WorldGrants` holds `Dictionary<Principal, List<ControlApplication>>`,
 separate from the five per-capability subject sets. An ABSENT row IS the
 own-body default (`DefaultApplications`, a per-body-index cached single-element
 list, so the per-tick fold read allocates nothing). A set composed back to the
@@ -148,7 +149,7 @@ default is stored as the default itself, never as a composition — so
 `SetApplications(principal, applications)`, `ClearApplications(principal) → bool`,
 `CollectApplicationHolders(target, into)`. The transition hook that feeds
 `WorldEventFeed.QueueRouteEngaged`/`QueueRouteDisengaged` fires per member
-added/removed. The set is captured in `WorldGrantsPrincipalCheckpoint` and
+added/removed. The set is captured in `WorldGrantsGranteeCheckpoint` and
 round-trips through `WorldAuthorityCheckpointCodec.Grants`.
 
 The set doubles as the `engagement` context FAMILY for seat bindings:
@@ -180,7 +181,7 @@ compares against the channel's own declared threshold whether or not the seat's
 kit binds an action to it (`FixedWorldKit.ActionThresholds` carries every
 declared ordinal's threshold).
 
-`WorldServer.ResolveEngageProbes` runs every `Step`, BEFORE the population
+`WorldTick.ResolveEngageProbes` runs every `Step`, BEFORE the population
 advances (so it reads PRE-MOVE positions), over every active local seat that has
 COMPOSED NOTHING beyond its own body (`HasComposedApplication`): the first
 (document order) screen that is `Engageable`, carrying a live machine
@@ -195,7 +196,7 @@ skips this tick's movement/action-track integration entirely (the identical idle
 no-op the latched branch already takes) — so the press can never ALSO fire a
 bound jump the instant it engages — and `WorldServer.Step` then calls the
 ordinary `Compose` with `actingPrincipal = targetPrincipal =
-WorldPrincipal.Seat(slot)`, printing `[world.engage: <principal> auto-engaged
+Principal.Seat(slot)`, printing `[world.engage: <principal> auto-engaged
 <target> — context button]` on stderr.
 
 **Replay.** Nothing about this is taped. It is pure re-derivation from tick-local
@@ -205,6 +206,22 @@ identical decision at the identical tick.
 
 **Scope today**: local seats only (`AdvanceSeats`, indices 0..3) —
 `AdvanceSimulated`'s peers/inhabitants are not probed.
+
+## `WorldScreenRoute.Input` — where a pointer hit on the screen goes
+
+`input` is a `Puck.Commands.SourceDestination`: absent or `Presentation` (hover
+and highlight), or `Simulation` (a light-gun style pointer). The validator
+refuses `Passthrough` by name in `ValidateRoute`: host passthrough exists only
+for a source the local user opened, and a document, authored locally or
+arrived through a portal, never creates one or sends it input. A `Simulation`
+screen maps a pointer ray from the row alone: `WorldScreenMappings.Of(screen,
+source, width, height)` publishes the row's `SourceMapping` (the face frame, the
+whole source, the glass bezel as an exact-inverse warp), and the ray arrives as
+the `source.pointer.origin`/`source.pointer.direction` Axis3D commands
+(`SourcePointerCommands.TryReadRay`), quantized once. `world.screens` echoes
+`input:<destination>` per screen. No module registers the pointer commands and
+no machine reads a mapped pixel yet; that wiring is P13b in
+`docs/plans/rendering.md`, and the `rendering` skill owns the mapping itself.
 
 ## `Dissolve` — three outcomes, no repair
 
@@ -216,9 +233,8 @@ identical decision at the identical tick.
 | the actor lacks Control over at least one applied target | `Denied` | yes |
 | every applied target checks out | `Dissolved` — the set returns to the default, the latch releases | yes |
 
-There is no repair arm. The `RepairedLatch`/`RepairedRoute` outcomes described
-states that cannot be represented any more: the latch is derived from the set,
-and a bare grant mints no application. `PeekDissolve` is the read-only twin the
+There is no repair arm: the latch is derived from the set, and a bare grant
+mints no application. `PeekDissolve` is the read-only twin the
 client uses to format the echo and decide whether to drop held state (only
 `Dissolved` does).
 
@@ -335,8 +351,8 @@ Run the game; drive `body.engage <target> [player] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising
-the screen path needs a screen at index 0, and no shipped world declares one
-under the four-world charter, so validate a screen application against a scratch
+the screen path needs a screen at index 0, and no shipped world declares one,
+so validate a screen application against a scratch
 world copy. Remember actor ≠ target: every seat holds wide grants by default, so
 self-targeting discriminates nothing — revoke first, then prove the denial, then
 re-grant and prove success. Remember body index vs. player index:

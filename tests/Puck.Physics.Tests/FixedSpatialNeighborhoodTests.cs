@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -161,23 +162,26 @@ public sealed class FixedSpatialNeighborhoodTests {
         );
         var output = new FixedSpatialNeighbor[16];
 
-        for (var step = 0; (step < 8); step++) { Exercise(
+        for (var step = 0; (step < 8); step++) {
+            Exercise(
             grid: grid,
             output: output,
             points: points,
             step: step
-        ); }
-        var allocated = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var step = 0; (step < 16); step++) { Exercise(
-            grid: grid,
-            output: output,
-            points: points,
-            step: step
-        ); }
+        );
+        }
         Assert.Equal(
-            0,
-            (GC.GetAllocatedBytesForCurrentThread() - allocated)
+            0L,
+            AllocationWindow.Least(window: () => {
+                for (var step = 0; (step < 16); step++) {
+                    Exercise(
+                        grid: grid,
+                        output: output,
+                        points: points,
+                        step: step
+                    );
+                }
+            })
         );
     }
     [Fact]

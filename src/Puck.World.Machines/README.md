@@ -4,12 +4,13 @@ This project hosts deterministic machine extensions for World. It owns boot,
 stepping, links, content pins, and symbol resolution through the contracts in
 `Puck.Abstractions.Machines`. It references no Gaming Brick core or forge project.
 
-`WorldMachineExtensionRegistry` collects the extensions selected by one host.
-`Build()` creates an immutable `WorldMachineCatalog`; duplicate engine/provider
-identifiers and providers without engines refuse. Dynamic loading requires an
-explicit registry. A catalog contains factory and content-provider registrations,
-not running machines, and can be shared by that host's replay and instance factories.
-Registering another catalog cannot change an existing host.
+`WorldMachineCatalog.From` builds a host's immutable catalog from the
+`IMachineEngine` and `IMachineContentProvider` contributions of its composed
+[extensions](../../docs/reference/extensions.md). Composition already refuses a
+duplicate engine or provider identifier by name; the catalog also refuses a
+provider without an engine. A catalog contains factory and content-provider
+registrations, not running machines, and can be shared by that host's replay and
+instance factories. Composing another catalog cannot change an existing host.
 
 `WorldMachineHost` implements `IWorldMachineHost`. Its `ValidationCatalog` is the
 same catalog used to construct machines. World admission supplies that catalog to

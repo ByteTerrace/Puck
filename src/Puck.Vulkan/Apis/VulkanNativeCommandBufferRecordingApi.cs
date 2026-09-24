@@ -16,15 +16,19 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     private const uint GraphicsPipelineBindPoint = 0;
     private const uint ImageAspectColorBit = 0x00000001;
     private const uint QueueFamilyIgnored = 0xFFFFFFFF;
+    private const uint StructureTypeBufferMemoryBarrier = 44;
     private const uint StructureTypeCommandBufferBeginInfo = 42;
     private const uint StructureTypeDebugUtilsLabel = 1000128002;
     private const uint StructureTypeImageMemoryBarrier = 45;
     private const uint StructureTypeMemoryBarrier = 46;
     private const uint StructureTypeRenderPassBeginInfo = 43;
     private const uint SubpassContentsInline = 0;
+    private const ulong WholeSize = ulong.MaxValue;
+
+    // The clear value of a render pass whose request names none: its one color attachment, opaque black.
+    private static readonly VkClearValue[] OpaqueBlack = [VkClearValue.OfColor(alpha: 1f, blue: 0f, green: 0f, red: 0f)];
 
     private readonly IAllocator m_allocator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeCommandBufferRecordingApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -35,104 +39,9 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         m_allocator = allocator;
     }
 
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                BeginCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkBeginCommandBuffer"u8
-            )),
-                CmdBindPipeline = ((delegate* unmanaged[Cdecl]<nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdBindPipeline"u8
-            )),
-                CmdBindVertexBuffers = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdBindVertexBuffers"u8
-            )),
-                CmdBindDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdBindDescriptorSets"u8
-            )),
-                CmdBeginRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdBeginRenderPass"u8
-            )),
-                CmdDraw = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdDraw"u8
-            )),
-                CmdDispatch = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdDispatch"u8
-            )),
-                CmdDispatchIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdDispatchIndirect"u8
-            )),
-                CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdSetScissor"u8
-            )),
-                CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdPipelineBarrier"u8
-            )),
-                CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdClearColorImage"u8
-            )),
-                CmdFillBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdFillBuffer"u8
-            )),
-                CmdCopyImageToBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdCopyImageToBuffer"u8
-            )),
-                CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdCopyBufferToImage"u8
-            )),
-                CmdCopyImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdCopyImage"u8
-            )),
-                CmdBlitImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdBlitImage"u8
-            )),
-                CmdPushConstants = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdPushConstants"u8
-            )),
-                CmdEndRenderPass = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdEndRenderPass"u8
-            )),
-                EndCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkEndCommandBuffer"u8
-            )),
-                // Optional (VK_EXT_debug_utils): resolves to null when the extension is not enabled, leaving the label
-                // methods as no-ops. The command-buffer label commands are device-child, so vkGetDeviceProcAddr resolves
-                // them once the instance extension is on.
-                CmdBeginDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdBeginDebugUtilsLabelEXT"u8
-            )),
-                CmdEndDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCmdEndDebugUtilsLabelEXT"u8
-            )),
-            }
-        );
-    }
     private static unsafe void ValidateRequest(VulkanCommandBufferRecordRequest request) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
@@ -159,7 +68,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     public VkResult BeginCommandBuffer(VulkanCommandBufferRecordRequest request) {
         ValidateRequest(request: request);
 
-        var beginCommandBuffer = GetPointers(deviceHandle: request.DeviceHandle).BeginCommandBuffer;
+        var beginCommandBuffer = request.Device.BeginCommandBuffer;
         // No ONE_TIME_SUBMIT: recorded command buffers may be cached and resubmitted across
         // frames without re-recording, which that flag forbids.
         var beginInfo = new VkCommandBufferBeginInfo {
@@ -173,12 +82,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public VkResult BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public VkResult BeginCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -186,7 +91,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             paramName: nameof(commandBufferHandle)
         );
 
-        var beginCommandBuffer = GetPointers(deviceHandle: deviceHandle).BeginCommandBuffer;
+        var beginCommandBuffer = device.BeginCommandBuffer;
         var beginInfo = new VkCommandBufferBeginInfo {
             Flags = 0,
             SType = StructureTypeCommandBufferBeginInfo,
@@ -198,10 +103,10 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void BeginDebugLabel(nint deviceHandle, nint commandBufferHandle, string label) {
+    public void BeginDebugLabel(VulkanDeviceCommands device, nint commandBufferHandle, string label) {
         ArgumentException.ThrowIfNullOrEmpty(argument: label);
 
-        var beginLabel = GetPointers(deviceHandle: deviceHandle).CmdBeginDebugUtilsLabel;
+        var beginLabel = device.CmdBeginDebugUtilsLabelExt;
 
         // VK_EXT_debug_utils absent (extension not enabled, or no capture layer resolving the entry point): no-op.
         if (beginLabel is null) {
@@ -230,8 +135,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void BindComputeDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles) {
-        var bindDescriptorSets = GetPointers(deviceHandle: deviceHandle).CmdBindDescriptorSets;
+    public void BindComputeDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles) {
+        var bindDescriptorSets = device.CmdBindDescriptorSets;
 
         fixed (nint* descriptorSetHandlesPointer = descriptorSetHandles) {
             bindDescriptorSets(
@@ -247,8 +152,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
-        var bindPipeline = GetPointers(deviceHandle: deviceHandle).CmdBindPipeline;
+    public void BindComputePipeline(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineHandle) {
+        var bindPipeline = device.CmdBindPipeline;
 
         bindPipeline(
             commandBufferHandle,
@@ -257,12 +162,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void BindDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public void BindDescriptorSet(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -282,7 +183,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             paramName: nameof(descriptorSetHandle)
         );
 
-        var bindDescriptorSets = GetPointers(deviceHandle: deviceHandle).CmdBindDescriptorSets;
+        var bindDescriptorSets = device.CmdBindDescriptorSets;
         var descriptorSetHandles = stackalloc nint[1];
 
         descriptorSetHandles[0] = descriptorSetHandle;
@@ -298,12 +199,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void BindDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint[] descriptorSetHandles) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public void BindDescriptorSets(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineLayoutHandle, nint[] descriptorSetHandles) {
+        ArgumentNullException.ThrowIfNull(argument: device);
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
             handleDescription: "command-buffer",
@@ -332,7 +229,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             }
         }
 
-        var bindDescriptorSets = GetPointers(deviceHandle: deviceHandle).CmdBindDescriptorSets;
+        var bindDescriptorSets = device.CmdBindDescriptorSets;
 
         fixed (nint* descriptorSetHandlesPointer = descriptorSetHandles) {
             bindDescriptorSets(
@@ -348,12 +245,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public void BindGraphicsPipeline(VulkanDeviceCommands device, nint commandBufferHandle, nint pipelineHandle) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -367,7 +260,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             paramName: nameof(pipelineHandle)
         );
 
-        var bindPipeline = GetPointers(deviceHandle: deviceHandle).CmdBindPipeline;
+        var bindPipeline = device.CmdBindPipeline;
 
         bindPipeline(
             commandBufferHandle,
@@ -376,12 +269,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, VulkanVertexBufferBinding vertexBufferBinding) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public void BindVertexBuffer(VulkanDeviceCommands device, nint commandBufferHandle, VulkanVertexBufferBinding vertexBufferBinding) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -392,7 +281,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         // vkCmdBindVertexBuffers copies both arrays during the call, so stack storage
         // suffices (same pattern as BindDescriptorSet) — this runs per draw per
         // re-record, where the previous array + pin pair was pure heap churn.
-        var bindVertexBuffers = GetPointers(deviceHandle: deviceHandle).CmdBindVertexBuffers;
+        var bindVertexBuffers = device.CmdBindVertexBuffers;
         var bufferHandles = stackalloc nint[1];
 
         bufferHandles[0] = vertexBufferBinding.BufferHandle;
@@ -409,7 +298,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     }
     /// <inheritdoc/>
     public void BlitImage(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint sourceImageHandle,
         uint sourceImageLayout,
@@ -423,7 +312,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         uint destinationHeight,
         uint filter
     ) {
-        var blitImage = GetPointers(deviceHandle: deviceHandle).CmdBlitImage;
+        var blitImage = device.CmdBlitImage;
         var blit = new VkImageBlit {
             DstOffset0 = new VkOffset3D(
             x: 0,
@@ -482,7 +371,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     }
     /// <inheritdoc/>
     public void ClearColorImage(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint imageHandle,
         uint imageLayout,
@@ -491,7 +380,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         float blue,
         float alpha
     ) {
-        var clearColorImage = GetPointers(deviceHandle: deviceHandle).CmdClearColorImage;
+        var clearColorImage = device.CmdClearColorImage;
         // vkCmdClearColorImage consumes both host structs synchronously, so they live on the stack.
         var clearColor = new VkClearColorValue(
             float32_0: red,
@@ -518,7 +407,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     }
     /// <inheritdoc/>
     public void CopyBufferToImage(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint bufferHandle,
         nint imageHandle,
@@ -528,7 +417,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         uint width,
         uint height
     ) {
-        var copyBufferToImage = GetPointers(deviceHandle: deviceHandle).CmdCopyBufferToImage;
+        var copyBufferToImage = device.CmdCopyBufferToImage;
         var bufferImageCopy = new VkBufferImageCopy {
             BufferImageHeight = 0,
             BufferOffset = 0,
@@ -572,7 +461,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     }
     /// <inheritdoc/>
     public void CopyImageToBuffer(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint imageHandle,
         uint imageLayout,
@@ -580,7 +469,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         uint width,
         uint height
     ) {
-        var copyImageToBuffer = GetPointers(deviceHandle: deviceHandle).CmdCopyImageToBuffer;
+        var copyImageToBuffer = device.CmdCopyImageToBuffer;
         var bufferImageCopy = new VkBufferImageCopy {
             BufferImageHeight = 0,
             BufferOffset = 0,
@@ -624,7 +513,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     }
     /// <inheritdoc/>
     public void CopyImageToImage(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint sourceImageHandle,
         uint sourceImageLayout,
@@ -633,7 +522,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         uint width,
         uint height
     ) {
-        var copyImage = GetPointers(deviceHandle: deviceHandle).CmdCopyImage;
+        var copyImage = device.CmdCopyImage;
         var imageCopy = new VkImageCopy {
             DstOffset = new VkOffset3D(
             x: 0,
@@ -685,8 +574,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
-        var dispatch = GetPointers(deviceHandle: deviceHandle).CmdDispatch;
+    public void Dispatch(VulkanDeviceCommands device, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
+        var dispatch = device.CmdDispatch;
 
         dispatch(
             commandBufferHandle,
@@ -696,8 +585,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong offset) {
-        var dispatchIndirect = GetPointers(deviceHandle: deviceHandle).CmdDispatchIndirect;
+    public void DispatchIndirect(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong offset) {
+        var dispatchIndirect = device.CmdDispatchIndirect;
 
         dispatchIndirect(
             commandBufferHandle,
@@ -706,12 +595,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void Draw(nint deviceHandle, nint commandBufferHandle, uint vertexCount, uint instanceCount, uint firstVertex, uint firstInstance) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public void BindIndexBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong offsetBytes, uint indexType) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -719,7 +604,47 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             paramName: nameof(commandBufferHandle)
         );
 
-        var cmdDraw = GetPointers(deviceHandle: deviceHandle).CmdDraw;
+        var bindIndexBuffer = device.CmdBindIndexBuffer;
+
+        bindIndexBuffer(
+            commandBufferHandle,
+            bufferHandle,
+            offsetBytes,
+            indexType
+        );
+    }
+    /// <inheritdoc/>
+    public void DrawIndexed(VulkanDeviceCommands device, nint commandBufferHandle, uint indexCount, uint instanceCount, uint firstIndex, int vertexOffset, uint firstInstance) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
+
+        var drawIndexed = device.CmdDrawIndexed;
+
+        drawIndexed(
+            commandBufferHandle,
+            indexCount,
+            instanceCount,
+            firstIndex,
+            vertexOffset,
+            firstInstance
+        );
+    }
+    /// <inheritdoc/>
+    public void Draw(VulkanDeviceCommands device, nint commandBufferHandle, uint vertexCount, uint instanceCount, uint firstVertex, uint firstInstance) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
+
+        var cmdDraw = device.CmdDraw;
 
         cmdDraw(
             commandBufferHandle,
@@ -730,12 +655,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public VkResult EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public VkResult EndCommandBuffer(VulkanDeviceCommands device, nint commandBufferHandle) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -743,13 +664,13 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             paramName: nameof(commandBufferHandle)
         );
 
-        var endCommandBuffer = GetPointers(deviceHandle: deviceHandle).EndCommandBuffer;
+        var endCommandBuffer = device.EndCommandBuffer;
 
         return endCommandBuffer(commandBufferHandle);
     }
     /// <inheritdoc/>
-    public void EndDebugLabel(nint deviceHandle, nint commandBufferHandle) {
-        var endLabel = GetPointers(deviceHandle: deviceHandle).CmdEndDebugUtilsLabel;
+    public void EndDebugLabel(VulkanDeviceCommands device, nint commandBufferHandle) {
+        var endLabel = device.CmdEndDebugUtilsLabelExt;
 
         // VK_EXT_debug_utils absent: no-op (balances a BeginDebugLabel that also no-oped).
         if (endLabel is not null) {
@@ -757,12 +678,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public void EndRenderPass(VulkanDeviceCommands device, nint commandBufferHandle) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -770,12 +687,12 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             paramName: nameof(commandBufferHandle)
         );
 
-        var endRenderPass = GetPointers(deviceHandle: deviceHandle).CmdEndRenderPass;
+        var endRenderPass = device.CmdEndRenderPass;
 
         endRenderPass(commandBufferHandle);
     }
     /// <inheritdoc/>
-    public void FillBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+    public void FillBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         if (
             (sizeBytes == 0) ||
             ((sizeBytes & 3) != 0)
@@ -786,7 +703,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 "Vulkan buffer fills require a positive size divisible by four."
             );
         }
-        var fillBuffer = GetPointers(deviceHandle: deviceHandle).CmdFillBuffer;
+        var fillBuffer = device.CmdFillBuffer;
 
         fillBuffer(
             commandBufferHandle,
@@ -797,15 +714,51 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
+    public void PipelineBufferBarrier(
+        VulkanDeviceCommands device,
+        nint commandBufferHandle,
+        nint bufferHandle,
+        uint sourceAccessMask,
+        uint destinationAccessMask,
+        uint sourceStageMask,
+        uint destinationStageMask
+    ) {
+        var pipelineBarrier = device.CmdPipelineBarrier;
+        // vkCmdPipelineBarrier consumes the host struct synchronously, so it lives on the stack.
+        var barrier = new VkBufferMemoryBarrier {
+            Buffer = bufferHandle,
+            DstAccessMask = destinationAccessMask,
+            DstQueueFamilyIndex = QueueFamilyIgnored,
+            Offset = 0,
+            SType = StructureTypeBufferMemoryBarrier,
+            Size = WholeSize,
+            SrcAccessMask = sourceAccessMask,
+            SrcQueueFamilyIndex = QueueFamilyIgnored,
+        };
+
+        pipelineBarrier(
+            commandBufferHandle,
+            sourceStageMask,
+            destinationStageMask,
+            0,
+            0,
+            0,
+            1,
+            ((nint)(&barrier)),
+            0,
+            0
+        );
+    }
+    /// <inheritdoc/>
     public void PipelineMemoryBarrier(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         uint sourceAccessMask,
         uint destinationAccessMask,
         uint sourceStageMask,
         uint destinationStageMask
     ) {
-        var pipelineBarrier = GetPointers(deviceHandle: deviceHandle).CmdPipelineBarrier;
+        var pipelineBarrier = device.CmdPipelineBarrier;
         // vkCmdPipelineBarrier consumes the host struct synchronously, so it lives on the stack.
         var barrier = new VkMemoryBarrier {
             DstAccessMask = destinationAccessMask,
@@ -828,18 +781,14 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     }
     /// <inheritdoc/>
     public void PushConstants(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint pipelineLayoutHandle,
         uint stageFlags,
         uint offset,
         ReadOnlySpan<byte> data
     ) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -872,7 +821,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         // vkCmdPushConstants copies the payload during the call, so pinning the span in
         // place suffices — this runs per draw per re-record, where the previous ToArray +
         // pin pair was pure heap churn.
-        var cmdPushConstants = GetPointers(deviceHandle: deviceHandle).CmdPushConstants;
+        var cmdPushConstants = device.CmdPushConstants;
 
         fixed (byte* dataPointer = data) {
             cmdPushConstants(
@@ -886,12 +835,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void SetScissor(nint deviceHandle, nint commandBufferHandle, int x, int y, uint width, uint height) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public void SetScissor(VulkanDeviceCommands device, nint commandBufferHandle, int x, int y, uint width, uint height) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandBufferHandle,
@@ -909,7 +854,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             );
         }
 
-        var cmdSetScissor = GetPointers(deviceHandle: deviceHandle).CmdSetScissor;
+        var cmdSetScissor = device.CmdSetScissor;
         var scissors = stackalloc VkRect2D[1];
 
         scissors[0] = new VkRect2D(
@@ -933,23 +878,14 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     public void StartRenderPass(VulkanCommandBufferRecordRequest request) {
         ValidateRequest(request: request);
 
-        var startRenderPass = GetPointers(deviceHandle: request.DeviceHandle).CmdBeginRenderPass;
-        var clearValue = new VkClearValue {
-            Color = new VkClearColorValue(
-            float32_0: 0f,
-            float32_1: 0f,
-            float32_2: 0f,
-            float32_3: 1f
-        ),
-        };
-        var clearValuePointer = m_allocator.Alloc(size: Marshal.SizeOf<VkClearValue>());
+        var startRenderPass = request.Device.CmdBeginRenderPass;
+        var clearValues = (request.ClearValues ?? OpaqueBlack);
+        var clearValuePointer = VulkanMarshalHelpers.AllocateArray(
+            allocator: m_allocator,
+            values: clearValues
+        );
 
         try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: clearValuePointer,
-                structure: clearValue
-            );
             var renderArea = new VkRect2D(
                 extent: new VkExtent2D(
                     height: request.Height,
@@ -961,7 +897,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 )
             );
             var beginInfo = new VkRenderPassBeginInfo {
-                ClearValueCount = 1,
+                ClearValueCount = ((uint)clearValues.Count),
                 Framebuffer = request.FramebufferHandle,
                 PClearValues = clearValuePointer,
                 RenderArea = renderArea,
@@ -980,9 +916,10 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     }
     /// <inheritdoc/>
     public void TransitionImageLayout(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint commandBufferHandle,
         nint imageHandle,
+        uint aspectMask,
         uint baseMipLevel,
         uint mipLevelCount,
         uint oldLayout,
@@ -992,7 +929,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         uint sourceStageMask,
         uint destinationStageMask
     ) {
-        var pipelineBarrier = GetPointers(deviceHandle: deviceHandle).CmdPipelineBarrier;
+        var pipelineBarrier = device.CmdPipelineBarrier;
         var barrier = new VkImageMemoryBarrier {
             DstAccessMask = destinationAccessMask,
             DstQueueFamilyIndex = QueueFamilyIgnored,
@@ -1003,7 +940,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             SrcAccessMask = sourceAccessMask,
             SrcQueueFamilyIndex = QueueFamilyIgnored,
             SubresourceRange = new VkImageSubresourceRange {
-                AspectMask = ImageAspectColorBit,
+                AspectMask = aspectMask,
                 BaseArrayLayer = 0,
                 BaseMipLevel = baseMipLevel,
                 LayerCount = 1,
@@ -1033,31 +970,5 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         } finally {
             m_allocator.Free(ptr: pointer);
         }
-    }
-
-    private unsafe struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult> BeginCommandBuffer;
-        public delegate* unmanaged[Cdecl]<nint, uint, nint, void> CmdBindPipeline;
-        public delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void> CmdBindVertexBuffers;
-        public delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void> CmdBindDescriptorSets;
-        public delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void> CmdBeginRenderPass;
-        public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void> CmdDraw;
-        public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void> CmdDispatch;
-        public delegate* unmanaged[Cdecl]<nint, nint, ulong, void> CmdDispatchIndirect;
-        public delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void> CmdSetScissor;
-        public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void> CmdPipelineBarrier;
-        public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdClearColorImage;
-        public delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void> CmdFillBuffer;
-        public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdCopyImageToBuffer;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void> CmdCopyBufferToImage;
-        public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void> CmdCopyImage;
-        public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void> CmdBlitImage;
-        public delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void> CmdPushConstants;
-        public delegate* unmanaged[Cdecl]<nint, void> CmdEndRenderPass;
-        public delegate* unmanaged[Cdecl]<nint, VkResult> EndCommandBuffer;
-        // VK_EXT_debug_utils command-buffer labels — null when the extension is not enabled (BeginDebugLabel /
-        // EndDebugLabel then no-op).
-        public delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void> CmdBeginDebugUtilsLabel;
-        public delegate* unmanaged[Cdecl]<nint, void> CmdEndDebugUtilsLabel;
     }
 }

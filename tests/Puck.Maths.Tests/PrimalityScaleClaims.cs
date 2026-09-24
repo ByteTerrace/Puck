@@ -20,7 +20,7 @@ namespace Puck.Maths.Tests;
 /// idea.
 /// </para>
 /// <para>
-/// Every operand stream is produced by <see cref="NextRandom(ref ulong)"/>, a SplitMix64 written here from published
+/// Every operand stream is produced by <see cref="Domains.NextSplitMix64(ref ulong)"/>, a SplitMix64 written here from published
 /// constants. No sweep borrows a Puck.Maths generator to make the values it then judges.
 /// </para>
 /// </remarks>
@@ -82,7 +82,7 @@ internal static class PrimalityScaleClaims {
             );
 
             for (var trial = 0; (trial < 20_000); ++trial) {
-                var candidate = (NextRandom(state: ref state) % span) | 1UL;
+                var candidate = (Domains.NextSplitMix64(state: ref state) % span) | 1UL;
 
                 failure = BaillieAgreesWithExactDecision(candidate: candidate);
 
@@ -122,7 +122,7 @@ internal static class PrimalityScaleClaims {
         // The uint carrier, at full width. Trial division by the primes below 65536 decides EVERY uint factor outright,
         // so the per-factor primality statement here carries no probable-prime reasoning at all.
         for (var trial = 0; (trial < 200_000); ++trial) {
-            var value = ((uint)NextRandom(state: ref state));
+            var value = ((uint)Domains.NextSplitMix64(state: ref state));
             var failure = NarrowFactorizationHolds(
                 destination: destination,
                 trialPrimes: trialPrimes,
@@ -237,7 +237,7 @@ internal static class PrimalityScaleClaims {
         // Moduli spanning the whole legal range: the smallest odd primes, the widening multiply's 2^32 seam, and the
         // 2^62 ceiling from both sides, filled out to thirty-two by a deterministic draw from the upper bands.
         while (32 > moduli.Count) {
-            moduli.Add(item: FirstPrimeAtOrAbove(value: ((1UL << 40) + (NextRandom(state: ref state) % ((1UL << 62) - (1UL << 41))))));
+            moduli.Add(item: FirstPrimeAtOrAbove(value: ((1UL << 40) + (Domains.NextSplitMix64(state: ref state) % ((1UL << 62) - (1UL << 41))))));
         }
 
         var fields = new PrimeField64[moduli.Count];
@@ -268,10 +268,10 @@ internal static class PrimalityScaleClaims {
 
         // Randomized agreement over the same modulus spread, with full-width exponents so the chain length varies.
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var field = fields[((int)(NextRandom(state: ref state) % ((ulong)fields.Length)))];
+            var field = fields[((int)(Domains.NextSplitMix64(state: ref state) % ((ulong)fields.Length)))];
             var modulus = field.Modulus;
-            var value = (NextRandom(state: ref state) % modulus);
-            var exponent = NextRandom(state: ref state);
+            var value = (Domains.NextSplitMix64(state: ref state) % modulus);
+            var exponent = Domains.NextSplitMix64(state: ref state);
             var expected = ((ulong)BigInteger.ModPow(
                 value: new BigInteger(value: value),
                 exponent: new BigInteger(value: exponent),
@@ -330,34 +330,34 @@ internal static class PrimalityScaleClaims {
             fromInclusive: 0,
             toExclusive: BlockCount,
             body: block => {
-            var start = ((ulong)(((uint)block) * BlockLength));
-            var flags = SieveWindow(
-                length: ((int)BlockLength),
-                start: start,
-                trialPrimes: trialPrimes
-            );
+                var start = ((ulong)(((uint)block) * BlockLength));
+                var flags = SieveWindow(
+                    length: ((int)BlockLength),
+                    start: start,
+                    trialPrimes: trialPrimes
+                );
 
-            for (var offset = 0; (offset < ((int)BlockLength)); ++offset) {
-                var value = (start + ((ulong)offset));
-                var expected = flags[offset];
+                for (var offset = 0; (offset < ((int)BlockLength)); ++offset) {
+                    var value = (start + ((ulong)offset));
+                    var expected = flags[offset];
 
-                if (
-                    (PrimeField64.IsBaillieProbablePrime(value: value) != expected) &&
-                    (0L > compositionFailures[block])
-                ) {
-                    compositionFailures[block] = ((long)value);
-                }
-                // The Lucas half alone must accept every prime. The conjunction would catch a false negative too, but
-                // the half is a contract of its own, so it is asserted directly rather than inferred.
-                if (
-                    expected &&
-                    !PrimeField64.IsStrongLucasProbablePrime(value: value) &&
-                    (0L > lucasFailures[block])
-                ) {
-                    lucasFailures[block] = ((long)value);
+                    if (
+                        (PrimeField64.IsBaillieProbablePrime(value: value) != expected) &&
+                        (0L > compositionFailures[block])
+                    ) {
+                        compositionFailures[block] = ((long)value);
+                    }
+                    // The Lucas half alone must accept every prime. The conjunction would catch a false negative too, but
+                    // the half is a contract of its own, so it is asserted directly rather than inferred.
+                    if (
+                        expected &&
+                        !PrimeField64.IsStrongLucasProbablePrime(value: value) &&
+                        (0L > lucasFailures[block])
+                    ) {
+                        lucasFailures[block] = ((long)value);
+                    }
                 }
             }
-        }
         );
 
         for (var block = 0; (block < BlockCount); ++block) {
@@ -382,7 +382,7 @@ internal static class PrimalityScaleClaims {
         }
 
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var value = NextRandom(state: ref state) | 1UL;
+            var value = Domains.NextSplitMix64(state: ref state) | 1UL;
 
             if (PrimeField64.IsStrongLucasProbablePrime(value: value) != Oracles.StrongLucasSelfridge(value: value)) {
                 return $"IsStrongLucasProbablePrime({value}) = {PrimeField64.IsStrongLucasProbablePrime(value: value)} where the companion-matrix oracle says {Oracles.StrongLucasSelfridge(value: value)}";
@@ -414,8 +414,8 @@ internal static class PrimalityScaleClaims {
         }
 
         for (var trial = 0; (trial < 2_000); ++trial) {
-            var value = NextRandom(state: ref state) | 1UL;
-            var witness = NextRandom(state: ref state);
+            var value = Domains.NextSplitMix64(state: ref state) | 1UL;
+            var witness = Domains.NextSplitMix64(state: ref state);
 
             if (PrimeField64.IsStrongProbablePrime(
                 value: value,
@@ -738,10 +738,12 @@ internal static class PrimalityScaleClaims {
             }
         }
 
-        if (1UL != remaining) { symbol *= LegendreByEuler(
+        if (1UL != remaining) {
+            symbol *= LegendreByEuler(
             numerator: numerator,
             prime: remaining
-        ); }
+        );
+        }
 
         return symbol;
     }
@@ -763,7 +765,7 @@ internal static class PrimalityScaleClaims {
             for (var index = 0; (index < 512); ++index) {
                 var residue = ((512UL > prime)
                     ? (((ulong)index) % prime)
-                    : (NextRandom(state: ref state) % prime)
+                    : (Domains.NextSplitMix64(state: ref state) % prime)
                 );
                 var character = field.LegendreCharacter(value: residue);
 
@@ -775,10 +777,10 @@ internal static class PrimalityScaleClaims {
 
         // The defining laws, over operand widths that keep every product inside the carrier.
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var left = (NextRandom(state: ref state) >>> 33);
-            var right = (NextRandom(state: ref state) >>> 33);
-            var oddLeft = (NextRandom(state: ref state) >>> 33) | 1UL;
-            var oddRight = (NextRandom(state: ref state) >>> 33) | 1UL;
+            var left = (Domains.NextSplitMix64(state: ref state) >>> 33);
+            var right = (Domains.NextSplitMix64(state: ref state) >>> 33);
+            var oddLeft = (Domains.NextSplitMix64(state: ref state) >>> 33) | 1UL;
+            var oddRight = (Domains.NextSplitMix64(state: ref state) >>> 33) | 1UL;
             var leftSymbol = left.JacobiSymbol(modulus: oddLeft);
 
             if ((left * right).JacobiSymbol(modulus: oddLeft) != (leftSymbol * right.JacobiSymbol(modulus: oddLeft))) {
@@ -838,10 +840,10 @@ internal static class PrimalityScaleClaims {
         // Full-width randomized agreement on all three instantiations, where the odd-modulus edge and the top bits
         // live, plus the arbitrary-width sibling on the same operands.
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var wideValue = NextRandom(state: ref state);
-            var wideModulus = NextRandom(state: ref state) | 1UL;
-            var hugeValue = (((UInt128)NextRandom(state: ref state)) << 64) | wideValue;
-            var hugeModulus = (((UInt128)NextRandom(state: ref state)) << 64) | wideModulus;
+            var wideValue = Domains.NextSplitMix64(state: ref state);
+            var wideModulus = Domains.NextSplitMix64(state: ref state) | 1UL;
+            var hugeValue = (((UInt128)Domains.NextSplitMix64(state: ref state)) << 64) | wideValue;
+            var hugeModulus = (((UInt128)Domains.NextSplitMix64(state: ref state)) << 64) | wideModulus;
             var narrowValue = ((uint)wideValue);
             var narrowModulus = ((uint)wideModulus) | 1U;
 
@@ -877,8 +879,8 @@ internal static class PrimalityScaleClaims {
         // The composite-modulus regime at width: odd COMPOSITE moduli below 2^32, where the definition can still be
         // reached by factoring, judged by the definition rather than by another descent.
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var modulus = (((uint)NextRandom(state: ref state)) | 1U) | (1U << 20);
-            var numerator = ((uint)NextRandom(state: ref state));
+            var modulus = (((uint)Domains.NextSplitMix64(state: ref state)) | 1U) | (1U << 20);
+            var numerator = ((uint)Domains.NextSplitMix64(state: ref state));
             var expected = JacobiSymbolByFactorAndEuler(
                 numerator: numerator,
                 oddModulus: modulus
@@ -933,11 +935,11 @@ internal static class PrimalityScaleClaims {
         // Zero and one, the two Fermat/Euler exponents, both carrier-edge exponents, and a sample.
         ulong[] exponents = [
             0UL, 1UL, 2UL, 3UL, ((modulus - 1UL) >>> 1), (modulus - 2UL), (modulus - 1UL),
-            modulus, (ulong.MaxValue - 1UL), ulong.MaxValue, NextRandom(state: ref state),
+            modulus, (ulong.MaxValue - 1UL), ulong.MaxValue, Domains.NextSplitMix64(state: ref state),
         ];
 
         for (var trial = 0; (trial < 6); ++trial) {
-            residues.Add(item: (NextRandom(state: ref state) % modulus));
+            residues.Add(item: (Domains.NextSplitMix64(state: ref state) % modulus));
         }
 
         foreach (var residue in residues) {
@@ -1041,7 +1043,7 @@ internal static class PrimalityScaleClaims {
         var batchExpected = new ulong[batch.Length];
 
         for (var index = 0; (index < batch.Length); ++index) {
-            var element = (1UL + (NextRandom(state: ref state) % (modulus - 1UL)));
+            var element = (1UL + (Domains.NextSplitMix64(state: ref state) % (modulus - 1UL)));
 
             batch[index] = element;
             batchExpected[index] = ((ulong)BigInteger.ModPow(
@@ -1113,7 +1115,7 @@ internal static class PrimalityScaleClaims {
             );
 
             for (var trial = 0; (trial < 400); ++trial) {
-                var candidate = (NextRandom(state: ref state) % span) | 1UL;
+                var candidate = (Domains.NextSplitMix64(state: ref state) % span) | 1UL;
 
                 if (PrimeField64.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) {
                     return $"IsPrime({candidate}) = {PrimeField64.IsPrime(value: candidate)} where the exact decision says {Oracles.ExactPrimality(value: candidate)}";
@@ -1135,12 +1137,12 @@ internal static class PrimalityScaleClaims {
         var pool = new ulong[512];
 
         for (var index = 0; (index < pool.Length); ++index) {
-            pool[index] = FirstPrimeAtOrAbove(value: (2_000_000_000UL + (NextRandom(state: ref state) % 100_000_000UL)));
+            pool[index] = FirstPrimeAtOrAbove(value: (2_000_000_000UL + (Domains.NextSplitMix64(state: ref state) % 100_000_000UL)));
         }
 
         for (var trial = 0; (trial < 5_000); ++trial) {
-            var left = pool[((int)(NextRandom(state: ref state) % ((ulong)pool.Length)))];
-            var right = pool[((int)(NextRandom(state: ref state) % ((ulong)pool.Length)))];
+            var left = pool[((int)(Domains.NextSplitMix64(state: ref state) % ((ulong)pool.Length)))];
+            var right = pool[((int)(Domains.NextSplitMix64(state: ref state) % ((ulong)pool.Length)))];
 
             if (PrimeField64.IsPrime(value: (left * right))) {
                 return $"IsPrime accepted the semiprime {left} x {right}";
@@ -1221,22 +1223,6 @@ internal static class PrimalityScaleClaims {
             ? null
             : $"the factors of {value} reassemble to {product}"
         );
-    }
-    /// <summary>SplitMix64, written here from its published constants so no sweep borrows a Puck.Maths generator to
-    /// produce the operands it then judges.</summary>
-    /// <param name="state">The generator state, advanced in place.</param>
-    /// <returns>The next draw.</returns>
-    private static ulong NextRandom(ref ulong state) {
-        unchecked {
-            state += 0x9E3779B97F4A7C15UL;
-
-            var mixed = state;
-
-            mixed = ((mixed ^ (mixed >>> 30)) * 0xBF58476D1CE4E5B9UL);
-            mixed = ((mixed ^ (mixed >>> 27)) * 0x94D049BB133111EBUL);
-
-            return mixed ^ (mixed >>> 31);
-        }
     }
     /// <summary>The primes below <paramref name="exclusiveMaximum"/>, from the sieve of Eratosthenes.</summary>
     /// <param name="exclusiveMaximum">The exclusive ceiling.</param>
@@ -1325,7 +1311,7 @@ internal static class PrimalityScaleClaims {
         // where that law's own shared range stops at 2047. Per-factor primality is the exact decision, outside
         // Puck.Maths entirely.
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var failure = WideFactorizationHolds(value: NextRandom(state: ref state));
+            var failure = WideFactorizationHolds(value: Domains.NextSplitMix64(state: ref state));
 
             if (failure is not null) { return failure; }
         }
@@ -1344,12 +1330,12 @@ internal static class PrimalityScaleClaims {
 
         for (var index = 0; (index < pool.Length); ++index) {
             // Bounded below 2^31 + 2^30 so the product of any two stays inside the carrier with room to spare.
-            pool[index] = FirstPrimeAtOrAbove(value: ((1UL << 31) + (NextRandom(state: ref state) % (1UL << 30))));
+            pool[index] = FirstPrimeAtOrAbove(value: ((1UL << 31) + (Domains.NextSplitMix64(state: ref state) % (1UL << 30))));
         }
 
         for (var trial = 0; (trial < 2_000); ++trial) {
-            var left = pool[((int)(NextRandom(state: ref state) % ((ulong)pool.Length)))];
-            var right = pool[((int)(NextRandom(state: ref state) % ((ulong)pool.Length)))];
+            var left = pool[((int)(Domains.NextSplitMix64(state: ref state) % ((ulong)pool.Length)))];
+            var right = pool[((int)(Domains.NextSplitMix64(state: ref state) % ((ulong)pool.Length)))];
             var product = (left * right);
             var expected = ((left <= right)
                 ? new[] { left, right, }

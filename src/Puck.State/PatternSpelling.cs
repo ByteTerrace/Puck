@@ -17,10 +17,16 @@ public static class PatternSpelling {
     private const int ChoiceLevel = 1;
     private const int ComplementLevel = 4;
     private const int LeafLevel = 6;
+    private const string NameDomain = "symbol name";
     private const int RepetitionLevel = 5;
     private const int SequenceLevel = 3;
 
-    private static readonly string[] ReservedWords = ["any", "empty", "except", "none"];
+    /// <summary>Gets the words a pattern reads as atoms rather than symbols, so a symbol spelling one prints
+    /// quoted.</summary>
+    public static IReadOnlySet<string> ReservedWords { get; } = System.Collections.Frozen.FrozenSet.ToFrozenSet(
+        comparer: StringComparer.Ordinal,
+        source: ["any", "empty", "except", "none"]
+    );
 
     private static int LevelOf(PatternNode node) => node switch {
         PatternNode.Choice => ChoiceLevel,
@@ -30,57 +36,22 @@ public static class PatternSpelling {
         PatternNode.Optional or PatternNode.Star or PatternNode.Plus or PatternNode.Repeat => RepetitionLevel,
         _ => LeafLevel,
     };
-    private static bool IsBareIdentifier(string name) {
-        if (
-            (name.Length == 0) ||
-            (!char.IsAsciiLetter(c: name[0]) && (name[0] != '_'))
-        ) {
-            return false;
-        }
-
-        foreach (var c in name) {
-            if (
-                !char.IsAsciiLetterOrDigit(c: c) &&
-                (c != '_')
-            ) {
-                return false;
-            }
-        }
-
-        return !ReservedWords.Contains(value: name);
-    }
+    private static bool IsBareIdentifier(string name) => (
+        IdentifierSpelling.IsIdentifier(text: name) &&
+        !ReservedWords.Contains(item: name)
+    );
     private static string SymbolText(string name) => (IsBareIdentifier(name: name)
         ? name
-        : $"\"{name.Replace(
-            newValue: "\\\\",
-            oldValue: "\\"
-        ).Replace(
-            newValue: "\\\"",
-            oldValue: "\""
-        )}\""
+        : StateSpelling.QuoteName(name: name)
     );
-    private static bool TryPrintInto(PatternNode? node, int minimumLevel, StringBuilder text) {
-        if (node is null) {
-            return false;
-        }
-
-        var parenthesize = (LevelOf(node: node) < minimumLevel);
-
-        if (parenthesize) {
-            _ = text.Append(value: '(');
-        }
-        if (!TryPrintBody(
+    private static bool TryPrintInto(PatternNode? node, int minimumLevel, StringBuilder text) =>
+        StateSpelling.TryPrintParenthesized(
+            levelOf: LevelOf,
+            minimumLevel: minimumLevel,
             node: node,
-            text: text
-        )) {
-            return false;
-        }
-        if (parenthesize) {
-            _ = text.Append(value: ')');
-        }
-
-        return true;
-    }
+            text: text,
+            tryPrintBody: TryPrintBody
+        );
     private static bool TryPrintBody(PatternNode node, StringBuilder text) {
         switch (node) {
             case PatternNode.Symbol symbol: {
@@ -114,25 +85,28 @@ public static class PatternSpelling {
                     return true;
                 }
             case PatternNode.Sequence sequence: {
-                    return TryPrintList(
+                    return StateSpelling.TryPrintInfixList(
                         items: sequence.Items,
                         minimumLevel: ComplementLevel,
+                        printItem: TryPrintInto,
                         separator: " ",
                         text: text
                     );
                 }
             case PatternNode.Choice choice: {
-                    return TryPrintList(
+                    return StateSpelling.TryPrintInfixList(
                         items: choice.Items,
                         minimumLevel: BothLevel,
+                        printItem: TryPrintInto,
                         separator: " | ",
                         text: text
                     );
                 }
             case PatternNode.Both both: {
-                    return TryPrintList(
+                    return StateSpelling.TryPrintInfixList(
                         items: both.Items,
                         minimumLevel: SequenceLevel,
+                        printItem: TryPrintInto,
                         separator: " & ",
                         text: text
                     );
@@ -182,26 +156,6 @@ public static class PatternSpelling {
                 }
         }
     }
-    private static bool TryPrintList(IReadOnlyList<PatternNode>? items, string separator, int minimumLevel, StringBuilder text) {
-        if (items is not { Count: > 1 }) {
-            return false;
-        }
-
-        for (var index = 0; (index < items.Count); index++) {
-            if (index > 0) {
-                _ = text.Append(value: separator);
-            }
-            if (!TryPrintInto(
-                minimumLevel: minimumLevel,
-                node: items[index],
-                text: text
-            )) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     private static bool TryPrintRepetition(PatternNode? item, string suffix, StringBuilder text) {
         if (!TryPrintInto(
             minimumLevel: RepetitionLevel,
@@ -239,465 +193,247 @@ public static class PatternSpelling {
     /// <param name="node">The node.</param>
     /// <param name="text">The text, or empty when the node has no spelling.</param>
     /// <returns><see langword="true"/> when the node printed.</returns>
-    public static bool TryPrint(PatternNode? node, out string text) {
-        var builder = new StringBuilder();
-
-        if (!TryPrintInto(
+    public static bool TryPrint(PatternNode? node, out string text) =>
+        StateSpelling.TryPrint(
             minimumLevel: ChoiceLevel,
             node: node,
-            text: builder
-        )) {
-            text = string.Empty;
-
-            return false;
-        }
-
-        text = builder.ToString();
-
-        return true;
-    }
+            print: TryPrintInto,
+            text: out text
+        );
     /// <summary>Parses pattern text into a node.</summary>
     /// <param name="text">The text.</param>
     /// <param name="node">The node, on success.</param>
-    /// <param name="error">Why the text was refused, or empty on success.</param>
+    /// <param name="error">Why the text was refused, or empty on success; never empty on a refusal.</param>
     /// <returns><see langword="true"/> when the text parsed.</returns>
-    public static bool TryParse(string? text, out PatternNode? node, out string error) {
-        node = null;
+    public static bool TryParse(string? text, out PatternNode? node, out string error) =>
+        StateSpelling.TryParse(
+            domain: "pattern",
+            emptyError: "is empty; a pattern names at least one symbol",
+            error: out error,
+            node: out node,
+            readRoot: TryReadChoice,
+            text: text
+        );
 
-        if (string.IsNullOrWhiteSpace(value: text)) {
-            error = "is empty; a pattern names at least one symbol";
+    private static bool TryReadChoice(ref SpellingCursor cursor, out PatternNode? node, out string error) =>
+        StateSpelling.TryReadInfixList<PatternNode>(
+            combine: static items => new PatternNode.Choice(Items: items),
+            cursor: ref cursor,
+            error: out error,
+            join: static (ref SpellingCursor next) => next.TryTake(c: '|'),
+            node: out node,
+            readItem: TryReadBoth
+        );
+    private static bool TryReadBoth(ref SpellingCursor cursor, out PatternNode? node, out string error) =>
+        StateSpelling.TryReadInfixList<PatternNode>(
+            combine: static items => new PatternNode.Both(Items: items),
+            cursor: ref cursor,
+            error: out error,
+            join: static (ref SpellingCursor next) => next.TryTake(c: '&'),
+            node: out node,
+            readItem: TryReadSequence
+        );
+    // Juxtaposition joins a sequence: the next item follows whenever what comes next opens an atom.
+    private static bool TryReadSequence(ref SpellingCursor cursor, out PatternNode? node, out string error) =>
+        StateSpelling.TryReadInfixList<PatternNode>(
+            combine: static items => new PatternNode.Sequence(Items: items),
+            cursor: ref cursor,
+            error: out error,
+            join: static (ref SpellingCursor next) => (
+                next.TryPeek(c: out var c) &&
+                (
+                    (c is '(' or '~' or '"') ||
+                    IdentifierSpelling.IsStart(character: c)
+                )
+            ),
+            node: out node,
+            readItem: TryReadUnary
+        );
+    private static bool TryReadUnary(ref SpellingCursor cursor, out PatternNode? node, out string error) {
+        if (!cursor.TryTake(c: '~')) {
+            return TryReadRepetition(
+                cursor: ref cursor,
+                error: out error,
+                node: out node
+            );
+        }
+        if (!TryReadUnary(
+            cursor: ref cursor,
+            error: out error,
+            node: out var item
+        )) {
+            node = null;
 
             return false;
         }
 
-        var reader = new Reader(text: text);
+        node = new PatternNode.Complement(Item: item!);
 
-        if (!reader.TryReadChoice(
+        return true;
+    }
+    private static bool TryReadRepetition(ref SpellingCursor cursor, out PatternNode? node, out string error) {
+        if (!TryReadAtom(
+            cursor: ref cursor,
             error: out error,
             node: out node
         )) {
             return false;
         }
 
-        reader.SkipSpace();
+        while (true) {
+            if (cursor.TryTake(c: '*')) {
+                node = new PatternNode.Star(Item: node!);
 
-        if (!reader.AtEnd) {
-            error = $"carries '{text[reader.Offset..]}' after the pattern";
-            node = null;
+                continue;
+            }
+            if (cursor.TryTake(c: '+')) {
+                node = new PatternNode.Plus(Item: node!);
+
+                continue;
+            }
+            if (cursor.TryTake(c: '?')) {
+                node = new PatternNode.Optional(Item: node!);
+
+                continue;
+            }
+            if (!cursor.TryTake(c: '{')) {
+                return true;
+            }
+            if (!TryReadCount(
+                count: out var minimum,
+                cursor: ref cursor,
+                error: out error
+            )) {
+                node = null;
+
+                return false;
+            }
+
+            var maximum = minimum;
+
+            if (cursor.TryTake(c: ',') && !TryReadCount(
+                count: out maximum,
+                cursor: ref cursor,
+                error: out error
+            )) {
+                node = null;
+
+                return false;
+            }
+            if (!cursor.TryTake(c: '}')) {
+                error = "expects '}' closing a repetition count";
+                node = null;
+
+                return false;
+            }
+            if (maximum < minimum) {
+                error = $"repeats {minimum}..{maximum} times, which is not least first";
+                node = null;
+
+                return false;
+            }
+            if (maximum > PatternCapacity.MaxRepeat) {
+                error = $"repeats {maximum} times, past the {PatternCapacity.MaxRepeat} a repetition unrolls";
+                node = null;
+
+                return false;
+            }
+
+            node = new PatternNode.Repeat(
+                Item: node!,
+                Max: maximum,
+                Min: minimum
+            );
+        }
+    }
+    private static bool TryReadAtom(ref SpellingCursor cursor, out PatternNode? node, out string error) {
+        node = null;
+        error = string.Empty;
+
+        if (cursor.TryTake(c: '(')) {
+            if (!TryReadChoice(
+                cursor: ref cursor,
+                error: out error,
+                node: out node
+            )) {
+                return false;
+            }
+            if (!cursor.TryTake(c: ')')) {
+                error = "expects ')' closing a parenthesized pattern";
+                node = null;
+
+                return false;
+            }
+
+            return true;
+        }
+        if (cursor.TryTakeWord(word: "any")) {
+            node = new PatternNode.AnySymbol();
+
+            return true;
+        }
+        if (cursor.TryTakeWord(word: "empty")) {
+            node = new PatternNode.Nothing();
+
+            return true;
+        }
+        if (cursor.TryTakeWord(word: "none")) {
+            node = new PatternNode.None();
+
+            return true;
+        }
+        if (cursor.TryTakeWord(word: "except")) {
+            if (!cursor.TryTake(c: '(')) {
+                error = "expects '(' after 'except'";
+
+                return false;
+            }
+            if (!cursor.TryReadName(
+                domain: NameDomain,
+                error: out error,
+                name: out var excluded
+            )) {
+                return false;
+            }
+            if (!cursor.TryTake(c: ')')) {
+                error = "expects ')' closing 'except'";
+
+                return false;
+            }
+
+            node = new PatternNode.Except(Name: excluded);
+
+            return true;
+        }
+        if (!cursor.TryReadName(
+            domain: NameDomain,
+            error: out error,
+            name: out var symbol
+        )) {
+            return false;
+        }
+
+        node = new PatternNode.Symbol(Name: symbol);
+
+        return true;
+    }
+    private static bool TryReadCount(ref SpellingCursor cursor, out int count, out string error) {
+        if (
+            !cursor.TryReadWholeNumber(
+                signed: false,
+                value: out var whole
+            ) ||
+            (whole > int.MaxValue)
+        ) {
+            count = 0;
+            error = "expects a whole repetition count";
 
             return false;
         }
 
+        count = ((int)whole);
+        error = string.Empty;
+
         return true;
-    }
-
-    private ref struct Reader(string text) {
-        private readonly string m_text = text;
-        private int m_offset = 0;
-
-        public readonly bool AtEnd => (m_offset >= m_text.Length);
-        public readonly int Offset => m_offset;
-
-        public void SkipSpace() {
-            while (
-                (m_offset < m_text.Length) &&
-                char.IsWhiteSpace(c: m_text[m_offset])
-            ) {
-                m_offset++;
-            }
-        }
-        public bool TryReadChoice(out PatternNode? node, out string error) {
-            if (!TryReadBoth(
-                error: out error,
-                node: out node
-            )) {
-                return false;
-            }
-
-            var items = new List<PatternNode> { node! };
-
-            while (TryTake(c: '|')) {
-                if (!TryReadBoth(
-                    error: out error,
-                    node: out var item
-                )) {
-                    node = null;
-
-                    return false;
-                }
-                items.Add(item: item!);
-            }
-
-            node = ((items.Count == 1)
-                ? items[0]
-                : new PatternNode.Choice(Items: items)
-            );
-
-            return true;
-        }
-
-        private bool TryReadBoth(out PatternNode? node, out string error) {
-            if (!TryReadSequence(
-                error: out error,
-                node: out node
-            )) {
-                return false;
-            }
-
-            var items = new List<PatternNode> { node! };
-
-            while (TryTake(c: '&')) {
-                if (!TryReadSequence(
-                    error: out error,
-                    node: out var item
-                )) {
-                    node = null;
-
-                    return false;
-                }
-                items.Add(item: item!);
-            }
-
-            node = ((items.Count == 1)
-                ? items[0]
-                : new PatternNode.Both(Items: items)
-            );
-
-            return true;
-        }
-        private bool TryReadSequence(out PatternNode? node, out string error) {
-            if (!TryReadUnary(
-                error: out error,
-                node: out node
-            )) {
-                return false;
-            }
-
-            var items = new List<PatternNode> { node! };
-
-            while (StartsAtom()) {
-                if (!TryReadUnary(
-                    error: out error,
-                    node: out var item
-                )) {
-                    node = null;
-
-                    return false;
-                }
-                items.Add(item: item!);
-            }
-
-            node = ((items.Count == 1)
-                ? items[0]
-                : new PatternNode.Sequence(Items: items)
-            );
-
-            return true;
-        }
-        private bool TryReadUnary(out PatternNode? node, out string error) {
-            if (TryTake(c: '~')) {
-                if (!TryReadUnary(
-                    error: out error,
-                    node: out var item
-                )) {
-                    node = null;
-
-                    return false;
-                }
-
-                node = new PatternNode.Complement(Item: item!);
-
-                return true;
-            }
-
-            return TryReadRepetition(
-                error: out error,
-                node: out node
-            );
-        }
-        private bool TryReadRepetition(out PatternNode? node, out string error) {
-            if (!TryReadAtom(
-                error: out error,
-                node: out node
-            )) {
-                return false;
-            }
-
-            while (true) {
-                SkipSpace();
-                if (TryTake(c: '*')) {
-                    node = new PatternNode.Star(Item: node!);
-
-                    continue;
-                }
-                if (TryTake(c: '+')) {
-                    node = new PatternNode.Plus(Item: node!);
-
-                    continue;
-                }
-                if (TryTake(c: '?')) {
-                    node = new PatternNode.Optional(Item: node!);
-
-                    continue;
-                }
-                if (!TryTake(c: '{')) {
-                    return true;
-                }
-                if (!TryReadCount(
-                    count: out var minimum,
-                    error: out error
-                )) {
-                    node = null;
-
-                    return false;
-                }
-
-                var maximum = minimum;
-
-                if (TryTake(c: ',') && !TryReadCount(
-                    count: out maximum,
-                    error: out error
-                )) {
-                    node = null;
-
-                    return false;
-                }
-                if (!TryTake(c: '}')) {
-                    error = "expects '}' closing a repetition count";
-                    node = null;
-
-                    return false;
-                }
-                if (maximum < minimum) {
-                    error = $"repeats {minimum}..{maximum} times, which is not least first";
-                    node = null;
-
-                    return false;
-                }
-                if (maximum > PatternCapacity.MaxRepeat) {
-                    error = $"repeats {maximum} times, past the {PatternCapacity.MaxRepeat} a repetition unrolls";
-                    node = null;
-
-                    return false;
-                }
-
-                node = new PatternNode.Repeat(
-                    Item: node!,
-                    Max: maximum,
-                    Min: minimum
-                );
-            }
-        }
-        private bool TryReadAtom(out PatternNode? node, out string error) {
-            SkipSpace();
-
-            node = null;
-            error = string.Empty;
-
-            if (TryTake(c: '(')) {
-                if (!TryReadChoice(
-                    error: out error,
-                    node: out node
-                )) {
-                    return false;
-                }
-                if (!TryTake(c: ')')) {
-                    error = "expects ')' closing a parenthesized pattern";
-                    node = null;
-
-                    return false;
-                }
-
-                return true;
-            }
-            if (TryTakeWord(word: "any")) {
-                node = new PatternNode.AnySymbol();
-
-                return true;
-            }
-            if (TryTakeWord(word: "empty")) {
-                node = new PatternNode.Nothing();
-
-                return true;
-            }
-            if (TryTakeWord(word: "none")) {
-                node = new PatternNode.None();
-
-                return true;
-            }
-            if (TryTakeWord(word: "except")) {
-                if (!TryTake(c: '(')) {
-                    error = "expects '(' after 'except'";
-
-                    return false;
-                }
-                if (!TryReadSymbolName(
-                    error: out error,
-                    name: out var excluded
-                )) {
-                    return false;
-                }
-                if (!TryTake(c: ')')) {
-                    error = "expects ')' closing 'except'";
-
-                    return false;
-                }
-
-                node = new PatternNode.Except(Name: excluded);
-
-                return true;
-            }
-            if (!TryReadSymbolName(
-                error: out error,
-                name: out var symbol
-            )) {
-                return false;
-            }
-
-            node = new PatternNode.Symbol(Name: symbol);
-
-            return true;
-        }
-        private bool TryReadCount(out int count, out string error) {
-            SkipSpace();
-
-            var start = m_offset;
-
-            while (
-                (m_offset < m_text.Length) &&
-                char.IsAsciiDigit(c: m_text[m_offset])
-            ) {
-                m_offset++;
-            }
-
-            if (
-                (m_offset == start) ||
-                !int.TryParse(
-                provider: CultureInfo.InvariantCulture,
-                result: out count,
-                s: m_text.AsSpan(length: (m_offset - start), start: start)
-            )
-            ) {
-                count = 0;
-                error = "expects a whole repetition count";
-
-                return false;
-            }
-
-            error = string.Empty;
-
-            return true;
-        }
-        private bool TryReadSymbolName(out string name, out string error) {
-            SkipSpace();
-
-            name = string.Empty;
-            error = string.Empty;
-
-            if (TryTake(c: '"')) {
-                var quoted = new StringBuilder();
-
-                while (
-                    (m_offset < m_text.Length) &&
-                    (m_text[m_offset] != '"')
-                ) {
-                    if (
-                        (m_text[m_offset] == '\\') &&
-                        ((m_offset + 1) < m_text.Length)
-                    ) {
-                        m_offset++;
-                    }
-                    _ = quoted.Append(value: m_text[m_offset]);
-                    m_offset++;
-                }
-                if (!TryTake(c: '"')) {
-                    error = "expects '\"' closing a symbol name";
-
-                    return false;
-                }
-
-                name = quoted.ToString();
-
-                if (name.Length == 0) {
-                    error = "expects a symbol name between the quotes";
-
-                    return false;
-                }
-
-                return true;
-            }
-
-            var start = m_offset;
-
-            if (
-                (m_offset < m_text.Length) &&
-                (char.IsAsciiLetter(c: m_text[m_offset]) || (m_text[m_offset] == '_'))
-            ) {
-                m_offset++;
-                while (
-                    (m_offset < m_text.Length) &&
-                    (char.IsAsciiLetterOrDigit(c: m_text[m_offset]) || (m_text[m_offset] == '_'))
-                ) {
-                    m_offset++;
-                }
-            }
-            if (m_offset == start) {
-                error = $"expects a symbol name at '{m_text[m_offset..]}'";
-
-                return false;
-            }
-
-            name = m_text[start..m_offset];
-
-            return true;
-        }
-        private bool StartsAtom() {
-            SkipSpace();
-
-            if (m_offset >= m_text.Length) {
-                return false;
-            }
-
-            var c = m_text[m_offset];
-
-            return (
-                (c is '(' or '~' or '"') ||
-                char.IsAsciiLetter(c: c) ||
-                (c == '_')
-            );
-        }
-        private bool TryTake(char c) {
-            SkipSpace();
-            if (
-                (m_offset >= m_text.Length) ||
-                (m_text[m_offset] != c)
-            ) {
-                return false;
-            }
-            m_offset++;
-
-            return true;
-        }
-        private bool TryTakeWord(string word) {
-            SkipSpace();
-
-            var end = (m_offset + word.Length);
-
-            if (
-                (end > m_text.Length) ||
-                !m_text.AsSpan(start: m_offset, length: word.Length).SequenceEqual(other: word)
-            ) {
-                return false;
-            }
-            if (
-                (end < m_text.Length) &&
-                (char.IsAsciiLetterOrDigit(c: m_text[end]) || (m_text[end] == '_'))
-            ) {
-                return false;
-            }
-            m_offset = end;
-
-            return true;
-        }
     }
 }

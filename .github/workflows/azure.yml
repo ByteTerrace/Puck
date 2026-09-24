@@ -73,7 +73,7 @@ jobs:
       - name: Sign in to Azure with OIDC
         uses: ./.github/actions/azure-login
       - name: Install pinned Bicep
-        run: az bicep install --version v0.46.1
+        run: az bicep install --version v0.47.16
       - name: Restore pinned bvm Template Specs and compile infrastructure
         run: puck azure build-infrastructure
       - name: Upload compiled Azure infrastructure
@@ -131,7 +131,7 @@ jobs:
         uses: ./.github/actions/azure-login
       - if: steps.current.outputs.deploy == 'true'
         name: Install pinned Bicep
-        run: az bicep install --version v0.46.1
+        run: az bicep install --version v0.47.16
       - if: steps.current.outputs.deploy == 'true'
         name: Reconcile the production platform
         run: puck azure deploy-infrastructure --infrastructure-artifacts artifacts/source/azure-infrastructure
@@ -163,7 +163,7 @@ jobs:
         shell: bash
       - if: steps.current.outputs.deploy == 'true'
         name: Deploy the primary Puck world
-        run: puck azure deploy-world
+        run: puck world release deploy artifacts/world-release
         shell: bash
       - if: always() && steps.vault.outcome != 'skipped'
         name: Restore signing-key vault restrictions

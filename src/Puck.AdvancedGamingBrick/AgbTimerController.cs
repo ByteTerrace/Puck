@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
@@ -279,7 +281,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         var shift = Shift[m_frequency[timer]];
         var period = (1L << shift);
         var stepsToOverflow = (0x10000 - m_anchorValue[timer]);                     // increments until the counter wraps
-        var firstAligned = ((m_anchorClock[timer] + period) - 1L) & ~(period - 1L); // first boundary at/after the anchor
+        var firstAligned = m_anchorClock[timer].AlignUp(alignment: period); // first boundary at/after the anchor
         var overflowClock = (firstAligned + ((stepsToOverflow - 1) * period));
 
         m_scheduler.ScheduleAbsolute(

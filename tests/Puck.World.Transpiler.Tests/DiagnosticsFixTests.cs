@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -8,27 +7,12 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary>Diagnostics that must be reachable, singular, and correctly coded: one error per mistake, at the span of
 /// the thing that is wrong, under a code no other report site also uses.</summary>
 public class DiagnosticsFixTests {
-    private static string[] Codes(DiagnosticBag diagnostics) =>
-        [.. diagnostics.Where(predicate: static d => (d.Severity == DiagnosticSeverity.Error)).Select(selector: static d => d.Code)];
     private static (JsonObject Json, DiagnosticBag Diagnostics) Compile(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
+        var compilation = WorldSources.Compile(source: (WorldSources.Header + body));
 
         return ((compilation.Json ?? []), compilation.Diagnostics);
     }
-    private static DiagnosticBag Parse(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var diagnostics = new DiagnosticBag();
-
-        PuckParser.ParseDocumentWithDiagnostics(
-            source,
-            diagnostics: diagnostics
-        );
-        return diagnostics;
-    }
+    private static DiagnosticBag Parse(string body) => WorldSources.Parse(body: body).Diagnostics;
 
     [Fact]
     public void AFileLevelDiagnosticRendersWithoutALineOrAQuotedSourceLine() {
@@ -70,22 +54,53 @@ public class DiagnosticsFixTests {
             userMessage: diagnostics.FormatReport()
         );
     }
+
     // ---- one mistake, one error ------------------------------------------------------------------------------
 
-    [Fact]
-    public void ChainedComparisonReportsOnceAndResynchronizes() {
-        var diagnostics = Parse(body: """
-            rule "r" {
-                when a[x] < b[y] < c[z]
-                hp[0] = 1
-            }
-            """);
+    // One mistake, one error, at the thing that is wrong, under the code no other report site uses. A case marked
+    // alone is the only error its source draws: the parser resynchronizes after it.
+    private static readonly Dictionary<string, Refusal> Mistakes = new(comparer: StringComparer.Ordinal) {
+        ["a chained comparison"] = new(
+            Body: "rule \"r\" {\n    when a[x] < b[y] < c[z]\n    hp[0] = 1\n}\n",
+            Code: PuckDiagnosticCodes.ChainedComparison,
+            Needle: "when a[x] < b[y] < c[z]"
+        ) { Alone = true },
+        ["an unknown kind after `as`"] = new(
+            Body: "rule \"r\" {\n    when a[x] == b[y] as Floaty\n    hp[0] = 1\n}\n",
+            Code: PuckDiagnosticCodes.UnknownKindAnnotation,
+            Needle: "as Floaty"
+        ) { Alone = true },
+        // The ': Kind' spelling is the one the decompiler writes, so its diagnostic must name the rule too.
+        ["an unknown kind after `:`"] = new(
+            Body: "rule \"r\" {\n    when a[x] == b[y] : Floaty\n    hp[0] = 1\n}\n",
+            Code: PuckDiagnosticCodes.UnknownKindAnnotation,
+            Needle: ": Floaty"
+        ),
+        ["a row reference that is an expression"] = new(
+            Body: "rule \"r\" {\n    remove someRow[a] + 1\n    hp[0] = 1\n}\n",
+            Code: PuckDiagnosticCodes.RowReferenceExpected,
+            Needle: "remove someRow[a] + 1"
+        ),
+        ["an effect outside a rule"] = new(
+            Body: "push tally = 1",
+            Code: PuckDiagnosticCodes.EffectOutsideEffectsBody,
+            Needle: "push tally = 1"
+        ),
+        ["an option outside a decision"] = new(
+            Body: "option \"stray\" {\n    score: 1\n}\n",
+            Code: PuckDiagnosticCodes.DecisionStructure,
+            Needle: "option \"stray\""
+        ),
+    };
 
-        Assert.Equal(
-            [PuckDiagnosticCodes.ChainedComparison],
-            Codes(diagnostics: diagnostics)
-        );
-    }
+    public static TheoryData<string> MistakeNames() => new(values: Mistakes.Keys);
+    [MemberData(nameof(MistakeNames))]
+    [Theory]
+    public void AMistakeIsReportedOnceAtItsOwnLine(string name) => WorldSources.AssertRefusedBy(
+        diagnostics: Parse(body: Mistakes[name].Body),
+        label: name,
+        refusal: Mistakes[name]
+    );
     // ---- code registry ----------------------------------------------------------------------------------------
 
     [Fact]
@@ -189,22 +204,6 @@ public class DiagnosticsFixTests {
             Assert.IsType<JsonObject>(@object: json["look"])["alpha"].AsNumber()!.Value
         );
     }
-    // ---- reachability -----------------------------------------------------------------------------------------
-
-    [Fact]
-    public void RowReferenceThatIsAnExpressionReportsPuck003() {
-        var diagnostics = Parse(body: """
-            rule "r" {
-                remove someRow[a] + 1
-                hp[0] = 1
-            }
-            """);
-
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == PuckDiagnosticCodes.RowReferenceExpected)
-        );
-    }
     // ---- units ------------------------------------------------------------------------------------------------
 
     [Fact]
@@ -224,63 +223,6 @@ public class DiagnosticsFixTests {
         Assert.Equal(
             0.5m,
             effect["delaySeconds"]!.GetValue<decimal>()
-        );
-    }
-    [Fact]
-    public void StrayEffectStatementNamesTheBlockItNeeds() {
-        var diagnostics = Parse(body: "push tally = 1");
-
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == PuckDiagnosticCodes.EffectOutsideEffectsBody)
-        );
-    }
-    [Fact]
-    public void StrayOptionBlockNamesTheBlockItNeeds() {
-        var diagnostics = Parse(body: """
-            option "stray" {
-                score: 1
-            }
-            """);
-
-        var errors = diagnostics.Where(predicate: static d => (d.Severity == DiagnosticSeverity.Error)).ToArray();
-
-        Assert.Contains(
-            collection: errors,
-            filter: d => (d.Code == PuckDiagnosticCodes.DecisionStructure)
-        );
-        Assert.Equal(
-            3,
-            errors[0].Span.Line
-        );
-    }
-    [Fact]
-    public void UnknownKindAfterAsReportsOnceAndResynchronizes() {
-        var diagnostics = Parse(body: """
-            rule "r" {
-                when a[x] == b[y] as Floaty
-                hp[0] = 1
-            }
-            """);
-
-        Assert.Equal(
-            [PuckDiagnosticCodes.UnknownKindAnnotation],
-            Codes(diagnostics: diagnostics)
-        );
-    }
-    [Fact]
-    public void UnknownKindAfterColonReportsTheSameCodeAsTheAsSpelling() {
-        // The ': Kind' spelling is the one the decompiler writes, so its diagnostic must name the rule too.
-        var diagnostics = Parse(body: """
-            rule "r" {
-                when a[x] == b[y] : Floaty
-                hp[0] = 1
-            }
-            """);
-
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == PuckDiagnosticCodes.UnknownKindAnnotation)
         );
     }
 }

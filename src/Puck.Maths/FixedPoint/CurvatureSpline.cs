@@ -638,10 +638,9 @@ public sealed class CompiledCurvatureSpline {
     /// the last authored knot; for a closed curve it is the wraparound back to knot zero, at
     /// <see cref="TotalLength"/>.</param>
     public FixedQ4816 KnotStation(int index) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: index,
-            other: SegmentCount
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: SegmentCount,
+            value: index
         );
 
         return NarrowToQ16(raw: ((index == SegmentCount)

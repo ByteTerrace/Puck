@@ -185,8 +185,8 @@ indent_size = 4
 indent_style = space
 indent_size = 4
 
-# Puck authoring DSL sources: 4-space, matching the C# tree.
-[*.{puck,world.puck}]
+# Puck authoring DSL sources: 2-space by design, the one layout `puck format` prints (PuckPrinter.IndentWidth).
+[*.puck]
 indent_style = space
 indent_size = 2
 end_of_line = lf

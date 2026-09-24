@@ -7,9 +7,8 @@ on desktop, server, and WASM.
 Disassembly and published processor measurements establish the prices offline;
 the executing computer never chooses them.
 
-This is a proposed implementation brief, based on source analysis at
-`197169025`. It does not describe a shipped replacement or a
-completed calibration. Its scope is the authored simulation work currently
+This is an implementation brief. It does not describe a shipped replacement or
+a completed calibration. Its scope is the authored simulation work currently
 charged through rules, interactions, decisions, flock affinities, and search,
 including the synchronous work their effects cause. Rendering, physics outside
 those paths, audio, emulators, and external I/O retain separate accounting.
@@ -24,19 +23,49 @@ The typed scaffolding exists and the accounting structure of §4 is in place:
 heuristic work is a typed bound that propagates an unpriced operation or an
 overflow, lines separate setup, check, and firing, and interactions, decisions,
 sorts, and transactions are priced at the paths they execute, held against the
-evaluator's own trace on enumerated worlds. Search (§6) spends a reserved,
+evaluator's own trace on enumerated worlds. An arena transform is priced by
+`TransformWork` from the operands it addresses alone: a fixed door, then its
+kernel's leases, visits, pattern steps and journal entries, held against the
+arena's own counters by `TransformWorkLawTests` from below and from above (the
+door plus sixteen times the counted work). A random transfer or a shuffle seeks
+its draw site once from a seed its host folded once, then pays a constant step
+a sample. A `rewindGroup` is priced by the work of restoring its group's widest
+turn, pool effects share the transforms' element-operation unit, and a
+transaction's steps are priced once, as the evaluator fires them. Every reader
+of a world's sheet takes the one computation admission runs. Search (§6) spends a reserved,
 resumable allowance per job, chance plies and playouts included, in the same
 heuristic units. The evidence manifest
 (`src/Puck.State/ReferenceSchedule.json`) pins eight targets and prices the
-unary expression operations; every other coefficient, and the whole memory
-profile, is recorded as unmodeled, and admission still runs on the heuristic
-work units. The held-cell cursor migration changed the expression and row-fold
-sources. Their manifest pins track those sources, but their native lowering and
-instruction-service evidence still needs regeneration for all eight targets as
-part of C1. The candidate timing check is a regression measurement, not that
-evidence. `puck bench state-evidence` replays the pinned instruction-service
-evidence through the specified LLVM version; it does not reconstruct missing
-Native AOT paths, helper formulas, or memory-service measurements.
+unary, binary, bit-field and bit-insert expression operations; the binary price
+is its costliest arm, a fixed-point division through the 128-bit slow path.
+Every other reachable operation is registered
+there with its named size parameters and an explicit unmodeled reason — the
+remaining expression kernels, the effect arms, the arena transforms, the draw
+sources, the search methods and candidate shapes — each enumerated by a law
+against the code that owns it, and the whole memory profile is recorded as
+unmodeled. Admission still runs on the heuristic work units. The reference
+lowering roots the whole State family, so the expression program and the row
+fold, which live in `Puck.State.Rules`, have bodies to walk. Neither resolves:
+the evaluator's call closure reaches the arena, the runtime's type loader and
+its allocator, and a capture of the program names several hundred loops and
+bodies with no declared bound, the fold several thousand. A whole-closure walk
+is the wrong instrument for them; they need focused kernels whose cold paths are
+declared exclusions, priced as setup plus per-token service. The function
+kernel is a dozen declared bounds and its nested dispatch tables short of
+resolving. The candidate timing check is a regression measurement, not that
+evidence.
+`puck bench state-evidence` replays the pinned instruction-service evidence
+through the specified LLVM version and reports the per-vocabulary priced and
+unmodeled counts. Its `--capture` mode produces the evidence instead of
+replaying it: it compiles both pinned Native AOT lowerings with the manifest's
+own options, disassembles each declared kernel and its call closure, asks
+`llvm-mca` per pinned model, walks each kernel's maximum permitted path under its
+declared loop bounds, renders the manifest sections that walk establishes, and
+names every difference from what is pinned. A pinned tool that is absent or at
+the wrong version is a named refusal rather than a substitution. What remains is
+the pricing itself: reference kernels for the unpriced vocabularies, declared
+bounds for the helper loops that currently leave a kernel unresolved, and
+memory-service measurements, which the capture reads rather than invents.
 
 One compilation now retains its work sheet and report for server and console
 consumers. Browser and portal worker reports preserve exact counts and distinguish
@@ -58,22 +87,25 @@ decision is in [the decisions register](../decisions/state-and-language.md#costi
 
 ## 3. Price schedule and evidence
 
-Put the primitive cost model in `Puck.State`; keep World-specific structural
-formulas in `Puck.World.Schema`. Do not introduce another project or a generic
-CPU simulator. Follow the existing compiled vocabulary and effect extension
-seams rather than creating a second list of authored features.
+The primitive cost model is in `Puck.State`, and its bound type, `CostBound`,
+is in `Puck.Maths`; World-specific structural formulas stay in
+`Puck.World.Schema`. Do not introduce another project or a generic CPU
+simulator. Follow the existing compiled vocabulary and effect extension seams
+rather than creating a second list of authored features.
 
-The proposed minimum contracts are:
+The minimum contracts, as the code declares them:
 
 ```text
-CostModel: Id, ReferenceProfile, Coefficients, EvidenceDigest
+CostModel: Id, ReferenceProfile, EvidenceDigest
 CostBound: Known(nonnegative reference cycles) | Unmodeled(reason) | Overflow
-RuleCost: PerRuleSetup, PerEvaluationCheck, PerFiringEffects
+RuleCost: Setup, Check, Effects
 WorldCostReport: ModelId, Scope, RecurringBound, SearchReservations,
-                 EditBurstBound, ResourceDimensions, Contributors, Issues
+                 EditBurstBound, Resources, Contributors, Issues
 ```
 
-Names may follow local conventions. Preserve these distinctions. A report
+`CostModel` holds no coefficients of its own: its prices are the evidence
+manifest's, and `EvidenceDigest` identifies them. Preserve these
+distinctions. A report
 must be available even when a document exceeds its budget, so authoring can
 explain the failure. Use compiled plans once; do not repeatedly compile a
 document to produce each panel of its report.
@@ -250,9 +282,10 @@ For other families:
   comparison/move envelope. Include comparator cost and string length where
   keys are strings; dictionary access is not a proved constant-time operation
   merely because the usual case is fast.
-- **Transactions and mutations:** account for main preflight plus commit on
-  success, or main preflight prefix plus refusal-branch preflight/commit on
-  failure. Include buffered-state composition, flushes, candidate validation,
+- **Transactions and mutations:** a transaction is a savepoint: account for its
+  steps fired once on success, or the refused prefix, its rewind, and the
+  refusal branch fired once on failure. No line prices a refused scope's
+  rewind yet, a savepoint's or a whole firing's. Include buffered-state composition, flushes, candidate validation,
   rebuild, and installation at their actual execution boundaries. Model the
   candidate document and its permitted growth, not only the original size.
   Do not change atomicity, immediate visibility, or journal boundaries to make
@@ -414,7 +447,7 @@ the old heuristics when the replacement becomes authoritative.
    a parallel permanent verification runner. Verify independent observed event
    counts against static bounds, not only one cost formula against another.
 4. **Activate reference-cycle admission and shared reporting.** Apply the exact
-   rate/share arithmetic, retire the 2,000,000 heuristic count and the old
+   rate/share arithmetic, retire the heuristic work-unit count and the old
    fallbacks in favor of the priced per-step allowance section 5 defines, and
    connect validator, console, search plans, and browser to the same report.
    The ceiling itself survives as that calibrated price, which

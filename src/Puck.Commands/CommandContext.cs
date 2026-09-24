@@ -28,20 +28,29 @@ public readonly record struct CommandContext {
     /// <param name="assignedSlot">Whether this invocation's physical signal created its device-to-slot assignment.</param>
     /// <param name="principal">The identity acting through this invocation, as stamped by its ingress door.</param>
     /// <param name="textSession">The originating immediate text session, or null outside session dispatch.</param>
+    /// <exception cref="ArgumentException"><paramref name="principal"/> is unstamped — a dispatch reached a handler
+    /// without passing an ingress door, which is a defect rather than an anonymous caller.</exception>
     internal CommandContext(
         CommandValue value,
         CommandPhase phase,
         CommandOrigin origin,
         ParseResult? parse,
+        Principal principal,
         string? text = null,
         CommandRegistry? registry = null,
         InputDeviceId deviceId = default,
         string? source = null,
         int slot = 0,
         bool assignedSlot = false,
-        CommandPrincipal principal = default,
         TextCommandSession? textSession = null
     ) {
+        if (!principal.IsStamped) {
+            throw new ArgumentException(
+                message: "A command reached its handler carrying no stamped principal; every ingress door must stamp one.",
+                paramName: nameof(principal)
+            );
+        }
+
         AssignedSlot = assignedSlot;
         DeviceId = deviceId;
         Origin = origin;
@@ -74,11 +83,11 @@ public readonly record struct CommandContext {
     /// <summary>The transition this invocation represents.</summary>
     public CommandPhase Phase { get; internal init; }
     /// <summary>The identity ACTING through this invocation, stamped by the ingress door that produced it: the text
-    /// door stamps <see cref="CommandPrincipal.Console"/>, the snapshot mixer stamps the lane's resolved principal
-    /// (<see cref="ICommandPrincipalResolver"/>), and an injection sink stamps the identity it was constructed with.
+    /// door stamps <see cref="Principal.Console"/>, the snapshot mixer stamps the lane's resolved principal
+    /// (<see cref="IPrincipalResolver"/>), and an injection sink stamps the identity it was constructed with.
     /// A handler READS this to attribute its action; a handler that constructs a principal instead is asserting an
     /// identity rather than carrying one.</summary>
-    public CommandPrincipal Principal { get; internal init; }
+    public Principal Principal { get; internal init; }
     /// <summary>The registry that dispatched the invocation, allowing handlers to query or affect command state.
     /// May be <see langword="null"/> when no registry context is available.</summary>
     public CommandRegistry? Registry { get; internal init; }

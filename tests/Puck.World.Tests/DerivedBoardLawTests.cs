@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Assets.Documents;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -85,7 +86,7 @@ public sealed class DerivedBoardLawTests {
         fixture.Server.EchoTap = next => echo = next;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             Row: "board",
             Key: "0",
             Value: 3,
@@ -119,7 +120,7 @@ public sealed class DerivedBoardLawTests {
         fixture.Server.EchoTap = next => echo = next;
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            WorldPrincipal.Console,
+            Principal.Console,
             Row: DerivedBoardRow(cells: [Cell(
                     key: "0",
                     value: 3
@@ -142,7 +143,7 @@ public sealed class DerivedBoardLawTests {
         ));
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             Row: "tokens",
             Key: "a",
             Value: 2,
@@ -194,8 +195,8 @@ public sealed class DerivedBoardLawTests {
             reason: out var reason
         ));
         Assert.Contains(
-            expectedSubstring: "the board is never authored, only derived",
-            actualString: reason
+            actualString: reason,
+            expectedSubstring: "the board is never authored, only derived"
         );
     }
     [Fact]
@@ -289,7 +290,7 @@ public sealed class DerivedBoardLawTests {
         ));
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             Row: "tokens",
             Key: "a",
             Value: 3,
@@ -297,7 +298,7 @@ public sealed class DerivedBoardLawTests {
         ));
         fixture.Step();
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             Row: "tokens",
             Key: "b",
             Value: 3,

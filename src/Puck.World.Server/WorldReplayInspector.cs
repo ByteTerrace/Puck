@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
@@ -570,7 +571,7 @@ public sealed class WorldReplayInspector {
             applied: applied
         );
         /// <inheritdoc/>
-        public string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels) => m_inner.DescribeUndeclaredGrantedChannels(
+        public string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels) => m_inner.DescribeUndeclaredGrantedChannels(
             channels: channels,
             principal: principal,
             reach: reach

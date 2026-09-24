@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Hosting;
@@ -157,7 +158,7 @@ public sealed class ReplayRateStampLawTests {
                     Kind: WorldRebuildKind.Load,
                     PathHint: path
                 ),
-                principal: WorldPrincipal.Console
+                principal: Principal.Console
             );
 
             // Drains the rebuild (WorldServer.Step -> DrainPendingOps -> ApplyRebuild swaps the live definition to
@@ -234,7 +235,7 @@ public sealed class ReplayRateStampLawTests {
                     Kind: WorldRebuildKind.Load,
                     PathHint: path
                 ),
-                principal: WorldPrincipal.Console
+                principal: Principal.Console
             );
 
             fixture.Step();
@@ -357,12 +358,12 @@ public sealed class ReplayPendingLeverFlushLawTests {
         // pause event used to strand in, but for a kind that is NOT provably harmless to relocate.
         transport.SubmitGrant(
             grant: new WorldGrant(
-                Principal: WorldPrincipal.Seat(slot: 1),
+                Grantee: Principal.Seat(slot: 1),
                 Capability: WorldCapability.Drive,
                 Subject: GrantSubject.Body(index: 0),
                 Exclusive: false
             ),
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
 
         var result = tape.StopRecording();

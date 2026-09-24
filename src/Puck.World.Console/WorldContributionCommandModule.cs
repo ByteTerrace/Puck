@@ -86,31 +86,11 @@ public sealed class WorldContributionCommandModule(IWorldConsoleAuthority author
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.contributions",
+        yield return authority.CreateOptionalFilterCommand(
+            describe: (filter, server) => Describe(filter: filter, server: server),
             description: "Echoes every contribution slot — the host-authored half (tenure, slotCreationId, link, graceSeconds and its compiled tick count) and the server-stamped half (contributor, retractDeadlineTick) — beside the live reachability of each presence slot's watched link: world.contributions [placementId]. With a placement id, echoes only that slot.",
-            handler: (context, args) => {
-                if (args.Count > 1) {
-                    return CommandResult.Error(output: "[world.contributions: expected [placementId]]");
-                }
-
-                if (!authority.TryResolveServer(
-                    context: context,
-                    error: out var error,
-                    server: out var server,
-                    verb: "world.contributions"
-                )) {
-                    return error;
-                }
-
-                return new CommandResult(Output: Describe(
-                    filter: ((args.Count == 1)
-                    ? args[0].ToString()
-                    : null),
-                    server: server
-                ));
-            }
+            name: "world.contributions",
+            paramName: "placementId"
         );
     }
 }

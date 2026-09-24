@@ -8,12 +8,12 @@ public static partial class WorldDefinitionValidator {
     // in range (a mutation can carry an out-of-range cast the JSON converter alone would not catch), and the surface
     // format not the Unknown hole. Genlock is SHAPE-only (null or non-whitespace) — unlike storage.endpoint (nothing yet
     // consumes it), genlock IS wired at boot into the external-clock election, which tolerates an unknown source id.
-    /// <summary>Refuses, at authoring, any token the backend site could emit that names no backend. Left to the
+    /// <summary>Refuses, at authoring, a backend-row source that can emit anything naming no backend. Left to the
     /// settle-time parse alone this would be a coin-flip refusal: a weighted table carrying one bad token boots fine
     /// on every seed that does not draw it, so whether the world starts would move with the world seed and the
-    /// instance identity. Every reachable token is checked instead — the same reason a numeric site's distribution is
-    /// narrowed against its domain rather than against what it happened to roll.</summary>
-    private static void ValidateBackendTokens(Draw draw, IReadOnlyList<GeneratorRow>? generators, List<string> errors) {
+    /// instance identity. The source's whole emission language is enumerated instead — the same reason a numeric
+    /// site's distribution is narrowed against its domain rather than against what it happened to roll.</summary>
+    private static void ValidateBackendTokens(Draw draw, IReadOnlyList<GeneratorRow>? generators, string rowName, List<string> errors) {
         if (!GeneratorEngine.TryResolveSource(
             draw: draw,
             generator: out var generator,
@@ -23,14 +23,22 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        foreach (var context in (generator.Contexts ?? [])) {
-            foreach (var alternative in ((context?.Alternatives) ?? [])) {
-                if (
-                    (alternative is not null) &&
-                    (WorldHostTokens.ParseBackend(token: alternative.Token) is null)
-                ) {
-                    errors.Add(item: $"a backend-row generator could emit token '{alternative.Token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}').");
-                }
+        // A backend names one of three tokens, so a source spanning a context's worth of alternatives is already
+        // far past anything admissible; the ceiling exists to bound the walk, not to bound the author.
+        if (!GeneratorEngine.TryEnumerateEmissions(
+            ceiling: GeneratorCapacity.MaxAlternativesPerContext,
+            emissions: out var emissions,
+            generator: generator,
+            reason: out var reason
+        )) {
+            errors.Add(item: $"host.backendRow names state row '{rowName}', whose source cannot be proven against the backend tokens: {reason}.");
+
+            return;
+        }
+
+        foreach (var emission in emissions) {
+            if (WorldHostTokens.ParseBackend(token: emission) is null) {
+                errors.Add(item: $"host.backendRow names state row '{rowName}', whose source can emit '{emission}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}').");
             }
         }
     }
@@ -171,7 +179,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"host.backend '{backend}' is not a defined WorldBackendPreference.");
         }
 
-        ValidateHostBackendRow(errors: errors, host: host, rows: stateRows);
+        ValidateHostBackendRow(errors: errors, generators: generators, host: host, rows: stateRows);
 
         if (!Enum.IsDefined(value: host.PresentMode)) {
             errors.Add(item: $"host.presentMode '{host.PresentMode}' is not a defined PresentMode.");
@@ -191,29 +199,16 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: "host.genlock must be non-whitespace or null.");
         }
 
-        // Listen is SHAPE-only too: null (loopback-only, the default) or a non-whitespace "host:port" pair.
-        // Server.WorldPeerHost is what actually parses/binds it; the validator only refuses an obviously malformed
-        // value so a typo fails loudly at boot rather than surfacing as a silent "never listening".
-        if ((host.Listen is { } listen)) {
-            if (string.IsNullOrWhiteSpace(value: listen)) {
-                errors.Add(item: "host.listen must be a non-whitespace \"host:port\" pair or null.");
-            } else {
-                var separator = listen.LastIndexOf(value: ':');
-
-                if (
-                    (separator <= 0) ||
-                    (separator == (listen.Length - 1)) ||
-                    !int.TryParse(
-                    s: listen[(separator + 1)..],
-                    result: out var port
-                ) ||
-                    (port <= 0) ||
-                    (port > 65535)
-                ) {
-                    errors.Add(item: $"host.listen '{listen}' must be a \"host:port\" pair with a port 1..65535.");
-                }
-            }
-        }
+        // Listen is SHAPE-only too: null (loopback-only, the default) or a non-whitespace "host:port" pair, where port 0
+        // binds any free port and the bound endpoint is narrated. Server.WorldPeerHost is what actually parses/binds it;
+        // the validator only refuses an obviously malformed value so a typo fails loudly at boot rather than surfacing
+        // as a silent "never listening".
+        ValidateHostEndpoint(
+            value: host.Listen,
+            path: "host.listen",
+            minimumPort: 0,
+            errors: errors
+        );
 
         // Branding is SHAPE-only, and deliberately forgiving past that: the title is whatever the author wants in the
         // caption bar, and the icon is a path the platform backend resolves against the world document at boot. An
@@ -236,6 +231,7 @@ public static partial class WorldDefinitionValidator {
         ValidateHostEndpoint(
             value: host.Authority,
             path: "host.authority",
+            minimumPort: 1,
             errors: errors
         );
 
@@ -247,7 +243,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    private static void ValidateHostEndpoint(string? value, string path, List<string> errors) {
+    // A null endpoint is absent; anything else is a "host:port" pair whose port lies in minimumPort..65535.
+    private static void ValidateHostEndpoint(string? value, string path, int minimumPort, List<string> errors) {
         if (value is null) {
             return;
         }
@@ -267,10 +264,10 @@ public static partial class WorldDefinitionValidator {
             s: value[(separator + 1)..],
             result: out var port
         ) ||
-            (port <= 0) ||
+            (port < minimumPort) ||
             (port > 65535)
         ) {
-            errors.Add(item: $"{path} '{value}' must be a \"host:port\" pair with a port 1..65535.");
+            errors.Add(item: $"{path} '{value}' must be a \"host:port\" pair with a port {minimumPort}..65535.");
         }
     }
     /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldFactsCompiler.CompileAllInteractions(WorldDefinition)"/>
@@ -452,10 +449,18 @@ public static partial class WorldDefinitionValidator {
                 hasDocument &&
                 row.Document!.StartsWith(
                 comparisonType: StringComparison.Ordinal,
-                value: OwnerNeighbourKeyPrefix
+                value: WorldReference.OwnerKeyPrefix
             )
             ) {
-                errors.Add(item: $"{path}.document '{row.Document}' begins with the reserved '{OwnerNeighbourKeyPrefix}' prefix — that spelling is reserved for the owner-named arm.");
+                errors.Add(item: $"{path}.document '{row.Document}' begins with the reserved '{WorldReference.OwnerKeyPrefix}' prefix — that spelling is reserved for the owner-named arm.");
+            } else if (
+                hasDocument &&
+                !WorldDocumentName.TryValidate(
+                name: row.Document!,
+                reason: out var documentReason
+            )
+            ) {
+                errors.Add(item: $"{path}.document {documentReason}.");
             }
         }
 
@@ -871,7 +876,7 @@ public static partial class WorldDefinitionValidator {
 
                             if (
                                 (conditions[c] is { } definedCondition) &&
-                                !Enum.IsDefined(value: definedCondition.Comparison)
+                                !definedCondition.Comparison.IsComparison()
                             ) {
                                 errors.Add(item: $"{path}.when[{c}].comparison '{definedCondition.Comparison}' is unknown.");
                             }
@@ -931,7 +936,7 @@ public static partial class WorldDefinitionValidator {
                         value: expose.Value
                     );
 
-                    if (!Enum.IsDefined(value: expose.Comparison)) {
+                    if (!expose.Comparison.IsComparison()) {
                         errors.Add(item: $"{path}.comparison '{expose.Comparison}' is unknown.");
                     }
 

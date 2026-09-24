@@ -25,9 +25,12 @@ public sealed class ScreenFrameOrthogonalityLawTests {
             Right: right,
             Round: 0f,
             Route: WorldScreenRoute.Passive,
-            Source: new WorldScreenSource.TestPattern(
-                Height: 240,
-                Width: 320
+            Source: WorldImageProducerSettings.SourceOf(
+                id: WorldImageProducerSettings.TestPatternId,
+                settings: new WorldTestPatternSettings(
+                    Height: 240,
+                    Width: 320
+                )
             ),
             Up: up
         ),

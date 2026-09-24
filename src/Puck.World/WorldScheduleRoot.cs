@@ -1,8 +1,7 @@
 namespace Puck.World;
 
-/// <summary>The boot-time override for <c>schedule.directory</c> — the <c>--state-dir</c>/<c>--capture-dir</c>
-/// pattern applied to schedule output, so two runs of the same document can write sibling directories without two
-/// document copies.</summary>
+/// <summary>The schedule output directory a boot's <c>--schedule-dir</c> names. A document carries no output path of
+/// its own, so two runs of the same document write sibling directories without two document copies.</summary>
 /// <remarks>The override is also what arms the section: <see cref="WorldScheduleRunner"/> submits a row only when
 /// <see cref="IsArmed"/>, so a boot that did not ask for schedule output runs no scheduled command at all.</remarks>
 internal static class WorldScheduleRoot {
@@ -40,10 +39,8 @@ internal static class WorldScheduleRoot {
             : null
         );
     }
-    /// <summary>Resolves the effective schedule directory: the boot override when present, else
-    /// <paramref name="authored"/> resolved against the current directory.</summary>
-    /// <param name="authored">The document's <c>schedule.directory</c>.</param>
-    /// <returns>The rooted directory path.</returns>
-    public static string Resolve(string authored) =>
-        (OverridePath ?? Path.GetFullPath(path: authored));
+
+    /// <summary>Gets the rooted schedule output directory this boot armed.</summary>
+    /// <exception cref="InvalidOperationException">This boot armed no schedule.</exception>
+    public static string Directory => (OverridePath ?? throw new InvalidOperationException(message: "this boot armed no schedule directory"));
 }

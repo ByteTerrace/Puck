@@ -87,14 +87,12 @@ public sealed class CartridgeSpriteTurnTests {
                 Turn: CartridgeExpressions.Of(constant: 32)
             )],
         };
-        var errors = CartridgeDocuments.Validate(document: document);
 
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "can only mirror one"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "can only mirror one",
+            Name: "a turn on the colour machine",
+            Path: "sprites[0].turn"
+        ).Holds();
     }
 }

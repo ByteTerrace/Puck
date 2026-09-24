@@ -1,0 +1,164 @@
+using System.Globalization;
+using System.Text;
+
+namespace Puck.Shaders;
+
+/// <summary>
+/// Generates the HLSL include a pass reads its <see cref="ShaderInterface"/> through. Every declaration carries its
+/// placement explicitly and for both backends at once: a block member carries <c>[[vk::offset(n)]]</c> and sits after
+/// named padding that makes Direct3D 12's packing land on the same offset, and a binding carries
+/// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>, and a pushed group's block carries
+/// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space0)</c>, where both backends' root constants live. Values
+/// reach a pass as members of a named struct per group, and an array is read through a generated accessor that hides how
+/// its elements are stored.
+/// <para>The text is a pure function of the interface: the same interface generates the same bytes, with LF line
+/// endings, on every host.</para>
+/// </summary>
+public static class ShaderInterfaceHlsl {
+    /// <summary>Returns the file name a generated include takes: the interface name followed by
+    /// <c>.interface.hlsli</c>.</summary>
+    /// <param name="shaderInterface">The interface.</param>
+    /// <returns>The file name.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shaderInterface"/> is <see langword="null"/>.</exception>
+    public static string FileName(ShaderInterface shaderInterface) {
+        ArgumentNullException.ThrowIfNull(argument: shaderInterface);
+
+        return (shaderInterface.Name + ".interface.hlsli");
+    }
+    /// <summary>Generates the include for an interface.</summary>
+    /// <param name="shaderInterface">The interface.</param>
+    /// <returns>The HLSL text.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shaderInterface"/> is <see langword="null"/>.</exception>
+    public static string Generate(ShaderInterface shaderInterface) {
+        ArgumentNullException.ThrowIfNull(argument: shaderInterface);
+
+        var layout = shaderInterface.Layout();
+        var guard = ("PUCK_SHADER_INTERFACE_" + shaderInterface.Name.Replace(
+            newChar: '_',
+            oldChar: '-'
+        ).ToUpperInvariant());
+        var text = new StringBuilder();
+
+        Line(
+            line: $"// Generated from shader interface '{shaderInterface.Name}' ({shaderInterface.Hash}). Regenerate it from the interface; never edit it.",
+            text: text
+        );
+        Line(
+            line: $"#ifndef {guard}",
+            text: text
+        );
+        Line(
+            line: $"#define {guard}",
+            text: text
+        );
+
+        foreach (var group in layout.Groups) {
+            Line(
+                line: "",
+                text: text
+            );
+            Line(
+                line: (group.Pushed
+                    ? $"// The {group.Group} group: push constants, register space {group.Set}."
+                    : $"// The {group.Group} group: descriptor set {group.Set}, register space {group.Set}."),
+                text: text
+            );
+
+            if (group.BlockTypeName is not null) {
+                Line(
+                    line: $"struct {group.BlockTypeName} {{",
+                    text: text
+                );
+
+                foreach (var member in group.BlockMembers) {
+                    Line(
+                        line: $"    [[vk::offset({Number(value: member.Offset)})]] {member.Type.Spelling()} {member.Name}{((member.Length == 0)
+                            ? ""
+                            : $"[{Number(value: member.Length)}]")};",
+                        text: text
+                    );
+                }
+
+                Line(
+                    line: "};",
+                    text: text
+                );
+                Line(
+                    line: $"{(group.Pushed ? "[[vk::push_constant]]" : Binding(binding: 0, set: group.Set))} ConstantBuffer<{group.BlockTypeName}> {group.BlockVariableName}{Register(binding: 0, register: 'b', set: group.Set)};",
+                    text: text
+                );
+            }
+
+            foreach (var resource in group.Resources) {
+                Line(
+                    line: Declaration(
+                        resource: resource,
+                        set: group.Set
+                    ),
+                    text: text
+                );
+            }
+        }
+
+        var arrays = layout.Groups.SelectMany(selector: static group => group.BlockMembers.Select(selector: member => (Group: group, Member: member)))
+            .Where(predicate: static entry => (entry.Member.Length != 0))
+            .ToArray();
+
+        if (arrays.Length != 0) {
+            Line(
+                line: "",
+                text: text
+            );
+        }
+
+        foreach (var (group, member) in arrays) {
+            var declared = shaderInterface.Members.Single(predicate: candidate => string.Equals(
+                a: candidate.Name,
+                b: member.Name,
+                comparisonType: StringComparison.Ordinal
+            ));
+            var type = declared.Type!.Value;
+
+            Line(
+                line: $"{type.Spelling()} {ShaderInterface.AccessorName(member: declared)}(uint index) {{ return {group.BlockVariableName}.{member.Name}[index].{"xyzw"[..((int)type.ComponentCount())]}; }}",
+                text: text
+            );
+        }
+
+        Line(
+            line: "",
+            text: text
+        );
+        Line(
+            line: $"#endif // {guard}",
+            text: text
+        );
+
+        return text.ToString();
+    }
+
+    private static string Binding(uint binding, uint set) =>
+        $"[[vk::binding({Number(value: binding)}, {Number(value: set)})]]";
+    private static string Declaration(ShaderInterfaceResourceLayout resource, uint set) {
+        var member = resource.Member;
+
+        var (register, declaration) = resource.Kind switch {
+            ShaderBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
+            ShaderBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
+            ShaderBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
+            _ => throw new ArgumentOutOfRangeException(
+                actualValue: resource.Kind,
+                message: "The binding kind is not generated for an interface member.",
+                paramName: nameof(resource)
+            ),
+        };
+
+        return $"{Binding(binding: resource.Binding, set: set)} {declaration}{Register(binding: resource.Binding, register: register, set: set)};";
+    }
+    private static void Line(StringBuilder text, string line) =>
+        text.Append(value: line).Append(value: '\n');
+    private static string Number(uint value) =>
+        value.ToString(provider: CultureInfo.InvariantCulture);
+    private static string Register(uint binding, uint set, char register) =>
+        $" : register({register}{Number(value: binding)}, space{Number(value: set)})";
+}

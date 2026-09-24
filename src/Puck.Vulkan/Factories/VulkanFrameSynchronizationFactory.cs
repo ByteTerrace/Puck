@@ -11,33 +11,26 @@ namespace Puck.Vulkan.Factories;
 /// </summary>
 public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizationFactory {
     private void Cleanup(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint imageAvailableSemaphoreHandle,
         nint inFlightFenceHandle,
         nint[] renderFinishedSemaphoreHandles
     ) {
         foreach (var renderFinishedSemaphoreHandle in renderFinishedSemaphoreHandles) {
-            if (renderFinishedSemaphoreHandle != 0) {
-                m_frameSynchronizationApi.DestroySemaphore(
-                    deviceHandle: deviceHandle,
-                    semaphoreHandle: renderFinishedSemaphoreHandle
-                );
-            }
-        }
-
-        if (imageAvailableSemaphoreHandle != 0) {
             m_frameSynchronizationApi.DestroySemaphore(
-                deviceHandle: deviceHandle,
-                semaphoreHandle: imageAvailableSemaphoreHandle
+                device: device,
+                semaphoreHandle: renderFinishedSemaphoreHandle
             );
         }
 
-        if (inFlightFenceHandle != 0) {
-            m_frameSynchronizationApi.DestroyFence(
-                deviceHandle: deviceHandle,
-                fenceHandle: inFlightFenceHandle
-            );
-        }
+        m_frameSynchronizationApi.DestroySemaphore(
+            device: device,
+            semaphoreHandle: imageAvailableSemaphoreHandle
+        );
+        m_frameSynchronizationApi.DestroyFence(
+            device: device,
+            fenceHandle: inFlightFenceHandle
+        );
     }
     private static void EnsureHandle(nint handle, string message) {
         if (handle == 0) {
@@ -54,11 +47,11 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
         );
 
         var semaphoreRequest = new VulkanFrameSynchronizationCreateRequest(
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             StartSignaled: false
         );
         var fenceRequest = new VulkanFrameSynchronizationCreateRequest(
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             StartSignaled: true
         );
         nint imageAvailableSemaphoreHandle = 0;
@@ -103,7 +96,7 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
             );
 
             return new VulkanFrameSynchronization(
-                deviceHandle: logicalDevice.Handle,
+                device: logicalDevice.Commands,
                 frameSynchronizationApi: m_frameSynchronizationApi,
                 imageAvailableSemaphoreHandle: imageAvailableSemaphoreHandle,
                 inFlightFenceHandle: inFlightFenceHandle,
@@ -111,7 +104,7 @@ public sealed class VulkanFrameSynchronizationFactory : IVulkanFrameSynchronizat
             );
         } catch {
             Cleanup(
-                deviceHandle: logicalDevice.Handle,
+                device: logicalDevice.Commands,
                 imageAvailableSemaphoreHandle: imageAvailableSemaphoreHandle,
                 inFlightFenceHandle: inFlightFenceHandle,
                 renderFinishedSemaphoreHandles: renderFinishedSemaphoreHandles

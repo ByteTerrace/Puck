@@ -1,10 +1,11 @@
 namespace Puck.HumbleGamingBrick.Post;
 
-/// <summary>The ordered POST stage registry. The battery runs these in array order (Tier A first); <c>--tier</c> and
+/// <summary>The ordered POST stage registry. The battery reports these in array order (Tier A first) and starts its
+/// concurrent stages in that order, so the long self-contained stages belong near the head; <c>--tier</c> and
 /// <c>--filter</c> select a subset without changing the order.</summary>
 internal static class PostStages {
     /// <summary>Creates the ordered stage list.</summary>
-    /// <returns>The stages, in run order.</returns>
+    /// <returns>The stages, in report order.</returns>
     public static IPostStage<PostContext>[] Create() =>
         [
             // Tier A — core self-tests (self-contained synthetic ROM; run anywhere).

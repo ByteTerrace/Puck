@@ -38,14 +38,13 @@ public sealed class CellValueReadLawTests {
 
         return vector;
     }
-
     private static WorldDefinition Document() => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(
             Spaces: [new StateSpace(
-                    Dimensions: 8,
-                    Model: "test-model",
-                    Name: CellName.Parse(candidate: "lore"),
-                    Revision: "1"
+                    dimensions: 8,
+                    model: "test-model",
+                    name: CellName.Parse(candidate: "lore"),
+                    revision: "1"
                 )],
             World: [
                 new WorldStateRow(
@@ -102,16 +101,15 @@ public sealed class CellValueReadLawTests {
             ]
         ),
     };
-
     private static CellValue Read(WorldDefinition definition, string row, string? key = null) {
         Assert.True(condition: WorldStateReader.TryReadValue(
             definition: definition,
+            engineTick: Tick,
             key: key,
             row: out _,
             rowName: row,
-            value: out var value,
             tick: Tick,
-            engineTick: Tick
+            value: out var value
         ));
 
         return value;
@@ -146,7 +144,6 @@ public sealed class CellValueReadLawTests {
             row: "score"
         ).AsText);
     }
-
     [Fact]
     public void AVectorCellAnswersItsComponentsWhereTheScalarPairAnswersAbsent() {
         var definition = Document();
@@ -172,19 +169,18 @@ public sealed class CellValueReadLawTests {
         // The pair this carrier replaces reads the same cell as nothing at all.
         _ = WorldStateReader.TryRead(
             definition: definition,
+            engineTick: Tick,
             key: "m1",
             rawValue: out var raw,
             row: out _,
             rowName: "memories",
             text: out var text,
-            tick: Tick,
-            engineTick: Tick
+            tick: Tick
         );
 
         Assert.Null(@object: raw);
         Assert.Null(@object: text);
     }
-
     [Fact]
     public void AnAbsentCellHoldsNoCaseAndADeclaredEmptyTextCellDoesNot() {
         var definition = Document();
@@ -213,7 +209,6 @@ public sealed class CellValueReadLawTests {
             expected: string.Empty
         );
     }
-
     [Fact]
     public void AKeyNoNameParsesFromIsAbsentOnEveryRowKindIncludingAVectorSlotRow() {
         var definition = Document();

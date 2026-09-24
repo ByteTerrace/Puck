@@ -17,6 +17,7 @@ using Puck.Hosting;
 using Puck.Mcp;
 using Puck.Networking;
 using Puck.State;
+using Puck.Testing;
 using Puck.World;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -28,8 +29,8 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
     internal const string Issuer = "https://issuer.example.test/tenant/v2.0";
     internal const string Tenant = "c75f3c9e-c844-4023-bfdf-81d996d67eb9";
 
-    internal int Active;
     internal string CommandHelp = "read; set <value>; wait";
+
     internal int KeyReads;
     internal int MetadataReads;
     internal int Opened;
@@ -42,9 +43,23 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
     private RealWorldHost? m_realWorldHost;
 
     internal readonly Channel<string> Entered = Channel.CreateUnbounded<string>();
-    internal readonly ManualClock Clock = new();
+    // The one clock every host deadline, idle sweep and token instant reads. It starts at the current whole second
+    // only because the JWT handler judges a token's lifetime on system time, which no host clock can replace; after
+    // that, only a law moves it.
+    internal readonly VirtualClock Clock = new(start: DateTimeOffset.FromUnixTimeSeconds(seconds: DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
 
+    private readonly Lock m_changeGate = new();
+
+    private int m_active;
+    private int m_inFlight;
+
+    private TaskCompletionSource m_changed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly RSA m_key = RSA.Create(keySizeInBits: 2048);
+
+    /// <summary>Gets how many Console sessions the gateway holds open.</summary>
+    internal int Active => Volatile.Read(location: ref m_active);
+    /// <summary>Gets how many requests are inside the gateway's pipeline, limiter leases included.</summary>
+    internal int InFlight => Volatile.Read(location: ref m_inFlight);
 
     internal WebApplication App { get; private set; } = null!;
 
@@ -56,15 +71,38 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
 
     internal async Task<McpClient> ClientAsync(HttpClient http, string revision, CancellationToken token) => await McpClient.CreateAsync(
         new HttpClientTransport(
-            new() { Endpoint = new(
+            new() {
+                Endpoint = new(
                 baseUri: http.BaseAddress!,
                 relativeUri: "/mcp"
-            ), TransportMode = HttpTransportMode.StreamableHttp },
+            ),
+                TransportMode = HttpTransportMode.StreamableHttp,
+            },
             http
         ),
-        new() { ProtocolVersion = revision },
+        // The revision is pinned, so the initialize fallback that the discover probe's timeout exists for is
+        // refused anyway; the probe would only misreport a slow first request (a cold JIT, OIDC metadata, a TLS
+        // handshake) as a handshake-only server. InitializationTimeout still bounds the connect.
+        new() { DiscoverProbeTimeout = Timeout.InfiniteTimeSpan, ProtocolVersion = revision },
         cancellationToken: token
     );
+
+    private void ChangeActive(int by) {
+        Interlocked.Add(
+            location1: ref m_active,
+            value: by
+        );
+        Pulse();
+    }
+    // Every event a law may wait on — a session opening or closing, a request leaving the pipeline — pulses one
+    // signal, and each waiter re-reads its own condition on it.
+    private void Pulse() {
+        lock (m_changeGate) {
+            m_changed.TrySetResult();
+            m_changed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
     internal HttpClient Http(string? token = null) {
         var handler = new HttpClientHandler();
 
@@ -72,10 +110,12 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         var http = new HttpClient(handler: handler) { BaseAddress = new Uri(uriString: App.Urls.Single()), Timeout = TimeSpan.FromSeconds(seconds: 15) };
 
         http.DefaultRequestHeaders.Host = "mcp.example.test";
-        if (token is not null) { http.DefaultRequestHeaders.Authorization = new(
+        if (token is not null) {
+            http.DefaultRequestHeaders.Authorization = new(
             parameter: token,
             scheme: "Bearer"
-        ); }
+        );
+        }
         return http;
     }
     internal async Task StartAsync(CancellationToken token, bool tls = false, bool entra = false, Action<WebApplicationBuilder>? configure = null, bool proxy = false, bool embedded = false) {
@@ -111,14 +151,17 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
                 : new ProbeHost(owner: this)));
             configure?.Invoke(builder);
             builder.Services.AddSingleton<TimeProvider>(implementationInstance: Clock);
+            builder.Services.AddSingleton<IStartupFilter>(implementationInstance: new RequestSignal(owner: this));
             builder.Services.Configure<JwtBearerOptions>(
                 RemoteMcpServer.AuthenticationScheme,
                 jwt => jwt.BackchannelHttpHandler = new IssuerHandler(owner: this)
             );
-            if (proxy) { builder.Services.Configure<JwtBearerOptions>(
+            if (proxy) {
+                builder.Services.Configure<JwtBearerOptions>(
                 RemoteMcpServer.ProxyAuthenticationScheme,
                 jwt => jwt.BackchannelHttpHandler = new IssuerHandler(owner: this)
-            ); }
+            );
+            }
         }
         if (embedded) {
             var builder = WebApplication.CreateSlimBuilder();
@@ -131,10 +174,12 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             );
             App = builder.Build();
             App.Run(handler: RemoteMcpServer.CreateRequestDelegate(services: App.Services));
-        } else { App = RemoteMcpServer.Build(
+        } else {
+            App = RemoteMcpServer.Build(
             configureBuilder: Configure,
             options: options
-        ); }
+        );
+        }
         await App.StartAsync(cancellationToken: token);
     }
     internal async Task StopGatewayAsync(CancellationToken token) {
@@ -143,12 +188,13 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             !m_appDisposed
         ) { m_appDisposed = true; await App.StopAsync(cancellationToken: token); await App.DisposeAsync(); }
     }
-    internal string Token(string subject = "alice", string? failure = null, int lifetimeSeconds = 300, string? audience = null) {
+    internal string Token(string subject = "alice", string? failure = null, int lifetimeSeconds = 300, string? audience = null, int ageSeconds = 120) {
         using var wrongKey = ((failure == "signature")
             ? RSA.Create(keySizeInBits: 2048)
             : null
         );
         var claims = new Dictionary<string, object> { ["sub"] = subject, ["scope"] = "user_impersonation", ["tid"] = Tenant };
+        var now = Clock.GetUtcNow().UtcDateTime;
 
         if (failure == "entra") { claims.Remove(key: "scope"); claims["scp"] = "other user_impersonation"; claims["oid"] = subject; claims["sub"] = "pairwise-client-subject"; }
         if (failure is "scope" or "app-only") { claims.Remove(key: "scope"); claims["roles"] = new[] { "user_impersonation" }; }
@@ -161,19 +207,43 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             Audience = (audience ?? ((failure == "audience")
             ? "https://management.azure.com/"
             : Audience)),
-            IssuedAt = DateTime.UtcNow.AddMinutes(value: -2),
+            IssuedAt = now.AddSeconds(value: -ageSeconds),
             NotBefore = ((failure == "future")
-            ? DateTime.UtcNow.AddMinutes(value: 1)
-            : DateTime.UtcNow.AddMinutes(value: -2)),
+            ? now.AddMinutes(value: 1)
+            : now.AddSeconds(value: -ageSeconds)),
             Expires = ((failure == "expired")
-            ? DateTime.UtcNow.AddMinutes(value: -1)
-            : DateTime.UtcNow.AddSeconds(value: lifetimeSeconds)),
+            ? now.AddMinutes(value: -1)
+            : now.AddSeconds(value: lifetimeSeconds)),
             Claims = claims,
             SigningCredentials = new(
             new RsaSecurityKey(rsa: (wrongKey ?? m_key)) { KeyId = "test-key" },
             SecurityAlgorithms.RsaSha256
         ),
         });
+    }
+    /// <summary>Waits until exactly <paramref name="count"/> requests are inside the gateway's pipeline. A client reads
+    /// a call's result from the event stream before the server's request leaves the pipeline, so a law that needs a
+    /// limiter lease free waits here rather than on the result it already holds.</summary>
+    /// <param name="count">The requests the law deliberately keeps in flight.</param>
+    /// <param name="ct">The test's own cancellation.</param>
+    /// <returns>The wait.</returns>
+    internal Task WhenInFlightAsync(int count, CancellationToken ct) => WhenAsync(
+        condition: () => (InFlight == count),
+        ct: ct
+    );
+    /// <summary>Waits until <paramref name="condition"/> holds, re-reading it whenever a session opens or closes or a
+    /// request leaves the gateway's pipeline.</summary>
+    /// <param name="condition">The state the law waits for.</param>
+    /// <param name="ct">The test's own cancellation.</param>
+    /// <returns>The wait.</returns>
+    internal async Task WhenAsync(Func<bool> condition, CancellationToken ct) {
+        while (true) {
+            Task changed;
+
+            lock (m_changeGate) { changed = m_changed.Task; }
+            if (condition()) { return; }
+            await changed.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+        }
     }
 
     public async ValueTask DisposeAsync() {
@@ -197,26 +267,32 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
 
                 document = new { keys = new[] { new { kty = "RSA", kid = "test-key", use = "sig", alg = "RS256", n = Base64UrlEncoder.Encode(inArray: key.Modulus!), e = Base64UrlEncoder.Encode(inArray: key.Exponent!) } } };
             } else { throw new InvalidOperationException(message: ("Unexpected OIDC backchannel URL: " + request.RequestUri)); }
-            return Task.FromResult(result: new HttpResponseMessage(statusCode: HttpStatusCode.OK) { Content = new StringContent(
+            return Task.FromResult(result: new HttpResponseMessage(statusCode: HttpStatusCode.OK) {
+                Content = new StringContent(
                 content: JsonSerializer.Serialize(document),
                 encoding: Encoding.UTF8,
                 mediaType: "application/json"
-            ) });
+            ),
+            });
         }
     }
     private sealed class ProbeSession(RemoteMcpFixture owner) : IControlSession {
         private int m_disposed;
         private string m_value = "fresh";
 
-        public void Dispose() { if (Interlocked.Exchange(
+        public void Dispose() {
+            if (Interlocked.Exchange(
             location1: ref m_disposed,
             value: 1
-        ) == 0) { Interlocked.Decrement(location: ref owner.Active); } }
+        ) == 0) { owner.ChangeActive(by: -1); }
+        }
         public async Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) {
-            if (request.Command == "wait") { owner.Entered.Writer.TryWrite(item: "wait"); await Task.Delay(
+            if (request.Command == "wait") {
+                owner.Entered.Writer.TryWrite(item: "wait"); await Task.Delay(
                 cancellationToken: cancellationToken,
                 millisecondsDelay: Timeout.Infinite
-            ); }
+            );
+            }
             if (request.Command?.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "set "
@@ -241,10 +317,10 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
     private sealed class ProbeHost(RemoteMcpFixture owner) : RemoteMcpHost {
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
             Interlocked.Increment(location: ref owner.Opened);
-            Interlocked.Increment(location: ref owner.Active);
-            return ValueTask.FromResult<IControlSession>(new ProbeSession(owner: owner));
+            owner.ChangeActive(by: 1);
+            return ValueTask.FromResult<IControlSession>(result: new ProbeSession(owner: owner));
         }
-        public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => ValueTask.FromResult(new ControlCapabilities(
+        public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => ValueTask.FromResult(result: new ControlCapabilities(
             CommandHelp: owner.CommandHelp,
             SupportsCapture: true
         ));
@@ -268,7 +344,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         internal RealWorldHost(RemoteMcpFixture owner) {
             m_owner = owner;
 
-            var space = new StateSpace(Dimensions: 8, Model: "test-model", Name: CellName.Parse(candidate: "lore"), Revision: "1");
+            var space = new StateSpace(dimensions: 8, model: "test-model", name: CellName.Parse(candidate: "lore"), revision: "1");
             var definition = new WorldDefinition(StateRaw: new WorldStateSection(
                 Spaces: [space],
                 World: [
@@ -325,35 +401,35 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             }
         }
 
-        internal static WorldPrincipal AlicePrincipal { get; } = WorldPrincipal.Peer(generation: 1, index: 1);
-        internal static WorldPrincipal BobPrincipal { get; } = WorldPrincipal.Peer(generation: 1, index: 2);
+        internal static Principal AlicePrincipal { get; } = Principal.Peer(generation: 1, index: 1);
+        internal static Principal BobPrincipal { get; } = Principal.Peer(generation: 1, index: 2);
 
-        private static void GrantEdit(WorldServer server, WorldPrincipal principal, string rowName) {
-            if (!WorldMutationKindCatalog.TryParseMask(text: "UpsertStateCell", mask: out var kindMask, unknown: out _)) {
+        private static void GrantEdit(WorldServer server, Principal principal, string rowName) {
+            if (!WorldMutationKindCatalog.TryParseMask(mask: out var kindMask, text: "UpsertStateCell", unknown: out _)) {
                 throw new InvalidOperationException(message: "UpsertStateCell is not a recognized mutation kind.");
             }
 
-            server.Grant(actor: WorldPrincipal.Console, grant: new WorldGrant(
+            server.Grant(actor: Principal.Console, grant: new WorldGrant(
                 Budget: 16,
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kindMask,
-                Principal: principal,
+                Grantee: principal,
                 Subject: GrantSubject.Section(section: WorldSection.State)
             ));
-            server.Grant(actor: WorldPrincipal.Console, grant: new WorldGrant(
+            server.Grant(actor: Principal.Console, grant: new WorldGrant(
                 Capability: WorldCapability.Edit,
                 Exclusive: false,
-                Principal: principal,
+                Grantee: principal,
                 Subject: GrantSubject.State(name: rowName)
             ));
         }
 
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
             Interlocked.Increment(location: ref m_owner.Opened);
-            Interlocked.Increment(location: ref m_owner.Active);
+            m_owner.ChangeActive(by: 1);
 
-            var principal = WorldPrincipalMapping.ToCommand(principal: (string.Equals(a: caller.Subject, b: "alice", comparisonType: StringComparison.Ordinal)
+            var principal = ((string.Equals(a: caller.Subject, b: "alice", comparisonType: StringComparison.Ordinal)
                 ? AlicePrincipal
                 : BobPrincipal
             ));
@@ -363,9 +439,9 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
                 principal: principal
             );
 
-            return ValueTask.FromResult<IControlSession>(new TrackedSession(inner: session, owner: m_owner));
+            return ValueTask.FromResult<IControlSession>(result: new TrackedSession(inner: session, owner: m_owner));
         }
-        public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => ValueTask.FromResult(new ControlCapabilities(
+        public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => ValueTask.FromResult(result: new ControlCapabilities(
             CommandHelp: m_owner.CommandHelp,
             SupportsCapture: false
         ));
@@ -395,7 +471,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         public void Dispose() {
             if (Interlocked.Exchange(location1: ref m_disposed, value: 1) == 0) {
                 inner.Dispose();
-                Interlocked.Decrement(location: ref owner.Active);
+                owner.ChangeActive(by: -1);
             }
         }
     }
@@ -419,15 +495,14 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             return false;
         }
     }
-
-    internal sealed class ManualClock : TimeProvider {
-        private long m_offset;
-
-        internal void Advance(TimeSpan time) => Interlocked.Add(
-            location1: ref m_offset,
-            value: ((long)(time.TotalSeconds * TimestampFrequency))
-        );
-
-        public override long GetTimestamp() => (base.GetTimestamp() + Volatile.Read(location: ref m_offset));
+    // Outermost in the pipeline, so a request has released every limiter lease it held before it signals.
+    private sealed class RequestSignal(RemoteMcpFixture owner) : IStartupFilter {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app => {
+            app.Use(middleware: async (context, following) => {
+                Interlocked.Increment(location: ref owner.m_inFlight);
+                try { await following(context).ConfigureAwait(continueOnCapturedContext: false); } finally { Interlocked.Decrement(location: ref owner.m_inFlight); owner.Pulse(); }
+            });
+            next(app);
+        };
     }
 }

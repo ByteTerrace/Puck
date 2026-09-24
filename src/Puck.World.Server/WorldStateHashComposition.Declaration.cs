@@ -118,19 +118,8 @@ public static partial class WorldStateHashComposition {
     }
 
     // A null string folds as a value no length can produce, so an absent member is never the empty one.
-    private static void AppendString(ref Fnv1aHash hash, string? value) {
-        if (value is null) {
-            hash.Add(value: uint.MaxValue);
-
-            return;
-        }
-
-        hash.Add(value: ((uint)value.Length));
-
-        foreach (var character in value) {
-            hash.Add(value: ((uint)character));
-        }
-    }
+    private static void AppendString(ref Fnv1aHash hash, string? value) =>
+        hash.Add(value: value);
     private static void AppendAdvance(ref Fnv1aHash hash, StateAdvance? advance) {
         hash.Add(value: ((byte)((advance is null)
             ? 0

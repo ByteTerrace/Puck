@@ -73,7 +73,7 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         var primaryPipeline = graphicsPipelines.First();
         var request = new VulkanCommandBufferRecordRequest(
             CommandBufferHandle: commandResources.CommandBufferHandles[imageIndex],
-            DeviceHandle: commandResources.DeviceHandle,
+            Device: commandResources.Device,
             FramebufferHandle: framebufferSet.FramebufferHandles[imageIndex],
             Height: swapchain.ImageExtentHeight,
             RenderPassHandle: renderPass.Handle,
@@ -87,13 +87,13 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         // The present-path fullscreen blit — the surface compositor's one draw — as a GPU-capture debug group.
         m_commandBufferRecordingApi.BeginDebugLabel(
             commandBufferHandle: request.CommandBufferHandle,
-            deviceHandle: request.DeviceHandle,
+            device: request.Device,
             label: "surface-blit"
         );
         // Dynamic scissor over the whole framebuffer; the pipeline bakes the matching viewport.
         m_commandBufferRecordingApi.SetScissor(
             commandBufferHandle: request.CommandBufferHandle,
-            deviceHandle: request.DeviceHandle,
+            device: request.Device,
             height: request.Height,
             width: request.Width,
             x: 0,
@@ -116,7 +116,7 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
             if (selectedPipeline.Handle != currentPipelineHandle) {
                 m_commandBufferRecordingApi.BindGraphicsPipeline(
                     commandBufferHandle: request.CommandBufferHandle,
-                    deviceHandle: request.DeviceHandle,
+                    device: request.Device,
                     pipelineHandle: selectedPipeline.Handle
                 );
                 currentPipelineHandle = selectedPipeline.Handle;
@@ -126,7 +126,7 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
             if (drawCommand.VertexBufferBinding is VulkanVertexBufferBinding vertexBufferBinding) {
                 m_commandBufferRecordingApi.BindVertexBuffer(
                     commandBufferHandle: request.CommandBufferHandle,
-                    deviceHandle: request.DeviceHandle,
+                    device: request.Device,
                     vertexBufferBinding: vertexBufferBinding
                 );
             }
@@ -135,7 +135,7 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
                 m_commandBufferRecordingApi.PushConstants(
                     commandBufferHandle: request.CommandBufferHandle,
                     data: pushConstantBinding.Data.Span,
-                    deviceHandle: request.DeviceHandle,
+                    device: request.Device,
                     offset: pushConstantBinding.Offset,
                     pipelineLayoutHandle: currentPipelineLayoutHandle,
                     stageFlags: pushConstantBinding.StageFlags
@@ -146,14 +146,14 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
                 m_commandBufferRecordingApi.BindDescriptorSet(
                     commandBufferHandle: request.CommandBufferHandle,
                     descriptorSetHandle: drawCommand.DescriptorSetHandle,
-                    deviceHandle: request.DeviceHandle,
+                    device: request.Device,
                     pipelineLayoutHandle: currentPipelineLayoutHandle
                 );
             }
 
             m_commandBufferRecordingApi.Draw(
                 commandBufferHandle: request.CommandBufferHandle,
-                deviceHandle: request.DeviceHandle,
+                device: request.Device,
                 firstInstance: drawCommand.DrawParameters.FirstInstance,
                 firstVertex: drawCommand.DrawParameters.FirstVertex,
                 instanceCount: drawCommand.DrawParameters.InstanceCount,
@@ -163,15 +163,15 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
 
         m_commandBufferRecordingApi.EndDebugLabel(
             commandBufferHandle: request.CommandBufferHandle,
-            deviceHandle: request.DeviceHandle
+            device: request.Device
         );
         m_commandBufferRecordingApi.EndRenderPass(
             commandBufferHandle: request.CommandBufferHandle,
-            deviceHandle: request.DeviceHandle
+            device: request.Device
         );
         m_commandBufferRecordingApi.EndCommandBuffer(
             commandBufferHandle: request.CommandBufferHandle,
-            deviceHandle: request.DeviceHandle
+            device: request.Device
         ).ThrowIfFailed(operation: "vkEndCommandBuffer");
     }
 }

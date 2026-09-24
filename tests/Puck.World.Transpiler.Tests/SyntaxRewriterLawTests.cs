@@ -168,7 +168,6 @@ public class SyntaxRewriterLawTests {
     /// <summary>Returns every shipped world source.</summary>
     /// <returns>The source corpus as xUnit theory data.</returns>
     public static TheoryData<string> ShippedSources() => ShippedWorlds.Sources();
-
     // A node kind with no descent arm never reaches a source-driven law until somebody authors a source that
     // produces it, so each kind is walked on its own.
     [MemberData(nameof(NodeKinds))]

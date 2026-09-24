@@ -152,18 +152,14 @@ public sealed partial class StateArena {
             next = Math.Max(
                 val1: next,
                 val2: Math.Max(
-                    val1: m_appendGenerations[rowOrdinal],
-                    val2: Math.Max(
-                        val1: m_rowGenerations[rowOrdinal],
-                        val2: m_rowVersions[rowOrdinal]
-                    )
+                    val1: m_rowGenerations[rowOrdinal],
+                    val2: m_rowVersions[rowOrdinal]
                 )
             );
         }
 
         next++;
 
-        m_appendGenerations = source.m_appendGenerations;
         m_behaviors = source.m_behaviors;
         m_catalog = source.m_catalog;
         m_keys = source.m_keys;
@@ -210,10 +206,6 @@ public sealed partial class StateArena {
 
         Array.Clear(array: m_reindexStamp);
         Array.Clear(array: m_rowChangeStamp);
-        Array.Fill(
-            array: m_appendGenerations,
-            value: next
-        );
         Array.Fill(
             array: m_rowGenerations,
             value: next

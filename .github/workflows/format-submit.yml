@@ -48,5 +48,5 @@ jobs:
           FORMAT_RUN_ID: ${{ github.event.workflow_run.id }}
           GH_TOKEN: ${{ github.token }}
         name: Validate and apply the formatting artifact
-        run: puck format submit
+        run: puck pull-request submit-format --run-id "$FORMAT_RUN_ID"
     timeout-minutes: 40

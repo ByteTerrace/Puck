@@ -15,7 +15,10 @@ public sealed class HudFrameElementValidationLawTests {
         Y: 0f
     );
 
-    private static WorldFrameSource CameraSource() => new WorldScreenSource.Camera(Sensor: WorldCameraSensor.Color);
+    private static WorldFrameSource CameraSource() => WorldImageProducerSettings.SourceOf(
+        id: WorldImageProducerSettings.CameraId,
+        settings: new WorldCameraSettings(Sensor: WorldCameraSensor.Color)
+    );
     private static WorldHudElement FrameElement(WorldFrameSource? source, float radius = 0f, float opacity = 1f, string id = "cam") => new(
         Id: id,
         Kind: WorldHudElementKind.Frame,
@@ -61,7 +64,7 @@ public sealed class HudFrameElementValidationLawTests {
     [Fact]
     public void AFrameElementRoundTripsThroughTheHudElementAccessor() {
         var element = FrameElement(
-            source: new WorldScreenSource.Camera(Sensor: WorldCameraSensor.Color),
+            source: CameraSource(),
             radius: 12f,
             opacity: 0.75f
         ) with {
@@ -95,7 +98,10 @@ public sealed class HudFrameElementValidationLawTests {
             actual: roundTripped.Opacity
         );
 
-        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped.Source);
+        Assert.True(condition: WorldImageProducerSettings.TryCamera(
+            camera: out var camera,
+            source: Assert.IsType<WorldScreenSource.Producer>(@object: roundTripped.Source)
+        ));
 
         Assert.Equal(
             expected: WorldCameraSensor.Color,
@@ -179,9 +185,12 @@ public sealed class HudFrameElementValidationLawTests {
             count: count,
             start: 0
         )
-            .Select(selector: index => ((WorldFrameSource)new WorldScreenSource.Capture(
-            WindowTitle: $"capture-{index}",
-            Profile: WorldFeedProfile.Default
+            .Select(selector: index => ((WorldFrameSource)WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.CaptureId,
+            settings: new WorldCaptureSettings(
+                Profile: WorldFeedProfile.Default,
+                WindowTitle: $"capture-{index}"
+            )
         )))
             .ToArray();
 
@@ -251,16 +260,19 @@ public sealed class HudFrameElementValidationLawTests {
     }
     [Fact]
     public void IndependentlyDeserializedCameraSourcesShareTheAuthoringCapacity() {
-        var source = new WorldScreenSource.Camera(Controls: new WorldCameraControls(Vendor: [
-                    new WorldCameraVendorControl(
-                Id: 12,
-                Value: 1
-            ),
-                    new WorldCameraVendorControl(
-                Id: 17,
-                Value: 90
-            ),
-                ]));
+        var source = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.CameraId,
+            settings: new WorldCameraSettings(Controls: new WorldCameraControls(Vendor: [
+                new WorldCameraVendorControl(
+                    Id: 12,
+                    Value: 1
+                ),
+                new WorldCameraVendorControl(
+                    Id: 17,
+                    Value: 90
+                ),
+            ]))
+        );
         var bytes = JsonSerializer.SerializeToUtf8Bytes(
             jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource,
             value: source
@@ -285,9 +297,12 @@ public sealed class HudFrameElementValidationLawTests {
     }
     [Fact]
     public void RepeatedFrameSourcesShareTheAuthoringCapacity() {
-        var shared = new WorldScreenSource.Capture(
-            WindowTitle: "shared-capture",
-            Profile: WorldFeedProfile.Default
+        var shared = WorldImageProducerSettings.SourceOf(
+            id: WorldImageProducerSettings.CaptureId,
+            settings: new WorldCaptureSettings(
+                Profile: WorldFeedProfile.Default,
+                WindowTitle: "shared-capture"
+            )
         );
         var repeated = Enumerable.Repeat<WorldFrameSource>(
             count: WorldHudCapacity.MaxElementsPerPanel,

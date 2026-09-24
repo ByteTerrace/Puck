@@ -113,7 +113,10 @@ internal sealed class HostRow : IDisposable {
     /// round-trip comparison to mean anything.</param>
     /// <param name="server">The restored server.</param>
     /// <param name="machines">The machine host the restored server was built with.</param>
-    public static HostRow Wrap(string name, WorldServer server, WorldMachineHost machines) {
+    /// <param name="stateDirectory">The scratch profile-catalog directory <paramref name="server"/> was restored
+    /// against, deleted alongside this row, or <see langword="null"/> when the caller owns that directory some
+    /// other way (a row built with no scratch directory of its own).</param>
+    public static HostRow Wrap(string name, WorldServer server, WorldMachineHost machines, string? stateDirectory = null) {
         var link = new LoopbackTransport(server: server);
         var instance = new WorldInstance(
             name: name,
@@ -131,7 +134,7 @@ internal sealed class HostRow : IDisposable {
         return new HostRow(
             instance: instance,
             machines: machines,
-            stateDirectory: string.Empty
+            stateDirectory: (stateDirectory ?? string.Empty)
         );
     }
 }

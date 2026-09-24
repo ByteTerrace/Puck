@@ -13,7 +13,7 @@ presentation and backend assembly. The composition root that hosts it is
 [`Puck.World`](../Puck.World/README.md).
 
 Project references: `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Networking`,
-`Puck.Storage`, `Puck.Hosting`, and—through the schema—`Puck.State`, whose
+`Puck.Storage`, `Puck.Hosting`, `Puck.Assets` (the release and authority content pins), and—through the schema—`Puck.State`, whose
 reader, catalog, topologies, and rule evaluator the tick runs; `WorldRuleHost`
 is the evaluator's host (`WorldRuleHost*.cs`: the reads, the mutation door, the
 world's effect arms—over the arena, `WorldServer.Arena.cs`, see below—plus the
@@ -76,7 +76,7 @@ geometry. `puck bench world`'s "shipped world: idle tick (median)" row and
 Every non-intent submission arrives as one `SubmissionEnvelope` through
 `WorldServer.Submit`—a single ordered domain, drained in submission order.
 Enqueue and drain both run under the same authority gate `Step` and every
-federation operation hold (`WorldServer.EnqueueOrdered` is the one door), so the
+federation operation hold (`WorldTick.EnqueueOrdered` is the one door), so the
 queue and its reentrancy guard are single-threaded state. A drain reached
 without that gate can be skipped by another thread's in-flight drain, which
 would leave an already-applied population change—an admitted arrival—standing
@@ -102,7 +102,10 @@ journal sequence. Deliveries fan out through
 `WorldOutputHub.cs`, which supports multiple subscribed sinks. A sink's live
 definition delivery is `DeliverDefinition` after a shape change or
 `DeliverState` after a value-only write—see `Puck.World.Protocol`'s
-`IClientSink`.
+`IClientSink`. Both leave through `WorldDocument.DeliverPending`
+(`WorldDocument.Delivery.cs`); a state delivery's `WorldStateStamp` names the row
+ordinals `WorldServer.MarkPublished` saw move since the last delivery
+(`WorldServer.StateStamp.cs`), or everything after the arena was rebuilt.
 
 ## Hosted release records
 
@@ -133,22 +136,19 @@ its own recovery behavior on failure:
 | Verify | Exercise recovery and continuation using the target image, persist its initial authoritative state, and check health and bindings. Verification writes must not manufacture player progress or external effects in the production state. |
 | Commit | Publish the active release and its coherent state references durably, then open admission. An interrupted admission-open step resumes the committed release. |
 
-New packages include `coordinatorContract: puck.world.release.restore.v1` in
-their canonical identity. Existing manifests without that member retain their
-identities. Metadata publication requires the member on at least one side of the
-pair, protecting rollback to an older manifest as well as forward deployment.
-The current contract adds closed-group rewind to receipt-aware packaged
-qualification and metadata publication. Existing receipt and metadata contract
-manifests remain readable. Older archive readers reject the unknown member or
-contract before runtime effects;
-new readers reject unknown coordinator contracts by name. The previous-reader
-control is in `WorldReleaseCoordinatorContractLawTests`.
+Every release manifest carries `coordinatorContract: puck.world.release.restore.v1`
+in its canonical identity. It is the one supported contract: metadata
+publication, receipt-aware packaged qualification, and closed-group rewind.
+Validation refuses a manifest without the member, or with any other value, by
+name. Manifest and archive pins parse through `Puck.Assets.ContentPin`, which
+admits only lowercase `sha256/<hex64>`. `WorldReleaseCoordinatorContractLawTests`
+and `WorldReleasePinLawTests` hold these rules.
 
 `WorldReleaseRestore` inspects a complete retained point before starting an
 explicitly acknowledged rewind. `WorldReleaseRewindBoundary` pins the enforced
 policy and group inventory in each authority root. Hosting cannot reopen those
 roots without the same closed group. A recovery point keeps its capture time,
-full checkpoints, and receipt provenance; a legacy qualification export has no
+full checkpoints, and receipt provenance; a qualification export has no
 rewind proof. Restore first protects current state, then publishes the selected
 checkpoints privately. Current operation receipts, journal numbering, and fresh
 writer generations survive the rewind. Pre-commit failure follows the ordinary
@@ -244,9 +244,8 @@ pins. Receipt envelopes use `puck.world.receipts.v1`, preserve their original in
 and chain bytes, and reject unsupported or noncanonical input. It does not
 sample mutable authority roots or carry production signing keys. The CLI builds
 a disposable store from those exact checkpoints and receipt graphs; incomplete and corrupt captures
-refuse before qualification. Older inventories remain readable but cannot become
-fixtures without explicit receipt proof; request a fresh capture from a supporting
-source worker. Empty worlds with no compiled body kits preserve
+refuse before qualification, and an inventory row without its receipt snapshot pin
+is malformed. Empty worlds with no compiled body kits preserve
 their empty population and zero selection sentinel; they cannot restore actual
 bodies or another kit index without a kit.
 Registry image retention and packaged qualification remain separate preflight
@@ -362,7 +361,7 @@ silently re-birth every live body's registers.
 The values therefore fold into the `Arena` hash component with the rest of the
 store; `BodyActionState` folds the declaration and the per-lane trigger runtime
 (press latches, fact-held edges, recency clocks) only. A checkpoint carries the
-lane image through `WorldBody.TransferState.ActionState`, captured by
+lane image through `WorldBodyTransferState.ActionState`, captured by
 `CaptureActionState` and written back by `RestoreActionState`; a federation
 arrival loads its carried registers into the lane through
 `ApplyTransferActionContinuity`, settling each through the destination's own
@@ -544,8 +543,13 @@ the changed section's derived state; a failure rejects loudly and changes
 nothing. The journal is the undo engine: `world.undo` restores the loaded base
 definition and deterministically replays the journal minus its tail through
 the same apply path—no per-mutation inverse exists.
-`world.save` writes a canonical session snapshot and compacts the journal (the
-saved definition becomes the new base). `world.reset`/`world.load`/`world.reload` are ONE
+`world.save` writes the authored document with the session's own changes folded
+in, and compacts the journal (the saved definition becomes the new base).
+`WorldSessionCapture` folds what the server owns: the peer-source default into
+an authored `bodies` section, the machine host's named declarations, magazine
+selectors into their authored screen rows, and every moving authored `state`
+cell. A section the document omits stays omitted, and one the session left
+alone is written as authored. `world.reset`/`world.load`/`world.reload` are ONE
 rebuild-and-swap mechanism (`WorldServer.ApplyRebuild`) over three document
 sources—the server's own base, a different file, or a re-read of the
 current origin—that also wipes and re-seeds the ENTIRE runtime grant table
@@ -572,19 +576,20 @@ The installed rule compilation retains one lazily computed `WorldCostReport` and
 hazard list. Console reads and search planning reuse its work sheet;
 `world.rule.hazards` uses the installed programs without compiling them again.
 Installing a replacement definition replaces these results. Construction reuses
-its validation's programs and pinned tables while row settlement leaves the
-exact definition unchanged. Reference-cycle evidence remains incomplete,
+its validation's programs and pinned tables: a loader settles state rows before
+admission, and a constructor handed no receipt settles before admitting for
+itself, so settlement never produces a definition the receipt does not name.
+Reference-cycle evidence remains incomplete,
 so unresolved bounds stay explicit and the current heuristic admission policy
 remains active. See [abstract-machine costing](../../docs/plans/abstract-machine-costing.md).
 
-File/DSL boot, local instance construction and checkpoint restore carry an operation-owned local admission
-result into machine preparation and rule installation. The receipt's ownership
+File/DSL boot, local instance construction, the hosted activation read and checkpoint restore carry an
+operation-owned local admission result into machine preparation and rule installation. A spawned instance
+hands its receipt over when it names that exact document and the catalog the row's own machine host
+validates against, and otherwise leaves construction to admit. The receipt's ownership
 and validity requirements are documented in [World.Schema](../Puck.World.Schema/README.md#the-rules-documentthe-per-body-action-primitive-one-level-up).
 Post-build wiring completes the loader's environment checks after command services
-and neighbour transports compose. A changed boot document takes fresh validation.
-Construction settles clocks and inverse boards from its initial arena, then installs
-that arena directly. Replacement arenas use the same search-narration wiring, so a
-finished job whose output mutation refuses remains visible after a document change.
+and neighbour transports compose.
 Construction settles clocks and inverse boards from its initial arena, then installs
 that arena directly. Replacement arenas use the same search-narration wiring, so a
 finished job whose output mutation refuses remains visible after a document change.
@@ -594,8 +599,8 @@ reported beside evaluation slots in `world.budget`; dynamic body-index keys use
 a prebuilt string cache on the evaluation path.
 
 **Lifetime sweeps.** Four per-tick passes run side by side at the end of
-`WorldServer.StepCore`, each firing ORDINARY mutations under
-`WorldPrincipal.World`'s structural exemption so recovery is journalled rather
+`WorldTick.StepCore`, each firing ORDINARY mutations under
+`Principal.World`'s structural exemption so recovery is journalled rather
 than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted ownership offer),
 `WorldTransferEscrow.ReclaimExpired` (an unclaimed destination reservation),
 `SweepContributionTenure` (`WorldTick.Contributions.cs`—a presence-tenure
@@ -615,8 +620,10 @@ condition holds at a placement's coupled cell becomes its prototype) and
 sweep, so the rule frame has folded and a cell a rule wrote this tick deals on
 this tick: each placement carrying a `WorldPlacementDeal` is a template whose
 children follow its keyed row, one `UpsertPlacement`/`RemovePlacement` per
-arriving, leaving, or re-variant cell, folded into one `Batch` under
-`WorldPrincipal.World`; a child keeps the region offset it was dealt and a new
+arriving, leaving, or re-variant cell, every template's folded into one `Batch` a
+tick under `Principal.World`, so however many templates re-deal the tick
+composes and validates the document once, and, being the World's own, it raises
+no edit echo; a child keeps the region offset it was dealt and a new
 cell takes the lowest free one; the sweep returns at once when the installed
 document is the one it last left, and skips a template whose row, variant
 row, and own row are unchanged before reading its children, so a quiet tick
@@ -659,14 +666,14 @@ own enum, so the kernel parses no document; the companion `WorldFieldsSection`
 otherwise remains authoritative for topology, cadence, paint, and
 presentation.
 
-`WorldServer.StepFields` runs after the rules (so a tag a rule wrote this tick
+`WorldTick.StepFields` runs after the rules (so a tag a rule wrote this tick
 is what an `emit`/`expose` reaction reads this same step) and before the
 snapshot (so the step's cell writes ride this tick's delivery), on the
 lattice's own `stepEveryTicks` cadence. `WorldServer` is the
 `IFieldLatticeHost`: `ReadScalar`/`AddScalar` resolve through
 `ReadScalarSlot`/`AddScalarSlot`, the SAME `WorldStateReader.TryRead` seam
 every other state read uses, and `AddScalarSlot`'s write lands through the
-ordinary `UpsertStateCell` mutation (`WorldPrincipal.World`, journaled,
+ordinary `UpsertStateCell` mutation (`Principal.World`, journaled,
 undoable), never a bypass—a season row a rule writes and a reaction reads
 can never disagree about the value. `WorldTick.Responses.cs`'s
 `WorldPlacementResponse` condition resolves its scalar the same way, by row
@@ -755,7 +762,7 @@ literal-count placement grows/shrinks under the ordinary structural
 placement is skipped there and starts every structural install (boot
 included) with zero live bodies, admitted only by
 `WorldPopulation.ReconcileInhabitCounts`—called from
-`WorldServer.InstallRuntimeStateValue` on every state-only mutation apply, so
+`WorldDocument.InstallRuntimeStateValue` on every state-only mutation apply, so
 a rule's end-of-tick fold reconciles on the same tick it writes the cell. The
 method caches the last raw value it resolved per placement ordinal and skips
 a placement whose cell has not moved, so an unrelated state write (or a
@@ -840,10 +847,10 @@ whole-vector `along` row) carries the follower's Q32 state—position
 and velocity raws, plus the previous commanded target the `r` term needs—
 as ordinary `WorldBody` sim state (`WorldBody.Dynamics.cs`); a medium hold's
 vertical lane carries the scalar counterpart. Cross-world motion continuity
-round-trips their values through `TransferState`. A same-world authority
+round-trips their values through `WorldBodyTransferState`. A same-world authority
 checkpoint additionally carries their seeded latches, the arbitrary-up
 frame/reseat/turn fractions, and complete hold/tether state through
-`IntegrationResidue`/`WorldAuthorityCheckpointCodec` (still under development;
+`WorldBodyIntegrationResidue`/`WorldAuthorityCheckpointCodec` (still under development;
 an incompatible wire or restored-authority contract moves `SupportedVersion`,
 and older versions have no compatibility reader).
 
@@ -1050,7 +1057,7 @@ rests, vacuously 1 for a world authoring none. `world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the
 last tick's solver work (pair resolutions, worst substep count) are
-`world.budget`'s own `rigid` segment. Checkpoint (`IntegrationResidue`)
+`world.budget`'s own `rigid` segment. Checkpoint (`WorldBodyIntegrationResidue`)
 and the diagnostic population hash (`WorldReplaySnapshot.HashState`) both cover
 linear/angular velocity, the resting latch and hold-tick counter, BOTH
 restitution edge latches, and both channels' miss streaks. A kit swap that
@@ -1127,7 +1134,7 @@ hands the target back to the solver with the carrier's own current
 velocity rather than snapping it to rest. `Carrying`/`CarriedBy` are `int?`
 population indices (`-1` raw, on the same "never a boolean fact" terms
 `AffectingSubject` already carries) folded into checkpoint
-(`IntegrationResidue`) and the authoritative hash; a relationship whose
+(`WorldBodyIntegrationResidue`) and the authoritative hash; a relationship whose
 mirror breaks (a body going inactive, or a live kit retune away from the
 facet either side depends on) self-heals in the same per-tick pass rather
 than leaking a dangling reference forward. That pass walks a sorted,
@@ -1145,7 +1152,7 @@ tick (never through the kit's action table, since it carries its own
 threshold), firing at most one transition per tick: a detach edge always wins
 over a same-tick attach edge, and a fresh attach only ever starts while
 untethered. `TryAttachTether` throws a directed aim query
-(`FixedSurfaceQuery.TryNearestSurfaceAlongDirection`) along the body's facing
+(`IContactField.TryNearestSurfaceAlongDirection`, over `FixedSurfaceQuery.TryNearestDirected`) along the body's facing
 within `maxAnchorDistance`/`aimHalfAngle`; a candidate anchors a
 `FixedTetherConstraint` at the candidate's own resolved distance (never the
 authored ceiling), with `minLength` clamped down when authored past what the
@@ -1163,12 +1170,12 @@ facet no longer resolves, on the same terms a rigid-facet swap resets
 solver-owned fields. Any other tether-facet retune drops a live attach and
 publishes the cleared fact through its retained `modeState`. A changed attach/detach binding resets its old edge
 history, and a changed `modeState` ordinal clears the old row and publishes
-the live attach fact through the new one. `IntegrationResidue.Tether`
-(`WorldBody.TetherResidue`)
+the live attach fact through the new one. `WorldBodyIntegrationResidue.Tether`
+(`WorldBodyTetherResidue`)
 carries the attach/detach previous-bits and the complete rope state
 (length, min length, reel remainder, anchor) through
 `WorldAuthorityCheckpointCodec` and the authoritative hash; a cross-world
-transfer deliberately drops it (`TransferState` carries none of it) since a
+transfer deliberately drops it (`WorldBodyTransferState` carries none of it) since a
 tether anchor names the source authority's own coordinate frame.
 `body.tether` echoes `attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>`;
 `body.where` trails `tether=<length> anchor=(x, y, z)` only while attached.
@@ -1302,7 +1309,7 @@ fallback. The library owns TLS, certificate-bound peer identity, message signatu
 and bounded message queues. `PeerStream` supplies ordered bytes to the World codecs,
 segmenting large documents into bounded messages without changing their contents.
 Before closing a completed World exchange, the host uses the networking library's
-bounded stream drain (at most 500 ms, cancelled by shutdown). A completed QUIC write
+bounded stream drain (at most 500 ms on the host clock, cancelled by shutdown). A completed QUIC write
 does not guarantee that immediate connection disposal preserves the final refusal;
 the drain gives the reader time to consume it. An unadmitted connection retains
 its handshake slot during this wait.
@@ -1311,10 +1318,22 @@ For the authenticated peer stream, this drain waits for the link to close, even
 if the peer already ended its sending direction. A half-close after a truncated
 identity frame must still leave the receiving direction open for its named refusal.
 
-The host accepts an optional `TimeProvider` for its admission deadline; production
-uses `TimeProvider.System`. Tests advance that clock after observing the actual
-challenge or queued admission, so timeout coverage does not wait ten wall-clock
-seconds. `PendingWorkCount` reports queued work awaiting the tick-thread drain.
+The host accepts an optional `TimeProvider` as its host clock: it runs the
+handshake deadline, the refusal drain and the route-lookup retry pacing
+(`RouteLookupRetryDelay`), supplies the instant an identity claim's validity
+window is checked at, and runs the peer deadlines of a `WorldPeerNetwork` the host
+owns. A supplied network's `Clock` is the host's clock, and a second clock beside
+it is refused. Production uses `TimeProvider.System`. Tests pin the instant and
+expire each deadline after observing the actual challenge, queued admission, or
+drain, so neither claim validity nor timeout coverage depends on wall-clock time.
+The one bound no clock governs is the QUIC/TLS transport handshake, which msquic
+times itself; `transportHandshakeTimeout` sets it for a network the host owns, and
+in-process tests pass a generous one. The storage-backed types
+(`WorldAuthorityBlobStore`, `WorldHostedOrigin`, `WorldStorageNeighbourResolver`,
+`WorldOwnedWorldSync`) and configured-extension observations likewise take the
+host's clock for their per-call operation timeouts.
+`WaitForPendingWorkAsync` completes when work is queued for the tick-thread drain,
+so a loop that steps only when a connection has work waits on it instead of polling.
 
 World admission remains an application policy, separate from proving possession
 of a peer key. After the networking handshake, two World checks run off the tick thread before any body is
@@ -1422,7 +1441,7 @@ land.
 
 ### One admission entry, every ingress
 
-`WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
+`WorldGrants.TryAdmitVerifiedParticipant` is the only path from an ingress to a
 population body plus grant rows. It takes a `WorldAdmissionVerdict` and nothing
 else—no arm accepts raw `WorldGrant` rows—and only
 `WorldAdmissionDoor` produces one: from a verified attestation claim
@@ -1430,7 +1449,7 @@ else—no arm accepts raw `WorldGrant` rows—and only
 document (`TryMatchEntry`, the whole-document rebuild's re-authorization), or
 from an authenticated federation authority's namespace (`TryAdmitArrival`).
 A caller with no verdict is refused by name rather than admitted on a default
-seed. `WorldServer.BuildAdmissionGrants` fills in the two fields a template
+seed. `WorldGrants.BuildAdmissionGrants` fills in the two fields a template
 cannot carry—the `Peer` principal, and a `body:<n>` subject for a template
 that authored none (`WorldAdmissionGrant.SubjectFor`)—and passes every other
 field through, so an authored template states exactly what the peer holds.
@@ -1440,7 +1459,7 @@ runs `TryAdmitArrival` once at reserve against `request.SourceAuthority` (the
 namespace `Puck.Networking.IAuthenticator`'s signed-claim handshake derived from the
 verified proof—never a label the connection merely claimed—or the
 in-process host's own for a colocated authority), carries the verdict on
-the lease, and commits it through `WorldServer.AdmitTransferredPeer`. Reserve
+the lease, and commits it through `WorldGrants.AdmitTransferredPeer`. Reserve
 and commit therefore cannot disagree: the reservation's per-slot authorization
 asks the verdict's templates whether they confer `Drive` over the body it is
 about to bind, which is the question the mint answers again. An arrival's
@@ -1490,6 +1509,9 @@ Whatever that gate protects is acquired and released under it.
 `ExecuteAuthorityOperation` exactly as it attached. Any check-then-act over
 population state—is this transferred principal still live, then submit or
 describe on its behalf—is ONE gated operation, never two.
+`WorldServer.AuthorityGateContended` is invoked on a thread whose authority
+operation finds the gate held elsewhere, just before it blocks; a law uses it
+to hold a drain open until a racing operation has provably reached the gate.
 
 The client half is `WorldRemoteAuthority` (`WorldRemoteAuthority.cs`), hosted in
 this project though its type still carries the `Puck.World` namespace pending a
@@ -1517,6 +1539,16 @@ prove (admission trust entries, no signing oracle) passes `IsConfigured`, so
 the first proof it refuses is what reveals it; from then on the same gate
 closes on it with the same answer.
 
+`WorldRemoteAuthority` dials through its host's one `WorldPeerNetwork` — a routed
+observer through its transaction authority's — and never builds a second; a
+local-only instance, which holds no network, refuses federation by name. Every
+bound it keeps runs on that network's `Clock`: the lane attempt
+(`LaneRequestTimeout`), the connect retry (`ConnectRetryDelay`), the caller's
+answer deadline (`RoutedRequestDeadline`), the observer and intent-stream
+reconnect pacing, and the intent acknowledgement window. The tick-thread caller
+still blocks for its answer, but on a `WaitAsync` deadline over that clock, never
+a wall-clock `Task.Wait`.
+
 Every document this codec writes goes out at the connection's disclosure tier.
 `DisclosureFor` resolves it once per federation connection, through the same
 `WorldAdmissionDoor.TryAdmitArrival` arm that decides what an arriving traveler
@@ -1535,6 +1567,8 @@ refused as `PayloadMalformed`. The reservation leaf carries a
 An ordinary `Observe` stream attaches with the world's authored
 `bodies.disclosure` and no observer body index. A narrowed policy
 therefore cannot reveal embodied observations to that unembodied connection.
+Its lane authenticated a source namespace, which names no body here, so its
+documents are composed for the public observer.
 Remote snapshots are sampled at that policy's `updateSeconds` cadence (0.03 s
 by default; 0 requests every authority tick). The sampler coalesces skipped
 field writes, accumulates the delivered `StepTicks`, and retains one-shot
@@ -1550,7 +1584,10 @@ no network listener. At stream opening, every hop validates its own credential a
 caps the requested document tier by its arrival policy; the request carries a
 shared 64-hop limit. The final owner checks the traveler's Observe grant and
 applies body-relative snapshot disclosure. A route seed precedes the definition
-and snapshots. Ownership, definition, or final Observe-grant changes invalidate
+and snapshots. The stream's documents, and every `Route` answer, are composed
+for the traveler's own peer principal through `WorldStateDisclosure.Disclose`
+(`WorldFederationCodec.EncodeRoute` derives it from the route's entity), so a
+traveler reads its own hidden rows and none of another's. Ownership, definition, or final Observe-grant changes invalidate
 the stream, and the client reopens through its original authenticated entry rather
 than dialing a private world name. Projection queues are bounded; a slow consumer
 disconnects instead of blocking the simulation. Disposing the client lease cancels
@@ -1621,15 +1658,16 @@ private back-reference; the server keeps `Grant`, `Revoke`, `GrantRows`,
 `WorldServer.GrantTable` is the facade itself where `WorldServer.Grants`
 remains the narrow `IWorldGrantsView`.
 
-Every write submission carries its acting `WorldPrincipal`—a seat, the
-console, a named addon guest, or a generation-bearing `Peer(index,
+Every write submission carries its acting `Principal` (`Puck.Commands`)—a
+seat, the console, a named addon guest, or a generation-bearing `Peer(index,
 generation)`—and one server-side table,
 `WorldGrants`, is the single place a write is authorized. A grant row is
-`(principal, capability, subject)` plus optional exclusivity, an untrusted
+`(grantee, capability, subject)`, where the `Grantee` is a principal, a group
+or another document, plus optional exclusivity, an untrusted
 principal's per-tick dispatch budget, and the co-driving reach/consent pair.
 Capabilities are `Drive`, `Observe`, `Control`, `Mutate`, and `Edit`
-(`Present` was retired—"contribute to what is drawn" is
-`Mutate` over presentation-shaped sections); subjects are the `all`
+("contribute to what is drawn" is `Mutate` over presentation-shaped
+sections); subjects are the `all`
 wildcard, `body:<n>`, `screen:<n>`, `section:<name>`,
 `state:<name>`, `composition` (the shared window-composition authority),
 `creation:<id>`/`placement:<id>` (one creations/placements row apiece,
@@ -1698,13 +1736,17 @@ occupancy included—do not invent a parallel ownership mechanism), and the
 authority decision is deliberately not modeled as a lattice or quotient
 (see the state document's "What is NOT algebra" entry).
 
-A grant may also name a group as its principal (`WorldPrincipal.Group`,
+A grant may also name a group as its grantee (`Grantee.Group`,
 token `group:<id>`), held by every current member whose declared role
 (`WorldGroupKind`'s role→capability map) reaches the granted capability. This
 membership expansion (`WorldGrants.TryRoleGroupExpansion` over
 `GroupRoleReach`, rule `GrantRule.GroupHold`) is read fresh from the live
 role projection on every check, so a departed, null-role, or differently-roled
-member never retains authority through a stale group hold.
+member never retains authority through a stale group hold. The projection is
+derived from the document, not carried in a checkpoint: construction and every
+install re-sync it (`WorldGrants.SyncGroups`), and checkpoint restoration
+rebuilds it from the restored definition (`WorldGrants.RestoreGroups`) before
+any admission or read consults it, keeping the captured revision.
 
 ## Screen machines (`IWorldMachineHost.cs`)
 
@@ -1807,8 +1849,8 @@ only on a successful poke, so an as-yet-unbooted machine is retried every
 tick rather than silently latching a value it never delivered. A `Read`
 binding peeks the machine (`TryPeekMessage`) and, when the value differs from
 the last value it mirrored, applies one `WorldMutation.UpsertStateCell`
-(`WorldPrincipal.World`) through the ordinary door, without this seam reaching
-into the arena the tick's own rules write, and calls `WorldOutputHub.DeliverState`, matching every other engine-driven
+(`Principal.World`) through the ordinary door, without this seam reaching
+into the arena the tick's own rules write, and delivers through `WorldDocument.DeliverPending`, matching every other engine-driven
 per-tick cell write in this project (`WorldTick.Fields.cs`). Both memos are
 keyed by (engine screen index, bus address), so an unmoved value costs one
 dictionary lookup and nothing past it: the peek/poke round trip through
@@ -1873,10 +1915,12 @@ The mirror caches the lane handle for the current rule catalog. Row selection,
 key enumeration, and unchanged-value checks use its document-lane ordinal;
 installing another catalog refreshes the handle before the lane is read again.
 
-`setIdentityFact` (`IdentityFactEffect`) resolves its body like `pose` does,
+`setIdentityFact` (`WorldIdentityFactEffect`) resolves its body like `pose` does,
 refuses by name a body driving under no owned identity (`IdentityUnbound`—
 an anonymous seat's fact is refused, never minted), a document declaring no
-lane, or a faulted expression (`IdentityFactUnwritable`), writes the lane cell
+lane, a faulted expression, or a lane write the row refuses
+(`IdentityFactUnwritable`, carrying the write's own reason; the lane cell is
+minted only when the lane holds none under the key), writes the lane cell
 when the value differs (`Applied`; an unchanged value is `Skipped` and costs a
 quiet tick what an unchanged ordinary write costs), and persists the fact on
 the identity's own row through `WorldOwnedWorlds.TrySetFact`—the one door
@@ -1961,7 +2005,7 @@ Enumerating the edge's view instead (a container named for the namespace) asks
 for something no account layout has, and an emulator that has been laid out to
 match the edge's view will pass while production 404s.
 
-`WorldOwnedWorldFileName` (in `Puck.World.Schema`, because the earliest door that
+`WorldDocumentName` (in `Puck.World.Schema`, because the earliest door that
 has to enforce it is document validation) is the id↔file/blob-name mapping. It
 escapes nothing: it takes a `SafeName`, whose fixed reserved-character set
 (rather than `Path.GetInvalidFileNameChars()`) is what makes two machines on
@@ -2001,8 +2045,8 @@ is scoped to, never who is playing.
 A hosted authority's root and every candidate it names live privately under
 `private/puck/hosted/{world}/authority/`: one mutable `root` plus immutable,
 content-addressed definition, checkpoint, journal, receipt, and receipt-index
-blobs. The old `puck/hosted/{world}/…` pointers are migration inputs only; once
-the private root exists, readers never consult them. No authority state is
+blobs. A world with no root has no published authority: the first unowned
+publication creates the root with a create-only write. No authority state is
 published through the public content edge.
 
 `IWorldAuthorityStore` (`WorldAuthorityBlobStore` over `IObjectBlobStore`) is
@@ -2014,7 +2058,12 @@ sequence and preserves the newer suffix when publishing; an omitted or stale
 watermark refuses rather than resetting later appends. Successful writes expose
 the committed root snapshot and watermark through `PublishedRoot`.
 `LoadRecoveryAsync` verifies the root, its immutable checkpoint/journal blobs,
-and its root-qualified validated definition as one coherent view. Receipt nodes
+and its root-qualified validated definition as one coherent view, and retains
+that validation as `WorldAuthorityRecovery.Admission` so an activation installs
+the programs it already compiled. The store's `machines` catalog is what the
+read validates against, so it must be the catalog the hosting activation's
+machine host carries; without one, provider checks are deferred and the
+activation admits for itself. Receipt nodes
 retain actor/payload-bound operation ids, while a rooted immutable index makes
 replay lookup bounded; applied and refused receipts use the same durable chain.
 `WorldAuthorityCheckpointCodec` still owns decoding the unchanged checkpoint
@@ -2136,8 +2185,8 @@ conversation about runner disposition); do not add one without asking.
 
 Discrete tabletop and tactics state is folded by `WorldArenaTransforms` — one
 resolved operation applied through the arena kernels a rule firing fires through
-— and installed through the existing mutation journal and transaction preflight. `WorldBoardQueries`
-reads bounded topology scratch spans; physical fields remain a separate runtime
+— and installed through the existing mutation journal and transaction preflight. `Puck.State`'s
+`BoardQueries` reads immutable topology and caller-owned value spans; physical fields remain a separate runtime
 allocation. `StateObservations(row)` passes `observe state:<row>` and then the
 row/cell audience policy for the authenticated submission stamp. Observation
 payloads carry literal cells only. See the

@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using Puck.Maths;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
@@ -34,6 +35,17 @@ public static unsafe class DirectXConstants {
     /// its returned HRESULT into a throwing, <c>void</c>-returning friendly overload, so callers wanting the raw
     /// removal-reason HRESULT invoke the slot directly.</summary>
     public const int GetDeviceRemovedReasonSlot = 37;
+    /// <summary>The vtable slot of <c>ID3D12PipelineLibrary::LoadComputePipeline</c> (the three <c>IUnknown</c>
+    /// methods, <c>ID3D12Object</c>'s four, <c>ID3D12DeviceChild</c>'s one, then <c>StorePipeline</c> and
+    /// <c>LoadGraphicsPipeline</c>). The CsWin32 wrapper throws on the failing HRESULT a library miss returns, so
+    /// callers invoke the slot directly and read it.</summary>
+    public const int LoadComputePipelineSlot = 10;
+    /// <summary>The vtable slot of <c>ID3D12PipelineLibrary::LoadGraphicsPipeline</c>, the slot before
+    /// <see cref="LoadComputePipelineSlot"/>; invoked directly for the same reason.</summary>
+    public const int LoadGraphicsPipelineSlot = 9;
+    /// <summary>The vtable slot of <c>ID3D12PipelineLibrary::StorePipeline</c>, the first after
+    /// <c>ID3D12DeviceChild</c>; invoked directly because storing a name already present fails harmlessly.</summary>
+    public const int StorePipelineSlot = 8;
     /// <summary>The vtable slot of <c>ID3D12DescriptorHeap::GetGPUDescriptorHandleForHeapStart</c> (the slot after
     /// <see cref="GetCpuDescriptorHandleSlot"/>); invoked directly for the same return-by-pointer ABI reason.</summary>
     public const int GetGpuDescriptorHandleSlot = 10;
@@ -55,7 +67,7 @@ public static unsafe class DirectXConstants {
     /// <param name="packedRowBytes">The tightly packed row size, in bytes.</param>
     /// <returns>The row pitch, rounded up to the copy alignment.</returns>
     public static uint AlignRowPitch(uint packedRowBytes) {
-        return ((packedRowBytes + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
+        return packedRowBytes.AlignUp(alignment: TextureRowPitchAlignment);
     }
     /// <summary>Gets a descriptor heap's CPU handle for its first descriptor, via the direct vtable-slot call the
     /// hidden-pointer x64 COM ABI requires (see <see cref="GetCpuDescriptorHandleSlot"/>).</summary>

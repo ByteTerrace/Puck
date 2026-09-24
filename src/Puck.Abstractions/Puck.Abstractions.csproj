@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Abstractions</AssemblyName>
-        <Description>The engine's neutral contract layer: backend- and platform-agnostic interfaces and value types that every backend, host, and content module implements against. Surfaces and presentation, native windowing, screen-machines and their linking, GPU compute services, frame capture and video recording, RGB lamp arrays, allocators, and frame pacing. Depends on nothing else in the engine.</Description>
+        <Description>The engine's neutral contract layer: backend- and platform-agnostic interfaces and value types that every backend, host, and content module implements against. Surfaces and presentation, native windowing, screen-machines and their linking, GPU compute services, frame capture and video recording, RGB lamp arrays, allocators, frame pacing, and deterministic work counters. Depends on Puck.Maths alone within the engine.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Abstractions</PackageId>
         <PackageTags>abstractions;contracts;determinism;presentation;screen-machine;windowing</PackageTags>
@@ -9,4 +9,10 @@
         <PuckLayer>Leaf contracts and data</PuckLayer>
         <RootNamespace>Puck.Abstractions</RootNamespace>
     </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="[10.*, )" />
+    </ItemGroup>
 </Project>

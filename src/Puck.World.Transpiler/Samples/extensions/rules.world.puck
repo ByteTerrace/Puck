@@ -1,8 +1,7 @@
-schema: "puck.world.definition.v1"
-documentId: "comprehensive-synthetic-rules-v1"
-
 // An imported fragment: its statements bundle into the importer under `puck compile --bundle`, and its mere
-// existence is what the default (unbundled) import check verifies.
+// existence is what the default (unbundled) import check verifies. No `schema:`/`documentId:` of its own — a
+// fragment reads `tableState` from the importer's own `state` section, and only a root document (one carrying
+// `schema:`) gets semantic validation, so this file is deliberately schema-less.
 rule "reset-table" {
   when tableState[activeRound] > 8
   mode: Edge

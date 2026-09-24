@@ -172,10 +172,9 @@ internal static class StateRoundTripProbe {
 
     /// <summary>Runs the three round-trip checks against one ROM image.</summary>
     /// <param name="rom">The cartridge ROM bytes.</param>
-    /// <param name="label">A display label for the ROM.</param>
     /// <param name="bios">The BIOS image to boot with.</param>
-    /// <returns><see langword="true"/> when every check passed, paired with a one-line detail.</returns>
-    public static (bool Pass, string Detail) Run(byte[] rom, string label, ReadOnlyMemory<byte> bios) {
+    /// <returns>Each check's detail, and whether all three passed.</returns>
+    public static StateRoundTripResult Run(byte[] rom, ReadOnlyMemory<byte> bios) {
         var (frameOk, frameDetail, size) = FrameBoundaryCheck(
             bios: bios,
             rom: rom
@@ -189,17 +188,23 @@ internal static class StateRoundTripProbe {
             rom: rom
         );
 
-        var pass = (frameOk && midOk && doubleOk);
-        var status = (pass
-            ? "PASS"
-            : "FAIL"
+        return new StateRoundTripResult(
+            DoubleRestore: doubleDetail,
+            FrameBoundary: frameDetail,
+            ImageBytes: size,
+            MidFrame: midDetail,
+            Pass: (frameOk && midOk && doubleOk)
         );
-
-        Console.WriteLine(value: $"  [{status}] {label}  (image {size} bytes)");
-        Console.WriteLine(value: $"           frame-boundary: {frameDetail}");
-        Console.WriteLine(value: $"           mid-frame:      {midDetail}");
-        Console.WriteLine(value: $"           double-restore: {doubleDetail}");
-
-        return (pass, $"{label}: {status}");
     }
+}
+/// <summary>The outcome of <see cref="StateRoundTripProbe.Run"/> on one ROM image.</summary>
+/// <param name="Pass">Whether all three checks passed.</param>
+/// <param name="ImageBytes">The size of the frame-boundary snapshot image, in bytes.</param>
+/// <param name="FrameBoundary">The frame-boundary check's detail.</param>
+/// <param name="MidFrame">The mid-frame check's detail.</param>
+/// <param name="DoubleRestore">The double-restore check's detail.</param>
+internal readonly record struct StateRoundTripResult(bool Pass, int ImageBytes, string FrameBoundary, string MidFrame, string DoubleRestore) {
+    /// <summary>Gets the three checks' details on one line.</summary>
+    public string Detail =>
+        $"frame-boundary: {FrameBoundary}; mid-frame: {MidFrame}; double-restore: {DoubleRestore} (image {ImageBytes} bytes)";
 }

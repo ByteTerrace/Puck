@@ -1,5 +1,5 @@
+using Puck.Commands;
 using Puck.Assets.Documents;
-using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
@@ -61,7 +61,7 @@ public sealed class SetRayEnvelopeLawTests {
                 Row: "board",
                 Value: value
             ),
-            WorldPrincipal.World,
+            Principal.World,
             1,
             "test",
             out changed,

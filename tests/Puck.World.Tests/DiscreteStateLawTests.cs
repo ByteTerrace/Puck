@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -114,7 +116,7 @@ public sealed class DiscreteStateLawTests {
             maxCost: 100,
             maxVisits: 16
         );
-        Span<long> values = stackalloc long[16];
+        var values = new long[16];
 
         BoardQueries.Read(
             row: row,
@@ -127,25 +129,24 @@ public sealed class DiscreteStateLawTests {
             1,
             0
         );
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var repeat = 0; (repeat < 100); repeat++) {
-            _ = WorldTopologyCompilation.FindPhysical(state: state);
-            BoardQueries.Read(
-                row: row,
-                topology: topology,
-                values: values
-            );
-            _ = BoardQueries.Evaluate(
-                query,
-                values,
-                1,
-                0
-            );
-        }
         Assert.Equal(
-            0,
-            (GC.GetAllocatedBytesForCurrentThread() - before)
+            0L,
+            AllocationWindow.Least(window: () => {
+                for (var repeat = 0; (repeat < 100); repeat++) {
+                    _ = WorldTopologyCompilation.FindPhysical(state: state);
+                    BoardQueries.Read(
+                        row: row,
+                        topology: topology,
+                        values: values
+                    );
+                    _ = BoardQueries.Evaluate(
+                        query,
+                        values,
+                        1,
+                        0
+                    );
+                }
+            })
         );
     }
     [Fact]
@@ -189,7 +190,7 @@ public sealed class DiscreteStateLawTests {
         );
 
         Assert.True(condition: WorldArenaTransforms.TryApply(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             candidate: out _,
             definition: definition,
             guard: new(
@@ -202,7 +203,7 @@ public sealed class DiscreteStateLawTests {
             transform: operation
         ));
         Assert.False(condition: WorldArenaTransforms.TryApply(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             candidate: out _,
             definition: definition,
             guard: new(
@@ -223,9 +224,9 @@ public sealed class DiscreteStateLawTests {
                 0,
                 1,
                 1,
-                WorldPrincipal.Console,
+                Principal.Console,
                 new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     operation
                 )),
                 Guid.NewGuid()
@@ -250,9 +251,9 @@ public sealed class DiscreteStateLawTests {
                 0,
                 2,
                 2,
-                WorldPrincipal.Console,
+                Principal.Console,
                 new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     operation,
                     new(
                         "turn",
@@ -460,7 +461,7 @@ public sealed class DiscreteStateLawTests {
             condition: WorldArenaTransforms.TryApply(
                 definition,
                 operation,
-                WorldPrincipal.World,
+                Principal.World,
                 1,
                 "test",
                 out var changed,
@@ -511,7 +512,7 @@ public sealed class DiscreteStateLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             open,
             operation,
-            WorldPrincipal.World,
+            Principal.World,
             1,
             "test",
             out var refused,
@@ -585,7 +586,7 @@ public sealed class DiscreteStateLawTests {
             condition: WorldArenaTransforms.TryApply(
                 definition,
                 slice,
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var changed,
@@ -611,7 +612,7 @@ public sealed class DiscreteStateLawTests {
             condition: WorldArenaTransforms.TryApply(
                 definition,
                 slice with { InsertFirst = true },
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var first,
@@ -629,7 +630,7 @@ public sealed class DiscreteStateLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             slice with { To = "small" },
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out _,
@@ -642,7 +643,7 @@ public sealed class DiscreteStateLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             slice with { Key = "zz" },
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out _,
@@ -655,7 +656,7 @@ public sealed class DiscreteStateLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             slice with { Count = 2 },
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out _,
@@ -671,7 +672,7 @@ public sealed class DiscreteStateLawTests {
                     Key: "c",
                     InsertFirst: true
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var rotated,
@@ -758,7 +759,7 @@ public sealed class DiscreteStateLawTests {
                     Left: "white",
                     Direction: "E"
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var shifted,
@@ -782,7 +783,7 @@ public sealed class DiscreteStateLawTests {
                     Left: "white",
                     Right: "black"
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var both,
@@ -807,7 +808,7 @@ public sealed class DiscreteStateLawTests {
                     Right: "black",
                     Value: 7
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var only,
@@ -842,7 +843,7 @@ public sealed class DiscreteStateLawTests {
                     BoardCombineOp.Not,
                     Left: "black"
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var complement,
@@ -866,7 +867,7 @@ public sealed class DiscreteStateLawTests {
                     Left: "white",
                     Element: "identity"
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var image,
@@ -889,7 +890,7 @@ public sealed class DiscreteStateLawTests {
                     BoardCombineOp.Fill,
                     Value: 3
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var filled,
@@ -911,7 +912,7 @@ public sealed class DiscreteStateLawTests {
                     "out",
                     BoardCombineOp.Clear
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var cleared,
@@ -931,7 +932,7 @@ public sealed class DiscreteStateLawTests {
                 Left: "white",
                 Direction: "UP"
             ),
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out _,
@@ -948,7 +949,7 @@ public sealed class DiscreteStateLawTests {
                 BoardCombineOp.Or,
                 Left: "white"
             ),
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out _,
@@ -962,7 +963,7 @@ public sealed class DiscreteStateLawTests {
                 Left: "white",
                 Value: 0
             ),
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out _,
@@ -1040,7 +1041,7 @@ public sealed class DiscreteStateLawTests {
             condition: WorldArenaTransforms.TryApply(
                 definition,
                 arrange,
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var sorted,
@@ -1081,7 +1082,7 @@ public sealed class DiscreteStateLawTests {
             condition: WorldArenaTransforms.TryApply(
                 sorted with { StateRaw = atFour.StateRaw },
                 arrange,
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var back,
@@ -1111,7 +1112,7 @@ public sealed class DiscreteStateLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             atSix,
             arrange,
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out _,
@@ -1166,7 +1167,7 @@ public sealed class DiscreteStateLawTests {
             condition: WorldArenaTransforms.TryApply(
                 definition,
                 operation,
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var changed,
@@ -1191,7 +1192,7 @@ public sealed class DiscreteStateLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             changed,
             operation,
-            WorldPrincipal.Console,
+            Principal.Console,
             0,
             "test",
             out var refused,
@@ -1209,7 +1210,7 @@ public sealed class DiscreteStateLawTests {
                     "deck",
                     ZoneSelector.First
                 ),
-                WorldPrincipal.Console,
+                Principal.Console,
                 0,
                 "test",
                 out var reordered,
@@ -1330,14 +1331,14 @@ public sealed class DiscreteStateLawTests {
                 Gate: new ActionPredicate.All(Predicates: [
                 new ActionPredicate.CompareState(
                         "position",
-                        ActionStateComparison.NotEqual,
+                        ExpressionOp.NotEqual,
                         Key: "0",
                         ComparandState: "destination",
                         ComparandKey: "0"
                     ),
                 new ActionPredicate.CompareState(
                         "$board:pathCost:terrain:cell:destination:0:100:16",
-                        ActionStateComparison.LessOrEqual,
+                        ExpressionOp.LessOrEqual,
                         Key: "$cell:position:0",
                         ComparandState: "allowance",
                         ComparandKey: "0"
@@ -1682,7 +1683,7 @@ public sealed class DiscreteStateLawTests {
         );
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "held",
             Key: "token",
             Value: 1,

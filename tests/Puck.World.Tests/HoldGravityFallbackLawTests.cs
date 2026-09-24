@@ -1,11 +1,9 @@
-using System.Globalization;
 
+using Puck.Commands;
 using Xunit;
 
-using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World.Tests;
 
@@ -16,24 +14,6 @@ namespace Puck.World.Tests;
 /// a change to the row's own `fall` rate.
 /// </summary>
 public sealed class HoldGravityFallbackLawTests {
-    private static string Hex(FixedQ4816 value) => value.Value.ToString(
-        format: "x16",
-        provider: CultureInfo.InvariantCulture
-    );
-    private static string TraceLine(WorldBody body) {
-        var state = body.CaptureTransferState();
-        var position = body.FixedPosition;
-
-        return string.Join(
-            separator: ' ',
-            value: [
-            Hex(value: position.X), Hex(value: position.Y), Hex(value: position.Z),
-            Hex(value: state.PlanarVelocity.X), Hex(value: state.PlanarVelocity.Y), Hex(value: state.PlanarVelocity.Z),
-            Hex(value: state.VerticalVelocity), Hex(value: body.FixedYaw),
-        ]
-        );
-    }
-
     [Fact]
     public void NoHoldsGravityFallback_ReproducesTheRecordedTrace_WhereFallChangedDiverges() {
         static string[] Trace(float fall) {
@@ -72,7 +52,7 @@ public sealed class HoldGravityFallbackLawTests {
             kits[0] = (kits[0] with { Motion = motion });
 
             using var fixture = Fixtures.FreshServer(definition: (document with { KitRowsRaw = kits }));
-            var actor = WorldPrincipal.Seat(slot: 0);
+            var actor = Principal.Seat(slot: 0);
 
             Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
                 Principal: actor,
@@ -86,7 +66,7 @@ public sealed class HoldGravityFallbackLawTests {
             for (var tick = 0; (tick < 240); tick++) {
                 body.SubmitIntent(intent: default);
                 fixture.Step();
-                lines[tick] = TraceLine(body: body);
+                lines[tick] = Fixtures.TraceLine(body: body);
             }
 
             return lines;

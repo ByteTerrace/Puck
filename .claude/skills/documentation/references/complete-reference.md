@@ -1,7 +1,6 @@
 # Documentation complete reference
 
-This preserves the full register, ownership, mechanics, and verification
-contract. Read the relevant section when the compact skill routes here.
+Read the relevant section when `SKILL.md` routes here.
 
 ## Contents
 
@@ -30,7 +29,7 @@ to make, it is stale; update it in the same change and say so.
 | `.claude/skills/*/SKILL.md`; `CLAUDE.md`; other `.claude/` agent material | **Agents mid-task** | Operational | §5 |
 
 Two kinds of Markdown fall outside all three rows and take no register from this
-skill: the root legal and governance files (`LICENSE.md`, `LICENSING.md`,
+skill: the root legal and governance files (`LICENSE.md`,
 `THIRD-PARTY-NOTICES.md`, `CLA.md`, `PRIVACY.md`, and their siblings, plus
 `experimental/Puck.BareMetal/NOTICE.md`), whose text is verbatim or boilerplate,
 and the machine-written artifacts §6 lists, which are never hand-edited at all.
@@ -198,7 +197,7 @@ and no second person.
 - *Property*: "Gets the …", stating the unit and the post-disposal value where
   either matters: `/// <summary>Gets the native <c>VkBuffer</c> handle, or zero
   once disposed.</summary>`
-  (`src/Puck.Vulkan/Interop/VulkanStorageBuffer.cs`)
+  (`src/Puck.Vulkan/Interop/VulkanBuffer.cs`)
 - *Constructor*: `Initializes a new instance of the <see cref="T"/> class, …`.
 - *Enum member*: one short declarative sentence, on **every** member.
   `src/Puck.Vulkan/Bindings/VkResult.cs` documents all twenty-two of its
@@ -213,7 +212,7 @@ noun phrase beginning with "The", and which states the **unit** and any
 /// <param name="sourceImageHandle">The native <c>VkImage</c> handle to read; must be in the shader-read-only layout.</param>
 ```
 
-(`src/Puck.Vulkan/Interop/VulkanStorageBuffer.cs`,
+(`src/Puck.Vulkan/Interop/VulkanBuffer.cs`,
 `src/Puck.Vulkan/VulkanSurfaceReadback.cs`.) `<returns>` says what the value is
 and names the null case explicitly.
 
@@ -221,11 +220,11 @@ and names the null case explicitly.
 the text is the **condition itself**, with no "Thrown when" preamble:
 
 ```xml
-/// <exception cref="ArgumentNullException"><paramref name="storageBufferApi"/> is <see langword="null"/>.</exception>
-/// <exception cref="ArgumentException"><paramref name="bufferHandle"/>, <paramref name="deviceHandle"/>, or <paramref name="memoryHandle"/> is zero.</exception>
+/// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="graphicsPipelineApi"/> is <see langword="null"/>.</exception>
+/// <exception cref="ArgumentException"><paramref name="layoutHandle"/> or <paramref name="pipelineHandle"/> is zero.</exception>
 ```
 
-(`src/Puck.Vulkan/Interop/VulkanStorageBuffer.cs`.) Several conditions of one
+(`src/Puck.Vulkan/Interop/VulkanGraphicsPipeline.cs`.) Several conditions of one
 exception type collapse into a single tag that lists them. A member that guards
 on disposal documents `ObjectDisposedException`.
 
@@ -324,7 +323,7 @@ not rename this repository's existing roster merely to change naming style.
 the request shapes that should trigger it, and explicit boundaries naming the
 skill that owns each excluded area. For a skill that holds a domain's settled
 contract rather than driving a procedure, add a closing clause saying so
-(`gaming-bricks` and `sdf-world` need it). Keep the whole trigger vocabulary in
+(`gaming-bricks` and `rendering` need it). Keep the whole trigger vocabulary in
 the description because it is the only text an agent reads while deciding
 whether to load the skill. Keep it non-empty, below 1,024 characters, and free
 of XML tags.
@@ -353,7 +352,9 @@ an explicit handoff for adjacent work.
 ### Headings are anchors
 
 Other files link into headings by GitHub-style slug: lowercase, spaces to
-hyphens, punctuation and backticks dropped. **Renaming a heading means sweeping
+hyphens, punctuation and backticks dropped, and a repeated heading suffixed
+`-1`, `-2` in document order. `puck docs links` applies the same rule, so run it
+over every referrer after a heading changes. **Renaming a heading means sweeping
 every referrer in the same change.** Rename a referenced heading only with a complete incoming-reference repair.
 
 **Derive a slug from the target file's real heading, never from memory** —
@@ -394,17 +395,23 @@ document under `docs/` that names the skill.
 - **Separate current behavior from proposals and evidence.** Guides and
   references explain the current product. Plans preserve requested work,
   dependencies and completion criteria. Decision pages preserve consequential
-  reasoning. Dated verification records identify their candidate and environment;
-  they must not imply permanent capability certification. Consolidate session
-  handoffs into those homes instead of requiring readers to follow transcripts.
-  Do not discard an unresolved idea or requirement merely because its source
-  document is being reorganized.
+  reasoning. Consolidate session handoffs into those homes instead of requiring
+  readers to follow transcripts. Do not discard an unresolved idea or
+  requirement merely because its source document is being reorganized.
+- **No dates and no commit SHAs.** Docs, plans, skills, and READMEs name no
+  date and no commit SHA; they state current behavior, limitations, and open
+  work in the present tense, and verification evidence lives in the commit
+  message that lands a change. The exemptions are legal effective dates,
+  upstream provenance pins, and external protocol version strings. The rule and
+  its exemptions live in
+  [Writing documentation](../../../../docs/development/documentation.md#leave-out-dates-and-commit-shas).
 - **Current references describe current behavior.** Avoid “recently added,”
   “as of this change,” and “previously this was” in reference prose and XML
-  documentation. Dated evidence and decision records may describe past states.
+  documentation. A decision record states the reasoning that still holds, not
+  the states it replaced.
 - **Machine-written artifacts are never hand-edited.** Two sets, with different
   owners. `tests/Puck.Maths.Tests/coverage-manifest.json`, `leg-ledger.md`,
-  `RESULTS.md`, and `frontier.json` are regenerated by the runs that own them,
+  `RESULTS.md`, and `frontier.json` are regenerated by the recording runs that own them,
   and [`maths-laws`](../../maths-laws/SKILL.md) owns their mechanics. The generated
   API reference under `docs/api/api/` and `docs/api/_site/` is git-ignored build
   output of `dotnet docfx docs/api/docfx.json`. Editing any of them closes
@@ -420,8 +427,12 @@ document under `docs/` that names the skill.
 
 ## 7. Verifying a documentation change
 
-1. **Links and anchors resolve.** Check each anchor against the target file's
-   real headings. Print them; do not recall them.
+1. **Links and anchors resolve.** Run `puck docs links <document>...` over the
+   changed Markdown, skills included, for relative links, their `#fragment`
+   anchors, and cited repository paths, and `puck docs citations` when a skill
+   or XML comment cites a console verb or document field. `docs links` checks a
+   fragment only on a link into a Markdown file; one written anywhere else is
+   checked by hand against its target.
 2. **Every factual claim was verified against its source.** Read the code, or
    run the thing. A worked fact — an arithmetic result, a rounding outcome, a
    command's output, a member's signature — is executed against the real library

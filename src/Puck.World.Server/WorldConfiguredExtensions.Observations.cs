@@ -1,3 +1,4 @@
+using Puck.Networking;
 using System.Globalization;
 using Puck.World.Protocol;
 
@@ -101,10 +102,12 @@ public sealed partial class WorldConfiguredExtensions {
                 observation.NeedsProjection &&
                 (observation.Items is { } items)
             ) {
-                try { ProjectObservation(
+                try {
+                    ProjectObservation(
                     items: items,
                     observation: observation
-                ); } catch (Exception exception) { observation.Failure = exception.GetType().Name; }
+                );
+                } catch (Exception exception) { observation.Failure = exception.GetType().Name; }
             }
             if (
                 (observation.Pending is null) &&
@@ -112,9 +115,12 @@ public sealed partial class WorldConfiguredExtensions {
             ) {
                 observation.Started = tick;
                 observation.Pending = Task.Run(function: async () => {
-                    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: m_stop.Token);
+                    using var deadline = new OperationDeadline(
+                        caller: m_stop.Token,
+                        timeout: (m_configuration.Worker ?? WorldExtensionHostOptions.Default).OperationTimeout,
+                        timeProvider: m_clock
+                    );
 
-                    deadline.CancelAfter(delay: (m_configuration.Worker ?? WorldExtensionHostOptions.Default).OperationTimeout);
                     var items = await observation.Source.ReadAsync(cancellationToken: deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
 
                     if (items.Count > observation.Settings.MaximumItems) { throw new InvalidOperationException(message: "Observation exceeds its complete snapshot budget."); }

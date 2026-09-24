@@ -29,10 +29,9 @@ public readonly record struct SquareIndex
     /// <exception cref="ArgumentOutOfRangeException">The index is outside the admitted range.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SquareIndex(long value) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: value);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: value,
-            other: MaxValue
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: MaxValue,
+            value: value
         );
         Value = value;
     }
@@ -73,18 +72,23 @@ public readonly record struct SquareIndex
 
         return (side * side);
     }
+    /// <summary>Reflects across the X axis: Gaussian conjugation (X, Y) → (X, −Y).</summary>
+    /// <returns>The reflected cell, computed directly from its offset.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private SquareIndex Reflect(long multiplier) {
+        if (Value == 0) { return this; }
+        var (radius, offset) = Locate(value: Value);
+        var reflected = (((multiplier * radius) - 2) - offset);
+
+        if (reflected < 0) { reflected += (8 * radius); }
+
+        return new(value: (RingStart(radius: radius) + reflected));
+    }
 
     /// <summary>Reflects across the X axis: Gaussian conjugation (X, Y) → (X, −Y).</summary>
     /// <returns>The reflected cell, computed directly from its offset.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SquareIndex Conjugate() {
-        if (Value == 0) { return this; }
-        var (radius, offset) = Locate(value: Value);
-        var reflected = (((2 * radius) - 2) - offset);
-
-        if (reflected < 0) { reflected += (8 * radius); }
-        return new(value: (RingStart(radius: radius) + reflected));
-    }
+    public SquareIndex Conjugate() => Reflect(multiplier: 2);
     /// <summary>Computes cardinal-step distance between encoded cells.</summary>
     /// <param name="left">The first cell.</param>
     /// <param name="right">The second cell.</param>
@@ -145,30 +149,24 @@ public readonly record struct SquareIndex
             (Value == 0) ||
             (factor == 0)
         ) { return default; }
+
         var (radius, offset) = Locate(value: Value);
-        var magnitude = Math.Abs(value: ((long)factor));
-        var scaledRadius = (radius * magnitude);
+        var (scaledRadius, scaledOffset) = HexagonalIndex.ScaleRing(
+            factor: factor,
+            fullTurnMultiplier: 8,
+            halfTurnMultiplier: 4,
+            maxRadius: MaxRadius,
+            offset: offset,
+            overflowMessage: "The scaled cell lies outside the complete-shell index domain.",
+            radius: radius
+        );
 
-        if (scaledRadius > MaxRadius) { throw new OverflowException(message: "The scaled cell lies outside the complete-shell index domain."); }
-        var scaledOffset = ((magnitude * (offset + 1)) - 1);
-
-        if (factor < 0) {
-            scaledOffset += (4 * scaledRadius);
-            if (scaledOffset >= (8 * scaledRadius)) { scaledOffset -= (8 * scaledRadius); }
-        }
         return new(value: (RingStart(radius: scaledRadius) + scaledOffset));
     }
     /// <summary>Exchanges X and Y directly on the shell offset.</summary>
     /// <returns>The reflected cell.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SquareIndex Swap() {
-        if (Value == 0) { return this; }
-        var (radius, offset) = Locate(value: Value);
-        var reflected = (((4 * radius) - 2) - offset);
-
-        if (reflected < 0) { reflected += (8 * radius); }
-        return new(value: (RingStart(radius: radius) + reflected));
-    }
+    public SquareIndex Swap() => Reflect(multiplier: 4);
     /// <summary>Decodes the index to its exact signed coordinate.</summary>
     /// <returns>The represented cell.</returns>
     public SquareCoordinate ToCoordinate() {

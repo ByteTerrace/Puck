@@ -13,7 +13,7 @@ Regenerate or verify them with the documented
 [`puck firmware hgb` command](../../Puck.Cli/README.md).
 Never hand-edit an image. A regeneration changes firmware identity, so review
 the source change and run the HGB Forge tests and Post firmware/handoff gates.
-The [Forge guide](../../Puck.HumbleGamingBrick.Forge/README.md#the-authored-boot-roms)
+The [Forge guide](../../../docs/emulation/hgb/forge.md#the-authored-boot-roms)
 owns presentation, header checks, hardware handoff and the limits of the
 independent conformance evidence.
 

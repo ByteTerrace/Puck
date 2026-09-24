@@ -1,0 +1,3 @@
+float4 Outside() {
+    return float4(0.0, 1.0, 0.0, 1.0);
+}

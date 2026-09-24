@@ -2,7 +2,7 @@
     <PropertyGroup>
         <AssemblyName>Puck.State.Rules</AssemblyName>
         <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
-        <Description>The rule compiler of a deterministic fixed-step simulation: authored rules lower to compiled gates, effects, and expression programs over a Puck.State arena, addressed by row ordinal and interned cell key rather than by name. A rule's compiled form carries the facets its facts declare, so a host is admitted or refused by capability before it ever evaluates, and the same document compiles to the same program on every host and backend. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <Description>The rule compiler of a deterministic fixed-step simulation: authored rules lower to compiled gates, effects, and expression programs over a Puck.State arena, addressed by row ordinal and interned cell key rather than by name. A rule's compiled form carries the facets its facts declare, so a host is admitted or refused by capability before it ever evaluates, and the same document compiles to the same program on every host and backend. Licensed under the Apache License 2.0.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.State.Rules</PackageId>
         <PackageTags>compiler;determinism;rules;simulation;state</PackageTags>

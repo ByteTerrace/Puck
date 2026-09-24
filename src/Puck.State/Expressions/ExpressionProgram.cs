@@ -8,7 +8,7 @@ namespace Puck.State;
 /// stack shape and numeric kind before simulation begins.</summary>
 /// <remarks>
 /// <para>The <c>.puck</c> grammar, the SQL dialect, and the infix spelling (<see cref="ExpressionSpelling"/>) are
-/// front ends that parse to this shape; <c>puck.world.def.v1</c> holds it and nothing else.
+/// front ends that parse to this shape; <c>puck.world.definition.v1</c> holds it and nothing else.
 /// <c>puck.cartridge.v1</c> spells a program as infix text instead, through
 /// <see cref="ExpressionSpellingJsonConverter"/>.</para>
 /// <para>A program's own <see cref="Instructions"/> and each of its <see cref="Subprograms"/> are separately bounded
@@ -23,6 +23,7 @@ public sealed record ExpressionProgram(IReadOnlyList<Instruction> Instructions) 
     /// entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at
     /// most that many deep at evaluation.</summary>
     public IReadOnlyList<Subprogram> Subprograms { get; init; } = [];
+
     /// <summary>Parses an infix spelling.</summary>
     /// <param name="text">The spelling.</param>
     /// <returns>The program.</returns>
@@ -37,8 +38,9 @@ public sealed record ExpressionProgram(IReadOnlyList<Instruction> Instructions) 
             : throw new FormatException(message: $"expression \"{text}\" {error}")
         );
 }
-/// <summary>One shared subprogram of an <see cref="ExpressionProgram"/>: the body a <c>derive</c> value, an authored
-/// runtime function, or a fold's per-member expression compiles to.</summary>
+/// <summary>One shared subprogram of an <see cref="ExpressionProgram"/>: a fold's per-member body, which the infix
+/// parser emits, or a callable body the IR form declares under <c>subprograms</c> and reaches through
+/// <see cref="ExpressionOp.Call"/>, which no front end emits.</summary>
 /// <remarks>A subprogram reads its call's operands through <see cref="ExpressionOp.Argument"/> and, inside a fold,
 /// the member in flight through <see cref="ExpressionOp.Member"/>. It reaches no other caller state, so one
 /// subprogram serves every call site and is priced per call.</remarks>

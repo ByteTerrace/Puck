@@ -1,4 +1,5 @@
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -205,6 +206,130 @@ public sealed class WorldThemeValidationLawTests {
         Color: new BindableColor(Raw: "#101010")
     );
 
+    /// <summary>The theme re-resolves only when a slot one of its own tokens reads changes: a row some other consumer
+    /// binds moving leaves the cached resolve in place, and the bound row moving resolves it again with the new value.</summary>
+    [Fact]
+    public void TheThemeReResolvesOnlyWhenASlotItBindsChanges() {
+        static WorldStateRow FixedRow(string name, double value) => new(
+            Name: CellName.Parse(candidate: name),
+            Kind: CellKind.Fixed,
+            Cells: [
+                new StateCell(
+                    Key: WorldStateRow.SlotKey,
+                    Value: CellValue.Fixed(rawBits: Puck.Maths.FixedQ4816.FromDouble(value: value).Value)
+                ),
+            ]
+        );
+        WorldDefinition Document(double panel, double gauge) => Fixtures.BuildDocument().WithWorldState(rows: [
+            FixedRow(
+                name: "panelAlpha",
+                value: panel
+            ),
+            FixedRow(
+                name: "gauge",
+                value: gauge
+            ),
+        ]) with {
+            ThemeRaw = MinimalTheme() with {
+                Color = MinimalColor() with { ScrimPanel = BoundScrim(binding: "state.panelAlpha") },
+            },
+        };
+
+        var definition = Document(
+            gauge: 1,
+            panel: 0.9
+        );
+        var view = new WorldDocumentStateView(definition: () => definition);
+        var mirror = new WorldStateMirror(view: view);
+        var theme = new WorldThemeResolve();
+
+        Assert.True(condition: view.TryResolveRow(
+            ordinal: out var panelRow,
+            rowName: "panelAlpha"
+        ));
+        Assert.True(condition: view.TryResolveRow(
+            ordinal: out var gaugeRow,
+            rowName: "gauge"
+        ));
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        // Another consumer binds the gauge.
+        var gauge = mirror.RegisterToken(
+            conversion: WorldStateConversion.Number,
+            token: "state.gauge"
+        );
+        var first = theme.Resolve(
+            definition: definition,
+            mirror: mirror,
+            revision: 1
+        );
+
+        Assert.Equal(
+            expected: 1,
+            actual: theme.Resolutions
+        );
+
+        definition = Document(
+            gauge: 2,
+            panel: 0.9
+        );
+        mirror.Refresh(stamp: new WorldStateStamp(
+            EngineTick: 0UL,
+            Everything: false,
+            MovedRows: new[] { gaugeRow },
+            Tick: 1UL
+        ));
+        Assert.True(condition: mirror.TryNumber(
+            slot: gauge,
+            value: out var moved
+        ));
+        Assert.Equal(
+            actual: moved,
+            expected: 2f
+        );
+        Assert.Equal(
+            expected: first,
+            actual: theme.Resolve(
+                definition: definition,
+                mirror: mirror,
+                revision: 1
+            )
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: theme.Resolutions
+        );
+
+        definition = Document(
+            gauge: 2,
+            panel: 0.95
+        );
+        mirror.Refresh(stamp: new WorldStateStamp(
+            EngineTick: 0UL,
+            Everything: false,
+            MovedRows: new[] { panelRow },
+            Tick: 2UL
+        ));
+
+        var second = theme.Resolve(
+            definition: definition,
+            mirror: mirror,
+            revision: 1
+        );
+
+        Assert.Equal(
+            expected: 2,
+            actual: theme.Resolutions
+        );
+        Assert.Equal(
+            expected: 0.95f,
+            actual: second.Color.ScrimPanel.Alpha,
+            precision: 4
+        );
+    }
     [Fact]
     public void AbsentThemeResolvesToZeroedBlock() {
         var definition = Fixtures.BuildDocument();
@@ -225,7 +350,7 @@ public sealed class WorldThemeValidationLawTests {
         var resolved = new WorldThemeResolve().Resolve(
             definition: definition,
             revision: 1,
-            tick: 0UL
+            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
         );
 
         Assert.Equal(
@@ -259,7 +384,7 @@ public sealed class WorldThemeValidationLawTests {
         var resolved = new WorldThemeResolve().Resolve(
             definition: definition,
             revision: 1,
-            tick: 0UL
+            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
         );
 
         Assert.Equal(
@@ -332,7 +457,7 @@ public sealed class WorldThemeValidationLawTests {
         var resolved = new WorldThemeResolve().Resolve(
             definition: definition,
             revision: 1,
-            tick: 0UL
+            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
         );
 
         Assert.True(condition: (resolved.Color.ScrimPanel.Alpha >= WorldThemeCapacity.ScrimMinAlpha));
@@ -374,25 +499,25 @@ public sealed class WorldThemeValidationLawTests {
             userMessage: controlReason
         );
     }
-    [Fact]
-    public void LiteralScrimAlphaBelowFloorRefusesByName() {
-        var definition = Fixtures.BuildDocument() with { ThemeRaw = MinimalTheme(scrimAlpha: 0.5f) };
-        var admitted = WorldDefinitionValidator.TryValidate(
-            definition: definition,
-            neighbours: null,
-            reason: out var reason
-        );
+    // A literal below its floor refuses naming both the field and the floor it protects: the scrim's alpha guards the
+    // guaranteed-AA contrast floor, the body type size the MSDF glyph coverage floor.
+    [InlineData("theme.color.scrimPanel.alpha", "guaranteed-AA contrast floor")]
+    [InlineData("theme.type.bodySize", "MSDF glyph coverage floor")]
+    [Theory]
+    public void ALiteralBelowItsFloorRefusesByName(string field, string floor) {
+        var definition = Fixtures.BuildDocument() with {
+            ThemeRaw = ((field == "theme.type.bodySize")
+                ? MinimalTheme(bodySize: 10f)
+                : MinimalTheme(scrimAlpha: 0.5f)),
+        };
 
-        Assert.False(condition: admitted);
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "theme.color.scrimPanel.alpha"
+        Laws.Refuses(
+            definition: definition,
+            needle: field
         );
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "guaranteed-AA contrast floor"
+        Laws.Refuses(
+            definition: definition,
+            needle: floor
         );
     }
     [Fact]
@@ -407,27 +532,6 @@ public sealed class WorldThemeValidationLawTests {
         Assert.True(
             condition: admitted,
             userMessage: reason
-        );
-    }
-    [Fact]
-    public void TypeSizeBelowFloorRefusesByName() {
-        var definition = Fixtures.BuildDocument() with { ThemeRaw = MinimalTheme(bodySize: 10f) };
-        var admitted = WorldDefinitionValidator.TryValidate(
-            definition: definition,
-            neighbours: null,
-            reason: out var reason
-        );
-
-        Assert.False(condition: admitted);
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "theme.type.bodySize"
-        );
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "MSDF glyph coverage floor"
         );
     }
 }

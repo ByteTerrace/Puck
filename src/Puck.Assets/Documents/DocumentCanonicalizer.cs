@@ -47,8 +47,8 @@ public sealed class DocumentValidationException : Exception {
 /// shared <see cref="DocumentJsonOptions.Shared"/> instance) and deterministic formatting — for a given normalized
 /// document these bytes never vary across calls, processes, or machines.</param>
 /// <param name="Hash">The SHA-256 hex64 digest of <see cref="Bytes"/>, in
-/// <see cref="Puck.Assets.ContentAddressedStore.ComputeHash"/>'s format (lowercase hex, no <c>sha256/</c> prefix) —
-/// prefix it with <c>"sha256/"</c> to use directly as a <see cref="Puck.Assets.ContentAddressedStore"/> ref
+/// <see cref="Puck.Assets.ContentPin.Hex"/>'s format (64 lowercase hex digits, no <c>sha256/</c> prefix) —
+/// <see cref="Puck.Assets.ContentPin.TryParseHex"/> reads it back as the pin of a <see cref="Puck.Assets.ContentAddressedStore"/> ref
 /// target.</param>
 public record CanonicalDocument<TDocument>(TDocument Document, byte[] Bytes, string Hash);
 /// <summary>
@@ -81,7 +81,7 @@ public static class DocumentCanonicalizer {
         return new CanonicalDocument<TDocument>(
             Bytes: bytes,
             Document: document,
-            Hash: Puck.Assets.ContentAddressedStore.ComputeHash(content: bytes)
+            Hash: Puck.Assets.ContentPin.Compute(content: bytes).Hex
         );
     }
     /// <summary>Formats a validation error list into the one exception-message shape every family's validation

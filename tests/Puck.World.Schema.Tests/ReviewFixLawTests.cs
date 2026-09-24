@@ -61,7 +61,7 @@ public sealed class ReviewFixLawTests {
     }
     [Fact]
     public void AFractionalComparand_LowersToTheExactIntegerGate() {
-        static Puck.State.Rules.GateToken Compile(ActionStateComparison comparison, decimal literal, CellKind kind = CellKind.Int) {
+        static Puck.State.Rules.GateToken Compile(ExpressionOp comparison, decimal literal, CellKind kind = CellKind.Int) {
             var definition = Definition(
                 rows: [Slot(
                         name: "count",
@@ -87,12 +87,12 @@ public sealed class ReviewFixLawTests {
         }
 
         var greater = Compile(
-            comparison: ActionStateComparison.Greater,
+            comparison: ExpressionOp.Greater,
             literal: 1.5m
         );
 
         Assert.Equal(
-            expected: ActionStateComparison.GreaterOrEqual,
+            expected: ExpressionOp.GreaterOrEqual,
             actual: greater.Comparison
         );
         Assert.Equal(
@@ -101,12 +101,12 @@ public sealed class ReviewFixLawTests {
         );
 
         var greaterOrEqual = Compile(
-            comparison: ActionStateComparison.GreaterOrEqual,
+            comparison: ExpressionOp.GreaterOrEqual,
             literal: 0.5m
         );
 
         Assert.Equal(
-            expected: ActionStateComparison.GreaterOrEqual,
+            expected: ExpressionOp.GreaterOrEqual,
             actual: greaterOrEqual.Comparison
         );
         Assert.Equal(
@@ -115,12 +115,12 @@ public sealed class ReviewFixLawTests {
         );
 
         var less = Compile(
-            comparison: ActionStateComparison.Less,
+            comparison: ExpressionOp.Less,
             literal: 1.5m
         );
 
         Assert.Equal(
-            expected: ActionStateComparison.LessOrEqual,
+            expected: ExpressionOp.LessOrEqual,
             actual: less.Comparison
         );
         Assert.Equal(
@@ -129,12 +129,12 @@ public sealed class ReviewFixLawTests {
         );
 
         var equal = Compile(
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             literal: 1.5m
         );
 
         Assert.Equal(
-            expected: ActionStateComparison.Greater,
+            expected: ExpressionOp.Greater,
             actual: equal.Comparison
         );
         Assert.Equal(
@@ -143,12 +143,12 @@ public sealed class ReviewFixLawTests {
         );
 
         var integral = Compile(
-            comparison: ActionStateComparison.Greater,
+            comparison: ExpressionOp.Greater,
             literal: 2m
         );
 
         Assert.Equal(
-            expected: ActionStateComparison.Greater,
+            expected: ExpressionOp.Greater,
             actual: integral.Comparison
         );
         Assert.Equal(
@@ -157,13 +157,13 @@ public sealed class ReviewFixLawTests {
         );
 
         var fixedGate = Compile(
-            comparison: ActionStateComparison.Greater,
+            comparison: ExpressionOp.Greater,
             kind: CellKind.Fixed,
             literal: 1.5m
         );
 
         Assert.Equal(
-            expected: ActionStateComparison.Greater,
+            expected: ExpressionOp.Greater,
             actual: fixedGate.Comparison
         );
         Assert.Equal(

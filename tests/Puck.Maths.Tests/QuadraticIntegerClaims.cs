@@ -138,10 +138,12 @@ internal static class QuadraticIntegerClaims {
         var product = factorization.LeadingUnit;
 
         foreach (var factor in factorization.Factors) {
-            for (var power = 0; (power < factor.Multiplicity); ++power) { product = algebra.Multiply(
+            for (var power = 0; (power < factor.Multiplicity); ++power) {
+                product = algebra.Multiply(
                 left: product,
                 right: factor.Prime
-            ); }
+            );
+            }
         }
 
         return product;
@@ -362,7 +364,7 @@ internal static class QuadraticIntegerClaims {
 
             var worker = System.Threading.Tasks.Task.Run(function: () => algebra.FundamentalUnit());
 
-            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return $"{label}: FundamentalUnit did not complete inside the bounded wait"; }
+            worker.Wait(cancellationToken: TestContext.Current.CancellationToken);
 
             var unit = worker.Result;
             var unitX = (2 * unit.U);
@@ -376,9 +378,11 @@ internal static class QuadraticIntegerClaims {
             if (norm != BigInteger.One) { return $"{label}: norm {norm}, but the mod-4 argument forces +1"; }
 
             foreach (var shifted in ((BigInteger[])[(unitX + 2), (unitX - 2)])) {
-                if (IsPerfectSquare(value: shifted)) { return $"{label}: X{((shifted > unitX)
+                if (IsPerfectSquare(value: shifted)) {
+                    return $"{label}: X{((shifted > unitX)
                     ? "+"
-                    : "-")}2 is a perfect square, so the answer could be a unit's square"; }
+                    : "-")}2 is a perfect square, so the answer could be a unit's square";
+                }
             }
         }
 
@@ -448,10 +452,12 @@ internal static class QuadraticIntegerClaims {
         ); // Delta = -19, class number one.
         var elements = new Element[100];
 
-        for (var step = 0L; (step < elements.Length); ++step) { elements[step] = DeterministicElement(
+        for (var step = 0L; (step < elements.Length); ++step) {
+            elements[step] = DeterministicElement(
             bound: 500L,
             step: step
-        ); }
+        );
+        }
 
         foreach (var element in elements) {
             var firstOk = algebra.TryFactorize(
@@ -913,7 +919,7 @@ internal static class QuadraticIntegerClaims {
                 ? factorization
                 : throw new InvalidOperationException(message: "(15,2) failed to factor, but it generates its own prime ideal")));
 
-            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return "D=991: TryFactorize(15,2) did not complete inside the bounded wait"; }
+            worker.Wait(cancellationToken: TestContext.Current.CancellationToken);
 
             var result = worker.Result;
 
@@ -948,7 +954,7 @@ internal static class QuadraticIntegerClaims {
                 ? factorization
                 : throw new InvalidOperationException(message: "(401,3) failed to factor")));
 
-            if (!worker.Wait(timeout: TimeSpan.FromSeconds(seconds: 20))) { return "D=99991: TryFactorize(401,3) did not complete inside the bounded wait"; }
+            worker.Wait(cancellationToken: TestContext.Current.CancellationToken);
 
             var result = worker.Result;
 

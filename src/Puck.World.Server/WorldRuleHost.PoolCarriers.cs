@@ -32,10 +32,10 @@ public sealed partial class WorldRuleHost {
             }
             var binding = carrier.Bindings[((int)member)];
             var body = ((binding.Kind == CompiledBodyRefKind.Placement)
-                ? Host.Population.BodyForPlacementOrdinal(binding.Index)
+                ? Host.Population.BodyForPlacementOrdinal(ordinal: binding.Index)
                 : binding.Index);
 
-            if ((body < 0) || (body >= Host.Population.Capacity) || (Host.Body(body) is null)) {
+            if ((body < 0) || (body >= Host.Population.Capacity) || (Host.Body(index: body) is null)) {
                 continue;
             }
             snapshots[handle.Slot] = handle;

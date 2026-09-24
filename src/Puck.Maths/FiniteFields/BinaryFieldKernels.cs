@@ -501,47 +501,61 @@ internal static class BinaryFieldKernels {
             tail: tail
         );
     }
-    /// <summary>Scales a region of byte-wide field elements through the 128-bit Galois-field affine transform.</summary>
+    /// <summary>Scales a region of byte-wide field elements through the Galois-field affine transform at one vector width.</summary>
+    /// <typeparam name="TLanes">The vector width.</typeparam>
+    /// <typeparam name="TBytes">The byte vector at that width.</typeparam>
     /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
     /// <param name="source">The reduced region to scale.</param>
     /// <param name="scalar">The reduced element to scale by.</param>
     /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
     /// <param name="degree">The field's degree, which is at most eight.</param>
     /// <param name="tail">The modulus tail.</param>
-    /// <remarks>Elements past the last whole vector are finished by the element-at-a-time loop rather than by a masked store, which would be a further kernel to prove for the last few bytes of a region measured in kilobytes.</remarks>
-    /// <exception cref="PlatformNotSupportedException">The 128-bit Galois-field instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionAffine128(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
+    /// <remarks>
+    /// The matrix qword is broadcast explicitly because the transform reads its matrix operand once per eight-byte group
+    /// and does not broadcast it itself. Elements past the last whole vector are finished by the element-at-a-time loop
+    /// rather than by a masked store, which would be a further kernel to prove for the last few bytes of a region
+    /// measured in kilobytes.
+    /// </remarks>
+    /// <exception cref="PlatformNotSupportedException">The Galois-field instruction set at this width is unavailable.</exception>
+    internal static void MultiplyAccumulateRegionAffine<TLanes, TBytes>(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail)
+        where TLanes : IByteVectorLanes<TBytes>
+        where TBytes : struct {
         var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var matrix = Vector128.Create(value: AffineMatrix(
+        var matrix = TLanes.Broadcast(value: AffineMatrix(
             degree: degree,
             scalar: scalar,
             tail: tail
-        )).AsByte();
+        ));
         // A zero mask turns accumulation into a plain store. The destination is still loaded either way, so the rung
         // keeps one branch-free loop body instead of two nearly identical ones.
         var keep = (accumulate
-            ? Vector128<byte>.AllBitsSet
-            : Vector128<byte>.Zero
+            ? TLanes.AllBitsSet
+            : TLanes.Zero
         );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
-        for (; ((index + 16) <= count); index += 16) {
-            (Gfni.GaloisFieldAffineTransform(
-                x: Vector128.LoadUnsafe(
-                    elementOffset: index,
-                    source: ref sourceBytes
-                ),
-                a: matrix,
-                b: 0
-            ) ^ (Vector128.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationBytes
-            ) & keep))
-                .StoreUnsafe(
+        for (; ((index + ((nuint)TLanes.ByteCount)) <= count); index += ((nuint)TLanes.ByteCount)) {
+            TLanes.Store(
                 destination: ref destinationBytes,
-                elementOffset: index
+                elementOffset: index,
+                value: TLanes.Xor(
+                    left: TLanes.GaloisFieldAffineTransform(
+                        matrix: matrix,
+                        value: TLanes.Load(
+                            elementOffset: index,
+                            source: in sourceBytes
+                        )
+                    ),
+                    right: TLanes.And(
+                        left: TLanes.Load(
+                            elementOffset: index,
+                            source: in destinationBytes
+                        ),
+                        right: keep
+                    )
+                )
             );
         }
 
@@ -553,117 +567,15 @@ internal static class BinaryFieldKernels {
             degree: degree,
             tail: tail
         );
-    }
-    /// <summary>Scales a region of byte-wide field elements through the 256-bit Galois-field affine transform.</summary>
-    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
-    /// <param name="source">The reduced region to scale.</param>
-    /// <param name="scalar">The reduced element to scale by.</param>
-    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
-    /// <param name="degree">The field's degree, which is at most eight.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <remarks>The matrix qword is broadcast explicitly because the transform reads its matrix operand once per eight-byte group and does not broadcast it itself.</remarks>
-    /// <exception cref="PlatformNotSupportedException">The 256-bit Galois-field instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionAffine256(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
-        var count = ((nuint)((uint)destination.Length));
-        var index = ((nuint)0U);
-        var matrix = Vector256.Create(value: AffineMatrix(
-            degree: degree,
-            scalar: scalar,
-            tail: tail
-        )).AsByte();
-        var keep = (accumulate
-            ? Vector256<byte>.AllBitsSet
-            : Vector256<byte>.Zero
-        );
-        ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
-        ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
-
-        for (; ((index + 32) <= count); index += 32) {
-            (Gfni.V256.GaloisFieldAffineTransform(
-                x: Vector256.LoadUnsafe(
-                    elementOffset: index,
-                    source: ref sourceBytes
-                ),
-                a: matrix,
-                b: 0
-            ) ^ (Vector256.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationBytes
-            ) & keep))
-                .StoreUnsafe(
-                destination: ref destinationBytes,
-                elementOffset: index
-            );
-        }
-
-        MultiplyAccumulateRegionScalar(
-            destination: destination[((int)index)..],
-            source: source[((int)index)..],
-            scalar: scalar,
-            accumulate: accumulate,
-            degree: degree,
-            tail: tail
-        );
-    }
-    /// <summary>Scales a region of byte-wide field elements through the 512-bit Galois-field affine transform.</summary>
-    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
-    /// <param name="source">The reduced region to scale.</param>
-    /// <param name="scalar">The reduced element to scale by.</param>
-    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
-    /// <param name="degree">The field's degree, which is at most eight.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <exception cref="PlatformNotSupportedException">The 512-bit Galois-field instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionAffine512(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
-        var count = ((nuint)((uint)destination.Length));
-        var index = ((nuint)0U);
-        var matrix = Vector512.Create(value: AffineMatrix(
-            degree: degree,
-            scalar: scalar,
-            tail: tail
-        )).AsByte();
-        var keep = (accumulate
-            ? Vector512<byte>.AllBitsSet
-            : Vector512<byte>.Zero
-        );
-        ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
-        ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
-
-        for (; ((index + 64) <= count); index += 64) {
-            (Gfni.V512.GaloisFieldAffineTransform(
-                x: Vector512.LoadUnsafe(
-                    elementOffset: index,
-                    source: ref sourceBytes
-                ),
-                a: matrix,
-                b: 0
-            ) ^ (Vector512.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationBytes
-            ) & keep))
-                .StoreUnsafe(
-                destination: ref destinationBytes,
-                elementOffset: index
-            );
-        }
-
-        MultiplyAccumulateRegionScalar(
-            destination: destination[((int)index)..],
-            source: source[((int)index)..],
-            scalar: scalar,
-            accumulate: accumulate,
-            degree: degree,
-            tail: tail
-        );
-    }
-    /// <summary>Scales a region of packed field elements one element at a time.</summary>
-    /// <typeparam name="T">The packed element carrier.</typeparam>
-    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
-    /// <param name="source">The reduced region to scale.</param>
-    /// <param name="scalar">The reduced element to scale by.</param>
-    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
-    /// <param name="degree">The field's degree.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <remarks>The reference rung. It queries no instruction-set support, runs at every carrier and degree, and is what every vector rung is compared against.</remarks>
+    }    /// <summary>Scales a region of packed field elements one element at a time.</summary>
+         /// <typeparam name="T">The packed element carrier.</typeparam>
+         /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
+         /// <param name="source">The reduced region to scale.</param>
+         /// <param name="scalar">The reduced element to scale by.</param>
+         /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
+         /// <param name="degree">The field's degree.</param>
+         /// <param name="tail">The modulus tail.</param>
+         /// <remarks>The reference rung. It queries no instruction-set support, runs at every carrier and degree, and is what every vector rung is compared against.</remarks>
     internal static void MultiplyAccumulateRegionScalar<T>(Span<T> destination, ReadOnlySpan<T> source, T scalar, bool accumulate, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var count = destination.Length;
 
@@ -689,7 +601,9 @@ internal static class BinaryFieldKernels {
             );
         }
     }
-    /// <summary>Scales a region of byte-wide field elements through a 128-bit nibble-split table shuffle.</summary>
+    /// <summary>Scales a region of byte-wide field elements through a nibble-split table shuffle at one vector width.</summary>
+    /// <typeparam name="TLanes">The vector width.</typeparam>
+    /// <typeparam name="TBytes">The byte vector at that width.</typeparam>
     /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
     /// <param name="source">The reduced region to scale.</param>
     /// <param name="scalar">The reduced element to scale by.</param>
@@ -698,12 +612,15 @@ internal static class BinaryFieldKernels {
     /// <param name="tail">The modulus tail.</param>
     /// <remarks>
     /// Every element is the sum of the scalar times its low nibble and the scalar times its high nibble, so two
-    /// sixteen-entry tables built through the field's own multiply cover the whole byte range. The lookups use the
-    /// per-lane <see cref="Ssse3.Shuffle(Vector128{byte}, Vector128{byte})"/> rather than the cross-platform shuffle:
-    /// the indices are masked to a nibble, so no lane's top bit is set and the two select the identical entry.
+    /// sixteen-entry tables built through the field's own multiply cover the whole byte range. The tables are replicated
+    /// into every 128-bit lane and every index is masked to a nibble, so the per-lane shuffle (<see cref="Ssse3"/>,
+    /// <see cref="Avx2"/>, <see cref="Avx512BW"/>) selects the same entry the cross-platform shuffle would: no index
+    /// crosses a lane and no lane's top bit is set.
     /// </remarks>
-    /// <exception cref="PlatformNotSupportedException">The 128-bit byte-shuffle instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionSplit128(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
+    /// <exception cref="PlatformNotSupportedException">The byte-shuffle instruction set at this width is unavailable.</exception>
+    internal static void MultiplyAccumulateRegionSplit<TLanes, TBytes>(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail)
+        where TLanes : IByteVectorLanes<TBytes>
+        where TBytes : struct {
         Span<byte> highTable = stackalloc byte[16];
         Span<byte> lowTable = stackalloc byte[16];
 
@@ -717,43 +634,58 @@ internal static class BinaryFieldKernels {
 
         var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var highVector = Vector128.Create(values: ((ReadOnlySpan<byte>)highTable));
-        var lowVector = Vector128.Create(values: ((ReadOnlySpan<byte>)lowTable));
-        var nibble = Vector128.Create(value: ((byte)0x0FU));
+
+        var (highVector, lowVector) = TLanes.Replicate(
+            high: Vector128.Create(values: ((ReadOnlySpan<byte>)highTable)),
+            low: Vector128.Create(values: ((ReadOnlySpan<byte>)lowTable))
+        );
+        var nibble = TLanes.Broadcast(value: ((byte)0x0FU));
         var keep = (accumulate
-            ? Vector128<byte>.AllBitsSet
-            : Vector128<byte>.Zero
+            ? TLanes.AllBitsSet
+            : TLanes.Zero
         );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
-        for (; ((index + 16) <= count); index += 16) {
-            var block = Vector128.LoadUnsafe(
+        for (; ((index + ((nuint)TLanes.ByteCount)) <= count); index += ((nuint)TLanes.ByteCount)) {
+            var block = TLanes.Load(
                 elementOffset: index,
-                source: ref sourceBytes
+                source: in sourceBytes
             );
             // No vector instruction set has a byte-wide logical shift, so the high nibble is extracted with a 16-bit
             // shift and the mask below discards the four bits that crossed the byte boundary.
-            var high = Vector128.ShiftRightLogical(
-                vector: block.AsUInt16(),
-                shiftCount: 4
-            ).AsByte() & nibble;
-            var low = block & nibble;
-            var product = Ssse3.Shuffle(
-                mask: low,
-                value: lowVector
-            ) ^ Ssse3.Shuffle(
-                mask: high,
-                value: highVector
+            var high = TLanes.And(
+                left: TLanes.ShiftRightLogicalUInt16ByNibble(value: block),
+                right: nibble
+            );
+            var low = TLanes.And(
+                left: block,
+                right: nibble
+            );
+            var product = TLanes.Xor(
+                left: TLanes.ShuffleWithinLanes(
+                    indices: low,
+                    table: lowVector
+                ),
+                right: TLanes.ShuffleWithinLanes(
+                    indices: high,
+                    table: highVector
+                )
             );
 
-            (product ^ (Vector128.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationBytes
-            ) & keep))
-                .StoreUnsafe(
+            TLanes.Store(
                 destination: ref destinationBytes,
-                elementOffset: index
+                elementOffset: index,
+                value: TLanes.Xor(
+                    left: product,
+                    right: TLanes.And(
+                        left: TLanes.Load(
+                            elementOffset: index,
+                            source: in destinationBytes
+                        ),
+                        right: keep
+                    )
+                )
             );
         }
 
@@ -766,179 +698,9 @@ internal static class BinaryFieldKernels {
             tail: tail
         );
     }
-    /// <summary>Scales a region of byte-wide field elements through a 256-bit nibble-split table shuffle.</summary>
-    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
-    /// <param name="source">The reduced region to scale.</param>
-    /// <param name="scalar">The reduced element to scale by.</param>
-    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
-    /// <param name="degree">The field's degree, which is at most eight.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <remarks>
-    /// The sixteen-entry tables are replicated into every 128-bit lane and every index is masked to a nibble, so the
-    /// per-lane <see cref="Avx2.Shuffle(Vector256{byte}, Vector256{byte})"/> selects the same entry the cross-platform
-    /// shuffle would: no index crosses a lane and no lane's top bit is set.
-    /// </remarks>
-    /// <exception cref="PlatformNotSupportedException">The 256-bit byte-shuffle instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionSplit256(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
-        Span<byte> highTable = stackalloc byte[16];
-        Span<byte> lowTable = stackalloc byte[16];
-
-        BuildSplitTables(
-            degree: degree,
-            highTable: highTable,
-            lowTable: lowTable,
-            scalar: scalar,
-            tail: tail
-        );
-
-        var count = ((nuint)((uint)destination.Length));
-        var index = ((nuint)0U);
-        var highHalf = Vector128.Create(values: ((ReadOnlySpan<byte>)highTable));
-        var lowHalf = Vector128.Create(values: ((ReadOnlySpan<byte>)lowTable));
-        var highVector = Vector256.Create(
-            lower: highHalf,
-            upper: highHalf
-        );
-        var lowVector = Vector256.Create(
-            lower: lowHalf,
-            upper: lowHalf
-        );
-        var nibble = Vector256.Create(value: ((byte)0x0FU));
-        var keep = (accumulate
-            ? Vector256<byte>.AllBitsSet
-            : Vector256<byte>.Zero
-        );
-        ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
-        ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
-
-        for (; ((index + 32) <= count); index += 32) {
-            var block = Vector256.LoadUnsafe(
-                elementOffset: index,
-                source: ref sourceBytes
-            );
-            var high = Vector256.ShiftRightLogical(
-                vector: block.AsUInt16(),
-                shiftCount: 4
-            ).AsByte() & nibble;
-            var low = block & nibble;
-            var product = Avx2.Shuffle(
-                mask: low,
-                value: lowVector
-            ) ^ Avx2.Shuffle(
-                mask: high,
-                value: highVector
-            );
-
-            (product ^ (Vector256.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationBytes
-            ) & keep))
-                .StoreUnsafe(
-                destination: ref destinationBytes,
-                elementOffset: index
-            );
-        }
-
-        MultiplyAccumulateRegionScalar(
-            destination: destination[((int)index)..],
-            source: source[((int)index)..],
-            scalar: scalar,
-            accumulate: accumulate,
-            degree: degree,
-            tail: tail
-        );
-    }
-    /// <summary>Scales a region of byte-wide field elements through a 512-bit nibble-split table shuffle.</summary>
-    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
-    /// <param name="source">The reduced region to scale.</param>
-    /// <param name="scalar">The reduced element to scale by.</param>
-    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
-    /// <param name="degree">The field's degree, which is at most eight.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <remarks>
-    /// The sixteen-entry tables are replicated into every 128-bit lane and every index is masked to a nibble, so the
-    /// per-lane <see cref="Avx512BW.Shuffle(Vector512{byte}, Vector512{byte})"/> selects the same entry the
-    /// cross-platform shuffle would: no index crosses a lane and no lane's top bit is set.
-    /// </remarks>
-    /// <exception cref="PlatformNotSupportedException">The 512-bit byte-shuffle instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionSplit512(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
-        Span<byte> highTable = stackalloc byte[16];
-        Span<byte> lowTable = stackalloc byte[16];
-
-        BuildSplitTables(
-            degree: degree,
-            highTable: highTable,
-            lowTable: lowTable,
-            scalar: scalar,
-            tail: tail
-        );
-
-        var count = ((nuint)((uint)destination.Length));
-        var index = ((nuint)0U);
-        var highQuarter = Vector128.Create(values: ((ReadOnlySpan<byte>)highTable));
-        var lowQuarter = Vector128.Create(values: ((ReadOnlySpan<byte>)lowTable));
-        var highHalf = Vector256.Create(
-            lower: highQuarter,
-            upper: highQuarter
-        );
-        var lowHalf = Vector256.Create(
-            lower: lowQuarter,
-            upper: lowQuarter
-        );
-        var highVector = Vector512.Create(
-            lower: highHalf,
-            upper: highHalf
-        );
-        var lowVector = Vector512.Create(
-            lower: lowHalf,
-            upper: lowHalf
-        );
-        var nibble = Vector512.Create(value: ((byte)0x0FU));
-        var keep = (accumulate
-            ? Vector512<byte>.AllBitsSet
-            : Vector512<byte>.Zero
-        );
-        ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
-        ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
-
-        for (; ((index + 64) <= count); index += 64) {
-            var block = Vector512.LoadUnsafe(
-                elementOffset: index,
-                source: ref sourceBytes
-            );
-            var high = Vector512.ShiftRightLogical(
-                vector: block.AsUInt16(),
-                shiftCount: 4
-            ).AsByte() & nibble;
-            var low = block & nibble;
-            var product = Avx512BW.Shuffle(
-                mask: low,
-                value: lowVector
-            ) ^ Avx512BW.Shuffle(
-                mask: high,
-                value: highVector
-            );
-
-            (product ^ (Vector512.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationBytes
-            ) & keep))
-                .StoreUnsafe(
-                destination: ref destinationBytes,
-                elementOffset: index
-            );
-        }
-
-        MultiplyAccumulateRegionScalar(
-            destination: destination[((int)index)..],
-            source: source[((int)index)..],
-            scalar: scalar,
-            accumulate: accumulate,
-            degree: degree,
-            tail: tail
-        );
-    }
-    /// <summary>Scales a region of sixteen-bit field elements through the 128-bit Galois-field affine transform.</summary>
+    /// <summary>Scales a region of sixteen-bit field elements through the Galois-field affine transform at one vector width.</summary>
+    /// <typeparam name="TLanes">The vector width.</typeparam>
+    /// <typeparam name="TBytes">The byte vector at that width.</typeparam>
     /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
     /// <param name="source">The reduced region to scale.</param>
     /// <param name="scalar">The reduced element to scale by.</param>
@@ -951,76 +713,82 @@ internal static class BinaryFieldKernels {
     /// applied to the high half. Rotating every element by eight bits presents the opposite half in each byte lane, so
     /// four transforms and a lane-parity blend cover all four pieces.
     /// </remarks>
-    /// <exception cref="PlatformNotSupportedException">The 128-bit Galois-field instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionWideAffine128(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail) {
+    /// <exception cref="PlatformNotSupportedException">The Galois-field instruction set at this width is unavailable.</exception>
+    internal static void MultiplyAccumulateRegionWideAffine<TLanes, TBytes>(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail)
+        where TLanes : IByteVectorLanes<TBytes>
+        where TBytes : struct {
         var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
+        var elementCount = ((nuint)(TLanes.ByteCount >> 1));
         var matrices = WideAffineMatrices(
             degree: degree,
             scalar: scalar,
             tail: tail
         );
-        var lowFromHigh = Vector128.Create(value: matrices.LowFromHigh).AsByte();
-        var lowFromLow = Vector128.Create(value: matrices.LowFromLow).AsByte();
-        var highFromHigh = Vector128.Create(value: matrices.HighFromHigh).AsByte();
-        var highFromLow = Vector128.Create(value: matrices.HighFromLow).AsByte();
+        var lowFromHigh = TLanes.Broadcast(value: matrices.LowFromHigh);
+        var lowFromLow = TLanes.Broadcast(value: matrices.LowFromLow);
+        var highFromHigh = TLanes.Broadcast(value: matrices.HighFromHigh);
+        var highFromLow = TLanes.Broadcast(value: matrices.HighFromLow);
         // The processor is little-endian on every platform this library targets, so byte lane zero of each element
         // holds its low half and lane one its high half; the mask below selects the low halves.
-        var lowLanes = Vector128.Create(value: ((ushort)0x00FFU)).AsByte();
+        var lowLanes = TLanes.Broadcast(value: ((ushort)0x00FFU));
         var keep = (accumulate
-            ? Vector128<byte>.AllBitsSet
-            : Vector128<byte>.Zero
+            ? TLanes.AllBitsSet
+            : TLanes.Zero
         );
         ref var destinationElements = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceElements = ref MemoryMarshal.GetReference(span: source);
 
-        for (; ((index + 8) <= count); index += 8) {
-            var block = Vector128.LoadUnsafe(
+        for (; ((index + elementCount) <= count); index += elementCount) {
+            var block = TLanes.Load(
                 elementOffset: index,
-                source: ref sourceElements
+                source: in sourceElements
             );
-            var swapped = Vector128.ShiftLeft(
-                shiftCount: 8,
-                vector: block
-            ) | Vector128.ShiftRightLogical(
-                shiftCount: 8,
-                vector: block
+            var swapped = TLanes.SwapUInt16Bytes(value: block);
+            var lowHalves = TLanes.Xor(
+                left: TLanes.GaloisFieldAffineTransform(
+                    matrix: lowFromLow,
+                    value: block
+                ),
+                right: TLanes.GaloisFieldAffineTransform(
+                    matrix: lowFromHigh,
+                    value: swapped
+                )
             );
-            var blockBytes = block.AsByte();
-            var swappedBytes = swapped.AsByte();
-            var lowHalves = Gfni.GaloisFieldAffineTransform(
-                a: lowFromLow,
-                b: 0,
-                x: blockBytes
-            ) ^
-                             Gfni.GaloisFieldAffineTransform(
-                a: lowFromHigh,
-                b: 0,
-                x: swappedBytes
+            var highHalves = TLanes.Xor(
+                left: TLanes.GaloisFieldAffineTransform(
+                    matrix: highFromHigh,
+                    value: block
+                ),
+                right: TLanes.GaloisFieldAffineTransform(
+                    matrix: highFromLow,
+                    value: swapped
+                )
             );
-            var highHalves = Gfni.GaloisFieldAffineTransform(
-                a: highFromHigh,
-                b: 0,
-                x: blockBytes
-            ) ^
-                              Gfni.GaloisFieldAffineTransform(
-                a: highFromLow,
-                b: 0,
-                x: swappedBytes
-            );
-            var product = (lowHalves & lowLanes) | Vector128.AndNot(
-                left: highHalves,
-                right: lowLanes
+            var product = TLanes.Or(
+                left: TLanes.And(
+                    left: lowHalves,
+                    right: lowLanes
+                ),
+                right: TLanes.AndNot(
+                    left: highHalves,
+                    right: lowLanes
+                )
             );
 
-            (product ^ (Vector128.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationElements
-            ).AsByte() & keep))
-                .AsUInt16()
-                .StoreUnsafe(
+            TLanes.Store(
                 destination: ref destinationElements,
-                elementOffset: index
+                elementOffset: index,
+                value: TLanes.Xor(
+                    left: product,
+                    right: TLanes.And(
+                        left: TLanes.Load(
+                            elementOffset: index,
+                            source: in destinationElements
+                        ),
+                        right: keep
+                    )
+                )
             );
         }
 
@@ -1032,195 +800,20 @@ internal static class BinaryFieldKernels {
             degree: degree,
             tail: tail
         );
-    }
-    /// <summary>Scales a region of sixteen-bit field elements through the 256-bit Galois-field affine transform.</summary>
-    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
-    /// <param name="source">The reduced region to scale.</param>
-    /// <param name="scalar">The reduced element to scale by.</param>
-    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
-    /// <param name="degree">The field's degree, which is at most sixteen.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <exception cref="PlatformNotSupportedException">The 256-bit Galois-field instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionWideAffine256(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail) {
-        var count = ((nuint)((uint)destination.Length));
-        var index = ((nuint)0U);
-        var matrices = WideAffineMatrices(
-            degree: degree,
-            scalar: scalar,
-            tail: tail
-        );
-        var lowFromHigh = Vector256.Create(value: matrices.LowFromHigh).AsByte();
-        var lowFromLow = Vector256.Create(value: matrices.LowFromLow).AsByte();
-        var highFromHigh = Vector256.Create(value: matrices.HighFromHigh).AsByte();
-        var highFromLow = Vector256.Create(value: matrices.HighFromLow).AsByte();
-        var lowLanes = Vector256.Create(value: ((ushort)0x00FFU)).AsByte();
-        var keep = (accumulate
-            ? Vector256<byte>.AllBitsSet
-            : Vector256<byte>.Zero
-        );
-        ref var destinationElements = ref MemoryMarshal.GetReference(span: destination);
-        ref var sourceElements = ref MemoryMarshal.GetReference(span: source);
-
-        for (; ((index + 16) <= count); index += 16) {
-            var block = Vector256.LoadUnsafe(
-                elementOffset: index,
-                source: ref sourceElements
-            );
-            var swapped = Vector256.ShiftLeft(
-                shiftCount: 8,
-                vector: block
-            ) | Vector256.ShiftRightLogical(
-                shiftCount: 8,
-                vector: block
-            );
-            var blockBytes = block.AsByte();
-            var swappedBytes = swapped.AsByte();
-            var lowHalves = Gfni.V256.GaloisFieldAffineTransform(
-                a: lowFromLow,
-                b: 0,
-                x: blockBytes
-            ) ^
-                             Gfni.V256.GaloisFieldAffineTransform(
-                a: lowFromHigh,
-                b: 0,
-                x: swappedBytes
-            );
-            var highHalves = Gfni.V256.GaloisFieldAffineTransform(
-                a: highFromHigh,
-                b: 0,
-                x: blockBytes
-            ) ^
-                              Gfni.V256.GaloisFieldAffineTransform(
-                a: highFromLow,
-                b: 0,
-                x: swappedBytes
-            );
-            var product = (lowHalves & lowLanes) | Vector256.AndNot(
-                left: highHalves,
-                right: lowLanes
-            );
-
-            (product ^ (Vector256.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationElements
-            ).AsByte() & keep))
-                .AsUInt16()
-                .StoreUnsafe(
-                destination: ref destinationElements,
-                elementOffset: index
-            );
-        }
-
-        MultiplyAccumulateRegionScalar(
-            destination: destination[((int)index)..],
-            source: source[((int)index)..],
-            scalar: scalar,
-            accumulate: accumulate,
-            degree: degree,
-            tail: tail
-        );
-    }
-    /// <summary>Scales a region of sixteen-bit field elements through the 512-bit Galois-field affine transform.</summary>
-    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
-    /// <param name="source">The reduced region to scale.</param>
-    /// <param name="scalar">The reduced element to scale by.</param>
-    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
-    /// <param name="degree">The field's degree, which is at most sixteen.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <exception cref="PlatformNotSupportedException">The 512-bit Galois-field instruction set is unavailable.</exception>
-    internal static void MultiplyAccumulateRegionWideAffine512(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail) {
-        var count = ((nuint)((uint)destination.Length));
-        var index = ((nuint)0U);
-        var matrices = WideAffineMatrices(
-            degree: degree,
-            scalar: scalar,
-            tail: tail
-        );
-        var lowFromHigh = Vector512.Create(value: matrices.LowFromHigh).AsByte();
-        var lowFromLow = Vector512.Create(value: matrices.LowFromLow).AsByte();
-        var highFromHigh = Vector512.Create(value: matrices.HighFromHigh).AsByte();
-        var highFromLow = Vector512.Create(value: matrices.HighFromLow).AsByte();
-        var lowLanes = Vector512.Create(value: ((ushort)0x00FFU)).AsByte();
-        var keep = (accumulate
-            ? Vector512<byte>.AllBitsSet
-            : Vector512<byte>.Zero
-        );
-        ref var destinationElements = ref MemoryMarshal.GetReference(span: destination);
-        ref var sourceElements = ref MemoryMarshal.GetReference(span: source);
-
-        for (; ((index + 32) <= count); index += 32) {
-            var block = Vector512.LoadUnsafe(
-                elementOffset: index,
-                source: ref sourceElements
-            );
-            var swapped = Vector512.ShiftLeft(
-                shiftCount: 8,
-                vector: block
-            ) | Vector512.ShiftRightLogical(
-                shiftCount: 8,
-                vector: block
-            );
-            var blockBytes = block.AsByte();
-            var swappedBytes = swapped.AsByte();
-            var lowHalves = Gfni.V512.GaloisFieldAffineTransform(
-                a: lowFromLow,
-                b: 0,
-                x: blockBytes
-            ) ^
-                             Gfni.V512.GaloisFieldAffineTransform(
-                a: lowFromHigh,
-                b: 0,
-                x: swappedBytes
-            );
-            var highHalves = Gfni.V512.GaloisFieldAffineTransform(
-                a: highFromHigh,
-                b: 0,
-                x: blockBytes
-            ) ^
-                              Gfni.V512.GaloisFieldAffineTransform(
-                a: highFromLow,
-                b: 0,
-                x: swappedBytes
-            );
-            var product = (lowHalves & lowLanes) | Vector512.AndNot(
-                left: highHalves,
-                right: lowLanes
-            );
-
-            (product ^ (Vector512.LoadUnsafe(
-                elementOffset: index,
-                source: ref destinationElements
-            ).AsByte() & keep))
-                .AsUInt16()
-                .StoreUnsafe(
-                destination: ref destinationElements,
-                elementOffset: index
-            );
-        }
-
-        MultiplyAccumulateRegionScalar(
-            destination: destination[((int)index)..],
-            source: source[((int)index)..],
-            scalar: scalar,
-            accumulate: accumulate,
-            degree: degree,
-            tail: tail
-        );
-    }
-    /// <summary>Reduces a two-limb product modulo <c>t^degree + tail</c>.</summary>
-    /// <typeparam name="T">The packed element carrier.</typeparam>
-    /// <param name="low">The product's low limb.</param>
-    /// <param name="high">The product's high limb.</param>
-    /// <param name="degree">The field's degree.</param>
-    /// <param name="tail">The modulus tail.</param>
-    /// <returns>The unique representative of the product's class whose degree is below <paramref name="degree"/>.</returns>
-    /// <remarks>
-    /// The iterated tail fold. Because <c>t^degree</c> is congruent to the tail, the part of the value at or above
-    /// <c>t^degree</c> can be multiplied by the tail and folded back down; the tail's degree is strictly below the
-    /// field's, so the folded part's degree strictly decreases and the loop always halts. Nothing is precomputed, so
-    /// there is no constant that could be derived differently on two paths, and the iteration count depends only on
-    /// the operand values rather than on which multiplication tier produced them.
-    /// </remarks>
+    }    /// <summary>Reduces a two-limb product modulo <c>t^degree + tail</c>.</summary>
+         /// <typeparam name="T">The packed element carrier.</typeparam>
+         /// <param name="low">The product's low limb.</param>
+         /// <param name="high">The product's high limb.</param>
+         /// <param name="degree">The field's degree.</param>
+         /// <param name="tail">The modulus tail.</param>
+         /// <returns>The unique representative of the product's class whose degree is below <paramref name="degree"/>.</returns>
+         /// <remarks>
+         /// The iterated tail fold. Because <c>t^degree</c> is congruent to the tail, the part of the value at or above
+         /// <c>t^degree</c> can be multiplied by the tail and folded back down; the tail's degree is strictly below the
+         /// field's, so the folded part's degree strictly decreases and the loop always halts. Nothing is precomputed, so
+         /// there is no constant that could be derived differently on two paths, and the iteration count depends only on
+         /// the operand values rather than on which multiplication tier produced them.
+         /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static T ReduceWide<T>(T low, T high, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         var width = CarrierBitCount<T>();
@@ -1533,7 +1126,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) &&
             ((AffineMatrixAmortizationVectors * 64) <= count)
         ) {
-            MultiplyAccumulateRegionAffine512(
+            MultiplyAccumulateRegionAffine<VectorLanes512, Vector512<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: narrowDestination,
@@ -1549,7 +1142,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Split512) &&
             ((SplitTableAmortizationVectors * 64) <= count)
         ) {
-            MultiplyAccumulateRegionSplit512(
+            MultiplyAccumulateRegionSplit<VectorLanes512, Vector512<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: narrowDestination,
@@ -1565,7 +1158,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) &&
             ((AffineMatrixAmortizationVectors * 32) <= count)
         ) {
-            MultiplyAccumulateRegionAffine256(
+            MultiplyAccumulateRegionAffine<VectorLanes256, Vector256<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: narrowDestination,
@@ -1581,7 +1174,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Split256) &&
             ((SplitTableAmortizationVectors * 32) <= count)
         ) {
-            MultiplyAccumulateRegionSplit256(
+            MultiplyAccumulateRegionSplit<VectorLanes256, Vector256<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: narrowDestination,
@@ -1597,7 +1190,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) &&
             ((AffineMatrixAmortizationVectors * 16) <= count)
         ) {
-            MultiplyAccumulateRegionAffine128(
+            MultiplyAccumulateRegionAffine<VectorLanes128, Vector128<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: narrowDestination,
@@ -1613,7 +1206,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Split128) &&
             ((SplitTableAmortizationVectors * 16) <= count)
         ) {
-            MultiplyAccumulateRegionSplit128(
+            MultiplyAccumulateRegionSplit<VectorLanes128, Vector128<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: narrowDestination,
@@ -1657,7 +1250,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) &&
             ((WideAffineMatrixAmortizationVectors * 32) <= count)
         ) {
-            MultiplyAccumulateRegionWideAffine512(
+            MultiplyAccumulateRegionWideAffine<VectorLanes512, Vector512<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: wideDestination,
@@ -1673,7 +1266,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) &&
             ((WideAffineMatrixAmortizationVectors * 16) <= count)
         ) {
-            MultiplyAccumulateRegionWideAffine256(
+            MultiplyAccumulateRegionWideAffine<VectorLanes256, Vector256<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: wideDestination,
@@ -1689,7 +1282,7 @@ internal static class BinaryFieldKernels {
             IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) &&
             ((WideAffineMatrixAmortizationVectors * 8) <= count)
         ) {
-            MultiplyAccumulateRegionWideAffine128(
+            MultiplyAccumulateRegionWideAffine<VectorLanes128, Vector128<byte>>(
                 accumulate: accumulate,
                 degree: degree,
                 destination: wideDestination,

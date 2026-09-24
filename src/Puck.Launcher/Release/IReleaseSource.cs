@@ -1,3 +1,5 @@
+using Puck.Assets;
+
 namespace Puck.Launcher.Release;
 
 /// <summary>The outcome of asking an <see cref="IReleaseSource"/> for a channel's latest release manifest.</summary>
@@ -20,9 +22,9 @@ public interface IReleaseSource {
     /// <summary>Fetches one content-addressed payload file's bytes into <paramref name="destination"/>. Never
     /// verifies the hash itself — the caller (<see cref="IUpdateStager"/>) re-verifies every downloaded byte
     /// against the hash the manifest named, so a source implementation is trusted for transport only.</summary>
-    /// <param name="hash">The file's content hash, as <c>sha256/&lt;hex64&gt;</c>.</param>
+    /// <param name="pin">The file's content pin.</param>
     /// <param name="destination">The stream to write the file's bytes to.</param>
     /// <param name="cancellationToken">Cancels the fetch.</param>
     /// <returns><see langword="true"/> when the file was found and written; otherwise <see langword="false"/>.</returns>
-    Task<bool> TryGetFileAsync(string hash, Stream destination, CancellationToken cancellationToken);
+    Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, CancellationToken cancellationToken);
 }

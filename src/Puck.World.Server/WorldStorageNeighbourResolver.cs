@@ -1,3 +1,4 @@
+using Puck.Networking;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Storage;
@@ -11,8 +12,8 @@ public enum WorldStorageNamespace {
     /// carry a basis chain.</summary>
     Worlds,
 
-    /// <summary>The hosted-world namespace (<see cref="WorldOwnedWorldSync.HostedAddressFor"/>) — a neighbour is
-    /// always stored already composed.</summary>
+    /// <summary>The hosted-world authority roots (<see cref="WorldAuthorityBlobStore"/>) — a neighbour's published
+    /// definition is always stored already composed.</summary>
     Hosted,
 }
 /// <summary>
@@ -20,7 +21,7 @@ public enum WorldStorageNamespace {
 /// read, reusing <see cref="WorldOwnedWorldSync"/>'s own address shape (the same namespace prefix, quoted rather than
 /// duplicated) instead of inventing a second resolution mechanism. A <see cref="WorldReference.Document"/> value must
 /// be the canonical file name emitted for a <see cref="SafeName"/>-shaped world id. The resolver parses that id
-/// and calls <see cref="WorldOwnedWorldSync.AddressFor"/> or <see cref="WorldOwnedWorldSync.HostedAddressFor"/>
+/// and reads <see cref="WorldOwnedWorldSync.AddressFor"/> or the definition the id's authority root names
 /// (selected by <see cref="WorldStorageNamespace"/>), so a reader cannot drift from the writer's encoding or reach an
 /// object the writer could never have produced.
 /// </summary>
@@ -28,16 +29,17 @@ public enum WorldStorageNamespace {
 /// Read-only, by design: this resolver never adopts, never tracks a version token, and never writes — it exists only
 /// so a validator can read a neighbour's declared data (kits, simulation rate, placements) to prove an adjacency
 /// claim, not to sync a catalog. It parses the fetched bytes through <see cref="WorldJsonPayload.TryParse{T}(string,
-/// System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}, out T, out string, bool)"/> and <see cref="WorldDefinitionMigrations.Apply"/>
-/// only — never <see cref="WorldDefinitionValidator.Validate"/> — because the neighbour's own validity (which may in
+/// System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}, out T, out string, bool)"/> only — never <see cref="WorldDefinitionValidator.Validate"/> — because the neighbour's own validity (which may in
 /// turn need its own neighbour resolver for a border of its own) is that world's own boot concern, not a proof this
 /// resolver re-derives. A read that fails for any reason (not found, no permission, an unreachable endpoint, a
 /// malformed document) answers <see cref="WorldNeighbourResolutionKind.Unavailable"/> rather than throwing — the
 /// same fail-named discipline <see cref="WorldOwnedWorldSync"/>'s own operations follow.
 /// </remarks>
 public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
-    private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);
+    /// <summary>Gets the bound on each storage read, and separately on the whole basis chain, on the host clock.</summary>
+    public static TimeSpan OperationTimeout { get; } = TimeSpan.FromSeconds(seconds: 15);
 
+    private readonly TimeProvider m_clock;
     private readonly Guid m_containerId;
     private readonly WorldStorageNamespace m_namespace;
     private readonly IObjectBlobStore m_store;
@@ -48,11 +50,14 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
     /// <param name="target">The storage target (the per-user cloud endpoint).</param>
     /// <param name="containerId">The per-user container id the identity resolver produced.</param>
     /// <param name="namespace">Which of the two blob namespaces to address a resolved neighbour under.</param>
+    /// <param name="timeProvider">The host clock each read's bound runs on; <see langword="null"/> is
+    /// <see cref="TimeProvider.System"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
-    public WorldStorageNeighbourResolver(IObjectBlobStore store, ObjectStorageTarget target, Guid containerId, WorldStorageNamespace @namespace = WorldStorageNamespace.Worlds) {
+    public WorldStorageNeighbourResolver(IObjectBlobStore store, ObjectStorageTarget target, Guid containerId, WorldStorageNamespace @namespace = WorldStorageNamespace.Worlds, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
 
+        m_clock = (timeProvider ?? TimeProvider.System);
         m_containerId = containerId;
         m_namespace = @namespace;
         m_store = store;
@@ -66,14 +71,16 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             id: out var id,
             reason: out var reason
         )) { return WorldNeighbourResolution.Unavailable(reason: reason); }
-        var address = WorldOwnedWorldSync.HostedAddressFor(
-            containerId: m_containerId,
-            leaf: "definition.json",
-            world: id
+        var address = WorldAuthorityBlobStore.RootAddress(identity: new(
+            Owner: m_containerId,
+            World: id
+        ));
+        using var timeout = new OperationDeadline(
+            caller: cancellationToken,
+            timeout: OperationTimeout,
+            timeProvider: m_clock
         );
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
 
-        timeout.CancelAfter(delay: OperationTimeout);
         try {
             var content = await WorldAuthorityRootReader.ReadDefinitionAsync(
                 m_containerId,
@@ -84,7 +91,7 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             cancellationToken.ThrowIfCancellationRequested();
-            if (content is not { } found) { return WorldNeighbourResolution.Unavailable(reason: $"no cloud copy at '{address.Key}'"); }
+            if (content is not { } found) { return WorldNeighbourResolution.Unavailable(reason: $"no published definition at '{address.Key}'"); }
             return ParseAttestation(
                 Encoding.UTF8.GetString(bytes: found.Content.Span),
                 address.Key,
@@ -94,7 +101,7 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
     }
 
     private static WorldNeighbourResolution ParseAttestation(string json, string sourceName, string document) {
-        // Bind creation expressions and migrate, but prove only the seam facts needed by this world.
+        // Bind creation expressions, but prove only the seam facts needed by this world.
         if (!WorldDefinitionFileSource.TryParseDocument(
             definition: out var parsed,
             json: json,
@@ -114,67 +121,37 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             : WorldNeighbourResolution.Unavailable(reason: $"'{sourceName}' declares no attestable seam — {attestReason}")
         );
     }
-    private static bool TryWorldId(string document, out SafeName id, out string reason) {
-        id = default;
-        if (string.IsNullOrWhiteSpace(value: document)) {
-            reason = "the reference names no document"; return false;
-        }
-
-        if (!document.EndsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: WorldOwnedWorldFileName.Suffix
-        )) {
-            reason = $"document '{document}' is not a canonical owned-world file name ending in '{WorldOwnedWorldFileName.Suffix}'"; return false;
-        }
-
-        var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
-
-        if (
-            !SafeName.TryParse(
-            candidate: candidateId,
-            name: out id,
-            reason: out var nameReason
-        ) ||
-            !string.Equals(
-            a: document,
-            b: WorldOwnedWorldFileName.For(id: id),
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            reason = $"document '{document}' is not a canonical owned-world file name — {nameReason}"; return false;
-        }
-
-        reason = string.Empty;
-        return true;
-    }
+    private static bool TryWorldId(string document, out SafeName id, out string reason) => WorldDocumentName.TryParseId(
+        id: out id,
+        name: document,
+        reason: out reason
+    );
 
     /// <inheritdoc/>
     public WorldNeighbourResolution Resolve(string document) {
-        if (m_namespace == WorldStorageNamespace.Hosted) { return ResolveHostedAsync(
+        if (m_namespace == WorldStorageNamespace.Hosted) {
+            return ResolveHostedAsync(
             document,
             CancellationToken.None
-        ).AsTask().GetAwaiter().GetResult(); }
+        ).AsTask().GetAwaiter().GetResult();
+        }
         if (!TryWorldId(
             document: document,
             id: out var id,
             reason: out var reason
         )) { return WorldNeighbourResolution.Unavailable(reason: reason); }
-        var address = ((m_namespace == WorldStorageNamespace.Hosted)
-            ? WorldOwnedWorldSync.HostedAddressFor(
-                containerId: m_containerId,
-                leaf: "definition.json",
-                world: id
-            )
-            : WorldOwnedWorldSync.AddressFor(
-                containerId: m_containerId,
-                id: id
-            )
+        var address = WorldOwnedWorldSync.AddressFor(
+            containerId: m_containerId,
+            id: id
         );
 
         ObjectBlobContent? content;
 
         try {
-            using var timeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var timeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
 
             content = m_store.ReadAsync(
                 target: m_target,
@@ -195,7 +172,10 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
         string composeReason;
 
         try {
-            using var chainTimeout = new CancellationTokenSource(delay: OperationTimeout);
+            using var chainTimeout = new CancellationTokenSource(
+                delay: OperationTimeout,
+                timeProvider: m_clock
+            );
 
             if (!WorldDefinitionFileSource.TryComposeChain(
                 source: new WorldStorageDocumentSource(

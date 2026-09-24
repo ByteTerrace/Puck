@@ -211,9 +211,11 @@ public sealed class OAuthAdmissionLawTests {
             )) },
             row with { Subject = "*" }, row with { Subject = "" }, row with { PublicKey = "key" }];
 
-        foreach (var entry in invalid) { Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+        foreach (var entry in invalid) {
+            Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: document with { Admission = [entry] },
             reason: out _
-        )); }
+        ));
+        }
     }
 }

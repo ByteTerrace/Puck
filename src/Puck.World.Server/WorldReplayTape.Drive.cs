@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -116,6 +117,7 @@ public sealed partial class WorldReplayTape {
         m_recordName = forkName;
         m_definitionJson = source.DefinitionJson;
         m_recordRateHz = source.SimulationRate;
+        m_pipelineSourceDirectory = source.PipelineSourceDirectory;
         m_mountedAddons = [.. source.MountedAddons];
         m_seats = [.. source.Seats];
         m_ticks = prefix;
@@ -281,7 +283,7 @@ public sealed partial class WorldReplayTape {
                     Force: true,
                     ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)
                 ),
-                principal: WorldPrincipal.Console
+                principal: Principal.Console
             );
             _ = m_liveServer.DrainAdministrative();
             if (!ReferenceEquals(
@@ -375,7 +377,7 @@ public sealed partial class WorldReplayTape {
             source = WorldReplaySnapshot.Read(stream: stream);
         }
 
-        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: source.DefinitionJson);
+        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: source.PipelineSourceDirectory, utf8Json: source.DefinitionJson);
 
         if (source.SimulationRate != ((uint)definition.SimulationRateHz)) {
             throw ReplayRefusal.RateMismatch.Raise(message: $"This .puckreplay recording's header pins {source.SimulationRate} Hz, but its own embedded world definition authors {definition.SimulationRateHz} Hz — this tape is internally inconsistent; re-record it.");

@@ -13,8 +13,9 @@ from `Puck.Abstractions.Machines`. The adapter recognizes cartridge document
 paths, validates and compiles their bytes, and exports source identity, named
 bus addresses, and the `puck.cartridge.v1` format marker only after successful
 preparation. Generic machine hosts consume `PreparedMachineContent` without
-referencing this package or its cartridge schema. Static and dynamic machine
-registration use `IMachineExtension` from the same neutral contract layer.
+referencing this package or its cartridge schema. Each forge registers its
+engine and provider as an `IPuckExtension` contribution, whether a host composes
+it as a built-in or discovers it installed; see [Extensions](../../reference/extensions.md).
 
 ## Author inside the engine
 
@@ -137,7 +138,7 @@ A value is an `ExpressionProgram`—the engine's own expression, spelled infix:
 
 `CartridgeExpressions.Reads` is the admitted subset: the arithmetic and bitwise
 operations, the six comparisons (each yielding 1 or 0), `minimum`, `maximum`,
-`clamp`, `select`, `sign` and bitwise complement. An operation the rule language
+`clamp`, the conditional (`c ? a : b`), `sign` and bitwise complement. An operation the rule language
 evaluates and a cartridge does not—a hex lattice, a Hilbert index, a prime—is
 refused by that name rather than reported as unknown. Every step evaluates in the
 operand width, so a byte expression wraps modulo 256 at each operation and a
@@ -299,11 +300,11 @@ hidden states or game-type switches.
 
 Buttons are `a`, `b`, `start`, `select`, `up`, `down`, `left`, `right`. Modes are
 `held`, `pressed`, `released`. Comparisons are unsigned and are named from the
-engine's own vocabulary (`Puck.State.ActionStateComparison`): `Equal`,
+engine's own vocabulary (the comparison subset of `Puck.State.ExpressionOp`, `ExpressionComparisons.All`): `Equal`,
 `NotEqual`, `Less`, `LessOrEqual`, `Greater`, `GreaterOrEqual`. An action is
 `{"target":{"state":"score"},"operation":"Add","value":"1"}`.
 Operations are named from the engine's opcodes (`Puck.State.ExpressionOp`):
-`Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `BitAnd`, `BitOr`, `BitXor`,
+`Add`, `Subtract`, `Multiply`, `Divide`, `Remainder`, `BitAnd`, `BitOr`, `BitXor`,
 `ShiftLeft` and `ShiftRight`; an ABSENT operation assigns, which is the one
 combination no opcode spells. Byte arithmetic is unsigned and wraps modulo 256 on
 both targets; wide assignment, addition and subtraction use sixteen bits. A runtime zero divisor yields zero and a runtime shift of eight or more
@@ -322,17 +323,17 @@ exclusive guard's safety.
 `CartridgeCost` advises on per-frame work. That model counts abstract work units—one unit is an
 eleventh of a `set` step writing a literal to a variable—and compares the
 total against a per-frame reservation. The weights are measured, not estimated:
-`CartridgeCostMeasurement` boots documents on both real machines and reports the
+[`puck cartridge-cost`](../../reference/cli.md#puck-cartridge-costcartridge-cost-measurement)
+boots `CartridgeCostMeasurement`'s probe documents on both real machines and reports the
 largest per-frame iteration count each sustains at full frame rate, and cost per
 iteration is inversely proportional to that. Each target has its own weights and reservation;
 changing `/target` can change the estimate and observed cadence. Cross-target unit totals are not comparable.
 
 A primitive with no measured weight prices as `Unmodeled`, leaving the document without usable cost advice.
-Cost alone does not refuse compilation. Adding a primitive
-therefore means measuring it. To re-measure, raise the reservation so the
-harness can probe past it, run
-`PUCK_FORGE_MEASURE=1 dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests`,
-fold the reported capacities into the weights, and restore the reservation. CGB exports are 32 KiB; AGB exports are
+Cost alone does not refuse compilation, so a probe past a reservation still
+compiles and simply misses frames. Adding a primitive therefore means measuring
+it: add its shape to `CartridgeCostMeasurement.Shapes`, run `puck cartridge-cost`,
+and fold the reported capacities into the weights. CGB exports are 32 KiB; AGB exports are
 64 KiB. Source hashes identify canonical source; they are distinct from the
 engine's hash of exported ROM bytes. `CartridgeCompilation.Variables` and `.Arrays` map source names to native
 memory addresses for debugging and memory watches.

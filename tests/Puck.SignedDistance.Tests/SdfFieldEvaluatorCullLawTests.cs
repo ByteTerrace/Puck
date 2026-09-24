@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 
 using Puck.Maths;
@@ -215,56 +214,67 @@ public sealed class SdfFieldEvaluatorCullLawTests {
             new SdfFieldEvaluator(program: unwrappedBuilder.Build())
         );
     }
-    // Every far instance holds ShapesPerInstance chained union spheres, so evaluating one fully costs far more than
-    // testing its bound once — without the cull, this many far instances is slow enough to discriminate reliably
-    // from a bound-only skip on any machine.
-    private static SdfFieldEvaluator BuildManyFarInstancesEvaluator(int instanceCount, int shapesPerInstance) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+    // Every witness instance declares a bound far out along +X but places its shapes at the origin, under the one near
+    // sphere, in a material of its own. The bound does not contain the shapes, so a skipped instance and an evaluated
+    // one answer differently at the origin: any body that runs there wins the union with a negative distance and the
+    // witness material. A query answering exactly the near sphere's own distance and material has therefore run none
+    // of the bodies, and each skip cost one bound test.
+    private static (SdfFieldEvaluator Witnessed, SdfFieldEvaluator NearOnly, int WitnessMaterial) BuildFarInstanceWitnesses(int instanceCount, int shapesPerInstance) {
+        var witnessedBuilder = new SdfProgramBuilder();
+        var nearOnlyBuilder = new SdfProgramBuilder();
+        var nearMaterial = witnessedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var witnessMaterial = witnessedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX));
 
-        _ = builder.ResetPoint();
-        _ = builder.Translate(offset: new Vector3(
-            x: 0f,
-            y: 0f,
-            z: 3f
-        ));
-        _ = builder.Sphere(
-            blend: SdfBlendOp.Union,
-            material: material,
-            radius: 0.5f
-        );
+        _ = nearOnlyBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        for (var index = 0; (index < instanceCount); index++) {
-            var center = new Vector3(
-                x: (1000f + (index * 25f)),
+        void EmitNear(SdfProgramBuilder builder) {
+            _ = builder.ResetPoint();
+            _ = builder.Translate(offset: new Vector3(
+                x: 0f,
                 y: 0f,
-                z: 0f
-            );
-
-            void Emit(SdfProgramBuilder b) {
-                for (var shape = 0; (shape < shapesPerInstance); shape++) {
-                    _ = b.ResetPoint();
-                    _ = b.Translate(offset: (center + new Vector3(
-                        x: shape,
-                        y: 0f,
-                        z: 0f
-                    )));
-                    _ = b.Sphere(
-                        blend: SdfBlendOp.Union,
-                        material: material,
-                        radius: 0.4f
-                    );
-                }
-            }
-
-            _ = builder.Instance(
-                boundCenter: center,
-                boundRadius: ((shapesPerInstance * 1.0f) + 1.0f),
-                emit: Emit
+                z: 3f
+            ));
+            _ = builder.Sphere(
+                blend: SdfBlendOp.Union,
+                material: nearMaterial,
+                radius: 0.5f
             );
         }
 
-        return new SdfFieldEvaluator(program: builder.Build());
+        EmitNear(builder: witnessedBuilder);
+        EmitNear(builder: nearOnlyBuilder);
+
+        for (var index = 0; (index < instanceCount); index++) {
+            _ = witnessedBuilder.Instance(
+                boundCenter: new Vector3(
+                    x: (1000f + (index * 25f)),
+                    y: 0f,
+                    z: 0f
+                ),
+                boundRadius: ((shapesPerInstance * 1.0f) + 1.0f),
+                emit: builder => {
+                    for (var shape = 0; (shape < shapesPerInstance); shape++) {
+                        _ = builder.ResetPoint();
+                        _ = builder.Translate(offset: new Vector3(
+                            x: (shape * 0.1f),
+                            y: 0f,
+                            z: 0f
+                        ));
+                        _ = builder.Sphere(
+                            blend: SdfBlendOp.Union,
+                            material: witnessMaterial,
+                            radius: 0.4f
+                        );
+                    }
+                }
+            );
+        }
+
+        return (
+            new SdfFieldEvaluator(program: witnessedBuilder.Build()),
+            new SdfFieldEvaluator(program: nearOnlyBuilder.Build()),
+            witnessMaterial
+        );
     }
     private static FixedVector3 Direction(double x, double y, double z) =>
         new(
@@ -520,43 +530,48 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         );
     }
     [Fact]
-    [Trait("Category", "Performance")]
-    public void FarInstanceCullMeetsTheCalibratedTimingBudget() {
-        const int InstanceCount = 4000;
-        const int ShapesPerInstance = 8;
-
-        var evaluator = BuildManyFarInstancesEvaluator(
-            instanceCount: InstanceCount,
-            shapesPerInstance: ShapesPerInstance
-        );
-        var origin = Position(
-            x: 0.0,
-            y: 0.0,
-            z: 0.0
+    public void FarInstancesOutsideTheRunningBestRunNoneOfTheirBodies() {
+        var (witnessed, nearOnly, witnessMaterial) = BuildFarInstanceWitnesses(
+            instanceCount: 4000,
+            shapesPerInstance: 8
         );
 
-        // Warms the JIT once outside the timed section.
-        _ = evaluator.TryDistance(
-            distance: out _,
-            material: out _,
-            position: origin
-        );
+        foreach (var (x, y, z) in new[] { (0.0, 0.0, 0.0), (0.5, 0.25, 1.0), (-2.0, 1.0, 0.0), (0.0, -1.5, 5.0) }) {
+            var position = Position(
+                x: x,
+                y: y,
+                z: z
+            );
 
-        var elapsed = Stopwatch.StartNew();
-
-        for (var iteration = 0; (iteration < 20); iteration++) {
-            _ = evaluator.TryDistance(
-                distance: out _,
-                material: out _,
-                position: origin
+            Assert.True(condition: nearOnly.TryDistance(
+                distance: out var nearDistance,
+                material: out var nearMaterial,
+                position: position
+            ));
+            Assert.True(condition: witnessed.TryDistance(
+                distance: out var distance,
+                material: out var material,
+                position: position
+            ));
+            Assert.True(
+                condition: ((distance == nearDistance) && (material == nearMaterial)),
+                userMessage: $"at ({x}, {y}, {z}) a far instance body ran: answered {distance} in material {material}, the near sphere alone answers {nearDistance} in material {nearMaterial}"
             );
         }
 
-        elapsed.Stop();
-
-        Assert.True(
-            condition: (elapsed.Elapsed < TimeSpan.FromMilliseconds(value: 100.0)),
-            userMessage: $"20 queries over {InstanceCount} far instances of {ShapesPerInstance} shapes each took {elapsed.Elapsed}, exceeding this benchmark's 100 ms budget. Run on an idle machine; elapsed time alone does not establish which instructions executed."
+        // Inside the first bound the cull may not skip, so the same program answers with a body: the witnesses bite.
+        Assert.True(condition: witnessed.TryDistance(
+            distance: out _,
+            material: out var boundMaterial,
+            position: Position(
+                x: 1000.0,
+                y: 0.0,
+                z: 0.0
+            )
+        ));
+        Assert.Equal(
+            actual: boundMaterial,
+            expected: witnessMaterial
         );
     }
 }

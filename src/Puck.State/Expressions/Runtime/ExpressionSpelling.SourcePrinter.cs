@@ -13,6 +13,7 @@ public static partial class ExpressionSpelling {
         ArgumentNullException.ThrowIfNull(syntax);
         ArgumentNullException.ThrowIfNull(atom);
         var into = new StringBuilder();
+
         Write(depth: 0, node: syntax);
         return into.ToString();
 
@@ -20,7 +21,7 @@ public static partial class ExpressionSpelling {
             if (depth > MaxNesting) { throw new ArgumentException(message: "The source tree exceeds the nesting bound.", paramName: nameof(syntax)); }
             switch (node) {
                 case Literal literal: into.Append(value: literal.Value.ToString(provider: CultureInfo.InvariantCulture)); break;
-                case SourceName name: into.Append(value: (name.Quoted ? $"`{name.Name}`" : name.Name)); break;
+                case SourceName name: into.Append(value: PrintName(name: name)); break;
                 case SourceAtom value: into.Append(value: atom(value.Index)); break;
                 case SourceString value:
                     into.Append(value: '"').Append(value: value.Value.Replace(comparisonType: StringComparison.Ordinal, newValue: "\\\\", oldValue: "\\").Replace(comparisonType: StringComparison.Ordinal, newValue: "\\\"", oldValue: "\"")).Append(value: '"');
@@ -44,6 +45,7 @@ public static partial class ExpressionSpelling {
                     for (var index = 0; (index < call.Arguments.Count); index++) {
                         if (index > 0) { into.Append(value: ", "); }
                         var argument = call.Arguments[index];
+
                         if (argument.Name is { } name) { into.Append(value: name).Append(value: ": "); }
                         Write(argument.Value, (depth + 1));
                     }

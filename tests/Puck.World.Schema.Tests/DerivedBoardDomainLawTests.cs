@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -28,20 +29,20 @@ public sealed class DerivedBoardDomainLawTests {
             Domain: new StateDomain.Keys()
         );
 
-        Assert.False(StateRow.TryProveDerivedDomain(board, null, codes, null, out var reason));
-        Assert.Contains("can admit 0..2", reason, StringComparison.Ordinal);
+        Assert.False(condition: StateRow.TryProveDerivedDomain(board: board, boardSymbols: null, codeSymbols: null, codes: codes, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "can admit 0..2");
 
         var unboundedBoard = board with { Min = null, Max = null };
         var unboundedCodes = codes with { Min = null, Max = null };
 
-        Assert.True(StateRow.TryProveDerivedDomain(unboundedBoard, null, unboundedCodes, null, out reason), reason);
+        Assert.True(condition: StateRow.TryProveDerivedDomain(board: unboundedBoard, boardSymbols: null, codeSymbols: null, codes: unboundedCodes, reason: out reason), userMessage: reason);
 
         var boolBoard = unboundedBoard with { Kind = CellKind.Bool };
         var boolCodes = unboundedCodes with { Min = 0L, Max = 1L };
 
-        Assert.True(StateRow.TryProveDerivedDomain(boolBoard, null, boolCodes, null, out reason), reason);
-        Assert.False(StateRow.TryProveDerivedDomain(boolBoard, null, unboundedCodes, null, out reason));
-        Assert.Contains("can admit", reason, StringComparison.Ordinal);
+        Assert.True(condition: StateRow.TryProveDerivedDomain(board: boolBoard, boardSymbols: null, codeSymbols: null, codes: boolCodes, reason: out reason), userMessage: reason);
+        Assert.False(condition: StateRow.TryProveDerivedDomain(board: boolBoard, boardSymbols: null, codeSymbols: null, codes: unboundedCodes, reason: out reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "can admit");
     }
     [Fact]
     public void EmptyAndEnumIntersectionsAreAdmittedAsTheirEffectiveDomains() {
@@ -64,39 +65,28 @@ public sealed class DerivedBoardDomainLawTests {
         var boardValues = new StateEnum(Name(value: "boardValues"), [Name(value: "empty"), Name(value: "piece")]);
         var codeValues = new StateEnum(Name(value: "codeValues"), [Name(value: "piece"), Name(value: "other")]);
 
-        Assert.True(StateRow.TryProveDerivedDomain(board, boardValues, codes, codeValues, out var reason), reason);
+        Assert.True(condition: StateRow.TryProveDerivedDomain(board: board, boardSymbols: boardValues, codeSymbols: codeValues, codes: codes, reason: out var reason), userMessage: reason);
 
         var boardWithOneValue = board with { Enum = Name(value: "boardOne") };
         var boardOne = new StateEnum(Name(value: "boardOne"), [Name(value: "empty")]);
         var twoCodeValues = codes with { Min = 0L, Max = 1L };
 
-        Assert.False(StateRow.TryProveDerivedDomain(boardWithOneValue, boardOne, twoCodeValues, codeValues, out reason));
-        Assert.Contains("admits 0..0", reason, StringComparison.Ordinal);
+        Assert.False(condition: StateRow.TryProveDerivedDomain(board: boardWithOneValue, boardSymbols: boardOne, codeSymbols: codeValues, codes: twoCodeValues, reason: out reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "admits 0..0");
 
         var emptyOutside = board with { Min = 0L, Max = 1L };
         var noEmpty = emptyOutside with { Domain = new StateDomain.CellsOf(Empty: 2L, Topology: "grid") };
 
-        Assert.False(StateRow.TryProveDerivedDomain(noEmpty, boardValues, codes with { Min = 0L, Max = 1L }, codeValues, out reason));
-        Assert.Contains("empty value 2", reason, StringComparison.Ordinal);
+        Assert.False(condition: StateRow.TryProveDerivedDomain(noEmpty, boardValues, codes with { Min = 0L, Max = 1L }, codeValues, out reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "empty value 2");
     }
     [Fact]
     public void EveryShippedInverseDeclarationPassesTheDomainProof() {
-        var root = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while ((root is not null) && !Directory.Exists(path: Path.Combine(root.FullName, "src", "Puck.World", "Assets", "worlds"))) {
-            root = root.Parent;
-        }
-        Assert.NotNull(@object: root);
-
-        var files = Directory.EnumerateFiles(
-            Path.Combine(root!.FullName, "src", "Puck.World", "Assets", "worlds"),
-            "*.world.json",
-            SearchOption.AllDirectories
-        ).OrderBy(path => path, StringComparer.Ordinal);
+        var files = ShippedWorldDocuments.Files(directory: RepositoryPaths.Resolve(relativePath: ShippedWorldDocuments.WorldDirectory));
         var declarations = 0;
 
         foreach (var path in files) {
-            using var document = JsonDocument.Parse(File.ReadAllBytes(path: path));
+            using var document = JsonDocument.Parse(ShippedWorldDocuments.Read(path: path));
 
             if (!document.RootElement.TryGetProperty(propertyName: "state", value: out var stateJson)) {
                 continue;
@@ -148,8 +138,8 @@ public sealed class DerivedBoardDomainLawTests {
                 _ = catalog.TryGetEnum(handle: codeHandle, symbols: out var codeSymbols);
 
                 Assert.True(
-                    StateRow.TryProveDerivedDomain(board, boardSymbols, code, codeSymbols, out var reason),
-                    $"{path}: {reason}"
+                    condition: StateRow.TryProveDerivedDomain(board: board, boardSymbols: boardSymbols, codeSymbols: codeSymbols, codes: code, reason: out var reason),
+                    userMessage: $"{path}: {reason}"
                 );
             }
         }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Assets;
 
 namespace Puck.World.Server;
 
@@ -33,7 +34,7 @@ public readonly record struct WorldAuthorityRoot(
     [property: JsonPropertyName("durableOrdinal")] long DurableOrdinal,
     [property: JsonPropertyName("durableTick")] ulong DurableTick
 ) {
-    /// <summary>Creates an empty, unowned root used by explicit legacy initialization.</summary>
+    /// <summary>Gets the empty, unowned root an absent root stands for until its first create-only publication.</summary>
     public static WorldAuthorityRoot Empty => new(
         CheckpointCoverageSequence: -1,
         CheckpointHash: null,
@@ -67,7 +68,11 @@ public readonly record struct WorldAuthorityRecovery(
     WorldMutationJournalTail Journal
 ) {
     /// <summary>The root-qualified, fully validated definition, or <see langword="null"/> when no definition is published.</summary>
-    public WorldDefinition? Definition { get; init; }
+    public WorldDefinition? Definition => Admission?.Definition;
+    /// <summary>This read's own validation result for the published definition, or <see langword="null"/> when no
+    /// definition is published. It is the receipt an activation hands to server construction and machine preparation,
+    /// valid only while the definition and the catalog it was validated against stay unchanged.</summary>
+    public WorldDefinitionAdmission? Admission { get; init; }
 }
 /// <summary>Server-neutral durable receipt facts. Decision vocabulary remains a stable code so Protocol can evolve
 /// its typed outcome without creating a Server-to-Protocol persistence cycle.</summary>
@@ -84,33 +89,19 @@ public readonly record struct WorldAuthorityOperationReceipt(
 /// <summary>Encodes the additive mutable authority root and immutable receipt nodes. Existing checkpoint, journal, and
 /// definition payloads are passed through unchanged.</summary>
 internal static class WorldAuthorityRootCodec {
-    private static readonly JsonSerializerOptions Options = new() {
+    // The one serializer configuration for authority roots, receipt nodes and recovery roots.
+    internal static readonly JsonSerializerOptions Options = new() {
         PropertyNamingPolicy = null,
         WriteIndented = false,
     };
 
-    private static bool IsContentPin(string? value) {
-        const string Prefix = "sha256-64/";
-
-        if (value is null) {
-            return true;
-        }
-        if (
-            (value.Length != (Prefix.Length + 16)) ||
-            !value.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: Prefix
-        )
-        ) {
-            return false;
-        }
-        for (var index = Prefix.Length; (index < value.Length); index++) {
-            if (!Uri.IsHexDigit(character: value[index])) {
-                return false;
-            }
-        }
-        return true;
-    }
+    private static bool IsContentPin(string? value) => (
+        (value is null) ||
+        AssetContentHash.TryParse(
+        hash: out _,
+        text: value
+    )
+    );
 
     public static byte[] Encode(WorldAuthorityRoot root) => JsonSerializer.SerializeToUtf8Bytes(
         options: Options,
@@ -171,7 +162,7 @@ internal static class WorldAuthorityRootCodec {
             );
             if (
                 (root.RewindBoundary is { } boundary) &&
-                !WorldAuthorityRecoveryRootCodec.IsPin(pin: boundary)
+                !ContentPin.TryParse(pin: out _, text: boundary)
             ) {
                 reason = "rewind boundary is not a full SHA-256 policy pin"; root = default; return false;
             }

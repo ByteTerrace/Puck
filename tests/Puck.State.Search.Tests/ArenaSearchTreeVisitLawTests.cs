@@ -8,9 +8,8 @@ namespace Puck.State.Search.Tests;
 /// child was kept or judged refused on the way back to it, so selection's unvisited-first rule moves on.</summary>
 public sealed class ArenaSearchTreeVisitLawTests {
     // The judge accepts each position twice — once for the root's legal-move pass and once for the expansion that
-    // enumerates it as a child — and refuses it ever after, so every child is refused the moment an iteration tries
-    // to keep it: the drawn child first, and each selected child after it. Every iteration then ends at a child,
-    // and the root's visits are its children's.
+    // grows it as a child — and refuses it ever after, so every child is refused the moment a later iteration selects
+    // it. Every iteration then ends at a child, and the root's visits are its children's.
     [Fact]
     public void AChildRefusedOnTheWayBackToItStillCountsItsVisit() {
         var position = new Position(rows: Board(
@@ -28,10 +27,14 @@ public sealed class ArenaSearchTreeVisitLawTests {
             judge: new DelegateJudge(
                 arena: position.Arena,
                 judge: (in ArenaSearchView view) => {
-                    _ = view.Arena.TryReadRaw(
+                    _ = view.Arena.TryReadLiveNumber(
                         key: token,
-                        raw: out var cell,
-                        rowOrdinal: piece
+                        rowOrdinal: piece,
+                        time: ArenaTime.At(
+                            engineTick: view.EngineTick,
+                            tick: view.Tick
+                        ),
+                        value: out var cell
                     );
 
                     seen[cell] = (seen.GetValueOrDefault(key: cell) + 1);
@@ -76,10 +79,10 @@ public sealed class ArenaSearchTreeVisitLawTests {
                         Kind: SearchShapeKind.Relocate,
                         Displace: true,
                         Directions: [],
-                        PairWithIndex: -1
+                        CompanionIndex: -1
                     )],
                 Iterations: 16,
-                Method: SearchMethod.Tree
+                Method: SearchMethod.MonteCarlo
             ) {
                 Scored = true,
             },
@@ -93,10 +96,10 @@ public sealed class ArenaSearchTreeVisitLawTests {
                 tick: 1UL
             );
 
-            if (search.Capture().Jobs[0].Tree is { } tree && (tree.ChildCount[0] > 0)) {
+            if ((search.Capture().Jobs[0].Tree is { } tree) && (tree.ChildCount[0] > 0)) {
                 var children = 0L;
 
-                for (var child = tree.FirstChild[0]; (child < (tree.FirstChild[0] + tree.ChildCount[0])); child++) {
+                for (var child = tree.FirstChild[0]; (child >= 0); child = tree.NextSibling[child]) {
                     children += tree.Visits[child];
                 }
 

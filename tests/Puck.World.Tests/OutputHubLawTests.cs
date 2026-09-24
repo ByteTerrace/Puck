@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -139,7 +140,7 @@ public sealed class OutputHubLawTests {
 
         // Activate body 0 (Fixtures.FreshServer boots every seat unjoined — see EngageAuthorityLawTests' own
         // remarks) so it appears in the snapshot's entries at all.
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -224,7 +225,7 @@ internal sealed class RecordingSink : IClientSink {
         SnapshotDeliveries++;
         m_lastEntries = snapshot.Entries.ToArray();
     }
-    public void DeliverState(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) { }
     /// <summary>The most recently delivered snapshot's continuity hint for the named entity index, or
     /// <see langword="null"/> when no delivery has reported that index active.</summary>
     public EntityContinuity? LastContinuity(int index) {
@@ -269,7 +270,7 @@ internal sealed class SelfDisposingThrowingSink : IClientSink {
             throw new InvalidOperationException(message: "SelfDisposingThrowingSink: deliberate dispose-then-throw for OutputHubLawTests.");
         }
     }
-    public void DeliverState(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) { }
 }
 /// <summary>A typed-lane sink test double that calls <c>AttachSink</c> from within its first ordinary tick delivery
 /// (the attach primer is benign), attempting to smuggle a second sink into the live fan-out — the reentrancy
@@ -291,7 +292,7 @@ internal sealed class ReattachingSink(Puck.World.Server.WorldServer server) : IC
             _ = server.AttachSink(sink: Smuggled);
         }
     }
-    public void DeliverState(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) { }
 }
 /// <summary>A typed-lane sink test double that throws out of <see cref="DeliverSnapshot"/> from
 /// <paramref name="throwFromCall"/> onward (1-based call count) — proves <c>WorldOutputHub</c>'s per-sink exception
@@ -310,5 +311,5 @@ internal sealed class FaultingSink(int throwFromCall) : IClientSink {
             throw new InvalidOperationException(message: "FaultingSink: deliberate delivery fault for OutputHubLawTests.");
         }
     }
-    public void DeliverState(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) { }
 }

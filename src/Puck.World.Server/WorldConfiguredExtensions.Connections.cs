@@ -10,10 +10,13 @@ public sealed partial class WorldConfiguredExtensions {
     /// <summary>Snapshots authorized request tables and recovery evidence at a closed world boundary, then schedules
     /// bounded asynchronous journal work. Service calls and persistence never run on the simulation pump.</summary>
     /// <param name="completedTick">This authority's completed tick, used only to pace scans.</param>
-    /// <remarks>Run on the simulation thread. Old clients remain revoked after replay; restarting live integration
-    /// requires a fresh composition. Results are keyed by the original request key, so late completion cannot
-    /// overwrite another incarnation's result.</remarks>
+    /// <remarks>Run on the simulation thread. Participants run their queued world operations on every call; request
+    /// and collection scans run every <c>scanEveryTicks</c>. Old clients remain revoked after replay; restarting live
+    /// integration requires a fresh composition. Results are keyed by the original request key, so late completion
+    /// cannot overwrite another incarnation's result.</remarks>
     public void Pump(ulong completedTick) {
+        if (m_disposed) { return; }
+        PumpParticipants(completedTick: completedTick);
         if (
             m_disposed ||
             !m_work.IsCompleted ||
@@ -41,10 +44,12 @@ public sealed partial class WorldConfiguredExtensions {
                             connection.Status,
                             CellKind.Int
                         );
-                        if (connection.Results is { } resultRow) { RequireTable(
+                        if (connection.Results is { } resultRow) {
+                            RequireTable(
                             kind: CellKind.Text,
                             name: resultRow
-                        ); }
+                        );
+                        }
                         var statuses = ReadTable(
                             client,
                             connection.Status,
@@ -207,10 +212,12 @@ public sealed partial class WorldConfiguredExtensions {
                 // Queued is not applied. Re-check the authorized status observation before suppressing another
                 // projection, so a refused contribution can be retried after the host corrects its grants.
                 m_status[request.CacheKey] = status;
-            } catch (OperationCanceledException) when (m_stop.IsCancellationRequested) { return; } catch (Exception exception) { Volatile.Write(
+            } catch (OperationCanceledException) when (m_stop.IsCancellationRequested) { return; } catch (Exception exception) {
+                Volatile.Write(
                 location: ref m_lastFailure,
                 value: $"Connection '{request.Connection.Name}': {exception.GetType().Name}"
-            ); }
+            );
+            }
         }
     }
 }

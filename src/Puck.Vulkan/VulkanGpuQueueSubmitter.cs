@@ -1,5 +1,7 @@
+using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan;
 
@@ -14,7 +16,7 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
         var vkContext = ((IVulkanDeviceContext)deviceContext);
 
         return new VulkanGpuSubmissionFence(
-            deviceHandle: vkContext.LogicalDevice.Handle,
+            device: vkContext.LogicalDevice.Commands,
             frameSynchronizationApi: frameSynchronizationApi
         );
     }
@@ -24,7 +26,7 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
 
         queueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,
-            deviceHandle: vkContext.LogicalDevice.Handle,
+            device: vkContext.LogicalDevice.Commands,
             graphicsQueue: vkContext.LogicalDevice.GraphicsQueue
         );
     }
@@ -35,7 +37,7 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
 
         queueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,
-            deviceHandle: vkContext.LogicalDevice.Handle,
+            device: vkContext.LogicalDevice.Commands,
             fenceHandle: vkFence.Arm(),
             graphicsQueue: vkContext.LogicalDevice.GraphicsQueue
         );
@@ -46,7 +48,7 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
 
         queueSubmitter.SubmitAndWait(
             commandBufferHandles: commandBufferHandles,
-            deviceHandle: vkContext.LogicalDevice.Handle,
+            device: vkContext.LogicalDevice.Commands,
             graphicsQueue: vkContext.LogicalDevice.GraphicsQueue
         );
     }
@@ -57,22 +59,45 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
 /// drained by an unbounded <c>vkWaitForFences</c> + reset. Single-threaded like every other pump-thread GPU object.
 /// </summary>
 file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
-    private readonly nint m_deviceHandle;
+    private readonly VulkanDeviceCommands m_device;
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
 
     private nint m_fenceHandle;
     private bool m_pending;
 
-    internal VulkanGpuSubmissionFence(nint deviceHandle, IVulkanFrameSynchronizationApi frameSynchronizationApi) {
-        m_deviceHandle = deviceHandle;
+    internal VulkanGpuSubmissionFence(VulkanDeviceCommands device, IVulkanFrameSynchronizationApi frameSynchronizationApi) {
+        m_device = device;
         m_frameSynchronizationApi = frameSynchronizationApi;
         m_frameSynchronizationApi.CreateFence(
             fenceHandle: out m_fenceHandle,
             request: new VulkanFrameSynchronizationCreateRequest(
-                DeviceHandle: deviceHandle,
+                Device: device,
                 StartSignaled: false
             )
         ).ThrowIfFailed(operation: "vkCreateFence");
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Reads <c>vkGetFenceStatus</c>; <c>VK_ERROR_DEVICE_LOST</c> surfaces as <see cref="DeviceLostException"/>.</remarks>
+    public bool IsSignaled {
+        get {
+            if (!m_pending) {
+                return true;
+            }
+
+            var status = m_frameSynchronizationApi.GetFenceStatus(
+                device: m_device,
+                fenceHandle: m_fenceHandle
+            );
+
+            if (status == VkResult.NotReady) {
+                return false;
+            }
+
+            status.ThrowIfFailed(operation: "vkGetFenceStatus");
+
+            return true;
+        }
     }
 
     /// <summary>Marks a submission outstanding and hands the native fence handle to the submit; the caller must have
@@ -91,14 +116,12 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
     /// <remarks>Destroys the fence WITHOUT waiting (the frame-ring owner drains the device before teardown, and a
     /// lost device has nothing left to wait on).</remarks>
     public void Dispose() {
-        if (0 != m_fenceHandle) {
-            m_frameSynchronizationApi.DestroyFence(
-                deviceHandle: m_deviceHandle,
-                fenceHandle: m_fenceHandle
-            );
-            m_fenceHandle = 0;
-            m_pending = false;
-        }
+        m_frameSynchronizationApi.DestroyFence(
+            device: m_device,
+            fenceHandle: m_fenceHandle
+        );
+        m_fenceHandle = 0;
+        m_pending = false;
     }
     /// <inheritdoc/>
     public void Wait() {
@@ -109,12 +132,12 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
         // Unbounded, like vkDeviceWaitIdle — a hung GPU surfaces as a device loss (ThrowIfFailed maps
         // VK_ERROR_DEVICE_LOST to the neutral DeviceLostException the host pump's recovery catches).
         m_frameSynchronizationApi.WaitForFence(
-            deviceHandle: m_deviceHandle,
+            device: m_device,
             fenceHandle: m_fenceHandle,
             timeout: ulong.MaxValue
         ).ThrowIfFailed(operation: "vkWaitForFences");
         m_frameSynchronizationApi.ResetFence(
-            deviceHandle: m_deviceHandle,
+            device: m_device,
             fenceHandle: m_fenceHandle
         ).ThrowIfFailed(operation: "vkResetFences");
         m_pending = false;

@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Storage;
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
@@ -50,20 +52,21 @@ public sealed class WorldObservationLawTests {
                 MaximumItems: 4
             )]
     );
-    private static WorldConfiguredExtensions Create(WorldServer server, Source source, WorldExtensionConfiguration? configuration = null) =>
+    private static WorldConfiguredExtensions Create(WorldServer server, Source source, WorldExtensionConfiguration? configuration = null, TimeProvider? clock = null) =>
         WorldConfiguredExtensions.Create(
             (configuration ?? Configuration()),
-            new(
-                extensions: [new WorldExtensionProviderType(
-                        Create: _ => source,
-                        Type: "test"
-                    )],
-                keyOf: type => type.Type
-            ),
+            PuckExtensionSet.Compose(extensions: [new TestExtension(
+                name: "test",
+                register: registry => registry.AddOperation(provider: new(
+                    Create: _ => source,
+                    Type: "test"
+                ))
+            )]),
             server,
             new FakeObjectBlobStore(),
             new DirectoryObjectStorageTarget("unused"),
-            () => throw new InvalidOperationException(message: "Reads must not capture effect recovery images.")
+            () => throw new InvalidOperationException(message: "Reads must not capture effect recovery images."),
+            clock
         );
     private static WorldDefinition Document() {
         var document = Fixtures.BuildDocument();
@@ -113,11 +116,13 @@ public sealed class WorldObservationLawTests {
     [Fact]
     public async Task ANonNumericValueRefusesTheItemByFieldAndKeepsThePreviousProjection() {
         using var world = Fixtures.FreshServer(Document());
-        using var provider = new Source { Items = [Item(
+        using var provider = new Source {
+            Items = [Item(
                 "a",
                 score: "1",
                 depth: "1"
-            )] };
+            )],
+        };
         await using var runtime = Create(
             world.Server,
             provider
@@ -185,6 +190,32 @@ public sealed class WorldObservationLawTests {
             actual: provider.Reads,
             expected: 1
         );
+    }
+    [Fact]
+    public async Task AReadThatNeverAnswersFailsWhenItsOperationTimeoutExpiresOnTheHostClock() {
+        var clock = new VirtualClock();
+        using var world = Fixtures.FreshServer(Document());
+        using var provider = new Source { Deferred = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously) };
+        await using var runtime = Create(
+            world.Server,
+            provider,
+            clock: clock
+        );
+
+        runtime.Pump(completedTick: 1);
+        await provider.Started.Task.WaitAsync(cancellationToken: Cancel);
+
+        var flushed = runtime.FlushObservationsAsync(cancellationToken: Cancel);
+
+        await clock.ExpireAsync(
+            ct: Cancel,
+            dueTime: WorldExtensionHostOptions.Default.OperationTimeout,
+            pending: flushed
+        );
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => flushed);
+        runtime.Pump(completedTick: 2);
+        Assert.NotNull(@object: Assert.Single(collection: runtime.Observations).Failure);
+        Assert.Empty(collection: Names(server: world.Server));
     }
     [Fact]
     public async Task CompleteSnapshotsProjectAtomicallyAndStayQuietOnAnUnchangedCollection() {
@@ -314,11 +345,13 @@ public sealed class WorldObservationLawTests {
     [Fact]
     public async Task NumericAndFixedFieldsParseByTheirRowKindWithTheFixedConversionsOwnRounding() {
         using var world = Fixtures.FreshServer(Document());
-        using var provider = new Source { Items = [Item(
+        using var provider = new Source {
+            Items = [Item(
                 "a",
                 score: "42",
                 depth: "12.375"
-            )] };
+            )],
+        };
         await using var runtime = Create(
             world.Server,
             provider

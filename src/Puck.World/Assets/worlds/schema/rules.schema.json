@@ -11,7 +11,7 @@
     ],
     "properties": {
       "name": {
-        "description": "The rule\u0027s stable name \u2014 unique within the section. A CellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name at the JSON converter. The reserved $ prefix is refused on top of that, by RuleCompiler.CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
+        "description": "The rule\u0027s stable name \u2014 unique within the section. A CellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name at the JSON converter. The reserved $ prefix is refused on top of that, by RuleCompiler.CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and the engine mints no rule. A rule a .puck scope generates carries the $ inside its name instead (GeneratedName: turn$east).",
         "title": "CellName",
         "type": "string"
       },
@@ -38,7 +38,7 @@
       },
       "forEach": {
         "$ref": "./common.schema.json#/$defs/StateChannelRefNonNullable",
-        "description": "A keyed state row to iterate, $zones to iterate the rule\u0027s own Zones table (its non-empty indices, each bound to $each), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s value when it is an integer and by its position in the row otherwise.",
+        "description": "A keyed state row to iterate, $zones to iterate the rule\u0027s own Zones table (its non-empty indices, each bound to $each), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s interned CellKey ordinal, so a key keeps its latch wherever it sits in the row.",
         "default": null
       },
       "decision": {
@@ -147,7 +147,7 @@
             "title": "WorldDecisionMode"
           },
           "scoreKind": {
-            "$ref": "./common.schema.json#/$defs/CellKind",
+            "$ref": "./common.schema.json#/$defs/CellKindNonNullable",
             "description": "The common numeric kind, Int or Fixed; operands must match it.",
             "default": "Fixed"
           },
@@ -214,17 +214,9 @@
               "description": "The postfix expression whose evaluated result the local holds."
             },
             "kind": {
+              "$ref": "./common.schema.json#/$defs/CellKind",
               "description": "The value\u0027s cell kind, Int or Fixed, or null for the kind the rule compiler infers: Int when the expression compiles as one, otherwise Fixed. A comparison or sign may consume Fixed operands yet leave an Int result, which is the inferred binding kind.",
-              "enum": [
-                "Int",
-                "Fixed",
-                "Bool",
-                "Text",
-                "Vector",
-                null
-              ],
-              "default": null,
-              "title": "CellKind"
+              "default": null
             }
           },
           "required": [

@@ -160,11 +160,13 @@ public sealed class AzureResourceInventoryTests {
         protected override void Dispose(bool disposing) { if (disposing) { m_client?.Dispose(); } base.Dispose(disposing: disposing); }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             Methods.Add(item: request.Method.Method); Uris.Add(item: request.RequestUri!);
-            return Task.FromResult(result: new HttpResponseMessage(statusCode: HttpStatusCode.OK) { Content = new StringContent(
+            return Task.FromResult(result: new HttpResponseMessage(statusCode: HttpStatusCode.OK) {
+                Content = new StringContent(
                 content: m_replies.Dequeue(),
                 encoding: Encoding.UTF8,
                 mediaType: "application/json"
-            ) });
+            ),
+            });
         }
     }
     private sealed class Credential : TokenCredential {

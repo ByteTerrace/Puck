@@ -105,7 +105,7 @@ internal static partial class Subjects {
             flippedTriple: CocycleTriple,
             order: CocycleOrder
         ));
-        var twistedCertificate = twisted.Certify(overlapLimit: (1L << 20));
+        var twistedCertificate = twisted.Certify(tupleLimit: (1L << 20));
 
         if (!twisted.Presentation.HasLiveReassociation) { return "the two-element group's 3-cocycle did not register as a live re-association charge"; }
 
@@ -637,7 +637,7 @@ internal static partial class Subjects {
     // signs. The declared table is internal and is never read here, so a certificate that compared the wrong two routes
     // would disagree with this even where its own perturbation probe still separated.
     private static string? CoherenceMatchesMeasuredIdentity(string name, PresentedAlgebra<BigInteger, IntegerMaterial> algebra) {
-        var certificate = algebra.Certify(overlapLimit: (1L << 22));
+        var certificate = algebra.Certify(tupleLimit: (1L << 22));
         var count = algebra.Presentation.NormalFormCount;
         var associator = new BigInteger[((count * count) * count)];
         var product = new int[(count * count)];

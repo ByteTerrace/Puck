@@ -1,8 +1,6 @@
 # Maths-usage complete reference
 
-This preserves the full primitive-selection, determinism, verification, and
-governance contract. Read the relevant section when the compact skill routes
-here.
+Read the relevant section when `SKILL.md` routes here.
 
 ## Contents
 
@@ -43,7 +41,7 @@ agent's.
 | The subject is a graph, a lattice, a language or a finite structure rather than a number — reachability, convolution and inversion, pattern matching, homology, group orbits | [Oracle](../../../../src/Puck.Maths/Oracle/README.md) | One presented-algebra product over swappable materials: `Presentations`, `PresentedAlgebra`, `DivisibilityAlgebra`, `TokenPattern`/`PatternMatcher`, `ExteriorCalculus`/`IntegerHomology`, `ReflectionSystem`/`PresentedGroup` | "Choosing an entry point", then "Contracts every consumer inherits" |
 | An exploratory or open-problem question — continued-fraction tails, Sturmian and quasicrystal words, Fibonacci and metallic means, real-quadratic orders | [Research](../../../../src/Puck.Maths/Research/README.md) | Exact, certificate-bearing, off the hot path; a budget-exhausted search (`SearchLimitReached`) is never conflated with a proof or a counterexample | "At a glance" — and the namespace split stated above it |
 | A frequency- or sequency-domain transform, or a cyclic convolution | [Transforms](../../../../src/Puck.Maths/Transforms/README.md) | Exact: `NumberTheoreticTransform`/`NumberTheoreticTransformPlan` (over `PrimeField64`), `WalshHadamardTransform` (any binary integer, no plan). Fixed-point, measured bounds: `FixedFourierTransform`/`FixedFourierTransformPlan` (over `FixedComplex`), `FixedCosineTransform`/`FixedCosineTransformPlan` (over `FixedQ4816`). All in place; `Convolve` on both spectral transforms | "At a glance", then the transform's own section |
-| A per-tick state hash, an exact allocation over intervals, bucket routing, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `RealQuadratic`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [Root-level types](../../../../docs/reference/maths.md#root-level-types) |
+| A per-tick state hash, an exact allocation over intervals, bucket routing, a tie-broken sort order, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `LexicographicOrder`, `RealQuadratic`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [Root-level types](../../../../docs/reference/maths.md#root-level-types) |
 
 **Depth lives in the wing READMEs**, and this skill never restates their
 contract tables or re-argues a rule they own. When one disagrees with this file,
@@ -144,6 +142,7 @@ for each is at
 | An exact rational, reduced on construction, for authoring and compile-time derivations that round once at the end | `Rational` | root level |
 | An exact real-quadratic value — `RealQuadraticField` names the field `ℚ(√d)`, `RealQuadratic` carries the value with conjugate, norm and trace | `RealQuadratic` | root level |
 | Bit tricks, GCD, integer roots, pairing, factorization | `BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions` | root level |
+| A low mask exact at 0 and the full width, power-of-two alignment, PDEP/PEXT, a 2-D or 3-D Morton code — never a hand-rolled `(1 << n) - 1`, `(x + a - 1) & ~(a - 1)` or `Bmi2` call | `BinaryIntegerFunctions.LowMask`, `AlignUp`/`AlignDown`, `ParallelBitDeposit`/`ParallelBitExtract`, `BitwisePair`/`BitwiseTriple` | [Bit kit](../../../../docs/reference/maths.md#bit-kit) |
 | One relation over several carriers, or a proof two carriers agree | `QuadraticAlgebra<TScalar>` and the structure tier | [Algebra](../../../../src/Puck.Maths/Algebra/README.md) |
 
 ### Finite fields
@@ -248,6 +247,15 @@ stable, and never add a path that reproduces old-wrong behaviour.
   region ladders in the fields) are bit-identical to their portable fallbacks,
   and that equivalence is *gated* — see
   [FiniteFields → Verifying changes](../../../../src/Puck.Maths/FiniteFields/README.md#verifying-changes).
+  A hardware path is taken only where it is also fast: `PDEP`/`PEXT` are
+  microcoded on AMD before Zen 3 (the Steam Deck's Zen 2 included) and on Hygon's
+  licensed Zen 1, with a mask-dependent latency of up to hundreds of cycles, so
+  every `PDEP`/`PEXT` site
+  tests `BitManipulation.HasFastParallelBits`, never `Bmi2.IsSupported`, and that
+  one gate is the only vendor-specific branch in the library. Its decision is the
+  pure `BitManipulation.IsParallelBitsFast(vendor, family, hasBmi2)`, pinned by
+  `integer.fast-parallel-bits-decision-table`; see the
+  [bit kit](../../../../docs/reference/maths.md#bit-kit).
   Parameterless formatting and parsing are invariant; explicit providers are
   honored deterministically.
 
@@ -255,11 +263,8 @@ stable, and never add a path that reproduces old-wrong behaviour.
 
 ## 3. Verify
 
-There is no repo-wide verification story left to sit on top of: the battery that
-owned the engine and document gates is quarantined with `Puck.Post`, and the
-skill that routed it went with it. `tests/Puck.Maths.Tests` is the tree's only
-unit-test project — a committed four-tier suite — and the tiers below are the
-whole machine-checked story a `src/Puck.Maths` change gets.
+`tests/Puck.Maths.Tests` is the machine-checked story a `src/Puck.Maths` change
+gets — a committed four-tier suite — and the tiers below are all of it.
 
 **Is a contract claim actually tested?**
 `tests/Puck.Maths.Tests/LawRegistry.cs` is the executable index of what the
@@ -280,7 +285,9 @@ cheap on purpose and it is where the *structural* gates live: the coverage
 ratchet and both leg gates carry the `Default` trait, so this run is the only
 one that checks a new public member is classified, that legs are declared and
 siblings resolve, and the only one that regenerates `coverage-manifest.json`
-and `leg-ledger.md`. Skipping it does not save time; it defers a failure that
+and `leg-ledger.md` (into the build output; `puck baselines maths-ledger`
+records them into the checkout, which the manifest and leg checks require after a
+declaration change). Skipping it does not save time; it defers a failure that
 cannot heal itself once the manifest and the surface disagree.
 
 **The tier ladder.** Higher tiers are opt-in by runsettings and are *not* to be
@@ -293,7 +300,6 @@ in a change loop.
 | **Default** | *(bound by default — no `--settings`)* | ~13 s | **every change**, unconditionally |
 | Deep | `--settings tests/Puck.Maths.Tests/deep.runsettings` | minutes | **before you commit**, and before any rounding change lands |
 | Exhaustive | `--settings tests/Puck.Maths.Tests/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an entire carrier |
-| Bench | `--settings tests/Puck.Maths.Tests/bench.runsettings` | timing | on demand; breach-tolerant, gates no value |
 
 **Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes
 and does not support running a subset. Run it only
@@ -312,7 +318,7 @@ at one of these**:
 | `BinaryField` / `BinaryFields` | the `binary-field.*` law family (`laws/binary-field.json`) |
 | `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | the `sampling.*` law family — cases live in `laws/sampling.json`, and `DigitalNetSampler`'s also in `laws/digital-net.json` |
 | `MonotonicPartitioner` | the `core.*` law family — cases live in `laws/monotonic-partitioner.json` |
-| `BinaryIntegerFunctions` | the `core.*` law family (`laws/core.json`) |
+| `BinaryIntegerFunctions` | the `core.*` law family (`laws/core.json`) and the `integer.*` family (`laws/integer-magic-constants.json`, `laws/integer-bit-kernels.json`) |
 | `SecureRandom`'s refusal edge | the `sampling.*` law family (`laws/sampling.json`) |
 | The presented algebra (`Oracle/`) | the `presented.*` law families, which run as Default-tier cases; the Default tier is the gate of record |
 | `QuadraticAlgebra` / `MonogenicAlgebra` / `GeometricAlgebra` / `DoublingAlgebra` | the matching law family — see [Algebra → Verifying changes](../../../../src/Puck.Maths/Algebra/README.md#verifying-changes) |
@@ -320,7 +326,7 @@ at one of these**:
 | Quadratic integer arithmetic | the `quadratic-integer.*` and `algebra.quadratic-*` law families (`laws/quadratic-integer.json`, `laws/doubling-tower.json`) |
 
 **Machine gotcha — `-c Release` must PRECEDE the file path.** In
-`dotnet run -c Release wasm/build.cs` the flag comes first or the file
+`dotnet run -c Release <file>.cs` the flag comes first or the file
 is silently built and run as Debug. This is not cosmetic on the reference
 machine: Windows App Control blocks loading never-seen Debug binaries
 (`FileLoadException 0x800711C7`), so file-based `dotnet run <script>.cs`

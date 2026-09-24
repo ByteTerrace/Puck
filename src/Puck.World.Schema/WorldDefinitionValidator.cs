@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Machines;
+using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.Maths;
@@ -45,10 +46,6 @@ public static partial class WorldDefinitionValidator {
     // Puck.SignedDistance's own screen-frame door and Puck.Abstractions' CameraSnapshot basis check.
     private const float MaximumScreenBasisSkew = 1e-3f;
     private const float MinimumBasisLengthSquared = 1e-8f;
-    // PlanarImpulse.BodyDirection quantizes to FixedQ4816 (step 2^-16) before reaching the sim; that rounds a unit
-    // vector's length by at most ~1.3e-5. This tolerance sits ~8x above that quantization floor and far below any
-    // unnormalized axis (e.g. (3, 0, 4) is off by 4).
-    private const float PlanarImpulseUnitDirectionTolerance = 1e-4f;
 
     // World-local CPU/GPU screen sources are intentionally presentation-sized. A bad authored extent must fail here,
     // before it can become an unchecked pixel-buffer or offscreen-render allocation. Public: it is also the structural
@@ -79,12 +76,13 @@ public static partial class WorldDefinitionValidator {
         );
     }
 
-    private delegate bool TryLoadAsset<TRow, TDocument>(TRow row, out TDocument? document, out string? error);
+    private delegate bool TryLoadAsset<TRow, TDocument>(string? documentDirectory, TRow row, out TDocument? document, out string? error);
 
     // The load-then-check shape every off-disk asset row (patch, table, tune) validates through: a row that cannot
     // load refuses on its source, one that loads runs the SAME structural CheckAsset every embedded family gets.
     // CheckMusic keeps its own body because it layers document-crossing facts on top of the canonicalizer's own.
     private static AssetCheck? CheckLoadedAsset<TRow, TDocument>(
+        string? documentDirectory,
         TRow row,
         string source,
         TryLoadAsset<TRow, TDocument> tryLoad,
@@ -92,6 +90,7 @@ public static partial class WorldDefinitionValidator {
         Func<TDocument, string, string> canonicalHash
     ) where TDocument : class {
         if (!tryLoad(
+            documentDirectory,
             row,
             out var document,
             out var loadError
@@ -111,42 +110,45 @@ public static partial class WorldDefinitionValidator {
             canonicalHash: canonicalHash
         );
     }
+    private static AssetCheck? CheckCanonicalAsset<TRow, TDocument>(
+        string? documentDirectory,
+        TRow row,
+        string source,
+        TryLoadAsset<TRow, TDocument> tryLoad,
+        Func<TDocument, IReadOnlyList<DocumentValidationError>> validate,
+        Func<TDocument, string, CanonicalDocument<TDocument>> canonicalize
+    ) where TDocument : class =>
+        CheckLoadedAsset(
+            canonicalHash: (document, src) => canonicalize(document, src).Hash,
+            documentDirectory: documentDirectory,
+            row: row,
+            source: source,
+            tryLoad: tryLoad,
+            validate: validate
+        );
     // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
     // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
     // embedded family — see CheckMusic's remarks, the same load-then-check shape.
-    private static AssetCheck? CheckPatch(WorldPatch patch) => CheckLoadedAsset<WorldPatch, SynthPatchDocument>(
+    private static AssetCheck? CheckPatch(string? documentDirectory, WorldPatch patch) => CheckCanonicalAsset<WorldPatch, SynthPatchDocument>(
+        documentDirectory: documentDirectory,
+        canonicalize: SynthPatchCanonicalizer.Canonicalize,
         row: patch,
         source: patch.Name,
         tryLoad: WorldAssetRowLoader.TryLoadPatch,
-        validate: static document => SynthPatchCanonicalizer.Validate(document: document),
-        canonicalHash: static (document, source) => SynthPatchCanonicalizer.Canonicalize(
-            document: document,
-            source: source
-        ).Hash
+        validate: SynthPatchCanonicalizer.Validate
     );
-    // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
-    // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
-    // embedded family, plus facts MusicCanonicalizer alone cannot check: it validates one document at a time
-    // against only what Puck.World.Authoring itself can see. ticksPerBeat's divisibility duplicates
-    // ValidateSimulation's own FixedTickConversion.TicksPerSecond reasoning (Puck.World.Authoring cannot reference
-    // that constant's true owner either); a transition/layer/embellishment `when` token resolves against
-    // WorldAudioCue.MusicWhenTokens — the sense-mappable subset the director compiler maps, not the full cue
-    // vocabulary — which this document family's own project cannot reference without inverting the dependency; and a
-    // layer/embellishment `gainThousandths` rides the same CreationSoundDocument.MaxLevel ceiling ValidateCues
-    // enforces on a cue row, so the ceiling stays the one place — this validator — that enforces it everywhere.
-    private static AssetCheck? CheckTable(TableRow row) => CheckLoadedAsset<TableRow, TableDocument>(
+    private static AssetCheck? CheckTable(string? documentDirectory, TableRow row) => CheckCanonicalAsset<TableRow, TableDocument>(
+        documentDirectory: documentDirectory,
+        canonicalize: TableCanonicalizer.Canonicalize,
         row: row,
         source: row.Name,
         tryLoad: WorldAssetRowLoader.TryLoadTable,
-        validate: static document => TableCanonicalizer.Validate(document: document),
-        canonicalHash: static (document, source) => TableCanonicalizer.Canonicalize(
-            document: document,
-            source: source
-        ).Hash
+        validate: TableCanonicalizer.Validate
     );
-    private static AssetCheck? CheckMusic(WorldMusicRow row, HashSet<string> tuneIds, HashSet<string> patchIds) {
+    private static AssetCheck? CheckMusic(string? documentDirectory, WorldMusicRow row, HashSet<string> tuneIds, HashSet<string> patchIds) {
         if (!WorldAssetRowLoader.TryLoadMusic(
             document: out var document,
+            documentDirectory: documentDirectory,
             error: out var loadError,
             row: row
         )) {
@@ -261,15 +263,13 @@ public static partial class WorldDefinitionValidator {
             Violations: [.. violations]
         );
     }
-    private static AssetCheck? CheckTune(WorldTune tune) => CheckLoadedAsset<WorldTune, AudioDocument>(
+    private static AssetCheck? CheckTune(string? documentDirectory, WorldTune tune) => CheckCanonicalAsset<WorldTune, AudioDocument>(
+        documentDirectory: documentDirectory,
+        canonicalize: AudioCanonicalizer.Canonicalize,
         row: tune,
         source: tune.Name,
         tryLoad: WorldAssetRowLoader.TryLoadTune,
-        validate: static document => AudioCanonicalizer.Validate(document: document),
-        canonicalHash: static (document, source) => AudioCanonicalizer.Canonicalize(
-            document: document,
-            source: source
-        ).Hash
+        validate: AudioCanonicalizer.Validate
     );
     // THIS document's channel table, for the binding-overlay vocabulary check — or null when the channels section is
     // itself too malformed to compile (a null row, or more rows than ordinals exist). Null is safe rather than
@@ -292,7 +292,6 @@ public static partial class WorldDefinitionValidator {
 
         return WorldChannelTable.Compile(channels: channels);
     }
-    private static bool IsFinite(Vector3 value) => (float.IsFinite(f: value.X) && float.IsFinite(f: value.Y) && float.IsFinite(f: value.Z));
     // |cos| between a screen frame's two axes: 0 for the orthogonal pair the slab's geometry and collider both assume,
     // 1 for a parallel one. Callers must have cleared finiteness and non-degeneracy first, or this reads NaN.
     private static float ScreenBasisSkew(WorldScreen screen) => MathF.Abs(x: Vector3.Dot(
@@ -639,11 +638,7 @@ public static partial class WorldDefinitionValidator {
 
                 return;
             case OverlayPredicate.State state:
-                if (!BindableState.TryParseBinding(
-                    key: out var stateKey,
-                    row: out var stateRow,
-                    value: state.Binding
-                )) {
+                if (StateBinding.Parse(token: state.Binding) is not (var stateRow, var stateKey, _)) {
                     errors.Add(item: $"{path}.binding '{state.Binding}' must be spelled state.<row>[.<key>].");
                 } else if (definition is not null) {
                     // stateRows is the SAME name-keyed map ValidateState builds once per whole-document validate
@@ -678,7 +673,7 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     (state.Text is not null) &&
-                    (state.Comparison is not (ActionStateComparison.Equal or ActionStateComparison.NotEqual))
+                    (state.Comparison is not (ExpressionOp.Equal or ExpressionOp.NotEqual))
                 ) {
                     errors.Add(item: $"{path}.comparison {state.Comparison} is not a text comparison (equal or notEqual).");
                 }
@@ -690,7 +685,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.value must be finite.");
                 }
 
-                if (!Enum.IsDefined(value: state.Comparison)) {
+                if (!state.Comparison.IsComparison()) {
                     errors.Add(item: $"{path}.comparison is not a defined comparison.");
                 }
 
@@ -768,29 +763,10 @@ public static partial class WorldDefinitionValidator {
         definition: definition,
         value: value
     );
-    // Hand-rolled rather than System.Text.Regex — the canonical form is a "sha256-64/" prefix followed by exactly
-    // 16 lowercase hex digits (AssetContentHash.ToString's "x16" format).
-    private static bool IsValidAddonHash(string hash) {
-        const string Prefix = "sha256-64/";
-
-        if (
-            !hash.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: Prefix
-        ) ||
-            (hash.Length != (Prefix.Length + 16))
-        ) {
-            return false;
-        }
-
-        for (var index = Prefix.Length; (index < hash.Length); index++) {
-            if (!char.IsAsciiHexDigitLower(c: hash[index])) {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private static bool IsValidAddonHash(string hash) => AssetContentHash.TryParse(
+        hash: out _,
+        text: hash
+    );
     // The dangling-reference door every "names a row this document must declare" check opens: blank or unresolved
     // against declaredSet is one "{path}[.field] '{value}' names no {rowNoun} row." refusal. field may be empty when
     // path already names the leaf. Returns whether the reference resolved, so a caller gating a further
@@ -1028,8 +1004,9 @@ public static partial class WorldDefinitionValidator {
     // overload needs (BrowserErrorPaths, the ratchet test) without a second walk of the whole document. deferredSink
     // carries ValidateAdmission's platform-deferred notices (see TrustListEntry.ValidateShape/ValidateKeyMaterial) —
     // never populated when throwOnErrors is true, since none of those callers read it.
-    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink, IMachineValidationCatalog? machines = null) {
+    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink, IMachineValidationCatalog? machines = null, bool proveCensusOutcomes = true) {
         ArgumentNullException.ThrowIfNull(definition);
+        WorldBootWork.Count(kind: WorldBootWork.Validations);
 
         var errors = new List<string>();
         var scope = new ValidationScope { Machines = machines };
@@ -1261,7 +1238,7 @@ public static partial class WorldDefinitionValidator {
             section: "tunes",
             id: static tune => tune.Name,
             hash: static tune => tune.Hash,
-            check: CheckTune,
+            check: tune => CheckTune(documentDirectory: definition.DocumentDirectory, tune: tune),
             errors: errors
         );
         var patchIds = ValidateAssets(
@@ -1269,7 +1246,7 @@ public static partial class WorldDefinitionValidator {
             section: "patches",
             id: static patch => patch.Name,
             hash: static patch => patch.Hash,
-            check: CheckPatch,
+            check: patch => CheckPatch(documentDirectory: definition.DocumentDirectory, patch: patch),
             errors: errors
         );
 
@@ -1282,6 +1259,7 @@ public static partial class WorldDefinitionValidator {
             id: static row => row.Name,
             hash: static row => row.Hash,
             check: row => CheckMusic(
+                documentDirectory: definition.DocumentDirectory,
                 patchIds: patchIds,
                 row: row,
                 tuneIds: tuneIds
@@ -1294,7 +1272,7 @@ public static partial class WorldDefinitionValidator {
             section: "tables",
             id: static row => row.Name,
             hash: static row => row.Hash,
-            check: CheckTable,
+            check: row => CheckTable(documentDirectory: definition.DocumentDirectory, row: row),
             errors: errors
         );
 
@@ -1375,12 +1353,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         var stateRows = ValidateState(
-            rows: definition.State,
-            generators: definition.Generators,
+            definition: definition,
             dynamicsNames: dynamicsNames,
-            spaces: stateSpaces,
             enums: stateEnums,
-            errors: errors
+            errors: errors,
+            spaces: stateSpaces
         );
         var actionStateSlots = ValidateActionState(
             definition: definition,
@@ -1589,10 +1566,14 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"state: visibility and retained keys bring the arena to {((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes)} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling.");
             }
         }
-        if (errors.Count == 0) {
+        if (
+            (errors.Count == 0) &&
+            (work is { } admitted)
+        ) {
             ValidateSearch(
                 definition: definition,
                 errors: errors,
+                recurringWork: admitted.Budget.WorkUnitsPerTick,
                 rules: compiledRules
             );
         }
@@ -1768,6 +1749,18 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
 
+                // A camera's name shares the view registration namespace with the view names the engine generates
+                // (a session screen's, a seat-relative camera's per seat), so it may not be in their form.
+                if (
+                    !string.IsNullOrEmpty(value: camera.Name) &&
+                    !GeneratedName.TryValidateAuthored(
+                    name: camera.Name,
+                    reason: out var cameraNameReason
+                )
+                ) {
+                    errors.Add(item: $"{path}.name {cameraNameReason}.");
+                }
+
                 // A null anchor resolves the world reference frame.
                 if (camera.Anchor is { } anchor) {
                     ValidateAnchor(
@@ -1942,9 +1935,6 @@ public static partial class WorldDefinitionValidator {
         );
 
         var screenIndices = new HashSet<int>();
-        // The declared-live console sources (screens[*].source, NOT magazine entries): the feed owns ONE upload surface,
-        // so at most one may be live at a time. A console entry sitting unselected in a magazine is legal.
-        var consoleLiveIndices = new List<int>();
         // The derived-face slots the binder reserves up front (Program.cs concatenates them after the document screens):
         // a document screen at one of these indices would silently collide with the reserved placeholder in the binder's
         // dict-fill, so the range is carved out of the authored screen-index space here. The membership test itself is
@@ -1990,9 +1980,9 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     (screen.Origin is null) || (screen.Right is null) || (screen.Up is null) ||
-                    !IsFinite(value: screen.Origin) ||
-                    !IsFinite(value: screen.Right) ||
-                    !IsFinite(value: screen.Up)
+                    !VectorFunctions.IsFinite(vector: screen.Origin) ||
+                    !VectorFunctions.IsFinite(vector: screen.Right) ||
+                    !VectorFunctions.IsFinite(vector: screen.Up)
                 ) {
                     errors.Add(item: $"{path} frame vectors must contain finite coordinates.");
                 } else if (
@@ -2019,10 +2009,9 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} half extents must be finite and positive.");
                 }
 
-                // The declared source and each magazine entry cross the SAME source gate (a magazine entry could
-                // otherwise name an undeclared camera). A declared console source counts against the one-live ceiling;
-                // a console entry sitting in the magazine does not.
-                if (ValidateScreenSource(
+                // The declared source and each magazine entry cross the same source gate (a magazine entry could
+                // otherwise name an undeclared camera).
+                ValidateScreenSource(
                     definition: definition,
                     source: screen.Source,
                     path: $"{path}.source",
@@ -2030,9 +2019,7 @@ public static partial class WorldDefinitionValidator {
                     cablePermitted: true,
                     errors: errors,
                     deferred: deferredSink
-                )) {
-                    consoleLiveIndices.Add(item: screen.Index);
-                }
+                );
 
                 ValidateRoute(
                     route: screen.Route,
@@ -2087,15 +2074,6 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        // The one-live-console ceiling: the console feed owns a single upload surface, so a second declared console
-        // screen is an error naming both indices.
-        if (consoleLiveIndices.Count > 1) {
-            errors.Add(item: $"at most one screen may declare a console source, but screens {string.Join(
-                separator: " and ",
-                values: consoleLiveIndices
-            )} both do.");
-        }
-
         ValidateMachines(
             definition,
             scope.Machines,
@@ -2137,7 +2115,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
-        // Groups validates before Grants: a grant row may target a group principal, so Grants needs the declared
+        // Groups validates before Grants: a grant row may name a group grantee, so Grants needs the declared
         // group-id set already resolved.
         ValidateGrants(
             grants: definition.Grants,
@@ -2157,6 +2135,19 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             deferred: deferredSink
         );
+
+        // A candidate already refused is not probed: its own refusals are the answer, and every census would repeat
+        // them.
+        if (
+            proveCensusOutcomes &&
+            (errors.Count == 0)
+        ) {
+            ValidateCensusOutcomes(
+                definition: definition,
+                errors: errors,
+                machines: scope.Machines
+            );
+        }
 
         if (throwOnErrors) {
             RefuseCollected(errors: errors);

@@ -36,25 +36,7 @@ internal static class ConstructProbes {
         """;
 
     // Locks the one text an `embeds` probe writes ("one"), so a probe compiles without a live embedding call.
-    internal static EmbeddingLock Lock { get; } = CreateLock();
-
-    private static EmbeddingLock CreateLock() {
-        var lockFile = new EmbeddingLock();
-        var space = new EmbeddingLockSpace(
-            dimensions: 8,
-            model: "puck-fixture",
-            revision: "1"
-        );
-        var hash = EmbeddingLock.ComputeTextHash(text: "one");
-
-        space.Entries[hash] = new EmbeddingLockEntry(
-            Text: "one",
-            Vector: "fwAAAAAAAAA"
-        );
-        lockFile.Spaces["lore"] = space;
-
-        return lockFile;
-    }
+    internal static EmbeddingLock Lock { get; } = WorldSources.LoreLock("puck-fixture", "one");
 
     private const string RuleRows = """
                 slot hp = 1
@@ -123,6 +105,10 @@ internal static class ConstructProbes {
         ["pipeline"] = [new(
             Pointer: "/views/pipelines/0",
             Source: Doc(body: "views {\n    pipeline \"main\" {\n    }\n}")
+        )],
+        ["graph"] = [new(
+            Pointer: "/views/graphs/0",
+            Source: Doc(body: "views {\n    graph \"main\" {\n    }\n}")
         )],
         ["seatRig"] = [new(
             Pointer: "/views/seatRig",
@@ -230,6 +216,10 @@ internal static class ConstructProbes {
                 Pointer: "/state/world/0",
                 Source: Doc(body: $"state {{\n{Space}\n    world {{\n        table lines embeds(lineVectors, space: lore) {{\n            a = \"one\"\n        }}\n    }}\n}}")
             ),
+            new(
+                Pointer: "/state/world/0",
+                Source: Doc(body: "state {\n    enum Element { Nothing Air }\n    world {\n        table recipe: Element {\n            a = Air\n        }\n    }\n}")
+            ),
         ],
         ["slot"] = [
             new(
@@ -239,6 +229,10 @@ internal static class ConstructProbes {
             new(
                 Pointer: "/state/world/0",
                 Source: Doc(body: $"state {{\n{Space}\n    world {{\n        slot situation space(lore)\n    }}\n}}")
+            ),
+            new(
+                Pointer: "/state/world/0",
+                Source: Doc(body: "state {\n    enum Element { Nothing Air }\n    world {\n        slot left: Element = Air\n    }\n}")
             ),
         ],
         ["pool"] = [new(
@@ -313,6 +307,13 @@ internal static class ConstructProbes {
                                 a = 1
                             }
                     """)
+            ),
+            new(
+                Elsewhere: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+                    ["state.lattices[]"] = "/state/lattices/0",
+                },
+                Pointer: "/state/world/0",
+                Source: Doc(body: "state {\n    enum Element { Nothing Air }\n    world {\n        grid field: Element dimensions(width: 2, depth: 2)\n    }\n}")
             ),
         ],
         ["row"] = [new(
@@ -527,7 +528,7 @@ internal static class ConstructProbes {
             ),
         ],
         ["test"] = [new(
-            GeneratedWorld: "world--a-slot-a-seat-wrote-reads-back",
+            GeneratedWorld: "world~a-slot-a-seat-wrote-reads-back",
             Pointer: "/schedule",
             Source: Doc(body: """
                 grants [

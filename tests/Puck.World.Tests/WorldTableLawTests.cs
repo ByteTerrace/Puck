@@ -9,29 +9,15 @@ namespace Puck.World.Tests;
 /// proven present at compile, a dynamic key reads at evaluation and a missing one never holds a gate, a stale hash or
 /// a duplicate key refuses at validation, and the table is not simulation state.</summary>
 public sealed class WorldTableLawTests {
-    private static WorldStateRow Slot(string name, long value) =>
-        new(
-            CellName.Parse(candidate: name),
-            CellKind.Int,
-            Cells: [new StateCell(
-                    WorldStateRow.SlotKey,
-                    CellValue.Int(value: value)
-                )]
-        );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
+    // The directory every document here is read from, so each row's relative source resolves beside it.
+    private static readonly string TableDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-table-law-").FullName;
+
     private static (string Source, string Hash) Write(TableDocument document) {
         var source = $"tables-{Guid.NewGuid():N}.table.json";
 
         File.WriteAllBytes(
             Path.Combine(
-                path1: AppContext.BaseDirectory,
+                path1: TableDirectory,
                 path2: source
             ),
             JsonSerializer.SerializeToUtf8Bytes(
@@ -78,6 +64,7 @@ public sealed class WorldTableLawTests {
             (201, 0m)
         );
         var document = Fixtures.BuildDocument() with {
+            DocumentDirectory = TableDirectory,
             Tables = [new TableRow(
                 Hash: hash,
                 Name: "moves",
@@ -87,22 +74,22 @@ public sealed class WorldTableLawTests {
                 Name: "chart",
                 Source: chart
             )],
-            StateRaw = new WorldStateSection(World: [Slot(
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
                 name: "move",
                 value: 2L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "attack",
                 value: 1L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "defend",
                 value: 2L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "power",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "priority",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "multiplier",
                 value: 0L
             )]),
@@ -149,33 +136,29 @@ public sealed class WorldTableLawTests {
         fixture.Step();
         Assert.Equal(
             90L,
-            Value(
-                fixture: fixture,
-                row: "power"
+            fixture.SlotValue(row: "power"
             )
         );
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "priority"
+            fixture.SlotValue(row: "priority"
             )
         );
         Assert.Equal(
             2L,
-            Value(
-                fixture: fixture,
-                row: "multiplier"
+            fixture.SlotValue(row: "multiplier"
             )
         );
 
-        var unnamed = document with { Rules = [new WorldRule(
+        var unnamed = document with {
+            Rules = [new WorldRule(
                 CellName.Parse(candidate: "stats"),
                 [new ActionEffect.SetState(
                         State: "power",
                         FromState: "$table:moves:2"
                     )]
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: unnamed,
@@ -196,21 +179,22 @@ public sealed class WorldTableLawTests {
             (250, 5m)
         );
         var document = Fixtures.BuildDocument() with {
+            DocumentDirectory = TableDirectory,
             Tables = [new TableRow(
                 Hash: hash,
                 Name: "power",
                 Source: source
             )],
-            StateRaw = new WorldStateSection(World: [Slot(
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
                 name: "move",
                 value: 2L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "literal",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "dynamic",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "missing",
                 value: 0L
             )]),
@@ -237,7 +221,7 @@ public sealed class WorldTableLawTests {
                     )],
                 Gate: new ActionPredicate.CompareState(
                     State: "$table:power:$cell:missing:$value",
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Value: 0m
                 )
             ),
@@ -256,23 +240,17 @@ public sealed class WorldTableLawTests {
         fixture.Step();
         Assert.Equal(
             5L,
-            Value(
-                fixture: fixture,
-                row: "literal"
+            fixture.SlotValue(row: "literal"
             )
         );
         Assert.Equal(
             90L,
-            Value(
-                fixture: fixture,
-                row: "dynamic"
+            fixture.SlotValue(row: "dynamic"
             )
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "missing"
+            fixture.SlotValue(row: "missing"
             )
         );
         Assert.Contains(
@@ -281,27 +259,29 @@ public sealed class WorldTableLawTests {
             StringComparison.Ordinal
         );
 
-        var control = document with { StateRaw = document.StateRaw! with { World = [Slot(
+        var control = document with {
+            StateRaw = document.StateRaw! with {
+                World = [StateFixtures.IntSlot(
                 name: "move",
                 value: 2L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "literal",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "dynamic",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "missing",
                 value: 1L
-            )] } };
+            )],
+            },
+        };
         using var held = Fixtures.FreshServer(definition: control);
 
         held.Step();
         Assert.Equal(
             1L,
-            Value(
-                fixture: held,
-                row: "missing"
+            held.SlotValue(row: "missing"
             )
         );
     }
@@ -312,6 +292,7 @@ public sealed class WorldTableLawTests {
             (7, 1.5m)
         );
         var baseline = Fixtures.BuildDocument() with {
+            DocumentDirectory = TableDirectory,
             Tables = [new TableRow(
                 Hash: hash,
                 Name: "rates",
@@ -342,13 +323,15 @@ public sealed class WorldTableLawTests {
             userMessage: okReason
         );
 
-        var missing = baseline with { Rules = [new WorldRule(
+        var missing = baseline with {
+            Rules = [new WorldRule(
                 CellName.Parse(candidate: "r"),
                 [new ActionEffect.SetState(
                         State: "rate",
                         FromState: "$table:rates:8"
                     )]
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: missing,
@@ -360,14 +343,16 @@ public sealed class WorldTableLawTests {
             expectedSubstring: "does not carry"
         );
 
-        var stale = baseline with { Tables = [new TableRow(
+        var stale = baseline with {
+            Tables = [new TableRow(
                 "rates",
                 source,
                 new string(
                     c: '0',
                     count: 64
                 )
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: stale,
@@ -384,11 +369,13 @@ public sealed class WorldTableLawTests {
             (1, 1m),
             (1, 2m)
         );
-        var duplicate = baseline with { Tables = [new TableRow(
+        var duplicate = baseline with {
+            Tables = [new TableRow(
                 Hash: hash,
                 Name: "rates",
                 Source: duplicateSource
-            )] };
+            )],
+        };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: duplicate,

@@ -40,6 +40,8 @@ public interface IVulkanGraphicsPipelineFactory {
     /// <param name="textureSamplerCount">The number of combined image-sampler descriptors in the texture array binding.</param>
     /// <param name="enableStorageBuffer">Whether to include a storage buffer binding in the descriptor set layout.</param>
     /// <param name="vertexInput">The explicit vertex input layout; an empty layout is used for SV_VertexID shaders.</param>
+    /// <param name="outputs">What the pipeline writes: its color attachment count and blending; <see langword="null"/>
+    /// for one alpha-over-blended color attachment.</param>
     /// <returns>A new, owning <see cref="VulkanGraphicsPipeline"/>.</returns>
     VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
@@ -51,6 +53,7 @@ public interface IVulkanGraphicsPipelineFactory {
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
         bool enableStorageBuffer = true,
-        GpuVertexInputLayout? vertexInput = null
+        GpuVertexInputLayout? vertexInput = null,
+        VulkanGraphicsOutputs? outputs = null
     );
 }

@@ -57,7 +57,7 @@ public sealed class CartridgeTrackerTests {
                         Kind: "if",
                         When: CartridgeExpressions.Gate(
                             left: CartridgeExpressions.Of(state: "tick"),
-                            comparison: ActionStateComparison.GreaterOrEqual,
+                            comparison: ExpressionOp.GreaterOrEqual,
                             right: CartridgeExpressions.Of(constant: RowFrames)
                         ),
                         Then: [
@@ -84,7 +84,7 @@ public sealed class CartridgeTrackerTests {
                             new CartridgeStatement(
                                 Kind: "set",
                                 Target: new CartridgeTarget(State: "row"),
-                                Operation: ExpressionOp.Modulo,
+                                Operation: ExpressionOp.Remainder,
                                 Value: CartridgeExpressions.Of(constant: 4)
                             ),
                         ]

@@ -3,114 +3,69 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 public class FormatterTests {
-    [Fact]
-    public void TestFormatterArrayOfObjectsDoesNotCollapseBraces() {
-        var unformatted = @"
-cells [
-{
-key: ""feltColor""
-value: feltColor
-}
-{
-key: ""activeRound""
-value: 1
-}
-]";
-        var formatted = PuckFormat.Format(unformatted);
+    /// <summary>A source, what its formatted print must and must not carry; every print is also a fixed point of the
+    /// formatter.</summary>
+    private sealed record Print(string Input, string[] Printed, string[] NotPrinted);
 
-        Assert.DoesNotContain(
-            actualString: formatted,
-            expectedSubstring: "[ {"
-        );
-        Assert.DoesNotContain(
-            actualString: formatted,
-            expectedSubstring: "} {"
-        );
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "cells [\n  {\n    key: \"feltColor\""
-        );
-    }
-    [Fact]
-    public void TestFormatterBasicIndentationAndBraces() {
-        var unformatted = @"
-puck: 1
-host {
-authority: ""test.host""
-presentation: windowed
-}
-entities [
-{
-name: ""Player""
-components [
-{ type: ""Transform"" }
-]
-}
-]";
+    private static readonly Dictionary<string, Print> Prints = new(comparer: StringComparer.Ordinal) {
+        ["an array of objects does not collapse its braces"] = new(
+            Input: "\ncells [\n{\nkey: \"feltColor\"\nvalue: feltColor\n}\n{\nkey: \"activeRound\"\nvalue: 1\n}\n]",
+            NotPrinted: ["[ {", "} {"],
+            Printed: ["cells [\n  {\n    key: \"feltColor\""]
+        ),
+        // Two spaces per level by default.
+        ["blocks and arrays indent their bodies"] = new(
+            Input: "\npuck: 1\nhost {\nauthority: \"test.host\"\npresentation: windowed\n}\nentities [\n{\nname: \"Player\"\ncomponents [\n{ type: \"Transform\" }\n]\n}\n]",
+            NotPrinted: [],
+            Printed: ["host {", "entities [", "  authority: \"test.host\"", "  presentation: windowed"]
+        ),
+        ["a colon and a comma each take one space"] = new(
+            Input: "puck:1\nhost {\nauthority:\"my-auth\",presentation:headless\n}\n",
+            NotPrinted: [],
+            Printed: ["puck: 1", "authority: \"my-auth\"", "presentation: headless"]
+        ),
+        ["uneven indentation settles in one pass"] = new(
+            Input: "puck: 1\n\nhost {\n    authority: \"test.host\"\n  presentation: windowed\n}\n\nentities [\n    {\n        name: \"Entity1\"\n    }\n]\n",
+            NotPrinted: [],
+            Printed: []
+        ),
+        // A backquoted name is one lexeme; its commas are name characters, not statement punctuation, and must not
+        // gain the space the comma rule inserts everywhere else.
+        ["a backquoted name keeps its commas"] = new(
+            Input: "rule \"r\" {\n    when `$board:attacks:board:-5:-4:N,S,E,W`[5] != 0\n}\n",
+            NotPrinted: [],
+            Printed: ["`$board:attacks:board:-5:-4:N,S,E,W`[5]"]
+        ),
+        ["line, block and inline comments survive"] = new(
+            Input: "// Header comment\npuck: 1\n\n/* Host section block comment */\nhost {\n    authority: \"test.host\" // inline comment\n}\n",
+            NotPrinted: [],
+            Printed: ["// Header comment", "/* Host section block comment */", "// inline comment"]
+        ),
+        // A ternary's colon carries a space on both sides (Puck.State.ExpressionSpelling's own spelling); splicing
+        // "x : y" into "x: y" is a different, unreadable binding.
+        ["a ternary's colon keeps a space on both sides"] = new(
+            Input: "rule \"r\" {\n    local ownBefore = turn == 0 ? a : b\n    score = 1\n}\n",
+            NotPrinted: [],
+            Printed: ["local ownBefore = turn == 0 ? a : b"]
+        ),
+    };
 
-        var formatted = PuckFormat.Format(unformatted);
+    public static TheoryData<string> PrintNames() => new(values: Prints.Keys);
+    [MemberData(nameof(PrintNames))]
+    [Theory]
+    public void ASourceFormatsToItsCanonicalPrint(string name) {
+        var print = Prints[name];
+        var formatted = PuckFormat.Format(source: print.Input);
+        var missing = print.Printed.Where(predicate: text => !formatted.Contains(comparisonType: StringComparison.Ordinal, value: text)).ToArray();
+        var present = print.NotPrinted.Where(predicate: text => formatted.Contains(comparisonType: StringComparison.Ordinal, value: text)).ToArray();
 
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "host {"
+        Assert.True(
+            condition: ((missing.Length == 0) && (present.Length == 0)),
+            userMessage: $"{name}: missing [{string.Join(separator: " | ", values: missing)}], present [{string.Join(separator: " | ", values: present)}]{Environment.NewLine}{formatted}"
         );
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "entities ["
-        );
-        // Default: two spaces per level
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "  authority: \"test.host\""
-        );
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "  presentation: windowed"
-        );
-    }
-    [Fact]
-    public void TestFormatterColonAndCommaSpacing() {
-        var unformatted = @"puck:1
-host {
-authority:""my-auth"",presentation:headless
-}
-";
-        var formatted = PuckFormat.Format(unformatted);
-
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "puck: 1"
-        );
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "authority: \"my-auth\""
-        );
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "presentation: headless"
-        );
-    }
-    [Fact]
-    public void TestFormatterIdempotency() {
-        var input = @"puck: 1
-
-host {
-    authority: ""test.host""
-  presentation: windowed
-}
-
-entities [
-    {
-        name: ""Entity1""
-    }
-]
-";
-        var pass1 = PuckFormat.Format(input);
-        var pass2 = PuckFormat.Format(pass1);
-
         Assert.Equal(
-            actual: pass2,
-            expected: pass1
+            actual: PuckFormat.Format(source: formatted),
+            expected: formatted
         );
     }
     // The decompiler's one-time-import header must still be readable as a header after formatting, not folded into
@@ -118,7 +73,7 @@ entities [
     [Fact]
     public void TestFormatterKeepsTheLeadingHeaderCommentAsTheFirstLine() {
         var input = "// Decompiled from a canonical Puck world document — a one-time import.\n// 'let'/'template' cannot be recovered; re-running the decompiler will not\n// preserve hand-authored constants or templates added after this file was\n// generated. Treat this file as a starting point, not a synced mirror.\n\n\npuck: 1\n";
-        var formatted = PuckFormat.Format(input);
+        var formatted = PuckFormat.Format(source: input);
         var lines = formatted.Split('\n');
 
         Assert.Equal(
@@ -129,7 +84,7 @@ entities [
     [Fact]
     public void TestFormatterPreservesACommentBetweenTwoRules() {
         var input = "rule \"first\" {\n    a = 1\n}\n\n// a comment between two rules\nrule \"second\" {\n    b = 2\n}\n";
-        var formatted = PuckFormat.Format(input);
+        var formatted = PuckFormat.Format(source: input);
 
         Assert.Contains(
             actualString: formatted,
@@ -154,43 +109,6 @@ entities [
 
         Assert.True(condition: ((commentIndex >= 0) && (secondRuleIndex > commentIndex)));
     }
-    // A backquoted name (`N,S,E,W`) is one lexeme; its commas are name characters, not statement punctuation, and
-    // must not gain the space the comma rule inserts everywhere else.
-    [Fact]
-    public void TestFormatterPreservesBackquotedNameCommas() {
-        var input = "rule \"r\" {\n    when `$board:attacks:board:-5:-4:N,S,E,W`[5] != 0\n}\n";
-        var formatted = PuckFormat.Format(input);
-
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "`$board:attacks:board:-5:-4:N,S,E,W`[5]"
-        );
-    }
-    [Fact]
-    public void TestFormatterPreservesComments() {
-        var input = @"// Header comment
-puck: 1
-
-/* Host section block comment */
-host {
-    authority: ""test.host"" // inline comment
-}
-";
-        var formatted = PuckFormat.Format(input);
-
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "// Header comment"
-        );
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "/* Host section block comment */"
-        );
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "// inline comment"
-        );
-    }
     [Fact]
     public void TestFormatterPrintsAVeryLongStringLiteralUnchanged() {
         var literal = ("__puck_literal_" + new string(
@@ -202,7 +120,7 @@ host {
             count: 1_000,
             start: 0
         ).Select(selector: index => $"let text{index} = \"value{index}\"\n")));
-        var formatted = PuckFormat.Format(input);
+        var formatted = PuckFormat.Format(source: input);
 
         Assert.Equal(
             actual: formatted,
@@ -210,19 +128,7 @@ host {
         );
         Assert.Equal(
             formatted,
-            PuckFormat.Format(formatted)
-        );
-    }
-    // A ternary's colon carries a space on both sides (Puck.State.ExpressionSpelling's own spelling); splicing
-    // "x : y" into "x: y" is a different, unreadable binding.
-    [Fact]
-    public void TestFormatterPreservesTernaryColonSpacing() {
-        var input = "rule \"r\" {\n    local ownBefore = turn == 0 ? a : b\n    score = 1\n}\n";
-        var formatted = PuckFormat.Format(input);
-
-        Assert.Contains(
-            actualString: formatted,
-            expectedSubstring: "local ownBefore = turn == 0 ? a : b"
+            PuckFormat.Format(source: formatted)
         );
     }
 }

@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One static lookup-table asset reference row \u2014 a puck.table.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the convention Source uses), and the SHA-256 hex64 pin of the document\u0027s canonical bytes. A rule reads it through $table:\u003Cname\u003E:\u003Ckey\u003E; nothing writes it, and it is not simulation state.",
+    "description": "One static lookup-table asset reference row \u2014 a puck.table.v1 document\u0027s stable name, its file path (resolved beside the document that authors the row), and the SHA-256 hex64 pin of the document\u0027s canonical bytes. A rule reads it through $table:\u003Cname\u003E:\u003Ckey\u003E; nothing writes it, and it is not simulation state.",
     "type": [
       "object",
       "null"

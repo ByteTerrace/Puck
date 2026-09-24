@@ -7,11 +7,11 @@ namespace Puck.World.Embeddings;
 
 /// <summary>Configured fixture embedding provider producing deterministic offline embeddings using SHA-256.</summary>
 public sealed class FixtureConfiguredEmbeddingProvider : IWorldConfiguredEmbeddingProvider {
-    private readonly Puck.Embeddings.EmbeddingIdentity m_identity;
+    private readonly EmbeddingIdentity m_identity;
 
     /// <summary>Initializes a new instance of <see cref="FixtureConfiguredEmbeddingProvider"/>.</summary>
     /// <param name="identity">The embedding identity.</param>
-    public FixtureConfiguredEmbeddingProvider(Puck.Embeddings.EmbeddingIdentity identity) {
+    public FixtureConfiguredEmbeddingProvider(EmbeddingIdentity identity) {
         m_identity = identity;
     }
 
@@ -23,12 +23,14 @@ public sealed class FixtureConfiguredEmbeddingProvider : IWorldConfiguredEmbeddi
             throw new ArgumentException(message: "Fixture settings must be a JSON object.");
         }
 
-        var model = (settings.TryGetProperty(propertyName: "model", value: out var modelEl) ? modelEl.GetString() : FixtureEmbeddingGenerator.SupportedModel) ?? FixtureEmbeddingGenerator.SupportedModel;
+        var model = ((settings.TryGetProperty(propertyName: "model", value: out var modelEl) ? modelEl.GetString() : FixtureEmbeddingGenerator.SupportedModel) ?? FixtureEmbeddingGenerator.SupportedModel);
+
         if (!string.Equals(a: model, b: FixtureEmbeddingGenerator.SupportedModel, comparisonType: StringComparison.Ordinal)) {
             throw new ArgumentException(message: $"Fixture provider only supports model '{FixtureEmbeddingGenerator.SupportedModel}'.");
         }
 
         var revision = (settings.TryGetProperty(propertyName: "revision", value: out var revEl) ? revEl.GetString() : "1");
+
         if (string.IsNullOrWhiteSpace(value: revision)) {
             throw new ArgumentException(message: "Revision must not be empty.");
         }
@@ -37,49 +39,40 @@ public sealed class FixtureConfiguredEmbeddingProvider : IWorldConfiguredEmbeddi
             throw new ArgumentException(message: "Dimensions must be specified as an integer.");
         }
 
-        var identity = new Puck.Embeddings.EmbeddingIdentity(Model: model, Revision: revision, Dimensions: dimensions);
+        var identity = new EmbeddingIdentity(Dimensions: dimensions, Model: model, Revision: revision);
+
         if (!identity.IsValid) {
             throw new ArgumentException(message: "Invalid fixture embedding identity.");
         }
 
         return new FixtureConfiguredEmbeddingProvider(identity: identity);
     }
-
     /// <inheritdoc />
     public IWorldEmbeddingSource BindEmbedding(JsonElement settings) =>
         new FixtureEmbeddingSource(identity: m_identity);
-
     /// <inheritdoc />
     public void Dispose() { }
 
-    private sealed class FixtureEmbeddingSource : IWorldEmbeddingSource {
-        private readonly Puck.Embeddings.EmbeddingIdentity m_identity;
-
-        public FixtureEmbeddingSource(Puck.Embeddings.EmbeddingIdentity identity) {
-            m_identity = identity;
-            Identity = new Puck.World.Server.EmbeddingIdentity(Model: identity.Model, Revision: identity.Revision, Dimensions: identity.Dimensions);
-        }
-
-        public Puck.World.Server.EmbeddingIdentity Identity { get; }
+    private sealed class FixtureEmbeddingSource(EmbeddingIdentity identity) : IWorldEmbeddingSource {
+        public EmbeddingIdentity Identity => identity;
 
         public Task<IReadOnlyList<EmbeddingAnswer>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) {
             ArgumentNullException.ThrowIfNull(argument: texts);
             var answers = new List<EmbeddingAnswer>(capacity: texts.Count);
-            var buffer = new sbyte[m_identity.Dimensions];
+            var buffer = new sbyte[identity.Dimensions];
 
             foreach (var text in texts) {
                 cancellationToken.ThrowIfCancellationRequested();
-                FixtureEmbeddingGenerator.ComputeFixtureSbytes(destination: buffer, identity: m_identity, text: text);
-                if (StateVector.TryCreate(components: buffer, vector: out var vector, error: out var error)) {
-                    answers.Add(item: new EmbeddingAnswer(Vector: vector, Refusal: null));
+                FixtureEmbeddingGenerator.ComputeFixtureSbytes(destination: buffer, identity: identity, text: text);
+                if (StateVector.TryCreate(components: buffer, error: out var error, vector: out var vector)) {
+                    answers.Add(item: new EmbeddingAnswer(Refusal: null, Vector: vector));
                 } else {
-                    answers.Add(item: new EmbeddingAnswer(Vector: null, Refusal: error));
+                    answers.Add(item: new EmbeddingAnswer(Refusal: error, Vector: null));
                 }
             }
 
             return Task.FromResult<IReadOnlyList<EmbeddingAnswer>>(result: answers);
         }
-
         public void Dispose() { }
     }
 }

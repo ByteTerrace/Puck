@@ -154,10 +154,7 @@ public readonly struct FiniteTokenAlphabet : IAlphabetRefinement<ulong> {
         );
 
     private static ulong MaskOf(int count) =>
-        ((64 == count)
-            ? ulong.MaxValue
-            : ((1UL << count) - 1UL)
-        );
+        count.LowMask<ulong>();
     private bool TryIndexOf(ulong token, out int index) {
         var tokens = m_tokens;
         var low = 0;
@@ -278,10 +275,9 @@ public readonly struct FiniteTokenAlphabet : IAlphabetRefinement<ulong> {
     /// <returns>The token.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The index is outside <see cref="TokenCount"/>.</exception>
     public ulong Token(int index) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: index,
-            other: TokenCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: TokenCount,
+            value: index
         );
 
         return m_tokens[index];

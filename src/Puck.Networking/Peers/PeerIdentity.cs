@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Puck.Assets;
 using Puck.Attestation;
 
 namespace Puck.Networking.Peers;
@@ -113,47 +114,23 @@ public sealed class PeerIdentity : IDisposable {
     /// <exception cref="UnauthorizedAccessException">The caller may not read the file.</exception>
     public static PeerIdentity Load(string path) => FromPkcs8PrivateKey(pkcs8PrivateKey: File.ReadAllBytes(path: path));
     /// <summary>Persists this identity's private key to a file <see cref="Load(string)"/> can read back. The file
-    /// holds the unencrypted private key, so possession of it is the whole identity: it is written to a sibling
-    /// <c>.tmp</c> file created fresh (owner read/write only on Unix), flushed to disk, and then moved over
-    /// <paramref name="path"/> — replacing whatever file was there — so a crash mid-write never leaves a
+    /// holds the unencrypted private key, so possession of it is the whole identity: it is written through
+    /// <see cref="AtomicFile"/>, created owner read/write only on Unix, so a crash mid-write never leaves a
     /// truncated key behind the real name. No encrypted export is offered; a caller that needs one wraps
     /// <see cref="ExportPkcs8PrivateKey"/>.</summary>
-    /// <param name="path">The destination path; an existing file there is replaced.</param>
+    /// <param name="path">The destination path; an existing file there is replaced, and a missing parent directory
+    /// is created.</param>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
-    /// <exception cref="IOException">The sibling <c>.tmp</c> file could not be created, written, or moved.</exception>
-    /// <exception cref="UnauthorizedAccessException">The caller may not create the sibling <c>.tmp</c> file or
-    /// replace <paramref name="path"/>.</exception>
-    public void Save(string path) {
-        ArgumentException.ThrowIfNullOrEmpty(argument: path);
-
-        var temporary = (path + ".tmp");
-
-        File.Delete(path: temporary);
-
-        var options = new FileStreamOptions {
-            Access = FileAccess.Write,
-            Mode = FileMode.CreateNew,
-            Share = FileShare.None,
-        };
-
-        if (!OperatingSystem.IsWindows()) {
-            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        }
-
-        using (var stream = new FileStream(
-            options: options,
-            path: temporary
-        )) {
-            stream.Write(buffer: ExportPkcs8PrivateKey());
-            stream.Flush(flushToDisk: true);
-        }
-
-        File.Move(
-            destFileName: path,
-            overwrite: true,
-            sourceFileName: temporary
+    /// <exception cref="IOException">The temporary file beside <paramref name="path"/> could not be created,
+    /// written, or moved.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller may not create the temporary file or replace
+    /// <paramref name="path"/>.</exception>
+    public void Save(string path) =>
+        AtomicFile.WriteAllBytes(
+            bytes: ExportPkcs8PrivateKey(),
+            path: path,
+            unixCreateMode: UnixFileMode.UserRead | UnixFileMode.UserWrite
         );
-    }
     /// <summary>Signs an opaque claim under this identity's own id — the shape every handshake proof and every
     /// attested message shares (only <paramref name="purpose"/> tells them apart). The signed window opens
     /// <see cref="PeerWireProtocol.ClockSkewTolerance"/> before <paramref name="now"/> and closes

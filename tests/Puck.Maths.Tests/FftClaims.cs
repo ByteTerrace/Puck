@@ -193,22 +193,6 @@ internal static class FftClaims {
 
         return null;
     }
-    private static string? Refuses(Action action, Type type, string? parameterName, string what) {
-        try {
-            action();
-        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
-            if (parameterName is null) { return null; }
-
-            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
-                ? null
-                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'"
-            );
-        } catch (Exception thrown) {
-            return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
-        }
-
-        return $"{what} did not throw at all";
-    }
     private static string? RoundTripBoundCore(int[] lengths, long bound, ulong saltBase) {
         foreach (var length in lengths) {
             var plan = FixedFourierTransformPlan.Create(length: length);
@@ -423,10 +407,12 @@ internal static class FftClaims {
             var dc = new FixedComplex[length];
             var dcValue = FixedQ4816.FromInteger(value: 3);
 
-            for (var i = 0; (i < length); ++i) { dc[i] = new(
+            for (var i = 0; (i < length); ++i) {
+                dc[i] = new(
                 Real: dcValue,
                 Imaginary: FixedQ4816.Zero
-            ); }
+            );
+            }
 
             FixedFourierTransform.Forward(
                 plan: plan,
@@ -815,10 +801,12 @@ internal static class FftClaims {
 
             var embedded = new FixedComplex[length];
 
-            for (var i = 0; (i < length); ++i) { embedded[i] = new(
+            for (var i = 0; (i < length); ++i) {
+                embedded[i] = new(
                 Real: real[i],
                 Imaginary: FixedQ4816.Zero
-            ); }
+            );
+            }
 
             FixedFourierTransform.Forward(
                 plan: plan,

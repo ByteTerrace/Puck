@@ -53,10 +53,12 @@ internal static partial class Subjects {
                         paramName: "index",
                         testCode: () => sequence.Locate(index: index)
                     );
-                    if (index < 0) { Assert.Throws<ArgumentOutOfRangeException>(
+                    if (index < 0) {
+                        Assert.Throws<ArgumentOutOfRangeException>(
                         paramName: "index",
                         testCode: () => sequence.Project(index: index)
-                    ); }
+                    );
+                    }
                 } else if (expected.Value.Layer > long.MaxValue) {
                     Assert.Throws<OverflowException>(testCode: () => sequence.LayerOf(index: index));
                     Assert.Throws<OverflowException>(testCode: () => sequence.Locate(index: index));

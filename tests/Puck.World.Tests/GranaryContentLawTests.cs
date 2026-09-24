@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using System.Text.Json.Nodes;
@@ -10,7 +11,7 @@ namespace Puck.World.Tests;
 /// occupation/clearance vocabulary, the water and power markers publish independent influence channels, and the
 /// keyed coverage rows plus exported requests give a host a bounded survey and expansion control surface.</summary>
 public sealed class GranaryContentLawTests {
-    private const string Alias = "granaries_";
+    private const string Alias = "granaries$";
 
     private static WorldDefinition GranaryModule() {
         // Keep the runtime fixture small while still crossing the real file composition boundary. The module is
@@ -58,7 +59,7 @@ public sealed class GranaryContentLawTests {
         "Assets",
         "worlds",
         "modules",
-        "granaries.world.json"
+        "granaries"
     );
 
     [Fact]
@@ -94,7 +95,7 @@ public sealed class GranaryContentLawTests {
 
         var stores = Assert.Single(
             collection: definition.Placements,
-            predicate: static placement => (placement.Id == "granaryStores")
+            predicate: static placement => (placement.Id == $"{Alias}granaryStores")
         );
 
         Assert.Contains(
@@ -108,11 +109,11 @@ public sealed class GranaryContentLawTests {
 
         var irrigation = Assert.Single(
             collection: definition.Placements,
-            predicate: static placement => (placement.Id == "granaryIrrigation")
+            predicate: static placement => (placement.Id == $"{Alias}granaryIrrigation")
         );
         var power = Assert.Single(
             collection: definition.Placements,
-            predicate: static placement => (placement.Id == "granaryPower")
+            predicate: static placement => (placement.Id == $"{Alias}granaryPower")
         );
 
         Assert.Equal(
@@ -124,26 +125,26 @@ public sealed class GranaryContentLawTests {
             actual: Assert.Single(collection: power.Spatial!).Channel
         );
         Assert.Equal(
-            expected: "granaryIrrigation",
+            expected: $"{Alias}granaryIrrigation",
             actual: irrigation.PrototypeId
         );
         Assert.Equal(
-            expected: "granaryPower",
+            expected: $"{Alias}granaryPower",
             actual: power.PrototypeId
         );
 
         var table = Assert.Single(
             collection: definition.Placements,
-            predicate: static placement => (placement.Id == "granarySurveyTable")
+            predicate: static placement => (placement.Id == $"{Alias}granarySurveyTable")
         );
 
         Assert.Equal(
-            expected: "granarySurveyTable",
+            expected: $"{Alias}granarySurveyTable",
             actual: table.PrototypeId
         );
         var tablePrototype = Assert.Single(
             collection: definition.Creations,
-            predicate: static creation => (creation.Id == "granarySurveyTable")
+            predicate: static creation => (creation.Id == $"{Alias}granarySurveyTable")
         );
 
         Assert.Contains(
@@ -170,15 +171,15 @@ public sealed class GranaryContentLawTests {
 
         Assert.Contains(
             collection: definition.Placements,
-            filter: static placement => (placement.Id == "granaryStores")
+            filter: static placement => (placement.Id == $"{Alias}granaryStores")
         );
         Assert.Contains(
             collection: definition.Placements,
-            filter: static placement => (placement.Id == "granaryIrrigation")
+            filter: static placement => (placement.Id == $"{Alias}granaryIrrigation")
         );
         Assert.Contains(
             collection: definition.Placements,
-            filter: static placement => (placement.Id == "granaryPower")
+            filter: static placement => (placement.Id == $"{Alias}granaryPower")
         );
         Assert.Contains(
             collection: definition.Rules!,
@@ -195,7 +196,7 @@ public sealed class GranaryContentLawTests {
             start: 1
         )
             .Select(selector: index => ((WorldMutation)new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: $"{Alias}granaryNames",
             Key: $"bytrcstp{index:000}",
             Value: 0,
@@ -205,16 +206,16 @@ public sealed class GranaryContentLawTests {
             .ToArray();
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Mutations: discovered
         ));
         fixture.Step();
 
-        var providerFrame = fixture.Server.Definition.PlacementFrames["granaryIrrigation"];
+        var providerFrame = fixture.Server.Definition.PlacementFrames[$"{Alias}granaryIrrigation"];
         var uncovered = fixture.Server.Definition.Placements
             .Where(predicate: placement => placement.Id.StartsWith(
             comparisonType: StringComparison.Ordinal,
-            value: "granaryStores/"
+            value: $"{Alias}granaryStores/"
         ))
             .FirstOrDefault(predicate: placement => {
                 if (
@@ -241,7 +242,7 @@ public sealed class GranaryContentLawTests {
         Assert.NotNull(@object: uncovered);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: $"{Alias}granaryIrrigationRequest",
             Key: WorldStateRow.SlotKey.Value,
             Value: 1,
@@ -261,7 +262,7 @@ public sealed class GranaryContentLawTests {
 
         var provider = Assert.Single(
             collection: fixture.Server.Definition.Placements,
-            predicate: static placement => (placement.Id == "granaryIrrigation")
+            predicate: static placement => (placement.Id == $"{Alias}granaryIrrigation")
         );
 
         Assert.Equal(
@@ -283,7 +284,7 @@ public sealed class GranaryContentLawTests {
         ) > 0));
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: $"{Alias}granaryIrrigationRequest",
             Key: WorldStateRow.SlotKey.Value,
             Value: 2,
@@ -301,7 +302,7 @@ public sealed class GranaryContentLawTests {
         );
         provider = Assert.Single(
             collection: fixture.Server.Definition.Placements,
-            predicate: static placement => (placement.Id == "granaryIrrigation")
+            predicate: static placement => (placement.Id == $"{Alias}granaryIrrigation")
         );
         coverage = Assert.Single(
             collection: provider.Spatial!,
@@ -326,10 +327,10 @@ public sealed class GranaryContentLawTests {
             actual: fixture.Server.Definition
         );
 
-        var removedKey = uncovered.Id["granaryStores/".Length..];
+        var removedKey = uncovered.Id[$"{Alias}granaryStores/".Length..];
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: $"{Alias}granaryNames",
             Key: removedKey
         ));

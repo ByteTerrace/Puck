@@ -1,0 +1,44 @@
+/* A preview snapshot's judge trace: quiet log wells on the sunken surface. */
+.log {
+  margin: 0;
+  padding: var(--mantine-spacing-xs) 0;
+  list-style: none;
+}
+
+.entry {
+  display: grid;
+  /* Rows are separate grids, so the mode badge gets a fixed column for the rule names to line up. */
+  grid-template-columns: rem(36px) rem(56px) minmax(0, 1fr) auto;
+  justify-items: start;
+  gap: var(--mantine-spacing-xs);
+  align-items: center;
+  padding: rem(2px) var(--mantine-spacing-sm);
+
+  @mixin hover {
+    background-color: color-mix(in oklab, var(--mantine-color-text) 5%, transparent);
+  }
+}
+
+.ordinal,
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+/* A rule the source map resolves: the same monospace text as any other name, underlined as a link. */
+.link {
+  color: var(--mantine-color-anchor);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-sm);
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: rem(2px);
+}
+
+.arrow {
+  margin-inline: rem(6px);
+  color: var(--mantine-color-dimmed);
+}

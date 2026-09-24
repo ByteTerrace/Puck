@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -25,9 +26,9 @@ public sealed class WorldKeyedDrawLawTests {
                 0,
                 sequence,
                 sequence,
-                WorldPrincipal.Console,
+                Principal.Console,
                 new WorldSubmissionPayload.Mutation(Value: new WorldMutation.Generate(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     "dice",
                     keys
                 )),

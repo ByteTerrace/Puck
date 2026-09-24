@@ -72,12 +72,132 @@
       "default": null
     },
     "shaderToolchain": {
-      "description": "The directory holding the pipeline compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
+      "description": "The directory holding the pipeline compiler\u0027s dxc, or null to resolve it by bare name through the ordinary executable search path \u2014 never an environment variable.",
       "type": [
         "string",
         "null"
       ],
       "default": null
+    },
+    "graphs": {
+      "description": "The authored views.graphs frame-graph instances (empty = none declared).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One named instance of a frame graph: a view rendered by a puck.render.graph.v1 document, such as a pane, a game camera shown on a screen, or a nested world. The row carries authored intent; planning, scheduling and resources belong to the renderer.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The instance\u0027s stable name (a SafeName, unique within the section), which another row\u0027s input names.",
+            "type": "string"
+          },
+          "source": {
+            "description": "The graph document, resolved relative to the world document\u0027s own directory as a Source is.",
+            "type": "string"
+          },
+          "camera": {
+            "description": "The authored camera the instance renders from, or null for a graph that reads no camera.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "refresh": {
+            "description": "How often it refreshes, or null for every frame something visible reads it.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "divisor": {
+                "description": "The instance renders at most once every this many presented frames, or null when Hertz states the rate.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
+              },
+              "hertz": {
+                "description": "The most renders a second, or null when Divisor states the rate.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldViewGraphRefresh"
+          },
+          "inputs": {
+            "description": "The external versions of its graph bound to other instances\u0027 outputs, or null for none.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One external version of a graph instance\u0027s document bound to another instance\u0027s output.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "resource": {
+                  "description": "The external version of the instance\u0027s graph document the binding fills.",
+                  "type": "string"
+                },
+                "instance": {
+                  "description": "The views.graphs row whose output fills it. Naming the row\u0027s own instance reads its previous frame.",
+                  "type": "string"
+                },
+                "previousFrame": {
+                  "description": "Whether the read takes the producer\u0027s previous completed frame, which lets two instances show each other. Default false: the producer renders first in the same frame.",
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "resource",
+                "instance"
+              ],
+              "additionalProperties": false,
+              "title": "WorldViewGraphInput"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "source"
+        ],
+        "additionalProperties": false,
+        "title": "WorldViewGraph"
+      },
+      "default": null
+    },
+    "graphBudget": {
+      "description": "The graph scheduler\u0027s price ceiling, or null for none.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "passPixelsPerFrame": {
+          "description": "The pass-pixels (passes times rendered pixels) those instances may spend in one presented frame; the stalest due instance is admitted first and the rest read their latest completed output. 0 sets no ceiling.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldViewGraphBudget"
     },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -187,11 +307,11 @@
             "type": "string"
           },
           "source": {
-            "description": "The pipeline document or shader source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
+            "description": "Where the pipeline comes from: a pipeline document, a one-off shader source file, or a puck.shader.package.v1 package directory, which loads with its source tree gone. It resolves beside the document that authors it (WorldDocumentPaths), like every relative path a document authors.",
             "type": "string"
           },
           "camera": {
-            "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_SHADERTOY, or null for the pipeline\u0027s own iMouse orbit (the Shadertoy-dialect default).",
+            "description": "The authored camera feeding the pipeline frame block\u0027s cameraPosition, cameraTarget, cameraUp and cameraFov, or null, which leaves cameraFov zero so a pipeline keeps its own pointer orbit.",
             "type": [
               "string",
               "null"
@@ -202,6 +322,25 @@
             "description": "The pipeline clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
             "type": "number",
             "default": 1
+          },
+          "output": {
+            "description": "The image version the instance shows, or null for the source\u0027s first declared output.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "overrides": {
+            "description": "This instance\u0027s parameter overrides, keyed by pass name; each value is that pass\u0027s config object keyed by field. A field absent here keeps the default the shared source declares, so two instances of one source differ only in what they override. The source\u0027s config schema binds them when a boot, a world.load or world.reload, a commit, or an upsert names them (the server reads the source, and refuses a value by name), and again when a graph installs (the host binds them into its passes). null overrides nothing.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null,
+            "additionalProperties": {
+              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+            }
           }
         },
         "required": [

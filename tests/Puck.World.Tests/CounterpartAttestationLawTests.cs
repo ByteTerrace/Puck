@@ -37,11 +37,11 @@ public sealed class CounterpartAttestationLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "left-ref"),
-                "left.world.json"
+                "left"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "right-ref"),
-                "right.world.json"
+                "right"
             ),
                 cornerReference,
             ],
@@ -84,7 +84,7 @@ public sealed class CounterpartAttestationLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "source-ref"),
-                "source.world.json"
+                "source"
             ),
                 cornerReference,
             ],
@@ -121,7 +121,7 @@ public sealed class CounterpartAttestationLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "source-ref"),
-                "source.world.json"
+                "source"
             ),
                 cornerReference,
             ],
@@ -158,11 +158,11 @@ public sealed class CounterpartAttestationLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "left-ref"),
-                "left.world.json"
+                "left"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "right-ref"),
-                "right.world.json"
+                "right"
             ),
             ],
             Destinations = [
@@ -281,7 +281,7 @@ public sealed class CounterpartAttestationLawTests {
         var east = Quilt(
             name: "east",
             counterpart: "west",
-            document: "west.world.json",
+            document: "west",
             center: new Vector3(
                 x: -10f,
                 y: 0f,
@@ -294,7 +294,7 @@ public sealed class CounterpartAttestationLawTests {
         Assert.True(condition: WorldCounterpartAttestation.TryCompose(
             attestation: out var attested,
             definition: east,
-            document: "east.world.json",
+            document: "east",
             reason: out _
         ));
 
@@ -460,11 +460,11 @@ public sealed class CounterpartAttestationLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "east-ref"),
-                "east.world.json"
+                "east"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "north-ref"),
-                "north.world.json"
+                "north"
             ),
             ],
             Destinations = [
@@ -521,7 +521,7 @@ public sealed class CounterpartAttestationLawTests {
             condition: WorldCounterpartAttestation.TryCompose(
                 attestation: out var attestation,
                 definition: definition,
-                document: "self.world.json",
+                document: "self",
                 reason: out var composeReason
             ),
             userMessage: composeReason
@@ -596,9 +596,9 @@ public sealed class CounterpartAttestationLawTests {
         );
         var resolver = WorldCompositeNeighbourResolver.Compose(
             new DictResolver(definitions: new Dictionary<string, WorldDefinition> {
-            ["left.world.json"] = left,
-            ["right.world.json"] = right,
-        }),
+                ["left"] = left,
+                ["right"] = right,
+            }),
             apiResolver
         )!;
 
@@ -632,7 +632,7 @@ public sealed class CounterpartAttestationLawTests {
         var west = Quilt(
             name: "west",
             counterpart: "east",
-            document: "east.world.json",
+            document: "east",
             center: new Vector3(
                 x: 10f,
                 y: 0f,
@@ -644,7 +644,7 @@ public sealed class CounterpartAttestationLawTests {
         var east = Quilt(
             name: "east",
             counterpart: "west",
-            document: "west.world.json",
+            document: "west",
             center: new Vector3(
                 x: -10f,
                 y: 0f,
@@ -658,7 +658,7 @@ public sealed class CounterpartAttestationLawTests {
             condition: WorldCounterpartAttestation.TryCompose(
                 attestation: out var attested,
                 definition: east,
-                document: "east.world.json",
+                document: "east",
                 reason: out var composeReason
             ),
             userMessage: composeReason
@@ -701,7 +701,7 @@ public sealed class CounterpartAttestationLawTests {
         Assert.Contains(
             actualString: refused,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "but neighbour 'east.world.json'/'east' is"
+            expectedSubstring: "but neighbour 'east'/'east' is"
         );
 
         // A counterpart that stops pointing back refuses by its own name, not by the extent one.

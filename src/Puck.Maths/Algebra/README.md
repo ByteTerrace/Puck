@@ -9,10 +9,9 @@ elsewhere in the library as special cases.
 The hand-written types in [`FixedPoint/`](../FixedPoint/README.md) are the
 **speed tier**; where the two meet they agree bit-for-bit, because over
 `FixedQ4816` every returned component is rounded exactly once with no opt-in
-flag to misuse. Why both tiers exist, with the measured evidence and the
-standing retention gates, is
-the retention-gate rationale (write-up retired; the gates themselves are the record)—read
-it before proposing to collapse one into the other.
+flag to misuse. The rationale for keeping both tiers is not written up here;
+treat collapsing one into the other as a design change that needs its own
+evidence.
 
 Every public type lives flat in `namespace Puck.Maths`. The parent
 [Deterministic numerics](../../../docs/reference/maths.md) is the library's entry point; this file is

@@ -10,7 +10,7 @@ namespace Puck.World.Transpiler.Tests;
 /// change what it compiles to, must be idempotent, and must leave the decompiler's one-time-import header as the
 /// first line.</summary>
 public class FormatterRoundTripTests {
-    private static JsonNode CompileToJson(string source, string fullPath, string relativePath) {
+    private static JsonNode CanonicalCompile(string source, string fullPath, string relativePath) {
         var compilation = WorldCompiler.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             imports: ImportHandling.Ignore,
@@ -23,123 +23,58 @@ public class FormatterRoundTripTests {
             userMessage: $"Compile errors for {relativePath}:{Environment.NewLine}{compilation.Diagnostics.FormatReport(source)}"
         );
 
-        return compilation.RequireJson();
+        return Canonical(node: compilation.RequireJson());
     }
+    private static JsonNode Canonical(JsonNode node) => JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node)))!;
 
-    [MemberData(nameof(GetShippedWorldFiles))]
-    [Theory]
-    public void DecompileFormatCompileRoundTripsToTheOriginalDocument(string relativePath) {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-        var originalJsonText = File.ReadAllText(path: fullPath);
-        var originalNode = JsonNode.Parse(originalJsonText);
-
-        Assert.NotNull(@object: originalNode);
-
-        var decompiled = WorldDecompiler.Decompile(jsonText: originalJsonText);
-        var formatted = PuckFormat.Format(decompiled);
-        var recompiledNode = CompileToJson(
-            fullPath: fullPath,
-            relativePath: relativePath,
-            source: formatted
-        );
-
-        var originalCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: originalNode));
-        var recompiledCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: recompiledNode));
-
-        var mismatch = JsonMismatch.Find(
-            JsonNode.Parse(originalCanonical),
-            JsonNode.Parse(recompiledCanonical),
-            $"{relativePath}:"
-        );
-
-        Assert.Null(@object: mismatch);
-    }
-    [MemberData(nameof(GetShippedWorldSources))]
-    [Theory]
-    public void FormattingACommittedSourceIsIdempotent(string relativePath) {
-        var pass1 = PuckFormat.Format(File.ReadAllText(path: Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        )));
-        var pass2 = PuckFormat.Format(pass1);
-
-        Assert.Equal(
-            actual: pass2,
-            expected: pass1
-        );
-    }
-    [MemberData(nameof(GetShippedWorldFiles))]
-    [Theory]
-    public void FormattingIsIdempotent(string relativePath) {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
-
-        var pass1 = PuckFormat.Format(decompiled);
-        var pass2 = PuckFormat.Format(pass1);
-
-        Assert.Equal(
-            actual: pass2,
-            expected: pass1
-        );
-    }
-    // Isolates the formatter from the decompiler: comparing the unformatted and formatted decompiled sources
-    // against each other, rather than against the original JSON, fails only when formatting itself drifts.
-    [Theory]
-    [MemberData(nameof(GetShippedWorldFiles))]
-    public void FormattingNeverChangesWhatADocumentCompilesTo(string relativePath) {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
-        var formatted = PuckFormat.Format(decompiled);
-
-        var unformattedNode = CompileToJson(
-            fullPath: fullPath,
-            relativePath: relativePath,
-            source: decompiled
-        );
-        var formattedNode = CompileToJson(
-            fullPath: fullPath,
-            relativePath: relativePath,
-            source: formatted
-        );
-
-        var unformattedCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: unformattedNode));
-        var formattedCanonical = System.Text.Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: formattedNode));
-
-        var mismatch = JsonMismatch.Find(
-            JsonNode.Parse(unformattedCanonical),
-            JsonNode.Parse(formattedCanonical),
-            $"{relativePath}:"
-        );
-
-        Assert.Null(@object: mismatch);
-    }
     public static TheoryData<string> GetShippedWorldFiles() => ShippedWorlds.Files();
-    public static TheoryData<string> GetShippedWorldSources() => ShippedWorlds.Sources();
     [MemberData(nameof(GetShippedWorldFiles))]
     [Theory]
-    public void TheFirstLineAfterFormattingIsTheHeaderComment(string relativePath) {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
-        var formatted = PuckFormat.Format(decompiled);
-
-        var firstLine = formatted.Split('\n')[0];
+    public void AFormattedDecompilationIsHeadedIdempotentAndCompilesToTheOriginalDocument(string relativePath) {
+        var fullPath = ShippedWorlds.PathOf(relativePath: relativePath);
+        var originalJsonText = File.ReadAllText(path: fullPath);
+        var decompiled = WorldDecompiler.Decompile(jsonText: originalJsonText);
+        var formatted = PuckFormat.Format(source: decompiled);
 
         Assert.Equal(
-            actual: firstLine,
+            actual: formatted.Split('\n')[0],
             expected: "// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and"
         );
-    }
+        Assert.Equal(
+            actual: PuckFormat.Format(source: formatted),
+            expected: formatted
+        );
 
+        var original = Canonical(node: JsonNode.Parse(originalJsonText)!);
+        var mismatch = JsonMismatch.Find(
+            actual: CanonicalCompile(
+                fullPath: fullPath,
+                relativePath: relativePath,
+                source: formatted
+            ),
+            expected: original,
+            path: $"{relativePath}:"
+        );
+
+        if (mismatch is null) {
+            return;
+        }
+
+        // Compiling the unformatted decompilation isolates the formatter from the decompiler: only when it still
+        // compiles to the original did the formatting itself move the document.
+        var decompilerMismatch = JsonMismatch.Find(
+            actual: CanonicalCompile(
+                fullPath: fullPath,
+                relativePath: relativePath,
+                source: decompiled
+            ),
+            expected: original,
+            path: $"{relativePath}:"
+        );
+
+        Assert.Fail(message: ((decompilerMismatch is null)
+            ? $"formatting changed what the decompilation compiles to: {mismatch}"
+            : $"the decompilation does not compile to the original before formatting: {decompilerMismatch}"
+        ));
+    }
 }

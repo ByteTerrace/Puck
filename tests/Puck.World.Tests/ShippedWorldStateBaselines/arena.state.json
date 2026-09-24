@@ -742,7 +742,7 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_live",
+      "row": "$pool$arenaFighters$live",
       "cells": [
         {
           "key": "0",
@@ -757,7 +757,7 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_generation",
+      "row": "$pool$arenaFighters$generation",
       "cells": [
         {
           "key": "0",
@@ -772,22 +772,7 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_field_body",
-      "cells": [
-        {
-          "key": "0",
-          "value": 1,
-          "text": null
-        },
-        {
-          "key": "1",
-          "value": 0,
-          "text": null
-        }
-      ]
-    },
-    {
-      "row": "$pool_arenaFighters_field_alive",
+      "row": "$pool$arenaFighters$field$body",
       "cells": [
         {
           "key": "0",
@@ -802,7 +787,22 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_field_frags",
+      "row": "$pool$arenaFighters$field$alive",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$arenaFighters$field$frags",
       "cells": [
         {
           "key": "0",
@@ -817,7 +817,7 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_field_deaths",
+      "row": "$pool$arenaFighters$field$deaths",
       "cells": [
         {
           "key": "0",
@@ -832,7 +832,7 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_field_health",
+      "row": "$pool$arenaFighters$field$health",
       "cells": [
         {
           "key": "0",
@@ -847,7 +847,7 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_field_respawn",
+      "row": "$pool$arenaFighters$field$respawn",
       "cells": [
         {
           "key": "0",
@@ -862,7 +862,7 @@
       ]
     },
     {
-      "row": "$pool_arenaFighters_field_taken",
+      "row": "$pool$arenaFighters$field$taken",
       "cells": [
         {
           "key": "0",
@@ -877,7 +877,7 @@
       ]
     },
     {
-      "row": "$pool_arenaPickups_live",
+      "row": "$pool$arenaPickups$live",
       "cells": [
         {
           "key": "0",
@@ -892,7 +892,7 @@
       ]
     },
     {
-      "row": "$pool_arenaPickups_generation",
+      "row": "$pool$arenaPickups$generation",
       "cells": [
         {
           "key": "0",
@@ -907,7 +907,7 @@
       ]
     },
     {
-      "row": "$pool_arenaPickups_field_body",
+      "row": "$pool$arenaPickups$field$body",
       "cells": [
         {
           "key": "0",
@@ -922,7 +922,7 @@
       ]
     },
     {
-      "row": "$pool_arenaPickups_field_active",
+      "row": "$pool$arenaPickups$field$active",
       "cells": [
         {
           "key": "0",
@@ -937,7 +937,7 @@
       ]
     },
     {
-      "row": "$pool_arenaPickups_field_respawn",
+      "row": "$pool$arenaPickups$field$respawn",
       "cells": [
         {
           "key": "0",

@@ -49,7 +49,7 @@ public static class WorldFaceApertures {
             value: out var recipe
         )
             ? recipe
-            : null        )
+            : null)
         : null
     );
 }

@@ -190,11 +190,15 @@ public sealed partial class WorldOutputHub {
     /// <see cref="IClientSink.DeliverState"/>). A faulting sink is isolated and detached — see the class
     /// remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>
-    public void DeliverState(WorldDefinition definition) =>
+    /// <param name="stamp">The tick the values hold as of and the rows whose values moved.</param>
+    public void DeliverState(WorldDefinition definition, in WorldStateStamp stamp) =>
         Deliver(
             callSite: nameof(DeliverState),
-            deliver: static (sink, payload) => sink.DeliverState(definition: payload),
-            payload: definition
+            deliver: static (sink, payload) => sink.DeliverState(
+                definition: payload.Definition,
+                stamp: payload.Stamp
+            ),
+            payload: (Definition: definition, Stamp: stamp)
         );
     /// <summary>Fans an accepted live session lever out to every typed subscriber. A faulting sink is isolated and
     /// detached — see the class remarks.</summary>

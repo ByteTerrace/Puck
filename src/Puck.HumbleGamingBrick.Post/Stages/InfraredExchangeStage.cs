@@ -12,16 +12,22 @@ namespace Puck.HumbleGamingBrick.Post;
 /// furthest-behind interleave keeps both machines cycle-locked to within one instruction, so a transmitted bit is
 /// always stable before its matching receive-phase sample.
 /// <para>
-/// Three proofs. Correctness: each side receives the OTHER side's full pattern back, bit-for-bit — the sent and received
+/// Four proofs. Correctness: each side receives the OTHER side's full pattern back, bit-for-bit — the sent and received
 /// transcripts match exactly on both sides, so real light crossed the medium both ways. Determinism: two fresh runs on the
 /// identical schedule reproduce both received transcripts and both final snapshots. Churn: at a mid-exchange budget
-/// boundary the session is <see cref="IrLinkSession.Suspend">suspended</see> for its resume token, both machines are
+/// boundary the session is <see cref="LinkSession{TPort}.Suspend">suspended</see> for its resume token, both machines are
 /// snapshotted, restored into FRESH machines, and reconnected WITH the token; the remaining budgets then produce
 /// transcripts and final snapshots bit-identical to the unchurned run — proving the transceiver's whole state (RP register,
-/// cart LED latch) serializes and the credit-preserving token continues the exact pacing.
+/// cart LED latch) serializes and the credit-preserving token continues the exact pacing. Coupled rewind: at the same
+/// boundary the live session's <see cref="LinkSession{TPort}.PacingCredits"/> are captured beside both snapshots, the
+/// pair runs into an abandoned future, both machines are restored in place and the credits re-anchored through
+/// <see cref="LinkSession{TPort}.ReanchorPacing"/> with the link still wired; the remaining budgets again reproduce the
+/// unchurned tail.
 /// </para>
 /// </summary>
 internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
+    // The budgets the coupled-rewind leg runs into the future it then abandons.
+    private const int AbandonedSteps = 16;
     private const ulong BudgetStep = 256;
     private const int StepCount = 512;
 
@@ -30,6 +36,9 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     private static readonly byte[] FirstPatternSource = [0xB4, 0x6C, 0x39];
     private static readonly byte[] SecondPatternSource = [0x1E, 0xC3, 0x5A];
 
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
     /// <inheritdoc/>
     public string Name =>
         "infrared-exchange";
@@ -128,8 +137,10 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     // the second's; the second receives first, then transmits — pairing the two roles keeps each transmit phase inside
     // the peer's matching receive phase (see InfraredRom's remarks). With churnAtStep >= 0 the session is suspended at
     // that boundary (which the reference confirmed mid-exchange), both machines snapshotted and restored into fresh
-    // machines, and the cable reconnected with the resume token before the remaining budgets run.
-    private static InfraredScenarioResult RunScenario(byte[] firstPattern, byte[] secondPattern, int churnAtStep) {
+    // machines, and the cable reconnected with the resume token before the remaining budgets run. With rewind set the
+    // session instead stays wired: its pacing credits are captured beside both snapshots, the pair runs into a future it
+    // then abandons, and both machines are restored in place with the credits re-anchored.
+    private static InfraredScenarioResult RunScenario(byte[] firstPattern, byte[] secondPattern, int churnAtStep, bool rewind) {
         var firstRom = InfraredRom.CreatePrimary(
             patternBits: firstPattern,
             expectedReceiveCount: secondPattern.Length
@@ -158,7 +169,19 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
                 for (var step = 0; (step < StepCount); ++step) {
                     probes.Add(item: ReadProgress(instance: first));
 
-                    if (step == churnAtStep) {
+                    if ((step == churnAtStep) && rewind) {
+                        var credits = session.PacingCredits;
+                        var firstState = first.Machine.Snapshot();
+                        var secondState = second.Machine.Snapshot();
+
+                        for (var ahead = 0; (ahead < AbandonedSteps); ++ahead) {
+                            session.Run(tCycles: BudgetStep);
+                        }
+
+                        first.Machine.Restore(snapshot: firstState);
+                        second.Machine.Restore(snapshot: secondState);
+                        session.ReanchorPacing(credits: credits);
+                    } else if (step == churnAtStep) {
                         var token = session.Suspend();
                         var firstState = first.Machine.Snapshot();
                         var secondState = second.Machine.Snapshot();
@@ -371,6 +394,7 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
         var reference = RunScenario(
             churnAtStep: -1,
             firstPattern: firstPattern,
+            rewind: false,
             secondPattern: secondPattern
         );
 
@@ -397,6 +421,7 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
         var replay = RunScenario(
             churnAtStep: -1,
             firstPattern: firstPattern,
+            rewind: false,
             secondPattern: secondPattern
         );
 
@@ -412,6 +437,7 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
         var churned = RunScenario(
             churnAtStep: churnStep,
             firstPattern: firstPattern,
+            rewind: false,
             secondPattern: secondPattern
         );
 
@@ -423,7 +449,24 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return PostStageOutcome.Pass(detail: $"self-sensing (unpaired CGB via RP and HuC1, unpaired Agb suppressed without a HuC cartridge, cross-view consistency with one present) plus {firstPattern.Length} IR bits exchanged each way (two cgb machines over RP), each side received the peer's pattern exactly, replay- and churn-identical (severed mid-exchange at budget step {churnStep}, {reference.FirstState.Size}+{reference.SecondState.Size} state bytes)");
+        // Coupled rewind: capture the live credits beside both snapshots, run into a future, restore in place, re-anchor,
+        // and demand the identical tail with the link never severed.
+        var rewound = RunScenario(
+            churnAtStep: churnStep,
+            firstPattern: firstPattern,
+            rewind: true,
+            secondPattern: secondPattern
+        );
+
+        if (Difference(
+            actual: rewound,
+            expected: reference,
+            leg: "coupled-rewind"
+        ) is { } rewindFailure) {
+            return PostStageOutcome.Fail(detail: rewindFailure);
+        }
+
+        return PostStageOutcome.Pass(detail: $"self-sensing (unpaired CGB via RP and HuC1, unpaired Agb suppressed without a HuC cartridge, cross-view consistency with one present) plus {firstPattern.Length} IR bits exchanged each way (two cgb machines over RP), each side received the peer's pattern exactly, replay-, churn- and coupled-rewind-identical (severed or rewound {AbandonedSteps} budgets mid-exchange at budget step {churnStep}, {reference.FirstState.Size}+{reference.SecondState.Size} state bytes)");
     }
 
     private sealed record InfraredScenarioResult(

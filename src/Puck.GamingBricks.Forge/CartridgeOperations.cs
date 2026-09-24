@@ -3,7 +3,7 @@ using Puck.State;
 namespace Puck.GamingBricks.Forge;
 
 /// <summary>Which arms of the engine's shared vocabularies a cartridge admits. The spellings are
-/// <see cref="Puck.State"/>'s — <see cref="ActionStateComparison"/> for a rule's question, <see cref="ExpressionOp"/>
+/// <see cref="Puck.State"/>'s — <see cref="ExpressionOp"/> for a rule's question, <see cref="ExpressionOp"/>
 /// for a <c>set</c> step's combining operation; this names the emittable subset.
 /// KEEP IN SYNC with both backends' operation switches.</summary>
 public static class CartridgeOperations {
@@ -14,7 +14,7 @@ public static class CartridgeOperations {
         ExpressionOp.Subtract,
         ExpressionOp.Multiply,
         ExpressionOp.Divide,
-        ExpressionOp.Modulo,
+        ExpressionOp.Remainder,
         ExpressionOp.BitAnd,
         ExpressionOp.BitOr,
         ExpressionOp.BitXor,

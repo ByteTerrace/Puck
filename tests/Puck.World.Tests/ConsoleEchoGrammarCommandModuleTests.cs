@@ -35,7 +35,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
     public async Task ClockResetCannotReviveAnExpiredWaitThatThePumpHasNotObserved() {
         var gate = new WorldConsoleWaitGate();
         var source = new TextCommandSource(new CommandRegistry(modules: []));
-        using var session = source.CreateSession(CommandPrincipal.Console);
+        using var session = source.CreateSession(Principal.Console);
 
         _ = gate.Arm(
             session: session,
@@ -71,8 +71,8 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
     public async Task StalledReleaseAndClockResetReleaseEveryWaitingSession() {
         var gate = new WorldConsoleWaitGate();
         var source = new TextCommandSource(new CommandRegistry(modules: []));
-        using var first = source.CreateSession(CommandPrincipal.Console);
-        using var second = source.CreateSession(CommandPrincipal.Console);
+        using var first = source.CreateSession(Principal.Console);
+        using var second = source.CreateSession(Principal.Console);
 
         gate.PublishTick(tick: 10);
         _ = gate.Arm(
@@ -138,7 +138,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
                     Id: SafeName.Parse(candidate: "alpha"),
                     KindName: "party",
                     Members: [new WorldGroupMember(
-                            WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0)),
+                            WorldMemberRef.Local(principal: Principal.Seat(slot: 0)),
                             null,
                             0
                         )],
@@ -156,7 +156,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
                     ),
                     Owner: new OwnershipOwner(
                         Kind: OwnershipOwnerKind.Principal,
-                        Principal: WorldPrincipal.Seat(slot: 1)
+                        Principal: Principal.Seat(slot: 1)
                     )
                 ),
             ]
@@ -284,8 +284,8 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             ),
         ]);
         var source = new TextCommandSource(registry);
-        using var first = source.CreateSession(CommandPrincipal.Console);
-        using var second = source.CreateSession(CommandPrincipal.Console);
+        using var first = source.CreateSession(Principal.Console);
+        using var second = source.CreateSession(Principal.Console);
 
         first.Enqueue(line: "world.wait 3");
         var afterFirst = first.InvokeAsync(
@@ -337,7 +337,7 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         CommandResult result = default;
         var source = new TextCommandSource(registry);
         using var session = source.CreateSession(
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             onResult: (_, value) => result = value
         );
 

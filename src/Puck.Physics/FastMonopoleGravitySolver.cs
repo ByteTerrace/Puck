@@ -68,10 +68,7 @@ public sealed class FastMonopoleGravitySolver : IGravitySolver {
                     gravitationalConstant: parameters.GravitationalConstant
                 );
 
-                acceleration = GravityKernel.AddChecked(
-                    left: acceleration,
-                    right: contribution
-                );
+                acceleration = checked((acceleration + contribution));
                 m_exactSourceEvaluations++;
             }
 
@@ -108,10 +105,7 @@ public sealed class FastMonopoleGravitySolver : IGravitySolver {
                     gravitationalConstant: parameters.GravitationalConstant
                 );
 
-                acceleration = GravityKernel.AddChecked(
-                    left: acceleration,
-                    right: contribution
-                );
+                acceleration = checked((acceleration + contribution));
                 m_approximatedNodeEvaluations++;
                 m_approximatedSourceCount += node.Count;
 

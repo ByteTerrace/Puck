@@ -13,29 +13,15 @@ namespace Puck.World.Tests;
 public sealed class PaletteAdmissionLawTests {
     private const string PrototypeId = "palette-admission";
 
-    private static void AssertAccepts(PaletteEntryDocument entry) {
-        var violations = CreationCanonicalizer.Validate(document: Document(entry: entry));
-
-        Assert.Empty(collection: violations);
-    }
-    private static void AssertRefusesNaming(PaletteEntryDocument entry, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: Document(entry: entry));
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
-    private static CreationDocument Document(PaletteEntryDocument entry) => new(
-        Schema: CreationDocument.CurrentSchema,
-        Name: PrototypeId,
-        Palette: [entry],
-        Shapes: [],
-        Frames: null
+    private static void AssertAccepts(PaletteEntryDocument entry) => CreationFixtures.AssertAccepts(document: Document(entry: entry));
+    private static void AssertRefusesNaming(PaletteEntryDocument entry, string needle) => CreationFixtures.AssertRefusesNaming(
+        document: Document(entry: entry),
+        needle: needle
+    );
+    private static CreationDocument Document(PaletteEntryDocument entry) => CreationFixtures.Document(
+        name: PrototypeId,
+        palette: [entry],
+        shapes: []
     );
 
     [Fact]
@@ -215,20 +201,28 @@ public sealed class PaletteAdmissionLawTests {
 
         AssertAccepts(entry: entry);
         AssertRefusesNaming(
-            entry: entry with { Inset = inset with { Paint = new([new(
+            entry: entry with {
+                Inset = inset with {
+                    Paint = new([new(
                     Color: "#FFFFFF",
                     Radius: 1f
                 ), new(
                     Color: "#000000",
                     Radius: 0f
-                )]) } },
+                )]),
+                },
+            },
             needle: "Invalid inset"
         );
         AssertRefusesNaming(
-            entry: entry with { Inset = inset with { Paint = new([new(
+            entry: entry with {
+                Inset = inset with {
+                    Paint = new([new(
                     Color: "brown",
                     Radius: 0f
-                )]) } },
+                )]),
+                },
+            },
             needle: "Layer colors"
         );
     }
@@ -246,7 +240,8 @@ public sealed class PaletteAdmissionLawTests {
             entry: entry,
             needle: "Invalid inset or weathering"
         );
-        AssertAccepts(entry: entry with { Weathering = new(
+        AssertAccepts(entry: entry with {
+            Weathering = new(
             Edge: 1f,
             Under: [new(
                     0.4f,
@@ -256,7 +251,8 @@ public sealed class PaletteAdmissionLawTests {
                         Roughness: 0.5f
                     )
                 )]
-        ) });
+        ),
+        });
         AssertRefusesNaming(
             entry: entry with { Weathering = new(Settle: 1f) },
             needle: "Invalid inset or weathering"

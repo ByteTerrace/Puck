@@ -22,18 +22,21 @@ public class ConstructCompletionScopeLawTests {
     // The cursor's line inside the `host { }` body, 0-based.
     private const int HostBodyLine = 3;
 
-    private static IReadOnlyList<string> ConstructLabels(IEnumerable<OfferedCompletion> offered) => Sorted(labels: offered
-        .Where(predicate: static item => item.Detail.Contains(
-        comparisonType: StringComparison.Ordinal,
-        value: " construct: lowers to "
-    ))
+    private static IReadOnlyList<string> ConstructLabels(IEnumerable<OfferedCompletion> offered) => LabelsDetailed(
+        marker: " construct: lowers to ",
+        offered: offered
+    );
+    // The labels of the items whose detail line carries `marker`, which is what says the table sourced them.
+    private static IReadOnlyList<string> LabelsDetailed(IEnumerable<OfferedCompletion> offered, string marker) => Sorted(labels: offered
+        .Where(predicate: item => item.Detail.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: marker
+        ))
         .Select(selector: static item => item.Label));
-    private static IReadOnlyList<string> MemberLabels(IEnumerable<OfferedCompletion> offered) => Sorted(labels: offered
-        .Where(predicate: static item => item.Detail.Contains(
-        comparisonType: StringComparison.Ordinal,
-        value: "` member: "
-    ))
-        .Select(selector: static item => item.Label));
+    private static IReadOnlyList<string> MemberLabels(IEnumerable<OfferedCompletion> offered) => LabelsDetailed(
+        marker: "` member: ",
+        offered: offered
+    );
     // Every member name completion can offer: a header or body member is written as part of the construct's own
     // statement, so it never stands as a label of its own.
     private static IReadOnlyList<string> OfferableMemberNames(WorldConstruct construct) => Sorted(labels: construct.Members
@@ -49,7 +52,7 @@ public class ConstructCompletionScopeLawTests {
     [Fact]
     public void DocumentStatementPositionOffersTheWholeVocabulary() {
         var table = WorldConstructs.Table;
-        var offered = LanguageServerCompletions.At(
+        var offered = LanguageServerClient.CompletionsAt(
             character: 0,
             line: 2,
             source: Root
@@ -90,7 +93,7 @@ public class ConstructCompletionScopeLawTests {
             keyword: "host"
         ));
 
-        var offered = LanguageServerCompletions.At(
+        var offered = LanguageServerClient.CompletionsAt(
             character: 0,
             line: HostBodyLine,
             source: HostBody
@@ -109,7 +112,7 @@ public class ConstructCompletionScopeLawTests {
         // The exclusion is what this position carries: the document's own constructs are offered where they are
         // legal and not here.
         Assert.Contains(
-            collection: ConstructLabels(offered: LanguageServerCompletions.At(
+            collection: ConstructLabels(offered: LanguageServerClient.CompletionsAt(
                 character: 0,
                 line: 2,
                 source: Root

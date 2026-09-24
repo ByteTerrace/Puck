@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Reflection;
 
 using Puck.World.Client;
@@ -20,16 +21,6 @@ public sealed class ClientStateDeliveryLawTests {
         client: client,
         name: "m_channels"
     );
-    private static WorldClient Client(WorldDefinition definition) => new(
-        composition: new WorldCompositionState(),
-        definition: definition,
-        roster: new PlayerRoster(
-            definition: definition,
-            link: new SilentLink(definition: definition),
-            seatBindings: new WorldSeatBindings(definition: definition)
-        ),
-        seatRouter: new WorldSeatAuthorityRouter()
-    );
     private static object Field(WorldClient client, string name) =>
         typeof(WorldClient).GetField(
             bindingAttr: BindingFlags.NonPublic | BindingFlags.Instance,
@@ -47,7 +38,7 @@ public sealed class ClientStateDeliveryLawTests {
         using var fixture = Fixtures.FreshServer(definition: Game(game: "solitaireKlondike"));
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "solitaireKlondike",
             Key: "option",
             Value: 1,
@@ -55,7 +46,7 @@ public sealed class ClientStateDeliveryLawTests {
         ));
         fixture.Step();
 
-        var client = Client(definition: fixture.Server.Definition);
+        var client = ClientFixtures.Client(definition: fixture.Server.Definition);
         var installedChannels = ChannelTable(client: client);
         var installedTargets = TargetTable(client: client);
         var installedRevision = client.DefinitionRevision;
@@ -73,7 +64,15 @@ public sealed class ClientStateDeliveryLawTests {
                 game: "solitaireKlondike",
                 action: 1
             );
-            client.DeliverState(definition: fixture.Server.Definition);
+            client.DeliverState(
+                definition: fixture.Server.Definition,
+                stamp: new WorldStateStamp(
+                EngineTick: 0UL,
+                Everything: true,
+                MovedRows: default,
+                Tick: 0UL
+            )
+            );
 
             Assert.Same(
                 expected: installedChannels,
@@ -121,21 +120,4 @@ public sealed class ClientStateDeliveryLawTests {
         );
     }
 
-    // The narrowest link a PlayerRoster can be built over: it answers the one construction-time query and drops
-    // everything else, so no server has to run to construct the client under test.
-    private sealed class SilentLink(WorldDefinition definition) : IServerLink {
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) {
-            if (query is WorldQuery.PopulationChannels) {
-                completion(obj: new QueryAnswer(
-                    Payload: WorldChannelTable.Compile(channels: definition.Channels),
-                    Text: string.Empty
-                ));
-            }
-        }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => 0L;
-        public void SubmitIntent(in IntentSubmission submission) {
-        }
-        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
-        }
-    }
 }

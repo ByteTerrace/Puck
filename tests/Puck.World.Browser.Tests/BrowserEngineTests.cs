@@ -1,11 +1,12 @@
 using System.Text;
 
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Browser.Tests;
 
 /// <summary>Exercises the pure <c>Engine/</c> core directly (linked as source — see the project's own remarks on why
-/// a browser-wasm exe cannot be referenced), over real shipped documents: <c>standard.basis.json</c> composed with
+/// a browser-wasm exe cannot be referenced), over real shipped documents: <c>standard.world.json</c> composed with
 /// <c>games/tictactoe.world.json</c> as the primary "does the whole pipeline run" fixture, and the flagship
 /// <c>puck.world.json</c> to pin the one verified, honest scope boundary this engine has today (a
 /// <c>screens[].source.machine</c> engine key never resolves to a real catalog, so its registration is DEFERRED
@@ -13,14 +14,7 @@ namespace Puck.World.Browser.Tests;
 /// here carries an emulator core).</summary>
 public sealed class BrowserEngineTests {
     private static byte[] ComposedPuckWorldBytes() {
-        var path = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "puck.world.json"
-        );
+        var path = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryComposeDocumentTree(
@@ -33,26 +27,11 @@ public sealed class BrowserEngineTests {
 
         return Encoding.UTF8.GetBytes(s: tree!.ToJsonString());
     }
-    // standard.basis.json composed with the tictactoe fragment — a real shipped document pair with no
+    // standard.world.json composed with the tictactoe fragment — a real shipped document pair with no
     // screens[].source.machine engine to trip the extension-vocabulary boundary ComposedPuckWorldBytes hits.
     private static byte[] ComposedTicTacToeBytes() {
-        var basisBytes = File.ReadAllBytes(path: Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "standard.basis.json"
-        ));
-        var fragmentBytes = File.ReadAllBytes(path: Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "games",
-            "tictactoe.world.json"
-        ));
+        var basisBytes = File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
+        var fragmentBytes = ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck"));
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryComposeFragmentBytes(
@@ -66,23 +45,6 @@ public sealed class BrowserEngineTests {
         );
 
         return Encoding.UTF8.GetBytes(s: composed!.ToJsonString());
-    }
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
     }
 
     [InlineData("bodies.localSeats -1 is outside 0..4 (the host's seat ceiling).", "bodies.localSeats")]
@@ -127,9 +89,9 @@ public sealed class BrowserEngineTests {
             """;
 
         var ok = BrowserTopology.TryCells(
-            topologyJson: TopologyJson,
             cells: out var cells,
-            reason: out var reason
+            reason: out var reason,
+            topologyJson: TopologyJson
         );
 
         Assert.True(
@@ -181,25 +143,10 @@ public sealed class BrowserEngineTests {
     }
     [Fact]
     public void ParseFragment_composes_a_game_module_under_the_standard_basis() {
-        var basisPath = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "standard.basis.json"
-        );
-        var fragmentPath = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "games",
-            "tictactoe.world.json"
-        );
+        var basisPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json");
+        var fragmentPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck");
         var hostBytes = File.ReadAllBytes(path: basisPath);
-        var fragmentBytes = File.ReadAllBytes(path: fragmentPath);
+        var fragmentBytes = ShippedWorldDocuments.Read(path: fragmentPath);
 
         var result = BrowserParser.ParseFragment(
             fragmentUtf8: fragmentBytes,
@@ -215,7 +162,7 @@ public sealed class BrowserEngineTests {
             )
         );
         Assert.DoesNotContain(
-            expectedSubstring: "a_",
+            expectedSubstring: "a$",
             actualString: ((result.Errors ?? []).Select(selector: error => error.Message).FirstOrDefault() ?? "")
         );
     }
@@ -237,15 +184,15 @@ public sealed class BrowserEngineTests {
         Assert.Contains(
             collection: result.Deferred!,
             filter: message => message.Contains(
-                value: "no machine catalog was supplied for 'gaming-brick'",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "no machine catalog was supplied for 'gaming-brick'"
             )
         );
         Assert.Contains(
             collection: result.Deferred!,
             filter: message => message.Contains(
-                value: "no machine catalog was supplied for 'advanced-gaming-brick'",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "no machine catalog was supplied for 'advanced-gaming-brick'"
             )
         );
     }
@@ -279,8 +226,8 @@ public sealed class BrowserEngineTests {
         Assert.Contains(
             collection: result.Errors!,
             filter: error => error.Message.Contains(
-                value: "not.a.real.schema",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "not.a.real.schema"
             )
         );
     }
@@ -374,8 +321,8 @@ public sealed class BrowserEngineTests {
         var second = session.StateHash();
 
         Assert.Equal(
-            expected: first,
-            actual: second
+            actual: second,
+            expected: first
         );
     }
 }

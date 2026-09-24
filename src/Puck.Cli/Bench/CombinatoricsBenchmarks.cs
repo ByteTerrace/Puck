@@ -31,8 +31,8 @@ public class CombinationQueries {
         for (var i = 0; (i < Count); ++i) {
             m_ranks[i] = (((((ulong)random.NextInt64()) << 1) | ((uint)random.Next(maxValue: 2))) % capacity);
             var hand = m_elements.AsSpan(
-                (i * m_k),
-                m_k
+                length: m_k,
+                start: (i * m_k)
             );
 
             Combinatorics.CombinationUnrank(
@@ -41,8 +41,8 @@ public class CombinationQueries {
                 hand
             );
             if (Combinatorics.CombinationRank(
-                m_n,
-                hand
+                combination: hand,
+                n: m_n
             ) != m_ranks[i]) { throw new InvalidOperationException(message: "Combination benchmark inputs disagree."); }
         }
     }
@@ -66,8 +66,8 @@ public class CombinationQueries {
             sink ^= Combinatorics.CombinationRank(
                 m_n,
                 m_elements.AsSpan(
-                    (i * m_k),
-                    m_k
+                    length: m_k,
+                    start: (i * m_k)
                 )
             );
         }
@@ -131,8 +131,8 @@ public class PermutationQueries {
                 permutation
             );
             if (
-                (Combinatorics.PermutationRank(permutation) != m_ranks[i]) ||
-                (QuadraticRank(permutation) != m_ranks[i])
+                (Combinatorics.PermutationRank(permutation: permutation) != m_ranks[i]) ||
+                (QuadraticRank(permutation: permutation) != m_ranks[i])
             ) { throw new InvalidOperationException(message: "Permutation benchmark inputs disagree."); }
         }
     }
@@ -141,7 +141,7 @@ public class PermutationQueries {
         var sink = 0UL;
 
         for (var i = 0; (i < Count); ++i) {
-            sink ^= Combinatorics.PermutationRank(m_elements.AsSpan(
+            sink ^= Combinatorics.PermutationRank(permutation: m_elements.AsSpan(
                 (i * Length),
                 Length
             ));
@@ -153,7 +153,7 @@ public class PermutationQueries {
         var sink = 0UL;
 
         for (var i = 0; (i < Count); ++i) {
-            sink ^= QuadraticRank(m_elements.AsSpan(
+            sink ^= QuadraticRank(permutation: m_elements.AsSpan(
                 (i * Length),
                 Length
             ));

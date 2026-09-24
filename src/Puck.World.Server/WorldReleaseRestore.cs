@@ -132,12 +132,10 @@ public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTar
         var keys = point.Worlds.Keys.Select(selector: world => $"{owner:D}/{world}").ToHashSet(comparer: StringComparer.Ordinal);
 
         if (
-            (release.CoordinatorContract != WorldReleaseManifest.CurrentCoordinatorContract) ||
-            (active.CoordinatorContract != WorldReleaseManifest.CurrentCoordinatorContract) ||
             !keys.SetEquals(other: release.Definitions.Keys) ||
             !keys.SetEquals(other: active.Definitions.Keys)
         ) {
-            throw new InvalidOperationException(message: "rewind requires the exact complete inventory and releases enforcing its boundary");
+            throw new InvalidOperationException(message: "rewind requires the exact complete inventory");
         }
         await m_releases.VerifyAsync(
             cancellationToken: token,
@@ -216,10 +214,12 @@ public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTar
                 value: current.Root.DurableTick
             );
         }
-        foreach (var checkpoint in checkpoints) { WorldReleaseRewindBoundary.RequireContained(
+        foreach (var checkpoint in checkpoints) {
+            WorldReleaseRewindBoundary.RequireContained(
             checkpoint: checkpoint,
             containsAuthority: authorities.Contains
-        ); }
+        );
+        }
         return new(
             CurrentDurableTicks: ticks,
             Point: point,

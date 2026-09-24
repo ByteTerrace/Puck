@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Text;
 
 using Puck.Assets.Documents;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.World.Authoring;
@@ -58,7 +59,14 @@ public sealed class CreationEffectorLawTests {
         ));
         client.UpdateRenderPoses(alpha: 1f);
         pool.Tick(deltaSeconds: (1f / 60f));
+        var moved = new SdfMovedTransforms();
+
+        moved.Begin(
+            everything: false,
+            tableRows: transforms.Length
+        );
         pool.PackTransforms(
+            moved: moved,
             client: client,
             parkPosition: new Vector3(
                 x: 0f,
@@ -103,16 +111,7 @@ public sealed class CreationEffectorLawTests {
         return builder.Build(buildInstanceGrid: false);
     }
     private static WorldClient Client(WorldDefinition definition) {
-        var client = new WorldClient(
-            composition: new WorldCompositionState(),
-            definition: definition,
-            roster: new PlayerRoster(
-                definition: definition,
-                link: new SilentLink(definition: definition),
-                seatBindings: new WorldSeatBindings(definition: definition)
-            ),
-            seatRouter: new WorldSeatAuthorityRouter()
-        );
+        var client = ClientFixtures.Client(definition: definition);
 
         client.PublishStaticField(field: new SdfFieldEvaluator(program: BoxProgram()));
 
@@ -238,18 +237,7 @@ public sealed class CreationEffectorLawTests {
                 )]
         : null)
     );
-    private static WorldPrototype Prototype(CreationDocument document) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: "rig"
-        );
-
-        return new WorldPrototype(
-            Id: "rig",
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
+    private static WorldPrototype Prototype(CreationDocument document) => CreationFixtures.Prototype(document: document, id: "rig");
     private static WorldPrototype Prototype(IReadOnlyList<CreationEffectorDocument>? effectors) => Prototype(document: Rig(effectors: effectors));
     private static string Refusal(CreationDocument document) => string.Join(
         separator: " | ",
@@ -952,10 +940,12 @@ public sealed class CreationEffectorLawTests {
             expectedSubstring: $"is fewer than the {CreationEffectorDocument.MinChainBones} a chain needs"
         );
         Assert.Contains(
-            actualString: Refuse(effector: Leg(plant: null) with { Chain = [.. Enumerable.Repeat(
+            actualString: Refuse(effector: Leg(plant: null) with {
+                Chain = [.. Enumerable.Repeat(
                     count: (CreationEffectorDocument.MaxChainBones + 1),
                     element: "thigh"
-                )] }),
+                )],
+            }),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: $"exceeds the {CreationEffectorDocument.MaxChainBones}-bone chain"
         );
@@ -1020,10 +1010,12 @@ public sealed class CreationEffectorLawTests {
             expectedSubstring: $"standoff 4 is outside [0, {CreationEffectorTargetDocument.MaxStandoff}]"
         );
         Assert.Contains(
-            actualString: Refuse(effector: Leg(plant: null) with { Target = new CreationEffectorTargetDocument(
+            actualString: Refuse(effector: Leg(plant: null) with {
+                Target = new CreationEffectorTargetDocument(
                 Kind: CreationEffectorTargetDocument.KindState,
                 Reference: "boots"
-            ) }),
+            ),
+            }),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "is not a 'state.<row>[.<key>]' state reference"
         );
@@ -1304,21 +1296,4 @@ public sealed class CreationEffectorLawTests {
     // The tip's dynamic-transform slot: the pool's first registration's root slot plus the boot's shape index.
     private static int TipSlot => (1 + 2);
 
-    // The narrowest link a PlayerRoster can be built over: it answers the one construction-time query and drops
-    // everything else, so no server has to run for a pack-path law.
-    private sealed class SilentLink(WorldDefinition definition) : IServerLink {
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) {
-            if (query is WorldQuery.PopulationChannels) {
-                completion(obj: new QueryAnswer(
-                    Payload: WorldChannelTable.Compile(channels: definition.Channels),
-                    Text: string.Empty
-                ));
-            }
-        }
-        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => 0L;
-        public void SubmitIntent(in IntentSubmission submission) {
-        }
-        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
-        }
-    }
 }

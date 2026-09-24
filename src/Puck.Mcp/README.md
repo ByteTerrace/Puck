@@ -12,24 +12,35 @@ The CLI requires the .NET 10 ASP.NET Core runtime.
 
 ## Host extension
 
-An outer composition installs `builder.AddPuckMcp(options, configurationPath)`.
-The application registers `IControlSessionHost`; MCP owns authentication,
-attachment admission and its HTTP listener. The host retains its Console pump,
-target lifetime and shutdown. Closing MCP ingress precedes host drain.
+Remote MCP is an installed [extension](../../docs/reference/extensions.md).
+`McpControlExtension` contributes the host's one `HostedControl`: a host that
+exposes `IControlSessionHost` starts it when the deployment names a control
+configuration, and a second hosted control is refused at composition. MCP owns
+authentication, attachment admission and its HTTP listener. The host retains its
+Console pump, target lifetime and shutdown. Closing MCP ingress precedes host drain.
 
-For an owned World silo, the CLI composes both:
+For an owned World silo with `Puck.Mcp` installed in its extensions directory:
 
 ```text
 puck mcp --silo silo.json --http remote.json
 ```
+
+which is the silo's own `--silo silo.json --mcp remote.json`.
+
+The configuration's `services` member decides which remote host the server uses.
+Without it, every caller attaches to the configured `target`. With it, exactly one
+installed extension must contribute an `McpServicesProvider`, which interprets the
+settings and adds its service tools; `services` with no provider, or with more
+than one, refuses startup by name. [Puck.Mcp.Azure](../Puck.Mcp.Azure/README.md)
+is the provider this repository ships. Puck.Mcp itself references no provider.
 
 Set `target` to the silo's exact World row. Remote configuration has no local capability path.
 Each attachment gets a dedicated text session with a fixed row binding and an admitted peer identity.
 Retirement closes it; admitting the same row again never revives an old handle.
 Discovery describes the admitted command surface from the host's actual registry.
 The headless silo omits framebuffer capture from discovery and refuses direct calls. Standalone
-`Puck.World.Silo` has no MCP assembly or package dependency; its public
-`WorldSiloApplication.RunAsync` permits an outer distribution to add host services.
+`Puck.World.Silo` has no MCP assembly or package dependency; MCP reaches it only
+as an installed extension, and only a named control configuration starts it.
 Neither the desktop World nor the silo installs MCP implicitly.
 
 An existing ASP.NET Core host can call `RemoteMcpServer.AddServices(services, options)`
@@ -43,10 +54,30 @@ authentication defaults. The body limit, request deadline, shutdown cancellation
 and grant checks still apply. Configure the outer server's header, connection and
 header-timeout limits too. Plaintext connections must come from loopback.
 
-A service composition may override `RemoteMcpHost.SupportsAttachments` to return
-false. Then Console tools are neither advertised nor callable. Its explicit
-`services` settings replace the attachment source; the installed adapter still
-owns each service's authorization and disclosure limits.
+A services host may override `RemoteMcpHost.SupportsAttachments` to return
+false, as the Azure provider does for a configuration with `services` and no
+`target`. Then Console tools are neither advertised nor callable. The provider
+still owns each service's authorization and disclosure limits.
+
+A host decides each `tools/call`'s delegated authorization in
+`RemoteMcpHost.AuthorizeAsync`, which runs after the caller's bearer token is
+validated and before the request reaches the MCP dispatcher. That is where any
+token exchange that can require user interaction belongs; a
+`RemoteMcpAuthorizationException` thrown there answers that request with an HTTP
+401 challenge. The state it returns, such as an exchanged downstream token,
+reaches `AttachAsync` or `CallServiceAsync` as `RemoteMcpCaller.Authorization`.
+Those two run after dispatch, when the transport may already have streamed the
+response headers. When a downstream service rejects the delegated token there,
+as continuous access evaluation does after a revocation, they throw
+`RemoteMcpAuthorizationException` too: the call fails with a tool error that asks
+the caller to sign in again, and the resource server remembers the claims
+challenge for that subject. The subject's next request of any kind that presents
+the rejected token, or one issued before it, is answered with the 401 challenge
+without being dispatched. A token issued since the rejection is the
+re-authentication the challenge asked for; it clears the challenge and is served.
+One remembered challenge is held per granted subject, and removing a subject's
+grant drops it. Any other exception from these two reaches the client as an
+ordinary tool failure.
 
 ## Local stdio
 
@@ -63,11 +94,15 @@ It prints an attachment file path. The MCP client launches:
 puck mcp --profile operator
 ```
 
-which attaches to the most recent active World, so one configuration serves
-every run. The checkout carries it for both clients: `.mcp.json` at the root
-and `.vscode/mcp.json`. A client that starts before a World is running finds no
-attachment and fails; reconnect it after `world.control start`.
-`--attach <printed-file>` names one World where several run. Never launch the
+which follows the newest running World, so one configuration serves every run.
+The checkout carries it for both clients: `.mcp.json` at the root and
+`.vscode/mcp.json`. The adapter outlives Worlds and attaches on each tool call:
+started before any World, or after the World exits, a call is refused with
+nothing dispatched; once a World runs `world.control start`, the next call
+attaches. A call whose attachment closes (timeout, cancellation, World exit or
+`world.control stop`) reports an unknown outcome and is never replayed; the next
+call attaches anew, possibly to a restarted World with fresh state.
+`--attach <printed-file>` pins one World where several run. Never launch the
 server from a project's build output: the running server holds every assembly
 in that folder, and the next build fails to replace them. Paths containing spaces
 must remain one argument in the client configuration. `world.control status`
@@ -121,7 +156,8 @@ configured owner/World; neither a command nor `silo.use` can select another row.
 This release deliberately supports one authoritative worker; it does not offer
 distributed attachment routing or arbitrary user-owned World discovery.
 
-The CLI's optional Azure adapter reuses [delegated services](../Puck.World.Azure/README.md#delegated-observations).
+The optional [Puck.Mcp.Azure](../Puck.Mcp.Azure/README.md) services provider
+reuses [delegated services](../Puck.World.Azure/README.md#delegated-observations).
 `puck_onboard` calls the existing Function `/api/self-onboard` with an exchanged
 OBO token. It reuses account provisioning, partition selection and protected user
 escrow. Attachment also checks onboarding; `Onboarding` requires an explicit retry,
@@ -132,12 +168,18 @@ or provisioning workflow exists in MCP.
 identity's federated client assertion to obtain an ARM token. Per-observation
 subject grants and field allowlists still apply. Failed consent never falls back
 to host credentials. Discovery includes only the caller's granted observation
-names, as an input-schema enum. A downstream sign-in, consent or claims challenge
-returns HTTP 401 with `WWW-Authenticate`, the MCP resource metadata URI and its
-qualified `user_impersonation` scope. Validated claims are bounded and encoded;
-downstream authority and scope headers are never forwarded. The client must obtain
-fresh user authorization before retrying. MCP retains no user/downstream tokens after the request;
-the existing platform onboarding service owns its protected escrow lifetime.
+names, as an input-schema enum. The Entra exchange for `puck_onboard`,
+`puck_attach` and `puck_service_observe` runs before dispatch. A sign-in, consent
+or claims challenge from it returns HTTP 401 with `WWW-Authenticate`, the MCP
+resource metadata URI and its qualified `user_impersonation` scope, however long
+the exchange takes. Validated claims are bounded and encoded; downstream
+authority and scope headers are never forwarded. The client must obtain fresh
+user authorization before retrying. A downstream API that refuses the exchanged
+token once the call is running fails that call and challenges the caller's next
+request, as described above. MCP retains no user/downstream tokens after the
+request; a remembered challenge holds only the rejected token's SHA-256
+fingerprint and issue time. The existing platform onboarding service owns its
+protected escrow lifetime.
 World simulation grants authorize World changes; they are not Azure permissions.
 Host filesystem, process, deployment and cloud-job commands are unavailable
 remotely. Durable delegated cloud mutation services remain outside this surface.
@@ -164,7 +206,7 @@ routing and lifetime management, so the Function worker is not its hosting targe
 TLS reverse proxy on the same machine. Preserve the public Host header, disable
 response buffering, and allow at least the 125-second request deadline. Direct
 HTTPS accepts an IP-literal listener and requires a PFX `certificatePath`; its
-optional password comes from `certificatePasswordEnvironmentVariable`. Relative
+optional password comes from the deployment-secret file `certificatePasswordFile`. Relative
 file paths resolve beside the configuration file. Public plaintext listeners,
 unknown Hosts and unapproved browser Origins are refused. Add browser clients'
 exact HTTPS origins to `allowedOrigins` when required. Forwarded headers cannot
@@ -233,8 +275,16 @@ Invalid tool arguments, ordinary command errors and capture failures return
 `isError`; unknown tools remain protocol errors. Malformed JSON string escapes
 are invalid protocol parameters before tool dispatch. Timeout closes the attachment and reports an
 uncertain dispatched outcome. Explicit cancellation follows the selected SDK
-protocol's rules; the adapter sends no extra late result. Restart and inspect
-state before deciding whether to retry. Nothing is automatically replayed.
+protocol's rules; the adapter sends no extra late result.
+
+A closed attachment never ends the local adapter. A timeout, a cancellation, a
+host that stopped control or exited, or a transport failure closes only the
+attachment: the call that found it closed reports an unknown outcome (a
+cancelled request gets no reply), and the next call attaches anew, to the pinned
+file or the newest World. A new attachment is a new Console session, so waits or
+ordering held by the old one do not carry over. Inspect state before deciding
+whether to retry. Nothing is automatically replayed. With no World to attach, a
+call is refused and nothing runs.
 EOF and adapter crashes release the attachment while World and its recordings
 retain their own lifetimes. Local Operator `quit` and reload retain their normal meaning; the remote guard refuses them.
 
@@ -248,43 +298,58 @@ Result metadata uses a typed, source-generated serializer; standalone schemas us
 Admission counters bound that transport without adding another queue; a single
 console result uses a completion source, and the ordinary engine pump keeps its
 synchronous drain and session barriers.
-World uses `Puck.Hosting` and `Puck.Networking`; CLI references this optional adapter.
+World uses `Puck.Hosting` and `Puck.Networking`; the CLI references this adapter for
+the local stdio profile, and hosts install it for remote HTTP.
 The SDK stays outside the base engine. Networking and the adapter retain exact
 architecture profiles, and all three libraries retain AOT/trim analysis. MCP input
 is strictly UTF-8 with a 64 KiB JSON-RPC line ceiling before SDK buffering. At most
 128 nonblank messages may await SDK consumption; malformed messages consume that
 budget too. Stdout admits at most four pending replies with a five-second send
-deadline, including time waiting for the SDK's send lock. Exceeding either budget
+deadline, including time waiting for the SDK's send lock. Every adapter-side
+deadline runs on the `TimeProvider` passed to `OperatorMcpServer.RunAsync` (the
+system clock by default): each attachment's five-second connect and handshake,
+each call, the control connection's own call deadline and each reply write. The
+World's side runs its handshake and request deadlines on the clock its
+`LocalControlServer` was given. Exceeding either budget
 or failing an input/output operation closes the attachment and exits with failure.
 Clean EOF exits successfully. The adapter owns both streams and closes them on
 shutdown, including when a pending read ignores cancellation. Stdout is protocol-only;
 diagnostics use stderr.
 
-Official C# SDK 2.2.0 clients launch the real CLI in the tests. The target is
-`2026-07-28` discovery/per-request metadata:
-listing, exec, images, argument errors, cancellation, timeout, EOF and reconnect.
-Adversarial tests also cover split UTF-8 characters, invalid encodings, oversized
-and malformed input, stalled output, reply flooding and cancellation-resistant reads.
+The process tests launch the real CLI and connect the official C# SDK 2.2.0
+client over its stdio, pinned to a World and through `--attach latest`: listing,
+exec, images and argument errors, plus EOF and oversized-input exits that leave
+the World serving. Each gives the child a private temporary directory, so
+`latest` can only find that test's World. Each connection ends as the stdio
+transport specifies: the client closes the adapter's stdin and the adapter must
+exit with code 0. The SDK's own `StdioClientTransport` never closes that stdin,
+so it kills any server once its `ShutdownTimeout` expires
+([csharp-sdk#1836](https://github.com/modelcontextprotocol/csharp-sdk/issues/1836)).
+The adapter's laws run in process, with the adapter and the World each on a
+test clock that fires a deadline only when the test expires it. They check that
+the adapter's deadline, the World's deadline and a client cancellation each
+close only the attachment, that the next call attaches anew, that calls with no
+World are refused while discovery answers, and that following a directory picks
+the newest World that answers, skipping one that is gone. They also cover split
+UTF-8 characters, invalid encodings, oversized and malformed input, stalled
+output, reply flooding and cancellation-resistant reads.
 The remote server explicitly selects this revision; the local one pins none, because a
 pinned revision turns the initialize handshake off, and its interop test runs the
 handshake revisions beside it. Remote tests use real Kestrel,
 signed JWTs, OIDC discovery/JWKS, direct TLS, tenant/subject isolation, scope and
 audience refusal, token expiry, cancellation, idle expiry, capacity and shutdown.
 Raw HTTP tests check required metadata, header mismatches and absent session
-endpoints, claims challenges and recovery, caller fairness, and headless discovery.
+endpoints, claims challenges before and after dispatch and recovery with a newly
+issued token, caller fairness, and headless discovery.
 This is not a claim that every IDE client or the live Entra tenant
 has been tested. The protocol contract is the
 [current specification](https://modelcontextprotocol.io/specification/2026-07-28).
 
-A real Direct3D smoke in offscreen and windowed presentation submitted a dynamics
-parameter edit (the normal host reported it applied), decoded PNGs through the
-producer and unified overlay, answered human console status during an agent wait,
-and captured again after adapter restart. Existing render
-writer boundary tests remain in Commands, Abstractions and Shaders. A physical
-device-loss event or live Entra deployment is not claimed by this run.
+Render writer boundary tests are in Commands, Abstractions and Shaders. No
+automated check covers a physical device-loss event or a live Entra deployment.
 
 Run `dotnet test tests/Puck.Cli.Tests -c Release` for SDK interop and the
-[Hosting verification](../Puck.Hosting/README.md#verification) for engine attachment contracts.
+[Hosting tests](../../tests/Puck.Hosting.Tests/README.md) for engine attachment contracts.
 For a live smoke, edit a parameter through MCP and decode the captured PNG; hold
 this attachment with `world.wait` and confirm human input still answers. Close
 the adapter during the wait, reconnect with the same file, then capture again.

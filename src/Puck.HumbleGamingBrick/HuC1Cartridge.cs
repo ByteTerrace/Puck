@@ -51,12 +51,6 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
     }
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_infraredMode = reader.ReadBoolean();
-        m_ramBank = reader.ReadInt32();
-        m_romBank = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
     /// <inheritdoc/>
@@ -67,10 +61,10 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
             romBank: m_romBank
         );
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_infraredMode);
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteInt32(value: m_romBank);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Boolean(value: ref m_infraredMode);
+        transfer.Int32(value: ref m_ramBank);
+        transfer.Int32(value: ref m_romBank);
     }
 
     /// <summary>Reads from the external window: the IR register while in IR mode, otherwise banked RAM. The IR read is

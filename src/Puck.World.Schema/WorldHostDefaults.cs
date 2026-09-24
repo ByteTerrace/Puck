@@ -204,15 +204,17 @@ public enum WorldHostPresentation : byte {
     Windowed,
 
     /// <summary>Boot the authoritative server, console, and tape only — no window, no GPU device, no swapchain, no
-    /// audio device. Every presentation-only console verb (<c>world.fps</c>/<c>.gpu</c>/<c>render*</c>/<c>view*</c>/
+    /// audio device. Every presentation-only console verb (<c>world.fps</c>, the render levers, <c>view*</c>/
     /// <c>.screenshot</c>, <c>screen.*</c>, audio, editor) refuses as unknown — the honest reflection of the composed
     /// set, not a special-cased denial.</summary>
     None,
 
     /// <summary>Boot the authoritative server plus a real GPU device and the composed-frame render pipeline (the
     /// world render — no unified overlay/console-mirror/binding-bar, no audio device, no gamepad/pointer input), with
-    /// NO window and NO swapchain ever created: <c>world.screenshot</c> writes real PNGs of the composed world, and
-    /// every other presentation-only console verb (audio, HUD levers, recording, gamepads) still refuses as unknown.
+    /// NO window and NO swapchain ever created: <c>world.screenshot</c> writes real PNGs of the composed world, the
+    /// render levers (<c>world.cadence</c>, <c>world.shadows</c>, <c>world.render-scale</c>, <c>world.quality</c> and the
+    /// rest) apply exactly as windowed, and every other presentation-only console verb (audio, HUD levers, recording,
+    /// gamepads) still refuses as unknown.
     /// See <c>Puck.World.WorldBootComposition.AddWorldOffscreenPresentation</c> for the exact composition and the
     /// per-backend device bring-up (Direct3D 12 is genuinely surfaceless; Vulkan uses a never-shown native window
     /// solely to obtain the device — see its remarks for why).</summary>
@@ -224,11 +226,11 @@ public enum WorldHostPresentation : byte {
 /// <list type="bullet">
 /// <item><description><b>boot-only</b> (<see cref="Presentation"/>, <see cref="Backend"/>, <see cref="Width"/>,
 /// <see cref="Height"/>, <see cref="SurfaceFormat"/>, <see cref="Fullscreen"/>, <see cref="PresentMode"/>,
-/// <see cref="ExitAfterSeconds"/>, <see cref="RayQuery"/>, <see cref="Genlock"/>): read once at composition; a live
-/// edit is journaled and validated immediately but takes effect next boot.</description></item>
-/// <item><description><b>Boot-default with a live lever</b> (<see cref="TargetHertz"/> via <c>world.target</c>,
-/// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on;
-/// <c>Puck.World.WorldSessionCapture</c> folds the live values back at <c>world.save</c>.</description></item>
+/// <see cref="ExitAfterSeconds"/>, <see cref="Genlock"/>): read once at composition; a live edit is journaled and
+/// validated immediately but takes effect next boot.</description></item>
+/// <item><description><b>Boot-default with a live lever</b> (<see cref="TargetHertz"/> via <c>world.target</c>):
+/// the value the session wakes on; <c>world.save</c> folds a moved lever back into an authored <c>host</c> section
+/// (<c>WorldSessionLevers.Fold</c>).</description></item>
 /// </list>
 /// The standard windowed boot is authored in <c>Assets/worlds/standard.world.json</c>; absence reads
 /// <see cref="Absent"/> (no presentation).
@@ -257,16 +259,15 @@ public enum WorldHostPresentation : byte {
 /// <param name="TargetHertz">The boot present-pacing target in Hz; <c>0</c> selects automatic display pacing. The
 /// <c>world.target</c> live lever owns "now" thereafter.</param>
 /// <param name="ExitAfterSeconds">Seconds before the world auto-exits; <c>0</c> runs until the window is closed.</param>
-/// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
-/// <param name="Timing">Whether GPU per-pass timing boots armed; the <c>world.timing</c> live lever owns it thereafter.</param>
 /// <param name="Genlock">The external-clock election policy, consumed at boot by the clock registry (which tolerates an
 /// unknown source id): <see langword="null"/> for the launcher's automatic election, or a non-whitespace source id /
 /// <c>off</c>. Shape-only validation (null or non-whitespace); the registry, not the validator, interprets the id.</param>
 /// <param name="Listen">The QUIC listen endpoint (<c>host:port</c>) the authoritative host binds for remote peer
 /// admission, or <see langword="null"/> to stay loopback-only (no socket ever opens). Durable configuration per the
 /// unification contract — the <c>--listen</c> CLI flag reflects it for a single run without editing the document.
-/// Shape-only validation (null or a non-whitespace <c>host:port</c> pair); <c>Server.WorldPeerHost</c> is what actually
-/// parses and binds it.</param>
+/// Shape-only validation (null or a non-whitespace <c>host:port</c> pair with a port 0..65535, where 0 binds any free
+/// port and the <c>[world.listen: bound …]</c> narration names the one bound); <c>Server.WorldPeerHost</c> is what
+/// actually parses and binds it.</param>
 /// <param name="Authority">The QUIC endpoint at which this world's authority is reached when another world resolves
 /// it as a destination, or <see langword="null"/> when the authority is colocated with the resolver. Colocation
 /// short-circuits the authority transport; it does not select a separate transfer path.</param>
@@ -296,8 +297,6 @@ public sealed record WorldHostDefaults(
     PresentMode PresentMode,
     double TargetHertz,
     int ExitAfterSeconds,
-    bool RayQuery,
-    bool Timing,
     // OPTIONAL: both are documented as null-by-default (loopback-only, no genlock), so absence is the ordinary
     // case and saying so with a default is what keeps a world document from spelling the absence out.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Genlock = null,
@@ -326,8 +325,6 @@ public sealed record WorldHostDefaults(
         PresentMode: PresentMode.Immediate,
         TargetHertz: 0.0,
         ExitAfterSeconds: 0,
-        RayQuery: false,
-        Timing: false,
         Genlock: null,
         Listen: null,
         Authority: null,

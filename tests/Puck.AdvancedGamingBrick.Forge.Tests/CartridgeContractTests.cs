@@ -1,7 +1,4 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -12,40 +9,17 @@ public sealed class CartridgeContractTests {
         Column: CartridgeExpressions.Of(constant: 0),
         Tile: CartridgeExpressions.Of(constant: 0)
     );
-    private static int Run(CartridgeDocument document, string name, bool wide = false) {
-        ICartridgeCompiler compiler = ((document.Target == "cgb")
-            ? new HgbCartridgeCompiler()
-            : new AgbCartridgeCompiler()
-        );
-        var compiled = compiler.Compile(document: document);
-        var address = compiled.Variables[name];
-
-        if (document.Target == "cgb") {
-            using var probe = new VerifyMachineDriver(
-                compiled.Rom,
-                "contract"
-            );
-
-            probe.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: 12
-            );
-            return (probe.Read(address: ((ushort)address)) + (wide
-                ? (probe.Read(address: ((ushort)(address + 1))) * 256)
-                : 0));
-        }
-        using var advanced = new AgbVerifyMachineDriver(
-            compiled.Rom,
-            "contract"
-        );
-
-        advanced.RunFrames(
+    // Runs the document once and reads each named slot, two bytes little-endian where the document declares it wide.
+    private static int[] Run(CartridgeDocument document, params string[] names) {
+        using var probe = CartridgeProbe.Boot(
+            document: document,
             frames: 12,
-            keys: AgbKeys.None
+            label: "contract"
         );
-        return (advanced.ReadByte(address: address) + (wide
-            ? (advanced.ReadByte(address: (address + 1)) * 256)
-            : 0));
+
+        return [.. names.Select(selector: name => ((document.Variables.Single(predicate: variable => (variable.Name == name)).Width == 2)
+            ? probe.ReadWide(variable: name)
+            : probe.Read(variable: name)))];
     }
     private static CartridgeDocument Seed(string target) => CartridgeDocuments.Create(
         target: target,
@@ -73,30 +47,27 @@ public sealed class CartridgeContractTests {
         Value: ExpressionProgram.Parse(text: expression)
     );
 
-    [InlineData("256 / 2")]
-    [InlineData("sign(256)")]
-    [InlineData("wide")]
+    [InlineData("256 / 2", "does not fit a byte expression")]
+    [InlineData("sign(256)", "does not fit a byte expression")]
+    [InlineData("wide", "is a wide slot")]
     [Theory]
-    public void ByteAssignmentsRefuseWideOperands(string expression) {
-        var document = Seed(target: "agb") with { Rules = [new(
+    public void ByteAssignmentsRefuseWideOperands(string expression, string fragment) => new CartridgeRefusal(
+        Name: expression,
+        Document: Seed(target: "agb") with {
+            Rules = [new(
                 "write",
                 [Set(
                         expression: expression,
                         name: "out"
                     )]
-            )] };
-
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Path.EndsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: ".value"
-            )
-        );
-    }
+            )],
+        },
+        Path: "rules[0].body[0].value",
+        Fragment: fragment
+    ).Holds();
     public static IEnumerable<object[]> Comparisons() {
         foreach (var target in new[] { "cgb", "agb" }) {
-            foreach (var comparison in Enum.GetValues<ActionStateComparison>()) {
+            foreach (var comparison in ExpressionComparisons.All) {
                 foreach (var right in new[] { 1, 256, 257, 258, 513 }) {
                     yield return [target, comparison, right];
                 }
@@ -122,7 +93,7 @@ public sealed class CartridgeContractTests {
                 [redraw, new(Kind: "load")],
                 CartridgeExpressions.Gate(
                     CartridgeExpressions.Of("scene"),
-                    ActionStateComparison.Equal,
+                    ExpressionOp.Equal,
                     CartridgeExpressions.Of(constant: 0)
                 )
             ),
@@ -131,19 +102,18 @@ public sealed class CartridgeContractTests {
                 [redraw],
                 CartridgeExpressions.Gate(
                     CartridgeExpressions.Of("scene"),
-                    ActionStateComparison.Equal,
+                    ExpressionOp.Equal,
                     CartridgeExpressions.Of(constant: 1)
                 )
             )],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "against a queue of"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "against a queue of",
+            Name: "a load beside an inferred partition",
+            Path: "rules"
+        ).Holds();
         Assert.Empty(collection: CartridgeDocuments.Validate(document: document with { Scene = "scene" }));
     }
     [InlineData("cgb")]
@@ -172,24 +142,11 @@ public sealed class CartridgeContractTests {
         };
 
         Assert.Equal(
-            258,
+            [258, 17, 19],
             Run(
                 document,
                 "wide",
-                wide: true
-            )
-        );
-        Assert.Equal(
-            17,
-            Run(
-                document,
-                "pad"
-            )
-        );
-        Assert.Equal(
-            19,
-            Run(
-                document,
+                "pad",
                 "out"
             )
         );
@@ -213,18 +170,20 @@ public sealed class CartridgeContractTests {
                 Body: [step]
             );
         }
-        var document = Seed(target: "agb") with { Variables = [.. variables], Rules = [new(
+        var document = Seed(target: "agb") with {
+            Variables = [.. variables],
+            Rules = [new(
                 "overflow",
                 [step]
-            )] };
+            )],
+        };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "against a queue of"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "against a queue of",
+            Name: "nested loops past the queue",
+            Path: "rules"
+        ).Holds();
     }
     [InlineData("cgb")]
     [InlineData("agb")]
@@ -252,9 +211,8 @@ public sealed class CartridgeContractTests {
             257,
             Run(
                 document,
-                "wide",
-                wide: true
-            )
+                "wide"
+            )[0]
         );
     }
     [InlineData("cgb")]
@@ -277,7 +235,7 @@ public sealed class CartridgeContractTests {
                     )],
                 CartridgeExpressions.Gate(
                     ExpressionProgram.Parse(text: "cells[scene]"),
-                    ActionStateComparison.Equal,
+                    ExpressionOp.Equal,
                     CartridgeExpressions.Of(constant: 10)
                 )
             )],
@@ -288,19 +246,19 @@ public sealed class CartridgeContractTests {
             Run(
                 document,
                 "out"
-            )
+            )[0]
         );
     }
     [MemberData(nameof(Comparisons))]
     [Theory]
-    public void WideComparisonsMatchUnsignedIntegerOrder(string target, ActionStateComparison comparison, int right) {
+    public void WideComparisonsMatchUnsignedIntegerOrder(string target, ExpressionOp comparison, int right) {
         var expected = comparison switch {
-            ActionStateComparison.Equal => (257 == right),
-            ActionStateComparison.NotEqual => (257 != right),
-            ActionStateComparison.Less => (257 < right),
-            ActionStateComparison.LessOrEqual => (257 <= right),
-            ActionStateComparison.Greater => (257 > right),
-            ActionStateComparison.GreaterOrEqual => (257 >= right),
+            ExpressionOp.Equal => (257 == right),
+            ExpressionOp.NotEqual => (257 != right),
+            ExpressionOp.Less => (257 < right),
+            ExpressionOp.LessOrEqual => (257 <= right),
+            ExpressionOp.Greater => (257 > right),
+            ExpressionOp.GreaterOrEqual => (257 >= right),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(comparison)),
         };
         var document = Seed(target: target) with {
@@ -325,7 +283,7 @@ public sealed class CartridgeContractTests {
             Run(
                 document,
                 "out"
-            )
+            )[0]
         );
     }
 }

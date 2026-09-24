@@ -18,41 +18,36 @@ public static partial class WorldAuthorityCheckpointCodec {
             Point: point
         );
     }
-    private static void WritePopulationEntry(WireWriter writer, WorldPopulation.WorldPopulationEntryCheckpoint entry) {
+    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);
         writer.WriteVector(value: entry.BodyColor);
         writer.WriteByte(value: entry.CatalogRig);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: entry.Designations,
             writeItem: WriteTargetDesignation
         );
         writer.WriteInt32(value: entry.Generation);
         writer.WriteBoolean(value: entry.IsAuthorityTransferred);
         writer.WriteBoolean(value: entry.IsRemoteHuman);
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: entry.Mobility,
             writeValue: WorldWireLeaves.WriteMobility
         );
         writer.WriteInt32(value: entry.MobilityGeneration);
         writer.WriteBoolean(value: entry.Parked);
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: entry.ParkedUntilTick,
             writeValue: static (w, v) => w.WriteInt64(value: v)
         );
         writer.WriteNullableString(value: entry.PlacementId);
         writer.WriteFixedVector(value: entry.SpawnPosition);
         writer.WriteFixed(value: entry.SpawnYaw);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: entry.AdmissionInstalledGrantTemplates,
             writeItem: WriteAdmissionGrant
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: entry.AdmissionRevokedKeys,
             writeItem: static (w, row) => {
                 WriteCapability(
@@ -108,13 +103,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             residue: entry.Residue
         );
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: entry.Profile,
             writeValue: WriteIdentityProjection
         );
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: entry.Navigation,
             writeValue: static (w, navigation) => {
                 w.WriteInt32(value: navigation.ActiveProducerDomainIndex);
@@ -123,35 +116,32 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteInt32(value: navigation.Waypoint);
                 w.WriteInt32(value: navigation.ExpandedLast);
                 w.WriteByte(value: checked((byte)navigation.Status));
-                WorldAuthorityCheckpointCodec.WriteArray(
-                    writer: w,
+                w.WriteArray(
                     items: navigation.Path,
                     writeItem: static (pathWriter, value) => pathWriter.WriteInt32(value: value)
                 );
             }
         );
     }
-    private static WorldPopulation.WorldPopulationEntryCheckpoint ReadPopulationEntry(ref WireReader reader) {
+    private static WorldPopulationEntryCheckpoint ReadPopulationEntry(ref WireReader reader) {
         var index = reader.ReadInt32();
         var kitIndex = reader.ReadByte();
         var bodyColor = reader.ReadFiniteVector(field: "population entry body color");
         var catalogRig = reader.ReadByte();
-        var designations = ReadArray(
-            reader: ref reader,
+        var designations = reader.ReadArray(
             field: "population entry designations",
-            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r)
+            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r),
+            maximum: MaxCollectionCount
         );
         var generation = reader.ReadInt32();
         var isAuthorityTransferred = reader.ReadBoolean();
         var isRemoteHuman = reader.ReadBoolean();
-        var mobility = ReadOptional(
-            reader: ref reader,
+        var mobility = reader.ReadOptional(
             readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
         );
         var mobilityGeneration = reader.ReadInt32();
         var parked = reader.ReadBoolean();
-        var parkedUntilTick = ReadOptional(
-            reader: ref reader,
+        var parkedUntilTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadInt64()
         );
         var placementId = reader.ReadNullableString(
@@ -160,20 +150,20 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var spawnPosition = reader.ReadFixedVector();
         var spawnYaw = reader.ReadFixed();
-        var admissionInstalledGrantTemplates = ReadArray(
-            reader: ref reader,
+        var admissionInstalledGrantTemplates = reader.ReadArray(
             field: "population entry admission templates",
-            readItem: static (ref WireReader r) => ReadAdmissionGrant(reader: ref r)
+            readItem: static (ref WireReader r) => ReadAdmissionGrant(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var admissionRevokedKeys = ReadArray(
-            reader: ref reader,
+        var admissionRevokedKeys = reader.ReadArray(
             field: "population entry admission revoked keys",
             readItem: static (ref WireReader r) => {
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var capability = WorldWireCodec.ReadCapability(reader: ref r);
+                var subject = WorldWireCodec.ReadSubject(reader: ref r);
 
                 return (capability, subject);
-            }
+            },
+            maximum: MaxCollectionCount
         );
         var identityDomain = reader.ReadString(
             field: "population entry identity domain",
@@ -195,7 +185,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
         var producerActiveCurveIndex = reader.ReadInt32();
-        var flock = new WorldPopulation.WorldPopulationFlockCheckpoint(
+        var flock = new WorldPopulationFlockCheckpoint(
             reader.ReadBoolean(),
             reader.ReadInt32(),
             reader.ReadFixedVector(),
@@ -204,13 +194,15 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
 
         if (reader.ReadBoolean()) {
-            flock = flock with { Target = new WorldFlockObservation(
+            flock = flock with {
+                Target = new WorldFlockObservation(
                 reader.ReadInt32(),
                 reader.ReadInt32(),
                 reader.ReadFixedVector()
-            ) };
+            ),
+            };
         }
-        var autonomy = new WorldPopulation.WorldPopulationAutonomyCheckpoint(
+        var autonomy = new WorldPopulationAutonomyCheckpoint(
             MotionPeriodTicks: reader.ReadUInt64(),
             MotionElapsedTicks: reader.ReadUInt64(),
             MotionRemainingTicks: reader.ReadUInt64(),
@@ -224,21 +216,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
         var residue = ReadResidue(reader: ref reader);
-        var profile = ReadOptional(
-            reader: ref reader,
+        var profile = reader.ReadOptional(
             readValue: static (ref WireReader r) => ReadIdentityProjection(reader: ref r)
         );
-        var navigation = ReadOptional(
-            reader: ref reader,
-            readValue: static (ref WireReader r) => new WorldPopulation.WorldPopulationNavigationCheckpoint(
+        var navigation = reader.ReadOptional(
+            readValue: static (ref WireReader r) => new WorldPopulationNavigationCheckpoint(
                 ActiveProducerDomainIndex: r.ReadInt32(),
                 DomainIndex: r.ReadInt32(),
                 GoalCell: r.ReadInt32(),
                 Waypoint: r.ReadInt32(),
                 ExpandedLast: r.ReadInt32(),
                 Status: ((NavigationStatus)r.ReadByte()),
-                Path: WorldAuthorityCheckpointCodec.ReadArray(
-                    reader: ref r,
+                Path: r.ReadArray(
                     field: "population entry navigation path",
                     readItem: static (ref WireReader pathReader) => pathReader.ReadInt32(),
                     maximum: WorldNavigationCapacity.MaxPathNodes
@@ -246,7 +235,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             )
         );
 
-        return new WorldPopulation.WorldPopulationEntryCheckpoint(
+        return new WorldPopulationEntryCheckpoint(
             AdmissionInstalledGrantTemplates: admissionInstalledGrantTemplates,
             AdmissionRevokedKeys: admissionRevokedKeys,
             Autonomy: autonomy,
@@ -285,123 +274,112 @@ public static partial class WorldAuthorityCheckpointCodec {
             Yaw: yaw
         );
     }
-    private static byte[] EncodePopulation(WorldPopulation.WorldPopulationCheckpoint section) {
+    private static byte[] EncodePopulation(WorldPopulationCheckpoint section) {
         var writer = new WireWriter();
 
         writer.WriteInt32(value: section.SimulatedCount);
         writer.WriteInt32(value: section.Revision);
         writer.WriteByte(value: section.SeatKit);
-        WriteArray(
-            writer,
-            section.Generations,
-            static (w, generation) => w.WriteInt32(value: generation)
+        writer.WriteArray(
+            items: section.Generations,
+            writeItem: static (w, generation) => w.WriteInt32(value: generation)
         );
         writer.WriteBoolean(value: (section.SharedNavigation is not null));
         if (section.SharedNavigation is { } domains) {
-            WriteArray(
-                writer,
-                domains,
-                static (w, domain) => {
-                w.WriteInt32(value: domain.Cursor);
-                WriteArray(
-                    w,
-                    domain.Trees,
-                    static (treeWriter, tree) => {
-                    treeWriter.WriteInt32(value: tree.Goal);
-                    treeWriter.WriteInt32(value: tree.Age);
-                    WriteArray(
-                        treeWriter,
-                        tree.Nodes,
-                        static (nodeWriter, node) => {
-                        nodeWriter.WriteInt32(value: node.Node);
-                        nodeWriter.WriteInt32(value: node.Cost);
-                        nodeWriter.WriteInt32(value: node.Next);
-                        nodeWriter.WriteBoolean(value: node.Settled);
-                    }
-                    );
-                    WriteArray(
-                        treeWriter,
-                        tree.Pending,
-                        static (pendingWriter, node) => pendingWriter.WriteInt32(value: node)
+            writer.WriteArray(
+                items: domains,
+                writeItem: static (w, domain) => {
+                    w.WriteInt32(value: domain.Cursor);
+                    w.WriteArray(
+                        items: domain.Trees,
+                        writeItem: static (treeWriter, tree) => {
+                            treeWriter.WriteInt32(value: tree.Goal);
+                            treeWriter.WriteInt32(value: tree.Age);
+                            treeWriter.WriteArray(
+                                items: tree.Nodes,
+                                writeItem: static (nodeWriter, node) => {
+                                    nodeWriter.WriteInt32(value: node.Node);
+                                    nodeWriter.WriteInt32(value: node.Cost);
+                                    nodeWriter.WriteInt32(value: node.Next);
+                                    nodeWriter.WriteBoolean(value: node.Settled);
+                                }
+                            );
+                            treeWriter.WriteArray(
+                                items: tree.Pending,
+                                writeItem: static (pendingWriter, node) => pendingWriter.WriteInt32(value: node)
+                            );
+                        }
                     );
                 }
-                );
-            }
             );
         }
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Entries,
             writeItem: WritePopulationEntry
         );
 
         return writer.ToArray();
     }
-    private static bool TryDecodePopulation(byte[] bytes, out string reason, out WorldPopulation.WorldPopulationCheckpoint section) {
+    private static bool TryDecodePopulation(byte[] bytes, out string reason, out WorldPopulationCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
         var simulatedCount = reader.ReadInt32();
         var revision = reader.ReadInt32();
         var seatKit = reader.ReadByte();
-        var generations = ReadArray(
-            ref reader,
-            "population slot generations",
-            static (ref WireReader r) => r.ReadInt32(),
+        var generations = reader.ReadArray(
+            field: "population slot generations",
+            readItem: static (ref WireReader r) => r.ReadInt32(),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
         var shared = (reader.ReadBoolean()
-            ? ReadArray(
-                ref reader,
-                "shared navigation domains",
-                static (ref WireReader domainReader) => {
-            var cursor = domainReader.ReadInt32();
-            var trees = ReadArray(
-                ref domainReader,
-                "shared navigation trees",
-                static (ref WireReader treeReader) => {
-                var goal = treeReader.ReadInt32();
-                var age = treeReader.ReadInt32();
-                var nodes = ReadArray(
-                    ref treeReader,
-                    "shared navigation nodes",
-                    static (ref WireReader nodeReader) =>
-                    new NavigationTreeNode(
-                        nodeReader.ReadInt32(),
-                        nodeReader.ReadInt32(),
-                        nodeReader.ReadInt32(),
-                        nodeReader.ReadBoolean()
-                    ),
-                    maximum: WorldNavigationCapacity.MaxCellsPerDomain
-                );
-                var pending = ReadArray(
-                    ref treeReader,
-                    "shared navigation pending starts",
-                    static (ref WireReader pendingReader) => pendingReader.ReadInt32(),
-                    maximum: WorldBodiesLimits.CapacityCeiling
-                );
+            ? reader.ReadArray(
+                field: "shared navigation domains",
+                readItem: static (ref WireReader domainReader) => {
+                    var cursor = domainReader.ReadInt32();
+                    var trees = domainReader.ReadArray(
+                        field: "shared navigation trees",
+                        readItem: static (ref WireReader treeReader) => {
+                            var goal = treeReader.ReadInt32();
+                            var age = treeReader.ReadInt32();
+                            var nodes = treeReader.ReadArray(
+                                field: "shared navigation nodes",
+                                readItem: static (ref WireReader nodeReader) =>
+                        new NavigationTreeNode(
+                            nodeReader.ReadInt32(),
+                            nodeReader.ReadInt32(),
+                            nodeReader.ReadInt32(),
+                            nodeReader.ReadBoolean()
+                        ),
+                                maximum: WorldNavigationCapacity.MaxCellsPerDomain
+                            );
+                            var pending = treeReader.ReadArray(
+                                field: "shared navigation pending starts",
+                                readItem: static (ref WireReader pendingReader) => pendingReader.ReadInt32(),
+                                maximum: WorldBodiesLimits.CapacityCeiling
+                            );
 
-                return new NavigationTreeCheckpoint(
-                    Age: age,
-                    Goal: goal,
-                    Nodes: nodes,
-                    Pending: pending
-                );
-            },
-                maximum: WorldNavigationCapacity.MaxSharedGoals
-            );
+                            return new NavigationTreeCheckpoint(
+                        Age: age,
+                        Goal: goal,
+                        Nodes: nodes,
+                        Pending: pending
+                    );
+                        },
+                        maximum: WorldNavigationCapacity.MaxSharedGoals
+                    );
 
-            return new NavigationSharedCheckpoint(
-                Cursor: cursor,
-                Trees: trees
-            );
-        },
+                    return new NavigationSharedCheckpoint(
+                        Cursor: cursor,
+                        Trees: trees
+                    );
+                },
                 maximum: WorldNavigationCapacity.MaxDomains
             )
             : null
         );
-        var entries = ReadArray(
-            reader: ref reader,
+        var entries = reader.ReadArray(
             field: "population entries",
-            readItem: static (ref WireReader r) => ReadPopulationEntry(reader: ref r)
+            readItem: static (ref WireReader r) => ReadPopulationEntry(reader: ref r),
+            maximum: MaxCollectionCount
         );
 
         if (!reader.TryFinish(failure: out var failure)) {
@@ -411,7 +389,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new WorldPopulation.WorldPopulationCheckpoint(
+        section = new WorldPopulationCheckpoint(
             Entries: entries,
             Generations: generations,
             Revision: revision,

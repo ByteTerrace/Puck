@@ -25,9 +25,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     // consecutive-loss streak above (which guards against a device that drops again the instant it is recovered).
     private const int DeviceReacquireBackoffMilliseconds = 250;
     private const double DeviceReacquireBudgetSeconds = 10.0;
-    // [frame-timing] digest cadence — summarize each block of produced frames, matching SdfEngineNode's
-    // [world-timing] throttle so the two digests read at the same rate.
-    private const ulong FrameTimingReportInterval = 60UL;
     // Cap on back-to-back device-loss recoveries with no successful frame between them, so a permanently-dead GPU (or a
     // presenter that cannot recover) fails loudly instead of spinning forever. Reset to 0 after any good frame.
     private const int MaxConsecutiveDeviceLossRecoveries = 8;
@@ -36,8 +33,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly FrameCaptureController? m_capture;
     private readonly ExternalClockRegistry m_externalClocks;
-    private readonly FrameTimingHub m_frameTimingHub;
     private readonly IInputClock m_inputClock;
+    private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
     private readonly ILogger<LauncherWindowHostedService> m_logger;
     private readonly LauncherOptions m_options;
@@ -53,15 +50,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly TextCommandSource m_textSource;
     private readonly INativeWindowFactory m_windowFactory;
 
-    private ulong m_frameTimingDigestLastProducedFrameIndex;
-    private ulong m_frameTimingDigestSampleCount;
-    private FrameTimingSample m_frameTimingDigestWorst;
-
     public LauncherWindowHostedService(
         IHostApplicationLifetime applicationLifetime,
         BufferedConsoleOutput bufferedOutput,
         ExternalClockRegistry externalClocks,
-        FrameTimingHub frameTimingHub,
         IInputClock inputClock,
         ILogger<LauncherWindowHostedService> logger,
         LauncherOptions options,
@@ -76,13 +68,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         CommandRegistry registry,
         TextCommandSource textSource,
         TerminalControl terminal,
+        StandardInputBacklog inputBacklog,
         INativeWindowFactory windowFactory
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(captureControllers);
         ArgumentNullException.ThrowIfNull(externalClocks);
-        ArgumentNullException.ThrowIfNull(frameTimingHub);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
         ArgumentNullException.ThrowIfNull(logger);
@@ -94,6 +86,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(textSource);
         ArgumentNullException.ThrowIfNull(terminal);
+        ArgumentNullException.ThrowIfNull(inputBacklog);
         ArgumentNullException.ThrowIfNull(windowFactory);
 
         m_applicationLifetime = applicationLifetime;
@@ -104,7 +97,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             hostDescription: "windowed host"
         );
         m_externalClocks = externalClocks;
-        m_frameTimingHub = frameTimingHub;
         m_inputClock = inputClock;
         m_inputRouter = LauncherHostLoop.SingleOrDefault(
             items: inputRouters,
@@ -127,6 +119,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         );
         m_snapshotInputCaptures = snapshotInputCaptures.ToArray();
         m_terminal = terminal;
+        m_inputBacklog = inputBacklog;
         m_windowFactory = windowFactory;
 
         if ((m_simulation is null) != (m_inputRouter is null)) {
@@ -177,33 +170,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
             streak = 0;
         }
     }
-    // The [frame-timing] stderr digest, now ONE SUBSCRIBER of the frame-timing hub (the loop publishes every armed
-    // iteration; a bench runner is another subscriber). One line per FrameTimingReportInterval newly PRODUCED frames
-    // reports the slowest complete interval in that block and its literal bucket tiling. Reporting the block maximum,
-    // rather than whichever frame happened to land on the modulo boundary, makes intermittent hitches attributable
-    // without logging every frame and perturbing the cadence under investigation.
-    private void PublishFrameTimingDigest(FrameTimingSample sample) {
-        if (sample.ProducedFrameIndex <= m_frameTimingDigestLastProducedFrameIndex) {
-            return;
-        }
-
-        m_frameTimingDigestLastProducedFrameIndex = sample.ProducedFrameIndex;
-        ++m_frameTimingDigestSampleCount;
-
-        if (sample.IntervalMs >= m_frameTimingDigestWorst.IntervalMs) {
-            m_frameTimingDigestWorst = sample;
-        }
-
-        if (0UL != (m_frameTimingDigestSampleCount % FrameTimingReportInterval)) {
-            return;
-        }
-
-        var worst = m_frameTimingDigestWorst;
-
-        m_frameTimingDigestWorst = default;
-
-        Console.Error.WriteLine(value: $"[frame-timing] worst-of-{FrameTimingReportInterval} frame {worst.ProducedFrameIndex} | interval {worst.IntervalMs:0.000}ms | pump {worst.PumpMs:0.000} | clock {worst.ClockMs:0.000} | input-snapshot {worst.InputSnapshotMs:0.000} | command-apply {worst.CommandApplyMs:0.000} | simulation-step {worst.SimulationStepMs:0.000} | fixed-overhead {worst.FixedStepOverheadMs:0.000} | sim-output {worst.SimulationOutputMs:0.000} | gpu-drain {worst.GpuDrainMs:0.000} | produce {worst.ProduceMs:0.000} | present {worst.PresentMs:0.000} | post-present {worst.PostPresentMs:0.000} | pacer {worst.PacerMs:0.000} | remainder {worst.RemainderMs:0.000} | gc-pause {worst.GcPauseMs:0.000} ({worst.GcCollections}) | steps {worst.FixedSteps} | skippedTotal {worst.SkippedPresentTotal}");
-    }
     private long ResolveRenderPeriod(DisplayTimingSnapshot displayTiming, long frequency, double requestedHertz) {
         var decision = PresentPacingPolicy.Resolve(
             requestedHertz: requestedHertz,
@@ -241,17 +207,25 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private void RunWindowLoop(CancellationToken stoppingToken) {
         try {
             using var window = m_windowFactory.Create();
+            var activated = false;
+            Exception? fault = null;
 
             try {
                 if (window is not IWindowInputSource inputSource) {
                     throw new InvalidOperationException(message: "The launcher requires a window that can provide input.");
                 }
 
-                m_presenter.Activate(
-                    binding: window.CreateSurfaceBinding(),
-                    height: window.Height,
-                    width: window.Width
-                );
+                try {
+                    m_presenter.Activate(
+                        binding: window.CreateSurfaceBinding(),
+                        height: window.Height,
+                        width: window.Width
+                    );
+                } catch (Exception exception) {
+                    throw new PresenterActivationException(innerException: exception);
+                }
+
+                activated = true;
 
                 if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
                     m_logger.LogInformation(
@@ -268,18 +242,17 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // The shared fixed-step accumulator (Puck.Launcher.FixedStepPump) — null when no simulation is
                 // registered (a composition root that drives no fixed-step sim at all), mirroring the ORIGINAL
                 // m_simulation/m_inputRouter pairing check the constructor already enforces.
-                var pump = (((m_simulation is { } pumpSimulation) && (m_inputRouter is { } pumpInputRouter))
-                    ? new FixedStepPump(
-                        simulation: pumpSimulation,
-                        inputRouter: pumpInputRouter,
-                        registry: m_registry,
-                        captureOriginTicks: m_inputClock.NowTicks
-                    )
-                    : null
+                var pump = FixedStepPump.CreateHosted(
+                    holdsClock: false,
+                    inputBacklog: m_inputBacklog,
+                    inputClock: m_inputClock,
+                    inputRouter: m_inputRouter,
+                    output: m_bufferedOutput,
+                    registry: m_registry,
+                    simulation: m_simulation,
+                    terminal: m_terminal,
+                    textSource: m_textSource
                 );
-                // Reused every iteration (never reallocated) so [frame-timing]'s sub-bucket breakdown costs nothing
-                // while disarmed and no per-frame garbage while armed.
-                var fixedStepTiming = new FixedStepTimingAccumulator();
                 var hostFrame = 0UL;
                 var frequency = Stopwatch.Frequency;
                 var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
@@ -361,16 +334,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 );
                 var syntheticDeviceLossFired = false;
 
-                // [frame-timing] (presentation-side only — Stopwatch ticks, never simulation state): wall buckets around
-                // the loop's own phases, tiling the loop-top-to-loop-top interval so bucket sums plus the remainder
-                // always equal the measured interval. An optional IPresentationSkipFeedback presenter (Vulkan) folds its
-                // running skipped-present tally into the same line. Arming is the live GpuTimingControl.Shared state (a
-                // bench arm / the demo's gpu.timing switch / Puck.World's world.timing verb flip it mid-session, and the
-                // run-doc host.timing field seeds it) — so one switch lights both the GPU per-pass digest and this CPU
-                // hub. Each armed iteration publishes a sample into the frame-timing hub, and the throttled stderr digest
-                // is one subscriber of that hub rather than a private code path — the bench runner is another.
-                var frameTimingSkipFeedback = (m_presenter as IPresentationSkipFeedback);
-                var frameTimingProducedFrames = 0UL;
                 // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
                 // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
                 // simulation.rateHz durable stop) — the pump's own calling cadence is presentation-adjacent host
@@ -392,43 +355,12 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     return EngineTicks.PerRate(ratePerSecond: pumpRatePerSecond);
                 }
 
-                m_frameTimingHub.Published += PublishFrameTimingDigest;
-
                 while (
                     window.IsOpen &&
                     !stoppingToken.IsCancellationRequested
                 ) {
-                    // Re-read the live arming state each iteration so a mid-session arm/disarm (bench.run, gpu.timing)
-                    // takes effect without a restart.
-                    var frameTimingEnabled = GpuTimingControl.Shared.Armed;
-                    // The loop-top mark: [frame-timing]'s interval bucket is THIS iteration's own span (loop-top to the
-                    // point just before the next loop-top re-check below), so every bucket measured inside this iteration
-                    // tiles it exactly.
-                    var frameTimingIterationStart = (frameTimingEnabled
-                        ? Stopwatch.GetTimestamp()
-                        : 0L
-                    );
-                    var frameTimingGcPauseStart = (frameTimingEnabled
-                        ? GC.GetTotalPauseDuration().Ticks
-                        : 0L
-                    );
-                    var frameTimingGcCollectionsStart = (frameTimingEnabled
-                        ? ((GC.CollectionCount(generation: 0) + GC.CollectionCount(generation: 1)) + GC.CollectionCount(generation: 2))
-                        : 0
-                    );
-                    var frameTimingPumpTicks = 0L;
-                    var frameTimingClockTicks = 0L;
-                    var frameTimingInputSnapshotTicks = 0L;
-                    var frameTimingCommandApplyTicks = 0L;
-                    var frameTimingSimulationStepTicks = 0L;
-                    var frameTimingFixedStepOverheadTicks = 0L;
-                    var frameTimingFixedSteps = 0UL;
-                    var frameTimingSimulationOutputTicks = 0L;
-                    var frameTimingBeginFrameTicks = 0L;
-                    var frameTimingProduceTicks = 0L;
-                    var frameTimingPresentTicks = 0L;
-                    var frameTimingPostPresentTicks = 0L;
-                    var frameTimingPacerTicks = 0L;
+                    // The number of whole fixed steps this iteration ran — feeds the frame context's DeltaTicks below.
+                    var fixedSteps = 0UL;
 
                     window.PollEvents();
 
@@ -590,17 +522,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     // finally-block flushes again so the final lines before an --exit-after shutdown are never lost.
                     m_bufferedOutput.Flush();
 
-                    // [frame-timing] pump bucket: everything from loop-top through the input drain above (PollEvents,
-                    // the display/genlock/focus checks, the windowInput dequeue loop, Collect).
-                    if (frameTimingEnabled) {
-                        frameTimingPumpTicks = (Stopwatch.GetTimestamp() - frameTimingIterationStart);
-                    }
-
-                    var frameTimingClockStart = (frameTimingEnabled
-                        ? Stopwatch.GetTimestamp()
-                        : 0L
-                    );
-
                     if (
                         (exitAfterTimestamp is { } deadline) &&
                         (Stopwatch.GetTimestamp() >= deadline)
@@ -609,57 +530,16 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                     }
 
                     var deltaTicks = clock.Sample();
-
-                    if (frameTimingEnabled) {
-                        frameTimingClockTicks = (Stopwatch.GetTimestamp() - frameTimingClockStart);
-                    }
-
-                    var frameTimingFixedStepStart = (frameTimingEnabled
-                        ? Stopwatch.GetTimestamp()
-                        : 0L
-                    );
                     // Re-resolved every iteration — see ResolveStepTicks' own remarks above.
                     var stepTicks = ResolveStepTicks(simulation: m_simulation);
 
                     if (pump is { } activePump) {
-                        var timing = (frameTimingEnabled
-                            ? fixedStepTiming
-                            : null
-                        );
-
-                        if (timing is not null) {
-                            timing.InputSnapshotTicks = 0L;
-                            timing.CommandApplyTicks = 0L;
-                            timing.SimulationStepTicks = 0L;
-                        }
-
-                        frameTimingFixedSteps += ((ulong)activePump.Advance(
+                        fixedSteps += ((ulong)activePump.Advance(
                             deltaTicks: deltaTicks,
                             maxFrameTicks: maxFrameTicks,
-                            stepTicks: stepTicks,
-                            timing: timing
+                            stepTicks: stepTicks
                         ));
-
-                        if (timing is not null) {
-                            frameTimingInputSnapshotTicks = timing.InputSnapshotTicks;
-                            frameTimingCommandApplyTicks = timing.CommandApplyTicks;
-                            frameTimingSimulationStepTicks = timing.SimulationStepTicks;
-                        }
                     }
-
-                    if (frameTimingEnabled) {
-                        var frameTimingFixedStepTicks = (Stopwatch.GetTimestamp() - frameTimingFixedStepStart);
-
-                        frameTimingFixedStepOverheadTicks = (((frameTimingFixedStepTicks
-                            - frameTimingInputSnapshotTicks)
-                            - frameTimingCommandApplyTicks)
-                            - frameTimingSimulationStepTicks);
-                    }
-
-                    var frameTimingSimulationOutputStart = (frameTimingEnabled
-                        ? Stopwatch.GetTimestamp()
-                        : 0L
-                    );
 
                     // Simulation-routed console handlers run while snapshots are applied above. Flush their real
                     // results in this iteration rather than leaving them buffered until the next rendered frame.
@@ -667,12 +547,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                     var width = window.Width;
                     var height = window.Height;
-
-                    if (frameTimingEnabled) {
-                        frameTimingSimulationOutputTicks = (Stopwatch.GetTimestamp() - frameTimingSimulationOutputStart);
-                    }
-
-                    var frameTimingPostPresentStart = 0L;
 
                     // The frame body (present-side GPU work) can surface a device-lost error (DXGI_ERROR_DEVICE_REMOVED /
                     // VK_ERROR_DEVICE_LOST) at BeginFrame's wait-for-idle, the node tree's own submit, or Present, all
@@ -691,21 +565,11 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         );
 
                         // BeginFrame recreates presentation resources when the size changed and waits for the
-                        // previous frame's GPU work, so the node tree can safely reuse its per-frame resources — the
-                        // [frame-timing] "gpu-drain" bucket, since that wait is where the PRIOR frame's GPU work is drained.
-                        var frameTimingBeginFrameStart = (frameTimingEnabled
-                            ? Stopwatch.GetTimestamp()
-                            : 0L
-                        );
-
+                        // previous frame's GPU work, so the node tree can safely reuse its per-frame resources.
                         m_presenter.BeginFrame(
                             height: height,
                             width: width
                         );
-
-                        if (frameTimingEnabled) {
-                            frameTimingBeginFrameTicks = (Stopwatch.GetTimestamp() - frameTimingBeginFrameStart);
-                        }
 
                         if (
                             (width > 0) &&
@@ -713,17 +577,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         ) {
                             var frameContext = new FrameContext(
                                 AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
-                                DeltaTicks: (frameTimingFixedSteps * stepTicks),
+                                DeltaTicks: (fixedSteps * stepTicks),
                                 ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
                                 FrameDeltaTicks: deltaTicks,
                                 Host: m_rootHostContext,
                                 StepTicks: stepTicks,
                                 TargetHeight: height,
                                 TargetWidth: width
-                            );
-                            var frameTimingProduceStart = (frameTimingEnabled
-                                ? Stopwatch.GetTimestamp()
-                                : 0L
                             );
                             var surface = m_root.ProduceFrame(context: in frameContext);
 
@@ -733,28 +593,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 surface: surface
                             );
 
-                            if (frameTimingEnabled) {
-                                frameTimingProduceTicks = (Stopwatch.GetTimestamp() - frameTimingProduceStart);
-                            }
-
-                            var frameTimingPresentStart = (frameTimingEnabled
-                                ? Stopwatch.GetTimestamp()
-                                : 0L
-                            );
-
                             m_presenter.Present(surface: surface);
-
-                            if (frameTimingEnabled) {
-                                frameTimingPresentTicks = (Stopwatch.GetTimestamp() - frameTimingPresentStart);
-                            }
-
-                            ++frameTimingProducedFrames;
                         }
-
-                        frameTimingPostPresentStart = (frameTimingEnabled
-                            ? Stopwatch.GetTimestamp()
-                            : 0L
-                        );
 
                         NoteFrameSucceeded(streak: ref deviceLossStreak);
                     } catch (DeviceLostException deviceLost) {
@@ -778,17 +618,6 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         // Skip this frame's present-timing/pacing work; the next iteration renders on the fresh device.
                         continue;
                     }
-
-                    // Everything from the completed present through the pacing decision is tracked separately from the
-                    // actual deadline wait. This isolates feedback/genlock/exit bookkeeping from both GPU work and slack.
-                    if (
-                        frameTimingEnabled &&
-                        (0L == frameTimingPostPresentStart)
-                    ) {
-                        frameTimingPostPresentStart = Stopwatch.GetTimestamp();
-                    }
-
-                    var frameTimingPostPresentClosed = false;
 
                     if (m_terminal.TryConsumeExit()) {
                         window.Close();
@@ -856,129 +685,15 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         if ((nowTimestamp - nextRenderDeadline) > renderPeriod) {
                             nextRenderDeadline = nowTimestamp;
                         } else {
-                            if (frameTimingEnabled) {
-                                frameTimingPostPresentTicks = (Stopwatch.GetTimestamp() - frameTimingPostPresentStart);
-                                frameTimingPostPresentClosed = true;
-                            }
-
-                            var frameTimingPacerStart = (frameTimingEnabled
-                                ? Stopwatch.GetTimestamp()
-                                : 0L
-                            );
-
                             LauncherHostLoop.WaitUntil(
                                 deadlineTimestamp: nextRenderDeadline,
                                 frequency: frequency,
                                 precisionWaiter: precisionWaiter,
                                 spinThreshold: spinThreshold
                             );
-
-                            if (frameTimingEnabled) {
-                                frameTimingPacerTicks = (Stopwatch.GetTimestamp() - frameTimingPacerStart);
-                            }
                         }
                     }
-
-                    if (
-                        frameTimingEnabled &&
-                        !frameTimingPostPresentClosed
-                    ) {
-                        frameTimingPostPresentTicks = (Stopwatch.GetTimestamp() - frameTimingPostPresentStart);
-                    }
-
-                    // [frame-timing]: close out this iteration's interval (loop-top to here, right before the next
-                    // loop-top re-check) and PUBLISH a sample that TILES it — the twelve phase buckets plus whatever is left
-                    // over (principally this measurement's own overhead) —
-                    // into the hub. Subscribers (the throttled stderr digest, a bench runner) read from there; the
-                    // publish fires them synchronously on this thread.
-                    if (frameTimingEnabled) {
-                        var frameTimingGcPauseTicks = (GC.GetTotalPauseDuration().Ticks - frameTimingGcPauseStart);
-                        var frameTimingGcCollections = (((GC.CollectionCount(generation: 0) + GC.CollectionCount(generation: 1)) + GC.CollectionCount(generation: 2)) - frameTimingGcCollectionsStart);
-                        var frameTimingIntervalTicks = (Stopwatch.GetTimestamp() - frameTimingIterationStart);
-                        var frameTimingRemainderTicks = ((((((((((((frameTimingIntervalTicks
-                            - frameTimingPumpTicks)
-                            - frameTimingClockTicks)
-                            - frameTimingInputSnapshotTicks)
-                            - frameTimingCommandApplyTicks)
-                            - frameTimingSimulationStepTicks)
-                            - frameTimingFixedStepOverheadTicks)
-                            - frameTimingSimulationOutputTicks)
-                            - frameTimingBeginFrameTicks)
-                            - frameTimingProduceTicks)
-                            - frameTimingPresentTicks)
-                            - frameTimingPostPresentTicks)
-                            - frameTimingPacerTicks);
-
-                        static double ToMs(long ticks, long frequency) =>
-                            ((((double)ticks) * 1000.0) / frequency);
-
-                        m_frameTimingHub.Publish(sample: new FrameTimingSample(
-                            ProducedFrameIndex: frameTimingProducedFrames,
-                            IntervalMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingIntervalTicks
-                            ),
-                            PumpMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingPumpTicks
-                            ),
-                            ClockMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingClockTicks
-                            ),
-                            InputSnapshotMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingInputSnapshotTicks
-                            ),
-                            CommandApplyMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingCommandApplyTicks
-                            ),
-                            SimulationStepMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingSimulationStepTicks
-                            ),
-                            FixedStepOverheadMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingFixedStepOverheadTicks
-                            ),
-                            SimulationOutputMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingSimulationOutputTicks
-                            ),
-                            GpuDrainMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingBeginFrameTicks
-                            ),
-                            ProduceMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingProduceTicks
-                            ),
-                            PresentMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingPresentTicks
-                            ),
-                            PostPresentMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingPostPresentTicks
-                            ),
-                            PacerMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingPacerTicks
-                            ),
-                            RemainderMs: ToMs(
-                                frequency: frequency,
-                                ticks: frameTimingRemainderTicks
-                            ),
-                            GcPauseMs: (((double)frameTimingGcPauseTicks) / TimeSpan.TicksPerMillisecond),
-                            GcCollections: frameTimingGcCollections,
-                            FixedSteps: frameTimingFixedSteps,
-                            SkippedPresentTotal: (frameTimingSkipFeedback?.SkippedPresentCount ?? 0UL)
-                        ));
-                    }
                 }
-
-                m_frameTimingHub.Published -= PublishFrameTimingDigest;
 
                 if (window.IsOpen) {
                     window.Close();
@@ -986,20 +701,36 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 }
 
                 m_logger.LogInformation("Native window closed; shutting the host down.");
+            } catch (Exception exception) {
+                fault = exception;
+
+                throw;
             } finally {
-                // Flush any buffered echo tail before teardown so the final lines a scripted run emits (e.g. right
-                // before an --exit-after shutdown, or the frame a quit/exit verb lands) are never lost.
-                m_bufferedOutput.Flush();
-
-                // The loop's final Present submitted GPU work that the NEXT frame's BeginFrame would normally
-                // wait on — but there is no next frame. Drain the device here so node/presenter teardown below
-                // can't destroy resources still referenced by that last in-flight frame.
-                if (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
-                    deviceContext.WaitIdle();
-                }
-
-                m_root.Dispose();
-                m_presenter.Dispose();
+                LauncherHostRun.RunTeardown(
+                    fault,
+                    m_logger,
+                    // Flush any buffered echo tail before teardown so the final lines a scripted run emits (e.g. right
+                    // before an --exit-after shutdown, or the frame a quit/exit verb lands) are never lost.
+                    ("flush output", m_bufferedOutput.Flush),
+                    // Before the render root goes: a capture still owed a frame is decided while the chain that would
+                    // have served it is alive, never refused by the disposal of a node still holding it.
+                    ("settle owed frames", () => m_simulation?.SettleOwedFrames()),
+                    // The loop's final Present submitted GPU work that the NEXT frame's BeginFrame would normally
+                    // wait on — but there is no next frame. Drain the device here so node/presenter teardown below
+                    // can't destroy resources still referenced by that last in-flight frame. A presenter that never
+                    // activated submitted nothing, so there is nothing to drain.
+                    ("drain device", () => {
+                        if (
+                            activated &&
+                            m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)
+                        ) {
+                            deviceContext.WaitIdle();
+                        }
+                    }
+                ),
+                    ("dispose render root", m_root.Dispose),
+                    ("dispose presenter", m_presenter.Dispose)
+                );
             }
         } finally {
             m_applicationLifetime.StopApplication();
@@ -1121,14 +852,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
         }
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) {
-        var pumpThread = new Thread(start: () => RunWindowLoop(stoppingToken: stoppingToken)) {
-            IsBackground = true,
-            Name = "Puck.Launcher Window Pump",
-        };
-
-        pumpThread.Start();
-
-        return Task.CompletedTask;
-    }
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => LauncherHostLoop.RunPump(
+        name: "Puck.Launcher Window Pump",
+        pump: () => RunWindowLoop(stoppingToken: stoppingToken)
+    );
 }

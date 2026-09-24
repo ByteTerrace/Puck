@@ -1,5 +1,8 @@
 extension 'br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:1.0.0'
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Types
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 @export()
 type groupType = {
   name: string
@@ -21,9 +24,15 @@ type roleAssignmentType = {
   userAssignedIdentityId: string?
 }
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Parameters
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param groups groupType[] = []
 param roleAssignments roleAssignmentType[] = []
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Variables
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Note: The { '': 0 } hack found multiple times below is to work around this issue: https://github.com/Azure/bicep/issues/3990.
 var groupsMap { *: int } = { ...{ '': 0 }, ...toObject(range(0, length(groups)), i => groups[i].name, i => i) }
 var roleAssignmentResourceIds = map(
@@ -58,12 +67,15 @@ var userAssignedIdentityMap = {
   )
 }
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Resources
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 resource groupsResource 'Microsoft.Graph/groups@v1.0' existing = [
   for group in groups: {
     uniqueName: (group.?uniqueName ?? guid(tenant().tenantId, group.name))
   }
 ]
-module roleAssignmentsModule './avm-temp/resource-role-assignment/main.bicep' = [
+module roleAssignmentsModule './avm/resource-role-assignment/main.bicep' = [
   for (assignment, index) in roleAssignments: {
     params: {
       condition: assignment.?condition
@@ -96,4 +108,3 @@ resource userAssignedIdentities 'Microsoft.ManagedIdentity/userAssignedIdentitie
     )
   }
 ]
-

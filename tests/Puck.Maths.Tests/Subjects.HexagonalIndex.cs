@@ -270,22 +270,18 @@ internal static partial class Subjects {
             r: pr
         );
     }
-    private static void ExpectHexIndex(Func<HexagonalIndex> action, BigInteger q, BigInteger r) {
-        if (Oracles.HexIndexRadius(
-            q: q,
-            r: r
-        ) > HexagonalIndex.MaxRadius) {
-            Assert.Throws<OverflowException>(testCode: () => action());
-        } else {
-            Assert.Equal(
-                expected: ((long)Oracles.HexIndexValue(
-                    q: q,
-                    r: r
-                )),
-                actual: action().Value
-            );
-        }
-    }
+    private static void ExpectHexIndex(Func<HexagonalIndex> action, BigInteger q, BigInteger r) =>
+        ExpectValueOrOverflow(
+            action: () => action().Value,
+            expected: () => ((long)Oracles.HexIndexValue(
+                q: q,
+                r: r
+            )),
+            overflows: (Oracles.HexIndexRadius(
+                q: q,
+                r: r
+            ) > HexagonalIndex.MaxRadius)
+        );
 
     public static string? HexagonalIndexBoundaries() {
         var maximumRadius = HexagonalIndex.MaxRadius;

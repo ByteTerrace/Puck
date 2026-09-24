@@ -16,32 +16,10 @@ public sealed class ParityVocabularyStationLawTests {
     private const string PrototypeId = "vocabRig";
 
     private static WorldDefinition LoadParityWorld() {
-        var path = Path.Combine(
-            path1: RepoRoot(),
-            path2: "tests",
-            path3: "Puck.Parity",
-            path4: "parity.world.json"
-        );
+        var path = RepositoryPaths.Resolve(relativePath: "tests/Puck.Parity/parity.world.json");
         var bytes = File.ReadAllBytes(path: path);
 
         return WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
-    }
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
     }
 
     /// <summary>The control: a copy of the rig with every panel stripped falls back to one charge per shape — the

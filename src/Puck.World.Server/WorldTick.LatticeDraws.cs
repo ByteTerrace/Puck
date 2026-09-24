@@ -19,6 +19,7 @@ public sealed partial class WorldTick {
             }
         }
     }
+
     private void PaintLatticeDraw(WorldDefinition definition, WorldStateRow row) {
         if (
             (Host.Population.Fields is not { } lattice) ||
@@ -80,6 +81,7 @@ public sealed partial class WorldTick {
             ArrayPool<long>.Shared.Return(array: values);
         }
     }
+
     // Every apply and every undo preserves the live lattice allocation and reaction state. Repaint only rows whose
     // persisted draw position or draw fill actually moved, so an unrelated mutation cannot erase evolved cells.
     // Pairs a current row with its previous self by array position (a name compare, not a scan) whenever both row
@@ -148,6 +150,7 @@ public sealed partial class WorldTick {
             }
         }
     }
+
     private static Dictionary<string, WorldStateRow> BuildRowsByName(IReadOnlyList<WorldStateRow> rows) {
         var byName = new Dictionary<string, WorldStateRow>(
             capacity: rows.Count,

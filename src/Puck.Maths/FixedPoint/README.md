@@ -130,7 +130,7 @@ give each type its full contract.
 | `UnitFraction32` | `readonly record struct` | UQ0.32—the same half-open contract at a resolution of `2⁻³²`, stored in a `uint`. This is the grid the samplers draw on. |
 | `UnitInterval32` | `readonly record struct` | The **closed** interval `[0, 1]`—one included this time—on that same `2⁻³²` grid, stored in a `ulong` under a single invariant: `Value ≤ 2³²`. The thirty-third bit buys a multiplicative identity, exact absorbing elements at both ends (an absorbing element swallows whatever it meets, the way zero times anything is zero), and closure of `Multiply`. There are no arithmetic operators at all; every combining operation is a named method. |
 | `FixedVector2` | `readonly record struct` | Two `FixedQ4816` components. `Dot` and `Wedge`—the signed area of the parallelogram the two vectors span, which is the winding test—accumulate wide and round once. |
-| `FixedVector3` | `readonly record struct` | Three components, with `Dot`, `Cross`, `Lerp`, a scale-free `Normalize`, and saturating `Length` / `LengthSquared` alongside `Try…` siblings. This is the world-space displacement type. |
+| `FixedVector3` | `readonly record struct` | Three components, with `Dot`, `Cross`, `Lerp`, a scale-free `Normalize`, and saturating `Length` / `LengthSquared` alongside `Try…` siblings. `TryIntersectPlane` meets a ray with a plane: the parameter is one ties-to-even rounding of the quotient of two `Dot`s, refused when the ray runs parallel, the plane lies behind it, or the parameter leaves the carrier. This is the world-space displacement type. |
 | `FixedComplex` | `readonly record struct` | The deterministic planar **rotation**, built on `i² = −1`. `FromAngle` is the 2D exponential map, `*` composes turns, `Rotate` applies one, and `Argument` is the logarithm. Division is full-range with exact rounding. |
 | `FixedDual` | `static` | The factory and derivative-lift surface for the dual construction: `Constant`, `Variable`, `Divide`, and the lifted `Log2`, `SinCos` and `Sqrt`. |
 | `FixedDual<TValue>` | `readonly record struct` | The dual construction `a + b·ε`, where `ε² = 0`, over any carrier that supplies six operator interfaces. Over `FixedQ4816` it is a *quantized*—that is, rounded onto the fixed-point grid—forward-mode sensitivity; over `FixedQuaternion` it is the dual quaternion beneath `FixedRigidTransform`. Both house carriers get a fused kernel selected by a type test the JIT folds to a constant. |
@@ -150,7 +150,7 @@ give each type its full contract.
 | `IFieldEvaluator` (with `FieldEvaluatorCapabilities`) | `interface` | A scalar field and its gradient over `FixedPosition`, read as `TryDistance` (signed: negative inside geometry) and `TryFieldGradient` (unit-length, pointing away from the nearest surface). It names no representation, so a field's producer and its gravity, contact or wind consumers can sit in sibling libraries that never reference each other; a consumer wanting "down" computes `-gradient.Normalize()`. |
 | `FixedPointRounding` | `public static` | The shared nearest-result decision for integer kernels: compare the exact distance to the truncated result with the exact distance to its next neighbour, then resolve an equal-distance tie toward the even raw. `TryRoundRational` applies that decision to a whole exact `BigInteger` rational—the scale shift folded onto the numerator, one division, one rounding, refusing rather than wrapping—and is where both the mass-property chain here and Physics's softness chain round, so simulation subsystems cannot drift onto different tie rules. |
 | `Rational` | `readonly record struct` | The exact `BigInteger` rational, reduced to lowest terms with a positive denominator on construction (a root-level type; listed here because every exact derivation in this folder forms its intermediates in it), never narrowed until a caller's own closing rounding through `FixedPointRounding`. Every `BigInteger`-exact authoring/compile-time derivation in this folder, and `Puck.Physics`'s soft-constraint chain, forms its intermediates here—`SecondOrderDynamics`'s exact-transition-matrix derivation, `CurvatureSpline`'s tangent-length solve and Sturm-sequence root isolation, and `FixedSoftConstraint`'s stiffness/damping algebra all round through the same core rather than hand-inlining numerator/denominator pairs. |
-| `SignedFixedPointArithmetic` | `internal static` | **Substrate.** The common signed-raw division, fused interpolation, and magnitude selection for Q48.16, Q32.32 and Q16.48. The binary-point count is an input where the operation depends on it; the x64 division fast path, `UInt128` fallback, tie comparison, sign application, checked narrowing, and shared generic-math tie rules each live once. |
+| `SignedFixedPointArithmetic` (with `ISignedFixedPointFormat<TSelf>`) | `internal static` + `internal interface` | **Substrate.** The common signed-raw division, fused interpolation, magnitude selection, rounding, and `double` conversion for Q48.16, Q32.32 and Q16.48. The members that depend on the binary point are written once over `ISignedFixedPointFormat<TSelf>`, which each signed Q format implements with its fraction bit count, so the format's public `/`, `Lerp`, `Round` and `FromDouble`—and `FixedPointText`'s signed `Parse`, `TryParse` and `TryFormat` entry points—forward to one body specialized per format. The x64 division fast path, `UInt128` fallback, tie comparison, sign application, checked narrowing, and shared generic-math tie rules each live once. |
 | `FixedPointText` | `internal static` | **Substrate.** Exact decimal parsing and rendering shared by all six formattable carriers. Rendering is always allocation-free. Parsing is allocation-free too, in `UInt128`, for every carrier at or below thirty-seven fraction bits—`FixedQ4816`, `UFixedQ4816`, `UnitFraction16`, `UnitFraction32` and `FixedQ3232` all sit under that today. Only `FixedQ1648`'s Q16.48 crosses it: a format reads `F + 1` decimal digits, and forty-nine of them no longer fit `UInt128`, so its accumulation and rounding alone route through `BigInteger` (and therefore allocate)—a strict generalization of the narrow path that changes no result where both could run. The platform parser validates the culture syntax and supplies only the sign; the original digits are then quantized directly, so an arbitrarily long run of digits sitting on a midpoint cannot get rounded twice. On the rendering side it owns the format-specifier check and terminating fraction digits for every carrier, plus the raw prefix, exact length check, and culture-token splicing shared by the four Q formats as an unsigned magnitude plus a sign flag. |
 | `FixedPointConvert` | `internal static` | **Substrate.** The single `INumberBase<T>` conversion body for all three signed Q formats, including their signed/unsigned or cross-width peer seams, plus the recognized-source predicates and exact scaling steps. A known BCL numeric is expressed at the target scale with no range clamp before the requested checked, saturating or truncating policy is applied. Decimal sources are read from their own bits and rounded once; Q16.48 and Q32.32 use the wide `BigInteger` lane their fraction counts require, while Q48.16 stays on `Int128`. |
 
@@ -406,6 +406,16 @@ componentwise and exact on the raws (wrapping); scaling by a scalar and
 dividing by a scalar are componentwise scalar operations, so the division is a
 genuine per-component divide rounded to nearest rather than a multiply by a
 rounded reciprocal, and a zero scalar throws `DivideByZeroException`.
+
+`FixedVector3` also carries the `checked` forms of `+`, `-`, unary `-` and
+`*` by a scalar. Each applies the scalar `checked` operator lane by lane in X,
+Y, Z order and throws `OverflowException` at the first lane that leaves the
+carrier. The componentwise helpers are the scalar members lifted the same way:
+`Abs`, `Max`, `Clamp`, `Round`, the Hadamard `Multiply` and `Divide`, and
+`MaxComponent`, the greatest of the three lanes. `Abs` throws on a `MinValue`
+lane, and `Clamp` throws when a lower bound lies above its upper bound. `UnitX`,
+`UnitY` and `UnitZ` are the world axes. `FixedSaturate.Add` has a vector
+overload that clamps each lane's sum to the carrier's extremes.
 
 **The products are fused.** `Dot`, `FixedVector2.Wedge` and
 `FixedVector3.Cross` widen every leaf product and round once per returned
@@ -806,7 +816,7 @@ transitions (never naive Euler):
 - **`Evaluate(initialValue, initialVelocity, target, elapsedTicks,
   ticksPerSecond)` → `SecondOrderSample`**—the closed form from initial
   conditions, computed lazily on read with no per-tick work, mirroring
-  `WorldStateAdvance`'s epoch-based accumulation. `Retarget(sample, oldTarget,
+  `Puck.State`'s `StateAdvance` epoch-based accumulation. `Retarget(sample, oldTarget,
   newTarget)` adds the velocity kick a piecewise-constant target change
   implies, so a rewritten target keeps the sample continuous instead of
   snapping. `r` is inert in `Evaluate`—the closed form has no history of
@@ -1358,7 +1368,7 @@ or by nothing:
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/bench.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings
 ```
 
 The bare command is the default tier (Smoke + Default). Its **budget** is under
@@ -1382,11 +1392,7 @@ the test run rebuilds from scratch rather than one anyone edits. That one is
 [`tests/Puck.Maths.Tests/leg-ledger.md`](../../../tests/Puck.Maths.Tests/leg-ledger.md).
 A row cannot go stale, and a divergence cannot be closed by editing the
 register: closing one means correcting the doc (or the code) and re-spelling
-the leg, after which the row drops out by itself. Every row the campaign
-raised against this folder is now closed—the last two rulings landed as the
-BCL unsigned parse grammar and the proof that `Inverse`'s overflow early-out
-answers the correctly rounded zero—and no divergence stands against the
-types documented above.
+the leg, after which the row drops out by itself.
 
 **What a change here means.** Rule 4 governs: determinism pins the mapping,
 not the values. A deliberate correction to any value path is *expected* to

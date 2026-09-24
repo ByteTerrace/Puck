@@ -812,21 +812,21 @@ public static class WorldDocumentBasis {
         );
     }
     private static string? TryGetString(JsonObject obj, string propertyName) {
-        if (obj.TryGetPropertyValue(propertyName: propertyName, jsonNode: out var node) && (node is JsonValue val) && val.TryGetValue<string>(value: out var str)) {
+        if (obj.TryGetPropertyValue(jsonNode: out var node, propertyName: propertyName) && (node is JsonValue val) && val.TryGetValue<string>(value: out var str)) {
             return str;
         }
 
         return null;
     }
     private static int? TryGetInt(JsonObject obj, string propertyName) {
-        if (obj.TryGetPropertyValue(propertyName: propertyName, jsonNode: out var node) && (node is JsonValue val) && val.TryGetValue<int>(value: out var num)) {
+        if (obj.TryGetPropertyValue(jsonNode: out var node, propertyName: propertyName) && (node is JsonValue val) && val.TryGetValue<int>(value: out var num)) {
             return num;
         }
 
         return null;
     }
     private static void ValidateSpaceCompositionIdentity(JsonObject basisRow, JsonObject overlayRow, string path) {
-        if (!path.EndsWith(value: ".spaces", comparisonType: StringComparison.Ordinal) && !path.EndsWith(value: "spaces", comparisonType: StringComparison.Ordinal)) {
+        if (!path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".spaces") && !path.EndsWith(comparisonType: StringComparison.Ordinal, value: "spaces")) {
             return;
         }
 
@@ -865,6 +865,81 @@ public static class WorldDocumentBasis {
             target: target
         );
     }
+    /// <summary>Returns the pointer a node of a composed tree stands at in one of the layers composed into it, so a
+    /// finding against the composed document can be read against the layer that authored the node. Each list index
+    /// is traced by the merge's own rules: through the row identity key a keyed list merges by, past a leading
+    /// <c>$replace</c> marker, or unchanged in a list the layer replaced wholesale.</summary>
+    /// <param name="composed">The composed tree the pointer indexes.</param>
+    /// <param name="layer">One layer composed into <paramref name="composed"/>: typically the document's own body,
+    /// which composes last.</param>
+    /// <param name="pointer">The JSON pointer into <paramref name="composed"/>.</param>
+    /// <returns>The pointer into <paramref name="layer"/> naming the same node, or naming the deepest node on the way
+    /// to it the layer writes when the layer leaves a member below it unwritten; <see langword="null"/> when the way
+    /// passes through a list row the layer does not author, one only a basis or an import contributes.</returns>
+    public static string? TraceToLayer(JsonNode? composed, JsonNode? layer, string pointer) {
+        ArgumentNullException.ThrowIfNull(argument: pointer);
+
+        if (pointer.Length == 0) {
+            return pointer;
+        }
+
+        var traced = new System.Text.StringBuilder(capacity: pointer.Length);
+
+        foreach (var segment in pointer.Split(separator: '/')[1..]) {
+            switch (composed) {
+                case JsonObject composedObject when (layer is JsonObject layerObject): {
+                        var member = segment.Replace(comparisonType: StringComparison.Ordinal, newValue: "/", oldValue: "~1").Replace(comparisonType: StringComparison.Ordinal, newValue: "~", oldValue: "~0");
+
+                        if (!composedObject.TryGetPropertyValue(jsonNode: out composed, propertyName: member) || !layerObject.TryGetPropertyValue(jsonNode: out layer, propertyName: member)) {
+                            return traced.ToString();
+                        }
+
+                        _ = traced.Append(value: '/').Append(value: segment);
+
+                        break;
+                    }
+                case JsonArray composedList when ((layer is JsonArray layerList) && int.TryParse(provider: System.Globalization.CultureInfo.InvariantCulture, result: out var index, s: segment, style: System.Globalization.NumberStyles.None) && (index < composedList.Count)): {
+                        var at = TraceIndex(
+                            composed: composedList,
+                            index: index,
+                            layer: layerList
+                        );
+
+                        if (at < 0) {
+                            return null;
+                        }
+
+                        composed = composedList[index: index];
+                        layer = layerList[index: at];
+                        _ = traced.Append(value: '/').Append(value: at.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+
+                        break;
+                    }
+                default:
+                    return traced.ToString();
+            }
+        }
+
+        return traced.ToString();
+    }
+
+    // The layer's index of the composed list's row at an index, or -1 when the layer authors no such row.
+    private static int TraceIndex(JsonArray composed, int index, JsonArray layer) {
+        if ((layer.Count > 0) && IsReplaceMarker(node: layer[index: 0])) {
+            return (((index + 1) < layer.Count) ? (index + 1) : -1);
+        }
+        if (TryFindRowKey(ambiguity: out _, basis: composed, key: out var key, overlay: layer)) {
+            return IndexOfRowKey(
+                key: key,
+                list: layer,
+                value: ((JsonObject)composed[index: index]!)[propertyName: key]
+            );
+        }
+
+        // A list that does not key composes wholesale from the last layer that writes it.
+        return (((layer.Count == composed.Count) && (index < layer.Count)) ? index : -1);
+    }
+
     /// <summary>Merges <paramref name="overlay"/> (the derived document's tree, its <c>basis</c> member already
     /// removed) over <paramref name="basis"/> under the rules in the type remarks, returning the composed tree.
     /// Neither input is mutated.</summary>

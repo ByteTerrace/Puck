@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -34,7 +33,7 @@ public static class ShaderConfigBinding {
             _ => shape,
         };
     }
-    private static JsonObject FieldJsonSchema(ShaderConfigField field, bool quantizesTick) {
+    private static JsonObject FieldJsonSchema(ShaderConfigField field) {
         var kind = field.Type.ScalarKind();
         var component = new JsonObject {
             ["type"] = ((kind == ShaderScalarKind.Float)
@@ -42,51 +41,33 @@ public static class ShaderConfigBinding {
             : "integer"),
         };
 
-        if (quantizesTick) {
-            var divisors = new JsonArray();
+        var (floor, ceiling) = kind switch {
+            ShaderScalarKind.Uint => (((double?)uint.MinValue), ((double?)uint.MaxValue)),
+            ShaderScalarKind.Int => (((double?)int.MinValue), ((double?)int.MaxValue)),
+            _ => (((double?)null), ((double?)null)),
+        };
+        var minimum = ((field.Min, floor) switch {
+            ( { } a, { } b) => Math.Max(
+            val1: a,
+            val2: b
+        ),
+            ( { } a, null) => a,
+            (null, var b) => b
+        });
+        var maximum = ((field.Max, ceiling) switch {
+            ( { } a, { } b) => Math.Min(
+            val1: a,
+            val2: b
+        ),
+            ( { } a, null) => a,
+            (null, var b) => b
+        });
 
-            for (var hz = 1u; (hz <= EngineTicks.PerSecond); hz++) {
-                if (
-                    ShaderPushConstantLayout.DividesTickRate(hz: hz) &&
-                    InRange(
-                    field: field,
-                    value: hz
-                )
-                ) {
-                    divisors.Add(item: ((JsonNode)JsonValue.Create(value: hz)));
-                }
-            }
-
-            component["enum"] = divisors;
-        } else {
-            var (floor, ceiling) = kind switch {
-                ShaderScalarKind.Uint => (((double?)uint.MinValue), ((double?)uint.MaxValue)),
-                ShaderScalarKind.Int => (((double?)int.MinValue), ((double?)int.MaxValue)),
-                _ => (((double?)null), ((double?)null)),
-            };
-            var minimum = ((field.Min, floor) switch {
-                ( { } a, { } b) => Math.Max(
-                val1: a,
-                val2: b
-            ),
-                ( { } a, null) => a,
-                (null, var b) => b
-            });
-            var maximum = ((field.Max, ceiling) switch {
-                ( { } a, { } b) => Math.Min(
-                val1: a,
-                val2: b
-            ),
-                ( { } a, null) => a,
-                (null, var b) => b
-            });
-
-            if (minimum is { } min) {
-                component["minimum"] = min;
-            }
-            if (maximum is { } max) {
-                component["maximum"] = max;
-            }
+        if (minimum is { } min) {
+            component["minimum"] = min;
+        }
+        if (maximum is { } max) {
+            component["maximum"] = max;
         }
 
         JsonObject fieldSchema;
@@ -232,19 +213,14 @@ public static class ShaderConfigBinding {
     /// <see langword="null"/> admitted (a schema with every field defaulted takes an absent config).</summary>
     /// <param name="schema">The config schema, or <see langword="null"/> for none.</param>
     /// <param name="description">The owner's description, carried onto the schema object.</param>
-    /// <param name="quantizeRateFields">The field names that quantize a tick rate — emitted as an enum of the rates
-    /// that evenly divide <see cref="EngineTicks.PerSecond"/>, or <see langword="null"/> for none.</param>
     /// <returns>The schema node.</returns>
-    public static JsonObject JsonSchema(IReadOnlyDictionary<string, ShaderConfigField>? schema, string? description, IReadOnlySet<string>? quantizeRateFields = null) {
+    public static JsonObject JsonSchema(IReadOnlyDictionary<string, ShaderConfigField>? schema, string? description) {
         var properties = new JsonObject();
         var required = new JsonArray();
 
         if (schema is not null) {
             foreach (var (name, field) in schema) {
-                properties[name] = FieldJsonSchema(
-                    field: field,
-                    quantizesTick: ((quantizeRateFields is not null) && quantizeRateFields.Contains(item: name))
-                );
+                properties[name] = FieldJsonSchema(field: field);
 
                 if (field.Default is null) {
                     required.Add(item: ((JsonNode)JsonValue.Create(value: name)));
@@ -274,18 +250,15 @@ public static class ShaderConfigBinding {
         return node;
     }
     /// <summary>Validates a document's <c>config</c> against a schema and resolves every absent field to its
-    /// default: an unknown property, a value of the wrong shape or type, a component outside its inclusive range, a
-    /// missing field without a default, or a tick-quantization rate that does not divide
-    /// <see cref="EngineTicks.PerSecond"/> refuses, naming the field.</summary>
+    /// default: an unknown property, a value of the wrong shape or type, a component outside its inclusive range, or a
+    /// missing field without a default refuses, naming the field.</summary>
     /// <param name="schema">The config schema, or <see langword="null"/> for none.</param>
     /// <param name="config">The authored configuration, or <see langword="null"/> when the document supplied none.</param>
     /// <param name="ownerName">The owner's id, named in the "not a config field of" refusal.</param>
     /// <param name="values">The bound values, set only when this returns <see langword="true"/>.</param>
     /// <param name="reason">The refusal reason naming the field, set only when this returns <see langword="false"/>.</param>
-    /// <param name="quantizeRateFields">The field names that quantize a tick rate and so must evenly divide
-    /// <see cref="EngineTicks.PerSecond"/>, or <see langword="null"/> for none.</param>
     /// <returns><see langword="true"/> when <paramref name="config"/> is valid.</returns>
-    public static bool TryBind(IReadOnlyDictionary<string, ShaderConfigField>? schema, JsonElement? config, string ownerName, out ShaderConfigValues values, out string reason, IReadOnlySet<string>? quantizeRateFields = null) {
+    public static bool TryBind(IReadOnlyDictionary<string, ShaderConfigField>? schema, JsonElement? config, string ownerName, out ShaderConfigValues values, out string reason) {
         values = ShaderConfigValues.Empty;
         reason = "";
 
@@ -352,17 +325,6 @@ public static class ShaderConfigBinding {
             }
         }
 
-        if (quantizeRateFields is not null) {
-            foreach (var name in quantizeRateFields) {
-                var hz = bound[name].ComponentBits(index: 0);
-
-                if (!ShaderPushConstantLayout.DividesTickRate(hz: hz)) {
-                    reason = $"'{name}' must be a positive integer that divides {EngineTicks.PerSecond} exactly.";
-
-                    return false;
-                }
-            }
-        }
 
         values = new ShaderConfigValues(values: bound);
 

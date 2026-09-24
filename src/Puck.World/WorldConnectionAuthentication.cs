@@ -1,16 +1,14 @@
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Networking;
 using Puck.Storage;
 using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The desktop distribution's dynamic connection authentication catalog.</summary>
+/// <summary>Reads a deployment's connection authentication configuration and selects its installed provider.</summary>
 internal static class WorldConnectionAuthentication {
-    private static readonly Dictionary<string, WorldAuthenticationProvider> Providers = new(comparer: StringComparer.Ordinal);
-    private static readonly Lock Gate = new();
-
-    internal static (IAuthenticator Authenticator, string Subject) Load(string path) {
+    internal static (IAuthenticator Authenticator, string Subject) Load(PuckExtensionSet extensions, string path, TimeProvider clock) {
         using var document = JsonDocument.Parse(ConfinedFile.ReadAllBytes(
             maximumBytes: 16384,
             path: path
@@ -33,27 +31,12 @@ internal static class WorldConnectionAuthentication {
         ) {
             throw new ArgumentException(message: "Authentication configuration requires an installed type and its settings object.");
         }
-
-        var typeKey = type.GetString()!;
-        WorldAuthenticationProvider? provider;
-
-        lock (Gate) {
-            Providers.TryGetValue(
-                key: typeKey,
-                value: out provider
-            );
-        }
-
-        if (provider is null) {
-            throw new ArgumentException(message: $"Uninstalled authentication extension '{typeKey}'.");
-        }
-
-        return provider.Client(settings);
-    }
-    internal static void Register(WorldAuthenticationProvider provider) {
-        ArgumentNullException.ThrowIfNull(argument: provider);
-        lock (Gate) {
-            Providers[provider.Type] = provider;
-        }
+        return extensions.Select<WorldAuthenticationProvider>(
+            key: type.GetString()!,
+            purpose: "Authentication"
+        ).Client(
+            settings,
+            clock
+        );
     }
 }

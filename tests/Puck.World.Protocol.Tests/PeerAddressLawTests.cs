@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Protocol.Tests;
@@ -7,12 +8,12 @@ public sealed class PeerAddressLawTests {
     [Fact]
     public void EveryRepresentablePeerAddressRoundTripsWithoutBecomingASeat() {
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            var principal = WorldPrincipal.Peer(
+            var principal = Principal.Peer(
                 generation: 7,
                 index: index
             );
 
-            Assert.True(condition: WorldPrincipal.TryParse(
+            Assert.True(condition: PrincipalTokens.TryParse(
                 principal.Describe(),
                 out var parsed
             ));
@@ -21,7 +22,7 @@ public sealed class PeerAddressLawTests {
                 expected: principal
             );
             var grant = new WorldGrant(
-                Principal: principal,
+                Grantee: principal,
                 Capability: WorldCapability.Control,
                 Subject: GrantSubject.All,
                 Exclusive: false
@@ -49,7 +50,7 @@ public sealed class PeerAddressLawTests {
             );
             Assert.Equal(
                 PrincipalKind.Peer,
-                decoded.Principal.Kind
+                decoded.Grantee.Principal.Kind
             );
         }
     }
@@ -59,17 +60,17 @@ public sealed class PeerAddressLawTests {
     [InlineData(0, -1)]
     [Theory]
     public void InvalidPeerAddressesAndGenerationsRemainRefused(int index, int generation) {
-        var principal = WorldPrincipal.Peer(
+        var principal = Principal.Peer(
             generation: generation,
             index: index
         );
 
-        Assert.False(condition: WorldPrincipal.TryParse(
+        Assert.False(condition: PrincipalTokens.TryParse(
             principal.Describe(),
             out _
         ));
         var grant = new WorldGrant(
-            Principal: principal,
+            Grantee: principal,
             Capability: WorldCapability.Control,
             Subject: GrantSubject.All,
             Exclusive: false

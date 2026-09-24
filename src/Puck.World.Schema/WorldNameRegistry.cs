@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Puck.Commands;
 using Puck.Physics.Motion;
 using Puck.Text;
@@ -25,6 +26,9 @@ public enum WorldNameKind : byte {
     RuleGroup,
     /// <summary>A <c>sets</c> row.</summary>
     CellSet,
+    /// <summary>A set of positions: a <c>state.world</c> board row or a <c>sets</c> row, whichever declares the name.
+    /// The two namespaces never share a name.</summary>
+    Positions,
     /// <summary>A <c>state.lattices</c> topology.</summary>
     Topology,
     /// <summary>A <c>generators</c> row.</summary>
@@ -39,6 +43,10 @@ public enum WorldNameKind : byte {
     Screen,
     /// <summary>A hardware binding local to a machine instance.</summary>
     MachineBinding,
+    /// <summary>A <c>placements</c> row: its own namespace, apart from every state-side name.</summary>
+    Placement,
+    /// <summary>A <c>prototypes</c> row: its own namespace, apart from every state-side name.</summary>
+    Prototype,
     /// <summary>Any declaration the document makes, whatever its namespace: an entry of a module's export lists.</summary>
     Any,
 }
@@ -76,21 +84,16 @@ public sealed record WorldNameField(Type Owner, string Member, WorldNameKind Kin
 public sealed record WorldNameExclusion(Type Owner, string Member, string Reason);
 /// <summary>
 /// The name registry: every document member that carries a state, zone, rule, table, pattern, topology, generator,
-/// field, or dynamics name, keyed by the C# member so the JSON paths it reaches are derived from
+/// field, dynamics, placement or prototype name, keyed by the C# member so the JSON paths it reaches are derived from
 /// <see cref="WorldJsonContext"/> rather than listed by hand (<see cref="Sites"/>). Two consumers read it: the
 /// <c>puck registry</c> verb renders it to <c>docs/world-name-registry.md</c> and checks the rendering against the
-/// model (<see cref="Render"/>, <see cref="Uncovered"/>), and <see cref="WorldModuleNamespace"/> prefixes an aliased
+/// model (<see cref="Render"/>, <see cref="Uncovered"/>), and <see cref="WorldModuleNamespace"/> qualifies an aliased
 /// import's names at compose time. A member typed <see cref="CellName"/>, <see cref="ExpressionProgram"/>,
 /// <see cref="StateChannelRef"/>, <see cref="BindableScalar"/>, <see cref="BindableColor"/>, or
 /// <see cref="WorldLatticeScalar"/>, or a string member whose C# name reads like a name position, must be
 /// registered or excluded with a reason; the check names every member that is neither.
 /// </summary>
 public static partial class WorldNameRegistry {
-    /// <summary>The separator between an import alias and the name it prefixes: the one character a
-    /// <see cref="CellName"/> admits that also lexes inside a bare expression name and is not the reserved
-    /// <c>$</c>.</summary>
-    public const char AliasSeparator = '_';
-
     private static readonly WorldNameField[] Fields = [
         new(typeof(StateRecord), nameof(StateRecord.Name), WorldNameKind.Record, WorldNameRole.Declares),
         new(typeof(StatePool), nameof(StatePool.Name), WorldNameKind.Pool, WorldNameRole.Declares),
@@ -315,7 +318,7 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         // Rules.
-        new(typeof(ActionEffect.RewindTurn), nameof(ActionEffect.RewindTurn.Group), WorldNameKind.RuleGroup, WorldNameRole.Names, WorldExportFacet.Action),
+        new(typeof(ActionEffect.RewindGroup), nameof(ActionEffect.RewindGroup.Group), WorldNameKind.RuleGroup, WorldNameRole.Names, WorldExportFacet.Action),
         new(typeof(Puck.State.Rules.RuleGroupUndo), nameof(Puck.State.Rules.RuleGroupUndo.Rows), WorldNameKind.Any, WorldNameRole.Names, WorldExportFacet.Action),
         new(
             typeof(Puck.State.Rules.RuleGroupDeclaration),
@@ -517,20 +520,20 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
-            typeof(WorldEffect.SetBodyVerticalVelocity),
-            nameof(WorldEffect.SetBodyVerticalVelocity.Key),
+            typeof(WorldEffect.SetVerticalVelocity),
+            nameof(WorldEffect.SetVerticalVelocity.Key),
             WorldNameKind.State,
             WorldNameRole.Key
         ),
         new(
-            typeof(WorldEffect.ScaleBodyVerticalVelocity),
-            nameof(WorldEffect.ScaleBodyVerticalVelocity.Key),
+            typeof(WorldEffect.ScaleVerticalVelocity),
+            nameof(WorldEffect.ScaleVerticalVelocity.Key),
             WorldNameKind.State,
             WorldNameRole.Key
         ),
         new(
-            typeof(WorldEffect.ApplyBodyImpulse),
-            nameof(WorldEffect.ApplyBodyImpulse.Key),
+            typeof(WorldEffect.PlanarImpulse),
+            nameof(WorldEffect.PlanarImpulse.Key),
             WorldNameKind.State,
             WorldNameRole.Key
         ),
@@ -559,14 +562,14 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
-            typeof(WorldEffect.DesignateBody),
-            nameof(WorldEffect.DesignateBody.Key),
+            typeof(WorldEffect.Designate),
+            nameof(WorldEffect.Designate.Key),
             WorldNameKind.State,
             WorldNameRole.Key
         ),
         new(
-            typeof(WorldEffect.DesignateBody),
-            nameof(WorldEffect.DesignateBody.TargetKey),
+            typeof(WorldEffect.Designate),
+            nameof(WorldEffect.Designate.TargetKey),
             WorldNameKind.State,
             WorldNameRole.Key
         ),
@@ -721,7 +724,7 @@ public static partial class WorldNameRegistry {
         new(
             typeof(StateTransform.WriteSet),
             nameof(StateTransform.WriteSet.Set),
-            WorldNameKind.State,
+            WorldNameKind.Positions,
             WorldNameRole.Names
         ),
         new(
@@ -740,13 +743,13 @@ public static partial class WorldNameRegistry {
         new(
             typeof(StateTransform.BoardCombine),
             nameof(StateTransform.BoardCombine.Left),
-            WorldNameKind.State,
+            WorldNameKind.Positions,
             WorldNameRole.Names
         ),
         new(
             typeof(StateTransform.BoardCombine),
             nameof(StateTransform.BoardCombine.Right),
-            WorldNameKind.State,
+            WorldNameKind.Positions,
             WorldNameRole.Names
         ),
         new(
@@ -767,31 +770,6 @@ public static partial class WorldNameRegistry {
             nameof(StateTransform.Arrange.FromKey),
             WorldNameKind.State,
             WorldNameRole.Key
-        ),
-        new(
-            typeof(StateTransform.Push),
-            nameof(StateTransform.Push.Row),
-            WorldNameKind.State,
-            WorldNameRole.Names,
-            WorldExportFacet.Action
-        ),
-        new(
-            typeof(StateTransform.Push),
-            nameof(StateTransform.Push.FromState),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
-        new(
-            typeof(StateTransform.Push),
-            nameof(StateTransform.Push.FromKey),
-            WorldNameKind.State,
-            WorldNameRole.Key
-        ),
-        new(
-            typeof(StateTransform.Push),
-            nameof(StateTransform.Push.Expression),
-            WorldNameKind.State,
-            WorldNameRole.Expression
         ),
         new(
             typeof(StateTransform.ClearEnclosed),
@@ -1025,6 +1003,24 @@ public static partial class WorldNameRegistry {
             WorldNameKind.State,
             WorldNameRole.Names
         ),
+        // Placements and prototypes, each its own namespace.
+        new(typeof(WorldPlacement), nameof(WorldPlacement.Id), WorldNameKind.Placement, WorldNameRole.Declares),
+        new(typeof(WorldPlacement), nameof(WorldPlacement.Parent), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldEffect.RemovePlacement), nameof(WorldEffect.RemovePlacement.Id), WorldNameKind.Placement, WorldNameRole.Names, WorldExportFacet.Action),
+        new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Parent), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldPoolBodyBinding), nameof(WorldPoolBodyBinding.Placement), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldAnchor.Placement), nameof(WorldAnchor.Placement.PlacementId), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldCameraSubject.Placement), nameof(WorldCameraSubject.Placement.PlacementId), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(OverlaySubject.Placement), nameof(OverlaySubject.Placement.PlacementId), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldGravityAttractor), nameof(WorldGravityAttractor.PlacementId), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldGravityPoint), nameof(WorldGravityPoint.PlacementId), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldGravityArea), nameof(WorldGravityArea.PlacementId), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldPrototype), nameof(WorldPrototype.Id), WorldNameKind.Prototype, WorldNameRole.Declares),
+        new(typeof(WorldPlacement), nameof(WorldPlacement.PrototypeId), WorldNameKind.Prototype, WorldNameRole.Names),
+        new(typeof(WorldPlacementResponse), nameof(WorldPlacementResponse.PrototypeId), WorldNameKind.Prototype, WorldNameRole.Names),
+        new(typeof(WorldCollider.FromCreation), nameof(WorldCollider.FromCreation.PrototypeId), WorldNameKind.Prototype, WorldNameRole.Names),
+        new(typeof(WorldLookSource.Creation), nameof(WorldLookSource.Creation.PrototypeId), WorldNameKind.Prototype, WorldNameRole.Names),
+        new(typeof(WorldPlacementDealVariants), nameof(WorldPlacementDealVariants.Map), WorldNameKind.Prototype, WorldNameRole.Names),
         // Placements, bodies, targeting.
         new(
             typeof(WorldPlacementBoard),
@@ -1097,13 +1093,13 @@ public static partial class WorldNameRegistry {
         new(
             typeof(WorldInteraction),
             nameof(WorldInteraction.Left),
-            WorldNameKind.State,
+            WorldNameKind.Any,
             WorldNameRole.Names
         ),
         new(
             typeof(WorldInteraction),
             nameof(WorldInteraction.Right),
-            WorldNameKind.State,
+            WorldNameKind.Any,
             WorldNameRole.Names
         ),
         new(
@@ -1344,8 +1340,8 @@ public static partial class WorldNameRegistry {
         new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),
         new(typeof(StatePoolField), nameof(StatePoolField.Enum), "an enum name is local to the document"),
         new(typeof(WorldPoolBodyCarrier), nameof(WorldPoolBodyCarrier.Field), "a field local to its pool record"),
+        new(typeof(WorldAudioCue), nameof(WorldAudioCue.Placement), "where a cue sounds: a site, the listener, or a named speaker"),
         new(typeof(WorldPoolBodyBinding), nameof(WorldPoolBodyBinding.Member), "an enum member local to the carrier field"),
-        new(typeof(WorldPoolBodyBinding), nameof(WorldPoolBodyBinding.Placement), "an inhabited placement id"),
         new(typeof(GraphEdge), nameof(GraphEdge.Direction), "a direction local to its own topology"),
         new(typeof(StateTransform.SetRay), nameof(StateTransform.SetRay.Direction), "a direction local to the row's topology"),
         new(typeof(StateTransform.PushRay), nameof(StateTransform.PushRay.Direction), "a direction local to its topology"),
@@ -1492,8 +1488,8 @@ public static partial class WorldNameRegistry {
             "a search job name is the search section's own namespace"
         ),
         new(
-            typeof(WorldSearchShape.Paired),
-            nameof(WorldSearchShape.Paired.With),
+            typeof(WorldSearchShape.Tandem),
+            nameof(WorldSearchShape.Tandem.With),
             "a cell key of the job's token row"
         ),
         new(
@@ -1505,6 +1501,11 @@ public static partial class WorldNameRegistry {
             typeof(WorldCaptureRow),
             nameof(WorldCaptureRow.Station),
             "a capture station is the captures section's own namespace"
+        ),
+        new(
+            typeof(WorldScheduleInstance),
+            nameof(WorldScheduleInstance.Name),
+            "an armed instance's name is the running host's own namespace, not a document's"
         ),
         new(
             typeof(WorldInteraction),
@@ -1519,11 +1520,6 @@ public static partial class WorldNameRegistry {
         new(
             typeof(WorldEffect.Designate),
             nameof(WorldEffect.Designate.Register),
-            "a target register name"
-        ),
-        new(
-            typeof(WorldEffect.DesignateBody),
-            nameof(WorldEffect.DesignateBody.Register),
             "a target register name"
         ),
         new(
@@ -1611,16 +1607,10 @@ public static partial class WorldNameRegistry {
             nameof(WorldViewLayout.Name),
             "a view layout name"
         ),
-        new(
-            typeof(WorldViewPipeline),
-            nameof(WorldViewPipeline.Name),
-            "a view pipeline name"
-        ),
-        new(
-            typeof(WorldViewPipeline),
-            nameof(WorldViewPipeline.Source),
-            "a view pipeline's source is a document path"
-        ),
+        new(typeof(WorldViewPipeline), nameof(WorldViewPipeline.Name), "a view pipeline name"),
+        new(typeof(WorldViewPipeline), nameof(WorldViewPipeline.Source), "a view pipeline's source is a document path"),
+        new(typeof(WorldViewGraph), nameof(WorldViewGraph.Name), "a view graph instance name"),
+        new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "a view graph's source is a document path"),
         new(
             typeof(WorldCameraProgram),
             nameof(WorldCameraProgram.Name),
@@ -1642,11 +1632,6 @@ public static partial class WorldNameRegistry {
             "a marker id"
         ),
         new(
-            typeof(WorldPlacement),
-            nameof(WorldPlacement.Id),
-            "a placement id"
-        ),
-        new(
             typeof(WorldHudElement),
             nameof(WorldHudElement.Id),
             "a HUD element id"
@@ -1662,11 +1647,6 @@ public static partial class WorldNameRegistry {
             "a HUD panel id"
         ),
         new(
-            typeof(WorldEffect.RemovePlacement),
-            nameof(WorldEffect.RemovePlacement.Id),
-            "a placement id"
-        ),
-        new(
             typeof(WorldSpawnPoint),
             nameof(WorldSpawnPoint.Id),
             "a spawn point id"
@@ -1680,6 +1660,11 @@ public static partial class WorldNameRegistry {
             typeof(WorldRenderExtensionEntry),
             nameof(WorldRenderExtensionEntry.Id),
             "a post-render extension id"
+        ),
+        new(
+            typeof(WorldScreenSource.Producer),
+            nameof(WorldScreenSource.Producer.Id),
+            "an image producer id"
         ),
         new(
             typeof(WorldMachineCable),
@@ -1967,11 +1952,6 @@ public static partial class WorldNameRegistry {
             "a literal payer cell key"
         ),
         new(
-            typeof(WorldNavigationDomain),
-            nameof(WorldNavigationDomain.Parent),
-            "a placement frame id"
-        ),
-        new(
             typeof(WorldPlacementSpatialVolume),
             nameof(WorldPlacementSpatialVolume.Name),
             "a placement-local spatial volume name"
@@ -1993,12 +1973,31 @@ public static partial class WorldNameRegistry {
     /// <param name="member">The member's C# name.</param>
     /// <param name="field">The registration, when one matches.</param>
     /// <returns><see langword="true"/> when the member is registered.</returns>
-    public static bool TryFind(Type declaringType, string member, out WorldNameField field) =>
-        TryFind(
-            declaringType: declaringType,
-            field: out field,
-            fields: Fields,
-            member: member
+    public static bool TryFind(Type declaringType, string member, out WorldNameField field) {
+        if (FieldsByMember.TryGetValue(key: member, value: out var candidates)) {
+            foreach (var candidate in candidates) {
+                if (candidate.Owner.IsAssignableFrom(c: declaringType)) {
+                    field = candidate;
+
+                    return true;
+                }
+            }
+        }
+
+        field = null!;
+
+        return false;
+    }
+
+    // Every walk asks the registry once per member it visits, so the registrations are indexed by member name: a
+    // lookup weighs only those that could match, in the order Fields lists them, and answers as a scan of Fields
+    // would.
+    private static readonly FrozenDictionary<string, WorldNameField[]> FieldsByMember = Fields
+        .GroupBy(keySelector: static field => field.Member, comparer: StringComparer.Ordinal)
+        .ToFrozenDictionary(
+            comparer: StringComparer.Ordinal,
+            elementSelector: static group => group.ToArray(),
+            keySelector: static group => group.Key
         );
 
     private static bool TryFind(IReadOnlyList<WorldNameField> fields, Type declaringType, string member, out WorldNameField field) {
@@ -2021,22 +2020,10 @@ public static partial class WorldNameRegistry {
 
         return false;
     }
-    private static bool IsExcluded(Type declaringType, string member) {
-        foreach (var exclusion in Exclusions) {
-            if (
-                exclusion.Owner.IsAssignableFrom(c: declaringType) &&
-                string.Equals(
-                a: exclusion.Member,
-                b: member,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool IsExcluded(Type declaringType, string member) => (ExclusionReason(
+        declaringType: declaringType,
+        member: member
+    ) is not null);
     private static string? ExclusionReason(Type declaringType, string member) {
         foreach (var exclusion in Exclusions) {
             if (

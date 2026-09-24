@@ -255,14 +255,9 @@ public sealed class ShaderVmThroughput {
         });
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
     public void Measures() {
-        var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
-
-        Assert.SkipWhen(
-            condition: string.IsNullOrEmpty(value: directory),
-            reason: "Opt-in harness: set PUCK_SKY_PREVIEW_DIR to the directory the report is written to."
-        );
+        var directory = PreviewOutput.Directory;
 
         var report = new StringBuilder();
 
@@ -355,7 +350,7 @@ public sealed class ShaderVmThroughput {
         File.WriteAllText(
             contents: report.ToString(),
             path: Path.Combine(
-                path1: directory!,
+                path1: directory,
                 path2: "throughput.txt"
             )
         );

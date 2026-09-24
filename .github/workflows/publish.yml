@@ -83,7 +83,7 @@ jobs:
       - env:
           PACKAGES: ${{ inputs.packages }}
         name: Select and validate the release batch
-        run: puck nuget prepare packages release "$PACKAGES"
+        run: puck nuget prepare packages "$PACKAGES" --output release
       - name: Upload the prepared NuGet batch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -139,7 +139,7 @@ jobs:
         name: Record this batch on the GitHub Release
         run: puck nuget release release/release.json
       - name: Verify published CLI availability and prepare its CI pin
-        run: puck nuget pin-published release puck-cli-pin.patch
+        run: puck nuget pin-published release --output puck-cli-pin.patch
       - name: Upload the CLI pin update
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -1,0 +1,5973 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 135,
+  "engineTick": 113400,
+  "hashes": {
+    "authoritative": "d84d2687204c9cbe",
+    "capture": "a6f9ff364f1c719d",
+    "pose": "cbf29ce484222325",
+    "world": "4f35d3fe19b439b2"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "lineupPeople",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1954
+          },
+          {
+            "key": "1",
+            "value": 1556
+          },
+          {
+            "key": "2",
+            "value": 2210
+          },
+          {
+            "key": "3",
+            "value": 273
+          },
+          {
+            "key": "4",
+            "value": 6340
+          },
+          {
+            "key": "5",
+            "value": 801
+          },
+          {
+            "key": "6",
+            "value": 4162
+          },
+          {
+            "key": "7",
+            "value": 3604
+          },
+          {
+            "key": "8",
+            "value": 4504
+          },
+          {
+            "key": "9",
+            "value": 164
+          },
+          {
+            "key": "10",
+            "value": 6177
+          },
+          {
+            "key": "11",
+            "value": 7314
+          },
+          {
+            "key": "12",
+            "value": 7464
+          },
+          {
+            "key": "13",
+            "value": 584
+          },
+          {
+            "key": "14",
+            "value": 3624
+          },
+          {
+            "key": "15",
+            "value": 2584
+          },
+          {
+            "key": "16",
+            "value": 5026
+          },
+          {
+            "key": "17",
+            "value": 7953
+          },
+          {
+            "key": "18",
+            "value": 4168
+          },
+          {
+            "key": "19",
+            "value": 4930
+          },
+          {
+            "key": "20",
+            "value": 4164
+          },
+          {
+            "key": "21",
+            "value": 1601
+          },
+          {
+            "key": "22",
+            "value": 5652
+          },
+          {
+            "key": "23",
+            "value": 2241
+          }
+        ]
+      },
+      {
+        "name": "lineupYes",
+        "kind": "Int",
+        "capacity": 13,
+        "cells": [
+          {
+            "key": "0",
+            "value": 10617896
+          },
+          {
+            "key": "1",
+            "value": 591941
+          },
+          {
+            "key": "2",
+            "value": 5243538
+          },
+          {
+            "key": "3",
+            "value": 323840
+          },
+          {
+            "key": "4",
+            "value": 4360586
+          },
+          {
+            "key": "5",
+            "value": 87589
+          },
+          {
+            "key": "6",
+            "value": 12329040
+          },
+          {
+            "key": "7",
+            "value": 8456981
+          },
+          {
+            "key": "8",
+            "value": 725289
+          },
+          {
+            "key": "9",
+            "value": 7069859
+          },
+          {
+            "key": "10",
+            "value": 6445187
+          },
+          {
+            "key": "11",
+            "value": 8576148
+          },
+          {
+            "key": "12",
+            "value": 6233424
+          }
+        ]
+      },
+      {
+        "name": "lineupQuestion",
+        "kind": "Int",
+        "capacity": 13,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          }
+        ]
+      },
+      {
+        "name": "lineupQuestionText",
+        "kind": "Text",
+        "capacity": 13,
+        "cells": [
+          {
+            "key": "0",
+            "value": "Black hair?"
+          },
+          {
+            "key": "1",
+            "value": "Brown hair?"
+          },
+          {
+            "key": "2",
+            "value": "Red hair?"
+          },
+          {
+            "key": "3",
+            "value": "Silver hair?"
+          },
+          {
+            "key": "4",
+            "value": "Brown eyes?"
+          },
+          {
+            "key": "5",
+            "value": "Blue eyes?"
+          },
+          {
+            "key": "6",
+            "value": "Green eyes?"
+          },
+          {
+            "key": "7",
+            "value": "Wears glasses?"
+          },
+          {
+            "key": "8",
+            "value": "Wears a hat?"
+          },
+          {
+            "key": "9",
+            "value": "Has a beard?"
+          },
+          {
+            "key": "10",
+            "value": "Wears earrings?"
+          },
+          {
+            "key": "11",
+            "value": "Long hair?"
+          },
+          {
+            "key": "12",
+            "value": "Large nose?"
+          }
+        ]
+      },
+      {
+        "name": "lineupName",
+        "kind": "Text",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": "Ada"
+          },
+          {
+            "key": "1",
+            "value": "Bram"
+          },
+          {
+            "key": "2",
+            "value": "Cleo"
+          },
+          {
+            "key": "3",
+            "value": "Dex"
+          },
+          {
+            "key": "4",
+            "value": "Esme"
+          },
+          {
+            "key": "5",
+            "value": "Finn"
+          },
+          {
+            "key": "6",
+            "value": "Gus"
+          },
+          {
+            "key": "7",
+            "value": "Hana"
+          },
+          {
+            "key": "8",
+            "value": "Ivo"
+          },
+          {
+            "key": "9",
+            "value": "Juno"
+          },
+          {
+            "key": "10",
+            "value": "Kit"
+          },
+          {
+            "key": "11",
+            "value": "Lior"
+          },
+          {
+            "key": "12",
+            "value": "Mira"
+          },
+          {
+            "key": "13",
+            "value": "Nell"
+          },
+          {
+            "key": "14",
+            "value": "Otto"
+          },
+          {
+            "key": "15",
+            "value": "Pia"
+          },
+          {
+            "key": "16",
+            "value": "Quin"
+          },
+          {
+            "key": "17",
+            "value": "Rhea"
+          },
+          {
+            "key": "18",
+            "value": "Sol"
+          },
+          {
+            "key": "19",
+            "value": "Tove"
+          },
+          {
+            "key": "20",
+            "value": "Uma"
+          },
+          {
+            "key": "21",
+            "value": "Vik"
+          },
+          {
+            "key": "22",
+            "value": "Yara"
+          },
+          {
+            "key": "23",
+            "value": "Zeno"
+          }
+        ]
+      },
+      {
+        "name": "lineupSlots",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          },
+          {
+            "key": "14",
+            "value": 14
+          },
+          {
+            "key": "15",
+            "value": 15
+          },
+          {
+            "key": "16",
+            "value": 16
+          },
+          {
+            "key": "17",
+            "value": 17
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "19",
+            "value": 19
+          },
+          {
+            "key": "20",
+            "value": 20
+          },
+          {
+            "key": "21",
+            "value": 21
+          },
+          {
+            "key": "22",
+            "value": 22
+          },
+          {
+            "key": "23",
+            "value": 23
+          }
+        ]
+      },
+      {
+        "name": "lineupPlate",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 4
+          },
+          {
+            "key": "4",
+            "value": 5
+          },
+          {
+            "key": "5",
+            "value": 6
+          },
+          {
+            "key": "6",
+            "value": 7
+          },
+          {
+            "key": "7",
+            "value": 8
+          },
+          {
+            "key": "8",
+            "value": 9
+          },
+          {
+            "key": "9",
+            "value": 10
+          },
+          {
+            "key": "10",
+            "value": 11
+          },
+          {
+            "key": "11",
+            "value": 12
+          },
+          {
+            "key": "12",
+            "value": 13
+          },
+          {
+            "key": "13",
+            "value": 14
+          },
+          {
+            "key": "14",
+            "value": 15
+          },
+          {
+            "key": "15",
+            "value": 16
+          },
+          {
+            "key": "16",
+            "value": 17
+          },
+          {
+            "key": "17",
+            "value": 18
+          },
+          {
+            "key": "18",
+            "value": 19
+          },
+          {
+            "key": "19",
+            "value": 20
+          },
+          {
+            "key": "20",
+            "value": 21
+          },
+          {
+            "key": "21",
+            "value": 22
+          },
+          {
+            "key": "22",
+            "value": 23
+          },
+          {
+            "key": "23",
+            "value": 24
+          }
+        ]
+      },
+      {
+        "name": "lineupSecret1",
+        "kind": "Int",
+        "min": 0,
+        "max": 23,
+        "value": 12,
+        "draw": {
+          "generator": {
+            "source": "WeightedNumeric",
+            "bound": 1,
+            "mode": "RestartOnExhaustion",
+            "weighted": [
+              {
+                "value": 0,
+                "weight": 1
+              },
+              {
+                "value": 1,
+                "weight": 1
+              },
+              {
+                "value": 2,
+                "weight": 1
+              },
+              {
+                "value": 3,
+                "weight": 1
+              },
+              {
+                "value": 4,
+                "weight": 1
+              },
+              {
+                "value": 5,
+                "weight": 1
+              },
+              {
+                "value": 6,
+                "weight": 1
+              },
+              {
+                "value": 7,
+                "weight": 1
+              },
+              {
+                "value": 8,
+                "weight": 1
+              },
+              {
+                "value": 9,
+                "weight": 1
+              },
+              {
+                "value": 10,
+                "weight": 1
+              },
+              {
+                "value": 11,
+                "weight": 1
+              },
+              {
+                "value": 12,
+                "weight": 1
+              },
+              {
+                "value": 13,
+                "weight": 1
+              },
+              {
+                "value": 14,
+                "weight": 1
+              },
+              {
+                "value": 15,
+                "weight": 1
+              },
+              {
+                "value": 16,
+                "weight": 1
+              },
+              {
+                "value": 17,
+                "weight": 1
+              },
+              {
+                "value": 18,
+                "weight": 1
+              },
+              {
+                "value": 19,
+                "weight": 1
+              },
+              {
+                "value": 20,
+                "weight": 1
+              },
+              {
+                "value": 21,
+                "weight": 1
+              },
+              {
+                "value": 22,
+                "weight": 1
+              },
+              {
+                "value": 23,
+                "weight": 1
+              }
+            ]
+          },
+          "timing": "Event",
+          "skip": 0
+        },
+        "drawCursor": 2,
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        },
+        "drawnMasks": [
+          "0000000000000000000000000000000000000000000000000000000000001004"
+        ]
+      },
+      {
+        "name": "lineupStanding1",
+        "kind": "Int",
+        "value": 8389140,
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupShown1",
+        "kind": "Int",
+        "value": 8389140,
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupFace1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 2
+          },
+          {
+            "key": "4",
+            "value": 1
+          },
+          {
+            "key": "5",
+            "value": 2
+          },
+          {
+            "key": "6",
+            "value": 2
+          },
+          {
+            "key": "7",
+            "value": 2
+          },
+          {
+            "key": "8",
+            "value": 2
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 2
+          },
+          {
+            "key": "11",
+            "value": 2
+          },
+          {
+            "key": "12",
+            "value": 2
+          },
+          {
+            "key": "13",
+            "value": 2
+          },
+          {
+            "key": "14",
+            "value": 2
+          },
+          {
+            "key": "15",
+            "value": 2
+          },
+          {
+            "key": "16",
+            "value": 2
+          },
+          {
+            "key": "17",
+            "value": 2
+          },
+          {
+            "key": "18",
+            "value": 2
+          },
+          {
+            "key": "19",
+            "value": 2
+          },
+          {
+            "key": "20",
+            "value": 2
+          },
+          {
+            "key": "21",
+            "value": 2
+          },
+          {
+            "key": "22",
+            "value": 2
+          },
+          {
+            "key": "23",
+            "value": 1
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupHair1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 4
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 5
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 2
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupEyes1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 3
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 2
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 3
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupGlasses1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 1
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 1
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupHat1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupBeard1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupEarrings1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupNose1",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 2
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 1
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupSecret2",
+        "kind": "Int",
+        "min": 0,
+        "max": 23,
+        "value": 2,
+        "draw": {
+          "generator": {
+            "source": "WeightedNumeric",
+            "bound": 1,
+            "mode": "RestartOnExhaustion",
+            "weighted": [
+              {
+                "value": 0,
+                "weight": 1
+              },
+              {
+                "value": 1,
+                "weight": 1
+              },
+              {
+                "value": 2,
+                "weight": 1
+              },
+              {
+                "value": 3,
+                "weight": 1
+              },
+              {
+                "value": 4,
+                "weight": 1
+              },
+              {
+                "value": 5,
+                "weight": 1
+              },
+              {
+                "value": 6,
+                "weight": 1
+              },
+              {
+                "value": 7,
+                "weight": 1
+              },
+              {
+                "value": 8,
+                "weight": 1
+              },
+              {
+                "value": 9,
+                "weight": 1
+              },
+              {
+                "value": 10,
+                "weight": 1
+              },
+              {
+                "value": 11,
+                "weight": 1
+              },
+              {
+                "value": 12,
+                "weight": 1
+              },
+              {
+                "value": 13,
+                "weight": 1
+              },
+              {
+                "value": 14,
+                "weight": 1
+              },
+              {
+                "value": 15,
+                "weight": 1
+              },
+              {
+                "value": 16,
+                "weight": 1
+              },
+              {
+                "value": 17,
+                "weight": 1
+              },
+              {
+                "value": 18,
+                "weight": 1
+              },
+              {
+                "value": 19,
+                "weight": 1
+              },
+              {
+                "value": 20,
+                "weight": 1
+              },
+              {
+                "value": 21,
+                "weight": 1
+              },
+              {
+                "value": 22,
+                "weight": 1
+              },
+              {
+                "value": 23,
+                "weight": 1
+              }
+            ]
+          },
+          "timing": "Event",
+          "skip": 0
+        },
+        "drawCursor": 2,
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        },
+        "drawnMasks": [
+          "0000000000000000000000000000000000000000000000000000000000040004"
+        ]
+      },
+      {
+        "name": "lineupStanding2",
+        "kind": "Int",
+        "value": 5128,
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupShown2",
+        "kind": "Int",
+        "value": 5128,
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupFace2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 2
+          },
+          {
+            "key": "5",
+            "value": 2
+          },
+          {
+            "key": "6",
+            "value": 2
+          },
+          {
+            "key": "7",
+            "value": 2
+          },
+          {
+            "key": "8",
+            "value": 2
+          },
+          {
+            "key": "9",
+            "value": 2
+          },
+          {
+            "key": "10",
+            "value": 1
+          },
+          {
+            "key": "11",
+            "value": 2
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 2
+          },
+          {
+            "key": "14",
+            "value": 2
+          },
+          {
+            "key": "15",
+            "value": 2
+          },
+          {
+            "key": "16",
+            "value": 2
+          },
+          {
+            "key": "17",
+            "value": 2
+          },
+          {
+            "key": "18",
+            "value": 2
+          },
+          {
+            "key": "19",
+            "value": 2
+          },
+          {
+            "key": "20",
+            "value": 2
+          },
+          {
+            "key": "21",
+            "value": 2
+          },
+          {
+            "key": "22",
+            "value": 2
+          },
+          {
+            "key": "23",
+            "value": 2
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupHair2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 2
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 8
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupEyes2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 2
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 2
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupGlasses2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupHat2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupBeard2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupEarrings2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupNose2",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 2
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 2
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "lineupTable",
+        "kind": "Int",
+        "capacity": 12,
+        "cells": [
+          {
+            "key": "stage",
+            "value": 2
+          },
+          {
+            "key": "turn",
+            "value": 1
+          },
+          {
+            "key": "winner",
+            "value": 2
+          },
+          {
+            "key": "lastSeat",
+            "value": 1
+          },
+          {
+            "key": "lastQuestion",
+            "value": 6
+          },
+          {
+            "key": "lastAnswer",
+            "value": 0
+          },
+          {
+            "key": "lastGuess",
+            "value": 3
+          },
+          {
+            "key": "accepted",
+            "value": 7
+          },
+          {
+            "key": "refused",
+            "value": 0
+          },
+          {
+            "key": "games",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "lineupAsked",
+        "kind": "Int",
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "1",
+            "value": 3
+          },
+          {
+            "key": "2",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "name": "lineupOptions",
+        "kind": "Int",
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "cpuMask",
+            "value": 2
+          },
+          {
+            "key": "pace",
+            "value": 30
+          }
+        ]
+      },
+      {
+        "name": "lineupAct",
+        "kind": "Int",
+        "capacity": 6,
+        "cells": [
+          {
+            "key": "seat",
+            "value": 1
+          },
+          {
+            "key": "kind",
+            "value": 2
+          },
+          {
+            "key": "value",
+            "value": 3
+          },
+          {
+            "key": "request",
+            "value": 7
+          },
+          {
+            "key": "applied",
+            "value": 7
+          },
+          {
+            "key": "result",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "lineupCursor",
+        "kind": "Int",
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "q1",
+            "value": 0
+          },
+          {
+            "key": "b1",
+            "value": 0
+          },
+          {
+            "key": "q2",
+            "value": 0
+          },
+          {
+            "key": "b2",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "lineupAi",
+        "kind": "Int",
+        "capacity": 3,
+        "cells": [
+          {
+            "key": "best",
+            "value": 0
+          },
+          {
+            "key": "question",
+            "value": 6
+          },
+          {
+            "key": "clock",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "lineupHudQuestion",
+        "kind": "Text",
+        "value": "Black hair?"
+      },
+      {
+        "name": "lineupHudBust",
+        "kind": "Text",
+        "value": "Ada"
+      },
+      {
+        "name": "lineupHudLast",
+        "kind": "Text",
+        "value": "Dex"
+      },
+      {
+        "name": "lineupHudAnswer",
+        "kind": "Text",
+        "value": "was named: wrong."
+      },
+      {
+        "name": "lineupHudOutcome",
+        "kind": "Text",
+        "value": "Seat 2 wins. N deals a new game."
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "lineupPeople",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1954,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1556,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2210,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 273,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 6340,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 801,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 4162,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 3604,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 4504,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 164,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 6177,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 7314,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 7464,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 584,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 3624,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 2584,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 5026,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 7953,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 4168,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 4930,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 4164,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1601,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 5652,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 2241,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupYes",
+      "cells": [
+        {
+          "key": "0",
+          "value": 10617896,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 591941,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 5243538,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 323840,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4360586,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 87589,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 12329040,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 8456981,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 725289,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 7069859,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 6445187,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 8576148,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 6233424,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupQuestion",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 12,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupQuestionText",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": "Black hair?"
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": "Brown hair?"
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": "Red hair?"
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": "Silver hair?"
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": "Brown eyes?"
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": "Blue eyes?"
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": "Green eyes?"
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": "Wears glasses?"
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": "Wears a hat?"
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": "Has a beard?"
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": "Wears earrings?"
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": "Long hair?"
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": "Large nose?"
+        }
+      ]
+    },
+    {
+      "row": "lineupName",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": "Ada"
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": "Bram"
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": "Cleo"
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": "Dex"
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": "Esme"
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": "Finn"
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": "Gus"
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": "Hana"
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": "Ivo"
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": "Juno"
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": "Kit"
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": "Lior"
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": "Mira"
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": "Nell"
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": "Otto"
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": "Pia"
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": "Quin"
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": "Rhea"
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": "Sol"
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": "Tove"
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": "Uma"
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": "Vik"
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": "Yara"
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": "Zeno"
+        }
+      ]
+    },
+    {
+      "row": "lineupSlots",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 16,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 17,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 21,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 22,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 23,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupPlate",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 16,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 17,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 21,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 22,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 23,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 24,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupSecret1",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 12,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupStanding1",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8389140,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupShown1",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8389140,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupFace1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupHair1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupEyes1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupGlasses1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupHat1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupBeard1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupEarrings1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupNose1",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupSecret2",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupStanding2",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 5128,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupShown2",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 5128,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupFace2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupHair2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupEyes2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupGlasses2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupHat2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupBeard2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupEarrings2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupNose2",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupTable",
+      "cells": [
+        {
+          "key": "stage",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "turn",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "winner",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "lastSeat",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "lastQuestion",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "lastAnswer",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "lastGuess",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "accepted",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "refused",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "games",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupAsked",
+      "cells": [
+        {
+          "key": "1",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupOptions",
+      "cells": [
+        {
+          "key": "cpuMask",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "pace",
+          "value": 30,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupAct",
+      "cells": [
+        {
+          "key": "seat",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "kind",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "value",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "request",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "applied",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "result",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupCursor",
+      "cells": [
+        {
+          "key": "q1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "b1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "q2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "b2",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupAi",
+      "cells": [
+        {
+          "key": "best",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "question",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "clock",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lineupHudQuestion",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": "Black hair?"
+        }
+      ]
+    },
+    {
+      "row": "lineupHudBust",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": "Ada"
+        }
+      ]
+    },
+    {
+      "row": "lineupHudLast",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": "Dex"
+        }
+      ]
+    },
+    {
+      "row": "lineupHudAnswer",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": "was named: wrong."
+        }
+      ]
+    },
+    {
+      "row": "lineupHudOutcome",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": "Seat 2 wins. N deals a new game."
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

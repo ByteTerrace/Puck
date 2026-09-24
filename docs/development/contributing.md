@@ -7,7 +7,7 @@ and the [CI guide](ci.md) for hosted validation and release procedures.
 
 ## Start here
 
-- A run uses a versioned `puck.world.def.v1` JSON document. CLI conveniences
+- A run uses a versioned `puck.world.definition.v1` JSON document. CLI conveniences
   synthesize the same model; they do not create a second execution path.
 - Vulkan and Direct3D 12 implement the same neutral GPU contracts. Shared GPU
   changes must be verified on both backends.
@@ -44,12 +44,37 @@ Prefer the cheapest correct tool:
 Use `/` in authored paths, configuration, stored path identities, and path output,
 including on Windows. Prefer current `System.IO` APIs that accept these paths
 directly; do not convert `/` to the platform separator before file access.
-Normalize platform-produced paths to `/` at Puck's output and storage boundaries.
-Keep resolution semantics explicit: `Path.Combine` can replace an earlier base
-with a rooted argument, whereas `Path.Join` only joins components. They are not
-interchangeable. Preserve native device-path syntax only at an interop boundary
-that requires it; backslashes in string escapes and regular expressions are not
-file separators.
+Normalize platform-produced paths to `/` at Puck's output and storage boundaries
+with `Puck.Abstractions.PuckPaths.Normalize`, which resolves a path to its full
+form and replaces every platform separator with `/`. Compare two file-system
+paths for equality, containment, or distinctness with `PuckPaths.Comparer` (a
+`StringComparer`) or `PuckPaths.Comparison` (its `StringComparison`
+equivalent): case-insensitive on Windows, where the file system itself ignores
+case, and ordinal everywhere else. This is a file-system rule, not a text
+rule — a document NAME (`Puck.Assets.WorldDocumentName.NameComparer`) is
+case-insensitive on every platform, on purpose, and never shares this
+comparer. Keep resolution semantics explicit: `Path.Combine` can replace an
+earlier base with a rooted argument, whereas `Path.Join` only joins
+components. They are not interchangeable. Preserve native device-path syntax
+only at an interop boundary that requires it; backslashes in string escapes
+and regular expressions are not file separators.
+
+## Per-user directory
+
+Puck keeps per-user state and caches in one directory, `Puck` under your local
+application data: `%LOCALAPPDATA%/Puck` on Windows and `~/.local/share/Puck` on
+Linux, or the temporary directory when the platform names no such folder
+(`PuckUserDirectory` in `Puck.Abstractions`). Each owner keeps one lower-case
+subdirectory there:
+
+| Subdirectory | Owner |
+|---|---|
+| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) |
+| `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root |
+| `bakes` | The creation bakes presentations make, shared the same way |
+| `world-builds` | The shared Release builds of `Puck.World` the CLI gates run |
+| `compilations` | The `.puck` compile cache the game and the CLI share |
+| `corpora` | The conformance corpora the emulator batteries fetch |
 
 ## C# file apps
 
@@ -72,15 +97,16 @@ Compile it without executing its operational code:
 dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
 ```
 
-Use `puck format . -Files files.json` with a JSON array of repository-relative
-paths, such as `["src/Puck.Azure.Resources/bootstrap.cs"]`. The CLI converts a
+Use `puck format --file-list files.json` from the repository root, with a JSON array
+of paths relative to the working directory, such as `["src/Puck.Azure.Resources/bootstrap.cs"]`. The CLI converts a
 standalone app to a disposable SDK project, preserves its references and linked
 helpers, compiles and formats the copy, then copies back only the selected source
-with its file directives restored. `-WhatIf` and `-Verify` leave the original
-source untouched. Ordinary project files still need their owning projects restored
-and built. See [automatic PR formatting](ci.md#automatic-pr-formatting) for the CI
-bot and the fork-PR patch path. Never run a repository-wide sweep to fix one entry
-point.
+with its file directives restored. `--check` leaves the original source
+untouched. Ordinary project files still need their owning projects restored
+and built in the configuration the run resolves symbols against—`Release` unless
+`--configuration` says otherwise—or the semantic passes skip them and say so. See
+[automatic PR formatting](ci.md#automatic-pr-formatting) for the CI bot and the
+fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 
 ## Verification
 
@@ -112,6 +138,32 @@ for render-path, shader, presenter, or capture changes. Its authored stations
 exercise specific contracts; passing them does not establish correctness for
 every possible scene. See `puck parity --help` for the current command surface.
 
+`puck affected --run` is how a change is verified: it runs the suites, canaries
+and parity the change can reach, chosen from the project graph and recorded
+canary coverage (see [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs)),
+and nothing wider. The full sets run only when the owner asks for them.
+
+`puck canary --merge` runs the full canary set. It runs every
+[real-World canary](../reference/cli.md#puck-canaryreal-world-behavioral-proofs)
+a merge needs: the automatic set (headless, no environmental requirements) and
+every canary requiring `gpu`, which includes the offscreen proofs on both
+backends. A bare `puck canary` runs only the automatic set, so it never runs a
+GPU proof. Run the merge gate with no competing build or GPU work on the
+machine, from a copy of the candidate's own CLI. `puck canary --merge --plan`
+prints what the gate would run without a GPU, and a gate that outgrows its
+declared ceiling is refused before it builds.
+
+`puck canary`, `puck parity`, `puck test`, and `puck docs citations` share one
+Release build of `Puck.World` per source state. The build lives in
+`world-builds` in the [per-user directory](#per-user-directory), never in the
+checkout. It is keyed by
+git's view of the World's project closure, including uncommitted and untracked
+changes. Running a second gate over an unchanged checkout does not rebuild, and
+an edit to documentation or tests leaves the build in place. An edit under a
+project the World builds produces a new key, so the next gate builds again.
+[Where the World artifact is built](../reference/cli.md#where-the-world-artifact-is-built)
+lists what the key covers and how old builds are pruned.
+
 A verification check proves its own behavior independently: derive the
 expected outcome another way than the code being checked, and prove that
 behavior the check doesn't touch stays unchanged. Running the same replay
@@ -125,13 +177,21 @@ data can still load: old data must never load under a new interpretation, so
 a renamed or reshaped field makes the strict parser refuse the old form
 rather than silently reinterpreting it.
 
-For changes under `src/Puck.Maths`, also run the maths law suite. The default
-tier is the everyday gate; `deep` and `exhaustive` are the opt-in volumes:
+For changes under `src/Puck.Maths`, also run the maths law suite. A plain
+`dotnet test` runs the default tier (Smoke and Default), the everyday gate;
+`smoke`, `deep` and `exhaustive` are selected by their committed run settings:
 
 ```powershell
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/default.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings
 ```
+
+Each tier is a filter on the `tier` trait. A `--filter` on the command line is
+combined with the default tier's filter rather than replacing it, so
+`--filter "tier=Exhaustive"` selects no test; select an opt-in tier with its
+`--settings` file.
 
 ### Game changes
 
@@ -141,26 +201,18 @@ Run the application to check composed game behavior, alongside relevant World te
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
 ```
 
-Use `Puck.World` for game verification. `Puck.Demo`, the
-composition-root-less library that once sat quarantined at
-`experimental/Puck.Demo`, is deleted—each folder's capability either has a
-live successor in `Puck.World` (see `experimental/README.md`) or is simply
-absent from it, with no plan bringing it over. Do not add a `--validate-*`
-mode or a `Puck.Post` stage for game-specific behavior unless explicitly
-requested.
+Use `Puck.World` for game verification. Do not add a `--validate-*` mode or
+a `Puck.Post` stage for game-specific behavior unless explicitly requested.
 
 The console and process stdin use the same command registry. Accepted results
-are written to stdout and refusals to stderr. A driver that needs their combined
+are written to stdout and refusals to stderr; host log lines go to stderr too,
+so stdout carries only answers. A driver that needs their combined
 arrival order can merge the streams. End a run with `wire.errors` and check
 `[wire.errors: 0 rejected]` when the result depends on every command being accepted.
 The [World guide](../../src/Puck.World/README.md) owns the current scripting and
-replay procedures. Historical console proofs in the quarantined engine harness
-are not an executable verification target.
-The `review-creation` scenario—isolated creation turntables with pinned content
-time and camera poses—has no runnable host today, and no plan to get one. It
-does not exist in `Puck.World`; the document that scheduled the move was deleted
-with the quarantine. Treat creation review as an absent capability, not a
-pending one.
+replay procedures. Creation review—isolated creation turntables with pinned
+content time and camera poses—has no runnable host in `Puck.World`, and no plan
+adds one. Treat it as an absent capability, not a pending one.
 
 ### Emulator changes
 
@@ -189,12 +241,31 @@ see its project README.
 There is no maintained cross-engine benchmark score. `Puck.Bench` remains
 quarantined under `experimental/`; do not build or revive its old suite.
 
-For a live World workload, use `world.timing on`, wait for rendered frames,
-then sample `world.gpu` and `world.fps`. `world.budget` distinguishes live
-program size from reserved capacity. Compare the same document, camera,
-resolution, quality settings, backend and build configuration before and after
-the change. Report these conditions and repeated samples with the result;
-GPU-pass time alone is not the delivered frame rate. See
+Performance is judged by counted work, code and disassembly, never by time.
+`puck bench` is the only tool that measures wall-clock time, and it runs only
+when the owner asks for a timing.
+
+Two tools read the counts. For a live World workload, wait for rendered
+frames, then sample `world.counters`: its `gpu` section is the per-pass counted
+work (dispatches, barriers, uploads, created objects), its `allocation` section
+says whether reading every count allocates, and every other section is a
+registered engine counter, including the server's `state.arena`, `state.rules`
+and `state.search`, and in a rendering World the shader compiler's
+`shaders.compiler`, the shader loads under `shaders.sdf-kernels`,
+`shaders.fullscreen-pass` and `shaders.set-manifest`, and, on Vulkan,
+`procedures.vulkan`. An owner whose counts need nothing more than a named set
+of kinds holds a `WorkCounterSet` rather than writing its own source.
+`world.budget` distinguishes live program size from
+reserved capacity. For a repeatable reading, run
+[`puck counters`](../reference/cli.md#puck-counterswork-counter-collector): it
+boots the authored counters workload offscreen on each backend, writes a report
+with every count tagged by class, and fails when a deterministic count differs
+between the backends. Keep the report from before a change and compare it with
+the one after, using `puck counters compare`.
+
+Compare the same document, camera, resolution, quality settings, backend and
+build configuration before and after the change. Report these conditions with
+the result. See
 [World graphics options](../../src/Puck.World/README.md#graphics-options).
 
 ### Browser engine changes (`Puck.World.Browser`)
@@ -223,14 +294,20 @@ cd src/Puck.Dashboard/src/portal
 $env:FNM_DIR = "$env:APPDATA/fnm"; fnm exec --using=26.5.1 -- node --test tests/engine-wasm.test.cjs
 ```
 
-That harness skips itself by name (never silently passes) when the AppBundle
+The `.puck` authoring surface (a mounted workspace, `CompileSource`,
+`ComposeSource`, and the language server's `Lsp`/`LspIdle` round trip) has its
+own harness over its own fixtures, run from the repository root:
+
+```powershell
+node --test tests/Puck.World.Browser.Tests/wasm/sources.test.mjs
+```
+
+Both harnesses skip themselves by name (never silently pass) when the AppBundle
 is absent. To re-record the determinism-canary baseline both the native tests
 and the Node harness compare against:
 
 ```powershell
-$env:PUCK_BROWSER_PARITY_RECORD = "1"
-dotnet test tests/Puck.World.Browser.Tests -c Release --filter "FullyQualifiedName~BrowserParityRecordingTests"
-Remove-Item Env:\PUCK_BROWSER_PARITY_RECORD
+puck baselines browser-parity
 ```
 
 See `src/Puck.World.Browser/README.md` for the AppBundle's real file layout
@@ -238,6 +315,19 @@ and sizes, the exact `[JSExport]` surface, the trim-warning baseline, and the
 one verified scope boundary (no emulator core, so a document authoring a
 `screens[].source.machine` engine—the shipped island's arcade district among
 them—refuses by name rather than crashing).
+
+`tests/Puck.Cli.Tests/Official/OfficialBuildCommandTests.cs` builds a real
+`puck.official.manifest.v1` tree from this checkout's own worlds and the
+browser AppBundle, so it needs that AppBundle published first:
+
+```powershell
+dotnet publish src/Puck.World.Browser -c Release
+dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~OfficialBuildCommandTests"
+```
+
+CI's `artifacts` workflow always publishes the browser before any test project
+runs, so this is a local-run-only step; the fixture's own failure message
+names the command when the bundle is missing.
 
 ## Working with world documents
 
@@ -259,26 +349,23 @@ behavior; the procedure above is the complete add-a-field procedure.
 
 ## Configuration and diagnostics
 
-`Puck.World` does not use `PUCK_*` configuration variables. Durable
-configuration belongs in the world document; live operations belong in console
-verbs.
+No environment variable switches Puck. Durable configuration belongs in the
+world document (genlock, for example, is the document's `host.genlock`); live
+operations belong in console verbs; a run's diagnostics are flags; and a
+committed test baseline is regenerated by a verb with a `--check` twin.
 
-The remaining environment variables are engine, launcher, or
-content-development diagnostics (both emulator batteries take their inputs on
-the command line; see their READMEs):
-
-| Variable | Purpose |
+| To | Use |
 |---|---|
-| `PUCK_GENLOCK=0` | Disable the launcher genlock control law. The document equivalent is `host.genlock`. |
-| `PUCK_PRESENT_TIMING` | Log measured present intervals. |
-| `PUCK_TEST_DEVICE_LOSS=<seconds>` | Request synthetic device loss for live verification. |
-| `PUCK_D3D12_DEBUG` | Opt in to the Direct3D 12 debug layer. |
-| `PUCK_FLAGSHIPS_REGENERATE=1` | Regenerate committed flagship creation documents. |
-| `PUCK_AGB_BIOS`, `PUCK_ARES_COSIM`, `PUCK_AGB_FULLBOOT`, `PUCK_AGS_TRACE`, `PUCK_AGB_SUITE_FOCUS` | Read only by the Advanced battery's diagnostic modes (lockstep co-simulation, full-boot renders, AGS tracing, suite focus); the battery itself takes every input on the command line. |
+| Turn on the backend's validation layer | `Puck.World --debug-layers`, `puck canary --debug-layers`, or a release profile's `debugLayers` for `puck qualify` |
+| Re-record a test baseline | `puck baselines <artifact>`, and `puck baselines <artifact> --check` to compare (see the [CLI reference](../reference/cli.md#puck-baselinestest-baselines)) |
+| Run an opt-in test harness | the test's own explicit tests or fixture, named in its project's README |
 
-GPU timing has no environment variable. Arm it with the `gpu.timing` feature
-switch, the `world.timing` verb, `host.timing`, `--timing`, or the benchmark
-harness.
+The `ENV001` analyzer in `Puck.Analyzers` holds this in every build: it refuses
+any read of the process environment whose variable is not named, with its
+reason, in `EnvironmentReadAllowlist`. That list holds only values the operating
+system, the .NET SDK, or the CI host defines, such as `PATH` and the
+`GITHUB_*` variables the CI-facing verbs read. Both emulator batteries take
+their inputs on the command line.
 
 ## GPU support and shader builds
 
@@ -287,8 +374,18 @@ and the RDNA2 Steam Deck. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader
 Model 6.6. Do not raise that floor without evidence for every supported GPU.
 
 DXC compiles the same HLSL sources to SPIR-V and DXIL during the build. `dxc`
-must be on `PATH` for these built-in kernels. Live one-off GLSL/Shadertoy
-authoring uses the separate toolchain described in the [shader guide](../../src/Puck.Shaders/README.md#one-off-shaders). A change to the SDF C# ISA
+must be on `PATH` for these built-in kernels, and live pipeline sources compile
+with the same DXC, resolved as the [shader guide](../reference/shaders.md#one-off-shaders)
+describes. The `Puck.World` build also packages every pipeline source a shipped
+world names into the [package store](../reference/shaders.md#the-builds-package-store)
+beside the worlds, so a pipeline source row does one of two things. In a
+developer checkout with DXC, an unedited shipped source loads its stored package
+and an edited or new source compiles live, so authoring keeps its loop. In a
+packaged runtime with no DXC, the shipped sources load their packages, nothing
+compiles, and a source with no stored package is refused by
+`SHADERPKG_ABSENT`. The Direct3D 11 camera and probe kernels and the Direct3D 12
+compositor's blit compile at build, so no device compiles them. A change to the
+SDF C# ISA
 must update the HLSL decoder in the same change. The SDF VM README lists
 the exact C# and HLSL contract pairs and bytecode rebuild procedure.
 
@@ -308,8 +405,7 @@ framed as unverified when no device run exists.
 - Full GPU removal can wedge the in-process NVIDIA Vulkan ICD. TDR recovery is
   supported; physical removal may require a new process.
 - The live Pocket Camera path uses CPU pixels. The zero-copy camera export
-  infrastructure is intentionally built ahead for re-hosting and remains
-  covered by the synthetic `camera-share` stage.
+  infrastructure is built ahead for re-hosting and has no live check.
 - RADV may select wave32 or wave64. New wave-intrinsic kernels must be
   subgroup-size-independent or explicitly request a supported size.
 - Incremental builds can retain stale committed shader bytecode or corrupted
@@ -320,12 +416,9 @@ framed as unverified when no device run exists.
   cycle counters each frame. Puck's exposed PC is four bytes ahead of mGBA's
   pipeline representation.
 - Windows App Control on the reference system blocks loading never-seen Debug
-  binaries (`FileLoadException` `0x800711C7`), which broke the file-based
-  `dotnet run <script>.cs` programs at their default Debug configuration —
-  relocating the runfile cache did not help; `-c Release` loaded cleanly. Kept
-  because the App Control behaviour is a property of the machine and will bite
-  the next thing that loads a fresh Debug binary, not because those scripts are
-  reachable: they are quarantined under `experimental/` and never run.
+  binaries (`FileLoadException` `0x800711C7`). A file-based app run at its
+  default Debug configuration fails to load, and relocating the runfile cache
+  does not help; build or run it with `-c Release`.
 - A machine with a Cosmocc toolchain installed may carry `C_INCLUDE_PATH`
   pointing at its `include` directory in the ambient shell environment. That
   path leaks into every `clang`/emscripten invocation a `Puck.World.Browser`
@@ -372,6 +465,25 @@ meant to establish.
   anything.
 - When correcting a claim, update its tables, examples, summaries, comments,
   and cross-references in the same change so no contradictory source remains.
+- Allocation laws, Post stages and bench diagnostics measure through
+  `AllocationWindow` (`Puck.Abstractions.Counting`), the one helper over
+  `GC.GetAllocatedBytesForCurrentThread`; nothing else reads the counter.
+  `Least` is the zero law. It takes the least of up to 16 windows, because a
+  method's first run can charge the runtime's own work to whichever window is
+  open. When every window allocated, it runs the body again under the runtime's
+  `AllocationSampled` event and fails naming the window, the GC mode, and the
+  types sampled on the measuring thread; the event carries no stack, so the
+  culprit is named by type. `Measure` returns the same least as a count, for a
+  ceiling. Both run the body more than once, so a window must leave its subject
+  able to run the same path again: advance to fresh ticks or rows rather than
+  repeating ones already consumed. `Total` runs a body exactly once, for a flow
+  that cannot repeat, one tick sampled for a median, or a batch divided into a
+  mean; a zero law never reads it. A background collection inflates the
+  counter: it retires the thread's allocation context without subtracting the
+  unused remainder, up to about 8 KiB the thread never allocated. Test and validation hosts therefore run
+  with blocking collections (`ConcurrentGarbageCollection` in
+  `Directory.Build.targets`). Setting `DOTNET_gcConcurrent=1` brings the false
+  failures back, so don't set it when you run these suites.
 - XML documentation is a compile-time dependency. With warnings treated as
   errors, an unresolved member reference produces CS1574; verify documentation
   changes with the compiler when they affect member references.
@@ -381,20 +493,48 @@ meant to establish.
 - Public APIs use XML documentation that describes current behavior, parameter
   units, ownership, lifetime, failure behavior, and determinism where relevant.
   Do not narrate the change that introduced the API.
-- Comments explain invariants and non-obvious constraints. Remove commented-out
-  designs, commit references, dated rollout notes, and obsolete alternatives.
-- `*Options` denotes configuration-bound data. `*CliSeams` owns a command-line
-  surface that must stay out of the main composition method.
-- Command-module conventions are documented on `ICommandModule`; screen claim
-  arbitration is documented on `WorldScreenBinder`; GPU-host ordering is
-  documented on `GpuHostComposition`.
+- A comment earns its place by stating what the code cannot and a reader would
+  act on wrongly without: an invariant, a sign convention or unit, a packing
+  layout, an external specification or hardware citation, or a coupling the
+  compiler cannot check. Name the other side of such a coupling, and prefer
+  removing the duplication that makes it necessary. If deleting a comment loses
+  nothing the code and git history can't recover, delete it. Never write dates,
+  commit references, citations of plans, reviews, or conversations, accounts of
+  a defect or its fix, changelogs, commented-out designs, obsolete alternatives,
+  capitals for emphasis, or counts and line numbers that drift. Delete a stale
+  comment rather than replacing it with a longer one.
+  `puck scan --only comment-smells` classifies the inline comments that break
+  these rules.
+- `*Options` denotes configuration-bound data.
+- Command-module conventions are documented on `ICommandModule`; screen-slot
+  claim arbitration is documented on `ScreenSlotPriority`; the split between the
+  headless core and the presentation layer that adds the GPU host is documented
+  on `WorldBootComposition`.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change
   a metric.
-- No source file over 2500 lines: `FileLengthAnalyzer` fails the build (LEN001)
+- No source file over 2000 lines: `FileLengthAnalyzer` fails the build (LEN001)
   unless `FileLengths.json` already records the file, and a recorded file may
-  only shrink (LEN002/LEN003). Split, then `puck lengths --write`—the ledger
+  only shrink (LEN002/LEN003). Split, then `puck lengths`—the ledger
   never grows.
+- No new comment smell: `CommentSmellAnalyzer` fails the build (SMELL001)
+  when a file `CommentSmells.json` does not record carries an inline comment
+  in a named smell bucket, and a recorded file's count may only fall
+  (SMELL002/SMELL003). Rewrite or delete the comment, then
+  `puck comment-smells`. Both ledgers are
+  [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
+- A call through an unmanaged function pointer (`delegate* unmanaged`, any
+  calling convention) may not use a signature that mentions a type parameter
+  except behind a pointer: `Puck.Analyzers` fails the build with INTEROP001,
+  because the call would throw `MarshalDirectiveException` at run time. Call
+  through a closed signature, or cast the entry point to a view that passes the
+  value as `T*`; declaring or passing a generic signature is fine.
+- Code never reads an environment variable to switch itself: `Puck.Analyzers`
+  fails the build with ENV001 on any `Environment.GetEnvironmentVariable`,
+  `GetEnvironmentVariables`, or `ExpandEnvironmentVariables` call outside
+  `EnvironmentReadAllowlist`, and on any read whose name is not a compile-time
+  constant. Make a switch a flag, a document or profile setting, or a test
+  fixture instead ([configuration and diagnostics](#configuration-and-diagnostics)).
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
   (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
@@ -414,10 +554,11 @@ settled cross-project decisions belong under docs/plans and docs/decisions.
 Project-owned contracts and implementation detail belong beside their source
 project. Other documents summarize and link to the owner.
 
-Place detailed evidence with the plan, decision, or verification surface that
-still depends on it. Retire completed rollout logs, audits, migration diaries,
-commit archaeology, and superseded plans when they no longer explain current
-behavior. When moving or retiring a document, move every live contract,
+Docs name no dates and no commit SHAs; verification evidence belongs in the
+commit message that lands a change (see
+[Write examples and claims precisely](documentation.md#write-examples-and-claims-precisely)).
+Retire rollout logs, audits, migration diaries, commit archaeology, and
+superseded plans. When moving or retiring a document, move every live contract,
 limitation, and procedure to its canonical home before removing the old copy.
 The root [README](../../README.md) routes to the document set; update its
 routing whenever the set changes.

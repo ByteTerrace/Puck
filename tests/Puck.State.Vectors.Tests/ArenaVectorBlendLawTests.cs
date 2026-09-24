@@ -141,7 +141,7 @@ public sealed class ArenaVectorBlendLawTests {
         ));
         Assert.Equal(
             actual: refusal.Code,
-            expected: RuleRefusal.VectorMixZero
+            expected: RuleEffectRefusal.VectorMixZero
         );
         Assert.Equal(
             actual: VectorArenaFixture.Read(
@@ -180,7 +180,7 @@ public sealed class ArenaVectorBlendLawTests {
         );
     }
     [InlineData(0)]
-    [InlineData(StateCapacity.MaxMixTerms + 1)]
+    [InlineData((StateCapacity.MaxMixTerms + 1))]
     [Theory]
     public void AMixOutsideTheTermCeilingRefuses(int count) {
         var arena = VectorArenaFixture.Arena(catalog: out var catalog);
@@ -316,7 +316,7 @@ public sealed class ArenaVectorBlendLawTests {
         ));
         Assert.Equal(
             actual: refusal.Code,
-            expected: RuleRefusal.VectorMeanEmpty
+            expected: RuleEffectRefusal.VectorMeanEmpty
         );
     }
     [Fact]

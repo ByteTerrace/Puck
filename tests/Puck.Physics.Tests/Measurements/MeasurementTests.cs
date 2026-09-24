@@ -26,11 +26,11 @@ public sealed class MeasurementTests {
         foreach (var rate in Rates) {
             foreach (var substeps in SubstepCounts) {
                 var softness = FixedSoftConstraint.Create(
-                    rateHz: rate,
-                    substepCount: substeps,
-                    hertz: authored,
                     dampingRatio: damping,
-                    fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount
+                    fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount,
+                    hertz: authored,
+                    rateHz: rate,
+                    substepCount: substeps
                 );
 
                 Assert.Equal(

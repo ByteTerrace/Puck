@@ -1,8 +1,6 @@
 # Symbol-analysis complete reference
 
-This preserves the full semantic/syntax behavior, flags, traps, recipes, and
-file-based-app fallback. Read the relevant section when the compact skill
-routes here.
+Read the relevant section when `SKILL.md` routes here.
 
 ## Contents
 
@@ -13,23 +11,21 @@ routes here.
 - [When neither verb fits](#when-neither-verb-fits)
 
 Two verbs of the consolidated `puck` developer CLI (`src/Puck.Cli`) are
-invoked from the repository root. Prefer the portable published assembly:
+invoked from the repository root, through a copy of the checkout's own
+`src/Puck.Cli/bin/Release/net10.0/` build (see `SKILL.md`):
 
 ```text
-dotnet src/Puck.Cli/publish/Puck.Cli.dll <verb>
+dotnet <scratch-copy>/Puck.Cli.dll <verb>
 ```
 
-If it is absent, bootstrap from the tracked project:
+If that build is absent, bootstrap from the tracked project:
 
 ```text
 dotnet run --project src/Puck.Cli/Puck.Cli.csproj -c Release -- <verb>
 ```
 
-Every command below writes just `puck <verb>` for short. Never depend
-exclusively on the ignored Windows launcher
-`src/Puck.Cli/publish/puck.exe`. Refresh published output after tool changes with
-`dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish` from the repo
-root. `puck <verb> -h` prints that verb's usage and exits 0; `puck` with no verb,
+Every command below writes just `puck <verb>` for short. Re-copy the build after
+tool changes. `puck <verb> -h` prints that verb's usage and exits 0; `puck` with no verb,
 like an unknown verb or option, prints the parse error and
 `Run 'puck --help' for usage.` on stderr and exits 2.
 
@@ -73,24 +69,24 @@ references <name>   references to a source symbol, solution-wide
   --derived           derived types
   --containing <frag> keep declarations whose display string contains frag (ordinal)
   --contains          treat <name> as a substring, not an exact simple name
-  -i                  case-insensitive name match
+  --ignore-case       case-insensitive name match
   --kind <k,k>        type, member, namespace (default: type,member)
   --solution <path>   default: the nearest .slnx walking up from the cwd
   --project <path>    load one project instead
-  --configuration <c> build configuration (default Debug)
+  --configuration <c> build configuration (default Release)
   --metadata          also match declarations from referenced assemblies
   --no-doc            drop locations inside documentation trivia
   --strict            keep only locations whose group definition IS the queried symbol
   --allow-partial     report anyway after a workspace load failure
   --json              one JSON object per line
-  -q / -h
+  --quiet / -h
 ```
 
 Output is records and nothing else — no counts, no banner:
 
 ```
 src/Puck.Abstractions/Memory/AllocatorExtensions.cs:14:24 decl Method Puck.Abstractions.Memory.AllocatorExtensions.Alloc(Puck.Abstractions.Memory.IAllocator, nint)
-src/Puck.Vulkan/VulkanMarshalHelpers.cs:18:31 ref Method Puck.Abstractions.Memory.AllocatorExtensions.Alloc(Puck.Abstractions.Memory.IAllocator, nint)
+src/Puck.Vulkan/Apis/VulkanNativeCommandBufferRecordingApi.cs:347:35 ref Method Puck.Abstractions.Memory.AllocatorExtensions.Alloc(Puck.Abstractions.Memory.IAllocator, nint)
 ```
 
 `path:line:col` leads, so a line parses like a `search` hit and pastes into an
@@ -108,7 +104,7 @@ verified here:
 
 - **Constructor cascade.**
   `references CaptureFrame --containing Puck.Abstractions.Capture` reports
-  `src/Puck.Hosting/FrameCaptureController.cs:169` under
+  the `new CaptureFrame(…)` site in `src/Puck.Hosting/FrameCaptureController.cs` under
   `CaptureFrame.CaptureFrame(Surface, long, ulong)` — the constructor — because
   the site is `new CaptureFrame(…)`. **`--strict` on a type therefore hides
   every construction site** (verified: strict drops exactly that location).
@@ -171,8 +167,15 @@ tree — the two walk one identical file set, see the walk contract below;
   `obj/<Configuration>/net10.0/` and writes `AssemblyInfo.cs`,
   `AssemblyInfoInputs.cache` and `GeneratedMSBuildEditorConfig.editorconfig`
   there (verified on a throwaway project outside the repo that had no `obj/`
-  before the run). The default Configuration is Debug; `--configuration`
-  changes it.
+  before the run). The default Configuration is Release, the one every verb's
+  `--configuration` defaults to; `--configuration` changes it.
+- **An analyzer that was never built is skipped by name.** A project-built
+  analyzer or generator (`Puck.Analyzers`) not yet built in the loaded
+  configuration loads as an unresolved analyzer reference, which the reference
+  search cannot hash. The verb drops each one and names it once on stderr
+  (`references: skipping analyzer <path> in <n> project(s)`), and the answer is
+  otherwise complete; build that configuration to include what the analyzer
+  generates. Verified on a throwaway project naming a missing analyzer file.
 - **An unrestored project degrades silently, it does not fail.** Verified on a
   throwaway project outside the repo with a `PackageReference` and no
   `obj/project.assets.json`: the workspace reported no diagnostic, source
@@ -201,7 +204,7 @@ tree — the two walk one identical file set, see the walk contract below;
 
 ```
 declarations [path ...]   declaration inventory, parse-only (default path: cwd)
-  -g <glob> / --not <glob>   include/exclude globs, the same matcher search uses
+  --glob <glob> / --not <glob>   include/exclude globs, the same matcher search uses
   --kind <k,k>       class, struct, record, interface, enum, delegate,
                      method, property, field, event, ctor
   --name <frag>      declared simple name contains frag (ordinal)
@@ -209,7 +212,7 @@ declarations [path ...]   declaration inventory, parse-only (default path: cwd)
   --attribute <frag> an attribute name contains frag
   --members          list members inside each type (implied by a member --kind)
   --doc              also emit XML-doc cref targets, filtered by --name alone
-  --json / -q / -h
+  --json / --quiet / -h
 ```
 
 Output is `path:line:col decl <kind> <qualified name>[ : <base list>]`, sorted by
@@ -232,7 +235,7 @@ path then position, with a `cref` relation under `--doc`. Exit codes are the sam
   declares nothing" (exit 1). A named file that is not `.cs` is called out on
   stderr and skipped.
 - **It sees files no project compiles** (the `references` blind spot above), and
-  it prunes `.git`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
+  it prunes `.git`, `.tmp`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
   `BenchmarkDotNet.Artifacts` and agent worktrees under `.claude/worktrees`.
   `puck search` prunes exactly the same set (verified), so the two verbs paired
   on one question cover one tree — neither reaches a stale duplicate checkout
@@ -287,5 +290,5 @@ still apply:
   — the event is `[Obsolete]`, and this repo compiles warnings as errors.
 - `MSBuildWorkspace.OpenSolutionAsync` handles this repo's `.slnx` directly.
 - Sort before printing. `ReferencedSymbol.Locations` comes back unordered.
-- The design-time build writes `obj/` and defaults to `Configuration=Debug`, as
-  above. Treat a run against the repo as a build, not a read.
+- The design-time build writes `obj/`, and without a `Configuration` property it
+  runs Debug. Treat a run against the repo as a build, not a read.

@@ -1,52 +1,268 @@
 using System.Text.Json.Nodes;
-using Puck.Transpiler.Diagnostics;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
 /// <summary>Lowering coverage for the concise state-row declarations: each declaration form emits exactly the JSON
 /// an independently authored explicit row would, and every refusal in the contract's list fires with its own
-/// diagnostic code and a non-degenerate source span.</summary>
+/// diagnostic code on its own line.</summary>
 public class StateDeclarationEmitterTests {
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
+    // Each declaration, the index of the world row it lowers to, and that row as an author would write it by hand.
+    private static readonly Dictionary<string, (string Body, int Row, string Expected)> Declarations = new(comparer: StringComparer.Ordinal) {
+        ["a table with capacity, bounds and a cell advance"] = (
+            Body: """
+                state {
+                    world {
+                        table vitals capacity(3) bounds(0..100, overflow: Saturate) {
+                            health = 100
+                            mana = 50 advance(perSecond: 5)
+                        }
+                    }
+                }
+                """,
+            Row: 0,
+            Expected: """
+                {
+                    "name": "vitals",
+                    "kind": "Int",
+                    "cells": [
+                        { "key": "health", "value": 100 },
+                        { "key": "mana", "value": 50, "advance": { "perSecondNumerator": 5, "perSecondDenominator": 1 } }
+                    ],
+                    "capacity": 3,
+                    "min": 0,
+                    "max": 100,
+                    "overflow": "Saturate"
+                }
+                """
+        ),
+        // StateRow.Min and Max are each independently optional, so a one-sided bound is legal.
+        ["a slot with a one-sided bound"] = (
+            Body: """
+                state {
+                    world {
+                        slot gold = 10 bounds(0..)
+                    }
+                }
+                """,
+            Row: 0,
+            Expected: """{ "name": "gold", "kind": "Int", "value": 10, "min": 0 }"""
+        ),
+        ["a slot with no default omits its value"] = (
+            Body: """
+                state {
+                    world {
+                        slot uninitialized
+                    }
+                }
+                """,
+            Row: 0,
+            Expected: """{ "name": "uninitialized", "kind": "Int" }"""
+        ),
+        ["an empty table with no capacity is a keys domain, never a slot"] = (
+            Body: """
+                state {
+                    world {
+                        table x { }
+                    }
+                }
+                """,
+            Row: 0,
+            Expected: """{ "name": "x", "kind": "Int", "domain": { "$type": "keys" } }"""
+        ),
+        ["behavior(none) lowers to the enum's wire spelling"] = (
+            Body: """
+                state {
+                    world {
+                        table flags {
+                            a = 1 behavior(none)
+                            b = 2
+                        }
+                    }
+                }
+                """,
+            Row: 0,
+            Expected: """
+                {
+                    "name": "flags",
+                    "kind": "Int",
+                    "cells": [
+                        { "key": "a", "value": 1, "behavior": "None" },
+                        { "key": "b", "value": 2 }
+                    ]
+                }
+                """
+        ),
+        // The `row { }` escape hatch works the same inside a `world { }` declaration block as in the `world [ ]`
+        // array form.
+        ["a row inside a declaration block lowers unchanged"] = (
+            Body: """
+                state {
+                    world {
+                        row { name: "custom" kind: Text value: "hello" }
+                    }
+                }
+                """,
+            Row: 0,
+            Expected: """{ "name": "custom", "kind": "Text", "value": "hello" }"""
+        ),
+        ["a pile is an ordered keysOf row"] = (
+            Body: """
+                state {
+                    world {
+                        table cardNames capacity(3) {
+                            king = 0
+                            queen = 1
+                            jack = 2
+                        }
+                        pile deck of cardNames capacity(3) {
+                            king
+                            queen
+                            jack
+                        }
+                    }
+                }
+                """,
+            Row: 1,
+            Expected: """
+                {
+                    "name": "deck",
+                    "kind": "Bool",
+                    "domain": { "$type": "keysOf", "row": "cardNames", "ordered": true },
+                    "cells": [
+                        { "key": "king", "value": true },
+                        { "key": "queen", "value": true },
+                        { "key": "jack", "value": true }
+                    ],
+                    "capacity": 3
+                }
+                """
+        ),
+    };
+    private static readonly Dictionary<string, Refusal> Refusals = new(comparer: StringComparer.Ordinal) {
+        ["PUCK049: a declaration outside a world block"] = new(
+            Body: "state {\n    slot x\n}\n",
+            Code: "PUCK049",
+            Needle: "slot x"
+        ),
+        ["PUCK050: a declaration block beside a world array"] = new(
+            Body: "state {\n    world [\n        { name: \"x\" kind: Int }\n    ]\n    world {\n        slot y\n    }\n}\n",
+            Code: "PUCK050",
+            Needle: "world {"
+        ),
+        ["PUCK051: a name declared twice"] = new(
+            Body: "state {\n    world {\n        slot x\n        slot x\n    }\n}\n",
+            Code: "PUCK051",
+            Needle: "slot x"
+        ),
+        ["PUCK052: a name the language reserves"] = new(
+            Body: "state {\n    world {\n        slot $x : Int\n    }\n}\n",
+            Code: "PUCK052",
+            Needle: "$x"
+        ),
+        ["PUCK053: a bound that is not a number"] = new(
+            Body: "state {\n    world {\n        slot x = 5 bounds(\"oops\"..)\n    }\n}\n",
+            Code: "PUCK053",
+            Needle: "\"oops\""
+        ),
+        ["PUCK053: a grid with no dimensions"] = new(
+            Body: "state {\n    world {\n        grid board { }\n    }\n}\n",
+            Code: "PUCK053",
+            Needle: "grid board"
+        ),
+        ["PUCK054: more cells than capacity"] = new(
+            Body: "state {\n    world {\n        table x capacity(1) {\n            a = 1\n            b = 2\n        }\n    }\n}\n",
+            Code: "PUCK054",
+            Needle: "capacity(1)"
+        ),
+        ["PUCK055: capacity on a slot"] = new(
+            Body: "state {\n    world {\n        slot x capacity(2)\n    }\n}\n",
+            Code: "PUCK055",
+            Needle: "capacity(2)"
+        ),
+        ["PUCK056: an advance beside behavior(none)"] = new(
+            Body: "state {\n    world {\n        table x {\n            a = 1 advance(perSecond: 1) behavior(none)\n        }\n    }\n}\n",
+            Code: "PUCK056",
+            Needle: "behavior(none)"
+        ),
+        ["PUCK057: an unknown modifier"] = new(
+            Body: "state {\n    world {\n        slot x unknownMod(1)\n    }\n}\n",
+            Code: "PUCK057",
+            Needle: "unknownMod(1)"
+        ),
+        ["PUCK058: an advance below the finest rate"] = new(
+            Body: "state {\n    world {\n        slot x advance(perSecond: 1e-19)\n    }\n}\n",
+            Code: "PUCK058",
+            Needle: "1e-19"
+        ),
+        ["PUCK058: an advance far below the finest rate"] = new(
+            Body: "state {\n    world {\n        slot x advance(perSecond: 1e-30)\n    }\n}\n",
+            Code: "PUCK058",
+            Needle: "1e-30"
+        ),
+        ["PUCK059: a pile of an undeclared row"] = new(
+            Body: "state {\n    world {\n        pile deck of missingRow {\n            king\n        }\n    }\n}\n",
+            Code: "PUCK059",
+            Needle: "missingRow"
+        ),
+        ["PUCK060: a pile of a slot"] = new(
+            Body: "state {\n    world {\n        slot notAPile = 1\n        pile deck of notAPile {\n            king\n        }\n    }\n}\n",
+            Code: "PUCK060",
+            Needle: "pile deck of notAPile"
+        ),
+        ["PUCK061: a card piled twice"] = new(
+            Body: "state {\n    world {\n        table cardNames capacity(2) {\n            king = 0\n            queen = 1\n        }\n        pile deck of cardNames {\n            king\n            king\n        }\n    }\n}\n",
+            Code: "PUCK061",
+            Needle: "king"
+        ),
+        ["PUCK062: a pile larger than its source"] = new(
+            Body: "state {\n    world {\n        table cardNames capacity(2) {\n            king = 0\n            queen = 1\n        }\n        pile deck of cardNames capacity(5) {\n            king\n            queen\n        }\n    }\n}\n",
+            Code: "PUCK062",
+            Needle: "capacity(5)"
+        ),
+        ["PUCK063: a fraction in a grid"] = new(
+            Body: "state {\n    world {\n        grid board dimensions(width: 2, depth: 2) {\n            \"0\" = 1.5\n        }\n    }\n}\n",
+            Code: "PUCK063",
+            Needle: "grid board"
+        ),
+        ["PUCK064: a grid cell outside its dimensions"] = new(
+            Body: "state {\n    world {\n        grid board dimensions(width: 2, depth: 2) {\n            \"9\" = 1\n        }\n    }\n}\n",
+            Code: "PUCK064",
+            Needle: "\"9\" = 1"
+        ),
+        ["PUCK065: an inverse whose rows do not agree"] = new(
+            Body: "state {\n    world {\n        table tokensRow capacity(1) {\n            a = 0\n        }\n        table codesRow capacity(1) {\n            a = 1\n        }\n        grid board dimensions(width: 1, depth: 1) inverse(tokens: tokensRow, codes: codesRow) {\n            \"0\" = 1\n        }\n    }\n}\n",
+            Code: "PUCK065",
+            Needle: "inverse(tokens: tokensRow, codes: codesRow)"
+        ),
+        ["PUCK066: a grid declared beside a lattice of its name"] = new(
+            Body: "state {\n    lattices [\n        { \"$type\": \"grid\", \"name\": \"board\", origin [0, 0, 0], \"cellSize\": 1, \"width\": 1, \"depth\": 1 }\n    ]\n    world {\n        grid board dimensions(width: 1, depth: 1)\n    }\n}\n",
+            Code: "PUCK066",
+            Needle: "grid board dimensions(width: 1, depth: 1)"
+        ),
+    };
 
-        Assert.NotNull(@object: compilation.Json);
+    private static JsonObject WorldRow(JsonObject json, int index) => Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["state"])["world"])[index]);
 
-        return (compilation.Json, compilation.Diagnostics);
-    }
-    private static JsonArray WorldRows(JsonObject json) => Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["state"])["world"]);
-    private static JsonObject WorldRow(JsonObject json, int index) => Assert.IsType<JsonObject>(@object: WorldRows(json: json)[index]);
-    private static void AssertRowEquals(JsonObject actual, string expectedJson) {
-        var expected = Assert.IsType<JsonObject>(@object: JsonNode.Parse(expectedJson));
-        var mismatch = JsonMismatch.Find(
-            actual: actual,
-            expected: expected,
-            path: "row"
-        );
-
-        Assert.Null(@object: mismatch);
-    }
-
-    // ---- byte-identical declaration forms -------------------------------------------------------------------
-
-    // Every value decides the row's kind together, so a fraction in a later cell widens a row whose first cell is
-    // whole, and a name bound by `let` reads as the value it is bound to.
+    public static TheoryData<string> DeclarationNames() => new(values: Declarations.Keys);
+    public static TheoryData<string> RefusalNames() => new(values: Refusals.Keys);
+    // Every value decides the row's kind together, so a fraction in a later cell, an arithmetic initializer or a
+    // fractional bound widens a row whose first value is whole, and a name bound by `let` reads as the value it is
+    // bound to.
     [InlineData("table speeds {\n            walk = 1\n            run = 2.5\n        }", "Fixed")]
     [InlineData("table counts {\n            walk = 1\n            run = 2\n        }", "Int")]
     [InlineData("slot pace = basePace", "Fixed")]
     [InlineData("slot lives = baseLives", "Int")]
     [InlineData("slot open = true", "Bool")]
     [InlineData("slot label = \"ready\"", "Text")]
+    [InlineData("slot status = baseLabel", "Text")]
+    [InlineData("slot total = 1 + 0.5 bounds(0.5..)", "Fixed")]
     [Theory]
     public void ADeclarationReadsItsKindFromEveryValueItSpells(string declaration, string kind) {
-        var (json, diagnostics) = Lower(body: $$"""
+        var json = WorldSources.LowerClean(body: $$"""
             let basePace = 1.5
             let baseLives = 3
+            let baseLabel = "ready"
 
             state {
                 world {
@@ -55,237 +271,31 @@ public class StateDeclarationEmitterTests {
             }
             """);
 
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
         Assert.Equal(
             actual: WorldRow(index: 0, json: json)["kind"]?.ToString(),
             expected: kind
         );
     }
-    [Fact]
-    public void AnArithmeticInitializerAndFractionalBoundWidenAnOtherwiseWholeRow() {
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    slot total = 1 + 0.5 bounds(0.5..)
-                }
-            }
-            """);
+    [MemberData(nameof(DeclarationNames))]
+    [Theory]
+    public void ADeclarationCompilesByteIdenticallyToAnExplicitRow(string name) {
+        var (body, row, expected) = Declarations[name];
 
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        Assert.Equal(
-            actual: WorldRow(index: 0, json: json)["kind"]?.ToString(),
-            expected: "Fixed"
-        );
+        Assert.Null(@object: JsonMismatch.Find(
+            actual: WorldRow(index: row, json: WorldSources.LowerClean(body: body)),
+            expected: JsonNode.Parse(json: expected),
+            path: name
+        ));
     }
-    [Fact]
-    public void ATextLetBindingWideningAValueIsRetained() {
-        var (json, diagnostics) = Lower(body: """
-            let label = "ready"
-
-            state {
-                world {
-                    slot status = label
-                }
-            }
-            """);
-
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        Assert.Equal(
-            actual: WorldRow(index: 0, json: json)["kind"]?.ToString(),
-            expected: "Text"
-        );
-    }
-    [Fact]
-    public void TableDeclarationCompilesByteIdenticallyToAnExplicitRow() {
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    table vitals capacity(3) bounds(0..100, overflow: Saturate) {
-                        health = 100
-                        mana = 50 advance(perSecond: 5)
-                    }
-                }
-            }
-            """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
-            actual: WorldRow(index: 0, json: json),
-            expectedJson: """
-            {
-                "name": "vitals",
-                "kind": "Int",
-                "cells": [
-                    { "key": "health", "value": 100 },
-                    { "key": "mana", "value": 50, "advance": { "perSecondNumerator": 5, "perSecondDenominator": 1 } }
-                ],
-                "capacity": 3,
-                "min": 0,
-                "max": 100,
-                "overflow": "Saturate"
-            }
-            """
-        );
-    }
-    [Fact]
-    public void SlotDeclarationCompilesByteIdenticallyToAnExplicitRow() {
-        // A one-sided bound (minimum only, no maximum) is legal — StateRow.Min and Max are each independently
-        // optional.
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    slot gold = 10 bounds(0..)
-                }
-            }
-            """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
-            actual: WorldRow(index: 0, json: json),
-            expectedJson: """{ "name": "gold", "kind": "Int", "value": 10, "min": 0 }"""
-        );
-    }
-    [Fact]
-    public void SlotDeclarationWithNoDefaultOmitsValue() {
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    slot uninitialized
-                }
-            }
-            """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
-            actual: WorldRow(index: 0, json: json),
-            expectedJson: """{ "name": "uninitialized", "kind": "Int" }"""
-        );
-    }
-    [Fact]
-    public void EmptyTableWithNoCapacityLowersAKeysDomainSoItIsNeverInferredAsASlot() {
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    table x { }
-                }
-            }
-            """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
-            actual: WorldRow(index: 0, json: json),
-            expectedJson: """{ "name": "x", "kind": "Int", "domain": { "$type": "keys" } }"""
-        );
-    }
-    [Fact]
-    public void CellBehaviorNoneModifierLowersToTheEnumsWireSpelling() {
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    table flags {
-                        a = 1 behavior(none)
-                        b = 2
-                    }
-                }
-            }
-            """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
-            actual: WorldRow(index: 0, json: json),
-            expectedJson: """
-            {
-                "name": "flags",
-                "kind": "Int",
-                "cells": [
-                    { "key": "a", "value": 1, "behavior": "None" },
-                    { "key": "b", "value": 2 }
-                ]
-            }
-            """
-        );
-    }
-    [Fact]
-    public void RowDeclarationInsideADeclarationBlockLowersUnchanged() {
-        // The `row { }` escape hatch works the same inside a `world { }` declaration block as it does in today's
-        // `world [ ]` array form.
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    row { name: "custom" kind: Text value: "hello" }
-                }
-            }
-            """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
-            actual: WorldRow(index: 0, json: json),
-            expectedJson: """{ "name": "custom", "kind": "Text", "value": "hello" }"""
-        );
-    }
-    [Fact]
-    public void PileDeclarationCompilesByteIdenticallyToAnExplicitKeysOfRow() {
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    table cardNames capacity(3) {
-                        king = 0
-                        queen = 1
-                        jack = 2
-                    }
-                    pile deck of cardNames capacity(3) {
-                        king
-                        queen
-                        jack
-                    }
-                }
-            }
-            """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
-            actual: WorldRow(index: 1, json: json),
-            expectedJson: """
-            {
-                "name": "deck",
-                "kind": "Bool",
-                "domain": { "$type": "keysOf", "row": "cardNames", "ordered": true },
-                "cells": [
-                    { "key": "king", "value": true },
-                    { "key": "queen", "value": true },
-                    { "key": "jack", "value": true }
-                ],
-                "capacity": 3
-            }
-            """
-        );
-    }
+    [MemberData(nameof(RefusalNames))]
+    [Theory]
+    public void ARefusedDeclarationNamesItsCodeAndLine(string name) => WorldSources.AssertRefused(
+        label: name,
+        refusal: Refusals[name]
+    );
     [Fact]
     public void GridDeclarationCompilesByteIdenticallyToAnExplicitCellsOfRowAndTopology() {
-        var (json, diagnostics) = Lower(body: """
+        var json = WorldSources.LowerClean(body: """
             state {
                 world {
                     grid board dimensions(width: 2, depth: 2) wrap(Both) cellSize(2) origin(1, 0, 1) band(0.5) empty(-1) {
@@ -295,13 +305,10 @@ public class StateDeclarationEmitterTests {
                 }
             }
             """);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport("")
-        );
-        AssertRowEquals(
+
+        Assert.Null(@object: JsonMismatch.Find(
             actual: WorldRow(index: 0, json: json),
-            expectedJson: """
+            expected: JsonNode.Parse(json: """
             {
                 "name": "board",
                 "kind": "Int",
@@ -311,15 +318,16 @@ public class StateDeclarationEmitterTests {
                     { "key": "3", "value": 5 }
                 ]
             }
-            """
-        );
+            """),
+            path: "row"
+        ));
 
         var lattices = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: json["state"])["lattices"]);
         var topology = Assert.IsType<JsonObject>(@object: lattices[0]);
 
-        AssertRowEquals(
+        Assert.Null(@object: JsonMismatch.Find(
             actual: topology,
-            expectedJson: """
+            expected: JsonNode.Parse(json: """
             {
                 "$type": "grid",
                 "name": "board",
@@ -330,312 +338,8 @@ public class StateDeclarationEmitterTests {
                 "wrap": "Both",
                 "band": 0.5
             }
-            """
-        );
-    }
-    [Fact]
-    public void GridDeclarationWithNoDimensionsRefusesAndStillLowersACellsOfDomain() {
-        var (json, diagnostics) = Lower(body: """
-            state {
-                world {
-                    grid board { }
-                }
-            }
-            """);
-
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK053")
-        );
-    }
-    // ---- refusal matrix (PUCK049-PUCK066), each with its source span -----------------------------------------
-
-    public static TheoryData<string, string, string> RefusalCases() {
-        var data = new TheoryData<string, string, string>();
-
-        data.Add(
-            p1: """
-            state {
-                slot x
-            }
-            """,
-            p2: "PUCK049",
-            p3: "slot x"
-        );
-        data.Add(
-            p1: """
-            state {
-                world [
-                    { name: "x" kind: Int }
-                ]
-                world {
-                    slot y
-                }
-            }
-            """,
-            p2: "PUCK050",
-            p3: "world {"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot x
-                    slot x
-                }
-            }
-            """,
-            p2: "PUCK051",
-            p3: "slot x"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot $x : Int
-                }
-            }
-            """,
-            p2: "PUCK052",
-            p3: "$x"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot x = 5 bounds("oops"..)
-                }
-            }
-            """,
-            p2: "PUCK053",
-            p3: "\"oops\""
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    table x capacity(1) {
-                        a = 1
-                        b = 2
-                    }
-                }
-            }
-            """,
-            p2: "PUCK054",
-            p3: "capacity(1)"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot x capacity(2)
-                }
-            }
-            """,
-            p2: "PUCK055",
-            p3: "capacity(2)"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    table x {
-                        a = 1 advance(perSecond: 1) behavior(none)
-                    }
-                }
-            }
-            """,
-            p2: "PUCK056",
-            p3: "behavior(none)"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot x unknownMod(1)
-                }
-            }
-            """,
-            p2: "PUCK057",
-            p3: "unknownMod(1)"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot x advance(perSecond: 1e-19)
-                }
-            }
-            """,
-            p2: "PUCK058",
-            p3: "1e-19"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot x advance(perSecond: 1e-30)
-                }
-            }
-            """,
-            p2: "PUCK058",
-            p3: "1e-30"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    pile deck of missingRow {
-                        king
-                    }
-                }
-            }
-            """,
-            p2: "PUCK059",
-            p3: "missingRow"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    slot notAPile = 1
-                    pile deck of notAPile {
-                        king
-                    }
-                }
-            }
-            """,
-            p2: "PUCK060",
-            p3: "pile deck of notAPile"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    table cardNames capacity(2) {
-                        king = 0
-                        queen = 1
-                    }
-                    pile deck of cardNames {
-                        king
-                        king
-                    }
-                }
-            }
-            """,
-            p2: "PUCK061",
-            p3: "king"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    table cardNames capacity(2) {
-                        king = 0
-                        queen = 1
-                    }
-                    pile deck of cardNames capacity(5) {
-                        king
-                        queen
-                    }
-                }
-            }
-            """,
-            p2: "PUCK062",
-            p3: "capacity(5)"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    grid board dimensions(width: 2, depth: 2) {
-                        "0" = 1.5
-                    }
-                }
-            }
-            """,
-            p2: "PUCK063",
-            p3: "grid board"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    grid board dimensions(width: 2, depth: 2) {
-                        "9" = 1
-                    }
-                }
-            }
-            """,
-            p2: "PUCK064",
-            p3: "\"9\" = 1"
-        );
-        data.Add(
-            p1: """
-            state {
-                world {
-                    table tokensRow capacity(1) {
-                        a = 0
-                    }
-                    table codesRow capacity(1) {
-                        a = 1
-                    }
-                    grid board dimensions(width: 1, depth: 1) inverse(tokens: tokensRow, codes: codesRow) {
-                        "0" = 1
-                    }
-                }
-            }
-            """,
-            p2: "PUCK065",
-            p3: "inverse(tokens: tokensRow, codes: codesRow)"
-        );
-        data.Add(
-            p1: """
-            state {
-                lattices [
-                    { "$type": "grid", "name": "board", origin [0, 0, 0], "cellSize": 1, "width": 1, "depth": 1 }
-                ]
-                world {
-                    grid board dimensions(width: 1, depth: 1)
-                }
-            }
-            """,
-            p2: "PUCK066",
-            p3: "grid board dimensions(width: 1, depth: 1)"
-        );
-        return data;
-    }
-    [MemberData(nameof(RefusalCases))]
-    [Theory]
-    public void RefusalFiresWithItsCodeAndSourceSpan(string body, string code, string needle) {
-        var (_, diagnostics) = Lower(body: body);
-        var match = diagnostics.SingleOrDefault(predicate: d => (d.Code == code));
-
-        Assert.True(
-            condition: (match is not null),
-            userMessage: $"expected diagnostic {code}, got: {diagnostics.FormatReport("")}"
-        );
-        Assert.True(
-            condition: (match!.Span.Length > 0),
-            userMessage: $"{code}'s span carries no length"
-        );
-
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var needleIndex = source.LastIndexOf(
-            comparisonType: StringComparison.Ordinal,
-            value: needle
-        );
-
-        Assert.True(
-            condition: (needleIndex >= 0),
-            userMessage: $"needle '{needle}' not found in source"
-        );
-
-        var expectedLine = (source[..needleIndex].Count(predicate: static c => (c == '\n')) + 1);
-
-        Assert.Equal(
-            expectedLine,
-            match.Span.Line
-        );
+            """),
+            path: "topology"
+        ));
     }
 }

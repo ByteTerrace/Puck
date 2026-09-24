@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -18,12 +19,12 @@ public sealed class StorageCompositionLawTests {
 
     private static string BasisKey(string name) => WorldOwnedWorldSync.BasisAddressFor(
         containerId: ContainerId,
-        name: name
+        id: SafeName.Parse(candidate: name)
     ).Key;
     /// <summary>Builds an owned-world catalog seeded with one flat "amber" identity, then reshapes its on-disk file
     /// into a delta over a hand-placed <c>basis/shared.world.json</c> — the shape the owner ruling settled: a basis
     /// file lives outside the catalog's own directory glob, so it never enumerates as a second owned world.</summary>
-    private static (WorldOwnedWorlds Worlds, WorldIdentity Amber) BuildGraftedCatalog(TempWorldDirectory dir) {
+    private static (WorldOwnedWorlds Worlds, WorldIdentity Amber) BuildGraftedCatalog(TemporaryDirectory dir) {
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -32,7 +33,7 @@ public sealed class StorageCompositionLawTests {
         var amber = (worlds.FindById(id: "amber") ?? throw new InvalidOperationException(message: "seeding must produce 'amber'"));
         var tipPath = Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
         );
         var flatBytes = File.ReadAllBytes(path: tipPath);
         var basisDirectory = Path.Combine(
@@ -49,7 +50,7 @@ public sealed class StorageCompositionLawTests {
             bytes: flatBytes
         );
         File.WriteAllText(
-            contents: /*lang=json*/ """{ "basis": "basis/shared.world.json" }""",
+            contents: /*lang=json*/ """{ "basis": "basis/shared" }""",
             path: tipPath
         );
 
@@ -70,7 +71,7 @@ public sealed class StorageCompositionLawTests {
 
     [Fact]
     public void BasisBlobAlreadyInCloud_WithDifferentBytes_RefusesByName() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         BuildGraftedCatalog(dir: dir);
 
@@ -83,7 +84,7 @@ public sealed class StorageCompositionLawTests {
 
         store.Seed(
             bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "schema": "not-the-same-document" }"""),
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
 
@@ -99,7 +100,7 @@ public sealed class StorageCompositionLawTests {
         );
 
         var outcomes = sync.Push(id: "amber");
-        var basisOutcome = outcomes.Single(predicate: outcome => (outcome.Id == "shared.world.json (basis)"));
+        var basisOutcome = outcomes.Single(predicate: outcome => (outcome.Id == "shared (basis)"));
 
         Assert.False(condition: basisOutcome.Ok);
         Assert.Contains(
@@ -110,7 +111,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void BasisBlobAlreadyInCloud_WithIdenticalBytes_PushSucceeds() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         BuildGraftedCatalog(dir: dir);
 
@@ -130,7 +131,7 @@ public sealed class StorageCompositionLawTests {
         // already pushed this session before the sidecar here ever tracked a token for it.
         store.Seed(
             bytes: basisBytes,
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
 
@@ -157,7 +158,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void ChainLinkOutsideTheReferrersDirectory_RefusesByName() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         // The ancestor sits as a SIBLING of the delta, not inside its basis/ subdirectory.
         dir.WriteBytes(
@@ -167,7 +168,7 @@ public sealed class StorageCompositionLawTests {
 
         var deltaPath = dir.WriteText(
             name: "delta.world.json",
-            text: /*lang=json*/ """{ "basis": "sibling.world.json", "motion": { "moveSpeed": 6.5 } }"""
+            text: /*lang=json*/ """{ "basis": "sibling", "motion": { "moveSpeed": 6.5 } }"""
         );
 
         Assert.False(condition: WorldDefinitionFileSource.TryResolveChainFiles(
@@ -183,7 +184,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void GraftedCatalog_ReloadsAndComposesTheHandPlacedBasis() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         BuildGraftedCatalog(dir: dir);
 
@@ -201,7 +202,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void PullOfACloudDelta_WritesTheDeltaPlusItsLinks() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -209,17 +210,17 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
         store.Seed(
             bytes: basisBytes,
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared.world.json", "motion": { "moveSpeed": 9.75 } }"""),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared", "motion": { "moveSpeed": 9.75 } }"""),
             key: TipKey(id: "amber"),
             objectId: ContainerId
         );
@@ -259,18 +260,18 @@ public sealed class StorageCompositionLawTests {
 
         var tipPath = Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
         );
         var tipDocument = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: tipPath))!);
 
         Assert.Equal(
-            expected: "basis/shared.world.json",
+            expected: "basis/shared",
             actual: tipDocument[propertyName: "basis"]!.GetValue<string>()
         );
     }
     [Fact]
     public void PullOfADelta_ComposesFromTheCloud_WithNoLocalSibling() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -278,17 +279,17 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
         store.Seed(
             bytes: basisBytes,
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared.world.json", "motion": { "moveSpeed": 9.75 } }"""),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared", "motion": { "moveSpeed": 9.75 } }"""),
             key: TipKey(id: "amber"),
             objectId: ContainerId
         );
@@ -337,7 +338,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void PullOfADelta_PrefersTheCloudBasisOverADifferentLocalSiblingOfTheSameName() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -345,17 +346,17 @@ public sealed class StorageCompositionLawTests {
         );
         var cloudBasisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
         store.Seed(
             bytes: cloudBasisBytes,
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared.world.json" }"""),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared" }"""),
             key: TipKey(id: "amber"),
             objectId: ContainerId
         );
@@ -400,7 +401,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void PushOfADelta_PushesItsBasisUnderTheBasisKey() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         BuildGraftedCatalog(dir: dir);
 
@@ -436,7 +437,7 @@ public sealed class StorageCompositionLawTests {
         );
         Assert.Contains(
             collection: outcomes,
-            filter: outcome => (outcome.Id == "shared.world.json (basis)")
+            filter: outcome => (outcome.Id == "shared (basis)")
         );
 
         var tipBytes = store.TryGetBytes(
@@ -444,7 +445,7 @@ public sealed class StorageCompositionLawTests {
             objectId: ContainerId
         );
         var basisBytes = store.TryGetBytes(
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
 
@@ -458,7 +459,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void PushOfTwoIdentitiesSharingOneBasis_PushesTheBasisExactlyOnce() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         BuildGraftedCatalog(dir: dir);
 
@@ -480,13 +481,13 @@ public sealed class StorageCompositionLawTests {
 
         var topazPath = Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "topaz"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "topaz"))
         );
 
         File.WriteAllText(
             contents: /*lang=json*/ """
             {
-              "basis": "basis/shared.world.json",
+              "basis": "basis/shared",
               "identity": { "id": "topaz", "name": "topaz", "color": "#3388CC", "moveSpeedState": "identity-move-speed", "turnSpeedState": "identity-turn-speed" }
             }
             """,
@@ -527,19 +528,19 @@ public sealed class StorageCompositionLawTests {
         );
         Assert.Single(
             collection: outcomes,
-            predicate: outcome => (outcome.Id == "shared.world.json (basis)")
+            predicate: outcome => (outcome.Id == "shared (basis)")
         );
         Assert.Equal(
             expected: 1,
             actual: store.WriteCountFor(
-                key: BasisKey(name: "shared.world.json"),
+                key: BasisKey(name: "shared"),
                 objectId: ContainerId
             )
         );
     }
     [Fact]
     public void PushPullPush_DoesNotFlattenTheCloudCopy() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -547,17 +548,17 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
         store.Seed(
             bytes: basisBytes,
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared.world.json", "motion": { "moveSpeed": 9.75 } }"""),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "shared", "motion": { "moveSpeed": 9.75 } }"""),
             key: TipKey(id: "amber"),
             objectId: ContainerId
         );
@@ -596,17 +597,17 @@ public sealed class StorageCompositionLawTests {
         )!))!);
 
         Assert.Equal(
-            expected: "shared.world.json",
+            expected: "shared",
             actual: cloudTip[propertyName: "basis"]!.GetValue<string>()
         );
         Assert.NotNull(@object: store.TryGetBytes(
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         ));
     }
     [Fact]
     public void Push_PublishesTheCounterpartClaim_NamingThisWorldUnderItsOwnerArmNeighbourKey() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -660,7 +661,7 @@ public sealed class StorageCompositionLawTests {
     // The document write is the primary effect: a refused claim post is reported, never fatal to a landed push.
     [Fact]
     public void Push_StillSucceedsWhenTheCounterpartPublisherRefuses() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -698,7 +699,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void PushedBasisBlob_IsNotDiscoveredAsAnOwnedWorld() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         BuildGraftedCatalog(dir: dir);
 
@@ -744,7 +745,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void SingleIdPush_DoesNotDirtyTheCatalog() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -785,7 +786,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void StaleBasisToken_WithIdenticalBytes_PushReconciles() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         BuildGraftedCatalog(dir: dir);
 
@@ -823,7 +824,7 @@ public sealed class StorageCompositionLawTests {
         // catalog's tracked token for the link is now stale even though the content it names has not diverged.
         store.Seed(
             bytes: basisBytes,
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId,
             token: "external-token"
         );
@@ -851,17 +852,17 @@ public sealed class StorageCompositionLawTests {
         var store = new FakeObjectBlobStore();
 
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "second.world.json" }"""),
-            key: BasisKey(name: "first.world.json"),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "second" }"""),
+            key: BasisKey(name: "first"),
             objectId: ContainerId
         );
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "first.world.json" }"""),
-            key: BasisKey(name: "second.world.json"),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "first" }"""),
+            key: BasisKey(name: "second"),
             objectId: ContainerId
         );
 
-        var rootBytes = Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "first.world.json" }""");
+        var rootBytes = Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "first" }""");
 
         Assert.False(condition: WorldDefinitionFileSource.TryComposeChain(
             chainBytes: out _,
@@ -885,10 +886,11 @@ public sealed class StorageCompositionLawTests {
             expectedSubstring: "first.world.json"
         );
     }
-    [InlineData(" leading.world.json")]
-    [InlineData("trailing.world.json ")]
-    [InlineData("../escape.world.json")]
-    [InlineData("sub/dir.world.json")]
+    [InlineData(" leading")]
+    [InlineData("trailing ")]
+    [InlineData("../escape")]
+    [InlineData("sub/dir")]
+    [InlineData("shared.world.json")]
     [InlineData("no-suffix.json")]
     [Theory]
     public void StorageBasisName_OutsideTheCanonicalShape_RefusesBeforeAnyRead(string name) {
@@ -917,7 +919,7 @@ public sealed class StorageCompositionLawTests {
 
         store.Seed(
             bytes: Fixtures.DefaultWorldBytes(),
-            key: BasisKey(name: "a..b.world.json"),
+            key: BasisKey(name: "a..b"),
             objectId: ContainerId
         );
 
@@ -929,7 +931,7 @@ public sealed class StorageCompositionLawTests {
         Assert.True(
             condition: source.TryRead(
                 content: out var content,
-                name: "a..b.world.json",
+                name: "a..b",
                 reason: out var reason,
                 referrerName: "root.world.json",
                 resolvedName: out var resolvedName
@@ -938,7 +940,7 @@ public sealed class StorageCompositionLawTests {
         );
         Assert.Equal(
             actual: resolvedName,
-            expected: BasisKey(name: "a..b.world.json")
+            expected: BasisKey(name: "a..b")
         );
         Assert.NotNull(@object: content);
         Assert.Equal(
@@ -948,7 +950,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void StorageBasisNamedLikeTheRootTip_IsNotACycle() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var worlds = new WorldOwnedWorlds(
             directory: dir.RootPath,
             machineId: Guid.NewGuid(),
@@ -956,7 +958,7 @@ public sealed class StorageCompositionLawTests {
         );
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             path1: worlds.FilePath,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: "amber"))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
         ));
         var store = new FakeObjectBlobStore();
 
@@ -964,11 +966,11 @@ public sealed class StorageCompositionLawTests {
         // tip itself.
         store.Seed(
             bytes: basisBytes,
-            key: BasisKey(name: "amber.world.json"),
+            key: BasisKey(name: "amber"),
             objectId: ContainerId
         );
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "amber.world.json", "motion": { "moveSpeed": 9.75 } }"""),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "amber", "motion": { "moveSpeed": 9.75 } }"""),
             key: TipKey(id: "amber"),
             objectId: ContainerId
         );
@@ -1002,7 +1004,7 @@ public sealed class StorageCompositionLawTests {
     }
     [Fact]
     public void StorageChain_EqualsFileChain_ByteForByte_AndHashForHash() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
         var basisBytes = Fixtures.DefaultWorldBytes();
 
@@ -1011,7 +1013,7 @@ public sealed class StorageCompositionLawTests {
             name: "shared.world.json"
         );
 
-        var deltaText = /*lang=json*/ """{ "basis": "shared.world.json", "motion": { "moveSpeed": 6.5 } }""";
+        var deltaText = /*lang=json*/ """{ "basis": "shared", "motion": { "moveSpeed": 6.5 } }""";
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: deltaText
@@ -1032,7 +1034,7 @@ public sealed class StorageCompositionLawTests {
 
         store.Seed(
             bytes: basisBytes,
-            key: BasisKey(name: "shared.world.json"),
+            key: BasisKey(name: "shared"),
             objectId: ContainerId
         );
 
@@ -1083,7 +1085,7 @@ public sealed class StorageCompositionLawTests {
         );
         Assert.Equal(
             expected: WorldDefinitionSerialization.Serialize(definition: fileComposed!),
-            actual: WorldDefinitionSerialization.Serialize(definition: WorldDefinitionMigrations.Apply(definition: storageDefinition))
+            actual: WorldDefinitionSerialization.Serialize(definition: storageDefinition)
         );
 
         // Mutation falsifier: folding the SAME two files in the opposite order must not produce the same pin —
@@ -1095,31 +1097,139 @@ public sealed class StorageCompositionLawTests {
             expected: storageHash
         );
     }
+
+    /// <summary>Which of the sync engine's bounded store calls <see cref="SyncStoreCall_EndsWhenItsOperationTimeoutExpiresOnTheHostClock"/>
+    /// never answers.</summary>
+    public enum SyncStall {
+        /// <summary>Whole-catalog discovery's list.</summary>
+        Discovery,
+        /// <summary>A pull's read of the tip.</summary>
+        PullTip,
+        /// <summary>A pull's basis chain behind a tip that answered.</summary>
+        PullChain,
+        /// <summary>A push's tip write.</summary>
+        PushTip,
+        /// <summary>A push's basis-link write.</summary>
+        PushBasis,
+        /// <summary>The read comparing a basis link another catalog already created.</summary>
+        PushBasisCompare,
+    }
+
+    /// <summary>Each bounded store call the sync engine makes ends exactly when <see cref="WorldOwnedWorldSync.OperationTimeout"/>
+    /// expires on the host clock, and is refused by name on the outcome it belongs to.</summary>
+    [Theory]
+    [InlineData(SyncStall.Discovery, "*", "cloud discovery timed out after 15s")]
+    [InlineData(SyncStall.PullTip, "amber", "timed out after 15s")]
+    [InlineData(SyncStall.PullChain, "amber", "timed out reading ")]
+    [InlineData(SyncStall.PushTip, "amber", "timed out after 15s")]
+    [InlineData(SyncStall.PushBasis, "shared (basis)", "timed out after 15s")]
+    [InlineData(SyncStall.PushBasisCompare, "shared (basis)", "could not be read to compare")]
+    public async Task SyncStoreCall_EndsWhenItsOperationTimeoutExpiresOnTheHostClock(SyncStall stall, string outcomeId, string expected) {
+        using var dir = new TemporaryDirectory();
+
+        var grafted = (stall is SyncStall.PushBasis or SyncStall.PushBasisCompare);
+
+        if (grafted) {
+            BuildGraftedCatalog(dir: dir);
+        }
+
+        var worlds = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: Fixtures.BuildDocument()
+        );
+        var inner = new FakeObjectBlobStore();
+
+        if (stall == SyncStall.PullChain) {
+            inner.Seed(
+                bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "deep" }"""),
+                key: TipKey(id: "amber"),
+                objectId: ContainerId
+            );
+        } else if (stall == SyncStall.PushBasisCompare) {
+            inner.Seed(
+                bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "schema": "another-catalog" }"""),
+                key: BasisKey(name: "shared"),
+                objectId: ContainerId
+            );
+        }
+
+        var (call, key) = stall switch {
+            SyncStall.Discovery => (StoreCall.List, string.Empty),
+            SyncStall.PullTip => (StoreCall.Read, TipKey(id: "amber")),
+            SyncStall.PullChain => (StoreCall.Read, BasisKey(name: "deep")),
+            SyncStall.PushTip => (StoreCall.Write, TipKey(id: "amber")),
+            SyncStall.PushBasis => (StoreCall.Write, BasisKey(name: "shared")),
+            _ => (StoreCall.Read, BasisKey(name: "shared")),
+        };
+        var clock = new VirtualClock();
+        var stalling = new StallingObjectBlobStore(
+            inner: inner,
+            stalls: (candidate, candidateKey) => ((candidate == call) && ((call == StoreCall.List) || (candidateKey == key)))
+        );
+        var sync = new WorldOwnedWorldSync(
+            containerId: ContainerId,
+            stateFilePath: Path.Combine(
+                path1: dir.RootPath,
+                path2: "sync-state.json"
+            ),
+            store: stalling,
+            target: Target,
+            timeProvider: clock,
+            worlds: worlds
+        );
+        var outcomes = Task.Run(
+            cancellationToken: TestContext.Current.CancellationToken,
+            function: () => (stall switch {
+                SyncStall.Discovery => sync.Pull(id: null),
+                SyncStall.PullTip or SyncStall.PullChain => sync.Pull(id: "amber"),
+                _ => sync.Push(id: "amber"),
+            })
+        );
+
+        await stalling.Stalled.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
+        await clock.ExpireAsync(
+            ct: TestContext.Current.CancellationToken,
+            dueTime: WorldOwnedWorldSync.OperationTimeout,
+            pending: outcomes
+        );
+
+        var outcome = (await outcomes).Single(predicate: candidate => (candidate.Id == outcomeId));
+
+        Assert.False(condition: outcome.Ok);
+        Assert.Contains(
+            actualString: outcome.Detail,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: expected
+        );
+    }
     [Fact]
     public void StorageChain_ObservesOneDeadlineForTheWholeChain() {
         var store = new FakeObjectBlobStore();
 
         store.Seed(
-            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "deep.world.json" }"""),
-            key: BasisKey(name: "mid.world.json"),
+            bytes: Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "deep" }"""),
+            key: BasisKey(name: "mid"),
             objectId: ContainerId
         );
         store.Seed(
             bytes: Fixtures.DefaultWorldBytes(),
-            key: BasisKey(name: "deep.world.json"),
-            objectId: ContainerId
-        );
-        // No read delay is seeded on hop 1, so this proves the SAME caller-supplied deadline (already ticking since
-        // before hop 1) reaches hop 2's read — token propagation across the whole chain, not a per-hop-fresh budget
-        // of equal size. The 50ms deadline set below is what actually expires during hop 2's 2s delay.
-        store.SeedReadDelay(
-            delay: TimeSpan.FromSeconds(seconds: 2),
-            key: BasisKey(name: "deep.world.json"),
+            key: BasisKey(name: "deep"),
             objectId: ContainerId
         );
 
-        using var deadline = new CancellationTokenSource(delay: TimeSpan.FromMilliseconds(value: 50));
-        var rootBytes = Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "mid.world.json" }""");
+        // The caller's one deadline expires the moment hop 1's read answers, so hop 2 runs past it. Hop 2 refuses
+        // only if the chain handed it that same token: a per-hop budget, or a hop reading with no token, would read
+        // the deep blob and compose.
+        using var deadline = new CancellationTokenSource();
+
+        store.SeedAfterRead(
+            afterRead: deadline.Cancel,
+            key: BasisKey(name: "mid"),
+            objectId: ContainerId
+        );
+
+        var rootBytes = Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "mid" }""");
 
         Assert.False(condition: WorldDefinitionFileSource.TryComposeChain(
             chainBytes: out _,
@@ -1132,16 +1242,19 @@ public sealed class StorageCompositionLawTests {
                 store: store
             )
         ));
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "timed out"
+        Assert.Equal(
+            actual: reason,
+            expected: $"timed out reading '{BasisKey(name: "deep")}'"
+        );
+        Assert.Equal(
+            actual: store.ReadCount,
+            expected: 2
         );
     }
     [Fact]
     public void StorageMissingBasisBlob_RefusesNamingTheAddress() {
         var store = new FakeObjectBlobStore();
-        var rootBytes = Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "ghost.world.json" }""");
+        var rootBytes = Encoding.UTF8.GetBytes(s: /*lang=json*/ """{ "basis": "ghost" }""");
 
         Assert.False(condition: WorldDefinitionFileSource.TryComposeChain(
             chainBytes: out _,
@@ -1157,7 +1270,7 @@ public sealed class StorageCompositionLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: BasisKey(name: "ghost.world.json")
+            expectedSubstring: BasisKey(name: "ghost")
         );
     }
 

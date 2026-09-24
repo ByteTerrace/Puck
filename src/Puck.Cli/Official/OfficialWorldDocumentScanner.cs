@@ -1,68 +1,157 @@
 using System.Text.Json.Nodes;
 
+using System.Text;
+
 using Puck.Launcher.Release;
 using Puck.World;
+using Puck.World.Transpiler.Assets;
+using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler.Embeddings;
 
 namespace Puck.Cli.Official;
 
-// Resolves documents[] (every world document under the worlds directory, by its own raw JSON — never a full
-// WorldDefinition parse, which most fragments refuse standalone by design) and composed[] (the root puck.world.json,
+// Resolves sources[] (the authoring workspace: every .puck source under the worlds directory, recursively, the
+// embedding and asset locks a compile reads beside one, and every .world.json document with no .puck source emitting
+// its name — each
+// published byte for byte), documents[] (every document that workspace authors, named by its document name
+// (WorldDocumentName) and described by its own JSON — never a full WorldDefinition parse, which most fragments refuse
+// standalone by design — each naming the sources[] file that authors it), and composed[] (the root document `puck`,
 // resolved through its whole basis-and-imports graph, parsed, migrated, validated, and re-serialized — the one
-// document this tree proves boots).
+// document this tree proves boots). A .puck source authors exactly the names it emits (WorldCompilation.DocumentNames):
+// its stem, or one per world a composition source declares, or none for a module library, so a .world.json file named
+// like a library, or like a composition that declares no world of its stem, is that name's carrier; a .world.json file
+// beside the source of its name emitting that name is never read. Every authored document name is unique ignoring
+// case (DocumentName.Comparer), a composition's declared worlds included, under the carriers' own rule.
 internal static class OfficialWorldDocumentScanner {
-    private const string BasisDocumentName = "standard.basis.json";
+    private const string BasisDocumentName = "standard";
     private const string BasisMemberName = "basis";
     private const string ImportsMemberName = "imports";
-    private const string RootDocumentName = "puck.world.json";
+    private const string RootDocumentName = "puck";
 
-    private static readonly string[] FragmentSubdirectories = ["games", "modules"];
+    // One document the workspace authors: its document name, the sources[] file that authors it, and its JSON.
+    private readonly record struct AuthoredDocument(string Name, string Source, byte[] Bytes);
 
-    private static bool TryDescribeDocument(string full, string path, OfficialObjectWriter writer, out OfficialDocumentEntry? entry, out string reason) {
-        entry = null;
+    // The authoring workspace a compile reads, keyed by worlds-relative name and sorted ordinally: the file carrying
+    // each document anywhere under the worlds directory, as the composer resolves a name (PuckDocumentComposer.TryCarriers
+    // — the .puck source that emits it where one does, whatever its stem, its .world.json document otherwise; a document beside the source
+    // of its name emitting that name is never read, so it is no part of the workspace), every module library, which carries no document name
+    // but is read by the sources importing it, and each lock a source's compile reads beside it (EmbeddingLock and
+    // AssetLock own the sidecar suffixes).
+    private static bool TrySourcesIn(string full, out SortedDictionary<string, string> sources, out string reason) {
+        sources = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        byte[] bytes;
+        if (!PuckDocumentComposer.TryCarriers(
+            carriers: out var carriers,
+            directory: full,
+            libraries: out var libraries,
+            option: SearchOption.AllDirectories,
+            reason: out reason
+        )) {
+            return false;
+        }
 
-        try {
-            bytes = File.ReadAllBytes(path: path);
-        } catch (IOException exception) {
-            reason = $"cannot read {path}: {exception.Message}";
+        foreach (var path in carriers.Select(selector: static carrier => carrier.Path).Concat(second: libraries)) {
+            sources[WorkspaceName(
+                full: full,
+                path: path
+            )] = path;
+
+            if (!WorldDocumentName.IsSourceFile(path: path)) {
+                continue;
+            }
+
+            foreach (var sidecar in ((ReadOnlySpan<string>)[EmbeddingLock.DeriveLockPath(sourcePath: path), AssetLock.DeriveLockPath(sourcePath: path)])) {
+                if (File.Exists(path: sidecar)) {
+                    sources[WorkspaceName(
+                        full: full,
+                        path: sidecar
+                    )] = sidecar;
+                }
+            }
+        }
+
+        return true;
+    }
+    // Every document one workspace file authors. A sourceless .world.json authors itself; a .puck source authors one
+    // document per name it emits (WorldCompilation.DocumentNames), beside it the way `puck compile` writes them: the
+    // document an ordinary source lowers to under its stem, or each world a composition declares. A module library
+    // emits no name and authors nothing; a lock authors nothing either.
+    private static bool TryAuthor(string name, string path, List<AuthoredDocument> documents, out string reason) {
+        reason = string.Empty;
+
+        if (WorldDocumentName.IsDocumentFile(path: name)) {
+            try {
+                documents.Add(item: new AuthoredDocument(
+                    Bytes: File.ReadAllBytes(path: path),
+                    Name: WorldDocumentName.OfDocumentFile(path: name),
+                    Source: name
+                ));
+            } catch (IOException exception) {
+                reason = $"cannot read {path}: {exception.Message}";
+
+                return false;
+            }
+
+            return true;
+        }
+
+        if (!WorldDocumentName.IsSourceFile(path: name)) {
+            return true;
+        }
+
+        // The workspace enumeration only parsed this source to learn the names it emits (WorldSourceIndex); its compile
+        // reads the same declaration from the same tree, so it authors a document under exactly those names.
+        if (!WorldCompileCache.Shared.TryCompile(
+            compiled: out var compiled,
+            failure: out var failure,
+            path: path
+        )) {
+            reason = $"{path} does not compile: {string.Join(separator: "; ", values: failure!.Diagnostics.Select(selector: static diagnostic => $"{diagnostic.Code} {diagnostic.Message}"))}";
 
             return false;
         }
 
+        var directory = name[..(name.LastIndexOf(value: '/') + 1)];
+
+        foreach (var emitted in compiled!.DocumentNames(sourcePath: path)) {
+            documents.Add(item: new AuthoredDocument(
+                Bytes: compiled.DocumentNamed(name: emitted)!,
+                Name: (directory + emitted),
+                Source: name
+            ));
+        }
+
+        return true;
+    }
+    private static bool TryDescribeDocument(AuthoredDocument document, OfficialObjectWriter writer, out OfficialDocumentEntry? entry, out string reason) {
+        entry = null;
+
         JsonObject? root;
 
         try {
-            root = (JsonNode.Parse(utf8Json: bytes) as JsonObject);
+            root = (JsonNode.Parse(utf8Json: document.Bytes) as JsonObject);
         } catch (Exception exception) when ((exception is System.Text.Json.JsonException or ArgumentException)) {
-            reason = $"{path} is not valid JSON: {exception.Message}";
+            reason = $"document '{document.Name}' ({document.Source}) is not valid JSON: {exception.Message}";
 
             return false;
         }
 
         if (root is null) {
-            reason = $"{path} does not hold a JSON object.";
+            reason = $"document '{document.Name}' ({document.Source}) does not hold a JSON object.";
 
             return false;
         }
 
-        var name = Path.GetRelativePath(
-            path: path,
-            relativeTo: full
-        ).Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
         var documentId = (root["documentId"] as JsonValue)?.GetValue<string>();
         var hasBasis = root.ContainsKey(propertyName: BasisMemberName);
         var hasImports = root.ContainsKey(propertyName: ImportsMemberName);
-        var role = (name.StartsWith(
+        var role = (document.Name.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: "shards/"
         )
             ? OfficialDocumentRoles.Shard
             : (string.Equals(
-                a: name,
+                a: document.Name,
                 b: BasisDocumentName,
                 comparisonType: StringComparison.Ordinal
             )
@@ -76,12 +165,12 @@ internal static class OfficialWorldDocumentScanner {
         if ((root[ImportsMemberName] as JsonArray) is { } importsArray) {
             foreach (var item in importsArray) {
                 if (item is JsonObject importObject) {
-                    var document = ((importObject["document"] as JsonValue)?.GetValue<string>() ?? string.Empty);
+                    var imported = ((importObject["document"] as JsonValue)?.GetValue<string>() ?? string.Empty);
                     var alias = (importObject["as"] as JsonValue)?.GetValue<string>();
 
                     imports.Add(item: new OfficialImportRef(
                         As: alias,
-                        Document: document
+                        Document: imported
                     ));
                 }
             }
@@ -103,10 +192,10 @@ internal static class OfficialWorldDocumentScanner {
 
         var pin = ((hasBasis || hasImports)
             ? null
-            : WorldDefinitionFileSource.ComputeContentHash(content: bytes)
+            : WorldDefinitionFileSource.ComputeContentHash(content: document.Bytes)
         );
 
-        var (objectPath, hash, size) = writer.Put(bytes: bytes);
+        var (objectPath, hash, size) = writer.Put(bytes: document.Bytes);
 
         entry = new OfficialDocumentEntry(
             ContentType: "application/json",
@@ -114,25 +203,36 @@ internal static class OfficialWorldDocumentScanner {
             Exports: exports,
             Hash: hash,
             Imports: imports,
-            Name: name,
+            Name: document.Name,
             Path: objectPath,
             Pin: pin,
             Role: role,
-            Size: size
+            Size: size,
+            Source: document.Source
         );
         reason = string.Empty;
 
         return true;
     }
+    // A file's forward-slash path relative to the worlds directory — the name sources[] carries.
+    private static string WorkspaceName(string full, string path) => Path.GetRelativePath(
+        path: path,
+        relativeTo: full
+    ).Replace(
+        newChar: '/',
+        oldChar: '\\'
+    );
 
     public static bool TryScan(
         string worldsDirectory,
         OfficialObjectWriter writer,
+        out IReadOnlyList<OfficialSourceEntry> sources,
         out IReadOnlyList<OfficialDocumentEntry> documents,
         out IReadOnlyList<OfficialComposedEntry> composed,
         out WorldDefinition? composedDefinition,
         out string reason
     ) {
+        sources = [];
         documents = [];
         composed = [];
         composedDefinition = null;
@@ -141,64 +241,70 @@ internal static class OfficialWorldDocumentScanner {
         var catalogFingerprint = CliWorldVocabulary.Fingerprint(catalog: machines);
 
         var full = Path.GetFullPath(path: worldsDirectory);
-        var rootPath = Path.Combine(
-            path1: full,
-            path2: RootDocumentName
-        );
-        var basisPath = Path.Combine(
-            path1: full,
-            path2: BasisDocumentName
-        );
+        var sourceEntries = new List<OfficialSourceEntry>();
+        var authored = new List<AuthoredDocument>();
 
-        if (!File.Exists(path: rootPath)) {
-            reason = $"'{RootDocumentName}' does not exist under {full}.";
-
+        if (!TrySourcesIn(
+            full: full,
+            reason: out reason,
+            sources: out var workspace
+        )) {
             return false;
         }
 
-        if (!File.Exists(path: basisPath)) {
-            reason = $"'{BasisDocumentName}' does not exist under {full}.";
+        foreach (var (name, path) in workspace) {
+            byte[] bytes;
 
-            return false;
-        }
+            try {
+                bytes = File.ReadAllBytes(path: path);
+            } catch (IOException exception) {
+                reason = $"cannot read {path}: {exception.Message}";
 
-        var candidates = new List<string> { rootPath, basisPath };
+                return false;
+            }
 
-        foreach (var subdirectory in FragmentSubdirectories) {
-            var directory = Path.Combine(
-                path1: full,
-                path2: subdirectory
-            );
+            var (sourcePath, sourceHash, sourceSize) = writer.Put(bytes: bytes);
 
-            if (Directory.Exists(path: directory)) {
-                candidates.AddRange(collection: Directory.EnumerateFiles(
-                    path: directory,
-                    searchOption: SearchOption.TopDirectoryOnly,
-                    searchPattern: "*.json"
-                ).Order(comparer: StringComparer.Ordinal));
+            sourceEntries.Add(item: new OfficialSourceEntry(
+                ContentType: (WorldDocumentName.IsSourceFile(path: name)
+                    ? OfficialSourceContentTypes.Puck
+                    : OfficialSourceContentTypes.Json
+                ),
+                Hash: sourceHash,
+                Name: name,
+                Path: sourcePath,
+                Size: sourceSize
+            ));
+
+            if (!TryAuthor(
+                documents: authored,
+                name: name,
+                path: path,
+                reason: out reason
+            )) {
+                return false;
             }
         }
 
-        var shardsDirectory = Path.Combine(
-            path1: full,
-            path2: "shards"
-        );
+        // The root and the basis are documents like any other: each resolves by name to its source when it has one.
+        foreach (var required in ((ReadOnlySpan<string>)[RootDocumentName, BasisDocumentName])) {
+            if (!authored.Exists(match: document => string.Equals(
+                a: document.Name,
+                b: required,
+                comparisonType: StringComparison.Ordinal
+            ))) {
+                reason = $"no document named '{required}' ({WorldDocumentName.SourceFile(name: required)} or {WorldDocumentName.DocumentFile(name: required)}) is authored under {full}.";
 
-        if (Directory.Exists(path: shardsDirectory)) {
-            candidates.AddRange(collection: Directory.EnumerateFiles(
-                path: shardsDirectory,
-                searchOption: SearchOption.TopDirectoryOnly,
-                searchPattern: "*.json"
-            ).Order(comparer: StringComparer.Ordinal));
+                return false;
+            }
         }
 
         var entries = new List<OfficialDocumentEntry>();
 
-        foreach (var path in candidates) {
+        foreach (var document in authored) {
             if (!TryDescribeDocument(
+                document: document,
                 entry: out var entry,
-                full: full,
-                path: path,
                 reason: out reason,
                 writer: writer
             )) {
@@ -208,28 +314,43 @@ internal static class OfficialWorldDocumentScanner {
             entries.Add(item: entry!);
         }
 
-        if (!WorldDefinitionFileSource.TryComposeDocumentTree(
+        var root = authored.Find(match: static document => string.Equals(
+            a: document.Name,
+            b: RootDocumentName,
+            comparisonType: StringComparison.Ordinal
+        ));
+        var rootPath = Path.Combine(
+            path1: full,
+            path2: root.Source
+        );
+
+        if (!PuckDocumentComposer.TryComposeWorldDocument(
             catalog: machines,
             catalogFingerprint: catalogFingerprint,
-            path: rootPath,
+            chainBytes: out _,
+            composed: out var tree,
             reason: out reason,
-            tree: out var tree
+            rootBytes: root.Bytes,
+            rootResolvedPath: rootPath
         )) {
-            reason = $"composing {RootDocumentName}: {reason}";
+            reason = $"composing '{RootDocumentName}' ({root.Source}): {reason}";
 
             return false;
         }
 
         if (!WorldDefinitionFileSource.TryParseComposed(
             definition: out var definition,
-            json: tree!.ToJsonString(),
+            json: ((tree is null)
+                ? Encoding.UTF8.GetString(bytes: root.Bytes)
+                : tree.ToJsonString()),
             neighbours: null,
             reason: out reason,
             sourceName: rootPath,
             validateAdjacencyClaims: false,
-            catalog: machines
+            catalog: machines,
+            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: rootPath)
         )) {
-            reason = $"parsing composed {RootDocumentName}: {reason}";
+            reason = $"parsing composed '{RootDocumentName}' ({root.Source}): {reason}";
 
             return false;
         }
@@ -239,7 +360,7 @@ internal static class OfficialWorldDocumentScanner {
             machines: machines,
             reason: out reason
         )) {
-            reason = $"machine admission in {RootDocumentName}: {reason}";
+            reason = $"machine admission in '{RootDocumentName}' ({root.Source}): {reason}";
             return false;
         }
 
@@ -252,6 +373,7 @@ internal static class OfficialWorldDocumentScanner {
             : $"puck:world/{Uri.EscapeDataString(stringToEscape: definition.DocumentId)}?schema={definition.Schema}&hash={pin}"
         );
 
+        sources = sourceEntries;
         documents = entries;
         composed = [
             new OfficialComposedEntry(

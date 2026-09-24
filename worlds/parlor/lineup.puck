@@ -1,0 +1,1257 @@
+// Lineup: two seats each secretly hold one of twenty-four porcelain busts, and take turns asking yes-or-no
+// questions about the other's. The rules answer every question from the hidden bust, and the asker's own gallery
+// lays down every bust the answer rules out. A seat may instead name a bust: right wins, wrong loses.
+//
+// Every bust is one attribute mask: one hair colour, one eye colour, and six features it has or lacks. A question is
+// one bit of that mask, and its answer set (`lineupYes`) is the twenty-four-bit set of busts carrying the bit, so
+// elimination is one AND on a seat's standing set. Every pair of busts differs in at least one bit.
+//
+// Seat 1 plays with the bound keys; seat 2 is the computer by default (`lineupOptions[cpuMask]`: bit 0 seat 1,
+// bit 1 seat 2). The computer asks the question whose yes/no split of its own standing set is closest to half, and
+// names the bust when one remains.
+//
+// Each seat's secret, standing set and gallery rows are readable by that seat alone. The rules read both; a seat's
+// console reads only its own.
+schema: "puck.world.definition.v1"
+basis: "parlor.basis"
+documentId: "lineup"
+
+// ---- The roster --------------------------------------------------------------------------------------------------
+// hair: 0 black, 1 brown, 2 red, 3 silver. eyes: 0 brown, 1 blue, 2 green. The six features are 0 or 1.
+let people = [
+  { name: "Ada", hair: 1, eyes: 1, glasses: 1, hat: 1, beard: 1, earrings: 1, long: 0, nose: 0 },
+  { name: "Bram", hair: 2, eyes: 0, glasses: 0, hat: 0, beard: 1, earrings: 1, long: 0, nose: 0 },
+  { name: "Cleo", hair: 1, eyes: 1, glasses: 1, hat: 0, beard: 0, earrings: 0, long: 1, nose: 0 },
+  { name: "Dex", hair: 0, eyes: 0, glasses: 0, hat: 1, beard: 0, earrings: 0, long: 0, nose: 0 },
+  { name: "Esme", hair: 2, eyes: 2, glasses: 1, hat: 0, beard: 0, earrings: 0, long: 1, nose: 1 },
+  { name: "Finn", hair: 0, eyes: 1, glasses: 0, hat: 1, beard: 1, earrings: 0, long: 0, nose: 0 },
+  { name: "Gus", hair: 1, eyes: 2, glasses: 0, hat: 0, beard: 0, earrings: 0, long: 0, nose: 1 },
+  { name: "Hana", hair: 2, eyes: 0, glasses: 0, hat: 0, beard: 1, earrings: 1, long: 1, nose: 0 },
+  { name: "Ivo", hair: 3, eyes: 0, glasses: 1, hat: 1, beard: 0, earrings: 0, long: 0, nose: 1 },
+  { name: "Juno", hair: 2, eyes: 1, glasses: 1, hat: 0, beard: 0, earrings: 0, long: 0, nose: 0 },
+  { name: "Kit", hair: 0, eyes: 1, glasses: 0, hat: 0, beard: 0, earrings: 0, long: 1, nose: 1 },
+  { name: "Lior", hair: 1, eyes: 0, glasses: 1, hat: 0, beard: 0, earrings: 1, long: 1, nose: 1 },
+  { name: "Mira", hair: 3, eyes: 1, glasses: 0, hat: 1, beard: 0, earrings: 1, long: 1, nose: 1 },
+  { name: "Nell", hair: 3, eyes: 2, glasses: 0, hat: 0, beard: 1, earrings: 0, long: 0, nose: 0 },
+  { name: "Otto", hair: 3, eyes: 1, glasses: 0, hat: 0, beard: 1, earrings: 1, long: 1, nose: 0 },
+  { name: "Pia", hair: 3, eyes: 0, glasses: 0, hat: 0, beard: 1, earrings: 0, long: 1, nose: 0 },
+  { name: "Quin", hair: 1, eyes: 1, glasses: 1, hat: 1, beard: 1, earrings: 0, long: 0, nose: 1 },
+  { name: "Rhea", hair: 0, eyes: 0, glasses: 0, hat: 1, beard: 1, earrings: 1, long: 1, nose: 1 },
+  { name: "Sol", hair: 3, eyes: 2, glasses: 0, hat: 0, beard: 0, earrings: 0, long: 0, nose: 1 },
+  { name: "Tove", hair: 1, eyes: 2, glasses: 0, hat: 1, beard: 1, earrings: 0, long: 0, nose: 1 },
+  { name: "Uma", hair: 2, eyes: 2, glasses: 0, hat: 0, beard: 0, earrings: 0, long: 0, nose: 1 },
+  { name: "Vik", hair: 0, eyes: 2, glasses: 0, hat: 0, beard: 1, earrings: 1, long: 0, nose: 0 },
+  { name: "Yara", hair: 2, eyes: 0, glasses: 0, hat: 0, beard: 1, earrings: 1, long: 0, nose: 1 },
+  { name: "Zeno", hair: 0, eyes: 2, glasses: 1, hat: 0, beard: 0, earrings: 0, long: 1, nose: 0 }
+]
+let pow2 = map(range(0, 24), i => reduce(range(0, i), 1, (acc, k) => acc * 2))
+let all = 16777215
+// The attribute mask: bits 0-3 hair colour, 4-6 eye colour, 7 glasses, 8 hat, 9 beard, 10 earrings, 11 long hair,
+// 12 large nose.
+let masks = map(people, p => pow2[p["hair"]] + pow2[4 + p["eyes"]] + p["glasses"] * 128 + p["hat"] * 256 + p["beard"] * 512 + p["earrings"] * 1024 + p["long"] * 2048 + p["nose"] * 4096)
+let questions = [
+  "Black hair?", "Brown hair?", "Red hair?", "Silver hair?",
+  "Brown eyes?", "Blue eyes?", "Green eyes?",
+  "Wears glasses?", "Wears a hat?", "Has a beard?", "Wears earrings?", "Long hair?", "Large nose?"
+]
+// The answer set of question q: every bust whose mask carries bit q.
+let yesSets = map(range(0, 13), q => reduce(range(0, 24), 0, (acc, p) => acc + (floor(masks[p] / pow2[q]) % 2) * pow2[p]))
+let seats = range(1, 2)
+
+host {
+  width: 1280
+  height: 960
+}
+
+views {
+  layout "action" {
+    slots [{ camera: "table", height: 1, width: 1, x: 0, y: 0 }]
+  }
+}
+
+bodies {
+  capacity: 2
+  localSeats: 2
+  sleepAfterSeconds: 0
+}
+
+defaultSeatKit: "player"
+
+// The seats play through their keys, not their bodies, so the bodies wait out of sight below the table.
+spawnPoints [
+  {
+    id: "origin"
+    position [0, -40, 8]
+    yawDegrees: 0
+  }
+]
+
+cameras [{
+    name: "table"
+    renderWidth: 1280
+    renderHeight: 960
+    rig {
+      name: "table"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.75, 2.9]))
+        lookAt(subject: worldPoint(point: [0, 1.32, -0.3]))
+        fieldOfView(fieldOfViewRadians: 0.74)
+      ]
+    }
+  }
+]
+
+gravity {
+  uniform [0, 0, 0]
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "still"
+    operations [
+      CommitPose
+    ]
+    version: "puck.body.program.v1"
+  }
+]
+
+kits {
+  rows [
+    {
+      bodyContact: Overlap
+      bodyMotionProgram: "still"
+      collider: capsule(endpoint: [0, 1, 0], radius: 0.35)
+      motion {
+        facingSnap: false
+        holds [
+          {
+            bond: Free
+            hold: None
+            name: "floating"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+        }
+      }
+      name: "player"
+    }
+  ]
+}
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat2"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat2"
+    subject: "all"
+  }
+]
+
+// ---- Controls --------------------------------------------------------------------------------------------------
+// Up and down choose a question, left and right a bust; Enter asks the chosen question, G names the chosen bust, and
+// N deals a new game once one is over. A gamepad's d-pad chooses, South asks, West names and Start deals.
+channels [
+  { name: "questionNext", shape: Binary, composition: true }
+  { name: "questionPrev", shape: Binary, composition: true }
+  { name: "bustNext", shape: Binary, composition: true }
+  { name: "bustPrev", shape: Binary, composition: true }
+  { name: "ask", shape: Binary, composition: true }
+  { name: "guess", shape: Binary, composition: true }
+  { name: "newGame", shape: Binary, composition: true }
+]
+
+bindingOverlays [
+  {
+    id: "lineup"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              { channel: "questionNext", sources ["keyboard.arrowDown", "gamepad.dpadDown"] }
+              { channel: "questionPrev", sources ["keyboard.arrowUp", "gamepad.dpadUp"] }
+              { channel: "bustNext", sources ["keyboard.arrowRight", "gamepad.dpadRight"] }
+              { channel: "bustPrev", sources ["keyboard.arrowLeft", "gamepad.dpadLeft"] }
+              { channel: "ask", sources ["keyboard.enter", "gamepad.buttonSouth"] }
+              { channel: "guess", sources ["keyboard.g", "gamepad.buttonWest"] }
+              { channel: "newGame", sources ["keyboard.n", "gamepad.start"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
+// ---- State -----------------------------------------------------------------------------------------------------
+// The layers a gallery draws each bust in, one deal row per seat each: the value is the variant the bust shows, and
+// zero draws nothing.
+let layers = ["Face", "Hair", "Eyes", "Glasses", "Hat", "Beard", "Earrings", "Nose"]
+
+state {
+  world {
+    // Each bust's attribute mask, public: the roster is the shared lineup.
+    row {
+      name: "lineupPeople"
+      kind: "Int"
+      capacity: 24
+      cells: map(range(0, 24), p => { key: $"{p}", value: masks[p] })
+    }
+
+    // The answer set of each question: the busts whose mask carries its bit.
+    row {
+      name: "lineupYes"
+      kind: "Int"
+      capacity: 13
+      cells: map(range(0, 13), q => { key: $"{q}", value: yesSets[q] })
+    }
+
+    // Each question's own index, so a walk over the questions reads the one it stands on.
+    row {
+      name: "lineupQuestion"
+      kind: "Int"
+      capacity: 13
+      cells: map(range(0, 13), q => { key: $"{q}", value: q })
+    }
+
+    row {
+      name: "lineupQuestionText"
+      kind: "Text"
+      capacity: 13
+      cells: map(range(0, 13), q => { key: $"{q}", value: questions[q] })
+    }
+
+    row {
+      name: "lineupName"
+      kind: "Text"
+      capacity: 24
+      cells: map(range(0, 24), p => { key: $"{p}", value: people[p]["name"] })
+    }
+
+    // The gallery's twenty-four places, in the order every layer deals them.
+    row {
+      name: "lineupSlots"
+      kind: "Int"
+      capacity: 24
+      cells: map(range(0, 24), p => { key: $"{p}", value: p })
+    }
+
+    // Every bust's nameplate, the same in both galleries.
+    row {
+      name: "lineupPlate"
+      kind: "Int"
+      capacity: 24
+      cells: map(range(0, 24), p => { key: $"{p}", value: p + 1 })
+    }
+
+    for seat in seats {
+      // The bust this seat holds, drawn at the deal. Only this seat reads it; the rules answer from it.
+      row {
+        name: $"lineupSecret{seat}"
+        kind: "Int"
+        min: 0
+        max: 23
+        draw {
+          generator {
+            source: "WeightedNumeric"
+            mode: "RestartOnExhaustion"
+            weighted: map(range(0, 24), k => { value: k, weight: 1 })
+          }
+          timing: "Event"
+        }
+        visibility {
+          readers [$"seat{seat}"]
+        }
+      }
+
+      // The busts this seat has not yet ruled out, one bit each.
+      row {
+        name: $"lineupStanding{seat}"
+        kind: "Int"
+        value: all
+        visibility {
+          readers [$"seat{seat}"]
+        }
+      }
+
+      // The standing set the gallery rows were last drawn from.
+      row {
+        name: $"lineupShown{seat}"
+        kind: "Int"
+        value: -1
+        visibility {
+          readers [$"seat{seat}"]
+        }
+      }
+
+      for layer in layers {
+        row {
+          name: $"lineup{layer}{seat}"
+          kind: "Int"
+          capacity: 24
+          cells []
+          visibility {
+            readers [$"seat{seat}"]
+          }
+        }
+      }
+    }
+
+    // stage: 0 dealing, 1 playing, 2 over. winner: the seat that won, 0 while playing.
+    table lineupTable capacity(12) {
+      stage = 0
+      turn = 1
+      winner = 0
+      lastSeat = 0
+      lastQuestion = -1
+      lastAnswer = -1
+      lastGuess = -1
+      accepted = 0
+      refused = 0
+      games = 0
+    }
+
+    table lineupAsked capacity(2) {
+      "1" = 0
+      "2" = 0
+    }
+
+    // cpuMask: bit 0 plays seat 1, bit 1 seat 2. pace: the ticks the computer waits before it acts.
+    table lineupOptions capacity(2) {
+      cpuMask = 2
+      pace = 30
+    }
+
+    // The one door a seat acts through: name the seat, the kind (1 ask, 2 name a bust) and the question or bust,
+    // then bump the request. `result` answers 1 accepted or -1 refused.
+    table lineupAct capacity(6) {
+      seat = 0
+      kind = 0
+      value = 0
+      request = 0
+      applied = 0
+      result = 0
+    }
+
+    // Each seat's chosen question and bust.
+    table lineupCursor capacity(4) {
+      q1 = 0
+      b1 = 0
+      q2 = 0
+      b2 = 0
+    }
+
+    table lineupAi capacity(3) {
+      best = 100
+      question = -1
+      clock = 0
+    }
+
+    // What the panel shows.
+    slot lineupHudQuestion = "Black hair?"
+    slot lineupHudBust = "Ada"
+    slot lineupHudLast = "none yet"
+    slot lineupHudAnswer = ""
+    slot lineupHudOutcome = "Seat 1 to ask."
+  }
+}
+
+// ---- The deal --------------------------------------------------------------------------------------------------
+// Both secrets are drawn together and both galleries stand every bust up again.
+rule "lineup-deal" {
+  when lineupTable[stage] == 0
+  mode: Level
+  generate(row: lineupSecret1)
+  generate(row: lineupSecret2)
+  lineupStanding1 = all
+  lineupStanding2 = all
+  lineupAsked[1] = 0
+  lineupAsked[2] = 0
+  lineupTable[turn] = 1
+  lineupTable[winner] = 0
+  lineupTable[lastSeat] = 0
+  lineupTable[lastQuestion] = -1
+  lineupTable[lastAnswer] = -1
+  lineupTable[lastGuess] = -1
+  lineupTable[games] += 1
+  lineupTable[stage] = 1
+  lineupHudLast = "none yet"
+  lineupHudAnswer = ""
+  lineupHudOutcome = "Seat 1 to ask."
+}
+
+// ---- A turn ----------------------------------------------------------------------------------------------------
+// The rules answer a question from the other seat's secret and eliminate on the asker's side: the standing set keeps
+// the answer set on a yes and its complement on a no. Naming the other seat's bust wins; naming any other loses.
+rule "lineup-act" {
+  when lineupAct[request] != lineupAct[applied]
+  local seat = lineupAct[seat]
+  local other = 3 - seat
+  local legal = (lineupTable[stage] == 1) * (seat == lineupTable[turn]) * ((seat == 1) + (seat == 2))
+  local asking = legal * (lineupAct[kind] == 1) * (lineupAct[value] >= 0) * (lineupAct[value] <= 12)
+  local naming = legal * (lineupAct[kind] == 2) * (lineupAct[value] >= 0) * (lineupAct[value] <= 23)
+  local q = asking == 1 ? lineupAct[value] : 0
+  local target = seat == 1 ? lineupSecret2 : lineupSecret1
+  local answer = (lineupPeople[(target)] >> q) & 1
+  local keep = answer == 1 ? lineupYes[(q)] : all ^ lineupYes[(q)]
+  local named = naming == 1 ? lineupAct[value] : 0
+  mode: Level
+  if asking == 1 {
+    if seat == 1 {
+      lineupStanding1 = lineupStanding1 & keep
+    } else {
+      lineupStanding2 = lineupStanding2 & keep
+    }
+    lineupAsked[(seat)] += 1
+    lineupTable[lastSeat] = seat
+    lineupTable[lastQuestion] = q
+    lineupTable[lastAnswer] = answer
+    lineupTable[lastGuess] = -1
+    lineupTable[turn] = other
+    lineupTable[accepted] += 1
+    lineupAct[result] = 1
+    setState(state: lineupHudLast, fromState: lineupQuestionText, fromKey: local(q))
+    if answer == 1 {
+      lineupHudAnswer = "Yes."
+    } else {
+      lineupHudAnswer = "No."
+    }
+    if other == 1 {
+      lineupHudOutcome = "Seat 1 to ask."
+    } else {
+      lineupHudOutcome = "Seat 2 to ask."
+    }
+  } else if naming == 1 {
+    lineupTable[lastSeat] = seat
+    lineupTable[lastGuess] = lineupAct[value]
+    lineupTable[winner] = lineupAct[value] == target ? seat : other
+    lineupTable[stage] = 2
+    lineupTable[accepted] += 1
+    lineupAct[result] = 1
+    setState(state: lineupHudLast, fromState: lineupName, fromKey: local(named))
+    if lineupAct[value] == target {
+      lineupHudAnswer = "was named: right."
+    } else {
+      lineupHudAnswer = "was named: wrong."
+    }
+  } else {
+    lineupAct[result] = -1
+    lineupTable[refused] += 1
+  }
+  lineupAct[applied] = lineupAct[request]
+  lineupAi[clock] = 0
+}
+
+rule "lineup-outcome" {
+  when lineupTable[stage] == 2 and lineupTable[winner] != 0
+  mode: Edge
+  if lineupTable[winner] == 1 {
+    lineupHudOutcome = "Seat 1 wins. N deals a new game."
+  } else {
+    lineupHudOutcome = "Seat 2 wins. N deals a new game."
+  }
+}
+
+// ---- The computer ----------------------------------------------------------------------------------------------
+// One question costs one walk over the thirteen answer sets: each split is the distance between the busts a yes
+// would keep and half the standing set, and the smallest wins, the lowest question on a tie. With one bust left, the
+// computer names it.
+rule "lineup-cpu-clock" {
+  mode: Level
+  if lineupTable[stage] == 1 and lineupAct[request] == lineupAct[applied] {
+    lineupAi[clock] = minimum(lineupOptions[pace], lineupAi[clock] + 1)
+  } else {
+    lineupAi[clock] = 0
+  }
+}
+
+template computer(seat, standing) {
+  rules "" when lineupTable[stage] == 1 and lineupTable[turn] == seat and ((lineupOptions[cpuMask] >> (seat - 1)) & 1) == 1 and lineupAi[clock] >= lineupOptions[pace] and lineupAct[request] == lineupAct[applied] {
+    mode: "Level"
+    rule $"lineup-cpu-reset-{seat}" {
+      lineupAi[best] = 100
+      lineupAi[question] = -1
+    }
+    rule $"lineup-cpu-split-{seat}" {
+      forEach: lineupYes
+      local kept = setBitCount(standing & lineupYes[$each]) * 2 - setBitCount(standing)
+      local split = maximum(kept, 0 - kept)
+      if split < lineupAi[best] {
+        lineupAi[best] = split
+        lineupAi[question] = lineupQuestion[$each]
+      }
+    }
+    rule $"lineup-cpu-act-{seat}" {
+      local last = setBitCount(standing) == 1
+      lineupAct[seat] = seat
+      lineupAct[kind] = last ? 2 : 1
+      lineupAct[value] = last ? trailingZeroCount(standing) : lineupAi[question]
+      lineupAct[request] += 1
+      lineupAi[clock] = 0
+    }
+  }
+}
+
+computer(seat: 1, standing: lineupStanding1)
+computer(seat: 2, standing: lineupStanding2)
+
+// ---- A seat at the keys -----------------------------------------------------------------------------------------
+template keys(seat) {
+  rules "" when ((lineupOptions[cpuMask] >> (seat - 1)) & 1) == 0 {
+    mode: "Edge"
+    rule $"lineup-question-next-{seat}" {
+      when channel(seat, questionNext) >= 0.5
+      lineupCursor[$"q{seat}"] = (lineupCursor[$"q{seat}"] + 1) % 13
+      setState(state: lineupHudQuestion, fromState: lineupQuestionText, fromKey: cell(lineupCursor, $"q{seat}"))
+    }
+    rule $"lineup-question-prev-{seat}" {
+      when channel(seat, questionPrev) >= 0.5
+      lineupCursor[$"q{seat}"] = (lineupCursor[$"q{seat}"] + 12) % 13
+      setState(state: lineupHudQuestion, fromState: lineupQuestionText, fromKey: cell(lineupCursor, $"q{seat}"))
+    }
+    rule $"lineup-bust-next-{seat}" {
+      when channel(seat, bustNext) >= 0.5
+      lineupCursor[$"b{seat}"] = (lineupCursor[$"b{seat}"] + 1) % 24
+      setState(state: lineupHudBust, fromState: lineupName, fromKey: cell(lineupCursor, $"b{seat}"))
+    }
+    rule $"lineup-bust-prev-{seat}" {
+      when channel(seat, bustPrev) >= 0.5
+      lineupCursor[$"b{seat}"] = (lineupCursor[$"b{seat}"] + 23) % 24
+      setState(state: lineupHudBust, fromState: lineupName, fromKey: cell(lineupCursor, $"b{seat}"))
+    }
+    rule $"lineup-ask-{seat}" {
+      when channel(seat, ask) >= 0.5 and lineupAct[request] == lineupAct[applied]
+      lineupAct[seat] = seat
+      lineupAct[kind] = 1
+      lineupAct[value] = lineupCursor[$"q{seat}"]
+      lineupAct[request] += 1
+    }
+    rule $"lineup-guess-{seat}" {
+      when channel(seat, guess) >= 0.5 and lineupAct[request] == lineupAct[applied]
+      lineupAct[seat] = seat
+      lineupAct[kind] = 2
+      lineupAct[value] = lineupCursor[$"b{seat}"]
+      lineupAct[request] += 1
+    }
+    rule $"lineup-new-game-{seat}" {
+      when channel(seat, newGame) >= 0.5 and lineupTable[stage] == 2
+      lineupTable[stage] = 0
+    }
+  }
+}
+
+keys(seat: 1)
+keys(seat: 2)
+
+// ---- The galleries ---------------------------------------------------------------------------------------------
+// A standing set moved since its gallery was drawn: every bust redraws its layers from its own mask, and a bust the
+// set no longer holds shows its folded variant and nothing else.
+template gallery(seat, standing, shown) {
+  rules "" when standing != shown {
+    mode: "Level"
+    rule $"lineup-draw-{seat}" {
+      forEach: lineupSlots
+      local mask = lineupPeople[$each]
+      local up = (standing >> lineupSlots[$each]) & 1
+      setState(state: $"lineupFace{seat}", key: $each, expression: 2 - up)
+      setState(state: $"lineupHair{seat}", key: $each, expression: up * (trailingZeroCount(mask & 15) * 2 + ((mask >> 11) & 1) + 1))
+      setState(state: $"lineupEyes{seat}", key: $each, expression: up * (trailingZeroCount((mask >> 4) & 7) + 1))
+      setState(state: $"lineupGlasses{seat}", key: $each, expression: up * ((mask >> 7) & 1))
+      setState(state: $"lineupHat{seat}", key: $each, expression: up * ((mask >> 8) & 1))
+      setState(state: $"lineupBeard{seat}", key: $each, expression: up * ((mask >> 9) & 1) * (trailingZeroCount(mask & 15) + 1))
+      setState(state: $"lineupEarrings{seat}", key: $each, expression: up * ((mask >> 10) & 1))
+      setState(state: $"lineupNose{seat}", key: $each, expression: up * (((mask >> 12) & 1) + 1))
+    }
+    rule $"lineup-drawn-{seat}" {
+      setState(state: $"lineupShown{seat}", expression: standing)
+    }
+  }
+}
+
+gallery(seat: 1, standing: lineupStanding1, shown: lineupShown1)
+gallery(seat: 2, standing: lineupStanding2, shown: lineupShown2)
+
+// ---- Placements ------------------------------------------------------------------------------------------------
+// Each gallery is four tiers of six places, dealt once per layer from the same twenty-four keys, so every layer's
+// place k stands on the same spot. A lattice deals its second step fastest, so the row step comes first and bust k
+// lands in row k / 6, column k % 6, where its nameplate stands. Seat 1's gallery faces the camera and climbs away
+// from it; seat 2's stands behind it facing away, raised, and climbs on away, so seat 1 sees every row of it from
+// behind. `back` is the local depth one row steps.
+let galleries = [
+  { seat: 1, x: 0.75, y: 0.82, z: 0.5, yaw: 180, facing: -1, back: 0.25, stand: "lineupStandNear" },
+  { seat: 2, x: -0.75, y: 1.35, z: -0.45, yaw: 0, facing: 1, back: -0.25, stand: "lineupStandFar" }
+]
+let column = [0.3, 0, 0]
+let rise = 0.15
+let layerMaps = [
+  { layer: "Face", map { "1": "lineupBustUp", "2": "lineupBustDown" } },
+  { layer: "Hair", map { "1": "lineupHairBlackShort", "2": "lineupHairBlackLong", "3": "lineupHairBrownShort", "4": "lineupHairBrownLong", "5": "lineupHairRedShort", "6": "lineupHairRedLong", "7": "lineupHairSilverShort", "8": "lineupHairSilverLong" } },
+  { layer: "Eyes", map { "1": "lineupEyesBrown", "2": "lineupEyesBlue", "3": "lineupEyesGreen" } },
+  { layer: "Glasses", map { "1": "lineupGlasses" } },
+  { layer: "Hat", map { "1": "lineupHat" } },
+  { layer: "Beard", map { "1": "lineupBeardBlack", "2": "lineupBeardBrown", "3": "lineupBeardRed", "4": "lineupBeardSilver" } },
+  { layer: "Earrings", map { "1": "lineupEarrings" } },
+  { layer: "Nose", map { "1": "lineupNoseSmall", "2": "lineupNoseLarge" } }
+]
+
+placements {
+  placement "lineupTable" {
+    prototype: "lineupTable"
+    position [0, 0, 0]
+  }
+
+  for g in galleries {
+    placement $"lineupStand{g[\"seat\"]}" {
+      prototype: g["stand"]
+      position [g["x"], g["y"], g["z"]]
+      yawDegrees: g["yaw"]
+    }
+
+    for l in layerMaps {
+      placement $"lineupGallery{g[\"seat\"]}{l[\"layer\"]}" {
+        prototype: "lineupBlank"
+        position [g["x"], g["y"], g["z"]]
+        yawDegrees: g["yaw"]
+        distribution {
+          fill {
+            name: "none"
+            offset: 0
+            step: 0
+          }
+          region: lattice(stepA: [0, rise, g["back"]], countA: 4, stepB: column, countB: 6)
+        }
+        deal {
+          row: "lineupSlots"
+          variants {
+            row: $"lineup{l[\"layer\"]}{g[\"seat\"]}"
+            map: l["map"]
+          }
+        }
+      }
+    }
+
+    // The nameplates never change, so each is an ordinary placement at its place's own spot.
+    for p in range(0, 24) {
+      placement $"lineupPlate{g[\"seat\"]}x{p}" {
+        prototype: $"lineupPlate{p}"
+        position [g["x"] + g["facing"] * (p % 6) * column[0], g["y"] + floor(p / 6) * rise, g["z"] + g["facing"] * floor(p / 6) * g["back"]]
+        yawDegrees: g["yaw"]
+      }
+    }
+  }
+}
+
+// ---- The busts -------------------------------------------------------------------------------------------------
+// Glazed porcelain on a walnut foot. A bust is its face layer plus whichever part prototypes its mask selects, so the
+// twenty-four busts share eighteen part prototypes rather than each carrying a copy. The author frame faces +Z.
+let porcelain = "#F1E7DC"
+let walnut = "#4A3322"
+let tunic = "#5E6F8C"
+let hairColors = ["#1F1A17", "#6B4226", "#B4472B", "#C8CDD4"]
+let hairNames = ["Black", "Brown", "Red", "Silver"]
+let eyeColors = ["#4A2E1B", "#2F6FC6", "#2E8B57"]
+let eyeNames = ["Brown", "Blue", "Green"]
+let quarterX = [0.70710678, 0, 0, 0.70710678]
+let layBack = [-0.70710678, 0, 0, 0.70710678]
+
+template hair(colorIndex, length, long) {
+  prototype $"lineupHair{hairNames[colorIndex]}{length}" {
+    document {
+      name: $"lineupHair{hairNames[colorIndex]}{length}"
+      schema: "puck.creation.v1"
+      palette [{ color: hairColors[colorIndex], roughness: 0.8, specular: 0.2 }]
+      shape Superellipsoid "cap" {
+        exponent: 2.6
+        material: 0
+        position [0, 0.243, -0.014]
+        scale [0.071, 0.05, 0.072]
+      }
+      for lock in filter([0], k => long) {
+        shape Superellipsoid "fall" {
+          blend: "SmoothUnion"
+          exponent: 2.4
+          material: 0
+          position [0, 0.178, -0.044]
+          scale [0.074, 0.082, 0.042]
+          smooth: 0.02
+        }
+      }
+    }
+  }
+}
+
+template eyes(colorIndex) {
+  prototype $"lineupEyes{eyeNames[colorIndex]}" {
+    document {
+      name: $"lineupEyes{eyeNames[colorIndex]}"
+      schema: "puck.creation.v1"
+      palette [{ color: eyeColors[colorIndex], roughness: 0.25, specular: 0.8 }, { color: "#0E0E10", roughness: 0.2, specular: 0.9 }]
+      for side in [-1, 1] {
+        shape Sphere $"iris{side}" {
+          material: 0
+          position [side * 0.024, 0.214, 0.057]
+          scale [0.012, 0.012, 0.012]
+        }
+        shape Sphere $"pupil{side}" {
+          material: 1
+          position [side * 0.024, 0.214, 0.066]
+          scale [0.005, 0.005, 0.005]
+        }
+      }
+    }
+  }
+}
+
+template beard(colorIndex) {
+  prototype $"lineupBeard{hairNames[colorIndex]}" {
+    document {
+      name: $"lineupBeard{hairNames[colorIndex]}"
+      schema: "puck.creation.v1"
+      palette [{ color: hairColors[colorIndex], roughness: 0.85, specular: 0.2 }]
+      shape Superellipsoid "beard" {
+        exponent: 2.4
+        material: 0
+        position [0, 0.16, 0.034]
+        scale [0.056, 0.042, 0.042]
+      }
+    }
+  }
+}
+
+template nose(id, size) {
+  prototype id {
+    document {
+      name: id
+      schema: "puck.creation.v1"
+      palette [{ color: porcelain, roughness: 0.35, specular: 0.5 }]
+      shape Ellipsoid "nose" {
+        material: 0
+        position [0, 0.198, 0.066 + size * 0.004]
+        scale [0.012 + size * 0.007, 0.016 + size * 0.01, 0.012 + size * 0.008]
+      }
+    }
+  }
+}
+
+template stand(id, lift, back) {
+  prototype id {
+    document {
+      name: id
+      schema: "puck.creation.v1"
+      palette [{ color: walnut, roughness: 0.6 }]
+      for row in range(0, 4) {
+        shape Box $"tier{row}" {
+          material: 0
+          position [-0.75, (row * rise - lift) / 2, -row * back]
+          scale [0.9, (row * rise + lift) / 2 + 0.001, 0.125]
+        }
+      }
+    }
+  }
+}
+
+prototypes {
+  // Draws nothing: a layer a bust does not carry, or carries no longer.
+  prototype "lineupBlank" {
+    document {
+      name: "lineupBlank"
+      schema: "puck.creation.v1"
+      palette [{ color: porcelain }]
+    }
+  }
+
+  prototype "lineupTable" {
+    document {
+      name: "lineupTable"
+      schema: "puck.creation.v1"
+      palette [{ color: "#5B3B28", roughness: 0.65 }, { color: "#2C4A3E", roughness: 0.95 }]
+      shape Box "top" {
+        material: 0
+        position [0, 0.72, 0]
+        scale [1.75, 0.09, 1.35]
+      }
+      shape Box "baize" {
+        material: 1
+        position [0, 0.805, 0]
+        scale [1.68, 0.01, 1.28]
+      }
+    }
+  }
+
+  // Four walnut tiers a gallery's rows stand on, stepping up and back; the high stand lifts seat 2's gallery so its
+  // busts show over seat 1's.
+  stand(id: "lineupStandNear", lift: 0.01, back: 0.25)
+  stand(id: "lineupStandFar", lift: 0.54, back: -0.25)
+
+  // A standing bust: foot, shoulders, neck, head, ears and a mouth, in porcelain over a slate tunic.
+  prototype "lineupBustUp" {
+    document {
+      name: "lineupBustUp"
+      schema: "puck.creation.v1"
+      palette [{ color: porcelain, roughness: 0.35, specular: 0.5 }, { color: walnut, roughness: 0.6 }, { color: tunic, roughness: 0.7 }, { color: "#A24F4F", roughness: 0.5 }]
+      shape Cylinder "foot" {
+        material: 1
+        position [0, 0.012, 0]
+        scale [0.085, 0.012, 0.085]
+      }
+      shape Superellipsoid "shoulders" {
+        exponent: 3
+        material: 2
+        position [0, 0.07, 0]
+        scale [0.1, 0.05, 0.058]
+      }
+      shape Cylinder "neck" {
+        blend: "SmoothUnion"
+        material: 0
+        position [0, 0.13, 0]
+        scale [0.026, 0.03, 0.026]
+        smooth: 0.01
+      }
+      shape Ellipsoid "head" {
+        blend: "SmoothUnion"
+        material: 0
+        position [0, 0.205, 0]
+        scale [0.062, 0.076, 0.068]
+        smooth: 0.012
+      }
+      for side in [-1, 1] {
+        shape Sphere $"ear{side}" {
+          blend: "SmoothUnion"
+          material: 0
+          position [side * 0.062, 0.205, -0.004]
+          scale [0.012, 0.018, 0.012]
+          smooth: 0.006
+        }
+      }
+      shape Ellipsoid "mouth" {
+        material: 3
+        position [0, 0.172, 0.06]
+        scale [0.016, 0.004, 0.006]
+      }
+    }
+  }
+
+  // A folded bust: the same figure laid on its back, its glaze gone grey.
+  prototype "lineupBustDown" {
+    document {
+      name: "lineupBustDown"
+      schema: "puck.creation.v1"
+      palette [{ color: "#8C8A88", roughness: 1 }, { color: walnut, roughness: 0.6 }]
+      shape Cylinder "foot" {
+        material: 1
+        position [0, 0.012, 0]
+        scale [0.085, 0.012, 0.085]
+      }
+      shape Superellipsoid "shoulders" {
+        exponent: 3
+        material: 0
+        position [0, 0.05, -0.02]
+        rotation: layBack
+        scale [0.1, 0.05, 0.03]
+      }
+      shape Ellipsoid "head" {
+        material: 0
+        position [0, 0.05, -0.12]
+        rotation: layBack
+        scale [0.062, 0.076, 0.03]
+      }
+    }
+  }
+
+  hair(colorIndex: 0, length: "Short", long: 0)
+  hair(colorIndex: 0, length: "Long", long: 1)
+  hair(colorIndex: 1, length: "Short", long: 0)
+  hair(colorIndex: 1, length: "Long", long: 1)
+  hair(colorIndex: 2, length: "Short", long: 0)
+  hair(colorIndex: 2, length: "Long", long: 1)
+  hair(colorIndex: 3, length: "Short", long: 0)
+  hair(colorIndex: 3, length: "Long", long: 1)
+  eyes(colorIndex: 0)
+  eyes(colorIndex: 1)
+  eyes(colorIndex: 2)
+  beard(colorIndex: 0)
+  beard(colorIndex: 1)
+  beard(colorIndex: 2)
+  beard(colorIndex: 3)
+  nose(id: "lineupNoseSmall", size: 0)
+  nose(id: "lineupNoseLarge", size: 1)
+
+  // Round wire spectacles.
+  prototype "lineupGlasses" {
+    document {
+      name: "lineupGlasses"
+      schema: "puck.creation.v1"
+      palette [{ color: "#1C1C1E", roughness: 0.3, specular: 0.9, metal: 0.8 }]
+      for side in [-1, 1] {
+        shape Torus $"rim{side}" {
+          material: 0
+          position [side * 0.024, 0.214, 0.069]
+          rotation: quarterX
+          scale [0.017, 0.017, 0.017]
+        }
+        shape Box $"arm{side}" {
+          material: 0
+          position [side * 0.056, 0.216, 0.03]
+          scale [0.002, 0.002, 0.036]
+        }
+      }
+      shape Box "bridge" {
+        material: 0
+        position [0, 0.216, 0.072]
+        scale [0.008, 0.002, 0.002]
+      }
+    }
+  }
+
+  // A flat-crowned hat with a band.
+  prototype "lineupHat" {
+    document {
+      name: "lineupHat"
+      schema: "puck.creation.v1"
+      palette [{ color: "#2E3440", roughness: 0.75 }, { color: "#C1843A", roughness: 0.5 }]
+      shape Cylinder "brim" {
+        material: 0
+        position [0, 0.276, -0.006]
+        scale [0.098, 0.005, 0.098]
+      }
+      shape Cylinder "crown" {
+        material: 0
+        position [0, 0.31, -0.006]
+        scale [0.064, 0.034, 0.064]
+      }
+      shape Cylinder "band" {
+        material: 1
+        position [0, 0.286, -0.006]
+        scale [0.066, 0.007, 0.066]
+      }
+    }
+  }
+
+  // Gold drops at the ear lobes.
+  prototype "lineupEarrings" {
+    document {
+      name: "lineupEarrings"
+      schema: "puck.creation.v1"
+      palette [{ color: "#E2B13C", roughness: 0.25, specular: 0.9, metal: 1 }]
+      for side in [-1, 1] {
+        shape Sphere $"drop{side}" {
+          material: 0
+          position [side * 0.066, 0.184, 0.002]
+          scale [0.009, 0.009, 0.009]
+        }
+      }
+    }
+  }
+
+  // One engraved walnut plate per bust, standing at the front of its foot.
+  for p in range(0, 24) {
+    prototype $"lineupPlate{p}" {
+      document {
+        name: $"lineupPlate{p}"
+        schema: "puck.creation.v1"
+        palette [{ color: walnut, roughness: 0.6 }, { color: "#E8D7A8", roughness: 0.4, specular: 0.6 }]
+        shape Box "plate" {
+          material: 0
+          position [0, 0.022, 0.1]
+          scale [0.08, 0.02, 0.008]
+        }
+        textRuns [
+          { text: people[p]["name"], position [0, 0.013, 0.109], rotation [0, 0, 0, 1], emHeight: 0.03, depth: 0.001, material: 1, align: "center" }
+        ]
+      }
+    }
+  }
+}
+
+// ---- The panel -------------------------------------------------------------------------------------------------
+hud {
+  defaults {
+    enabled: true
+  }
+  panels [
+    {
+      id: "lineup"
+      layer: Over
+      style: Panel
+      rect { x: 0.02, y: 0.015, width: 0.96, height: 0.19 }
+      elements [
+        { id: "ask", kind: Text, style: Primary, rect { x: 0.02, y: 0.05, width: 0.5, height: 0.2 }, "template": "Ask: {state.lineupHudQuestion}" }
+        { id: "bust", kind: Text, style: Primary, rect { x: 0.55, y: 0.05, width: 0.43, height: 0.2 }, "template": "Name: {state.lineupHudBust}" }
+        { id: "last", kind: Text, style: Warning, rect { x: 0.02, y: 0.29, width: 0.96, height: 0.2 }, "template": "Last: {state.lineupHudLast} {state.lineupHudAnswer}" }
+        { id: "outcome", kind: Text, style: Positive, rect { x: 0.02, y: 0.53, width: 0.96, height: 0.2 }, "template": "{state.lineupHudOutcome}" }
+        { id: "keys", kind: Text, style: Primary, rect { x: 0.02, y: 0.77, width: 0.96, height: 0.2 }, text: "Arrows: choose   Enter: ask   G: name" }
+      ]
+    }
+  ]
+}
+
+text {
+  defaultFont: "inter"
+  fonts [{ name: "inter", source: "fonts/inter-regular.ttf", hash: "sha256-64/47e488e1fc92d640", codePointRanges ["U+0020-U+007E"] }]
+}
+
+// ---- Tests -----------------------------------------------------------------------------------------------------
+// Each test skips the deal: it opens at stage 1 with both secrets and both standing sets written, and the computer
+// off unless the test is about it. A seat acts through the act door, as the keys and the computer do. Seat 2 holds
+// Ada (brown hair, blue eyes, glasses, hat, beard, earrings) and seat 1 holds Gus (brown hair, green eyes, large
+// nose). The brute-force sets read the roster's own attributes rather than the masks or answer sets the rules use:
+// they state what a question must keep independently of how the rules keep it.
+let bruteBrownHair = reduce(range(0, 24), 0, (acc, p) => acc + (people[p]["hair"] == 1) * pow2[p])
+let bruteNotGreenEyes = reduce(range(0, 24), 0, (acc, p) => acc + (people[p]["eyes"] != 2) * pow2[p])
+let bruteGlasses = reduce(range(0, 24), 0, (acc, p) => acc + people[p]["glasses"] * pow2[p])
+let bruteBrownHairGlasses = reduce(range(0, 24), 0, (acc, p) => acc + (people[p]["hair"] == 1) * people[p]["glasses"] * pow2[p])
+let bruteGreenEyesNoHat = reduce(range(0, 24), 0, (acc, p) => acc + (people[p]["eyes"] == 2) * (1 - people[p]["hat"]) * pow2[p])
+
+test "a hair colour question is answered from the other seat's bust" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: world.state.cell.set lineupAct seat 1
+    seat1: world.state.cell.set lineupAct kind 1
+    seat1: world.state.cell.set lineupAct value 1
+    seat1: world.state.cell.set lineupAct request 1 add
+    ticks 2
+  }
+  expect {
+    lineupTable[lastAnswer] == 1
+    lineupStanding1 == bruteBrownHair
+    lineupTable[turn] == 2
+  }
+}
+
+test "an eye colour question is answered from the other seat's bust" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: world.state.cell.set lineupAct seat 1
+    seat1: world.state.cell.set lineupAct kind 1
+    seat1: world.state.cell.set lineupAct value 6
+    seat1: world.state.cell.set lineupAct request 1 add
+    ticks 2
+  }
+  expect {
+    lineupTable[lastAnswer] == 0
+    lineupStanding1 == bruteNotGreenEyes
+  }
+}
+
+test "a feature question is answered from the other seat's bust" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: world.state.cell.set lineupAct seat 1
+    seat1: world.state.cell.set lineupAct kind 1
+    seat1: world.state.cell.set lineupAct value 7
+    seat1: world.state.cell.set lineupAct request 1 add
+    ticks 2
+  }
+  expect {
+    lineupTable[lastAnswer] == 1
+    lineupStanding1 == bruteGlasses
+  }
+}
+
+test "every answer keeps exactly the busts a brute-force filter keeps" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: world.state.cell.set lineupAct seat 1
+    seat1: world.state.cell.set lineupAct kind 1
+    seat1: world.state.cell.set lineupAct value 1
+    seat1: world.state.cell.set lineupAct request 1 add
+    ticks 3
+    seat2: world.state.cell.set lineupAct seat 2
+    seat2: world.state.cell.set lineupAct kind 1
+    seat2: world.state.cell.set lineupAct value 6
+    seat2: world.state.cell.set lineupAct request 1 add
+    ticks 3
+    seat1: world.state.cell.set lineupAct seat 1
+    seat1: world.state.cell.set lineupAct kind 1
+    seat1: world.state.cell.set lineupAct value 7
+    seat1: world.state.cell.set lineupAct request 1 add
+    ticks 3
+    seat2: world.state.cell.set lineupAct seat 2
+    seat2: world.state.cell.set lineupAct kind 1
+    seat2: world.state.cell.set lineupAct value 8
+    seat2: world.state.cell.set lineupAct request 1 add
+    ticks 3
+  }
+  expect {
+    lineupStanding1 == bruteBrownHairGlasses
+    lineupStanding2 == bruteGreenEyesNoHat
+    lineupAsked[1] == 2
+    lineupAsked[2] == 2
+    lineupTable[refused] == 0
+  }
+}
+
+test "naming the other seat's bust wins" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: world.state.cell.set lineupAct seat 1
+    seat1: world.state.cell.set lineupAct kind 2
+    seat1: world.state.cell.set lineupAct value 0
+    seat1: world.state.cell.set lineupAct request 1 add
+    ticks 2
+  }
+  expect {
+    lineupTable[stage] == 2
+    lineupTable[winner] == 1
+    lineupTable[lastGuess] == 0
+  }
+}
+
+test "naming any other bust loses" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: world.state.cell.set lineupAct seat 1
+    seat1: world.state.cell.set lineupAct kind 2
+    seat1: world.state.cell.set lineupAct value 16
+    seat1: world.state.cell.set lineupAct request 1 add
+    ticks 2
+  }
+  expect {
+    lineupTable[stage] == 2
+    lineupTable[winner] == 2
+    lineupTable[lastGuess] == 16
+  }
+}
+
+test "a seat acting out of turn is refused and nothing moves" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat2: world.state.cell.set lineupAct seat 2
+    seat2: world.state.cell.set lineupAct kind 2
+    seat2: world.state.cell.set lineupAct value 6
+    seat2: world.state.cell.set lineupAct request 1 add
+    ticks 2
+  }
+  expect {
+    lineupAct[result] == -1
+    lineupTable[refused] == 1
+    lineupTable[stage] == 1
+    lineupTable[winner] == 0
+  }
+}
+
+// The secret and the standing set are disclosed to their own seat alone: the owner's read is taken, the other
+// seat's is refused by name, and so is a read of the gallery row drawn from the standing set.
+test "a seat reads its own secret and is refused the other seat's" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: world.state lineupSecret1 $value
+    seat2: world.state lineupSecret2 $value
+    seat2 refused "'lineupSecret1'.'$value' is not disclosed to seat2": world.state lineupSecret1 $value
+    seat1 refused "'lineupSecret2'.'$value' is not disclosed to seat1": world.state lineupSecret2 $value
+    seat2 refused "'lineupStanding1'.'$value' is not disclosed to seat2": world.state lineupStanding1 $value
+    seat2 refused "'lineupFace1'.'0' is not disclosed to seat2": world.state lineupFace1 0
+    seat2 refused "may observe only itself": world.observe seat1
+    ticks 1
+  }
+  expect {
+    lineupSecret1 == 6
+    lineupSecret2 == 0
+  }
+}
+
+// Both seats are the computer, seat 2 moves first, and each holds a bust the greedy split needs five questions for,
+// so seat 2 names seat 1's bust on its sixth turn, before seat 1 can name seat 2's.
+test "the computer names the bust within six turns" {
+  given {
+    lineupTable[stage] = 1
+    lineupTable[turn] = 2
+    lineupOptions[cpuMask] = 3
+    lineupOptions[pace] = 1
+    lineupSecret1 = 0
+    lineupSecret2 = 1
+  }
+  when {
+    ticks 90
+  }
+  expect {
+    lineupTable[stage] == 2
+    lineupTable[winner] == 2
+    lineupTable[lastGuess] == 0
+    lineupAsked[2] <= 5
+  }
+}
+
+// A seat at the keys: two presses move the chosen question on to the third, and the ask key asks it.
+test "the keys choose a question and ask it" {
+  given {
+    lineupTable[stage] = 1
+    lineupOptions[cpuMask] = 0
+    lineupSecret1 = 6
+    lineupSecret2 = 0
+  }
+  when {
+    seat1: body.press questionNext 1 0.05
+    ticks 6
+    seat1: body.press questionNext 1 0.05
+    ticks 6
+    seat1: body.press ask 1 0.05
+    ticks 6
+  }
+  expect {
+    lineupCursor[q1] == 2
+    lineupTable[lastQuestion] == 2
+    lineupTable[lastAnswer] == 0
+    lineupAsked[1] == 1
+  }
+}

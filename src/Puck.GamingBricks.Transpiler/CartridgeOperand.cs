@@ -136,8 +136,8 @@ public static class CartridgeOperand {
         if (value.TryGetValue<string>(value: out var text)) {
             if (!ExpressionSpelling.TryParse(
                 error: out var error,
-                text: text,
-                program: out var parsed
+                program: out var parsed,
+                text: text
             )) {
                 reason = error;
 
@@ -183,8 +183,8 @@ public static class CartridgeOperand {
 
         if (!ExpressionSpelling.TryParse(
             error: out var error,
-            text: text,
-            program: out var parsed
+            program: out var parsed,
+            text: text
         )) {
             reason = error;
 
@@ -232,6 +232,7 @@ public static class CartridgeOperand {
             return node switch {
                 IdentifierExpressionNode name => (!scope.Constants.ContainsKey(key: name.Name) && !scope.Locals.ContainsKey(key: name.Name)),
                 BinaryExpressionNode binary => (Runtime(node: binary.Left) || Runtime(node: binary.Right)),
+                ConditionalExpressionNode conditional => (Runtime(node: conditional.Condition) || Runtime(node: conditional.WhenTrue) || Runtime(node: conditional.WhenFalse)),
                 UnaryExpressionNode unary => Runtime(node: unary.Operand),
                 IndexExpressionNode index => (Runtime(node: index.Target) || Runtime(node: index.Index)),
                 CallExpressionNode call => call.Arguments.Any(predicate: argument => Runtime(node: argument.Value)),
@@ -261,8 +262,12 @@ public static class CartridgeOperand {
                 return lowered!.GetValue<string>();
             }
             return node switch {
-                IdentifierExpressionNode name => $"`{name.Name}`",
+                IdentifierExpressionNode name => ExpressionSpelling.PrintName(
+                    name: name.Name,
+                    quoted: true
+                ),
                 BinaryExpressionNode binary => $"({Spell(node: binary.Left)} {binary.Operator} {Spell(node: binary.Right)})",
+                ConditionalExpressionNode conditional => $"({Spell(node: conditional.Condition)} ? {Spell(node: conditional.WhenTrue)} : {Spell(node: conditional.WhenFalse)})",
                 UnaryExpressionNode unary => $"({unary.Operator}{Spell(node: unary.Operand)})",
                 IndexExpressionNode index => $"{Spell(node: index.Target)}[{Spell(node: index.Index)}]",
                 CallExpressionNode call => $"{call.Name}({string.Join(

@@ -1,23 +1,23 @@
 {
   "schema": "puck.world.definition.v1",
   "documentId": "dive-medium-canary-discriminating",
-  "basis": "fixture.world.json",
+  "basis": "fixture",
   "rules": [
     {
-      "name": "dive_dive-depth-deep",
+      "name": "dive$dive-depth-deep",
       "mode": "Level",
       "gate": {
         "$type": "compareState",
         "state": {
           "channel": "region",
           "arguments": [
-            "diveDepth1"
+            "dive$diveDepth1"
           ]
         },
         "comparison": "GreaterOrEqual",
         "value": 1
       },
-      "effects": [{ "$type": "setState", "state": "dive_depth", "value": 2.9 }]
+      "effects": [{ "$type": "setState", "state": "dive$depth", "value": 2.9 }]
     }
   ]
 }

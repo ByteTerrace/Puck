@@ -51,28 +51,28 @@ public sealed partial class WorldRemoteAuthority {
         await WorldProjectionStream.RunAsync(
             output,
             async token => {
-            while (!token.IsCancellationRequested) {
-                var frame = await WorldFederationCodec.ReadResponseAsync(
-                    ct: token,
-                    stream: stream
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                while (!token.IsCancellationRequested) {
+                    var frame = await WorldFederationCodec.ReadResponseAsync(
+                        ct: token,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
 
-                if (!frame.Ok) { throw new IOException(message: $"traveler projection relay failed: {frame.Failure}"); }
-                var kind = ((WorldFederationResponse)frame.Kind);
+                    if (!frame.Ok) { throw new IOException(message: $"traveler projection relay failed: {frame.Failure}"); }
+                    var kind = ((WorldFederationResponse)frame.Kind);
 
-                if (kind is not (WorldFederationResponse.Route or WorldFederationResponse.Definition or WorldFederationResponse.Snapshot
-                    or WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal)) {
-                    throw new IOException(message: $"unexpected traveler projection response {kind}");
+                    if (kind is not (WorldFederationResponse.Route or WorldFederationResponse.Definition or WorldFederationResponse.Snapshot
+                        or WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal)) {
+                        throw new IOException(message: $"unexpected traveler projection response {kind}");
+                    }
+                    await WorldFederationCodec.WriteResponseAsync(
+                        output,
+                        kind,
+                        frame.Body,
+                        token
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    if (kind is WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal) { return; }
                 }
-                await WorldFederationCodec.WriteResponseAsync(
-                    output,
-                    kind,
-                    frame.Body,
-                    token
-                ).ConfigureAwait(continueOnCapturedContext: false);
-                if (kind is WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal) { return; }
-            }
-        },
+            },
             ct
         ).ConfigureAwait(continueOnCapturedContext: false);
         return null;

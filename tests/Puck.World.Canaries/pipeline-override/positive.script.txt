@@ -1,0 +1,14 @@
+# The boot row compiles in the background.
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+# The row names the shared ink source by an absolute path, so the document saved into the run directory still names
+# it. Time scale zero holds the instance at its first frame.
+world.row.set views.pipelines {"name":"ink","source":"{fixtures}/../../../src/Puck.World/Assets/pipelines/ink.pipeline.json","timeScale":0}
+pipeline.reload ink
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+# Preview exposure zero, commit it into the row, and save the document.
+pipeline.set ink visualize {"exposure":0}
+pipeline.commit ink
+pipeline.overrides ink
+world.save {run}/override.world.json

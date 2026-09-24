@@ -4,70 +4,115 @@ using Puck.Networking;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteUndoHistory(WireWriter writer, ArenaUndoSnapshot history) => WriteArray(writer, history.Groups, static (w, group) => {
-        w.WriteString(group.Name);
-        w.WriteInt32(group.Depth);
-        WriteIntArray(w, group.Rows);
-        WriteArray(w, group.Segments, WriteUndoSegment);
-        WriteOptionalClass(w, group.Pending, WriteUndoSegment);
-    });
-    private static ArenaUndoSnapshot ReadUndoHistory(ref WireReader reader) => new(ReadArray(ref reader, "undo groups", static (ref WireReader r) => {
-        var name = r.ReadString(field: "undo group", maxBytes: MaxStringBytes);
-        var depth = r.ReadCount(field: "undo depth", maximum: (ArenaCapacity.MaxJournalBytes / ArenaJournal.EntryBytes), minimum: 1);
-        var rows = ReadIntArray(field: "undo rows", reader: ref r);
-        var segments = ReadArray(ref r, "undo turns", ReadUndoSegment, maximum: depth);
-        var pending = ReadOptionalClass(readValue: ReadUndoSegment, reader: ref r);
+    private static void WriteUndoHistory(WireWriter writer, ArenaUndoSnapshot history) => writer.WriteArray(
+        items: history.Groups,
+        writeItem: static (w, group) => {
+            w.WriteString(value: group.Name);
+            w.WriteInt32(value: group.Depth);
+            WriteIntArray(w, group.Rows);
+            w.WriteArray(
+                items: group.Segments,
+                writeItem: WriteUndoSegment
+            );
+            w.WriteOptionalClass(
+                value: group.Pending,
+                writeValue: WriteUndoSegment
+            );
+        }
+    );
+    private static ArenaUndoSnapshot ReadUndoHistory(ref WireReader reader) => new(Groups: reader.ReadArray(
+        field: "undo groups",
+        readItem: static (ref WireReader r) => {
+            var name = r.ReadString(field: "undo group", maxBytes: MaxStringBytes);
+            var depth = r.ReadCount(field: "undo depth", maximum: (ArenaCapacity.MaxJournalBytes / ArenaJournal.EntryBytes), minimum: 1);
+            var rows = ReadIntArray(field: "undo rows", reader: ref r);
+            var segments = r.ReadArray(
+                field: "undo turns",
+                maximum: depth,
+                readItem: ReadUndoSegment
+            );
+            var pending = r.ReadOptionalClass(
+                readValue: ReadUndoSegment
+            );
 
-        return new ArenaUndoGroupSnapshot(name, depth, rows, segments, pending);
-    }));
+            return new ArenaUndoGroupSnapshot(Depth: depth, Name: name, Pending: pending, Rows: rows, Segments: segments);
+        },
+        maximum: MaxCollectionCount
+    ));
     private static void WriteUndoSegment(WireWriter writer, ArenaUndoSegmentSnapshot segment) {
-        writer.WriteBoolean(segment.Rewindable);
-        WriteArray(writer, segment.Entries, static (w, entry) => {
-            w.WriteByte(((byte)entry.Column));
-            w.WriteInt32(entry.Index);
-            w.WriteInt64(entry.Number);
-            WriteUndoText(w, entry.Text);
-            WriteOptionalClass(w, entry.Visibility, static (v, visibility) => {
-                v.WriteByte(((byte)visibility.Hidden));
-                WriteUndoText(v, visibility.ReadersFrom);
-                v.WriteBoolean((visibility.Readers is not null));
-                if (visibility.Readers is { } readers) { WriteArray(v, readers, WriteUndoText); }
-            });
-            WriteOptionalClass(w, entry.Observation, static (v, observation) => {
-                v.WriteInt64(observation.Tick);
-                v.WriteBoolean(observation.Visible);
-            });
-            WriteUndoText(w, entry.MemberKey);
-            w.WriteBoolean((entry.Components is not null));
-            if (entry.Components is { } components) { w.WriteBlock(MemoryMarshal.Cast<sbyte, byte>(components)); }
-        });
+        writer.WriteBoolean(value: segment.Rewindable);
+        writer.WriteArray(
+            items: segment.Entries,
+            writeItem: static (w, entry) => {
+                w.WriteByte(value: ((byte)entry.Column));
+                w.WriteInt32(value: entry.Index);
+                w.WriteInt64(value: entry.Number);
+                WriteUndoText(w, entry.Text);
+                w.WriteOptionalClass(
+                    value: entry.Visibility,
+                    writeValue: static (v, visibility) => {
+                        v.WriteByte(value: ((byte)visibility.Hidden));
+                        WriteUndoText(v, visibility.ReadersFrom);
+                        v.WriteBoolean(value: (visibility.Readers is not null));
+                        if (visibility.Readers is { } readers) {
+                            v.WriteArray(
+                        items: readers,
+                        writeItem: WriteUndoText
+                    );
+                        }
+                    }
+                );
+                w.WriteOptionalClass(
+                    value: entry.Observation,
+                    writeValue: static (v, observation) => {
+                        v.WriteInt64(value: observation.Tick);
+                        v.WriteBoolean(value: observation.Visible);
+                    }
+                );
+                WriteUndoText(w, entry.MemberKey);
+                w.WriteBoolean(value: (entry.Components is not null));
+                if (entry.Components is { } components) { w.WriteBlock(value: MemoryMarshal.Cast<sbyte, byte>(span: components)); }
+            }
+        );
     }
     private static ArenaUndoSegmentSnapshot ReadUndoSegment(ref WireReader reader) {
         var rewindable = reader.ReadBoolean();
-        var entries = ReadArray(ref reader, "undo entries", static (ref WireReader r) => {
-            var column = ((ArenaColumn)r.ReadByte());
+        var entries = reader.ReadArray(
+            field: "undo entries",
+            readItem: static (ref WireReader r) => {
+                var column = ((ArenaColumn)r.ReadByte());
 
-            if (!Enum.IsDefined(value: column)) { r.Fail(detail: "undo column is unknown", refusal: WireRefusal.EnumValueUnknown); }
-            var index = r.ReadInt32();
-            var number = r.ReadInt64();
-            var text = ReadUndoText(reader: ref r);
-            var visibility = ReadOptionalClass(ref r, static (ref WireReader v) => {
-                var hidden = ((HiddenCells)v.ReadByte());
+                if (!Enum.IsDefined(value: column)) { r.Fail(detail: "undo column is unknown", refusal: WireRefusal.EnumValueUnknown); }
+                var index = r.ReadInt32();
+                var number = r.ReadInt64();
+                var text = ReadUndoText(reader: ref r);
+                var visibility = r.ReadOptionalClass(
+                    readValue: static (ref WireReader v) => {
+                        var hidden = ((HiddenCells)v.ReadByte());
 
-                if (!Enum.IsDefined(value: hidden)) { v.Fail(detail: "undo visibility hidden mode is unknown", refusal: WireRefusal.EnumValueUnknown); }
-                var from = ReadUndoText(reader: ref v);
-                var readers = (v.ReadBoolean() ? ReadArray(ref v, "undo readers", static (ref WireReader item) => ReadUndoText(reader: ref item)!, maximum: StateCapacity.MaxVisibilityReaders) : null);
+                        if (!Enum.IsDefined(value: hidden)) { v.Fail(detail: "undo visibility hidden mode is unknown", refusal: WireRefusal.EnumValueUnknown); }
+                        var from = ReadUndoText(reader: ref v);
+                        var readers = (v.ReadBoolean() ? v.ReadArray(
+                        field: "undo readers",
+                        readItem: static (ref WireReader item) => ReadUndoText(reader: ref item)!,
+                        maximum: StateCapacity.MaxVisibilityReaders
+                    ) : null);
 
-                return new StateVisibility(Hidden: hidden, Readers: readers, ReadersFrom: from);
-            });
-            var observation = ReadOptionalClass(ref r, static (ref WireReader v) => new StateObservation(Tick: v.ReadInt64(), Visible: v.ReadBoolean()));
-            var key = ReadUndoText(reader: ref r);
-            var components = (r.ReadBoolean() ? MemoryMarshal.Cast<byte, sbyte>(span: r.ReadBlock(field: "undo vector", maxBytes: ArenaCapacity.MaxJournalBytes)).ToArray() : null);
+                        return new StateVisibility(Hidden: hidden, Readers: readers, ReadersFrom: from);
+                    }
+                );
+                var observation = r.ReadOptionalClass(
+                    readValue: static (ref WireReader v) => new StateObservation(Tick: v.ReadInt64(), Visible: v.ReadBoolean())
+                );
+                var key = ReadUndoText(reader: ref r);
+                var components = (r.ReadBoolean() ? MemoryMarshal.Cast<byte, sbyte>(span: r.ReadBlock(field: "undo vector", maxBytes: ArenaCapacity.MaxJournalBytes)).ToArray() : null);
 
-            return new ArenaUndoEntrySnapshot(column, index, number, text, visibility, observation, key, components);
-        }, maximum: (ArenaCapacity.MaxJournalBytes / ArenaJournal.EntryBytes));
+                return new ArenaUndoEntrySnapshot(Column: column, Components: components, Index: index, MemberKey: key, Number: number, Observation: observation, Text: text, Visibility: visibility);
+            },
+            maximum: (ArenaCapacity.MaxJournalBytes / ArenaJournal.EntryBytes)
+        );
 
-        return new ArenaUndoSegmentSnapshot(rewindable, entries);
+        return new ArenaUndoSegmentSnapshot(Entries: entries, Rewindable: rewindable);
     }
     // State text is a sequence of UTF-16 code units, including isolated surrogates. UTF-8 replacement would change
     // a retained value and its hash, so this uses explicit little-endian code units on every host.

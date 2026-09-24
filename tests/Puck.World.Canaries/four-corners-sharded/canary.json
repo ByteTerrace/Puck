@@ -3,7 +3,6 @@
   "title": "A traveler crosses onto a remote authority inside a five-process Four Corners mesh",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 50,
   "timeoutSeconds": 120,
   "binding": "Five real Puck.World processes (nw, ne, se, sw, island) each bind a distinct dynamic loopback endpoint and trust each other's generated federation identity, and each raises its own bodies.networkPlayers so an arrival from a peer has a slot to land in. Only nw's script drives a body: posed five units inside nw's own ground on its east face's centre line and flown outward, it crosses that face at x=66 onto ne's process — not onto a local shadow of ne's document — and nw's own transcript names the endpoint it forwarded to and reads the traveler back at an instance-qualified address on the far side. The discriminating leg keeps the same five worlds and the same topology and poses the traveler at the same spot, but never flies it, so no crossing and no remote-authority naming can be asserted against it. The onward hops of the ring are not asserted here: a body that has arrived over a federation hop is minted rigid on the destination, and a rigid body's own transfer is refused by name (\"cross-world transfer of a rigid body is not supported\"), so a second remote hop cannot leave the first destination at all. seamless-four-corners-circuit proves the same four-hop ring colocated.",
   "fixtures": [],

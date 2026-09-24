@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Add a public FixedQ4816 helper and a Default-tier law proving it agrees with an exact independently authored oracle.",
-      "expected_output": "Authors one declaration row in the appropriate laws family and one matching Case binding, uses an existing Laws combinator and shared Domain, places exact reference arithmetic in Oracles rather than calling Puck.Maths, declares an honest classical leg, classifies the new public member, and runs the unfiltered Release Default tier to regenerate owned artifacts.",
+      "expected_output": "Authors one declaration row in the appropriate laws family and one matching Case binding, uses an existing Laws combinator and shared Domain, places exact reference arithmetic in Oracles rather than calling Puck.Maths, declares an honest classical leg, classifies the new public member, and records the unfiltered Release Default tier with puck baselines maths-ledger to regenerate owned artifacts.",
       "files": []
     },
     {

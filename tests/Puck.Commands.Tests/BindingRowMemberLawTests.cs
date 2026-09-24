@@ -33,7 +33,7 @@ public sealed class BindingRowMemberLawTests {
         new(
             registry: new CommandRegistry(modules: [new Module()]),
             bindings: new PagedInputBindings(profile: profile),
-            principalResolver: new Principal()
+            principalResolver: new ConsolePrincipal()
         );
 
     [Fact]
@@ -221,8 +221,8 @@ public sealed class BindingRowMemberLawTests {
         ]);
     }
 
-    private sealed class Principal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class Module : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

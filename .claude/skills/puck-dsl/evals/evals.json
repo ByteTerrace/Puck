@@ -14,16 +14,16 @@
     },
     {
       "id": 2,
-      "prompt": "Two of my .puck edits are failing to compile and I don't understand either error:\n\n1) `host: {\\n    width: 1280\\n}` fails with a PUCK040 error pointing at the `host:` line.\n2) A rule in a puck.world.def.v1 document fails with PUCK037 when I write:\n```\nrule \"advance-round\" {\n    repeat 3 as i {\n        tableState[activeRound] += 1\n    }\n}\n```\nWhat's actually wrong with each one, and how do I fix them?",
+      "prompt": "Two of my .puck edits are failing to compile and I don't understand either error:\n\n1) `host: {\\n    width: 1280\\n}` fails with a PUCK040 error pointing at the `host:` line.\n2) A rule in a puck.world.definition.v1 document fails with PUCK037 when I write:\n```\nrule \"advance-round\" {\n    repeat 3 as i {\n        tableState[activeRound] += 1\n    }\n}\n```\nWhat's actually wrong with each one, and how do I fix them?",
       "files": [],
       "expected_output": "PUCK040: a container value (a block) is always written without a colon in front of it — `host { ... }`, not `host: { ... }`; drop the colon. PUCK037: the world vocabulary's rule body has nothing to lower a `repeat`/`break` loop onto (`if` is the one control-flow keyword this vocabulary does carry — it lowers to the state engine's own conditional effect) even though the core parser accepts `repeat`/`break` for every vocabulary; a cartridge rule admits them, but a world rule needs its count expressed a different way — e.g. `forEach` over a row's cells, or three separate effect statements.",
       "assertions": [
         "States the PUCK040 fix as removing the colon before the block, not changing the block to a colon-scalar form",
         "States that a colon in front of a container (`{` or `[`) is refused at every depth, not just at the document root",
-        "States that PUCK037 fires because the puck.world.def.v1 rule body has nothing to lower `repeat`/`break` onto, not because all control flow is unsupported in this vocabulary",
+        "States that PUCK037 fires because the puck.world.definition.v1 rule body has nothing to lower `repeat`/`break` onto, not because all control flow is unsupported in this vocabulary",
         "Names `forEach` or unrolling into separate effect statements as the concrete fix for the PUCK037 case, not a workaround that keeps the `repeat`",
         "Does not conflate the two diagnostics or suggest the same fix for both",
-        "Does not claim `if` is refused in a puck.world.def.v1 rule body"
+        "Does not claim `if` is refused in a puck.world.definition.v1 rule body"
       ]
     },
     {
@@ -35,6 +35,18 @@
         "Proposes `map(range(0, 180), i => 0)` or an equivalent range/map/reduce builtin composition, not a `for` loop (a `for` emits rows, not one array's contents)",
         "Is explicit that the compiled JSON still contains all 180 literal values — the builtin is a compile-time authoring convenience, not a runtime-evaluated expression",
         "Does not claim this changes what the cartridge does at play time"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "In my puck.world.definition.v1 source one rule checks five rotation offsets for a falling piece. I wrote five near-identical `local fit0 = ...` through `local fit4 = ...` lines by hand, one per offset in `let kicks = [0, -1, 1, -2, 2]`. Can the rule generate them from `kicks`, and can I also put a `when` inside that loop so each offset adds its own condition?",
+      "files": [],
+      "expected_output": "Yes for the locals: a compile-time `for (kick, t) in kicks { local $\"fit{t}\" = ... kick ... }` inside the rule body unrolls into fit0..fit4, each with the offset as a literal, and later statements read them by those names. No for the `when`: a rule has one gate, so a `when` inside a rule-body `for` is refused with PUCK114; conditions go in the rule's single `when` or in an `if` inside the loop.",
+      "assertions": [
+        "Proposes a compile-time `for` inside the rule body, with an interpolated local name such as `local $\"fit{t}\"`",
+        "States that the document carries the five unrolled locals, not a loop, so each one is compiled and priced like a local written by hand",
+        "Says a `when` inside a rule-body `for` is refused (PUCK114) and offers the rule's own `when` or an `if` inside the loop instead",
+        "Does not suggest splitting the check into five separate rules as the only way to avoid repetition"
       ]
     }
   ],

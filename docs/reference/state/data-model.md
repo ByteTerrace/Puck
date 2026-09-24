@@ -1,529 +1,561 @@
-# Model state with rows and cells
+# Rows, cells, and values
 
-A state model gives a simulation a shared vocabulary. In a small board game,
-`coins` might hold one balance, `pieceCell` might record each piece's location,
-and `hand` might hold cards in pile order. Rules read and change those values;
-the names themselves do not give them game behavior.
+Every piece of simulation state in Puck lives in a **row**: a named collection of
+values that all share one kind. This article explains how you declare rows, how
+you address the cells inside them, which values a cell can hold, and how the
+declarations you write relate to the values the engine stores. It's for authors
+writing `.puck` worlds and for host developers building a state section in C#.
 
-Start by answering three separate questions for each row:
+## Model a small game
 
-| Question | Example | State concept |
-|---|---|---|
-| What does each value mean? | A whole-number balance or a piece's location | `CellKind` chooses the value encoding. |
-| How do I address a value? | One slot, a piece name, or a board-cell ordinal | `StateDomain` chooses the address space. |
-| What additional behavior applies? | A capacity, accumulating value, or visibility policy | Row and cell traits supply the constraints and metadata. |
-
-## Read an address
-
-Every ordinary cell address has two parts: **row name and cell key**.
-The expression spelling `pieceCell[rook]` addresses key `rook` in row
-`pieceCell`. The value stored there might be `12`, meaning that this piece
-occupies board cell 12. Its key and its value serve different purposes.
-
-```mermaid
-flowchart LR
-    Address["Row: pieceCell<br/>Key: rook"] --> Value["Int value: 12"]
-    Value -- "ValuesFrom" --> Cell["Cell 12<br/>in the named topology"]
-    Cell -- "Inverse" --> Board["Derived occupancy<br/>board[12]"]
-```
-
-A **slot** holds one value. Its C# cell uses `StateRow.SlotKey`; an authored
-effect's omitted `Key` selects that slot. Omission never selects the first
-member of a keyed row. A declared `Capacity` expresses table intent even
-when the row currently contains only one cell.
-
-In C#, `StateCell.Value` is one `CellValue` — a closed union with one case per
-`CellKind`: `CellValue.Int` and `CellValue.Fixed` each carry a raw `long`
-(Q48.16 bits for `Fixed`), `CellValue.Bool` a `bool`, `CellValue.Text` a
-`string`, and `CellValue.Vector` the component memory a `StateVector` wraps.
-There is no implicit conversion between cases — a raw `long` means Int in one
-row and Q48.16 bits in another, so every construction site spells its case
-by name, and a cell whose `Value.Kind` disagrees with its row's declared
-`Kind` is refused by name (`StateRow.TryAdmitKind`). Reading a case a carrier
-does not hold — `Raw`, `AsInt`, `AsFixed`, `AsBool`, `AsText`, `AsVector` —
-throws rather than answering a neutral value that would read as a real one, so
-a reader checks `Value.Kind` (or `HasValue`, for the default carrier that
-holds no case at all) before choosing which accessor to call. Q48.16 stores a
-number as an integer scaled by 65,536; a raw value of `65536` means one.
-Human-facing numeric literals are converted at ingress. An integer and a
-fixed-point number therefore cannot be interchanged by copying their raw
-bits. Vector components are normalized signed 8-bit integers (`sbyte[]`)
-scaled to radius 127, preserving bit-exact reproducibility across execution
-hosts.
-
-## Choose an addressing shape
-
-| Domain | What a key names | Example |
-|---|---|---|
-| `slot` | The row's single reserved cell | `coins` or `turn`. |
-| `keys` | An author-chosen identifier | The declared pieces `rook`, `king`, and `pawn`. |
-| `keysOf` | A key drawn from another row | A value per piece; with `Ordered = true`, an ordered pile of cards. |
-| `cellsOf` | A cell of a named topology | Occupancy or a legal-move marker at each board location. |
-| `ring` | A bounded history slot | The last several pushed values, read by age through `$history:`. |
-
-A **topology** defines locations and connections: which squares are neighbors,
-for example. A row over that topology supplies values at those locations.
-Several rows can use the same topology: occupancy, visibility, and legal moves
-can describe one board without copying its geometry.
-
-A token row with `ValuesFrom` says that its integer values name locations.
-A board row with `Inverse` derives occupancy from those token positions.
-Write the token position and let the inverse be recomputed; independently
-maintaining both would give the same position two possible answers.
-
-## Group fields into bounded instances
-
-A record declares typed fields, defaults, and bounds. A pool provides a bounded
-set of live instances of that record. `claim` chooses the lowest free slot;
-`release` removes the instance and advances that slot's generation. Fields and
-allocator metadata participate in the same journal, so a refused initializer
-rolls back the whole claim.
-
-Storage reserves a fixed position per identity slot and marks live instances with
-presence bits. Claim and release do not move other instances. Generic C# row
-iteration must skip holes; see [pool storage and iteration](../state.md#store-bounded-records-and-relationships).
-
-`poolName[slot].field` addresses the slot's current occupant. A lexical binding
-from a claim or iteration holds a specific generation instead; release and
-reclaim cannot make that binding refer to the replacement. Iteration snapshots
-handles in ascending slot order and skips stale entries. Dead-slot generations
-remain in snapshots and hashes because they determine whether held handles are
-valid; equal live values alone do not mean equal allocator state.
-
-Numeric fields can declare `advance(perSecond: ...)`. Each live instance has
-its own clock, born at claim time. Pool snapshots carry the stored base and
-clock together, preserving accumulation across publication and reload. C#
-callers use the time-aware pool APIs for effective values and rebasing writes.
-
-World interactions bind a pool through `properties.carriers`, naming an enum
-field and mapping each member to a local seat, a named inhabited placement, or
-an explicit detached state. Every enum member needs exactly one mapping. The
-field and mapping compile once; live reads use ordinals, and placement bindings
-follow the population's current body assignment. Several instances may share
-one body; each remains a separate interaction participant and spends its own
-evaluation budget. Release removes a carrier; reclaim resolves the new instance's own
-default or initialized binding. Physical body indices never enter pool state.
-
-## Choose behavior deliberately
-
-| Need | Trait or mechanism | Consequence for the host |
-|---|---|---|
-| Bound a value or table | `Min`/`Max`, `Overflow`, `Capacity` | Admit writes against the row's envelope, capacity, and overflow policy. |
-| Keep the newest inserted entries | `Evicts` with `Capacity` | Evict by insertion order; updating an existing key does not make it newer. |
-| Accumulate between writes | `StateAdvance` | Read from a base and an exact per-second rate, evaluated over elapsed engine ticks; explicit writes rebase the carrying cell's clock. |
-| Follow a target smoothly | `StateDynamics` | Preserve the follower's state and its declared dynamics; presentation reads ease toward the target, while rules and simulation read stored truth. |
-| Cycle through a spatial symmetry | `StateCycle` | Derive the phase or lattice value from the requested tick. |
-| Draw a value | `Draw` | Preserve the site's cursor and exhaustion state; see [Generators](generators.md). |
-| Control what observers learn | `StateVisibility`, `StateKnowledge` | Apply observation policy when producing a recipient's view. |
-| Reject a stale submission | `StatePhase`, `PhaseGuard` | Admit against the current generation and advance it on success. |
-
-`Min` and `Max` are each independently optional — a one-sided range (a floor
-with no ceiling, or the reverse) is legal, and both are legitimate only on an
-`Int`/`Fixed` row. `Overflow` names what happens when a write's exact result
-(computed without wrapping) would leave that range, or overflows 64-bit
-storage: `Refuse` (the default, including on a row that declares no envelope
-at all) refuses the write by name, because a silent clamp can hide an
-authoring error; `Saturate` clamps it to the crossed bound,
-or to the storage limit on a side with no declared bound. `StateRow.TryAdmitWrite`
-is the one method every write path — the rule frame, mutation compose, ring
-push, board combine, write sets — decides through, so every path agrees. A
-saturating write still submits the rule's own operand as the mutation, so
-replay reproduces the same clamped result.
-
-Time traits describe computed reads. `StateAdvance` is authored per second
-and evaluated over elapsed engine ticks (`FixedTickConversion.TicksPerSecond`,
-50,400 per second) rather than simulation ticks, so a live change to the
-world's own `simulation.rateHz` moves no epoch and skews no accumulation.
-If an accumulating cell stores 10 at engine tick 0 and advances by 60 per
-second, its Int read one full second later (engine tick 50,400) is 70. The
-stored base can still be 10. Adding three at that engine tick must start from
-the current 70, then establish a new base of 73 at that engine tick. This is
-why readers and writers use the shared state helpers. A world authored at
-`simulation.rateHz: 0` never steps, so its engine tick never advances either:
-an `advance` row there is legal, not refused, and simply never accrues past
-whatever base its last explicit write left it at. `StateDynamics` and
-`StateCycle` stay on simulation ticks — only `StateAdvance` reads the engine
-clock. The arena's live read applies advance and cycle but never eases: a
-rule gate, an arithmetic write operand, an effect source, a reduction, and a
-search judge all read a `StateDynamics` cell's stored truth.
-`StateReader.TryReadEased`, read over a document's exported rows rather than
-the arena, is the one eased read — the one a plain presentation binding (a
-HUD readout, a look, a gait driver) takes.
-
-A row's `Advance`/`Dynamics`/`Cycle` is the default behavior of every cell it
-carries, including a key a later write mints — `EffectiveBehavior.Resolve`
-is the one place every consumer (readers, the validator, rebase, JSON
-conversion, save capture) decides which trait governs a cell. A cell replaces
-that default wholesale with its own `Advance`/`Dynamics`/`Cycle` (never two of
-the three at once), or opts out entirely with `StateCell.Behavior =
-StateCellBehavior.None`; neither is legitimate on the reserved slot key, since
-a slot's one cell has no separate default to override. Timing state — the
-epoch, a dynamics follower's sampled position and velocity, a cycle's carried
-substep — lives on the cell itself (`StateCellClock`), not on the trait: a key
-minted later starts its own clock from the tick (and engine tick) it was
-created. `StateCellClock` carries two independent epochs: `EpochTick` (a
-simulation tick, for `Dynamics`/`Cycle`) and `EpochEngineTick` (an engine
-tick, for `Advance`) — the two clocks never share a coordinate. A cell
-authored with a `Dynamics` behavior and no `StateCellClock` at all reads its
-own stored value as the follower's position, at rest, rather than easing in
-from zero. Re-authoring a
-row's default or a cell's own behavior settles every affected cell at the
-change tick, per the transition each behavior pair follows (a parameter
-change keeps the live value and moves the epoch; switching behaviors, or to
-none, freezes the old behavior's current value and zeroes velocity/substep).
-A declaration carries the *stored* value, which for a timed cell is a base or
-a phase rather than what a reader sees, so restating that value is not a write
-of it: changing a row's default rate leaves a cell that declares its own rate
-accumulating, uninterrupted. A `StateCycle` cell is the one case where the two
-readings differ in kind — its stored value is a phase and its read value the
-output that phase drives, so settling it into another cycle carries the phase,
-while settling it into any other behavior (including none) stores the value it
-was displaying.
-These traits have other compatibility rules too — a slot cannot both
-accumulate and draw, for one.
-
-Visibility also differs from gameplay permission. An observation policy says
-what a reader learns; it does not authorize that reader to mutate the state.
-Row and cell restrictions intersect. Hidden cells can disappear, contribute
-only a count, or appear as anonymous placeholders. A knowledge row is keyed by
-the stable token identity shared with its source-property and position rows.
-`observe` tests each token's current position against a board mask and remembers
-the source property with its observation tick. Moving a revealed token therefore
-keeps what was learned about it; hiding its new cell clears `Visible` without
-discarding the remembered value. Omitting the positions row selects the direct
-board projection for location knowledge: source, mask, and knowledge then share
-one topology and observations remain keyed by cell.
-
-A phase guard answers a narrower question: “Does this submission still refer
-to generation 7?” Once an accepted guarded submission advances the generation,
-another submission carrying 7 is stale. Rules and host admission still decide
-who may act and what a turn means.
-
-## Keep definitions, storage, and reads distinct
-
-The section describes rows. The catalog resolves their names into
-catalog-bound handles. A store supplies the values currently being read.
-`StateReader` combines a stored value with its authored behavior at a tick.
-Replacing a catalog invalidates its handles; preserving the declaration shape
-can let a host retain the catalog during value-only updates.
-
-State sections are immutable snapshots. Pool expansion is shared by section
-identity, so layout, rules, and admission reuse one expansion. A replacement
-section gets its own expanded values even when its declaration shape allows the
-catalog to survive. Shape comparison reads declarations rather than constructing
-every pool slot again; loading the replacement still validates its population.
-
-[Candidates](frames.md) explain how the same rows and compiled rules can read a
-different store while exploring a possible move.
-
-Several pairs of mechanisms recur across the model because they share a name,
-a storage shape, or an implementation, not because either is redundant:
-
-| Pair | What keeps them distinct |
-|---|---|
-| Board masks / board rows | A mask addresses at most 64 cells; board operations cover larger topologies and preserve cell values. A loop of single-cell writes also lacks an atomic board transform's publication boundary. |
-| `pushState` / transform `push` | One resolves an authored numeric source; the other carries its already-resolved raw mutation. They meet at the transform door, but the mutation boundary stays separate. |
-| `shuffle` / `arrange` | A draw-consuming shuffle and a deterministic rank-selected permutation differ in randomness, bounds, and cursor advancement. |
-| State ring / topology ring | A bounded history buffer and a spatial or cyclic adjacency structure are different domains despite the shared name. |
-| Live zones / dynamic keys | Both select an address component, but a live-zone gap closes the whole evaluation before the gate; a dynamic key's evaluation timing is its own. |
-| Bindings / state rows | A per-evaluation value and persistent, mutable simulation state have different lifetimes and observability; they are not interchangeable. |
-| Own-value / attribute sorting | One authored `sort(row: scores, by: [{ row: scores }])` orders a row's own values. Naming attribute rows in `by` instead orders a pile over their shared token domain. Compilation selects the storage-specific kernel; both preserve stable ties and per-key direction. |
-
-World wrappers such as `WorldStateRow` and `WorldRule` forward a base row's or
-rule's constructor fields; that duplication is maintenance surface, not a
-second state engine. A trait declared before its slot has any authored
-value is never normalized into a zero-valued cell — normalization must not
-manufacture existence or initial-fill behavior the author didn't write.
-
-## The state section
-
-`IStateSection` is the contract every reader and
-compiler consumes—the document-owned `Rows`, the `Lattices` they may lie
-over, two per-participant slot lanes (`ParticipantSlots`,
-`IdentitySlots`, each an `IStateSlot` declaring a `StateParticipantRole` of
-`Counter` or `Timer`), the `Enums` a row may name, and the `Families` that group
-consecutive rows. `StateSection` is the standalone
-document's own record of it; a document project declares its own record
-over the same interface and adds what only it can name.
-
-## Rows and cells
-
-`StateRow` describes a collection of `StateCell` values. A document project can
-derive its own row to add traits. `StateCapacity` and `StateReservedCells`
-define shared limits and reserved cells; `StateRows` supplies lookup helpers. The row
-converter `StateRowJsonConverter<TRow>` owns the wire shape (`value`-vs-
-`cells`, the decimal fixed-point spelling) and exposes two hook points a
-derived row's converter writes its own members at.
-
-`CellValue` is the one carrier `StateCell.Value` holds: a closed union over
-`CellKind` with one case each for `Int`, `Fixed`, `Bool`, `Text`, and `Vector`,
-stored inline rather than boxed. The `Vector` case carries opaque signed 8-bit
-components; the typed view over them belongs to the vector space that owns
-them.
-
-## Domains
-
-The `StateDomain` union chooses how a row is addressed: `slot`, `keys`,
-`keysOf`, `cellsOf`, or `ring`. Its cases use the `[Union]` marker in `Union.cs`.
-A token-domain declaration is an ordinary `keys` row whose `capacity` is the
-domain size — there is no separate facet marking it as a token domain, so a
-hash that covers a row's domain shape cannot distinguish that row from any
-other capacity-bounded keyed row. Whether every key in a domain belongs to
-exactly one grouping (a zone, a pile) is authored as an ordinary rule over the
-row's own cells, never enforced as domain-shape law.
-
-## Symbolic values and families
-
-A `StateEnum` names a closed set of member names in value order, so member *i*
-is the value *i*. An `Int` row names one through its `enum` member; the write
-door then admits only a value the enum names, and a console listing or a
-decompiled source prints the member name in place of the number. An enum and its
-members are local to the document, so an aliased import prefixes neither.
-
-A `StateFamily` names *size* consecutive rows spelled `<family>0` through
-`<family><size-1>` — the shape a `tableau[8]` declaration lowers to. The catalog
-resolves each one to a `RowFamily`, the contiguous ordinal range its members
-occupy, and refuses by name when a member is missing, out of order, or of a
-different `CellKind` from member zero.
-
-A row also carries two marks that describe it rather than being authored on the
-wire: `Generated`, set when a lowering or the runtime synthesized the row, and
-`HostOwned`, set when a host facet serves the row instead of the store. A
-host-owned row is admitted only for the `Slot` and `Lattice` shapes, which a
-host can serve without an ordering contract.
-
-## Traits
-
-Rows can carry behavior and observation traits: `StateAdvance` (exact per-second
-rational accumulation over engine ticks — `PerSecondNumerator`/
-`PerSecondDenominator`, JSON `perSecondNumerator`/`perSecondDenominator`), `StateDynamics`
-(a second-order follower over a `DynamicsRow`), `StateCycle`/`CycleOutput`
-(a tick-indexed rotation through a symmetry-lattice word), `StateVisibility`/
-`HiddenCells`/`StateKnowledge`/`StateObservation` (observation policy),
-`StatePhase`/`PhaseGuard` (a guarded submission generation), `StateInverse`
-(a `cellsOf` row declaring itself the inverse of a keyed token row, recomputed
-by `StateArena`). A cell's own `StateCellBehavior` and `StateCellClock` carry
-its opt-out and its timing state; see `EffectiveBehavior.Resolve`.
-
-## Topologies
-
-`LatticeTopology` declares a discrete space: `grid`, `ring`, `hex`,
-`box`, `graph`, or `tiling`. A host can register its dense `field`
-case as a derived record. `TopologyKind`, `TopologyWrap`,
-`TopologyDirection`, and `TopologyElementAlias` describe the space's
-kind, boundaries, directions, and named elements.
-
-`TopologyCompilation` validates, normalizes, and compiles a topology, including
-an anchor offset when needed, and supports finding an unanchored topology.
-`CompiledTopology` supplies adjacency, opposite directions, symmetry images,
-element aliases, cell centres, position-to-cell lookup, and axial offsets.
-A symmetry image says where a cell lands after a permitted rotation or reflection.
-A direction's opposite is read from a table built once at compile time by
-negating the direction's own step vector and matching it against the declared
-set, never derived from ordinal arithmetic — pairing directions by index
-offset only works when a kind's directions happen to be authored as reciprocal
-ordered pairs, and a `TopologyKind.Box` orders its 26 directions planar first,
-then up-shifted, then down-shifted. `TopologyCompilation.MaxDirections` bounds
-a direction vocabulary; the
-[world schema guide](../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
-states the authored `directions` rules and the ceiling they meet. Capacity
-ceilings here are derived from the
-representation they bound rather than restated as their own constants: a hex
-topology's own radius ceiling is the greatest radius whose cell count
-(`1 + 3r(r + 1)`) still fits `MaxCells`, and a `transfer` state transform's
-own count ceiling (`StateTransferCapacity.MaxTransferCount`) is `MaxCells`
-itself, since a transfer can move at most as many tokens as a domain can hold.
-
-### Hex cells
-
-A hex topology uses `HexagonalIndex` as its cell order: cell i is index i,
-with rings progressing outward and consecutive indices adjacent.
-Its six directions are `HexagonalCoordinate.Direction(0..5)`, named
-E, SE, SW, W, NW, NE.
-
-For axial coordinates (q, r), the cell centre is:
-
-```text
-origin + cellSize × (q − r/2, 0, r×√3/2)
-```
-
-### Authored graphs
-
-A graph supplies its adjacency directly. Cells have ids and centres relative
-to the origin in world units. Each direction names its opposite. An edge
-specifies `from`, `to`, `direction`, and optional `oneWay`; it fills
-one (cell, direction) slot and ordinarily the reverse slot.
-
-Use a graph for a territory map, a star board, or geometry emitted by a tool.
-Position-to-cell chooses the nearest centre within half a `cellSize`.
-Graphs provide no axial offset, and their symmetry group contains only the
-identity transformation.
-
-### Generated tilings
-
-`TilingGenerator` creates a graph within a radius from uniform unit cells:
-triangular, kagome, truncated-square, rhombitrihexagonal, truncated-hexagonal,
-elongated-triangular, and truncated-trihexagonal tilings. It also generates
-Penrose P3 rhombs by Robinson-triangle inflation from a sun arrangement.
-
-Tiles become cells ordered outward from the origin. Shared sides supply
-adjacency, and edge normals such as `a0` and `a30` name the direction slots.
-
-## Embedding spaces and vectors
-
-An **embedding space** (`StateSpace`) establishes the model identity, revision, and
-dimensionality for semantic state vectors:
-
-- `Name`: a valid identifier referencing the space (e.g. `lore`).
-- `Model`: the model name (e.g. `puck-fixture` or `text-embedding-3-small`).
-- `Revision`: model revision string (e.g. `"1"`).
-- `Dimensions`: dimensionality in `[8, 1024]`.
-
-Every `Vector` table or slot must reference a declared space (`space: "lore"`);
-in `.puck` source, the row's own `space(...)` modifier is what infers the `Vector`
-kind — a row's kind is never authored (see [world-vocabulary.md](../world-vocabulary.md)).
-Vector components are stored in `StateVector` as unit-normalized signed 8-bit integers
-(`sbyte[]`) on radius 127:
+Suppose you're building a small card and board game. You need a coin balance, a
+board position for each piece, and an ordered hand of cards. In a `.puck` world
+you declare those rows inside the `state` section:
 
 ```puck
 state {
-    spaces {
-        space lore { model: "puck-fixture" revision: "1" dimensions: 256 }
+  lattices [
+    grid(name: "board", origin: [0, 0, 0], cellSize: 1, width: 4, depth: 4, wrap: None)
+  ]
+
+  world {
+    slot coins = 3 bounds(0..99)
+
+    table pieces capacity(3) {
+      rook = 0
+      king = 0
+      pawn = 0
     }
-    world {
-        table events space(lore) {
-            ambush = "Bandits ambushed the caravan on the north road"
-        }
-        table memories capacity(128) evicts space(lore) { }
-        slot situation space(lore) = "Travellers approach the gate at dusk"
+
+    row {
+      name: "pieceCell"
+      kind: "Int"
+      domain: keysOf(row: pieces)
+      valuesFrom: "board"
+      cells [
+        { key: "rook", value: 0 }
+        { key: "king", value: 5 }
+        { key: "pawn", value: 9 }
+      ]
     }
+
+    table cards capacity(5) {
+      ace = 1
+      two = 2
+      three = 3
+    }
+
+    pile hand of cards capacity(3) {
+      ace
+      three
+    }
+
+    row {
+      name: "recentRolls"
+      kind: "Int"
+      domain: ring(capacity: 8, empty: 0)
+    }
+  }
 }
 ```
 
-### Quantized drift and mean
+This fragment is the `state` section of a world document. It declares:
 
-Quantized vector mutations preserve unit length on radius 127. Operations like
-`mix` compute weighted integer sums and re-project to the unit sphere using
-`SignedByteVectorFunctions.TryNormalize`, preventing drift or scale collapse over long
-simulation runs.
+1. `coins`, a **slot**: a row with a single cell. Its kind is inferred as
+   `Int` from the literal `3`, and `bounds(0..99)` limits it.
+2. `pieces`, a keyed table whose keys (`rook`, `king`, `pawn`) name the game's
+   pieces. Other rows reuse these keys.
+3. `pieceCell`, a row keyed by the pieces. Each value is an ordinal of a cell on
+   the `board` topology, so `pieceCell[king]` is `5`.
+4. `hand`, an ordered **pile** over the `cards` keys. The order of its cells is
+   the order of the cards in the hand.
+5. `recentRolls`, a ring that keeps the last eight values pushed into it.
 
-### Model-change recovery
+The `slot`, `table`, `pile`, and `grid` declarations are shorthand. Each one
+lowers to the explicit `row { }` form used for `pieceCell` and `recentRolls`,
+which accepts every member a row can carry. The
+[world vocabulary](../world-vocabulary.md) lists what each shorthand accepts.
 
-Changing an embedding model or revision changes vector coordinates. Authored text
-in `.puck` sources is locked in `.embeddings.json` companion files via `puck embed`.
-When an embedding model changes, regenerating the lock file with `puck embed`
-re-embeds all authored text, preserving semantic intent under the new model without
-manual vector surgery.
+## Rows and cells
 
-### What a vector row cannot carry
+A row has a name, a kind, and zero or more cells. A **cell** is one value
+addressed by a key inside its row. In C#, a row is a `StateRow` and a cell is a
+`StateCell` whose `Value` is a `CellValue`.
 
-A `Vector` row is a keyed table or a slot; `capacity`, `evicts`, `visibility`,
-and `space` apply to it, but the validator and the transpiler refuse every
-other row trait on it by name — `min`, `max`, `overflow`, `advance`,
-`dynamics`, `cycle`, `draw`, `valuesFrom`, `inverse`, `phase`, `phaseOf`,
-`gatesDrive`, and `field` — every domain other than a slot or a keyed table,
-`addState`/`scheduleState`/`pushState`, and a HUD binding. A
-row's cell ceiling times its space's dimensions must not exceed 65,536, and a
-document's vector rows together must not exceed 4 MiB.
+Every ordinary address has two parts, a row name and a cell key. The expression
+`pieceCell[king]` addresses the key `king` in the row `pieceCell`. The value
+stored there, `5`, means the king stands on board cell 5. The key says which
+piece you're asking about, and the value is the answer.
 
-The simulation never runs an embedding model itself, so several capabilities
-authors might expect are deliberately absent rather than merely unbuilt:
+```mermaid
+flowchart LR
+    Address["Row: pieceCell<br/>Key: king"] --> Value["Int value: 5"]
+    Value -- "valuesFrom" --> Cell["Cell 5 of<br/>the board topology"]
+    Cell -- "inverse" --> Occupancy["Derived occupancy<br/>row at cell 5"]
+```
 
-- No model inference happens in the tick, the compiler, the linter, the
-  formatter, or the language server; only offline `puck embed` and an
-  operator-approved runtime host service produce vectors.
-- No model runs in-process (no ONNX or similar); the fixture and
-  `azure-openai` providers are the ones that ship.
-- No provider authenticates with an API key; every provider authenticates
-  with identity.
-- No provider returns generated text — a provider returns vectors only.
-- No approximate nearest-neighbour index exists; `nearest` and `mean` scan
-  their candidate table exactly.
-- A vector has no place in a general expression — no binding, component
-  read, or arithmetic reaches it — and there is no distance or norm function
-  beyond `dot`, `similarity`, and `identical`.
-- A scoped judge (the browser session and search) refuses `nearest`, `remember`,
-  and any vector write that would mint a key, by name; it has no runtime
-  embedding connection and cannot gain one from the browser session or a
-  remote-client boot.
-- An addon guest or a cartridge cannot write a vector cell; the addon
-  mutation decoder and the cartridge vocabulary both refuse `Vector` by name.
+The diagram follows one read. The address selects a cell, and the cell holds an
+integer. Because `pieceCell` declares `valuesFrom: "board"`, that integer names a
+cell of the `board` topology. A board row that declares an `inverse` over
+`pieceCell` derives its occupancy from those positions, so you write a piece's
+position once and read occupancy from the derived row.
+[Row and cell behavior](traits.md) explains `valuesFrom` and `inverse`.
 
-### Patterns authors build with vectors
+### Slots and keyed rows
 
-| Pattern | How it is built |
+A slot holds one cell under the reserved key `$value`, which C# exposes as
+`StateRow.SlotKey`. When a rule writes a slot, it omits the key; the omitted key
+selects the slot's cell. On a keyed row an omitted key addresses nothing, and the
+rule compiler refuses it. An omitted key never falls back to a keyed row's first
+cell.
+
+A row that declares no domain has its shape inferred from what it carries. It's
+keyed when it declares a `capacity`, carries more than one cell, carries one cell
+under a key other than `$value`, or declares a `phase`. Otherwise it's a slot.
+Declaring a capacity always declares a keyed row, even if the row currently holds
+a single cell.
+
+The `$` prefix is reserved for names the engine mints. An authored row name
+can't start with `$`, and an authored cell key can start with `$` only when the
+row's own shape mints that key. For an ordinary row, that key is `$value`; a
+verdict row also mints `$firedTick` and its `$status` key.
+
+A `$` further inside a name marks one Puck generated by joining parts, such as
+a pool's backing row `$pool$pieces$live`, a `stabilize` member `turn$east`, or
+a test's verdict row `expect$1`. An authored name never carries `$` past its
+first character, so a generated name can't collide with one.
+[Generated names](../dsl.md#generated-names) lists every form.
+
+## Cell kinds and values
+
+A row's `CellKind` decides what every cell in it holds:
+
+| Kind | Holds | Authored spelling | Example |
+|---|---|---|---|
+| `Int` | A signed 64-bit integer. | A whole number. | `coins = 3` |
+| `Fixed` | A Q48.16 fixed-point number. | A decimal number. | `speed = 1.5` |
+| `Bool` | `true` or `false`. | `true` or `false`. | `open = false` |
+| `Text` | A string of at most 1,024 UTF-16 code units. | A quoted string. | `status = "ready"` |
+| `Vector` | A normalized signed 8-bit embedding vector. | A string embedded through a lock file. | See [Vectors and embedding spaces](vectors.md). |
+
+There's no floating-point kind. Simulation state stays free of floats so that the
+same inputs produce bit-identical state on every machine. A fractional value is
+stored as `Fixed`.
+
+In `.puck` you don't write a row's kind for the shorthand declarations. The
+compiler infers it from the values and modifiers:
+
+- A `space(...)` modifier, or an `embed(...)` or `vector(...)` value, makes the
+  row `Vector`.
+- A string makes it `Text`, and `true` or `false` makes it `Bool`.
+- Whole numbers make it `Int`. A fraction or a unit anywhere among the values,
+  or a fractional `bounds` or `advance` argument, widens it to `Fixed`.
+- With no signal at all, the row is `Int`.
+
+The explicit `row { }` form states the kind with `kind: "Int"` and so on.
+
+### The CellValue union
+
+In C#, `CellValue` is a closed union with one case per kind. You create a value
+with the factory for its case and read it with the matching accessor:
+
+```csharp
+using Puck.State;
+
+var coins = CellValue.Int(value: 3L);
+var speed = CellValue.Fixed(rawBits: 98_304L);   // 1.5 in Q48.16
+var open = CellValue.Bool(value: false);
+var status = CellValue.Text(value: "ready");
+
+if (coins.Kind == CellKind.Int) {
+    Console.WriteLine(coins.AsInt);              // 3
+}
+
+Console.WriteLine(speed.Raw);                    // 98304
+Console.WriteLine(default(CellValue).HasValue);  // False
+```
+
+The rules for working with the union are:
+
+- **No implicit conversion.** A raw `long` means a whole number in an `Int` row
+  and Q48.16 bits in a `Fixed` row, so every construction names its case.
+- **Accessors throw on a mismatch.** `AsInt`, `AsFixed`, `AsBool`, `AsText`, and
+  `AsVector` throw `InvalidOperationException` when the carrier holds a different
+  case. Check `Kind` first, or use `TryGetValue<T>`.
+- **The default carrier holds nothing.** `default(CellValue)` has `HasValue`
+  false, and reading its `Kind` throws.
+- **`Raw` covers the numeric cases.** It returns an `Int`'s value, a `Fixed`'s
+  raw bits, or a `Bool` as 0 or 1, and throws for `Text` and `Vector`.
+- **Equality compares case and payload.** Text compares ordinally and vectors
+  compare component by component. `GetHashCode` is for dictionaries only; state
+  hashes fold the stored columns instead.
+
+Values are stored inline. A numeric case never allocates, which matters because
+cells are read every tick. The `Vector` case carries its components as opaque
+signed bytes; the typed view belongs to [the vector library](vectors.md).
+
+### Kind admission
+
+A cell's value must hold its row's declared kind. `StateRow.TryAdmitKind` decides
+that, and every path that admits a cell calls it: the arena's import, a live
+mint, an insert, and a write. A carrier holding no case is refused the same way
+as a carrier holding the wrong case. A numeric write then goes through the row's
+envelope, which [Row and cell behavior](traits.md) describes.
+
+### Fixed-point numbers
+
+A `Fixed` value is a [Q48.16 fixed-point number](../maths.md): an integer scaled
+by 65,536. The raw value `65536` means one, and `98304` means one and a half.
+The arithmetic is exact and deterministic, which is why simulation state uses it
+in place of floating point.
+
+People never write raw bits. A document, a console argument, a refusal message,
+and a read-back all spell a fixed value as a decimal (`"12.5"`). The conversion
+happens where the value enters the system. `CellValue.TryParse` applies the
+authored grammar for a kind: a decimal for `Fixed`, `true` or `false` for `Bool`,
+and a plain integer for `Int`. It refuses `Text` and `Vector` tokens, which carry
+their own payloads.
+
+```csharp
+if (CellValue.TryParse(kind: CellKind.Fixed, token: "1.5", value: out var parsed, reason: out var why)) {
+    Console.WriteLine(parsed.AsFixed);   // 98304
+}
+```
+
+Because the two numeric kinds encode differently, you can't turn an `Int` into a
+`Fixed` by copying its raw bits. Convert through the value instead.
+
+## Choose an addressing shape
+
+A row's **domain** decides which keys its storage admits. `StateDomain` is a
+closed union, marked `[Union]`, with five cases:
+
+| Domain | What a key names | Running example | `.puck` spelling |
+|---|---|---|---|
+| `slot` | The single reserved cell. | `coins` | `slot coins = 3` |
+| `keys` | An author-chosen identifier. | `pieces`, `cards` | `table pieces capacity(3) { … }` |
+| `keysOf` | A key drawn from another row. | `pieceCell`, `hand` | `domain: keysOf(row: pieces)` or `pile hand of cards` |
+| `cellsOf` | A cell of a named topology. | A board occupancy row | `domain: cellsOf(topology: board)` or `grid` |
+| `ring` | A slot in a bounded history. | `recentRolls` | `domain: ring(capacity: 8, empty: 0)` |
+
+The domain derives one storage shape, `RowShape`: `Slot`, `Keyed`, `Ordered`,
+`Lattice`, or `Ring`. Every store and compiler switches on that shape; you never
+declare it separately.
+
+### Keys and keysOf
+
+A `keys` row names its own keys. A **token domain** is an ordinary `keys` row
+whose capacity is the number of tokens. Nothing in a row's shape, or in the hash
+of its shape, marks it as a token domain; other rows reuse its keys through
+`keysOf`.
+
+A `keysOf` row has two modes:
+
+- **Unordered** (`keysOf(row: pieces)`): one value per token, with no meaning in
+  the cell order. `pieceCell` is an attribute row of this kind.
+- **Ordered** (`keysOf(row: cards, ordered: true)`): the cell order is pile
+  order, so the first and last cells mean something. The `pile` declaration
+  writes this shape, with `Bool` cells holding `true`.
+
+Whether every token belongs to only one pile, zone, or group isn't something
+the domain enforces. If your game needs that rule, write it as an ordinary rule
+over the rows' cells.
+
+### cellsOf
+
+A `cellsOf` row holds one value per cell of a topology declared in
+`state.lattices`. Its `empty` value is what a cell reads before anything writes
+it. Several rows can lie over one topology, so occupancy, visibility, and legal
+moves can all describe the same board without copying its geometry.
+[Topologies and boards](topologies.md) owns the topology kinds.
+
+A topology supplies locations and their connections, and a domain says how a
+row's cells are addressed. Neither decides what a legal move is; your rules and
+the host's admission supply that meaning.
+
+### Ring
+
+A `ring` row keeps the last `capacity` pushed values in slots keyed `0` through
+`capacity - 1`, overwriting the oldest first. Its `empty` value is what an age
+older than the ring holds reads as. You read a ring by age through the `$history`
+channel, which [Reads and expressions](expressions.md) covers. A ring holds
+`Int` or `Fixed` values, and Puck.World admits a capacity from 1 to 4,096.
+
+Don't confuse a state ring with a ring *topology*. A state ring is a bounded
+history of values. A ring topology is a cyclic arrangement of locations with
+adjacency, declared in `state.lattices`, that `cellsOf` rows lie over.
+
+### Cell ceilings
+
+Every row has a cell ceiling, so no row can grow without bound:
+
+| Row | Ceiling |
 |---|---|
-| An NPC remembers and recalls what matters now | `remember` stores an event in an evicting table unless a near-duplicate exists; `nearest` recalls the memories closest to the current situation. |
-| Factions, moods, or relationships drift | `mix` for fast drift; `mean` over an evicting history table for exact slow drift; a `similarity` threshold gates behavior. |
-| Move away, contrast, or draw an analogy | `mix` with negative weights. |
-| Items, recipes, or hints find their kin | `nearest` over a catalog, with `where` to restrict candidates and `exclude` to skip the item itself. |
-| Dialogue that fits the moment | A `Text` table declared `embeds(vectorRow)`; `nearest` writes the best key into a `Text` slot, which then reads the line. |
-| An NPC understands a player | A chat table doubles as a runtime embedding request table; its vectors feed `nearest`. |
-| Semantic word games | Guesses scored with `similarity`, including `farthest` for "coldest". |
-| A check against an inline concept | A gate comparing `similarity(stance[guards], embed("danger"))` against a threshold. |
-| An agent with world memory | An agent writes a vector or a `Text` note, and reads back what `nearest` recalled. |
+| `slot` or `keys` with a declared `capacity` | The capacity, at most 4,096. |
+| `slot` or `keys` without a capacity | 128 cells of growth room. |
+| `keysOf` or `cellsOf` | The declared capacity, or 4,096. |
+| `ring` | The ring's capacity. |
 
-A search `Score` program can read `dot` and `similarity`. Authors tune
-thresholds with `puck embed probe` and the `world.state.similar` console
-verb; a rule's trace prints every similarity it computed.
+The 4,096 figure is `StateCapacity.MaxCellsPerRow`, which equals the most cells
+a topology can have. An authored capacity can narrow it but never widen it.
 
-## The catalog and the reader
+## Enums
 
-`StateCatalog` compiles a section into
-`StateDescriptor`s and catalog-bound `StateHandle`s. A descriptor names its
-`StateLane` (`Document`, `Participant`, `Identity`), its `RowShape` (derived
-from the row's `StateDomain` by `RowShapes.FromDomain`, the library's one shape
-axis), the `CellKind` its values are stored in, its `StateParticipantRole`
-(`Counter` or `Timer` on a slot lane, `None` on a document row), and whether a
-lowering generated it or a host facet owns it. Beside the descriptors the
-catalog holds the lane extents (`StateLaneDescriptor`), the `CellKeyTable` that
-interns authored keys and compiled key symbols to a `CellKey`, the declared `StateEnum`s a row may name,
-and each declared `StateFamily` resolved to the contiguous `RowFamily` ordinal
-range of its member rows.
+A **state enum** (`StateEnum`) names a closed set of members in value order, so
+member *i* is the value *i*. An `Int` row or record field can name an enum. The
+stored value is still an ordinary integer; the enum adds a range that a write is
+admitted against and a name the console reads and prints in place of the number:
+`world.state` prints a cell by its member's name, and `world.state.cell.set`
+takes a member name as well as the number.
 
-Each `StateArena.Keys` table starts with the authored cell and topology names
-sealed when its catalog was constructed, and owns its runtime additions.
-Compiler-only symbols do not consume the arena's key or byte budget or enter
-its hash until a runtime operation admits the name. Constructing an arena
-before or after binding a compiler literal therefore gives the same state.
-A speculative mint consumes room only in that arena; rewinding its
-scope releases the name and rejects any retained handle from that mint. A
-later mint can reuse the ordinal without reviving the old handle. Compiled
-keys continue to resolve by name even when compilation introduces a symbol
-after the arena was constructed. Runtime callers resolve and render keys
-through `StateArena.Keys`, not the catalog's symbol table.
+```puck
+state {
+  enum Team {
+    Red
+    Blue
+  }
 
-Member hashes fold names in cell order. The full arena hash also covers its
-retained key-name count and a wrapping sum of per-name digests, because a committed name still
-uses key budget after its last cell is removed. Relayouts and checkpoints retain this ledger;
-exported rows alone do not retain orphan names. Both distinct-key count and
-retained key bytes are bounded, and `StateArena.Bytes` includes the key charge.
-Each retained name charges 96 bytes plus two bytes per UTF-16 code unit;
-spare table capacity is bounded separately by `StateCapacity.MaxCellKeys`.
-The digest sum changes only for admitted or released names, so hashing the
-ledger is constant time and requires no sorting or temporary allocation.
-Removing a committed cell still retains its name: distinct names admitted
-over the arena's lifetime remain bounded by that ledger. Reads resolve keys
-without admitting names.
+  record Unit {
+    team: Team = Team.Red
+  }
 
-`StateReader` is the one (row, key) → raw-value computation (advance, cycle,
-eased reads, reductions, arg-extrema); `StateArena` is the one cell-write
-store, and owns FIFO eviction. `StateArena.TryRead` answers one keyed read as a
-`CellValue` in the row's own kind, so a keyed read resolves the cell once.
-A `StateHandle` is minted only against a row the compiler has already proved
-present in the candidate document, and every document install revalidates by
-recompiling every handle-holding reader against the new candidate — so an
-installed document can never carry a handle addressing a row that has
-vanished. A handle read throws rather than returning a neutral value it
-should never need to.
+  pool units of Unit capacity(8)
 
-## Identifiers
+  world {
+    slot serving: Team = Blue
+    table scores: Team {
+      first = Red
+    }
+  }
+}
+```
 
-`SafeName` and `CellName` validate identifiers at construction and refuse invalid
-names. `SafeName.MaxSuffixLength` reserves space for a file suffix a document
-project may append. Their JSON converters share the
-`TryParseStringJsonConverter<T>` shape.
+In `.puck`, `enum` members are compile-time constants (`Team.Blue` is `1`), and a
+member also reads bare (`Blue`). A bare member may not share its spelling with a
+`let` or a module parameter. Two enums may declare the same member; each reads it
+qualified, and a bare read of the shared member is refused (PUCK115), since it
+names no one value.
 
----
+A record field and a row name their enum the same way, after the name: a record
+field as `team: Team`, and a `table`, `slot` or `grid` as `slot serving: Team`.
+A row that names an enum is `Int`, whatever its values spell. An explicit
+`row { }` names one with `enum: Team`. The compiler writes every enum a world
+document declares into its `state.enums`, and a document with a `basis` reads
+its basis's enums, so its members read in the child as they read in the basis.
+A name no `enum` of the composed world declares is refused once, where it is
+written (PUCK119), by the validation of the composed world, for a row and a
+record field alike. A cell kind written in its place (`slot hp: Int`, PUCK107)
+is refused too, since a row's kind is inferred.
 
-[State and rules](../state.md) · Next: [Read values and build expressions](expressions.md)
+An enum must declare at least one member, no more than 1,024, and no duplicates.
+A write that would store a value outside `0` through `Count - 1` is refused, and
+under a saturating envelope the clamped value is checked against the enum too.
+Enums and their members are local to the document, so an aliased import qualifies
+neither.
+
+## Row families
+
+A **row family** (`StateFamily`) gives one name to a group of sibling rows, so a
+rule can select a member with a computed index. The `tableau[8]` shorthand
+declares a family of eight rows named `tableau0` through `tableau7`.
+
+A family can take three forms:
+
+- **Conventional**: `Size` rows named `<family>0` through `<family><Size-1>`,
+  declared consecutively.
+- **Indexed**: an `Indices` list gives each member its family index, and gaps are
+  allowed. `Pile0` and `Pile2` through `Pile12` can be one family.
+- **Named**: a `Members` list names the member rows outright, which frees them
+  from both the naming convention and contiguity.
+
+The catalog resolves each family to a `RowFamily`, which maps a family index to a
+catalog ordinal. A contiguous family is a bounds check and an addition; a gapped
+one uses a lookup table where a gap selects no row. The catalog refuses a family
+whose member is missing, a conventional family whose members aren't consecutive,
+a family whose members don't share member zero's kind, and an index declared
+twice.
+
+## Generated and host-owned rows
+
+Two marks describe a row without being authored:
+
+- **`Generated`** is set when a lowering or the runtime synthesized the row. The
+  pool storage rows described in [Records, pools, and handles](records-and-pools.md)
+  are generated. Console listings, HUD bindings, the decompiler, and the schema
+  treat a generated row as an implementation detail, while the state hash and
+  checkpoints still cover it. An authored row can't carry the mark; the catalog
+  refuses a section that tries.
+- **`HostOwned`** is set when a host facet serves the row instead of the store. A
+  host-owned row has a descriptor and no storage: rules read it through the facet,
+  no rule writes it, and its owner covers it in place of the store's hash. Only
+  `Slot` and `Lattice` rows can be host-owned, because a host can serve those
+  without an ordering contract. The mark has no wire form; the document project
+  derives it.
+
+## Names
+
+Row names and cell keys are `CellName` values. A `CellName` can't be empty and
+can't contain control characters, a dot, a backquote, or any of `"`, `<`, `>`,
+`|`, `:`, `*`, `?`, `/`, or `\`. The dot is excluded so that a HUD binding such
+as `state.pieceCell.king` splits into row and key without ambiguity. The
+backquote is excluded because an expression quotes a name in backquotes, which
+have no escape, so every row and key can be written in an expression. `SafeName`
+applies the same character rules to world and instance identifiers, allows dots,
+refuses `.` and `..`, and limits length to 244 characters (255 minus the 11
+characters of a `.world.json` suffix).
+
+Both types validate at construction. `Parse` throws `FormatException` for an
+invalid name, and `TryParse` returns the reason instead. Holding a `CellName` is
+proof that the name is valid, so downstream code doesn't check again. Their JSON
+converters share one shape, `TryParseStringJsonConverter<T>`, and refuse an
+invalid name while reading.
+
+## The state section
+
+The **state section** is the whole declared state of a document. `IStateSection`
+is the contract every compiler and reader consumes, and `StateSection` is the
+standalone record that implements it for a host with no document type of its own.
+A document project, such as Puck.World, implements the interface on its own
+record.
+
+| Member | What it holds |
+|---|---|
+| `Rows` | The document's rows. |
+| `Lattices` | The topologies that `cellsOf` rows lie over. |
+| `Spaces` | The embedding spaces vector rows belong to. |
+| `Enums` | The symbolic domains rows and record fields may name. |
+| `Families` | The declared row families. |
+| `Records`, `Pools`, `PairPools` | Typed record declarations and the bounded pools that instantiate them. |
+| `ParticipantSlots` | Per-participant state the host declares, each an `IStateSlot`. |
+| `IdentitySlots` | Per-identity durable state the host declares. |
+
+A section is an immutable snapshot. `StateSection` copies every list it receives
+at construction and on every `with`, so changing your array afterward can't
+change the section. Compilation results are cached by section identity; to
+change a declaration or a value, build a new section.
+
+### Participant and identity slots
+
+The two slot lanes hold state that belongs to one participant or to one durable
+identity instead of to the document. Each slot has a name and a
+`StateParticipantRole`. A `Counter` is stored as `Fixed` and a `Timer` as `Int`;
+the role decides the kind, so a slot never declares one. What a participant is,
+and when its slots reset, is up to the host.
+
+## The JSON wire shape
+
+A row's JSON shape is owned by `StateRowJsonConverter<TRow>`. Here's `coins` and
+`hand` from the running example as `puck compile` writes them:
+
+```json
+[
+  { "kind": "Int", "max": 99, "min": 0, "name": "coins", "value": 3 },
+  {
+    "capacity": 3,
+    "cells": [
+      { "key": "ace", "value": true },
+      { "key": "three", "value": true }
+    ],
+    "domain": { "$type": "keysOf", "ordered": true, "row": "cards" },
+    "kind": "Bool",
+    "name": "hand"
+  }
+]
+```
+
+The converter enforces these rules and refuses a violation with a message that
+names the member:
+
+- `name` and `kind` are required. An unknown member is refused.
+- A row writes either `value` (one cell under `$value`) or `cells`, never both,
+  and never `value` beside `capacity`.
+- A cell's value uses its kind's spelling: a JSON number for `Int`, a decimal
+  string for `Fixed` (`"12.5"`, never raw bits), a boolean for `Bool`, a string
+  for `Text`, and an unpadded base64url string for `Vector`.
+- A slot's timing state is written as a row-level `clock` beside `value`; a
+  keyed cell carries its own `clock`.
+- Pairs of time traits that can't combine are refused while reading, before any
+  validator runs.
+
+A document project that derives its own row type extends the converter. It
+claims its extra members by name, validates them alongside the shared ones, and
+writes them at two hook points that keep the canonical member order. The
+standalone `StateRowJsonConverter` serves `StateRow` itself.
+
+Record defaults, pool seeds, and pool snapshots use a different, tagged shape:
+`{ "kind": "Int", "value": 3 }`. In that shape a `Fixed` value is its raw Q48.16
+bits and a `Vector` is an array of signed bytes. `CellValueJsonConverter` owns it.
+
+## Declarations, the catalog, and stored values
+
+A section, its catalog, and an arena are three separate objects. Knowing which
+one holds what explains most of the system's behavior:
+
+```mermaid
+flowchart LR
+    Section["State section<br/>(declarations)"] --> Catalog["StateCatalog<br/>(names to handles)"]
+    Section --> Arena["StateArena<br/>(stored values)"]
+    Catalog --> Arena
+    Arena -- "export" --> Rows["Row list<br/>(saved document)"]
+```
+
+- The **section** declares rows, their kinds, domains, traits, and starting
+  values.
+- The **catalog** compiles the section once. It resolves each name to a
+  catalog-bound handle and ordinal, interns keys, and resolves families.
+- The **arena** stores the values being read and written right now. It's seeded
+  from the section and exported back to a row list when the document is saved.
+
+A rule that changes `coins` changes the value in the arena, and the declaration
+keeps its authored value. Loading the same section again resets the arena to the
+declared values. Handles belong to the catalog that minted them, so a replacement
+catalog invalidates them; keeping the declaration shape the same lets a host keep
+its catalog across value-only updates.
+[The state arena](arena.md) owns storage, journaling, and hashing.
+
+## Limitations
+
+- **No floating point.** State holds `Int`, `Fixed`, `Bool`, `Text`, and `Vector`
+  only. Presentation code converts at its own boundary.
+- **Text is short.** A text cell holds at most 1,024 UTF-16 code units.
+- **Every row is bounded.** No row holds more than 4,096 cells, and a section
+  holds at most 1,024 rows after pool expansion.
+- **Domains don't enforce membership rules.** Exclusive membership across piles
+  or zones is a rule you write.
+- **Enums apply to `Int` values only.** Up to 256 enums of up to 1,024 members
+  each.
+- **Families are bounded.** Up to 256 families per section.
+
+## Key types
+
+| Type | Project | Purpose |
+|---|---|---|
+| `IStateSection`, `StateSection` | Puck.State | The declared state of a document. |
+| `StateRow`, `StateCell` | Puck.State | One row and one cell. |
+| `CellKind` | Puck.State | The five value kinds. |
+| `CellValue` | Puck.State | The closed union a cell's value is held in. |
+| `StateDomain`, `RowShape` | Puck.State | How a row is addressed, and the storage shape it derives. |
+| `StateEnum` | Puck.State | A closed set of symbolic integer values. |
+| `StateFamily`, `RowFamily` | Puck.State | A declared group of sibling rows and its compiled ordinals. |
+| `CellName`, `SafeName` | Puck.State | Validated row, key, and identifier names. |
+| `StateRowJsonConverter<TRow>` | Puck.State | The row's JSON shape and its extension points. |
+| `CellValueJsonConverter` | Puck.State | The tagged value shape used by records and snapshots. |
+| `StateCapacity` | Puck.State | The shared ceilings for rows, cells, and values. |
+| `StateReservedCells` | Puck.State | Decides which `$`-prefixed cell keys a row may carry. |
+| `StateRows` | Puck.State | Allocation-free row and cell lookup helpers. |
+
+## Next steps
+
+- [Row and cell behavior](traits.md): bound a value, accumulate it over time, or
+  control who can see it.
+- [Records, pools, and handles](records-and-pools.md): group typed fields into
+  bounded instances such as the game's units.
+- [Reads and expressions](expressions.md): read cells, including the difference
+  between `row.key` and `row[key]`.
+
+## See also
+
+- [The state arena](arena.md)
+- [Topologies and boards](topologies.md)
+- [World schema: the state document](../../../src/Puck.World.Schema/README.md)
+- [State and language decisions](../../decisions/state-and-language.md)

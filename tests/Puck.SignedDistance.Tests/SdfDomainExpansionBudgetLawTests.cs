@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
@@ -25,13 +26,14 @@ public sealed class SdfDomainExpansionBudgetLawTests {
             refusal: out _
         );
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var expanded = SdfDomainExpansion.TryExpand(
+        var expanded = true;
+        SdfRigidFrame[] frames = [];
+        var refusal = string.Empty;
+        var allocated = AllocationWindow.Measure(window: () => expanded = SdfDomainExpansion.TryExpand(
             domain: domain,
-            frames: out var frames,
-            refusal: out var refusal
-        );
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+            frames: out frames,
+            refusal: out refusal
+        ));
 
         Assert.False(condition: expanded);
         Assert.Empty(collection: frames);

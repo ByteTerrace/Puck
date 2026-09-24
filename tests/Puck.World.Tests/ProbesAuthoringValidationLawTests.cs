@@ -32,10 +32,10 @@ public sealed class ProbesAuthoringValidationLawTests {
         RateHz: 30U,
         Track: track
     );
-    private static WorldFrameSource CameraSource(WorldCameraSensor sensor = WorldCameraSensor.Infrared) => new WorldScreenSource.Camera(
+    private static WorldFrameSource CameraSource(WorldCameraSensor sensor = WorldCameraSensor.Infrared) => WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(
         Profile: WorldFeedProfile.Default,
         Sensor: sensor
-    );
+    ));
     private static WorldDefinition WithProbes(WorldProbe[] probes, WorldProbeBinding[] bindings, WorldRenderExtensionEntry[]? extensions = null) {
         var document = Fixtures.BuildDocument() with {
             ProbesRaw = ((probes.Length == 0)
@@ -63,6 +63,30 @@ public sealed class ProbesAuthoringValidationLawTests {
             controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
                 definition: WithProbes(
                     probes: [BuildProbe()],
+                    bindings: []
+                ),
+                reason: out _
+            )
+        );
+    }
+    // A seat-relative probe's instances are keyed '<id>$<seat>' in the probe-id namespace, so an authored id in that
+    // generated form (or the file form) is refused by name, and the same id without the joiner passes.
+    [InlineData("head$2")]
+    [InlineData("head~2")]
+    [Theory]
+    public void AProbeIdInTheGeneratedFormRefusesWhileItsAuthorTwinPasses(string generated) {
+        Laws.RefusalWithControl(
+            lawId: "probes.id-generated-form",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                    probes: [BuildProbe(id: generated)],
+                    bindings: []
+                ),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithProbes(
+                    probes: [BuildProbe(id: "head-2")],
                     bindings: []
                 ),
                 reason: out _
@@ -152,11 +176,11 @@ public sealed class ProbesAuthoringValidationLawTests {
     public void AxisSeatOutsideLocalSeatsOnASingleInstanceProbeRefusesWhileAnInRangeSeatPasses() {
         // Every camera socket names its own seat, so the row is NOT seat-relative — the ordinary range law applies,
         // exactly as it did before seat-relative instancing existed.
-        static WorldFrameSource SeatedCameraSource() => new WorldScreenSource.Camera(
+        static WorldFrameSource SeatedCameraSource() => WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(
             Profile: WorldFeedProfile.Default,
             Sensor: WorldCameraSensor.Infrared,
             Seat: 1
-        );
+        ));
         var seatedInputs = new Dictionary<string, WorldFrameSource>(comparer: StringComparer.Ordinal) { ["lit"] = SeatedCameraSource() };
 
         Laws.RefusalWithControl(
@@ -231,11 +255,11 @@ public sealed class ProbesAuthoringValidationLawTests {
     }
     [Fact]
     public void CameraControlsOnAProbeSocketRefuseWhileAnUncontrolledCameraPasses() {
-        var controlled = new WorldScreenSource.Camera(
+        var controlled = WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(
             Controls: new WorldCameraControls(Brightness: 1),
             Profile: WorldFeedProfile.Default,
             Sensor: WorldCameraSensor.Infrared
-        );
+        ));
 
         Laws.RefusalWithControl(
             lawId: "probes.camera-controls-not-hosted",
@@ -257,10 +281,10 @@ public sealed class ProbesAuthoringValidationLawTests {
     }
     [Fact]
     public void CaptureSocketRefusesWhileACameraSocketPasses() {
-        var capture = new WorldScreenSource.Capture(
+        var capture = WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CaptureId, settings: new WorldCaptureSettings(
             WindowTitle: "OBS",
             Profile: WorldFeedProfile.Default
-        );
+        ));
 
         Laws.RefusalWithControl(
             lawId: "probes.capture-input-not-hosted",
@@ -314,37 +338,33 @@ public sealed class ProbesAuthoringValidationLawTests {
             )
         );
     }
-    [Fact]
-    public void DeadbandPlusHysteresisReachingOneRefusesWhileABelowOneSumPasses() {
-        Laws.RefusalWithControl(
-            lawId: "probes.deadband-plus-hysteresis",
-            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
-                definition: WithProbes(
-                    probes: [BuildProbe()],
-                    bindings: [
-                    new WorldProbeBinding.Axis(
-                            Channel: ChannelName,
-                            Source: "head-x",
-                            Deadband: 0.80f,
-                            Hysteresis: 0.30f
-                        ),
-                ]
-                ),
-                reason: out _
+    // An axis gate must be reachable: its hysteresis sits inside its deadband, and the two together stay below one.
+    [InlineData("probes.deadband-plus-hysteresis", 0.80f, 0.30f, 0.60f, 0.30f)]
+    [InlineData("probes.hysteresis-above-deadband", 0.05f, 0.10f, 0.10f, 0.05f)]
+    [Theory]
+    public void AnUnreachableAxisGateRefusesWhileAReachableOnePasses(string lawId, float deniedDeadband, float deniedHysteresis, float controlDeadband, float controlHysteresis) {
+        bool Validates(float deadband, float hysteresis) => WorldDefinitionValidator.TryValidateLocally(
+            definition: WithProbes(
+                probes: [BuildProbe()],
+                bindings: [new WorldProbeBinding.Axis(
+                    Channel: ChannelName,
+                    Source: "head-x",
+                    Deadband: deadband,
+                    Hysteresis: hysteresis
+                )]
             ),
-            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
-                definition: WithProbes(
-                    probes: [BuildProbe()],
-                    bindings: [
-                    new WorldProbeBinding.Axis(
-                            Channel: ChannelName,
-                            Source: "head-x",
-                            Deadband: 0.60f,
-                            Hysteresis: 0.30f
-                        ),
-                ]
-                ),
-                reason: out _
+            reason: out _
+        );
+
+        Laws.RefusalWithControl(
+            lawId: lawId,
+            deniedOutcome: () => Validates(
+                deadband: deniedDeadband,
+                hysteresis: deniedHysteresis
+            ),
+            controlOutcome: () => Validates(
+                deadband: controlDeadband,
+                hysteresis: controlHysteresis
             )
         );
     }
@@ -387,46 +407,12 @@ public sealed class ProbesAuthoringValidationLawTests {
         );
     }
     [Fact]
-    public void HysteresisAboveTheDeadbandRefusesWhileAReachableGatePasses() {
-        Laws.RefusalWithControl(
-            lawId: "probes.hysteresis-above-deadband",
-            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
-                definition: WithProbes(
-                    probes: [BuildProbe()],
-                    bindings: [
-                    new WorldProbeBinding.Axis(
-                            Channel: ChannelName,
-                            Source: "head-x",
-                            Deadband: 0.05f,
-                            Hysteresis: 0.10f
-                        ),
-                ]
-                ),
-                reason: out _
-            ),
-            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
-                definition: WithProbes(
-                    probes: [BuildProbe()],
-                    bindings: [
-                    new WorldProbeBinding.Axis(
-                            Channel: ChannelName,
-                            Source: "head-x",
-                            Deadband: 0.10f,
-                            Hysteresis: 0.05f
-                        ),
-                ]
-                ),
-                reason: out _
-            )
-        );
-    }
-    [Fact]
     public void MixedCameraSocketSeatsRefuseWhileMatchingSeatsPass() {
-        static WorldFrameSource At(int seat) => new WorldScreenSource.Camera(
+        static WorldFrameSource At(int seat) => WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(
             Profile: WorldFeedProfile.Default,
             Seat: seat,
             Sensor: WorldCameraSensor.Infrared
-        );
+        ));
 
         Laws.RefusalWithControl(
             lawId: "probes.camera-sockets-one-graph",

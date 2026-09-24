@@ -114,15 +114,8 @@ public readonly record struct UnitInterval32
     /// <param name="obj">The object to compare with this instance, or <see langword="null"/>.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="obj"/>; a <see langword="null"/> <paramref name="obj"/> sorts first.</returns>
     /// <exception cref="ArgumentException"><paramref name="obj"/> is neither <see langword="null"/> nor a <see cref="UnitInterval32"/>.</exception>
-    public int CompareTo(object? obj) {
-        if (obj is null) { return 1; }
-        if (obj is UnitInterval32 other) { return CompareTo(other: other); }
-
-        throw new ArgumentException(
-            message: $"Object must be of type {nameof(UnitInterval32)}.",
-            paramName: nameof(obj)
-        );
-    }
+    public int CompareTo(object? obj) =>
+        SignedFixedPointArithmetic.CompareToObject(obj: obj, self: this);
     /// <summary>Compares this instance with another <see cref="UnitInterval32"/> and indicates their relative order.</summary>
     /// <param name="other">The value to compare with this instance.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="other"/>.</returns>

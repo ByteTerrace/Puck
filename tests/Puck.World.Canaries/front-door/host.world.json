@@ -1,17 +1,17 @@
 {
   "schema": "puck.world.definition.v1",
-  "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
+  "basis": "../../../src/Puck.World/Assets/worlds/standard",
   "documentId": "front-door-canary",
   "simulation": {
     "rateHz": 30
   },
   "imports": [
     {
-      "document": "../../../src/Puck.World/Assets/worlds/modules/jump.world.json",
+      "document": "../../../src/Puck.World/Assets/worlds/modules/jump",
       "as": "jump"
     },
     {
-      "document": "../../../src/Puck.World/Assets/worlds/modules/studio.world.json",
+      "document": "../../../src/Puck.World/Assets/worlds/modules/studio",
       "as": "studio"
     }
   ],
@@ -102,10 +102,8 @@
     "listen": null,
     "presentMode": "Immediate",
     "presentation": "Windowed",
-    "rayQuery": true,
     "surfaceFormat": "r8g8b8a8",
     "targetHertz": 60,
-    "timing": false,
     "width": 1280
   },
   "collision": {

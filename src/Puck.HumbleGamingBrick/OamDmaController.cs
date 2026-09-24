@@ -197,19 +197,8 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
         return OamDmaWriteConflict.Drop;
     }
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_active = reader.ReadBoolean();
-        m_activeBase = reader.ReadUInt16();
-        m_activeBaseUnclamped = reader.ReadUInt16();
-        m_delay = reader.ReadInt32();
-        m_index = reader.ReadInt32();
-        m_pending = reader.ReadBoolean();
-        m_pendingBase = reader.ReadUInt16();
-        m_pendingBaseUnclamped = reader.ReadUInt16();
-        m_phase = reader.ReadInt32();
-        m_poisonCurrentByte = reader.ReadBoolean();
-        m_register = reader.ReadByte();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
     public void PoisonCurrentOamByte() =>
         m_poisonCurrentByte = true;
@@ -232,19 +221,23 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
     public byte ReadRegister() =>
         m_register;
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBoolean(value: m_active);
-        writer.WriteUInt16(value: m_activeBase);
-        writer.WriteUInt16(value: m_activeBaseUnclamped);
-        writer.WriteInt32(value: m_delay);
-        writer.WriteInt32(value: m_index);
-        writer.WriteBoolean(value: m_pending);
-        writer.WriteUInt16(value: m_pendingBase);
-        writer.WriteUInt16(value: m_pendingBaseUnclamped);
-        writer.WriteInt32(value: m_phase);
-        writer.WriteBoolean(value: m_poisonCurrentByte);
-        writer.WriteByte(value: m_register);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Boolean(value: ref m_active);
+        transfer.UInt16(value: ref m_activeBase);
+        transfer.UInt16(value: ref m_activeBaseUnclamped);
+        transfer.Int32(value: ref m_delay);
+        transfer.Int32(value: ref m_index);
+        transfer.Boolean(value: ref m_pending);
+        transfer.UInt16(value: ref m_pendingBase);
+        transfer.UInt16(value: ref m_pendingBaseUnclamped);
+        transfer.Int32(value: ref m_phase);
+        transfer.Boolean(value: ref m_poisonCurrentByte);
+        transfer.Byte(value: ref m_register);
     }
+
     /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed into the start-up delay.</summary>
     /// <param name="cycles">The T-cycles to absorb.</param>
     public void Skip(int cycles) {

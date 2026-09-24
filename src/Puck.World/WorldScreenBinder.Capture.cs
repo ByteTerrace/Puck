@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Platform;
 using Puck.SdfVm.Views;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -15,31 +16,16 @@ internal sealed partial class WorldScreenBinder {
         ? m_renderAdapterLuid
         : null
     );
-    // The declared-data compositor-capture boot: route by the source selector (a window title or a whole monitor). A
-    // resolvable target starts live; a target momentarily absent on a supported platform retains a pending feed that
-    // reacquires on publication through the same cadence-gated TryEnsureSource path; an unsupported platform faults. On
-    // the D3D12 GPU transport the open is ALWAYS deferred to that pending path (the render adapter LUID the platform
-    // capture must open on is not resolvable at construction), so a valid declaration retains a pending feed here.
-    private void BootDeclaredCapture(ScreenSlot slot, WorldScreenSource.Capture capture) {
-        var feed = TryCreateCaptureFeed(
-            capture: capture,
-            fault: out var fault
-        );
-
-        if (feed is not null) {
-            slot.Capture = feed;
-        } else {
-            slot.DeclaredFault = fault;
-        }
-    }
-    // The one open ladder behind a Capture source, shared by a declared screen row (BootDeclaredCapture, above) and
-    // the frame-source registry (DeclareFrameSource, WorldScreenBinder.FrameSources.cs — a HUD/overlay capture with
+    // The one open ladder behind a capture producer source, shared by a screen row (CaptureProducer) and the
+    // frame-source registry (DeclareFrameSource, WorldScreenBinder.FrameSources.cs — a HUD/overlay capture with
     // no screen row at all): the D3D12 GPU transport always defers to the pending path (the render adapter LUID is
     // not resolvable yet); otherwise an immediate CPU/GPU open is tried, then a pending feed on a platform that
     // supports window capture at all, then nothing (fault only, no feed) on a platform with none. A caller that
     // gets no feed back never retries on its own — a null return means the platform itself cannot ever open this
     // source, not a transient miss.
-    private CaptureFeed? TryCreateCaptureFeed(WorldScreenSource.Capture capture, out string? fault) {
+    private CaptureFeed? TryCreateCaptureFeed(WorldCaptureSettings capture, out string? fault) {
+        var windowTitle = (capture.WindowTitle ?? string.Empty);
+
         if (capture.MonitorIndex is { } monitorIndex) {
             if (
                 m_hostsOnDirectX &&
@@ -90,19 +76,19 @@ internal sealed partial class WorldScreenBinder {
         if (
             m_hostsOnDirectX &&
             m_windowCapture.IsSupported &&
-            !string.IsNullOrWhiteSpace(value: capture.WindowTitle)
+            !string.IsNullOrWhiteSpace(value: windowTitle)
         ) {
             fault = null;
 
             return NewCaptureFeed(
-                title: capture.WindowTitle,
+                title: windowTitle,
                 profile: capture.Profile,
                 source: null
             );
         }
 
         if (TryOpenCapture(
-            title: capture.WindowTitle,
+            title: windowTitle,
             profile: capture.Profile,
             feed: out var captureFeed,
             fault: out var captureFault
@@ -114,12 +100,12 @@ internal sealed partial class WorldScreenBinder {
 
         if (
             m_windowCapture.IsSupported &&
-            !string.IsNullOrWhiteSpace(value: capture.WindowTitle)
+            !string.IsNullOrWhiteSpace(value: windowTitle)
         ) {
             fault = captureFault;
 
             return NewCaptureFeed(
-                title: capture.WindowTitle,
+                title: windowTitle,
                 profile: capture.Profile,
                 source: null,
                 fault: captureFault
@@ -165,7 +151,7 @@ internal sealed partial class WorldScreenBinder {
                 feed.Source!.TryCapture(surface: out var glowSurface) &&
                 glowSurface.IsCpuPixels
             ) {
-                feed.Light = AverageColor(pixels: glowSurface.Pixels.Span);
+                feed.Light = WorldImageLight.Average(bgra: glowSurface.Pixels.Span);
             }
 
             // Live once the platform has completed its first GPU copy — the same first-frame gate the CPU path uses.
@@ -186,7 +172,7 @@ internal sealed partial class WorldScreenBinder {
             );
             feed.Live = true;
             feed.Fault = null;
-            feed.Light = AverageColor(pixels: surface.Pixels.Span);
+            feed.Light = WorldImageLight.Average(bgra: surface.Pixels.Span);
         } else if (!feed.Live) {
             feed.Fault = $"{feed.Label} awaiting a compositor frame";
         }
@@ -220,11 +206,11 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        var images = new IGpuExportableStorageImage[3];
+        var images = new IGpuExportableImage[3];
         var handles = new nint[images.Length];
 
         for (var i = 0; (i < images.Length); ++i) {
-            images[i] = m_surfaceExport!.CreateSimultaneousAccessStorageImage(
+            images[i] = m_surfaceExport!.CreateSimultaneousAccessImage(
                 deviceContext: deviceContext,
                 format: GpuPixelFormat.B8G8R8A8Unorm,
                 height: ((uint)height),
@@ -369,7 +355,10 @@ internal sealed partial class WorldScreenBinder {
         }
 
         slot.ClearLive();
-        slot.Capture = feed;
+        slot.LiveFeed = new CaptureSlotFeed(
+            binder: this,
+            feed: feed
+        );
         slot.DeclaredFault = null;
 
         return (Ok: true, Message: $"screen {index} capturing '{windowTitle}'");
@@ -403,7 +392,10 @@ internal sealed partial class WorldScreenBinder {
         }
 
         slot.ClearLive();
-        slot.Capture = feed;
+        slot.LiveFeed = new CaptureSlotFeed(
+            binder: this,
+            feed: feed
+        );
         slot.DeclaredFault = null;
 
         return (Ok: true, Message: $"screen {index} capturing monitor {monitorIndex}");
@@ -455,7 +447,7 @@ internal sealed partial class WorldScreenBinder {
         public INativeImageCaptureFeed? GpuAttachedSource { get; set; }
         // The three simultaneous-access shared textures the platform copies into round-robin (null until the source's
         // extent is known and the first attach runs), and the source they are attached to (identity guards re-attach).
-        public IReadOnlyList<IGpuExportableStorageImage>? GpuTargets { get; set; }
+        public IReadOnlyList<IGpuExportableImage>? GpuTargets { get; set; }
         // The human label a fault reads under: a window title, or a whole-monitor index.
         public string Label => ((MonitorIndex is { } monitor)
             ? $"monitor {monitor}"
@@ -465,6 +457,7 @@ internal sealed partial class WorldScreenBinder {
         public bool Live { get; set; }
 
         public int? MonitorIndex { get; } = monitorIndex;
+        public WorldFeedProfile Profile { get; } = profile;
         public INativeImageCaptureFeed? Source { get; private set; } = source;
         public CpuSurfaceSource Surface { get; } = surface;
         public string Title { get; } = title;
@@ -533,17 +526,17 @@ internal sealed partial class WorldScreenBinder {
             var reacquired = ((MonitorIndex is { } monitor)
                 ? service.TryCreateMonitorCapture(
                     monitorIndex: monitor,
-                    width: profile.Width,
-                    height: profile.Height,
-                    refreshRateHz: profile.RefreshRateHz,
+                    width: Profile.Width,
+                    height: Profile.Height,
+                    refreshRateHz: Profile.RefreshRateHz,
                     feed: out next,
                     adapterLuid: adapterLuid
                 )
                 : service.TryCreateWindowCapture(
                     windowTitleFragment: Title,
-                    width: profile.Width,
-                    height: profile.Height,
-                    refreshRateHz: profile.RefreshRateHz,
+                    width: Profile.Width,
+                    height: Profile.Height,
+                    refreshRateHz: Profile.RefreshRateHz,
                     feed: out next,
                     adapterLuid: adapterLuid
                 )

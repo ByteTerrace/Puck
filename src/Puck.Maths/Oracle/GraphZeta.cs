@@ -192,10 +192,9 @@ public sealed class GraphZeta<TValue, TOps>
     /// <remarks>It is the full coefficient even where <see cref="DegreeBound"/> truncates
     /// <see cref="CharacteristicPolynomial"/>, since the recursion reaches every degree the order carries.</remarks>
     public TValue Coefficient(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: degree,
-            other: Order
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: Order,
+            value: degree
         );
 
         return m_coefficients[degree];
@@ -206,10 +205,9 @@ public sealed class GraphZeta<TValue, TOps>
     /// order's worth of ones.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The length is negative or above <see cref="Order"/>.</exception>
     public TValue PowerSum(int length) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: length,
-            other: Order
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: Order,
+            value: length
         );
 
         return m_powerSums[length];

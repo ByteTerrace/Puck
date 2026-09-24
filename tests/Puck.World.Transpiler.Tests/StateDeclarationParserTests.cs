@@ -13,22 +13,10 @@ public class StateDeclarationParserTests {
 
         return Assert.IsType<BlockNode>(@object: stateBlock.Statements[0]);
     }
-    private static DocumentNode ParseClean(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-
-        var (doc, diagnostics) = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        Assert.NotNull(@object: doc);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport(source)
-        );
-        return doc!;
-    }
 
     [Fact]
     public void TableDeclarationParsesNameKindModifiersAndCells() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             state {
                 world {
                     table vitals bounds(0..100) {
@@ -71,7 +59,7 @@ public class StateDeclarationParserTests {
     }
     [Fact]
     public void SlotDeclarationParsesOptionalValueAndModifiers() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             state {
                 world {
                     slot gold = 10 bounds(0..)
@@ -90,7 +78,7 @@ public class StateDeclarationParserTests {
     }
     [Fact]
     public void SlotDeclarationWithNoValueLeavesValueNull() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             state {
                 world {
                     slot uninitialized
@@ -105,7 +93,7 @@ public class StateDeclarationParserTests {
     }
     [Fact]
     public void PileDeclarationParsesTokenRowAndTokens() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             state {
                 world {
                     row { name: "deckCards" kind: Int capacity: 4 }
@@ -148,7 +136,7 @@ public class StateDeclarationParserTests {
     }
     [Fact]
     public void GridDeclarationParsesDimensionsModifiersAndBody() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             state {
                 world {
                     grid board dimensions(width: 8, depth: 8) wrap(Both) {
@@ -177,7 +165,7 @@ public class StateDeclarationParserTests {
     }
     [Fact]
     public void GridDeclarationWithNoBodyHasBodyFalseAndNoCells() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             state {
                 world {
                     grid board dimensions(width: 8, depth: 8)
@@ -206,9 +194,17 @@ public class StateDeclarationParserTests {
             }
             """;
 
-        var (doc, diagnostics) = PuckParser.ParseDocumentWithDiagnostics(source);
+        // A kind word is refused where it is read; whether `: Card` names an enum or a record is the lowering's answer.
+        var (doc, parsed) = PuckParser.ParseDocumentWithDiagnostics(source);
 
         Assert.NotNull(@object: doc);
+        Assert.Equal(
+            3,
+            parsed.Where(predicate: d => (d.Code == "PUCK107")).Count()
+        );
+
+        var diagnostics = WorldSources.Compile(source: source).Diagnostics;
+
         Assert.Equal(
             4,
             diagnostics.Where(predicate: d => (d.Code == "PUCK107")).Count()
@@ -218,30 +214,27 @@ public class StateDeclarationParserTests {
             filter: diagnostic => diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "pool cards of Card capacity(...)")
         );
     }
-    [Fact]
-    public void TableAndSlotColonPropertiesInAnOrdinaryBlockStillParseAsProperties() {
-        var doc = ParseClean(body: """
+    // A declaration keyword followed by a colon is an ordinary property of that name.
+    [InlineData("table: 5", "slot: \"y\"")]
+    [InlineData("pile: 1", "grid: 2")]
+    [Theory]
+    public void DeclarationKeywordColonPropertiesInAnOrdinaryBlockStillParseAsProperties(string first, string second) {
+        var doc = WorldSources.ParseClean(body: $$"""
             host {
-                table: 5
-                slot: "y"
+                {{first}}
+                {{second}}
             }
             """);
         var host = Assert.IsType<BlockNode>(@object: doc.Statements[0]);
-        var table = Assert.IsType<PropertyNode>(@object: host.Statements[0]);
-        var slot = Assert.IsType<PropertyNode>(@object: host.Statements[1]);
 
         Assert.Equal(
-            "table",
-            table.Name
-        );
-        Assert.Equal(
-            "slot",
-            slot.Name
+            actual: host.Statements.Select(selector: static statement => Assert.IsType<PropertyNode>(@object: statement).Name),
+            expected: [first[..first.IndexOf(value: ':')], second[..second.IndexOf(value: ':')]]
         );
     }
     [Fact]
     public void TableAndSlotColonPropertiesInsideARowBlockStillParseAsProperties() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             state {
                 world {
                     row {
@@ -265,27 +258,6 @@ public class StateDeclarationParserTests {
         Assert.Equal(
             "slot",
             slotProp.Name
-        );
-    }
-    [Fact]
-    public void PileAndGridColonPropertiesStillParseAsProperties() {
-        var doc = ParseClean(body: """
-            host {
-                pile: 1
-                grid: 2
-            }
-            """);
-        var host = Assert.IsType<BlockNode>(@object: doc.Statements[0]);
-        var pile = Assert.IsType<PropertyNode>(@object: host.Statements[0]);
-        var grid = Assert.IsType<PropertyNode>(@object: host.Statements[1]);
-
-        Assert.Equal(
-            "pile",
-            pile.Name
-        );
-        Assert.Equal(
-            "grid",
-            grid.Name
         );
     }
 }

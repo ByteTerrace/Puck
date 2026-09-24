@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Assets;
+using Puck.Commands;
 
 namespace Puck.Cli.Canary;
 
@@ -26,7 +27,7 @@ internal static class CanaryFrameNoise {
     /// <summary>The per-pixel channel delta, in LSB, at or above which a pixel counts as changed.</summary>
     public const int MinChangedDelta = 2;
 }
-internal static class CanaryAssertions {
+internal static partial class CanaryAssertions {
     /// <summary>The token a manifest writes where the runner's per-leg companion-authority endpoint belongs.</summary>
     public const string AuthorityToken = "{authority}";
 
@@ -205,6 +206,39 @@ internal static class CanaryAssertions {
                         Passed: passed
                     );
                 }
+            case CanaryRelationOperator.Greater: {
+                    if (!TryResolveOperand(
+                        operand: assertion.Right!,
+                        values: values,
+                        value: out var right,
+                        error: out var rightError
+                    )) {
+                        return new CanaryAssertionResult(
+                            Detail: $"{assertion.Name}: {rightError}",
+                            Passed: false
+                        );
+                    }
+                    if (
+                        !TryNumber(
+                        number: out var leftNumber,
+                        value: left
+                    ) ||
+                        !TryNumber(
+                        number: out var rightNumber,
+                        value: right
+                    )
+                    ) {
+                        return new CanaryAssertionResult(
+                            Detail: $"{assertion.Name}: greater needs two finite numbers, got '{left}' and '{right}'",
+                            Passed: false
+                        );
+                    }
+
+                    return new CanaryAssertionResult(
+                        Detail: $"{assertion.Name}: '{left}' {OperatorName(relationOperator: assertion.Operator)} '{right}'",
+                        Passed: (leftNumber > rightNumber)
+                    );
+                }
             case CanaryRelationOperator.BetweenInclusive:
             case CanaryRelationOperator.AtLeast:
             case CanaryRelationOperator.AtMost: {
@@ -298,7 +332,16 @@ internal static class CanaryAssertions {
             if (!TryExtract(
                 error: out var error,
                 extraction: extraction,
-                line: selected,
+                line: ((extraction.Line is { } start)
+                    ? ContinuationLine(
+                        occurrence: assertion.Occurrence,
+                        start: start,
+                        stream: assertion.Stream,
+                        transcript: transcript,
+                        verb: assertion.Verb
+                    )
+                    : selected
+                ),
                 value: out var value
             )) {
                 return new CanaryAssertionResult(
@@ -312,6 +355,51 @@ internal static class CanaryAssertions {
 
         return new CanaryAssertionResult(
             Detail: $"{assertion.Name}: selected {assertion.Verb} occurrence {assertion.Occurrence} of exactly {assertion.Count} on {StreamName(stream: assertion.Stream)}",
+            Passed: true
+        );
+    }
+    // Each listed line must match at an index past the previous one's match; the first match after it is taken, so a
+    // line that also appears earlier cannot satisfy a later position.
+    private static CanaryAssertionResult EvaluateLineOrder(CanaryLineOrderAssertion assertion, CanaryTranscript transcript) {
+        var lines = Lines(
+            transcript: transcript,
+            stream: assertion.Stream
+        );
+        var next = 0;
+
+        foreach (var text in assertion.Lines) {
+            var found = -1;
+
+            for (var index = next; (index < lines.Count); index++) {
+                if (assertion.Match switch {
+                    CanaryLineMatch.Exact => string.Equals(
+                        a: lines[index],
+                        b: text,
+                        comparisonType: StringComparison.Ordinal
+                    ),
+                    _ => lines[index].Contains(
+                        comparisonType: StringComparison.Ordinal,
+                        value: text
+                    ),
+                }) {
+                    found = index;
+
+                    break;
+                }
+            }
+
+            if (found < 0) {
+                return new CanaryAssertionResult(
+                    Detail: $"{assertion.Name}: '{text}' is absent after line {next} on {StreamName(stream: assertion.Stream)}",
+                    Passed: false
+                );
+            }
+
+            next = (found + 1);
+        }
+
+        return new CanaryAssertionResult(
+            Detail: $"{assertion.Name}: {assertion.Lines.Count} lines arrived in order on {StreamName(stream: assertion.Stream)}",
             Passed: true
         );
     }
@@ -394,12 +482,48 @@ internal static class CanaryAssertions {
     private static string OperatorName(CanaryRelationOperator relationOperator) => relationOperator switch {
         CanaryRelationOperator.Equal => "==",
         CanaryRelationOperator.NotEqual => "!=",
+        CanaryRelationOperator.Greater => ">",
         _ => relationOperator.ToString(),
     };
     private static string StreamName(CanaryStream stream) => ((stream == CanaryStream.Stdout)
         ? "stdout"
         : "stderr"
     );
+    // The first line inside a response's record — the lines after its "[verb:" line that the console indents
+    // (ConsoleRecord) — whose text past the indent starts with the given prefix, rewritten as "<prefix>:<rest>" so the
+    // field reader parses the rest; an empty line, which carries no field, when none does.
+    private static string ContinuationLine(CanaryTranscript transcript, CanaryStream stream, string verb, int occurrence, string start) {
+        var lines = Lines(
+            stream: stream,
+            transcript: transcript
+        );
+        var prefix = $"[{verb}:";
+        var seen = 0;
+
+        for (var index = 0; (index < lines.Count); index++) {
+            if (!lines[index].StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: prefix
+            ) || (++seen != occurrence)) {
+                continue;
+            }
+
+            for (var next = (index + 1); ((next < lines.Count) && ConsoleRecord.IsContinuation(line: lines[next])); next++) {
+                var text = lines[next].TrimStart();
+
+                if (text.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: start
+                )) {
+                    return $"{start}:{text[start.Length..]}";
+                }
+            }
+
+            break;
+        }
+
+        return string.Empty;
+    }
     private static bool TryExtract(string line, CanaryValueExtraction extraction, out string value, out string error) {
         value = string.Empty;
         error = string.Empty;
@@ -584,7 +708,7 @@ internal static class CanaryAssertions {
         );
 
     // authorityTranscripts resolves an assertion's optional authority id to that authority's own transcript; a null
-    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer and framesAgree always
+    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer, framesAgree, and imageRegion always
     // read primaryTranscript.RunDirectory regardless of authority, since capture paths are leg-scoped, not per-process.
     // authorityEndpoint substitutes {authority} in a line assertion's text: the runner binds a companion authority to
     // a free loopback port per leg, so a manifest names the endpoint by token rather than pinning a port the runner
@@ -626,6 +750,12 @@ internal static class CanaryAssertions {
                         transcript: Resolve(authority: line.Authority)
                     ));
                     break;
+                case CanaryLineOrderAssertion order:
+                    results.Add(item: EvaluateLineOrder(
+                        assertion: order,
+                        transcript: Resolve(authority: order.Authority)
+                    ));
+                    break;
                 case CanarySequenceAssertion sequence:
                     results.Add(item: EvaluateSequence(
                         assertion: sequence,
@@ -647,6 +777,12 @@ internal static class CanaryAssertions {
                 case CanaryFrameAgreementAssertion frames:
                     results.Add(item: EvaluateFrameAgreement(
                         assertion: frames,
+                        transcript: primaryTranscript
+                    ));
+                    break;
+                case CanaryImageRegionAssertion region:
+                    results.Add(item: EvaluateImageRegion(
+                        assertion: region,
                         transcript: primaryTranscript
                     ));
                     break;

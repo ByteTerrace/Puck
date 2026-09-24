@@ -9,25 +9,9 @@ namespace Puck.Cli.Tests;
 /// test suite rather than surfacing only in CI or a manual verb run.
 /// </summary>
 public sealed class LedgerDriftTests {
-    private static (int ExitCode, string Output) RunCapturingConsole(Func<int> run) {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        using var writer = new StringWriter();
-
-        Console.SetOut(newOut: writer);
-        Console.SetError(newError: writer);
-
-        try {
-            return (run(), writer.ToString());
-        } finally {
-            Console.SetOut(newOut: originalOut);
-            Console.SetError(newError: originalError);
-        }
-    }
-
     [Fact]
     public void ArchitectureCheckMatchesTheCheckedInLayeringBlock() {
-        var (exitCode, output) = RunCapturingConsole(run: static () => PuckRootCommand.Invoke(args: ["architecture", "--check"]));
+        var (exitCode, output) = ConsoleCapture.Run(run: static () => PuckRootCommand.Invoke(args: ["architecture", "--check"]));
 
         Assert.True(
             condition: (exitCode == 0),
@@ -36,7 +20,7 @@ public sealed class LedgerDriftTests {
     }
     [Fact]
     public void RegistryCheckMatchesTheCheckedInFile() {
-        var (exitCode, output) = RunCapturingConsole(run: static () => PuckRootCommand.Invoke(args: ["registry", "--check"]));
+        var (exitCode, output) = ConsoleCapture.Run(run: static () => PuckRootCommand.Invoke(args: ["registry", "--check"]));
 
         Assert.True(
             condition: (exitCode == 0),
@@ -45,7 +29,7 @@ public sealed class LedgerDriftTests {
     }
     [Fact]
     public void SchemaCheckMatchesTheCheckedInFiles() {
-        var (exitCode, output) = RunCapturingConsole(run: static () => PuckRootCommand.Invoke(args: ["schema", "--check"]));
+        var (exitCode, output) = ConsoleCapture.Run(run: static () => PuckRootCommand.Invoke(args: ["schema", "--check"]));
 
         Assert.True(
             condition: (exitCode == 0),

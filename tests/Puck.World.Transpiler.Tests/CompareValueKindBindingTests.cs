@@ -42,19 +42,6 @@ public class CompareValueKindBindingTests {
         );
         return node!.ToJsonString();
     }
-    private static JsonObject Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.False(
-            condition: compilation.Diagnostics.HasErrors,
-            userMessage: compilation.Diagnostics.FormatReport(source)
-        );
-        return compilation.RequireJson();
-    }
 
     // With no `kind` at all there is no annotation to print, so the node has no sugar spelling and must fall to
     // the call form, which carries `$type` verbatim.
@@ -76,10 +63,30 @@ public class CompareValueKindBindingTests {
         );
         AssertRoundTripsExactly(json: Json);
     }
-    // `Fixed` stays elided only where the bare text re-lowers to a `compareValue` on its own, which a
-    // multi-token operand guarantees.
+    // A comparison with no kind infers one, so its bare text re-lowers to the same kindless node wherever a
+    // multi-token operand keeps it a `compareValue`.
     [Fact]
-    public void DecompilerLeavesDefaultFixedKindUnannotatedWhenTheBareTextKeepsCompareValue() {
+    public void DecompilerLeavesAKindlessCompareValueUnannotatedWhenTheBareTextKeepsCompareValue() {
+        const string Json = """
+            {"schema":"puck.world.definition.v1","rules":[
+              {"name":"r","gate":{"$type":"compareValue","comparison":"NotEqual","left":"b + 1","right":"c"},
+               "effects":[{"$type":"setState","state":"hp","value":0}]}
+            ]}
+            """;
+
+        var puck = WorldDecompiler.Decompile(jsonText: Document(json: Json));
+
+        Assert.Contains(
+            actualString: puck,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "when b + 1 != c"
+        );
+        AssertRoundTripsExactly(json: Json);
+    }
+    // A declared kind is printed even where a kindless comparison would print bare: eliding it would re-lower to an
+    // inferred kind, which is a different node.
+    [Fact]
+    public void DecompilerPrintsADeclaredFixedKindWhereTheBareTextKeepsCompareValue() {
         const string Json = """
             {"schema":"puck.world.definition.v1","rules":[
               {"name":"r","gate":{"$type":"compareValue","comparison":"NotEqual","kind":"Fixed","left":"b + 1","right":"c"},
@@ -92,12 +99,7 @@ public class CompareValueKindBindingTests {
         Assert.Contains(
             actualString: puck,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "when b + 1 != c"
-        );
-        Assert.DoesNotContain(
-            actualString: puck,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "Fixed"
+            expectedSubstring: "when (b + 1 != c : Fixed)"
         );
         AssertRoundTripsExactly(json: Json);
     }
@@ -166,7 +168,7 @@ public class CompareValueKindBindingTests {
     }
     [Fact]
     public void ParenthesizedFixedKindInsideAndChainLowersExactCompareValueJson() {
-        var json = Lower(body: """
+        var json = WorldSources.LowerClean(body: """
             rule "r" {
                 when a >= 0 and (b != c : Fixed)
                 effectRow = 1
@@ -187,7 +189,7 @@ public class CompareValueKindBindingTests {
     }
     [Fact]
     public void ParenthesizedIntKindInsideAndChainLowersExactCompareValueJson() {
-        var json = Lower(body: """
+        var json = WorldSources.LowerClean(body: """
             rule "r" {
                 when a >= 0 and (b != c : Int)
                 effectRow = 1

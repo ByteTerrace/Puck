@@ -2,7 +2,8 @@ namespace Puck.HumbleGamingBrick.Interfaces;
 
 /// <summary>
 /// The host-facing audio output seam: a bounded ring of mixed stereo samples that the emulated mixer fills and the
-/// host drains. The sink is strictly output-only — whether (or when) the host drains it never feeds back into
+/// host drains. When the ring is full the oldest frame is dropped, so a host that stalls finds the newest emulated
+/// second waiting. The sink is strictly output-only — whether (or when) the host drains it never feeds back into
 /// emulated state, so host audio timing cannot perturb determinism. For the same reason its contents are
 /// <em>not</em> snapshot state: a snapshot captures none of it, and a restore clears it so a rewound machine starts
 /// a fresh stream instead of replaying stale output.

@@ -128,22 +128,6 @@ internal static class DctClaims {
 
         return null;
     }
-    private static string? Refuses(Action action, Type type, string? parameterName, string what) {
-        try {
-            action();
-        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
-            if (parameterName is null) { return null; }
-
-            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
-                ? null
-                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'"
-            );
-        } catch (Exception thrown) {
-            return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
-        }
-
-        return $"{what} did not throw at all";
-    }
     private static string? RoundTripBoundCore(int[] lengths, long bound, ulong saltBase) {
         foreach (var length in lengths) {
             var plan = FixedCosineTransformPlan.Create(length: length);

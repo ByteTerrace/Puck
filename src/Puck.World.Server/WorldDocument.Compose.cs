@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
@@ -108,7 +109,7 @@ public sealed partial class WorldDocument {
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetPopulationDefaults));
 
-    private static bool ContainsMember(IReadOnlyList<WorldGroupMember> members, WorldPrincipal member) {
+    private static bool ContainsMember(IReadOnlyList<WorldGroupMember> members, Principal member) {
         foreach (var existing in members) {
             if (
                 (existing.Ref.Kind == MemberRefKind.Local) &&
@@ -133,47 +134,39 @@ public sealed partial class WorldDocument {
 
         return true;
     }
-    private static WorldGroupKind? FindGroupKind(IReadOnlyList<WorldGroupKind> kinds, string name) {
-        foreach (var kind in kinds) {
+    private static T? FindById<T>(IReadOnlyList<T> list, string id, Func<T, string> idOf) where T : class {
+        foreach (var item in list) {
             if (string.Equals(
-                a: kind.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return kind;
-            }
-        }
-
-        return null;
-    }
-    private static WorldGroup? FindGroupRow(IReadOnlyList<WorldGroup> groups, string id) {
-        foreach (var row in groups) {
-            if (string.Equals(
-                a: row.Id,
+                a: idOf(arg: item),
                 b: id,
                 comparisonType: StringComparison.Ordinal
             )) {
-                return row;
+                return item;
             }
         }
 
         return null;
     }
+    private static WorldGroupKind? FindGroupKind(IReadOnlyList<WorldGroupKind> kinds, string name) =>
+        FindById(
+            id: name,
+            idOf: static kind => kind.Name,
+            list: kinds
+        );
+    private static WorldGroup? FindGroupRow(IReadOnlyList<WorldGroup> groups, string id) =>
+        FindById(
+            id: id,
+            idOf: static row => row.Id,
+            list: groups
+        );
     // The HUD element mutations' panel lookup — a single-element read-modify-write needs its OWNING panel by id
     // before it can rewrite that panel's Elements list; null when no panel declares that id.
-    private static WorldHudPanel? FindHudPanel(IReadOnlyList<WorldHudPanel> panels, string id) {
-        foreach (var panel in panels) {
-            if (string.Equals(
-                a: panel.Id,
-                b: id,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return panel;
-            }
-        }
-
-        return null;
-    }
+    private static WorldHudPanel? FindHudPanel(IReadOnlyList<WorldHudPanel> panels, string id) =>
+        FindById(
+            id: id,
+            idOf: static panel => panel.Id,
+            list: panels
+        );
     // The Ownership section's own find — keyed by the Subject value (a readonly record struct, so structural
     // equality is exact) rather than a name string, since a subject is (kind, id) rather than one bare identifier.
     private static WorldOwnership? FindOwnershipRow(IReadOnlyList<WorldOwnership> ownership, OwnershipSubject subject) {
@@ -221,7 +214,7 @@ public sealed partial class WorldDocument {
     // that empties it and the kind's Lifetime is Ephemeral — checked ONLY when the group HAD at least one member
     // before (forming an empty group never auto-dissolves it). A null kind (defensive — the validator refuses a
     // dangling kindName before this could be reached live) leaves the group Persistent by default.
-    private static IReadOnlyList<WorldGroup> RemoveMemberAndMaybeDissolve(IReadOnlyList<WorldGroup> groups, WorldGroup group, WorldGroupKind? kind, WorldPrincipal member) {
+    private static IReadOnlyList<WorldGroup> RemoveMemberAndMaybeDissolve(IReadOnlyList<WorldGroup> groups, WorldGroup group, WorldGroupKind? kind, Principal member) {
         var remaining = new List<WorldGroupMember>(capacity: group.Members.Count);
 
         foreach (var existing in group.Members) {
@@ -320,7 +313,7 @@ public sealed partial class WorldDocument {
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
         WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout
-            or WorldMutation.UpsertViewPipeline or WorldMutation.RemoveViewPipeline => WorldSection.Views,
+            or WorldMutation.UpsertViewPipeline or WorldMutation.RemoveViewPipeline or WorldMutation.CommitViewPipeline => WorldSection.Views,
         WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
         WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
@@ -447,58 +440,6 @@ public sealed partial class WorldDocument {
         return true;
     }
 
-    /// <summary>Owns load + canonical hash verification for a name/source/hash reference row at the mutation
-    /// composition boundary (<see cref="WorldTune"/>/<see cref="WorldPatch"/>) — the referenced twin of <see
-    /// cref="TryCanonicalizeDocument{TDocument}"/>: the row carries no document to write back, so a successful
-    /// verify only proves the row is admissible, never returns a payload.</summary>
-    private delegate bool AssetRowLoader<in TRow, TDocument>(TRow row, out TDocument? document, out string? error);
-
-    private static bool TryVerifyReferencedAsset<TRow, TDocument>(
-        TRow row,
-        string id,
-        string hash,
-        string kind,
-        AssetRowLoader<TRow, TDocument> tryLoad,
-        Func<TDocument, string, Puck.Assets.Documents.CanonicalDocument<TDocument>> canonicalize,
-        out string reason) where TDocument : class {
-        if (!tryLoad(
-            row,
-            out var document,
-            out var loadError
-        )) {
-            reason = $"{kind} '{id}': {loadError}";
-
-            return false;
-        }
-
-        Puck.Assets.Documents.CanonicalDocument<TDocument> canonical;
-
-        try {
-            canonical = canonicalize(
-                arg1: document!,
-                arg2: id
-            );
-        } catch (Exception exception) when ((exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException)) {
-            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
-
-            return false;
-        }
-
-        if (!string.Equals(
-            a: hash,
-            b: canonical.Hash,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            reason = $"{kind} '{id}' hash '{hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-
     // Compose a candidate definition from the current one and a mutation — a with-expression over the coarse section,
     // whole-row upsert addressed by stable id. A remove of a missing id fails here (before validation) with a reason.
     // `tick` is the tick this mutation APPLIES at — the live tick boundary, or a journal entry's own tick during
@@ -579,6 +520,7 @@ public sealed partial class WorldDocument {
 
         if (
             !TryCollectStateMutationRowNames(
+            definition: candidate,
             mutation: mutation,
             names: m_touchedRows,
             reason: out _
@@ -832,23 +774,14 @@ public sealed partial class WorldDocument {
                     return true;
                 }
             case WorldMutation.RemoveCreation m: {
-                    // The conservative no-cascade ruling: a creation with live placements rejects loudly rather than
-                    // silently unstamping the world (remove the placements first; undo replay stays order-honest).
-                    var referencing = 0;
-
-                    foreach (var placement in current.Placements) {
-                        if (string.Equals(
-                            a: placement.PrototypeId,
-                            b: m.Id,
-                            comparisonType: StringComparison.Ordinal
-                        )) {
-                            referencing++;
-                        }
-                    }
-
-                    if (referencing > 0) {
+                    // The conservative no-cascade ruling: a creation any row still names rejects loudly rather than
+                    // silently unstamping the world (remove the referent first; undo replay stays order-honest).
+                    if (WorldDefinitionRows.FindCreationReference(
+                        creationId: m.Id,
+                        definition: current
+                    ) is { } referent) {
                         candidate = current;
-                        reason = $"creation '{m.Id}' has {referencing} live placement(s) — remove them first";
+                        reason = $"creation '{m.Id}' is still named by {referent} — remove that reference first";
 
                         return false;
                     }
@@ -934,10 +867,11 @@ public sealed partial class WorldDocument {
                 return true;
             case WorldMutation.UpsertTune m: {
                     if (!TryVerifyReferencedAsset<WorldTune, Puck.Assets.Documents.AudioDocument>(
+                        documentDirectory: current.DocumentDirectory,
                         row: m.Tune,
                         id: m.Tune.Name,
                         hash: m.Tune.Hash,
-                        kind: "tune",
+                        kind: Puck.Assets.Documents.AssetRowFamilies.Tune,
                         tryLoad: WorldAssetRowLoader.TryLoadTune,
                         canonicalize: static (document, source) => Puck.Assets.Documents.AudioCanonicalizer.Canonicalize(
                             document: document,
@@ -993,10 +927,11 @@ public sealed partial class WorldDocument {
                 }
             case WorldMutation.UpsertPatch m: {
                     if (!TryVerifyReferencedAsset<WorldPatch, Puck.Assets.Documents.SynthPatchDocument>(
+                        documentDirectory: current.DocumentDirectory,
                         row: m.Patch,
                         id: m.Patch.Name,
                         hash: m.Patch.Hash,
-                        kind: "patch",
+                        kind: Puck.Assets.Documents.AssetRowFamilies.Patch,
                         tryLoad: WorldAssetRowLoader.TryLoadPatch,
                         canonicalize: static (document, source) => Puck.Assets.Documents.SynthPatchCanonicalizer.Canonicalize(
                             document: document,
@@ -1092,74 +1027,21 @@ public sealed partial class WorldDocument {
                 candidate = (current with { PlayerDefaultsRaw = (current.PlayerDefaults with { SeatLookRaw = m.SeatLook }) });
 
                 return true;
-            case WorldMutation.UpsertViewLayout m: {
-                    var views = current.Views;
-
-                    candidate = (current with {
-                        ViewsRaw = (views with {
-                            Layouts = Upsert(
-                        list: views.Layouts,
-                        item: m.Layout,
-                        keyOf: static layout => layout.Name
-                    ),
-                        }),
-                    });
-
-                    return true;
-                }
-            case WorldMutation.RemoveViewLayout m: {
-                    var views = current.Views;
-
-                    if (!Remove(
-                        list: views.Layouts,
-                        key: m.Name,
-                        keyOf: static layout => layout.Name,
-                        result: out var layouts
-                    )) {
-                        candidate = current;
-                        reason = $"no view layout named '{m.Name}'";
-
-                        return false;
-                    }
-
-                    candidate = (current with { ViewsRaw = (views with { Layouts = layouts }) });
-
-                    return true;
-                }
-            case WorldMutation.UpsertViewPipeline m: {
-                    var views = current.Views;
-
-                    candidate = (current with {
-                        ViewsRaw = (views with {
-                            Pipelines = Upsert(
-                        list: views.Pipelines,
-                        item: m.Pipeline,
-                        keyOf: static pipeline => pipeline.Name
-                    ),
-                        }),
-                    });
-
-                    return true;
-                }
-            case WorldMutation.RemoveViewPipeline m: {
-                    var views = current.Views;
-
-                    if (!Remove(
-                        list: views.Pipelines,
-                        key: m.Name,
-                        keyOf: static pipeline => pipeline.Name,
-                        result: out var pipelines
-                    )) {
-                        candidate = current;
-                        reason = $"no views.pipelines row named '{m.Name}'";
-
-                        return false;
-                    }
-
-                    candidate = (current with { ViewsRaw = (views with { Pipelines = pipelines }) });
-
-                    return true;
-                }
+            case WorldMutation.UpsertViewLayout m:
+                return TryComposeViewLayoutUpsert(candidate: out candidate, current: current, mutation: m, reason: out reason);
+            case WorldMutation.RemoveViewLayout m:
+                return TryComposeViewLayoutRemove(candidate: out candidate, current: current, mutation: m, reason: out reason);
+            case WorldMutation.UpsertViewPipeline m:
+                return TryComposeViewPipelineUpsert(candidate: out candidate, current: current, mutation: m, reason: out reason);
+            case WorldMutation.CommitViewPipeline m:
+                return TryComposePipelineCommit(
+                    candidate: out candidate,
+                    commit: m,
+                    current: current,
+                    reason: out reason
+                );
+            case WorldMutation.RemoveViewPipeline m:
+                return TryComposeViewPipelineRemove(candidate: out candidate, current: current, mutation: m, reason: out reason);
             case WorldMutation.RemoveBindingOverlay m:
                 if (!Remove(
                     list: current.BindingOverlays,
@@ -1263,7 +1145,7 @@ public sealed partial class WorldDocument {
                     GrantsRaw = Upsert(
                     list: current.Grants,
                     item: m.Row,
-                    keyOf: static grant => (grant.Principal, grant.Capability, grant.Subject)
+                    keyOf: static grant => (grant.Grantee, grant.Capability, grant.Subject)
                 ),
                 });
 
@@ -1271,12 +1153,12 @@ public sealed partial class WorldDocument {
             case WorldMutation.RemoveGrant m:
                 if (!Remove(
                     list: current.Grants,
-                    key: (m.Target.Principal, m.Target.Capability, m.Target.Subject),
-                    keyOf: static grant => (grant.Principal, grant.Capability, grant.Subject),
+                    key: (m.Target.Grantee, m.Target.Capability, m.Target.Subject),
+                    keyOf: static grant => (grant.Grantee, grant.Capability, grant.Subject),
                     result: out var grants
                 )) {
                     candidate = current;
-                    reason = $"no grant row for {m.Target.Principal.Describe()} {m.Target.Capability.ToString().ToLowerInvariant()} {m.Target.Subject.Describe()}";
+                    reason = $"no grant row for {m.Target.Grantee.Describe()} {m.Target.Capability.ToString().ToLowerInvariant()} {m.Target.Subject.Describe()}";
 
                     return false;
                 }
@@ -1983,13 +1865,12 @@ public sealed partial class WorldDocument {
                     WorldOwnership settled;
 
                     if (m.Reclaim) {
-                        // Manual reclaim is the offerer's own remedy; WorldPrincipal.World is the engine's automatic
-                        // sweep (ReclaimExpiredEscrows) firing the identical mutation once the deadline passes with no
-                        // accept, so recovery needs no operator action. Both paths are gated on the SAME deadline check
-                        // below — the sweep does not jump the queue, it just never forgets to ask.
+                        // Manual reclaim is the offerer's own remedy; Principal.World is the engine's automatic sweep
+                        // (ReclaimExpiredEscrows) firing the identical mutation once the deadline passes with no accept.
+                        // Both paths are gated on the SAME deadline check below.
                         if (
                             (m.Principal != escrow.Offerer) &&
-                            (m.Principal != WorldPrincipal.World)
+                            (m.Principal != Principal.World)
                         ) {
                             candidate = current;
                             reason = $"only the offerer {escrow.Offerer.Describe()} (or the engine's own timeout sweep) may reclaim '{m.Subject.Describe()}'";
@@ -2181,7 +2062,7 @@ public sealed partial class WorldDocument {
     // The placement upsert arm. Everything here is about the contribution facet's server-stamped half; a row carrying
     // no facet composes exactly as it always did.
     //
-    // WorldPrincipal.World takes the submitted row verbatim: the per-tick sweep and a world rule's own effects are the
+    // Principal.World takes the submitted row verbatim: the per-tick sweep and a world rule's own effects are the
     // engine composing its own bookkeeping, and re-deriving it here would overwrite the arm/disarm/retract the sweep
     // just computed. Every other principal has the stamped half DERIVED, never read from the payload — filling the
     // slot stamps the acting principal the ingress door already put on the envelope, so there is no spelling of this

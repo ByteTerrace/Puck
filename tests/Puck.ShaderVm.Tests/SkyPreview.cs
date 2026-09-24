@@ -103,14 +103,9 @@ public sealed class SkyPreview {
     [InlineData("sky-base")]
     [InlineData("sky-night")]
     [InlineData("sky-day")]
-    [Theory]
+    [Theory(Explicit = true)]
     public void RendersTheAuthoredSky(string name) {
-        var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
-
-        Assert.SkipWhen(
-            condition: string.IsNullOrEmpty(value: directory),
-            reason: "Opt-in harness: set PUCK_SKY_PREVIEW_DIR to the directory the preview is written to."
-        );
+        var directory = PreviewOutput.Directory;
 
         var settings = Settings(name: name);
         var program = SkyProgram.Compile(
@@ -129,24 +124,24 @@ public sealed class SkyPreview {
 
         _ = Parallel.For(
             body: y => {
-            for (var x = 0; (x < Width); x++) {
-                var context = new ShaderContext(Coordinate: RayDirection(
-                    x: x,
-                    y: y
-                ));
-                var color = ShaderInterpreter.Evaluate(
-                    context: in context,
-                    parameters: parameters,
-                    program: program
-                );
-                var offset = (((y * Width) + x) * 4);
+                for (var x = 0; (x < Width); x++) {
+                    var context = new ShaderContext(Coordinate: RayDirection(
+                        x: x,
+                        y: y
+                    ));
+                    var color = ShaderInterpreter.Evaluate(
+                        context: in context,
+                        parameters: parameters,
+                        program: program
+                    );
+                    var offset = (((y * Width) + x) * 4);
 
-                pixels[(offset + 0)] = Encode(value: color.X);
-                pixels[(offset + 1)] = Encode(value: color.Y);
-                pixels[(offset + 2)] = Encode(value: color.Z);
-                pixels[(offset + 3)] = 255;
-            }
-        },
+                    pixels[(offset + 0)] = Encode(value: color.X);
+                    pixels[(offset + 1)] = Encode(value: color.Y);
+                    pixels[(offset + 2)] = Encode(value: color.Z);
+                    pixels[(offset + 3)] = 255;
+                }
+            },
             fromInclusive: 0,
             toExclusive: Height
         );
@@ -155,7 +150,7 @@ public sealed class SkyPreview {
         PngEncoder.Write(
             height: Height,
             path: Path.Combine(
-                path1: directory!,
+                path1: directory,
                 path2: (name + ".png")
             ),
             rgba: pixels,
@@ -164,7 +159,7 @@ public sealed class SkyPreview {
         File.WriteAllText(
             contents: $"{name}: instructions={program.InstructionCount} constants={program.ConstantCount} words={program.Words.Length} milliseconds={stopwatch.ElapsedMilliseconds}",
             path: Path.Combine(
-                path1: directory!,
+                path1: directory,
                 path2: (name + ".txt")
             )
         );

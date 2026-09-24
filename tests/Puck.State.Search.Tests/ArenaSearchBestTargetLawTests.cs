@@ -51,7 +51,7 @@ public sealed class ArenaSearchBestTargetLawTests {
                     Directions: [],
                     Displace: false,
                     Kind: SearchShapeKind.Promote,
-                    PairWithIndex: -1,
+                    CompanionIndex: -1,
                     PromoteTo: [5L, 6L]
                 )]
         ) {

@@ -7,7 +7,7 @@ using Puck.Cli.Source;
 namespace Puck.Cli.Scan.Analyzers;
 
 // One JSONL record per non-XML comment (the SingleLine // and MultiLine /* */ trivia kinds; the /// and
-// /** */ doc-comment kinds are skipped, which is why "//" inside a string never registers). -Grouped
+// /** */ doc-comment kinds are skipped, which is why "//" inside a string never registers). --grouped
 // buckets the comments into per-file chunks of line numbers — the work-list a fan-out staleness audit
 // fans across, big files split so no reviewer judges too many comments at once. The json is hand-written:
 // one record shape, emitted once, so a serializer would buy nothing.

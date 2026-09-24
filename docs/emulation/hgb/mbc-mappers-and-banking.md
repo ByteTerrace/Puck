@@ -31,7 +31,7 @@ flowchart TD
 ### 1. ROM-only (`RomOnlyCartridge`)
 - **ROM Capacity**: Exactly 32 KB (Banks 00 and 01 mapped continuously at `0x0000–0x7FFF`).
 - **RAM Capacity**: None or 8 KB non-banked SRAM at `0xA000–0xBFFF`.
-- Used in early launch titles (*Tetris*, *Dr. Mario*).
+- Used by the earliest, smallest titles, whose whole program fits the two fixed banks.
 
 ### 2. MBC1 (`Mbc1Cartridge`)
 The first and most widespread banking chip, supporting up to **2 MB ROM** (128 banks) and **32 KB RAM** (4 banks):

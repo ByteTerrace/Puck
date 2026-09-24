@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Assets;
 using Puck.Assets.Documents;
 
 namespace Puck.Launcher.Release;
@@ -83,18 +84,6 @@ public static class ReleaseCanonicalizer {
         "payloads", "rollout", "revoked", "notes", "signature",
     };
 
-    private static bool IsWellFormedContentHash(string hash) {
-        const string Prefix = "sha256/";
-
-        return (
-            hash.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: Prefix
-        ) &&
-            (hash.Length == (Prefix.Length + 64)) &&
-            hash.AsSpan(start: Prefix.Length).ToArray().All(predicate: Uri.IsHexDigit)
-        );
-    }
     private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile file, string path, HashSet<string>? seenPaths) {
         if (
             string.IsNullOrWhiteSpace(value: file.Path) ||
@@ -118,9 +107,12 @@ public static class ReleaseCanonicalizer {
             ));
         }
 
-        if (!IsWellFormedContentHash(hash: file.Hash)) {
+        if (!ContentPin.TryParse(
+            pin: out _,
+            text: file.Hash
+        )) {
             errors.Add(item: new(
-                Message: $"'{file.Hash}' is not a well-formed sha256/<hex64> content hash.",
+                Message: $"'{file.Hash}' is not a well-formed sha256/<64 lowercase hex> content hash.",
                 Path: $"{path}.hash"
             ));
         }

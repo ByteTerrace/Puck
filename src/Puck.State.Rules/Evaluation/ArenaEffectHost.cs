@@ -24,18 +24,18 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
 
     private readonly IReadOnlyList<DynamicsRow>? m_dynamics;
-    private readonly ulong m_documentSeed;
     private readonly IReadOnlyList<GeneratorRow>? m_generators;
-    private readonly string m_instanceIdentity;
 
     private readonly long[] m_patternWord = new long[PatternCapacity.MaxWord];
 
-    private readonly ArenaDrawSite m_site;
+    private readonly ArenaDrawSeeds m_seeds;
+    private readonly IReadOnlyList<string>? m_sites;
     private readonly int m_ticksPerSecond;
 
     private ulong m_rewoundUndoTick = ulong.MaxValue;
 
-    /// <summary>Initializes a host over an arena.</summary>
+    /// <summary>Initializes a host over an arena, folding every draw site's seed once (<see cref="ArenaDrawSeeds"/>) so
+    /// no draw it makes afterwards reads the instance identity or a site descriptor.</summary>
     /// <param name="arena">The store every read and write addresses.</param>
     /// <param name="generators">The section's declared draw sources, which a <c>generate</c> effect's row may name
     /// instead of inlining one.</param>
@@ -44,15 +44,31 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
     /// <param name="dynamics">The declared dynamics rows a <see cref="StateDynamics"/> trait resolves against.</param>
     /// <param name="documentSeed">The document's own reroll lever, folded into every draw site's seed.</param>
     /// <param name="instanceIdentity">The running instance's identity, folded into every draw site's seed.</param>
-    public ArenaEffectHost(StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "") {
+    /// <param name="sites">The site descriptor per catalog ordinal that a draw's seed ladder and stream id fold, or
+    /// <see langword="null"/> to name each site by its catalog row name. Every host that draws for one document must
+    /// be handed the same table, or the same site draws a different stream on each of them.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog
+    /// ordinal of <paramref name="arena"/>.</exception>
+    public ArenaEffectHost(StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
+        if ((sites is not null) && (sites.Count != arena.Catalog.Count)) {
+            throw new ArgumentException(
+                message: $"the draw-site table holds {sites.Count} descriptors for a catalog of {arena.Catalog.Count} rows",
+                paramName: nameof(sites)
+            );
+        }
+
         Arena = arena;
-        m_documentSeed = documentSeed;
         m_dynamics = dynamics;
         m_generators = generators;
-        m_instanceIdentity = instanceIdentity;
-        m_site = (_, rowOrdinal) => DrawSite(rowOrdinal: rowOrdinal);
+        m_sites = sites;
+        m_seeds = new ArenaDrawSeeds(
+            documentSeed: documentSeed,
+            instanceIdentity: instanceIdentity,
+            sites: (sites ?? [.. arena.Catalog.Descriptors.Select(selector: static descriptor => descriptor.Name)])
+        );
         m_ticksPerSecond = ticksPerSecond;
     }
 
@@ -135,10 +151,8 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
     public virtual bool TryTransform(ArenaTransform transform, in ArenaTransformBinding binding, out bool moved, out EffectRefusal refusal) {
         var context = new ArenaTransformContext(
             Arena: Arena,
-            DocumentSeed: m_documentSeed,
             Generators: m_generators,
-            InstanceIdentity: m_instanceIdentity,
-            Site: m_site,
+            Seeds: m_seeds,
             Time: Time
         );
 
@@ -153,9 +167,10 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
     /// <summary>Returns the descriptor a draw site's seed ladder and stream id fold.</summary>
     /// <param name="rowOrdinal">The site row's catalog ordinal.</param>
     /// <returns>The site descriptor.</returns>
-    /// <remarks>A host that carries draw sites in more than one document section overrides this so a state row's
-    /// site cannot collide with one of another kind.</remarks>
-    public virtual string DrawSite(int rowOrdinal) => Arena.Catalog.Descriptors[rowOrdinal].Name;
+    public string DrawSite(int rowOrdinal) => ((m_sites is { } sites)
+        ? sites[rowOrdinal]
+        : Arena.Catalog.Descriptors[rowOrdinal].Name
+    );
     /// <inheritdoc/>
     public virtual void Committed(int scope) { }
     /// <inheritdoc/>
@@ -175,8 +190,8 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
         return false;
     }
     /// <inheritdoc/>
-    public bool TryRewindTurn(string group, out string reason) {
-        if (!Arena.TryRewindTurn(group: group, reason: out reason)) {
+    public bool TryRewindGroup(string group, out string reason) {
+        if (!Arena.TryRewindGroup(group: group, reason: out reason)) {
             return false;
         }
         if (m_rewoundUndoTick != Tick) {
@@ -245,14 +260,12 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
         }
         if (!ArenaDraws.TryFire(
             arena: Arena,
-            documentSeed: m_documentSeed,
             generator: generator,
-            instanceIdentity: m_instanceIdentity,
             reason: out var fireReason,
             result: out var fired,
             rowOrdinal: ordinal,
             secret: draw.Secret,
-            site: DrawSite(rowOrdinal: ordinal),
+            seed: m_seeds[ordinal],
             skip: draw.Skip
         )) {
             refusal = EffectRefusal.Of(
@@ -328,35 +341,14 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
         var key = mutation.Key;
         var ordinal = mutation.RowOrdinal;
         var time = Time;
-
-        if (!Arena.TryCellSlot(
-            key: key,
-            rowOrdinal: ordinal,
-            slot: out _
-        )) {
-            return Moved(
-                changed: Arena.TryMint(
-                    key: out _,
-                    name: Arena.Keys[key],
-                    reason: out var mintReason,
-                    rowOrdinal: ordinal,
-                    value: Carry(
-                        raw: mutation.Operand,
-                        rowOrdinal: ordinal
-                    )
-                ),
-                reason: mintReason,
-                refusal: out refusal
-            );
-        }
-
         var present = Arena.TryRead(
             key: key,
             rowOrdinal: ordinal,
             value: out var before
         );
 
-        if (!Arena.TryWriteLive(
+        if (!Arena.TryWriteLiveOrMint(
+            evicted: out _,
             key: key,
             operand: mutation.Operand,
             reason: out var reason,
@@ -386,11 +378,6 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             !before.Equals(other: after)
         );
     }
-    private CellValue Carry(int rowOrdinal, long raw) => (Arena.Layout[rowOrdinal].Kind switch {
-        CellKind.Bool => CellValue.Bool(value: (raw != 0L)),
-        CellKind.Fixed => CellValue.Fixed(rawBits: raw),
-        _ => CellValue.Int(value: raw),
-    });
 }
 /// <summary>A rule host whose arena carries retained turn journals.</summary>
 public interface IArenaUndoHost {
@@ -409,7 +396,7 @@ public interface IArenaUndoHost {
     /// <summary>Discards an unsettled turn record.</summary>
     void CancelUndoTurn(string group);
     /// <summary>Rewinds the named group's newest turn.</summary>
-    bool TryRewindTurn(string group, out string reason);
+    bool TryRewindGroup(string group, out string reason);
     /// <summary>Gets whether a successful rewind suppresses this group for the rest of the named tick.</summary>
     bool UndoGroupSuppressed(string group, ulong tick);
 }

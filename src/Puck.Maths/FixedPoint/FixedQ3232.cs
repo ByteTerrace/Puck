@@ -23,6 +23,7 @@ namespace Puck.Maths;
 public readonly partial record struct FixedQ3232(long Value)
     : INumber<FixedQ3232>,
       ISignedNumber<FixedQ3232>,
+      ISignedFixedPointFormat<FixedQ3232>,
       IMinMaxValue<FixedQ3232> {
     /// <summary>The number of fractional bits in the Q32.32 layout (<c>32</c>).</summary>
     public const int FractionBitCount = 32;
@@ -40,14 +41,8 @@ public readonly partial record struct FixedQ3232(long Value)
     private const long MaxIntegerValue = (long.MaxValue >> FractionBitCount);
     private const long MinIntegerValue = (long.MinValue >> FractionBitCount);
     private const long RawEpsilon = 1L;
-    private const ulong RawHalf = (1UL << (FractionBitCount - 1)); // the half-ULP threshold, in the fraction domain
     private const long RawOne = (1L << FractionBitCount);          // the raw representation of 1.0, in the value domain
     private const double RawOneInverse = (1d / RawOne);
-    // The largest power-of-two-grid double strictly below 2^63 and the exactly-representable -2^63; clamping here
-    // keeps (long) casts from wrapping. Carrier-width facts, identical to FixedQ4816's — independent of the
-    // fraction/integer split.
-    private const double ScaledMaximum = 9223372036854774784d;
-    private const double ScaledMinimum = -9223372036854775808d;
 
     /// <summary>Converts a <see cref="FixedQ3232"/> to the nearest <see cref="double"/>.</summary>
     /// <param name="value">The value to convert.</param>
@@ -149,12 +144,10 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <returns>The rounded quotient <c><paramref name="x"/> ÷ <paramref name="y"/></c>.</returns>
     /// <exception cref="DivideByZeroException"><paramref name="y"/> is zero.</exception>
     public static FixedQ3232 operator /(FixedQ3232 x, FixedQ3232 y) =>
-        new(Value: SignedFixedPointArithmetic.Divide(
-            x: x.Value,
-            y: y.Value,
-            fractionBitCount: FractionBitCount,
-            integerBitCount: IntegerBitCount
-        ));
+        SignedFixedPointArithmetic.Divide(
+            dividend: x,
+            divisor: y
+        );
     /// <summary>Divides two values in fixed point, rounding to nearest with ties to even and throwing when the rounded result is not representable.</summary>
     /// <param name="x">The dividend.</param>
     /// <param name="y">The divisor.</param>
@@ -172,18 +165,8 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <param name="y">The divisor.</param>
     /// <returns>The fixed-point remainder <c><paramref name="x"/> mod <paramref name="y"/></c>, with the sign of <paramref name="x"/>.</returns>
     /// <exception cref="DivideByZeroException"><paramref name="y"/> is zero.</exception>
-    public static FixedQ3232 operator %(FixedQ3232 x, FixedQ3232 y) {
-        // Every integer is exactly divisible by ±1. Bypass the CLR's signed-division overflow trap for
-        // long.MinValue % -1 while preserving the ordinary divide-by-zero exception for a zero divisor.
-        if (
-            (y.Value == 1L) ||
-            (y.Value == -1L)
-        ) {
-            return Zero;
-        }
-
-        return new(Value: (x.Value % y.Value));
-    }
+    public static FixedQ3232 operator %(FixedQ3232 x, FixedQ3232 y) =>
+        new(Value: SignedFixedPointArithmetic.Modulo(x: x.Value, y: y.Value));
     /// <summary>Indicates whether <paramref name="x"/> is less than <paramref name="y"/>.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>
@@ -238,13 +221,13 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <returns><paramref name="value"/> rounded toward positive infinity to a whole number.</returns>
     /// <exception cref="OverflowException">The ceiling exceeds <see cref="MaxValue"/>.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ3232 Ceiling(FixedQ3232 value) {
-        var floor = value.Value & IntegerBitMask;
-
-        return new(Value: (((value.Value & ((long)FractionBitMask)) != 0L)
-            ? checked((floor + RawOne))
-            : floor));
-    }
+    public static FixedQ3232 Ceiling(FixedQ3232 value) =>
+        new(Value: SignedFixedPointArithmetic.Ceiling(
+            fractionBitMask: FractionBitMask,
+            integerBitMask: IntegerBitMask,
+            rawOne: RawOne,
+            rawValue: value.Value
+        ));
     /// <summary>Restricts <paramref name="value"/> to the inclusive range <c>[<paramref name="minimum"/>, <paramref name="maximum"/>]</c>.</summary>
     /// <param name="value">The value to clamp.</param>
     /// <param name="minimum">The inclusive lower bound.</param>
@@ -264,20 +247,12 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <returns><paramref name="value"/> made negative when <paramref name="sign"/> is negative and non-negative otherwise.</returns>
     /// <exception cref="OverflowException"><paramref name="value"/> is <see cref="MinValue"/> and <paramref name="sign"/> is non-negative, so the requested positive magnitude is unrepresentable.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ3232 CopySign(FixedQ3232 value, FixedQ3232 sign) {
-        if (
-            (value.Value == long.MinValue) &&
-            (sign.Value >= 0L)
-        ) {
-            throw new OverflowException(message: $"The positive magnitude of {nameof(FixedQ3232)}.{nameof(MinValue)} is not representable.");
-        }
-
-        var magnitudeSign = (value.Value >> 63);
-        var magnitude = unchecked(((value.Value ^ magnitudeSign) - magnitudeSign));
-        var targetSign = (sign.Value >> 63);
-
-        return new(Value: unchecked(((magnitude ^ targetSign) - targetSign)));
-    }
+    public static FixedQ3232 CopySign(FixedQ3232 value, FixedQ3232 sign) =>
+        new(Value: SignedFixedPointArithmetic.CopySign(
+            sign: sign.Value,
+            typeName: nameof(FixedQ3232),
+            value: value.Value
+        ));
     /// <summary>Returns the largest integral value less than or equal to <paramref name="value"/>.</summary>
     /// <param name="value">The value to round down.</param>
     /// <returns><paramref name="value"/> with its fractional bits cleared (rounded toward negative infinity).</returns>
@@ -294,36 +269,20 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <param name="value">The value to convert.</param>
     /// <returns>The nearest representable <see cref="FixedQ3232"/>, clamped to <c>[<see cref="MinValue"/>, <see cref="MaxValue"/>]</c>. Not-a-number clamps to zero.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ3232 FromDouble(double value) {
-        var scaled = double.Round(
-            mode: MidpointRounding.ToEven,
-            x: (value * RawOne)
-        );
-
-        if (double.IsNaN(d: scaled)) { return Zero; }
-        if (scaled > ScaledMaximum) { return MaxValue; }
-        if (scaled <= ScaledMinimum) { return MinValue; }
-
-        return new(Value: unchecked((long)scaled));
-    }
+    public static FixedQ3232 FromDouble(double value) => SignedFixedPointArithmetic.FromDouble<FixedQ3232>(value: value);
     /// <summary>Constructs a <see cref="FixedQ3232"/> from a whole number.</summary>
     /// <param name="value">The integer to represent. Its magnitude must fit the integer range of the format
     /// (<c>[-2147483648, 2147483647]</c>).</param>
     /// <returns>The fixed-point value equal to <paramref name="value"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is outside the integer range of the format.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ3232 FromInteger(long value) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: value,
-            other: MaxIntegerValue
-        );
-        ArgumentOutOfRangeException.ThrowIfLessThan(
-            value: value,
-            other: MinIntegerValue
-        );
-
-        return new(Value: (value << FractionBitCount));
-    }
+    public static FixedQ3232 FromInteger(long value) =>
+        new(Value: SignedFixedPointArithmetic.FromInteger(
+            fractionBitCount: FractionBitCount,
+            maxIntegerValue: MaxIntegerValue,
+            minIntegerValue: MinIntegerValue,
+            value: value
+        ));
     /// <summary>Constructs a <see cref="FixedQ3232"/> directly from a raw storage bit pattern.</summary>
     /// <param name="value">The pre-scaled raw value to wrap, interpreted as the real number <c><paramref name="value"/> / 2³²</c>.</param>
     /// <returns>A <see cref="FixedQ3232"/> whose <see cref="Value"/> equals <paramref name="value"/>.</returns>
@@ -354,42 +313,32 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <returns>Whether <paramref name="value"/>'s integer part fits Q32.32's <c>[-2147483648, 2147483647]</c> range.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static bool TryFromFixedQ4816(FixedQ4816 value, out FixedQ3232 result) {
-        var widened = (((Int128)value.Value) << PeerNarrowShift);
+        if (SignedFixedPointArithmetic.TryWidenFromFixedQ4816(
+            rawValue: value.Value,
+            result: out var rawResult,
+            widenShift: PeerNarrowShift
+        )) {
+            result = new(Value: rawResult);
 
-        if (
-            (widened < long.MinValue) ||
-            (widened > long.MaxValue)
-        ) {
-            result = default;
-
-            return false;
+            return true;
         }
 
-        result = new(Value: ((long)widened));
+        result = default;
 
-        return true;
+        return false;
     }
     /// <summary>Narrows this value into a <see cref="FixedQ4816"/> (Q48.16), rounding to nearest with ties to even.</summary>
     /// <returns>The value on Q48.16's coarser sixteen-bit fraction grid, losing the low sixteen fraction bits.
     /// This direction never overflows: Q32.32's whole integer range (±2,147,483,648) fits comfortably inside
     /// Q48.16's (roughly ±2⁴⁷), so the single rounding is the only thing that can move the value at all.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public FixedQ4816 ToFixedQ4816() {
-        var sign = (Value >> 63);
-        var magnitude = unchecked((ulong)((Value ^ sign) - sign));
-        var truncated = (magnitude >> PeerNarrowShift);
-        var remainder = magnitude & PeerNarrowBitMask;
-        var rounded = FixedPointRounding.RoundHalfToEven(
-            remainder: remainder,
-            threshold: PeerNarrowHalf,
-            truncated: truncated
-        );
-        var result = unchecked((long)rounded);
-
-        return FixedQ4816.FromRawBits(value: ((sign != 0L)
-            ? unchecked(-result)
-            : result));
-    }
+    public FixedQ4816 ToFixedQ4816() =>
+        FixedQ4816.FromRawBits(value: SignedFixedPointArithmetic.NarrowToFixedQ4816(
+            narrowBitMask: PeerNarrowBitMask,
+            narrowHalf: PeerNarrowHalf,
+            narrowShift: PeerNarrowShift,
+            value: Value
+        ));
     /// <summary>Linearly interpolates from <paramref name="from"/> to <paramref name="to"/> by <paramref name="amount"/>.</summary>
     /// <param name="from">The value returned when <paramref name="amount"/> is zero.</param>
     /// <param name="to">The value returned when <paramref name="amount"/> is one.</param>
@@ -403,12 +352,11 @@ public readonly partial record struct FixedQ3232(long Value)
     /// no checked or saturating sibling.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ3232 Lerp(FixedQ3232 from, FixedQ3232 to, FixedQ3232 amount) =>
-        new(Value: SignedFixedPointArithmetic.Lerp(
-            from: from.Value,
-            to: to.Value,
-            amount: amount.Value,
-            fractionBitCount: FractionBitCount
-        ));
+        SignedFixedPointArithmetic.Lerp(
+            amount: amount,
+            from: from,
+            to: to
+        );
     /// <summary>Returns the greater of two values.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>
@@ -434,15 +382,7 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <returns><paramref name="value"/> rounded to a whole number using banker's rounding.</returns>
     /// <exception cref="OverflowException">The rounded result exceeds <see cref="MaxValue"/>.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ3232 Round(FixedQ3232 value) {
-        var integerPart = value.Value & IntegerBitMask;
-        var fraction = ((ulong)value.Value) & FractionBitMask;
-        var roundUp = ((fraction > RawHalf) || ((fraction == RawHalf) && (((integerPart >> FractionBitCount) & 1L) != 0L)));
-
-        return new(Value: (roundUp
-            ? checked((integerPart + RawOne))
-            : integerPart));
-    }
+    public static FixedQ3232 Round(FixedQ3232 value) => SignedFixedPointArithmetic.Round(value: value);
 
     /// <summary>Returns a value indicating whether a raw storage bit pattern denotes an exact integer — a multiple of <c>2³²</c>, at any magnitude the format holds.</summary>
     /// <param name="raw">The raw storage bit pattern to classify.</param>
@@ -461,26 +401,19 @@ public readonly partial record struct FixedQ3232(long Value)
     /// <param name="value">The value to truncate.</param>
     /// <returns><paramref name="value"/> with its fractional part removed toward zero.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ3232 Truncate(FixedQ3232 value) {
-        var floor = value.Value & IntegerBitMask;
-
-        return new(Value: (((value.Value < 0L) && ((value.Value & ((long)FractionBitMask)) != 0L))
-            ? unchecked((floor + RawOne))
-            : floor));
-    }
+    public static FixedQ3232 Truncate(FixedQ3232 value) =>
+        new(Value: SignedFixedPointArithmetic.Truncate(
+            fractionBitMask: FractionBitMask,
+            integerBitMask: IntegerBitMask,
+            rawOne: RawOne,
+            rawValue: value.Value
+        ));
     /// <summary>Compares this instance with a boxed <see cref="FixedQ3232"/> and indicates their relative order.</summary>
     /// <param name="obj">The object to compare with this instance, or <see langword="null"/>.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="obj"/>; a <see langword="null"/> <paramref name="obj"/> sorts first.</returns>
     /// <exception cref="ArgumentException"><paramref name="obj"/> is neither <see langword="null"/> nor a <see cref="FixedQ3232"/>.</exception>
-    public int CompareTo(object? obj) {
-        if (obj is null) { return 1; }
-        if (obj is FixedQ3232 other) { return CompareTo(other: other); }
-
-        throw new ArgumentException(
-            message: $"Object must be of type {nameof(FixedQ3232)}.",
-            paramName: nameof(obj)
-        );
-    }
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(object? obj) => SignedFixedPointArithmetic.CompareToObject(obj: obj, self: this);
     /// <summary>Compares this instance with another <see cref="FixedQ3232"/> and indicates their relative order.</summary>
     /// <param name="other">The value to compare with this instance.</param>
     /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="other"/>.</returns>

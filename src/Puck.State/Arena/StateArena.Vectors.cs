@@ -99,7 +99,7 @@ public sealed partial class StateArena {
             : default
         );
     }
-    private void WriteVectorSlot(in ArenaRowLayout layout, int slot, ReadOnlySpan<sbyte> components, bool tailPush = false) {
+    private void WriteVectorSlot(in ArenaRowLayout layout, int slot, ReadOnlySpan<sbyte> components) {
         if (layout.Dimensions == 0) {
             return;
         }
@@ -132,8 +132,7 @@ public sealed partial class StateArena {
 
         BumpGeneration(
             column: ArenaColumn.Vector,
-            index: slot,
-            tailPush: tailPush
+            index: slot
         );
     }
 }

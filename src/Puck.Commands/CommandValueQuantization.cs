@@ -16,9 +16,8 @@ namespace Puck.Commands;
 /// positional fence is not the end state.
 /// </remarks>
 public static class CommandValueQuantization {
-    /// <summary>Quantizes a two-dimensional axis sample to fixed point, componentwise, once. One of exactly two
-    /// call sites today (the move and look stick routers); a third door reuses this rather than re-deriving the
-    /// conversion.</summary>
+    /// <summary>Quantizes a two-dimensional axis sample to fixed point, componentwise, once — the door every stick
+    /// router (move, look) takes rather than re-deriving the conversion.</summary>
     /// <param name="value">The physical axis sample, each component conventionally in <c>[-1, 1]</c>.</param>
     /// <returns>The componentwise nearest, ties-to-even <see cref="FixedVector2"/>.</returns>
     public static FixedVector2 QuantizeAxis(Vector2 value) {
@@ -27,4 +26,10 @@ public static class CommandValueQuantization {
             Y: FixedQ4816.FromDouble(value: value.Y)
         );
     }
+    /// <summary>Quantizes a three-dimensional axis sample to fixed point, componentwise, once — the door a source
+    /// pointer's ray takes into the simulation (<see cref="SourcePointerCommands"/>).</summary>
+    /// <param name="value">The axis sample, such as a world-space ray origin or direction.</param>
+    /// <returns>The componentwise nearest, ties-to-even <see cref="FixedVector3"/>, through
+    /// <see cref="FixedVector3.FromVector3"/>.</returns>
+    public static FixedVector3 QuantizeAxis3D(Vector3 value) => FixedVector3.FromVector3(value: value);
 }

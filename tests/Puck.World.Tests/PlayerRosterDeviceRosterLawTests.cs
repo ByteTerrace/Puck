@@ -16,7 +16,7 @@ namespace Puck.World.Tests;
 /// through <see cref="PlayerRoster.TryClaimSlot"/>'s "already driven by a human device" refusal. A keyboard and a
 /// mouse are ordinary roster devices too — classified by <see cref="PlayerRoster.ObserveDeviceKind"/> (the router's
 /// own per-signal first-touch classification, called directly here in place of a real <c>InputRouter</c>) and
-/// seated through <see cref="PlayerRoster.Confirm(InputDeviceId, WorldPrincipal)"/> exactly like a gamepad's first
+/// seated through <see cref="PlayerRoster.Confirm(InputDeviceId, Principal)"/> exactly like a gamepad's first
 /// press. When several devices of one kind share a slot, <see cref="PlayerRoster.TryGetSeatDevice"/> resolves
 /// whichever was assigned to it most recently.
 /// </summary>
@@ -26,31 +26,20 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         link: new LoopbackTransport(server: fixture.Server),
         seatBindings: new WorldSeatBindings(definition: fixture.Server.Definition)
     );
-    private static WorldDefinition SingleActiveSeatDocument() {
+    private static WorldDefinition SingleActiveSeatDocument() => EagerSeatsDocument(eager: 1);
+    private static WorldDefinition TwoActiveSeatsDocument() => EagerSeatsDocument(eager: 2);
+    // The first eager seats activate at boot; the rest wait for a device.
+    private static WorldDefinition EagerSeatsDocument(int eager) {
         var baseDefinition = Fixtures.BuildDocument();
 
         return baseDefinition with {
             PopulationRaw = baseDefinition.Population with {
-                SeatActivationRaw = [
-                    SeatActivationPolicy.Eager,
-                    SeatActivationPolicy.OnDemand,
-                    SeatActivationPolicy.OnDemand,
-                    SeatActivationPolicy.OnDemand,
-                ],
-            },
-        };
-    }
-    private static WorldDefinition TwoActiveSeatsDocument() {
-        var baseDefinition = Fixtures.BuildDocument();
-
-        return baseDefinition with {
-            PopulationRaw = baseDefinition.Population with {
-                SeatActivationRaw = [
-                    SeatActivationPolicy.Eager,
-                    SeatActivationPolicy.Eager,
-                    SeatActivationPolicy.OnDemand,
-                    SeatActivationPolicy.OnDemand,
-                ],
+                SeatActivationRaw = [.. Enumerable.Range(
+                    count: WorldBodiesLimits.LocalSeatCount,
+                    start: 0
+                ).Select(selector: seat => ((seat < eager)
+                    ? SeatActivationPolicy.Eager
+                    : SeatActivationPolicy.OnDemand))],
             },
         };
     }
@@ -87,7 +76,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             device: gamepad,
             fault: out var fault,
             preferredSlot: 1,
-            principal: WorldPrincipal.Console,
+            principal: Principal.Console,
             slot: out var claimed
         ));
         Assert.Equal(
@@ -109,7 +98,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         );
         _ = roster.Confirm(
             device: keyboard1,
-            actingPrincipal: WorldPrincipal.Console
+            actingPrincipal: Principal.Console
         );
 
         // A second keyboard finds slot 0 already carrying a keyboard, so it takes the next free slot as a pending
@@ -121,7 +110,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
 
         var (outcome, slot) = roster.Confirm(
             device: keyboard2,
-            actingPrincipal: WorldPrincipal.Console
+            actingPrincipal: Principal.Console
         );
 
         Assert.Equal(
@@ -151,7 +140,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actual: roster.AssignDevice(
                 device: keyboard2,
                 targetSlot: 0,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
         Assert.Equal(
@@ -173,7 +162,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actual: roster.AssignDevice(
                 device: gamepad,
                 targetSlot: 1,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
 
@@ -196,7 +185,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actual: roster.AssignDevice(
                 device: camera,
                 targetSlot: 1,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
         Assert.Equal(
@@ -232,7 +221,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actual: roster.AssignDevice(
                 device: camera,
                 targetSlot: 1,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
 
@@ -279,7 +268,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actual: roster.AssignDevice(
                 device: camera2,
                 targetSlot: 1,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
         Assert.Null(@object: roster.DeviceSlot(device: camera2));
@@ -306,7 +295,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             expected: (ConfirmOutcome.Seated, 0),
             actual: roster.Confirm(
                 device: keyboard,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
         Assert.Equal(
@@ -322,7 +311,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             expected: (ConfirmOutcome.Seated, 0),
             actual: roster.Confirm(
                 device: mouse,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
         Assert.Equal(
@@ -483,7 +472,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actual: roster.AssignDevice(
                 device: camera2,
                 targetSlot: 0,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
 
@@ -512,7 +501,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
             actual: roster.AssignDevice(
                 device: camera1,
                 targetSlot: 0,
-                actingPrincipal: WorldPrincipal.Console
+                actingPrincipal: Principal.Console
             )
         );
 

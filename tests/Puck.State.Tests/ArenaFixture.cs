@@ -1,4 +1,5 @@
 using Puck.Assets.Documents;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -283,14 +284,12 @@ public static class ArenaFixture {
             ),
         ],
         Spaces: [new StateSpace(
-                Name: Name(value: "space8"),
-                Model: "model",
-                Revision: "r1",
-                Dimensions: 8
+                name: Name(value: "space8"),
+                model: "model",
+                revision: "r1",
+                dimensions: 8
             )]
     );
-    /// <summary>Builds a catalog and an arena over the fixture's section.</summary>
-    /// <returns>The catalog and its arena.</returns>
     /// <summary>An exhausting two-context Markov walk, so a site drawing from it persists two masks.</summary>
     /// <returns>The generator.</returns>
     public static StateGenerator Walk() => new(
@@ -310,17 +309,9 @@ public static class ArenaFixture {
         Source: GeneratorSource.Markov,
         Start: Name(value: "a")
     );
-    public static (StateCatalog Catalog, StateArena Arena) Build() {
-        var section = Section();
-        var catalog = StateCatalog.Compile(section: section);
-
-        return (catalog, new StateArena(
-            catalog: catalog,
-            options: null,
-            section: section,
-            time: ArenaTime.Origin
-        ));
-    }
+    /// <summary>Builds a catalog and an arena over the fixture's section.</summary>
+    /// <returns>The catalog and its arena.</returns>
+    public static (StateCatalog Catalog, StateArena Arena) Build() => TopologyArenaFixture.Build(section: Section());
     /// <summary>Resolves an interned cell key by name.</summary>
     /// <param name="catalog">The catalog that interned it.</param>
     /// <param name="value">The key's text.</param>

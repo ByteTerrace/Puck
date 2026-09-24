@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.World.Protocol;
 
 /// <summary>
@@ -29,7 +31,7 @@ public readonly record struct SubmissionEnvelope(
     int SessionGeneration,
     long Sequence,
     long CorrelationId,
-    WorldPrincipal Principal,
+    Principal Principal,
     WorldSubmissionPayload Payload,
     Guid OperationId
 ) {

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using System.Numerics;
 using Puck.World.Protocol;
@@ -22,6 +23,8 @@ public sealed partial class WorldTick {
         public long[] VariantValues = [];
         public ulong WorldSeed;
     }
+    // What one template's deal moved this tick, narrated once the tick's single deal mutation has landed or failed.
+    private readonly record struct DealReport(string Template, string Row, int Cells, int Offsets, int Added, int Removed, int Replaced, int Overflow);
 
     private readonly Dictionary<string, DealMemo> m_dealMemos = new(comparer: StringComparer.Ordinal);
     private readonly List<WorldPlacement> m_dealChildren = [];
@@ -29,15 +32,19 @@ public sealed partial class WorldTick {
     private readonly List<bool> m_dealChildKept = [];
     private readonly List<int> m_dealPendingCells = [];
     private readonly List<WorldMutation> m_dealMutations = [];
+    private readonly List<DealReport> m_dealReports = [];
     private bool[] m_dealSlotTaken = [];
 
     private WorldDefinition? m_dealSweptDefinition;
 
-    /// <summary>Describes every placement row: its prototype, resolved transform, parent, facets, and — for a dealt
-    /// template — the row it deals from with the children present against the row's capacity, or — for a dealt
-    /// child — the template that dealt it.</summary>
-    internal string DescribePlacements() {
-        var placements = Host.Document.Definition.Placements;
+    /// <summary>Describes every placement row as one reader's disclosure deals it: its prototype, resolved transform,
+    /// parent, facets, and — for a dealt template — the row it deals from with the children present against the row's
+    /// capacity, or — for a dealt child — the template that dealt it.</summary>
+    /// <param name="view">The reader's view of this server's state; a dealt child read from a cell it withholds is
+    /// described as <see cref="WorldStateDisclosure.Disclose"/> re-deals it.</param>
+    internal string DescribePlacements(WorldStateReadView view) {
+        var definition = view.Definition;
+        var placements = definition.Placements;
 
         if (placements.Count == 0) {
             return "[world.placements: none declared]";
@@ -47,12 +54,12 @@ public sealed partial class WorldTick {
 
         foreach (var placement in placements) {
             var frame = WorldDefinitionRows.ResolvedFrame(
-                definition: Host.Document.Definition,
+                definition: definition,
                 placement: placement
             );
             var line = string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"'{placement.Id}' prototype={placement.PrototypeId} at ({frame.Position.X:0.##}, {frame.Position.Y:0.##}, {frame.Position.Z:0.##}) yaw {frame.YawDegrees:0.#} scale {placement.Scale:0.##}"
+                handler: $"'{placement.Id}' prototype={placement.ShownPrototypeId} at ({frame.Position.X:0.##}, {frame.Position.Y:0.##}, {frame.Position.Z:0.##}) yaw {frame.YawDegrees:0.#} scale {placement.Scale:0.##}"
             );
 
             if (placement.Parent is { } parent) {
@@ -63,14 +70,17 @@ public sealed partial class WorldTick {
 
             if (placement.Deal is { } deal) {
                 var capacity = ((WorldDefinitionRows.FindStateRow(
-                    rows: Host.Document.Definition.State,
+                    rows: definition.State,
                     name: deal.Row
                 ) is { } row)
                     ? row.CellCeiling
                     : 0
                 );
 
-                line += $" dealt from {deal.Row} ({CountDealtChildren(template: placement)} of {capacity})";
+                line += $" dealt from {deal.Row} ({CountDealtChildren(
+                    placements: placements,
+                    template: placement
+                )} of {capacity})";
             } else if (
                 (placement.Parent is { } templateId) &&
                 WorldPlacementDeal.IsChild(
@@ -154,6 +164,10 @@ public sealed partial class WorldTick {
             facets += $" respond={respond.Count}";
         }
 
+        if (WorldPlacementResponse.ShownEntry(placement: placement) >= 0) {
+            facets += $" authored={placement.PrototypeId}";
+        }
+
         if (placement.Board is not null) {
             facets += " board";
         }
@@ -168,10 +182,10 @@ public sealed partial class WorldTick {
 
         return facets;
     }
-    private int CountDealtChildren(WorldPlacement template) {
+    private static int CountDealtChildren(IReadOnlyList<WorldPlacement> placements, WorldPlacement template) {
         var count = 0;
 
-        foreach (var placement in Host.Document.Definition.Placements) {
+        foreach (var placement in placements) {
             if (WorldPlacementDeal.IsChild(
                 parent: template,
                 placement: placement
@@ -185,7 +199,9 @@ public sealed partial class WorldTick {
     // Runs once per tick right after SweepPlacementResponses: the rule frame has folded, so a cell a rule wrote
     // this tick deals on this tick's sweep. Nothing here runs, and nothing allocates, on a tick where the installed
     // document is the one the last sweep left — and a template whose dealt row, variant row, and own row are
-    // unchanged is skipped before its children are read.
+    // unchanged is skipped before its children are read. Every template's children are dealt against the document
+    // the sweep opened on (no two templates share a child), and the tick's whole deal applies as one mutation: one
+    // composition, one whole-document validation, one journal entry, landing or refused as a unit.
     private void SweepPlacementDeals(ulong tick) {
         if (ReferenceEquals(
             objA: Host.Document.Definition,
@@ -197,6 +213,9 @@ public sealed partial class WorldTick {
         var placements = Host.Document.Definition.Placements;
         var worldSeed = (Host.Document.Definition.Generation?.WorldSeed ?? 0UL);
         var templates = 0;
+
+        m_dealMutations.Clear();
+        m_dealReports.Clear();
 
         for (var index = 0; (index < placements.Count); index++) {
             var template = placements[index];
@@ -257,7 +276,6 @@ public sealed partial class WorldTick {
                 memo: memo,
                 row: row,
                 template: template,
-                tick: tick,
                 variantRow: variantRow,
                 worldSeed: worldSeed
             );
@@ -271,6 +289,41 @@ public sealed partial class WorldTick {
                 ) is not { Deal: not null }) {
                     _ = m_dealMemos.Remove(key: templateId);
                 }
+            }
+        }
+
+        var applied = true;
+
+        if (m_dealMutations.Count > 0) {
+            // Principal.World, the same structural-exemption door the response sweep uses.
+            applied = Host.TryApplyMutation(
+                connectionId: SubmissionEnvelope.LocalConnectionId,
+                correlationId: 0,
+                mutation: ((m_dealMutations.Count == 1)
+                    ? m_dealMutations[0]
+                    : new WorldMutation.Batch(
+                        Principal: Principal.World,
+                        Mutations: [.. m_dealMutations]
+                    )
+                ),
+                preMetered: false,
+                tick: tick,
+                engineTick: CompletedEngineTicks
+            );
+        }
+
+        if (Host.Output.HasNarrationSink) {
+            var total = m_dealMutations.Count;
+
+            foreach (var report in m_dealReports) {
+                Host.Output.Narrate(
+                    channel: "world.deal",
+                    text: (applied
+                    ? $"[world.deal: '{report.Template}' dealt {report.Row}: {report.Cells} cell(s) over {report.Offsets} offset(s) — {report.Added} added, {report.Removed} removed, {report.Replaced} replaced{((report.Overflow > 0)
+                        ? $", {report.Overflow} without a free offset"
+                        : string.Empty)}]"
+                    : $"[world.deal: '{report.Template}' dealt {report.Row}: the tick's {total} child mutation(s) were refused as one; the children stay as they were]")
+                );
             }
         }
 
@@ -311,7 +364,7 @@ public sealed partial class WorldTick {
                 b: texts[index],
                 comparisonType: StringComparison.Ordinal
             ) ||
-                ((cell.Value.HasValue && (cell.Value.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool) ? cell.Value.Raw : 0L) != values[index])
+                (((cell.Value.HasValue && (cell.Value.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)) ? cell.Value.Raw : 0L) != values[index])
             ) {
                 return false;
             }
@@ -336,7 +389,7 @@ public sealed partial class WorldTick {
             values[index] = ((cellValue.HasValue && (cellValue.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool)) ? cellValue.Raw : 0L);
         }
     }
-    private void Deal(WorldPlacement template, WorldPlacementDeal deal, WorldStateRow? row, WorldStateRow? variantRow, DealMemo memo, ulong worldSeed, ulong tick) {
+    private void Deal(WorldPlacement template, WorldPlacementDeal deal, WorldStateRow? row, WorldStateRow? variantRow, DealMemo memo, ulong worldSeed) {
         if (
             !memo.Swept ||
             (memo.WorldSeed != worldSeed) ||
@@ -375,7 +428,8 @@ public sealed partial class WorldTick {
         m_dealChildSlots.Clear();
         m_dealChildKept.Clear();
         m_dealPendingCells.Clear();
-        m_dealMutations.Clear();
+
+        var firstMutation = m_dealMutations.Count;
 
         foreach (var candidate in Host.Document.Definition.Placements) {
             if (!WorldPlacementDeal.IsChild(
@@ -432,10 +486,9 @@ public sealed partial class WorldTick {
             }
 
             var child = m_dealChildren[childIndex];
-            var prototype = ResolvePrototype(
-                deal: deal,
+            var prototype = deal.ResolvePrototype(
                 key: key,
-                template: template,
+                templatePrototype: template.PrototypeId,
                 variantRow: variantRow
             );
 
@@ -454,7 +507,7 @@ public sealed partial class WorldTick {
             replaced++;
             m_dealMutations.Add(item: new WorldMutation.UpsertPlacement(
                 Placement: reconciled,
-                Principal: WorldPrincipal.World
+                Principal: Principal.World
             ));
         }
 
@@ -474,7 +527,7 @@ public sealed partial class WorldTick {
             removed++;
             m_dealMutations.Add(item: new WorldMutation.RemovePlacement(
                 Id: m_dealChildren[childIndex].Id,
-                Principal: WorldPrincipal.World
+                Principal: Principal.World
             ));
         }
 
@@ -509,10 +562,9 @@ public sealed partial class WorldTick {
                 ? ReconcileChild(
                         m_dealChildren[existing],
                         template,
-                        ResolvePrototype(
-                            deal: deal,
+                        deal.ResolvePrototype(
                             key: key,
-                            template: template,
+                            templatePrototype: template.PrototypeId,
                             variantRow: variantRow
                         ),
                         offsets[slot],
@@ -527,63 +579,31 @@ public sealed partial class WorldTick {
                             )),
                         offset: offsets[slot],
                         slot: slot,
-                        prototype: ResolvePrototype(
-                            deal: deal,
+                        prototype: deal.ResolvePrototype(
                             key: key,
-                            template: template,
+                            templatePrototype: template.PrototypeId,
                             variantRow: variantRow
                         ),
                         template: template
                     )),
-                Principal: WorldPrincipal.World
+                Principal: Principal.World
             ));
         }
 
-        var applied = true;
-
-        if (m_dealMutations.Count > 0) {
-            // WorldPrincipal.World, the same structural-exemption door the response sweep uses, folded into one
-            // batch so a deal lands or fails as a unit and undoes as one journal entry.
-            var mutation = ((m_dealMutations.Count == 1)
-                ? m_dealMutations[0]
-                : new WorldMutation.Batch(
-                    Principal: WorldPrincipal.World,
-                    Mutations: [.. m_dealMutations]
-                )
-            );
-
-            applied = Host.TryApplyMutation(
-                connectionId: SubmissionEnvelope.LocalConnectionId,
-                correlationId: 0,
-                mutation: mutation,
-                preMetered: false,
-                tick: tick,
-                engineTick: CompletedEngineTicks
-            );
-        }
-
         if (
-            Host.Output.HasNarrationSink &&
-            ((m_dealMutations.Count > 0) || (overflow > 0))
+            (m_dealMutations.Count > firstMutation) ||
+            (overflow > 0)
         ) {
-            var dealId = template.Id;
-            var dealRow = deal.Row;
-            var dealCells = cells.Count;
-            var dealOffsets = offsets.Length;
-            var dealAdded = added;
-            var dealRemoved = removed;
-            var dealReplaced = replaced;
-            var dealOverflow = overflow;
-            var dealApplied = applied;
-
-            Host.Output.Narrate(
-                channel: "world.deal",
-                text: (dealApplied
-                ? $"[world.deal: '{dealId}' dealt {dealRow}: {dealCells} cell(s) over {dealOffsets} offset(s) — {dealAdded} added, {dealRemoved} removed, {dealReplaced} replaced{((dealOverflow > 0)
-                    ? $", {dealOverflow} without a free offset"
-                    : string.Empty)}]"
-                : $"[world.deal: '{dealId}' dealt {dealRow}: the {((dealAdded + dealRemoved) + dealReplaced)} child mutation(s) were refused as one; the children stay as they were]")
-            );
+            m_dealReports.Add(item: new DealReport(
+                Template: template.Id,
+                Row: deal.Row,
+                Cells: cells.Count,
+                Offsets: offsets.Length,
+                Added: added,
+                Removed: removed,
+                Replaced: replaced,
+                Overflow: overflow
+            ));
         }
 
         memo.Template = template;
@@ -624,58 +644,6 @@ public sealed partial class WorldTick {
         }
 
         return -1;
-    }
-    // The variant row's same-keyed cell selects from the map by its text, or by its integer value spelled as text;
-    // no cell, or no entry, deals the template's own prototype.
-    private static string ResolvePrototype(WorldPlacement template, WorldPlacementDeal deal, WorldStateRow? variantRow, string key) {
-        if (
-            (deal.Variants is not { Map: { } map }) ||
-            (variantRow?.Cells is not { } cells)
-        ) {
-            return template.PrototypeId;
-        }
-
-        for (var index = 0; (index < cells.Count); index++) {
-            var cell = cells[index];
-
-            if (!string.Equals(
-                a: cell.Key.Value,
-                b: key,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                continue;
-            }
-
-            if (cell.Value.HasValue && (cell.Value.Kind == CellKind.Text)) {
-                return (map.TryGetValue(
-                    key: cell.Value.AsText,
-                    value: out var byText
-                )
-                    ? byText
-                    : template.PrototypeId
-                );
-            }
-
-            foreach (var (spelled, prototype) in map) {
-                if (
-                    long.TryParse(
-                    s: spelled,
-                    style: NumberStyles.Integer,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var spelledValue
-                ) &&
-                    cell.Value.HasValue &&
-                    (cell.Value.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool) &&
-                    (spelledValue == cell.Value.Raw)
-                ) {
-                    return prototype;
-                }
-            }
-
-            return template.PrototypeId;
-        }
-
-        return template.PrototypeId;
     }
     private static WorldPlacement ReconcileChild(WorldPlacement child, WorldPlacement template, string prototype, Vector3 offset, int slot) {
         var seed = BuildChild(

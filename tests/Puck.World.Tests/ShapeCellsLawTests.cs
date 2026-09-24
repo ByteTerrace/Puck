@@ -7,7 +7,6 @@ using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.Maths;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -35,85 +34,36 @@ public sealed class ShapeCellsLawTests {
         Cells: Cells
     );
 
-    private static CreationDocument Document(ShapeDocument shape) => new(
-        Schema: CreationDocument.CurrentSchema,
-        Name: "cells",
-        Palette: [new(
-                "#AAAAAA",
-                null,
-                null,
-                null
-            )],
-        Shapes: [shape],
-        Frames: null
+    private static CreationDocument Document(ShapeDocument shape) => CreationFixtures.Document(
+        name: "cells",
+        palette: CreationFixtures.Grey,
+        shapes: [shape]
     );
     private static SdfProgram Emit(ShapeDocument shape, float scale, bool pooled, bool probe = false, float? probeScale = null) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: Document(shape: shape),
-            source: "cells"
-        );
-        var builder = new SdfProgramBuilder();
+        var creation = CreationFixtures.Prototype(document: Document(shape: shape));
 
-        if (!pooled) {
-            var material = builder.AddMaterial(material: new(Vector3.One));
-
-            CreationStampEmitter.Emit(
-                builder: builder,
-                document: canonical.Document,
-                materialFor: _ => material,
-                transform: new(
-                    Vector3.Zero,
-                    Quaternion.Identity,
-                    scale,
-                    null
-                )
-            );
-        } else {
-            var creation = new WorldPrototype(
-                "cells",
-                canonical.Document,
-                canonical.Hash
-            );
-            var definition = Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-                CreationsRaw = [creation],
-                LookRowsRaw = [new(
-                    "rig",
-                    new WorldLookSource.Creation(PrototypeId: "cells"),
-                    scale,
-                    WorldLookMotion.Default
-                )],
-            };
-            var pool = new WorldStampPool();
-
-            pool.Reconcile(
-                [],
-                [creation],
-                [],
-                [new(
-                        0,
-                        creation,
-                        scale,
-                        WorldLookMotion.Default
-                    )]
-            );
-            pool.Emit(
-                builder,
-                definition,
-                probeWorstCase: probe,
-                maxPlacementScale: (probeScale ?? scale),
-                slotBase: 0
-            );
-        }
-        return builder.Build(buildInstanceGrid: false);
+        return (pooled
+            ? CreationFixtures.EmitPool(
+                bodyScale: scale,
+                creation: creation,
+                maxPlacementScale: probeScale,
+                probeWorstCase: probe
+            )
+            : CreationFixtures.EmitStatic(
+                document: creation.Document,
+                stampScale: scale
+            ));
     }
 
     [Fact]
     public void AnisotropicPrimitiveBoundsIncludeTheFieldDistanceCorrection() {
-        var shape = Shape with { Scale = new Vector3(
+        var shape = Shape with {
+            Scale = new Vector3(
             x: 1f,
             y: .1f,
             z: .1f
-        ) };
+        ),
+        };
         var plain = CreationStampEmitter.ShapeStampBound(
             document: Document(shape: shape with { Cells = null }),
             shapeIndex: 0,
@@ -314,14 +264,17 @@ public sealed class ShapeCellsLawTests {
     }
     [Fact]
     public void WarpedGeometryRestoresItsRigidSamplingFrame() {
-        var shape = Shape with { Shear = new(
+        var shape = Shape with {
+            Shear = new(
             .4f,
             .2f
-        ), Flare = new(
+        ),
+            Flare = new(
             .5f,
             .2f,
             2f
-        ) };
+        ),
+        };
 
         foreach (var pooled in new[] { false, true }) {
             var ops = Emit(

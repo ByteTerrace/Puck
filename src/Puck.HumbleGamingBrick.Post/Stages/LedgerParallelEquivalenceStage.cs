@@ -8,6 +8,9 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class LedgerParallelEquivalenceStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "ledger-parallel-equivalence";
     /// <inheritdoc/>

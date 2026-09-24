@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using System.Numerics;
 using Puck.Physics.Fields;
@@ -225,7 +226,7 @@ public sealed class WorldMediumLawTests {
     }
     private static double FirstTickImpliedVerticalSpeed(WorldDefinition definition) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -246,7 +247,7 @@ public sealed class WorldMediumLawTests {
     }
     private static FixedVector3[] MediumTrace(WorldDefinition definition, int ticks = 240) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -317,8 +318,8 @@ public sealed class WorldMediumLawTests {
             depth: 2,
             width: 2
         )));
-        var wet = WorldPrincipal.Seat(slot: 0);
-        var dry = WorldPrincipal.Seat(slot: 1);
+        var wet = Principal.Seat(slot: 0);
+        var dry = Principal.Seat(slot: 1);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: wet,
@@ -611,7 +612,7 @@ public sealed class WorldMediumLawTests {
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -628,10 +629,10 @@ public sealed class WorldMediumLawTests {
         _ = fixture.StepUntilStable(
             ceiling: 5000,
             observe: () => {
-            body.SubmitIntent(intent: default);
+                body.SubmitIntent(intent: default);
 
-            return body.FixedPosition.Y.Value;
-        }
+                return body.FixedPosition.Y.Value;
+            }
         );
 
         var settledY = ((double)body.FixedPosition.Y);

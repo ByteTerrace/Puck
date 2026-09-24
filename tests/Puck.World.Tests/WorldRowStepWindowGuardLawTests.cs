@@ -24,35 +24,26 @@ public sealed class WorldRowStepWindowGuardLawTests {
             guard.Claim(rowIdentity: "render");
         }
     }
-    [Fact]
-    public void SameRow_SameWindow_SecondClaimCollides() {
+    // A second step to the same row in the same window is a collision — the whole-row upsert would stomp the first;
+    // a different row's whole-row upsert composes into the same candidate without loss, so it is allowed.
+    [InlineData("render", "render", true)]
+    [InlineData("creations.a", "creations.b", false)]
+    [Theory]
+    public void WithinOneWindow_OnlyTheSameRowCollides(string claimed, string probed, bool collides) {
         var guard = new WorldRowStepWindowGuard();
 
         Assert.False(condition: guard.IsClaimed(
-            rowIdentity: "render",
+            rowIdentity: claimed,
             window: 5UL
         ));
-        guard.Claim(rowIdentity: "render");
-        // A second step to the same row in the same window is a collision — the whole-row upsert would stomp the first.
-        Assert.True(condition: guard.IsClaimed(
-            rowIdentity: "render",
-            window: 5UL
-        ));
-    }
-    [Fact]
-    public void SameWindow_DifferentRows_DoNotCollide() {
-        var guard = new WorldRowStepWindowGuard();
-
-        Assert.False(condition: guard.IsClaimed(
-            rowIdentity: "creations.a",
-            window: 5UL
-        ));
-        guard.Claim(rowIdentity: "creations.a");
-        // A different row's whole-row upsert composes into the same candidate without loss, so it is allowed.
-        Assert.False(condition: guard.IsClaimed(
-            rowIdentity: "creations.b",
-            window: 5UL
-        ));
+        guard.Claim(rowIdentity: claimed);
+        Assert.Equal(
+            expected: collides,
+            actual: guard.IsClaimed(
+                rowIdentity: probed,
+                window: 5UL
+            )
+        );
     }
     [Fact]
     public void UnclaimedProbe_DoesNotBlockRetry_InSameWindow() {

@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Net;
@@ -80,7 +81,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 out var row
             ));
             row!.Server.EnqueueMutation(new WorldMutation.SetRenderDefaults(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Render: row.Server.Definition.Render with { AmbientOcclusion = !row.Server.Definition.Render.AmbientOcclusion }
             ));
             Tick(
@@ -399,10 +400,12 @@ public sealed partial class WorldReleaseCutoverLawTests {
             b.Identity,
             rollbackFixture.Release
         );
-        foreach (var row in latest) { Assert.Equal(
+        foreach (var row in latest) {
+            Assert.Equal(
             row.Value,
             rollbackFixture.Worlds[row.Key].Tick
-        ); }
+        );
+        }
         group = Required(outcome: await scenario.Groups.BeginRollbackAsync(
             group,
             Guid.NewGuid(),
@@ -802,19 +805,11 @@ public sealed partial class WorldReleaseCutoverLawTests {
         Assert.True(condition: await new WorldSiloReleaseControl(silo: host).HandleAsync(context: context));
         return (context.Response.StatusCode, System.Text.Encoding.UTF8.GetString(bytes: body.ToArray()));
     }
-    private static async Task PumpAllAsync(IReadOnlyList<WorldSiloHost> hosts, Task operation) {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 20));
-        while (!operation.IsCompleted) {
-            foreach (var host in hosts) { host.DrainActivationMailbox(); }
-            await Task.Delay(
-                1,
-                deadline.Token
-            );
-        }
-        await operation;
-    }
+    private static Task PumpAllAsync(IReadOnlyList<WorldSiloHost> hosts, Task operation) => WorldSiloHost.PumpActivationMailboxesAsync(
+        cancellationToken: Token,
+        hosts: hosts,
+        operation: operation
+    );
 
     [Fact]
     public async Task TwoRowCutoverKeepsCandidatesFrozenAndCommittedRestartPreservesProgress() {
@@ -1088,21 +1083,23 @@ public sealed partial class WorldReleaseCutoverLawTests {
         identities.ToDictionary(
             identity => identity.World.Value,
             identity => {
-            Assert.True(condition: host.Instances.TryGet(
-                identity.World.Value,
-                out var instance
-            ));
-            return instance!.CompletedTicks;
-        }
+                Assert.True(condition: host.Instances.TryGet(
+                    identity.World.Value,
+                    out var instance
+                ));
+                return instance!.CompletedTicks;
+            }
         );
     private static void AssertTicks(IReadOnlyDictionary<string, ulong> expected, WorldSiloHost host, IEnumerable<WorldAuthorityIdentity> identities) {
         foreach (var actual in Ticks(
             host: host,
             identities: identities
-        )) { Assert.Equal(
+        )) {
+            Assert.Equal(
             expected[actual.Key],
             actual.Value
-        ); }
+        );
+        }
     }
     private static async Task ActivateAllAsync(WorldSiloHost host, IEnumerable<WorldAuthorityIdentity> identities) {
         foreach (var identity in identities) {
@@ -1127,20 +1124,10 @@ public sealed partial class WorldReleaseCutoverLawTests {
         );
         return await publication;
     }
-    private static async Task PumpAsync(WorldSiloHost host, Task operation) {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 20));
-        while (!operation.IsCompleted) {
-            host.DrainActivationMailbox();
-            await Task.Delay(
-                1,
-                deadline.Token
-            );
-        }
-        await operation;
-        host.DrainActivationMailbox();
-    }
+    private static Task PumpAsync(WorldSiloHost host, Task operation) => PumpAllAsync(
+        hosts: [host],
+        operation: operation
+    );
     private static WorldReleaseGroupSnapshot Required(WorldReleaseGroupOutcome outcome) {
         Assert.True(
             condition: outcome.Ok,
@@ -1150,7 +1137,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
     }
 
     private sealed class Scenario : IDisposable {
-        private readonly TempWorldDirectory m_directory = new();
+        private readonly TemporaryDirectory m_directory = new();
         private readonly BufferedConsoleOutput m_output = new();
         private readonly Guid m_owner = Guid.NewGuid();
 
@@ -1214,11 +1201,11 @@ public sealed partial class WorldReleaseCutoverLawTests {
             return Required(outcome: await Groups.AdvanceAsync(
                 current,
                 current.Record with {
-                PendingPhase = phase,
-                Admission = WorldReleaseAdmissionState.Closed,
-                RecoveryRoots = roots,
-                Revision = (current.Record.Revision + 1),
-            },
+                    PendingPhase = phase,
+                    Admission = WorldReleaseAdmissionState.Closed,
+                    RecoveryRoots = roots,
+                    Revision = (current.Record.Revision + 1),
+                },
                 Token
             ));
         }
@@ -1280,11 +1267,13 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None },
             };
 
-            foreach (var identity in Identities) { Assert.True(condition: (await Authority.PublishDefinitionAsync(
+            foreach (var identity in Identities) {
+                Assert.True(condition: (await Authority.PublishDefinitionAsync(
                 identity,
                 document,
                 Token
-            )).Ok); }
+            )).Ok);
+            }
             Required(outcome: await Groups.CreateAsync(
                 "primary",
                 activeRelease,
@@ -1294,6 +1283,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
         // These laws test orchestration and persistence in one compiled engine. Packaged-pair qualification
         // is a separate prerequisite and is deliberately not replaced by a fake qualification receipt here.
         public WorldReleaseManifest Manifest(char image) => new() {
+            CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
             Label = "cutover-test",
             SourceRevision = new string(
             c: image,

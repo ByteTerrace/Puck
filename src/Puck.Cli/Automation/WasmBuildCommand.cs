@@ -10,8 +10,8 @@ internal static class WasmBuildCommand {
         var scriptDirectory = Puck.RepositoryPaths.Resolve(relativePath: "wasm");
 
         await CliProcess.RunCheckedAsync(
-            root: scriptDirectory,
-            executable: "cargo",
+            workingDirectory: scriptDirectory,
+            fileName: "cargo",
             arguments: ["build", "--release"]
         );
         var wasmDirectory = Path.Combine(

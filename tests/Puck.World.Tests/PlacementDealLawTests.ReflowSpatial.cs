@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.World.Protocol;
@@ -17,7 +18,7 @@ public sealed partial class PlacementDealLawTests {
         );
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
+            Principal.Console,
             parent with { Id = "annex", Parent = parent.Id, DealSlot = null }
         ));
         fixture.Step();
@@ -37,7 +38,7 @@ public sealed partial class PlacementDealLawTests {
                         )
                     )]
             ),
-            WorldPrincipal.Console,
+            Principal.Console,
             out _,
             out var reason
         ));
@@ -62,7 +63,7 @@ public sealed partial class PlacementDealLawTests {
 
         Assert.False(condition: fixture.Server.TryPreviewReflow(
             ((WorldPlacementReflowRequest)null!),
-            WorldPrincipal.Console,
+            Principal.Console,
             out _,
             out var reason
         ));
@@ -76,7 +77,7 @@ public sealed partial class PlacementDealLawTests {
                 TemplateId,
                 PlacementIds: ["a", "a"]
             ),
-            WorldPrincipal.Console,
+            Principal.Console,
             out _,
             out reason
         ));
@@ -90,7 +91,7 @@ public sealed partial class PlacementDealLawTests {
                 TemplateId,
                 PlacementIds: ["missing"]
             ),
-            WorldPrincipal.Console,
+            Principal.Console,
             out _,
             out reason
         ));
@@ -121,7 +122,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.True(
             condition: fixture.Server.TryPreviewReflow(
                 request,
-                WorldPrincipal.Console,
+                Principal.Console,
                 out var proposal,
                 out var reason
             ),
@@ -146,7 +147,7 @@ public sealed partial class PlacementDealLawTests {
 
         fixture.Server.EnqueueUndo(
             1,
-            WorldPrincipal.Console
+            Principal.Console
         );
         fixture.Step();
         Assert.Equal(
@@ -187,7 +188,7 @@ public sealed partial class PlacementDealLawTests {
 
         Assert.False(condition: fixture.Server.TryPreviewReflow(
             request,
-            WorldPrincipal.Console,
+            Principal.Console,
             out var proposal,
             out var reason
         ));
@@ -232,11 +233,11 @@ public sealed partial class PlacementDealLawTests {
         };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
+            Principal.Console,
             provider
         ));
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
+            Principal.Console,
             target
         ));
         fixture.Step();
@@ -267,7 +268,7 @@ public sealed partial class PlacementDealLawTests {
 
         Assert.False(condition: fixture.Server.TryPreviewReflow(
             request,
-            WorldPrincipal.Console,
+            Principal.Console,
             out var proposal,
             out var reason
         ));
@@ -302,30 +303,36 @@ public sealed partial class PlacementDealLawTests {
         ),
             Spatial = ReflowSpatial(),
         };
-        var providerA = a with { Position = new DocumentVector3(
+        var providerA = a with {
+            Position = new DocumentVector3(
             x: 2,
             y: 0,
             z: 0
-        ), Spatial = ReflowSpatial() };
-        var providerB = b with { Position = new DocumentVector3(
+        ),
+            Spatial = ReflowSpatial(),
+        };
+        var providerB = b with {
+            Position = new DocumentVector3(
             x: 2,
             y: 0,
             z: 0
-        ), Spatial = ProviderSpatial(
+        ),
+            Spatial = ProviderSpatial(
             influenceCenterX: 0,
             influenceCenterY: 1.5f
-        ) };
+        ),
+        };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
+            Principal.Console,
             providerA
         ));
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
+            Principal.Console,
             providerB
         ));
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(
-            WorldPrincipal.Console,
+            Principal.Console,
             target
         ));
         fixture.Step();
@@ -340,7 +347,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.True(
             condition: fixture.Server.TryPreviewReflow(
                 TemplateId,
-                WorldPrincipal.Console,
+                Principal.Console,
                 out var first,
                 out var firstReason
             ),
@@ -358,7 +365,7 @@ public sealed partial class PlacementDealLawTests {
         Assert.True(
             condition: fixture.Server.TryPreviewReflow(
                 request,
-                WorldPrincipal.Console,
+                Principal.Console,
                 out var proposal,
                 out var reason
             ),

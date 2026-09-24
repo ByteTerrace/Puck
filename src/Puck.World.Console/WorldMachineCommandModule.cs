@@ -66,7 +66,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority, 
 
         return SubmitOperation(
             link,
-            context.ActingPrincipal(),
+            context.Principal,
             new WorldMachineOperation(
                 expectedGeneration: generation,
                 instance: instance,
@@ -177,7 +177,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority, 
     /// <param name="contentPath">The content path to prepare at the host.</param>
     /// <param name="verb">The calling console verb.</param>
     /// <returns>The typed operation outcome or an unavailable-capability error.</returns>
-    public static CommandResult InsertContent(IServerLink link, IWorldMachineHost host, WorldPrincipal principal,
+    public static CommandResult InsertContent(IServerLink link, IWorldMachineHost host, Principal principal,
         string instance, string contentPath, string verb) {
         if (
             (host.InstanceState(name: instance) is not { } state) ||
@@ -211,7 +211,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority, 
     /// <param name="request">The named instance, expected generation, and detached provider payload.</param>
     /// <param name="verb">The calling console verb used in the response.</param>
     /// <returns>The provider outcome or an explicit transport or missing-completion error.</returns>
-    public static CommandResult SubmitOperation(IServerLink link, WorldPrincipal principal, WorldMachineOperation request,
+    public static CommandResult SubmitOperation(IServerLink link, Principal principal, WorldMachineOperation request,
         string verb = "machine.operation") {
         var result = CommandResult.Error(output: $"[{verb}: {request.Instance} outcome unavailable; execution status unknown]");
 

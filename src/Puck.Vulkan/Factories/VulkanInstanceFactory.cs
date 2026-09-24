@@ -1,3 +1,4 @@
+using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
 using Puck.Vulkan.Messages;
@@ -47,41 +48,68 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: applicationName);
 
-        var request = new VulkanInstanceCreateRequest(
-            ApplicationName: applicationName,
-            DisplayKind: displayKind,
-            EnableValidation: enableValidation,
-            ExtensionNames: BuildExtensionNames(displayKind: displayKind),
-            LayerNames: (enableValidation
-            ? ValidationLayers
-            : [])
-        );
-        var result = m_instanceApi.CreateInstance(
-            instanceHandle: out var instanceHandle,
-            request: request
-        );
+        VulkanInstanceCreateRequest request;
+        VkResult result;
+        VulkanInstanceCommands? instance;
 
-        result.ThrowIfFailed(operation: "vkCreateInstance");
-
-        if (0 == instanceHandle) {
-            throw new InvalidOperationException(message: "vkCreateInstance returned success without a valid instance handle.");
+        // The first two loader calls. An absent loader, or one missing its entry points, is a host with no Vulkan.
+        try {
+            request = new VulkanInstanceCreateRequest(
+                ApplicationName: applicationName,
+                DisplayKind: displayKind,
+                EnableValidation: enableValidation,
+                ExtensionNames: BuildExtensionNames(displayKind: displayKind),
+                LayerNames: (enableValidation
+                ? ValidationLayers
+                : [])
+            );
+            result = m_instanceApi.CreateInstance(
+                instance: out instance,
+                request: request
+            );
+        } catch (Exception exception) when ((exception is DllNotFoundException or EntryPointNotFoundException)) {
+            throw VulkanResultExtensions.Unavailable(
+                innerException: exception,
+                reason: $"no Vulkan loader: {exception.Message}"
+            );
         }
 
-        // With validation on, register the debug-utils messenger so validation messages reach the console — parity
-        // with the Direct3D 12 info-queue drain. Best-effort: a zero handle just means no messenger.
-        var debugMessengerHandle = (enableValidation
-            ? m_instanceApi.CreateDebugMessenger(instanceHandle: instanceHandle)
-            : 0
-        );
+        // No installable client driver makes vkCreateInstance fail (VK_ERROR_INCOMPATIBLE_DRIVER).
+        result.ThrowIfUnavailable(operation: "vkCreateInstance");
 
-        return new(
-            debugMessengerHandle: debugMessengerHandle,
-            displayKind: displayKind,
-            enabledExtensions: request.ExtensionNames,
-            enabledLayers: request.LayerNames,
-            instanceApi: m_instanceApi,
-            instanceHandle: instanceHandle
-        );
+        if (instance is null) {
+            throw VulkanResultExtensions.Unavailable(reason: "vkCreateInstance returned success without a valid instance handle.");
+        }
+
+        nint debugMessengerHandle = 0;
+
+        // From here the instance is live and no owner holds it yet: whatever fails destroys what this call created,
+        // messenger first, before the failure propagates.
+        try {
+            // With validation on, register the debug-utils messenger so validation messages reach the console — parity
+            // with the Direct3D 12 info-queue drain. Best-effort: a zero handle just means no messenger.
+            debugMessengerHandle = (enableValidation
+                ? m_instanceApi.CreateDebugMessenger(instance: instance)
+                : 0
+            );
+
+            return new(
+                debugMessengerHandle: debugMessengerHandle,
+                displayKind: displayKind,
+                enabledExtensions: request.ExtensionNames,
+                enabledLayers: request.LayerNames,
+                instanceApi: m_instanceApi,
+                instance: instance
+            );
+        } catch {
+            m_instanceApi.DestroyDebugMessenger(
+                instance: instance,
+                messengerHandle: debugMessengerHandle
+            );
+            m_instanceApi.DestroyInstance(instance: instance);
+
+            throw;
+        }
     }
 
     /// <summary>Initializes a new instance of the <see cref="VulkanInstanceFactory"/> class.</summary>

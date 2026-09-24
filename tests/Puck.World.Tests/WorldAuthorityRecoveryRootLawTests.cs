@@ -1,4 +1,5 @@
 using Puck.Storage;
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
@@ -9,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldAuthorityRecoveryRootLawTests {
     [Fact]
     public async Task CaptureSurvivesStoreRestartAndRestoreCreatesFreshUnownedEpoch() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
             path2: "authority"
@@ -148,7 +149,7 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
     }
     [Fact]
     public async Task RestoreWithStaleFenceCannotOverwriteNewActivation() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
             path2: "authority"
@@ -215,7 +216,7 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
     }
     [Fact]
     public async Task TamperedRecoveryBlobIsRejectedBeforeRestore() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
             path1: directory.RootPath,
             path2: "authority"

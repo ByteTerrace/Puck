@@ -12,7 +12,7 @@ public class OneDoorTests {
     [Fact]
     public void TheEmitterPublishesNoSecondWayIntoTheLowering() {
         var doors = typeof(WorldDocumentEmitter)
-            .GetMethods(bindingAttr: (BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Static))
+            .GetMethods(bindingAttr: BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.Static)
             .Where(predicate: static method => method.GetParameters().Any(predicate: static parameter => (parameter.ParameterType == typeof(DocumentNode))))
             .Select(selector: static method => method.Name)
             .Order(comparer: StringComparer.Ordinal);

@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 public sealed class PathProfileLawTests {
-    private static SdfPathContour Square(float r) => new(new(-r, -r), [new(new(r, -r)), new(new(r, r)), new(new(-r, r))]);
+    private static SdfPathContour Square(float r) => new(new(x: -r, y: -r), [new(new(x: r, y: -r)), new(new(x: r, y: r)), new(new(x: -r, y: r))]);
 
     [Fact]
     public void FilledContoursKeepConcavityAndHoles() {
@@ -18,8 +18,8 @@ public sealed class PathProfileLawTests {
         Assert.Equal(-0.2f, FillDistance(new(x: 0.4f, y: 0), edges), 6);
         Assert.Equal(0.2f, FillDistance(new(x: 1, y: 0), edges), 6);
 
-        var concave = new SdfPathProfile([new(new(-0.8f, -0.8f), [
-            new(new(0.8f, -0.8f)), new(new(0.8f, 0.8f)), new(new(0, 0)), new(new(-0.8f, 0.8f))])]).Compile();
+        var concave = new SdfPathProfile([new(new(x: -0.8f, y: -0.8f), [
+            new(new(x: 0.8f, y: -0.8f)), new(new(x: 0.8f, y: 0.8f)), new(new(x: 0, y: 0)), new(new(x: -0.8f, y: 0.8f))])]).Compile();
 
         Assert.True(condition: (FillDistance(new(x: 0, y: 0.5f), concave) > 0));
         Assert.True(condition: (FillDistance(new(x: 0, y: -0.5f), concave) < 0));
@@ -27,13 +27,13 @@ public sealed class PathProfileLawTests {
     [Fact]
     public void ArcOutlineStaysWithinItsDeclaredCircleError() {
         const float Radius = 0.6f;
-        var edges = new SdfPathProfile([new(new(Radius, 0), [new(new(Radius, 0), ArcCenter: Vector2.Zero)])], 0.001f).Compile();
+        var edges = new SdfPathProfile([new(new(x: Radius, y: 0), [new(new(x: Radius, y: 0), ArcCenter: Vector2.Zero)])], 0.001f).Compile();
 
         for (var i = 0; (i < 2048); i++) {
             var angle = ((Math.Tau * i) / 2048);
             var p = (new Vector2(x: ((float)Math.Cos(d: angle)), y: ((float)Math.Sin(a: angle))) * Radius);
 
-            Assert.InRange(MathF.Abs(x: FillDistance(p, edges)), 0f, 0.001001f);
+            Assert.InRange(MathF.Abs(x: FillDistance(edges: edges, p: p)), 0f, 0.001001f);
         }
     }
     [Fact]
@@ -56,10 +56,10 @@ public sealed class PathProfileLawTests {
 
             foreach (var edge in edges) {
                 var d = (edge.B - edge.A);
-                var f = Math.Clamp((Vector2.Dot((center - edge.A), d) / d.LengthSquared()), 0, 1);
-                var error = (Vector2.Distance(value1: center, value2: Vector2.Lerp(edge.A, edge.B, f)) + MathF.Abs((radius - (edge.RadiusA + (f * (edge.RadiusB - edge.RadiusA))))));
+                var f = Math.Clamp((Vector2.Dot(value1: (center - edge.A), value2: d) / d.LengthSquared()), 0, 1);
+                var error = (Vector2.Distance(value1: center, value2: Vector2.Lerp(edge.A, edge.B, f)) + MathF.Abs(x: (radius - (edge.RadiusA + (f * (edge.RadiusB - edge.RadiusA))))));
 
-                best = MathF.Min(best, error);
+                best = MathF.Min(x: best, y: error);
             }
             Assert.InRange(actual: best, high: 0.000101f, low: 0f);
         }
@@ -68,11 +68,11 @@ public sealed class PathProfileLawTests {
     public void ClampedShearOfArcsPreservesTheOutlineWithinTolerance() {
         // Two circular lobes and two lines. The oracle evaluates the original analytic boundary,
         // then independently applies the clamped polynomial used to bend it.
-        var path = new SdfPathProfile([new(new(0, -0.55f), [
-            new(new(0.5f, -0.05f)),
-            new(new(0, 0.45f), ArcCenter: new(0.25f, 0.20f)),
-            new(new(-0.5f, -0.05f), ArcCenter: new(-0.25f, 0.20f)),
-            new(new(0, -0.55f))])], 0.001f, Shear: new(0.028f, 0.28f, Offset: -0.0693f, From: -0.55f, To: 0.45f));
+        var path = new SdfPathProfile([new(new(x: 0, y: -0.55f), [
+            new(new(x: 0.5f, y: -0.05f)),
+            new(new(x: 0, y: 0.45f), ArcCenter: new(x: 0.25f, y: 0.20f)),
+            new(new(x: -0.5f, y: -0.05f), ArcCenter: new(x: -0.25f, y: 0.20f)),
+            new(new(x: 0, y: -0.55f))])], 0.001f, Shear: new(0.028f, 0.28f, Offset: -0.0693f, From: -0.55f, To: 0.45f));
         var edges = path.Compile();
 
         foreach (var side in new[] { -1, 1 }) {
@@ -83,20 +83,20 @@ public sealed class PathProfileLawTests {
                 var y = Math.Clamp(max: 1, min: 0, value: (p.Y + 0.55f));
 
                 p.X -= ((0.28f * y) * (1 - y));
-                Assert.InRange(MathF.Abs(x: FillDistance(p, edges)), 0f, 0.001002f);
+                Assert.InRange(MathF.Abs(x: FillDistance(edges: edges, p: p)), 0f, 0.001002f);
             }
         }
     }
     [Fact]
     public void BudgetAndMalformedGeometryRefuse() {
-        Assert.Throws<ArgumentException>(() => new SdfPathProfile([new(new(0.6f, 0), [new(new(0.6f, 0), ArcCenter: Vector2.Zero)])], 0.00001f).Compile());
-        Assert.Throws<ArgumentException>(() => new SdfPathProfile([new(new(-0.5f, -0.5f), [new(new(0.5f, 0.5f)), new(new(-0.5f, 0.5f)), new(new(0.5f, -0.5f))])]).Compile());
-        Assert.Throws<ArgumentException>(() => new SdfPathProfile([Square(r: 0.5f), Square(r: 0.5f)]).Compile());
-        Assert.Throws<ArgumentException>(() => new SdfPathProfile([Square(r: 0.5f)], float.NaN).Compile());
-        Assert.Throws<ArgumentException>(() => new SdfPathProfile([new(Vector2.Zero, [new(new(0.5f, 0), Control2: Vector2.One)])]).Compile());
-        Assert.Throws<ArgumentException>(() => new SdfPathProfile([new(Vector2.Zero, [new(Vector2.One)])], Stroke: new(0.1f, 0.1f)).Compile());
-        Assert.Throws<ArgumentException>(() => new SdfPathProfile([new(new(0.5f, 0),
-            [new(new(0.5f, 0), ArcCenter: Vector2.Zero)], Closed: true)], Stroke: new(0.1f, 0.05f)).Compile());
+        Assert.Throws<ArgumentException>(testCode: () => new SdfPathProfile([new(new(x: 0.6f, y: 0), [new(new(x: 0.6f, y: 0), ArcCenter: Vector2.Zero)])], 0.00001f).Compile());
+        Assert.Throws<ArgumentException>(testCode: () => new SdfPathProfile([new(new(x: -0.5f, y: -0.5f), [new(new(x: 0.5f, y: 0.5f)), new(new(x: -0.5f, y: 0.5f)), new(new(x: 0.5f, y: -0.5f))])]).Compile());
+        Assert.Throws<ArgumentException>(testCode: () => new SdfPathProfile([Square(r: 0.5f), Square(r: 0.5f)]).Compile());
+        Assert.Throws<ArgumentException>(testCode: () => new SdfPathProfile([Square(r: 0.5f)], float.NaN).Compile());
+        Assert.Throws<ArgumentException>(testCode: () => new SdfPathProfile([new(Vector2.Zero, [new(new(x: 0.5f, y: 0), Control2: Vector2.One)])]).Compile());
+        Assert.Throws<ArgumentException>(testCode: () => new SdfPathProfile([new(Vector2.Zero, [new(Vector2.One)])], Stroke: new(0.1f, 0.1f)).Compile());
+        Assert.Throws<ArgumentException>(testCode: () => new SdfPathProfile([new(new(x: 0.5f, y: 0),
+            [new(new(x: 0.5f, y: 0), ArcCenter: Vector2.Zero)], Closed: true)], Stroke: new(0.1f, 0.05f)).Compile());
     }
     [Fact]
     public void PackedTablesAreOwnedAndBudgetedAndContactIsExplicitlyRefused() {
@@ -105,17 +105,17 @@ public sealed class PathProfileLawTests {
 
         builder.Path(new([Square(r: 0.5f)]), Vector2.One, 0.04f, material);
         var program = builder.Build();
-        var instruction = Assert.Single(program.Instructions, i => ((i.Shape == ((uint)SdfShapeType.Path)) && (i.Op == SdfOp.ShapeBlend)));
+        var instruction = Assert.Single(collection: program.Instructions, predicate: i => ((i.Shape == ((uint)SdfShapeType.Path)) && (i.Op == SdfOp.ShapeBlend)));
 
         Assert.Equal(4, instruction.Data0.Y);
         Assert.Equal(0.04f, instruction.Data0.W);
-        var offset = (((int)BitConverter.SingleToUInt32Bits(instruction.Data0.X)) * 4);
+        var offset = (((int)BitConverter.SingleToUInt32Bits(value: instruction.Data0.X)) * 4);
 
         Assert.Equal(-0.5f, BitConverter.UInt32BitsToSingle(value: program.Words[offset]));
         Assert.Equal(1f, program.StepScale);
         Assert.Throws<ArgumentException>(testCode: () => new SdfProgram(program.Instructions, [new SdfMaterial(Albedo: Vector3.One)]));
         Assert.Contains("Path", Assert.Throws<ArgumentException>(testCode: () => new SdfFieldEvaluator(program: program)).Message);
-        builder.ReservePathTables(2);
+        builder.ReservePathTables(shapeCount: 2);
         var probe = builder.Build();
 
         Assert.Equal(program.Words.Length, probe.Words.Length);
@@ -128,9 +128,9 @@ public sealed class PathProfileLawTests {
 
         foreach (var edge in edges) {
             var delta = (edge.B - edge.A);
-            var t = Math.Clamp((Vector2.Dot((p - edge.A), delta) / delta.LengthSquared()), 0, 1);
+            var t = Math.Clamp((Vector2.Dot(value1: (p - edge.A), value2: delta) / delta.LengthSquared()), 0, 1);
 
-            distance = MathF.Min(x: distance, y: Vector2.Distance(p, (edge.A + (t * delta))));
+            distance = MathF.Min(x: distance, y: Vector2.Distance(value1: p, value2: (edge.A + (t * delta))));
             if (((edge.A.Y > p.Y) != (edge.B.Y > p.Y)) &&
                 (p.X < (edge.A.X + (((p.Y - edge.A.Y) * (edge.B.X - edge.A.X)) / (edge.B.Y - edge.A.Y))))) { crossings++; }
         }

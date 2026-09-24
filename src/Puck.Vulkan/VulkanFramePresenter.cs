@@ -23,7 +23,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
     private long m_lastPresentTimestamp;     // Stopwatch ticks of the last confirmed present; 0 = none
     private ulong m_nextPresentId = 1UL;     // monotonic per-swapchain; 0 is the "no id" sentinel
     private uint m_presentCount;             // monotonic confirmed-present count (the pacer's "new present" signal)
-    private nint m_presentWaitResolvedForDevice; // the device handle m_presentWaitSupported was resolved for; 0 = none yet
+    private VulkanDeviceCommands? m_presentWaitResolvedForDevice; // the device table m_presentWaitSupported was resolved for; null = none yet
     // Closed-loop present timing (VK_KHR_present_wait). All accessed only on the single pump thread that presents.
     private bool? m_presentWaitSupported;    // resolved per-device (re-resolved when m_presentWaitResolvedForDevice changes); null = not yet probed
     private ulong m_priorPresentId;          // the id queued last frame; 0 = none yet
@@ -50,10 +50,10 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
     // display cadence for the pacer (one period staler — the pacer's re-anchor guard absorbs that). An unexpected
     // hard error disables further waits for the session (graceful → open-loop); a timeout/swapchain status code just
     // skips this one sample.
-    private void RecordPresentTiming(nint deviceHandle, nint swapchainHandle) {
+    private void RecordPresentTiming(VulkanDeviceCommands device, nint swapchainHandle) {
         if (m_priorPriorPresentId != 0UL) {
             var waitResult = m_framePresentationApi.WaitForPresent(
-                deviceHandle: deviceHandle,
+                device: device,
                 presentId: m_priorPriorPresentId,
                 swapchainHandle: swapchainHandle,
                 timeoutNanoseconds: PresentWaitTimeoutNanoseconds
@@ -108,7 +108,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         ArgumentNullException.ThrowIfNull(swapchain);
 
         var waitResult = m_frameSynchronizationApi.WaitForFence(
-            deviceHandle: logicalDevice.Handle,
+            device: logicalDevice.Commands,
             fenceHandle: frameSynchronization.InFlightFenceHandle,
             timeout: FrameFenceWaitTimeoutNanoseconds
         );
@@ -128,7 +128,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         waitResult.ThrowIfFailed(operation: "vkWaitForFences");
 
         var acquireRequest = new VulkanFrameAcquireRequest(
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             ImageAvailableSemaphoreHandle: frameSynchronization.ImageAvailableSemaphoreHandle,
             InFlightFenceHandle: 0,
             SwapchainHandle: swapchain.Handle,
@@ -178,7 +178,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         recordAcquiredImage(imageIndex);
 
         var resetResult = m_frameSynchronizationApi.ResetFence(
-            deviceHandle: logicalDevice.Handle,
+            device: logicalDevice.Commands,
             fenceHandle: frameSynchronization.InFlightFenceHandle
         );
 
@@ -190,7 +190,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         var renderFinishedSemaphoreHandle = frameSynchronization.RenderFinishedSemaphoreHandles[((int)imageIndex)];
         var submitRequest = new VulkanFrameSubmitRequest(
             CommandBufferHandle: commandResources.CommandBufferHandles[((int)imageIndex)],
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             FenceHandle: frameSynchronization.InFlightFenceHandle,
             GraphicsQueueHandle: logicalDevice.GraphicsQueue.Handle,
             ImageAvailableSemaphoreHandle: frameSynchronization.ImageAvailableSemaphoreHandle,
@@ -210,23 +210,17 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
 
         // Closed-loop present timing (only when VK_KHR_present_wait is enabled): tag this present with a monotonic id;
         // a zero id leaves the present unchanged. Present ids are per-swapchain, so reset the counter when it changes.
-        var deviceHandle = logicalDevice.Handle;
+        var device = logicalDevice.Commands;
 
-        // Present-wait support (and the present-API's per-device function pointers) are tied to the DEVICE, so re-resolve
-        // when the device handle CHANGES — and drop the stale function-pointer cache for the prior device. No live path
-        // recreates the device today (a device-lost ResetVulkanResources is produced but consumed nowhere), so this is
-        // correct-by-construction hardening for a future where device-lost recovery yields a DIFFERENT device handle. A
-        // self-disable below sets the flag false and, since the device handle is unchanged, it stays false for that
-        // device's lifetime. RESIDUAL GAP (only matters once device-lost recovery is wired): this keys on the raw handle
-        // VALUE, so a new device that happens to REUSE the prior handle value would not re-resolve; closing that needs a
-        // device generation/epoch counter rather than the handle value (and a self-disable would then need to reset it).
-        if (deviceHandle != m_presentWaitResolvedForDevice) {
-            if (m_presentWaitResolvedForDevice != 0) {
-                m_framePresentationApi.InvalidateDevice(deviceHandle: m_presentWaitResolvedForDevice);
-            }
-
-            m_presentWaitSupported = m_framePresentationApi.SupportsPresentWait(deviceHandle: deviceHandle);
-            m_presentWaitResolvedForDevice = deviceHandle;
+        // Present-wait support is a property of the device, so it is re-probed whenever the device's command table
+        // changes. The comparison is by table identity, so a new device that reuses a destroyed device's handle value
+        // still re-probes. A self-disable below sets the flag false for the rest of that device's lifetime.
+        if (!ReferenceEquals(
+            objA: device,
+            objB: m_presentWaitResolvedForDevice
+        )) {
+            m_presentWaitSupported = m_framePresentationApi.SupportsPresentWait(device: device);
+            m_presentWaitResolvedForDevice = device;
             m_priorPresentId = 0UL;
             m_priorPriorPresentId = 0UL;
             m_nextPresentId = 1UL;
@@ -244,7 +238,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             : 0UL
         );
         var presentRequest = new VulkanPresentRequest(
-            DeviceHandle: deviceHandle,
+            Device: device,
             ImageIndex: imageIndex,
             PresentId: presentId,
             PresentQueueHandle: logicalDevice.PresentQueue.Handle,
@@ -265,7 +259,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
 
         if (presentId != 0UL) {
             RecordPresentTiming(
-                deviceHandle: deviceHandle,
+                device: device,
                 swapchainHandle: swapchain.Handle
             );
         }

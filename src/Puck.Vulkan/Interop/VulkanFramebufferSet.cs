@@ -12,8 +12,8 @@ public sealed class VulkanFramebufferSet : IDisposable {
 
     private bool m_disposed;
 
-    /// <summary>Gets the native <c>VkDevice</c> handle that owns the resources.</summary>
-    public nint DeviceHandle { get; }
+    /// <summary>Gets the command table of the logical device that owns the resources.</summary>
+    public VulkanDeviceCommands Device { get; }
     /// <summary>Gets the native <c>VkFramebuffer</c> handles, one per swapchain image. Empty once disposed.</summary>
     public IReadOnlyList<nint> FramebufferHandles { get; private set; }
     /// <summary>Gets the native <c>VkImage</c> handles of the swapchain images (not owned by this set). Empty once disposed.</summary>
@@ -22,15 +22,14 @@ public sealed class VulkanFramebufferSet : IDisposable {
     public IReadOnlyList<nint> ImageViewHandles { get; private set; }
 
     /// <summary>Initializes a new instance of the <see cref="VulkanFramebufferSet"/> class, taking ownership of the framebuffers and image views.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the resources.</param>
+    /// <param name="device">The command table of the logical device that owns the resources.</param>
     /// <param name="imageHandles">The native <c>VkImage</c> handles of the swapchain images (not owned by this set).</param>
     /// <param name="framebufferHandles">The native <c>VkFramebuffer</c> handles to own.</param>
     /// <param name="imageViewHandles">The native <c>VkImageView</c> handles to own.</param>
     /// <param name="framebufferSetApi">The API used to destroy the framebuffers and image views on disposal.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="imageHandles"/>, <paramref name="framebufferHandles"/>, <paramref name="imageViewHandles"/>, or <paramref name="framebufferSetApi"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/>, <paramref name="imageHandles"/>, <paramref name="framebufferHandles"/>, <paramref name="imageViewHandles"/>, or <paramref name="framebufferSetApi"/> is <see langword="null"/>.</exception>
     public VulkanFramebufferSet(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         IReadOnlyList<nint> imageHandles,
         IReadOnlyList<nint> framebufferHandles,
         IReadOnlyList<nint> imageViewHandles,
@@ -41,13 +40,9 @@ public sealed class VulkanFramebufferSet : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: imageViewHandles);
         ArgumentNullException.ThrowIfNull(argument: framebufferSetApi);
 
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: device);
 
-        DeviceHandle = deviceHandle;
+        Device = device;
         ImageHandles = imageHandles;
         FramebufferHandles = framebufferHandles;
         ImageViewHandles = imageViewHandles;
@@ -61,21 +56,17 @@ public sealed class VulkanFramebufferSet : IDisposable {
         }
 
         foreach (var framebufferHandle in FramebufferHandles) {
-            if (0 != framebufferHandle) {
-                m_framebufferSetApi.DestroyFramebuffer(
-                    deviceHandle: DeviceHandle,
-                    framebufferHandle: framebufferHandle
-                );
-            }
+            m_framebufferSetApi.DestroyFramebuffer(
+                device: Device,
+                framebufferHandle: framebufferHandle
+            );
         }
 
         foreach (var imageViewHandle in ImageViewHandles) {
-            if (0 != imageViewHandle) {
-                m_framebufferSetApi.DestroyImageView(
-                    deviceHandle: DeviceHandle,
-                    imageViewHandle: imageViewHandle
-                );
-            }
+            m_framebufferSetApi.DestroyImageView(
+                device: Device,
+                imageViewHandle: imageViewHandle
+            );
         }
 
         FramebufferHandles = [];

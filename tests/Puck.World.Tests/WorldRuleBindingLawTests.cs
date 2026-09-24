@@ -19,13 +19,13 @@ public sealed class WorldRuleBindingLawTests {
         );
 
         return Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [Slot(
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
                 name: "damage",
                 value: 30L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "hp",
                 value: 20L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "attacker",
                 value: 100L
             )]),
@@ -56,29 +56,12 @@ public sealed class WorldRuleBindingLawTests {
         };
     }
     private static ExpressionProgram Expr(params Instruction[] tokens) => new(Instructions: tokens);
-    private static WorldStateRow Slot(string name, long value) =>
-        new(
-            CellName.Parse(candidate: name),
-            CellKind.Int,
-            Cells: [new StateCell(
-                    WorldStateRow.SlotKey,
-                    CellValue.Int(value: value)
-                )]
-        );
     private static Instruction State(string row) => Instruction.Operand(name: row);
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
 
     [Fact]
     public void ABindingReadsOnlyEarlierBindingsAndAppearsInTheReadBack() {
         var later = Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [Slot(
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
                 name: "a",
                 value: 1L
             )]),
@@ -145,10 +128,10 @@ public sealed class WorldRuleBindingLawTests {
     [Fact]
     public void ABindingThatCannotEvaluateClosesTheGateAndIsReported() {
         var document = Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [Slot(
+            StateRaw = new WorldStateSection(World: [StateFixtures.IntSlot(
                 name: "zero",
                 value: 0L
-            ), Slot(
+            ), StateFixtures.IntSlot(
                 name: "hit",
                 value: 0L
             )]),
@@ -174,15 +157,13 @@ public sealed class WorldRuleBindingLawTests {
         fixture.Step();
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "hit"
+            fixture.SlotValue(row: "hit"
             )
         );
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
 
         Assert.Equal<Enum>(
-            Puck.State.Rules.RuleEffectRefusal.Arithmetic,
+            RuleEffectRefusal.Arithmetic,
             diagnostic.Refusal
         );
         Assert.Contains(
@@ -198,16 +179,12 @@ public sealed class WorldRuleBindingLawTests {
         fixture.Step();
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "hp"
+            fixture.SlotValue(row: "hp"
             )
         );
         Assert.Equal(
             95L,
-            Value(
-                fixture: fixture,
-                row: "attacker"
+            fixture.SlotValue(row: "attacker"
             )
         );
         Assert.Empty(collection: fixture.Server.RuleRuntimeDiagnostics());
@@ -217,16 +194,12 @@ public sealed class WorldRuleBindingLawTests {
         control.Step();
         Assert.Equal(
             0L,
-            Value(
-                fixture: control,
-                row: "hp"
+            control.SlotValue(row: "hp"
             )
         );
         Assert.Equal(
             100L,
-            Value(
-                fixture: control,
-                row: "attacker"
+            control.SlotValue(row: "attacker"
             )
         );
     }

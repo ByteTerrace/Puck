@@ -4,8 +4,9 @@ These pages explain choices that affect more than one subsystem. Current API
 contracts belong in the subsystem guides; proposed changes belong in
 [plans](../plans/README.md).
 
-- [Engine design decisions](engine-design.md): document ownership, simulation and
-  presentation boundaries, composition, and verification policy.
+- [Engine design decisions](engine-design.md): document ownership, the paths a
+  document names, simulation and presentation boundaries, composition, the one
+  acting identity and what a grant names, and verification policy.
 - [State and the authoring language](state-and-language.md): the rebuilt
   state substrate, its ceilings as prices, the language as a projection with
   modules, records, pools, and tests as worlds, the costing model, and the
@@ -24,7 +25,11 @@ contracts belong in the subsystem guides; proposed changes belong in
   [how worlds reach the GPU](rendering.md#how-worlds-reach-the-gpu) — the pass
   interface and its generated declarations, one binding contract grouped by
   update frequency, HLSL through the pinned DXC, the state mirror at
-  presentation time, residency from adapter properties, and tiers as variants.
+  presentation time, residency from adapter properties, and tiers as variants —
+  and [the frame graph and nesting](rendering.md#the-frame-graph-and-nesting):
+  the graph as a document, views as graph instances, sources by transport and
+  content class, hit-to-source mapping, temporal reconstruction, HDR output,
+  and assets derived from SDFs.
 - [Worlds and federation](../architecture/worlds.md): authority, admission,
   transfers, and the relationships between worlds.
 

@@ -489,7 +489,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                 .Append(value: "\",\"bindable\":").Append(value: ((definition.Bindability == CommandBindability.Bindable)
                 ? "true"
                 : "false"))
-                .Append(value: "}");
+                .Append(value: ",\"audience\":\"").Append(value: definition.Audience.ToString().ToLowerInvariant())
+                .Append(value: "\"}");
             count++;
         }
 
@@ -1011,7 +1012,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.affordances",
-            description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, and BINDABILITY — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
+            description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, BINDABILITY, and audience (anyone, or operator for a verb the registry answers for the console alone) — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.affordances"

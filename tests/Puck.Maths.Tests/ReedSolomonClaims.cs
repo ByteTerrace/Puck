@@ -45,28 +45,6 @@ internal static class ReedSolomonClaims {
 
         return message;
     }
-    /// <summary>Runs an action that must throw, and reports what it did instead.</summary>
-    /// <param name="action">The call under test.</param>
-    /// <param name="type">The exception type the call must throw.</param>
-    /// <param name="parameterName">The parameter the refusal must name, or <see langword="null"/> when the refusal names none.</param>
-    /// <param name="what">The call, for the counterexample text.</param>
-    /// <returns>The counterexample text, or <see langword="null"/> when the refusal is the declared one.</returns>
-    private static string? Refuses(Action action, Type type, string? parameterName, string what) {
-        try {
-            action();
-        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
-            if (parameterName is null) { return null; }
-
-            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
-                ? null
-                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'"
-            );
-        } catch (Exception thrown) {
-            return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
-        }
-
-        return $"{what} did not throw at all";
-    }
     /// <summary>Widens a span of byte-carried field elements into the oracle's arbitrary-width coefficients.</summary>
     /// <param name="values">The elements.</param>
     /// <returns>The same elements as <see cref="BigInteger"/> coefficients.</returns>

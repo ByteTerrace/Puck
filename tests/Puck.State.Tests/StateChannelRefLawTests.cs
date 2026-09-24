@@ -58,14 +58,13 @@ public sealed class StateChannelRefLawTests {
     [InlineData("\"$zones[game[from]]\"")]
     [Theory]
     public void AChannelHeldAsAStringIsRefused(string json) => Assert.Throws<JsonException>(testCode: () => StateChannelRefJsonConverter.FromNode(node: JsonNode.Parse(json: json)));
-
-    [Theory]
     [InlineData("""{"channel":"tick","arguments":null}""")]
     [InlineData("""{"channel":"tick","arguments":"ignored"}""")]
     [InlineData("""{"channel":"tick","arguments":{}}""")]
     [InlineData("""{"channel":"board","arguments":[1e100]}""")]
     [InlineData("""{"channel":"history","arguments":[{"expression":{"instructions":[]},"extra":1}]}""")]
     [InlineData("""{"channel":"zones","arguments":[{"zone":{"instructions":[]},"expression":{"instructions":[]}}]}""")]
+    [Theory]
     public void MalformedArgumentsAreRefusedWithoutDiscardingMembersOrLeakingNumericExceptions(string json) =>
         Assert.Throws<JsonException>(testCode: () => StateChannelRefJsonConverter.FromNode(node: JsonNode.Parse(json: json)));
 }

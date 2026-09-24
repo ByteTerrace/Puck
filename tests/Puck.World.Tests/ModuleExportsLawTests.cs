@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -6,8 +7,8 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// The law: a module's names are private by default, and a host binds only what the module exports. A host that
-/// imports <c>games/tictactoe.world.json</c> as <c>a</c> drives the module through its exported actions
-/// (<c>a_tttMoveCell</c>, <c>a_tttMoveRequest</c>) from a rule and from an interaction between its kits, reads its
+/// imports <c>games/tictactoe.puck</c> as <c>a</c> drives the module through its exported actions
+/// (<c>a$tttMoveCell</c>, <c>a$tttMoveRequest</c>) from a rule and from an interaction between its kits, reads its
 /// exported rows, and binds a HUD element to an exported binding; the same host binding an interaction effect, a
 /// gate, a HUD element, or a placement's board facet to a name the module declares and does not export under that
 /// facet refuses at load, naming the
@@ -17,14 +18,14 @@ namespace Puck.World.Tests;
 public sealed class ModuleExportsLawTests {
     private const string TicTacToeHost = /*lang=json*/ """
         {
-          "basis": "basis.world.json",
-          "imports": [{ "document": "tictactoe.world.json", "as": "a" }],
+          "basis": "basis",
+          "imports": [{ "document": "tictactoe", "as": "a" }],
           "rules": [
             {
               "name": "drive-a",
               "effects": [
-                { "$type": "setState", "state": "a_tttMoveCell", "value": 4 },
-                { "$type": "setState", "state": "a_tttMoveRequest", "value": 1 }
+                { "$type": "setState", "state": "a$tttMoveCell", "value": 4 },
+                { "$type": "setState", "state": "a$tttMoveRequest", "value": 1 }
               ]
             },
             {
@@ -54,34 +55,8 @@ public sealed class ModuleExportsLawTests {
 
         return (found!.Cells?.SingleOrDefault(predicate: cell => (cell.Key.Value == key))?.Value.Raw ?? 0L);
     }
-    private static string ModuleText(string module) =>
-        File.ReadAllText(path: Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "games",
-            $"{module}.world.json"
-        ));
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
-    private static string WriteHost(TempWorldDirectory files, string actionRow = "a_tttMoveCell", string readRow = "a_tttActive", string bindingToken = "state.a_tttWinner", string? moduleText = null) {
+    private static string ModuleText(string module) => System.Text.Encoding.UTF8.GetString(bytes: Puck.Testing.ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.World/Assets/worlds/games/{module}.puck")));
+    private static string WriteHost(TemporaryDirectory files, string actionRow = "a$tttMoveCell", string readRow = "a$tttActive", string bindingToken = "state.a$tttWinner", string? moduleText = null) {
         files.WriteText(
             name: "basis.world.json",
             text: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes())
@@ -112,12 +87,12 @@ public sealed class ModuleExportsLawTests {
         );
     }
 
-    [InlineData("a_tttBoard", "a_tttActive", "state.a_tttWinner", "a_tttBoard", "exports.actions", "$.interactions.interactions[0].effects[0].state")]
-    [InlineData("a_tttMoveCell", "a_tttMaskX", "state.a_tttWinner", "a_tttMaskX", "exports.reads", "$.rules[1].gate.state")]
-    [InlineData("a_tttMoveCell", "a_tttActive", "state.a_tttMoveCell", "a_tttMoveCell", "exports.bindings", "$.hud.panels[0].elements[0].binding")]
+    [InlineData("a$tttBoard", "a$tttActive", "state.a$tttWinner", "a$tttBoard", "exports.actions", "$.interactions.interactions[0].effects[0].state")]
+    [InlineData("a$tttMoveCell", "a$tttMaskX", "state.a$tttWinner", "a$tttMaskX", "exports.reads", "$.rules[1].gate.state")]
+    [InlineData("a$tttMoveCell", "a$tttActive", "state.a$tttMoveCell", "a$tttMoveCell", "exports.bindings", "$.hud.panels[0].elements[0].binding")]
     [Theory]
     public void ABindingToANameTheModuleDoesNotExportRefusesByName(string actionRow, string readRow, string bindingToken, string name, string list, string path) {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
         var hostPath = WriteHost(
             files: files,
             actionRow: actionRow,
@@ -149,7 +124,7 @@ public sealed class ModuleExportsLawTests {
     }
     [Fact]
     public void AHostDrivesReadsAndBindsTheModuleThroughItsExports() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
         var hostPath = WriteHost(files: files);
 
         Assert.True(
@@ -163,7 +138,7 @@ public sealed class ModuleExportsLawTests {
         Assert.Null(@object: definition!.Exports);
         Assert.Contains(
             collection: definition.State,
-            filter: static row => (row.Name.Value == "a_tttMoveCell")
+            filter: static row => (row.Name.Value == "a$tttMoveCell")
         );
 
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -179,7 +154,7 @@ public sealed class ModuleExportsLawTests {
             actual: Cell(
                 fixture: fixture,
                 key: "4",
-                row: "a_tttBoard"
+                row: "a$tttBoard"
             )
         );
         Assert.Equal(
@@ -187,7 +162,7 @@ public sealed class ModuleExportsLawTests {
             actual: Cell(
                 fixture: fixture,
                 key: WorldStateRow.SlotKey,
-                row: "a_tttActive"
+                row: "a$tttActive"
             )
         );
         Assert.Equal(
@@ -222,12 +197,7 @@ public sealed class ModuleExportsLawTests {
     }
     [Fact]
     public void APlacementBoardFacetBindsOnlyAnExportedOccupancyRow() {
-        var fixtures = Path.Combine(
-            path1: RepositoryRoot(),
-            path2: "tests",
-            path3: "Puck.World.Tests",
-            path4: "Fixtures"
-        );
+        var fixtures = RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Tests/Fixtures");
         var host = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: Path.Combine(
             path1: fixtures,
             path2: "minimal-hexlines-host.world.json"
@@ -242,7 +212,7 @@ public sealed class ModuleExportsLawTests {
             path2: host[propertyName: "imports"]![index: 0]![propertyName: "document"]!.GetValue<string>()
         ));
 
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
         var exported = files.WriteText(
             name: "exported.world.json",
             text: host.ToJsonString()
@@ -284,7 +254,7 @@ public sealed class ModuleExportsLawTests {
     }
     [Fact]
     public void ASiblingImportBindsOnlyWhatItsSiblingExports() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
         files.WriteText(
             name: "basis.world.json",
@@ -314,7 +284,7 @@ public sealed class ModuleExportsLawTests {
         var refused = files.WriteText(
             name: "refused.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "private.world.json" }, { "document": "reader.world.json" }] }
+            { "basis": "basis", "imports": [{ "document": "private" }, { "document": "reader" }] }
             """
         );
 
@@ -335,7 +305,7 @@ public sealed class ModuleExportsLawTests {
         var admitted = files.WriteText(
             name: "admitted.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "public.world.json" }, { "document": "reader.world.json" }] }
+            { "basis": "basis", "imports": [{ "document": "public" }, { "document": "reader" }] }
             """
         );
 
@@ -368,7 +338,7 @@ public sealed class ModuleExportsLawTests {
 
         module[propertyName: "exports"]![propertyName: "reads"]!.AsArray().Add(value: "tttNoSuchRow");
 
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
         var hostPath = WriteHost(
             files: files,
             moduleText: module.ToJsonString()
@@ -390,7 +360,7 @@ public sealed class ModuleExportsLawTests {
 
         world[propertyName: "exports"] = new JsonObject { [propertyName: "reads"] = new JsonArray() };
 
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
         var path = files.WriteText(
             name: "module-as-world.world.json",
             text: world.ToJsonString()

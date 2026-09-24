@@ -1,27 +1,32 @@
-import { TokenCredential } from "@azure/identity";
-import { AccountInfo } from "@azure/msal-browser";
-import { AddMiddleware, Dispatch, Reducer, UnknownAction } from "@reduxjs/toolkit";
-import React from "react";
-import { HostStore } from "./store";
+import type { TokenCredential } from "@azure/identity";
+import type { AccountInfo } from "@azure/msal-browser";
+import type { ComponentType, ReactNode } from "react";
+import type { OnboardingActor } from "./onboarding";
 
 export type ServiceFactory<TServiceProvider, T> = (serviceProvider: TServiceProvider) => T;
 
 export interface HostContextValue {
   activeAccount: AccountInfo | null;
   isSignedIn: boolean;
+  /** The signed-in account's setup (see `onboardingMachine`); the portal reads its state and may send `RETRY`. */
+  onboarding: OnboardingActor;
   serviceProvider: ServiceProvider<HostServiceProviders>;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
-  store: {
-    addMiddleware: AddMiddleware<any, Dispatch<UnknownAction>>;
-    setReducer: (key: string, reducer: Reducer) => void;
-    value: HostStore;
-  };
 }
 export interface HostProviderProperties {
-  children: React.ReactNode;
+  children: ReactNode;
+  onboarding: OnboardingActor;
   serviceProvider: ServiceProvider<HostServiceProviders>;
   signInScopes: string[];
+  tokenCredential: TokenCredential;
+}
+/**
+ * The portal's federated module (`portal/portal-app`): the one contract between the host and the portal. The host
+ * passes its context; the portal served on its own renders with none.
+ */
+export interface PortalModule {
+  default: ComponentType<{ context?: HostContextValue }>;
 }
 export interface HostServiceProviders {
   tokenCredential: TokenCredential;

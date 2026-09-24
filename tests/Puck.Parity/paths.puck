@@ -12,12 +12,10 @@ host {
   width: 640
   height: 480
   targetHertz: 0
-  rayQuery: true
   surfaceFormat: r8g8b8a8
   fullscreen: false
   presentMode: Immediate
   exitAfterSeconds: 0
-  timing: false
 }
 
 simulation {
@@ -52,7 +50,6 @@ views {
 }
 
 captures {
-  directory: "captures"
   rows [
     {
       station: paths

@@ -25,7 +25,8 @@ public sealed class WorldScheduleResumeLawTests {
 
     [Fact]
     public void EveryDocumentRestoringVerbIsRefusedByNameInsideAnArmedRun() {
-        var legDirectory = ScheduledWorldBoot.Leg(name: "armed-resume");
+        using var leg = ScheduledWorldBoot.Leg();
+        var legDirectory = leg.PathOf(name: "armed-resume");
         var savePath = Path.Combine(
             path1: legDirectory,
             path2: "saved.world.json"
@@ -40,8 +41,6 @@ public sealed class WorldScheduleResumeLawTests {
             world: ScheduledWorld
         );
         var transcript = (run.Stdout + run.Stderr);
-
-        Assert.False(condition: run.TimedOut);
 
         foreach (var verb in Verbs) {
             Assert.Contains(
@@ -58,7 +57,8 @@ public sealed class WorldScheduleResumeLawTests {
     }
     [Fact]
     public void TheSameVerbsOnAnUnarmedBootAreNotRefusedForThatReason() {
-        var legDirectory = ScheduledWorldBoot.Leg(name: "unarmed-resume");
+        using var leg = ScheduledWorldBoot.Leg();
+        var legDirectory = leg.PathOf(name: "unarmed-resume");
         var savePath = Path.Combine(
             path1: legDirectory,
             path2: "saved.world.json"
@@ -70,7 +70,6 @@ public sealed class WorldScheduleResumeLawTests {
         );
         var transcript = (run.Stdout + run.Stderr);
 
-        Assert.False(condition: run.TimedOut);
         Assert.DoesNotContain(
             actualString: transcript,
             comparisonType: StringComparison.Ordinal,

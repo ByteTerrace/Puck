@@ -27,11 +27,13 @@ namespace Puck.State;
 /// <param name="Iterations">How many tree iterations the job runs.</param>
 /// <param name="JudgeRules">How many rules a verdict evaluates.</param>
 /// <param name="HasOutcome">Whether the job's method backpropagates an outcome rather than a score.</param>
+/// <param name="TreeNodes">How many nodes of its pool a tree job's tree holds, the root included; zero for a job that
+/// grows no tree.</param>
 public readonly record struct ArenaSearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerStep, long JudgeCost,
     long Allowance, long PeakStepWork, long Work,
     bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, int Iteration, int Iterations,
-    int JudgeRules = 0, bool HasOutcome = false
+    int JudgeRules = 0, bool HasOutcome = false, int TreeNodes = 0
 );
 /// <summary>
 /// Runs a set of search jobs over one <see cref="StateArena"/>: each candidate is a journal scope holding the
@@ -116,14 +118,16 @@ public sealed partial class ArenaSearch {
                 TtMeta = new long[SearchCapacity.TranspositionEntries];
                 TtValue = new long[SearchCapacity.TranspositionEntries];
             }
-            if (plan.Method == SearchMethod.Tree) {
+            if (plan.Method == SearchMethod.MonteCarlo) {
                 var nodes = SearchCapacity.TreeNodes;
 
                 Path = new int[(plan.Depth + 2)];
                 TreeChildCount = new int[nodes];
-                TreeExpanded = new long[nodes];
                 TreeFirstChild = new int[nodes];
+                TreeNextSibling = new int[nodes];
                 TreeParent = new int[nodes];
+                TreeScanStart = new int[nodes];
+                TreeScanned = new int[nodes];
                 TreeShape = new int[nodes];
                 TreeTarget = new int[nodes];
                 TreeToken = new int[nodes];
@@ -152,10 +156,10 @@ public sealed partial class ArenaSearch {
         public IArenaSearchJudge Judge { get; set; } = null!;
         // Every row a position key folds: what the plan names and what the judge reads, ascending.
         public int[] KeyRows { get; set; } = [];
+
         // The judge reads the live clock directly, or one of its keyed rows has value-over-time traits. This is
         // derived once when the job is installed, keeping an idle untimed step to its existing row-version walk.
         public bool TimeSensitive { get; set; }
-
         public long[] Legal { get; set; }
         public Level[] Levels { get; set; }
         public long Nodes { get; set; }
@@ -191,9 +195,13 @@ public sealed partial class ArenaSearch {
         public CellKey[] TokenKeys { get; set; }
         public int[]? TreeChildCount { get; set; }
         public int TreeCount { get; set; }
-        public long[]? TreeExpanded { get; set; }
+        // A node's children are a list: the eldest is FirstChild and each names the next in NextSibling, -1 ending it.
         public int[]? TreeFirstChild { get; set; }
+        public int[]? TreeNextSibling { get; set; }
         public int[]? TreeParent { get; set; }
+        // How many of its candidates a node's own expansion has scanned, and the flat candidate it scans from.
+        public int[]? TreeScanStart { get; set; }
+        public int[]? TreeScanned { get; set; }
         public int[]? TreeShape { get; set; }
         public int[]? TreeTarget { get; set; }
         public int[]? TreeToken { get; set; }
@@ -205,11 +213,9 @@ public sealed partial class ArenaSearch {
         public bool TreeActive { get; set; }
         public long[]? TtMeta { get; set; }
         public long[]? TtValue { get; set; }
+        // The playout ply's scan: how many candidates it has tried, and the flat candidate it tries from.
         public int UScan { get; set; }
-        public int UShape { get; set; }
         public int UStart { get; set; }
-        public int UTarget { get; set; }
-        public int UToken { get; set; }
 
         public CellKey[] ReachKeys { get; set; } = [];
 
@@ -549,7 +555,8 @@ public sealed partial class ArenaSearch {
             Iteration: job.Iteration,
             Iterations: plan.Iterations,
             JudgeRules: job.Judge.RuleCount,
-            HasOutcome: (plan.Method == SearchMethod.Tree)
+            HasOutcome: (plan.Method == SearchMethod.MonteCarlo),
+            TreeNodes: job.TreeCount
         );
     }
 
@@ -940,37 +947,28 @@ public sealed partial class ArenaSearch {
         job.Token = 0;
         job.Wide?.AsSpan().Clear();
     }
-    private static long Raw(in CellValue value) => (value.Kind switch {
-        CellKind.Bool => (value.AsBool
-        ? 1L
-        : 0L),
-        CellKind.Fixed => value.AsFixed,
-        CellKind.Int => value.AsInt,
-        _ => 0L,
-    });
-    private long Slot(int rowOrdinal) => ((m_arena.TryRead(
+
+    // The clocks the job is searched at: a plan row's advancing or cycling cell answers what the rules read now.
+    private ArenaTime Time => ArenaTime.At(
+        engineTick: m_engineTick,
+        tick: m_tick
+    );
+
+    private long Slot(int rowOrdinal) => (m_arena.TryReadLiveNumber(
         key: m_slotKey,
         rowOrdinal: rowOrdinal,
+        time: Time,
         value: out var value
-    ))
-        ? Raw(value: value)
+    )
+        ? value
         : 0L
     );
-    private bool TryNumberAt(int rowOrdinal, int position, out long value) {
-        if (m_arena.TryReadAt(
-            position: position,
-            rowOrdinal: rowOrdinal,
-            value: out var carried
-        )) {
-            value = Raw(value: carried);
-
-            return true;
-        }
-
-        value = 0L;
-
-        return false;
-    }
+    private bool TryNumberAt(int rowOrdinal, int position, out long value) => m_arena.TryReadLiveNumberAt(
+        position: position,
+        rowOrdinal: rowOrdinal,
+        time: Time,
+        value: out value
+    );
     private ArenaSearchView View(int ply) => new(
         Arena: m_arena,
         EngineTick: m_engineTick,

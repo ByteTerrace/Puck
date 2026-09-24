@@ -1,0 +1,7 @@
+# The puck counters workload script. The collector runs it on each backend's offscreen World, then closes it with
+# wire.errors and quit, and reads the one world.counters --json response below.
+# Every frame renders every pass, so the newest completed submission is a full frame rather than a re-composite.
+world.cadence off
+# Pinned ticks: the read lands after the same completed tick on every run.
+world.wait 120
+world.counters --json

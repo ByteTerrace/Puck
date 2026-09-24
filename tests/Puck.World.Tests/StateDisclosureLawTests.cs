@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text;
 using Puck.Assets.Documents;
 using Puck.World.Protocol;
@@ -12,10 +13,10 @@ public sealed class StateDisclosureLawTests {
             new(
             Name(value: "cards"),
             CellKind.Int,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "ace",
                     value: 101
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "king",
                     value: 202
                 )],
@@ -24,7 +25,7 @@ public sealed class StateDisclosureLawTests {
             new(
             Name(value: "handA"),
             CellKind.Bool,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "ace",
                     kind: CellKind.Bool,
                     value: 1
@@ -38,7 +39,7 @@ public sealed class StateDisclosureLawTests {
             new(
             Name(value: "handB"),
             CellKind.Bool,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "king",
                     kind: CellKind.Bool,
                     value: 1
@@ -51,13 +52,6 @@ public sealed class StateDisclosureLawTests {
         )
         ]),
     };
-    private static StateCell Cell(string key, long value, CellKind kind = CellKind.Int) => new(
-        Name(value: key),
-        ((kind == CellKind.Bool)
-            ? CellValue.Bool(value: (value != 0L))
-            : CellValue.Int(value: value)
-        )
-    );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
 
     [Fact]
@@ -80,15 +74,15 @@ public sealed class StateDisclosureLawTests {
                     Name(value: "pieces"),
                     CellKind.Int,
                     Capacity: 2,
-                    Cells: [Cell(key: "piece0", value: 0), Cell(key: "piece1", value: 1)]
+                    Cells: [StateFixtures.Cell(key: "piece0", value: 0), StateFixtures.Cell(key: "piece1", value: 1)]
                 ),
                 new(
                     Name(value: "truth"),
                     CellKind.Int,
-                    Cells: [Cell(
+                    Cells: [StateFixtures.Cell(
                             key: "piece0",
                             value: 7
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "piece1",
                             value: 9
                         )],
@@ -98,14 +92,14 @@ public sealed class StateDisclosureLawTests {
                 new(
                     Name(value: "positions"),
                     CellKind.Int,
-                    Cells: [Cell(key: "piece0", value: 0), Cell(key: "piece1", value: 1)],
+                    Cells: [StateFixtures.Cell(key: "piece0", value: 0), StateFixtures.Cell(key: "piece1", value: 1)],
                     Domain: new StateDomain.KeysOf(Row: Name(value: "pieces")),
                     Visibility: new([])
                 ),
                 new(
                     Name(value: "sight"),
                     CellKind.Bool,
-                    Cells: [Cell(
+                    Cells: [StateFixtures.Cell(
                             key: "0",
                             kind: CellKind.Bool,
                             value: 1
@@ -145,7 +139,7 @@ public sealed class StateDisclosureLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.Observe(Row: "known"),
-            WorldPrincipal.Seat(slot: 0),
+            Principal.Seat(slot: 0),
             8,
             "test",
             out _,
@@ -159,7 +153,7 @@ public sealed class StateDisclosureLawTests {
             condition: WorldArenaTransforms.TryApply(
                 definition,
                 new StateTransform.Observe(Row: "known"),
-                WorldPrincipal.World,
+                Principal.World,
                 8,
                 "test",
                 out var seen,
@@ -169,7 +163,7 @@ public sealed class StateDisclosureLawTests {
         );
         var changed = seen.WithWorldState(rows: seen.State.Select(selector: r => r.Name.Value switch {
             "truth" => r with {
-                Cells = [Cell(
+                Cells = [StateFixtures.Cell(
                 key: "piece0",
                 value: 42
             )],
@@ -182,7 +176,7 @@ public sealed class StateDisclosureLawTests {
             condition: WorldArenaTransforms.TryApply(
                 changed,
                 new StateTransform.Observe(Row: "known"),
-                WorldPrincipal.World,
+                Principal.World,
                 12,
                 "test",
                 out var remembered,
@@ -192,7 +186,7 @@ public sealed class StateDisclosureLawTests {
         );
         var cell = Assert.Single(collection: Assert.Single(collection: Fixtures.Disclose(
             definition: remembered,
-            recipient: WorldPrincipal.Seat(slot: 0)
+            recipient: Principal.Seat(slot: 0)
         )!).Cells);
 
         Assert.Equal(
@@ -207,8 +201,8 @@ public sealed class StateDisclosureLawTests {
             cell.Observation
         );
         var moved = remembered.WithWorldState(rows: remembered.State.Select(selector: row => row.Name.Value switch {
-            "positions" => row with { Cells = [Cell(key: "piece0", value: 1), Cell(key: "piece1", value: 0)] },
-            "sight" => row with { Cells = [Cell(key: "1", kind: CellKind.Bool, value: 1)] },
+            "positions" => row with { Cells = [StateFixtures.Cell(key: "piece0", value: 1), StateFixtures.Cell(key: "piece1", value: 0)] },
+            "sight" => row with { Cells = [StateFixtures.Cell(key: "1", kind: CellKind.Bool, value: 1)] },
             _ => row,
         }).ToArray());
 
@@ -216,7 +210,7 @@ public sealed class StateDisclosureLawTests {
             condition: WorldArenaTransforms.TryApply(
                 moved,
                 new StateTransform.Observe(Row: "known"),
-                WorldPrincipal.World,
+                Principal.World,
                 16,
                 "test",
                 out var followed,
@@ -226,7 +220,7 @@ public sealed class StateDisclosureLawTests {
         );
         var followedCell = Assert.Single(collection: Assert.Single(collection: Fixtures.Disclose(
             definition: followed,
-            recipient: WorldPrincipal.Seat(slot: 0)
+            recipient: Principal.Seat(slot: 0)
         )!).Cells);
 
         Assert.Equal("piece0", followedCell.Key);
@@ -259,14 +253,14 @@ public sealed class StateDisclosureLawTests {
             WorldDisclosureTier.Presentation,
             "test",
             1,
-            WorldPrincipal.Seat(slot: 0)
+            Principal.Seat(slot: 0)
         )!));
         var b = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: Fixtures.Project(
             definition,
             WorldDisclosureTier.Presentation,
             "test",
             1,
-            WorldPrincipal.Seat(slot: 1)
+            Principal.Seat(slot: 1)
         )!));
 
         Assert.Contains(
@@ -401,17 +395,17 @@ public sealed class StateDisclosureLawTests {
                 Capacity: 2,
                 Visibility: new(),
                 Cells: [
-                Cell(
+                StateFixtures.Cell(
                         key: "cardA",
                         value: 101
-                    ) with { Visibility = new([WorldPrincipal.Peer(
+                    ) with { Visibility = new([Principal.Peer(
                             generation: 1,
                             index: start
                         ).Describe()]) },
-                Cell(
+                StateFixtures.Cell(
                         key: "cardB",
                         value: 202
-                    ) with { Visibility = new([WorldPrincipal.Peer(
+                    ) with { Visibility = new([Principal.Peer(
                             generation: 1,
                             index: (start + 1)
                         ).Describe()]) }
@@ -419,28 +413,26 @@ public sealed class StateDisclosureLawTests {
             )]),
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
-        using var host = new WorldPeerHost(fixture.Server);
-
-        host.Start(listen: "127.0.0.1:0");
-        using var pumpCancellation = new CancellationTokenSource();
-        var pump = AdmissionWireFixture.RunPumpAsync(
-            fixture,
-            host,
-            pumpCancellation.Token
+        using var host = AdmissionWireFixture.StartHost(
+            clock: out _,
+            server: fixture.Server
         );
 
-        try {
-            using var deadline = Laws.SocketDeadline();
+        await using (AdmissionWireFixture.StartPump(
+            fixture: fixture,
+            host: host
+        )) {
+            var testToken = TestContext.Current.CancellationToken;
             var a = await AdmissionWireFixture.ConnectAndAdmitAsync(
-                host,
-                first,
-                deadline.Token
+                ct: testToken,
+                host: host,
+                identity: first
             );
             using var clientA = a.Client;
             var b = await AdmissionWireFixture.ConnectAndAdmitAsync(
-                host,
-                second,
-                deadline.Token
+                ct: testToken,
+                host: host,
+                identity: second
             );
             using var clientB = b.Client;
 
@@ -455,12 +447,12 @@ public sealed class StateDisclosureLawTests {
             var seenA = await AdmissionWireFixture.SubmitQueryAsync(
                 clientA.GetStream(),
                 new WorldQuery.StateObservations(Row: "hands"),
-                deadline.Token
+                testToken
             );
             var seenB = await AdmissionWireFixture.SubmitQueryAsync(
                 clientB.GetStream(),
                 new WorldQuery.StateObservations(Row: "hands"),
-                deadline.Token
+                testToken
             );
 
             Assert.False(
@@ -500,9 +492,6 @@ public sealed class StateDisclosureLawTests {
                 expectedA,
                 seenB.Text
             );
-        } finally {
-            pumpCancellation.Cancel();
-            await pump;
         }
     }
 }

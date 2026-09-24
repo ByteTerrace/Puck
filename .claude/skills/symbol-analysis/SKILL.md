@@ -20,19 +20,21 @@ re-run the relevant command against the current tree before relying on them.
 
 ## Start the CLI from a clean checkout
 
-Run from the repository root. Prefer:
+Run from the repository root with the checkout's own CLI build, never a
+published copy or the global `puck` tool, both of which lag the head. Copy
+`src/Puck.Cli/bin/Release/net10.0/` to a scratch directory and run the copy, so
+the running tool never locks the build output another build needs:
 
 ```text
-dotnet src/Puck.Cli/publish/Puck.Cli.dll <verb> <arguments>
+dotnet <scratch-copy>/Puck.Cli.dll <verb> <arguments>
 ```
 
-If the published assembly is absent:
+If that build is absent, build it (`dotnet build src/Puck.Cli -c Release`) or
+run the tracked project directly:
 
 ```text
 dotnet run --project src/Puck.Cli/Puck.Cli.csproj -c Release -- <verb> <arguments>
 ```
-
-Never depend exclusively on ignored `publish/puck.exe`.
 
 ## Evidence rules
 

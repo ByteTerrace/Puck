@@ -2,12 +2,13 @@ using Xunit;
 
 namespace Puck.State.Rules.Tests;
 
-/// <summary>CONTRACT UNDER TEST: typed-pool work bounds include fixed-slot mutations, journal payload widths,
-/// snapshot scans, and every row a cascading release can mutate.</summary>
+/// <summary>CONTRACT UNDER TEST: typed-pool work bounds include fixed-slot mutations, the journal entries and vector
+/// components they record, snapshot scans, and every row a cascading release can mutate, in the element operations
+/// every other effect is priced in: a text value is journaled by reference, so its length prices nothing.</summary>
 public sealed class PoolWorkBudgetLawTests {
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static StateSection Section(int dimensions) => new(
-        Spaces: [new StateSpace(Name: Name(value: "pose"), Model: "test", Revision: "1", Dimensions: dimensions)],
+        Spaces: [new StateSpace(name: Name(value: "pose"), model: "test", revision: "1", dimensions: dimensions)],
         Records: [new StateRecord(Name: Name(value: "piece"), Fields: [
             new StatePoolField(Name: Name(value: "count"), Kind: CellKind.Int, Default: CellValue.Int(value: 0L)),
             new StatePoolField(Name: Name(value: "label"), Kind: CellKind.Text, Default: CellValue.Text(value: string.Empty)),
@@ -64,11 +65,11 @@ public sealed class PoolWorkBudgetLawTests {
             var mark = arena.BeginScope();
 
             Assert.True(condition: arena.TryClaim(handle: out var handle, poolOrdinal: 0, reason: out var reason), userMessage: reason);
-            var claimBytes = arena.Journal.Bytes;
+            var claimed = (arena.Journal.Length + arena.Journal.ComponentLength);
 
-            Assert.True(condition: (claim.Cost(context: compiled.Context).Units >= claimBytes));
+            Assert.True(condition: (claim.Cost(context: compiled.Context).Units >= claimed));
             Assert.True(condition: arena.TryRelease(handle: handle, reason: out reason), userMessage: reason);
-            Assert.True(condition: (release.Cost(context: compiled.Context).Units >= (arena.Journal.Bytes - claimBytes)));
+            Assert.True(condition: (release.Cost(context: compiled.Context).Units >= ((arena.Journal.Length + arena.Journal.ComponentLength) - claimed)));
             arena.Rewind(mark: mark);
 
             releaseCost ??= release.Cost(context: compiled.Context).Units;
@@ -98,12 +99,12 @@ public sealed class PoolWorkBudgetLawTests {
         var text = claim.Effects[1].Cost(context: compiled.Context).Units;
         var vectorCost = claim.Effects[2].Cost(context: compiled.Context).Units;
 
-        Assert.True(condition: (text > scalar));
+        Assert.Equal(actual: text, expected: scalar);
         Assert.True(condition: (vectorCost > scalar));
-        Assert.True(condition: (vectorCost >= (ArenaJournal.EntryBytes + Dimensions)));
+        Assert.True(condition: (vectorCost >= (1L + Dimensions)));
     }
     [Fact]
-    public void StaticAndLexicalTextWritesChargeTheAuthoredPayloadBytes() {
+    public void StaticAndLexicalTextWritesCostTheSameWhateverTheirLength() {
         var section = Section(dimensions: 8);
         var lexical = Compile(section: section, new ActionEffect.Claim(
             Pool: "pieces",
@@ -115,13 +116,13 @@ public sealed class PoolWorkBudgetLawTests {
         ));
         var claim = Assert.IsType<ClaimEffect>(@object: Assert.Single(collection: lexical.Rule.Effects));
 
-        Assert.True(condition: (claim.Effects[1].Cost(context: lexical.Context).Units > claim.Effects[0].Cost(context: lexical.Context).Units));
+        Assert.Equal(expected: claim.Effects[0].Cost(context: lexical.Context).Units, actual: claim.Effects[1].Cost(context: lexical.Context).Units);
 
         var seeded = section with { Pools = [section.Pools![0] with { Initial = [new StatePoolSeed(Slot: 0)] }] };
-        var shortStatic = Compile(section: seeded, new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "label"), Text: "a"));
-        var longStatic = Compile(section: seeded, new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "label"), Text: "a longer label"));
+        var shortStatic = Compile(section: seeded, new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(field: "label", pool: "pieces", slot: 0), Text: "a"));
+        var longStatic = Compile(section: seeded, new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(field: "label", pool: "pieces", slot: 0), Text: "a longer label"));
 
-        Assert.True(condition: (longStatic.Rule.Effects[0].Cost(context: longStatic.Context).Units > shortStatic.Rule.Effects[0].Cost(context: shortStatic.Context).Units));
+        Assert.Equal(expected: shortStatic.Rule.Effects[0].Cost(context: shortStatic.Context).Units, actual: longStatic.Rule.Effects[0].Cost(context: longStatic.Context).Units);
     }
     [Fact]
     public void ReleaseDeclaresEveryTransitiveCascadeRowAsAWriteHazard() {
@@ -181,7 +182,9 @@ public sealed class PoolWorkBudgetLawTests {
         var nested = Release(section: nestedSection);
         var directCost = direct.Effect.Cost(context: direct.Context).Units;
         var nestedCost = nested.Effect.Cost(context: nested.Context).Units;
-        var sparseRelease = (512L + (23L * ArenaJournal.EntryBytes));
+        // The door, one fixed slot's twenty lanes and its value entry twice, and the generation entry; the record
+        // declares no field.
+        var sparseRelease = (512L + 23L);
 
         // Direct bound: 9 releases * (8 handles + 1 occupancy word) = 81. Nested bound:
         // 10 releases * (9 handles + 2 occupancy words) = 110. Include the sparse pool's own release.

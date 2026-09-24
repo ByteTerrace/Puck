@@ -70,8 +70,6 @@ internal static class WorldAddonWire {
             case AddonCapabilityMask.Observe:
                 capability = WorldCapability.Observe;
                 return true;
-            // AddonCapabilityMask.Reserved (bit 2, formerly Present) maps to no capability — the reserved hole
-            // falls through to the default refusal below, same as any other undefined mask value.
             case AddonCapabilityMask.Control:
                 capability = WorldCapability.Control;
                 return true;

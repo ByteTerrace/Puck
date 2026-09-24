@@ -26,40 +26,47 @@ public static partial class WorldAuthorityCheckpointCodec {
             Intent: intent
         );
     }
-    private static void WriteInputHoldParticipant(WireWriter writer, WorldInputHoldRuntime.WorldInputHoldParticipantCheckpoint row) {
+    private static void WriteInputHoldParticipant(WireWriter writer, WorldInputHoldParticipantCheckpoint row) {
+        // An inactive participant carries no principal: its runtime slot holds the unstamped default, which names no
+        // one and has no wire value.
         writer.WriteBoolean(value: row.Active);
-        WritePrincipal(
-            writer: writer,
-            principal: row.Principal
-        );
+
+        if (row.Active) {
+            WritePrincipal(
+                writer: writer,
+                principal: row.Principal
+            );
+        }
+
         writer.WriteInt32(value: row.Measured);
         writer.WriteInt32(value: row.Target);
         writer.WriteInt32(value: row.Applied);
         writer.WriteInt32(value: row.LowerTarget);
         writer.WriteInt32(value: row.LowerStableTicks);
         writer.WriteInt32(value: row.HistoryStart);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.History,
             writeItem: WriteSubmittedInput
         );
     }
-    private static WorldInputHoldRuntime.WorldInputHoldParticipantCheckpoint ReadInputHoldParticipant(ref WireReader reader) {
+    private static WorldInputHoldParticipantCheckpoint ReadInputHoldParticipant(ref WireReader reader) {
         var active = reader.ReadBoolean();
-        var principal = ReadPrincipal(reader: ref reader);
+        var principal = (active
+            ? WorldWireCodec.ReadPrincipal(reader: ref reader)
+            : default);
         var measured = reader.ReadInt32();
         var target = reader.ReadInt32();
         var applied = reader.ReadInt32();
         var lowerTarget = reader.ReadInt32();
         var lowerStableTicks = reader.ReadInt32();
         var historyStart = reader.ReadInt32();
-        var history = ReadArray(
-            reader: ref reader,
+        var history = reader.ReadArray(
             field: "input hold history",
-            readItem: static (ref WireReader r) => ReadSubmittedInput(reader: ref r)
+            readItem: static (ref WireReader r) => ReadSubmittedInput(reader: ref r),
+            maximum: MaxCollectionCount
         );
 
-        return new WorldInputHoldRuntime.WorldInputHoldParticipantCheckpoint(
+        return new WorldInputHoldParticipantCheckpoint(
             Active: active,
             Applied: applied,
             History: history,
@@ -71,25 +78,24 @@ public static partial class WorldAuthorityCheckpointCodec {
             Target: target
         );
     }
-    private static byte[] EncodeInputHold(WorldInputHoldRuntime.WorldInputHoldCheckpoint section) {
+    private static byte[] EncodeInputHold(WorldInputHoldCheckpoint section) {
         var writer = new WireWriter();
 
         writer.WriteInt32(value: section.MaximumSetter);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Participants,
             writeItem: WriteInputHoldParticipant
         );
 
         return writer.ToArray();
     }
-    private static bool TryDecodeInputHold(byte[] bytes, out string reason, out WorldInputHoldRuntime.WorldInputHoldCheckpoint section) {
+    private static bool TryDecodeInputHold(byte[] bytes, out string reason, out WorldInputHoldCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
         var maximumSetter = reader.ReadInt32();
-        var participants = ReadArray(
-            reader: ref reader,
+        var participants = reader.ReadArray(
             field: "input hold participants",
-            readItem: static (ref WireReader r) => ReadInputHoldParticipant(reader: ref r)
+            readItem: static (ref WireReader r) => ReadInputHoldParticipant(reader: ref r),
+            maximum: MaxCollectionCount
         );
 
         if (!reader.TryFinish(failure: out var failure)) {
@@ -99,7 +105,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new WorldInputHoldRuntime.WorldInputHoldCheckpoint(
+        section = new WorldInputHoldCheckpoint(
             MaximumSetter: maximumSetter,
             Participants: participants
         );

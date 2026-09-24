@@ -73,8 +73,10 @@ source-reader pixel graph reports ready only after publishing a usable host
 frame. A source-reader shared graph first validates that its native sample is a
 Direct3D texture, then waits for consumer targets after returning.
 `Win32D3D11CameraFrameConverter` is the shared tier's compute kernel for the
-native YUY2/NV12/L8 surfaces. Color conversion preserves the format's Media
-Foundation transfer-matrix, nominal-range, and chroma-siting attributes;
+native YUY2/NV12/L8 surfaces. Its kernels (`Assets/Shaders/camera-conversion.hlsl`)
+compile to `cs_5_0` at build, so the camera's device only creates them. Color
+conversion preserves the format's Media Foundation transfer-matrix,
+nominal-range, and chroma-siting attributes, passed to the kernel as constants;
 unsupported metadata or a failed Direct3D resource/view creation refuses the
 GPU tier so the coordinated pair reopens on CPU pixels.
 `Win32D3D11VideoDevice` is the source reader's DXVA
@@ -88,7 +90,7 @@ are opened once on the graph's device (`ID3D11Device1::OpenSharedResource1`,
 the same pattern the converter uses for its own output ring) and its latest
 slot is acquired and released around each run, running unbound (a null SRV,
 its `boundMask` bit clear) on a cycle with nothing published yet. A kernel
-compiles once every `Sensor`/`StrobePair` socket resolves; a `Ring`/`Unbound`
+is created once every `Sensor`/`StrobePair` socket resolves; a `Ring`/`Unbound`
 socket never blocks that. `Win32CameraControlSurface` maps the neutral control
 vocabulary onto either a WinRT `VideoDeviceController` or the legacy
 `IAMCameraControl`/`IAMVideoProcAmp` pair.

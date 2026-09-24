@@ -1,7 +1,7 @@
+using Puck.Commands;
 using Puck.Testing;
 using System.Buffers.Binary;
 using System.Net;
-using System.Net.Sockets;
 using System.Numerics;
 using System.Security.Cryptography;
 
@@ -28,7 +28,9 @@ namespace Puck.World.Tests;
 /// the socket laws still exercise the complete cryptographic Hello door. OAuth admission has separate laws.
 /// </summary>
 public sealed class AdmissionSecurityLawTests {
-    private static async Task<Stream> ConnectPastChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {
+    private static CancellationToken TestToken => TestContext.Current.CancellationToken;
+
+    private static async Task<(Stream Stream, ReadOnlyMemory<byte> Challenge)> ConnectPastChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
         await client.ConnectAsync(
@@ -56,13 +58,13 @@ public sealed class AdmissionSecurityLawTests {
             expected: WorldPeerWireFormat.DownstreamKind.HelloChallenge
         );
 
-        return stream;
+        return (stream, challenge.Body);
     }
     /// <summary>Connects, completes the Hello version door, reads the identity challenge, then half-closes the send
     /// side without ever writing an identity frame — a genuine disconnect. Returns whether the server closed the
-    /// connection with no bytes sent back.</summary>
-    private static async Task<bool> DisconnectAfterChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {
-        var stream = await ConnectPastChallengeAsync(
+    /// connection with no bytes sent back once its refusal drain expired on <paramref name="clock"/>.</summary>
+    private static async Task<bool> DisconnectAfterChallengeAsync(WorldPeerHost host, VirtualClock clock, PeerTestClient client, CancellationToken ct) {
+        var (stream, _) = await ConnectPastChallengeAsync(
             client: client,
             ct: ct,
             host: host
@@ -70,8 +72,10 @@ public sealed class AdmissionSecurityLawTests {
 
         await client.CompleteWritesAsync(ct: ct);
 
-        return await WaitForCloseAsync(
+        return await ExpireUntilClosedAsync(
+            clock: clock,
             ct: ct,
+            handshakeDeadline: false,
             stream: stream
         );
     }
@@ -112,35 +116,28 @@ public sealed class AdmissionSecurityLawTests {
             ));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(server: fixture.Server);
+            using var host = StartHost(
+            clock: out _,
+            server: fixture.Server
+        );
 
-            host.Start(listen: "127.0.0.1:0");
-
-            using var pumpCts = new CancellationTokenSource();
-            var pumpTask = RunPumpAsync(
+            await using (StartPump(
                 fixture: fixture,
-                host: host,
-                ct: pumpCts.Token
-            );
-
-            try {
-                using var requestCts = Laws.SocketDeadline();
+                host: host
+            )) {
                 var admitted = await ConnectAndAdmitAsync(
                     host: host,
                     identity: identity,
-                    ct: requestCts.Token
+                    ct: TestToken
                 );
 
                 using (admitted.Client) {
                     return await SubmitQueryAsync(
                         stream: admitted.Client.GetStream(),
                         query: new WorldQuery.PlayerWhere(Index: PeerBodyIndex),
-                        ct: requestCts.Token
+                        ct: TestToken
                     );
                 }
-            } finally {
-                pumpCts.Cancel();
-                await pumpTask;
             }
         } finally {
             identity.Key.Dispose();
@@ -163,33 +160,18 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: entry);
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(server: fixture.Server);
-
-            host.Start(listen: "127.0.0.1:0");
-
-            using var pumpCts = new CancellationTokenSource();
-            var pumpTask = RunPumpAsync(
+            using var host = StartHost(
+            clock: out _,
+            server: fixture.Server
+        );
+            var admitted = await AdmitAsync(
                 fixture: fixture,
                 host: host,
-                ct: pumpCts.Token
-            );
-            AdmittedPeer admitted;
-
-            try {
-                using var connectCts = Laws.SocketDeadline();
-
-                admitted = await ConnectAndAdmitAsync(
-                    host: host,
-                    identity: identity,
-                    ct: connectCts.Token
-                ).ConfigureAwait(continueOnCapturedContext: false);
-            } finally {
-                pumpCts.Cancel();
-                await pumpTask.ConfigureAwait(continueOnCapturedContext: false);
-            }
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
 
             using (admitted.Client) {
-                var peer = WorldPrincipal.Peer(
+                var peer = Principal.Peer(
                     index: admitted.PeerIndex,
                     generation: admitted.Generation
                 );
@@ -206,12 +188,12 @@ public sealed class AdmissionSecurityLawTests {
                 if (revoke) {
                     fixture.Server.Revoke(
                         grant: new WorldGrant(
-                            Principal: peer,
+                            Grantee: peer,
                             Capability: WorldCapability.Drive,
                             Subject: subject,
                             Exclusive: false
                         ),
-                        actor: WorldPrincipal.Console
+                        actor: Principal.Console
                     );
                     fixture.Step();
 
@@ -232,7 +214,7 @@ public sealed class AdmissionSecurityLawTests {
                         PathHint: null,
                         Force: false
                     ),
-                    principal: WorldPrincipal.Console
+                    principal: Principal.Console
                 );
                 fixture.Step();
 
@@ -251,7 +233,7 @@ public sealed class AdmissionSecurityLawTests {
     /// <see cref="HandshakeWireFormat.WriteHelloIdentityAsync"/>'s own grammar so a deliberately malformed shape can
     /// be sent) and returns the door's downstream reply.</summary>
     private static async Task<(WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendRawIdentityFrameAsync(WorldPeerHost host, PeerTestClient client, byte[] body, CancellationToken ct) {
-        var stream = await ConnectPastChallengeAsync(
+        var (stream, _) = await ConnectPastChallengeAsync(
             client: client,
             ct: ct,
             host: host
@@ -286,7 +268,7 @@ public sealed class AdmissionSecurityLawTests {
     /// <paramref name="actualBodyBytes"/> of that body, and half-closes the send side — a peer that commits to a
     /// frame and then abandons it. Returns the door's downstream reply.</summary>
     private static async Task<(WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)> SendTruncatedIdentityFrameAsync(WorldPeerHost host, PeerTestClient client, int declaredBodyLength, int actualBodyBytes, CancellationToken ct) {
-        var stream = await ConnectPastChallengeAsync(
+        var (stream, _) = await ConnectPastChallengeAsync(
             client: client,
             ct: ct,
             host: host
@@ -341,18 +323,6 @@ public sealed class AdmissionSecurityLawTests {
             identity.Key.Dispose();
         }
     }
-    private static async Task<bool> WaitForCloseAsync(Stream stream, CancellationToken ct) {
-        var probe = new byte[1];
-
-        try {
-            return (await stream.ReadAsync(
-                buffer: probe,
-                cancellationToken: ct
-            ) == 0);
-        } catch (Exception exception) when ((exception is IOException or SocketException)) {
-            return true;
-        }
-    }
 
     /// <summary>An admission row rejected by the live grant table was never held and therefore was never explicitly
     /// revoked. Once the conflicting exclusive reservation disappears, the next rebuild must retry the CURRENT
@@ -374,9 +344,8 @@ public sealed class AdmissionSecurityLawTests {
             ));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(server: fixture.Server);
             var blocker = new WorldGrant(
-                Principal: WorldPrincipal.Seat(slot: 0),
+                Grantee: Principal.Seat(slot: 0),
                 Capability: WorldCapability.Observe,
                 Subject: body,
                 Exclusive: true
@@ -384,33 +353,21 @@ public sealed class AdmissionSecurityLawTests {
 
             fixture.Server.Grant(
                 grant: blocker,
-                actor: WorldPrincipal.Console
+                actor: Principal.Console
             );
-            host.Start(listen: "127.0.0.1:0");
 
-            using var pumpCts = new CancellationTokenSource();
-            var pumpTask = RunPumpAsync(
+            using var host = StartHost(
+            clock: out _,
+            server: fixture.Server
+        );
+            var admitted = await AdmitAsync(
                 fixture: fixture,
                 host: host,
-                ct: pumpCts.Token
+                identity: identity
             );
-            AdmittedPeer admitted;
-
-            try {
-                using var connectCts = Laws.SocketDeadline();
-
-                admitted = await ConnectAndAdmitAsync(
-                    host: host,
-                    identity: identity,
-                    ct: connectCts.Token
-                );
-            } finally {
-                pumpCts.Cancel();
-                await pumpTask;
-            }
 
             using (admitted.Client) {
-                var peer = WorldPrincipal.Peer(
+                var peer = Principal.Peer(
                     index: admitted.PeerIndex,
                     generation: admitted.Generation
                 );
@@ -426,7 +383,7 @@ public sealed class AdmissionSecurityLawTests {
 
                 fixture.Server.Revoke(
                     grant: blocker,
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 );
                 fixture.Server.EnqueueRebuild(
                     request: new WorldRebuildRequest(
@@ -435,7 +392,7 @@ public sealed class AdmissionSecurityLawTests {
                         PathHint: null,
                         Force: false
                     ),
-                    principal: WorldPrincipal.Console
+                    principal: Principal.Console
                 );
                 fixture.Step();
 
@@ -461,12 +418,11 @@ public sealed class AdmissionSecurityLawTests {
     [Fact]
     public async Task MalformedHelloIdentityFrame_DrawsNamedRefusal_ControlCleanDisconnectStaysSilent() {
         using var fixture = Fixtures.FreshServer();
-        using var host = new WorldPeerHost(server: fixture.Server);
-
-        host.Start(listen: "127.0.0.1:0");
-
-        using var testCts = Laws.SocketDeadline();
-        var testCt = testCts.Token;
+        using var host = StartHost(
+            clock: out var clock,
+            server: fixture.Server
+        );
+        var testCt = TestToken;
         var marker = "ATTACKER-SUPPLIED-MARKER-3ee19c";
         var malformedBody = new byte[] { 5 }.Concat(second: System.Text.Encoding.UTF8.GetBytes(s: marker)).ToArray();
 
@@ -492,11 +448,19 @@ public sealed class AdmissionSecurityLawTests {
                 actualString: text,
                 expectedSubstring: marker
             );
+            // The refused connection stays open for its drain, then closes with nothing after the refusal.
+            Assert.True(condition: await ExpireUntilClosedAsync(
+                clock: clock,
+                ct: testCt,
+                handshakeDeadline: false,
+                stream: malformedClient.GetStream()
+            ));
         }
 
         using (var cleanClient = new PeerTestClient()) {
             var closedSilently = await DisconnectAfterChallengeAsync(
                 client: cleanClient,
+                clock: clock,
                 ct: testCt,
                 host: host
             );
@@ -563,33 +527,18 @@ public sealed class AdmissionSecurityLawTests {
             ));
 
             using var fixture = Fixtures.FreshServer(definition: initial);
-            using var host = new WorldPeerHost(server: fixture.Server);
-
-            host.Start(listen: "127.0.0.1:0");
-
-            using var pumpCts = new CancellationTokenSource();
-            var pumpTask = RunPumpAsync(
+            using var host = StartHost(
+            clock: out _,
+            server: fixture.Server
+        );
+            var admitted = await AdmitAsync(
                 fixture: fixture,
                 host: host,
-                ct: pumpCts.Token
+                identity: identity
             );
-            AdmittedPeer admitted;
-
-            try {
-                using var connectCts = Laws.SocketDeadline();
-
-                admitted = await ConnectAndAdmitAsync(
-                    host: host,
-                    identity: identity,
-                    ct: connectCts.Token
-                );
-            } finally {
-                pumpCts.Cancel();
-                await pumpTask;
-            }
 
             using (admitted.Client) {
-                var peer = WorldPrincipal.Peer(
+                var peer = Principal.Peer(
                     index: admitted.PeerIndex,
                     generation: admitted.Generation
                 );
@@ -607,7 +556,7 @@ public sealed class AdmissionSecurityLawTests {
                         Kind: WorldRebuildKind.Load,
                         PathHint: "successive-rebuild.world.json"
                     ),
-                    principal: WorldPrincipal.Console
+                    principal: Principal.Console
                 );
                 fixture.Step();
 
@@ -622,12 +571,12 @@ public sealed class AdmissionSecurityLawTests {
 
                 fixture.Server.Revoke(
                     grant: new WorldGrant(
-                        Principal: peer,
+                        Grantee: peer,
                         Capability: WorldCapability.Observe,
                         Subject: body,
                         Exclusive: false
                     ),
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 );
                 fixture.Step();
 
@@ -647,7 +596,7 @@ public sealed class AdmissionSecurityLawTests {
                         PathHint: null,
                         Force: false
                     ),
-                    principal: WorldPrincipal.Console
+                    principal: Principal.Console
                 );
                 fixture.Step();
 
@@ -696,7 +645,6 @@ public sealed class AdmissionSecurityLawTests {
                 machineHostFactory: Fixtures.MachineHostFactory,
                 addonHostFactory: static (_, _) => new NullAddonHost()
             );
-            using var host = new WorldPeerHost(server: fixture.Server);
 
             Assert.True(
                 condition: tape.TryBeginRecording(
@@ -706,32 +654,19 @@ public sealed class AdmissionSecurityLawTests {
                 userMessage: $"refused to arm admission replay: {refusal}"
             );
 
-            host.Start(listen: "127.0.0.1:0");
-
-            using var pumpCts = new CancellationTokenSource();
-            var pumpTask = RunPumpAsync(
+            using var host = StartHost(
+            clock: out _,
+            server: fixture.Server
+        );
+            var admitted = await AdmitAsync(
                 fixture: fixture,
                 host: host,
-                ct: pumpCts.Token,
+                identity: identity,
                 tape: tape
             );
-            AdmittedPeer admitted;
-
-            try {
-                using var connectCts = Laws.SocketDeadline();
-
-                admitted = await ConnectAndAdmitAsync(
-                    host: host,
-                    identity: identity,
-                    ct: connectCts.Token
-                );
-            } finally {
-                pumpCts.Cancel();
-                await pumpTask;
-            }
 
             using (admitted.Client) {
-                var peer = WorldPrincipal.Peer(
+                var peer = Principal.Peer(
                     index: admitted.PeerIndex,
                     generation: admitted.Generation
                 );
@@ -743,7 +678,7 @@ public sealed class AdmissionSecurityLawTests {
                         PathHint: null,
                         Force: false
                     ),
-                    principal: WorldPrincipal.Console
+                    principal: Principal.Console
                 );
                 fixture.Step();
                 tape.NoteTick();
@@ -790,7 +725,6 @@ public sealed class AdmissionSecurityLawTests {
     /// deadline uses a controlled timer, so the law observes expiry without waiting through the production timeout.</summary>
     [Fact]
     public async Task StalledPreAdmissionHandshake_ClosesAfterDeadline_ControlPromptHandshakeAdmits() {
-        var clock = new DeadlineClock();
         var identity = GenerateIdentity(subject: "deadline-peer");
 
         try {
@@ -801,97 +735,50 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: entry);
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(
-                server: fixture.Server,
-                timeProvider: clock
+            using var host = StartHost(
+                clock: out var clock,
+                server: fixture.Server
             );
+            var testCt = TestToken;
 
-            host.Start(listen: "127.0.0.1:0");
-
-            using var pumpCts = new CancellationTokenSource();
-            var pumpTask = RunPumpAsync(
+            await using (StartPump(
                 fixture: fixture,
-                host: host,
-                ct: pumpCts.Token
-            );
-
-            var testCt = TestContext.Current.CancellationToken;
-
-            try {
+                host: host
+            )) {
                 // CONTROL — an ordinary prompt handshake against this SAME host is admitted, not refused.
-                using (var promptCts = Laws.SocketDeadline()) {
-                    var admitted = await ConnectAndAdmitAsync(
-                        host: host,
-                        identity: identity,
-                        ct: promptCts.Token
-                    );
+                var admitted = await ConnectAndAdmitAsync(
+                    ct: testCt,
+                    host: host,
+                    identity: identity
+                );
 
-                    admitted.Client.Dispose();
-                }
+                using var admittedClient = admitted.Client;
 
                 // DENIED — connect, complete ONLY the Hello version door, then send nothing further at all. The
                 // server must close this on its own; no further bytes travel in either direction.
-                var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
-
                 using var stalling = new PeerTestClient();
 
-                await stalling.ConnectAsync(
-                    address: endpoint.Address,
-                    port: endpoint.Port,
-                    cancellationToken: testCt
-                );
-
-                var stallingStream = stalling.GetStream();
-
-                await HandshakeWireFormat.WriteHelloAsync(
+                var (stallingStream, _) = await ConnectPastChallengeAsync(
+                    client: stalling,
                     ct: testCt,
-                    key: WorldProtocol.WireProtocolKey,
-                    stream: stallingStream
+                    host: host
                 );
 
-                var challenge = await WorldPeerWireFormat.TryReadDownstreamAsync(
-                    ct: testCt,
-                    stream: stallingStream
-                );
-
-                Assert.NotNull(@object: challenge);
-                Assert.Equal(
-                    expected: WorldPeerWireFormat.DownstreamKind.HelloChallenge,
-                    actual: challenge!.Value.Kind
-                );
-
-                await clock.ExpireAsync(
-                    TimeSpan.FromSeconds(seconds: 10),
-                    testCt
-                );
-                var closed = false;
-                var probe = new byte[1];
-
-                try {
-                    // Runner cancellation only bounds a broken close path; the admission clock was explicitly expired.
-                    using var waitCts = Laws.SocketDeadline();
-
-                    var read = await stallingStream.ReadAsync(
-                        buffer: probe,
-                        cancellationToken: waitCts.Token
-                    );
-
-                    closed = (read == 0);
-                } catch (IOException) {
-                    closed = true;
-                } catch (SocketException) {
-                    closed = true;
-                } catch (OperationCanceledException) when (!testCt.IsCancellationRequested) {
-                    closed = false;
-                }
-
+                // The handshake deadline elapses for every connection this host has opened, the admitted one included:
+                // an admitted connection is no longer subject to it, so only the stalled connection may close.
                 Assert.True(
-                    condition: closed,
+                    condition: await ExpireUntilClosedAsync(
+                        clock: clock,
+                        ct: testCt,
+                        handshakeDeadline: true,
+                        stream: stallingStream
+                    ),
                     userMessage: "a connection that never sent its identity frame was expected to be closed by the handshake deadline when its deadline expired, but it was still open"
                 );
-            } finally {
-                pumpCts.Cancel();
-                await pumpTask;
+                Assert.Equal(
+                    actual: Assert.Single(collection: host.Connections).PeerIndex,
+                    expected: admitted.PeerIndex
+                );
             }
         } finally {
             identity.Key.Dispose();
@@ -928,12 +815,11 @@ public sealed class AdmissionSecurityLawTests {
     [Fact]
     public async Task TruncatedDeclaredFrame_DrawsNamedRefusal_NotSilentDisconnect() {
         using var fixture = Fixtures.FreshServer();
-        using var host = new WorldPeerHost(server: fixture.Server);
-
-        host.Start(listen: "127.0.0.1:0");
-
-        using var testCts = Laws.SocketDeadline();
-        var testCt = testCts.Token;
+        using var host = StartHost(
+            clock: out _,
+            server: fixture.Server
+        );
+        var testCt = TestToken;
 
         using var client = new PeerTestClient();
         var reply = await SendTruncatedIdentityFrameAsync(
@@ -960,7 +846,6 @@ public sealed class AdmissionSecurityLawTests {
     /// later drain must skip the orphaned work rather than admitting a body with no socket.</summary>
     [Fact]
     public async Task VerifiedIdentityQueuedWithoutTickDrain_ExpiresAndCannotAdmitLater() {
-        var clock = new DeadlineClock();
         var identity = GenerateIdentity(subject: "queued-deadline-peer");
 
         try {
@@ -970,62 +855,37 @@ public sealed class AdmissionSecurityLawTests {
             ));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(
-                server: fixture.Server,
-                timeProvider: clock
+            using var host = StartHost(
+                clock: out var clock,
+                server: fixture.Server
             );
-
-            host.Start(listen: "127.0.0.1:0");
-
             using var client = new PeerTestClient();
-            // Runner cancellation bounds failure; the admission clock is controlled separately.
-            using var testCts = Laws.SocketDeadline();
-            var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
+            var testCt = TestToken;
 
-            await client.ConnectAsync(
-                address: endpoint.Address,
-                port: endpoint.Port,
-                cancellationToken: testCts.Token
+            var (stream, challenge) = await ConnectPastChallengeAsync(
+                client: client,
+                ct: testCt,
+                host: host
             );
+            var admissionQueued = host.WaitForPendingWorkAsync(cancellationToken: testCt);
 
-            var stream = client.GetStream();
-
-            await HandshakeWireFormat.WriteHelloAsync(
-                stream: stream,
-                key: WorldProtocol.WireProtocolKey,
-                ct: testCts.Token
+            Assert.False(
+                condition: admissionQueued.IsCompleted,
+                userMessage: "tick-thread work was queued before the identity frame was sent"
             );
-
-            var challenge = ((await WorldPeerWireFormat.TryReadDownstreamAsync(
-                stream: stream,
-                ct: testCts.Token
-            ))
-                ?? throw new InvalidOperationException(message: "connection closed before the challenge"));
-
-            Assert.Equal(
-                actual: challenge.Kind,
-                expected: WorldPeerWireFormat.DownstreamKind.HelloChallenge
-            );
-
             await WriteIdentityResponseAsync(
-                stream: stream,
+                challenge: challenge,
+                ct: testCt,
                 identity: identity,
-                challenge: challenge.Body,
-                ct: testCts.Token
+                stream: stream
             );
-
-            // Wait for verified admission to reach the queue, then expire its own clock without draining.
-            while (host.PendingWorkCount == 0) { await Task.Delay(
-                1,
-                testCts.Token
-            ); }
-            await clock.ExpireAsync(
-                TimeSpan.FromSeconds(seconds: 10),
-                testCts.Token
-            );
-            var closed = await WaitForCloseAsync(
-                stream: stream,
-                ct: testCts.Token
+            // The verified admission reaches the tick-thread queue; its own clock then expires without a drain.
+            await admissionQueued;
+            var closed = await ExpireUntilClosedAsync(
+                clock: clock,
+                ct: testCt,
+                handshakeDeadline: true,
+                stream: stream
             );
 
             Assert.True(
@@ -1051,12 +911,11 @@ public sealed class AdmissionSecurityLawTests {
     [Fact]
     public async Task WellFormedFrameWithTrailingBytes_DrawsNamedRefusal() {
         using var fixture = Fixtures.FreshServer();
-        using var host = new WorldPeerHost(server: fixture.Server);
-
-        host.Start(listen: "127.0.0.1:0");
-
-        using var testCts = Laws.SocketDeadline();
-        var testCt = testCts.Token;
+        using var host = StartHost(
+            clock: out _,
+            server: fixture.Server
+        );
+        var testCt = TestToken;
         var claim = new byte[] { 1, 2, 3, 4 };
         var claimEnvelope = new byte[(sizeof(uint) + claim.Length)];
 

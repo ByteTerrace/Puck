@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 using Puck.Assets;
 using Puck.Assets.Documents;
@@ -33,34 +32,34 @@ internal static class OfficialVerifyCommand {
 
         try {
             recomputed = entry.Family switch {
-                OfficialAssetFamilies.Music => $"sha256/{MusicCanonicalizer.Canonicalize(
+                AssetRowFamilies.Music => (ContentPin.Prefix + MusicCanonicalizer.Canonicalize(
                 document: JsonSerializer.Deserialize<MusicDocument>(
                     utf8Json: bytes,
                     options: DocumentJsonOptions.Shared
                 )!,
                 source: entry.Name
-            ).Hash}",
-                OfficialAssetFamilies.Table => $"sha256/{TableCanonicalizer.Canonicalize(
+            ).Hash),
+                AssetRowFamilies.Table => (ContentPin.Prefix + TableCanonicalizer.Canonicalize(
                 document: JsonSerializer.Deserialize<TableDocument>(
                     utf8Json: bytes,
                     options: DocumentJsonOptions.Shared
                 )!,
                 source: entry.Name
-            ).Hash}",
-                OfficialAssetFamilies.Tune => $"sha256/{AudioCanonicalizer.Canonicalize(
+            ).Hash),
+                AssetRowFamilies.Tune => (ContentPin.Prefix + AudioCanonicalizer.Canonicalize(
                 document: JsonSerializer.Deserialize<AudioDocument>(
                     utf8Json: bytes,
                     options: DocumentJsonOptions.Shared
                 )!,
                 source: entry.Name
-            ).Hash}",
-                OfficialAssetFamilies.Patch => $"sha256/{SynthPatchCanonicalizer.Canonicalize(
+            ).Hash),
+                AssetRowFamilies.Patch => (ContentPin.Prefix + SynthPatchCanonicalizer.Canonicalize(
                 document: JsonSerializer.Deserialize<SynthPatchDocument>(
                     utf8Json: bytes,
                     options: DocumentJsonOptions.Shared
                 )!,
                 source: entry.Name
-            ).Hash}",
+            ).Hash),
                 _ => null,
             };
         } catch (JsonException exception) {
@@ -78,6 +77,54 @@ internal static class OfficialVerifyCommand {
         )
         ) {
             problems.Add(item: $"{label}: pin '{entry.Pin}' does not match the recomputed '{recomputed}'.");
+        }
+    }
+    // A document is named by its document name, and its source is a file that can author that name: its own
+    // .world.json file, which it then is byte for byte, or a .puck source in the same directory — the one named after
+    // it, or a composition declaring it as a world.
+    private static void CheckAuthorship(OfficialDocumentEntry entry, string label, List<string> problems, IReadOnlyDictionary<string, OfficialSourceEntry> sourcesByName) {
+        if (!WorldDocumentName.TryValidate(
+            name: entry.Name,
+            reason: out var nameReason
+        )) {
+            problems.Add(item: $"{label}: {nameReason}.");
+
+            return;
+        }
+
+        if (!sourcesByName.TryGetValue(
+            key: entry.Source,
+            value: out var source
+        )) {
+            return;
+        }
+
+        if (WorldDocumentName.IsDocumentFile(path: source.Name)) {
+            if (!string.Equals(
+                a: source.Name,
+                b: WorldDocumentName.DocumentFile(name: entry.Name),
+                comparisonType: StringComparison.Ordinal
+            )) {
+                problems.Add(item: $"{label}: source '{source.Name}' is another document's file.");
+            } else if (!string.Equals(
+                a: source.Hash,
+                b: entry.Hash,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                problems.Add(item: $"{label}: authored by its own file, but its hash '{entry.Hash}' is not that source's '{source.Hash}'.");
+            }
+
+            return;
+        }
+
+        if (!WorldDocumentName.IsSourceFile(path: source.Name)) {
+            problems.Add(item: $"{label}: source '{source.Name}' is neither a .puck source nor a document file, so it authors no document.");
+        } else if (!string.Equals(
+            a: source.Name[..(source.Name.LastIndexOf(value: '/') + 1)],
+            b: entry.Name[..(entry.Name.LastIndexOf(value: '/') + 1)],
+            comparisonType: StringComparison.Ordinal
+        )) {
+            problems.Add(item: $"{label}: source '{source.Name}' sits in another directory, and a source authors documents only beside itself.");
         }
     }
     private static void CheckObject(string label, OfficialObjectRef objectRef, List<string> problems, string root) {
@@ -98,7 +145,7 @@ internal static class OfficialVerifyCommand {
             problems.Add(item: $"{label}: '{objectRef.Path}' is {bytes.LongLength} byte(s), manifest claims {objectRef.Size}.");
         }
 
-        var hash = $"sha256/{ContentAddressedStore.ComputeHash(content: bytes)}";
+        var hash = ContentPin.Compute(content: bytes).ToString();
 
         if (!string.Equals(
             a: hash,
@@ -180,12 +227,6 @@ internal static class OfficialVerifyCommand {
             problems: problems,
             root: root
         );
-        VerifySchemaBundleCommit(
-            build: manifest.Build,
-            problems: problems,
-            root: root,
-            worldSchemaBundle: manifest.WorldSchemaBundle
-        );
 
         foreach (var file in manifest.Engine.Files) {
             CheckObject(
@@ -201,9 +242,44 @@ internal static class OfficialVerifyCommand {
             );
         }
 
+        foreach (var error in OfficialCanonicalizer.Validate(document: manifest)) {
+            problems.Add(item: $"{error.Path}: {error.Message}");
+        }
+
+        // A manifest missing its sources list is already a named problem above; its objects are then none.
+        var sources = (manifest.Sources ?? []);
+
+        foreach (var entry in sources) {
+            CheckObject(
+                label: $"sources[{entry.Name}]",
+                objectRef: new OfficialObjectRef(
+                    ContentType: entry.ContentType,
+                    Hash: entry.Hash,
+                    Path: entry.Path,
+                    Size: entry.Size
+                ),
+                problems: problems,
+                root: root
+            );
+        }
+
+        var sourcesByName = sources
+            .GroupBy(keySelector: static entry => entry.Name, comparer: StringComparer.Ordinal)
+            .ToDictionary(
+                comparer: StringComparer.Ordinal,
+                elementSelector: static group => group.First(),
+                keySelector: static group => group.Key
+            );
+
         foreach (var entry in manifest.Documents) {
             var label = $"documents[{entry.Name}]";
 
+            CheckAuthorship(
+                entry: entry,
+                label: label,
+                problems: problems,
+                sourcesByName: sourcesByName
+            );
             CheckObject(
                 label: label,
                 objectRef: new OfficialObjectRef(
@@ -283,7 +359,7 @@ internal static class OfficialVerifyCommand {
         }
 
         if (problems.Count == 0) {
-            Console.Out.WriteLine(value: $"official verify: {channel} at commit {manifest.Build.Commit} — {manifest.Documents.Count} document(s), {manifest.Composed.Count} composed world(s), {manifest.Assets.Count} asset(s), {manifest.Engine.Files.Count} engine file(s) — all checks passed.");
+            Console.Out.WriteLine(value: $"official verify: {channel} at commit {manifest.Build.Commit} — {sources.Count} source file(s), {manifest.Documents.Count} document(s), {manifest.Composed.Count} composed world(s), {manifest.Assets.Count} asset(s), {manifest.Engine.Files.Count} engine file(s) — all checks passed.");
 
             return 0;
         }
@@ -296,61 +372,34 @@ internal static class OfficialVerifyCommand {
 
         return 1;
     }
-    private static void VerifySchemaBundleCommit(OfficialBuildInfo build, List<string> problems, string root, OfficialObjectRef worldSchemaBundle) {
-        var fullPath = Path.Combine(
-            path1: root,
-            path2: worldSchemaBundle.Path
-        );
-
-        if (!File.Exists(path: fullPath)) {
-            return;
-        }
-
-        JsonObject? bundle;
-
-        try {
-            bundle = (JsonNode.Parse(json: File.ReadAllText(path: fullPath)) as JsonObject);
-        } catch (JsonException) {
-            bundle = null;
-        }
-
-        var identity = (bundle?["x-puck"] as JsonObject);
-        var commit = (identity?["commit"] as JsonValue)?.GetValue<string>();
-
-        if (
-            (commit is not null) &&
-            !string.Equals(
-            a: commit,
-            b: build.Commit,
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            problems.Add(item: $"worldSchemaBundle: x-puck.commit '{commit}' does not match build.commit '{build.Commit}'.");
-        }
-    }
 
     public static Command Create() {
-        var baseOption = new Option<string>(name: "--base") { Description = "The official tree's root.", Required = true };
+        var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root.", Required = true };
         var channelOption = new Option<string>(name: "--channel") { Description = "The channel to verify.", Required = true };
         var expectCommitOption = new Option<string?>(name: "--expect-commit") { Description = "Refuse unless build.commit equals this." };
         var command = new Command(
-            description: """
-            Re-hash and re-check a puck.official.manifest.v1 tree's own claims. Reads only — never writes.
+            description: "Re-hash and re-check a puck.official.manifest.v1 tree's own claims, writing nothing.",
+            name: "verify"
+        ) { treeOption, channelOption, expectCommitOption };
 
-            Checks: every object the manifest names re-hashes and re-sizes to what it claims; every document/composed
-            pin recomputes to what WorldDefinitionFileSource.ComputeContentHash mints for that object's own bytes; every
-            asset row's pin recomputes to its family's own canonical document hash; the world schema bundle's own
-            x-puck.commit equals build.commit; and builds/<commit>/manifest.json is byte-identical to the channel
-            manifest.
+        command.Detail(detail: """
+            Checks: the manifest is a structurally valid puck.official.manifest.v1 document (every name distinct, every
+            documents[].source naming a sources[] file, composed[].name naming a document); every document is named
+            by its document name, and its source can author it — its own .world.json file, which it then is byte for
+            byte, or a .puck source beside it; every object the manifest names re-hashes and re-sizes to what it
+            claims; every document/composed pin recomputes to what WorldDefinitionFileSource.ComputeContentHash mints
+            for that object's own bytes; every asset row's pin recomputes to its family's own canonical document hash;
+            and builds/<commit>/manifest.json is byte-identical to the channel manifest. build.commit names the worlds
+            tree the manifest was built from, so --expect-commit checks it against that tree's commit ("none" for a
+            tree no commit holds); the world schema bundle's own x-puck.commit names the generator's build and is not
+            compared with it.
 
             Exit codes: 0 every check passed, 1 one or more checks failed (every discrepancy named), 2 an unreadable
             path.
-            """,
-            name: "verify"
-        ) { baseOption, channelOption, expectCommitOption };
+            """);
 
         command.SetAction(action: parseResult => Run(
-            baseDirectory: parseResult.GetRequiredValue(option: baseOption),
+            baseDirectory: parseResult.GetRequiredValue(option: treeOption),
             channel: parseResult.GetRequiredValue(option: channelOption),
             expectCommit: parseResult.GetValue(option: expectCommitOption)
         ));

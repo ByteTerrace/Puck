@@ -30,9 +30,10 @@ public interface IAgbApu : IAgbClockedComponent {
     /// <summary>Returns and clears the request to DMA-refill Direct Sound FIFO B.</summary>
     /// <returns><see langword="true"/> if FIFO B needs refilling.</returns>
     bool ConsumeFifoBRefill();
-    /// <summary>Enables host audio output at the given sample rate, allocating the resample ring. A rate of zero
-    /// disables output (the default), so headless conformance runs incur no audio work. Reconfiguration discards
-    /// queued samples; draining while disabled returns zero.</summary>
+    /// <summary>Enables host audio output at the given sample rate, sizing the output ring to one emulated second of
+    /// stereo frames. When the ring is full the oldest frame is dropped, so an undrained ring holds the newest second. A
+    /// rate of zero disables output (the default), so headless conformance runs incur no audio work. Reconfiguration
+    /// discards queued samples; draining while disabled returns zero.</summary>
     /// <param name="sampleRate">The host sample rate in Hz, or 0 to disable.</param>
     void ConfigureOutput(int sampleRate);
 
@@ -40,8 +41,9 @@ public interface IAgbApu : IAgbClockedComponent {
     /// or 0 while output is disabled.</summary>
     int SampleRate { get; }
 
-    /// <summary>Drains queued stereo samples (interleaved left/right) into <paramref name="destination"/>.</summary>
-    /// <param name="destination">The buffer to fill; its length should be a multiple of two.</param>
-    /// <returns>The number of samples written (left and right counted separately).</returns>
+    /// <summary>Drains queued stereo samples (interleaved left/right), oldest first, into
+    /// <paramref name="destination"/>. Only whole frames are copied, so an odd trailing slot stays untouched.</summary>
+    /// <param name="destination">The buffer to fill.</param>
+    /// <returns>The number of samples written (left and right counted separately), which is always even.</returns>
     int DrainSamples(Span<short> destination);
 }

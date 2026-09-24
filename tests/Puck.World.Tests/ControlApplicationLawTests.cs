@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -19,8 +20,8 @@ namespace Puck.World.Tests;
 /// </list>
 /// </summary>
 public sealed class ControlApplicationLawTests {
-    private static WorldPrincipal Join(WorldFixture fixture, int slot) {
-        var principal = WorldPrincipal.Seat(slot: slot);
+    private static Principal Join(WorldFixture fixture, int slot) {
+        var principal = Principal.Seat(slot: slot);
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
@@ -149,12 +150,12 @@ public sealed class ControlApplicationLawTests {
         // route-without-latch/latch-without-route repair existed to detect cannot arise.
         fixture.Server.Revoke(
             grant: new WorldGrant(
-                Principal: seat,
+                Grantee: seat,
                 Capability: WorldCapability.Control,
                 Subject: GrantSubject.All,
                 Exclusive: false
             ),
-            actor: WorldPrincipal.Console
+            actor: Principal.Console
         );
 
         Assert.Equal(

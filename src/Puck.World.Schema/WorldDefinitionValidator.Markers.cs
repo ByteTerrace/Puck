@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.World;
 
 /// <summary>The <c>markers</c> section's validation: unique ids, a resolvable icon (gated the same way
@@ -35,7 +37,7 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (marker.Source is WorldMarkerSource.Point point) &&
-                !IsFinite(value: point.Position)
+                !VectorFunctions.IsFinite(vector: point.Position)
             ) {
                 errors.Add(item: $"{path}.source.position must contain finite coordinates.");
             }

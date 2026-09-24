@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Puck.Maths;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
@@ -47,7 +49,7 @@ public static partial class WorldDefinitionValidator {
             }
             if (
                 (volume.Shape.Center is null) ||
-                !IsFinite(value: volume.Shape.Center)
+                !VectorFunctions.IsFinite(vector: volume.Shape.Center)
             ) {
                 errors.Add(item: $"{spatialPath}.shape.center must contain finite coordinates.");
             }
@@ -58,7 +60,7 @@ public static partial class WorldDefinitionValidator {
                 case WorldSpatialShapeKind.Box:
                     if (
                         (volume.Shape.HalfExtents is null) ||
-                        !IsFinite(value: volume.Shape.HalfExtents)
+                        !VectorFunctions.IsFinite(vector: volume.Shape.HalfExtents)
                     ) {
                         errors.Add(item: $"{spatialPath}.shape.halfExtents must contain finite coordinates.");
                     } else {
@@ -141,7 +143,7 @@ public static partial class WorldDefinitionValidator {
 
         var errors = new List<string>();
 
-        if ((placement.Position is null) || !IsFinite(value: placement.Position)) {
+        if ((placement.Position is null) || !VectorFunctions.IsFinite(vector: placement.Position)) {
             errors.Add(item: "placement.position must contain finite coordinates.");
         }
         RequireFinite(

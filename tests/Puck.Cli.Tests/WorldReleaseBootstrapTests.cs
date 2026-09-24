@@ -66,6 +66,7 @@ public sealed class WorldReleaseBootstrapTests {
                 World: SafeName.Parse(candidate: "plum")
             );
             var manifest = new WorldReleaseManifest {
+                CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
                 Label = "bootstrap",
                 SourceRevision = "test",
                 EngineImageDigest = ("sha256:" + new string(
@@ -95,12 +96,12 @@ public sealed class WorldReleaseBootstrapTests {
                     identity: plum
                 );
 
-                await Assert.ThrowsAsync<InvalidDataException>(() => AzureCommand.InitializeWorldReleaseBootstrapAsync(
-                    manifest,
-                    archive,
-                    authority,
-                    owner,
-                    token
+                await Assert.ThrowsAsync<InvalidDataException>(testCode: () => AzureCommand.InitializeWorldReleaseBootstrapAsync(
+                    archive: archive,
+                    authority: authority,
+                    cancellationToken: token,
+                    manifest: manifest,
+                    owner: owner
                 ));
                 Assert.Null(value: await authority.LoadRootAsync(
                     cancellationToken: token,
@@ -115,18 +116,18 @@ public sealed class WorldReleaseBootstrapTests {
                 );
             } else {
                 await AzureCommand.InitializeWorldReleaseBootstrapAsync(
-                    manifest,
-                    archive,
-                    authority,
-                    owner,
-                    token
+                    archive: archive,
+                    authority: authority,
+                    cancellationToken: token,
+                    manifest: manifest,
+                    owner: owner
                 );
                 await AzureCommand.InitializeWorldReleaseBootstrapAsync(
-                    manifest,
-                    archive,
-                    authority,
-                    owner,
-                    token
+                    archive: archive,
+                    authority: authority,
+                    cancellationToken: token,
+                    manifest: manifest,
+                    owner: owner
                 );
                 foreach (var identity in new[] { amber, plum }) {
                     var root = await authority.LoadRootAsync(

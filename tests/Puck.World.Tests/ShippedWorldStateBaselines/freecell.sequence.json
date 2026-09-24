@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "games/freecell.world.json",
+  "world": "games/freecell.puck",
   "host": {
     "kind": "spliced",
     "stateRows": [

@@ -302,8 +302,8 @@ public sealed class InputRouterFocusExemptTests {
         );
     }
 
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     // A resolver with just enough state to be asked the question the router asks: which sources it is holding down.
     // A press marks one; its release gives it up. That is the whole of what PagedInputBindings' latches, tracker and

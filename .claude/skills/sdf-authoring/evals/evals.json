@@ -159,9 +159,9 @@
         "Mentions creation stats or an equivalent structural check",
         "Every verb named actually exists",
         "Uses whole-array row.set for vector scale/position and four-component rotation; does not suggest row.step on a vector",
-        "If the world was booted from a `.puck` source, does not suggest `world.reload` or a bare `world.save` to persist the change — both are JSON-only and the second overwrites the `.puck` file with canonical JSON"
+        "If the world was booted from a `.puck` source, persists a live row edit with `world.save` to an explicit JSON path, not a bare `world.save` (refused against a `.puck` origin) and not `world.reload` (which rebuilds from disk and discards unsaved edits)"
       ],
-      "expected_output": "The live loop: world.row.set against creations with a name selector, world.row to read back, world.wait to fence, world.screenshot to capture, and creation stats offline. If the running world was booted from a .puck file, a live edit is saved by naming an explicit JSON path, never by world.reload or a bare world.save.",
+      "expected_output": "The live loop: world.row.set against creations with a name selector, world.row to read back, world.wait to fence, world.screenshot to capture, and creation stats offline. If the running world was booted from a .puck file, a live edit is saved by naming an explicit JSON path; a bare world.save is refused against a .puck origin, and world.reload re-reads the .puck source, discarding unsaved edits.",
       "files": [],
       "id": 12,
       "prompt": "im tweaking proportions on a character and restarting the game after every single change is killing me. is there a way to nudge a shape's scale while its running and actually see the result? and how do i grab a picture of it to compare?"

@@ -100,7 +100,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     /// <summary>Gets whether the lookahead machine is live (runahead armed with a forked sibling).</summary>
     public bool RunaheadActive => ((m_runaheadFrames > 0) && (m_lookahead is not null));
 
-    private void AppendDelta(long cycle, long nativeFrame, in TInput input, long budget, ulong hostAccumulator) {
+    private void AppendDelta(long cycle, long nativeFrame, in TInput input, long budget, RationalRateAccumulator hostAccumulator) {
         var segment = Newest;
         var index = segment.DeltaCount;
 
@@ -214,7 +214,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     // the accounting tracks the real image, matching the per-span cost EnsureRing budgets the ring against.
     private long RetainedBytesPerSegment() =>
         (((long)m_snapshotSize) + PerFrameRecordBytes());
-    private void StartSegment(int length, long cycle, long nativeFrame, ulong hostAccumulator) {
+    private void StartSegment(int length, long cycle, long nativeFrame, RationalRateAccumulator hostAccumulator) {
         EnsureRing(baseLength: length);
 
         int slot;
@@ -404,7 +404,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     /// <param name="hostAccumulator">The host's tick-to-cycle accumulator phase AFTER this frame produced its budget —
     /// the value that seeds the next frame's budget. Stored with the frame and handed back at the landing point on a
     /// rewind so the host restores it atomically with the core.</param>
-    public void Record(in TInput input, long budget, ulong hostAccumulator) {
+    public void Record(in TInput input, long budget, RationalRateAccumulator hostAccumulator) {
         if (!m_enabled) {
             return;
         }
@@ -454,11 +454,11 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     /// <param name="frames">The number of native frames to move backward.</param>
     /// <param name="hostAccumulator">Receives the host tick-to-cycle accumulator phase the landed frame was produced
     /// under — the caller restores its own accumulator to this atomically with the core so identical future ticks buy
-    /// identical budgets. Left at 0 when nothing was rewound.</param>
+    /// identical budgets. Left at a zero phase when nothing was rewound.</param>
     /// <returns>The number of native frames actually rewound, which may exceed <paramref name="frames"/> only when the
     /// history has no captured instant inside the requested window.</returns>
-    public int RewindBy(int frames, out ulong hostAccumulator) {
-        hostAccumulator = 0UL;
+    public int RewindBy(int frames, out RationalRateAccumulator hostAccumulator) {
+        hostAccumulator = default;
 
         if (
             !m_enabled ||
@@ -584,17 +584,17 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
             NativeFrame = new long[deltaCapacity];
             Input = new TInput[deltaCapacity];
             Budget = new long[deltaCapacity];
-            Accumulator = new ulong[deltaCapacity];
+            Accumulator = new RationalRateAccumulator[deltaCapacity];
         }
 
-        public readonly ulong[] Accumulator;
+        public readonly RationalRateAccumulator[] Accumulator;
         public readonly long[] Budget;
         public readonly long[] Cycle;
         public readonly TInput[] Input;
         public readonly long[] NativeFrame;
 
         public byte[] Base = [];
-        public ulong BaseAccumulator;
+        public RationalRateAccumulator BaseAccumulator;
         public long BaseCycle;
         public int BaseLength;
         public long BaseNativeFrame;

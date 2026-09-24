@@ -88,6 +88,20 @@ public class ConstructRefusalLineLawTests {
                     }
                 """)
         },
+        // A state row's refusal names `state.world[i]`, the member the row is authored under, so it reports on the
+        // declaration's own line rather than the `state {` line.
+        {
+            "slot",
+            Doc(body: "state {\n    world {\n        table b {\n            x = 1\n        }\n        slot left: Missing = 0\n    }\n}")
+        },
+        {
+            "table",
+            Doc(body: "state {\n    world {\n        slot a = 0\n        table recipe: Missing {\n            x = 1\n        }\n    }\n}")
+        },
+        {
+            "row",
+            Doc(body: "state {\n    world {\n        slot a = 0\n        row {\n            name: \"recipe\"\n            kind: Int\n            value: 0\n            min: 5\n            max: 1\n        }\n    }\n}")
+        },
         {
             "onNoChoice",
             Rule(body: """
@@ -104,7 +118,6 @@ public class ConstructRefusalLineLawTests {
                 """)
         },
     };
-
     [MemberData(nameof(Probes))]
     [Theory]
     public void ARefusalInsideADescribedConstructNamesThatConstructsLine(string keyword, string source) {

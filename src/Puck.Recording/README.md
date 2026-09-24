@@ -8,4 +8,4 @@ Matroska/WebM muxing, frame-capture observers, and overlay compositing.
 - [Capture and recording pipeline](https://github.com/ByteTerrace/Puck/blob/main/docs/reference/recording.md) — Matroska muxer, Opus lane, capture sinks, and overlays.
 - [Engine manual](https://github.com/ByteTerrace/Puck/blob/main/docs/README.md) — setup, architecture, and related libraries.
 - [Development and verification](https://github.com/ByteTerrace/Puck/blob/main/tests/Puck.Recording.Tests/README.md).
-- [License](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md) and [commercial licensing](https://github.com/ByteTerrace/Puck/blob/main/LICENSING.md).
+- [License](https://github.com/ByteTerrace/Puck/blob/main/LICENSE.md): Apache 2.0.

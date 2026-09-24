@@ -28,7 +28,7 @@ public sealed class CompositionSyntaxTests {
 
         var world = Assert.IsType<WorldDeclarationNode>(@object: document.Statements[0]);
 
-        Assert.IsType<InterpolatedStringNode>(world.Name);
+        Assert.IsType<InterpolatedStringNode>(@object: world.Name);
         Assert.Equal("terrain", world.Module.Name);
         var border = Assert.IsType<WorldLinkNode>(@object: document.Statements[1]);
 
@@ -37,17 +37,17 @@ public sealed class CompositionSyntaxTests {
         var door = Assert.IsType<WorldLinkNode>(@object: document.Statements[2]);
 
         Assert.Equal("door", door.Kind);
-        Assert.Empty(door.Properties);
+        Assert.Empty(collection: door.Properties);
 
-        var printed = PuckPrinter.Print(document);
+        var printed = PuckPrinter.Print(document: document);
         var reparsed = PuckParser.ParseDocument(printed);
         var rewritten = new Rename().Rewrite(document: reparsed);
         var rewrittenBorder = Assert.IsType<WorldLinkNode>(@object: rewritten.Statements[1]);
-        var left = Assert.IsType<CallExpressionNode>(rewrittenBorder.Left);
+        var left = Assert.IsType<CallExpressionNode>(@object: rewrittenBorder.Left);
 
         Assert.Equal("island.arch", left.Name);
         var rewrittenDoor = Assert.IsType<WorldLinkNode>(@object: rewritten.Statements[2]);
-        var under = Assert.IsType<CallExpressionNode>(rewrittenDoor.Left);
+        var under = Assert.IsType<CallExpressionNode>(@object: rewrittenDoor.Left);
 
         Assert.Equal("atoll", Assert.IsType<IdentifierExpressionNode>(@object: under.Arguments[0].Value).Name);
     }
@@ -57,7 +57,7 @@ public sealed class CompositionSyntaxTests {
         var asset = Assert.IsType<AssetExpressionNode>(@object: expression);
 
         Assert.Equal("worlds/island.puck", asset.Path);
-        Assert.Equal("asset \"worlds/island.puck\"", PuckPrinter.PrintExpression(asset));
+        Assert.Equal("asset \"worlds/island.puck\"", PuckPrinter.PrintExpression(expression: asset));
     }
     [Fact]
     public void QualifiedCallsDoNotReassociateMemberAccess() {

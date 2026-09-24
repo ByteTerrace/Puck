@@ -3,6 +3,7 @@ using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Puck.Transpiler.Rewriting;
+using Puck.Transpiler.Units;
 
 namespace Puck.Transpiler.Modules;
 
@@ -17,7 +18,7 @@ public static class ModuleResolver {
         public DocumentNode Read(string path) {
             CancellationToken.ThrowIfCancellationRequested();
             if (!Documents.TryGetValue(key: path, value: out var document)) {
-                var source = File.ReadAllText(path: path);
+                var source = CompileInputs.ReadAllText(path: path);
 
                 document = PuckParser.ParseDocument(source, vocabulary: Vocabulary);
                 Documents.Add(key: path, value: document);
@@ -37,6 +38,13 @@ public static class ModuleResolver {
             value1: StringComparer.OrdinalIgnoreCase.GetHashCode(obj: obj.Path),
             value2: StringComparer.Ordinal.GetHashCode(obj: obj.Namespace)
         );
+    }
+    // The vocabulary-free reading of a runtime document import: the name is a file path beside the importer.
+    private sealed class FileDocuments : IDocumentVocabulary {
+        public static FileDocuments Instance { get; } = new();
+
+        public UnitDimension ClassifyField(string fieldKey) => UnitDimension.None;
+        public string? NameCallArgument(string callName, int positionalIndex) => null;
     }
 
     private static long AddBounded(long left, long right) => Math.Min(
@@ -65,8 +73,8 @@ public static class ModuleResolver {
                     value: ".puck"
                 )
                 ) {
-                    if (File.Exists(path: resolvedTarget)) {
-                        var subText = File.ReadAllText(path: resolvedTarget);
+                    if (CompileInputs.Exists(path: resolvedTarget)) {
+                        var subText = CompileInputs.ReadAllText(path: resolvedTarget);
                         var subDoc = PuckParser.ParseDocument(source: subText, vocabulary: vocabulary);
                         var subDir = (Path.GetDirectoryName(path: resolvedTarget) ?? "");
                         var importedStatements = new List<StatementNode>();
@@ -95,7 +103,7 @@ public static class ModuleResolver {
         foreach (var statement in statements) {
             var name = statement switch { LetNode let => let.Name, TemplateNode template => template.Name, _ => null };
 
-            if (name is not null) { symbols.TryAdd(key: name, value: $"{alias}.{name}"); }
+            if (name is not null) { symbols.TryAdd(key: name, value: QualifiedName.Parse(text: alias).Append(member: name).ToString()); }
         }
 
         return new ImportedSymbolRewriter(symbols: symbols).RewriteStatements(statements: statements);
@@ -116,14 +124,14 @@ public static class ModuleResolver {
 
         protected override Puck.State.ExpressionSpelling.SyntaxNode RewriteOperandSyntax(Puck.State.ExpressionSpelling.SyntaxNode node, DocumentValueForm form) {
             if (node is Puck.State.ExpressionSpelling.SourceLambda lambda) {
-                return lambda with { Body = Without([lambda.Binder]).RewriteOperandSyntax(lambda.Body, DocumentValueForm.Expression) };
+                return lambda with { Body = Without(names: [lambda.Binder]).RewriteOperandSyntax(lambda.Body, DocumentValueForm.Expression) };
             }
             var rewritten = base.RewriteOperandSyntax(form: form, node: node);
+
             return (((rewritten is Puck.State.ExpressionSpelling.SourceName { Quoted: false } name) &&
-                (form != DocumentValueForm.Key) && symbols.TryGetValue(name.Name, out var replacement))
+                (form != DocumentValueForm.Key) && symbols.TryGetValue(key: name.Name, value: out var replacement))
                 ? name with { Name = replacement } : rewritten);
         }
-
         protected override ExpressionNode RewriteExpression(ExpressionNode expression) {
             if (expression is LambdaExpressionNode lambda) {
                 return lambda with { Body = Without(names: lambda.Parameters).RewriteOne(expression: lambda.Body) };
@@ -219,43 +227,59 @@ public static class ModuleResolver {
                     path1: currentDir,
                     path2: importNode.Path
                 ));
+                var module = resolvedTarget.EndsWith(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: ".puck"
+                );
 
-                if (!File.Exists(path: resolvedTarget)) {
+                if (!module) {
+                    // A runtime document import: which files can carry the named document is the vocabulary's own rule.
+                    if (!(context.Vocabulary ?? FileDocuments.Instance).TryFindDocumentImport(
+                        directory: currentDir,
+                        name: importNode.Path,
+                        reason: out var missing
+                    )) {
+                        diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.ImportTargetMissing,
+                            message: missing,
+                            span: importNode.Span
+                        );
+                        success = false;
+                    }
+
+                    continue;
+                }
+
+                if (!CompileInputs.Exists(path: resolvedTarget)) {
                     diagnostics.ReportError(
                         code: PuckDiagnosticCodes.ImportTargetMissing,
-                        message: $"Imported document '{importNode.Path}' could not be found at '{resolvedTarget}'.",
+                        message: $"Imported module '{importNode.Path}' could not be found at '{resolvedTarget}'.",
                         span: importNode.Span
                     );
                     success = false;
                     continue;
                 }
 
-                // If importing another .puck document, parse and recurse
-                if (resolvedTarget.EndsWith(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: ".puck"
-                )) {
-                    try {
-                        var subDoc = context.Read(path: resolvedTarget);
+                try {
+                    var subDoc = context.Read(path: resolvedTarget);
 
-                        if (!TraverseImports(
-                            activeChain: activeChain,
-                            context: context,
-                            currentPath: resolvedTarget,
-                            diagnostics: diagnostics,
-                            doc: subDoc,
-                            visited: visited
-                        )) {
-                            success = false;
-                        }
-                    } catch (Exception ex) when ((ex is not OperationCanceledException)) {
-                        diagnostics.ReportError(
-                            code: PuckDiagnosticCodes.ImportGraph,
-                            message: $"Failed to parse imported document '{importNode.Path}': {ex.Message}",
-                            span: importNode.Span
-                        );
+                    if (!TraverseImports(
+                        activeChain: activeChain,
+                        context: context,
+                        currentPath: resolvedTarget,
+                        diagnostics: diagnostics,
+                        doc: subDoc,
+                        visited: visited
+                    )) {
                         success = false;
                     }
+                } catch (Exception ex) when ((ex is not OperationCanceledException)) {
+                    diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.ImportGraph,
+                        message: $"Failed to parse imported document '{importNode.Path}': {ex.Message}",
+                        span: importNode.Span
+                    );
+                    success = false;
                 }
             }
         }
@@ -411,7 +435,7 @@ public static class ModuleResolver {
         foreach (var import in document.Statements.OfType<ImportNode>()) {
             context.CancellationToken.ThrowIfCancellationRequested();
             var path = Path.GetFullPath(path: Path.Combine(path1: currentDir, path2: import.Path));
-            var nextNamespace = (string.IsNullOrEmpty(value: namespacePath) ? (import.Alias ?? "") : $"{namespacePath}.{import.Alias}");
+            var nextNamespace = (string.IsNullOrEmpty(value: namespacePath) ? (import.Alias ?? "") : QualifiedName.Parse(text: namespacePath).Append(member: (import.Alias ?? "")).ToString());
             var identity = new ModuleImportIdentity(Namespace: nextNamespace, Path: path);
 
             if (!path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck") || !loaded.Add(item: identity)) { continue; }
@@ -420,7 +444,11 @@ public static class ModuleResolver {
 
             CollectModules(imported, (Path.GetDirectoryName(path: path) ?? ""), nextNamespace, loaded, nested, context);
             nested.AddRange(collection: imported.Statements.Where(predicate: static statement => (statement is LetNode or TemplateNode))
-                .Select(selector: statement => ((statement is TemplateNode template) ? template with { DefinitionPath = path } : statement)));
+                .Select(selector: statement => (statement switch {
+                    TemplateNode template => template with { DefinitionPath = path },
+                    LetNode let => let with { DefinitionPath = path },
+                    _ => statement,
+                })));
             output.AddRange(collection: ((import.Alias is { } alias) ? PrefixModuleSymbols(alias: alias, statements: nested) : nested));
         }
     }

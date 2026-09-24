@@ -29,27 +29,49 @@ public static partial class ArenaTransforms {
 
         if (
             BoardCombination.NeedsLeft(operation: combine.Operation) &&
-            !TrySourceBoard(
-            context: in context,
-            empty: out leftEmpty,
-            refusal: out refusal,
-            rowOrdinal: combine.LeftRowOrdinal,
-            topology: topology,
-            values: left
-        )
+            !((combine.LeftSet is { } leftSet)
+            ? TrySourceSet(
+                context: in context,
+                empty: out leftEmpty,
+                member: combine.Value,
+                nonMember: target.Empty,
+                refusal: out refusal,
+                set: leftSet,
+                topology: topology,
+                values: left
+            )
+            : TrySourceBoard(
+                context: in context,
+                empty: out leftEmpty,
+                refusal: out refusal,
+                rowOrdinal: combine.LeftRowOrdinal,
+                topology: topology,
+                values: left
+            ))
         ) {
             return false;
         }
         if (
             BoardCombination.NeedsRight(operation: combine.Operation) &&
-            !TrySourceBoard(
-            context: in context,
-            empty: out rightEmpty,
-            refusal: out refusal,
-            rowOrdinal: combine.RightRowOrdinal,
-            topology: topology,
-            values: right
-        )
+            !((combine.RightSet is { } rightSet)
+            ? TrySourceSet(
+                context: in context,
+                empty: out rightEmpty,
+                member: combine.Value,
+                nonMember: target.Empty,
+                refusal: out refusal,
+                set: rightSet,
+                topology: topology,
+                values: right
+            )
+            : TrySourceBoard(
+                context: in context,
+                empty: out rightEmpty,
+                refusal: out refusal,
+                rowOrdinal: combine.RightRowOrdinal,
+                topology: topology,
+                values: right
+            ))
         ) {
             return false;
         }
@@ -57,6 +79,7 @@ public static partial class ArenaTransforms {
         using var resultLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
 
         var result = resultLease.Span;
+
         BoardCombination.Write(
             direction: combine.Direction,
             element: combine.Element,
@@ -92,6 +115,54 @@ public static partial class ArenaTransforms {
         moved = true;
 
         return Applied(refusal: out refusal);
+    }
+    // A declared set reads as a board whose members hold the written value and whose other cells hold the written
+    // board's empty value, so Copy paints the set and every other operation reads its membership.
+    private static bool TrySourceSet(in ArenaTransformContext context, CellSetRow set, CompiledTopology topology, long member, long nonMember, Span<long> values, out long empty, out EffectRefusal refusal) {
+        empty = nonMember;
+
+        if (!TryLowerDeclaredSet(
+            cells: out var cells,
+            code: TransformRefusal.BoardCombineOperands,
+            context: in context,
+            refusal: out refusal,
+            set: set,
+            topology: topology,
+            verb: "boardCombine"
+        )) {
+            return false;
+        }
+
+        for (var cell = 0; (cell < topology.CellCount); cell++) {
+            values[cell] = (cells.Contains(index: cell)
+                ? member
+                : nonMember
+            );
+        }
+
+        return true;
+    }
+    // A declared set lowers at the width of the board it is read against; a source addressing a different number of
+    // positions refuses by the set's name.
+    private static bool TryLowerDeclaredSet(in ArenaTransformContext context, CellSetRow set, CompiledTopology topology, TransformRefusal code, string verb, out CellSet cells, out EffectRefusal refusal) {
+        if (!CellSetLowering.TryLower(
+            arena: context.Arena,
+            elements: topology.CellCount,
+            expression: set.Set,
+            reason: out var reason,
+            set: out cells,
+            time: context.Time
+        )) {
+            return Refuse(
+                code: code,
+                reason: $"{verb} reads declared set '{set.Name.Value}' over a board of {topology.CellCount} cells: {reason}",
+                refusal: out refusal
+            );
+        }
+
+        refusal = EffectRefusal.None;
+
+        return true;
     }
     private static bool TrySourceBoard(in ArenaTransformContext context, int rowOrdinal, CompiledTopology topology, Span<long> values, out long empty, out EffectRefusal refusal) {
         empty = 0L;

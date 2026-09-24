@@ -1,10 +1,12 @@
 // The `'inline'` engine host: boots Puck.World.Browser's own main.mjs directly in the calling thread (the main
 // thread in a browser tab, or the Node process under `node --test`) and wraps its synchronous, JSON-string
 // `[JSExport]` surface into the async, bigint-typed `WorldEngine` facade. `wrapRawExports` carries no import of its
-// own beyond `engineTypes` — `engine.worker.ts` reuses it unmodified inside a Worker's own global scope, so the
-// wire-decoding rules (which field is a decimal-string 64-bit value, which failure shape throws versus returns an
-// `ok:false` arm) exist in exactly one place.
-import type { CellKindName, CellValue, EngineCell, EngineCostBound, EngineCostReport, EngineDiagnostic, EngineHostOptions, JudgeTrace, ParseResult, RowInfo, WorldEngine } from "./engineTypes";
+// own beyond `engineTypes` and `wasmCounts`, so `engine.worker.ts` reuses it unmodified inside a Worker's own global scope, and the
+// language pump (which needs RxJS) stays on the page's side. The wire-decoding rules (which field is a decimal-string 64-bit value, which failure shape
+// throws versus returns an `ok:false` arm, which export an engine build may lack) exist in exactly one place.
+import { wasmCallCounts } from "./wasmCounts";
+import { EngineCapabilityMissing, type SourceCompileResult, type SourceComposeResult, type SourceDiagnostic, type SourceSeverity } from "./engineTypes";
+import type { CellKindName, CellValue, EngineCell, EngineCore, EngineCostBound, EngineCostReport, EngineDiagnostic, EngineHostOptions, JudgeTrace, LspIdleResult, LspMessage, ParseResult, RowInfo, SourceMap } from "./engineTypes";
 
 /** The raw `[JSExport]` surface `main.mjs`'s `createEngine()` resolves — every member synchronous, taking and
  * returning JSON strings (see `Puck.World.Browser.Exports.BrowserExports`). */
@@ -12,7 +14,6 @@ export interface RawBrowserExports {
   Version(): string;
   Parse(json: string): string;
   ParseFragment(fragmentJson: string, hostJson: string, alias: string): string;
-  ComposeTree(rootName: string, documentsJson: string, editedName: string, editedJson: string): string;
   Canonicalize(json: string): string;
   Compile(json: string): string;
   AnalyzeCosts(json: string): string;
@@ -27,6 +28,12 @@ export interface RawBrowserExports {
   BoardMask(handle: string, row: string): string;
   StateHash(handle: string): string;
   Cells(topologyJson: string): string;
+  MountSources?(filesJson: string): string;
+  WriteSource?(path: string, text: string): string;
+  CompileSource?(path: string): string;
+  ComposeSource?(path: string): string;
+  Lsp?(message: string): string;
+  LspIdle?(): string;
 }
 
 /** `main.mjs`'s own `createEngine(options)` signature — the subset `wrapRawExports`'s callers need. */
@@ -128,17 +135,82 @@ function mapJudgeTrace(raw: {
   return {
     rules: raw.rules,
     writes: raw.writes.map((write) => ({ row: write.row, key: write.key, old: BigInt(write.old), new: BigInt(write.new) })),
-    refusals: raw.refusals.map(formatRefusal),
+    refusals: raw.refusals.map((refusal) => ({ rule: refusal.rule, text: formatRefusal(refusal) })),
     hostFacts: raw.hostFacts ?? [],
   };
+}
+
+type WireSourceDiagnostic = { code: string; severity: string; message: string; path: string | null; line: number; column: number; length: number };
+const SEVERITIES: ReadonlySet<string> = new Set<SourceSeverity>(["error", "warning", "information"]);
+function mapSourceDiagnostics(diagnostics: readonly WireSourceDiagnostic[] | null | undefined, fallbackPath: string): SourceDiagnostic[] {
+  return (diagnostics ?? []).map((diagnostic) => ({
+    code: diagnostic.code,
+    severity: SEVERITIES.has(diagnostic.severity) ? diagnostic.severity as SourceSeverity : "error",
+    message: diagnostic.message,
+    path: diagnostic.path ?? fallbackPath,
+    line: diagnostic.line,
+    column: diagnostic.column,
+    length: diagnostic.length,
+  }));
+}
+function mapSourceCompile(path: string, rawJson: string): SourceCompileResult {
+  const raw = JSON.parse(rawJson) as {
+    ok: boolean; document: string | null; diagnostics: WireSourceDiagnostic[] | null; sourceMap: SourceMap | null;
+    worlds: { name: string; document: string; entry: boolean; sourceMap: SourceMap | null }[] | null;
+  };
+  return {
+    ok: raw.ok,
+    document: raw.document ?? null,
+    worlds: (raw.worlds ?? []).map((world) => ({ ...world, sourceMap: world.sourceMap ?? {} })),
+    diagnostics: mapSourceDiagnostics(raw.diagnostics, path),
+    sourceMap: raw.sourceMap ?? {},
+  };
+}
+function mapSourceCompose(path: string, rawJson: string): SourceComposeResult {
+  const raw = JSON.parse(rawJson) as { ok: boolean; composed: string | null; diagnostics: WireSourceDiagnostic[] | null };
+  return { ok: raw.ok && raw.composed !== null, composed: raw.composed ?? null, diagnostics: mapSourceDiagnostics(raw.diagnostics, path) };
+}
+function mapIdle(rawJson: string): LspIdleResult {
+  const raw = JSON.parse(rawJson) as { ran: boolean; pending: boolean; messages: LspMessage[] | null };
+  return { ran: raw.ran, pending: raw.pending, messages: raw.messages ?? [] };
+}
+/** Throws by name when the raw exports lack `name`, so a caller can tell an older engine build from a failure. */
+function requireExport<K extends keyof RawBrowserExports>(raw: RawBrowserExports, name: K): NonNullable<RawBrowserExports[K]> {
+  const member = raw[name];
+  if (typeof member !== "function") throw new EngineCapabilityMissing(name);
+  return (member as (...args: never[]) => unknown).bind(raw) as NonNullable<RawBrowserExports[K]>;
+}
+/** A source call that answers `{ok:false, error}` instead of its result refused the call itself. */
+function checkAcknowledged(rawJson: string): void {
+  const result = JSON.parse(rawJson) as { ok?: boolean; error?: string } | null;
+  if (result && result.ok === false) throw new Error(result.error ?? "the engine refused the source workspace call.");
 }
 
 /** Wraps a booted engine's raw `[JSExport]` surface into the `WorldEngine` facade — the one place every export's
  * wire shape is decoded, shared by `inline` and `worker` hosting. `disposeCore` lets a caller (the worker script's
  * own message loop) supply a real teardown; the inline caller passes none, since an in-process Mono runtime has no
- * supported unload path of its own. */
-export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void): WorldEngine {
+ * supported unload path of its own. The page's host gives the result its language server
+ * (`languagePump.withLanguageServer`); the worker never needs one. */
+export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void): EngineCore {
   return {
+    async mountSources(files) {
+      checkAcknowledged(requireExport(raw, "MountSources")(JSON.stringify(files)));
+    },
+    async writeSource(path, text) {
+      checkAcknowledged(requireExport(raw, "WriteSource")(path, text));
+    },
+    async compileSource(path) {
+      return mapSourceCompile(path, requireExport(raw, "CompileSource")(path));
+    },
+    async composeSource(path) {
+      return mapSourceCompose(path, requireExport(raw, "ComposeSource")(path));
+    },
+    async lsp(message) {
+      return JSON.parse(requireExport(raw, "Lsp")(message)) as LspMessage[];
+    },
+    async lspIdle() {
+      return mapIdle(requireExport(raw, "LspIdle")());
+    },
     async costs(handle) {
       const result = JSON.parse(raw.Costs(handle)) as { ok: true; report: WireCostReport } | { ok: false; error: string };
       if (!result.ok) throw new Error(result.error);
@@ -160,18 +232,6 @@ export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void)
     },
     async parseFragment(fragmentJson, hostJson, alias) {
       return mapParseResult(raw.ParseFragment(fragmentJson, hostJson, alias));
-    },
-    async composeTree(rootName, documents, edited) {
-      const raw2 = JSON.parse(
-        raw.ComposeTree(rootName, JSON.stringify(documents), edited?.name ?? "", edited?.json ?? ""),
-      ) as
-        | { ok: true; composed: string; document: string; deferred: string[] | null }
-        | { ok: false; errors: { path: string | null; message: string }[]; deferred: string[] | null };
-
-      return (raw2.ok
-        ? { ok: true, composed: raw2.composed, document: JSON.parse(raw2.document), deferred: raw2.deferred ?? [] }
-        : { ok: false, errors: mapDiagnostics(raw2.errors), deferred: raw2.deferred ?? [] }
-      );
     },
     async canonicalize(json) {
       return mapParseResult(raw.Canonicalize(json));
@@ -233,6 +293,9 @@ export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void)
     async cells(topologyJson) {
       return JSON.parse(raw.Cells(topologyJson)) as { ok: true; cells: EngineCell[] } | { ok: false; error: string };
     },
+    async wasmCounts() {
+      return wasmCallCounts();
+    },
     async dispose() {
       disposeCore?.();
     },
@@ -256,8 +319,8 @@ export const dynamicImport: (specifier: string) => Promise<unknown> = new Functi
   "return import(specifier);",
 ) as (specifier: string) => Promise<unknown>;
 
-/** Boots `options.engineEntryUrl` (a `main.mjs`) in the calling thread and returns the wrapped `WorldEngine`. */
-export async function createInlineWorldEngine(options: EngineHostOptions): Promise<WorldEngine> {
+/** Boots `options.engineEntryUrl` (a `main.mjs`) in the calling thread and returns its decoded calls. */
+export async function createInlineWorldEngine(options: EngineHostOptions): Promise<EngineCore> {
   const module = (await dynamicImport(options.engineEntryUrl)) as { createEngine: CreateRawEngine };
   const raw = await module.createEngine(options.resourceLoader ? { resourceLoader: options.resourceLoader } : undefined);
 

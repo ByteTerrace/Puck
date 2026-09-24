@@ -1,0 +1,4132 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 168,
+  "engineTick": 282240,
+  "hashes": {
+    "authoritative": "dbd927cee61ad98b",
+    "capture": "a7cf60752672827d",
+    "pose": "cbf29ce484222325",
+    "world": "bae9bbb941274333"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "board",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "capacity": 361,
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "161",
+            "value": 1
+          },
+          {
+            "key": "168",
+            "value": 2
+          },
+          {
+            "key": "179",
+            "value": 1
+          },
+          {
+            "key": "180",
+            "value": 0
+          },
+          {
+            "key": "181",
+            "value": 1
+          },
+          {
+            "key": "199",
+            "value": 1
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "goban"
+        }
+      },
+      {
+        "name": "probe",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "capacity": 361,
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": 0
+          },
+          {
+            "key": "49",
+            "value": 0
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 0
+          },
+          {
+            "key": "52",
+            "value": 0
+          },
+          {
+            "key": "53",
+            "value": 0
+          },
+          {
+            "key": "54",
+            "value": 0
+          },
+          {
+            "key": "55",
+            "value": 0
+          },
+          {
+            "key": "56",
+            "value": 0
+          },
+          {
+            "key": "57",
+            "value": 0
+          },
+          {
+            "key": "58",
+            "value": 0
+          },
+          {
+            "key": "59",
+            "value": 0
+          },
+          {
+            "key": "60",
+            "value": 0
+          },
+          {
+            "key": "61",
+            "value": 0
+          },
+          {
+            "key": "62",
+            "value": 0
+          },
+          {
+            "key": "63",
+            "value": 0
+          },
+          {
+            "key": "64",
+            "value": 0
+          },
+          {
+            "key": "65",
+            "value": 0
+          },
+          {
+            "key": "66",
+            "value": 0
+          },
+          {
+            "key": "67",
+            "value": 0
+          },
+          {
+            "key": "68",
+            "value": 0
+          },
+          {
+            "key": "69",
+            "value": 0
+          },
+          {
+            "key": "70",
+            "value": 0
+          },
+          {
+            "key": "71",
+            "value": 0
+          },
+          {
+            "key": "72",
+            "value": 0
+          },
+          {
+            "key": "73",
+            "value": 0
+          },
+          {
+            "key": "74",
+            "value": 0
+          },
+          {
+            "key": "75",
+            "value": 0
+          },
+          {
+            "key": "76",
+            "value": 0
+          },
+          {
+            "key": "77",
+            "value": 0
+          },
+          {
+            "key": "78",
+            "value": 0
+          },
+          {
+            "key": "79",
+            "value": 0
+          },
+          {
+            "key": "80",
+            "value": 0
+          },
+          {
+            "key": "81",
+            "value": 0
+          },
+          {
+            "key": "82",
+            "value": 0
+          },
+          {
+            "key": "83",
+            "value": 0
+          },
+          {
+            "key": "84",
+            "value": 0
+          },
+          {
+            "key": "85",
+            "value": 0
+          },
+          {
+            "key": "86",
+            "value": 0
+          },
+          {
+            "key": "87",
+            "value": 0
+          },
+          {
+            "key": "88",
+            "value": 0
+          },
+          {
+            "key": "89",
+            "value": 0
+          },
+          {
+            "key": "90",
+            "value": 0
+          },
+          {
+            "key": "91",
+            "value": 0
+          },
+          {
+            "key": "92",
+            "value": 0
+          },
+          {
+            "key": "93",
+            "value": 0
+          },
+          {
+            "key": "94",
+            "value": 0
+          },
+          {
+            "key": "95",
+            "value": 0
+          },
+          {
+            "key": "96",
+            "value": 0
+          },
+          {
+            "key": "97",
+            "value": 0
+          },
+          {
+            "key": "98",
+            "value": 0
+          },
+          {
+            "key": "99",
+            "value": 0
+          },
+          {
+            "key": "100",
+            "value": 0
+          },
+          {
+            "key": "101",
+            "value": 0
+          },
+          {
+            "key": "102",
+            "value": 0
+          },
+          {
+            "key": "103",
+            "value": 0
+          },
+          {
+            "key": "104",
+            "value": 0
+          },
+          {
+            "key": "105",
+            "value": 0
+          },
+          {
+            "key": "106",
+            "value": 0
+          },
+          {
+            "key": "107",
+            "value": 0
+          },
+          {
+            "key": "108",
+            "value": 0
+          },
+          {
+            "key": "109",
+            "value": 0
+          },
+          {
+            "key": "110",
+            "value": 0
+          },
+          {
+            "key": "111",
+            "value": 0
+          },
+          {
+            "key": "112",
+            "value": 0
+          },
+          {
+            "key": "113",
+            "value": 0
+          },
+          {
+            "key": "114",
+            "value": 0
+          },
+          {
+            "key": "115",
+            "value": 0
+          },
+          {
+            "key": "116",
+            "value": 0
+          },
+          {
+            "key": "117",
+            "value": 0
+          },
+          {
+            "key": "118",
+            "value": 0
+          },
+          {
+            "key": "119",
+            "value": 0
+          },
+          {
+            "key": "120",
+            "value": 0
+          },
+          {
+            "key": "121",
+            "value": 0
+          },
+          {
+            "key": "122",
+            "value": 0
+          },
+          {
+            "key": "123",
+            "value": 0
+          },
+          {
+            "key": "124",
+            "value": 0
+          },
+          {
+            "key": "125",
+            "value": 0
+          },
+          {
+            "key": "126",
+            "value": 0
+          },
+          {
+            "key": "127",
+            "value": 0
+          },
+          {
+            "key": "128",
+            "value": 0
+          },
+          {
+            "key": "129",
+            "value": 0
+          },
+          {
+            "key": "130",
+            "value": 0
+          },
+          {
+            "key": "131",
+            "value": 0
+          },
+          {
+            "key": "132",
+            "value": 0
+          },
+          {
+            "key": "133",
+            "value": 0
+          },
+          {
+            "key": "134",
+            "value": 0
+          },
+          {
+            "key": "135",
+            "value": 0
+          },
+          {
+            "key": "136",
+            "value": 0
+          },
+          {
+            "key": "137",
+            "value": 0
+          },
+          {
+            "key": "138",
+            "value": 0
+          },
+          {
+            "key": "139",
+            "value": 0
+          },
+          {
+            "key": "140",
+            "value": 0
+          },
+          {
+            "key": "141",
+            "value": 0
+          },
+          {
+            "key": "142",
+            "value": 0
+          },
+          {
+            "key": "143",
+            "value": 0
+          },
+          {
+            "key": "144",
+            "value": 0
+          },
+          {
+            "key": "145",
+            "value": 0
+          },
+          {
+            "key": "146",
+            "value": 0
+          },
+          {
+            "key": "147",
+            "value": 0
+          },
+          {
+            "key": "148",
+            "value": 0
+          },
+          {
+            "key": "149",
+            "value": 0
+          },
+          {
+            "key": "150",
+            "value": 0
+          },
+          {
+            "key": "151",
+            "value": 0
+          },
+          {
+            "key": "152",
+            "value": 0
+          },
+          {
+            "key": "153",
+            "value": 0
+          },
+          {
+            "key": "154",
+            "value": 0
+          },
+          {
+            "key": "155",
+            "value": 0
+          },
+          {
+            "key": "156",
+            "value": 0
+          },
+          {
+            "key": "157",
+            "value": 0
+          },
+          {
+            "key": "158",
+            "value": 0
+          },
+          {
+            "key": "159",
+            "value": 0
+          },
+          {
+            "key": "160",
+            "value": 0
+          },
+          {
+            "key": "161",
+            "value": 1
+          },
+          {
+            "key": "162",
+            "value": 0
+          },
+          {
+            "key": "163",
+            "value": 0
+          },
+          {
+            "key": "164",
+            "value": 0
+          },
+          {
+            "key": "165",
+            "value": 0
+          },
+          {
+            "key": "166",
+            "value": 0
+          },
+          {
+            "key": "167",
+            "value": 0
+          },
+          {
+            "key": "168",
+            "value": 0
+          },
+          {
+            "key": "169",
+            "value": 0
+          },
+          {
+            "key": "170",
+            "value": 0
+          },
+          {
+            "key": "171",
+            "value": 0
+          },
+          {
+            "key": "172",
+            "value": 0
+          },
+          {
+            "key": "173",
+            "value": 0
+          },
+          {
+            "key": "174",
+            "value": 0
+          },
+          {
+            "key": "175",
+            "value": 0
+          },
+          {
+            "key": "176",
+            "value": 0
+          },
+          {
+            "key": "177",
+            "value": 0
+          },
+          {
+            "key": "178",
+            "value": 0
+          },
+          {
+            "key": "179",
+            "value": 1
+          },
+          {
+            "key": "180",
+            "value": 0
+          },
+          {
+            "key": "181",
+            "value": 1
+          },
+          {
+            "key": "182",
+            "value": 0
+          },
+          {
+            "key": "183",
+            "value": 0
+          },
+          {
+            "key": "184",
+            "value": 0
+          },
+          {
+            "key": "185",
+            "value": 0
+          },
+          {
+            "key": "186",
+            "value": 0
+          },
+          {
+            "key": "187",
+            "value": 0
+          },
+          {
+            "key": "188",
+            "value": 0
+          },
+          {
+            "key": "189",
+            "value": 0
+          },
+          {
+            "key": "190",
+            "value": 0
+          },
+          {
+            "key": "191",
+            "value": 0
+          },
+          {
+            "key": "192",
+            "value": 0
+          },
+          {
+            "key": "193",
+            "value": 0
+          },
+          {
+            "key": "194",
+            "value": 0
+          },
+          {
+            "key": "195",
+            "value": 0
+          },
+          {
+            "key": "196",
+            "value": 0
+          },
+          {
+            "key": "197",
+            "value": 0
+          },
+          {
+            "key": "198",
+            "value": 0
+          },
+          {
+            "key": "199",
+            "value": 1
+          },
+          {
+            "key": "200",
+            "value": 0
+          },
+          {
+            "key": "201",
+            "value": 0
+          },
+          {
+            "key": "202",
+            "value": 0
+          },
+          {
+            "key": "203",
+            "value": 0
+          },
+          {
+            "key": "204",
+            "value": 0
+          },
+          {
+            "key": "205",
+            "value": 0
+          },
+          {
+            "key": "206",
+            "value": 0
+          },
+          {
+            "key": "207",
+            "value": 0
+          },
+          {
+            "key": "208",
+            "value": 0
+          },
+          {
+            "key": "209",
+            "value": 0
+          },
+          {
+            "key": "210",
+            "value": 0
+          },
+          {
+            "key": "211",
+            "value": 0
+          },
+          {
+            "key": "212",
+            "value": 0
+          },
+          {
+            "key": "213",
+            "value": 0
+          },
+          {
+            "key": "214",
+            "value": 0
+          },
+          {
+            "key": "215",
+            "value": 0
+          },
+          {
+            "key": "216",
+            "value": 0
+          },
+          {
+            "key": "217",
+            "value": 0
+          },
+          {
+            "key": "218",
+            "value": 0
+          },
+          {
+            "key": "219",
+            "value": 0
+          },
+          {
+            "key": "220",
+            "value": 0
+          },
+          {
+            "key": "221",
+            "value": 0
+          },
+          {
+            "key": "222",
+            "value": 0
+          },
+          {
+            "key": "223",
+            "value": 0
+          },
+          {
+            "key": "224",
+            "value": 0
+          },
+          {
+            "key": "225",
+            "value": 0
+          },
+          {
+            "key": "226",
+            "value": 0
+          },
+          {
+            "key": "227",
+            "value": 0
+          },
+          {
+            "key": "228",
+            "value": 0
+          },
+          {
+            "key": "229",
+            "value": 0
+          },
+          {
+            "key": "230",
+            "value": 0
+          },
+          {
+            "key": "231",
+            "value": 0
+          },
+          {
+            "key": "232",
+            "value": 0
+          },
+          {
+            "key": "233",
+            "value": 0
+          },
+          {
+            "key": "234",
+            "value": 0
+          },
+          {
+            "key": "235",
+            "value": 0
+          },
+          {
+            "key": "236",
+            "value": 0
+          },
+          {
+            "key": "237",
+            "value": 0
+          },
+          {
+            "key": "238",
+            "value": 0
+          },
+          {
+            "key": "239",
+            "value": 0
+          },
+          {
+            "key": "240",
+            "value": 0
+          },
+          {
+            "key": "241",
+            "value": 0
+          },
+          {
+            "key": "242",
+            "value": 0
+          },
+          {
+            "key": "243",
+            "value": 0
+          },
+          {
+            "key": "244",
+            "value": 0
+          },
+          {
+            "key": "245",
+            "value": 0
+          },
+          {
+            "key": "246",
+            "value": 0
+          },
+          {
+            "key": "247",
+            "value": 0
+          },
+          {
+            "key": "248",
+            "value": 0
+          },
+          {
+            "key": "249",
+            "value": 0
+          },
+          {
+            "key": "250",
+            "value": 0
+          },
+          {
+            "key": "251",
+            "value": 0
+          },
+          {
+            "key": "252",
+            "value": 0
+          },
+          {
+            "key": "253",
+            "value": 0
+          },
+          {
+            "key": "254",
+            "value": 0
+          },
+          {
+            "key": "255",
+            "value": 0
+          },
+          {
+            "key": "256",
+            "value": 0
+          },
+          {
+            "key": "257",
+            "value": 0
+          },
+          {
+            "key": "258",
+            "value": 0
+          },
+          {
+            "key": "259",
+            "value": 0
+          },
+          {
+            "key": "260",
+            "value": 0
+          },
+          {
+            "key": "261",
+            "value": 0
+          },
+          {
+            "key": "262",
+            "value": 0
+          },
+          {
+            "key": "263",
+            "value": 0
+          },
+          {
+            "key": "264",
+            "value": 0
+          },
+          {
+            "key": "265",
+            "value": 0
+          },
+          {
+            "key": "266",
+            "value": 0
+          },
+          {
+            "key": "267",
+            "value": 0
+          },
+          {
+            "key": "268",
+            "value": 0
+          },
+          {
+            "key": "269",
+            "value": 0
+          },
+          {
+            "key": "270",
+            "value": 0
+          },
+          {
+            "key": "271",
+            "value": 0
+          },
+          {
+            "key": "272",
+            "value": 0
+          },
+          {
+            "key": "273",
+            "value": 0
+          },
+          {
+            "key": "274",
+            "value": 0
+          },
+          {
+            "key": "275",
+            "value": 0
+          },
+          {
+            "key": "276",
+            "value": 0
+          },
+          {
+            "key": "277",
+            "value": 0
+          },
+          {
+            "key": "278",
+            "value": 0
+          },
+          {
+            "key": "279",
+            "value": 0
+          },
+          {
+            "key": "280",
+            "value": 0
+          },
+          {
+            "key": "281",
+            "value": 0
+          },
+          {
+            "key": "282",
+            "value": 0
+          },
+          {
+            "key": "283",
+            "value": 0
+          },
+          {
+            "key": "284",
+            "value": 0
+          },
+          {
+            "key": "285",
+            "value": 0
+          },
+          {
+            "key": "286",
+            "value": 0
+          },
+          {
+            "key": "287",
+            "value": 0
+          },
+          {
+            "key": "288",
+            "value": 0
+          },
+          {
+            "key": "289",
+            "value": 0
+          },
+          {
+            "key": "290",
+            "value": 0
+          },
+          {
+            "key": "291",
+            "value": 0
+          },
+          {
+            "key": "292",
+            "value": 0
+          },
+          {
+            "key": "293",
+            "value": 0
+          },
+          {
+            "key": "294",
+            "value": 0
+          },
+          {
+            "key": "295",
+            "value": 0
+          },
+          {
+            "key": "296",
+            "value": 0
+          },
+          {
+            "key": "297",
+            "value": 0
+          },
+          {
+            "key": "298",
+            "value": 0
+          },
+          {
+            "key": "299",
+            "value": 0
+          },
+          {
+            "key": "300",
+            "value": 0
+          },
+          {
+            "key": "301",
+            "value": 0
+          },
+          {
+            "key": "302",
+            "value": 0
+          },
+          {
+            "key": "303",
+            "value": 0
+          },
+          {
+            "key": "304",
+            "value": 0
+          },
+          {
+            "key": "305",
+            "value": 0
+          },
+          {
+            "key": "306",
+            "value": 0
+          },
+          {
+            "key": "307",
+            "value": 0
+          },
+          {
+            "key": "308",
+            "value": 0
+          },
+          {
+            "key": "309",
+            "value": 0
+          },
+          {
+            "key": "310",
+            "value": 0
+          },
+          {
+            "key": "311",
+            "value": 0
+          },
+          {
+            "key": "312",
+            "value": 0
+          },
+          {
+            "key": "313",
+            "value": 0
+          },
+          {
+            "key": "314",
+            "value": 0
+          },
+          {
+            "key": "315",
+            "value": 0
+          },
+          {
+            "key": "316",
+            "value": 0
+          },
+          {
+            "key": "317",
+            "value": 0
+          },
+          {
+            "key": "318",
+            "value": 0
+          },
+          {
+            "key": "319",
+            "value": 0
+          },
+          {
+            "key": "320",
+            "value": 0
+          },
+          {
+            "key": "321",
+            "value": 0
+          },
+          {
+            "key": "322",
+            "value": 0
+          },
+          {
+            "key": "323",
+            "value": 0
+          },
+          {
+            "key": "324",
+            "value": 0
+          },
+          {
+            "key": "325",
+            "value": 0
+          },
+          {
+            "key": "326",
+            "value": 0
+          },
+          {
+            "key": "327",
+            "value": 0
+          },
+          {
+            "key": "328",
+            "value": 0
+          },
+          {
+            "key": "329",
+            "value": 0
+          },
+          {
+            "key": "330",
+            "value": 0
+          },
+          {
+            "key": "331",
+            "value": 0
+          },
+          {
+            "key": "332",
+            "value": 0
+          },
+          {
+            "key": "333",
+            "value": 0
+          },
+          {
+            "key": "334",
+            "value": 0
+          },
+          {
+            "key": "335",
+            "value": 0
+          },
+          {
+            "key": "336",
+            "value": 0
+          },
+          {
+            "key": "337",
+            "value": 0
+          },
+          {
+            "key": "338",
+            "value": 0
+          },
+          {
+            "key": "339",
+            "value": 0
+          },
+          {
+            "key": "340",
+            "value": 0
+          },
+          {
+            "key": "341",
+            "value": 0
+          },
+          {
+            "key": "342",
+            "value": 0
+          },
+          {
+            "key": "343",
+            "value": 0
+          },
+          {
+            "key": "344",
+            "value": 0
+          },
+          {
+            "key": "345",
+            "value": 0
+          },
+          {
+            "key": "346",
+            "value": 0
+          },
+          {
+            "key": "347",
+            "value": 0
+          },
+          {
+            "key": "348",
+            "value": 0
+          },
+          {
+            "key": "349",
+            "value": 0
+          },
+          {
+            "key": "350",
+            "value": 0
+          },
+          {
+            "key": "351",
+            "value": 0
+          },
+          {
+            "key": "352",
+            "value": 0
+          },
+          {
+            "key": "353",
+            "value": 0
+          },
+          {
+            "key": "354",
+            "value": 0
+          },
+          {
+            "key": "355",
+            "value": 0
+          },
+          {
+            "key": "356",
+            "value": 0
+          },
+          {
+            "key": "357",
+            "value": 0
+          },
+          {
+            "key": "358",
+            "value": 0
+          },
+          {
+            "key": "359",
+            "value": 0
+          },
+          {
+            "key": "360",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "goban"
+        }
+      },
+      {
+        "name": "blackReach",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "capacity": 361,
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "goban"
+        }
+      },
+      {
+        "name": "whiteReach",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "capacity": 361,
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "goban"
+        }
+      },
+      {
+        "name": "frontier",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "capacity": 361,
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "goban"
+        }
+      },
+      {
+        "name": "owner",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "capacity": 361,
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "goban"
+        }
+      },
+      {
+        "name": "positions",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": -6535851959522287758
+          },
+          {
+            "key": "1",
+            "value": 4520092218935414254
+          },
+          {
+            "key": "2",
+            "value": 1744439481636135248
+          },
+          {
+            "key": "3",
+            "value": -1816287291836342135
+          },
+          {
+            "key": "4",
+            "value": 5063856998031367287
+          },
+          {
+            "key": "5",
+            "value": -6734886365649049768
+          },
+          {
+            "key": "6",
+            "value": 1355633612184447286
+          },
+          {
+            "key": "7",
+            "value": -4093134178678476950
+          }
+        ],
+        "historyCursor": 9,
+        "domain": {
+          "$type": "ring",
+          "capacity": 8
+        }
+      },
+      {
+        "name": "stone",
+        "kind": "Int",
+        "min": -1,
+        "max": 360,
+        "cells": [
+          {
+            "key": "play",
+            "value": 168
+          }
+        ]
+      },
+      {
+        "name": "stones",
+        "kind": "Int",
+        "min": 0,
+        "max": 361,
+        "cells": [
+          {
+            "key": "1",
+            "value": 4
+          },
+          {
+            "key": "2",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "name": "prisoners",
+        "kind": "Int",
+        "min": 0,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "territory",
+        "kind": "Int",
+        "min": 0,
+        "max": 361,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "placed",
+        "kind": "Int",
+        "min": -1,
+        "max": 360,
+        "value": 168
+      },
+      {
+        "name": "turn",
+        "kind": "Int",
+        "min": 1,
+        "max": 2,
+        "value": 1
+      },
+      {
+        "name": "verdict",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "ko",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "refusal",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 0
+      },
+      {
+        "name": "captured",
+        "kind": "Int",
+        "min": 0,
+        "max": 361,
+        "value": 0
+      },
+      {
+        "name": "group",
+        "kind": "Int",
+        "min": 0,
+        "max": 361,
+        "value": 1
+      },
+      {
+        "name": "liberties",
+        "kind": "Int",
+        "min": 0,
+        "max": 361,
+        "value": 4
+      },
+      {
+        "name": "atari",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "moves",
+        "kind": "Int",
+        "min": 0,
+        "value": 8
+      },
+      {
+        "name": "reported",
+        "kind": "Int",
+        "min": 0,
+        "value": 8
+      },
+      {
+        "name": "rejected",
+        "kind": "Int",
+        "min": 0,
+        "value": 0
+      },
+      {
+        "name": "passes",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0
+      },
+      {
+        "name": "passRequest",
+        "kind": "Int",
+        "min": 0,
+        "value": 0
+      },
+      {
+        "name": "passApplied",
+        "kind": "Int",
+        "min": 0,
+        "value": 0
+      },
+      {
+        "name": "opened",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "over",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "scoring",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0
+      },
+      {
+        "name": "growing",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "reached",
+        "kind": "Int",
+        "min": 0,
+        "max": 722,
+        "value": 0
+      },
+      {
+        "name": "winner",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0
+      },
+      {
+        "name": "aiRevision",
+        "kind": "Int",
+        "min": 0,
+        "value": 8
+      },
+      {
+        "name": "aiSide",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 2
+      },
+      {
+        "name": "aiEnabled",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "aiBest",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "token",
+            "value": 0
+          },
+          {
+            "key": "to",
+            "value": 168
+          },
+          {
+            "key": "score",
+            "value": 156
+          },
+          {
+            "key": "revision",
+            "value": 7
+          }
+        ]
+      }
+    ],
+    "lattices": [
+      {
+        "$type": "grid",
+        "width": 19,
+        "depth": 19,
+        "wrap": "None",
+        "band": 0,
+        "directions": [
+          {
+            "name": "N",
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "E",
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "S",
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "W",
+            "x": -1,
+            "y": 0,
+            "z": 0
+          }
+        ],
+        "name": "goban",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "board",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "161",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "168",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "179",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "180",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "181",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "199",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "probe",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "64",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "65",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "66",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "67",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "68",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "69",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "70",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "71",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "72",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "73",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "74",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "75",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "76",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "77",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "78",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "79",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "80",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "81",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "82",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "83",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "84",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "85",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "86",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "87",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "88",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "89",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "90",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "91",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "92",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "93",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "94",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "95",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "96",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "97",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "98",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "99",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "100",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "101",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "102",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "103",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "104",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "105",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "106",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "107",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "108",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "109",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "110",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "111",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "112",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "113",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "114",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "115",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "116",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "117",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "118",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "119",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "120",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "121",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "122",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "123",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "124",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "125",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "126",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "127",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "128",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "129",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "130",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "131",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "132",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "133",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "134",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "135",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "136",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "137",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "138",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "139",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "140",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "141",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "142",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "143",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "144",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "145",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "146",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "147",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "148",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "149",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "150",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "151",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "152",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "153",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "154",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "155",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "156",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "157",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "158",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "159",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "160",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "161",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "162",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "163",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "164",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "165",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "166",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "167",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "168",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "169",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "170",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "171",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "172",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "173",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "174",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "175",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "176",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "177",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "178",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "179",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "180",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "181",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "182",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "183",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "184",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "185",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "186",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "187",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "188",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "189",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "190",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "191",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "192",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "193",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "194",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "195",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "196",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "197",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "198",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "199",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "200",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "201",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "202",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "203",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "204",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "205",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "206",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "207",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "208",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "209",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "210",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "211",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "212",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "213",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "214",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "215",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "216",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "217",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "218",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "219",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "220",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "221",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "222",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "223",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "224",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "225",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "226",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "227",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "228",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "229",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "230",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "231",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "232",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "233",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "234",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "235",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "236",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "237",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "238",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "239",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "240",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "241",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "242",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "243",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "244",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "245",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "246",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "247",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "248",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "249",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "250",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "251",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "252",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "253",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "254",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "255",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "256",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "257",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "258",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "259",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "260",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "261",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "262",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "263",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "264",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "265",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "266",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "267",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "268",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "269",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "270",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "271",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "272",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "273",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "274",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "275",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "276",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "277",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "278",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "279",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "280",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "281",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "282",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "283",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "284",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "285",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "286",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "287",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "288",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "289",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "290",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "291",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "292",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "293",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "294",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "295",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "296",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "297",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "298",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "299",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "300",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "301",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "302",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "303",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "304",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "305",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "306",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "307",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "308",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "309",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "310",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "311",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "312",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "313",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "314",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "315",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "316",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "317",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "318",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "319",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "320",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "321",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "322",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "323",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "324",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "325",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "326",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "327",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "328",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "329",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "330",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "331",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "332",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "333",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "334",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "335",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "336",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "337",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "338",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "339",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "340",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "341",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "342",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "343",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "344",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "345",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "346",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "347",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "348",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "349",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "350",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "351",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "352",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "353",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "354",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "355",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "356",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "357",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "358",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "359",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "360",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "blackReach",
+      "cells": []
+    },
+    {
+      "row": "whiteReach",
+      "cells": []
+    },
+    {
+      "row": "frontier",
+      "cells": []
+    },
+    {
+      "row": "owner",
+      "cells": []
+    },
+    {
+      "row": "positions",
+      "cells": [
+        {
+          "key": "0",
+          "value": -6535851959522287758,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 4520092218935414254,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1744439481636135248,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": -1816287291836342135,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 5063856998031367287,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": -6734886365649049768,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1355633612184447286,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": -4093134178678476950,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stone",
+      "cells": [
+        {
+          "key": "play",
+          "value": 168,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stones",
+      "cells": [
+        {
+          "key": "1",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "prisoners",
+      "cells": [
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "territory",
+      "cells": [
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "placed",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 168,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "turn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "verdict",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "ko",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "refusal",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "captured",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "group",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "liberties",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 4,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "atari",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "moves",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reported",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "rejected",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "passes",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "passRequest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "passApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "opened",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "over",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "scoring",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "growing",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "reached",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "winner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiRevision",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiSide",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiEnabled",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiBest",
+      "cells": [
+        {
+          "key": "token",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "to",
+          "value": 168,
+          "text": null
+        },
+        {
+          "key": "score",
+          "value": 156,
+          "text": null
+        },
+        {
+          "key": "revision",
+          "value": 7,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

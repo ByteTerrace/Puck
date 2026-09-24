@@ -42,7 +42,7 @@ public class EmitterTests {
     public void TestMinimalSyntheticWorldEmission() {
         const string Source = """
             schema: "puck.world.definition.v1"
-            basis: "worlds/standard.basis.json"
+            basis: "worlds/standard"
 
             host {
                 width: 1280
@@ -62,7 +62,7 @@ public class EmitterTests {
             jsonObj["schema"]?.ToString()
         );
         Assert.Equal(
-            "worlds/standard.basis.json",
+            "worlds/standard",
             jsonObj["basis"]?.ToString()
         );
 
@@ -113,7 +113,6 @@ public class EmitterTests {
                 listen: null
                 presentMode: Immediate
                 presentation: Windowed
-                rayQuery: true
                 surfaceFormat: r8g8b8a8
                 targetHertz: 60
                 timing: false
@@ -153,7 +152,7 @@ public class EmitterTests {
 
                 pipeline "moth-pipeline" {
                     camera: null
-                    source: "../pipelines/moth.glsl"
+                    source: "../pipelines/moth.hlsl"
                     timeScale: 1
                 }
             }

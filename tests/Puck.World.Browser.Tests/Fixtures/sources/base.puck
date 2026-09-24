@@ -1,0 +1,24 @@
+// The room every fixture game stands in: a host, a floor and an arrival spot.
+schema: "puck.world.definition.v1"
+
+host {
+  presentation: Windowed
+  backend: auto
+  width: 640
+  height: 480
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentMode: Immediate
+  targetHertz: 60
+  exitAfterSeconds: 0
+}
+
+ground floor {
+  center [0m, 0m, 0m]
+  size [8m, 8m]
+}
+
+spawn arrival {
+  at [0m, 1m, 0m]
+  yaw: 0deg
+}

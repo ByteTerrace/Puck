@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
 using Puck.Physics.Motion;
@@ -12,7 +13,7 @@ namespace Puck.World.Protocol;
 /// <see cref="Principal"/>; the server checks <see cref="WorldCapability.Drive"/> over the target body before it applies.</summary>
 /// <param name="Principal">The acting identity the command is checked against.</param>
 /// <param name="EntityIndex">The 0-based entity index the command acts on.</param>
-public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
+public abstract record WorldCommand(Principal Principal, int EntityIndex) {
     /// <summary>Snaps selected pose components while preserving every component omitted by <see cref="Mode"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
@@ -21,7 +22,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="PitchRadians">The replacement pitch.</param>
     /// <param name="RollRadians">The replacement roll.</param>
     /// <param name="Mode">The closed replacement shape.</param>
-    public sealed record SnapPose(WorldPrincipal Principal, int EntityIndex, Vector3 Position, float YawRadians, float PitchRadians, float RollRadians, SnapPoseMode Mode) : WorldCommand(
+    public sealed record SnapPose(Principal Principal, int EntityIndex, Vector3 Position, float YawRadians, float PitchRadians, float RollRadians, SnapPoseMode Mode) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -31,7 +32,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="EntityIndex">The 0-based entity index.</param>
     /// <param name="Intent">The intent the segment holds while live.</param>
     /// <param name="Seconds">How long (advance seconds) the segment drives before it expires.</param>
-    public sealed record EnqueueSegment(WorldPrincipal Principal, int EntityIndex, PlayerIntent Intent, float Seconds) : WorldCommand(
+    public sealed record EnqueueSegment(Principal Principal, int EntityIndex, PlayerIntent Intent, float Seconds) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -43,7 +44,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="Value">The raw fixed-point value to hold the channel at.</param>
     /// <param name="HoldSeconds">How long (sim seconds) the channel reads held before auto-releasing, or
     /// <see langword="null"/> for the default host-step-derived tap.</param>
-    public sealed record PressChannel(WorldPrincipal Principal, int EntityIndex, int ChannelOrdinal, FixedQ4816 Value, float? HoldSeconds) : WorldCommand(
+    public sealed record PressChannel(Principal Principal, int EntityIndex, int ChannelOrdinal, FixedQ4816 Value, float? HoldSeconds) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -51,7 +52,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
     /// <param name="BodyMotionProgram">The body motion program to execute.</param>
-    public sealed record SetBodyMotion(WorldPrincipal Principal, int EntityIndex, string BodyMotionProgram) : WorldCommand(
+    public sealed record SetBodyMotion(Principal Principal, int EntityIndex, string BodyMotionProgram) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -59,7 +60,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
     /// <param name="Source">The intent source to latch.</param>
-    public sealed record SetControl(WorldPrincipal Principal, int EntityIndex, IntentSource Source) : WorldCommand(
+    public sealed record SetControl(Principal Principal, int EntityIndex, IntentSource Source) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -71,14 +72,14 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="Z">The authoritative world Z coordinate.</param>
     /// <param name="YawRadians">The authoritative heading in radians (0 = facing -Z).</param>
     /// <param name="Seconds">The smoothing window over which the client eases the render error to zero.</param>
-    public sealed record Reconcile(WorldPrincipal Principal, int EntityIndex, float X, float Z, float YawRadians, float Seconds) : WorldCommand(
+    public sealed record Reconcile(Principal Principal, int EntityIndex, float X, float Z, float YawRadians, float Seconds) : WorldCommand(
         Principal,
         EntityIndex
     );
     /// <summary>Stops an entity dead — clears its whole tape and releases every held key/lane.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
-    public sealed record Stop(WorldPrincipal Principal, int EntityIndex) : WorldCommand(
+    public sealed record Stop(Principal Principal, int EntityIndex) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -101,7 +102,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// entity being applied (a local seat's own claimed identity, or a population entry's
     /// <see cref="PrincipalKind.Peer"/> identity), distinct from <see cref="Principal"/> whenever an actor composes
     /// an application for an entity that is not itself.</param>
-    public sealed record ComposeControl(WorldPrincipal Principal, int EntityIndex, GrantSubject Target, bool Exclusive, WorldPrincipal TargetPrincipal) : WorldCommand(
+    public sealed record ComposeControl(Principal Principal, int EntityIndex, GrantSubject Target, bool Exclusive, Principal TargetPrincipal) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -113,7 +114,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="EntityIndex">The 0-based entity index whose applications are dissolved.</param>
     /// <param name="TargetPrincipal">The identity whose application set is dissolved — see
     /// <see cref="ComposeControl.TargetPrincipal"/>.</param>
-    public sealed record DissolveControl(WorldPrincipal Principal, int EntityIndex, WorldPrincipal TargetPrincipal) : WorldCommand(
+    public sealed record DissolveControl(Principal Principal, int EntityIndex, Principal TargetPrincipal) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -122,7 +123,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="EntityIndex">The 0-based entity index.</param>
     /// <param name="Tick">The simulation tick at whose boundary the values enter.</param>
     /// <param name="Values">Named fixed-point counter or exact timer values.</param>
-    public sealed record LoadDurableState(WorldPrincipal Principal, int EntityIndex, ulong Tick, IReadOnlyList<DurableStateValue> Values) : WorldCommand(
+    public sealed record LoadDurableState(Principal Principal, int EntityIndex, ulong Tick, IReadOnlyList<DurableStateValue> Values) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -132,7 +133,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
     /// <param name="Impulse">The impulse, in mass·length/time units.</param>
-    public sealed record RigidImpulse(WorldPrincipal Principal, int EntityIndex, Vector3 Impulse) : WorldCommand(
+    public sealed record RigidImpulse(Principal Principal, int EntityIndex, Vector3 Impulse) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -143,7 +144,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The carrier's 0-based entity index.</param>
     /// <param name="TargetIndex">The candidate target's 0-based entity index.</param>
-    public sealed record CarryBody(WorldPrincipal Principal, int EntityIndex, int TargetIndex) : WorldCommand(
+    public sealed record CarryBody(Principal Principal, int EntityIndex, int TargetIndex) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -152,7 +153,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
     /// exception) when the carrier is not currently carrying anything.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The carrier's 0-based entity index.</param>
-    public sealed record ReleaseCarry(WorldPrincipal Principal, int EntityIndex) : WorldCommand(
+    public sealed record ReleaseCarry(Principal Principal, int EntityIndex) : WorldCommand(
         Principal,
         EntityIndex
     );

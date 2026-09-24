@@ -760,5 +760,30 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "complex.multiply-routes-allocate-nothing",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedComplex",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.QuadraticAlgebra\u00601[[Puck.Maths.FixedQ4816, Puck.Maths, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "Name": "Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the hand-written FixedComplex product and the generic QuadraticAlgebra\u003CFixedQ4816\u003E.Multiply at (0, \u22121) each run a 4096-step rotation chain, after a warm-up chain through the same method, with the current thread\u0027s allocation meter (AllocationWindow.Least) reading exactly zero bytes across the chain in some window, and the two chains end on the same element. ENVELOPE: allocation only \u2014 the generic-versus-hand latency ratio is a timing, measured by puck bench kernels --filter \u0027*ComplexMulNarrow*\u0027 and gated by no law",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

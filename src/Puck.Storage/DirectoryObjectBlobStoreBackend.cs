@@ -48,14 +48,16 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
             if (directory.IsDirectory(name: name)) {
                 using var child = directory.Child(name: name);
 
-                if (child is not null) { Walk(
+                if (child is not null) {
+                    Walk(
                     cancellationToken: cancellationToken,
                     directory: child,
                     keys: keys,
                     path: (key + "/"),
                     prefix: prefix,
                     remaining: ref remaining
-                ); }
+                );
+                }
             } else {
                 using var file = directory.OpenFile(name);
 
@@ -90,14 +92,16 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
         var keys = new List<string>();
         var remaining = local.MaximumListEntries;
 
-        if (directory is not null) { Walk(
+        if (directory is not null) {
+            Walk(
             cancellationToken: cancellationToken,
             directory: directory,
             keys: keys,
             path: "",
             prefix: prefix,
             remaining: ref remaining
-        ); }
+        );
+        }
         return ValueTask.FromResult<IReadOnlyList<string>>(result: keys);
     }
     public ValueTask<ObjectBlobContent?> ReadAsync(ObjectStorageTarget target, ObjectBlobAddress address,

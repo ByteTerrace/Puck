@@ -573,10 +573,9 @@ public sealed class PresentedMachine<TValue, TOps>
     /// <returns>The step element.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The symbol names no step of this machine.</exception>
     public PresentedAlgebra<TValue, TOps>.Element Step(int index) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: index,
-            other: m_steps.Length
+        ArgumentRange.ThrowIfNotIndex(
+            count: m_steps.Length,
+            value: index
         );
 
         return m_steps[index];

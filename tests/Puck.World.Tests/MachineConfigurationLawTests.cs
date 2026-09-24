@@ -27,15 +27,15 @@ public sealed class MachineConfigurationLawTests {
             userMessage: reason
         );
         Assert.Equal(
-            "room_cabinet",
+            "room$cabinet",
             module["machines"]![0]!["name"]!.GetValue<string>()
         );
         Assert.Equal(
-            "room_cabinet",
+            "room$cabinet",
             module["screens"]![0]!["source"]!["instance"]!.GetValue<string>()
         );
         Assert.Equal(
-            "room_cabinet",
+            "room$cabinet",
             module["speakers"]![0]!["feed"]!["source"]!["instance"]!.GetValue<string>()
         );
         Assert.Equal(
@@ -116,7 +116,7 @@ public sealed class MachineConfigurationLawTests {
         );
 
         Assert.Equal(
-            "left_stateTarget",
+            "left$stateTarget",
             module["state"]!["world"]![0]!["name"]!.GetValue<string>()
         );
         var config = module["machines"]![0]!["configuration"]!.AsObject();
@@ -130,11 +130,11 @@ public sealed class MachineConfigurationLawTests {
             config["machineTarget"]!.GetValue<string>()
         );
         Assert.Equal(
-            "left_pin",
+            "left$pin",
             config["local"]!.GetValue<string>()
         );
         Assert.Equal(
-            "left_pin",
+            "left$pin",
             config["localRef"]!.GetValue<string>()
         );
         Assert.Equal(
@@ -160,7 +160,7 @@ public sealed class MachineConfigurationLawTests {
             userMessage: reason
         );
         Assert.Equal(
-            "right_pin",
+            "right$pin",
             second["machines"]![0]!["configuration"]!["local"]!.GetValue<string>()
         );
     }
@@ -179,7 +179,7 @@ public sealed class MachineConfigurationLawTests {
                     path2: "root.world.json"
                 ),
                 """
-                { "imports": [ { "document": "fragment.world.json", "as": "cab" } ] }
+                { "imports": [ { "document": "fragment", "as": "cab" } ] }
                 """
             );
             File.WriteAllText(
@@ -293,7 +293,7 @@ public sealed class MachineConfigurationLawTests {
             );
 
             File.WriteAllText(
-                contents: """{ "imports": [ { "document": "fragment.world.json", "as": "cab" } ] }""",
+                contents: """{ "imports": [ { "document": "fragment", "as": "cab" } ] }""",
                 path: path
             );
             File.WriteAllText(
@@ -503,12 +503,12 @@ public sealed class MachineConfigurationLawTests {
             configuration: value,
             descriptor: descriptor,
             visitor: site => {
-            if (site.Field.Role == MachineFieldRole.StateReference) {
-                site.Value = JsonValue.Create(("cabinet_" + site.Value!.GetValue<string>()));
-            } else if (site.Field.Role == MachineFieldRole.AssetPath) {
-                assets.Add(item: site.Path);
+                if (site.Field.Role == MachineFieldRole.StateReference) {
+                    site.Value = JsonValue.Create(("cabinet_" + site.Value!.GetValue<string>()));
+                } else if (site.Field.Role == MachineFieldRole.AssetPath) {
+                    assets.Add(item: site.Path);
+                }
             }
-        }
         );
         Assert.Equal(
             "score",
@@ -581,7 +581,7 @@ public sealed class MachineConfigurationLawTests {
                     path1: directory,
                     path2: "root.world.json"
                 ),
-                "{ \"imports\": [ { \"document\": \"modules/middle.world.json\", \"as\": \"outer\" } ] }"
+                "{ \"imports\": [ { \"document\": \"modules/middle\", \"as\": \"outer\" } ] }"
             );
             File.WriteAllText(
                 Path.Combine(
@@ -589,7 +589,7 @@ public sealed class MachineConfigurationLawTests {
                     path2: "modules",
                     path3: "middle.world.json"
                 ),
-                "{ \"imports\": [ { \"document\": \"inner/fragment.world.json\", \"as\": \"inner\" } ] }"
+                "{ \"imports\": [ { \"document\": \"inner/fragment\", \"as\": \"inner\" } ] }"
             );
             File.WriteAllText(
                 Path.Combine(
@@ -640,7 +640,7 @@ public sealed class MachineConfigurationLawTests {
             Assert.Contains(
                 actualString: json,
                 comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "outer_inner_privateRow"
+                expectedSubstring: "outer$inner$privateRow"
             );
             Assert.Contains(
                 actualString: json,
@@ -737,13 +737,13 @@ public sealed class MachineConfigurationLawTests {
         var request = new MachineCreationRequest(
             document.RootElement,
             new Dictionary<string, PreparedMachineAsset> {
-            ["firmware.path"] = new(
+                ["firmware.path"] = new(
                 "an-intentionally-unresolved-firmware-path.bin",
                 image,
                 WorldDefinitionFileSource.ComputeContentHash(content: image),
                 image
             ),
-        }
+            }
         );
         using var runtime = engine.CreateMachine(request: request);
 

@@ -349,11 +349,7 @@ public sealed partial class WorldPopulation {
 
         return new FieldLatticeInput(
             Lattice: new FieldLatticeTopology(
-                Origin: new FixedVector3(
-                    X: FixedQ4816.FromDouble(value: document.Lattice.Origin.X),
-                    Y: FixedQ4816.FromDouble(value: document.Lattice.Origin.Y),
-                    Z: FixedQ4816.FromDouble(value: document.Lattice.Origin.Z)
-                ),
+                Origin: FixedVector3.FromVector3(value: document.Lattice.Origin),
                 CellSize: FixedQ4816.FromDouble(value: document.Lattice.CellSize),
                 Width: document.Lattice.Width,
                 Depth: document.Lattice.Depth,
@@ -801,20 +797,6 @@ public sealed partial class WorldPopulation {
 
         m_revision++;
     }
-
-    /// <summary>One reusable sweep row for dynamic-body contact.</summary>
-    private readonly record struct DynamicContactBody(int Index, FixedQ4816 MinimumX, FixedQ4816 MaximumX,
-        FixedQ4816 Radius) : IComparable<DynamicContactBody> {
-        public int CompareTo(DynamicContactBody other) {
-            var minimum = MinimumX.CompareTo(other: other.MinimumX);
-
-            return ((minimum != 0)
-                ? minimum
-                : Index.CompareTo(value: other.Index)
-            );
-        }
-    }
-
     /// <summary>
     /// Resolves active local body pairs after every body has integrated. Pair order is deterministic sweep order with
     /// population index as the complete tie-breaker; each body's own authority remains its sole pose writer and an
@@ -832,11 +814,6 @@ public sealed partial class WorldPopulation {
         var two = FixedQ4816.FromInteger(value: 2L);
         var contacts = m_dynamicContactBodies;
         var count = 0;
-        // Hoisted out of every loop below (CA2014): one reused stack buffer per role, its contents fully overwritten
-        // by ScaledColliderVolumes on every call, never read across bodies.
-        Span<FixedBodyColliderVolume> broadphaseScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        Span<FixedBodyColliderVolume> leftScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        Span<FixedBodyColliderVolume> rightScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
 
         for (var index = 0; (index < Capacity); index++) {
             if (
@@ -847,12 +824,9 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes(
-                volumes: collider.Volumes,
-                scratch: broadphaseScratch
-            ));
+            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes());
 
-            contacts[count++] = new DynamicContactBody(
+            contacts[count++] = new WorldSweepBody(
                 Index: index,
                 MinimumX: (body.FixedPosition.X - radius),
                 MaximumX: (body.FixedPosition.X + radius),
@@ -874,7 +848,7 @@ public sealed partial class WorldPopulation {
         // a local function cannot close over a ref struct. Returns candidate pairs routed to the rigid impulse path
         // (used only to derive the extra-pass count below) — RigidPairResolvedCount is ResolveRigidPairContact's own
         // to increment, one call at a time, never assigned here directly.
-        int RunSweep(Span<FixedBodyColliderVolume> leftScratch, Span<FixedBodyColliderVolume> rightScratch) {
+        int RunSweep() {
             var rigidResolvedThisPass = 0;
 
             // Refreshed from each body's CURRENT FixedPosition every pass (radius is collider-derived and does not
@@ -942,16 +916,10 @@ public sealed partial class WorldPopulation {
                     if (FixedDynamicBodyContacts.TryCorrection(
                         leftPosition: left.FixedPosition,
                         leftOrientation: left.FixedOrientation,
-                        leftVolumes: left.ScaledColliderVolumes(
-                            volumes: leftCollider.Volumes,
-                            scratch: leftScratch
-                        ),
+                        leftVolumes: left.ScaledColliderVolumes(),
                         rightPosition: right.FixedPosition,
                         rightOrientation: right.FixedOrientation,
-                        rightVolumes: right.ScaledColliderVolumes(
-                            volumes: rightCollider.Volumes,
-                            scratch: rightScratch
-                        ),
+                        rightVolumes: right.ScaledColliderVolumes(),
                         tieBreaker: leftIndex ^ rightIndex,
                         correction: out var correction
                     )) {
@@ -983,10 +951,7 @@ public sealed partial class WorldPopulation {
             return rigidResolvedThisPass;
         }
 
-        var firstPassRigidResolved = RunSweep(
-            leftScratch: leftScratch,
-            rightScratch: rightScratch
-        );
+        var firstPassRigidResolved = RunSweep();
 
         RigidPairPassesThisTick = 1;
 
@@ -1009,10 +974,7 @@ public sealed partial class WorldPopulation {
         for (var extra = 0; ((extra < extraIterations) && (firstPassRigidResolved > 0)); extra++) {
             RigidPairPassesThisTick++;
 
-            var thisPassRigidResolved = RunSweep(
-                leftScratch: leftScratch,
-                rightScratch: rightScratch
-            );
+            var thisPassRigidResolved = RunSweep();
 
             if (thisPassRigidResolved <= 0) {
                 break;

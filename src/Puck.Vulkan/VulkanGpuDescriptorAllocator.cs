@@ -1,3 +1,4 @@
+using Puck.Vulkan.Interop;
 using Puck.Vulkan.Messages;
 
 namespace Puck.Vulkan;
@@ -7,8 +8,8 @@ namespace Puck.Vulkan;
 /// adapting the pool-size and sampler parameters to their Vulkan-specific forms.
 /// </summary>
 public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator allocator) : IGpuDescriptorAllocator {
-    private static ReadOnlyMemory<VulkanDescriptorPoolSize> BuildPoolSizes(uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount, uint accelerationStructureCount) {
-        var sizes = new List<VulkanDescriptorPoolSize>(capacity: 4);
+    private static ReadOnlyMemory<VulkanDescriptorPoolSize> BuildPoolSizes(uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount) {
+        var sizes = new List<VulkanDescriptorPoolSize>(capacity: 3);
 
         if (combinedImageSamplerCount > 0) {
             sizes.Add(item: new VulkanDescriptorPoolSize(
@@ -31,13 +32,6 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
             ));
         }
 
-        if (accelerationStructureCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(
-                DescriptorCount: accelerationStructureCount,
-                DescriptorType: VulkanDescriptorType.AccelerationStructure
-            ));
-        }
-
         return sizes.ToArray();
     }
 
@@ -45,20 +39,19 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
     public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) =>
         allocator.AllocateSet(
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             poolHandle: poolHandle
         );
     /// <inheritdoc/>
     public nint CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) {
         var poolSizes = BuildPoolSizes(
-            accelerationStructureCount: sizes.AccelerationStructureCount,
             combinedImageSamplerCount: sizes.CombinedImageSamplerCount,
             storageBufferCount: sizes.StorageBufferCount,
             storageImageCount: sizes.StorageImageCount
         );
 
         return allocator.CreatePool(
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             maxSets: sizes.MaxSets,
             poolSizes: poolSizes
         );
@@ -78,7 +71,7 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
             BorderColor: 0,
             CompareEnable: 0,
             CompareOp: 0,
-            DeviceHandle: deviceHandle,
+            Device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             Flags: 0,
             MagFilter: vulkanFilter,
             MaxAnisotropy: 1f,
@@ -93,23 +86,14 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
     /// <inheritdoc/>
     public void DestroyPool(nint deviceHandle, nint poolHandle) =>
         allocator.DestroyPool(
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             poolHandle: poolHandle
         );
     /// <inheritdoc/>
     public void DestroySampler(nint deviceHandle, nint samplerHandle) =>
         allocator.DestroySampler(
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             samplerHandle: samplerHandle
-        );
-    /// <inheritdoc/>
-    public void WriteAccelerationStructure(nint deviceHandle, nint descriptorSetHandle, uint binding, nint accelerationStructureReference) =>
-        // The reference is the Vulkan VkAccelerationStructureKHR handle directly.
-        allocator.WriteAccelerationStructure(
-            accelerationStructureHandle: accelerationStructureReference,
-            binding: binding,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
         );
     /// <inheritdoc/>
     public void WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) =>
@@ -117,7 +101,7 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
             arrayElement: arrayElement,
             binding: binding,
             descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             imageViewHandle: imageViewHandle,
             samplerHandle: samplerHandle
         );
@@ -128,13 +112,13 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
             descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle)
         );
     /// <inheritdoc/>
     public void WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) =>
         // A Vulkan storage buffer carries no descriptor-side stride (the shader's declared type defines the layout),
         // so a read-only structured buffer is the same descriptor write as any other storage buffer.
-        allocator.WriteStorageBuffer(
+        WriteStorageBuffer(
             binding: binding,
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
@@ -144,7 +128,17 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
     /// <inheritdoc/>
     public void WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) =>
         // A Vulkan storage buffer is read-write regardless; this is the same descriptor as the read-only write.
-        allocator.WriteStorageBuffer(
+        WriteStorageBuffer(
+            binding: binding,
+            bufferHandle: bufferHandle,
+            bufferSize: bufferSize,
+            descriptorSetHandle: descriptorSetHandle,
+            deviceHandle: deviceHandle
+        );
+    /// <inheritdoc/>
+    public void WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) =>
+        // A byte-address buffer compiles to a storage buffer of 32-bit words; the descriptor is the same either way.
+        WriteStorageBuffer(
             binding: binding,
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
@@ -157,7 +151,7 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
             arrayElement: arrayElement,
             binding: binding,
             descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle,
+            device: VulkanDeviceCommands.FromToken(token: deviceHandle),
             imageViewHandle: imageViewHandle
         );
 }

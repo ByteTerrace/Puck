@@ -30,7 +30,7 @@ public sealed class VulkanRenderPassFactory : IVulkanRenderPassFactory {
 
         var request = VulkanRenderPassRequests.Present(
             colorFormat: swapchain.ImageFormat,
-            deviceHandle: logicalDevice.Handle
+            device: logicalDevice.Commands
         );
         var result = m_renderPassApi.CreateRenderPass(
             renderPassHandle: out var renderPassHandle,
@@ -44,7 +44,7 @@ public sealed class VulkanRenderPassFactory : IVulkanRenderPassFactory {
         }
 
         return new(
-            deviceHandle: logicalDevice.Handle,
+            device: logicalDevice.Commands,
             renderPassApi: m_renderPassApi,
             renderPassHandle: renderPassHandle
         );

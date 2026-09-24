@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -15,11 +16,11 @@ public static class WorldCrossAuthoritySettlement {
         );
 
         if (authority != 0) { return authority; }
-        var index = left.Index.CompareTo(value: right.Index);
-
-        return ((index != 0)
-            ? index
-            : left.Generation.CompareTo(value: right.Generation)
+        return LexicographicOrder.Compare(
+            leftPrimary: left.Index,
+            leftSecondary: left.Generation,
+            rightPrimary: right.Index,
+            rightSecondary: right.Generation
         );
     }
     private static ulong PairHash(in WorldEntityAddress lower, in WorldEntityAddress higher, string interaction) {

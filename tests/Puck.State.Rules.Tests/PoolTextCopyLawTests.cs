@@ -7,7 +7,7 @@ namespace Puck.State.Rules.Tests;
 public sealed class PoolTextCopyLawTests {
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static StateSection Section() => new(
-        Spaces: [new StateSpace(Name: Name(value: "pose"), Model: "test", Revision: "1", Dimensions: 8)],
+        Spaces: [new StateSpace(name: Name(value: "pose"), model: "test", revision: "1", dimensions: 8)],
         Rows: [
             new StateRow(Name: Name(value: "source"), Kind: CellKind.Text, Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Text(value: "copied"))]),
             new StateRow(Name: Name(value: "destination"), Kind: CellKind.Text, Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Text(value: "unchanged"))]),
@@ -54,8 +54,8 @@ public sealed class PoolTextCopyLawTests {
     public void StaticPoolTextCopiesAndAnAbsentSourceIsANoOp() {
         var (arena, context, evaluator) = Arrange();
         var intoPool = RuleCompiler.Compile(context: context, rule: new Rule(Name: Name(value: "intoPool"), Effects: [
-            new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "label"), FromState: "source"),
-            new ActionEffect.SetState(State: "destination", FromState: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "label")),
+            new ActionEffect.SetState(State: StateChannelRef.OfStaticPoolField(field: "label", pool: "pieces", slot: 0), FromState: "source"),
+            new ActionEffect.SetState(State: "destination", FromState: StateChannelRef.OfStaticPoolField(field: "label", pool: "pieces", slot: 0)),
         ]));
 
         Assert.True(condition: evaluator.Evaluate(rules: [intoPool], latch: new RuleLatch(), stepTicks: 1UL));
@@ -71,7 +71,7 @@ public sealed class PoolTextCopyLawTests {
 
         Assert.True(condition: evaluator.Evaluate(rules: [reset], latch: new RuleLatch(), stepTicks: 1UL));
         var absent = RuleCompiler.Compile(context: context, rule: new Rule(Name: Name(value: "absent"), Effects: [
-            new ActionEffect.SetState(State: "destination", FromState: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "label")),
+            new ActionEffect.SetState(State: "destination", FromState: StateChannelRef.OfStaticPoolField(field: "label", pool: "pieces", slot: 0)),
         ]));
 
         Assert.False(condition: evaluator.Evaluate(rules: [absent], latch: new RuleLatch(), stepTicks: 1UL));
@@ -90,26 +90,26 @@ public sealed class PoolTextCopyLawTests {
         var (_, context, _) = Arrange();
         Assert.Throws<RuleException>(testCode: () => RuleCompiler.Compile(context: context, rule: new Rule(
             Name: Name(value: "staticGate"),
-            Gate: new ActionPredicate.CompareState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "label"), Comparison: ActionStateComparison.Equal, Value: 0m),
+            Gate: new ActionPredicate.CompareState(State: StateChannelRef.OfStaticPoolField(field: "label", pool: "pieces", slot: 0), Comparison: ExpressionOp.Equal, Value: 0m),
             Effects: [new ActionEffect.SetState(State: "destination", Text: "bad")]
         )));
         Assert.Throws<RuleException>(testCode: () => RuleCompiler.Compile(context: context, rule: new Rule(Name: Name(value: "lexicalGate"), Effects: [
             new ActionEffect.ForEachPool(Pool: "pieces", Binding: Name(value: "piece"), Effects: [
                 new ActionEffect.If(
-                    Condition: new ActionPredicate.CompareState(State: StateChannelRef.OfBindingField(binding: "piece", field: "label"), Comparison: ActionStateComparison.Equal, Value: 0m),
+                    Condition: new ActionPredicate.CompareState(State: StateChannelRef.OfBindingField(binding: "piece", field: "label"), Comparison: ExpressionOp.Equal, Value: 0m),
                     Then: [new ActionEffect.SetState(State: "destination", Text: "bad")]
                 ),
             ]),
         ])));
         Assert.Throws<RuleException>(testCode: () => RuleCompiler.Compile(context: context, rule: new Rule(
             Name: Name(value: "staticVectorGate"),
-            Gate: new ActionPredicate.CompareState(State: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 0, field: "pose"), Comparison: ActionStateComparison.Equal, Value: 0m),
+            Gate: new ActionPredicate.CompareState(State: StateChannelRef.OfStaticPoolField(field: "pose", pool: "pieces", slot: 0), Comparison: ExpressionOp.Equal, Value: 0m),
             Effects: [new ActionEffect.SetState(State: "destination", Text: "bad")]
         )));
         Assert.Throws<RuleException>(testCode: () => RuleCompiler.Compile(context: context, rule: new Rule(Name: Name(value: "lexicalVectorGate"), Effects: [
             new ActionEffect.ForEachPool(Pool: "pieces", Binding: Name(value: "piece"), Effects: [
                 new ActionEffect.If(
-                    Condition: new ActionPredicate.CompareState(State: StateChannelRef.OfBindingField(binding: "piece", field: "pose"), Comparison: ActionStateComparison.Equal, Value: 0m),
+                    Condition: new ActionPredicate.CompareState(State: StateChannelRef.OfBindingField(binding: "piece", field: "pose"), Comparison: ExpressionOp.Equal, Value: 0m),
                     Then: [new ActionEffect.SetState(State: "destination", Text: "bad")]
                 ),
             ]),

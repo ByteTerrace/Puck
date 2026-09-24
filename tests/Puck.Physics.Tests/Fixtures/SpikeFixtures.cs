@@ -56,11 +56,13 @@ internal static class SpikeFixtures {
         return new(
             options: options,
             body: body,
-            pose: new() { Center = Vector(
+            pose: new() {
+                Center = Vector(
                 x: 0.46d,
                 y: 0.31d,
                 z: 0d
-            ), },
+            ),
+            },
             shape: SpikeShape.Box(halfExtents: halfExtents),
             reach: FixedQ4816.FromDouble(value: 0.5545d),
             new HalfSpaceSurface(
@@ -128,11 +130,13 @@ internal static class SpikeFixtures {
         return new(
             options: options,
             body: body,
-            pose: new() { Center = Vector(
+            pose: new() {
+                Center = Vector(
                 x: 0d,
                 y: 0.42d,
                 z: 0d
-            ), },
+            ),
+            },
             shape: SpikeShape.Capsule(
                 radius: radius,
                 segmentHalf: half
@@ -154,11 +158,13 @@ internal static class SpikeFixtures {
             density: FixedQ4816.FromInteger(value: 20L),
             scales: options.Scales
         );
-        var pose = new BodyPose { Center = Vector(
+        var pose = new BodyPose {
+            Center = Vector(
             x: 0.62d,
             y: 0.62d,
             z: 0d
-        ), };
+        ),
+        };
 
         return new(
             options: options,
@@ -218,11 +224,13 @@ internal static class SpikeFixtures {
         return new(
             options: options,
             body: body,
-            pose: new() { Center = Vector(
+            pose: new() {
+                Center = Vector(
                 x: 0d,
                 y: -0.02d,
                 z: 0d
-            ), },
+            ),
+            },
             shape: SpikeShape.Sphere(radius: radius),
             reach: radius,
             new SlabSurface(
@@ -258,11 +266,13 @@ internal static class SpikeFixtures {
         return new(
             options: options,
             body: body,
-            pose: new() { Center = Vector(
+            pose: new() {
+                Center = Vector(
                 x: 0d,
                 y: height,
                 z: 0d
-            ), },
+            ),
+            },
             shape: SpikeShape.Sphere(radius: radius),
             reach: radius,
             new HalfSpaceSurface(
@@ -303,11 +313,13 @@ internal static class SpikeFixtures {
         return new(
             options: options,
             body: body,
-            pose: new() { Center = Vector(
+            pose: new() {
+                Center = Vector(
                 x: 0d,
                 y: 0.34d,
                 z: 0d
-            ), },
+            ),
+            },
             shape: SpikeShape.Box(halfExtents: halfExtents),
             reach: FixedQ4816.FromDouble(value: 0.5545d),
             new HalfSpaceSurface(

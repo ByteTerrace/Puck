@@ -10,24 +10,31 @@ namespace Puck.World.Azure;
 /// Puck app registration; the platform app pre-authorizes Azure CLI/VS Code for <c>user_impersonation</c>.
 /// </summary>
 public sealed class HttpCounterpartPublisher : ICounterpartPublisher {
+    private readonly TimeProvider m_clock;
     private readonly TokenCredential m_credential;
     private readonly HttpClient m_httpClient;
 
     /// <summary>Initializes the publisher.</summary>
     /// <param name="httpClient">The API client — base address the API root. Owned by the caller; not disposed here.</param>
     /// <param name="credential">The ambient platform-API credential.</param>
+    /// <param name="timeProvider">The host clock each publication's <see cref="CounterpartApiPolicy.OperationTimeout"/>
+    /// runs on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="httpClient"/> or <paramref name="credential"/> is <see langword="null"/>.</exception>
-    public HttpCounterpartPublisher(HttpClient httpClient, TokenCredential credential) {
+    public HttpCounterpartPublisher(HttpClient httpClient, TokenCredential credential, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(argument: httpClient);
         ArgumentNullException.ThrowIfNull(argument: credential);
 
+        m_clock = (timeProvider ?? TimeProvider.System);
         m_credential = credential;
         m_httpClient = httpClient;
     }
 
     /// <inheritdoc/>
     public bool TryPublish(string worldId, ReadOnlyMemory<byte> payload, out string detail) {
-        using var timeout = new CancellationTokenSource(delay: CounterpartApiPolicy.OperationTimeout);
+        using var timeout = new CancellationTokenSource(
+            delay: CounterpartApiPolicy.OperationTimeout,
+            timeProvider: m_clock
+        );
         AccessToken token;
 
         try {

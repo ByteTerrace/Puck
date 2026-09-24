@@ -105,12 +105,12 @@ internal static class LandingCommand {
         Console.WriteLine(value: $"landing git component: clean given base {authoringBase[..12]}; running the automatic canary set next.");
     }
     private static int Run(string against, string? baseRef) {
-        if (!Git.TryResolve(
-            error: out var tipError,
+        if (!CliGit.TryResolveCommit(
+            repository: ".",
             resolved: out var tip,
             revision: against
         )) {
-            Console.Error.WriteLine(value: $"ERROR: --against '{against}': {tipError}");
+            Console.Error.WriteLine(value: $"ERROR: --against '{against}': unknown revision (not a commit this repository carries).");
 
             return 2;
         }
@@ -119,12 +119,12 @@ internal static class LandingCommand {
             return RefuseMissingBase(tip: tip);
         }
 
-        if (!Git.TryResolve(
-            error: out var baseError,
+        if (!CliGit.TryResolveCommit(
+            repository: ".",
             resolved: out var authoringBase,
             revision: baseRef
         )) {
-            Console.Error.WriteLine(value: $"ERROR: --base '{baseRef}': {baseError}");
+            Console.Error.WriteLine(value: $"ERROR: --base '{baseRef}': unknown revision (not a commit this repository carries).");
 
             return 2;
         }
@@ -166,9 +166,10 @@ internal static class LandingCommand {
         // ancestry and still blesses the bug (see RefuseMissingBase). This catches wrong bases, not dishonest ones.
         // The verdict remains conditional on an honestly-supplied base, which is inherent — the tool cannot know
         // what you built on except by asking, and that conditionality is stated in the PASS line rather than hidden.
-        if (!Git.IsAncestor(
+        if (!CliGit.IsAncestor(
             candidate: authoringBase,
-            descendant: "HEAD"
+            descendant: "HEAD",
+            repository: "."
         )) {
             Console.Error.WriteLine(value: $"ERROR: --base {authoringBase[..12]} is not an ancestor of HEAD.");
             Console.Error.WriteLine(value: string.Empty);
@@ -236,30 +237,32 @@ internal static class LandingCommand {
         // to print a runnable command, which only exists after --against resolves.
         var baseOption = new Option<string>(name: "--base") { Description = "The commit your work was AUTHORED FROM. For rebased work this is the ORIGINAL base, never the new parent: a rebase moves your parent to the tip, so passing the parent makes --base and --against equal and the check vacuous. That pairing is refused." };
         var command = new Command(
-            description: """
-            Refuse a commit that drops someone else's landing.
-
-            Compares the lines HEAD deletes relative to <tip> against the lines it deletes relative
-            to <base>. The first set is what the push would remove; the second is what your own work
-            removes. Anything in the first and not the second arrived on the tip while you were
-            working and would be silently lost.
-
-            There is no ignore list and no override, deliberately: deleting someone's landing ON
-            PURPOSE means having rebased onto it, which puts it in <base>, which accounts for the
-            deletion automatically. Intent is derived, never declared.
-
-            <base> is required. It cannot be guessed — merge-base(tip, HEAD) returns the tip itself
-            for a re-parented tree, which would make every deletion look intended. A <base> equal
-            to <tip>, or one HEAD does not descend from, is refused for the same reason: both would
-            report a PASS that measured nothing.
-
-            After every git check passes, runs the nonempty automatic canary set. There is no skip flag.
-
-            Exit codes: 0 both components passed, 1 unaccounted deletions or observed canary failure,
-            2 usage, manifest, build, or canary infrastructure refusal.
-            """,
+            description: "Refuse a commit that drops someone else's landing.",
             name: "landing"
         ) { againstOption, baseOption };
+
+        command.Detail(detail: """
+            Compares the lines HEAD deletes relative to --against (the tip you land onto) with the
+            lines it deletes relative to --base (the commit your work was authored from). The first
+            set is what the push would remove; the second is what your own work removes. Anything
+            in the first and not the second arrived on the tip while you were working and would be
+            silently lost.
+
+            There is no ignore list and no override, deliberately: deleting someone's landing ON
+            PURPOSE means having rebased onto it, which puts it in --base, which accounts for the
+            deletion automatically. Intent is derived, never declared.
+
+            --base is required. It cannot be guessed: merge-base(tip, HEAD) returns the tip itself
+            for a re-parented tree, which would make every deletion look intended. A --base equal
+            to --against, or one HEAD does not descend from, is refused for the same reason: both
+            would report a PASS that measured nothing.
+
+            After every git check passes, runs the nonempty automatic canary set. There is no skip
+            flag.
+
+            Exit codes: 0 both components passed; 1 unaccounted deletions or an observed canary
+            failure; 2 a usage, manifest, build, or canary infrastructure refusal.
+            """);
 
         command.SetAction(action: parseResult => Run(
             against: parseResult.GetRequiredValue(option: againstOption),

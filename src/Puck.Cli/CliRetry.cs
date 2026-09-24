@@ -5,11 +5,13 @@ namespace Puck.Cli;
 // the attempt cap, the fixed delay between attempts, which failures are worth another attempt, and the line it
 // wants printed for each one; the last attempt's exception is the caller's, so a give-up never hides the cause.
 internal static class CliRetry {
-    // attempts counts total attempts, not retries: the delay is paid attempts-1 times at most. retryable filters
-    // which exceptions earn another attempt (every one when absent). report renders the stderr line for a failed
-    // attempt, given that attempt's exception and its 1-based number (nothing is printed when absent).
+    // attempts counts total attempts, not retries: the delay is paid attempts-1 times at most, on clock (system time
+    // when absent). retryable filters which exceptions earn another attempt (every one when absent). report renders
+    // the stderr line for a failed attempt, given that attempt's exception and its 1-based number (nothing is printed
+    // when absent).
     internal static async Task<T> RetryAsync<T>(
-        Func<Task<T>> action, int attempts, TimeSpan delay, Func<Exception, bool>? retryable = null, Func<Exception, int, string>? report = null
+        Func<Task<T>> action, int attempts, TimeSpan delay, Func<Exception, bool>? retryable = null, Func<Exception, int, string>? report = null,
+        TimeProvider? clock = null
     ) {
         for (var attempt = 1; ; attempt++) {
             try {
@@ -21,16 +23,21 @@ internal static class CliRetry {
                         attempt
                     ));
                 }
-                await Task.Delay(delay: delay);
+                await Task.Delay(
+                    delay: delay,
+                    timeProvider: (clock ?? TimeProvider.System)
+                );
             }
         }
     }
     internal static Task RetryAsync(
-        Func<Task> action, int attempts, TimeSpan delay, Func<Exception, bool>? retryable = null, Func<Exception, int, string>? report = null
+        Func<Task> action, int attempts, TimeSpan delay, Func<Exception, bool>? retryable = null, Func<Exception, int, string>? report = null,
+        TimeProvider? clock = null
     ) =>
         RetryAsync<bool>(
             action: async () => { await action(); return true; },
             attempts: attempts,
+            clock: clock,
             delay: delay,
             report: report,
             retryable: retryable

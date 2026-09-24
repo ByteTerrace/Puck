@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -588,12 +589,11 @@ public sealed class SimulationRateZeroLawTests {
     [Fact]
     public void RateZeroDocument_WithOrdinaryInputHold_StillValidates() {
         // The fixture's own inputHold section (ceilingSeconds 0.5, lowerAfterSeconds 0.25, defaultSeconds 0) is
-        // ordinary, unremarkable authored content — every shipped world carries something in this shape. Before
-        // this change, WorldDefinitionValidator validated the COMPILED ticks form: at rate 0 every compiled *Ticks
-        // field collapses to 0 (WorldSimulationTickConversion.DurationTicks' own contract), and lowerAfterTicks < 1
-        // fired on EVERY rate-0 world regardless of what was authored. This is the end-to-end proof that moving the
-        // check to the authored (seconds) domain actually closed that false-refusal gap, not merely that
-        // ValidateSimulation itself admits the rate.
+        // ordinary authored content, and the validator checks it in the authored (seconds) domain: at rate 0 every
+        // compiled *Ticks field collapses to 0 (WorldSimulationTickConversion.DurationTicks' own contract), so a
+        // check on the compiled form would refuse every rate-0 world regardless of what was authored.
+        // The same admission is the discriminating proof that ValidateSimulation returns early for rate 0 rather than
+        // applying the exact-divisor check: 50400 % 0 is undefined, so no coincidence of modulo arithmetic admits it.
         var zeroRate = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 0) });
 
         Assert.True(
@@ -645,7 +645,7 @@ public sealed class SimulationRateZeroLawTests {
         var before = fixture.DefinitionBytes();
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetInputHold(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Settings: new WorldInputHoldSettings(
                 CeilingTicks: 120,
                 DefaultTicks: 0,
@@ -738,7 +738,7 @@ public sealed class SimulationRateZeroLawTests {
         );
     }
     /// <summary>The discriminator this suite's own test audit named missing: nothing above proves the divisor check
-    /// still FIRES for a positive rate — <see cref="ValidatorAtRateZero_SkipsTheDivisorCheck"/> and
+    /// still FIRES for a positive rate — <see cref="RateZeroDocument_WithOrdinaryInputHold_StillValidates"/> and
     /// <see cref="ValidatorAdmitsRateZero_RefusesNegativeRate"/> both only ever exercise 0 and -1, so a change that
     /// accidentally admitted EVERY rate (deleting the divisor check outright, not merely special-casing 0) would
     /// pass both. 241 Hz does not divide 50400.</summary>
@@ -758,25 +758,6 @@ public sealed class SimulationRateZeroLawTests {
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "does not divide"
-        );
-    }
-    [Fact]
-    public void ValidatorAtRateZero_SkipsTheDivisorCheck() {
-        // 0 does not divide 50400 (nothing does, in the ordinary sense) — if ValidateSimulation applied the SAME
-        // exact-divisor check to a zero rate that it applies to a positive one, rate 0 would be refused for
-        // "not a divisor" rather than admitted as the owner's distinct, legal rate. Admission alone (the law above)
-        // could pass by accident if the divisor check happened to tolerate 0 mathematically; this asserts the
-        // discriminating fact directly: 50400 % 0 is undefined, so the ONLY way rate 0 validates is a genuine early
-        // return, not a coincidence of modulo arithmetic.
-        var zeroRate = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 0) });
-
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidate(
-                definition: zeroRate,
-                neighbours: null,
-                reason: out var reason
-            ),
-            userMessage: $"rate 0 was expected to validate; refused: {reason}"
         );
     }
 }

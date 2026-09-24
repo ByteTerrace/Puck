@@ -1,56 +1,51 @@
 using Puck.Vulkan.Interfaces;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan;
 
 /// <summary>
-/// Implements <see cref="IGpuStorageBufferFactory"/> by forwarding to <see cref="IVulkanStorageBufferFactory"/>,
-/// resolving the Vulkan instance and logical device from the device context.
+/// Implements <see cref="IGpuStorageBufferFactory"/> over <see cref="IVulkanBufferApi"/>: every storage buffer carries
+/// <see cref="VulkanBufferUsageFlags.Storage"/>, an indirect-argument buffer adds
+/// <see cref="VulkanBufferUsageFlags.IndirectBuffer"/>, and a host-written buffer is
+/// <see cref="VulkanBufferMemory.HostCoherent"/> while a device-written one is <see cref="VulkanBufferMemory.DeviceLocal"/>.
 /// </summary>
-public sealed class VulkanGpuStorageBufferFactory(IVulkanStorageBufferFactory storageBufferFactory) : IGpuStorageBufferFactory {
+public sealed class VulkanGpuStorageBufferFactory(IVulkanBufferApi bufferApi) : IGpuStorageBufferFactory {
     /// <inheritdoc/>
-    public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
-
-        return storageBufferFactory.Create(
-            logicalDevice: vkContext.LogicalDevice,
+    public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
+        VulkanBuffer.Create(
+            bufferApi: bufferApi,
+            device: ((IVulkanDeviceContext)deviceContext),
+            memory: VulkanBufferMemory.HostCoherent,
             sizeBytes: sizeBytes,
-            vulkanInstance: vkContext.Instance
+            usage: VulkanBufferUsageFlags.Storage
         );
-    }
     /// <inheritdoc/>
-    public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
-
-        // Back it with device-local (not host-visible) memory — a GPU-only storage buffer (UAV target) that is never
-        // host-mapped, matching the Direct3D 12 default-heap UAV buffer.
-        return storageBufferFactory.CreateDeviceLocal(
-            logicalDevice: vkContext.LogicalDevice,
+    public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
+        // Device-local, never host-mapped: a GPU-only storage buffer, matching the Direct3D 12 default-heap UAV buffer.
+        VulkanBuffer.Create(
+            bufferApi: bufferApi,
+            device: ((IVulkanDeviceContext)deviceContext),
+            memory: VulkanBufferMemory.DeviceLocal,
             sizeBytes: sizeBytes,
-            vulkanInstance: vkContext.Instance
+            usage: VulkanBufferUsageFlags.Storage
         );
-    }
     /// <inheritdoc/>
-    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
-
-        return storageBufferFactory.CreateDeviceLocal(
-            indirectArgs: true,
-            logicalDevice: vkContext.LogicalDevice,
+    public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
+        VulkanBuffer.Create(
+            bufferApi: bufferApi,
+            device: ((IVulkanDeviceContext)deviceContext),
+            memory: VulkanBufferMemory.DeviceLocal,
             sizeBytes: sizeBytes,
-            vulkanInstance: vkContext.Instance
+            usage: VulkanBufferUsageFlags.Storage | VulkanBufferUsageFlags.IndirectBuffer
         );
-    }
     /// <inheritdoc/>
-    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
-
-        // Indirect-capable. Host-visible by default (the CPU fills it via Write before submit — host-coherent, no extra
-        // barrier); device-local when a compute shader writes it as a UAV (GPU-computed args), ordered by a barrier.
-        return storageBufferFactory.Create(
-            indirectArgs: true,
-            logicalDevice: vkContext.LogicalDevice,
+    public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
+        // The CPU fills it through Write before submit; host-coherent, so no barrier is needed for that write.
+        VulkanBuffer.Create(
+            bufferApi: bufferApi,
+            device: ((IVulkanDeviceContext)deviceContext),
+            memory: VulkanBufferMemory.HostCoherent,
             sizeBytes: sizeBytes,
-            vulkanInstance: vkContext.Instance
+            usage: VulkanBufferUsageFlags.Storage | VulkanBufferUsageFlags.IndirectBuffer
         );
-    }
 }

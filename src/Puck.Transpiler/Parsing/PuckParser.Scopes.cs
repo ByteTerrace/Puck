@@ -63,26 +63,12 @@ public static partial class PuckParser {
             SkipWhiteSpace(context: context);
         }
 
-        if (!TryConsume(c: '{', context: context)) {
-            throw CreateException(context: context, message: $"Expected '{{' starting body for rules scope '{name}'");
-        }
-
-        var statements = new List<StatementNode>();
-
-        SkipWhiteSpace(context: context);
-        while (!cursor.Eof && (cursor.Current != '}')) {
-            var stmt = ParseRuleScopeBodyStatement(context: context, diagnostics: diagnostics);
-
-            if (stmt is not null) {
-                statements.Add(item: stmt);
-            }
-            ConsumeSeparator(context: context);
-            SkipWhiteSpace(context: context);
-        }
-
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: $"Expected '}}' closing body for rules scope '{name}'");
-        }
+        var statements = ParseRuleScopeStatementsBlock(
+            blockKind: "rules scope",
+            context: context,
+            diagnostics: diagnostics,
+            name: name
+        );
 
         var len = (cursor.Offset - startOffset);
 
@@ -122,6 +108,24 @@ public static partial class PuckParser {
             return ParseRuleBlock(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
+        // A compile-time `for` stamps member rules; `for each` is the pool iteration an effect statement spells.
+        var beforeFor = cursor.Position;
+
+        if (TryMatchKeyword(context: context, keyword: "for")) {
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: "each")) {
+                return ParseForStatement(
+                    body: static (bodyContext, bodyDiagnostics) => ParseRuleScopeBodyStatement(context: bodyContext, diagnostics: bodyDiagnostics),
+                    col: col,
+                    context: context,
+                    diagnostics: diagnostics,
+                    line: line,
+                    startOffset: startOffset
+                );
+            }
+            cursor.ResetPosition(position: beforeFor);
+        }
+
         if (TryMatchKeyword(context: context, keyword: "when")) {
             return ParseWhenStatement(
                 col: col,
@@ -151,5 +155,37 @@ public static partial class PuckParser {
         }
 
         throw CreateException(context: context, message: $"Unexpected statement inside rules scope at offset {cursor.Offset}");
+    }
+    private static List<StatementNode> ParseRuleScopeStatementsBlock(
+        string blockKind,
+        ParseContext context,
+        DiagnosticBag? diagnostics,
+        string name
+    ) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: '{', context: context)) {
+            throw CreateException(context: context, message: $"Expected '{{' starting body for {blockKind} '{name}'");
+        }
+
+        var statements = new List<StatementNode>();
+
+        SkipWhiteSpace(context: context);
+        while (!cursor.Eof && (cursor.Current != '}')) {
+            var stmt = ParseRuleScopeBodyStatement(context: context, diagnostics: diagnostics);
+
+            if (stmt is not null) {
+                statements.Add(item: stmt);
+            }
+            ConsumeSeparator(context: context);
+            SkipWhiteSpace(context: context);
+        }
+
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: $"Expected '}}' closing body for {blockKind} '{name}'");
+        }
+
+        return statements;
     }
 }

@@ -11,6 +11,7 @@ public sealed class ConsoleControlSession : IControlSession {
     private readonly CancellationTokenSource m_lifetime = new();
 
     private readonly Func<string, FrameCaptureRequest> m_capture;
+    private readonly TimeProvider m_clock;
     private readonly TextCommandSession m_session;
 
     private bool m_busy;
@@ -24,10 +25,12 @@ public sealed class ConsoleControlSession : IControlSession {
     /// <param name="scope">Optional host scope entered by the ordinary command pump.</param>
     /// <param name="principal">The fixed acting principal; null uses the Console principal.</param>
     /// <param name="authorize">Optional command-metadata predicate forwarded to the dedicated text session.</param>
-    public ConsoleControlSession(TextCommandSource source, Func<string, FrameCaptureRequest> capture, int slot = 0, Func<IDisposable>? scope = null, CommandPrincipal? principal = null, Func<CommandMetadata, bool>? authorize = null) {
+    /// <param name="clock">Drives each request's deadline; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
+    public ConsoleControlSession(TextCommandSource source, Func<string, FrameCaptureRequest> capture, int slot = 0, Func<IDisposable>? scope = null, Principal? principal = null, Func<CommandMetadata, bool>? authorize = null, TimeProvider? clock = null) {
         m_capture = capture;
+        m_clock = (clock ?? TimeProvider.System);
         m_session = source.CreateSession(
-            (principal ?? CommandPrincipal.Console),
+            (principal ?? Principal.Console),
             slot: slot,
             scope: scope,
             authorize: authorize,
@@ -144,7 +147,7 @@ public sealed class ConsoleControlSession : IControlSession {
     }
     /// <inheritdoc/>
     public async Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) {
-        CancellationTokenSource deadline;
+        OperationDeadline deadline;
 
         lock (m_gate) {
             ObjectDisposedException.ThrowIf(
@@ -160,11 +163,12 @@ public sealed class ConsoleControlSession : IControlSession {
             );
             }
             if (LocalControlServer.Validate(request: request) is { } refusal) { return refusal; }
-            deadline = CancellationTokenSource.CreateLinkedTokenSource(
-                token1: cancellationToken,
-                token2: m_lifetime.Token
+            deadline = new(
+                caller: cancellationToken,
+                lifetime: m_lifetime.Token,
+                timeout: TimeSpan.FromMilliseconds(value: request.TimeoutMilliseconds),
+                timeProvider: m_clock
             );
-            deadline.CancelAfter(millisecondsDelay: request.TimeoutMilliseconds);
             m_busy = true;
         }
         cancellationToken = deadline.Token;

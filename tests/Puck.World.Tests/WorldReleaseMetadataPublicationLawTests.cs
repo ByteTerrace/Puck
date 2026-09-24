@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Puck.Storage;
@@ -77,18 +78,22 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             ) { armed = false; throw new IOException(message: "injected lost root response"); }
             return Task.CompletedTask;
         };
-        if (failure == 0) { await Assert.ThrowsAsync<IOException>(testCode: () => scenario.ApplyAsync()); } else { Assert.Equal(
+        if (failure == 0) { await Assert.ThrowsAsync<IOException>(testCode: () => scenario.ApplyAsync()); } else {
+            Assert.Equal(
             (failure == 2),
             (await scenario.ApplyAsync()).Ok
-        ); }
+        );
+        }
         Assert.False(condition: armed);
-        if (failure != 2) { Assert.Equal(
+        if (failure != 2) {
+            Assert.Equal(
             before,
             await scenario.Store.LoadRootAsync(
                 scenario.Identity,
                 Token
             )
-        ); }
+        );
+        }
         var outcome = await scenario.ApplyAsync(store: new WorldAuthorityBlobStore(
             store: scenario.Blobs,
             target: scenario.Target
@@ -222,33 +227,6 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         );
         Assert.Equal(
             root,
-            await scenario.Store.LoadRootAsync(
-                scenario.Identity,
-                Token
-            )
-        );
-    }
-    [Fact]
-    public async Task MetadataPairWithoutCoordinatorRequirementCannotPublish() {
-        using var scenario = await Scenario.CreateAsync(coordinatorContract: false);
-        var before = await scenario.Store.LoadRootAsync(
-            scenario.Identity,
-            Token
-        );
-        var writes = scenario.Blobs.Writes;
-        var outcome = await scenario.ApplyAsync();
-
-        Assert.False(condition: outcome.Ok);
-        Assert.Contains(
-            "metadata coordinator contract",
-            outcome.Detail
-        );
-        Assert.Equal(
-            writes,
-            scenario.Blobs.Writes
-        );
-        Assert.Equal(
-            before,
             await scenario.Store.LoadRootAsync(
                 scenario.Identity,
                 Token
@@ -456,7 +434,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
     }
 
     private sealed class Scenario : IDisposable {
-        private readonly TempWorldDirectory m_directory = new();
+        private readonly TemporaryDirectory m_directory = new();
 
         public IObjectBlobStore Inner { get; } = PuckStorageTestComposition.BuildStore();
         public WorldAuthorityIdentity Identity { get; } = new(
@@ -505,7 +483,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             );
         }
 
-        private async Task<WorldReleaseManifest> PackageAsync(WorldDefinition definition, string label, bool coordinator = true) {
+        private async Task<WorldReleaseManifest> PackageAsync(WorldDefinition definition, string label) {
             var package = Directory.CreateDirectory(path: Path.Combine(
                 path1: m_directory.RootPath,
                 path2: label
@@ -532,9 +510,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             )),
                 PersistenceContract = "test",
                 PeerProtocolContract = "test",
-                CoordinatorContract = (((label == "B") && coordinator)
-                ? WorldReleaseManifest.MetadataCoordinatorContract
-                : null),
+                CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
                 Definitions = new Dictionary<string, string> { [key] = ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes))) },
                 DefinitionFiles = new Dictionary<string, string> { [key] = "world.json" },
             };
@@ -556,12 +532,14 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 Archive,
                 Token
             );
-        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool coordinatorContract = true, bool deferredDraw = false) {
+        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool deferredDraw = false) {
             var scenario = new Scenario();
-            var a = Fixtures.BuildDocument() with { Metadata = new(
+            var a = Fixtures.BuildDocument() with {
+                Metadata = new(
                 Title: "A",
                 Description: "authored"
-            ) };
+            ),
+            };
 
             if (deferredDraw) {
                 var tree = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: a))!;
@@ -590,13 +568,12 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: a)));
             }
             scenario.Source = await scenario.PackageAsync(
-                a,
-                "A"
+                definition: a,
+                label: "A"
             );
             scenario.Candidate = await scenario.PackageAsync(
-                a with { Metadata = a.Metadata! with { Title = "B" } },
-                "B",
-                coordinatorContract
+                definition: a with { Metadata = a.Metadata! with { Title = "B" } },
+                label: "B"
             );
             Assert.True(
                 condition: WorldDrawBootResolver.TryResolve(
@@ -607,12 +584,14 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 ),
                 userMessage: bootReason
             );
-            using var fixture = Fixtures.FreshServer(live with { Metadata = new(
+            using var fixture = Fixtures.FreshServer(live with {
+                Metadata = new(
                 Title: (conflict
                 ? "operator"
                 : "A"),
                 Description: "live note"
-            ) });
+            ),
+            });
 
             fixture.Step();
             fixture.Step();
@@ -648,7 +627,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 Token,
                 fence
             )).Ok);
-            if (tail) { Assert.True(condition: (await scenario.Store.AppendJournalAsync(
+            if (tail) {
+                Assert.True(condition: (await scenario.Store.AppendJournalAsync(
                 scenario.Identity,
                 new WorldMutationJournalEntry(
                     (checkpoint.Server.LastCompletedTick + 1),
@@ -657,12 +637,15 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 ),
                 Token,
                 fence
-            )).Ok); }
-            if (!owned) { Assert.True(condition: (await scenario.Store.ReleaseActivationAsync(
+            )).Ok);
+            }
+            if (!owned) {
+                Assert.True(condition: (await scenario.Store.ReleaseActivationAsync(
                 scenario.Identity,
                 fence!.Value,
                 Token
-            )).Ok); }
+            )).Ok);
+            }
             var created = await scenario.Groups.CreateAsync(
                 "primary",
                 scenario.Source.Identity,
@@ -685,8 +668,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             var drained = await coordinator.RecordDrainAsync(
                 begun.Snapshot!.Value,
                 new Dictionary<string, string> {
-                [$"{scenario.Identity.Owner:D}/{scenario.Identity.World}"] = scenario.Protected.Pin,
-            },
+                    [$"{scenario.Identity.Owner:D}/{scenario.Identity.World}"] = scenario.Protected.Pin,
+                },
                 Token
             );
             var activation = await coordinator.RecordActivationAsync(

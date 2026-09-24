@@ -33,18 +33,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return result;
     }
-    internal static IReadOnlyList<RuleWorkContributor> Contributors(WorldDefinition definition, CompiledRule[] rules, CompiledRule[] interactions) {
-        var context = WorldFactsCompiler.Context(definition: definition);
-        var contributors = Lines(
-            context: context,
-            definition: definition,
-            interactions: interactions,
-            rules: rules
-        );
-
-        Sort(contributors: contributors);
-        return contributors.AsReadOnly();
-    }
 
     /// <summary>Reads the shared contributor lines without compiling or analyzing the programs again.</summary>
     /// <param name="compilation">The exact definition's unchanged compilation.</param>
@@ -72,11 +60,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
     }
 
-    internal static WorldRuleWorkBudget Measure(WorldDefinition definition, CompiledRule[] rules, CompiledRule[] interactions) {
-        var context = WorldFactsCompiler.Context(definition: definition);
-
-        return Measure(definition, rules, interactions, context, Lines(context: context, definition: definition, interactions: interactions, rules: rules));
-    }
+    // The one computation of a tick's work: admission runs it over the rules and groups it validated, and every
+    // other reader takes the sheet a compilation of the whole document retained, so no reader prices a rule the
+    // document's own groups have not bound.
     internal static (WorldRuleWorkBudget Budget, IReadOnlyList<RuleWorkContributor> Contributors) Analyze(WorldDefinition definition, CompiledRule[] rules, CompiledRule[] interactions, WorldFactsCompileContext? context = null) {
         context ??= WorldFactsCompiler.Context(definition: definition);
         var lines = Lines(context: context, definition: definition, interactions: interactions, rules: rules);
@@ -307,16 +293,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             rules: WorldFactsCompiler.CompileAll(definition: definition)
         );
     }
-    /// <summary>Lists every contributor line, costliest first, then by name.</summary>
+    /// <summary>Lists every contributor line, costliest first, then by name: the lines admission reads, over the
+    /// document's rules, groups and interactions compiled together.</summary>
     /// <param name="definition">The world.</param>
     public static IReadOnlyList<RuleWorkContributor> Contributors(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Contributors(
-            definition,
-            WorldFactsCompiler.CompileAll(definition: definition),
-            WorldFactsCompiler.CompileAllInteractions(definition: definition)
-        );
+        return WorldRuleCompilation.Compile(definition: definition).WorkContributors;
     }
     /// <summary>Returns admission's refusal of a tick's work, or <see langword="null"/> when the work is admitted.
     /// Only a known number at or under <see cref="RuleCapacity.MaxWorkUnitsPerTick"/> is admitted: a bound nothing
@@ -384,18 +367,14 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         tokens: tokens,
         context: WorldFactsCompiler.Context(definition: definition)
     );
-    /// <summary>Measures a document's worst-case per-tick rule work.</summary>
+    /// <summary>Measures a document's worst-case per-tick rule work: the sheet admission holds against the ceiling,
+    /// over the document's rules, groups and interactions compiled together.</summary>
     /// <param name="definition">The world.</param>
     public static WorldRuleWorkBudget Measure(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Measure(
-            definition,
-            WorldFactsCompiler.CompileAll(definition: definition),
-            WorldFactsCompiler.CompileAllInteractions(definition: definition)
-        );
+        return WorldRuleCompilation.Compile(definition: definition).WorkBudget;
     }
-
     /// <summary>Reads the shared work sheet without compiling the programs or analyzing them again.</summary>
     /// <param name="compilation">The exact definition's unchanged compilation.</param>
     /// <returns>The worst-case per-tick rule work.</returns>

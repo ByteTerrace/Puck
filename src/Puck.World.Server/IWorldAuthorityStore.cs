@@ -2,11 +2,11 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>One checkpoint blob's raw encoded bytes plus the pointer facts that named it — the hash-verified answer
+/// <summary>One checkpoint blob's raw encoded bytes plus the root facts that named it — the hash-verified answer
 /// <see cref="IWorldAuthorityStore.LoadLatestAsync"/> returns. The bytes are opaque to the store: a checkpoint codec
 /// decodes them into a simulation-state record elsewhere, so the store and that record format can land
 /// independently.</summary>
-/// <param name="Encoded">The checkpoint blob's raw bytes, hash-verified against the pointer that named them.</param>
+/// <param name="Encoded">The checkpoint blob's raw bytes, hash-verified against the root that named them.</param>
 /// <param name="Ordinal">The checkpoint's own ordinal.</param>
 /// <param name="Tick">The engine tick the checkpoint was captured at.</param>
 public readonly record struct WorldAuthorityCheckpointBlob(ReadOnlyMemory<byte> Encoded, long Ordinal, ulong Tick);
@@ -95,7 +95,7 @@ public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutc
 /// write through. Programmed against opaque encoded bytes throughout — this seam never decodes a checkpoint or a
 /// mutation leaf, so it lands independently of the record formats those bytes carry.</summary>
 public interface IWorldAuthorityStore {
-    /// <summary>Reads the authoritative root. Once present, legacy mutable pointers are never read as authority.</summary>
+    /// <summary>Reads the authoritative root; <see langword="null"/> when the world has no published authority.</summary>
     Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
     /// <summary>Reads a coherent checkpoint and journal view named by one root publication.</summary>
     Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
@@ -111,13 +111,12 @@ public interface IWorldAuthorityStore {
     /// <returns>The definition, or <see langword="null"/> when none has been published.</returns>
     Task<WorldDefinition?> LoadDefinitionAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
     /// <summary>Loads a hosted world's latest checkpoint named by the authoritative private root, then the immutable
-    /// blob it references, hash-verified against that root (with the legacy pointer used only before root
-    /// initialization).</summary>
+    /// blob it references, hash-verified against that root.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="cancellationToken">A token to observe.</param>
-    /// <returns>The latest checkpoint's raw bytes and pointer facts, or <see langword="null"/> when none has been
-    /// captured yet.</returns>
-    /// <exception cref="InvalidDataException">A checkpoint blob's content does not hash to what the pointer
+    /// <returns>The latest checkpoint's raw bytes and root facts, or <see langword="null"/> when no root exists or it
+    /// names no checkpoint yet.</returns>
+    /// <exception cref="InvalidDataException">A checkpoint blob's content does not hash to what the root
     /// recorded.</exception>
     Task<WorldAuthorityCheckpointBlob?> LoadLatestAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
     /// <summary>Loads every mutation recorded since a checkpoint ordinal.</summary>
@@ -151,7 +150,7 @@ public interface IWorldAuthorityStore {
     /// <returns>The write outcome; <see cref="WorldAuthorityStoreOutcomeKind.Failed"/> when no checkpoint has ever
     /// been written for this identity (a journal is always relative to one).</returns>
     Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null);
-    /// <summary>Publishes a hosted world's composed definition — the one writer of <c>definition.json</c>.</summary>
+    /// <summary>Publishes a hosted world's composed definition as an immutable candidate named by the authority root.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="composed">The composed definition to publish.</param>
     /// <param name="fence">The activation fence acquired by the owning writer. <see langword="null"/> is permitted
@@ -164,7 +163,8 @@ public interface IWorldAuthorityStore {
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="receipt">The actor/payload-bound operation receipt.</param>
     /// <param name="cancellationToken">A token to observe.</param>
-    /// <param name="fence">The activation fence acquired by the owning writer, or <see langword="null"/> for
-    /// compatibility callers that acquire one for this operation.</param>
-    Task<WorldAuthorityStoreOutcome> RecordReceiptAsync(WorldAuthorityIdentity identity, WorldAuthorityOperationReceipt receipt, CancellationToken cancellationToken, WorldAuthorityFence? fence = null);
+    /// <param name="fence">The activation fence acquired by the owning writer. <see langword="null"/> is permitted
+    /// only for epoch-zero bootstrap or an already-released empty-token root; it never acquires an active lease.</param>
+    /// <returns>The write outcome.</returns>
+    Task<WorldAuthorityStoreOutcome> RecordReceiptAsync(WorldAuthorityIdentity identity, WorldAuthorityOperationReceipt receipt, CancellationToken cancellationToken, WorldAuthorityFence? fence);
 }

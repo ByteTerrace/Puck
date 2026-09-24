@@ -354,7 +354,7 @@ public sealed class FieldLatticeLawTests {
             Reactions = [new FieldReactionInput.Transform(
                 When: [new FieldConditionInput(
                         Field: 0,
-                        Comparison: ActionStateComparison.Greater,
+                        Comparison: ExpressionOp.Greater,
                         Value: new FieldScalarInput(
                             Literal: FixedQ4816.Zero,
                             State: default
@@ -510,7 +510,7 @@ public sealed class FieldLatticeLawTests {
                 ),
             new FieldReactionInput.Expose(
                     Field: 0,
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     Value: new FieldScalarInput(
                         Literal: FixedQ4816.One,
                         State: default
@@ -733,7 +733,7 @@ public sealed class FieldLatticeLawTests {
         );
         var lattice = new FieldLattice(input: Fields(reactions: [new FieldReactionInput.Expose(
                 Field: 0,
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Value: new FieldScalarInput(
                     Literal: FixedQ4816.One,
                     State: default

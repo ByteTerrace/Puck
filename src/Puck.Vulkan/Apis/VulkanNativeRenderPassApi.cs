@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -15,11 +14,11 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
     // color attachment, not a policy choice. Per-attachment initial/final layouts come from the caller's
     // VkAttachmentDescription.
     private const uint ColorAttachmentOptimalLayout = 2;
+    private const uint DepthStencilAttachmentOptimalLayout = 3;
     private const uint GraphicsPipelineBindPoint = 0;
     private const uint StructureTypeRenderPassCreateInfo = 38;
 
     private readonly IAllocator m_allocator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeRenderPassApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -30,106 +29,87 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
         m_allocator = allocator;
     }
 
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateRenderPass"u8
-            )),
-                DestroyRenderPass = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyRenderPass"u8
-            )),
-            }
-        );
-    }
-
     /// <inheritdoc/>
     public VkResult CreateRenderPass(VulkanRenderPassCreateRequest request, out nint renderPassHandle) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
-        var colorAttachments = request.ColorAttachments;
+        var colorAttachments = (request.ColorAttachments ?? []);
 
         if (
-            (colorAttachments is null) ||
-            (0 == colorAttachments.Count)
+            (0 == colorAttachments.Count) &&
+            (request.DepthAttachment is null)
         ) {
             throw new ArgumentException(
-                message: "A render pass requires at least one color attachment.",
+                message: "A render pass requires at least one attachment.",
                 paramName: nameof(request)
             );
         }
 
         var dependencies = (request.Dependencies ?? []);
-        var createRenderPass = GetPointers(deviceHandle: request.DeviceHandle).CreateRenderPass;
+        var createRenderPass = request.Device.CreateRenderPass;
 
-        var attachmentCount = colorAttachments.Count;
-        var attachmentStride = Marshal.SizeOf<VkAttachmentDescription>();
-        var referenceStride = Marshal.SizeOf<VkAttachmentReference>();
-        var dependencyCount = dependencies.Count;
-        var dependencyStride = Marshal.SizeOf<VkSubpassDependency>();
+        var colorCount = colorAttachments.Count;
+        var attachments = new List<VkAttachmentDescription>(collection: colorAttachments);
+        var references = new VkAttachmentReference[colorCount];
+        // The depth attachment follows the colors, referenced in its attachment layout for the whole subpass.
+        var depthReference = new VkAttachmentReference {
+            Attachment = ((uint)colorCount),
+            Layout = DepthStencilAttachmentOptimalLayout,
+        };
 
-        var attachmentsPointer = m_allocator.Alloc(size: (attachmentStride * attachmentCount));
-        var referencesPointer = m_allocator.Alloc(size: (referenceStride * attachmentCount));
-        var subpassPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkSubpassDescription>());
-        var dependencyPointer = ((dependencyCount > 0)
-            ? m_allocator.Alloc(size: (dependencyStride * dependencyCount))
-            : nint.Zero
-        );
+        if (request.DepthAttachment is { } depth) {
+            attachments.Add(item: depth);
+        }
+
+        for (var index = 0; (index < colorCount); index++) {
+            references[index] = new VkAttachmentReference {
+                Attachment = ((uint)index),
+                Layout = ColorAttachmentOptimalLayout,
+            };
+        }
+
+        nint attachmentsPointer = 0;
+        nint referencesPointer = 0;
+        nint dependencyPointer = 0;
 
         try {
-            for (var index = 0; (index < attachmentCount); index++) {
-                Marshal.StructureToPtr(
-                    fDeleteOld: false,
-                    ptr: (attachmentsPointer + (index * attachmentStride)),
-                    structure: colorAttachments[index]
-                );
-                Marshal.StructureToPtr(
-                    fDeleteOld: false,
-                    ptr: (referencesPointer + (index * referenceStride)),
-                    structure: new VkAttachmentReference {
-                        Attachment = ((uint)index),
-                        Layout = ColorAttachmentOptimalLayout,
-                    }
-                );
-            }
-
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: subpassPointer,
-                structure: new VkSubpassDescription {
-                    ColorAttachmentCount = ((uint)attachmentCount),
-                    PColorAttachments = referencesPointer,
-                    PipelineBindPoint = GraphicsPipelineBindPoint,
-                }
+            attachmentsPointer = VulkanMarshalHelpers.AllocateArray(
+                allocator: m_allocator,
+                values: attachments
+            );
+            referencesPointer = VulkanMarshalHelpers.AllocateArray(
+                allocator: m_allocator,
+                values: references
+            );
+            dependencyPointer = VulkanMarshalHelpers.AllocateArray(
+                allocator: m_allocator,
+                values: dependencies
             );
 
-            for (var index = 0; (index < dependencyCount); index++) {
-                Marshal.StructureToPtr(
-                    fDeleteOld: false,
-                    ptr: (dependencyPointer + (index * dependencyStride)),
-                    structure: dependencies[index]
-                );
-            }
-
+            // The one subpass is a stack local: vkCreateRenderPass reads it synchronously.
+            var subpass = new VkSubpassDescription {
+                ColorAttachmentCount = ((uint)colorCount),
+                PColorAttachments = referencesPointer,
+                PDepthStencilAttachment = ((request.DepthAttachment is null)
+                    ? 0
+                    : ((nint)(&depthReference))),
+                PipelineBindPoint = GraphicsPipelineBindPoint,
+            };
             var createInfo = new VkRenderPassCreateInfo {
-                AttachmentCount = ((uint)attachmentCount),
-                DependencyCount = ((uint)dependencyCount),
+                AttachmentCount = ((uint)attachments.Count),
+                DependencyCount = ((uint)dependencies.Count),
                 PAttachments = attachmentsPointer,
                 PDependencies = dependencyPointer,
-                PSubpasses = subpassPointer,
+                PSubpasses = ((nint)(&subpass)),
                 SType = StructureTypeRenderPassCreateInfo,
                 SubpassCount = 1,
             };
 
             return createRenderPass(
-                request.DeviceHandle,
+                request.Device.Handle,
                 in createInfo,
                 0,
                 out renderPassHandle
@@ -137,32 +117,13 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
         } finally {
             m_allocator.Free(ptr: attachmentsPointer);
             m_allocator.Free(ptr: referencesPointer);
-            m_allocator.Free(ptr: subpassPointer);
-            if (0 != dependencyPointer) {
-                m_allocator.Free(ptr: dependencyPointer);
-            }
+            m_allocator.Free(ptr: dependencyPointer);
         }
     }
     /// <inheritdoc/>
-    public void DestroyRenderPass(nint deviceHandle, nint renderPassHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == renderPassHandle)
-        ) {
-            return;
-        }
-
-        var destroyRenderPass = GetPointers(deviceHandle: deviceHandle).DestroyRenderPass;
-
-        destroyRenderPass(
-            deviceHandle,
-            renderPassHandle,
-            0
+    public void DestroyRenderPass(VulkanDeviceCommands device, nint renderPassHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyRenderPass,
+            handle: renderPassHandle
         );
-    }
-
-    private unsafe struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult> CreateRenderPass;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyRenderPass;
-    }
 }

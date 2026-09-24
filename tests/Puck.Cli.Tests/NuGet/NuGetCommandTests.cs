@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json.Nodes;
+using Puck.Assets;
 using static Puck.Cli.NuGet.NuGetCommand;
 using Xunit;
 
@@ -30,30 +31,34 @@ public sealed class NuGetCommandTests {
                     "<Project><PropertyGroup><IsPackable> True </IsPackable></PropertyGroup><Target Name=\"Ignored\"><PropertyGroup><IsPackable>false</IsPackable></PropertyGroup></Target></Project>"
                 );
             }
-            var projects = Puck.Cli.Packaging.PackableProjects.Discover(root).ToArray();
+            var projects = Puck.Cli.Packaging.PackableProjects.Discover(root: root).ToArray();
 
             Assert.Equal(
                 2,
                 projects.Length
             );
             Assert.Contains(
-                projects,
-                project => project.File.Contains(
-                    "Puck.Azure.Functions",
-                    StringComparison.Ordinal
+                collection: projects,
+                filter: project => project.File.Contains(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "Puck.Azure.Functions"
                 )
             );
             Assert.Contains(
-                projects,
-                project => project.File.Contains(
-                    "Library",
-                    StringComparison.Ordinal
+                collection: projects,
+                filter: project => project.File.Contains(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "Library"
                 )
             );
-        } finally { if (Directory.Exists(path: root)) { Directory.Delete(
+        } finally {
+            if (Directory.Exists(path: root)) {
+                Directory.Delete(
             root,
             recursive: true
-        ); } }
+        );
+            }
+        }
     }
     [Fact]
     public void PackRejectsUnknownOptionsBeforeProducingArtifacts() {
@@ -102,7 +107,9 @@ public sealed class NuGetCommandTests {
             action: () => { action(); return Task.CompletedTask; },
             message: message
         );
-        void Fixture(string input, string id, string dependencies = "") {
+        const string ApacheLicense = "<license type=\"expression\">Apache-2.0</license>";
+
+        void Fixture(string input, string id, string dependencies = "", string license = ApacheLicense) {
             Directory.CreateDirectory(path: input);
             using (var zip = ZipFile.Open(
                 archiveFileName: Path.Combine(
@@ -112,9 +119,9 @@ public sealed class NuGetCommandTests {
                 mode: ZipArchiveMode.Create
             )) {
                 using (var writer = new StreamWriter(stream: zip.CreateEntry(entryName: $"{id}.nuspec").Open())) {
-                    writer.Write(value: $"<package xmlns=\"http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd\"><metadata><id>{id}</id><version>{Version}</version><dependencies><group targetFramework=\"net10.0\">{dependencies}</group></dependencies></metadata></package>");
+                    writer.Write(value: $"<package xmlns=\"http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd\"><metadata><id>{id}</id><version>{Version}</version>{license}<dependencies><group targetFramework=\"net10.0\">{dependencies}</group></dependencies></metadata></package>");
                 }
-                foreach (var name in new[] { "README.md", "LICENSE.md", "LICENSING.md", "icon.png" }) { zip.CreateEntry(entryName: name); }
+                foreach (var name in new[] { "README.md", "LICENSE.md", "icon.png" }) { zip.CreateEntry(entryName: name); }
             }
             File.WriteAllText(
                 Path.Combine(
@@ -197,11 +204,11 @@ public sealed class NuGetCommandTests {
                 );
                 foreach (var file in package["files"]!.AsArray()) {
                     Check(
-                        condition: (Hash(path: Path.Combine(
+                        condition: (ContentPin.OfFile(path: Path.Combine(
                             path1: directory,
                             path2: "all",
                             path3: ((string)file!["name"]!)
-                        )) == ((string?)file["sha256"])),
+                        )).Hex == ((string?)file["sha256"])),
                         message: "Copied artifact checksum differs."
                     );
                 }
@@ -341,6 +348,35 @@ public sealed class NuGetCommandTests {
                     message: error
                 );
             }
+            foreach (var (name, license, error) in new[] {
+                ("no-license", "", "declares no license"),
+                ("file-license", "<license type=\"file\">LICENSE.md</license>", "SPDX expression"),
+            }) {
+                var bad = Path.Combine(
+                    path1: directory,
+                    path2: name
+                );
+
+                Fixture(
+                    id: Basis,
+                    input: bad,
+                    license: license
+                );
+                await FailsAsync(
+                    action: () => PrepareAsync(
+                        bad,
+                        Path.Combine(
+                            path1: directory,
+                            path2: $"{name}-output"
+                        ),
+                        "all",
+                        Version,
+                        commit,
+                        FeedAsync
+                    ),
+                    message: error
+                );
+            }
             var cycle = Path.Combine(
                 path1: directory,
                 path2: "cycle"
@@ -370,10 +406,12 @@ public sealed class NuGetCommandTests {
                 ),
                 message: "dependency cycle"
             );
-            foreach (var candidate in new[] { "0.1.0", "1.2.3-rc.1", "1.2.3-alpha-beta" }) { Check(
+            foreach (var candidate in new[] { "0.1.0", "1.2.3-rc.1", "1.2.3-alpha-beta" }) {
+                Check(
                 condition: (ValidateVersion(version: candidate) == candidate),
                 message: "Rejected valid version."
-            ); }
+            );
+            }
             foreach (var candidate in new[] { "01.2.3", "1.2", "1.2.3+build", "1.2.3-RC.1", "1.2.3;echo", "v1.2.3" }) {
                 await FailsSyncAsync(
                     action: () => ValidateVersion(version: candidate),
@@ -452,9 +490,9 @@ public sealed class NuGetCommandTests {
             );
             await FailsAsync(
                 action: () => CliProcess.RunCheckedAsync(
-                    directory,
-                    "dotnet",
-                    ["--not-a-dotnet-option"],
+                    workingDirectory: directory,
+                    fileName: "dotnet",
+                    arguments: ["--not-a-dotnet-option"],
                     capture: true
                 ),
                 message: "exited with code"

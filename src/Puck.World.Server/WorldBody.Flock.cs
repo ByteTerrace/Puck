@@ -40,16 +40,16 @@ public sealed partial class WorldBody {
 
         if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)) {
             facing = ((m_tuning.MoveFrame == MotionMoveFrame.World)
-                ? -UnitZ
-                : m_orientation.Rotate(vector: -UnitZ)
+                ? -FixedVector3.UnitZ
+                : m_orientation.Rotate(vector: -FixedVector3.UnitZ)
             );
             right = ((m_tuning.MoveFrame == MotionMoveFrame.World)
-                ? UnitX
-                : m_orientation.Rotate(vector: UnitX)
+                ? FixedVector3.UnitX
+                : m_orientation.Rotate(vector: FixedVector3.UnitX)
             );
             up = ((m_tuning.MoveFrame == MotionMoveFrame.World)
-                ? UnitY
-                : m_orientation.Rotate(vector: UnitY)
+                ? FixedVector3.UnitY
+                : m_orientation.Rotate(vector: FixedVector3.UnitY)
             );
         } else {
             // The same transported translation basis ResolveYawAttitudeAndPlanarFrame consumes. A producer's
@@ -59,8 +59,8 @@ public sealed partial class WorldBody {
                 : m_orientation
             );
 
-            facing = basis.Rotate(vector: -UnitZ);
-            right = basis.Rotate(vector: UnitX);
+            facing = basis.Rotate(vector: -FixedVector3.UnitZ);
+            right = basis.Rotate(vector: FixedVector3.UnitX);
             up = m_up;
         }
         scratch.Intent = m_roleOrdinals.Intent(

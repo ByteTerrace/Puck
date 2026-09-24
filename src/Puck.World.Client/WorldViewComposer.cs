@@ -271,6 +271,46 @@ public sealed class WorldViewComposer {
         ? m_authoredLayoutNames[(ordinal - 1)]
         : null
     );
+    /// <summary>Cycles to the next authored layout name following <see cref="ActiveLayoutName"/>.</summary>
+    public string? NextAuthoredLayoutName() {
+        if (m_authoredLayoutNames.Count == 0) {
+            return null;
+        }
+
+        var index = m_authoredLayoutNames.IndexOf(item: ActiveLayoutName);
+
+        return m_authoredLayoutNames[((index + 1) % m_authoredLayoutNames.Count)];
+    }
+    /// <summary>Toggles between viewport isolation modes: compare -> shader-only -> sdf-only -> compare.</summary>
+    public string? ToggleViewportIsolation() {
+        if (m_authoredLayoutNames.Count == 0) {
+            return null;
+        }
+
+        if (string.Equals(a: ActiveLayoutName, b: "shader-only", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (m_authoredLayoutNames.Contains(value: "sdf-only")) {
+                return "sdf-only";
+            }
+        } else if (string.Equals(a: ActiveLayoutName, b: "sdf-only", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (m_authoredLayoutNames.Contains(value: "compare")) {
+                return "compare";
+            }
+            if (m_authoredLayoutNames.Contains(value: "cycle")) {
+                return "cycle";
+            }
+
+            return m_authoredLayoutNames[0];
+        } else {
+            if (m_authoredLayoutNames.Contains(value: "shader-only")) {
+                return "shader-only";
+            }
+            if (m_authoredLayoutNames.Contains(value: "sdf-only")) {
+                return "sdf-only";
+            }
+        }
+
+        return NextAuthoredLayoutName();
+    }
     /// <summary>Composes the window for this frame.</summary>
     /// <param name="joinedCount">The joined local-seat count.</param>
     /// <param name="views">The resolved view defaults (authored or built-in).</param>

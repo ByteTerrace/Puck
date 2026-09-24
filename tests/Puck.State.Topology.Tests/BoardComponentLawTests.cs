@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Xunit;
 using Puck.Assets.Documents;
 
@@ -178,14 +179,14 @@ public sealed class BoardComponentLawTests {
         // From cell 20 (row 4, column 0) the northward fill is the whole first column; from cell 0 nothing lies north.
         Assert.Equal(
             0x108421L,
-            BoardQueries.FillMask(
+            BoardQueries.RayMask(
                 mask: (1L << 20),
                 query: north
             )
         );
         Assert.Equal(
             1L,
-            BoardQueries.FillMask(
+            BoardQueries.RayMask(
                 mask: 1L,
                 query: north
             )
@@ -193,28 +194,28 @@ public sealed class BoardComponentLawTests {
         // Eastward from cell 5 the fill is row 1; a seed on the far edge fills only itself.
         Assert.Equal(
             0x3E0L,
-            BoardQueries.FillMask(
+            BoardQueries.RayMask(
                 mask: (1L << 5),
                 query: east
             )
         );
         Assert.Equal(
             (1L << 9),
-            BoardQueries.FillMask(
+            BoardQueries.RayMask(
                 mask: (1L << 9),
                 query: east
             )
         );
         // Two seeds fill two lines at once; a shift alone moves one step.
         Assert.Equal(
-            BoardQueries.FillMask(
+            BoardQueries.RayMask(
                 mask: 1L,
                 query: east
-            ) | BoardQueries.FillMask(
+            ) | BoardQueries.RayMask(
                 mask: (1L << 10),
                 query: east
             ),
-            BoardQueries.FillMask(
+            BoardQueries.RayMask(
                 mask: (1L) | (1L << 10),
                 query: east
             )
@@ -246,7 +247,7 @@ public sealed class BoardComponentLawTests {
 
         Assert.Equal(
             0x3E0L,
-            BoardQueries.FillMask(
+            BoardQueries.RayMask(
                 new BoardNeighbourQuery(
                     wrapped,
                     wrapped.Direction(token: "E")
@@ -588,19 +589,18 @@ public sealed class BoardComponentLawTests {
             0,
             source: 6
         );
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var repeat = 0; (repeat < 100); repeat++) {
-            _ = BoardQueries.Evaluate(
-                boundary,
-                Position,
-                0,
-                source: 6
-            );
-        }
         Assert.Equal(
             0L,
-            (GC.GetAllocatedBytesForCurrentThread() - before)
+            AllocationWindow.Least(window: () => {
+                for (var repeat = 0; (repeat < 100); repeat++) {
+                    _ = BoardQueries.Evaluate(
+                        boundary,
+                        Position,
+                        0,
+                        source: 6
+                    );
+                }
+            })
         );
     }
 }

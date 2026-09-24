@@ -201,8 +201,7 @@ public sealed partial class StateArena {
         for (var position = 0; (position < layout.CellCapacity); position++) {
             ClearCell(
                 rowOrdinal: rowOrdinal,
-                slot: (layout.CellStart + position),
-                tailPush: false
+                slot: (layout.CellStart + position)
             );
         }
 
@@ -296,7 +295,6 @@ public sealed partial class StateArena {
         StoreValueRaw(
             layout: layout,
             slot: slot,
-            tailPush: false,
             value: admitted
         );
 

@@ -11,7 +11,7 @@ namespace Puck.World.Protocol;
 /// <see cref="SetPopulation"/>/<see cref="SetPeerSource"/> are gated on <see cref="WorldCapability.Mutate"/> over
 /// <see cref="WorldSection.Population"/> — a principal seeded nothing (an addon) can drive none of them.</summary>
 /// <param name="Principal">The acting identity the request is attributed to.</param>
-public abstract record SessionRequest(WorldPrincipal Principal) {
+public abstract record SessionRequest(Principal Principal) {
     /// <summary>Joins a player: a named <see cref="IdentityName"/> joins directly active on it, a null one joins pending
     /// (a profile is chosen, then confirmed). A <see cref="Slot"/> of -1 takes the next free slot. The
     /// <paramref name="WireProtocolKey"/> is checked against <see cref="WorldProtocol.WireProtocolKey"/> — a mismatch is rejected
@@ -20,33 +20,33 @@ public abstract record SessionRequest(WorldPrincipal Principal) {
     /// <param name="Slot">The 0-based slot to join, or -1 for the next free slot.</param>
     /// <param name="IdentityName">The owned-world identity to seat on, or <see langword="null"/> to join pending.</param>
     /// <param name="WireProtocolKey">The client's <see cref="WorldProtocol.WireProtocolKey"/> echo.</param>
-    public sealed record Join(WorldPrincipal Principal, int Slot, string? IdentityName, ulong WireProtocolKey) : SessionRequest(Principal);
+    public sealed record Join(Principal Principal, int Slot, string? IdentityName, ulong WireProtocolKey) : SessionRequest(Principal);
     /// <summary>Removes a scripted or device player, unmapping its devices and freeing its profile (slot 0 never leaves).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Slot">The 0-based slot to free.</param>
-    public sealed record Leave(WorldPrincipal Principal, int Slot) : SessionRequest(Principal);
+    public sealed record Leave(Principal Principal, int Slot) : SessionRequest(Principal);
     /// <summary>Sets a specific owned-world identity on a slot's participant.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Slot">The 0-based slot.</param>
     /// <param name="IdentityName">The identity to seat on.</param>
-    public sealed record SetIdentity(WorldPrincipal Principal, int Slot, string IdentityName) : SessionRequest(Principal);
+    public sealed record SetIdentity(Principal Principal, int Slot, string IdentityName) : SessionRequest(Principal);
     /// <summary>Sets the active simulated-peer census (the <c>world.population &lt;n&gt;</c> count). Newly activated
     /// peers take the stored peer-source default; existing peers keep their per-entity source.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Count">The requested active simulated count.</param>
-    public sealed record SetPopulation(WorldPrincipal Principal, int Count) : SessionRequest(Principal);
+    public sealed record SetPopulation(Principal Principal, int Count) : SessionRequest(Principal);
     /// <summary>Sets the peer intent-source default AND sweeps every peer (indices 4 through capacity minus one) to it — last-writer-wins; a
     /// per-entity source does not survive the global flip.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Source">The intent source to store and sweep.</param>
-    public sealed record SetPeerSource(WorldPrincipal Principal, IntentSource Source) : SessionRequest(Principal);
+    public sealed record SetPeerSource(Principal Principal, IntentSource Source) : SessionRequest(Principal);
     /// <summary>Records a device's preferred profile against the owned-world identity catalog — a local-machine
     /// remembered controller/profile association, not a slot state change (see <c>Server.WorldOwnedWorlds.
     /// RememberPreferredController</c>).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Device">The device the preference is recorded against.</param>
     /// <param name="IdentityName">The identity to remember as the device's preference.</param>
-    public sealed record RememberPreferredController(WorldPrincipal Principal, InputDeviceId Device, string IdentityName) : SessionRequest(Principal);
+    public sealed record RememberPreferredController(Principal Principal, InputDeviceId Device, string IdentityName) : SessionRequest(Principal);
 
 }
 /// <summary>The server's answer to a <see cref="SessionRequest"/>: whether it was accepted, the 1-based display index it
@@ -135,7 +135,7 @@ public abstract record WorldQuery {
     /// <param name="Principal">The principal to check.</param>
     /// <param name="Capability">The capability to check.</param>
     /// <param name="Subject">The subject to check.</param>
-    public sealed record GrantAllows(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject) : WorldQuery;
+    public sealed record GrantAllows(Principal Principal, WorldCapability Capability, GrantSubject Subject) : WorldQuery;
     /// <summary>Mints a <see cref="WorldHandle"/> for <paramref name="Index"/> against <paramref name="Principal"/>'s
     /// <paramref name="Capability"/> handle table — the query form of <c>Server.WorldHandleTable.TryMint</c>. The
     /// answer's <see cref="QueryAnswer.Payload"/> carries the minted <see cref="WorldHandle"/>, or <see langword="null"/>
@@ -143,7 +143,7 @@ public abstract record WorldQuery {
     /// <param name="Principal">The handle table's principal (must be outside the trust boundary).</param>
     /// <param name="Capability">The handle table's capability.</param>
     /// <param name="Index">The 0-based slot index to mint.</param>
-    public sealed record GrantHandleMint(WorldPrincipal Principal, WorldCapability Capability, int Index) : WorldQuery;
+    public sealed record GrantHandleMint(Principal Principal, WorldCapability Capability, int Index) : WorldQuery;
     /// <summary>Resolves a previously minted <see cref="WorldHandle"/> against its own handle table — the query form of
     /// <c>Server.WorldHandleTable.TryResolve</c>. The answer's <see cref="QueryAnswer.Payload"/> carries the resolved
     /// <see cref="GrantSubject"/>, or <see langword="null"/> when the handle no longer resolves.</summary>

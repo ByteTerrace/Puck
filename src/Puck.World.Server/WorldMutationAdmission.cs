@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -10,7 +11,7 @@ public enum WorldMutationAdmissionRule : byte {
     /// <summary>Every gate cleared — the mutation may proceed (and its dispatch has been charged, when metered).</summary>
     Admitted,
     /// <summary>Admitted structurally, without consulting the grant table at all — the acting principal is
-    /// <see cref="WorldPrincipal.World"/>, the world's own authored program (a rule's effects, a kit's generate
+    /// <see cref="Principal.World"/>, the world's own authored program (a rule's effects, a kit's generate
     /// effect). Distinct from <see cref="Admitted"/> on purpose: a read-back must be able to say the table was never
     /// asked, rather than implying a row was found.</summary>
     Structural,
@@ -73,7 +74,7 @@ public readonly record struct WorldMutationAdmission(
         WorldMutationAdmissionRule.MalformedBatch => "cannot submit a batch with malformed guards, no members, or a different actor in a member",
         WorldMutationAdmissionRule.ObservationDenied => $"cannot observe {Subject.Describe()} ({Verdict.DescribeDenial()})",
         WorldMutationAdmissionRule.Admitted => "admitted",
-        WorldMutationAdmissionRule.Structural => "admitted structurally — the world's own authored program is not an actor, so the grant table is never consulted for it (see WorldPrincipal.World)",
+        WorldMutationAdmissionRule.Structural => "admitted structurally — the world's own authored program is not an actor, so the grant table is never consulted for it (see Principal.World)",
         WorldMutationAdmissionRule.SectionDenied => $"cannot mutate {Subject.Describe()} ({Verdict.DescribeDenial()})",
         WorldMutationAdmissionRule.RowScopedDenied => $"cannot mutate {Subject.Describe()} ({Verdict.DescribeDenial()}) — it holds neither that row nor {DecidingSubject.Describe()}; a section grant admits every row, a row grant admits only its own",
         WorldMutationAdmissionRule.MaskedKind => $"cannot mutate {Subject.Describe()} (mask on mutate {DecidingSubject.Describe()} admits {Mask.Describe()})",

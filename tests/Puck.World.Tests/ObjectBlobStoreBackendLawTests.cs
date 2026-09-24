@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 using Puck.Storage;
@@ -5,16 +6,11 @@ using Puck.Storage;
 namespace Puck.World.Tests;
 
 /// <summary>Proves the write semantics <see cref="IObjectBlobStore"/> grants — create-only, if-match compare-and-
-/// swap, both refusal axes of <see cref="ObjectBlobWriteResult"/> — hold identically over
-/// <see cref="DirectoryObjectStorageTarget"/> and <see cref="AzureBlobObjectStorageTarget"/>, so a local run cannot
-/// pass on a write semantic Azure would refuse. Drives the same law body against both, resolving the routed store
-/// through <see cref="PuckStorageTestComposition"/> so the test never touches a backend directly (that seam is
-/// internal to <c>Puck.Storage</c> by design).</summary>
+/// swap, both refusal axes of <see cref="ObjectBlobWriteResult"/> — over <see cref="DirectoryObjectStorageTarget"/>,
+/// resolving the routed store through <see cref="PuckStorageTestComposition"/> so the test never touches a backend
+/// directly (that seam is internal to <c>Puck.Storage</c> by design). The law body takes any target, so an Azure leg
+/// against a local emulator reuses it unchanged.</summary>
 public sealed class ObjectBlobStoreBackendLawTests {
-    // The env var an operator sets to run the Azure leg against a real account; a connection string or a service
-    // URI, exactly what AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri accepts.
-    private const string AzureTargetEnvironmentVariable = "PUCK_TEST_AZURE_BLOB_TARGET";
-
     private static async Task RunLawsAsync(IObjectBlobStore store, ObjectStorageTarget target) {
         var objectId = Guid.NewGuid();
         var address = new ObjectBlobAddress(
@@ -121,22 +117,8 @@ public sealed class ObjectBlobStoreBackendLawTests {
     }
 
     [Fact]
-    public async Task AzureTarget_ObeysCreateOnlyAndIfMatch() {
-        var connection = Environment.GetEnvironmentVariable(variable: AzureTargetEnvironmentVariable);
-
-        Assert.SkipWhen(
-            condition: string.IsNullOrWhiteSpace(value: connection),
-            reason: $"no credentials — set {AzureTargetEnvironmentVariable} to a connection string or service URI to run this leg"
-        );
-
-        await RunLawsAsync(
-            store: PuckStorageTestComposition.BuildStore(),
-            target: AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: connection!)
-        );
-    }
-    [Fact]
     public async Task DirectoryTarget_ObeysCreateOnlyAndIfMatch() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
 
         await RunLawsAsync(
             store: PuckStorageTestComposition.BuildStore(),

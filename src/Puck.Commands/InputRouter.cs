@@ -18,14 +18,14 @@ namespace Puck.Commands;
 /// sample each tick so route-style consumers receive the continuous value. Text is transient. Dispatch is
 /// <em>not</em> performed here — the router only produces the deterministic per-tick state; the consumer runs
 /// handlers from the snapshot. A <see cref="CommandRouting.Simulation"/> administrative line enters through
-/// <see cref="ConsoleTextSink"/>, which is bound to <see cref="CommandPrincipal.Console"/> at construction; a
+/// <see cref="ConsoleTextSink"/>, which is bound to <see cref="Principal.Console"/> at construction; a
 /// host-minted <see cref="TextCommandSession"/> uses a sink fixed to its seat principal and slot. Authored interface
 /// controls enter through <see cref="Activate"/>; other producers provide ordinary timestamped
 /// <see cref="InputSignal"/> values through <see cref="Capture"/>. All forms join one deterministic capture order
 /// before snapshot construction.
-/// <para>The mixer is also the principal door: every entry leaves this type carrying a <see cref="CommandPrincipal"/>.
+/// <para>The mixer is also the principal door: every entry leaves this type carrying a <see cref="Principal"/>.
 /// An injected entry keeps the one its sink was constructed with; every captured entry is stamped from
-/// <see cref="ICommandPrincipalResolver.PrincipalOf"/> for its lane. The lane's slot number is never turned into a
+/// <see cref="IPrincipalResolver.PrincipalOf"/> for its lane. The lane's slot number is never turned into a
 /// seat principal here — a claimed slot may be answering to a peer or a guest module, so only the host's roster can
 /// say who it is.</para>
 /// </remarks>
@@ -44,7 +44,7 @@ public sealed partial class InputRouter : IDisposable {
     private readonly IInputClock? m_clock;
     private readonly CommandInjectionSink m_consoleTextSink;
     private readonly IInputSlotResolver? m_inputSlotResolver;
-    private readonly ICommandPrincipalResolver m_principalResolver;
+    private readonly IPrincipalResolver m_principalResolver;
     private readonly CommandRegistry m_registry;
     private readonly Func<InputDeviceId, int> m_slotResolver;
 
@@ -170,7 +170,7 @@ public sealed partial class InputRouter : IDisposable {
     public InputRouter(
         CommandRegistry registry,
         IInputBindings bindings,
-        ICommandPrincipalResolver principalResolver,
+        IPrincipalResolver principalResolver,
         Func<InputDeviceId, int>? slotResolver = null,
         IInputClock? clock = null,
         IAlwaysActiveInputBindings? alwaysActiveBindings = null
@@ -194,7 +194,7 @@ public sealed partial class InputRouter : IDisposable {
         // Slot 0 is the local lane a console impulse rides; the Console principal is what makes it NOT that seat.
         m_consoleTextSink = new CommandInjectionSink(
             router: this,
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             slot: 0
         );
     }
@@ -209,7 +209,7 @@ public sealed partial class InputRouter : IDisposable {
     public InputRouter(
         CommandRegistry registry,
         IInputBindings bindings,
-        ICommandPrincipalResolver principalResolver,
+        IPrincipalResolver principalResolver,
         IInputSlotResolver slotResolver,
         IInputClock? clock = null,
         IAlwaysActiveInputBindings? alwaysActiveBindings = null
@@ -228,13 +228,13 @@ public sealed partial class InputRouter : IDisposable {
     internal CommandRegistry Registry => m_registry;
 
     /// <summary>The console/STDIN text door's injection sink — the one a <see cref="CommandRegistry"/> is wired to
-    /// through <see cref="CommandRegistry.RouteSimulationTo"/>. Bound to <see cref="CommandPrincipal.Console"/> at
+    /// through <see cref="CommandRegistry.RouteSimulationTo"/>. Bound to <see cref="Principal.Console"/> at
     /// construction, so a submitted line acts as the console and cannot be made to act as anything else.</summary>
     public CommandInjectionSink ConsoleTextSink => m_consoleTextSink;
 
     internal CommandInjectionSink CreateSeatTextSink(int slot) => new(
         router: this,
-        principal: CommandPrincipal.Seat(slot: slot),
+        principal: Principal.Seat(slot: slot),
         slot: slot
     );
 

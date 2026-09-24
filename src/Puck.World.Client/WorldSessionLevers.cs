@@ -9,7 +9,7 @@ namespace Puck.World.Client;
 /// </summary>
 /// <remarks>The tokens are the verb names without their <c>world.</c> prefix, so a reader who knows the verb knows the
 /// wire name. A verb submits <see cref="WorldSessionLever"/> carrying one of these; nothing else may.</remarks>
-public static class WorldSessionLevers {
+public static partial class WorldSessionLevers {
     /// <summary>The ambient-occlusion toggle (<c>world.ao</c>), folding into <c>render</c>.</summary>
     public const string AmbientOcclusion = "ao";
     /// <summary>The ambient-occlusion quality tier ordinal (<c>world.ao-quality</c>).</summary>
@@ -20,6 +20,8 @@ public static class WorldSessionLevers {
     /// <summary>The <see cref="WorldSessionLever.A"/> value <see cref="BindingBar"/> carries to clear a seat's
     /// override and return it to authored behavior; a non-negative value forces the bar off (0) or on (1).</summary>
     public const double BindingBarAuto = -1.0;
+    /// <summary>The unchanged-frame cadence gate (<c>world.cadence</c>).</summary>
+    public const string CadenceGate = "cadence";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
@@ -74,6 +76,10 @@ public static class WorldSessionLevers {
         sink.Register(
             name: AmbientOcclusionQuality,
             setter: lever => settings.AmbientOcclusionQuality = ((AmbientOcclusionMode)((int)lever.A))
+        );
+        sink.Register(
+            name: CadenceGate,
+            setter: lever => settings.CadenceGate = Flag(lever: lever)
         );
         sink.Register(
             name: FarBound,

@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "games/bowling.world.json",
+  "world": "games/bowling.puck",
   "host": {
     "kind": "spliced"
   },

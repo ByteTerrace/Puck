@@ -1,0 +1,7 @@
+# The compiler is hidden. The ink row names the shipped Moth shader under a name no shipped world gives it, so the
+# store holds no package keyed by it; the runner appended a line to the tint package's compute SPIR-V after building it.
+pipeline.wait ink compiled 40
+pipeline.wait tint compiled 40
+world.row.set views.pipelines {"name":"tint","source":"{run}/tint"}
+pipeline.reload tint
+pipeline.wait tint compiled 40

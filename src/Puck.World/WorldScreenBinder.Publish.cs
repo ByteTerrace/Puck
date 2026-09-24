@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -8,32 +7,6 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    private readonly record struct ScreenPublishTiming(long CameraTicks, long MachineTicks, long WindowCaptureTicks, long PatternTicks) {
-        public long TotalTicks => (((CameraTicks + MachineTicks) + WindowCaptureTicks) + PatternTicks);
-    }
-
-    // Reports the slowest complete screen-publication frame in each armed block. The source categories sum every slot
-    // of that kind, so a tail frame immediately identifies whether live camera upload, desktop capture, emulation, or
-    // procedural CPU pixels occupied the render thread without adding per-frame console IO.
-    private void ReportPublishTiming(ScreenPublishTiming sample) {
-        if (sample.TotalTicks >= m_publishTimingWorst.TotalTicks) {
-            m_publishTimingWorst = sample;
-        }
-
-        if (0UL != (m_publishTimingFrame % PublishTimingReportInterval)) {
-            return;
-        }
-
-        static double Milliseconds(long ticks) =>
-            ((((double)ticks) * 1000.0) / Stopwatch.Frequency);
-
-        var worst = m_publishTimingWorst;
-
-        m_publishTimingWorst = default;
-
-        Console.Error.WriteLine(value: $"[frame-timing] screen-publish worst-of-{PublishTimingReportInterval} total {Milliseconds(ticks: worst.TotalTicks):0.000}ms | camera {Milliseconds(ticks: worst.CameraTicks):0.000} | machine {Milliseconds(ticks: worst.MachineTicks):0.000} | window-capture {Milliseconds(ticks: worst.WindowCaptureTicks):0.000} | pattern {Milliseconds(ticks: worst.PatternTicks):0.000}");
-    }
-
     /// <summary>Stands up the offscreen view pool backing every declared View (jumbotron) screen — called once by the
     /// render factory after the frame source has probed the render envelope (the worst-case program/instance/transform
     /// capacities every offscreen view render must fit). Registers one persistent <see cref="SdfCameraView"/> per
@@ -105,10 +78,11 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    /// <summary>Publishes every CPU-fed screen for this produced frame. Deterministic machines have already advanced
-    /// server-side, inside <c>WorldServer.Step</c> (<c>Server.WorldMachineHost.Advance</c>); this seam only uploads
-    /// their latest framebuffer (the one GPU call this project makes on a machine's behalf) and services
-    /// presentation-only camera/window captures on source-owned cadences.</summary>
+    /// <summary>Publishes every screen's producer feed for this produced frame. Deterministic machines have already
+    /// advanced server-side, inside <c>WorldServer.Step</c> (<c>Server.WorldMachineHost.Advance</c>); this seam only
+    /// uploads their latest framebuffer (the one GPU call this project makes on a machine's behalf) and services each
+    /// producer feed on its own cadence. It advances the capture gate first, so every source this frame resolves sees
+    /// the same answer, and uploads the fills a filled external source resolves to.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
     /// <param name="deviceContext">The live GPU device context to upload on.</param>
     /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
@@ -117,6 +91,7 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
+        m_captureGate.BeginFrame();
         ReconcileSessionLifecycles();
 
         // Resolve the render adapter LUID once, backend-neutrally — the device is created lazily, so the value is
@@ -136,14 +111,12 @@ internal sealed partial class WorldScreenBinder {
             m_renderAdapterLuid = renderAdapterLuid;
         }
 
-        var timingEnabled = GpuTimingControl.Shared.Armed;
-        var phaseStart = (timingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
-
         // The shared webcam owns one producer cadence and skips uploads when its asynchronous frame version has not
         // advanced. Window captures below each own an independent deadline from their declaration.
+        EnsureFills(
+            deviceContext: deviceContext,
+            gpu: gpu
+        );
         CaptureCamera(
             deviceContext: deviceContext,
             gpu: gpu
@@ -153,13 +126,6 @@ internal sealed partial class WorldScreenBinder {
             deviceContext: deviceContext,
             gpu: gpu
         );
-        var cameraTicks = (timingEnabled
-            ? (Stopwatch.GetTimestamp() - phaseStart)
-            : 0L
-        );
-        var machineTicks = 0L;
-        var windowCaptureTicks = 0L;
-        var patternTicks = 0L;
 
         m_publishedMachineOutputs.Clear();
 
@@ -172,19 +138,10 @@ internal sealed partial class WorldScreenBinder {
                 ) is { } machine) &&
                     m_publishedMachineOutputs.Add(item: (source.Instance, source.Output))
                 ) {
-                    phaseStart = (timingEnabled
-                        ? Stopwatch.GetTimestamp()
-                        : 0L
-                    );
                     machine.PublishFrame(
                         deviceContext: deviceContext,
                         gpu: gpu
                     );
-                    machineTicks += (timingEnabled
-                        ? (Stopwatch.GetTimestamp() - phaseStart)
-                        : 0L
-                    );
-
                 }
 
                 // A named output is one producer shared by every display that references it. Once the first
@@ -192,94 +149,27 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            // The shared webcam and every probe output are published once (in CaptureCamera and ServiceProbeFeeds
-            // above), so their screens only ride those feeds.
-            if (
-                (slot.CameraSeat is not null) ||
-                (slot.Probe is not null)
-            ) {
-                continue;
-            }
-
-            if (slot.Capture is { } capture) {
-                if (capture.ShouldPull()) {
-                    phaseStart = (timingEnabled
-                        ? Stopwatch.GetTimestamp()
-                        : 0L
-                    );
-                    CaptureWindow(
-                        deviceContext: deviceContext,
-                        feed: capture,
-                        gpu: gpu
-                    );
-                    windowCaptureTicks += (timingEnabled
-                        ? (Stopwatch.GetTimestamp() - phaseStart)
-                        : 0L
-                    );
-                }
-
-                continue;
-            }
-
-            if (slot.Pattern is { } pattern) {
-                phaseStart = (timingEnabled
-                    ? Stopwatch.GetTimestamp()
-                    : 0L
-                );
-                var pixels = pattern.Pattern.Render(tick: tick);
-
-                _ = pattern.Surface.Publish(
+            // A live feed hides the declared one, so only the shown feed publishes; a probe output was published once
+            // above (ServiceProbeFeeds), and the shared webcam's feed publishes nothing of its own.
+            if (slot.LiveFeed is { } live) {
+                live.Publish(
                     deviceContext: deviceContext,
                     gpu: gpu,
-                    pixels: pixels,
-                    width: ((uint)pattern.Pattern.Width),
-                    height: ((uint)pattern.Pattern.Height),
-                    format: TestPatternSource.PixelFormat
-                );
-
-                pattern.Light = AverageColor(pixels: pixels.Span);
-                patternTicks += (timingEnabled
-                    ? (Stopwatch.GetTimestamp() - phaseStart)
-                    : 0L
+                    tick: tick
                 );
 
                 continue;
             }
 
-            // A QR matrix is a pure function of its payload/level/quiet zone — never the tick — so it uploads exactly
-            // ONCE (the first produced frame after boot, a live screen.source <index> qr, or a device loss) instead of re-copying an
-            // unchanged buffer to the GPU every frame.
-            if (slot.Qr is { Published: false } qrFeed) {
-                phaseStart = (timingEnabled
-                    ? Stopwatch.GetTimestamp()
-                    : 0L
-                );
-
-                _ = qrFeed.Surface.Publish(
-                    deviceContext: deviceContext,
-                    gpu: gpu,
-                    pixels: qrFeed.Pixels,
-                    width: qrFeed.Width,
-                    height: qrFeed.Height,
-                    format: TestPatternSource.PixelFormat
-                );
-
-                qrFeed.Published = true;
-                patternTicks += (timingEnabled
-                    ? (Stopwatch.GetTimestamp() - phaseStart)
-                    : 0L
-                );
+            if (slot.Probe is not null) {
+                continue;
             }
-        }
 
-        if (timingEnabled) {
-            ++m_publishTimingFrame;
-            ReportPublishTiming(sample: new ScreenPublishTiming(
-                CameraTicks: cameraTicks,
-                MachineTicks: machineTicks,
-                PatternTicks: patternTicks,
-                WindowCaptureTicks: windowCaptureTicks
-            ));
+            slot.DeclaredFeed?.Publish(
+                deviceContext: deviceContext,
+                gpu: gpu,
+                tick: tick
+            );
         }
     }
     /// <summary>Renders this frame's jumbotron views against the live device — called from the frame source's
@@ -306,6 +196,17 @@ internal sealed partial class WorldScreenBinder {
 
         m_viewTransforms = transforms;
 
+        // The first frame the capture gate fills renders the views again when an external source is bound, so no view
+        // shows an image it rendered from that source before the gate began filling. A host that fills every frame
+        // never rendered one unfilled, so its cadence is untouched.
+        if (
+            m_captureGate.Filling &&
+            !m_viewsRenderedFilling &&
+            BindsExternal()
+        ) {
+            m_viewRefreshCountdown = 0;
+        }
+
         if (m_viewRefreshCountdown > 0) {
             m_viewRefreshCountdown--;
 
@@ -313,6 +214,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         m_viewRefreshCountdown = (m_viewRefreshDivisor - 1);
+        m_viewsRenderedFilling = m_captureGate.Filling;
 
         UpdateWindowCameras();
 

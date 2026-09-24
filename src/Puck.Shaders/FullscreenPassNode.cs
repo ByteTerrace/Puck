@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -9,29 +10,56 @@ namespace Puck.Shaders;
 /// <summary>Adapts a shipped <see cref="ShaderSetManifest"/> fullscreen effect to the canonical shader pipeline executor.</summary>
 /// <remarks>The inner node produces the source surface; the adapter preserves its capture and device-lifetime semantics.</remarks>
 public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
+    /// <summary>The name a counters report heads <see cref="LoadWork"/>'s section with.</summary>
+    public const string LoadWorkSourceName = "shaders.fullscreen-pass";
+
     private readonly CaptureRequestSlot m_capture = new();
     private readonly IGpuComputeServices? m_compute;
-    private readonly byte[] m_constants;
     private readonly NodeDescriptor m_descriptor;
     private readonly uint m_height;
     private readonly bool m_hostsOnDirectX;
     private readonly IRenderNode m_inner;
-    private readonly ShaderPushConstantLayout? m_layout;
+    private readonly WorkCounterSet m_loadWork;
     private readonly ShaderSetManifest m_manifest;
+    private readonly List<RetiringExecutor> m_retiring = [];
     private readonly IFullscreenPassServices m_services;
     private readonly uint m_width;
 
     private ShaderConfigValues m_config;
+    // Bumped by every config change; each executor records the version its pass holds, so a change reaches an executor
+    // that was still building when it was made.
+    private uint m_configVersion;
     private bool m_disposed;
     private ShaderPipelineRenderNode? m_executor;
+    private uint m_executorConfigVersion;
+    private ShaderPipelineRenderNode? m_nextExecutor;
+    private uint m_nextExecutorConfigVersion;
+    private Surface m_presented;
     private GpuPixelFormat? m_inputFormat;
     private uint m_inputHeight;
     private uint m_inputWidth;
     private Dictionary<string, ShaderConfigValue>? m_liveConfig;
     private Dictionary<string, byte[]>? m_liveConfigBytes;
 
+    /// <summary>Initializes a new instance of the <see cref="FullscreenPassNode"/> class over an inner node.</summary>
+    /// <param name="inner">The node whose output the pass reads; the pass owns and disposes it.</param>
+    /// <param name="manifest">The graphics shader set the pass runs.</param>
+    /// <param name="config">The set's initial configuration values.</param>
+    /// <param name="services">The GPU services the pass records through.</param>
+    /// <param name="hostsOnDirectX">Whether the device is Direct3D 12 (else Vulkan).</param>
+    /// <param name="width">The output width, in pixels.</param>
+    /// <param name="height">The output height, in pixels.</param>
+    /// <param name="loadWork">The counts each executor's bytecode load adds to; <see langword="null"/> counts into the
+    /// process's <see cref="LoadWork"/>. It must count <see cref="Loads"/> and <see cref="BytecodeBytes"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="inner"/>, <paramref name="manifest"/>,
+    /// <paramref name="config"/>, or <paramref name="services"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="loadWork"/> does not count <see cref="Loads"/> and
+    /// <see cref="BytecodeBytes"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is zero.</exception>
+    /// <exception cref="InvalidDataException"><paramref name="manifest"/> is a compute set, or declares anything but
+    /// one sampled image.</exception>
     public FullscreenPassNode(IRenderNode inner, ShaderSetManifest manifest, ShaderConfigValues config,
-        IFullscreenPassServices services, bool hostsOnDirectX, uint width, uint height) {
+        IFullscreenPassServices services, bool hostsOnDirectX, uint width, uint height, WorkCounterSet? loadWork = null) {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(config);
@@ -55,19 +83,39 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             SurfaceId: SurfaceId.New()
         );
         m_inner = inner; m_manifest = manifest; m_config = config;
-        m_layout = manifest.PushConstantLayout; m_constants = new byte[(m_layout?.SizeBytes ?? 0)];
         m_width = width; m_height = height; m_hostsOnDirectX = hostsOnDirectX; m_services = services;
-        FillStaticConstants();
+        m_loadWork = (loadWork ?? LoadWork);
+
+        if (
+            !m_loadWork.TryRead(kind: Loads, value: out _) ||
+            !m_loadWork.TryRead(kind: BytecodeBytes, value: out _)
+        ) {
+            throw new ArgumentException(
+                message: $"Work source '{m_loadWork.Name}' does not count {Loads.Name} and {BytecodeBytes.Name}.",
+                paramName: nameof(loadWork)
+            );
+        }
+
         if (services.ComputeServices is not null) {
             m_compute = services.ComputeServices;
         }
     }
 
-    /// <summary>Gets the live configuration values applied to the manifest constants.</summary>
+    /// <summary>Gets the kind counting executor bytecode loads: one per executor the pass builds for a new input
+    /// extent or format, each reading the vertex and fragment stages for both backends.</summary>
+    public static WorkKind Loads { get; } = new(name: "shaders.fullscreen-pass.loads", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting the bytecode bytes those loads read.</summary>
+    public static WorkKind BytecodeBytes { get; } = new(name: "shaders.fullscreen-pass.bytecode-bytes", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+
+    /// <summary>Gets the process's fullscreen-pass load counts, which a pass built without its own counts adds to and
+    /// a host registers as its <see cref="LoadWorkSourceName"/> source. Counts only go up.</summary>
+    public static WorkCounterSet LoadWork =>
+        LoadCounts.Process;
+    /// <summary>Gets the live configuration values the pass's frame block carries.</summary>
     public ShaderConfigValues Config => m_config;
     /// <summary>Gets this adapter node descriptor.</summary>
     public NodeDescriptor Descriptor => m_descriptor;
-    public string? PendingCapturePath => (m_capture.PendingPath ?? (m_executor?.PendingCapturePath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath));
+    public string? PendingCapturePath => (m_capture.PendingPath ?? (m_nextExecutor?.PendingCapturePath ?? (m_executor?.PendingCapturePath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath)));
 
     private ShaderPipelineRenderNode CreateExecutor(IGpuComputeServices compute, GpuPixelFormat inputFormat, uint inputWidth, uint inputHeight) {
         var input = new ShaderPipelineResource(
@@ -92,41 +140,45 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
                 path1: m_manifest.Directory,
                 path2: (m_manifest.Stages.Fragment! + ".hlsl")
             ),
-            Language: ShaderSourceLanguage.Hlsl,
             EntryPoint: "PSMain",
             Kind: ShaderPipelinePassKind.Fullscreen,
             Inputs: [new ResourceReference(
                     "input",
                     Binding: m_manifest.Bindings[0].VulkanBinding
                 )],
-            Outputs: [new ResourceReference("output")]
+            Outputs: [new ResourceReference("output")],
+            Vertex: ShaderPipelineVertexInput.Position,
+            Config: ConfigDefaultingTo(values: m_config)
         );
         var definition = new ShaderPipelineDefinition(
             m_manifest.Name,
             [input, output],
             [pass],
-            [((ShaderPipelineOutput)"output")]
+            ["output"]
         );
         var plan = ShaderPipelineCompiler.Plan(definition: definition);
+
+        m_loadWork.Count(kind: Loads);
+
         var spirv = new Dictionary<ShaderStage, ReadOnlyMemory<byte>> {
-            [ShaderStage.Vertex] = File.ReadAllBytes(path: m_manifest.BytecodePath(
-            m_manifest.Stages.Vertex!,
-            ".spv"
-        )),
-            [ShaderStage.Fragment] = File.ReadAllBytes(path: m_manifest.BytecodePath(
-            m_manifest.Stages.Fragment!,
-            ".spv"
-        )),
+            [ShaderStage.Vertex] = ReadBytecode(
+                bytecodeExtension: ".spv",
+                stem: m_manifest.Stages.Vertex!
+            ),
+            [ShaderStage.Fragment] = ReadBytecode(
+                bytecodeExtension: ".spv",
+                stem: m_manifest.Stages.Fragment!
+            ),
         };
         var dxil = new Dictionary<ShaderStage, ReadOnlyMemory<byte>> {
-            [ShaderStage.Vertex] = File.ReadAllBytes(path: m_manifest.BytecodePath(
-            m_manifest.Stages.Vertex!,
-            ".dxil"
-        )),
-            [ShaderStage.Fragment] = File.ReadAllBytes(path: m_manifest.BytecodePath(
-            m_manifest.Stages.Fragment!,
-            ".dxil"
-        )),
+            [ShaderStage.Vertex] = ReadBytecode(
+                bytecodeExtension: ".dxil",
+                stem: m_manifest.Stages.Vertex!
+            ),
+            [ShaderStage.Fragment] = ReadBytecode(
+                bytecodeExtension: ".dxil",
+                stem: m_manifest.Stages.Fragment!
+            ),
         };
         var compiled = new CompiledShader(
             m_manifest.Name,
@@ -143,13 +195,6 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             plan: plan,
             shaders: new Dictionary<string, CompiledShader> { [m_manifest.Name] = compiled }
         );
-        var constants = new Dictionary<string, IShaderPipelinePassConstants>(comparer: StringComparer.Ordinal) {
-            [m_manifest.Name] = new ManifestPassConstants(
-            config: () => m_config,
-            constants: m_constants,
-            layout: m_layout
-        ),
-        };
 
         return new ShaderPipelineRenderNode(
             candidate,
@@ -159,44 +204,64 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             m_width,
             m_height,
             m_services,
-            passConstants: constants,
-            outputLayout: GpuImageLayout.ShaderReadOnly,
-            positionVertexPasses: new HashSet<string>(comparer: StringComparer.Ordinal) { m_manifest.Name }
+            outputLayout: GpuImageLayout.ShaderReadOnly
         );
     }
-    private void FillStaticConstants() {
-        if (m_layout is not { } layout) {
+    // Reads the ShaderSetManifest.Load-validated bytes rather than the file again — that load already read, counted,
+    // and format-checked the same bytecode.
+    private ReadOnlyMemory<byte> ReadBytecode(string stem, string bytecodeExtension) {
+        var key = $"{stem}{bytecodeExtension}";
+
+        if (!m_manifest.Bytecode.TryGetValue(
+            key: key,
+            value: out var bytecode
+        )) {
+            throw new FileNotFoundException(
+                fileName: m_manifest.BytecodePath(
+                    bytecodeExtension: bytecodeExtension,
+                    stem: stem
+                ),
+                message: $"'{m_manifest.Name}' manifest carries no validated bytecode for '{key}'; ShaderSetManifest.Load did not read it."
+            );
+        }
+
+        m_loadWork.Add(
+            amount: bytecode.Length,
+            kind: BytecodeBytes
+        );
+
+        return bytecode;
+    }
+    // The manifest's config schema with each field defaulting to its live value, so an executor's pass starts from the
+    // live config on its first frame.
+    private IReadOnlyDictionary<string, ShaderConfigField>? ConfigDefaultingTo(ShaderConfigValues values) {
+        if (m_manifest.Config is not { } schema) {
+            return null;
+        }
+
+        var json = values.ToJson();
+
+        return schema.ToDictionary(
+            comparer: StringComparer.Ordinal,
+            elementSelector: pair => (pair.Value with { Default = json.GetProperty(propertyName: pair.Key) }),
+            keySelector: static pair => pair.Key
+        );
+    }
+    // Rebinds an installed executor's pass to the live config when a change has not reached it yet.
+    private void ApplyConfig(ShaderPipelineRenderNode executor, ref uint appliedVersion) {
+        if (
+            (appliedVersion == m_configVersion) ||
+            !executor.IsReady
+        ) {
             return;
         }
 
-        foreach (var slot in layout.Slots) {
-            var destination = m_constants.AsSpan(
-                ((int)slot.Offset),
-                ((int)slot.Type.SizeBytes())
-            );
-
-            switch (slot.Kind) {
-                case ShaderPushConstantSourceKind.Config: m_config[slot.ConfigField!].Bytes.Span.CopyTo(destination: destination); break;
-                case ShaderPushConstantSourceKind.Resolution:
-                    if (slot.Type == ShaderValueType.Float2) {
-                        BinaryPrimitives.WriteSingleLittleEndian(
-                        destination: destination,
-                        value: m_width
-                    ); BinaryPrimitives.WriteSingleLittleEndian(
-                        destination: destination[4..],
-                        value: m_height
-                    );
-                    } else {
-                        BinaryPrimitives.WriteUInt32LittleEndian(
-                        destination: destination,
-                        value: m_width
-                    ); BinaryPrimitives.WriteUInt32LittleEndian(
-                        destination: destination[4..],
-                        value: m_height
-                    );
-                    }
-                    break;
-            }
+        if (executor.TrySetConfig(
+            config: m_config.ToJson(),
+            passName: m_manifest.Name,
+            reason: out _
+        )) {
+            appliedVersion = m_configVersion;
         }
     }
     private static GpuPixelFormat ToGpuFormat(SurfaceFormat format) {
@@ -215,10 +280,26 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
 
         m_disposed = true;
         m_capture.Refuse(error: new ObjectDisposedException(objectName: nameof(FullscreenPassNode)));
-        try { m_executor?.Dispose(); } finally { m_inner.Dispose(); }
+        try {
+            m_nextExecutor?.Dispose();
+            m_executor?.Dispose();
+            foreach (var retiring in m_retiring) {
+                retiring.Node.Dispose();
+            }
+            m_retiring.Clear();
+        } finally { m_inner.Dispose(); }
     }
-    /// <summary>Forwards device loss to the active executor and inner node.</summary>
-    public void OnDeviceLost() { m_executor?.OnDeviceLost(); m_inner.OnDeviceLost(); }
+    /// <summary>Forwards device loss to the active executor, any executor building for a new input, and the inner
+    /// node; a replaced executor still waiting to retire is released at once, since the lost device's work is gone.</summary>
+    public void OnDeviceLost() {
+        m_nextExecutor?.OnDeviceLost();
+        m_executor?.OnDeviceLost();
+        foreach (var retiring in m_retiring) {
+            retiring.Node.DisposeRetired();
+        }
+        m_retiring.Clear();
+        m_inner.OnDeviceLost();
+    }
     /// <summary>Produces one adapted frame from the inner node.</summary>
     public Surface ProduceFrame(in FrameContext context) {
         if (m_disposed) {
@@ -235,38 +316,86 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             return surface;
         }
         var format = ToGpuFormat(format: surface.Format);
-        var executor = m_executor;
 
         if (
-            (executor is null) ||
+            ((m_executor is null) && (m_nextExecutor is null)) ||
             (m_inputFormat != format) ||
             (m_inputWidth != surface.Width) ||
             (m_inputHeight != surface.Height)
         ) {
-            executor?.Dispose();
-            executor = m_executor = CreateExecutor(
+            m_nextExecutor?.Dispose();
+            m_nextExecutor = CreateExecutor(
                 (m_compute ?? throw new InvalidOperationException(message: "Fullscreen pass services do not provide compute services.")),
                 format,
                 surface.Width,
                 surface.Height
             );
+            m_nextExecutorConfigVersion = m_configVersion;
             m_inputFormat = format;
             m_inputWidth = surface.Width;
             m_inputHeight = surface.Height;
         }
+
+        var input = new ShaderPipelineExternalImage(
+            surface.ImageHandle,
+            surface.ImageViewHandle,
+            surface.Width,
+            surface.Height,
+            format,
+            GpuImageLayout.ShaderReadOnly
+        );
+
+        // An executor for a new input builds its pipelines off the frame thread; until it produces, the installed
+        // executor's last frame stays published.
+        if (m_nextExecutor is { } next) {
+            next.BindImage(
+                image: input,
+                name: "input"
+            );
+            m_capture.Forward(target: next);
+            ApplyConfig(
+                appliedVersion: ref m_nextExecutorConfigVersion,
+                executor: next
+            );
+
+            var produced = next.ProduceFrame(context: context);
+
+            if (produced.IsEmpty) {
+                return ((m_executor is null)
+                    ? produced
+                    : m_presented
+                );
+            }
+
+            // The replaced executor is not drained here: a downstream reader may still sample its last image, so it
+            // retires once its successor's RetirementLag-th submission after this one completes.
+            if (m_executor is { } replaced) {
+                m_retiring.Add(item: new RetiringExecutor(
+                    node: replaced,
+                    retiresAfter: (next.SubmissionCount + ShaderPipelineRenderNode.RetirementLag)
+                ));
+            }
+            m_executor = next;
+            m_executorConfigVersion = m_nextExecutorConfigVersion;
+            m_nextExecutor = null;
+
+            return (m_presented = produced);
+        }
+
+        var executor = m_executor!;
+
         executor.BindImage(
-            "input",
-            new ShaderPipelineExternalImage(
-                surface.ImageHandle,
-                surface.ImageViewHandle,
-                surface.Width,
-                surface.Height,
-                format,
-                GpuImageLayout.ShaderReadOnly
-            )
+            image: input,
+            name: "input"
         );
         m_capture.Forward(target: executor);
-        return executor.ProduceFrame(context: context);
+        ApplyConfig(
+            appliedVersion: ref m_executorConfigVersion,
+            executor: executor
+        );
+        m_presented = executor.ProduceFrame(context: context);
+        RetireCompleted(successor: executor);
+        return m_presented;
     }
     /// <summary>Arms a capture that is forwarded to the current executor when available.</summary>
     public void RequestCapture(FrameCaptureRequest request) {
@@ -279,7 +408,11 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             PendingCapturePath
         );
     }
-    /// <summary>Updates a declared floating-point manifest parameter.</summary>
+    /// <summary>Updates a declared floating-point manifest parameter; the pass's frame block carries it from the next
+    /// frame its executor renders.</summary>
+    /// <param name="field">The config field's name.</param>
+    /// <param name="value">The value, which must be finite and inside the field's range.</param>
+    /// <returns><see langword="true"/> when the field is a float field and the value is admitted.</returns>
     public bool TrySetConfig(string field, float value) {
         if (
             (m_manifest.Config is not { } schema) ||
@@ -318,56 +451,41 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             destination: bytes,
             value: value
         );
-        if (m_layout is { } layout) {
-            foreach (var slot in layout.Slots.Where(predicate: slot => ((slot.Kind == ShaderPushConstantSourceKind.Config) && (slot.ConfigField == field)))) {
-                bytes.CopyTo(destination: m_constants.AsSpan(start: ((int)slot.Offset)));
-            }
-        }
+        m_configVersion++;
 
         return true;
     }
 
-    private sealed class ManifestPassConstants(ShaderPushConstantLayout? layout, Func<ShaderConfigValues> config, byte[] constants) : IShaderPipelinePassConstants {
-        public uint SizeBytes => ((uint)constants.Length);
-        public GpuShaderStage Stages => (layout?.Stages ?? GpuShaderStage.None);
+    // A nested holder initializes after every kind above, whatever order the members are declared in.
+    private static class LoadCounts {
+        internal static readonly WorkCounterSet Process = new(
+            kinds: [Loads, BytecodeBytes],
+            name: LoadWorkSourceName
+        );
+    }
+    // Releases every replaced executor whose retiring submission, its successor's, has completed.
+    private void RetireCompleted(ShaderPipelineRenderNode successor) {
+        for (var index = (m_retiring.Count - 1); (index >= 0); index--) {
+            var retiring = m_retiring[index];
 
-        public void Write(in FrameContext context, in ShaderFrameInput input, uint passWidth, uint passHeight, ulong frameCounter, Span<byte> destination) {
-            constants.AsSpan().CopyTo(destination: destination);
-            if (layout is not { } resolved) {
-                return;
+            if (
+                (retiring.Fence is null) &&
+                (successor.SubmissionCount >= retiring.RetiresAfter)
+            ) {
+                retiring.Fence = successor.LatestSubmission;
             }
-
-            foreach (var slot in resolved.Slots) {
-                var target = destination[((int)slot.Offset)..];
-
-                switch (slot.Kind) {
-                    case ShaderPushConstantSourceKind.Tick:
-                        var period = ((slot.QuantizeHzLiteral is { } literal)
-                            ? EngineTicks.PerRate(ratePerSecond: literal)
-                            : ((slot.QuantizeHzConfigField is { } field)
-                                ? EngineTicks.PerRate(ratePerSecond: config()[field].ComponentBits(index: 0))
-                                : 1
-                        ));
-                        var value = (context.ElapsedTicks / period);
-                        BinaryPrimitives.WriteUInt32LittleEndian(
-                            destination: target,
-                            value: ((uint)value)
-                        );
-                        if (slot.Type == ShaderValueType.Uint2) {
-                            BinaryPrimitives.WriteUInt32LittleEndian(
-                                destination: target[4..],
-                                value: ((uint)(value >> 32))
-                            );
-                        }
-
-                        break;
-                    case ShaderPushConstantSourceKind.Frame:
-                        BinaryPrimitives.WriteUInt32LittleEndian(
-                        destination: target,
-                        value: ((uint)frameCounter)
-                    ); break;
-                }
+            if (retiring.Fence is { IsSignaled: true }) {
+                retiring.Node.DisposeRetired();
+                m_retiring.RemoveAt(index: index);
             }
         }
+    }
+
+    // An executor a new input replaced, waiting for the successor submission whose completion retires it.
+    private sealed class RetiringExecutor(ShaderPipelineRenderNode node, long retiresAfter) {
+        public IGpuSubmissionFence? Fence { get; set; }
+
+        public ShaderPipelineRenderNode Node { get; } = node;
+        public long RetiresAfter { get; } = retiresAfter;
     }
 }

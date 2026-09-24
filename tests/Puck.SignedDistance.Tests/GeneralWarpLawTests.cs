@@ -107,10 +107,12 @@ public sealed class GeneralWarpLawTests {
                 0.5f,
                 op.Data1.Y
             );
-            if (step is { } expected) { Assert.Equal(
+            if (step is { } expected) {
+                Assert.Equal(
                 expected,
                 p.StepScale
-            ); }
+            );
+            }
             step = p.StepScale;
         }
     }

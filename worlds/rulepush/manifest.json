@@ -1,0 +1,21 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "rulepush",
+  "name": "Puck Rulepush",
+  "version": "0.1.0",
+  "basis": "rules.puck",
+  "worlds": [
+    {
+      "id": "rulepush",
+      "source": "rulepush.puck"
+    }
+  ],
+  "files": [
+    "README.md",
+    "rules.puck",
+    "room.puck",
+    "level.puck",
+    "hub.puck",
+    "rulepush.puck"
+  ]
+}

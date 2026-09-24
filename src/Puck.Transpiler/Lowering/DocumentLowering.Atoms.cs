@@ -42,7 +42,7 @@ public static partial class DocumentLowering {
         for (var index = 0; (index < spellings.Length); index++) {
             var computed = (KeyText(node: At(context: null, lower: () => LowerValue(expr: operand.Atoms[index].Value, scope: scope), scope: scope)) ?? string.Empty);
 
-            if ((computed.Length == 0) || computed.Contains(value: '`')) {
+            if (!Puck.State.ExpressionSpelling.IsSpelledName(name: computed)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.InvalidValue,
                     message: $"'{operand.Text.Substring(length: operand.Atoms[index].Length, startIndex: operand.Atoms[index].Start)}' computes '{computed}', which is neither a name nor a number",
@@ -50,9 +50,10 @@ public static partial class DocumentLowering {
                 );
             }
 
-            spellings[index] = ((Puck.State.ExpressionSpelling.IsBareName(name: computed) || decimal.TryParse(provider: System.Globalization.CultureInfo.InvariantCulture, result: out _, s: computed, style: System.Globalization.NumberStyles.Float))
+            // A number the atom computes is written as the number; anything else is the name it spells.
+            spellings[index] = (decimal.TryParse(provider: System.Globalization.CultureInfo.InvariantCulture, result: out _, s: computed, style: System.Globalization.NumberStyles.Float)
                 ? computed
-                : $"`{computed}`"
+                : Puck.State.ExpressionSpelling.PrintName(name: computed)
             );
         }
 
@@ -97,7 +98,7 @@ public static partial class DocumentLowering {
         }
 
         var atoms = new List<string>();
-        var markerPrefix = AtomMarkerPrefix(PuckPrinter.PrintExpression(interpolated), [], "__atom");
+        var markerPrefix = AtomMarkerPrefix(PuckPrinter.PrintExpression(expression: interpolated), [], "__atom");
         var into = new StringBuilder();
 
         for (var index = 0; (index < elements.Count);) {
@@ -171,11 +172,10 @@ public static partial class DocumentLowering {
     private static string AtomPlaceholder(string prefix, int index) => $"{prefix}{index}__";
     private static bool IsNameElement((char Character, ExpressionNode? Hole) element) => (
         (element.Hole is not null) ||
-        char.IsAsciiLetterOrDigit(c: element.Character) ||
-        (element.Character == '_')
+        Puck.State.IdentifierSpelling.IsPart(character: element.Character)
     );
     // A bare word reads a compile-time binding only where no sigil, bracket or call makes it a read of live state
-    // or a literal key. KEEP IN SYNC with the world emitter's BareIdentifier.
+    // or a literal key.
     private static bool ReadsAsBinding(char before, char after) => (
         (before is not ('$' or '`' or '.' or '[')) &&
         (after is not ('(' or '[' or ':' or '`'))

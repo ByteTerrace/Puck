@@ -83,6 +83,50 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
         }
         return false;
     }
+    /// <summary>Determines, from the two declarations alone, whether every reader <paramref name="audience"/> may ever
+    /// admit is one <paramref name="policy"/> admits too: a public policy encloses every audience, no restricted policy
+    /// encloses a public one, and a restricted policy encloses a restricted audience whose static readers it lists and
+    /// whose live reader row, when it names one, is the policy's own.
+    /// <para>The live reader rows are not read: a token a rule may write into one is a reader no declaration names, so
+    /// an audience admitting readers through a row the policy does not share is never enclosed.</para></summary>
+    /// <param name="policy">The policy of what is read, or <see langword="null"/> for a public row.</param>
+    /// <param name="audience">The policy of what is written, or <see langword="null"/> for a public row.</param>
+    /// <returns><see langword="true"/> when no reader of <paramref name="audience"/> is refused by
+    /// <paramref name="policy"/>.</returns>
+    public static bool Encloses(StateVisibility? policy, StateVisibility? audience) {
+        if (
+            (policy is null) ||
+            policy.IsPublic
+        ) {
+            return true;
+        }
+        if (
+            (audience is null) ||
+            audience.IsPublic
+        ) {
+            return false;
+        }
+        if (
+            (audience.ReadersFrom is { } live) &&
+            !string.Equals(
+            a: live,
+            b: policy.ReadersFrom,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            return false;
+        }
+
+        var readers = (audience.Readers ?? []);
+
+        for (var index = 0; (index < readers.Count); index++) {
+            if (!policy.Allows(recipient: readers[index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 /// <summary>The canonical deterministic fold of a visibility policy, shared by declaration and live-state hashes.</summary>
 public static class StateVisibilityHash {
@@ -115,18 +159,8 @@ public static class StateVisibilityHash {
         }
     }
 
-    private static void AppendString(ref Fnv1aHash hash, string? value) {
-        if (value is null) {
-            hash.Add(value: uint.MaxValue);
-            return;
-        }
-
-        hash.Add(value: ((uint)value.Length));
-
-        foreach (var character in value) {
-            hash.Add(value: ((uint)character));
-        }
-    }
+    private static void AppendString(ref Fnv1aHash hash, string? value) =>
+        hash.Add(value: value);
 }
 
 // The arena owns the collection it retains. Recognizing this marker makes a visibility already admitted by an

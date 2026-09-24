@@ -120,20 +120,18 @@ impl Verdict {
 }
 
 // `Puck.Scripting.AddonCapabilityMask` (`src/Puck.Scripting/AddonCapabilityMask.cs`) — the addon ABI's Ask capability-mask bit values.
-/// `AddonCapabilityMask.All` (`63`).
-pub const CAP_ALL: u64 = 63;
-/// `AddonCapabilityMask.Control` (`8`).
-pub const CAP_CONTROL: u64 = 8;
+/// `AddonCapabilityMask.All` (`31`).
+pub const CAP_ALL: u64 = 31;
+/// `AddonCapabilityMask.Control` (`4`).
+pub const CAP_CONTROL: u64 = 4;
 /// `AddonCapabilityMask.Drive` (`1`).
 pub const CAP_DRIVE: u64 = 1;
-/// `AddonCapabilityMask.Edit` (`32`).
-pub const CAP_EDIT: u64 = 32;
-/// `AddonCapabilityMask.Mutate` (`16`).
-pub const CAP_MUTATE: u64 = 16;
+/// `AddonCapabilityMask.Edit` (`16`).
+pub const CAP_EDIT: u64 = 16;
+/// `AddonCapabilityMask.Mutate` (`8`).
+pub const CAP_MUTATE: u64 = 8;
 /// `AddonCapabilityMask.Observe` (`2`).
 pub const CAP_OBSERVE: u64 = 2;
-/// `AddonCapabilityMask.Reserved` (`4`).
-pub const CAP_RESERVED: u64 = 4;
 
 // `Puck.Scripting.AddonAbi` constants (`src/Puck.Scripting/AddonAbi.cs`).
 /// `AddonAbi.AbiVersion` (`1`).

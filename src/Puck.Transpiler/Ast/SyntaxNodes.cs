@@ -149,7 +149,10 @@ public sealed record LetNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Gets the defining source path when this declaration came through an import.</summary>
+    public string? DefinitionPath { get; init; }
+}
 /// <summary>A compile-time parametric template: <c>template name(p1 = v1, ...) { ... }</c>.</summary>
 /// <param name="Name">The template identifier.</param>
 /// <param name="Parameters">The formal parameters with optional default expressions.</param>
@@ -232,6 +235,10 @@ public sealed record BlockNode(
     /// <summary>Gets a value indicating whether <see cref="Name"/> was written as a quoted string rather than as a
     /// bare identifier. Both spellings read back the same string, so only a printer reads this.</summary>
     public bool NameQuoted { get; init; }
+    /// <summary>Gets a value indicating whether <see cref="Identifier"/> was written as a quoted string rather than as
+    /// a bare identifier. A quoted identifier opens no statement its word would otherwise open, and names a member
+    /// that is not one bare name, so a printer writes it back quoted.</summary>
+    public bool IdentifierQuoted { get; init; }
 }
 /// <summary>A key-value property assignment: <c>name: expression</c> or <c>name = expression</c>.</summary>
 /// <param name="Name">The property name.</param>
@@ -419,11 +426,35 @@ public sealed record BinaryExpressionNode(
     Line,
     Column
 );
-/// <summary>A prefix operator expression: <c>-operand</c> or <c>+operand</c>. A signed NUMERIC LITERAL never
-/// reaches this node — the primary reader folds the sign into the literal so a unit suffix still reads against the
-/// value it signs (<c>-1.5m</c>) — so this node's operand is always an identifier, call, member access, or
-/// parenthesized expression.</summary>
-/// <param name="Operator">The operator token ('-' or '+').</param>
+/// <summary>A conditional expression: <c>condition ? whenTrue : whenFalse</c>, the rule language's own spelling of
+/// <c>ExpressionOp.Select</c>. It binds looser than every infix operator and associates to the right, so
+/// <c>a ? x : b ? y : z</c> reads as a chain.</summary>
+/// <param name="Condition">The condition; a nonzero value selects <paramref name="WhenTrue"/>.</param>
+/// <param name="WhenTrue">The value a true condition selects.</param>
+/// <param name="WhenFalse">The value a false condition selects.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record ConditionalExpressionNode(
+    ExpressionNode Condition,
+    ExpressionNode WhenTrue,
+    ExpressionNode WhenFalse,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary>A prefix operator expression: <c>-operand</c> or <c>~operand</c>, the rule language's two prefix
+/// operators. A negative NUMERIC LITERAL never reaches this node — the primary reader folds the sign into the literal
+/// so a unit suffix still reads against the value it signs (<c>-1.5m</c>) — so a <c>-</c> node's operand is always an
+/// identifier, call, member access, or parenthesized expression.</summary>
+/// <param name="Operator">The operator token ('-' or '~').</param>
 /// <param name="Operand">The expression the operator applies to.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
@@ -670,6 +701,10 @@ public sealed record OperandExpressionNode(
     public Puck.State.ExpressionSpelling.SyntaxNode? Syntax { get; init; }
     /// <summary>Gets the syntax refusal, or an empty string when <see cref="Syntax"/> is present.</summary>
     public string SyntaxError { get; init; } = string.Empty;
+    /// <summary>Gets a value indicating whether the parser already reported <see cref="SyntaxError"/> at this
+    /// operand, so lowering, which reports the refusal of an operand the parser did not check, does not report it a
+    /// second time.</summary>
+    public bool SyntaxErrorReported { get; init; }
 }
 /// <summary>One interpolated string inside an operand's text.</summary>
 /// <param name="Start">The atom's first character within the operand's text.</param>

@@ -11,16 +11,9 @@ using Puck.State;
 namespace Puck.GamingBricks.Transpiler.Tests;
 
 public class CartridgeRoundTripTests {
-    // The shipped Tetris cartridge, which exercises every action kind, both condition kinds, all eight arithmetic
+    // The shipped tetromino cartridge, which exercises every action kind, both condition kinds, all eight arithmetic
     // operations and nested control flow.
-    private static readonly string TetrisPath = Path.Combine(
-        RepositoryRoot(),
-        "src",
-        "Puck.World",
-        "Assets",
-        "cartridges",
-        "tetris.cgb.cartridge.json"
-    );
+    private static readonly string TetrominoPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/tetromino.cgb.cartridge.json");
 
     // Both sides go through the emitter's own canonicalizer, so the comparison is about content rather than about
     // which order the two producers happened to write their keys in.
@@ -52,26 +45,9 @@ public class CartridgeRoundTripTests {
 
         return lowered.Value;
     }
-    private static string RepositoryRoot() {
-        var directory = AppContext.BaseDirectory;
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = Path.GetDirectoryName(path: directory);
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory;
-    }
 
     public static IEnumerable<object[]> CommittedSources() => Directory.EnumerateFiles(
-        Path.GetDirectoryName(path: TetrisPath)!,
+        Path.GetDirectoryName(path: TetrominoPath)!,
         "*.puck",
         SearchOption.AllDirectories
     )
@@ -148,6 +124,43 @@ public class CartridgeRoundTripTests {
                 step["value"]?.GetValue<string>()
             );
         }
+    }
+    [Fact]
+    public void TestAForInsideARuleBodyUnrollsToTheStepsWrittenOut() {
+        const string Looped = """
+            schema: "puck.cartridge.v1"
+            target: "cgb"
+
+            rule "paint" {
+                when ph == 1
+                for column in [2, 4] {
+                    map(row: cr, column: column, tile: 0, palette: 1)
+                }
+                if ph == 1 {
+                    for step in [1] {
+                        ph = ph + step
+                    }
+                }
+            }
+            """;
+        const string Written = """
+            schema: "puck.cartridge.v1"
+            target: "cgb"
+
+            rule "paint" {
+                when ph == 1
+                map(row: cr, column: 2, tile: 0, palette: 1)
+                map(row: cr, column: 4, tile: 0, palette: 1)
+                if ph == 1 {
+                    ph = ph + 1
+                }
+            }
+            """;
+
+        Assert.Equal(
+            actual: Canonical(document: Compile(source: Looped)),
+            expected: Canonical(document: Compile(source: Written))
+        );
     }
     [Fact]
     public void TestAForGeneratesOneSectionRowPerElement() {
@@ -277,7 +290,7 @@ public class CartridgeRoundTripTests {
     }
     [Fact]
     public void TestCompilingTwiceProducesTheSameBytes() {
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse(File.ReadAllText(path: TetrisPath)));
+        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse(File.ReadAllText(path: TetrominoPath)));
         var source = CartridgeDecompiler.Decompile(document: original);
 
         Assert.Equal(
@@ -346,7 +359,7 @@ public class CartridgeRoundTripTests {
                 nameof(ExpressionOp.Subtract),
                 nameof(ExpressionOp.Multiply),
                 nameof(ExpressionOp.Divide),
-                nameof(ExpressionOp.Modulo),
+                nameof(ExpressionOp.Remainder),
                 nameof(ExpressionOp.BitAnd),
                 nameof(ExpressionOp.BitOr),
                 nameof(ExpressionOp.BitXor),
@@ -393,11 +406,11 @@ public class CartridgeRoundTripTests {
             Assert.IsType<JsonObject>(@object: conditions[0])["right"]?.GetValue<string>()
         );
         Assert.Equal(
-            nameof(ActionStateComparison.Equal),
+            nameof(ExpressionOp.Equal),
             Assert.IsType<JsonObject>(@object: conditions[1])["comparison"]?.GetValue<string>()
         );
         Assert.Equal(
-            nameof(ActionStateComparison.GreaterOrEqual),
+            nameof(ExpressionOp.GreaterOrEqual),
             Assert.IsType<JsonObject>(@object: conditions[2])["comparison"]?.GetValue<string>()
         );
     }
@@ -456,9 +469,15 @@ public class CartridgeRoundTripTests {
             painted["tile"]?.GetValue<string>()
         );
     }
-    [Fact]
-    public void TestShippedTetrisCartridgeSurvivesADecompileAndRecompile() {
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse(File.ReadAllText(path: TetrisPath)));
+    // Every committed cartridge is held to the round trip, not one of them: a cartridge source is shipped the way a
+    // world source is, and the world corpus (tests/Puck.State.Rebuild.Corpus) holds every shipped world source.
+    [MemberData(nameof(CommittedSources))]
+    [Theory]
+    public void TestEveryCommittedCartridgeSurvivesADecompileAndRecompile(string sourcePath) {
+        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse(File.ReadAllText(path: Path.ChangeExtension(
+            extension: ".cartridge.json",
+            path: sourcePath
+        ))));
         var canonicalOriginal = Canonical(document: original);
 
         var source = CartridgeDecompiler.Decompile(document: original);

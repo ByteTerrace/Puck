@@ -23,8 +23,10 @@ public sealed record RemoteMcpOptions {
     public required string Audience { get; init; }
     /// <summary>The OAuth scope clients request; defaults to scope. Entra commonly needs api://application-id/scope here while scp contains only the short scope.</summary>
     public string? AuthorizationScope { get; init; }
-    /// <summary>The environment variable containing the optional PFX password; no password is written to this document.</summary>
-    public string? CertificatePasswordEnvironmentVariable { get; init; }
+    /// <summary>A deployment-secret file holding the optional PFX password as its whole text (one trailing line break
+    /// ignored); no password is written to this document. A relative path resolves beside the configuration
+    /// file.</summary>
+    public string? CertificatePasswordFile { get; init; }
     /// <summary>A server certificate PFX path, required for a direct HTTPS listener.</summary>
     public string? CertificatePath { get; init; }
     /// <summary>Idle attachment lifetime in seconds, from 10 through 3600; active calls are governed by request deadlines.</summary>

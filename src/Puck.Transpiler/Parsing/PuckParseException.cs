@@ -10,6 +10,8 @@ public sealed class PuckParseException : Exception {
     public int Line { get; }
     /// <summary>Gets the 0-based character offset within the source text where the error occurred.</summary>
     public int Offset { get; }
+    /// <summary>Gets the error message without the position <see cref="Exception.Message"/> appends to it.</summary>
+    public string Reason { get; }
 
     /// <summary>Initializes a new instance of the <see cref="PuckParseException"/> class.</summary>
     /// <param name="message">The error message describing the syntax violation.</param>
@@ -25,5 +27,6 @@ public sealed class PuckParseException : Exception {
         Offset = offset;
         Line = line;
         Column = column;
+        Reason = message;
     }
 }

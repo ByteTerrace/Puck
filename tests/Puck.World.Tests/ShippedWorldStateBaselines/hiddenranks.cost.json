@@ -1,0 +1,28 @@
+{
+  "schema": "puck.world.state-baseline-cost.v1",
+  "world": "games/hiddenranks.puck",
+  "simulationRateHz": 30,
+  "ticks": 190,
+  "workUnits": {
+    "boot": {
+      "ruleRows": 10,
+      "interactionRows": 0,
+      "evaluationSlots": 10,
+      "workUnitsPerTick": 51755,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    },
+    "final": {
+      "ruleRows": 10,
+      "interactionRows": 0,
+      "evaluationSlots": 10,
+      "workUnitsPerTick": 51755,
+      "flockAffinityWorkUnitsPerTick": 0,
+      "decisionImagePointsPerTick": 0,
+      "decisionGridBuildsPerTick": 0,
+      "decisionGridPointsPerTick": 0
+    }
+  }
+}

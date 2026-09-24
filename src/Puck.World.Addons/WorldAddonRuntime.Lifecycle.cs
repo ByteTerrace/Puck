@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Assets;
 using Puck.Scripting;
 using Puck.World.Protocol;
@@ -196,8 +197,8 @@ public sealed partial class WorldAddonRuntime {
     // settled table as of PREPARE, but the caller stages the returned text and prints it only once the plan that
     // produced it actually commits — a refused prepare must never have printed a mount claim that never became true.
     private static string? BuildCapabilityDisclosureNarration(string name, IReadOnlyList<WorldCapabilityRequest>? requests, IWorldGrantsView grants) {
-        var principal = WorldPrincipal.Addon(name: name);
-        var held = grants.Held(principal: principal);
+        var principal = Principal.Addon(name: name);
+        var held = grants.Held(grantee: principal);
 
         if (
             ((requests is null) || (requests.Count == 0)) &&
@@ -280,17 +281,6 @@ public sealed partial class WorldAddonRuntime {
                 values: inert
             )}]"
             : null
-        );
-    }
-    // Resolve an addon module path: absolute as-is, else relative to the executable directory (Assets/** is
-    // Content-copied beside the output, exactly how the world document itself is found at boot).
-    private static string ResolvePath(string modulePath) {
-        return (Path.IsPathRooted(path: modulePath)
-            ? modulePath
-            : Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: modulePath
-            )
         );
     }
     // The Response channel is host-written only, so its index is fixed at handshake and resolved once here rather
@@ -548,8 +538,13 @@ public sealed partial class WorldAddonRuntime {
                             Hash: existing.Instance.Hash.ToString(),
                             Fuel: ((ulong)existing.Instance.FuelPerTick)
                         ));
+                        if (!TryDescriptorFor(descriptor: out var reusedDescriptor, documentDirectory: candidate.DocumentDirectory, reason: out reason, row: row)) {
+                            plan = null;
+                            return false;
+                        }
+
                         hostByName[existing.Instance.Name] = existing.Instance;
-                        hostDescriptors[existing.Instance.Name] = DescriptorFor(row: row);
+                        hostDescriptors[existing.Instance.Name] = reusedDescriptor;
                         hostInstances.Add(item: existing.Instance);
 
                         continue;
@@ -577,7 +572,10 @@ public sealed partial class WorldAddonRuntime {
                     hostIsNew = true;
                 }
 
-                var descriptor = DescriptorFor(row: row);
+                if (!TryDescriptorFor(descriptor: out var descriptor, documentDirectory: candidate.DocumentDirectory, reason: out reason, row: row)) {
+                    plan = null;
+                    return false;
+                }
 
                 // Grown BEFORE the store exists so the Add below cannot allocate (and so cannot throw) — otherwise
                 // the instant between Prepare returning and ownership registering could leak the store.
@@ -706,10 +704,28 @@ public sealed partial class WorldAddonRuntime {
 
     // Reconstructs the neutral load descriptor a row prepares under — identical for a freshly-prepared row and a
     // reused one (structural equality already proved every field, including Name/ModulePath/Hash/Fuel, matches),
-    // so the SAME helper serves both branches of TryPrepare's loop without a live AddonHost read.
-    private static AddonDescriptor DescriptorFor(WorldAddonRow row) => new(
+    // so the SAME helper serves both branches of TryPrepare's loop without a live AddonHost read. The module path
+    // resolves beside the document (WorldDocumentPaths); a relative one in a document with no directory refuses the
+    // row by name.
+    private static bool TryDescriptorFor(string? documentDirectory, WorldAddonRow row, out AddonDescriptor descriptor, out string? reason) {
+        if (!WorldDocumentPaths.TryResolve(
+            documentDirectory: documentDirectory,
+            path: row.ModulePath,
+            reason: out var unresolved,
+            resolved: out var modulePath
+        )) {
+            descriptor = default;
+            reason = $"'{row.Name}' could not prepare — modulePath {unresolved}";
+            return false;
+        }
+
+        descriptor = DescriptorFor(modulePath: modulePath, row: row);
+        reason = null;
+        return true;
+    }
+    private static AddonDescriptor DescriptorFor(string modulePath, WorldAddonRow row) => new(
         Name: row.Name,
-        ModulePath: ResolvePath(modulePath: row.ModulePath),
+        ModulePath: modulePath,
         // The document gate requires a hash; the empty→null translation stays defensive, because the neutral
         // descriptor is reachable from hosts that have no document gate in front of them.
         ModuleHash: (string.IsNullOrEmpty(value: row.Hash)
@@ -914,7 +930,7 @@ public sealed partial class WorldAddonRuntime {
     /// <param name="channels">The world's channel table, for naming the ordinals.</param>
     /// <returns>A description of the granted-but-undeclared channels, or <see langword="null"/> when every granted
     /// channel is declared, the principal names no mounted guest, or the grant carries no channel mask.</returns>
-    public string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels) {
+    public string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels) {
         if (reach is not { } mask) {
             return null;
         }

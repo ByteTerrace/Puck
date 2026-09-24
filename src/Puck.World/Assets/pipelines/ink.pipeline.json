@@ -3,7 +3,7 @@
   "name": "ink",
   "resources": [
     {
-      "name": "ink",
+      "name": "simulation",
       "kind": "Image",
       "format": "R32G32B32A32Float",
       "dimensions": {
@@ -11,7 +11,6 @@
         "width": 1,
         "height": 1
       },
-      "persistent": true,
       "history": true,
       "initialization": "Zero"
     },
@@ -26,7 +25,7 @@
       }
     },
     {
-      "name": "finished",
+      "name": "image",
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
       "dimensions": {
@@ -39,20 +38,19 @@
   "passes": [
     {
       "name": "simulation",
-      "source": "ink-simulation.glsl",
-      "language": "ShadertoyGlsl",
-      "entryPoint": "mainImage",
+      "source": "ink-simulation.hlsl",
+      "entryPoint": "main",
       "kind": "Compute",
       "inputs": [
         {
-          "name": "ink",
+          "name": "simulation",
           "previousFrame": true,
           "binding": 1
         }
       ],
       "outputs": [
         {
-          "name": "ink",
+          "name": "simulation",
           "binding": 0
         }
       ],
@@ -68,13 +66,12 @@
     },
     {
       "name": "visualize",
-      "source": "ink-visualize.glsl",
-      "language": "ShadertoyGlsl",
-      "entryPoint": "mainImage",
+      "source": "ink-visualize.hlsl",
+      "entryPoint": "main",
       "kind": "Compute",
       "inputs": [
         {
-          "name": "ink",
+          "name": "simulation",
           "binding": 1
         }
       ],
@@ -97,7 +94,6 @@
     {
       "name": "finish",
       "source": "ink-finish.hlsl",
-      "language": "Hlsl",
       "entryPoint": "main",
       "kind": "Fullscreen",
       "inputs": [
@@ -108,29 +104,10 @@
       ],
       "outputs": [
         {
-          "name": "finished"
+          "name": "image"
         }
       ]
     }
   ],
-  "outputs": [
-    {
-      "name": "image",
-      "resource": {
-        "name": "finished"
-      }
-    },
-    {
-      "name": "simulation",
-      "resource": {
-        "name": "ink"
-      }
-    },
-    {
-      "name": "color",
-      "resource": {
-        "name": "color"
-      }
-    }
-  ]
+  "outputs": ["image", "simulation", "color"]
 }

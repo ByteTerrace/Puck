@@ -398,30 +398,39 @@ internal static class FixedPointText {
 
         return FixedPointParseStatus.Success;
     }
-    /// <summary>Parses text into the raw of a signed 64-bit fixed-point carrier, throwing the diagnosis that
-    /// carrier's public <c>Parse</c> states.</summary>
-    /// <typeparam name="TSelf">The carrier the diagnoses name.</typeparam>
+    /// <summary>Parses a string under a caller-named style, refusing <see langword="null"/> before the text is read.</summary>
+    /// <typeparam name="TSelf">The carrier.</typeparam>
     /// <param name="s">The text to parse.</param>
     /// <param name="style">The styles <paramref name="s"/> is admitted under.</param>
     /// <param name="provider">The provider supplying the numeric conventions, or <see langword="null"/> for the
     /// invariant culture.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <param name="parsingDenominator">The carrier's <see cref="CreateParsingDenominator"/> value.</param>
-    /// <returns>The parsed raw value.</returns>
+    /// <returns>The parsed value, as the carrier's span parser returns it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="s"/> is <see langword="null"/>.</exception>
+    internal static TSelf Parse<TSelf>(string s, NumberStyles style, IFormatProvider? provider) where TSelf : INumberBase<TSelf> {
+        ArgumentNullException.ThrowIfNull(argument: s);
+
+        return TSelf.Parse(
+            s: s.AsSpan(),
+            style: style,
+            provider: provider
+        );
+    }
+    /// <summary>Parses text into a signed 64-bit fixed-point carrier, throwing the diagnosis that carrier's public
+    /// <c>Parse</c> states.</summary>
+    /// <typeparam name="TSelf">The carrier, which the diagnoses name.</typeparam>
+    /// <param name="s">The text to parse.</param>
+    /// <param name="style">The styles <paramref name="s"/> is admitted under.</param>
+    /// <param name="provider">The provider supplying the numeric conventions, or <see langword="null"/> for the
+    /// invariant culture.</param>
+    /// <returns>The parsed value.</returns>
     /// <exception cref="OverflowException">The value is outside the carrier's range.</exception>
     /// <exception cref="FormatException"><paramref name="s"/> is not a valid literal.</exception>
     /// <remarks>The platform parser is re-entered only on failure, so this preserves its format-versus-overflow
     /// distinction while a successful value is always quantized from the original digits.</remarks>
-    internal static long ParseSignedRaw<TSelf>(
-        ReadOnlySpan<char> s,
-        NumberStyles style,
-        IFormatProvider? provider,
-        int fractionBitCount,
-        UInt128 parsingDenominator
-    ) {
+    internal static TSelf ParseSigned<TSelf>(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider) where TSelf : struct, ISignedFixedPointFormat<TSelf> {
         var status = ParseSignedRawCore(
-            fractionBitCount: fractionBitCount,
-            parsingDenominator: parsingDenominator,
+            fractionBitCount: TSelf.FractionBitCount,
+            parsingDenominator: SignedParsingDenominator<TSelf>.Value,
             provider: provider,
             rawValue: out var rawValue,
             s: s,
@@ -429,7 +438,7 @@ internal static class FixedPointText {
         );
 
         if (FixedPointParseStatus.Success == status) {
-            return rawValue;
+            return TSelf.FromRawBits(value: rawValue);
         }
 
         if (FixedPointParseStatus.Overflow == status) {
@@ -572,7 +581,7 @@ internal static class FixedPointText {
         // minus the fraction's trailing zero count digits.
         var requiredLength = ((negative
             ? 1
-            : 0) + ((int)integerPart.LogarithmBase10()));
+            : 0) + ((int)integerPart.DigitCount()));
 
         if (fraction != 0UL) {
             requiredLength += (1 + (fractionBitCount - BitOperations.TrailingZeroCount(value: fraction)));
@@ -633,60 +642,55 @@ internal static class FixedPointText {
             charsWritten: out charsWritten,
             provider: provider
         );
-    /// <summary>Refuses any format specifier other than the exact decimal expansion, then writes a signed raw value
-    /// using a provider's number tokens.</summary>
-    /// <param name="rawValue">The signed raw value.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <summary>Refuses any format specifier other than the exact decimal expansion, then writes a signed
+    /// fixed-point value using a provider's number tokens.</summary>
+    /// <typeparam name="TSelf">The carrier.</typeparam>
+    /// <param name="value">The value to render.</param>
     /// <param name="format">An empty format, <c>G</c> or <c>g</c>.</param>
     /// <param name="destination">The span the expansion is written to.</param>
     /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
     /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
     /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
     /// <exception cref="FormatException"><paramref name="format"/> is another specifier.</exception>
-    internal static bool TryFormatSignedGeneral(
-        long rawValue,
-        int fractionBitCount,
+    internal static bool TryFormatSignedGeneral<TSelf>(
+        TSelf value,
         ReadOnlySpan<char> format,
         Span<char> destination,
         out int charsWritten,
         IFormatProvider? provider
-    ) {
+    ) where TSelf : struct, ISignedFixedPointFormat<TSelf> {
         ValidateGeneralFormat(format: format);
 
         return TryFormatSigned(
             charsWritten: out charsWritten,
             destination: destination,
-            fractionBitCount: fractionBitCount,
+            fractionBitCount: TSelf.FractionBitCount,
             provider: provider,
-            rawValue: rawValue
+            rawValue: value.Value
         );
     }
-    /// <summary>Parses text into the raw of a signed 64-bit fixed-point carrier, reporting instead of
-    /// throwing.</summary>
+    /// <summary>Parses text into a signed 64-bit fixed-point carrier, reporting instead of throwing.</summary>
+    /// <typeparam name="TSelf">The carrier.</typeparam>
     /// <param name="s">The text to parse.</param>
     /// <param name="style">The styles <paramref name="s"/> is admitted under.</param>
     /// <param name="provider">The provider supplying the numeric conventions, or <see langword="null"/> for the
     /// invariant culture.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <param name="parsingDenominator">The carrier's <see cref="CreateParsingDenominator"/> value.</param>
-    /// <param name="rawValue">The parsed raw value, or zero on failure.</param>
+    /// <param name="result">The parsed value, or zero on failure.</param>
     /// <returns>Whether <paramref name="s"/> named an in-range value.</returns>
-    internal static bool TryParseSignedRaw(
-        ReadOnlySpan<char> s,
-        NumberStyles style,
-        IFormatProvider? provider,
-        int fractionBitCount,
-        UInt128 parsingDenominator,
-        out long rawValue
-    ) =>
-        (FixedPointParseStatus.Success == ParseSignedRawCore(
-            fractionBitCount: fractionBitCount,
-            parsingDenominator: parsingDenominator,
+    internal static bool TryParseSigned<TSelf>(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out TSelf result) where TSelf : struct, ISignedFixedPointFormat<TSelf> {
+        var parsed = (FixedPointParseStatus.Success == ParseSignedRawCore(
+            fractionBitCount: TSelf.FractionBitCount,
+            parsingDenominator: SignedParsingDenominator<TSelf>.Value,
             provider: provider,
-            rawValue: out rawValue,
+            rawValue: out var rawValue,
             s: s,
             style: style
         ));
+
+        result = TSelf.FromRawBits(value: rawValue);
+
+        return parsed;
+    }
     /// <summary>Refuses any format specifier other than the exact decimal expansion.</summary>
     /// <param name="format">The specifier to validate.</param>
     /// <exception cref="FormatException">The specifier is neither empty nor <c>G</c>/<c>g</c>.</exception>
@@ -1242,5 +1246,12 @@ internal static class FixedPointText {
             comparisonType: StringComparison.Ordinal
         )
         );
+    }
+
+    /// <summary>Holds one signed carrier's <see cref="CreateParsingDenominator"/> value, computed once per carrier.</summary>
+    /// <typeparam name="TSelf">The carrier.</typeparam>
+    private static class SignedParsingDenominator<TSelf> where TSelf : struct, ISignedFixedPointFormat<TSelf> {
+        /// <summary>The carrier's parsing denominator.</summary>
+        internal static readonly UInt128 Value = CreateParsingDenominator(fractionBitCount: TSelf.FractionBitCount);
     }
 }

@@ -33,10 +33,10 @@ public sealed class CompositionArithmeticTests {
         var spawn = world["spawnPoints"]?[0];
         var shape = world["prototypes"]?[0]?["document"]?["shapes"]?[0];
 
-        Assert.Equal(expected: [5m, 7m, 9m], actual: spawn?["position"]?.AsArray().Select(Exact));
-        Assert.Equal(expected: 90m, actual: Exact(spawn?["yawDegrees"]));
-        Assert.Equal(expected: 4m, actual: Exact(shape?["scale"]?[0]));
-        Assert.Equal(expected: 4m, actual: Exact(shape?["scale"]?[2]));
+        Assert.Equal(expected: [5m, 7m, 9m], actual: spawn?["position"]?.AsArray().Select(selector: Exact));
+        Assert.Equal(expected: 90m, actual: Exact(value: spawn?["yawDegrees"]));
+        Assert.Equal(expected: 4m, actual: Exact(value: shape?["scale"]?[0]));
+        Assert.Equal(expected: 4m, actual: Exact(value: shape?["scale"]?[2]));
     }
 
     private static decimal Exact(JsonNode? value) {

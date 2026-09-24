@@ -13,23 +13,6 @@ namespace Puck.World.Browser.Tests;
 /// the moment that sweep touches either fixture's own message, so the sweep's own progress is visible rather than
 /// silently absorbed.</summary>
 public sealed class ValidatorMessagePathRatchetTests {
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
     private static IReadOnlyList<BrowserErrorPath> ValidateAndSplitDeferred(byte[] utf8Json) {
         var errors = new List<string>();
         var deferred = new List<string>();
@@ -65,14 +48,7 @@ public sealed class ValidatorMessagePathRatchetTests {
 
     [Fact]
     public void Composed_puck_world_admits_and_defers_a_path_on_every_machine_engine_message() {
-        var path = Path.Combine(
-            RepositoryRoot(),
-            "src",
-            "Puck.World",
-            "Assets",
-            "worlds",
-            "puck.world.json"
-        );
+        var path = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json");
 
         Assert.True(
             condition: WorldDefinitionFileSource.TryComposeDocumentTree(

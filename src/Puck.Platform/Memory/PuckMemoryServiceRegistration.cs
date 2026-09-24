@@ -6,8 +6,8 @@ namespace Puck.Memory;
 /// <summary>Dependency-injection registration for the engine's default unmanaged allocator.</summary>
 public static class PuckMemoryServiceRegistration {
     /// <summary>
-    /// Registers the process-wide default <see cref="IAllocator"/> — <see cref="Allocator.Current"/>, selected by
-    /// the <c>Puck_ALLOCATOR</c> environment variable — unless one is already registered. Components that need
+    /// Registers the process-wide default <see cref="IAllocator"/> — <see cref="Allocator.Current"/>, mimalloc unless a
+    /// host assigned another — unless one is already registered. Components that need
     /// unmanaged allocation (e.g. the Vulkan backend) depend only on the <see cref="IAllocator"/> abstraction and
     /// resolve it from the container, so the composition root is the single place that binds the concrete.
     /// </summary>

@@ -242,13 +242,13 @@ public sealed partial class WorldRuleHost {
                     )); grid.Built = true;
                     m_decisionWork = m_decisionWork with { GridBuilds = (m_decisionWork.GridBuilds + 1) };
                 }
-                var width = BitOperations.RoundUpToPowerOf2(value: ((ulong)image.Active.Length));
+                var width = ((ulong)image.Active.Length).NextPowerOfTwo();
                 var bits = BitOperations.Log2(value: width);
                 // Visit distant portions of each population-sized phase block first, not an almost identical
                 // sliding window. This permutes every phase in each block and consumes no choice RNG draws.
                 var ordinal = ((bits == 0)
                     ? state.Reconsiderations
-                    : (state.Reconsiderations & ~(width - 1)) | (state.Reconsiderations.ReverseBits() >> (64 - bits))
+                    : state.Reconsiderations.AlignDown(alignment: width) | (state.Reconsiderations.ReverseBits() >> (64 - bits))
                 );
                 var phase = unchecked((((ordinal + (((ulong)((uint)key)) * 0x9E3779B9UL)) +
                     (((ulong)((uint)state.Generation)) << 32)) + (((ulong)index) * 0x85EBCA6BUL)));

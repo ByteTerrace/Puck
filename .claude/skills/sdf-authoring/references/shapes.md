@@ -82,6 +82,21 @@ non-collinear, and wind **strictly clockwise**.
 local Y, with `scale.z` as a radial offset). A revolve is refused on any solid or
 body-collider row, because a revolve's radial offset is not a per-axis box.
 
+The rounding and chamfer ceilings above are `SdfSolidGeometry.MaxRounding` and
+`SdfSolidGeometry.MaxChamfer`; a value past either is refused by name. A
+chamfered `Box` emits as an extruded ChamferedRectangle and a chamfered
+`Cylinder` as a revolved one. A trapezoid Prism uses the Trapezoid/Extrude VM
+path in static and animated emission and in the deterministic contact field, and
+a `Convex` profile is the exact iq polygon SDF.
+
+`Superellipsoid` is exact and 1-Lipschitz over the whole admitted exponent range:
+`SdfProgramBuilder.Superellipsoid`'s remarks carry the derivation and
+`SuperellipsoidLawTests` the numeric proof. Every ellipsoid, and every
+non-uniformly scaled sphere, emits it at exponent 2.
+
+Verify profile admission and surfaces with `AuthoredShapeAdmissionLawTests` and
+`SdfTrapezoidProfileLawTests`.
+
 ## Every per-shape field
 
 ### Placement

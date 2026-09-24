@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -19,7 +20,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
             userMessage: reason
         );
     }
-    private static WorldGroup Group(string id, params (WorldPrincipal Principal, string? Role)[] members) => new(
+    private static WorldGroup Group(string id, params (Principal Principal, string? Role)[] members) => new(
         Id: SafeName.Parse(candidate: id),
         KindName: "authority",
         Members: [.. members.Select(selector: static member => new WorldGroupMember(
@@ -62,9 +63,9 @@ public sealed class WorldGroupRoleAuthorityLawTests {
     [Fact]
     public void ExactRoleControlsEveryEffectivePayload_AndSameActorMayHoldDifferentGroupRoles() {
         var grants = NewGrants();
-        var seat0 = WorldPrincipal.Seat(slot: 0);
-        var seat1 = WorldPrincipal.Seat(slot: 1);
-        var seat2 = WorldPrincipal.Seat(slot: 2);
+        var seat0 = Principal.Seat(slot: 0);
+        var seat1 = Principal.Seat(slot: 1);
+        var seat2 = Principal.Seat(slot: 2);
         var body = GrantSubject.Body(index: 0);
         var state = GrantSubject.State(name: "facts");
         var section = GrantSubject.Section(section: WorldSection.State);
@@ -92,7 +93,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         );
 
         var readGrant = new WorldGrant(
-            Principal: WorldPrincipal.Group(id: "readers"),
+            Grantee: Grantee.Group(id: "readers"),
             Capability: WorldCapability.Observe,
             Subject: body,
             Exclusive: false,
@@ -100,7 +101,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
             EventBudget: 5
         );
         var driveGrant = new WorldGrant(
-            Principal: WorldPrincipal.Group(id: "drivers"),
+            Grantee: Grantee.Group(id: "drivers"),
             Capability: WorldCapability.Drive,
             Subject: body,
             Exclusive: false,
@@ -109,7 +110,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
             HoldCeiling: 100L
         );
         var mutateSectionGrant = new WorldGrant(
-            Principal: WorldPrincipal.Group(id: "writers"),
+            Grantee: Grantee.Group(id: "writers"),
             Capability: WorldCapability.Mutate,
             Subject: section,
             Exclusive: false,
@@ -117,7 +118,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
             KindMask: WorldMutationKindCatalog.KindsOf(section: WorldSection.State)
         );
         var mutateStateGrant = new WorldGrant(
-            Principal: WorldPrincipal.Group(id: "writers"),
+            Grantee: Grantee.Group(id: "writers"),
             Capability: WorldCapability.Mutate,
             Subject: state,
             Exclusive: false,
@@ -240,7 +241,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         Assert.Equal(
             expected: 100L,
             actual: grants.HoldCeiling(
-                principal: seat0,
+                grantee: seat0,
                 subject: body
             )
         );
@@ -256,8 +257,8 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         );
         Assert.True(condition: grants.TryGetKindMask(
             capability: WorldCapability.Mutate,
+            grantee: seat0,
             mask: out var kindMask,
-            principal: seat0,
             subject: section
         ));
         Assert.Equal(
@@ -266,8 +267,8 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         );
         Assert.True(condition: grants.TryGetWriteMask(
             capability: WorldCapability.Mutate,
+            grantee: seat0,
             mask: out var writeMask,
-            principal: seat0,
             subject: state
         ));
         Assert.Equal(
@@ -285,10 +286,10 @@ public sealed class WorldGroupRoleAuthorityLawTests {
     [Fact]
     public void GroupOwnedReachUsesOwnerGroupRole_DirectPrincipalOwnershipRemainsSeparate() {
         var grants = NewGrants();
-        var reader = WorldPrincipal.Seat(slot: 0);
-        var controller = WorldPrincipal.Seat(slot: 1);
-        var subjectMember = WorldPrincipal.Seat(slot: 2);
-        var unrelated = WorldPrincipal.Seat(slot: 3);
+        var reader = Principal.Seat(slot: 0);
+        var controller = Principal.Seat(slot: 1);
+        var subjectMember = Principal.Seat(slot: 2);
+        var unrelated = Principal.Seat(slot: 3);
         var screen0 = GrantSubject.Screen(index: 0);
         var screen1 = GrantSubject.Screen(index: 1);
         var owner = Group(
@@ -335,7 +336,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         AssertGrant(
             grants,
             new WorldGrant(
-                WorldPrincipal.Group(id: "subject"),
+                Grantee.Group(id: "subject"),
                 WorldCapability.Control,
                 screen0,
                 false
@@ -344,7 +345,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         AssertGrant(
             grants,
             new WorldGrant(
-                WorldPrincipal.Group(id: "direct"),
+                Grantee.Group(id: "direct"),
                 WorldCapability.Control,
                 screen1,
                 false
@@ -387,7 +388,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
     [Fact]
     public void LeaveRoleChangeAndGrantRevokeTakeEffectImmediately_AndProjectionRevisionAdvances() {
         var grants = NewGrants();
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
         var body = GrantSubject.Body(index: 0);
         var reader = Group(
             id: "readers",
@@ -402,7 +403,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         AssertGrant(
             grants,
             new WorldGrant(
-                WorldPrincipal.Group(id: "readers"),
+                Grantee.Group(id: "readers"),
                 WorldCapability.Observe,
                 body,
                 false,
@@ -428,7 +429,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         );
 
         Assert.True(condition: grants.Revoke(
-            WorldPrincipal.Group(id: "readers"),
+            Grantee.Group(id: "readers"),
             WorldCapability.Observe,
             body
         ));
@@ -477,15 +478,15 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         var groups = new[] {
             Group(
             id: "readers",
-            (WorldPrincipal.Seat(slot: 0), "reader")
+            (Principal.Seat(slot: 0), "reader")
         ),
             Group(
             id: "owners",
-            (WorldPrincipal.Seat(slot: 1), "controller")
+            (Principal.Seat(slot: 1), "controller")
         ),
             Group(
             id: "subject",
-            (WorldPrincipal.Seat(slot: 2), "reader")
+            (Principal.Seat(slot: 2), "reader")
         ),
         };
         var ownership = new[] {
@@ -500,10 +501,10 @@ public sealed class WorldGroupRoleAuthorityLawTests {
             )
         ),
         };
-        var controller = WorldPrincipal.Seat(slot: 1);
+        var controller = Principal.Seat(slot: 1);
         var screen = GrantSubject.Screen(index: 0);
         var kinds = new[] { Kind() };
-        var principal = WorldPrincipal.Seat(slot: 0);
+        var principal = Principal.Seat(slot: 0);
         var body = GrantSubject.Body(index: 0);
         var grants = NewGrants();
 
@@ -515,7 +516,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         AssertGrant(
             grants,
             new WorldGrant(
-                WorldPrincipal.Group(id: "readers"),
+                Grantee.Group(id: "readers"),
                 WorldCapability.Observe,
                 body,
                 false,
@@ -534,7 +535,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
         AssertGrant(
             grants,
             new WorldGrant(
-                WorldPrincipal.Group(id: "subject"),
+                Grantee.Group(id: "subject"),
                 WorldCapability.Control,
                 screen,
                 false

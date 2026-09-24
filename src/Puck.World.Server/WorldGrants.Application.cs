@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -7,8 +8,8 @@ public sealed partial class WorldGrants {
     // attributed echo. Admission re-authorization additionally needs to know whether the row ACTUALLY reached the
     // live table so a conflict refusal is not later misclassified as an explicit revoke; it uses this identical
     // implementation and keeps the boolean inside the server.
-    internal bool TryApplyGrant(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
-        var label = $"{grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
+    internal bool TryApplyGrant(WorldGrant grant, Principal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
+        var label = $"{grant.Grantee.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
 
         if (!HoldsForAdministration(
             principal: actor,
@@ -16,7 +17,7 @@ public sealed partial class WorldGrants {
             subject: grant.Subject
         )) {
             Host.Document.DenyGrantTable(
-                denial: $"{actor.Describe()} cannot grant {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()} to {grant.Principal.Describe()} — it holds none there itself",
+                denial: $"{actor.Describe()} cannot grant {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()} to {grant.Grantee.Describe()} — it holds none there itself",
                 connectionId: connectionId,
                 correlationId: correlationId
             );
@@ -28,10 +29,10 @@ public sealed partial class WorldGrants {
             (grant.Capability == WorldCapability.Drive) &&
             (grant.Subject.Kind == GrantSubjectKind.Body) &&
             Host.Population.IsAdmittedPeer(bodyIndex: grant.Subject.Value) &&
-            (grant.Principal != Host.Population.PeerPrincipal(index: grant.Subject.Value))
+            (grant.Grantee != Host.Population.PeerPrincipal(index: grant.Subject.Value))
         ) {
             Host.Document.DenyGrantTable(
-                denial: $"{grant.Principal.Describe()} cannot co-drive {grant.Subject.Describe()} — no consent authorship exists for a remote-admitted body except its own peer ({Host.Population.PeerPrincipal(index: grant.Subject.Value).Describe()}); Reach ∧ Consent composes to nothing until that peer authors it",
+                denial: $"{grant.Grantee.Describe()} cannot co-drive {grant.Subject.Describe()} — no consent authorship exists for a remote-admitted body except its own peer ({Host.Population.PeerPrincipal(index: grant.Subject.Value).Describe()}); Reach ∧ Consent composes to nothing until that peer authors it",
                 connectionId: connectionId,
                 correlationId: correlationId
             );
@@ -59,14 +60,14 @@ public sealed partial class WorldGrants {
             // will not move. Reported, never refused: a later reload may legitimately add the channel, so the row is a
             // standing intent rather than a mistake.
             if (Host.Addons?.DescribeUndeclaredGrantedChannels(
-                principal: grant.Principal,
+                principal: grant.Grantee.Principal,
                 reach: grant.Reach,
                 channels: Host.Population.Channels
             ) is { } undeclared) {
                 if (Host.Output.HasNarrationSink) {
                     Host.Output.Narrate(
                         channel: "world.grant",
-                        text: $"[world.grant: {grant.Principal.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]"
+                        text: $"[world.grant: {grant.Grantee.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]"
                     );
                 }
             }
@@ -123,17 +124,16 @@ public sealed partial class WorldGrants {
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(
                 channel: "world.grant",
-                text: $"[world.grant: {grant.Principal.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]"
+                text: $"[world.grant: {grant.Grantee.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]"
             );
         }
 
         // The mask travels with the ceiling on a seat's own gesture and means nothing without it, so both go.
         return (grant with { Reach = null, Consent = null, Ceiling = null });
     }
-
     /// <summary>Adds a grant to the table synchronously (the <c>world.grant</c> half; like a command, so the next tick's
     /// checks observe it). Checks <paramref name="actor"/> — the principal asking, distinct from
-    /// <see cref="WorldGrant.Principal"/> (the principal receiving it) — via
+    /// <see cref="WorldGrant.Grantee"/> (the principal receiving it) — via
     /// <see cref="WorldGrants.HoldsForAdministration"/>, which is enforced only for actors outside the trust boundary
     /// (an <c>Addon</c> or <c>Peer</c> may only grant authority it itself holds); a <c>Console</c> or <c>Seat</c> actor
     /// passes unconditionally, because gating a fully-trusted operator's own grant path is ceremony, not security — see
@@ -145,13 +145,13 @@ public sealed partial class WorldGrants {
     /// defaults to the local connection for a direct caller (replay, the addon runtime) with no originating envelope.</param>
     /// <param name="correlationId">The submitting envelope's correlation id; defaults to none.</param>
     /// <remarks>A Drive grant whose subject is a remote-admitted human body
-    /// (<see cref="WorldPopulation.IsAdmittedPeer"/>) refuses, by name, for any <see cref="WorldGrant.Principal"/>
+    /// (<see cref="WorldPopulation.IsAdmittedPeer"/>) refuses, by name, for any <see cref="WorldGrant.Grantee"/>
     /// other than that body's own <see cref="PrincipalKind.Peer"/>: with no Peer-authored consent grammar,
     /// <c>Reach ∧ Consent</c> is <c>0</c> by construction for any other principal, so such a row would compose to
     /// nothing anyway; the refusal states this at the door instead of leaving an operator to infer it from a pool
     /// that silently never moves. <see cref="WorldPopulation.IsAdmittedPeer"/> is currently always
     /// <see langword="false"/>, so this door does not yet trigger.</remarks>
-    internal void ApplyGrant(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    internal void ApplyGrant(WorldGrant grant, Principal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
         _ = TryApplyGrant(
             actor: actor,
             connectionId: connectionId,
@@ -170,8 +170,8 @@ public sealed partial class WorldGrants {
     /// <param name="connectionId">The submitting envelope's connection id (see <see cref="WorldEditEcho.ConnectionId"/>);
     /// defaults to the local connection for a direct caller with no originating envelope.</param>
     /// <param name="correlationId">The submitting envelope's correlation id; defaults to none.</param>
-    internal void ApplyRevoke(WorldGrant grant, WorldPrincipal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
-        var label = $"{grant.Principal.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
+    internal void ApplyRevoke(WorldGrant grant, Principal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
+        var label = $"{grant.Grantee.Describe()} {grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()}";
 
         if (!HoldsForAdministration(
             principal: actor,
@@ -179,7 +179,7 @@ public sealed partial class WorldGrants {
             subject: grant.Subject
         )) {
             Host.Document.DenyGrantTable(
-                denial: $"{actor.Describe()} cannot revoke {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()} from {grant.Principal.Describe()} — it holds none there itself",
+                denial: $"{actor.Describe()} cannot revoke {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()} from {grant.Grantee.Describe()} — it holds none there itself",
                 connectionId: connectionId,
                 correlationId: correlationId
             );
@@ -188,7 +188,7 @@ public sealed partial class WorldGrants {
         }
 
         var removed = Revoke(
-            principal: grant.Principal,
+            grantee: grant.Grantee,
             capability: grant.Capability,
             subject: grant.Subject
         );
@@ -198,7 +198,7 @@ public sealed partial class WorldGrants {
                 channel: "world.revoke",
                 text: (removed
                 ? $"[world.revoke: {label}]"
-                : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
+                : $"[world.revoke: {grant.Grantee.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
             );
         }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -260,14 +260,14 @@ public sealed partial class WorldGrants {
     /// already charged it (an addon act charged at its pre-flight, re-entering at apply).</param>
     /// <param name="admission">The decided outcome — which gate fired and the row-level evidence behind it.</param>
     /// <returns><see langword="true"/> when every gate cleared (and the dispatch was charged, when metered).</returns>
-    internal bool TryAdmitMutation(WorldPrincipal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) {
+    internal bool TryAdmitMutation(Principal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) {
         var sectionSubject = GrantSubject.Section(section: section);
 
         // THE ONE STRUCTURAL EXEMPTION, keyed on the principal KIND and decided HERE so nothing else has to know
         // about it — no bypass parameter threaded through the apply path, no seeded wildcard row standing in for
         // authority. The world's own authored program (a rule's effects, a kit's generate effect) is not an actor
         // submitting a write; it is the document acting on itself, exactly as a per-body ActionEffect has always
-        // done without consulting this table at all. See WorldPrincipal.World for the full argument, including why
+        // done without consulting this table at all. See Principal.World for the full argument, including why
         // this is NOT the "handler constructs a principal to launder an identity" defect. Every gate BELOW authority
         // still runs unconditionally at the call site: compose, whole-document validate, envelope, solids.
         if (principal.Kind == PrincipalKind.World) {
@@ -341,7 +341,7 @@ public sealed partial class WorldGrants {
 
         if (
             TryGetKindMask(
-            principal: principal,
+            grantee: principal,
             capability: WorldCapability.Mutate,
             subject: decidingMutateSubject,
             out var mutateMask
@@ -392,7 +392,7 @@ public sealed partial class WorldGrants {
 
             if (
                 TryGetKindMask(
-                principal: principal,
+                grantee: principal,
                 capability: WorldCapability.Edit,
                 subject: decidingEditSubject,
                 out var editMask

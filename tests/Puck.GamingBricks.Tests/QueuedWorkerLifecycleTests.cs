@@ -8,7 +8,6 @@ namespace Puck.GamingBricks.Tests;
 /// propagation are proven on the shape each host actually runs, not on the primitive alone.</summary>
 public sealed class QueuedWorkerLifecycleTests {
     private const int DrainCount = 64;
-    private const int JoinTimeoutMilliseconds = 30_000;
     private const int PendingWindow = 4;
     private const int SegmentCount = 512;
 
@@ -46,7 +45,7 @@ public sealed class QueuedWorkerLifecycleTests {
         );
     }
     [Fact]
-    public void GroupStopCompletesEverySegmentAcceptedWhileAProducerIsSubmitting() {
+    public async Task GroupStopCompletesEverySegmentAcceptedWhileAProducerIsSubmitting() {
         var firstCore = new CountingCore();
         var secondCore = new CountingCore();
 
@@ -61,7 +60,7 @@ public sealed class QueuedWorkerLifecycleTests {
             workers: [firstHost.Worker, secondHost.Worker]
         );
         var accepted = 0L;
-        var producer = new Thread(start: () => {
+        var producer = RunOnItsOwnThread(body: () => {
             for (var index = 0; (index < SegmentCount); ++index) {
                 if (link.Submit(
                     deltaTicks: 1UL,
@@ -70,9 +69,7 @@ public sealed class QueuedWorkerLifecycleTests {
                     _ = Interlocked.Increment(location: ref accepted);
                 }
             }
-        }) { IsBackground = true };
-
-        producer.Start();
+        });
 
         // The link is live for this whole loop, so every synchronous step is accepted and drained rather than refused.
         for (var index = 0; (index < DrainCount); ++index) {
@@ -83,10 +80,8 @@ public sealed class QueuedWorkerLifecycleTests {
             _ = Interlocked.Increment(location: ref accepted);
         }
 
-        Assert.True(
-            condition: producer.Join(millisecondsTimeout: JoinTimeoutMilliseconds),
-            userMessage: "the producer never finished; a lost wake left it waiting for pending-window capacity"
-        );
+        // A lost wake would leave the producer waiting for pending-window capacity forever.
+        await producer.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var completed = link.CompletedSteps;
 
@@ -140,7 +135,7 @@ public sealed class QueuedWorkerLifecycleTests {
         );
     }
     [Fact]
-    public void WorkerStopCompletesEverySegmentAcceptedWhileAProducerIsSubmitting() {
+    public async Task WorkerStopCompletesEverySegmentAcceptedWhileAProducerIsSubmitting() {
         using var core = new CountingCore();
         var worker = new QueuedMachineWorker(
             width: 1,
@@ -152,7 +147,7 @@ public sealed class QueuedWorkerLifecycleTests {
         worker.Load(core: core);
 
         var accepted = 0L;
-        var producer = new Thread(start: () => {
+        var producer = RunOnItsOwnThread(body: () => {
             for (var index = 0; (index < SegmentCount); ++index) {
                 if (worker.Submit(
                     deltaTicks: 1UL,
@@ -161,9 +156,7 @@ public sealed class QueuedWorkerLifecycleTests {
                     _ = Interlocked.Increment(location: ref accepted);
                 }
             }
-        }) { IsBackground = true };
-
-        producer.Start();
+        });
 
         // Synchronous drains race the queued producer: each one appends a barrier behind whatever the producer has
         // already accepted and blocks until the worker has run all of it.
@@ -176,11 +169,8 @@ public sealed class QueuedWorkerLifecycleTests {
             }
         }
 
-        Assert.True(
-            condition: producer.Join(millisecondsTimeout: JoinTimeoutMilliseconds),
-            userMessage: "the producer never finished; a lost wake left it waiting for pending-window capacity"
-        );
-
+        // A lost wake would leave the producer waiting for pending-window capacity forever.
+        await producer.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
         worker.Dispose();
 
         var submitted = Interlocked.Read(location: ref accepted);
@@ -204,9 +194,14 @@ public sealed class QueuedWorkerLifecycleTests {
             actual: core.DisposeCount
         );
     }
+    // The first segment holds the worker mid-step, so nothing the producer submits can complete, and the pending
+    // window holds the producer to a handful of acceptances, until the stop has closed the queue. The first
+    // rejection proves the close happened while the producer was still submitting; only then is the step released.
     [Fact]
-    public void WorkerStopUnderLoadRejectsLaterSubmissionsRatherThanAcceptingThem() {
-        using var core = new CountingCore();
+    public async Task WorkerStopUnderLoadRejectsEverySubmissionAfterTheCloseAndCompletesEveryOneBefore() {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var release = new ManualResetEventSlim(initialState: false);
+        using var core = new CountingCore { FirstStepRelease = release };
         var worker = new QueuedMachineWorker(
             width: 1,
             height: 1,
@@ -217,55 +212,90 @@ public sealed class QueuedWorkerLifecycleTests {
         worker.Load(core: core);
 
         var accepted = 0L;
+        var acceptedAfterRejection = 0L;
+        var firstRejection = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         var rejected = 0L;
-        var producer = new Thread(start: () => {
+        var producer = RunOnItsOwnThread(body: () => {
             for (var index = 0; (index < SegmentCount); ++index) {
                 if (worker.Submit(
                     deltaTicks: 1UL,
                     input: default
                 ) == QueuedMachineSubmission.Rejected) {
-                    _ = Interlocked.Increment(location: ref rejected);
+                    ++rejected;
+                    _ = firstRejection.TrySetResult();
                 } else {
-                    _ = Interlocked.Increment(location: ref accepted);
+                    ++accepted;
+
+                    if (rejected != 0L) {
+                        ++acceptedAfterRejection;
+                    }
                 }
             }
-        }) { IsBackground = true };
+        });
+        Task stop;
 
-        producer.Start();
-
-        // Stop while the producer is mid-run, with the pending window full often enough that some submissions are
-        // parked in backpressure when the queue closes.
-        var deadline = (Environment.TickCount64 + JoinTimeoutMilliseconds);
-
-        while (
-            (worker.CompletedSteps < PendingWindow) &&
-            (Environment.TickCount64 < deadline)
-        ) {
-            Thread.Yield();
+        try {
+            await core.FirstStepEntered.Task.WaitAsync(cancellationToken: cancellationToken);
+            stop = RunOnItsOwnThread(body: worker.Dispose);
+            // A producer that finishes without a rejection has been accepted past the close; the assertions say so.
+            _ = await Task.WhenAny(
+                task1: firstRejection.Task,
+                task2: producer
+            ).WaitAsync(cancellationToken: cancellationToken);
+        } finally {
+            release.Set();
         }
 
-        worker.Dispose();
+        await Task.WhenAll(tasks: [producer, stop]).WaitAsync(cancellationToken: cancellationToken);
 
-        Assert.True(
-            condition: producer.Join(millisecondsTimeout: JoinTimeoutMilliseconds),
-            userMessage: "the producer never finished; the stop left a backpressured submission waiting on a queue nothing would drain"
-        );
         Assert.Null(@object: worker.QueueFault);
         Assert.Equal(
-            expected: Interlocked.Read(location: ref accepted),
+            actual: acceptedAfterRejection,
+            expected: 0L
+        );
+        Assert.InRange(
+            actual: accepted,
+            high: PendingWindow,
+            low: 1L
+        );
+        Assert.Equal(
+            actual: (accepted + rejected),
+            expected: ((long)SegmentCount)
+        );
+        // The stop drained what it inherited: every accepted segment ran, and the core was disposed once.
+        Assert.Equal(
+            expected: accepted,
             actual: worker.CompletedSteps
         );
         Assert.Equal(
-            expected: SegmentCount,
-            actual: ((int)(Interlocked.Read(location: ref accepted) + Interlocked.Read(location: ref rejected)))
+            expected: accepted,
+            actual: core.RunCycleCalls
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: core.DisposeCount
         );
     }
+
+    private static Task RunOnItsOwnThread(Action body) =>
+        Task.Factory.StartNew(
+            action: body,
+            cancellationToken: CancellationToken.None,
+            creationOptions: TaskCreationOptions.LongRunning,
+            scheduler: TaskScheduler.Default
+        );
 
     private sealed class CountingCore : IQueuedMachineCore {
         public string CheckpointIdentity => "test/counting-core";
         public long CycleCount => 0L;
         public ulong CyclesPerSecond => 1UL;
         public int DisposeCount { get; private set; }
+
+        /// <summary>Gets a signal set once the first segment is running and, when <see cref="FirstStepRelease"/> is
+        /// set, holding the worker until it is released.</summary>
+        public TaskCompletionSource FirstStepEntered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ManualResetEventSlim? FirstStepRelease { get; init; }
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
         public long NativeFrameIndex => 0L;
         public long RunCycleCalls => Interlocked.Read(location: ref m_runCycleCalls);
@@ -288,7 +318,12 @@ public sealed class QueuedWorkerLifecycleTests {
                 throw new InvalidOperationException(message: "the core refuses to run");
             }
 
-            _ = Interlocked.Increment(location: ref m_runCycleCalls);
+            if (
+                (Interlocked.Increment(location: ref m_runCycleCalls) == 1L) &&
+                FirstStepEntered.TrySetResult()
+            ) {
+                FirstStepRelease?.Wait();
+            }
         }
     }
     private sealed class CountingGroupCore : IMachineGroupCore {

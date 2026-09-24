@@ -76,7 +76,7 @@ public sealed record CostModelProfile {
     /// <exception cref="OverflowException">The resulting tick count does not fit in a signed 64-bit integer.</exception>
     public long ReferenceEngineTicks(long cycles) {
         ArgumentOutOfRangeException.ThrowIfNegative(cycles);
-        return checked((long)((((Int128)cycles) * EngineTicksPerSecond).CeilingDivide(((Int128)CyclesPerSecond))));
+        return checked((long)((((Int128)cycles) * EngineTicksPerSecond).CeilingDivide(divisor: ((Int128)CyclesPerSecond))));
     }
     /// <summary>Returns C * r / F as an exact rational with a widened numerator. Rate zero has no step fraction.</summary>
     /// <exception cref="ArgumentException">The cycle count or rate is negative, or a positive rate is unsupported.</exception>

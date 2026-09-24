@@ -47,15 +47,12 @@ public readonly partial record struct UFixedQ4816 {
         x: x,
         y: y
     );
-    public static UFixedQ4816 Parse(string s, NumberStyles style, IFormatProvider? provider) {
-        ArgumentNullException.ThrowIfNull(argument: s);
-
-        return Parse(
-            s: s.AsSpan(),
-            style: style,
-            provider: provider
+    public static UFixedQ4816 Parse(string s, NumberStyles style, IFormatProvider? provider) =>
+        FixedPointText.Parse<UFixedQ4816>(
+            provider: provider,
+            s: s,
+            style: style
         );
-    }
     public static UFixedQ4816 Parse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider) {
         var status = ParseText(
             provider: provider,

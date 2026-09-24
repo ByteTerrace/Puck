@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Tests;

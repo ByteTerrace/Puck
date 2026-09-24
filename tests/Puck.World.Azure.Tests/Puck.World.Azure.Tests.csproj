@@ -11,4 +11,7 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
         <ProjectReference Include="..\..\src\Puck.World.Azure\Puck.World.Azure.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
 </Project>

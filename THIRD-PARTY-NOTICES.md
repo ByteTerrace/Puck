@@ -1,15 +1,13 @@
 # Third-Party Notices — ByteTerrace.Puck
 
-ByteTerrace.Puck is distributed under the repository license (PolyForm Noncommercial 1.0.0 for
-noncommercial use; a separate paid license for commercial use — see [`LICENSE.md`](LICENSE.md)
-and [`LICENSING.md`](LICENSING.md)). Separately licensed components retain their
+ByteTerrace.Puck is distributed under the [Apache License 2.0](LICENSE.md). Separately licensed
+components retain their
 own terms, including the ByteTerrace-authored GamingBrick firmware described below.
 
 The components below are **not** original to Puck. Each keeps its **own** license and copyright;
 those licenses permit redistribution inside this work. **None of them is copyleft** — no
-dependency forces the engine's own source open or prevents offering it under paid commercial
-terms. Where a component is redistributed in a build, its own license travels with it as that
-license requires.
+dependency places conditions on the engine's own license. Where a component is redistributed in
+a build, its own license travels with it as that license requires.
 
 This file is the root inventory. The bare-metal target keeps its own, more detailed notice at
 [`experimental/Puck.BareMetal/NOTICE.md`](experimental/Puck.BareMetal/NOTICE.md); it is the
@@ -83,7 +81,7 @@ source license either, and it carries conditions that must be honored on redistr
 
 > **For an attorney, before shipping bare-metal builds commercially or across borders:** confirm
 > the export-control posture for the AMD firmware (and, separately, for the mbedTLS cryptography).
-> These are redistribution conditions, not licensing blockers for the dual-license model.
+> These are redistribution conditions; they do not affect the engine's own license.
 
 ---
 

@@ -1,0 +1,19 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "familiars",
+  "name": "Puck Familiars",
+  "version": "0.1.0",
+  "basis": "rules.puck",
+  "worlds": [
+    {
+      "id": "familiars",
+      "source": "familiars.puck"
+    }
+  ],
+  "files": [
+    "README.md",
+    "rules.puck",
+    "seasons.puck",
+    "familiars.puck"
+  ]
+}

@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 /// <summary>A compiled pattern: the refined alphabet that numbered its letters and the deterministic machine over
@@ -339,10 +341,7 @@ public sealed class CompiledPattern {
 
         public PatternTerms(int letterCount) {
             m_letterCount = letterCount;
-            m_all = ((letterCount == 64)
-                ? ulong.MaxValue
-                : ((1UL << letterCount) - 1UL)
-            );
+            m_all = letterCount.LowMask<ulong>();
             Empty = Intern(term: new(
                 Items: [],
                 Kind: Kind.Empty,

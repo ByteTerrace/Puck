@@ -1783,22 +1783,22 @@ public sealed class PagedInputBindingsTests {
 
         var reload = Task.Run(
             action: () => {
-            for (var index = 0; (index < 50_000); index++) {
-                bindings.Reload(profile: (((index & 1) == 0)
-                    ? second
-                    : first));
-            }
-        },
+                for (var index = 0; (index < 50_000); index++) {
+                    bindings.Reload(profile: (((index & 1) == 0)
+                        ? second
+                        : first));
+                }
+            },
             cancellationToken: TestContext.Current.CancellationToken
         );
         var read = Task.Run(
             action: () => {
-            for (var index = 0; (index < 50_000); index++) {
-                var pageId = bindings.ViewFor(slot: 0).PageId;
+                for (var index = 0; (index < 50_000); index++) {
+                    var pageId = bindings.ViewFor(slot: 0).PageId;
 
-                Assert.True(condition: (pageId is "first" or "menu"));
-            }
-        },
+                    Assert.True(condition: (pageId is "first" or "menu"));
+                }
+            },
             cancellationToken: TestContext.Current.CancellationToken
         );
 
@@ -1877,10 +1877,10 @@ public sealed class PagedInputBindingsTests {
         var reading = true;
         var reads = Task.Run(
             action: () => {
-            while (Volatile.Read(location: ref reading)) {
-                _ = bindings.WheelFor(slot: 0);
-            }
-        },
+                while (Volatile.Read(location: ref reading)) {
+                    _ = bindings.WheelFor(slot: 0);
+                }
+            },
             cancellationToken: TestContext.Current.CancellationToken
         );
 
@@ -1925,8 +1925,8 @@ public sealed class PagedInputBindingsTests {
         await reads;
     }
 
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class TestModule((string Name, CommandValueKind Kind)[] definitions) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

@@ -29,12 +29,6 @@ namespace Puck.World.Server;
 /// depenetrates against the same snapshot rather than repeating the recompute per body.</para>
 /// </remarks>
 internal sealed class WorldColliderSet : IContactField {
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
-
     private readonly List<FixedStaticCollider> m_attachedColliders = [];
     // Every ATTACHED solid row (Attach + Solid both set — refused only under the FIELD provider, see the validator):
     // its geometry cannot join m_colliders above because its origin/yaw are not the row's static authored transform,
@@ -115,7 +109,7 @@ internal sealed class WorldColliderSet : IContactField {
                 (placement.Solid is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -285,7 +279,7 @@ internal sealed class WorldColliderSet : IContactField {
                 (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -312,7 +306,7 @@ internal sealed class WorldColliderSet : IContactField {
             // from the document by every process, never baked once and shared, which is why a non-portable
             // transcendental here is a cross-machine divergence rather than a one-time authoring rounding.
             var rotation = FixedQuaternion.FromAxisAngle(
-                axis: UnitY,
+                axis: FixedVector3.UnitY,
                 angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
             );
             // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
@@ -421,6 +415,7 @@ internal sealed class WorldColliderSet : IContactField {
 
         RefreshAttachedRows(population: population);
     }
+
     // The visitor below captures this method's locals, and a captured local's closure is allocated where its scope
     // opens — at method entry. Keeping the walk in its own method is what lets a document with no attached row pay
     // nothing per tick.
@@ -448,7 +443,7 @@ internal sealed class WorldColliderSet : IContactField {
             // determinism rule permits on a value that decides where a body stops.
             var stampRotation = FixedQuaternion.FromAxisAngle(
                 angle: fixedYaw,
-                axis: UnitY
+                axis: FixedVector3.UnitY
             );
 
             CreationStampEmitter.VisitFixedPrimitiveCopies(
@@ -513,6 +508,7 @@ internal sealed class WorldColliderSet : IContactField {
             AttachedRevision++;
         }
     }
+
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
@@ -562,7 +558,7 @@ internal sealed class WorldColliderSet : IContactField {
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         _ = position;
-        up = UnitY;
+        up = FixedVector3.UnitY;
 
         return true;
     }

@@ -1,25 +1,29 @@
+using System.Text.Json;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>Camera vendor rows cross an unsafe native control boundary, so their byte-sized wire contract and the
-/// sensor enum are load-time invariants rather than values the platform layer silently truncates.</summary>
+/// sensor vocabulary are load-time invariants of the camera producer's settings rather than values the platform layer
+/// silently truncates.</summary>
 public sealed class CameraAuthoringValidationLawTests {
-    private static WorldDefinition WithCamera(WorldCameraSensor sensor, IReadOnlyList<WorldCameraVendorControl>? vendor, int? seat = null) {
+    private static WorldDefinition WithSource(WorldScreenSource source) {
         var definition = Fixtures.BuildDocument();
         var screen = definition.Screens[0];
 
         return definition with {
-            ScreensRaw = [screen with {
-                Source = new WorldScreenSource.Camera(
-                Profile: WorldFeedProfile.Default,
-                Controls: new WorldCameraControls(Vendor: vendor),
-                Sensor: sensor,
-                Seat: seat
-            ),
-            }],
+            ScreensRaw = [screen with { Source = source }],
         };
     }
+    private static WorldDefinition WithCamera(WorldCameraSensor sensor, IReadOnlyList<WorldCameraVendorControl>? vendor, int? seat = null) => WithSource(source: WorldImageProducerSettings.SourceOf(
+        id: WorldImageProducerSettings.CameraId,
+        settings: new WorldCameraSettings(
+            Controls: new WorldCameraControls(Vendor: vendor),
+            Profile: WorldFeedProfile.Default,
+            Seat: seat,
+            Sensor: sensor
+        )
+    ));
 
     [Fact]
     public void AZeroSeatRefuses() {
@@ -36,7 +40,7 @@ public sealed class CameraAuthoringValidationLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "camera.seat"
+            expectedSubstring: "producer.settings.seat"
         );
     }
     // The fixture document declares 4 local seats (Fixtures.BuildDocument's four seat spawns), so seat 5 is the first
@@ -64,20 +68,41 @@ public sealed class CameraAuthoringValidationLawTests {
         );
     }
     [Fact]
-    public void UndefinedSensorRefusesBeforeBinderIndexing() {
-        var definition = WithCamera(
-            sensor: ((WorldCameraSensor)byte.MaxValue),
-            vendor: null
+    public void AnUnknownSensorOrSettingsMemberRefusesByName() {
+        Laws.RefusalWithControl(
+            lawId: "camera.sensor-unknown",
+            deniedOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithSource(source: new WorldScreenSource.Producer(
+                    Id: WorldImageProducerSettings.CameraId,
+                    Settings: new Dictionary<string, JsonElement> { ["sensor"] = JsonSerializer.SerializeToElement(value: "Ultraviolet") }
+                )),
+                reason: out _
+            ),
+            controlOutcome: () => WorldDefinitionValidator.TryValidateLocally(
+                definition: WithSource(source: new WorldScreenSource.Producer(
+                    Id: WorldImageProducerSettings.CameraId,
+                    Settings: new Dictionary<string, JsonElement> { ["sensor"] = JsonSerializer.SerializeToElement(value: "Infrared") }
+                )),
+                reason: out _
+            )
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: definition,
+            definition: WithSource(source: new WorldScreenSource.Producer(
+                Id: WorldImageProducerSettings.CameraId,
+                Settings: new Dictionary<string, JsonElement> { ["lens"] = JsonSerializer.SerializeToElement(value: 3) }
+            )),
             reason: out var reason
         ));
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "camera.sensor"
+            expectedSubstring: "producer.settings"
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "lens"
         );
     }
     public static IEnumerable<object[]> VendorByteCases() {
@@ -112,7 +137,7 @@ public sealed class CameraAuthoringValidationLawTests {
             Assert.Contains(
                 actualString: reason,
                 comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "camera.controls.vendor[0]"
+                expectedSubstring: "producer.settings.controls.vendor[0]"
             );
         }
     }

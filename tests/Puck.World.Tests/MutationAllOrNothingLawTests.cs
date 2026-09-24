@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -16,7 +17,7 @@ namespace Puck.World.Tests;
 /// that already validated once live, in the same order, against the same base document, so nothing in the current
 /// engine can make a legitimate replay fail: there is no code path here that constructs a REAL (non-injected)
 /// mid-replay failure to prove the loop's own early-return against, and none is proven by this suite. The acting
-/// principal is <see cref="WorldPrincipal.Console"/> throughout — this law is about VALIDATION, not authority (see
+/// principal is <see cref="Principal.Console"/> throughout — this law is about VALIDATION, not authority (see
 /// <see cref="AuthorityAdministrationLawTests"/> for the authority law).
 /// </summary>
 public sealed class MutationAllOrNothingLawTests {
@@ -28,7 +29,7 @@ public sealed class MutationAllOrNothingLawTests {
         );
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: row
         ));
         fixture.Step();

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text;
 using Puck.Attestation;
 using Puck.World.Protocol;
@@ -7,13 +8,13 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     // Ownership rows still address real local actors directly; group membership rows use the typed
     // WorldMemberRef union and are validated by WorldGroupMembershipValidation below.
-    private static bool IsLegitimateGroupMember(WorldPrincipal member) => (member.Kind is
+    private static bool IsLegitimateGroupMember(Principal member) => (member.Kind is
         PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer);
-    // Document-authored grant rows (WorldDefinition.Grants). Console and Seat principals are already canonical per
-    // WorldGrantCommandModule.TryParsePrincipal's grammar. An Addon principal's name is resolved against addonNames;
+    // Document-authored grant rows (WorldDefinition.Grants). Console and Seat grantees are already canonical per
+    // Grantee.TryParse's grammar. An Addon principal's name is resolved against addonNames;
     // a Peer's index is checked against the reserved peer slice (defense in depth against a programmatically
     // constructed definition, since the JSON converter's shared parser already enforces it). An exclusive 'all'
-    // reservation is refused, and no two rows may name the identical (principal, capability, subject) triple —
+    // reservation is refused, and no two rows may name the identical (grantee, capability, subject) triple —
     // unlike the ordinary idempotent re-grant a live world.grant tolerates. Whether a legitimate, non-conflicting row
     // is actually held — including Budget legitimacy — is WorldGrants.TryGrant's decision alone, made once at boot;
     // this pass does not re-derive it.
@@ -377,7 +378,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static void ValidateGrants(IReadOnlyList<WorldGrant> grants, HashSet<string> addonNames, HashSet<string> groupIds, int populationCapacity, int localSeats, List<string> errors) {
-        var seen = new HashSet<(WorldPrincipal, WorldCapability, GrantSubject)>();
+        var seen = new HashSet<(Grantee, WorldCapability, GrantSubject)>();
 
         for (var index = 0; (index < grants.Count); index++) {
             var grant = grants[index];
@@ -388,26 +389,26 @@ public static partial class WorldDefinitionValidator {
             // STRUCTURAL, so a row for it would be accepted-and-inert), which made this a document that validates
             // against itself and then loses a row it declared, every single time it loads. A document may not carry
             // a row nothing will ever hold.
-            if (grant.Principal.Kind == PrincipalKind.World) {
-                errors.Add(item: $"{path}.principal is 'world' — the world's own authored program (a rules effect, a kit's generate effect) holds no grant rows: its authority is STRUCTURAL, admitted before the table is consulted at all, so the grant table refuses this row on every boot and the document would validate against itself.");
+            if (grant.Grantee.Principal.Kind == PrincipalKind.World) {
+                errors.Add(item: $"{path}.grantee is 'world' — the world's own authored program (a rules effect, a kit's generate effect) holds no grant rows: its authority is STRUCTURAL, admitted before the table is consulted at all, so the grant table refuses this row on every boot and the document would validate against itself.");
             } else if (
-                (grant.Principal.Kind == PrincipalKind.Addon) &&
-                !addonNames.Contains(item: (grant.Principal.Name ?? string.Empty))
+                (grant.Grantee.Principal.Kind == PrincipalKind.Addon) &&
+                !addonNames.Contains(item: (grant.Grantee.Principal.Name ?? string.Empty))
             ) {
-                errors.Add(item: $"{path}.principal addon:{grant.Principal.Name} names no declared addon row.");
+                errors.Add(item: $"{path}.grantee addon:{grant.Grantee.Principal.Name} names no declared addon row.");
             } else if (
-                (grant.Principal.Kind == PrincipalKind.Peer) &&
-                (((uint)(grant.Principal.Index - localSeats)) >= ((uint)(populationCapacity - localSeats)))
+                (grant.Grantee.Principal.Kind == PrincipalKind.Peer) &&
+                (((uint)(grant.Grantee.Principal.Index - localSeats)) >= ((uint)(populationCapacity - localSeats)))
             ) {
-                errors.Add(item: $"{path}.principal peer:{grant.Principal.Index} is outside {localSeats}..{(populationCapacity - 1)} for the authored population capacity.");
+                errors.Add(item: $"{path}.grantee peer:{grant.Grantee.Principal.Index} is outside {localSeats}..{(populationCapacity - 1)} for the authored population capacity.");
             } else if (
-                (grant.Principal.Kind == PrincipalKind.Group) &&
-                !groupIds.Contains(item: (grant.Principal.Name ?? string.Empty))
+                (grant.Grantee.Kind == GranteeKind.Group) &&
+                !groupIds.Contains(item: (grant.Grantee.Name ?? string.Empty))
             ) {
                 // The SAME "validates then loses the row" trap the world/addon/peer checks above already close: the
                 // live table refuses an unknown-group grant row too (Server.WorldGrants.Conflicts' reachability
                 // check), so a document that validates against itself here would lose the row on every boot.
-                errors.Add(item: $"{path}.principal group:{grant.Principal.Name} names no declared group row.");
+                errors.Add(item: $"{path}.grantee group:{grant.Grantee.Name} names no declared group row.");
             }
 
             ValidateGrantSubjectBounds(
@@ -424,8 +425,8 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} is exclusive over 'all' — an exclusive reservation must name a concrete subject.");
             }
 
-            if (!seen.Add(item: (grant.Principal, grant.Capability, grant.Subject))) {
-                errors.Add(item: $"{path} duplicates an earlier row naming the same principal, capability, and subject.");
+            if (!seen.Add(item: (grant.Grantee, grant.Capability, grant.Subject))) {
+                errors.Add(item: $"{path} duplicates an earlier row naming the same grantee, capability, and subject.");
             }
         }
     }

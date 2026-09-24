@@ -353,7 +353,7 @@ public static class WorldPlacementStamper {
     /// copies × <see cref="CreationStampEmitter.PerCopyInstanceCount"/> — a panelled shape charges two chains for its
     /// one instance — plus MaxShapesPerStamp for each authoring-headroom copy; see <see cref="StaticStampReservation"/>).</param>
     public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int reservedShapeInstances = 0) {
-        builder.ReservePathTables(checked(((reservedCount * WorldPlacementPolicy.MaxShapesPerStamp) + reservedShapeInstances)));
+        builder.ReservePathTables(shapeCount: checked(((reservedCount * WorldPlacementPolicy.MaxShapesPerStamp) + reservedShapeInstances)));
         for (var index = 0; (index < reservedCount); index++) {
             // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette
             // (the per-id cache only relaxes this; probing as if every stamp were unique is the conservative bound).
@@ -375,8 +375,8 @@ public static class WorldPlacementStamper {
             );
 
             // Each shape charge reserves the chain a text-carrying, scope-free creation's shape emits with its own
-            // field scope (CreationStampEmitter.EmitShapeChain: an eccentric primitive, or a panelled shape whose
-            // two charges together cover its plate chain, copy chain, and shape pair).
+            // field scope (CreationStampEmitter.EmitShapeChain: a dilate/onion/warp/cells shape, or a panelled shape
+            // whose two charges together cover its plate chain, copy chain, and shape pair).
             for (var shape = 0; (shape < WorldPlacementPolicy.MaxShapesPerStamp); shape++) {
                 _ = SdfSolidGeometry.AppendPrimitive(
                     chain: builder.ResetPoint()
@@ -429,8 +429,9 @@ public static class WorldPlacementStamper {
                 chain = chain.SymmetryPlane(normal: Vector3.UnitX);
             }
 
-            // The per-shape field scope an eccentric primitive opens around itself (CreationStampEmitter.EmitShapeChain),
-            // reserved for every shape since any shape may be authored eccentric.
+            // The per-shape field scope a dilate/onion/warp/cells shape opens around itself
+            // (CreationStampEmitter.EmitShapeChain), with the cells relief it may carry, reserved for every shape since
+            // any shape may author one.
             _ = SdfSolidGeometry.AppendPrimitive(
                 chain: chain
                     .Translate(offset: Vector3.Zero)
@@ -467,11 +468,13 @@ public static class WorldPlacementStamper {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
+        WorldBootWork.Count(kind: WorldBootWork.ShapeBuilds);
+
         foreach (var placement in placements) {
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation) ||
                 !IsStaticStamp(
                 creation: creation,
@@ -568,7 +571,7 @@ public static class WorldPlacementStamper {
             if (
                 (WorldDefinitionRows.FindCreation(
                 creations: creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation) ||
                 !IsStaticStamp(
                 creation: creation,

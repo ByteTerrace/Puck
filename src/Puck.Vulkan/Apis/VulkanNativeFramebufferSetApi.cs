@@ -11,14 +11,12 @@ namespace Puck.Vulkan;
 /// framebuffer, and swapchain-image entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSetApi {
-    private const uint AspectColorBit = 0x00000001;
     private const uint ComponentSwizzleIdentity = 0;
     private const uint StructureTypeFramebufferCreateInfo = 37;
     private const uint StructureTypeImageViewCreateInfo = 15;
     private const uint TwoDimensionalImageViewType = 1;
 
     private readonly IAllocator m_allocator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeFramebufferSetApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -29,56 +27,40 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
         m_allocator = allocator;
     }
 
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateFramebuffer = ((delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateFramebuffer"u8
-            )),
-                CreateImageView = ((delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateImageView"u8
-            )),
-                DestroyFramebuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyFramebuffer"u8
-            )),
-                DestroyImageView = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyImageView"u8
-            )),
-                GetSwapchainImagesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkGetSwapchainImagesKHR"u8
-            )),
-            }
-        );
-    }
-
     /// <inheritdoc/>
     public VkResult CreateFramebuffer(VulkanFramebufferCreateRequest request, out nint framebufferHandle) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
-        var createFramebuffer = GetPointers(deviceHandle: request.DeviceHandle).CreateFramebuffer;
-        var attachmentsPointer = m_allocator.Alloc(size: IntPtr.Size);
+        var views = request.ImageViewHandles;
+
+        if (
+            (views is null) ||
+            (views.Count == 0)
+        ) {
+            throw new ArgumentException(
+                message: "A framebuffer binds at least one image view.",
+                paramName: nameof(request)
+            );
+        }
+
+        var createFramebuffer = request.Device.CreateFramebuffer;
+        var attachmentsPointer = m_allocator.Alloc(size: (IntPtr.Size * views.Count));
 
         try {
-            Marshal.WriteIntPtr(
-                ptr: attachmentsPointer,
-                val: request.ImageViewHandle
-            );
-            // SINGLE attachment, SINGLE layer: the request carries one image view, matching the swapchain's single
-            // color target. The render-pass API accepts multiple attachments, so if a multi-attachment pass (e.g. color
-            // + depth, or MRT) is ever paired with this framebuffer, the request must take an array of image views and
-            // AttachmentCount must equal the pass's attachment count — a mismatch creates an invalid framebuffer.
+            for (var index = 0; (index < views.Count); index++) {
+                Marshal.WriteIntPtr(
+                    ofs: (index * IntPtr.Size),
+                    ptr: attachmentsPointer,
+                    val: views[index]
+                );
+            }
+
+            // One layer; one view per attachment of the render pass, in its order.
             var createInfo = new VkFramebufferCreateInfo {
-                AttachmentCount = 1,
+                AttachmentCount = ((uint)views.Count),
                 Height = request.Height,
                 Layers = 1,
                 PAttachments = attachmentsPointer,
@@ -88,7 +70,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
             };
 
             return createFramebuffer(
-                request.DeviceHandle,
+                request.Device.Handle,
                 in createInfo,
                 0,
                 out framebufferHandle
@@ -99,13 +81,12 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
     }
     /// <inheritdoc/>
     public VkResult CreateImageView(VulkanImageViewCreateRequest request, out nint imageViewHandle) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
-        var createImageView = GetPointers(deviceHandle: request.DeviceHandle).CreateImageView;
+        var createImageView = request.Device.CreateImageView;
         var createInfo = new VkImageViewCreateInfo {
             Components = new VkComponentMapping {
                 A = ComponentSwizzleIdentity,
@@ -117,7 +98,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
             Image = request.ImageHandle,
             SType = StructureTypeImageViewCreateInfo,
             SubresourceRange = new VkImageSubresourceRange {
-                AspectMask = AspectColorBit,
+                AspectMask = request.AspectMask,
                 BaseArrayLayer = 0,
                 BaseMipLevel = 0,
                 LayerCount = 1,
@@ -127,53 +108,27 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
         };
 
         return createImageView(
-            request.DeviceHandle,
+            request.Device.Handle,
             in createInfo,
             0,
             out imageViewHandle
         );
     }
     /// <inheritdoc/>
-    public void DestroyFramebuffer(nint deviceHandle, nint framebufferHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == framebufferHandle)
-        ) {
-            return;
-        }
-
-        var destroyFramebuffer = GetPointers(deviceHandle: deviceHandle).DestroyFramebuffer;
-
-        destroyFramebuffer(
-            deviceHandle,
-            framebufferHandle,
-            0
+    public void DestroyFramebuffer(VulkanDeviceCommands device, nint framebufferHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyFramebuffer,
+            handle: framebufferHandle
         );
-    }
     /// <inheritdoc/>
-    public void DestroyImageView(nint deviceHandle, nint imageViewHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == imageViewHandle)
-        ) {
-            return;
-        }
-
-        var destroyImageView = GetPointers(deviceHandle: deviceHandle).DestroyImageView;
-
-        destroyImageView(
-            deviceHandle,
-            imageViewHandle,
-            0
+    public void DestroyImageView(VulkanDeviceCommands device, nint imageViewHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyImageView,
+            handle: imageViewHandle
         );
-    }
     /// <inheritdoc/>
-    public IReadOnlyList<nint> GetSwapchainImages(nint deviceHandle, nint swapchainHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public IReadOnlyList<nint> GetSwapchainImages(VulkanDeviceCommands device, nint swapchainHandle) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: swapchainHandle,
@@ -181,11 +136,11 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
             paramName: nameof(swapchainHandle)
         );
 
-        var getSwapchainImages = GetPointers(deviceHandle: deviceHandle).GetSwapchainImagesKhr;
+        var getSwapchainImages = device.GetSwapchainImagesKhr;
 
         var imageCount = 0U;
         var result = getSwapchainImages(
-            deviceHandle,
+            device.Handle,
             swapchainHandle,
             ref imageCount,
             0
@@ -201,7 +156,7 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
 
         try {
             result = getSwapchainImages(
-                deviceHandle,
+                device.Handle,
                 swapchainHandle,
                 ref imageCount,
                 imageBuffer
@@ -221,13 +176,5 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
         } finally {
             m_allocator.Free(ptr: imageBuffer);
         }
-    }
-
-    private unsafe struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult> CreateFramebuffer;
-        public delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult> CreateImageView;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyFramebuffer;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyImageView;
-        public delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult> GetSwapchainImagesKhr;
     }
 }

@@ -51,5 +51,11 @@ public sealed class LegLedgerTests {
                 values: unresolved.Take(count: 20)
             )}"
         );
+
+        // The committed ledger changes only through `puck baselines maths-ledger`, so every run holds it to the declarations.
+        Assert.True(
+            condition: (File.ReadAllText(path: TestPaths.Artifact(fileName: "leg-ledger.md")).ReplaceLineEndings(replacementText: "\n") == LegLedger.Render(lawRows: rows).ReplaceLineEndings(replacementText: "\n")),
+            userMessage: $"leg-ledger.md does not match the declarations; record it with {TestPaths.RecordCommand} and commit the result."
+        );
     }
 }

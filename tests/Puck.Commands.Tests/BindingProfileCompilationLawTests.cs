@@ -702,8 +702,8 @@ public sealed class BindingProfileCompilationLawTests {
         );
     }
 
-    private sealed class SeatPrincipals : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+    private sealed class SeatPrincipals : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Seat(slot: slot);
     }
     private sealed class TextProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

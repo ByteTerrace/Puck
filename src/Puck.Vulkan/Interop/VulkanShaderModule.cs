@@ -12,8 +12,8 @@ public sealed class VulkanShaderModule : IGpuShaderModule {
 
     private bool m_disposed;
 
-    /// <summary>Gets the native <c>VkDevice</c> handle that owns the shader module.</summary>
-    public nint DeviceHandle { get; }
+    /// <summary>Gets the command table of the logical device that owns the shader module.</summary>
+    public VulkanDeviceCommands Device { get; }
     /// <summary>Gets the native <c>VkShaderModule</c> handle, or zero once the module has been disposed.</summary>
     public nint Handle { get; private set; }
     /// <summary>Gets the shader stage the module implements.</summary>
@@ -21,24 +21,20 @@ public sealed class VulkanShaderModule : IGpuShaderModule {
 
     /// <summary>Initializes a new instance of the <see cref="VulkanShaderModule"/> class, taking ownership of an existing native shader module handle.</summary>
     /// <param name="stage">The shader stage the module implements.</param>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the module.</param>
+    /// <param name="device">The command table of the logical device that owns the module.</param>
     /// <param name="handle">The native <c>VkShaderModule</c> handle to own.</param>
     /// <param name="shaderModuleApi">The API used to destroy the module on disposal.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="shaderModuleApi"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> or <paramref name="handle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="shaderModuleApi"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is zero.</exception>
     public VulkanShaderModule(
         ShaderStage stage,
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         nint handle,
         IVulkanShaderModuleApi shaderModuleApi
     ) {
         ArgumentNullException.ThrowIfNull(argument: shaderModuleApi);
 
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: handle,
@@ -47,7 +43,7 @@ public sealed class VulkanShaderModule : IGpuShaderModule {
         );
 
         Stage = stage;
-        DeviceHandle = deviceHandle;
+        Device = device;
         Handle = handle;
         m_shaderModuleApi = shaderModuleApi;
     }
@@ -58,14 +54,11 @@ public sealed class VulkanShaderModule : IGpuShaderModule {
             return;
         }
 
-        if (0 != Handle) {
-            m_shaderModuleApi.DestroyShaderModule(
-                deviceHandle: DeviceHandle,
-                moduleHandle: Handle
-            );
-            Handle = 0;
-        }
-
+        m_shaderModuleApi.DestroyShaderModule(
+            device: Device,
+            moduleHandle: Handle
+        );
+        Handle = 0;
         m_disposed = true;
     }
 }

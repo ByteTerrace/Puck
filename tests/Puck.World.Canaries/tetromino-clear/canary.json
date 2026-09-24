@@ -1,0 +1,431 @@
+{
+  "id": "tetromino-clear",
+  "title": "Three tetromino pieces lock and the row they complete clears",
+  "binding": "Boots the tetromino world and plays it with the seat's own presses. The bottom row starts with columns 6 to 9 filled and the next three pieces set to O through the bag's cell. The first O moves to the left wall and hard-drops, the second drops beside it, and the third drops where it appears, which completes the bottom row: three pieces lock, one row clears, and the row above drops into its place. The run is recorded and replays exactly. The discriminating leg moves the third O one column right, where it rests on the filled columns a row higher and leaves column 4 open, so nothing clears.",
+  "bootShape": "headless",
+  "requirements": [],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "expect": [
+      {
+        "name": "three-locked",
+        "present": true,
+        "match": "contains",
+        "text": "'locked'.'$value' value=3",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "one-row-cleared",
+        "present": true,
+        "match": "contains",
+        "text": "'lines'.'$value' value=1",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "row-above-dropped",
+        "present": true,
+        "match": "contains",
+        "text": "'well'.'23' value=57855",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "replay-match",
+        "present": true,
+        "match": "contains",
+        "text": "[replay.verify: 'tetromino-clear' | MATCH",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "no-rule-refusal",
+        "present": false,
+        "match": "contains",
+        "text": "effect refused",
+        "stream": "stderr",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "replay.record",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "replay.stop",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "replay.verify",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "wire.errors",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "src/Puck.World/Assets/worlds/games/tetromino.puck"
+  },
+  "discriminating": {
+    "expect": [
+      {
+        "name": "three-locked",
+        "present": true,
+        "match": "contains",
+        "text": "'locked'.'$value' value=3",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "nothing-cleared",
+        "present": true,
+        "match": "contains",
+        "text": "'lines'.'$value' value=0",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "column-four-open",
+        "present": true,
+        "match": "contains",
+        "text": "'well'.'23' value=65151",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "replay-match",
+        "present": true,
+        "match": "contains",
+        "text": "[replay.verify: 'tetromino-clear' | MATCH",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "no-rule-refusal",
+        "present": false,
+        "match": "contains",
+        "text": "effect refused",
+        "stream": "stderr",
+        "type": "line"
+      },
+      {
+        "name": "clean-wire",
+        "present": true,
+        "match": "contains",
+        "text": "[wire.errors: 0 rejected]",
+        "stream": "stdout",
+        "type": "line"
+      }
+    ],
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "replay.record",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 5
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 7
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.state.cell.set",
+        "outcome": "accepted",
+        "occurrence": 4
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 8
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 9
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "body.press",
+        "outcome": "accepted",
+        "occurrence": 10
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 11
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 2
+      },
+      {
+        "verb": "world.state",
+        "outcome": "accepted",
+        "occurrence": 3
+      },
+      {
+        "verb": "replay.stop",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "replay.verify",
+        "outcome": "accepted",
+        "occurrence": 1
+      },
+      {
+        "verb": "wire.errors",
+        "outcome": "accepted",
+        "occurrence": 1
+      }
+    ],
+    "world": "src/Puck.World/Assets/worlds/games/tetromino.puck"
+  }
+}

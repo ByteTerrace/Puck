@@ -13,16 +13,156 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 public sealed class WorldReleaseFixtureBuilderTests {
-    private static async Task PumpAsync(WorldSiloHost host, Task operation, CancellationToken token) {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: token);
+    private static Task PumpAsync(WorldSiloHost host, Task operation, CancellationToken token) => WorldSiloHost.PumpActivationMailboxesAsync(
+        cancellationToken: token,
+        hosts: [host],
+        operation: operation
+    );
+    // The qualify verb's two failure codes over a real captured fixture, with scripted containers in place of Docker:
+    // a pair that ran and failed a leg's claim exits 1, anything that stops the pair from running exits 2, and
+    // neither leaves a receipt. The runner reports the same failures as a result rather than an exception.
+    private static async Task QualifyVerdictsAsync(string fixture, WorldReleaseManifest release, WorldReleaseManifest unsupported, string temporary, CancellationToken token) {
+        var manifests = Directory.CreateDirectory(path: Path.Combine(
+            path1: temporary,
+            path2: "qualify-manifests"
+        )).FullName;
+        var sourcePath = Path.Combine(
+            path1: manifests,
+            path2: "source.json"
+        );
+        var targetPath = Path.Combine(
+            path1: manifests,
+            path2: "target.json"
+        );
+        var unsupportedPath = Path.Combine(
+            path1: manifests,
+            path2: "unsupported.json"
+        );
+        var target = release with { Label = "qualify candidate" };
 
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 20));
-        while (!operation.IsCompleted) { host.DrainActivationMailbox(); await Task.Delay(
-            1,
-            deadline.Token
-        ); }
-        await operation;
-        host.DrainActivationMailbox();
+        File.WriteAllBytes(
+            sourcePath,
+            WorldReleaseManifest.Canonicalize(manifest: release)
+        );
+        File.WriteAllBytes(
+            targetPath,
+            WorldReleaseManifest.Canonicalize(manifest: target)
+        );
+        File.WriteAllBytes(
+            unsupportedPath,
+            WorldReleaseManifest.Canonicalize(manifest: unsupported)
+        );
+
+        async Task<(int ExitCode, string Error, string Evidence)> QualifyAsync(string name, string targetManifest, IWorldReleaseQualificationContainers containers) {
+            var evidence = Path.Combine(
+                path1: temporary,
+                path2: ("qualify-" + name)
+            );
+            var command = WorldReleaseCommand.Create(
+                clock: TimeProvider.System,
+                containers: containers
+            );
+
+            CliExit.Guard(command: command);
+
+            var (exitCode, _, error) = await ConsoleCapture.RunSplitAsync(run: () => command.Parse(["qualify", sourcePath, targetManifest, fixture, "--source-image", "source",
+                "--target-image", "target", "--steps", "4", "--output", evidence]).InvokeAsync(cancellationToken: token));
+
+            return (exitCode, error, evidence);
+        }
+        void AssertNoReceipt(string evidence) {
+            if (Directory.Exists(path: evidence)) {
+                Assert.Empty(collection: Directory.EnumerateFiles(
+                    path: evidence,
+                    searchOption: SearchOption.AllDirectories,
+                    searchPattern: "receipt.json"
+                ));
+            }
+        }
+
+        var failedLeg = await QualifyAsync(
+            containers: new ScriptedContainers(
+                exercise: static _ => 1,
+                imageId: release.EngineImageDigest
+            ),
+            name: "failed-leg",
+            targetManifest: targetPath
+        );
+
+        Assert.Equal(
+            actual: failedLeg.ExitCode,
+            expected: CliExit.Failed
+        );
+        Assert.Contains(
+            actualString: failedLeg.Error,
+            expectedSubstring: "qualification leg 'source-import': the packaged engine exited with code 1"
+        );
+        AssertNoReceipt(evidence: failedLeg.Evidence);
+
+        foreach (var (name, targetManifest, containers, expected) in new (string, string, IWorldReleaseQualificationContainers, string)[] {
+            ("unsupported", unsupportedPath, new ScriptedContainers(exercise: static _ => 0, imageId: release.EngineImageDigest), "release definition"),
+            ("foreign-image", targetPath, new ScriptedContainers(exercise: static _ => 0, imageId: ("sha256:" + new string(c: 'f', count: 64))), "immutable digest"),
+            ("no-engine", targetPath, new ScriptedContainers(exercise: static _ => 0, imageId: null), "cannot inspect"),
+        }) {
+            var refused = await QualifyAsync(
+                containers: containers,
+                name: name,
+                targetManifest: targetManifest
+            );
+
+            Assert.Equal(
+                actual: refused.ExitCode,
+                expected: CliExit.Refused
+            );
+            Assert.Contains(
+                actualString: refused.Error,
+                expectedSubstring: expected
+            );
+            AssertNoReceipt(evidence: refused.Evidence);
+        }
+
+        foreach (var (report, expected) in new (string?, string)[] {
+            (null, "produced no readable state report"),
+            ("not json", "produced no readable state report"),
+            ((("{\"Schema\":\"" + WorldReleaseExerciseResult.CurrentSchema) + "\"}"), "does not prove receipt preservation"),
+        }) {
+            var result = await new WorldReleaseQualificationRunner(
+                containers: new ScriptedContainers(
+                    exercise: directory => {
+                        if (report is not null) {
+                            File.WriteAllText(
+                                contents: report,
+                                path: Path.Combine(
+                                    path1: directory,
+                                    path2: "exercise-result.json"
+                                )
+                            );
+                        }
+
+                        return 0;
+                    },
+                    imageId: release.EngineImageDigest
+                ),
+                fixture: fixture,
+                outputDirectory: Path.Combine(
+                    path1: temporary,
+                    path2: "qualify-reports"
+                ),
+                sourceImage: "source",
+                steps: 4,
+                targetImage: "target"
+            ).RunAsync(
+                cancellationToken: token,
+                source: release,
+                target: target
+            );
+
+            Assert.Null(@object: result.Receipt);
+            Assert.Contains(
+                actualString: result.Failure,
+                expectedSubstring: expected
+            );
+        }
     }
 
     [Fact]
@@ -69,21 +209,17 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 bytes
             );
             var token = TestContext.Current.CancellationToken;
-            var image = Environment.GetEnvironmentVariable(variable: "PUCK_TEST_WORLD_IMAGE");
-            var digest = ((image is null)
-                ? ("sha256:" + new string(
-                    c: 'a',
-                    count: 64
-                ))
-                : JsonNode.Parse(await CliProcess.RunCheckedAsync(
-                    Environment.CurrentDirectory,
-                    "docker",
-                    ["image", "inspect", image],
-                    capture: true,
-                    cancellationToken: token
-                ))![0]!["Id"]!.GetValue<string>()
+            var imageId = await CandidateWorldImage.TryResolveIdAsync(cancellationToken: token);
+            var image = ((imageId is null)
+                ? null
+                : CandidateWorldImage.Tag
             );
+            var digest = (imageId ?? ("sha256:" + new string(
+                c: 'a',
+                count: 64
+            )));
             var release = new WorldReleaseManifest {
+                CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
                 Label = "fixture",
                 SourceRevision = "test",
                 EngineImageDigest = digest,
@@ -109,17 +245,17 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 path2: "fixture"
             );
             var builder = new WorldReleaseFixtureBuilder(
-                blobs,
-                archive,
-                snapshots
+                blobs: blobs,
+                fixtures: snapshots,
+                releases: archive
             );
 
             await builder.BuildAsync(
-                release,
-                owner,
-                null,
-                output,
-                token
+                directory: output,
+                owner: owner,
+                release: release,
+                snapshot: null,
+                token: token
             );
             Assert.Equal(
                 "puck.world.qualification.v1",
@@ -167,32 +303,41 @@ public sealed class WorldReleaseFixtureBuilderTests {
                     ),
                     row.Federation.KeyFile
                 );
-                Assert.Null(value: await authority.LoadRootAsync(
+                var seeded = (await authority.LoadRootAsync(
                     new(
                         Owner: owner,
                         World: row.World
                     ),
                     token
-                ));
+                ))!.Value.Root;
+
+                Assert.Equal(
+                    0,
+                    seeded.Epoch
+                );
+                Assert.Equal(
+                    Guid.Empty,
+                    seeded.FenceToken
+                );
+                Assert.Null(@object: seeded.CheckpointHash);
+                Assert.Null(@object: seeded.ReceiptHash);
                 Assert.Equal(
                     bytes,
-                    (await blobs.ReadAsync(
-                        local,
-                        WorldOwnedWorldSync.HostedAddressFor(
-                            owner,
-                            row.World,
-                            "definition.json"
+                    (await authority.LoadPublishedDefinitionBytesAsync(
+                        new(
+                            Owner: owner,
+                            World: row.World
                         ),
                         token
-                    ))!.Value.Content.ToArray()
+                    ))!.Value.ToArray()
                 );
             }
-            await Assert.ThrowsAsync<IOException>(() => builder.BuildAsync(
-                release,
-                owner,
-                null,
-                output,
-                token
+            await Assert.ThrowsAsync<IOException>(testCode: () => builder.BuildAsync(
+                directory: output,
+                owner: owner,
+                release: release,
+                snapshot: null,
+                token: token
             ));
             var groups = new WorldReleaseGroupStore(
                 owner: owner,
@@ -212,11 +357,13 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 tagging: new SiloConsoleTagging(output: console)
             );
             var host = new WorldSiloHost(
-                silo with { Release = new(
+                silo with {
+                    Release = new(
                     "official",
                     owner,
                     release.Identity
-                ) },
+                ),
+                },
                 blobs,
                 routing,
                 local
@@ -348,15 +495,15 @@ public sealed class WorldReleaseFixtureBuilderTests {
             );
 
             await new WorldReleaseFixtureBuilder(
-                blobs,
-                archive,
-                capturedArchive
+                blobs: blobs,
+                fixtures: capturedArchive,
+                releases: archive
             ).BuildAsync(
-                release,
-                owner,
-                capture,
-                complete,
-                token
+                directory: complete,
+                owner: owner,
+                release: release,
+                snapshot: capture,
+                token: token
             );
             var restored = new WorldAuthorityBlobStore(
                 store: blobs,
@@ -442,7 +589,6 @@ public sealed class WorldReleaseFixtureBuilderTests {
             );
             var candidate = release with {
                 Label = "metadata candidate",
-                CoordinatorContract = WorldReleaseManifest.MetadataCoordinatorContract,
                 Definitions = release.Definitions.ToDictionary(
                 row => row.Key,
                 _ => ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: candidateBytes)))
@@ -460,27 +606,27 @@ public sealed class WorldReleaseFixtureBuilderTests {
             );
 
             await new WorldReleaseFixtureBuilder(
-                blobs,
-                archive,
-                capturedArchive
+                blobs: blobs,
+                fixtures: capturedArchive,
+                releases: archive
             ).BuildAsync(
-                release,
-                owner,
-                capture,
-                metadataCopy,
-                token
+                directory: metadataCopy,
+                owner: owner,
+                release: release,
+                snapshot: capture,
+                token: token
             );
             var transition = new WorldReleaseQualificationTransition(
-                blobs,
-                archive
+                archive: archive,
+                blobs: blobs
             );
 
             await transition.ApplyAsync(
-                metadataCopy,
-                silo,
-                release,
-                candidate,
-                token
+                definition: silo,
+                directory: metadataCopy,
+                source: release,
+                target: candidate,
+                token: token
             );
             var transformed = new WorldAuthorityBlobStore(
                 store: blobs,
@@ -526,11 +672,11 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 );
             }
             await transition.ApplyAsync(
-                metadataCopy,
-                silo,
-                candidate,
-                release,
-                token
+                definition: silo,
+                directory: metadataCopy,
+                source: candidate,
+                target: release,
+                token: token
             );
             foreach (var row in silo.Worlds) {
                 var saved = (await transformed.LoadRecoveryAsync(
@@ -569,10 +715,10 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 "missing",
                 "missing"
             );
-            var missing = await Assert.ThrowsAsync<InvalidDataException>(() => missingPackages.RunAsync(
-                release,
-                candidate,
-                token
+            var missing = await Assert.ThrowsAsync<InvalidDataException>(testCode: () => missingPackages.RunAsync(
+                cancellationToken: token,
+                source: release,
+                target: candidate
             ));
 
             Assert.Contains(
@@ -618,10 +764,10 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 "missing",
                 archive: archive
             );
-            var unsupportedError = await Assert.ThrowsAsync<InvalidDataException>(() => refusedRunner.RunAsync(
-                release,
-                unsupported,
-                token
+            var unsupportedError = await Assert.ThrowsAsync<InvalidDataException>(testCode: () => refusedRunner.RunAsync(
+                cancellationToken: token,
+                source: release,
+                target: unsupported
             ));
 
             Assert.Contains(
@@ -633,11 +779,27 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: "receipt.json"
             ));
+            await QualifyVerdictsAsync(
+                fixture: complete,
+                release: release,
+                temporary: temporary.FullName,
+                token: token,
+                unsupported: unsupported
+            );
             if (image is not null) {
-                var evidence = (Environment.GetEnvironmentVariable(variable: "PUCK_TEST_RELEASE_EVIDENCE_DIRECTORY") ?? Path.Combine(
-                    path1: temporary.FullName,
-                    path2: "evidence"
-                ));
+                // Retained beside the test assembly for inspection, replaced by the next run's Docker legs.
+                var evidence = Path.Combine(
+                    path1: AppContext.BaseDirectory,
+                    path2: "world-release-evidence"
+                );
+
+                if (Directory.Exists(path: evidence)) {
+                    Directory.Delete(
+                        path: evidence,
+                        recursive: true
+                    );
+                }
+
                 var runner = new WorldReleaseQualificationRunner(
                     complete,
                     Path.GetFullPath(path: evidence),
@@ -646,11 +808,11 @@ public sealed class WorldReleaseFixtureBuilderTests {
                     4
                 );
 
-                Assert.NotNull(await runner.RunAsync(
+                Assert.NotNull(@object: (await runner.RunAsync(
                     release,
                     release with { Label = "candidate" },
                     token
-                ));
+                )).Receipt);
                 var sourceManifestPath = Path.Combine(
                     path1: package.FullName,
                     path2: "release.json"
@@ -669,7 +831,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
                     WorldReleaseManifest.Canonicalize(manifest: candidate)
                 );
                 // Exercise the public qualify command's package retention as well as its four packaged legs.
-                var command = WorldReleaseCommand.Create();
+                var command = WorldReleaseCommand.Create(clock: TimeProvider.System);
 
                 Assert.Equal(
                     0,
@@ -690,7 +852,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
                     var result = proof[proofLeg]!;
 
                     Assert.Equal(
-                        "puck.world.qualification-exercise.v2",
+                        WorldReleaseExerciseResult.CurrentSchema,
                         result["Schema"]!.GetValue<string>()
                     );
                     Assert.Equal(
@@ -773,48 +935,6 @@ public sealed class WorldReleaseFixtureBuilderTests {
                         ));
                     }
                 }
-                var previousImage = Environment.GetEnvironmentVariable(variable: "PUCK_TEST_PREVIOUS_WORLD_IMAGE");
-
-                if (previousImage is not null) {
-                    var previousDigest = JsonNode.Parse(await CliProcess.RunCheckedAsync(
-                        Environment.CurrentDirectory,
-                        "docker",
-                        ["image", "inspect", previousImage],
-                        capture: true,
-                        cancellationToken: token
-                    ))![0]!["Id"]!.GetValue<string>();
-
-                    Assert.NotEqual(
-                        actual: previousDigest,
-                        expected: digest
-                    );
-                    var unsupportedEvidence = Path.Combine(
-                        path1: temporary.FullName,
-                        path2: "old-exercise-evidence"
-                    );
-                    var oldRunner = new WorldReleaseQualificationRunner(
-                        complete,
-                        unsupportedEvidence,
-                        previousImage,
-                        image,
-                        4
-                    );
-                    var oldError = await Assert.ThrowsAsync<InvalidDataException>(() => oldRunner.RunAsync(
-                        release with { EngineImageDigest = previousDigest },
-                        release,
-                        token
-                    ));
-
-                    Assert.Contains(
-                        "receipt-aware exercise",
-                        oldError.Message
-                    );
-                    Assert.Empty(collection: Directory.EnumerateFiles(
-                        path: unsupportedEvidence,
-                        searchOption: SearchOption.AllDirectories,
-                        searchPattern: "receipt.json"
-                    ));
-                }
             }
             foreach (var row in silo.Worlds) {
                 var saved = (await restored.LoadRecoveryAsync(
@@ -849,49 +969,18 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 operation: host.DrainAsync(ct: token),
                 token: token
             );
-            var legacyRows = new Dictionary<string, WorldReleaseFixtureCheckpoint>();
+            var receipts = new Dictionary<string, WorldAuthorityReceiptSnapshot>(comparer: StringComparer.Ordinal);
 
             foreach (var row in silo.Worlds) {
-                legacyRows.Add(
+                receipts.Add(
                     key: row.World.Value,
-                    value: new(
-                        (await capturedArchive.ReadCheckpointAsync(
-                            capture,
-                            row.World.Value,
-                            token
-                        )).ToArray(),
-                        capture.Worlds[row.World.Value].Tick
+                    value: await capturedArchive.ReadReceiptsAsync(
+                        capture,
+                        row.World.Value,
+                        token
                     )
                 );
             }
-            var legacy = await snapshots.SaveAsync(
-                Guid.NewGuid(),
-                "official",
-                release.Identity,
-                capture.MachineId,
-                legacyRows,
-                token
-            );
-            var legacyOutput = Path.Combine(
-                path1: temporary.FullName,
-                path2: "legacy"
-            );
-            var legacyError = await Assert.ThrowsAsync<InvalidDataException>(() => builder.BuildAsync(
-                release,
-                owner,
-                legacy,
-                legacyOutput,
-                token
-            ));
-
-            Assert.Contains(
-                "receipt history proof",
-                legacyError.Message
-            );
-            Assert.False(condition: File.Exists(path: Path.Combine(
-                path1: legacyOutput,
-                path2: "qualification.fixture"
-            )));
             var invalid = await snapshots.SaveAsync(
                 Guid.NewGuid(),
                 "official",
@@ -899,9 +988,10 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 Guid.NewGuid(),
                 new[] { "alpha", "beta" }.ToDictionary(
                     world => world,
-                    _ => new WorldReleaseFixtureCheckpoint(
+                    world => new WorldReleaseFixtureCheckpoint(
                         "invalid checkpoint"u8.ToArray(),
-                        10
+                        10,
+                        receipts[world]
                     )
                 ),
                 token
@@ -911,17 +1001,32 @@ public sealed class WorldReleaseFixtureBuilderTests {
                 path2: "partial"
             );
 
-            await Assert.ThrowsAsync<InvalidDataException>(() => builder.BuildAsync(
-                release,
-                owner,
-                invalid,
-                partial,
-                token
+            await Assert.ThrowsAsync<InvalidDataException>(testCode: () => builder.BuildAsync(
+                directory: partial,
+                owner: owner,
+                release: release,
+                snapshot: invalid,
+                token: token
             ));
             Assert.False(condition: File.Exists(path: Path.Combine(
                 path1: partial,
                 path2: "qualification.fixture"
             )));
         } finally { temporary.Delete(recursive: true); }
+    }
+
+    // A container engine that never starts Docker: every image resolves to imageId, or the engine cannot inspect it at
+    // all when imageId is null, and each exercise answers with the exit code exercise returns for its fixture.
+    private sealed class ScriptedContainers(Func<string, int> exercise, string? imageId) : IWorldReleaseQualificationContainers {
+        public Task<int> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken) =>
+            Task.FromResult(result: exercise(arg: fixture));
+        public Task<WorldReleaseQualificationImage> InspectAsync(string reference, CancellationToken cancellationToken) =>
+            ((imageId is null)
+                ? throw new InvalidOperationException(message: "the container engine cannot inspect images")
+                : Task.FromResult(result: new WorldReleaseQualificationImage(
+                    Id: imageId,
+                    RepoDigests: []
+                )));
+        public Task RemoveAsync(string container) => Task.CompletedTask;
     }
 }

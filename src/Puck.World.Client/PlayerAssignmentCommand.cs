@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
@@ -43,7 +42,7 @@ public static class PlayerAssignmentCommand {
             outcome: roster.AssignDevice(
                 device: device,
                 targetSlot: targetSlot,
-                actingPrincipal: context.ActingPrincipal()
+                actingPrincipal: context.Principal
             ),
             slot: targetSlot
         );

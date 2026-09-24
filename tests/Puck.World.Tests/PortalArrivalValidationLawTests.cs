@@ -105,7 +105,7 @@ public sealed class PortalArrivalValidationLawTests {
             PlacementRowsRaw = [placement],
             References = [new WorldReference(
                 Name: SafeName.Parse(candidate: ReferenceName),
-                Document: "worlds/dest.world.json"
+                Document: "worlds/dest"
             )],
             Destinations = [new WorldDestination(
                 Name: SafeName.Parse(candidate: DestinationName),
@@ -167,7 +167,7 @@ public sealed class PortalArrivalValidationLawTests {
             PlacementRowsRaw = [placement],
             References = [new WorldReference(
                 Name: SafeName.Parse(candidate: ReferenceName),
-                Document: "worlds/dest.world.json"
+                Document: "worlds/dest"
             )],
             Destinations = [new WorldDestination(
                 Name: SafeName.Parse(candidate: DestinationName),

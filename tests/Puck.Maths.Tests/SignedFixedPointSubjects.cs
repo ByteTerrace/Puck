@@ -774,27 +774,70 @@ internal static partial class Subjects {
                 (0 != refused)
             ) { return $"the span format claimed a short destination at raw {raw}"; }
             if (destination[..^1].ContainsAnyExcept(value: '#')) { return $"the failed span format left a partial rendering behind at raw {raw}"; }
-            if (!Throws<FormatException>(action: () => { Span<char> local = stackalloc char[formatBufferLength]; _ = value.TryFormat(
+            if (!Throws<FormatException>(action: () => {
+                Span<char> local = stackalloc char[formatBufferLength]; _ = value.TryFormat(
                 charsWritten: out _,
                 destination: local,
                 format: "N2",
                 provider: null
-            ); })) { return $"the span format accepted an unsupported specifier at raw {raw}"; }
+            );
+            })) { return $"the span format accepted an unsupported specifier at raw {raw}"; }
 
-            var point = rendered.IndexOf(value: '.');
+            return OracleThenParseAll(
+                expected: raw,
+                includeStyledOverloads: includeStyledOverloads,
+                parseStyle: parseStyle,
+                text: rendered
+            );
+        }
+        /// <summary>Proves the half-ULP tie-break at the carrier's own fraction-digit limit: a decimal string exactly at
+        /// the tie between raws one and two rounds to the EVEN one, one just below rounds down, and one just above rounds
+        /// up. A round trip alone never reaches this: every string it parses is the exact terminating expansion of a
+        /// representable raw, so the division remainder is always zero and the tie-break arithmetic never runs.</summary>
+        /// <param name="below">The tie's decimal expansion with its last digit lowered by one.</param>
+        /// <param name="exact">The exact tie at <c>1.5</c> raw units, carrying <c>fractionBitCount + 1</c> digits.</param>
+        /// <param name="above">The tie's decimal expansion with its last digit raised by one.</param>
+        /// <param name="parseStyle">The style the styled entry points take.</param>
+        /// <param name="includeStyledOverloads">Whether the carrier offers the styled entry points.</param>
+        /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+        public static string? TextParseTies(string below, string exact, string above, NumberStyles parseStyle, bool includeStyledOverloads) =>
+            (OracleThenParseAll(
+                expected: 1L,
+                includeStyledOverloads: includeStyledOverloads,
+                parseStyle: parseStyle,
+                text: below
+            ) ??
+                (OracleThenParseAll(
+                expected: 2L,
+                includeStyledOverloads: includeStyledOverloads,
+                parseStyle: parseStyle,
+                text: exact
+            ) ??
+                OracleThenParseAll(
+                expected: 2L,
+                includeStyledOverloads: includeStyledOverloads,
+                parseStyle: parseStyle,
+                text: above
+            )));
+
+        // Re-derives the raw a decimal string names with the shared-nothing decimal oracle (never through the carrier's
+        // Parse), holds it to the caller's expectation, then proves every parse entry point agrees — so a wrong
+        // expectation in the test, not just a wrong subject, is caught.
+        private static string? OracleThenParseAll(string text, long expected, NumberStyles parseStyle, bool includeStyledOverloads) {
+            var point = text.IndexOf(value: '.');
             var digits = ((point < 0)
-                ? rendered
+                ? text
                 : string.Concat(
-                    str0: rendered.AsSpan(
+                    str0: text.AsSpan(
                         length: point,
                         start: 0
                     ),
-                    str1: rendered.AsSpan(start: (point + 1))
+                    str1: text.AsSpan(start: (point + 1))
                 )
             );
             var fractionDigitCount = ((point < 0)
                 ? 0
-                : ((rendered.Length - point) - 1)
+                : ((text.Length - point) - 1)
             );
 
             var (inRange, quantized) = Oracles.DecimalToRaw(
@@ -808,13 +851,13 @@ internal static partial class Subjects {
 
             if (
                 !inRange ||
-                (quantized != raw)
-            ) { return $"the oracle re-derived '{rendered}' as {quantized} (in range: {inRange}), not {raw}"; }
+                (quantized != expected)
+            ) { return $"the oracle re-derived '{text}' as {quantized} (in range: {inRange}), not {expected}"; }
 
             return ParseAll(
-                text: rendered,
+                text: text,
                 provider: CultureInfo.InvariantCulture,
-                expected: raw,
+                expected: expected,
                 parseStyle: parseStyle,
                 includeStyledOverloads: includeStyledOverloads
             );

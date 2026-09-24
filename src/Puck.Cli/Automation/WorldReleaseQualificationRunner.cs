@@ -1,21 +1,38 @@
-using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Abstractions;
+using Puck.Assets;
+using Puck.Networking;
 using Puck.Storage;
 using Puck.World;
 using Puck.World.Server;
 
 namespace Puck.Cli.Automation;
 
-/// <summary>Executes an ordered package pair against copied state in isolated Docker containers. The fixture
-/// must be a coherent, offline export; the runner never mounts or changes the source store.</summary>
+/// <summary>
+/// Executes an ordered package pair against copied state in isolated containers. The fixture must be a coherent,
+/// offline export; the runner never mounts or changes the source store.
+/// <para>
+/// A run that exercised the pair returns its verdict: a receipt, or the claim a leg failed (a packaged engine that
+/// exited nonzero, overran <see cref="LegTimeout"/>, reported an incomplete or non-advancing inventory, or lost
+/// receipts, or two imports that disagree). A run that cannot exercise the pair throws: bad input, an unmarked or
+/// mismatched fixture, an unsupported pair, an image that is not the release's, or a container engine that cannot
+/// inspect or start an image.
+/// </para>
+/// </summary>
 internal sealed class WorldReleaseQualificationRunner(string fixture, string outputDirectory, string sourceImage, string targetImage, int steps = 60,
-    WorldReleaseArchive? archive = null)
+    WorldReleaseArchive? archive = null, TimeProvider? clock = null, IWorldReleaseQualificationContainers? containers = null)
     : IWorldReleaseQualificationRunner, IWorldReleaseBootstrapQualificationRunner {
+    /// <summary>Gets how long one packaged leg may run, on the runner's clock, before it is abandoned.</summary>
+    public static TimeSpan LegTimeout { get; } = TimeSpan.FromMinutes(minutes: 5);
+
     private const string Marker = "puck.world.qualification.v1";
+
+    private readonly TimeProvider m_clock = (clock ?? TimeProvider.System);
+    private readonly IWorldReleaseQualificationContainers m_containers = (containers ?? new WorldReleaseQualificationDocker(clock: (clock ?? TimeProvider.System)));
+
     private const int MaximumFileBytes = WorldReleaseFixtureArchive.MaximumCheckpointBytes;
 
     private static void CopyFixture(string source, string destination, WorldSiloDefinition definition) {
@@ -97,9 +114,7 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
                 );
                 if (!key.StartsWith(
                     (Path.GetFullPath(path: source).TrimEnd(trimChar: Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar),
-                    (OperatingSystem.IsWindows()
-                    ? StringComparison.OrdinalIgnoreCase
-                    : StringComparison.Ordinal)
+                    PuckPaths.Comparison
                 )) {
                     throw new InvalidDataException(message: "qualification signing keys must be inside the disposable fixture");
                 }
@@ -169,33 +184,6 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             }
         }
     }
-    private static async Task<string> DockerAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken, bool allowFailure = false) {
-        var start = new ProcessStartInfo(fileName: "docker") { CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false };
-
-        foreach (var argument in arguments) { start.ArgumentList.Add(item: argument); }
-        using var process = (Process.Start(startInfo: start) ?? throw new IOException(message: "cannot start Docker qualification process"));
-        var output = process.StandardOutput.ReadToEndAsync(cancellationToken: cancellationToken);
-        var errors = process.StandardError.ReadToEndAsync(cancellationToken: cancellationToken);
-
-        try { await process.WaitForExitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) {
-            if (!process.HasExited) { process.Kill(entireProcessTree: true); }
-            await process.WaitForExitAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
-            throw;
-        }
-        var text = await output.ConfigureAwait(continueOnCapturedContext: false);
-        var error = await errors.ConfigureAwait(continueOnCapturedContext: false);
-
-        if (
-            (process.ExitCode != 0) &&
-            !allowFailure
-        ) { throw new InvalidOperationException(message: $"packaged qualification failed: {error}"); }
-        return text;
-    }
-    private static bool FullPin(string? value) => ((value is { Length: 71 }) && value.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "sha256/"
-    ) && (value.AsSpan(7).IndexOfAnyExcept("0123456789abcdef") < 0));
-    private static string Hash(byte[] bytes) => ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
     private static string HashTree(string directory) {
         var files = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -218,16 +206,18 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             ))) { continue; }
             files.Add(
                 key: relative,
-                value: Hash(bytes: ConfinedFile.ReadAllBytes(
+                value: ContentPin.Compute(content: ConfinedFile.ReadAllBytes(
                     maximumBytes: MaximumFileBytes,
                     path: file
-                ))
+                )).ToString()
             );
         }
-        return Hash(bytes: JsonSerializer.SerializeToUtf8Bytes(files));
+        return ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(files)).ToString();
     }
-    private async Task<(string Directory, WorldReleaseExerciseResult Result)> LegAsync(string seed, string name, string image,
-        WorldSiloDefinition definition, string run, CancellationToken cancellationToken, bool bootstrap = false) {
+    // One packaged leg: its verdict is a report, or the claim the packaged engine failed. Only a leg that cannot start
+    // throws.
+    private async Task<LegOutcome> LegAsync(string seed, string name, string image, WorldSiloDefinition definition, string run,
+        CancellationToken cancellationToken, bool bootstrap = false) {
         var leg = Path.Combine(
             path1: run,
             path2: name
@@ -247,7 +237,8 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             target: new DirectoryObjectStorageTarget(Path.Combine(
                 path1: leg,
                 path2: "store"
-            ))
+            )),
+            timeProvider: m_clock
         );
         var expectedReceipts = WorldReleaseReceiptProof.Hash(inventory: await WorldReleaseReceiptProof.ReadAsync(
             allowMissingRoots: bootstrap,
@@ -256,52 +247,61 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             token: cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false));
         var container = ("puck-qualification-" + Guid.NewGuid().ToString(format: "N"));
+        int exitCode;
 
         Console.WriteLine(value: $"Qualification {name}: {image}");
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+        using var deadline = new OperationDeadline(
+            caller: cancellationToken,
+            timeout: LegTimeout,
+            timeProvider: m_clock
+        );
 
-        deadline.CancelAfter(delay: TimeSpan.FromMinutes(minutes: 5));
         try {
-            await DockerAsync(
-                [
-                "run", "--name", container, "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
-                "--security-opt", "no-new-privileges", "--pids-limit", "256", "--memory", "4g", "--cpus", "2",
-                "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "--mount", $"type=bind,source={leg},target=/fixture",
-                "--entrypoint", "dotnet", image, "/puck-cli/Puck.Cli.dll", "world", "release", "exercise", "/fixture",
-                "--steps", steps.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-            ],
-                deadline.Token
+            exitCode = await m_containers.ExerciseAsync(
+                cancellationToken: deadline.Token,
+                container: container,
+                fixture: leg,
+                image: image,
+                steps: steps
             ).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
-            throw new TimeoutException(message: $"qualification leg '{name}' exceeded its five-minute limit; no receipt was produced");
+            return LegOutcome.Failed(failure: $"qualification leg '{name}' exceeded its five-minute limit; no receipt was produced");
         } finally {
-            // Killing a Docker client does not stop its container. Always remove this runner's unique container,
-            // including after cancellation, before another leg can use its completed state.
-            using var cleanup = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 30));
-
-            await DockerAsync(
-                ["rm", "--force", container],
-                cleanup.Token,
-                allowFailure: true
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            // Removal runs before another leg can use this leg's completed state, cancellation included.
+            await m_containers.RemoveAsync(container: container).ConfigureAwait(continueOnCapturedContext: false);
         }
-        var result = (JsonSerializer.Deserialize<WorldReleaseExerciseResult>(ConfinedFile.ReadAllBytes(
-            Path.Combine(
-                path1: leg,
-                path2: "exercise-result.json"
-            ),
-            (1024 * 1024)
-        ))
-            ?? throw new InvalidDataException(message: "qualification leg produced no state report"));
+        if (exitCode != 0) {
+            return LegOutcome.Failed(failure: $"qualification leg '{name}': the packaged engine exited with code {exitCode}");
+        }
+        var report = Path.Combine(
+            path1: leg,
+            path2: "exercise-result.json"
+        );
+        WorldReleaseExerciseResult? result;
+
+        try {
+            result = (File.Exists(path: report)
+                ? JsonSerializer.Deserialize<WorldReleaseExerciseResult>(ConfinedFile.ReadAllBytes(
+                    maximumBytes: (1024 * 1024),
+                    path: report
+                ))
+                : null
+            );
+        } catch (JsonException) {
+            result = null;
+        }
+        if (result is null) {
+            return LegOutcome.Failed(failure: $"qualification leg '{name}' produced no readable state report");
+        }
         var worlds = definition.Worlds.Select(selector: row => row.World.Value).ToHashSet(comparer: StringComparer.Ordinal);
 
         if (
-            (result.Schema != "puck.world.qualification-exercise.v2") ||
+            (result.Schema != WorldReleaseExerciseResult.CurrentSchema) ||
             (result.ReceiptSeedHash != expectedReceipts) ||
             (result.ImportedReceiptHash != expectedReceipts) ||
             (result.ContinuedReceiptHash != expectedReceipts)
         ) {
-            throw new InvalidDataException(message: "packaged engine did not prove receipt preservation and duplicate handling; qualification requires receipt-aware exercise tooling");
+            return LegOutcome.Failed(failure: $"qualification leg '{name}': the packaged engine report has another schema or does not prove receipt preservation and duplicate handling");
         }
         if (
             (result.Steps != steps) ||
@@ -309,40 +309,47 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             (result.ContinuedTicks is null) ||
             !worlds.SetEquals(other: result.ImportedTicks.Keys) ||
             !worlds.SetEquals(other: result.ContinuedTicks.Keys) ||
-            !FullPin(value: result.ImportedStateHash) ||
-            !FullPin(value: result.ContinuedStateHash) ||
+            !ContentPin.TryParse(
+                pin: out _,
+                text: result.ImportedStateHash
+            ) ||
+            !ContentPin.TryParse(
+                pin: out _,
+                text: result.ContinuedStateHash
+            ) ||
             worlds.Any(predicate: world => (result.ContinuedTicks[world] < result.ImportedTicks[world])) ||
             !worlds.Any(predicate: world => (result.ContinuedTicks[world] > result.ImportedTicks[world]))
         ) {
-            throw new InvalidDataException(message: "qualification leg did not report a complete advancing inventory");
+            return LegOutcome.Failed(failure: $"qualification leg '{name}' did not report a complete advancing inventory");
         }
-        return (leg, result);
+        return new(
+            Directory: leg,
+            Failure: null,
+            Result: result
+        );
     }
-    private static async Task<string> ResolveImageAsync(string reference, string expected, CancellationToken cancellationToken) {
+    private async Task<string> ResolveImageAsync(string reference, string expected, CancellationToken cancellationToken) {
         if (
             string.IsNullOrWhiteSpace(value: reference) ||
             reference.StartsWith(value: '-')
         ) { throw new InvalidDataException(message: "qualification requires an image reference"); }
-        var json = await DockerAsync(
-            ["image", "inspect", reference],
-            cancellationToken
+        var image = await m_containers.InspectAsync(
+            cancellationToken: cancellationToken,
+            reference: reference
         ).ConfigureAwait(continueOnCapturedContext: false);
-        using var document = JsonDocument.Parse(json);
-        var image = document.RootElement.EnumerateArray().Single();
-        var id = image.GetProperty(propertyName: "Id").GetString()!;
 
         if (
-            (id != expected) &&
-            !image.GetProperty(propertyName: "RepoDigests").EnumerateArray().Any(predicate: value => (value.GetString()?.EndsWith(
+            (image.Id != expected) &&
+            !image.RepoDigests.Any(predicate: value => value.EndsWith(
             comparisonType: StringComparison.Ordinal,
             value: ("@" + expected)
-        ) == true))
+        ))
         ) {
             throw new InvalidDataException(message: "qualification image does not match the release's immutable digest");
         }
-        return id;
+        return image.Id;
     }
-    private async Task<WorldReleaseQualificationReceipt?> RunPairAsync(WorldReleaseManifest? source, WorldReleaseManifest target, CancellationToken cancellationToken) {
+    private async Task<WorldReleaseQualificationResult> RunPairAsync(WorldReleaseManifest? source, WorldReleaseManifest target, CancellationToken cancellationToken) {
         if (steps is < 1 or > 1024) { throw new ArgumentOutOfRangeException(paramName: nameof(steps)); }
         IReadOnlyList<WorldReleaseDefinitionChange> changes = [];
 
@@ -491,6 +498,10 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             cancellationToken,
             bootstrap: (source is null)
         ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (a.Failure is { } sourceImportFailure) {
+            return WorldReleaseQualificationResult.Failed(failure: sourceImportFailure);
+        }
         var b = await LegAsync(
             forwardSeed,
             "target-import",
@@ -501,10 +512,13 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             bootstrap: (source is null)
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (a.Result.ImportedStateHash != b.Result.ImportedStateHash) {
-            throw new InvalidDataException(message: "candidate import changed the complete source state");
+        if (b.Failure is { } targetImportFailure) {
+            return WorldReleaseQualificationResult.Failed(failure: targetImportFailure);
         }
-        var reverseSeed = b.Directory;
+        if (a.Result!.ImportedStateHash != b.Result!.ImportedStateHash) {
+            return WorldReleaseQualificationResult.Failed(failure: "candidate import changed the complete source state");
+        }
+        var reverseSeed = b.Directory!;
 
         if (transition is not null) {
             reverseSeed = Path.Combine(
@@ -514,7 +528,7 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             CopyFixture(
                 definition: definition,
                 destination: reverseSeed,
-                source: b.Directory
+                source: b.Directory!
             );
             await transition.ApplyAsync(
                 definition: definition,
@@ -533,6 +547,10 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             run,
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (reverse.Failure is { } reverseFailure) {
+            return WorldReleaseQualificationResult.Failed(failure: reverseFailure);
+        }
         var reference = await LegAsync(
             reverseSeed,
             "target-reverse-reference",
@@ -542,8 +560,11 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (reverse.Result.ImportedStateHash != reference.Result.ImportedStateHash) {
-            throw new InvalidDataException(message: "source cannot preserve the candidate-written continuation state");
+        if (reference.Failure is { } referenceFailure) {
+            return WorldReleaseQualificationResult.Failed(failure: referenceFailure);
+        }
+        if (reverse.Result!.ImportedStateHash != reference.Result!.ImportedStateHash) {
+            return WorldReleaseQualificationResult.Failed(failure: "source cannot preserve the candidate-written continuation state");
         }
         var evidence = JsonSerializer.SerializeToUtf8Bytes(new {
             Schema = "puck.world.qualification.v1",
@@ -573,7 +594,7 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
         var receipt = new WorldReleaseQualificationReceipt {
             SourceRelease = source?.Identity,
             TargetRelease = target.Identity,
-            EvidenceId = Hash(bytes: evidence),
+            EvidenceId = ContentPin.Compute(content: evidence).ToString(),
             SourceStateHash = a.Result.ImportedStateHash,
             TargetStateHash = b.Result.ImportedStateHash,
             ReverseStateHash = reverse.Result.ImportedStateHash,
@@ -592,19 +613,28 @@ internal sealed class WorldReleaseQualificationRunner(string fixture, string out
             path1: run,
             path2: "evidence.json"
         )}");
-        return receipt;
+        return WorldReleaseQualificationResult.Qualified(receipt: receipt);
     }
 
-    public Task<WorldReleaseQualificationReceipt?> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
+    public Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
         RunPairAsync(
             cancellationToken: cancellationToken,
             source: null,
             target: target
         );
-    public Task<WorldReleaseQualificationReceipt?> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
+    public Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
         RunPairAsync(
             cancellationToken: cancellationToken,
             source: source,
             target: target
         );
+
+    // A leg's verdict: its directory and report, or the claim it failed.
+    private sealed record LegOutcome(string? Directory, WorldReleaseExerciseResult? Result, string? Failure) {
+        public static LegOutcome Failed(string failure) => new(
+            Directory: null,
+            Failure: failure,
+            Result: null
+        );
+    }
 }

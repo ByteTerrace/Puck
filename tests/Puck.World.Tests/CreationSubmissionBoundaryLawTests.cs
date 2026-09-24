@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 
 using Xunit;
@@ -31,7 +32,7 @@ public sealed class CreationSubmissionBoundaryLawTests {
         // The denial: an unresolved `state.` spatial reference — exactly what a traveler's copied document carries
         // when its source world's state vocabulary did not travel with it.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertCreation(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Creation: Piece(rotation: "\"state.spatial.identityQuaternion\"")
         ));
         fixture.Step();
@@ -44,7 +45,7 @@ public sealed class CreationSubmissionBoundaryLawTests {
         // The control: the identical document with the reference resolved to its literal, and NO carried hash —
         // the canonical hash is adopted rather than refused, so the row lands and self-verifies.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertCreation(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Creation: Piece(rotation: "[0,0,0,1]")
         ));
         fixture.Step();

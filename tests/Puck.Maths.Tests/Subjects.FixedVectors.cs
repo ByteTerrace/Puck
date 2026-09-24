@@ -222,94 +222,38 @@ internal static partial class Subjects {
             result: result,
             right: right
         );
+
+    // Folds both operands onto the narrow branch before running the operation, so a subject and its oracle see
+    // identically folded lanes.
+    private static VectorBinaryOp OnNarrowSpaceLanes(VectorBinaryOp operation) =>
+        (left, right, result) => {
+            Span<long> foldedLeft = stackalloc long[3];
+            Span<long> foldedRight = stackalloc long[3];
+
+            NarrowLanes(
+                destination: foldedLeft,
+                source: left
+            );
+            NarrowLanes(
+                destination: foldedRight,
+                source: right
+            );
+            operation(
+                foldedLeft,
+                foldedRight,
+                result
+            );
+        };
+
     /// <summary>The subject space's three dot products ON THE NARROW BRANCH.</summary>
-    /// <param name="left">The first vector's raws.</param>
-    /// <param name="right">The second vector's raws.</param>
-    /// <param name="result">The three dot products' raws.</param>
-    public static void NarrowSpaceDotLanes(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        Span<long> foldedLeft = stackalloc long[3];
-        Span<long> foldedRight = stackalloc long[3];
-
-        NarrowLanes(
-            destination: foldedLeft,
-            source: left
-        );
-        NarrowLanes(
-            destination: foldedRight,
-            source: right
-        );
-        SpaceDotLanes(
-            left: foldedLeft,
-            result: result,
-            right: foldedRight
-        );
-    }
+    public static readonly VectorBinaryOp NarrowSpaceDotLanes = OnNarrowSpaceLanes(operation: SpaceDotLanes);
     /// <summary>The oracle for the narrow branch's three dot products.</summary>
-    /// <param name="left">The first vector's raws.</param>
-    /// <param name="right">The second vector's raws.</param>
-    /// <param name="result">The three reference raws.</param>
-    public static void NarrowSpaceDotLanesOracle(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        Span<long> foldedLeft = stackalloc long[3];
-        Span<long> foldedRight = stackalloc long[3];
-
-        NarrowLanes(
-            destination: foldedLeft,
-            source: left
-        );
-        NarrowLanes(
-            destination: foldedRight,
-            source: right
-        );
-        SpaceDotLanesOracle(
-            left: foldedLeft,
-            result: result,
-            right: foldedRight
-        );
-    }
+    public static readonly VectorBinaryOp NarrowSpaceDotLanesOracle = OnNarrowSpaceLanes(operation: SpaceDotLanesOracle);
     /// <summary>The subject space's cross product ON THE NARROW BRANCH.</summary>
-    /// <param name="left">The first vector's raws.</param>
-    /// <param name="right">The second vector's raws.</param>
-    /// <param name="result">The cross product's three raws.</param>
-    public static void NarrowSpaceCrossLanes(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        Span<long> foldedLeft = stackalloc long[3];
-        Span<long> foldedRight = stackalloc long[3];
-
-        NarrowLanes(
-            destination: foldedLeft,
-            source: left
-        );
-        NarrowLanes(
-            destination: foldedRight,
-            source: right
-        );
-        SpaceCrossLanes(
-            left: foldedLeft,
-            result: result,
-            right: foldedRight
-        );
-    }
+    public static readonly VectorBinaryOp NarrowSpaceCrossLanes = OnNarrowSpaceLanes(operation: SpaceCrossLanes);
     /// <summary>The oracle for the narrow branch's cross product.</summary>
-    /// <param name="left">The first vector's raws.</param>
-    /// <param name="right">The second vector's raws.</param>
-    /// <param name="result">The three reference raws.</param>
-    public static void NarrowSpaceCrossLanesOracle(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        Span<long> foldedLeft = stackalloc long[3];
-        Span<long> foldedRight = stackalloc long[3];
+    public static readonly VectorBinaryOp NarrowSpaceCrossLanesOracle = OnNarrowSpaceLanes(operation: SpaceCrossLanesOracle);
 
-        NarrowLanes(
-            destination: foldedLeft,
-            source: left
-        );
-        NarrowLanes(
-            destination: foldedRight,
-            source: right
-        );
-        SpaceCrossLanesOracle(
-            left: foldedLeft,
-            result: result,
-            right: foldedRight
-        );
-    }
     /// <summary>The fused one-rounding side of the product canary: the plane's dot and wedge and the space's dot, all
     /// on narrow-folded operands where nothing saturates and every operand is strictly inside the accumulator's own
     /// bound.</summary>

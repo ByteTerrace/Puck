@@ -13,7 +13,7 @@ choices supersede the island-ranger palette and helmet defaults below. The
 [Moth studio guide](../../../src/Puck.World/Assets/worlds/avatars/moth.md) owns the current authored
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
-The [Moth concept pack](moth-concept-pack-2026-09-09/README.md) expands the selected
+The [Moth concept pack](moth-concept-pack/README.md) expands the selected
 source into character views, facial and armor details, proposed wing mechanics,
 and movement studies. Its guide distinguishes the owner-selected design from
 generated mechanical proposals.
@@ -137,7 +137,7 @@ Aim for 36–44 authored shapes, keeping headroom beneath the live stamp limit. 
 
 Move allocations when the silhouette earns it. Count mirrored pieces separately. Prefer simple existing primitives and rigid transforms. Add a new ISA operation only under the owning skill's admission rule, never just to name an armor plate.
 
-Use plain unions for most separate armor pieces and smooth unions only where a continuous surface is intended. A carve, group, eccentric shape, or field modifier can change evaluation and culling costs; inspect the emitted program and profile it. Do not add procedural noise to this character: clean plates are the art direction, and creation-level noise has body-look restrictions in the present authoring contract.
+Use plain unions for most separate armor pieces and smooth unions only where a continuous surface is intended. A carve, group, or field modifier can change evaluation and culling costs; inspect the emitted program and profile it. Do not add procedural noise to this character: clean plates are the art direction, and creation-level noise has body-look restrictions in the present authoring contract.
 
 ## 4. Animation direction
 
@@ -238,7 +238,7 @@ Judge each category as **pass**, **revise**, or **blocked**, citing the capture 
 
 ## 7. Verification mechanics and boundaries
 
-Use the running `Puck.World`; a build proves compilation, not the character. Consult the current [world skill](../../../.claude/skills/puck-world/SKILL.md) for console grammar, capture behavior, body/seat indexing, and run recipes, and the [SDF skill](../../../.claude/skills/sdf-world/SKILL.md) for shader contract pairs and bytecode regeneration. Do not run the quarantined Post battery.
+Use the running `Puck.World`; a build proves compilation, not the character. Consult the current [world skill](../../../.claude/skills/puck-world/SKILL.md) for console grammar, capture behavior, body/seat indexing, and run recipes, and the [rendering skill](../../../.claude/skills/rendering/SKILL.md) for shader contract pairs and shader builds. Do not run the quarantined Post battery.
 
 The baseline launch shape is:
 

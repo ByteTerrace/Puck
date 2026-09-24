@@ -22,7 +22,6 @@ public sealed class WorldScheduleLawTests {
         Tick: tick
     );
     private static WorldScheduleSection Schedule(int settleTicks = 4, params WorldScheduleRow[] rows) => new(
-        Directory: "out",
         Rows: rows,
         SettleTicks: settleTicks
     );
@@ -151,18 +150,6 @@ public sealed class WorldScheduleLawTests {
         );
     }
     [Fact]
-    public void AnEmptyDirectoryIsRefusedByName() {
-        Assert.Contains(
-            actualString: Validate(definition: BuildDefinition(schedule: new WorldScheduleSection(
-                Directory: " ",
-                Rows: [Row(tick: 2UL)],
-                SettleTicks: 2
-            ))),
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "schedule.directory is required"
-        );
-    }
-    [Fact]
     public void AnEmptyRowSetStillExportsAtTheSettleMargin() {
         var schedule = Schedule(settleTicks: 7);
 
@@ -203,9 +190,9 @@ public sealed class WorldScheduleLawTests {
             expectedSubstring: "schedule.rows[0].tick is 0"
         );
     }
-    [Theory]
     [InlineData("seat1")]
     [InlineData("seat4")]
+    [Theory]
     public void AnAdmittedPrincipalLabelValidates(string principal) {
         Assert.Equal(
             actual: Validate(definition: BuildDefinition(schedule: Schedule(
@@ -217,7 +204,6 @@ public sealed class WorldScheduleLawTests {
             expected: string.Empty
         );
     }
-    [Theory]
     [InlineData("peer:2:1", "carries a live admission generation")]
     [InlineData("addon:mirror", "has no text ingress door of its own")]
     [InlineData("seat0", "is not a principal label")]
@@ -225,6 +211,7 @@ public sealed class WorldScheduleLawTests {
     [InlineData("seat-1", "is not a principal label")]
     [InlineData("world", "names a World principal, which has no text ingress door")]
     [InlineData("", "is required")]
+    [Theory]
     public void AnUnadmittedPrincipalLabelIsRefusedByName(string principal, string expected) {
         Assert.Contains(
             actualString: Validate(definition: BuildDefinition(schedule: Schedule(
@@ -267,18 +254,18 @@ public sealed class WorldScheduleLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "is not a principal label"
         );
-        Assert.False(condition: WorldPrincipal.TryParse(
+        Assert.False(condition: PrincipalTokens.TryParse(
             principal: out _,
             token: $"seat{(WorldBodiesLimits.LocalSeatCount + 1)}"
         ));
     }
-    [Theory]
     [InlineData("world.state.cell.set counter n 1")]
     [InlineData("world.state.transform {\"$type\":\"observe\"}")]
     [InlineData("world.state.act phase 0 {\"$type\":\"observe\"}")]
     [InlineData("body.pose 1 0 1 90 0 0 0")]
     [InlineData("player.join 2")]
     [InlineData("player.leave 2")]
+    [Theory]
     public void AScheduledStepCommandValidates(string command) {
         Assert.Equal(
             actual: Validate(definition: BuildDefinition(schedule: Schedule(
@@ -290,7 +277,6 @@ public sealed class WorldScheduleLawTests {
             expected: string.Empty
         );
     }
-    [Theory]
     [InlineData("world.rate pause")]
     [InlineData("world.save out/snapshot.world.json")]
     [InlineData("world.load out/snapshot.world.json")]
@@ -303,6 +289,7 @@ public sealed class WorldScheduleLawTests {
     [InlineData("world.control start")]
     [InlineData("replay.record on")]
     [InlineData("world.state.cel.set counter n 7")]
+    [Theory]
     public void ACommandOutsideTheScheduledStepVocabularyIsRefusedByNameWithItsRowIndex(string command) {
         var reason = Validate(definition: BuildDefinition(schedule: Schedule(
             rows: [Row(tick: 2UL), Row(
@@ -322,7 +309,18 @@ public sealed class WorldScheduleLawTests {
         Assert.Equal(
             actual: string.Join(
                 separator: " ",
-                values: WorldScheduleCommands.Admitted
+                values: WorldScheduleCommands.Reads
+            ),
+            expected: "world.hud.template world.match world.observe world.row world.state world.state.observe world.state.similar world.tabletop"
+        );
+        Assert.Equal(
+            actual: WorldScheduleCommands.Admitted,
+            expected: [.. WorldScheduleCommands.Steps.Concat(second: WorldScheduleCommands.Reads).Order(comparer: StringComparer.Ordinal)]
+        );
+        Assert.Equal(
+            actual: string.Join(
+                separator: " ",
+                values: WorldScheduleCommands.Steps
             ),
             // KEEP IN SYNC with tests/Puck.Cli.Tests' ScheduledStepVocabularyLawTests, which ties this set to the
             // live registry rather than to another copy of the list.

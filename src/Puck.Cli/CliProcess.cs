@@ -1,26 +1,63 @@
 using System.Diagnostics;
 using System.Text;
+using Puck.Hosting;
+using Puck.Networking;
 
 namespace Puck.Cli;
 
-// The one child-process boundary for CLI verbs: ordinary tools can inherit the console, while proof runners capture
-// both streams without merging them. The captured shape owns the pipe lifecycle because waiting for a child before
-// draining both streams can deadlock, and returning before the pumps finish loses the tail that often names a crash.
+// The CLI's child-process boundary, over Puck.Hosting's ChildProcess. The tool runner (RunAsync, and RunCheckedAsync
+// over it) adds the one CLI concern ChildProcess lacks, resolving the az and npm cmd.exe launchers to their
+// interpreters, and otherwise is ChildProcess.RunAsync. The proof runner (RunCaptured) differs because a proof judges
+// the transcript itself: it records every line with its sequence and arrival time, can hold stdin open for a
+// continuation handshake, and reports a timeout as data for the proof to judge. A synchronous caller waits on
+// RunAsync. Both runners own the pipe lifecycle, because waiting for a child before draining both streams can
+// deadlock, and returning before the pumps finish loses the tail that often names a crash.
 internal static class CliProcess {
-    // A credential may travel on stdin (docker login --password-stdin), never in an argument or a shell expression.
-    internal static async Task<string> RunCheckedAsync(string root, string executable, IEnumerable<string> arguments, bool capture = false, string? input = null, CancellationToken cancellationToken = default) {
+    // At most three UTF-8 bytes a character, so the head stays inside the smallest default pipe buffer (4 KiB).
+    private const int InputHeadCharacters = 1024;
+
+    // Runs one tool to exit and requires exit code zero: a nonzero exit throws InvalidOperationException naming the
+    // diagnostics stream (captured standard output can be a token, so it is never repeated), and a timeout throws
+    // TimeoutException. A credential may travel on stdin (docker login --password-stdin), never in an argument.
+    internal static async Task<string> RunCheckedAsync(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, bool capture = false, string? input = null, TimeSpan? timeout = null, TimeProvider? clock = null, CancellationToken cancellationToken = default) {
+        var run = await RunAsync(
+            arguments: arguments,
+            cancellationToken: cancellationToken,
+            capture: capture,
+            clock: clock,
+            fileName: fileName,
+            input: input,
+            timeout: timeout,
+            workingDirectory: workingDirectory
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (run.TimedOut) {
+            throw new TimeoutException(message: $"{Path.GetFileName(path: fileName)} did not exit within {timeout}. {run.Stderr}".TrimEnd());
+        }
+        if (run.ExitCode != 0) {
+            throw new InvalidOperationException(message: $"{Path.GetFileName(path: fileName)} exited with code {run.ExitCode}. {run.Stderr}".TrimEnd());
+        }
+        if (
+            capture &&
+            !string.IsNullOrWhiteSpace(value: run.Stderr)
+        ) { Console.Error.WriteLine(value: run.Stderr); }
+        return run.Stdout;
+    }
+    // Runs one tool to exit through ChildProcess.RunAsync, which owns the timeout, tree kill and stream draining, after
+    // resolving the az and npm launchers on Windows.
+    internal static async Task<ChildProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, bool capture = true, string? input = null, TimeSpan? timeout = null, TimeProvider? clock = null, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
         var command = arguments.ToList();
 
         // The cmd.exe launchers behind az and npm re-parse their arguments; their interpreters take a clean vector.
         if (
             OperatingSystem.IsWindows() &&
-            (executable is "az" or "npm")
+            (fileName is "az" or "npm")
         ) {
-            var home = Path.GetDirectoryName(path: FindOnPath(name: (executable + ".cmd")))!;
+            var home = Path.GetDirectoryName(path: FindOnPath(name: (fileName + ".cmd")))!;
 
-            if (executable == "az") {
-                executable = Path.GetFullPath(path: Path.Combine(
+            if (fileName == "az") {
+                fileName = Path.GetFullPath(path: Path.Combine(
                     path1: home,
                     path2: "../python.exe"
                 ));
@@ -29,7 +66,7 @@ internal static class CliProcess {
                     index: 0
                 );
             } else {
-                executable = Path.Combine(
+                fileName = Path.Combine(
                     path1: home,
                     path2: "node.exe"
                 );
@@ -42,70 +79,16 @@ internal static class CliProcess {
                 );
             }
         }
-        var info = new ProcessStartInfo(fileName: executable) {
-            CreateNoWindow = true,
-            RedirectStandardError = capture,
-            RedirectStandardInput = (input is not null),
-            RedirectStandardOutput = capture,
-            UseShellExecute = false,
-            WorkingDirectory = root,
-        };
-
-        if (capture) { info.StandardErrorEncoding = Encoding.UTF8; info.StandardOutputEncoding = Encoding.UTF8; }
-        foreach (var argument in command) { info.ArgumentList.Add(item: argument); }
-        using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {executable}."));
-        var output = (capture
-            ? process.StandardOutput.ReadToEndAsync()
-            : Task.FromResult(result: "")
-        );
-        var errors = (capture
-            ? process.StandardError.ReadToEndAsync()
-            : Task.FromResult(result: "")
-        );
-
-        try {
-            if (input is not null) {
-                await process.StandardInput.WriteAsync(
-                    input.AsMemory(),
-                    cancellationToken
-                ); process.StandardInput.Close();
-            }
-            await process.WaitForExitAsync(cancellationToken: cancellationToken);
-        } catch (OperationCanceledException) {
-            try { if (!process.HasExited) { process.Kill(entireProcessTree: true); } } catch (InvalidOperationException) when (process.HasExited) { }
-            await process.WaitForExitAsync(cancellationToken: CancellationToken.None);
-            await Task.WhenAll(
-                output,
-                errors
-            );
-            throw;
-        }
-        var text = await output;
-        var errorText = await errors;
-
-        // Captured standard output can be a token (`az account get-access-token`), so a failure repeats only the diagnostics stream.
-        if (process.ExitCode != 0) {
-            throw new InvalidOperationException(message: $"{Path.GetFileName(path: executable)} exited with code {process.ExitCode}. {errorText}".TrimEnd());
-        }
-        if (
-            capture &&
-            !string.IsNullOrWhiteSpace(value: errorText)
-        ) { Console.Error.WriteLine(value: errorText); }
-        return text;
-    }
-    internal static int RunStreamedInDirectory(string fileName, string workingDirectory, params string[] arguments) {
-        var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false, WorkingDirectory = workingDirectory };
-
-        foreach (var argument in arguments) {
-            startInfo.ArgumentList.Add(item: argument);
-        }
-
-        using var process = (Process.Start(startInfo: startInfo)
-            ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
-
-        process.WaitForExit();
-
-        return process.ExitCode;
+        return await ChildProcess.RunAsync(
+            arguments: command,
+            cancellationToken: cancellationToken,
+            capture: capture,
+            clock: clock,
+            fileName: fileName,
+            input: input,
+            timeout: timeout,
+            workingDirectory: workingDirectory
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
 
     private static string FindOnPath(string name) {
@@ -149,7 +132,10 @@ internal static class CliProcess {
         return text.ToString();
     }
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
-        Func<CliProcessOutputLine, bool>? continueWhen, string continuationInput) {
+        Func<CliProcessOutputLine, bool>? continueWhen, string continuationInput, Task? continuationGate, TimeProvider clock, CancellationToken cancellationToken, string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environment) {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         var startInfo = new ProcessStartInfo {
             CreateNoWindow = true,
@@ -161,16 +147,51 @@ internal static class CliProcess {
             StandardInputEncoding = utf8NoBom,
             StandardOutputEncoding = utf8NoBom,
             UseShellExecute = false,
+            WorkingDirectory = (workingDirectory ?? string.Empty),
         };
 
         foreach (var argument in arguments) {
             startInfo.ArgumentList.Add(item: argument);
         }
+        foreach (var (name, value) in (environment ?? new Dictionary<string, string?>())) {
+            if (value is null) {
+                _ = startInfo.Environment.Remove(key: name);
+            } else {
+                startInfo.Environment[name] = value;
+            }
+        }
 
         var startedAt = Stopwatch.GetTimestamp();
         using var process = (Process.Start(startInfo: startInfo)
             ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
-        using var cancellation = new CancellationTokenSource(delay: timeout);
+        // A World treats a pipe still empty at its first read as idle and starts stepping, so the input's first bytes are
+        // written here, before any await can yield to a busy thread pool. The head stays under a pipe buffer, so this
+        // write never blocks on a child that has not started reading.
+        var head = Math.Min(
+            val1: input.Length,
+            val2: InputHeadCharacters
+        );
+
+        if (head != 0) {
+            try {
+                process.StandardInput.Write(buffer: input.AsSpan(
+                    length: head,
+                    start: 0
+                ));
+                process.StandardInput.Flush();
+            } catch (IOException) {
+                // An early-exiting child closes its pipe; the writer below meets the same pipe and settles it.
+            }
+
+            input = input[head..];
+        }
+
+        // A caller's cancellation takes the timeout's path: the whole tree is killed and both streams drained.
+        using var cancellation = new OperationDeadline(
+            caller: cancellationToken,
+            timeProvider: clock,
+            timeout: timeout
+        );
         var events = new List<CliProcessOutputLine>();
         var eventGate = new object();
         var sequence = 0L;
@@ -201,7 +222,19 @@ internal static class CliProcess {
         var inputPump = WriteInputAsync(
             writer: process.StandardInput,
             input: input,
-            continueAfter: ((continueWhen is null) ? null : Task.WhenAny(task1: continuation.Task, task2: exited)),
+            continueAfter: ((continueWhen is null)
+                ? null
+                : Task.WhenAny(
+                    task1: ((continuationGate is null)
+                        ? continuation.Task
+                        : Task.WhenAll(
+                            continuation.Task,
+                            continuationGate
+                        )
+                    ),
+                    task2: exited
+                )
+            ),
             continuationInput: continuationInput,
             cancellationToken: cancellation.Token
         );
@@ -212,7 +245,7 @@ internal static class CliProcess {
                 exited,
                 inputPump
             ).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (OperationCanceledException) when (cancellation.IsCancellationRequested) {
+        } catch (OperationCanceledException) when (cancellation.Token.IsCancellationRequested) {
             timedOut = true;
 
             try {
@@ -222,12 +255,15 @@ internal static class CliProcess {
             }
 
             await process.WaitForExitAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
+            try { process.StandardInput.Close(); } catch (IOException) { /* The killed child's pipe is already gone. */ }
         }
 
         var streams = await Task.WhenAll(
             stdout,
             stderr
         ).ConfigureAwait(continueOnCapturedContext: false);
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         return new CliProcessResult(
             ExitCode: process.ExitCode,
@@ -249,14 +285,15 @@ internal static class CliProcess {
             if (continueAfter is not null) {
                 await writer.FlushAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 await continueAfter.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-                await writer.WriteAsync(continuationInput.AsMemory(), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                await writer.WriteAsync(buffer: continuationInput.AsMemory(), cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch (IOException) {
             // An early-exiting child closes its pipe. The missing runner-owned terminal response makes the proof fail;
             // the writer does not replace that decision with an infrastructure exception.
-        } finally {
-            writer.Close();
         }
+        // EOF is the one-shot contract's final input, sent only when the input completed. A timeout leaves stdin open
+        // so the kill, not an EOF the child might treat as its cue to proceed, is what ends the child.
+        writer.Close();
     }
 
     /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time. The result is
@@ -268,61 +305,29 @@ internal static class CliProcess {
     /// killed child reports exit code -1 with both streams empty — indistinguishable from a failure to launch.</remarks>
     public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) => (budget - clock.Elapsed);
     // An optional output predicate releases a final stdin chunk. Keep stdin open while waiting, flush the initial
-    // chunk first, and stop waiting if the child exits or times out. Ordinary one-shot callers are unchanged.
+    // chunk first, and stop waiting if the child exits or times out. A continuation gate also holds that chunk until
+    // the gate completes, so several children can be released together. Ordinary one-shot callers are unchanged. The
+    // timeout runs on clock, the system clock unless a caller supplies one; Timeout.InfiniteTimeSpan sets no deadline,
+    // leaving cancellationToken as the run's only bound. Cancelling cancellationToken kills the
+    // child's whole tree like a timeout, waits for it to exit, and then throws OperationCanceledException; a token
+    // already cancelled starts nothing. The child starts in workingDirectory, or the caller's own when it is null, and
+    // inherits this process's environment with each environment entry applied: a value sets the variable, null removes it.
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
-        Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "") =>
+        Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", TimeProvider? clock = null, Task? continuationGate = null,
+        CancellationToken cancellationToken = default, string? workingDirectory = null, IReadOnlyDictionary<string, string?>? environment = null) =>
         RunCapturedAsync(
             arguments: arguments,
+            cancellationToken: cancellationToken,
+            clock: (clock ?? TimeProvider.System),
+            continuationGate: continuationGate,
             continuationInput: continuationInput,
             continueWhen: continueWhen,
+            environment: environment,
             fileName: fileName,
             input: input,
-            timeout: timeout
+            timeout: timeout,
+            workingDirectory: workingDirectory
         ).GetAwaiter().GetResult();
-    /// <summary>Spawns <paramref name="fileName"/>, drains both streams to their end exactly as read (no line
-    /// splitting or re-joining, so byte content — including line endings — passes through unchanged), waits for
-    /// exit, and returns the raw text alongside the exit code. Unlike <see cref="RunCaptured"/> this leaves the
-    /// child's standard input inherited from the caller rather than redirected, and never times out or kills the
-    /// child — the shape a short, non-interactive, synchronous invocation (a local <c>git</c> query) needs.</summary>
-    public static CliRawProcessResult RunCapturedRaw(string fileName, IReadOnlyList<string> arguments) {
-        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        var startInfo = new ProcessStartInfo {
-            CreateNoWindow = true,
-            FileName = fileName,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            StandardErrorEncoding = utf8NoBom,
-            StandardOutputEncoding = utf8NoBom,
-            UseShellExecute = false,
-        };
-
-        foreach (var argument in arguments) {
-            startInfo.ArgumentList.Add(item: argument);
-        }
-
-        using var process = (Process.Start(startInfo: startInfo)
-            ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
-        // Both pipes drain concurrently: a child that fills one pipe before closing the other would deadlock a
-        // sequential ReadToEnd pair.
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = stderrTask.GetAwaiter().GetResult();
-
-        process.WaitForExit();
-
-        return new CliRawProcessResult(
-            ExitCode: process.ExitCode,
-            Stderr: stderr,
-            Stdout: stdout
-        );
-    }
-    public static int RunStreamed(string fileName, params string[] arguments) {
-        return RunStreamedInDirectory(
-            fileName: fileName,
-            workingDirectory: Environment.CurrentDirectory,
-            arguments: arguments
-        );
-    }
 }
 internal enum CliProcessOutputStream {
     Stdout,
@@ -337,4 +342,3 @@ internal sealed record CliProcessResult(
     string Stdout,
     bool TimedOut
 );
-internal readonly record struct CliRawProcessResult(int ExitCode, string Stderr, string Stdout);

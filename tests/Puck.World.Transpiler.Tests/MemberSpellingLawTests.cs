@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
 using Xunit;
 
@@ -43,23 +42,8 @@ public class MemberSpellingLawTests {
 
         """;
 
-    private static (JsonObject? Document, DiagnosticBag Diagnostics) Compile(string source) {
-        var result = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        return (result.Json, result.Diagnostics);
-    }
-    private static JsonObject Document(string source) {
-        var (document, diagnostics) = Compile(source: source);
-
-        Assert.False(condition: diagnostics.HasErrors, userMessage: string.Join(separator: "\n", values: diagnostics.Select(selector: static diagnostic => diagnostic.ToString())));
-
-        return document!;
-    }
     private static Diagnostic Refusal(string source, string code) => Assert.Single(
-        collection: Compile(source: source).Diagnostics,
+        collection: WorldSources.Compile(source: source).Diagnostics,
         predicate: diagnostic => string.Equals(a: diagnostic.Code, b: code, comparisonType: StringComparison.Ordinal)
     );
 
@@ -75,21 +59,21 @@ public class MemberSpellingLawTests {
     }
     [Fact]
     public void ABarePropertyLineLowersToTheMemberTheQuotedLineDid() {
-        var rule = Document(source: (Rows + "rule \"r\" {\n    mode: Level\n    forEach: deck\n    hp = 1\n}"))["rules"]![0]!;
+        var rule = WorldSources.LowerSourceClean(source: (Rows + "rule \"r\" {\n    mode: Level\n    forEach: deck\n    hp = 1\n}"))["rules"]![0]!;
 
         Assert.Equal(expected: "Level", actual: rule["mode"]!.GetValue<string>());
         Assert.Equal(expected: "deck", actual: rule["forEach"]!.GetValue<string>());
     }
     [Fact]
     public void AnEnumerationWordIsReadInAnyCaseAndIsNeverACompileTimeBinding() {
-        var host = Document(source: (Rows + "let Windowed = 3\n\nhost {\n    backend: auto\n    presentation: Windowed\n}"))["host"]!;
+        var host = WorldSources.LowerSourceClean(source: (Rows + "let Windowed = 3\n\nhost {\n    backend: auto\n    presentation: Windowed\n}"))["host"]!;
 
         Assert.Equal(expected: "auto", actual: host["backend"]!.GetValue<string>());
         Assert.Equal(expected: "Windowed", actual: host["presentation"]!.GetValue<string>());
     }
     [Fact]
     public void ABareNameReadsABindingOnlyWhereTheBindingHoldsANameOrAListOfNames() {
-        var rules = Document(source: (Rows + "let deck = 7\nlet piles = [\"deck\"]\n\nrule \"r\" {\n    forEach: deck\n    zones: piles\n    hp = 1\n}"))["rules"]![0]!;
+        var rules = WorldSources.LowerSourceClean(source: (Rows + "let deck = 7\nlet piles = [\"deck\"]\n\nrule \"r\" {\n    forEach: deck\n    zones: piles\n    hp = 1\n}"))["rules"]![0]!;
 
         Assert.Equal(expected: "deck", actual: rules["forEach"]!.GetValue<string>());
         Assert.Equal(expected: "deck", actual: rules["zones"]![0]!.GetValue<string>());
@@ -98,7 +82,7 @@ public class MemberSpellingLawTests {
     public void ADirectionIsANameOfItsTopologyWrittenBare() {
         const string Ray = "patterns [\n    {\n        name: \"p\"\n        kind: Int\n        value: 1\n        symbols [{ name: \"any\", match: 1 }]\n        match: \"any\"\n    }\n]\n\nrule \"r\" {\n    transform setRay(row: deck, from: a, direction: N, pattern: p, value: 1)\n}";
 
-        Assert.Equal(expected: "N", actual: Document(source: (Rows + Ray))["rules"]![0]!["effects"]![0]!["transform"]!["direction"]!.GetValue<string>());
+        Assert.Equal(expected: "N", actual: WorldSources.LowerSourceClean(source: (Rows + Ray))["rules"]![0]!["effects"]![0]!["transform"]!["direction"]!.GetValue<string>());
         Assert.Contains(
             actualString: Refusal(code: PuckDiagnosticCodes.ArgumentWrittenBare, source: (Rows + Ray.Replace(comparisonType: StringComparison.Ordinal, newValue: "direction: \"N\"", oldValue: "direction: N"))).Message,
             comparisonType: StringComparison.Ordinal,
@@ -108,7 +92,7 @@ public class MemberSpellingLawTests {
     [Fact]
     public void AnInteractionBindsItsSidesSoAPoolFieldIsWrittenAsARuleWritesOne() {
         const string Strike = "interactions {\n    interactions [\n        {\n            coOccurrence: Distance\n            effects [\n                addState(state: right.hits, value: 1)\n            ]\n            left: balls\n            mode: Edge\n            name: \"strike\"\n            range: 1\n            right: paddles\n        }\n    ]\n}";
-        var state = Document(source: (Pools + Strike))["interactions"]!["interactions"]![0]!["effects"]![0]!["state"]!;
+        var state = WorldSources.LowerSourceClean(source: (Pools + Strike))["interactions"]!["interactions"]![0]!["effects"]![0]!["state"]!;
 
         Assert.Equal(expected: "right", actual: state["binding"]!.GetValue<string>());
         Assert.Equal(expected: "hits", actual: state["field"]!.GetValue<string>());
@@ -120,7 +104,7 @@ public class MemberSpellingLawTests {
     }
     [Fact]
     public void AConstructWithItsOwnLoweringStandsAtNoPositionSoItsBodyIsNotClassified() {
-        var (_, diagnostics) = Compile(source: (Rows + "state {\n    world {\n        row {\n            name: \"probe\"\n            kind: \"Int\"\n        }\n    }\n}"));
+        var diagnostics = WorldSources.Compile(source: (Rows + "state {\n    world {\n        row {\n            name: \"probe\"\n            kind: \"Int\"\n        }\n    }\n}")).Diagnostics;
 
         Assert.DoesNotContain(collection: diagnostics, filter: static diagnostic => (diagnostic.Code is PuckDiagnosticCodes.ArgumentWrittenBare or PuckDiagnosticCodes.ArgumentWrittenQuoted));
     }

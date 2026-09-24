@@ -1,194 +1,71 @@
 using System.Text.Json.Nodes;
-using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Embeddings;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
 /// <summary>Decompiler coverage for embedding declarations: spaces, Vector rows, embeds pairs, transforms, and lock-aware literals.</summary>
 public class EmbeddingDeclarationDecompilerTests {
-    private const string SampleVectorBase64 = "fwAAAAAAAAA"; // 8-byte unit vector
+    // A `lore` space of `dimensions`, and then `rows` as the world's rows.
+    private static string Lore(int dimensions, string rows) => $$"""
+        {
+            "schema": "puck.world.definition.v1",
+            "state": {
+                "spaces": [
+                    { "name": "lore", "model": "text-embedding-3-small", "revision": "1", "dimensions": {{dimensions}} }
+                ],
+                "world": [
+                    {{rows}}
+                ]
+            }
+        }
+        """;
 
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Recompile(string puckSource, EmbeddingLock? lockFile = null) {
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            embeddings: lockFile,
-            source: puckSource
+    private const string Memories = $$"""{ "name": "memories", "kind": "Vector", "space": "lore", "cells": [ { "key": "k1", "value": "{{WorldSources.SampleVector}}" } ] }""";
+
+    /// <summary>A document, whether the lock carries <c>hello world</c> in both directions, and what the print must
+    /// say.</summary>
+    private sealed record Print(string Json, bool Locked, string[] Printed);
+
+    private static readonly Dictionary<string, Print> Prints = new(comparer: StringComparer.Ordinal) {
+        ["a spaces block and a Vector slot"] = new(
+            Json: Lore(dimensions: 256, rows: """{ "name": "s", "kind": "Vector", "space": "lore" }"""),
+            Locked: false,
+            Printed: []
+        ),
+        ["a Vector cell with no lock prints its vector literal"] = new(
+            Json: Lore(dimensions: 8, rows: Memories),
+            Locked: false,
+            Printed: ["k1 = vector(\"fwAAAAAAAAA\")"]
+        ),
+        ["a Vector cell the lock carries prints the text it embeds"] = new(
+            Json: Lore(dimensions: 8, rows: Memories),
+            Locked: true,
+            Printed: ["embed(\"hello world\")"]
+        ),
+        ["a text row and its companion vectors print as one embeds table"] = new(
+            Json: Lore(dimensions: 8, rows: """
+                { "name": "loreLog", "kind": "Text", "cells": [ { "key": "entry1", "value": "hello world" } ] },
+                { "name": "companionVectors", "kind": "Vector", "space": "lore", "cells": [ { "key": "entry1", "value": "fwAAAAAAAAA" } ] }
+                """),
+            Locked: true,
+            Printed: ["table loreLog embeds(companionVectors)"]
+        ),
+    };
+
+    public static TheoryData<string> PrintNames() => new(values: Prints.Keys);
+    [MemberData(nameof(PrintNames))]
+    [Theory]
+    public void AnEmbeddingDeclarationPrintsAndRoundTrips(string name) {
+        var print = Prints[name];
+        var printed = WorldSources.AssertRoundTrips(
+            embeddings: (print.Locked ? WorldSources.LoreLock("text-embedding-3-small", "hello world") : null),
+            original: Assert.IsType<JsonObject>(@object: JsonNode.Parse(json: print.Json))
         );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
-    }
-
-    private static void AssertRoundTrips(JsonObject original, EmbeddingLock? lockFile = null) {
-        var decompiled = WorldDecompiler.Decompile(root: original, embeddings: lockFile);
-        var (recompiled, diagnostics) = Recompile(puckSource: decompiled, lockFile: lockFile);
-
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: $"{diagnostics.FormatReport(decompiled)}\n---\n{decompiled}"
-        );
-
-        var mismatch = JsonMismatch.Find(
-            actual: recompiled,
-            expected: original,
-            path: "$"
-        );
+        var missing = print.Printed.Where(predicate: text => !printed.Contains(comparisonType: StringComparison.Ordinal, value: text)).ToArray();
 
         Assert.True(
-            condition: (mismatch is null),
-            userMessage: $"{mismatch}\n---\n{decompiled}"
+            condition: (missing.Length == 0),
+            userMessage: $"{name}: missing [{string.Join(separator: " | ", values: missing)}]{Environment.NewLine}{printed}"
         );
-    }
-
-    private static EmbeddingLock CreateSampleLock() {
-        var lockFile = new EmbeddingLock();
-        var space = new EmbeddingLockSpace(
-            dimensions: 8,
-            model: "text-embedding-3-small",
-            revision: "1"
-        );
-        var hash = EmbeddingLock.ComputeTextHash(text: "hello world");
-        space.Entries[hash] = new EmbeddingLockEntry(Text: "hello world", Vector: SampleVectorBase64);
-        lockFile.Spaces["lore"] = space;
-        return lockFile;
-    }
-
-    [Fact]
-    public void SpacesBlockDecompilesAndRecompilesToSameJson() {
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse("""
-            {
-                "schema": "puck.world.definition.v1",
-                "state": {
-                    "spaces": [
-                        {
-                            "name": "lore",
-                            "model": "text-embedding-3-small",
-                            "revision": "1",
-                            "dimensions": 256
-                        }
-                    ],
-                    "world": [
-                        {
-                            "name": "s",
-                            "kind": "Vector",
-                            "space": "lore"
-                        }
-                    ]
-                }
-            }
-            """));
-
-        AssertRoundTrips(original: original);
-    }
-
-    [Fact]
-    public void VectorRowWithoutLockDecompilesToVectorLiteral() {
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse($$"""
-            {
-                "schema": "puck.world.definition.v1",
-                "state": {
-                    "spaces": [
-                        {
-                            "name": "lore",
-                            "model": "text-embedding-3-small",
-                            "revision": "1",
-                            "dimensions": 8
-                        }
-                    ],
-                    "world": [
-                        {
-                            "name": "memories",
-                            "kind": "Vector",
-                            "space": "lore",
-                            "cells": [
-                                { "key": "k1", "value": "{{SampleVectorBase64}}" }
-                            ]
-                        }
-                    ]
-                }
-            }
-            """));
-
-        var decompiled = WorldDecompiler.Decompile(root: original, embeddings: null);
-        Assert.Contains("k1 = vector(\"fwAAAAAAAAA\")", decompiled);
-        AssertRoundTrips(original: original, lockFile: null);
-    }
-
-    [Fact]
-    public void VectorRowWithLockDecompilesToEmbedLiteral() {
-        var lockFile = CreateSampleLock();
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse($$"""
-            {
-                "schema": "puck.world.definition.v1",
-                "state": {
-                    "spaces": [
-                        {
-                            "name": "lore",
-                            "model": "text-embedding-3-small",
-                            "revision": "1",
-                            "dimensions": 8
-                        }
-                    ],
-                    "world": [
-                        {
-                            "name": "memories",
-                            "kind": "Vector",
-                            "space": "lore",
-                            "cells": [
-                                { "key": "k1", "value": "{{SampleVectorBase64}}" }
-                            ]
-                        }
-                    ]
-                }
-            }
-            """));
-
-        var decompiled = WorldDecompiler.Decompile(root: original, embeddings: lockFile);
-        Assert.Contains("embed(\"hello world\")", decompiled);
-        AssertRoundTrips(original: original, lockFile: lockFile);
-    }
-
-    [Fact]
-    public void EmbedsPairReconstructionDecompilesToTextTableWithEmbedsModifier() {
-        var lockFile = CreateSampleLock();
-        var original = Assert.IsType<JsonObject>(@object: JsonNode.Parse($$"""
-            {
-                "schema": "puck.world.definition.v1",
-                "state": {
-                    "spaces": [
-                        {
-                            "name": "lore",
-                            "model": "text-embedding-3-small",
-                            "revision": "1",
-                            "dimensions": 8
-                        }
-                    ],
-                    "world": [
-                        {
-                            "name": "loreLog",
-                            "kind": "Text",
-                            "cells": [
-                                { "key": "entry1", "value": "hello world" }
-                            ]
-                        },
-                        {
-                            "name": "companionVectors",
-                            "kind": "Vector",
-                            "space": "lore",
-                            "cells": [
-                                { "key": "entry1", "value": "{{SampleVectorBase64}}" }
-                            ]
-                        }
-                    ]
-                }
-            }
-            """));
-
-        var decompiled = WorldDecompiler.Decompile(root: original, embeddings: lockFile);
-        Assert.Contains("table loreLog embeds(companionVectors)", decompiled);
-        AssertRoundTrips(original: original, lockFile: lockFile);
     }
 }

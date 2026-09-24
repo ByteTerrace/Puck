@@ -17,7 +17,7 @@ internal sealed class WorldClientSeats(WorldClient client, PlayerRoster roster, 
     /// <inheritdoc/>
     public void ClearHeld(int slot) => _ = router().ClearSlotHeld(slot: slot);
     /// <inheritdoc/>
-    public void ConfigureLeave(Func<int, WorldPrincipal, bool> leave) => roster.ConfigureLeave(leave: leave);
+    public void ConfigureLeave(Func<int, Principal, bool> leave) => roster.ConfigureLeave(leave: leave);
     /// <inheritdoc/>
     public bool IsOccupied(int slot) => (roster.Seat(slot: slot) is not null);
     /// <inheritdoc/>

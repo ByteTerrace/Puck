@@ -3,11 +3,25 @@
         <PuckKind>Production</PuckKind>
         <PuckLayer>Presentation</PuckLayer>
     </PropertyGroup>
+    <PropertyGroup>
+        <!-- The surface compositor's blit runs only on Direct3D 12, so the shared recipe (build\Shaders.targets) emits its
+             DXIL alone. -->
+        <PuckShaderSpirvEnabled>false</PuckShaderSpirvEnabled>
+    </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Evaluation-time glob for ValidateShaderBytecodeSources (build\Shaders.targets); the shipped Content
+             declaration is owned by the shared CollectShaderBytecode target, which re-globs after CompileShaders. -->
+        <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+    </ItemGroup>
+    <ItemGroup>
+        <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
+        <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
     </ItemGroup>
 </Project>

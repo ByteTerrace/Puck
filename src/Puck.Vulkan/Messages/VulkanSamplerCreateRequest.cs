@@ -1,3 +1,4 @@
+using Puck.Vulkan.Interop;
 namespace Puck.Vulkan.Messages;
 
 /// <summary>
@@ -11,7 +12,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="BorderColor">The predefined border color used with clamp-to-border, as a <c>VkBorderColor</c> value.</param>
 /// <param name="CompareEnable">A <c>VkBool32</c>; <c>VK_TRUE</c> enables comparison against a reference during lookups.</param>
 /// <param name="CompareOp">The comparison operator applied when comparison is enabled, as a <c>VkCompareOp</c> value.</param>
-/// <param name="DeviceHandle">The native <c>VkDevice</c> handle.</param>
+/// <param name="Device">The command table of the logical device.</param>
 /// <param name="Flags">A bitmask of <c>VkSamplerCreateFlagBits</c> specifying additional parameters.</param>
 /// <param name="MagFilter">The magnification filter, as a <c>VkFilter</c> value.</param>
 /// <param name="MaxAnisotropy">The anisotropy clamp used when anisotropic filtering is enabled.</param>
@@ -29,7 +30,7 @@ public readonly record struct VulkanSamplerCreateRequest(
     uint BorderColor,
     uint CompareEnable,
     uint CompareOp,
-    nint DeviceHandle,
+    VulkanDeviceCommands Device,
     uint Flags,
     uint MagFilter,
     float MaxAnisotropy,

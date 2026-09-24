@@ -9,14 +9,13 @@ namespace Puck.Vulkan;
 /// <see cref="GpuPixelFormat"/> constants to <c>VkFormat</c> values at call time.
 /// </summary>
 public sealed class VulkanGpuSurfaceTransferFactory(
+    IVulkanBufferApi bufferApi,
     IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
     IVulkanCommandResourcesFactory commandResourcesFactory,
     IVulkanExternalMemoryApi externalMemoryApi,
     IVulkanFramebufferSetApi framebufferSetApi,
-    IVulkanFrameReadbackApi frameReadbackApi,
     IVulkanFrameSynchronizationApi frameSynchronizationApi,
     IVulkanOffscreenImageApi offscreenImageApi,
-    IVulkanStorageBufferFactory storageBufferFactory,
     VulkanQueueSubmitter queueSubmitter
 ) : IGpuSurfaceTransferFactory {
     /// <inheritdoc/>
@@ -31,9 +30,9 @@ public sealed class VulkanGpuSurfaceTransferFactory(
     /// <inheritdoc/>
     public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) =>
         new VulkanGpuSurfaceReadback(inner: new VulkanSurfaceReadback(
+            bufferApi: bufferApi,
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
-            frameReadbackApi: frameReadbackApi,
             frameSynchronizationApi: frameSynchronizationApi,
             queueSubmitter: queueSubmitter
         ));
@@ -42,13 +41,13 @@ public sealed class VulkanGpuSurfaceTransferFactory(
         // The frame-synchronization API opts the upload into its PIPELINED mode (fenced fire-and-forget — see
         // VulkanSurfaceUpload's remarks), so a per-frame feed behind the frame-ring host never drains the queue.
         new VulkanGpuSurfaceUpload(inner: new VulkanSurfaceUpload(
+            bufferApi: bufferApi,
             commandBufferRecordingApi: commandBufferRecordingApi,
             commandResourcesFactory: commandResourcesFactory,
             frameSynchronizationApi: frameSynchronizationApi,
             framebufferSetApi: framebufferSetApi,
             offscreenImageApi: offscreenImageApi,
-            queueSubmitter: queueSubmitter,
-            storageBufferFactory: storageBufferFactory
+            queueSubmitter: queueSubmitter
         ));
 }
 

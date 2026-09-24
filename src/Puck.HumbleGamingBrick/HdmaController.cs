@@ -209,23 +209,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     }
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
-        m_active = reader.ReadBoolean();
-        m_allowWakeArm = reader.ReadBoolean();
-        m_chunks = reader.ReadByte();
-        m_cpuHalted = reader.ReadBoolean();
-        m_destinationCursor = reader.ReadUInt16();
-        m_destinationHigh = reader.ReadByte();
-        m_destinationLow = reader.ReadByte();
-        m_hblankMode = reader.ReadBoolean();
-        m_previousMode = reader.ReadInt32();
-        m_remainingBytes = reader.ReadUInt16();
-        m_sourceCursor = reader.ReadUInt16();
-        m_sourceHigh = reader.ReadByte();
-        m_sourceLow = reader.ReadByte();
-        m_stallAcknowledged = reader.ReadBoolean();
-        m_state = reader.ReadByte();
-        m_stepCounter = reader.ReadInt32();
-        m_windDownPending = reader.ReadBoolean();
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
 
         // The state byte drives a switch with no default arm, so a value outside the four it can hold would run the
         // unit off its own state machine rather than faulting.
@@ -267,25 +251,29 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     public void SampleMode() =>
         m_previousMode = m_ppu.Mode;
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBoolean(value: m_active);
-        writer.WriteBoolean(value: m_allowWakeArm);
-        writer.WriteByte(value: m_chunks);
-        writer.WriteBoolean(value: m_cpuHalted);
-        writer.WriteUInt16(value: m_destinationCursor);
-        writer.WriteByte(value: m_destinationHigh);
-        writer.WriteByte(value: m_destinationLow);
-        writer.WriteBoolean(value: m_hblankMode);
-        writer.WriteInt32(value: m_previousMode);
-        writer.WriteUInt16(value: m_remainingBytes);
-        writer.WriteUInt16(value: m_sourceCursor);
-        writer.WriteByte(value: m_sourceHigh);
-        writer.WriteByte(value: m_sourceLow);
-        writer.WriteBoolean(value: m_stallAcknowledged);
-        writer.WriteByte(value: m_state);
-        writer.WriteInt32(value: m_stepCounter);
-        writer.WriteBoolean(value: m_windDownPending);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Boolean(value: ref m_active);
+        transfer.Boolean(value: ref m_allowWakeArm);
+        transfer.Byte(value: ref m_chunks);
+        transfer.Boolean(value: ref m_cpuHalted);
+        transfer.UInt16(value: ref m_destinationCursor);
+        transfer.Byte(value: ref m_destinationHigh);
+        transfer.Byte(value: ref m_destinationLow);
+        transfer.Boolean(value: ref m_hblankMode);
+        transfer.Int32(value: ref m_previousMode);
+        transfer.UInt16(value: ref m_remainingBytes);
+        transfer.UInt16(value: ref m_sourceCursor);
+        transfer.Byte(value: ref m_sourceHigh);
+        transfer.Byte(value: ref m_sourceLow);
+        transfer.Boolean(value: ref m_stallAcknowledged);
+        transfer.Byte(value: ref m_state);
+        transfer.Int32(value: ref m_stepCounter);
+        transfer.Boolean(value: ref m_windDownPending);
     }
+
     /// <summary>Absorbs <paramref name="cycles"/> T-cycles while <see cref="IsQuiet"/>, or while <see cref="IsIdle"/>
     /// and the display has been ticked through them with <see cref="SampleMode"/> taken before its last dot.</summary>
     /// <param name="cycles">The T-cycles to absorb.</param>

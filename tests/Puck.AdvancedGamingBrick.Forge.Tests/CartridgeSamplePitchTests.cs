@@ -1,42 +1,33 @@
+using System.Collections.Concurrent;
 using Puck.GamingBricks.Forge;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>
-/// Covers resampling a recording as it plays, which is what turns one recording into an instrument rather than a
-/// single fixed sound.
+/// Compiles the pitch cartridge once per playback rate, so every test that boots a rate boots the same image.
 /// </summary>
-public sealed class CartridgeSamplePitchTests {
-    private const uint BufferAddress = 0x02000160u;
-    // The first voice's step word: the mix buffer's two halves, then the cursor, then the record's fourth word.
-    private const uint FirstVoiceStepAddress = (((BufferAddress + (SamplesPerFrame * 2)) + 4) + 12);
-    private const int SampleLength = 1152;
-    private const int SamplesPerFrame = 288;
+public sealed class SamplePitchFixture {
+    private readonly ConcurrentDictionary<int, CartridgeCompilation> m_compiled = new();
 
-    private static string Mixed(int rate) {
-        using var machine = Run(
-            frames: 5,
-            rate: rate
-        );
-        var written = new System.Text.StringBuilder();
+    /// <summary>Returns the pitch cartridge compiled for a rate, compiling it on the first request.</summary>
+    /// <param name="rate">The authored playback rate, where 64 is the recording's own rate.</param>
+    /// <returns>The compiled cartridge.</returns>
+    public CartridgeCompilation At(int rate) => m_compiled.GetOrAdd(
+        key: rate,
+        valueFactory: static rate => new AgbCartridgeCompiler().Compile(document: Document(rate: rate))
+    );
 
-        for (var index = 0; (index < (SamplesPerFrame * 2)); ++index) {
-            written.Append(value: machine.ReadByte(address: (BufferAddress + ((uint)index))).ToString(format: "X2"));
-        }
-
-        return written.ToString();
-    }
-    private static AgbVerifyMachineDriver Run(int rate, int frames) {
+    // A recording fired on the third frame at the given rate.
+    private static CartridgeDocument Document(int rate) {
         // A slow ramp rather than an alternating pair: resampling a two-sample cycle can land on one phase every time
         // and read as silence, which would pass this for the wrong reason.
-        var sample = new int[SampleLength];
+        var sample = new int[CartridgeSamplePitchTests.SampleLength];
 
         for (var index = 0; (index < sample.Length); ++index) {
-            sample[index] = (((index * 200) / SampleLength) - 100);
+            sample[index] = (((index * 200) / CartridgeSamplePitchTests.SampleLength) - 100);
         }
 
-        var document = CartridgeDocuments.Create(
+        return CartridgeDocuments.Create(
             target: "agb",
             title: "PITCH"
         ) with {
@@ -53,7 +44,7 @@ public sealed class CartridgeSamplePitchTests {
                 Name: "fire",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     right: CartridgeExpressions.Of(constant: 2)
                 ),
                 Body: [new CartridgeStatement(
@@ -66,7 +57,7 @@ public sealed class CartridgeSamplePitchTests {
                 Name: "tick",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "phase"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 200)
                 ),
                 Body: [new CartridgeStatement(
@@ -78,9 +69,37 @@ public sealed class CartridgeSamplePitchTests {
             ),
             ],
         };
-        var result = new AgbCartridgeCompiler().Compile(document: document);
+    }
+}
+/// <summary>
+/// Covers resampling a recording as it plays, which is what turns one recording into an instrument rather than a
+/// single fixed sound.
+/// </summary>
+public sealed class CartridgeSamplePitchTests(SamplePitchFixture pitch) : IClassFixture<SamplePitchFixture> {
+    /// <summary>The recording's length in samples: four frames at its own rate.</summary>
+    public const int SampleLength = 1152;
+
+    private const uint BufferAddress = 0x02000160u;
+    // The first voice's step word: the mix buffer's two halves, then the cursor, then the record's fourth word.
+    private const uint FirstVoiceStepAddress = (((BufferAddress + (SamplesPerFrame * 2)) + 4) + 12);
+    private const int SamplesPerFrame = 288;
+
+    private string Mixed(int rate) {
+        using var machine = Run(
+            frames: 5,
+            rate: rate
+        );
+        var written = new System.Text.StringBuilder();
+
+        for (var index = 0; (index < (SamplesPerFrame * 2)); ++index) {
+            written.Append(value: machine.ReadByte(address: (BufferAddress + ((uint)index))).ToString(format: "X2"));
+        }
+
+        return written.ToString();
+    }
+    private AgbVerifyMachineDriver Run(int rate, int frames) {
         var machine = new AgbVerifyMachineDriver(
-            rom: result.Rom,
+            rom: pitch.At(rate: rate).Rom,
             label: $"pitch{rate}"
         );
 
@@ -91,75 +110,56 @@ public sealed class CartridgeSamplePitchTests {
 
         return machine;
     }
-    // The voice's own step rather than the buffer's contents: a retired voice leaves the half it last filled intact
-    // for another frame, so buffer silence lags the voice by one.
-    private static bool Sounding(int rate, int frames) {
+
+    // The recording is four frames long at its own rate (64): twice that rate retires it in two, half of it takes
+    // eight, and a step of zero, which would never reach the recording's end, must leave the voice free instead.
+    [InlineData(6, 64, true)]
+    [InlineData(6, 128, false)]
+    [InlineData(9, 64, false)]
+    [InlineData(9, 32, true)]
+    [InlineData(6, 0, false)]
+    [Theory]
+    public void TheRateSetsHowLongTheRecordingSounds(int frames, int rate, bool sounding) {
         using var machine = Run(
             frames: frames,
             rate: rate
         );
+        var step = 0u;
 
+        // The voice's own step rather than the buffer's contents: a retired voice leaves the half it last filled
+        // intact for another frame, so buffer silence lags the voice by one.
         for (var index = 0u; (index < 4u); ++index) {
-            if (machine.ReadByte(address: (FirstVoiceStepAddress + index)) != 0) {
-                return true;
-            }
+            step |= machine.ReadByte(address: (FirstVoiceStepAddress + index));
         }
 
-        return false;
-    }
-
-    [Fact]
-    public void ARateAboveNaturalRunsTheRecordingOutSooner() {
-        // The recording is four frames long at its own rate, so twice that rate retires it in two.
-        Assert.True(condition: Sounding(
-            frames: 6,
-            rate: 64
-        ));
-        Assert.False(condition: Sounding(
-            frames: 6,
-            rate: 128
-        ));
-    }
-    [Fact]
-    public void ARateBelowNaturalStretchesTheRecordingOut() {
-        // Half rate takes eight frames, so it is still sounding where the natural rate has already finished.
-        Assert.False(condition: Sounding(
-            frames: 9,
-            rate: 64
-        ));
-        Assert.True(condition: Sounding(
-            frames: 9,
-            rate: 32
-        ));
-    }
-    [Fact]
-    public void ARateOfZeroSoundsNothing() {
-        // A step of zero would never reach the recording's end, so it must leave the voice free instead.
-        Assert.False(condition: Sounding(
-            frames: 6,
-            rate: 0
-        ));
+        Assert.Equal(
+            actual: (step != 0u),
+            expected: sounding
+        );
     }
     [Fact]
     public void TheRateChangesWhatIsMixedRatherThanOnlyHowLongItLasts() {
+        var natural = Mixed(rate: 64);
+
         Assert.NotEqual(
-            expected: Mixed(rate: 64),
+            expected: natural,
             actual: Mixed(rate: 128)
         );
         Assert.Equal(
-            expected: Mixed(rate: 64),
+            expected: natural,
             actual: Mixed(rate: 64)
         );
     }
     [Fact]
-    public void ValidationRefusesARateOnASoundThatIsNotARecording() {
-        var document = CartridgeDocuments.Create(
+    public void ValidationRefusesARateOnASoundThatIsNotARecording() => new CartridgeRefusal(
+        Name: "a rate on music",
+        Document: CartridgeDocuments.Create(
             target: "agb",
             title: "RATEBAD"
         ) with {
             Sounds = [new CartridgeSound(
                 Name: "theme",
-                Music: [CartridgeCostMeasurement.Lead(part: CartridgeCostMeasurement.Track())]
+                Music: [CartridgeCostMeasurement.Lead]
             )],
             Rules = [new CartridgeRule(
                 Name: "go",
@@ -171,15 +171,8 @@ public sealed class CartridgeSamplePitchTests {
                     ),
             ]
             )],
-        };
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "is not a recording"
-            )
-        );
-    }
+        },
+        Path: "rules[0].body[0].rate",
+        Fragment: "is not a recording"
+    ).Holds();
 }

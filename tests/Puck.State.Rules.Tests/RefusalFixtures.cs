@@ -59,9 +59,10 @@ public static class IrreversibleFixture {
 /// <summary>A section carrying two vector spaces, so a space mismatch and every vector shape refusal has a source.</summary>
 public static class VectorFixture {
     /// <summary>Builds a compile context over the vector section.</summary>
+    /// <param name="hidden">The row seat 1 alone may read, or <see langword="null"/> for a section every reader sees.</param>
     /// <returns>The context.</returns>
-    public static RuleCompileContext Context() {
-        var section = Section();
+    public static RuleCompileContext Context(string? hidden = null) {
+        var section = Section(hidden: hidden);
 
         return new RuleCompileContext(
             catalog: StateCatalog.Compile(section: section),
@@ -74,52 +75,57 @@ public static class VectorFixture {
         );
     }
     /// <summary>Builds the vector section.</summary>
+    /// <param name="hidden">The row seat 1 alone may read, or <see langword="null"/> for a section every reader sees.</param>
     /// <returns>The section.</returns>
-    public static StateSection Section() => new(
-        Rows: [
-            new StateRow(
-                Name: RulesFixture.Name(value: "score"),
-                Kind: CellKind.Int,
-                Cells: [new StateCell(
-                        Key: StateRow.SlotKey,
-                        Value: CellValue.Int(value: 0L)
-                    )]
-            ),
-            new StateRow(
-                Name: RulesFixture.Name(value: "wide"),
-                Kind: CellKind.Vector,
-                Space: "wide16"
-            ),
-            new StateRow(
-                Name: RulesFixture.Name(value: "narrow"),
-                Kind: CellKind.Vector,
-                Space: "narrow8"
-            ),
-            new StateRow(
-                Name: RulesFixture.Name(value: "bank"),
-                Kind: CellKind.Vector,
-                Capacity: 4,
-                Space: "wide16"
-            ),
-            new StateRow(
-                Name: RulesFixture.Name(value: "ranks"),
-                Kind: CellKind.Int,
-                Capacity: 4
-            ),
-        ],
+    public static StateSection Section(string? hidden = null) => new(
+        Rows: [.. Rows().Select(selector: row => (((hidden is not null) && row.Name.Equals(other: RulesFixture.Name(value: hidden)))
+            ? (row with { Visibility = new StateVisibility(Readers: ["seat1"]) })
+            : row))],
         Spaces: [
             new StateSpace(
-                Name: RulesFixture.Name(value: "wide16"),
-                Model: "model",
-                Revision: "r1",
-                Dimensions: 16
+                name: RulesFixture.Name(value: "wide16"),
+                model: "model",
+                revision: "r1",
+                dimensions: 16
             ),
             new StateSpace(
-                Name: RulesFixture.Name(value: "narrow8"),
-                Model: "model",
-                Revision: "r1",
-                Dimensions: 8
+                name: RulesFixture.Name(value: "narrow8"),
+                model: "model",
+                revision: "r1",
+                dimensions: 8
             ),
         ]
     );
+
+    private static StateRow[] Rows() => [
+        new StateRow(
+            Name: RulesFixture.Name(value: "score"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                    Key: StateRow.SlotKey,
+                    Value: CellValue.Int(value: 0L)
+                )]
+        ),
+        new StateRow(
+            Name: RulesFixture.Name(value: "wide"),
+            Kind: CellKind.Vector,
+            Space: "wide16"
+        ),
+        new StateRow(
+            Name: RulesFixture.Name(value: "narrow"),
+            Kind: CellKind.Vector,
+            Space: "narrow8"
+        ),
+        new StateRow(
+            Name: RulesFixture.Name(value: "bank"),
+            Kind: CellKind.Vector,
+            Capacity: 4,
+            Space: "wide16"
+        ),
+        new StateRow(
+            Name: RulesFixture.Name(value: "ranks"),
+            Kind: CellKind.Int,
+            Capacity: 4
+        ),
+    ];
 }

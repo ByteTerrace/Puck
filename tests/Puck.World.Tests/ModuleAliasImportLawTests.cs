@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Testing;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -6,8 +8,8 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// The law: one game module composes twice under two aliases and both play. <c>Fixtures/twin-tictactoe-host.world.json</c>
-/// imports <c>games/tictactoe.world.json</c> as <c>a</c> and as <c>b</c>; every row, lattice, and rule the module
-/// declares lands twice under <c>a_</c>/<c>b_</c>, the module's own references follow, and a move on one table
+/// imports <c>games/tictactoe.puck</c> as <c>a</c> and as <c>b</c>; every row, lattice, and rule the module
+/// declares lands twice under <c>a$</c>/<c>b$</c>, the module's own references follow, and a move on one table
 /// leaves the other untouched.
 /// </summary>
 public sealed class ModuleAliasImportLawTests {
@@ -15,29 +17,7 @@ public sealed class ModuleAliasImportLawTests {
         ?? ((row.EffectiveDomain is StateDomain.CellsOf board)
         ? board.Empty
         : throw new InvalidOperationException(message: $"missing {row.Name}[{key}]")));
-    private static string FixturePath() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return Path.Combine(
-            directory!.FullName,
-            "tests",
-            "Puck.World.Tests",
-            "Fixtures",
-            "twin-tictactoe-host.world.json"
-        );
-    }
+    private static string FixturePath() => RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json");
     private static WorldDefinition LoadTwinHost() {
         Assert.True(
             condition: WorldDefinitionLoader.TryLoadFile(
@@ -53,12 +33,12 @@ public sealed class ModuleAliasImportLawTests {
     private static void Place(WorldFixture fixture, string alias, long cell, long request) {
         Write(
             fixture: fixture,
-            row: $"{alias}_tttMoveCell",
+            row: $"{alias}$tttMoveCell",
             value: cell
         );
         Write(
             fixture: fixture,
-            row: $"{alias}_tttMoveRequest",
+            row: $"{alias}$tttMoveRequest",
             value: request
         );
 
@@ -84,7 +64,7 @@ public sealed class ModuleAliasImportLawTests {
         key: WorldStateRow.SlotKey
     );
     private static void Write(WorldFixture fixture, string row, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: row,
         Key: WorldStateRow.SlotKey,
         Value: value,
@@ -113,7 +93,7 @@ public sealed class ModuleAliasImportLawTests {
             actual: Cell(
                 row: Row(
                     fixture: fixture,
-                    name: "a_tttBoard"
+                    name: "a$tttBoard"
                 ),
                 key: "0"
             )
@@ -123,7 +103,7 @@ public sealed class ModuleAliasImportLawTests {
             actual: Cell(
                 row: Row(
                     fixture: fixture,
-                    name: "a_tttBoard"
+                    name: "a$tttBoard"
                 ),
                 key: "5"
             )
@@ -133,7 +113,7 @@ public sealed class ModuleAliasImportLawTests {
             actual: Cell(
                 row: Row(
                     fixture: fixture,
-                    name: "b_tttBoard"
+                    name: "b$tttBoard"
                 ),
                 key: "5"
             )
@@ -143,7 +123,7 @@ public sealed class ModuleAliasImportLawTests {
             actual: Cell(
                 row: Row(
                     fixture: fixture,
-                    name: "b_tttBoard"
+                    name: "b$tttBoard"
                 ),
                 key: "0"
             )
@@ -152,28 +132,28 @@ public sealed class ModuleAliasImportLawTests {
             expected: 1L,
             actual: Slot(
                 fixture: fixture,
-                name: "a_tttMoveApplied"
+                name: "a$tttMoveApplied"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: Slot(
                 fixture: fixture,
-                name: "b_tttMoveApplied"
+                name: "b$tttMoveApplied"
             )
         );
         Assert.Equal(
             expected: 2L,
             actual: Slot(
                 fixture: fixture,
-                name: "a_tttActive"
+                name: "a$tttActive"
             )
         );
         Assert.Equal(
             expected: 2L,
             actual: Slot(
                 fixture: fixture,
-                name: "b_tttActive"
+                name: "b$tttActive"
             )
         );
 
@@ -190,7 +170,7 @@ public sealed class ModuleAliasImportLawTests {
             actual: Cell(
                 row: Row(
                     fixture: fixture,
-                    name: "a_tttBoard"
+                    name: "a$tttBoard"
                 ),
                 key: "1"
             )
@@ -199,28 +179,28 @@ public sealed class ModuleAliasImportLawTests {
             expected: 2L,
             actual: Slot(
                 fixture: fixture,
-                name: "a_tttMoveCount"
+                name: "a$tttMoveCount"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: Slot(
                 fixture: fixture,
-                name: "a_tttActive"
+                name: "a$tttActive"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: Slot(
                 fixture: fixture,
-                name: "b_tttMoveCount"
+                name: "b$tttMoveCount"
             )
         );
         Assert.Equal(
             expected: 2L,
             actual: Slot(
                 fixture: fixture,
-                name: "b_tttActive"
+                name: "b$tttActive"
             )
         );
         Assert.Equal(
@@ -228,7 +208,7 @@ public sealed class ModuleAliasImportLawTests {
             actual: Cell(
                 row: Row(
                     fixture: fixture,
-                    name: "b_tttBoard"
+                    name: "b$tttBoard"
                 ),
                 key: "1"
             )
@@ -246,21 +226,21 @@ public sealed class ModuleAliasImportLawTests {
             expected: 2L,
             actual: Slot(
                 fixture: fixture,
-                name: "b_tttMoveApplied"
+                name: "b$tttMoveApplied"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: Slot(
                 fixture: fixture,
-                name: "b_tttMoveCount"
+                name: "b$tttMoveCount"
             )
         );
         Assert.Equal(
             expected: 2L,
             actual: Slot(
                 fixture: fixture,
-                name: "b_tttActive"
+                name: "b$tttActive"
             )
         );
     }
@@ -281,11 +261,9 @@ public sealed class ModuleAliasImportLawTests {
             actual: aliased,
             expected: ["a", "b"]
         );
+        // Both aliased layers are the tictactoe module, carried by its source.
         Assert.All(
-            collection: layers.Where(predicate: static layer => layer.Path.EndsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "tictactoe.world.json"
-            )),
+            collection: layers.Where(predicate: static layer => (layer.Alias is not null)),
             action: static layer => Assert.Equal(
                 expected: ["rules", "state"],
                 actual: layer.Keys.OrderBy(
@@ -305,11 +283,11 @@ public sealed class ModuleAliasImportLawTests {
         Assert.Null(@object: definition.Imports);
         Assert.Contains(
             collection: rows,
-            expected: "a_tttBoard"
+            expected: "a$tttBoard"
         );
         Assert.Contains(
             collection: rows,
-            expected: "b_tttBoard"
+            expected: "b$tttBoard"
         );
         Assert.DoesNotContain(
             collection: rows,
@@ -317,46 +295,46 @@ public sealed class ModuleAliasImportLawTests {
         );
         Assert.Contains(
             collection: rules,
-            expected: "a_ttt-place-mark"
+            expected: "a$ttt-place-mark"
         );
         Assert.Contains(
             collection: rules,
-            expected: "b_ttt-place-mark"
+            expected: "b$ttt-place-mark"
         );
         Assert.Contains(
             collection: lattices,
-            expected: "a_tttCube"
+            expected: "a$tttCube"
         );
         Assert.Contains(
             collection: lattices,
-            expected: "b_tttCube"
+            expected: "b$tttCube"
         );
 
         // The module's own references follow its declarations: the board's domain names the aliased cube, and the
         // win check's expressions read the aliased masks over the aliased cube.
-        var board = definition.State.Single(predicate: static row => (row.Name.Value == "b_tttBoard"));
+        var board = definition.State.Single(predicate: static row => (row.Name.Value == "b$tttBoard"));
 
         Assert.Equal(
-            expected: "b_tttCube",
+            expected: "b$tttCube",
             actual: ((StateDomain.CellsOf)board.Domain!).Topology
         );
 
-        var winCheck = (definition.Rules ?? []).Single(predicate: static rule => (rule.Name.Value == "b_ttt-check-win"));
-        var maskEffect = winCheck.Effects.OfType<ActionEffect.SetState>().First(predicate: static effect => (effect.State == "b_tttMaskX"));
+        var winCheck = (definition.Rules ?? []).Single(predicate: static rule => (rule.Name.Value == "b$ttt-check-win"));
+        var maskEffect = winCheck.Effects.OfType<ActionEffect.SetState>().First(predicate: static effect => (effect.State == "b$tttMaskX"));
 
         Assert.Equal(
-            expected: "$board:mask:b_tttBoard:1:1",
+            expected: "`$board:mask:b$tttBoard:1:1`",
             actual: ExpressionSpelling.Print(program: maskEffect.Expression!)
         );
         Assert.Contains(
-            expectedSubstring: "boardShift(b_tttMaskX, b_tttCube, L0)",
-            actualString: ExpressionSpelling.Print(program: winCheck.Effects.OfType<ActionEffect.SetState>().First(predicate: static effect => (effect.State == "b_tttXWin")).Expression!)
+            expectedSubstring: "boardShift(`b$tttMaskX`, `b$tttCube`, L0)",
+            actualString: ExpressionSpelling.Print(program: winCheck.Effects.OfType<ActionEffect.SetState>().First(predicate: static effect => (effect.State == "b$tttXWin")).Expression!)
         );
     }
     [Fact]
     public void OneAliasTwiceFoldsAndAMalformedAliasRefusesByName() {
-        using var files = new TempWorldDirectory();
-        var module = File.ReadAllText(path: Path.Combine(
+        using var files = new TemporaryDirectory();
+        var module = System.Text.Encoding.UTF8.GetString(bytes: Puck.Testing.ShippedWorldDocuments.Read(path: Path.Combine(
             Path.GetDirectoryName(path: FixturePath())!,
             "..",
             "..",
@@ -366,8 +344,8 @@ public sealed class ModuleAliasImportLawTests {
             "Assets",
             "worlds",
             "games",
-            "tictactoe.world.json"
-        ));
+            "tictactoe.puck"
+        )));
 
         files.WriteText(
             name: "basis.world.json",
@@ -382,7 +360,7 @@ public sealed class ModuleAliasImportLawTests {
         var twice = files.WriteText(
             name: "twice.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "tictactoe.world.json", "as": "a" }, { "document": "tictactoe.world.json", "as": "a" }] }
+            { "basis": "basis", "imports": [{ "document": "tictactoe", "as": "a" }, { "document": "tictactoe", "as": "a" }] }
             """
         );
 
@@ -396,13 +374,13 @@ public sealed class ModuleAliasImportLawTests {
         );
         Assert.Single(
             collection: folded!.State,
-            predicate: static row => (row.Name.Value == "a_tttBoard")
+            predicate: static row => (row.Name.Value == "a$tttBoard")
         );
 
         var hyphen = files.WriteText(
             name: "hyphen.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": [{ "document": "tictactoe.world.json", "as": "b-2" }] }
+            { "basis": "basis", "imports": [{ "document": "tictactoe", "as": "b-2" }] }
             """
         );
 
@@ -419,7 +397,7 @@ public sealed class ModuleAliasImportLawTests {
         var bare = files.WriteText(
             name: "bare.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": ["tictactoe.world.json"] }
+            { "basis": "basis", "imports": ["tictactoe"] }
             """
         );
 

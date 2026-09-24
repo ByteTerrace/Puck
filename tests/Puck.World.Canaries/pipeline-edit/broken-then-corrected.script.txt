@@ -1,0 +1,33 @@
+# The feedback pipeline compiles and installs; paused and reset, submission 2 holds 2/16.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+pipeline.time feedback pause
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.step feedback
+pipeline.wait feedback submitted 2 10
+pipeline.capture feedback {run}/pre-edit.png
+pipeline.wait feedback captured 10
+# The broken edit: its middle pass does not compile, and the installed graph's image stays usable.
+pipeline.load feedback broken.pipeline.json
+pipeline.reload feedback
+pipeline.wait feedback compiled 40
+pipeline.capture feedback {run}/after-broken.png
+pipeline.wait feedback captured 10
+# The installed graph keeps producing: submission 3 holds 3/16.
+pipeline.step feedback
+pipeline.wait feedback submitted 3 10
+pipeline.capture feedback {run}/after-broken-step.png
+pipeline.wait feedback captured 10
+# The corrected edit compiles; paused, the instance installs it without rendering and still shows submission 3.
+pipeline.load feedback corrected.pipeline.json
+pipeline.reload feedback
+pipeline.wait feedback compiled 40
+pipeline.capture feedback {run}/held.png
+pipeline.wait feedback captured 10
+# The next step renders submission 4 through the whole corrected graph, over the retained history.
+pipeline.step feedback
+pipeline.wait feedback installed 10
+pipeline.wait feedback submitted 4 10
+pipeline.capture feedback {run}/post-edit.png
+pipeline.wait feedback captured 10

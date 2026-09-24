@@ -67,9 +67,9 @@ public sealed class BoardDerivationFailureLawTests {
         var errors = new List<string>();
 
         _ = WorldDefinitionValidator.TryValidateLocally(
-            definition,
-            errors,
-            out _
+            compilation: out _,
+            definition: definition,
+            errors: errors
         );
 
         return errors;

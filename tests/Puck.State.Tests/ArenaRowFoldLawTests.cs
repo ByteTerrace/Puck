@@ -1,5 +1,6 @@
 using Puck.Maths;
 
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -145,7 +146,7 @@ public sealed class ArenaRowFoldLawTests {
     public void ARingsCursorMovesTheFold() {
         var (_, arena) = ArenaFixture.Build();
 
-        foreach (var value in (long[])[1L, 2L, 3L]) {
+        foreach (var value in ((long[])[1L, 2L, 3L])) {
             Assert.True(condition: arena.TryPush(
                 reason: out _,
                 rowOrdinal: ArenaFixture.History,

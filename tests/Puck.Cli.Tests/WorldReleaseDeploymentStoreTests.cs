@@ -18,16 +18,19 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
     private readonly Guid m_owner = Guid.NewGuid();
     private readonly Secrets m_secrets = new();
     private readonly WorldReleaseManifest m_manifest = new() {
+        CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
         Label = "test",
         SourceRevision = "test",
         EngineImageDigest = ("sha256:" + new string(
         c: 'a',
         count: 64
     )),
-        Definitions = new Dictionary<string, string> { ["world"] = ("sha256/" + new string(
+        Definitions = new Dictionary<string, string> {
+            ["world"] = ("sha256/" + new string(
         c: 'b',
         count: 64
-    )) },
+    )),
+        },
         DefinitionFiles = new Dictionary<string, string> { ["world"] = "world.json" },
         PersistenceContract = "test",
         PeerProtocolContract = "test",
@@ -50,10 +53,10 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
         m_manifest.Identity,
         "official",
         new JsonObject {
-        ["release"] = ("example.azurecr.io/world@" + m_manifest.EngineImageDigest),
-        ["bootstrapCommand"] = "bootstrap-secret-value",
-        ["capacity"] = 1,
-    },
+            ["release"] = ("example.azurecr.io/world@" + m_manifest.EngineImageDigest),
+            ["bootstrapCommand"] = "bootstrap-secret-value",
+            ["capacity"] = 1,
+        },
         "public-key",
         new JsonObject { ["resources"] = new JsonArray() }
     );
@@ -67,12 +70,12 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
     [Fact]
     public async Task ABackendWithoutAVersionCannotPublishAnUnrecoverableReference() {
         m_secrets.EmptyVersion = true;
-        await Assert.ThrowsAsync<InvalidDataException>(() => Store().SaveAsync(
+        await Assert.ThrowsAsync<InvalidDataException>(testCode: () => Store().SaveAsync(
             m_manifest,
             Configuration(),
             Token
         ));
-        Assert.Null(await Store().LoadAsync(
+        Assert.Null(@object: await Store().LoadAsync(
             m_manifest,
             "official",
             Token
@@ -81,12 +84,12 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
     [Fact]
     public async Task CorruptSecretReadBackCannotPublishAReference() {
         m_secrets.CorruptRead = true;
-        await Assert.ThrowsAsync<InvalidDataException>(() => Store().SaveAsync(
+        await Assert.ThrowsAsync<InvalidDataException>(testCode: () => Store().SaveAsync(
             m_manifest,
             Configuration(),
             Token
         ));
-        Assert.Null(await Store().LoadAsync(
+        Assert.Null(@object: await Store().LoadAsync(
             m_manifest,
             "official",
             Token
@@ -94,20 +97,22 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
     }
     public void Dispose() {
         m_provider.Dispose();
-        if (Directory.Exists(path: m_directory)) { Directory.Delete(
+        if (Directory.Exists(path: m_directory)) {
+            Directory.Delete(
             m_directory,
             recursive: true
-        ); }
+        );
+        }
     }
     [Fact]
     public async Task LostSecretWriteResponseLeavesNoReferenceAndRetryPublishesVerifiedInputs() {
         m_secrets.LoseWriteResponse = true;
-        await Assert.ThrowsAsync<IOException>(() => Store().SaveAsync(
+        await Assert.ThrowsAsync<IOException>(testCode: () => Store().SaveAsync(
             m_manifest,
             Configuration(),
             Token
         ));
-        Assert.Null(await Store().LoadAsync(
+        Assert.Null(@object: await Store().LoadAsync(
             m_manifest,
             "official",
             Token
@@ -118,13 +123,13 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             Configuration(),
             Token
         );
-        Assert.NotNull(await Store().LoadAsync(
+        Assert.NotNull(@object: await Store().LoadAsync(
             m_manifest,
             "official",
             Token
         ));
         m_secrets.CorruptRead = true;
-        await Assert.ThrowsAsync<InvalidDataException>(() => Store().LoadAsync(
+        await Assert.ThrowsAsync<InvalidDataException>(testCode: () => Store().LoadAsync(
             m_manifest,
             "official",
             Token
@@ -147,7 +152,7 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             Token
         );
 
-        Assert.NotNull(restored);
+        Assert.NotNull(@object: restored);
         Assert.Equal(
             1,
             restored.Parameters["capacity"]!.GetValue<int>()
@@ -189,7 +194,7 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             Token
         );
         reordered.Parameters["capacity"] = 2;
-        await Assert.ThrowsAsync<InvalidDataException>(() => Store().SaveAsync(
+        await Assert.ThrowsAsync<InvalidDataException>(testCode: () => Store().SaveAsync(
             m_manifest,
             reordered,
             Token
@@ -218,15 +223,15 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
         public int Writes { get; private set; }
 
         public Task<ReadOnlyMemory<byte>> ReadAsync(string version, CancellationToken cancellationToken) =>
-            Task.FromResult<ReadOnlyMemory<byte>>((CorruptRead
+            Task.FromResult<ReadOnlyMemory<byte>>(result: (CorruptRead
                 ? "corrupt"u8.ToArray()
                 : m_versions[version]));
         public Task<string> WriteAsync(string release, ReadOnlyMemory<byte> content, CancellationToken cancellationToken) {
             var version = ("https://example.vault.azure.net/secrets/release/" + (++Writes));
 
             m_versions.Add(
-                version,
-                content.ToArray()
+                key: version,
+                value: content.ToArray()
             ); Latest = version;
             return (LoseWriteResponse
                 ? Task.FromException<string>(exception: new IOException(message: "write response lost"))

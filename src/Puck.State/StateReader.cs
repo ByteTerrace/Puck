@@ -23,7 +23,8 @@ public enum StateReduceOp : byte {
     Count,
     /// <summary>The Lehmer rank, over k! for a zone of k tokens, of an ordered zone's order relative to its token
     /// domain's own cell order — the arrangement a shuffle or a sort left the pile in, as one integer; -1 when the
-    /// zone holds more than 20 tokens or a token its domain does not declare.</summary>
+    /// zone holds more than <see cref="StateReader.MaxArrangementTokens"/> tokens or a token its domain does not
+    /// declare.</summary>
     ArrangementRank,
 }
 /// <summary>
@@ -81,7 +82,6 @@ public static class StateReader {
             engineTick
         );
     }
-
     private static string? ArgExtremumOverRow<TState>(
         StateRow declared,
         StateReduceOp op,
@@ -139,40 +139,6 @@ public static class StateReader {
         }
 
         return bestKey;
-    }
-    private static int DomainOrdinalsOf(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) {
-        var cells = (zone.Cells ?? []);
-        var count = cells.Count;
-
-        if (
-            (zone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } keysOf) ||
-            (count > MaxArrangementTokens) ||
-            (StateRows.FindStateRow(
-            rows: rows,
-            name: keysOf.Row.Value
-        ) is not { Cells: { } domain })
-        ) {
-            return -1;
-        }
-        for (var index = 0; (index < count); index++) {
-            var key = ((cells.Count > index)
-                ? cells[index].Key
-                : default
-            );
-            var ordinal = -1;
-
-            for (var candidate = 0; (candidate < domain.Count); candidate++) {
-                if (domain[candidate].Key == key) {
-                    ordinal = candidate;
-                    break;
-                }
-            }
-            if (ordinal < 0) {
-                return -1;
-            }
-            ordinals[index] = ordinal;
-        }
-        return count;
     }
     // The live value of a stored base under the cell's effective behavior (its own trait, or its row's default) —
     // a cell the row does not list (a frame's dense board cell) resolves the row's own default the same way an
@@ -362,16 +328,30 @@ public static class StateReader {
             zone: zone
         );
 
-        if (count < 0) {
+        return ((count < 0)
+            ? -1L
+            : ArrangementRank(domainOrdinals: ordinals[..count])
+        );
+    }
+    /// <summary>Returns the Lehmer rank of a token order given each token's ordinal in its domain's cell order —
+    /// over k! for k tokens, 0 when the tokens stand in domain order — or -1 when there are more than
+    /// <see cref="MaxArrangementTokens"/> of them. The ordinals need not be contiguous; only their relative order
+    /// counts (<see cref="RelativeOrder"/>).</summary>
+    /// <param name="domainOrdinals">The tokens' distinct ordinals in their domain, in zone order.</param>
+    /// <returns>The rank, or -1.</returns>
+    /// <exception cref="ArgumentException">Two ordinals are equal.</exception>
+    public static long ArrangementRank(ReadOnlySpan<int> domainOrdinals) {
+        if (domainOrdinals.Length > MaxArrangementTokens) {
             return -1L;
         }
-        Span<int> relative = stackalloc int[MaxArrangementTokens];
+
+        Span<int> relative = stackalloc int[domainOrdinals.Length];
 
         RelativeOrder(
-            ordinals: ordinals[..count],
-            relative: relative[..count]
+            ordinals: domainOrdinals,
+            relative: relative
         );
-        return unchecked((long)Puck.Maths.Combinatorics.PermutationRank(permutation: relative[..count]));
+        return unchecked((long)Combinatorics.PermutationRank(permutation: relative));
     }
     /// <summary>Fills each zone token's ordinal in its token domain's cell order, in zone order. Returns the token
     /// count, or -1 when the zone is not an ordered zone, exceeds <see cref="MaxArrangementTokens"/>, or holds a
@@ -379,11 +359,101 @@ public static class StateReader {
     /// <param name="rows">The section's rows.</param>
     /// <param name="zone">The ordered zone.</param>
     /// <param name="ordinals">Scratch of at least <see cref="MaxArrangementTokens"/>.</param>
-    public static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) => DomainOrdinalsOf(
-        ordinals: ordinals,
-        rows: rows,
-        zone: zone
-    );
+    public static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) {
+        ArgumentNullException.ThrowIfNull(argument: zone);
+
+        var cells = (zone.Cells ?? []);
+        var count = cells.Count;
+
+        if (
+            (zone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } keysOf) ||
+            (count > MaxArrangementTokens) ||
+            (StateRows.FindStateRow(
+            rows: rows,
+            name: keysOf.Row.Value
+        ) is not { Cells: { } domain })
+        ) {
+            return -1;
+        }
+        for (var index = 0; (index < count); index++) {
+            var key = cells[index].Key;
+            var ordinal = -1;
+
+            for (var candidate = 0; (candidate < domain.Count); candidate++) {
+                if (domain[candidate].Key == key) {
+                    ordinal = candidate;
+                    break;
+                }
+            }
+            if (ordinal < 0) {
+                return -1;
+            }
+            ordinals[index] = ordinal;
+        }
+        return count;
+    }
+    /// <summary>Fills each ordered-zone token's ordinal in its token domain row's cell order, in zone order, off a
+    /// live arena. Returns the token count, or -1 when <paramref name="domainOrdinal"/> names no row, the zone holds
+    /// more tokens than <paramref name="ordinals"/> or <see cref="MaxArrangementTokens"/> admits, or it holds a token
+    /// the domain does not declare.</summary>
+    /// <param name="arena">The arena.</param>
+    /// <param name="rowOrdinal">The ordered zone's catalog ordinal.</param>
+    /// <param name="domainOrdinal">The token domain row's catalog ordinal, or -1.</param>
+    /// <param name="ordinals">The buffer that receives the ordinals.</param>
+    /// <returns>The token count, or -1.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
+    public static int DomainOrdinals(StateArena arena, int rowOrdinal, int domainOrdinal, Span<int> ordinals) {
+        ArgumentNullException.ThrowIfNull(argument: arena);
+
+        if (domainOrdinal < 0) {
+            return -1;
+        }
+
+        var count = arena.CellCount(rowOrdinal: rowOrdinal);
+
+        if (
+            (count > ordinals.Length) ||
+            (count > MaxArrangementTokens)
+        ) {
+            return -1;
+        }
+
+        var domainCount = arena.CellCount(rowOrdinal: domainOrdinal);
+
+        for (var position = 0; (position < count); position++) {
+            if (!arena.TryKeyAt(
+                key: out var key,
+                position: position,
+                rowOrdinal: rowOrdinal
+            )) {
+                return -1;
+            }
+
+            var found = -1;
+
+            for (var candidate = 0; (candidate < domainCount); candidate++) {
+                if (
+                    arena.TryKeyAt(
+                    key: out var domainKey,
+                    position: candidate,
+                    rowOrdinal: domainOrdinal
+                ) &&
+                    (domainKey == key)
+                ) {
+                    found = candidate;
+
+                    break;
+                }
+            }
+            if (found < 0) {
+                return -1;
+            }
+
+            ordinals[position] = found;
+        }
+
+        return count;
+    }
     /// <summary>The inverse of <see cref="DynamicsRowRawToFixed"/> — narrows a continuous value back to the row's own
     /// raw encoding: exact for <see cref="CellKind.Fixed"/>, nearest whole number (ties to even) for every other
     /// kind.</summary>

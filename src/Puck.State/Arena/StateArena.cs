@@ -4,16 +4,15 @@ namespace Puck.State;
 
 /// <summary>
 /// The columnar runtime store for every cell of every lane: one contiguous column per cell kind per shape per
-/// lane, a column for every runtime-state field a row or cell carries, nested journal scopes, and the three
-/// per-row counters a scheduler, a cache, and a pattern memo each read for a different question.
+/// lane, a column for every runtime-state field a row or cell carries, nested journal scopes, and the two per-row
+/// counters a scheduler and a cache each read for a different question.
 /// </summary>
 /// <remarks>
-/// <para>Three counters answer three questions and are never interchangeable. <see cref="RowVersion"/> moves only
+/// <para>Two counters answer two questions and are never interchangeable. <see cref="RowVersion"/> moves only
 /// when a commit leaves the row's bytes different from what they were when the outermost scope opened, so an
 /// unchanged version proves the row's content unchanged — change detection. <see cref="RowGeneration"/> moves on
 /// every mutation, including a no-op write and a rewind, so anything caching a derived answer over the row's
-/// storage invalidates on it. <see cref="AppendGeneration"/>, on an ordered row, moves on every mutation except a
-/// push at the tail, so a walk memoized over the row's prefix is valid exactly while it has not moved.</para>
+/// storage invalidates on it.</para>
 /// <para>A host-owned row has a descriptor and no columns: every read answers <see langword="false"/> and every
 /// write refuses by name, because its facet owns it.</para>
 /// <para>Every value entering a row decides through <see cref="StateRow.TryAdmitWrite"/>, the one admission door:
@@ -24,7 +23,6 @@ namespace Puck.State;
 /// reach the derived boards a row feeds through one internal recompute, so no path can skip either.</para>
 /// </remarks>
 public sealed partial class StateArena {
-    private ulong[] m_appendGenerations;
     private StateCatalog m_catalog;
     private CellKeyTable m_keys;
 
@@ -140,7 +138,6 @@ public sealed partial class StateArena {
         ArgumentNullException.ThrowIfNull(argument: catalog);
         ArgumentNullException.ThrowIfNull(argument: layout);
 
-        m_appendGenerations = new ulong[layout.RowCount];
         m_catalog = catalog;
         m_keys = catalog.Keys.Fork();
         m_historyCursors = new long[layout.RowCount];
@@ -214,7 +211,6 @@ public sealed partial class StateArena {
         if (loaded) {
             // Construction is not a mutation, so nothing may look changed to a scheduler reading the arena for
             // the first time.
-            Array.Clear(array: m_appendGenerations);
             Array.Clear(array: m_rowChangeStamp);
             Array.Clear(array: m_rowGenerations);
             Array.Clear(array: m_rowVersions);
@@ -445,12 +441,6 @@ public sealed partial class StateArena {
         return Array.AsReadOnly(array: normalized);
     }
 
-    /// <summary>Returns an ordered row's append generation: a counter that moves on every mutation of the row
-    /// except a push at its tail, so a walk memoized over the row's prefix is valid exactly while it has not
-    /// moved.</summary>
-    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <returns>The append generation.</returns>
-    public ulong AppendGeneration(int rowOrdinal) => m_appendGenerations[rowOrdinal];
     /// <summary>Opens a journal scope: every write until the matching <see cref="Commit"/> or <see cref="Rewind"/>
     /// records the column position it overwrote. Scopes nest; close the innermost first.</summary>
     /// <returns>The mark the scope closes with.</returns>
@@ -475,6 +465,7 @@ public sealed partial class StateArena {
         if (m_journal.Scopes == 1) {
             SettleVersions(mark: mark);
             RetainCommittedEntries(mark: mark);
+            WindowCommitted(mark: mark);
         }
 
         m_journal.CommitScope(mark: mark);
@@ -544,8 +535,7 @@ public sealed partial class StateArena {
             Restore(entry: entry);
             BumpGeneration(
                 column: entry.Column,
-                index: entry.Index,
-                tailPush: false
+                index: entry.Index
             );
             MarkReindex(
                 column: entry.Column,
@@ -624,7 +614,7 @@ public sealed partial class StateArena {
         m_reindexRow[m_reindexCount] = row;
         m_reindexCount++;
     }
-    private void BumpGeneration(ArenaColumn column, int index, bool tailPush) {
+    private void BumpGeneration(ArenaColumn column, int index) {
         // A roster bit belongs to a whole lane rather than to one row: joining or leaving changes what every slot
         // of that lane answers, so every one of its descriptors moves.
         if (column == ArenaColumn.LaneRoster) {
@@ -647,13 +637,6 @@ public sealed partial class StateArena {
         }
 
         m_rowGenerations[row]++;
-
-        if (
-            m_layout[row].IsOrdered &&
-            !tailPush
-        ) {
-            m_appendGenerations[row]++;
-        }
     }
     private void MarkVersion(ArenaColumn column, int index) {
         if (column == ArenaColumn.LaneRoster) {

@@ -1,0 +1,8 @@
+.well {
+  --table-surface: var(--puck-surface-sunken);
+
+  overflow: auto;
+  background-color: var(--puck-surface-sunken);
+  border: 1px solid var(--puck-line);
+  border-radius: var(--mantine-radius-md);
+}

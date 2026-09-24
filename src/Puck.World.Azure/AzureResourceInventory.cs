@@ -213,11 +213,11 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
                     fields.Add(
                         key: field.Key,
                         value: value.ValueKind switch {
-                        JsonValueKind.String => value.GetString()!,
-                        JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
-                        JsonValueKind.Null or JsonValueKind.Undefined => "",
-                        _ => throw new JsonException(message: "Inventory disclosure must select scalar fields."),
-                    }
+                            JsonValueKind.String => value.GetString()!,
+                            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
+                            JsonValueKind.Null or JsonValueKind.Undefined => "",
+                            _ => throw new JsonException(message: "Inventory disclosure must select scalar fields."),
+                        }
                     );
                 }
                 result.Add(item: new(

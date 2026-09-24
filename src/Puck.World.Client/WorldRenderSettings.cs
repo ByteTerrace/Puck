@@ -29,6 +29,7 @@ public enum AmbientOcclusionMode {
 public sealed class WorldRenderSettings {
     private bool m_ambientOcclusion;
     private AmbientOcclusionMode m_ambientOcclusionQuality;
+    private bool m_cadenceGate;
     private bool m_farBound;
     private float m_renderScale;
     private int m_revision;
@@ -55,6 +56,7 @@ public sealed class WorldRenderSettings {
         RenderScale = WorldRenderScaleTiers.Scale(tier: defaults.RenderScale);
         UpscaleSharpness = defaults.UpscaleSharpness;
         FarBound = true;
+        CadenceGate = true;
 
     }
 
@@ -71,6 +73,11 @@ public sealed class WorldRenderSettings {
     /// durable config. Rides the per-frame <see cref="Puck.SdfVm.SdfFrame.DisableFarBound"/> lane
     /// <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
+    /// <summary>Whether a frame whose render inputs match the previous one re-composites the retained image instead of
+    /// re-rendering (default <see langword="true"/>; pixel-identical either way). Set <see langword="false"/> (via
+    /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
+    /// durable config; rides <see cref="Puck.SdfVm.SdfFrame.EnableCadenceGate"/>.</summary>
+    public bool CadenceGate { get => m_cadenceGate; set { m_cadenceGate = value; m_revision++; } }
     /// <summary>The engine-wide internal render-scale fraction, applied to every player view's
     /// <see cref="Puck.SdfVm.SdfViewSnapshot.RenderScale"/> each frame. Named tiers initialize it, while
     /// <c>world.render-scale</c> also accepts a live numeric fraction/percentage for performance sweeps. Native 1.0 is

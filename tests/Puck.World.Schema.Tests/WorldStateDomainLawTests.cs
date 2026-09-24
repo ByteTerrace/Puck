@@ -293,7 +293,7 @@ public sealed class WorldStateDomainLawTests {
         );
 
         Assert.Contains(
-            expectedSubstring: "boolean membership",
+            expectedSubstring: "its membership cells must be kind Bool",
             actualString: Validate(definition: badKind)
         );
     }
@@ -323,10 +323,12 @@ public sealed class WorldStateDomainLawTests {
         );
 
         // Control: the same attribute row against a domain row that already carries its keys validates clean.
-        var populatedDomain = emptyDomain with { Cells = [new(
+        var populatedDomain = emptyDomain with {
+            Cells = [new(
                 CellName.Parse(candidate: "t1"),
                 CellValue.Int(value: 0L)
-            )] };
+            )],
+        };
 
         Assert.Equal(
             expected: string.Empty,

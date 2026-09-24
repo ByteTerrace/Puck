@@ -10,11 +10,14 @@ integration, while device and COM bindings remain in the DirectX package.
 
 Register the services from the composition root after selecting a Windows
 surface and Direct3D 12 device. The presenter consumes the neutral surface and
-shader contracts; it does not compile shaders or choose a native window.
+shader contracts and does not choose a native window. Its blit shaders
+(`Assets/Shaders/surface-blit.*.hlsl`) compile to DXIL at build and ship beside
+the application, so it compiles no shader at run time.
 
 ## Verification
 
-Build the project with `dotnet build src/Puck.DirectX.Presentation -c Release`.
+Build the project with `dotnet build src/Puck.DirectX.Presentation -c Release`;
+the build runs `dxc` from `PATH`.
 Runtime GPU checks belong to the rendering parity workflow in the development
 guide and require a supported Windows device.
 

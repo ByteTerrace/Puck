@@ -99,10 +99,10 @@ rule "mancala-apply-capture" {
   local isOwnSide = ((mancalaLastPit + 7 * mancalaTurn) % 14 <= 5) ? 1 : 0
   local isNotSelected = mancalaLastPit != mancalaSelectedPit ? 1 : 0
   local wasEmpty = mancalaBoard[(mancalaLastPit)] == (1 + (mancalaPitSeeds - 1) / 13) ? 1 : 0
-  local oppositeHasSeeds = mancalaBoard[(12 - mancalaLastPit)] > 0 ? 1 : 0
+  local oppositeHasSeeds = mancalaBoard[12 - mancalaLastPit] > 0 ? 1 : 0
   local canCapture = isOwnSide & isNotSelected & wasEmpty & oppositeHasSeeds
   mode: Level
-  mancalaBoard[6 + 7 * mancalaTurn] = mancalaBoard[(6 + 7 * mancalaTurn)] + mancalaBoard[(mancalaLastPit)] + mancalaBoard[(12 - mancalaLastPit)]
+  mancalaBoard[6 + 7 * mancalaTurn] = mancalaBoard[6 + 7 * mancalaTurn] + mancalaBoard[(mancalaLastPit)] + mancalaBoard[12 - mancalaLastPit]
   mancalaBoard[mancalaLastPit[$value]] = 0
   mancalaBoard[12 - mancalaLastPit] = 0
   mancalaStage = 3

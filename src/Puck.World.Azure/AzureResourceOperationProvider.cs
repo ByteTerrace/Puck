@@ -128,10 +128,12 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
             name: "x-ms-client-request-id",
             value: Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: operation.Id)))
         );
-        if (m_binding.IfMatch is { } etag) { message.Request.Headers.SetValue(
+        if (m_binding.IfMatch is { } etag) {
+            message.Request.Headers.SetValue(
             name: "If-Match",
             value: etag
-        ); }
+        );
+        }
         if (operation.Payload.Length != 0) {
             message.Request.Headers.SetValue(
                 name: "Content-Type",
@@ -208,10 +210,12 @@ public sealed partial class AzureResourceOperationProvider : IWorldExternalOpera
     }
     private void ValidatePayload(string payload) {
         ArgumentNullException.ThrowIfNull(payload);
-        if (Encoding.UTF8.GetByteCount(s: payload) > m_maximumRequestBytes) { throw new ArgumentException(
+        if (Encoding.UTF8.GetByteCount(s: payload) > m_maximumRequestBytes) {
+            throw new ArgumentException(
             message: "Azure request exceeds its byte budget.",
             paramName: nameof(payload)
-        ); }
+        );
+        }
         if (
             (payload.Length == 0) &&
             (m_binding.Method is AzureResourceMethod.Post or AzureResourceMethod.Delete)

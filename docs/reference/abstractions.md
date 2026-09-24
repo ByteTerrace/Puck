@@ -8,22 +8,27 @@ emulator; a component allocates through an *`IAllocator`*, not through a
 particular platform heap. The concrete implementations live in the backend,
 platform, and content projects; this project is only the shape they agree on.
 
-It sits at the bottom of the dependency graph and **depends on nothing else in
-the engine**, so every other project can reference it without pulling in a
-backend or a host. That is the whole point: the seam is what lets a Vulkan and a
+It sits at the bottom of the dependency graph beside Puck.Maths, the one engine
+project it references, so every other project can reference it without pulling
+in a backend or a host. That is the whole point: the seam is what lets a Vulkan and a
 Direct3D 12 backend, a Windows and a Linux window, or a real machine and a
 headless stand-in be swapped without touching the code that drives them.
 
 ## Key features
 
 - *One seam per capability:* presentation, windowing, machine runtimes, GPU
-  compute, capture, recording, lamp arrays, allocation, and pacing each get a
-  small, explicit contract instead of a concrete dependency.
+  compute, capture, recording, lamp arrays, allocation, pacing, and work
+  counting each get a small, explicit contract instead of a concrete
+  dependency.
 - *Backend- and platform-neutral:* no GPU API types, no OS handles in the public
   surface—those stay inside the backend and platform projects that implement
   these interfaces.
-- *Leaf of the dependency graph:* references nothing else in the engine, so it
-  can be shared everywhere without creating a cycle or dragging in a backend.
+- *One extension contract:* `IPuckExtension`, `PuckExtensionSet`, and the
+  `[PuckExtension]` attribute let any host compose installed capabilities the same
+  way; [Extensions](extensions.md) explains the model.
+- *Bottom of the dependency graph:* references only Puck.Maths, another leaf,
+  so it can be shared everywhere without creating a cycle or dragging in a
+  backend.
 - *Value types carry no behavior:* the records and enums here (surface formats,
   present modes, lamp colors, pad state) are plain data the contracts exchange.
 - *Determinism-friendly by construction:* the machine and pacing seams
@@ -62,10 +67,12 @@ graph TD
 
 | Group | Primary contracts | Implemented by |
 |---|---|---|
-| **Presentation** | `ISurfacePresenter`, `Surface`, `SurfaceFormat`, `PresentMode`, `PresentationOptions`, present-timing and device-lost feedback, `OffscreenRenderBudget` (the one per-produced-frame offscreen-submit budget the view stack's refresh share and the world validator's window ceiling both read) | the GPU backends and their presentation projects |
+| **Presentation** | `ISurfacePresenter`, `Surface`, `SurfaceFormat`, `PresentMode`, `PresentationOptions`, present-timing and device-lost feedback, `PresentationWork` (a presenter's `presentation.skipped` counter source), `OffscreenRenderBudget` (the one per-produced-frame offscreen-submit budget the view stack's refresh share and the world validator's window ceiling both read) | the GPU backends and their presentation projects |
 | **Windowing** | `INativeWindow`, `INativeWindowFactory`, `IClipboardService`, per-platform `NativeSurfaceBinding` (Win32, Wayland, Xcb, Vi) | `Puck.Platform` |
 | **Machines** | `IMachineRuntime`, `IMachineEngine`; optional `IMachineVideoOutputs`, `IMachineAudioOutputs`, `IMachineInputPorts`, `IMachineContentSlot`, `IMachineLink`, `ITimeTravelMachine`, `IReconfigurableMachine`, and descriptor-validated `IMachineOperationProvider` | the GamingBrick emulators and other hosted machines |
-| **Gpu** | `IGpuComputeServices` | the GPU backends |
+| **Gpu** | `IGpuComputeServices`; `IGpuDeviceContext`, whose `Identity` (`GpuDeviceIdentity`: backend, adapter, PCI ids, driver and API versions) the backend records when it creates the device, for readouts only, and whose `MemoryProfile` (`GpuMemoryProfile`: coherent unified memory, device-local bytes, the largest device-local heap, host-visible device-local bytes) it fills at the same time for residency; `GpuResidency.Select`, the pure choice of a `GpuResidencyPolicy` (in place, ring or staged) from a profile and a region's size; `GpuRegion`, a region the host writes and GPU work reads under any policy, with `GpuUploadRuns` tracking the ranges each buffer owes | the GPU backends; `GpuResidency` and `GpuRegion` are backend-neutral |
+| **Counting** | `WorkKind` (each kind declares its `WorkClass`: deterministic, per-backend-deterministic or pacing), `WorkCount`, `IWorkCounterSource` (each source has a stable dotted `Name`), `WorkCounterSet` (a named source over a fixed list of kinds that any thread counts into), `WorkCounterSources` (the shared `TryReadSingle` a source that counts exactly one kind answers `TryRead` with), `ForwardingWorkCounterSource` (one stable source over the instances its owner replaces or runs side by side, summing the live ones and carrying each retired instance's totals), `AllocationWindow`, and `WorkCounterReport`, the text and JSON form every counter readout prints; for GPU work, `GpuWorkLedger`, `GpuWorkSample`, the pass-through wrappers of `GpuWorkCounting`, `GpuWorkReport`, and `IGpuWorkRegistry`, the host's list of render nodes | any engine service that counts deterministic work; render nodes for GPU work; `world.counters` reads both |
+| **Sources** | `ImageSourceDescriptor` (producer, transport, extent, `ImagePixelFormat`, `ImageColorEncoding`, `ImageSourceCadence`, `ImageSourceStamp`, `ImageContentClass`, capture fill), `IImageSourceProducer` and `ImageSourceProducerRegistry<TProducer>` (producers by id), `ImageSourceUploadLayout` (an uploaded source's region), `ImageSourceConversion` (the CPU reference of the shipped conversion kernels), `IImageSourceReference` and `ImageSourceVerdict` (the exact verdict of a deterministic source) | the World's image producers; the conversion kernels in `Puck.Shaders` |
 | **Capture / Recording** | `IFrameCaptureSource`, `ICaptureSink`, `IVideoEncoder`, `IAudioCaptureSource`, `RecordedPacket` | `Puck.Platform` and `Puck.Recording` |
 | **Lighting** | `ILampArrayDevice`, `LampColor`, `LampInfo`, `LampPurposes` | `Puck.Platform` |
 | **Memory / Pacing** | `IAllocator`, `IPrecisionWaiter`, `IDisplayTimingInfo` | `Puck.Platform` |

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -26,7 +27,6 @@ public sealed class BodySleepLawTests {
 
         return decoded!;
     }
-
     // Zero gravity on the fixture kit's one Free hold — Fixtures.BuildDocument's kit carries no collider and no
     // ground plane, so a body under any nonzero fall rate would never stop integrating downward and could never
     // qualify as "produced no motion" no matter how long it idles.
@@ -145,7 +145,7 @@ public sealed class BodySleepLawTests {
         // own ComposeContactField contract, regardless of whether the compiled colliders differ.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetCollision(
             Collision: fixture.Server.Definition.Collision,
-            Principal: WorldPrincipal.Console
+            Principal: Principal.Console
         ));
         fixture.Step();
 
@@ -228,7 +228,7 @@ public sealed class BodySleepLawTests {
         var before = population.Capture().Entries.Single().Residue;
 
         Assert.Equal(expected: 0UL, actual: before.AsleepSinceTick);
-        Assert.True(condition: before.SleepIdleTicks > 0UL);
+        Assert.True(condition: (before.SleepIdleTicks > 0UL));
         Assert.True(condition: before.ContactFieldObservationCurrent);
         Assert.Equal(expected: 0UL, actual: before.LastContactFieldVersion);
         Assert.True(
@@ -314,6 +314,7 @@ public sealed class BodySleepLawTests {
         var pendingEntry = capturedEntry with {
             Residue = capturedEntry.Residue with { ContactFieldObservationCurrent = false },
         };
+
         checkpoint = checkpoint with {
             Population = populationCheckpoint with { Entries = [pendingEntry] },
         };
@@ -322,7 +323,7 @@ public sealed class BodySleepLawTests {
         fixture.Step();
 
         Assert.True(
-            condition: fixture.Server.Body(index: index)!.AsleepSinceTick > sleptAt,
+            condition: (fixture.Server.Body(index: index)!.AsleepSinceTick > sleptAt),
             userMessage: "the pending contact-field edge was rebased away during restore"
         );
     }

@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -72,18 +72,18 @@ public sealed class StatePoolDenseLawTests {
         Assert.Equal(expected: 2, actual: arena.CellCount(rowOrdinal: field));
         var cursor = 0;
 
-        Assert.True(condition: arena.TryNextCell(rowOrdinal: field, cursor: ref cursor, key: out var first));
+        Assert.True(condition: arena.TryNextCell(cursor: ref cursor, key: out var first, rowOrdinal: field));
         Assert.Equal(expected: "64", actual: arena.Keys[first].Value);
-        Assert.True(condition: arena.TryNextCell(rowOrdinal: field, cursor: ref cursor, key: out var second));
+        Assert.True(condition: arena.TryNextCell(cursor: ref cursor, key: out var second, rowOrdinal: field));
         Assert.Equal(expected: "129", actual: arena.Keys[second].Value);
-        Assert.False(condition: arena.TryNextCell(rowOrdinal: field, cursor: ref cursor, key: out var end));
-        Assert.Equal(expected: default, actual: end);
+        Assert.False(condition: arena.TryNextCell(cursor: ref cursor, key: out var end, rowOrdinal: field));
+        Assert.Equal(actual: end, expected: default);
         Assert.True(condition: arena.TryWrite(handle: handles[1], fieldOrdinal: 0, value: CellValue.Int(value: 23), reason: out _));
         Assert.True(condition: arena.TryResolve(handle: handles[1], position: out var position));
         Assert.Equal(actual: position, expected: 129);
         Span<long> word = stackalloc long[2];
 
-        _ = arena.ReadWord(rowOrdinal: field, word: word);
+        _ = arena.ReadWord(rowOrdinal: field, time: ArenaTime.Origin, word: word);
         Assert.Equal(expected: new long[] { 7, 23 }, actual: word.ToArray());
         var stored = section with { Pools = arena.ToPools() };
         var restored = Build(section: stored);
@@ -91,8 +91,8 @@ public sealed class StatePoolDenseLawTests {
         Assert.Equal(expected: arena.ComputeHash(), actual: restored.ComputeHash());
         Assert.True(condition: arena.TryRelayout(catalog: StateCatalog.Compile(section: stored), section: stored, time: ArenaTime.Origin, reason: out var reason), userMessage: reason);
         Assert.Equal(expected: restored.ComputeHash(), actual: arena.ComputeHash());
-        Assert.True(condition: arena.TryResolvePoolSlot(poolOrdinal: 0, slot: 129, handle: out var retained));
-        Assert.True(condition: arena.TryRead(handle: retained, fieldOrdinal: 0, value: out var read));
+        Assert.True(condition: arena.TryResolvePoolSlot(handle: out var retained, poolOrdinal: 0, slot: 129));
+        Assert.True(condition: arena.TryRead(fieldOrdinal: 0, handle: retained, value: out var read));
         Assert.Equal(expected: 23L, actual: read.AsInt);
     }
     [Fact]
@@ -108,7 +108,7 @@ public sealed class StatePoolDenseLawTests {
         Assert.Equal(expected: new[] { 16, 288 }, actual: arena.SnapshotPool(poolOrdinal: 1).Select(selector: handle => handle.Slot));
         Assert.True(condition: arena.TryWrite(handle: last, fieldOrdinal: 0, value: CellValue.Int(value: 41), reason: out reason), userMessage: reason);
         var rows = Enumerable.Range(start: 0, count: arena.Layout.RowCount).ToArray();
-        var plan = new ArenaUndoPlan(Name: "turn", Rows: rows, Depth: 1);
+        var plan = new ArenaUndoPlan(Depth: 1, Name: "turn", Rows: rows);
 
         arena.ConfigureUndo(plans: [plan]);
         var before = arena.ComputeHash();
@@ -128,10 +128,10 @@ public sealed class StatePoolDenseLawTests {
         Assert.True(condition: restored.TryImportUndoSnapshot(snapshot: arena.ExportUndoSnapshot(), reason: out reason), userMessage: reason);
         Assert.Equal(expected: arena.ComputeHash(), actual: restored.ComputeHash());
         restored.CommitUndoTurn(group: "turn");
-        Assert.True(condition: restored.TryRewindTurn(group: "turn", reason: out reason), userMessage: reason);
+        Assert.True(condition: restored.TryRewindGroup(group: "turn", reason: out reason), userMessage: reason);
         Assert.Equal(expected: before, actual: restored.ComputeHash());
-        Assert.True(condition: restored.TryResolvePoolSlot(poolOrdinal: 1, slot: 288, handle: out var restoredLast));
-        Assert.True(condition: restored.TryRead(handle: restoredLast, fieldOrdinal: 0, value: out var value));
+        Assert.True(condition: restored.TryResolvePoolSlot(handle: out var restoredLast, poolOrdinal: 1, slot: 288));
+        Assert.True(condition: restored.TryRead(fieldOrdinal: 0, handle: restoredLast, value: out var value));
         Assert.Equal(expected: 41L, actual: value.AsInt);
     }
     [Fact]
@@ -175,17 +175,17 @@ public sealed class StatePoolDenseLawTests {
         var row = arena.Catalog.Pools[0].DomainRowOrdinal;
         var at = arena.Layout[row].CellStart;
 
-        arena.ConfigureUndo(plans: [new ArenaUndoPlan(Name: "turn", Rows: [row], Depth: 1)]);
+        arena.ConfigureUndo(plans: [new ArenaUndoPlan(Depth: 1, Name: "turn", Rows: [row])]);
         var before = arena.ComputeHash();
         var snapshot = new ArenaUndoSnapshot(Groups: [new ArenaUndoGroupSnapshot(Name: "turn", Depth: 1, Rows: [row], Pending: null, Segments: [new ArenaUndoSegmentSnapshot(Rewindable: true, Entries: [
-            new ArenaUndoEntrySnapshot(ArenaColumn.MemberKey, (at + 2), -1, null, null, null, null, null),
-            new ArenaUndoEntrySnapshot(ArenaColumn.Presence, (at + 2), 0, null, null, null, null, null),
-            new ArenaUndoEntrySnapshot(ArenaColumn.MemberKey, (at + 1), 0, null, null, null, "2", null),
-            new ArenaUndoEntrySnapshot(ArenaColumn.Presence, (at + 1), 1, null, null, null, null, null),
+            new ArenaUndoEntrySnapshot(Column: ArenaColumn.MemberKey, Components: null, Index: (at + 2), MemberKey: null, Number: -1, Observation: null, Text: null, Visibility: null),
+            new ArenaUndoEntrySnapshot(Column: ArenaColumn.Presence, Components: null, Index: (at + 2), MemberKey: null, Number: 0, Observation: null, Text: null, Visibility: null),
+            new ArenaUndoEntrySnapshot(Column: ArenaColumn.MemberKey, Components: null, Index: (at + 1), MemberKey: "2", Number: 0, Observation: null, Text: null, Visibility: null),
+            new ArenaUndoEntrySnapshot(Column: ArenaColumn.Presence, Components: null, Index: (at + 1), MemberKey: null, Number: 1, Observation: null, Text: null, Visibility: null),
         ])])]);
 
-        Assert.False(condition: arena.TryImportUndoSnapshot(snapshot: snapshot, reason: out var reason));
-        Assert.Contains(expectedSubstring: "fixed identity slot", actualString: reason);
+        Assert.False(condition: arena.TryImportUndoSnapshot(reason: out var reason, snapshot: snapshot));
+        Assert.Contains(actualString: reason, expectedSubstring: "fixed identity slot");
         Assert.Equal(expected: before, actual: arena.ComputeHash());
     }
 }

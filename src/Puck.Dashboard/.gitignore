@@ -27,3 +27,8 @@ dist
 dist-deploy
 dist-ssr
 node_modules
+
+# Build byproducts
+**/.__mf__temp
+.mf
+*.tsbuildinfo

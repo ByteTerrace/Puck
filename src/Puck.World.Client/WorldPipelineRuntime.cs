@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.World.Client;
@@ -9,20 +11,17 @@ namespace Puck.World.Client;
 public readonly record struct WorldPipelinePointerSample(Vector2 ClientPosition, bool HasPosition, bool Pressed);
 /// <summary>Hosts named shader-pipeline instances. Compilation runs in the background; completed candidates
 /// are installed by the frame presenter before producing a frame. Clocks and history are presentation state.</summary>
-public sealed class WorldPipelineRuntime : IDisposable {
-    private static StringComparer PathComparer => (OperatingSystem.IsWindows()
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal
-    );
-
+public sealed partial class WorldPipelineRuntime : IDisposable {
     /// <summary>The factory for instances loaded after boot, using the same device as the host.</summary>
     public Func<string, ShaderPipelineRenderNode>? CreateNode { get; set; }
-    /// <summary>The directory against which authored pipeline source paths resolve.</summary>
-    public string DocumentDirectory { get; }
+    /// <summary>Gets the directory against which authored pipeline source paths resolve — the same directory the
+    /// server's override gate resolves <c>views.pipelines</c> rows against. See <see cref="Rebase"/>.</summary>
+    public string DocumentDirectory { get; private set; }
     /// <summary>Every registered instance by its authored name.</summary>
     public IReadOnlyDictionary<string, Entry> Entries => m_entries;
-    /// <summary>The source loader used by both boot and live authoring.</summary>
-    public ShaderPipelineLoader Loader { get; }
+    /// <summary>The source loader used by both boot and live authoring: a row naming a package directory loads through
+    /// the package, and any other row through the ordinary pipeline loader.</summary>
+    public ShaderPackager Packager { get; }
     /// <summary>A non-destructive pointer read, absent in an offscreen host.</summary>
     public Func<WorldPipelinePointerSample>? ReadPointer { get; set; }
     /// <summary>Registers a newly created instance with the owning render tree.</summary>
@@ -33,10 +32,8 @@ public sealed class WorldPipelineRuntime : IDisposable {
     public Action<string, string>? Report { get; set; }
 
     /// <summary>One instance's presentation controls, pending compilation, and dependency watch.</summary>
-    public sealed class Entry {
-        private readonly Dictionary<string, (DateTime Time, long Length)> m_stamps = new(comparer: PathComparer);
-
-        internal float AuthoredTimeScale { get; set; } = 1f;
+    public sealed partial class Entry {
+        private readonly Dictionary<string, (DateTime Time, long Length)> m_stamps = new(comparer: PuckPaths.Comparer);
 
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;
@@ -47,25 +44,35 @@ public sealed class WorldPipelineRuntime : IDisposable {
         private long m_lastPolledAt;
         private long m_retryAt;
 
-        internal CancellationTokenSource? Cancellation { get; set; }
-        internal Task<ShaderPipelineLoadResult>? Pending { get; set; }
+        internal BackgroundBuild<CompileOutcome> Compilation { get; } = new();
+
         internal int PendingSteps { get; set; }
         internal Exception? ReportedSwapError { get; set; }
 
         /// <summary>The latest console capture awaiting a completion report on the presentation pump.</summary>
-        public FrameCaptureRequest? Capture { get; set; }
+        public FrameCaptureRequest? Capture { get; private set; }
+        /// <summary>The number of console captures requested since this instance was registered.</summary>
+        public int CapturesRequested { get; private set; }
+        /// <summary>The failure of the most recently reported capture, or <see langword="null"/> when it was written.</summary>
+        public string? LastCaptureError { get; private set; }
         /// <summary>Whether time and feedback advancement are paused.</summary>
         public bool ClockPaused { get; set; }
         /// <summary>The presentation clock in seconds.</summary>
         public double ClockSeconds { get; set; }
         /// <summary>Whether a background compilation is still pending installation.</summary>
-        public bool IsCompiling => (Pending is not null);
+        public bool IsCompiling => Compilation.IsPending;
         /// <summary>The most recently completed compilation, including any diagnostics.</summary>
         public ShaderPipelineLoadResult? LastCompile { get; internal set; }
-        /// <summary>The previous pointer state in Shadertoy pixel coordinates.</summary>
-        public Vector4 Mouse { get; set; }
+        /// <summary>The pointer's position during its most recent press over the instance, in the instance's pixels with
+        /// the origin at the top-left corner, or zero before the first press.</summary>
+        public Vector2 Pointer { get; set; }
         /// <summary>Whether the pointer was pressed in the previous frame.</summary>
-        public bool MouseWasPressed { get; set; }
+        public bool PointerWasDown { get; set; }
+        /// <summary>How many presses the pointer has made over the instance.</summary>
+        public uint PointerPresses { get; set; }
+        /// <summary>The published mapping of the pane the instance is shown in, kept while its region and extent hold,
+        /// or <see langword="null"/> before the instance is first shown.</summary>
+        public Puck.Commands.SourceMapping? Pane { get; set; }
         /// <summary>The GPU executor, owned by the hosting render tree.</summary>
         public required ShaderPipelineRenderNode Node { get; init; }
         /// <summary>The number of dependency changes observed.</summary>
@@ -73,35 +80,8 @@ public sealed class WorldPipelineRuntime : IDisposable {
         /// <summary>The root source being watched, or null when watching is disabled.</summary>
         public string? WatchPath { get; private set; }
 
-        internal void CancelPending() {
-            var cancellation = Cancellation;
-            var pending = Pending;
-
-            Cancellation = null;
-            Pending = null;
-            if (cancellation is null) { return; }
-            cancellation.Cancel();
-            if (
-                (pending is null) ||
-                pending.IsCompleted
-            ) {
-                _ = pending?.Exception;
-                cancellation.Dispose();
-                return;
-            }
-            // Retain the cancellation source until native compiler cleanup has finished, and observe
-            // faults from superseded tasks that will never be installed by PumpWatches.
-            _ = pending.ContinueWith(
-                static (task, state) => {
-                _ = task.Exception;
-                ((CancellationTokenSource)state!).Dispose();
-            },
-                cancellation,
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default
-            );
-        }
+        internal void CancelPending() =>
+            Compilation.Cancel();
         internal bool PollWatch(long debounceTicks, long pollTicks) {
             var now = Stopwatch.GetTimestamp();
 
@@ -133,13 +113,15 @@ public sealed class WorldPipelineRuntime : IDisposable {
         }
         internal void RefreshDependencies() {
             if (WatchPath is not { } root) { return; }
-            var retained = new HashSet<string>(comparer: PathComparer) { root };
+            var retained = new HashSet<string>(comparer: PuckPaths.Comparer) { root };
 
             if (LastCompile is { } compiled) { retained.UnionWith(other: compiled.Dependencies); }
-            foreach (var path in retained) { m_stamps.TryAdd(
+            foreach (var path in retained) {
+                m_stamps.TryAdd(
                 key: path,
                 value: ReadStamp(path: path)
-            ); }
+            );
+            }
             foreach (var path in m_stamps.Keys.ToArray()) {
                 if (!retained.Contains(item: path)) { m_stamps.Remove(key: path); }
             }
@@ -208,6 +190,10 @@ public sealed class WorldPipelineRuntime : IDisposable {
         }
     }
 
+    // One background compilation: the loader's result and, for a compiled candidate, the read of the source it was
+    // compiled from, taken before and after the load so an edit during compilation retries instead of mislabeling.
+    internal sealed record CompileOutcome(ShaderPipelineLoadResult Result, ShaderPipelineSource? Source);
+
     /// <summary>The source watch's quiet period before requesting compilation.</summary>
     public const int WatchDebounceMilliseconds = 150;
     /// <summary>The minimum interval between dependency metadata polls, independent of presentation cadence.</summary>
@@ -218,14 +204,24 @@ public sealed class WorldPipelineRuntime : IDisposable {
     private bool m_disposed;
     private IReadOnlyList<WorldViewPipeline>? m_lastRows;
 
-    /// <summary>Creates a host registry using the shared pipeline loader and the world's document directory.</summary>
-    public WorldPipelineRuntime(ShaderPipelineLoader loader, string documentDirectory) {
-        ArgumentNullException.ThrowIfNull(loader);
+    /// <summary>Creates a host registry using the shared source loader and the world's document directory.</summary>
+    public WorldPipelineRuntime(ShaderPackager packager, string documentDirectory) {
+        ArgumentNullException.ThrowIfNull(packager);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentDirectory);
-        Loader = loader;
+        Packager = packager;
         DocumentDirectory = Path.GetFullPath(path: documentDirectory);
     }
 
+    /// <summary>Rebases every future relative source resolution onto a newly loaded document's own directory — a
+    /// <c>world.load</c>/<c>world.reload</c> that installs a document from another directory moves what a row's
+    /// relative <c>source</c> resolves against, the same directory the server's override gate begins reading rows
+    /// from at that same moment. Does not retroactively re-resolve an already-compiled instance; a live
+    /// <see cref="QueueCompile"/> after this call is what reads the new directory.</summary>
+    /// <param name="documentDirectory">The newly loaded document's directory.</param>
+    public void Rebase(string documentDirectory) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentDirectory);
+        DocumentDirectory = Path.GetFullPath(path: documentDirectory);
+    }
     /// <summary>Cancels pending compilations; the render tree retains ownership of the GPU instances.</summary>
     public void Dispose() {
         if (m_disposed) { return; }
@@ -242,9 +238,11 @@ public sealed class WorldPipelineRuntime : IDisposable {
 
         foreach (var (name, entry) in m_entries) {
             if (entry.Capture is { Completion.IsCompleted: true } capture) {
-                entry.Capture = null;
                 var result = capture.Completion.GetAwaiter().GetResult();
 
+                entry.CompleteCapture(error: (result.Succeeded
+                    ? null
+                    : result.Error!.Message));
                 Report?.Invoke(
                     name,
                     (result.Succeeded
@@ -257,105 +255,190 @@ public sealed class WorldPipelineRuntime : IDisposable {
                 objB: entry.Node.LastSwapError
             )) {
                 entry.ReportedSwapError = entry.Node.LastSwapError;
-                if (entry.ReportedSwapError is { } error) { Report?.Invoke(
+                if (entry.ReportedSwapError is { } error) {
+                    Report?.Invoke(
                     name,
                     $"GPU candidate refused: {error.Message}"
-                ); }
+                );
+                }
             }
-            if (entry.Pending is { IsCompleted: true } pending) {
-                entry.Pending = null;
-                entry.Cancellation?.Dispose();
-                entry.Cancellation = null;
-                ShaderPipelineLoadResult result;
+            if (entry.Compilation.TryTake(
+                error: out var compileError,
+                result: out var compiled
+            )) {
+                var result = (compiled?.Result ?? new ShaderPipelineLoadResult(
+                    Dependencies: [],
+                    Message: compileError!.Message,
+                    Pipeline: null,
+                    Status: ShaderPipelineLoadStatus.Failed
+                ));
 
-                try { result = pending.GetAwaiter().GetResult(); } catch (Exception exception) { result = new ShaderPipelineLoadResult(
-                    null,
-                    [],
-                    exception.Message
-                ); }
                 entry.LastCompile = result;
                 if (result.Pipeline is { } pipeline) {
-                    try { entry.Node.Swap(pipeline: pipeline); } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException or NotSupportedException)) {
-                        result = result with { Pipeline = null, Message = exception.Message };
+                    // A compiled candidate not yet installed — queued for the next frame, or still building — is replaced
+                    // by a newer one.
+                    var held = entry.Node.HasPendingCandidate;
+
+                    try {
+                        entry.Node.Swap(pipeline: pipeline);
+                        entry.Candidate = ((compiled?.Source is { } source)
+                            ? (pipeline.Plan, source)
+                            : null);
+                        if (held) {
+                            Report?.Invoke(
+                                name,
+                                "superseded: compiled candidate"
+                            );
+                        }
+                    } catch (Exception exception) when ((exception is InvalidOperationException or ArgumentException or NotSupportedException or InvalidDataException)) {
+                        result = result with { Message = exception.Message, Pipeline = null, Status = ShaderPipelineLoadStatus.Failed };
                         entry.LastCompile = result;
                     }
                 }
                 entry.RefreshDependencies();
-                if (result.RetryRecommended) { entry.ScheduleRetry(); }
+                if (result.Status == ShaderPipelineLoadStatus.Retry) { entry.ScheduleRetry(); }
                 Report?.Invoke(
                     name,
-                    result.Message
+                    ((result.Status == ShaderPipelineLoadStatus.Unsupported)
+                    ? $"unsupported: {result.Message}"
+                    : result.Message)
                 );
             }
+            entry.Synchronize();
             if (entry.PollWatch(
                 debounceTicks: debounce,
                 pollTicks: poll
-            )) { QueueCompile(
+            )) {
+                QueueCompile(
                 name: name,
                 source: entry.Source
-            ); }
+            );
+            }
         }
     }
-    /// <summary>Schedules a complete candidate compilation. A newer request supersedes an older result.</summary>
+    /// <summary>Schedules a complete candidate compilation. A newer request supersedes an older result: a compilation
+    /// still pending is canceled and never installed, and <see cref="Report"/> says so as <c>superseded: compilation</c>.
+    /// A compiled candidate not yet installed, queued for the next frame or with its pipelines still building, is
+    /// likewise replaced when the newer one compiles (<c>superseded: compiled candidate</c>).</summary>
     public void QueueCompile(string name, string source) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
         var entry = m_entries[name];
+        var superseded = entry.IsCompiling;
 
         entry.CancelPending();
+        if (superseded) {
+            Report?.Invoke(
+                name,
+                "superseded: compilation"
+            );
+        }
         entry.Source = source;
-        string resolved;
-
-        try { resolved = Path.GetFullPath(
-            source,
-            DocumentDirectory
-        ); } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
+        if (!WorldDocumentPaths.TryResolve(
+            documentDirectory: DocumentDirectory,
+            path: source,
+            reason: out var unresolved,
+            resolved: out var resolved
+        )) {
             entry.LastCompile = new ShaderPipelineLoadResult(
-                null,
-                [],
-                exception.Message
+                Dependencies: [],
+                Message: unresolved,
+                Pipeline: null,
+                Status: ShaderPipelineLoadStatus.Failed
             );
             Report?.Invoke(
                 name,
-                exception.Message
+                unresolved
             );
             return;
         }
-        var cancellation = new CancellationTokenSource();
-
-        entry.Cancellation = cancellation;
         if (
             (entry.WatchPath is { } watched) &&
             !string.Equals(
             a: watched,
             b: resolved,
-            comparisonType: StringComparison.OrdinalIgnoreCase
+            comparisonType: PuckPaths.Comparison
         )
         ) { entry.Watch(path: resolved); }
-        var token = cancellation.Token;
-
-        entry.Pending = Task.Run(function: () => {
+        entry.Compilation.Start(build: token => {
             try {
-                return Loader.Load(
+                _ = ShaderPipelineSource.TryRead(
+                    name: name,
+                    path: resolved,
+                    reason: out _,
+                    source: out var before
+                );
+
+                var loaded = Packager.LoadSource(
                     cancellationToken: token,
                     name: name,
                     path: resolved
                 );
-            } catch (OperationCanceledException) {
-                return new ShaderPipelineLoadResult(
-                    null,
-                    [resolved],
-                    "compilation superseded"
+
+                if (loaded.Status != ShaderPipelineLoadStatus.Compiled) {
+                    return new CompileOutcome(
+                        Result: loaded,
+                        Source: null
+                    );
+                }
+                // The identity a commit carries is the source this candidate was compiled from; a source that moved
+                // while the loader ran retries the whole pipeline, as the loader's own source check does.
+                if (
+                    !ShaderPipelineSource.TryRead(
+                    name: name,
+                    path: resolved,
+                    reason: out _,
+                    source: out var after
+                ) ||
+                    !string.Equals(
+                    a: before?.SourceIdentity,
+                    b: after.SourceIdentity,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
+                    return new CompileOutcome(
+                        Result: new ShaderPipelineLoadResult(
+                            Dependencies: loaded.Dependencies,
+                            Message: "Source changed during compilation; retrying the complete pipeline.",
+                            Pipeline: null,
+                            Status: ShaderPipelineLoadStatus.Retry
+                        ),
+                        Source: null
+                    );
+                }
+
+                return new CompileOutcome(
+                    Result: loaded,
+                    Source: after
                 );
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException or ShaderToolMissingException)) {
-                return new ShaderPipelineLoadResult(
-                    null,
-                    [resolved],
-                    exception.Message
+            } catch (OperationCanceledException) {
+                return Failed(
+                    message: "compilation superseded",
+                    status: ShaderPipelineLoadStatus.Failed
+                );
+            } catch (ShaderToolMissingException exception) {
+                return Failed(
+                    message: exception.Message,
+                    status: ShaderPipelineLoadStatus.Unsupported
+                );
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)) {
+                return Failed(
+                    message: exception.Message,
+                    status: ShaderPipelineLoadStatus.Failed
                 );
             }
+
+            CompileOutcome Failed(string message, ShaderPipelineLoadStatus status) => new(
+                Result: new ShaderPipelineLoadResult(
+                    Dependencies: [resolved],
+                    Message: message,
+                    Pipeline: null,
+                    Status: status
+                ),
+                Source: null
+            );
         });
     }
     /// <summary>Reconciles accepted document rows before rendering. Refused mutations never create GPU instances.</summary>
@@ -385,10 +468,7 @@ public sealed class WorldPipelineRuntime : IDisposable {
                 );
                 entry = m_entries[row.Name];
             }
-            if (entry.AuthoredTimeScale != row.TimeScale) {
-                entry.AuthoredTimeScale = row.TimeScale;
-                entry.ClockScale = row.TimeScale;
-            }
+            entry.Adopt(row: row);
             if (!string.Equals(
                 a: entry.Source,
                 b: row.Source,
@@ -416,7 +496,7 @@ public sealed class WorldPipelineRuntime : IDisposable {
         ArgumentNullException.ThrowIfNull(node);
         m_entries.Add(
             key: name,
-            value: new Entry { Node = node }
+            value: new Entry { Name = name, Node = node, Owner = this }
         );
     }
     /// <summary>Looks up a registered instance without creating one.</summary>

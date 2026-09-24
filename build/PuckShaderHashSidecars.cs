@@ -20,7 +20,6 @@ public sealed class PuckWriteShaderHashSidecars : Task {
     /// <summary>Every compiled bytecode file (.spv/.dxil) produced this pass; each item's <c>SourcePath</c>
     /// metadata names its originating <c>.hlsl</c>.</summary>
     public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
-
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
 
@@ -38,14 +37,15 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 
             // Publish a complete file rather than truncating one a live asset reader may have memory-mapped.
             // Windows refuses truncation of mapped files; replacement also prevents readers seeing half a hash.
-            var sidecarPath = bytecodePath + ".hash";
-            var temporaryPath = sidecarPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var sidecarPath = (bytecodePath + ".hash");
+            var temporaryPath = (((sidecarPath + ".") + Guid.NewGuid().ToString(format: "N")) + ".tmp");
+
             try {
-                File.WriteAllText(path: temporaryPath, contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n");
+                File.WriteAllText(contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n", path: temporaryPath);
                 if (File.Exists(path: sidecarPath)) {
-                    File.Replace(sourceFileName: temporaryPath, destinationFileName: sidecarPath, destinationBackupFileName: null);
+                    File.Replace(destinationBackupFileName: null, destinationFileName: sidecarPath, sourceFileName: temporaryPath);
                 } else {
-                    File.Move(sourceFileName: temporaryPath, destFileName: sidecarPath);
+                    File.Move(destFileName: sidecarPath, sourceFileName: temporaryPath);
                 }
             } finally {
                 if (File.Exists(path: temporaryPath)) {
@@ -57,7 +57,6 @@ public sealed class PuckWriteShaderHashSidecars : Task {
         return !Log.HasLoggedErrors;
     }
 }
-
 /// <summary>
 /// Independently recomputes both hashes <see cref="PuckWriteShaderHashSidecars"/> writes from whatever is on
 /// disk right now and compares them against each cached <c>.hash</c> sidecar — catching a cached
@@ -72,7 +71,6 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
     /// <summary>Every cached bytecode file (.spv/.dxil); each item's <c>SourcePath</c> metadata names its
     /// matching <c>.hlsl</c> (already confirmed to exist by <c>ValidateShaderBytecodeSources</c>).</summary>
     public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
-
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
 
@@ -87,31 +85,30 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
                 continue;
             }
 
-            var sidecarPath = bytecodePath + ".hash";
+            var sidecarPath = (bytecodePath + ".hash");
+
             if (!File.Exists(path: sidecarPath)) {
                 Log.LogError(
-                    message: $"Shader bytecode '{bytecode.ItemSpec}' has no '.hash' sidecar. Recompile (edit and " +
-                        "save its source, or delete the bytecode so a rebuild regenerates it) to refresh the " +
-                        "bytecode and sidecar together.");
+                    message: (((string)$"Shader bytecode '{bytecode.ItemSpec}' has no '.hash' sidecar. Recompile (edit and save its source, or delete the bytecode so a rebuild regenerates it) to refresh the ") +
+                        "bytecode and sidecar together."));
                 continue;
             }
 
             var expectedSourceHash = PuckShaderHashing.HashConcatenated(firstPath: sourcePath, includes: Includes);
             var expectedBytecodeHash = PuckShaderHashing.HashFile(path: bytecodePath);
+
             var (recordedSourceHash, recordedBytecodeHash) = PuckShaderHashing.ReadSidecar(path: sidecarPath);
 
             if (!string.Equals(a: recordedSourceHash, b: expectedSourceHash, comparisonType: StringComparison.Ordinal)) {
                 Log.LogError(
-                    message: $"Shader bytecode '{bytecode.ItemSpec}' is stale relative to its source (or was not " +
-                        "recompiled after a source or included .hlsli change). Recompile to refresh the " +
-                        "bytecode and '.hash' sidecar.");
+                    message: (((string)$"Shader bytecode '{bytecode.ItemSpec}' is stale relative to its source (or was not recompiled after a source or included .hlsli change). Recompile to refresh the ") +
+                        "bytecode and '.hash' sidecar."));
             }
 
             if (!string.Equals(a: recordedBytecodeHash, b: expectedBytecodeHash, comparisonType: StringComparison.Ordinal)) {
                 Log.LogError(
-                    message: $"Shader bytecode '{bytecode.ItemSpec}' does not match its own cached '.hash' " +
-                        "sidecar (the cached bytecode bytes changed without a recompile). Recompile to refresh " +
-                        "the bytecode and '.hash' sidecar.");
+                    message: (((string)$"Shader bytecode '{bytecode.ItemSpec}' does not match its own cached '.hash' sidecar (the cached bytecode bytes changed without a recompile). Recompile to refresh ") +
+                        "the bytecode and '.hash' sidecar."));
             }
         }
 
@@ -127,7 +124,7 @@ internal static class PuckShaderHashing {
     /// policy (`* text=auto` yields CRLF on Windows and LF elsewhere for the same blob).</summary>
     public static string HashConcatenated(string firstPath, ITaskItem[] includes) {
         using (var sha256 = SHA256.Create()) {
-            using (var cryptoStream = new CryptoStream(stream: Stream.Null, transform: sha256, mode: CryptoStreamMode.Write)) {
+            using (var cryptoStream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: sha256)) {
                 AppendFile(destination: cryptoStream, path: firstPath);
                 foreach (var include in includes) {
                     AppendFile(destination: cryptoStream, path: include.GetMetadata(metadataName: "FullPath"));
@@ -137,7 +134,6 @@ internal static class PuckShaderHashing {
             return ToHex(bytes: sha256.Hash);
         }
     }
-
     /// <summary>Hashes one file's raw bytes.</summary>
     public static string HashFile(string path) {
         using (var sha256 = SHA256.Create()) {
@@ -146,16 +142,15 @@ internal static class PuckShaderHashing {
             }
         }
     }
-
     /// <summary>Reads a two-line "source:&lt;hex&gt;" / "bytecode:&lt;hex&gt;" sidecar.</summary>
     public static (string SourceHash, string BytecodeHash) ReadSidecar(string path) {
         var sourceHash = "";
         var bytecodeHash = "";
 
         foreach (var line in File.ReadAllLines(path: path)) {
-            if (line.StartsWith(value: "source:", comparisonType: StringComparison.Ordinal)) {
+            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "source:")) {
                 sourceHash = line.Substring(startIndex: "source:".Length).Trim();
-            } else if (line.StartsWith(value: "bytecode:", comparisonType: StringComparison.Ordinal)) {
+            } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "bytecode:")) {
                 bytecodeHash = line.Substring(startIndex: "bytecode:".Length).Trim();
             }
         }
@@ -166,23 +161,24 @@ internal static class PuckShaderHashing {
     private static void AppendFile(CryptoStream destination, string path) {
         var bytes = File.ReadAllBytes(path: path);
         var count = 0;
-        for (var i = 0; i < bytes.Length; i++) {
-            if (bytes[i] != (byte)'\r') {
+
+        for (var i = 0; (i < bytes.Length); i++) {
+            if (bytes[i] != ((byte)'\r')) {
                 bytes[count++] = bytes[i];
             }
         }
-        destination.Write(buffer: bytes, offset: 0, count: count);
+        destination.Write(buffer: bytes, count: count, offset: 0);
     }
-
     private static string ToHex(byte[] bytes) {
-        var chars = new char[bytes.Length * 2];
-        for (var i = 0; i < bytes.Length; i++) {
-            var b = bytes[i];
-            chars[i * 2] = ToNibble(value: (byte)(b >> 4));
-            chars[i * 2 + 1] = ToNibble(value: (byte)(b & 0xF));
-        }
-        return new string(chars);
-    }
+        var chars = new char[(bytes.Length * 2)];
 
-    private static char ToNibble(byte value) => (char)(value < 10 ? '0' + value : 'a' + (value - 10));
+        for (var i = 0; (i < bytes.Length); i++) {
+            var b = bytes[i];
+
+            chars[(i * 2)] = ToNibble(value: ((byte)(b >> 4)));
+            chars[((i * 2) + 1)] = ToNibble(value: ((byte)(b & 0xF)));
+        }
+        return new string(value: chars);
+    }
+    private static char ToNibble(byte value) => ((char)((value < 10) ? ('0' + value) : ('a' + (value - 10))));
 }

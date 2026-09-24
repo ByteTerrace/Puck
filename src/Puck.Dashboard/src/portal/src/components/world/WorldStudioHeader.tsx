@@ -1,47 +1,42 @@
-import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, FileButton, Group, Modal, Paper, Stack, Text, Textarea, TextInput } from "@mantine/core";
+import { useState } from "react";
 import {
-  RiArrowLeftLine,
-  RiArrowRightLine,
-  RiDownloadLine,
-  RiFolderOpenLine,
-  RiSaveLine,
-  RiUploadLine,
-} from "@remixicon/react";
+  Alert,
+  Badge,
+  Button,
+  Group,
+  Modal,
+  Paper,
+  ScrollArea,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+  UnstyledButton,
+} from "@mantine/core";
+import { RiDownloadLine, RiDraftLine, RiErrorWarningLine, RiFolderOpenLine, RiSaveLine } from "@remixicon/react";
 import {
   StudioContext,
   useStudioBoot,
-  useStudioCanRedo,
-  useStudioCanUndo,
-  useStudioDocument,
-  useStudioOfficial,
+  useStudioCanSaveDraft,
+  useStudioChecking,
   useStudioIsDirty,
+  useStudioLanguage,
+  useStudioOfficial,
+  useStudioProblems,
+  useStudioWorkspace,
+  useStudioWorld,
 } from "../../context/StudioContext";
-import type { DocumentRole } from "../../document/documentRole";
-import { checkDocument } from "../../document/intake";
 import { readDraftListing } from "../../document/localDrafts";
-import type { ManifestDocumentEntry } from "../../official/manifest";
+import { describeTree, type DocumentRole, type ManifestDocumentEntry } from "../../official/manifest";
+import { EmptyState } from "../../ui/EmptyState";
+import { Kicker } from "../../ui/Kicker";
 import { useStudioConfirmation } from "./StudioConfirmation";
+import classes from "./WorldStudioHeader.module.css";
 
-const ROLE_LABEL: Record<DocumentRole, string> = {
-  world: "world",
-  basis: "basis",
-  fragment: "fragment",
-  shard: "shard",
-};
-
-const VALIDATION_LABEL: Record<string, { text: string; color: string }> = {
-  pending: { text: "pending", color: "yellow" },
-  clean: { text: "clean", color: "teal" },
-  refused: { text: "refused", color: "red" },
-};
-
-function isTextEditingTarget(target: EventTarget | null): boolean {
-  return (target instanceof HTMLElement) && !!target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]');
-}
+const ROLES: readonly DocumentRole[] = ["world", "basis", "fragment", "shard"];
 
 function downloadText(filename: string, text: string): void {
-  const blob = new Blob([text], { type: "application/json" });
+  const blob = new Blob([text], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const anchor = window.document.createElement("a");
   anchor.href = url;
@@ -51,176 +46,153 @@ function downloadText(filename: string, text: string): void {
 }
 
 /**
- * The studio's document toolbar: the official build (or the boot refusal by name), the open
- * document's name and role, validation status, undo/redo, and the Open/Import/Export/Save-draft
- * document actions. Bound entirely to `StudioContext` — no props.
+ * The studio's masthead: the open document's name and role, where its source stands (checking, clean, or how many
+ * problems), the official build and both engines (or a boot refusal by name), then the Open, Save draft, and
+ * Download source actions. Bound entirely to `StudioContext` — no props.
  */
 export function WorldStudioHeader() {
   const actor = StudioContext.useActorRef();
   const boot = useStudioBoot();
-  const document = useStudioDocument();
+  const language = useStudioLanguage();
+  const world = useStudioWorld();
+  const workspace = useStudioWorkspace();
   const official = useStudioOfficial();
-  const canUndo = useStudioCanUndo();
-  const canRedo = useStudioCanRedo();
+  const checking = useStudioChecking();
+  const problems = useStudioProblems();
   const isDirty = useStudioIsDirty();
-  const canSave = StudioContext.useSelector(snapshot => snapshot.matches({ ready: { document: "idle" } }));
+  const canSave = useStudioCanSaveDraft();
   const confirm = useStudioConfirmation();
-  const replaceDocument = async (perform: () => void) => {
-    if (!isDirty || await confirm("Discard unsaved edits and replace this document?")) perform();
-  };
-
   const [openModal, setOpenModal] = useState(false);
-  const [importModal, setImportModal] = useState(false);
-  const [importText, setImportText] = useState("");
-  const [importError, setImportError] = useState<string | null>(null);
   const [saveDraftModal, setSaveDraftModal] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
 
-  useEffect(() => {
-    const shortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || isTextEditingTarget(event.target)) return;
-      const key = event.key.toLowerCase();
-      if (key !== "z" && key !== "y") return;
-      event.preventDefault();
-      if (key === "y" || event.shiftKey) {
-        if (canRedo) actor.send({ type: "REDO" });
-      } else if (canUndo) {
-        actor.send({ type: "UNDO" });
-      }
-    };
-    window.addEventListener("keydown", shortcut);
-    return () => window.removeEventListener("keydown", shortcut);
-  }, [actor, canUndo, canRedo]);
+  const bootLine = boot.status === "refused"
+    ? `boot refused: ${boot.refusal}`
+    : boot.build
+      ? `${describeTree(boot.build)} · ${boot.build.source} · ${official?.manifest.channel ?? "?"} channel · language engine ${language.status}${language.refusal ? `: ${language.refusal}` : ""} · world engine ${world.status}${world.refusal ? `: ${world.refusal}` : ""}`
+      : "booting…";
+  const errors = problems.filter((problem) => problem.severity === "error").length;
+  const status = !workspace ? { text: "no document", color: "gray" }
+    : checking ? { text: "checking", color: "yellow" }
+      : errors > 0 ? { text: `${errors} error${errors === 1 ? "" : "s"}`, color: "red" }
+        : { text: "clean", color: "jade" };
 
-  const validation = VALIDATION_LABEL[document.validation] ?? VALIDATION_LABEL.pending;
-  const draftStore = actor.getSnapshot().context.machineInput.draftStore;
-  const { drafts, error: draftError } = useMemo(() => openModal ? readDraftListing(draftStore) : { drafts: [], error: null }, [openModal, draftStore]);
+  const replaceWorkspace = async (perform: () => void) => {
+    if (!isDirty || await confirm("Discard unsaved source edits and open another document?")) perform();
+  };
+  const { drafts, error: draftError } = openModal ? readDraftListing(actor.getSnapshot().context.machineInput.draftStore) : { drafts: [], error: null };
   const documentsByRole = new Map<DocumentRole, ManifestDocumentEntry[]>();
-  if (official) {
-    for (const entry of official.manifest.documents) {
-      const list = documentsByRole.get(entry.role) ?? [];
-      list.push(entry);
-      documentsByRole.set(entry.role, list);
-    }
+  for (const entry of official?.manifest.documents ?? []) {
+    documentsByRole.set(entry.role, [...(documentsByRole.get(entry.role) ?? []), entry]);
   }
-
-  const openImport = () => { setImportText(document.text); setImportError(null); setImportModal(true); };
-  const applyImport = () => {
-    // `checkDocument` runs the same byte-size intake check the machine's own `OPEN_TEXT` edit
-    // reducer runs (`openTextDocument`, `document/intake.ts`) — checked again here so the modal
-    // can show the refusal by name inline instead of only via `WorldStudioAlerts` a beat later.
-    try {
-      checkDocument(importText);
-    } catch (error) {
-      setImportError((error as Error).message);
-      return;
-    }
-    void replaceDocument(() => {
-      actor.send({ type: "OPEN_TEXT", text: importText });
-      setImportModal(false);
-    });
-  };
-  const importFile = (file: File | null) => {
-    if (!file) return;
-    void file.text().then((text) => { setImportText(text); setImportError(null); });
-  };
+  const title = workspace ? (workspace.draftId ? `${workspace.documentName} · ${workspace.draftId}` : workspace.documentName) : "No document";
 
   return (
-    <Paper p="sm" radius="md" withBorder className="studio-document-toolbar">
-      <Group justify="space-between" gap="sm" wrap="wrap">
-        <div>
-          <Text className="kicker">Puck authoring studio</Text>
-          <Group gap="xs" align="baseline">
-            <Text component="h1" m={0} fw={600} size="lg">{document.name}</Text>
-            <Badge size="xs" variant="light">{ROLE_LABEL[document.role]}</Badge>
-            <Badge size="xs" variant="light" color={validation.color} role="status">
-              {validation.text}{document.diagnostics.length > 0 ? ` (${document.diagnostics.length})` : ""}
-            </Badge>
+    <Paper p="md">
+      <Stack gap={4}>
+        <Kicker>World Studio</Kicker>
+        {/* Each masthead line keeps one line's height whatever it says, so nothing below it moves as it changes. */}
+        <Group gap="sm" align="center" wrap="nowrap">
+          <Title order={1} size="h2" className={classes.name} title={title}>{title}</Title>
+          <Group gap={6} wrap="nowrap">
+            <Badge color="gray">{workspace?.role ?? "—"}</Badge>
+            <Badge color={status.color} role="status">{status.text}</Badge>
           </Group>
-          <Text size="xs" c="dimmed" mt={2}>
-            {boot.status === "refused"
-              ? `boot refused: ${boot.refusal}`
-              : boot.build
-                ? `commit ${boot.build.commit.slice(0, 12)} · ${boot.build.source} · ${official?.manifest.channel ?? "?"} channel`
-                : "booting…"}
-          </Text>
-        </div>
-        <Group gap="xs">
-          <Button size="xs" variant="default" leftSection={<RiFolderOpenLine size={15} />} disabled={boot.status !== "ready"} onClick={() => setOpenModal(true)}>Open</Button>
-          <Button size="xs" variant="default" leftSection={<RiUploadLine size={15} />} onClick={openImport}>Import JSON</Button>
-          <Button size="xs" variant="default" leftSection={<RiDownloadLine size={15} />} onClick={() => downloadText(`${document.name}.json`, document.text)}>Export JSON</Button>
-          <Button size="xs" variant="default" leftSection={<RiSaveLine size={15} />} onClick={() => { setDraftTitle(document.name); setSaveDraftModal(true); }}>Save draft</Button>
+        </Group>
+        <Text size="xs" c="dimmed" ff="monospace" truncate="end" title={bootLine}>
+          {bootLine}
+        </Text>
+      </Stack>
+
+      <Group gap="sm" justify="space-between" wrap="wrap" className={classes.toolbar}>
+        <Text size="xs" c="dimmed" className={classes.label}>
+          {workspace ? `${workspace.entry} · revision ${workspace.revision}` : "Open a document to edit its source."}
+        </Text>
+        <Group gap="xs" wrap="wrap">
+          <Button size="xs" variant="default" leftSection={<RiFolderOpenLine size={16} />} disabled={boot.status !== "ready"} onClick={() => setOpenModal(true)}>
+            Open
+          </Button>
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<RiDownloadLine size={16} />}
+            disabled={!workspace}
+            onClick={() => workspace && downloadText(workspace.active.slice(workspace.active.lastIndexOf("/") + 1), workspace.files[workspace.active].text)}
+          >
+            Download source
+          </Button>
+          <Button
+            size="xs"
+            variant={isDirty ? "filled" : "default"}
+            leftSection={<RiSaveLine size={16} />}
+            disabled={!canSave}
+            onClick={() => { setDraftTitle(workspace?.draftId ?? workspace?.documentName ?? ""); setSaveDraftModal(true); }}
+          >
+            Save draft
+          </Button>
         </Group>
       </Group>
-      <Group gap="xs" mt="sm">
-        <Button size="compact-xs" variant="default" leftSection={<RiArrowLeftLine size={14} />} disabled={!canUndo} onClick={() => actor.send({ type: "UNDO" })}>Undo</Button>
-        <Button size="compact-xs" variant="default" rightSection={<RiArrowRightLine size={14} />} disabled={!canRedo} onClick={() => actor.send({ type: "REDO" })}>Redo</Button>
-        <Text size="xs" c="dimmed" role="status" style={{ flex: 1 }}>{document.label}</Text>
-      </Group>
 
-      <Modal opened={openModal} onClose={() => setOpenModal(false)} title="Open a document" size="lg">
-        <Stack gap="md">
-          {(["world", "basis", "fragment", "shard"] as const).map((role) => {
+      <Modal opened={openModal} onClose={() => setOpenModal(false)} title="Open a document" size="lg" scrollAreaComponent={ScrollArea.Autosize}>
+        <Stack gap="lg">
+          {ROLES.map((role) => {
             const entries = documentsByRole.get(role) ?? [];
             if (entries.length === 0) return null;
             return (
-              <div key={role}>
-                <Text size="xs" c="dimmed" mb={4} tt="uppercase">{role}</Text>
-                <Stack gap={4}>
+              <Stack gap={6} key={role}>
+                <Kicker>{role}</Kicker>
+                <ul className={classes.list}>
                   {entries.map((entry) => (
-                    <Button
-                      key={entry.name}
-                      variant="default"
-                      size="xs"
-                      justify="flex-start"
-                      onClick={() => void replaceDocument(() => { actor.send({ type: "OPEN_OFFICIAL", name: entry.name }); setOpenModal(false); })}
-                    >
-                      {entry.name}
-                    </Button>
+                    <li key={entry.name}>
+                      <UnstyledButton
+                        className={classes.entry}
+                        aria-current={entry.name === workspace?.documentName ? "true" : undefined}
+                        onClick={() => void replaceWorkspace(() => { actor.send({ type: "OPEN_OFFICIAL", name: entry.name }); setOpenModal(false); })}
+                      >
+                        <Text size="sm" ff="monospace" className={classes.entryName}>{entry.name}</Text>
+                        <Text size="xs" c="dimmed" ff="monospace" visibleFrom="xs">{entry.source}</Text>
+                      </UnstyledButton>
+                    </li>
                   ))}
-                </Stack>
-              </div>
+                </ul>
+              </Stack>
             );
           })}
-          <div>
-            <Text size="xs" c="dimmed" mb={4} tt="uppercase">Local drafts</Text>
-            {draftError && <Text size="sm" c="red" role="alert">{draftError}</Text>}
-            {!draftError && drafts.length === 0 && <Text size="xs" c="dimmed">No local drafts saved yet.</Text>}
-            <Stack gap={4}>
-              {drafts.map((draft) => (
-                <Button
-                  key={draft.id}
-                  variant="default"
-                  size="xs"
-                  justify="flex-start"
-                  onClick={() => void replaceDocument(() => { actor.send({ type: "LOAD_DRAFT", id: draft.id }); setOpenModal(false); })}
-                >
-                  {draft.title}
-                </Button>
-              ))}
-            </Stack>
-          </div>
-        </Stack>
-      </Modal>
-
-      <Modal opened={importModal} onClose={() => setImportModal(false)} title="Import JSON" size="lg">
-        <Stack gap="sm">
-          <FileButton onChange={importFile} accept="application/json,.json">
-            {(props) => <Button {...props} size="xs" variant="default">Choose a file…</Button>}
-          </FileButton>
-          <Textarea autosize minRows={8} maxRows={20} value={importText} onChange={(e) => setImportText(e.currentTarget.value)} styles={{ input: { fontFamily: "ui-monospace,monospace" } }} />
-          {importError && <Text size="xs" c="red" role="alert">{importError}</Text>}
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setImportModal(false)}>Cancel</Button>
-            <Button onClick={applyImport}>Open as new document</Button>
-          </Group>
+          <Stack gap={6}>
+            <Kicker>Local drafts</Kicker>
+            {draftError && (
+              <Alert color="red" icon={<RiErrorWarningLine size={18} />} title="Local drafts unreadable">
+                {draftError}
+              </Alert>
+            )}
+            {!draftError && drafts.length === 0 && (
+              <EmptyState icon={<RiDraftLine size={22} />} title="No local drafts saved yet">
+                Save draft keeps the files you changed in this browser.
+              </EmptyState>
+            )}
+            {drafts.length > 0 && (
+              <ul className={classes.list}>
+                {drafts.map((draft) => (
+                  <li key={draft.id}>
+                    <UnstyledButton
+                      className={classes.entry}
+                      onClick={() => void replaceWorkspace(() => { actor.send({ type: "LOAD_DRAFT", id: draft.id }); setOpenModal(false); })}
+                    >
+                      <Text size="sm" className={classes.entryName}>{draft.title}</Text>
+                      <Text size="xs" c="dimmed" ff="monospace" visibleFrom="xs">{draft.documentName}</Text>
+                    </UnstyledButton>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Stack>
         </Stack>
       </Modal>
 
       <Modal opened={saveDraftModal} onClose={() => setSaveDraftModal(false)} title="Save local draft">
         <Stack gap="sm">
-          <TextInput label="Title" value={draftTitle} onChange={(e) => setDraftTitle(e.currentTarget.value)} />
-          <Group justify="flex-end">
+          <TextInput data-autofocus label="Title" value={draftTitle} onChange={(e) => setDraftTitle(e.currentTarget.value)} />
+          <Group justify="flex-end" gap="xs">
             <Button variant="default" onClick={() => setSaveDraftModal(false)}>Cancel</Button>
             <Button disabled={!canSave} onClick={() => { actor.send({ type: "SAVE_DRAFT", title: draftTitle || undefined }); setSaveDraftModal(false); }}>Save</Button>
           </Group>

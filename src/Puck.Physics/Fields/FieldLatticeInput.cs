@@ -42,7 +42,7 @@ public sealed record FieldDescriptorInput(string Name, FixedQ4816 Initial, Fixed
 /// <param name="Field">The field ordinal read at the cell.</param>
 /// <param name="Comparison">The comparison.</param>
 /// <param name="Value">The scalar compared against.</param>
-public sealed record FieldConditionInput(int Field, ActionStateComparison Comparison, FieldScalarInput Value);
+public sealed record FieldConditionInput(int Field, ExpressionOp Comparison, FieldScalarInput Value);
 /// <summary>One per-cell write of a <see cref="FieldReactionInput.Transform"/>.</summary>
 /// <param name="Field">The field ordinal written at the cell.</param>
 /// <param name="Op">Set or add.</param>
@@ -61,7 +61,7 @@ public abstract record FieldReactionInput {
     public sealed record Emit(StateHandle Tag, int Field, FieldScalarInput Amount) : FieldReactionInput;
     /// <summary>Writes 1 or 0 into <paramref name="Row"/>'s cell for every active body, by whether
     /// <paramref name="Field"/> at the body's cell satisfies the comparison.</summary>
-    public sealed record Expose(int Field, ActionStateComparison Comparison, FieldScalarInput Value, StateHandle Row) : FieldReactionInput;
+    public sealed record Expose(int Field, ExpressionOp Comparison, FieldScalarInput Value, StateHandle Row) : FieldReactionInput;
     /// <summary>Moves <paramref name="Field"/> downhill, cell to cell, over the combined surface height of
     /// <paramref name="Over"/> plus <paramref name="Field"/>'s own value.</summary>
     /// <param name="Field">The field transported.</param>

@@ -120,7 +120,7 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var velocity = (m_planarVelocity + (UnitY * m_verticalVelocity));
+        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
         var result = tether.Solve(
             anchor: in anchor,
             position: ref m_position,
@@ -209,7 +209,7 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var facing = m_orientation.Rotate(vector: -UnitZ);
+        var facing = m_orientation.Rotate(vector: -FixedVector3.UnitZ);
 
         if (field.TryNearestSurfaceAlongDirection(
             assistHalfAngle: policy.AimHalfAngle,

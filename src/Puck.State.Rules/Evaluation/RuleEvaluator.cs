@@ -39,8 +39,12 @@ public interface IRuleOwner {
 /// <para>The tick pair every read answers as of is the host's, never the evaluator's: a caller advances its host to
 /// the tick it wants and then evaluates.</para>
 /// </remarks>
-public sealed partial class RuleEvaluator {
+public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCounterSource {
     private readonly IEffectHost m_host;
+
+    private Puck.Abstractions.Counting.WorkCount m_evaluations;
+    private Puck.Abstractions.Counting.WorkCount m_firings;
+    private Puck.Abstractions.Counting.WorkCount m_skips;
 
     private readonly List<CellKey> m_eachKeyScratch = [];
     private readonly List<StateInstanceHandle>?[] m_poolHandleScratch = new List<StateInstanceHandle>[StateCapacity.MaxInstanceBindings];
@@ -54,6 +58,13 @@ public sealed partial class RuleEvaluator {
 
         m_host = host;
     }
+
+    /// <inheritdoc/>
+    string Puck.Abstractions.Counting.IWorkCounterSource.Name =>
+        RuleWorkKinds.SourceName;
+    /// <inheritdoc/>
+    ReadOnlySpan<Puck.Abstractions.Counting.WorkKind> Puck.Abstractions.Counting.IWorkCounterSource.WorkKinds =>
+        RuleWorkKinds.Kinds;
 
     /// <summary>Gets the cell key bound to <see cref="BoundKey.Each"/> for the evaluation in flight.</summary>
     public CellKey BoundEachKey => m_host.BoundEachKey;
@@ -71,6 +82,30 @@ public sealed partial class RuleEvaluator {
         bindings[register] = handle;
         return true;
     }
+
+    /// <inheritdoc/>
+    bool Puck.Abstractions.Counting.IWorkCounterSource.TryRead(Puck.Abstractions.Counting.WorkKind kind, out long value) {
+        if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Evaluations)) {
+            value = m_evaluations.Value;
+
+            return true;
+        }
+        if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Skips)) {
+            value = m_skips.Value;
+
+            return true;
+        }
+        if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Firings)) {
+            value = m_firings.Value;
+
+            return true;
+        }
+
+        value = 0L;
+
+        return false;
+    }
+
     /// <summary>Clears one lexical instance register after its owner finishes evaluating.</summary>
     public void ClearInstanceBinding(int register) {
         var bindings = m_host.InstanceBindings;
@@ -415,6 +450,7 @@ public sealed partial class RuleEvaluator {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         applied = false;
+        m_evaluations.Increment();
 
         var tick = m_host.Tick;
         var trace = BeginTrace(
@@ -446,6 +482,7 @@ public sealed partial class RuleEvaluator {
         ) {
             // Nothing this rule reads has changed since it last closed, and it reads no host or tick fact a version
             // cannot see through — the verdict is still closed, so bindings and gate need not run at all.
+            m_skips.Increment();
             latch.Touch(binding: binding);
             EndTrace(entry: trace);
 
@@ -529,8 +566,12 @@ public sealed partial class RuleEvaluator {
             tick: tick
         );
 
-        if ((outcome == RuleOutcome.Fired) && (rule.Effects is [RewindTurnEffect])) {
-            latch.InvalidateScheduler();
+        if (outcome == RuleOutcome.Fired) {
+            m_firings.Increment();
+
+            if (rule.Effects is [RewindGroupEffect]) {
+                latch.InvalidateScheduler();
+            }
         }
 
         EndTrace(entry: trace);

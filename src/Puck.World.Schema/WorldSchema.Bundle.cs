@@ -81,10 +81,9 @@ public static partial class WorldSchema {
 
             // Unlike the split's own common.schema.json hoist (IsHoistCandidate, gated to an object/enum/union
             // shape worth a $ref), the bundle hoists ANY titled node, scalar wrappers included (BindableColor,
-            // CellName, ...): json-schema-to-typescript names an inline node from its own "title" too, so a
-            // scalar type reused at many sites without a $ref would mint one numbered duplicate per site
-            // (BindableColor, BindableColor1, BindableColor2, ...) instead of the one shared alias the class
-            // doc's OUTCOME calls for.
+            // CellName, ...): ToTypeScript names a type only by its $defs key, so a scalar type reused at many
+            // sites without a $ref would be spelled out inline at every site instead of as the one shared alias
+            // the class doc's OUTCOME calls for.
             return ((
                 hoistSelf &&
                 (newObj["title"] is JsonValue titleValue) &&
@@ -208,15 +207,10 @@ public static partial class WorldSchema {
         return reference;
     }
     // A reference site is always "anyOf: [{$ref}]" — a single-arm union when non-nullable, a two-arm one with a
-    // "null" type when nullable — never a bare "$ref". json-schema-to-typescript resolves a $ref correctly no
-    // matter what rides beside the ENCLOSING anyOf, but treats a bare "$ref" carrying ANY sibling keyword
-    // ("description", "default") as a distinct schema to inline and name afresh — see HoistBundleTitles' own
-    // remark at its common-file-ref rewrite for the observed behavior this works around. A stored def's OWN
-    // top-level type never keeps a "null" admission (see nullableDefs) — folding it into "anyOf: [X, null]"
-    // instead of "type: [X, null]" ALSO sidesteps a second, unrelated json-schema-to-typescript quirk: given
-    // "type"/"required"/"anyOf" together (how a $type-discriminated union's own def is shaped) AND a "null" in
-    // that "type", it decomposes the def into an intersection of two further-numbered helper exports instead of
-    // the one clean union alias a def with a plain non-null "type" compiles to.
+    // "null" type when nullable — never a bare "$ref", so a site's own "description" and "default" ride the
+    // enclosing node rather than sitting beside the "$ref", where a reader could take the pair for a distinct
+    // schema. A stored def's OWN top-level type never keeps a "null" admission (see nullableDefs): the null rides
+    // the site's second arm, so one def serves its nullable and non-nullable sites alike.
     private static JsonObject BuildReferenceSite(string title, bool nullable) {
         var arms = new JsonArray(new JsonObject { ["$ref"] = $"#/$defs/{title}" });
 
@@ -413,10 +407,12 @@ public static partial class WorldSchema {
             var nullType = new JsonObject { ["type"] = "null" };
 
             obj["not"] = ((obj["not"] is { } negated)
-                ? new JsonObject { ["anyOf"] = new JsonArray(
+                ? new JsonObject {
+                    ["anyOf"] = new JsonArray(
                     negated.DeepClone(),
                     nullType
-                ) }
+                ),
+                }
                 : nullType
             );
         }
@@ -513,7 +509,7 @@ public static partial class WorldSchema {
 
         return false;
     }
-    // Wrap references with annotations for the TypeScript compiler, and every nullable target because its
+    // Wrap references that carry annotations (see BuildReferenceSite), and every nullable target because its
     // stored body excludes null. A bare reference is sufficient only for an unannotated, non-nullable target.
     private static JsonNode RewrapReferenceSiteSiblings(JsonObject obj, string title, JsonObject defs, Dictionary<string, string> defContentByTitle, Dictionary<string, bool> nullableDefs) {
         // Generated references normally carry only annotations; extension schemas may also constrain the
@@ -565,7 +561,7 @@ public static partial class WorldSchema {
         return rewritten;
     }
 
-    /// <summary>Composes a <see cref="SplitSchema"/> into the single-file equivalent json-schema-to-typescript
+    /// <summary>Composes a <see cref="SplitSchema"/> into the single-file equivalent <see cref="ToTypeScript"/>
     /// reads: every shared shape lives once under the bundle's own <c>$defs</c> (seeded from
     /// <see cref="SplitSchema.Common"/>, whose internal pointers already use the bare <c>#/$defs/X</c> form), a
     /// section's own cross-file pointer is rewritten to match, and every OTHER titled shape a section left

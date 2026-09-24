@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Counting;
 
 namespace Puck.Maths.Tests;
 
@@ -400,6 +401,97 @@ internal static partial class Subjects {
         }
 
         return null;
+    }
+    /// <summary>Proves both complex multiply routes allocate nothing per product: the hand-written
+    /// <see cref="FixedComplex"/> product and the generic <see cref="QuadraticAlgebra{TScalar}"/> multiply at the complex
+    /// relation each run a rotation chain, after a warm-up chain through the same method, in some
+    /// <see cref="AllocationWindow"/> that allocates nothing on the current thread, and the two chains end on the same
+    /// element. The generic-versus-hand latency ratio is a
+    /// timing, and is <c>puck bench kernels --filter '*ComplexMulNarrow*'</c>'s measurement rather than a law.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ComplexMultiplyRoutesAllocateNothing() {
+        const int Steps = 4096;
+
+        // Raw angles, so no floating-point value enters the law: 19661 and 1114 are 0.3 and 0.017 on the 2^-16 grid.
+        var seed = FixedComplex.FromAngle(angle: FixedQ4816.FromRawBits(value: 19661L));
+        var rotation = FixedComplex.FromAngle(angle: FixedQ4816.FromRawBits(value: 1114L));
+        var algebra = QuadraticAlgebra<FixedQ4816>.Create(
+            p: FixedQ4816.Zero,
+            q: FixedQ4816.NegativeOne
+        );
+        var elementSeed = new QuadraticAlgebra<FixedQ4816>.Element(
+            U: seed.Real,
+            V: seed.Imaginary
+        );
+        var elementStep = new QuadraticAlgebra<FixedQ4816>.Element(
+            U: rotation.Real,
+            V: rotation.Imaginary
+        );
+
+        _ = HandChain(
+            rotation: rotation,
+            seed: seed,
+            steps: Steps
+        );
+        _ = GenericChain(
+            algebra: algebra,
+            seed: elementSeed,
+            step: elementStep,
+            steps: Steps
+        );
+
+        var hand = seed;
+        var generic = elementSeed;
+
+        try {
+            _ = AllocationWindow.Least(window: () => hand = HandChain(
+                rotation: rotation,
+                seed: seed,
+                steps: Steps
+            ));
+        } catch (AllocationWindowException exception) {
+            return $"the hand-written chain of {Steps} products allocated: {exception.Message}";
+        }
+
+        try {
+            _ = AllocationWindow.Least(window: () => generic = GenericChain(
+                algebra: algebra,
+                seed: elementSeed,
+                step: elementStep,
+                steps: Steps
+            ));
+        } catch (AllocationWindowException exception) {
+            return $"the generic chain of {Steps} products allocated: {exception.Message}";
+        }
+
+        if (
+            (hand.Real != generic.U) ||
+            (hand.Imaginary != generic.V)
+        ) { return $"the chains ended apart: hand ({hand.Real.Value}, {hand.Imaginary.Value}), generic ({generic.U.Value}, {generic.V.Value})"; }
+
+        return null;
+
+        static FixedComplex HandChain(FixedComplex seed, FixedComplex rotation, int steps) {
+            var accumulator = seed;
+
+            for (var step = 0; (step < steps); ++step) {
+                accumulator = (accumulator * rotation);
+            }
+
+            return accumulator;
+        }
+        static QuadraticAlgebra<FixedQ4816>.Element GenericChain(QuadraticAlgebra<FixedQ4816> algebra, QuadraticAlgebra<FixedQ4816>.Element seed, QuadraticAlgebra<FixedQ4816>.Element step, int steps) {
+            var accumulator = seed;
+
+            for (var index = 0; (index < steps); ++index) {
+                accumulator = algebra.Multiply(
+                    left: accumulator,
+                    right: step
+                );
+            }
+
+            return accumulator;
+        }
     }
     /// <summary>Proves the planar transcendental seam on hand-derived constant ladders: the eighteen-row angle ladder,
     /// the sixteen-row argument ladder, the exact poles at both ends of the seam, the REALIZED closed raw range, and the
@@ -1208,13 +1300,14 @@ internal static partial class Subjects {
 
     // ---- FixedQuaternion ----
 
-    private static FixedQuaternion QuaternionOf(ReadOnlySpan<long> lanes) =>
+    internal static FixedQuaternion QuaternionOf(ReadOnlySpan<long> lanes) =>
         new(
             X: Raw(value: lanes[0]),
             Y: Raw(value: lanes[1]),
             Z: Raw(value: lanes[2]),
             W: Raw(value: lanes[3])
         );
+
     private static void WriteQuaternionLanes(FixedQuaternion value, Span<long> result) {
         result[0] = value.X.Value;
         result[1] = value.Y.Value;

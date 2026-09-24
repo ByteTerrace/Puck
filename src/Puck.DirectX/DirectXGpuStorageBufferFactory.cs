@@ -2,7 +2,6 @@ using System.Runtime.Versioning;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Windows.Win32.Graphics.Direct3D12;
-using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.DirectX;
 
@@ -15,36 +14,16 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
     /// <inheritdoc/>
     public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         var device = ((ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle);
-        var heapProperties = new D3D12_HEAP_PROPERTIES {
-            Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
-        };
-        var bufferDesc = new D3D12_RESOURCE_DESC {
-            DepthOrArraySize = 1,
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
-            Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
-            Height = 1,
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-            MipLevels = 1,
-            SampleDesc = new Windows.Win32.Graphics.Dxgi.Common.DXGI_SAMPLE_DESC { Count = 1, },
-            Width = sizeBytes,
-        };
-
-        void* buffer;
-        var resourceIid = ID3D12Resource.IID_Guid;
-
-        device->CreateCommittedResource(
-            HeapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            pDesc: in bufferDesc,
-            pHeapProperties: in heapProperties,
-            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
-            ppvResource: &buffer,
-            riidResource: in resourceIid
+        var buffer = DirectXBuffers.CreateCommitted(
+            device: device,
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+            sizeBytes: sizeBytes
         );
 
         void* mapped;
 
-        ((ID3D12Resource*)buffer)->Map(
+        buffer->Map(
             Subresource: 0,
             pReadRange: ((D3D12_RANGE*)null),
             ppData: &mapped
@@ -61,35 +40,15 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
         var device = ((ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle);
         // A default-heap buffer that allows unordered access: the GPU writes it (the beam prepass UAV); D3D12 forbids
         // UAVs on the upload heap that Create uses, so the GPU-written cull buffer needs its own default-heap resource.
-        var heapProperties = new D3D12_HEAP_PROPERTIES {
-            Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
-        };
-        var bufferDesc = new D3D12_RESOURCE_DESC {
-            DepthOrArraySize = 1,
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
-            Flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-            Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
-            Height = 1,
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-            MipLevels = 1,
-            SampleDesc = new Windows.Win32.Graphics.Dxgi.Common.DXGI_SAMPLE_DESC { Count = 1, },
-            Width = sizeBytes,
-        };
-
-        void* buffer;
-        var resourceIid = ID3D12Resource.IID_Guid;
-
-        device->CreateCommittedResource(
-            in heapProperties,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            in bufferDesc,
+        var buffer = DirectXBuffers.CreateCommitted(
+            device: device,
+            flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
             // D3D12 ignores the initial state for buffers (they are always created in COMMON and promoted to
             // UNORDERED_ACCESS implicitly on the beam prepass's first UAV write); passing COMMON avoids the
             // debug-layer warning that an UNORDERED_ACCESS initial state triggers.
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
-            ((D3D12_CLEAR_VALUE?)null),
-            in resourceIid,
-            &buffer
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
+            sizeBytes: sizeBytes
         );
 
         return new DirectXGpuDeviceBuffer(

@@ -37,31 +37,23 @@ Mutation verbs return no synchronous echo — the verdict lands at the tick
 boundary on stderr. A second edit to the same row inside one tick is refused:
 `row '<identity>' already has an edit buffered this tick — fence with world.wait`.
 
-`world.load <path> [force]`, `world.reload`, and a bare `world.save` are all
-JSON-only, and none of them know `.puck` exists — only the process's own boot
-(`--world <file>.puck`, once, via `PuckWorldLoader`) transpiles it. This is
-today's behavior, not a design choice a workaround can fix:
+Against a world booted `--world <file>.puck`:
 
-- `world.load <path>` and `world.reload` both read through
-  `WorldDefinitionFileSource.TryLoad`, the plain JSON loader, with no
-  `.puck` special case. Pointed at a `.puck` file (explicitly for
-  `world.load`, or implicitly for `world.reload`'s re-read of the running
-  world's own origin) the read fails to parse
-  (`is not a valid puck.world.def.v1 document`) instead of picking up the
-  source.
-- `world.save` with **no path argument** writes canonical JSON back over the
-  running world's origin path. Against a `.puck`-sourced world this
-  overwrites the `.puck` file with JSON, discarding every `let`, `template`,
-  `for`, comment, and shape/palette sugar spelling in it.
+- `world.load <path>` and `world.reload` read `.puck` through
+  `WorldDefinitionFileSource.TryLoad` with the `PuckDocumentComposer`
+  document source, so editing the `.puck` file and running `world.reload`
+  recompiles it (basis chain included) with no restart. A re-read that no
+  longer compiles or validates leaves the running world untouched and echoes
+  why.
+- `world.save` refuses a `.puck` target by name, including a bare
+  `world.save` against a `.puck` origin, and writes nothing: canonical JSON
+  would overwrite the source.
 
-Against a world booted `--world <file>.puck`: `world.row.set`/`world.row`
-mutations are fine (they act on the in-memory document, not the file). To
-persist one, `world.save <explicit-path>.world.json` — never bare
-`world.save`, `world.reload`, or `world.load` naming the `.puck` path itself —
-then hand-port the change back into the `.puck` source (or decompile a
-throwaway copy to diff against; decompiling is one-way, see below). Restart
-with `--world <file>.puck` to pick up an edited `.puck` source; there is no
-live re-transpile.
+`world.row.set`/`world.row` mutations act on the in-memory document. To keep
+one, `world.save <explicit-path>.world.json`, then hand-port the change back
+into the `.puck` source (or decompile a throwaway copy to diff against;
+decompiling is one-way, see below). A `world.reload` discards unsaved row
+edits, since it rebuilds from what is on disk.
 
 ## Looking
 
@@ -171,8 +163,8 @@ through it today**: `CreationSculptRegistry` ships with zero sculpts
 registered (a sculpt is registered by a composition root or a test, and
 `puck creation sculpts` prints `none registered` until one is), and nothing
 in the tree calls `new CreationBuilder(...)` outside that law-test suite.
-`moth.puck`'s 230 hand-authored `shape` statements are `.puck` DSL source,
-not `CreationBuilder` output.
+`moth.puck`'s hand-authored `shape` statements are `.puck` DSL source, not
+`CreationBuilder` output.
 
 Prefer `.puck` for hand-authoring a character, armor, or prop — it is the
 checked-in convention every shipped creation follows, and the loop above

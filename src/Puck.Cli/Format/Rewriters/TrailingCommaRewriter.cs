@@ -6,7 +6,9 @@ namespace Puck.Cli.Format.Rewriters;
 
 // The `trailing-comma` pass: a multi-line initializer (last element and closing brace on different source
 // lines) gets a trailing comma after its last element, so a later add/reorder is a one-line diff. Single-line
-// initializers are left alone, and an initializer that already ends with a comma is untouched (idempotent).
+// initializers are left alone, and an initializer that already ends with a comma is untouched (idempotent). A complex
+// element initializer (`{ key, value }` inside a collection initializer) is an argument list, which admits no
+// trailing comma, so it is left as written.
 internal sealed class TrailingCommaRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node) {
         var visited = ((InitializerExpressionSyntax)base.VisitInitializerExpression(node: node)!);
@@ -14,6 +16,7 @@ internal sealed class TrailingCommaRewriter : CSharpSyntaxRewriter {
         var separators = expressions.GetSeparators().ToList();
 
         if (
+            node.IsKind(kind: SyntaxKind.ComplexElementInitializerExpression) ||
             (expressions.Count == 0) ||
             (separators.Count >= expressions.Count)
         ) {

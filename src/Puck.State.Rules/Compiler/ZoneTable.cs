@@ -252,6 +252,65 @@ public sealed class LiveRow {
         );
     }
 }
+/// <summary>A key computed where it is used: the cell whose name is the integer its expression evaluates to at the
+/// moment the effect or condition holding it reads or writes. A key that reads a binding an effect body opens (a
+/// <c>for each</c> instance, a claimed instance) compiles to this, because that binding's handle exists only while
+/// the body fires, never when the rule's own locals evaluate before its gate.</summary>
+/// <remarks>An expression that faults, or evaluates to an integer no key table interns, names no cell, so the read is
+/// absent and a write through it refuses.</remarks>
+public sealed class EffectKeyFact : RuleKeyFact {
+    /// <summary>Initializes the fact.</summary>
+    /// <param name="source">The key's compiled Int expression.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    public EffectKeyFact(CompiledExpressionToken[] source) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        Source = source;
+    }
+
+    /// <summary>Gets the key's compiled expression.</summary>
+    public CompiledExpressionToken[] Source { get; }
+
+    /// <summary>Appends what the key's expression reads: a read addressed by this key moves whenever they do.</summary>
+    /// <param name="into">The read set being collected.</param>
+    public override void CollectReads(List<CellAccess> into) => RuleDataflow.CollectExpression(
+        into: into,
+        tokens: Source
+    );
+    /// <inheritdoc/>
+    public override CellKey Resolve(IStateReader reader, out bool named) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        if (!TryResolveIndex(
+            index: out var index,
+            reader: reader
+        ) || !RuleReads.TryIndexKey(
+            index: index,
+            key: out var key,
+            keys: reader.Arena.Keys
+        )) {
+            named = false;
+
+            return default;
+        }
+
+        named = true;
+
+        return key;
+    }
+    /// <inheritdoc/>
+    public override bool TryResolveIndex(IStateReader reader, out long index) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        return RuleExpressions.TryEvaluate(
+            fault: out _,
+            kind: CellKind.Int,
+            program: Source,
+            reader: reader,
+            value: out index
+        );
+    }
+}
 /// <summary>The key an implicit local computed: the cell whose name is the local's integer.</summary>
 public sealed class LocalKeyFact : RuleKeyFact {
     /// <summary>Initializes the fact.</summary>

@@ -71,6 +71,26 @@ public static partial class RuleCompiler {
             verb: $"{where} key expression"
         );
 
+        // A key reading an instance an effect body binds cannot be a local: locals evaluate before the gate, when that
+        // body's handle does not exist yet. It evaluates where the effect or condition holding it reads or writes.
+        if (ReadsEffectBinding(
+            context: context,
+            tokens: program
+        )) {
+            var effectKey = new CompiledCellRef(
+                Custom: new EffectKeyFact(source: program),
+                Key: default,
+                RowOrdinal: -1
+            );
+
+            context.KeyExpressions.Add(
+                key: cacheKey,
+                value: effectKey
+            );
+
+            return effectKey;
+        }
+
         // Nested keys append their dependencies while compiling the expression; price the new binding after them.
         if (bindings.Count >= RuleCapacity.MaxLocalsPerRule) {
             throw new RuleException(
@@ -105,17 +125,55 @@ public static partial class RuleCompiler {
 
         return reference;
     }
-    /// <summary>Formats one comparison for the rules read-back.</summary>
-    /// <param name="comparison">The comparison.</param>
-    /// <returns>The infix spelling.</returns>
-    public static string DescribeComparison(ActionStateComparison comparison) => (comparison switch {
-        ActionStateComparison.Equal => "==",
-        ActionStateComparison.NotEqual => "!=",
-        ActionStateComparison.Less => "<",
-        ActionStateComparison.LessOrEqual => "<=",
-        ActionStateComparison.Greater => ">",
-        _ => ">=",
-    });
+
+    // Whether a compiled program reads an instance an effect body binds, directly or through a nested key, a fold
+    // body, or a called subprogram.
+    private static bool ReadsEffectBinding(ReadOnlySpan<CompiledExpressionToken> tokens, RuleCompileContext context) {
+        foreach (var token in tokens) {
+            if ((token.Operand is InstanceFieldOperand field) && context.IsEffectScopedBinding(slot: field.BindingSlot)) {
+                return true;
+            }
+            if ((token.Operand is IStateAddressedOperand { KeyFrom.Custom: EffectKeyFact }) ||
+                ((token.Fold is { } fold) && ReadsEffectBinding(context: context, tokens: fold.Body)) ||
+                ((token.Call is { } call) && ReadsEffectBinding(context: context, tokens: call.Body))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Both sides of a compareValue share one domain. A declared kind is that domain; an undeclared one is inferred
+    // the way a local's carrier is: Int, unless both sides are constants alone and one holds a fraction, and the
+    // other domain when the first reading refuses either side. A refusal under both readings reports the first.
+    private static CellKind CompileComparisonSides(ActionPredicate.CompareValue expression, string ruleName, RuleCompileContext context, out CompiledExpressionToken[] left, out CompiledExpressionToken[] right) {
+        var kind = (expression.Kind ?? (((IsFractionalConstantExpression(expression: expression.Left) || IsFractionalConstantExpression(expression: expression.Right)) &&
+            IsConstantExpression(expression: expression.Left) && IsConstantExpression(expression: expression.Right))
+            ? CellKind.Fixed
+            : CellKind.Int
+        ));
+
+        try {
+            left = CompileExpression(context: context, expression: expression.Left, kind: kind, ruleName: ruleName, verb: "compareValue left");
+            right = CompileExpression(context: context, expression: expression.Right, kind: kind, ruleName: ruleName, verb: "compareValue right");
+
+            return kind;
+        } catch (RuleException first) when ((expression.Kind is null)) {
+            var other = ((kind == CellKind.Int) ? CellKind.Fixed : CellKind.Int);
+
+            try {
+                left = CompileExpression(context: context, expression: expression.Left, kind: other, ruleName: ruleName, verb: "compareValue left");
+                right = CompileExpression(context: context, expression: expression.Right, kind: other, ruleName: ruleName, verb: "compareValue right");
+            } catch (RuleException) {
+                throw first;
+            }
+
+            return other;
+        }
+    }
+    private static bool IsConstantExpression(ExpressionProgram expression) =>
+        !expression.Instructions.Concat(second: expression.Subprograms.SelectMany(selector: static subprogram => subprogram.Instructions))
+            .Any(predicate: static instruction => (instruction.Payload is InstructionPayload.State));
+
     /// <summary>Lowers a constant comparand against a cell exactly: an integral literal is the raw it names, and a
     /// fractional one against an Int or Bool cell becomes the equivalent integer comparison rather than a rounded
     /// literal that would move the gate. A Fixed cell keeps its exact fixed-point literal.</summary>
@@ -128,7 +186,7 @@ public static partial class RuleCompiler {
     /// <c>x &gt; 1.5</c> is <c>x &gt;= 2</c>, <c>x &gt;= 1.5</c> is <c>x &gt;= 2</c>, <c>x &lt; 1.5</c> is
     /// <c>x &lt;= 1</c>, <c>x &lt;= 1.5</c> is <c>x &lt;= 1</c>, <c>x == 1.5</c> never holds, and
     /// <c>x != 1.5</c> always holds.</remarks>
-    public static (long Value, ActionStateComparison Comparison) LowerConstantComparison(CellKind kind, decimal literal, ActionStateComparison comparison, string ruleName) {
+    public static (long Value, ExpressionOp Comparison) LowerConstantComparison(CellKind kind, decimal literal, ExpressionOp comparison, string ruleName) {
         if (
             (kind == CellKind.Fixed) ||
             (decimal.Truncate(d: literal) == literal)
@@ -155,10 +213,10 @@ public static partial class RuleCompiler {
         );
 
         return (comparison switch {
-            ActionStateComparison.Greater or ActionStateComparison.GreaterOrEqual => (ceiling, ActionStateComparison.GreaterOrEqual),
-            ActionStateComparison.Less or ActionStateComparison.LessOrEqual => (floor, ActionStateComparison.LessOrEqual),
-            ActionStateComparison.Equal => (long.MaxValue, ActionStateComparison.Greater),
-            _ => (long.MinValue, ActionStateComparison.GreaterOrEqual),
+            ExpressionOp.Greater or ExpressionOp.GreaterOrEqual => (ceiling, ExpressionOp.GreaterOrEqual),
+            ExpressionOp.Less or ExpressionOp.LessOrEqual => (floor, ExpressionOp.LessOrEqual),
+            ExpressionOp.Equal => (long.MaxValue, ExpressionOp.Greater),
+            _ => (long.MinValue, ExpressionOp.GreaterOrEqual),
         });
     }
     /// <summary>Resolves a <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection: the named cell must exist on a declared
@@ -223,7 +281,7 @@ public static partial class RuleCompiler {
             verb: channel
         );
 
-        if (!declared.HasCell(key: resolvedKey)) {
+        if (!DeclaresCell(context: context, key: resolvedKey, row: declared)) {
             throw new RuleException(
                 detail: $"'{channel}' reads cell '{row}'.'{resolvedKey}' as a key, which the row does not declare",
                 refusal: RuleRefusal.StateCellUndeclared,
@@ -290,8 +348,8 @@ public static partial class RuleCompiler {
                 if (family.TryCompile(
                     cell: out cell,
                     context: context,
-                    reference: reference,
                     keyFieldLabel: keyFieldLabel,
+                    reference: reference,
                     ruleName: ruleName,
                     verb: verb
                 )) {
@@ -530,13 +588,6 @@ public static partial class RuleCompiler {
         return true;
     }
 
-    private static ActionStateComparison FlipComparison(ActionStateComparison comparison) => (comparison switch {
-        ActionStateComparison.Less => ActionStateComparison.Greater,
-        ActionStateComparison.LessOrEqual => ActionStateComparison.GreaterOrEqual,
-        ActionStateComparison.Greater => ActionStateComparison.Less,
-        ActionStateComparison.GreaterOrEqual => ActionStateComparison.LessOrEqual,
-        _ => comparison,
-    });
     private static CompiledExpressionToken Literal(long raw) => new(
         Constant: raw,
         Operation: ExpressionOp.Constant
@@ -660,8 +711,8 @@ public static partial class RuleCompiler {
                 break;
             case ActionPredicate.CompareValue expression:
                 if (
-                    (expression.Kind is not (CellKind.Int or CellKind.Fixed)) ||
-                    !Enum.IsDefined(value: expression.Comparison)
+                    (expression.Kind is { } declaredKind and not (CellKind.Int or CellKind.Fixed)) ||
+                    !expression.Comparison.IsComparison()
                 ) {
                     throw new RuleException(
                         detail: "compareValue requires Int or Fixed and a defined comparison",
@@ -671,24 +722,17 @@ public static partial class RuleCompiler {
                 }
 
                 var comparison = expression.Comparison;
-                var left = CompileExpression(
+                var valueKind = CompileComparisonSides(
                     context: context,
-                    expression: expression.Left,
-                    kind: expression.Kind,
-                    ruleName: ruleName,
-                    verb: "compareValue left"
-                );
-                var right = CompileExpression(
-                    context: context,
-                    expression: expression.Right,
-                    kind: expression.Kind,
-                    ruleName: ruleName,
-                    verb: "compareValue right"
+                    expression: expression,
+                    left: out var left,
+                    right: out var right,
+                    ruleName: ruleName
                 );
 
                 // The one conversion table, reached from this spelling too: a fractional literal on either side of an
                 // Int comparison lowers to the exact integer comparison rather than to a rounded literal.
-                if (expression.Kind == CellKind.Int) {
+                if (valueKind == CellKind.Int) {
                     if (TryFractionalLiteral(
                         literal: out var rightLiteral,
                         program: expression.Right
@@ -707,23 +751,23 @@ public static partial class RuleCompiler {
                         program: expression.Left
                     )) {
                         var (raw, lowered) = LowerConstantComparison(
-                            comparison: FlipComparison(comparison: comparison),
+                            comparison: comparison.Flip(),
                             kind: CellKind.Int,
                             literal: leftLiteral,
                             ruleName: ruleName
                         );
 
-                        comparison = FlipComparison(comparison: lowered);
+                        comparison = lowered.Flip();
                         left = [Literal(raw: raw)];
                     }
                 }
 
                 gate.Add(item: new GateToken(
                     Comparison: comparison,
-                    Describe: $"compareValue {expression.Kind} {DescribeComparison(comparison: comparison)}",
+                    Describe: $"compareValue {valueKind} {comparison.Symbol()}",
                     LeftSource: CompiledValueSource.FromExpression(expression: left),
                     RightSource: CompiledValueSource.FromExpression(expression: right),
-                    ValueKind: expression.Kind
+                    ValueKind: valueKind
                 ));
 
                 break;
@@ -755,7 +799,7 @@ public static partial class RuleCompiler {
 
         static GateToken Logical(GateOp op, int arity, string describe) => new(
             Arity: arity,
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Describe: describe,
             LeftSource: default,
             Op: op,
@@ -768,6 +812,14 @@ public static partial class RuleCompiler {
         var hasComparand = (compare.ComparandState is not null);
         var hasValue = (compare.Value is not null);
         var name = compare.State.Spelling;
+
+        if (!comparison.IsComparison()) {
+            throw new RuleException(
+                detail: $"compareState names '{comparison}', which is not a comparison",
+                refusal: RuleRefusal.PredicateKindInadmissible,
+                ruleName: ruleName
+            );
+        }
 
         // 'comparandKey' is an appendage of 'comparandState'; on its own it is a parsed-and-discarded field, refused
         // by name rather than silently ignored under the constant spelling.
@@ -813,7 +865,7 @@ public static partial class RuleCompiler {
 
             return new GateToken(
                 Comparison: lowered,
-                Describe: $"{lhs.Describe} {DescribeComparison(comparison: comparison)} {compare.Value.Value.ToString(provider: CultureInfo.InvariantCulture)}",
+                Describe: $"{lhs.Describe} {comparison.Symbol()} {compare.Value.Value.ToString(provider: CultureInfo.InvariantCulture)}",
                 LeftSource: CompiledValueSource.FromOperand(operand: lhs.Operand),
                 RightSource: CompiledValueSource.Constant(rawValue: value),
                 ValueKind: lhs.ValueKind
@@ -844,7 +896,7 @@ public static partial class RuleCompiler {
 
         return new GateToken(
             Comparison: comparison,
-            Describe: $"{lhs.Describe} {DescribeComparison(comparison: comparison)} {rhs.Describe}",
+            Describe: $"{lhs.Describe} {comparison.Symbol()} {rhs.Describe}",
             LeftSource: CompiledValueSource.FromOperand(operand: lhs.Operand),
             RightSource: CompiledValueSource.FromOperand(operand: rhs.Operand),
             ValueKind: lhs.ValueKind

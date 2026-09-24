@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Launcher.Release;
 using Puck.World;
@@ -6,19 +7,17 @@ using Puck.World.Authoring;
 namespace Puck.Cli.Official;
 
 // Resolves every music/table/tune/patch row the composed root world declares into assets[]: reads the row's own
-// referenced document off the worlds project tree (never AppContext.BaseDirectory — that is the convention a BUILT
-// executable's own Content-copied Assets read through, and this tool walks the SOURCE tree before any such build
-// exists), then re-derives the row family's own canonical document hash and refuses by name on a mismatch against
-// the row's declared hash — the same check WorldDefinitionValidator runs at a live load. WorldDefinition declares no
-// row type for the "audio"/"synth"/"font" families the official manifest contract reserves (see
-// OfficialAssetFamilies), so this resolver never emits an entry under one of those three.
+// referenced document beside the root document in the source tree (WorldDocumentPaths, the rule every load follows),
+// then re-derives the row family's own canonical document hash and refuses by name on a mismatch against
+// the row's declared hash — the same check WorldDefinitionValidator runs at a live load. The four row families
+// (AssetRowFamilies) are the whole manifest family vocabulary.
 internal static class OfficialAssetResolver {
     private static bool TryResolveOne<TDocument>(
         string family,
         string name,
         string source,
         string declaredHash,
-        string worldProjectRoot,
+        string? documentDirectory,
         OfficialObjectWriter writer,
         TryLoadRow<TDocument> tryLoad,
         Func<TDocument, string, string> canonicalHash,
@@ -33,16 +32,19 @@ internal static class OfficialAssetResolver {
             return false;
         }
 
-        var resolvedPath = (Path.IsPathRooted(path: source)
-            ? source
-            : Path.Combine(
-                path1: worldProjectRoot,
-                path2: source
-            )
-        );
+        if (!WorldDocumentPaths.TryResolve(
+            documentDirectory: documentDirectory,
+            path: source,
+            reason: out var unresolved,
+            resolved: out var resolvedPath
+        )) {
+            reason = $"{family} row '{name}': source {unresolved}.";
+
+            return false;
+        }
 
         if (!File.Exists(path: resolvedPath)) {
-            reason = $"{family} row '{name}': source '{source}' does not exist under {worldProjectRoot}.";
+            reason = $"{family} row '{name}': source '{source}' does not exist at {resolvedPath}.";
 
             return false;
         }
@@ -82,7 +84,7 @@ internal static class OfficialAssetResolver {
             Hash: hash,
             Name: name,
             Path: objectPath,
-            Pin: $"sha256/{recomputed}",
+            Pin: (ContentPin.Prefix + recomputed),
             Size: size,
             Source: source
         );
@@ -91,7 +93,7 @@ internal static class OfficialAssetResolver {
         return true;
     }
 
-    public static bool TryResolve(WorldDefinition definition, string worldProjectRoot, OfficialObjectWriter writer, out IReadOnlyList<OfficialAssetEntry> assets, out string reason) {
+    public static bool TryResolve(WorldDefinition definition, OfficialObjectWriter writer, out IReadOnlyList<OfficialAssetEntry> assets, out string reason) {
         assets = [];
 
         var entries = new List<OfficialAssetEntry>();
@@ -104,16 +106,17 @@ internal static class OfficialAssetResolver {
                 ).Hash,
                 declaredHash: row.Hash,
                 entry: out var entry,
-                family: OfficialAssetFamilies.Music,
+                family: AssetRowFamilies.Music,
                 name: row.Name,
                 reason: out reason,
                 source: row.Source,
                 tryLoad: (string resolvedSource, out MusicDocument? document, out string? error) => WorldAssetRowLoader.TryLoadMusic(
                     document: out document,
+                    documentDirectory: null,
                     error: out error,
                     row: (row with { Source = resolvedSource })
                 ),
-                worldProjectRoot: worldProjectRoot,
+                documentDirectory: definition.DocumentDirectory,
                 writer: writer
             )) {
                 return false;
@@ -130,16 +133,17 @@ internal static class OfficialAssetResolver {
                 ).Hash,
                 declaredHash: row.Hash,
                 entry: out var entry,
-                family: OfficialAssetFamilies.Table,
+                family: AssetRowFamilies.Table,
                 name: row.Name,
                 reason: out reason,
                 source: row.Source,
                 tryLoad: (string resolvedSource, out TableDocument? document, out string? error) => WorldAssetRowLoader.TryLoadTable(
                     document: out document,
+                    documentDirectory: null,
                     error: out error,
                     row: (row with { Source = resolvedSource })
                 ),
-                worldProjectRoot: worldProjectRoot,
+                documentDirectory: definition.DocumentDirectory,
                 writer: writer
             )) {
                 return false;
@@ -156,16 +160,17 @@ internal static class OfficialAssetResolver {
                 ).Hash,
                 declaredHash: row.Hash,
                 entry: out var entry,
-                family: OfficialAssetFamilies.Tune,
+                family: AssetRowFamilies.Tune,
                 name: row.Name,
                 reason: out reason,
                 source: row.Source,
                 tryLoad: (string resolvedSource, out AudioDocument? document, out string? error) => WorldAssetRowLoader.TryLoadTune(
                     document: out document,
+                    documentDirectory: null,
                     error: out error,
                     row: (row with { Source = resolvedSource })
                 ),
-                worldProjectRoot: worldProjectRoot,
+                documentDirectory: definition.DocumentDirectory,
                 writer: writer
             )) {
                 return false;
@@ -182,16 +187,17 @@ internal static class OfficialAssetResolver {
                 ).Hash,
                 declaredHash: row.Hash,
                 entry: out var entry,
-                family: OfficialAssetFamilies.Patch,
+                family: AssetRowFamilies.Patch,
                 name: row.Name,
                 reason: out reason,
                 source: row.Source,
                 tryLoad: (string resolvedSource, out SynthPatchDocument? document, out string? error) => WorldAssetRowLoader.TryLoadPatch(
                     document: out document,
+                    documentDirectory: null,
                     error: out error,
                     row: (row with { Source = resolvedSource })
                 ),
-                worldProjectRoot: worldProjectRoot,
+                documentDirectory: definition.DocumentDirectory,
                 writer: writer
             )) {
                 return false;

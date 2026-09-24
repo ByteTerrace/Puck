@@ -99,13 +99,13 @@ public sealed class WorldProjectionSampler {
             Array.Sort(
                 array: combined,
                 comparison: static (left, right) => {
-                var cell = left.Cell.CompareTo(value: right.Cell);
-
-                return ((cell != 0)
-                    ? cell
-                    : left.Field.CompareTo(value: right.Field)
-                );
-            }
+                    return LexicographicOrder.Compare(
+                        leftPrimary: left.Cell,
+                        leftSecondary: left.Field,
+                        rightPrimary: right.Cell,
+                        rightSecondary: right.Field
+                    );
+                }
             );
             fields = combined;
         }

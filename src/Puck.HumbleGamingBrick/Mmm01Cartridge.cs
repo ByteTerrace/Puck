@@ -100,21 +100,6 @@ public sealed class Mmm01Cartridge : CartridgeBase {
     }
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_locked = reader.ReadBoolean();
-        m_mbc1Mode = reader.ReadBoolean();
-        m_mbc1ModeDisable = reader.ReadBoolean();
-        m_multiplexMode = reader.ReadBoolean();
-        m_ramBankHigh = reader.ReadInt32();
-        m_ramBankLow = reader.ReadInt32();
-        m_ramBankMask = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBankHigh = reader.ReadInt32();
-        m_romBankLow = reader.ReadInt32();
-        m_romBankMid = reader.ReadInt32();
-        m_romBankMask = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((ResolveRamBank() & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
     /// <inheritdoc/>
@@ -127,19 +112,19 @@ public sealed class Mmm01Cartridge : CartridgeBase {
         return (((bank & m_romBankWrapMask) * RomBankSize) + (address & (RomBankSize - 1)));
     }
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_locked);
-        writer.WriteBoolean(value: m_mbc1Mode);
-        writer.WriteBoolean(value: m_mbc1ModeDisable);
-        writer.WriteBoolean(value: m_multiplexMode);
-        writer.WriteInt32(value: m_ramBankHigh);
-        writer.WriteInt32(value: m_ramBankLow);
-        writer.WriteInt32(value: m_ramBankMask);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBankHigh);
-        writer.WriteInt32(value: m_romBankLow);
-        writer.WriteInt32(value: m_romBankMid);
-        writer.WriteInt32(value: m_romBankMask);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Boolean(value: ref m_locked);
+        transfer.Boolean(value: ref m_mbc1Mode);
+        transfer.Boolean(value: ref m_mbc1ModeDisable);
+        transfer.Boolean(value: ref m_multiplexMode);
+        transfer.Int32(value: ref m_ramBankHigh);
+        transfer.Int32(value: ref m_ramBankLow);
+        transfer.Int32(value: ref m_ramBankMask);
+        transfer.Boolean(value: ref m_ramEnabled);
+        transfer.Int32(value: ref m_romBankHigh);
+        transfer.Int32(value: ref m_romBankLow);
+        transfer.Int32(value: ref m_romBankMid);
+        transfer.Int32(value: ref m_romBankMask);
     }
 
     /// <inheritdoc/>

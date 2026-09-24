@@ -1,6 +1,8 @@
 namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
+    // The sort keys are the row's word at the firing's time, so a cell sorts by the live value every other read of
+    // it answers.
     private static bool TrySortKeyed(in ArenaTransformContext context, ArenaTransform.SortKeyed sort, out bool moved, out EffectRefusal refusal) {
         moved = false;
 
@@ -30,19 +32,13 @@ public static partial class ArenaTransforms {
             return Applied(refusal: out refusal);
         }
 
-        using var keysLease = context.Arena.Scratch.Rent<long>(length: count);
+        using var keysLease = context.Arena.Scratch.Rent<long>(length: row.CellCapacity);
 
-        var keys = keysLease.Span;
-
-        for (var position = 0; (position < count); position++) {
-            if (arena.TryReadRawAt(
-                position: position,
-                raw: out var raw,
-                rowOrdinal: sort.RowOrdinal
-            )) {
-                keys[position] = raw;
-            }
-        }
+        var keys = arena.ReadWord(
+            rowOrdinal: sort.RowOrdinal,
+            time: context.Time,
+            word: keysLease.Span
+        );
 
         using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 

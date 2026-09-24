@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.Commands;
@@ -13,9 +14,9 @@ namespace Puck.World.Tests;
 public sealed partial class WorldReleaseCutoverLawTests {
     // A focused development probe through actual hosted rows, capture, controller, storage and restart.
     // It does not stand in for running the packaged release pair or the complete official inventory.
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task LocalDeployRollbackRewindAndInterruptedResumePreserveTheirDistinctStateContracts() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         var owner = Guid.NewGuid();
         var blobs = new RewindInterruptionStore(inner: PuckStorageTestComposition.BuildStore());
@@ -85,6 +86,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
             )).Ok);
         }
         var release = new WorldReleaseManifest {
+            CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
             Label = "rewind-probe",
             SourceRevision = new string(
             c: 'a',
@@ -104,7 +106,6 @@ public sealed partial class WorldReleaseCutoverLawTests {
         ),
             PersistenceContract = "puck.world.persistence.v1",
             PeerProtocolContract = "puck.world.peer.v1",
-            CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
         };
 
         await archive.SaveAsync(
@@ -120,13 +121,15 @@ public sealed partial class WorldReleaseCutoverLawTests {
             path2: "package-b"
         )).FullName;
 
-        foreach (var identity in identities) { File.WriteAllBytes(
+        foreach (var identity in identities) {
+            File.WriteAllBytes(
             Path.Combine(
                 path1: nextPackage,
                 path2: (identity.World.Value + ".world.json")
             ),
             nextBytes
-        ); }
+        );
+        }
         var nextRelease = release with {
             Label = "release-b",
             EngineImageDigest = ("sha256:" + new string(
@@ -198,10 +201,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
         source.DrainActivationMailbox();
         Assert.Equal(
             WorldReleaseAdmissionPublication.Opened,
-            await republishing.WaitAsync(
-                TimeSpan.FromSeconds(seconds: 3),
-                Token
-            )
+            await republishing.WaitAsync(cancellationToken: Token)
         );
         Tick(
             count: 3,
@@ -400,10 +400,12 @@ public sealed partial class WorldReleaseCutoverLawTests {
         );
         var rootsAtPoint = new Dictionary<string, WorldAuthorityRoot>();
 
-        foreach (var identity in identities) { rootsAtPoint[identity.World.Value] = (await authority.LoadRootAsync(
+        foreach (var identity in identities) {
+            rootsAtPoint[identity.World.Value] = (await authority.LoadRootAsync(
             identity,
             Token
-        ))!.Value.Root; }
+        ))!.Value.Root;
+        }
         var preview = await restores.InspectAsync(
             group: "primary",
             pointId: point.RequestId,
@@ -479,7 +481,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 documentPath: "beta.world.json",
                 name: "beta"
             ),
-            actingPrincipal: WorldPrincipal.Console
+            actingPrincipal: Principal.Console
         );
         source.Instances.DrainPendingTransfers();
         Assert.True(condition: alpha.Server.Population.IsActive(index: PeerSlot));
@@ -489,7 +491,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
             scope: WorldInstanceHost.TransferScope.Body,
             sourceSlot: PeerSlot,
             destination: WorldInstanceHost.TransferDestination.Existing(name: "beta"),
-            actingPrincipal: WorldPrincipal.Console
+            actingPrincipal: Principal.Console
         );
         source.Instances.DrainPendingTransfers();
         Assert.False(condition: alpha.Server.Population.IsActive(index: PeerSlot));

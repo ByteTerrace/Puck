@@ -46,14 +46,30 @@ public static class AzureBlobCredentialProbe {
     }
 
     /// <summary>Probes the ambient credential for a blob-storage token, bounded by <paramref name="timeout"/>.</summary>
-    /// <param name="timeout">How long to wait before giving up — the caller is on a frame loop, so this is short.</param>
+    /// <param name="timeout">How long, on <paramref name="clock"/>, to wait before giving up — the caller is on a frame
+    /// loop, so this is short.</param>
     /// <param name="cancellationToken">A token to observe.</param>
+    /// <param name="clock">The host clock <paramref name="timeout"/> runs on; <see langword="null"/> is
+    /// <see cref="TimeProvider.System"/>.</param>
+    /// <param name="credential">The credential to ask; <see langword="null"/> builds a fresh
+    /// <c>DefaultAzureCredential</c> for this probe alone. A supplied credential stays the caller's.</param>
     /// <returns>The verdict.</returns>
-    public static async ValueTask<AzureBlobCredentialStatus> ProbeAsync(TimeSpan timeout, CancellationToken cancellationToken = default) {
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-        var credential = new DefaultAzureCredential();
+    public static async ValueTask<AzureBlobCredentialStatus> ProbeAsync(TimeSpan timeout, CancellationToken cancellationToken = default, TimeProvider? clock = null,
+        TokenCredential? credential = null) {
+        using var expiry = new CancellationTokenSource(
+            delay: timeout,
+            timeProvider: (clock ?? TimeProvider.System)
+        );
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(
+            token1: cancellationToken,
+            token2: expiry.Token
+        );
+        var owned = ((credential is null)
+            ? new DefaultAzureCredential()
+            : null
+        );
 
-        timeoutSource.CancelAfter(delay: timeout);
+        credential ??= owned!;
 
         try {
             var token = await credential.GetTokenAsync(
@@ -83,7 +99,7 @@ public static class AzureBlobCredentialProbe {
                 ExpiresOn: null
             );
         } finally {
-            if (credential is IDisposable disposable) {
+            if (owned is IDisposable disposable) {
                 disposable.Dispose();
             }
         }

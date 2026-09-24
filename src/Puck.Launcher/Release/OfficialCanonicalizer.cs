@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Assets.Documents;
 
 namespace Puck.Launcher.Release;
@@ -9,35 +10,22 @@ namespace Puck.Launcher.Release;
 /// </summary>
 public static class OfficialCanonicalizer {
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
-        "schema", "channel", "build", "worldSchemaBundle", "engine", "documents", "composed", "assets", "signature",
+        "schema", "channel", "build", "worldSchemaBundle", "engine", "sources", "documents", "composed", "assets", "signature",
     };
 
-    private static bool IsWellFormedContentHash(string hash) {
-        const string Prefix = "sha256/";
-
-        return (
-            (hash is not null) &&
-            hash.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: Prefix
-        ) &&
-            (hash.Length == (Prefix.Length + 64)) &&
-            hash.AsSpan(start: Prefix.Length).ToArray().All(predicate: Uri.IsHexDigit)
-        );
-    }
-    private static bool IsWellFormedShortPin(string pin) {
-        const string Prefix = "sha256-64/";
-
-        return (
-            (pin is not null) &&
-            pin.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: Prefix
-        ) &&
-            (pin.Length == (Prefix.Length + 16)) &&
-            pin.AsSpan(start: Prefix.Length).ToArray().All(predicate: Uri.IsHexDigit)
-        );
-    }
+    // A workspace name (a sources[] file, or a document name) is a forward-slash path relative to the worlds
+    // directory: no backslash, no drive or scheme colon, and no empty, '.', or '..' segment (so no rooted form
+    // either), so a client mounting the workspace can never place a file outside the mounted tree.
+    private static bool IsWellFormedWorkspaceName(string name) => (
+        !string.IsNullOrEmpty(value: name) &&
+        !name.Contains(value: '\\') &&
+        !name.Contains(value: ':') &&
+        name.Split(separator: '/').All(predicate: static segment => (
+            (segment.Length > 0) &&
+            (segment != ".") &&
+            (segment != "..")
+        ))
+    );
     private static void ValidateAssets(IReadOnlyList<OfficialAssetEntry> assets, List<DocumentValidationError> errors) {
         if (assets is null) {
             errors.Add(item: new(
@@ -54,11 +42,11 @@ public static class OfficialCanonicalizer {
             var entry = assets[i];
             var path = $"assets[{i}]";
 
-            if (!OfficialAssetFamilies.All.Contains(item: entry.Family)) {
+            if (!AssetRowFamilies.All.Contains(item: entry.Family)) {
                 errors.Add(item: new(
                     Message: $"'{entry.Family}' is not a recognized family ({string.Join(
                         separator: " | ",
-                        values: OfficialAssetFamilies.All
+                        values: AssetRowFamilies.All
                     )}).",
                     Path: $"{path}.family"
                 ));
@@ -94,10 +82,13 @@ public static class OfficialCanonicalizer {
 
             if (
                 (entry.Pin is { Length: > 0 }) &&
-                !IsWellFormedContentHash(hash: entry.Pin)
+                !ContentPin.TryParse(
+                pin: out _,
+                text: entry.Pin
+            )
             ) {
                 errors.Add(item: new(
-                    Message: $"'{entry.Pin}' is not a well-formed sha256/<hex64> pin.",
+                    Message: $"'{entry.Pin}' is not a well-formed sha256/<64 lowercase hex> pin.",
                     Path: $"{path}.pin"
                 ));
             }
@@ -134,7 +125,7 @@ public static class OfficialCanonicalizer {
             ));
         }
     }
-    private static void ValidateComposed(IReadOnlyList<OfficialComposedEntry> composed, List<DocumentValidationError> errors) {
+    private static void ValidateComposed(IReadOnlyList<OfficialComposedEntry> composed, IReadOnlySet<string> documentNames, List<DocumentValidationError> errors) {
         if (
             (composed is null) ||
             (composed.Count == 0)
@@ -165,9 +156,14 @@ public static class OfficialCanonicalizer {
                 ));
             }
 
-            if (string.IsNullOrWhiteSpace(value: entry.Name)) {
+            if (!IsWellFormedWorkspaceName(name: entry.Name)) {
                 errors.Add(item: new(
-                    Message: "a name is required.",
+                    Message: $"'{entry.Name}' is not a forward-slash document name relative to the worlds directory with no empty, '.', or '..' segment.",
+                    Path: $"{path}.name"
+                ));
+            } else if (!documentNames.Contains(value: entry.Name)) {
+                errors.Add(item: new(
+                    Message: $"'{entry.Name}' does not name a document in documents.",
                     Path: $"{path}.name"
                 ));
             }
@@ -183,16 +179,25 @@ public static class OfficialCanonicalizer {
 
             if (
                 (entry.Pin is { Length: > 0 }) &&
-                !IsWellFormedShortPin(pin: entry.Pin)
+                !AssetContentHash.TryParse(
+                hash: out _,
+                text: entry.Pin
+            )
             ) {
                 errors.Add(item: new(
-                    Message: $"'{entry.Pin}' is not a well-formed sha256-64/<hex16> pin.",
+                    Message: $"'{entry.Pin}' is not a well-formed sha256-64/<16 lowercase hex> pin.",
                     Path: $"{path}.pin"
                 ));
             }
         }
     }
-    private static void ValidateDocuments(IReadOnlyList<OfficialDocumentEntry> documents, List<DocumentValidationError> errors) {
+    // Returns every well-formed, distinct document name, the set each composed[].name must resolve into. A document
+    // name is unique ignoring case (DocumentName), so two names differing only in letter case are refused as one name
+    // carried twice; a composed[].name still resolves by its exact spelling.
+    private static HashSet<string> ValidateDocuments(IReadOnlyList<OfficialDocumentEntry> documents, IReadOnlySet<string> sourceNames, List<DocumentValidationError> errors) {
+        var seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var carriedBy = new Dictionary<string, OfficialDocumentEntry>(comparer: DocumentName.Comparer);
+
         if (
             (documents is null) ||
             (documents.Count == 0)
@@ -202,24 +207,48 @@ public static class OfficialCanonicalizer {
                 Path: "documents"
             ));
 
-            return;
+            return seenNames;
         }
-
-        var seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var i = 0; (i < documents.Count); i++) {
             var entry = documents[i];
             var path = $"documents[{i}]";
 
-            if (string.IsNullOrWhiteSpace(value: entry.Name)) {
+            if (!IsWellFormedWorkspaceName(name: entry.Name)) {
                 errors.Add(item: new(
-                    Message: "a name is required.",
+                    Message: $"'{entry.Name}' is not a forward-slash document name relative to the worlds directory with no empty, '.', or '..' segment.",
                     Path: $"{path}.name"
                 ));
-            } else if (!seenNames.Add(item: entry.Name)) {
+            } else if (carriedBy.TryGetValue(
+                key: entry.Name,
+                value: out var held
+            )) {
                 errors.Add(item: new(
-                    Message: $"name '{entry.Name}' is declared more than once.",
+                    Message: DocumentName.Collision(
+                        heldFile: held.Source,
+                        heldName: held.Name,
+                        otherFile: entry.Source,
+                        otherName: entry.Name
+                    ),
                     Path: $"{path}.name"
+                ));
+            } else {
+                carriedBy.Add(
+                    key: entry.Name,
+                    value: entry
+                );
+                seenNames.Add(item: entry.Name);
+            }
+
+            if (string.IsNullOrWhiteSpace(value: entry.Source)) {
+                errors.Add(item: new(
+                    Message: "a source is required.",
+                    Path: $"{path}.source"
+                ));
+            } else if (!sourceNames.Contains(value: entry.Source)) {
+                errors.Add(item: new(
+                    Message: $"'{entry.Source}' does not name a file in sources.",
+                    Path: $"{path}.source"
                 ));
             }
 
@@ -260,14 +289,19 @@ public static class OfficialCanonicalizer {
 
             if (
                 (entry.Pin is { Length: > 0 }) &&
-                !IsWellFormedShortPin(pin: entry.Pin)
+                !AssetContentHash.TryParse(
+                hash: out _,
+                text: entry.Pin
+            )
             ) {
                 errors.Add(item: new(
-                    Message: $"'{entry.Pin}' is not a well-formed sha256-64/<hex16> pin.",
+                    Message: $"'{entry.Pin}' is not a well-formed sha256-64/<16 lowercase hex> pin.",
                     Path: $"{path}.pin"
                 ));
             }
         }
+
+        return seenNames;
     }
     private static void ValidateEngine(OfficialEngine engine, List<DocumentValidationError> errors) {
         if (engine is null) {
@@ -355,9 +389,12 @@ public static class OfficialCanonicalizer {
             ));
         }
 
-        if (!IsWellFormedContentHash(hash: hash)) {
+        if (!ContentPin.TryParse(
+            pin: out _,
+            text: hash
+        )) {
             errors.Add(item: new(
-                Message: $"'{hash}' is not a well-formed sha256/<hex64> content hash.",
+                Message: $"'{hash}' is not a well-formed sha256/<64 lowercase hex> content hash.",
                 Path: $"{path}.hash"
             ));
         }
@@ -376,6 +413,67 @@ public static class OfficialCanonicalizer {
             ));
         }
     }
+    // Returns every well-formed, distinct source name, the set each documents[].source must resolve into. A source
+    // name is a path, not a document name, but it is unique under the same comparer for the same reason: a client
+    // mounting the workspace on a case-insensitive file system holds two names differing only in letter case as one
+    // file. A documents[].source still resolves by its exact spelling.
+    private static HashSet<string> ValidateSources(IReadOnlyList<OfficialSourceEntry> sources, List<DocumentValidationError> errors) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var spelledAs = new Dictionary<string, string>(comparer: DocumentName.Comparer);
+
+        if (sources is null) {
+            errors.Add(item: new(
+                Message: "a sources list is required.",
+                Path: "sources"
+            ));
+
+            return names;
+        }
+
+        for (var i = 0; (i < sources.Count); i++) {
+            var entry = sources[i];
+            var path = $"sources[{i}]";
+
+            if (!IsWellFormedWorkspaceName(name: entry.Name)) {
+                errors.Add(item: new(
+                    Message: $"'{entry.Name}' is not a forward-slash path relative to the worlds directory with no empty, '.', or '..' segment.",
+                    Path: $"{path}.name"
+                ));
+            } else if (spelledAs.TryGetValue(
+                key: entry.Name,
+                value: out var held
+            )) {
+                errors.Add(item: new(
+                    Message: (string.Equals(
+                        a: held,
+                        b: entry.Name,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                        ? $"name '{entry.Name}' is declared more than once."
+                        : $"'{held}' and '{entry.Name}' differ only in letter case; a workspace path is unique ignoring case, since a case-insensitive file system holds both as one file."
+                    ),
+                    Path: $"{path}.name"
+                ));
+            } else {
+                spelledAs.Add(
+                    key: entry.Name,
+                    value: entry.Name
+                );
+                names.Add(item: entry.Name);
+            }
+
+            ValidateObject(
+                contentType: entry.ContentType,
+                errors: errors,
+                hash: entry.Hash,
+                path: path,
+                pathValue: entry.Path,
+                size: entry.Size
+            );
+        }
+
+        return names;
+    }
 
     /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
     /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
@@ -393,7 +491,8 @@ public static class OfficialCanonicalizer {
         return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
     }
     /// <summary>Normalizes an already-schema-valid document: sorts <see cref="OfficialManifest.Engine"/>'s files by
-    /// name, <see cref="OfficialManifest.Documents"/> by name, <see cref="OfficialManifest.Composed"/> by name, and
+    /// name, <see cref="OfficialManifest.Sources"/>, <see cref="OfficialManifest.Documents"/>, and
+    /// <see cref="OfficialManifest.Composed"/> by name, and
     /// <see cref="OfficialManifest.Assets"/> by (family, name) — all ordinal — so a build's own authoring/walk order
     /// never affects the canonical bytes. A document entry's own <c>imports</c> list keeps authored order (it is
     /// composition order, not a set); its <c>exports</c> list is deduplicated and sorted, since it is a flattened
@@ -422,6 +521,10 @@ public static class OfficialCanonicalizer {
             comparer: StringComparer.Ordinal
         )
             .ToList();
+        var sources = document.Sources.OrderBy(
+            keySelector: static entry => entry.Name,
+            comparer: StringComparer.Ordinal
+        ).ToList();
         var composed = document.Composed.OrderBy(
             keySelector: static entry => entry.Name,
             comparer: StringComparer.Ordinal
@@ -443,6 +546,7 @@ public static class OfficialCanonicalizer {
             Documents = documents,
             Engine = engine,
             Schema = OfficialManifest.CurrentSchema,
+            Sources = sources,
         });
     }
     /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
@@ -497,12 +601,21 @@ public static class OfficialCanonicalizer {
             engine: document.Engine,
             errors: errors
         );
-        ValidateDocuments(
-            documents: document.Documents,
-            errors: errors
+
+        var sourceNames = ValidateSources(
+            errors: errors,
+            sources: document.Sources
         );
+
+        var documentNames = ValidateDocuments(
+            documents: document.Documents,
+            errors: errors,
+            sourceNames: sourceNames
+        );
+
         ValidateComposed(
             composed: document.Composed,
+            documentNames: documentNames,
             errors: errors
         );
         ValidateAssets(

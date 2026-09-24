@@ -12,61 +12,40 @@ namespace Puck.Networking.Tests.Peers;
 public sealed class SendTimeoutTests {
     [Fact]
     public async Task SendAsync_WhenThePeerWithholdsStreamCredit_ClosesTheLinkAsConnectionClosed_AtTheSendTimeout_AndReleasesTheSendQueuedBehindIt() {
-        using var deadline = Laws.SocketDeadline();
-        var clock = new DeadlineClock();
+        var ct = TestContext.Current.CancellationToken;
+        var clock = new VirtualClock();
 
-        var identityA = PeerIdentity.Create();
-        var identityB = PeerIdentity.Create();
-
-        var (connectionAtA, connectionAtB) = InMemoryPeerConnection.Pair(
-            keyProvedByA: identityA.SubjectPublicKeyInfo,
-            keyProvedByB: identityB.SubjectPublicKeyInfo
-        );
-        var transportB = new FakePeerTransport(dial: static _ => throw new InvalidOperationException(message: "this law never dials from B"));
-
-        await using var peerA = new Peer(
-            identity: identityA,
-            timeProvider: clock,
-            transport: new FakePeerTransport(dial: _ => connectionAtA)
-        );
-        await using var peerB = new Peer(
-            identity: identityB,
-            transport: transportB
+        var (peerA, peerB, linkAtoB, linkBtoA, connectionAtA, _) = await PeerTestSupport.ConnectInMemoryAsync(
+            clockA: clock,
+            ct: ct
         );
 
-        await peerB.ListenAsync(
-            ct: deadline.Token,
-            endpoint: PeerTestSupport.Loopback()
-        );
-        transportB.Accept(connection: connectionAtB);
-
-        var linkAtoB = await peerA.DialAsync(
-            ct: deadline.Token,
-            endpoint: PeerTestSupport.Loopback(port: 2)
-        );
-        var linkBtoA = await peerB.IncomingLinks.ReadAsync(cancellationToken: deadline.Token);
+        await using var disposeA = peerA;
+        await using var disposeB = peerB;
 
         // The handshake and the link are honest up to here; from now on B grants A no credit, so A's next write
         // parks inside the transport with the write gate held, and the send behind it parks on the gate.
         connectionAtA.WithholdWriteCredit();
 
         var stalled = linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: "never credited"u8.ToArray()
         );
         var queued = linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: "behind the stalled send"u8.ToArray()
         );
 
         Assert.False(condition: stalled.IsCompleted);
         Assert.False(condition: queued.IsCompleted);
-        await clock.ExpireAsync(
-            PeerWireProtocol.SendTimeout,
-            deadline.Token
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: ct,
+            dueTime: PeerWireProtocol.SendTimeout
         );
-        var stalledRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => stalled.WaitAsync(cancellationToken: deadline.Token));
-        var queuedRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => queued.WaitAsync(cancellationToken: deadline.Token));
+        clock.Advance(by: PeerWireProtocol.SendTimeout);
+        var stalledRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => stalled.WaitAsync(cancellationToken: ct));
+        var queuedRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => queued.WaitAsync(cancellationToken: ct));
 
         Assert.Equal(
             expected: PeerRefusal.ConnectionClosed,
@@ -98,7 +77,7 @@ public sealed class SendTimeoutTests {
         // A send after the close is refused at entry by the same name, and the far side sees a closed connection,
         // not a partial frame it could mistake for anything else.
         var late = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => linkAtoB.SendAsync(
-            ct: deadline.Token,
+            ct: ct,
             payload: "too late"u8.ToArray()
         ));
 

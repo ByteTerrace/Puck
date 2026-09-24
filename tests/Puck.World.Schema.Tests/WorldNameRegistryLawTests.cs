@@ -46,23 +46,6 @@ public sealed class WorldNameRegistryLawTests {
         ["pile-one"] = "a_pile-one",
     };
 
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
     private static string Rewrite(string text, WorldNameRole role) =>
         WorldModuleNamespace.Rewrite(
             declared: Declared,
@@ -134,35 +117,35 @@ public sealed class WorldNameRegistryLawTests {
         var text = module.ToJsonString();
 
         Assert.Equal(
-            expected: "twin_cube",
+            expected: "twin$cube",
             actual: module["state"]!["lattices"]![0]!["name"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "twin_cube",
+            expected: "twin$cube",
             actual: module["state"]!["world"]![0]!["domain"]!["topology"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "twin_flip",
+            expected: "twin$flip",
             actual: module["rules"]![0]!["name"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "twin_board",
+            expected: "twin$board",
             actual: module["rules"]![0]!["forEach"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "$reduce:count:twin_board",
+            expected: "$reduce:count:twin$board",
             actual: module["rules"]![0]!["gate"]!["comparandState"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "twin_turn",
+            expected: "twin$turn",
             actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![0]!["name"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "$cell:twin_board:$each",
+            expected: "$cell:twin$board:$each",
             actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![0]!["key"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "twin_cube",
+            expected: "twin$cube",
             actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![1]!["topology"]!.GetValue<string>()
         );
         Assert.Equal(
@@ -170,7 +153,7 @@ public sealed class WorldNameRegistryLawTests {
             actual: module["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]![1]!["index"]!.GetValue<string>()
         );
         Assert.Equal(
-            expected: "twin_turn",
+            expected: "twin$turn",
             actual: module["rules"]![0]!["effects"]![1]!["expression"]!["instructions"]![0]!["name"]!.GetValue<string>()
         );
         Assert.DoesNotContain(
@@ -203,12 +186,12 @@ public sealed class WorldNameRegistryLawTests {
             """)!.AsObject();
 
         Assert.True(
-            WorldModuleNamespace.TryRestoreReferences(
+            condition: WorldModuleNamespace.TryRestoreReferences(
                 module,
                 new Dictionary<string, string>(comparer: StringComparer.Ordinal) { [Placeholder] = "host" },
                 out var reason
             ),
-            reason
+            userMessage: reason
         );
 
         Assert.Equal(Placeholder, module["state"]!["world"]![0]!["name"]!.GetValue<string>());
@@ -243,11 +226,7 @@ public sealed class WorldNameRegistryLawTests {
     }
     [Fact]
     public void CheckedInTableMatchesTheModel() {
-        var path = Path.Combine(
-            path1: RepositoryRoot(),
-            path2: "docs",
-            path3: "world-name-registry.md"
-        );
+        var path = RepositoryPaths.Resolve(relativePath: "docs/world-name-registry.md");
 
         Assert.True(
             condition: File.Exists(path: path),
@@ -304,8 +283,8 @@ public sealed class WorldNameRegistryLawTests {
     }
     [InlineData("3 - board", "3 - a_board")]
     [InlineData("board[from] + game[to]", "a_board[from] + a_game[to]")]
-    [InlineData("boardShift(board, cube, L0) & 0xFF", "boardShift(a_board, a_cube, L0) & 0xFF")]
-    [InlineData("$board:mask:board:1:1 | min(armor, 2)", "$board:mask:a_board:1:1 | min(a_armor, 2)")]
+    [InlineData("boardShift(board, cube, L0) & 0xFF", "boardShift(a_board, a_cube, L0) & 255")]
+    [InlineData("$board:mask:board:1:1 | min(armor)", "$board:mask:a_board:1:1 | $reduce:min:a_armor")]
     [InlineData("`pile-one`[$each] ? 1 : 0", "`a_pile-one`[$each] ? 1 : 0")]
     [InlineData("buffs[board[$each]]", "buffs[a_board[$each]]")]
     [InlineData("$table:armor:power[$local:move]", "$table:a_armor:power[$local:move]")]
@@ -355,6 +334,104 @@ public sealed class WorldNameRegistryLawTests {
                 role: WorldNameRole.Names,
                 text: authored
             )
+        );
+    }
+
+    // A module whose declarations are spelled like the engine's own words: functions (max, body, count), channel
+    // keywords (where, cellOf, placement, cell, argmax, body), and facets (Airborne, phaseError, quiescent). Beside
+    // them, rows the channels below read by name (score, threat, alive, board, music).
+    private static readonly Dictionary<string, string> EngineWords = new[] {
+        "max", "body", "count", "sum", "where", "cellOf", "placement", "cell", "argmax", "Airborne", "phaseError",
+        "quiescent", "any", "last", "score", "threat", "alive", "board", "music",
+    }.ToDictionary(elementSelector: static name => $"a_{name}", keySelector: static name => name, comparer: StringComparer.Ordinal);
+
+    [InlineData("max(score) + body(3)", "$reduce:max:a_score + $body:3", WorldNameRole.Expression)]
+    [InlineData("count (board)", "$reduce:count:a_board", WorldNameRole.Expression)]
+    [InlineData("max + 1", "a_max + 1", WorldNameRole.Expression)]
+    [InlineData("$distance:body:0:body:1", "$distance:body:0:body:1", WorldNameRole.Names)]
+    [InlineData("$distance:argmax:threat:body:1", "$distance:argmax:a_threat:body:1", WorldNameRole.Names)]
+    [InlineData("$reduce:max:score", "$reduce:max:a_score", WorldNameRole.Names)]
+    [InlineData("$reduce:sum:score:where:alive", "$reduce:sum:a_score:where:a_alive", WorldNameRole.Names)]
+    [InlineData("$argmax:threat:where:alive", "$argmax:a_threat:where:a_alive", WorldNameRole.Names)]
+    [InlineData("$fact:body:0:Airborne", "$fact:body:0:Airborne", WorldNameRole.Names)]
+    [InlineData("$nearest:body:0:threat", "$nearest:body:0:a_threat", WorldNameRole.Names)]
+    [InlineData("$board:cellOf:board:placement:$each", "$board:cellOf:a_board:placement:$each", WorldNameRole.Names)]
+    [InlineData("$clock:music:phaseError", "$clock:a_music:phaseError", WorldNameRole.Names)]
+    [InlineData("$region:placement", "$region:a_placement", WorldNameRole.Names)]
+    [InlineData("$distance:placement:cell:body:0", "$distance:placement:a_cell:body:0", WorldNameRole.Names)]
+    [InlineData("$physics:quiescent", "$physics:quiescent", WorldNameRole.Names)]
+    [InlineData("$match:score:board:any", "$match:a_score:a_board:any", WorldNameRole.Names)]
+    [InlineData("$zone:board:last", "$zone:a_board:last", WorldNameRole.Key)]
+    [InlineData("$pair:body:0:cell:score:max", "$pair:body:0:cell:a_score:max", WorldNameRole.Key)]
+    [InlineData("cell:body:target", "cell:a_body:target", WorldNameRole.Key)]
+    [InlineData("body:3", "body:3", WorldNameRole.Key)]
+    [InlineData("$expr:max(score)", "$expr:$reduce:max:a_score", WorldNameRole.Key)]
+    [InlineData("fact(body, 0, Airborne) + 1", "$fact:body:0:Airborne + 1", WorldNameRole.Expression)]
+    [InlineData("clock(music, phaseError) > 0", "$clock:a_music:phaseError > 0", WorldNameRole.Expression)]
+    [InlineData("count(board, where: alive)", "$reduce:count:a_board:where:a_alive", WorldNameRole.Expression)]
+    [InlineData("any(board, last -> last > 1)", "any(a_board, last -> last > 1)", WorldNameRole.Expression)]
+    [InlineData("$expr:fact(body, 0, Airborne)", "$expr:$fact:body:0:Airborne", WorldNameRole.Key)]
+    [Theory]
+    public void AModuleDeclaringAnEngineWordStillReadsTheEngines(string authored, string expected, WorldNameRole role) => Assert.Equal(
+        actual: WorldModuleNamespace.Rewrite(
+            declared: EngineWords,
+            role: role,
+            text: authored
+        ),
+        expected: expected
+    );
+    // Composed through an alias, a module declaring rows named max and body prefixes those rows and still calls the
+    // engine's max and reads the engine's body references. Infix text is read by the expression grammar, so it prints
+    // back in the document's colon spelling.
+    [Fact]
+    public void AnAliasedModuleDeclaringMaxAndBodyStillCallsTheEngines() {
+        var module = JsonNode.Parse(json: /*lang=json*/ """
+            {
+              "state": { "world": [ { "name": "max", "kind": "Int", "value": 0 }, { "name": "body", "kind": "Int", "value": 0 } ] },
+              "rules": [ {
+                "name": "near",
+                "gate": { "$type": "compareState", "state": "$distance:body:0:body:1", "comparison": "LessOrEqual", "comparandState": "body" },
+                "effects": [ { "$type": "setState", "state": "max", "expression": "max(max) + body" } ]
+              } ]
+            }
+            """)!.AsObject();
+
+        Assert.True(condition: WorldModuleNamespace.TryApply(alias: "twin", module: module, reason: out var reason), userMessage: reason);
+        Assert.Equal(actual: module["state"]!["world"]![0]!["name"]!.GetValue<string>(), expected: "twin$max");
+        Assert.Equal(actual: module["rules"]![0]!["gate"]!["state"]!.GetValue<string>(), expected: "$distance:body:0:body:1");
+        Assert.Equal(actual: module["rules"]![0]!["gate"]!["comparandState"]!.GetValue<string>(), expected: "twin$body");
+        Assert.Equal(actual: module["rules"]![0]!["effects"]![0]!["state"]!.GetValue<string>(), expected: "twin$max");
+        Assert.Equal(actual: module["rules"]![0]!["effects"]![0]!["expression"]!.GetValue<string>(), expected: "`$reduce:max:twin$max` + `twin$body`");
+    }
+    // Every channel a reserved spelling names is read by its grammar, so none falls to reading every argument as a
+    // name — which would rename the engine's words.
+    [Fact]
+    public void EveryReservedChannelIsReadByItsGrammar() {
+        var channels = new[] { typeof(RuleFacts), typeof(WorldRuleFacts) }
+            .SelectMany(selector: static type => type.GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+            .Where(predicate: static field => (field.IsLiteral && (field.FieldType == typeof(string))))
+            .Select(selector: static field => ((string)field.GetRawConstantValue()!))
+            .Where(predicate: static spelling => (spelling.StartsWith(value: '$') && spelling.Contains(value: ':') && !spelling.StartsWith(value: RuleFacts.LocalPrefix)))
+            .Select(selector: static spelling => spelling[1..spelling.IndexOf(value: ':')])
+            .Concat(second: ["board", "phase"])
+            .Distinct(comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Contains(collection: channels, expected: "distance");
+        Assert.All(
+            action: static channel => Assert.True(condition: WorldModuleNamespace.DescribesChannel(channel: channel), userMessage: channel),
+            collection: channels
+        );
+    }
+    // A spelling the channel table does not hold is no channel, so nothing guesses which of its arguments are names:
+    // it is left as written. The mutation proof: read an undescribed channel's every argument as a name, and the
+    // engine's words 'body' and 'Airborne' are renamed.
+    [Fact]
+    public void AnUndescribedChannelIsLeftAsWritten() {
+        Assert.False(condition: WorldModuleNamespace.DescribesChannel(channel: "undescribed"));
+        Assert.Equal(
+            actual: WorldModuleNamespace.Rewrite(declared: EngineWords, role: WorldNameRole.Names, text: "$undescribed:body:0:Airborne"),
+            expected: "$undescribed:body:0:Airborne"
         );
     }
     [Fact]

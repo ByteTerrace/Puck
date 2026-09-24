@@ -22,6 +22,7 @@ public sealed partial class WorldDocument {
     // world.save") and by ApplyRebuild's Load/Reload arm (a new base replaces the old one, exactly like a swap
     // always has). Reset itself never writes this: reset targets the base WITHOUT moving it.
     private string m_baseOrigin = "the boot document";
+
     private WorldDefinition m_base;
     private WorldDefinition m_definition;
     private WorldDocumentSubmissionReceipt? m_lastDocumentReceipt;
@@ -43,8 +44,10 @@ public sealed partial class WorldDocument {
     internal string BaseOrigin => m_baseOrigin;
     /// <summary>Gets the live world definition, swapped in place as buffered edits apply.</summary>
     internal WorldDefinition Definition => m_definition;
+
     /// <summary>Gets the server whose arena, entity table, grants and narration this pipeline runs against.</summary>
     private WorldServer Host => m_host;
+
     /// <summary>Gets the applied-mutation journal over the base.</summary>
     internal List<WorldJournalEntry> Journal => m_journal;
     /// <summary>Gets the journal length — the number of applied mutations over the base.</summary>
@@ -67,9 +70,11 @@ public sealed partial class WorldDocument {
     }
     /// <summary>Gets the buffered live-edit ops, drained FIFO at the step boundary before intents.</summary>
     internal Queue<WorldPendingOp> Pending => m_pending;
+
     /// <summary>Gets the live SDF contact field under the field provider, or <see langword="null"/> under the
     /// analytic one.</summary>
     public WorldSolidField? SolidField => m_solids;
+
     /// <summary>Gets the solid-field revision, bumped each time the field is rebuilt.</summary>
     internal int SolidRevision => m_solidRevision;
 
@@ -96,12 +101,14 @@ public sealed partial class WorldDocument {
     /// <summary>Swaps the live definition.</summary>
     /// <param name="definition">The new live definition.</param>
     internal void AdoptDefinition(WorldDefinition definition) => m_definition = definition;
+
     /// <summary>Adopts a rebuilt solid field and bumps its revision.</summary>
     /// <param name="solids">The new field, or <see langword="null"/> under the analytic provider.</param>
     private void AdoptSolidField(WorldSolidField? solids) {
         m_solidRevision++;
         m_solids = solids;
     }
+
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared.</summary>
     internal void Compact() {
         m_base = m_definition;

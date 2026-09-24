@@ -28,6 +28,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
     private const uint DescriptorTypeStorageBuffer = 7;
     private const uint DynamicStateScissor = 1;
     private const uint False = 0;
+    private const uint FormatR32G32B32A32Sfloat = 109;
+    private const uint FormatR32G32B32Sfloat = 106;
     private const uint FormatR32G32Sfloat = 103;
     private const uint FrontFaceCounterClockwise = 0;
     private const uint PolygonModeFill = 0;
@@ -35,8 +37,10 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
     private const uint SampleCount1Bit = 0x00000001;
     private const uint ShaderStageFragmentBit = 0x00000010;
     private const uint ShaderStageVertexBit = 0x00000001;
+    private const uint StructureTypePipelineDepthStencilStateCreateInfo = 25;
     private const uint StructureTypePipelineMultisampleStateCreateInfo = 24;
     private const uint StructureTypePipelineRasterizationStateCreateInfo = 23;
+    private const uint True = 1;
     private const uint VertexInputRateVertex = 0;
     private const uint VertexPositionStride = 8;
 
@@ -51,6 +55,38 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         m_graphicsPipelineApi = graphicsPipelineApi;
     }
 
+    // One blend state per color attachment: straight alpha-over, or blending off so a fragment replaces the texel.
+    private static VkPipelineColorBlendAttachmentState[] BuildBlendAttachments(VulkanGraphicsOutputs outputs) {
+        var attachments = new VkPipelineColorBlendAttachmentState[outputs.ColorAttachmentCount];
+
+        for (var index = 0; (index < attachments.Length); index++) {
+            attachments[index] = (outputs.AlphaBlend
+                ? new VkPipelineColorBlendAttachmentState(
+                    blendEnable: 1,
+                    colorWriteMask: ColorComponentRgbaBits
+                ) {
+                    AlphaBlendOp = BlendOpAdd,
+                    ColorBlendOp = BlendOpAdd,
+                    DstAlphaBlendFactor = BlendFactorZero,
+                    DstColorBlendFactor = BlendFactorOneMinusSrcAlpha,
+                    SrcAlphaBlendFactor = BlendFactorOne,
+                    SrcColorBlendFactor = BlendFactorSrcAlpha,
+                }
+                : new VkPipelineColorBlendAttachmentState(
+                    blendEnable: 0,
+                    colorWriteMask: ColorComponentRgbaBits
+                ) {
+                    AlphaBlendOp = BlendOpAdd,
+                    ColorBlendOp = BlendOpAdd,
+                    DstAlphaBlendFactor = BlendFactorZero,
+                    DstColorBlendFactor = BlendFactorZero,
+                    SrcAlphaBlendFactor = BlendFactorOne,
+                    SrcColorBlendFactor = BlendFactorOne,
+                });
+        }
+
+        return attachments;
+    }
     private static IReadOnlyList<VkDescriptorSetLayoutBinding> BuildDescriptorBindings(uint textureSamplerCount, bool enableStorageBuffer) {
         var bindings = new List<VkDescriptorSetLayoutBinding>();
 
@@ -82,10 +118,12 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
     // factory's identity slot map (DirectXGpuPipelineFactory.BuildLayout), so both backends agree on binding numbers.
     private static uint ToVkVertexFormat(GpuVertexFormat format) => format switch {
         GpuVertexFormat.R32G32Float => FormatR32G32Sfloat,
+        GpuVertexFormat.R32G32B32Float => FormatR32G32B32Sfloat,
+        GpuVertexFormat.R32G32B32A32Float => FormatR32G32B32A32Sfloat,
         _ => throw new ArgumentOutOfRangeException(
         nameof(format),
         format,
-        "The Vulkan graphics pipeline supports only R32G32Float vertex attributes."
+        "The vertex attribute format is not defined."
     ),
     };
 
@@ -127,7 +165,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         VulkanPushConstantBinding? pushConstantBinding = null,
         uint textureSamplerCount = 64,
         bool enableStorageBuffer = true,
-        GpuVertexInputLayout? vertexInput = null
+        GpuVertexInputLayout? vertexInput = null,
+        VulkanGraphicsOutputs? outputs = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
         ArgumentNullException.ThrowIfNull(argument: renderPass);
@@ -178,25 +217,26 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
                 Stride = layout.StrideBytes,
             }]
         );
+        var written = (outputs ?? new VulkanGraphicsOutputs(
+            AlphaBlend: true,
+            ColorAttachmentCount: 1
+        ));
         var request = new VulkanGraphicsPipelineCreateRequest(
-            ColorBlendAttachments: [
-                new VkPipelineColorBlendAttachmentState(
-                    blendEnable: 1,
-                    colorWriteMask: ColorComponentRgbaBits
-                ) {
-                    AlphaBlendOp = BlendOpAdd,
-                    ColorBlendOp = BlendOpAdd,
-                    DstAlphaBlendFactor = BlendFactorZero,
-                    DstColorBlendFactor = BlendFactorOneMinusSrcAlpha,
-                    SrcAlphaBlendFactor = BlendFactorOne,
-                    SrcColorBlendFactor = BlendFactorSrcAlpha,
-                },
-            ],
+            ClipSpaceYUp: written.ClipSpaceYUp,
+            ColorBlendAttachments: BuildBlendAttachments(outputs: written),
+            DepthStencil: ((written.DepthCompareOp is { } compare)
+                ? new VkPipelineDepthStencilStateCreateInfo {
+                    DepthCompareOp = compare,
+                    DepthTestEnable = True,
+                    DepthWriteEnable = True,
+                    SType = StructureTypePipelineDepthStencilStateCreateInfo,
+                }
+                : null),
             DescriptorBindings: BuildDescriptorBindings(
                 enableStorageBuffer: enableStorageBuffer,
                 textureSamplerCount: textureSamplerCount
             ),
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             DynamicStates: [DynamicStateScissor],
             FragmentShaderModuleHandle: fragmentShaderModule.Handle,
             Height: height,
@@ -205,6 +245,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
                 SType = StructureTypePipelineMultisampleStateCreateInfo,
                 SampleShadingEnable = False,
             },
+            PipelineCache: logicalDevice.PipelineCache,
             PushConstantSize: (pushConstantBinding?.Size ?? 0),
             PushConstantStageFlags: (pushConstantBinding?.StageFlags ?? 0),
             Rasterization: new VkPipelineRasterizationStateCreateInfo {
@@ -233,7 +274,11 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
 
         result.ThrowIfFailed(operation: "vkCreateGraphicsPipelines");
 
-        if (0 == descriptorSetLayoutHandle) {
+        // A pipeline that binds no descriptors has no descriptor set layout (VulkanPipelineLayouts.Create).
+        if (
+            (0 == descriptorSetLayoutHandle) &&
+            (request.DescriptorBindings.Count != 0)
+        ) {
             throw new InvalidOperationException(message: "vkCreateGraphicsPipelines returned success without a valid descriptor-set-layout handle.");
         }
 
@@ -247,7 +292,7 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
 
         return new(
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
-            deviceHandle: logicalDevice.Handle,
+            device: logicalDevice.Commands,
             graphicsPipelineApi: m_graphicsPipelineApi,
             layoutHandle: pipelineLayoutHandle,
             pipelineHandle: pipelineHandle

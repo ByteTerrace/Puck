@@ -40,11 +40,12 @@ public enum SeatActivationPolicy : byte {
 /// channel (<see cref="WorldRuleFacts.ParkedPrefix"/>) that reads a parked body's remaining count.</summary>
 /// <remarks><c>capacityRow</c> is the census's authored-randomness facet, or <see langword="null"/> for an
 /// ordinary literal <see cref="CapacityRaw"/>. A boot-only site (<see cref="WorldDrawSites.PopulationCapacity"/>):
-/// settled into <see cref="CapacityRaw"/>, cleared, and narrated exactly like
-/// <c>host.backendRow</c>. The site's admissible domain is not the capacity ceiling alone —
-/// <see cref="NetworkPlayers"/> is validated against capacity minus the local seats, so a drawn capacity below
-/// that sum is a document this same validator would refuse once resolved; the domain is narrowed statically at
-/// authoring instead, so the roll can never decide whether the world boots. <see cref="Disclosure"/> is the
+/// settled into <see cref="CapacityRaw"/> and narrated exactly like
+/// <c>host.backendRow</c>. The census is not bounded by the capacity ceiling alone — the seat floor,
+/// <see cref="NetworkPlayers"/>, and every authored body index bound against capacity each refuse some censuses —
+/// so admission settles every outcome the named row's source can draw into a candidate and puts each through the
+/// whole document validator, and a source spanning more than <see cref="WorldBodiesLimits.MaxDrawnCensusOutcomes"/>
+/// refuses by name. The roll therefore cannot decide whether the world boots. <see cref="Disclosure"/> is the
 /// per-observer snapshot disclosure policy (default null = <see cref="WorldObserverDisclosure.Default"/>,
 /// disclose-all) — read through <see cref="ObserverDisclosure"/>, applied at the output hub's sink boundary, never
 /// inside the tick, so it changes what an observer is told and never what the simulation computes.

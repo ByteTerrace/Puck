@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Protocol.Tests;
@@ -19,7 +20,7 @@ public sealed class MutationOutcomeWireLawTests {
     public void AppliedOutcomeRoundTripsWithWatermarkAndGroupRevision() {
         var expected = new WorldMutationOutcome(
             OperationId: Guid.Parse(input: "01234567-89ab-cdef-0123-456789abcdef"),
-            Actor: WorldPrincipal.Console,
+            Actor: Principal.Console,
             PayloadDigest: new string(
                 c: 'a',
                 count: 64
@@ -72,9 +73,9 @@ public sealed class MutationOutcomeWireLawTests {
             SessionGeneration: 0,
             Sequence: 1,
             CorrelationId: 1,
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Payload: new WorldSubmissionPayload.Mutation(Value: new WorldMutation.RemoveKit(
-                WorldPrincipal.Console,
+                Principal.Console,
                 "kit"
             )),
             OperationId: Guid.Parse(input: "01234567-89ab-cdef-0123-456789abcdef")
@@ -89,7 +90,7 @@ public sealed class MutationOutcomeWireLawTests {
             userMessage: detail
         );
         Assert.Equal(
-            WorldPrincipal.Console,
+            Principal.Console,
             binding.Actor
         );
         Assert.Equal(
@@ -101,7 +102,7 @@ public sealed class MutationOutcomeWireLawTests {
             binding.PayloadDigest.ToLowerInvariant()
         );
 
-        var changedActor = envelope with { Principal = WorldPrincipal.Seat(slot: 0) };
+        var changedActor = envelope with { Principal = Principal.Seat(slot: 0) };
 
         Assert.False(condition: WorldMutationBindingFactory.TryCreate(
             binding: out _,
@@ -133,7 +134,7 @@ public sealed class MutationOutcomeWireLawTests {
     public void DurableOutcomeWithoutPublicationProofIsMalformed() {
         var malformed = new WorldMutationOutcome(
             Guid.Parse(input: "01234567-89ab-cdef-0123-456789abcdef"),
-            WorldPrincipal.Console,
+            Principal.Console,
             new string(
                 c: 'e',
                 count: 64
@@ -163,7 +164,7 @@ public sealed class MutationOutcomeWireLawTests {
     public void DurableRefusalRoundTripsWithoutBecomingApplied() {
         var expected = new WorldMutationOutcome(
             Guid.Parse(input: "01234567-89ab-cdef-0123-456789abcdef"),
-            WorldPrincipal.Console,
+            Principal.Console,
             new string(
                 c: 'b',
                 count: 64
@@ -211,7 +212,7 @@ public sealed class MutationOutcomeWireLawTests {
     public void MutationFramePreservesCallerOperationId() {
         var operationId = Guid.Parse(input: "11223344-5566-7788-99aa-bbccddeeff00");
         var payload = new WorldSubmissionPayload.Mutation(Value: new WorldMutation.RemoveKit(
-            WorldPrincipal.Console,
+            Principal.Console,
             "kit"
         ));
 
@@ -245,7 +246,7 @@ public sealed class MutationOutcomeWireLawTests {
     [Fact]
     public void MutationFrameRejectsMissingOperationIdMetadata() {
         var payload = new WorldSubmissionPayload.Mutation(Value: new WorldMutation.RemoveKit(
-            WorldPrincipal.Console,
+            Principal.Console,
             "kit"
         ));
 
@@ -268,7 +269,7 @@ public sealed class MutationOutcomeWireLawTests {
     public void PendingOutcomeHasNoDurabilityProofYet() {
         var expected = new WorldMutationOutcome(
             Guid.Parse(input: "01234567-89ab-cdef-0123-456789abcdef"),
-            WorldPrincipal.Console,
+            Principal.Console,
             new string(
                 c: 'd',
                 count: 64
@@ -307,7 +308,7 @@ public sealed class MutationOutcomeWireLawTests {
     public void RecoveryRequiredWithoutWatermarkRoundTripsAsUncertain() {
         var expected = new WorldMutationOutcome(
             Guid.Parse(input: "01234567-89ab-cdef-0123-456789abcdef"),
-            WorldPrincipal.Console,
+            Principal.Console,
             new string(
                 c: 'c',
                 count: 64

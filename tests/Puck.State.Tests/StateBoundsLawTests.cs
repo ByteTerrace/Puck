@@ -17,7 +17,7 @@ public sealed class StateBoundsLawTests {
 
     [Fact]
     public void Add_AtMax_WithPositive_RefusesByDefault() {
-        var row = MakeRow(min: null, max: null, overflow: StateOverflow.Refuse);
+        var row = MakeRow(max: null, min: null, overflow: StateOverflow.Refuse);
         var admitted = row.TryAdmitWrite(
             current: long.MaxValue,
             operand: 1L,
@@ -26,14 +26,13 @@ public sealed class StateBoundsLawTests {
             reason: out var reason
         );
 
-        Assert.False(admitted);
-        Assert.Equal(0L, stored);
-        Assert.NotEmpty(reason);
+        Assert.False(condition: admitted);
+        Assert.Equal(actual: stored, expected: 0L);
+        Assert.NotEmpty(collection: reason);
     }
-
     [Fact]
     public void Add_AtMax_WithPositive_SaturatesToMax() {
-        var row = MakeRow(min: null, max: null, overflow: StateOverflow.Saturate);
+        var row = MakeRow(max: null, min: null, overflow: StateOverflow.Saturate);
         var admitted = row.TryAdmitWrite(
             current: long.MaxValue,
             operand: 1000L,
@@ -42,14 +41,13 @@ public sealed class StateBoundsLawTests {
             reason: out var reason
         );
 
-        Assert.True(admitted);
-        Assert.Equal(long.MaxValue, stored);
-        Assert.Empty(reason);
+        Assert.True(condition: admitted);
+        Assert.Equal(actual: stored, expected: long.MaxValue);
+        Assert.Empty(value: reason);
     }
-
     [Fact]
     public void Add_AtMin_WithNegative_RefusesByDefault() {
-        var row = MakeRow(min: null, max: null, overflow: StateOverflow.Refuse);
+        var row = MakeRow(max: null, min: null, overflow: StateOverflow.Refuse);
         var admitted = row.TryAdmitWrite(
             current: long.MinValue,
             operand: -1L,
@@ -58,14 +56,13 @@ public sealed class StateBoundsLawTests {
             reason: out var reason
         );
 
-        Assert.False(admitted);
-        Assert.Equal(0L, stored);
-        Assert.NotEmpty(reason);
+        Assert.False(condition: admitted);
+        Assert.Equal(actual: stored, expected: 0L);
+        Assert.NotEmpty(collection: reason);
     }
-
     [Fact]
     public void Add_AtMin_WithNegative_SaturatesToMin() {
-        var row = MakeRow(min: null, max: null, overflow: StateOverflow.Saturate);
+        var row = MakeRow(max: null, min: null, overflow: StateOverflow.Saturate);
         var admitted = row.TryAdmitWrite(
             current: long.MinValue,
             operand: -9999L,
@@ -74,131 +71,127 @@ public sealed class StateBoundsLawTests {
             reason: out var reason
         );
 
-        Assert.True(admitted);
-        Assert.Equal(long.MinValue, stored);
-        Assert.Empty(reason);
+        Assert.True(condition: admitted);
+        Assert.Equal(actual: stored, expected: long.MinValue);
+        Assert.Empty(value: reason);
     }
-
     [Fact]
     public void Add_MaxToMax_DoesNotOverflowInt128_SaturatesOrRefuses() {
         var saturateRow = MakeRow(overflow: StateOverflow.Saturate);
         var refuseRow = MakeRow(overflow: StateOverflow.Refuse);
 
-        Assert.True(saturateRow.TryAdmitWrite(
+        Assert.True(condition: saturateRow.TryAdmitWrite(
             current: long.MaxValue,
             operand: long.MaxValue,
             write: StateWriteKind.Add,
             stored: out var satStored,
             reason: out var satReason
         ));
-        Assert.Equal(long.MaxValue, satStored);
-        Assert.Empty(satReason);
+        Assert.Equal(actual: satStored, expected: long.MaxValue);
+        Assert.Empty(value: satReason);
 
-        Assert.False(refuseRow.TryAdmitWrite(
+        Assert.False(condition: refuseRow.TryAdmitWrite(
             current: long.MaxValue,
             operand: long.MaxValue,
             write: StateWriteKind.Add,
             stored: out var refStored,
             reason: out var refReason
         ));
-        Assert.Equal(0L, refStored);
-        Assert.NotEmpty(refReason);
+        Assert.Equal(actual: refStored, expected: 0L);
+        Assert.NotEmpty(collection: refReason);
     }
-
     [Fact]
     public void Add_MinToMin_DoesNotUnderflowInt128_SaturatesOrRefuses() {
         var saturateRow = MakeRow(overflow: StateOverflow.Saturate);
         var refuseRow = MakeRow(overflow: StateOverflow.Refuse);
 
-        Assert.True(saturateRow.TryAdmitWrite(
+        Assert.True(condition: saturateRow.TryAdmitWrite(
             current: long.MinValue,
             operand: long.MinValue,
             write: StateWriteKind.Add,
             stored: out var satStored,
             reason: out var satReason
         ));
-        Assert.Equal(long.MinValue, satStored);
-        Assert.Empty(satReason);
+        Assert.Equal(actual: satStored, expected: long.MinValue);
+        Assert.Empty(value: satReason);
 
-        Assert.False(refuseRow.TryAdmitWrite(
+        Assert.False(condition: refuseRow.TryAdmitWrite(
             current: long.MinValue,
             operand: long.MinValue,
             write: StateWriteKind.Add,
             stored: out var refStored,
             reason: out var refReason
         ));
-        Assert.Equal(0L, refStored);
-        Assert.NotEmpty(refReason);
+        Assert.Equal(actual: refStored, expected: 0L);
+        Assert.NotEmpty(collection: refReason);
     }
-
     [Fact]
     public void Set_BeyondAuthoredBounds_RefusesOrSaturates() {
-        var refuseRow = MakeRow(min: -100L, max: 100L, overflow: StateOverflow.Refuse);
-        var saturateRow = MakeRow(min: -100L, max: 100L, overflow: StateOverflow.Saturate);
+        var refuseRow = MakeRow(max: 100L, min: -100L, overflow: StateOverflow.Refuse);
+        var saturateRow = MakeRow(max: 100L, min: -100L, overflow: StateOverflow.Saturate);
 
-        Assert.False(refuseRow.TryAdmitWrite(
+        Assert.False(condition: refuseRow.TryAdmitWrite(
             current: 0L,
             operand: 101L,
             write: StateWriteKind.Set,
             stored: out var rStoredHigh,
             reason: out var rReasonHigh
         ));
-        Assert.Equal(0L, rStoredHigh);
-        Assert.NotEmpty(rReasonHigh);
+        Assert.Equal(actual: rStoredHigh, expected: 0L);
+        Assert.NotEmpty(collection: rReasonHigh);
 
-        Assert.False(refuseRow.TryAdmitWrite(
+        Assert.False(condition: refuseRow.TryAdmitWrite(
             current: 0L,
             operand: -101L,
             write: StateWriteKind.Set,
             stored: out var rStoredLow,
             reason: out var rReasonLow
         ));
-        Assert.Equal(0L, rStoredLow);
-        Assert.NotEmpty(rReasonLow);
+        Assert.Equal(actual: rStoredLow, expected: 0L);
+        Assert.NotEmpty(collection: rReasonLow);
 
-        Assert.True(saturateRow.TryAdmitWrite(
+        Assert.True(condition: saturateRow.TryAdmitWrite(
             current: 0L,
             operand: 500L,
             write: StateWriteKind.Set,
             stored: out var sStoredHigh,
             reason: out var sReasonHigh
         ));
-        Assert.Equal(100L, sStoredHigh);
-        Assert.Empty(sReasonHigh);
+        Assert.Equal(actual: sStoredHigh, expected: 100L);
+        Assert.Empty(value: sReasonHigh);
 
-        Assert.True(saturateRow.TryAdmitWrite(
+        Assert.True(condition: saturateRow.TryAdmitWrite(
             current: 0L,
             operand: -500L,
             write: StateWriteKind.Set,
             stored: out var sStoredLow,
             reason: out var sReasonLow
         ));
-        Assert.Equal(-100L, sStoredLow);
-        Assert.Empty(sReasonLow);
+        Assert.Equal(actual: sStoredLow, expected: -100L);
+        Assert.Empty(value: sReasonLow);
     }
-
     [Fact]
     public void ExactAuthoredBounds_AdmitsWithoutClamping() {
-        var row = MakeRow(min: -50L, max: 50L, overflow: StateOverflow.Refuse);
+        var row = MakeRow(max: 50L, min: -50L, overflow: StateOverflow.Refuse);
 
-        Assert.True(row.TryAdmitWrite(
+        Assert.True(condition: row.TryAdmitWrite(
             current: 0L,
             operand: 50L,
             write: StateWriteKind.Set,
             stored: out var s50,
             reason: out var r50
         ));
-        Assert.Equal(50L, s50);
-        Assert.Empty(r50);
+        Assert.Equal(actual: s50, expected: 50L);
+        Assert.Empty(value: r50);
 
-        Assert.True(row.TryAdmitWrite(
+        Assert.True(condition: row.TryAdmitWrite(
             current: 0L,
             operand: -50L,
             write: StateWriteKind.Set,
             stored: out var sNeg50,
             reason: out var rNeg50
         ));
-        Assert.Equal(-50L, sNeg50);
-        Assert.Empty(rNeg50);
+        Assert.Equal(actual: sNeg50, expected: -50L);
+        Assert.Empty(value: rNeg50);
     }
 }

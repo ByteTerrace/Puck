@@ -43,7 +43,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
     [Fact]
     public void Apply_Refuses_WhenAStagedFileWasTamperedAfterStaging() {
         var content = "original"u8.ToArray();
-        var hash = $"sha256/{ContentAddressedStore.ComputeHash(content: content)}";
+        var hash = ContentPin.Compute(content: content).ToString();
 
         StageFile(
             version: "1.0.1",
@@ -111,9 +111,9 @@ public sealed class FileUpdateApplierTests : IDisposable {
     [Fact]
     public void Apply_RetainsThePreviousCurrentAsLastGood_OnASecondApply() {
         var firstContent = "v1"u8.ToArray();
-        var firstHash = $"sha256/{ContentAddressedStore.ComputeHash(content: firstContent)}";
+        var firstHash = ContentPin.Compute(content: firstContent).ToString();
         var secondContent = "v2"u8.ToArray();
-        var secondHash = $"sha256/{ContentAddressedStore.ComputeHash(content: secondContent)}";
+        var secondHash = ContentPin.Compute(content: secondContent).ToString();
 
         StageFile(
             content: firstContent,
@@ -187,7 +187,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
     [Fact]
     public void Apply_WritesCurrentAndStateGeneration_OnAFirstInstall_WithNoLastGood() {
         var content = "bytes"u8.ToArray();
-        var hash = $"sha256/{ContentAddressedStore.ComputeHash(content: content)}";
+        var hash = ContentPin.Compute(content: content).ToString();
 
         StageFile(
             content: content,

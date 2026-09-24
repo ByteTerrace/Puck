@@ -56,8 +56,8 @@ public sealed class CartridgeToolingTests {
             Assert.Equal(
                 0,
                 LintCommand.Execute(
-                    path,
-                    true
+                    path: path,
+                    strict: true
                 )
             );
             File.AppendAllText(
@@ -67,8 +67,8 @@ public sealed class CartridgeToolingTests {
             Assert.Equal(
                 1,
                 LintCommand.Execute(
-                    path,
-                    true
+                    path: path,
+                    strict: true
                 )
             );
             Assert.Equal(
@@ -82,10 +82,12 @@ public sealed class CartridgeToolingTests {
                     false
                 )
             );
-        } finally { Directory.Delete(
+        } finally {
+            Directory.Delete(
             directory,
             recursive: true
-        ); }
+        );
+        }
     }
     [Fact]
     public async Task UnsavedCartridgeBufferUsesForgeDiagnostics() {
@@ -110,12 +112,14 @@ public sealed class CartridgeToolingTests {
         // than the world's is diagnosed by the dispatcher.
         var server = new PuckLanguageServer(
             diagnoseDocument: CartridgeLanguageServices.Diagnose,
-            input: input,
-            output: output,
             vocabularyResolver: Puck.Cli.Transpiler.CliVocabularyResolver.Instance
         );
 
-        await server.RunAsync(cancellationToken: TestContext.Current.CancellationToken);
+        await server.RunAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            input: input,
+            output: output
+        );
         var messages = Encoding.UTF8.GetString(bytes: output.ToArray());
 
         Assert.Contains(

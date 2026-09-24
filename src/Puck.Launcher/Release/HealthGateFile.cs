@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
+using Puck.Assets;
 
 namespace Puck.Launcher.Release;
 
@@ -37,31 +38,16 @@ internal static class HealthGateFile {
     /// <param name="cacheRoot">The install root (the same directory the stub reads <c>state/health.json</c> under).</param>
     /// <param name="version">The version to clear.</param>
     public static void ClearHealthy(string cacheRoot, string version) {
-        var directory = Path.Combine(
-            path1: cacheRoot,
-            path2: "state"
-        );
-        var path = Path.Combine(
-            path1: directory,
-            path2: "health.json"
-        );
-        var tmpPath = Path.Combine(
-            path1: directory,
-            path2: $"{Guid.NewGuid():n}.tmp"
-        );
-
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllText(
-            path: tmpPath,
+        AtomicFile.WriteAllText(
             contents: JsonSerializer.Serialize(value: new HealthRecord(
                 Attempts: 0,
                 Version: version
-            ))
-        );
-        File.Move(
-            destFileName: path,
-            overwrite: true,
-            sourceFileName: tmpPath
+            )),
+            path: Path.Combine(
+                path1: cacheRoot,
+                path2: "state",
+                path3: "health.json"
+            )
         );
     }
 }

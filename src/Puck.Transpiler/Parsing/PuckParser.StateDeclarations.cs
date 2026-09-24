@@ -1,4 +1,5 @@
 using Parlot.Fluent;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
@@ -178,44 +179,59 @@ public static partial class PuckParser {
 
         return skipped;
     }
-    // Any `: word` left after the name is the retired
-    // annotation, refused and consumed regardless of the word — the rest of the declaration still parses.
-    private static void RefuseWrittenKindAnnotation(ParseContext context, DiagnosticBag? diagnostics, string keyword, string name) {
+    // `: word` after the name names the enum the row's cells are drawn from, the way a record field names one
+    // (`field: Enum`). A cell kind is never written, so `: Int` and its siblings are refused and consumed, and the rest
+    // of the declaration still parses; which words are enums is the owning vocabulary's own answer. `span` is the enum
+    // name's own, so a fault in the name points at it; empty when no enum is named.
+    private static string? ReadEnumAnnotation(ParseContext context, DiagnosticBag? diagnostics, string keyword, string name, out SourceSpan span) {
         var cursor = context.Scanner.Cursor;
         var saved = cursor.Position;
 
+        span = default;
         SkipWhiteSpace(context: context);
         if (!TryConsume(c: ':', context: context)) {
             cursor.ResetPosition(position: saved);
 
-            return;
+            return null;
         }
 
         SkipWhiteSpace(context: context);
 
+        var wordOffset = cursor.Offset;
+
         var (kindLine, kindCol) = GetLineAndColumn(
             buffer: context.Scanner.Buffer,
-            offset: cursor.Offset
+            offset: wordOffset
         );
 
         if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var word)) {
             cursor.ResetPosition(position: saved);
 
-            return;
+            return null;
+        }
+        if (!Enum.GetNames<CellKind>().Contains(value: word)) {
+            span = new SourceSpan(
+                wordOffset,
+                word.Length,
+                kindLine,
+                kindCol
+            );
+
+            return word;
         }
 
         diagnostics?.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationKindAnnotated,
-            message: ((keyword == "table")
-                ? $"'table {name}' spells the retired ': {word}' annotation — table kinds are inferred from their cells and modifiers; instantiate a record with 'pool {name} of {word} capacity(...)' instead"
-                : $"'{keyword} {name}' spells its kind explicitly as ': {word}' — the kind is inferred from the row's cells, value, and modifiers; write '{keyword} {name}' and drop the annotation"),
+            message: $"'{keyword} {name}' spells its kind explicitly as ': {word}' — the kind is inferred from the row's cells, value, and modifiers; write '{keyword} {name}' and drop the annotation",
             span: new SourceSpan(
-                cursor.Offset,
-                1,
+                wordOffset,
+                word.Length,
                 kindLine,
                 kindCol
             )
         );
+
+        return null;
     }
     private static StatementNode ParseStateTableDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, IDocumentVocabulary? vocabulary) {
         var cursor = context.Scanner.Cursor;
@@ -228,7 +244,7 @@ public static partial class PuckParser {
         SkipSpacesOnLine(context: context);
         ParseFamilyBracket(context: context, keyword: "table", members: out var familyMembers, name: name, size: out var familySize);
 
-        RefuseWrittenKindAnnotation(context: context, diagnostics: diagnostics, keyword: "table", name: name);
+        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "table", name: name, span: out var enumSpan);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "table", vocabulary: vocabulary);
         ExpressionNode? initializer = null;
@@ -252,7 +268,7 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateTableDeclarationNode(Cells: cells, Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset);
+        return new StateTableDeclarationNode(Cells: cells, Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, Initializer: initializer, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset) { EnumSpan = enumSpan };
     }
     // A family's bracket is either a bare count -- [8], today's spelling -- or a member list: comma-separated index
     // ranges ([0, 2..12], so a family may have gaps) and quoted member row names (["PileA", "PileB"]).
@@ -358,7 +374,7 @@ public static partial class PuckParser {
         SkipSpacesOnLine(context: context);
         ParseFamilyBracket(context: context, keyword: "slot", members: out var familyMembers, name: name, size: out var familySize);
 
-        RefuseWrittenKindAnnotation(context: context, diagnostics: diagnostics, keyword: "slot", name: name);
+        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "slot", name: name, span: out var enumSpan);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "slot", vocabulary: vocabulary);
         ExpressionNode? value = null;
@@ -371,7 +387,7 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateSlotDeclarationNode(Column: col, FamilyMembers: familyMembers, FamilySize: familySize, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, Value: value);
+        return new StateSlotDeclarationNode(Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, Value: value) { EnumSpan = enumSpan };
     }
     // `pile` opens a declaration only when a row name and the bare keyword 'of' follow on the same line, mirroring
     // `TryMatchDeclarationKeyword`'s own guard — an ordinary `pile: ...` property still parses as it always has.
@@ -481,7 +497,7 @@ public static partial class PuckParser {
         SkipSpacesOnLine(context: context);
         ParseFamilyBracket(context: context, keyword: "grid", members: out var familyMembers, name: name, size: out var familySize);
 
-        RefuseWrittenKindAnnotation(context: context, diagnostics: diagnostics, keyword: "grid", name: name);
+        var enumName = ReadEnumAnnotation(context: context, diagnostics: diagnostics, keyword: "grid", name: name, span: out var enumSpan);
 
         var modifiers = ParseStateModifiers(context: context, keyword: "grid", vocabulary: vocabulary);
         var cells = new List<StateCellEntryNode>();
@@ -505,7 +521,7 @@ public static partial class PuckParser {
 
         var len = (cursor.Offset - startOffset);
 
-        return new StateGridDeclarationNode(Cells: cells, Column: col, FamilyMembers: familyMembers, FamilySize: familySize, HasBody: hasBody, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset);
+        return new StateGridDeclarationNode(Cells: cells, Column: col, Enum: enumName, FamilyMembers: familyMembers, FamilySize: familySize, HasBody: hasBody, Kind: string.Empty, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset) { EnumSpan = enumSpan };
     }
     // Zero or more `name(args)` calls, chained: `bounds(...) advance(...)`. Each candidate is read speculatively —
     // an identifier not immediately followed by '(' belongs to whatever statement comes next (the next declaration,

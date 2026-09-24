@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Xunit;
@@ -19,7 +20,8 @@ public sealed class RuleWriteReconciliationLawTests {
                 ? (source.Population with { ScaleRow = "scale" })
                 : source.Population),
             Rules = rules,
-            StateRaw = ((source.StateRaw ?? new WorldStateSection()) with { World = [
+            StateRaw = ((source.StateRaw ?? new WorldStateSection()) with {
+                World = [
                 .. (source.StateRaw?.World ?? []),
                 new WorldStateRow(
                     CellName.Parse(candidate: "stunned"),
@@ -42,7 +44,8 @@ public sealed class RuleWriteReconciliationLawTests {
                     Max: FixedQ4816.One.Value,
                     Min: FixedQ4816.FromDouble(value: 0.05).Value
                 ),
-            ] }),
+            ],
+            }),
         };
     }
     private static WorldRule Write(string row, decimal value) => new(
@@ -54,7 +57,7 @@ public sealed class RuleWriteReconciliationLawTests {
             )]
     );
     private static void Join(WorldFixture fixture) {
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
@@ -144,7 +147,7 @@ public sealed class RuleWriteReconciliationLawTests {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
                 Key: "0",
                 Kind: WorldDocumentWriteKind.Set,
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: "stunned",
                 Value: 1
             ));
@@ -181,7 +184,7 @@ public sealed class RuleWriteReconciliationLawTests {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
                 Key: "0",
                 Kind: WorldDocumentWriteKind.Set,
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: "scale",
                 Value: Half.Value
             ));

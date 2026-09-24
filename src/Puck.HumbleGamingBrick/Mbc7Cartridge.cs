@@ -225,24 +225,6 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     }
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        reader.ReadBytes(destination: m_eeprom);
-        m_argumentBitsLeft = reader.ReadInt32();
-        m_chipSelect = reader.ReadBoolean();
-        m_clockLine = reader.ReadBoolean();
-        m_commandShift = reader.ReadInt32();
-        m_dataIn = reader.ReadBoolean();
-        m_dataOut = reader.ReadBoolean();
-        m_latchErased = reader.ReadBoolean();
-        m_ramEnablePrimary = reader.ReadBoolean();
-        m_ramEnableSecondary = reader.ReadBoolean();
-        m_readShift = reader.ReadInt32();
-        m_romBank = reader.ReadInt32();
-        m_writeEnabled = reader.ReadBoolean();
-        m_xLatch = reader.ReadInt32();
-        m_yLatch = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (address - MemoryMap.ExternalRamStart);
     /// <inheritdoc/>
@@ -253,22 +235,22 @@ public sealed class Mbc7Cartridge : CartridgeBase {
             romBank: m_romBank
         );
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBytes(value: m_eeprom);
-        writer.WriteInt32(value: m_argumentBitsLeft);
-        writer.WriteBoolean(value: m_chipSelect);
-        writer.WriteBoolean(value: m_clockLine);
-        writer.WriteInt32(value: m_commandShift);
-        writer.WriteBoolean(value: m_dataIn);
-        writer.WriteBoolean(value: m_dataOut);
-        writer.WriteBoolean(value: m_latchErased);
-        writer.WriteBoolean(value: m_ramEnablePrimary);
-        writer.WriteBoolean(value: m_ramEnableSecondary);
-        writer.WriteInt32(value: m_readShift);
-        writer.WriteInt32(value: m_romBank);
-        writer.WriteBoolean(value: m_writeEnabled);
-        writer.WriteInt32(value: m_xLatch);
-        writer.WriteInt32(value: m_yLatch);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Block(values: m_eeprom);
+        transfer.Int32(value: ref m_argumentBitsLeft);
+        transfer.Boolean(value: ref m_chipSelect);
+        transfer.Boolean(value: ref m_clockLine);
+        transfer.Int32(value: ref m_commandShift);
+        transfer.Boolean(value: ref m_dataIn);
+        transfer.Boolean(value: ref m_dataOut);
+        transfer.Boolean(value: ref m_latchErased);
+        transfer.Boolean(value: ref m_ramEnablePrimary);
+        transfer.Boolean(value: ref m_ramEnableSecondary);
+        transfer.Int32(value: ref m_readShift);
+        transfer.Int32(value: ref m_romBank);
+        transfer.Boolean(value: ref m_writeEnabled);
+        transfer.Int32(value: ref m_xLatch);
+        transfer.Int32(value: ref m_yLatch);
     }
 
     /// <summary>Reads a register from the <c>0xA000</c>–<c>0xAFFF</c> window (address bits 7–4 select it): the latched

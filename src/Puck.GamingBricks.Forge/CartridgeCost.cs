@@ -13,7 +13,7 @@ namespace Puck.GamingBricks.Forge;
 /// <para>
 /// Weights come from measured sustained capacity on both real machines, never from counting an emitter's instructions:
 /// cost per iteration is inversely proportional to the iterations a machine sustains at full frame rate, and
-/// <c>CartridgeCostMeasurement</c> reports those capacities. Each machine has its own weights and reservation on
+/// <see cref="CartridgeCostMeasurement"/> reports those capacities. Each machine has its own weights and reservation on
 /// <see cref="CartridgeCostProfile"/>; unit counts are not comparable between targets.
 /// </para>
 /// <para>
@@ -303,7 +303,7 @@ public static class CartridgeCost {
         ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.BitAnd or ExpressionOp.BitOr or ExpressionOp.BitXor
             or ExpressionOp.BitNot or ExpressionOp.Negate => CostBound.Known(cycles: profile.StepArithmetic),
         ExpressionOp.Multiply => CostBound.Known(cycles: profile.StepMultiply),
-        ExpressionOp.Divide or ExpressionOp.Modulo => CostBound.Known(cycles: profile.StepDivide),
+        ExpressionOp.Divide or ExpressionOp.Remainder => CostBound.Known(cycles: profile.StepDivide),
         ExpressionOp.ShiftLeft or ExpressionOp.ShiftRight => CostBound.Known(cycles: profile.StepShift),
         // A comparison, a bound and a choice are each a compare and a branch, which is what a gate's comparison was
         // measured at.
@@ -532,7 +532,7 @@ public static class CartridgeCost {
     /// <returns>The guard variable's name and the value it must hold, or a null name.</returns>
     /// <remarks>The shape a phase machine's rules take.</remarks>
     public static (string? Name, int Value) Guard(CartridgeRule? rule) =>
-        (((rule?.When is ActionPredicate.CompareValue { Comparison: ActionStateComparison.Equal } compare)
+        (((rule?.When is ActionPredicate.CompareValue { Comparison: ExpressionOp.Equal } compare)
             && (Slot(expression: compare.Left) is { } name)
             && (Whole(expression: compare.Right) is { } value))
             ? (name, value)

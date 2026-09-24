@@ -15,11 +15,16 @@ namespace Puck.Launcher;
 /// cadence to ride — produces one composed frame per host-loop iteration, right after the fixed-step pump advances:
 /// frame pacing rides the fixed-step pump's own cadence instead of vsync. The console pump and every registered
 /// <see cref="ISnapshotInputCapture"/> contribution run every iteration exactly like the other two host loops.
+/// <para>Its frames are its only output, so its pump holds its clock for them
+/// (<see cref="IFixedStepSimulation.HoldsClock"/>): while a frame a step owes has not been served, for whatever reason
+/// the render chain cannot serve it yet, the loop keeps producing frames and draining the console but steps no further
+/// tick. The two other host loops never hold.</para>
 /// </summary>
 public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly IHostApplicationLifetime m_applicationLifetime;
     private readonly BufferedConsoleOutput m_bufferedOutput;
     private readonly IInputClock m_inputClock;
+    private readonly StandardInputBacklog m_inputBacklog;
     private readonly InputRouter? m_inputRouter;
     private readonly ILogger<OffscreenTickHostedService> m_logger;
     private readonly LauncherOptions m_options;
@@ -48,7 +53,8 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         IEnumerable<ISnapshotInputCapture> snapshotInputCaptures,
         CommandRegistry registry,
         TextCommandSource textSource,
-        TerminalControl terminal
+        TerminalControl terminal,
+        StandardInputBacklog inputBacklog
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
@@ -64,6 +70,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         ArgumentNullException.ThrowIfNull(snapshotInputCaptures);
         ArgumentNullException.ThrowIfNull(textSource);
         ArgumentNullException.ThrowIfNull(terminal);
+        ArgumentNullException.ThrowIfNull(inputBacklog);
 
         m_applicationLifetime = applicationLifetime;
         m_bufferedOutput = bufferedOutput;
@@ -88,6 +95,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
             hostDescription: "offscreen host"
         );
         m_terminal = terminal;
+        m_inputBacklog = inputBacklog;
 
         if ((m_simulation is null) != (m_inputRouter is null)) {
             throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
@@ -97,32 +105,27 @@ public sealed class OffscreenTickHostedService : BackgroundService {
     }
 
     private void RunOffscreenLoop(CancellationToken stoppingToken) {
+        Exception? fault = null;
+
         try {
             if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
                 m_logger.LogInformation(message: "Offscreen boot: a real GPU device and the composed-frame render pipeline — no window, no swapchain.");
             }
 
             var clock = TickClock.Start();
-            var pump = (((m_simulation is { } pumpSimulation) && (m_inputRouter is { } pumpInputRouter))
-                ? new FixedStepPump(
-                    simulation: pumpSimulation,
-                    inputRouter: pumpInputRouter,
-                    registry: m_registry,
-                    captureOriginTicks: m_inputClock.NowTicks
-                )
-                : null
+            var pump = FixedStepPump.CreateHosted(
+                holdsClock: true,
+                inputBacklog: m_inputBacklog,
+                inputClock: m_inputClock,
+                inputRouter: m_inputRouter,
+                output: m_bufferedOutput,
+                registry: m_registry,
+                simulation: m_simulation,
+                terminal: m_terminal,
+                textSource: m_textSource
             );
             var frequency = Stopwatch.Frequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
-
-            static uint ResolveRatePerSecond(IFixedStepSimulation? simulation) {
-                var simRatePerSecond = (simulation?.RatePerSecond ?? LauncherHostLoop.DefaultUpdateRate);
-
-                return ((simRatePerSecond == 0U)
-                    ? LauncherHostLoop.DefaultUpdateRate
-                    : simRatePerSecond
-                );
-            }
 
             var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
             var hostFrame = 0UL;
@@ -154,7 +157,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 hostFrame++;
 
                 var deltaTicks = clock.Sample();
-                var ratePerSecond = ResolveRatePerSecond(simulation: m_simulation);
+                var ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: ratePerSecond);
                 var period = (frequency / ((long)ratePerSecond));
 
@@ -201,27 +204,35 @@ public sealed class OffscreenTickHostedService : BackgroundService {
             }
 
             m_logger.LogInformation(message: "Offscreen run ending; shutting the host down.");
+        } catch (Exception exception) {
+            fault = exception;
+
+            throw;
         } finally {
-            m_bufferedOutput.Flush();
-
-            if (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
-                deviceContext.WaitIdle();
+            try {
+                LauncherHostRun.RunTeardown(
+                    fault,
+                    m_logger,
+                    ("flush output", m_bufferedOutput.Flush),
+                    // Before the render root goes: a capture still owed a frame is decided while the chain that would
+                    // have served it is alive, never refused by the disposal of a node still holding it.
+                    ("settle owed frames", () => m_simulation?.SettleOwedFrames()),
+                    ("drain device", () => {
+                        if (m_rootHostContext.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext)) {
+                            deviceContext.WaitIdle();
+                        }
+                    }
+                ),
+                    ("dispose render root", m_root.Dispose)
+                );
+            } finally {
+                m_applicationLifetime.StopApplication();
             }
-
-            m_root.Dispose();
-
-            m_applicationLifetime.StopApplication();
         }
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) {
-        var pumpThread = new Thread(start: () => RunOffscreenLoop(stoppingToken: stoppingToken)) {
-            IsBackground = true,
-            Name = "Puck.Launcher Offscreen Tick Pump",
-        };
-
-        pumpThread.Start();
-
-        return Task.CompletedTask;
-    }
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => LauncherHostLoop.RunPump(
+        name: "Puck.Launcher Offscreen Tick Pump",
+        pump: () => RunOffscreenLoop(stoppingToken: stoppingToken)
+    );
 }

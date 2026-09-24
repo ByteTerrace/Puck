@@ -30,7 +30,7 @@ public sealed class VulkanShaderModuleFactory : IVulkanShaderModuleFactory {
 
         var spirVBytes = stageInfo.Content;
         var request = new VulkanShaderModuleCreateRequest(
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             SpirVBytes: spirVBytes
         );
         var result = m_shaderModuleApi.CreateShaderModule(
@@ -45,7 +45,7 @@ public sealed class VulkanShaderModuleFactory : IVulkanShaderModuleFactory {
         }
 
         return new(
-            deviceHandle: logicalDevice.Handle,
+            device: logicalDevice.Commands,
             handle: moduleHandle,
             shaderModuleApi: m_shaderModuleApi,
             stage: stageInfo.Stage

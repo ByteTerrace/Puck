@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
-using System.IO.Hashing;
 using System.Text;
+using Puck.Maths;
 
 namespace Puck.Assets;
 
@@ -144,10 +144,10 @@ public static class PngDecoder {
         var previousRow = new byte[stride];
         var currentRow = new byte[stride];
         var sourceOffset = 0;
-        var maxSample = ((bitDepth < 8)
-            ? ((1 << bitDepth) - 1)
-            : 255
-        );
+        var maxSample = Math.Min(
+            val1: ((int)bitDepth),
+            val2: 8
+        ).LowMask<int>();
 
         for (var rowIndex = 0; (rowIndex < height); rowIndex++) {
             var filterType = decodedBytes[sourceOffset++];
@@ -409,12 +409,10 @@ public static class PngDecoder {
         }
     }
     private static void ValidateChunkCrc(ReadOnlySpan<byte> chunkType, ReadOnlySpan<byte> chunkData, ReadOnlySpan<byte> storedCrc) {
-        var crc = new Crc32();
-
-        crc.Append(source: chunkType);
-        crc.Append(source: chunkData);
-
-        if (BinaryPrimitives.ReadUInt32BigEndian(source: storedCrc) != crc.GetCurrentHashAsUInt32()) {
+        if (BinaryPrimitives.ReadUInt32BigEndian(source: storedCrc) != PngChunk.Crc(
+            data: chunkData,
+            type: chunkType
+        )) {
             throw new InvalidDataException(message: $"PNG chunk '{Encoding.ASCII.GetString(bytes: chunkType)}' failed its CRC check.");
         }
     }

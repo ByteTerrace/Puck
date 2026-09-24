@@ -63,10 +63,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // silently cancel every commit landing on such a frame. Counted in observed frames, never wall time.
     private const int CommitGraceFrames = 2;
 
-    /// <summary>The label-row cell the hub reads while nothing is hovered — what releasing now does. The ONE reserved
-    /// key in a wheel's label row; every other key is a sector id.</summary>
-    public const string HubLabelKey = "cancel";
-
     private readonly WorldSeatBindings m_bindings;
     // The engine-tick capture clock the selection-grace window is measured against. The hovered sector it decides
     // flows through Arm -> BindingWheelCommitResult.Dispatch -> InputRouter.Activate into the seat's deterministic
@@ -74,7 +70,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // here would be a second, unsubstitutable time source sitting directly upstream of a simulation command.
     private readonly IInputClock m_clock;
     private readonly WorldCursorFeed m_cursor;
-    private readonly WorldIconTable m_icons;
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
@@ -111,10 +106,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         public OverlayWheelSeat LastSeat;
         public bool LastSeatKnown;
         public long PointerSequence;
-        // The sector text lives in a state row, so the cache is keyed on the definition delivery too: an applied
-        // mutation bumps the revision and the labels re-resolve on the next frame.
-        public WorldDefinition? RingCacheDefinition;
-        public BindingWheelView? RingCacheSource;
+        public required WorldWheelRings Rings;
         public float RingScroll;
         public WorldWheelStatus Status;
         public BindingWheelView? Wheel;
@@ -125,7 +117,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         // The last sector a live selection highlighted and the tick-counted window it survives a dead-centre dwell
         // for. The decision itself is Puck.Commands' — this feed only supplies the readings and the engine tick.
         public BindingWheelGrace Grace { get; } = new();
-        public OverlayWheelRing[] RingCache = [];
         public string CommitLabel = string.Empty;
         public int FlashSector = -1;
         public string CommitReason = "closed";
@@ -164,13 +155,13 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         m_cursor = cursor;
         m_pointer = pointer;
         m_roster = roster;
-        m_icons = icons;
         m_router = router;
         m_store = store;
         m_viewports = viewports;
 
         for (var slot = 0; (slot < m_state.Length); slot++) {
             m_state[slot] = new SeatState {
+                Rings = new WorldWheelRings(resolveIcon: icons.ResolveIcon),
                 Status = ClosedStatus(slot: slot),
             };
         }
@@ -222,13 +213,14 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.CommitRing = state.ActiveRing;
         state.CommitSector = hoverSector;
         state.CommitActivation = hovered?.Activation;
-        state.CommitLabel = (((hovered is not null)
-            ? SectorCell(
-                rowReference: wheel.LabelRow,
+        state.CommitLabel = ((hovered is not null)
+            ? Rings(
                 slot: slot,
-                sector: hovered
-            )
-            : null) ?? (hovered?.Command ?? string.Empty));
+                state: state,
+                wheel: wheel
+            )[state.ActiveRing].Sectors.Span[hoverSector].Label
+            : string.Empty
+        );
         state.CommitReason = hoverReason;
         state.ClosedFrames = 0;
     }
@@ -251,57 +243,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.CenterKnown = false;
     }
     private OverlayWheelSeat BuildSeat(int slot, SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
-        m_bindings.GetRoutedState(
-            definition: out var definition,
+        var rings = Rings(
             slot: slot,
-            engineTick: out _,
-            tick: out _
+            state: state,
+            wheel: wheel
         );
-
-        if (
-            !ReferenceEquals(
-            objA: state.RingCacheSource,
-            objB: wheel
-        ) ||
-            !ReferenceEquals(
-            objA: state.RingCacheDefinition,
-            objB: definition
-        )
-        ) {
-            var rings = new OverlayWheelRing[wheel.Rings.Count];
-
-            for (var ringIndex = 0; (ringIndex < rings.Length); ringIndex++) {
-                var ring = wheel.Rings[ringIndex];
-                var sectors = new OverlayWheelSector[ring.Sectors.Count];
-
-                for (var sectorIndex = 0; (sectorIndex < sectors.Length); sectorIndex++) {
-                    var sector = ring.Sectors[sectorIndex];
-
-                    sectors[sectorIndex] = new OverlayWheelSector(
-                        Icon: m_icons.ResolveIcon(name: SectorCell(
-                            rowReference: wheel.IconRow,
-                            slot: slot,
-                            sector: sector
-                        )),
-                        Label: (SectorCell(
-                            rowReference: wheel.LabelRow,
-                            slot: slot,
-                            sector: sector
-                        ) ?? sector.Command)
-                    );
-                }
-
-                rings[ringIndex] = new OverlayWheelRing(
-                    Label: (ring.Label ?? ring.PageId),
-                    Sectors: sectors
-                );
-            }
-
-            state.RingCache = rings;
-            state.RingCacheDefinition = definition;
-            state.RingCacheSource = wheel;
-        }
-
         var centerX = (state.CenterKnown
             ? state.Center.X
             : ((viewport.Region.X + (viewport.Region.Width * 0.5f)) * viewport.Width)
@@ -320,11 +266,8 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             ActiveRing: state.ActiveRing,
             HoveredSector: hoverSector,
             SectorOffset: wheel.Style.SectorOffset,
-            Rings: state.RingCache,
-            HubLabel: (HubLabel(
-                slot: slot,
-                wheel: wheel
-            ) ?? string.Empty)
+            Rings: rings,
+            HubLabel: state.Rings.HubLabel
         );
     }
     private static void Close(int slot, SeatState state) {
@@ -396,61 +339,20 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             : 0L
         );
     }
-    private string? HubLabel(int slot, BindingWheelView wheel) {
-        m_bindings.GetRoutedState(
-            definition: out var definition,
-            slot: slot,
-            engineTick: out var engineTick,
-            tick: out var tick
-        );
-
-        return ((WorldStateBindingContext.TryParseRowReference(
-            reference: wheel.LabelRow,
-            rowName: out var rowName
-        ) && WorldStateReader.TryRead(
-            definition: definition,
-            key: HubLabelKey,
-            rawValue: out _,
-            row: out _,
-            rowName: rowName,
-            text: out var text,
-            tick: tick,
-            engineTick: engineTick
-        ))
-            ? text
-            : null
-        );
-    }
     private static bool RequiresSpatialNeutral(BindingWheelView wheel) =>
         ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.Angle) ||
             ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.HitTarget) && (wheel.Excursion is not null)));
-    // A sector's presentation, read from authored state: the wheel names a row (label row, icon row), the sector's
-    // own id is the cell key, the cell's value is the text or icon name. The rows are ordinary live state, so
-    // renaming or re-iconing a sector on screen is a state write — the binding row itself carries no presentation,
-    // only what it does and which sector it is.
-    private string? SectorCell(int slot, string? rowReference, BindingWheelSectorView sector) {
+    // The seat's drawn rings, read through its routed state mirror and rebuilt only when a cell they read moved.
+    private OverlayWheelRing[] Rings(int slot, SeatState state, BindingWheelView wheel) {
         m_bindings.GetRoutedState(
-            definition: out var definition,
+            definition: out _,
             slot: slot,
-            engineTick: out var engineTick,
-            tick: out var tick
+            state: out var routed
         );
 
-        return (((sector.Id is { Length: > 0 } sectorId) && WorldStateBindingContext.TryParseRowReference(
-            reference: rowReference,
-            rowName: out var rowName
-        ) && WorldStateReader.TryRead(
-            definition: definition,
-            key: sectorId,
-            rawValue: out _,
-            row: out _,
-            rowName: rowName,
-            text: out var text,
-            tick: tick,
-            engineTick: engineTick
-        ))
-            ? text
-            : null
+        return state.Rings.Resolve(
+            mirror: routed,
+            wheel: wheel
         );
     }
     private static BindingWheelSelection SelectAxis(SeatState state, BindingWheelView wheel) {

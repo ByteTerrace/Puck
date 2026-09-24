@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Puck.Maths;
+
 namespace Puck.SignedDistance;
 
 /// <summary>The bounded participating medium's density family.</summary>
@@ -31,8 +33,8 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
 
     /// <summary>Refuses invalid engine inputs before they reach the GPU.</summary>
     public void Validate(int dynamicTransformCount) {
-        static bool Finite(Vector3 v) => (float.IsFinite(f: v.X) && float.IsFinite(f: v.Y) && float.IsFinite(f: v.Z));
-        static bool NonNegative(float v) => (float.IsFinite(f: v) && (v >= 0f));
+        static bool Finite(Vector3 v) => VectorFunctions.IsFinite(vector: v);
+        static bool NonNegative(float v) => SdfMaterialLayers.NonNegative(v: v);
         if (
             ((Kind != SdfVolumeKind.Flow) && (Kind != SdfVolumeKind.Cloud)) ||
             !Finite(v: Position) ||

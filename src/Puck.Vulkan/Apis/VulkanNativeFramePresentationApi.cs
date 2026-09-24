@@ -20,7 +20,6 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     private const uint StructureTypeSubmitInfo = 4;
 
     private readonly IAllocator m_allocator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeFramePresentationApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -31,35 +30,9 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         m_allocator = allocator;
     }
 
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkAcquireNextImageKHR"u8
-            )),
-                QueuePresentKhr = ((delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkQueuePresentKHR"u8
-            )),
-                QueueSubmit = ((delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkQueueSubmit"u8
-            )),
-                // Optional: present (VK_KHR_present_wait). Resolves to null when the extension was not enabled, which the
-                // present-timing path treats as "unsupported" and falls back to open-loop pacing.
-                WaitForPresentKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkWaitForPresentKHR"u8
-            )),
-            }
-        );
-    }
     private static unsafe void ValidateAcquireRequest(VulkanFrameAcquireRequest request) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
@@ -80,10 +53,10 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     public VkResult AcquireNextImage(VulkanFrameAcquireRequest request, out uint imageIndex) {
         ValidateAcquireRequest(request: request);
 
-        var acquireNextImage = GetPointers(deviceHandle: request.DeviceHandle).AcquireNextImageKhr;
+        var acquireNextImage = request.Device.AcquireNextImageKhr;
 
         return acquireNextImage(
-            request.DeviceHandle,
+            request.Device.Handle,
             request.SwapchainHandle,
             request.TimeoutNanoseconds,
             request.ImageAvailableSemaphoreHandle,
@@ -92,17 +65,9 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         );
     }
     /// <inheritdoc/>
-    public void InvalidateDevice(nint deviceHandle) {
-        m_pointers.TryRemove(
-            key: deviceHandle,
-            value: out _
-        );
-    }
-    /// <inheritdoc/>
     public VkResult Present(VulkanPresentRequest request) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
@@ -124,7 +89,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
             paramName: nameof(request)
         );
 
-        var queuePresent = GetPointers(deviceHandle: request.DeviceHandle).QueuePresentKhr;
+        var queuePresent = request.Device.QueuePresentKhr;
         var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
         var swapchainPointer = m_allocator.Alloc(size: IntPtr.Size);
         var imageIndexPointer = m_allocator.Alloc(size: sizeof(uint));
@@ -200,9 +165,8 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
     }
     /// <inheritdoc/>
     public VkResult Submit(VulkanFrameSubmitRequest request) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
@@ -224,7 +188,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
             paramName: nameof(request)
         );
 
-        var queueSubmit = GetPointers(deviceHandle: request.DeviceHandle).QueueSubmit;
+        var queueSubmit = request.Device.QueueSubmit;
         var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
         var waitStagePointer = m_allocator.Alloc(size: sizeof(uint));
         var commandBufferPointer = m_allocator.Alloc(size: IntPtr.Size);
@@ -276,12 +240,8 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         }
     }
     /// <inheritdoc/>
-    public VkResult Submit(nint deviceHandle, nint graphicsQueueHandle, nint commandBufferHandle, nint fenceHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+    public VkResult Submit(VulkanDeviceCommands device, nint graphicsQueueHandle, nint commandBufferHandle, nint fenceHandle) {
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: graphicsQueueHandle,
@@ -301,7 +261,7 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
             paramName: nameof(fenceHandle)
         );
 
-        var queueSubmit = GetPointers(deviceHandle: deviceHandle).QueueSubmit;
+        var queueSubmit = device.QueueSubmit;
         var commandBufferPointer = m_allocator.Alloc(size: IntPtr.Size);
 
         try {
@@ -332,31 +292,23 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         }
     }
     /// <inheritdoc/>
-    public bool SupportsPresentWait(nint deviceHandle) {
-        return (GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr is not null);
+    public bool SupportsPresentWait(VulkanDeviceCommands device) {
+        return (device.WaitForPresentKhr is not null);
     }
     /// <inheritdoc/>
-    public VkResult WaitForPresent(nint deviceHandle, nint swapchainHandle, ulong presentId, ulong timeoutNanoseconds) {
-        var waitForPresent = GetPointers(deviceHandle: deviceHandle).WaitForPresentKhr;
+    public VkResult WaitForPresent(VulkanDeviceCommands device, nint swapchainHandle, ulong presentId, ulong timeoutNanoseconds) {
+        var waitForPresent = device.WaitForPresentKhr;
 
         // Null only if the function pointer never loaded (extension absent); callers gate on SupportsPresentWait, so this
         // is purely defensive — report a benign timeout rather than dereferencing null.
         return ((waitForPresent is null)
             ? VkResult.Timeout
             : waitForPresent(
-                deviceHandle,
+                device.Handle,
                 swapchainHandle,
                 presentId,
                 timeoutNanoseconds
             )
         );
-    }
-
-    private unsafe struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult> AcquireNextImageKhr;
-        public delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult> QueuePresentKhr;
-        public delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult> QueueSubmit;
-        // Null when VK_KHR_present_wait was not enabled — the closed-loop present-timing path stays off in that case.
-        public delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult> WaitForPresentKhr;
     }
 }

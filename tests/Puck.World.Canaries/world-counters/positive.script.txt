@@ -1,0 +1,6 @@
+# Sixty completed ticks, then a read: the newest completed submission is a still frame the cadence gate re-composited.
+world.wait 60
+world.counters gpu
+# Thirty more ticks: a later submission has completed, under the same pass configuration.
+world.wait 30
+world.counters gpu

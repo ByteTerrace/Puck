@@ -1,4 +1,5 @@
 using Puck.Networking;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -9,8 +10,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             subject: edge.GateA
         );
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: edge.GateB,
             writeValue: WriteSubject
         );
@@ -30,10 +30,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             );
         }
 
-        var gateA = ReadSubject(reader: ref reader);
-        var gateB = ReadOptional(
-            reader: ref reader,
-            readValue: static (ref WireReader r) => ReadSubject(reader: ref r)
+        var gateA = WorldWireCodec.ReadSubject(reader: ref reader);
+        var gateB = reader.ReadOptional(
+            readValue: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r)
         );
         var a = reader.ReadInt64();
         var b = reader.ReadInt64();
@@ -46,16 +45,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             GateB: gateB
         );
     }
-    private static byte[] EncodeEventFeed(WorldEventFeed.WorldEventFeedCheckpoint section) {
+    private static byte[] EncodeEventFeed(WorldEventFeedCheckpoint section) {
         var writer = new WireWriter();
 
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Edges,
             writeItem: WriteEventEdge
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.PendingRoutes,
             writeItem: WriteEventEdge
         );
@@ -63,16 +60,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             values: section.SeatOccupied
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Overlapping,
             writeItem: static (w, row) => {
                 w.WriteInt32(value: row.A);
                 w.WriteInt32(value: row.B);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.RegionOccupancy,
             writeItem: static (w, row) => {
                 w.WriteString(value: row.Region);
@@ -82,8 +77,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Links,
             writeItem: static (w, row) => {
                 w.WriteString(value: row.Adjacency);
@@ -96,25 +90,24 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeEventFeed(byte[] bytes, out string reason, out WorldEventFeed.WorldEventFeedCheckpoint section) {
+    private static bool TryDecodeEventFeed(byte[] bytes, out string reason, out WorldEventFeedCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
-        var edges = ReadArray(
-            reader: ref reader,
+        var edges = reader.ReadArray(
             field: "event feed edges",
-            readItem: static (ref WireReader r) => ReadEventEdge(reader: ref r)
+            readItem: static (ref WireReader r) => ReadEventEdge(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var pendingRoutes = ReadArray(
-            reader: ref reader,
+        var pendingRoutes = reader.ReadArray(
             field: "event feed pending routes",
-            readItem: static (ref WireReader r) => ReadEventEdge(reader: ref r)
+            readItem: static (ref WireReader r) => ReadEventEdge(reader: ref r),
+            maximum: MaxCollectionCount
         );
         var seatOccupied = ReadBoolArray(
             field: "event feed seat occupied",
             maximum: WorldBodiesLimits.LocalSeatCount,
             reader: ref reader
         );
-        var overlapping = ReadArray(
-            reader: ref reader,
+        var overlapping = reader.ReadArray(
             field: "event feed overlapping",
             maximum: WorldEventFeed.MaximumTrackedPairsForCapacity(capacity: WorldBodiesLimits.CapacityCeiling),
             readItem: static (ref WireReader r) => {
@@ -124,8 +117,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 return (a, b);
             }
         );
-        var regionOccupancy = ReadArray(
-            reader: ref reader,
+        var regionOccupancy = reader.ReadArray(
             field: "event feed region occupancy",
             readItem: static (ref WireReader r) => {
                 var region = r.ReadString(
@@ -139,11 +131,11 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
 
                 return (region, occupancy);
-            }
+            },
+            maximum: MaxCollectionCount
         );
 
-        var links = ReadArray(
-            reader: ref reader,
+        var links = reader.ReadArray(
             field: "event feed links",
             readItem: static (ref WireReader r) => {
                 var adjacency = r.ReadString(
@@ -155,14 +147,15 @@ public static partial class WorldAuthorityCheckpointCodec {
                 var pendingRefresh = r.ReadBoolean();
                 var dropped = r.ReadBoolean();
 
-                return new WorldEventFeed.WorldEventLinkState(
+                return new WorldEventLinkState(
                     Adjacency: adjacency,
                     DeliveredTick: deliveredTick,
                     Dropped: dropped,
                     PendingRefresh: pendingRefresh,
                     StaleTicks: staleTicks
                 );
-            }
+            },
+            maximum: MaxCollectionCount
         );
 
         if (!reader.TryFinish(failure: out var failure)) {
@@ -172,7 +165,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new WorldEventFeed.WorldEventFeedCheckpoint(
+        section = new WorldEventFeedCheckpoint(
             Edges: edges,
             Links: links,
             Overlapping: overlapping,

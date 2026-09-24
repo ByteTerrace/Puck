@@ -52,13 +52,12 @@
         <ProjectReference Include="..\..\src\Puck.Launcher\Puck.Launcher.csproj" />
         <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\..\src\Puck.Mcp\Puck.Mcp.csproj" />
+        <ProjectReference Include="..\..\src\Puck.Mcp.Azure\Puck.Mcp.Azure.csproj" />
+        <!-- MachineHostSeamLawTests reads the desktop composition root's assembly out of its own build output, so
+             that output has to exist before the suite runs; nothing here links against the assembly. -->
+        <ProjectReference Include="..\..\src\Puck.World\Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
         <ProjectReference Include="..\..\src\Puck.World.AgentHarness\Puck.World.AgentHarness.csproj" />
-    </ItemGroup>
-    <ItemGroup>
-        <!-- Build-time world generation only; the CLI is not a runtime dependency. Building it runs
-             build/WorldAssets.targets, the only producer of the generated .world.json twins the fixtures and
-             ShippedWorldStateBaselineTests load; no other reference in this project reaches Puck.Cli. -->
-        <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="..\..\src\Puck.World.AgentHarness.Azure\Puck.World.AgentHarness.Azure.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
@@ -68,6 +67,19 @@
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\DeadlineClock.cs" Link="DeadlineClock.cs" />
+        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+        <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
+        <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- A world's music, tune, and patch rows resolve their source against the executable's own directory, where
+             the game ships Assets/worlds (WorldAssetRowLoader). WorldSaveAuthoredDocumentLawTests boots the worlds that
+             author them, so the suite carries the same files at the same relative paths. -->
+        <None Include="..\..\src\Puck.World\Assets\worlds\music\**" LinkBase="Assets\worlds\music" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\..\src\Puck.World\Assets\worlds\patches\**" LinkBase="Assets\worlds\patches" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\..\src\Puck.World\Assets\worlds\tunes\**" LinkBase="Assets\worlds\tunes" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

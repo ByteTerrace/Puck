@@ -30,10 +30,6 @@ bool sdfPartShapeBox(uint type, float4 d0, float4 d1, float level, out float3 bo
         box = abs(d0.xyz) + abs(d0.w) + level;
     } else if (type == SDF_SHAPE_TORUS) {
         box = float3(abs(d0.x) + abs(d0.y), abs(d0.y), abs(d0.x) + abs(d0.y)) + level;
-    } else if (type == SDF_SHAPE_ELLIPSOID) {
-        if (any(d1.yzw <= 0.0) || min(d1.y, min(d1.z, d1.w)) < SDF_ELLIPSOID_MIN_DENOM) return false;
-        float minRadius = 1.0 / max(d1.y, max(d1.z, d1.w));
-        box = (1.0 + level / minRadius) / d1.yzw;
     } else if (type == SDF_SHAPE_SWEEP) {
         float3 a, b, c;
         float r0, r1, bulge;
@@ -235,6 +231,8 @@ bool sdfPartSublevelBox(uint4 part, float depth, float footprint, float minimumL
     return true;
 }
 
+// Only the beam binds the cull buffer read-write (SDF_TILES_READ_WRITE); every hit pass reads it read-only.
+#ifdef SDF_TILES_READ_WRITE
 void sdfWritePartBound(uint viewport, uint instance, float3 origin, float farDistance, float footprint) {
     uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + instance];
     // Unbounded sentinel declines clipping; reversed corners describe an empty part.
@@ -265,6 +263,7 @@ void sdfWritePartBound(uint viewport, uint instance, float3 origin, float farDis
     tiles[base] = lower.x; tiles[base + 1u] = lower.y; tiles[base + 2u] = lower.z;
     tiles[base + 3u] = upper.x; tiles[base + 4u] = upper.y; tiles[base + 5u] = upper.z;
 }
+#endif
 
 #if defined(SDF_PRIMARY_READ)
 bool sdfInstanceOutsideContactBox(uint instance, float3 low, float3 high) {

@@ -20,9 +20,9 @@ namespace Puck.Vulkan;
 /// </para>
 /// </summary>
 public sealed class VulkanSurfaceReadback : IDisposable {
+    private readonly IVulkanBufferApi m_bufferApi;
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
-    private readonly IVulkanFrameReadbackApi m_frameReadbackApi;
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
 
@@ -34,43 +34,40 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     private uint m_format;
     private uint m_height;
     private bool m_readInFlight;
-    private VulkanFrameReadbackBuffer? m_readbackBuffer;
+    private VulkanBuffer? m_readbackBuffer;
     private uint m_width;
 
     /// <summary>Initializes a reusable image readback service.</summary>
-    /// <param name="frameReadbackApi">The API that owns host-visible readback buffers.</param>
+    /// <param name="bufferApi">The API that makes the host-coherent readback buffer.</param>
     /// <param name="frameSynchronizationApi">The API used to synchronize asynchronous reads.</param>
     /// <param name="commandResourcesFactory">The factory for copy command resources.</param>
     /// <param name="commandBufferRecordingApi">The API used to record image-to-buffer copies.</param>
     /// <param name="queueSubmitter">The queue submission service.</param>
     public VulkanSurfaceReadback(
-        IVulkanFrameReadbackApi frameReadbackApi,
+        IVulkanBufferApi bufferApi,
         IVulkanFrameSynchronizationApi frameSynchronizationApi,
         IVulkanCommandResourcesFactory commandResourcesFactory,
         IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
         VulkanQueueSubmitter queueSubmitter
     ) {
+        ArgumentNullException.ThrowIfNull(bufferApi);
         ArgumentNullException.ThrowIfNull(commandBufferRecordingApi);
         ArgumentNullException.ThrowIfNull(commandResourcesFactory);
-        ArgumentNullException.ThrowIfNull(frameReadbackApi);
         ArgumentNullException.ThrowIfNull(frameSynchronizationApi);
         ArgumentNullException.ThrowIfNull(queueSubmitter);
 
+        m_bufferApi = bufferApi;
         m_commandBufferRecordingApi = commandBufferRecordingApi;
         m_commandResourcesFactory = commandResourcesFactory;
-        m_frameReadbackApi = frameReadbackApi;
         m_frameSynchronizationApi = frameSynchronizationApi;
         m_queueSubmitter = queueSubmitter;
     }
 
     private void DisposeResources() {
         // The fence belongs to the current (old) device — destroy it before m_device is reassigned to a new one.
-        if (
-            (m_device is not null) &&
-            (0 != m_fence)
-        ) {
+        if (m_device is not null) {
             m_frameSynchronizationApi.DestroyFence(
-                deviceHandle: m_device.Handle,
+                device: m_device.Commands,
                 fenceHandle: m_fence
             );
             m_fence = 0;
@@ -88,7 +85,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         if (
             (m_readbackBuffer is not null) &&
             (m_device is not null) &&
-            (m_device.Handle == device.Handle) &&
+            (m_device.Commands == device.Commands) &&
             (m_width == width) &&
             (m_height == height) &&
             (m_format == vulkanFormat)
@@ -98,8 +95,6 @@ public sealed class VulkanSurfaceReadback : IDisposable {
 
         DisposeResources();
 
-        var instance = deviceContext.Instance;
-
         m_commandResources = m_commandResourcesFactory.Create(
             commandBufferCount: 1,
             logicalDevice: device
@@ -108,18 +103,19 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_device = device;
         m_format = vulkanFormat;
         m_height = height;
-        m_readbackBuffer = m_frameReadbackApi.CreateBuffer(request: new VulkanFrameReadbackBufferCreateRequest(
-            DeviceHandle: device.Handle,
-            InstanceHandle: instance.Handle,
-            PhysicalDeviceHandle: device.PhysicalDevice.Handle,
-            SizeBytes: ((((ulong)width) * height) * bytesPerPixel)
-        ));
+        m_readbackBuffer = VulkanBuffer.Create(
+            bufferApi: m_bufferApi,
+            device: deviceContext,
+            memory: VulkanBufferMemory.HostCoherent,
+            sizeBytes: ((((ulong)width) * height) * bytesPerPixel),
+            usage: VulkanBufferUsageFlags.TransferDestination
+        );
         m_width = width;
         // The completion fence for the pipelined SubmitRead path — device-scoped, so a device/extent change rebuilds
         // it alongside the buffer (DisposeResources destroyed the old one just above). Unused by the blocking Read path.
         m_frameSynchronizationApi.CreateFence(
             request: new VulkanFrameSynchronizationCreateRequest(
-                DeviceHandle: device.Handle,
+                Device: device.Commands,
                 StartSignaled: false
             ),
             fenceHandle: out m_fence
@@ -157,14 +153,15 @@ public sealed class VulkanSurfaceReadback : IDisposable {
 
         m_commandBufferRecordingApi.BeginCommandBuffer(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
+            device: device.Commands
         ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
         m_commandBufferRecordingApi.TransitionImageLayout(
+            aspectMask: VulkanGpuFormats.ColorAspect,
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: VulkanAccessFlags.TransferRead,
             destinationStageMask: VulkanPipelineStageFlags.Transfer,
-            deviceHandle: device.Handle,
+            device: device.Commands,
             imageHandle: sourceImageHandle,
             mipLevelCount: 1,
             newLayout: VulkanImageLayout.TransferSourceOptimal,
@@ -175,18 +172,19 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_commandBufferRecordingApi.CopyImageToBuffer(
             bufferHandle: m_readbackBuffer!.BufferHandle,
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle,
+            device: device.Commands,
             height: m_height,
             imageHandle: sourceImageHandle,
             imageLayout: VulkanImageLayout.TransferSourceOptimal,
             width: m_width
         );
         m_commandBufferRecordingApi.TransitionImageLayout(
+            aspectMask: VulkanGpuFormats.ColorAspect,
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: sourceAccessMask,
             destinationStageMask: sourceStageMask,
-            deviceHandle: device.Handle,
+            device: device.Commands,
             imageHandle: sourceImageHandle,
             mipLevelCount: 1,
             newLayout: vulkanSourceLayout,
@@ -196,7 +194,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         );
         m_commandBufferRecordingApi.EndCommandBuffer(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
+            device: device.Commands
         ).ThrowIfFailed(operation: "vkEndCommandBuffer");
     }
 
@@ -227,7 +225,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         // A signaled fence => Success; still-pending => Timeout; a lost device => a negative code — all mapped to a
         // fail-safe boolean, never a throw into the render loop.
         return (m_frameSynchronizationApi.WaitForFence(
-            deviceHandle: m_device.Handle,
+            device: m_device.Commands,
             fenceHandle: m_fence,
             timeout: 0UL
         ) == VkResult.Success);
@@ -245,7 +243,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
 
         m_readInFlight = false;
 
-        return m_frameReadbackApi.ReadBuffer(buffer: m_readbackBuffer!);
+        return m_readbackBuffer!.Read();
     }
     /// <summary>Reads a color image back into tightly packed CPU pixels.</summary>
     /// <param name="deviceContext">The device the source image lives on.</param>
@@ -300,11 +298,11 @@ public sealed class VulkanSurfaceReadback : IDisposable {
 
         m_queueSubmitter.SubmitAndWait(
             commandBufferHandles: commandBuffers,
-            deviceHandle: device.Handle,
+            device: device.Commands,
             graphicsQueue: device.GraphicsQueue
         );
 
-        return m_frameReadbackApi.ReadBuffer(buffer: m_readbackBuffer!);
+        return m_readbackBuffer!.Read();
     }
     /// <summary>Records the image-to-staging copy and submits it under a completion fence without waiting — the
     /// non-blocking counterpart of <see cref="Read"/>. Poll <see cref="IsReadComplete"/> and then <see cref="MapPixels"/>
@@ -365,12 +363,12 @@ public sealed class VulkanSurfaceReadback : IDisposable {
 
         // Reset the reusable fence, then submit fenced WITHOUT waiting; IsReadComplete polls this fence.
         m_frameSynchronizationApi.ResetFence(
-            deviceHandle: device.Handle,
+            device: device.Commands,
             fenceHandle: m_fence
         ).ThrowIfFailed(operation: "vkResetFences");
         m_queueSubmitter.Submit(
             commandBufferHandles: commandBuffers,
-            deviceHandle: device.Handle,
+            device: device.Commands,
             fenceHandle: m_fence,
             graphicsQueue: device.GraphicsQueue
         );

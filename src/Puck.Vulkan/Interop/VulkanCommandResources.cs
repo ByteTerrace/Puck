@@ -15,18 +15,18 @@ public sealed class VulkanCommandResources : IDisposable {
     public IReadOnlyList<nint> CommandBufferHandles { get; private set; }
     /// <summary>Gets the native <c>VkCommandPool</c> handle, or zero once disposed.</summary>
     public nint CommandPoolHandle { get; private set; }
-    /// <summary>Gets the native <c>VkDevice</c> handle that owns the resources.</summary>
-    public nint DeviceHandle { get; }
+    /// <summary>Gets the command table of the logical device that owns the resources.</summary>
+    public VulkanDeviceCommands Device { get; }
 
     /// <summary>Initializes a new instance of the <see cref="VulkanCommandResources"/> class, taking ownership of an existing command pool and its command buffers.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the resources.</param>
+    /// <param name="device">The command table of the logical device that owns the resources.</param>
     /// <param name="commandBufferHandles">The native <c>VkCommandBuffer</c> handles allocated from the pool.</param>
     /// <param name="commandPoolHandle">The native <c>VkCommandPool</c> handle to own.</param>
     /// <param name="commandResourcesApi">The API used to destroy the command pool on disposal.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandBufferHandles"/> or <paramref name="commandResourcesApi"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="deviceHandle"/> or <paramref name="commandPoolHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/>, <paramref name="commandBufferHandles"/>, or <paramref name="commandResourcesApi"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="commandPoolHandle"/> is zero.</exception>
     public VulkanCommandResources(
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         IReadOnlyList<nint> commandBufferHandles,
         nint commandPoolHandle,
         IVulkanCommandResourcesApi commandResourcesApi
@@ -34,11 +34,7 @@ public sealed class VulkanCommandResources : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: commandBufferHandles);
         ArgumentNullException.ThrowIfNull(argument: commandResourcesApi);
 
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         VulkanArgument.RequireHandle(
             handle: commandPoolHandle,
@@ -46,7 +42,7 @@ public sealed class VulkanCommandResources : IDisposable {
             paramName: nameof(commandPoolHandle)
         );
 
-        DeviceHandle = deviceHandle;
+        Device = device;
         CommandBufferHandles = commandBufferHandles;
         CommandPoolHandle = commandPoolHandle;
         m_commandResourcesApi = commandResourcesApi;
@@ -58,14 +54,11 @@ public sealed class VulkanCommandResources : IDisposable {
             return;
         }
 
-        if (0 != CommandPoolHandle) {
-            m_commandResourcesApi.DestroyCommandPool(
-                commandPoolHandle: CommandPoolHandle,
-                deviceHandle: DeviceHandle
-            );
-            CommandPoolHandle = 0;
-        }
-
+        m_commandResourcesApi.DestroyCommandPool(
+            commandPoolHandle: CommandPoolHandle,
+            device: Device
+        );
+        CommandPoolHandle = 0;
         CommandBufferHandles = [];
         m_disposed = true;
     }

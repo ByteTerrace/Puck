@@ -1,4 +1,6 @@
+using Puck.Commands;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Storage;
 using Puck.World.Protocol;
 
@@ -11,8 +13,9 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
     private readonly WorldServer m_server;
     private readonly Func<string> m_captureCause;
     private readonly WorldExtensionConfiguration m_configuration;
+    private readonly TimeProvider m_clock;
 
-    private readonly Dictionary<WorldPrincipal, WorldExtensionClient> m_clients = [];
+    private readonly Dictionary<Principal, WorldExtensionClient> m_clients = [];
     private readonly List<IWorldConfiguredProvider> m_providers = [];
     private readonly CancellationTokenSource m_stop = new();
     private readonly Dictionary<string, string> m_observed = new(comparer: StringComparer.Ordinal);
@@ -23,8 +26,8 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
     private bool m_disposed;
     private string? m_lastFailure;
 
-    private WorldConfiguredExtensions(WorldExtensionConfiguration configuration, WorldServer server, Func<string> captureCause) {
-        m_configuration = configuration; m_server = server; m_captureCause = captureCause;
+    private WorldConfiguredExtensions(WorldExtensionConfiguration configuration, WorldServer server, Func<string> captureCause, TimeProvider clock) {
+        m_configuration = configuration; m_server = server; m_captureCause = captureCause; m_clock = clock;
     }
 
     /// <summary>Gets the shared worker and its diagnostics. This is a host-only API.</summary>
@@ -32,8 +35,8 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
 
     /// <summary>Gets the most recent connection failure, without provider exception messages or recovery images.</summary>
     public string? LastFailure => (Volatile.Read(location: ref m_lastFailure) ??
-        m_embeddingConnections.Select(selector: e => e.LastFailure).FirstOrDefault(predicate: f => f is not null) ??
-        Host.LastFailure);
+        (m_embeddingConnections.Select(selector: e => e.LastFailure).FirstOrDefault(predicate: f => (f is not null)) ??
+        Host.LastFailure));
     /// <summary>Gets the immutable connection declarations; no provider settings are included.</summary>
     public IReadOnlyList<WorldExtensionConnection> Connections => m_configuration.Connections.ToArray();
     /// <summary>Gets configured operation names for host diagnostics, without provider settings.</summary>
@@ -41,21 +44,28 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
 
     /// <summary>Validates configuration and constructs providers, grants, and private history without dispatching effects.</summary>
     /// <param name="configuration">Host-authorized deployment data.</param>
-    /// <param name="types">Explicitly installed provider types, using the existing keyed extension registry.</param>
+    /// <param name="extensions">The host's composed extensions; a provider row selects one of its
+    /// <see cref="WorldExtensionProviderType"/> or <see cref="WorldExtensionEmbeddingProviderType"/> contributions by
+    /// type.</param>
     /// <param name="server">The selected live authority.</param>
     /// <param name="store">The private routed store.</param>
     /// <param name="target">The host-selected private persistence target.</param>
     /// <param name="captureCause">Capture at a closed simulation boundary, before asynchronous work.</param>
-    /// <param name="embeddingTypes">Optional explicitly installed embedding provider types.</param>
-    /// <returns>An owned composition; call Pump to observe collections and requests, and the host's Start when operations are configured.</returns>
+    /// <param name="timeProvider">The host clock the worker schedules on, every observation read's operation
+    /// timeout runs on, and participants pace themselves on; <see langword="null"/> is <see cref="TimeProvider.System"/>.
+    /// Never read by simulation.</param>
+    /// <param name="link">The world link configured participants act through, stamped with each participant's
+    /// principal; <see langword="null"/> when the host supplies none, which refuses any configured participant.</param>
+    /// <returns>An owned composition; call <see cref="Pump"/> at closed boundaries and <see cref="Start"/> when the host
+    /// starts.</returns>
     /// <exception cref="ArgumentException">A name, reference, capacity, or world binding is invalid.</exception>
-    /// <exception cref="InvalidOperationException">A required capability or state table is unavailable.</exception>
-    public static WorldConfiguredExtensions Create(WorldExtensionConfiguration configuration,
-        WorldExtensionRegistry<WorldExtensionProviderType> types, WorldServer server, IObjectBlobStore store,
-        ObjectStorageTarget target, Func<string> captureCause,
-        WorldExtensionRegistry<WorldExtensionEmbeddingProviderType>? embeddingTypes = null) {
+    /// <exception cref="InvalidOperationException">A required capability or state table is unavailable, or a participant
+    /// is configured and <paramref name="link"/> is <see langword="null"/>.</exception>
+    public static WorldConfiguredExtensions Create(WorldExtensionConfiguration configuration, PuckExtensionSet extensions,
+        WorldServer server, IObjectBlobStore store, ObjectStorageTarget target, Func<string> captureCause,
+        TimeProvider? timeProvider = null, IPrincipalServerLink? link = null) {
         ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(extensions);
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(captureCause);
         configuration = WorldExtensionConfiguration.Parse(utf8: JsonSerializer.SerializeToUtf8Bytes(
@@ -82,6 +92,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         }
         var owner = new WorldConfiguredExtensions(
             captureCause: captureCause,
+            clock: (timeProvider ?? TimeProvider.System),
             configuration: configuration,
             server: server
         );
@@ -96,28 +107,46 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                     throw new ArgumentException(message: $"Duplicate provider '{row.Name}'.");
                 }
                 if (row.Settings.ValueKind != JsonValueKind.Object) { throw new ArgumentException(message: $"Provider '{row.Name}' needs object settings."); }
-                if (types.TryGet(
-                    row.Type,
-                    out var type
-                )) {
-                    var provider = type.Create(row.Settings);
+                var isOperation = extensions.TryGet<WorldExtensionProviderType>(
+                    contribution: out var type,
+                    key: row.Type
+                );
+                var isEmbedding = extensions.TryGet<WorldExtensionEmbeddingProviderType>(
+                    contribution: out var embeddingType,
+                    key: row.Type
+                );
+
+                if (isOperation && isEmbedding) {
+                    throw new ArgumentException(message: $"Provider '{row.Name}' type '{row.Type}' is installed as both an operation and an embedding provider type; the configuration cannot say which it means.");
+                }
+                if (isOperation) {
+                    var provider = type!.Create(row.Settings);
+
                     owner.m_providers.Add(item: provider);
                     providers.Add(
                         key: row.Name,
                         value: provider
                     );
-                } else if ((embeddingTypes is not null) && embeddingTypes.TryGet(
-                    row.Type,
-                    out var embeddingType
-                )) {
-                    var provider = embeddingType.Create(row.Settings);
+                } else if (isEmbedding) {
+                    var provider = embeddingType!.Create(row.Settings);
+
                     owner.m_embeddingProviders.Add(item: provider);
                     embeddingProviders.Add(
                         key: row.Name,
                         value: provider
                     );
                 } else {
-                    throw new ArgumentException(message: $"Provider '{row.Name}' selects uninstalled type '{row.Type}'.");
+                    var installed = extensions.Contributions<WorldExtensionProviderType>().Select(selector: static entry => entry.Key)
+                        .Concat(second: extensions.Contributions<WorldExtensionEmbeddingProviderType>().Select(selector: static entry => entry.Key))
+                        .Order(comparer: StringComparer.Ordinal)
+                        .ToArray();
+
+                    throw new ArgumentException(message: ((installed.Length == 0)
+                        ? $"Provider '{row.Name}' selects uninstalled type '{row.Type}'; no installed extension provides an operation or embedding provider type."
+                        : $"Provider '{row.Name}' selects uninstalled type '{row.Type}'; name one of: {string.Join(
+                            separator: ", ",
+                            values: installed
+                        )}."));
                 }
             }
             var operations = new Dictionary<string, WorldExtensionOperation>(comparer: StringComparer.Ordinal);
@@ -161,7 +190,8 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                 configuration.Lineage.ToString(format: "D"),
                 operations.Values,
                 captureCause,
-                configuration.Worker
+                configuration.Worker,
+                owner.m_clock
             );
             foreach (var row in configuration.Clients) {
                 var principal = ParsePrincipal(text: row.Principal);
@@ -179,7 +209,8 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                     : null
                 );
 
-                try { owner.m_clients.Add(
+                try {
+                    owner.m_clients.Add(
                     key: principal,
                     value: owner.Host.CreateClient(
                         principal,
@@ -187,7 +218,8 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                         row.Requests.Select(selector: ParseRequest),
                         storage: storage
                     )
-                ); } catch { storage?.Dispose(); throw; }
+                );
+                } catch { storage?.Dispose(); throw; }
             }
             var names = new HashSet<string>(comparer: StringComparer.Ordinal);
             var outputs = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -226,17 +258,20 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                     connection.Status,
                     CellKind.Int
                 );
-                if (connection.Results is { } resultTable) { _ = owner.ReadTable(
+                if (connection.Results is { } resultTable) {
+                    _ = owner.ReadTable(
                     client: client,
                     kind: CellKind.Text,
                     name: resultTable
-                ); }
+                );
+                }
             }
             if (configuration.Embeddings is { } embeddingConnections) {
                 if (embeddingConnections.Count > 16) {
                     throw new ArgumentException(message: "At most 16 embedding connections may be configured.");
                 }
                 var requestsTables = new HashSet<string>(comparer: StringComparer.Ordinal);
+
                 foreach (var conn in configuration.Connections) {
                     requestsTables.Add(item: conn.Requests);
                 }
@@ -256,13 +291,15 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                         ?? throw new ArgumentException(message: $"Embedding connection '{embedding.Name}' names undeclared space '{embedding.Space}'."));
 
                     var source = embeddingProvider.BindEmbedding(settings: default);
-                    if (!source.Identity.HasSameIdentity(space: space)) {
+
+                    if (source.Identity != space.Identity) {
                         source.Dispose();
                         throw new ArgumentException(message: $"Embedding provider '{embedding.Provider}' identity does not match space '{embedding.Space}' identity.");
                     }
 
                     owner.RequireTable(name: embedding.Requests, kind: CellKind.Text);
                     var reqRow = owner.FindRow(name: embedding.Requests);
+
                     if ((reqRow.Capacity ?? StateCapacity.MaxCellsPerRow) < embedding.MaximumItems) {
                         source.Dispose();
                         throw new ArgumentException(message: $"Embedding requests table '{embedding.Requests}' capacity must be at least maximumItems.");
@@ -274,11 +311,12 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
 
                     owner.RequireTable(name: embedding.Results, kind: CellKind.Vector);
                     var resRow = owner.FindRow(name: embedding.Results);
+
                     if ((resRow.Capacity ?? StateCapacity.MaxCellsPerRow) < embedding.MaximumItems) {
                         source.Dispose();
                         throw new ArgumentException(message: $"Embedding results table '{embedding.Results}' capacity must be at least maximumItems.");
                     }
-                    if (resRow.Space is { } declaredSpace && !string.Equals(a: declaredSpace, b: embedding.Space, comparisonType: StringComparison.Ordinal)) {
+                    if ((resRow.Space is { } declaredSpace) && !string.Equals(a: declaredSpace, b: embedding.Space, comparisonType: StringComparison.Ordinal)) {
                         source.Dispose();
                         throw new ArgumentException(message: $"Results table '{embedding.Results}' space '{declaredSpace}' does not match connection space '{embedding.Space}'.");
                     }
@@ -288,8 +326,9 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                     }
 
                     if (embedding.Status is { } statusName) {
-                        owner.RequireTable(name: statusName, kind: CellKind.Int);
+                        owner.RequireTable(kind: CellKind.Int, name: statusName);
                         var statRow = owner.FindRow(name: statusName);
+
                         if ((statRow.Capacity ?? StateCapacity.MaxCellsPerRow) < embedding.MaximumItems) {
                             source.Dispose();
                             throw new ArgumentException(message: $"Embedding status table '{statusName}' capacity must be at least maximumItems.");
@@ -301,6 +340,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                     }
 
                     var client = owner.Client(principal: ParsePrincipal(text: embedding.Client));
+
                     _ = owner.ReadTable(client: client, kind: CellKind.Text, name: embedding.Requests);
                     _ = owner.ReadTable(client: client, kind: CellKind.Vector, name: embedding.Results);
                     if (embedding.Status is { } stName) {
@@ -311,7 +351,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                         Client = client,
                         Settings = embedding,
                         Source = source,
-                        Space = space
+                        Space = space,
                     });
                 }
             }
@@ -325,8 +365,13 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
             ) {
                 throw new ArgumentException(message: "A connection output cannot also be a request table; use authored rules to initiate a new request.");
             }
+            owner.ConfigureParticipants(
+                extensions: extensions,
+                link: link
+            );
             return owner;
         } catch {
+            owner.DisposeParticipantsDuringRefusal();
             foreach (var conn in owner.m_embeddingConnections) { conn.Dispose(); }
             foreach (var observation in owner.m_observations) { observation.Source.Dispose(); }
             foreach (var client in owner.m_clients.Values) { client.Dispose(); }
@@ -340,7 +385,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
     /// <param name="principal">Identity supplied by the trusted ingress.</param>
     /// <returns>The configured caller capability.</returns>
     /// <exception cref="UnauthorizedAccessException">No client policy exists for this identity.</exception>
-    public WorldExtensionClient Client(WorldPrincipal principal) => (m_clients.TryGetValue(
+    public WorldExtensionClient Client(Principal principal) => (m_clients.TryGetValue(
         key: principal,
         value: out var client
     )
@@ -355,7 +400,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
             reason: out var reason
         )) { throw new ArgumentException(message: $"Invalid extension name: {reason}"); }
     }
-    private static WorldPrincipal ParsePrincipal(string text) => (WorldPrincipal.TryParseCanonical(
+    private static Principal ParsePrincipal(string text) => (PrincipalTokens.TryParseCanonical(
         principal: out var principal,
         token: text
     )
@@ -424,7 +469,6 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         }
         return row.Cells.Where(predicate: cell => !cell.Hidden).ToArray();
     }
-
     private WorldStateRow FindRow(string name) {
         var row = m_server.Definition.State.FirstOrDefault(predicate: row => (row.Name.Value == name));
 
@@ -441,10 +485,12 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         return row;
     }
 
-    /// <summary>Cancels and drains connection and observation work, drains the shared host, then disposes owned providers.</summary>
+    /// <summary>Stops and disposes participants, cancels and drains connection and observation work, drains the shared
+    /// host, then disposes owned providers.</summary>
     public async ValueTask DisposeAsync() {
         if (m_disposed) { return; }
         m_disposed = true;
+        await DisposeParticipantsAsync().ConfigureAwait(continueOnCapturedContext: false);
         await m_stop.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
         await m_work.ConfigureAwait(continueOnCapturedContext: false);
         foreach (var emb in m_embeddingConnections) {

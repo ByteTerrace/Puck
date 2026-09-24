@@ -160,18 +160,14 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        var boardSymbols = ((row.Enum is { } boardEnumName)
-            ? definition.Enums.FirstOrDefault(predicate: candidate => (candidate.Name == boardEnumName))
-            : null);
-        var codeSymbols = ((codes.Enum is { } codeEnumName)
-            ? definition.Enums.FirstOrDefault(predicate: candidate => (candidate.Name == codeEnumName))
-            : null);
+        var boardSymbols = definition.EnumOf(row: row);
+        var codeSymbols = definition.EnumOf(row: codes);
 
         if (!StateRow.TryProveDerivedDomain(
             board: row,
             boardSymbols: boardSymbols,
-            codes: codes,
             codeSymbols: codeSymbols,
+            codes: codes,
             reason: out var domainReason
         )) {
             errors.Add(item: $"state row '{row.Name}': inverse domain is incompatible — {domainReason}.");
@@ -368,11 +364,12 @@ public static partial class WorldDefinitionValidator {
                 }
             }
         }
-        if (
-            (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) &&
-            ((row.Kind != CellKind.Bool) || (row.Cells ?? []).Any(predicate: c => ((c is not null) && (c.Value.Raw != 1))))
-        ) {
-            errors.Add(item: $"state row '{row.Name}': an ordered keysOf (pile/zone) row contains boolean membership cells whose value is true.");
+        if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
+            if (row.Kind != CellKind.Bool) {
+                errors.Add(item: $"state row '{row.Name}': an ordered keysOf (pile/zone) row is kind {StateSpelling.Kind(kind: row.Kind)}; its membership cells must be kind Bool.");
+            } else if ((row.Cells ?? []).FirstOrDefault(predicate: c => ((c is not null) && (c.Value.Raw != 1))) is { } member) {
+                errors.Add(item: $"state row '{row.Name}': an ordered keysOf (pile/zone) row's membership cell '{member.Key}' is false; a token in the zone is a true cell, and one out of it has no cell.");
+            }
         }
         if (row.Phase is { } phase) {
             ValidatePhase(

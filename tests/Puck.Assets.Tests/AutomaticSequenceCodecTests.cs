@@ -31,12 +31,12 @@ public sealed class AutomaticSequenceCodecTests {
             expected: encoded
         );
         Assert.Equal(
-            expected: ContentAddressedStore.ComputeHash(content: encoded),
-            actual: ContentAddressedStore.ComputeHash(content: reencoded)
+            expected: ContentPin.Compute(content: encoded).Hex,
+            actual: ContentPin.Compute(content: reencoded).Hex
         );
         Assert.Equal(
             expected: "4ac441487cdcc97eaf5e534c2bd116ea83985a1a8859aada2b374dcfffd1c004",
-            actual: ContentAddressedStore.ComputeHash(content: encoded)
+            actual: ContentPin.Compute(content: encoded).Hex
         );
 
         for (ulong index = 0; (index < 4096); ++index) {

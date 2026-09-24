@@ -4,7 +4,6 @@
   "binding": "The positive leg forces a seat-1 recompose against a registered command and asserts both the success echo and the absence of every binding-narration form (the boot-sweep findings, unregistered-command skips, and both recompose-rejection forms — a value-kind mismatch is fatal only at recompose, never at boot). The discriminating leg targets an unregistered command instead, so the success echo goes red and the unregistered-command refusal appears.",
   "bootShape": "windowed",
   "requirements": ["gpu"],
-  "seconds": 28,
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {

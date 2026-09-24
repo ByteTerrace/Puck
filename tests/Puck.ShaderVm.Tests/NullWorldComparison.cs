@@ -63,14 +63,9 @@ public sealed class NullWorldComparison {
         return points;
     }
 
-    [Fact]
+    [Fact(Explicit = true)]
     public void Measures() {
-        var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
-
-        Assert.SkipWhen(
-            condition: string.IsNullOrEmpty(value: directory),
-            reason: "Opt-in harness: set PUCK_SKY_PREVIEW_DIR to the directory the report is written to."
-        );
+        var directory = PreviewOutput.Directory;
 
         var program = ShaderExpressionCompiler.Compile(root: NullWorldScene.Build(point: ShaderExpression.Input(input: ShaderInput.Coordinate)));
         var statistics = ShaderProgramStatistics.Measure(program: program);
@@ -116,19 +111,19 @@ public sealed class NullWorldComparison {
 
         var interpreted = Nanoseconds(
             evaluate: point => {
-            var context = new ShaderContext(Coordinate: new Vector4(
-                w: 0f,
-                x: point.X,
-                y: point.Y,
-                z: point.Z
-            ));
+                var context = new ShaderContext(Coordinate: new Vector4(
+                    w: 0f,
+                    x: point.X,
+                    y: point.Y,
+                    z: point.Z
+                ));
 
-            return ShaderInterpreter.Evaluate(
-                context: in context,
-                parameters: [],
-                program: program
-            ).X;
-        },
+                return ShaderInterpreter.Evaluate(
+                    context: in context,
+                    parameters: [],
+                    program: program
+                ).X;
+            },
             points: points
         );
         var bespoke = Nanoseconds(
@@ -161,7 +156,7 @@ public sealed class NullWorldComparison {
         File.WriteAllText(
             contents: report.ToString(),
             path: Path.Combine(
-                path1: directory!,
+                path1: directory,
                 path2: "comparison.txt"
             )
         );

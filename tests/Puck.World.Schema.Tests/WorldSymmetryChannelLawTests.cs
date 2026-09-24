@@ -90,7 +90,7 @@ public sealed class WorldSymmetryChannelLawTests {
         ))));
 
         Assert.Equal(
-            expected: Puck.State.Rules.RuleRefusal.SymmetryChannelMalformed,
+            expected: RuleRefusal.SymmetryChannelMalformed,
             actual: exception.Refusal
         );
 
@@ -210,7 +210,7 @@ public sealed class WorldSymmetryChannelLawTests {
         ))));
 
         Assert.NotEqual(
-            expected: Puck.State.Rules.RuleRefusal.SymmetryChannelMalformed,
+            expected: RuleRefusal.SymmetryChannelMalformed,
             actual: keyed.Refusal
         );
     }

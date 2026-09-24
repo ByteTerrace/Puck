@@ -6,8 +6,9 @@ conversation sessions, planning, and human approval handling. Puck supplies the
 world, deterministic simulation, identity, and authorization.
 
 An `IChatClient` is Microsoft's common C# interface for a model provider. The
-caller injects one, so Puck does not select an AI vendor, read an API key, or
-turn provider settings into world state. The integration pins
+library takes one from its caller; the hosted participant below takes one from an
+installed `ChatClientProvider`. Puck never reads an API key or turns provider
+settings into world state. The integration pins
 `Microsoft.Agents.AI.Harness` 1.20.0 because that package is evolving quickly
 and an unreviewed package update should not silently change the agent runtime.
 
@@ -88,37 +89,73 @@ denial through Agent Framework's normal response flow. The official
 and [terminal sample](https://github.com/microsoft/agent-framework/blob/main/dotnet/samples/02-agents/Harness/Harness_Shared_Console/HarnessConsole.cs)
 show that interaction loop.
 
-Setting `RequireActionApproval` to `false` permits unattended tool invocation,
-but it does not widen Puck grants. This is suitable only when the host has
-already established its own consent policy.
+`WorldAgentHarnessOptions.Actions` chooses how the three mutating tools reach
+the model. `RequireApproval`, the default, wraps each in an approval request.
+`Unattended` offers them without one, which suits only a host that has already
+established its own consent policy. `None` omits them, so the model can only
+observe. No mode widens Puck grants.
 
-## Hosting and Console control
+## Running as a world participant
 
-The library intentionally stops at composition. The base `Puck.World`
-application is agent-blind: it references neither agent project and registers
-no agent services. A separate agent-capable composition root must call
-`AddPuckWorldAgentBridge`, decide which provider creates the `IChatClient`, how
-credentials are stored, which skills are trusted, and which principal and body
-are assigned. Those are extension and deployment decisions rather than durable
-world-document fields.
+The extension contributes the `agent.harness` participant type. A host runs one
+when its [extension configuration](../Puck.World.Server/ExtensionConfiguration.md#run-an-agent-participant)
+lists it: a local World through `--extensions-config-file`, a silo through a
+row's `extensions` file. Both hosts compose it the same way. The base
+`Puck.World` and silo reference neither agent project; they discover this one
+installed beside them.
 
-When the application hosts persistent agents, Console commands should manage
-their lifecycle and surface pending approvals and status. Body actions should
-continue through the bridge's typed tools. An MCP server, if added, should be a
-separate adapter over the same bridge so desktop Harness agents and external
-clients receive identical grants and observations.
+The participant's `settings` are:
+
+| Setting | Meaning | Default |
+|---|---|---|
+| `objective` | What the participant works toward; its first turn's message. Required. | |
+| `provider` | The installed `ChatClientProvider` to use. | the one installed |
+| `providerSettings` | The provider's own settings object. | `{}` |
+| `instructions` | Role instructions added to the Harness's own. | none |
+| `approval` | `refuse` or `allow` (see below). | `refuse` |
+| `turnSeconds` | Seconds between the end of one turn and the start of the next. | `10` |
+| `maximumTurns` | Stop after this many turns. | run until stopped |
+| `maximumIterationsPerRequest` | The Harness's model and tool iteration limit per turn. | `12` |
+| `planning`, `telemetry` | Enable the todo provider and OpenTelemetry. | `true` |
+
+The host builds a `WorldAgentBridge` over the participant's principal and body
+and a Harness over the selected provider's client. Each turn sends the objective,
+then a short continuation, and waits `turnSeconds` on the host clock before the
+next. The model's reads and actions queue on a bounded `WorldAgentMailbox` that
+the host drains only at closed simulation boundaries, so a participant never
+touches the world from its own thread. Stopping the host, or retiring a silo row,
+cancels the turn, refuses queued work, and disposes the model client.
+
+There is no operator in the loop, so the configured `approval` is the consent.
+`refuse` offers the model no mutating tools, and the participant only observes.
+`allow` offers them without a Harness approval step. Either way Puck's grants
+decide whether an action is authorized.
+
+A provider is selected by name, or, when `provider` is absent, as the one
+installed; none, several, or an unknown name is refused by name, as is an
+unknown setting, a blank objective, or a console principal. Providers
+authenticate with identity. [Puck.World.AgentHarness.Azure](../Puck.World.AgentHarness.Azure/README.md)
+contributes `azure.openai`. Another provider is an extension that calls
+`AddChatClient` with its own name.
+
+`world.extensions` echoes each participant as one status line: type, principal,
+body, provider, state, completed turns, and the last failure.
 
 ## Verifying changes
 
 ```powershell
 dotnet test tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj -c Release
-dotnet build src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj -c Release
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter "FullyQualifiedName~WorldSiloExtensionLawTests|FullyQualifiedName~ExtensionModelLawTests"
 ```
 
-The focused test uses a recording `IChatClient` to inspect the real options sent
-through Harness. It proves that reads are ordinary functions, mutations are
-`ApprovalRequiredAIFunction` values, and hosted web search is absent.
-
+The focused tests drive the harness and the participant with scripted
+`IChatClient`s. They show that reads are ordinary functions and mutations are
+`ApprovalRequiredAIFunction` values by default, that the loop observes its body
+only when the host pumps it, that `allow` offers the actions and submits one and
+`refuse` offers none, that disposal stops the loop between turns, and that bad configuration is
+refused by name. The World tests show a local World and a silo composing the same
+participant from one configuration, and an installed harness selecting an
+installed provider across load contexts. No test reaches a live model.
 ## Documentation
 
 📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

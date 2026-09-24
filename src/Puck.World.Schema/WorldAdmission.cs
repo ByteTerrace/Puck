@@ -47,12 +47,12 @@ public enum WorldDisclosureTier : byte {
     Replica,
 }
 /// <summary>One capability a verified admission entry mints for the connecting peer once its identity checks out —
-/// the same fields <see cref="WorldGrant"/> carries for a Peer principal, minus <see cref="WorldGrant.Principal"/>
+/// the same fields <see cref="WorldGrant"/> carries for a Peer principal, minus <see cref="WorldGrant.Grantee"/>
 /// itself (unknowable until <c>Server.WorldPopulation.TryAdmitRemotePeer</c> assigns the connection's body index and
 /// generation) and minus the co-driving payloads (<see cref="WorldGrant.Reach"/>/<see cref="WorldGrant.Consent"/>/
 /// <see cref="WorldGrant.Ceiling"/>), which are seat-authored pool mechanics that presuppose a body already exists.
 /// <c>Server.WorldServer.TryAdmitPeerConnection</c> rebinds each template onto
-/// <c>WorldPrincipal.Peer(index, generation)</c> the moment the body is admitted, through the same
+/// <c>Principal.Peer(index, generation)</c> the moment the body is admitted, through the same
 /// <c>Server.WorldServer.Grant</c> door the document's own <c>grants</c> section goes through — an admission-minted
 /// grant is subject to the identical budget/exclusivity rules a live <c>world.grant</c> row is.</summary>
 /// <param name="Capability">The capability minted.</param>

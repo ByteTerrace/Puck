@@ -1,7 +1,9 @@
+using Puck.Commands;
 using System.Text;
 using Puck.Abstractions.Machines;
 using Puck.Hosting;
 using Puck.Maths;
+using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -40,17 +42,17 @@ public abstract record WorldReplayEntry {
     /// <param name="Value">The grant row acquired.</param>
     /// <param name="Actor">The principal that asked for it — distinct from the grant's own receiving principal, and the
     /// identity the administration check runs against.</param>
-    internal sealed record Grant(WorldGrant Value, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record Grant(WorldGrant Value, Principal Actor) : WorldReplayEntry;
     /// <summary>A revocation (<c>world.revoke</c>). <see cref="WorldGrant.Exclusive"/> is ignored by the revoke path but
     /// is carried verbatim, because the tape records what was submitted, never a normalization of it.</summary>
     /// <param name="Value">The grant row (capability + subject) revoked.</param>
     /// <param name="Actor">The principal that asked for the revocation.</param>
-    internal sealed record Revoke(WorldGrant Value, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record Revoke(WorldGrant Value, Principal Actor) : WorldReplayEntry;
     /// <summary>A session request re-executed through the authoritative session door.</summary>
     /// <param name="Value">The canonical request submitted by the live client.</param>
     internal sealed record Session(SessionRequest Value) : WorldReplayEntry;
     /// <summary>A target-register designation and its acting principal.</summary>
-    internal sealed record Designation(WorldDesignation Value, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record Designation(WorldDesignation Value, Principal Actor) : WorldReplayEntry;
     /// <summary>A submitted document mutation and its acting principal — buffered to the tick boundary on re-drive
     /// through the same <c>Server.WorldServer.EnqueueMutation</c> door a live submission uses, so the whole apply
     /// pipeline (admission, compose, whole-document validate, capacity, install, addon prepare, journal)
@@ -64,23 +66,23 @@ public abstract record WorldReplayEntry {
     /// FATAL replay refusal: once acceptance can depend on module bytes on disk (addon preparation), a live-
     /// accepted-but-now-refused or live-refused-but-now-accepted disagreement is a real determinism finding, never
     /// something a later-tick pose comparison alone could ever surface.</param>
-    internal sealed record Mutation(WorldMutation Value, WorldPrincipal Actor, bool Outcome) : WorldReplayEntry;
+    internal sealed record Mutation(WorldMutation Value, Principal Actor, bool Outcome) : WorldReplayEntry;
     /// <summary>A journal undo (<c>world.undo</c>) — buffered to the tick boundary on re-drive exactly as a live
     /// submission is, so the recorded journal tail is replayed back through the same all-or-nothing gates.</summary>
     /// <param name="Count">The number of journal entries to undo.</param>
     /// <param name="Actor">The principal that submitted it.</param>
-    internal sealed record Undo(int Count, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record Undo(int Count, Principal Actor) : WorldReplayEntry;
     /// <summary>A window-composition override (<c>view.override</c>) and its acting principal — applied
     /// synchronously on re-drive, exactly as it is live.</summary>
     /// <param name="Value">The composition submission.</param>
     /// <param name="Actor">The principal that submitted it.</param>
-    internal sealed record Composition(WorldComposition Value, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record Composition(WorldComposition Value, Principal Actor) : WorldReplayEntry;
     /// <summary>A read-back query and the identity the envelope stamped. Re-executed on re-drive at the same
     /// position it held live, so any read-back state its composition touches is reproduced; the answer itself is
     /// discarded, since a query moves no simulation state and therefore cannot alter either replay trace.</summary>
     /// <param name="Value">The query.</param>
     /// <param name="Actor">The identity the envelope stamped.</param>
-    internal sealed record Query(WorldQuery Value, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record Query(WorldQuery Value, Principal Actor) : WorldReplayEntry;
     /// <summary>A server-authored peer admission, emitted at the point of effect.</summary>
     /// <param name="Value">The ordered admission event.</param>
     internal sealed record PeerAdmitted(WorldServerEvent.PeerAdmitted Value) : WorldReplayEntry;
@@ -100,7 +102,7 @@ public abstract record WorldReplayEntry {
     /// never a normalization of it (the same convention <see cref="Revoke"/> follows for <c>Exclusive</c>).</param>
     /// <param name="ContentHash">The CAS pin a re-drive refuses by name against, on mismatch.</param>
     /// <param name="Actor">The principal that submitted the rebuild.</param>
-    internal sealed record Rebuild(WorldRebuildKind Kind, string? PathHint, bool Force, string ContentHash, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record Rebuild(WorldRebuildKind Kind, string? PathHint, bool Force, string ContentHash, Principal Actor) : WorldReplayEntry;
     /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
     /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — screen ops join the ordered domain and the tape as their own
     /// authority entry kind, applying synchronously on re-drive exactly as they do live (see
@@ -115,7 +117,7 @@ public abstract record WorldReplayEntry {
     /// engine-resolution failure, since content is signed before engine resolution is even attempted and is never
     /// left null on that path).</param>
     /// <param name="Actor">The principal that submitted the op.</param>
-    internal sealed record ScreenOp(WorldScreenOp Value, string? ContentHash, WorldPrincipal Actor) : WorldReplayEntry;
+    internal sealed record ScreenOp(WorldScreenOp Value, string? ContentHash, Principal Actor) : WorldReplayEntry;
     /// <summary>A pause or resume of the boot instance's own live schedule lever (<c>world.rate pause</c>/
     /// <c>resume</c>) — recorded so a saved tape carries a legible history of when a pause/resume happened, alongside
     /// the header's own <see cref="WorldReplaySnapshot.SimulationRate"/> (the initial authored rate). Purely
@@ -241,12 +243,13 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// on every run, machine, and backend at a fixed code version. <see cref="Drive"/> is the offline re-drive the
 /// replay/verify side runs; the record side samples the live population instead, so a match proves the fresh re-drive
 /// reproduces the running session, not merely another re-drive of itself.</para>
-/// <para>Wire form. Every enum that reaches this codec crosses as an explicitly declared wire value, mapped by an
-/// exhaustive switch in both directions and never by an ordinal cast — including the <see cref="WorldSection"/> ordinal
-/// nested inside a section <see cref="GrantSubject"/>'s value lane. The channel vector (<see cref="PlayerIntent"/>) and
-/// a channel press's ordinal cross as plain integers instead of a pinned bit set now that <c>ActionLanes</c> has
-/// dissolved. A member the set does not
-/// cover is refused by name at write; a byte the set does not name is refused loudly at read. The header also carries
+/// <para>Wire form. The tape is one <c>Puck.Networking</c> <c>WireWriter</c> leaf, read back by one bounded
+/// <c>WireReader</c>: the same stack, string encoding, and leaves (<see cref="WorldWireCodec"/>) the submission wire,
+/// the authority checkpoint, and the federation frames use. Every enum crosses as its <see cref="WorldWireTags"/>
+/// byte, never by an ordinal cast — including the <see cref="WorldSection"/> byte inside a section
+/// <see cref="GrantSubject"/>. The channel vector (<see cref="PlayerIntent"/>) and a channel press's ordinal cross as
+/// plain integers. A member no table covers is refused by name at write; a byte no table names, a non-finite command
+/// vector, a truncated field, or trailing bytes are refused at read. The header also carries
 /// the mounted addon set as recorded-at-mount receipts (<see cref="MountedAddons"/>): because the re-drive re-runs the
 /// document's guests rather than replaying their output, the identity of what mounts is part of what the tape pins, and
 /// <see cref="Drive"/> refuses a disagreement before the first tick. The header also carries the recording's own
@@ -281,6 +284,13 @@ public sealed class WorldReplaySnapshot {
     /// content hash, fuel, lane) the re-drive re-establishes before it runs a tick. Empty when the recorded session
     /// mounted nothing, which is itself pinned: a re-drive that mounts a guest against an empty set is refused.</summary>
     public required IReadOnlyList<WorldAddonReceipt> MountedAddons { get; init; }
+    /// <summary>Gets the directory the recording server's pipeline source reader resolved <c>views.pipelines</c> rows
+    /// against (<see cref="WorldPipelineSources.DocumentDirectory"/>), or <see langword="null"/> when it attached none.
+    /// <see cref="Drive"/> attaches a reader over the same directory to the shadow server, so a recorded
+    /// <c>CommitViewPipeline</c>, or a row upsert naming overrides, binds against the sources it bound against live.
+    /// It is the recorded document's own directory, so the re-drive's definition resolves every relative path it
+    /// authors (<see cref="WorldDefinition.DocumentDirectory"/>) where the live one did.</summary>
+    public string? PipelineSourceDirectory { get; init; }
     /// <summary>Gets the live session's per-tick authoritative state-system hashes: world state, rule and interaction
     /// latches, body action state, live fields, and poses. Replay verdicts compare this trace;
     /// <see cref="RecordedHashes"/> remains the population-only diagnostic trace.</summary>
@@ -497,7 +507,7 @@ public sealed class WorldReplaySnapshot {
         foreach (var seat in Seats) {
             // Seat(slot) directly: there is no PlayerRoster (and so no claim) behind this join to ask PrincipalOf of.
             _ = server.ApplySession(request: new SessionRequest.Join(
-                Principal: WorldPrincipal.Seat(slot: seat.Slot),
+                Principal: Principal.Seat(slot: seat.Slot),
                 Slot: seat.Slot,
                 IdentityName: seat.Profile?.Name,
                 WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -678,97 +688,135 @@ public sealed class WorldReplaySnapshot {
 
         return null;
     }
-    private static WorldCommand ReadCommandLeaf(BinaryReader reader) => ReadLeaf<WorldCommand>(
-        reader: reader,
+    private static WorldCommand ReadCommandLeaf(ref WireReader reader) => ReadLeaf<WorldCommand>(
+        reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeCommand,
         what: "command"
     );
-    private static WorldComposition ReadCompositionLeaf(BinaryReader reader) => ReadLeaf<WorldComposition>(
-        reader: reader,
+    private static WorldComposition ReadCompositionLeaf(ref WireReader reader) => ReadLeaf<WorldComposition>(
+        reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeComposition,
         what: "composition"
     );
-    // Every length prefix in a tape is UNTRUSTED — a doctored or truncated file reaches this reader through
-    // `replay.verify <name>`, so a count is validated against the bytes actually left in the stream BEFORE it sizes an
-    // allocation. Without it a negative count throws ArgumentOutOfRangeException and an absurd one throws
-    // OutOfMemoryException, neither of which the verb's catch list covers: the tape kills the host instead of being
-    // named and refused.
-    private static int ReadCount(BinaryReader reader, int minimumBytesEach, string what) {
-        var count = reader.ReadInt32();
-
-        if (count < 0) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay recording ({what} count {count} is negative).");
-        }
-
-        var stream = reader.BaseStream;
-
-        if (
-            stream.CanSeek &&
-            ((((long)count) * minimumBytesEach) > (stream.Length - stream.Position))
-        ) {
-            throw new InvalidDataException(message: $"Truncated .puckreplay recording ({what} count {count} exceeds the bytes remaining).");
-        }
-
-        return count;
-    }
-    private static WorldDesignation ReadDesignationLeaf(BinaryReader reader) => ReadLeaf<WorldDesignation>(
-        reader: reader,
+    private static WorldDesignation ReadDesignationLeaf(ref WireReader reader) => ReadLeaf<WorldDesignation>(
+        reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeDesignation,
         what: "designation"
     );
-    private static WorldReplayEntry ReadEntry(BinaryReader reader) {
+    private static WorldReplayEntry ReadEntry(ref WireReader reader) {
         var kind = reader.ReadByte();
 
-        return kind switch {
-            0 => new WorldReplayEntry.Command(Value: ReadCommandLeaf(reader: reader)),
-            1 => new WorldReplayEntry.Grant(
-            Value: ReadGrantLeaf(
-                reader: reader,
-                revoke: false
-            ),
-            Actor: ReadPrincipal(reader: reader)
-        ),
-            2 => new WorldReplayEntry.Revoke(
-            Value: ReadGrantLeaf(
-                reader: reader,
-                revoke: true
-            ),
-            Actor: ReadPrincipal(reader: reader)
-        ),
-            3 => new WorldReplayEntry.PeerAdmitted(Value: ReadPeerAdmitted(reader: reader)),
-            4 => new WorldReplayEntry.PeerDisconnected(Value: ReadPeerDisconnected(reader: reader)),
-            6 => ReadRebuildEntry(reader: reader),
-            7 => ReadScreenOpEntry(reader: reader),
-            8 => new WorldReplayEntry.Session(Value: ReadSessionLeaf(reader: reader)),
-            9 => new WorldReplayEntry.Designation(
-            Value: ReadDesignationLeaf(reader: reader),
-            Actor: ReadPrincipal(reader: reader)
-        ),
-            10 => new WorldReplayEntry.RateLever(Paused: reader.ReadBoolean()),
-            11 => ReadTransferEntry(reader: reader),
-            12 => new WorldReplayEntry.Mutation(
-            Value: ReadMutationLeaf(reader: reader),
-            Actor: ReadPrincipal(reader: reader),
-            Outcome: reader.ReadBoolean()
-        ),
-            13 => new WorldReplayEntry.Undo(
-            Count: reader.ReadInt32(),
-            Actor: ReadPrincipal(reader: reader)
-        ),
-            14 => new WorldReplayEntry.Composition(
-            Value: ReadCompositionLeaf(reader: reader),
-            Actor: ReadPrincipal(reader: reader)
-        ),
-            15 => new WorldReplayEntry.Query(
-            Value: ReadQueryLeaf(reader: reader),
-            Actor: ReadPrincipal(reader: reader)
-        ),
-            16 => new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString()),
-            _ => throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}."),
-        };
+        switch (kind) {
+            case 0:
+                return new WorldReplayEntry.Command(Value: ReadCommandLeaf(reader: ref reader));
+            case 1: {
+                    var grant = ReadGrantLeaf(
+                        reader: ref reader,
+                        revoke: false
+                    );
+
+                    return new WorldReplayEntry.Grant(
+                        Actor: WorldWireCodec.ReadPrincipal(reader: ref reader),
+                        Value: grant
+                    );
+                }
+            case 2: {
+                    var grant = ReadGrantLeaf(
+                        reader: ref reader,
+                        revoke: true
+                    );
+
+                    return new WorldReplayEntry.Revoke(
+                        Actor: WorldWireCodec.ReadPrincipal(reader: ref reader),
+                        Value: grant
+                    );
+                }
+            case 3: {
+                    var (entries, grants) = ReadPeerEvent(
+                        reader: ref reader,
+                        revoked: false
+                    );
+
+                    return new WorldReplayEntry.PeerAdmitted(Value: new WorldServerEvent.PeerAdmitted(
+                        Entries: entries,
+                        MintedGrants: grants
+                    ));
+                }
+            case 4: {
+                    var (entries, grants) = ReadPeerEvent(
+                        reader: ref reader,
+                        revoked: true
+                    );
+
+                    return new WorldReplayEntry.PeerDisconnected(Value: new WorldServerEvent.PeerDisconnected(
+                        Entries: entries,
+                        RevokedGrants: grants
+                    ));
+                }
+            case 5:
+                return ReadRebuildEntry(reader: ref reader);
+            case 6:
+                return ReadScreenOpEntry(reader: ref reader);
+            case 7:
+                return new WorldReplayEntry.Session(Value: ReadSessionLeaf(reader: ref reader));
+            case 8: {
+                    var designation = ReadDesignationLeaf(reader: ref reader);
+
+                    return new WorldReplayEntry.Designation(
+                        Actor: WorldWireCodec.ReadPrincipal(reader: ref reader),
+                        Value: designation
+                    );
+                }
+            case 9:
+                return new WorldReplayEntry.RateLever(Paused: reader.ReadBoolean());
+            case 10:
+                return ReadTransferEntry(reader: ref reader);
+            case 11: {
+                    var mutation = ReadMutationLeaf(reader: ref reader);
+                    var actor = WorldWireCodec.ReadPrincipal(reader: ref reader);
+
+                    return new WorldReplayEntry.Mutation(
+                        Actor: actor,
+                        Outcome: reader.ReadBoolean(),
+                        Value: mutation
+                    );
+                }
+            case 12: {
+                    var count = reader.ReadInt32();
+
+                    return new WorldReplayEntry.Undo(
+                        Actor: WorldWireCodec.ReadPrincipal(reader: ref reader),
+                        Count: count
+                    );
+                }
+            case 13: {
+                    var composition = ReadCompositionLeaf(reader: ref reader);
+
+                    return new WorldReplayEntry.Composition(
+                        Actor: WorldWireCodec.ReadPrincipal(reader: ref reader),
+                        Value: composition
+                    );
+                }
+            case 14: {
+                    var query = ReadQueryLeaf(reader: ref reader);
+
+                    return new WorldReplayEntry.Query(
+                        Actor: WorldWireCodec.ReadPrincipal(reader: ref reader),
+                        Value: query
+                    );
+                }
+            case 15:
+                return new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString(field: "link delivery adjacency"));
+            default:
+                if (!reader.Failed) {
+                    throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}.");
+                }
+
+                return new WorldReplayEntry.RateLever(Paused: false);
+        }
     }
-    private static WorldGrant ReadGrantLeaf(BinaryReader reader, bool revoke) => ReadLeaf<WorldGrant>(
-        reader: reader,
+    private static WorldGrant ReadGrantLeaf(ref WireReader reader, bool revoke) => ReadLeaf<WorldGrant>(
+        reader: ref reader,
         tryDecode: (revoke
         ? WorldSubmissionCodec.TryDecodeRevoke
         : WorldSubmissionCodec.TryDecodeGrant),
@@ -776,39 +824,15 @@ public sealed class WorldReplaySnapshot {
         ? "revoke"
         : "grant")
     );
-    private static IntentSubmission ReadIntent(BinaryReader reader) {
-        var tick = reader.ReadUInt64();
-        var entityIndex = reader.ReadInt32();
-        var intent = WorldWireCodec.ReadIntent(reader: reader);
-        var principal = ReadPrincipal(reader: reader);
-        var heldChannels = WorldWireCodec.ReadIntent(reader: reader);
-        var measuredHoldTicks = reader.ReadInt32();
-
-        return new IntentSubmission(
-            EntityIndex: entityIndex,
-            HeldChannels: heldChannels,
-            Intent: intent,
-            MeasuredHoldTicks: measuredHoldTicks,
-            Principal: principal,
-            Tick: tick
+    private static T ReadLeaf<T>(ref WireReader reader, string what, TryDecodeLeaf<T> tryDecode) {
+        var bytes = reader.ReadBlock(
+            field: $"{what} leaf",
+            maxBytes: WireLimits.MaxDocumentBytes
         );
-    }
-    private static IntentSource ReadIntentSource(BinaryReader reader) {
-        if (!WorldWireCodec.TryReadIntentSource(
-            reader: reader,
-            source: out var source,
-            wire: out var wire
-        )) {
-            throw new InvalidDataException(message: $"unknown .puckreplay {nameof(IntentSource)} wire value {wire}.");
+
+        if (reader.Failed) {
+            return default!;
         }
-
-        return source;
-    }
-    private static T ReadLeaf<T>(BinaryReader reader, string what, TryDecodeLeaf<T> tryDecode) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: $"{what} leaf"
-        );
 
         if (
             !tryDecode(
@@ -823,169 +847,57 @@ public sealed class WorldReplaySnapshot {
 
         return value;
     }
-    private static byte[] ReadLeafBytes(BinaryReader reader, string what) {
-        var length = ReadCount(
-            minimumBytesEach: 1,
-            reader: reader,
-            what: what
-        );
-        var bytes = reader.ReadBytes(count: length);
-
-        if (bytes.Length != length) {
-            throw new InvalidDataException(message: $"Truncated .puckreplay recording ({what}).");
-        }
-
-        return bytes;
-    }
-    private static WorldMutation ReadMutationLeaf(BinaryReader reader) => ReadLeaf<WorldMutation>(
-        reader: reader,
+    private static WorldMutation ReadMutationLeaf(ref WireReader reader) => ReadLeaf<WorldMutation>(
+        reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeMutation,
         what: "mutation"
     );
-    private static FixedQ4816? ReadNullableRate(BinaryReader reader) =>
-        (reader.ReadBoolean()
-            ? new FixedQ4816(Value: reader.ReadInt64())
-            : null
-        );
-    // ---------------------------------------------------------------------------------------------------------------
-
-    // The PressLane hold is written as (bool present, float value) so the float slot is always consumed; the value is
-    // meaningful only when the present flag is set, else the command carried no explicit hold.
-    private static float? ReadNullableSingle(BinaryReader reader) {
-        var present = reader.ReadBoolean();
-        var value = reader.ReadSingle();
-
-        return (present
-            ? value
-            : null
-        );
-    }
-    private static WorldServerEvent.PeerAdmitted ReadPeerAdmitted(BinaryReader reader) {
-        var value = ReadPeerEvent(
-            reader: reader,
-            revoked: false
-        );
-
-        return new WorldServerEvent.PeerAdmitted(
-            Entries: value.Entries,
-            MintedGrants: value.Grants
-        );
-    }
-    private static WorldServerEvent.PeerDisconnected ReadPeerDisconnected(BinaryReader reader) {
-        var value = ReadPeerEvent(
-            reader: reader,
-            revoked: true
-        );
-
-        return new WorldServerEvent.PeerDisconnected(
-            Entries: value.Entries,
-            RevokedGrants: value.Grants
-        );
-    }
-    private static (IReadOnlyList<WorldPeerEventEntry> Entries, IReadOnlyList<WorldGrant> Grants) ReadPeerEvent(BinaryReader reader, bool revoked) {
-        var entryCount = ReadCount(
+    private static (IReadOnlyList<WorldPeerEventEntry> Entries, IReadOnlyList<WorldGrant> Grants) ReadPeerEvent(ref WireReader reader, bool revoked) {
+        var entries = ReadTapeArray(
             minimumBytesEach: 16,
-            reader: reader,
+            readItem: static (ref WireReader r) => WorldWireLeaves.ReadPeerEventEntry(reader: ref r),
+            reader: ref reader,
             what: "peer event entry"
         );
-        var entries = new List<WorldPeerEventEntry>(capacity: entryCount);
-
-        for (var index = 0; (index < entryCount); index++) {
-            var bodyIndex = reader.ReadInt32();
-            var generation = reader.ReadInt32();
-            var source = ReadIntentSource(reader: reader);
-            var identity = ReadPrincipal(reader: reader);
-            var identityDomain = reader.ReadString();
-            var identitySubject = reader.ReadString();
-            var authorityTransferred = reader.ReadBoolean();
-            var catalogRig = reader.ReadByte();
-            var placementId = (reader.ReadBoolean()
-                ? reader.ReadString()
-                : null
-            );
-
-            if (catalogRig >= WorldLookSource.Catalog.RigCount) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay peer event entry: catalog rig {catalogRig} is outside 0..{(WorldLookSource.Catalog.RigCount - 1)}.");
-            }
-
-            if (
-                (identity.Kind != PrincipalKind.Peer) ||
-                (identity.Index != bodyIndex) ||
-                (identity.Generation != generation)
-            ) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay peer event entry: identity {identity.Describe()} does not match body {bodyIndex}, generation {generation}.");
-            }
-
-            entries.Add(item: new WorldPeerEventEntry(
-                AuthorityTransferred: authorityTransferred,
-                BodyIndex: bodyIndex,
-                CatalogRig: catalogRig,
-                Generation: generation,
-                Identity: identity,
-                IdentityDomain: identityDomain,
-                IdentitySubject: identitySubject,
-                PlacementId: placementId,
-                Source: source
-            ));
-        }
-
-        var grantCount = ReadCount(
+        var grants = ReadTapeArray(
             minimumBytesEach: 5,
-            reader: reader,
+            readItem: (ref WireReader r) => ReadGrantLeaf(
+                reader: ref r,
+                revoke: revoked
+            ),
+            reader: ref reader,
             what: "peer event grant"
         );
-        var grants = new List<WorldGrant>(capacity: grantCount);
-
-        for (var index = 0; (index < grantCount); index++) {
-            grants.Add(item: ReadGrantLeaf(
-                reader: reader,
-                revoke: revoked
-            ));
-        }
 
         return (entries, grants);
     }
-    private static WorldPrincipal ReadPrincipal(BinaryReader reader) {
-        if (!WorldWireCodec.TryReadPrincipal(
-            kindWire: out var wire,
-            principal: out var principal,
-            reader: reader
-        )) {
-            throw new InvalidDataException(message: $"unknown .puckreplay {nameof(PrincipalKind)} wire value {wire}.");
-        }
-
-        return principal;
-    }
-    private static WorldReplayProfilePin? ReadProfilePin(BinaryReader reader) {
-        if (!reader.ReadBoolean()) {
-            return null;
-        }
-
-        var name = reader.ReadString();
-        var moveSpeed = ReadNullableRate(reader: reader);
-        var turnSpeed = ReadNullableRate(reader: reader);
+    private static WorldReplayProfilePin? ReadProfilePin(ref WireReader reader) => reader.ReadOptional(readValue: static (ref WireReader r) => {
+        var name = r.ReadString(field: "seat profile name");
+        var moveSpeed = r.ReadNullableFixed();
+        var turnSpeed = r.ReadNullableFixed();
 
         return new WorldReplayProfilePin(
             MoveSpeed: moveSpeed,
             Name: name,
             TurnSpeed: turnSpeed
         );
-    }
-    private static WorldQuery ReadQueryLeaf(BinaryReader reader) => ReadLeaf<WorldQuery>(
-        reader: reader,
+    });
+    private static WorldQuery ReadQueryLeaf(ref WireReader reader) => ReadLeaf<WorldQuery>(
+        reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeQuery,
         what: "query"
     );
-    private static WorldReplayEntry ReadRebuildEntry(BinaryReader reader) {
-        var kind = RebuildKindFromWire(reader: reader);
+    private static WorldReplayEntry ReadRebuildEntry(ref WireReader reader) {
+        var kind = WorldWireCodec.ReadRebuildKind(reader: ref reader);
         var force = reader.ReadBoolean();
-        var pathHint = WorldWireCodec.ReadNullableString(reader: reader);
-        var contentHash = reader.ReadString();
-        var actor = ReadPrincipal(reader: reader);
+        var pathHint = reader.ReadNullableString(field: "rebuild path hint");
+        var contentHash = reader.ReadString(field: "rebuild content hash");
+        var actor = WorldWireCodec.ReadPrincipal(reader: ref reader);
 
         if (
-            ((kind == WorldRebuildKind.Reset) && (pathHint is not null)) ||
-            ((kind != WorldRebuildKind.Reset) && (pathHint is null))
+            !reader.Failed &&
+            (((kind == WorldRebuildKind.Reset) && (pathHint is not null)) ||
+            ((kind != WorldRebuildKind.Reset) && (pathHint is null)))
         ) {
             throw new InvalidDataException(message: $"Corrupt .puckreplay rebuild entry: kind '{kind}' does not carry the path-hint shape its kind requires (none for Reset, one for Load/Reload).");
         }
@@ -998,25 +910,14 @@ public sealed class WorldReplaySnapshot {
             PathHint: pathHint
         );
     }
-    private static WorldReplayEntry ReadScreenOpEntry(BinaryReader reader) {
-        var bytes = ReadLeafBytes(
-            reader: reader,
-            what: "screen-op leaf"
+    private static WorldReplayEntry ReadScreenOpEntry(ref WireReader reader) {
+        var screenOp = ReadLeaf<WorldScreenOp>(
+            reader: ref reader,
+            tryDecode: WorldSubmissionCodec.TryDecodeScreenOp,
+            what: "screen-op"
         );
-
-        if (
-            !WorldSubmissionCodec.TryDecodeScreenOp(
-            bytes: bytes,
-            failure: out var failure,
-            screenOp: out var screenOp
-        ) ||
-            (screenOp is null)
-        ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay screen-op leaf: {failure}");
-        }
-
-        var contentHash = WorldWireCodec.ReadNullableString(reader: reader);
-        var actor = ReadPrincipal(reader: reader);
+        var contentHash = reader.ReadNullableString(field: "screen-op content hash");
+        var actor = WorldWireCodec.ReadPrincipal(reader: ref reader);
 
         return new WorldReplayEntry.ScreenOp(
             Actor: actor,
@@ -1024,34 +925,48 @@ public sealed class WorldReplaySnapshot {
             Value: screenOp
         );
     }
-    private static SessionRequest ReadSessionLeaf(BinaryReader reader) => ReadLeaf<SessionRequest>(
-        reader: reader,
+    private static SessionRequest ReadSessionLeaf(ref WireReader reader) => ReadLeaf<SessionRequest>(
+        reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeSession,
         what: "session"
     );
-    private static WorldReplayEntry ReadTransferEntry(BinaryReader reader) {
-        var transferId = reader.ReadUInt64();
-        var destinationName = reader.ReadString();
-        var scopeKey = reader.ReadString();
-        var generationId = reader.ReadUInt64();
-        var outcome = reader.ReadString();
-        var departedCount = ReadCount(
-            minimumBytesEach: 4,
-            reader: reader,
-            what: "transfer departed-slot"
+    // Every count in a tape is UNTRUSTED — a doctored or truncated file reaches this reader through
+    // `replay.verify <name>` — so a count is bounded by the bytes actually left before it sizes an allocation: a
+    // count whose smallest possible elements could not fit in what remains is refused as out of range.
+    private static T[] ReadTapeArray<T>(ref WireReader reader, string what, int minimumBytesEach, WireReadItem<T> readItem) {
+        var maximum = (Math.Max(
+            val1: 0,
+            val2: (reader.Remaining - sizeof(int))
+        ) / minimumBytesEach);
+
+        return reader.ReadArray(
+            field: $"{what} count",
+            maximum: maximum,
+            readItem: readItem
         );
-        var departedBootSlots = new int[departedCount];
+    }
+    private static WorldReplayEntry ReadTransferEntry(ref WireReader reader) {
+        var transferId = reader.ReadUInt64();
+        var destinationName = reader.ReadString(field: "transfer destination");
+        var scopeKey = reader.ReadString(field: "transfer scope key");
+        var generationId = reader.ReadUInt64();
+        var outcome = reader.ReadString(field: "transfer outcome");
+        var departedBootSlots = reader.ReadArray(
+            field: "transfer departed-slot count",
+            maximum: WorldBodiesLimits.LocalSeatCount,
+            readItem: static (ref WireReader r) => {
+                var slot = r.ReadInt32();
 
-        for (var index = 0; (index < departedCount); index++) {
-            var slot = reader.ReadInt32();
+                if (((uint)slot) >= WorldBodiesLimits.LocalSeatCount) {
+                    r.Fail(
+                        detail: $"transfer departed-slot {slot} is out of range (expected 0..{(WorldBodiesLimits.LocalSeatCount - 1)})",
+                        refusal: WireRefusal.PayloadMalformed
+                    );
+                }
 
-            if (((uint)slot) >= WorldBodiesLimits.LocalSeatCount) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: transfer departed-slot {slot} is out of range (expected 0..{(WorldBodiesLimits.LocalSeatCount - 1)}).");
+                return slot;
             }
-
-            departedBootSlots[index] = slot;
-        }
-
+        );
         var storedSignature = reader.ReadUInt64();
         var entry = new WorldReplayEntry.Transfer(
             DepartedBootSlots: departedBootSlots,
@@ -1061,6 +976,11 @@ public sealed class WorldReplaySnapshot {
             ScopeKey: scopeKey,
             TransferId: transferId
         );
+
+        if (reader.Failed) {
+            return entry;
+        }
+
         var recomputed = ComputeTransferSignature(transfer: entry);
 
         if (recomputed != storedSignature) {
@@ -1069,22 +989,6 @@ public sealed class WorldReplaySnapshot {
 
         return entry;
     }
-    private static WorldRebuildKind RebuildKindFromWire(BinaryReader reader) {
-        var wire = reader.ReadByte();
-
-        return wire switch {
-            Wire.RebuildKindReset => WorldRebuildKind.Reset,
-            Wire.RebuildKindLoad => WorldRebuildKind.Load,
-            Wire.RebuildKindReload => WorldRebuildKind.Reload,
-            _ => throw new InvalidDataException(message: $"unknown .puckreplay {nameof(WorldRebuildKind)} wire value {wire}."),
-        };
-    }
-    private static byte RebuildKindToWire(WorldRebuildKind kind) => kind switch {
-        WorldRebuildKind.Reset => Wire.RebuildKindReset,
-        WorldRebuildKind.Load => Wire.RebuildKindLoad,
-        WorldRebuildKind.Reload => Wire.RebuildKindReload,
-        _ => throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(WorldRebuildKind)}.{kind} — give the new member one in the pinned wire set."),
-    };
     // Reports a live/pinned rate drift without refusing: a drifted profile is a perfectly replayable recording, so
     // nothing here throws. Without this, an operator who edited a profile between record and verify would see a
     // MATCH with no way to tell a profile edit from a genuine determinism regression.
@@ -1131,31 +1035,31 @@ public sealed class WorldReplaySnapshot {
             );
         }
     }
-    private static void WriteCommandLeaf(BinaryWriter writer, WorldCommand command) => WriteLeaf(
+    private static void WriteCommandLeaf(WireWriter writer, WorldCommand command) => WriteLeaf(
         tryEncode: WorldSubmissionCodec.TryEncodeCommand,
         value: command,
         what: "command",
         writer: writer
     );
-    private static void WriteCompositionLeaf(BinaryWriter writer, WorldComposition composition) => WriteLeaf(
+    private static void WriteCompositionLeaf(WireWriter writer, WorldComposition composition) => WriteLeaf(
         tryEncode: WorldSubmissionCodec.TryEncodeComposition,
         value: composition,
         what: "composition",
         writer: writer
     );
-    private static void WriteDesignationLeaf(BinaryWriter writer, WorldDesignation designation) => WriteLeaf(
+    private static void WriteDesignationLeaf(WireWriter writer, WorldDesignation designation) => WriteLeaf(
         tryEncode: WorldSubmissionCodec.TryEncodeDesignation,
         value: designation,
         what: "designation",
         writer: writer
     );
     // The authority-INPUT tagged union: one discriminant byte, then the entry's own payload. Kept distinct from the
-    // command tagged union below — that one discriminates WorldCommand's sealed subtypes, this one discriminates what
-    // KIND of authority write crossed the link at all.
-    private static void WriteEntry(BinaryWriter writer, WorldReplayEntry entry) {
+    // command tagged union — that one discriminates WorldCommand's sealed subtypes, this one discriminates what KIND
+    // of authority write crossed the link at all.
+    private static void WriteEntry(WireWriter writer, WorldReplayEntry entry) {
         switch (entry) {
             case WorldReplayEntry.Command command:
-                writer.Write(value: ((byte)0));
+                writer.WriteByte(value: 0);
                 WriteCommandLeaf(
                     writer: writer,
                     command: command.Value
@@ -1163,7 +1067,7 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.Grant grant:
-                writer.Write(value: ((byte)1));
+                writer.WriteByte(value: 1);
                 WriteGrantLeaf(
                     writer: writer,
                     grant: grant.Value,
@@ -1176,7 +1080,7 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.Revoke revoke:
-                writer.Write(value: ((byte)2));
+                writer.WriteByte(value: 2);
                 WriteGrantLeaf(
                     writer: writer,
                     grant: revoke.Value,
@@ -1188,28 +1092,8 @@ public sealed class WorldReplaySnapshot {
                 );
 
                 break;
-            case WorldReplayEntry.Session session:
-                writer.Write(value: ((byte)8));
-                WriteSessionLeaf(
-                    writer: writer,
-                    request: session.Value
-                );
-
-                break;
-            case WorldReplayEntry.Designation designation:
-                writer.Write(value: ((byte)9));
-                WriteDesignationLeaf(
-                    writer: writer,
-                    designation: designation.Value
-                );
-                WritePrincipal(
-                    writer: writer,
-                    principal: designation.Actor
-                );
-
-                break;
             case WorldReplayEntry.PeerAdmitted admitted:
-                writer.Write(value: ((byte)3));
+                writer.WriteByte(value: 3);
                 WritePeerEvent(
                     writer: writer,
                     entries: admitted.Value.Entries,
@@ -1219,7 +1103,7 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.PeerDisconnected disconnected:
-                writer.Write(value: ((byte)4));
+                writer.WriteByte(value: 4);
                 WritePeerEvent(
                     writer: writer,
                     entries: disconnected.Value.Entries,
@@ -1229,7 +1113,7 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.Rebuild rebuild:
-                writer.Write(value: ((byte)6));
+                writer.WriteByte(value: 5);
                 WriteRebuildLeaf(
                     rebuild: rebuild,
                     writer: writer
@@ -1241,24 +1125,49 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.ScreenOp screenOp:
-                writer.Write(value: ((byte)7));
-                WriteScreenOpLeaf(
-                    screenOp: screenOp,
+                writer.WriteByte(value: 6);
+                WriteLeaf(
+                    tryEncode: WorldSubmissionCodec.TryEncodeScreenOp,
+                    value: screenOp.Value,
+                    what: "screen-op",
                     writer: writer
                 );
+                writer.WriteNullableString(value: screenOp.ContentHash);
                 WritePrincipal(
                     writer: writer,
                     principal: screenOp.Actor
                 );
 
                 break;
+            case WorldReplayEntry.Session session:
+                writer.WriteByte(value: 7);
+                WriteLeaf(
+                    tryEncode: WorldSubmissionCodec.TryEncodeSession,
+                    value: session.Value,
+                    what: "session",
+                    writer: writer
+                );
+
+                break;
+            case WorldReplayEntry.Designation designation:
+                writer.WriteByte(value: 8);
+                WriteDesignationLeaf(
+                    writer: writer,
+                    designation: designation.Value
+                );
+                WritePrincipal(
+                    writer: writer,
+                    principal: designation.Actor
+                );
+
+                break;
             case WorldReplayEntry.RateLever rateLever:
-                writer.Write(value: ((byte)10));
-                writer.Write(value: rateLever.Paused);
+                writer.WriteByte(value: 9);
+                writer.WriteBoolean(value: rateLever.Paused);
 
                 break;
             case WorldReplayEntry.Transfer transfer:
-                writer.Write(value: ((byte)11));
+                writer.WriteByte(value: 10);
                 WriteTransferLeaf(
                     transfer: transfer,
                     writer: writer
@@ -1266,10 +1175,12 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.Mutation mutation:
-                writer.Write(value: ((byte)12));
-                WriteMutationLeaf(
-                    writer: writer,
-                    mutation: mutation.Value
+                writer.WriteByte(value: 11);
+                WriteLeaf(
+                    tryEncode: WorldSubmissionCodec.TryEncodeMutation,
+                    value: mutation.Value,
+                    what: "mutation",
+                    writer: writer
                 );
                 WritePrincipal(
                     writer: writer,
@@ -1278,12 +1189,12 @@ public sealed class WorldReplaySnapshot {
                 // The recorded accept/refuse outcome — see WorldReplayEntry.Mutation's own remarks. Every entry this
                 // writer ever sees was resolved synchronously within the tick it was recorded on (the same tick
                 // MutationOutcomeTap fired), so Outcome is never speculative by the time it reaches here.
-                writer.Write(value: mutation.Outcome);
+                writer.WriteBoolean(value: mutation.Outcome);
 
                 break;
             case WorldReplayEntry.Undo undo:
-                writer.Write(value: ((byte)13));
-                writer.Write(value: undo.Count);
+                writer.WriteByte(value: 12);
+                writer.WriteInt32(value: undo.Count);
                 WritePrincipal(
                     writer: writer,
                     principal: undo.Actor
@@ -1291,7 +1202,7 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.Composition composition:
-                writer.Write(value: ((byte)14));
+                writer.WriteByte(value: 13);
                 WriteCompositionLeaf(
                     writer: writer,
                     composition: composition.Value
@@ -1303,10 +1214,12 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.Query query:
-                writer.Write(value: ((byte)15));
-                WriteQueryLeaf(
-                    writer: writer,
-                    query: query.Value
+                writer.WriteByte(value: 14);
+                WriteLeaf(
+                    tryEncode: WorldSubmissionCodec.TryEncodeQuery,
+                    value: query.Value,
+                    what: "query",
+                    writer: writer
                 );
                 WritePrincipal(
                     writer: writer,
@@ -1315,15 +1228,15 @@ public sealed class WorldReplaySnapshot {
 
                 break;
             case WorldReplayEntry.LinkDelivery linkDelivery:
-                writer.Write(value: ((byte)16));
-                writer.Write(value: linkDelivery.Adjacency);
+                writer.WriteByte(value: 15);
+                writer.WriteString(value: linkDelivery.Adjacency);
 
                 break;
             default:
                 throw new WorldReplayCodecException(message: $"no .puckreplay encoding for authority entry kind '{entry.GetType().Name}'.");
         }
     }
-    private static void WriteGrantLeaf(BinaryWriter writer, WorldGrant grant, bool revoke) => WriteLeaf(
+    private static void WriteGrantLeaf(WireWriter writer, WorldGrant grant, bool revoke) => WriteLeaf(
         tryEncode: (revoke
         ? WorldSubmissionCodec.TryEncodeRevoke
         : WorldSubmissionCodec.TryEncodeGrant),
@@ -1333,32 +1246,7 @@ public sealed class WorldReplaySnapshot {
         : "grant"),
         writer: writer
     );
-    private static void WriteIntent(BinaryWriter writer, in IntentSubmission submission) {
-        writer.Write(value: submission.Tick);
-        writer.Write(value: submission.EntityIndex);
-        WorldWireCodec.WriteIntent(
-            intent: submission.Intent,
-            writer: writer
-        );
-        WritePrincipal(
-            writer: writer,
-            principal: submission.Principal
-        );
-        WorldWireCodec.WriteIntent(
-            intent: submission.HeldChannels,
-            writer: writer
-        );
-        writer.Write(value: submission.MeasuredHoldTicks);
-    }
-    private static void WriteIntentSource(BinaryWriter writer, IntentSource source) {
-        if (!WorldWireCodec.TryWriteIntentSource(
-            source: source,
-            writer: writer
-        )) {
-            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(IntentSource)} '{source}'.");
-        }
-    }
-    private static void WriteLeaf<T>(BinaryWriter writer, T value, string what, TryEncodeLeaf<T> tryEncode) {
+    private static void WriteLeaf<T>(WireWriter writer, T value, string what, TryEncodeLeaf<T> tryEncode) {
         if (!tryEncode(
             value,
             out var bytes,
@@ -1367,136 +1255,54 @@ public sealed class WorldReplaySnapshot {
             throw new WorldReplayCodecException(message: $"the canonical {what} leaf refused while writing .puckreplay: {failure}");
         }
 
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
+        writer.WriteBlock(value: bytes);
     }
-    private static void WriteLeafBytes(BinaryWriter writer, byte[] bytes) {
-        writer.Write(value: bytes.Length);
-        writer.Write(buffer: bytes);
-    }
-    private static void WriteMutationLeaf(BinaryWriter writer, WorldMutation mutation) => WriteLeaf(
-        tryEncode: WorldSubmissionCodec.TryEncodeMutation,
-        value: mutation,
-        what: "mutation",
-        writer: writer
-    );
-    private static void WriteNullableRate(BinaryWriter writer, FixedQ4816? rate) {
-        writer.Write(value: rate.HasValue);
-
-        if (rate is { } value) {
-            writer.Write(value: value.Value);
-        }
-    }
-    private static void WritePeerEvent(BinaryWriter writer, IReadOnlyList<WorldPeerEventEntry> entries, IReadOnlyList<WorldGrant> grants, bool revoked) {
-        writer.Write(value: entries.Count);
-
-        foreach (var entry in entries) {
-            writer.Write(value: entry.BodyIndex);
-            writer.Write(value: entry.Generation);
-            WriteIntentSource(
-                writer: writer,
-                source: entry.Source
-            );
-            WritePrincipal(
-                writer: writer,
-                principal: entry.Identity
-            );
-            writer.Write(value: entry.IdentityDomain);
-            writer.Write(value: entry.IdentitySubject);
-            writer.Write(value: entry.AuthorityTransferred);
-            writer.Write(value: entry.CatalogRig);
-            writer.Write(value: (entry.PlacementId is not null));
-            if (entry.PlacementId is { } placementId) {
-                writer.Write(value: placementId);
+    private static void WritePeerEvent(WireWriter writer, IReadOnlyList<WorldPeerEventEntry> entries, IReadOnlyList<WorldGrant> grants, bool revoked) {
+        writer.WriteArray(
+            items: entries,
+            writeItem: static (w, entry) => {
+                if (!WorldWireLeaves.TryWritePeerEventEntry(
+                    peer: entry,
+                    writer: w
+                )) {
+                    throw new WorldReplayCodecException(message: $"no .puckreplay wire value for peer event entry {entry.Identity.Describe()} (source '{entry.Source}').");
+                }
             }
-        }
-
-        writer.Write(value: grants.Count);
-
-        foreach (var grant in grants) {
-            WriteGrantLeaf(
+        );
+        writer.WriteArray(
+            items: grants,
+            writeItem: (w, grant) => WriteGrantLeaf(
                 grant: grant,
                 revoke: revoked,
-                writer: writer
-            );
-        }
+                writer: w
+            )
+        );
     }
-    private static void WritePrincipal(BinaryWriter writer, WorldPrincipal principal) {
+    private static void WritePrincipal(WireWriter writer, Principal principal) {
         if (!WorldWireCodec.TryWritePrincipal(
             principal: principal,
             writer: writer
         )) {
-            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{principal.Kind} — a Document/World principal never rides the tape.");
+            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{principal.Kind} — the world's own program never rides the tape as an actor.");
         }
     }
-    // The seat's profile pin rides the same present-flag convention as WorldWireCodec.WriteNullableString: a
-    // profileless seat writes the flag and nothing else, and its body falls back to the seat kit's own tuning on the
-    // re-drive exactly as it did live. The two rates cross as their RAW fixed-point lanes — the simulation's own
-    // currency, never a float — so a recorded rate re-enters WorldBody.Advance bit-identical.
-    private static void WriteProfilePin(BinaryWriter writer, WorldReplayProfilePin? pin) {
-        writer.Write(value: (pin is not null));
-
-        if (pin is { } value) {
-            writer.Write(value: value.Name);
-            WriteNullableRate(
-                rate: value.MoveSpeed,
-                writer: writer
-            );
-            WriteNullableRate(
-                rate: value.TurnSpeed,
-                writer: writer
-            );
-        }
-    }
-    private static void WriteQueryLeaf(BinaryWriter writer, WorldQuery query) => WriteLeaf(
-        tryEncode: WorldSubmissionCodec.TryEncodeQuery,
-        value: query,
-        what: "query",
-        writer: writer
-    );
     // Deliberately its OWN small leaf, never WorldSubmissionCodec's TryEncodeRebuild/TryDecodeRebuild: that leaf's
     // shape REQUIRES an embedded document for Load/Reload (the ordinary submission needs it to cross the loopback),
-    // while the tape must NEVER carry one — Drive re-reads PathHint fresh, which is the content-address proof. This
-    // codec's own discriminant set for WorldRebuildKind (below, in Wire) is independent of WorldSubmissionCodec's,
-    // matching this file's own doctrine on why two frozen surfaces are never welded together by reuse.
-    private static void WriteRebuildLeaf(BinaryWriter writer, WorldReplayEntry.Rebuild rebuild) {
-        writer.Write(value: RebuildKindToWire(kind: rebuild.Kind));
-        writer.Write(value: rebuild.Force);
-        WorldWireCodec.WriteNullableString(
-            value: rebuild.PathHint,
-            writer: writer
-        );
-        writer.Write(value: rebuild.ContentHash);
-    }
-    // Reuses WorldSubmissionCodec's canonical screen-op leaf directly — unlike Rebuild, a screen op carries no
-    // embedded document either way, so there is no shape asymmetry forcing a fork here. The nullable ContentHash and
-    // the actor are tape-only metadata riding beside the shared leaf.
-    private static void WriteScreenOpLeaf(BinaryWriter writer, WorldReplayEntry.ScreenOp screenOp) {
-        if (!WorldSubmissionCodec.TryEncodeScreenOp(
-            screenOp: screenOp.Value,
-            bytes: out var bytes,
-            failure: out var failure
+    // while the tape must NEVER carry one — Drive re-reads PathHint fresh, which is the content-address proof. The
+    // kind byte is the one WorldWireTags table both leaves share.
+    private static void WriteRebuildLeaf(WireWriter writer, WorldReplayEntry.Rebuild rebuild) {
+        if (!WorldWireTags.TryToWire(
+            value: rebuild.Kind,
+            wire: out var kind
         )) {
-            throw new WorldReplayCodecException(message: $"the canonical screen-op leaf refused while writing .puckreplay: {failure}");
+            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(WorldRebuildKind)}.{rebuild.Kind}.");
         }
 
-        WriteLeafBytes(
-            bytes: bytes,
-            writer: writer
-        );
-        WorldWireCodec.WriteNullableString(
-            value: screenOp.ContentHash,
-            writer: writer
-        );
+        writer.WriteByte(value: kind);
+        writer.WriteBoolean(value: rebuild.Force);
+        writer.WriteNullableString(value: rebuild.PathHint);
+        writer.WriteString(value: rebuild.ContentHash);
     }
-    private static void WriteSessionLeaf(BinaryWriter writer, SessionRequest request) => WriteLeaf(
-        tryEncode: WorldSubmissionCodec.TryEncodeSession,
-        value: request,
-        what: "session",
-        writer: writer
-    );
     // The local-transfer leaf: five semantic fields (see WorldReplayEntry.Transfer's own remarks) followed by an
     // FNV-1a content signature folded over those SAME five fields, length-prefixing every string so two distinct
     // field sequences can never fold to the same signature regardless of what any one field contains (the identical
@@ -1504,19 +1310,17 @@ public sealed class WorldReplaySnapshot {
     // OUTSIDE the population hash's own coverage — a crossing's destination/scope/generation/outcome text is not
     // simulation state — so this signature is the ONLY thing on the tape that would ever catch a tampered byte here;
     // ReadTransferEntry recomputes it from the DECODED fields and refuses BY NAME on a disagreement.
-    private static void WriteTransferLeaf(BinaryWriter writer, WorldReplayEntry.Transfer transfer) {
-        writer.Write(value: transfer.TransferId);
-        writer.Write(value: transfer.DestinationName);
-        writer.Write(value: transfer.ScopeKey);
-        writer.Write(value: transfer.GenerationId);
-        writer.Write(value: transfer.Outcome);
-        writer.Write(value: transfer.DepartedBootSlots.Count);
-
-        foreach (var slot in transfer.DepartedBootSlots) {
-            writer.Write(value: slot);
-        }
-
-        writer.Write(value: ComputeTransferSignature(transfer: transfer));
+    private static void WriteTransferLeaf(WireWriter writer, WorldReplayEntry.Transfer transfer) {
+        writer.WriteUInt64(value: transfer.TransferId);
+        writer.WriteString(value: transfer.DestinationName);
+        writer.WriteString(value: transfer.ScopeKey);
+        writer.WriteUInt64(value: transfer.GenerationId);
+        writer.WriteString(value: transfer.Outcome);
+        writer.WriteArray(
+            items: transfer.DepartedBootSlots,
+            writeItem: static (w, slot) => w.WriteInt32(value: slot)
+        );
+        writer.WriteUInt64(value: ComputeTransferSignature(transfer: transfer));
     }
 
     /// <summary>Rehydrates a fresh authoritative world from this recording and re-drives the recorded server-input stream
@@ -1582,7 +1386,7 @@ public sealed class WorldReplaySnapshot {
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
         ArgumentNullException.ThrowIfNull(argument: addonHostFactory);
 
-        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: DefinitionJson);
+        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: PipelineSourceDirectory, utf8Json: DefinitionJson);
 
         // The header's SimulationRate must agree with the embedded definition's own SimulationRateHz — the same
         // internal-consistency family as the mount pin below. A disagreement re-driven anyway would produce a
@@ -1609,6 +1413,9 @@ public sealed class WorldReplaySnapshot {
         );
 
         server.RebuildDocuments = documents;
+        server.PipelineSources = ((PipelineSourceDirectory is { } pipelineSources)
+            ? new WorldPipelineSources(documentDirectory: pipelineSources)
+            : null);
         server.Extensions.EnterReplay();
 
         // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
@@ -1771,234 +1578,213 @@ public sealed class WorldReplaySnapshot {
 
         return hash.Value;
     }
-    /// <summary>Reads a recording from a stream.</summary>
+    /// <summary>Reads a recording from a stream, consuming the stream to its end.</summary>
     /// <param name="stream">The source stream.</param>
     /// <returns>The deserialized recording.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The stream is not a <c>.puckreplay</c> tape, or is an older shape this
     /// build does not read (refused outright — greenfield keeps no read-side tolerance for a foreign shape); is
-    /// truncated/corrupt (including a truncated or malformed length-prefixed string, normalized here from the BCL's own
-    /// <see cref="EndOfStreamException"/>/<see cref="FormatException"/> so every corruption this reader detects throws
-    /// the same exception type); carries a value no pinned wire set names; pins one addon name twice; or pins a seat
-    /// slot out of range or twice.</exception>
+    /// truncated, corrupt, or carries bytes after the tape; carries a value no wire table names; pins one addon name
+    /// twice; or pins a seat slot out of range or twice.</exception>
     public static WorldReplaySnapshot Read(Stream stream) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
-        using var reader = new BinaryReader(
-            input: stream,
-            encoding: Encoding.UTF8,
-            leaveOpen: true
+        byte[] bytes;
+
+        using (var buffer = new MemoryStream()) {
+            stream.CopyTo(destination: buffer);
+            bytes = buffer.ToArray();
+        }
+
+        var reader = new WireReader(bytes: bytes);
+        var magic = reader.ReadUInt32();
+        var shapeToken = reader.ReadUInt32();
+
+        if (reader.Failed) {
+            throw Corrupt(failure: reader.Failure);
+        }
+
+        if (
+            (magic != Magic) ||
+            (shapeToken != ShapeToken)
+        ) {
+            throw ReplayRefusal.ShapeMismatch.Raise(message: $"Not a Puck replay tape, or an older shape this build does not read — re-record it. (found magic 0x{magic:x8}, shape token {shapeToken}; this build reads magic 0x{Magic:x8}, shape token {ShapeToken} only)");
+        }
+
+        var simulationRate = reader.ReadUInt32();
+        var forkedFrom = reader.ReadOptional(readValue: static (ref WireReader r) => {
+            var parentName = r.ReadString(field: "fork provenance parent");
+            var forkTick = r.ReadInt32();
+
+            return new WorldReplayForkProvenance(
+                ParentName: parentName,
+                Tick: forkTick
+            );
+        });
+        var pipelineSourceDirectory = reader.ReadNullableString(field: "pipeline source directory");
+
+        if (
+            !reader.Failed &&
+            (forkedFrom is { } fork)
+        ) {
+            if (string.IsNullOrWhiteSpace(value: fork.ParentName)) {
+                throw new InvalidDataException(message: "Corrupt .puckreplay recording: the fork provenance names an empty parent tape.");
+            }
+
+            if (fork.Tick < 0) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance tick {fork.Tick} is negative.");
+            }
+        }
+
+        var recordedHashes = ReadTapeArray(
+            minimumBytesEach: sizeof(ulong),
+            readItem: static (ref WireReader r) => r.ReadUInt64(),
+            reader: ref reader,
+            what: "hash"
         );
+        var recordedAuthoritativeHashes = ReadTapeArray(
+            minimumBytesEach: sizeof(ulong),
+            readItem: static (ref WireReader r) => r.ReadUInt64(),
+            reader: ref reader,
+            what: "authoritative hash"
+        );
+        var definitionJson = reader.ReadBlock(
+            field: "definition",
+            maxBytes: WireLimits.MaxDocumentBytes
+        );
+        // 12 = the smallest possible receipt: two empty strings' 16-bit length prefixes and the u64 fuel.
+        var mountedAddons = ReadTapeArray(
+            minimumBytesEach: 12,
+            readItem: static (ref WireReader r) => {
+                var name = r.ReadString(field: "mounted addon name");
+                var hash = r.ReadString(field: "mounted addon hash");
+                var fuel = r.ReadUInt64();
 
-        try {
-            var magic = reader.ReadUInt32();
-            var shapeToken = reader.ReadUInt32();
-
-            if (
-                (magic != Magic) ||
-                (shapeToken != ShapeToken)
-            ) {
-                throw ReplayRefusal.ShapeMismatch.Raise(message: $"Not a Puck replay tape, or an older shape this build does not read — re-record it. (found magic 0x{magic:x8}, shape token {shapeToken}; this build reads magic 0x{Magic:x8}, shape token {ShapeToken} only)");
-            }
-
-            var simulationRate = reader.ReadUInt32();
-            WorldReplayForkProvenance? forkedFrom = null;
-
-            if (reader.ReadBoolean()) {
-                var parentName = reader.ReadString();
-                var forkTick = reader.ReadInt32();
-
-                if (string.IsNullOrWhiteSpace(value: parentName)) {
-                    throw new InvalidDataException(message: "Corrupt .puckreplay recording: the fork provenance names an empty parent tape.");
-                }
-
-                if (forkTick < 0) {
-                    throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance tick {forkTick} is negative.");
-                }
-
-                forkedFrom = new WorldReplayForkProvenance(
-                    ParentName: parentName,
-                    Tick: forkTick
-                );
-            }
-
-            var hashCount = ReadCount(
-                minimumBytesEach: 8,
-                reader: reader,
-                what: "hash"
-            );
-            var recordedHashes = new ulong[hashCount];
-
-            for (var index = 0; (index < hashCount); index++) {
-                recordedHashes[index] = reader.ReadUInt64();
-            }
-
-            var authoritativeHashCount = ReadCount(
-                minimumBytesEach: 8,
-                reader: reader,
-                what: "authoritative hash"
-            );
-            var recordedAuthoritativeHashes = new ulong[authoritativeHashCount];
-
-            for (var index = 0; (index < authoritativeHashCount); index++) {
-                recordedAuthoritativeHashes[index] = reader.ReadUInt64();
-            }
-
-            var definitionLength = ReadCount(
-                minimumBytesEach: 1,
-                reader: reader,
-                what: "definition"
-            );
-            var definitionJson = reader.ReadBytes(count: definitionLength);
-
-            if (definitionJson.Length != definitionLength) {
-                throw new InvalidDataException(message: "Truncated .puckreplay recording (definition).");
-            }
-
-            // 11 = the smallest possible receipt: two 1-byte string length prefixes, the u64 fuel, and the placeholder lane byte.
-            var addonCount = ReadCount(
-                minimumBytesEach: 11,
-                reader: reader,
-                what: "mounted addon"
-            );
-            var mountedAddons = new List<WorldAddonReceipt>(capacity: addonCount);
-
-            for (var index = 0; (index < addonCount); index++) {
-                var name = reader.ReadString();
-                var hash = reader.ReadString();
-                var fuel = reader.ReadUInt64();
-
-                // The set is compared BY NAME at re-drive, so two receipts under one name make the pin ambiguous: whichever
-                // the comparison happened to reach first would decide, and the other would be silently unenforced.
-                if (Find(
-                    name: name,
-                    receipts: mountedAddons
-                ) is not null) {
-                    throw new InvalidDataException(message: $"Corrupt .puckreplay recording: addon '{name}' is pinned twice in the mounted set — a name identifies exactly one mounted guest.");
-                }
-
-                mountedAddons.Add(item: new WorldAddonReceipt(
+                return new WorldAddonReceipt(
                     Fuel: fuel,
                     Hash: hash,
                     Name: name
-                ));
-            }
+                );
+            },
+            reader: ref reader,
+            what: "mounted addon"
+        );
+        var seats = ReadTapeArray(
+            minimumBytesEach: 5,
+            readItem: static (ref WireReader r) => {
+                var slot = r.ReadInt32();
+                var profile = ReadProfilePin(reader: ref r);
 
-            var seatCount = ReadCount(
-                minimumBytesEach: 5,
-                reader: reader,
-                what: "seat"
-            );
-            var seats = new List<WorldReplaySeat>(capacity: seatCount);
-
-            for (var index = 0; (index < seatCount); index++) {
-                var slot = reader.ReadInt32();
-                var profile = ReadProfilePin(reader: reader);
-
-                // An out-of-range slot indexes straight into WorldPopulation's local-seat array during Drive
-                // (Join's own range check only refuses the session reply; SetSeatProfile does not check again),
-                // so it is refused here, before that reach, rather than crashing the host with an index exception.
-                if (((uint)slot) >= WorldBodiesLimits.LocalSeatCount) {
-                    throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is out of range (expected 0..{(WorldBodiesLimits.LocalSeatCount - 1)}).");
-                }
-
-                // The set is compared BY SLOT at re-drive (Drive re-joins each recorded slot once), so two seats
-                // pinning the same slot make the pin ambiguous — the same ambiguity the mounted-addon duplicate-name
-                // guard above refuses for names.
-                if (FindSeat(
-                    seats: seats,
-                    slot: slot
-                ) is not null) {
-                    throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is pinned twice in the seat set — a slot identifies exactly one seat.");
-                }
-
-                seats.Add(item: new WorldReplaySeat(
+                return new WorldReplaySeat(
                     Profile: profile,
                     Slot: slot
-                ));
-            }
-
-            var tickCount = ReadCount(
-                minimumBytesEach: 8,
-                reader: reader,
-                what: "tick"
-            );
-            var ticks = new List<WorldReplayTickInput>(capacity: tickCount);
-
-            for (var index = 0; (index < tickCount); index++) {
+                );
+            },
+            reader: ref reader,
+            what: "seat"
+        );
+        var ticks = ReadTapeArray(
+            minimumBytesEach: 8,
+            readItem: static (ref WireReader r) => {
                 // 2 = the smallest possible entry: RateLever's discriminant byte plus its one bool. Every other kind
                 // (Command's minimal principal, a Grant/Revoke leaf, ...) is strictly larger.
-                var entryCount = ReadCount(
+                var authority = ReadTapeArray(
                     minimumBytesEach: 2,
-                    reader: reader,
+                    readItem: static (ref WireReader entry) => ReadEntry(reader: ref entry),
+                    reader: ref r,
                     what: "authority entry"
                 );
-                var authority = new List<WorldReplayEntry>(capacity: entryCount);
-
-                for (var entry = 0; (entry < entryCount); entry++) {
-                    authority.Add(item: ReadEntry(reader: reader));
-                }
-
-                var intentCount = ReadCount(
+                var intents = ReadTapeArray(
                     minimumBytesEach: 60,
-                    reader: reader,
+                    readItem: static (ref WireReader intent) => WorldWireCodec.ReadIntentSubmission(reader: ref intent),
+                    reader: ref r,
                     what: "intent"
                 );
-                var intents = new List<IntentSubmission>(capacity: intentCount);
 
-                for (var intent = 0; (intent < intentCount); intent++) {
-                    intents.Add(item: ReadIntent(reader: reader));
-                }
-
-                ticks.Add(item: new WorldReplayTickInput(
+                return new WorldReplayTickInput(
                     Authority: authority,
                     Intents: intents
-                ));
-            }
+                );
+            },
+            reader: ref reader,
+            what: "tick"
+        );
 
-            // The two lengths are equal BY CONSTRUCTION on the record side (one hash sampled per tick appended), so a file
-            // where they disagree is doctored or truncated between the two sections. Reject it here rather than letting the
-            // shorter one silently bound the comparison — a trace cut short would otherwise read as "matched everywhere it
-            // was checked", which is exactly the shape of a verification that cannot fail.
-            if (recordedHashes.Length != ticks.Count) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedHashes.Length} recorded hashes for {ticks.Count} ticks.");
-            }
-            if (recordedAuthoritativeHashes.Length != ticks.Count) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedAuthoritativeHashes.Length} recorded authoritative hashes for {ticks.Count} ticks.");
-            }
-
-            // A child carries its copied prefix in its own Ticks, so a provenance claiming more copied ticks than the
-            // tape holds is doctored or truncated after the header.
-            if (
-                (forkedFrom is { } provenance) &&
-                (provenance.Tick > ticks.Count)
-            ) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance claims {provenance.Tick} tick(s) copied from '{provenance.ParentName}', but the tape carries only {ticks.Count}.");
-            }
-
-            return new WorldReplaySnapshot {
-                DefinitionJson = definitionJson,
-                ForkedFrom = forkedFrom,
-                MountedAddons = mountedAddons,
-                RecordedAuthoritativeHashes = recordedAuthoritativeHashes,
-                RecordedHashes = recordedHashes,
-                Seats = seats,
-                SimulationRate = simulationRate,
-                Ticks = ticks,
-            };
-        } catch (Exception exception) when ((exception is EndOfStreamException or FormatException)) {
-            // BinaryReader.ReadString throws THESE directly on a truncated or malformed length-prefixed string — never
-            // InvalidDataException — so without this normalization they would escape every caller's catch list (the
-            // codec's own claim, stated at the class level, is that a corrupt or truncated tape is refused, never
-            // crashes the host). Every OTHER corruption path in this reader already throws InvalidDataException by
-            // hand (ReadCount, the pinned wire sets, the duplicate-name guards); this is the one BCL-thrown exception
-            // shape this codec does not otherwise control, normalized here so the read side's catch list stays short
-            // and its no-host-kill claim stays true.
-            throw new InvalidDataException(
-                message: $"Corrupt .puckreplay recording (truncated or malformed while reading a length-prefixed field): {exception.Message}",
-                innerException: exception
-            );
+        if (!reader.TryFinish(failure: out var failure)) {
+            throw Corrupt(failure: failure);
         }
+
+        // The set is compared BY NAME at re-drive, so two receipts under one name make the pin ambiguous: whichever the
+        // comparison happened to reach first would decide, and the other would be silently unenforced.
+        for (var index = 0; (index < mountedAddons.Length); index++) {
+            if (Find(
+                name: mountedAddons[index].Name,
+                receipts: new ArraySegment<WorldAddonReceipt>(
+                    array: mountedAddons,
+                    count: index,
+                    offset: 0
+                )
+            ) is not null) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: addon '{mountedAddons[index].Name}' is pinned twice in the mounted set — a name identifies exactly one mounted guest.");
+            }
+        }
+
+        for (var index = 0; (index < seats.Length); index++) {
+            var slot = seats[index].Slot;
+
+            // An out-of-range slot indexes straight into WorldPopulation's local-seat array during Drive (Join's own
+            // range check only refuses the session reply; SetSeatProfile does not check again), so it is refused
+            // here, before that reach, rather than crashing the host with an index exception.
+            if (((uint)slot) >= WorldBodiesLimits.LocalSeatCount) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is out of range (expected 0..{(WorldBodiesLimits.LocalSeatCount - 1)}).");
+            }
+
+            // The set is compared BY SLOT at re-drive (Drive re-joins each recorded slot once), so two seats pinning
+            // the same slot make the pin ambiguous — the same ambiguity the mounted-addon duplicate-name guard above
+            // refuses for names.
+            if (FindSeat(
+                seats: new ArraySegment<WorldReplaySeat>(
+                    array: seats,
+                    count: index,
+                    offset: 0
+                ),
+                slot: slot
+            ) is not null) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is pinned twice in the seat set — a slot identifies exactly one seat.");
+            }
+        }
+
+        // The two lengths are equal BY CONSTRUCTION on the record side (one hash sampled per tick appended), so a file
+        // where they disagree is doctored or truncated between the two sections. Reject it here rather than letting the
+        // shorter one silently bound the comparison — a trace cut short would otherwise read as "matched everywhere it
+        // was checked", which is exactly the shape of a verification that cannot fail.
+        if (recordedHashes.Length != ticks.Length) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedHashes.Length} recorded hashes for {ticks.Length} ticks.");
+        }
+        if (recordedAuthoritativeHashes.Length != ticks.Length) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay recording: {recordedAuthoritativeHashes.Length} recorded authoritative hashes for {ticks.Length} ticks.");
+        }
+
+        // A child carries its copied prefix in its own Ticks, so a provenance claiming more copied ticks than the
+        // tape holds is doctored or truncated after the header.
+        if (
+            (forkedFrom is { } provenance) &&
+            (provenance.Tick > ticks.Length)
+        ) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay recording: the fork provenance claims {provenance.Tick} tick(s) copied from '{provenance.ParentName}', but the tape carries only {ticks.Length}.");
+        }
+
+        return new WorldReplaySnapshot {
+            DefinitionJson = definitionJson,
+            ForkedFrom = forkedFrom,
+            MountedAddons = mountedAddons,
+            PipelineSourceDirectory = pipelineSourceDirectory,
+            RecordedAuthoritativeHashes = recordedAuthoritativeHashes,
+            RecordedHashes = recordedHashes,
+            Seats = seats,
+            SimulationRate = simulationRate,
+            Ticks = ticks,
+        };
     }
     /// <summary>Derives the engine-tick step width <see cref="Drive"/> re-runs each recorded tick at — the one place
     /// <see cref="SimulationRate"/>'s "0 means a static world that never steps" contract and
@@ -2032,173 +1818,158 @@ public sealed class WorldReplaySnapshot {
             : EngineTicks.PerRate(ratePerSecond: simulationRate)
         );
     }
-    /// <summary>Serializes a recording to a stream in the <c>.puckreplay</c> binary form.</summary>
-    /// <param name="stream">The destination stream.</param>
-    /// <param name="recording">The recording to write.</param>
-    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    /// <exception cref="WorldReplayCodecException">A host-side codec bug: the recording carries a value no pinned
-    /// wire set or discriminated encoding covers, or pins one mounted-addon name twice.</exception>
-    public static void Write(Stream stream, WorldReplaySnapshot recording) {
+    /// <summary>Encodes a recording in the <c>.puckreplay</c> binary form.</summary>
+    /// <param name="recording">The recording to encode.</param>
+    /// <returns>The complete tape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="recording"/> is <see langword="null"/>.</exception>
+    /// <exception cref="WorldReplayCodecException">A host-side codec bug: the recording carries a value no wire table
+    /// or discriminated encoding covers, or pins one mounted-addon name twice.</exception>
+    public static byte[] Encode(WorldReplaySnapshot recording) {
         ArgumentNullException.ThrowIfNull(argument: recording);
-        ArgumentNullException.ThrowIfNull(argument: stream);
 
-        using var writer = new BinaryWriter(
-            output: stream,
-            encoding: Encoding.UTF8,
-            leaveOpen: true
-        );
+        var writer = new WireWriter(capacity: (recording.DefinitionJson.Length + 4096));
 
-        writer.Write(value: Magic);
-        writer.Write(value: ShapeToken);
+        writer.WriteUInt32(value: Magic);
+        writer.WriteUInt32(value: ShapeToken);
         // Right after the shape header, before anything else: the rate is simulation INPUT the same way the
         // definition and seats are, and Drive needs it before it can honestly derive a step size.
-        writer.Write(value: recording.SimulationRate);
-        // (bool present, string parent, int32 tick) — the fork provenance slot, right behind the rate it shares a
-        // header with; absent for a tape recorded from boot.
-        writer.Write(value: recording.ForkedFrom.HasValue);
+        writer.WriteUInt32(value: recording.SimulationRate);
 
-        if (recording.ForkedFrom is { } forkedFrom) {
-            if (
-                string.IsNullOrWhiteSpace(value: forkedFrom.ParentName) ||
-                (forkedFrom.Tick < 0) ||
-                (forkedFrom.Tick > recording.Ticks.Count)
-            ) {
-                throw new WorldReplayCodecException(message: $"a .puckreplay recording's fork provenance is inconsistent (parent '{forkedFrom.ParentName}', {forkedFrom.Tick} copied tick(s) of {recording.Ticks.Count}) — a host bug, not tape data.");
+        if (
+            (recording.ForkedFrom is { } forkedFrom) &&
+            (string.IsNullOrWhiteSpace(value: forkedFrom.ParentName) ||
+            (forkedFrom.Tick < 0) ||
+            (forkedFrom.Tick > recording.Ticks.Count))
+        ) {
+            throw new WorldReplayCodecException(message: $"a .puckreplay recording's fork provenance is inconsistent (parent '{forkedFrom.ParentName}', {forkedFrom.Tick} copied tick(s) of {recording.Ticks.Count}) — a host bug, not tape data.");
+        }
+
+        // (present, parent, int32 tick) — the fork provenance slot, right behind the rate it shares a header with;
+        // absent for a tape recorded from boot.
+        writer.WriteOptional(
+            value: recording.ForkedFrom,
+            writeValue: static (w, fork) => {
+                w.WriteString(value: fork.ParentName);
+                w.WriteInt32(value: fork.Tick);
             }
+        );
+        writer.WriteNullableString(value: recording.PipelineSourceDirectory);
+        writer.WriteArray(
+            items: recording.RecordedHashes,
+            writeItem: static (w, hash) => w.WriteUInt64(value: hash)
+        );
+        writer.WriteArray(
+            items: recording.RecordedAuthoritativeHashes,
+            writeItem: static (w, hash) => w.WriteUInt64(value: hash)
+        );
+        writer.WriteBlock(value: recording.DefinitionJson);
 
-            writer.Write(value: forkedFrom.ParentName);
-            writer.Write(value: forkedFrom.Tick);
+        // Read refuses a duplicate mounted-addon NAME (a name identifies exactly one mounted guest); the same
+        // ambiguity is reachable HERE too, straight from the live server's OWN receipts (WorldReplayTape.StopRecording
+        // never validated them). That is the host's own runtime having mounted two instances under one name — a host
+        // bug, not untrusted tape bytes — hence WorldReplayCodecException.
+        for (var index = 0; (index < recording.MountedAddons.Count); index++) {
+            for (var other = (index + 1); (other < recording.MountedAddons.Count); other++) {
+                if (string.Equals(
+                    a: recording.MountedAddons[index].Name,
+                    b: recording.MountedAddons[other].Name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    throw new WorldReplayCodecException(message: $"a .puckreplay recording's mounted-addon set pins '{recording.MountedAddons[index].Name}' twice — the live runtime mounted two instances under the same name, a host bug, not tape data.");
+                }
+            }
         }
-
-        writer.Write(value: recording.RecordedHashes.Length);
-
-        foreach (var hash in recording.RecordedHashes) {
-            writer.Write(value: hash);
-        }
-
-        writer.Write(value: recording.RecordedAuthoritativeHashes.Length);
-        foreach (var hash in recording.RecordedAuthoritativeHashes) {
-            writer.Write(value: hash);
-        }
-
-        writer.Write(value: recording.DefinitionJson.Length);
-        writer.Write(buffer: recording.DefinitionJson);
 
         // Immediately after the definition and before the seats: the definition says which addons a world DECLARES, the
         // receipt set says which ones actually mounted and from which bytes. The second is the one a re-drive is pinned
         // against, and it reads next to the document it qualifies.
-        writer.Write(value: recording.MountedAddons.Count);
-
-        for (var index = 0; (index < recording.MountedAddons.Count); index++) {
-            var receipt = recording.MountedAddons[index];
-
-            // Read refuses a duplicate mounted-addon NAME (a name identifies exactly one mounted guest — see Read's
-            // matching guard); the same ambiguity is reachable HERE too, straight from the live server's OWN receipts
-            // (WorldReplayTape.StopRecording never validated them). This is the host's OWN runtime having mounted two
-            // instances under one name — a host bug, not untrusted tape bytes — hence WorldReplayCodecException,
-            // matching every other "the codec cannot honestly encode this" throw in this method.
-            for (var other = (index + 1); (other < recording.MountedAddons.Count); other++) {
-                if (string.Equals(
-                    a: receipt.Name,
-                    b: recording.MountedAddons[other].Name,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    throw new WorldReplayCodecException(message: $"a .puckreplay recording's mounted-addon set pins '{receipt.Name}' twice — the live runtime mounted two instances under the same name, a host bug, not tape data.");
-                }
+        writer.WriteArray(
+            items: recording.MountedAddons,
+            writeItem: static (w, receipt) => {
+                w.WriteString(value: receipt.Name);
+                w.WriteString(value: receipt.Hash);
+                w.WriteUInt64(value: receipt.Fuel);
             }
-
-            writer.Write(value: receipt.Name);
-            writer.Write(value: receipt.Hash);
-            writer.Write(value: receipt.Fuel);
-        }
-
-        writer.Write(value: recording.Seats.Count);
-
-        foreach (var seat in recording.Seats) {
-            writer.Write(value: seat.Slot);
-            WriteProfilePin(
-                writer: writer,
-                pin: seat.Profile
-            );
-        }
-
-        writer.Write(value: recording.Ticks.Count);
-
-        foreach (var input in recording.Ticks) {
-            writer.Write(value: input.Authority.Count);
-
-            foreach (var entry in input.Authority) {
-                WriteEntry(
-                    entry: entry,
-                    writer: writer
+        );
+        // The seat's profile pin rides a presence bit: a profileless seat writes the bit and nothing else, and its
+        // body falls back to the seat kit's own tuning on the re-drive exactly as it did live. The two rates cross as
+        // their RAW fixed-point lanes — the simulation's own currency, never a float — so a recorded rate re-enters
+        // WorldBody.Advance bit-identical.
+        writer.WriteArray(
+            items: recording.Seats,
+            writeItem: static (w, seat) => {
+                w.WriteInt32(value: seat.Slot);
+                w.WriteOptional(
+                    value: seat.Profile,
+                    writeValue: static (pinWriter, pin) => {
+                        pinWriter.WriteString(value: pin.Name);
+                        pinWriter.WriteNullableFixed(value: pin.MoveSpeed);
+                        pinWriter.WriteNullableFixed(value: pin.TurnSpeed);
+                    }
                 );
             }
-
-            writer.Write(value: input.Intents.Count);
-
-            foreach (var intent in input.Intents) {
-                WriteIntent(
-                    submission: in intent,
-                    writer: writer
+        );
+        writer.WriteArray(
+            items: recording.Ticks,
+            writeItem: static (w, input) => {
+                w.WriteArray(
+                    items: input.Authority,
+                    writeItem: WriteEntry
+                );
+                w.WriteArray(
+                    items: input.Intents,
+                    writeItem: static (intentWriter, intent) => {
+                        if (!WorldWireCodec.TryWriteIntentSubmission(
+                            submission: in intent,
+                            writer: intentWriter
+                        )) {
+                            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{intent.Principal.Kind} — the world's own program never rides the tape as an actor.");
+                        }
+                    }
                 );
             }
-        }
+        );
+
+        return writer.ToArray();
     }
-    /// <summary>Serializes a recording to <paramref name="path"/> in one write: the whole tape is encoded to an
-    /// in-memory buffer first (where every write-side throw in <see cref="Write"/> can still fire — an unmapped enum
-    /// member, a duplicate mounted-addon name, any host-side codec bug — see their remarks), and only a complete
-    /// buffer ever reaches the destination file, via one <see cref="File.WriteAllBytes(string, byte[])"/> call. A throw
-    /// during encoding therefore never truncates or creates a partial file on disk — the destination is untouched
-    /// until the whole tape is ready to go, which is the property that matters (this is not a defense against the disk
-    /// itself failing mid-write, only against a codec throw racing an already-opened, already-truncated file handle).</summary>
+    /// <summary>Serializes a recording to a stream in the <c>.puckreplay</c> binary form: the whole tape is encoded
+    /// first (<see cref="Encode"/>), then written in one call.</summary>
+    /// <param name="stream">The destination stream.</param>
+    /// <param name="recording">The recording to write.</param>
+    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    /// <exception cref="WorldReplayCodecException">A host-side codec bug (see <see cref="Encode"/>).</exception>
+    public static void Write(Stream stream, WorldReplaySnapshot recording) {
+        ArgumentNullException.ThrowIfNull(argument: stream);
+
+        stream.Write(buffer: Encode(recording: recording));
+    }
+    /// <summary>Serializes a recording to <paramref name="path"/> in one write: the whole tape is encoded to memory
+    /// first (<see cref="Encode"/>, where every write-side throw can still fire), and only a complete buffer ever
+    /// reaches the destination file, via one <see cref="File.WriteAllBytes(string, byte[])"/> call. A throw during
+    /// encoding therefore never truncates or creates a partial file on disk — the destination is untouched until the
+    /// whole tape is ready (a guard against a codec throw, not against the disk failing mid-write).</summary>
     /// <param name="path">The destination file path.</param>
     /// <param name="recording">The recording to write.</param>
     /// <exception cref="ArgumentNullException"><paramref name="recording"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
-    /// <exception cref="WorldReplayCodecException">A host-side codec bug: the recording carries a value no pinned
-    /// wire set or discriminated encoding covers, or pins one mounted-addon name twice (see <see cref="Write"/>'s
-    /// per-site remarks).</exception>
+    /// <exception cref="WorldReplayCodecException">A host-side codec bug (see <see cref="Encode"/>).</exception>
     public static void WriteFile(string path, WorldReplaySnapshot recording) {
-        ArgumentNullException.ThrowIfNull(argument: recording);
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
-        using var buffer = new MemoryStream();
-
-        Write(
-            recording: recording,
-            stream: buffer
-        );
-
         File.WriteAllBytes(
-            path: path,
-            bytes: buffer.ToArray()
+            bytes: Encode(recording: recording),
+            path: path
         );
     }
 
+    private static InvalidDataException Corrupt(WireFailure failure) => new(message: $"Corrupt .puckreplay recording: {failure}.");
+
     // The one shape every fixed leaf codec's TryDecodeX follows: a span of bytes decodes to a T or names a
     // WorldCodecFailure. `value is null` is reachable only for the reference-typed leaves (WorldCommand,
-    // WorldComposition, WorldMutation, WorldQuery, SessionRequest) — a defensive check against a codec that reports
-    // success with no value, always false for the struct-typed leaves (WorldDesignation, WorldGrant).
+    // WorldComposition, WorldMutation, WorldQuery, SessionRequest, WorldScreenOp) — a defensive check against a codec
+    // that reports success with no value, always false for the struct-typed leaves (WorldDesignation, WorldGrant).
     private delegate bool TryDecodeLeaf<T>(ReadOnlySpan<byte> bytes, out T? value, out WorldCodecFailure failure);
     // The write-side twin of ReadLeaf: every fixed leaf codec's TryEncodeX turns a T into bytes or names a
     // WorldCodecFailure.
     private delegate bool TryEncodeLeaf<T>(T value, out byte[] bytes, out WorldCodecFailure failure);
-
-    // ---------------------------------------------------------------------------------------------------------------
-    // This codec's OWN pinned wire set — the discriminants no shared table owns. Every enum crosses as a value
-    // declared here or in Puck.World.Protocol (WorldWireTags for the grant vocabulary, WorldWireCodec for the leaf
-    // layouts this tape shares with the submission wire), mapped by an exhaustive switch in both directions — never
-    // by a cast, since a cast pins whatever ordinals the enum happens to have and a reorder/insert/delete would
-    // silently change every saved tape's meaning.
-    //
-    // Version-1 wire values: after a layout change, re-record tapes. The write side throws by name on a member the
-    // set does not cover; the read side throws InvalidDataException naming the value it found, so a doctored or
-    // drifted tape is refused rather than decoded as garbage.
-    private static class Wire {
-        public const byte RebuildKindLoad = 1;
-        public const byte RebuildKindReload = 2;
-        // WorldRebuildKind — this codec's OWN discriminant set, independent of WorldSubmissionCodec's identically-
-        // numbered one (see WriteRebuildLeaf's remarks on why the two are never welded together).
-        public const byte RebuildKindReset = 0;
-    }
 }

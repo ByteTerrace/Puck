@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.World.Authoring;
 using Puck.Maths;
@@ -115,7 +116,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             ],
             References = [new WorldReference(
                 SafeName.Parse(candidate: "beyond-ref"),
-                "beyond.world.json"
+                "beyond"
             )],
             Destinations = [new WorldDestination(
                 SafeName.Parse(candidate: "beyond"),
@@ -184,7 +185,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             );
         }
 
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,
@@ -212,11 +213,11 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "unused-east-ref"),
-                "unused-east.world.json"
+                "unused-east"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "unused-south-ref"),
-                "unused-south.world.json"
+                "unused-south"
             ),
             ],
             Destinations = [
@@ -252,7 +253,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         using var fixture = Fixtures.FreshServer(definition: source);
 
         fixture.Server.Adjacencies = new CornerSource(definition: corner);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,

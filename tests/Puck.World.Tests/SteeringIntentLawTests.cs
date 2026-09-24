@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Xunit;
@@ -49,14 +50,14 @@ public sealed class SteeringIntentLawTests {
             ProducersRaw = new Dictionary<string, BodyProgramParameters> {
                 [ProducerName] = new(
             Scalars: new Dictionary<string, float> {
-                        ["standoffRadius"] = 0.005f,
-                        ["approach"] = 0f,
-                        ["orbit"] = 0f,
-                        ["approachAltitudeGain"] = approachAltitudeGain,
-                        ["inwardGain"] = 1.6f,
-                        ["turnScale"] = 2.5f,
-                        ["releaseRadius"] = (sensedRange * 2f),
-                    },
+                ["standoffRadius"] = 0.005f,
+                ["approach"] = 0f,
+                ["orbit"] = 0f,
+                ["approachAltitudeGain"] = approachAltitudeGain,
+                ["inwardGain"] = 1.6f,
+                ["turnScale"] = 2.5f,
+                ["releaseRadius"] = (sensedRange * 2f),
+            },
             Channels: new Dictionary<string, string>()
         ),
             },
@@ -159,7 +160,7 @@ public sealed class SteeringIntentLawTests {
         ["releaseRadius"] = 2000f,
     };
     private static WorldBody JoinAndPose(WorldFixture fixture, float x, float y, float z) {
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -182,7 +183,7 @@ public sealed class SteeringIntentLawTests {
         return body;
     }
     private static WorldBody JoinAndPoseAwayFromHome(WorldFixture fixture, float distance) {
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -209,7 +210,7 @@ public sealed class SteeringIntentLawTests {
     }
     private static WorldBody JoinSeat(WorldFixture fixture, int slot, float x, float z) {
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: slot),
+            Principal: Principal.Seat(slot: slot),
             Slot: slot,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -474,7 +475,7 @@ public sealed class SteeringIntentLawTests {
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

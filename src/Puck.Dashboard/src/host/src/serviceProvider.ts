@@ -1,4 +1,4 @@
-import { ServiceFactory, ServiceProvider } from "../../shared/interfaces";
+import type { ServiceFactory, ServiceProvider } from "../../shared/interfaces";
 
 export class DefaultServiceProvider<TServiceMap extends object = Record<string, unknown>> implements ServiceProvider<TServiceMap> {
   private factories = new Map<string, ServiceFactory<this, any>>();

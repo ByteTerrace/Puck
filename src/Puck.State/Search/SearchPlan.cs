@@ -43,9 +43,9 @@ public static class SearchCapacity {
 public enum SearchMethod : byte {
     /// <summary>Iterative-deepening negamax with alpha-beta and a transposition table, the score read at the depth cap.</summary>
     Negamax,
-    /// <summary>UCB1 tree search over a bounded node pool with seeded playouts, the score read where no candidate is
+    /// <summary>UCB1 Monte Carlo tree search over a bounded node pool with seeded playouts, the score read where no candidate is
     /// accepted or at the depth cap, the most-visited root move landed.</summary>
-    Tree,
+    MonteCarlo,
 }
 /// <summary>Which board-state change one candidate shape makes. <see cref="Relocate"/> is the plain default shape.</summary>
 public enum SearchShapeKind : byte {
@@ -58,19 +58,19 @@ public enum SearchShapeKind : byte {
     /// <summary>One token relocates and its code changes to one of an authored list.</summary>
     Promote,
     /// <summary>The walked token and a second, fixed token relocate together.</summary>
-    Pair,
+    Tandem,
     /// <summary>The walked token, at one end of its ordered zone, moves onto another of the job's zones.</summary>
     Transfer,
 }
 /// <summary>One compiled candidate shape a search job enumerates, ahead of token and target/direction in the walk's
 /// fixed order. <see cref="Directions"/> is populated for <see cref="SearchShapeKind.Jump"/> alone — the resolved
-/// direction ordinals its authored shape names. <see cref="PairWithIndex"/> is populated for
-/// <see cref="SearchShapeKind.Pair"/> alone — the fixed companion's ordinal in the job's tokens row.</summary>
+/// direction ordinals its authored shape names. <see cref="CompanionIndex"/> is populated for
+/// <see cref="SearchShapeKind.Tandem"/> alone — the fixed companion's ordinal in the job's tokens row.</summary>
 /// <param name="Kind">The shape.</param>
 /// <param name="Displace">Whether a <see cref="SearchShapeKind.Relocate"/> evicts the token standing on the
 /// target; unused by every other kind.</param>
 /// <param name="Directions">The resolved direction ordinals a <see cref="SearchShapeKind.Jump"/> tries.</param>
-/// <param name="PairWithIndex">The companion token's ordinal for a <see cref="SearchShapeKind.Pair"/>, or -1.</param>
+/// <param name="CompanionIndex">The companion token's ordinal for a <see cref="SearchShapeKind.Tandem"/>, or -1.</param>
 /// <param name="Codes">The codes row a <see cref="SearchShapeKind.Promote"/> writes, or <see langword="null"/>.</param>
 /// <param name="PromoteTo">The codes a <see cref="SearchShapeKind.Promote"/> offers, or <see langword="null"/>.</param>
 /// <param name="Selector">The zone end a <see cref="SearchShapeKind.Transfer"/> moves from.</param>
@@ -79,7 +79,7 @@ public enum SearchShapeKind : byte {
 /// is the section's original single hop; past 1, one candidate is a whole chain of 1..<paramref name="MaxHops"/>
 /// hops, each over an occupied cell onto an empty one never repeating a cell of the chain (including the token's
 /// own starting cell), and none of the chain's intermediate cells are evicted.</param>
-public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false, int MaxHops = 1) {
+public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int CompanionIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false, int MaxHops = 1) {
     // A base-(directions + 1) count, saturating at int.MaxValue rather than throwing — validation keeps a real
     // document's product far under this ceiling; the saturated value only ever reaches a caller as an early refusal.
     private static int ChainCandidateCount(int directions, int maxHops) {
@@ -120,7 +120,7 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
 /// choosing, and the outcome table a document project bakes once from the row's own declared generator (its cells'
 /// cross product — two dice of <c>uniformRange 1..6</c> bake 36 outcomes) so a search runtime reads pure
 /// data. Negamax computes the exact weighted average over every outcome at <see cref="AtDepth"/>; a
-/// <see cref="SearchMethod.Tree"/> job instead samples one outcome per playout at the ply its own playout numbering
+/// <see cref="SearchMethod.MonteCarlo"/> job instead samples one outcome per playout at the ply its own playout numbering
 /// reaches <see cref="AtDepth"/>, from the job's own stream.</summary>
 /// <param name="Row">The row a chosen outcome writes.</param>
 /// <param name="AtDepth">Negamax: the absolute ply (0 = root) whose move choice is replaced. Tree: the 1-based
@@ -156,14 +156,14 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// or <see langword="null"/>.</param>
 /// <param name="Accept">The verdict value that accepts a candidate.</param>
 /// <param name="Method">How the job compares plies by its score.</param>
-/// <param name="Iterations">The tree iterations a <see cref="SearchMethod.Tree"/> job runs.</param>
+/// <param name="Iterations">The tree iterations a <see cref="SearchMethod.MonteCarlo"/> job runs.</param>
 /// <param name="Chance">The job's baked chance node, or <see langword="null"/> for a job with none.</param>
 /// <param name="Scores">A keyed integer row, one cell per seat in <paramref name="Turn"/>'s own ordinal order,
 /// holding each seat's own current score; <see langword="null"/> when the job's judge carries its scoring instead.
 /// A level maximizes the mover seat's own entry rather than negating the reply, so an n-seat job never assumes one
 /// seat's gain is another's loss (max-n); mutually exclusive with <see cref="SearchPlan.Scored"/>, and, since the
-/// outcome the tree method backpropagates alternates sign along the path, not authored with
-/// <see cref="SearchMethod.Tree"/>.</param>
+/// outcome the MonteCarlo method backpropagates alternates sign along the path, not authored with
+/// <see cref="SearchMethod.MonteCarlo"/>.</param>
 /// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
 /// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
 public sealed record SearchPlan(

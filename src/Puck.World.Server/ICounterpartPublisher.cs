@@ -7,7 +7,7 @@ namespace Puck.World.Server;
 public interface ICounterpartPublisher {
     /// <summary>Posts one world's counterpart claim payload.</summary>
     /// <param name="worldId">The owned-world id the platform route names — the same spelling
-    /// <see cref="WorldOwnedWorldFileName"/> would produce, never the escaped filename.</param>
+    /// <see cref="WorldDocumentName"/> would produce, never the escaped filename.</param>
     /// <param name="payload">The exact <see cref="WorldCounterpartAttestationProtocol.Payload"/> bytes to sign and store.</param>
     /// <param name="detail">What happened — a short line the push outcome echoes either way.</param>
     /// <returns><see langword="true"/> when the platform accepted the claim.</returns>

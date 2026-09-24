@@ -35,17 +35,8 @@ public abstract class VectorEffect : RuleEffect, IStateAddressedEffect {
         reference: KeyFrom
     );
     /// <inheritdoc/>
-    public override void CollectWrites(List<CellAccess> into) {
-        ArgumentNullException.ThrowIfNull(argument: into);
-
-        into.Add(item: new CellAccess(
-            IsSet: true,
-            Key: ((KeyFrom is null)
-            ? Key
-            : default),
-            RowOrdinal: RowOrdinal
-        ));
-    }
+    public override void CollectWrites(List<CellAccess> into) =>
+        CollectWriteAccess(effect: this, into: into);
 }
 /// <summary>Copies one vector into a vector cell.</summary>
 public sealed class VectorCopyEffect : VectorEffect {
@@ -57,7 +48,7 @@ public sealed class VectorCopyEffect : VectorEffect {
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     public VectorCopyEffect(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledVector source, string describe) : base(
         describe: describe,
-        dimensions: (source?.Space.Dimensions ?? 0),
+        dimensions: (source?.Space.Identity.Dimensions ?? 0),
         key: key,
         keyFrom: keyFrom,
         rowOrdinal: rowOrdinal
@@ -261,7 +252,7 @@ public sealed class VectorRememberEffect : VectorEffect {
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     public VectorRememberEffect(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, CompiledVector source, int capacity, long unlessWithinQ16, string describe) : base(
         describe: describe,
-        dimensions: (source?.Space.Dimensions ?? 0),
+        dimensions: (source?.Space.Identity.Dimensions ?? 0),
         key: key,
         keyFrom: keyFrom,
         rowOrdinal: rowOrdinal

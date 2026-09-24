@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -19,31 +20,25 @@ public sealed partial class PlacementDealLawTests {
 
             transport.Query(
                 query,
-                WorldPrincipal.Console,
+                Principal.Console,
                 result => answer = result
             );
             return answer;
         }
         Assert.False(condition: Query(query: new WorldQuery.ReflowPreview(Request: new WorldPlacementReflowRequest(TemplateId))).Refused);
         Assert.False(condition: fixture.Server.TryTakeReviewedReflow(
-            principal: WorldPrincipal.Console,
+            principal: Principal.Console,
             proposal: out _,
             reason: out _
         ));
-        QueryAnswer status = default;
-        using var timeout = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 5));
+        await fixture.Server.ReflowPreviewCompletion(principal: Principal.Console).WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        while (status.Payload is null) {
-            status = Query(query: new WorldQuery.ReflowStatus());
-            Assert.False(
-                condition: status.Refused,
-                userMessage: status.Text
-            );
-            if (status.Payload is null) { await Task.Delay(
-                10,
-                timeout.Token
-            ); }
-        }
+        var status = Query(query: new WorldQuery.ReflowStatus());
+
+        Assert.False(
+            condition: status.Refused,
+            userMessage: status.Text
+        );
         var proposal = Assert.IsType<WorldPlacementProposal>(@object: status.Payload);
 
         Assert.Equal(
@@ -56,7 +51,7 @@ public sealed partial class PlacementDealLawTests {
         );
         Assert.False(condition: Query(query: new WorldQuery.ReflowCancel()).Refused);
         Assert.False(condition: fixture.Server.TryTakeReviewedReflow(
-            principal: WorldPrincipal.Console,
+            principal: Principal.Console,
             proposal: out _,
             reason: out _
         ));

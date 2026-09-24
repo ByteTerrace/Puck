@@ -50,11 +50,7 @@ public static class WorldPlacementAttachment {
             return false;
         }
 
-        var localOffset = new FixedVector3(
-            X: FixedQ4816.FromDouble(value: attach.LocalOffset.X),
-            Y: FixedQ4816.FromDouble(value: attach.LocalOffset.Y),
-            Z: FixedQ4816.FromDouble(value: attach.LocalOffset.Z)
-        );
+        var localOffset = FixedVector3.FromVector3(value: attach.LocalOffset);
         var localYaw = FixedQ4816.FromDouble(value: (attach.LocalYawDegrees * (Math.PI / 180.0)));
 
         position = (body.FixedPosition + body.FixedOrientation.Rotate(vector: localOffset));

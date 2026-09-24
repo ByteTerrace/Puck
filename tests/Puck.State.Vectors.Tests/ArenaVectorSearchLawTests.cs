@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Xunit;
 
@@ -74,18 +75,16 @@ public sealed class ArenaVectorSearchLawTests {
             ));
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var round = 0; (round < 256); round++) {
-            _ = ArenaVectorTransforms.TryNearest(
-                arena: arena,
-                refusal: out _,
-                request: request
-            );
-        }
-
         Assert.Equal(
-            actual: (GC.GetAllocatedBytesForCurrentThread() - before),
+            actual: AllocationWindow.Least(window: () => {
+                for (var round = 0; (round < 256); round++) {
+                    _ = ArenaVectorTransforms.TryNearest(
+                        arena: arena,
+                        refusal: out _,
+                        request: request
+                    );
+                }
+            }),
             expected: 0L
         );
     }

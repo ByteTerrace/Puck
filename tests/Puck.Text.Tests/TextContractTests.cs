@@ -536,9 +536,9 @@ public sealed class TextContractTests {
             layout.Width
         );
     }
-    [Theory]
     [InlineData(1f, 3f)]
     [InlineData(-3f, -1f)]
+    [Theory]
     public void LayoutCenterAlignmentCentersVisualBoundsAwayFromPenOrigin(float left, float right) {
         var atlas = CreateAtlas(
             glyphs: [new FontAtlasGlyph(
@@ -800,7 +800,7 @@ public sealed class TextContractTests {
         );
     }
     [Fact]
-    public void PinnedContainedResolutionChecksBothBoundaryAndContent() {
+    public void PinnedResolutionReadsBesideTheDocumentAndChecksContent() {
         var basePath = Path.GetFullPath(path: Path.Combine(
             path1: Path.GetTempPath(),
             path2: "puck-text-contained-resolution"
@@ -810,9 +810,15 @@ public sealed class TextContractTests {
             path2: "fonts",
             path3: "body.ttf"
         );
+        var siblingPath = Path.GetFullPath(path: Path.Combine(
+            path1: basePath,
+            path2: "..",
+            path3: "sibling.ttf"
+        ));
         byte[] fontBytes = [1, 2, 3, 4];
         var source = new MemoryAssetSource(assets: new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal) {
             [resolvedPath] = fontBytes,
+            [siblingPath] = fontBytes,
         });
         var resolver = new FontAtlasSourceResolver(
             fontAtlasGenerator: new StubFontAtlasGenerator(),
@@ -820,20 +826,20 @@ public sealed class TextContractTests {
         );
         var expectedHash = AssetContentHash.Compute(content: fontBytes).ToString();
 
-        _ = resolver.ResolvePinnedContained(
+        _ = resolver.ResolvePinned(
             fontPath: "fonts/body.ttf",
             expectedHash: expectedHash,
             generationOptions: new FontAtlasGenerationOptions(),
             basePath: basePath
         );
 
-        _ = Assert.Throws<ArgumentException>(testCode: () => resolver.ResolvePinnedContained(
-            fontPath: "../outside.ttf",
+        _ = resolver.ResolvePinned(
+            fontPath: "../sibling.ttf",
             expectedHash: expectedHash,
             generationOptions: new FontAtlasGenerationOptions(),
             basePath: basePath
-        ));
-        _ = Assert.Throws<InvalidDataException>(testCode: () => resolver.ResolvePinnedContained(
+        );
+        _ = Assert.Throws<InvalidDataException>(testCode: () => resolver.ResolvePinned(
             fontPath: "fonts/body.ttf",
             expectedHash: "sha256-64/0000000000000000",
             generationOptions: new FontAtlasGenerationOptions(),

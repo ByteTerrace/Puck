@@ -27,8 +27,6 @@ namespace Puck.World;
 /// <param name="PresentMode">The effective swapchain presentation algorithm.</param>
 /// <param name="TargetHertz">The boot present-pacing target in Hz (<c>0</c> = automatic display pacing).</param>
 /// <param name="ExitAfterSeconds">The effective auto-exit seconds (<c>0</c> runs until the window is closed).</param>
-/// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
-/// <param name="Timing">Whether GPU per-pass timing boots armed.</param>
 /// <param name="Genlock">The external-clock election policy (shape-only validation; the registry interprets the id), or <see langword="null"/> for automatic election.</param>
 /// <param name="Listen">The effective QUIC listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
 /// loopback-only.</param>
@@ -52,8 +50,6 @@ internal sealed record WorldHostSettings(
     PresentMode PresentMode,
     double TargetHertz,
     int ExitAfterSeconds,
-    bool RayQuery,
-    bool Timing,
     string? Genlock,
     string? Listen,
     string? Title,
@@ -152,8 +148,6 @@ internal sealed record WorldHostSettings(
             PresentMode: (presentModeOverride ?? defaults.PresentMode),
             TargetHertz: defaults.TargetHertz,
             ExitAfterSeconds: (exitAfterSecondsOverride ?? defaults.ExitAfterSeconds),
-            RayQuery: defaults.RayQuery,
-            Timing: defaults.Timing,
             Genlock: defaults.Genlock,
             Listen: (listenOverride ?? defaults.Listen),
             Title: defaults.Title,

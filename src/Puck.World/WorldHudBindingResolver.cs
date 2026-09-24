@@ -9,8 +9,10 @@ namespace Puck.World;
 /// <summary>
 /// The render-side implementation of <see cref="IHudBindingResolver"/> for the closed <see cref="HudBindingVocabulary"/>:
 /// resolves each frame's live value for <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>,
-/// and <c>population.active</c>. Presentation-only: every normalization here is cosmetic (which fraction of a gauge
-/// fills), never simulation state, and is free to change without a determinism concern.
+/// <c>population.active</c>, and <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>. Each token is parsed once, on first
+/// sight; a state token registers its slot with the client's <see cref="WorldStateMirror"/> then. Presentation-only:
+/// every normalization here is cosmetic (which fraction of a gauge fills), never simulation state, and is free to
+/// change without a determinism concern.
 /// </summary>
 internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum) : IHudBindingResolver {
     // A generous FPS ceiling a gauge fraction normalizes against (240 covers every target hertz World boots at).
@@ -27,6 +29,9 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     private readonly FrameRateMonitor m_frameRate = frameRate;
     private readonly WorldPopulation m_population = population;
     private readonly WorldContinuum m_continuum = continuum;
+    // Every token seen so far, parsed once, with the mirror slot a state token reads (-1 for any other kind); an
+    // unknown token is remembered as unresolvable.
+    private readonly Dictionary<string, (bool Known, HudBinding Binding, int Slot)> m_tokens = new(comparer: StringComparer.Ordinal);
 
     private void ResolveFps(out float fraction, out string text) {
         var fps = m_frameRate.Summarize().AverageFps;
@@ -82,56 +87,26 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
             provider: CultureInfo.InvariantCulture
         );
     }
-    // A state.<row> or state.<row>.<key> binding's live value, resolved through WorldStateReader — the ONE (row, key)
-    // read the rule gates, the rule effects and world.state's own read-back all share, so none of them can disagree
-    // about which cell a pair names. cellKey null means the plain state.<row> form (the row's own SLOT cell); cellKey
-    // non-null means the state.<row>.<key> form (any named cell in ANY row shape). `target` selects TryRead (the
-    // stored truth — a plain `.$target` token) over TryReadEased (the live second-order-eased value — the ordinary,
-    // no-suffix token) — the same distinction HudBindingVocabulary parses (HudBinding.Target).
+    // A state.<row> or state.<row>.<key> binding's value, read through the client's state mirror at the slot the token
+    // registered. The plain token presents the eased follower of a cell carrying an easing trait, interpolated at the
+    // frame's fraction; the .$target token presents the stored truth. The text shows the value the mirror read at
+    // the delivered tick.
     //
-    // The TICK passed is m_client.Tick — the LAST DELIVERED SNAPSHOT's tick, which is snapshot time, not the server's
-    // completed tick. It is what this side honestly knows: the client never runs the simulation, and a value the HUD
-    // draws is a value the client was told. It IS a server tick (WorldSnapshot.Tick), so it is comparable to an
-    // advancing row's epoch and a gauge bound to such a row DRAWS LIVE — lagging by delivery, never reading a
-    // different clock, and never reaching past the snapshot it is drawing.
-    //
-    // Either way the GAUGE fraction is computed from the ROW's own declared Min/Max envelope — cells share one
-    // envelope per row, they do not carry their own — so a keyed row's gauge is exactly as meaningful as a slot's. A
-    // row/cell that does not exist (validation refuses this at world scope, but a seat-scope panel can never verify
-    // existence, so the render path stays honest too), a keyed row bound with the plain state.<row> form, or a row
-    // carrying no declared range draws an EMPTY gauge (fraction 0) — the same "an unbound gauge draws empty"
-    // precedent every other gauge follows; a bool/text row carries no range at all, so its gauge fraction is always
-    // 0.
-    private void ResolveState(string name, string? cellKey, bool target, out float fraction, out string text) {
+    // The gauge fraction is computed from the row's own declared Min/Max envelope — cells share one envelope per row,
+    // they do not carry their own — so a keyed row's gauge is exactly as meaningful as a slot's. A row/cell that does
+    // not exist (validation refuses this at world scope, but a seat-scope panel can never verify existence, so the
+    // render path stays honest too), a keyed row bound with the plain state.<row> form, or a row carrying no declared
+    // range draws an empty gauge (fraction 0), the same "an unbound gauge draws empty" precedent every other gauge
+    // follows; a bool/text row carries no range at all, so its gauge fraction is always 0.
+    private void ResolveState(int slot, out float fraction, out string text) {
         fraction = 0f;
         text = string.Empty;
 
-        var resolved = (target
-            ? WorldStateReader.TryReadValue(
-                definition: m_client.Definition,
-                key: cellKey,
-                row: out var row,
-                rowName: name,
-                value: out var value,
-                tick: m_client.Tick,
-                engineTick: m_client.EngineTick
-            )
-            : WorldStateReader.TryReadEasedValue(
-                definition: m_client.Definition,
-                key: cellKey,
-                row: out row,
-                rowName: name,
-                value: out value,
-                tick: m_client.Tick,
-                engineTick: m_client.EngineTick
-            )
-        );
+        var mirror = m_client.StateMirror;
+        var sample = mirror.Sample(slot: slot);
+        var value = sample.Value;
 
-        if (
-            !resolved ||
-            (row is null) ||
-            !value.HasValue
-        ) {
+        if (!value.HasValue) {
             return;
         }
 
@@ -139,16 +114,22 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
             case CellKind.Int:
                 text = value.AsInt.ToString(provider: CultureInfo.InvariantCulture);
                 fraction = Fraction(
-                    raw: value.AsInt,
-                    row: row
+                    fixedPoint: false,
+                    max: sample.Max,
+                    min: sample.Min,
+                    mirror: mirror,
+                    slot: slot
                 );
 
                 break;
             case CellKind.Fixed:
                 text = FixedQ4816.FromRawBits(value: value.AsFixed).ToString();
                 fraction = Fraction(
-                    raw: value.AsFixed,
-                    row: row
+                    fixedPoint: true,
+                    max: sample.Max,
+                    min: sample.Min,
+                    mirror: mirror,
+                    slot: slot
                 );
 
                 break;
@@ -171,24 +152,73 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
 
                 break;
             default:
-                throw new ArgumentOutOfRangeException(paramName: nameof(row.Kind));
+                throw new ArgumentOutOfRangeException(paramName: nameof(slot));
         }
     }
-    // Cells share one envelope per row and carry none of their own, so a keyed row's gauge is exactly as meaningful
-    // as a slot's; a row declaring no range draws empty.
-    private static float Fraction(WorldStateRow row, long raw) => (((row.Min is { } lo) && (row.Max is { } hi) && (hi > lo))
-        ? Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: (((float)(raw - lo)) / (hi - lo))
+    // A row declaring no range draws empty. The envelope is raw, so a Fixed row's bounds convert to the presented
+    // value's units first.
+    private static float Fraction(WorldStateMirror mirror, int slot, long? min, long? max, bool fixedPoint) {
+        if (
+            (min is not { } lo) ||
+            (max is not { } hi) ||
+            (hi <= lo) ||
+            !mirror.TryValue(
+            slot: slot,
+            value: out var presented
         )
-        : 0f
-    );
+        ) {
+            return 0f;
+        }
+
+        var low = (fixedPoint
+            ? ((double)FixedQ4816.FromRawBits(value: lo))
+            : lo
+        );
+        var high = (fixedPoint
+            ? ((double)FixedQ4816.FromRawBits(value: hi))
+            : hi
+        );
+
+        return ((float)Math.Clamp(
+            max: 1d,
+            min: 0d,
+            value: ((presented - low) / (high - low))
+        ));
+    }
     private void ResolveTick(out float fraction, out string text) {
         var tick = m_client.Tick;
 
         fraction = (((float)(tick % TickCycleLength)) / TickCycleLength);
         text = tick.ToString(provider: CultureInfo.InvariantCulture);
+    }
+    private (bool Known, HudBinding Binding, int Slot) Token(string binding) {
+        if (m_tokens.TryGetValue(
+            key: binding,
+            value: out var seen
+        )) {
+            return seen;
+        }
+
+        var known = HudBindingVocabulary.TryParse(
+            binding: out var parsed,
+            token: binding
+        );
+        var slot = ((known && (parsed.Kind == HudBindingKind.StateNamed))
+            ? m_client.StateMirror.Register(
+                binding: new StateBinding(
+                Key: parsed.StateCellKey,
+                Row: parsed.StateName!,
+                Target: parsed.Target
+            ),
+                conversion: WorldStateConversion.Number
+            )
+            : -1
+        );
+
+        seen = (known, parsed, slot);
+        m_tokens[binding] = seen;
+
+        return seen;
     }
 
     /// <inheritdoc/>
@@ -196,10 +226,9 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
         fraction = 0f;
         text = string.Empty;
 
-        if (!HudBindingVocabulary.TryParse(
-            binding: out var parsed,
-            token: binding
-        )) {
+        var (known, parsed, slot) = Token(binding: binding);
+
+        if (!known) {
             return false;
         }
 
@@ -238,10 +267,8 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
                 return true;
             case HudBindingKind.StateNamed:
                 ResolveState(
-                    name: parsed.StateName!,
-                    cellKey: parsed.StateCellKey,
-                    target: parsed.Target,
                     fraction: out fraction,
+                    slot: slot,
                     text: out text
                 );
 

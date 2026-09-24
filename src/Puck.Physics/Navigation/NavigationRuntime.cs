@@ -84,6 +84,8 @@ public sealed partial class NavigationRuntime {
     public int RetainedDomainCount { get; }
     /// <summary>Gets the number of domain workspaces compiled for this runtime installation.</summary>
     public int RebuiltDomainCount { get; }
+    /// <summary>Gets the number of domains whose occupancy and edges have been baked. Reading it never bakes.</summary>
+    public int BakedDomainCount => m_domains.Count(predicate: static domain => domain.IsBaked);
     public long CellCount => m_domains.Sum(selector: static domain => ((long)domain.CellCount));
     public long WalkableCellCount => m_domains.Sum(selector: static domain => ((long)domain.WalkableCellCount));
     public long WorkspaceBytes => m_domains.Sum(selector: static domain => domain.WorkspaceBytes);
@@ -408,6 +410,8 @@ public sealed partial class NavigationRuntime {
         }
 
         public int CellCount => m_walkable.Length;
+        /// <summary>Gets whether this domain's occupancy sweep and static edge bake have run. Reading it never bakes.</summary>
+        public bool IsBaked => m_baked;
         public string Name { get; }
         public NavigationDomainInput Tuning { get; }
         public int WalkableCellCount {

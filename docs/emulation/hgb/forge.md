@@ -157,14 +157,19 @@ dotnet test tests/Puck.HumbleGamingBrick.Forge.Tests -c Release
 dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests -c Release
 ```
 
-Native tooling that uses the legacy framework PRNG seeds it from input timing,
-never a wall clock. Its save module checks magic/version/checksum and restores
-ROM defaults on mismatch. These capabilities are not yet exposed by the
-cartridge document schema. Tune keeps its separate audio-document path.
+Native tooling that uses the framework PRNG seeds it from input timing,
+never a wall clock; the cartridge document schema does not expose that PRNG.
+A cartridge document's save declaration (`CartridgeDocument.Save`) compiles to
+the framework's save module
+(`SaveModule`), which checks magic/version/checksum and restores the ROM
+defaults on mismatch. Tune keeps its separate audio-document path.
 
 Always settle with `VerifyMachineSettle.SettleOutOfOamDma` after stepping
 CGB frames before reading the bus. A fixed-size run can stop inside OAM DMA,
 where memory reads are gated; `Framework.VerifyMachineDriver` handles this.
+Its `RunFramesUntil` settles after every frame and fails at a frame cap, and
+`Snapshot`/`Restore` let one walk to a position seed many runs over the same
+cartridge.
 
 ## Documentation
 

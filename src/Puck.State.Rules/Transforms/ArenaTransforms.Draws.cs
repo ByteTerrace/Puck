@@ -1,11 +1,11 @@
 namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
-    // The redrawable integer streamDraw site a transfer or shuffle samples from. A boot-timing site is settled into
-    // a literal at composition and has no cursor left to advance, so it is not one.
-    private static bool TryDrawSite(in ArenaTransformContext context, int rowOrdinal, TransformRefusal code, string verb, out StateGenerator generator, out Draw draw, out EffectRefusal refusal) {
-        draw = default!;
-        generator = default!;
+    // Opens the redrawable integer streamDraw site a transfer or shuffle samples from, sought once at the cursor the
+    // arena holds. A boot-timing site is settled into a literal at composition and has no cursor left to advance, so
+    // it is not one.
+    private static bool TryOpenDraws(in ArenaTransformContext context, int rowOrdinal, TransformRefusal code, string verb, out GeneratorEngine.DrawStream draws, out EffectRefusal refusal) {
+        draws = default;
 
         if (
             (((uint)rowOrdinal) >= ((uint)context.Arena.Rows.Count)) ||
@@ -13,7 +13,7 @@ public static partial class ArenaTransforms {
             (context.Arena.Layout[rowOrdinal].Kind != CellKind.Int) ||
             !GeneratorEngine.TryResolveSource(
             draw: declared,
-            generator: out generator,
+            generator: out var generator,
             generators: context.Generators,
             reason: out _
         ) ||
@@ -28,28 +28,28 @@ public static partial class ArenaTransforms {
                 refusal: out refusal
             );
         }
-
-        draw = declared;
-        refusal = EffectRefusal.None;
-
-        return true;
-    }
-    // Every sample advances the site's cursor through the arena, so the caller's open scope is what un-consumes a
-    // draw when the transform refuses.
-    private static bool TrySample(in ArenaTransformContext context, int rowOrdinal, StateGenerator generator, in Draw draw, TransformRefusal code, out long sample, out EffectRefusal refusal) {
-        sample = 0L;
-
-        if (!ArenaDraws.TryFire(
+        if (
+            (context.Seeds is not { } seeds) ||
+            (rowOrdinal >= seeds.Count)
+        ) {
+            return Refuse(
+                code: code,
+                reason: $"{verb} draws from row '{RowName(
+                    context: in context,
+                    rowOrdinal: rowOrdinal
+                )}', which this host seeds no draw site for",
+                refusal: out refusal
+            );
+        }
+        if (!ArenaDraws.TryOpen(
             arena: context.Arena,
-            documentSeed: context.DocumentSeed,
             generator: generator,
-            instanceIdentity: context.InstanceIdentity,
             reason: out var reason,
-            result: out var fired,
             rowOrdinal: rowOrdinal,
-            secret: draw.Secret,
-            site: context.SiteOf(rowOrdinal: rowOrdinal),
-            skip: draw.Skip
+            secret: declared.Secret,
+            seed: seeds[rowOrdinal],
+            skip: declared.Skip,
+            stream: out draws
         )) {
             return Refuse(
                 code: code,
@@ -57,24 +57,44 @@ public static partial class ArenaTransforms {
                 refusal: out refusal
             );
         }
-        if (fired.Numeric is not { } numeric) {
-            return Refuse(
-                code: code,
-                reason: $"row '{RowName(
-                    context: in context,
-                    rowOrdinal: rowOrdinal
-                )}' emitted no number to select with",
-                refusal: out refusal
-            );
-        }
 
-        sample = numeric;
         refusal = EffectRefusal.None;
 
         return true;
     }
-    // The site records the last sample it emitted, the way an ordinary draw site's slot cell does.
-    private static bool TryRecordSample(in ArenaTransformContext context, int rowOrdinal, long sample, TransformRefusal code, out EffectRefusal refusal) {
+    // One sample of an open stream: constant work, and nothing written until the stream closes.
+    private static bool TrySample(ref GeneratorEngine.DrawStream draws, TransformRefusal code, out long sample, out EffectRefusal refusal) {
+        if (!draws.TryNext(
+            reason: out var reason,
+            value: out sample
+        )) {
+            return Refuse(
+                code: code,
+                reason: reason,
+                refusal: out refusal
+            );
+        }
+
+        refusal = EffectRefusal.None;
+
+        return true;
+    }
+    // Stores the advanced cursor, then records the last sample in the site's slot cell, the way an ordinary draw
+    // site's slot cell holds its last emission. Both writes land in the caller's open scope, which is what un-consumes
+    // the samples when the transform refuses.
+    private static bool TryCloseDraws(in ArenaTransformContext context, int rowOrdinal, in GeneratorEngine.DrawStream draws, long sample, TransformRefusal code, out EffectRefusal refusal) {
+        if (!ArenaDraws.TryClose(
+            arena: context.Arena,
+            reason: out var closeReason,
+            rowOrdinal: rowOrdinal,
+            stream: in draws
+        )) {
+            return Refuse(
+                code: code,
+                reason: closeReason,
+                refusal: out refusal
+            );
+        }
         if (!context.Arena.TryWrite(
             key: context.Arena.Keys.Intern(name: StateRow.SlotKey),
             operand: sample,

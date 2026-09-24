@@ -12,8 +12,9 @@ filling the FIFO. Branches and other non-sequential fetches invalidate the
 stream.
 
 `AgbBus` models this with prefetch slots, a load address, wait progress, and
-explicit reset/synchronize operations. `PUCK_NO_PREFETCH=1` is an A/B diagnostic,
-not a supported machine mode.
+explicit reset/synchronize operations. The Advanced battery's `--no-prefetch`
+flag (`AgbMachineOptions.DisablePrefetch`) is an A/B diagnostic, not a supported
+machine mode.
 
 ## Cycle attribution
 

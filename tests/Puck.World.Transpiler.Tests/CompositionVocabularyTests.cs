@@ -18,18 +18,21 @@ public sealed class CompositionVocabularyTests {
         Assert.Null(@object: rows!.RootArm);
         Assert.Equal(expected: "state.world", actual: rows.DocumentMember);
     }
-    [InlineData("world")]
-    [InlineData("border")]
-    [InlineData("door")]
-    [InlineData("asset")]
-    [InlineData("ground")]
-    [InlineData("spawn")]
+    // A construct whose expansion writes generated names is read back from them; one whose expansion writes only
+    // ordinary document fields prints as those fields.
+    [InlineData("world", true)]
+    [InlineData("border", true)]
+    [InlineData("door", true)]
+    [InlineData("asset", false)]
+    [InlineData("ground", true)]
+    [InlineData("spawn", false)]
     [Theory]
-    public void CompositionConstructsProjectThroughTheCompileTimeArm(string keyword) {
+    public void CompositionConstructsProjectThroughTheCompileTimeArm(string keyword, bool readBack) {
         Assert.True(condition: WorldConstructs.Table.TryGet(construct: out var construct, enclosing: null, keyword: keyword));
         Assert.Equal(expected: "(nothing)", actual: construct!.DocumentMember);
         Assert.Equal(expected: WorldRootArm.CompileTime, actual: construct.RootArm);
-        Assert.False(condition: construct.Sugar.Printed);
+        Assert.Equal(expected: readBack, actual: construct.Sugar.Printed);
+        Assert.Equal(expected: readBack, actual: construct.Sugar.FromRows);
     }
     [Fact]
     public void EndpointAndLinkMembersDescribeEverySupportedProperty() {
@@ -45,6 +48,6 @@ public sealed class CompositionVocabularyTests {
         Assert.Equal(expected: ["center", "name", "size"], actual: ground!.Members.Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal));
 
         Assert.True(condition: table.TryGet(construct: out var spawn, enclosing: null, keyword: "spawn"));
-        Assert.Equal(expected: ["at", "name", "position", "yaw"], actual: spawn!.Members.Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal));
+        Assert.Equal(expected: ["at", "name", "yaw"], actual: spawn!.Members.Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal));
     }
 }

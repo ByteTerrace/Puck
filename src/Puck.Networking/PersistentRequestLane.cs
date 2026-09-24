@@ -87,14 +87,16 @@ public interface ILaneProtocol<TRequestKind, TResponseKind>
 /// itself completed: a peer that stalls the write (a full receive window) cannot decode a partial frame, but a write
 /// cancelled at its last byte may still have landed whole, so that request too is left in doubt rather than re-sent.
 /// The deadline is the lane's only read bound; a caller that wants to wait less applies its own wait to the task
-/// <see cref="Enqueue"/> returns.</para>
+/// <see cref="Enqueue"/> returns. The deadline, the connect retry delay, and the backoff window all read the
+/// constructor's <c>timeProvider</c>, so a caller that supplies its own clock decides when each of them elapses.</para>
 /// <para>The worker survives everything the protocol can throw: an exception outside the wire vocabulary answers the
 /// current request <see cref="WireRefusal.LaneUnavailable"/> naming the exception, drops the connection, and serves
 /// the next request. Requests still queued when the worker stops are answered <see cref="WireRefusal.LaneUnavailable"/>
 /// too, from a <c>finally</c> that calls no caller code, drops the socket, and closes the queue behind the worker, so
 /// cancelling the lifetime token — with or without <see cref="Dispose"/> — releases the connection to the peer rather
 /// than holding it open until the finalizer runs, and a request queued afterwards is answered
-/// <see cref="WireRefusal.LaneUnavailable"/> at once rather than parked in a channel nobody reads.</para>
+/// <see cref="WireRefusal.LaneUnavailable"/> at once rather than parked in a channel nobody reads.
+/// <see cref="Completion"/> settles once that <c>finally</c> has run.</para>
 /// <para>This class does not itself gate a request on <see cref="IsAvailable"/> — a caller checks it before
 /// enqueueing, so a lane inside its unreachable backoff never even reaches a socket attempt for that request.</para>
 /// </remarks>
@@ -111,14 +113,17 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     private readonly TimeSpan m_requestTimeout;
     private readonly Func<LaneRoute> m_route;
     private readonly string m_sourceAuthority;
-    private readonly TimeSpan m_unavailableBackoff;
+    private readonly TimeProvider m_timeProvider;
+    // The backoff window in m_timeProvider's timestamp units, clamped to [0, 1 day] once here.
+    private readonly long m_unavailableBackoff;
     private readonly Task m_worker;
 
     private int m_disposed;
     private Stream? m_stream;
     private int m_unavailableNoted;
-    private long m_unavailableUntil;
 
+    // A m_timeProvider timestamp; long.MinValue while no backoff window is open.
+    private long m_unavailableUntil = long.MinValue;
     private readonly Channel<PendingRequest> m_queue = Channel.CreateUnbounded<PendingRequest>(options: new UnboundedChannelOptions { SingleReader = true });
     private string m_connectedEndpoint = string.Empty;
     // The description of the route most recently sampled by the worker, kept so the worker's own last words (the
@@ -148,19 +153,21 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     /// exception that took the lane down. It runs on the thread pool, never on the worker, so a callback that
     /// disposes the lane cannot deadlock against it; a throwing callback is contained and never strands the current
     /// request or the worker.</param>
+    /// <param name="timeProvider">The clock the per-request deadline, the connect retry delay, and the backoff window
+    /// read; defaults to system time. <see cref="Dispose"/>'s bounded join is the one wait it does not govern.</param>
     /// <exception cref="ArgumentNullException"><paramref name="route"/> or <paramref name="protocol"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="sourceAuthority"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="connectRetryDelay"/> or
     /// <paramref name="requestTimeout"/> is negative or exceeds one day.</exception>
-    public PersistentRequestLane(Func<LaneRoute> route, string sourceAuthority, ILaneProtocol<TRequestKind, TResponseKind> protocol, Func<EndPoint, CancellationToken, ValueTask<Stream>> connect, CancellationToken lifetime, TimeSpan connectRetryDelay, TimeSpan unavailableBackoff, TimeSpan requestTimeout, Action<Exception>? onUnavailable = null) {
+    public PersistentRequestLane(Func<LaneRoute> route, string sourceAuthority, ILaneProtocol<TRequestKind, TResponseKind> protocol, Func<EndPoint, CancellationToken, ValueTask<Stream>> connect, CancellationToken lifetime, TimeSpan connectRetryDelay, TimeSpan unavailableBackoff, TimeSpan requestTimeout, Action<Exception>? onUnavailable = null, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(argument: route);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourceAuthority);
         ArgumentNullException.ThrowIfNull(argument: protocol);
         ArgumentNullException.ThrowIfNull(connect);
         m_connect = connect;
         // One day is the same ceiling the backoff is clamped to, and it sits well inside every timer these values
-        // reach — the per-attempt CancelAfter, the retry Task.Delay, and the disposal join's Task.Wait — so no value
+        // reach — the per-attempt deadline, the retry Task.Delay, and the disposal join's Task.Wait — so no value
         // admitted here can make one of them throw later.
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: TimeSpan.Zero,
@@ -183,15 +190,25 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
         m_sourceAuthority = sourceAuthority;
         m_protocol = protocol;
         m_connectRetryDelay = connectRetryDelay;
-        m_unavailableBackoff = unavailableBackoff;
+        m_timeProvider = (timeProvider ?? TimeProvider.System);
+        m_unavailableBackoff = ((long)((((Int128)Math.Clamp(
+            max: TimeSpan.TicksPerDay,
+            min: 0,
+            value: unavailableBackoff.Ticks
+        )) * m_timeProvider.TimestampFrequency) / TimeSpan.TicksPerSecond));
         m_requestTimeout = requestTimeout;
         m_onUnavailable = onUnavailable;
         m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: lifetime);
         m_worker = Task.Run(function: () => RunAsync(ct: m_lifetime.Token));
     }
 
-    /// <summary>Gets a value indicating whether the lane is outside its unreachable-peer backoff window.</summary>
-    public bool IsAvailable => (Environment.TickCount64 >= Interlocked.Read(location: ref m_unavailableUntil));
+    /// <summary>Gets a task that completes once the worker has stopped — the lifetime token cancelled or the lane was
+    /// disposed — and its exit has dropped the socket, closed the queue, and answered every request still queued.
+    /// From then on <see cref="Enqueue"/> answers <see cref="WireRefusal.LaneUnavailable"/> before it returns.</summary>
+    public Task Completion => m_worker;
+    /// <summary>Gets a value indicating whether the lane is outside its unreachable-peer backoff window, as read on
+    /// the constructor's <c>timeProvider</c>.</summary>
+    public bool IsAvailable => (m_timeProvider.GetTimestamp() >= Interlocked.Read(location: ref m_unavailableUntil));
 
     private LaneResponse<TResponseKind> Closed() =>
         LaneResponse<TResponseKind>.Refused(
@@ -311,9 +328,11 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
 
             // One deadline per attempt, over connect + Hello + authenticate + write + read together. Every decision
             // about whether the LANE is closing tests the lifetime token (ct), never this one.
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
-
-            deadline.CancelAfter(delay: m_requestTimeout);
+            using var deadline = new OperationDeadline(
+                caller: ct,
+                timeProvider: m_timeProvider,
+                timeout: m_requestTimeout
+            );
 
             try {
                 await EnsureConnectedAsync(
@@ -327,7 +346,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
                     break;
                 }
 
-                if (deadline.IsCancellationRequested) {
+                if (deadline.Token.IsCancellationRequested) {
                     exception = new TimeoutException(
                         innerException: exception,
                         message: $"connect and authentication did not complete inside {m_requestTimeout}"
@@ -344,7 +363,8 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
                 try {
                     await Task.Delay(
                         cancellationToken: ct,
-                        delay: m_connectRetryDelay
+                        delay: m_connectRetryDelay,
+                        timeProvider: m_timeProvider
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     break;
@@ -381,7 +401,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
                         break;
                     }
 
-                    if (deadline.IsCancellationRequested) {
+                    if (deadline.Token.IsCancellationRequested) {
                         return TimedOut(
                             request: request,
                             route: route,
@@ -415,7 +435,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
                 );
                 _ = Interlocked.Exchange(
                     location1: ref m_unavailableUntil,
-                    value: 0
+                    value: long.MinValue
                 );
 
                 return response;
@@ -426,7 +446,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
                     break;
                 }
 
-                if (deadline.IsCancellationRequested) {
+                if (deadline.Token.IsCancellationRequested) {
                     return TimedOut(
                         request: request,
                         route: route,
@@ -470,11 +490,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     private LaneResponse<TResponseKind> Unreachable(Exception exception, LaneRoute route) {
         _ = Interlocked.Exchange(
             location1: ref m_unavailableUntil,
-            value: (Environment.TickCount64 + ((long)Math.Clamp(
-                max: TimeSpan.FromDays(value: 1).TotalMilliseconds,
-                min: 0,
-                value: m_unavailableBackoff.TotalMilliseconds
-            )))
+            value: (m_timeProvider.GetTimestamp() + m_unavailableBackoff)
         );
 
         if (
@@ -504,8 +520,9 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
 
     /// <summary>Stops the worker and releases the socket. Idempotent and never throws: the lifetime is cancelled, the
     /// queue is closed, the socket is dropped FIRST (so a worker parked in a read unblocks), then the worker is joined
-    /// for at most <c>requestTimeout</c> plus one second — a join that outlasts that bound is abandoned, not
-    /// surfaced.</summary>
+    /// for at most <c>requestTimeout</c> plus one second of wall time — a join that outlasts that bound is abandoned,
+    /// not surfaced. The bound is wall time rather than the lane's <c>timeProvider</c> because it guards against a
+    /// protocol that ignores its token, which no lane clock can end.</summary>
     public void Dispose() {
         if (Interlocked.Exchange(
             location1: ref m_disposed,

@@ -659,20 +659,26 @@ public sealed class SweepLawTests {
         var instructions = new List<SdfInstruction> { original.Instructions[0] };
 
         if (dynamic) {
-            instructions.Add(item: original.Instructions[0] with { Op = SdfOp.TransformDynamic, Data0 = new Vector4(
+            instructions.Add(item: original.Instructions[0] with {
+                Op = SdfOp.TransformDynamic,
+                Data0 = new Vector4(
                 w: 0f,
                 x: 7f,
                 y: 0f,
                 z: 0f
-            ) });
+            ),
+            });
         }
         if (scaled) {
-            instructions.Add(item: original.Instructions[0] with { Op = SdfOp.Scale, Data0 = new Vector4(
+            instructions.Add(item: original.Instructions[0] with {
+                Op = SdfOp.Scale,
+                Data0 = new Vector4(
                 w: 0f,
                 x: 2f,
                 y: 3f,
                 z: 4f
-            ) });
+            ),
+            });
         }
         var shapeIndex = instructions.Count;
 

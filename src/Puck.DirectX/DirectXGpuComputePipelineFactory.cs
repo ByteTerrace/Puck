@@ -63,10 +63,13 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             hasRootConstants: hasRootConstants,
             rootConstantsCount: layout.RootConstantsCount,
             samplerFilter: samplerFilter,
+            serialized: out layout.RootSignatureBlob,
             slotByBinding: layout.SlotByBinding
         );
         layout.PsoHandle = BuildPso(
             device: device,
+            library: ((IDirectXDeviceContext)deviceContext).PipelineLibrary,
+            rootSignatureBlob: layout.RootSignatureBlob,
             rootSignature: layout.RootSignatureHandle,
             csHandle: cs.Handle,
             csLength: cs.BytecodeLength
@@ -111,7 +114,8 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         bool hasRootConstants,
         uint rootConstantsCount,
         GpuSamplerFilter samplerFilter,
-        uint[] slotByBinding
+        uint[] slotByBinding,
+        out byte[] serialized
     ) {
         var rangeCount = bindings.Count;
         var paramCount = ((hasDescriptorTable
@@ -132,10 +136,9 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         // (UAVs u0,u1...; SRVs t0,t1...), an array binding consuming `Count` consecutive registers and heap slots.
         for (var index = 0; (index < bindings.Count); index++) {
             var binding = bindings[index];
-            // A read-only storage buffer, an acceleration structure, and a sampled image all bind as SRVs (t#); a storage
-            // image or a read-write buffer binds as a UAV (u#). On Direct3D 12 a RaytracingAccelerationStructure IS an
-            // SRV, and a sampled image is an SRV read through the static sampler added to the root signature below.
-            var isSrv = ((binding.Kind == GpuComputeBindingKind.StorageBufferRead) || (binding.Kind == GpuComputeBindingKind.AccelerationStructure) || (binding.Kind == GpuComputeBindingKind.SampledImage));
+            // A read-only storage buffer and a sampled image bind as SRVs (t#); a storage image or a read-write buffer binds
+            // as a UAV (u#). A sampled image is an SRV read through the static sampler added to the root signature below.
+            var isSrv = ((binding.Kind == GpuComputeBindingKind.StorageBufferRead) || (binding.Kind == GpuComputeBindingKind.SampledImage));
             var count = binding.Count;
             var rangeType = (isSrv
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
@@ -240,10 +243,11 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
 
         return DirectXRootSignatures.Create(
             description: in desc,
-            device: device
+            device: device,
+            serialized: out serialized
         );
     }
-    private static nint BuildPso(ID3D12Device* device, nint rootSignature, nint csHandle, nuint csLength) {
+    private static nint BuildPso(ID3D12Device* device, DirectXPipelineLibrary? library, nint rootSignature, byte[] rootSignatureBlob, nint csHandle, nuint csLength) {
         var psoDesc = new D3D12_COMPUTE_PIPELINE_STATE_DESC {
             CS = new D3D12_SHADER_BYTECODE {
                 BytecodeLength = csLength,
@@ -251,6 +255,17 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             },
             pRootSignature = ((ID3D12RootSignature*)rootSignature),
         };
+
+        if (library is not null) {
+            return library.CreateComputePipeline(
+                description: in psoDesc,
+                device: device,
+                identity: [new ReadOnlySpan<byte>(
+                    length: checked((int)csLength),
+                    pointer: ((void*)csHandle)
+                ).ToArray(), rootSignatureBlob]
+            );
+        }
 
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;

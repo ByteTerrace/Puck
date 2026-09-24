@@ -1,0 +1,322 @@
+// The rulepush rule set, written once. A level stamps this module with nothing but its map; every rule, the
+// turn, and its undo live here.
+//
+// Objects are tokens in one pool, each holding the board cell it stands on, so any number of them share a cell.
+// Text is a token too: its noun is TEXT and its word says which word it spells. A turn is one fixpoint group over
+// the whole pool, retained for undo:
+//
+//   1. a press moves every YOU token one cell, pushing whatever PUSH run lies ahead as a whole or not at all, and
+//      stopping at STOP;
+//   2. the text is spelled onto the word lattice and every three-word sentence along a row or a column is read off
+//      it with a pattern match, giving each noun its properties and its rewrite;
+//   3. every token of a rewritten noun becomes the new noun, all at once;
+//   4. every token is classified for the next push, and each cell collects the properties standing on it;
+//   5. SINK drowns everything sharing its cell, DEFEAT destroys a YOU on it, and a YOU on WIN wins.
+//
+// The group runs a pass a tick until a pass changes nothing, so a turn that sinks a word re-reads the rules on the
+// next tick before it closes.
+
+// Nouns, the value a token's `noun` holds. TEXT is the noun of every word tile.
+let imp = 0
+let hedge = 1
+let boulder = 2
+let flower = 3
+let mire = 4
+let thorn = 5
+let text = 6
+
+// Words, the value a text token's `word` holds and the letter the word lattice carries: a noun word is its noun plus
+// one, so an empty lattice cell (zero) is never a word.
+let copula = 7
+let firstProperty = 8
+
+// Property bits, the value a noun's `properties` cell holds. Word firstProperty + n sets bit n.
+let youBit = 1
+let pushBit = 2
+let stopBit = 4
+let sinkBit = 8
+let defeatBit = 16
+let winBit = 32
+
+// A cell of the collected board holds the properties standing on it in its low six bits and how many tokens stand
+// there above them.
+let crowd = 64
+
+// Push classes, the pattern symbol a token shows pushRay.
+let passable = 1
+let pushed = 2
+let stopped = 3
+
+// The map legend: lowercase is an object, uppercase a noun word, `=` IS, and the rest a property word.
+let legend = {
+  i { noun: imp, word: 0 }
+  h { noun: hedge, word: 0 }
+  b { noun: boulder, word: 0 }
+  f { noun: flower, word: 0 }
+  m { noun: mire, word: 0 }
+  t { noun: thorn, word: 0 }
+  I { noun: text, word: imp + 1 }
+  H { noun: text, word: hedge + 1 }
+  B { noun: text, word: boulder + 1 }
+  F { noun: text, word: flower + 1 }
+  M { noun: text, word: mire + 1 }
+  T { noun: text, word: thorn + 1 }
+  "=" { noun: text, word: copula }
+  Y { noun: text, word: firstProperty }
+  P { noun: text, word: firstProperty + 1 }
+  S { noun: text, word: firstProperty + 2 }
+  N { noun: text, word: firstProperty + 3 }
+  D { noun: text, word: firstProperty + 4 }
+  V { noun: text, word: firstProperty + 5 }
+}
+
+// One direction of travel: a press on its channel moves every YOU token, each with the run of PUSH tokens ahead of
+// it. A blocked push rewinds that one mover's push and leaves the others to move.
+template move(name, channel, direction) {
+  rule $"{name}" {
+    when channel(1, channel) >= 0.5 and won == 0
+    mode: Edge
+    moves += 1
+    dirty = 1
+    for each mover in things {
+      if (properties[mover.noun] & youBit) != 0 {
+        transaction {
+          transform pushRay(pool: things, cell: cell, value: kind, from: mover.cell, topology: board, direction: direction, pattern: pushable, pushPattern: shoves, stopPattern: stops, empty: 0)
+        } onFailure {
+          bumps += 1
+        }
+      }
+    }
+  }
+}
+
+// The sentences standing along one line of the word lattice, one rule per place a sentence can start. `origin` is
+// the line's sentinel cell, whose ray reads the whole line, and `step` the lattice distance between neighbouring
+// words along it. Occurrence k of the pattern starts at `at`, and the noun and its complement are the two cells read
+// at that start and two steps on.
+template line(name, origin, direction, step, count) {
+  for k in range(0, count) {
+    rule $"{name}-{k}" {
+      local at = match(sentence, words, direction, at, k)[$"{origin}"]
+      when dirty == 1 and at >= 0
+      if (words[at + 2 * step] ?? 0) >= firstProperty {
+        properties[(words[local(at)] ?? 1) - 1] = properties[(words[local(at)] ?? 1) - 1] | (1 << ((words[at + 2 * step] ?? firstProperty) - firstProperty))
+      } else {
+        becomes[(words[local(at)] ?? 1) - 1] = (words[at + 2 * step] ?? 1) - 1
+      }
+    }
+  }
+}
+
+module rules(width, height, layout) {
+  channels [
+    { name: "east", shape: Binary, composition: true }
+    { name: "west", shape: Binary, composition: true }
+    { name: "north", shape: Binary, composition: true }
+    { name: "south", shape: Binary, composition: true }
+    { name: "undo", shape: Binary, composition: true }
+  ]
+
+  // The arrow keys and the d-pad press the puzzle's four directions; Z or the west face button takes a turn back.
+  bindingOverlays [
+    {
+      id: "puzzle"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers []
+        chords [
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [
+                { channel: "east", sources ["keyboard.arrowRight", "gamepad.dpadRight"] }
+                { channel: "west", sources ["keyboard.arrowLeft", "gamepad.dpadLeft"] }
+                { channel: "north", sources ["keyboard.arrowUp", "gamepad.dpadUp"] }
+                { channel: "south", sources ["keyboard.arrowDown", "gamepad.dpadDown"] }
+                { channel: "undo", sources ["keyboard.z", "gamepad.buttonWest"] }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+
+  pattern pushable: Int {
+    symbols {
+      vacant = 0
+      open = 1
+      shove = 2
+    }
+    match: any shove* (vacant | open+)
+  }
+
+  pattern shoves: Int {
+    symbols {
+      shove = 2
+    }
+    match: shove
+  }
+
+  pattern stops: Int {
+    symbols {
+      halt = 3
+    }
+    match: halt
+  }
+
+  pattern sentence: Int {
+    symbols {
+      noun = 1..6
+      copula = 7
+      property = 8..13
+    }
+    match: noun copula (noun | property)
+  }
+
+  let cells = reduce(range(0, height), [], (found, y) => concat(found, map(range(0, width), x => { glyph: layout[y][x], cell: y * width + x })))
+  let tiles = map(filter(cells, c => c.glyph != "."), c => { cell: c.cell, noun: legend[c.glyph].noun, word: legend[c.glyph].word })
+
+  state {
+    record Thing {
+      cell: Int bounds(0..(width * height - 1)) = 0
+      noun: Int bounds(0..6) = 0
+      word: Int bounds(0..13) = 0
+      kind: Int bounds(0..3) = 1
+    }
+
+    pool things of Thing capacity(length(tiles)) = tiles
+
+    world {
+      grid board dimensions(width: width, depth: height)
+      grid words dimensions(width: width + 1, depth: height + 1) wrap(Both)
+      table properties capacity(7) {
+        "0" = 0
+        "1" = 0
+        "2" = 0
+        "3" = 0
+        "4" = 0
+        "5" = 0
+        "6" = 2
+      }
+      table becomes capacity(6) {
+        "0" = -1
+        "1" = -1
+        "2" = -1
+        "3" = -1
+        "4" = -1
+        "5" = -1
+      }
+      slot moves = 0
+      slot bumps = 0
+      slot won = 0 bounds(0..1)
+      slot yous = 0
+      slot dirty = 1 bounds(0..1)
+      slot sunk = 0 bounds(0..1)
+    }
+  }
+
+  stabilize turn undo({ rows [things, words, board, properties, becomes, moves, bumps, won, yous, dirty, sunk], depth: 32 }) maxPasses(8) {
+    move(name: "east", channel: east, direction: E)
+    move(name: "west", channel: west, direction: W)
+    move(name: "north", channel: north, direction: N)
+    move(name: "south", channel: south, direction: S)
+
+    rule "spell" {
+      when dirty == 1
+      transform boardCombine(operation: Clear, row: words)
+      for each t in things {
+        if t.noun == text {
+          words[t.cell + t.cell / width] = t.word
+        }
+      }
+      properties[0] = 0
+      properties[1] = 0
+      properties[2] = 0
+      properties[3] = 0
+      properties[4] = 0
+      properties[5] = 0
+      becomes[0] = -1
+      becomes[1] = -1
+      becomes[2] = -1
+      becomes[3] = -1
+      becomes[4] = -1
+      becomes[5] = -1
+    }
+
+    for y in range(0, height) {
+      line(name: $"row{y}", origin: y * (width + 1) + width, direction: E, step: 1, count: floor((width - 1) / 2))
+    }
+    for x in range(0, width) {
+      line(name: $"column{x}", origin: height * (width + 1) + x, direction: S, step: width + 1, count: floor((height - 1) / 2))
+    }
+
+    rule "rewrite" {
+      when dirty == 1
+      for each t in things {
+        if t.noun < text and becomes[t.noun] >= 0 {
+          t.noun = becomes[t.noun]
+        }
+      }
+    }
+
+    rule "classify" {
+      when dirty == 1
+      transform boardCombine(operation: Clear, row: board)
+      yous = 0
+      for each t in things {
+        t.kind = ((properties[t.noun] & stopBit) != 0) ? stopped : (((properties[t.noun] & pushBit) != 0) ? pushed : passable)
+        board[t.cell] = (board[t.cell] | properties[t.noun]) + crowd
+        if (properties[t.noun] & youBit) != 0 {
+          yous += 1
+        }
+      }
+    }
+
+    rule "sink" {
+      when dirty == 1
+      for each t in things {
+        if (board[t.cell] & sinkBit) != 0 and board[t.cell] >= 2 * crowd {
+          release t
+          sunk = 1
+        }
+      }
+    }
+
+    rule "defeat" {
+      when dirty == 1
+      for each t in things {
+        if (properties[t.noun] & youBit) != 0 and (board[t.cell] & defeatBit) != 0 {
+          release t
+          sunk = 1
+        }
+      }
+    }
+
+    rule "win" {
+      when dirty == 1 and won == 0
+      for each t in things {
+        if (properties[t.noun] & youBit) != 0 and (board[t.cell] & winBit) != 0 {
+          won = 1
+        }
+      }
+    }
+
+    // A pass that destroyed a token may have destroyed a word, so it leaves the board to be read again; any
+    // other pass leaves it settled, and a settled board costs a pass nothing but its gates.
+    rule "settle" {
+      when dirty == 1
+      dirty = sunk
+      sunk = 0
+    }
+  }
+
+  // Undo is a press like any other; it steps back one whole turn, and never past the first move.
+  rule "undo" {
+    when channel(1, undo) >= 0.5 and moves > 0
+    mode: Edge
+    rewindGroup(group: turn)
+  }
+}

@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Maths;
 using Puck.Physics;
 using Puck.Physics.Motion;
@@ -88,13 +87,15 @@ public sealed partial class WorldPopulation {
                 if (producer.Flock is not { } flock) { continue; }
                 var width = FlockGridWidth(range: FlockQueryRange(producer: producer));
 
-                if (!m_flockGrids.ContainsKey(key: width)) { m_flockGrids.Add(
+                if (!m_flockGrids.ContainsKey(key: width)) {
+                    m_flockGrids.Add(
                     key: width,
                     value: new FlockGrid(
                         capacity: Capacity,
                         widthRaw: width
                     )
-                ); }
+                );
+                }
                 candidates = Math.Max(
                     val1: candidates,
                     val2: flock.Source.CandidateBudget
@@ -131,7 +132,7 @@ public sealed partial class WorldPopulation {
         )
         : producer.Flock!.Range
     );
-    private static long FlockGridWidth(FixedQ4816 range) => checked((long)BitOperations.RoundUpToPowerOf2(value: ((ulong)range.Value)));
+    private static long FlockGridWidth(FixedQ4816 range) => checked((long)((ulong)range.Value).NextPowerOfTwo());
     private void FreezeFlockImage() {
         FlockStatistics = default;
         if (m_flockGrids.Count == 0) { return; }
@@ -276,11 +277,13 @@ public sealed partial class WorldPopulation {
                     target &= !targetNeedsSight;
                 }
             }
-            if (target) { state.FlockTarget = new WorldFlockObservation(
+            if (target) {
+                state.FlockTarget = new WorldFlockObservation(
                 other,
                 m_entries[other].Generation,
                 m_flockPositions[other]
-            ); }
+            );
+            }
             if (neighbor) {
                 m_flockScratch[count++] = new FixedFlockNeighbor(
                     other,

@@ -52,6 +52,12 @@ Their deadlines are failure bounds, with cancellation shared by the producers.
   `BindingWheelGestureStateTests`, `BindingWheelGraceTests`, and
   `BindingWheelSectorTextTests` cover radial geometry, gesture state, the
   grace window, and a sector's authored text.
+- **Source mapping.** `SourceMappingLawTests` maps known points on a tilted
+  screen and an off-centre pane to known source pixels through every layout,
+  fit, crop and warp, refuses a warp with no inverse as an input path and a
+  document's passthrough source, and holds a hit bit-identical across
+  evaluations and threads. `SourcePointerCommandLawTests` carries a pointer
+  ray through the router's snapshot to the same pixel on every replay.
 - **The published surface itself.** `ApiSurfaceTests` and `PackagingTests` pin
   that the snapshot shapes stay internal to construct, that no public member
   carries `[Obsolete]`, a retired-shape name, or a mutable field, and that the

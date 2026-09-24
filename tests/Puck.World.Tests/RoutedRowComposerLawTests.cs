@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -20,7 +21,7 @@ public sealed class RoutedRowComposerLawTests {
                 json: """{"id":"probe","prototypeId":"ball","position":[1,0,2],"yawDegrees":0,"scale":1}""",
                 mutation: out var composed,
                 path: "placements",
-                principal: WorldPrincipal.Console
+                principal: Principal.Console
             ),
             userMessage: composeError
         );
@@ -38,7 +39,7 @@ public sealed class RoutedRowComposerLawTests {
             json: "{}",
             mutation: out _,
             path: "inputHold",
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         ));
         Assert.Contains(
             actualString: liveDocumentError,
@@ -52,7 +53,7 @@ public sealed class RoutedRowComposerLawTests {
             json: "{}",
             mutation: out _,
             path: "nonsense",
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         ));
         Assert.Contains(
             actualString: unknownError,

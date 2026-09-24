@@ -78,7 +78,7 @@ public static class SdfViewsKernelVariants {
         return null;
     }
     /// <summary>The first HEAVY op/shape the program's instruction stream touches (the <c>SDF_STRIP_HEAVY</c> set —
-    /// the warp/noise family and the analytic-solve 2D shapes), or <see langword="null"/> when it touches none. KEEP
+    /// the warp/noise family, the analytic-solve 2D shapes, and a superellipsoid past the ellipsoid's exponent 2), or <see langword="null"/> when it touches none. KEEP
     /// this set IN SYNC with the <c>SDF_STRIP_HEAVY</c> gates in sdf-vm.hlsli.</summary>
     /// <param name="program">The program to inspect.</param>
     /// <returns>The first heavy touch, or <see langword="null"/>.</returns>
@@ -105,11 +105,15 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.Star:
                         case SdfShapeType.Trapezoid:
                         case SdfShapeType.Ellipse:
-                        case SdfShapeType.Superellipsoid:
                         case SdfShapeType.ConvexPolygon:
                         case SdfShapeType.Sweep:
                         case SdfShapeType.Path:
                             return $"shape {((SdfShapeType)instruction.Shape)}";
+                        // The ellipsoid (e == 2, every ellipsoid the ISA carries) is the pow-free gauge the fold tier
+                        // keeps compiled; only a general exponent needs the heavy pow path (sdf-vm.hlsli's
+                        // SDF_STRIP_HEAVY split of the SDF_SHAPE_SUPERELLIPSOID case).
+                        case SdfShapeType.Superellipsoid when (instruction.Data0.W != SdfProgramBuilder.MinSuperellipsoidExponent):
+                            return $"shape {((SdfShapeType)instruction.Shape)} (exponent {instruction.Data0.W})";
                         default:
                             break;
                     }

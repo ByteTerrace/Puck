@@ -57,43 +57,53 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
             if (
                 !m_disposed &&
                 (m_current is null)
-            ) { Volatile.Write(
+            ) {
+                Volatile.Write(
                 location: ref m_current,
                 value: current
-            ); return true; }
+            ); return true;
+            }
         }
         (current as IDisposable)?.Dispose();
         return false;
     }
     public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
-        if (Volatile.Read(location: ref m_current) is { } current) { return current.TryDescribeRoute(
+        if (Volatile.Read(location: ref m_current) is { } current) {
+            return current.TryDescribeRoute(
             reason: out reason,
             route: out route
-        ); }
+        );
+        }
         route = default; reason = Unavailable; return false;
     }
     public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
-        if (Volatile.Read(location: ref m_current) is { } current) { return current.TryForwardIntent(
+        if (Volatile.Read(location: ref m_current) is { } current) {
+            return current.TryForwardIntent(
             reason: out reason,
             submission: in submission
-        ); }
+        );
+        }
         reason = Unavailable; return false;
     }
     public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
-        if (Volatile.Read(location: ref m_current) is { } current) { return current.TryForwardSubmission(
+        if (Volatile.Read(location: ref m_current) is { } current) {
+            return current.TryForwardSubmission(
             payload: payload,
             reason: out reason,
             result: out result
-        ); }
+        );
+        }
         result = null; reason = Unavailable; return false;
     }
     public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
-        if (Volatile.Read(location: ref m_current) is { } current) { return current.TryForwardSubmission(
+        if (Volatile.Read(location: ref m_current) is { } current) {
+            return current.TryForwardSubmission(
             operationId: operationId,
             payload: payload,
             reason: out reason,
             result: out result
-        ); }
+        );
+        }
         result = new WorldSubmissionResult.Refusal(
             Code: "world.forwarding.unavailable",
             Detail: Unavailable

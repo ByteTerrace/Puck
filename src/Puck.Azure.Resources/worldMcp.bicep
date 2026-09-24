@@ -1,13 +1,54 @@
 extension 'br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:1.0.0'
-import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.5'
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Imports
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.6'
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Types
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Grants and observations pass through to the silo, whose admission and delegated-observation schemas validate them.
 @export()
 type worldMcpType = {
   @maxLength(64)
+  #disable-next-line use-user-defined-types
   participants: { subject: string, grants: object[] }[]
+  #disable-next-line use-user-defined-types
   observations: object[]?
   testLocations: string[]?
 }
+@export()
+type worldMcpConfigurationType = {
+  admission: {
+    domain: string
+    subject: string
+    mode: 'OAuth'
+    algorithm: string
+    publicKey: string
+    disclosure: 'Replica'
+    #disable-next-line use-user-defined-types
+    grants: object[]
+  }[]
+  options: {
+    target: string
+    publicUrl: string
+    listenUrl: string
+    issuer: string
+    audience: string
+    scope: string
+    authorizationScope: string
+    subjectClaim: string
+    tenantId: string
+    allowedSubjects: string[]
+    #disable-next-line use-user-defined-types
+    services: { managedIdentityClientId: string, onboardingUrl: string, observations: object[] }
+  }
+}
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Parameters
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param settings worldMcpType
 param configuration worldSiloConfigType
 param applicationUniqueName string
@@ -18,10 +59,17 @@ param identityPrincipalId string
 param onboardingUrl string
 param applicationInsightsName string
 param location string = resourceGroup().location
-param tags object = {}
+param tags { *: string } = {}
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Variables
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 var issuer = '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
 var hostname = '${configuration.dns.recordName}.${configuration.dns.zoneName}'
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Resources
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 resource trust 'Microsoft.Graph/applications/federatedIdentityCredentials@v1.0' = {
   name: '${applicationUniqueName}/${identityClientId}'
   audiences: ['api://AzureADTokenExchange']
@@ -44,11 +92,16 @@ resource availability 'Microsoft.Insights/webtests@2022-06-15' = {
     Timeout: 30
     RetryEnabled: true
     Locations: map(settings.?testLocations ?? ['us-va-ash-azr', 'us-ca-sjc-azr'], id => { Id: id })
-    Request: { RequestUrl: 'https://${hostname}/healthz', HttpVerb: 'GET', FollowRedirects: false, ParseDependentRequests: false }
+    Request: {
+      RequestUrl: 'https://${hostname}/healthz'
+      HttpVerb: 'GET'
+      FollowRedirects: false
+      ParseDependentRequests: false
+    }
     ValidationRules: { ExpectedHttpStatusCode: 200, SSLCheck: true, SSLCertRemainingLifetimeCheck: 7 }
   }
 }
-resource alert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+resource alert 'Microsoft.Insights/metricAlerts@2026-01-01' = {
   name: '${configuration.name}-mcp'
   location: 'global'
   tags: tags
@@ -65,10 +118,16 @@ resource alert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
       componentId: insights.id
       failedLocationCount: 1
     }
+    // Action group IDs arrive as configured resource IDs; the rule cannot follow loop items.
+    #disable-next-line use-resource-id-functions
     actions: map(configuration.monitoring.actionGroupResourceIds, actionGroupId => { actionGroupId: actionGroupId })
   }
 }
-output worldMcpConfiguration object = {
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Outputs
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+output worldMcpConfiguration worldMcpConfigurationType = {
   admission: map(settings.participants, participant => {
     domain: issuer
     subject: participant.subject

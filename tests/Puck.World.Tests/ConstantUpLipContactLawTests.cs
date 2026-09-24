@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.Assets.Documents;
@@ -126,7 +127,7 @@ public sealed class ConstantUpLipContactLawTests {
     [Fact]
     public void GroundedBodyUnderConstantUp_StaysYawOnlyAcrossTheLip_AndFalls() {
         using var fixture = Fixtures.FreshServer(definition: PlatformDocument());
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

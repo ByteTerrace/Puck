@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Maths;
@@ -10,7 +11,7 @@ namespace Puck.World.Tests;
 /// wholesale: the follower keeps chasing from wherever it actually was, receives a velocity kick signed by the
 /// referenced <c>dynamics</c> row's own <c>r</c>, and <c>world.undo</c> rebases the same way.</summary>
 public sealed class StateDynamicsRebaseLawTests {
-    private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
+    private static readonly Principal Actor = Principal.Seat(slot: 0);
     private static readonly DynamicsRow KickPositive = new(
         Damping: 1f,
         Frequency: 1f,
@@ -199,7 +200,7 @@ public sealed class StateDynamicsRebaseLawTests {
                 Name: CellName.Parse(candidate: "bump"),
                 Gate: new ActionPredicate.CompareState(
                     State: "trigger",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1
                 ),
                 Mode: ActionTriggerMode.Edge,
@@ -289,7 +290,7 @@ public sealed class StateDynamicsRebaseLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 

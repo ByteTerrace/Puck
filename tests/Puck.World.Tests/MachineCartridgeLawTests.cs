@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
@@ -41,12 +42,8 @@ public sealed class MachineCartridgeLawTests {
     // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
     // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
     private static string CartridgePath(string file) => Path.Combine(
-        RepoRoot(),
-        "src",
-        "Puck.World",
-        "Assets",
-        "cartridges",
-        file
+        path1: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges"),
+        path2: file
     );
     private static CartridgeCompilation CompileOutOfBand(string engine, string path) =>
         ((ICartridgeCompiler)TestHookInstaller.CreateMachineCatalog().ContentProviders[engine]).Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)));
@@ -105,43 +102,14 @@ public sealed class MachineCartridgeLawTests {
             hash *= 1099511628211UL;
         }
     }
-    private static string ModulePath() => Path.Combine(
-        RepoRoot(),
-        "src",
-        "Puck.World",
-        "Assets",
-        "worlds",
-        "modules",
-        "arcade.world.json"
-    );
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
+    private static string ModulePath() => RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/modules/arcade.world.json");
     /// <summary>A cartridge the GAME ships, for the one law that boots a shipped module and must therefore stage
     /// what that module names.</summary>
     /// <param name="file">The cartridge file name.</param>
     /// <returns>The absolute path under the world's own assets.</returns>
     private static string ShippedCartridgePath(string file) => Path.Combine(
-        RepoRoot(),
-        "src",
-        "Puck.World",
-        "Assets",
-        "cartridges",
-        file
+        path1: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges"),
+        path2: file
     );
     private static long Slot(WorldDefinition definition, string name) {
         var row = WorldDefinitionRows.FindStateRow(
@@ -165,20 +133,29 @@ public sealed class MachineCartridgeLawTests {
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
         var configuration = ((engine == CgbEngine)
-            ? JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = ((options?.Contains(
+            ? JsonSerializer.SerializeToElement(new {
+                schema = "puck.gaming-brick.configuration.v1",
+                model = "cgb",
+                boot = ((options?.Contains(
                 comparisonType: StringComparison.Ordinal,
                 value: "fast"
             ) == true)
                 ? "fast"
-                : "cold"), content = new { path = contentPath } })
+                : "cold"),
+                content = new { path = contentPath }
+            })
             : ((engine == "tune-instrument")
                 ? JsonSerializer.SerializeToElement(new { schema = "puck.tune-instrument.configuration.v1", content = new { path = contentPath } })
-                : JsonSerializer.SerializeToElement(new { schema = "puck.advanced-gaming-brick.config.v1", boot = ((options?.Contains(
+                : JsonSerializer.SerializeToElement(new {
+                    schema = "puck.advanced-gaming-brick.config.v1",
+                    boot = ((options?.Contains(
                     comparisonType: StringComparison.Ordinal,
                     value: "fast"
                 ) == true)
                     ? "fast"
-                    : "cold"), content = new { path = contentPath } })
+                    : "cold"),
+                    content = new { path = contentPath }
+                })
         ));
 
         return document with {
@@ -318,7 +295,7 @@ public sealed class MachineCartridgeLawTests {
     }
     [Fact]
     public void AMalformedCartridgeRefusesTheBindWithTheForgesOwnMessage() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
         var good = JsonNode.Parse(json: File.ReadAllText(path: CartridgePath(file: "hgb-mirror.cgb.cartridge.json")))!.AsObject();
 
         // Three colors in a background palette where the CGB target needs four — the forge's own validator names it.
@@ -351,7 +328,7 @@ public sealed class MachineCartridgeLawTests {
     }
     [Fact]
     public void TheArcadeModuleBootsUnderItsAliasFromAMinimalHost() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
         // The shipped layout: the host beside the worlds, the cartridges one directory up, so the module's own
         // module-relative content paths relocate into the host document exactly as they do under Assets/worlds.
@@ -380,7 +357,7 @@ public sealed class MachineCartridgeLawTests {
             ),
             text: File.ReadAllText(path: ModulePath())
         );
-        host["imports"] = new JsonArray(new JsonObject { ["document"] = "modules/arcade.world.json", ["as"] = "arcade" });
+        host["imports"] = new JsonArray(new JsonObject { ["document"] = "modules/arcade", ["as"] = "arcade" });
 
         // The host's own body composes last and refines the import layer, and an empty list it authors replaces
         // the module's wholesale — so the sections the module owns are left to the module.
@@ -435,31 +412,31 @@ public sealed class MachineCartridgeLawTests {
             actual: layer.Exports!.Describe()
         );
 
-        // The module's rows compose under the alias; its placements, kit, and screens keep their bare names.
+        // The module's rows and placements compose under the alias; its kit and screens keep their bare names.
         Assert.Equal(
             expected: 8L,
             actual: Slot(
                 definition: definition,
-                name: "arcade_cgbScreen"
+                name: "arcade$cgbScreen"
             )
         );
         Assert.Equal(
             expected: 9L,
             actual: Slot(
                 definition: definition,
-                name: "arcade_agbScreen"
+                name: "arcade$agbScreen"
             )
         );
         Assert.Equal(
             expected: 10L,
             actual: Slot(
                 definition: definition,
-                name: "arcade_handheldScreen"
+                name: "arcade$handheldScreen"
             )
         );
         Assert.Contains(
             collection: definition.Placements.Select(selector: static placement => placement.Id),
-            expected: "arcadeCourt"
+            expected: "arcade$arcadeCourt"
         );
         Assert.Contains(
             collection: definition.SpawnPoints.Select(selector: static point => point.Id),

@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Puck.State;
+using Puck.Transpiler.Editing;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lsp;
@@ -14,7 +16,7 @@ public static class WorldConstructLanguageServices {
     private const int KeywordKind = 14;
     private const int SectionKind = 7;
 
-    private static int KindOf(WorldConstructShape shape) => (shape is WorldConstructShape.Section or WorldConstructShape.Row
+    private static int KindOf(WorldConstructShape shape) => ((shape is WorldConstructShape.Section or WorldConstructShape.Row)
         ? SectionKind
         : KeywordKind
     );
@@ -26,13 +28,6 @@ public static class WorldConstructLanguageServices {
         WorldMemberPosition.Modifier => $"{member.Name}(${{1:}})",
         WorldMemberPosition.Property => $"{member.Name}: ${{1:}}",
         _ => member.Name,
-    };
-    private static JsonObject Item(string label, string insertText, string detail, int kind) => new() {
-        ["detail"] = detail,
-        ["insertText"] = insertText,
-        ["insertTextFormat"] = 2,
-        ["kind"] = kind,
-        ["label"] = label,
     };
 
     /// <summary>Returns the keyword of the construct whose statement the cursor sits in.</summary>
@@ -54,7 +49,7 @@ public static class WorldConstructLanguageServices {
             value: offset
         );
         var open = new Stack<string?>();
-        var lineWord = (string?)null;
+        var lineWord = ((string?)null);
         var lineWordEnd = 0;
         var lineStart = 0;
         var index = 0;
@@ -75,9 +70,9 @@ public static class WorldConstructLanguageServices {
             if (
                 (character == '/') &&
                 ((index + 1) < text.Length) &&
-                (text[index + 1] is '/' or '*')
+                (text[(index + 1)] is '/' or '*')
             ) {
-                var close = ((text[index + 1] == '/')
+                var close = ((text[(index + 1)] == '/')
                     ? text.IndexOf(startIndex: index, value: '\n')
                     : text.IndexOf(
                         comparisonType: StringComparison.Ordinal,
@@ -88,7 +83,7 @@ public static class WorldConstructLanguageServices {
 
                 index = ((close < 0)
                     ? text.Length
-                    : ((text[index + 1] == '/')
+                    : ((text[(index + 1)] == '/')
                         ? close
                         : (close + 2))
                 );
@@ -112,12 +107,13 @@ public static class WorldConstructLanguageServices {
 
                 continue;
             }
-            if (char.IsLetter(c: character) || (character == '_')) {
+            if (IdentifierSpelling.IsStart(character: character)) {
                 var start = index;
 
-                while ((index < text.Length) && (char.IsLetterOrDigit(c: text[index]) || (text[index] == '_'))) {
-                    index++;
-                }
+                index += IdentifierSpelling.ScanIdentifier(
+                    start: index,
+                    text: text
+                );
                 if (
                     (lineWord is null) &&
                     (text[lineStart..start].Trim().Length == 0)
@@ -197,8 +193,8 @@ public static class WorldConstructLanguageServices {
             if (!offered.Add(item: construct.Keyword)) {
                 continue;
             }
-            items.Add(item: ((JsonNode?)Item(
-                detail: $"{(construct.Enclosing is null
+            items.Add(item: ((JsonNode?)LspJson.Completion(
+                detail: $"{((construct.Enclosing is null)
                     ? "Document"
                     : $"`{construct.Enclosing}`")} construct: lowers to {construct.DocumentMember}",
                 insertText: (construct.Snippet ?? construct.Keyword),
@@ -224,7 +220,7 @@ public static class WorldConstructLanguageServices {
                 ) {
                     continue;
                 }
-                items.Add(item: ((JsonNode?)Item(
+                items.Add(item: ((JsonNode?)LspJson.Completion(
                     detail: $"`{construct.Keyword}` member: {member.Summary}",
                     insertText: InsertTextFor(member: member),
                     kind: KindOf(position: member.Position),

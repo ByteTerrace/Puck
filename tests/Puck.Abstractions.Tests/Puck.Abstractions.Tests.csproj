@@ -15,4 +15,8 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Abstractions\Puck.Abstractions.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
+    </ItemGroup>
 </Project>

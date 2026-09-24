@@ -16,6 +16,7 @@ public sealed class BindingMemoLawTests {
                 Name: "now"
             )],
         };
+
         var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(
             rules: [new Rule(
                 Effects: [new ActionEffect.SetState(
@@ -116,6 +117,97 @@ public sealed class BindingMemoLawTests {
 
         Assert.Equal(expected: 1L, actual: Tick(tickValue: 1UL));
         Assert.Equal(expected: 2L, actual: Tick(tickValue: 2UL));
+    }
+    // A fold reads every cell of its row, including the cells a rule writes into a row declared with none, so the
+    // binding that folds it is recomputed after each committed write and is priced at the row's capacity rather than
+    // at its authored cells.
+    [Fact]
+    public void ABindingThatFoldsARowDeclaredWithNoCellsFollowsTheCellsWrittenIntoIt() {
+        var section = new StateSection(Rows: [
+            EvaluatorFixture.Slot(
+                name: "score",
+                value: 0L
+            ),
+            new StateRow(
+                Capacity: 8,
+                Kind: CellKind.Int,
+                Name: RulesFixture.Name(value: "tally")
+            ),
+        ]);
+
+        var (host, evaluator, rules, latch, context) = EvaluatorFixture.Arrange(
+            rules: [new Rule(
+                Locals: [new RuleLocal(
+                        Expression: RulesFixture.Program(text: "count(tally, c -> c != 0)"),
+                        Kind: CellKind.Int,
+                        Name: RulesFixture.Name(value: "held")
+                    )],
+                Effects: [new ActionEffect.SetState(
+                        Expression: RulesFixture.Program(text: "$local:held"),
+                        State: "score"
+                    )],
+                Name: RulesFixture.Name(value: "count")
+            )],
+            section: section
+        );
+        var tally = EvaluatorFixture.Ordinal(
+            host: host,
+            row: "tally"
+        );
+
+        void Mint(string key) {
+            var mark = host.Arena.BeginScope();
+
+            Assert.True(condition: host.Arena.TryMint(
+                key: out _,
+                name: RulesFixture.Name(value: key),
+                reason: out var reason,
+                rowOrdinal: tally,
+                value: CellValue.Int(value: 1L)
+            ), userMessage: reason);
+            host.Arena.Commit(mark: mark);
+        }
+        long Counted(ulong tick) {
+            host.Advance(
+                engineTick: tick,
+                tick: tick
+            );
+            _ = evaluator.Evaluate(
+                latch: latch,
+                rules: rules,
+                stepTicks: 1UL
+            );
+
+            return EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            );
+        }
+
+        Assert.Equal(
+            actual: Counted(tick: 1UL),
+            expected: 0L
+        );
+        Mint(key: "a");
+        Assert.Equal(
+            actual: Counted(tick: 2UL),
+            expected: 1L
+        );
+        Mint(key: "b");
+        Assert.Equal(
+            actual: Counted(tick: 3UL),
+            expected: 2L
+        );
+
+        var fold = Assert.Single(
+            collection: rules[0].Locals!.SelectMany(selector: static local => local.Expression),
+            predicate: static token => (token.Fold is not null)
+        );
+
+        Assert.Equal(
+            actual: fold.Fold!.Cells,
+            expected: context.RowCapacity(rowOrdinal: tally)
+        );
     }
     [Fact]
     public void ABindingThroughALiveZoneFollowsTheSelectionToAnotherZone() {

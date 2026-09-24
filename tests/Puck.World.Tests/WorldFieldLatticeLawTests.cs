@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Reflection;
 using Xunit;
 
@@ -91,7 +92,7 @@ public sealed class WorldFieldLatticeLawTests {
         var bootCells = lattice.Capture().Raw[0].ToArray();
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.Generate(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "drawn"
         ));
         fixture.Step();
@@ -112,7 +113,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 
@@ -143,7 +144,7 @@ public sealed class WorldFieldLatticeLawTests {
                 Kind: WorldRebuildKind.Load,
                 PathHint: "lattice-draw-load-probe.world.json"
             ),
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 
@@ -287,7 +288,7 @@ public sealed class WorldFieldLatticeLawTests {
         // base is injected because the current live gates correctly make such a journal/base combination
         // unreachable through public authoring; this law targets the defensive all-or-nothing door itself.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name: CellName.Parse(candidate: "probe"),
                 Kind: CellKind.Int
@@ -319,7 +320,7 @@ public sealed class WorldFieldLatticeLawTests {
         fixture.Server.EchoTap = next => echo = next;
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 
@@ -406,7 +407,7 @@ public sealed class WorldFieldLatticeLawTests {
             composite: Fields(reactions: [
             new WorldReaction.Transform(
                     When: [new WorldFieldCondition(
-                            Comparison: ((ActionStateComparison)byte.MaxValue),
+                            Comparison: ((ExpressionOp)byte.MaxValue),
                             Field: "heat",
                             Value: 0f
                         )],

@@ -1,5 +1,7 @@
+using Puck.Commands;
 using System.Numerics;
 using System.Text.Json;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Machines;
 
 using Xunit;
@@ -23,37 +25,13 @@ public sealed class MachineMemoryLawTests {
     private const int MachineScreen = 8;
     private const int SettleTicks = 16;
 
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
     // The machine-host laws ride a SHIPPED cartridge and READ their expectations out of it. A frozen fixture copy
     // rots — the cartridge document model is still moving, and a copy nobody migrates breaks on every step while the
     // shipped cartridges are carried forward with it. Hard-coding the game's own numbers rots the same way for the
     // same reason: 76 and 68 were pip's authored initials, and every one of them had to be chased by hand the moment
     // the cabinet's game changed. A law about the HOST asserts the host's contract and derives everything that is a
     // fact about content.
-    private static string CartridgePath() => Path.Combine(
-        RepoRoot(),
-        "src",
-        "Puck.World",
-        "Assets",
-        "cartridges",
-        "hgb-mirror.cgb.cartridge.json"
-    );
+    private static string CartridgePath() => RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/cartridges/hgb-mirror.cgb.cartridge.json");
     // The compiled image's own bus address for a named variable — read the same way the machine host reads the
     // booted image, so the law addresses the byte the running cartridge actually owns rather than a guessed offset.
     private static CartridgeDocument Document() => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath()));
@@ -283,7 +261,7 @@ public sealed class MachineMemoryLawTests {
 
         // wall-north/wall-south clamp y to 8..128, so 50 rides through untouched by the cartridge's own rules.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "pipY",
             Key: WorldStateRow.SlotKey.Value,
             Value: 50,
@@ -426,7 +404,7 @@ public sealed class MachineMemoryLawTests {
         // One committed poke first, so the QUIET run's memo already holds this value — its every sampled tick is
         // the fast "unchanged" path, never the one-time first-poke every binding pays once.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "pipY",
             Key: WorldStateRow.SlotKey.Value,
             Value: 40,
@@ -439,7 +417,7 @@ public sealed class MachineMemoryLawTests {
         for (var tick = 0; (tick < samples.Length); tick++) {
             if (changingEachTick) {
                 fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.Console,
+                    Principal: Principal.Console,
                     Row: "pipY",
                     Key: WorldStateRow.SlotKey.Value,
                     Value: (40 + (tick % 20)),
@@ -447,10 +425,7 @@ public sealed class MachineMemoryLawTests {
                 ));
             }
 
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
-            fixture.Step();
-            samples[tick] = (GC.GetAllocatedBytesForCurrentThread() - before);
+            samples[tick] = AllocationWindow.Total(window: () => fixture.Step());
         }
 
         Array.Sort(array: samples);

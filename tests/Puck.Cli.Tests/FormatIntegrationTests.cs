@@ -31,8 +31,7 @@ public sealed class FormatIntegrationTests {
                 actual: FormatFileProject.Run(
                     file: source,
                     selected: FormatPasses.DefaultSelection(),
-                    whatIf: false,
-                    verify: false
+                    check: false
                 )
             );
             var result = File.ReadAllText(path: source);
@@ -52,18 +51,59 @@ public sealed class FormatIntegrationTests {
                 actual: FormatFileProject.Run(
                     file: source,
                     selected: FormatPasses.DefaultSelection(),
-                    whatIf: false,
-                    verify: true
+                    check: true
                 )
             );
             Assert.Equal(
                 expected: result,
                 actual: File.ReadAllText(path: source)
             );
-        } finally { Directory.Delete(
+        } finally {
+            Directory.Delete(
             path: root,
             recursive: true
-        ); }
+        );
+        }
+    }
+    /// <summary>
+    /// A root is formatted as the selection of every file under it, so a file-based app found there goes through its
+    /// disposable project exactly as an explicitly selected one does, rather than being parsed without its directives
+    /// and reported as a syntax error and a file no project owns.
+    /// </summary>
+    [Fact]
+    public void AStandaloneAppUnderAFormattedRootIsFormattedThroughItsProject() {
+        var root = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-format-root-file-app-{Guid.NewGuid():N}"
+        );
+
+        Directory.CreateDirectory(path: root);
+        try {
+            File.WriteAllText(
+                contents: "#!/usr/bin/env dotnet\n#:property PublishAot=false\nSystem.Console.WriteLine(value: \"formatted\");\n",
+                path: Path.Combine(
+                    path1: root,
+                    path2: "Probe.cs"
+                )
+            );
+
+            var (code, _, report) = ConsoleCapture.RunSplit(run: () => PuckRootCommand.Invoke(args: ["format", root, "--check"]));
+
+            Assert.Equal(
+                actual: code,
+                expected: 0
+            );
+            Assert.DoesNotContain(
+                actualString: report,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "syntax errors"
+            );
+        } finally {
+            Directory.Delete(
+                path: root,
+                recursive: true
+            );
+        }
     }
     [Fact]
     public void FormattingASelectedFileLeavesItsSiblingAndLinkedSourceUntouched() {
@@ -124,21 +164,18 @@ public sealed class FormatIntegrationTests {
                 path: manifest,
                 contents: new JsonArray("One.cs").ToJsonString()
             );
-            Assert.Equal(
-                expected: 0,
-                actual: CliProcess.RunStreamed(
-                    fileName: "dotnet",
-                    arguments: ["build", project, "-c", "Release"]
-                )
+            FormatNamedArgsClosureTests.Build(
+                configuration: "Release",
+                project: project
             );
             Assert.Equal(
                 expected: 0,
                 actual: FormatSelection.Run(
                     root: root,
+                    configuration: "Release",
                     manifest: manifest,
                     selected: FormatPasses.DefaultSelection(),
-                    whatIf: false,
-                    verify: false
+                    check: false
                 )
             );
             Assert.Contains(
@@ -158,16 +195,18 @@ public sealed class FormatIntegrationTests {
                 expected: 0,
                 actual: FormatSelection.Run(
                     root: root,
+                    configuration: "Release",
                     manifest: manifest,
                     selected: FormatPasses.DefaultSelection(),
-                    whatIf: false,
-                    verify: true
+                    check: true
                 )
             );
-        } finally { Directory.Delete(
+        } finally {
+            Directory.Delete(
             path: root,
             recursive: true
-        ); }
+        );
+        }
     }
     [Fact]
     public void SourceReplacementPreservesAnExistingReadersMappedView() {
@@ -208,8 +247,8 @@ public sealed class FormatIntegrationTests {
             );
 
             RewriteIo.WriteText(
-                path,
-                "new source\n"
+                file: path,
+                text: "new source\n"
             );
             Assert.Equal(
                 "new source\n",
@@ -222,9 +261,11 @@ public sealed class FormatIntegrationTests {
                 reader.ReadToEnd()
             );
             Assert.Single(collection: Directory.EnumerateFiles(path: root));
-        } finally { Directory.Delete(
+        } finally {
+            Directory.Delete(
             root,
             recursive: true
-        ); }
+        );
+        }
     }
 }

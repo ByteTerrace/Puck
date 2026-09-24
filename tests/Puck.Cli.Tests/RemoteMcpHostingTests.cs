@@ -11,14 +11,19 @@ namespace Puck.Cli.Tests;
 public sealed class RemoteMcpHostingTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static async Task Until(Func<bool> predicate) {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+    // Re-reads the subject's admission each time the policy changes, so the wait ends on the change itself.
+    private static async Task WhenAllowedAsync(RemoteMcpAccessPolicy policy, bool allowed) {
+        var changed = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 5));
-        while (!predicate()) { await Task.Delay(
-            20,
-            deadline.Token
-        ); }
+        void Changed() => changed.TrySetResult();
+
+        policy.Changed += Changed;
+        try {
+            while (policy.Allows(subject: "alice") != allowed) {
+                await changed.Task.WaitAsync(cancellationToken: Token);
+                changed = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+        } finally { policy.Changed -= Changed; }
     }
 
     [Fact]
@@ -69,13 +74,21 @@ public sealed class RemoteMcpHostingTests {
                 "{",
                 Token
             );
-            await Until(predicate: () => !policy.Allows(subject: "alice"));
+            fixture.Clock.Advance(by: RemoteMcpServer.ConfigurationReloadInterval);
+            await WhenAllowedAsync(
+                allowed: false,
+                policy: policy
+            );
             await File.WriteAllTextAsync(
                 path,
                 json,
                 Token
             );
-            await Until(predicate: () => policy.Allows(subject: "alice"));
+            fixture.Clock.Advance(by: RemoteMcpServer.ConfigurationReloadInterval);
+            await WhenAllowedAsync(
+                allowed: true,
+                policy: policy
+            );
             var result = await client.CallToolAsync(
                 "puck_exec",
                 new Dictionary<string, object?> { ["attachmentId"] = id, ["command"] = "read" },
@@ -92,7 +105,11 @@ public sealed class RemoteMcpHostingTests {
                 ),
                 Token
             );
-            await Until(predicate: () => !policy.Allows(subject: "alice"));
+            fixture.Clock.Advance(by: RemoteMcpServer.ConfigurationReloadInterval);
+            await WhenAllowedAsync(
+                allowed: false,
+                policy: policy
+            );
         } finally {
             await stop.CancelAsync();
             if (monitor is not null) { await monitor; }
@@ -198,22 +215,18 @@ public sealed class RemoteMcpHostingTests {
             cancellationToken: Token
         );
         var id = attached.StructuredContent!.Value.GetProperty(propertyName: "attachmentId").GetString();
-        using var deadline = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 10));
         var work = client.CallToolAsync(
             "puck_exec",
             new Dictionary<string, object?> { ["attachmentId"] = id, ["command"] = "hold" },
-            cancellationToken: deadline.Token
+            cancellationToken: Token
         ).AsTask();
 
-        await host.Entered.Task.WaitAsync(cancellationToken: deadline.Token);
+        await host.Entered.Task.WaitAsync(cancellationToken: Token);
         var policy = fixture.App.Services.GetRequiredService<RemoteMcpAccessPolicy>();
 
         policy.Replace(subjects: []);
-        try { await work.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 3),
-            Token
-        ); } catch (Exception) when (!deadline.IsCancellationRequested) { }
-        Assert.True(condition: work.IsCompleted);
+        // Revocation is what ends the held call; nothing else would.
+        _ = await Record.ExceptionAsync(testCode: () => work);
         Assert.True(condition: host.Closed);
         policy.Replace(subjects: ["alice"]);
         var stale = await client.CallToolAsync(
@@ -246,12 +259,11 @@ public sealed class RemoteMcpHostingTests {
             collection: await client.ListToolsAsync(cancellationToken: Token),
             filter: tool => (tool.Name == "test_service")
         );
-        using var deadline = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 10));
         var pending = client.CallToolAsync(
             "test_service",
-            cancellationToken: deadline.Token
+            cancellationToken: Token
         ).AsTask();
-        var caller = await host.Entered.Task.WaitAsync(cancellationToken: deadline.Token);
+        var caller = await host.Entered.Task.WaitAsync(cancellationToken: Token);
 
         Assert.Equal(
             "alice",
@@ -274,15 +286,9 @@ public sealed class RemoteMcpHostingTests {
             caller.ToString()!
         );
         fixture.App.Services.GetRequiredService<RemoteMcpAccessPolicy>().Replace(subjects: []);
-        await host.Cancelled.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 3),
-            Token
-        );
-        try { await pending.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 3),
-            Token
-        ); } catch (Exception) when (!deadline.IsCancellationRequested) { }
-        Assert.True(condition: pending.IsCompleted);
+        await host.Cancelled.Task.WaitAsync(cancellationToken: Token);
+        // Grant removal is what ends the pending call; nothing else would.
+        _ = await Record.ExceptionAsync(testCode: () => pending);
     }
 
     private sealed class ServiceHost : RemoteMcpHost {
@@ -295,10 +301,12 @@ public sealed class RemoteMcpHostingTests {
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => throw new InvalidOperationException(message: "Service calls do not open Console sessions.");
         public override async ValueTask<CallToolResult> CallServiceAsync(RemoteMcpCaller caller, CallToolRequestParams request, CancellationToken cancellationToken) {
             Entered.TrySetResult(result: caller);
-            try { await Task.Delay(
+            try {
+                await Task.Delay(
                 cancellationToken: cancellationToken,
                 delay: Timeout.InfiniteTimeSpan
-            ); return new(); } finally { Cancelled.TrySetResult(); }
+            ); return new();
+            } finally { Cancelled.TrySetResult(); }
         }
     }
     private sealed class ProbeHost : RemoteMcpHost {
@@ -313,7 +321,7 @@ public sealed class RemoteMcpHostingTests {
 
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
             Opened++;
-            return ValueTask.FromResult<IControlSession>(new Session(host: this));
+            return ValueTask.FromResult<IControlSession>(result: new Session(host: this));
         }
 
         private sealed class Session(ProbeHost host) : IControlSession {

@@ -224,10 +224,8 @@ host {
   listen: null
   presentMode: Immediate
   presentation: Windowed
-  rayQuery: true
   surfaceFormat: r8g8b8a8
   targetHertz: 60
-  timing: false
   width: viewWidth
 }
 
@@ -314,9 +312,9 @@ looks {
     }
   }
   rows [
-    { name: "hero", scale: 1, source: creation(prototypeId: "hgbMirrorHero"), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
-    { name: "falls", scale: 1, source: creation(prototypeId: "hgbMirrorFalls"), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
-    { name: "ripples", scale: 1, source: creation(prototypeId: "hgbMirrorRipples"), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
+    { name: "hero", scale: 1, source: creation(prototypeId: hgbMirrorHero), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
+    { name: "falls", scale: 1, source: creation(prototypeId: hgbMirrorFalls), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
+    { name: "ripples", scale: 1, source: creation(prototypeId: hgbMirrorRipples), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
   ]
 }
 

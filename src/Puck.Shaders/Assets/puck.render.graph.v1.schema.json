@@ -1,0 +1,506 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "puck.render.graph.v1",
+  "x-puck": {
+    "schemaVersion": "puck.render.graph.v1",
+    "generator": "Puck.World.WorldSchema"
+  },
+  "title": "Puck frame graph (puck.render.graph.v1)",
+  "description": "A frame as a document: passes connected by named image and buffer versions, planned by the one pipeline planner (ShaderPipelineCompiler). Every view renders an instance of a graph, and a version declared External is an input the host binds, such as another instance\u0027s output. Its members are the pipeline document\u0027s members, with the same shapes, plus Packages: a puck.shader.pipeline.v1 document\u0027s content is a graph with no packages, so a pipeline is a graph a world names.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "$schema": {
+      "description": "The schema tag, puck.render.graph.v1.",
+      "type": "string",
+      "const": "puck.render.graph.v1"
+    },
+    "name": {
+      "description": "The graph name.",
+      "type": "string"
+    },
+    "resources": {
+      "description": "The versions, as a pipeline declares them.",
+      "type": "array",
+      "items": {
+        "description": "One resource version declared by a ShaderPipelineDefinition. Each version has exactly one writer. A version that names From forwards that predecessor: its writer continues the predecessor\u0027s storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The unique version name.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Image, buffer, or depth resource.",
+            "enum": [
+              "Image",
+              "Buffer",
+              "Depth"
+            ],
+            "default": "Image",
+            "title": "ShaderPipelineResourceKind"
+          },
+          "format": {
+            "description": "The backend-neutral format spelling. Required for images and depth resources.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "dimensions": {
+            "description": "Image dimensions; omitted for buffers.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "Relative",
+                  "Absolute"
+                ],
+                "title": "ShaderPipelineDimensionMode"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "mode",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "ShaderPipelineDimensions"
+          },
+          "history": {
+            "description": "Retains this version\u0027s contents into the next frame, where a pass input reads them with PreviousFrame. Only the last version of a forwarding chain can be history, because a forward would overwrite what is retained.",
+            "type": "boolean",
+            "default": false
+          },
+          "initialization": {
+            "description": "How the first frame obtains valid contents. Only a version that forwards nothing declares it; a forwarded version\u0027s contents come from its predecessor.",
+            "enum": [
+              "Undefined",
+              "Zero",
+              "External"
+            ],
+            "default": "Undefined",
+            "title": "ShaderPipelineInitialization"
+          },
+          "sizeBytes": {
+            "description": "Buffer capacity in bytes, a multiple of four, or null for images. A buffer is a raw buffer of 32-bit words, read and written by byte address.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "from": {
+            "description": "The predecessor version this one forwards, or null for a version whose writer starts from discarded contents. A predecessor has at most one successor, and its kind, format, extent and sample count equal this version\u0027s.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "samples": {
+            "description": "The sample count of an image. Only single-sampled images are executable, so any other count is refused by name.",
+            "type": "integer",
+            "default": 1
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "title": "ShaderPipelineResource"
+      }
+    },
+    "outputs": {
+      "description": "The public versions; the first is what a consumer reads by default.",
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "passes": {
+      "description": "The shader passes, as a pipeline declares them, or null for none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One executable pass in a shader pipeline.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The unique pass name.",
+            "type": "string"
+          },
+          "source": {
+            "description": "The HLSL source\u0027s path, relative to the pipeline document.",
+            "type": "string"
+          },
+          "entryPoint": {
+            "description": "The entry point compiled by the shader compiler: a compute pass\u0027s kernel, or a graphics pass\u0027s fragment stage.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Compute, fullscreen graphics, or indexed geometry.",
+            "enum": [
+              "Compute",
+              "Fullscreen",
+              "Geometry"
+            ],
+            "title": "ShaderPipelinePassKind"
+          },
+          "inputs": {
+            "description": "Named resource bindings. Set PreviousFrame explicitly for feedback.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "A pass\u0027s reference to one resource version: which version it reads or writes, which frame\u0027s instance, and its descriptor binding.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The version name.",
+                  "type": "string"
+                },
+                "previousFrame": {
+                  "description": "Reads the contents the previous frame left rather than this frame\u0027s. Only a pass input sets it, and only for a version declared History.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "binding": {
+                  "description": "The descriptor binding, or null for the planner to assign one.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false,
+              "title": "ResourceReference"
+            },
+            "default": null
+          },
+          "outputs": {
+            "description": "The versions the pass writes. A graphics pass writes one color image and, for a geometry pass, at most one depth version.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/properties/passes/items/properties/inputs/items"
+            },
+            "default": null
+          },
+          "config": {
+            "description": "Optional config fields, using the shared shader-set config vocabulary.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "description": "One field of a ShaderSetManifest\u0027s config schema \u2014 what a document may author for this shader set, validated by TryBindConfig and emitted as JSON Schema by ConfigJsonSchema.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "type": {
+                  "description": "The value type; a document value is a number for a scalar type and an array of ComponentCount numbers for a vector type.",
+                  "enum": [
+                    "float",
+                    "float2",
+                    "float3",
+                    "float4",
+                    "uint",
+                    "uint2",
+                    "uint3",
+                    "uint4",
+                    "int",
+                    "int2",
+                    "int3",
+                    "int4"
+                  ],
+                  "title": "ShaderValueType"
+                },
+                "default": {
+                  "description": "The value an absent document field resolves to, or null when the field is required.",
+                  "default": null,
+                  "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+                },
+                "min": {
+                  "description": "The inclusive per-component minimum, or null for none.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "max": {
+                  "description": "The inclusive per-component maximum, or null for none.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "description": {
+                  "description": "The field\u0027s description, carried into the emitted JSON Schema.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "ShaderConfigField"
+            },
+            "default": null
+          },
+          "groupSizeX": {
+            "description": "Compute workgroup width; ignored for graphics passes.",
+            "type": "integer",
+            "default": 8
+          },
+          "groupSizeY": {
+            "description": "Compute workgroup height; ignored for graphics passes.",
+            "type": "integer",
+            "default": 8
+          },
+          "groupSizeZ": {
+            "description": "Compute workgroup depth; ignored for graphics passes.",
+            "type": "integer",
+            "default": 1
+          },
+          "vertex": {
+            "description": "How a fullscreen pass\u0027s vertex stage obtains the triangle\u0027s corners; null means VertexId. Only a fullscreen pass declares it.",
+            "enum": [
+              "VertexId",
+              "Position",
+              null
+            ],
+            "default": null,
+            "title": "ShaderPipelineVertexInput"
+          },
+          "geometry": {
+            "description": "A geometry pass\u0027s vertices, indices and vertex layout. Only a geometry pass declares it, and it must.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "vertexEntryPoint": {
+                "description": "The vertex stage\u0027s entry point in the pass\u0027s source, which also holds the fragment stage\u0027s EntryPoint. The vertex stage receives no parameters: the pass\u0027s parameter block reaches only the fragment stage.",
+                "type": "string"
+              },
+              "strideBytes": {
+                "description": "The bytes of one vertex, a positive multiple of four.",
+                "type": "integer"
+              },
+              "attributes": {
+                "description": "The vertex attributes, one per location from zero.",
+                "type": "array",
+                "items": {
+                  "description": "One attribute of a geometry pass\u0027s vertices. The vertex stage reads attribute n as the POSITION{n} semantic, the nth input it declares.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "location": {
+                      "description": "The attribute\u0027s input location, equal to its position in the attribute list.",
+                      "type": "integer"
+                    },
+                    "format": {
+                      "description": "The attribute\u0027s format, spelled as a GpuVertexFormat name.",
+                      "type": "string"
+                    },
+                    "offsetBytes": {
+                      "description": "The attribute\u0027s byte offset within one vertex, a multiple of four.",
+                      "type": "integer",
+                      "default": 0
+                    }
+                  },
+                  "required": [
+                    "location",
+                    "format"
+                  ],
+                  "additionalProperties": false,
+                  "title": "ShaderPipelineVertexAttribute"
+                }
+              },
+              "vertices": {
+                "description": "The vertex data as 32-bit floats, a whole number of vertices.",
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "indices": {
+                "description": "The triangle list\u0027s indices, three per triangle, each naming a declared vertex.",
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "indexFormat": {
+                "description": "The width of each index; a 16-bit index is at most 65535.",
+                "enum": [
+                  "UInt16",
+                  "UInt32"
+                ],
+                "default": "UInt16",
+                "title": "ShaderPipelineIndexFormat"
+              }
+            },
+            "required": [
+              "vertexEntryPoint",
+              "strideBytes",
+              "attributes",
+              "vertices",
+              "indices"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "ShaderPipelineGeometry"
+          },
+          "depthCompare": {
+            "description": "A geometry pass\u0027s depth test, which it declares exactly when it writes a depth version; null there means Less. A passing fragment writes its depth.",
+            "enum": [
+              "Less",
+              "LessOrEqual",
+              "Greater",
+              "GreaterOrEqual",
+              "Equal",
+              "Always",
+              null
+            ],
+            "default": null,
+            "title": "ShaderPipelineDepthCompare"
+          },
+          "blend": {
+            "description": "A graphics pass\u0027s blend policy; null means Opaque, the only policy the planner admits.",
+            "enum": [
+              "Opaque",
+              "AlphaOver",
+              "Additive",
+              null
+            ],
+            "default": null,
+            "title": "ShaderPipelineBlend"
+          },
+          "alphaTest": {
+            "description": "An alpha-test cutoff. The planner refuses every value by name.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "source",
+          "entryPoint",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "title": "ShaderPipelinePass"
+      },
+      "default": null
+    },
+    "packages": {
+      "description": "The engine-package passes, or null for none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One pass of engine work a graph names by package instead of by shader source: SDF rendering, the overlay, or a shipped post-process set. The package decides how it records its work; the graph decides which versions it reads and writes, and the planner orders it among the shader passes by those versions.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The pass\u0027s unique name, shared with the shader passes.",
+            "type": "string"
+          },
+          "package": {
+            "description": "The package id, which the host\u0027s RenderGraphPackageCatalog declares.",
+            "type": "string"
+          },
+          "inputs": {
+            "description": "The versions the package reads, one per input port in port order. A reference may read a history version\u0027s previous frame. A package binds its own descriptors, so no reference declares a binding.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/properties/passes/items/properties/inputs/items"
+            },
+            "default": null
+          },
+          "outputs": {
+            "description": "The image versions the package writes, one per output port in port order.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/properties/passes/items/properties/inputs/items"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "package"
+        ],
+        "additionalProperties": false,
+        "title": "RenderGraphPackagePass"
+      },
+      "default": null
+    }
+  },
+  "required": [
+    "$schema",
+    "name",
+    "resources",
+    "outputs"
+  ],
+  "additionalProperties": false
+}

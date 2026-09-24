@@ -45,23 +45,53 @@ When two machines link (e.g. two players sitting at connected arcade cabinets or
 
 ## Pacing credits and overshoot compensation
 
-Because the two emulated consoles may have minor variations in interrupt timing or execution speed, `SerialLinkSession` employs a deterministic pacing credit system (`SerialLinkSession.PacingCredits`):
+`SerialLinkSession` and `IrLinkSession` are the one `LinkSession<TPort>` over
+their port, and both pace the pair the same way:
 
-- If one machine advances slightly ahead while waiting for a serial handshake, it earns overshoot credits.
-- Once a handshake begins, the faster machine stalls its clock cycles until the slower machine catches up.
-- Snapshot captures (`SerialLinkGroupCore.CaptureState`) include both machines' full memory states, the pacing credit balance, and the completed transfer count. Replaying the link session reproduces the exact same byte transfers without desynchronization.
+- Each budget moves both machines' cumulative targets forward by the same
+  number of T-cycles, and the furthest-behind machine steps one instruction at
+  a time until both reach their targets.
+- An instruction usually ends a few cycles past its target. That overshoot is
+  the machine's pacing credit, and it carries into the next budget instead of
+  accumulating as drift.
+- The credits are session state, not machine state. `Suspend` severs the link
+  and returns them as a `LinkResumeToken` for the resume constructor. A live
+  link reads them through `PacingCredits` and restores them through
+  `ReanchorPacing`, which is the path a coupled rewind takes.
+- A hosted serial link's snapshot (`SerialLinkGroupCore.CaptureState`)
+  includes both machines' full states, the pacing credits, the completed
+  transfer count, and a traffic fingerprint. Replaying the link session
+  reproduces the exact same byte transfers without desynchronization.
 
 ---
 
 ## Infrared and peripheral emulation
 
-Beyond standard copper link cables, Puck emulates non-serial peripherals through dedicated session adapters:
+Two more media ride the same pacing: an infrared link between two machines, and
+a printer on one machine's serial cable.
 
 ### Infrared link (`IrLinkSession`)
-- Emulates the CGB built-in infrared transceiver (`InfraredPort`) and cartridge-based transceivers (`HuC1Cartridge`, `HuC3Cartridge`).
-- Handles LED pulse modulation, line-of-sight signal attenuation, and half-duplex packet transmission.
+
+- Each machine has one infrared transceiver, `InfraredPort`. The CGB infrared
+  register (RP, `0xFF56`) and the HuC1/HuC3 cartridge IR windows are two
+  register views of it: a cartridge implementing `IInfraredCartridge` is handed
+  the machine's transceiver rather than modelling its own.
+- Infrared carries a light level, not a clocked bit stream, so there is no
+  shift edge to arbitrate. A machine emits light when its RP LED bit or a
+  cartridge IR-mode LED write is set. It receives its linked peer's emitted
+  light, as that peer stood at its last instruction boundary, OR-ed with its
+  own emitted light where the hardware senses its own LED.
+- The light is digital. Puck does not model the receiver's analog warm-up and
+  decay, distance, or line-of-sight attenuation, and it does not packetize the
+  exchange; the game software times its own pulses.
+- `IrLinkSession` is `LinkSession<InfraredPort>`, so it carries the pacing
+  credits above through `Suspend` and a coupled rewind. Disposing it returns
+  both received lines to dark.
+- `IrLinkSession` pairs two machines directly. The hosted linked machine group
+  wires only the serial cable (`SerialLinkGroupCore`), and the Humble battery's
+  infrared stages exercise the infrared link.
 
 ### Game Boy Printer (`GamePrinterDevice`)
 - Emulates the external thermal printer connected via serial cable (`GamePrinterLinkSession`).
 - Decodes the printer packet protocol: Magic bytes (`0x88, 0x33`), Commands (`Initialize`, `Print`, `Transfer Data`), 2-bit tile data decompression, exposure/contrast settings, and printout generation (`GamePrintout`).
-- Emitted printouts can be held as physical paper items in the player's world inventory or pinned to corkboards in the game environment.
+- No world surface displays a `GamePrintout` yet; the Humble battery's printer stage exercises the protocol.

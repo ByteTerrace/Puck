@@ -81,8 +81,8 @@ claimed replacement through an old snapshot entry.
 
 Membership and generation rows participate in dependency collection, search
 position keys, and cache invalidation. Allocation metadata lives in the same
-journal as fields. Claim and release charge fixed-slot journal writes, field and
-payload widths, occupancy-word scans, and cascades. They have no live-count
+journal as fields. Claim and release charge fixed-slot journal entries, field entries
+and vector components, occupancy-word scans, and cascades. They have no live-count
 multiplier for row movement. Snapshot iteration visits occupancy words and live
 bits; endpoint release still scans dependent pair pools and journals each released
 relationship. These scans remain in the admitted work price.
@@ -102,12 +102,11 @@ Physical body indices are resolved from those logical targets at runtime and are
 never stored in pool identity or record state. Interaction geometry reads the
 resolved body while effects address the logical instance through their lexical
 left/right bindings. Release removes the old lifetime; reclaim reads the new
-lifetime's current enum value. The former generation-pinned attachment mechanism
-is not a second carrier mode.
+lifetime's current enum value. There is no second carrier mode.
 
 Identity-owned records belong to the owned identity document and travel through
 its existing persistence and transfer path. Their typed fields must not be squeezed
-into the old integer-only fact lane. Receivers validate record shapes and values;
+into the integer-only identity fact lane (`WorldIdentityFactLane`). Receivers validate record shapes and values;
 they never silently discard fields that cannot be represented.
 
 ## Implementation order and evidence
@@ -117,8 +116,9 @@ they never silently discard fields that cannot be represented.
 2. Integrate World publication, replacement, checkpoints, declaration hashing,
    module composition, and cache invalidation. Exercise real host scenarios.
 3. Add bounded pairs, logical enum carriers, and identity-owned record transfer.
-4. Migrate static record families and Pong/Arena. Remove superseded regex paths
-   after their supported behavior has a typed replacement.
+4. Migrate static record families and Paddleball/Arena. Remove superseded regex paths
+   after their supported behavior has a typed replacement. Paddleball and Arena
+   are migrated, and no regex path for a record family remains.
 5. Run affected Release suites, architecture/vocabulary/schema checks, authored
    scenarios and real-World verification. Re-record changed baselines only after
    independent behavior and deterministic replay checks pass.
@@ -141,16 +141,16 @@ slowdown. Capacity scans and dependent-pair cascades remain explicitly priced.
 The [records-pools canary](../../tests/Puck.World.Canaries/records-pools/canary.json)
 exercises the real executable: an ordinary state mutation triggers claim, field
 write, release, reclaim with defaults, and deterministic replay. The shipped-game
-behavior laws check Pong scoring and Arena elimination independently of recorded
+behavior laws check Paddleball scoring and Arena elimination independently of recorded
 export hashes, so a changed baseline cannot hide a migration regression.
 
 Current status: the engine and source-language substrate includes
 generation-aware handles, fixed identity-slot rows, snapshots, pairs, lexical effects,
 round-trip projection, structurally typed pool-field references, enums on record
 fields, and advancing numeric fields with persisted clocks. Logical enum carriers
-cover reclaimed generations and pair-pool carriers. Both Arena and Pong use this
+cover reclaimed generations and pair-pool carriers. Both Arena and Paddleball use this
 path; Arena keeps fighter health, respawn continuation, pickup state, and carrier
-roles in its records, and Pong keeps its ball and paddle roles and state there.
+roles in its records, and Paddleball keeps its ball and paddle roles and state there.
 Identity-owned record transfer and pair interactions have World integration laws.
 
 Retained turns use a load-time row closure and bounded depth. Claim/release rows
@@ -158,12 +158,14 @@ Retained turns use a load-time row closure and bounded depth. Claim/release rows
 same retained segment as ordinary writes. The ring reserves its closed depth plus
 one pending segment, hashes and checkpoints its continuation, refuses or
 invalidates turns that write outside the declared closure, and restores a turn
-atomically through `rewindTurn`. The tree includes a 32-turn, 256-slot
+atomically through `rewindGroup`. The tree includes a 32-turn, 256-slot
 release/reclaim stress law and the executable records-pools canary; coordinated
 Release, generated-schema/vocabulary/name-registry, real-host, and replay checks
 remain the acceptance gate for this working tree. Equal live values alone are not
 the fresh-state hash criterion: allocator generations and retained continuation
 must also agree, as recorded in the
-[generation decision](../decisions/state-and-language.md). A playable authored
-Baba scenario that exercises selective push, blocking, overlap, noun rewrite,
-undo, and deterministic replay remains an explicit completion criterion.
+[generation decision](../decisions/state-and-language.md). The authored rulepush
+scenario is met by the [rulepush package](../../worlds/rulepush/README.md). Its tests
+cover selective push, blocking, overlap, noun rewrite and undo. Its canaries
+check deterministic replay and an eight-turn undo whose state hash matches the
+earlier turn.

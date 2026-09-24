@@ -14,7 +14,6 @@
 #:package System.Configuration.ConfigurationManager@10.0.12
 #:package System.Drawing.Common@10.0.12
 #:package System.Security.Cryptography.Xml@10.0.12
-
 /* PowerShell
     dotnet ./bootstrap.cs `
         --application-name '<application-name>' `
@@ -381,8 +380,7 @@ var delegatedGroups = string.Join(separator: ", ", values: groupNameSuffixMap.Va
 var roleIdSet = string.Join(separator: ", ", values: delegatedRoleIds);
 var ownerCondition = string.Join(separator: " AND ", values: new[] { ("write", "Request"), ("delete", "Resource") }
     .Select(selector: operation =>
-        ($"((!(ActionMatches{{'Microsoft.Authorization/roleAssignments/{operation.Item1}'}})) OR (@{operation.Item2}[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{roleIdSet}}} AND (" +
-        $"@{operation.Item2}[Microsoft.Authorization/roleAssignments:PrincipalType] StringEqualsIgnoreCase 'ServicePrincipal' OR " +
+        (((string)$"((!(ActionMatches{{{{'Microsoft.Authorization/roleAssignments/{operation.Item1}'}}}})) OR (@{operation.Item2}[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{{{roleIdSet}}}}} AND (@{operation.Item2}[Microsoft.Authorization/roleAssignments:PrincipalType] StringEqualsIgnoreCase 'ServicePrincipal' OR ") +
         $"@{operation.Item2}[Microsoft.Authorization/roleAssignments:PrincipalId] ForAnyOfAnyValues:GuidEquals {{{delegatedGroups}}})))")));
 var existingCiAssignments = await resourceManagerClient.GetRoleAssignments(scope: resourceGroup.Id)
     .GetAllAsync(cancellationToken: cancellationToken)
@@ -634,7 +632,7 @@ Console.WriteLine(value: "Ensuring that template specifications exist...");
 // The manifest records a separate immutable version for each dependency, in publication order.
 var publisher = new System.Diagnostics.ProcessStartInfo(fileName: "dotnet") {
     UseShellExecute = false,
-    WorkingDirectory = Puck.RepositoryPaths.FindRoot()!,
+    WorkingDirectory = Puck.RepositoryPaths.RequireRoot(),
 };
 foreach (var argument in new[] { "run", "--project", Puck.RepositoryPaths.Resolve(relativePath: "src/Puck.Cli"), "-c", "Release", "--", "azure", "publish-template-specs" }) {
     publisher.ArgumentList.Add(item: argument);

@@ -10,7 +10,7 @@ namespace Puck.State;
 /// carried). Neither family member escapes or collapses an offending character the way that mapping used to — each
 /// refuses it, by name, at construction, which is what makes simply holding either type a proof of safety rather
 /// than a courtesy some caller remembered to check.</summary>
-internal static class IdentifierRules {
+public static class IdentifierRules {
     /// <summary>The reserved-character set spelled out for a refusal sentence.</summary>
     public const string ReservedDescription = "control characters and of the reserved set (quote, angle brackets, pipe, colon, asterisk, question mark, and both slashes)";
 
@@ -46,7 +46,6 @@ internal static class IdentifierRules {
         return true;
     }
 }
-
 /// <summary>
 /// A validated world/owned-world id or process-local world-instance name — the type cannot hold a value that does
 /// not survive the document project's id↔file-name mapping, or that would navigate a directory
@@ -139,10 +138,12 @@ public readonly record struct SafeName {
 /// A validated <c>state</c>-section row name or cell key — the base <see cref="SafeName"/> rule plus no dot
 /// anywhere, which is what makes the <c>state.&lt;row&gt;.&lt;key&gt;</c> HUD binding grammar unambiguous by
 /// construction: splitting a bound token on <c>'.'</c> can never mistake part of a row or cell name for a grammar
-/// separator, because neither can hold one. A row's reserved slot key
+/// separator, because neither can hold one. It holds no backquote either, the expression language's quote for a
+/// name, so every row and cell key can be written in an expression. A row's reserved slot key
 /// (<c>"$value"</c>) is unaffected — <c>'$'</c> is neither a reserved character nor a dot, so it is already a legal
 /// <see cref="CellName"/> like any other author-chosen key, exactly the one reserved exception the substrate
-/// mints rather than authors.
+/// mints rather than authors. A generated name (<see cref="GeneratedName"/>, <c>turn$east</c>) is a legal
+/// <see cref="CellName"/> for the same reason; the doors an author writes through refuse it, not this type.
 /// </summary>
 public readonly record struct CellName {
     private CellName(string value) => Value = value;
@@ -165,8 +166,8 @@ public readonly record struct CellName {
         );
     /// <inheritdoc/>
     public override string ToString() => Value;
-    /// <summary>Parses a candidate, refusing by name (naming the offending character, or the dot rule) rather than
-    /// throwing.</summary>
+    /// <summary>Parses a candidate, refusing by name (naming the offending character, or the dot or backquote rule)
+    /// rather than throwing.</summary>
     /// <param name="candidate">The candidate string.</param>
     /// <param name="name">The validated name, on success.</param>
     /// <param name="reason">Why the candidate was refused, or empty on success.</param>
@@ -183,6 +184,12 @@ public readonly record struct CellName {
 
         if (candidate!.Contains(value: '.')) {
             reason = "carries a '.' — a state row/cell name must be free of dots so state.<row>.<key> parses unambiguously";
+
+            return false;
+        }
+
+        if (candidate.Contains(value: '`')) {
+            reason = "carries a '`' — an expression quotes a state row/cell name in backquotes, so the name must be free of them";
 
             return false;
         }

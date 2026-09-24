@@ -19,17 +19,13 @@ public sealed class RomOnlyCartridge : CartridgeBase {
         Header.HasRam;
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        // No registers.
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (address - MemoryMap.ExternalRamStart);
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
         address;
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
         // No registers.
     }
 

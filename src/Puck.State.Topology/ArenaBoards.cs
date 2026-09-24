@@ -100,13 +100,11 @@ public static class ArenaBoards {
     /// <param name="direction">The direction ordinal; one the topology steps in, or the ray is refused.</param>
     /// <param name="values">Scratch storage of at least the topology's cell count.</param>
     /// <param name="word">The word buffer, at least the topology's cell count long.</param>
-    /// <param name="ray">The word and the read that produced it, on success.</param>
+    /// <param name="ray">The word, the filled prefix of <paramref name="word"/>, on success.</param>
     /// <param name="reason">Why the ray was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the ray was read.</returns>
-    /// <remarks>Each origin and direction reads its own word off the one board, and the word carries which of them
-    /// it came from.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
-    public static bool TryReadRay(StateArena arena, int rowOrdinal, int origin, int direction, Span<long> values, Span<long> word, out ArenaWord ray, out string reason) {
+    public static bool TryReadRay(StateArena arena, int rowOrdinal, int origin, int direction, Span<long> values, Span<long> word, out ReadOnlySpan<long> ray, out string reason) {
         ray = default;
 
         if (!TryBoard(
@@ -138,16 +136,7 @@ public static class ArenaBoards {
             word: word
         );
 
-        ray = new ArenaWord(
-            arena: arena,
-            letters: word[..length],
-            source: new WordSource(
-                AttributeOrdinal: -1,
-                Direction: direction,
-                RowOrdinal: rowOrdinal,
-                Start: origin
-            )
-        );
+        ray = word[..length];
 
         return true;
     }

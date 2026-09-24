@@ -1,0 +1,168 @@
+{
+  "format": 1,
+  "spaces": {
+    "wordSpySpace": {
+      "dimensions": 64,
+      "entries": {
+        "00e3e584e242f926ff6b26bdd0cd26aac15b7ae023a7306c81a7d5708ce8459a": {
+          "text": "violin",
+          "vector": "9u7-B_PpDuj2FP0PEBX28_n0DhUXBxYDDhILABH9GvQSAgYaEQcL5grrChMX9ekD-RAI8O7rAO0XEhj98vHoDA"
+        },
+        "03b6b3e9163de296faebe3502b998148ae0a756cbb82382a18622a4c19e1cbee": {
+          "text": "flight",
+          "vector": "GunzBQ0S9Bnx7QIBCwEHAOf5FRAB6Anu7ef6Bvnt7-b95hgY8f3nFxoDFgAKBvP0AO797_cX-RHu8_Ln_foEDg"
+        },
+        "03ecab669ba200ba17f994677e88894400fd627e6f70439247ce0cbda8ca9a20": {
+          "text": "metal",
+          "vector": "6ej67ewL-OoNEQ0EEPnnGO0J8RgX7ffnFg3rC_oXBQ4XE_ESEATu7wjv7w8VFgT4Bwjq7Q4C-QILAAb07vv_6Q"
+        },
+        "0ae90cdacdb49230553a9c64137c22d1b614182a043ffdc6a6ae65af30c9ee17": {
+          "text": "quarry",
+          "vector": "5v_uEhgB-vTv9w7sAhXl8hPxAgL5GeoLCPAE-QUDBfPt_Orp6fAY7fDtFvr9AOb0FwEEGxoDD_kG9xbzEOYJ9Q"
+        },
+        "0f4168490e38b8447e11ba4bd656aa11b925bd22af30bac464bc153fdb608501": {
+          "text": "water",
+          "vector": "DPwRGRDuCPEXGPz47fb1GRn86RbzCgnm8fP28_sLEhAXEP3t6f3uA-zz7O0F-OYVFOcH9Qnz9ATqARQQ8PT4AQ"
+        },
+        "176473d7313395b6e209bc6b1d57aa160b628706860aa0554d7af60a1d40ab87": {
+          "text": "night",
+          "vector": "-PQW9eX6Du315_AcEQ389xD7B_T5GP0bEAEEDv8W5xb1CgcXEPgBB_EM7RXy8AgY6f3xDOUTD_cY-_LyEBfyBw"
+        },
+        "20cd4732ae60507a2e2e01ae3ca7a75cc3c0d5a4e98f9a69689e1f31df74493e": {
+          "text": "kettle",
+          "vector": "7wrl9-Xk-fn4HOr3FPb-_RP1EwQB_gru-QMR6wT2EQr94xsW6fD3Cuvr9Pz-8BLu8fn06BIBEBHpGhD_8g_4BQ"
+        },
+        "421c3d033a6ce4c326c968e663e678f8eb5e2deecf5d813bfd8460273cc0ab4d": {
+          "text": "lagoon",
+          "vector": "CuXw_hsb7ejv-QboBBEL-_QFEgL9AQoQCwTlFv769u0GBPYC6egE6xsbDQQYDfQX6PLzAPHy7_UWAQkD5RT8EQ"
+        },
+        "49eff747f7b66f70133bfe00aa8ac2d6b0fbee5be80e52537b0163f147d20418": {
+          "text": "thunder",
+          "vector": "HAzzCg4bCwDx5_PwCf4QC_UN9AgPABjsBR7vBwcA5h32Ffju_-wE_vYc5QP0Eebv_RQO6wbv6P_7CA_98Afr8A"
+        },
+        "5605a516a7ebf33bbfc1189be3b201f380d9c721b124098eda2894544e2771d7": {
+          "text": "ladder",
+          "vector": "CeXqCPIZGQgICuX5EBLx7xcX_QLzBgUAFucLBQYRFekGDxXz--0AEP37-xoKFgkQDxHp8_0L-wkPFevt8f_n6g"
+        },
+        "5a2a0ed9aa3ab7d82b53e8209b13bf598377870fd38f8e1063bfbe0c4d7d7f96": {
+          "text": "heat",
+          "vector": "GfwD_g32EQr87-oOCgH87QUL7QcIBPQIFuoQ7AkWFRDu7-cQGPzoGfAF-v_y6xjo8woU6-_v6AL6Fv_87Bnv9w"
+        },
+        "68566dc699f6bb9ea6330371b5dd1c402ae6f717dd30ef15a88d1a7a6afaf8c7": {
+          "text": "orchard",
+          "vector": "7OsC7_AKEuQW__b_9PQEDAD39P4U-P0NFxQG9xAZ9xbwCOX_5hrxF_MP9AT7CgPlAOr_-hHsGQD7GxMLFvMYDw"
+        },
+        "6d02f7d61e02d070944a9a37856f43d78fb89f8adea6150cd2fdcb53d2a4cc4a": {
+          "text": "meadow",
+          "vector": "EuwTFQvyFQIYFwrr5_7nFBL9_wsH_wTu7v_uAOvo_wwR9fD9BvIV_REG_uwW-wrx9eYOEOsA--wZDwXp6Bjy9A"
+        },
+        "79bfb0e2ba76b9d447606ddbcc494834f05a4c11deb052e74b49ea307a3c5bcd": {
+          "text": "anchor",
+          "vector": "GPrrBxrz7A_v8eoKB_r4EQ_8E_Tw9fvn6BD9-AYACQ_nGgQREBQO6QP3BQ30Gu4N6PYJ6wzq8vH8AAbrE_rmFw"
+        },
+        "7cadc15d609c4ae9b4be6265b8e1cace16e6fa78a81ab0c7db82e687a7c867a5": {
+          "text": "ember",
+          "vector": "7uvo-APr6vr_Ehn18_AP7hYP-O719AwF6fkQEfH2BPgRF-cJDfkI9AUIGOb6DxDyEQ3rCegSAhbt9O8REewX_g"
+        },
+        "7cd0fc6ee61e2a57b030062d729f8b68705faab8fee6d727ada7a8c0329fab6e": {
+          "text": "blanket",
+          "vector": "7-3_Fv3sFxgRGPsAGRj98_7wDvL5GhfvBvvw6fMRDQXsERcX5g39FvL0_g8D6e_w5vcABgf99usJ5-8D8AAQ_w"
+        },
+        "80f189984e5ca70287d13342f6daa0db45cba3c131c4e46dc81360f3a4c4f690": {
+          "text": "music",
+          "vector": "ExQVCfUQDvvp-ggT9BHyEQfw9hQZFQ7s9wzn6hTq_AYK6fzo-Ab9BewC7OcZBxYZ-AkR-vESFwHq6_r_6_oI-g"
+        },
+        "8cbbcf29d9cef89675c5f5c1dcfe827d0570416a5aaba30dd0de159661ad905b": {
+          "text": "pepper",
+          "vector": "_wj_6Rj3CObt_PkL7hD-Bu0W5BURExXu__YO6wz2BxgHHAfiAhLs7g4F7-fn8goOFwH97e8dDf_5_BL8-P0A9g"
+        },
+        "8d2ac8b58ead9744d77286de9b0bcb7a894f238c3149fc9f3b1e3caff36330fe": {
+          "text": "money",
+          "vector": "8BgJBgoGCxP4Df0G7xr97wDv-xXv9BH1FP7m8wMU9OwaE_3mDuQFAgP-FgTn6-0G6_nt7_L77xzlFPQJCQwO7g"
+        },
+        "9149a4a2c2c78eacd782a5735821aa0a19708bb305c49530c474b37dd9aa6a46": {
+          "text": "glacier",
+          "vector": "BQLv9f0IAw7w8uj2FxcXExIKAOoDEOrv7fcU-P_s8BHt7gYXAhgB5gUV6OUaD-r1_hX4BgLsDf31Aef0AgwPEg"
+        },
+        "94a35fdc30df7d129a447217f9ffade7e4917bdcc90460d7db2f0460c08c0e06": {
+          "text": "tunnel",
+          "vector": "6_oE8f_39AMN9uj77_7uBesE9uL4GAX-GwcR9Pn_8fMY5QgcEQHkFQnn5O8LBArpExsGDvf2-AcbFgn1BPoU9A"
+        },
+        "a82ce870f999b01b17b9135b72d1f4b6d31217aec9cbee69d5bfc9659018ca06": {
+          "text": "medicine",
+          "vector": "6v8PB-kE7usHEQMN8fMU6f30AfvyABgHAPH68-sABv_n8u32-_v8Gefx5-zv6wbt-Bb6FugH8RQOGffuFRMT6Q"
+        },
+        "a84571394b5e99fe70aae39ece25f844acbaf83479e27f39a30732e092b19677": {
+          "text": "falcon",
+          "vector": "7gkA8-gb5wUZEQr3FBrq-xoa8vMA__AJ_voOABrs9vMQ5PD-EgQc_gQNCQv8BuYZ8gHzEf758xH2_OfzCOoJEw"
+        },
+        "b52115ea553c55b7f70ceb81a97870163e02cb159d7d4717abb82d4e606e2465": {
+          "text": "feather",
+          "vector": "CAoNAxHuEwAH9eH96PLv6gL_DQcLC_bq_Bb_DvnuBeUFAPgZAhjp_fkI6RcCGhPvBwn_Gfb95BHkAPHhCwQUFA"
+        },
+        "ba08dad18ac84822bc25630acb53b7ef93888d4b7cc8edb9245c866f02bb4074": {
+          "text": "saddle",
+          "vector": "9wjt7_3v7QgA8fjnBuYNGukY5uoZDAb86gP0AgII7PYH6w4IBgz2F_ELCwgREPHuBhnrBeoQDBfy-QwQ7AgW5w"
+        },
+        "bd1220101d5de4dfd1cf524466da6da91883f44e911a74db5949ded3ee3b9fe0": {
+          "text": "wordspy",
+          "vector": "Ag4I-wH98vv9CPj2Ce8YGfD-Ahbv6_0Q7_7r9e7jDgkP5fUYBBYODBr0DBEU6QsC_xHl-PQK8Ovj8AvjAAgD5Q"
+        },
+        "c1d64b2d4cb30f1be788cc4d246ddd9fc1fe85a3eb3a85a3de33829dfaf6ce7d": {
+          "text": "harbor",
+          "vector": "Genv9e3--BL__Q4Y8Of19vYB7_315vz0AhL0GBnw6AQUFgwC7hf4EhT0AgEUFwoG_u8W7PERAgfm7w_-8BIJFQ"
+        },
+        "c5220b3c4266890f047190c18dc4243e0dac079d43ca8065899c4f9f3cf124ef": {
+          "text": "lantern",
+          "vector": "BOfv5w796Bb0FPT99gcWCBQM_frs-un96OwFGAf0BBMH7OoT6ur18PAVFBXn9vwDB-4L8vYN-wsSFwX65wjyFg"
+        },
+        "cde56892bbebbf6c5fe56cf3317f558aec67aeb0ba19504ca3c9e6801cb45b28": {
+          "text": "journey",
+          "vector": "9_7sD_4A6Q7l_P39-gsYEhfp5AH0Fev5_xsZD_cVE_oD6e7vDPwXDQ8J6gzy7PbwCuYK6hsA_xEREgoKAgQQ-A"
+        },
+        "d1068beeb96a6a79937661d5cc9f290dddaa5730e64b7ab2b238078a1194c614": {
+          "text": "compass",
+          "vector": "-fzk-wf28AIY_e3n4vMa5wbz7ALzCfD36QcKE_ESHA8G5fHsHP7_GxsN_QL79fsB8QIH6_fzCgkRDQIU8-7p_g"
+        },
+        "d12478167056f775ec7fb7e071a94db0e8b671349c0c8a0436be234edbd38da2": {
+          "text": "wordspy",
+          "vector": "BBz-9xMF-e38C_UYEB0ZHP0U9RDtDRML-A8UCQcRCxEY7An5-O3nBvrlAP757wIC7QMTFBoO7wYZBf8b_PYN7Q"
+        },
+        "d51f791051c2e5f9112c57109acd4d7b9b5788df79db36fa24c09c3c9ee8a569": {
+          "text": "comet",
+          "vector": "_hUHEgAX6PztDvb76w_4GPAYA-v09QHxFe0Y8Rft-vkO6AQTDhT58BIO9O8JCAwQ_-gJB-397QoJBRbp6ezs7w"
+        },
+        "d8e66c7c5692c1e03b2cea2791af8dd611d9a938b29fca1ee6326caea0a84352": {
+          "text": "hunting",
+          "vector": "-vsNCgIKGgXv-gQK8BIF6wEDGxsNG-0NCgsQ5hf6DQD9BAgU-RsK6QQL6w_zF-zoCvMJ_f0F9Of8F_XqDxzoFA"
+        },
+        "e272deecde720ffc773d7a6a81adabbc366ccbb64da5abdb6b26f52cd3f952cb": {
+          "text": "cold",
+          "vector": "CgoGC_YK7ewQEO8SFxQX8vP86_z3GfX1CwztAxYC7hcUFBUOC-j16RcR8QnyDhEU6esO7AUNExX2_f4Q8ggAEQ"
+        },
+        "ec450786e26a5154173545c402bcc03b20e2e0477d6086fa632a55c85bdcdd83": {
+          "text": "sport",
+          "vector": "6xXy-e0U-AUaA_8a-BoPBhrsEfwH6QMaBPQR7_zpExgVF-r7EAwLEgEIAvMEEewRDgP4Gf_xDfsI8g4W6RcH9w"
+        },
+        "f4c44266a2dfad9847930615218f2811c5ee3248c6df3d3921a6d2b8e67c8bf6": {
+          "text": "velvet",
+          "vector": "9g4R_RITFOv-_QjvBhkNCesEDu3_FQca-vMIDuwS-PgY6_Tt9-oP9hcRFusV_PcYB_YG_P379xn3CRYa5e76Fw"
+        },
+        "f6000d4ef895fd961f1357ef1cdc690203b81a06fd8f19a54a0e37ce75900038": {
+          "text": "pillow",
+          "vector": "HBT3-_sB9eYCBP7sGeUDDxAL7AUZGvT6BesS6envFuz9DvDl-gjn6QkE_AT29OkIFOzp8gMFCA_2Fgv_8fb87g"
+        },
+        "fa82948800a46459b9df0c867a38b9e466f71e3ec35b3f3a5344b8a9d8fbefed": {
+          "text": "whistle",
+          "vector": "-PT9AfnrC_EU_-wYAfQJAw_q5vcY9RMY7wEEEw0Z5wH47fr1GBX__BLoFgvv5BkNBgf7_e4F6g31HQXvGQYB8A"
+        },
+        "ff2a8a3987ef4645f85dd41ccf34338ef0044fcc1a5a6ae11887aa305ac7a997": {
+          "text": "canyon",
+          "vector": "Cu7k-_cM_ent5vMM8wgD7OsEDg765BAJ_g0O8hb8C-oNBPcO6AjpFgwHEPHp7RTlAwMa6_nvBvvuAu0M5QH85w"
+        }
+      },
+      "model": "puck-fixture",
+      "revision": "1"
+    }
+  }
+}

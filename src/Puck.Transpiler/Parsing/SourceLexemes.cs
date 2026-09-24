@@ -28,10 +28,12 @@ public static class SourceLexemes {
                         offset: index
                     );
                 }
-            } else if (source[index] is ')' or ']' or '}') { depth = Math.Max(
+            } else if (source[index] is ')' or ']' or '}') {
+                depth = Math.Max(
                 val1: 0,
                 val2: (depth - 1)
-            ); }
+            );
+            }
         }
         PuckParseException Refuse(string message, int offset) {
             var line = 1;

@@ -1,101 +1,102 @@
-import { TokenCredential } from "@azure/identity";
+import type { TokenCredential } from "@azure/identity";
 import { BlobServiceClient } from "@azure/storage-blob";
 import {
   Alert,
-  Box,
+  Badge,
   Button,
-  Code,
   Group,
-  Loader,
+  type MantineColor,
+  Paper,
   SegmentedControl,
+  Skeleton,
   Stack,
+  Table,
   Text,
-  Title,
 } from "@mantine/core";
-import { useCallback, useEffect, useState } from "react";
+import { RiBarChartBoxLine, RiErrorWarningLine, RiHistoryLine } from "@remixicon/react";
+import { useEffect, useState } from "react";
 import { resolveStorageEndpoint } from "../clients/resolveStorageEndpoint";
+import { navigateToSection } from "../shell/sectionStore";
+import { EmptyState } from "../ui/EmptyState";
+import { Kicker } from "../ui/Kicker";
+import classes from "./Page.module.css";
+import { PageHeader } from "./PageHeader";
+import { Timestamp } from "./Timestamp";
+import { Well } from "../ui/Well";
+import { type AuditEvent, type AuditKind, auditJournal, initialAuditJournalState, JOURNAL_PREFIX } from "./auditJournal";
+import { API_TOKEN_SCOPES, STORAGE_API_VERSION, STORAGE_TOKEN_SCOPES } from "./data/storage";
 
-const API_TOKEN_SCOPES = ["https://api.byteterrace.com/user_impersonation"];
-const STORAGE_TOKEN_SCOPES = ["https://storage.azure.com/.default"];
-const JOURNAL_PREFIX = "system/events/blob/";
-const JOURNAL_FETCH_LIMIT = 60;
+const KINDS: Record<AuditKind, { color: MantineColor; label: string }> = {
+  created: { color: "jade", label: "created" },
+  deleted: { color: "red", label: "deleted" },
+  other: { color: "gray", label: "changed" },
+  renamed: { color: "yellow", label: "renamed" },
+};
 
-type AuditKind = "created" | "deleted" | "other" | "renamed";
+const FILTERS = [
+  { label: "All", value: "all" },
+  { label: "Created", value: "created" },
+  { label: "Deleted", value: "deleted" },
+  { label: "Renamed", value: "renamed" },
+];
 
-interface AuditEvent {
-  blobPath: string;
-  journalUrl: string;
-  kind: AuditKind;
-  time: Date;
+const dayOf = (time: Date) => time.toLocaleDateString(undefined, { day: "numeric", month: "short", weekday: "short" });
+
+function TimelineSkeleton() {
+  return (
+    <Stack aria-label="Loading your audit history" gap="xs" role="status">
+      {[0, 1, 2, 3].map((row) => (
+        <Skeleton height={28} key={row} />
+      ))}
+    </Stack>
+  );
 }
 
-const KIND_STYLES: Record<AuditKind, { background: string; color: string; label: string }> = {
-  created: { background: "#ebfbee", color: "#2f9e44", label: "created" },
-  deleted: { background: "#fff5f5", color: "#e03131", label: "deleted" },
-  other: { background: "#f1f3f5", color: "#868e96", label: "changed" },
-  renamed: { background: "#fff9db", color: "#f08c00", label: "renamed" },
-};
+function Timeline({ events }: { events: AuditEvent[] }) {
+  const days = Map.groupBy(events, (event) => dayOf(event.time));
 
-const kindOf = (eventType: string): AuditKind => {
-  const type = eventType.toLowerCase();
+  return (
+    <Well>
+      <Table.ScrollContainer minWidth={560}>
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Time</Table.Th>
+              <Table.Th>Action</Table.Th>
+              <Table.Th>Target</Table.Th>
+              <Table.Th>Operation</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          {[...days].map(([day, dayEvents]) => (
+            <Table.Tbody key={day}>
+              <Table.Tr>
+                <Table.Th colSpan={4} scope="rowgroup">
+                  <Kicker c="dimmed">{day}</Kicker>
+                </Table.Th>
+              </Table.Tr>
+              {dayEvents.map((event, index) => (
+                <Table.Tr key={`${event.journalUrl}-${index}`}>
+                  <Table.Td className={classes.nowrap}>
+                    <Timestamp relative time={event.time} />
+                  </Table.Td>
+                  <Table.Td>
+                    <Badge color={KINDS[event.kind].color}>{KINDS[event.kind].label}</Badge>
+                  </Table.Td>
+                  <Table.Td className={`${classes.data} ${classes.path}`}>{event.blobPath}</Table.Td>
+                  <Table.Td c="dimmed" className={classes.data}>
+                    {event.operation ?? ""}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          ))}
+        </Table>
+      </Table.ScrollContainer>
+    </Well>
+  );
+}
 
-  if (type.includes("created")) {
-    return "created";
-  }
-
-  if (type.includes("deleted")) {
-    return "deleted";
-  }
-
-  if (type.includes("renamed")) {
-    return "renamed";
-  }
-
-  return "other";
-};
-// Journal payload shapes are parsed defensively: the writer serializes
-// CloudEvent batches whose casing depends on serializer configuration.
-const parseJournal = (raw: unknown, journalUrl: string): AuditEvent[] => {
-  const record = raw as Record<string, unknown>;
-  const items = (Array.isArray(raw)
-    ? raw
-    : ((record?.value ??
-        record?.Value ??
-        record?.items ??
-        record?.Items) as unknown[])) ?? [];
-
-  return items.flatMap((item) => {
-    const event = item as Record<string, any>;
-    const type = String(event?.type ?? event?.Type ?? "");
-    const time = event?.time ?? event?.Time;
-    const url = String(
-      event?.data?.url ?? event?.Data?.url ?? event?.data?.Url ?? "",
-    );
-    let blobPath = "";
-
-    try {
-      blobPath = decodeURIComponent(
-        new URL(url).pathname.split("/").slice(2).join("/"),
-      );
-    } catch {
-      blobPath = url;
-    }
-
-    if (!type || !time) {
-      return [];
-    }
-
-    return [
-      {
-        blobPath: blobPath,
-        journalUrl: journalUrl,
-        kind: kindOf(type),
-        time: new Date(time),
-      },
-    ];
-  });
-};
-
+/** Audit Trail: the read-only journal of changes to the user's files, newest first, grouped by day. */
 export default function AuditView({
   tokenCredential,
   userObjectId,
@@ -103,77 +104,45 @@ export default function AuditView({
   tokenCredential: TokenCredential;
   userObjectId: string;
 }) {
-  const [error, setError] = useState<string | undefined>();
-  const [events, setEvents] = useState<AuditEvent[] | undefined>();
+  const [{ error, events, journalUrls }, setJournal] = useState(initialAuditJournalState);
   const [filter, setFilter] = useState("all");
-  const [journalUrls, setJournalUrls] = useState<string[]>([]);
-  const [storageEndpoint, setStorageEndpoint] = useState<string>();
 
   useEffect(() => {
-    resolveStorageEndpoint(tokenCredential, API_TOKEN_SCOPES).then(
-      setStorageEndpoint,
-      (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
-    );
-  }, [tokenCredential]);
-
-  const load = useCallback(async () => {
-    if (!storageEndpoint) {
-      return;
-    }
-
-    setError(undefined);
-
-    try {
-      const containerClient = new BlobServiceClient(
-        storageEndpoint,
-        tokenCredential,
-      ).getContainerClient(userObjectId);
-      const journalNames: string[] = [];
-
-      for await (const blob of containerClient.listBlobsFlat({
-        prefix: JOURNAL_PREFIX,
-      })) {
-        journalNames.push(blob.name);
-      }
-
-      // Journal names begin with a UTC timestamp, so name order is time order.
-      const recent = journalNames.sort().reverse().slice(0, JOURNAL_FETCH_LIMIT);
-      const accessToken = await tokenCredential.getToken(STORAGE_TOKEN_SCOPES);
-      const headers = {
-        Authorization: `Bearer ${accessToken!.token}`,
-        "x-ms-version": "2025-01-05",
-      };
-      const parsed = await Promise.all(
-        recent.map(async (name) => {
-          const journalUrl = `${storageEndpoint}/${userObjectId}/${name}`;
-
-          try {
-            const response = await fetch(journalUrl, { headers });
-
-            return response.ok
-              ? parseJournal(await response.json(), journalUrl)
-              : [];
-          } catch {
-            return [];
-          }
+    const subscription = auditJournal(
+      {
+        headers: async () => ({
+          Authorization: `Bearer ${(await tokenCredential.getToken(STORAGE_TOKEN_SCOPES))!.token}`,
+          "x-ms-version": STORAGE_API_VERSION,
         }),
-      );
+        listJournalNames: async (endpoint) => {
+          const names: string[] = [];
 
-      setEvents(
-        parsed.flat().sort((a, b) => b.time.getTime() - a.time.getTime()),
-      );
-      setJournalUrls(
-        recent.map((name) => `${storageEndpoint}/${userObjectId}/${name}`),
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [storageEndpoint, tokenCredential, userObjectId]);
+          for await (const blob of new BlobServiceClient(endpoint, tokenCredential)
+            .getContainerClient(userObjectId)
+            .listBlobsFlat({ prefix: JOURNAL_PREFIX })) {
+            names.push(blob.name);
+          }
 
-  useEffect(() => {
-    load();
-  }, [load]);
+          return names;
+        },
+        resolveEndpoint: () => resolveStorageEndpoint(tokenCredential, API_TOKEN_SCOPES),
+        userObjectId: userObjectId,
+      },
+      async (url, headers) => {
+        const response = await fetch(url, { headers });
 
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        return response.json();
+      },
+    ).subscribe(setJournal);
+
+    return () => subscription.unsubscribe();
+  }, [tokenCredential, userObjectId]);
+
+  // Hands the newest journals to Cloud Storage's SQL editor, which picks the query up when it opens.
   const analyzeWithSql = () => {
     const urls = journalUrls.slice(0, 20);
 
@@ -190,133 +159,57 @@ export default function AuditView({
       return;
     }
 
-    history.pushState(null, "", "/data");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigateToSection("data");
   };
 
-  const visible = (events ?? []).filter(
-    (event) => "all" === filter || event.kind === filter,
-  );
-  const groups = visible.reduce<Record<string, AuditEvent[]>>(
-    (accumulator, event) => {
-      const day = event.time.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-        weekday: "short",
-      });
-
-      (accumulator[day] ??= []).push(event);
-
-      return accumulator;
-    },
-    {},
-  );
+  const visible = (events ?? []).filter((event) => "all" === filter || event.kind === filter);
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
-        <Box>
-          <Title order={3}>Audit</Title>
-          <Text c="dimmed" size="sm">
-            Every change to your files, recorded automatically. Read-only — not
-            even you can edit it.
-          </Text>
-        </Box>
-        <Button
-          disabled={0 === journalUrls.length}
-          onClick={analyzeWithSql}
-          variant="default"
-        >
-          Analyze with SQL
-        </Button>
-      </Group>
-      <SegmentedControl
-        data={[
-          { label: "All", value: "all" },
-          { label: "Created", value: "created" },
-          { label: "Deleted", value: "deleted" },
-          { label: "Renamed", value: "renamed" },
-        ]}
-        onChange={setFilter}
-        value={filter}
-        w="fit-content"
-      />
-      {error ? (
-        <Alert color="red" title="Could not load your audit history">
-          {error}
-        </Alert>
-      ) : undefined === events ? (
-        <Loader size="sm" />
-      ) : 0 === visible.length ? (
-        <Text c="dimmed">No recorded events yet.</Text>
-      ) : (
-        <Stack
-          gap={0}
-          style={{
-            background: "var(--mantine-color-body, #ffffff)",
-            border: "1px solid var(--mantine-color-default-border, #dee2e6)",
-            borderRadius: 8,
-          }}
-        >
-          {Object.entries(groups).map(([day, dayEvents]) => (
-            <Box key={day}>
-              <Text
-                c="dimmed"
-                fw={700}
-                px="lg"
-                py={8}
-                size="xs"
-                tt="uppercase"
-              >
-                {day}
+      <PageHeader
+        actions={
+          <Button
+            disabled={0 === journalUrls.length}
+            leftSection={<RiBarChartBoxLine size={16} />}
+            onClick={analyzeWithSql}
+            size="sm"
+            variant="default"
+          >
+            Analyze with SQL
+          </Button>
+        }
+        kicker="Account"
+        title="Audit Trail"
+      >
+        Every change to your files, recorded automatically. Read-only — not even you can edit it.
+      </PageHeader>
+      <Paper p="md" withBorder>
+        <Stack gap="md">
+          <Group justify="space-between">
+            <SegmentedControl aria-label="Show events" data={FILTERS} onChange={setFilter} size="xs" value={filter} />
+            {events ? (
+              <Text c="dimmed" className={classes.data}>
+                {visible.length} of {events.length} events
               </Text>
-              {dayEvents.map((event, index) => {
-                const style = KIND_STYLES[event.kind];
-
-                return (
-                  <Group
-                    gap="md"
-                    key={`${event.journalUrl}-${index}`}
-                    px="lg"
-                    py={8}
-                    wrap="nowrap"
-                  >
-                    <Box
-                      style={{
-                        alignItems: "center",
-                        background: style.background,
-                        borderRadius: 20,
-                        color: style.color,
-                        display: "flex",
-                        flexShrink: 0,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        height: 22,
-                        justifyContent: "center",
-                        textTransform: "uppercase",
-                        width: 68,
-                      }}
-                    >
-                      {style.label}
-                    </Box>
-                    <Code style={{ flexGrow: 1 }}>{event.blobPath}</Code>
-                    <Text
-                      c="dimmed"
-                      size="xs"
-                      style={{ fontVariantNumeric: "tabular-nums" }}
-                    >
-                      {event.time.toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </Text>
-                  </Group>
-                );
-              })}
-            </Box>
-          ))}
+            ) : null}
+          </Group>
+          {error ? (
+            <Alert color="red" icon={<RiErrorWarningLine size={18} />} title="Could not load your audit history" variant="light">
+              {error}
+            </Alert>
+          ) : undefined === events ? (
+            <TimelineSkeleton />
+          ) : 0 === visible.length ? (
+            <EmptyState icon={<RiHistoryLine size={22} />} title={0 === events.length ? "No recorded events yet" : "Nothing matches"}>
+              {0 === events.length
+                ? "Uploads, deletions, and renames in your storage appear here as they happen."
+                : "No recent event is of this kind. Choose All to see every event."}
+            </EmptyState>
+          ) : (
+            <Timeline events={visible} />
+          )}
         </Stack>
-      )}
+      </Paper>
     </Stack>
   );
 }

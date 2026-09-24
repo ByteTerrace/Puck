@@ -15,7 +15,9 @@ public static class AddonOutCellReader {
         var kindByte = cell[AddonAbi.OutCellOffsets.Kind];
         var kind = ((AddonOutCellKind)kindByte);
 
-        if (!Enum.IsDefined(value: kind)) {
+        // Named rather than Enum.IsDefined, which reads a type cache the runtime holds only weakly and allocates it
+        // again after every collection, on a check every guest tick makes.
+        if (kind is not (AddonOutCellKind.Act or AddonOutCellKind.Ask)) {
             error = $"kind {kindByte} is not defined";
             return false;
         }

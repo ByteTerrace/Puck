@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -5,22 +6,6 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed class WorldAuthorityRetirementLawTests {
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
-
     [Fact]
     public void LateSubmissionCompletesWithNamedRefusalAndCannotChangeFrozenDefinition() {
         using var fixture = Fixtures.FreshServer();
@@ -37,9 +22,9 @@ public sealed class WorldAuthorityRetirementLawTests {
                 0,
                 1,
                 1,
-                WorldPrincipal.Console,
+                Principal.Console,
                 new WorldSubmissionPayload.Mutation(Value: new WorldMutation.UpsertKit(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     kit
                 )),
                 Guid.NewGuid()
@@ -98,9 +83,9 @@ public sealed class WorldAuthorityRetirementLawTests {
             0,
             1,
             1,
-            WorldPrincipal.Console,
+            Principal.Console,
             new WorldSubmissionPayload.Mutation(Value: new WorldMutation.UpsertKit(
-                WorldPrincipal.Console,
+                Principal.Console,
                 kit
             )),
             Guid.NewGuid()
@@ -129,7 +114,7 @@ public sealed class WorldAuthorityRetirementLawTests {
         );
         Assert.True(
             condition: server.TryCaptureCheckpoint(
-                EmptyHostRow(),
+                WorldAuthorityHostRowCheckpoint.Empty,
                 out var first,
                 out var reason
             ),
@@ -138,7 +123,7 @@ public sealed class WorldAuthorityRetirementLawTests {
         server.FreezeForRetirement();
         Assert.True(
             condition: server.TryCaptureCheckpoint(
-                EmptyHostRow(),
+                WorldAuthorityHostRowCheckpoint.Empty,
                 out var second,
                 out reason
             ),

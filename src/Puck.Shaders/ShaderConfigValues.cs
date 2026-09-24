@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Puck.Shaders;
 
@@ -37,6 +39,36 @@ public sealed class ShaderConfigValues {
     /// <exception cref="KeyNotFoundException">The manifest declares no such field.</exception>
     public ShaderConfigValue this[string name] => m_values[name];
 
+    /// <summary>Writes the bound values as the config object that binds back to them: each field a number for a scalar
+    /// type and an array of numbers for a vector type, in <see cref="Names"/> order.</summary>
+    /// <returns>The config object.</returns>
+    public JsonElement ToJson() {
+        var node = new JsonObject();
+
+        foreach (var (name, value) in m_values) {
+            var count = ((int)value.Type.ComponentCount());
+            var components = new JsonNode?[count];
+
+            for (var index = 0; (index < count); index++) {
+                var bits = value.ComponentBits(index: index);
+
+                components[index] = (value.Type.ScalarKind() switch {
+                    ShaderScalarKind.Float => JsonValue.Create(value: BitConverter.UInt32BitsToSingle(value: bits)),
+                    ShaderScalarKind.Uint => JsonValue.Create(value: bits),
+                    _ => JsonValue.Create(value: unchecked((int)bits)),
+                });
+            }
+
+            node[name] = ((count == 1)
+                ? components[0]
+                : new JsonArray(items: components));
+        }
+
+        return JsonSerializer.SerializeToElement(
+            jsonTypeInfo: ShaderConfigValuesJsonContext.Default.JsonObject,
+            value: node
+        );
+    }
     /// <summary>Gets a bound value, when the field exists.</summary>
     /// <param name="name">The field's name.</param>
     /// <param name="value">The value, when found.</param>
@@ -45,4 +77,9 @@ public sealed class ShaderConfigValues {
         key: name,
         value: out value!
     );
+}
+
+/// <summary>Source-generated metadata for <see cref="ShaderConfigValues.ToJson"/>.</summary>
+[System.Text.Json.Serialization.JsonSerializable(typeof(JsonObject))]
+internal sealed partial class ShaderConfigValuesJsonContext : System.Text.Json.Serialization.JsonSerializerContext {
 }

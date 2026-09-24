@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.World.Protocol;
 
 /// <summary>The in-process transport binding one client to one <see cref="IWorldServerHost"/> (a
@@ -47,15 +49,15 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     /// <summary>Gets an optional record tap invoked with every window-composition submission before it reaches the
     /// server, carrying the composition and its actor. <see langword="null"/> (the default) is a free
     /// pass-through.</summary>
-    public Action<WorldComposition, WorldPrincipal>? CompositionTap { get; set; }
+    public Action<WorldComposition, Principal>? CompositionTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every designation before it applies.</summary>
-    public Action<WorldDesignation, WorldPrincipal>? DesignationTap { get; set; }
+    public Action<WorldDesignation, Principal>? DesignationTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every grant acquisition before it applies, carrying the grant row
     /// and the actor that asked for it. Captured for the same reason commands are: authority is an input to the tick,
     /// and a replay whose fresh world was never granted re-drives a differently-authorized simulation — which bites
     /// hardest on the addon path, where the re-run guest is checked against the replayed world's own table.
     /// <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<WorldGrant, WorldPrincipal>? GrantTap { get; set; }
+    public Action<WorldGrant, Principal>? GrantTap { get; set; }
     /// <summary>Gets or sets a value indicating whether the local connection's driving input — every
     /// <see cref="SubmitIntent"/> and every <see cref="WorldSubmissionPayload.Command"/> — is dropped before it
     /// reaches a tap or the server. A replay drive holds this while it feeds a tape's recorded intents and commands
@@ -70,20 +72,20 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     /// the query and the identity the envelope stamped. Captured because a query crosses the same Observe gate a
     /// grant change moves, so a replay that skipped it would exercise a different admission history.
     /// <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<WorldQuery, WorldPrincipal>? QueryTap { get; set; }
+    public Action<WorldQuery, Principal>? QueryTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every revocation before it applies — the mirror of
     /// <see cref="GrantTap"/>. <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<WorldGrant, WorldPrincipal>? RevokeTap { get; set; }
+    public Action<WorldGrant, Principal>? RevokeTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every session request before it applies. Occupancy, profile, and
     /// population changes are authoritative inputs to later simulation ticks.</summary>
     public Action<SessionRequest>? SessionTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every journal undo before it reaches the server, carrying the
     /// entry count and its actor. <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<int, WorldPrincipal>? UndoTap { get; set; }
+    public Action<int, Principal>? UndoTap { get; set; }
 
     // Mints the next envelope for the LOCAL connection (id 0, generation 0) — Sequence/CorrelationId both simple
     // monotonic counters (see their own field remarks).
-    private long Submit(WorldPrincipal principal, WorldSubmissionPayload payload, Guid operationId = default, Action<WorldSubmissionResult>? completion = null) {
+    private long Submit(Principal principal, WorldSubmissionPayload payload, Guid operationId = default, Action<WorldSubmissionResult>? completion = null) {
         if (
             (payload is WorldSubmissionPayload.Mutation) &&
             (operationId == Guid.Empty)
@@ -116,7 +118,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     }
     // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
     // The payload's concrete leaf type proves that decoding returned the expected union case.
-    private long SubmitTapped<TPayload, TValue>(TPayload payload, WorldPrincipal principal, Func<TPayload, TValue> selectValue, Action<TValue, WorldPrincipal>? tap, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
+    private long SubmitTapped<TPayload, TValue>(TPayload payload, Principal principal, Func<TPayload, TValue> selectValue, Action<TValue, Principal>? tap, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
         if (
             TryNextEnvelope(
             envelope: out var envelope,
@@ -139,7 +141,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     }
     // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
     // A refusal is a transport verdict printed by name; invalid caller state never escapes as an invariant exception.
-    private bool TryNextEnvelope(WorldPrincipal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, Guid operationId = default) {
+    private bool TryNextEnvelope(Principal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, Guid operationId = default) {
         if (
             !WorldFrameCodec.TryEncode(
             failure: out var failure,
@@ -184,12 +186,12 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
         Query(
             completion: completion,
-            principal: WorldPrincipal.Console,
+            principal: Principal.Console,
             query: query
         );
     }
     /// <inheritdoc/>
-    public void Query(WorldQuery query, WorldPrincipal principal, Action<QueryAnswer> completion) {
+    public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
         // Queries carry no principal of their own; the envelope is the identity coordinate. The two-argument overload
@@ -228,24 +230,24 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     // (WorldServer.MutationTap), the one ingress the loopback, an admitted socket peer, and a forwarded traveller's
     // submission all share.
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => SubmitEnvelope(
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
         completion: null,
         operationId: Guid.Empty,
         payload: payload,
         principal: principal
     );
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) => SubmitEnvelope(
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) => SubmitEnvelope(
         completion: null,
         operationId: operationId,
         payload: payload,
         principal: principal
     );
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
         switch (payload) {
             // CommandTap is single-arg (Action<WorldCommand>, no principal), unlike the two-arg taps below —
-            // inlined rather than forced through SubmitTapped's Action<TValue, WorldPrincipal> shape.
+            // inlined rather than forced through SubmitTapped's Action<TValue, Principal> shape.
             case WorldSubmissionPayload.Command command:
                 if (InputMasked) {
                     return 0;

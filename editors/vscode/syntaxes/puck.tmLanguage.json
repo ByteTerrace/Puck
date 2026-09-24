@@ -451,7 +451,7 @@
                     ]
                 },
                 {
-                    "match": "\\b(in|as|of|else|break|and|or|not|transaction|onFailure|onNoChoice|bind|push|countdown|remove|schedule|transform|score)\\b",
+                    "match": "\\b(in|as|of|else|break|and|or|not|transaction|onFailure|onNoChoice|bind|push|remove|schedule|transform|score)\\b",
                     "name": "keyword.control.puck"
                 }
             ]

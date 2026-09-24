@@ -4,12 +4,11 @@ namespace Puck.World.Server;
 /// <c>state.&lt;row&gt;</c> descriptor rather than the catalog's bare row name, and every write to a verdict row
 /// carries the tick of the firing that made it.</summary>
 public sealed class WorldArenaHost : ArenaEffectHost {
-    private readonly string[] m_sites;
     private readonly WorldVerdictStamp? m_verdicts;
 
     /// <summary>Initializes the host over an arena and its draw-site descriptors.</summary>
     /// <param name="arena">The store every read and write addresses.</param>
-    /// <param name="sites">The site descriptor per catalog ordinal.</param>
+    /// <param name="sites">The site descriptor per catalog ordinal (<see cref="WorldDrawSites.Of"/>).</param>
     /// <param name="generators">The section's declared draw sources.</param>
     /// <param name="ticksPerSecond">The simulation rate a dynamics follower is stepped at.</param>
     /// <param name="dynamics">The declared dynamics rows.</param>
@@ -23,19 +22,12 @@ public sealed class WorldArenaHost : ArenaEffectHost {
         dynamics: dynamics,
         generators: generators,
         instanceIdentity: instanceIdentity,
+        sites: (sites ?? throw new ArgumentNullException(paramName: nameof(sites))),
         ticksPerSecond: ticksPerSecond
     ) {
-        ArgumentNullException.ThrowIfNull(argument: sites);
-
-        m_sites = sites;
         m_verdicts = verdicts;
     }
 
-    /// <inheritdoc/>
-    public override string DrawSite(int rowOrdinal) => ((((uint)rowOrdinal) < ((uint)m_sites.Length))
-        ? m_sites[rowOrdinal]
-        : base.DrawSite(rowOrdinal: rowOrdinal)
-    );
     /// <inheritdoc/>
     /// <remarks>This is the door that makes "a rule's firing wrote this" checkable: a write to any cell of a verdict
     /// row, or of a witness of one, stamps the verdict's <see cref="WorldVerdict.FiredTickKey"/> with the firing's

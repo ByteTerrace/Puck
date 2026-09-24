@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using Puck.Networking.Peers;
 using Xunit;
@@ -34,7 +35,7 @@ public sealed class PeerIdentityTests {
         using var directory = new TemporaryDirectory();
         using var identity = PeerIdentity.Create();
 
-        var path = directory.PathOf(fileName: "peer.key");
+        var path = directory.PathOf(name: "peer.key");
 
         identity.Save(path: path);
 
@@ -52,7 +53,10 @@ public sealed class PeerIdentityTests {
             expected: identity.ExportPkcs8PrivateKey(),
             actual: File.ReadAllBytes(path: path)
         );
-        Assert.False(condition: File.Exists(path: (path + ".tmp")));
+        Assert.Equal(
+            expected: [path],
+            actual: Directory.GetFileSystemEntries(path: directory.RootPath)
+        );
     }
     [Fact]
     public void Save_OnUnix_CreatesTheFileReadableAndWritableByItsOwnerAlone() {
@@ -65,7 +69,7 @@ public sealed class PeerIdentityTests {
         using var directory = new TemporaryDirectory();
         using var identity = PeerIdentity.Create();
 
-        var path = directory.PathOf(fileName: "peer.key");
+        var path = directory.PathOf(name: "peer.key");
 
         identity.Save(path: path);
 
@@ -75,21 +79,20 @@ public sealed class PeerIdentityTests {
         );
     }
     [Fact]
-    public void Save_ReplacesAnExistingFile_AndAStaleTemporaryFile() {
+    public void Save_ReplacesAnExistingFile_BesideAStaleTemporaryFile() {
         using var directory = new TemporaryDirectory();
         using var previous = PeerIdentity.Create();
         using var identity = PeerIdentity.Create();
 
-        var path = directory.PathOf(fileName: "peer.key");
-
+        var path = directory.PathOf(name: "peer.key");
         // What a crash between an earlier Save's write and its move leaves behind: a real key at the path, and a
-        // sibling .tmp that must not be mistaken for a file another writer is still filling.
-        previous.Save(path: path);
-        File.WriteAllText(
-            contents: "not a key",
-            path: (path + ".tmp")
+        // sibling temporary file that must not stop a later save.
+        var stale = directory.WriteText(
+            name: "peer.key.0123456789abcdef0123456789abcdef.tmp",
+            text: "not a key"
         );
 
+        previous.Save(path: path);
         identity.Save(path: path);
 
         using var loaded = PeerIdentity.Load(path: path);
@@ -102,28 +105,10 @@ public sealed class PeerIdentityTests {
             expected: previous.Id.Domain,
             actual: loaded.Id.Domain
         );
-        Assert.False(condition: File.Exists(path: (path + ".tmp")));
-    }
-
-    /// <summary>A per-law directory under the temp root, created on construction and deleted whole on dispose; a
-    /// deletion failure fails the law rather than masking a handle the tested code left open.</summary>
-    private sealed class TemporaryDirectory : IDisposable {
-        private readonly string m_root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-peer-identity-{Guid.NewGuid():n}"
-        );
-
-        public TemporaryDirectory() {
-            Directory.CreateDirectory(path: m_root);
-        }
-
-        public void Dispose() => Directory.Delete(
-            path: m_root,
-            recursive: true
-        );
-        public string PathOf(string fileName) => Path.Combine(
-            path1: m_root,
-            path2: fileName
+        Assert.Equal(
+            expected: [path, stale],
+            actual: Directory.GetFileSystemEntries(path: directory.RootPath).Order(comparer: StringComparer.Ordinal)
         );
     }
+
 }

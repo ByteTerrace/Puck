@@ -23,18 +23,13 @@ public sealed record SdfWorldRenderSpec(
     /// frozen at construction. Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
     /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
     public int BrickPoolVoxelCapacity { get; init; } = SdfWorldEngine.DefaultBrickPoolVoxelCapacity;
-    /// <summary>The resolved <c>host.rayQuery</c> document toggle (permitted by default). Parallel to
-    /// <see cref="Timing"/>; see <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults
-    /// it yet.</summary>
-    public bool RayQuery { get; init; } = true;
-
     /// <summary>Child render nodes keyed by name (each <see cref="SdfViewSnapshot.Child"/> naming one supplies that
     /// frame's slot surface instead of an SDF camera render). The name is the registry key a <see cref="SdfFrame"/>'s
     /// per-view bindings resolve against, not a fixed viewport slot — see <see cref="SdfEngineNode"/>'s remarks for the
     /// per-frame slot derivation.</summary>
     public IReadOnlyDictionary<string, IRenderNode>? Children { get; init; }
     /// <summary>An optional factory for the output image (export mode when it returns an exportable image).</summary>
-    public Func<IGpuDeviceContext, IGpuStorageImage>? CreateOutputImage { get; init; }
+    public Func<IGpuDeviceContext, IGpuImage>? CreateOutputImage { get; init; }
     /// <summary>An optional render-node decorator wrapped around the producer (e.g. the unified overlay). Applied on
     /// every host backend — a decorator resolves neutral services and selects its bytecode from the resolved host
     /// (the <see cref="SdfWorldRenderBuilder.BytecodeExtension"/> convention), exactly like the kernels.</summary>
@@ -62,7 +57,7 @@ public sealed record SdfWorldRenderSpec(
     /// <summary>Frame-scoped screen-source providers keyed by the program-declared screen index. The engine node
     /// retires each returned acquisition only after the submission that sampled its view has completed. A provider in
     /// this map replaces a same-index handle provider from <see cref="ScreenSources"/>.</summary>
-    public IReadOnlyDictionary<int, Func<SdfScreenSourceFrame>>? ScreenSourceFrames { get; init; }
+    public IReadOnlyDictionary<int, Func<GpuImageLease>>? ScreenSourceFrames { get; init; }
     /// <summary>Screen-source handle providers keyed by the program-declared screen index (the diegetic-screen seam).
     /// Use <see cref="ScreenSourceFrames"/> instead for an asynchronously updated source that needs submission-lifetime
     /// protection.</summary>
@@ -71,12 +66,6 @@ public sealed record SdfWorldRenderSpec(
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
     // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.
 
-    /// <summary>The resolved <c>host.timing</c> toggle (per-pass GPU-ms timestamps), or <see langword="null"/> for the
-    /// disarmed default. The engine always receives the timing seam and arms live from
-    /// <see cref="GpuTimingControl.Shared"/> (arm it live via the demo's gpu.timing switch / Puck.World's world.timing
-    /// verb, or the run-doc <c>host.timing</c> field) — this value only seeds that shared control at construction, the
-    /// lowest precedence tier beneath a programmatic arm and the run-doc composition seed.</summary>
-    public bool? Timing { get; init; }
     /// <summary>A floor on the compositor's viewport capacity — the capacity envelope for a frame source whose
     /// per-frame view count grows past the first frame's (a split-screen host whose players join later). The engine
     /// composites each frame's actual <see cref="SdfFrame.Views"/> count, up to this envelope; without a floor the

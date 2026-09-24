@@ -19,8 +19,6 @@
         <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The CLI build generates the world documents this project compares against; it is not a runtime
-             dependency. -->
-        <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
     </ItemGroup>
 </Project>

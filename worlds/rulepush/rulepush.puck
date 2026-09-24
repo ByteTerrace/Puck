@@ -1,0 +1,313 @@
+// Rulepush, as four worlds: an overworld and three levels bordering it. Compiling this source writes
+// `hub.world.json`, `hedges.world.json`, `rewrite.world.json` and `sink.world.json`, with the reciprocal adjacency
+// rows each border derives. Each level is its map and nothing else; the rules live once, in rules.puck.
+//
+// Legend: lowercase is an object (i imp, h hedge, b boulder, f flower, m mire, t thorn), uppercase a noun word, `=`
+// IS, and Y P S N D V the properties YOU PUSH STOP SINK DEFEAT WIN.
+
+import "hub.puck"
+import "level.puck"
+
+// Hedges: HEDGE IS STOP, read down the third column, pens the flower into the lower right corner. Pushing the
+// boulders into the pen moves nothing; pushing STOP out of the column lets the imp walk through the hedge.
+let hedgesMap = [
+  "I.H.....F"
+  "=.=.....="
+  "Y.S.....V"
+  ".....hhhh"
+  ".ibb.h.f."
+  ".....hhhh"
+  "B=P......"
+]
+
+// Rewrite: FLOWER IS WIN, and there is no flower. Pushing the loose FLOWER word under BOULDER IS completes BOULDER IS
+// FLOWER down the fifth column and turns every boulder on the board into one.
+let rewriteMap = [
+  "......I=Y"
+  ".i.b....."
+  "........."
+  "....B...."
+  "F...=...."
+  "=.F......"
+  "V....b..."
+]
+
+// Sink: a mire runs the full width of the board between the imp and the flower, and a thorn waits in the corner.
+// A boulder pushed into the mire sinks with it and opens a way through; the imp walking in sinks too.
+let sinkMap = [
+  "I=Y..M=N."
+  "t........"
+  ".i.b....."
+  "mmmmmmmmm"
+  "........."
+  "..f......"
+  "B=PT=DF=V"
+]
+
+entry world hub = hub(centre: [0m, 0m, 0m], size: [24m, 24m], westGate: [-11.6m, 1.2m, 0m])
+world hedges = level(centre: [20.5m, 0m, 0m], record: "pushCleared", layout: hedgesMap)
+world rewrite = level(centre: [0m, 0m, -19.5m], record: "rewriteCleared", layout: rewriteMap)
+world sink = level(centre: [-20.5m, 0m, 0m], record: "sinkCleared", layout: sinkMap)
+
+border hub.east, hedges.west {
+  width: 12m
+  height: 6m
+  hysteresis: 2m
+}
+
+border hub.north, rewrite.south {
+  width: 12m
+  height: 6m
+  hysteresis: 2m
+}
+
+border hub.west, sink.east {
+  width: 12m
+  height: 6m
+  hysteresis: 2m
+}
+
+// ---- The composition -----------------------------------------------------------------------------------------------
+// The visitor walks east off the overworld into Hedges, and the level hears its presses: the seat that crossed is the
+// level's own first seat, so the level's rules read its channels exactly as they read a seat that booted there.
+
+test "a visitor walks from the overworld into a level and plays it" {
+  when {
+    hub {
+      seat1: body.pose 9 1 0 0 0 0 0
+      seat1: body.fly 0 1 0 0 0 0 2 0
+    }
+    ticks 90
+    hub {
+      seat1: body.press east 1 0.1
+    }
+    ticks 20
+  }
+  expect {
+    hub {
+      westOpen == 0
+    }
+    hedges {
+      moves == 1
+    }
+  }
+}
+
+// ---- Hedges --------------------------------------------------------------------------------------------------------
+// Slots follow the map in reading order: the imp is things[13], the boulders things[14] and things[15], the STOP
+// word things[7] and the IS above it things[4].
+
+test "a push chain into the hedge moves whole or not at all" with level(centre: [0m, 0m, 0m], record: "pushCleared", layout: hedgesMap) {
+  when {
+    ticks 2
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+  }
+  expect {
+    moves == 2
+    bumps == 1
+    things[13].cell == 38
+    things[14].cell == 39
+    things[15].cell == 40
+    won == 0
+  }
+}
+
+test "pushing STOP out of HEDGE IS STOP opens the pen to the flower" with level(centre: [0m, 0m, 0m], record: "pushCleared", layout: hedgesMap) {
+  when {
+    ticks 2
+    seat1: body.press north 1 0.1
+    ticks 6
+    seat1: body.press north 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+  }
+  expect {
+    moves == 10
+    things[4].cell == 11
+    things[7].cell == 21
+    things[13].cell == 43
+    won == 1
+  }
+}
+
+test "eight turns taken back return every token to where it began" with level(centre: [0m, 0m, 0m], record: "pushCleared", layout: hedgesMap) {
+  when {
+    ticks 2
+    seat1: body.press north 1 0.1
+    ticks 6
+    seat1: body.press north 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+  }
+  expect {
+    moves == 0
+    things[4].cell == 11
+    things[7].cell == 20
+    things[13].cell == 37
+    won == 0
+  }
+}
+
+// ---- Rewrite -------------------------------------------------------------------------------------------------------
+// The imp is things[3], the boulders things[4] and things[11], and the loose FLOWER word things[9].
+
+test "a boulder is only a boulder until BOULDER IS FLOWER stands" with level(centre: [0m, 0m, 0m], record: "rewriteCleared", layout: rewriteMap) {
+  when {
+    ticks 2
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+  }
+  expect {
+    things[3].cell == 13
+    things[4].noun == 2
+    won == 0
+  }
+}
+
+test "BOULDER IS FLOWER rewrites every boulder and the imp wins on one" with level(centre: [0m, 0m, 0m], record: "rewriteCleared", layout: rewriteMap) {
+  when {
+    ticks 2
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+  }
+  expect {
+    things[9].cell == 49
+    things[4].noun == 3
+    things[11].noun == 3
+    things[3].cell == 59
+    won == 1
+  }
+}
+
+// ---- Sink ----------------------------------------------------------------------------------------------------------
+// The imp is things[7], the boulder things[8], the mire things[9] to things[17], and the thorn things[6].
+
+test "a boulder pushed into the mire sinks with it and opens the way" with level(centre: [0m, 0m, 0m], record: "sinkCleared", layout: sinkMap) {
+  when {
+    ticks 2
+    seat1: body.press north 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press west 1 0.1
+    ticks 6
+  }
+  expect {
+    count(things) == 26
+    yous == 1
+    won == 1
+  }
+}
+
+test "the imp sinks, every YOU is gone, and one undo brings the imp back" with level(centre: [0m, 0m, 0m], record: "sinkCleared", layout: sinkMap) {
+  when {
+    ticks 2
+    seat1: body.press east 1 0.1
+    ticks 6
+    seat1: body.press west 1 0.1
+    ticks 6
+    seat1: body.press south 1 0.1
+    ticks 6
+    seat1: body.press undo 1 0.1
+    ticks 6
+  }
+  expect {
+    count(things) == 28
+    yous == 1
+    things[7].cell == 19
+    moves == 2
+  }
+}
+
+test "the thorn defeats the imp and leaves itself" with level(centre: [0m, 0m, 0m], record: "sinkCleared", layout: sinkMap) {
+  when {
+    ticks 2
+    seat1: body.press west 1 0.1
+    ticks 6
+    seat1: body.press north 1 0.1
+    ticks 6
+  }
+  expect {
+    count(things) == 27
+    yous == 0
+    things[6].cell == 9
+    won == 0
+  }
+}

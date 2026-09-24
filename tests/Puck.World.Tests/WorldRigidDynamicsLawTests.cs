@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.Assets.Documents;
@@ -15,15 +16,17 @@ namespace Puck.World.Tests;
 /// <summary>Laws for the rigid-dynamics facet (<see cref="WorldRigid"/>): pair-contact momentum conservation and
 /// checkpoint/restore bit-exactness across a rigid body's own state.</summary>
 public sealed class WorldRigidDynamicsLawTests {
-    [Theory]
     [InlineData(0.05f)]
     [InlineData(0.06f)]
     [InlineData(0.15f)]
+    [Theory]
     public void ASphereSpawnedAtOrAboveItsFloorCannotFallThrough(float height) {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
+
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         var ball = fixture.Server.Body(index: 0)!;
+
         Assert.True(condition: ball.IsRigid);
         ball.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: height, yawRadians: 0f, z: 0f);
         for (var tick = 0; (tick < 180); tick++) {
@@ -35,13 +38,14 @@ public sealed class WorldRigidDynamicsLawTests {
         Assert.True(condition: ball.Grounded);
         Assert.True(condition: ((ball.Facts & BodyFacts.Grounded) != 0));
     }
-
     [Fact]
     public void AFallingRigidSphereReportsAirborneAndFalling() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
+
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         var ball = fixture.Server.Body(index: 0)!;
+
         Assert.True(condition: ball.IsRigid);
         ball.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 2f, yawRadians: 0f, z: 0f);
         fixture.Step();
@@ -50,13 +54,14 @@ public sealed class WorldRigidDynamicsLawTests {
         Assert.True(condition: ((ball.Facts & BodyFacts.Airborne) != 0));
         Assert.True(condition: ((ball.Facts & BodyFacts.Falling) != 0));
     }
-
     [Fact]
     public void RestingSphereReleasesAndReacquiresItsGroundedFactAfterAnImpulse() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
+
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         var ball = fixture.Server.Body(index: 0)!;
+
         ball.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: FloorTopY, yawRadians: 0f, z: 0f);
         for (var tick = 0; ((tick < 600) && !ball.Resting); tick++) {
             fixture.Step();
@@ -74,6 +79,7 @@ public sealed class WorldRigidDynamicsLawTests {
         Assert.True(condition: ((ball.Facts & BodyFacts.Rising) != 0));
 
         var fellWhileAirborne = false;
+
         for (var tick = 0; ((tick < 600) && !ball.Resting); tick++) {
             fixture.Step();
             fellWhileAirborne |= (!ball.Grounded && ((ball.Facts & BodyFacts.Falling) != 0));
@@ -158,21 +164,6 @@ public sealed class WorldRigidDynamicsLawTests {
             )],
         };
     }
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     /// <summary>A flat solid floor plus uniform downward gravity — a single rigid ball dropped, bounced, and rolling
     /// so its checkpoint residue (angular velocity, resting hold ticks, both restitution edge latches) is genuinely
     /// live, never zero by construction.</summary>
@@ -246,8 +237,8 @@ public sealed class WorldRigidDynamicsLawTests {
     }
     private static WorldFixture TwoJoinedSeats(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
-        var left = WorldPrincipal.Seat(slot: 0);
-        var right = WorldPrincipal.Seat(slot: 1);
+        var left = Principal.Seat(slot: 0);
+        var right = Principal.Seat(slot: 1);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             left,
@@ -294,7 +285,7 @@ public sealed class WorldRigidDynamicsLawTests {
     [Fact]
     public void ARestingBoxWakesAndFallsWhenALiveSolidEditLowersItsFloor() {
         using var fixture = Fixtures.FreshServer(definition: BoxOnFloorDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -340,7 +331,7 @@ public sealed class WorldRigidDynamicsLawTests {
                 z: 0f
             )),
             }),
-            Principal: WorldPrincipal.Console
+            Principal: Principal.Console
         ));
         fixture.Step();
 
@@ -366,8 +357,8 @@ public sealed class WorldRigidDynamicsLawTests {
     [Fact]
     public void BoxPastItsCriticalAngleTopplesAndControlUprightBoxStaysStanding() {
         using var fixture = Fixtures.FreshServer(definition: BoxOnFloorDocument());
-        var left = WorldPrincipal.Seat(slot: 0);
-        var right = WorldPrincipal.Seat(slot: 1);
+        var left = Principal.Seat(slot: 0);
+        var right = Principal.Seat(slot: 1);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             left,
@@ -554,7 +545,7 @@ public sealed class WorldRigidDynamicsLawTests {
     [Fact]
     public void RestingRigidCheckpointCarriesTheLiveFreezeLatchAndContactEdge() {
         using var fixture = Fixtures.FreshServer(definition: BoxOnFloorDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -586,7 +577,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var captured,
                 reason: out var captureReason
             ),
@@ -636,7 +627,7 @@ public sealed class WorldRigidDynamicsLawTests {
     [Fact]
     public void RigidBodyCheckpointResumesBitExactlyMidFallAndBounce() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var left = WorldPrincipal.Seat(slot: 0);
+        var left = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             left,
@@ -670,7 +661,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 checkpoint: out var captured,
                 reason: out var captureReason
             ),

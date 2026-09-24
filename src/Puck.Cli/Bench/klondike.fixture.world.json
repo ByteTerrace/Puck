@@ -65,9 +65,12 @@
       "halfDepth": 0.1,
       "round": 0,
       "source": {
-        "$type": "testPattern",
-        "width": 320,
-        "height": 240
+        "$type": "producer",
+        "id": "testPattern",
+        "settings": {
+          "width": 320,
+          "height": 240
+        }
       },
       "route": {
         "engageable": false,
@@ -359,7 +362,6 @@
     "presentMode": "Immediate",
     "targetHertz": 0,
     "exitAfterSeconds": 0,
-    "rayQuery": true,
     "timing": false,
     "genlock": null,
     "listen": null,
@@ -4937,7 +4939,7 @@
             "value": 2
           },
           {
-            "op": "Modulo"
+            "op": "Remainder"
           },
           {
             "op": "Operand",
@@ -4951,7 +4953,7 @@
             "value": 2
           },
           {
-            "op": "Modulo"
+            "op": "Remainder"
           },
           {
             "op": "NotEqual"
@@ -5036,7 +5038,7 @@
             "value": 2
           },
           {
-            "op": "Modulo"
+            "op": "Remainder"
           },
           {
             "op": "Operand",
@@ -5054,7 +5056,7 @@
             "value": 2
           },
           {
-            "op": "Modulo"
+            "op": "Remainder"
           },
           {
             "op": "NotEqual"

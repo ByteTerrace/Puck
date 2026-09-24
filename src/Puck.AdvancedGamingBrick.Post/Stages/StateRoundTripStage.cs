@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>
@@ -24,26 +26,36 @@ internal sealed class StateRoundTripStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        var failures = 0;
-        var total = 0;
+        var rows = new List<PostCaseResult>(capacity: MicroRoms.Kinds.Length);
 
         foreach (var kind in MicroRoms.Kinds) {
-            ++total;
-
-            var (pass, _) = StateRoundTripProbe.Run(
-                rom: MicroRoms.GenerateBytes(kind: kind),
-                label: $"micro:{kind}",
-                bios: context.BiosImage
+            var start = Stopwatch.GetTimestamp();
+            var result = StateRoundTripProbe.Run(
+                bios: context.BiosImage,
+                rom: MicroRoms.GenerateBytes(kind: kind)
             );
 
-            if (!pass) {
-                ++failures;
-            }
+            rows.Add(item: new PostCaseResult(
+                Detail: result.Detail,
+                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+                Name: $"micro:{kind}",
+                Verdict: (result.Pass
+                    ? PostCaseVerdict.Pass
+                    : PostCaseVerdict.Mismatch)
+            ));
         }
 
+        var failures = rows.Count(predicate: static row => (row.Verdict != PostCaseVerdict.Pass));
+
         return ((failures == 0)
-            ? PostStageOutcome.Pass(detail: $"all {total} micro-ROMs snapshot/restore byte-identical (frame-boundary, mid-frame, double-restore)")
-            : PostStageOutcome.Fail(detail: $"{failures}/{total} micro-ROM(s) diverged after a savestate round-trip")
+            ? PostStageOutcome.Pass(
+                cases: rows,
+                detail: $"all {rows.Count} micro-ROMs snapshot/restore byte-identical (frame-boundary, mid-frame, double-restore)"
+            )
+            : PostStageOutcome.Fail(
+                cases: rows,
+                detail: $"{failures}/{rows.Count} micro-ROM(s) diverged after a savestate round-trip"
+            )
         );
     }
 }

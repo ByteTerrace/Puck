@@ -1,10 +1,9 @@
 // Timing harness for Puck.World.Browser (Package P9 — wasm engine performance). Boots the real
 // AppBundle through the same facade the studio calls (native/engineBoot.ts's own
-// bootEngineFromLocalBundle — reused verbatim from tests/native.test.cjs, which is also where the
-// worlds-directory-read helper below is reused from), then times every call an editing loop makes
-// over the shipped island (puck.world.json + standard.basis.json + all 16 imports under
-// src/Puck.World/Assets/worlds — the same document set tests/engine-wasm.test.cjs's own
-// 'ComposeTree() composes the real island' test reads) and prints a table.
+// bootEngineFromLocalBundle — reused verbatim from tests/native.test.cjs), then times every call an editing loop
+// makes over the shipped island — the built official tree's sources[] mounted the way the studio mounts them, the
+// same workspace tests/engine-wasm.test.cjs's own 'ComposeSource() composes the real island' test reads — and prints
+// a table.
 //
 // This is a MEASUREMENT harness, not a performance gate: it asserts only that each call succeeds
 // (the same ok/error assertions tests/native.test.cjs already makes), never a timing threshold —
@@ -15,12 +14,9 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
 const { performance } = require('node:perf_hooks');
 
-require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, file);
+require('./support/register.cjs');
 
 const { bootEngineFromLocalBundle } = require('../src/native/engineBoot.ts');
 
@@ -37,12 +33,15 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const worldsDir = path.join(root, 'src', 'Puck.World', 'Assets', 'worlds');
+const { EngineCapabilityMissing } = require('../src/native/engineTypes.ts');
+const { officialTreeMissing, officialDocument, officialSources, officialIslandRootSource } = require('./support/officialTree.cjs');
 
 if (!fs.existsSync(mainMjs)) {
   test(`engine-timing (SKIPPED: no AppBundle at ${appBundleDir} — run 'dotnet publish src/Puck.World.Browser -c Release -r browser-wasm')`, { skip: true }, () => {});
+} else if (officialTreeMissing()) {
+  test(`engine-timing (SKIPPED: ${officialTreeMissing()})`, { skip: true }, () => {});
 } else {
-  test('engine timing table: Version/Parse/ComposeTree/Compile/Judge/StateHash/Cells over the shipped island', async () => {
+  test('engine timing table: Version/Parse/MountSources/ComposeSource/Compile/Judge/StateHash/Cells over the shipped island', async (t) => {
     const rows = [];
     async function time(label, fn) {
       const start = performance.now();
@@ -60,32 +59,33 @@ if (!fs.existsSync(mainMjs)) {
       const version = await time('Version()', () => engine.version());
       assert.equal(version.engine, 'Puck.World.Browser');
 
-      // Parse: the tictactoe fragment under standard.basis.json (ParseFragment) — the cheap,
-      // single-fragment call the document-open path takes for a bare fragment (see
-      // machines/studio/document.ts's own routing remarks), timed separately from the expensive
-      // full-island ComposeTree below.
-      const basisJson = fs.readFileSync(path.join(worldsDir, 'standard.basis.json'), 'utf8');
-      const fragmentJson = fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8');
-      const parsed = await time('Parse (tictactoe fragment under standard.basis.json)', () => engine.parseFragment(fragmentJson, basisJson, 'a'));
+      // Parse: the tictactoe fragment under the standard basis (ParseFragment) — the cheap, single-fragment call,
+      // timed separately from the expensive full-island ComposeSource below.
+      const basisJson = officialDocument('standard');
+      const fragmentJson = officialDocument('games/tictactoe');
+      const parsed = await time('Parse (tictactoe fragment under the standard basis)', () => engine.parseFragment(fragmentJson, basisJson, 'a'));
       assert.equal(parsed.ok, true, JSON.stringify(parsed));
 
-      // ComposeTree: the real shipped island — puck.world.json + standard.basis.json + all 16
-      // imports. Same document set tests/engine-wasm.test.cjs's own island test reads.
-      const documents = {};
-      for (const file of fs.readdirSync(worldsDir, { recursive: true })) {
-        if (!file.endsWith('.json')) continue;
-        documents[file.split(path.sep).join('/')] = fs.readFileSync(path.join(worldsDir, file), 'utf8');
+      // ComposeSource: the real shipped island, composed from the official tree's sources[] mounted the way the studio
+      // mounts them.
+      const sources = officialSources();
+      sizes.push({ label: 'sources payload (MountSources input, JSON.stringify(sources))', bytes: Buffer.byteLength(JSON.stringify(sources), 'utf8') });
+      try {
+        await time('MountSources (official sources[])', () => engine.mountSources(sources));
+      } catch (error) {
+        if (!(error instanceof EngineCapabilityMissing)) throw error;
+        t.skip(`this AppBundle predates the source exports: ${error.message}`);
+        return;
       }
-      sizes.push({ label: 'documents payload (ComposeTree input, JSON.stringify(documents))', bytes: Buffer.byteLength(JSON.stringify(documents), 'utf8') });
 
-      const composed = await time('ComposeTree (full island: puck.world.json + basis + 16 imports)', () => engine.composeTree('puck.world.json', documents));
-      assert.equal(composed.ok, true, JSON.stringify(composed.errors));
-      assert.ok(composed.composed, 'composeTree() must record the composed standalone document text');
-      sizes.push({ label: 'composed island payload (ComposeTree output .composed)', bytes: Buffer.byteLength(composed.composed, 'utf8') });
+      const composed = await time('ComposeSource (full island)', () => engine.composeSource(officialIslandRootSource()));
+      assert.equal(composed.ok, true, JSON.stringify(composed.diagnostics));
+      assert.ok(composed.composed, 'composeSource() must record the composed standalone document text');
+      sizes.push({ label: 'composed island payload (ComposeSource output .composed)', bytes: Buffer.byteLength(composed.composed, 'utf8') });
 
       // Compile: the composed island's raw text — never JS-round-tripped (see native.test.cjs's own
-      // remarks: a JSON.parse -> JSON.stringify round trip cannot preserve tictactoe.world.json's
-      // Int64.Min/MaxValue sentinels exactly, and composeTree()'s own `.composed` field is the exact
+      // remarks: a JSON.parse -> JSON.stringify round trip cannot preserve the tictactoe document's
+      // Int64.Min/MaxValue sentinels exactly, and composeSource()'s own `.composed` field is the exact
       // original bytes for this reason).
       const compiled = await time('Compile (composed island)', () => engine.compile(composed.composed));
       assert.equal(compiled.ok, true, JSON.stringify(compiled));
@@ -114,9 +114,9 @@ if (!fs.existsSync(mainMjs)) {
 
       // Cells: the composed island's 4x4x4 tic-tac-toe topology. Read as a plain JS object because
       // the lattice definition itself carries no Int64 sentinels.
-      const tictactoeFragment = JSON.parse(fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8'));
+      const tictactoeFragment = JSON.parse(fragmentJson);
       const cube = tictactoeFragment.state.lattices.find((l) => l.name === 'tttCube');
-      assert.ok(cube, 'games/tictactoe.world.json must author a "tttCube" lattice');
+      assert.ok(cube, 'games/tictactoe must author a "tttCube" lattice');
       assert.equal(cube.width * cube.depth * cube.layers, 64);
 
       const cells = await time('Cells (tttCube, 4x4x4 box)', () => engine.cells(JSON.stringify(cube)));

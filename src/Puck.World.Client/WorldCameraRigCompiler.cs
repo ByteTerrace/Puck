@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -19,14 +20,16 @@ public interface IWorldCameraProgramRig : ISdfCameraRig {
 
     /// <summary>Repoints this rig's document reads at the current live document.</summary>
     /// <param name="definition">The current document.</param>
-    /// <remarks>A cached rig must be retargeted whenever a delivery replaces the document: a state binding and a
-    /// placement subject both read the LIVE document, never the one this rig compiled against.</remarks>
+    /// <remarks>A cached rig must be retargeted whenever a delivery replaces the document: a placement subject reads
+    /// the live document, never the one this rig compiled against. A bound operand reads the state mirror, which
+    /// follows deliveries itself.</remarks>
     void Retarget(WorldDefinition definition);
 }
 /// <summary>Compiles an authored camera program into one presentation rig: authored ops become
-/// <see cref="SdfCameraOp"/>s, authored subjects and state bindings become per-frame slots this rig refills from the
-/// live document, and the walk itself belongs to <see cref="SdfCameraProgramEvaluator"/>, which parses no
-/// document.</summary>
+/// <see cref="SdfCameraOp"/>s, authored subjects and state bindings become per-frame slots this rig refills — a
+/// bound operand from its <see cref="WorldStateMirror"/> slot, eased by default and stored truth with
+/// <c>.$target</c>, a subject from the live document — and the walk itself belongs to
+/// <see cref="SdfCameraProgramEvaluator"/>, which parses no document.</summary>
 public static class WorldCameraRigCompiler {
     /// <summary>Returns the program's authored eye or pivot position, for a caller that narrates or places a camera
     /// row rather than framing one — the orbit's resolved offset from its pivot, the offset op's raw value, or the
@@ -54,21 +57,26 @@ public static class WorldCameraRigCompiler {
     /// resolve against.</param>
     /// <param name="interactive">Whether the program's orbit op folds in <see cref="IWorldCameraProgramRig.Look"/> —
     /// true for the seat rig a joined seat steers, false for an authored camera that renders its own angles.</param>
+    /// <param name="mirror">The state mirror the program's bound operands register their slots with and read each
+    /// frame.</param>
     /// <returns>A fresh presentation rig.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, bool interactive = false) {
+    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: program);
+        ArgumentNullException.ThrowIfNull(argument: mirror);
 
         var translation = new Translation(
             definition: definition,
-            interactive: interactive
+            interactive: interactive,
+            mirror: mirror
         );
 
         _ = translation.Translate(program: program);
 
         return new CompiledRig(
             definition: definition,
+            mirror: mirror,
             scalarSources: translation.ScalarSources,
             set: new SdfCameraProgramSet(Programs: translation.Programs),
             subjectSources: translation.SubjectSources
@@ -87,6 +95,7 @@ public static class WorldCameraRigCompiler {
         private IReadOnlyList<WorldCurveRow>? m_curves;
         private IReadOnlyList<DynamicsRow>? m_dynamics;
         private bool m_interactive;
+        private WorldStateMirror? m_mirror;
         private WorldCameraProgram? m_program;
         private IWorldCameraProgramRig? m_rig;
         private WorldViewDefaults? m_views;
@@ -95,17 +104,24 @@ public static class WorldCameraRigCompiler {
         /// any input it read has moved.</summary>
         /// <param name="program">The authored op list.</param>
         /// <param name="definition">The current live document.</param>
+        /// <param name="mirror">The state mirror the program's bound operands read through (see
+        /// <see cref="Compile"/>).</param>
         /// <param name="interactive">Whether the program's orbit op folds in the live look (see
         /// <see cref="Compile"/>).</param>
         /// <returns>The rig.</returns>
         /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, bool interactive = false) {
+        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false) {
             ArgumentNullException.ThrowIfNull(argument: definition);
             ArgumentNullException.ThrowIfNull(argument: program);
+            ArgumentNullException.ThrowIfNull(argument: mirror);
 
             if (
                 (m_rig is { } rig) &&
                 (m_interactive == interactive) &&
+                ReferenceEquals(
+                objA: m_mirror,
+                objB: mirror
+            ) &&
                 ReferenceEquals(
                 objA: m_program,
                 objB: program
@@ -136,11 +152,13 @@ public static class WorldCameraRigCompiler {
             m_curves = definition.Curves;
             m_dynamics = definition.Dynamics;
             m_interactive = interactive;
+            m_mirror = mirror;
             m_program = program;
             m_views = definition.ViewsRaw;
             m_rig = Compile(
                 definition: definition,
                 interactive: interactive,
+                mirror: mirror,
                 program: program
             );
 
@@ -148,14 +166,14 @@ public static class WorldCameraRigCompiler {
         }
     }
 
-    // One per-frame scalar slot's source: an authored state binding read at the frame's tick, or the group-spread
-    // widening an offset op's pullback applies. Exactly one arm is live per slot.
-    private readonly record struct ScalarSource(BindableScalar? Binding, float Fallback, float SpreadPullback);
+    // One per-frame scalar slot's source: the state mirror slot an authored binding reads (-1 for none), or the
+    // group-spread widening an offset op's pullback applies. Exactly one arm is live per slot.
+    private readonly record struct ScalarSource(int MirrorSlot, float Fallback, float SpreadPullback);
     // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
     private readonly record struct SubjectSource(WorldCameraSubject Subject);
-    // The authored-to-IR walk. Programs are keyed by authored NAME so a blend that reaches the same program twice
+    // The authored-to-IR walk. Programs are keyed by authored name so a blend that reaches the same program twice
     // (and a cycle the validator would have refused) compiles to one entry rather than recursing forever.
-    private sealed class Translation(WorldDefinition definition, bool interactive) {
+    private sealed class Translation(WorldDefinition definition, bool interactive, WorldStateMirror mirror) {
         private readonly Dictionary<string, int> m_indexByName = new(comparer: StringComparer.Ordinal);
 
         public List<SdfCameraProgram> Programs { get; } = [];
@@ -206,7 +224,7 @@ public static class WorldCameraRigCompiler {
             return null;
         }
         private SdfCameraScalar Scalar(BindableScalar scalar, float fallback) {
-            if (scalar.Binding is null) {
+            if (scalar.State is not { } binding) {
                 return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
                     ? literal
                     : fallback));
@@ -215,8 +233,11 @@ public static class WorldCameraRigCompiler {
             var slot = ScalarSources.Count;
 
             ScalarSources.Add(item: new ScalarSource(
-                Binding: scalar,
                 Fallback: fallback,
+                MirrorSlot: mirror.Register(
+                binding: in binding,
+                conversion: WorldStateConversion.Number
+            ),
                 SpreadPullback: 0f
             ));
 
@@ -233,8 +254,8 @@ public static class WorldCameraRigCompiler {
             var slot = ScalarSources.Count;
 
             ScalarSources.Add(item: new ScalarSource(
-                Binding: null,
                 Fallback: 1f,
+                MirrorSlot: -1,
                 SpreadPullback: pullback
             ));
 
@@ -439,14 +460,16 @@ public static class WorldCameraRigCompiler {
         }
     }
     private sealed class CompiledRig : IWorldCameraProgramRig {
+        private readonly WorldStateMirror m_mirror;
         private readonly SdfCameraProgramRig m_rig;
         private readonly IReadOnlyList<ScalarSource> m_scalarSources;
         private readonly IReadOnlyList<SubjectSource> m_subjectSources;
 
         private WorldDefinition m_definition;
 
-        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources) {
+        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, WorldStateMirror mirror, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources) {
             m_definition = definition;
+            m_mirror = mirror;
             m_rig = new SdfCameraProgramRig(
                 programs: set,
                 scalarCount: scalarSources.Count,
@@ -463,20 +486,23 @@ public static class WorldCameraRigCompiler {
         }
         public float Spread { get; set; }
 
-        // Refills the evaluator's per-frame slots from the live document. Runs inside Resolve so no caller can
-        // evaluate against a stale binding by forgetting an ordering step.
-        private void Refresh(ulong tick) {
+        // Refills the evaluator's per-frame slots: a bound operand presents its state mirror slot, which the mirror
+        // read at the delivered tick and engine tick and the frame interpolated; a placement subject reads the live
+        // document. Runs inside Resolve so no caller can evaluate against a stale binding by forgetting an ordering
+        // step.
+        private void Refresh() {
             var scalars = m_rig.Scalars;
 
             for (var index = 0; (index < m_scalarSources.Count); index++) {
                 var source = m_scalarSources[index];
 
-                scalars[index] = ((source.Binding is { } binding)
-                    ? binding.Resolve(
-                        definition: m_definition,
-                        fallback: source.Fallback,
-                        tick: tick
+                scalars[index] = ((source.MirrorSlot >= 0)
+                    ? (m_mirror.TryNumber(
+                        slot: source.MirrorSlot,
+                        value: out var bound
                     )
+                        ? bound
+                        : source.Fallback)
                     : (1f + (source.SpreadPullback * MathF.Max(
                         x: Spread,
                         y: 0f
@@ -506,7 +532,7 @@ public static class WorldCameraRigCompiler {
         }
 
         public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
-            Refresh(tick: clock.AuthoritativeTick);
+            Refresh();
 
             return m_rig.Resolve(
                 anchor: in anchor,

@@ -60,7 +60,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         );
         // A literal zero divisor or an out-of-range literal shift is always a defect; the runtime forms are total.
         if (
-            (value.Operation is (ExpressionOp.Divide or ExpressionOp.Modulo)) &&
+            (value.Operation is (ExpressionOp.Divide or ExpressionOp.Remainder)) &&
             (Literal(value: value.Value) == 0)
         ) {
             Error(

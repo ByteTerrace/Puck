@@ -23,7 +23,7 @@ public sealed class TextSafetyTests {
         return Enumerable.Range(
             count: 4,
             start: 0
-        ).Select(i => new FontOutlineSegment(
+        ).Select(selector: i => new FontOutlineSegment(
             points[i],
             default,
             points[((i + 1) % 4)],
@@ -32,11 +32,11 @@ public sealed class TextSafetyTests {
     }
     private static float Sample(int channel, float x, float y, params IReadOnlyList<FontOutlineSegment>[] contours) {
         var geometry = new FontGlyphGeometry(
-            10,
-            contours,
-            0,
-            10,
-            0
+            Bottom: 10,
+            Contours: contours,
+            Left: 0,
+            Right: 10,
+            Top: 0
         );
         var rgba = new byte[4];
 
@@ -118,25 +118,25 @@ public sealed class TextSafetyTests {
             1025
         ).ToArray();
 
-        Assert.Throws<InvalidDataException>(() => GlyphBoundaryNormalizer.Normalize(new(
-            4,
-            edges,
-            0,
-            4,
-            0
+        Assert.Throws<InvalidDataException>(testCode: () => GlyphBoundaryNormalizer.Normalize(new(
+            Bottom: 4,
+            Contours: edges,
+            Left: 0,
+            Right: 4,
+            Top: 0
         )));
-        Assert.Throws<InvalidDataException>(() => MtsdfGlyphField.EvaluateCell(
+        Assert.Throws<InvalidDataException>(testCode: () => MtsdfGlyphField.EvaluateCell(
             new(
-                4,
-                [Rectangle(
+                Bottom: 4,
+                Contours: [Rectangle(
                         0,
                         0,
                         4,
                         4
                     )],
-                0,
-                4,
-                0
+                Left: 0,
+                Right: 4,
+                Top: 0
             ),
             [],
             10000,
@@ -271,12 +271,12 @@ public sealed class TextSafetyTests {
                 ((i * 2) + 1)
             ));
         }
-        var error = Assert.Throws<InvalidDataException>(() => GlyphBoundaryNormalizer.Normalize(new(
-            301,
-            contours,
-            -1,
-            301,
-            -1
+        var error = Assert.Throws<InvalidDataException>(testCode: () => GlyphBoundaryNormalizer.Normalize(new(
+            Bottom: 301,
+            Contours: contours,
+            Left: -1,
+            Right: 301,
+            Top: -1
         )));
 
         Assert.Contains(
@@ -327,8 +327,8 @@ public sealed class TextSafetyTests {
     [Fact]
     public void NearEndpointIntersectionsUseCoordinateSpaceTolerance() {
         var result = GlyphBoundaryNormalizer.Normalize(new(
-            150,
-            [Rectangle(
+            Bottom: 150,
+            Contours: [Rectangle(
                     0,
                     0,
                     16000,
@@ -339,12 +339,12 @@ public sealed class TextSafetyTests {
                     200,
                     150
                 )],
-            0,
-            16000,
-            0
+            Left: 0,
+            Right: 16000,
+            Top: 0
         ));
 
-        Assert.Single(result.Contours);
+        Assert.Single(collection: result.Contours);
         Assert.Equal(
             8,
             result.Contours[0].Count

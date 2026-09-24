@@ -108,34 +108,10 @@ public static class BodyMotionProgramRoles {
 public static class BodyActionSpecFactory {
     private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
         var instruction = effect switch {
-            WorldEffect.SetVerticalVelocity set => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.SetVerticalVelocity,
-            Value: FixedQ4816.FromDouble(value: set.Velocity),
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: set.Target
-        ),
-            WorldEffect.ScaleVerticalVelocity scale => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.ScaleVerticalVelocity,
-            Value: FixedQ4816.FromDouble(value: scale.Factor),
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: scale.Target
-        ),
-            WorldEffect.PlanarImpulse impulse => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.PlanarImpulse,
-            Value: FixedQ4816.FromDouble(value: impulse.Speed),
-            Direction: new FixedVector3(
-                X: FixedQ4816.FromDouble(value: impulse.BodyDirection.X),
-                Y: FixedQ4816.FromDouble(value: impulse.BodyDirection.Y),
-                Z: FixedQ4816.FromDouble(value: impulse.BodyDirection.Z)
+            WorldEffect.SetVerticalVelocity or WorldEffect.ScaleVerticalVelocity or WorldEffect.PlanarImpulse or WorldEffect.Designate => CompileBodyMotion(
+                actionName: actionName,
+                effect: effect
             ),
-            DurationTicks: DurationTicks(seconds: impulse.DurationSeconds),
-            StateSlot: -1,
-            Target: impulse.Target
-        ),
             ActionEffect.SetState set => new CompiledBodyInstruction(
             Operation: BodyMotionOp.SetState,
             Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
@@ -194,15 +170,6 @@ public static class BodyActionSpecFactory {
             Target: timer.Target,
             StateName: timer.State
         ),
-            WorldEffect.Designate designate => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.Designate,
-            Value: default,
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: designate.Target,
-            StateName: designate.Register
-        ),
             // Nothing is resolved at kit-compile time: the generator row and the destination row are world-global
             // `state` rows, not this kit's per-body slot table, so both names ride through to the mutation compose
             // boundary that owns their existence checks.
@@ -242,6 +209,30 @@ public static class BodyActionSpecFactory {
         }
 
         return instruction;
+    }
+    // A body-motion effect lowers through the check a world rule's lowers through; the document validator has already
+    // refused the effect by the same check with the world's register table in hand.
+    private static CompiledBodyInstruction CompileBodyMotion(ActionEffect effect, string actionName) {
+        if (!WorldBodyEffects.TryLower(
+            effect: effect,
+            form: out var form,
+            reason: out var reason,
+            refusal: out _,
+            registerDeclared: null,
+            scope: WorldBodyEffectScope.Kit
+        )) {
+            throw new InvalidOperationException(message: $"Action '{actionName}': {reason}.");
+        }
+
+        return new CompiledBodyInstruction(
+            Direction: form.Direction,
+            DurationTicks: form.DurationTicks,
+            Operation: form.Operation,
+            StateName: form.Register,
+            StateSlot: -1,
+            Target: form.Target,
+            Value: form.Value
+        );
     }
     private static CompiledTrigger? CompileTrigger(ActionTrigger? trigger, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
         if (trigger is null) {

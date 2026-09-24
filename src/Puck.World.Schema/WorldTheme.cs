@@ -105,7 +105,7 @@ public sealed record WorldThemeColor(
         Warning: Zero
     );
 
-    private static BindableColor Zero { get; } = new(Raw: "#00000000");
+    private static BindableColor Zero => new(Raw: "#00000000");
 }
 /// <summary>The theme's 4px spacing grid and grid-locked component heights — the authored twin of
 /// <c>Puck.Overlays.DesignTokens.Space</c>. Every field is a plain float, px.</summary>
@@ -292,8 +292,8 @@ public sealed record WorldThemeElevation(
         ShadowSeatStripSpread: 0f
     );
 
-    private static BindableScalar Zero { get; } = new(literal: 0f);
-    private static BindableColor ZeroColor { get; } = new(Raw: "#00000000");
+    private static BindableScalar Zero => new(literal: 0f);
+    private static BindableColor ZeroColor => new(Raw: "#00000000");
 }
 /// <summary>The theme's diegetic material recipe (the world-geometry emboss/engrave physics plus the CRT quote) —
 /// the authored twin of <c>Puck.Overlays.DesignTokens.Diegetic</c>. Shadow scalars are plain floats; every
@@ -349,7 +349,7 @@ public sealed record WorldThemeDiegetic(
         ScreenWellOuter: Zero
     );
 
-    private static BindableColor Zero { get; } = new(Raw: "#00000000");
+    private static BindableColor Zero => new(Raw: "#00000000");
 }
 /// <summary>The theme's motion recipe — the authored twin of <c>Puck.Overlays.DesignTokens.Motion</c>.
 /// Durations are plain floats, ms.</summary>

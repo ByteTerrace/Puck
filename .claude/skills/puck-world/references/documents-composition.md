@@ -1,6 +1,6 @@
 # Document composition, boot-authored topology, the validator, serialization
 
-Part of [`puck.world.def.v1`](documents.md). Field names and defaults are
+Part of [`puck.world.definition.v1`](documents.md). Field names and defaults are
 generated (`puck schema`); this file is the decision/derivation prose the
 schema cannot state.
 
@@ -88,16 +88,20 @@ subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
+## The one world and its districts
+
+`puck.world.json` is the island; every district is a module under `Assets/worlds/modules/` imported under an alias (`imports[].as`, names compose as `<alias>$<name>`, placements and prototypes included, `exports` names the only rows a host may read, write, or bind; `world.imports` echoes every layer). The primitives the districts read: a placement `deal` facet deals one child placement per cell of a keyed row (`<template>/<key>`, laid out by the template's `distribution` region; `PlacementDealLawTests`); an observation writes rows of any cell kind and nothing else (`WorldObservationLawTests`); a `respond[].when` is a closed union of a lattice-field condition and a state-cell condition (`PlacementResponseLawTests`); an owned identity carries a keyed Int `facts` row mirrored into the reserved body-scope `identity` row, written by the `setIdentityFact` effect, echoed by `identity.facts` (`IdentityFactsLawTests`); a `machine` screen's content may be a `puck.cartridge.v1` document compiled at bind by the brick's forge (`MachineCartridgeLawTests`); an `inhabit` facet's `count` may name an Int cell instead of an authored literal — the cell-driven placement starts every structural install at zero live bodies and is admitted/retired only by `WorldPopulation.ReconcileInhabitCounts`, called on every state-value mutation apply so a rule-written cell reconciles the same tick, clamped to the tighter of the peer capacity and the distribution's own sample count and never retiring a seat-driven body (`InhabitCountLawTests`). A world authoring no `simulation.rateHz` runs at 30 Hz; a stress fixture authors 240 by name. Three derived limits shape a district: sixteen drive-reach ordinals across channels and target registers, one physical field topology per document, and the four-million work-unit rule budget (`RuleCapacity.MaxWorkUnitsPerTick`) where a body-pair interaction costs capacity squared; `modules/README.md` records what each decided.
+
 ## Worlds have no in-code definition — the shipped `puck.world.json` walkthrough
 
 A boot with no `--world` override loads
 `src/Puck.World/Assets/worlds/puck.world.json` — the bare walker world, a delta over
-`standard.basis.json`. The basis carries the standards, defined AS STATE — a `transforms` text row
+`standard.world.json`. The basis carries the standards, defined AS STATE — a `transforms` text row
 (`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
 `state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
 resolves to `WorldThemeSection.Absent`, all zeros, which the console panel draws as a 120×16 px
 black corner: 1 px glyph cells, no chrome) — plus the infinite SAFETY NET and its debug
-texture: one SOLID Plane placement (`groundPlane`) at y = −16, catching anything that falls (never
+texture: one SOLID Plane placement (`groundPlane`) at y = −64, catching anything that falls (never
 the level's own floor), its single shape rendered and collided from the same declaration, under the
 unbounded `groundTexture` checkerboard (one tile wallpaper-folded with a parity `materialStride`
 over `state.colors.groundPrimary`/`groundSecondary`, a NON-SOLID placement — a solid placement
@@ -180,13 +184,14 @@ limb). A driver's `cadence` and a facet's `amplitude`/`phase` may reference a nu
 as its decimal spelling), and a driver's `signal` may be `state.<row>[.<key>]`, read at the frame's
 tick (a `cycle` row is a shared clock; a cell carrying a `dynamics` trait reads its EASED sample, so
 a second-order follower on a rule-written target is a pose blend the simulation owns). In a driver
-signal, a gate token, an effector's `state` target, and a look's `motion.poses`, `$body` in the key is
-the wearing body's 0-based index (`state.airPose.$body` on a row keyed by body); a body with no such
-cell reads 0. A look's `motion.poses` maps a creation frame name to such a reference: the frame holds
+signal, a gate token, an effector's `state` target, and a look's `motion.poses`, a key that is exactly
+`$body` is the wearing body's 0-based index (`state.airPose.$body` on a row keyed by body); a key that
+only contains that text (`$bodyguard`, `air$body`) names the cell spelled that way
+(`WorldGaitDrivers.TryResolveBodyKey`). A body with no such cell reads 0. A look's `motion.poses` maps a creation frame name to such a reference: the frame holds
 while the cell's STORED value is nonzero (a pose is a truth, never an eased sample) and overrides the
 cue and replay cursor (a blink a `scheduleState`/`generate` rule pair schedules). The world validator refuses an undeclared curve, a non-numeric signal, gate, or pose
 row, and a pose naming no frame (`ValidateCreationBindings`, `ValidateLooks`). A look's `motion.lanes` is an array of up to four optional
-`ValueExpression` entries. Indices 0..3 map directly to
+`ExpressionProgram` entries. Indices 0..3 map directly to
 `DynamicTransform.Lanes` on every dynamic slot owned by the look.
 Interior nulls remain in place; absent and trailing null entries read zero.
 Expressions use eased state. Invalid arithmetic, failed reads, or unsupported
@@ -247,7 +252,7 @@ a small union carrying its own material (a rivet) that stays a crisp mark at any
 march-carved groove thinner than the footprint-relative acceptance produces. Refused by name alongside `panel` or
 `trims` on the same shape — both compose a SECOND shape instance detail cannot separately describe. A shape's
 `secondary` (bool, null = true) is `detail`'s OPPOSITE exclusion set: false drops it from ONLY the soft-shadow and
-ambient-occlusion field walks (sdf-world.hlsli's `softShadowVisibility`/`calcAO`/`calcFastAO`, gated on
+ambient-occlusion field walks (sdf-occlusion.hlsli's `softShadowVisibility`/`calcAO`/`calcFastAO`, gated on
 `sdfSecondaryMarchActive`) — it still marches for the camera, still carves the silhouette, and
 `CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` still hold it as ordinary contact geometry. No Panel/
 Trims restriction, since it packs its own bit on the SAME instruction rather than composing a second shape. A shape's
@@ -261,7 +266,7 @@ unlike every other primitive's unit-size law (`SdfSolidGeometry`'s dimension tab
 (`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip it outright, like `detail`) and needs none of
 their scopes. `bulge`/the radius taper/`strandOffset` are each refused past a ratio to the authored radii
 (`SdfProgramBuilder.MaxSweepBulgeRatio`/`MaxSweepTaperRatio`/`MaxSweepStrandOffsetRatio`) — the envelope the shape's
-conservative margin is numerically calibrated against (see the sdf-world skill's Sweep row). `strands` above 1 is
+conservative margin is numerically calibrated against. `strands` above 1 is
 render-only, refused for deterministic field contact by name. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
@@ -354,7 +359,7 @@ avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an in
 conditional expression cannot combine its gates.
 Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
 [Puck.State](../../../../docs/reference/state/expressions.md#periodic-bit-masks) owns their Int-only domain and refusal contract.
-`Puck.State/ExpressionOperators.cs` owns context-free operator spelling, arity,
+`src/Puck.State/Expressions/ExpressionOperators.cs` owns context-free operator spelling, arity,
 type signature, and cost; keep payload-bearing literal/state/board lowering specialized.
 The compiler folds successful constant subexpressions after full validation,
 using the runtime evaluator; never elide a live read or a refusing conditional branch.
@@ -373,6 +378,20 @@ one. The `plan` row is a rendered-nothing seam: an addon may write candidate cel
 board rendering are this lane's; painting `plan` is deliberately left to a future addon.
 An explicit path or the shipped default that cannot be loaded refuses the boot by name. The loader is
 `src/Puck.World.Schema/WorldDefinitionLoader.cs`.
+
+## Authoring a creation in code — the sculpting library
+
+A creation may be authored in code instead of by hand, through the sculpting
+library in `Puck.World.Authoring/Sculpting` (`CreationBuilder`/`StateHoisting`/
+`SculptPatch`/`ICreationSculpt`/`CreationSculptRegistry`) — see that project's
+README for the primitives; the shipped registry carries no sculpts, so one is
+registered by a composition root or a test. The document
+stays the source of truth either way: a sculpt only ever produces a patch a
+caller applies, validates, and (for the live world) composes into ordinary
+`WorldMutation` rows through the `world.row.set`/`.remove` section table under
+the issuing principal (`creation.sculpt <name>`) or writes to disk offline
+(`puck creation sculpt <name> --world <path>`) — it never bypasses
+whole-document revalidation or the per-section `Mutate` grant check.
 
 ## Document composition (`basis` and `imports`)
 
@@ -401,7 +420,7 @@ overriding the layer before it, per the merge rules below).
 Merge rules: objects merge member-wise (recursive), omitted inherits, authored `null` clears, a `$type`-changed
 union object replaces wholesale, and a row list whose rows all carry the settled identity vocabulary (first of
 `id`/`name`/`key`/`index` on every row of BOTH sides — `key` covers a state row's own `cells` and any other list
-keyed the same way, which used to replace wholesale under this vocabulary) merges BY KEY in basis order — new keys
+keyed the same way) merges BY KEY in basis order — new keys
 append, `{"<key>": …, "$drop": true}` tombstones remove (a stale tombstone refuses by name), a leading
 `{"$replace": true}` row replaces wholesale. Any other list replaces wholesale too — notably an overlay's `chords`
 (unkeyed rows, no settled identity field of their own): adding one chord means restating that row's whole list.
@@ -439,10 +458,12 @@ and `Puck.World.Server`'s `WorldStorageDocumentSource` resolves basis members ag
 (each link its own blob) via `WorldDefinitionFileSource.TryResolveChainFiles`, deduplicated per push call when two
 owned worlds share a basis. An entry's `as` composes the fragment under a namespace: every name the fragment declares at a `Declares` site of
 `WorldNameRegistry` (`src/Puck.World.Schema/WorldNameRegistry.cs`; the generated table is
-`docs/world-name-registry.md`, `puck registry --check`) becomes `<alias>_<name>` and every other registered site in
-the fragment — bare name positions, `$` channel segments, `$cell:`/`cell:`/`$expr:` keys, infix and postfix
-expressions, `state.<row>` bindings — is rewritten to match (`WorldModuleNamespace`); names the fragment does not
-declare stay as written. An alias is a bare identifier (letter or underscore, then letters, digits, underscores).
+`docs/world-name-registry.md`, `puck registry --check`) becomes the generated name `<alias>$<name>` and every other
+registered site in the fragment — bare name positions, `$` channel segments, `$cell:`/`cell:`/`$expr:` keys, infix and
+postfix expressions, `state.<row>` bindings — is rewritten to match (`WorldModuleNamespace`); names the fragment does
+not declare stay as written. Placements and prototypes are namespaced too, each in its own namespace; spawn points,
+kits, looks and cameras stay flat. A host writes the document spelling (`world.state kart$lap`, a restated court
+`{"id": "dive$diveCourt", ...}`); a `.puck` source writes `alias.name` (`puck-dsl`). An alias is a bare identifier (letter or underscore, then letters, digits, underscores).
 One fragment composes twice under two aliases; an entry with no `as` composes its names unchanged. A fragment's
 names are private by default: its `exports` record (`WorldExports` — `reads`, `actions`, `bindings`, each naming the
 fragment's own declarations) is the surface a host may bind, and at compose time (`WorldModuleExports`, same pass)
@@ -457,19 +478,19 @@ document loaded as a world with `exports` on it refuses at validation, and `worl
 Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
-**`standard.basis.json` — the standard library, not a world.** The engine ships
+**`standard.world.json` — the standard library, not a world.** The engine ships
 no content default: the standard bindings, movement channels, chase rig,
 icon/badge table, theme, seat modes and markers are AUTHORED, in
-`standard.basis.json`, beside the kits, body-motion programs and state rows it
+`standard.world.json`, beside the kits, body-motion programs and state rows it
 carries. Every shipped world names it as its `basis` (directly, or through
-`quilt-base`). Absent now means
+`quilt-base`). Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
 property non-null between parse and validation which the validator refuses for
 any document whose `population.capacity` is nonzero — the same derived refusal
 `kits` carries, so a seatless document may still author neither. A world takes
-the standard set by naming `standard.basis.json` as its `basis`; a world that
+the standard set by naming `standard.world.json` as its `basis`; a world that
 wants only its own `layouts` and other prototype-specific sections over that
 basis authors just those sections in its own body — the ordinary basis-refine
 rule above, no second file involved.
@@ -481,8 +502,8 @@ rule above, no second file involved.
 every live mutation, on whole-document swap, and on every undo-replay entry —
 so builders and appliers never repeat semantic checks. Refusals are an
 aggregated STRING list (`"Invalid WorldDefinition: …"`); the one
-enum-reasoned section is HUD (`HudValidationException` carrying `HudRefusal`,
-folded in as `hud.<Reason>: …`). There is no separate incomplete-document
+enum-reasoned section is HUD (`HudRowValidation.Refuse` appends a `HudRefusal`
+reason as `hud.<Reason>: …`). There is no separate incomplete-document
 refusal: an absent required section resolves through its accessor to the
 section's own `Absent`/empty placeholder (`Hud`, `Views`, `Kits`, …), and the
 validator refuses it BY NAME from whatever derived rule that placeholder
@@ -544,13 +565,15 @@ here".
   prevent.
 - **`$type`-discriminated unions:** `ActionPredicate`, `ActionEffect`,
   `WorldScreenSource`
-  (`none`/`testPattern`/`machine`/`camera`/`view`/`capture`/`console`/`qr`),
-  `WorldLookSource`, `WorldSpawnPolicy`, `WorldAnchor`
-  (`entity`/`entityLeaf`/`placement`/`group`), `WorldCameraProgramOp`
-  (`anchor`/`offset`/`lookAt`/`orbit`/`dynamics`/`clampPitch`/`fov`/`blend`) and
+  (`none`/`machine`/`producer`/`view`/`session`/`text`/`probe`; a `producer` names a registered image
+  producer by id with its own settings object, validated by `WorldImageProducerVocabulary`),
+  `WorldLookSource` (`catalog`/`creation`), `WorldAnchor`
+  (`entity`/`entityPart`/`placement`/`group`/`seat`/`recentSpeaker`), `WorldCameraProgramOp`
+  (`anchor`/`offset`/`lookAt`/`orbit`/`path`/`dynamics`/`clampPitch`/`fieldOfView`/`blend`/`selectProgram`) and
   `WorldCameraSubject` (`reference`/`placement`/`worldPoint`), `WorldSpeakerSource`
-  (`none`/`machine`/`tune`/`synth`), `WorldStateRow`
-  (`int`/`fixed`/`bool`/`text`). `$type` failures do NOT all surface as
+  (`none`/`machine`/`tune`/`synth`); `grep JsonPolymorphic src/Puck.World.Schema`
+  lists the rest. A state row is not a `$type` union: its `kind` member picks the
+  `CellKind`. `$type` failures do NOT all surface as
   `JsonException` — `WorldJsonPayload.IsParseFailure` is the complete set;
   route author-supplied JSON through `WorldJsonPayload.TryParse`.
 - **Canonical write-back** (`Serialize`/`Save`): UTF-8 no BOM, LF newlines,

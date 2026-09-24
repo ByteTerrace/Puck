@@ -10,7 +10,7 @@ public static partial class WorldConstructs {
         keyword: keyword
     )
         ? construct!
-        : throw new InvalidOperationException(message: $"'{keyword}' is not a construct described inside {(enclosing is null
+        : throw new InvalidOperationException(message: $"'{keyword}' is not a construct described inside {((enclosing is null)
             ? "the document"
             : $"'{enclosing}'")}.")
     );
@@ -23,10 +23,10 @@ public static partial class WorldConstructs {
     /// <returns>The member's admitted words.</returns>
     /// <exception cref="InvalidOperationException">The construct or the member is not described, or the member
     /// admits no fixed set of words.</exception>
-    public static HashSet<string> Choices(string? enclosing, string keyword, string member) => (Require(enclosing: enclosing, keyword: keyword).TryGetMember(
+    public static HashSet<string> Choices(string? enclosing, string keyword, string member) => ((Require(enclosing: enclosing, keyword: keyword).TryGetMember(
         member: out var described,
         name: member
-    ) && (described!.Choices.Count > 0)
+    ) && (described!.Choices.Count > 0))
         ? new HashSet<string>(collection: described.Choices, comparer: StringComparer.Ordinal)
         : throw new InvalidOperationException(message: $"'{keyword}' describes no '{member}' member with a fixed set of words.")
     );

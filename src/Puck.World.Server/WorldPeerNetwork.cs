@@ -17,11 +17,24 @@ public sealed class WorldPeerNetwork : IDisposable {
     /// <param name="identityFile">A PKCS8 peer identity file to load or create; null creates an ephemeral identity.</param>
     /// <param name="allowOutbound">Whether this authority may initiate remote streams. A closed rewind group
     /// keeps its player listener but refuses outbound authority connections.</param>
-    public WorldPeerNetwork(string? identityFile = null, bool allowOutbound = true) {
+    /// <param name="timeProvider">The host clock the peer's control-stream, handshake, refusal-drain, and send deadlines
+    /// run on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
+    /// <param name="transportHandshakeTimeout">The wall-clock bound on each QUIC/TLS handshake;
+    /// <see langword="null"/> is <see cref="QuicPeerTransport.DefaultHandshakeTimeout"/>.</param>
+    public WorldPeerNetwork(string? identityFile = null, bool allowOutbound = true, TimeProvider? timeProvider = null, TimeSpan? transportHandshakeTimeout = null) {
         m_allowOutbound = allowOutbound;
-        m_peer = new(valueFactory: () => CreatePeer(path: identityFile));
+        Clock = (timeProvider ?? TimeProvider.System);
+        m_peer = new(valueFactory: () => CreatePeer(
+            handshakeTimeout: transportHandshakeTimeout,
+            path: identityFile,
+            timeProvider: Clock
+        ));
     }
 
+    /// <summary>Gets the host clock this network was built on: its peer's deadlines run on it, and every federation
+    /// lane, answer deadline and retry pacing that dials through this network reads it too, so one host has one clock
+    /// for its whole peer surface.</summary>
+    public TimeProvider Clock { get; }
     /// <summary>Gets the process or hosted authority's shared peer. The owner, not its consumers, disposes it.</summary>
     public Peer Peer {
         get {
@@ -35,7 +48,7 @@ public sealed class WorldPeerNetwork : IDisposable {
         }
     }
 
-    private static Peer CreatePeer(string? path) {
+    private static Peer CreatePeer(string? path, TimeProvider timeProvider, TimeSpan? handshakeTimeout) {
         if (
             !(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) ||
             !QuicPeerTransport.IsSupported
@@ -57,7 +70,11 @@ public sealed class WorldPeerNetwork : IDisposable {
             }
             return new Peer(
                 identity,
-                new QuicPeerTransport(certificate: identity.CreateTransportCertificate())
+                new QuicPeerTransport(
+                    certificate: identity.CreateTransportCertificate(),
+                    handshakeTimeout: handshakeTimeout
+                ),
+                timeProvider: timeProvider
             );
         } catch { identity.Dispose(); throw; }
     }

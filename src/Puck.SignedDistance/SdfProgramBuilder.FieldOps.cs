@@ -241,78 +241,60 @@ public sealed partial class SdfProgramBuilder {
 
         return PopField();
     }
+
+    private SdfProgramBuilder PopFieldStairs(SdfBlendOp blendOp, float radius, int steps) {
+        if (m_fieldScope is not { } scope) {
+            throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
+        }
+
+        RequireFinite(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
+        // A zero radius is exactly a plain Union/Subtraction pop; that composition has one spelling.
+        RequirePositive(
+            value: radius,
+            paramName: nameof(radius),
+            subject: "A stairs blend radius"
+        );
+
+        if (steps < 1) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(steps),
+                message: "A stairs blend step count must be at least 1."
+            );
+        }
+
+        m_fieldScope = (
+            blendOp,
+            radius,
+            scope.ShapeCountAtOpen,
+            default,
+            ((float)steps)
+        );
+
+        return PopField();
+    }
+
     /// <summary>Closes the scope and composes its field via continuous stairs union.</summary>
-    /// <param name="radius">The blend radius.</param>
+    /// <param name="radius">The blend radius (&gt; 0).</param>
     /// <param name="steps">The integer step count (>= 1).</param>
-    public SdfProgramBuilder PopFieldStairsUnion(float radius, int steps) {
-        if (m_fieldScope is not { } scope) {
-            throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
-        }
-
-        RequireFinite(
-            value: radius,
-            paramName: nameof(radius),
-            subject: "A stairs blend radius"
+    public SdfProgramBuilder PopFieldStairsUnion(float radius, int steps) =>
+        PopFieldStairs(
+            blendOp: SdfBlendOp.StairsUnion,
+            radius: radius,
+            steps: steps
         );
-        RequireNonNegative(
-            value: radius,
-            paramName: nameof(radius),
-            subject: "A stairs blend radius"
-        );
-
-        if (steps < 1) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(steps),
-                message: "A stairs blend step count must be at least 1."
-            );
-        }
-
-        m_fieldScope = (
-            SdfBlendOp.StairsUnion,
-            radius,
-            scope.ShapeCountAtOpen,
-            default,
-            ((float)steps)
-        );
-
-        return PopField();
-    }
     /// <summary>Closes the scope and composes its field via continuous stairs subtraction.</summary>
-    /// <param name="radius">The blend radius.</param>
+    /// <param name="radius">The blend radius (&gt; 0).</param>
     /// <param name="steps">The integer step count (>= 1).</param>
-    public SdfProgramBuilder PopFieldStairsSubtraction(float radius, int steps) {
-        if (m_fieldScope is not { } scope) {
-            throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
-        }
-
-        RequireFinite(
-            value: radius,
-            paramName: nameof(radius),
-            subject: "A stairs blend radius"
+    public SdfProgramBuilder PopFieldStairsSubtraction(float radius, int steps) =>
+        PopFieldStairs(
+            blendOp: SdfBlendOp.StairsSubtraction,
+            radius: radius,
+            steps: steps
         );
-        RequireNonNegative(
-            value: radius,
-            paramName: nameof(radius),
-            subject: "A stairs blend radius"
-        );
-
-        if (steps < 1) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(steps),
-                message: "A stairs blend step count must be at least 1."
-            );
-        }
-
-        m_fieldScope = (
-            SdfBlendOp.StairsSubtraction,
-            radius,
-            scope.ShapeCountAtOpen,
-            default,
-            ((float)steps)
-        );
-
-        return PopField();
-    }
     /// <summary>Opens a scoped field accumulator (<see cref="SdfOp.PushField"/>): every accumulator-reading op emitted
     /// until the matching <see cref="PopField"/> — the intersection family, and the <see cref="Onion"/>/
     /// <see cref="Dilate"/>/<see cref="Displace"/> field ops — acts on this scope's shapes alone, not on everything
@@ -444,7 +426,7 @@ public sealed partial class SdfProgramBuilder {
         return this;
     }
     /// <summary>Opens a field scope that will compose back into the parent via continuous stairs.</summary>
-    /// <param name="radius">The blend radius.</param>
+    /// <param name="radius">The blend radius (&gt; 0).</param>
     /// <param name="steps">The integer step count (>= 1).</param>
     /// <param name="subtraction">Whether the stairs compose is subtraction (true) or union (false).</param>
     public SdfProgramBuilder PushFieldStairs(float radius, int steps, bool subtraction = false) {
@@ -453,7 +435,8 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(radius),
             subject: "A stairs blend radius"
         );
-        RequireNonNegative(
+        // A zero radius is exactly a plain Union/Subtraction pop; that composition has one spelling.
+        RequirePositive(
             value: radius,
             paramName: nameof(radius),
             subject: "A stairs blend radius"
@@ -497,7 +480,7 @@ public sealed partial class SdfProgramBuilder {
         return this;
     }
     /// <summary>Opens a field scope that will compose back into the parent via continuous stairs union.</summary>
-    /// <param name="radius">The blend radius.</param>
+    /// <param name="radius">The blend radius (&gt; 0).</param>
     /// <param name="steps">The integer step count (>= 1).</param>
     public SdfProgramBuilder PushFieldStairsUnion(float radius, int steps) =>
         PushFieldStairs(
@@ -506,7 +489,7 @@ public sealed partial class SdfProgramBuilder {
             subtraction: false
         );
     /// <summary>Opens a field scope that will compose back into the parent via continuous stairs subtraction.</summary>
-    /// <param name="radius">The blend radius.</param>
+    /// <param name="radius">The blend radius (&gt; 0).</param>
     /// <param name="steps">The integer step count (>= 1).</param>
     public SdfProgramBuilder PushFieldStairsSubtraction(float radius, int steps) =>
         PushFieldStairs(

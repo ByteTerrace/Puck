@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Puck.Abstractions.Pacing;
+using Puck.Hosting;
 
 namespace Puck.Launcher;
 
@@ -64,5 +65,45 @@ internal static class LauncherHostLoop {
                 Thread.SpinWait(iterations: 48);
             }
         }
+    }
+    public static uint ResolveRatePerSecond(IFixedStepSimulation? simulation) {
+        var simRatePerSecond = (simulation?.RatePerSecond ?? DefaultUpdateRate);
+
+        return ((simRatePerSecond == 0U)
+            ? DefaultUpdateRate
+            : simRatePerSecond
+        );
+    }
+    // Runs a host pump on its own dedicated background thread and returns the task a hosted service hands back from
+    // ExecuteAsync. The task completes when the pump returns and faults with whatever it threw, so a pump that fails
+    // (a device that never comes up, a render root that throws) faults its hosted service and stops the host with the
+    // exception in hand, where an unhandled exception on a raw thread would end the process before anything reports.
+    // The pump must return once its stopping token is cancelled: the host's StopAsync waits for this task.
+    public static Task RunPump(Action pump, string name) {
+        var completion = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _ = StartBackgroundThread(
+            action: () => {
+                try {
+                    pump();
+                    completion.SetResult();
+                } catch (Exception exception) {
+                    completion.SetException(exception: exception);
+                }
+            },
+            name: name
+        );
+
+        return completion.Task;
+    }
+    public static Thread StartBackgroundThread(Action action, string name) {
+        var thread = new Thread(start: () => action()) {
+            IsBackground = true,
+            Name = name,
+        };
+
+        thread.Start();
+
+        return thread;
     }
 }

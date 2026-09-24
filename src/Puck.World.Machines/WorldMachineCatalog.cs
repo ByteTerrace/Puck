@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 
 namespace Puck.World.Machines;
@@ -67,6 +68,20 @@ public sealed class WorldMachineCatalog : IMachineValidationCatalog {
         CompositionFingerprint = MachineConfigurationFields.CatalogFingerprint(descriptors: factories.Select(selector: static pair => (EngineId: pair.Key, Descriptor: ((MachineEngineDescriptor?)pair.Value.Descriptor))));
     }
 
+    /// <summary>Builds the catalog from a composed extension set's <see cref="IMachineEngine"/> and
+    /// <see cref="IMachineContentProvider"/> contributions.</summary>
+    /// <param name="extensions">The host's composed extensions.</param>
+    /// <returns>The host's immutable machine catalog.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="extensions"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">An engine publishes a mismatched descriptor, or a content provider names no
+    /// contributed engine.</exception>
+    public static WorldMachineCatalog From(PuckExtensionSet extensions) {
+        ArgumentNullException.ThrowIfNull(argument: extensions);
+        return new WorldMachineCatalog(
+            contentProviders: extensions.Contributions<IMachineContentProvider>().Select(selector: static entry => entry.Value),
+            engines: extensions.Contributions<IMachineEngine>().Select(selector: static entry => entry.Value)
+        );
+    }
     /// <inheritdoc/>
     public bool CanPrepare(string engineId, string contentPath) =>
         (ContentProviders.TryGetValue(

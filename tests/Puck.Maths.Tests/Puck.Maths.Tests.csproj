@@ -16,6 +16,11 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Allocation claims measure through Puck.Abstractions.Counting.AllocationWindow. -->
+        <ProjectReference Include="..\..\src\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\..\src\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
     </ItemGroup>
 </Project>

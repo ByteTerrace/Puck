@@ -9,8 +9,7 @@ here and in the [play programme](../plans/play.md).
 
 Use this page when you need the reference game's design decisions. Use the
 [manual](../README.md) for engine concepts and current contracts, and use the
-topic plans for proposed implementation work. The dated [milestone records](../development/game-milestones.md)
-show what earlier checks established and what they left unresolved.
+topic plans for proposed implementation work.
 
 For the main character's visual implementation, use the
 [armored chibi hero brief](art/armored-chibi-hero-brief.md). It translates the requested
@@ -42,8 +41,7 @@ platform (traffic, queues, compute, gateways, caches) enters the same way, as ob
 module's placements, bodies, and rules read — the engine learns no cloud noun and no game noun for it.
 The roster of retired prototypes (`play`, `nexus`, `dive`, `kart`, `jump`, `studio`, the quilt corners,
 the frozen diorama, the two scenario documents, `granaries.world.json`) is realized inside the one world
-and deleted as each is realized, never repaired beside it; `experimental/Puck.Demo` retires the same way,
-folder by folder, each deletion beside the landing that eclipses it. The 51-game tabletop roster
+and deleted as each is realized, never repaired beside it. The 51-game tabletop roster
 (chess through billiards, Riichi Mahjong, Chinese Checkers) is a real target the market district is
 built toward, and every capability it needs lands as a game-agnostic primitive — chance and
 information-set search nodes, multi-hop candidate chains, n-player search, a cue gesture over
@@ -96,7 +94,7 @@ them.
 
 Settled shape decisions from this arc, so a reader extending the split does not re-litigate them.
 
-**Documents belong in world-type projects.** Everything document-shaped — `puck.world.def.v1` and its
+**Documents belong in world-type projects.** Everything document-shaped — `puck.world.definition.v1` and its
 neighbours — lives in `Puck.World.Schema` and `Puck.World.Protocol` (world wire residue), never in the
 generic layer beneath them. `Puck.Networking` carries the transport, hello, identity, request lane and
 authenticator that `Puck.World.Protocol` builds on, and it carries no `World` token — a world concept
@@ -107,7 +105,7 @@ document families `Puck.World` embeds inline; the ROM forges live beside their m
 `Puck.HumbleGamingBrick.Forge` (SM83/CGB) and `Puck.AdvancedGamingBrick.Forge` (ARM7TDMI/AGB), each packable on
 its own. The audio/synth document families sit in `Puck.Assets` so a forge package never drags a world assembly.
 
-**Everything is v1.** `puck.world.def.v1`, `puck.world.projection.v1`, `puck.world.counterpart.v1` — no
+**Everything is v1.** `puck.world.definition.v1`, `puck.world.projection.v1`, `puck.world.counterpart.v1` — no
 schema in this repository carries a v2, and none is planned. Supergreen holds: zero consumers, so a
 breaking change edits the v1 shape in place and updates every internal caller in the same change, never
 a parallel version or a compatibility shim.
@@ -157,13 +155,12 @@ than implicit migrations. `world.budget` reads the derived cost every
 authorable feature with a price now folds into (render program words/instances against their frozen
 envelope, the Lipschitz step scale, the lattice's exact full-cell/body-slot pass cost, the state row
 count) — a
-decision's price stays legible instead of a silent frame tax. The document vocabulary moved with it:
-`kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, authoring
-dissolved into placements' own policy block); `prototypes` (`prototypeId` references) replaces
-`creations`; `bodies` replaces `population`; `seatDefaults`/`seatCameraFeel` replace
-`playerDefaults`/`seatLook`. The dive district (`modules/dive.world.json`) is the worked example of the
+decision's price stays legible instead of a silent frame tax. In the document vocabulary,
+`kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, with
+authoring defaults in placements' own policy block), and creations are `prototypes` rows that other
+rows reference by `prototypeId`. The dive district (`modules/dive.world.json`) is the worked example of the
 field spelling (a medium pool lattice a diver kit settles in) and the arena district
-(`modules/arena.world.json`) carries the hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`WorldStateCycle`, beside `advance` and `dynamics`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
+(`modules/arena.world.json`) carries the hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`StateCycle`, exclusive with `advance`, `dynamics` and `draw`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
@@ -176,14 +173,14 @@ Acceleration and contact support remain separate frame inputs: opposed solved
 gravity supplies ambient up in every world. Collision's `GradientDerivedUp`
 requirement additionally lets a measured walkable support normal own grounded
 orientation; without it, support is a grounding fact rather than a frame source.
-Bounded local `areas` now ride static or body-attached placements: inclusive
+Bounded local `areas` ride static or body-attached placements: inclusive
 sphere and yaw-local box bounds choose directional or inward-radial acceleration,
 then fold over the global answer by deterministic priority/authored order with
 explicit Combine/Replace. This is sufficient for a room, ship interior, local
 planet influence, or a deliberate zero-G pocket without coupling acceleration
 to SDF geometry. Arbitrary SDF volume bounds and per-body masks remain the next
 explicit query/asset seam rather than an inferred shortcut.
-The same global kernel now honors body-only systems when no static source is
+The same global kernel honors body-only systems when no static source is
 authored, and every fixed-point composition addition saturates rather than
 wrapping across an extreme.
 
@@ -191,11 +188,10 @@ wrapping across an extreme.
 
 **Do not trust this section's vintage — re-run the checks.** Each claim below names the check that
 produced it, because a status sentence with no check behind it is how a reader ends up believing a
-capability exists. This is the whole reason the old per-capability register was deleted and must not
-come back.
+capability exists.
 
-
-**Chronological verification history.** Detailed test runs, command transcripts, and evidence logs from earlier development waves are preserved in [milestone records](../development/game-milestones.md).
+Test runs and command transcripts are not kept here: the landing commit
+message of each change carries the evidence for it.
 
 **The charter's back half has not started**: the owner feel sitting (the declared gate,
 never held — and now well behind the motion work, so its recordings want redoing), win conditions,

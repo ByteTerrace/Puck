@@ -34,21 +34,25 @@ public sealed record WorldAuthorityReceiptSnapshot(Guid Owner, string World, Wor
 
             if (!bytes.SequenceEqual(other: snapshot.Encode())) { throw new InvalidDataException(message: "receipt snapshot is not canonical"); }
             return snapshot;
-        } catch (JsonException error) { throw new InvalidDataException(
+        } catch (JsonException error) {
+            throw new InvalidDataException(
             innerException: error,
             message: "receipt snapshot envelope is malformed"
-        ); }
+        );
+        }
     }
     /// <summary>Encodes a validated snapshot in stable node order without changing its original payload bytes.</summary>
     public byte[] Encode() {
         _ = Validate();
-        var encoded = JsonSerializer.SerializeToUtf8Bytes(this with { Nodes = new SortedDictionary<string, byte[]>(
+        var encoded = JsonSerializer.SerializeToUtf8Bytes(this with {
+            Nodes = new SortedDictionary<string, byte[]>(
             Nodes.ToDictionary(
                 pair => pair.Key,
                 pair => pair.Value
             ),
             StringComparer.Ordinal
-        ) });
+        ),
+        });
 
         if (encoded.Length > MaximumEncodedBytes) { throw new InvalidDataException(message: "receipt snapshot envelope exceeds its byte budget"); }
         return encoded;
@@ -156,9 +160,11 @@ public sealed record WorldAuthorityReceiptSnapshot(Guid Owner, string World, Wor
             }
             if (visited.Count != Nodes.Count) { throw new InvalidDataException(message: "receipt snapshot contains nodes outside its source chain"); }
             return receipts;
-        } catch (JsonException error) { throw new InvalidDataException(
+        } catch (JsonException error) {
+            throw new InvalidDataException(
             innerException: error,
             message: "receipt snapshot index is malformed"
-        ); }
+        );
+        }
     }
 }

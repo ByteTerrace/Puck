@@ -19,7 +19,7 @@ internal sealed partial class PlayerCommandModule {
     // world declares no camera body for this seat, or the server's own Control check denies the actor — the ModeHandler
     // caller has already checked Drive over the target SEAT's own body; this is the separate Control check the route
     // itself requires.
-    private bool ActivateCameraApplication(WorldPrincipal actingPrincipal, int slot) {
+    private bool ActivateCameraApplication(Principal actingPrincipal, int slot) {
         if (!m_client.TryInhabitantBody(
             index: out var cameraBody,
             placementId: CameraPlacementId(slot: slot)
@@ -42,9 +42,9 @@ internal sealed partial class PlayerCommandModule {
         // own body (HoldsForAdministration), so this rides under Console, exactly as an admission's own Drive
         // template does. Idempotent — re-entering camera mode re-grants the identical row.
         m_link.SubmitGrant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
-                Principal: WorldPrincipal.Seat(slot: slot),
+                Grantee: Principal.Seat(slot: slot),
                 Capability: WorldCapability.Drive,
                 Subject: target,
                 Exclusive: false
@@ -56,7 +56,7 @@ internal sealed partial class PlayerCommandModule {
             Exclusive: true,
             Principal: actingPrincipal,
             Target: target,
-            TargetPrincipal: WorldPrincipal.Seat(slot: slot)
+            TargetPrincipal: Principal.Seat(slot: slot)
         ));
 
         return true;
@@ -64,7 +64,7 @@ internal sealed partial class PlayerCommandModule {
     // Dissolves the camera control application through the ordinary DissolveControl door — the avatar resumes driving
     // itself and the perceived body/camera eye/audio listener fall back to it the instant WorldEngagement restores the
     // own-body application, mirroring ActivateCameraApplication's own single mechanism.
-    private void DeactivateCameraApplication(WorldPrincipal actingPrincipal, int slot) {
+    private void DeactivateCameraApplication(Principal actingPrincipal, int slot) {
         WorldCameraApplication.Deactivate(
             actingPrincipal: actingPrincipal,
             link: m_link,
@@ -205,7 +205,7 @@ internal sealed partial class PlayerCommandModule {
         // body or hijack its camera application by naming a trailing [seat]. A pure non-camera flip is presentation
         // only and needs no such authority.
         if (wasCamera != isCamera) {
-            var actingPrincipal = context.ActingPrincipal();
+            var actingPrincipal = context.Principal;
 
             if (!m_server.Grants.Allows(
                 principal: actingPrincipal,

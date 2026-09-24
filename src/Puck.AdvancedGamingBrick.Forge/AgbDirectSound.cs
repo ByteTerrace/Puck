@@ -264,36 +264,14 @@ public sealed class AgbDirectSound {
             source: LowRegister.R6
         );
     }
-    private void StoreHalf(uint address, uint value) {
-        m_emitter.LoadConstant(
-            destination: LowRegister.R0,
-            value: value
-        );
-        m_emitter.LoadConstant(
-            destination: LowRegister.R2,
-            value: address
-        );
-        m_emitter.StoreHalf(
-            baseRegister: LowRegister.R2,
-            byteOffset: 0,
-            source: LowRegister.R0
-        );
-    }
-    private void StoreWord(uint address, uint value) {
-        m_emitter.LoadConstant(
-            destination: LowRegister.R0,
-            value: value
-        );
-        m_emitter.LoadConstant(
-            destination: LowRegister.R2,
-            value: address
-        );
-        m_emitter.StoreWord(
-            baseRegister: LowRegister.R2,
-            byteOffset: 0,
-            source: LowRegister.R0
-        );
-    }
+    private void StoreHalf(uint address, uint value) => m_emitter.StoreHalfConstant(
+        address: address,
+        value: value
+    );
+    private void StoreWord(uint address, uint value) => m_emitter.StoreWordConstant(
+        address: address,
+        value: value
+    );
 
     /// <summary>Emits the engine's power-up: silence the buffer, arm the transfer, and start the timer.</summary>
     public void EmitBoot() {

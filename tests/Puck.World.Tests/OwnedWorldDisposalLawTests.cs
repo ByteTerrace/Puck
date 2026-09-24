@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -16,12 +17,12 @@ public sealed class OwnedWorldDisposalLawTests {
         .GetFiles(
             path: directory,
             searchOption: SearchOption.TopDirectoryOnly,
-            searchPattern: $"*{WorldOwnedWorldFileName.Suffix}"
+            searchPattern: $"*{WorldDocumentName.DocumentSuffix}"
         )
         .Order(comparer: StringComparer.Ordinal)];
     // A second and third admissible owned world, so a sweep across several files is exercised rather than inferred
     // from the single identity the fixture document authors.
-    private static void Clone(TempWorldDirectory dir, string source, string id) {
+    private static void Clone(TemporaryDirectory dir, string source, string id) {
         var node = JsonNode.Parse(json: File.ReadAllText(path: source))!.AsObject();
         var identity = node["identity"]!.AsObject();
 
@@ -30,14 +31,14 @@ public sealed class OwnedWorldDisposalLawTests {
         node["documentId"] = id;
 
         _ = dir.WriteText(
-            name: $"{id}{WorldOwnedWorldFileName.Suffix}",
+            name: $"{id}{WorldDocumentName.DocumentSuffix}",
             text: node.ToJsonString()
         );
     }
     // A throwaway hub bound to stderr, so this catalog's narration reaches Console.Error exactly as it would through
     // a composition root's own AttachNarrationSink — the same mechanism WorldOutputHub.Narrate now uses in place of
     // an unconditional Console.Error.WriteLine.
-    private static WorldOwnedWorlds Open(TempWorldDirectory dir) {
+    private static WorldOwnedWorlds Open(TemporaryDirectory dir) {
         var hub = new WorldOutputHub();
 
         _ = hub.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
@@ -49,7 +50,7 @@ public sealed class OwnedWorldDisposalLawTests {
             template: Fixtures.BuildDocument()
         );
     }
-    private static string[] Populate(TempWorldDirectory dir) {
+    private static string[] Populate(TemporaryDirectory dir) {
         var seeded = Open(dir: dir);
 
         Assert.NotEmpty(collection: seeded.All);
@@ -81,7 +82,7 @@ public sealed class OwnedWorldDisposalLawTests {
 
         return files;
     }
-    private static string QuarantineDirectory(TempWorldDirectory dir) => Path.Combine(
+    private static string QuarantineDirectory(TemporaryDirectory dir) => Path.Combine(
         path1: dir.RootPath,
         path2: WorldOwnedWorlds.QuarantineDirectoryName
     );
@@ -121,7 +122,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// later construction over the same directory finds nothing left to discard.</summary>
     [Fact]
     public void RetiredDocumentShape_IsDiscardedOnce_AndNamedWithItsOwnReason() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var files = Populate(dir: dir);
 
         foreach (var path in files) {
@@ -173,7 +174,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// still parse stay in the catalog, byte-for-byte, and no re-seed runs behind them.</summary>
     [Fact]
     public void OneUnreadableDocument_IsDiscardedWithoutDisturbingTheDocumentsThatParse() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var files = Populate(dir: dir);
         var corrupt = files[0];
         var survivors = files[1..].ToDictionary(
@@ -219,7 +220,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// quarantine directory, and every file's bytes survive the construction untouched.</summary>
     [Fact]
     public void ValidOwnedWorlds_LoadUnchanged_AndAreNeverDiscarded() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var before = Populate(dir: dir).ToDictionary(
             elementSelector: File.ReadAllBytes,
             keySelector: path => path
@@ -254,7 +255,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// directory the entry names, so an operator can still read what was refused.</summary>
     [Fact]
     public void DiscardedDocument_SurvivesInQuarantine_ByteForByte() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var target = Populate(dir: dir)[0];
 
         RetireCameraProgram(path: target);
@@ -277,7 +278,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// beside it load exactly as they would have.</summary>
     [Fact]
     public void UnreadableDocument_IsRefusedWithoutBeingDisposedOf() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var files = Populate(dir: dir);
         var target = files[0];
         var before = File.ReadAllBytes(path: target);
@@ -306,7 +307,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// disposed of — so the retention proved above rests on the refusal's class, not on the sweep being inert.</summary>
     [Fact]
     public void UnparseableDocument_AtTheSamePath_IsDisposedOf() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var target = Populate(dir: dir)[0];
 
         File.WriteAllText(
@@ -328,7 +329,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// authored bytes survive to the next boot.</summary>
     [Fact]
     public void UnreadableDocuments_AreNeverReSeededOver() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var files = Populate(dir: dir);
         var before = files.ToDictionary(
             elementSelector: File.ReadAllBytes,
@@ -369,12 +370,12 @@ public sealed class OwnedWorldDisposalLawTests {
     /// than handing back a null identity.</summary>
     [Fact]
     public void DirectoryAtSeedPath_IsPreservedAndDoesNotCrashConstruction() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var template = Fixtures.BuildDocument();
         var seed = Assert.Single(collection: template.PlayerDefaults.Identities);
         var occupied = Path.Combine(
             path1: dir.RootPath,
-            path2: WorldOwnedWorldFileName.For(id: seed.Id)
+            path2: WorldDocumentName.For(id: seed.Id)
         );
 
         _ = Directory.CreateDirectory(path: occupied);
@@ -393,7 +394,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// same name arrives twice carrying different bytes: BOTH copies survive, at distinct paths.</summary>
     [Fact]
     public void QuarantineCollision_PreservesBothCopies() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var target = Populate(dir: dir)[0];
 
         RetireCameraProgram(path: target);
@@ -435,7 +436,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// rather than turning a recoverable name collision into a failed disposal.</summary>
     [Fact]
     public void QuarantineDirectoryEntryCollision_UsesTheNextSuffix() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var target = Populate(dir: dir)[0];
 
         RetireCameraProgram(path: target);
@@ -465,7 +466,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// bytes the failed move promised would be named again next boot.</summary>
     [Fact]
     public void FailedMove_LeavesTheBytes_AndNoSeedOverwritesThem() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var files = Populate(dir: dir);
 
         foreach (var path in files) {
@@ -516,7 +517,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// leave a half-written or clobbered copy behind: the destination it chose stays absent.</summary>
     [Fact]
     public void FailingFileMove_LeavesTheSourceBytes_AndTheEarlierQuarantinedCopy() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var target = Populate(dir: dir)[0];
 
         RetireCameraProgram(path: target);
@@ -574,7 +575,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// disposal being inert whenever a quarantined copy of that name already exists.</summary>
     [Fact]
     public void MovableSecondCopy_IsQuarantinedBesideTheFirst() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var target = Populate(dir: dir)[0];
 
         RetireCameraProgram(path: target);
@@ -610,7 +611,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// <see cref="WorldOwnedWorlds.Discarded"/>: nothing was moved.</summary>
     [Fact]
     public void RefusedInPlaceDocument_IsReadBackOnRefused_NotOnDiscarded() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var files = Populate(dir: dir);
         var target = files[0];
         WorldOwnedWorlds swept;
@@ -636,7 +637,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// verdict on what happened rather than a running inventory of the directory.</summary>
     [Fact]
     public void AdmittedDocuments_LeaveTheRefusedListEmpty() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
 
         _ = Populate(dir: dir);
 
@@ -650,7 +651,7 @@ public sealed class OwnedWorldDisposalLawTests {
     /// same way share ONE group, and the player's state directory never reaches the console through a reason.</summary>
     [Fact]
     public void RefusalNarration_GroupsSiblings_AndCarriesNoAbsolutePath() {
-        using var dir = new TempWorldDirectory();
+        using var dir = new TemporaryDirectory();
         var files = Populate(dir: dir);
         var locks = new List<FileStream>();
         var originalError = Console.Error;

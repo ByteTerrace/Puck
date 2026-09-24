@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -130,20 +131,20 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     // committed body ("any"). principal is unused here — it never rode this transport; the interface parameter
     // exists for the loopback side, which routes on it for real. Returns 0: the remote authority mints the envelope,
     // so no local correlation exists for a deferred verdict to address.
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) => SubmitEnvelope(
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
         operationId: Guid.Empty,
         payload: payload,
         principal: principal
     );
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) => SubmitEnvelope(
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) => SubmitEnvelope(
         completion: null,
         operationId: operationId,
         payload: payload,
         principal: principal
     );
     /// <inheritdoc/>
-    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
         var reply = (payload switch {
             WorldSubmissionPayload.Command command => Submit(
             bodyIndex: command.Value.EntityIndex,

@@ -284,7 +284,7 @@ public static partial class WorldDefinitionValidator {
 
             switch (area.Acceleration) {
                 case WorldGravityAreaAcceleration.Directional directional:
-                    if (!IsFinite(value: directional.Value)) {
+                    if (!VectorFunctions.IsFinite(vector: directional.Value)) {
                         errors.Add(item: $"{path}.acceleration.value must contain finite coordinates.");
                     }
                     break;
@@ -894,11 +894,11 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} counts cannot exceed the {SdfProgramBuilder.MaxInstances}-instance engine ceiling.");
         }
 
-        if (!IsFinite(value: lattice.StepA)) {
+        if (!VectorFunctions.IsFinite(vector: lattice.StepA)) {
             errors.Add(item: $"{path}.stepA must contain finite coordinates.");
         }
 
-        if (!IsFinite(value: lattice.StepB)) {
+        if (!VectorFunctions.IsFinite(vector: lattice.StepB)) {
             errors.Add(item: $"{path}.stepB must contain finite coordinates.");
         }
 
@@ -1066,7 +1066,7 @@ public static partial class WorldDefinitionValidator {
                 switch (light) {
                     case WorldRenderLight.Directional directional: {
                             if (directional.Direction is { } direction) {
-                                if (!IsFinite(value: direction)) {
+                                if (!VectorFunctions.IsFinite(vector: direction)) {
                                     errors.Add(item: $"{lightPath}.direction must contain finite coordinates.");
                                 } else if (direction.LengthSquared() <= 0f) {
                                     errors.Add(item: $"{lightPath}.direction must be nonzero.");
@@ -1138,7 +1138,7 @@ public static partial class WorldDefinitionValidator {
                     case WorldRenderLight.Occluder occluder: {
                             if (
                                 (occluder.Position is { } position) &&
-                                !IsFinite(value: position)
+                                !VectorFunctions.IsFinite(vector: position)
                             ) {
                                 errors.Add(item: $"{lightPath}.position must be finite.");
                             }
@@ -1181,7 +1181,7 @@ public static partial class WorldDefinitionValidator {
                     case WorldRenderLight.Point point: {
                             if (
                                 (point.Position is { } position) &&
-                                !IsFinite(value: position)
+                                !VectorFunctions.IsFinite(vector: position)
                             ) {
                                 errors.Add(item: $"{lightPath}.position must contain finite coordinates.");
                             }
@@ -1829,38 +1829,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        if (defaults.Identities is { Count: > 0 }) {
-            var ids = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-            var names = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-            // Each seed becomes an owned-world document on disk under WorldOwnedWorldFileName's id→file-name mapping,
-            // and that mapping is injective into file-name STRINGS, not into storage locations: NTFS and default APFS
-            // resolve a name case-insensitively, so 'Amber' and 'amber' address one file. Ids are therefore unique
-            // IGNORING CASE here, the same rule Server.WorldOwnedWorlds holds over the directory itself.
-            for (var index = 0; (index < defaults.Identities.Count); index++) {
-                var profile = defaults.Identities[index];
-                var path = $"seatDefaults.identities[{index}]";
-
-                if (profile is null) {
-                    errors.Add(item: $"{path} is required.");
-                    continue;
-                }
-
-                if (!ids.Add(item: profile.Id)) {
-                    errors.Add(item: $"{path}.id '{profile.Id}' is duplicated — owned-world ids are unique ignoring case, since each addresses one '{WorldOwnedWorldFileName.For(id: profile.Id)}' file.");
-                }
-
-                if (
-                    string.IsNullOrWhiteSpace(value: profile.Name) ||
-                    !names.Add(item: profile.Name)
-                ) {
-                    errors.Add(item: $"{path}.name is required and unique ignoring case.");
-                }
-
-                if (!IsHexColor(value: profile.Color)) {
-                    errors.Add(item: $"{path}.color must be #RRGGBB.");
-                }
-            }
-        }
+        ValidateIdentitySeeds(
+            errors: errors,
+            identities: defaults.Identities
+        );
 
         if (!IsHexColor(value: defaults.NeutralColor)) {
             errors.Add(item: "seatDefaults.neutralColor must be #RRGGBB.");
@@ -2029,7 +2001,7 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
-            if (!IsFinite(value: spawn.Position)) {
+            if (!VectorFunctions.IsFinite(vector: spawn.Position)) {
                 errors.Add(item: $"spawnPoints[{index}].position must contain finite coordinates.");
             }
 

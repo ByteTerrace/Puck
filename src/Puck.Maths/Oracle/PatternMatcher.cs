@@ -135,10 +135,9 @@ public sealed class PatternMatcher<TValue, TOps>
     /// over a tropical one.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The state number is outside <see cref="StateCount"/>.</exception>
     public TValue Accept(int state) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: state,
-            other: StateCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: StateCount,
+            value: state
         );
 
         return m_accept[state];
@@ -242,18 +241,12 @@ public sealed class PatternMatcher<TValue, TOps>
     /// <returns>The target state, or <c>-1</c> when the residual is zero and no span can complete a match from here.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The state number or the letter is outside its range.</exception>
     public int Step(int state, int letter) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: state,
-            other: StateCount
-        );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: letter);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: letter,
-            other: LetterCount
-        );
-
-        return m_transition[((state * LetterCount) + letter)];
+        return m_transition[ArgumentRange.ThrowIfNotCell(
+            column: letter,
+            columnCount: LetterCount,
+            row: state,
+            rowCount: StateCount
+        )];
     }
     /// <summary>Compiles a pattern to a finite machine, eagerly and bounded.</summary>
     /// <param name="pattern">The pattern surface the value belongs to.</param>
@@ -465,10 +458,9 @@ public static class TokenMatching {
 
             // Checked per token, never hoisted: an alphabet with more blocks than the matcher has letters still decides
             // every span whose tokens land inside the machine, and a pre-loop comparison would refuse those.
-            ArgumentOutOfRangeException.ThrowIfNegative(value: letter);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-                value: letter,
-                other: letterCount
+            ArgumentRange.ThrowIfNotIndex(
+                count: letterCount,
+                value: letter
             );
 
             state = matcher.StepCore(

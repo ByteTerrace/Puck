@@ -1,40 +1,103 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers runtime background writes reaching the display, and the bound that keeps the queue from dropping one.</summary>
 public sealed class CartridgeMapWriteTests {
+    private static readonly CartridgeStatement ColumnWrite = new(
+        Kind: "map",
+        Row: CartridgeExpressions.Of(constant: 0),
+        Column: CartridgeExpressions.Of(state: "i"),
+        Tile: CartridgeExpressions.Of(constant: 0)
+    );
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            // Refused rather than silently dropping the overflow.
+            Name: "a loop past the queue",
+            Document: Bounded(body: new CartridgeStatement(
+                Kind: "repeat",
+                Count: 25,
+                Index: "i",
+                Body: [ColumnWrite]
+            )),
+            Path: "rules",
+            Fragment: "against a queue of"
+        ),
+        new(
+            Name: "a blit past the display-off window",
+            Document: Bounded(body: Blit(
+                row: CartridgeExpressions.Of(constant: 0),
+                screen: "wide"
+            )) with {
+                Screens = [new CartridgeScreen(
+                    Name: "wide",
+                    Width: 20,
+                    Tiles: new int[(20 * 8)]
+                )],
+            },
+            Path: "rules[0].body[0].screen",
+            Fragment: "before the display-off window costs frames"
+        ),
+        new(
+            Name: "an unknown screen",
+            Document: Bounded(body: Blit(
+                row: CartridgeExpressions.Of(constant: 0),
+                screen: "missing"
+            )),
+            Path: "rules[0].body[0].screen",
+            Fragment: "Unknown screen"
+        ),
+        new(
+            Name: "a blit off the map's edge",
+            Document: Bounded(body: Blit(
+                row: CartridgeExpressions.Of(constant: 31),
+                screen: "panel"
+            )),
+            Path: "rules[0].body[0]",
+            Fragment: "runs past the 32 by 32 map"
+        ),
+        new(
+            Name: "a blit at a computed row",
+            Document: Bounded(body: Blit(
+                row: CartridgeExpressions.Of(state: "i"),
+                screen: "panel"
+            )),
+            Path: "rules[0].body[0]",
+            Fragment: "literal row and column"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    private static CartridgeStatement Blit(ExpressionProgram row, string screen) => new(
+        Kind: "blit",
+        Screen: screen,
+        Row: row,
+        Column: CartridgeExpressions.Of(constant: 0)
+    );
+    // A four-wide screen and a column cursor, with the one statement under test as the whole rule.
+    private static CartridgeDocument Bounded(CartridgeStatement body) => Blank(
+        target: "cgb",
+        title: "BOUNDS"
+    ) with {
+        Variables = [new CartridgeVariable(
+            Name: "i",
+            Initial: 0
+        )],
+        Screens = [new CartridgeScreen(
+            Name: "panel",
+            Width: 4,
+            Tiles: new int[8]
+        )],
+        Rules = [new CartridgeRule(
+            Name: "r",
+            Body: [body]
+        )],
+    };
     private static CartridgeDocument Blank(string target, string title) => CartridgeDocuments.Create(
         target: target,
         title: title
     );
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
-    private static MachineProbe Run(CartridgeDocument document, int frames, out CartridgeCompilation result) {
-        ICartridgeCompiler compiler = ((document.Target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-
-        result = compiler.Compile(document: document);
-        var machine = new MachineProbe(result: result);
-
-        machine.Run(frames: frames);
-        return machine;
-    }
 
     [InlineData("cgb")]
     [InlineData("agb")]
@@ -74,7 +137,7 @@ public sealed class CartridgeMapWriteTests {
                 Name: "paint",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "done"),
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     right: CartridgeExpressions.Of(constant: 0)
                 ),
                 Body: [
@@ -101,10 +164,10 @@ public sealed class CartridgeMapWriteTests {
                 ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
             frames: 16,
-            out _
+            label: "map"
         );
 
         // The painted run differs from an untouched cell well to its right.
@@ -137,161 +200,30 @@ public sealed class CartridgeMapWriteTests {
         );
     }
     [Fact]
-    public void ValidationBoundsMapWritesToTheQueueAndTheBlitWindow() {
-        var document = Blank(
-            target: "cgb",
-            title: "BOUNDS"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "i",
-                Initial: 0
-            )],
-            Screens = [new CartridgeScreen(
-                Name: "panel",
-                Width: 4,
-                Tiles: new int[8]
-            )],
-        };
-        var write = new CartridgeStatement(
-            Kind: "map",
-            Row: CartridgeExpressions.Of(constant: 0),
-            Column: CartridgeExpressions.Of(state: "i"),
-            Tile: CartridgeExpressions.Of(constant: 0)
+    public void ExclusiveBranchArmsCountTheirMapWritesOnce() {
+        var redraw = new CartridgeStatement(
+            Kind: "repeat",
+            Count: 20,
+            Index: "i",
+            Body: [ColumnWrite]
         );
 
-        // A loop past the queue's capacity is refused rather than silently dropping the overflow.
-        Refuses(
-            document: document with { Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [new CartridgeStatement(
-                            Kind: "repeat",
-                            Count: 25,
-                            Index: "i",
-                            Body: [write]
-                        )]
-                )] },
-            fragment: "against a queue of"
-        );
-
-        // Branch arms are exclusive, so gated redraws are counted once, not summed.
-        Assert.Empty(collection: CartridgeDocuments.Validate(document: document with {
-            Rules = [new CartridgeRule(
-                Name: "r",
-                Body: [new CartridgeStatement(
-                        Kind: "if",
-                        When: CartridgeExpressions.Gate(
-                            left: CartridgeExpressions.Of(state: "i"),
-                            comparison: ActionStateComparison.Equal,
-                            right: CartridgeExpressions.Of(constant: 0)
-                        ),
-                        Then: [new CartridgeStatement(
-                                Kind: "repeat",
-                                Count: 20,
-                                Index: "i",
-                                Body: [write]
-                            )],
-                        Else: [new CartridgeStatement(
-                                Kind: "repeat",
-                                Count: 20,
-                                Index: "i",
-                                Body: [write]
-                            )]
-                    )]
-            )],
-        }));
-
-        // A blit past the measured display-off window is refused; one inside it is admitted.
-        Refuses(
-            document: document with {
-                Screens = [new CartridgeScreen(
-                    Name: "wide",
-                    Width: 20,
-                    Tiles: new int[(20 * 8)]
-                )],
-                Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [new CartridgeStatement(
-                            Kind: "blit",
-                            Screen: "wide",
-                            Row: CartridgeExpressions.Of(constant: 0),
-                            Column: CartridgeExpressions.Of(constant: 0)
-                        )]
-                )],
-            },
-            fragment: "before the display-off window costs frames"
-        );
-
-        Refuses(
-            document: document with { Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [new CartridgeStatement(
-                            Kind: "blit",
-                            Screen: "missing",
-                            Row: CartridgeExpressions.Of(constant: 0),
-                            Column: CartridgeExpressions.Of(constant: 0)
-                        )]
-                )] },
-            fragment: "Unknown screen"
-        );
-
-        Refuses(
-            document: document with { Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [new CartridgeStatement(
-                            Kind: "blit",
-                            Screen: "panel",
-                            Row: CartridgeExpressions.Of(constant: 31),
-                            Column: CartridgeExpressions.Of(constant: 0)
-                        )]
-                )] },
-            fragment: "runs past the 32 by 32 map"
-        );
-
-        Refuses(
-            document: document with { Rules = [new CartridgeRule(
-                    Name: "r",
-                    Body: [new CartridgeStatement(
-                            Kind: "blit",
-                            Screen: "panel",
-                            Row: CartridgeExpressions.Of(state: "i"),
-                            Column: CartridgeExpressions.Of(constant: 0)
-                        )]
-                )] },
-            fragment: "literal row and column"
-        );
+        // Two arms of twenty writes each fit a queue of 24 because only one of them runs in a frame.
+        Assert.Empty(collection: CartridgeDocuments.Validate(document: Bounded(body: new CartridgeStatement(
+            Kind: "if",
+            When: CartridgeExpressions.Gate(
+                left: CartridgeExpressions.Of(state: "i"),
+                comparison: ExpressionOp.Equal,
+                right: CartridgeExpressions.Of(constant: 0)
+            ),
+            Then: [redraw],
+            Else: [redraw]
+        ))));
     }
-
-    private sealed class MachineProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public MachineProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "map"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "map"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public uint Pixel(int x, int y) => (m_agb?.ReadPixel(
-            x: x,
-            y: y
-        ) ?? m_hgb!.ReadPixel(
-            x: x,
-            y: y
-        ));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationBoundsMapWritesToTheQueueAndTheBlitWindow(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

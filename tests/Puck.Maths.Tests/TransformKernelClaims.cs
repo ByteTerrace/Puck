@@ -146,10 +146,10 @@ internal static class TransformKernelClaims {
             }
 
             var onePassDeviation = Math.Max(
-                Math.Abs(value: (unitX - ideal[0])),
-                Math.Max(
-                    Math.Abs(value: (unitY - ideal[1])),
-                    Math.Abs(value: (unitZ - ideal[2]))
+                val1: Math.Abs(value: (unitX - ideal[0])),
+                val2: Math.Max(
+                    val1: Math.Abs(value: (unitY - ideal[1])),
+                    val2: Math.Abs(value: (unitZ - ideal[2]))
                 )
             );
 
@@ -179,13 +179,13 @@ internal static class TransformKernelClaims {
     /// </remarks>
     internal static string? NormalizeWithMagnitudeFullUnsignedWidthSurface() {
         if (FixedVectorMath.TryNormalizeWithMagnitude(
-            x: 0L,
-            y: 0L,
-            z: 0L,
+            rawMagnitude: out var refusedMagnitude,
             unitX: out var refusedX,
             unitY: out var refusedY,
             unitZ: out var refusedZ,
-            rawMagnitude: out var refusedMagnitude
+            x: 0L,
+            y: 0L,
+            z: 0L
         )) {
             return "the zero direction was normalized rather than refused";
         }
@@ -261,10 +261,10 @@ internal static class TransformKernelClaims {
             );
 
             var deviation = Math.Max(
-                Math.Abs(value: (unitX - ideal[0])),
-                Math.Max(
-                    Math.Abs(value: (unitY - ideal[1])),
-                    Math.Abs(value: (unitZ - ideal[2]))
+                val1: Math.Abs(value: (unitX - ideal[0])),
+                val2: Math.Max(
+                    val1: Math.Abs(value: (unitY - ideal[1])),
+                    val2: Math.Abs(value: (unitZ - ideal[2]))
                 )
             );
 
@@ -321,7 +321,7 @@ internal static class TransformKernelClaims {
         for (var index = 0; (index < (UnsignedAngleLadder.Length + SinCosRawDrawCount)); ++index) {
             var rawAngle = ((index < UnsignedAngleLadder.Length)
                 ? UnsignedAngleLadder[index]
-                : MixIndex(index: ++counter)
+                : Domains.SplitMix64(index: ++counter)
             );
 
             if (rawAngle < (1UL << 63)) {
@@ -395,7 +395,7 @@ internal static class TransformKernelClaims {
         var counter = 0UL;
 
         for (var draw = 0; (draw < SinCosRawSweepDrawCount); ++draw) {
-            var failure = CompareSinCosRaw(rawAngle: MixIndex(index: ++counter));
+            var failure = CompareSinCosRaw(rawAngle: Domains.SplitMix64(index: ++counter));
 
             if (failure is not null) { return failure; }
         }
@@ -484,11 +484,11 @@ internal static class TransformKernelClaims {
     private static long DrawComponent(ref ulong counter) {
         counter += 1UL;
 
-        var mixed = MixIndex(index: counter);
+        var mixed = Domains.SplitMix64(index: counter);
 
         counter += 1UL;
 
-        return (unchecked((long)mixed) >> ((int)(MixIndex(index: counter) % 64UL)));
+        return (unchecked((long)mixed) >> ((int)(Domains.SplitMix64(index: counter) % 64UL)));
     }
     // ---- the angle-addition carriage of Oracles.EncloseSinCos past the signed carrier ----
 
@@ -512,16 +512,6 @@ internal static class TransformKernelClaims {
             value: enclosed.Cos
         )
         );
-    }
-    // ---- SplitMix64 index mixer: a pure function of a running counter, never System.Random and never wall-clock ----
-
-    private static ulong MixIndex(ulong index) {
-        var mixed = (index + 0x9E3779B97F4A7C15UL);
-
-        mixed = ((mixed ^ (mixed >> 30)) * 0xBF58476D1CE4E5B9UL);
-        mixed = ((mixed ^ (mixed >> 27)) * 0x94D049BB133111EBUL);
-
-        return mixed ^ (mixed >> 31);
     }
     private static Oracles.Enclosure Multiply(Oracles.Enclosure left, Oracles.Enclosure right) {
         var lowLow = (left.Low * right.Low);

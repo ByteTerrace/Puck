@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.World.Protocol;
@@ -32,7 +33,7 @@ public enum WorldGroupEvictionPolicy : byte {
 }
 /// <summary>One named role a <see cref="WorldGroupKind"/> declares — the role→capability half of the kind's policy
 /// bundle. <see cref="WorldGroupMember.Role"/> assigns this name to an individual membership row. The catalog lets
-/// <c>world.grant</c> refuse a hold over a group principal that no declared role could exercise. During live permission
+/// <c>world.grant</c> refuse a hold over a group grantee that no declared role could exercise. During live permission
 /// expansion, only a current local member whose exact assigned role reaches the capability receives that group's row;
 /// a null or unknown role receives no capability. The catalog-wide admission check and this per-member projection are
 /// deliberately separate.</summary>
@@ -52,7 +53,7 @@ public sealed record WorldGroupRole(
 /// <see cref="WorldGroup.KindName"/> reference is validated against (unknown-by-name, the same shape as the state-row
 /// cell-existence refusal).</param>
 /// <param name="Roles">The role→capability map (see <see cref="WorldGroupRole"/>). May be empty — a kind with no
-/// roles reaches no capability at all through its group principal, so any grant naming it is refused as unreachable.</param>
+/// roles reaches no capability at all through its group grantee, so any grant naming it is refused as unreachable.</param>
 /// <param name="Lifetime">The lifetime/persistence policy (see <see cref="WorldGroupLifetime"/>) — runtime groups only.</param>
 /// <param name="EvictionPolicy">What a kick does to the kicked member's row — and, under
 /// <see cref="WorldGroupEvictionPolicy.Disband"/>, to the whole group (see <see cref="WorldGroupEvictionPolicy"/>).</param>
@@ -73,11 +74,10 @@ public sealed record WorldGroupKind(
 /// does not carry it forward — the party-vs-roster split falls out of the ordinary document-swap machinery, not a
 /// bespoke flag on this type).</summary>
 /// <param name="Id">The group's stable id, unique within <see cref="WorldGroupsSection.Groups"/> — the token
-/// <see cref="WorldPrincipal.Group"/> carries as a grant principal. <see cref="SafeName"/>-typed (the
-/// <see cref="WorldOwnedWorldFileName.For"/> precedent: a scoped session's process-local instance name is composed
-/// from this id, literal separators and all, in <c>WorldSessionResolver.MintInstanceName</c> — typing it here is
-/// what makes that composition injective by construction rather than by an escaping step downstream that could
-/// collapse two distinct ids onto one name).</param>
+/// <see cref="Grantee.Group"/> carries as a grant principal. <see cref="SafeName"/>-typed (the
+/// <see cref="WorldDocumentName.For"/> precedent: a scoped session's process-local instance name is composed
+/// from this id, spelled by <see cref="GeneratedName.ToFile"/>, in <c>WorldSessionResolver.MintInstanceName</c>; a
+/// document refuses an id carrying <c>~</c>, which keeps that spelling injective).</param>
 /// <param name="KindName">The owning kind's name — validated to reference a declared <see cref="WorldGroupKind"/>
 /// (unknown-by-name).</param>
 /// <param name="Members">The current flat membership rows. Each row is a local actor or verified external identity,
@@ -137,8 +137,8 @@ public enum OwnershipOwnerKind : byte {
 /// admits — the same tick unit <see cref="StateCellClock.EpochTick"/> already rides. Before this tick, only an
 /// accept by <see cref="Recipient"/> can resolve the escrow.</param>
 public readonly record struct OwnershipEscrow(
-    WorldPrincipal Offerer,
-    WorldPrincipal Recipient,
+    Principal Offerer,
+    Principal Recipient,
     long DeadlineTick
 );
 /// <summary>The owned thing — today, exclusively a group (see <see cref="OwnershipSubjectKind"/>'s remarks). A later
@@ -154,7 +154,7 @@ public readonly record struct OwnershipSubject(OwnershipSubjectKind Kind, string
         _ => "?",
     };
     /// <summary>Parses a subject token (<c>group:&lt;id&gt;</c>) — shared by the world.ownership.* console
-    /// verbs, the same typed-token discipline <see cref="WorldPrincipal.TryParse"/> and <c>GrantSubject</c>'s own
+    /// verbs, the same typed-token discipline <see cref="PrincipalTokens.TryParse"/> and <c>GrantSubject</c>'s own
     /// converter already follow. A future item/instance subject kind adds its own prefix here rather than reusing
     /// this one.</summary>
     /// <param name="token">The token to parse.</param>
@@ -189,15 +189,15 @@ public readonly record struct OwnershipSubject(OwnershipSubjectKind Kind, string
 /// none (escrow counts as one).</summary>
 /// <param name="Kind">Whether the owner is a bare principal, a group, or an escrow row.</param>
 /// <param name="Principal">The owning principal for <see cref="OwnershipOwnerKind.Principal"/>; <see langword="null"/>
-/// otherwise. Never <see cref="PrincipalKind.Group"/> — a group owner is spelled through <see cref="GroupId"/>, not
-/// this field, so the two branches never overlap.</param>
+/// otherwise. A principal is never a group — a group owner is spelled through <see cref="GroupId"/>, so the two
+/// branches never overlap.</param>
 /// <param name="GroupId">The owning group's id for <see cref="OwnershipOwnerKind.Group"/>; <see langword="null"/>
 /// otherwise.</param>
 /// <param name="Escrow">The escrow payload for <see cref="OwnershipOwnerKind.Escrow"/>; <see langword="null"/>
 /// otherwise.</param>
 public readonly record struct OwnershipOwner(
     OwnershipOwnerKind Kind,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrincipal? Principal = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Principal? Principal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? GroupId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OwnershipEscrow? Escrow = null
 );

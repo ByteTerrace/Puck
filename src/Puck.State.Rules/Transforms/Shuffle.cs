@@ -25,11 +25,10 @@ public static partial class ArenaTransforms {
         if (count < 2) {
             return Applied(refusal: out refusal);
         }
-        if (!TryDrawSite(
+        if (!TryOpenDraws(
             code: TransformRefusal.ShuffleDrawSite,
             context: in context,
-            draw: out var draw,
-            generator: out var generator,
+            draws: out var draws,
             refusal: out refusal,
             rowOrdinal: shuffle.DrawRowOrdinal,
             verb: "shuffle"
@@ -40,6 +39,7 @@ public static partial class ArenaTransforms {
         using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
         var order = orderLease.Span;
+
         for (var position = 0; (position < count); position++) {
             order[position] = position;
         }
@@ -49,11 +49,8 @@ public static partial class ArenaTransforms {
         for (var position = (count - 1); (position > 0); position--) {
             if (!TrySample(
                 code: TransformRefusal.ShuffleDrawSite,
-                context: in context,
-                draw: in draw,
-                generator: generator,
+                draws: ref draws,
                 refusal: out refusal,
-                rowOrdinal: shuffle.DrawRowOrdinal,
                 sample: out sample
             )) {
                 return false;
@@ -80,9 +77,10 @@ public static partial class ArenaTransforms {
         // The site records the cursor and the last sample even when the permutation it produced is the identity.
         moved = true;
 
-        return TryRecordSample(
+        return TryCloseDraws(
             code: TransformRefusal.ShuffleDrawSite,
             context: in context,
+            draws: in draws,
             refusal: out refusal,
             rowOrdinal: shuffle.DrawRowOrdinal,
             sample: sample

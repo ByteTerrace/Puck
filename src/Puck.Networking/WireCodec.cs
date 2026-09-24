@@ -65,6 +65,14 @@ public readonly record struct WireFailure(WireRefusal Refusal, string Detail) {
         : "ok"
     );
 }
+
+/// <summary>Reads one item of a composite leaf — an array element or an optional value — from the reader it is
+/// handed, advancing that same reader.</summary>
+/// <typeparam name="T">The item type.</typeparam>
+/// <param name="reader">The reader, positioned at the item.</param>
+/// <returns>The item.</returns>
+public delegate T WireReadItem<T>(ref WireReader reader);
+
 /// <summary>A bounded, forward-only reader over one already-framed payload. Every read is checked against the
 /// remaining span; the first underflow latches a refusal and every later read is inert, so a leaf decoder reads its
 /// whole shape and asks once — at <see cref="TryFinish"/> — whether the bytes were honest.</summary>
@@ -126,6 +134,36 @@ public ref struct WireReader {
                 Refusal: refusal
             );
         }
+    }
+    /// <summary>Reads a declared-count array, the exact mirror of <see cref="WireWriter.WriteArray"/>: a count bounded
+    /// to <c>0..<paramref name="maximum"/></c>, then that many items. The item loop stops at the first latched
+    /// refusal, so a hostile count never drives more than one failed read.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="field">The field name used in the refusal narration.</param>
+    /// <param name="readItem">The reader of one element.</param>
+    /// <param name="maximum">The largest admitted count.</param>
+    /// <returns>The elements, or an empty array for a zero count or a latched refusal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="readItem"/> is <see langword="null"/>.</exception>
+    public T[] ReadArray<T>(string field, WireReadItem<T> readItem, int maximum) {
+        ArgumentNullException.ThrowIfNull(argument: readItem);
+
+        var count = ReadCount(
+            field: field,
+            maximum: maximum,
+            minimum: 0
+        );
+
+        if (count == 0) {
+            return [];
+        }
+
+        var items = new T[count];
+
+        for (var index = 0; ((index < count) && !Failed); index++) {
+            items[index] = readItem(reader: ref this);
+        }
+
+        return items;
     }
     /// <summary>Reads a bounded length-prefixed byte block.</summary>
     /// <param name="field">The field name used in the refusal narration.</param>
@@ -209,6 +247,17 @@ public ref struct WireReader {
         }
 
         return value;
+    }
+    /// <summary>Reads one little-endian double-precision float. Presentation-only lanes carry it; simulation values
+    /// never do.</summary>
+    /// <returns>The value, or zero once a refusal has latched.</returns>
+    public double ReadDouble() {
+        var slice = Take(count: sizeof(double));
+
+        return (slice.IsEmpty
+            ? 0D
+            : BinaryPrimitives.ReadDoubleLittleEndian(source: slice)
+        );
     }
     /// <summary>Reads one presentation quaternion, refusing a non-finite lane. The exact mirror of
     /// <see cref="ReadFiniteVector"/> for the four-lane shape <see cref="WireWriter.WriteQuaternion"/> writes.</summary>
@@ -320,6 +369,34 @@ public ref struct WireReader {
             )
             : null
         );
+    /// <summary>Reads an optional value behind its presence bit, the exact mirror of
+    /// <see cref="WireWriter.WriteOptional"/>.</summary>
+    /// <typeparam name="T">The value type.</typeparam>
+    /// <param name="readValue">The reader of the value, called only when the presence bit is set.</param>
+    /// <returns>The value, or <see langword="null"/> when the presence bit is clear.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="readValue"/> is <see langword="null"/>.</exception>
+    public T? ReadOptional<T>(WireReadItem<T> readValue) where T : struct {
+        ArgumentNullException.ThrowIfNull(argument: readValue);
+
+        return (ReadBoolean()
+            ? readValue(reader: ref this)
+            : null
+        );
+    }
+    /// <summary>Reads an optional reference behind its presence bit, the exact mirror of
+    /// <see cref="WireWriter.WriteOptionalClass"/>.</summary>
+    /// <typeparam name="T">The reference type.</typeparam>
+    /// <param name="readValue">The reader of the value, called only when the presence bit is set.</param>
+    /// <returns>The value, or <see langword="null"/> when the presence bit is clear.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="readValue"/> is <see langword="null"/>.</exception>
+    public T? ReadOptionalClass<T>(WireReadItem<T> readValue) where T : class {
+        ArgumentNullException.ThrowIfNull(argument: readValue);
+
+        return (ReadBoolean()
+            ? readValue(reader: ref this)
+            : null
+        );
+    }
     /// <summary>Reads a required non-blank UTF-8 string.</summary>
     /// <param name="field">The field name used in the refusal narration.</param>
     /// <param name="maxBytes">The hard cap on the encoded byte count.</param>
@@ -410,6 +487,28 @@ public ref struct WireReader {
         }
 
         return Encoding.UTF8.GetString(bytes: slice);
+    }
+    /// <summary>Reads one little-endian unsigned 16-bit integer.</summary>
+    /// <returns>The value, or zero once a refusal has latched.</returns>
+    public ushort ReadUInt16() {
+        var slice = Take(count: sizeof(ushort));
+
+        return (slice.IsEmpty
+            ? (ushort)0
+            : BinaryPrimitives.ReadUInt16LittleEndian(source: slice)
+        );
+    }
+    /// <summary>Reads one unsigned 128-bit integer as two little-endian 64-bit halves, low half first — the exact
+    /// mirror of <see cref="WireWriter.WriteUInt128"/>.</summary>
+    /// <returns>The value, or zero once a refusal has latched.</returns>
+    public UInt128 ReadUInt128() {
+        var low = ReadUInt64();
+        var high = ReadUInt64();
+
+        return new UInt128(
+            lower: low,
+            upper: high
+        );
     }
     /// <summary>Reads one little-endian unsigned 32-bit integer.</summary>
     /// <returns>The value.</returns>
@@ -519,6 +618,26 @@ public sealed class WireWriter {
     /// beyond the writer's next write; <see cref="WrittenMemory"/> serves an immediate consumer without the copy.</summary>
     /// <returns>The canonical leaf.</returns>
     public byte[] ToArray() => WrittenSpan.ToArray();
+    /// <summary>Writes a declared-count array: the 32-bit count, then each item through
+    /// <paramref name="writeItem"/>.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="items">The elements, in wire order.</param>
+    /// <param name="writeItem">The writer of one element.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="items"/> or <paramref name="writeItem"/> is
+    /// <see langword="null"/>.</exception>
+    public void WriteArray<T>(IReadOnlyList<T> items, Action<WireWriter, T> writeItem) {
+        ArgumentNullException.ThrowIfNull(argument: items);
+        ArgumentNullException.ThrowIfNull(argument: writeItem);
+
+        WriteInt32(value: items.Count);
+
+        foreach (var item in items) {
+            writeItem(
+                this,
+                item
+            );
+        }
+    }
     /// <summary>Writes a length-prefixed byte block.</summary>
     /// <param name="value">The block.</param>
     public void WriteBlock(ReadOnlySpan<byte> value) {
@@ -536,6 +655,12 @@ public sealed class WireWriter {
     /// <summary>Writes raw bytes with no prefix.</summary>
     /// <param name="value">The bytes.</param>
     public void WriteBytes(ReadOnlySpan<byte> value) => value.CopyTo(destination: Reserve(count: value.Length));
+    /// <summary>Writes one little-endian double-precision float.</summary>
+    /// <param name="value">The value.</param>
+    public void WriteDouble(double value) => BinaryPrimitives.WriteDoubleLittleEndian(
+        destination: Reserve(count: sizeof(double)),
+        value: value
+    );
     /// <summary>Writes one fixed-point scalar.</summary>
     /// <param name="value">The value.</param>
     public void WriteFixed(FixedQ4816 value) => WriteInt64(value: value.Value);
@@ -584,6 +709,42 @@ public sealed class WireWriter {
             WriteString(value: value);
         }
     }
+    /// <summary>Writes an optional value behind its presence bit: the bit alone for <see langword="null"/>, the bit
+    /// then the value through <paramref name="writeValue"/> otherwise.</summary>
+    /// <typeparam name="T">The value type.</typeparam>
+    /// <param name="value">The value, or <see langword="null"/>.</param>
+    /// <param name="writeValue">The writer of a present value.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writeValue"/> is <see langword="null"/>.</exception>
+    public void WriteOptional<T>(T? value, Action<WireWriter, T> writeValue) where T : struct {
+        ArgumentNullException.ThrowIfNull(argument: writeValue);
+
+        WriteBoolean(value: value.HasValue);
+
+        if (value is { } present) {
+            writeValue(
+                this,
+                present
+            );
+        }
+    }
+    /// <summary>Writes an optional reference behind its presence bit: the bit alone for <see langword="null"/>, the
+    /// bit then the value through <paramref name="writeValue"/> otherwise.</summary>
+    /// <typeparam name="T">The reference type.</typeparam>
+    /// <param name="value">The value, or <see langword="null"/>.</param>
+    /// <param name="writeValue">The writer of a present value.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writeValue"/> is <see langword="null"/>.</exception>
+    public void WriteOptionalClass<T>(T? value, Action<WireWriter, T> writeValue) where T : class {
+        ArgumentNullException.ThrowIfNull(argument: writeValue);
+
+        WriteBoolean(value: (value is not null));
+
+        if (value is not null) {
+            writeValue(
+                this,
+                value
+            );
+        }
+    }
     /// <summary>Writes one presentation quaternion.</summary>
     /// <param name="value">The value.</param>
     public void WriteQuaternion(Quaternion value) {
@@ -624,6 +785,19 @@ public sealed class WireWriter {
             bytes: Reserve(count: byteCount),
             chars: text
         );
+    }
+    /// <summary>Writes one little-endian unsigned 16-bit integer.</summary>
+    /// <param name="value">The value.</param>
+    public void WriteUInt16(ushort value) => BinaryPrimitives.WriteUInt16LittleEndian(
+        destination: Reserve(count: sizeof(ushort)),
+        value: value
+    );
+    /// <summary>Writes one unsigned 128-bit integer as two little-endian 64-bit halves, low half first. Both halves
+    /// are written explicitly: a single 64-bit lane would drop every bit above 63.</summary>
+    /// <param name="value">The value.</param>
+    public void WriteUInt128(UInt128 value) {
+        WriteUInt64(value: ((ulong)value));
+        WriteUInt64(value: ((ulong)(value >> 64)));
     }
     /// <summary>Writes one little-endian unsigned 32-bit integer.</summary>
     /// <param name="value">The value.</param>

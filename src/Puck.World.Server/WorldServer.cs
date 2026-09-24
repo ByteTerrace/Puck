@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -134,7 +135,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         }
 
         return new WorldMutation.Batch(
-            Principal: WorldPrincipal.World,
+            Principal: Principal.World,
             Mutations: mutations
         );
     }
@@ -146,12 +147,12 @@ public sealed partial class WorldServer : IWorldServerHost {
             ArenaSearchWrite.Cell cell => new WorldMutation.UpsertStateCell(
             Key: m_arena.Keys[cell.Key].Value,
             Kind: WorldDocumentWriteKind.Set,
-            Principal: WorldPrincipal.World,
+            Principal: Principal.World,
             Row: catalog.Descriptors[cell.RowOrdinal].Name,
             Value: cell.Value
         ),
             ArenaSearchWrite.ClearBoard clear => new WorldMutation.TransformState(
-            Principal: WorldPrincipal.World,
+            Principal: Principal.World,
             Transform: new StateTransform.BoardCombine(
                 Operation: BoardCombineOp.Clear,
                 Row: StateChannelRef.OfName(name: catalog.Descriptors[clear.RowOrdinal].Name)
@@ -248,7 +249,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// narrates them without scraping stderr. Fires synchronously inline with the apply, never from a background
     /// thread: at submit-time for the ordered-domain kinds applied inline (grant, revoke, command, designation,
     /// composition, screen op), and inside <see cref="Step"/> for the kinds buffered to the tick boundary (mutation,
-    /// rebuild, undo, addon lifecycle) and for a fired world-rule effect.</summary>
+    /// rebuild, undo, addon lifecycle) and for a fired world-rule effect. A mutation carrying
+    /// <see cref="Principal.World"/> — one the World makes itself, such as a deal or response sweep's or a rule's
+    /// document-row effect — was submitted by no session and raises no echo; it is narrated on the transcript
+    /// alone.</summary>
     public Action<WorldEditEcho>? EchoTap { get; set; }
     /// <summary>Observes deterministic presentation-neutral cues emitted by world rules. The callback runs
     /// synchronously on the tick thread; consumers must hand off any presentation work without blocking it.</summary>
@@ -308,7 +312,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// one twice. A mutation the apply pipeline goes on to refuse is still observed, so the refusal reproduces
     /// identically. The replay tape attaches only while armed; clients never receive this submission-only
     /// seam.</summary>
-    public Action<WorldMutation, WorldPrincipal>? MutationTap { get; set; }
+    public Action<WorldMutation, Principal>? MutationTap { get; set; }
     /// <summary>Observes the accept/refuse OUTCOME of a mutation <see cref="MutationTap"/> already observed at
     /// submission, invoked once the SAME tick's <see cref="Step"/> has drained and applied it — never for the two
     /// internal producers <see cref="MutationTap"/> itself excludes (a mounted guest's decoded act, a world rule's
@@ -358,13 +362,14 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <c>m_base</c> — a value private to this server that can move between submission and drain (see
     /// <see cref="EnqueueRebuild"/>'s remarks). The replay tape attaches only while armed; clients never receive this
     /// submission-only seam.</summary>
-    public Action<WorldRebuildRequest, WorldPrincipal, string>? RebuildTap { get; set; }
+    public Action<WorldRebuildRequest, Principal, string>? RebuildTap { get; set; }
     /// <summary>Gets the rule-fired <c>save</c> effect's own I/O seam, invoked with the settling tick from
     /// <c>FireWorldRuleEffect</c> — mirroring <see cref="EchoTap"/>/<see cref="ScreenOpTap"/>'s "the server calls
     /// out, the composition root supplies the capability" shape: this project (<c>Puck.World.Server</c>) references
-    /// no rendering or input, so it cannot itself run the settle-at-save capture the manual <c>world.save</c> verb
-    /// runs (<c>WorldSessionCapture.Capture</c>, in the composition root, needs the live render levers, screen
-    /// binder, audio director and pacing control — none of which exist here). A <see langword="null"/> tap is a
+    /// no rendering or input, so it cannot itself compose the snapshot the manual <c>world.save</c> verb writes
+    /// (<see cref="WorldSessionCapture.Capture"/> folds the authority half, but the lever half,
+    /// <c>WorldSessionLevers.Fold</c>, needs the live render levers, audio director and pacing control — none of
+    /// which exist here). A <see langword="null"/> tap is a
     /// silent no-op, the same convention <see cref="EchoTap"/> follows; every live boot shape wires one
     /// (<c>WorldPostBuildWiring.Install</c>). <c>WorldReplaySnapshot.Drive</c> — the offline replay-verification
     /// drive — wires its own narration-only tap instead of the live closure, so replay verification stays
@@ -383,7 +388,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// carries <see langword="null"/>, since nothing else on the tape needs a CAS pin (see
     /// <see cref="WorldScreenOp.Insert"/>'s own remarks on why <see cref="WorldScreenOp.Select"/> needs none). The
     /// replay tape attaches only while armed; clients never receive this submission-only seam.</summary>
-    public Action<WorldScreenOp, string?, WorldPrincipal>? ScreenOpTap { get; set; }
+    public Action<WorldScreenOp, string?, Principal>? ScreenOpTap { get; set; }
     /// <summary>Observes server-authored ordered events after they take effect. The replay tape attaches only while
     /// armed; clients never receive this submission-only seam.</summary>
     public Action<WorldServerEvent>? ServerEventTap { get; set; }
@@ -415,13 +420,29 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public T ExecuteAuthorityOperation<T>(Func<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
-        lock (m_authorityGate) { ThrowIfAuthorityRetiring(); return operation(); }
+        EnterAuthorityGate();
+        try { ThrowIfAuthorityRetiring(); return operation(); } finally { m_authorityGate.Exit(); }
     }
     /// <summary>Executes a void authority operation under the same gate.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public void ExecuteAuthorityOperation(Action operation) {
         ArgumentNullException.ThrowIfNull(operation);
-        lock (m_authorityGate) { ThrowIfAuthorityRetiring(); operation(); }
+        EnterAuthorityGate();
+        try { ThrowIfAuthorityRetiring(); operation(); } finally { m_authorityGate.Exit(); }
+    }
+
+    /// <summary>Gets or sets a callback invoked on a thread whose <see cref="ExecuteAuthorityOperation{T}"/> finds the
+    /// authority gate held by another thread, immediately before that thread blocks on it. It makes an authority
+    /// operation's arrival at a held gate observable, so a caller can order a race by event instead of by elapsed
+    /// time; it runs outside the gate and must not enter it.</summary>
+    public Action? AuthorityGateContended { get; set; }
+
+    private void EnterAuthorityGate() {
+        if (m_authorityGate.TryEnter()) {
+            return;
+        }
+        AuthorityGateContended?.Invoke();
+        m_authorityGate.Enter();
     }
 
     /// <summary>Initializes a new instance of the <see cref="WorldServer"/> class over the world it authoritatively owns.</summary>
@@ -455,6 +476,12 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         if ((admission is not null) && !admission.AppliesTo(definition: definition, machines: machines.ValidationCatalog)) {
             throw new ArgumentException(message: "The admission result belongs to a different definition or machine catalog.", paramName: nameof(admission));
+        }
+        // A caller with no receipt admits here, so settle first: the rows this constructor installs are then the
+        // exact rows validation reads, and installation reuses its programs rather than compiling them again. A
+        // caller that brought a receipt settled before earning it.
+        if (admission is null) {
+            definition = WorldStateSettlement.SettleBeforeAdmission(definition: definition);
         }
         if ((admission is null) && !WorldDefinitionValidator.TryAdmitLocally(
             admission: out admission,
@@ -513,7 +540,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_ruleHost = new WorldRuleHost(host: this);
         m_ruleHost.InstallTables(compilation: compilation!);
         BuildArena(definition: definition);
-        m_search = CreateSearch(arena: m_arena);
+        AdoptSearch(arena: m_arena);
         m_searchApply = writes => TryApplyMutation(
             mutation: ComposeSearchMutation(writes: writes),
             tick: m_searchTick,
@@ -609,7 +636,7 @@ public sealed partial class WorldServer : IWorldServerHost {
 
             Grant(
                 grant: m_grants.WithoutAuthoredConsent(grant: grant),
-                actor: WorldPrincipal.Console
+                actor: Principal.Console
             );
         }
 
@@ -620,10 +647,11 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_machines.ReconcileLinks(links: definition.MachineCableGroups());
 
         // The initial arena already settled clocks and inverse boards. Export those results from that same arena,
-        // then install it directly: constructing and loading another copy would repeat the entire state seed.
-        // Admission's programs remain reusable only when settlement keeps the exact definition unchanged.
-        definition = SettleInstalledRows(definition: definition, seeded: m_arena);
-        definition = RecompileRules(definition: definition, compilation: compilation, arena: m_arena);
+        // then install it directly: constructing and loading another copy would repeat the entire state seed. The
+        // admitted document settled before its admission, so this export agrees with it and the receipt still names
+        // the definition being installed.
+        definition = WorldStateSettlement.SettleFrom(definition: definition, seeded: m_arena);
+        definition = RecompileRules(arena: m_arena, compilation: compilation, definition: definition);
         // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
         // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
         m_tick.PaintLatticeDraws(definition: definition);

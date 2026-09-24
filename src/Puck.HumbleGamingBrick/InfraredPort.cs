@@ -102,27 +102,14 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     // Wires two transceivers as IR peers. Internal on purpose: IrLinkSession is the one blessed connect seam, because a
     // connected pair must also be STEPPED as a pair (the interleave keeps their light levels coherent) — the session owns
     // both halves. Guarded against double-linking exactly like the serial cable.
-    internal static void Connect(InfraredPort first, InfraredPort second) {
-        if (ReferenceEquals(
-            objA: first,
-            objB: second
-        )) {
-            throw new ArgumentException(
-                message: "An infrared port cannot be linked to itself.",
-                paramName: nameof(second)
-            );
-        }
-
-        if (
-            (first.m_peer is not null) ||
-            (second.m_peer is not null)
-        ) {
-            throw new InvalidOperationException(message: "An infrared port is already linked; disconnect its session first.");
-        }
-
-        first.m_peer = second;
-        second.m_peer = first;
-    }
+    internal static void Connect(InfraredPort first, InfraredPort second) =>
+        PeerCable.Connect<IInfraredPeer>(
+            first: first,
+            firstPeer: ref first.m_peer,
+            port: "An infrared port",
+            second: second,
+            secondPeer: ref second.m_peer
+        );
     // Severs a port's link, clearing both ends; a no-op for an unlinked port.
     internal static void Disconnect(InfraredPort port) {
         if (port.m_peer is InfraredPort peer) {
@@ -135,10 +122,8 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     public void ApplyModel(ConsoleModel model) =>
         m_model = model;
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_register = reader.ReadByte();
-        m_cartLightOut = reader.ReadBoolean();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
     public byte ReadRegister() {
         var value = ((byte)((m_register & ReadBackKeepMask) | ReadBackHighBits));
@@ -154,10 +139,14 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
         return value;
     }
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: m_register);
-        writer.WriteBoolean(value: m_cartLightOut);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Byte(value: ref m_register);
+        transfer.Boolean(value: ref m_cartLightOut);
     }
+
     /// <inheritdoc/>
     public void WriteRegister(byte value) =>
         m_register = value;

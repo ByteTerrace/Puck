@@ -103,8 +103,8 @@ public sealed class WorldPoolIntegrationLawTests {
             """)!.AsObject();
 
         Assert.True(condition: WorldModuleNamespace.TryApply(alias: "a", module: node, reason: out var reason), userMessage: reason);
-        Assert.Equal("a_actor", node["state"]!["records"]![0]!["name"]!.GetValue<string>());
-        Assert.Equal("a_actors", node["rules"]![0]!["effects"]![0]!["pool"]!.GetValue<string>());
+        Assert.Equal("a$actor", node["state"]!["records"]![0]!["name"]!.GetValue<string>());
+        Assert.Equal("a$actors", node["rules"]![0]!["effects"]![0]!["pool"]!.GetValue<string>());
         Assert.Equal("x", node["rules"]![0]!["effects"]![0]!["binding"]!.GetValue<string>());
         Assert.Equal("x.score", node["rules"]![0]!["effects"]![0]!["effects"]![0]!["row"]!.GetValue<string>());
     }
@@ -120,8 +120,8 @@ public sealed class WorldPoolIntegrationLawTests {
         Assert.True(condition: WorldModuleNamespace.TryApply(alias: "a", module: node, reason: out var reason), userMessage: reason);
         var effects = node["rules"]![0]!["effects"]!;
 
-        Assert.Equal("a_actors.score", effects[0]!["state"]!.GetValue<string>());
-        Assert.Equal("a_actors", effects[1]!["pool"]!.GetValue<string>());
+        Assert.Equal("a$actors.score", effects[0]!["state"]!.GetValue<string>());
+        Assert.Equal("a$actors", effects[1]!["pool"]!.GetValue<string>());
         Assert.Equal("actors.score", effects[1]!["effects"]![0]!["state"]!.GetValue<string>());
     }
 }

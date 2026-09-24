@@ -2,11 +2,12 @@
 // This source is canonical; compile it to regenerate the world document.
 
 schema: "puck.world.definition.v1"
-basis: "parlor.basis.puck"
+basis: "parlor.basis"
 documentId: "chess"
 
 bodies {
   capacity: 40
+  localSeats: 1
 }
 
 let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
@@ -316,7 +317,7 @@ rules "" when settleHold == 60 {
     local kind = (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? MoveKind.Illegal : (absolute(mover) == PieceKind.King) & (absolute(move[to] - move[from]) == 2) ? MoveKind.Castle : (absolute(mover) == PieceKind.Pawn) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? MoveKind.EnPassant : lastLegal[move[to]] != 0 ? MoveKind.Capture : MoveKind.Quiet
     move[mover] = mover
     move[kind] = kind
-    move[captured] = kind == MoveKind.EnPassant ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]
+    move[captured] = kind == MoveKind.EnPassant ? lastLegal[move[to] - 8 * (1 - 2 * turn)] : lastLegal[move[to]]
   }
 
   // Search relocates the primary token; these hypothetical-only rules complete

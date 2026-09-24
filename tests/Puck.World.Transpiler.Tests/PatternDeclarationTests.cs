@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
-using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Decompiler;
 using Xunit;
@@ -12,27 +11,6 @@ namespace Puck.World.Transpiler.Tests;
 /// source text it decompiles back to. A pattern whose derivative machine outgrows its budget is refused where it is
 /// written rather than where the document is validated.</summary>
 public class PatternDeclarationTests {
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
-    }
-    private static JsonObject LowerClean(string body) {
-        var (json, diagnostics) = Lower(body: body);
-
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport()
-        );
-
-        return json;
-    }
     private static JsonObject FirstPattern(JsonObject json) =>
         Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["patterns"])[0]);
 
@@ -86,7 +64,7 @@ public class PatternDeclarationTests {
     }
     [Fact]
     public void TheDeclarationLowersToOnePatternsRow() {
-        var row = FirstPattern(json: LowerClean(body: RunPattern));
+        var row = FirstPattern(json: WorldSources.LowerClean(body: RunPattern));
 
         Assert.Equal(
             "hand",
@@ -119,7 +97,7 @@ public class PatternDeclarationTests {
     }
     [Fact]
     public void TheLoweredRowReadsBackThroughTheDocumentsOwnSerializer() {
-        var document = LowerClean(body: RunPattern);
+        var document = WorldSources.LowerClean(body: RunPattern);
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: document.ToJsonString()));
         var row = Assert.Single(collection: definition.Patterns);
 
@@ -147,7 +125,7 @@ public class PatternDeclarationTests {
     [InlineData("name", "9probe")]
     [InlineData("kind", "int")]
     public void ARowTheDeclarationCannotSpellIsNotSugared(string member, string value) {
-        var document = LowerClean(body: RunPattern);
+        var document = WorldSources.LowerClean(body: RunPattern);
 
         FirstPattern(json: document)[member] = value;
 
@@ -166,19 +144,32 @@ public class PatternDeclarationTests {
         );
     }
     [Fact]
-    public void ARowNamedWithADollarStillDecompilesAsADeclaration() {
-        var document = LowerClean(body: RunPattern);
+    public void ARowNamedWithTheSigilStillDecompilesAsADeclaration() {
+        var document = WorldSources.LowerClean(body: RunPattern);
 
-        FirstPattern(json: document)["name"] = "probe$name";
+        FirstPattern(json: document)["name"] = "$probe";
 
         Assert.Contains(
             actualString: WorldDecompiler.Decompile(root: document),
-            expectedSubstring: "pattern probe$name : Int {"
+            expectedSubstring: "pattern $probe : Int {"
+        );
+    }
+    // The sigil only opens a name, so a pattern carrying it inside is in the generated form, which no declaration
+    // prints: the decompiler refuses it by name rather than printing it as an authored one.
+    [Fact]
+    public void APatternCarryingTheSigilInsideItsNameIsRefusedByName() {
+        var document = WorldSources.LowerClean(body: RunPattern);
+
+        FirstPattern(json: document)["name"] = "probe$name";
+
+        Assert.Equal(
+            actual: Assert.Throws<WorldDecompileRefusedException>(testCode: () => WorldDecompiler.Decompile(root: document)).Name,
+            expected: "probe$name"
         );
     }
     [Fact]
     public void TheDeclarationDecompilesBackToTheSameSourceText() {
-        var document = LowerClean(body: RunPattern);
+        var document = WorldSources.LowerClean(body: RunPattern);
         var source = WorldDecompiler.Decompile(root: document);
 
         Assert.Contains(
@@ -238,7 +229,7 @@ public class PatternDeclarationTests {
     }
     [Fact]
     public void AMachineLargerThanItsBudgetIsRefusedByName() {
-        var (_, diagnostics) = Lower(body: """
+        var (_, diagnostics) = WorldSources.Lower(body: """
             pattern wide : Int {
               maxStates: 2
               symbols {
@@ -261,7 +252,7 @@ public class PatternDeclarationTests {
     }
     [Fact]
     public void TheSameMachineInsideItsBudgetIsAdmitted() {
-        var (_, diagnostics) = Lower(body: """
+        var (_, diagnostics) = WorldSources.Lower(body: """
             pattern wide : Int {
               maxStates: 64
               symbols {
@@ -279,7 +270,7 @@ public class PatternDeclarationTests {
     }
     [Fact]
     public void AMatchNamingNoDeclaredSymbolIsRefusedByName() {
-        var (_, diagnostics) = Lower(body: """
+        var (_, diagnostics) = WorldSources.Lower(body: """
             pattern hand : Int {
               symbols {
                 face = 1

@@ -59,18 +59,18 @@ public sealed class UndoRuleLawTests {
     }
     [Fact]
     public void RewindInsideItsOwnGroupIsRejected() {
-        var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.RewindTurn(Group: Name(value: "turn"))]);
+        var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.RewindGroup(Group: Name(value: "turn"))]);
         var exception = CompileRefusal(authored: [rewind], groups: [UndoGroup(member: rewind.Name)]);
 
         Assert.Equal(RuleRefusal.RuleGroupMalformed, exception.Refusal);
     }
     [Fact]
     public void NestedRewindIsRejected() {
-        var condition = new ActionPredicate.CompareState(State: "score", Comparison: ActionStateComparison.GreaterOrEqual, Value: 0m);
+        var condition = new ActionPredicate.CompareState(State: "score", Comparison: ExpressionOp.GreaterOrEqual, Value: 0m);
         var member = RulesFixture.Rule(name: "step");
         var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.If(
             Condition: condition,
-            Then: [new ActionEffect.RewindTurn(Group: Name(value: "turn"))]
+            Then: [new ActionEffect.RewindGroup(Group: Name(value: "turn"))]
         )]);
         var exception = CompileRefusal(authored: [member, rewind]);
 
@@ -80,7 +80,7 @@ public sealed class UndoRuleLawTests {
     public void RewindBesideAnotherEffectIsRejected() {
         var member = RulesFixture.Rule(name: "step");
         var rewind = RulesFixture.Rule(name: "rewind", effects: [
-            new ActionEffect.RewindTurn(Group: Name(value: "turn")),
+            new ActionEffect.RewindGroup(Group: Name(value: "turn")),
             new ActionEffect.SetState(State: "score", Value: 0m),
         ]);
         var exception = CompileRefusal(authored: [member, rewind]);
@@ -90,10 +90,36 @@ public sealed class UndoRuleLawTests {
     [Fact]
     public void RewindNamingAGroupWithoutUndoIsRejected() {
         var member = RulesFixture.Rule(name: "step");
-        var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.RewindTurn(Group: Name(value: "other"))]);
+        var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.RewindGroup(Group: Name(value: "other"))]);
         var exception = CompileRefusal(authored: [member, rewind]);
 
         Assert.Equal(RuleRefusal.RuleGroupMalformed, exception.Refusal);
+    }
+    // A rewind is priced by the work of restoring its group's widest turn, which grows with the rows the group retains
+    // and not with how many turns it keeps.
+    [InlineData(1)]
+    [InlineData(64)]
+    [Theory]
+    public void ARewindIsPricedByRestoringItsGroupsWidestTurn(int depth) {
+        var section = EvaluatorFixture.Section();
+        var context = EvaluatorFixture.Context(section: section);
+        var member = RulesFixture.Rule(name: "step", effects: [new ActionEffect.SetState(State: "score", Value: 7m)]);
+        var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.RewindGroup(Group: Name(value: "turn"))]);
+        var compiled = RuleCompiler.CompileAll(context: context, rules: [member, rewind]);
+        var group = Assert.Single(collection: RuleCompiler.CompileGroups(context: context, groups: [UndoGroup(member: member.Name) with {
+            Undo = new RuleGroupUndo(Rows: [Name(value: "score")], Depth: depth),
+        }], rules: compiled));
+        var effect = Assert.IsType<RewindGroupEffect>(@object: Assert.Single(collection: compiled[1].Effects));
+
+        Assert.Equal(
+            expected: RuleWork.Known(units: StateArena.EstimateRewindWork(
+                catalog: context.Catalog,
+                layout: ArenaLayout.Build(context.Catalog, context.Section),
+                plan: group.Undo!,
+                plans: [group.Undo!]
+            )),
+            actual: effect.Cost(context: context)
+        );
     }
     [Fact]
     public void AWorkflowRetainsItsTwoStepsAsOneTurn() {
@@ -119,7 +145,7 @@ public sealed class UndoRuleLawTests {
         ));
         runtime.Host.Arena.Commit(mark: unrelated);
         TickGroup(runtime: runtime, tick: 1UL);
-        Assert.True(runtime.Host.Arena.TryRewindTurn("turn", out var reason), reason);
+        Assert.True(condition: runtime.Host.Arena.TryRewindGroup(group: "turn", reason: out var reason), userMessage: reason);
         Assert.Equal(0L, EvaluatorFixture.Cell(runtime.Host, "score"));
         Assert.Equal(0L, EvaluatorFixture.Cell(runtime.Host, "other"));
         Assert.Equal(5L, EvaluatorFixture.Cell(runtime.Host, "third"));
@@ -129,7 +155,7 @@ public sealed class UndoRuleLawTests {
         var raise = new Rule(
             Name: Name(value: "raise"),
             Effects: [new ActionEffect.AddState(State: "score", Value: 1m)],
-            Gate: new ActionPredicate.CompareState(State: "score", Comparison: ActionStateComparison.Less, Value: 2m)
+            Gate: new ActionPredicate.CompareState(State: "score", Comparison: ExpressionOp.Less, Value: 2m)
         );
         var group = new RuleGroupDeclaration(
             Name: Name(value: "turn"),
@@ -143,7 +169,7 @@ public sealed class UndoRuleLawTests {
         TickGroup(runtime: runtime, tick: 1UL);
         TickGroup(runtime: runtime, tick: 2UL);
         Assert.Equal(2L, EvaluatorFixture.Cell(runtime.Host, "score"));
-        Assert.True(runtime.Host.Arena.TryRewindTurn("turn", out var reason), reason);
+        Assert.True(condition: runtime.Host.Arena.TryRewindGroup(group: "turn", reason: out var reason), userMessage: reason);
         Assert.Equal(0L, EvaluatorFixture.Cell(runtime.Host, "score"));
     }
     [Fact]
@@ -151,7 +177,7 @@ public sealed class UndoRuleLawTests {
         var raise = new Rule(
             Name: Name(value: "raise"),
             Effects: [new ActionEffect.AddState(State: "score", Value: 1m)],
-            Gate: new ActionPredicate.CompareState(State: "score", Comparison: ActionStateComparison.Less, Value: 1m)
+            Gate: new ActionPredicate.CompareState(State: "score", Comparison: ExpressionOp.Less, Value: 1m)
         );
         var group = new RuleGroupDeclaration(
             Name: Name(value: "turn"),
@@ -164,13 +190,13 @@ public sealed class UndoRuleLawTests {
         for (ulong tick = 0; (tick < 8); tick++) {
             TickGroup(runtime: runtime, tick: tick);
         }
-        Assert.True(runtime.Host.Arena.TryRewindTurn("turn", out var reason), reason);
+        Assert.True(condition: runtime.Host.Arena.TryRewindGroup(group: "turn", reason: out var reason), userMessage: reason);
         Assert.Equal(0L, EvaluatorFixture.Cell(runtime.Host, "score"));
     }
     [Fact]
     public void RewindSuppressesItsTargetGroupForTheRestOfTheTick() {
         var step = RulesFixture.Rule(name: "step", effects: [new ActionEffect.SetState(State: "score", Value: 7m)]);
-        var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.RewindTurn(Group: Name(value: "turn"))]);
+        var rewind = RulesFixture.Rule(name: "rewind", effects: [new ActionEffect.RewindGroup(Group: Name(value: "turn"))]);
         var runtime = ArrangeRuntime([step, rewind], UndoGroup(member: step.Name));
 
         TickGroup(runtime: runtime, tick: 0UL);
@@ -181,7 +207,7 @@ public sealed class UndoRuleLawTests {
         _ = runtime.Evaluator.EvaluateGroups(runtime.Rules, runtime.Groups, runtime.State, runtime.Latch, stepTicks: 1UL);
 
         Assert.Equal(0L, EvaluatorFixture.Cell(runtime.Host, "score"));
-        Assert.False(runtime.Host.Arena.UndoTurnPending("turn"));
+        Assert.False(condition: runtime.Host.Arena.UndoTurnPending(group: "turn"));
         TickGroup(runtime: runtime, tick: 2UL);
         Assert.Equal(7L, EvaluatorFixture.Cell(runtime.Host, "score"));
     }
@@ -202,16 +228,16 @@ public sealed class UndoRuleLawTests {
         ));
         runtime.Host.Arena.Commit(mark: mark);
 
-        Assert.False(runtime.Host.Arena.TryRewindTurn("turn", out var reason));
-        Assert.Contains("outside", reason, StringComparison.Ordinal);
+        Assert.False(condition: runtime.Host.Arena.TryRewindGroup(group: "turn", reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "outside");
     }
     [Fact]
     public void ARewindRuleUsesItsOwnGateAsAuthority() {
         var step = RulesFixture.Rule(name: "step", effects: [new ActionEffect.SetState(State: "score", Value: 7m)]);
         var rewind = new Rule(
             Name: Name(value: "rewind"),
-            Effects: [new ActionEffect.RewindTurn(Group: Name(value: "turn"))],
-            Gate: new ActionPredicate.CompareState(State: "flag", Comparison: ActionStateComparison.Equal, Value: 1m),
+            Effects: [new ActionEffect.RewindGroup(Group: Name(value: "turn"))],
+            Gate: new ActionPredicate.CompareState(State: "flag", Comparison: ExpressionOp.Equal, Value: 1m),
             Mode: ActionTriggerMode.Edge
         );
         var runtime = ArrangeRuntime([step, rewind], UndoGroup(member: step.Name));

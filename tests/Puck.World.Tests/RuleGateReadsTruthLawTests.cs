@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -24,19 +25,11 @@ public sealed class RuleGateReadsTruthLawTests {
                 Dynamics: (eased ? new StateDynamics(Row: "slow") : null)
             )]
     );
-    private static WorldStateRow Flag(string name) => new(
-        Name: CellName.Parse(candidate: name),
-        Kind: CellKind.Int,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: 0L)
-            )]
-    );
     private static WorldRule Watch(string name, string gauge, string flag) => new(
         Name: CellName.Parse(candidate: name),
         Gate: new ActionPredicate.CompareState(
             State: gauge,
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: 100m,
             Key: "0"
         ),
@@ -46,15 +39,12 @@ public sealed class RuleGateReadsTruthLawTests {
                 Value: 1m
             )]
     );
-    private static long Read(WorldFixture fixture, string row) => WorldDefinitionRows.FindStateRow(
-        rows: fixture.Server.Definition.State,
-        name: row
-    )!.Cells![0].Value.AsInt;
+    private static long Read(WorldFixture fixture, string row) => fixture.Row(name: row).Cells![0].Value.Raw;
 
     [Fact]
     public void AGateOverAnEasedCellOpensWhenTheTruthCrosses() {
         var document = (Fixtures.BuildDocument().WithWorldState(rows: [
-            Gauge(eased: true, name: "eased"), Gauge(eased: false, name: "plain"), Flag(name: "easedFired"), Flag(name: "plainFired"),
+            Gauge(eased: true, name: "eased"), Gauge(eased: false, name: "plain"), StateFixtures.IntSlot(name: "easedFired"), StateFixtures.IntSlot(name: "plainFired"),
         ]) with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, Slow],
             Rules = [Watch(flag: "easedFired", gauge: "eased", name: "watchEased"), Watch(flag: "plainFired", gauge: "plain", name: "watchPlain")],
@@ -63,7 +53,7 @@ public sealed class RuleGateReadsTruthLawTests {
 
         foreach (var row in new[] { "eased", "plain" }) {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: row,
                 Key: "0",
                 Value: 300,

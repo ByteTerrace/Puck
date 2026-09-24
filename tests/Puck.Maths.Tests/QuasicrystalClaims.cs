@@ -10,7 +10,7 @@ namespace Puck.Maths.Tests;
 /// </summary>
 /// <remarks>
 /// Every oracle below is written out in this file rather than calling <c>Oracles.cs</c> or any <c>Puck.Maths</c>
-/// kernel, per the shared-nothing discipline: <see cref="IntegerSquareRoot(BigInteger)"/> is an independent
+/// kernel, per the shared-nothing discipline: <see cref="Oracles.IntegerSquareRoot(BigInteger)"/> is an independent
 /// BigInteger Newton-descent root that shares no code with <c>FixedQ4816.Sqrt</c> or
 /// <c>BigIntegerFunctions.SquareRoot</c>; <see cref="ModularCuspOracle"/> and <see cref="ModularFormAction"/> are
 /// self-contained BigInteger/Int128 reference arithmetic.
@@ -42,7 +42,7 @@ namespace Puck.Maths.Tests;
 /// </remarks>
 internal static class QuasicrystalClaims {
     /// <summary>Brackets the Q16 raw fixed-point value of <c>(rationalNumerator + surdNumerator·√radicand) /
-    /// denominator</c> to within a fraction of one raw tick, using <see cref="IntegerSquareRoot(BigInteger)"/> at
+    /// denominator</c> to within a fraction of one raw tick, using <see cref="Oracles.IntegerSquareRoot(BigInteger)"/> at
     /// 48 extra bits of precision. <paramref name="radicand"/> and <paramref name="denominator"/> must be
     /// positive.</summary>
     private static (BigInteger Lower, BigInteger Upper) BracketRawQ16(
@@ -52,7 +52,7 @@ internal static class QuasicrystalClaims {
         BigInteger denominator) {
         const int ExtraBits = 48;
         var fine = (BigInteger.One << ExtraBits);
-        var root = IntegerSquareRoot(value: ((radicand * fine) * fine)); // floor(sqrt(radicand) * 2^ExtraBits)
+        var root = Oracles.IntegerSquareRoot(value: ((radicand * fine) * fine)); // floor(sqrt(radicand) * 2^ExtraBits)
         var scaleQ16 = (BigInteger.One << 16);
         var rationalTerm = ((rationalNumerator * scaleQ16) * fine);
         BigInteger lowNumerator;
@@ -200,40 +200,6 @@ internal static class QuasicrystalClaims {
     }
     // ---- shared helpers, sharing nothing with the subject kernels each claim checks ----
 
-    /// <summary>The exact floor square root <c>⌊√value⌋</c>, by a bit-length seed and Newton descent, settled by the
-    /// exact predicate <c>r² ≤ value &lt; (r+1)²</c>. Deliberately independent of <c>FixedQ4816.Sqrt</c> (a hardware-
-    /// or double-seeded fixed-width kernel) and of <c>BigIntegerFunctions.SquareRoot</c> — calling either would check
-    /// the tree against itself.</summary>
-    private static BigInteger IntegerSquareRoot(BigInteger value) {
-        if (value.Sign <= 0) { return BigInteger.Zero; }
-
-        var root = (BigInteger.One << ((int)((value.GetBitLength() + 1L) / 2L)));
-
-        while (true) {
-            var next = ((root + (value / root)) >> 1);
-
-            if (next >= root) { break; }
-
-            root = next;
-        }
-
-        while ((root * root) > value) { root -= BigInteger.One; }
-        while (((root + BigInteger.One) * (root + BigInteger.One)) <= value) { root += BigInteger.One; }
-
-        return root;
-    }
-    /// <summary>Is <paramref name="needle"/> a contiguous factor of <paramref name="haystack"/>? A phase-independent
-    /// witness that two constructions of one tiling share a language.</summary>
-    private static bool IsFactorOfWord(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needle) {
-        for (var start = 0; (start <= (haystack.Length - needle.Length)); ++start) {
-            if (haystack.Slice(
-                start: start,
-                length: needle.Length
-            ).SequenceEqual(other: needle)) { return true; }
-        }
-
-        return false;
-    }
     /// <summary>The Mobius action on a cusp p/q, formed as an exact BigInteger rational reduction, calling no
     /// <c>ModularTransform</c> member.</summary>
     private static (long Numerator, long Denominator) ModularCuspOracle(ModularTransform g, long p, long q) {
@@ -365,20 +331,14 @@ internal static class QuasicrystalClaims {
             }
 
             if (
-                !IsFactorOfWord(
-                haystack: metallicWord,
-                needle: chainWord.AsSpan(
+                !(((ReadOnlySpan<bool>)metallicWord).IndexOf(value: chainWord.AsSpan(
                     length: 900,
                     start: 0
-                )
-            ) ||
-                !IsFactorOfWord(
-                haystack: chainWord,
-                needle: metallicWord.AsSpan(
+                )) >= 0) ||
+                !(((ReadOnlySpan<bool>)chainWord).IndexOf(value: metallicWord.AsSpan(
                     length: 900,
                     start: 0
-                )
-            )
+                )) >= 0)
             ) {
                 return $"the single-term chain and the metallic ring walk do not realize the same tiling at n={n}";
             }
@@ -489,13 +449,10 @@ internal static class QuasicrystalClaims {
                 }
             }
 
-            if (!IsFactorOfWord(
-                haystack: streamed,
-                needle: walkWord.AsSpan(
+            if (!(((ReadOnlySpan<bool>)streamed).IndexOf(value: walkWord.AsSpan(
                     length: 1500,
                     start: 0
-                )
-            )) {
+                )) >= 0)) {
                 return $"the chain random access is not a factor of the streamed word at d={testCase.D}";
             }
 
@@ -951,10 +908,7 @@ internal static class QuasicrystalClaims {
             tiles: generalGoldenWord
         );
 
-        if (!IsFactorOfWord(
-            haystack: generalGoldenWord,
-            needle: goldenReference
-        )) { return "the general generator does not reproduce the golden word"; }
+        if (!(((ReadOnlySpan<bool>)generalGoldenWord).IndexOf(value: goldenReference) >= 0)) { return "the general generator does not reproduce the golden word"; }
 
         var periodicProbe = new bool[300];
 
@@ -1100,13 +1054,10 @@ internal static class QuasicrystalClaims {
                 tiles: streamed
             );
 
-            if (!IsFactorOfWord(
-                haystack: streamed,
-                needle: walkWord.AsSpan(
+            if (!(((ReadOnlySpan<bool>)streamed).IndexOf(value: walkWord.AsSpan(
                     length: 1200,
                     start: 0
-                )
-            )) {
+                )) >= 0)) {
                 return $"the metallic walk word is not a factor of the streamed substitution word at n={n}";
             }
         }
@@ -1200,24 +1151,15 @@ internal static class QuasicrystalClaims {
         }
 
         if (
-            !IsFactorOfWord(
-            haystack: metallicGolden,
-            needle: goldenFromOrigin
-        ) ||
-            !IsFactorOfWord(
-            haystack: metallicSilver,
-            needle: silverFromOrigin
-        )
+            !(((ReadOnlySpan<bool>)metallicGolden).IndexOf(value: goldenFromOrigin) >= 0) ||
+            !(((ReadOnlySpan<bool>)metallicSilver).IndexOf(value: silverFromOrigin) >= 0)
         ) {
             return "MetallicQuasicrystal.Word does not reproduce the golden/silver ring-coordinate word";
         }
-        if (IsFactorOfWord(
-            haystack: metallicSilver,
-            needle: goldenFromOrigin.AsSpan(
+        if ((((ReadOnlySpan<bool>)metallicSilver).IndexOf(value: goldenFromOrigin.AsSpan(
                 length: 256,
                 start: 0
-            )
-        )) {
+            )) >= 0)) {
             return "the silver generator matched the golden word";
         }
 

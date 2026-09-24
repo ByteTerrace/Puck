@@ -1,4 +1,11 @@
-import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.5'
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Imports
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.6'
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Parameters
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param configuration worldSiloConfigType
 param actionGroup worldSiloActionGroupConfigType
 param publishingPrincipalId string
@@ -7,12 +14,32 @@ param registryName string
 param keyVaultName string
 param location string = resourceGroup().location
 param tags { *: string } = {}
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Resources
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 module identity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = {
-  params: { name: configuration.userAssignedIdentity.name, location: location, tags: union(tags, configuration.userAssignedIdentity.?tags ?? {}) }
+  params: {
+    name: configuration.userAssignedIdentity.name
+    location: location
+    tags: union(tags, configuration.userAssignedIdentity.?tags ?? {})
+  }
 }
-module world 'ts/bvm:ptn_platform_world-silo:0.0.5' = {
-  params: { configuration: configuration, actionGroup: actionGroup, tags: tags, owner: identity.outputs.principalId, publishingPrincipalId: publishingPrincipalId, storageAccountName: storageAccountName, registryName: registryName }
+module world 'ts/bvm:ptn_platform_world-silo:0.0.6' = {
+  params: {
+    configuration: configuration
+    actionGroup: actionGroup
+    tags: tags
+    owner: identity.outputs.principalId
+    publishingPrincipalId: publishingPrincipalId
+    storageAccountName: storageAccountName
+    registryName: registryName
+  }
 }
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Outputs
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 output worldSiloOwner string = identity.outputs.principalId
 output worldSiloIdentityResourceId string = identity.outputs.resourceId
 output worldSiloClientId string = identity.outputs.clientId

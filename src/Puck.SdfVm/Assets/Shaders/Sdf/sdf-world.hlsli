@@ -49,33 +49,17 @@ struct CompositeParams {
     uint childMask;      // bit v set => viewport v is backed by a CHILD node's surface, not an SDF camera
     uint screenMask;     // bit s set => screen source slot s is bound this frame (Stage 1 only; unused elsewhere)
     uint instanceMaskWordCount; // the LIVE uploaded program's derived per-tile mask width (SdfProgram.InstanceMaskWordCount), pushed per frame
-    // The deterministic tick clock the sky's twinkle and cloud motion read. Stage 1 only. KEEP IN SYNC with
-    // SdfFrame.SampleIndex.
+    // The deterministic tick clock star twinkle reads; cloud motion is baked into the environment rows. Stage 1 only.
+    // KEEP IN SYNC with SdfFrame.SampleIndex.
     uint sampleIndex;
 };
 [[vk::push_constant]] ConstantBuffer<CompositeParams> params;
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_PRIMARY_READ)
-// Five float4 rows per full-extent pixel per viewport. KEEP IN SYNC with SdfWorldEngine.PrimaryHitByteLength,
-// PrimaryHitBindingIndex and its views binding order (tiles u0, five source images u1..u5, hit records u6).
-// Row 0: depth, terminal field radius, acceptance threshold, material bits. Row 1: anonymous hit lanes.
-// Row 2: frame-slot bits, seam weight, other-material bits, packed step/eval/hit bits. No quantized depth/attributes.
-// Row 3: geometric normal xyz and gradient magnitude. Row 4: curvature, surface/AO query count, AO, flags.
-// Surface writes rows 3/4; ambient updates row 4; views reads them after their compute barriers.
-// Scalar uint storage matches the engine's four-byte UAV descriptor stride on both backends.
-[[vk::binding(49, 0)]] RWStructuredBuffer<uint> sdfPrimaryHits : register(u6);
-uint sdfPrimaryHitOffset(uint2 pixel, uint viewIndex) {
-    return (20u * (((viewIndex * params.imageExtent.y) + pixel.y) * params.imageExtent.x + pixel.x));
-}
-float4 sdfLoadPrimaryRow(uint index) {
-    return asfloat(uint4(sdfPrimaryHits[index], sdfPrimaryHits[index + 1u], sdfPrimaryHits[index + 2u], sdfPrimaryHits[index + 3u]));
-}
-void sdfStorePrimaryRow(uint index, float4 value) {
-    uint4 bits = asuint(value);
-    sdfPrimaryHits[index] = bits.x;
-    sdfPrimaryHits[index + 1u] = bits.y;
-    sdfPrimaryHits[index + 2u] = bits.z;
-    sdfPrimaryHits[index + 3u] = bits.w;
+// The per-pixel visibility record the hit passes write and views shades (sdf-visibility.hlsli owns its layout).
+#include "sdf-visibility.hlsli"
+uint worldVisibilityRecord(uint2 pixel, uint viewIndex) {
+    return sdfVisibilityRecord(pixel, viewIndex, params.imageExtent);
 }
 #endif
 
@@ -448,11 +432,10 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
 
     uint screenIndex = (uint)(material - SDF_SCREEN_MATERIAL - 1);
 
-    // The sibling of sdf-world-rt-debug's hitMaterial guard: an out-of-bounds structured-buffer read is zeroed on
-    // Direct3D 12 by spec but only defined under robustBufferAccess on Vulkan, so the bound makes both backends agree
-    // by construction rather than by driver luck. Falling back to the material-shaded path is the same answer a zeroed
-    // entry would produce here (no decal, no bound source), and the host refuses such an id, so no valid program
-    // reaches this branch and no composed pixel moves.
+    // An out-of-bounds structured-buffer read is zeroed on Direct3D 12 by spec but only defined under robustBufferAccess
+    // on Vulkan, so the bound makes both backends agree by construction rather than by driver luck. Falling back to the
+    // material-shaded path is the same answer a zeroed entry would produce here (no decal, no bound source), and the host
+    // refuses such an id, so no valid program reaches this branch and no composed pixel moves.
     if (screenIndex >= SdfScreenSurfaceCount) {
         return false;
     }
@@ -706,7 +689,7 @@ static const float SurfaceEpsilon = 0.001;
 static const float SphereTraceOmega = 1.2; // Keinert over-relaxation factor (1 = plain sphere tracing; [1, 2))
 static const int ConeMarchSteps = 56;
 static const int IndependentConeMarchSteps = 8;
-static const float ConeNear = 0.02;
+static const float ConeNear = 0.02; // KEEP IN SYNC with SdfWorldEngine.ConeNear, the near plane ViewProjection shares
 static const float ConeEpsilon = 0.002;
 // Four-bound teleport (Larsson "The Gunk"): after the beam cone finds the tile's ENTRY (the classic marchStart), it
 // keeps marching a bounded budget to detect ONE proven-empty gap between two occupied bands — [firstExit,
@@ -732,6 +715,15 @@ static const int TileFarSteps = 10;
 // <= 1-Lipschitz, so the measured slope M is in [-1, 1] and m never legitimately exceeds SlopeCap).
 static const float SlopeBeta = 0.3;
 static const float SlopeCap = 0.8;   // omega <= 2 / (1 - 0.8) = 10
+// Near-miss refinement. A primary sample inside the footprint shell (fieldDistance < hitThreshold) is accepted only
+// once the ray has converged below PrimaryConvergeFraction of the threshold; until then it takes plain steps, at most
+// PrimaryRefineSteps of them per ray, and accepts when that budget runs out. Step phase varies with the tile's march
+// start and instance mask, so an edge decided on shell entry breaks thin lines into tile-periodic dashes; a refined
+// ray that passes a feature leaves the shell and finds what lies behind it. One that escapes to sky still resolves
+// the near miss through the exhaustion arm, which keeps the silhouette coverage signal. A 0.5 fraction or a 3-4 step
+// budget measurably restores tile-correlated edges.
+static const float PrimaryConvergeFraction = 0.25;
+static const int PrimaryRefineSteps = 8;
 // STRICT-MARCH fallback (SDF_STRICT_MARCH). Defining it (a build-time flip, rebuild the kernels) replaces the default
 // Bán 2023 auto-relaxed marcher with a conservative Keinert marcher: fixed omega = 1.2 with a
 // disjoint-sphere step-back that LATCHES omega to 1 for the rest of the ray after an overshoot — and omega is NEVER
@@ -766,17 +758,16 @@ static const float DitherQuantum = (1.0 / 255.0);
 // before saturating solid red — chosen so a typical unshadowed ambient-only hit (~30-40 evals: a short march plus
 // the analytic normal and AO) reads green/yellow rather than washing out at the floor.
 static const float EvalHeatmapCeiling = 256.0;
-// The soft-shadow march toward the shadow light: a closest-approach penumbra estimate — the running minimum of
-// k · d / t, where d is the nearest approach of the field's clearance spheres to the ray between consecutive samples
-// and t the distance travelled — marched by the field's own clearance under a distance-proportional step ceiling that
-// keeps the samples dense enough for the estimate to converge. Deterministic: one ray per lit pixel, no per-frame
+// The soft-shadow march toward the shadow light (softShadowVisibility, sdf-occlusion.hlsli): a penumbra estimate — the
+// running minimum of k · d / t, where d is the field's clearance at the sample and t the distance travelled — marched
+// by the field's own clearance under a distance-proportional step ceiling that keeps the samples dense enough for the
+// estimate to converge. Deterministic: one ray per lit pixel, no per-frame
 // sample, no history. k is the reciprocal of the shadow light's authored penumbra half-slope
 // (worldShadowPenumbraSlope), so the visibility ramps across an angular band of that slope about an occluder's edge.
 static const int ShadowSteps = 64;
 static const int FastShadowSteps = 12;
-// Half the RT path's 24-unit reach: this compute march has no TLAS to fast-forward to the occluder, so every unit of
-// reach is marched per lit pixel. Contact/self shadows (the visual win) are near; 12 covers every realistic case while
-// halving the worst-case empty-space step count on dense scenes.
+// Short: this compute march has no acceleration structure to fast-forward to the occluder, so every unit of reach
+// is marched per lit pixel. Contact/self shadows (the visual win) are near. Scaled per frame by worldShadowDistanceScale.
 static const float ShadowMaxDistance = 9.0;
 static const float ShadowBias = 0.02;
 // A sample within this travel of the origin reads the origin surface itself — a ray skimming its own curved surface
@@ -798,10 +789,10 @@ float worldShadowPenumbraChord() { return (3.0 * worldShadowPenumbraSlope()); }
 // The gradient probe's finite-difference offset. Small enough that the tetrahedron's O(eps) curvature error is
 // sub-LSB, large enough to stay clear of the field's own float noise.
 static const float NormalProbeEpsilon = 0.0006;
-// GRADIENT-SCALED PENUMBRA/AO (secondary-ray posture, src/Puck.World/Assets/pipelines/moth.glsl's surfaceGradient/shadow/ambientOcclusion).
+// GRADIENT-SCALED PENUMBRA/AO (secondary-ray posture, src/Puck.World/Assets/pipelines/moth.hlsl's surfaceGradient/shadow/ambientOcclusion).
 // mapCore/mapGradCore's per-program stepScale (sdfStepScale) is a single GLOBAL, WORST-CASE Lipschitz bound for the
 // whole program/scope — it keeps the march SOUND but says nothing about how far a given shape's own formula departs
-// from a unit SDF AT THE HIT (an approximate Ellipsoid's directional gradient, AxialProfile's y-varying shear, the study's
+// from a unit SDF AT THE HIT (an ellipsoid gauge's sub-unit slope toward its long-axis tips, AxialProfile's y-varying shear, the study's
 // own hand-authored `d*.7`-style scalar distance multiplies). The RAW gradient mapGradMasked returns (before its
 // consumer normalizes) already carries that local departure — it is the gradient of the same shape-formula distance
 // mapCore returns before ITS OWN final stepScale multiply (sdf-vm.hlsli: "result.distance *= stepScale;" is NOT
@@ -809,7 +800,7 @@ static const float NormalProbeEpsilon = 0.0006;
 // compose multiplicatively into one effective de-scale factor (see shadingStepScale at the softShadowVisibility/
 // calcAO call sites below) — never folded into stepScale itself, which must stay the program's own march-soundness
 // bound. GradientMagnitudeFloor keeps a near-degenerate local gradient (a cusp, a blend seam) from blowing the
-// estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/pipelines/moth.glsl, clamp(magnitude,.12,1.5)).
+// estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/pipelines/moth.hlsl, clamp(magnitude,.12,1.5)).
 static const float GradientMagnitudeFloor = 0.12;
 
 // Per-pixel query tally for debug.view.evals, including primary local-part marches and shading probes.
@@ -827,7 +818,7 @@ static float sdfEvalCount = 0.0;
 // exactly as absent from a nearby tap as it is from the hit itself (the beam prepass's tile cone covers the whole
 // tile, taps included at this epsilon). The per-program stepScale is a common factor that cancels under
 // normalize, so the Lipschitz clamp leaves normals untouched.
-// gradientMagnitude (out): the secondary-ray gradient-scaling posture (src/Puck.World/Assets/pipelines/moth.glsl's surfaceGradient) — the
+// gradientMagnitude (out): the secondary-ray gradient-scaling posture (src/Puck.World/Assets/pipelines/moth.hlsl's surfaceGradient) — the
 // tetrahedron sum's own magnitude divided by 4e recovers the RAW field's local gradient magnitude at the hit
 // (BEFORE this normalize), still carrying the taps' own mapDistanceMasked stepScale bake, so it is divided back out
 // by sdfStepScale() to land in the SAME program-stepScale-independent units calculateNormalAnalytic reports (see
@@ -1536,8 +1527,8 @@ bool worldUseTapNormals() {
 #endif
 }
 
-// The four engine-bench shader-feature levers (sdf.soft-shadows / sdf.ao / sdf.shadow-distance /
-// sdf.screen-lights). Ride the reserved bench-params screen-light row (SdfBenchParams): x = disable soft shadows,
+// The four per-frame shader-feature lanes (World's world.shadows drives x and z; world.ao drives y). Ride the
+// reserved bench-params screen-light row (SdfBenchParams): x = disable soft shadows,
 // y = disable AO, z = shadow-distance scale (0 => the full 1.0 reach, so an unset frame uploads 0 and is unchanged),
 // w = disable screen lights. Decoded only under SDF_SCREEN_SOURCES (the world-views kernel is the sole lit SDF shader);
 // every other config keeps the shipped defaults. KEEP IN SYNC with SdfFrame's DisableSoftShadows/DisableAmbientOcclusion/
@@ -2073,21 +2064,20 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     // and every OTHER debug mode still marches exactly as before (the added compares are false for them).
 #ifdef SDF_PRIMARY_READ
     if (active) {
-        uint hitOffset = sdfPrimaryHitOffset(pixel, viewIndex);
-        float4 geometry = sdfLoadPrimaryRow(hitOffset);
-        float4 attributes = sdfLoadPrimaryRow(hitOffset + 8u);
-        uint flags = asuint(attributes.w);
-        traveled = geometry.x;
-        terminalRadius = geometry.y;
-        terminalHitThreshold = geometry.z;
-        material = asint(geometry.w);
-        hitLanes = sdfLoadPrimaryRow(hitOffset + 4u);
-        hitFrameSlot = asint(attributes.x);
-        materialBlendWeight = attributes.y;
-        materialBlendOther = asint(attributes.z);
-        marchStep = (int)(flags & 255u);
-        sdfEvalCount = (float)((flags >> 8u) & 0x7FFFFFu);
-        hitSurface = ((flags & 0x80000000u) != 0u);
+        uint record = worldVisibilityRecord(pixel, viewIndex);
+        SdfVisibility visibility = sdfLoadVisibility(record);
+        SdfVisibilityCoverage coverage = sdfLoadVisibilityCoverage(record);
+        traveled = visibility.t;
+        terminalRadius = coverage.terminalRadius;
+        terminalHitThreshold = coverage.threshold;
+        material = visibility.material;
+        hitLanes = sdfLoadVisibilityLanes(record);
+        hitFrameSlot = sdfVisibilityFrameSlot(visibility);
+        materialBlendWeight = coverage.blendWeight;
+        materialBlendOther = coverage.blendOther;
+        marchStep = (int)sdfVisibilitySteps(visibility);
+        sdfEvalCount = (float)sdfVisibilityQueries(visibility);
+        hitSurface = sdfVisibilityHit(visibility);
     }
 #else
     if ((marchStart >= 0.0) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
@@ -2109,20 +2099,27 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
 #if defined(SDF_SURFACE_PASS)
     if (active) sdfResolveSurface(rayOrigin + rayDirection * traveled, rayDirection, hitSurface, material,
-        viewMode, instanceMaskBase, terminalRadius, pixelFootprint * traveled, sdfPrimaryHitOffset(pixel, viewIndex));
+        viewMode, instanceMaskBase, terminalRadius, pixelFootprint * traveled, worldVisibilityRecord(pixel, viewIndex));
     return 0.0;
 #elif defined(SDF_AMBIENT_PASS)
     sdfResolveAmbient(rayOrigin + rayDirection * traveled, instanceMaskBase, pixel, viewIndex, lane, active);
     return 0.0;
 #elif defined(SDF_PRIMARY_PASS)
     if (active) {
-        uint hitOffset = sdfPrimaryHitOffset(pixel, viewIndex);
-        // Selected march steps occupy bits 0..7; total queries across all marches saturate in bits 8..30.
-        // Bit 31 marks a hit. Local traces can execute more than 255 queries; none may overwrite the hit bit.
-        uint flags = min((uint)marchStep, 255u) | (min((uint)sdfEvalCount, 0x7FFFFFu) << 8u) | (hitSurface ? 0x80000000u : 0u);
-        sdfStorePrimaryRow(hitOffset, float4(traveled, terminalRadius, terminalHitThreshold, asfloat(material)));
-        sdfStorePrimaryRow(hitOffset + 4u, hitLanes);
-        sdfStorePrimaryRow(hitOffset + 8u, float4(asfloat(hitFrameSlot), materialBlendWeight, asfloat(materialBlendOther), asfloat(flags)));
+        uint record = worldVisibilityRecord(pixel, viewIndex);
+        SdfVisibility visibility;
+        visibility.t = traveled;
+        visibility.identity = sdfVisibilitySdfIdentity(hitSurface, hitFrameSlot);
+        visibility.material = material;
+        visibility.flags = sdfVisibilityFlags(marchStep, sdfEvalCount);
+        SdfVisibilityCoverage coverage;
+        coverage.terminalRadius = terminalRadius;
+        coverage.threshold = terminalHitThreshold;
+        coverage.blendWeight = materialBlendWeight;
+        coverage.blendOther = materialBlendOther;
+        sdfStoreVisibility(record, visibility);
+        sdfStoreVisibilityCoverage(record, coverage);
+        sdfStoreVisibilityLanes(record, hitLanes);
     }
     return 0.0;
 #else
@@ -2226,19 +2223,19 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         float gradientMagnitude = 1.0;
 
 #ifdef SDF_PRIMARY_READ
-        float4 surfaceInfo = sdfLoadPrimaryRow(sdfPrimaryHitOffset(pixel, viewIndex) + 16u);
-        sdfEvalCount += surfaceInfo.y;
+        SdfVisibilitySurface surfaceInfo = sdfLoadVisibilitySurface(worldVisibilityRecord(pixel, viewIndex));
+        sdfEvalCount += surfaceInfo.queries;
         if (needsNormal) {
-            float4 surfaceNormal = sdfLoadPrimaryRow(sdfPrimaryHitOffset(pixel, viewIndex) + 12u);
-            normal = surfaceNormal.xyz;
-            gradientMagnitude = surfaceNormal.w;
-            curvature = surfaceInfo.x;
+            SdfVisibilityNormal surfaceNormal = sdfLoadVisibilityNormal(worldVisibilityRecord(pixel, viewIndex));
+            normal = surfaceNormal.normal;
+            gradientMagnitude = surfaceNormal.gradientMagnitude;
+            curvature = surfaceInfo.curvature;
         }
 #else
         if (needsNormal) {
             // Detail shapes (SDF_SHAPE_DETAIL_FLAG) perturb the normal ONLY here — the one hit-only re-evaluation,
-            // never a per-step march. Every normal path shares the toggle so switching sdf.normals/curvature never
-            // silently drops a detail shape's dent.
+            // never a per-step march. Every normal path shares the toggle so switching the normal path or curvature
+            // never silently drops a detail shape's dent.
             sdfDetailShadingActive = true;
 
             // Authored curvature uses four taps and a center distance, reused from primary when admitted.
@@ -2261,8 +2258,8 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         if (needsLitColor) {
             // The shadow light's Lambert term under its soft-shadow visibility (the ambient lights still fill shadowed
             // regions, so shadows read soft, not black). The march is skipped where the surface faces away from the
-            // light, where no light shadows, or when the engine-bench sdf.soft-shadows lever disables it (the light
-            // then goes unshadowed). The procedural screen branch below consumes sunDiffuse too, so this march is
+            // light, where no light shadows, or when soft shadows are disabled (world.shadows off; the light then
+            // goes unshadowed). The procedural screen branch below consumes sunDiffuse too, so this march is
             // not dead there.
             float3 keyDirection = worldSunDirection();
             float sunDiffuse = max(dot(normal, keyDirection), 0.0);
@@ -2286,8 +2283,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 #endif
 
             if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled()) {
-                // ONE shared scaled reach for BOTH the gather cull cone and the march ceiling (the sdf.shadow-distance
-                // lever) — they MUST use the same length or the gathered occluder set is unsound for the shadow ray.
+                // ONE shared scaled reach for BOTH the gather cull cone and the march ceiling (world.shadows's
+                // reach, worldShadowDistanceScale) — they MUST use the same length or the gathered occluder set is
+                // unsound for the shadow ray.
                 float shadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
                 sdfSecondaryMarchActive = true;
 #ifdef SDF_SCREEN_SOURCES
@@ -2381,7 +2379,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // The ambient pass skips emissive screen cards and initializes neutral AO when world.ao is off.
                 // The monolithic comparison kernel retains its local ladder here.
 #ifdef SDF_PRIMARY_READ
-                float ambientOcclusion = surfaceInfo.z;
+                float ambientOcclusion = surfaceInfo.ambient;
 #else
                 uint ambientMaskBase = instanceMaskBase;
 #ifdef SDF_SCREEN_SOURCES
@@ -2576,14 +2574,14 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                     int2 neighbor = int2(pixel) + offsets[i];
                     if (all(neighbor >= 0) && all(neighbor < int2(renderDims))) {
                         uint neighborTile = worldTileIndex(viewIndex, uint2(neighbor) / WorldTileSize, params.tileGrid);
-                        // Empty tiles outside the indirect dispatch bbox have stale hit records. Use the beam's
-                        // current-frame emptiness proof directly; only live tiles may read the primary cache.
+                        // Empty tiles outside the indirect dispatch bbox have stale visibility records. Use the
+                        // beam's current-frame emptiness proof directly; only live tiles may read the records.
                         if (tiles[worldTileMarchStartIndex(neighborTile)] == TileEmpty) {
                             adjacentSky = true;
                         } else {
-                            uint flags = sdfPrimaryHits[sdfPrimaryHitOffset(uint2(neighbor), viewIndex) + 11u];
+                            SdfVisibility adjacent = sdfLoadVisibility(worldVisibilityRecord(uint2(neighbor), viewIndex));
                             // Exhaustion proves neither sky nor geometry. Treat it conservatively as unknown.
-                            adjacentSky = adjacentSky || ((flags & 0x80000000u) == 0u && (flags & 255u) < (uint)MaxSteps);
+                            adjacentSky = adjacentSky || (!sdfVisibilityHit(adjacent) && sdfVisibilitySteps(adjacent) < (uint)MaxSteps);
                         }
                     }
                 }
@@ -2697,9 +2695,8 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 break;
             }
 
-            // The UNMASKED field (map, the rt-debug kernel's precedent — never mapMasked): the slice is the ideal
-            // mathematics, so no per-tile instance mask may hide far-field contributions. Still the post-stepScale-
-            // clamp distance — the quantity the marcher steps on — so an isoline IS a level set of the marched field.
+            // The UNMASKED field (map, never mapMasked): the slice is the ideal mathematics, so no per-tile instance mask
+            // may hide far-field contributions. Still the post-stepScale-clamp distance — the quantity the marcher steps on — so an isoline IS a level set of the marched field.
             float sliceDistance = mapDistance(rayOrigin + (rayDirection * planeT));
 
             // Two-scale isolines over the sign-split hue ramp (inside warm/red, outside cool/blue): brightness ramps

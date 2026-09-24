@@ -1,0 +1,42 @@
+# Compilation, then installation, each under its own bounded deadline.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+# Pause and reset: the paused instance renders exactly one initialization frame, submission 1.
+pipeline.time feedback pause
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.capture feedback {run}/n1.png
+pipeline.wait feedback captured 10
+# A second paused capture reads the same submission; the counter does not move.
+pipeline.capture feedback {run}/n1-again.png
+pipeline.wait feedback captured 10
+pipeline.status
+# One step is submission 2.
+pipeline.step feedback
+pipeline.wait feedback submitted 2 10
+pipeline.capture feedback {run}/n2.png
+pipeline.wait feedback captured 10
+# Fifteen more steps reach submission 17, past full scale.
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.step feedback
+pipeline.wait feedback submitted 17 10
+pipeline.capture feedback {run}/n17.png
+pipeline.wait feedback captured 10
+# Reset again: the initialization frame is submission 1 once more.
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.capture feedback {run}/n1-reset.png
+pipeline.wait feedback captured 10

@@ -20,6 +20,24 @@ internal static partial class Oracles {
     /// scaled by <c>2^(16 + GuardBitCount)</c>, so a sub-ULP envelope is expressible as an integer comparison.</summary>
     public const int GuardBitCount = 32;
 
+    /// <summary>States a transcendental subject's envelope: its raw, lifted to the guard scale, lies inside the
+    /// enclosure widened by the stated tolerance. A transcendental kernel has no correctly-rounded answer to be compared
+    /// against, so this is the strongest statement an oracle can make — and a strong one, because the enclosure's own
+    /// width is a handful of guard units while the tolerance is a fraction of one ULP.</summary>
+    /// <param name="name">The subject's description, quoted in the counterexample.</param>
+    /// <param name="subjectRaw">The subject's raw result.</param>
+    /// <param name="enclosure">The exact enclosure, at guard scale.</param>
+    /// <param name="toleranceUnits">The allowed excursion outside the enclosure, in guard units.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the raw lies within the envelope.</returns>
+    public static string? WithinEnvelope(string name, long subjectRaw, Enclosure enclosure, BigInteger toleranceUnits) {
+        var scaled = (new BigInteger(value: subjectRaw) << GuardBitCount);
+
+        if (scaled < (enclosure.Low - toleranceUnits)) { return $"{name} is {subjectRaw}, below the envelope [{enclosure.Low}, {enclosure.High}] at guard scale by more than the allowed {toleranceUnits} units"; }
+        if (scaled > (enclosure.High + toleranceUnits)) { return $"{name} is {subjectRaw}, above the envelope [{enclosure.Low}, {enclosure.High}] at guard scale by more than the allowed {toleranceUnits} units"; }
+
+        return null;
+    }
+
     // The working fraction bits the logarithm and exponential oracles carry.
     private const int SeriesBitCount = 160;
     // The working fraction bits the arctangent series carries. Smaller than SeriesBitCount because the arctangent runs
@@ -574,10 +592,12 @@ internal static partial class Oracles {
     // coefficient·√radicand ≤ bound, exactly: the signs are read off first so the single squaring never flips the
     // inequality. The radicand is non-negative by construction.
     private static bool SurdAtMost(BigInteger coefficient, BigInteger radicand, BigInteger bound) {
-        if (coefficient.Sign <= 0) { return (
+        if (coefficient.Sign <= 0) {
+            return (
             (bound.Sign >= 0) ||
             (((coefficient * coefficient) * radicand) >= (bound * bound))
-        ); }
+        );
+        }
 
         return (
             (bound.Sign > 0) &&

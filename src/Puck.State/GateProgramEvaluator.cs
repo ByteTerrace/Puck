@@ -29,7 +29,6 @@ public static class GateProgramEvaluator {
         top = start;
         stack[top++] = result;
     }
-
     /// <summary>
     /// Inverts the top value on <paramref name="stack"/>.
     /// </summary>

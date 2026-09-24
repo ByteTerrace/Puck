@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -19,9 +20,9 @@ namespace Puck.World.Tests;
 /// its own (it starts with neither — seats seed Drive over their OWN body index only).
 /// </summary>
 public sealed class AuthorityAdministrationLawTests {
-    private static bool GrantAndObserveHeld(WorldFixture fixture, WorldPrincipal actor, WorldPrincipal recipient, GrantSubject subject) {
+    private static bool GrantAndObserveHeld(WorldFixture fixture, Principal actor, Principal recipient, GrantSubject subject) {
         var grant = new WorldGrant(
-            Principal: recipient,
+            Grantee: recipient,
             Capability: WorldCapability.Drive,
             Subject: subject,
             Exclusive: false
@@ -43,8 +44,8 @@ public sealed class AuthorityAdministrationLawTests {
     public void SeatAdministersOnlyItsOwnBody_OtherBodyRefused_OwnBodySucceeds() {
         using var fixture = Fixtures.FreshServer();
 
-        var actor = WorldPrincipal.Seat(slot: 1);
-        var recipient = WorldPrincipal.Seat(slot: 2);
+        var actor = Principal.Seat(slot: 1);
+        var recipient = Principal.Seat(slot: 2);
         // The other actor's own body — Seat(1) administering it is exactly the cross-body laundering case; the
         // control substitutes the actor's OWN body (index 1), the one subject IsOwnSeatBody admits for a Seat actor.
         var otherBody = GrantSubject.Body(index: 0);

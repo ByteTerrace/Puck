@@ -9,7 +9,6 @@ public sealed partial class ArenaSearch {
         ? job.Root
         : job.Levels[(p - 1)]
     );
-
     // One step's worth of iterative-deepening negamax over the job's own explicit ply stack: the recursion below the
     // root runs on that stack rather than the call stack, so a step boundary can suspend it anywhere, a chance ply
     // included. The root ply never prunes and never skips a candidate, so an unscored job's root outputs are the
@@ -408,7 +407,7 @@ public sealed partial class ArenaSearch {
                 !hasScore ||
                 (job.PassDepth >= plan.Depth)
             ) {
-                if (plan.Method == SearchMethod.Tree) {
+                if (plan.Method == SearchMethod.MonteCarlo) {
                     StartTree(job: job);
                 } else {
                     job.Running = false;

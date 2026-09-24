@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Abstractions.Machines;
+using Puck.Assets;
 using Puck.Storage;
 
 namespace Puck.World.Server;
@@ -34,11 +35,6 @@ public sealed partial class WorldAuthorityBlobStore {
             candidate: target,
             previous: source,
             reason: out reason
-        ) ||
-            !WorldReleaseCompatibility.TryRequireMetadataCoordinator(
-            reason: out reason,
-            source: source,
-            target: target
         )
         ) {
             return WorldAuthorityStoreOutcome.Failed(detail: reason);
@@ -135,7 +131,7 @@ public sealed partial class WorldAuthorityBlobStore {
         var receipt = new WorldAuthorityOperationReceipt(
             operationId,
             "world.release.metadata",
-            WorldAuthorityRecoveryRootCodec.ComputePin(bytes: Encoding.UTF8.GetBytes(s: $"{source.Identity}\n{target.Identity}\n{recoveryPin}")),
+            ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"{source.Identity}\n{target.Identity}\n{recoveryPin}")).ToString(),
             "release.metadata.applied",
             true,
             checked((protectedRoot.Root.Sequence + 1)),
@@ -285,10 +281,12 @@ public sealed partial class WorldAuthorityBlobStore {
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (write.Succeeded) { return WorldAuthorityStoreOutcome.Success(root: new(
+            if (write.Succeeded) {
+                return WorldAuthorityStoreOutcome.Success(root: new(
                 Root: next,
                 VersionToken: (write.VersionToken ?? string.Empty)
-            )); }
+            ));
+            }
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "authority root moved before release publication; no state was replaced");
         } catch (Exception error) when ((error is not OperationCanceledException)) {
             return await ReconcileAsync(

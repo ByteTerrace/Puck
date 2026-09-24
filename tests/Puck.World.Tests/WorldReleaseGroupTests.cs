@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.Commands;
@@ -13,20 +14,11 @@ namespace Puck.World.Tests;
 public sealed class WorldReleaseGroupTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
 
-    private static async Task PumpAsync(WorldSiloHost host, Task operation) {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 20));
-        while (!operation.IsCompleted) {
-            host.DrainActivationMailbox();
-            await Task.Delay(
-                1,
-                deadline.Token
-            );
-        }
-        await operation;
-        host.DrainActivationMailbox();
-    }
+    private static Task PumpAsync(WorldSiloHost host, Task operation) => WorldSiloHost.PumpActivationMailboxesAsync(
+        cancellationToken: TestContext.Current.CancellationToken,
+        hosts: [host],
+        operation: operation
+    );
 
     [Fact]
     public void FenceCensusRejectsUnownedAndDuplicateWorlds() {
@@ -328,7 +320,7 @@ public sealed class WorldReleaseGroupTests {
     }
     [Fact]
     public async Task ManagedHostKeepsCandidatePrivateUntilExplicitGroupPublication() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var keyFile = directory.WriteBytes(
@@ -479,7 +471,7 @@ public sealed class WorldReleaseGroupTests {
     }
     [Fact]
     public async Task ManagedHostResumesCommittedTargetWithFreshFenceClaim() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var keyFile = directory.WriteBytes(

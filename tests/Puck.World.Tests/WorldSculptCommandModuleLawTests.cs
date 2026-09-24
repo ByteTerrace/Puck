@@ -89,11 +89,11 @@ public sealed class WorldSculptCommandModuleLawTests {
 
         public List<(WorldMutation Mutation, bool Applied)> Outcomes { get; } = [];
         public WorldServer Server => m_row.Server;
-        public List<(WorldMutation Mutation, WorldPrincipal Principal)> Submitted { get; } = [];
+        public List<(WorldMutation Mutation, Principal Principal)> Submitted { get; } = [];
 
         public void Dispose() => m_row.Dispose();
         public void Step() => m_row.Server.Advance(stepTicks: Fixtures.StepTicks);
-        public CommandResult Submit(CommandPrincipal principal, string line) {
+        public CommandResult Submit(Principal principal, string line) {
             var result = CommandResult.None;
 
             using var session = m_source.CreateSession(
@@ -108,7 +108,7 @@ public sealed class WorldSculptCommandModuleLawTests {
         }
     }
 
-    private static bool SculptLands(Harness harness, CommandPrincipal principal) {
+    private static bool SculptLands(Harness harness, Principal principal) {
         harness.Submitted.Clear();
         harness.Outcomes.Clear();
 
@@ -143,7 +143,7 @@ public sealed class WorldSculptCommandModuleLawTests {
 
         var result = harness.Submit(
             line: $"creation.sculpt {FaultingSculpt.SculptName}",
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         Assert.True(
@@ -170,7 +170,7 @@ public sealed class WorldSculptCommandModuleLawTests {
 
         var edit = harness.Submit(
             line: "world.row.set render farDistance 32",
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         Assert.False(
@@ -181,7 +181,7 @@ public sealed class WorldSculptCommandModuleLawTests {
 
         var collided = harness.Submit(
             line: $"creation.sculpt {FarDistanceSculpt.SculptName}",
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         Assert.True(
@@ -204,7 +204,7 @@ public sealed class WorldSculptCommandModuleLawTests {
 
         var landed = harness.Submit(
             line: $"creation.sculpt {FarDistanceSculpt.SculptName}",
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         Assert.False(
@@ -224,7 +224,7 @@ public sealed class WorldSculptCommandModuleLawTests {
     [Fact]
     public void SeatSculptCarriesTheSeatPrincipalAndApplies() {
         using var harness = new Harness();
-        var seat = CommandPrincipal.Seat(slot: 1);
+        var seat = Principal.Seat(slot: 1);
 
         var result = harness.Submit(
             line: $"creation.sculpt {FarDistanceSculpt.SculptName}",
@@ -241,7 +241,7 @@ public sealed class WorldSculptCommandModuleLawTests {
             comparisonType: StringComparison.Ordinal
         );
         Assert.Contains(
-            expectedSubstring: $"render set submitted as {WorldPrincipal.Seat(slot: 1).Describe()}",
+            expectedSubstring: $"render set submitted as {Principal.Seat(slot: 1).Describe()}",
             actualString: result.Output,
             comparisonType: StringComparison.Ordinal
         );
@@ -250,11 +250,11 @@ public sealed class WorldSculptCommandModuleLawTests {
 
         Assert.IsType<WorldMutation.SetRenderDefaults>(@object: submitted.Mutation);
         Assert.Equal(
-            expected: WorldPrincipal.Seat(slot: 1),
+            expected: Principal.Seat(slot: 1),
             actual: submitted.Mutation.Principal
         );
         Assert.Equal(
-            expected: WorldPrincipal.Seat(slot: 1),
+            expected: Principal.Seat(slot: 1),
             actual: submitted.Principal
         );
 
@@ -270,16 +270,16 @@ public sealed class WorldSculptCommandModuleLawTests {
     [Fact]
     public void SeatSculptIsRefusedWithoutMutateOverTheSection_ConsoleControlLands() {
         using var harness = new Harness();
-        var seat = CommandPrincipal.Seat(slot: 1);
+        var seat = Principal.Seat(slot: 1);
         var hold = new WorldGrant(
             Capability: WorldCapability.Mutate,
             Exclusive: false,
-            Principal: WorldPrincipal.Seat(slot: 1),
+            Grantee: Principal.Seat(slot: 1),
             Subject: GrantSubject.Section(section: WorldSection.Render)
         );
 
         harness.Server.Revoke(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: hold
         );
 
@@ -291,7 +291,7 @@ public sealed class WorldSculptCommandModuleLawTests {
             ),
             controlOutcome: () => SculptLands(
                 harness: harness,
-                principal: CommandPrincipal.Console
+                principal: Principal.Console
             )
         );
     }
@@ -302,7 +302,7 @@ public sealed class WorldSculptCommandModuleLawTests {
 
         var result = harness.Submit(
             line: "creation.sculpt not-a-real-sculpt",
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         Assert.True(

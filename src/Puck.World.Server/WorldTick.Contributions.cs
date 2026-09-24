@@ -1,50 +1,10 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // Whether any surviving row still names `prototypeId` — the pre-check the retraction runs before submitting a
-    // RemoveCreation, so a shared creation is left alone instead of driving a loud refusal the sweep would repeat
-    // every tick. RemoveCreation's own compose arm re-checks placements; looks are covered by whole-document
-    // revalidation, and are checked here for the same pre-filter reason.
-    private static bool IsCreationReferenced(WorldDefinition definition, string prototypeId) {
-        foreach (var placement in definition.Placements) {
-            if (string.Equals(
-                a: placement.PrototypeId,
-                b: prototypeId,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-
-            if (
-                (placement.Contribution is { } contribution) &&
-                string.Equals(
-                a: contribution.SlotCreationId,
-                b: prototypeId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return true;
-            }
-        }
-
-        foreach (var look in definition.Looks) {
-            if (
-                (look.Source is WorldLookSource.Creation creationLook) &&
-                string.Equals(
-                a: creationLook.PrototypeId.Value,
-                b: prototypeId,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    // Re-stamps one slot's server-owned half through the ordinary pipeline under WorldPrincipal.World — the same
+    // Re-stamps one slot's server-owned half through the ordinary pipeline under Principal.World — the same
     // structural-exemption door a rule effect's own writes use, so the arm/disarm is journalled and undoable.
     private void StampContribution(WorldPlacement placement, WorldPlacementContribution contribution, ulong tick) {
         _ = Host.TryApplyMutation(
@@ -52,7 +12,7 @@ public sealed partial class WorldTick {
             correlationId: 0,
             mutation: new WorldMutation.UpsertPlacement(
                 Placement: (placement with { Contribution = contribution }),
-                Principal: WorldPrincipal.World
+                Principal: Principal.World
             ),
             preMetered: false,
             tick: tick,
@@ -76,7 +36,7 @@ public sealed partial class WorldTick {
             // deadline promises is an explicit re-arm at the next tick: this tick's own pass is already past it,
             // which is what keeps the retry from spinning inside the dequeue loop.
             m_tenureDeadlines.Add(
-                dueTick: unchecked(((long)tick) + 1L),
+                dueTick: unchecked((((long)tick) + 1L)),
                 token: placement.Id
             );
 
@@ -101,7 +61,7 @@ public sealed partial class WorldTick {
                     PrototypeId = contribution.SlotCreationId,
                     Contribution = (contribution with { Contributor = null, RetractDeadlineTick = null }),
                 }),
-                Principal: WorldPrincipal.World
+                Principal: Principal.World
             ),
             preMetered: false,
             tick: tick,
@@ -117,17 +77,12 @@ public sealed partial class WorldTick {
             );
         }
 
-        if (
-            string.Equals(
-            a: retired,
-            b: contribution.SlotCreationId,
-            comparisonType: StringComparison.Ordinal
-        ) ||
-            IsCreationReferenced(
-            definition: Host.Document.Definition,
-            prototypeId: retired
-        )
-        ) {
+        // A creation some surviving row still names stays: its removal would be refused, and the stamp this sweep just
+        // cleared would not bring it back to retry.
+        if (WorldDefinitionRows.FindCreationReference(
+            creationId: retired,
+            definition: Host.Document.Definition
+        ) is not null) {
             return;
         }
 
@@ -136,13 +91,14 @@ public sealed partial class WorldTick {
             correlationId: 0,
             mutation: new WorldMutation.RemoveCreation(
                 Id: retired,
-                Principal: WorldPrincipal.World
+                Principal: Principal.World
             ),
             preMetered: false,
             tick: tick,
             engineTick: CompletedEngineTicks
         );
     }
+
     // Presence-tenure slots, indexed by their watched link, rebuilt only when the document itself has changed since
     // the last rebuild (every mutation swaps the live definition for a new instance — this project never mutates a
     // document in place — so a reference compare is an exact "did anything change" test). m_tenureLinkDropped is the

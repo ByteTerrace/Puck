@@ -12,5 +12,6 @@ public interface IVulkanInstanceFactory {
     /// <param name="displayKind">The native display kind, which selects the surface extension to enable.</param>
     /// <param name="enableValidation">Whether to enable the Vulkan validation layers.</param>
     /// <returns>A new, owning <see cref="VulkanInstance"/>.</returns>
+    /// <exception cref="GpuDeviceUnavailableException">The host has no Vulkan loader, or instance creation failed (no installable client driver).</exception>
     VulkanInstance Create(string applicationName, NativeDisplayKind displayKind, bool enableValidation);
 }

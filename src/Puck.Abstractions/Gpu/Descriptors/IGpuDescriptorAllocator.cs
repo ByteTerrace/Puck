@@ -6,8 +6,8 @@ namespace Puck.Abstractions.Gpu;
 public interface IGpuDescriptorAllocator {
     /// <summary>Allocates a single descriptor set of the given layout from a pool.</summary>
     nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle);
-    /// <summary>Creates a descriptor pool for combined image samplers, storage buffers, storage images, and/or
-    /// acceleration structures.</summary>
+    /// <summary>Creates a descriptor pool for combined image samplers, storage buffers, and/or storage
+    /// images.</summary>
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="sizes">The per-descriptor-kind capacity the pool must provide, DERIVED from the binding lists
     /// of the sets it will back (see <see cref="GpuDescriptorPoolSizes.ForSets"/>) rather than hand-tallied.</param>
@@ -35,13 +35,17 @@ public interface IGpuDescriptorAllocator {
     void WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize);
     /// <summary>Writes a read-write storage buffer descriptor into a set (a Vulkan storage buffer, or a Direct3D 12 UAV).</summary>
     void WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize);
-    /// <summary>Writes a storage image descriptor into a set (the image bound for compute write and later sampling).</summary>
-    void WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle);
-    /// <summary>Writes a top-level acceleration structure descriptor into a set (ray-query only). The reference is
-    /// backend-defined: a Vulkan <c>VkAccelerationStructureKHR</c> handle, or a Direct3D 12 TLAS GPU virtual address.</summary>
+    /// <summary>Writes a raw (byte-address) buffer descriptor into a set: the view a <c>ByteAddressBuffer</c> or
+    /// <c>RWByteAddressBuffer</c> declaration reads. On Direct3D 12 it is a raw SRV, or a raw UAV when
+    /// <paramref name="writable"/>, over 4-byte words; a Vulkan storage buffer carries no view-side layout, so there it
+    /// is the ordinary storage-buffer write.</summary>
     /// <param name="deviceHandle">The native device handle.</param>
     /// <param name="descriptorSetHandle">The descriptor set to write into.</param>
     /// <param name="binding">The binding index within the set.</param>
-    /// <param name="accelerationStructureReference">The backend-defined TLAS reference (a handle, or a GPU virtual address).</param>
-    void WriteAccelerationStructure(nint deviceHandle, nint descriptorSetHandle, uint binding, nint accelerationStructureReference);
+    /// <param name="bufferHandle">The native buffer handle.</param>
+    /// <param name="bufferSize">The viewed size in bytes, a multiple of four.</param>
+    /// <param name="writable">Whether the binding is read-write (a UAV on Direct3D 12) rather than read-only (an SRV).</param>
+    void WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable);
+    /// <summary>Writes a storage image descriptor into a set (the image bound for compute write and later sampling).</summary>
+    void WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle);
 }

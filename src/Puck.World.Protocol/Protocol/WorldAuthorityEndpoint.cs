@@ -59,12 +59,19 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <summary>The engine-tick coordinate of the endpoint's last delivered snapshot, the time its delivered
     /// definition's advancing state is read as of.</summary>
     public ulong EngineTick => m_mirror.EngineTick;
+    /// <summary>The honest presentation fraction through the endpoint's currently delivered snapshot interval.</summary>
+    public float InterpolationAlpha => m_mirror.InterpolationAlpha;
     /// <summary>The endpoint's next authoritative input coordinate.</summary>
     public ulong NextInputTick => m_nextInputTick();
     /// <summary>The endpoint's ordinary submission door.</summary>
     public IServerLink Submissions { get; }
 
     public void Dispose() => m_observationLease.Dispose();
+    /// <summary>Brings the state mirror over this authority's delivered rows up to its latest delivery and returns
+    /// it: the one path presentation reads this authority's state through (see
+    /// <see cref="WorldSessionMirror.FollowState"/>).</summary>
+    /// <returns>The authority's state mirror.</returns>
+    public WorldStateMirror FollowState() => m_mirror.FollowState();
     /// <summary>Attaches an ordinary observation sink.</summary>
     public IDisposable Observe(IClientSink sink) => m_observe(sink);
     /// <summary>Atomically seeds a newly discovered committed route before publishing its new seat epoch.</summary>

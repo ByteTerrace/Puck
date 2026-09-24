@@ -7,8 +7,8 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Round-trip laws for <see cref="WorldFrameSource"/> — the frame-producing sub-vocabulary of
-/// <see cref="WorldScreenSource"/> (<see cref="WorldScreenSource.Camera"/>/<see cref="WorldScreenSource.View"/>/
-/// <see cref="WorldScreenSource.Probe"/>/<see cref="WorldScreenSource.Capture"/>) a probe socket plugs into.</summary>
+/// <see cref="WorldScreenSource"/> (<see cref="WorldScreenSource.Producer"/>/<see cref="WorldScreenSource.View"/>/
+/// <see cref="WorldScreenSource.Probe"/>) a probe socket plugs into.</summary>
 public sealed class WorldFrameSourceSerializationTests {
     private static T RoundTrip<T>(T value, JsonTypeInfo<T> typeInfo) {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(
@@ -22,84 +22,41 @@ public sealed class WorldFrameSourceSerializationTests {
         )!;
     }
 
-    [Fact]
-    public void ACameraFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
-        var source = new WorldScreenSource.Camera(
-            Profile: WorldFeedProfile.Default,
-            Sensor: WorldCameraSensor.Infrared
-        );
-
+    // Every frame-source arm, including a camera producer's optional seat and a capture producer's absent monitor,
+    // round-trips through the frame-source accessor to an equal record of the same arm.
+    public static TheoryData<string> Sources() => new(values: ["camera", "camera-seat", "capture", "probe", "view"]);
+    [MemberData(memberName: nameof(Sources))]
+    [Theory]
+    public void EveryFrameSourceRoundTripsThroughTheFrameSourceAccessor(string arm) {
+        WorldFrameSource source = arm switch {
+            "camera" => WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(
+                Profile: WorldFeedProfile.Default,
+                Sensor: WorldCameraSensor.Infrared
+            )),
+            "camera-seat" => WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(
+                Sensor: WorldCameraSensor.Color,
+                Seat: 2
+            )),
+            "capture" => WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CaptureId, settings: new WorldCaptureSettings(
+                WindowTitle: "OBS",
+                Profile: WorldFeedProfile.Default,
+                MonitorIndex: null
+            )),
+            "probe" => new WorldScreenSource.Probe(Id: "faerie"),
+            _ => new WorldScreenSource.View(CameraName: "gallery"),
+        };
         var roundTripped = RoundTrip(
             typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: ((WorldFrameSource)source)
+            value: source
         );
 
-        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped);
-
-        Assert.Equal(
-            expected: WorldCameraSensor.Infrared,
-            actual: camera.Sensor
+        Assert.IsType(
+            expectedType: source.GetType(),
+            @object: roundTripped
         );
         Assert.Equal(
-            expected: WorldFeedProfile.Default,
-            actual: camera.Profile
-        );
-        Assert.Null(@object: camera.Seat);
-    }
-    [Fact]
-    public void ACameraFrameSourceWithASeatRoundTripsThroughTheFrameSourceAccessor() {
-        var source = new WorldScreenSource.Camera(
-            Sensor: WorldCameraSensor.Color,
-            Seat: 2
-        );
-
-        var roundTripped = RoundTrip(
-            typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: ((WorldFrameSource)source)
-        );
-
-        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped);
-
-        Assert.Equal(
-            expected: 2,
-            actual: camera.Seat
-        );
-    }
-    [Fact]
-    public void ACaptureFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
-        var source = new WorldScreenSource.Capture(
-            WindowTitle: "OBS",
-            Profile: WorldFeedProfile.Default,
-            MonitorIndex: null
-        );
-
-        var roundTripped = RoundTrip(
-            typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: ((WorldFrameSource)source)
-        );
-
-        var capture = Assert.IsType<WorldScreenSource.Capture>(@object: roundTripped);
-
-        Assert.Equal(
-            expected: "OBS",
-            actual: capture.WindowTitle
-        );
-        Assert.Null(@object: capture.MonitorIndex);
-    }
-    [Fact]
-    public void AProbeFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
-        var source = new WorldScreenSource.Probe(Id: "faerie");
-
-        var roundTripped = RoundTrip(
-            typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: ((WorldFrameSource)source)
-        );
-
-        var probe = Assert.IsType<WorldScreenSource.Probe>(@object: roundTripped);
-
-        Assert.Equal(
-            expected: "faerie",
-            actual: probe.Id
+            actual: roundTripped,
+            expected: source
         );
     }
     // A screen row's own Source is typed WorldScreenSource, the wider union — this proves the narrower
@@ -127,10 +84,10 @@ public sealed class WorldFrameSourceSerializationTests {
             HalfHeight: 1f,
             HalfDepth: 0.1f,
             Round: 0f,
-            Source: new WorldScreenSource.Camera(
+            Source: WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(
                 Profile: WorldFeedProfile.Default,
                 Sensor: WorldCameraSensor.Color
-            ),
+            )),
             Route: WorldScreenRoute.Passive
         );
 
@@ -144,27 +101,14 @@ public sealed class WorldFrameSourceSerializationTests {
             actual: roundTripped.Index
         );
 
-        var camera = Assert.IsType<WorldScreenSource.Camera>(@object: roundTripped.Source);
+        Assert.True(condition: WorldImageProducerSettings.TryCamera(
+            camera: out var camera,
+            source: Assert.IsType<WorldScreenSource.Producer>(@object: roundTripped.Source)
+        ));
 
         Assert.Equal(
             expected: WorldCameraSensor.Color,
             actual: camera.Sensor
-        );
-    }
-    [Fact]
-    public void AViewFrameSourceRoundTripsThroughTheFrameSourceAccessor() {
-        var source = new WorldScreenSource.View(CameraName: "gallery");
-
-        var roundTripped = RoundTrip(
-            typeInfo: WorldJsonContext.Default.WorldFrameSource,
-            value: ((WorldFrameSource)source)
-        );
-
-        var view = Assert.IsType<WorldScreenSource.View>(@object: roundTripped);
-
-        Assert.Equal(
-            expected: "gallery",
-            actual: view.CameraName
         );
     }
 }

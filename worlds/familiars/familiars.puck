@@ -1,0 +1,551 @@
+// Familiars: tame, befriend and catch wild familiars, and fight beside one of them in real time. This world plays the
+// default ruleset (seasons.puck) for one player, through the orders rules.puck documents.
+
+schema: "puck.world.definition.v1"
+documentId: "familiars"
+
+import "seasons.puck"
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "all"
+  }
+]
+
+use seasons()
+
+// A chart cell is attacker * 13 + defender, the elements numbered Root 0, Rain 1, Swarm 2, Dune 3, Tide 4, Blaze 5,
+// Husk 6, Mire 7, Gale 8, Ice 9, Snow 10, Aurora 11 and none 12.
+test "the chart is the season ring and the form triangle, with four immunities" {
+  when {
+    ticks 1
+  }
+  expect {
+    famChart[0] == 2
+    famChart[1] == 8
+    famChart[13] == 2
+    famChart[3] == 2
+    famChart[9] == 8
+    famChart[117] == 0
+    famChart[48] == 8
+    famChart[120] == 8
+    famChart[57] == 8
+    famChart[69] == 0
+    famChart[5] == 4
+    famChart[161] == 4
+  }
+}
+
+// The fights below put a Tidefin (species 4) in the player's slot 2 and a wild Emberfox (species 5) in slot 5. Splash
+// on the Emberfox: 12 power * 12 / 10 guard = 14, x2 for Tide on Blaze = 28, and half again for a Tide move from a Tide
+// familiar = 42. The Emberfox turns on the Tidefin, whose Singe cannot touch Tide.
+test "a strong hit lands double and half again for its own element, and an immune one lands nothing" {
+  given {
+    famRole[2] = 3
+    famSpecies[2] = 4
+    famLoyalty[2] = 50
+    famStableCount = 2
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 5
+    seat1: world.state.cell.set famOrder target 2
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder verb 2
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 10
+  }
+  expect {
+    famOrder[result] == 1
+    famActive == 2
+    famHealth[5] == 158
+    famTarget[5] == 2
+    famHealth[2] == 220
+    famLastHit[attacker] == 5
+    famLastHit[factor] == 0
+    famLastHit[damage] == 0
+  }
+}
+
+// Undertow: 20 * 12 / 10 = 24, x2 = 48, half again = 72, and a strong Stream move stuns. The Tidefin's Splash follows
+// on the next tick (42), and the stunned Emberfox does not hit back.
+test "a strong stream special stuns" {
+  given {
+    famRole[2] = 3
+    famSpecies[2] = 4
+    famLoyalty[2] = 50
+    famStableCount = 2
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 5
+    seat1: world.state.cell.set famOrder target 2
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder verb 3
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 10
+  }
+  expect {
+    famHealth[5] == 86
+    famStatus[5] == 2
+    famLastHit[attacker] == 2
+    famHealth[2] == 220
+  }
+}
+
+test "a move in season hits a quarter harder" {
+  given {
+    famSeason = 1
+    famRole[2] = 3
+    famSpecies[2] = 4
+    famLoyalty[2] = 50
+    famStableCount = 2
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 5
+    seat1: world.state.cell.set famOrder target 2
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder verb 2
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 10
+  }
+  expect {
+    famHealth[5] == 148
+  }
+}
+
+test "the seasons turn on the clock" {
+  given {
+    famSeasonEnds = 10
+  }
+  when {
+    ticks 20
+  }
+  expect {
+    famSeason == 1
+    famSeasonEnds == 5410
+  }
+}
+
+// The player's strike: 10 * 10 / 10 = 10, neutral. The Emberfox turns on the player and Singes them for
+// 12 * 14 / 10 = 16, half again = 24. A second strike before the cooldown is refused.
+test "the player strikes, is struck back, and waits for the cooldown" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 1
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 5
+  }
+  expect {
+    famOrder[result] == -3
+    famHealth[5] == 190
+    famTarget[5] == 0
+    famHealth[0] == 176
+  }
+}
+
+test "the player cannot strike their own familiar" {
+  when {
+    seat1: world.state.cell.set famOrder verb 1
+    seat1: world.state.cell.set famOrder target 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == -2
+    famHealth[1] == 220
+  }
+}
+
+// A catch rate of 300 makes the chance at full health 300 * (3 * 220 - 2 * 220) / (3 * 220) = 100, so any roll
+// catches.
+test "a lure that cannot miss catches the familiar" {
+  given {
+    famSpeciesCatchRate[4] = 300
+    famRole[5] = 2
+    famSpecies[5] = 4
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 7
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 5
+  }
+  expect {
+    famCatch[result] == 1
+    famCatch[chance] == 100
+    famRole[5] == 3
+    famLoyalty[5] == 20
+    famBag[lures] == 4
+    famStableCount == 2
+    famWildCount == 0
+    famTally[caught] == 1
+  }
+}
+
+test "a familiar that is only tamed refuses the lure" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 7
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == -7
+    famBag[lures] == 5
+    famRole[5] == 2
+  }
+}
+
+test "a familiar at full health is not weak enough to tame" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 8
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == -10
+    famTame[active] == 0
+  }
+}
+
+// An Emberfox at 90 of 200 is under half health, and nothing hits the player during the four-second channel.
+test "taming a weakened familiar completes after the channel" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famHealth 5 90
+    ticks 1
+    seat1: world.state.cell.set famOrder verb 8
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 130
+  }
+  expect {
+    famOrder[result] == 1
+    famTame[result] == 1
+    famRole[5] == 3
+    famLoyalty[5] == 50
+    famStableCount == 2
+    famTally[tamed] == 1
+  }
+}
+
+// The same Emberfox, hostile to the player, Singes them while they channel, which breaks the tame.
+test "damage to the player breaks taming" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famTarget[5] = 0
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famHealth 5 90
+    ticks 1
+    seat1: world.state.cell.set famOrder verb 8
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 130
+  }
+  expect {
+    famTame[result] == -1
+    famRole[5] == 2
+    famTally[tamed] == 0
+  }
+}
+
+// A Snowhare (species 10) only befriends, and loves winter treats (season 3): 40 affection each, 100 to join.
+test "three loved treats befriend a shy familiar" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 10
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 9
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder arg 3
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == 1
+    famRole[5] == 3
+    famLoyalty[5] == 80
+    famTreats[3] == 0
+    famStableCount == 2
+    famTally[befriended] == 1
+  }
+}
+
+test "a treat the familiar does not love counts once" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 10
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 9
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder arg 0
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famAffection[5] == 20
+    famTreats[0] == 2
+    famRole[5] == 2
+  }
+}
+
+test "a hostile familiar will not take a treat" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 10
+    famTarget[5] = 0
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 9
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder arg 3
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == -11
+    famTreats[3] == 3
+  }
+}
+
+test "a treat raises the player's own familiar's loyalty" {
+  when {
+    seat1: world.state.cell.set famOrder verb 9
+    seat1: world.state.cell.set famOrder target 1
+    seat1: world.state.cell.set famOrder arg 0
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == 1
+    famLoyalty[1] == 55
+  }
+}
+
+test "a second summon waits for the swap" {
+  given {
+    famRole[2] = 3
+    famSpecies[2] = 4
+    famLoyalty[2] = 50
+    famStableCount = 2
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 5
+    seat1: world.state.cell.set famOrder target 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder target 2
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == -3
+    famActive == 1
+  }
+}
+
+test "a disloyal familiar disobeys" {
+  given {
+    famLoyalty[1] = 10
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 5
+    seat1: world.state.cell.set famOrder target 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder verb 2
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == -8
+    famTarget[1] == -1
+  }
+}
+
+// The Puddlepup starter faints (loyalty 50 - 10), steps back, and a tonic brings it back at half of 220.
+test "a fainted familiar loses loyalty and a tonic revives it" {
+  when {
+    seat1: world.state.cell.set famOrder verb 5
+    seat1: world.state.cell.set famOrder target 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famHealth 1 0
+    ticks 2
+    seat1: world.state.cell.set famOrder verb 10
+    seat1: world.state.cell.set famOrder target 1
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == 1
+    famActive == -1
+    famDown[1] == 0
+    famHealth[1] == 110
+    famLoyalty[1] == 40
+    famBag[tonics] == 2
+    famTally[fainted] == 1
+  }
+}
+
+// A last Splash defeats the Emberfox: its slot empties and the Tidefin that fought it gains loyalty.
+test "a defeated wild familiar frees its slot and rewards the familiar that fought it" {
+  given {
+    famRole[2] = 3
+    famSpecies[2] = 4
+    famLoyalty[2] = 50
+    famStableCount = 2
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famHealth 5 1
+    seat1: world.state.cell.set famOrder verb 5
+    seat1: world.state.cell.set famOrder target 2
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 1
+    seat1: world.state.cell.set famOrder verb 2
+    seat1: world.state.cell.set famOrder target 5
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 5
+  }
+  expect {
+    famRole[5] == 0
+    famWildCount == 0
+    famLoyalty[2] == 53
+    famTarget[2] == -1
+    famTally[defeated] == 1
+  }
+}
+
+// A wound takes a sixteenth of 180 (11) each second until it ends at tick 80: at ticks 30 and 60.
+test "a wound bleeds every second until it ends" {
+  given {
+    famRole[5] = 2
+    famSpecies[5] = 2
+    famWildCount = 1
+    famStatus[5] = 1
+    famStatusNext[5] = 30
+    famStatusUntil[5] = 80
+  }
+  when {
+    ticks 100
+  }
+  expect {
+    famHealth[5] == 158
+    famStatus[5] == 0
+  }
+}
+
+// The player's Tidefin steps back while an Emberfox is on it, so the Emberfox turns on the player.
+test "a wild familiar whose target leaves turns on the player" {
+  given {
+    famRole[2] = 3
+    famSpecies[2] = 4
+    famLoyalty[2] = 50
+    famStableCount = 2
+    famActive = 2
+    famRole[5] = 2
+    famSpecies[5] = 5
+    famTarget[5] = 2
+    famWildCount = 1
+  }
+  when {
+    seat1: world.state.cell.set famOrder verb 6
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famActive == -1
+    famTarget[5] == 0
+  }
+}
+
+test "foraging brings a wild familiar into the first free slot" {
+  when {
+    seat1: world.state.cell.set famOrder verb 12
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 5
+  }
+  expect {
+    famOrder[result] == 1
+    famForaging[slot] == 2
+    famRole[2] == 2
+    famSpecies[2] >= 0
+    famHealth[2] > 0
+    famHealth[2] == famMaxHealth[2]
+    famWildCount == 1
+  }
+}
+
+test "an order with no verb is refused" {
+  when {
+    seat1: world.state.cell.set famOrder verb 99
+    seat1: world.state.cell.set famOrder request 1 add
+    ticks 3
+  }
+  expect {
+    famOrder[result] == -1
+  }
+}

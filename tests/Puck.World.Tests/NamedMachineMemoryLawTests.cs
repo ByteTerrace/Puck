@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using System.Buffers.Binary;
 using Puck.Abstractions.Machines;
@@ -135,7 +136,7 @@ public sealed class NamedMachineMemoryLawTests {
         var replacement = fixture.Server.Definition.Machines[0] with { Configuration = Configuration(seed: 1) };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
-            WorldPrincipal.Console,
+            Principal.Console,
             replacement
         ));
         fixture.Step();
@@ -200,7 +201,7 @@ public sealed class NamedMachineMemoryLawTests {
         var declaration = fixture.Server.Definition.Machines[0] with { Memory = [binding with { Conversion = "truncate" }] };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
-            WorldPrincipal.Console,
+            Principal.Console,
             declaration
         ));
         fixture.Step();
@@ -307,7 +308,7 @@ public sealed class NamedMachineMemoryLawTests {
         };
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
-            WorldPrincipal.Console,
+            Principal.Console,
             declaration
         ));
         fixture.Step();

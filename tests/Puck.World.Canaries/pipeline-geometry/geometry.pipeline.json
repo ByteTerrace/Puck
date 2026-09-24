@@ -1,0 +1,91 @@
+{
+  "$schema": "puck.shader.pipeline.v1",
+  "name": "geometry",
+  "resources": [
+    { "name": "c0", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 32, "height": 32 } },
+    { "name": "c1", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }, "from": "c0" },
+    { "name": "d0", "kind": "Depth", "format": "D32Float", "dimensions": { "mode": "Absolute", "width": 32, "height": 32 } },
+    { "name": "d1", "kind": "Depth", "format": "D32Float", "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }, "from": "d0" },
+    { "name": "image", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 32, "height": 32 } },
+    { "name": "stripes", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 32, "height": 32 } },
+    { "name": "oriented", "kind": "Image", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "Absolute", "width": 32, "height": 32 } }
+  ],
+  "passes": [
+    {
+      "name": "near",
+      "source": "layers.hlsl",
+      "entryPoint": "ps",
+      "kind": "Geometry",
+      "outputs": [ { "name": "c0" }, { "name": "d0" } ],
+      "depthCompare": "Less",
+      "geometry": {
+        "vertexEntryPoint": "vs",
+        "strideBytes": 24,
+        "attributes": [
+          { "location": 0, "format": "R32G32B32Float", "offsetBytes": 0 },
+          { "location": 1, "format": "R32G32B32Float", "offsetBytes": 12 }
+        ],
+        "vertices": [
+          -1, -1, 0.25, 1, 0, 0,
+           0, -1, 0.25, 1, 0, 0,
+          -1,  1, 0.25, 1, 0, 0,
+           0,  1, 0.25, 1, 0, 0
+        ],
+        "indices": [ 3, 2, 1, 0, 1, 2 ],
+        "indexFormat": "UInt16"
+      }
+    },
+    {
+      "name": "far",
+      "source": "layers.hlsl",
+      "entryPoint": "ps",
+      "kind": "Geometry",
+      "outputs": [ { "name": "c1" }, { "name": "d1" } ],
+      "depthCompare": "Less",
+      "geometry": {
+        "vertexEntryPoint": "vs",
+        "strideBytes": 24,
+        "attributes": [
+          { "location": 0, "format": "R32G32B32Float", "offsetBytes": 0 },
+          { "location": 1, "format": "R32G32B32Float", "offsetBytes": 12 }
+        ],
+        "vertices": [
+          -1,   -1, 0.75, 0, 0, 1,
+           0.5, -1, 0.75, 0, 0, 1,
+          -1,    1, 0.75, 0, 0, 1,
+           0.5,  1, 0.75, 0, 0, 1,
+           0,    0, 0.5,  0, 1, 0,
+           1,    0, 0.5,  0, 1, 0,
+           0,    1, 0.5,  0, 1, 0,
+           1,    1, 0.5,  0, 1, 0
+        ],
+        "indices": [ 7, 6, 5, 4, 5, 6, 3, 2, 1, 0, 1, 2 ],
+        "indexFormat": "UInt32"
+      }
+    },
+    {
+      "name": "present",
+      "source": "present.hlsl",
+      "entryPoint": "main",
+      "kind": "Fullscreen",
+      "inputs": [ { "name": "c1", "binding": 0 } ],
+      "outputs": [ { "name": "image" } ]
+    },
+    {
+      "name": "stripes",
+      "source": "stripes.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [ { "name": "stripes", "binding": 0 } ]
+    },
+    {
+      "name": "orient",
+      "source": "present.hlsl",
+      "entryPoint": "main",
+      "kind": "Fullscreen",
+      "inputs": [ { "name": "stripes", "binding": 0 } ],
+      "outputs": [ { "name": "oriented" } ]
+    }
+  ],
+  "outputs": ["image", "oriented"]
+}

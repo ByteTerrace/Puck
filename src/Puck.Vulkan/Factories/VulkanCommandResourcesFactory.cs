@@ -34,7 +34,7 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
 
         var poolRequest = new VulkanCommandPoolCreateRequest(
-            DeviceHandle: logicalDevice.Handle,
+            Device: logicalDevice.Commands,
             QueueFamilyIndex: logicalDevice.GraphicsQueue.FamilyIndex
         );
         var createPoolResult = m_commandResourcesApi.CreateCommandPool(
@@ -56,7 +56,7 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
             var allocateRequest = new VulkanCommandBufferAllocateRequest(
                 CommandBufferCount: commandBufferCount,
                 CommandPoolHandle: commandPoolHandle,
-                DeviceHandle: logicalDevice.Handle
+                Device: logicalDevice.Commands
             );
             var allocateResult = m_commandResourcesApi.AllocateCommandBuffers(
                 buffer: buffer,
@@ -83,12 +83,12 @@ public sealed class VulkanCommandResourcesFactory : IVulkanCommandResourcesFacto
                 commandBufferHandles: commandBufferHandles,
                 commandPoolHandle: commandPoolHandle,
                 commandResourcesApi: m_commandResourcesApi,
-                deviceHandle: logicalDevice.Handle
+                device: logicalDevice.Commands
             );
         } catch {
             m_commandResourcesApi.DestroyCommandPool(
                 commandPoolHandle: commandPoolHandle,
-                deviceHandle: logicalDevice.Handle
+                device: logicalDevice.Commands
             );
             throw;
         } finally {

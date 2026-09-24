@@ -84,7 +84,7 @@ outside this contract and takes the references as written.
 
 - Start with a profile, benchmark, allocation trace, or demonstrated hot path.
 - **Three measurement harnesses exist: `Puck.Maths` kernels, the World server
-  tick path, and real-process startup.** `puck bench` is the BenchmarkDotNet microscope for Maths —
+  tick path, and real-process startup.** `puck bench kernels` is the BenchmarkDotNet microscope for Maths —
   disassembly, allocation columns, percentiles — and `puck bench world` is a
   stopwatch lane over server construction, the idle tick, and a scripted
   Klondike deal. `puck bench startup` measures console readiness and rendered
@@ -92,9 +92,16 @@ outside this contract and takes the references as written.
   [`docs/reference/cli.md`](../../../docs/reference/cli.md),
   which also carries the measurement hygiene: numbers taken on a busy machine
   are garbage rather than merely pessimistic, and two runs disagreeing by more
-  than ~10% mean the machine was not quiet. The pass/fail counterpart is the law
-  suite's Bench tier in
-  [`tests/Puck.Maths.Tests/README.md`](../../../tests/Puck.Maths.Tests/README.md).
+  than ~10% mean the machine was not quiet. No law gates a timing: the law suite
+  states cost only as a deterministic count, such as an allocation meter reading.
+  The one managed-allocation meter is `Puck.Abstractions.Counting.AllocationWindow`:
+  `Least` takes the least of up to 16 windows of
+  `GC.GetAllocatedBytesForCurrentThread` and, when every window allocated,
+  throws naming the window, the GC mode, and the types the runtime's
+  `AllocationSampled` event sampled on that thread; `Measure` reads the same
+  least as a count for a ceiling, and `Total` counts one run of a body that
+  cannot repeat. Write allocation laws, stages and diagnostics with it rather
+  than reading the counter by hand.
   Outside those three, say which harness you built and why it measures the claim.
 - Prefer idiomatic code the .NET 10 JIT and libraries recognize.
 - Check the folklore section before preserving an old hand-optimization.

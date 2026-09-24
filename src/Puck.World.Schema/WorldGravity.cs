@@ -292,11 +292,11 @@ public readonly record struct FixedWorldGravity(
         }
 
         compiled.Sort(comparison: static (left, right) => {
-            var priority = left.Priority.CompareTo(value: right.Priority);
-
-            return ((priority != 0)
-                ? priority
-                : left.AuthoredIndex.CompareTo(value: right.AuthoredIndex)
+            return LexicographicOrder.Compare(
+                leftPrimary: left.Priority,
+                leftSecondary: left.AuthoredIndex,
+                rightPrimary: right.Priority,
+                rightSecondary: right.AuthoredIndex
             );
         });
 
@@ -494,11 +494,7 @@ public readonly record struct FixedWorldGravityArea(
 
                         var local = FixedVector3.FromVector3(value: box.HalfExtents);
 
-                        halfExtents = new FixedVector3(
-                            X: checked((local.X * scale)),
-                            Y: checked((local.Y * scale)),
-                            Z: checked((local.Z * scale))
-                        );
+                        halfExtents = checked((local * scale));
                         if (
                             (halfExtents.X <= FixedQ4816.Zero) ||
                             (halfExtents.Y <= FixedQ4816.Zero) ||

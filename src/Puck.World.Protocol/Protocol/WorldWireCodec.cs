@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Networking;
 
@@ -7,36 +8,46 @@ namespace Puck.World.Protocol;
 /// the live submission wire (<see cref="WorldSubmissionCodec"/>), the persisted <c>.puckreplay</c> tape
 /// (<c>Puck.World.WorldReplaySnapshot</c>), the authority checkpoint
 /// (<c>Puck.World.Server.WorldAuthorityCheckpointCodec</c>), and the federation frames
-/// (<c>Puck.World.Server.WorldFederationCodec</c>). Sibling to <see cref="WorldWireTags"/>, which pins the
-/// enum-to-byte tables these leaves cross on; this type pins the field order around them. Frozen: changing a layout
-/// here invalidates every saved tape, every checkpoint, and every in-flight envelope.</summary>
-/// <remarks>Each layout carries two overloads — one over <see cref="BinaryReader"/>/<see cref="BinaryWriter"/>,
-/// one over <see cref="WireReader"/>/<see cref="WireWriter"/> — because the framing around them differs. The fixed
-/// and long lanes are byte-identical across the pair: <see cref="WireWriter.WriteFixed"/> emits the same raw
-/// <see cref="long"/> lane <see cref="BinaryWriter.Write(long)"/> does. The two string forms are NOT: they share only
-/// the present flag, after which <see cref="BinaryWriter.Write(string)"/> emits a 7-bit-encoded length prefix while
-/// <see cref="WireWriter.WriteString"/> emits a u16 prefix, so a nullable string written by one overload is never read
-/// back by the other's reader. Decodes that can
-/// meet an undeclared byte are <c>Try</c>-shaped rather than throwing, and writers that can refuse write nothing
-/// before returning <see langword="false"/> — each codec raises its own refusal (a <c>WorldCodecRefusal</c> leaf
-/// failure on the wire, a tape exception on the tape, a <c>WireReader.Fail</c> narration on a wire frame) at the call
-/// site, so no caller inherits another's wording.</remarks>
+/// (<c>Puck.World.Server.WorldFederationCodec</c>). Every one of them reads and writes through
+/// <see cref="WireReader"/>/<see cref="WireWriter"/>. Sibling to <see cref="WorldWireTags"/>, which holds the
+/// enum-to-byte tables these leaves cross on; this type holds the field order around them.</summary>
+/// <remarks>A read never throws: an undeclared byte latches <see cref="WireRefusal.EnumValueUnknown"/> on the reader,
+/// naming the type and the value, and the caller learns of it at <see cref="WireReader.TryFinish"/>. A write that
+/// cannot represent its value writes nothing and returns <see langword="false"/>, so each codec raises its own
+/// host-bug exception (a <c>WorldCodecRefusal</c> leaf failure, a tape codec exception, an invalid-operation throw)
+/// in its own wording.</remarks>
 public static class WorldWireCodec {
-    /// <summary>Reads the whole channel vector: <see cref="ChannelLimits.MaxChannels"/> raw <see cref="FixedQ4816"/>
-    /// lanes, one per ordinal, unconditionally.</summary>
-    /// <param name="reader">The reader.</param>
-    /// <returns>The decoded intent.</returns>
-    public static PlayerIntent ReadIntent(BinaryReader reader) {
-        var channels = default(ChannelValues);
+    private static void Undeclared(ref WireReader reader, string type, byte wire) => reader.Fail(
+        detail: $"{type} wire value {wire} is not declared",
+        refusal: WireRefusal.EnumValueUnknown
+    );
+    // One tag byte through its WorldWireTags table; an undeclared byte latches the reader's refusal by type name.
+    private static T ReadTag<T>(ref WireReader reader, TryFromWire<T> fromWire) where T : struct, Enum {
+        var wire = reader.ReadByte();
 
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            channels[ordinal] = new FixedQ4816(Value: reader.ReadInt64());
+        if (!fromWire(
+            wire,
+            out var value
+        )) {
+            Undeclared(
+                reader: ref reader,
+                type: typeof(T).Name,
+                wire: wire
+            );
         }
 
-        return new PlayerIntent(Channels: channels);
+        return value;
     }
-    /// <summary>Reads the whole channel vector off a wire frame: <see cref="ChannelLimits.MaxChannels"/> raw
-    /// <see cref="FixedQ4816"/> lanes, one per ordinal, unconditionally.</summary>
+
+    /// <summary>Reads a <see cref="WorldCapability"/> through its <see cref="WorldWireTags"/> byte.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The capability; an undeclared byte latches a refusal.</returns>
+    public static WorldCapability ReadCapability(ref WireReader reader) => ReadTag<WorldCapability>(
+        fromWire: WorldWireTags.TryFromWire,
+        reader: ref reader
+    );
+    /// <summary>Reads the whole channel vector: <see cref="ChannelLimits.MaxChannels"/> raw <see cref="FixedQ4816"/>
+    /// lanes, one per ordinal, unconditionally.</summary>
     /// <param name="reader">The reader.</param>
     /// <returns>The decoded intent; every lane reads zero once a refusal has latched.</returns>
     public static PlayerIntent ReadIntent(ref WireReader reader) {
@@ -48,145 +59,171 @@ public static class WorldWireCodec {
 
         return new PlayerIntent(Channels: channels);
     }
-    /// <summary>Reads a present-flag-prefixed string.</summary>
-    /// <param name="reader">The reader.</param>
-    /// <returns>The string, or <see langword="null"/> when the present flag is clear.</returns>
-    public static string? ReadNullableString(BinaryReader reader) => (reader.ReadBoolean()
-        ? reader.ReadString()
-        : null
-    );
     /// <summary>Reads the intent-source union: one discriminant byte (<c>0</c> live, <c>1</c> idle, <c>2</c>
-    /// producer), followed by the producer name for <c>2</c>.</summary>
-    /// <param name="reader">The reader.</param>
-    /// <param name="source">The decoded source, on success.</param>
-    /// <param name="wire">The discriminant byte read, declared or not; the caller's refusal names it.</param>
-    /// <returns><see langword="true"/> when <paramref name="wire"/> names a declared source.</returns>
-    public static bool TryReadIntentSource(BinaryReader reader, out IntentSource source, out byte wire) {
-        wire = reader.ReadByte();
-
-        switch (wire) {
-            case 0: source = IntentSource.Live; return true;
-            case 1: source = IntentSource.Idle; return true;
-            case 2: source = IntentSource.Producer(name: reader.ReadString()); return true;
-            default: source = default; return false;
-        }
-    }
-    /// <summary>Reads the intent-source union off a wire frame: one discriminant byte (<c>0</c> live, <c>1</c> idle,
-    /// <c>2</c> producer), followed by the producer name for <c>2</c>. A producer name that reads back blank latches
-    /// the reader's own required-string refusal and yields <see cref="IntentSource.Live"/>, so an untrusted frame
-    /// never drives the closed union's own argument check.</summary>
+    /// producer), followed by the producer name for <c>2</c>. A producer name that reads back blank latches the
+    /// reader's own required-string refusal and yields <see cref="IntentSource.Live"/>, so an untrusted frame never
+    /// drives the closed union's own argument check.</summary>
     /// <param name="reader">The reader.</param>
     /// <param name="producerNameField">The field name the producer-name refusal narrates.</param>
-    /// <param name="source">The decoded source, on success.</param>
-    /// <param name="wire">The discriminant byte read, declared or not; the caller's refusal names it.</param>
-    /// <returns><see langword="true"/> when <paramref name="wire"/> names a declared source.</returns>
-    public static bool TryReadIntentSource(ref WireReader reader, string producerNameField, out IntentSource source, out byte wire) {
-        wire = reader.ReadByte();
+    /// <returns>The source; an undeclared discriminant latches a refusal and yields <see cref="IntentSource.Live"/>.</returns>
+    public static IntentSource ReadIntentSource(ref WireReader reader, string producerNameField = "intent source producer name") {
+        var wire = reader.ReadByte();
 
         switch (wire) {
-            case 0: source = IntentSource.Live; return true;
-            case 1: source = IntentSource.Idle; return true;
+            case 0: return IntentSource.Live;
+            case 1: return IntentSource.Idle;
             case 2: {
                     var name = reader.ReadRequiredString(field: producerNameField);
 
-                    source = (reader.Failed
+                    return (reader.Failed
                         ? IntentSource.Live
                         : IntentSource.Producer(name: name)
                     );
-
-                    return true;
                 }
-            default: source = default; return false;
+            default:
+                Undeclared(
+                    reader: ref reader,
+                    type: nameof(IntentSource),
+                    wire: wire
+                );
+
+                return IntentSource.Live;
         }
+    }
+    /// <summary>Reads one <see cref="IntentSubmission"/>: tick, entity index, intent, principal, held channels, and
+    /// the measured hold ticks.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The submission.</returns>
+    public static IntentSubmission ReadIntentSubmission(ref WireReader reader) {
+        var tick = reader.ReadUInt64();
+        var entityIndex = reader.ReadInt32();
+        var intent = ReadIntent(reader: ref reader);
+        var principal = ReadPrincipal(reader: ref reader);
+        var heldChannels = ReadIntent(reader: ref reader);
+        var measuredHoldTicks = reader.ReadInt32();
+
+        return new IntentSubmission(
+            EntityIndex: entityIndex,
+            HeldChannels: heldChannels,
+            Intent: intent,
+            MeasuredHoldTicks: measuredHoldTicks,
+            Principal: principal,
+            Tick: tick
+        );
     }
     /// <summary>Reads a principal: the <see cref="WorldWireTags"/> kind byte, <c>Index</c>, <c>Generation</c>, then a
-    /// present-flag-prefixed <c>Name</c>. On an undeclared kind byte only that byte is consumed.</summary>
-    /// <param name="reader">The reader.</param>
-    /// <param name="principal">The decoded principal, on success.</param>
-    /// <param name="kindWire">The kind byte read, declared or not; the caller's refusal names it.</param>
-    /// <returns><see langword="true"/> when <paramref name="kindWire"/> names a declared kind.</returns>
-    public static bool TryReadPrincipal(BinaryReader reader, out WorldPrincipal principal, out byte kindWire) {
-        kindWire = reader.ReadByte();
-
-        if (!WorldWireTags.TryFromWire(
-            value: out PrincipalKind kind,
-            wire: kindWire
-        )) {
-            principal = default;
-
-            return false;
-        }
-
-        principal = new WorldPrincipal(
-            Kind: kind,
-            Index: reader.ReadInt32(),
-            Generation: reader.ReadInt32(),
-            Name: ReadNullableString(reader: reader)
-        );
-
-        return true;
-    }
-    /// <summary>Reads a principal off a wire frame: the <see cref="WorldWireTags"/> kind byte, <c>Index</c>,
-    /// <c>Generation</c>, then a present-flag-prefixed <c>Name</c>. On an undeclared kind byte only that byte is
-    /// consumed.</summary>
+    /// present-flag-prefixed <c>Name</c>. On an undeclared kind byte only that byte is consumed and a refusal
+    /// latches.</summary>
     /// <param name="reader">The reader.</param>
     /// <param name="nameField">The field name the <c>Name</c> refusal narrates.</param>
-    /// <param name="principal">The decoded principal, on success.</param>
-    /// <param name="kindWire">The kind byte read, declared or not; the caller's refusal names it.</param>
-    /// <returns><see langword="true"/> when <paramref name="kindWire"/> names a declared kind.</returns>
-    public static bool TryReadPrincipal(ref WireReader reader, string nameField, out WorldPrincipal principal, out byte kindWire) {
-        kindWire = reader.ReadByte();
+    /// <returns>The principal, or <see langword="default"/> once a refusal has latched.</returns>
+    public static Principal ReadPrincipal(ref WireReader reader, string nameField = "principal name") {
+        var kindWire = reader.ReadByte();
 
         if (!WorldWireTags.TryFromWire(
             value: out PrincipalKind kind,
             wire: kindWire
         )) {
-            principal = default;
+            Undeclared(
+                reader: ref reader,
+                type: nameof(PrincipalKind),
+                wire: kindWire
+            );
 
-            return false;
+            return default;
         }
 
         var index = reader.ReadInt32();
         var generation = reader.ReadInt32();
         var name = reader.ReadNullableString(field: nameField);
 
-        principal = new WorldPrincipal(
+        return new Principal(
             Generation: generation,
             Index: index,
             Kind: kind,
             Name: name
         );
+    }
+    /// <summary>Reads a grantee: the <see cref="WorldWireTags"/> grantee-kind byte, then a principal
+    /// (<see cref="ReadPrincipal"/>) for an actor or the group id for a group.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The grantee, or <see langword="default"/> once a refusal has latched.</returns>
+    public static Grantee ReadGrantee(ref WireReader reader) {
+        var kind = ReadTag<GranteeKind>(
+            fromWire: WorldWireTags.TryFromWire,
+            reader: ref reader
+        );
+
+        return (kind switch {
+            GranteeKind.Group => Grantee.Group(id: reader.ReadString(field: "group id")),
+            _ => ReadPrincipal(reader: ref reader),
+        });
+    }
+    /// <summary>Reads a <see cref="WorldRebuildKind"/> through its <see cref="WorldWireTags"/> byte.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The rebuild kind; an undeclared byte latches a refusal.</returns>
+    public static WorldRebuildKind ReadRebuildKind(ref WireReader reader) => ReadTag<WorldRebuildKind>(
+        fromWire: WorldWireTags.TryFromWire,
+        reader: ref reader
+    );
+    /// <summary>Reads a <see cref="WorldSection"/> through its <see cref="WorldWireTags"/> byte.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The section; an undeclared byte latches a refusal.</returns>
+    public static WorldSection ReadSection(ref WireReader reader) => ReadTag<WorldSection>(
+        fromWire: WorldWireTags.TryFromWire,
+        reader: ref reader
+    );
+    /// <summary>Reads a <see cref="SnapPoseMode"/> through its <see cref="WorldWireTags"/> byte.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The snap mode; an undeclared byte latches a refusal.</returns>
+    public static SnapPoseMode ReadSnapPoseMode(ref WireReader reader) => ReadTag<SnapPoseMode>(
+        fromWire: WorldWireTags.TryFromWire,
+        reader: ref reader
+    );
+    /// <summary>Reads a grant subject: the <see cref="WorldWireTags"/> kind byte, then the value — a
+    /// <see cref="WorldSection"/> byte for a section subject, a 32-bit integer otherwise — then the present-flag-prefixed
+    /// id.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <param name="idField">The field name the id refusal narrates.</param>
+    /// <returns>The subject; an undeclared byte latches a refusal.</returns>
+    public static GrantSubject ReadSubject(ref WireReader reader, string idField = "subject id") {
+        var kind = ReadTag<GrantSubjectKind>(
+            fromWire: WorldWireTags.TryFromWire,
+            reader: ref reader
+        );
+        var value = ((kind == GrantSubjectKind.Section)
+            ? ((int)ReadSection(reader: ref reader))
+            : reader.ReadInt32()
+        );
+        var id = reader.ReadNullableString(field: idField);
+
+        return new GrantSubject(
+            Id: id,
+            Kind: kind,
+            Value: value
+        );
+    }
+    /// <summary>Writes a <see cref="WorldCapability"/> as its <see cref="WorldWireTags"/> byte. Nothing is written
+    /// when the capability has no wire value.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="capability">The capability.</param>
+    /// <returns><see langword="true"/> when <paramref name="capability"/> has a wire value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    public static bool TryWriteCapability(WireWriter writer, WorldCapability capability) {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
+        if (!WorldWireTags.TryToWire(
+            value: capability,
+            wire: out var wire
+        )) {
+            return false;
+        }
+
+        writer.WriteByte(value: wire);
 
         return true;
     }
     /// <summary>Writes the intent-source union. Nothing is written when the source names no declared shape.</summary>
-    /// <param name="writer">The writer.</param>
-    /// <param name="source">The source to write.</param>
-    /// <returns><see langword="true"/> when <paramref name="source"/> has a wire shape.</returns>
-    public static bool TryWriteIntentSource(BinaryWriter writer, IntentSource source) {
-        if (source.IsLive) {
-            writer.Write(value: ((byte)0));
-
-            return true;
-        }
-
-        if (source.IsIdle) {
-            writer.Write(value: ((byte)1));
-
-            return true;
-        }
-
-        if (source.ProducerName is { } name) {
-            writer.Write(value: ((byte)2));
-            writer.Write(value: name);
-
-            return true;
-        }
-
-        return false;
-    }
-    /// <summary>Writes the intent-source union onto a wire frame. Nothing is written when the source names no
-    /// declared shape.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="source">The source to write.</param>
     /// <returns><see langword="true"/> when <paramref name="source"/> has a wire shape.</returns>
@@ -215,36 +252,45 @@ public static class WorldWireCodec {
 
         return false;
     }
+    /// <summary>Writes one <see cref="IntentSubmission"/> in <see cref="ReadIntentSubmission"/>'s order. Nothing past
+    /// the entity index is meaningful when the principal has no wire value, so the caller discards the writer on
+    /// <see langword="false"/>.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="submission">The submission.</param>
+    /// <returns><see langword="true"/> when the submission's principal has a wire value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    public static bool TryWriteIntentSubmission(WireWriter writer, in IntentSubmission submission) {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
+        writer.WriteUInt64(value: submission.Tick);
+        writer.WriteInt32(value: submission.EntityIndex);
+        WriteIntent(
+            intent: submission.Intent,
+            writer: writer
+        );
+
+        if (!TryWritePrincipal(
+            principal: submission.Principal,
+            writer: writer
+        )) {
+            return false;
+        }
+
+        WriteIntent(
+            intent: submission.HeldChannels,
+            writer: writer
+        );
+        writer.WriteInt32(value: submission.MeasuredHoldTicks);
+
+        return true;
+    }
     /// <summary>Writes a principal. Nothing is written when the kind has no wire value. A caller imposing a shape
     /// ruling beyond the kind table checks it before this call.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="principal">The principal to write.</param>
     /// <returns><see langword="true"/> when <paramref name="principal"/>'s kind has a wire value.</returns>
-    public static bool TryWritePrincipal(BinaryWriter writer, WorldPrincipal principal) {
-        if (!WorldWireTags.TryToWire(
-            value: principal.Kind,
-            wire: out var kindWire
-        )) {
-            return false;
-        }
-
-        writer.Write(value: kindWire);
-        writer.Write(value: principal.Index);
-        writer.Write(value: principal.Generation);
-        WriteNullableString(
-            value: principal.Name,
-            writer: writer
-        );
-
-        return true;
-    }
-    /// <summary>Writes a principal onto a wire frame. Nothing is written when the kind has no wire value. A caller
-    /// imposing a shape ruling beyond the kind table checks it before this call.</summary>
-    /// <param name="writer">The writer.</param>
-    /// <param name="principal">The principal to write.</param>
-    /// <returns><see langword="true"/> when <paramref name="principal"/>'s kind has a wire value.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
-    public static bool TryWritePrincipal(WireWriter writer, WorldPrincipal principal) {
+    public static bool TryWritePrincipal(WireWriter writer, Principal principal) {
         ArgumentNullException.ThrowIfNull(argument: writer);
 
         if (!WorldWireTags.TryToWire(
@@ -261,18 +307,84 @@ public static class WorldWireCodec {
 
         return true;
     }
+    /// <summary>Writes a grantee in <see cref="ReadGrantee"/>'s layout. Nothing is written when the grantee's kind, or
+    /// an actor's principal kind, has no live wire value.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="grantee">The grantee to write.</param>
+    /// <returns><see langword="true"/> when <paramref name="grantee"/> has a live wire shape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    public static bool TryWriteGrantee(WireWriter writer, Grantee grantee) {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
+        if (
+            !WorldWireTags.TryToWire(
+            value: grantee.Kind,
+            wire: out var kindWire
+        ) ||
+            ((grantee.Kind == GranteeKind.Principal) && !WorldWireTags.TryToWire(
+            value: grantee.Principal.Kind,
+            wire: out _
+        ))
+        ) {
+            return false;
+        }
+
+        writer.WriteByte(value: kindWire);
+
+        if (grantee.Kind == GranteeKind.Group) {
+            writer.WriteString(value: (grantee.Name ?? string.Empty));
+
+            return true;
+        }
+
+        return TryWritePrincipal(
+            principal: grantee.Principal,
+            writer: writer
+        );
+    }
+    /// <summary>Writes a grant subject in <see cref="ReadSubject"/>'s layout. Nothing is written when the kind, or a
+    /// section subject's section, has no wire value.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="subject">The subject to write.</param>
+    /// <returns><see langword="true"/> when <paramref name="subject"/> has a wire shape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    public static bool TryWriteSubject(WireWriter writer, GrantSubject subject) {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
+        if (!WorldWireTags.TryToWire(
+            value: subject.Kind,
+            wire: out var kindWire
+        )) {
+            return false;
+        }
+
+        var sectionWire = default(byte);
+
+        if (
+            (subject.Kind == GrantSubjectKind.Section) &&
+            !WorldWireTags.TryToWire(
+                value: ((WorldSection)subject.Value),
+                wire: out sectionWire
+            )
+        ) {
+            return false;
+        }
+
+        writer.WriteByte(value: kindWire);
+
+        if (subject.Kind == GrantSubjectKind.Section) {
+            writer.WriteByte(value: sectionWire);
+        } else {
+            writer.WriteInt32(value: subject.Value);
+        }
+
+        writer.WriteNullableString(value: subject.Id);
+
+        return true;
+    }
     /// <summary>Writes the whole channel vector: <see cref="ChannelLimits.MaxChannels"/> raw
     /// <see cref="FixedQ4816"/> lanes, one per ordinal, unconditionally. The vector's capacity is what is wire-shaped,
-    /// not a document's declared channel count, so neither codec needs the world's channel table to decode.</summary>
-    /// <param name="writer">The writer.</param>
-    /// <param name="intent">The intent to write.</param>
-    public static void WriteIntent(BinaryWriter writer, PlayerIntent intent) {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            writer.Write(value: intent[ordinal].Value);
-        }
-    }
-    /// <summary>Writes the whole channel vector onto a wire frame: <see cref="ChannelLimits.MaxChannels"/> raw
-    /// <see cref="FixedQ4816"/> lanes, one per ordinal, unconditionally.</summary>
+    /// not a document's declared channel count, so no codec needs the world's channel table to decode.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="intent">The intent to write.</param>
     /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
@@ -283,15 +395,6 @@ public static class WorldWireCodec {
             writer.WriteFixed(value: intent[ordinal]);
         }
     }
-    /// <summary>Writes a present-flag-prefixed string: the flag alone for <see langword="null"/>, the flag then the
-    /// string otherwise.</summary>
-    /// <param name="writer">The writer.</param>
-    /// <param name="value">The string, or <see langword="null"/>.</param>
-    public static void WriteNullableString(BinaryWriter writer, string? value) {
-        writer.Write(value: (value is not null));
 
-        if (value is not null) {
-            writer.Write(value: value);
-        }
-    }
+    private delegate bool TryFromWire<T>(byte wire, out T value);
 }

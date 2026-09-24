@@ -19,12 +19,12 @@ namespace Puck.State;
 [JsonDerivedType(typeof(ActionEffect.Release), typeDiscriminator: "release")]
 [JsonDerivedType(typeof(ActionEffect.ForEachPool), typeDiscriminator: "forEachPool")]
 [JsonDerivedType(typeof(ActionEffect.ClaimPair), typeDiscriminator: "claimPair")]
-[JsonDerivedType(typeof(ActionEffect.RewindTurn), typeDiscriminator: "rewindTurn")]
+[JsonDerivedType(typeof(ActionEffect.RewindGroup), typeDiscriminator: "rewindGroup")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionEffect {
     /// <summary>Restores and removes the newest retained turn of a named undo group.</summary>
     /// <param name="Group">The undo-enabled rule group.</param>
-    public sealed record RewindTurn(CellName Group) : ActionEffect;
+    public sealed record RewindGroup(CellName Group) : ActionEffect;
     /// <summary>Applies a bounded state transform through the ordinary mutation pipeline.</summary>
     /// <param name="Transform">The typed operation.</param>
     public sealed record TransformState(StateTransform Transform) : ActionEffect;
@@ -132,9 +132,10 @@ public abstract record ActionEffect {
         decimal DelaySeconds,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
     ) : ActionEffect;
-    /// <summary>Applies a bounded list of effects atomically after preflight. When any effect refuses, none apply and
-    /// <paramref name="OnFailure"/> runs instead. The compiler refuses nested transactions and effects
-    /// a document project's own effect family has not admitted into a transaction.</summary>
+    /// <summary>Applies a bounded list of effects atomically, as a savepoint inside the firing: each effect fires once,
+    /// and when any refuses, the savepoint rewinds so none apply and <paramref name="OnFailure"/> runs instead. The compiler refuses an empty main branch, a branch of more than
+    /// <see cref="RuleCapacity.MaxTransactionEffects"/> effects, and a transaction anywhere inside another, including
+    /// inside an <see cref="If"/> branch.</summary>
     /// <param name="Effects">The main transaction branch.</param>
     /// <param name="OnFailure">The optional branch run after a main-branch refusal.</param>
     public sealed record Transaction(

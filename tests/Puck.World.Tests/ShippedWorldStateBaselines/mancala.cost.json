@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-cost.v1",
-  "world": "games/mancala.world.json",
+  "world": "games/mancala.puck",
   "simulationRateHz": 30,
   "ticks": 590,
   "workUnits": {

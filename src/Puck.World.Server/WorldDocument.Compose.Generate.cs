@@ -183,11 +183,10 @@ public sealed partial class WorldDocument {
                 // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
                 // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill all
                 // share.
-                Value: (siteRow.Kind switch {
-                    CellKind.Fixed => CellValue.Fixed(rawBits: fired.Numeric!.Value),
-                    CellKind.Bool => CellValue.Bool(value: (fired.Numeric!.Value != 0L)),
-                    _ => CellValue.Int(value: fired.Numeric!.Value),
-                })
+                Value: CellValue.FromNumber(
+                    kind: siteRow.Kind,
+                    raw: fired.Numeric!.Value
+                )
             )
         );
         var state = Upsert(

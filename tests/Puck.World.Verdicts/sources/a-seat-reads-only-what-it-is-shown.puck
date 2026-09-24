@@ -1,0 +1,36 @@
+// A slot only seat 1 may read, read by both seats through the real host. Seat 1's reads are submitted; seat 2's read
+// of the same cell, its template naming it, and its attempt to observe seat 1 are refused by name. No read changes
+// the world.
+
+schema: "puck.world.definition.v1"
+documentId: "a-seat-reads-only-what-it-is-shown"
+
+state {
+  world {
+    row {
+      name: "vault"
+      kind: "Int"
+      value: 41
+      visibility {
+        readers [
+          "seat1"
+        ]
+      }
+    }
+  }
+}
+
+test "a seat reads only what its visibility admits" {
+  when {
+    seat1: world.state vault $value
+    seat2 refused "'vault'.'$value' is not disclosed to seat2": world.state vault $value
+    seat2 refused "may observe only itself": world.observe seat1
+    seat1: world.hud.template {state.vault}
+    seat2 refused "'vault' is not disclosed to seat2": world.hud.template {state.vault}
+    seat2: world.observe seat2
+    ticks 1
+  }
+  expect {
+    vault == 41
+  }
+}

@@ -8,8 +8,6 @@ namespace Puck.State.Rules;
 public enum ExpressionFault : byte {
     /// <summary>The expression evaluated.</summary>
     None,
-    /// <summary>A table read named a key its table lacks; the read reported itself.</summary>
-    TableKeyMissing,
     /// <summary>An operand read a fact with no number.</summary>
     Forever,
     /// <summary>An operand's dynamic key named no cell (an empty zone's endpoint).</summary>
@@ -21,17 +19,6 @@ public enum ExpressionFault : byte {
 /// source, folding a postfix Boolean gate, and formatting a fact for the trace. Nothing here holds state of its
 /// own; every number it formats is rendered with the invariant culture.</summary>
 public static class RuleEvaluation {
-    /// <summary>Formats a comparison as its operator spelling.</summary>
-    /// <param name="comparison">The comparison.</param>
-    /// <returns>The spelling.</returns>
-    public static string DescribeComparison(ActionStateComparison comparison) => comparison switch {
-        ActionStateComparison.Equal => "==",
-        ActionStateComparison.NotEqual => "!=",
-        ActionStateComparison.Less => "<",
-        ActionStateComparison.LessOrEqual => "<=",
-        ActionStateComparison.Greater => ">",
-        _ => ">=",
-    };
     /// <summary>Formats a fact for a trace: <c>absent</c>, <c>forever</c>, a fixed-point value, or an integer.</summary>
     /// <param name="fact">The fact.</param>
     /// <returns>The spelling.</returns>
@@ -165,7 +152,7 @@ public static class RuleEvaluation {
             trace?.Add(item: $"{predicate.Describe}: {Spell(
                 fact: in left,
                 read: leftRead
-            )} {DescribeComparison(comparison: predicate.Comparison)} {Spell(
+            )} {predicate.Comparison.Symbol()} {Spell(
                 fact: in right,
                 read: rightRead
             )} -> {Spell(value: holds)}");
@@ -184,7 +171,10 @@ public static class RuleEvaluation {
     /// <param name="source">The compiled source.</param>
     /// <param name="kind">The encoding the read answers in.</param>
     /// <param name="fact">The fact, on success.</param>
-    /// <param name="fault">Why the read did not answer, or <see cref="ExpressionFault.None"/>.</param>
+    /// <param name="fault">Why the read did not answer, or <see cref="ExpressionFault.None"/>. An operand answering
+    /// the absent fact faults <see cref="ExpressionFault.Absent"/>; one answering <c>forever</c> does not fault, since
+    /// a fact comparison answers it under infinity semantics. <see cref="ExpressionFault.Forever"/> comes only from an
+    /// expression, whose numeric evaluation cannot read infinity.</param>
     /// <returns><see langword="true"/> when the source answered. An operand answering the absent or forever fact
     /// still answers: the caller decides what an absence means where it sits.</returns>
     public static bool TryReadSource(IStateReader reader, in CompiledValueSource source, CellKind kind, out RuleFact fact, out ExpressionFault fault) {
@@ -196,10 +186,8 @@ public static class RuleEvaluation {
             fact = operand.Read(reader: reader);
             fault = (fact.IsAbsent
                 ? ExpressionFault.Absent
-                : (fact.IsForever
-                    ? ExpressionFault.Forever
-                    : ExpressionFault.None
-            ));
+                : ExpressionFault.None
+            );
 
             return true;
         }

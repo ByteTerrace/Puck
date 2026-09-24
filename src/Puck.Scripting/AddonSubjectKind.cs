@@ -1,11 +1,10 @@
 namespace Puck.Scripting;
 
-/// <summary>The addon ABI's <c>Ask</c> subject kind wire values. Pinned independently of any consumer enum. The
+/// <summary>The addon ABI's <c>Ask</c> subject kind wire values, defined independently of any consumer enum. The
 /// decode-valid set is <c>{1, 3}</c> — <see cref="Body"/> (paired with the Drive/Observe capability bits) and
 /// <see cref="Section"/> (paired with the Mutate capability bit alone, the addon mutation seam's own handle shape);
-/// <see cref="Screen"/> and <see cref="Profile"/> remain number-pinned reservations, not yet admitted, so growth
-/// is a range change, never a break. No wildcard ordinal exists on purpose: the wire has no spelling for asking
-/// for one.</summary>
+/// <see cref="Screen"/> and <see cref="Profile"/> are declared but not admitted. No wildcard ordinal exists on
+/// purpose: the wire has no spelling for asking for one.</summary>
 public enum AddonSubjectKind : byte {
     /// <summary>A simulated body. Paired with the Drive/Observe capability bits.</summary>
     Body = 1,

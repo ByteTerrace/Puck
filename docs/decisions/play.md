@@ -20,6 +20,26 @@ ground transfers off it at once. The four ground corners and the island stay
 what they were, federation stress content, until the forcing world reimagines
 them.
 
+**A surface is one description.** An island built from separate
+descriptions (hand-placed creation piles, painted lattice heights, flat prop
+scatter, detached ground quads) agrees with itself only by eye, so the surface
+a player sees and the surface they collide with drift apart, and the owner
+ruled such a world unplayable. A solid is therefore rendered and collided from
+one declaration, and presentation-only decoration is a non-solid placement: a
+solid placement carrying a wallpaper fold refuses by name.
+
+**The standards are state.** `standard.world.json`, the basis every shipped
+world deltas over, carries the shared values as state rows: a `transforms`
+text row (`identity`, `origin`, `unit`) and a `colors` text row, which
+documents reference as `state.<row>.<key>` instead of restating literals,
+beside the standard `theme`, so each standard value has one home.
+
+**Every world stands over a safety net.** The basis places one solid `Plane`
+(`groundPlane`) far below the playable space to catch anything that falls; it
+is never a level's own floor. Its single shape is both rendered and collided.
+The checkerboard over it (`groundTexture`, one wallpaper-folded tile) is a
+non-solid placement, so the plane stays the only collision truth.
+
 **No world runs inside another.** Worlds link by federation; modules nest at
 compile time; a link (`border`, `door`) is one declaration generating both
 halves; each world has its own budget. A world on a screen inside another is a
@@ -31,8 +51,8 @@ not translate to handheld hardware by themselves.
 
 **Districts are modules** imported under an alias and exporting only their
 control rows. `granaries.world.json` moves under the modules rather than
-disappearing; the frozen documents, the scenarios, their canaries, and
-`experimental/Puck.Demo` retire with a ledger naming each successor.
+disappearing; the frozen documents, the scenarios, and their canaries retire
+with a ledger naming each successor.
 
 **In-flight state at transfer:** drop and re-derive what the engine can
 recompute; carry what the player can perceive.

@@ -1,4 +1,4 @@
-import { TokenCredential } from "@azure/identity";
+import type { TokenCredential } from "@azure/identity";
 
 // The user's container lives in the storage-account partition their oid maps to. Rather than run
 // the partitioner in the browser, we ask the edge — which asks the user's grain, the authority on

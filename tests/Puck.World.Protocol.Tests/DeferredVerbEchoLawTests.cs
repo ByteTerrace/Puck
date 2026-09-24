@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Protocol.Tests;
@@ -191,8 +192,8 @@ public sealed class DeferredVerbEchoLawTests {
         Puck.Commands.CommandResult? firstResult = null;
         Puck.Commands.CommandResult? secondResult = null;
 
-        Settled(first.Submit(new WorldMutation.RemoveKit(WorldPrincipal.Console, "one"), echoes, "first"), result => firstResult = result);
-        Settled(second.Submit(new WorldMutation.RemoveKit(WorldPrincipal.Console, "two"), echoes, "second"), result => secondResult = result);
+        Settled(first.Submit(new WorldMutation.RemoveKit(Principal.Console, "one"), echoes, "first"), result => firstResult = result);
+        Settled(second.Submit(new WorldMutation.RemoveKit(Principal.Console, "two"), echoes, "second"), result => secondResult = result);
         Assert.Equal(firstHost.Envelope.CorrelationId, secondHost.Envelope.CorrelationId);
         secondHost.Completion!(new WorldSubmissionResult.Refusal(Code: "second.refused", Detail: "second detail"));
         Assert.Null(value: firstResult);
@@ -206,7 +207,7 @@ public sealed class DeferredVerbEchoLawTests {
         var link = new LoopbackTransport(server: host);
         Puck.Commands.CommandResult? result = null;
 
-        Settled(link.Submit(new WorldMutation.RemoveKit(WorldPrincipal.Console, "one"), new WorldDeferredVerbEchoes(), "edit"), verdict => result = verdict);
+        Settled(link.Submit(new WorldMutation.RemoveKit(Principal.Console, "one"), new WorldDeferredVerbEchoes(), "edit"), verdict => result = verdict);
         Assert.True(condition: result!.Value.IsError);
         Assert.Contains("retiring", result.Value.Output, StringComparison.Ordinal);
     }
@@ -217,7 +218,7 @@ public sealed class DeferredVerbEchoLawTests {
         Puck.Commands.CommandResult? result = null;
         var oversized = new string(c: 'x', count: (WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Mutation) + 1));
 
-        Settled(link.Submit(new WorldMutation.RemoveKit(WorldPrincipal.Console, oversized), new WorldDeferredVerbEchoes(), "edit"), verdict => result = verdict);
+        Settled(link.Submit(new WorldMutation.RemoveKit(Principal.Console, oversized), new WorldDeferredVerbEchoes(), "edit"), verdict => result = verdict);
         Assert.True(condition: result!.Value.IsError);
         Assert.Contains("codec_refused", result.Value.Output, StringComparison.Ordinal);
         Assert.Null(@object: host.Completion);
@@ -231,8 +232,8 @@ public sealed class DeferredVerbEchoLawTests {
         var echoes = new WorldDeferredVerbEchoes();
         Puck.Commands.CommandResult? result = null;
         var pending = (undo
-            ? link.SubmitUndo(1, WorldPrincipal.Console, echoes, "world.undo")
-            : link.SubmitRebuild(new WorldRebuildRequest(WorldRebuildKind.Reset, null, null, false), WorldPrincipal.Console, echoes, "world.reset"));
+            ? link.SubmitUndo(1, Principal.Console, echoes, "world.undo")
+            : link.SubmitRebuild(new WorldRebuildRequest(WorldRebuildKind.Reset, null, null, false), Principal.Console, echoes, "world.reset"));
 
         Settled(pending, verdict => result = verdict);
         Assert.True(condition: result!.Value.IsError);
@@ -261,7 +262,7 @@ public sealed class DeferredVerbEchoLawTests {
         var source = new Puck.Commands.TextCommandSource(registry: new Puck.Commands.CommandRegistry(modules: [new SettlingModule(result: result)]));
         using var session = source.CreateSession(
             onSettled: (_, verdict) => observe(obj: verdict),
-            principal: Puck.Commands.CommandPrincipal.Console
+            principal: Puck.Commands.Principal.Console
         );
 
         session.Enqueue(line: "settle");

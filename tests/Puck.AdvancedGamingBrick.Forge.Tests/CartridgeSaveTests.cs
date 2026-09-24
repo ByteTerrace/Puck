@@ -1,19 +1,80 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers battery-backed state reaching the cartridge's save window and coming back.</summary>
 public sealed class CartridgeSaveTests {
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "a save step without a save",
+            Document: Bad() with { Rules = [Rule(body: [new CartridgeStatement(Kind: "save")])] },
+            Path: "rules[0].body[0]",
+            Fragment: "requires a declared save"
+        ),
+        new(
+            Name: "an unknown variable",
+            Document: Bad() with { Save = Persisting(
+                arrays: [],
+                variables: ["missing"]
+            ) },
+            Path: "save.variables",
+            Fragment: "Unknown state variable"
+        ),
+        new(
+            Name: "a variable persisted twice",
+            Document: Bad() with { Save = Persisting(
+                arrays: [],
+                variables: ["x", "x"]
+            ) },
+            Path: "save.variables",
+            Fragment: "persisted more than once"
+        ),
+        new(
+            Name: "a save of nothing",
+            Document: Bad() with { Save = Persisting(
+                arrays: [],
+                variables: []
+            ) },
+            Path: "save",
+            Fragment: "at least one variable or array"
+        ),
+        new(
+            Name: "a payload past the battery mirror",
+            Document: Bad() with { Save = Persisting(
+                arrays: ["big"],
+                variables: []
+            ) },
+            Path: "save",
+            Fragment: "battery-backed mirror holds"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    private static CartridgeDocument Bad() => CartridgeDocuments.Create(
+        target: "cgb",
+        title: "SAVEBAD"
+    ) with {
+        Variables = [new CartridgeVariable(
+            Name: "x",
+            Initial: 0
+        )],
+        Arrays = [new CartridgeArray(
+            Initial: new int[200],
+            Name: "big"
+        )],
+    };
+    private static CartridgeSave Persisting(string[] arrays, string[] variables) => new(
+        Arrays: arrays,
+        Variables: variables,
+        Version: 1
+    );
     // Runs its body on the frame the phase counter names, then advances it.
     private static CartridgeRule Once(int phase, CartridgeStatement[] body) => new(
         Name: $"phase{phase}",
         When: CartridgeExpressions.Gate(
             left: CartridgeExpressions.Of(state: "phase"),
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             right: CartridgeExpressions.Of(constant: phase)
         ),
         Body: [.. body, Set(
@@ -21,17 +82,6 @@ public sealed class CartridgeSaveTests {
                 value: (phase + 1)
             )]
     );
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
     private static CartridgeRule Rule(CartridgeStatement[] body) => new(
         Name: "rule",
         Body: body
@@ -98,12 +148,11 @@ public sealed class CartridgeSaveTests {
             ),
             ],
         };
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
+        var result = CartridgeProbe.Compile(document: document);
+        using var machine = new CartridgeProbe(
+            label: "save",
+            result: result
         );
-        var result = compiler.Compile(document: document);
-        using var machine = new SaveProbe(result: result);
 
         machine.Run(frames: 16);
         Assert.Equal(
@@ -123,86 +172,10 @@ public sealed class CartridgeSaveTests {
             actual: machine.Read(address: (result.Arrays["table"] + 2))
         );
     }
-    [Fact]
-    public void ValidationGatesSaveOnTargetDeclarationAndCapacity() {
-        var document = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "SAVEBAD"
-        ) with {
-            Variables = [new CartridgeVariable(
-                Name: "x",
-                Initial: 0
-            )],
-            Arrays = [new CartridgeArray(
-                Initial: new int[200],
-                Name: "big"
-            )],
-        };
-
-        Refuses(
-            document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "save")])] },
-            fragment: "requires a declared save"
-        );
-        Refuses(
-            document: document with { Save = new CartridgeSave(
-                Arrays: [],
-                Variables: ["missing"],
-                Version: 1
-            ) },
-            fragment: "Unknown state variable"
-        );
-        Refuses(
-            document: document with { Save = new CartridgeSave(
-                Arrays: [],
-                Variables: ["x", "x"],
-                Version: 1
-            ) },
-            fragment: "persisted more than once"
-        );
-        Refuses(
-            document: document with { Save = new CartridgeSave(
-                Arrays: [],
-                Variables: [],
-                Version: 1
-            ) },
-            fragment: "at least one variable or array"
-        );
-        Refuses(
-            document: document with { Save = new CartridgeSave(
-                Arrays: ["big"],
-                Variables: [],
-                Version: 1
-            ) },
-            fragment: "battery-backed mirror holds"
-        );
-
-    }
-
-    private sealed class SaveProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public SaveProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "save"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "save"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationGatesSaveOnTargetDeclarationAndCapacity(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

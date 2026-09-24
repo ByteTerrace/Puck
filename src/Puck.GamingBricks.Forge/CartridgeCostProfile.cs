@@ -25,13 +25,6 @@ namespace Puck.GamingBricks.Forge;
 /// function. One unit is a eleventh of a <c>set</c> step on that machine, so units are not comparable between the two
 /// — only a document's fit against its own target's reservation is.
 /// </para>
-/// <para>
-/// <see cref="Calibration"/> exists so the reservations above it can be measured rather than asserted. Measuring what
-/// a machine sustains means booting documents past the current reservation, which the standard profiles refuse by
-/// design — a measurement run under a standard profile would report the model's own opinion instead of the machine's
-/// behaviour. It is not a way to admit a document that does not fit: nothing that compiles under it is claimed to
-/// keep frame cadence.
-/// </para>
 /// </remarks>
 /// <param name="Name">The profile's identifier.</param>
 /// <param name="FrameUnits">Abstract work units the rule pass may spend in one frame.</param>
@@ -128,14 +121,6 @@ public sealed record CartridgeCostProfile(
         StepShift: 34L,
         TargetArray: 10L
     );
-    /// <summary>
-    /// The reservation used while measuring what a machine sustains, large enough that the machine binds before the
-    /// model does. Its weights are the Color machine's, so a probe is shaped the same way either machine's is.
-    /// </summary>
-    public static CartridgeCostProfile Calibration { get; } = Humble with {
-        Name = "puck.cartridge.calibration.v1",
-        FrameUnits = long.MaxValue,
-    };
 
     /// <summary>Returns a value indicating whether a cost fits the reservation.</summary>
     /// <param name="bound">The cost to test.</param>

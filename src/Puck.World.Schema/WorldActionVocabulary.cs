@@ -26,24 +26,64 @@ public static class WorldPredicate {
     public sealed record Held(string Channel) : ActionPredicate;
 }
 /// <summary>The effect arms the world adds to <see cref="ActionEffect"/>, registered by
-/// <see cref="WorldFactsVocabulary"/>. The body-program arms (vertical velocity, planar impulse, timers, designation
-/// by <see cref="ActionTarget"/>) belong to a kit's action programs and refuse in a world rule; the body-keyed,
-/// document, cue, field, pose, and save arms belong to world rules and refuse in a kit.</summary>
+/// <see cref="WorldFactsVocabulary"/>. The four body-motion arms (<see cref="SetVerticalVelocity"/>,
+/// <see cref="ScaleVerticalVelocity"/>, <see cref="PlanarImpulse"/>, <see cref="Designate"/>) are one operation in
+/// both scopes: a kit's action acts on its own body when it names none, and a world rule, which has no body of its
+/// own, names one with <c>key</c> (<see cref="WorldBodyEffects"/> is the one check and lowering both read). A timer
+/// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, and save arms
+/// belong to world rules and refuse in a kit.</summary>
 public static class WorldEffect {
-    /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge).</summary>
-    public sealed record SetVerticalVelocity(float Velocity, ActionTarget Target = ActionTarget.Self) : ActionEffect;
-    /// <summary>Multiplies the body's vertical velocity (the jump cut; gate on <see cref="ActionFact.Rising"/>).</summary>
-    public sealed record ScaleVerticalVelocity(float Factor, ActionTarget Target = ActionTarget.Self) : ActionEffect;
+    /// <summary>Writes a body's vertical-velocity channel (the jump launch / the surge).</summary>
+    /// <param name="Velocity">The vertical velocity, in world units per second.</param>
+    /// <param name="Key">The body a world rule names — an index, a <c>$cell:</c> indirection, or a bound key. A kit's
+    /// action names none: it acts on its own body, or on <paramref name="Target"/>.</param>
+    /// <param name="Target">The participant a kit's action addresses; a world rule refuses any but the default.</param>
+    public sealed record SetVerticalVelocity(
+        decimal Velocity,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        ActionTarget Target = ActionTarget.Self
+    ) : ActionEffect;
+    /// <summary>Multiplies a body's vertical velocity (the jump cut; gate on <see cref="ActionFact.Rising"/>).</summary>
+    /// <param name="Factor">The multiplier.</param>
+    /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
+    /// <param name="Target">The participant a kit's action addresses — see <see cref="SetVerticalVelocity.Target"/>.</param>
+    public sealed record ScaleVerticalVelocity(
+        decimal Factor,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        ActionTarget Target = ActionTarget.Self
+    ) : ActionEffect;
     /// <summary>A timed planar velocity overlay (the dash): <paramref name="BodyDirection"/> is rotated by the body's
-    /// attitude at fire time and ridden as authored, never normalized, at <paramref name="Speed"/> for
-    /// <paramref name="DurationSeconds"/>.</summary>
-    public sealed record PlanarImpulse(DocumentVector3 BodyDirection, float Speed, float DurationSeconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
+    /// attitude at fire time and ridden as authored, never normalized, so it must be unit length, at
+    /// <paramref name="Speed"/> for <paramref name="DurationSeconds"/>, an exact whole number of engine ticks.</summary>
+    /// <param name="BodyDirection">The unit direction in the body's own frame.</param>
+    /// <param name="Speed">The overlay's speed, in world units per second.</param>
+    /// <param name="DurationSeconds">How long the overlay rides.</param>
+    /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
+    /// <param name="Target">The participant a kit's action addresses — see <see cref="SetVerticalVelocity.Target"/>.</param>
+    public sealed record PlanarImpulse(
+        DocumentVector3 BodyDirection,
+        decimal Speed,
+        decimal DurationSeconds,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        ActionTarget Target = ActionTarget.Self
+    ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(string State, float Seconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
-    /// <summary>Submits the selected subject into a named target register.</summary>
+    /// <summary>Designates a subject into a body's named target register, or clears the register. A kit's action
+    /// designates into its own body the participant that last affected it; a world rule names the body with
+    /// <paramref name="Key"/> and the subject with <paramref name="TargetKey"/>.</summary>
     /// <param name="Register">The authored target-register name.</param>
-    /// <param name="Target">The subject source.</param>
-    public sealed record Designate(string Register, ActionTarget Target = ActionTarget.AffectingSubject) : ActionEffect;
+    /// <param name="Kind">Whether the register is filled or cleared; only a world rule clears.</param>
+    /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
+    /// <param name="TargetKey">The body a world rule designates, required when <paramref name="Kind"/> is
+    /// <see cref="WorldBodyDesignationKind.Body"/> and refused when it is <see cref="WorldBodyDesignationKind.Clear"/>.
+    /// A kit's action names none.</param>
+    public sealed record Designate(
+        string Register,
+        WorldBodyDesignationKind Kind = WorldBodyDesignationKind.Body,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? TargetKey = null
+    ) : ActionEffect;
     /// <summary>Emits a deterministic presentation-neutral cue (<see cref="WorldGameplayCue"/>).</summary>
     /// <param name="Name">The cue name; see <see cref="WorldGameplayCue.IsValidName"/>.</param>
     /// <param name="Payload">An optional bounded payload.</param>
@@ -53,13 +93,6 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Payload = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
     ) : ActionEffect;
-    /// <summary>Writes a world-addressed body's vertical velocity.</summary>
-    public sealed record SetBodyVerticalVelocity(StateChannelRef Key, decimal Velocity) : ActionEffect;
-    /// <summary>Scales a world-addressed body's vertical velocity.</summary>
-    public sealed record ScaleBodyVerticalVelocity(StateChannelRef Key, decimal Factor) : ActionEffect;
-    /// <summary>Rides a unit <paramref name="BodyDirection"/> at <paramref name="Speed"/> on a world-addressed body
-    /// for an exact whole-engine-tick duration.</summary>
-    public sealed record ApplyBodyImpulse(StateChannelRef Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : ActionEffect;
     /// <summary>Applies the same instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
     /// mass, through the server's rigid-body solver — never a second impulse mechanism) to a
     /// <paramref name="Key"/>-addressed body, along <paramref name="HeadingKey"/>'s own body's forward facing,
@@ -80,13 +113,6 @@ public static class WorldEffect {
         string HeadingKey,
         StateChannelRef MagnitudeState,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? MagnitudeKey = null
-    ) : ActionEffect;
-    /// <summary>Designates or clears a world-addressed body's target register.</summary>
-    public sealed record DesignateBody(
-        StateChannelRef Key,
-        string Register,
-        WorldBodyDesignationKind Kind,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? TargetKey = null
     ) : ActionEffect;
     /// <summary>Paints one lattice field cell, or the cube of <paramref name="Radius"/> around it.</summary>
     public sealed record PaintField(

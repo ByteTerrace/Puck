@@ -7,6 +7,7 @@ using Puck.Maths;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Embeddings;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.Cli.Transpiler;
 
@@ -157,7 +158,6 @@ public static class EmbedCommand {
 
         return probeCommand;
     }
-
     private static async Task<int> ExecuteEmbedAsync(
         string path,
         bool check,
@@ -172,7 +172,7 @@ public static class EmbedCommand {
         List<string> puckFiles = [];
 
         if (Directory.Exists(path: fullPath)) {
-            puckFiles.AddRange(collection: Directory.GetFiles(path: fullPath, searchPattern: "*.puck", searchOption: SearchOption.AllDirectories));
+            puckFiles.AddRange(collection: Directory.GetFiles(path: fullPath, searchOption: SearchOption.AllDirectories, searchPattern: "*.puck"));
         } else if (File.Exists(path: fullPath)) {
             puckFiles.Add(item: fullPath);
         } else {
@@ -194,7 +194,7 @@ public static class EmbedCommand {
                 continue;
             }
 
-            if (spaces.Count == 0 && textsBySpace.Count == 0) {
+            if ((spaces.Count == 0) && (textsBySpace.Count == 0)) {
                 continue;
             }
 
@@ -224,11 +224,7 @@ public static class EmbedCommand {
                 requiredTexts ??= [];
 
                 if (!lockFile.Spaces.TryGetValue(key: space.Name, value: out var lockSpace)) {
-                    lockSpace = new EmbeddingLockSpace(
-                        dimensions: space.Dimensions,
-                        model: space.Model,
-                        revision: space.Revision
-                    );
+                    lockSpace = new EmbeddingLockSpace(identity: space.Identity);
 
                     if (!check) {
                         lockFile.Spaces[space.Name] = lockSpace;
@@ -236,19 +232,11 @@ public static class EmbedCommand {
                 }
 
                 // Check if space parameters changed (stale)
-                var isSpaceStale = (
-                    lockSpace.Dimensions != space.Dimensions ||
-                    !string.Equals(a: lockSpace.Model, b: space.Model, comparisonType: StringComparison.Ordinal) ||
-                    !string.Equals(a: lockSpace.Revision, b: space.Revision, comparisonType: StringComparison.Ordinal)
-                );
-
-                if (isSpaceStale) {
+                if (lockSpace.Identity != space.Identity) {
                     staleCount += lockSpace.Entries.Count;
 
                     if (!check) {
-                        lockSpace.Dimensions = space.Dimensions;
-                        lockSpace.Model = space.Model;
-                        lockSpace.Revision = space.Revision;
+                        lockSpace.Identity = space.Identity;
                         lockSpace.Entries.Clear();
                     }
                 }
@@ -279,11 +267,7 @@ public static class EmbedCommand {
                 }
 
                 if (textsToEmbed.Count > 0) {
-                    var identity = new EmbeddingIdentity(
-                        Dimensions: space.Dimensions,
-                        Model: space.Model,
-                        Revision: space.Revision
-                    );
+                    var identity = space.Identity;
 
                     IEmbeddingGenerator<string, Embedding<float>> generator;
 
@@ -301,7 +285,7 @@ public static class EmbedCommand {
                     }
 
                     using (generator) {
-                        var boundedBatchSize = Math.Clamp(value: batchSize, min: 1, max: 2048);
+                        var boundedBatchSize = Math.Clamp(max: 2048, min: 1, value: batchSize);
                         var batches = EmbeddingBatcher.Batch(batchSize: boundedBatchSize, items: textsToEmbed);
 
                         foreach (var batch in batches) {
@@ -324,16 +308,16 @@ public static class EmbedCommand {
                                 return 1;
                             }
 
-                            for (var i = 0; i < batch.Count; i++) {
+                            for (var i = 0; (i < batch.Count); i++) {
                                 var srcText = batch[i];
                                 var emb = embeddingList[i];
 
-                                if (!VectorQuantizer.TryQuantizeToBase64Url(embedding: emb, base64UrlVector: out var b64)) {
+                                if (!VectorQuantizer.TryQuantizeToBase64Url(base64UrlVector: out var b64, embedding: emb)) {
                                     Console.Error.WriteLine(value: $"error: Quantization failed for text \"{srcText}\".");
                                     return 1;
                                 }
 
-                                lockFile.SetEntry(dimensions: identity.Dimensions, model: identity.Model, revision: identity.Revision, spaceName: space.Name, text: srcText, vectorBase64Url: b64);
+                                lockFile.SetEntry(identity: identity, spaceName: space.Name, text: srcText, vectorBase64Url: b64);
                             }
                         }
                     }
@@ -341,7 +325,7 @@ public static class EmbedCommand {
             }
 
             if (check) {
-                if (missingCount > 0 || staleCount > 0 || unusedCount > 0) {
+                if ((missingCount > 0) || (staleCount > 0) || (unusedCount > 0)) {
                     Console.Error.WriteLine(
                         value: $"check failed for '{puckFile}': {missingCount} missing, {staleCount} stale, {unusedCount} unused."
                     );
@@ -363,7 +347,6 @@ public static class EmbedCommand {
 
         return overallExitCode;
     }
-
     private static async Task<int> ExecuteProbeAsync(
         string path,
         string text,
@@ -385,7 +368,7 @@ public static class EmbedCommand {
 
         var lockFile = EmbeddingLock.TryLoad(rootSourcePath: fullPath);
 
-        if (lockFile is null || lockFile.Spaces.Count == 0) {
+        if ((lockFile is null) || (lockFile.Spaces.Count == 0)) {
             Console.Error.WriteLine(value: $"error: No embedding lock file found for '{path}'. Run puck embed first.");
             return 1;
         }
@@ -409,17 +392,13 @@ public static class EmbedCommand {
         StateVector queryVector;
 
         if (lockFile.TryGet(spaceName: resolvedSpaceName, text: text, vectorBase64Url: out var existingVector)) {
-            if (!StateVector.TryParseBase64Url(dimensions: lockSpace.Dimensions, error: out var err, text: existingVector, vector: out var vec)) {
+            if (!StateVector.TryParseBase64Url(dimensions: lockSpace.Identity.Dimensions, error: out var err, text: existingVector, vector: out var vec)) {
                 Console.Error.WriteLine(value: $"error: Corrupted lock vector: {err}");
                 return 1;
             }
             queryVector = vec;
         } else {
-            var identity = new EmbeddingIdentity(
-                Dimensions: lockSpace.Dimensions,
-                Model: lockSpace.Model,
-                Revision: lockSpace.Revision
-            );
+            var identity = lockSpace.Identity;
 
             IEmbeddingGenerator<string, Embedding<float>> generator;
 
@@ -444,12 +423,12 @@ public static class EmbedCommand {
 
                 var embList = embs.ToList();
 
-                if (embList.Count == 0 || !VectorQuantizer.TryQuantizeToBase64Url(base64UrlVector: out var b64, embedding: embList[0])) {
+                if ((embList.Count == 0) || !VectorQuantizer.TryQuantizeToBase64Url(base64UrlVector: out var b64, embedding: embList[0])) {
                     Console.Error.WriteLine(value: "error: Failed to quantize query vector.");
                     return 1;
                 }
 
-                if (!StateVector.TryParseBase64Url(dimensions: lockSpace.Dimensions, error: out var err, text: b64, vector: out var vec)) {
+                if (!StateVector.TryParseBase64Url(dimensions: lockSpace.Identity.Dimensions, error: out var err, text: b64, vector: out var vec)) {
                     Console.Error.WriteLine(value: $"error: Failed to parse query vector: {err}");
                     return 1;
                 }
@@ -462,7 +441,7 @@ public static class EmbedCommand {
         var querySpan = queryVector.Components;
 
         foreach (var entry in lockSpace.Entries.Values) {
-            if (StateVector.TryParseBase64Url(dimensions: lockSpace.Dimensions, error: out _, text: entry.Vector, vector: out var targetVec)) {
+            if (StateVector.TryParseBase64Url(dimensions: lockSpace.Identity.Dimensions, error: out _, text: entry.Vector, vector: out var targetVec)) {
                 var targetSpan = targetVec.Components;
                 var sim = SignedByteVectorFunctions.CosineQ16(left: querySpan, right: targetSpan);
                 var dot = SignedByteVectorFunctions.Dot(left: querySpan, right: targetSpan);
@@ -471,21 +450,21 @@ public static class EmbedCommand {
             }
         }
 
-        results.Sort(comparison: static (a, b) => b.Similarity.CompareTo(a.Similarity));
+        results.Sort(comparison: static (a, b) => b.Similarity.CompareTo(value: a.Similarity));
 
         var displayCount = Math.Min(val1: top, val2: results.Count);
 
         Console.WriteLine(value: $"Ranked similarity in space '{resolvedSpaceName}' (top {displayCount}):");
 
-        for (var i = 0; i < displayCount; i++) {
+        for (var i = 0; (i < displayCount); i++) {
             var (label, similarity, dot) = results[i];
             var simFloat = (similarity / 65536.0);
-            Console.WriteLine(value: $"  {i + 1,2}. similarity: {simFloat:F4}  dot: {dot,6}  \"{label}\"");
+
+            Console.WriteLine(value: $"  {(i + 1),2}. similarity: {simFloat:F4}  dot: {dot,6}  \"{label}\"");
         }
 
         return 0;
     }
-
     private static IEmbeddingGenerator<string, Embedding<float>> ResolveGenerator(
         EmbeddingIdentity identity,
         string? provider,
@@ -493,8 +472,8 @@ public static class EmbedCommand {
         bool omitDimensions,
         int timeoutSeconds
     ) {
-        var isFixture = string.Equals(a: provider, b: "fixture", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(a: identity.Model, b: FixtureEmbeddingGenerator.SupportedModel, comparisonType: StringComparison.OrdinalIgnoreCase);
+        var isFixture = (string.Equals(a: provider, b: "fixture", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a: identity.Model, b: FixtureEmbeddingGenerator.SupportedModel, comparisonType: StringComparison.OrdinalIgnoreCase));
 
         if (isFixture) {
             return new FixtureEmbeddingGenerator(identity: identity);
@@ -515,7 +494,7 @@ public static class EmbedCommand {
         return OpenAiEmbeddingGeneratorFactory.Create(options: options);
     }
 
-    private sealed record DiscoveredSpace(string Name, string Model, string Revision, int Dimensions);
+    private sealed record DiscoveredSpace(string Name, EmbeddingIdentity Identity);
 
     private static bool TryDiscoverSpacesAndTexts(
         string puckFilePath,
@@ -540,28 +519,26 @@ public static class EmbedCommand {
         }
 
         var discoveredEmbeddings = lowerResult.DiscoveredEmbeddings;
-        var realErrors = loweringDiags.Where(static d => (d.Severity == DiagnosticSeverity.Error) &&
+        var realErrors = loweringDiags.Where(predicate: static d => ((d.Severity == DiagnosticSeverity.Error) &&
             (d.Code != PuckDiagnosticCodes.EmbeddingLockMissing) &&
-            (d.Code != PuckDiagnosticCodes.EmbeddingLockStale)).ToList();
+            (d.Code != PuckDiagnosticCodes.EmbeddingLockStale))).ToList();
 
         if (realErrors.Count > 0) {
-            failure = $"Lowering errors in '{puckFilePath}': " + string.Join(separator: "; ", values: realErrors.Select(static e => $"{e.Code}: {e.Message}"));
+            failure = ($"Lowering errors in '{puckFilePath}': " + string.Join(separator: "; ", values: realErrors.Select(selector: static e => $"{e.Code}: {e.Message}")));
             return false;
         }
 
         var discoveredSpaces = new List<DiscoveredSpace>();
 
-        if (lowerResult.Json is JsonObject root &&
-            root["state"] is JsonObject stateObj &&
-            stateObj["spaces"] is JsonArray spacesArr) {
+        if ((lowerResult.Json is JsonObject root) &&
+            (root["state"] is JsonObject stateObj) &&
+            (stateObj["spaces"] is JsonArray spacesArr)) {
             foreach (var spNode in spacesArr) {
                 if (spNode is JsonObject spObj) {
-                    var name = (spObj["name"]?.ToString() ?? "");
-                    var model = (spObj["model"]?.ToString() ?? "");
-                    var revision = (spObj["revision"]?.ToString() ?? "");
-                    var dims = (spObj["dimensions"] is JsonValue dv && (dv.TryGetValue<int>(out var dVal) || (dv.TryGetValue<long>(out var lVal) && (dVal = (int)lVal) == dVal))) ? dVal : 0;
-
-                    discoveredSpaces.Add(item: new DiscoveredSpace(Dimensions: dims, Model: model, Name: name, Revision: revision));
+                    discoveredSpaces.Add(item: new DiscoveredSpace(
+                        Identity: WorldDocumentEmitter.ReadSpaceIdentity(space: spObj),
+                        Name: (spObj["name"]?.ToString() ?? "")
+                    ));
                 }
             }
         }

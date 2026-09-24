@@ -4,7 +4,6 @@
   "binding": "128 medium-constrained creatures share a destination tree with an aggregate 64-expansion-per-tick budget. Vertical movement distinguishes the designated-goal leg from the no-goal control; both expose live authoritative work. Boot replay must MATCH. This is headless integration evidence, not rendered FPS or a thousands-of-creatures claim.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 5,
   "timeoutSeconds": 30,
   "fixtures": [],
   "positive": {

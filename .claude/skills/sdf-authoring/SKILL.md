@@ -1,6 +1,6 @@
 ---
 name: sdf-authoring
-description: "Author and edit Puck creations inside world prototypes, in `.puck` DSL source or raw JSON: characters, armor, props, and SDF geometry. Use for sculpting, primitive/blend/warp selection, materials, state-driven looks, shape budgets, author-frame/scope/contact mismatches, and the `shape`/`prototypes` DSL sugar. Route pure `.puck` grammar, CLI verbs, or PUCK0xx language diagnostics to puck-dsl instead. Use sdf-world instead for VM, ISA, kernel, or shader implementation."
+description: "Author and edit Puck creations inside world prototypes, in `.puck` DSL source or raw JSON: characters, armor, props, and SDF geometry. Use for sculpting, primitive/blend/warp selection, materials, state-driven looks, shape budgets, author-frame/scope/contact mismatches, and the `shape`/`prototypes` DSL sugar. Route pure `.puck` grammar, CLI verbs, or PUCK0xx language diagnostics to puck-dsl instead. Use rendering instead for the SDF VM, ISA, kernels, shaders, or GPU cost."
 ---
 
 # Authoring a Puck creation
@@ -87,11 +87,10 @@ there.
 
 ## The loop
 
-A world booted with `--world <file>.puck` transpiles in memory at boot only
-(`PuckWorldLoader`) — the running console never re-reads `.puck` again on its
-own. Authoring against that live process is still a live loop, not an
-edit-and-restart cycle, but two of its verbs are JSON-only traps against a
-`.puck`-sourced world:
+A world booted with `--world <file>.puck` transpiles in memory
+(`PuckWorldLoader`), and `world.reload` recompiles it from disk on request.
+Authoring against that live process is a live loop, not an edit-and-restart
+cycle:
 
 ```
 world.row.set creations <id> document.shapes[name=<shape>].<field> <json>
@@ -102,15 +101,11 @@ world.screenshot <abs-path.png>
 
 `world.row.set`/`world.row` mutate the in-memory document and work
 regardless of source format. `world.reload` re-reads the document's on-disk
-origin through the plain JSON loader — against a `.puck`-sourced world it
-fails to parse. A bare `world.save` (no path argument) writes canonical JSON
-back over that same origin path — against a `.puck`-sourced world it
-overwrites the `.puck` file with JSON, destroying every `let`, `template`,
-`for`, comment, and shape-sugar spelling in it. Neither verb is fixed today.
-To persist a live edit made against a `.puck`-booted world: `world.save
-<explicit-path>.world.json` to an explicit path, hand-port the change into the
-`.puck` source, and restart (or recompile and reboot with `--world`) to pick
-it up — never bare `world.save` or `world.reload` on that world.
+origin and recompiles a `.puck` source (basis chain included), so editing the
+`.puck` file and reloading needs no restart. A bare `world.save` against a
+`.puck`-sourced world is refused by name and writes nothing, since canonical
+JSON would overwrite the source. To keep a live row edit, `world.save
+<explicit-path>.world.json` and hand-port the change into the `.puck` source.
 
 `world.screenshot` only **arms** a capture. Fence it with `world.wait` and
 confirm the `[capture] … -> <path>` line on **stderr** before reading the file.
@@ -174,8 +169,9 @@ separate cutter shape. It still forces the creation-wide scope.
 Two rules decide whether facets are even available to you:
 
 1. **Per-shape scope.** `dilate`, `onion`, `panel`, `flare`, `shear`, `bumps`,
-   `erode`, `cells`, and a non-uniformly scaled sphere or ellipsoid each make
-   the shape request its own field scope. When that depth is already occupied,
+   `erode`, and `cells` each make the shape request its own field scope. A
+   non-uniformly scaled sphere or ellipsoid does not: it bakes into the exact
+   1-Lipschitz exponent-2 superellipsoid gauge. When that depth is already occupied,
    a warp's bound is shared at the enclosing group or creation pop; only an
    unscoped chain taxes the program-wide step scale. A shared conservative
    bound can make siblings march short; check clamps before diagnosing a soft
@@ -272,6 +268,13 @@ expand are also refused where contact is owed. In contrast, `flare`, `shear`,
 but are omitted from creation contact geometry (cells keep the base primitive).
 These authoring omissions are distinct from low-level VM interpreter support.
 See [shapes](references/shapes.md#contact-admission).
+
+A creation's bake (its mesh, textures and impostor) is the deterministic contact
+field's view of it: detail shapes, sweeps, text, noise relief, volumes and the
+omitted warp facets are absent from the bake, and a creation the fixed-point
+evaluator refuses (a residual nonuniform `Scale`, a wallpaper fold) has none and
+keeps drawing through its field. Nothing draws a bake yet. See
+[prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes).
 
 ## Verifying
 

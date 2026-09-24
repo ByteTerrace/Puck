@@ -104,8 +104,8 @@ public static partial class RuleCompiler {
                 return ResolveForEachPool(context: context, effect: each, ruleName: ruleName);
             case ActionEffect.ClaimPair pair:
                 return ResolveClaimPair(context: context, effect: pair, ruleName: ruleName);
-            case ActionEffect.RewindTurn rewind:
-                return new RewindTurnEffect(group: rewind.Group.Value);
+            case ActionEffect.RewindGroup rewind:
+                return new RewindGroupEffect(group: rewind.Group.Value);
             default:
                 if (context.Vocabulary.EffectOf(effect: effect) is { } family) {
                     var compiled = family.Compile(
@@ -140,7 +140,7 @@ public static partial class RuleCompiler {
         RuleInstanceBinding binding;
 
         try {
-            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool);
+            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool, effectScoped: true);
         } catch (InvalidOperationException error) {
             throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
         }
@@ -192,7 +192,7 @@ public static partial class RuleCompiler {
         RuleInstanceBinding binding;
 
         try {
-            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool);
+            binding = context.PushInstanceBinding(name: effect.Binding, pool: pool, effectScoped: true);
         } catch (InvalidOperationException error) {
             throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName);
         }
@@ -222,7 +222,7 @@ public static partial class RuleCompiler {
 
         RuleInstanceBinding binding;
 
-        try { binding = context.PushInstanceBinding(name: effect.Binding, pool: pool); } catch (InvalidOperationException error) { throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName); }
+        try { binding = context.PushInstanceBinding(name: effect.Binding, pool: pool, effectScoped: true); } catch (InvalidOperationException error) { throw new RuleException(detail: error.Message, refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName); }
         try { return new ForEachPoolEffect(pool: pool, bindingSlot: binding.Slot, effects: CompileEffects(effects: effect.Effects, ruleName: ruleName, context: context, subject: "pool foreach"), describe: $"for each {binding.Name} in {pool.Name.Value}"); } finally { context.PopInstanceBinding(binding: binding); }
     }
 
@@ -485,7 +485,7 @@ public static partial class RuleCompiler {
             );
         }
 
-        var write = ((WriteEffect)ResolveWrite(
+        var resolved = ResolveWrite(
             context: context,
             expression: push.Expression,
             fromKey: push.FromKey,
@@ -499,7 +499,16 @@ public static partial class RuleCompiler {
             valueSeconds: null,
             verb: "pushState",
             write: StateWriteKind.Set
-        ));
+        );
+
+        // A Vector row's write resolves to a vector effect, not a WriteEffect, and a history ring holds one value.
+        if (resolved is not WriteEffect write) {
+            throw new RuleException(
+                detail: $"'pushState' writes '{push.State}', whose kind carries no single value a history ring can hold",
+                refusal: RuleRefusal.EffectSourceKindMismatch,
+                ruleName: ruleName
+            );
+        }
 
         return new PushStateEffect(
             describe: $"pushState {push.State}",

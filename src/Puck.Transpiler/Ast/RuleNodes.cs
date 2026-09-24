@@ -118,13 +118,16 @@ public sealed record RuleBlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="NameExpression">An interpolated name, when the statement wrote one instead of an identifier; only a
+/// lowering scope can resolve it, so <see cref="Name"/> stays empty until then.</param>
 public sealed record LocalStatementNode(
     string Name,
     OperandExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? NameExpression = null
 ) : StatementNode(
     Offset,
     Length,

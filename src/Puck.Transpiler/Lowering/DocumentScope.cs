@@ -83,6 +83,26 @@ public interface IDocumentVocabulary {
     /// <param name="scope">The active scope, positioned at the member's value type.</param>
     /// <returns>The document value. The default leaves it unchanged.</returns>
     JsonNode? NormalizeMemberValue(JsonNode? value, DocumentValueForm form, DocumentScope scope) => value;
+    /// <summary>Returns whether a runtime document import (an <c>import</c> not naming a <c>.puck</c> module) names a
+    /// document that exists beside the importing source.</summary>
+    /// <param name="directory">The full path of the importing source's directory.</param>
+    /// <param name="name">The imported name as written.</param>
+    /// <param name="reason">The named refusal when the import names nothing this vocabulary can read, or empty.</param>
+    /// <returns><see langword="true"/> when the document exists. The default reads <paramref name="name"/> as a file
+    /// path.</returns>
+    bool TryFindDocumentImport(string directory, string name, out string reason) {
+        var path = Path.GetFullPath(path: Path.Combine(
+            path1: directory,
+            path2: name
+        ));
+
+        reason = (Modules.CompileInputs.Exists(path: path)
+            ? string.Empty
+            : $"Imported document '{name}' could not be found at '{path}'."
+        );
+
+        return (reason.Length == 0);
+    }
 }
 /// <summary>How the value of a call argument is written in source.</summary>
 /// <remarks>A bare form is written without quotes and is never a string literal; <see cref="Text"/> is always a
@@ -104,56 +124,183 @@ public enum DocumentValueForm {
 }
 /// <summary>One lowering pass's carried state: the constants and templates in scope, where diagnostics and source
 /// spans go, and the document vocabulary answering the schema-specific questions.</summary>
-/// <param name="vocabulary">The document vocabulary being lowered against.</param>
-/// <param name="basePath">The base directory relative asset paths resolve against, or <see langword="null"/>.</param>
-/// <param name="constants">The <c>let</c> bindings in scope; a fresh dictionary when null.</param>
-/// <param name="templates">The <c>template</c> declarations in scope; a fresh dictionary when null.</param>
-/// <param name="sourceMap">The JSON-pointer-to-span map to fill, or <see langword="null"/> to record none.</param>
-/// <param name="diagnostics">The bag refusals are reported into; a fresh bag when null.</param>
-/// <param name="schema">The document's declared schema, or <see langword="null"/>.</param>
-/// <param name="currentPointer">The JSON pointer lowering is currently positioned at.</param>
-/// <param name="annotations">The arbitrary annotations carried across child scopes, or <see langword="null"/>.</param>
-public sealed class DocumentScope(
-    IDocumentVocabulary vocabulary,
-    string? basePath = null,
-    Dictionary<string, ExpressionNode>? constants = null,
-    Dictionary<string, TemplateNode>? templates = null,
-    SourceMap? sourceMap = null,
-    DiagnosticBag? diagnostics = null,
-    string? schema = null,
-    string currentPointer = "",
-    Dictionary<string, object?>? annotations = null
-) {
+public sealed partial class DocumentScope {
+    /// <summary>Creates the root scope of a lowering pass.</summary>
+    /// <param name="vocabulary">The document vocabulary being lowered against.</param>
+    /// <param name="basePath">The base directory relative asset paths resolve against, or <see langword="null"/>.</param>
+    /// <param name="constants">The <c>let</c> bindings in scope; a fresh dictionary when null.</param>
+    /// <param name="templates">The <c>template</c> declarations in scope; a fresh dictionary when null.</param>
+    /// <param name="sourceMap">The JSON-pointer-to-span map to fill, or <see langword="null"/> to record none.</param>
+    /// <param name="diagnostics">The bag refusals are reported into; a fresh bag when null.</param>
+    /// <param name="schema">The document's declared schema, or <see langword="null"/>.</param>
+    /// <param name="currentPointer">The JSON pointer lowering is currently positioned at.</param>
+    /// <param name="annotations">The arbitrary annotations carried across child scopes, or <see langword="null"/>.</param>
+    public DocumentScope(
+        IDocumentVocabulary vocabulary,
+        string? basePath = null,
+        Dictionary<string, ExpressionNode>? constants = null,
+        Dictionary<string, TemplateNode>? templates = null,
+        SourceMap? sourceMap = null,
+        DiagnosticBag? diagnostics = null,
+        string? schema = null,
+        string currentPointer = "",
+        Dictionary<string, object?>? annotations = null
+    ) : this(
+        annotations: (annotations ?? new(comparer: StringComparer.Ordinal)),
+        arguments: new(comparer: StringComparer.Ordinal),
+        basePath: basePath,
+        budget: new(),
+        constants: (constants ?? []),
+        currentPointer: currentPointer,
+        diagnostics: (diagnostics ?? new DiagnosticBag()),
+        evaluating: new(comparer: StringComparer.Ordinal),
+        locals: [],
+        schema: schema,
+        sourceMap: sourceMap,
+        templates: (templates ?? []),
+        templateScopes: new(comparer: StringComparer.Ordinal),
+        values: [],
+        vocabulary: vocabulary
+    ) {
+    }
+
+    // Every derived scope names each piece of state it shares and each it starts fresh, and allocates nothing else:
+    // a lambda application and a loop iteration each derive one, so a derivation that built state only to replace
+    // it would pay for that on every element of every collection a document folds.
+    private DocumentScope(
+        IDocumentVocabulary vocabulary,
+        string? basePath,
+        Dictionary<string, ExpressionNode> constants,
+        Dictionary<string, TemplateNode> templates,
+        SourceMap? sourceMap,
+        DiagnosticBag diagnostics,
+        string? schema,
+        string currentPointer,
+        Dictionary<string, object?> annotations,
+        Dictionary<string, JsonNode?> locals,
+        DocumentEvaluationBudget budget,
+        Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> values,
+        Dictionary<string, DocumentScope> arguments,
+        Dictionary<string, DocumentScope> templateScopes,
+        HashSet<string> evaluating
+    ) {
+        Vocabulary = vocabulary;
+        BasePath = basePath;
+        Constants = constants;
+        Templates = templates;
+        SourceMap = sourceMap;
+        Diagnostics = diagnostics;
+        Schema = schema;
+        CurrentPointer = currentPointer;
+        Annotations = annotations;
+        Locals = locals;
+        Budget = budget;
+        m_values = values;
+        m_arguments = arguments;
+        m_templateScopes = templateScopes;
+        m_evaluating = evaluating;
+    }
+
     /// <summary>Gets the document vocabulary being lowered against.</summary>
-    public IDocumentVocabulary Vocabulary { get; } = vocabulary;
+    public IDocumentVocabulary Vocabulary { get; }
     /// <summary>Gets the base directory relative asset paths resolve against.</summary>
-    public string? BasePath { get; } = basePath;
+    public string? BasePath { get; }
     /// <summary>Gets the <c>let</c> bindings in scope.</summary>
-    public Dictionary<string, ExpressionNode> Constants { get; } = (constants ?? []);
+    public Dictionary<string, ExpressionNode> Constants { get; }
     /// <summary>Gets the <c>template</c> declarations in scope.</summary>
-    public Dictionary<string, TemplateNode> Templates { get; } = (templates ?? []);
+    public Dictionary<string, TemplateNode> Templates { get; }
     /// <summary>Gets the JSON-pointer-to-span map being filled, or <see langword="null"/>.</summary>
-    public SourceMap? SourceMap { get; } = sourceMap;
+    public SourceMap? SourceMap { get; }
     /// <summary>Gets the bag refusals are reported into.</summary>
-    public DiagnosticBag Diagnostics { get; } = (diagnostics ?? new DiagnosticBag());
+    public DiagnosticBag Diagnostics { get; }
     /// <summary>Gets the document's declared schema.</summary>
-    public string? Schema { get; } = schema;
+    public string? Schema { get; }
     /// <summary>Gets or sets the JSON pointer lowering is currently positioned at.</summary>
-    public string CurrentPointer { get; set; } = currentPointer;
+    public string CurrentPointer { get; set; }
     /// <summary>Gets the lambda parameters bound in this scope, as already-lowered values.</summary>
     /// <remarks>Separate from <see cref="Constants"/> because a bound value is a JSON node, not an expression that
     /// could be lowered again; a local shadows a constant of the same name.</remarks>
-    public Dictionary<string, JsonNode?> Locals { get; private init; } = [];
+    public Dictionary<string, JsonNode?> Locals { get; }
     /// <summary>Gets schema-agnostic user annotations attached to this compilation scope.</summary>
-    public Dictionary<string, object?> Annotations { get; init; } = (annotations ?? new(comparer: StringComparer.Ordinal));
+    public Dictionary<string, object?> Annotations { get; init; }
 
-    private Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> m_values = [];
-    private Dictionary<string, DocumentScope> m_arguments = new(comparer: StringComparer.Ordinal);
-    private Dictionary<string, DocumentScope> m_templateScopes = new(comparer: StringComparer.Ordinal);
-    private HashSet<string> m_evaluating = new(comparer: StringComparer.Ordinal);
+    // The constants a vocabulary bound only to refuse every read of their value, each to its refusal. Keyed by the
+    // bound node, so a refusal follows the binding into every scope that shares the constants.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ExpressionNode, DocumentBindingRefusal> RefusedBindings = new();
+
+    private readonly Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> m_values;
+    private readonly Dictionary<string, DocumentScope> m_arguments;
+    private readonly Dictionary<string, DocumentScope> m_templateScopes;
+    private readonly HashSet<string> m_evaluating;
 
     /// <summary>Gets the work budget shared by every scope of this compilation.</summary>
-    public DocumentEvaluationBudget Budget { get; init; } = new();
+    public DocumentEvaluationBudget Budget { get; init; }
+
+    /// <summary>Binds <paramref name="name"/> to a constant whose value no read may take: a name the vocabulary knows
+    /// but cannot give one value, such as a bare enum member two enums declare. The name still reads as bound, so a
+    /// position that takes a name keeps its spelling and it never falls through to a row; a position that takes its
+    /// value reports <see cref="TryGetRefusedBinding"/>'s refusal where the name is read.</summary>
+    /// <param name="name">The bare name.</param>
+    /// <param name="code">The diagnostic code a read reports.</param>
+    /// <param name="message">The refusal, naming the spellings that do read.</param>
+    /// <returns>The bound node, which identifies the refused binding.</returns>
+    public ExpressionNode BindRefused(string name, string code, string message) {
+        var node = new LiteralExpressionNode(Value: null);
+
+        RefusedBindings.AddOrUpdate(
+            key: node,
+            value: new DocumentBindingRefusal(
+                Code: code,
+                Message: message
+            )
+        );
+        Constants[name] = node;
+
+        return node;
+    }
+    /// <summary>Reports a read of <paramref name="name"/>'s value at <paramref name="span"/> when the name is bound by
+    /// <see cref="BindRefused"/>, once per read however often lowering evaluates it.</summary>
+    /// <param name="name">The bare name read.</param>
+    /// <param name="span">The source that reads it.</param>
+    /// <returns><see langword="true"/> when the read is refused; the caller then writes a placeholder, never the
+    /// binding's value.</returns>
+    public bool TryRefuseRead(string name, SourceSpan span) {
+        if (!TryGetRefusedBinding(
+            name: name,
+            refusal: out var refusal
+        )) {
+            return false;
+        }
+        if (!Diagnostics.Any(predicate: diagnostic => ((diagnostic.Code == refusal.Code) && (diagnostic.Span == span)))) {
+            Diagnostics.ReportError(
+                code: refusal.Code,
+                message: refusal.Message,
+                span: span
+            );
+        }
+
+        return true;
+    }
+    /// <summary>Returns the refusal a read of <paramref name="name"/>'s value reports, when the name is bound by
+    /// <see cref="BindRefused"/> and no local shadows it.</summary>
+    /// <param name="name">The bare name.</param>
+    /// <param name="refusal">The refusal, on success.</param>
+    /// <returns><see langword="true"/> when reading the name's value is refused.</returns>
+    public bool TryGetRefusedBinding(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out DocumentBindingRefusal? refusal) {
+        refusal = null;
+
+        return (
+            !Locals.ContainsKey(key: name) &&
+            Constants.TryGetValue(
+                key: name,
+                value: out var expression
+            ) &&
+            RefusedBindings.TryGetValue(
+                key: expression,
+                value: out refusal
+            )
+        );
+    }
 
     internal void BindArgument(string name, ExpressionNode expression, DocumentScope caller) {
         Constants[name] = expression;
@@ -208,23 +355,26 @@ public sealed class DocumentScope(
                 : ForConstant()
             );
 
-            // A binding's value is data until something uses it, and its result is cached across uses, so it is
-            // evaluated at no position: what it holds is classified where it lands, never where it was first read.
-            value = DocumentLowering.At(
-                context: null,
-                lower: () => DocumentLowering.EvaluateValue(
-                    expr: expression,
-                    fieldKey: fieldKey,
-                    scope: lexical
-                ),
-                scope: lexical
-            );
+            value = EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical);
             m_values[key] = (expression, value);
             return true;
         } finally {
             m_evaluating.Remove(item: name);
         }
     }
+
+    // A binding's value is data until something uses it, and its result is cached across uses, so it is evaluated at
+    // no position: what it holds is classified where it lands, never where it was first read. Its own method so the
+    // closure is built only for a binding evaluated, never for one read from a local or the cache.
+    private static JsonNode? EvaluateAtNoPosition(ExpressionNode expression, string? fieldKey, DocumentScope lexical) => DocumentLowering.At(
+        context: null,
+        lower: () => DocumentLowering.EvaluateValue(
+            expr: expression,
+            fieldKey: fieldKey,
+            scope: lexical
+        ),
+        scope: lexical
+    );
 
     /// <summary>Gets a scope for lowering a CONSTANT: the same constants and templates, with no locals in scope.</summary>
     /// <remarks>A <c>let</c> is a document-level value and cannot read a loop binding or a lambda parameter — which
@@ -233,21 +383,22 @@ public sealed class DocumentScope(
     public DocumentScope ForConstant() => ((Locals.Count == 0)
         ? this
         : new(
-            vocabulary: Vocabulary,
+            annotations: new(comparer: StringComparer.Ordinal),
+            arguments: m_arguments,
             basePath: BasePath,
+            budget: Budget,
             constants: Constants,
-            templates: Templates,
-            sourceMap: SourceMap,
+            currentPointer: CurrentPointer,
             diagnostics: Diagnostics,
+            evaluating: m_evaluating,
+            locals: [],
             schema: Schema,
-            currentPointer: CurrentPointer
-        ) {
-            Budget = Budget,
-            m_arguments = m_arguments,
-            m_evaluating = m_evaluating,
-            m_templateScopes = m_templateScopes,
-            m_values = m_values,
-        }
+            sourceMap: SourceMap,
+            templates: Templates,
+            templateScopes: m_templateScopes,
+            values: m_values,
+            vocabulary: Vocabulary
+        )
     );
     /// <summary>Indexes document-level declarations before either vocabulary emits rows.</summary>
     /// <param name="statements">The statements in this lexical document scope.</param>
@@ -265,6 +416,7 @@ public sealed class DocumentScope(
             Annotations["DeclaredGates"] = gatesValue;
         }
         IndexStructuralNames(gates: ((HashSet<string>)gatesValue!), pools: ((HashSet<string>)poolsValue!), rows: ((HashSet<string>)rowsValue!), statements: statements);
+        IndexModuleInstances(statements: statements);
         foreach (var statement in statements) {
             if (statement is LetNode let) {
                 if (!Constants.TryAdd(
@@ -369,23 +521,22 @@ public sealed class DocumentScope(
         try {
             var lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
             var positioned = new DocumentScope(
-                vocabulary: Vocabulary,
+                annotations: Annotations,
+                arguments: lexical.m_arguments,
                 basePath: lexical.BasePath,
+                budget: Budget,
                 constants: lexical.Constants,
-                templates: lexical.Templates,
-                sourceMap: SourceMap,
-                diagnostics: Diagnostics,
-                schema: Schema,
                 currentPointer: CurrentPointer,
-                annotations: Annotations
-            ) {
-                Budget = Budget,
-                Locals = lexical.Locals,
-                m_arguments = lexical.m_arguments,
-                m_evaluating = m_evaluating,
-                m_templateScopes = lexical.m_templateScopes,
-                m_values = lexical.m_values,
-            };
+                diagnostics: Diagnostics,
+                evaluating: m_evaluating,
+                locals: lexical.Locals,
+                schema: Schema,
+                sourceMap: SourceMap,
+                templates: lexical.Templates,
+                templateScopes: lexical.m_templateScopes,
+                values: lexical.m_values,
+                vocabulary: Vocabulary
+            );
 
             value = DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: positioned);
             return true;
@@ -402,63 +553,63 @@ public sealed class DocumentScope(
         Dictionary<string, ExpressionNode> invocationConstants,
         Dictionary<string, object?>? annotations = null
     ) => new(
-        vocabulary: Vocabulary,
+        annotations: (annotations ?? Annotations),
+        arguments: new(dictionary: m_arguments, comparer: StringComparer.Ordinal),
         basePath: BasePath,
+        budget: Budget,
         constants: invocationConstants,
-        templates: Templates,
-        sourceMap: SourceMap,
-        diagnostics: Diagnostics,
-        schema: Schema,
         currentPointer: CurrentPointer,
-        annotations: (annotations ?? Annotations)
-    ) {
-        m_arguments = new(
-        m_arguments,
-        StringComparer.Ordinal
-    ),
-        m_templateScopes = m_templateScopes,
-        Budget = Budget,
-    };
+        diagnostics: Diagnostics,
+        evaluating: new(comparer: StringComparer.Ordinal),
+        locals: [],
+        schema: Schema,
+        sourceMap: SourceMap,
+        templates: Templates,
+        templateScopes: m_templateScopes,
+        values: [],
+        vocabulary: Vocabulary
+    );
     /// <summary>Creates a scope whose relative paths resolve from a defining source directory.</summary>
     /// <param name="basePath">The defining source directory.</param>
     /// <returns>The rebased lexical scope.</returns>
     public DocumentScope WithBasePath(string? basePath) => new(
-        vocabulary: Vocabulary,
+        annotations: Annotations,
+        arguments: new(dictionary: m_arguments, comparer: StringComparer.Ordinal),
         basePath: basePath,
+        budget: Budget,
         constants: Constants,
-        templates: Templates,
-        sourceMap: SourceMap,
-        diagnostics: Diagnostics,
-        schema: Schema,
         currentPointer: CurrentPointer,
-        annotations: Annotations
-    ) {
-        m_arguments = new(m_arguments, StringComparer.Ordinal),
-        m_templateScopes = m_templateScopes,
-        Budget = Budget,
-    };
+        diagnostics: Diagnostics,
+        evaluating: new(comparer: StringComparer.Ordinal),
+        locals: [],
+        schema: Schema,
+        sourceMap: SourceMap,
+        templates: Templates,
+        templateScopes: m_templateScopes,
+        values: [],
+        vocabulary: Vocabulary
+    );
     /// <summary>Creates a scope identical to this one but carrying a different local set, for one application of a
     /// lambda.</summary>
     /// <param name="lambdaLocals">The locals the nested scope sees.</param>
     /// <returns>The nested scope.</returns>
     public DocumentScope WithLocals(Dictionary<string, JsonNode?> lambdaLocals) => new(
-        vocabulary: Vocabulary,
+        annotations: Annotations,
+        arguments: m_arguments,
         basePath: BasePath,
+        budget: Budget,
         constants: Constants,
-        templates: Templates,
-        sourceMap: SourceMap,
-        diagnostics: Diagnostics,
-        schema: Schema,
         currentPointer: CurrentPointer,
-        annotations: Annotations
-    ) {
-        Budget = Budget,
-        Locals = lambdaLocals,
-        m_arguments = m_arguments,
-        m_evaluating = m_evaluating,
-        m_templateScopes = m_templateScopes,
-        m_values = m_values,
-    };
+        diagnostics: Diagnostics,
+        evaluating: m_evaluating,
+        locals: lambdaLocals,
+        schema: Schema,
+        sourceMap: SourceMap,
+        templates: Templates,
+        templateScopes: m_templateScopes,
+        values: m_values,
+        vocabulary: Vocabulary
+    );
 }
 /// <summary>JSON helpers every lowering pass needs and none should restate.</summary>
 public static class JsonNodeExtensions {

@@ -47,7 +47,7 @@ public static partial class WorldDecompiler {
             if (
                 (item is not JsonObject row) ||
                 (row["name"] is not JsonValue rowName) ||
-                !IsDeclarationIdentifier(text: rowName.ToString()) ||
+                !IdentifierSpelling.IsName(text: rowName.ToString()) ||
                 (row["kind"] is not JsonValue rowKind) ||
                 !Enum.GetNames<CellKind>().Contains(value: rowKind.ToString(), comparer: StringComparer.Ordinal) ||
                 (row["symbols"] is not JsonArray symbols) ||
@@ -68,7 +68,7 @@ public static partial class WorldDecompiler {
                     (entry["min"] is not JsonValue) ||
                     (entry["max"] is not JsonValue) ||
                     (entry.Count != 3) ||
-                    !IsBarePatternName(name: name.ToString())
+                    !IdentifierSpelling.IsIdentifier(text: name.ToString())
                 ) {
                     return false;
                 }
@@ -82,25 +82,6 @@ public static partial class WorldDecompiler {
                 node: pattern,
                 text: out _
             )
-            ) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-    private static bool IsBarePatternName(string name) {
-        if (
-            (name.Length == 0) ||
-            (!char.IsAsciiLetter(c: name[0]) && (name[0] != '_'))
-        ) {
-            return false;
-        }
-
-        foreach (var c in name) {
-            if (
-                !char.IsAsciiLetterOrDigit(c: c) &&
-                (c != '_')
             ) {
                 return false;
             }

@@ -1,11 +1,13 @@
 /*
     Stages `dist/` into `dist-deploy/`, matching the Front Door serving contract
     defined by the `portal` rule set in Azure.Resources/main.bicep:
-      - `$web/index.html` and `$web/assets/**` are served with a forced
+      - `$web/index.html`, `$web/assets/**`, `$web/portal/assets/**`, and
+        `$web/portal/duckdb-extensions/**` are served with a forced
         `Content-Encoding: br` response header, so those files must contain
         brotli-compressed bytes at rest.
-      - Every other path (including the `portal/**` federated remote) is served
-        without a Content-Encoding header, so those files must be uncompressed.
+      - Every other path (the portal's `mf-manifest.json` and
+        `portal-entry.js` among them) is served without a Content-Encoding
+        header, so those files must be uncompressed.
 */
 
 import {
@@ -67,4 +69,6 @@ cpSync(join(distDirectory, "portal"), join(stageDirectory, "portal"), {
 });
 compressInPlace(join(stageDirectory, "index.html"));
 compressTreeInPlace(join(stageDirectory, "assets"));
+compressTreeInPlace(join(stageDirectory, "portal", "assets"));
+compressTreeInPlace(join(stageDirectory, "portal", "duckdb-extensions"));
 console.log(`Staged deployment layout at: ${stageDirectory}`);

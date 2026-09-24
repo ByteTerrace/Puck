@@ -33,14 +33,14 @@ capability authentication.
 - *Safe parallel stepping:* `ISteppableRenderNode` separates serial shared-state
   preparation from parallel private-state execution; GPU work stays on the
   render thread.
-- *Presentation observability:* frame capture, latest-value publication, emitted
-  light, and frame-timing samples remain outside the simulation trajectory.
+- *Presentation observability:* frame capture, latest-value publication, and
+  emitted light remain outside the simulation trajectory.
 
 ## The host boundary
 
-The fixed-step simulation is authoritative. Rendering, timing diagnostics,
-capture, and GPU upload observe or present its state; they do not decide what
-the state becomes.
+The fixed-step simulation is authoritative. Rendering, capture, and GPU
+upload observe or present its state; they do not decide what the state
+becomes.
 
 ```mermaid
 graph LR
@@ -53,7 +53,6 @@ graph LR
     Simulation --> Tree
     Tree --> Surface["🖼️ Root Surface"]
     Surface --> Present["🖥️ Swapchain / capture"]
-    Context -. "presentation timing only" .-> Timing["📊 FrameTimingHub"]
 ```
 
 ## Quick start: a render node
@@ -178,13 +177,6 @@ The fields most often confused in `FrameContext` have distinct meanings:
 | `StepTicks` | Fixed update period |
 | `RenderTicks` | Interpolated presentation instant: elapsed plus accumulator |
 
-`FrameTimingSample` records CPU wall-clock phase buckets, garbage-collection
-overlays, and a remainder that makes the buckets tile the whole observed frame.
-`FrameTimingHub` publishes the latest sample with a version number and invokes
-its `Published` event synchronously on the render thread. Observers must keep
-event handlers small and non-blocking. None of this timing data belongs in
-simulation decisions.
-
 ## Render lifecycle and publication
 
 Every `IRenderNode` has a stable `NodeDescriptor`, produces one `Surface`, and
@@ -210,6 +202,72 @@ surfaces use the active presenter's optional readback capability. Capture
 timestamps use authoritative `ElapsedTicks`, while cadence follows continuous
 `RenderTicks` so it does not assume a fixed host presentation rate.
 
+`ProduceFrame` must never wait for slow GPU object creation, because the same
+thread drains the console and steps the simulation. `BackgroundBuild<T>` is how a
+node moves that work off: it starts a build on the thread pool, the node polls
+`TryTake` once per produced frame and installs the result at that frame
+boundary, and until then it presents what it already has. A newer request
+cancels the pending build with `Cancel`, and the discarded result is released
+when the build finishes. Before the device goes away, `CancelAndWait` blocks
+until the build's current unit of work returns, so nothing is created on a
+device being torn down. The SDF engine's pipelines and live shader-pipeline
+compilations both use it.
+
+A node that samples an image another producer keeps writing, such as a camera
+ring slot or a HUD frame, receives it as a `GpuImageLease`: an image-view
+handle with an optional release callback and token. The node holds each such
+lease in a `LeaseRetireList` until a fence wait proves the submission that
+sampled it has finished, then retires the list, which runs every release once
+in the order the leases were held. A node with frames in flight keeps one list
+per frame-ring slot and moves each frame's list into its slot when it submits.
+The SDF engine node and the unified overlay both use it.
+
+`RenderGraphScheduler` decides which views render in a frame. Every view is a
+`RenderGraphInstance`: a name, a refresh (a frame divisor or a rate in hertz),
+the passes one render records, and the instances it may read.
+`RenderGraphInstanceSet.TryCreate` validates a set and orders it so every
+producer renders before the consumers that read it in the same frame. A read of
+the instance's own output, or a read declared previous-frame, takes the
+producer's last completed frame instead. A loop of same-frame reads is refused
+with `SameFrameCycle`, naming every instance in the loop. `Schedule` is a pure
+function of the set, a `RenderGraphFrame`, and the previous frame's
+`RenderGraphHistory`. The frame carries the display's extent and rate, the
+instances the display shows (`RenderGraphRoot`), how much of each rendering
+instance's image another instance's output covers (`RenderGraphFootprint`),
+and the frame's pass-pixel budget:
+
+- An instance renders only when the display or an instance rendering this frame
+  shows it, and at most once a frame however many consumers read it.
+- It renders at its largest footprint: the consumer's own extent times the
+  fraction the producer covers. `RenderGraphExtent` rounds that up to one of
+  sixteen steps in its power-of-two octave, and keeps the allocation through
+  a shrink of less than an eighth.
+- It renders only when its refresh is due. A consumer of an instance that is
+  not due reads that instance's latest completed output and never waits for it.
+- The instances the display does not show directly spend at most the budget,
+  priced as passes times pixels. The stalest due instance goes first, so an
+  instance the budget defers is first in line on the next frame.
+
+The schedule lists every instance with its status, extent, divisor, passes and
+price, the renders in order, and the frame of its output each rendering
+consumer reads. Nothing renders through it yet: the live renderer still
+composes its views itself, and moving it onto the scheduler is P11b in
+[the rendering programme](../plans/rendering.md#p11--the-frame-graph-document-and-nested-views).
+
+`RenderGraphHitWalk` follows a hit through nested instances. Each instance
+reports, through `IRenderGraphHitScene`, the source placements in its world
+(`Puck.Commands.SourceMapping`) and the camera it renders from. `Walk` casts a
+ray into an instance's world and meets the nearest surface placement. When that
+placement shows another instance's output, the walk casts a new ray through the
+producer's camera from the hit's point on the image, and repeats in the
+producer's world. `WalkDisplay` starts from the topmost pane under a display
+point. A walk continues at most the limit it is given, which is normally
+`RenderGraphInstanceSet.NestingDepth`, the longest chain of same-frame reads.
+It ends on a producer's pixels, on an instance's world, off a source, at the
+limit, on an image the showing instance does not read, or at an instance with
+no camera. Every step maps in fixed point, so the same inputs walk the same
+path on every run.
+
 `PublishBuffer<T>` is the smaller handoff for immutable latest-state values. A
 single writer swaps a holder reference and readers snapshot the newest value.
 It is not a FIFO and retains no history, so use it only when skipping obsolete
@@ -225,7 +283,28 @@ intermediate publications is correct.
 | Host scope | `IHostContext`, `HostContext`, `ChainedHostContext`, `HostCapabilityContribution` | Inherited services and exclusive held capabilities |
 | Delegation | `HeldCapabilityGrants`, `ICapabilityTakeBack`, `IHeldCapabilityLeaseSource` | Revocable held-capability chains |
 | Standard authority | `ITerminalControl`, `IInputFocus` | Exit ownership and device focus |
-| Observation | `FrameCaptureController`, `PublishBuffer<T>`, `FrameTimingHub`, `FrameTimingSample` | Capture sessions, latest-value handoff, and timing telemetry |
+| Observation | `FrameCaptureController`, `PublishBuffer<T>` | Capture sessions and latest-value handoff |
+| Background work | `BackgroundBuild<T>` | A candidate built on the thread pool and installed at a frame boundary |
+| Sampled images | `GpuImageLease`, `LeaseRetireList` | An image a submission samples, released once that submission retires |
+| View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent` | Which views render in a frame, at what extent, rate and price |
+| Nested hits | `RenderGraphHitWalk`, `IRenderGraphHitScene`, `RenderGraphHitPath` | Where a pick through views that show other views lands |
+| Child processes | `ChildProcess`, `ChildProcessResult` | Tool runs and driven companions started from an argument vector |
+
+`ChildProcess` starts the tools that the CLI, the shader compiler and the
+emulator diagnostics run. `RunAsync` takes an argument
+vector, never a shell expression. It reads both captured streams while the child
+runs, so a child that fills a pipe buffer on either stream still runs to exit, and
+it returns only after both reads finish, so the tail of the output is never lost.
+The run is bounded by an optional timeout on a caller-supplied `TimeProvider` and
+by cancellation. Either bound kills the whole process tree and drains both
+streams. A timeout is reported as `TimedOut` in the result, while cancellation
+throws `OperationCanceledException`. `StartRedirected` starts a companion that
+the caller drives itself. That caller owns all three redirected streams and must
+drain every output stream it keeps open.
+
+Extension discovery and its load contexts (`PuckExtensionDiscovery`,
+`PuckExtensionLoadContext`) and the `HostedControl` contribution also live in
+this project; [Extensions](extensions.md) explains them.
 
 The machine-neutral queued-host substrate (`QueuedMachineWorker`,
 `IQueuedMachineCore`, `MachineTimeTravel<TInput>`, `QueuedHostContractProbe`)
@@ -243,7 +322,9 @@ World, GPU-backend or cloud dependency here; the optional
 
 The opt-in endpoint binds only IPv4 loopback, admits at most four connections
 including handshakes, and uses Networking's user-only Windows/Linux x64
-local endpoint capability.
+local endpoint capability. It publishes its attachment file in the user's
+temporary directory, where an adapter following the newest World looks, unless
+the host names another directory.
 Creating an instance starts the listener; the host owns its disposal.
 An in-process extension can use `IControlSessionHost` instead. `DescribeAsync`
 returns the identity's admitted command help and renderer availability without
@@ -274,6 +355,14 @@ Client-side admission refusals carry ID zero and do not advance that sequence.
 | Completed PNG | 16 MiB |
 | Response JSON payload | 24 MiB |
 | Request deadline | 1–120000 milliseconds; client default 30000 |
+
+Every deadline runs on a `TimeProvider`, the system clock unless one is passed.
+The clock given to `LocalControlClient.ConnectAsync` bounds connecting and
+authenticating, then each call on that attachment. The clock given to
+`LocalControlServer` bounds each connection's authentication and each request,
+and the clock given to `ConsoleControlSession` bounds each request it runs. No
+deadline on either side reads wall time on its own, so a test can drive every
+one of them from a clock it advances.
 
 Call serially. An additional frame while an operation waits closes and cancels
 that ingress. One bounded read observes disconnect during the wait. Oversized

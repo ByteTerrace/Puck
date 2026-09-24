@@ -78,8 +78,8 @@ public sealed class WorldIdentityAppendLawTests {
         ));
         Assert.Null(@object: evicted);
         Assert.Contains(
-            expectedSubstring: "absent",
-            actualString: reason
+            actualString: reason,
+            expectedSubstring: "absent"
         );
     }
 }

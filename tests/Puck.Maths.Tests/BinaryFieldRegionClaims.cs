@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.Intrinsics;
 
 namespace Puck.Maths.Tests;
 
@@ -74,17 +75,17 @@ internal static class BinaryFieldRegionClaims {
             // A deterministic, operand-free affine walk spread across the element space by two odd mixing constants,
             // salted so the source and the seed region never coincide, then reduced into the narrow-degree field —
             // unlike a catalog field, where degree equals the carrier's width and every value is already reduced.
-            source[index] = field.Reduce(value: NarrowDegreeRegionWalk<T>(
+            source[index] = field.Reduce(value: Subjects.BinaryFieldRegionWalk<T>(
                 index: index,
                 salt: 0UL
             ));
-            seed[index] = field.Reduce(value: NarrowDegreeRegionWalk<T>(
+            seed[index] = field.Reduce(value: Subjects.BinaryFieldRegionWalk<T>(
                 index: index,
                 salt: 0x5DEECE66DUL
             ));
         }
 
-        var scalar = field.Reduce(value: NarrowDegreeRegionWalk<T>(
+        var scalar = field.Reduce(value: Subjects.BinaryFieldRegionWalk<T>(
             index: Ceiling,
             salt: 0x2545F4914F6CDD1DUL
         ));
@@ -172,20 +173,6 @@ internal static class BinaryFieldRegionClaims {
 
         return null;
     }
-    /// <summary>The fixed region content: a deterministic, operand-free affine walk spread across the element space
-    /// by two odd mixing constants, salted so a source region and a destination region never coincide. No wall clock
-    /// and no randomness — the walk is a pure function of the index and the salt.</summary>
-    /// <typeparam name="T">The packed element carrier.</typeparam>
-    /// <param name="index">The region index to derive a value for.</param>
-    /// <param name="salt">The per-region salt.</param>
-    /// <returns>The derived carrier value, not yet reduced into any field.</returns>
-    private static T NarrowDegreeRegionWalk<T>(int index, ulong salt) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        var seed = unchecked((((ulong)index) + salt));
-        var low = unchecked((seed * 0x9E3779B97F4A7C15UL));
-        var high = unchecked(((seed ^ 0xD1B54A32D192ED03UL) * 0xBF58476D1CE4E5B9UL));
-
-        return T.CreateTruncating(value: (((UInt128)high) << 64) | low);
-    }
     /// <summary>Runs one named byte-wide region rung directly, bypassing <see cref="BinaryFieldKernels"/>'s own
     /// dispatch and support gate — the byte region-tier seam.</summary>
     /// <param name="tier">The rung to run.</param>
@@ -198,72 +185,72 @@ internal static class BinaryFieldRegionClaims {
     private static void RunByteRegionTier(BinaryFieldRegionTier tier, Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
         switch (tier) {
             case BinaryFieldRegionTier.Affine512:
-                BinaryFieldKernels.MultiplyAccumulateRegionAffine512(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionAffine<VectorLanes512, Vector512<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             case BinaryFieldRegionTier.Split512:
-                BinaryFieldKernels.MultiplyAccumulateRegionSplit512(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionSplit<VectorLanes512, Vector512<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             case BinaryFieldRegionTier.Affine256:
-                BinaryFieldKernels.MultiplyAccumulateRegionAffine256(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionAffine<VectorLanes256, Vector256<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             case BinaryFieldRegionTier.Split256:
-                BinaryFieldKernels.MultiplyAccumulateRegionSplit256(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionSplit<VectorLanes256, Vector256<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             case BinaryFieldRegionTier.Affine128:
-                BinaryFieldKernels.MultiplyAccumulateRegionAffine128(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionAffine<VectorLanes128, Vector128<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             case BinaryFieldRegionTier.Split128:
-                BinaryFieldKernels.MultiplyAccumulateRegionSplit128(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionSplit<VectorLanes128, Vector128<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             default:
                 BinaryFieldKernels.MultiplyAccumulateRegionScalar(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
@@ -281,42 +268,42 @@ internal static class BinaryFieldRegionClaims {
     private static void RunWideRegionTier(BinaryFieldRegionTier tier, Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail) {
         switch (tier) {
             case BinaryFieldRegionTier.Affine512:
-                BinaryFieldKernels.MultiplyAccumulateRegionWideAffine512(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionWideAffine<VectorLanes512, Vector512<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             case BinaryFieldRegionTier.Affine256:
-                BinaryFieldKernels.MultiplyAccumulateRegionWideAffine256(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionWideAffine<VectorLanes256, Vector256<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             case BinaryFieldRegionTier.Affine128:
-                BinaryFieldKernels.MultiplyAccumulateRegionWideAffine128(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
+                BinaryFieldKernels.MultiplyAccumulateRegionWideAffine<VectorLanes128, Vector128<byte>>(
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
             default:
                 BinaryFieldKernels.MultiplyAccumulateRegionScalar(
-                    destination: destination,
-                    source: source,
-                    scalar: scalar,
                     accumulate: accumulate,
                     degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
                     tail: tail
                 );
                 break;
@@ -583,11 +570,11 @@ internal static class BinaryFieldRegionClaims {
                         source.CopyTo(destination: actual);
                         source.CopyTo(destination: expected);
                         BinaryFieldKernels.MultiplyAccumulateRegionScalar(
-                            destination: expected,
-                            source: source,
-                            scalar: ((byte)scalar),
                             accumulate: (1 == accumulate),
                             degree: 8,
+                            destination: expected,
+                            scalar: ((byte)scalar),
+                            source: source,
                             tail: tail
                         );
                         RunByteRegionTier(
@@ -645,11 +632,11 @@ internal static class BinaryFieldRegionClaims {
                             index: 0
                         );
                         BinaryFieldKernels.MultiplyAccumulateRegionScalar(
-                            destination: expected,
-                            source: source,
-                            scalar: scalar,
                             accumulate: (1 == accumulate),
                             degree: 16,
+                            destination: expected,
+                            scalar: scalar,
+                            source: source,
                             tail: tail
                         );
                         RunWideRegionTier(

@@ -60,14 +60,18 @@ public sealed class FontAtlasImageData {
                 var offset = ((((y * Width) + x) * 4) + 3);
                 var alpha = m_rgbaPixels[offset];
 
-                if ((x + 1) < Width) { horizontal = Math.Max(
+                if ((x + 1) < Width) {
+                    horizontal = Math.Max(
                     val1: horizontal,
                     val2: Math.Abs(value: (alpha - m_rgbaPixels[(offset + 4)]))
-                ); }
-                if ((y + 1) < Height) { vertical = Math.Max(
+                );
+                }
+                if ((y + 1) < Height) {
+                    vertical = Math.Max(
                     val1: vertical,
                     val2: Math.Abs(value: (alpha - m_rgbaPixels[(offset + (Width * 4))]))
-                ); }
+                );
+                }
             }
         }
         // A bilinear partial derivative is a convex combination of the two parallel edge differences.

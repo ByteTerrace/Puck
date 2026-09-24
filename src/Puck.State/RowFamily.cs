@@ -64,22 +64,61 @@ public readonly record struct RowFamily(CellName Name, int FirstOrdinal, int Cou
         return false;
     }
     /// <summary>Returns the catalog ordinals of the family's members, in member order.</summary>
-    /// <returns>One ordinal per member.</returns>
-    public IEnumerable<int> Ordinals() {
-        if (Slots is not { } slots) {
-            for (var ordinal = FirstOrdinal; (ordinal < EndOrdinal); ordinal++) {
-                yield return ordinal;
-            }
+    /// <returns>An enumerator over one ordinal per member, which a <see langword="foreach"/> walks without
+    /// allocating.</returns>
+    public OrdinalEnumerator Ordinals() => new(family: this);
 
-            yield break;
+    /// <summary>Walks a family's member ordinals in member order, skipping the gaps of an indexed family.</summary>
+    public struct OrdinalEnumerator {
+        private readonly int[]? m_slots;
+        private readonly int m_first;
+        private readonly int m_count;
+
+        private int m_index;
+
+        /// <summary>Initializes a new instance of the <see cref="OrdinalEnumerator"/> struct, positioned before the
+        /// family's first member.</summary>
+        /// <param name="family">The family to walk.</param>
+        public OrdinalEnumerator(RowFamily family) {
+            m_slots = family.Slots;
+            m_first = family.FirstOrdinal;
+            m_count = family.Count;
+            m_index = -1;
+            Current = -1;
         }
 
-        for (var index = 0; (index < slots.Length); index++) {
-            if (slots[index] >= 0) {
-                yield return slots[index];
+        /// <summary>Gets the catalog ordinal of the member the enumerator stands on.</summary>
+        public int Current { readonly get; private set; }
+
+        /// <summary>Returns this enumerator, so a <see langword="foreach"/> can walk it directly.</summary>
+        /// <returns>This enumerator.</returns>
+        public readonly OrdinalEnumerator GetEnumerator() => this;
+        /// <summary>Advances to the next member.</summary>
+        /// <returns><see langword="true"/> when another member exists.</returns>
+        public bool MoveNext() {
+            if (m_slots is not { } slots) {
+                if ((m_index + 1) >= m_count) {
+                    return false;
+                }
+
+                m_index++;
+                Current = (m_first + m_index);
+
+                return true;
             }
+
+            while (++m_index < slots.Length) {
+                if (slots[m_index] >= 0) {
+                    Current = slots[m_index];
+
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
+
     /// <summary>Attempts to resolve a family index to its catalog ordinal.</summary>
     /// <param name="index">The family index, which a gapped family may leave unfilled.</param>
     /// <param name="ordinal">The catalog ordinal on success; otherwise <c>-1</c>.</param>

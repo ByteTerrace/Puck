@@ -8,8 +8,7 @@ namespace Puck.World.Transpiler.Tests;
 public sealed class PushRayCanaryAuthoringLawTests {
     [Fact]
     public void ShippedPushRaySourceCompilesThroughWorldAdmission() {
-        var root = FindRepositoryRoot();
-        var path = Path.Combine(root, "tests", "Puck.World.Canaries", "push-ray", "fixture.puck");
+        var path = RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Canaries/push-ray/fixture.puck");
         var source = File.ReadAllText(path: path);
         var compilation = WorldCompiler.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
@@ -33,15 +32,4 @@ public sealed class PushRayCanaryAuthoringLawTests {
         _ = WorldDefinitionSerialization.Deserialize(utf8Json: CanonicalJsonDocument.Serialize(node: (composed ?? document)));
     }
 
-    private static string FindRepositoryRoot() {
-        var directory = AppContext.BaseDirectory;
-
-        while (directory is not null) {
-            if (File.Exists(path: Path.Combine(path1: directory, path2: "Puck.slnx"))) {
-                return directory;
-            }
-            directory = Path.GetDirectoryName(path: directory);
-        }
-        throw new DirectoryNotFoundException(message: "Could not locate the Puck repository root from the test runner.");
-    }
 }

@@ -1,37 +1,59 @@
 using System.Collections.Concurrent;
-using Puck.Abstractions.Gpu;
+using Puck.Assets;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
-public sealed class ShaderCompilerTests {
+public sealed partial class ShaderCompilerTests {
     [Fact]
-    public async Task Adapter_diagnostics_map_to_author_lines() {
+    public async Task Dxc_diagnostics_name_the_authored_source_and_its_line() {
         using var fixture = new Fixture();
-        var runner = new FakeRunner { GlslDiagnostics = true };
-        const string Source = "void mainImage(out vec4 c, in vec2 p) {\n c = vec4(1);\n}";
-        var adapter = ShadertoyShaderAdapter.Adapt(Source);
+        var runner = new FakeRunner { DxcDiagnostics = true };
+        var sourcePath = Path.Combine(
+            path1: fixture.Path,
+            path2: "bad.hlsl"
+        );
         var result = await new ShaderCompiler(
             fixture.Path,
             runner
         ).CompileAsync(
-            "bad",
-            "bad.glsl",
-            Source,
-            TestContext.Current.CancellationToken
+            cancellationToken: TestContext.Current.CancellationToken,
+            descriptor: new ShaderCompilationRequest(
+                name: "bad",
+                stages: [new ShaderStageSource(
+                    ShaderStage.Compute,
+                    sourcePath,
+                    "[numthreads(8,8,1)] void main() {\n syntax\n}"
+                )]
+            )
         );
 
-        var diagnostic = Assert.Single(
-            result.Diagnostics,
-            d => (d.IsError && (d.Message == "syntax error"))
+        Assert.False(condition: result.IsSuccess);
+        Assert.All(
+            collection: result.Diagnostics.Where(predicate: static d => (d.Message == "syntax error")),
+            action: diagnostic => {
+                Assert.True(condition: diagnostic.IsError);
+                Assert.Equal(
+                    2,
+                    diagnostic.Line
+                );
+                Assert.Equal(
+                    5,
+                    diagnostic.Column
+                );
+                Assert.Equal(
+                    ShaderStage.Compute,
+                    diagnostic.Stage
+                );
+                Assert.Equal(
+                    sourcePath,
+                    diagnostic.Path
+                );
+            }
         );
-
-        Assert.Equal(
-            2,
-            diagnostic.Line
-        );
-        Assert.Equal(
-            ShaderStage.Compute,
-            diagnostic.Stage
+        Assert.Contains(
+            collection: result.Diagnostics,
+            filter: static d => (d.Message == "syntax error")
         );
     }
     [Fact]
@@ -44,8 +66,8 @@ public sealed class ShaderCompilerTests {
             runner
         );
         var request = new ShaderCompilationRequest(
-            "cancel",
-            [new ShaderStageSource(
+            name: "cancel",
+            stages: [new ShaderStageSource(
                     ShaderStage.Compute,
                     "cancel.hlsl",
                     "void main() { }"
@@ -62,35 +84,6 @@ public sealed class ShaderCompilerTests {
         await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: async () => await task);
     }
     [Fact]
-    public async Task Compiler_returns_channel_validation_as_a_failed_candidate() {
-        using var fixture = new Fixture();
-        var request = ShaderCompilationRequest.Compute(
-            "bad-channel",
-            Path.Combine(
-                path1: fixture.Path,
-                path2: "bad.glsl"
-            ),
-            "void mainImage(out vec4 c, in vec2 p) { c = texture(iChannel0, p); }",
-            channels: new Dictionary<string, uint>()
-        );
-        var result = await new ShaderCompiler(
-            fixture.Path,
-            new FakeRunner()
-        ).CompileAsync(
-            request,
-            TestContext.Current.CancellationToken
-        );
-
-        Assert.False(result.IsSuccess);
-        Assert.Contains(
-            result.Diagnostics,
-            diagnostic => (diagnostic.IsError && diagnostic.Message.Contains(
-                "iChannel0",
-                StringComparison.Ordinal
-            ))
-        );
-    }
-    [Fact]
     public async Task Concurrent_identical_compiles_do_not_race_cache_publication() {
         using var fixture = new Fixture();
         var runner = new FakeRunner();
@@ -99,8 +92,8 @@ public sealed class ShaderCompilerTests {
             runner
         );
         var request = new ShaderCompilationRequest(
-            "concurrent",
-            [new ShaderStageSource(
+            name: "concurrent",
+            stages: [new ShaderStageSource(
                     ShaderStage.Compute,
                     "concurrent.hlsl",
                     "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }"
@@ -129,21 +122,19 @@ public sealed class ShaderCompilerTests {
         using var fixture = new Fixture();
         var runner = new FakeRunner();
         var request = new ShaderCompilationRequest(
-            "graphics",
-            [
+            name: "graphics",
+            stages: [
             new ShaderStageSource(
-                    ShaderStage.Vertex,
-                    "vertex.hlsl",
-                    "float4 main(float3 p : POSITION) : SV_Position { return float4(p, 1); }",
-                    ShaderSourceLanguage.Hlsl,
-                    "main"
+                    EntryPoint: "main",
+                    Path: "vertex.hlsl",
+                    Source: "float4 main(float3 p : POSITION) : SV_Position { return float4(p, 1); }",
+                    Stage: ShaderStage.Vertex
                 ),
             new ShaderStageSource(
-                    ShaderStage.Fragment,
-                    "fragment.hlsl",
-                    "float4 main() : SV_Target { return 1; }",
-                    ShaderSourceLanguage.Hlsl,
-                    "main"
+                    EntryPoint: "main",
+                    Path: "fragment.hlsl",
+                    Source: "float4 main() : SV_Target { return 1; }",
+                    Stage: ShaderStage.Fragment
                 )]
         );
 
@@ -155,7 +146,7 @@ public sealed class ShaderCompilerTests {
             TestContext.Current.CancellationToken
         );
 
-        Assert.True(result.IsSuccess);
+        Assert.True(condition: result.IsSuccess);
         Assert.Equal(
             2,
             result.SpirvByStage.Count
@@ -195,8 +186,8 @@ public sealed class ShaderCompilerTests {
         );
         const string Source = "#include \"shared.hlsl\"\n[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }";
         var request = new ShaderCompilationRequest(
-            "cached",
-            [new ShaderStageSource(
+            name: "cached",
+            stages: [new ShaderStageSource(
                     ShaderStage.Compute,
                     sourcePath,
                     Source
@@ -237,47 +228,83 @@ public sealed class ShaderCompilerTests {
             runner.Calls.Count
         );
     }
+    /// <summary>Separate compiler instances share no gate, so racing them over one cache directory is the same race
+    /// separate processes run: the file system is all they have in common. Each round is a fresh key that every
+    /// racer builds at once while a reader keeps opening whatever the cache has published.</summary>
     [Fact]
-    public async Task Separate_compiler_instances_publish_only_complete_shared_cache_entries() {
+    public async Task Separate_compiler_instances_racing_one_key_all_succeed_and_publish_only_complete_entries() {
+        const int Racers = 4;
+        const int Rounds = 48;
         using var fixture = new Fixture();
-        var firstRunner = new FakeRunner();
-        var secondRunner = new FakeRunner();
-        var firstCompiler = new ShaderCompiler(
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var compilers = Enumerable.Range(
+            count: Racers,
+            start: 0
+        ).Select(selector: _ => new ShaderCompiler(
             fixture.Path,
-            firstRunner
-        );
-        var secondCompiler = new ShaderCompiler(
-            fixture.Path,
-            secondRunner
-        );
-        var request = new ShaderCompilationRequest(
-            "shared",
-            [
-            new ShaderStageSource(
-                    ShaderStage.Compute,
-                    Path.Combine(
-                        path1: fixture.Path,
-                        path2: "shared.hlsl"
-                    ),
-                    "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }"
-                )
-        ]
+            new FakeRunner()
+        )).ToArray();
+        using var reading = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+        var incomplete = new ConcurrentBag<string>();
+        var reader = Task.Run(
+            action: () => {
+                while (!reading.IsCancellationRequested) {
+                    foreach (var marker in Directory.GetFiles(
+                        fixture.Path,
+                        "*.complete",
+                        SearchOption.TopDirectoryOnly
+                    )) {
+                        var stem = marker[..^".complete".Length];
+
+                        foreach (var target in ((string[])["spv", "dxil"])) {
+                            var bytecode = $"{stem}.comp.{target}";
+
+                            if (
+                                !File.Exists(path: bytecode) ||
+                                (AtomicFile.ReadAllBytes(path: bytecode).Length != 4)
+                            ) { incomplete.Add(item: bytecode); }
+                        }
+                    }
+                }
+            },
+            cancellationToken: cancellationToken
         );
 
-        var results = await Task.WhenAll(
-            firstCompiler.CompileAsync(
-                request,
-                TestContext.Current.CancellationToken
-            ),
-            secondCompiler.CompileAsync(
-                request,
-                TestContext.Current.CancellationToken
-            )
-        );
+        for (var round = 0; (round < Rounds); round++) {
+            var request = new ShaderCompilationRequest(
+                name: "shared",
+                stages: [
+                new ShaderStageSource(
+                        ShaderStage.Compute,
+                        Path.Combine(
+                            path1: fixture.Path,
+                            path2: "shared.hlsl"
+                        ),
+                        $"[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) {{ }} // round {round}"
+                    )
+            ]
+            );
+            var results = await Task.WhenAll(tasks: compilers.Select(selector: compiler => compiler.CompileAsync(
+                cancellationToken: cancellationToken,
+                descriptor: request
+            )));
 
-        Assert.All(
-            results,
-            result => Assert.True(condition: result.IsSuccess)
+            Assert.All(
+                results,
+                result => Assert.True(condition: result.IsSuccess)
+            );
+        }
+        await reading.CancelAsync();
+        await reader;
+
+        Assert.Empty(collection: incomplete);
+        Assert.Equal(
+            Rounds,
+            Directory.GetFiles(
+                fixture.Path,
+                "*.complete",
+                SearchOption.TopDirectoryOnly
+            ).Length
         );
         Assert.Empty(collection: Directory.GetFiles(
             fixture.Path,
@@ -290,153 +317,52 @@ public sealed class ShaderCompilerTests {
             SearchOption.TopDirectoryOnly
         ));
     }
-    [Fact]
-    public async Task Shadertoy_channels_and_float_output_are_adapted() {
-        using var fixture = new Fixture();
-        var runner = new FakeRunner();
-        var request = ShaderCompilationRequest.Compute(
-            "channels",
-            "channels.glsl",
-            "void mainImage(out vec4 c, in vec2 p) { c = texture(iChannelNoise, p); }",
-            channels: new Dictionary<string, uint> { ["iChannelNoise"] = 4 },
-            outputFormat: GpuPixelFormat.R16G16B16A16Float
-        );
-
-        var result = await new ShaderCompiler(
-            fixture.Path,
-            runner
-        ).CompileAsync(
-            request,
-            TestContext.Current.CancellationToken
-        );
-        var source = File.ReadAllText(path: Directory.GetFiles(
-            path: fixture.Path,
-            searchPattern: "*.source"
-        ).Single());
-
-        Assert.True(result.IsSuccess);
-        Assert.Contains(
-            actualString: source,
-            expectedSubstring: "binding = 4"
-        );
-        Assert.Contains(
-            actualString: source,
-            expectedSubstring: "rgba16f"
-        );
-        Assert.Contains(
-            actualString: source,
-            expectedSubstring: "sampler2D iChannelNoise"
-        );
-        Assert.Equal(
-            3,
-            runner.Calls.Count
-        );
-    }
-    [Fact]
-    public void Translated_native_glsl_registers_follow_descriptor_kind_and_order() {
-        const string Translated = "Texture2D<float4> source : register(t7, space0); SamplerState sourceSampler : register(s7, space0); RWStructuredBuffer<float4> output : register(u9, space0);";
-        var remapped = ShaderCompiler.RemapTranslatedHlslRegisters(
-            Translated,
-            [
-            new ShaderDescriptorBinding(
-                    7,
-                    GpuComputeBindingKind.SampledImage
-                ),
-            new ShaderDescriptorBinding(
-                    3,
-                    GpuComputeBindingKind.StorageBufferRead
-                ),
-            new ShaderDescriptorBinding(
-                    9,
-                    GpuComputeBindingKind.StorageImage
-                ),
-        ]
-        );
-
-        Assert.Contains(
-            "register(t0, space0)",
-            remapped
-        );
-        Assert.Contains(
-            "register(s0, space0)",
-            remapped
-        );
-        Assert.Contains(
-            "register(u0, space0)",
-            remapped
-        );
-    }
-    [Fact]
-    public void Translated_shadertoy_registers_follow_dense_descriptor_order_and_keep_unused_slots() {
-        const string Translated = "RWTexture2D<float4> puckShaderImage : register(u0, space0); Texture2D<float4> iChannel0 : register(t1, space0); SamplerState s0 : register(s1, space0); Texture2D<float4> iChannel1 : register(t3, space0); SamplerState s1 : register(s3, space0);";
-        var remapped = ShaderCompiler.RemapTranslatedHlslRegisters(
-            Translated,
-            new Dictionary<string, uint> {
-            ["iChannel0"] = 1,
-            ["iChannel1"] = 3,
-            ["iChannelUnused"] = 5,
-        }
-        );
-
-        Assert.Contains(
-            "register(t0, space0)",
-            remapped
-        );
-        Assert.Contains(
-            "register(s0, space0)",
-            remapped
-        );
-        Assert.Contains(
-            "register(t1, space0)",
-            remapped
-        );
-        Assert.Contains(
-            "register(s1, space0)",
-            remapped
-        );
-        Assert.Contains(
-            "register(u0, space0)",
-            remapped
-        );
-    }
 
     private sealed class Fixture : IDisposable {
-        public Fixture() { Path = System.IO.Path.Combine(
+        public Fixture() {
+            Path = System.IO.Path.Combine(
             path1: System.IO.Path.GetTempPath(),
             path2: ("puck-shader-tests-" + Guid.NewGuid().ToString(format: "N"))
-        ); Directory.CreateDirectory(path: Path); }
+        ); Directory.CreateDirectory(path: Path);
+        }
 
         public string Path { get; }
 
-        public void Dispose() { try { Directory.Delete(
+        public void Dispose() {
+            try {
+                Directory.Delete(
             path: Path,
             recursive: true
-        ); } catch (IOException) { } }
+        );
+            } catch (IOException) { }
+        }
     }
     private sealed class FakeRunner : IShaderProcessRunner {
         public readonly ConcurrentBag<(string FileName, string Arguments)> Calls = [];
         public readonly TaskCompletionSource Started = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool Block { get; init; }
-        public bool GlslDiagnostics { get; init; }
+        public bool DxcDiagnostics { get; init; }
 
         private static string? Output(IReadOnlyList<string> arguments) {
             for (var i = 0; (i < (arguments.Count - 1)); i++) {
-                if (arguments[i] is "-o" or "-Fo" or "--output") { return arguments[(i + 1)]; }
+                if (arguments[i] is "-Fo") { return arguments[(i + 1)]; }
             }
             return null;
         }
 
-        public async Task<ShaderProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
+        public async Task<ChildProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
             Calls.Add(item: (fileName, string.Join(
                 separator: " ",
                 values: arguments
             )));
             Started.TrySetResult();
-            if (Block) { await Task.Delay(
+            if (Block) {
+                await Task.Delay(
                 cancellationToken: cancellationToken,
                 delay: Timeout.InfiniteTimeSpan
-            ); }
+            );
+            }
             var output = Output(arguments: arguments);
 
             if (output is not null) {
@@ -445,34 +371,19 @@ public sealed class ShaderCompilerTests {
                     bytes: [1, 2, 3, 4],
                     path: output
                 );
-                if (output.EndsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "translated.hlsl"
-                )) { File.WriteAllText(
-                    contents: "float4 main() : SV_Target { return 1; }",
-                    path: output
-                ); }
-            }
-            if (
-                GlslDiagnostics &&
-                fileName.Contains(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "glslang"
-            )
-            ) {
-                var sourceFile = arguments[^1];
-                var prefix = ShadertoyShaderAdapter.Adapt("void mainImage(out vec4 c, in vec2 p) {\n c = vec4(1);\n}").PrefixLineCount;
 
-                return new ShaderProcessResult(
-                    1,
-                    $"ERROR: {sourceFile}:{(prefix + 2)}: syntax error",
-                    string.Empty
+            }
+            if (DxcDiagnostics) {
+                return new ChildProcessResult(
+                    ExitCode: 1,
+                    Stderr: $"{arguments[^1]}:2:5: error: syntax error",
+                    Stdout: string.Empty
                 );
             }
-            return new ShaderProcessResult(
-                0,
-                string.Empty,
-                string.Empty
+            return new ChildProcessResult(
+                ExitCode: 0,
+                Stderr: string.Empty,
+                Stdout: string.Empty
             );
         }
     }

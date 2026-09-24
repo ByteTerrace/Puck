@@ -16,6 +16,7 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
     private const string Prefix = "puck.entra.v1\n";
 
     private readonly string m_audience;
+    private readonly TimeProvider m_clock;
     private readonly IConfigurationManager<OpenIdConnectConfiguration> m_configuration;
     private readonly TokenCredential? m_credential;
     private readonly IAuthenticator? m_federation;
@@ -37,8 +38,12 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
     /// <param name="federation">The world's existing attestation authenticator, retained for explicitly trusted world peers.</param>
     /// <param name="credential">Optional client credential; defaults to the existing ambient Azure credential chain.</param>
     /// <param name="configuration">Optional issuer metadata provider for isolated verification.</param>
+    /// <param name="timeProvider">The host clock the token acquisition and metadata deadlines, and the cached token's
+    /// refresh window, run on; <see langword="null"/> is <see cref="TimeProvider.System"/>. A token's own lifetime is
+    /// validated by the token handler on system time.</param>
     public EntraWorldAuthenticator(JsonElement settings, bool client, IAuthenticator? federation = null, TokenCredential? credential = null,
-        IConfigurationManager<OpenIdConnectConfiguration>? configuration = null) {
+        IConfigurationManager<OpenIdConnectConfiguration>? configuration = null, TimeProvider? timeProvider = null) {
+        m_clock = (timeProvider ?? TimeProvider.System);
         foreach (var property in settings.EnumerateObject()) {
             if (property.Name is not ("tenantId" or "audience" or "groupId" or "scope" or "remoteKeyHash")) { throw new ArgumentException(message: $"Unknown API authentication setting '{property.Name}'."); }
         }
@@ -64,6 +69,11 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
         ));
     }
 
+    /// <summary>Gets how long, on the host clock, a client waits for its user token.</summary>
+    public static TimeSpan TokenAcquisitionTimeout { get; } = TimeSpan.FromSeconds(seconds: 15);
+    /// <summary>Gets how long, on the host clock, a server waits for the issuer's signing metadata.</summary>
+    public static TimeSpan MetadataTimeout { get; } = TimeSpan.FromSeconds(seconds: 10);
+
     /// <inheritdoc/>
     public int ChallengeBytes => 32;
     /// <inheritdoc/>
@@ -72,8 +82,11 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
     private string ReadClientToken() {
         if (m_credential is null) { throw new InvalidOperationException(message: "This host does not acquire user tokens."); }
         lock (m_tokenGate) {
-            if (m_cachedToken.ExpiresOn > DateTimeOffset.UtcNow.AddMinutes(minutes: 2)) { return m_cachedToken.Token; }
-            using var timeout = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 15));
+            if (m_cachedToken.ExpiresOn > m_clock.GetUtcNow().AddMinutes(minutes: 2)) { return m_cachedToken.Token; }
+            using var timeout = new CancellationTokenSource(
+                delay: TokenAcquisitionTimeout,
+                timeProvider: m_clock
+            );
             var access = m_credential.GetToken(
                 new TokenRequestContext([$"api://{m_audience}/.default"]),
                 timeout.Token
@@ -133,11 +146,13 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
         if (!wire.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: Prefix
-        )) { return (m_federation?.TryVerify(
+        )) {
+            return (m_federation?.TryVerify(
             challenge: challenge,
             proof: proof,
             sourceAuthority: out sourceAuthority
-        ) == true); }
+        ) == true);
+        }
         if (
             (m_credential is not null) ||
             (challenge.Length != ChallengeBytes)
@@ -154,23 +169,26 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
         )
         ) { return false; }
         try {
-            using var timeout = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 10));
+            using var timeout = new CancellationTokenSource(
+                delay: MetadataTimeout,
+                timeProvider: m_clock
+            );
             var metadata = m_configuration.GetConfigurationAsync(cancel: timeout.Token).GetAwaiter().GetResult();
             var validation = m_tokens.ValidateTokenAsync(
                 token: parts[2],
                 validationParameters: new TokenValidationParameters {
-                ClockSkew = TimeSpan.Zero,
-                IssuerSigningKeys = metadata.SigningKeys,
-                RequireExpirationTime = true,
-                RequireSignedTokens = true,
-                ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
-                ValidAudience = m_audience,
-                ValidIssuer = $"https://login.microsoftonline.com/{m_tenant}/v2.0",
-                ValidateAudience = true,
-                ValidateIssuer = true,
-                ValidateIssuerSigningKey = true,
-                ValidateLifetime = true,
-            }
+                    ClockSkew = TimeSpan.Zero,
+                    IssuerSigningKeys = metadata.SigningKeys,
+                    RequireExpirationTime = true,
+                    RequireSignedTokens = true,
+                    ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
+                    ValidAudience = m_audience,
+                    ValidIssuer = $"https://login.microsoftonline.com/{m_tenant}/v2.0",
+                    ValidateAudience = true,
+                    ValidateIssuer = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidateLifetime = true,
+                }
             ).GetAwaiter().GetResult();
 
             if (!validation.IsValid) {

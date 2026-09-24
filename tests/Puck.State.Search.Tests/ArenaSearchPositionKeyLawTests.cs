@@ -55,7 +55,7 @@ public sealed class ArenaSearchPositionKeyLawTests {
                     Kind: SearchShapeKind.Relocate,
                     Displace: false,
                     Directions: [],
-                    PairWithIndex: -1
+                    CompanionIndex: -1
                 )],
             Counts: "counts",
             Iterations: iterations,
@@ -211,7 +211,7 @@ public sealed class ArenaSearchPositionKeyLawTests {
                 rules: [new Rule(
                     Name: Name(value: "accept-at-one"),
                     Gate: new ActionPredicate.CompareState(
-                        Comparison: ActionStateComparison.Equal,
+                        Comparison: ExpressionOp.Equal,
                         State: RuleFacts.Tick,
                         Value: 1m
                     ),
@@ -574,7 +574,7 @@ public sealed class ArenaSearchPositionKeyLawTests {
                 plan: Plan(
                     depth: 2,
                     iterations: 24,
-                    method: SearchMethod.Tree,
+                    method: SearchMethod.MonteCarlo,
                     scored: true
                 ),
                 position: position

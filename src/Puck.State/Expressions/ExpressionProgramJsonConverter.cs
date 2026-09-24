@@ -49,6 +49,20 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
         }
         return result;
     }
+    // A state read is admitted on Instruction.Operand's terms, so a document can hold no operand a printer cannot write.
+    private static InstructionPayload? StatePayload(StateChannelRef name, StateChannelRef? key) {
+        try {
+            return Instruction.Operand(
+                key: key,
+                name: name
+            ).Payload;
+        } catch (ArgumentException exception) {
+            throw new JsonException(
+                innerException: exception,
+                message: exception.Message
+            );
+        }
+    }
     private static Instruction ReadInstruction(JsonNode? node) {
         if (node is not JsonObject obj) {
             throw new JsonException(message: "an instruction is an object carrying 'op'");
@@ -117,12 +131,12 @@ public sealed class ExpressionProgramJsonConverter : JsonConverter<ExpressionPro
                     member: "subprogram"
                 )
             ),
-                PayloadShape.State => new InstructionPayload.State(
-                Key: ((obj["key"] is { } key)
+                PayloadShape.State => StatePayload(
+                key: ((obj["key"] is { } key)
                     ? StateChannelRefJsonConverter.FromNode(node: key)
                     : null
                 ),
-                Name: StateChannelRefJsonConverter.FromNode(node: (obj["name"] ?? throw Missing(member: "name")))
+                name: StateChannelRefJsonConverter.FromNode(node: (obj["name"] ?? throw Missing(member: "name")))
             ),
                 PayloadShape.Vector => new InstructionPayload.Vector(
                 Left: ReadVector(node: obj["left"]),

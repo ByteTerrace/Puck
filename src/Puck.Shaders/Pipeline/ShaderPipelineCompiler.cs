@@ -5,7 +5,7 @@ namespace Puck.Shaders;
 
 /// <summary>Validates a shader-pipeline document and compiles its same-frame dependency graph into an immutable plan.
 /// This class does not load source, invoke a compiler, or create GPU objects.</summary>
-public sealed class ShaderPipelineCompiler {
+public sealed partial class ShaderPipelineCompiler {
     private readonly ShaderPipelineLimits m_limits;
 
     /// <summary>Initializes a planner with the documented default resource limits.</summary>
@@ -77,7 +77,7 @@ public sealed class ShaderPipelineCompiler {
     }
     // Assign omitted descriptors once, before making the immutable plan. Explicit slots are reserved first,
     // so a late explicit binding never collides with an earlier implicit one. Compute outputs lead inputs;
-    // fullscreen outputs are attachments, not descriptors.
+    // graphics outputs are attachments, not descriptors.
     private static ShaderPipelinePass ResolveBindings(ShaderPipelinePass pass) {
         var used = pass.InputReferences.Concat(second: ((pass.Kind == ShaderPipelinePassKind.Compute)
             ? pass.OutputReferences
@@ -173,7 +173,7 @@ public sealed class ShaderPipelineCompiler {
             definition.Resources.Any(predicate: static resource => ((resource is null) || string.IsNullOrWhiteSpace(value: resource.Name))) ||
             definition.Passes.Any(predicate: static pass => ((pass is null) || string.IsNullOrWhiteSpace(value: pass.Name) ||
                 pass.InputReferences.Concat(second: pass.OutputReferences).Any(predicate: static reference => ((reference is null) || string.IsNullOrWhiteSpace(value: reference.Name))))) ||
-            definition.Outputs.Any(predicate: static output => ((output is null) || string.IsNullOrWhiteSpace(value: output.Name) || (output.Resource is null) || string.IsNullOrWhiteSpace(value: output.Resource.Name)))
+            definition.Outputs.Any(predicate: static output => string.IsNullOrWhiteSpace(value: output))
         ) {
             Add(
                 diagnostics,
@@ -255,6 +255,7 @@ public sealed class ShaderPipelineCompiler {
             );
         }
 
+        var successors = Successors(definition: definition);
         var passNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var writers = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -297,17 +298,6 @@ public sealed class ShaderPipelineCompiler {
                     diagnostics,
                     "SHADERPIPE_PASS_KIND",
                     $"Pass '{pass.Name}' has an unsupported pass kind '{pass.Kind}'.",
-                    pass.Name
-                );
-            }
-            if (
-                (pass.Kind == ShaderPipelinePassKind.Fullscreen) &&
-                (pass.OutputReferences.Count != 1)
-            ) {
-                Add(
-                    diagnostics,
-                    "SHADERPIPE_UNSUPPORTED_MRT",
-                    $"Fullscreen pass '{pass.Name}' declares {pass.OutputReferences.Count} outputs; the current runtime supports exactly one color target per fullscreen pass.",
                     pass.Name
                 );
             }
@@ -366,7 +356,7 @@ public sealed class ShaderPipelineCompiler {
                 );
             }
 
-            if (pass.Kind == ShaderPipelinePassKind.Fullscreen) {
+            if (pass.IsGraphics) {
                 for (var inputIndex = 0; (inputIndex < pass.InputReferences.Count); inputIndex++) {
                     if (
                         (pass.InputReferences[inputIndex].Binding is { } binding) &&
@@ -374,8 +364,8 @@ public sealed class ShaderPipelineCompiler {
                     ) {
                         Add(
                             diagnostics,
-                            "SHADERPIPE_FULLSCREEN_BINDING",
-                            $"Fullscreen pass '{pass.Name}' inputs must use consecutive descriptor bindings in input order, starting at zero.",
+                            "SHADERPIPE_GRAPHICS_BINDING",
+                            $"Graphics pass '{pass.Name}' inputs must use consecutive descriptor bindings in input order, starting at zero.",
                             pass.Name
                         );
                     }
@@ -383,11 +373,21 @@ public sealed class ShaderPipelineCompiler {
                 if (pass.OutputReferences.Any(predicate: static output => output.Binding.HasValue)) {
                     Add(
                         diagnostics,
-                        "SHADERPIPE_FULLSCREEN_ATTACHMENT_BINDING",
-                        $"Fullscreen pass '{pass.Name}' color output is an attachment and cannot declare a descriptor binding.",
+                        "SHADERPIPE_GRAPHICS_ATTACHMENT_BINDING",
+                        $"Graphics pass '{pass.Name}' outputs are attachments and cannot declare descriptor bindings.",
                         pass.Name
                     );
                 }
+                ValidateGraphics(
+                    diagnostics: diagnostics,
+                    pass: pass,
+                    resources: resources
+                );
+            } else {
+                ValidateComputeFields(
+                    diagnostics: diagnostics,
+                    pass: pass
+                );
             }
             var bindings = new HashSet<(string Name, bool PreviousFrame)>();
             var bindingNumbers = new HashSet<uint>();
@@ -434,14 +434,21 @@ public sealed class ShaderPipelineCompiler {
                         $"Pass '{pass.Name}' reads undeclared resource '{input.Name}'.",
                         input.Name
                     );
+                } else if (resource.Kind == ShaderPipelineResourceKind.Depth) {
+                    Add(
+                        diagnostics,
+                        "SHADERPIPE_DEPTH_SAMPLED",
+                        $"Pass '{pass.Name}' reads depth version '{input.Name}'; a depth attachment is tested and written by geometry passes and never sampled.",
+                        input.Name
+                    );
                 } else if (
-                    (pass.Kind == ShaderPipelinePassKind.Fullscreen) &&
+                    pass.IsGraphics &&
                     (resource.Kind == ShaderPipelineResourceKind.Buffer)
                 ) {
                     Add(
                         diagnostics,
-                        "SHADERPIPE_UNSUPPORTED_FULLSCREEN_BUFFER",
-                        $"Fullscreen pass '{pass.Name}' reads buffer '{input.Name}'; the current graphics binding contract supports sampled images only.",
+                        "SHADERPIPE_UNSUPPORTED_GRAPHICS_BUFFER",
+                        $"Graphics pass '{pass.Name}' reads buffer '{input.Name}'; the graphics binding contract supports sampled images only.",
                         input.Name
                     );
                 } else if (
@@ -456,41 +463,30 @@ public sealed class ShaderPipelineCompiler {
                     );
                 } else if (
                     input.PreviousFrame &&
-                    (!resource.History || !resource.Persistent || (resource.Initialization == ShaderPipelineInitialization.Undefined))
+                    successors.ContainsKey(key: input.Name)
+                ) {
+                    Add(
+                        diagnostics,
+                        "SHADERPIPE_DISCARDED_READ",
+                        $"Pass '{pass.Name}' reads '{input.Name}' from the previous frame, but '{successors[input.Name]}' overwrites it within that frame; read the last version of the chain instead.",
+                        input.Name
+                    );
+                } else if (
+                    input.PreviousFrame &&
+                    (!resource.History || (ChainRoot(
+                        name: input.Name,
+                        resources: resources
+                    ).Initialization == ShaderPipelineInitialization.Undefined))
                 ) {
                     Add(
                         diagnostics,
                         "SHADERPIPE_FEEDBACK_DECLARATION",
-                        $"Pass '{pass.Name}' reads '{input.Name}' from the previous frame, but that resource requires persistent history and explicit initialization.",
+                        $"Pass '{pass.Name}' reads '{input.Name}' from the previous frame, but that version must be declared history and its chain's first version must declare an initialization.",
                         input.Name
                     );
                 }
             }
 
-            if (
-                (pass.Language == ShaderSourceLanguage.ShadertoyGlsl) &&
-                ((pass.Kind != ShaderPipelinePassKind.Compute) || (pass.OutputReferences.Count != 1) ||
-                 (pass.OutputReferences[0].Binding is not (null or 0)) || pass.InputReferences.Any(predicate: static input => (input.Binding == 0)) ||
-                 pass.InputReferences.Concat(second: pass.OutputReferences).Any(predicate: reference => (resources.TryGetValue(
-                key: reference.Name,
-                value: out var resource
-            ) && (resource.Kind != ShaderPipelineResourceKind.Image))))
-            ) {
-                Add(
-                    diagnostics,
-                    "SHADERPIPE_SHADERTOY_BINDINGS",
-                    $"Shadertoy pass '{pass.Name}' requires one image output at binding 0 and image inputs at other bindings.",
-                    pass.Name
-                );
-            }
-            if (!Enum.IsDefined(value: pass.Language)) {
-                Add(
-                    diagnostics,
-                    "SHADERPIPE_SOURCE_LANGUAGE",
-                    $"Pass '{pass.Name}' has an unsupported shader source language.",
-                    pass.Name
-                );
-            }
             foreach (var output in pass.OutputReferences) {
                 if (
                     (pass.Kind == ShaderPipelinePassKind.Compute) &&
@@ -512,13 +508,23 @@ public sealed class ShaderPipelineCompiler {
                         output.Name
                     );
                 } else if (
-                    (pass.Kind == ShaderPipelinePassKind.Fullscreen) &&
-                    (resources[output.Name].Kind != ShaderPipelineResourceKind.Image)
+                    pass.IsGraphics &&
+                    (resources[output.Name].Kind == ShaderPipelineResourceKind.Buffer)
                 ) {
                     Add(
                         diagnostics,
-                        "SHADERPIPE_UNSUPPORTED_FULLSCREEN_OUTPUT",
-                        $"Fullscreen pass '{pass.Name}' writes '{output.Name}', which is not an image color target.",
+                        "SHADERPIPE_UNSUPPORTED_GRAPHICS_OUTPUT",
+                        $"Graphics pass '{pass.Name}' writes buffer '{output.Name}', which is not an attachment.",
+                        output.Name
+                    );
+                } else if (
+                    (pass.Kind != ShaderPipelinePassKind.Geometry) &&
+                    (resources[output.Name].Kind == ShaderPipelineResourceKind.Depth)
+                ) {
+                    Add(
+                        diagnostics,
+                        "SHADERPIPE_DEPTH_WRITER",
+                        $"{pass.Kind} pass '{pass.Name}' writes depth version '{output.Name}'; only a geometry pass writes a depth attachment.",
                         output.Name
                     );
                 } else if (resources[output.Name].IsExternal) {
@@ -528,41 +534,6 @@ public sealed class ShaderPipelineCompiler {
                         $"Pass '{pass.Name}' writes external resource '{output.Name}'; external resources are host inputs and cannot have a pass writer.",
                         output.Name
                     );
-                }
-                if (resources.TryGetValue(
-                    key: output.Name,
-                    value: out var outputResource
-                )) {
-                    if (
-                        (pass.Kind == ShaderPipelinePassKind.Fullscreen) &&
-                        !string.Equals(
-                        a: outputResource.Format,
-                        b: "R8G8B8A8Unorm",
-                        comparisonType: StringComparison.OrdinalIgnoreCase
-                    )
-                    ) {
-                        Add(
-                            diagnostics,
-                            "SHADERPIPE_FULLSCREEN_FORMAT",
-                            (((("Fullscreen pass " + pass.Name) + " writes format ") + outputResource.Format) + "; the current graphics service creates R8G8B8A8Unorm targets."),
-                            output.Name
-                        );
-                    }
-                    if (
-                        (pass.Language == ShaderSourceLanguage.ShadertoyGlsl) &&
-                        string.Equals(
-                        a: outputResource.Format,
-                        b: "B8G8R8A8Unorm",
-                        comparisonType: StringComparison.OrdinalIgnoreCase
-                    )
-                    ) {
-                        Add(
-                            diagnostics,
-                            "SHADERPIPE_SHADERTOY_FORMAT",
-                            (("Shadertoy pass " + pass.Name) + " cannot write B8G8R8A8Unorm through the adapter."),
-                            output.Name
-                        );
-                    }
                 }
                 if (!writers.TryAdd(
                     key: output.Name,
@@ -601,55 +572,45 @@ public sealed class ShaderPipelineCompiler {
                     resource.Name
                 );
             }
-            if (
-                resource.History &&
-                !resource.Persistent
-            ) {
-                Add(
-                    diagnostics,
-                    "SHADERPIPE_HISTORY_PERSISTENCE",
-                    $"Resource '{resource.Name}' declares history but is not persistent.",
-                    resource.Name
-                );
-            }
         }
 
         var outputNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var output in definition.Outputs) {
-            if (!outputNames.Add(item: output.Name)) {
+            if (!outputNames.Add(item: output)) {
                 Add(
-                    diagnostics,
-                    "SHADERPIPE_DUPLICATE_OUTPUT",
-                    $"Pipeline output '{output.Name}' is declared more than once.",
-                    output.Name
+                    code: "SHADERPIPE_DUPLICATE_OUTPUT",
+                    diagnostics: diagnostics,
+                    message: $"Pipeline output '{output}' is declared more than once.",
+                    name: output
                 );
             }
-            if (!resources.ContainsKey(key: output.Resource.Name)) {
+            if (!resources.TryGetValue(
+                key: output,
+                value: out var published
+            )) {
                 Add(
-                    diagnostics,
-                    "SHADERPIPE_UNKNOWN_RESOURCE",
-                    $"Pipeline output '{output.Name}' references undeclared resource '{output.Resource.Name}'.",
-                    output.Resource.Name
+                    code: "SHADERPIPE_UNKNOWN_RESOURCE",
+                    diagnostics: diagnostics,
+                    message: $"Pipeline output '{output}' names undeclared version '{output}'.",
+                    name: output
                 );
-            }
-            if (output.Resource.Binding is not null) {
+            } else if (published.Kind == ShaderPipelineResourceKind.Depth) {
                 Add(
-                    diagnostics,
-                    "SHADERPIPE_OUTPUT_BINDING",
-                    "Pipeline outputs cannot declare descriptor bindings; bindings belong to pass references.",
-                    output.Name
-                );
-            }
-            if (output.Resource.PreviousFrame) {
-                Add(
-                    diagnostics,
-                    "SHADERPIPE_FEEDBACK_OUTPUT",
-                    $"Pipeline output '{output.Name}' cannot expose a previous-frame resource reference.",
-                    output.Name
+                    code: "SHADERPIPE_DEPTH_PUBLIC",
+                    diagnostics: diagnostics,
+                    message: $"Pipeline output '{output}' is a depth version; a depth attachment is never published.",
+                    name: output
                 );
             }
         }
+        ValidateForwards(
+            definition: definition,
+            diagnostics: diagnostics,
+            outputs: outputNames,
+            resources: resources,
+            successors: successors
+        );
     }
     private static void ValidateLimits(ShaderPipelineLimits limits) {
         if (
@@ -657,11 +618,13 @@ public sealed class ShaderPipelineCompiler {
             (limits.MaxPasses <= 0) ||
             (limits.MaxInputsPerPass <= 0) ||
             (limits.MaxOutputsPerPass <= 0) ||
-            (limits.MaxConfigConstantBytes == 0) ||
+            (limits.MaxFrameBlockBytes == 0) ||
             (limits.MaxComputeWorkGroupSizeX == 0) ||
             (limits.MaxComputeWorkGroupSizeY == 0) ||
             (limits.MaxComputeWorkGroupSizeZ == 0) ||
-            (limits.MaxComputeWorkGroupInvocations == 0)
+            (limits.MaxComputeWorkGroupInvocations == 0) ||
+            (limits.MaxVertexAttributes <= 0) ||
+            (limits.MaxGeometryBytes == 0)
         ) {
             throw new ArgumentOutOfRangeException(
                 nameof(limits),
@@ -724,12 +687,12 @@ public sealed class ShaderPipelineCompiler {
                 resource.Format,
                 ignoreCase: true,
                 out var format
-            ) || !Enum.IsDefined(value: format))
+            ) || !Enum.IsDefined(value: format) || GpuPixelFormats.IsDepth(format: format))
             ) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_RESOURCE_FORMAT",
-                    $"Resource '{resource.Name}' has unsupported image format '{resource.Format}'.",
+                    $"Resource '{resource.Name}' has unsupported image format '{resource.Format}'; an image has a color format, and a depth format belongs to a depth resource.",
                     resource.Name
                 );
             }
@@ -747,15 +710,19 @@ public sealed class ShaderPipelineCompiler {
                     resource.Name
                 );
             }
-            if (
-                (resource.SizeBytes is not null) ||
-                (resource.ElementType is not null) ||
-                (resource.StrideBytes is not null)
-            ) {
+            if (resource.SizeBytes is not null) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_RESOURCE_KIND_FIELDS",
-                    $"Image/depth resource '{resource.Name}' cannot declare buffer fields sizeBytes, elementType, or strideBytes.",
+                    $"Image/depth resource '{resource.Name}' cannot declare the buffer field sizeBytes.",
+                    resource.Name
+                );
+            }
+            if (resource.Samples != 1) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_UNSUPPORTED_SAMPLES",
+                    $"Resource '{resource.Name}' declares {resource.Samples} samples; only single-sampled images are executable on every backend.",
                     resource.Name
                 );
             }
@@ -791,33 +758,20 @@ public sealed class ShaderPipelineCompiler {
                     resource.Name
                 );
             }
-            if (
-                (resource.ElementType is not null) ||
-                (resource.StrideBytes is not null)
-            ) {
+            if (resource.Samples != 1) {
                 Add(
                     diagnostics,
-                    "SHADERPIPE_UNSUPPORTED_TYPED_BUFFER",
-                    $"Buffer resource '{resource.Name}' declares typed layout metadata that the runtime does not bind.",
-                    resource.Name
-                );
-            }
-            if (resource.StrideBytes is not null) {
-                Add(
-                    diagnostics,
-                    "SHADERPIPE_BUFFER_STRIDE",
-                    $"Buffer resource '{resource.Name}' declares strideBytes, but the runtime does not bind typed buffer strides.",
+                    "SHADERPIPE_RESOURCE_KIND_FIELDS",
+                    $"Buffer resource '{resource.Name}' cannot declare a sample count.",
                     resource.Name
                 );
             }
         }
 
         if (resource.Kind == ShaderPipelineResourceKind.Depth) {
-            Add(
-                diagnostics,
-                "SHADERPIPE_UNSUPPORTED_DEPTH",
-                $"Resource '{resource.Name}' is a depth attachment; depth resources are reserved in the schema but the current runtime has no depth attachment or depth sampling contract.",
-                resource.Name
+            ValidateDepth(
+                diagnostics: diagnostics,
+                resource: resource
             );
         }
     }
@@ -874,6 +828,11 @@ public sealed class ShaderPipelineCompiler {
                 }
             }
         }
+        AddForwardDependencies(
+            definition: definition,
+            dependencies: dependencies,
+            writerByResource: writerByResource
+        );
 
         var order = TopologicalOrder(
             definition: definition,
@@ -885,13 +844,19 @@ public sealed class ShaderPipelineCompiler {
             throw new ShaderPipelineCompilationException(diagnostics: diagnostics);
         }
 
-        // Liveness follows both current- and previous-frame reads. A history writer is needed for future
-        // frames even when no current-frame pass consumes its result. External writes are not admitted.
+        // Liveness follows both current- and previous-frame reads, and a forward's predecessor. A history writer is
+        // needed for future frames even when no current-frame pass consumes its result. External writes are not admitted.
         var livePasses = new HashSet<int>();
-        var liveResources = definition.Outputs.Select(selector: static output => output.Resource.Name).ToHashSet(comparer: StringComparer.Ordinal);
+        var liveResources = definition.Outputs.ToHashSet(comparer: StringComparer.Ordinal);
         var pendingResources = new Stack<string>(collection: liveResources);
 
         while (pendingResources.TryPop(result: out var resourceName)) {
+            if (
+                (resourceByName[resourceName].From is { } predecessor) &&
+                liveResources.Add(item: predecessor)
+            ) {
+                pendingResources.Push(item: predecessor);
+            }
             if (
                 !writerByResource.TryGetValue(
                 key: resourceName,
@@ -901,9 +866,8 @@ public sealed class ShaderPipelineCompiler {
             ) { continue; }
             var pass = definition.Passes[writer];
 
-            foreach (var output in pass.OutputReferences) { liveResources.Add(item: output.Name); }
-            foreach (var input in pass.InputReferences) {
-                if (liveResources.Add(item: input.Name)) { pendingResources.Push(item: input.Name); }
+            foreach (var reference in pass.OutputReferences.Concat(second: pass.InputReferences)) {
+                if (liveResources.Add(item: reference.Name)) { pendingResources.Push(item: reference.Name); }
             }
         }
         order.RemoveAll(match: pass => !livePasses.Contains(item: pass));
@@ -923,74 +887,83 @@ public sealed class ShaderPipelineCompiler {
         }
 
         var plannedPasses = new List<ShaderPipelinePlannedPass>(capacity: order.Count);
+        var interfacesBySource = new Dictionary<string, (string Pass, ShaderInterface Interface)>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < order.Count); index++) {
             var passIndex = order[index];
-            var parameters = ShaderPipelineParameterLayout.Resolve(pass: definition.Passes[passIndex]);
-            var configBytes = (parameters.SizeBytes - ShaderPipelineParameterLayout.FramePrefixBytes);
+            var pass = definition.Passes[passIndex];
+            ShaderPipelineParameterLayout parameters;
 
-            if (configBytes > m_limits.MaxConfigConstantBytes) {
+            try {
+                parameters = ShaderPipelineParameterLayout.Resolve(pass: pass);
+            } catch (InvalidDataException exception) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_INTERFACE",
+                    $"Pass '{pass.Name}' has no frame interface: {exception.Message}",
+                    pass.Name
+                );
+                continue;
+            }
+
+            if (parameters.SizeBytes > m_limits.MaxFrameBlockBytes) {
                 Add(
                     diagnostics,
                     "SHADERPIPE_PUSH_CONSTANT_LIMIT",
-                    $"Pass '{definition.Passes[passIndex].Name}' config block is {configBytes} bytes; the portable limit is {m_limits.MaxConfigConstantBytes} bytes after the {ShaderPipelineParameterLayout.FramePrefixBytes}-byte frame prefix.",
-                    definition.Passes[passIndex].Name
+                    $"Pass '{pass.Name}' frame block is {parameters.SizeBytes} bytes with its config; the portable limit is {m_limits.MaxFrameBlockBytes} bytes.",
+                    pass.Name
                 );
+            }
+            // A source includes one generated interface, so every pass compiling it must read the same one.
+            if (
+                interfacesBySource.TryGetValue(
+                    key: pass.Source,
+                    value: out var shared
+                ) &&
+                (shared.Interface.Hash != parameters.Interface.Hash)
+            ) {
+                Add(
+                    diagnostics,
+                    "SHADERPIPE_INTERFACE_CONFLICT",
+                    $"Passes '{shared.Pass}' and '{pass.Name}' compile '{pass.Source}' with different config, so the source would read two interfaces.",
+                    pass.Name
+                );
+            } else {
+                interfacesBySource[pass.Source] = (pass.Name, parameters.Interface);
             }
             plannedPasses.Add(item: new ShaderPipelinePlannedPass(
                 Declaration: definition.Passes[passIndex],
                 Index: index,
                 Dependencies: new ReadOnlyCollection<int>(list: dependencies[passIndex].OrderBy(keySelector: value => ordinal[value]).Select(selector: value => ordinal[value]).ToList()),
-                Parameters: parameters
+                Parameters: parameters,
+                Accesses: [],
+                Attachments: []
             ));
         }
         if (diagnostics.Count != 0) {
             throw new ShaderPipelineCompilationException(diagnostics: diagnostics);
         }
-        var firstUse = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var lastUse = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-
-        foreach (var pass in plannedPasses) {
-            foreach (var reference in pass.Declaration.InputReferences.Concat(second: pass.Declaration.OutputReferences)) {
-                firstUse.TryAdd(
-                    key: reference.Name,
-                    value: pass.Index
-                );
-                lastUse[reference.Name] = pass.Index;
-            }
-        }
-        // Public outputs remain live through publication; history and persistent resources also outlive passes.
-        foreach (var output in definition.Outputs) { lastUse[output.Resource.Name] = plannedPasses.Count; }
-        var plannedResources = resourceByName.Values.Where(predicate: resource => liveResources.Contains(item: resource.Name))
-            .OrderBy(
-            static resource => resource.Name,
-            StringComparer.Ordinal
-        )
-            .Select(selector: resource => new ShaderPipelinePlannedResource(
-            Declaration: resource,
-            WriterPassIndex: (writerByResource.TryGetValue(
-                key: resource.Name,
-                value: out var writer
-            )
-            ? ordinal[writer]
-            : -1),
-            FirstUsePassIndex: firstUse.GetValueOrDefault(
-                resource.Name,
-                -1
-            ),
-            LastUsePassIndex: (resource.Persistent
-            ? plannedPasses.Count
-            : lastUse.GetValueOrDefault(
-                    resource.Name,
-                    -1
-                ))
-        )).ToList();
+        var versions = PlanVersions(
+            definition: definition,
+            liveResources: liveResources,
+            passes: plannedPasses
+        );
+        var plannedResources = versions.Resources.ToDictionary(
+            keySelector: static resource => resource.Name,
+            comparer: StringComparer.Ordinal
+        );
 
         return new ShaderPipelinePlan(
             definition: definition,
-            resources: plannedResources,
-            passes: plannedPasses,
-            outputs: definition.Outputs
+            passes: plannedPasses.Select(selector: (pass, index) => pass with {
+                Accesses = versions.Accesses[index],
+                Attachments = AttachmentsOf(
+                    pass: pass.Declaration,
+                    resources: plannedResources
+                ),
+            }).ToArray(),
+            resources: versions.Resources,
+            storages: versions.Storages
         );
     }
     /// <summary>Convenience static entry point for callers that do not need custom limits.</summary>

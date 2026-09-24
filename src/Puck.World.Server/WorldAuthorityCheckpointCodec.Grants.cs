@@ -5,40 +5,18 @@ namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteCapability(WireWriter writer, WorldCapability capability) {
-        if (!WorldWireTags.TryToWire(
-            value: capability,
-            wire: out var wire
+        if (!WorldWireCodec.TryWriteCapability(
+            capability: capability,
+            writer: writer
         )) {
             throw new InvalidOperationException(message: $"{nameof(WorldCapability)}.{capability} has no wire value");
         }
-        writer.WriteByte(value: wire);
     }
-    private static WorldCapability ReadCapability(ref WireReader reader) {
-        var wire = reader.ReadByte();
-        var valid = WorldWireTags.TryFromWire(
-            value: out WorldCapability capability,
-            wire: wire
-        );
-
-        if (
-            !reader.Failed &&
-            !valid
-        ) {
-            reader.Fail(
-                detail: (WorldWireTags.IsRetiredCapabilityWire(wire: wire)
-                ? $"{nameof(WorldCapability)} wire value {wire} is retired"
-                : $"{nameof(WorldCapability)} wire value {wire} is not declared"),
-                refusal: WireRefusal.EnumValueUnknown
-            );
-        }
-
-        return capability;
-    }
-    // The (principal, capability, subject) triple every per-grant row is keyed by — budgets, ceilings, masks, reach,
+    // The (grantee, capability, subject) triple every per-grant row is keyed by — budgets, ceilings, masks, reach,
     // seeded sections — written and read through one pair so no row can spell the key in a different order.
-    private static void WriteGrantKey(WireWriter writer, WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
-        WritePrincipal(
-            principal: principal,
+    private static void WriteGrantKey(WireWriter writer, Grantee grantee, WorldCapability capability, GrantSubject subject) {
+        WriteGrantee(
+            grantee: grantee,
             writer: writer
         );
         WriteCapability(
@@ -50,45 +28,39 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer
         );
     }
-    private static (WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject) ReadGrantKey(ref WireReader reader) {
-        var principal = ReadPrincipal(reader: ref reader);
-        var capability = ReadCapability(reader: ref reader);
-        var subject = ReadSubject(reader: ref reader);
+    private static (Grantee Grantee, WorldCapability Capability, GrantSubject Subject) ReadGrantKey(ref WireReader reader) {
+        var grantee = WorldWireCodec.ReadGrantee(reader: ref reader);
+        var capability = WorldWireCodec.ReadCapability(reader: ref reader);
+        var subject = WorldWireCodec.ReadSubject(reader: ref reader);
 
-        return (principal, capability, subject);
+        return (grantee, capability, subject);
     }
-    private static void WriteGrantsPrincipal(WireWriter writer, WorldGrants.WorldGrantsPrincipalCheckpoint row) {
-        WritePrincipal(
-            writer: writer,
-            principal: row.Principal
+    private static void WriteGrantsGrantee(WireWriter writer, WorldGrantsGranteeCheckpoint row) {
+        WriteGrantee(
+            grantee: row.Grantee,
+            writer: writer
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.Drive,
             writeItem: WriteSubject
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.Observe,
             writeItem: WriteSubject
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.Control,
             writeItem: WriteSubject
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.Mutate,
             writeItem: WriteSubject
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.Edit,
             writeItem: WriteSubject
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: row.Applications,
             writeItem: WriteControlApplication
         );
@@ -102,7 +74,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: application.Reach.Bits);
     }
     private static ControlApplication ReadControlApplication(ref WireReader reader) {
-        var target = ReadSubject(reader: ref reader);
+        var target = WorldWireCodec.ReadSubject(reader: ref reader);
         var kit = reader.ReadString(
             field: "control application kit",
             maxBytes: MaxStringBytes
@@ -117,59 +89,57 @@ public static partial class WorldAuthorityCheckpointCodec {
             Target: target
         );
     }
-    private static WorldGrants.WorldGrantsPrincipalCheckpoint ReadGrantsPrincipal(ref WireReader reader) {
-        var principal = ReadPrincipal(reader: ref reader);
-        var drive = ReadArray(
-            reader: ref reader,
+    private static WorldGrantsGranteeCheckpoint ReadGrantsGrantee(ref WireReader reader) {
+        var grantee = WorldWireCodec.ReadGrantee(reader: ref reader);
+        var drive = reader.ReadArray(
             field: "grants drive subjects",
-            readItem: static (ref WireReader r) => ReadSubject(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var observe = ReadArray(
-            reader: ref reader,
+        var observe = reader.ReadArray(
             field: "grants observe subjects",
-            readItem: static (ref WireReader r) => ReadSubject(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var control = ReadArray(
-            reader: ref reader,
+        var control = reader.ReadArray(
             field: "grants control subjects",
-            readItem: static (ref WireReader r) => ReadSubject(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var mutate = ReadArray(
-            reader: ref reader,
+        var mutate = reader.ReadArray(
             field: "grants mutate subjects",
-            readItem: static (ref WireReader r) => ReadSubject(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var edit = ReadArray(
-            reader: ref reader,
+        var edit = reader.ReadArray(
             field: "grants edit subjects",
-            readItem: static (ref WireReader r) => ReadSubject(reader: ref r)
+            readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var applications = ReadArray(
-            reader: ref reader,
+        var applications = reader.ReadArray(
             field: "grants control applications",
-            readItem: static (ref WireReader r) => ReadControlApplication(reader: ref r)
+            readItem: static (ref WireReader r) => ReadControlApplication(reader: ref r),
+            maximum: MaxCollectionCount
         );
 
-        return new WorldGrants.WorldGrantsPrincipalCheckpoint(
+        return new WorldGrantsGranteeCheckpoint(
             Applications: applications,
             Control: control,
             Drive: drive,
             Edit: edit,
+            Grantee: grantee,
             Mutate: mutate,
-            Observe: observe,
-            Principal: principal
+            Observe: observe
         );
     }
-    private static byte[] EncodeGrants(WorldGrants.WorldGrantsCheckpoint section) {
+    private static byte[] EncodeGrants(WorldGrantsCheckpoint section) {
         var writer = new WireWriter();
 
-        WriteArray(
-            writer: writer,
-            items: section.Principals,
-            writeItem: WriteGrantsPrincipal
+        writer.WriteArray(
+            items: section.Grantees,
+            writeItem: WriteGrantsGrantee
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Exclusive,
             writeItem: static (w, row) => {
                 WriteCapability(
@@ -180,76 +150,70 @@ public static partial class WorldAuthorityCheckpointCodec {
                     subject: row.Subject,
                     writer: w
                 );
-                WritePrincipal(
-                    principal: row.Holder,
+                WriteGrantee(
+                    grantee: row.Holder,
                     writer: w
                 );
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.Budgets,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
                 w.WriteInt32(value: row.Budget);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.EventBudgets,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
                 w.WriteInt32(value: row.Budget);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.HoldCeilings,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
                 w.WriteInt64(value: row.Ceiling);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.ChannelReach,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
                 w.WriteUInt64(value: row.Bits);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.PoolCeilings,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
-                WriteArray(
-                    writer: w,
+                w.WriteArray(
                     items: row.Ceilings,
                     writeItem: static (w2, cell) => {
                         w2.WriteInt32(value: cell.Ordinal);
@@ -258,89 +222,44 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.KindMasks,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
-                WriteUInt128(
-                    value: row.Bits,
-                    writer: w
+                w.WriteUInt128(
+                    value: row.Bits
                 );
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.WriteMasks,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
                 w.WriteUInt64(value: row.Bits);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.SeededSections,
             writeItem: static (w, row) => {
                 WriteGrantKey(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject,
                     writer: w
                 );
             }
         );
-        WriteArray(
-            writer: writer,
-            items: section.GroupMembership,
-            writeItem: static (w, row) => {
-                WritePrincipal(
-                    principal: row.Principal,
-                    writer: w
-                );
-                WriteStringArray(
-                    values: row.Groups,
-                    writer: w
-                );
-            }
-        );
-        WriteArray(
-            writer: writer,
-            items: section.GroupReach,
-            writeItem: static (w, row) => {
-                w.WriteString(value: row.Group);
-                WriteArray(
-                    items: row.Reach,
-                    writeItem: WriteCapability,
-                    writer: w
-                );
-            }
-        );
-        WriteArray(
-            writer: writer,
-            items: section.OwnedGroups,
-            writeItem: static (w, row) => {
-                WritePrincipal(
-                    principal: row.Principal,
-                    writer: w
-                );
-                WriteStringArray(
-                    values: row.Groups,
-                    writer: w
-                );
-            }
-        );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.DriveGates,
             writeItem: static (w, row) => {
                 w.WriteInt32(value: row.BodyIndex);
@@ -351,157 +270,113 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeGrants(byte[] bytes, out string reason, out WorldGrants.WorldGrantsCheckpoint section) {
+    private static bool TryDecodeGrants(byte[] bytes, out string reason, out WorldGrantsCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
-        var principals = ReadArray(
-            reader: ref reader,
-            field: "grants principals",
-            readItem: static (ref WireReader r) => ReadGrantsPrincipal(reader: ref r)
+        var grantees = reader.ReadArray(
+            field: "grants grantees",
+            readItem: static (ref WireReader r) => ReadGrantsGrantee(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var exclusive = ReadArray(
-            reader: ref reader,
+        var exclusive = reader.ReadArray(
             field: "grants exclusive",
             readItem: static (ref WireReader r) => {
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
-                var holder = ReadPrincipal(reader: ref r);
+                var capability = WorldWireCodec.ReadCapability(reader: ref r);
+                var subject = WorldWireCodec.ReadSubject(reader: ref r);
+                var holder = WorldWireCodec.ReadGrantee(reader: ref r);
 
                 return (capability, subject, holder);
-            }
+            },
+            maximum: MaxCollectionCount
         );
-        var budgets = ReadArray(
-            reader: ref reader,
+        var budgets = reader.ReadArray(
             field: "grants budgets",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
                 var budget = ((ushort)r.ReadInt32());
 
-                return (principal, capability, subject, budget);
-            }
+                return (grantee, capability, subject, budget);
+            },
+            maximum: MaxCollectionCount
         );
-        var eventBudgets = ReadArray(
-            reader: ref reader,
+        var eventBudgets = reader.ReadArray(
             field: "grants event budgets",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
                 var budget = ((ushort)r.ReadInt32());
 
-                return (principal, capability, subject, budget);
-            }
+                return (grantee, capability, subject, budget);
+            },
+            maximum: MaxCollectionCount
         );
-        var holdCeilings = ReadArray(
-            reader: ref reader,
+        var holdCeilings = reader.ReadArray(
             field: "grants hold ceilings",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
                 var ceiling = r.ReadInt64();
 
-                return (principal, capability, subject, ceiling);
-            }
+                return (grantee, capability, subject, ceiling);
+            },
+            maximum: MaxCollectionCount
         );
-        var channelReach = ReadArray(
-            reader: ref reader,
+        var channelReach = reader.ReadArray(
             field: "grants channel reach",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
                 var bits = r.ReadUInt64();
 
-                return (principal, capability, subject, bits);
-            }
+                return (grantee, capability, subject, bits);
+            },
+            maximum: MaxCollectionCount
         );
-        var poolCeilings = ReadArray(
-            reader: ref reader,
+        var poolCeilings = reader.ReadArray(
             field: "grants pool ceilings",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
-                var ceilings = ReadArray(
-                    reader: ref r,
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
+                var ceilings = r.ReadArray(
                     field: "grants pool ceiling cells",
                     readItem: static (ref WireReader r2) => {
                         var ordinal = r2.ReadInt32();
                         var ceiling = r2.ReadInt64();
 
                         return (ordinal, ceiling);
-                    }
+                    },
+                    maximum: MaxCollectionCount
                 );
 
-                return (principal, capability, subject, ((IReadOnlyList<(int Ordinal, long Ceiling)>)ceilings));
-            }
+                return (grantee, capability, subject, ((IReadOnlyList<(int Ordinal, long Ceiling)>)ceilings));
+            },
+            maximum: MaxCollectionCount
         );
-        var kindMasks = ReadArray(
-            reader: ref reader,
+        var kindMasks = reader.ReadArray(
             field: "grants kind masks",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
-                var bits = ReadUInt128(reader: ref r);
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
+                var bits = r.ReadUInt128();
 
-                return (principal, capability, subject, bits);
-            }
+                return (grantee, capability, subject, bits);
+            },
+            maximum: MaxCollectionCount
         );
-        var writeMasks = ReadArray(
-            reader: ref reader,
+        var writeMasks = reader.ReadArray(
             field: "grants write masks",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
                 var bits = r.ReadUInt64();
 
-                return (principal, capability, subject, bits);
-            }
+                return (grantee, capability, subject, bits);
+            },
+            maximum: MaxCollectionCount
         );
-        var seededSections = ReadArray(
-            reader: ref reader,
+        var seededSections = reader.ReadArray(
             field: "grants seeded sections",
             readItem: static (ref WireReader r) => {
-                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
+                var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
 
-                return (principal, capability, subject);
-            }
+                return (grantee, capability, subject);
+            },
+            maximum: MaxCollectionCount
         );
-        var groupMembership = ReadArray(
-            reader: ref reader,
-            field: "grants group membership",
-            readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var groups = ReadStringArray(
-                    field: "grants group membership groups",
-                    reader: ref r
-                );
-
-                return (principal, ((IReadOnlyList<string>)groups));
-            }
-        );
-        var groupReach = ReadArray(
-            reader: ref reader,
-            field: "grants group reach",
-            readItem: static (ref WireReader r) => {
-                var group = r.ReadString(
-                    field: "grants group reach name",
-                    maxBytes: MaxStringBytes
-                );
-                var reach = ReadArray(
-                    reader: ref r,
-                    field: "grants group reach capabilities",
-                    readItem: static (ref WireReader r2) => ReadCapability(reader: ref r2)
-                );
-
-                return (group, ((IReadOnlyList<WorldCapability>)reach));
-            }
-        );
-        var ownedGroups = ReadArray(
-            reader: ref reader,
-            field: "grants owned groups",
-            readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var groups = ReadStringArray(
-                    field: "grants owned groups groups",
-                    reader: ref r
-                );
-
-                return (principal, ((IReadOnlyList<string>)groups));
-            }
-        );
-        var driveGates = ReadArray(
-            reader: ref reader,
+        var driveGates = reader.ReadArray(
             field: "grants drive gates",
             readItem: static (ref WireReader r) => {
                 var bodyIndex = r.ReadInt32();
@@ -511,7 +386,8 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
 
                 return (bodyIndex, reasonText);
-            }
+            },
+            maximum: MaxCollectionCount
         );
         var revision = reader.ReadInt32();
 
@@ -522,19 +398,16 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new WorldGrants.WorldGrantsCheckpoint(
+        section = new WorldGrantsCheckpoint(
             Budgets: budgets,
             ChannelReach: channelReach,
             DriveGates: driveGates,
             EventBudgets: eventBudgets,
             Exclusive: exclusive,
-            GroupMembership: groupMembership,
-            GroupReach: groupReach,
+            Grantees: grantees,
             HoldCeilings: holdCeilings,
             KindMasks: kindMasks,
-            OwnedGroups: ownedGroups,
             PoolCeilings: poolCeilings,
-            Principals: principals,
             Revision: revision,
             SeededSections: seededSections,
             WriteMasks: writeMasks

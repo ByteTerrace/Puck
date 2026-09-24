@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -12,7 +13,7 @@ namespace Puck.World.Server;
 /// step) enqueued, so both halves of one tick charge against the same allowance and the next tick starts fresh. A
 /// principal that never dispatches never gets an entry.</remarks>
 public sealed class WorldMutationBudgetMeter {
-    private readonly Dictionary<(WorldPrincipal Principal, WorldSection Section), int> m_charged = [];
+    private readonly Dictionary<(Principal Principal, WorldSection Section), int> m_charged = [];
 
     /// <summary>Drops every count.</summary>
     /// <remarks>O(capacity) over a dictionary whose live set is the number of (untrusted principal, section) pairs
@@ -25,7 +26,7 @@ public sealed class WorldMutationBudgetMeter {
     /// <returns>Whether the dispatch was charged.</returns>
     /// <remarks>The charge lands only on success: a refused dispatch must not consume the allowance it was refused
     /// by, or a single over-budget burst would silently extend the exhaustion past the tick that caused it.</remarks>
-    public bool TryCharge(WorldPrincipal principal, WorldSection section, ushort budget) {
+    public bool TryCharge(Principal principal, WorldSection section, ushort budget) {
         var key = (principal, section);
         ref var count = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
             dictionary: m_charged,

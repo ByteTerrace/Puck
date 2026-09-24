@@ -1,0 +1,648 @@
+{
+  "id": "pipeline-resize",
+  "title": "A resize rebuilds a float-history pipeline at the new extent, installs without rendering while paused, restarts history whose extent changed from zero, and captures float outputs throughout",
+  "binding": "Both legs boot an offscreen 64x64 world whose one pipeline accumulates previous.r + 1/16 into a zero-initialized half-float history and publishes that history through the float preview, so a capture's red channel is min(n/16, 1) after n submissions of the history. Paused and reset, the graph's first submission reads 1/16 and one step 2/16 at 64x64. An edit of the layout slot to half the frame on each axis makes the host request 32x32. A resize is not a step, so the paused instance rebuilds and installs the graph at 32x32 without rendering (pipeline.wait resized) and still presents 2/16 at 64x64. In the positive leg the history's extent follows the frame, so it restarts from zero at 32x32 and the next steps read 1/16, then 2/16. Resumed, the slot returns to the whole frame, the running instance rebuilds at 64x64, and after a reset and 24 submissions the preview reads full scale. Every expectation is derived from that arithmetic, not recorded. The discriminating leg fixes the history at 64x64, so the resize carries it: the step after the resize reads 3/16 at 64x64 and the next 4/16, where the positive leg's resized captures require 32x32 at 1/16 and 2/16.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "resize.pipeline.json",
+    "fixed-history.pipeline.json"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-resize/fixture.world.json",
+    "script": "resize.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "created-first-submission-is-one-sixteenth",
+        "capture": "created.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-host-requests-32x32",
+        "stream": "stderr",
+        "match": "exact",
+        "text": "[pipeline: feedback wait resized 32 32 reached]",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "paused-instance-presents-its-last-frame-after-the-resize",
+        "capture": "held.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.125,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.125,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "resized-history-restarts-at-one-sixteenth",
+        "capture": "resized.png",
+        "extent": [
+          32,
+          32
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "resized-history-steps-to-two-sixteenths",
+        "capture": "resized-step.png",
+        "extent": [
+          32,
+          32
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.125,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.125,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-host-requests-64x64",
+        "stream": "stderr",
+        "match": "exact",
+        "text": "[pipeline: feedback wait resized 64 64 reached]",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "active-capture-after-resize-is-full-scale",
+        "capture": "active.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          1,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          1,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "no-candidate-is-refused",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[pipeline: feedback GPU candidate refused: ",
+        "present": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-resize/fixed-history.world.json",
+    "script": "resize.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "created-first-submission-is-one-sixteenth",
+        "capture": "created.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "paused-instance-presents-its-last-frame-after-the-resize",
+        "capture": "held.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.125,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.125,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "fixed-history-carries-to-three-sixteenths",
+        "capture": "resized.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.1875,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.1875,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "fixed-history-steps-to-four-sixteenths",
+        "capture": "resized-step.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.25,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.25,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "carried-history-is-not-restarted",
+        "capture": "resized.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.0625,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": false
+      }
+    ]
+  }
+}

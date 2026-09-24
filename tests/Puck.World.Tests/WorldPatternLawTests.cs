@@ -1,5 +1,5 @@
+using Puck.Commands;
 using Puck.Assets.Documents;
-using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
@@ -8,9 +8,9 @@ namespace Puck.World.Tests;
 /// <summary>Pins the pattern-language operand over its three word sources, complement and intersection, the sort that
 /// canonicalizes a hand, the state budget's refusal, and the strict wire shape.</summary>
 public sealed class WorldPatternLawTests {
-    [Theory]
     [InlineData("sortZone")]
     [InlineData("sortKeyed")]
+    [Theory]
     public void RetiredSortDiscriminatorsAreRefused(string discriminator) {
         var json = System.Text.Encoding.UTF8.GetBytes(s: $$$"""
             {"rules":[{"name":"order","effects":[{"$type":"transformState","transform":{
@@ -18,24 +18,10 @@ public sealed class WorldPatternLawTests {
             }}]}]}
             """);
         var error = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: json));
+
         Assert.Contains(discriminator, error.Message, StringComparison.Ordinal);
     }
 
-    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
-        Assert.True(
-            condition: WorldArenaTransforms.TryApply(
-                definition,
-                transform,
-                WorldPrincipal.World,
-                1,
-                "test",
-                out var candidate,
-                out var reason
-            ),
-            userMessage: reason
-        );
-        return candidate!;
-    }
     private static PatternRow Bracket(string name, bool single = false) => new(
         Name(value: name),
         CellKind.Int,
@@ -51,10 +37,6 @@ public sealed class WorldPatternLawTests {
         Pattern: new PatternNode.Sequence(Items: [(single
         ? new PatternNode.Symbol(Name: "them")
         : new PatternNode.Plus(Item: new PatternNode.Symbol(Name: "them"))), new PatternNode.Symbol(Name: "me")])
-    );
-    private static StateCell Cell(string key, long value = 1, CellKind kind = CellKind.Int) => new(
-        Name(value: key),
-        ((kind == CellKind.Bool) ? CellValue.Bool(value: (value != 0)) : CellValue.Int(value: value))
     );
     private static WorldDefinition Document(WorldStateRow[] rows, PatternRow[] patterns, WorldRule[] rules) => Fixtures.BuildDocument() with {
         StateRaw = new(
@@ -103,25 +85,25 @@ public sealed class WorldPatternLawTests {
                     Name(value: "cards"),
                     CellKind.Int,
                     Capacity: 5,
-                    Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")]
+                    Cells: [StateFixtures.Cell("c1"), StateFixtures.Cell("c2"), StateFixtures.Cell("c3"), StateFixtures.Cell("c4"), StateFixtures.Cell("c5")]
                 ),
             new(
                     Name(value: "rank"),
                     CellKind.Int,
                     Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards")),
-                    Cells: [Cell(
+                    Cells: [StateFixtures.Cell(
                             key: "c1",
                             value: 9
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c2",
                             value: 5
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c3",
                             value: 7
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c4",
                             value: 6
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c5",
                             value: 8
                         )]
@@ -130,19 +112,19 @@ public sealed class WorldPatternLawTests {
                     Name(value: "suit"),
                     CellKind.Int,
                     Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards")),
-                    Cells: [Cell(
+                    Cells: [StateFixtures.Cell(
                             key: "c1",
                             value: 1
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c2",
                             value: 2
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c3",
                             value: 1
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c4",
                             value: 2
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c5",
                             value: 1
                         )]
@@ -151,13 +133,13 @@ public sealed class WorldPatternLawTests {
                     Name(value: "hand"),
                     CellKind.Bool,
                     Capacity: 5,
-                    Cells: [Cell("c1", kind: CellKind.Bool), Cell("c2", kind: CellKind.Bool), Cell("c3", kind: CellKind.Bool), Cell("c4", kind: CellKind.Bool), Cell("c5", kind: CellKind.Bool)],
+                    Cells: [StateFixtures.Cell("c1", kind: CellKind.Bool), StateFixtures.Cell("c2", kind: CellKind.Bool), StateFixtures.Cell("c3", kind: CellKind.Bool), StateFixtures.Cell("c4", kind: CellKind.Bool), StateFixtures.Cell("c5", kind: CellKind.Bool)],
                     Domain: new StateDomain.KeysOf(
                         CellName.Parse(candidate: "cards"),
                         Ordered: true
                     )
                 ),
-            Slot(name: "straight"),
+            StateFixtures.IntSlot(name: "straight"),
         ],
             [straight],
             [Mirror(
@@ -175,45 +157,29 @@ public sealed class WorldPatternLawTests {
             )]
     );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static WorldStateRow Slot(string name) => new(
-        Name(value: name),
-        CellKind.Int,
-        Cells: [new StateCell(
-                WorldStateRow.SlotKey,
-                CellValue.Int(value: 0L)
-            )]
-    );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
 
     [Fact]
     public void ABoardRayIsAWordAndAFlankIsARegularPattern() {
         var board = new WorldStateRow(
             Name(value: "board"),
             CellKind.Int,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "0",
                     value: 1
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "1",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "2",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "3",
                     value: 1
                 )],
             Domain: new StateDomain.CellsOf("map")
         );
         var definition = Document(
-            [board, Slot(name: "flank"), Slot(name: "south"), Slot(name: "narrow")],
+            [board, StateFixtures.IntSlot(name: "flank"), StateFixtures.IntSlot(name: "south"), StateFixtures.IntSlot(name: "narrow")],
             [Bracket("bracket"), Bracket(
                     name: "tight",
                     single: true
@@ -243,23 +209,17 @@ public sealed class WorldPatternLawTests {
 
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "flank"
+            fixture.SlotValue(row: "flank"
             )
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "south"
+            fixture.SlotValue(row: "south"
             )
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "narrow"
+            fixture.SlotValue(row: "narrow"
             )
         );
         Assert.Contains(
@@ -319,25 +279,25 @@ public sealed class WorldPatternLawTests {
             Name(value: "dice"),
             CellKind.Int,
             Capacity: 5,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "d1",
                     value: 4
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d2",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d3",
                     value: 6
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d4",
                     value: 6
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d5",
                     value: 5
                 )]
         );
         var definition = Document(
-            [dice, Slot(name: "pair"), Slot(name: "noSix"), Slot(name: "twoAndFive")],
+            [dice, StateFixtures.IntSlot(name: "pair"), StateFixtures.IntSlot(name: "noSix"), StateFixtures.IntSlot(name: "twoAndFive")],
             [
             new(
                     Name(value: "pair"),
@@ -379,30 +339,24 @@ public sealed class WorldPatternLawTests {
 
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "pair"
+            fixture.SlotValue(row: "pair"
             )
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "noSix"
+            fixture.SlotValue(row: "noSix"
             )
         );
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "twoAndFive"
+            fixture.SlotValue(row: "twoAndFive"
             )
         );
     }
     [Fact]
     public void ASortedHandReadsItsAttributeWordAndAStraightMatchesOnlyAfterSorting() {
         var unsorted = Hand();
-        var sorted = Apply(
+        var sorted = StateFixtures.Apply(
             definition: unsorted,
             transform: new StateTransform.Sort(
                 "hand",
@@ -417,7 +371,7 @@ public sealed class WorldPatternLawTests {
                 row: "hand"
             ).Cells!.Select(selector: c => c.Key.Value)
         );
-        var descending = Apply(
+        var descending = StateFixtures.Apply(
             definition: unsorted,
             transform: new StateTransform.Sort(
                 "hand",
@@ -436,7 +390,7 @@ public sealed class WorldPatternLawTests {
             ).Cells![0].Key.Value
         );
         // Suit first, rank descending inside a suit, stable across cards with equal keys.
-        var suited = Apply(
+        var suited = StateFixtures.Apply(
             definition: unsorted,
             transform: new StateTransform.Sort(
                 "hand",
@@ -461,7 +415,7 @@ public sealed class WorldPatternLawTests {
                 "hand",
                 By: []
             ),
-            WorldPrincipal.World,
+            Principal.World,
             0,
             "test",
             out _,
@@ -479,16 +433,16 @@ public sealed class WorldPatternLawTests {
                 Name(value: "seats"),
                 CellKind.Int,
                 Capacity: 2,
-                Cells: [Cell("s1"), Cell("s2")]
+                Cells: [StateFixtures.Cell("s1"), StateFixtures.Cell("s2")]
             ),
             new(
                 Name(value: "score"),
                 CellKind.Int,
                 Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "seats")),
-                Cells: [Cell(
+                Cells: [StateFixtures.Cell(
                         key: "s1",
                         value: 3
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "s2",
                         value: 1
                     )]
@@ -502,7 +456,7 @@ public sealed class WorldPatternLawTests {
                 "hand",
                 By: [new("score")]
             ),
-            WorldPrincipal.World,
+            Principal.World,
             0,
             "test",
             out _,
@@ -560,9 +514,7 @@ public sealed class WorldPatternLawTests {
         before.Step();
         Assert.Equal(
             0L,
-            Value(
-                fixture: before,
-                row: "straight"
+            before.SlotValue(row: "straight"
             )
         );
 
@@ -571,9 +523,7 @@ public sealed class WorldPatternLawTests {
         after.Step();
         Assert.Equal(
             1L,
-            Value(
-                fixture: after,
-                row: "straight"
+            after.SlotValue(row: "straight"
             )
         );
     }
@@ -583,19 +533,19 @@ public sealed class WorldPatternLawTests {
             Name(value: "dice"),
             CellKind.Int,
             Capacity: 5,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "d1",
                     value: 4
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d2",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d3",
                     value: 6
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d4",
                     value: 3
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d5",
                     value: 5
                 )]
@@ -623,7 +573,7 @@ public sealed class WorldPatternLawTests {
             ])
         );
         var definition = Document(
-            [dice, Slot(name: "hit")],
+            [dice, StateFixtures.IntSlot(name: "hit")],
             [large],
             [Mirror(
                     "hit",
@@ -636,13 +586,11 @@ public sealed class WorldPatternLawTests {
         unsorted.Step();
         Assert.Equal(
             0L,
-            Value(
-                fixture: unsorted,
-                row: "hit"
+            unsorted.SlotValue(row: "hit"
             )
         );
 
-        var sorted = Apply(
+        var sorted = StateFixtures.Apply(
             definition: definition,
             transform: new StateTransform.Sort(Row: "dice", By: [new SortKey(Row: "dice")])
         );
@@ -659,9 +607,7 @@ public sealed class WorldPatternLawTests {
         fixture.Step();
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "hit"
+            fixture.SlotValue(row: "hit"
             )
         );
 
@@ -669,7 +615,7 @@ public sealed class WorldPatternLawTests {
         Assert.False(condition: WorldArenaTransforms.TryApply(
             definition,
             new StateTransform.Sort(Row: "hit", By: [new SortKey(Row: "hit")]),
-            WorldPrincipal.World,
+            Principal.World,
             0,
             "test",
             out _,
@@ -726,24 +672,24 @@ public sealed class WorldPatternLawTests {
         var suited = Hand() with {
             StateRaw = Hand().StateRaw! with {
                 World = [.. Hand().State.Where(predicate: r => (r.Name.Value != "straight")).Select(selector: r => ((r.Name.Value == "suit")
-            ? r with { Cells = [Cell(
+            ? r with { Cells = [StateFixtures.Cell(
                         key: "c1",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c2",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c3",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c4",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c5",
                         value: 1
                     )] }
             : r)),
-            Slot(name: "flush"), Slot(name: "royal")],
+            StateFixtures.IntSlot(name: "flush"), StateFixtures.IntSlot(name: "royal")],
             },
         };
         var definition = suited with {
@@ -762,16 +708,12 @@ public sealed class WorldPatternLawTests {
         unsorted.Step();
         Assert.Equal(
             1L,
-            Value(
-                fixture: unsorted,
-                row: "flush"
+            unsorted.SlotValue(row: "flush"
             )
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: unsorted,
-                row: "royal"
+            unsorted.SlotValue(row: "royal"
             )
         );
         Assert.Contains(
@@ -785,7 +727,7 @@ public sealed class WorldPatternLawTests {
             )
         );
 
-        var sorted = Apply(
+        var sorted = StateFixtures.Apply(
             definition: definition,
             transform: new StateTransform.Sort(
                 "hand",
@@ -797,28 +739,26 @@ public sealed class WorldPatternLawTests {
         ordered.Step();
         Assert.Equal(
             1L,
-            Value(
-                fixture: ordered,
-                row: "royal"
+            ordered.SlotValue(row: "royal"
             )
         );
 
         var mixed = definition with {
             StateRaw = definition.StateRaw! with {
                 World = [.. definition.State.Select(selector: r => ((r.Name.Value == "suit")
-            ? r with { Cells = [Cell(
+            ? r with { Cells = [StateFixtures.Cell(
                         key: "c1",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c2",
                         value: 2
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c3",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c4",
                         value: 1
-                    ), Cell(
+                    ), StateFixtures.Cell(
                         key: "c5",
                         value: 1
                     )] }
@@ -830,9 +770,7 @@ public sealed class WorldPatternLawTests {
         broken.Step();
         Assert.Equal(
             0L,
-            Value(
-                fixture: broken,
-                row: "flush"
+            broken.SlotValue(row: "flush"
             )
         );
 
@@ -882,6 +820,7 @@ public sealed class WorldPatternLawTests {
             expectedSubstring: "both attribute and value"
         );
     }
+
     // Staggered ranges give every value its own set of memberships, so the alphabet is as wide as a letter mask
     // holds, and a long exact repeat gives the machine a state for every copy: a wide, tall table.
     private static PatternRow Wide(int index) => new(
@@ -972,16 +911,16 @@ public sealed class WorldPatternLawTests {
         var board = new WorldStateRow(
             Name(value: "board"),
             CellKind.Int,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "0",
                     value: 1
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "1",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "2",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "3",
                     value: 1
                 )],
@@ -998,7 +937,7 @@ public sealed class WorldPatternLawTests {
             Pattern: new PatternNode.Star(Item: new PatternNode.Symbol(Name: "them"))
         );
         var definition = Document(
-            [board, Slot(name: "blockerCell"), Slot(name: "blockerDistance"), Slot(name: "edgeCell"), Slot(name: "edgeDistance")],
+            [board, StateFixtures.IntSlot(name: "blockerCell"), StateFixtures.IntSlot(name: "blockerDistance"), StateFixtures.IntSlot(name: "edgeCell"), StateFixtures.IntSlot(name: "edgeDistance")],
             [runOfThem],
             [
             Mirror(
@@ -1030,36 +969,28 @@ public sealed class WorldPatternLawTests {
 
         Assert.Equal(
             3L,
-            Value(
-                fixture: fixture,
-                row: "blockerCell"
+            fixture.SlotValue(row: "blockerCell"
             )
         );
         Assert.Equal(
             3L,
-            Value(
-                fixture: fixture,
-                row: "blockerDistance"
+            fixture.SlotValue(row: "blockerDistance"
             )
         );
         Assert.Equal(
             -1L,
-            Value(
-                fixture: fixture,
-                row: "edgeCell"
+            fixture.SlotValue(row: "edgeCell"
             )
         );
         Assert.Equal(
             -1L,
-            Value(
-                fixture: fixture,
-                row: "edgeDistance"
+            fixture.SlotValue(row: "edgeDistance"
             )
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: Document(
-                [board, Slot(name: "x")],
+                [board, StateFixtures.IntSlot(name: "x")],
                 [runOfThem],
                 [Mirror(
                         key: "0",
@@ -1075,7 +1006,7 @@ public sealed class WorldPatternLawTests {
         );
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: Document(
-                [board, Slot(name: "x")],
+                [board, StateFixtures.IntSlot(name: "x")],
                 [runOfThem],
                 [Mirror(
                         key: "0",
@@ -1165,37 +1096,37 @@ public sealed class WorldPatternLawTests {
         var board = new WorldStateRow(
             Name(value: "board"),
             CellKind.Int,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "0",
                     value: 1
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "1",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "2",
                     value: 2
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "3",
                     value: 1
                 )],
             Domain: new StateDomain.CellsOf("map")
         );
         var definition = Document(
-            [board, Slot(name: "flips"), Slot(name: "mask"), Slot(name: "count"), Slot(name: "handPrefix"),
+            [board, StateFixtures.IntSlot(name: "flips"), StateFixtures.IntSlot(name: "mask"), StateFixtures.IntSlot(name: "count"), StateFixtures.IntSlot(name: "handPrefix"),
                 new(
                     Name(value: "hand"),
                     CellKind.Int,
                     Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards")),
-                    Cells: [Cell(
+                    Cells: [StateFixtures.Cell(
                             key: "c1",
                             value: 2
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c2",
                             value: 2
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c3",
                             value: 1
-                        ), Cell(
+                        ), StateFixtures.Cell(
                             key: "c4",
                             value: 2
                         )]
@@ -1204,7 +1135,7 @@ public sealed class WorldPatternLawTests {
                     Name(value: "cards"),
                     CellKind.Int,
                     Capacity: 4,
-                    Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4")]
+                    Cells: [StateFixtures.Cell("c1"), StateFixtures.Cell("c2"), StateFixtures.Cell("c3"), StateFixtures.Cell("c4")]
                 )],
             [Bracket("bracket")],
             [
@@ -1236,21 +1167,15 @@ public sealed class WorldPatternLawTests {
 
         Assert.Equal(
             3L,
-            Value(
-                fixture: fixture,
-                row: "flips"
+            fixture.SlotValue(row: "flips"
             )
         );
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "count"
+            fixture.SlotValue(row: "count"
             )
         );
-        var mask = Value(
-            fixture: fixture,
-            row: "mask"
+        var mask = fixture.SlotValue(row: "mask"
         );
 
         Assert.True(
@@ -1259,15 +1184,13 @@ public sealed class WorldPatternLawTests {
         );
         Assert.Equal(
             3L,
-            Value(
-                fixture: fixture,
-                row: "handPrefix"
+            fixture.SlotValue(row: "handPrefix"
             )
         );
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: Document(
-                [board, Slot(name: "x")],
+                [board, StateFixtures.IntSlot(name: "x")],
                 [Bracket("bracket")],
                 [Mirror(
                         key: "0",
@@ -1283,7 +1206,7 @@ public sealed class WorldPatternLawTests {
         );
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: Document(
-                [board, Slot(name: "x")],
+                [board, StateFixtures.IntSlot(name: "x")],
                 [Bracket("bracket")],
                 [Mirror(
                         key: "0",
@@ -1304,10 +1227,10 @@ public sealed class WorldPatternLawTests {
             Name(value: "dice"),
             CellKind.Int,
             Capacity: 2,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "d1",
                     value: 1
-                ), Cell(
+                ), StateFixtures.Cell(
                     key: "d2",
                     value: 1
                 )]
@@ -1324,7 +1247,7 @@ public sealed class WorldPatternLawTests {
             Pattern: pattern
         );
         var definition = Document(
-            [dice, Slot(name: "zero"), Slot(name: "choice"), Slot(name: "annihilated"), Slot(name: "everything")],
+            [dice, StateFixtures.IntSlot(name: "zero"), StateFixtures.IntSlot(name: "choice"), StateFixtures.IntSlot(name: "annihilated"), StateFixtures.IntSlot(name: "everything")],
             [
             Row(
                     name: "zero",
@@ -1368,30 +1291,22 @@ public sealed class WorldPatternLawTests {
 
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "zero"
+            fixture.SlotValue(row: "zero"
             )
         );
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "choice"
+            fixture.SlotValue(row: "choice"
             )
         );
         Assert.Equal(
             0L,
-            Value(
-                fixture: fixture,
-                row: "annihilated"
+            fixture.SlotValue(row: "annihilated"
             )
         );
         Assert.Equal(
             1L,
-            Value(
-                fixture: fixture,
-                row: "everything"
+            fixture.SlotValue(row: "everything"
             )
         );
     }
@@ -1417,7 +1332,7 @@ public sealed class WorldPatternLawTests {
             Name(value: "dice"),
             CellKind.Int,
             Capacity: 8,
-            Cells: [Cell(
+            Cells: [StateFixtures.Cell(
                     key: "d1",
                     value: 1
                 )]
@@ -1480,7 +1395,7 @@ public sealed class WorldPatternLawTests {
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: Document(
-                [dice, Slot(name: "hit")],
+                [dice, StateFixtures.IntSlot(name: "hit")],
                 [fixedPattern],
                 [Mirror(
                         "hit",
@@ -1495,7 +1410,7 @@ public sealed class WorldPatternLawTests {
         );
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: Document(
-                [dice, Slot(name: "hit")],
+                [dice, StateFixtures.IntSlot(name: "hit")],
                 [Tail(
                         maxStates: 16,
                         n: 1

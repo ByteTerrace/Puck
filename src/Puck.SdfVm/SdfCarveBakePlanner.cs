@@ -48,9 +48,8 @@ public interface ISdfBrickBakeService {
 /// The planner is the representation-of-record's cache manager, not a new representation: deleting every brick (turn
 /// the switch <see cref="Enabled"/> off) reproduces the identical analytic scene, slower. A brick holds only the
 /// settled hard-Subtraction carve union; smooth carves and sub-<see cref="MinCarveVoxelRadius"/>-voxel carves always
-/// stay analytic. Two seams consume it: the interactive SDF-debug carve pool (settle
-/// <see cref="DefaultSettleFrames"/>) and the <c>sdf.carves</c> bench workload (settle 0 — immediate, so the warm
-/// window absorbs the bake and the sampled window measures the baked steady state).
+/// stay analytic. The interactive SDF-debug carve pool settles over <see cref="DefaultSettleFrames"/> produced
+/// frames; <c>sdf.bake now</c> forces settle 0 (immediate) for one pass.
 /// </para>
 /// <para>
 /// PER-FRAME LIFECYCLE. <see cref="Advance"/> runs once per produced frame with the current carve list, a monotonic
@@ -77,7 +76,7 @@ public sealed class SdfCarveBakePlanner {
     /// instead of splintering across the eight cells meeting at that point.</summary>
     public const float BinEdge = 6.0f;
     /// <summary>The settle window for the interactive debug pool: a bin bakes after this many produced frames with no
-    /// membership change (120 ≈ 2 s at 60 fps). The bench adapter and <c>sdf.bake now</c> use 0.</summary>
+    /// membership change (120 ≈ 2 s at 60 fps). <c>sdf.bake now</c> uses 0.</summary>
     public const int DefaultSettleFrames = 120;
     /// <summary>A carve thinner than this many nominal voxels (<c>radius &lt; MinCarveVoxelRadius · h</c>, h =
     /// <see cref="BinEdge"/>/<see cref="SdfBrickPoolLayout.BrickDim"/>) can't meet the trilinear fidelity budget, so it
@@ -87,9 +86,8 @@ public sealed class SdfCarveBakePlanner {
     /// analytic instances are cheaper than a brick's fixed pool + instruction footprint.</summary>
     public const int MinHardCarvesToBake = 16;
 
-    // THE PROCESS-WIDE FEATURE GATE. A single static flag every planner instance consults — the interactive debug pool
-    // AND the bench's carves workload — so one `sdf.carve-bake` switch (BenchInstaller) reaches every planner without
-    // any single frame source owning them all (the GpuTimingControl.Shared static-control precedent). Enabled by
+    // THE PROCESS-WIDE FEATURE GATE. A single static flag every planner instance consults — one `sdf.carve-bake`
+    // switch reaches every planner without any single frame source owning them all. Enabled by
     // default: a dense cluster of many small hard-subtraction carves bakes to ONE SampledRegion brick, so the
     // primary/shadow/AO marches stop paying per-carve cost. An explicit `sdf.carve-bake off` still emits analytic,
     // BIT-IDENTICAL to every carve staying unbaked — and deleting every brick reproduces the identical scene (bricks
@@ -111,10 +109,9 @@ public sealed class SdfCarveBakePlanner {
         get => EnabledFlag;
         set => EnabledFlag = value;
     }
-    /// <summary>Gets the live per-phase bin counts (<c>Analytic</c> / <c>Baking</c> / <c>Brick</c>). The readiness signal a
-    /// settle-0 bench adapter polls so its warm window absorbs the bake and its sampled window measures the baked steady
-    /// state: a carves scene is "settled" once no bin is still <c>Baking</c> and at least one has adopted a
-    /// <c>Brick</c>. Zero-allocation — a cheap walk of the live bin map.</summary>
+    /// <summary>Gets the live per-phase bin counts (<c>Analytic</c> / <c>Baking</c> / <c>Brick</c>). The readiness
+    /// signal a settle-0 caller (<c>sdf.bake now</c>) polls: a carves scene is "settled" once no bin is still
+    /// <c>Baking</c> and at least one has adopted a <c>Brick</c>. Zero-allocation — a cheap walk of the live bin map.</summary>
     public (int Analytic, int Baking, int Brick) PhaseCounts => CountPhases();
 
     private sealed class Bin {
@@ -147,7 +144,7 @@ public sealed class SdfCarveBakePlanner {
     private readonly Dictionary<CellKey, CellAccum> m_scratch = [];
 
     /// <summary>Initializes a planner with the given settle window (produced frames of quiescence before a bin bakes).
-    /// The interactive debug pool passes <see cref="DefaultSettleFrames"/>; the bench passes 0 (immediate).</summary>
+    /// The interactive debug pool passes <see cref="DefaultSettleFrames"/>; <c>sdf.bake now</c> passes 0 (immediate).</summary>
     /// <param name="settleFrames">Quiet produced frames before an eligible bin bakes; clamped to ≥ 0.</param>
     public SdfCarveBakePlanner(int settleFrames = DefaultSettleFrames) {
         m_settleFrames = Math.Max(
@@ -685,7 +682,7 @@ public sealed class SdfCarveBakePlanner {
         }
     }
     /// <summary>Forces every currently-eligible bin to settle on the NEXT <see cref="Advance"/> (settle window collapsed
-    /// to 0 for that pass) — the <c>sdf.bake now</c> accelerator and the bench's settle-0 seam. Returns a status line.</summary>
+    /// to 0 for that pass) — the <c>sdf.bake now</c> accelerator. Returns a status line.</summary>
     /// <returns>A human-readable summary of what will bake.</returns>
     public string SettleNow() {
         if (!Enabled) {

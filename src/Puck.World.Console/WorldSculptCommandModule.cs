@@ -16,7 +16,7 @@ namespace Puck.World;
 /// — several member-level edits to one row become one upsert) is composed through the same section table
 /// <c>world.row.set</c>/<c>world.row.remove</c> compose through (<see cref="WorldRowCommandModule.TryComposeEditedRow"/>/
 /// <see cref="WorldRowCommandModule.TryComposeRemove"/>), stamped with the principal the issuing ingress stamped
-/// (<c>context.ActingPrincipal()</c> — never a principal this module constructs, and never a re-dispatched text line,
+/// (<c>context.Principal</c> — never a principal this module constructs, and never a re-dispatched text line,
 /// which would stamp the shared injection sink's Console identity over whoever actually issued the verb), and
 /// submitted over the link as ordinary <see cref="WorldMutation"/> rows — so the whole-document revalidation, the
 /// per-section <c>Mutate</c> grant check, the tick-boundary apply, the replay tape's recorded mutation entries, and
@@ -146,7 +146,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                     return error;
                 }
 
-                var principal = context.ActingPrincipal();
+                var principal = context.Principal;
                 var document = JsonSerializer.SerializeToNode(
                     inputType: typeof(WorldDefinition),
                     options: WorldJsonContext.Default.Options,

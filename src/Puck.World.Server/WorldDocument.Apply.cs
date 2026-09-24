@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -8,7 +9,7 @@ public sealed partial class WorldDocument {
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
 
-    internal bool ApplyDesignationCore(WorldDesignation designation, WorldPrincipal principal, bool knownSubject, int connectionId, long correlationId) {
+    internal bool ApplyDesignationCore(WorldDesignation designation, Principal principal, bool knownSubject, int connectionId, long correlationId) {
         var sourceIndex = designation.EntityIndex;
 
         if (
@@ -367,7 +368,7 @@ public sealed partial class WorldDocument {
     // reset around — this closes that loudly, by construction, rather than by omission). The console handler already
     // validated a Load/Reload file (WorldDefinitionLoader.TryLoadFile); this
     // re-check is the defensive apply-time gate every install passes through, same as the prior world.load-only path.
-    internal bool ApplyRebuild(WorldRebuildRequest request, WorldPrincipal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
+    internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
         var verb = request.Kind switch {
             WorldRebuildKind.Reset => "world.reset",
             WorldRebuildKind.Load => "world.load",
@@ -506,6 +507,30 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        // A loaded document's overrides bind against the CANDIDATE's own directory, not Host.PipelineSources (still
+        // the currently installed document's), since the candidate is not installed until this whole gate passes.
+        // A reset reinstalls the base already bound to its own directory.
+        WorldPipelineSources? rebuildPipelineSources = null;
+
+        if (request.Kind != WorldRebuildKind.Reset) {
+            rebuildPipelineSources = new WorldPipelineSources(documentDirectory: candidate.DocumentDirectory);
+
+            if (!TryBindPipelineRows(
+                candidate: candidate,
+                reason: out var pipelineReason,
+                sourcesOverride: rebuildPipelineSources
+            )) {
+                RejectRebuild(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    reason: pipelineReason,
+                    verb: verb
+                );
+
+                return false;
+            }
+        }
+
         if (candidate.Population.Capacity != Host.Population.Capacity) {
             RejectRebuild(
                 verb: verb,
@@ -586,7 +611,7 @@ public sealed partial class WorldDocument {
         // rather than installing a candidate that claims a mounted addon no host can ever run.
         IWorldAddonPreparedPlan? rebuildAddonPlan = null;
         int[]? newRebuildTickWrittenEntity = null;
-        WorldPrincipal[]? newRebuildTickWrittenPrincipal = null;
+        Principal[]? newRebuildTickWrittenPrincipal = null;
         bool[]? newRebuildTickCollided = null;
         var rebuildAddonPlanCommitted = false;
 
@@ -741,7 +766,7 @@ public sealed partial class WorldDocument {
 
             Host.Grant(
                 grant: Host.GrantTable.WithoutAuthoredConsent(grant: grant),
-                actor: WorldPrincipal.Console,
+                actor: Principal.Console,
                 connectionId: connectionId,
                 correlationId: correlationId
             );
@@ -780,6 +805,8 @@ public sealed partial class WorldDocument {
             m_base = candidate;
             origin = $"'{request.PathHint}' ({verb})";
             m_baseOrigin = origin;
+            // Installed as of this point: a later live commit resolves against the candidate's own directory too.
+            Host.PipelineSources = rebuildPipelineSources;
         }
 
         var message = $"{verb} applied — base is {origin}, journal cleared";
@@ -912,30 +939,10 @@ public sealed partial class WorldDocument {
             CorrelationId: correlationId
         ));
     }
-
     // Swap the live definition and rebuild the derived state that compiled from it. Sim-affecting sections (kits,
     // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
-    // What the tick has installed and not yet delivered: a shape change carries the definition, a value change
-    // carries state; the step delivers whichever is pending, once, through DeliverPending.
-    private bool m_pendingDefinitionDelivery;
-    private bool m_pendingStateDelivery;
-
-    internal void DeliverPending() {
-        if (m_pendingDefinitionDelivery) {
-            Host.Output.DeliverDefinition(definition: m_definition);
-        } else if (m_pendingStateDelivery) {
-            Host.Output.DeliverState(definition: m_definition);
-        }
-
-        m_pendingDefinitionDelivery = false;
-        m_pendingStateDelivery = false;
-    }
-    /// <summary>Records that the live definition's state values have moved since the last delivery, so the step's
-    /// <see cref="DeliverPending"/> carries them to every attached sink.</summary>
-    /// <remarks>A shape change already pending outranks this: a definition delivery carries the values too.</remarks>
-    internal void MarkStateDeliveryPending() => m_pendingStateDelivery = true;
     internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
         m_pendingDefinitionDelivery = true;
         m_definition = definition;
@@ -1079,7 +1086,7 @@ public sealed partial class WorldDocument {
     private bool TouchesDriveGate(WorldDefinition definition, WorldMutation mutation) {
         m_touchedRows.Clear();
 
-        if (!TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out _)) {
+        if (!TryCollectStateMutationRowNames(definition: definition, mutation: mutation, names: m_touchedRows, reason: out _)) {
             return true;
         }
 
@@ -1133,7 +1140,7 @@ public sealed partial class WorldDocument {
     private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
         m_touchedRows.Clear();
 
-        return (TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out reason)
+        return (TryCollectStateMutationRowNames(definition: candidate, mutation: mutation, names: m_touchedRows, reason: out reason)
             ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, reason: out reason, rowNames: m_touchedRows)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
     }
@@ -1144,7 +1151,7 @@ public sealed partial class WorldDocument {
     // Collects the row names a state mutation touches; false (with an empty reason) when the mutation — or, for a
     // Batch, any one of its members — is not one of the state kinds TryValidateStateMutation covers, which the
     // caller reads as "fall back to whole-document validation" rather than a refusal.
-    private static bool TryCollectStateMutationRowNames(WorldMutation mutation, ISet<string> names, out string reason) {
+    private static bool TryCollectStateMutationRowNames(WorldDefinition definition, WorldMutation mutation, ISet<string> names, out string reason) {
         reason = string.Empty;
 
         switch (mutation) {
@@ -1161,10 +1168,10 @@ public sealed partial class WorldDocument {
 
                 return true;
             case WorldMutation.TransformState transform:
-                return WorldDefinitionValidator.TryCollectTransformRowNames(transform: transform.Transform, names: names, reason: out reason);
+                return WorldDefinitionValidator.TryCollectTransformRowNames(definition: definition, transform: transform.Transform, names: names, reason: out reason);
             case WorldMutation.Batch batch:
                 foreach (var member in batch.Mutations) {
-                    if (!TryCollectStateMutationRowNames(mutation: member, names: names, reason: out reason)) {
+                    if (!TryCollectStateMutationRowNames(definition: definition, mutation: member, names: names, reason: out reason)) {
                         return false;
                     }
                 }
@@ -1178,6 +1185,9 @@ public sealed partial class WorldDocument {
         m_lastMutationFailureDetail = reason;
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(channel: "world.mutation rejected", text: $"[world.mutation rejected: {WorldServer.Describe(mutation: mutation)} — {reason}]");
+        }
+        if (!HasSubmitter(mutation: mutation)) {
+            return;
         }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: $"{WorldServer.Describe(mutation: mutation)} rejected: {reason}",
@@ -1262,7 +1272,7 @@ public sealed partial class WorldDocument {
     // the SAME grant subject ScreenCommandModule's pre-inversion client-side precheck used, now checked
     // AUTHORITATIVELY server-side — then the mechanical apply through Host.Machines. ScreenOpTap fires exactly once,
     // after the outcome (success or refusal) is known, so a refused op still reproduces on replay.
-    private bool TryApplyScreenOp(WorldScreenOp op, WorldPrincipal principal, int connectionId, long correlationId, string? expectedContentHash) {
+    private bool TryApplyScreenOp(WorldScreenOp op, Principal principal, int connectionId, long correlationId, string? expectedContentHash) {
         var verb = op switch {
             WorldScreenOp.Insert => "screen.insert",
             WorldScreenOp.Eject => "screen.eject",
@@ -1402,7 +1412,7 @@ public sealed partial class WorldDocument {
     // named member) and Unlink (every member of the ALREADY-LIVE link by that name, when one exists — mirroring the
     // pre-inversion console module's own "control over every member is required to sever" rule; a missing link
     // passes this check trivially and falls through to TryUnlink's own honest "no link" refusal).
-    private bool TryCheckScreenOpControl(WorldScreenOp op, WorldPrincipal principal, out int denial) {
+    private bool TryCheckScreenOpControl(WorldScreenOp op, Principal principal, out int denial) {
         denial = -1;
 
         var indices = ScreenOpTargets(op: op);
@@ -1618,7 +1628,7 @@ public sealed partial class WorldDocument {
             case WorldCommand.PressChannel press:
                 if (press.HoldSeconds is { } holdSeconds) {
                     var holdCeiling = FixedQ4816.FromRawBits(value: Host.GrantTable.HoldCeiling(
-                        principal: press.Principal,
+                        grantee: press.Principal,
                         subject: GrantSubject.Body(index: press.EntityIndex)
                     ));
                     var outcome = body.PressChannel(
@@ -1776,7 +1786,7 @@ public sealed partial class WorldDocument {
     /// defaults to the local connection for a direct caller with no originating envelope.</param>
     /// <param name="correlationId">The submitting envelope's correlation id; defaults to none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="composition"/> is <see langword="null"/>.</exception>
-    internal void ApplyComposition(WorldComposition composition, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
+    internal void ApplyComposition(WorldComposition composition, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
         ArgumentNullException.ThrowIfNull(argument: composition);
 
         if (Host.GrantTable.Allows(
@@ -1809,7 +1819,7 @@ public sealed partial class WorldDocument {
         Host.Output.DeliverComposition(composition: composition);
     }
     /// <summary>Validates and applies one subject-bearing target-register write.</summary>
-    internal bool ApplyDesignation(WorldDesignation designation, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
+    internal bool ApplyDesignation(WorldDesignation designation, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
         return ApplyDesignationCore(
             connectionId: connectionId,
             correlationId: correlationId,
@@ -1829,7 +1839,7 @@ public sealed partial class WorldDocument {
     /// the concrete host's "content absent" sentinel when the recording itself never read the file) —
     /// see <see cref="IWorldMachineHost.TryInsert"/>'s own remarks. <see langword="null"/> for every other op kind
     /// and for the live path.</param>
-    internal void ApplyScreenOp(WorldScreenOp op, WorldPrincipal principal, string? expectedContentHash = null) =>
+    internal void ApplyScreenOp(WorldScreenOp op, Principal principal, string? expectedContentHash = null) =>
         TryApplyScreenOp(
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
@@ -1875,7 +1885,7 @@ public sealed partial class WorldDocument {
     // a limit on how many a guest may drive. Past it, ReportContention's defensive length check stops recording new
     // entities and contention reporting saturates. Every array stays null when the capacity did not move, so an
     // addon-affecting mutation that leaves MountedCount unchanged allocates nothing here either.
-    internal void StageAddonContentionArrays(int mountedCount, out int[]? entity, out WorldPrincipal[]? principal, out bool[]? collided) {
+    internal void StageAddonContentionArrays(int mountedCount, out int[]? entity, out Principal[]? principal, out bool[]? collided) {
         var capacity = (Host.Population.LocalSeatCount + (mountedCount * 2));
 
         if (capacity == Host.TickWrittenEntity.Length) {
@@ -1887,7 +1897,7 @@ public sealed partial class WorldDocument {
         }
 
         entity = new int[capacity];
-        principal = new WorldPrincipal[capacity];
+        principal = new Principal[capacity];
         collided = new bool[capacity];
     }
     /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
@@ -1984,57 +1994,5 @@ public sealed partial class WorldDocument {
             OutcomeObserved: outcomeObserved,
             SourceAddonInstanceId: sourceAddonInstanceId
         ));
-    }
-    /// <summary>Buffers a whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>)
-    /// for the next <see cref="WorldServer.Step"/> (drained before intents). Retains the submitting envelope's
-    /// connection/correlation identity — see <see cref="EnqueueMutation"/>'s own remarks.</summary>
-    /// <param name="request">The rebuild request.</param>
-    /// <param name="principal">The acting identity the rebuild is checked against.</param>
-    /// <param name="connectionId">The submitting envelope's connection id.</param>
-    /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <param name="expectedContentHash">Replay only: the CAS content hash a recorded tape entry pins. When set,
-    /// <see cref="ApplyRebuild"/> compares it against the hash it computes for this drive's own resolved candidate
-    /// (its own base for Reset, a fresh re-read of <see cref="WorldRebuildRequest.PathHint"/> for Load/Reload) and
-    /// refuses by name on a mismatch, before any other guard runs. <see langword="null"/> (the default) is the live
-    /// path — nothing to compare against, since the live drive is what establishes the hash a later recording pins.
-    /// <see cref="WorldReplaySnapshot.Drive"/> is the one caller that ever passes a non-null value.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
-    internal void EnqueueRebuild(WorldRebuildRequest request, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, string? expectedContentHash = null) {
-        ArgumentNullException.ThrowIfNull(argument: request);
-
-        string? preparationFailure = null;
-
-        // A carried document is available at submission time, outside Step. Prove its neighbour claims here and carry
-        // any refusal into the ordered tick-boundary decision; ApplyRebuild repeats only document-local checks.
-        var rebuildNeighbours = ((request.PathHint is { } candidatePath)
-            ? ResolveRebuildNeighbours(path: candidatePath)
-            : Host.Neighbours
-        );
-
-        if (
-            (request.Definition is { } supplied) &&
-            !WorldDefinitionValidator.TryValidate(
-            definition: supplied,
-            neighbours: rebuildNeighbours,
-            reason: out var proofReason
-        )
-        ) {
-            preparationFailure = $"cross-document load proof failed before enqueue — {proofReason}";
-        }
-
-        m_pending.Enqueue(item: new WorldPendingOp.Rebuild(
-            ConnectionId: connectionId,
-            CorrelationId: correlationId,
-            ExpectedContentHash: expectedContentHash,
-            PreparationFailure: preparationFailure,
-            Principal: principal,
-            Request: request
-        ));
-    }
-    /// <summary>Resolves the proof transport appropriate to one replacement document path.</summary>
-    internal IWorldNeighbourResolver? ResolveRebuildNeighbours(string path) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
-
-        return (Host.RebuildNeighbours?.Invoke(arg: path) ?? Host.Neighbours);
     }
 }

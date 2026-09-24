@@ -17,7 +17,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
     [Fact]
     public void PathProfilesRenderButRefuseFieldContactAndUnsupportedFacets() {
         var profile = new SdfPrismProfile(SdfPrismProfileKind.Path, CornerRadius: 0,
-            Path: new([new(new(-0.5f, -0.5f), [new(new(0.5f, -0.5f)), new(new(0, 0.5f))])]));
+            Path: new([new(new(x: -0.5f, y: -0.5f), [new(new(x: 0.5f, y: -0.5f)), new(new(x: 0, y: 0.5f))])]));
         var shape = Shape(SdfSolidPrimitive.Prism, Vector3.One) with { Profile = profile };
 
         AssertCanonicalizerAccepts(shape: shape);
@@ -31,31 +31,30 @@ public sealed class AuthoredShapeAdmissionLawTests {
         var source = Shape(SdfSolidPrimitive.Prism, Vector3.One) with {
             Name = "outline",
             Profile = new(SdfPrismProfileKind.Path, CornerRadius: 0,
-                Path: new([new(new(-0.5f, -0.5f), [new(new(0.5f, -0.5f)), new(new(0, 0.5f))])])),
+                Path: new([new(new(x: -0.5f, y: -0.5f), [new(new(x: 0.5f, y: -0.5f)), new(new(x: 0, y: 0.5f))])])),
         };
         var host = Shape(SdfSolidPrimitive.Box, Vector3.One) with { Id = 1, Name = "host", Trims = [new("outline", 0.02f, 0)] };
         var document = Document(shape: source) with { Shapes = [source, host] };
 
         Assert.Contains(collection: CreationCanonicalizer.Validate(document: document), filter: error => error.Message.Contains(comparisonType: StringComparison.Ordinal, value: "Path profile"));
     }
+    [InlineData(SdfBlendOp.Morph)]
+    [InlineData(SdfBlendOp.StairsUnion)]
+    [InlineData(SdfBlendOp.StairsSubtraction)]
+    [Theory]
+    public void AScopeCompositionBlendIsRefusedAsAShapeBlend(SdfBlendOp blend) {
+        var shape = Shape(SdfSolidPrimitive.Sphere, Vector3.One);
 
-    private static void AssertCanonicalizerAccepts(ShapeDocument shape) {
-        var violations = CreationCanonicalizer.Validate(document: Document(shape: shape));
-
-        Assert.Empty(collection: violations);
+        AssertCanonicalizerAccepts(shape: shape with { Blend = SdfBlendOp.SmoothUnion });
+        AssertCanonicalizerRefusesNaming(shape with { Blend = blend }, $"blend '{blend}' composes a closed field scope");
+        AssertWorldRefusesNaming(shape with { Blend = blend }, canonicalize: false, needle: blend.ToString());
     }
-    private static void AssertCanonicalizerRefusesNaming(ShapeDocument shape, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: Document(shape: shape));
 
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
+    private static void AssertCanonicalizerAccepts(ShapeDocument shape) => CreationFixtures.AssertAccepts(document: Document(shape: shape));
+    private static void AssertCanonicalizerRefusesNaming(ShapeDocument shape, string needle) => CreationFixtures.AssertRefusesNaming(
+        document: Document(shape: shape),
+        needle: needle
+    );
     private static void AssertWorldRefusesNaming(ShapeDocument shape, bool canonicalize, string needle, bool requiresField = false) {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: World(
@@ -83,14 +82,10 @@ public sealed class AuthoredShapeAdmissionLawTests {
             userMessage: reason
         );
     }
-    private static CreationDocument Document(ShapeDocument shape) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: [shape],
-            Frames: null
-        );
+    private static CreationDocument Document(ShapeDocument shape) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: [shape]
+    );
     private static SdfInstruction PrismShape(Vector3 scale, float rounding) {
         var builder = new SdfProgramBuilder();
 
@@ -605,33 +600,45 @@ public sealed class AuthoredShapeAdmissionLawTests {
             scale
         ) with { Rounding = .05f });
     }
-    [InlineData(SdfSolidPrimitive.Box)]
-    [InlineData(SdfSolidPrimitive.Cylinder)]
-    [InlineData(SdfSolidPrimitive.Prism)]
+    [InlineData("chamfer", SdfSolidPrimitive.Box)]
+    [InlineData("chamfer", SdfSolidPrimitive.Cylinder)]
+    [InlineData("chamfer", SdfSolidPrimitive.Prism)]
+    [InlineData("rounding", SdfSolidPrimitive.Prism)]
+    [InlineData("rounding", SdfSolidPrimitive.Cylinder)]
     [Theory]
-    public void ChamferIsAdmittedWhereItFitsAndRefusedWhereItDoesNot(SdfSolidPrimitive type) {
+    public void AnEdgeRadiusIsAdmittedWhereItFitsAndRefusedWhereItDoesNot(string radius, SdfSolidPrimitive type) {
         var scale = new Vector3(
             x: .5f,
             y: .5f,
             z: .5f
         );
-        var ceiling = SdfSolidGeometry.MaxChamfer(
-            type,
-            scale
-        );
-
-        Assert.True(condition: (ceiling > 0f));
-        AssertCanonicalizerAccepts(shape: Shape(
-            type,
-            scale
-        ) with { Chamfer = (ceiling * .5f) });
-        // The control and the cell differ in exactly one authored number: the radius, either side of the ceiling.
-        AssertCanonicalizerRefusesNaming(
-            Shape(
+        var chamfer = (radius == "chamfer");
+        var ceiling = (chamfer
+            ? SdfSolidGeometry.MaxChamfer(
                 type,
                 scale
-            ) with { Chamfer = (ceiling * 2f) },
-            "chamfer"
+            )
+            : SdfSolidGeometry.MaxRounding(
+                type,
+                scale
+            ));
+
+        ShapeDocument With(float value) => (chamfer
+            ? (Shape(
+                type,
+                scale
+            ) with { Chamfer = value })
+            : (Shape(
+                type,
+                scale
+            ) with { Rounding = value }));
+
+        Assert.True(condition: (ceiling > 0f));
+        AssertCanonicalizerAccepts(shape: With(value: (ceiling * .5f)));
+        // The control and the cell differ in exactly one authored number: the radius, either side of the ceiling.
+        AssertCanonicalizerRefusesNaming(
+            With(value: (ceiling * 2f)),
+            radius
         );
     }
     [Fact]
@@ -698,8 +705,10 @@ public sealed class AuthoredShapeAdmissionLawTests {
             ) with { Chamfer = .05f },
             "chamfer"
         );
-    [Fact]
-    public void ChamferedRectangleIsAdmittedForFieldContact() => AssertWorldValidates(
+    [InlineData(SdfPrismProfileKind.ChamferedRectangle)]
+    [InlineData(SdfPrismProfileKind.RoundedRectangle)]
+    [Theory]
+    public void AFieldContactProfileIsAdmittedForFieldContact(SdfPrismProfileKind profile) => AssertWorldValidates(
         Shape(
             SdfSolidPrimitive.Prism,
             new Vector3(
@@ -709,9 +718,9 @@ public sealed class AuthoredShapeAdmissionLawTests {
             )
         ) with {
             Profile = new(
-            SdfPrismProfileKind.ChamferedRectangle,
-            .3f
-        ),
+                profile,
+                .3f
+            ),
         },
         requiresField: true
     );
@@ -792,30 +801,26 @@ public sealed class AuthoredShapeAdmissionLawTests {
             ) with { Exponent = 4f },
             "exponent"
         );
-    [InlineData(1.9f)]
-    [InlineData(8.1f)]
-    [InlineData(float.NaN)]
+    [InlineData("exponent", 1.9f)]
+    [InlineData("exponent", 8.1f)]
+    [InlineData("exponent", float.NaN)]
+    [InlineData("taper", -0.1f)]
+    [InlineData("taper", 1.1f)]
+    [InlineData("taper", float.NaN)]
+    [InlineData("taper", float.PositiveInfinity)]
     [Theory]
-    public void InvalidExponentNamesTheDocumentField(float exponent) =>
+    public void AnInvalidProfileLaneNamesTheDocumentField(string field, float value) =>
         Assert.Contains(
-            collection: CreationCanonicalizer.Validate(document: Document(shape: Shape(
-                SdfSolidPrimitive.Superellipsoid,
-                Vector3.One
-            ) with { Exponent = exponent })),
-            filter: error => (error.Path == "shapes[0].exponent")
-        );
-    [InlineData(-0.1f)]
-    [InlineData(1.1f)]
-    [InlineData(float.NaN)]
-    [InlineData(float.PositiveInfinity)]
-    [Theory]
-    public void InvalidPrismTaperNamesTheDocumentField(float taper) =>
-        Assert.Contains(
-            collection: CreationCanonicalizer.Validate(document: Document(shape: Shape(
-                SdfSolidPrimitive.Prism,
-                Vector3.One
-            ) with { Taper = taper })),
-            filter: error => (error.Path == "shapes[0].taper")
+            collection: CreationCanonicalizer.Validate(document: Document(shape: ((field == "exponent")
+                ? (Shape(
+                    SdfSolidPrimitive.Superellipsoid,
+                    Vector3.One
+                ) with { Exponent = value })
+                : (Shape(
+                    SdfSolidPrimitive.Prism,
+                    Vector3.One
+                ) with { Taper = value })))),
+            filter: error => (error.Path == $"shapes[0].{field}")
         );
     [Fact]
     public void InvalidProfileControlsAreRefusedBeforeEmission() {
@@ -904,23 +909,6 @@ public sealed class AuthoredShapeAdmissionLawTests {
         Assert.False(condition: string.IsNullOrWhiteSpace(value: reason));
     }
     [Fact]
-    public void RoundedProfileIsAdmittedForFieldContact() => AssertWorldValidates(
-        Shape(
-            SdfSolidPrimitive.Prism,
-            new Vector3(
-                x: .4f,
-                y: .2f,
-                z: .1f
-            )
-        ) with {
-            Profile = new(
-            SdfPrismProfileKind.RoundedRectangle,
-            .3f
-        ),
-        },
-        requiresField: true
-    );
-    [Fact]
     public void RoundingInsetsTheShapeInsteadOfGrowingIt() {
         var scale = new Vector3(
             x: .5f,
@@ -952,34 +940,6 @@ public sealed class AuthoredShapeAdmissionLawTests {
         Assert.True(condition: ((rounded.Data0.W + rounded.Data1.W) <= (sharp.Data0.W + 1e-6f)));
         // Something actually moved: an inset that is a no-op would pass the bound test and round nothing.
         Assert.True(condition: (rounded.Data0.Z < sharp.Data0.Z));
-    }
-    [InlineData(SdfSolidPrimitive.Prism)]
-    [InlineData(SdfSolidPrimitive.Cylinder)]
-    [Theory]
-    public void RoundingIsAdmittedWhereItFitsAndRefusedWhereItDoesNot(SdfSolidPrimitive type) {
-        var scale = new Vector3(
-            x: .5f,
-            y: .5f,
-            z: .5f
-        );
-        var ceiling = SdfSolidGeometry.MaxRounding(
-            type,
-            scale
-        );
-
-        Assert.True(condition: (ceiling > 0f));
-        AssertCanonicalizerAccepts(shape: Shape(
-            type,
-            scale
-        ) with { Rounding = (ceiling * .5f) });
-        // The control and the cell differ in exactly one authored number: the radius, either side of the ceiling.
-        AssertCanonicalizerRefusesNaming(
-            Shape(
-                type,
-                scale
-            ) with { Rounding = (ceiling * 2f) },
-            "rounding"
-        );
     }
     [Fact]
     public void RoundingOnAConeIsRefusedByName_TheApexLeavesNoRoomToRound() {

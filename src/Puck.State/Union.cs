@@ -1,6 +1,6 @@
 namespace Puck.State;
 
-// The hand-written C# 15 basic union pattern (docs/reference/state/rules.md, "The facts"), polyfilled internally
+// The hand-written C# 15 basic union pattern (docs/reference/state/hosting.md, "The fact families"), polyfilled internally
 // until .NET 11 supplies the real attribute/interface pair. The day the toolchain moves, the flip is deleting these
 // two markers and switching on the carrier's Value directly wherever a case-type dispatch exists today; nothing
 // else moves.

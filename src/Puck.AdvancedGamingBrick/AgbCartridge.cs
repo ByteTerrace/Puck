@@ -26,6 +26,8 @@ public sealed partial class AgbCartridge {
     private readonly bool m_isFlash;
     private readonly bool m_isEeprom;
 
+    // Set by every backup write and cleared when the host persists the save (see SaveDirty).
+    private bool m_saveDirty;
     // Serial EEPROM (accessed at 0x0D… over a 1-bit bus, driven by DMA). The bus width — 6 address bits
     // (512 B / 64 blocks) or 14 (8 KiB / 1024 blocks) — is auto-detected from the first command's length, the
     // same way real carts behave. Each block is 64 bits (8 bytes), shifted MSB-first.
@@ -253,7 +255,7 @@ public sealed partial class AgbCartridge {
     public bool HasSave => (m_save.Length > 0);
     /// <summary>Gets a value indicating whether the save backup has been written since it was last loaded or
     /// persisted. A host watches this to decide when to flush the save to disk, then calls <see cref="MarkSaveClean"/>.</summary>
-    public bool SaveDirty { get; private set; }
+    public bool SaveDirty => m_saveDirty;
     /// <summary>Exports the raw save backup (SRAM/Flash/EEPROM contents) for persistence to a <c>.sav</c> file.</summary>
     public ReadOnlySpan<byte> SaveData => m_save;
 
@@ -273,12 +275,12 @@ public sealed partial class AgbCartridge {
         }
 
         data.CopyTo(destination: m_save);
-        SaveDirty = false;
+        m_saveDirty = false;
 
         return true;
     }
     /// <summary>Clears <see cref="SaveDirty"/> after a host has persisted the save to disk.</summary>
-    public void MarkSaveClean() => SaveDirty = false;
+    public void MarkSaveClean() => m_saveDirty = false;
 
     // Game-pak burst page counter (mask-ROM cartridge behavior). The 16-bit cartridge bus latches the low address lines
     // on a non-sequential access (startBurst) and auto-increments per sequential half-word — so during a burst the
@@ -410,7 +412,7 @@ public sealed partial class AgbCartridge {
         }
 
         m_save[address & ((uint)(m_save.Length - 1))] = value;
-        SaveDirty = true;
+        m_saveDirty = true;
     }
 
     /// <summary>Gets a value indicating whether the cartridge's backup is a serial EEPROM (accessed at 0x0D…).</summary>
@@ -518,7 +520,7 @@ public sealed partial class AgbCartridge {
                 m_save[(blockOffset + i)] = ((byte)(data >> (56 - (i * 8))));
             }
 
-            SaveDirty = true;
+            m_saveDirty = true;
         }
     }
     // Drives the flash command/unlock state machine for a byte write. Commands are issued as a three-write
@@ -530,7 +532,7 @@ public sealed partial class AgbCartridge {
                 if (m_flashCommand == 0xA0) {
                     m_save[FlashOffset(offset: address)] = value;
                     m_flashCommand = 0;
-                    SaveDirty = true;
+                    m_saveDirty = true;
 
                     return;
                 }
@@ -578,7 +580,7 @@ public sealed partial class AgbCartridge {
                                 value: ((byte)0xFF)
                             ); // chip erase
                             m_flashCommand = 0;
-                            SaveDirty = true;
+                            m_saveDirty = true;
                         }
                     } else if (m_flashCommand == 0x90) {
                         if (value == 0xF0) {
@@ -599,7 +601,7 @@ public sealed partial class AgbCartridge {
                         value: ((byte)0xFF)
                     );
                     m_flashCommand = 0;
-                    SaveDirty = true;
+                    m_saveDirty = true;
                 }
 
                 return;

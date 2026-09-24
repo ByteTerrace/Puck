@@ -142,7 +142,7 @@ public sealed class PlacementDriverLawTests {
             placements: [placement]
         );
         var definition = CreationDomainParentLawTests.Definition(creation);
-        var client = CreationDomainParentLawTests.Client(definition: definition);
+        var client = ClientFixtures.Client(definition: definition);
         var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(

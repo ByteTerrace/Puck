@@ -34,7 +34,6 @@ Different pages serve different purposes:
 | Explanation | The mechanism, its rationale, examples, and connections to related concepts. |
 | Reference | Precise fields, commands, contracts, limits, and lookup navigation. |
 | Plan | The proposed outcome, dependencies, unresolved decisions, and completion criteria. |
-| Evidence record | The dated candidate, environment, check, result, and limits of the conclusion. |
 
 Use the shape that fits the content. Short pages can stay short; long pages need
 clear navigation rather than a mandatory set of empty sections. A plan is not
@@ -51,10 +50,12 @@ make sense when opened directly. Use verbs for procedures and noun phrases for
 concepts, keeping parallel headings consistent. Do not add a terminal period or
 colon, decorative emoji, or bold styling to a heading.
 
-Use lowercase filenames with hyphens between words. Keep `README.md` for directory
-entry points. Ordered handbook prefixes, dated evidence bundles, source-owned
-example names, and generated filenames have useful naming conventions of their
-own. Rename a file when its meaning or discoverability improves, then repair
+Use lowercase filenames with hyphens between words, and name a page after its
+title. Keep `README.md` for directory entry points. Don't number filenames to
+set a reading order; the directory's README or index sets the order and
+explains which paths suit which readers. Source-owned example names and
+generated filenames have useful naming conventions of their own; no filename
+carries a date. Rename a file when its meaning or discoverability improves, then repair
 its incoming links. Changing a linked heading is the same kind of intentional
 interface change: it is not a reason to keep an old anchor or an obsolete page
 in place, and the pages that reference it get repaired in the same change.
@@ -148,7 +149,7 @@ the structure their distinct ownership needs.
 Use `Usage`, `Verification`, and `Documentation` for those common section roles,
 while keeping descriptive technical headings for the detailed content. Maths
 topic references retain their useful type and invariant structure. Existing
-examples, constraints, and dated evidence survive an organization change.
+examples and constraints survive an organization change.
 
 Keep decoration in a compact navigation row: 📚 accompanies documentation,
 🛠️ accompanies development guidance, and 🎨 accompanies branding. Use at most
@@ -182,17 +183,39 @@ example again if its executable content changes. Agent execution guidance —
 the operational constraints an agent follows while working in an area — stays
 in that area's skill rather than in this register.
 
-Explain current behavior in guides, proposed work in plans, and dated results
-in evidence records. A passing test establishes the behavior it exercised for
-its recorded candidate and environment. Do not turn that result into a general
-claim of correctness or a permanent capability guarantee. Keep numerical units,
+Explain current behavior in guides and proposed work in plans, in the present
+tense and [without dates or commit SHAs](#leave-out-dates-and-commit-shas).
+A passing test establishes only the behavior it
+exercised. Do not turn that result into a general claim of correctness or a
+permanent capability guarantee; name the check that proves a claim so a reader
+can run it again. Keep numerical units,
 algorithm conditions, failure behavior, and verification limits explicit.
 
 Edit generated documentation at its source. The world-name registry, generated
 project-map block, API output, and other generated registers are not prose-editing
-targets. Check paths with `puck doc-links` and check section fragments against the
-actual target headings separately. Follow the [contributor guide](contributing.md)
+targets. Check paths and section fragments with `puck docs links`, which compares
+each fragment with the target file's heading anchors. Follow the [contributor guide](contributing.md)
 for the checks appropriate to changed examples, XML comments, and generated inputs.
+
+## Leave out dates and commit SHAs
+
+Docs, plans, skills, READMEs, and filenames name no date and no commit SHA.
+They state current behavior, limitations, and open work in the present tense.
+The commit message that lands a change carries its verification evidence: the
+candidate, the commands, and their results.
+
+A date or SHA stays only where it is part of the fact itself rather than a
+record of when this repository changed:
+
+- A legal effective date, in [the license](../../LICENSE.md),
+  [platform terms](../../PLATFORM-TERMS.md), [privacy policy](../../PRIVACY.md),
+  and [trademark policy](../../TRADEMARKS.md).
+- An upstream provenance pin: the upstream commit or release that third-party
+  material was taken from, as in
+  [the third-party notices](../../THIRD-PARTY-NOTICES.md) and
+  [the AGB firmware README](../../src/Puck.AdvancedGamingBrick/Firmware/README.md).
+- An external protocol's version string, such as MCP's `2026-07-28`, which is
+  the protocol's own name for the revision Puck speaks.
 
 ## Further guidance
 

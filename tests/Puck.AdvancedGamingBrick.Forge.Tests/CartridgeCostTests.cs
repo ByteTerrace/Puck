@@ -123,7 +123,7 @@ public sealed class CartridgeCostTests {
                 Kind: "if",
                 When: new ActionPredicate.CompareState(
                     State: "touch",
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: 1
                 ),
                 Then: [Set(
@@ -188,7 +188,7 @@ public sealed class CartridgeCostTests {
                 Kind: "if",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "i"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 1)
                 ),
                 Then: [cheap],
@@ -198,7 +198,7 @@ public sealed class CartridgeCostTests {
                 Kind: "if",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "i"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 1)
                 ),
                 Then: [dear],
@@ -248,7 +248,7 @@ public sealed class CartridgeCostTests {
         var withSprites = CartridgeCost.Frame(
             profile: CartridgeCostProfile.Humble,
             document: document with {
-            Sprites = [.. Enumerable.Range(
+                Sprites = [.. Enumerable.Range(
                     count: 8,
                     start: 0
                 ).Select(selector: index => new CartridgeSprite(
@@ -258,7 +258,7 @@ public sealed class CartridgeCostTests {
                     Y: CartridgeExpressions.Of(constant: 0),
                     Visible: CartridgeExpressions.Of(constant: 1)
                 ))],
-        }
+            }
         );
 
         Assert.True(condition: (withSprites.Cycles > bare.Cycles));

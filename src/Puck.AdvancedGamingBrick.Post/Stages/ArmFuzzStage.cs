@@ -7,6 +7,9 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal sealed class ArmFuzzStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "arm-fuzz";
     /// <inheritdoc/>

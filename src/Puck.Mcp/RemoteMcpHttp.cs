@@ -3,23 +3,27 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Networking;
 
 namespace Puck.Mcp;
 
 public static partial class RemoteMcpServer {
-    private static void UseAdmission(IApplicationBuilder app, CancellationToken stopping) => app.Use(middleware: async (context, next) => {
+    // The longest any request may run: the longest tool deadline plus time to write its reply.
+    private static readonly TimeSpan RequestDeadline = TimeSpan.FromSeconds(seconds: 125);
+
+    private static void UseAdmission(IApplicationBuilder app, TimeProvider clock, CancellationToken stopping) => app.Use(middleware: async (context, next) => {
         using var lease = ((context.Request.Path == "/healthz")
             ? null
             : context.RequestServices.GetRequiredKeyedService<ConcurrencyLimiter>(serviceKey: "PuckMcp").AttemptAcquire()
         );
 
         if (lease is { IsAcquired: false }) { context.Response.StatusCode = StatusCodes.Status429TooManyRequests; context.Response.Headers.RetryAfter = "1"; return; }
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
-            token1: context.RequestAborted,
-            token2: stopping
+        using var deadline = new OperationDeadline(
+            caller: context.RequestAborted,
+            lifetime: stopping,
+            timeout: RequestDeadline,
+            timeProvider: clock
         );
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 125));
         var original = context.RequestAborted;
 
         context.RequestAborted = deadline.Token;

@@ -17,7 +17,7 @@ public class ConstructRootArmLawTests {
         var member = construct.DocumentMember;
         var dot = member.IndexOf(value: '.');
 
-        return (dot < 0
+        return ((dot < 0)
             ? member.TrimEnd(trimChars: ['[', ']'])
             : member[..dot]
         );
@@ -27,7 +27,6 @@ public class ConstructRootArmLawTests {
         .Inside(enclosing: null)
         .Select(selector: static construct => construct.Keyword)
         .Order(comparer: StringComparer.Ordinal));
-
     [Fact]
     public void EveryRootConstructNamesTheArmBothDispatchersTake() {
         var table = WorldConstructs.Table;

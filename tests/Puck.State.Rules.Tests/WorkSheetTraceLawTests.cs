@@ -18,7 +18,7 @@ public sealed class WorkSheetTraceLawTests {
             value: 1m
         ))],
         Gate: EvaluatorFixture.Compare(
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             row: "flag",
             value: value
         ),
@@ -31,7 +31,7 @@ public sealed class WorkSheetTraceLawTests {
                 value: target
             )],
         Gate: EvaluatorFixture.Compare(
-            comparison: ActionStateComparison.GreaterOrEqual,
+            comparison: ExpressionOp.GreaterOrEqual,
             row: "third",
             value: 1m
         ),
@@ -227,8 +227,8 @@ public sealed class WorkSheetTraceLawTests {
         }
 
         Assert.Equal(
-            admittedOnce,
-            costliest
+            actual: costliest,
+            expected: admittedOnce
         );
     }
 }

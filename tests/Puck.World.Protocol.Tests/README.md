@@ -1,6 +1,6 @@
 # Puck.World.Protocol.Tests
 
-This xUnit v3 suite targets `net10.0` and checks the wire shapes owned by `Puck.World.Protocol`. Its law tests cover authority, batch mutations, deferred verb echoes, link queries, mutation kind masks and outcomes, peer addresses, reflow proposals and queries, and row-scoped subjects.
+This xUnit v3 suite targets `net10.0` and checks the wire shapes owned by `Puck.World.Protocol`. Its law tests cover authority, batch mutations, deferred verb echoes, link queries, mutation kind masks and outcomes, finite command vectors, peer addresses, reflow proposals and queries, and row-scoped subjects.
 
 ## Verification
 

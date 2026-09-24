@@ -1,5 +1,6 @@
+using Puck.Commands;
 using Puck.Storage;
-using Puck.World.Protocol;
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
@@ -55,12 +56,12 @@ public sealed class WorldExtensionHostLawTests {
             provider
         );
         using var first = host.CreateClient(
-            WorldPrincipal.Addon(name: "first"),
+            Principal.Addon(name: "first"),
             ["delete"],
             []
         );
         using var second = host.CreateClient(
-            WorldPrincipal.Addon(name: "second"),
+            Principal.Addon(name: "second"),
             [],
             []
         );
@@ -117,7 +118,7 @@ public sealed class WorldExtensionHostLawTests {
             expected: 1
         );
         using var third = host.CreateClient(
-            WorldPrincipal.Addon(name: "third"),
+            Principal.Addon(name: "third"),
             ["delete"],
             []
         );
@@ -147,23 +148,18 @@ public sealed class WorldExtensionHostLawTests {
         );
 
         Assert.Throws<ArgumentException>(testCode: () => host.CreateClient(
-            WorldPrincipal.World,
-            ["delete"],
-            []
-        ));
-        Assert.Throws<ArgumentException>(testCode: () => host.CreateClient(
-            WorldPrincipal.Group(id: "admins"),
+            Principal.World,
             ["delete"],
             []
         ));
         using var caller = host.CreateClient(
-            WorldPrincipal.Addon(name: "actor"),
+            Principal.Addon(name: "actor"),
             ["delete"],
             []
         );
 
         Assert.Throws<InvalidOperationException>(testCode: () => host.CreateClient(
-            WorldPrincipal.Addon(name: "other"),
+            Principal.Addon(name: "other"),
             ["delete"],
             []
         ));
@@ -182,7 +178,7 @@ public sealed class WorldExtensionHostLawTests {
             Cancel
         ).AsTask());
         using var replacement = host.CreateClient(
-            WorldPrincipal.Addon(name: "actor"),
+            Principal.Addon(name: "actor"),
             [],
             []
         );
@@ -200,7 +196,7 @@ public sealed class WorldExtensionHostLawTests {
             provider
         );
         using var caller = host.CreateClient(
-            WorldPrincipal.Addon(name: "actor"),
+            Principal.Addon(name: "actor"),
             ["delete"],
             []
         );
@@ -212,10 +208,7 @@ public sealed class WorldExtensionHostLawTests {
             Cancel
         );
         host.Start();
-        await provider.Executed.Task.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 5),
-            Cancel
-        );
+        await provider.Executed.Task.WaitAsync(cancellationToken: Cancel);
         Assert.Equal(
             actual: provider.Executions,
             expected: 1
@@ -226,7 +219,7 @@ public sealed class WorldExtensionHostLawTests {
         using var world = Fixtures.FreshServer();
         var provider = new Provider { ExecuteStatus = WorldExternalOperationStatus.Running };
         var journal = Journal();
-        var clock = new Clock();
+        var clock = new VirtualClock();
 
         await using (var first = Host(
             world.Server,
@@ -235,7 +228,7 @@ public sealed class WorldExtensionHostLawTests {
             clock
         )) {
             using var caller = first.CreateClient(
-                WorldPrincipal.Addon(name: "actor"),
+                Principal.Addon(name: "actor"),
                 ["delete"],
                 []
             );
@@ -254,7 +247,7 @@ public sealed class WorldExtensionHostLawTests {
             clock
         )) {
             using var caller = second.CreateClient(
-                WorldPrincipal.Addon(name: "actor"),
+                Principal.Addon(name: "actor"),
                 ["delete"],
                 []
             );
@@ -279,7 +272,7 @@ public sealed class WorldExtensionHostLawTests {
             clock
         );
         using var restored = third.CreateClient(
-            WorldPrincipal.Addon(name: "actor"),
+            Principal.Addon(name: "actor"),
             ["delete"],
             []
         );
@@ -289,13 +282,13 @@ public sealed class WorldExtensionHostLawTests {
             actual: provider.Reconciliations,
             expected: 0
         );
-        clock.Now += TimeSpan.FromSeconds(seconds: 9);
+        clock.Advance(by: TimeSpan.FromSeconds(seconds: 9));
         await third.RunOnceAsync(cancellationToken: Cancel);
         Assert.Equal(
             actual: provider.Reconciliations,
             expected: 0
         );
-        clock.Now += TimeSpan.FromSeconds(seconds: 1);
+        clock.Advance(by: TimeSpan.FromSeconds(seconds: 1));
         await third.RunOnceAsync(cancellationToken: Cancel);
         Assert.Equal(
             actual: provider.Reconciliations,
@@ -331,7 +324,7 @@ public sealed class WorldExtensionHostLawTests {
             writable: true
         );
         using var caller = host.CreateClient(
-            WorldPrincipal.Addon(name: "actor"),
+            Principal.Addon(name: "actor"),
             ["delete"],
             [],
             storage: storage
@@ -384,24 +377,23 @@ public sealed class WorldExtensionHostLawTests {
             WorldExtensionHostOptions.Default with { MaximumConcurrentOperations = 2 }
         );
         using var caller = host.CreateClient(
-            WorldPrincipal.Addon(name: "actor"),
+            Principal.Addon(name: "actor"),
             ["delete"],
             []
         );
 
-        for (var i = 0; (i < 3); i++) { await caller.InvokeAsync(
+        for (var i = 0; (i < 3); i++) {
+            await caller.InvokeAsync(
             "delete",
             $"death/{i}",
             "{}",
             Cancel
-        ); }
+        );
+        }
         var pass = host.RunOnceAsync(cancellationToken: Cancel);
 
         try {
-            await provider.TwoEntered.Task.WaitAsync(
-                TimeSpan.FromSeconds(seconds: 5),
-                Cancel
-            );
+            await provider.TwoEntered.Task.WaitAsync(cancellationToken: Cancel);
             Assert.Equal(
                 actual: provider.Executions,
                 expected: 2
@@ -447,19 +439,6 @@ public sealed class WorldExtensionHostLawTests {
                 Status: WorldExternalOperationStatus.Succeeded
             ));
         }
-    }
-    private sealed class Clock : TimeProvider {
-        public DateTimeOffset Now = new(
-            day: 1,
-            hour: 0,
-            minute: 0,
-            month: 1,
-            offset: TimeSpan.Zero,
-            second: 0,
-            year: 2026
-        );
-
-        public override DateTimeOffset GetUtcNow() => Now;
     }
     private sealed class BlockingProvider : IWorldExternalOperationProvider {
         public string Identity => "bounded-resource";

@@ -2,86 +2,8 @@ namespace Puck.AdvancedGamingBrick;
 
 public sealed partial class AgbTimerController : ISnapshotable {
     /// <inheritdoc/>
-    // Per-timer live counters/reloads/control plus the deferred-by-one-cycle latch discipline (control + reload
-    // pending flags and their latched values), the enable-reload pending flags, and the in-flight overflow-IRQ delay
-    // countdowns — the latches and countdowns are load-bearing: dropping them would lose a write, or an overflow's
-    // pending interrupt, in flight at the snapshot instant. The closed-form anchors (clock + value) and the scheduled
-    // flag capture where each prescaler timer is between overflows; the overflow events themselves are never
-    // serialized — they are re-derived from the anchors on restore.
-    public void SaveState(StateWriter writer) {
-        ArgumentNullException.ThrowIfNull(argument: writer);
-
-        writer.WriteBlock<int>(values: m_period);
-        writer.WriteBlock<int>(values: m_reload);
-        writer.WriteBlock<int>(values: m_frequency);
-        WriteBooleans(
-            values: m_enable,
-            writer: writer
-        );
-        WriteBooleans(
-            values: m_irqEnabled,
-            writer: writer
-        );
-        WriteBooleans(
-            values: m_cascade,
-            writer: writer
-        );
-        WriteBooleans(
-            values: m_pending,
-            writer: writer
-        );
-        writer.WriteBlock<int>(values: m_irqCountdown);
-
-        writer.WriteBlock<long>(values: m_anchorClock);
-        writer.WriteBlock<int>(values: m_anchorValue);
-
-        WriteBooleans(
-            values: m_controlFlag,
-            writer: writer
-        );
-        writer.WriteBlock<int>(values: m_latchControl);
-        writer.WriteBlock<int>(values: m_reloadFlags);
-        writer.WriteBlock<int>(values: m_latchReload);
-        writer.WriteBoolean(value: m_timerLatched);
-        writer.WriteBoolean(value: m_scheduled);
-    }
-    /// <inheritdoc/>
     public void LoadState(StateReader reader) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        reader.ReadBlock<int>(destination: m_period);
-        reader.ReadBlock<int>(destination: m_reload);
-        reader.ReadBlock<int>(destination: m_frequency);
-        ReadBooleans(
-            reader: reader,
-            values: m_enable
-        );
-        ReadBooleans(
-            reader: reader,
-            values: m_irqEnabled
-        );
-        ReadBooleans(
-            reader: reader,
-            values: m_cascade
-        );
-        ReadBooleans(
-            reader: reader,
-            values: m_pending
-        );
-        reader.ReadBlock<int>(destination: m_irqCountdown);
-
-        reader.ReadBlock<long>(destination: m_anchorClock);
-        reader.ReadBlock<int>(destination: m_anchorValue);
-
-        ReadBooleans(
-            reader: reader,
-            values: m_controlFlag
-        );
-        reader.ReadBlock<int>(destination: m_latchControl);
-        reader.ReadBlock<int>(destination: m_reloadFlags);
-        reader.ReadBlock<int>(destination: m_latchReload);
-        m_timerLatched = reader.ReadBoolean();
-        m_scheduled = reader.ReadBoolean();
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
         RefreshPendingLatch();
 
         // Re-derive the overflow events from the anchors (the scheduler cleared its queue in its own LoadState, run
@@ -96,15 +18,34 @@ public sealed partial class AgbTimerController : ISnapshotable {
             }
         }
     }
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
 
-    private static void WriteBooleans(StateWriter writer, bool[] values) {
-        foreach (var value in values) {
-            writer.WriteBoolean(value: value);
-        }
-    }
-    private static void ReadBooleans(StateReader reader, bool[] values) {
-        for (var i = 0; (i < values.Length); ++i) {
-            values[i] = reader.ReadBoolean();
-        }
+    // Per-timer live counters/reloads/control plus the deferred-by-one-cycle latch discipline (control + reload
+    // pending flags and their latched values), the enable-reload pending flags, and the in-flight overflow-IRQ delay
+    // countdowns — the latches and countdowns are load-bearing: dropping them would lose a write, or an overflow's
+    // pending interrupt, in flight at the snapshot instant. The closed-form anchors (clock + value) and the scheduled
+    // flag capture where each prescaler timer is between overflows; the overflow events themselves are never
+    // serialized — they are re-derived from the anchors on restore.
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Block(values: m_period);
+        transfer.Block(values: m_reload);
+        transfer.Block(values: m_frequency);
+        transfer.Block(values: m_enable);
+        transfer.Block(values: m_irqEnabled);
+        transfer.Block(values: m_cascade);
+        transfer.Block(values: m_pending);
+        transfer.Block(values: m_irqCountdown);
+
+        transfer.Block(values: m_anchorClock);
+        transfer.Block(values: m_anchorValue);
+
+        transfer.Block(values: m_controlFlag);
+        transfer.Block(values: m_latchControl);
+        transfer.Block(values: m_reloadFlags);
+        transfer.Block(values: m_latchReload);
+        transfer.Boolean(value: ref m_timerLatched);
+        transfer.Boolean(value: ref m_scheduled);
     }
 }

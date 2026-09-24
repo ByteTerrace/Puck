@@ -64,8 +64,9 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
         slots.Configure(targetCount: 2);
 
         var request = new ProbeKernelRequest(
-            KernelSource: "",
+            AccumulateBytecode: ReadOnlyMemory<byte>.Empty,
             AccumulateEntry: "",
+            FinalizeBytecode: ReadOnlyMemory<byte>.Empty,
             FinalizeEntry: "",
             Constants: ReadOnlyMemory<byte>.Empty,
             ChannelCount: 0,

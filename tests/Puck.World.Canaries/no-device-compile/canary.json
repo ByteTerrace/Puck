@@ -1,0 +1,65 @@
+{
+  "id": "no-device-compile",
+  "title": "A shipped pipeline and a pipeline package render in a World that has no shader compiler, which an unpackaged pipeline source cannot",
+  "binding": "Once per run, the runner packages a copy of the pipeline-package canary's tint pipeline with the candidate CLI's own shaders package, which compiles its binaries with the compiler on the runner's path, and before each leg boots it copies the package to {run}/tint. The World then boots with every directory holding dxc removed from its search path, showing two offscreen 128x256 panes. The positive leg's ink row names the shipped ink pipeline by its source, the way the shipped pipeline world does; the World's build packaged that source into its package store, so the row loads the stored package, runs no tool, and captures every pixel at or below the ink background (0.018, 0.027, 0.060) at exposure zero after a reset. Its tint row names the tint source, which no shipped world names, so the store holds no package for it: the compile is refused as unsupported by SHADERPKG_ABSENT. Pointed at the runner's tint package, the same instance loads from its binaries and captures (gain, 1 - gain, 0.5) = (1, 0, 0.5) in every pixel. The discriminating leg's ink row names the shipped Moth shader under a name no shipped world gives it, so the store holds no package keyed by it and the row is refused by SHADERPKG_ABSENT with nothing compiled, and the runner appends a line to the tint package's compute SPIR-V, so loading refuses it by SHADERPKG_FILE_PIN: neither instance reaches compiled and no image is captured.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "../pipeline-package/tint.pipeline.json",
+    "../pipeline-package/tint.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/no-device-compile/fixture.world.json",
+    "script": "positive.script.txt",
+    "hideShaderCompiler": true,
+    "package": { "source": "../pipeline-package/tint.pipeline.json", "output": "tint" },
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reload", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "pipeline.reset", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 8, "outcome": "accepted" },
+      { "verb": "pipeline.capture", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 9, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the shipped pipeline loads its stored package", "stream": "stderr", "match": "contains", "text": "[pipeline: ink wait compiled reached", "present": true },
+      { "type": "line", "name": "the unpackaged source is refused by name", "stream": "stderr", "match": "contains", "text": "[pipeline: tint wait compiled unsupported: [SHADERPKG_ABSENT]", "present": true },
+      { "type": "line", "name": "the package compiles from its binaries", "stream": "stderr", "match": "contains", "text": "[pipeline: tint wait compiled reached", "present": true },
+      { "type": "line", "name": "no package is refused", "stream": "stderr", "match": "contains", "text": "failed: [SHADERPKG_", "present": false },
+      { "type": "imageRegion", "name": "shipped-pipeline-renders-without-a-compiler", "capture": "shipped.png", "extent": [128, 256], "region": [0, 0, 1, 1], "reduce": "every", "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "package-row-renders-without-a-compiler", "capture": "package.png", "extent": [128, 256], "region": [0, 0, 1, 1], "reduce": "every", "minimum": [1, 0, 0.5, 1], "maximum": [1, 0, 0.5, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/no-device-compile/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "hideShaderCompiler": true,
+    "package": { "source": "../pipeline-package/tint.pipeline.json", "output": "tint", "alter": "binaries/tint.default.comp.spv" },
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reload", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the shipped pipeline loads its stored package", "stream": "stderr", "match": "contains", "text": "[pipeline: ink wait compiled reached", "present": false },
+      { "type": "line", "name": "a shipped source under an unshipped name is refused by name", "stream": "stderr", "match": "contains", "text": "[pipeline: ink wait compiled unsupported: [SHADERPKG_ABSENT]", "present": true },
+      { "type": "line", "name": "the package compiles from its binaries", "stream": "stderr", "match": "contains", "text": "[pipeline: tint wait compiled reached", "present": false },
+      { "type": "line", "name": "the altered binary is refused by its pin", "stream": "stderr", "match": "contains", "text": "[SHADERPKG_FILE_PIN]", "present": true }
+    ]
+  }
+}

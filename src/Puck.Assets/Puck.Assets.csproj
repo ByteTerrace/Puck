@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Assets</AssemblyName>
-        <Description>Content-addressed asset primitives for .NET: path-based byte sources, SHA-256 identities and storage, a bounded cache, PNG/APNG and QR codecs, and canonical binary codecs for automatic sequences and raw mathematical certificates.</Description>
+        <Description>Content-addressed asset primitives for .NET: path-based byte sources, SHA-256 identities and storage, atomic file replacement, a bounded cache, PNG/APNG, block-compressed texture (BC4, BC5, BC6H, BC7) and QR codecs, and canonical binary codecs for automatic sequences, raw mathematical certificates, and content-hashed chunk containers.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Assets</PackageId>
         <PackageTags>assets;caching;content-addressing;png;qr</PackageTags>

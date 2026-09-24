@@ -34,7 +34,7 @@ public class UnaryOperandTests {
     }
     [Fact]
     public void TestFormatterKeepsTheSignAttachedToItsOperand() {
-        var formatted = PuckFormat.Format("""
+        var formatted = PuckFormat.Format(source: """
             schema: "puck.world.definition.v1"
             let spread = 1.8
             screens [

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
@@ -8,8 +9,8 @@ using Windows.Win32.Graphics.Dxgi.Common;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12, creating a root signature and PSO tailored
-/// for the SDF renderer: POSITION-only (R32G32_FLOAT) vertex input, a descriptor table with N SRV slots and
+/// Implements <see cref="IGpuPipelineFactory"/> for Direct3D 12, creating a root signature and an opaque PSO:
+/// <c>POSITIONn</c> vertex attributes, the render pass's formats and depth test, a descriptor table with N SRV slots and
 /// an optional UAV slot, root constants for push data, and one static linear-clamp sampler PER texture SRV
 /// (<c>s0..sN-1</c>, matching <c>t0..tN-1</c> one-for-one) — every one of those static samplers carries the SAME
 /// fixed filter/address description, so in effect the whole table shares one sampler configuration.
@@ -28,20 +29,22 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
     /// <inheritdoc/>
     public IGpuPipeline Create(
         IGpuDeviceContext deviceContext,
-        IGpuRenderTarget renderTarget,
+        IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
         GpuGraphicsPipelineDescription description,
         uint width,
         uint height
     ) {
+        ArgumentNullException.ThrowIfNull(description);
+        description.ValidateAgainst(renderPass: renderPass);
+
         var device = ((ID3D12Device*)deviceContext.DeviceHandle);
         var vs = ((DirectXGpuShaderModule)vertexShaderModule);
         var ps = ((DirectXGpuShaderModule)fragmentShaderModule);
-        // Derive the PSO render-target format from the bound target (the DirectXImageView it exposes via
-        // ImageViewHandle) so the PSO format always matches the RTV — mirroring how the Vulkan factory derives
-        // the format from the render pass. A hardcoded format would mismatch a B8G8R8A8Unorm target.
-        var renderTargetView = ((DirectXImageView)GCHandle.FromIntPtr(value: renderTarget.ImageViewHandle).Target!);
+        // The render pass's formats are the PSO's render-target and depth-stencil formats, as a Vulkan pipeline takes
+        // them from its render pass.
+        var pass = ((DirectXGpuRenderPass)renderPass);
         var layout = BuildLayout(
             device: device,
             enableStorageBuffer: description.EnableStorageBuffer,
@@ -51,10 +54,10 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         var attributes = description.VertexInput.Attributes;
         var inputElements = stackalloc D3D12_INPUT_ELEMENT_DESC[attributes.Count];
 
-        // Every attribute reads as the "POSITION" semantic at its own SemanticIndex: the only vertex data this
-        // renderer's callers ever declare is untextured 2D position, and Direct3D's HLSL-facing semantic-name
-        // concept has no Vulkan counterpart to generalize against — a second semantic earns its own field when a
-        // caller actually needs one.
+        // Every attribute reads as the "POSITION" semantic at its location's SemanticIndex: Direct3D's HLSL-facing
+        // semantic-name concept has no Vulkan counterpart, where DXC numbers a vertex stage's inputs by declaration
+        // order, so a shader declares attribute n as POSITIONn and as its nth input, and both backends read the same
+        // attribute.
         fixed (byte* positionSemantic = "POSITION\0"u8) {
             for (var index = 0; (index < attributes.Count); index++) {
                 inputElements[index] = new D3D12_INPUT_ELEMENT_DESC {
@@ -63,15 +66,18 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
                     InputSlot = 0,
                     InputSlotClass = D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                     InstanceDataStepRate = 0,
-                    SemanticIndex = ((uint)index),
+                    SemanticIndex = attributes[index].Location,
                     SemanticName = new PCSTR(value: positionSemantic),
                 };
             }
 
             layout.PsoHandle = BuildPso(
+                depthCompare: description.DepthCompare,
                 device: device,
+                library: ((IDirectXDeviceContext)deviceContext).PipelineLibrary,
                 rootSignature: layout.RootSignatureHandle,
-                renderTargetFormat: renderTargetView.Format,
+                rootSignatureBlob: layout.RootSignatureBlob,
+                renderPass: pass,
                 inputElements: inputElements,
                 inputElementCount: ((uint)attributes.Count),
                 vsHandle: vs.Handle,
@@ -87,6 +93,8 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
     private static DXGI_FORMAT ToDxgiFormat(GpuVertexFormat format) {
         return format switch {
             GpuVertexFormat.R32G32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT,
+            GpuVertexFormat.R32G32B32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32B32_FLOAT,
+            GpuVertexFormat.R32G32B32A32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT,
             _ => throw new ArgumentOutOfRangeException(
             nameof(format),
             format,
@@ -128,6 +136,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             hasDescriptorTable: hasDescriptorTable,
             hasRootConstants: hasRootConstants,
             rootConstantsCount: layout.RootConstantsCount,
+            serialized: out layout.RootSignatureBlob,
             textureSamplerCount: textureSamplerCount
         );
 
@@ -139,7 +148,8 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         bool enableStorageBuffer,
         bool hasDescriptorTable,
         bool hasRootConstants,
-        uint rootConstantsCount
+        uint rootConstantsCount,
+        out byte[] serialized
     ) {
         var rangeCount = (((textureSamplerCount > 0)
             ? 1
@@ -241,13 +251,30 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
 
         return DirectXRootSignatures.Create(
             description: in desc,
-            device: device
+            device: device,
+            serialized: out serialized
         );
     }
+    private static D3D12_COMPARISON_FUNC ToComparisonFunc(GpuDepthCompare compare) => compare switch {
+        GpuDepthCompare.Less => D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS,
+        GpuDepthCompare.LessOrEqual => D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS_EQUAL,
+        GpuDepthCompare.Greater => D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER,
+        GpuDepthCompare.GreaterOrEqual => D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+        GpuDepthCompare.Equal => D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_EQUAL,
+        GpuDepthCompare.Always => D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_ALWAYS,
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: compare,
+            message: "The depth comparison is not defined.",
+            paramName: nameof(compare)
+        ),
+    };
     private static nint BuildPso(
+        GpuDepthCompare? depthCompare,
         ID3D12Device* device,
+        DirectXPipelineLibrary? library,
         nint rootSignature,
-        DXGI_FORMAT renderTargetFormat,
+        byte[] rootSignatureBlob,
+        DirectXGpuRenderPass renderPass,
         D3D12_INPUT_ELEMENT_DESC* inputElements,
         uint inputElementCount,
         nint vsHandle,
@@ -260,15 +287,23 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
                 AlphaToCoverageEnable = false,
                 IndependentBlendEnable = false,
             },
-            DepthStencilState = new D3D12_DEPTH_STENCIL_DESC {
-                DepthEnable = false,
-                StencilEnable = false,
-            },
+            DepthStencilState = ((depthCompare is { } compare)
+                ? new D3D12_DEPTH_STENCIL_DESC {
+                    DepthEnable = true,
+                    DepthFunc = ToComparisonFunc(compare: compare),
+                    DepthWriteMask = D3D12_DEPTH_WRITE_MASK.D3D12_DEPTH_WRITE_MASK_ALL,
+                    StencilEnable = false,
+                }
+                : new D3D12_DEPTH_STENCIL_DESC {
+                    DepthEnable = false,
+                    StencilEnable = false,
+                }),
             InputLayout = new D3D12_INPUT_LAYOUT_DESC {
                 NumElements = inputElementCount,
                 pInputElementDescs = inputElements,
             },
-            NumRenderTargets = 1,
+            DSVFormat = renderPass.DepthFormat,
+            NumRenderTargets = ((uint)renderPass.ColorFormats.Count),
             PS = new D3D12_SHADER_BYTECODE {
                 BytecodeLength = psLength,
                 pShaderBytecode = ((void*)psHandle),
@@ -308,7 +343,47 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             SrcBlend = D3D12_BLEND.D3D12_BLEND_ONE,
             SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE,
         };
-        psoDesc.RTVFormats._0 = renderTargetFormat;
+        for (var index = 0; (index < renderPass.ColorFormats.Count); index++) {
+            psoDesc.RTVFormats.AsSpan()[index] = renderPass.ColorFormats[index];
+        }
+
+        if (library is not null) {
+            // The fixed state this factory varies besides the stages and root signature: the render-target count and
+            // formats, the depth-stencil format, the depth test (-1 for none), and each vertex attribute's format,
+            // offset and semantic index.
+            var colorCount = renderPass.ColorFormats.Count;
+            var state = new byte[(sizeof(int) * ((3 + colorCount) + (3 * ((int)inputElementCount))))];
+            var words = MemoryMarshal.Cast<byte, int>(span: state.AsSpan());
+
+            words[0] = colorCount;
+
+            for (var index = 0; (index < colorCount); index++) {
+                words[(1 + index)] = ((int)renderPass.ColorFormats[index]);
+            }
+
+            words[(1 + colorCount)] = ((int)renderPass.DepthFormat);
+            words[(2 + colorCount)] = ((depthCompare is { } test)
+                ? ((int)test)
+                : -1);
+
+            for (var index = 0; (index < inputElementCount); index++) {
+                words[((3 + colorCount) + (3 * index))] = ((int)inputElements[index].Format);
+                words[((4 + colorCount) + (3 * index))] = ((int)inputElements[index].AlignedByteOffset);
+                words[((5 + colorCount) + (3 * index))] = ((int)inputElements[index].SemanticIndex);
+            }
+
+            return library.CreateGraphicsPipeline(
+                description: in psoDesc,
+                device: device,
+                identity: [new ReadOnlySpan<byte>(
+                    length: checked((int)vsLength),
+                    pointer: ((void*)vsHandle)
+                ).ToArray(), new ReadOnlySpan<byte>(
+                    length: checked((int)psLength),
+                    pointer: ((void*)psHandle)
+                ).ToArray(), rootSignatureBlob, state]
+            );
+        }
 
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;

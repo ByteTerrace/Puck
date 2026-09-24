@@ -193,7 +193,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the signed overload\u0027s negative-weight refusal, PRICED: a quarter-million-entry span whose first weight is negative is refused while GC.GetAllocatedBytesForCurrentThread advances by under 64 KiB, where a factory that converted before it refused would have spent four megabytes. The exception type alone cannot separate the two orders; the meter can",
+        "Subject": "the signed overload\u0027s negative-weight refusal, PRICED: a quarter-million-entry span whose first weight is negative is refused while the current thread\u0027s allocation meter (AllocationWindow.Measure) reads under 64 KiB, where a factory that converted before it refused would have spent four megabytes. The exception type alone cannot separate the two orders; the meter can",
         "Against": "",
         "Shared": "",
         "Citation": "",

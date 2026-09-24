@@ -1,19 +1,21 @@
 using System.Text.Json;
+using Puck.Abstractions.Gpu;
 
 
 namespace Puck.Shaders.Tests;
 
 public sealed class ShaderPipelineTests {
+    // Where the frame members end and a pass's first config field can start: cameraUp, a float3 at 80.
+    private const uint FrameMembersEnd = 92;
+
     private static ShaderPipelineResource Image(
         string name,
         ShaderPipelineInitialization initialization = ShaderPipelineInitialization.Undefined,
-        bool persistent = false,
         bool history = false
     ) => new(
         Name: name,
         Format: "R8G8B8A8Unorm",
         Dimensions: ShaderPipelineDimensions.Relative(),
-        Persistent: persistent,
         History: history,
         Initialization: initialization
     );
@@ -25,7 +27,6 @@ public sealed class ShaderPipelineTests {
     ) => new(
         name,
         $"{name}.hlsl",
-        ShaderSourceLanguage.Hlsl,
         "main",
         kind,
         inputs,
@@ -131,12 +132,12 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Fullscreen_and_shadertoy_reject_runtime_unsupported_output_formats() {
-        var fullscreen = new ShaderPipelineDefinition(
+    public void Fullscreen_draws_into_its_declared_color_format_and_an_image_never_declares_a_depth_format() {
+        ShaderPipelineDefinition Fullscreen(string format) => new(
             "fullscreen-format",
             [new ShaderPipelineResource(
                     "out",
-                    Format: "R16G16B16A16Float",
+                    Format: format,
                     Dimensions: ShaderPipelineDimensions.Relative()
                 )],
             [Pass(
@@ -147,32 +148,17 @@ public sealed class ShaderPipelineTests {
                 )],
             ["out"]
         );
-        var fullscreenError = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: fullscreen));
 
-        Assert.Contains(
-            collection: fullscreenError.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_FULLSCREEN_FORMAT")
+        Assert.Equal(
+            expected: GpuAttachmentLoad.Clear,
+            actual: new ShaderPipelineCompiler().Compile(definition: Fullscreen(format: "R16G16B16A16Float")).Passes[0].Attachments.Single().Load
         );
 
-        var shadertoy = new ShaderPipelineDefinition(
-            "toy-format",
-            [new ShaderPipelineResource(
-                    "out",
-                    Format: "B8G8R8A8Unorm",
-                    Dimensions: ShaderPipelineDimensions.Relative()
-                )],
-            [Pass(
-                    "draw",
-                    [],
-                    ["out"]
-                ) with { Language = ShaderSourceLanguage.ShadertoyGlsl }],
-            ["out"]
-        );
-        var shadertoyError = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: shadertoy));
+        var depthFormat = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: Fullscreen(format: "D32Float")));
 
         Assert.Contains(
-            collection: shadertoyError.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_SHADERTOY_FORMAT")
+            collection: depthFormat.Diagnostics,
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_RESOURCE_FORMAT")
         );
     }
     [Fact]
@@ -200,7 +186,7 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Incompatible_resource_kind_fields_and_typed_buffers_are_rejected() {
+    public void An_image_declaring_a_buffer_size_is_rejected() {
         var definition = new ShaderPipelineDefinition(
             "fields",
             [
@@ -210,14 +196,7 @@ public sealed class ShaderPipelineTests {
                     Dimensions: ShaderPipelineDimensions.Relative(),
                     SizeBytes: 4
                 ),
-            new ShaderPipelineResource(
-                    "buffer",
-                    ShaderPipelineResourceKind.Buffer,
-                    Initialization: ShaderPipelineInitialization.External,
-                    SizeBytes: 64,
-                    ElementType: ShaderValueType.Float4,
-                    StrideBytes: 16
-                )],
+            ],
             [Pass(
                     "draw",
                     [],
@@ -231,10 +210,26 @@ public sealed class ShaderPipelineTests {
             collection: error.Diagnostics,
             filter: diagnostic => (diagnostic.Code == "SHADERPIPE_RESOURCE_KIND_FIELDS")
         );
+    }
+    [InlineData("elementType", "\"Float4\"")]
+    [InlineData("strideBytes", "16")]
+    [Theory]
+    public void A_buffer_carrying_a_typed_layout_member_fails_as_an_unknown_member(string member, string value) {
+        var json = $$"""{ "name": "buffer", "kind": "Buffer", "sizeBytes": 64, "{{member}}": {{value}} }""";
+        var refusal = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
+            json: json,
+            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineResource
+        ));
+
         Assert.Contains(
-            collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_UNSUPPORTED_TYPED_BUFFER")
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: member,
+            actualString: refusal.Message
         );
+        Assert.NotNull(@object: JsonSerializer.Deserialize(
+            json: """{ "name": "buffer", "kind": "Buffer", "sizeBytes": 64 }""",
+            jsonTypeInfo: ShaderPipelineJsonContext.Default.ShaderPipelineResource
+        ));
     }
     [Fact]
     public void Independent_passes_use_authored_order_as_the_tie_breaker() {
@@ -300,36 +295,31 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void One_off_source_inference_rejects_ambiguous_extensions() {
+    public void A_one_off_source_is_an_hlsl_compute_pass_unless_its_kind_is_given() {
         var compute = ShaderPipelineDefinition.FromShaderSource(
             "compute",
-            "effect.comp"
+            "effect.hlsl"
         );
 
-        Assert.Equal(
-            ShaderSourceLanguage.Glsl,
-            compute.Passes[0].Language
-        );
         Assert.Equal(
             ShaderPipelinePassKind.Compute,
             compute.Passes[0].Kind
         );
-        var fragment = ShaderPipelineDefinition.FromShaderSource(
-            "fragment",
-            "effect.frag"
-        );
-
         Assert.Equal(
-            ShaderSourceLanguage.Glsl,
-            fragment.Passes[0].Language
+            "main",
+            compute.Passes[0].EntryPoint
         );
         Assert.Equal(
             ShaderPipelinePassKind.Fullscreen,
-            fragment.Passes[0].Kind
+            ShaderPipelineDefinition.FromShaderSource(
+                kind: ShaderPipelinePassKind.Fullscreen,
+                name: "fragment",
+                sourcePath: "effect.frag.hlsl"
+            ).Passes[0].Kind
         );
         Assert.Throws<ArgumentException>(testCode: () => ShaderPipelineDefinition.FromShaderSource(
-            "vertex",
-            "effect.vert"
+            "glsl",
+            "effect.glsl"
         ));
         Assert.Throws<ArgumentException>(testCode: () => ShaderPipelineDefinition.FromShaderSource(
             "unknown",
@@ -337,7 +327,7 @@ public sealed class ShaderPipelineTests {
         ));
     }
     [Fact]
-    public void Parameter_layout_binds_defaults_after_frame_prefix() {
+    public void Parameter_layout_binds_defaults_after_the_frame_members() {
         var config = new Dictionary<string, ShaderConfigField> {
             ["amount"] = new ShaderConfigField(
             ShaderValueType.Float,
@@ -356,7 +346,7 @@ public sealed class ShaderPipelineTests {
         var layout = ShaderPipelineParameterLayout.Resolve(pass: pass);
 
         Assert.Equal(
-            expected: ((uint)ShaderFrameConstants.SizeBytes),
+            expected: FrameMembersEnd,
             actual: layout.Slots[0].Offset
         );
         Assert.True(
@@ -399,16 +389,17 @@ public sealed class ShaderPipelineTests {
             expected: ["aScalar", "mVector", "zVector"],
             actual: layout.Slots.Select(selector: slot => slot.Name)
         );
+        // A float3 starts a 16-byte row and a float2 an 8-byte boundary, whatever the frame members before them.
         Assert.Equal(
-            expected: ((uint)ShaderFrameConstants.SizeBytes),
+            expected: FrameMembersEnd,
             actual: layout.Slots[0].Offset
         );
         Assert.Equal(
-            expected: (((uint)ShaderFrameConstants.SizeBytes) + 4),
+            expected: 96u,
             actual: layout.Slots[1].Offset
         );
         Assert.Equal(
-            expected: (((uint)ShaderFrameConstants.SizeBytes) + 16),
+            expected: 112u,
             actual: layout.Slots[2].Offset
         );
     }
@@ -510,7 +501,7 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Planner_refuses_unimplemented_depth_and_fullscreen_mrt() {
+    public void Planner_refuses_misused_depth_graphics_mrt_and_graphics_buffers() {
         var depth = new ShaderPipelineDefinition(
             name: "depth",
             resources: [new ShaderPipelineResource(
@@ -529,9 +520,9 @@ public sealed class ShaderPipelineTests {
         );
         var depthError = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: depth));
 
-        Assert.Contains(
-            collection: depthError.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_UNSUPPORTED_DEPTH")
+        Assert.Equal(
+            expected: ["SHADERPIPE_DEPTH_INITIALIZATION", "SHADERPIPE_DEPTH_PUBLIC", "SHADERPIPE_DEPTH_WRITER"],
+            actual: depthError.Diagnostics.Select(selector: static diagnostic => diagnostic.Code).Order(comparer: StringComparer.Ordinal)
         );
 
         var mrt = new ShaderPipelineDefinition(
@@ -574,7 +565,7 @@ public sealed class ShaderPipelineTests {
 
         Assert.Contains(
             collection: bufferError.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_UNSUPPORTED_FULLSCREEN_BUFFER")
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_UNSUPPORTED_GRAPHICS_BUFFER")
         );
     }
     [Fact]
@@ -590,6 +581,7 @@ public sealed class ShaderPipelineTests {
                 Config = new Dictionary<string, ShaderConfigField> {
                     ["a"] = new(ShaderValueType.Float4),
                     ["b"] = new(ShaderValueType.Float4),
+                    ["c"] = new(ShaderValueType.Float),
                 },
             }],
             ["out"]
@@ -639,7 +631,7 @@ public sealed class ShaderPipelineTests {
         );
     }
     [Fact]
-    public void Planner_reports_resource_limit_and_invalid_typed_buffer() {
+    public void Planner_reports_the_resource_limit() {
         var definition = new ShaderPipelineDefinition(
             name: "limits",
             resources: [
@@ -651,9 +643,7 @@ public sealed class ShaderPipelineTests {
                     "b",
                     ShaderPipelineResourceKind.Buffer,
                     Initialization: ShaderPipelineInitialization.External,
-                    SizeBytes: 64,
-                    ElementType: ShaderValueType.Float4,
-                    StrideBytes: 4
+                    SizeBytes: 64
                 ),
             ],
             passes: [],
@@ -666,13 +656,9 @@ public sealed class ShaderPipelineTests {
             collection: exception.Diagnostics,
             filter: diagnostic => (diagnostic.Code == "SHADERPIPE_LIMIT_RESOURCES")
         );
-        Assert.Contains(
-            collection: exception.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_BUFFER_STRIDE")
-        );
     }
     [Fact]
-    public void Previous_frame_feedback_requires_persistent_history_and_initialization() {
+    public void Previous_frame_feedback_requires_history_and_initialization() {
         var missingDeclaration = new ShaderPipelineDefinition(
             name: "feedback",
             resources: [Image("state")],
@@ -699,7 +685,6 @@ public sealed class ShaderPipelineTests {
             resources: [Image(
                     "state",
                     ShaderPipelineInitialization.Zero,
-                    persistent: true,
                     history: true
                 )],
             passes: [Pass(
@@ -756,7 +741,6 @@ public sealed class ShaderPipelineTests {
         var state = Image(
             "state",
             ShaderPipelineInitialization.Zero,
-            persistent: true,
             history: true
         );
         var definition = new ShaderPipelineDefinition(

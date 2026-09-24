@@ -10,14 +10,6 @@ public sealed class WorldExpressionVocabularyLawTests {
         StateRaw = new WorldStateSection(World: state),
         Rules = rules,
     };
-    private static WorldStateRow FixedSlot(string name, long value) => new(
-        Name: Name(value: name),
-        Kind: CellKind.Fixed,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Fixed(rawBits: value)
-            )]
-    );
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static WorldRule Rule(string name, string target, IReadOnlyList<Instruction> tokens) => new(
         Name: Name(value: name),
@@ -25,14 +17,6 @@ public sealed class WorldExpressionVocabularyLawTests {
         Effects: [new ActionEffect.SetState(
                 State: target,
                 Expression: new ExpressionProgram(Instructions: tokens)
-            )]
-    );
-    private static WorldStateRow Slot(string name, long value) => new(
-        Name: Name(value: name),
-        Kind: CellKind.Int,
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: value)
             )]
     );
     private static long Value(WorldFixture fixture, string row) {
@@ -51,52 +35,52 @@ public sealed class WorldExpressionVocabularyLawTests {
     public void BitCensusRotationsAndBoardSymmetriesReadTheCarrierExactly() {
         var board = (1L << 63) | (1L << 9) | 1L; // h8, b2, a1
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "board",
                     value: board
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "count",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "lowest",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "highest",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "next",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "rest",
                     value: 0L
                 ),
-                    Slot(
+                    StateFixtures.IntSlot(
                     name: "flip",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "turn",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "rot",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "neg",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "mag",
                     value: -6L
-                ), FixedSlot(
+                ), StateFixtures.FixedSlot(
                     name: "sgn",
-                    value: FixedQ4816.FromInteger(value: -3).Value
-                ), FixedSlot(
+                    rawBits: FixedQ4816.FromInteger(value: -3).Value
+                ), StateFixtures.FixedSlot(
                     name: "sign",
-                    value: 0L
+                    rawBits: 0L
                 )],
             rules: [
                 Rule(
                     name: "count",
                     target: "count",
-                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.PopCount)]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.SetBitCount)]
                 ),
                 Rule(
                     name: "lowest",
@@ -126,7 +110,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                 Rule(
                     name: "turn",
                     target: "turn",
-                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.BitReverse)]
+                    tokens: [Instruction.Operand(name: "board"), Instruction.Of(operation: ExpressionOp.ReverseBits)]
                 ),
                 Rule(
                     name: "rot",
@@ -141,7 +125,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                 Rule(
                     name: "mag",
                     target: "mag",
-                    tokens: [Instruction.Operand(name: "mag"), Instruction.Of(operation: ExpressionOp.Abs)]
+                    tokens: [Instruction.Operand(name: "mag"), Instruction.Of(operation: ExpressionOp.Absolute)]
                 ),
                 Rule(
                     name: "sign",
@@ -236,9 +220,9 @@ public sealed class WorldExpressionVocabularyLawTests {
     [Fact]
     public void BitwiseInFixedAndMistypedSelectRefuseAtCompilation() {
         var bitwiseInFixed = Document(
-            state: [FixedSlot(
+            state: [StateFixtures.FixedSlot(
                     name: "target",
-                    value: 0L
+                    rawBits: 0L
                 )],
             rules: [new WorldRule(
                     Name: Name(value: "fixed-bitwise"),
@@ -253,9 +237,9 @@ public sealed class WorldExpressionVocabularyLawTests {
                 )]
         );
         var fixedCondition = Document(
-            state: [FixedSlot(
+            state: [StateFixtures.FixedSlot(
                     name: "target",
-                    value: 0L
+                    rawBits: 0L
                 )],
             rules: [new WorldRule(
                     Name: Name(value: "fixed-condition"),
@@ -271,9 +255,9 @@ public sealed class WorldExpressionVocabularyLawTests {
                 )]
         );
         var danglingComparison = Document(
-            state: [FixedSlot(
+            state: [StateFixtures.FixedSlot(
                     name: "target",
-                    value: 0L
+                    rawBits: 0L
                 )],
             rules: [new WorldRule(
                     Name: Name(value: "dangling"),
@@ -288,7 +272,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                 )]
         );
         var underflow = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "target",
                     value: 0L
                 )],
@@ -305,7 +289,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                 )]
         );
         var control = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "target",
                     value: 0L
                 )],
@@ -368,7 +352,7 @@ public sealed class WorldExpressionVocabularyLawTests {
     [Fact]
     public void EveryOperatorRoundTripsThroughTheStrictWireShape() {
         Instruction[] tokens = [
-            Instruction.Constant(value: 1m), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.Modulo),
+            Instruction.Constant(value: 1m), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.Remainder),
             Instruction.Constant(value: 3m), Instruction.Of(operation: ExpressionOp.BitAnd), Instruction.Constant(value: 4m), Instruction.Of(operation: ExpressionOp.BitOr),
             Instruction.Constant(value: 5m), Instruction.Of(operation: ExpressionOp.BitXor), Instruction.Of(operation: ExpressionOp.BitNot),
             Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.ShiftLeft), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.ShiftRight),
@@ -377,16 +361,16 @@ public sealed class WorldExpressionVocabularyLawTests {
             Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.Less), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.LessOrEqual),
             Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.Greater), Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.GreaterOrEqual),
             Instruction.Constant(value: 8m), Instruction.Constant(value: 9m), Instruction.Of(operation: ExpressionOp.Select),
-            Instruction.Of(operation: ExpressionOp.PopCount), Instruction.Of(operation: ExpressionOp.LeadingZeroCount), Instruction.Of(operation: ExpressionOp.TrailingZeroCount),
+            Instruction.Of(operation: ExpressionOp.SetBitCount), Instruction.Of(operation: ExpressionOp.LeadingZeroCount), Instruction.Of(operation: ExpressionOp.TrailingZeroCount),
             Instruction.Of(operation: ExpressionOp.LowestSetBit), Instruction.Of(operation: ExpressionOp.ClearLowestSetBit),
             Instruction.Constant(value: 3m), Instruction.Of(operation: ExpressionOp.RotateLeft), Instruction.Constant(value: 3m), Instruction.Of(operation: ExpressionOp.RotateRight),
-            Instruction.Of(operation: ExpressionOp.ByteSwap), Instruction.Of(operation: ExpressionOp.BitReverse), Instruction.Of(operation: ExpressionOp.Negate), Instruction.Of(operation: ExpressionOp.Abs), Instruction.Of(operation: ExpressionOp.Sign),
+            Instruction.Of(operation: ExpressionOp.ByteSwap), Instruction.Of(operation: ExpressionOp.ReverseBits), Instruction.Of(operation: ExpressionOp.Negate), Instruction.Of(operation: ExpressionOp.Absolute), Instruction.Of(operation: ExpressionOp.Sign),
             Instruction.Constant(value: 12m), Instruction.Of(operation: ExpressionOp.ParallelBitExtract), Instruction.Constant(value: 12m), Instruction.Of(operation: ExpressionOp.ParallelBitDeposit),
             Instruction.Constant(value: 1m), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.BitField),
             Instruction.Constant(value: 1m), Instruction.Constant(value: 1m), Instruction.Constant(value: 2m), Instruction.Of(operation: ExpressionOp.BitInsert),
         ];
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "target",
                     value: 0L
                 )],
@@ -424,13 +408,13 @@ public sealed class WorldExpressionVocabularyLawTests {
     [Fact]
     public void IntCellsSpanTheWholeLongAndBitboardArithmeticIsExact() {
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "board",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "big",
                     value: long.MaxValue
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "seen",
                     value: 0L
                 )],
@@ -456,7 +440,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Mode: ActionTriggerMode.Edge,
                     Gate: new ActionPredicate.CompareState(
                         State: "big",
-                        Comparison: ActionStateComparison.Greater,
+                        Comparison: ExpressionOp.Greater,
                         Value: 140_737_488_355_327m
                     ),
                     Effects: [new ActionEffect.SetState(
@@ -494,21 +478,21 @@ public sealed class WorldExpressionVocabularyLawTests {
     public void ModuloComparisonsAndSelectComposeInBothKinds() {
         var half = FixedQ4816.FromRawBits(value: (FixedQ4816.One.Value / 2L)).Value;
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "pos",
                     value: 37L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "total",
                     value: 15L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "ace",
                     value: 0L
-                ), FixedSlot(
+                ), StateFixtures.FixedSlot(
                     name: "frac",
-                    value: 0L
-                ), FixedSlot(
+                    rawBits: 0L
+                ), StateFixtures.FixedSlot(
                     name: "pick",
-                    value: 0L
+                    rawBits: 0L
                 )],
             rules: [
                 new WorldRule(
@@ -521,7 +505,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                         Instruction.Constant(value: 7m),
                         Instruction.Of(operation: ExpressionOp.Add),
                         Instruction.Constant(value: 40m),
-                        Instruction.Of(operation: ExpressionOp.Modulo),
+                        Instruction.Of(operation: ExpressionOp.Remainder),
                     ])
                         )]
                 ),
@@ -550,7 +534,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                             Expression: new ExpressionProgram(Instructions: [
                         Instruction.Constant(value: 2.5m),
                         Instruction.Constant(value: 1m),
-                        Instruction.Of(operation: ExpressionOp.Modulo),
+                        Instruction.Of(operation: ExpressionOp.Remainder),
                     ])
                         )]
                 ),
@@ -608,19 +592,19 @@ public sealed class WorldExpressionVocabularyLawTests {
     [Fact]
     public void ParallelBitsAndBitFieldsPackAndUnpackAndRefuseFieldsThatLeaveTheCarrier() {
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "packed",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "spread",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "field",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "inserted",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "refused",
                     value: 7L
                 )],
@@ -718,26 +702,27 @@ public sealed class WorldExpressionVocabularyLawTests {
             )
         );
     }
-    [InlineData(8L, 0x80L, true)]
-    [InlineData(64L, long.MinValue, true)]
-    [InlineData(7L, 1L, false)]
-    [InlineData(8L, 256L, false)]
+    [InlineData(8L, 0x80L, true, 0x0101010101010101L, unchecked((long)0x8080808080808080UL))]
+    [InlineData(64L, long.MinValue, true, 1L, long.MinValue)]
+    [InlineData(7L, 1L, true, unchecked((long)0x8102040810204081UL), unchecked((long)0x8102040810204081UL))]
+    [InlineData(65L, 1L, false, 5L, 7L)]
+    [InlineData(8L, 256L, false, 5L, 7L)]
     [Theory]
-    public void ReplicationReadsLiveOperandsAndRefusesTheWholeTransaction(long width, long pattern, bool accepted) {
+    public void ReplicationReadsLiveOperandsAndRefusesTheWholeTransaction(long width, long pattern, bool accepted, long mask, long repeated) {
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "width",
                     value: width
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "pattern",
                     value: pattern
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "mask",
                     value: 5
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "repeated",
                     value: 7
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "failed",
                     value: 0
                 )],
@@ -777,22 +762,14 @@ public sealed class WorldExpressionVocabularyLawTests {
             )
         );
         Assert.Equal(
-            (accepted
-            ? ((width == 64)
-                ? 1L
-                : 0x0101010101010101L)
-            : 5L),
+            mask,
             Value(
                 fixture: fixture,
                 row: "mask"
             )
         );
         Assert.Equal(
-            (accepted
-            ? ((width == 64)
-                ? long.MinValue
-                : unchecked((long)0x8080808080808080UL))
-            : 7L),
+            repeated,
             Value(
                 fixture: fixture,
                 row: "repeated"
@@ -802,16 +779,16 @@ public sealed class WorldExpressionVocabularyLawTests {
     [Fact]
     public void ShiftCountAndZeroDivisorRefuseTransactionallyWhileMinusOneModuloIsZero() {
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "target",
                     value: 5L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "failed",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "wrapped",
                     value: long.MinValue
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "zero",
                     value: 9L
                 )],
@@ -843,7 +820,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                                     Expression: new ExpressionProgram(Instructions: [
                             Instruction.Constant(value: 1m),
                             Instruction.Constant(value: 0m),
-                            Instruction.Of(operation: ExpressionOp.Modulo),
+                            Instruction.Of(operation: ExpressionOp.Remainder),
                         ])
                                 )],
                             OnFailure: [new ActionEffect.AddState(
@@ -860,7 +837,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                             Expression: new ExpressionProgram(Instructions: [
                         Instruction.Operand(name: "wrapped"),
                         Instruction.Constant(value: -1m),
-                        Instruction.Of(operation: ExpressionOp.Modulo),
+                        Instruction.Of(operation: ExpressionOp.Remainder),
                     ])
                         )]
                 ),
@@ -896,25 +873,25 @@ public sealed class WorldExpressionVocabularyLawTests {
     [Fact]
     public void ZeroCensusSaturatesAtSixtyFourAndCarrierMinimumRefusesNegation() {
         var definition = Document(
-            state: [Slot(
+            state: [StateFixtures.IntSlot(
                     name: "zero",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "lead",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "trail",
                     value: 0L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "low",
                     value: 7L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "min",
                     value: long.MinValue
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "target",
                     value: 5L
-                ), Slot(
+                ), StateFixtures.IntSlot(
                     name: "failed",
                     value: 0L
                 )],
@@ -954,7 +931,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Effects: [new ActionEffect.Transaction(
                             Effects: [new ActionEffect.SetState(
                                     State: "target",
-                                    Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "min"), Instruction.Of(operation: ExpressionOp.Abs)])
+                                    Expression: new ExpressionProgram(Instructions: [Instruction.Operand(name: "min"), Instruction.Of(operation: ExpressionOp.Absolute)])
                                 )],
                             OnFailure: [new ActionEffect.AddState(
                                     State: "failed",
@@ -979,15 +956,15 @@ public sealed class WorldExpressionVocabularyLawTests {
             ]
         );
         var censusInFixed = Document(
-            state: [FixedSlot(
+            state: [StateFixtures.FixedSlot(
                     name: "target",
-                    value: 0L
+                    rawBits: 0L
                 )],
             rules: [new WorldRule(
                     Name: Name(value: "fixed-census"),
                     Effects: [new ActionEffect.SetState(
                             State: "target",
-                            Expression: new ExpressionProgram(Instructions: [Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.PopCount)])
+                            Expression: new ExpressionProgram(Instructions: [Instruction.Constant(value: 1m), Instruction.Of(operation: ExpressionOp.SetBitCount)])
                         )]
                 )]
         );

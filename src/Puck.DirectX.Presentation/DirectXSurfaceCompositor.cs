@@ -4,9 +4,7 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
-using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
-using Puck.DirectX.Messages;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
@@ -45,32 +43,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     // the waitable instead — the DXGI analogue of Vulkan's vkWaitForPresentKHR.
     private const uint DxgiSwapChainFlagFrameLatencyWaitableObject = 0x00000040; // DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
     private const uint FrameLatencyWaitTimeoutMilliseconds = 100; // bound so a stalled/occluded present pipeline can never hang the pump
-    private const string BlitPixelHlsl = """
-        Texture2D<float4> g_Source : register(t0);
-        SamplerState g_Sampler : register(s0);
-        float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
-            return g_Source.Sample(g_Sampler, uv);
-        }
-        """;
-    private const string BlitVertexHlsl = """
-        struct VSOutput {
-            float4 Position : SV_Position;
-            float2 TexCoord : TEXCOORD0;
-        };
-        VSOutput main(uint id : SV_VertexID) {
-            float2 uv = float2(id == 1u ? 2.0 : 0.0, id == 2u ? 2.0 : 0.0);
-            VSOutput o;
-            o.TexCoord = uv;
-            o.Position = float4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.0, 1.0);
-            return o;
-        }
-        """;
-
-    private static byte[]? BlitPixelBytecode;
-    private static byte[]? BlitVertexBytecode;
+    // The blit's build-compiled DXIL (Assets/Shaders/surface-blit.*.hlsl), read from the shader directory.
+    private const string BlitPixelFileName = "surface-blit.frag.dxil";
+    private const string BlitVertexFileName = "surface-blit.vert.dxil";
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
-    private readonly IDirectXShaderCompilerApi m_shaderCompiler;
+    private readonly string m_shaderDirectory;
     private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
     private readonly DXGI_FORMAT m_swapChainFormat;
     private readonly PresentMode m_presentMode;
@@ -122,22 +100,23 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <summary>Initializes a new instance of the <see cref="DirectXSurfaceCompositor"/> class.</summary>
     /// <param name="commandListRecorder">Records draw commands into the per-frame command list.</param>
     /// <param name="presentationOptions">The neutral present-mode and surface-format preferences.</param>
-    /// <param name="shaderCompiler">Compiles the blit vertex and pixel shaders to bytecode.</param>
+    /// <param name="shaderDirectory">The directory holding the blit's DXIL, <c>surface-blit.vert.dxil</c> and
+    /// <c>surface-blit.frag.dxil</c>, which the build compiles; nothing compiles at run time.</param>
     /// <param name="surfaceTransferFactory">Creates the shared-texture importer used for cross-device surfaces.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, or <paramref name="shaderCompiler"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, <paramref name="shaderDirectory"/>, or <paramref name="surfaceTransferFactory"/> is <see langword="null"/>.</exception>
     public DirectXSurfaceCompositor(
         IDirectXCommandListRecorder commandListRecorder,
         PresentationOptions presentationOptions,
-        IDirectXShaderCompilerApi shaderCompiler,
+        string shaderDirectory,
         IGpuSurfaceTransferFactory surfaceTransferFactory
     ) {
         ArgumentNullException.ThrowIfNull(commandListRecorder);
         ArgumentNullException.ThrowIfNull(presentationOptions);
-        ArgumentNullException.ThrowIfNull(shaderCompiler);
+        ArgumentNullException.ThrowIfNull(shaderDirectory);
         ArgumentNullException.ThrowIfNull(surfaceTransferFactory);
 
         m_commandListRecorder = commandListRecorder;
-        m_shaderCompiler = shaderCompiler;
+        m_shaderDirectory = shaderDirectory;
         m_surfaceTransferFactory = surfaceTransferFactory;
         m_presentMode = presentationOptions.PresentMode;
         // Map the neutral surface format to the back-buffer DXGI format (both are valid flip-model formats);
@@ -198,7 +177,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
         CreateSrvHeap(device: device);
-        CreateBlitPipeline(device: device);
+        CreateBlitPipeline(
+            device: device,
+            library: deviceContext.PipelineLibrary
+        );
         CreateCommandInfrastructure(device: device);
 
         // The blit draw command is invariant for the compositor's whole activation lifetime — every field it
@@ -236,7 +218,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         WaitForFrameSlot();
 
         // The full-drain WaitIdle this replaced also flushed the D3D12 debug-layer message queue every frame
-        // (opt-in via PUCK_D3D12_DEBUG); the per-slot wait above has nothing to do with that queue, so the drain
+        // (opt-in via GpuDeviceOptions.DebugLayers); the per-slot wait above has nothing to do with that queue, so the drain
         // is called directly to keep the same per-frame cadence.
         deviceContext.DrainDebugMessages();
 
@@ -711,18 +693,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         }
     }
     private void CreateRtvHeap(ID3D12Device* device) {
-        var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
-            Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
-            NumDescriptors = FrameCount,
-            Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
-        };
-
-        device->CreateDescriptorHeap(
-            pDescriptorHeapDesc: in heapDesc,
-            ppvHeap: out var rtvHeap,
-            riid: ID3D12DescriptorHeap.IID_Guid
-        );
-        m_rtvHeap = ((nint)rtvHeap);
+        m_rtvHeap = ((nint)DirectXDescriptorHeaps.Create(
+            count: FrameCount,
+            device: device,
+            shaderVisible: false,
+            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
+        ));
         m_rtvStride = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     }
     private void AcquireBackBuffers(ID3D12Device* device) {
@@ -756,49 +732,47 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // One SRV: the blit samples a SINGLE source texture into the swapchain back buffer. `WriteSrv` always writes
         // slot 0. This is deliberate scope — the compositor is a single-source present, not a multi-layer compositor;
         // adding more source layers would require sizing this heap from the layer count and a per-slot WriteSrv.
-        var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
-            Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-            NumDescriptors = 1,
-            Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        };
-
-        device->CreateDescriptorHeap(
-            pDescriptorHeapDesc: in heapDesc,
-            ppvHeap: out var srvHeap,
-            riid: ID3D12DescriptorHeap.IID_Guid
+        var srvHeap = DirectXDescriptorHeaps.Create(
+            count: 1,
+            device: device,
+            shaderVisible: true,
+            type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
         );
+
         m_srvHeap = ((nint)srvHeap);
-        BlitDescriptorGpuHandle = GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)srvHeap)).ptr;
+        BlitDescriptorGpuHandle = GetGpuHeapStart(heap: srvHeap).ptr;
         // A fresh SRV heap has no descriptor written yet; force the next Blit to write one.
         m_lastBlitResource = 0;
     }
-    private void CreateBlitPipeline(ID3D12Device* device) {
-        BlitVertexBytecode ??= CompileShaderToBytes(
-            entryPoint: "main",
-            source: BlitVertexHlsl,
-            sourceName: "blit.vs",
-            target: "vs_5_0"
+    private void CreateBlitPipeline(ID3D12Device* device, DirectXPipelineLibrary? library) {
+        var vertexBytecode = File.ReadAllBytes(path: Path.Combine(
+            path1: m_shaderDirectory,
+            path2: BlitVertexFileName
+        ));
+        var pixelBytecode = File.ReadAllBytes(path: Path.Combine(
+            path1: m_shaderDirectory,
+            path2: BlitPixelFileName
+        ));
+        var rootSig = CreateBlitRootSignature(
+            device: device,
+            serialized: out var rootSigBlob
         );
-        BlitPixelBytecode ??= CompileShaderToBytes(
-            entryPoint: "main",
-            source: BlitPixelHlsl,
-            sourceName: "blit.ps",
-            target: "ps_5_0"
-        );
-
-        var rootSig = CreateBlitRootSignature(device: device);
         nint pso;
 
-        fixed (byte* pVs = BlitVertexBytecode)
-        fixed (byte* pPs = BlitPixelBytecode) {
+        fixed (byte* pVs = vertexBytecode)
+        fixed (byte* pPs = pixelBytecode) {
             pso = CreateBlitPso(
                 device: device,
+                library: library,
+                pixelBytecode: pixelBytecode,
                 rootSignature: rootSig,
+                rootSignatureBlob: rootSigBlob,
+                vertexBytecode: vertexBytecode,
                 renderTargetFormat: m_swapChainFormat,
                 vsHandle: ((nint)pVs),
-                vsLength: ((nuint)BlitVertexBytecode.Length),
+                vsLength: ((nuint)vertexBytecode.Length),
                 psHandle: ((nint)pPs),
-                psLength: ((nuint)BlitPixelBytecode.Length)
+                psLength: ((nuint)pixelBytecode.Length)
             );
         }
 
@@ -813,28 +787,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             SlotByBinding = [0],
         });
     }
-    private byte[] CompileShaderToBytes(string source, string sourceName, string entryPoint, string target) {
-        using var bytecode = m_shaderCompiler.Compile(request: new DirectXShaderCompileRequest(
-            EntryPoint: entryPoint,
-            HlslSource: source,
-            SourceName: sourceName,
-            Target: target
-        ));
-
-        var bytes = new byte[((int)bytecode.BufferLength)];
-
-        fixed (byte* destination = bytes) {
-            Buffer.MemoryCopy(
-                source: ((void*)bytecode.BufferPointer),
-                destination: destination,
-                destinationSizeInBytes: bytes.Length,
-                sourceBytesToCopy: bytes.Length
-            );
-        }
-
-        return bytes;
-    }
-    private static nint CreateBlitRootSignature(ID3D12Device* device) {
+    private static nint CreateBlitRootSignature(ID3D12Device* device, out byte[] serialized) {
         var srvRange = new D3D12_DESCRIPTOR_RANGE {
             BaseShaderRegister = 0,
             NumDescriptors = 1,
@@ -867,12 +820,17 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         return DirectXRootSignatures.Create(
             description: in rootSigDesc,
-            device: device
+            device: device,
+            serialized: out serialized
         );
     }
     private static nint CreateBlitPso(
         ID3D12Device* device,
+        DirectXPipelineLibrary? library,
         nint rootSignature,
+        byte[] rootSignatureBlob,
+        byte[] vertexBytecode,
+        byte[] pixelBytecode,
         DXGI_FORMAT renderTargetFormat,
         nint vsHandle,
         nuint vsLength,
@@ -933,6 +891,14 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE,
         };
         psoDesc.RTVFormats._0 = renderTargetFormat;
+
+        if (library is not null) {
+            return library.CreateGraphicsPipeline(
+                description: in psoDesc,
+                device: device,
+                identity: [vertexBytecode, pixelBytecode, rootSignatureBlob, BitConverter.GetBytes(value: ((int)renderTargetFormat))]
+            );
+        }
 
         void* pso;
         var psoIid = ID3D12PipelineState.IID_Guid;

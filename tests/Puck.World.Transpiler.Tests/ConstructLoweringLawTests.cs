@@ -19,10 +19,10 @@ public class ConstructLoweringLawTests {
     private static JsonNode? Resolve(JsonObject document, string pointer) {
         JsonNode? node = document;
 
-        foreach (var segment in pointer.Split(separator: '/', options: StringSplitOptions.RemoveEmptyEntries)) {
+        foreach (var segment in pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/')) {
             node = (node switch {
                 JsonObject obj => obj[propertyName: segment],
-                JsonArray array when (int.TryParse(s: segment, result: out var index) && (index >= 0) && (index < array.Count)) => array[index],
+                JsonArray array when (int.TryParse(result: out var index, s: segment) && (index >= 0) && (index < array.Count)) => array[index],
                 _ => null,
             });
 
@@ -149,7 +149,6 @@ public class ConstructLoweringLawTests {
     }
 
     public static TheoryData<string> Described() => new(values: WorldConstructs.Table.Keywords);
-
     [Fact]
     public void EveryDescribedConstructThatReachesADocumentCarriesAProbe() {
         var table = WorldConstructs.Table;
@@ -287,7 +286,7 @@ public class ConstructLoweringLawTests {
             comparisonType: StringComparison.Ordinal
         )) {
             foreach (var member in construct!.Members) {
-                var seen = (member.DocumentNode is { } node
+                var seen = ((member.DocumentNode is { } node)
                     ? (elsewhereKeys.TryGetValue(
                         key: node,
                         value: out var found

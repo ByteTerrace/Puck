@@ -1,9 +1,9 @@
 /**
  * Loads and verifies the official manifest, then exposes lazy, hash-verified access to every
- * object it names. Nothing here fetches until asked: `documents`/`composed`/`assets` resolve one
+ * object it names. Nothing here fetches until asked: `sources`/`documents`/`composed`/`assets` resolve one
  * name to its verified text on first `get`, cached for the life of the returned `OfficialLoad`.
  */
-import { type ByteStore, createByteStore, manifestCacheKey } from "./byteStore";
+import { type ByteStore, createByteStore, manifestCacheKey, readThroughVerified } from "./byteStore";
 import {
   type ManifestAssetEntry,
   type ManifestBuild,
@@ -11,11 +11,12 @@ import {
   type ManifestDocumentEntry,
   type ManifestEngineFile,
   type ManifestFileEntry,
+  type ManifestSourceEntry,
   type OfficialManifest,
   parseManifest,
 } from "./manifest";
 import { type ResolvedOfficial } from "./officialBase";
-import { OfficialRefusal, verifyBytes } from "./verify";
+import { OfficialRefusal } from "./verify";
 
 export type FetchLike = typeof fetch;
 
@@ -36,6 +37,8 @@ export interface OfficialLoad {
   readonly manifest: OfficialManifest;
   readonly build: ManifestBuild;
   readonly schemaBundle: unknown;
+  /** Every authoring file, by worlds-relative path. */
+  readonly sources: LazyOfficialSet;
   readonly documents: LazyOfficialSet;
   readonly composed: LazyOfficialSet;
   readonly assets: LazyOfficialSet;
@@ -53,25 +56,16 @@ async function fetchBytes(fetchImpl: FetchLike, url: string): Promise<Uint8Array
   return new Uint8Array(await response.arrayBuffer());
 }
 
-/** Fetches (or serves from the byte store) `entry`'s bytes, verifying on every network fetch. */
+/** `entry`'s bytes from the byte store or the network, verified against the manifest either way
+ * (`readThroughVerified`): a tampered stored copy is fetched again and replaced, and a mismatch caches nothing. */
 function fetchVerifiedBytes(
   official: ResolvedOfficial,
   fetchImpl: FetchLike,
   byteStore: ByteStore,
   entry: ManifestFileEntry,
 ): Promise<Uint8Array> {
-  return (async () => {
-    const stored = await byteStore.get(entry.hash);
-    if (stored) {
-      return stored;
-    }
-    const url = official.objectUrl(entry.path).href;
-    const bytes = await fetchBytes(fetchImpl, url);
-    // A mismatch throws here, before the store is ever touched — caches nothing on refusal.
-    await verifyBytes(entry.path, bytes, entry.hash);
-    await byteStore.put(entry.hash, bytes, entry.contentType);
-    return bytes;
-  })();
+  return readThroughVerified(byteStore, entry.path, entry.hash, entry.contentType, () =>
+    fetchBytes(fetchImpl, official.objectUrl(entry.path).href));
 }
 
 function buildLazySet<T extends ManifestFileEntry & { name: string }>(
@@ -145,6 +139,7 @@ export async function loadOfficial(
   );
   const schemaBundle: unknown = JSON.parse(schemaBundleText);
 
+  const sources = buildLazySet<ManifestSourceEntry>(official, fetchImpl, byteStore, manifest.sources);
   const documents = buildLazySet<ManifestDocumentEntry>(official, fetchImpl, byteStore, manifest.documents);
   const composed = buildLazySet<ManifestComposedEntry>(official, fetchImpl, byteStore, manifest.composed);
   const assets = buildLazySet<ManifestAssetEntry>(
@@ -171,6 +166,7 @@ export async function loadOfficial(
     manifest,
     build: manifest.build,
     schemaBundle,
+    sources,
     documents,
     composed,
     assets,
@@ -178,4 +174,16 @@ export async function loadOfficial(
     engineFiles,
     source,
   };
+}
+
+/** The commit the manifest's generator was built at: the world schema bundle's own `x-puck.commit`, the one build
+ * identity a manifest carries for the code that wrote it, or `null` when the bundle names none. `build.commit`
+ * names the worlds tree instead. */
+export function generatorCommit(official: Pick<OfficialLoad, "schemaBundle">): string | null {
+  const bundle = official.schemaBundle;
+  if (typeof bundle !== "object" || bundle === null) return null;
+  const identity = (bundle as Record<string, unknown>)["x-puck"];
+  if (typeof identity !== "object" || identity === null) return null;
+  const commit = (identity as Record<string, unknown>).commit;
+  return typeof commit === "string" ? commit : null;
 }

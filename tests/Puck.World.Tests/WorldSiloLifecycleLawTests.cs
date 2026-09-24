@@ -1,5 +1,7 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.Storage;
@@ -50,28 +52,111 @@ public sealed class WorldSiloLifecycleLawTests {
             userMessage: result.Detail
         );
     }
+    // A stepping pump advances the rows one master step per pass, so an operation that completes at a step boundary
+    // is driven by steps taken, never by time waited.
     private static async Task PumpAsync(WorldSiloHost host, Task operation, bool step = false) {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 20));
-        while (!operation.IsCompleted) {
-            host.DrainActivationMailbox();
-            if (
-                step &&
-                !host.IsDraining
-            ) { host.Instances.StepInstances(masterDeltaTicks: Fixtures.StepTicks); host.NoteMasterStep(stepTicks: Fixtures.StepTicks); }
-            await Task.Delay(
-                1,
-                deadline.Token
+        if (!step) {
+            await WorldSiloHost.PumpActivationMailboxesAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                hosts: [host],
+                operation: operation
             );
+
+            return;
+        }
+
+        while (!operation.IsCompleted) {
+            TestContext.Current.CancellationToken.ThrowIfCancellationRequested();
+            host.DrainActivationMailbox();
+            if (!host.IsDraining) { host.Instances.StepInstances(masterDeltaTicks: Fixtures.StepTicks); host.NoteMasterStep(stepTicks: Fixtures.StepTicks); }
+            await Task.Yield();
         }
         await operation;
         host.DrainActivationMailbox();
     }
 
+    // Law: a row whose published listen endpoint another socket already holds fails its activation with the endpoint
+    // named, the row does not stay admitted, and the host keeps that failure for the silo's unsupported-environment exit.
+    [Fact]
+    public async Task ARowDoorThatCannotBindItsEndpointFailsActivationAndIsKeptForTheExit() {
+        using var directory = new TemporaryDirectory();
+        using var output = new BufferedConsoleOutput();
+        using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+        using var occupant = new System.Net.Sockets.Socket(
+            addressFamily: System.Net.Sockets.AddressFamily.InterNetwork,
+            protocolType: System.Net.Sockets.ProtocolType.Udp,
+            socketType: System.Net.Sockets.SocketType.Dgram
+        );
+
+        occupant.Bind(localEP: new System.Net.IPEndPoint(
+            address: System.Net.IPAddress.Loopback,
+            port: 0
+        ));
+        var endpoint = occupant.LocalEndPoint!.ToString()!;
+        var keyFile = Path.Combine(
+            path1: directory.RootPath,
+            path2: "world.key"
+        );
+
+        File.WriteAllBytes(
+            keyFile,
+            key.ExportPkcs8PrivateKey()
+        );
+        var identity = new WorldAuthorityIdentity(
+            Owner: Guid.NewGuid(),
+            World: SafeName.Parse(candidate: "row")
+        );
+        var store = PuckStorageTestComposition.BuildStore();
+        var backend = new WorldAuthorityBlobStore(
+            store: store,
+            target: new DirectoryObjectStorageTarget(directory.RootPath)
+        );
+        var definition = Fixtures.BuildDocument() with {
+            HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = endpoint, Presentation = WorldHostPresentation.None },
+        };
+
+        Assert.True(condition: (await backend.PublishDefinitionAsync(
+            identity,
+            definition,
+            TestContext.Current.CancellationToken
+        )).Ok);
+        var host = Host(
+            directory.RootPath,
+            store,
+            output,
+            [new(
+                    identity.Owner,
+                    identity.World,
+                    new(KeyFile: keyFile)
+                )]
+        );
+        using var instances = host.Instances;
+
+        Assert.Null(@object: host.HostUnavailable);
+        var refused = await Assert.ThrowsAsync<Puck.Abstractions.ListenEndpointUnavailableException>(testCode: () => PumpAsync(
+            host,
+            host.ActivateAsync(
+                identity,
+                TestContext.Current.CancellationToken
+            )
+        ));
+
+        Assert.Equal(
+            endpoint,
+            refused.Endpoint
+        );
+        Assert.Same(
+            refused,
+            host.HostUnavailable
+        );
+        Assert.False(condition: host.Instances.TryGet(
+            identity.World.Value,
+            out _
+        ));
+    }
     [Fact]
     public async Task CancellationBeforeThePumpDoesNotFreezeTheHost() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         var host = Host(
             directory.RootPath,
@@ -92,7 +177,7 @@ public sealed class WorldSiloLifecycleLawTests {
     [InlineData(true)]
     [Theory]
     public async Task ConcurrentDrainCallersObserveTheirOwnCancellationAndCanRetry(bool cancelFirst) {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         var host = Host(
             directory.RootPath,
@@ -126,7 +211,7 @@ public sealed class WorldSiloLifecycleLawTests {
     [InlineData(true)]
     [Theory]
     public async Task DuplicateActivationKeepsItsFenceAndReplacementRejectsTheOldWriter(bool colocated) {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var keyFile = Path.Combine(
@@ -148,9 +233,13 @@ public sealed class WorldSiloLifecycleLawTests {
             target: new DirectoryObjectStorageTarget(directory.RootPath)
         );
         var definition = Fixtures.BuildDocument() with {
-            HostRaw = Fixtures.StandardHost with { Authority = (colocated
+            HostRaw = Fixtures.StandardHost with {
+                Authority = (colocated
             ? null
-            : "localhost:7825"), Listen = null, Presentation = WorldHostPresentation.None },
+            : "localhost:7825"),
+                Listen = null,
+                Presentation = WorldHostPresentation.None,
+            },
         };
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(
@@ -275,7 +364,7 @@ public sealed class WorldSiloLifecycleLawTests {
     }
     [Fact]
     public async Task FailedDeactivationAndFinalSaveRetainTheRowAndAllowDurableDrainRetry() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var keyFile = Path.Combine(
@@ -366,7 +455,7 @@ public sealed class WorldSiloLifecycleLawTests {
     [InlineData(true)]
     [Theory]
     public async Task PublishedReloadUsesExistingRebuildAndCommitsOnlyAfterCheckpoint(bool failCheckpoint) {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var keyFile = Path.Combine(
@@ -468,10 +557,12 @@ public sealed class WorldSiloLifecycleLawTests {
         ));
         var rebuilds = 0;
 
-        active!.Server.EchoTap += echo => { if (
+        active!.Server.EchoTap += echo => {
+            if (
             (echo.Kind == WorldEditEchoKind.Rebuild) &&
             !echo.Rejected
-        ) { rebuilds++; } };
+        ) { rebuilds++; }
+        };
         store.Fail = failCheckpoint;
         var update = host.ReloadAsync(
             identity,
@@ -627,7 +718,7 @@ public sealed class WorldSiloLifecycleLawTests {
     [InlineData(true)]
     [Theory]
     public async Task ReplacementActivationUsesPublishedNetworkBindingAfterCheckpointRecovery(bool listen) {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var keyFile = Path.Combine(
@@ -679,21 +770,12 @@ public sealed class WorldSiloLifecycleLawTests {
             original,
             original.DrainAsync(ct: TestContext.Current.CancellationToken)
         );
-        string? endpoint = null;
-
-        if (listen) {
-            using var reservation = new System.Net.Sockets.Socket(
-                addressFamily: System.Net.Sockets.AddressFamily.InterNetwork,
-                protocolType: System.Net.Sockets.ProtocolType.Udp,
-                socketType: System.Net.Sockets.SocketType.Dgram
-            );
-
-            reservation.Bind(localEP: new System.Net.IPEndPoint(
-                address: System.Net.IPAddress.Loopback,
-                port: 0
-            ));
-            endpoint = reservation.LocalEndPoint!.ToString();
-        }
+        // Port 0 has the door's own bind pick a free port, so no other process can take a port this law reserved and
+        // released before the replacement binds it.
+        var endpoint = (listen
+            ? "127.0.0.1:0"
+            : null
+        );
         var published = definition with { HostRaw = definition.Host with { Authority = "play.puck.byteterrace.com:7825", Listen = endpoint } };
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(
@@ -734,8 +816,22 @@ public sealed class WorldSiloLifecycleLawTests {
         );
         Assert.Equal(
             endpoint,
-            row.Door!.ListenEndpoint
+            row.ListenEndpoint
         );
+        if (listen) {
+            var bound = System.Net.IPEndPoint.Parse(s: row.Door!.ListenEndpoint!);
+
+            Assert.Equal(
+                System.Net.IPAddress.Loopback,
+                bound.Address
+            );
+            Assert.NotEqual(
+                0,
+                bound.Port
+            );
+        } else {
+            Assert.Null(@object: row.Door!.ListenEndpoint);
+        }
         await PumpAsync(
             replacement,
             replacement.ReloadAsync(
@@ -760,6 +856,131 @@ public sealed class WorldSiloLifecycleLawTests {
             replacement,
             replacement.DrainAsync(ct: TestContext.Current.CancellationToken)
         );
+    }
+    // Law: an activated row resolves views.pipelines rows against the executable's own directory — a hosted
+    // world's definition arrives from cloud storage, never a local file, so it has no document directory of its
+    // own — rather than refusing every override with SourcesUnattached, and the same boot check the desktop host
+    // runs right after loading a document runs here too: a bad override value in the activated document is
+    // refused BY NAME at activation, before the row ever becomes active.
+    [Fact]
+    public async Task AnActivatedRowAttachesPipelineSourcesAndRunsTheBootBindCheck() {
+        using var directory = new TemporaryDirectory();
+        using var output = new BufferedConsoleOutput();
+        // A hosted document has no directory, so it names its pipeline by an absolute path.
+        var pipelinePath = PuckPaths.Normalize(path: Path.Combine(
+            path1: directory.RootPath,
+            path2: "silo.pipeline.json"
+        ));
+
+        File.Copy(
+            destFileName: pipelinePath,
+            sourceFileName: Path.Combine(
+                path1: AuthoredGameFixtures.Root,
+                path2: "src/Puck.World/Assets/pipelines/ink.pipeline.json"
+            )
+        );
+
+        {
+            static WorldDefinition WithPipelineRow(string source, double exposure) {
+                var definition = Fixtures.BuildDocument();
+
+                return (definition with {
+                    HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Presentation = WorldHostPresentation.None },
+                    ViewsRaw = (definition.Views with {
+                        Pipelines = [
+                            new WorldViewPipeline(
+                                Name: "left",
+                                Source: source,
+                                Overrides: new Dictionary<string, JsonElement> {
+                                    ["visualize"] = JsonDocument.Parse(json: $"{{\"exposure\":{exposure.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}}}").RootElement.Clone(),
+                                }
+                            ),
+                        ],
+                    }),
+                });
+            }
+
+            var store = PuckStorageTestComposition.BuildStore();
+            var backend = new WorldAuthorityBlobStore(
+                store: store,
+                target: new DirectoryObjectStorageTarget(directory.RootPath)
+            );
+
+            async Task<(bool Activated, WorldSiloHost Host, WorldAuthorityIdentity Identity)> TryActivateAsync(string worldName, double exposure, string? source = null) {
+                using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+                var keyFile = Path.Combine(
+                    path1: directory.RootPath,
+                    path2: $"{worldName}.key"
+                );
+
+                File.WriteAllBytes(
+                    keyFile,
+                    key.ExportPkcs8PrivateKey()
+                );
+
+                var identity = new WorldAuthorityIdentity(
+                    Owner: Guid.NewGuid(),
+                    World: SafeName.Parse(candidate: worldName)
+                );
+
+                Assert.True(condition: (await backend.PublishDefinitionAsync(
+                    identity,
+                    WithPipelineRow(exposure: exposure, source: (source ?? pipelinePath)),
+                    TestContext.Current.CancellationToken
+                )).Ok);
+
+                var host = Host(
+                    directory.RootPath,
+                    store,
+                    output,
+                    [new(identity.Owner, identity.World, new(KeyFile: keyFile))]
+                );
+                var activation = host.ActivateAsync(
+                    identity,
+                    TestContext.Current.CancellationToken
+                );
+
+                await PumpAsync(
+                    host: host,
+                    operation: activation
+                );
+
+                return (await activation, host, identity);
+            }
+
+            // Control: a valid override activates, and the reader is attached with no directory of its own.
+            var (controlActivated, controlHost, controlIdentity) = await TryActivateAsync(exposure: 4, worldName: "row-good");
+
+            using (controlHost.Instances) {
+                Assert.True(condition: controlActivated);
+                Assert.True(condition: controlHost.Instances.TryGet(
+                    controlIdentity.World.Value,
+                    out var row
+                ));
+                Assert.NotNull(@object: row!.Server.PipelineSources);
+                Assert.Null(@object: row.Server.PipelineSources!.DocumentDirectory);
+            }
+
+            // Denied: a relative source in a document with no directory resolves nowhere, and is refused by name.
+            var (relativeActivated, relativeHost, _) = await TryActivateAsync(exposure: 4, source: "silo.pipeline.json", worldName: "row-relative");
+
+            using (relativeHost.Instances) {
+                Assert.False(condition: relativeActivated);
+
+            }
+
+            // Denied: an out-of-range override is refused at activation — the boot check — rather than installing
+            // an instance that can never accept it.
+            var (deniedActivated, deniedHost, deniedIdentity) = await TryActivateAsync(exposure: 4.5, worldName: "row-bad");
+
+            using (deniedHost.Instances) {
+                Assert.False(condition: deniedActivated);
+                Assert.False(condition: deniedHost.Instances.TryGet(
+                    deniedIdentity.World.Value,
+                    out _
+                ));
+            }
+        }
     }
 
     private sealed class FailingWrites(IObjectBlobStore inner) : IObjectBlobStore {

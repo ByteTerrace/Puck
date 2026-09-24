@@ -16,6 +16,10 @@
     {
       "id": "hearts",
       "source": "hearts.puck"
+    },
+    {
+      "id": "lineup",
+      "source": "lineup.puck"
     }
   ],
   "files": [
@@ -24,6 +28,7 @@
     "chess.puck",
     "chinese-checkers.puck",
     "hearts.puck",
+    "lineup.puck",
     "fonts/inter-regular.ttf",
     "fonts/Inter-LICENSE.txt"
   ]

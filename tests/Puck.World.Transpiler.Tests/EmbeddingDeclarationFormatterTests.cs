@@ -1,6 +1,3 @@
-using System.Text.Json.Nodes;
-using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Embeddings;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -39,61 +36,10 @@ public class EmbeddingDeclarationFormatterTests {
         }
 
         """;
-    private const string SampleVectorBase64 = "fwAAAAAAAAA";
-
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string source, EmbeddingLock lockFile) {
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            embeddings: lockFile,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
-    }
-    private static EmbeddingLock CreateSampleLock() {
-        var lockFile = new EmbeddingLock();
-        var space = new EmbeddingLockSpace(
-            dimensions: 8,
-            model: "text-embedding-3-small",
-            revision: "1"
-        );
-        var hash = EmbeddingLock.ComputeTextHash(text: "hello world");
-
-        space.Entries[hash] = new EmbeddingLockEntry(Text: "hello world", Vector: SampleVectorBase64);
-        lockFile.Spaces["lore"] = space;
-        return lockFile;
-    }
 
     [Fact]
-    public void FormattingEmbeddingSourceTwiceIsIdempotent() {
-        var pass1 = PuckFormat.Format(EmbeddingSource);
-        var pass2 = PuckFormat.Format(pass1);
-
-        Assert.Equal(
-            actual: pass2,
-            expected: pass1
-        );
-    }
-    [Fact]
-    public void FormattingPreservesLoweredJson() {
-        var lockFile = CreateSampleLock();
-
-        var (beforeJson, beforeDiagnostics) = Lower(lockFile: lockFile, source: EmbeddingSource);
-        var formatted = PuckFormat.Format(EmbeddingSource);
-
-        var (afterJson, afterDiagnostics) = Lower(lockFile: lockFile, source: formatted);
-
-        Assert.False(condition: beforeDiagnostics.HasErrors, userMessage: beforeDiagnostics.FormatReport(""));
-        Assert.False(condition: afterDiagnostics.HasErrors, userMessage: afterDiagnostics.FormatReport(""));
-
-        var mismatch = JsonMismatch.Find(
-            actual: afterJson,
-            expected: beforeJson,
-            path: "$"
-        );
-
-        Assert.Null(@object: mismatch);
-    }
+    public void FormattingEmbeddingSourceIsStable() => PuckFormat.AssertStable(
+        embeddings: WorldSources.LoreLock("text-embedding-3-small", "hello world"),
+        source: EmbeddingSource
+    );
 }

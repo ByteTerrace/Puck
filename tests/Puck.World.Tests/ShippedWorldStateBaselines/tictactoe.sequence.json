@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "games/tictactoe.world.json",
+  "world": "games/tictactoe.puck",
   "host": {
     "kind": "fixture",
     "path": "tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json"
@@ -12,14 +12,14 @@
     },
     {
       "set": {
-        "row": "a_tttMoveCell",
+        "row": "a$tttMoveCell",
         "key": "$value",
         "value": 4
       }
     },
     {
       "set": {
-        "row": "a_tttMoveRequest",
+        "row": "a$tttMoveRequest",
         "key": "$value",
         "value": 1
       }
@@ -29,14 +29,14 @@
     },
     {
       "set": {
-        "row": "a_tttMoveCell",
+        "row": "a$tttMoveCell",
         "key": "$value",
         "value": 0
       }
     },
     {
       "set": {
-        "row": "a_tttMoveRequest",
+        "row": "a$tttMoveRequest",
         "key": "$value",
         "value": 2
       }
@@ -46,14 +46,14 @@
     },
     {
       "set": {
-        "row": "b_tttMoveCell",
+        "row": "b$tttMoveCell",
         "key": "$value",
         "value": 8
       }
     },
     {
       "set": {
-        "row": "b_tttMoveRequest",
+        "row": "b$tttMoveRequest",
         "key": "$value",
         "value": 1
       }

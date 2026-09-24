@@ -1,0 +1,18 @@
+/* The preview registers: a sunken table well; a changed row carries a jade wash, a read-only value is set back. */
+.changed {
+  background-color: light-dark(var(--mantine-color-jade-0), color-mix(in oklab, var(--mantine-color-jade-4) 12%, transparent));
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.registerInput {
+  flex: 1;
+  min-width: rem(100px);
+  max-width: rem(260px);
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+}

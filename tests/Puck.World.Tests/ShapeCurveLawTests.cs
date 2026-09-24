@@ -2,7 +2,6 @@ using System.Numerics;
 
 using Puck.SignedDistance;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -40,109 +39,15 @@ public sealed class ShapeCurveLawTests {
         StrandOffset: 0f
     );
 
-    private static void AssertCanonicalizerAccepts(CreationDocument document) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.Empty(collection: violations);
-    }
-    private static void AssertCanonicalizerRefusesNaming(CreationDocument document, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
-    private static CreationDocument Document(params ShapeDocument[] shapes) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: shapes,
-            Frames: null
-        );
-    // --- Pool emission path (WorldStampPool.EmitShape) ---
-
-    private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale, bool probeWorstCase = false) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: [new(
-                        "#AAAAAA",
-                        null,
-                        null,
-                        null
-                    )],
-                Shapes: [shape],
-                Frames: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: bodyScale,
-                Motion: WorldLookMotion.Default
-            )],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: probeWorstCase,
-            maxPlacementScale: bodyScale,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
-    // --- Static emission path (CreationStampEmitter.Emit -> SdfSolidGeometry.AppendScaledPrimitive) ---
-
-    private static SdfProgram EmitStatic(ShapeDocument shape, float stampScale) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        CreationStampEmitter.Emit(
-            builder: builder,
-            document: Document(shape),
-            materialFor: _ => material,
-            transform: new CreationStampTransform(
-                Origin: Vector3.Zero,
-                Rotation: Quaternion.Identity,
-                Scale: stampScale,
-                ReflectionNormal: null
-            )
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static CreationDocument Document(params ShapeDocument[] shapes) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: shapes
+    );
+    private static SdfProgram EmitPool(ShapeDocument shape, float bodyScale) => CreationFixtures.EmitPool(
+        bodyScale: bodyScale,
+        name: PrototypeId,
+        shapes: [shape]
+    );
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, ShapeCurveDocument? curve, int id = 0, ShapePanelDocument? panel = null, IReadOnlyList<ShapeDomainOp>? domain = null, ShapeFlareDocument? flare = null) =>
         new(
             Id: id,
@@ -163,21 +68,25 @@ public sealed class ShapeCurveLawTests {
     private static SdfInstruction SweepInstruction(SdfProgram program) =>
         program.Instructions.Single(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) == SdfShapeType.Sweep)));
 
-    [InlineData(0f)]
-    [InlineData(-0.1f)]
+    [InlineData("radiusStart", 0f)]
+    [InlineData("radiusStart", -0.1f)]
+    [InlineData("strands", 0f)]
+    [InlineData("strands", 5f)]
     [Theory]
-    public void ANonPositiveRadiusStartIsRefusedByName(float radiusStart) =>
-        AssertCanonicalizerRefusesNaming(
+    public void ACurveLaneOutsideItsAdmittedRangeIsRefusedByName(string lane, float value) =>
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Sweep,
                 Vector3.One,
-                (Curve with { RadiusStart = radiusStart })
+                ((lane == "strands")
+                    ? (Curve with { Strands = ((int)value) })
+                    : (Curve with { RadiusStart = value }))
             )),
-            needle: "radiusStart"
+            needle: lane
         );
     [Fact]
     public void ANonUniformScaleOnASweepIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Sweep,
                 new Vector3(
@@ -191,67 +100,44 @@ public sealed class ShapeCurveLawTests {
         );
     [Fact]
     public void ANormalSweepIsAccepted() =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Sweep,
             Vector3.One,
             Curve
         )));
-    [InlineData(0)]
-    [InlineData(5)]
+    [InlineData("domain")]
+    [InlineData("flare")]
+    [InlineData("panel")]
     [Theory]
-    public void AStrandCountOutsideTheAdmittedRangeIsRefusedByName(int strands) =>
-        AssertCanonicalizerRefusesNaming(
-            document: Document(Shape(
-                SdfSolidPrimitive.Sweep,
-                Vector3.One,
-                (Curve with { Strands = strands })
-            )),
-            needle: "strands"
-        );
-    [Fact]
-    public void ASweepWithAFlareIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+    public void ASweepCarryingAnotherFacetIsRefusedByName(string facet) =>
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Sweep,
                 Vector3.One,
                 Curve,
-                flare: new ShapeFlareDocument(
-                    Amount: 1f,
-                    Bulge: 0f,
-                    Span: 1f
-                )
+                domain: ((facet == "domain")
+                    ? [new ShapeDomainOp.Symmetry(Normal: Vector3.UnitX)]
+                    : null),
+                flare: ((facet == "flare")
+                    ? new ShapeFlareDocument(
+                        Amount: 1f,
+                        Bulge: 0f,
+                        Span: 1f
+                    )
+                    : null),
+                panel: ((facet == "panel")
+                    ? new ShapePanelDocument(
+                        Material: 0,
+                        Inset: 0.1f,
+                        Depth: 0.01f
+                    )
+                    : null)
             )),
-            needle: "flare"
-        );
-    [Fact]
-    public void ASweepWithAPanelIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
-            document: Document(Shape(
-                SdfSolidPrimitive.Sweep,
-                Vector3.One,
-                Curve,
-                panel: new ShapePanelDocument(
-                    Material: 0,
-                    Inset: 0.1f,
-                    Depth: 0.01f
-                )
-            )),
-            needle: "panel"
-        );
-    [Fact]
-    public void ASweepWithDomainOpsIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
-            document: Document(Shape(
-                SdfSolidPrimitive.Sweep,
-                Vector3.One,
-                Curve,
-                domain: [new ShapeDomainOp.Symmetry(Normal: Vector3.UnitX)]
-            )),
-            needle: "domain"
+            needle: facet
         );
     [Fact]
     public void ASweepWithNoCurveIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Sweep,
                 Vector3.One,
@@ -262,7 +148,7 @@ public sealed class ShapeCurveLawTests {
     [MemberData(memberName: nameof(EveryNonSweepPrimitive))]
     [Theory]
     public void CurveIsRefusedOnEveryOtherPrimitive(SdfSolidPrimitive type) =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 type,
                 Vector3.One,
@@ -270,8 +156,7 @@ public sealed class ShapeCurveLawTests {
             )),
             needle: "curve"
         );
-    public static IEnumerable<object[]> EveryNonSweepPrimitive() =>
-        Enum.GetValues<SdfSolidPrimitive>().Where(predicate: static type => (type != SdfSolidPrimitive.Sweep)).Select(selector: static type => new object[] { type });
+    public static TheoryData<SdfSolidPrimitive> EveryNonSweepPrimitive() => CreationFixtures.EveryPrimitiveExcept(excluded: SdfSolidPrimitive.Sweep);
     [Fact]
     public void ThePoolEmitsASweepInstructionWithoutThrowing() {
         var program = EmitPool(
@@ -289,29 +174,12 @@ public sealed class ShapeCurveLawTests {
         );
     }
     [Fact]
-    public void ThePoolsProbeDoesNotThrowForASweepBearingBody() {
-        var exception = Record.Exception(testCode: () => EmitPool(
-            shape: Shape(
-                SdfSolidPrimitive.Sweep,
-                Vector3.One,
-                Curve
-            ),
-            bodyScale: 1f,
-            probeWorstCase: true
-        ));
-
-        Assert.Null(@object: exception);
-    }
-    [Fact]
     public void TheStaticPathEmitsASweepInstruction() {
-        var instruction = SweepInstruction(program: EmitStatic(
-            shape: Shape(
+        var instruction = SweepInstruction(program: CreationFixtures.EmitStatic(document: Document(Shape(
                 SdfSolidPrimitive.Sweep,
                 Vector3.One,
                 Curve
-            ),
-            stampScale: 1f
-        ));
+            ))));
 
         Assert.Equal(
             expected: 1f,

@@ -1,4 +1,5 @@
-using Puck.World.Protocol;
+using Puck.Commands;
+using System.Globalization;
 
 namespace Puck.World;
 
@@ -13,7 +14,7 @@ namespace Puck.World;
 /// destinations row and so have nothing for this type to resolve). Public rather than internal: this type carries
 /// no dependency on the composition root, since every type it touches (<see cref="WorldDefinition"/>,
 /// <see cref="WorldDestination"/>, <see cref="WorldGroupSelector"/>, <see cref="WorldGroup"/>,
-/// <see cref="WorldPrincipal"/>) already lives in this assembly, so it is declared here rather than in
+/// <see cref="Principal"/>) already lives in this assembly, so it is declared here rather than in
 /// <c>Puck.World</c> behind an <c>InternalsVisibleTo</c> grant. This also lets an in-process law in
 /// <c>tests/Puck.World.Tests</c> (which references this assembly but deliberately never <c>Puck.World</c> — see
 /// that project's own README) exercise the idempotence and generation-lifecycle rules directly.
@@ -61,6 +62,9 @@ public sealed class WorldSessionResolver {
     /// <summary>The fixed scope key every <see cref="WorldDestinationScope.Global"/> resolution shares.</summary>
     public const string GlobalScopeKey = "global";
 
+    // The kind half of a group-scoped key, "group:<id>".
+    private const string GroupScopeKind = "group";
+
     // A PURE function of resolution order — never wall-clock, RNG, or tick-of-entry (docs/architecture/worlds.md "Resolution
     // and transfer are ordered authority events"). Advances by exactly one per NEW generation minted, mirroring
     // WorldInstanceHost.m_freshCounters' own determinism shape one level up: within one process run, the Nth
@@ -105,12 +109,12 @@ public sealed class WorldSessionResolver {
     /// principal (for group-membership checks) alongside its currently-seated identity id, if any (for user-scope
     /// checks). Neither field is re-derived by this type: the caller (which already holds the population) reads
     /// both once, live, before calling.</summary>
-    /// <param name="Principal">The member's own principal — <see cref="WorldPrincipal.Seat"/> for a local seat.</param>
+    /// <param name="Principal">The member's own principal — <see cref="Principal.Seat"/> for a local seat.</param>
     /// <param name="IdentityId">The member's currently-seated owned-identity id, or <see langword="null"/> for an
     /// anonymous seat.</param>
-    public readonly record struct CohortMember(WorldPrincipal Principal, string? IdentityId);
+    public readonly record struct CohortMember(Principal Principal, string? IdentityId);
 
-    private static List<string> FindTaggedMemberships(IReadOnlyList<WorldGroup> groups, string tag, WorldPrincipal principal) {
+    private static List<string> FindTaggedMemberships(IReadOnlyList<WorldGroup> groups, string tag, Principal principal) {
         var matches = new List<string>();
 
         foreach (var group in groups) {
@@ -147,7 +151,7 @@ public sealed class WorldSessionResolver {
 
         return matches;
     }
-    private static bool GroupContains(IReadOnlyList<WorldGroup> groups, string groupId, WorldPrincipal principal) {
+    private static bool GroupContains(IReadOnlyList<WorldGroup> groups, string groupId, Principal principal) {
         foreach (var group in groups) {
             if (
                 (group is not null) &&
@@ -203,17 +207,23 @@ public sealed class WorldSessionResolver {
     // Injectivity holds ACROSS the global and scoped arms too: each arm opens with its own fixed, netstring-wrapped
     // KIND segment ("global" or "scoped") before any caller-supplied piece — two different fixed literals can never
     // agree byte-for-byte, so the two arms' whole segment sequences can never collide regardless of what a later
-    // segment (including a raw destinationName) contains. Every piece of the output is a netstring segment from its
-    // first byte; nothing raw or unwrapped appears anywhere in either arm.
+    // segment contains. Every piece of the output is a netstring segment from its first byte; nothing raw or unwrapped
+    // appears anywhere in either arm.
+    //
+    // The destination segment holds the destination's file-backed spelling (GeneratedName.ToFile: a generated
+    // 'link$west' is 'link~west'), so the directory an instance starts in never carries a '$'. ToFile is injective
+    // over every destination an admitted document names — none carries '~' (TryResolve refuses one) — so the segment
+    // keeps two destinations apart exactly as the raw name did.
     private static string MintInstanceName(string destinationName, string scopeKey, ulong generationId, WorldDestinationDurability durability) {
         string scoped;
+        var destination = GeneratedName.ToFile(name: destinationName);
 
         if (string.Equals(
             a: scopeKey,
             b: GlobalScopeKey,
             comparisonType: StringComparison.Ordinal
         )) {
-            scoped = $"{ScopedSegment(value: "global")}{ScopedSegment(value: destinationName)}";
+            scoped = $"{ScopedSegment(value: "global")}{ScopedSegment(value: destination)}";
         } else {
             // scopeKey is always exactly "user:<id>" or "group:<id>" here (TryResolveScopeKey's other two cases) —
             // decomposed rather than embedded whole because its own ':' is a character no instance name may ever
@@ -229,7 +239,17 @@ public sealed class WorldSessionResolver {
                 : scopeKey[(colon + 1)..]
             );
 
-            scoped = $"{ScopedSegment(value: "scoped")}{ScopedSegment(value: destinationName)}{ScopedSegment(value: scopeKind)}{ScopedSegment(value: scopeId)}";
+            // A group id is a document name, spelled file-backed like the destination; a user scope's id is the
+            // owned identity's own id and stands as it is.
+            if (string.Equals(
+                a: scopeKind,
+                b: GroupScopeKind,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                scopeId = GeneratedName.ToFile(name: scopeId);
+            }
+
+            scoped = $"{ScopedSegment(value: "scoped")}{ScopedSegment(value: destination)}{ScopedSegment(value: scopeKind)}{ScopedSegment(value: scopeId)}";
         }
 
         return ((durability == WorldDestinationDurability.Persisted)
@@ -237,6 +257,18 @@ public sealed class WorldSessionResolver {
             : $"{scoped}{ScopedSegment(value: generationId.ToString())}"
         );
     }
+
+    /// <summary>Returns the name of the fresh instance a transfer starts for a site: the generated
+    /// <c>&lt;site&gt;~&lt;ordinal&gt;</c> (<see cref="GeneratedName.AppendFile"/>), which no instance name an operator
+    /// writes can equal, since every such door refuses <see cref="GeneratedName.FileJoiner"/>.</summary>
+    /// <param name="site">The site's name.</param>
+    /// <param name="ordinal">The site's own draw count, from zero.</param>
+    /// <returns>The instance name.</returns>
+    public static string FreshInstanceName(string site, int ordinal) => GeneratedName.AppendFile(
+        name: site,
+        part: ordinal.ToString(provider: CultureInfo.InvariantCulture)
+    );
+
     // One length-prefixed, self-delimiting segment for MintInstanceName's scoped branch: its own decimal length, a
     // single '~' (never ambiguous with the length digits themselves — a digit and '~' can never be confused), then
     // exactly that many characters verbatim. No character this composes from is ever escaped or folded, which is
@@ -274,7 +306,7 @@ public sealed class WorldSessionResolver {
                         }
                     }
 
-                    scopeKey = $"group:{named.Group}";
+                    scopeKey = $"{GroupScopeKind}:{named.Group}";
                     reason = string.Empty;
 
                     return true;
@@ -320,7 +352,7 @@ public sealed class WorldSessionResolver {
                         }
                     }
 
-                    scopeKey = $"group:{resolvedGroupId}";
+                    scopeKey = $"{GroupScopeKind}:{resolvedGroupId}";
                     reason = string.Empty;
 
                     return true;
@@ -640,7 +672,7 @@ public sealed class WorldSessionResolver {
     /// <param name="referencedDocument">The destination's own resolved referenced document identity — a canonical
     /// local identity the caller resolved (this resolver stays I/O-free by construction: it never touches a
     /// filesystem, so it cannot canonicalize anything itself). Two different spellings of one underlying document
-    /// ("dive.world.json" vs "Assets/worlds/dive.world.json") must resolve to the identical string here, or they
+    /// ("modules/dive.world.json" vs "Assets/worlds/modules/dive.world.json") must resolve to the identical string here, or they
     /// mint two cache entries for what the host's own instance-reuse fence (<c>Puck.World.WorldInstanceHost.ResolveByStableName</c>'s
     /// name-collision check, <c>TryFindRunningInstanceByOrigin</c>'s origin scan) already treats as one document —
     /// see this type's own <c>m_active</c> remarks.</param>
@@ -658,6 +690,18 @@ public sealed class WorldSessionResolver {
             return false;
         }
 
+        // An admitted document names no destination or group carrying '~' (WorldAuthoredNames refuses one at load); a
+        // row that reached here around that door is refused by name rather than spelled, since its file-backed
+        // spelling could equal another's.
+        if (!GeneratedName.TryValidateDocument(
+            name: destination.Name.Value,
+            reason: out var destinationReason
+        )) {
+            reason = $"destination {destinationReason}";
+
+            return false;
+        }
+
         if (!TryResolveScopeKey(
             cohort: cohort,
             destination: destination,
@@ -665,6 +709,21 @@ public sealed class WorldSessionResolver {
             scopeKey: out var scopeKey,
             sourceDefinition: sourceDefinition
         )) {
+            return false;
+        }
+
+        if (
+            scopeKey.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: $"{GroupScopeKind}:"
+        ) &&
+            !GeneratedName.TryValidateDocument(
+            name: scopeKey[(GroupScopeKind.Length + 1)..],
+            reason: out var groupReason
+        )
+        ) {
+            reason = $"group {groupReason}";
+
             return false;
         }
 

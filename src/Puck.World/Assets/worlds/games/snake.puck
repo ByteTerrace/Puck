@@ -11,9 +11,10 @@
 // smallest one that completes it.
 //
 // Deliberate reductions, stated rather than left to be discovered: the field wraps instead
-// of carrying walls (the 'Snake' half of the genre rather than the 'Blockade' half), the
-// snake is capped at six segments so the vacated-tail cell is addressable by a bounded
-// chain of history ages, and the cell the tail is about to vacate counts as solid.
+// of carrying walls (the 'Snake' half of the genre rather than the 'Blockade' half), and
+// the cell the tail is about to vacate counts as solid. The snake is capped at six segments
+// because snake-move clears the tail through one branch per length over four fixed trail
+// ages; raising the cap means rewriting that rule, snake-eat's guard and snakeLength's bounds.
 
 // --- The four turn doors -------------------------------------------------------------
 // A press on the seat's own movement channels and an ordered console submission reach the
@@ -57,7 +58,7 @@ rule "snake-turn-east" {
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 2 {
     snakeHeading = 0
-    transform push(row: snakeHeadingLog, value: 0)
+    push snakeHeadingLog = 0
   } else {
     snakeIllegalTurns += 1
   }
@@ -69,7 +70,7 @@ rule "snake-turn-south" {
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 3 {
     snakeHeading = 1
-    transform push(row: snakeHeadingLog, value: 1)
+    push snakeHeadingLog = 1
   } else {
     snakeIllegalTurns += 1
   }
@@ -81,7 +82,7 @@ rule "snake-turn-west" {
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 0 {
     snakeHeading = 2
-    transform push(row: snakeHeadingLog, value: 2)
+    push snakeHeadingLog = 2
   } else {
     snakeIllegalTurns += 1
   }
@@ -93,7 +94,7 @@ rule "snake-turn-north" {
   snakeTurnApplied = snakeTurnSerial
   if snakeHeading != 1 {
     snakeHeading = 3
-    transform push(row: snakeHeadingLog, value: 3)
+    push snakeHeadingLog = 3
   } else {
     snakeIllegalTurns += 1
   }
@@ -185,7 +186,7 @@ rule "snake-spawn" {
   snakeScore = 0
   snakePace = 0
   snakeAlive = 1
-  transform push(row: snakeHeadingLog, value: 0)
+  push snakeHeadingLog = 0
   snakeTurnApplied = snakeTurnSerial
   snakeTurnRequest = 0
   snakeFoodPlaced = 0

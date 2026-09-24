@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -45,7 +46,7 @@ public sealed class LinkLivenessLawTests {
                 Name: CellName.Parse(candidate: "seam-alarm"),
                 Gate: new ActionPredicate.CompareState(
                     State: $"{WorldRuleFacts.LinkPrefix}{LinkRow}",
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Value: grace
                 ),
                 Effects: [new ActionEffect.SetState(
@@ -68,7 +69,7 @@ public sealed class LinkLivenessLawTests {
         References = [
             new WorldReference(
             Name: SafeName.Parse(candidate: "north-neighbour"),
-            Document: "north.world.json"
+            Document: "north"
         )
         ],
         Destinations = [
@@ -194,19 +195,19 @@ public sealed class LinkLivenessLawTests {
     public void AnUntrustedObserveAdjacencyRowRequiresAnEventBudget_AndATrustedPrincipalIsRefusedOne() {
         using var fixture = Fixtures.FreshServer(definition: SeamDocument(graceSeconds: 0.05f));
 
-        var addon = WorldPrincipal.Addon(name: "probe");
+        var addon = Principal.Addon(name: "probe");
         var subject = GrantSubject.Adjacency(name: LinkRow);
 
         Laws.RefusalWithControl(
             lawId: "authority.untrusted-observe-adjacency-requires-events",
             deniedOutcome: () => {
                 fixture.Server.Grant(
-                    actor: WorldPrincipal.Console,
+                    actor: Principal.Console,
                     grant: new WorldGrant(
                         Budget: 4,
                         Capability: WorldCapability.Observe,
                         Exclusive: false,
-                        Principal: addon,
+                        Grantee: addon,
                         Subject: subject
                     )
                 );
@@ -219,13 +220,13 @@ public sealed class LinkLivenessLawTests {
             },
             controlOutcome: () => {
                 fixture.Server.Grant(
-                    actor: WorldPrincipal.Console,
+                    actor: Principal.Console,
                     grant: new WorldGrant(
                         Budget: 4,
                         Capability: WorldCapability.Observe,
                         EventBudget: 4,
                         Exclusive: false,
-                        Principal: addon,
+                        Grantee: addon,
                         Subject: subject
                     )
                 );
@@ -249,11 +250,11 @@ public sealed class LinkLivenessLawTests {
         // A trusted principal has no consumer for the event-only subject — refused on the same terms as
         // region/seat, so the row cannot sit in a seat's set as an inert hold.
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Capability: WorldCapability.Observe,
                 Exclusive: false,
-                Principal: WorldPrincipal.Seat(slot: 1),
+                Grantee: Principal.Seat(slot: 1),
                 Subject: subject
             )
         );
@@ -262,7 +263,7 @@ public sealed class LinkLivenessLawTests {
             expected: GrantRule.WildcardHold,
             actual: fixture.Server.Grants.Allows(
                 capability: WorldCapability.Observe,
-                principal: WorldPrincipal.Seat(slot: 1),
+                principal: Principal.Seat(slot: 1),
                 subject: subject
             ).Rule
         );
@@ -308,11 +309,11 @@ public sealed class LinkLivenessLawTests {
     public void EverySubmittedMutationTapesWithTheEnvelopesOwnActor() {
         using var fixture = Fixtures.FreshServer();
 
-        var observed = new List<WorldPrincipal>();
+        var observed = new List<Principal>();
 
         fixture.Server.MutationTap = (_, actor) => observed.Add(item: actor);
 
-        var peer = WorldPrincipal.Peer(
+        var peer = Principal.Peer(
             generation: 1,
             index: 4
         );
@@ -345,7 +346,7 @@ public sealed class LinkLivenessLawTests {
         // The control: the two internal producers reach EnqueueMutation directly and must NOT tape — they re-derive
         // during a drive, so taping them would apply each twice.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: new WorldStateRow(
                 Name: CellName.Parse(candidate: "internal-probe"),
                 Kind: CellKind.Int

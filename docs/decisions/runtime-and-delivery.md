@@ -51,11 +51,21 @@ and upload stay outside the programme; neither exists.
 
 ## ROMs
 
-**The Tetris cartridge keeps its game and becomes `tetromino`.** Tetris is a
-trademark with no generic name the way chess has one; a tetromino is the
-mathematical name for its pieces. Every tie to the commercial reference image
-is cut, and the rename is accompanied by a re-theme, because renaming removes
-the trademark but not the likeness.
+**The falling-block cartridge keeps its game and is `tetromino`.** The
+commercial game's name is a trademark with no generic equivalent the way chess
+has one; a tetromino is the mathematical name for its pieces. Every tie to the
+commercial reference image is cut, and the name comes with a re-theme, because
+a generic name removes the trademark but not the likeness.
+
+**Puck ships no trademarked game names or likenesses, so every such game gets
+the same treatment.** A game keeps its mechanics, takes a generic name, and is
+re-themed wherever it still resembles the product. Five games ship under
+generic names: `tetromino`, `rulepush` (its player is an imp, and its levels
+and word tiles are Puck's own), `hiddenranks`, `wordspy` (with Puck's own
+board words), and `paddleball`. A game with a generic name, such as chess, Go,
+Reversi, Hearts or Snake, keeps it. A citation of a real product as prior art,
+such as an emulator reference or a game named for its feel, is not a shipped
+name.
 
 **Every house cartridge has a `.puck` source.** `pip.agb` gets one by
 decompiling its document, reproduced byte for byte through `puck compile`.
@@ -74,8 +84,24 @@ product, not a test fixture: a cabinet is what gives it a player.
 
 ## Compiled worlds
 
-**The file is a chunk container in `PbakBundle`'s shape.** The codec exists;
-it moves to a shared home rather than gaining a second implementation.
+**The file is a chunk container in `PbakBundle`'s shape.** One codec serves
+both rather than a second implementation. Its home is `Puck.Assets`, the
+content-addressing leaf every producer and consumer
+already references, so the container and the content hash each chunk carries
+live together. The file is `<name>.puckb` beside its document: the binary
+sibling of `.puck`, a suffix no document or source spelling shares.
+
+**The header keys the authored definition; `DEFN` holds the drawn one.** The
+definition hash is taken over the composed, undrawn definition's canonical
+bytes, so a `.puck` source and the document it compiles to key one compiled
+world however each was spelled. `DEFN` stores that definition drawn for the
+header's instance, before host overrides, which every boot applies afresh.
+
+**A boot never writes beside its document.** A compiled world beside a document
+is build or `puck compile` output; a boot that derives anything writes the whole
+compiled world into the per-user compiled-world cache. That cache, like the bake
+cache, holds a pure function of the source, the build and the catalog, never a
+run's state, so every boot on the device shares it whatever its state root.
 
 **The header records the build; a mismatch is ignored, never adapted.** A
 derivation's code is part of its input, so the engine build, catalog
@@ -155,8 +181,11 @@ same engine through WebAssembly.
 of the collider census, with the exact program as the narrow-band refinement;
 narration is a subscriber outside the core.
 
-**The facade split rides the state rebuild's WP11b**, which rewrites the same
-partials; splitting them twice would mean rewriting them twice.
+**`WorldServer` is split into facades over the partials the state rebuild
+rewrote, in the same rewrite**; splitting them separately would have rewritten
+them twice. The facades are `WorldDocument`, `WorldTick`, `WorldRuleHost`,
+`WorldExtensions`, `WorldGrants` and `WorldPersistence`, and `WorldServer`
+keeps its public API, constructor and phase order.
 
 ## The presentation view
 

@@ -445,14 +445,17 @@ public sealed class ArenaTransformLawTests {
             name: "log"
         );
 
+        // A ring append is the pushState effect's mutation, not a transform; it lands on the same arena.
         for (var value = 1L; (value <= 4L); value++) {
-            Applies(
-                context: context,
-                host: host,
-                transform: new StateTransform.Push(
-                    Row: "log",
-                    Value: value
-                )
+            Assert.True(
+                condition: host.Apply(
+                    mutation: Mutation.Push(
+                        rowOrdinal: log,
+                        value: value
+                    ),
+                    refusal: out var refusal
+                ),
+                userMessage: refusal.Reason
             );
         }
 

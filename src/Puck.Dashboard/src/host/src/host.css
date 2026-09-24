@@ -1,0 +1,69 @@
+/*
+  The host's only styles: the page ground and the screen shown while sign-in and the portal load. The palette comes
+  from the canonical branding/tokens.css, so this screen and the portal it hands over to share one ground in both
+  color schemes. Everything after the handover is the portal's own theme.
+*/
+
+@import url("../../../../../branding/tokens.css");
+
+html {
+  color-scheme: light dark;
+  background-color: var(--paper);
+  color: var(--ink);
+  /* The page never shifts sideways when its height starts or stops needing a scrollbar. */
+  scrollbar-gutter: stable;
+}
+
+/* The portal resets the body margin too; resetting it here keeps the loading screen from moving when it arrives. */
+body {
+  margin: 0;
+}
+
+.host-screen {
+  display: flex;
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 1rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  font-family: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
+  text-align: center;
+}
+
+.host-screen img {
+  display: block;
+}
+
+.host-screen p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  letter-spacing: 0.01em;
+}
+
+.host-screen h1 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.host-screen button {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.host-screen button:hover {
+  border-color: var(--accent);
+}

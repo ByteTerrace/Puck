@@ -44,7 +44,7 @@ public sealed class RuleRefusalLawTests {
         )),
         [RuleRefusal.StateCellUnaddressable] = static () => Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: "codes",
                 Value: 0m
             ),
@@ -52,14 +52,14 @@ public sealed class RuleRefusalLawTests {
         )),
         [RuleRefusal.ComparandAmbiguous] = static () => Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: "score"
             ),
             name: "neither"
         )),
         [RuleRefusal.ComparandKindMismatch] = static () => Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 ComparandState: "ratio",
                 State: "score"
             ),
@@ -104,7 +104,7 @@ public sealed class RuleRefusalLawTests {
         )),
         [RuleRefusal.StateCellUndeclared] = static () => Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 Key: "zz",
                 State: "codes",
                 Value: 0m
@@ -113,7 +113,7 @@ public sealed class RuleRefusalLawTests {
         )),
         [RuleRefusal.ReduceChannelMalformed] = static () => Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: "$reduce:median:codes",
                 Value: 0m
             ),
@@ -125,7 +125,7 @@ public sealed class RuleRefusalLawTests {
         )),
         [RuleRefusal.SymmetryChannelMalformed] = static () => Compile(rule: RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: "$symmetry:spiral:node",
                 Value: 0m
             ),
@@ -233,6 +233,18 @@ public sealed class RuleRefusalLawTests {
                     UnlessWithin: "0.5"
                 ))],
                 name: "remember"
+            )
+        ),
+        [RuleRefusal.TransformWidensAudience] = static () => Compile(
+            context: VectorFixture.Context(hidden: "bank"),
+            rule: RulesFixture.Rule(
+                effects: [new ActionEffect.TransformState(Transform: new StateTransform.Nearest(
+                    From: "bank",
+                    Into: "ranks",
+                    K: 1,
+                    Query: "wide"
+                ))],
+                name: "widens"
             )
         ),
         [RuleRefusal.VectorEffectNotAdmitted] = static () => Compile(

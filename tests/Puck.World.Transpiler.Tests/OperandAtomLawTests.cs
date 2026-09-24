@@ -26,22 +26,7 @@ public class OperandAtomLawTests {
 
         """;
 
-    private static (JsonObject? Document, DiagnosticBag Diagnostics) Compile(string source) {
-        var result = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        return (result.Json, result.Diagnostics);
-    }
-    private static JsonObject Document(string source) {
-        var (document, diagnostics) = Compile(source: source);
-
-        Assert.False(condition: diagnostics.HasErrors, userMessage: string.Join(separator: "\n", values: diagnostics.Select(selector: static diagnostic => diagnostic.ToString())));
-
-        return document!;
-    }
-    private static JsonNode Effect(string body) => Document(source: (Rows + body))["rules"]![0]!["effects"]![0]!;
+    private static JsonNode Effect(string body) => WorldSources.LowerSourceClean(source: (Rows + body))["rules"]![0]!["effects"]![0]!;
 
     [InlineData("$\"deck[a{i}]\"", "deck[$\"a{i}\"]")]
     [InlineData("$\"deck[{name}]\"", "deck[$\"{name}\"]")]
@@ -51,32 +36,61 @@ public class OperandAtomLawTests {
     [Theory]
     public void AnExpressionBuiltAsTextIsRefusedWithItsBareSpelling(string written, string bare) {
         var refusal = Assert.Single(
-            collection: Compile(source: (Rows + $"let i = 1\nlet name = \"a0\"\n\nrule \"r\" {{\n    setState(state: hp, expression: {written})\n}}")).Diagnostics,
+            collection: WorldSources.Compile(source: (Rows + $"let i = 1\nlet name = \"a0\"\n\nrule \"r\" {{\n    setState(state: hp, expression: {written})\n}}")).Diagnostics,
             predicate: static diagnostic => string.Equals(a: diagnostic.Code, b: PuckDiagnosticCodes.ExpressionBuiltAsText, comparisonType: StringComparison.Ordinal)
         );
 
         Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: $"write 'expression: {bare}'");
     }
-    [Fact]
-    public void AnAtomLowersToTheTokenItComputes() {
-        var computed = Effect(body: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"] + $\"{i + 1}\")\n}");
-        var written = Effect(body: "rule \"r\" {\n    setState(state: hp, expression: deck[a1] + 2)\n}");
 
-        Assert.True(condition: JsonNode.DeepEquals(node1: computed, node2: written), userMessage: computed.ToJsonString());
-    }
-    [Fact]
-    public void AnAtomMayOpenAnOperand() {
-        var computed = Effect(body: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: $\"a{i}\"[x] + 1)\n}");
-        var written = Effect(body: "rule \"r\" {\n    setState(state: hp, expression: a1[x] + 1)\n}");
+    // Each atom-bearing source and the source that spells what its atoms compute by hand; the two lower alike.
+    private static readonly Dictionary<string, (string Computed, string Written)> Atoms = new(comparer: StringComparer.Ordinal) {
+        ["an atom lowers to the token it computes"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"] + $\"{i + 1}\")\n}",
+            Written: "rule \"r\" {\n    setState(state: hp, expression: deck[a1] + 2)\n}"
+        ),
+        ["an atom may open an operand"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: $\"a{i}\"[x] + 1)\n}",
+            Written: "rule \"r\" {\n    setState(state: hp, expression: a1[x] + 1)\n}"
+        ),
+        ["an atom computing more than a bare name is read as one name"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"b:{i}\"])\n}",
+            Written: "rule \"r\" {\n    setState(state: hp, expression: deck[`b:1`])\n}"
+        ),
+        ["a statement line and a call bind the same atom"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    hp = deck[$\"a{i}\"]\n}",
+            Written: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"])\n}"
+        ),
+        ["an assignment target's key computes as the same key read does"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    deck[$\"a{i}\"] = 4\n}",
+            Written: "rule \"r\" {\n    deck[a1] = 4\n}"
+        ),
+        ["an addition target's key computes as the same key read does"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    deck[$\"a{i}\"] += deck[$\"a{i}\"]\n}",
+            Written: "rule \"r\" {\n    deck[a1] += deck[a1]\n}"
+        ),
+        ["a target's atom computing more than a bare name is one key"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    deck[$\"b:{i}\"] = 4\n}",
+            Written: "rule \"r\" {\n    deck[`b:1`] = 4\n}"
+        ),
+        ["an atom naming one of the rule's locals reads the local"] = (
+            Computed: "rule \"r\" {\n    for i in range(0, 2) {\n        local $\"at{i}\" = deck[$\"a{i}\"]\n    }\n    hp = $\"at{1}\" - $\"at{0}\"\n}",
+            Written: "rule \"r\" {\n    local at0 = deck[a0]\n    local at1 = deck[a1]\n    hp = at1 - at0\n}"
+        ),
+        ["an atom naming no local is a row even beside locals"] = (
+            Computed: "let i = 1\n\nrule \"r\" {\n    local at0 = 1\n    hp = $\"a{i}\"[x] + at0\n}",
+            Written: "rule \"r\" {\n    local at0 = 1\n    hp = a1[x] + at0\n}"
+        ),
+    };
 
-        Assert.True(condition: JsonNode.DeepEquals(node1: computed, node2: written), userMessage: computed.ToJsonString());
-    }
-    [Fact]
-    public void AnAtomThatComputesMoreThanABareNameIsReadAsOneName() {
-        var computed = Effect(body: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"b:{i}\"])\n}");
-        var written = Effect(body: "rule \"r\" {\n    setState(state: hp, expression: deck[`b:1`])\n}");
+    public static TheoryData<string> AtomNames() => new(values: Atoms.Keys);
+    [MemberData(nameof(AtomNames))]
+    [Theory]
+    public void AnAtomLowersAsItsHandWrittenSpelling(string name) {
+        var (computed, written) = Atoms[name];
+        var lowered = Effect(body: computed);
 
-        Assert.True(condition: JsonNode.DeepEquals(node1: computed, node2: written), userMessage: computed.ToJsonString());
+        Assert.True(condition: JsonNode.DeepEquals(node1: lowered, node2: Effect(body: written)), userMessage: $"{name}: {lowered.ToJsonString()}");
     }
     [Fact]
     public void WhatAnAtomComputesIsNeverReadAgainAsABinding() {
@@ -99,24 +113,26 @@ public class OperandAtomLawTests {
         Assert.Equal(expected: "b:1", actual: effect["key"]!.GetValue<string>());
     }
     [Fact]
-    public void AStatementLineAndACallBindTheSameAtom() {
-        var computed = Effect(body: "let i = 1\n\nrule \"r\" {\n    hp = deck[$\"a{i}\"]\n}");
-        var called = Effect(body: "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"])\n}");
-        Assert.True(condition: JsonNode.DeepEquals(node1: computed, node2: called), userMessage: computed.ToJsonString());
-    }
-    [Fact]
     public void AnUnusedBindingIsNotReportedWhereOnlyAnAtomReadsIt() {
-        var (_, diagnostics) = Compile(source: (Rows + "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"])\n}"));
+        var diagnostics = WorldSources.Compile(source: (Rows + "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"])\n}")).Diagnostics;
 
         Assert.DoesNotContain(collection: WorldSourceLint(source: (Rows + "let i = 1\n\nrule \"r\" {\n    setState(state: hp, expression: deck[$\"a{i}\"])\n}")), filter: static diagnostic => string.Equals(a: diagnostic.Code, b: PuckDiagnosticCodes.LintUnusedLet, comparisonType: StringComparison.Ordinal));
         Assert.False(condition: diagnostics.HasErrors);
     }
     [Fact]
     public void FormattingLeavesAnOperandsAtomsAsWritten() {
-        var source = (Rows + "let i = 1\n\nrule \"r\" {\n  setState(state: hp, expression: deck[$\"a{i}\"] + $\"{i + 1}\")\n}\n");
+        var source = (Rows + "let i = 1\n\nrule \"r\" {\n  setState(state: hp, expression: deck[$\"a{i}\"] + $\"{i + 1}\")\n  deck[$\"a{i}\"] = 1\n}\n");
         var printed = PuckFormat.Format(source: source);
 
         Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "expression: deck[$\"a{i}\"] + $\"{i + 1}\"");
+        Assert.Contains(actualString: printed, comparisonType: StringComparison.Ordinal, expectedSubstring: "deck[$\"a{i}\"] = 1");
+    }
+    [Fact]
+    public void AnUnusedBindingIsNotReportedWhereOnlyATargetsAtomReadsIt() {
+        var source = (Rows + "let i = 1\n\nrule \"r\" {\n    deck[$\"a{i}\"] = 4\n}");
+
+        Assert.DoesNotContain(collection: WorldSourceLint(source: source), filter: static diagnostic => string.Equals(a: diagnostic.Code, b: PuckDiagnosticCodes.LintUnusedLet, comparisonType: StringComparison.Ordinal));
+        Assert.False(condition: WorldSources.Compile(source: source).Diagnostics.HasErrors);
     }
     [Fact]
     public void AnImportAliasReachesABindingReadInsideAnAtom() {

@@ -283,7 +283,7 @@ properties {
   names []
   carriers [
     { pool: arenaFighters, field: body, bindings [{ member: Detached }, { member: First, seat: 0 }, { member: Second, seat: 1 }] }
-    { pool: arenaPickups, field: body, bindings [{ member: Detached }, { member: Medkit, placement: "arenaMedkit" }, { member: Mega, placement: "arenaMegaHealth" }] }
+    { pool: arenaPickups, field: body, bindings [{ member: Detached }, { member: Medkit, placement: arenaMedkit }, { member: Mega, placement: arenaMegaHealth }] }
   ]
 }
 
@@ -375,4 +375,4 @@ state {
 
 export action arenaEnter
 export binding arenaFighters, arenaOver
-export read arenaFighters, arenaEnter, arenaItemSpawns, arenaJoined, arenaMomentum, arenaOver, arenaPickups, arenaRefused, arenaRoster, arenaShots, arenaSpawns, arenaWinner
+export read arenaEnter, arenaFighters, arenaItem, arenaItemSpawns, arenaJoined, arenaMomentum, arenaOver, arenaPickups, arenaRefused, arenaRoster, arenaShots, arenaSpawns, arenaWinner

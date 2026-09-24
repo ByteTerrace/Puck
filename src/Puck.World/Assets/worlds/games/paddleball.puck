@@ -1,0 +1,691 @@
+// Paddleball — two paddles face each other across a court, the ball is served from the side that
+// was last scored upon, a paddle that meets the ball returns it, a ball that passes a paddle and
+// reaches the goal behind it scores one point for the other side, and the first side to eleven
+// points wins the game.
+//
+// This is a module: a host supplies the seat, the 'attack' channel the serve press arrives on, the
+// 'walk' motion program the kits name, the three looks, and the population the five bodies need.
+// tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json is the smallest one that completes it.
+//
+// What makes this paddleball rather than a board game is that the court is physical. The ball is a rigid
+// body on a solid floor, served by a real impulse down the court, and the three things the rules
+// care about — the ball meeting a paddle, the ball loitering in a paddle's reach, and the ball
+// reaching a goal — are read off body geometry by the 'interactions' table rather than by a rule
+// spelling a coordinate. The three latch shapes that table carries are all three here: a
+// Distance x Edge strike, a Distance x Level pressure meter, and a Region x Edge goal.
+//
+// The serve's direction comes from a pair of fixed posts standing in the court's far corners, never
+// from the serving paddle itself: 'applyRigidImpulse' aims along a body's own facing, and a paddle
+// that has been moved has had its facing reset to zero by the move, so a paddle can carry a lane
+// but not a heading. The posts are never moved and their authored facings are the court's two ends.
+//
+// Deliberate reductions, stated rather than left to be discovered: the paddles are moved by placing
+// their bodies rather than by a per-seat drive program, so a second seat is not needed to play the
+// far side; the ball's return is the strike latch's own bookkeeping rather than a reflected
+// velocity, since an impulse effect can add momentum but cannot replace it; a rolled ball on a real
+// floor stops where a video court's never does, so a rally that goes quiet is called a let and served
+// again rather than awarded to somebody; an unopposed serve always reaches the far goal, so with
+// the conceding side serving the model's scores alternate and a finished game reads 11-10; and a
+// ball that speeds up over a rally or a paddle that shrinks is not modelled.
+
+let ballColor = "#F5F1E6"
+let paddleColor = "#7FD4FF"
+let goalColor = "#FF9E7F"
+let courtColor = "#1E2A33"
+
+enum PaddleballBallBody {
+  Detached
+  Ball
+}
+
+enum PaddleballPaddleBody {
+  Detached
+  East
+  West
+}
+
+// --- The kits: what the court is played with ------------------------------------------------
+// The ball carries a 'rigid' facet, so it is integrated by the rigid solver and takes the serve's
+// impulse through the same WorldBody.TryApplyRigidImpulse door 'body.impulse' uses. The paddles
+// carry none: they are ordinary solid bodies that stand where they are put.
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: sphere(radius: 0.18)
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "paddleballBall"
+      rigid {
+        angularDamping: 0.2
+        friction: 0.1
+        linearDamping: 0.1
+        mass: 0.25
+        restitution: 0.6
+        rollingFriction: 0.01
+      }
+    }
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.125, 0.25, 0.5], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: false
+        holds [
+          {
+            bond: Surface
+            cone [0, 60]
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: Gravity
+            name: "ground"
+            reach: 1.2
+          }
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+        }
+      }
+      name: "paddleballPaddle"
+    }
+  ]
+}
+
+// --- The court ------------------------------------------------------------------------------
+// The court sits twelve units east of the world origin, clear of the spawn the host's own seat body
+// takes, so nothing but the game's own bodies ever stands on it. Its floor's top face is the
+// court's local y = 0. The two long sides carry walls and the two ends are open; a goal region sits
+// in each opening, four units out, with a paddle two units out in front of it and a backstop behind
+// it so a scored ball stays on the court. The ball's root starts on the floor; its sphere center
+// is one radius above that root, and contact is established before the first serve.
+
+placements {
+  placement "paddleballCourt" {
+    prototype: "paddleballCourt"
+    position [12, 0, 0]
+    solid
+  }
+
+  placement "paddleballGoalWest" {
+    prototype: "paddleballGoalMarker"
+    parent: "paddleballCourt"
+    position [-4, 0.25, 0]
+    region {
+      radius: 0.5
+    }
+  }
+
+  placement "paddleballGoalEast" {
+    prototype: "paddleballGoalMarker"
+    parent: "paddleballCourt"
+    position [4, 0.25, 0]
+    region {
+      radius: 0.5
+    }
+  }
+
+  placement "paddleballBall" {
+    prototype: "paddleballBall"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "paddleballBall"
+      look: "paddleballBall"
+      source: "Idle"
+    }
+    parent: "paddleballCourt"
+    position [0, 0, 0]
+  }
+
+  placement "paddleballPaddleWest" {
+    prototype: "paddleballPaddle"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "paddleballPaddle"
+      look: "paddleballPaddle"
+      source: "Idle"
+    }
+    parent: "paddleballCourt"
+    position [-2, 0, 0]
+    yawDegrees: 270
+  }
+
+  placement "paddleballPaddleEast" {
+    prototype: "paddleballPaddle"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "paddleballPaddle"
+      look: "paddleballPaddle"
+      source: "Idle"
+    }
+    parent: "paddleballCourt"
+    position [2, 0, 0]
+    yawDegrees: 90
+  }
+
+  placement "paddleballPostWest" {
+    prototype: "paddleballPost"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "paddleballPaddle"
+      look: "paddleballPost"
+      source: "Idle"
+    }
+    parent: "paddleballCourt"
+    position [-4.4, 0, 2.2]
+    yawDegrees: 270
+  }
+
+  placement "paddleballPostEast" {
+    prototype: "paddleballPost"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "paddleballPaddle"
+      look: "paddleballPost"
+      source: "Idle"
+    }
+    parent: "paddleballCourt"
+    position [4.4, 0, 2.2]
+    yawDegrees: 90
+  }
+}
+
+prototypes {
+  prototype "paddleballBall" {
+    document {
+      name: "paddleballBall"
+      palette [
+        {
+          color: ballColor
+          roughness: 0.4
+          specular: 0.5
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "sphere" {
+        material: 0
+        position [0, 0.18, 0]
+        scale [0.18, 0.18, 0.18]
+      }
+    }
+  }
+
+  prototype "paddleballPaddle" {
+    document {
+      name: "paddleballPaddle"
+      palette [
+        {
+          color: paddleColor
+          roughness: 0.6
+          specular: 0.2
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "blade" {
+        material: 0
+        position [0, 0.25, 0]
+        scale [0.125, 0.25, 0.5]
+      }
+    }
+  }
+
+  prototype "paddleballPost" {
+    document {
+      name: "paddleballPost"
+      palette [
+        {
+          color: goalColor
+          roughness: 0.8
+          specular: 0.1
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "pillar" {
+        material: 0
+        position [0, 0.25, 0]
+        scale [0.1, 0.25, 0.1]
+      }
+    }
+  }
+
+  prototype "paddleballGoalMarker" {
+    document {
+      name: "paddleballGoalMarker"
+      palette [
+        {
+          color: goalColor
+          roughness: 0.9
+          specular: 0.05
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "line" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.04, 0.02, 2.4]
+      }
+    }
+  }
+
+  prototype "paddleballCourt" {
+    document {
+      name: "paddleballCourt"
+      palette [
+        {
+          color: courtColor
+          roughness: 0.9
+          specular: 0.05
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "floor" {
+        material: 0
+        position [0, -0.05, 0]
+        scale [4.5, 0.05, 2.4]
+      }
+
+      shape Box "wallNorth" {
+        material: 0
+        position [0, 0.15, 2.5]
+        scale [4.5, 0.15, 0.1]
+      }
+
+      shape Box "wallSouth" {
+        material: 0
+        position [0, 0.15, -2.5]
+        scale [4.5, 0.15, 0.1]
+      }
+
+      shape Box "backstopWest" {
+        material: 0
+        position [-4.6, 0.15, 0]
+        scale [0.1, 0.15, 2.4]
+      }
+
+      shape Box "backstopEast" {
+        material: 0
+        position [4.6, 0.15, 0]
+        scale [0.1, 0.15, 2.4]
+      }
+    }
+  }
+}
+
+// --- What the interaction table watches -----------------------------------------------------
+// The ball and paddles are logical pool instances carried by named inhabited placements. Runtime
+// body indices may change without changing their state identity; the posts carry no role, so
+// no interaction binds one. Paddle slots retain the game's established state-key ordering: the east
+// paddle is slot 0 and the west paddle is slot 1.
+
+properties {
+  names []
+  carriers [
+    { pool: paddleballBalls, field: body, bindings [{ member: Detached }, { member: Ball, placement: paddleballBall }] }
+    { pool: paddleballPaddles, field: body, bindings [{ member: Detached }, { member: East, placement: paddleballPaddleEast }, { member: West, placement: paddleballPaddleWest }] }
+  ]
+}
+
+interactions {
+  interactions [
+    // The return. Edge: one firing per approach, however many ticks the attached ball spends
+    // touching an attached paddle, which is exactly what "the paddle met the ball once" means.
+    {
+      coOccurrence: Distance
+      effects [
+        addState(state: paddleballRally, value: 1)
+        addState(state: right.hits, value: 1)
+        setState(fromState: paddleballRally, state: right.rally)
+        setState(state: paddleballSpin, value: 0.75)
+      ]
+      left: paddleballBalls
+      mode: Edge
+      name: "paddleball-paddle-strike"
+      range: 1
+      right: paddleballPaddles
+    }
+    // The pressure meter. Level: it fires again every tick the ball is still inside a paddle's
+    // reach, so the cell counts ticks-under-threat rather than approaches.
+    {
+      coOccurrence: Distance
+      effects [
+        addState(state: paddleballPressure, value: 1)
+      ]
+      left: paddleballBalls
+      mode: Level
+      name: "paddleball-paddle-pressure"
+      range: 1.8
+      right: paddleballPaddles
+    }
+    // The two goals. A goal is an event, not a point: the rules below decide whether the ball was
+    // in play when it arrived, because an interaction row carries no gate of its own.
+    {
+      coOccurrence: Region
+      effects [
+        addState(state: paddleballWestGoalSerial, value: 1)
+      ]
+      left: paddleballBalls
+      mode: Edge
+      name: "paddleball-goal-west"
+      range: 0
+      right: paddleballGoalWest
+    }
+    {
+      coOccurrence: Region
+      effects [
+        addState(state: paddleballEastGoalSerial, value: 1)
+      ]
+      left: paddleballBalls
+      mode: Edge
+      name: "paddleball-goal-east"
+      range: 0
+      right: paddleballGoalEast
+    }
+  ]
+}
+
+// --- The serve door ---------------------------------------------------------------------------
+// A press on the seat's own 'attack' control and an ordered console submission reach the same
+// request pair (paddleballServeSerial, paddleballServeApplied); the three rules below judge it.
+
+rule "paddleball-serve-press" {
+  when channel(1, attack) >= 1
+  mode: Edge
+  paddleballServeSerial += 1
+}
+
+// The refusal the game itself enforces: there is only ever one ball, so a serve asked for while
+// the ball is live, while the between-points deadline has not yet passed, or after the game has
+// been won, is turned away and counted.
+rule "paddleball-serve-refuse" {
+  when paddleballServeSerial != paddleballServeApplied and (paddleballInPlay == 1 or $tick < paddleballServeTimer or paddleballWinner != 0)
+  mode: Level
+  paddleballServeApplied = paddleballServeSerial
+  paddleballRefused += 1
+}
+
+rule "paddleball-serve-west" {
+  when paddleballServeSerial != paddleballServeApplied and paddleballInPlay == 0 and $tick >= paddleballServeTimer and paddleballWinner == 0 and paddleballServeSide == 0
+  mode: Level
+  paddleballServeApplied = paddleballServeSerial
+  paddleballInPlay = 1
+  paddleballRally = 0
+  paddleballRallyClock = 0
+  paddleballSpin = 0
+  paddleballServes += 1
+  applyRigidImpulse(headingKey: `placement:paddleballPostWest`, key: `placement:paddleballBall`, magnitudeState: paddleballServeSpeed)
+}
+
+rule "paddleball-serve-east" {
+  when paddleballServeSerial != paddleballServeApplied and paddleballInPlay == 0 and $tick >= paddleballServeTimer and paddleballWinner == 0 and paddleballServeSide == 1
+  mode: Level
+  paddleballServeApplied = paddleballServeSerial
+  paddleballInPlay = 1
+  paddleballRally = 0
+  paddleballRallyClock = 0
+  paddleballSpin = 0
+  paddleballServes += 1
+  applyRigidImpulse(headingKey: `placement:paddleballPostEast`, key: `placement:paddleballBall`, magnitudeState: paddleballServeSpeed)
+}
+
+// --- Points, dead balls, and the deadline between them -----------------------------------------
+// The goal behind the west paddle is east's point, and the side that conceded serves next.
+
+rule "paddleball-point-east" {
+  when paddleballWestGoalSerial != paddleballWestGoalApplied and paddleballInPlay == 1
+  mode: Level
+  paddleballWestGoalApplied = paddleballWestGoalSerial
+  paddleballPaddles[1].score += 1
+  paddleballInPlay = 0
+  paddleballServeSide = 0
+  schedule paddleballServeTimer in 1s
+  paddleballSpin = 0
+}
+
+rule "paddleball-point-west" {
+  when paddleballEastGoalSerial != paddleballEastGoalApplied and paddleballInPlay == 1
+  mode: Level
+  paddleballEastGoalApplied = paddleballEastGoalSerial
+  paddleballPaddles[0].score += 1
+  paddleballInPlay = 0
+  paddleballServeSide = 1
+  schedule paddleballServeTimer in 1s
+  paddleballSpin = 0
+}
+
+// A ball that reaches a goal while no ball is in play scores nothing — the other half of the
+// serve refusal, counted separately so the export says which kind of illegal arrival happened.
+rule "paddleball-dead-ball-west" {
+  when paddleballWestGoalSerial != paddleballWestGoalApplied and paddleballInPlay == 0
+  mode: Level
+  paddleballWestGoalApplied = paddleballWestGoalSerial
+  paddleballDeadBalls += 1
+}
+
+rule "paddleball-dead-ball-east" {
+  when paddleballEastGoalSerial != paddleballEastGoalApplied and paddleballInPlay == 0
+  mode: Level
+  paddleballEastGoalApplied = paddleballEastGoalSerial
+  paddleballDeadBalls += 1
+}
+
+// A let. A video court's ball never stops, but a rolled ball on a real floor does: a rally whose ball
+// has been alive five seconds and has come to rest short of either goal is no point at all, and the
+// same side serves again. '$physics:quiescent' is the world's own rigid-body rest fact, and the ball
+// is the only rigid body on the court, so it reads exactly "the ball has stopped".
+rule "paddleball-let" {
+  when paddleballInPlay == 1 and paddleballRallyClock >= 5 and physics(quiescent) == 1
+  mode: Edge
+  paddleballInPlay = 0
+  paddleballLets += 1
+  schedule paddleballServeTimer in 0.5s
+  paddleballSpin = 0
+}
+
+// --- The scoreboard ---------------------------------------------------------------------------
+
+rule "paddleball-longest-rally" {
+  when paddleballRally > paddleballLongestRally
+  mode: Level
+  paddleballLongestRally = paddleballRally
+}
+
+rule "paddleball-game-west" {
+  when paddleballWinner == 0 and paddleballPaddles[0].score >= 11
+  mode: Edge
+  paddleballWinner = 1
+  paddleballInPlay = 0
+}
+
+rule "paddleball-game-east" {
+  when paddleballWinner == 0 and paddleballPaddles[1].score >= 11
+  mode: Edge
+  paddleballWinner = 2
+  paddleballInPlay = 0
+}
+
+// The spin a strike puts on the ball is the stored truth; the eased read the dynamics row computes
+// is what a presentation layer would draw. Between points it is released back to nothing, and the
+// follower glides there rather than snapping.
+rule "paddleball-spin-release" {
+  when paddleballInPlay == 0 and paddleballSpin != 0
+  mode: Level
+  paddleballSpin = 0
+}
+
+dynamics [
+  {
+    f: 2
+    name: "paddleballSpinEase"
+    r: 0.375
+    zeta: 0.875
+  }
+]
+
+state {
+  record PaddleballBall {
+    body: PaddleballBallBody = PaddleballBallBody.Detached
+    active: Bool = true
+  }
+  record PaddleballPaddle {
+    body: PaddleballPaddleBody = PaddleballPaddleBody.Detached
+    hits: Int bounds(0..9999) = 0
+    rally: Int bounds(0..999) = 0
+    score: Int bounds(0..99) = 0
+  }
+  pool paddleballBalls of PaddleballBall capacity(1) = [{ body: PaddleballBallBody.Ball, active: true }]
+  pool paddleballPaddles of PaddleballPaddle capacity(2) = [
+    { body: PaddleballPaddleBody.East, hits: 0, rally: 0, "score": 0 }
+    { body: PaddleballPaddleBody.West, hits: 0, rally: 0, "score": 0 }
+  ]
+
+  world {
+    // The rally clock accumulates one a second from the serve that started the rally; every serve
+    // and every point rebases it.
+    slot paddleballRallyClock = 0 bounds(0..3600) advance(perSecond: 1)
+
+    // The impulse magnitude the serve rides, in the kind=Fixed row applyRigidImpulse requires.
+    slot paddleballServeSpeed = 2.0
+
+    // The spin a strike imparts. Presentation reads ease toward the stored target; rules and simulation
+    // read stored truth. A write sets stored truth and kicks the follower from its current position toward
+    // the new target.
+    row {
+      dynamics {
+        row: "paddleballSpinEase"
+      }
+      kind: "Fixed"
+      name: "paddleballSpin"
+      value: "0"
+    }
+
+    slot paddleballInPlay = 0 bounds(0..1)
+
+    slot paddleballServeSide = 0 bounds(0..1)
+
+    slot paddleballServeTimer = 0
+
+    slot paddleballServeSerial = 0 bounds(0..9999)
+
+    slot paddleballServeApplied = 0 bounds(0..9999)
+
+    slot paddleballServes = 0 bounds(0..9999)
+
+    slot paddleballRefused = 0 bounds(0..9999)
+
+    slot paddleballDeadBalls = 0 bounds(0..9999)
+
+    slot paddleballLets = 0 bounds(0..9999)
+
+    slot paddleballRally = 0 bounds(0..999)
+
+    slot paddleballLongestRally = 0 bounds(0..999)
+
+    slot paddleballPressure = 0 bounds(0..999999)
+
+    slot paddleballWinner = 0 bounds(0..2)
+
+    slot paddleballWestGoalSerial = 0 bounds(0..9999)
+
+    slot paddleballWestGoalApplied = 0 bounds(0..9999)
+
+    slot paddleballEastGoalSerial = 0 bounds(0..9999)
+
+    slot paddleballEastGoalApplied = 0 bounds(0..9999)
+  }
+}
+
+export action paddleballServeSerial
+export binding paddleballInPlay, paddleballRally, paddleballWinner
+export read paddleballBall, paddleballDeadBalls, paddleballInPlay, paddleballLets, paddleballLongestRally, paddleballPaddle, paddleballPaddles, paddleballPost, paddleballPressure, paddleballRally, paddleballRallyClock, paddleballRefused, paddleballServeSide, paddleballServeTimer, paddleballServes, paddleballSpin, paddleballWinner

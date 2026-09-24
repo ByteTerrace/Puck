@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Puck.Hosting;
 using Puck.SignedDistance;
@@ -172,44 +171,122 @@ public sealed partial class SdfWorldEngine {
     }
     private bool IsChildSlot(int slot) =>
         (0u != (m_childMask & (1u << slot)));
-    // Pack each moving entity's rigid transform into the dynamic-transform scratch — 2 float4 per slot: position.xyz
-    // (+ pad) then the orientation quaternion (xyzw) — for upload into the buffer SDF_OP_TRANSFORM_DYNAMIC indexes by
-    // slot. An empty list is only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still
-    // writes the one always-present slot as identity so the binding stays valid (a static program never reads it).
-    // Clamped to the slot capacity the construction options grew the buffer to.
-    private void PackDynamicTransforms(SdfFrame frame) {
-        var floats = MemoryMarshal.Cast<byte, float>(span: m_dynamicTransformScratch.AsSpan());
+    // Packs the rows the frame's moved set owes into the dynamic-transform mirror — 3 float4 per slot: position.xyz
+    // (+ shadow participation), the orientation quaternion (xyzw), then the lanes — for the device-local table
+    // SDF_OP_TRANSFORM_DYNAMIC indexes by slot, and owes each packed row an upload. The owed rows are the ones the
+    // producer's SdfMovedTransforms recorded since the last frame this engine consumed from it; a frame with no moved
+    // set declares its table static and owes nothing past the first frame that carries that table. Every row is owed
+    // on this engine's first frame, for a frame from another producer or another static table, and when the last
+    // consumed frame has left the producer's history; nothing compares the table against the mirror. An empty list is
+    // only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still packs the one
+    // always-present slot as identity so the binding stays valid. Clamped to the slot capacity the construction
+    // options grew the buffer to. Returns whether any row was packed.
+    private bool PackDynamicTransforms(SdfFrame frame) {
+        var mirror = MemoryMarshal.Cast<byte, float>(span: m_dynamicTransformScratch.AsSpan());
         var transforms = frame.DynamicTransforms;
-        var capacity = (m_dynamicTransformScratch.Length / DynamicTransformByteLength);
+        var moved = frame.MovedTransforms;
         var count = Math.Min(
             val1: transforms.Count,
-            val2: capacity
+            val2: m_dynamicTransformCapacity
+        );
+        var everything = (
+            (m_dynamicTransformSlotsResident == 0) ||
+            !ReferenceEquals(
+            objA: moved,
+            objB: m_movedTransformsSource
+        ) ||
+            ((moved is null)
+                ? !ReferenceEquals(
+                    objA: transforms,
+                    objB: m_movedTransformsTable
+                )
+                : !moved.TryCollect(
+                    into: m_owedTransforms,
+                    since: m_movedTransformsSerial
+                ))
         );
 
-        if (count == 0) {
-            floats[0] = 0f; floats[1] = 0f; floats[2] = 0f; floats[3] = 0f;   // position.xyz, pad
-            floats[4] = 0f; floats[5] = 0f; floats[6] = 0f; floats[7] = 1f;   // identity quaternion
-            floats[8] = 0f; floats[9] = 0f; floats[10] = 0f; floats[11] = 0f; // Lanes: x damage, y thrust, z/w free
-
-            return;
+        if (moved is null) {
+            m_owedTransforms.Clear();
         }
 
-        for (var index = 0; (index < count); index++) {
-            var transform = transforms[index];
-            var b = (index * 12);
+        m_movedTransformsSource = moved;
+        m_movedTransformsSerial = (moved?.Serial ?? 0L);
+        m_movedTransformsTable = transforms;
 
-            // position.w encodes per-instance soft-shadow participation: 0 = casts (the default pad every prior frame
-            // uploaded → byte-identical), 1 = shadow-suppressed (skipped by the soft-shadow march only). Read by
-            // sdf-world.hlsli's sdfShadowParticipationActive skip; camera/AO marches ignore it.
-            floats[(b + 0)] = transform.Position.X; floats[(b + 1)] = transform.Position.Y; floats[(b + 2)] = transform.Position.Z; floats[(b + 3)] = (transform.CastsSoftShadow
-                ? 0f
-                : 1f
+        Span<float> floats = stackalloc float[DynamicTransformWordCount];
+
+        if (everything) {
+            // One run owes the whole table, so each row only needs its mirror copy.
+            m_tableUploads[DynamicTransformTable].Add(
+                length: (m_dynamicTransformCapacity * DynamicTransformWordCount),
+                start: 0
             );
-            floats[(b + 4)] = transform.Orientation.X; floats[(b + 5)] = transform.Orientation.Y; floats[(b + 6)] = transform.Orientation.Z; floats[(b + 7)] = transform.Orientation.W;
-            // Lanes row: any op evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane)
-            // sees the current value through sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
-            floats[(b + 8)] = transform.Lanes.X; floats[(b + 9)] = transform.Lanes.Y; floats[(b + 10)] = transform.Lanes.Z; floats[(b + 11)] = transform.Lanes.W;
+
+            if (count == 0) {
+                floats.Clear();
+                floats[7] = 1f; // identity quaternion
+                floats.CopyTo(destination: mirror[..DynamicTransformWordCount]);
+            }
+
+            for (var index = 0; (index < count); index++) {
+                PackDynamicTransform(
+                    floats: floats,
+                    transform: transforms[index]
+                );
+                floats.CopyTo(destination: mirror.Slice(
+                    length: DynamicTransformWordCount,
+                    start: (index * DynamicTransformWordCount)
+                ));
+            }
+
+            m_dynamicTransformSlotsResident = m_dynamicTransformCapacity;
+            m_dynamicTransformRevision++;
+
+            return true;
         }
+
+        var packed = false;
+
+        for (var run = 0; (run < m_owedTransforms.Count); run++) {
+            var start = m_owedTransforms.Start(index: run);
+            var end = Math.Min(
+                val1: (start + m_owedTransforms.Length(index: run)),
+                val2: count
+            );
+
+            for (var index = start; (index < end); index++) {
+                PackDynamicTransform(
+                    floats: floats,
+                    transform: transforms[index]
+                );
+                StageTableRow(
+                    entry: index,
+                    mirror: mirror,
+                    packed: floats,
+                    table: DynamicTransformTable
+                );
+                packed = true;
+            }
+        }
+
+        if (packed) {
+            m_dynamicTransformRevision++;
+        }
+
+        return packed;
+    }
+    // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
+    // soft-shadow march only), read by sdf-world.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
+    // evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through
+    // sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
+    private static void PackDynamicTransform(Span<float> floats, in DynamicTransform transform) {
+        floats[0] = transform.Position.X; floats[1] = transform.Position.Y; floats[2] = transform.Position.Z; floats[3] = (transform.CastsSoftShadow
+            ? 0f
+            : 1f
+        );
+        floats[4] = transform.Orientation.X; floats[5] = transform.Orientation.Y; floats[6] = transform.Orientation.Z; floats[7] = transform.Orientation.W;
+        floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }
     // Pack the per-frame screen-light buffer: entries 0..(MaxScreenSurfaces-1) = each screen's emitted color (the
     // framebuffer average set via SetScreenLight) with the room-glow intensity gain in w, the last entry = the
@@ -473,26 +550,46 @@ public sealed partial class SdfWorldEngine {
     // the basis + tan(fov/2) + aspect). The render scale packs as its QUANTIZED numerator q (RenderScaleQ) so Stage 1,
     // the tile passes, and Stage 2 all derive the identical integer render extent. The far distance rides the row's
     // last lane because the viewport table is the one buffer every marching kernel (beam, views, instance cull, sky)
-    // already binds — no descriptor grows. KEEP IN SYNC with sdf-world.hlsli's ViewportData / worldFarDistance.
+    // already binds — no descriptor grows. Only rows whose packed bytes changed are owed an upload; a row carries the
+    // frame's presentation time, so a row is owed whenever that time moves. KEEP IN SYNC with sdf-world.hlsli's
+    // ViewportData / worldFarDistance.
     private void PackViewports(SdfFrame frame, uint viewportCount) {
-        var floats = MemoryMarshal.Cast<byte, float>(span: m_viewportScratch.AsSpan());
+        var mirror = MemoryMarshal.Cast<byte, float>(span: m_viewportScratch.AsSpan());
+        var resident = OweWholeTableOnce(
+            entries: ((int)m_viewportCapacity),
+            entryWords: ViewportWordCount,
+            resident: m_viewportRowsResident,
+            table: ViewportTable
+        );
+        Span<float> floats = stackalloc float[ViewportWordCount];
 
         for (var index = 0; (index < ((int)viewportCount)); index++) {
             var view = frame.Views[index];
             var camera = view.Camera;
             var region = view.Region;
-            var b = (index * 24);
 
-            floats[(b + 0)] = camera.Position.X; floats[(b + 1)] = camera.Position.Y; floats[(b + 2)] = camera.Position.Z; floats[(b + 3)] = frame.Time;          // position.xyz, time
-            floats[(b + 4)] = camera.Right.X; floats[(b + 5)] = camera.Right.Y; floats[(b + 6)] = camera.Right.Z; floats[(b + 7)] = camera.TanHalfFieldOfView;     // right.xyz, tan(fov/2)
-            floats[(b + 8)] = camera.Up.X; floats[(b + 9)] = camera.Up.Y; floats[(b + 10)] = camera.Up.Z; floats[(b + 11)] = camera.AspectRatio;                   // up.xyz, aspect
-            floats[(b + 12)] = camera.Forward.X; floats[(b + 13)] = camera.Forward.Y; floats[(b + 14)] = camera.Forward.Z; floats[(b + 15)] = DebugMode;           // forward.xyz, debug view mode
-            floats[(b + 16)] = region.X; floats[(b + 17)] = region.Y; floats[(b + 18)] = region.Width; floats[(b + 19)] = region.Height;                           // region origin.xy, size.xy
-            floats[(b + 20)] = RenderScaleQ(
+            floats[0] = camera.Position.X; floats[1] = camera.Position.Y; floats[2] = camera.Position.Z; floats[3] = frame.Time;          // position.xyz, time
+            floats[4] = camera.Right.X; floats[5] = camera.Right.Y; floats[6] = camera.Right.Z; floats[7] = camera.TanHalfFieldOfView;     // right.xyz, tan(fov/2)
+            floats[8] = camera.Up.X; floats[9] = camera.Up.Y; floats[10] = camera.Up.Z; floats[11] = camera.AspectRatio;                   // up.xyz, aspect
+            floats[12] = camera.Forward.X; floats[13] = camera.Forward.Y; floats[14] = camera.Forward.Z; floats[15] = DebugMode;           // forward.xyz, debug view mode
+            floats[16] = region.X; floats[17] = region.Y; floats[18] = region.Width; floats[19] = region.Height;                           // region origin.xy, size.xy
+            floats[20] = RenderScaleQ(
                 slot: index,
                 view: view
-            ); floats[(b + 21)] = view.AsymmetricFrustumOffset.X; floats[(b + 22)] = view.AsymmetricFrustumOffset.Y; floats[(b + 23)] = frame.FarDistance; // renderScale q, off-axis offset xy, far distance
+            ); floats[21] = view.AsymmetricFrustumOffset.X; floats[22] = view.AsymmetricFrustumOffset.Y; floats[23] = frame.FarDistance; // renderScale q, off-axis offset xy, far distance
+            _ = StageTableEntry(
+                entry: index,
+                mirror: mirror,
+                packed: floats,
+                resident: resident,
+                table: ViewportTable
+            );
         }
+
+        m_viewportRowsResident = Math.Max(
+            val1: resident,
+            val2: ((int)viewportCount)
+        );
     }
     // The shared per-frame front half of both submission paths: validate, (re)bind sources, pack + upload the
     // viewport/transform buffers, and rebuild both push-constant blocks from the LIVE regions (the camera director
@@ -550,13 +647,16 @@ public sealed partial class SdfWorldEngine {
             frame: frame,
             viewportCount: viewportCount
         );
-        m_viewportBuffers[slot].Write<byte>(data: m_viewportScratch);
-        PackDynamicTransforms(frame: frame);
-        m_dynamicTransformBuffers[slot].Write<byte>(data: m_dynamicTransformScratch);
-        // Re-bin only when an active maskable dynamic instance can move a grid entry. Invariant programs had every
-        // ring slot seeded by UploadProgram; rewriting the same CSR words every frame would be pure CPU/upload work.
-        if (m_rebuildInstanceGridPerFrame) {
-            var rebuildStopwatch = Stopwatch.StartNew();
+
+        var transformsChanged = PackDynamicTransforms(frame: frame);
+
+        // Re-bin only when an active maskable dynamic instance can move a grid entry, and only on a frame whose
+        // transforms moved (or after a program upload): the grid is a pure function of the program and the transforms.
+        // Invariant programs staged their grid once at UploadProgram.
+        if (
+            m_rebuildInstanceGridPerFrame &&
+            (transformsChanged || m_instanceGridRebuildOwed)
+        ) {
             var frameGrid = m_liveProgram.BuildFrameInstanceGrid(
                 transforms: frame.DynamicTransforms,
                 inputScratch: m_instanceGridInputScratch,
@@ -564,46 +664,60 @@ public sealed partial class SdfWorldEngine {
             );
 
             ValidateInstanceGridCapacity(words: frameGrid);
-            m_instanceGridBuffers[slot].Write<uint>(data: frameGrid);
-            m_instanceGridWordsWritten = frameGrid.Length;
-            m_lastInstanceGridRebuildMilliseconds = rebuildStopwatch.Elapsed.TotalMilliseconds;
-        } else {
-            m_lastInstanceGridRebuildMilliseconds = null;
-        }
-        // The screen-surface table: UploadProgram seeds the host mirror once; any SetScreenSurface call since patches
-        // it in place. Unlike the buffers above, this one is only re-uploaded when a value-changing SetScreenSurface
-        // (or UploadProgram) actually dirtied this slot's copy — a static program's screens never rewrite this table
-        // after their first upload, and a screen riding a dynamic transform still renders fresh every produced frame,
-        // because SetScreenSurface dirties every ring slot the instant a value actually changes (C5, screen-surface
-        // upload; the screen-light buffer below stays unconditional — it also carries per-frame env/grid/bench rows
-        // that genuinely dirty most frames).
-        if (m_screenSurfaceDirty[slot]) {
-            m_screenSurfaceBuffers[slot].Write<byte>(data: m_screenSurfaceScratch);
-            m_screenSurfaceDirty[slot] = false;
+            StageInstanceGrid(words: frameGrid);
+            m_instanceGridRebuildOwed = false;
         }
 
+        WriteStagedUploads(slot: slot);
+        // The ring tables: each slot's buffer receives only the ranges it is behind its mirror by. UploadProgram seeds
+        // the screen-surface mirror and SetScreenSurface patches it; SetScreenDecal/ClearScreenDecal patch the decal
+        // mirror; the screen-light and volume tables are packed every frame and diffed into theirs.
+        m_screenSurfaces.Flush(
+            buffer: m_screenSurfaceBuffers[slot],
+            slot: slot
+        );
         PackScreenLights(frame: frame);
-        m_screenLightBuffers[slot].Write<byte>(data: m_screenLightScratch);
+        _ = m_screenLights.Write(
+            bytes: m_screenLightScratch,
+            offset: 0
+        );
+        m_screenLights.Flush(
+            buffer: m_screenLightBuffers[slot],
+            slot: slot
+        );
         PackVolumes(frame: frame);
-        m_volumeBuffers[slot].Write<byte>(data: m_volumeScratch);
-        // The glyph-decal buffer: SetScreenDecal/ClearScreenDecal patch the host mirror; unlike the buffers above this
-        // one is only re-uploaded when a decal call actually dirtied this slot's copy — it is 820 KB, and a program
-        // that never touches decals (e.g. the bare revealed room) must not pay that upload every frame. An all-zero
-        // mirror (no decal declared) uploads inert descriptors once per slot's first frame so the GPU buffers'
-        // initial contents are known-zero — byte-identical shading either way.
-        if (m_decalDirty[slot]) {
-            m_decalBuffers[slot].Write<uint>(data: m_decalScratch);
-            m_decalDirty[slot] = false;
-        }
+        _ = m_volumes.Write(
+            bytes: m_volumeScratch,
+            offset: 0
+        );
+        m_volumes.Flush(
+            buffer: m_volumeBuffers[slot],
+            slot: slot
+        );
+        m_decals.Flush(
+            buffer: m_decalBuffers[slot],
+            slot: slot
+        );
 
         // CompositeParams { uint2 imageExtent; uint2 tileGrid; uint viewportCount; uint childMask; uint screenMask; uint instanceMaskWordCount; uint sampleIndex; } — Stage 0/1 push.
         var pushWords = MemoryMarshal.Cast<byte, uint>(span: m_pushConstant.AsSpan());
 
         pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = viewportCount; pushWords[5] = m_childMask; pushWords[6] = m_screenSourceMask; pushWords[7] = ((uint)m_liveInstanceMaskWordCount);
-        // The deterministic tick clock the sky's twinkle and cloud motion read. It rides the push because it changes
-        // every frame and nothing else does, and it is folded into ComputeFrameSignature below via m_pushConstant so
-        // the cadence gate can never skip a frame whose tick moved.
-        pushWords[8] = frame.SampleIndex;
+        // The deterministic tick clock star twinkle reads (cloud motion is baked into the environment rows). It rides
+        // the push and is folded into ComputeFrameSignature via m_pushConstant, so the cadence gate never skips a frame
+        // whose tick moved; a sky with no visible twinkle pushes 0, leaving a static frame skippable.
+        var environment = frame.Environment;
+        var twinkles = (
+            (environment.StarBrightness > 0f) &&
+            (environment.StarDensity > 0f) &&
+            (environment.TwinkleShare > 0f) &&
+            (environment.TwinkleDepth > 0f)
+        );
+
+        pushWords[8] = (twinkles
+            ? frame.SampleIndex
+            : 0u
+        );
 
         BuildCompositePush(frame: frame);
         DecideCadenceSkip(

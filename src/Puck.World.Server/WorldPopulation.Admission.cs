@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -125,7 +126,7 @@ public sealed partial class WorldPopulation {
     }
     private WorldPeerEventEntry PeerEventEntry(int index) {
         var entry = m_entries[index];
-        var identity = WorldPrincipal.Peer(
+        var identity = Principal.Peer(
             index: index,
             generation: entry.Generation
         );
@@ -455,7 +456,7 @@ public sealed partial class WorldPopulation {
     /// <c>WorldRuleFactKind.Parked</c> arm) carries it as positive infinity — <c>remaining &gt; 0</c> holds (the
     /// seat is parked, more so than any other), <c>remaining &gt; any finite</c> holds, <c>remaining &lt;= any
     /// finite</c> does not, and a copy operand alone cannot fire because there is no representable number to store
-    /// (the <c>ActionStateComparisons</c> infinity-aware overload owns the comparison semantics). That is exactly
+    /// (the <c>ExpressionComparisons</c> infinity-aware overload owns the comparison semantics). That is exactly
     /// what the expiry sweep already says on the deadline side, where <c>signedTick &gt;= ParkedUntilTick</c> never
     /// fires against a null deadline: the channel repeats what the sweep says rather than inventing a third answer.
     /// Reading forever as no fact was considered and rejected — it would make the most-parked seat of all invisible
@@ -525,7 +526,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Gets the current generation-bearing peer identity for a peer slot.</summary>
     /// <param name="index">The peer body index.</param>
     /// <returns>The current peer principal.</returns>
-    public WorldPrincipal PeerPrincipal(int index) => WorldPrincipal.Peer(
+    public Principal PeerPrincipal(int index) => Principal.Peer(
         index: index,
         generation: m_entries[index].Generation
     );
@@ -874,7 +875,7 @@ public sealed partial class WorldPopulation {
     );
     /// <summary>Restores a just-detached federated peer after an aborted transfer, preserving its generation,
     /// admission facts, pose, dynamic state, and designation registers.</summary>
-    public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
+    public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBodyTransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
         ArgumentNullException.ThrowIfNull(argument: grantTemplates);
         if (
             (((uint)(peer.BodyIndex - LocalSeatCount)) >= PeerCapacity) ||
@@ -950,13 +951,13 @@ public sealed partial class WorldPopulation {
     /// <param name="position">The captured pre-detach position.</param>
     /// <param name="yawRadians">The captured pre-detach yaw.</param>
     /// <param name="dynamicState">The captured pre-detach dynamic state (velocity, overlay, action-track) — see
-    /// <see cref="WorldBody.TransferState"/>.</param>
+    /// <see cref="WorldBodyTransferState"/>.</param>
     /// <param name="designations">The seat's own pre-detach <see cref="Entry.Designations"/> register, from
     /// <see cref="CaptureDesignations"/>, or <see langword="null"/> to leave the register at its cleared default (a
     /// non-abort restore caller has nothing to pass — every actual caller today is abort-only, so this defaults to
     /// <see langword="null"/> only for a hypothetical future caller, never today's).</param>
     /// <returns><see langword="true"/> when the seat was restored.</returns>
-    public bool RestoreDetachedSeat(int slot, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
+    public bool RestoreDetachedSeat(int slot, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBodyTransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
         var entry = m_entries[slot];
 
         if (entry.Active) {
@@ -1200,7 +1201,7 @@ public sealed partial class WorldPopulation {
     /// <see cref="WorldBody.CaptureTransferState"/>. <see cref="Entry.Designations"/> and
     /// <see cref="Entry.ProducerState"/> live on this class's own <see cref="Entry"/>, entirely outside
     /// <see cref="WorldBody"/>'s own reach, which is why they are addressed here rather than in
-    /// <see cref="WorldBody.TransferState"/>. A no-op returning <see langword="false"/> when the seat holds no active
+    /// <see cref="WorldBodyTransferState"/>. A no-op returning <see langword="false"/> when the seat holds no active
     /// body — nothing captured, nothing changed.</summary>
     /// <param name="slot">The seat index (0-based).</param>
     /// <param name="profile">The detached body's own retained identity, or <see langword="null"/> for an anonymous

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -25,7 +26,16 @@ public interface IWorldGrantsView {
     /// <param name="principal">The acting identity.</param>
     /// <param name="capability">The capability to test.</param>
     /// <param name="subject">The subject to test.</param>
-    GrantVerdict Allows(WorldPrincipal principal, WorldCapability capability, GrantSubject subject);
+    GrantVerdict Allows(Principal principal, WorldCapability capability, GrantSubject subject);
+    /// <summary>Determines whether <paramref name="grantee"/>'s own rows hold <paramref name="capability"/> over
+    /// <paramref name="subject"/> — the exclusivity override, then its concrete row, then its wildcard, with no group or
+    /// ownership expansion. <see cref="Allows"/> asks this first for an actor; <c>world.why</c> asks it directly for a
+    /// group grantee, which holds rows but never acts.</summary>
+    /// <param name="grantee">The row holder.</param>
+    /// <param name="capability">The capability to check.</param>
+    /// <param name="subject">The subject to check.</param>
+    /// <returns>The verdict: reserver match or beaten by reserver, concrete hold, wildcard hold, or no hold.</returns>
+    GrantVerdict Holds(Grantee grantee, WorldCapability capability, GrantSubject subject);
     /// <summary>Determines whether <paramref name="principal"/> holds <paramref name="capability"/> over every
     /// <see cref="WorldSection"/> — the check a whole-document swap or journal undo passes (it can touch any section).
     /// A failure names the first refusing section and its <see cref="GrantVerdict"/>, so "cannot mutate every section"
@@ -35,12 +45,12 @@ public interface IWorldGrantsView {
     /// <param name="capability">The capability to test (today <see cref="WorldCapability.Mutate"/>).</param>
     /// <param name="deniedSection">The first section that refused, when the check fails.</param>
     /// <param name="denial">The refusing section's verdict, when the check fails.</param>
-    bool AllowsAllSections(WorldPrincipal principal, WorldCapability capability, out WorldSection deniedSection, out GrantVerdict denial);
+    bool AllowsAllSections(Principal principal, WorldCapability capability, out WorldSection deniedSection, out GrantVerdict denial);
     /// <summary>Renders the grant table for the <c>world.grants</c> echo — one bracketed segment per principal, or one
     /// principal's rows when <paramref name="filter"/> is set. Diagnostics only; not on any tick path.</summary>
-    /// <param name="filter">A single principal to describe, or <see langword="null"/> for the whole table.</param>
+    /// <param name="filter">A single grantee to describe, or <see langword="null"/> for the whole table.</param>
     /// <returns>The echo string.</returns>
-    string Describe(WorldPrincipal? filter);
+    string Describe(Grantee? filter);
     /// <summary>Returns the <paramref name="principal"/>/<paramref name="capability"/> handle table — built on first request
     /// and cached after (a <see cref="WorldHandleTable"/> re-projects on its own when <see cref="Revision"/>
     /// moves, so the cached instance never needs replacing, only asking again). Refuses any principal but
@@ -48,7 +58,7 @@ public interface IWorldGrantsView {
     /// remarks for why Console and Seat, which could grant themselves anything, never get one.</summary>
     /// <param name="principal">The principal outside the trust boundary the table is for.</param>
     /// <param name="capability">The capability the table designates handles over.</param>
-    WorldHandleTable HandleTable(WorldPrincipal principal, WorldCapability capability);
+    WorldHandleTable HandleTable(Principal principal, WorldCapability capability);
     /// <summary>Returns the per-tick dispatch budget <paramref name="principal"/>'s row for <paramref name="capability"/> over
     /// <paramref name="subject"/> carries, or <see langword="false"/> when the row carries none — either it is
     /// unmetered (a trusted principal, or a capability other than Observe/Drive, both of which
@@ -61,7 +71,7 @@ public interface IWorldGrantsView {
     /// <param name="capability">The capability to query.</param>
     /// <param name="subject">The subject to query.</param>
     /// <param name="budget">The row's budget, when it carries one.</param>
-    bool TryGetBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget);
+    bool TryGetBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget);
     /// <summary>Returns the per-tick event-cell budget <paramref name="principal"/>'s Observe row over <paramref name="subject"/>
     /// carries, or <see langword="false"/> when the row carries none (either it holds no event budget, or it does
     /// not hold the row at all). A sibling to <see cref="TryGetBudget"/> over the identical key, metering a
@@ -71,12 +81,12 @@ public interface IWorldGrantsView {
     /// <param name="capability">The capability to query (today only <see cref="WorldCapability.Observe"/> ever carries one).</param>
     /// <param name="subject">The subject to query.</param>
     /// <param name="budget">The row's event budget, when it carries one.</param>
-    bool TryGetEventBudget(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out ushort budget);
+    bool TryGetEventBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget);
     /// <summary>Returns the effective timed-press ceiling in raw Q48.16 seconds from the Drive row that decides authority.
     /// A concrete row wins over a wildcard row; an omitted payload yields <see cref="WorldGrant.DefaultHoldSeconds"/>.</summary>
-    /// <param name="principal">The driving principal.</param>
+    /// <param name="grantee">The driving principal, or a group grantee whose own row is asked.</param>
     /// <param name="subject">The body subject.</param>
-    long HoldCeiling(WorldPrincipal principal, GrantSubject subject);
+    long HoldCeiling(Grantee grantee, GrantSubject subject);
     /// <summary>Returns the channel reach <paramref name="principal"/>'s Drive row over <paramref name="subject"/> carries —
     /// which ordinals this contributor may touch at all — or <see langword="false"/> when the row carries none. A miss
     /// is default-deny: the fold's caller treats it as an empty reach, never as an inferred one. Reach is not consent;
@@ -86,74 +96,74 @@ public interface IWorldGrantsView {
     /// <param name="principal">The contributing principal (typically an addon).</param>
     /// <param name="subject">The body subject.</param>
     /// <param name="mask">The reached channel bitmask, when the row carries one.</param>
-    bool TryGetChannelReach(WorldPrincipal principal, GrantSubject subject, out ChannelReachMask mask);
+    bool TryGetChannelReach(Principal principal, GrantSubject subject, out ChannelReachMask mask);
     /// <summary>Returns the occupying seat's own per-channel pool ceilings over its body — one number per (seat, channel),
     /// authored by the seat and never derived from any contributor row. Empty when the seat has authored none, which
     /// is default-deny for every ordinal: an untrusted contribution to a channel with no authored ceiling folds
     /// nothing. Its support mask is carried by the same value and is set exactly where a ceiling is positive.</summary>
     /// <param name="seat">The occupying seat principal.</param>
     /// <param name="subject">The seat's own body subject.</param>
-    ChannelCeilings PoolCeilings(WorldPrincipal seat, GrantSubject subject);
-    /// <summary>Returns the <see cref="MutationKindMask"/> <paramref name="principal"/>'s row for <paramref name="capability"/>
+    ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject);
+    /// <summary>Returns the <see cref="MutationKindMask"/> <paramref name="grantee"/>'s row for <paramref name="capability"/>
     /// over <paramref name="subject"/> carries, or <see langword="false"/> when the row carries none — the
     /// mutation-kind narrowing beneath a Mutate/<c>section:</c> or Edit/<c>state:</c> hold (see
     /// <see cref="WorldGrant.KindMask"/>). No mask means full reach over the subject the hold already cleared, never
     /// deny: the mask is opt-in narrowing, and deny-by-default is the hold's own job. Read fresh per query, exactly
     /// like <see cref="TryGetBudget"/> and for the same staleness reason.</summary>
-    /// <param name="principal">The acting identity.</param>
+    /// <param name="grantee">The acting identity, or a group grantee whose own rows are asked.</param>
     /// <param name="capability">The capability to query (<see cref="WorldCapability.Mutate"/> or <see cref="WorldCapability.Edit"/>).</param>
     /// <param name="subject">The subject to query.</param>
     /// <param name="mask">The row's mask, when it carries one.</param>
     /// <returns><see langword="true"/> when the row carries a kind mask.</returns>
-    bool TryGetKindMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out MutationKindMask mask);
-    /// <summary>Returns the <see cref="DocumentWriteMask"/> <paramref name="principal"/>'s row carries — the cross-document
+    bool TryGetKindMask(Grantee grantee, WorldCapability capability, GrantSubject subject, out MutationKindMask mask);
+    /// <summary>Returns the <see cref="DocumentWriteMask"/> <paramref name="grantee"/>'s row carries — the cross-document
     /// durable-state channel's own Set/Add narrowing (see <see cref="WorldGrant.WriteMask"/>), a different vocabulary
     /// from <see cref="TryGetKindMask"/> and therefore a different accessor: the two masks share a bit-lane shape and
     /// nothing else.</summary>
-    /// <param name="principal">The acting identity.</param>
+    /// <param name="grantee">The acting identity, or a group grantee whose own rows are asked.</param>
     /// <param name="capability">The capability to query (today only <see cref="WorldCapability.Mutate"/> carries one).</param>
     /// <param name="subject">The subject to query.</param>
     /// <param name="mask">The row's mask, when it carries one.</param>
     /// <returns><see langword="true"/> when the row carries a write mask.</returns>
-    bool TryGetWriteMask(WorldPrincipal principal, WorldCapability capability, GrantSubject subject, out DocumentWriteMask mask);
-    /// <summary>Returns the principal exclusively reserving <paramref name="subject"/> for <paramref name="capability"/>, or
+    bool TryGetWriteMask(Grantee grantee, WorldCapability capability, GrantSubject subject, out DocumentWriteMask mask);
+    /// <summary>Returns the grantee exclusively reserving <paramref name="subject"/> for <paramref name="capability"/>, or
     /// <see langword="null"/> when it is unreserved — the editor HUD's exclusive-hold readout. Same wildcard-aware
     /// lookup <see cref="Allows"/> enforces with; allocation-free, human-cadence reads only.</summary>
     /// <param name="capability">The capability to query.</param>
     /// <param name="subject">The subject to query.</param>
-    WorldPrincipal? ExclusiveHolder(WorldCapability capability, GrantSubject subject);
-    /// <summary>Returns every (capability, subject) pair <paramref name="principal"/> currently holds, across all five
+    Grantee? ExclusiveHolder(WorldCapability capability, GrantSubject subject);
+    /// <summary>Returns every (capability, subject) pair <paramref name="grantee"/> currently holds, across all five
     /// capabilities, in a deterministic order — capability declaration order, then a stable (kind, value, id) order,
     /// never <see cref="HashSet{T}"/> enumeration order (a free-list/insertion-history artifact). This is the one
     /// disclosure primitive: <see cref="Describe"/> (the <c>world.grants</c> echo) and any mount-time or audit report
     /// of what a principal actually holds read through this, never the raw per-capability sets directly, so none of
     /// them can independently drift from what the table contains or report merely the intersection of what was asked
     /// for and what was held.</summary>
-    /// <param name="principal">The principal to project.</param>
-    IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> Held(WorldPrincipal principal);
+    /// <param name="grantee">The grantee to project.</param>
+    IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> Held(Grantee grantee);
     /// <summary>Returns the <see cref="ControlApplication"/> set <paramref name="principal"/> holds — the whole of
     /// its engagement state. A participant that has composed nothing reports the default single own-body
     /// application, so an unengaged seat and an engaged one are read the same way; a principal with no body of its
     /// own (Console, Addon, World) reports an empty set. The returned list is the live storage, invalidated by the
     /// next <see cref="SetApplications"/>/<see cref="ClearApplications"/> on the same principal.</summary>
     /// <param name="principal">The principal.</param>
-    IReadOnlyList<ControlApplication> Applications(WorldPrincipal principal);
+    IReadOnlyList<ControlApplication> Applications(Principal principal);
     /// <summary>Collects every principal whose COMPOSED application set applies to <paramref name="target"/> into
     /// <paramref name="into"/> (cleared first) — the multiplayer-cabinet merge set for a screen target. An
     /// uncomposed participant's implicit own-body application is not a composition and is never collected.</summary>
     /// <param name="target">The application target subject (screen or body).</param>
     /// <param name="into">The reusable destination list.</param>
-    void CollectApplicationHolders(GrantSubject target, List<WorldPrincipal> into);
+    void CollectApplicationHolders(GrantSubject target, List<Principal> into);
     /// <summary>Replaces <paramref name="principal"/>'s application set. The permission to apply (a Control grant
     /// over each target, or the wildcard) is checked separately by the caller; this only records the resolved set.
     /// A set equal to the default is stored as the default itself, never as a composition.</summary>
     /// <param name="principal">The principal.</param>
     /// <param name="applications">The complete replacement set.</param>
-    void SetApplications(WorldPrincipal principal, IReadOnlyList<ControlApplication> applications);
+    void SetApplications(Principal principal, IReadOnlyList<ControlApplication> applications);
     /// <summary>Restores <paramref name="principal"/>'s set to its own-body default. Returns whether it had composed
     /// anything.</summary>
     /// <param name="principal">The principal.</param>
-    bool ClearApplications(WorldPrincipal principal);
+    bool ClearApplications(Principal principal);
 
     /// <summary>Gets the grant-table change counter a <see cref="WorldHandleTable"/> (and the addon runtime's own
     /// disclosure cache) compares against its own last-seen value to decide whether it must re-project before
@@ -167,7 +177,7 @@ public interface IWorldGrantsView {
     /// never the tick path.</summary>
     /// <param name="principal">The principal to project.</param>
     /// <param name="capability">The capability to project.</param>
-    GrantSubject[] ProjectSubjects(WorldPrincipal principal, WorldCapability capability);
+    GrantSubject[] ProjectSubjects(Principal principal, WorldCapability capability);
     /// <summary>Determines whether <paramref name="bodyIndex"/> is currently drive-gated (composition-core's CC/death gating,
     /// Seam A) — carries a nonzero cell on a state row declaring <see cref="WorldStateRow.GatesDrive"/> — and, when
     /// it is, which row decided it. Checked fresh against the index <see cref="WorldGrants.SyncState"/> last

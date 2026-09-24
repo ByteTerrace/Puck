@@ -9,20 +9,17 @@ namespace Puck.World.Tests;
 /// overlay flips into (and only into) the composed profile at the exact engine tick the row's live value crosses
 /// the overlay's threshold.</summary>
 public sealed class BindingOverlayRoutedSeatGateLawTests {
-    private const string OverlayId = "reveal";
     private const string ChordGroup = "revealed-only";
+    private const string OverlayId = "reveal";
 
-    private static WorldStateRow GaugeRow() => new(
-        Name: CellName.Parse(candidate: "gauge"),
-        Kind: CellKind.Int,
-        Advance: new StateAdvance(
-            PerSecondNumerator: 1,
-            PerSecondDenominator: 1
+    private static WorldStateRow GaugeRow() => StateFixtures.Slot(
+        advance: new StateAdvance(
+            PerSecondDenominator: 1,
+            PerSecondNumerator: 1
         ),
-        Cells: [new StateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: CellValue.Int(value: 0)
-            )]
+        kind: CellKind.Int,
+        name: "gauge",
+        value: CellValue.Int(value: 0)
     );
     private static WorldBindingOverlay GatedOverlay() => new(
         Id: OverlayId,
@@ -39,7 +36,7 @@ public sealed class BindingOverlayRoutedSeatGateLawTests {
         ),
         When: new WorldPlacementResponseCondition.StateCondition(
             State: "gauge",
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: 5f
         )
     );
@@ -64,6 +61,7 @@ public sealed class BindingOverlayRoutedSeatGateLawTests {
 
         bindings.SyncSeat(
             definition: AtEngineTick(baseDocument: document),
+            state: ClientFixtures.StateMirror(definition: AtEngineTick(baseDocument: document)),
             engineTick: (crossingTick - 1UL),
             entityIndex: 0,
             nextInputTick: 1,
@@ -77,6 +75,7 @@ public sealed class BindingOverlayRoutedSeatGateLawTests {
 
         bindings.SyncSeat(
             definition: AtEngineTick(baseDocument: document),
+            state: ClientFixtures.StateMirror(definition: AtEngineTick(baseDocument: document)),
             engineTick: crossingTick,
             entityIndex: 0,
             nextInputTick: 1,
@@ -92,6 +91,7 @@ public sealed class BindingOverlayRoutedSeatGateLawTests {
         // row) drops the overlay again, proving the gate reads live state rather than latching once true.
         bindings.SyncSeat(
             definition: AtEngineTick(baseDocument: document),
+            state: ClientFixtures.StateMirror(definition: AtEngineTick(baseDocument: document)),
             engineTick: (crossingTick - 1UL),
             entityIndex: 0,
             nextInputTick: 1,

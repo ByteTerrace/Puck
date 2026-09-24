@@ -229,16 +229,16 @@ public static class VectorArenaFixture {
         ],
         Spaces: [
             new StateSpace(
-                Name: Name(value: "space8"),
-                Model: "model",
-                Revision: "r1",
-                Dimensions: 8
+                name: Name(value: "space8"),
+                model: "model",
+                revision: "r1",
+                dimensions: 8
             ),
             new StateSpace(
-                Name: Name(value: "space16"),
-                Model: "model",
-                Revision: "r1",
-                Dimensions: 16
+                name: Name(value: "space16"),
+                model: "model",
+                revision: "r1",
+                dimensions: 16
             ),
         ]
     );

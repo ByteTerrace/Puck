@@ -5,7 +5,7 @@ exports.run = async function () {
     const extension = vscode.extensions.getExtension('ByteTerrace.vscode-puck');
     assert.ok(extension, 'Extension is installed in the development host');
     await extension.activate();
-    const document = await vscode.workspace.openTextDocument({ language: 'puck', content: 'schema: "puck.world.def.v1"\n\nhost {\nwidth:1280\n}\n' });
+    const document = await vscode.workspace.openTextDocument({ language: 'puck', content: 'schema: "puck.world.definition.v1"\n\nhost {\nwidth:1280\n}\n' });
     await vscode.window.showTextDocument(document);
     const completions = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', document.uri, new vscode.Position(1, 0));
     assert.ok(completions.items.some(item => item.label === 'compareState'), 'Server completion reaches the editor');
@@ -33,17 +33,18 @@ exports.run = async function () {
         assert.ok(cards.some(card => card.contents.some(content => content.value.includes(expected))), `Courtyard hover explains ${token}`);
     }
     assert.ok(!vscode.languages.getDiagnostics(courtyard.uri).some(diagnostic => diagnostic.code === 'PUCK035'), 'Editor URI resolves the courtyard basis on disk');
-    const layoutSource = 'stations [{ index: 0, p [0, 0, 0], yaw: 0 }]';
+    const layoutSource = 'host {\n\twidth: 1280\n    height: 720\n}';
     const layoutDocument = await vscode.workspace.openTextDocument({language:'puck',content:layoutSource});
     const layoutEditor = await vscode.window.showTextDocument(layoutDocument);
     assert.equal(layoutEditor.options.tabSize, 2, 'Puck defaults to two spaces in this uncustomized test profile');
-    for (const [tabSize, insertSpaces, indent] of [[2, true, '  '], [4, true, '    '], [4, false, '\t']]) {
+    // A source has one layout: whatever indentation the editor asks for, it receives the text `puck format` writes.
+    for (const [tabSize, insertSpaces] of [[2, true], [4, true], [4, false]]) {
         const layoutEdits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', layoutDocument.uri, {tabSize, insertSpaces});
         let formatted = layoutSource;
         for (const edit of [...layoutEdits].sort((a,b)=>layoutDocument.offsetAt(b.range.start)-layoutDocument.offsetAt(a.range.start))) {
             formatted = formatted.slice(0,layoutDocument.offsetAt(edit.range.start)) + edit.newText + formatted.slice(layoutDocument.offsetAt(edit.range.end));
         }
-        assert.equal(formatted.replace(/\r\n/g, '\n'), `stations [\n${indent}{\n${indent}${indent}index: 0,\n${indent}${indent}p [0, 0, 0],\n${indent}${indent}yaw: 0\n${indent}}\n]\n`);
+        assert.equal(formatted.replace(/\r\n/g, '\n'), 'host {\n  width: 1280\n  height: 720\n}\n');
     }
     const plainDocument = await vscode.languages.setTextDocumentLanguage(layoutDocument, 'plaintext');
     await vscode.languages.setTextDocumentLanguage(plainDocument, 'puck');

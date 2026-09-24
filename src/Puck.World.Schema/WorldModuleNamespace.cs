@@ -1,7 +1,8 @@
-using System.Text;
+using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Puck.Abstractions.Machines;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 
@@ -9,44 +10,51 @@ namespace Puck.World;
 
 /// <summary>
 /// Composes an imported fragment under an alias (<see cref="WorldImport.As"/>): every name the fragment declares —
-/// each <see cref="WorldNameRole.Declares"/> site the <see cref="WorldNameRegistry"/> lists — becomes
-/// <c>&lt;alias&gt;_&lt;name&gt;</c>, and every other registered site that spells one of those names is rewritten to
-/// match: a bare name position, a reserved <c>$</c> channel's colon segments, a cell key's <c>$cell:</c>/<c>cell:</c>
-/// spelling, an infix expression's state reads and topology arguments, a postfix token's row, and a
-/// <c>state.&lt;row&gt;</c> binding. A name the fragment does not declare is left as written, so a fragment may
-/// still address its host's rows by name. Runs on the fragment's composed raw JSON tree before the strict parse, in
-/// the same pass that strips <c>basis</c>/<c>imports</c>.
+/// each <see cref="WorldNameRole.Declares"/> site the <see cref="WorldNameRegistry"/> lists — becomes the generated
+/// name <c>&lt;alias&gt;$&lt;name&gt;</c> (<see cref="GeneratedName.Qualify"/>), which no author-written name can
+/// spell, and every other registered site that spells one of those names in the same namespace is rewritten to
+/// match: a bare name position, the name positions of a reserved <c>$</c> channel's colon segments (read by the
+/// channel's grammar, <see cref="DescribesChannel"/>), a cell key's <c>$cell:</c>/<c>cell:</c> spelling, an infix
+/// expression's state reads and topology arguments, a postfix token's row, and a <c>state.&lt;row&gt;</c> binding.
+/// A placement and a prototype each live in their own namespace, apart from every state-side name. The engine's own
+/// words are never renamed: a function an expression calls, and a channel's operation, facet, or body-reference kind.
+/// A name the fragment does not declare is left as written, so a fragment may still address its host's rows by
+/// name. Runs on the fragment's composed raw JSON tree before the strict parse, in the same pass that strips
+/// <c>basis</c>/<c>imports</c>.
 /// </summary>
 public static class WorldModuleNamespace {
-    private static readonly JsonSerializerOptions Options = WorldJsonContext.Default.Options;
-    // The source-generated context is immutable. Resolve its property registrations once, without retaining
-    // document nodes: every walk still observes the current values and lets its visitor rewrite them.
-    private static readonly ConditionalWeakTable<JsonTypeInfo, VisitMemberPlan[]> VisitMembers = new();
+    // The model's shape never changes. Resolve each type's property registrations once, without retaining document
+    // nodes: every walk still observes the current values and lets its visitor rewrite them.
+    private static readonly ConditionalWeakTable<WorldModelType, VisitMemberPlan[]> VisitMembers = new();
 
     private readonly record struct VisitMemberPlan(string Name, Type Type, WorldNameField? Field);
 
-    private static VisitMemberPlan[] BuildVisitMembers(JsonTypeInfo info) {
+    // A state row is converter-backed, so the serializer lists no members for it; its converter reads the record's
+    // own writable, unignored properties by camel-cased name.
+    private static VisitMemberPlan[] BuildVisitMembers(WorldModelType shape) {
         var members = new List<VisitMemberPlan>();
 
-        if (typeof(StateRow).IsAssignableFrom(c: info.Type)) {
-            foreach (var (jsonName, declaringType, member, propertyType) in WorldNameRegistry.ReflectedRowMembers(type: info.Type)) {
-                _ = WorldNameRegistry.TryResolve(declaringType: declaringType, field: out var field, member: member, propertyType: propertyType);
-                members.Add(item: new(Field: field, Name: jsonName, Type: propertyType));
-            }
-        } else {
-            foreach (var property in info.Properties) {
-                if (property.IsExtensionData || (property.Get is null) || (property.Set is null)) {
+        if (typeof(StateRow).IsAssignableFrom(c: shape.Type)) {
+            foreach (var property in shape.Properties) {
+                if (((property.Access & WorldModelAccess.Write) == 0) || ((property.Access & WorldModelAccess.Ignored) != 0)) {
                     continue;
                 }
-                var (declaringType, member) = WorldNameRegistry.ResolveMember(property: property);
-                _ = WorldNameRegistry.TryResolve(declaringType: declaringType, member: member, propertyType: property.PropertyType, field: out var field);
-                members.Add(item: new(Name: property.Name, Type: property.PropertyType, Field: field));
+                _ = WorldNameRegistry.TryResolve(declaringType: property.DeclaringType, field: out var field, member: property.Member, propertyType: property.Type);
+                members.Add(item: new(Field: field, Name: property.Name, Type: property.Type));
+            }
+        } else {
+            foreach (var property in shape.Members) {
+                if ((property.Access & (WorldModelAccess.ExtensionData | WorldModelAccess.Read | WorldModelAccess.Write)) != (WorldModelAccess.Read | WorldModelAccess.Write)) {
+                    continue;
+                }
+                _ = WorldNameRegistry.TryResolve(declaringType: property.DeclaringType, member: property.Member, propertyType: property.Type, field: out var field);
+                members.Add(item: new(Name: property.Name, Type: property.Type, Field: field));
             }
         }
         return [.. members];
     }
-    private static Dictionary<(WorldNameKind Kind, string Name), string> CollectDeclaredNames(JsonObject module, string alias) {
-        var declared = new Dictionary<(WorldNameKind Kind, string Name), string>();
+    private static DeclaredNames CollectDeclaredNames(JsonObject module, string alias) {
+        var declared = new DeclaredNames();
 
         Visit(
             node: module,
@@ -58,7 +66,14 @@ public static class WorldModuleNamespace {
                     leaf.TryGetValue<string>(value: out var textValue) &&
                     (textValue.Length > 0)
                 ) {
-                    declared[(field.Kind, textValue)] = ((alias + WorldNameRegistry.AliasSeparator) + textValue);
+                    declared.Declare(
+                        kind: field.Kind,
+                        name: textValue,
+                        qualified: GeneratedName.Qualify(
+                            head: alias,
+                            name: textValue
+                        )
+                    );
                 }
             }
         );
@@ -70,86 +85,8 @@ public static class WorldModuleNamespace {
         MachineFieldRole.ScreenReference => WorldNameKind.Screen,
         _ => WorldNameKind.Any
     };
-    private static string RelocateAssetPath(string path, string sourceDocumentPath, string targetDocumentPath) {
-        if (Path.IsPathRooted(path: path)) {
-            return path;
-        }
-
-        if (
-            Path.IsPathRooted(path: sourceDocumentPath) ||
-            Path.IsPathRooted(path: targetDocumentPath)
-        ) {
-            var source = Path.GetFullPath(path: Path.Combine(
-                path1: (Path.GetDirectoryName(path: Path.GetFullPath(path: sourceDocumentPath)) ?? "."),
-                path2: path
-            ));
-            var target = (Path.GetDirectoryName(path: Path.GetFullPath(path: targetDocumentPath)) ?? ".");
-
-            return Path.GetRelativePath(
-                path: source,
-                relativeTo: target
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
-        }
-
-        var sourceAsset = WorldDefinitionFileSource.CombineRelativeDocumentName(
-            name: path,
-            referrerName: sourceDocumentPath
-        );
-        var targetDirectory = targetDocumentPath.Replace(
-            newChar: '/',
-            oldChar: '\\'
-        );
-        var slash = targetDirectory.LastIndexOf(value: '/');
-
-        targetDirectory = ((slash >= 0)
-            ? targetDirectory[..slash]
-            : string.Empty
-        );
-        var from = targetDirectory.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: '/'
-        );
-        var to = sourceAsset.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: '/'
-        );
-        var common = 0;
-
-        while (
-            (common < from.Length) &&
-            (common < to.Length) &&
-            string.Equals(
-            a: from[common],
-            b: to[common],
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
-        ) {
-            common++;
-        }
-
-        var segments = new List<string>();
-
-        for (var i = common; (i < from.Length); i++) {
-            segments.Add(item: "..");
-        }
-
-        for (var i = common; (i < to.Length); i++) {
-            segments.Add(item: to[i]);
-        }
-
-        return ((segments.Count == 0)
-            ? "."
-            : string.Join(
-                separator: "/",
-                values: segments
-            )
-        );
-    }
     private static bool TryRewriteMachineMetadata(JsonObject module, string alias, IMachineValidationCatalog catalog,
-        string sourceDocumentPath, string targetDocumentPath, IReadOnlyDictionary<(WorldNameKind Kind, string Name), string> declared, out string reason) {
+        string sourceDocumentPath, string targetDocumentPath, DeclaredNames declared, out string reason) {
         if (!TryRelocateConfigurationAssets(
             catalog: catalog,
             module: module,
@@ -211,7 +148,10 @@ public static class WorldModuleNamespace {
 
                     if (!local.TryAdd(
                         key: name,
-                        value: ((alias + WorldNameRegistry.AliasSeparator) + name)
+                        value: GeneratedName.Qualify(
+                            head: alias,
+                            name: name
+                        )
                     )) {
                         localError = (((("machine '" + (machine["name"]?.ToString() ?? "(unnamed)")) +
                             "' declares duplicate provider-local name '") + name) + "'.");
@@ -244,9 +184,10 @@ public static class WorldModuleNamespace {
                         ? localName
                         : textValue),
                         MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference =>
-                            (declared.TryGetValue(
-                        key: (ProviderReferenceKind(role: site.Field.Role), textValue),
-                        value: out var worldName
+                            (declared.TryMapExact(
+                        kind: ProviderReferenceKind(role: site.Field.Role),
+                        mapped: out var worldName,
+                        name: textValue
                     )
                         ? worldName
                         : textValue),
@@ -275,19 +216,47 @@ public static class WorldModuleNamespace {
         ArgumentNullException.ThrowIfNull(argument: text);
         ArgumentNullException.ThrowIfNull(argument: declared);
 
-        return new Rewriter(declared: declared) { Scope = scope }.Rewrite(
+        return new Rewriter(names: new KindlessNames(names: declared)) { Scope = scope }.Rewrite(
+            kind: WorldNameKind.Any,
             role: role,
             text: text
         );
     }
-    /// <summary>Prefixes every name <paramref name="module"/> declares with <paramref name="alias"/> and rewrites
-    /// the module's references to match, in place.</summary>
+    /// <summary>Returns whether the rewrite knows a reserved channel: every channel it knows is a row of its channel
+    /// table, which reads the channel's arguments by their positions in its grammar, so that only a position naming a
+    /// declaration is renamed and the engine's own words there (an operation, a facet, a body-reference kind) never
+    /// are. A spelling the table does not hold is no channel, and its arguments are left as written.</summary>
+    /// <param name="channel">The channel's name, without the reserved prefix: <c>reduce</c>, <c>distance</c>.</param>
+    /// <returns><see langword="true"/> when the channel's grammar is described.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="channel"/> is <see langword="null"/>.</exception>
+    public static bool DescribesChannel(string channel) {
+        ArgumentNullException.ThrowIfNull(argument: channel);
+
+        return Channels.ContainsKey(key: channel);
+    }
+    /// <summary>Qualifies every name <paramref name="module"/> declares by <paramref name="alias"/> and rewrites the
+    /// module's references to match, in place.</summary>
     /// <param name="module">The fragment's composed tree; mutated.</param>
     /// <param name="alias">The alias, admissible under <see cref="WorldImport.TryValidateAlias"/>.</param>
     /// <param name="reason">The one-line refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the alias was admissible and the rewrite applied.</returns>
-    public static bool TryApply(JsonObject module, string alias, out string reason) {
+    public static bool TryApply(JsonObject module, string alias, out string reason) => TryApply(
+        alias: alias,
+        module: module,
+        qualified: out _,
+        reason: out reason
+    );
+    /// <summary>Qualifies every name <paramref name="module"/> declares by <paramref name="alias"/> and rewrites the
+    /// module's references to match, in place, returning the qualified names it minted.</summary>
+    /// <param name="module">The fragment's composed tree; mutated.</param>
+    /// <param name="alias">The alias, admissible under <see cref="WorldImport.TryValidateAlias"/>.</param>
+    /// <param name="qualified">Every declaration's qualified name, <c>&lt;alias&gt;$&lt;name&gt;</c>; empty on
+    /// refusal.</param>
+    /// <param name="reason">The one-line refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when the alias was admissible and the rewrite applied.</returns>
+    public static bool TryApply(JsonObject module, string alias, out IReadOnlyCollection<string> qualified, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: module);
+        qualified = [];
 
         if (!WorldImport.TryValidateAlias(
             alias: alias,
@@ -296,68 +265,31 @@ public static class WorldModuleNamespace {
             return false;
         }
 
-        var declared = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        Visit(
-            node: module,
-            type: typeof(WorldDefinition),
-            visitor: (parent, name, value, field, _) => {
-                if (
-                    (field.Role == WorldNameRole.Declares) &&
-                    (value is JsonValue leaf) &&
-                    leaf.TryGetValue<string>(value: out var text) &&
-                    (text.Length > 0)
-                ) {
-                    declared[text] = $"{alias}{WorldNameRegistry.AliasSeparator}{text}";
-                }
-            }
+        var declared = CollectDeclaredNames(
+            alias: alias,
+            module: module
         );
 
-        if (declared.Count == 0) {
-            reason = string.Empty;
+        qualified = [.. declared.Qualified];
 
+        if (declared.Count == 0) {
             return true;
         }
 
-        var rewriter = new Rewriter(declared: declared);
+        var rewriter = new Rewriter(names: declared);
 
         Visit(
             node: module,
             type: typeof(WorldDefinition),
             visitor: (parent, name, value, field, memberType) => {
                 rewriter.Scope = parent;
-                switch (WorldChannelNodes.Spelled(
+                rewriter.RewriteSite(
+                    field: field,
                     memberType: memberType,
+                    name: name,
+                    parent: parent,
                     value: value
-                )) {
-                    case JsonArray list when (field.Role == WorldNameRole.Names):
-                        for (var index = 0; (index < list.Count); index++) {
-                            if (
-                                (list[index: index] is JsonValue element) &&
-                                element.TryGetValue<string>(value: out var item)
-                            ) {
-                                list[index: index] = rewriter.Rewrite(
-                                    text: item,
-                                    role: field.Role
-                                );
-                            }
-                        }
-
-                        break;
-                    case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
-                        var rewritten = rewriter.Rewrite(
-                            text: text,
-                            role: field.Role
-                        );
-
-                        // A member that holds a call node holds one again, its row arguments renamed.
-                        parent[propertyName: name] = ((value is JsonObject)
-                            ? WorldChannelNodes.Node(spelling: rewritten)
-                            : rewritten
-                        );
-
-                        break;
-                }
+                );
             }
         );
 
@@ -381,7 +313,7 @@ public static class WorldModuleNamespace {
             return true;
         }
 
-        var rewriter = new Rewriter(declared: replacements);
+        var rewriter = new Rewriter(names: new KindlessNames(names: replacements));
 
         Visit(
             node: module,
@@ -399,12 +331,12 @@ public static class WorldModuleNamespace {
                     case JsonArray list when (field.Role == WorldNameRole.Names):
                         for (var index = 0; (index < list.Count); index++) {
                             if ((list[index] is JsonValue element) && element.TryGetValue<string>(value: out var item)) {
-                                list[index] = rewriter.Rewrite(item, field.Role);
+                                list[index] = rewriter.Rewrite(item, field.Role, field.Kind);
                             }
                         }
                         break;
                     case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
-                        var rewritten = rewriter.Rewrite(text, field.Role);
+                        var rewritten = rewriter.Rewrite(text, field.Role, field.Kind);
                         parent[name] = ((value is JsonObject)
                             ? WorldChannelNodes.Node(spelling: rewritten)
                             : rewritten);
@@ -495,7 +427,7 @@ public static class WorldModuleNamespace {
                         return;
                     }
 
-                    site.Value = JsonValue.Create(RelocateAssetPath(
+                    site.Value = JsonValue.Create(WorldDocumentPaths.Relocate(
                         path: path,
                         sourceDocumentPath: sourceDocumentPath,
                         targetDocumentPath: targetDocumentPath
@@ -626,6 +558,58 @@ public static class WorldModuleNamespace {
             visitor: visitor
         );
     }
+
+    // A creation document rides its own serializer, so the walk reads it by hand: every value in it a state cell may
+    // stand in for — a shape's spatial value, a palette color, an identifier — binds a row by its `state.<row>` token.
+    private static readonly WorldNameField CreationBinding = new(
+        Facet: WorldExportFacet.Binding,
+        Kind: WorldNameKind.State,
+        Member: "state binding",
+        Owner: typeof(Puck.World.Authoring.CreationDocument),
+        Role: WorldNameRole.Binding
+    );
+
+    private static void VisitCreationBindings(JsonNode node, WorldNameVisitor visitor) {
+        switch (node) {
+            case JsonObject obj:
+                foreach (var (name, value) in obj.ToArray()) {
+                    if (
+                        (value is JsonValue leaf) &&
+                        leaf.TryGetValue<string>(value: out var text) &&
+                        text.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: "state."
+                    )
+                    ) {
+                        visitor(
+                            obj,
+                            name,
+                            value,
+                            CreationBinding,
+                            typeof(string)
+                        );
+                    } else if (value is not null) {
+                        VisitCreationBindings(
+                            node: value,
+                            visitor: visitor
+                        );
+                    }
+                }
+
+                break;
+            case JsonArray list:
+                foreach (var element in list.ToArray()) {
+                    if (element is not null) {
+                        VisitCreationBindings(
+                            node: element,
+                            visitor: visitor
+                        );
+                    }
+                }
+
+                break;
+        }
+    }
     private static void VisitMember(JsonObject obj, string jsonName, Type declaringType, string member, Type memberType, WorldNameVisitor visitor) {
         if (
             (obj[jsonName] is not { } value) ||
@@ -652,8 +636,8 @@ public static class WorldModuleNamespace {
     /// is resolved against the registry by its C# member, a <c>$type</c> discriminator selects the arm, and the two
     /// converter-backed shapes (an expression's instruction list, a reaction scalar's row object) are followed by
     /// hand.</summary>
-    /// <remarks>Member registrations are cached against immutable serializer metadata. Document values,
-    /// collection contents, and discriminator choices are read afresh on every walk.</remarks>
+    /// <remarks>Member registrations are cached against the model's shape of each type (<see cref="WorldModelShape"/>).
+    /// Document values, collection contents, and discriminator choices are read afresh on every walk.</remarks>
     /// <param name="node">The tree, or the subtree to walk.</param>
     /// <param name="type">The model type <paramref name="node"/> holds.</param>
     /// <param name="visitor">Called once per registered site, in document order.</param>
@@ -671,6 +655,15 @@ public static class WorldModuleNamespace {
                     visitor: visitor
                 );
             }
+
+            return;
+        }
+
+        if (type == typeof(Puck.World.Authoring.CreationDocument)) {
+            VisitCreationBindings(
+                node: node,
+                visitor: visitor
+            );
 
             return;
         }
@@ -710,11 +703,8 @@ public static class WorldModuleNamespace {
             return;
         }
 
-        JsonTypeInfo typeInfo;
-
-        try {
-            typeInfo = Options.GetTypeInfo(type: type);
-        } catch (Exception exception) when ((exception is NotSupportedException or InvalidOperationException)) {
+        // The walk reads the model's shape, never serializes, so it reads the generated description of the type.
+        if (WorldModelShape.Of(type: type) is not { Described: true } shape) {
             return;
         }
 
@@ -722,7 +712,7 @@ public static class WorldModuleNamespace {
             typeof(StateRow).IsAssignableFrom(c: type) &&
             (node is JsonObject rowObject)
         ) {
-            foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: typeInfo)) {
+            foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: shape)) {
                 if (
                     !rowObject.TryGetPropertyValue(
                     jsonNode: out var value,
@@ -753,10 +743,10 @@ public static class WorldModuleNamespace {
             return;
         }
 
-        switch (typeInfo.Kind) {
+        switch (shape.Kind) {
             case JsonTypeInfoKind.Object when (node is JsonObject obj):
                 if (
-                    (typeInfo.PolymorphismOptions is { } polymorphism) &&
+                    (shape.Arms.Count > 0) &&
                     obj.TryGetPropertyValue(
                     jsonNode: out var discriminatorNode,
                     propertyName: "$type"
@@ -764,19 +754,19 @@ public static class WorldModuleNamespace {
                     (discriminatorNode is JsonValue discriminatorValue) &&
                     discriminatorValue.TryGetValue<string>(value: out var discriminator)
                 ) {
-                    foreach (var derived in polymorphism.DerivedTypes) {
+                    foreach (var derived in shape.Arms) {
                         if (
-                            (derived.TypeDiscriminator is string arm) &&
+                            (derived.Discriminator is string arm) &&
                             string.Equals(
                             a: arm,
                             b: discriminator,
                             comparisonType: StringComparison.Ordinal
                         ) &&
-                            (derived.DerivedType != type)
+                            (derived.Type != type)
                         ) {
                             Visit(
                                 node: node,
-                                type: derived.DerivedType,
+                                type: derived.Type,
                                 visitor: visitor
                             );
 
@@ -785,7 +775,7 @@ public static class WorldModuleNamespace {
                     }
                 }
 
-                foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: typeInfo)) {
+                foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: shape)) {
                     if (
                         !obj.TryGetPropertyValue(
                         propertyName: member.Name,
@@ -818,7 +808,7 @@ public static class WorldModuleNamespace {
                 foreach (var element in list) {
                     Visit(
                         node: element,
-                        type: typeInfo.ElementType!,
+                        type: shape.ElementType!,
                         visitor: visitor
                     );
                 }
@@ -828,7 +818,7 @@ public static class WorldModuleNamespace {
                 foreach (var entry in entries) {
                     Visit(
                         node: entry.Value,
-                        type: typeInfo.ElementType!,
+                        type: shape.ElementType!,
                         visitor: visitor
                     );
                 }
@@ -837,7 +827,346 @@ public static class WorldModuleNamespace {
         }
     }
 
-    private sealed class Rewriter(IReadOnlyDictionary<string, string> declared) {
+    // Where a declared name lives: a placement and a prototype each keep their own namespace, and every other kind
+    // shares the document's, so a module's placement 'gate' never renames a host row 'gate' the module reads.
+    private enum NameSpace : byte {
+        Document,
+        Placement,
+        Prototype,
+    }
+
+    private static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
+        WorldNameKind.Placement => NameSpace.Placement,
+        WorldNameKind.Prototype => NameSpace.Prototype,
+        _ => NameSpace.Document,
+    };
+
+    // What the rewrite asks at each name position: the position's kind, or null for a position naming what no module
+    // declaration renames (an input channel, an adjacency, a music row, a screen), which only a module argument's
+    // restoration reaches.
+    private interface INameMap {
+        bool TryMap(WorldNameKind? kind, string name, [NotNullWhen(returnValue: true)] out string? mapped);
+    }
+    // A map that answers by spelling alone, whatever the position: a module argument's placeholders, and a caller's
+    // own dictionary.
+    private sealed class KindlessNames(IReadOnlyDictionary<string, string> names) : INameMap {
+        public bool TryMap(WorldNameKind? kind, string name, [NotNullWhen(returnValue: true)] out string? mapped) => names.TryGetValue(
+            key: name,
+            value: out mapped
+        );
+    }
+    // Every name a fragment declares, by its kind and by the namespace it lives in, paired with its qualified spelling.
+    private sealed class DeclaredNames : INameMap {
+        private readonly Dictionary<(WorldNameKind Kind, string Name), string> m_exact = [];
+        private readonly Dictionary<(NameSpace Space, string Name), string> m_spaced = [];
+
+        public int Count => m_spaced.Count;
+        public IReadOnlyCollection<string> Qualified => m_spaced.Values;
+
+        public void Declare(WorldNameKind kind, string name, string qualified) {
+            m_exact[(kind, name)] = qualified;
+            m_spaced[(SpaceOf(kind: kind), name)] = qualified;
+        }
+        public bool TryMap(WorldNameKind? kind, string name, [NotNullWhen(returnValue: true)] out string? mapped) {
+            mapped = null;
+
+            if (kind is not { } known) {
+                return false;
+            }
+
+            if (known != WorldNameKind.Any) {
+                return m_spaced.TryGetValue(
+                    key: (SpaceOf(kind: known), name),
+                    value: out mapped
+                );
+            }
+
+            foreach (var space in ((ReadOnlySpan<NameSpace>)[NameSpace.Document, NameSpace.Placement, NameSpace.Prototype])) {
+                if (m_spaced.TryGetValue(
+                    key: (space, name),
+                    value: out mapped
+                )) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        public bool TryMapExact(WorldNameKind kind, string name, [NotNullWhen(returnValue: true)] out string? mapped) => m_exact.TryGetValue(
+            key: (kind, name),
+            value: out mapped
+        );
+    }
+    // One reserved channel's arguments, read by the channel's grammar into the rewritten arguments: a position holding
+    // a name maps under that name's kind, and a position the engine reads as its own word never does.
+    private sealed class ChannelReader(Rewriter rewriter, List<string> arguments, List<string> output) {
+        public void Name(int index, WorldNameKind? kind) => output.Add(item: rewriter.RewriteSegment(
+            kind: kind,
+            map: true,
+            segment: arguments[index]
+        ));
+        public void NameAt(int index, WorldNameKind? kind) {
+            if (index < arguments.Count) {
+                Name(
+                    index: index,
+                    kind: kind
+                );
+            }
+        }
+        public void Word(int index) => output.Add(item: rewriter.RewriteSegment(
+            kind: null,
+            map: false,
+            segment: arguments[index]
+        ));
+        public void Words(int from) {
+            for (var index = from; (index < arguments.Count); index++) {
+                Word(index: index);
+            }
+        }
+        public void Names(int from, WorldNameKind? kind) {
+            for (var index = from; (index < arguments.Count); index++) {
+                Name(
+                    index: index,
+                    kind: kind
+                );
+            }
+        }
+        public void Leading(int count, WorldNameKind? kind) {
+            for (var index = 0; ((index < count) && (index < arguments.Count)); index++) {
+                Name(
+                    index: index,
+                    kind: kind
+                );
+            }
+        }
+        public void KeyTail(int from) => Tail(
+            from: from,
+            rewrite: rewriter.RewriteKey
+        );
+        public void ExpressionTail(int from) => Tail(
+            from: from,
+            rewrite: rewriter.RewriteExpression
+        );
+        // Words until an argument opens with '$', which starts a key spelling that runs to the end.
+        public void WordsThenKey(int from) {
+            for (var index = from; (index < arguments.Count); index++) {
+                if (arguments[index].StartsWith(value: '$')) {
+                    KeyTail(from: index);
+
+                    return;
+                }
+
+                Word(index: index);
+            }
+        }
+        // reduce:<op>:<row>, argmax:<row>, then any where:<filterRow> or between:<lower>:<upper>.
+        public void Aggregate(bool operation) {
+            var index = 0;
+
+            if (operation && (arguments.Count > 0)) {
+                Word(index: index++);
+            }
+
+            if (index < arguments.Count) {
+                Name(
+                    index: index++,
+                    kind: WorldNameKind.State
+                );
+            }
+
+            while (index < arguments.Count) {
+                var isWhere = (arguments[index] == "where");
+
+                Word(index: index++);
+
+                if (isWhere && (index < arguments.Count)) {
+                    Name(
+                        index: index++,
+                        kind: WorldNameKind.State
+                    );
+                }
+            }
+        }
+        // symmetry:<function>[:<argument>]:<row>, where an argument cell:<row>[.<key>] reads a second row.
+        public void Symmetry() {
+            for (var index = 0; (index < arguments.Count); index++) {
+                if (index == (arguments.Count - 1)) {
+                    Name(
+                        index: index,
+                        kind: WorldNameKind.State
+                    );
+                } else if ((arguments[index] == "cell") && ((index + 1) < (arguments.Count - 1))) {
+                    Word(index: index);
+                    output.Add(item: rewriter.MapNameOrSplit(
+                        kind: WorldNameKind.State,
+                        name: arguments[++index]
+                    ));
+                } else {
+                    Word(index: index);
+                }
+            }
+        }
+        // board:<operation>:<row>:<arguments>; cellOf's argument is a body reference.
+        public void Board() {
+            if (arguments.Count > 0) {
+                Word(index: 0);
+            }
+
+            if (arguments.Count > 1) {
+                Name(
+                    index: 1,
+                    kind: WorldNameKind.State
+                );
+            }
+
+            if ((arguments.Count > 0) && (arguments[0] == "cellOf")) {
+                BodyReferences(start: 2);
+            } else {
+                WordsThenKey(from: 2);
+            }
+        }
+        // Successive body references from a position to the end.
+        public void BodyReferences(int start) {
+            while (start < arguments.Count) {
+                start += BodyReference(start: start);
+            }
+        }
+        // One body reference, then the channel's own facet words, or, for nearest, the rows it filters by.
+        public void BodyReferenceThen(WorldNameKind? rows) {
+            var width = BodyReference(start: 0);
+
+            if (rows is { } kind) {
+                Names(
+                    from: width,
+                    kind: kind
+                );
+            } else {
+                Words(from: width);
+            }
+        }
+
+        // One body reference: cell:<row>:<key> and argmax:<row>/argmin:<row> name a row, placement:<id> a placement,
+        // and body:<n> and a bound each/left/right name nothing. Returns how many arguments it spanned.
+        private int BodyReference(int start) {
+            if (start >= arguments.Count) {
+                return 0;
+            }
+
+            var width = Math.Min(
+                val1: WorldFactsCompileContext.BodyRefTokenWidth(start: start, tokens: [.. arguments]),
+                val2: (arguments.Count - start)
+            );
+            var kind = arguments[start];
+            var named = kind switch {
+                "cell" or "argmax" or "argmin" => WorldNameKind.State,
+                "placement" => WorldNameKind.Placement,
+                _ => ((WorldNameKind?)null),
+            };
+
+            output.Add(item: kind);
+
+            for (var index = (start + 1); (index < (start + width)); index++) {
+                if ((index == (start + 1)) && (named is { } nameKind)) {
+                    Name(
+                        index: index,
+                        kind: nameKind
+                    );
+                } else if ((index == (start + 2)) && (kind == "cell")) {
+                    output.Add(item: rewriter.RewriteKey(key: arguments[index]));
+                } else {
+                    Word(index: index);
+                }
+            }
+
+            return Math.Max(
+                val1: width,
+                val2: 1
+            );
+        }
+        private void Tail(int from, Func<string, string> rewrite) {
+            if (from < arguments.Count) {
+                output.Add(item: rewrite(arg: string.Join(separator: ':', values: arguments.Skip(count: from))));
+            }
+        }
+    }
+
+    // The channel's name, as a reserved spelling opens it: '$reduce:' names 'reduce'.
+    private static string ChannelName(string spelling) => spelling[1..spelling.IndexOf(value: ':')];
+
+    // Every reserved channel, each with the grammar its arguments are read by. The grammars mirror the channel
+    // compilers (RuleCompiler's operands and WorldFactsVocabulary's) and the spellings RuleFacts and WorldRuleFacts
+    // document; a spelling this table does not hold is no channel, and its arguments are left as written.
+    private static readonly FrozenDictionary<string, Action<ChannelReader>> Channels = new (string Name, Action<ChannelReader> Grammar)[] {
+        (ChannelName(spelling: RuleFacts.CellKeyPrefix), static read => {
+            read.Leading(count: 1, kind: WorldNameKind.State);
+            read.KeyTail(from: 1);
+        }),
+        (ChannelName(spelling: RuleFacts.ExpressionKeyPrefix), static read => read.ExpressionTail(from: 0)),
+        (ChannelName(spelling: RuleFacts.HistoryPrefix), static read => {
+            read.Leading(count: 1, kind: WorldNameKind.State);
+            read.ExpressionTail(from: 1);
+        }),
+        (ChannelName(spelling: RuleFacts.MatchPrefix), static read => {
+            read.Leading(count: 1, kind: WorldNameKind.Pattern);
+            read.NameAt(index: 1, kind: WorldNameKind.Zone);
+            read.Words(from: 2);
+        }),
+        (ChannelName(spelling: RuleFacts.ZoneKeyPrefix), static read => {
+            read.Leading(count: 1, kind: WorldNameKind.Zone);
+            read.Words(from: 1);
+        }),
+        ("phase", static read => {
+            read.Leading(count: 1, kind: WorldNameKind.State);
+            read.Words(from: 1);
+        }),
+        (ChannelName(spelling: RuleFacts.TablePrefix), static read => {
+            read.Leading(count: 1, kind: WorldNameKind.Table);
+            read.WordsThenKey(from: 1);
+        }),
+        (ChannelName(spelling: RuleFacts.ReducePrefix), static read => read.Aggregate(operation: true)),
+        (ChannelName(spelling: WorldRuleFacts.ArgMaxPrefix), static read => read.Aggregate(operation: false)),
+        (ChannelName(spelling: WorldRuleFacts.ArgMinPrefix), static read => read.Aggregate(operation: false)),
+        (ChannelName(spelling: RuleFacts.SymmetryPrefix), static read => read.Symmetry()),
+        ("board", static read => read.Board()),
+        (ChannelName(spelling: WorldRuleFacts.DistancePrefix), static read => read.BodyReferences(start: 0)),
+        (ChannelName(spelling: WorldRuleFacts.LineOfSightPrefix), static read => read.BodyReferences(start: 0)),
+        (ChannelName(spelling: WorldRuleFacts.PairKeyPrefix), static read => read.BodyReferences(start: 0)),
+        (ChannelName(spelling: WorldRuleFacts.FactPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.IdentityPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.NavigationPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.ParkedPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.UprightPrefix), static read => read.BodyReferenceThen(rows: null)),
+        (ChannelName(spelling: WorldRuleFacts.NearestPrefix), static read => read.BodyReferenceThen(rows: WorldNameKind.State)),
+        // A seat, then the input channel it reads.
+        (ChannelName(spelling: WorldRuleFacts.ChannelPrefix), static read => {
+            read.Word(index: 0);
+            read.Names(from: 1, kind: null);
+        }),
+        // An influence label every module shares, then the placement it reads.
+        (ChannelName(spelling: WorldRuleFacts.InfluencePrefix), static read => {
+            read.Word(index: 0);
+            read.Names(from: 1, kind: WorldNameKind.Placement);
+        }),
+        // The music row or screen, then the channel's facet or byte address.
+        (ChannelName(spelling: WorldRuleFacts.ClockPrefix), static read => {
+            read.Leading(count: 1, kind: null);
+            read.Words(from: 1);
+        }),
+        (ChannelName(spelling: WorldRuleFacts.MachinePrefix), static read => {
+            read.Leading(count: 1, kind: null);
+            read.Words(from: 1);
+        }),
+        (ChannelName(spelling: WorldRuleFacts.LinkPrefix), static read => read.Names(from: 0, kind: null)),
+        (ChannelName(spelling: WorldRuleFacts.RegionPrefix), static read => read.Names(from: 0, kind: WorldNameKind.Placement)),
+        (ChannelName(spelling: WorldRuleFacts.PhysicsQuiescent), static read => read.Words(from: 0)),
+        (ChannelName(spelling: RuleFacts.SearchPly), static read => read.Words(from: 0)),
+    }.ToFrozenDictionary(
+        comparer: StringComparer.Ordinal,
+        elementSelector: static channel => channel.Grammar,
+        keySelector: static channel => channel.Name
+    );
+
+    private sealed class Rewriter(INameMap names) {
         public JsonNode? Scope { get; set; }
 
         private const string BindingPrefix = "state.";
@@ -870,7 +1199,10 @@ public static class WorldModuleNamespace {
             while (root?.Parent is { } parent) {
                 root = parent;
             }
-            var mapped = (declared.ContainsKey(key: name) ? Map(name: name) : name);
+            var mapped = Map(
+                kind: WorldNameKind.Pool,
+                name: name
+            );
 
             foreach (var section in ((ReadOnlySpan<string>)["pools", "pairPools"])) {
                 if (root?["state"]?[section] is not JsonArray pools) {
@@ -886,14 +1218,14 @@ public static class WorldModuleNamespace {
             }
             return false;
         }
-        private string Map(string name) =>
-            (declared.TryGetValue(
-                key: name,
-                value: out var prefixed
-            )
-                ? prefixed
-                : name
-            );
+        private string Map(string name, WorldNameKind? kind) => (names.TryMap(
+            kind: kind,
+            mapped: out var mapped,
+            name: name
+        )
+            ? mapped
+            : name
+        );
         private static int MatchingBracket(string text, int open) {
             var depth = 0;
 
@@ -910,21 +1242,30 @@ public static class WorldModuleNamespace {
 
             return -1;
         }
+
         // A declared non-cell name (a topology, table, or generator name) may itself carry a dot — SafeName admits
-        // one where CellName never does — so a name found whole in `declared` is renamed whole; only a name that
-        // is NOT itself declared falls to ExpressionSpelling's typed lexical-field rule. An instance binding stays
-        // local while a qualified declaration is renamed; the field half is never itself a `Declares` site.
-        private string MapNameOrSplit(string name) =>
-            (declared.ContainsKey(key: name)
-                ? Map(name: name)
-                : (ExpressionSpelling.TrySplitDottedName(
+        // one where CellName never does — so a name found whole in the map is renamed whole; only a name that is NOT
+        // itself declared falls to ExpressionSpelling's typed lexical-field rule. An instance binding stays local
+        // while a qualified declaration is renamed; the field half is never itself a `Declares` site.
+        public string MapNameOrSplit(string name, WorldNameKind? kind) {
+            if (names.TryMap(
+                kind: kind,
+                mapped: out var mapped,
+                name: name
+            )) {
+                return mapped;
+            }
+
+            return (ExpressionSpelling.TrySplitDottedName(
                 key: out var key,
                 name: name,
                 row: out var row
             )
-                    ? $"{(IsInstanceBinding(name: row) ? row : Map(name: row))}.{key}"
-                    : Map(name: name))
+                ? $"{(IsInstanceBinding(name: row) ? row : Map(kind: kind, name: row))}.{key}"
+                : name
             );
+        }
+
         private string RewriteBinding(string token) {
             if (!token.StartsWith(
                 comparisonType: StringComparison.Ordinal,
@@ -944,7 +1285,7 @@ public static class WorldModuleNamespace {
                 : rest[dot..]
             );
 
-            return $"{BindingPrefix}{Map(name: row)}{tail}";
+            return $"{BindingPrefix}{Map(kind: WorldNameKind.State, name: row)}{tail}";
         }
         // The text between a name's brackets: a bare or backquoted name is a cell key and stays; a reserved token
         // rewrites as a key; anything else is an expression.
@@ -976,98 +1317,95 @@ public static class WorldModuleNamespace {
 
             return inner;
         }
-        private string RewriteExpression(string text) {
-            var output = new StringBuilder(capacity: text.Length);
-            var index = 0;
 
-            while (index < text.Length) {
-                var character = text[index];
-
-                if (character == '`') {
-                    var close = text.IndexOf(
-                        startIndex: (index + 1),
-                        value: '`'
-                    );
-
-                    if (close < 0) {
-                        _ = output.Append(
-                            value: text,
-                            startIndex: index,
-                            count: (text.Length - index)
-                        );
-
-                        break;
-                    }
-
-                    _ = output.Append(value: '`').Append(value: Map(name: text[(index + 1)..close])).Append(value: '`');
-                    index = (close + 1);
-
-                    continue;
-                }
-
-                var nameLength = ExpressionSpelling.ScanBareName(
-                    start: index,
-                    text: text
-                );
-
-                if (nameLength > 0) {
-                    var end = (index + nameLength);
-                    var name = text[index..end];
-
-                    _ = output.Append(value: (name.StartsWith(value: '$')
-                        ? RewriteReserved(name: name)
-                        : MapNameOrSplit(name: name)));
-                    index = end;
-
-                    if (
-                        (index < text.Length) &&
-                        (text[index] == '[')
-                    ) {
-                        var close = MatchingBracket(
-                            open: index,
-                            text: text
-                        );
-
-                        if (close < 0) {
-                            continue;
+        // Rewrites one registered site in place: a list of names, or one name-bearing value. A member that holds a
+        // call node holds one again, its row arguments renamed.
+        public void RewriteSite(JsonObject parent, string name, JsonNode value, WorldNameField field, Type memberType) {
+            switch (WorldChannelNodes.Spelled(
+                memberType: memberType,
+                value: value
+            )) {
+                case JsonArray list when (field.Role == WorldNameRole.Names):
+                    for (var index = 0; (index < list.Count); index++) {
+                        if (
+                            (list[index: index] is JsonValue element) &&
+                            element.TryGetValue<string>(value: out var item)
+                        ) {
+                            list[index: index] = Rewrite(
+                                kind: field.Kind,
+                                role: field.Role,
+                                text: item
+                            );
                         }
-
-                        _ = output.Append(value: '[').Append(value: RewriteBracket(inner: text[(index + 1)..close])).Append(value: ']');
-                        index = (close + 1);
                     }
 
-                    continue;
-                }
-
-                if (char.IsAsciiDigit(c: character)) {
-                    var end = index;
-
-                    while (
-                        (end < text.Length) &&
-                        (char.IsAsciiLetterOrDigit(c: text[end]) || (text[end] == '.'))
-                    ) {
-                        end++;
+                    break;
+                case JsonObject map when ((field.Role == WorldNameRole.Names) && (memberType == typeof(IReadOnlyDictionary<string, string>))):
+                    // A map whose values are names: a deal's variant prototypes.
+                    foreach (var (key, entry) in map.ToArray()) {
+                        if ((entry is JsonValue mapped) && mapped.TryGetValue<string>(value: out var item)) {
+                            map[propertyName: key] = Rewrite(
+                                kind: field.Kind,
+                                role: field.Role,
+                                text: item
+                            );
+                        }
                     }
 
-                    _ = output.Append(
-                        count: (end - index),
-                        startIndex: index,
-                        value: text
+                    break;
+                case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
+                    var rewritten = Rewrite(
+                        kind: field.Kind,
+                        role: field.Role,
+                        text: text
                     );
-                    index = end;
 
-                    continue;
-                }
+                    parent[propertyName: name] = ((value is JsonObject)
+                        ? WorldChannelNodes.Node(spelling: rewritten)
+                        : rewritten
+                    );
 
-                _ = output.Append(value: character);
-                index++;
+                    break;
+            }
+        }
+        // Infix text is read by the expression grammar itself, never lexically: it parses to the IR, the IR's
+        // registered sites are rewritten exactly as a document's own IR is, and the program prints back. So a channel
+        // call's arguments are read by the channel's grammar, a reduction's options and a fold's binder stay the
+        // engine's, and only a position that names a declaration is renamed. Text that does not parse is left as
+        // written; it is refused where it compiles.
+        public string RewriteExpression(string text) {
+            if (!ExpressionSpelling.TryParse(
+                error: out _,
+                program: out var program,
+                text: text
+            )) {
+                return text;
             }
 
-            return output.ToString();
+            var node = ExpressionProgramJsonConverter.ToNode(program: program);
+
+            VisitExpressionProgram(
+                node: node,
+                visitor: (parent, name, value, field, memberType) => RewriteSite(
+                    field: field,
+                    memberType: memberType,
+                    name: name,
+                    parent: parent,
+                    value: value
+                )
+            );
+
+            return (ExpressionSpelling.TryPrint(
+                program: ExpressionProgramJsonConverter.FromNode(node: node),
+                text: out var printed
+            )
+                ? printed
+                : text
+            );
         }
         // A literal key is local to its row and stays; a reserved spelling ($cell:, $zone:, $pair:, $expr:, $zones[)
         // or a body-reference spelling (cell:<row>:<key>, argmax:<row>) carries names in its segments.
-        private string RewriteKey(string key) {
+        public string RewriteKey(string key) {
             if (key.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: RuleFacts.ExpressionKeyPrefix
@@ -1084,22 +1422,13 @@ public static class WorldModuleNamespace {
 
             return key;
         }
-        // Colon segments outside brackets are names; a bracketed span is a live-zone index, a cell key in its own
-        // right. A $local: read names a rule-scoped local, never a row.
+
+        // A reserved spelling's colon segments, each read by the position it holds in its channel's grammar
+        // (Channels): only a position that names a declaration maps, so a keyword the engine reads there (an
+        // operation, a facet, a body-reference kind) keeps its meaning whatever a module declares. A body-reference
+        // key (cell:<row>:<key>, argmax:<row>, placement:<id>) reads the same way. A $local: read names a rule-scoped
+        // local, never a row, and a channel the table does not hold is left as written.
         private string RewriteReserved(string name) {
-            if (name.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: WorldRuleFacts.InfluencePrefix
-            )) {
-                var separator = name.IndexOf(
-                    ':',
-                    WorldRuleFacts.InfluencePrefix.Length
-                );
-                // Influence labels are shared semantics, even if a module happens to declare a row of that name.
-                if (separator >= 0) {
-                    return (name[..(separator + 1)] + RewriteReserved(name: name[(separator + 1)..]));
-                }
-            }
             if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: RuleFacts.LocalPrefix
@@ -1107,52 +1436,111 @@ public static class WorldModuleNamespace {
                 return name;
             }
 
-            var output = new StringBuilder(capacity: name.Length);
-            var segment = new StringBuilder();
+            var segments = SplitSegments(text: name);
+            var output = new List<string>(capacity: segments.Count);
+
+            if (!segments[0].StartsWith(value: '$')) {
+                new ChannelReader(arguments: segments, output: output, rewriter: this).BodyReferences(start: 0);
+            } else {
+                output.Add(item: RewriteSegment(
+                    kind: null,
+                    map: false,
+                    segment: segments[0]
+                ));
+
+                if (segments.Count > 1) {
+                    var arguments = segments.GetRange(
+                        count: (segments.Count - 1),
+                        index: 1
+                    );
+
+                    if (Channels.TryGetValue(
+                        key: segments[0][1..],
+                        value: out var grammar
+                    )) {
+                        grammar(obj: new ChannelReader(arguments: arguments, output: output, rewriter: this));
+                    } else {
+                        output.AddRange(collection: arguments);
+                    }
+                }
+            }
+
+            return string.Join(
+                separator: ':',
+                values: output
+            );
+        }
+
+        // One colon segment: its text outside brackets mapped under the kind when it holds a name, and each
+        // bracketed span — a live zone's index, a cell key in its own right — rewritten as a key.
+        public string RewriteSegment(string segment, bool map, WorldNameKind? kind) {
+            var output = new StringBuilder(capacity: segment.Length);
+            var text = new StringBuilder();
             var index = 0;
 
-            while (index < name.Length) {
-                var character = name[index];
+            while (index < segment.Length) {
+                var character = segment[index];
 
                 if (character == '[') {
                     var close = MatchingBracket(
                         open: index,
-                        text: name
+                        text: segment
                     );
 
                     if (close < 0) {
-                        _ = segment.Append(
-                            value: name,
+                        _ = text.Append(
+                            count: (segment.Length - index),
                             startIndex: index,
-                            count: (name.Length - index)
+                            value: segment
                         );
 
                         break;
                     }
 
-                    _ = output.Append(value: Map(name: segment.ToString()));
-                    _ = segment.Clear();
-                    _ = output.Append(value: '[').Append(value: RewriteBracket(inner: name[(index + 1)..close])).Append(value: ']');
+                    _ = output.Append(value: (map ? Map(kind: kind, name: text.ToString()) : text.ToString()));
+                    _ = text.Clear();
+                    _ = output.Append(value: '[').Append(value: RewriteBracket(inner: segment[(index + 1)..close])).Append(value: ']');
                     index = (close + 1);
 
                     continue;
                 }
 
-                if (character == ':') {
-                    _ = output.Append(value: Map(name: segment.ToString())).Append(value: ':');
-                    _ = segment.Clear();
-                    index++;
-
-                    continue;
-                }
-
-                _ = segment.Append(value: character);
+                _ = text.Append(value: character);
                 index++;
             }
 
-            _ = output.Append(value: Map(name: segment.ToString()));
+            _ = output.Append(value: (map ? Map(kind: kind, name: text.ToString()) : text.ToString()));
 
             return output.ToString();
+        }
+
+        // Splits a spelling on the colons outside any bracket or parenthesis.
+        private static List<string> SplitSegments(string text) {
+            var segments = new List<string>();
+            var depth = 0;
+            var start = 0;
+
+            for (var index = 0; (index < text.Length); index++) {
+                switch (text[index]) {
+                    case '[' or '(':
+                        depth++;
+
+                        break;
+                    case ']' or ')':
+                        depth--;
+
+                        break;
+                    case ':' when (depth == 0):
+                        segments.Add(item: text[start..index]);
+                        start = (index + 1);
+
+                        break;
+                }
+            }
+
+            segments.Add(item: text[start..]);
+
+            return segments;
         }
         private string RewriteTemplate(string template) {
             var output = new StringBuilder(capacity: template.Length);
@@ -1201,11 +1589,11 @@ public static class WorldModuleNamespace {
             return output.ToString();
         }
 
-        public string Rewrite(string text, WorldNameRole role) => role switch {
-            WorldNameRole.Declares => Map(name: text),
+        public string Rewrite(string text, WorldNameRole role, WorldNameKind kind) => role switch {
+            WorldNameRole.Declares => Map(kind: kind, name: text),
             WorldNameRole.Names => (text.StartsWith(value: '$')
             ? RewriteReserved(name: text)
-            : MapNameOrSplit(name: text)),
+            : MapNameOrSplit(kind: kind, name: text)),
             WorldNameRole.Key => RewriteKey(key: text),
             WorldNameRole.Expression => RewriteExpression(text: text),
             WorldNameRole.Binding => RewriteBinding(token: text),

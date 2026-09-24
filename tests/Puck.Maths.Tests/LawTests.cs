@@ -4,7 +4,7 @@ namespace Puck.Maths.Tests;
 
 /// <summary>
 /// Runs every declared law case as a theory row, one test per case, named by its id and tagged with its tier trait.
-/// Tier selection is declarative: the project's default runsettings exclude Deep and Bench, and each tier has a
+/// Tier selection is declarative: the project's default runsettings exclude Deep and Exhaustive, and each tier has a
 /// committed <c>*.runsettings</c> whose <c>TestCaseFilter</c> selects it (<c>dotnet test --settings …</c>).
 /// This is also where a law failure is RAISED for the frontier's green gate (see
 /// <see cref="Frontier.AdvanceAndPersist"/>): every law-side failure mode passes through this one frame, and no

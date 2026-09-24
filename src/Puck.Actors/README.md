@@ -22,7 +22,7 @@ https://claude.ai/code/artifact/aed8686b-2eff-4595-9ec0-6030489200dc
 {
     "protectedAssertion": "<DataProtection-protected user JWT, produced by the edge>",
     "tokenDiscriminator": "<base64 token discriminator, same value used as the protector sub-purpose>",
-    "assertionExpiresAt": "2026-08-27T21:03:00Z"
+    "assertionExpiresAt": "<ISO 8601 UTC instant>"
 }
 ```
 
@@ -34,7 +34,7 @@ Both return `200` with:
 {
     "status": "NotOnboarded | Onboarding | Ready | Faulted",
     "completedSteps": ["Identity", "Storage", "Keys", "Finalized"],
-    "updatedAt": "2026-08-27T21:02:31Z",
+    "updatedAt": "<ISO 8601 UTC instant>",
     "faultReason": null
 }
 ```

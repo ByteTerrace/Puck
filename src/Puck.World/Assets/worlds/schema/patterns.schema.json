@@ -16,7 +16,7 @@
         "type": "string"
       },
       "kind": {
-        "$ref": "./common.schema.json#/$defs/CellKind",
+        "$ref": "./common.schema.json#/$defs/CellKindNonNullable",
         "description": "The numeric kind of the values the word is read from: Int or Fixed."
       },
       "symbols": {

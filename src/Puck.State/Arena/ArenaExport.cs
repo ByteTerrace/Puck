@@ -137,13 +137,14 @@ public sealed partial class StateArena {
             Key: name,
             Observation: m_observations?[slot],
             Provenance: m_provenance?[slot],
-            Value: (layout.Kind switch {
-                CellKind.Text => CellValue.Text(value: (m_texts?[slot] ?? string.Empty)),
-                CellKind.Vector => CellValue.Vector(components: VectorSpan(slot: slot).ToArray()),
-                CellKind.Bool => CellValue.Bool(value: (m_numbers[slot] != 0L)),
-                CellKind.Fixed => CellValue.Fixed(rawBits: m_numbers[slot]),
-                _ => CellValue.Int(value: m_numbers[slot]),
-            }),
+            // An export owns its data, so a vector is copied out of the arena where ValueAt aliases it.
+            Value: ((layout.Kind == CellKind.Vector)
+                ? CellValue.Vector(components: VectorSpan(slot: slot).ToArray())
+                : ValueAt(
+                    layout: in layout,
+                    slot: slot
+                )
+            ),
             Visibility: m_visibilities?[slot]
         );
     }

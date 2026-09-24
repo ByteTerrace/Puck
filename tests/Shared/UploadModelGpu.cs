@@ -1,0 +1,227 @@
+using System.Runtime.InteropServices;
+using Puck.Abstractions.Gpu;
+
+namespace Puck.Testing;
+
+/// <summary>
+/// A device-free GPU that models memory for the one kernel whose effect a host law can predict: the table uploader,
+/// <c>sdf-frame-upload.comp</c>, whose ABI <see cref="GpuRegion"/>'s staged copy speaks. Every buffer is backed by bytes
+/// and carries its own handle; host writes land in those bytes and are tallied per buffer; descriptor sets remember
+/// which buffer each binding names; and a dispatch recorded while the pipeline built from
+/// <see cref="FrameUploadBytecode"/> is bound runs that kernel's copy at record time, from the set's binding 0 into its
+/// binding 1: the push carries <c>(count, runCount, offset, tableBase)</c> in uints, and thread <c>i</c> below the
+/// count copies <c>destination[word] = source[tableBase + word]</c>, where <c>word</c> is <c>offset + i</c> for one run
+/// or, for two or more, found in the source's leading <c>(table offset, prefix)</c> run table (a linear search here; the
+/// kernel's binary search finds the same run). Recording order is execution order here, as it is on one queue behind
+/// the barriers the caller records. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
+/// </summary>
+internal sealed class UploadModelGpu :
+    IGpuComputePipelineFactory,
+    IGpuComputeRecorder,
+    IGpuComputeServices,
+    IGpuDescriptorAllocator,
+    IGpuShaderModuleFactory,
+    IGpuStorageBufferFactory {
+    /// <summary>The first bytecode byte that marks the frame-upload kernel.</summary>
+    public const byte FrameUploadBytecode = 0xF7;
+
+    private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
+    private readonly Dictionary<nint, MemoryBuffer> m_buffers = [];
+    private readonly FakeGpuDevice m_inner;
+    private readonly byte[] m_push = new byte[16];
+
+    private nint m_boundPipeline;
+    private nint m_boundSet;
+    private nint m_nextHandle = 0x1000;
+    private nint m_uploadModule;
+    private nint m_uploadPipeline;
+
+    /// <summary>Initializes a new instance of the <see cref="UploadModelGpu"/> class.</summary>
+    /// <param name="reportVersion">The ISA version a 1×1 readback reports.</param>
+    public UploadModelGpu(byte reportVersion) {
+        m_inner = new FakeGpuDevice(reportVersion: reportVersion);
+    }
+
+    public IGpuComputeCommandPoolFactory CommandPoolFactory => m_inner.CommandPoolFactory;
+    public IGpuComputePipelineFactory ComputePipelineFactory => this;
+    public IGpuComputeRecorder ComputeRecorder => this;
+    public IGpuDescriptorAllocator DescriptorAllocator => this;
+    /// <summary>Gets the device the engine renders on.</summary>
+    public IGpuDeviceContext Device => m_inner;
+    public IGpuImageFactory ImageFactory => m_inner.ImageFactory;
+    public IGpuQueueSubmitter QueueSubmitter => m_inner.QueueSubmitter;
+    public IGpuShaderModuleFactory ShaderModuleFactory => this;
+    public IGpuStorageBufferFactory StorageBufferFactory => this;
+    public IGpuSurfaceTransferFactory SurfaceTransferFactory => m_inner.SurfaceTransferFactory;
+    /// <summary>Gets the table-upload copies recorded since the last <see cref="ResetTallies"/>.</summary>
+    public int UploadCopies { get; private set; }
+
+    /// <summary>Gets the bytes of the one device-local buffer of <paramref name="sizeBytes"/>.</summary>
+    /// <param name="sizeBytes">The buffer's size; exactly one device-local buffer must have it.</param>
+    /// <returns>The buffer's current contents.</returns>
+    public byte[] DeviceLocal(ulong sizeBytes) => Single(
+        hostVisible: false,
+        sizeBytes: sizeBytes
+    ).Memory;
+    /// <summary>Gets the bytes of the one host-visible buffer of <paramref name="sizeBytes"/>.</summary>
+    /// <param name="sizeBytes">The buffer's size; exactly one host-visible buffer must have it.</param>
+    /// <returns>The buffer's current contents.</returns>
+    public byte[] HostVisible(ulong sizeBytes) => Single(
+        hostVisible: true,
+        sizeBytes: sizeBytes
+    ).Memory;
+    /// <summary>Gets the bytes of the live buffer whose handle is <paramref name="bufferHandle"/>.</summary>
+    /// <param name="bufferHandle">The buffer's handle.</param>
+    /// <returns>The buffer's current contents.</returns>
+    public byte[] Memory(nint bufferHandle) => m_buffers[bufferHandle].Memory;
+    /// <summary>Gets the host-visible bytes written since the last <see cref="ResetTallies"/>, per buffer size, for
+    /// every buffer that received any.</summary>
+    /// <returns>Each written buffer's size and the bytes written to it.</returns>
+    public (ulong SizeBytes, long Written)[] HostWrites() => [.. m_buffers.Values
+        .Where(predicate: buffer => (buffer.Written > 0L))
+        .Select(selector: buffer => (buffer.SizeBytes, buffer.Written))];
+    /// <summary>Gets the host-visible bytes written since the last <see cref="ResetTallies"/>.</summary>
+    /// <returns>The byte count.</returns>
+    public long HostBytes() => m_buffers.Values.Sum(selector: buffer => buffer.Written);
+    /// <summary>Zeroes the host-write and upload-copy tallies.</summary>
+    public void ResetTallies() {
+        foreach (var buffer in m_buffers.Values) {
+            buffer.Written = 0L;
+        }
+
+        UploadCopies = 0;
+    }
+
+    IGpuComputePipeline IGpuComputePipelineFactory.Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+        var pipeline = new Handles(handle: NextHandle(), layout: NextHandle(), setLayout: NextHandle());
+
+        if (computeShaderModule.Handle == m_uploadModule) {
+            m_uploadPipeline = pipeline.Handle;
+        }
+
+        return pipeline;
+    }
+    IGpuShaderModule IGpuShaderModuleFactory.Create(IGpuDeviceContext deviceContext, GpuShaderStage stage, ReadOnlyMemory<byte> bytecode) {
+        var module = new Handles(handle: NextHandle(), layout: 0, setLayout: 0);
+
+        if (
+            !bytecode.IsEmpty &&
+            (bytecode.Span[0] == FrameUploadBytecode)
+        ) {
+            m_uploadModule = module.Handle;
+        }
+
+        return module;
+    }
+    IGpuStorageBuffer IGpuStorageBufferFactory.Create(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
+    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
+    IGpuBuffer IGpuStorageBufferFactory.CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
+    IGpuStorageBuffer IGpuStorageBufferFactory.CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
+    nint IGpuDescriptorAllocator.AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) => NextHandle();
+    nint IGpuDescriptorAllocator.CreatePool(nint deviceHandle, in GpuDescriptorPoolSizes sizes) => m_inner.DescriptorAllocator.CreatePool(deviceHandle: deviceHandle, sizes: sizes);
+    nint IGpuDescriptorAllocator.CreateSampler(nint deviceHandle, GpuSamplerFilter filter) => m_inner.DescriptorAllocator.CreateSampler(deviceHandle: deviceHandle, filter: filter);
+    void IGpuDescriptorAllocator.DestroyPool(nint deviceHandle, nint poolHandle) { }
+    void IGpuDescriptorAllocator.DestroySampler(nint deviceHandle, nint samplerHandle) { }
+    void IGpuDescriptorAllocator.WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) { }
+    void IGpuDescriptorAllocator.WriteRawBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, bool writable) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuDescriptorAllocator.WriteStorageBuffer(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuDescriptorAllocator.WriteStorageBufferReadOnly(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuDescriptorAllocator.WriteStorageBufferReadWrite(nint deviceHandle, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuDescriptorAllocator.WriteStorageImage(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
+    void IGpuComputeRecorder.BeginCommandBuffer(nint deviceHandle, nint commandBufferHandle) { }
+    void IGpuComputeRecorder.BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) { }
+    void IGpuComputeRecorder.BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) => m_boundSet = descriptorSetHandle;
+    void IGpuComputeRecorder.BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
+    void IGpuComputeRecorder.Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
+        if (
+            (0 == m_uploadPipeline) ||
+            (m_boundPipeline != m_uploadPipeline)
+        ) {
+            return;
+        }
+
+        var push = MemoryMarshal.Cast<byte, uint>(span: m_push.AsSpan());
+        var source = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 0u)]].Memory.AsSpan());
+        var destination = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 1u)]].Memory.AsSpan());
+
+        var (count, runCount, offset, tableBase) = (push[0], push[1], push[2], push[3]);
+
+        for (var thread = 0u; (thread < count); thread++) {
+            var word = (offset + thread);
+
+            if (runCount > 1u) {
+                var run = (runCount - 1u);
+
+                while (source[((int)((run * 2u) + 1u))] > thread) {
+                    run--;
+                }
+
+                word = (source[((int)(run * 2u))] + (thread - source[((int)((run * 2u) + 1u))]));
+            }
+
+            destination[((int)word)] = source[((int)(tableBase + word))];
+        }
+
+        UploadCopies++;
+    }
+    void IGpuComputeRecorder.DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
+    void IGpuComputeRecorder.EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) { }
+    void IGpuComputeRecorder.EndDebugGroup(nint deviceHandle, nint commandBufferHandle) { }
+    void IGpuComputeRecorder.MemoryBarrier(nint deviceHandle, nint commandBufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
+    void IGpuComputeRecorder.PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
+        if (
+            (0 != m_uploadPipeline) &&
+            (m_boundPipeline == m_uploadPipeline)
+        ) {
+            data.CopyTo(destination: m_push.AsSpan(start: ((int)offset)));
+        }
+    }
+    void IGpuComputeRecorder.TransitionBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
+    void IGpuComputeRecorder.TransitionImageLayout(nint deviceHandle, nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuComputeAccess sourceAccessMask, GpuComputeAccess destinationAccessMask, GpuComputeStage sourceStageMask, GpuComputeStage destinationStageMask) { }
+
+    private MemoryBuffer Buffer(bool hostVisible, ulong sizeBytes) {
+        var buffer = new MemoryBuffer(
+            handle: NextHandle(),
+            hostVisible: hostVisible,
+            owner: m_buffers,
+            sizeBytes: sizeBytes
+        );
+
+        m_buffers[buffer.BufferHandle] = buffer;
+
+        return buffer;
+    }
+    private nint NextHandle() => m_nextHandle++;
+    private MemoryBuffer Single(bool hostVisible, ulong sizeBytes) => m_buffers.Values.Single(predicate: buffer =>
+        ((buffer.HostVisible == hostVisible) &&
+        (buffer.SizeBytes == sizeBytes))
+    );
+
+    // A shader module or pipeline: its own handle, plus the layout handles a pipeline carries.
+    private sealed class Handles(nint handle, nint layout, nint setLayout) : IGpuComputePipeline, IGpuShaderModule {
+        public nint DescriptorSetLayoutHandle => setLayout;
+        public nint Handle => handle;
+        public nint LayoutHandle => layout;
+
+        public void Dispose() { }
+    }
+    private sealed class MemoryBuffer(nint handle, bool hostVisible, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes) : IGpuStorageBuffer {
+        public nint BufferHandle => handle;
+        public bool HostVisible => hostVisible;
+        public byte[] Memory { get; } = new byte[checked((int)sizeBytes)];
+        public ulong SizeBytes => sizeBytes;
+        public long Written { get; set; }
+
+        public void Dispose() => _ = owner.Remove(key: handle);
+        public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => Write(
+            data: data,
+            destinationOffsetBytes: 0UL
+        );
+        public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged {
+            var bytes = MemoryMarshal.AsBytes(span: data);
+
+            bytes.CopyTo(destination: Memory.AsSpan(start: checked((int)destinationOffsetBytes)));
+            Written += bytes.Length;
+        }
+    }
+}

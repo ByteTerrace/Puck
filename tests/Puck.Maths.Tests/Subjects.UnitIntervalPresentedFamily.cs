@@ -43,14 +43,15 @@ internal static partial class Subjects {
             right: right,
             route: Oracles.ClosedUnitBestRoute
         );
-    /// <summary>The subject widest bottleneck: the guarded sum over all lengths of a quiver element at the fuzzy
-    /// material, which rounds nowhere.</summary>
-    /// <returns>The bound operation, owning its own presentation.</returns>
-    public static VectorBinaryOp PresentedFuzzyStar() {
-        PresentedAlgebra<UnitInterval32, FuzzyMaterial>? algebra = null;
+
+    // The guarded sum over all lengths of a quiver element at one unit-interval material, on a presentation the bound
+    // operation builds on its first call and owns outright.
+    private static VectorBinaryOp PresentedUnitIntervalStar<TOps>()
+        where TOps : struct, IMaterialOps<UnitInterval32, TOps> {
+        PresentedAlgebra<UnitInterval32, TOps>? algebra = null;
 
         return (left, right, result) => {
-            algebra ??= PresentedAlgebra<UnitInterval32, FuzzyMaterial>.Create(presentation: CodiscreteQuiver<UnitInterval32, FuzzyMaterial>(
+            algebra ??= PresentedAlgebra<UnitInterval32, TOps>.Create(presentation: CodiscreteQuiver<UnitInterval32, TOps>(
                 material: default,
                 order: GraphOrder
             ));
@@ -63,6 +64,12 @@ internal static partial class Subjects {
             );
         };
     }
+
+    /// <summary>The subject widest bottleneck: the guarded sum over all lengths of a quiver element at the fuzzy
+    /// material, which rounds nowhere.</summary>
+    /// <returns>The bound operation, owning its own presentation.</returns>
+    public static VectorBinaryOp PresentedFuzzyStar() =>
+        PresentedUnitIntervalStar<FuzzyMaterial>();
     /// <summary>The shared-nothing widest-bottleneck oracle: the max-min triple loop, which forms no power at all.</summary>
     /// <param name="left">The weight lanes.</param>
     /// <param name="right">The arc-presence lanes.</param>
@@ -77,23 +84,8 @@ internal static partial class Subjects {
     /// <summary>The subject bounded-sum route: the guarded sum over all lengths of a quiver element at the bounded-sum
     /// material, which rounds nowhere.</summary>
     /// <returns>The bound operation, owning its own presentation.</returns>
-    public static VectorBinaryOp PresentedBoundedSumStar() {
-        PresentedAlgebra<UnitInterval32, BoundedSumMaterial>? algebra = null;
-
-        return (left, right, result) => {
-            algebra ??= PresentedAlgebra<UnitInterval32, BoundedSumMaterial>.Create(presentation: CodiscreteQuiver<UnitInterval32, BoundedSumMaterial>(
-                material: default,
-                order: GraphOrder
-            ));
-
-            UnitIntervalStar(
-                algebra: algebra,
-                left: left,
-                result: result,
-                right: right
-            );
-        };
-    }
+    public static VectorBinaryOp PresentedBoundedSumStar() =>
+        PresentedUnitIntervalStar<BoundedSumMaterial>();
     /// <summary>The shared-nothing bounded-sum route oracle: simple-path enumeration in exact arbitrary width.</summary>
     /// <param name="left">The weight lanes.</param>
     /// <param name="right">The arc-presence lanes.</param>
@@ -902,9 +894,9 @@ internal static partial class Subjects {
 
         return null;
     }
-    // The star at one unit-interval material, written into the lane vector: absent keys stay zero, and a refusal poisons
-    // every lane rather than throwing, so it reaches the comparison as a mismatch.
-    private static void UnitIntervalStar<TOps>(PresentedAlgebra<UnitInterval32, TOps> algebra, ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result)
+    // The quiver element the lane encoding names: an arc wherever the presence lane is odd, weighted by the folded
+    // closed-unit raw in the weight lane.
+    private static PresentedAlgebra<UnitInterval32, TOps>.Element ArcElement<TOps>(PresentedAlgebra<UnitInterval32, TOps> algebra, ReadOnlySpan<long> left, ReadOnlySpan<long> right)
         where TOps : struct, IMaterialOps<UnitInterval32, TOps> {
         var count = right.Length;
         var coefficients = new UnitInterval32[count];
@@ -919,7 +911,7 @@ internal static partial class Subjects {
             ++support;
         }
 
-        var element = algebra.FromSupport(
+        return algebra.FromSupport(
             keys: keys.AsSpan(
                 length: support,
                 start: 0
@@ -928,6 +920,15 @@ internal static partial class Subjects {
                 length: support,
                 start: 0
             )
+        );
+    }    // The star at one unit-interval material, written into the lane vector: absent keys stay zero, and a refusal poisons
+    // every lane rather than throwing, so it reaches the comparison as a mismatch.
+    private static void UnitIntervalStar<TOps>(PresentedAlgebra<UnitInterval32, TOps> algebra, ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result)
+        where TOps : struct, IMaterialOps<UnitInterval32, TOps> {
+        var element = ArcElement(
+            algebra: algebra,
+            left: left,
+            right: right
         );
 
         result.Clear();
@@ -956,29 +957,12 @@ internal static partial class Subjects {
         Span<long> result
     )
         where TOps : struct, IMaterialOps<UnitInterval32, TOps> {
-        var count = right.Length;
-        var coefficients = new UnitInterval32[count];
-        var keys = new long[count];
-        var support = 0;
-
-        for (var lane = 0; (lane < count); ++lane) {
-            if (0L == (right[lane] & 1L)) { continue; }
-
-            coefficients[support] = ClosedUnit(raw: left[lane]);
-            keys[support] = lane;
-            ++support;
-        }
-
-        var element = algebra.FromSupport(
-            keys: keys.AsSpan(
-                length: support,
-                start: 0
-            ),
-            coefficients: coefficients.AsSpan(
-                length: support,
-                start: 0
-            )
+        var element = ArcElement(
+            algebra: algebra,
+            left: left,
+            right: right
         );
+
         var total = algebra.TruncatedSum(
             bound: bound,
             value: element

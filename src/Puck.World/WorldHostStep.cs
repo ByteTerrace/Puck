@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Puck.Hosting;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -8,18 +7,20 @@ namespace Puck.World;
 /// <summary>
 /// The one fixed step every boot shape runs, in the one order — the windowed <see cref="WorldSimulation"/> and the
 /// headless/offscreen <see cref="HeadlessWorldSimulation"/> hold this and contribute nothing to the sequence itself:
-/// decide whether boot is due, submit its seats' intents, drain the host's pending transfers, step boot through
-/// <see cref="WorldServerStepShell"/> (or drain an administrative mutation and release a stalled console wait when
-/// it is paused), step every other instance, run the shell's post-step, then finish the seat intents. The host-work
-/// clock a <c>world.wait</c> counts in lives here, as does the per-phase timing <c>world.timing</c> arms. Also the
-/// <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
+/// deliver the seat route changes published since the last step, decide whether boot is due, submit its seats'
+/// intents, drain the host's pending transfers, step boot through <see cref="WorldServerStepShell"/> (or drain an
+/// administrative mutation and release a stalled console wait when it is paused), step every other instance, run the
+/// shell's post-step, then finish the seat intents. The host-work clock a <c>world.wait</c> counts in lives here. Also
+/// the <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions) : IWorldSimulationClock {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter) : IWorldSimulationClock {
+    private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
     private readonly WorldPeerHost m_peerHost = peerHost;
     private readonly WorldInstanceHost m_instances = instances;
+    private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
     // The schedule runner publishes LAST: a scheduled command submitted here is attributed to the tick that just
     // completed, so the capture station's state hash and the schedule's own export describe the state before this
     // tick's commands, never a half-applied mixture.
@@ -28,11 +29,23 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         captureScheduler.PublishTick(tick: (server.NextInputTick - 1UL));
         scheduleRunner.PublishTick(tick: (server.NextInputTick - 1UL));
     };
-    private readonly SimulationTimingReporter m_timingReporter = new();
 
     private ulong m_completedHostEngineTicks;
     // Monotonic host work coordinates keep console waits independent of an authority timeline restored by replay.
     private ulong m_completedHostSteps;
+
+    /// <summary>Gets whether a capture armed at the tick just completed still waits for the frame that shows it,
+    /// so the host composes one before its next step.</summary>
+    public bool AwaitsFrame => m_captureScheduler.AwaitsFrame;
+
+    /// <summary>Whether a host that holds its clock withholds its next step: while a capture armed at the tick just
+    /// completed is neither served nor refused (<see cref="WorldCaptureScheduler.HoldsClock"/>).</summary>
+    /// <param name="withheldTicks">The host time the host withholds when the answer is <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> to withhold the step.</returns>
+    public bool HoldsClock(ulong withheldTicks) => m_captureScheduler.HoldsClock(withheldTicks: withheldTicks);
+    /// <summary>Decides the capture still owed a frame as the run ends, before the host disposes its render chain
+    /// (<see cref="WorldCaptureScheduler.Drain"/>).</summary>
+    public void SettleOwedFrames() => m_captureScheduler.Drain();
 
     /// <summary>The exact engine time completed on the current authority timeline.</summary>
     public ulong ElapsedTicks => m_server.CompletedEngineTicks;
@@ -89,16 +102,16 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// seat intents finish — the windowed shell syncs seat bindings and publishes seat context here; a headless
     /// shell passes <see langword="null"/>.</param>
     public void Step(in FixedStepContext context, Action? afterInstances) {
-        var timingEnabled = GpuTimingControl.Shared.Armed;
+        // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
+        // console verb in the drain just run. Its subscribers change seat state and bind state mirrors, so the edge is
+        // delivered here, on the pump thread, at each point of the step after which a claim can have moved: before
+        // this step's intents, after the transfer drain commits, and after the other instances step.
+        _ = m_seatRouter.DeliverRouteChanges();
 
         // Computed first, before intents are submitted below: whether boot will actually step THIS call decides
         // whether its seats' input is consumed now or held untouched. context.StepTicks is threaded in so
         // ShouldStepBoot can refuse a call whose pump-supplied width no longer matches boot's current rate.
         var stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
-        var phaseStart = (timingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
 
         // Seat intents are simulation input, submitted only when boot will actually consume them this call. A
         // paused/rate-0 boot world behaves as if no ticks existed: held seat input is never buffered into the
@@ -112,22 +125,13 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             stepTicks: context.StepTicks
         );
 
-        var rosterTicks = (timingEnabled
-            ? (Stopwatch.GetTimestamp() - phaseStart)
-            : 0L
-        );
-
-        phaseStart = (timingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
-
         // The host-level pending-transfer FIFO's one fixed drain point — before either the boot instance or any
         // other instance steps this tick, mirroring where WorldServer.DrainPendingOps sits relative to the rest of
         // WorldServer.Step. A transfer is a host act, so it settles at this host's one fixed point rather than
         // inline with whichever instance's step produced it; a transfer drained here was enqueued by a per-step
         // portal scan during the PREVIOUS call, so it lands and is advanced exactly once, this same tick.
         m_instances.DrainPendingTransfers();
+        _ = m_seatRouter.DeliverRouteChanges();
         m_instances.SubmitExternallyClockedSeatIntents();
         StepBoot(
             context: in context,
@@ -141,35 +145,12 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         // instance, or zero times for a paused/rate-0 one — never once for the whole call regardless of how many
         // times an instance actually advanced.
         m_instances.StepInstances(masterDeltaTicks: context.StepTicks);
+        _ = m_seatRouter.DeliverRouteChanges();
         afterInstances?.Invoke();
 
         // Machine stepping runs INSIDE WorldServerStepShell.Step (Server.WorldMachineHost.Advance, called from
-        // WorldServer.Step right after WorldEngagement.FoldTick), so its cost is already folded into this phase;
-        // there is no separate phase to time.
-        var populationTicks = (timingEnabled
-            ? (Stopwatch.GetTimestamp() - phaseStart)
-            : 0L
-        );
-
-        phaseStart = (timingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        // WorldServer.Step right after WorldEngagement.FoldTick), so its cost is already folded into this phase.
         m_instances.FinishSeatIntents();
         extensions.Pump(tick: Tick);
-
-        var finishTicks = (timingEnabled
-            ? (Stopwatch.GetTimestamp() - phaseStart)
-            : 0L
-        );
-
-        if (timingEnabled) {
-            m_timingReporter.Report(sample: new SimulationTimingReporter.Sample(
-                Tick: Tick,
-                PopulationTicks: populationTicks,
-                RosterTicks: rosterTicks,
-                FinishTicks: finishTicks
-            ));
-        }
     }
 }

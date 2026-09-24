@@ -67,6 +67,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     private readonly float[] m_gaitPhases;
     private readonly WorldEntityAddress[] m_motionAddresses;
     private readonly bool[] m_motionSeeded;
+    private readonly WorldTransformOwners m_motionOwners;
     private readonly Vector3[] m_previousRenderPositions;
     private readonly IWorldAdjacencySource m_source;
     private readonly Func<WorldEntityAddress, bool>? m_suppressEntity;
@@ -121,6 +122,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         m_previousRenderPositions = new Vector3[m_gaitPhases.Length];
         m_motionAddresses = new WorldEntityAddress[m_gaitPhases.Length];
         m_motionSeeded = new bool[m_gaitPhases.Length];
+        m_motionOwners = new WorldTransformOwners(capacity: m_gaitPhases.Length);
         m_emittedRigs = new int[m_gaitPhases.Length];
         m_emittedScales = new float[m_gaitPhases.Length];
         m_emittedGaitAmplitudes = new float[m_gaitPhases.Length];
@@ -481,15 +483,14 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         }
     }
     /// <inheritdoc/>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
+    /// <remarks>An entity repacks only while its mapped pose moves. The emitted set changes only with a rebuild, which
+    /// owes the whole table, so an unemitted entity's range stays parked.</remarks>
+    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         var bandIndex = 0;
 
         foreach (var projection in m_emittedProjections) {
             var neighbour = projection.Neighbour;
-            var avatarSlots = slots.Slice(
-                start: (context.SlotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity)),
-                length: WorldRigCatalog.DynamicTransformCapacity
-            );
+            var bandBase = (context.SlotBase + (bandIndex * WorldRigCatalog.DynamicTransformCapacity));
             var alpha = neighbour.InterpolationAlpha;
 
             var bound = Math.Min(
@@ -517,9 +518,24 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     quaternion2: neighbour.CurrentOrientation(index: entity),
                     amount: alpha
                 );
+                var address = neighbour.EntityAddress(index: entity);
+
+                if (!m_motionOwners.Wake(
+                    castsSoftShadow: true,
+                    discontinuity: (
+                    !m_motionSeeded[motionIndex] ||
+                    (m_motionAddresses[motionIndex] != address)
+                ),
+                    moved: moved,
+                    orientation: orientation,
+                    owner: motionIndex,
+                    position: position
+                )) {
+                    continue;
+                }
 
                 WorldMirroredAvatarBand.AdvanceGait(
-                    address: neighbour.EntityAddress(index: entity),
+                    address: address,
                     gaitPhase: ref m_gaitPhases[motionIndex],
                     lastAddress: ref m_motionAddresses[motionIndex],
                     lastPosition: ref m_previousRenderPositions[motionIndex],
@@ -533,15 +549,21 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     path: projection.Path
                 );
 
-                WorldRigCatalog.PackTransforms(
+                m_motionOwners.Settle(
+                    deltaSeconds: 1f,
+                    moved: WorldTransformOwners.PackBody(
                     avatar: entity,
-                    rootPosition: mapped.Position,
-                    rootOrientation: mapped.Orientation,
-                    gaitPhase: (m_gaitPhases[motionIndex] * m_emittedGaitAmplitudes[motionIndex]),
                     castsSoftShadow: true,
-                    transforms: avatarSlots,
+                    catalogBase: bandBase,
+                    gaitPhase: (m_gaitPhases[motionIndex] * m_emittedGaitAmplitudes[motionIndex]),
+                    moved: moved,
                     rig: m_emittedRigs[motionIndex],
-                    scale: m_emittedScales[motionIndex]
+                    rootOrientation: mapped.Orientation,
+                    rootPosition: mapped.Position,
+                    scale: m_emittedScales[motionIndex],
+                    table: slots
+                ),
+                    owner: motionIndex
                 );
             }
             bandIndex++;

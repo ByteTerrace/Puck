@@ -16,14 +16,16 @@ public static partial class WorldDocumentEmitter {
         IReadOnlyList<int> Indices
     );
 
-    internal static Dictionary<string, StateFamilyInfo> GetOrCreateStateFamilies(DocumentScope scope) {
-        if (!scope.Annotations.TryGetValue(key: "StateFamilies", value: out var obj) || (obj is not Dictionary<string, StateFamilyInfo> dict)) {
-            dict = new Dictionary<string, StateFamilyInfo>(comparer: StringComparer.Ordinal);
-            scope.Annotations["StateFamilies"] = dict;
+    internal static Dictionary<string, T> GetOrCreateScopeDictionary<T>(DocumentScope scope, string key) {
+        if (!scope.Annotations.TryGetValue(key: key, value: out var obj) || (obj is not Dictionary<string, T> dict)) {
+            dict = new Dictionary<string, T>(comparer: StringComparer.Ordinal);
+            scope.Annotations[key] = dict;
         }
 
         return dict;
     }
+    internal static Dictionary<string, StateFamilyInfo> GetOrCreateStateFamilies(DocumentScope scope) =>
+        GetOrCreateScopeDictionary<StateFamilyInfo>(key: "StateFamilies", scope: scope);
     internal static void IndexStateFamilies(IReadOnlyList<StatementNode> statements, DocumentScope scope) {
         var families = GetOrCreateStateFamilies(scope: scope);
 
@@ -276,43 +278,26 @@ public static partial class WorldDocumentEmitter {
 
         return 0;
     }
+    private static IEnumerable<TNode> ExpandFamilyMembers<TNode>(
+        string name,
+        ExpressionNode? size,
+        SourceSpan span,
+        DocumentScope scope,
+        Func<string, TNode> factory
+    ) {
+        foreach (var member in FamilyMemberNames(name: name, scope: scope, size: size, span: span)) {
+            yield return factory(member);
+        }
+    }
 
-    internal static IEnumerable<StateTableDeclarationNode> ExpandTableFamily(StateTableDeclarationNode table, DocumentScope scope) {
-        foreach (var member in FamilyMemberNames(name: table.Name, scope: scope, size: table.FamilySize, span: table.Span)) {
-            yield return table with {
-                FamilyMembers = null,
-                FamilySize = null,
-                Name = member,
-            };
-        }
-    }
-    internal static IEnumerable<StateSlotDeclarationNode> ExpandSlotFamily(StateSlotDeclarationNode slot, DocumentScope scope) {
-        foreach (var member in FamilyMemberNames(name: slot.Name, scope: scope, size: slot.FamilySize, span: slot.Span)) {
-            yield return slot with {
-                FamilyMembers = null,
-                FamilySize = null,
-                Name = member,
-            };
-        }
-    }
-    internal static IEnumerable<StatePileDeclarationNode> ExpandPileFamily(StatePileDeclarationNode pile, DocumentScope scope) {
-        foreach (var member in FamilyMemberNames(name: pile.Name, scope: scope, size: pile.FamilySize, span: pile.Span)) {
-            yield return pile with {
-                FamilyMembers = null,
-                FamilySize = null,
-                Name = member,
-            };
-        }
-    }
-    internal static IEnumerable<StateGridDeclarationNode> ExpandGridFamily(StateGridDeclarationNode grid, DocumentScope scope) {
-        foreach (var member in FamilyMemberNames(name: grid.Name, scope: scope, size: grid.FamilySize, span: grid.Span)) {
-            yield return grid with {
-                FamilyMembers = null,
-                FamilySize = null,
-                Name = member,
-            };
-        }
-    }
+    internal static IEnumerable<StateTableDeclarationNode> ExpandTableFamily(StateTableDeclarationNode table, DocumentScope scope) =>
+        ExpandFamilyMembers(name: table.Name, size: table.FamilySize, span: table.Span, scope: scope, member => table with { FamilyMembers = null, FamilySize = null, Name = member });
+    internal static IEnumerable<StateSlotDeclarationNode> ExpandSlotFamily(StateSlotDeclarationNode slot, DocumentScope scope) =>
+        ExpandFamilyMembers(name: slot.Name, size: slot.FamilySize, span: slot.Span, scope: scope, member => slot with { FamilyMembers = null, FamilySize = null, Name = member });
+    internal static IEnumerable<StatePileDeclarationNode> ExpandPileFamily(StatePileDeclarationNode pile, DocumentScope scope) =>
+        ExpandFamilyMembers(name: pile.Name, size: pile.FamilySize, span: pile.Span, scope: scope, member => pile with { FamilyMembers = null, FamilySize = null, Name = member });
+    internal static IEnumerable<StateGridDeclarationNode> ExpandGridFamily(StateGridDeclarationNode grid, DocumentScope scope) =>
+        ExpandFamilyMembers(name: grid.Name, size: grid.FamilySize, span: grid.Span, scope: scope, member => grid with { FamilyMembers = null, FamilySize = null, Name = member });
 
     // The registered family is the one source of member names, so a declaration and every reference to it agree on
     // the gaps.
@@ -380,11 +365,23 @@ public static partial class WorldDocumentEmitter {
 
     // Row references already carry their row/key split. Only a declared family needs source binding here;
     // ordinary references take no parser or builder allocation.
-    private static string BindRowReference(string text, DocumentScope scope) {
+    // A refusal the binding draws (an index at a family gap) is reported at the span the reference was written at.
+    private static string BindRowReference(string text, SourceSpan span, DocumentScope scope) {
+        if (scope.TryQualify(qualified: out var instanceRow, reference: text)) {
+            return instanceRow;
+        }
         if ((GetOrCreateStateFamilies(scope: scope).Count == 0) || !text.Contains(value: '[')) {
             return text;
         }
-        var operand = Puck.Transpiler.Parsing.PuckParser.CreateOperand(text, DocumentValueForm.Name);
-        return DocumentReference(text: BindOperand(operand, scope));
+        var operand = Puck.Transpiler.Parsing.PuckParser.CreateOperand(
+            column: span.Column,
+            form: DocumentValueForm.Name,
+            length: span.Length,
+            line: span.Line,
+            offset: span.Offset,
+            text: text
+        );
+
+        return DocumentReference(text: BindOperand(operand: operand, scope: scope));
     }
 }

@@ -13,33 +13,14 @@ namespace Puck.Vulkan;
 public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi {
     private const uint StructureTypeShaderModuleCreateInfo = 16;
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateShaderModule = ((delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateShaderModule"u8
-            )),
-                DestroyShaderModule = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyShaderModule"u8
-            )),
-            }
-        );
-    }
-
     /// <inheritdoc/>
     public VkResult CreateShaderModule(VulkanShaderModuleCreateRequest request, out nint moduleHandle) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
-        var createShaderModule = GetPointers(deviceHandle: request.DeviceHandle).CreateShaderModule;
+        var createShaderModule = request.Device.CreateShaderModule;
 
         var spirVBytes = request.SpirVBytes.ToArray();
         var codeHandle = GCHandle.Alloc(
@@ -55,7 +36,7 @@ public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi 
             };
 
             return createShaderModule(
-                request.DeviceHandle,
+                request.Device.Handle,
                 in createInfo,
                 0,
                 out moduleHandle
@@ -65,25 +46,9 @@ public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi 
         }
     }
     /// <inheritdoc/>
-    public void DestroyShaderModule(nint deviceHandle, nint moduleHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == moduleHandle)
-        ) {
-            return;
-        }
-
-        var destroyShaderModule = GetPointers(deviceHandle: deviceHandle).DestroyShaderModule;
-
-        destroyShaderModule(
-            deviceHandle,
-            moduleHandle,
-            0
+    public void DestroyShaderModule(VulkanDeviceCommands device, nint moduleHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyShaderModule,
+            handle: moduleHandle
         );
-    }
-
-    private unsafe struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult> CreateShaderModule;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyShaderModule;
-    }
 }

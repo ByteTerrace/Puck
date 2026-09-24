@@ -1,5 +1,6 @@
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -18,17 +19,17 @@ public interface IVulkanFramebufferSetApi {
     /// <param name="imageViewHandle">When this method returns, the created native <c>VkImageView</c> handle.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the image view was created successfully.</returns>
     VkResult CreateImageView(VulkanImageViewCreateRequest request, out nint imageViewHandle);
-    /// <summary>Destroys a framebuffer.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the framebuffer.</param>
+    /// <summary>Destroys a framebuffer; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the framebuffer.</param>
     /// <param name="framebufferHandle">The native <c>VkFramebuffer</c> handle to destroy.</param>
-    void DestroyFramebuffer(nint deviceHandle, nint framebufferHandle);
-    /// <summary>Destroys an image view.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the image view.</param>
+    void DestroyFramebuffer(VulkanDeviceCommands device, nint framebufferHandle);
+    /// <summary>Destroys an image view; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the image view.</param>
     /// <param name="imageViewHandle">The native <c>VkImageView</c> handle to destroy.</param>
-    void DestroyImageView(nint deviceHandle, nint imageViewHandle);
+    void DestroyImageView(VulkanDeviceCommands device, nint imageViewHandle);
     /// <summary>Retrieves the presentable images owned by a swapchain.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="device">The command table of the logical device.</param>
     /// <param name="swapchainHandle">The native <c>VkSwapchainKHR</c> handle.</param>
     /// <returns>The native <c>VkImage</c> handles of the swapchain's images.</returns>
-    IReadOnlyList<nint> GetSwapchainImages(nint deviceHandle, nint swapchainHandle);
+    IReadOnlyList<nint> GetSwapchainImages(VulkanDeviceCommands device, nint swapchainHandle);
 }

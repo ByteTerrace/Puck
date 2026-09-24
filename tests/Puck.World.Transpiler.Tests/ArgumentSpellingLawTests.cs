@@ -72,7 +72,7 @@ public class ArgumentSpellingLawTests {
     }
     [Fact]
     public void ABareWordWhereAnArgumentIsTextIsRefusedAndTheRefusalNamesTheQuotedSpelling() {
-        var refusal = Refusal(code: PuckDiagnosticCodes.ArgumentWrittenQuoted, effect: "designateBody(key: $each, kind: Body, register: companion, targetKey: $right)");
+        var refusal = Refusal(code: PuckDiagnosticCodes.ArgumentWrittenQuoted, effect: "designate(key: $each, register: companion, targetKey: $right)");
 
         Assert.Contains(actualString: refusal.Message, comparisonType: StringComparison.Ordinal, expectedSubstring: "write 'register: \"companion\"'");
     }

@@ -34,6 +34,27 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         keyExtension: identity.World.Value,
         primaryKey: identity.Owner
     );
+    private CommandResult HandleGrainLifecycleAction(in WireArgs args, string verb, Func<IWorldGrain, Task> action) {
+        if (args.Count != 1) {
+            return CommandResult.Error(output: $"[{verb}: expected exactly one value — <key>]");
+        }
+
+        if (!host.TryResolveKey(
+            identity: out var identity,
+            key: args[0].ToString(),
+            reason: out var reason
+        )) {
+            return CommandResult.Error(output: $"[{verb}: refused ({reason})]");
+        }
+
+        FireAndForget(
+            key: args[0].ToString(),
+            verb: verb,
+            work: action(GrainFor(identity: identity))
+        );
+
+        return new CommandResult(Output: $"[{verb}: '{args[0]}' requested]");
+    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -75,7 +96,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.publish",
-            description: "silo.publish <key> <path>: composes the local world document at <path> (basis folded, validated) and publishes it as the hosted, composed definition.json for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
+            description: "silo.publish <key> <path>: composes the local world document at <path> (basis folded, validated) and publishes it through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
             handler: (context, args) => {
                 if (args.Count != 2) {
                     return CommandResult.Error(output: "[silo.publish: expected exactly two values — <key> <path>]");
@@ -126,53 +147,21 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             bindability: CommandBindability.Unbindable,
             name: "silo.activate",
             description: "silo.activate <key>: requests activation of the declared row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
-            handler: (context, args) => {
-                if (args.Count != 1) {
-                    return CommandResult.Error(output: "[silo.activate: expected exactly one value — <key>]");
-                }
-
-                if (!host.TryResolveKey(
-                    identity: out var identity,
-                    key: args[0].ToString(),
-                    reason: out var reason
-                )) {
-                    return CommandResult.Error(output: $"[silo.activate: refused ({reason})]");
-                }
-
-                FireAndForget(
-                    key: args[0].ToString(),
-                    verb: "silo.activate",
-                    work: GrainFor(identity: identity).ActivateAsync()
-                );
-
-                return new CommandResult(Output: $"[silo.activate: '{args[0]}' requested]");
-            }
+            handler: (context, args) => HandleGrainLifecycleAction(
+                action: static grain => grain.ActivateAsync(),
+                args: args,
+                verb: "silo.activate"
+            )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.deactivate",
             description: "silo.deactivate <key>: requests deactivation (with a final checkpoint) of the admitted row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
-            handler: (context, args) => {
-                if (args.Count != 1) {
-                    return CommandResult.Error(output: "[silo.deactivate: expected exactly one value — <key>]");
-                }
-
-                if (!host.TryResolveKey(
-                    identity: out var identity,
-                    key: args[0].ToString(),
-                    reason: out var reason
-                )) {
-                    return CommandResult.Error(output: $"[silo.deactivate: refused ({reason})]");
-                }
-
-                FireAndForget(
-                    key: args[0].ToString(),
-                    verb: "silo.deactivate",
-                    work: GrainFor(identity: identity).DeactivateAsync()
-                );
-
-                return new CommandResult(Output: $"[silo.deactivate: '{args[0]}' requested]");
-            }
+            handler: (context, args) => HandleGrainLifecycleAction(
+                action: static grain => grain.DeactivateAsync(),
+                args: args,
+                verb: "silo.deactivate"
+            )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,

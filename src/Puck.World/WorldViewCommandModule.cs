@@ -133,7 +133,11 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
                     var ordinal = ((int)MathF.Round(x: context.Value.AsAxis1D));
                     string? layoutName = null;
 
-                    if (ordinal >= 1) {
+                    if (ordinal == -1) {
+                        layoutName = composer.ToggleViewportIsolation();
+                    } else if (ordinal == -2) {
+                        layoutName = composer.NextAuthoredLayoutName();
+                    } else if (ordinal >= 1) {
                         layoutName = composer.AuthoredLayoutName(ordinal: ordinal);
                         if (layoutName is null) {
                             return CommandResult.Error(output: $"[view.override: no authored layout at ordinal {ordinal}]");
@@ -142,32 +146,55 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
                     link.SubmitComposition(
                         composition: new WorldComposition.SetActiveLayout(Name: layoutName),
-                        principal: context.ActingPrincipal()
+                        principal: context.Principal
+                    );
+
+                    return CommandResult.None;
+                }
+                if ((args.Count == 1) && string.Equals(a: args[0].ToString(), b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    var toggleName = composer.ToggleViewportIsolation();
+
+                    link.SubmitComposition(
+                        composition: new WorldComposition.SetActiveLayout(Name: toggleName),
+                        principal: context.Principal
                     );
 
                     return CommandResult.None;
                 }
                 if (args.Count != 2) {
                     return CommandResult.Usage(
-                        form: "camera|layout <name|auto>",
+                        form: "camera|layout <name|auto|toggle|next>",
                         verb: "view.override"
                     );
                 }
 
-                var name = ClearOrName(token: args[1].ToString());
-                WorldComposition? composition = args[0].ToString() switch {
+                var target = args[0].ToString();
+                var token = args[1].ToString();
+                string? name;
+
+                if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(a: token, b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    name = composer.ToggleViewportIsolation();
+                } else if (string.Equals(a: target, b: "layout", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(a: token, b: "next", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    name = composer.NextAuthoredLayoutName();
+                } else {
+                    name = ClearOrName(token: token);
+                }
+
+                WorldComposition? composition = target switch {
                     "layout" => new WorldComposition.SetActiveLayout(Name: name),
                     "camera" => new WorldComposition.SelectCamera(Name: name),
                     _ => null,
                 };
 
                 if (composition is null) {
-                    return CommandResult.Error(output: $"[view.override: unknown target '{args[0].ToString()}' — camera|layout]");
+                    return CommandResult.Error(output: $"[view.override: unknown target '{target}' — camera|layout]");
                 }
 
                 link.SubmitComposition(
                     composition: composition,
-                    principal: context.ActingPrincipal()
+                    principal: context.Principal
                 );
 
                 return CommandResult.None;

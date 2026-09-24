@@ -133,9 +133,11 @@ public sealed class WorldCarryTangibilityLawTests {
         return source with {
             KitRowsRaw = [carrierKit, ballKit],
             DefaultSeatKitRaw = carrierKit.Name,
-            PopulationRaw = source.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + (includeOtherBody
+            PopulationRaw = source.Population with {
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + (includeOtherBody
             ? 2
-            : 1)) },
+            : 1)),
+            },
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = (includeWall
             ? [ballCreation, wallCreation]
@@ -200,14 +202,8 @@ public sealed class WorldCarryTangibilityLawTests {
     }
     private static WorldFixture JoinedCarrier(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
-        var seat = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            seat,
-            seat.Index,
-            null,
-            WorldProtocol.WireProtocolKey
-        )).Accepted);
+        _ = fixture.JoinSeat();
 
         return fixture;
     }

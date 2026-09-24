@@ -18,15 +18,30 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// camera program's <c>select</c> op; see <c>docs</c>/<c>views.md</c>), so two backends that step the identical
 /// document capture the identical moment by construction, and this row only says WHEN to look, never AT WHAT.
 /// </summary>
-/// <param name="Station">The stable name — the manifest's <c>station</c> field and the frame filename's own
-/// prefix (<c>&lt;station&gt;-&lt;tick&gt;.png</c>). A <see cref="CellName"/>: dot-free, non-empty, free of the
-/// reserved character set.</param>
+/// <param name="Station">The stable name — the manifest's <c>station</c> field and the first part of the capture's
+/// generated name (<see cref="CaptureName"/>, <c>&lt;station&gt;~&lt;tick&gt;</c>). A <see cref="CellName"/>:
+/// dot-free, non-empty, free of the reserved character set, and free of <c>~</c>.</param>
 /// <param name="Ticks">The exact simulation ticks (completed-tick coordinates, ascending, none repeated) this
 /// station arms a capture at. Capacity: <see cref="WorldCapturesCapacity.MaxTicksPerRow"/>.</param>
 /// <param name="Palette">The per-pixel census's material table — at least one entry, at most
 /// <see cref="WorldCapturesCapacity.MaxPaletteEntriesPerRow"/>, unique <see cref="WorldCapturePaletteEntry.Material"/>
 /// indices.</param>
-public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette);
+public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette) {
+    /// <summary>The generated name of one capture: the station and the tick joined as a file name
+    /// (<see cref="GeneratedName.JoinFile"/>), <c>lattice~860</c>. The capture's frame is this name with <c>.png</c>,
+    /// and a parity comparison's evidence directory for it is this name. The tick is decimal digits and the station
+    /// carries no <see cref="GeneratedName.FileJoiner"/>, so the station and the tick are the parts either side of the
+    /// joiner.</summary>
+    /// <param name="station">The station name.</param>
+    /// <param name="tick">The tick the capture was armed for.</param>
+    /// <returns>The capture's name.</returns>
+    /// <exception cref="ArgumentException"><paramref name="station"/> is empty or carries
+    /// <see cref="GeneratedName.FileJoiner"/>.</exception>
+    public static string CaptureName(string station, ulong tick) => GeneratedName.JoinFile(
+        station,
+        tick.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+    );
+}
 /// <summary>
 /// The <c>captures</c> document section — tick-scheduled composed-frame captures, arming the same capture path
 /// <c>world.screenshot</c> uses (<c>SdfWorldRender.RequestCapture</c>/<c>SdfEngineNode.RequestCapture</c>) at exact
@@ -35,14 +50,53 @@ public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Tick
 /// none is unchanged. Boot-authored only — no mutation kind targets it and no grant subject names it, exactly like
 /// <c>Simulation</c>/<c>Portals</c>; a capture schedule is topology, not live state.
 /// </summary>
-/// <param name="Directory">The output directory every scheduled capture in this document writes into, and where
-/// <c>manifest.json</c> (the <c>puck.parity.manifest.v1</c> document) lands once at least one capture has landed —
-/// relative to the process's current directory unless rooted. A <c>--capture-dir</c> boot flag overrides this for a
-/// deployment run (the <c>--state-dir</c> pattern), so two backend legs of the same document can target sibling
-/// directories without two document copies.</param>
-/// <param name="Rows">The scheduled stations. Station names are unique; capacity
+/// <param name="Rows">The scheduled stations. Station names are unique ignoring case, since each names capture
+/// files; capacity
 /// <see cref="WorldCapturesCapacity.MaxRows"/>.</param>
-public sealed record WorldCapturesSection(string Directory, IReadOnlyList<WorldCaptureRow> Rows);
+/// <param name="Directory">The output directory every scheduled capture in this document writes into, and where
+/// <c>manifest.json</c> (the <c>puck.parity.manifest.v1</c> document) is written whenever a capture ends, whether it
+/// produced a frame or a named refusal. Absent, the default, is a <c>captures</c> directory under the run's state
+/// root (<c>--state-dir</c>, else the per-user state directory), so a boot that names no directory writes nothing
+/// under its working directory; an authored relative path resolves beside the document (<see cref="WorldDocumentPaths"/>). A
+/// <c>--capture-dir</c> boot flag overrides either for a deployment run (the <c>--state-dir</c> pattern), so two
+/// backend legs of the same document can target sibling directories without two document copies.</param>
+public sealed record WorldCapturesSection(IReadOnlyList<WorldCaptureRow> Rows, string? Directory = null) {
+    /// <summary>The directory, under the run's state root, captures write into when <see cref="Directory"/> is
+    /// <see langword="null"/>.</summary>
+    public const string DefaultDirectoryName = "captures";
+
+    /// <summary>Returns the rooted directory this section's captures write into, before any <c>--capture-dir</c>
+    /// override: <see cref="Directory"/> resolved beside the document when authored, else
+    /// <see cref="DefaultDirectoryName"/> under <paramref name="stateRoot"/>.</summary>
+    /// <param name="stateRoot">The run's rooted state directory.</param>
+    /// <param name="documentDirectory">The document's directory (<see cref="WorldDefinition.DocumentDirectory"/>), or
+    /// <see langword="null"/> for a document that has none.</param>
+    /// <returns>The rooted capture directory.</returns>
+    /// <exception cref="ArgumentException"><paramref name="stateRoot"/> is empty or not rooted.</exception>
+    /// <exception cref="InvalidOperationException">An authored <see cref="Directory"/> is relative and the document
+    /// has no directory to resolve it beside.</exception>
+    public string ResolveDirectory(string stateRoot, string? documentDirectory) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: stateRoot);
+
+        if (!Path.IsPathRooted(path: stateRoot)) {
+            throw new ArgumentException(
+                message: $"the state root '{stateRoot}' is not rooted",
+                paramName: nameof(stateRoot)
+            );
+        }
+
+        return ((Directory is null)
+            ? Path.Combine(
+                path1: stateRoot,
+                path2: DefaultDirectoryName
+            )
+            : WorldDocumentPaths.Resolve(
+                documentDirectory: documentDirectory,
+                path: Directory
+            )
+        );
+    }
+}
 /// <summary>The <c>captures</c> section's capacity ceilings — small and fixed, since a capture schedule is authored
 /// topology for a short deterministic proving run, never a live-growing table.</summary>
 public static class WorldCapturesCapacity {

@@ -69,7 +69,7 @@ public sealed class SiloConsoleRoutingLawTests {
         var closed = 0;
         using var control = routing.CreateControlSession(
             "row",
-            CommandPrincipal.Peer(
+            Principal.Peer(
                 generation: 1,
                 index: 8
             ),

@@ -8,20 +8,23 @@ namespace Puck.World.Tests;
 /// <summary>A search job explores document-defined positions without exposing hypothetical state to the installed
 /// section, survives checkpoint transport, and returns deterministic answers.</summary>
 public sealed class SearchLawTests {
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void RefusedSearchOutputsAreNarratedAfterConstructionAndArenaReplacement(bool replaceArena) {
         var definition = MiniNegamaxWorld(depth: 1, nodes: 64);
+
         definition = definition.WithWorldState(definition.AuthoredState.Select(selector: row =>
             ((row.Name.Value == "best") ? row with { Max = 0 } : row)).ToArray());
         using var fixture = Fixtures.FreshServer(definition);
         var server = fixture.Server;
         var sink = new RecordingNarrationSink();
         using var lease = server.AttachNarrationSink(sink: sink);
+
         if (replaceArena) {
             var time = default(ArenaTime);
             var current = server.Definition;
+
             Assert.True(condition: StateArena.TryCreate(current.StateCatalog, current.StateRaw, WorldSlotLanes.Options(definition: current),
                 in time, out var replacement, out var reason), userMessage: reason);
             server.RecompileRules(current, arena: replacement);
@@ -30,13 +33,10 @@ public sealed class SearchLawTests {
             fixture.Step();
         }
         var refusal = Assert.Single(collection: sink.Narrations, predicate: narration => (narration.Channel == "state.search"));
+
         Assert.Contains("outputs were refused", refusal.Text);
-        Assert.All(Row(fixture: fixture, name: "best").Cells!, cell => Assert.Equal(0L, cell.Value.Raw));
+        Assert.All(fixture.Row(name: "best").Cells!, cell => Assert.Equal(0L, cell.Value.Raw));
     }
-
-    private static WorldStateRow Row(WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: name)!;
-    private static long Cell(WorldFixture fixture, string row, string key) => Row(fixture: fixture, name: row).Cells!.Single(predicate: c => (c.Key.Value == key)).Value.Raw;
-
     [Fact]
     public void ACheckpointCarriesTheJobAndTwoServersAgree() {
         // Checkpoint transport needs a live, partially explored job, not hundreds of physical chess settling ticks.
@@ -51,6 +51,7 @@ public sealed class SearchLawTests {
 
         var a = first.Server.SearchStatus()[0];
         var b = second.Server.SearchStatus()[0];
+
         Assert.Equal(actual: b, expected: a);
         Assert.True(condition: (a.Nodes > 0));
         Assert.False(condition: a.Done);
@@ -60,6 +61,7 @@ public sealed class SearchLawTests {
         Assert.Equal(a.Nodes, checkpoint.Search.Jobs[0].Nodes);
 
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
         Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: bytes, checkpoint: out var decoded, reason: out var decodeReason), userMessage: decodeReason);
         // This live search carries stack and transposition-table arrays as well as the root move masks.
         Assert.Equal(bytes, WorldAuthorityCheckpointCodec.Encode(checkpoint: decoded!));
@@ -98,6 +100,75 @@ public sealed class SearchLawTests {
         return definition;
     }
 
+    // A judge rule draws 'roll' inside every candidate and the score reads it back, so the landed best score is the
+    // candidate's draw at cursor 0 (each candidate scope rewinds the cursor). The live rule then snapshots that
+    // score and draws the same site at the same cursor 0, which the live world has never advanced.
+    [Fact]
+    public void ACandidatesDrawEqualsTheLiveDrawAtTheSameCursor() {
+        var live = new ActionPredicate.CompareState(State: RuleFacts.SearchPly, Comparison: ExpressionOp.Equal, Value: 0m);
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(candidate: "pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: 3L))]),
+                StateFixtures.IntSlot(name: "turn"),
+                StateFixtures.IntSlot(name: "verdict"),
+                StateFixtures.IntSlot(name: "seen"),
+                StateFixtures.IntSlot(name: "taken"),
+                StateFixtures.IntSlot(name: "roll") with {
+                    Draw = new Draw(
+                        Generator: new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 1, RangeMax: 1_000_000),
+                        Timing: DrawTiming.Event
+                    ),
+                },
+                new WorldStateRow(CellName.Parse(candidate: "best"), CellKind.Int, Cells: [new StateCell(CellName.Parse(candidate: "token"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "to"), CellValue.Int(value: 0L)), new StateCell(CellName.Parse(candidate: "score"), CellValue.Int(value: 0L))]),
+            ],
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(x: 0, y: 0, z: 0), 1, Width: 4, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(
+                    Name: CellName.Parse(candidate: "accept"),
+                    Gate: new ActionPredicate.CompareState(State: RuleFacts.SearchPly, Comparison: ExpressionOp.GreaterOrEqual, Value: 1m),
+                    Effects: [
+                        new ActionEffect.Generate(Row: "roll"),
+                        new ActionEffect.SetState(State: "verdict", Value: 1),
+                        new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
+                    ]
+                ),
+                new WorldRule(
+                    Name: CellName.Parse(candidate: "liveRoll"),
+                    Gate: new ActionPredicate.All(Predicates: [
+                        live,
+                        new ActionPredicate.CompareState(State: "taken", Comparison: ExpressionOp.Equal, Value: 0m),
+                        new ActionPredicate.CompareState(State: "best", Key: "score", Comparison: ExpressionOp.NotEqual, Value: 0m),
+                    ]),
+                    Effects: [
+                        new ActionEffect.SetState(State: "seen", FromState: "best", FromKey: "score"),
+                        new ActionEffect.Generate(Row: "roll"),
+                        new ActionEffect.SetState(State: "taken", Value: 1),
+                    ]
+                ),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1, Score: "roll", Best: "best"),
+            ]),
+        };
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var invalid), userMessage: invalid);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        for (var tick = 0; ((tick < 4000) && (fixture.KeyedValue(key: "$value", row: "taken") == 0L)); tick++) {
+            fixture.Step();
+        }
+
+        var seen = fixture.KeyedValue(key: "$value", row: "seen");
+
+        Assert.Equal(1L, fixture.KeyedValue(key: "$value", row: "taken"));
+        Assert.InRange(actual: seen, high: 1_000_000L, low: 1L);
+        Assert.Equal(expected: seen, actual: fixture.KeyedValue(key: "$value", row: "roll"));
+    }
     // What the sheet and one fold of every row leave is divided equally among the jobs, and a share that cannot
     // cover a restart, a full replay and one unit is refused by that sum rather than left to stall.
     [Fact]
@@ -110,11 +181,10 @@ public sealed class SearchLawTests {
         static SearchPlan[] Plans(WorldDefinition definition) {
             Assert.True(
                 condition: WorldSearchCompilation.TryPlanAll(
-                    definition: definition,
+                    compilation: WorldRuleCompilation.Compile(definition: definition),
                     judges: out _,
                     plans: out var plans,
                     reason: out var reason,
-                    rules: WorldFactsCompiler.CompileAll(definition: definition),
                     scores: out _
                 ),
                 userMessage: reason
@@ -164,6 +234,7 @@ public sealed class SearchLawTests {
             expectedSubstring: $"may spend {(alone.Minimum - 1L)}"
         );
     }
+
     // An independent oracle over the SAME declared rule ("any token to any other cell, evicting whoever stood
     // there, always accepted, turn always flips") rather than a second reading of the runtime's own code: plain
     // recursion over a two-element array, token-major/target-ascending enumeration (matching ArenaSearch's
@@ -188,6 +259,7 @@ public sealed class SearchLawTests {
                 }
 
                 var next = ((long[])cells.Clone());
+
                 next[token] = target;
 
                 for (var other = 0; (other < cells.Length); other++) {
@@ -209,22 +281,11 @@ public sealed class SearchLawTests {
         return (best, bestToken, bestTarget);
     }
 
-    private static ArenaSearchStatus RunToCompletion(WorldFixture fixture, int maxTicks = 4000) {
-        var status = fixture.Server.SearchStatus()[0];
-
-        for (var tick = 0; ((tick < maxTicks) && !status.Done); tick++) {
-            fixture.Step();
-            status = fixture.Server.SearchStatus()[0];
-        }
-
-        return status;
-    }
-
     [Fact]
     public void DepthOneWithAnAuthoredScoreStillLandsBest() {
         using var fixture = Fixtures.FreshServer(definition: MiniNegamaxWorld(depth: 1));
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
         var expected = ReferenceNegamax(boardCells: 4, cells: [0L, 3L], plies: 1);
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
@@ -233,16 +294,15 @@ public sealed class SearchLawTests {
         Assert.Equal(expected.Value, status.BestScore);
         Assert.Equal(expected.Token, status.BestToken);
         Assert.Equal(expected.Target, status.BestTarget);
-        Assert.Equal(expected.Token, Cell(fixture: fixture, key: "token", row: "best"));
-        Assert.Equal(expected.Target, Cell(fixture: fixture, key: "to", row: "best"));
-        Assert.Equal(expected.Value, Cell(fixture: fixture, key: "score", row: "best"));
+        Assert.Equal(expected.Token, fixture.KeyedValue(key: "token", row: "best"));
+        Assert.Equal(expected.Target, fixture.KeyedValue(key: "to", row: "best"));
+        Assert.Equal(expected.Value, fixture.KeyedValue(key: "score", row: "best"));
     }
-
     [Fact]
     public void DepthTwoNegamaxPicksTheMoveThatMaximizesTheAuthoredScoreAgainstTheBestReply() {
         using var fixture = Fixtures.FreshServer(definition: MiniNegamaxWorld(depth: 2));
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
         var expected = ReferenceNegamax(boardCells: 4, cells: [0L, 3L], plies: 2);
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
@@ -253,9 +313,8 @@ public sealed class SearchLawTests {
         Assert.Equal(expected.Value, status.BestScore);
         Assert.Equal(expected.Token, status.BestToken);
         Assert.Equal(expected.Target, status.BestTarget);
-        Assert.Equal(expected.Value, Cell(fixture: fixture, key: "score", row: "best"));
+        Assert.Equal(expected.Value, fixture.KeyedValue(key: "score", row: "best"));
     }
-
     [Fact]
     public void ACheckpointMidNegamaxSearchRestoresAndFinishesIdenticallyToAnUninterruptedRun() {
         // One node per tick forces the depth-2 search to span many ticks, so a capture midway is genuinely mid-walk
@@ -263,7 +322,8 @@ public sealed class SearchLawTests {
         var document = MiniNegamaxWorld(depth: 2, nodes: 1);
 
         using var continuous = Fixtures.FreshServer(definition: document);
-        var continuousStatus = RunToCompletion(continuous);
+        var continuousStatus = continuous.SettleSearch();
+
         Assert.True(condition: continuousStatus.Done, userMessage: continuousStatus.ToString());
 
         using var interrupted = Fixtures.FreshServer(definition: document);
@@ -273,6 +333,7 @@ public sealed class SearchLawTests {
         }
 
         var midStatus = interrupted.Server.SearchStatus()[0];
+
         Assert.False(condition: midStatus.Done, userMessage: "the capture must land mid-search for a restore to prove anything");
         Assert.Equal(5L, midStatus.Nodes);
 
@@ -280,16 +341,20 @@ public sealed class SearchLawTests {
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+
+        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName;
+
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: new WorldOwnedWorlds(directory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName, machineId: Guid.NewGuid(), template: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
-        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName);
+        // WorldFixture.Dispose owns this directory — the SAME one profiles above was seeded from, not a second one.
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: profilesDirectory);
 
-        var interruptedFinal = RunToCompletion(interrupted);
-        var resumedFinal = RunToCompletion(resumed);
+        var interruptedFinal = interrupted.SettleSearch();
+        var resumedFinal = resumed.SettleSearch();
 
         Assert.True(condition: interruptedFinal.Done, userMessage: interruptedFinal.ToString());
         Assert.True(condition: resumedFinal.Done, userMessage: resumedFinal.ToString());
@@ -303,7 +368,7 @@ public sealed class SearchLawTests {
     }
 
     private static long BoardCellOrEmpty(WorldFixture fixture, string row, int cell) =>
-        (Row(fixture: fixture, name: row).Cells?.FirstOrDefault(predicate: c => (c.Key.Value == cell.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)))?.Value.Raw ?? 0L);
+        (fixture.Row(name: row).Cells?.FirstOrDefault(predicate: c => (c.Key.Value == cell.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)))?.Value.Raw ?? 0L);
 
     // Drop fixture: a 1x4 strip, one token "a" off the board (value -1) and one token "b" standing on cell 2. A
     // drop candidate is a cell no token occupies, so "a" should own every cell but 2 — the rule accepts every
@@ -312,7 +377,7 @@ public sealed class SearchLawTests {
     public void DepthThreeNegamaxAgreesWithTheOracleThroughTheTranspositionTable() {
         using var fixture = Fixtures.FreshServer(definition: MiniNegamaxWorld(depth: 3));
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
         var expected = ReferenceNegamax(boardCells: 4, cells: [0L, 3L], plies: 3);
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
@@ -360,13 +425,13 @@ public sealed class SearchLawTests {
     public void PromoteOffersEveryCodeOnEveryOtherCellAndTheJudgeReadsTheNewCode() {
         using var fixture = Fixtures.FreshServer(definition: PromoteWorld());
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(2L, status.Count);
-        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture: fixture, key: "a", row: "legal"));
+        Assert.Equal((1L << 1) | (1L << 2), fixture.KeyedValue(key: "a", row: "legal"));
         // The installed section never saw a hypothetical code.
-        Assert.Equal(1L, Cell(fixture: fixture, key: "a", row: "pieceCode"));
+        Assert.Equal(1L, fixture.KeyedValue(key: "a", row: "pieceCode"));
     }
 
     // Zones are cells: a 1x3 strip whose cells are three piles, two cards standing on the first two, and a relocate
@@ -407,13 +472,13 @@ public sealed class SearchLawTests {
     public void AZoneTransferIsARelocationOnTheZoneTopologyAndPilesShareACell() {
         using var fixture = Fixtures.FreshServer(definition: ZoneWorld());
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         // Each card may move to either of the two other zones, including the one the other card stands on.
         Assert.Equal(4L, status.Count);
-        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture: fixture, key: "x", row: "legal"));
-        Assert.Equal((1L << 0) | (1L << 2), Cell(fixture: fixture, key: "y", row: "legal"));
+        Assert.Equal((1L << 1) | (1L << 2), fixture.KeyedValue(key: "x", row: "legal"));
+        Assert.Equal((1L << 0) | (1L << 2), fixture.KeyedValue(key: "y", row: "legal"));
     }
 
     // Outcome fixture: a 1x4 strip, one token at 0, every relocation accepted. The outcome is read from the mover's
@@ -439,7 +504,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1,
-                    Score: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Method: SearchMethod.Tree, Best: "best", Iterations: iterations, Nodes: nodes),
+                    Score: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Method: SearchMethod.MonteCarlo, Best: "best", Iterations: iterations, Nodes: nodes),
             ]),
         };
 
@@ -452,7 +517,7 @@ public sealed class SearchLawTests {
     public void TheTreeSearchSettlesOnTheWinningOutcomeAndLandsIt() {
         using var fixture = Fixtures.FreshServer(definition: UctWorld(iterations: 64));
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.True(condition: status.HasOutcome);
@@ -461,16 +526,16 @@ public sealed class SearchLawTests {
         Assert.Equal(0, status.BestToken);
         Assert.Equal(3, status.BestTarget);
         Assert.Equal(1000L, status.BestScore);
-        Assert.Equal(3L, Cell(fixture: fixture, key: "to", row: "best"));
-        Assert.Equal(1000L, Cell(fixture: fixture, key: "score", row: "best"));
+        Assert.Equal(3L, fixture.KeyedValue(key: "to", row: "best"));
+        Assert.Equal(1000L, fixture.KeyedValue(key: "score", row: "best"));
     }
-
     [Fact]
     public void ACheckpointMidTreeSearchRestoresAndFinishesIdenticallyToAnUninterruptedRun() {
         var document = UctWorld(iterations: 32, nodes: 1);
 
         using var continuous = Fixtures.FreshServer(definition: document);
-        var continuousStatus = RunToCompletion(continuous);
+        var continuousStatus = continuous.SettleSearch();
+
         Assert.True(condition: continuousStatus.Done, userMessage: continuousStatus.ToString());
 
         using var interrupted = Fixtures.FreshServer(definition: document);
@@ -480,6 +545,7 @@ public sealed class SearchLawTests {
         }
 
         var midStatus = interrupted.Server.SearchStatus()[0];
+
         Assert.False(condition: midStatus.Done, userMessage: "the capture must land mid-search for a restore to prove anything");
         Assert.True(condition: (midStatus.Nodes > 3L), userMessage: midStatus.ToString());
 
@@ -487,22 +553,27 @@ public sealed class SearchLawTests {
         Assert.NotNull(@object: checkpoint!.Search!.Jobs[0].Tree);
 
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
         Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: bytes, checkpoint: out var decoded, reason: out var decodeReason), userMessage: decodeReason);
         Assert.Equal(checkpoint.Search.Jobs[0].Tree!.Visits, decoded!.Search!.Jobs[0].Tree!.Visits);
         Assert.Equal(checkpoint.Search.Jobs[0].Tree!.Seed, decoded.Search.Jobs[0].Tree!.Seed);
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+
+        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName;
+
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: new WorldOwnedWorlds(directory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName, machineId: Guid.NewGuid(), template: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
-        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName);
+        // WorldFixture.Dispose owns this directory — the SAME one profiles above was seeded from, not a second one.
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: profilesDirectory);
 
-        var interruptedFinal = RunToCompletion(interrupted);
-        var resumedFinal = RunToCompletion(resumed);
+        var interruptedFinal = interrupted.SettleSearch();
+        var resumedFinal = resumed.SettleSearch();
 
         Assert.True(condition: interruptedFinal.Done, userMessage: interruptedFinal.ToString());
         Assert.True(condition: resumedFinal.Done, userMessage: resumedFinal.ToString());
@@ -549,13 +620,13 @@ public sealed class SearchLawTests {
     public void DropOffboardTokenReachesEveryEmptyCellAndNoOccupiedOne() {
         using var fixture = Fixtures.FreshServer(definition: DropWorld());
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(3L, status.Count);
-        Assert.Equal(3L, Cell(fixture: fixture, key: "a", row: "counts"));
-        Assert.Equal((1L << 0) | (1L << 1) | (1L << 3), Cell(fixture: fixture, key: "a", row: "legal"));
-        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "legal"));
+        Assert.Equal(3L, fixture.KeyedValue(key: "a", row: "counts"));
+        Assert.Equal((1L << 0) | (1L << 1) | (1L << 3), fixture.KeyedValue(key: "a", row: "legal"));
+        Assert.Equal(0L, fixture.KeyedValue(key: "b", row: "legal"));
     }
 
     // Jump fixture: a 1x5 strip, "a" at cell 0 and "b" at cell 1. The judge's own gate reads pieceCell[b] < 0 —
@@ -578,7 +649,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(
                     Name: CellName.Parse(candidate: "accept"),
-                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse(text: "pieceCell[b]"), Comparison: ActionStateComparison.Less, Right: ExpressionProgram.Parse(text: "0"), Kind: CellKind.Int),
+                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse(text: "pieceCell[b]"), Comparison: ExpressionOp.Less, Right: ExpressionProgram.Parse(text: "0"), Kind: CellKind.Int),
                     Effects: [
                         new ActionEffect.SetState(State: "verdict", Value: 1),
                         new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
@@ -651,12 +722,12 @@ public sealed class SearchLawTests {
     public void JumpOverAnOccupiedIntermediateCellLandsOnTheEmptyCellBeyondAndEvictsIt() {
         using var fixture = Fixtures.FreshServer(definition: JumpWorld());
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(1L, status.Count);
-        Assert.Equal((1L << 2), Cell(fixture: fixture, key: "a", row: "legal"));
-        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "legal"));
+        Assert.Equal((1L << 2), fixture.KeyedValue(key: "a", row: "legal"));
+        Assert.Equal(0L, fixture.KeyedValue(key: "b", row: "legal"));
     }
 
     // Relocate fixture: a 1x4 strip, "a" at cell 0 and "b" at cell 2. The judge's own gate reads pieceCell[a] ==
@@ -679,7 +750,7 @@ public sealed class SearchLawTests {
             Rules = [
                 new WorldRule(
                     Name: CellName.Parse(candidate: "accept"),
-                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse(text: "pieceCell[a]"), Comparison: ActionStateComparison.Equal, Right: ExpressionProgram.Parse(text: "pieceCell[b]"), Kind: CellKind.Int),
+                    Gate: new ActionPredicate.CompareValue(Left: ExpressionProgram.Parse(text: "pieceCell[a]"), Comparison: ExpressionOp.Equal, Right: ExpressionProgram.Parse(text: "pieceCell[b]"), Kind: CellKind.Int),
                     Effects: [
                         new ActionEffect.SetState(State: "verdict", Value: 1),
                         new ActionEffect.SetState(State: "turn", Expression: ExpressionProgram.Parse(text: "1 - turn")),
@@ -701,18 +772,18 @@ public sealed class SearchLawTests {
     public void RelocateWithDisplaceFalseNeverRemovesTheStandingToken() {
         using var fixture = Fixtures.FreshServer(definition: RelocateWorld(displace: false));
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         // Only landing exactly on the OTHER token's cell can satisfy the judge's two-tokens-one-cell gate — "a"
         // onto "b"'s cell 2, or "b" onto "a"'s cell 0 — and each only still reads the other's cell back because
         // displace:false left it standing there.
         Assert.Equal(2L, status.Count);
-        Assert.Equal((1L << 2), Cell(fixture: fixture, key: "a", row: "legal"));
-        Assert.Equal((1L << 0), Cell(fixture: fixture, key: "b", row: "legal"));
+        Assert.Equal((1L << 2), fixture.KeyedValue(key: "a", row: "legal"));
+        Assert.Equal((1L << 0), fixture.KeyedValue(key: "b", row: "legal"));
 
         using var control = Fixtures.FreshServer(definition: RelocateWorld(displace: true));
-        var controlStatus = RunToCompletion(control);
+        var controlStatus = control.SettleSearch();
 
         // The same gate never once reads two tokens sharing a cell when displace evicts whoever stood there.
         Assert.True(condition: controlStatus.Done, userMessage: controlStatus.ToString());
@@ -759,15 +830,16 @@ public sealed class SearchLawTests {
         Assert.Contains(actualString: invalidReason, expectedSubstring: "64 cells");
 
         var definition = WideBoardWorld(withLegal: false);
+
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var validReason), userMessage: validReason);
 
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(198L, status.Count);
-        Assert.Equal(99L, Cell(fixture: fixture, key: "a", row: "counts"));
-        Assert.Equal(99L, Cell(fixture: fixture, key: "b", row: "counts"));
+        Assert.Equal(99L, fixture.KeyedValue(key: "a", row: "counts"));
+        Assert.Equal(99L, fixture.KeyedValue(key: "b", row: "counts"));
 
         // "held" defaults to 0, "a"'s own ordinal: every cell but its own starting one is a reachable destination.
         for (var cell = 0; (cell < 100); cell++) {
@@ -814,7 +886,8 @@ public sealed class SearchLawTests {
         var document = MultiShapeWorld(nodes: 1);
 
         using var continuous = Fixtures.FreshServer(definition: document);
-        var continuousStatus = RunToCompletion(continuous);
+        var continuousStatus = continuous.SettleSearch();
+
         Assert.True(condition: continuousStatus.Done, userMessage: continuousStatus.ToString());
         Assert.Equal(6L, continuousStatus.Count);
 
@@ -825,6 +898,7 @@ public sealed class SearchLawTests {
         }
 
         var midStatus = interrupted.Server.SearchStatus()[0];
+
         Assert.False(condition: midStatus.Done, userMessage: "the capture must land mid-search for a restore to prove anything");
         Assert.Equal(3L, midStatus.Nodes);
 
@@ -832,25 +906,29 @@ public sealed class SearchLawTests {
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+
+        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName;
+
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: new WorldOwnedWorlds(directory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName, machineId: Guid.NewGuid(), template: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
-        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName);
+        // WorldFixture.Dispose owns this directory — the SAME one profiles above was seeded from, not a second one.
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: profilesDirectory);
 
-        var interruptedFinal = RunToCompletion(interrupted);
-        var resumedFinal = RunToCompletion(resumed);
+        var interruptedFinal = interrupted.SettleSearch();
+        var resumedFinal = resumed.SettleSearch();
 
         Assert.True(condition: interruptedFinal.Done, userMessage: interruptedFinal.ToString());
         Assert.True(condition: resumedFinal.Done, userMessage: resumedFinal.ToString());
         Assert.Equal(continuousStatus.Count, interruptedFinal.Count);
         Assert.Equal(interruptedFinal.Count, resumedFinal.Count);
-        Assert.Equal(14L, Cell(fixture: interrupted, key: "a", row: "legal"));
-        Assert.Equal(14L, Cell(fixture: interrupted, key: "b", row: "legal"));
-        Assert.Equal(Cell(fixture: interrupted, key: "a", row: "legal"), Cell(fixture: resumed, key: "a", row: "legal"));
-        Assert.Equal(Cell(fixture: interrupted, key: "b", row: "legal"), Cell(fixture: resumed, key: "b", row: "legal"));
+        Assert.Equal(14L, interrupted.KeyedValue(key: "a", row: "legal"));
+        Assert.Equal(14L, interrupted.KeyedValue(key: "b", row: "legal"));
+        Assert.Equal(interrupted.KeyedValue(key: "a", row: "legal"), resumed.KeyedValue(key: "a", row: "legal"));
+        Assert.Equal(interrupted.KeyedValue(key: "b", row: "legal"), resumed.KeyedValue(key: "b", row: "legal"));
     }
 
     // Pair fixture over any lattice: two tokens, an accept-all judge, and the companion carried by the walked token's
@@ -877,7 +955,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
-                    Shapes: [new WorldSearchShape.Paired(With: "b")], Legal: "legal", Counts: "counts"),
+                    Shapes: [new WorldSearchShape.Tandem(With: "b")], Legal: "legal", Counts: "counts"),
             ]),
         };
 
@@ -903,32 +981,32 @@ public sealed class SearchLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(actual: oracle, expected: 3);
         Assert.Equal(((long)oracle), status.Count);
-        Assert.Equal(((long)oracle), Cell(fixture: fixture, key: "a", row: "counts"));
-        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "counts"));
+        Assert.Equal(((long)oracle), fixture.KeyedValue(key: "a", row: "counts"));
+        Assert.Equal(0L, fixture.KeyedValue(key: "b", row: "counts"));
     }
-
     [Fact]
     public void APairOnARingWrapsTheCompanionAroundWithTheWalkedToken() {
         var ring = new LatticeTopology.Ring(Name: "board", Origin: new DocumentVector3(x: 0, y: 0, z: 0), CellSize: 1, Width: 6);
         using var fixture = Fixtures.FreshServer(definition: PairWorld(ring, a: 0L, b: 3L));
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         // a may step to any other cell; b always lands three further round, never on a's own target.
         Assert.Equal(5L, status.Count);
-        Assert.Equal(0b111110L, Cell(fixture: fixture, key: "a", row: "legal"));
+        Assert.Equal(0b111110L, fixture.KeyedValue(key: "a", row: "legal"));
     }
 
     // Pile fixture: three cards standing in a deck, in order, two empty piles beside it, and an accept-all judge that
     // also counts the hand through the frame. Pile order is the zones' own: only the deck's end card may move.
     private static WorldDefinition PileWorld(ZoneSelector selector = ZoneSelector.Last, bool best = false, WorldSearchShape? shape = null) {
         var zone = new StateDomain.KeysOf(CellName.Parse(candidate: "cards"), Ordered: true);
+
         StateCell[] Members(string keys) => [.. keys.Select(selector: static key => new StateCell(CellName.Parse(candidate: key.ToString()), CellValue.Bool(value: true)))];
         var state = new WorldStateSection(
             World: [
@@ -971,20 +1049,19 @@ public sealed class SearchLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         Assert.Equal(3, status.Cells);
         Assert.Equal(2L, status.Count);
-        Assert.Equal(0L, Cell(fixture: fixture, key: "a", row: "counts"));
-        Assert.Equal(0L, Cell(fixture: fixture, key: "b", row: "counts"));
-        Assert.Equal(2L, Cell(fixture: fixture, key: "c", row: "counts"));
-        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture: fixture, key: "c", row: "legal"));
+        Assert.Equal(0L, fixture.KeyedValue(key: "a", row: "counts"));
+        Assert.Equal(0L, fixture.KeyedValue(key: "b", row: "counts"));
+        Assert.Equal(2L, fixture.KeyedValue(key: "c", row: "counts"));
+        Assert.Equal((1L << 1) | (1L << 2), fixture.KeyedValue(key: "c", row: "legal"));
         // The section's piles never moved: the frame took every transfer.
-        Assert.Equal("abc", string.Concat(values: Row(fixture: fixture, name: "deck").Cells!.Select(selector: c => c.Key.Value)));
-        Assert.Empty(collection: (Row(fixture: fixture, name: "hand").Cells ?? []));
+        Assert.Equal("abc", string.Concat(values: fixture.Row(name: "deck").Cells!.Select(selector: c => c.Key.Value)));
+        Assert.Empty(collection: (fixture.Row(name: "hand").Cells ?? []));
     }
-
     [Fact]
     public void TheFirstEndOfAPileMovesWhenTheShapeSaysSo() {
         var definition = PileWorld(selector: ZoneSelector.First);
@@ -993,13 +1070,12 @@ public sealed class SearchLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
-        Assert.Equal(2L, Cell(fixture: fixture, key: "a", row: "counts"));
-        Assert.Equal(0L, Cell(fixture: fixture, key: "c", row: "counts"));
+        Assert.Equal(2L, fixture.KeyedValue(key: "a", row: "counts"));
+        Assert.Equal(0L, fixture.KeyedValue(key: "c", row: "counts"));
     }
-
     [Fact]
     public void TheJudgeReadsThePileTheTransferLandedOnAndBestNamesThatZone() {
         var definition = PileWorld(best: true);
@@ -1008,17 +1084,16 @@ public sealed class SearchLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        var status = RunToCompletion(fixture);
+        var status = fixture.SettleSearch();
 
         Assert.True(condition: status.Done, userMessage: status.ToString());
         // Moving c onto the hand makes the hand count one through the frame; onto the discard it stays zero.
         Assert.Equal(2, status.BestToken);
         Assert.Equal(1, status.BestTarget);
         Assert.Equal(1L, status.BestScore);
-        Assert.Equal(1L, Cell(fixture: fixture, key: "to", row: "best"));
-        Assert.Equal(0L, Cell(fixture, "handCount", WorldStateRow.SlotKey.Value));
+        Assert.Equal(1L, fixture.KeyedValue(key: "to", row: "best"));
+        Assert.Equal(0L, fixture.KeyedValue("handCount", WorldStateRow.SlotKey.Value));
     }
-
     [Fact]
     public void AZoneJobRefusesABoardShapeAndABoardJobRefusesATransfer() {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: PileWorld(shape: new WorldSearchShape.Relocate()), reason: out var zoneReason));

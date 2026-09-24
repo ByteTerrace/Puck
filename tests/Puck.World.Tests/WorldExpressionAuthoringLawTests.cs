@@ -7,22 +7,6 @@ namespace Puck.World.Tests;
 /// <summary>Every expression the shipped worlds author prints to an infix spelling that parses back to the same
 /// tokens, so an author can move any of them between the two spellings without changing what compiles.</summary>
 public sealed class WorldExpressionAuthoringLawTests {
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-        Assert.NotNull(@object: directory);
-        return directory!.FullName;
-    }
-
     [Fact]
     public void ARuleAuthoredInfixCompilesToTheSameProgramAsItsTokens() {
         var infix = Fixtures.BuildDocument() with {
@@ -69,10 +53,7 @@ public sealed class WorldExpressionAuthoringLawTests {
     [MemberData(nameof(ShippedDocuments))]
     [Theory]
     public void EveryShippedExpressionRoundTripsThroughTheInfixSpelling(string relativePath) {
-        var node = JsonNode.Parse(File.ReadAllText(path: Path.Combine(
-            path1: RepoRoot(),
-            path2: relativePath
-        )));
+        var node = JsonNode.Parse(File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: relativePath)));
         var expressions = 0;
 
         Walk(
@@ -109,18 +90,22 @@ public sealed class WorldExpressionAuthoringLawTests {
                         return;
                     }
                     foreach (var (_, child) in obj) {
-                        if (child is not null) { Walk(
+                        if (child is not null) {
+                            Walk(
                             expressions: ref expressions,
                             node: child
-                        ); }
+                        );
+                        }
                     }
                     return;
                 case JsonArray array:
                     foreach (var child in array) {
-                        if (child is not null) { Walk(
+                        if (child is not null) {
+                            Walk(
                             expressions: ref expressions,
                             node: child
-                        ); }
+                        );
+                        }
                     }
                     return;
             }
@@ -128,7 +113,7 @@ public sealed class WorldExpressionAuthoringLawTests {
     }
     public static TheoryData<string> ShippedDocuments() {
         var data = new TheoryData<string>();
-        var root = RepoRoot();
+        var root = RepositoryPaths.RequireRoot();
 
         foreach (var directory in new[] { Path.Combine(
             path1: "src",

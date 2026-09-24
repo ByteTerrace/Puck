@@ -153,6 +153,7 @@ public sealed class ArenaJournal {
                 return ObjectBytes;
         }
     }
+
     /// <summary>Records one overwritten vector cell by copying its components into the journal's own buffer.</summary>
     /// <param name="index">The cell slot written.</param>
     /// <param name="previous">The components it held.</param>

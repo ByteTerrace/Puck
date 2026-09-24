@@ -44,7 +44,7 @@ public sealed class RuleGroupLawTests {
                 Shape: RuleGroupShape.Fixpoint,
                 Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "settle"))],
                 Trigger: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     Key: "$expr:1+1",
                     State: "codes",
                     Value: 0m
@@ -83,7 +83,7 @@ public sealed class RuleGroupLawTests {
                 Shape: RuleGroupShape.Fixpoint,
                 Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "settle"))],
                 Trigger: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     State: RuleFacts.Tick,
                     Value: 30m
                 )
@@ -101,7 +101,7 @@ public sealed class RuleGroupLawTests {
                 Shape: RuleGroupShape.Fixpoint,
                 Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "settle"))],
                 Trigger: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     State: $"{RuleFacts.ReducePrefix}count:{RulesFixture.HostField}",
                     Value: 0m
                 )
@@ -215,7 +215,7 @@ public sealed class RuleGroupLawTests {
                 Shape: RuleGroupShape.Fixpoint,
                 Steps: [new RuleGroupStep(Rule: CellName.Parse(candidate: "settle"))],
                 Trigger: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     State: "score",
                     Value: 0m
                 )

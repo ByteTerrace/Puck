@@ -165,8 +165,11 @@ startup mode; its bundled-firmware convenience constructor defaults to cold boot
 
 The [AGB Post battery](../../../src/Puck.AdvancedGamingBrick.Post/README.md) owns
 tiers, assets, diagnostics, and run instructions; embedding exercises the
-synchronous core without a worker or graphics/audio device. Shared substrate
-checks live in [Puck.GamingBricks.Tests](../../../tests/Puck.GamingBricks.Tests/README.md).
+synchronous core without a worker or graphics/audio device. The component
+snapshot layout law lives in
+[Puck.AdvancedGamingBrick.Tests](../../../tests/Puck.AdvancedGamingBrick.Tests/README.md),
+and shared substrate checks live in
+[Puck.GamingBricks.Tests](../../../tests/Puck.GamingBricks.Tests/README.md).
 
 - [Advanced Gaming Brick](README.md) — hardware topics and evidence.
 - [Performance techniques](performance-techniques.md) — execution equivalence and architectural constraints.

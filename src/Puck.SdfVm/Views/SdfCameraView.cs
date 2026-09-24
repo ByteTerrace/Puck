@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
@@ -9,7 +10,7 @@ namespace Puck.SdfVm.Views;
 /// <summary>
 /// Renders an SDF world into an offscreen image. A small <see cref="SdfWorldEngine"/> is posed for each resolve by an
 /// <see cref="ISdfCameraRig"/> against a
-/// live pose an <see cref="ISdfAnchorSource"/> resolves by id (see <see cref="SdfAnchorTable"/>) — or, for a rig that
+/// live pose an <see cref="ISdfAnchorSource"/> resolves by id — or, for a rig that
 /// ignores its anchor entirely (<see cref="FixedRig"/>), no anchor binding at all.
 /// <para>
 /// LIFETIME: this type owns a real GPU resource (an offscreen engine, lazily built on first <see cref="Resolve"/>)
@@ -34,11 +35,22 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     private readonly SdfViewGpuServices m_services;
     private readonly uint m_width;
 
+    // Owned here rather than by the engine, so submission identities keep increasing across an engine rebuild.
+    private readonly GpuWorkLedger m_work = new(
+        framesInFlight: SdfWorldEngine.FrameRingSize,
+        name: "gpu.camera-view"
+    );
+
     private SdfProgram? m_currentProgram;
     private SdfWorldEngine? m_engine;
-    private Func<IGpuDeviceContext, IGpuStorageImage>? m_exportFactory;
-    private SdfWorldKernels? m_kernels;
+    private Func<IGpuDeviceContext, IGpuImage>? m_exportFactory;
+
+    // Built off the frame thread on the first resolve and kept across engine rebuilds (an export-factory change) until
+    // a device loss or disposal.
+    private readonly SdfWorldPipelineSource m_pipelines;
+
     private int m_lastUploadedRevision = -1;
+
     // Export-mode changes rebuild the engine, but ViewStack keeps serving the last resolved image handle until a
     // replacement frame completes. Keep the engine backing that handle alive across the rebuild; disposing it in
     // ExportFactory's setter would leave a wired screen sampling a released image during a budgeted refresh gap.
@@ -58,6 +70,7 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     public SdfCameraView(SdfViewGpuServices services, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, uint width = DefaultWidth, uint height = DefaultHeight) {
         ArgumentNullException.ThrowIfNull(services);
 
+        m_pipelines = new SdfWorldPipelineSource(cache: services.Pipelines);
         m_services = services;
         m_hostsOnDirectX = hostsOnDirectX;
         m_programWordCapacity = programWordCapacity;
@@ -67,9 +80,9 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         m_height = height;
     }
 
-    /// <summary>Resolves this view's live anchor id fresh every frame (a name→id lookup, typically
-    /// <c>SdfAnchorTable.TryResolveId</c>) — a delegate rather than a cached int so a name published only SOME ticks
-    /// (a companion that despawned) is re-checked rather than sticking to a stale id.</summary>
+    /// <summary>Gets or sets the delegate that supplies this view's anchor id every frame — a delegate rather than a
+    /// cached int so a subject that changes (a camera following a different entity) is re-read rather than sticking to
+    /// a stale id.</summary>
     public Func<int>? AnchorIdSource { get; set; }
     /// <summary>Resolves this view's anchor id every frame (see <see cref="AnchorSource"/>) — null or a resolved id
     /// that fails to resolve leaves the rig's <c>anchor</c> parameter at <see langword="default"/> (a
@@ -86,12 +99,12 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     public Action<bool>? EndExportWrite { get; set; }
     /// <summary>The output-image factory forwarded to <see cref="SdfWorldEngineOptions.CreateOutputImage"/> —
     /// <see langword="null"/> (the default) builds a plain same-device image; a factory returning an
-    /// <see cref="IGpuExportableStorageImage"/> puts the engine in export mode (see <see cref="ExportSharedHandle"/>).
+    /// <see cref="IGpuExportableImage"/> puts the engine in export mode (see <see cref="ExportSharedHandle"/>).
     /// Only consulted while building a new engine (<see cref="EnsureEngine"/> is a no-op once one exists), so setting
     /// this after the engine already exists retires it — the next <see cref="Resolve"/> rebuilds against the new
     /// factory, while the old engine stays alive until that replacement frame completes (a fresh engine also means
     /// a fresh <see cref="SdfWorldEngine.ExportSharedHandle"/>).</summary>
-    public Func<IGpuDeviceContext, IGpuStorageImage>? ExportFactory {
+    public Func<IGpuDeviceContext, IGpuImage>? ExportFactory {
         get => m_exportFactory;
         set {
             if (ReferenceEquals(
@@ -114,6 +127,7 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
 
                 m_engine = null;
                 m_lastUploadedRevision = -1;
+                m_work.Invalidate();
             }
         }
     }
@@ -139,36 +153,35 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <see cref="Resolve"/> keeps the last completed image instead of overwriting it while a consumer holds a read
     /// lease.</summary>
     public Func<bool>? TryBeginExportWrite { get; set; }
+    /// <summary>Gets the GPU work this view's offscreen engine recorded, per pass, for its newest completed submission
+    /// (see <see cref="SdfWorldEngine.Work"/>). Submission identities keep increasing when the view rebuilds its engine;
+    /// the view's work reads unavailable after a rebuild until a frame of the new engine completes.</summary>
+    public IGpuWorkSource Work => m_work;
+    /// <summary>Gets the GPU objects this view's engines have created, over the view's whole life.</summary>
+    public IWorkCounterSource WorkLifetime => m_work;
 
-    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfProgram program) {
+    // Builds the engine once its pipelines are ready; false while they build on the thread pool.
+    private bool EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfProgram program) {
         if (m_engine is not null) {
-            return;
+            return true;
         }
 
-        m_kernels ??= SdfWorldKernels.Load(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_hostsOnDirectX));
-        m_currentProgram ??= program;
+        if (m_pipelines.Poll(
+            device: device,
+            gpu: gpu,
+            hostsOnDirectX: m_hostsOnDirectX,
+            includeBrickPipelines: false,
+            kernels: null
+        ) is not { } pipelines) {
+            return false;
+        }
 
-        // GPU performance counters: same live arming as SdfEngineNode.EnsureEngine — GpuTimingControl.Shared, gated on
-        // the backend having registered the timing seam. A [view-timing]-tagged offscreen engine, so its own per-pass GPU ms are
-        // distinguishable from the host world's [world-timing] in a mixed log.
-        // A known wart: the timing bundle is resolved eagerly at the composition root regardless of arming
-        // state, but this engine only picks it up when ViewTiming.Enabled is true at this EnsureEngine call
-        // (once per engine lifetime) — a view whose engine builds with timing off never gains it until a
-        // device-lost rebuild re-runs EnsureEngine.
-        var timingFactory = (ViewTiming.Enabled
-            ? m_services.TimingFactory
-            : null
-        );
-        var timingRecorder = (ViewTiming.Enabled
-            ? m_services.TimingRecorder
-            : null
-        );
+        m_currentProgram ??= program;
 
         m_engine = new SdfWorldEngine(
             device: device,
             gpu: gpu,
             height: m_height,
-            kernels: m_kernels.Value,
             options: new SdfWorldEngineOptions(
                 // A filming view never bakes carves (it renders the host world's program, and RequestBrickBake is never
                 // called on it), so provisioning the default 64 MB brick pool would waste ~64 MB per view — ~4 GB at the
@@ -180,21 +193,14 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
                 InstanceCapacity: m_instanceCapacity,
                 Program: m_currentProgram,
                 ProgramWordCapacity: m_programWordCapacity,
-                TimingFactory: timingFactory,
-                TimingRecorder: timingRecorder,
-                ViewportCapacity: 1
+                ViewportCapacity: 1,
+                WorkLedger: m_work
             ),
+            pipelines: pipelines,
             width: m_width
         );
 
-        if (
-            (timingFactory is not null) &&
-            (timingRecorder is not null)
-        ) {
-            Console.Error.WriteLine(value: (m_engine.TimingEnabled
-                ? $"[view-timing] camera view enabled | period {m_engine.TimingCapabilities.PeriodNanoseconds:0.###}ns"
-                : "[view-timing] camera view — the device reports no usable GPU timestamps; running untimed."));
-        }
+        return true;
     }
     // Re-uploads the shared world program when the host's revision counter has advanced since the last resolve — a
     // no-op otherwise (mirrors CameraFeedPool.Rebuild).
@@ -218,6 +224,7 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         m_engine = null;
         m_retiredEngine?.Dispose();
         m_retiredEngine = null;
+        m_pipelines.Release();
     }
     /// <inheritdoc/>
     public void NotifyDeviceLost() {
@@ -225,7 +232,9 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         m_engine = null;
         m_retiredEngine?.Dispose();
         m_retiredEngine = null;
+        m_pipelines.Release();
         m_lastUploadedRevision = -1;
+        m_work.Invalidate();
     }
     /// <inheritdoc/>
     public nint Resolve(in ViewRenderContext context) {
@@ -255,11 +264,16 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
             }
         }
 
-        EnsureEngine(
+        // No signal while the pipelines build — or the image an export-factory rebuild is replacing, still backed by
+        // its retired engine.
+        if (!EnsureEngine(
             device: device,
             gpu: m_services.Gpu,
             program: context.Program
-        );
+        )) {
+            return (m_retiredEngine?.OutputImageViewHandle ?? 0);
+        }
+
         Rebuild(
             program: context.Program,
             revision: context.ProgramRevision
@@ -346,8 +360,8 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
         m_retiredEngine?.Dispose();
         m_retiredEngine = null;
 
-        // OutputImageViewHandle stays a valid same-device view even in export mode (IGpuExportableStorageImage IS an
-        // IGpuStorageImage) — a jumbotron sampling this view and a probe kernel importing ExportSharedHandle read the
+        // OutputImageViewHandle stays a valid same-device view even in export mode (IGpuExportableImage IS an
+        // IGpuImage) — a jumbotron sampling this view and a probe kernel importing ExportSharedHandle read the
         // same drained frame through two different handles.
         return outputImageViewHandle;
     }

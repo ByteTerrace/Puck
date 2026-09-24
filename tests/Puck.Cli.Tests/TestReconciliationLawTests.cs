@@ -17,7 +17,7 @@ public sealed class TestReconciliationLawTests {
         ManifestBytes: [],
         Submissions: submissions,
         Truncated: truncated,
-        Verdicts: []
+        Worlds: []
     );
     private static TestSchedule Schedule(ulong exportTick, params TestScheduleRow[] rows) => new(
         ExportTick: exportTick,

@@ -146,7 +146,7 @@ public sealed class BindingRadialTests {
     public void ACompiledSectorReturnsThroughTheSeatsPrincipalDoor() {
         var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
         var registry = new CommandRegistry(modules: [new TestModule()]);
-        var expectedPrincipal = CommandPrincipal.Peer(
+        var expectedPrincipal = Principal.Peer(
             generation: 4,
             index: 17
         );
@@ -1104,7 +1104,7 @@ public sealed class BindingRadialTests {
         var router = new InputRouter(
             registry: registry,
             bindings: bindings,
-            principalResolver: new FixedPrincipalResolver(principal: CommandPrincipal.Console)
+            principalResolver: new FixedPrincipalResolver(principal: Principal.Console)
         );
 
         _ = bindings.Resolve(
@@ -1140,8 +1140,8 @@ public sealed class BindingRadialTests {
         ).Lanes);
     }
 
-    private sealed class FixedPrincipalResolver(CommandPrincipal principal) : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => principal;
+    private sealed class FixedPrincipalResolver(Principal principal) : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => principal;
     }
     private sealed class TestModule : ICommandModule {
         public const string Command = "test.radial.act";

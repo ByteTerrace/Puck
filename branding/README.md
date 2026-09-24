@@ -17,6 +17,9 @@ the primary product mark for the documentation site and NuGet package. The
 dashboard portal uses the authored `puck-logo-256.png` header variant, and the
 VS Code extension retains its separate `puck-editor-icon-128.png` variant.
 The favicon, touch icon, and dark application icons are canonicalized by size.
+The favicon carries only the 16 to 48 pixel images a browser uses for tabs and
+bookmarks; larger icons come from the PNG links and the web manifest, so every
+first visit does not download them twice.
 Choose the smallest supplied size that matches the consumer's declared slot;
 do not resize a raster in a source change.
 

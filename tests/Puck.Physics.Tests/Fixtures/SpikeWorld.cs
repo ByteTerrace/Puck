@@ -60,42 +60,22 @@ internal sealed class SpikeWorld {
     /// <summary>Gets the fingerprint of everything a replay would have to reproduce.</summary>
     internal ulong Digest {
         get {
-            var digest = FixedRigidArithmetic.DigestSeed;
+            var digest = Fnv1aHash.Create();
 
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: Pose.Center.X.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: Pose.Center.Y.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: Pose.Center.Z.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: Pose.Orientation.X.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: Pose.Orientation.Y.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: Pose.Orientation.Z.Value
-            );
-            digest = FixedRigidArithmetic.Fold(
-                digest: digest,
-                value: Pose.Orientation.W.Value
-            );
-            digest = Body.Fold(digest: digest);
-
-            return Slots.Fold(
-                digest: digest,
+            digest.Add(value: Pose.Center.X.Value);
+            digest.Add(value: Pose.Center.Y.Value);
+            digest.Add(value: Pose.Center.Z.Value);
+            digest.Add(value: Pose.Orientation.X.Value);
+            digest.Add(value: Pose.Orientation.Y.Value);
+            digest.Add(value: Pose.Orientation.Z.Value);
+            digest.Add(value: Pose.Orientation.W.Value);
+            Body.Fold(digest: ref digest);
+            Slots.Fold(
+                digest: ref digest,
                 step: m_step
             );
+
+            return digest.Value;
         }
     }
     /// <summary>Gets the activation bound the most recent step used.</summary>

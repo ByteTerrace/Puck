@@ -35,7 +35,8 @@ public enum SdfSolidPrimitive {
     /// <summary>A generalized ellipsoid: <c>q = pow(abs(p)/r, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r)</c>, unit
     /// radii (1,1,1) and an authored exponent <c>e</c> in [<see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>,
     /// <see cref="SdfProgramBuilder.MaxSuperellipsoidExponent"/>] (the document's <c>exponent</c> field carries it;
-    /// unauthored is the minimum, the ellipsoid limit — the two spellings agree bit-for-bit at that exponent). A
+    /// unauthored is the minimum, the ellipsoid itself — an <see cref="Ellipsoid"/> emits the identical instruction, since
+    /// every ellipsoid is this shape at that exponent). A
     /// squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.</summary>
     Superellipsoid,
     /// <summary>A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical

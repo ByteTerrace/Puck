@@ -1,9 +1,6 @@
-//! **BATTERY-ONLY GUEST.** Never shipped, no shipped world pins it. Exists solely so
-//! `docs/verification/lane-present-deletion` (now QUARANTINED — see its README) could prove the host refuses a channel
-//! descriptor naming a RETIRED `AddonChannelKind` ordinal (4, formerly `Geometry`; 5, formerly
-//! `Overlay` — both retired permanently with the rest of the lane axis) —
-//! by the ORDINARY undefined-kind refusal `AddonChannelTableReader.TryDecode` already gives every
-//! unrecognized byte, never a special case carved out for the retired values.
+//! **MALFORMED-INPUT GUEST.** Never shipped, no shipped world pins it. It proves the host refuses a
+//! channel descriptor whose kind byte names no `AddonChannelKind` member, by the undefined-kind refusal
+//! `AddonChannelTableReader.TryDecode` gives every unrecognized byte.
 //!
 //! Every export shim below delegates to `puck_stdlib::abi` exactly like `puck-addon-queryspam`'s
 //! (see its module doc for why the frozen `#[no_mangle]` names must live in the `cdylib`, not the

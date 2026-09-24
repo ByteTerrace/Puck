@@ -2,8 +2,8 @@
 
 Puck's addon WASM standard library—an `rlib`, not a `cdylib`. The addon ABI
 contract itself lives in
-[`../../src/Puck.Scripting/README.md`](../../src/Puck.Scripting/README.md),
-beside the constants that define it; [`../README.md`](../README.md) covers the
+[deterministic WASM scripting](../../docs/reference/scripting.md),
+the reference for the constants that define it; [`../README.md`](../README.md) covers the
 guest-authoring workflow (build/test commands, generated sources, the hash-pin
 refresh) and the spec-pinned vs algorithm-pinned split this crate's `fixed`
 module follows. This file is a short map of what lives where.

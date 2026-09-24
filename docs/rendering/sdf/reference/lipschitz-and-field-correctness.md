@@ -59,9 +59,9 @@ answer clear.
 
 A CPU marcher over the same instruction stream is bound by the same step scale
 as the shader. Restricting the interpreted subset to rigid ops does not make the
-raw field value a safe advance: the chamfer family lives in the blend tail and
-an eccentric ellipsoid in the shape body, so a program every one of whose ops is
-an isometry can still overestimate distance and be tunnelled by a raw step.
+raw field value a safe advance: the chamfer family lives in the blend tail, so a
+program every one of whose ops is an isometry can still overestimate distance and
+be tunnelled by a raw step.
 
 For a swept sphere, scale the field before subtracting the radius:
 `safeAdvance = field * stepScale - radius`. Scaling the clearance instead also
@@ -139,9 +139,12 @@ Two further consequences of scoping the analysis:
   `Data1.y` lane; zero = unpatched). The interpreters multiply the scope's
   field by it at the pop: a positively scaled distance keeps its zero set, and
   `(1/L)·f` of an `L`-Lipschitz `f` is exactly 1-Lipschitz, so scoped
-  relief/warps/eccentricity never tax the global `stepScale`. Anything
-  UNSCOPED still folds globally—a flattened `Ellipsoid` outside a scope
-  slows every march in the program by its eccentricity.
+  relief and warps never tax the global `stepScale`. Anything unscoped still
+  folds globally. A scope is a per-sample cost of its own: a scoped segment
+  never takes the segment early-out and is never rigid-planned. No primitive
+  needs one—every shape body is 1-Lipschitz, and an ellipsoid (including a
+  non-uniformly scaled sphere) is the superellipsoid's exact exponent-2 gauge
+  `(|p/r| - 1)·min(r)`, whatever its eccentricity.
 - **Continuous relief.** `Displace` and `NoiseDisplace` evaluate their basis
   at every distance in both the scalar and gradient interpreters. Replacing
   relief with `-|amplitude|` outside a band gives a lower value, but the jump

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -14,26 +15,28 @@ public sealed class WorldRuleHazardLawTests {
         );
         var compilation = WorldRuleCompilation.Compile(definition: definition);
         var hazards = WorldRuleHazards.Analyze(compilation: compilation);
+
         Assert.Single(collection: hazards);
         Assert.Equal(WorldRuleHazards.Analyze(definition: definition), hazards);
         Parallel.For(0, 16, _ => Assert.Same(hazards, WorldRuleHazards.Analyze(compilation: compilation)));
         Assert.Equal(WorldRuleWorkBudget.Measure(definition: definition), WorldRuleWorkBudget.Measure(compilation: compilation));
         Assert.Equal(compilation.WorkBudget, compilation.CostReport.WorkBudget);
         Assert.Same(compilation.WorkContributors, WorldRuleWorkBudget.Contributors(compilation: compilation));
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var index = 0; (index < 1000); index++) {
-            _ = WorldRuleHazards.Analyze(compilation: compilation);
-            _ = WorldRuleWorkBudget.Measure(compilation: compilation);
-            _ = WorldRuleWorkBudget.Contributors(compilation: compilation);
-            _ = compilation.CostReport;
-        }
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-        Assert.Equal(actual: allocated, expected: 0L);
+        Assert.Equal(actual: AllocationWindow.Least(window: () => {
+            for (var index = 0; (index < 1000); index++) {
+                _ = WorldRuleHazards.Analyze(compilation: compilation);
+                _ = WorldRuleWorkBudget.Measure(compilation: compilation);
+                _ = WorldRuleWorkBudget.Contributors(compilation: compilation);
+                _ = compilation.CostReport;
+            }
+        }), expected: 0L);
 
         Assert.NotNull(@object: definition.Rules);
         var reordered = definition with { Rules = [definition.Rules[1], definition.Rules[0]] };
+
         Assert.Same(definition.StateCatalog, reordered.StateCatalog);
         var replacement = WorldRuleCompilation.Compile(definition: reordered);
+
         Assert.Empty(collection: replacement.Hazards);
         Assert.Single(collection: compilation.Hazards);
     }
@@ -46,13 +49,13 @@ public sealed class WorldRuleHazardLawTests {
     private static ActionPredicate HpAtMost(long value) =>
         new ActionPredicate.CompareState(
             State: "hp",
-            Comparison: ActionStateComparison.LessOrEqual,
+            Comparison: ExpressionOp.LessOrEqual,
             Value: value
         );
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(
             State: "phase",
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Value: value
         );
     private static WorldRule Rule(string name, ActionEffect effect, ActionPredicate? gate = null) =>

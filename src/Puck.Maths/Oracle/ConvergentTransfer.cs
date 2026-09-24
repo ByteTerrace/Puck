@@ -45,15 +45,13 @@ public sealed class ConvergentTransfer<TValue, TOps>
 
     // The quiver key of a two-by-two cell, and the one place the coordinate range is decided.
     private static long CellKey(int row, int column) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: row);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: row,
-            other: 1
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: 1,
+            value: row
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: column);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: column,
-            other: 1
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: 1,
+            value: column
         );
 
         return ((row * 2L) + column);

@@ -6,8 +6,7 @@ namespace Puck.Maths.Tests;
 /// The seed law instantiations — the fixed-point algebra cluster proved end-to-end. Each combinator from
 /// <see cref="Laws"/> is instantiated per subject here, once, as a declaration. This is the only place subjects, oracles,
 /// domains, and covered members meet. Every case here is a law <see cref="LawTests"/> executes as a theory row, so a
-/// member the coverage module credits is always credited to a case that runs and asserts; timing work has no
-/// declaration here (<see cref="BenchTests"/> owns the bench outright).
+/// member the coverage module credits is always credited to a case that runs and asserts.
 /// </summary>
 internal static partial class LawRegistry {
     /// <summary>Gets the Puck.Maths assembly a declared member's type name is resolved against.</summary>
@@ -751,12 +750,20 @@ internal static partial class LawRegistry {
     );
 
     /// <summary>Gets every declared law case, across every tier.</summary>
-    public static IReadOnlyList<LawCase> All { get; } = Build();
+    public static IReadOnlyList<LawCase> All { get; }
     /// <summary>Gets the case lookup by id.</summary>
-    public static IReadOnlyDictionary<string, LawCase> ById { get; } = All.ToDictionary(
-        keySelector: lawCase => lawCase.Id,
-        comparer: StringComparer.Ordinal
-    );
+    public static IReadOnlyDictionary<string, LawCase> ById { get; }
+
+    // The registry is built in the static constructor, never a field initializer: initializers run in an unspecified
+    // order across this class's partial files, and a binding that captures a partial's Domain field while Build runs
+    // would otherwise capture it before it was assigned.
+    static LawRegistry() {
+        All = Build();
+        ById = All.ToDictionary(
+            keySelector: lawCase => lawCase.Id,
+            comparer: StringComparer.Ordinal
+        );
+    }
 
     // Relation coefficients as raw Q16 longs.
     private const long ComplexQ = -65536L;   // (0, −1) → FixedComplex
@@ -800,6 +807,7 @@ internal static partial class LawRegistry {
         .. Phase2ModulesCases(),
         .. ContinuedFractionLensCases(),
         .. FixedVectorCases(),
+        .. RayPlaneCases(),
         .. FixedPositionCases(),
         .. FixedRigidTransformCases(),
         .. RateAccumulatorCases(),
@@ -807,6 +815,7 @@ internal static partial class LawRegistry {
         .. MixedScaleCases(),
         .. DirectedRoundingCases(),
         .. FixedSaturateCases(),
+        .. CarrierHelperCases(),
         .. MassPropertiesCases(),
         .. BinaryPolynomialRingCases(),
         .. BinaryFieldQuotientCases(),
@@ -825,12 +834,9 @@ internal static partial class LawRegistry {
         .. HexagonalIndexCases(),
         .. SquareGridCases(),
         .. CombinatoricsCases(),
-        Case(
-            id: "integer.layer-sequence-full-range",
-            run: () => Laws.Claim(
-                claim: Subjects.LayerSequenceFullRange,
-                lawId: "integer.layer-sequence-full-range"
-            )
+        ClaimCase(
+            claim: Subjects.LayerSequenceFullRange,
+            id: "integer.layer-sequence-full-range"
         ),
         .. ScalarSpecificationCases(),
         .. BinaryFieldCrcCases(),
@@ -854,6 +860,7 @@ internal static partial class LawRegistry {
         .. CurvatureSplineCases(),
         .. MagicConstantCases(),
         .. SignedByteVectorCases(),
+        .. VectorFunctionsCases(),
     ];
     /// <summary>Builds a declared case: looks up the id's authored declaration in <see cref="LawDeclarations.All"/>
     /// for the tier, covered members and legs, and pairs it with the run delegate given here — the one part of a case
@@ -863,7 +870,33 @@ internal static partial class LawRegistry {
     /// <returns>The assembled case.</returns>
     /// <exception cref="InvalidOperationException">The id has no declaration, its tier token does not parse, or a
     /// declared member's type does not resolve in the Puck.Maths assembly.</exception>
-    private static LawCase Case(string id, Action run) {
+    private static LawCase Case(string id, Action run) =>
+        DeclaredCase(
+            bind: _ => run,
+            id: id
+        );
+    /// <summary>Builds a declared case whose whole run is one <see cref="Laws.Claim"/> over <paramref name="claim"/>,
+    /// quoting <paramref name="id"/> on failure — the binding most laws take, spelled without repeating the id.</summary>
+    /// <param name="id">The law id, matched against <see cref="LawDeclarations.All"/>.</param>
+    /// <param name="claim">The claim body: <see langword="null"/> when it holds, the counterexample text otherwise.</param>
+    /// <returns>The assembled case.</returns>
+    /// <exception cref="InvalidOperationException">As for <see cref="Case"/>.</exception>
+    private static LawCase ClaimCase(string id, Func<string?> claim) =>
+        Case(
+            id: id,
+            run: () => Laws.Claim(
+                claim: claim,
+                lawId: id
+            )
+        );
+    /// <summary>Looks up the id's declaration, as <see cref="Case"/> does, and hands its parsed tier to
+    /// <paramref name="bind"/> for the run delegate, so a combinator's sweep length is the declared tier's by
+    /// construction rather than by a second spelling that could disagree with it.</summary>
+    /// <param name="id">The law id, matched against <see cref="LawDeclarations.All"/>.</param>
+    /// <param name="bind">The run delegate's factory, given the declared tier.</param>
+    /// <returns>The assembled case.</returns>
+    /// <exception cref="InvalidOperationException">As for <see cref="Case"/>.</exception>
+    private static LawCase DeclaredCase(string id, Func<Tier, Action> bind) {
         var declaration = (LawDeclarations.All.TryGetValue(
             key: id,
             value: out var found
@@ -871,21 +904,43 @@ internal static partial class LawRegistry {
             ? found
             : throw new InvalidOperationException(message: $"law id '{id}' has no declaration under tests/Puck.Maths.Tests/laws/.")
         );
+        var tier = ParseTier(
+            id: id,
+            token: declaration.Tier
+        );
 
         return new(
             Id: id,
-            Tier: ParseTier(
-                id: id,
-                token: declaration.Tier
-            ),
+            Tier: tier,
             Members: [.. declaration.Members.Select(selector: member => ResolveMember(
                     id: id,
                     member: member
                 ))],
             Legs: [.. declaration.Legs.Select(selector: leg => leg.ToLeg())],
-            Run: run
+            Run: bind(arg: tier)
         );
     }
+    /// <summary>Builds a declared case whose whole run is one <see cref="Laws.SweptClaim"/> of
+    /// <paramref name="claim"/> over <paramref name="domain"/>, at the declared tier and quoting <paramref name="id"/>
+    /// on failure.</summary>
+    /// <param name="id">The law id, matched against <see cref="LawDeclarations.All"/>.</param>
+    /// <param name="domain">The operand domain.</param>
+    /// <param name="width">The lane count of each operand vector.</param>
+    /// <param name="claim">The swept claim body: <see langword="null"/> when it holds at the operands, the
+    /// counterexample text otherwise.</param>
+    /// <returns>The assembled case.</returns>
+    /// <exception cref="InvalidOperationException">As for <see cref="Case"/>.</exception>
+    private static LawCase SweptCase(string id, Domain domain, int width, Func<long[], long[], string?> claim) =>
+        DeclaredCase(
+            bind: tier => () => Laws.SweptClaim(
+                claim: claim,
+                domain: domain,
+                lawId: id,
+                tier: tier,
+                width: width
+            ),
+            id: id
+        );
     /// <summary>Parses a declared tier token.</summary>
     /// <param name="id">The owning law id, named in the exception if parsing fails.</param>
     /// <param name="token">The tier token, for example <c>"Deep"</c>.</param>

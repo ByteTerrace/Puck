@@ -9,8 +9,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: section.ScheduleAccumulatorTicks);
         writer.WriteUInt64(value: section.ElapsedEngineTicks);
         writer.WriteBoolean(value: section.IsPaused);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.PortalOccupancy,
             writeItem: static (w, row) => {
                 w.WriteString(value: row.PlacementId);
@@ -19,38 +18,32 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         );
         writer.WriteUInt64(value: section.NextTransferId);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.InDoubtTransfers,
             writeItem: WriteInDoubtTransfer
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.ForwardedBodies,
             writeItem: WriteForwardedBody
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.AppliedTransferIds,
             writeItem: static (w, v) => w.WriteUInt64(value: v)
         );
-        WriteOptional(
-            writer: writer,
+        writer.WriteOptional(
             value: section.AppliedTransferHighWater,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
         writer.WriteInt32(value: section.FreshCounter);
         writer.WriteBoolean(value: section.Retained);
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.AnnouncedCrossingHolds,
             writeItem: static (w, row) => {
                 w.WriteInt32(value: row.Seat);
                 w.WriteUInt64(value: row.TransferId);
             }
         );
-        WriteArray(
-            writer: writer,
+        writer.WriteArray(
             items: section.SeededArrivals,
             writeItem: static (w, row) => {
                 w.WriteInt32(value: row.Seat);
@@ -65,8 +58,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var scheduleAccumulatorTicks = reader.ReadUInt64();
         var elapsedEngineTicks = reader.ReadUInt64();
         var isPaused = reader.ReadBoolean();
-        var portalOccupancy = ReadArray(
-            reader: ref reader,
+        var portalOccupancy = reader.ReadArray(
             field: "host row portal occupancy",
             readItem: static (ref WireReader r) => {
                 var placementId = r.ReadString(
@@ -80,45 +72,44 @@ public static partial class WorldAuthorityCheckpointCodec {
                 var seat = r.ReadInt32();
 
                 return (placementId, faceName, seat);
-            }
+            },
+            maximum: MaxCollectionCount
         );
         var nextTransferId = reader.ReadUInt64();
-        var inDoubtTransfers = ReadArray(
-            reader: ref reader,
+        var inDoubtTransfers = reader.ReadArray(
             field: "host row in-doubt transfers",
             readItem: (ref WireReader r) => ReadInDoubtTransfer(
                 defaults: defaults,
                 reader: ref r
-            )
+            ),
+            maximum: MaxCollectionCount
         );
-        var forwardedBodies = ReadArray(
-            reader: ref reader,
+        var forwardedBodies = reader.ReadArray(
             field: "host row forwarded bodies",
-            readItem: static (ref WireReader r) => ReadForwardedBody(reader: ref r)
+            readItem: static (ref WireReader r) => ReadForwardedBody(reader: ref r),
+            maximum: MaxCollectionCount
         );
-        var appliedTransferIds = ReadArray(
-            reader: ref reader,
+        var appliedTransferIds = reader.ReadArray(
             field: "host row applied transfer ids",
-            readItem: static (ref WireReader r) => r.ReadUInt64()
+            readItem: static (ref WireReader r) => r.ReadUInt64(),
+            maximum: MaxCollectionCount
         );
-        var appliedTransferHighWater = ReadOptional(
-            reader: ref reader,
+        var appliedTransferHighWater = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
         var freshCounter = reader.ReadInt32();
         var retained = reader.ReadBoolean();
-        var announcedCrossingHolds = ReadArray(
-            reader: ref reader,
+        var announcedCrossingHolds = reader.ReadArray(
             field: "host row announced crossing holds",
             readItem: static (ref WireReader r) => {
                 var seat = r.ReadInt32();
                 var transferId = r.ReadUInt64();
 
                 return (seat, transferId);
-            }
+            },
+            maximum: MaxCollectionCount
         );
-        var seededArrivals = ReadArray(
-            reader: ref reader,
+        var seededArrivals = reader.ReadArray(
             field: "host row seeded arrivals",
             readItem: static (ref WireReader r) => {
                 var seat = r.ReadInt32();
@@ -128,7 +119,8 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
 
                 return (seat, border);
-            }
+            },
+            maximum: MaxCollectionCount
         );
 
         if (!reader.TryFinish(failure: out var failure)) {

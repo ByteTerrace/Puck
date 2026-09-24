@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Physics.Motion;
 
@@ -130,7 +131,7 @@ public readonly record struct IntentSubmission(
     ulong Tick,
     int EntityIndex,
     PlayerIntent Intent,
-    WorldPrincipal Principal,
+    Principal Principal,
     PlayerIntent HeldChannels = default,
     int MeasuredHoldTicks = 0
 );

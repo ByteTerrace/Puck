@@ -58,7 +58,7 @@ public sealed class CliWorldVocabularyTests {
 
         Assert.True(condition: catalog.IsRegistered(engineId: engine));
 
-        var schema = (engine == "advanced-gaming-brick"
+        var schema = ((engine == "advanced-gaming-brick")
             ? "puck.advanced-gaming-brick.config.v1"
             : $"puck.{engine}.configuration.v1");
         var diagnostics = new DiagnosticBag();
@@ -82,10 +82,10 @@ public sealed class CliWorldVocabularyTests {
             )
         );
     }
-    // The refusal half: with the hooks installed, an engine nobody registered is still rejected, so a passing
-    // registration assertion above cannot be an inert check that accepts anything.
+    // With no catalog at all, the machine check belongs to the host that runs the world: validation passes and a
+    // PUCK118 information notice names the deferral, so the author sees it without a finding against them.
     [Fact]
-    public void SemanticValidationReportsAnUnavailableProviderCatalog() {
+    public void SemanticValidationDefersAnUnavailableProviderCatalogAsANotice() {
         _ = CliWorldVocabulary.EnsureInstalled();
         var diagnostics = new DiagnosticBag();
         var root = JsonNode.Parse(ScreenJsonTemplate
@@ -93,17 +93,20 @@ public sealed class CliWorldVocabularyTests {
             .Replace(comparisonType: StringComparison.Ordinal, newValue: "puck.gaming-brick.configuration.v1", oldValue: "{SCHEMA}")
         )!.AsObject();
 
-        Assert.False(condition: WorldSemanticValidator.ValidateWorld(
+        Assert.True(condition: WorldSemanticValidator.ValidateWorld(
             root,
             sourceMap: null,
             diagnostics: diagnostics
         ));
+        Assert.False(condition: diagnostics.HasErrors);
         Assert.Contains(
             collection: diagnostics,
-            filter: diagnostic => diagnostic.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "no machine catalog"
-            )
+            filter: diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.SemanticValidationDeferred)
+                && (diagnostic.Severity == DiagnosticSeverity.Information)
+                && diagnostic.Message.Contains(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "no machine catalog"
+                ))
         );
     }
 }

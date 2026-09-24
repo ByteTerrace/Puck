@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -51,7 +52,7 @@ public sealed class ReplayAddonHostAttachLawTests {
                 Fuel: 1000UL,
                 Enabled: true
             ),
-            Principal: WorldPrincipal.Console
+            Principal: Principal.Console
         ));
 
         fixture.Step();

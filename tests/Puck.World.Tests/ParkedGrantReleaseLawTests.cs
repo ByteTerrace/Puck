@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -24,8 +25,8 @@ public sealed class ParkedGrantReleaseLawTests {
     // Admits the peer and hands it an EXCLUSIVE Control hold over its own body — the subject every law below measures
     // against. Control rather than Drive on purpose: WorldServer.Grant refuses a Drive row over an admitted peer's
     // body for any other principal by name, which would mask the exclusivity question this suite is asking.
-    private static WorldPrincipal AdmitPeer(WorldFixture fixture) {
-        var peer = WorldPrincipal.Peer(
+    private static Principal AdmitPeer(WorldFixture fixture) {
+        var peer = Principal.Peer(
             generation: PeerGeneration,
             index: PeerBodyIndex
         );
@@ -42,9 +43,9 @@ public sealed class ParkedGrantReleaseLawTests {
         peer = fixture.Server.Population.PeerPrincipal(index: PeerBodyIndex);
 
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
-                Principal: peer,
+                Grantee: peer,
                 Capability: WorldCapability.Control,
                 Subject: GrantSubject.Body(index: PeerBodyIndex),
                 Exclusive: true
@@ -53,18 +54,18 @@ public sealed class ParkedGrantReleaseLawTests {
 
         return peer;
     }
-    private static bool Controls(WorldFixture fixture, WorldPrincipal principal) =>
+    private static bool Controls(WorldFixture fixture, Principal principal) =>
         fixture.Server.Grants.Allows(
             capability: WorldCapability.Control,
             principal: principal,
             subject: GrantSubject.Body(index: PeerBodyIndex)
         ).IsAllowed;
-    private static void Disconnect(WorldFixture fixture, WorldPrincipal peer) =>
+    private static void Disconnect(WorldFixture fixture, Principal peer) =>
         fixture.Server.ApplyServerEvent(serverEvent: DisconnectEvent(
             fixture: fixture,
             peer: peer
         ));
-    private static WorldServerEvent.PeerDisconnected DisconnectEvent(WorldFixture fixture, WorldPrincipal peer) =>
+    private static WorldServerEvent.PeerDisconnected DisconnectEvent(WorldFixture fixture, Principal peer) =>
         // The identical shape WorldServer.ApplyLifecycleEvents dispatches and WorldReplaySnapshot re-drives: the
         // entries, plus the generation's live rows snapshotted at dispatch time.
         new(
@@ -73,24 +74,9 @@ public sealed class ParkedGrantReleaseLawTests {
             ],
             RevokedGrants: [.. fixture.Server.GrantRows(principal: peer)]
         );
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
-    private static bool Holds(WorldFixture fixture, WorldPrincipal principal, WorldCapability capability, GrantSubject subject) =>
-        fixture.Server.Grants.Held(principal: principal).Contains(value: (capability, subject));
-    private static WorldPeerEventEntry PeerEntry(WorldPrincipal peer) => new(
+    private static bool Holds(WorldFixture fixture, Principal principal, WorldCapability capability, GrantSubject subject) =>
+        fixture.Server.Grants.Held(grantee: principal).Contains(value: (capability, subject));
+    private static WorldPeerEventEntry PeerEntry(Principal peer) => new(
         BodyIndex: PeerBodyIndex,
         Generation: peer.Generation,
         Source: IntentSource.Live,
@@ -200,10 +186,10 @@ public sealed class ParkedGrantReleaseLawTests {
         live.Server.ApplyServerEvent(serverEvent: recorded);
         shadow.Server.ApplyServerEvent(serverEvent: recorded);
 
-        Assert.Empty(collection: live.Server.Grants.Held(principal: peer));
+        Assert.Empty(collection: live.Server.Grants.Held(grantee: peer));
         Assert.Equal(
-            actual: shadow.Server.Grants.Held(principal: peer),
-            expected: live.Server.Grants.Held(principal: peer)
+            actual: shadow.Server.Grants.Held(grantee: peer),
+            expected: live.Server.Grants.Held(grantee: peer)
         );
         Assert.Equal(
             actual: shadow.Server.Population.IsParked(index: PeerBodyIndex),
@@ -220,7 +206,7 @@ public sealed class ParkedGrantReleaseLawTests {
         using var fixture = Fixtures.FreshServer(definition: WithGrace(seconds: 3.0f));
 
         // A live local seat holding an acquisition over a NON-own body, captured alongside the peer.
-        var seat = WorldPrincipal.Seat(slot: 1);
+        var seat = Principal.Seat(slot: 1);
         var seatAcquired = GrantSubject.Body(index: 2);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
@@ -230,9 +216,9 @@ public sealed class ParkedGrantReleaseLawTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
-                Principal: seat,
+                Grantee: seat,
                 Capability: WorldCapability.Control,
                 Subject: seatAcquired,
                 Exclusive: true
@@ -246,7 +232,7 @@ public sealed class ParkedGrantReleaseLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var refusal
             ),
             userMessage: refusal
@@ -278,15 +264,15 @@ public sealed class ParkedGrantReleaseLawTests {
                 condition: restored.Population.IsParked(index: PeerBodyIndex),
                 userMessage: "a restore parks every captured remote human"
             );
-            Assert.Empty(collection: restored.Grants.Held(principal: peer));
+            Assert.Empty(collection: restored.Grants.Held(grantee: peer));
 
             // Its exclusive reservation is free: a rival's identical exclusive acquisition lands immediately.
-            var rival = WorldPrincipal.Seat(slot: 2);
+            var rival = Principal.Seat(slot: 2);
 
             restored.Grant(
-                actor: WorldPrincipal.Console,
+                actor: Principal.Console,
                 grant: new WorldGrant(
-                    Principal: rival,
+                    Grantee: rival,
                     Capability: WorldCapability.Control,
                     Subject: GrantSubject.Body(index: PeerBodyIndex),
                     Exclusive: true
@@ -294,18 +280,18 @@ public sealed class ParkedGrantReleaseLawTests {
             );
 
             Assert.True(
-                condition: restored.Grants.Held(principal: rival).Contains(value: (WorldCapability.Control, GrantSubject.Body(index: PeerBodyIndex))),
+                condition: restored.Grants.Held(grantee: rival).Contains(value: (WorldCapability.Control, GrantSubject.Body(index: PeerBodyIndex))),
                 userMessage: "a restored parked generation's exclusive reservation must not refuse a live acquirer"
             );
 
             // The control: the local seat's restore is unchanged — its acquisition and its seeded Drive row survive.
             Assert.Contains(
                 expected: (WorldCapability.Control, seatAcquired),
-                collection: restored.Grants.Held(principal: seat)
+                collection: restored.Grants.Held(grantee: seat)
             );
             Assert.Contains(
                 expected: (WorldCapability.Drive, GrantSubject.Body(index: 1)),
-                collection: restored.Grants.Held(principal: seat)
+                collection: restored.Grants.Held(grantee: seat)
             );
         } finally {
             try {
@@ -330,7 +316,7 @@ public sealed class ParkedGrantReleaseLawTests {
 
         var peer = AdmitPeer(fixture: fixture);
         var minted = new WorldGrant(
-            Principal: peer,
+            Grantee: peer,
             Capability: WorldCapability.Control,
             Subject: GrantSubject.Body(index: PeerBodyIndex),
             Exclusive: true
@@ -343,7 +329,7 @@ public sealed class ParkedGrantReleaseLawTests {
         fixture.Step();
 
         Assert.True(condition: fixture.Server.Population.IsParked(index: PeerBodyIndex));
-        Assert.Empty(collection: fixture.Server.Grants.Held(principal: peer));
+        Assert.Empty(collection: fixture.Server.Grants.Held(grantee: peer));
 
         // The resume-shaped event: same entries as the admission, the fresh connection's minted rows on board.
         fixture.Server.ApplyServerEvent(serverEvent: new WorldServerEvent.PeerAdmitted(
@@ -359,7 +345,7 @@ public sealed class ParkedGrantReleaseLawTests {
         );
         Assert.Contains(
             expected: (WorldCapability.Control, GrantSubject.Body(index: PeerBodyIndex)),
-            collection: fixture.Server.Grants.Held(principal: peer)
+            collection: fixture.Server.Grants.Held(grantee: peer)
         );
         Assert.True(condition: Controls(
             fixture: fixture,
@@ -385,7 +371,7 @@ public sealed class ParkedGrantReleaseLawTests {
             peer: peer
         );
 
-        Assert.Empty(collection: fixture.Server.Grants.Held(principal: peer));
+        Assert.Empty(collection: fixture.Server.Grants.Held(grantee: peer));
         Assert.False(
             condition: fixture.Server.Population.IsParked(index: PeerBodyIndex),
             userMessage: "an authored-zero grace must tear the body down immediately"
@@ -401,10 +387,10 @@ public sealed class ParkedGrantReleaseLawTests {
         using var fixture = Fixtures.FreshServer(definition: WithGrace(seconds: 3.0f));
 
         var peer = AdmitPeer(fixture: fixture);
-        var rival = WorldPrincipal.Seat(slot: 1);
+        var rival = Principal.Seat(slot: 1);
         var subject = GrantSubject.Body(index: PeerBodyIndex);
         var acquisition = new WorldGrant(
-            Principal: rival,
+            Grantee: rival,
             Capability: WorldCapability.Control,
             Subject: subject,
             Exclusive: true
@@ -425,7 +411,7 @@ public sealed class ParkedGrantReleaseLawTests {
         );
 
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: acquisition
         );
 
@@ -446,7 +432,7 @@ public sealed class ParkedGrantReleaseLawTests {
 
         // The control leg — no step, no sweep, no deadline: the same call, immediately after the disconnect event.
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: acquisition
         );
 
@@ -467,7 +453,7 @@ public sealed class ParkedGrantReleaseLawTests {
             fixture: fixture,
             principal: peer
         ));
-        Assert.Empty(collection: fixture.Server.Grants.Held(principal: peer));
+        Assert.Empty(collection: fixture.Server.Grants.Held(grantee: peer));
     }
     /// <summary>The seat-side discriminator: a local seat CAN resume (its retained body's own profile id is the match
     /// rule), so a leave must leave its rows completely alone — through the park and through the resume alike. This is
@@ -476,7 +462,7 @@ public sealed class ParkedGrantReleaseLawTests {
     public void LocalSeatParkAndResumeKeepTheirGrantRows() {
         using var fixture = Fixtures.FreshServer(definition: WithGrace(seconds: 3.0f));
 
-        var seat = WorldPrincipal.Seat(slot: 1);
+        var seat = Principal.Seat(slot: 1);
         // A live acquisition over a subject that is NOT the seat's own body, so the assertion cannot be carried by the
         // boot seed alone. The seeded Drive/body:1 row is checked beside it.
         var acquired = GrantSubject.Body(index: 2);
@@ -488,9 +474,9 @@ public sealed class ParkedGrantReleaseLawTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
-                Principal: seat,
+                Grantee: seat,
                 Capability: WorldCapability.Control,
                 Subject: acquired,
                 Exclusive: true
@@ -560,7 +546,7 @@ public sealed class ParkedGrantReleaseLawTests {
             peer: peer
         );
 
-        Assert.Empty(collection: fixture.Server.Grants.Held(principal: peer));
+        Assert.Empty(collection: fixture.Server.Grants.Held(grantee: peer));
         Assert.True(
             condition: fixture.Server.Population.IsParked(index: PeerBodyIndex),
             userMessage: "a positive grace must still park the body"
@@ -583,7 +569,7 @@ public sealed class ParkedGrantReleaseLawTests {
             condition: fixture.Server.Population.IsParked(index: PeerBodyIndex),
             userMessage: "one step is nowhere near a 3-second grace"
         );
-        Assert.Empty(collection: fixture.Server.Grants.Held(principal: peer));
+        Assert.Empty(collection: fixture.Server.Grants.Held(grantee: peer));
     }
     /// <summary>The rate-0 law. A positive grace compiled against rate 0 is NEVER, and a rate-0 world never steps, so
     /// <see cref="WorldPopulation.ReclaimExpiredParks"/> is unreachable there: a deadline-deferred release would have
@@ -609,7 +595,7 @@ public sealed class ParkedGrantReleaseLawTests {
             peer: peer
         );
 
-        Assert.Empty(collection: fixture.Server.Grants.Held(principal: peer));
+        Assert.Empty(collection: fixture.Server.Grants.Held(grantee: peer));
         Assert.False(condition: Controls(
             fixture: fixture,
             principal: peer

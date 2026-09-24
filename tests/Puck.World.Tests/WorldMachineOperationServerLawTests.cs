@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using Puck.Abstractions.Machines;
 using Puck.World.Machines;
@@ -40,7 +41,7 @@ public sealed class WorldMachineOperationServerLawTests {
             document.RootElement
         );
     }
-    private static WorldSubmissionResult Submit(WorldServer server, WorldPrincipal principal, WorldMachineOperation operation) {
+    private static WorldSubmissionResult Submit(WorldServer server, Principal principal, WorldMachineOperation operation) {
         WorldSubmissionResult? completion = null;
 
         server.Submit(
@@ -66,7 +67,7 @@ public sealed class WorldMachineOperationServerLawTests {
             Document(),
             machineCatalog: new WorldMachineCatalog([engine])
         );
-        var actor = WorldPrincipal.Addon(name: "operator");
+        var actor = Principal.Addon(name: "operator");
 
         fixture.Server.Grant(
             new WorldGrant(
@@ -75,7 +76,7 @@ public sealed class WorldMachineOperationServerLawTests {
                 GrantSubject.Machine(name: "cabinet"),
                 false
             ),
-            WorldPrincipal.Console
+            Principal.Console
         );
         var generation = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
 
@@ -110,7 +111,7 @@ public sealed class WorldMachineOperationServerLawTests {
             definition,
             machineCatalog: new WorldMachineCatalog([engine])
         );
-        var actor = WorldPrincipal.Addon(name: "operator");
+        var actor = Principal.Addon(name: "operator");
 
         fixture.Server.Grant(
             new WorldGrant(
@@ -119,7 +120,7 @@ public sealed class WorldMachineOperationServerLawTests {
                 GrantSubject.Machine(name: "cabinet"),
                 false
             ),
-            WorldPrincipal.Console
+            Principal.Console
         );
         var generation = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
 
@@ -148,7 +149,7 @@ public sealed class WorldMachineOperationServerLawTests {
         );
 
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertMachine(
-            WorldPrincipal.Console,
+            Principal.Console,
             new WorldMachine(
                 "other",
                 "operation-test",
@@ -179,7 +180,7 @@ public sealed class WorldMachineOperationServerLawTests {
             Document(),
             machineCatalog: new WorldMachineCatalog([engine])
         );
-        var actor = WorldPrincipal.Addon(name: "operator");
+        var actor = Principal.Addon(name: "operator");
 
         fixture.Server.Grant(
             new WorldGrant(
@@ -188,7 +189,7 @@ public sealed class WorldMachineOperationServerLawTests {
                 GrantSubject.Machine(name: "cabinet"),
                 false
             ),
-            WorldPrincipal.Console
+            Principal.Console
         );
         var generation = fixture.Server.Machines.InstanceState(name: "cabinet")!.Value.Generation;
         var before = DefinitionBytes(server: fixture.Server);
@@ -240,7 +241,7 @@ public sealed class WorldMachineOperationServerLawTests {
         var before = DefinitionBytes(server: fixture.Server);
         var blocked = Submit(
             fixture.Server,
-            WorldPrincipal.Addon(name: "blocked"),
+            Principal.Addon(name: "blocked"),
             Operation(
                 generation: generation,
                 instance: "cabinet",
@@ -265,7 +266,7 @@ public sealed class WorldMachineOperationServerLawTests {
             engine.Created[0].Model
         );
 
-        var actor = WorldPrincipal.Addon(name: "operator");
+        var actor = Principal.Addon(name: "operator");
 
         fixture.Server.Grant(
             new WorldGrant(
@@ -274,7 +275,7 @@ public sealed class WorldMachineOperationServerLawTests {
                 GrantSubject.Machine(name: "cabinet"),
                 false
             ),
-            WorldPrincipal.Console
+            Principal.Console
         );
         var stale = Submit(
             fixture.Server,

@@ -94,65 +94,6 @@ internal static class PresentedKernelClaims {
 
         return remainder;
     }
-    // The charge on an ordered pair of basis blades, by writing both out as explicit ascending generator lists,
-    // concatenating, bubble sorting while counting transpositions, and cancelling adjacent equal pairs against the
-    // generators' own squares. Deliberately
-    // the slow literal construction — no parity-of-inversions popcount identity anywhere, so it shares no reasoning
-    // with the presented product's own sign bookkeeping.
-    private static int CliffordChargeByBubbleSort(int leftBlade, int rightBlade, int positiveCount, int negativeCount, int degenerateCount) {
-        var generatorCount = ((positiveCount + negativeCount) + degenerateCount);
-        var letters = new List<int>();
-
-        for (var generator = 0; (generator < generatorCount); ++generator) {
-            if (0 != (leftBlade & (1 << generator))) { letters.Add(item: generator); }
-        }
-
-        for (var generator = 0; (generator < generatorCount); ++generator) {
-            if (0 != (rightBlade & (1 << generator))) { letters.Add(item: generator); }
-        }
-
-        var sign = 1;
-
-        for (var pass = 0; (pass < letters.Count); ++pass) {
-            for (var position = 0; ((position + 1) < letters.Count); ++position) {
-                if (letters[position] <= letters[(position + 1)]) { continue; }
-
-                (letters[position], letters[(position + 1)]) = (letters[(position + 1)], letters[position]);
-                sign = -sign;
-            }
-        }
-
-        for (var position = 0; ((position + 1) < letters.Count);) {
-            if (letters[position] != letters[(position + 1)]) {
-                ++position;
-
-                continue;
-            }
-
-            var generator = letters[position];
-            var square = ((generator < positiveCount)
-                ? 1
-                : ((generator < (positiveCount + negativeCount))
-                    ? -1
-                    : 0
-            ));
-
-            if (0 == square) { return 0; }
-
-            sign *= square;
-
-            letters.RemoveRange(
-                count: 2,
-                index: position
-            );
-            position = ((position > 0)
-                ? (position - 1)
-                : 0
-            );
-        }
-
-        return sign;
-    }
     // The multiplicative 2-cocycle condition sigma(a,b)*sigma(a^b,c) == sigma(b,c)*sigma(a,b^c), stated so a
     // degenerate zero is served without a
     // quotient. Its failures are exactly the support of the associator.
@@ -178,9 +119,10 @@ internal static class PresentedKernelClaims {
 
         return bladeToKey;
     }
+
     // ---- local oracles (Clifford signature ladder + octonion cocycle count) ----
 
-    private static int[] KeyToBladeMap<TValue, TOps>(ChargedPresentation<TValue, TOps> presentation)
+    internal static int[] KeyToBladeMap<TValue, TOps>(ChargedPresentation<TValue, TOps> presentation)
         where TOps : struct, IMaterialOps<TValue, TOps> {
         var count = presentation.NormalFormCount;
         var map = new int[count];
@@ -195,6 +137,7 @@ internal static class PresentedKernelClaims {
 
         return map;
     }
+
     // Builds the two coefficient-bitmask elements from the raw lanes and reads the product's support back as a
     // bitmask.
     private static ulong ParityFieldProduct(PresentedAlgebra<ulong, ParityMaterial> algebra, int degree, ulong left, ulong right) {
@@ -259,71 +202,12 @@ internal static class PresentedKernelClaims {
             ? -1
             : (((int)value.GetBitLength()) - 1)
         );
-    private static bool ThrowsMismatchedLength(Action action, string paramName) {
-        try {
-            action();
-
-            return false;
-        } catch (ArgumentException exception) when ((exception is not ArgumentOutOfRangeException)) {
-            return (paramName == exception.ParamName);
-        }
-    }
-    // ---- path-algebra argument validation ----
-
-    private static bool ThrowsOutOfRange(Action action, string paramName) {
-        try {
-            action();
-
-            return false;
-        } catch (ArgumentOutOfRangeException exception) {
-            return (paramName == exception.ParamName);
-        }
-    }
-    private static DoublingAlgebra<FixedScalarRing> UnitComplexAt(int index, int offset) =>
-        new(
-            Left: UnitScalarAt(
-                index: index,
-                offset: offset
-            ),
-            Right: UnitScalarAt(
-                index: index,
-                offset: (offset + 1)
-            )
-        );
-    private static LeafOctonion UnitOctonion(int index) =>
-        new(
-            Left: UnitQuaternionAt(
-                index: index,
-                offset: 0
-            ),
-            Right: UnitQuaternionAt(
-                index: index,
-                offset: 4
-            )
-        );
-    private static DoublingAlgebra<DoublingAlgebra<FixedScalarRing>> UnitQuaternionAt(int index, int offset) =>
-        new(
-            Left: UnitComplexAt(
-                index: index,
-                offset: offset
-            ),
-            Right: UnitComplexAt(
-                index: index,
-                offset: (offset + 2)
-            )
-        );
-    // ---- octonion twist cocycle count ----
-
-    private static FixedScalarRing UnitScalarAt(int index, int offset) =>
-        new(Value: ((offset == index)
-            ? FixedQ4816.One
-            : FixedQ4816.Zero));
 
     /// <summary>Proves the full 35-signature Clifford ladder (every <c>p+q+r&lt;=4</c> signature
     /// <see cref="GeometricAlgebra.Create(int, int, int)"/> admits — the existing twin/oracle cases between them reach
     /// only 8 of the 35): the generator-square reduction against <see cref="GeometricAlgebra.Square(int)"/>; every
     /// unit-blade product read per-lane through <see cref="GeometricAlgebra.GeometricProduct"/> so a leak into any
-    /// OTHER lane is caught before the sign is read, against the local bubble-sort charge oracle; the compiled
+    /// OTHER lane is caught before the sign is read, against the bubble-sort charge oracle <see cref="Oracles.CliffordCharge"/>; the compiled
     /// exact-material table's own 2-cocycle condition; and the certificate's associativity/identity/commutativity
     /// flags together with the zero-divisor-witness count, checked against the formula (ordered blade pairs sharing a
     /// degenerate generator) rather than assumed from the signature.</summary>
@@ -415,7 +299,7 @@ internal static class PresentedKernelClaims {
                     }
 
                     var sign = product[targetBlade].Value;
-                    var oracleCharge = CliffordChargeByBubbleSort(
+                    var oracleCharge = Oracles.CliffordCharge(
                         degenerateCount: degenerateCount,
                         leftBlade: leftBlade,
                         negativeCount: negativeCount,
@@ -476,7 +360,7 @@ internal static class PresentedKernelClaims {
                 return $"{name}: the derived twist fails the 2-cocycle condition on at least one ordered triple of lanes";
             }
 
-            var certificate = integerAlgebra.Certify(overlapLimit: (1L << 20));
+            var certificate = integerAlgebra.Certify(tupleLimit: (1L << 20));
             var degenerateMask = ((1 << geometric.GeneratorCount) - 1) & ~((1 << (positiveCount + negativeCount)) - 1);
             var expectedDivisors = 0;
 
@@ -540,16 +424,16 @@ internal static class PresentedKernelClaims {
                 for (var c = 0; (c < Width); ++c) {
                     var before = LeafOctonion.Multiply(
                         left: LeafOctonion.Multiply(
-                            left: UnitOctonion(index: a),
-                            right: UnitOctonion(index: b)
+                            left: DoublingTower.UnitOctonionAt(index: a),
+                            right: DoublingTower.UnitOctonionAt(index: b)
                         ),
-                        right: UnitOctonion(index: c)
+                        right: DoublingTower.UnitOctonionAt(index: c)
                     );
                     var after = LeafOctonion.Multiply(
-                        left: UnitOctonion(index: a),
+                        left: DoublingTower.UnitOctonionAt(index: a),
                         right: LeafOctonion.Multiply(
-                            left: UnitOctonion(index: b),
-                            right: UnitOctonion(index: c)
+                            left: DoublingTower.UnitOctonionAt(index: b),
+                            right: DoublingTower.UnitOctonionAt(index: c)
                         )
                     );
 
@@ -581,7 +465,7 @@ internal static class PresentedKernelClaims {
             material: default
         ));
 
-        if (!ThrowsOutOfRange(
+        if (!Throws<ArgumentOutOfRangeException>(
             action: () => algebra.FromSupport(
                 keys: [99L],
                 coefficients: [BigInteger.One]
@@ -591,7 +475,7 @@ internal static class PresentedKernelClaims {
             return "FromSupport admitted a key outside the normal-form range, or refused naming a different parameter";
         }
 
-        if (!ThrowsOutOfRange(
+        if (!Throws<ArgumentOutOfRangeException>(
             action: () => algebra.Compile().Target(
                 leftKey: -1L,
                 rightKey: 0L
@@ -601,14 +485,14 @@ internal static class PresentedKernelClaims {
             return "CompiledProduct.Target admitted a negative leftKey, or refused naming a different parameter";
         }
 
-        if (!ThrowsOutOfRange(
+        if (!Throws<ArgumentOutOfRangeException>(
             action: () => algebra.Generator(symbol: 999),
             paramName: "symbol"
         )) {
             return "Generator admitted an out-of-range symbol, or refused naming a different parameter";
         }
 
-        if (!ThrowsMismatchedLength(
+        if (!ThrowsExactly<ArgumentException>(
             action: () => algebra.FromSupport(
                 keys: [0L, 1L],
                 coefficients: [BigInteger.One]

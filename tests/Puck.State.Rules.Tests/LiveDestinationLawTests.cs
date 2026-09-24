@@ -31,7 +31,6 @@ public sealed class LiveDestinationLawTests {
             ),
         ]
     );
-
     private static Rule Rule() => new(
         Locals: [new RuleLocal(
                 Expression: RulesFixture.Program(text: "index"),
@@ -76,7 +75,6 @@ public sealed class LiveDestinationLawTests {
         // The cell the index resolves through is a read, so a scheduler sees the dependency.
         Assert.Contains(expected: Ordinal(context: context, name: "index"), collection: reads.Select(selector: static access => access.RowOrdinal));
     }
-
     [Fact]
     public void ALiveDestinationThatSelectsNoRowRefusesAndRewindsTheFiring() {
         // Family index 1 is a gap: the family carries 0 and 2 only.

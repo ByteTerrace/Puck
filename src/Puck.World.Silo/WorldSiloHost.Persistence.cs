@@ -6,7 +6,7 @@ public sealed partial class WorldSiloHost {
     private async Task<WorldAuthorityStoreOutcome> PublishDefinitionCoreAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken ct) {
         var admission = new TaskCompletionSource<Task<WorldAuthorityStoreOutcome>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             if (ct.IsCancellationRequested) { admission.TrySetCanceled(cancellationToken: ct); return; }
             if (FindWorldRow(identity: identity) is null) {
                 admission.TrySetResult(result: Task.FromResult(result: WorldAuthorityStoreOutcome.Failed(detail: "The world is not declared in this silo.")));

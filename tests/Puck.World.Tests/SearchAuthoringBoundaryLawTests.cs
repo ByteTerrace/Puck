@@ -21,7 +21,7 @@ public sealed class SearchAuthoringBoundaryLawTests {
             ),
             SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(
                 Name: "search",
-                Tokens: "$pool_actors_field_score",
+                Tokens: "$pool$actors$field$score",
                 Board: "missing"
             )]),
         };
@@ -30,7 +30,7 @@ public sealed class SearchAuthoringBoundaryLawTests {
             collection: definition.State,
             filter: row => (row.Generated && string.Equals(
                 a: row.Name.Value,
-                b: "$pool_actors_field_score",
+                b: "$pool$actors$field$score",
                 comparisonType: StringComparison.Ordinal
             ))
         );
@@ -40,7 +40,7 @@ public sealed class SearchAuthoringBoundaryLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "search 'search' tokens '$pool_actors_field_score' must be a keyed integer row"
+            expectedSubstring: "search 'search' tokens '$pool$actors$field$score' must be a keyed integer row"
         );
     }
 }

@@ -10,12 +10,16 @@ namespace Puck.Cli.Architecture;
 /// <param name="Kind">The declared <c>&lt;PuckKind&gt;</c>, empty when the project declares none.</param>
 /// <param name="Layer">The declared <c>&lt;PuckLayer&gt;</c>, empty for a terminal kind.</param>
 /// <param name="Name">The project's name.</param>
+/// <param name="References">Names of every project this one references, the <paramref name="Edges"/> plus each
+/// build-order-only reference (<c>ReferenceOutputAssembly="false"</c>) — what must be built, and so what can change
+/// its behavior, before it runs.</param>
 internal sealed record ArchitectureProject(
     IReadOnlyList<string> Edges,
     string File,
     string Kind,
     string Layer,
-    string Name);
+    string Name,
+    IReadOnlyList<string> References);
 /// <summary>
 /// The repository's architecture as read off disk: the policy from <c>build/Architecture.props</c> and the
 /// per-project declarations from the csproj files themselves.
@@ -29,14 +33,12 @@ internal sealed record ArchitectureProject(
 /// </remarks>
 internal sealed class ArchitectureModel {
     private ArchitectureModel(
-        IReadOnlyDictionary<string, string> backendExceptions,
         IReadOnlyDictionary<string, bool> kinds,
         IReadOnlyList<string> layers,
         IReadOnlyDictionary<string, IReadOnlyList<string>> friends,
         IReadOnlyDictionary<string, IReadOnlyList<string>> profiles,
         IReadOnlyDictionary<string, ArchitectureProject> projects,
         string repositoryRoot) {
-        BackendExceptions = backendExceptions;
         Friends = friends;
         Kinds = kinds;
         Layers = layers;
@@ -45,8 +47,6 @@ internal sealed class ArchitectureModel {
         RepositoryRoot = repositoryRoot;
     }
 
-    /// <summary>Named backend-quarantine exceptions, project name to the recorded reason.</summary>
-    public IReadOnlyDictionary<string, string> BackendExceptions { get; }
     /// <summary>Declared friend sets, project name to the assemblies it grants internals access.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> Friends { get; }
     /// <summary>The kind taxonomy: kind name to whether it is ranked.</summary>
@@ -65,6 +65,7 @@ internal sealed class ArchitectureModel {
     private static ArchitectureProject ReadProject(string file) {
         var document = XDocument.Load(uri: file);
         var edges = new List<string>();
+        var references = new List<string>();
 
         foreach (var element in document.Descendants().Where(predicate: e => (e.Name.LocalName == "ProjectReference"))) {
             var include = (element.Attribute(name: "Include") ?? element.Attribute(name: "Update"));
@@ -72,6 +73,13 @@ internal sealed class ArchitectureModel {
             if (include is null) {
                 continue;
             }
+
+            var name = Path.GetFileNameWithoutExtension(path: include.Value.Replace(
+                newChar: '/',
+                oldChar: '\\'
+            ));
+
+            references.Add(item: name);
 
             var outputAssembly =
                 (element.Attribute(name: "ReferenceOutputAssembly")?.Value
@@ -85,20 +93,19 @@ internal sealed class ArchitectureModel {
                 continue;
             }
 
-            edges.Add(item: Path.GetFileNameWithoutExtension(path: include.Value.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            )));
+            edges.Add(item: name);
         }
 
         edges.Sort(comparer: StringComparer.OrdinalIgnoreCase);
+        references.Sort(comparer: StringComparer.OrdinalIgnoreCase);
 
         return new ArchitectureProject(
             Edges: edges,
             File: file,
             Kind: (document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == "PuckKind"))?.Value.Trim() ?? ""),
             Layer: (document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == "PuckLayer"))?.Value.Trim() ?? ""),
-            Name: Path.GetFileNameWithoutExtension(path: file)
+            Name: Path.GetFileNameWithoutExtension(path: file),
+            References: references
         );
     }
     private static IReadOnlyList<string> Split(string? value) =>
@@ -142,7 +149,6 @@ internal sealed class ArchitectureModel {
             path2: "build",
             path3: "Architecture.props"
         ));
-        var backendExceptions = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
         var friends = new Dictionary<string, IReadOnlyList<string>>(comparer: StringComparer.OrdinalIgnoreCase);
         var kinds = new Dictionary<string, bool>(comparer: StringComparer.OrdinalIgnoreCase);
         var layers = new List<string>();
@@ -165,13 +171,6 @@ internal sealed class ArchitectureModel {
                 b: "true",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             );
-        }
-
-        foreach (var item in Items(
-            ledger: ledger,
-            name: "PuckArchitectureBackendException"
-        )) {
-            backendExceptions[item.Attribute(name: "Include")!.Value] = (item.Attribute(name: "Reason")?.Value ?? "");
         }
 
         foreach (var item in Items(
@@ -227,7 +226,6 @@ internal sealed class ArchitectureModel {
         }
 
         return new ArchitectureModel(
-            backendExceptions: backendExceptions,
             friends: friends,
             kinds: kinds,
             layers: layers,

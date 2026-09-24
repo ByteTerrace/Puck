@@ -1,8 +1,10 @@
 using System.Text;
 using Puck.Abstractions.Documents;
 using Puck.Cli.Transpiler;
+using Puck.GamingBricks.Transpiler;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler;
 using Xunit;
 
@@ -10,24 +12,46 @@ namespace Puck.Cli.Tests;
 
 /// <summary>Formatting prints the tree a source parsed to, so it can move the bytes of a source but never the bytes
 /// of the document that source compiles to — and formatting an already-formatted source changes nothing at all.
-/// The law walks every tracked <c>.puck</c> in the repository, through both vocabularies, the way <c>puck fmt</c>
+/// The law walks every tracked <c>.puck</c> in the repository, through both vocabularies, the way <c>puck format</c>
 /// resolves them.</summary>
 public sealed class FormatProjectionLawTests {
-    // Quarantined: read, never built or run.
-    private static readonly string[] Excluded = ["experimental"];
-
-    private static string RepositoryRoot() {
-        Assert.True(
-            condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root),
-            userMessage: "repository root is required"
-        );
-
-        return root!;
-    }
     // The text is compiled as if it were the file it stands for, so a relative `basis`, an `import`, and the
     // embedding lock beside it all resolve — and nothing is written into the checkout.
     private static string Compile(string source, string sourcePath, string label) {
         var diagnostics = new DiagnosticBag();
+
+        // A world source may emit several worlds, and formatting has to leave every one of them unchanged, so the
+        // compiled text is each emitted document under its world's name, in the compiler's own order.
+        if (!(PuckParser.TryReadDocumentSchema(schema: out var schema, source: source) && string.Equals(
+            a: schema,
+            b: CartridgeVocabulary.Schema,
+            comparisonType: StringComparison.Ordinal
+        ))) {
+            var compilation = WorldCompiler.Compile(
+                allowMultiple: true,
+                diagnostics: diagnostics,
+                imports: ImportHandling.Validate,
+                source: source,
+                sourceMap: new SourceMap(),
+                sourcePath: sourcePath
+            );
+
+            Assert.False(
+                condition: diagnostics.HasErrors,
+                userMessage: $"{label} does not compile:{Environment.NewLine}{diagnostics.FormatReport(source)}"
+            );
+
+            if (compilation.Worlds.Count > 0) {
+                return string.Join(
+                    separator: Environment.NewLine,
+                    values: compilation.Worlds.Select(selector: static world => $"{world.Name}: {Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: world.Json))}")
+                );
+            }
+
+            Assert.NotNull(@object: compilation.Json);
+
+            return Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: compilation.Json!));
+        }
 
         var (_, json) = CompileCommand.CompileSource(
             diagnostics: diagnostics,
@@ -47,13 +71,7 @@ public sealed class FormatProjectionLawTests {
         return Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: json!));
     }
     private static (string Path, string Source) Read(string relativePath) {
-        var path = Path.Combine(
-            path1: RepositoryRoot(),
-            path2: relativePath.Replace(
-                newChar: Path.DirectorySeparatorChar,
-                oldChar: '/'
-            )
-        );
+        var path = RepositoryPaths.Resolve(relativePath: relativePath);
 
         return (path, File.ReadAllText(path: path));
     }
@@ -71,43 +89,8 @@ public sealed class FormatProjectionLawTests {
         return result.Value!;
     }
 
-    public static TheoryData<string> Sources() {
-        var root = RepositoryRoot();
-        var found = new SortedSet<string>(comparer: StringComparer.Ordinal);
-        // Tracked files only: a checkout also holds other worktrees and scratch under it, none of which is this
-        // repository's source.
-        var listing = CliProcess.RunCaptured(
-            fileName: "git",
-            arguments: ["-C", root, "ls-files", "-z", "--", "*.puck"],
-            input: "",
-            timeout: TimeSpan.FromMinutes(value: 1)
-        );
-
-        Assert.True(
-            condition: (listing.ExitCode == 0),
-            userMessage: $"git ls-files failed: {listing.Stderr}"
-        );
-
-        foreach (var entry in listing.Stdout.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: '\0'
-        )) {
-            var relative = entry.Trim();
-
-            if (relative.Length == 0) {
-                continue;
-            }
-            if (relative.Split('/').Any(predicate: segment => Excluded.Contains(value: segment, comparer: StringComparer.OrdinalIgnoreCase))) {
-                continue;
-            }
-            found.Add(item: relative);
-        }
-
-        Assert.NotEmpty(collection: found);
-
-        return new TheoryData<string>(values: found);
-    }
-    // A committed source is the printer's own output, so `puck fmt` on a clean checkout writes nothing.
+    public static TheoryData<string> Sources() => TrackedPuckSources.Under();
+    // A committed source is the printer's own output, so `puck format` on a clean checkout writes nothing.
     [MemberData(nameof(Sources))]
     [Theory]
     public void ACommittedSourceIsAlreadyWhatThePrinterPrints(string relativePath) {
@@ -137,17 +120,27 @@ public sealed class FormatProjectionLawTests {
             ),
             expected: once
         );
-        Assert.Equal(
-            actual: Compile(
-                label: $"{relativePath}: formatted",
-                source: once,
-                sourcePath: path
-            ),
-            expected: Compile(
-                label: relativePath,
-                source: source,
-                sourcePath: path
-            )
+        var compiled = Compile(
+            label: relativePath,
+            source: source,
+            sourcePath: path
         );
+
+        // The compiler is a function of the text, so a source the printer leaves byte-identical compiles to the same
+        // document by construction; only moved bytes need a second compilation to compare.
+        if (!string.Equals(
+            a: once,
+            b: source,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            Assert.Equal(
+                actual: Compile(
+                    label: $"{relativePath}: formatted",
+                    source: once,
+                    sourcePath: path
+                ),
+                expected: compiled
+            );
+        }
     }
 }

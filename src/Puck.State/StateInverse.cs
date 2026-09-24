@@ -5,7 +5,8 @@ namespace Puck.State;
 /// <summary>
 /// A <see cref="StateDomain.CellsOf"/> row's declared inverse: the board's cells are not authored directly but
 /// derived from a keyed <see cref="Tokens"/> row naming cells of the same topology and a <see cref="Codes"/> row
-/// keyed the same way, giving each token's code. Legitimate only on a <see cref="CellKind.Int"/> row whose
+/// keyed the same way, giving each token's code. Legitimate only on a <see cref="CellKind.Int"/> or
+/// <see cref="CellKind.Bool"/> row (<see cref="StateRow.TryProveDerivedDomain"/>) whose
 /// <see cref="StateRow.EffectiveDomain"/> is <see cref="StateDomain.CellsOf"/> and that carries no
 /// <c>field</c> trait — a document project's validator enforces both.
 /// </summary>

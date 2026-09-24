@@ -55,12 +55,23 @@ public sealed record SdfFrame(
     /// never references). Updating this list is how entities move — the program (binding 1) is uploaded once and left
     /// untouched.</summary>
     public IReadOnlyList<DynamicTransform> DynamicTransforms { get; init; } = [];
+
+    /// <summary>The moved set of <see cref="DynamicTransforms"/>: which slots changed in each recent frame of the
+    /// table's producer. An engine stages only the rows moved since the frame it last consumed from this producer,
+    /// and every row when it has none of this producer's history. <see langword="null"/>, the default, declares the
+    /// table static: an engine stages it whole the first time it sees that table instance and never again, so a
+    /// producer whose transforms move must supply its moved set.</summary>
+    public SdfMovedTransforms? MovedTransforms { get; init; }
+
     /// <summary>The frame's bounded flow and cloud volumes, at most
     /// <see cref="SdfWorldEngine.MaxVolumes"/>; submission refuses a list beyond that capacity.
     /// Packed into its own structured buffer (never <c>sdfScreenLights</c>) and shaded by <c>shade-volumes.hlsli</c>'s
     /// one call site at the end of <c>renderView</c>, after the surface color is final. Empty (the default) uploads an
     /// all-zero table whose first bound ends the shader's scan.</summary>
     public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
+    /// <summary>The frame's opaque triangle meshes. Empty by default; no producer fills it and no pass draws it
+    /// yet.</summary>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
     /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
     /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>
     public float AmbientScale { get; init; } = 1f;
@@ -164,18 +175,17 @@ public sealed record SdfFrame(
     public Vector2 GridObjectPitch { get; init; }
     /// <summary>The world floor grid's per-axis lattice pitch on X/Z (world units); 0 disables the grid on that axis.</summary>
     public Vector2 GridWorldPitch { get; init; }
-    /// <summary>The area-light shadow estimator's sample index: which point of the digital net every pixel draws this
-    /// frame.</summary>
+    /// <summary>Gets the deterministic tick clock the sky reads: the star-twinkle phase and the integrated cloud offsets.</summary>
     /// <remarks>
     /// <para>
     /// This must be fed from the deterministic tick clock — <c>WorldSimulation.ElapsedTicks</c> — and never from
-    /// <see cref="Time"/>, which is a presentation-clock accumulation that advances by wall-clock deltas. The sampler
-    /// is stateless and seekable precisely so that a replay at tick N draws the identical set of sun-disc directions;
-    /// sourcing this from a wall-clock quantity throws that away and makes the shadows a per-run quantity.
+    /// <see cref="Time"/>, which is a presentation-clock accumulation that advances by wall-clock deltas, so a replay
+    /// at tick N renders the identical sky.
     /// </para>
     /// <para>
-    /// It is folded into the engine's frame signature, so the cadence gate can never skip a frame whose sample index
-    /// moved.
+    /// When the sky has visible twinkle it rides the composite push constant, which the engine's frame signature
+    /// folds in, so the cadence gate never skips a frame whose tick moved; a sky without visible twinkle pushes 0 and a
+    /// static frame stays skippable.
     /// </para>
     /// </remarks>
     public uint SampleIndex { get; init; }

@@ -24,4 +24,7 @@ public interface IDirectXDeviceContext {
     DirectXFeatureLevel FeatureLevel { get; }
     /// <summary>Gets a value indicating whether the context has been fully initialized.</summary>
     bool IsInitialized { get; }
+    /// <summary>Gets the device's pipeline library, which every compute and graphics pipeline creation on the device
+    /// asks first; <see langword="null"/> for a context created without one.</summary>
+    DirectXPipelineLibrary? PipelineLibrary { get; }
 }

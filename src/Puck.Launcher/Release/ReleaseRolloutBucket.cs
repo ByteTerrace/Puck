@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Puck.Assets;
 
 namespace Puck.Launcher.Release;
 
@@ -56,20 +57,10 @@ public static class ReleaseRolloutBucket {
 
         var bytes = RandomNumberGenerator.GetBytes(count: 16);
         var hex = Convert.ToHexStringLower(bytes: bytes);
-        var tmpPath = Path.Combine(
-            path1: cacheRoot,
-            path2: $"{Guid.NewGuid():n}.tmp"
-        );
 
-        _ = Directory.CreateDirectory(path: cacheRoot);
-        File.WriteAllText(
+        AtomicFile.WriteAllText(
             contents: hex,
-            path: tmpPath
-        );
-        File.Move(
-            destFileName: path,
-            overwrite: true,
-            sourceFileName: tmpPath
+            path: path
         );
 
         return hex;

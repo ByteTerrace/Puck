@@ -1,0 +1,596 @@
+// Go on the full 19x19 board. Black moves first; a stone placed on an empty point captures every
+// opposing group it leaves without a liberty; a move that would leave its own group without a
+// liberty and captures nothing is refused (no suicide); a move that would recreate the position the
+// mover left one full turn ago is refused (simple ko). Two consecutive passes end the game, and the
+// board is scored by area: stones plus the empty points that reach only one colour.
+//
+// The '.puck' source is canonical: edit it and compile, never the '.world.json' beside it.
+
+schema: "puck.world.definition.v1"
+documentId: "go"
+
+host {
+  presentation: None
+  width: 64
+  height: 64
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentMode: Immediate
+  targetHertz: 60
+  exitAfterSeconds: 0
+}
+
+simulation {
+  rateHz: 30
+}
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "state:stone"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "state:passRequest"
+  }
+]
+
+// The board's side and its point count. A point's ordinal is row * size + column.
+let size = 19
+let points = size * size
+
+// Point values: an empty point, a black stone, a white stone. A stone's value is also the turn of
+// the side that owns it.
+let empty = 0
+let black = 1
+let white = 2
+
+// White's compensation for moving second, in half points: 6.5.
+let komiHalves = 13
+
+// Why the last request was refused: its point was occupied, it would have left its own group without
+// a liberty, or it would have remade the position a full turn back.
+let occupied = 1
+let suicide = 2
+let koRefused = 3
+
+// The CPU opponent plays the colour aiSide names; 0 leaves both sides to players. On its turn the search
+// job below judges every point and grows a UCT tree over the answers, and the move it lands enters through
+// the same door a player's request takes.
+rule "ai-enable" {
+  when aiEnabled != ((aiSide == turn) & (over == 0))
+  mode: Level
+  aiEnabled = (aiSide == turn) & (over == 0)
+}
+
+rule "ai-play" {
+  when aiEnabled == 1 and aiBest[revision] == aiRevision and aiBest[to] >= 0 and search(ply) == 0
+  mode: Level
+  stone[play] = aiBest[to]
+}
+
+rule "ai-pass" {
+  when aiEnabled == 1 and aiBest[revision] == aiRevision and aiBest[to] < 0 and search(ply) == 0
+  mode: Level
+  passRequest += 1
+}
+
+// The position the game opens on is the first the ko check can be sent back to.
+rule "open" {
+  when opened == 0
+  mode: Level
+  push positions = board(fingerprint, board)
+  opened = 1
+}
+
+// One side's move door. The request is the point the stone token was moved to. The door admits it
+// when that point is empty and the stone either captures or keeps a liberty of its own: its capture
+// is clearEnclosed sweeping every opposing group the stone leaves without a liberty. Only a move that
+// takes exactly one stone can remake the position the mover left a full turn ago, so that move alone
+// is first tried on the probe board, and refused when its fingerprint is the one the history ring
+// holds a turn back (ko). Every other request is refused by name here and answered below.
+template play(colour, foe) {
+  rule $"play-{colour}" {
+    when stone[play] != placed and stone[play] >= 0 and over == 0 and turn == colour
+    local taken = board(enclosedAt, board, foe, foe, empty, empty, points)[stone[play]]
+    local breath = board(boundaryAt, board, colour, colour, empty, empty, points)[stone[play]]
+    mode: Level
+    ko = 0
+    if taken == 1 {
+      transform boardCombine(row: probe, operation: Copy, left: board)
+      probe[stone[play]] = colour
+      transform clearEnclosed(row: probe, from: cell(stone, play), lower: foe, upper: foe)
+      ko = board(fingerprint, probe) == history(positions, 1)
+    }
+    if taken >= 0 and (taken > 0 or breath > 0) and ko == 0 {
+      board[stone[play]] = colour
+      if taken > 0 {
+        transform clearEnclosed(row: board, from: cell(stone, play), lower: foe, upper: foe)
+      }
+      stones[$"{colour}"] += 1
+      stones[$"{foe}"] = stones[$"{foe}"] - taken
+      prisoners[$"{colour}"] += taken
+      captured = taken
+      push positions = board(fingerprint, board)
+      placed = stone[play]
+      moves += 1
+      passes = 0
+      refusal = 0
+      aiRevision += 1
+      verdict = 1
+      turn = foe
+    } else {
+      refusal = (taken < 0) ? occupied : ((ko == 1) ? koRefused : suicide)
+    }
+  }
+}
+
+play(colour: black, foe: white)
+play(colour: white, foe: black)
+
+// A request neither door admitted: an occupied point, a suicide, a ko, or a stone after the game.
+// The token goes back to the last stone played, so the next request is a fresh one.
+rule "refuse" {
+  when stone[play] != placed
+  mode: Level
+  rejected += 1
+  verdict = 0
+  stone[play] = placed
+}
+
+// A pass. Two in a row end the game.
+rule "pass" {
+  when passRequest != passApplied and over == 0
+  mode: Level
+  passApplied = passRequest
+  passes += 1
+  push positions = board(fingerprint, board)
+  aiRevision += 1
+  turn = 3 - turn
+  over = passes >= 2
+}
+
+// What the last stone did: the size and the liberties of the group it joined, and whether it left an
+// opposing group beside it in atari, with one liberty. The search never reads these, so its judge
+// never pays for them.
+template report(colour, foe) {
+  rule $"report-{colour}" {
+    when reported != moves and board[placed[$value]] == colour
+    local north = board(neighbour, board, N)[placed[$value]]
+    local east = board(neighbour, board, E)[placed[$value]]
+    local south = board(neighbour, board, S)[placed[$value]]
+    local west = board(neighbour, board, W)[placed[$value]]
+    mode: Level
+    reported = moves
+    group = board(component, board, colour, colour, points)[placed[$value]]
+    liberties = board(boundary, board, colour, colour, empty, empty, points)[placed[$value]]
+    atari = (((board[local(north)] ?? empty) == foe) & ((board(boundary, board, foe, foe, empty, empty, points)[local(north)] ?? 0) == 1)) | (((board[local(east)] ?? empty) == foe) & ((board(boundary, board, foe, foe, empty, empty, points)[local(east)] ?? 0) == 1)) | (((board[local(south)] ?? empty) == foe) & ((board(boundary, board, foe, foe, empty, empty, points)[local(south)] ?? 0) == 1)) | (((board[local(west)] ?? empty) == foe) & ((board(boundary, board, foe, foe, empty, empty, points)[local(west)] ?? 0) == 1))
+  }
+}
+
+report(colour: black, foe: white)
+report(colour: white, foe: black)
+
+// ---- Scoring -------------------------------------------------------------------------------------
+// Area scoring: a side's score is its stones plus the empty points that reach its stones and never
+// the other side's. Once the game is over each side's reach is flooded outward from its stones through
+// empty points, one step in every direction a pass, until a pass reaches nothing new.
+
+set open: board(board, 0..0)
+set blacks: board(board, 1..1)
+set whites: board(board, 2..2)
+set blackArea: board(blackReach, 1..1) & ~board(whiteReach, 1..1) & board(board, 0..0)
+set whiteArea: board(whiteReach, 1..1) & ~board(blackReach, 1..1) & board(board, 0..0)
+
+rule "score-open" {
+  when over == 1 and scoring == 0
+  mode: Level
+  transform boardCombine(row: blackReach, operation: Copy, left: blacks)
+  transform boardCombine(row: whiteReach, operation: Copy, left: whites)
+  scoring = 1
+  growing = 1
+}
+
+// One side's reach taking one step each way: its members shifted, kept where the point is empty, and
+// added back.
+template grow(reach) {
+  rule $"{reach}" {
+    for direction in ["N", "E", "S", "W"] {
+      transform boardCombine(row: frontier, operation: Shift, left: reach, direction: direction)
+      transform boardCombine(row: frontier, operation: And, left: frontier, right: open)
+      transform boardCombine(row: reach, operation: Or, left: reach, right: frontier)
+    }
+  }
+}
+
+stabilize flood maxPasses(256) until scoring != 1 {
+  grow(reach: blackReach)
+  grow(reach: whiteReach)
+
+  rule "measure" {
+    local reach = count(blackReach, c -> c != 0) + count(whiteReach, c -> c != 0)
+    growing = reach != reached
+    reached = reach
+  }
+}
+
+rule "score-tally" {
+  when scoring == 1 and growing == 0
+  mode: Level
+  transform boardCombine(row: owner, operation: Clear)
+  transform writeSet(row: owner, set: blackArea, value: black)
+  transform writeSet(row: owner, set: whiteArea, value: white)
+  territory[1] = count(owner, c -> c == 1)
+  territory[2] = count(owner, c -> c == 2)
+  winner = (2 * (stones[1] + territory[1]) > 2 * (stones[2] + territory[2]) + komiHalves) ? black : white
+  scoring = 2
+}
+
+search {
+  jobs [{
+      name: "goAI", tokens: stone, board: board, turn: turn, verdict: verdict
+      enabled: aiEnabled, revision: aiRevision, best: aiBest
+      method: MonteCarlo, iterations: 256, depth: 4
+      shapes [drop(), relocate(displace: false)]
+      // The side that just moved is the one turn no longer names: its stones less the other side's.
+      "score": (2 * turn - 3) * (stones[1] - stones[2]) * 100
+    }
+  ]
+}
+
+state {
+  lattices [
+    grid(name: "goban", origin: [0, 0, 0], cellSize: 1, width: size, depth: size, wrap: None, directions: [
+      { name: "N", x: 0, y: -1, z: 0 }
+      { name: "E", x: 1, y: 0, z: 0 }
+      { name: "S", x: 0, y: 1, z: 0 }
+      { name: "W", x: -1, y: 0, z: 0 }
+    ]
+    )
+  ]
+
+  world {
+    // The play board: 0 empty, 1 black, 2 white.
+    row {
+      name: "board"
+      kind: "Int"
+      capacity: points
+      min: empty
+      max: white
+      domain: cellsOf(topology: goban)
+    }
+
+    // A scratch board a capturing move is tried on first, so the ko check reads the position the
+    // move would make before the board takes it.
+    row {
+      name: "probe"
+      kind: "Int"
+      capacity: points
+      min: empty
+      max: white
+      domain: cellsOf(topology: goban)
+    }
+
+    // Scoring's boards: each side's reach, the step a flood pass takes, and the owner of every point.
+    for name in ["blackReach", "whiteReach", "frontier", "owner"] {
+      row {
+        name: name
+        kind: "Int"
+        capacity: points
+        min: empty
+        max: white
+        domain: cellsOf(topology: goban)
+      }
+    }
+
+    // The position after every move and pass, newest first: history(positions, 1) is the position the
+    // side to move left one full turn ago.
+    row {
+      name: "positions"
+      kind: "Int"
+      domain: ring(capacity: 8, empty: 0)
+    }
+
+    // The stone token: the point the last stone was played on, and the point a request moves it to.
+    // It is the search job's one token.
+    table stone bounds(-1..points - 1) {
+      play = -1
+    }
+
+    table stones bounds(0..points) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table prisoners bounds(0..) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table territory bounds(0..points) {
+      "1" = 0
+      "2" = 0
+    }
+
+    slot placed = -1 bounds(-1..points - 1)
+    slot turn = 1 bounds(1..2)
+    slot verdict = 0 bounds(0..1)
+    slot ko = 0 bounds(0..1)
+    slot refusal = 0 bounds(0..3)
+    slot captured = 0 bounds(0..points)
+    slot group = 0 bounds(0..points)
+    slot liberties = 0 bounds(0..points)
+    slot atari = 0 bounds(0..1)
+    slot moves = 0 bounds(0..)
+    slot reported = 0 bounds(0..)
+    slot rejected = 0 bounds(0..)
+    slot passes = 0 bounds(0..2)
+    slot passRequest = 0 bounds(0..)
+    slot passApplied = 0 bounds(0..)
+    slot opened = 0 bounds(0..1)
+    slot over = 0 bounds(0..1)
+    slot scoring = 0 bounds(0..2)
+    slot growing = 0 bounds(0..1)
+    slot reached = 0 bounds(0..2 * points)
+    slot winner = 0 bounds(0..2)
+    slot aiRevision = 0 bounds(0..)
+    slot aiSide = 0 bounds(0..2)
+    slot aiEnabled = 0 bounds(0..1)
+
+    table aiBest {
+      token = -1
+      to = -1
+      score = 0
+      revision = -1
+    }
+  }
+}
+
+// ---- Tests ---------------------------------------------------------------------------------------
+// Points are named by ordinal, row * 19 + column; the centre point is 180, with 161 above it, 199
+// below, 179 to its left and 181 to its right.
+
+test "a lone stone keeps four liberties" {
+  given {
+    stone[play] = 180
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    board[180] == 1
+    group == 1
+    liberties == 4
+    atari == 0
+    moves == 1
+    turn == 2
+  }
+}
+
+// White at 180 has black above and to its left; black's stone to its right leaves it one liberty, 199.
+test "a stone taking the second-last liberty puts the group in atari" {
+  given {
+    board[180] = 2
+    board[161] = 1
+    board[179] = 1
+    stones[1] = 2
+    stones[2] = 1
+    stone[play] = 181
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    board[181] == 1
+    board[180] == 2
+    atari == 1
+    liberties == 3
+    captured == 0
+  }
+}
+
+test "a stone filling the last liberty captures a single stone" {
+  given {
+    board[180] = 2
+    board[161] = 1
+    board[179] = 1
+    board[181] = 1
+    stones[1] = 3
+    stones[2] = 1
+    stone[play] = 199
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    board[199] == 1
+    board[180] == 0
+    captured == 1
+    prisoners[1] == 1
+    stones[1] == 4
+    stones[2] == 0
+  }
+}
+
+// White's two stones at 180 and 181 share their liberties; black's stone at 200 takes the last one and
+// the whole group comes off.
+test "a stone filling the last liberty captures a whole group" {
+  given {
+    board[180] = 2
+    board[181] = 2
+    board[161] = 1
+    board[162] = 1
+    board[179] = 1
+    board[182] = 1
+    board[199] = 1
+    stones[1] = 5
+    stones[2] = 2
+    stone[play] = 200
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    board[180] == 0
+    board[181] == 0
+    captured == 2
+    prisoners[1] == 2
+    stones[2] == 0
+    group == 2
+    liberties == 6
+  }
+}
+
+// Black surrounds 180 on every side; a white stone there would have no liberty and takes nothing.
+test "a stone with no liberty that captures nothing is refused as suicide" {
+  given {
+    turn = 2
+    board[161] = 1
+    board[179] = 1
+    board[181] = 1
+    board[199] = 1
+    stones[1] = 4
+    stone[play] = 180
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    board[180] == 0
+    refusal == 2
+    rejected == 1
+    moves == 0
+    turn == 2
+    stone[play] == -1
+  }
+}
+
+// The ko shape: black's stone at 181 sits in a white mouth whose one opening is 180, and black guards
+// 180 from above, left and below. White takes at 180; black taking straight back at 181 would remake
+// the position the game opened on, which the history ring still holds one turn back.
+test "retaking a ko at once is refused" {
+  given {
+    turn = 2
+    board[161] = 1
+    board[179] = 1
+    board[199] = 1
+    board[181] = 1
+    board[162] = 2
+    board[182] = 2
+    board[200] = 2
+    stones[1] = 4
+    stones[2] = 3
+  }
+  when {
+    ticks 2
+    seat1: world.state.cell.set stone play 180
+    ticks 2
+    seat1: world.state.cell.set stone play 181
+    ticks 2
+  }
+  expect {
+    board[180] == 2
+    board[181] == 0
+    refusal == 3
+    rejected == 1
+    moves == 1
+    turn == 1
+  }
+}
+
+// The same ko, with one exchange elsewhere first: the position a turn back is no longer the one the retake
+// makes, so the retake stands.
+test "a ko may be retaken after an exchange elsewhere" {
+  given {
+    turn = 2
+    board[161] = 1
+    board[179] = 1
+    board[199] = 1
+    board[181] = 1
+    board[162] = 2
+    board[182] = 2
+    board[200] = 2
+    stones[1] = 4
+    stones[2] = 3
+  }
+  when {
+    ticks 2
+    seat1: world.state.cell.set stone play 180
+    ticks 2
+    seat1: world.state.cell.set stone play 0
+    ticks 2
+    seat1: world.state.cell.set stone play 360
+    ticks 2
+    seat1: world.state.cell.set stone play 181
+    ticks 2
+  }
+  expect {
+    board[181] == 1
+    board[180] == 0
+    captured == 1
+    rejected == 0
+    moves == 4
+  }
+}
+
+// The CPU plays black on an empty board: the search judges every point, grows its tree over several ticks
+// within each tick's work allowance, and its answer enters through the move door as a player's would.
+test "the CPU plays one move" {
+  given {
+    aiSide = 1
+  }
+  when {
+    ticks 150
+  }
+  expect {
+    moves == 1
+    stones[1] == 1
+    turn == 2
+    aiEnabled == 0
+    rejected == 0
+  }
+}
+
+// Each side walls off a three-by-three corner with seven stones; the open middle reaches both walls and
+// counts for neither. Areas tie at sixteen, and komi gives the game to white.
+test "the game ends on two passes and is scored by area" {
+  given {
+    board[3] = 1
+    board[22] = 1
+    board[41] = 1
+    board[60] = 1
+    board[59] = 1
+    board[58] = 1
+    board[57] = 1
+    board[357] = 2
+    board[338] = 2
+    board[319] = 2
+    board[300] = 2
+    board[301] = 2
+    board[302] = 2
+    board[303] = 2
+    stones[1] = 7
+    stones[2] = 7
+  }
+  when {
+    ticks 2
+    seat1: world.state.cell.set passRequest $value 1
+    ticks 2
+    seat1: world.state.cell.set passRequest $value 2
+    ticks 90
+  }
+  expect {
+    over == 1
+    scoring == 2
+    territory[1] == 9
+    territory[2] == 9
+    winner == 2
+  }
+}

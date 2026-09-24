@@ -1,0 +1,158 @@
+{
+  "basis": "phase-fixture",
+  "grants": [
+    {
+      "capability": "Mutate",
+      "grantee": "seat1",
+      "subject": "section:state"
+    },
+    {
+      "capability": "Edit",
+      "grantee": "seat1",
+      "subject": "all"
+    }
+  ],
+  "host": {
+    "exitAfterSeconds": 0,
+    "presentation": "None"
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "if",
+          "condition": {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": {
+              "channel": "phase",
+              "arguments": [
+                "passPhase"
+              ]
+            },
+            "value": 0
+          },
+          "then": [
+            {
+              "$type": "setState",
+              "key": "ok",
+              "state": "passPhaseAdvanced",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "$type": "setState",
+          "fromState": {
+            "channel": "phase",
+            "arguments": [
+              "passPhase"
+            ]
+          },
+          "key": "generation",
+          "state": "passPhaseAdvanced"
+        }
+      ],
+      "mode": "Level",
+      "name": "verdict-pass-phase-advanced"
+    },
+    {
+      "effects": [
+        {
+          "$type": "if",
+          "condition": {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": {
+              "channel": "phase",
+              "arguments": [
+                "idlePhase"
+              ]
+            },
+            "value": 0
+          },
+          "then": [
+            {
+              "$type": "setState",
+              "key": "ok",
+              "state": "trickPhaseAdvanced",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "$type": "setState",
+          "fromState": {
+            "channel": "phase",
+            "arguments": [
+              "idlePhase"
+            ]
+          },
+          "key": "generation",
+          "state": "trickPhaseAdvanced"
+        }
+      ],
+      "mode": "Level",
+      "name": "verdict-trick-phase-advanced"
+    }
+  ],
+  "schedule": {
+    "rows": [
+      {
+        "command": "world.state.transform {\"$type\":\"transfer\",\"from\":\"deck\",\"to\":\"hand\",\"selector\":\"First\"}",
+        "principal": "seat1",
+        "tick": 3
+      },
+      {
+        "command": "world.state.act passPhase 0 {\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pass\",\"selector\":\"First\"}",
+        "principal": "seat1",
+        "tick": 6
+      }
+    ],
+    "settleTicks": 6
+  },
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 0
+  },
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "ok",
+            "value": 0
+          },
+          {
+            "key": "generation",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "passPhaseAdvanced",
+        "verdict": {
+          "gate": "passPhase's generation advanced past 0 once the scheduled guarded transform landed",
+          "status": "ok"
+        }
+      },
+      {
+        "cells": [
+          {
+            "key": "ok",
+            "value": 0
+          },
+          {
+            "key": "generation",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "trickPhaseAdvanced",
+        "verdict": {
+          "gate": "idlePhase's generation advanced past 0 — deliberately unproven: nothing is scheduled against it",
+          "status": "ok"
+        }
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "games/solitaire.world.json",
+  "world": "games/solitaire.puck",
   "host": {
     "kind": "spliced"
   },

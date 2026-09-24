@@ -9,8 +9,8 @@ namespace Puck.State.Tests;
 /// behavior before any cell exists gains no cell by normalization.</summary>
 public sealed class EffectiveBehaviorLawTests {
     private static StateAdvance Advance(long numerator = 1L, long denominator = 1L) => new(
-        PerSecondNumerator: numerator,
-        PerSecondDenominator: denominator
+        PerSecondDenominator: denominator,
+        PerSecondNumerator: numerator
     );
     private static StateCycle Cycle() => new();
     private static StateDynamics Dynamics(string row = "spring") => new(Row: row);
@@ -104,8 +104,8 @@ public sealed class EffectiveBehaviorLawTests {
             actual: forAMintedKey.Advance
         );
         Assert.Equal(
-            expected: forAnOrdinaryInheritingCell,
-            actual: forAMintedKey
+            actual: forAMintedKey,
+            expected: forAnOrdinaryInheritingCell
         );
     }
     // A row declaring a behavior before any cell exists (the plain constructor with no Cells authored) gains no

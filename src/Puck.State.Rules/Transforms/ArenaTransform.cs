@@ -14,9 +14,10 @@ public readonly record struct ArenaMixTerm(VectorSource Source, int Weight);
 /// reaches a <see cref="StateArena"/>.</summary>
 /// <remarks>Resolution happens once, through
 /// <see cref="RuleCompiler.TryResolveTransform(StateTransform, RuleCompileContext, out ArenaTransform?, out string)"/>,
-/// so no row or key name is read on the firing path. The parts a rule resolves fresh every firing — a dynamic key
-/// and a live zone end — travel beside the transform in an <see cref="ArenaTransformBinding"/> rather than in a
-/// rebuilt record.</remarks>
+/// so no row or key name is read on the firing path, except the sources of a declared cell set, which
+/// <see cref="CellSetLowering"/> resolves against the arena's catalog each time it lowers the set. The parts a rule
+/// resolves fresh every firing — a dynamic key and a live zone end — travel beside the transform in an
+/// <see cref="ArenaTransformBinding"/> rather than in a rebuilt record.</remarks>
 [Union]
 public abstract record ArenaTransform {
     private protected ArenaTransform() { }
@@ -27,7 +28,8 @@ public abstract record ArenaTransform {
     /// <param name="FromRowOrdinal">The integer row the rank is read from.</param>
     /// <param name="FromKey">The cell of that row.</param>
     public sealed record Arrange(int RowOrdinal, int DomainRowOrdinal, int FromRowOrdinal, CellKey FromKey) : ArenaTransform;
-    /// <summary>Rewrites a board from one or two boards over the same topology, cell by cell.</summary>
+    /// <summary>Rewrites a board from one or two sources over the same topology, cell by cell. A source is a board
+    /// row or a declared cell set.</summary>
     /// <param name="RowOrdinal">The board written.</param>
     /// <param name="Operation">What is written.</param>
     /// <param name="LeftRowOrdinal">The first source board's catalog ordinal, or <c>-1</c>.</param>
@@ -35,7 +37,12 @@ public abstract record ArenaTransform {
     /// <param name="Direction">The validated direction ordinal for a shift, or <c>-1</c>.</param>
     /// <param name="Element">The validated point-group element for an image, or <c>-1</c>.</param>
     /// <param name="Value">The admitted value written to every member.</param>
-    public sealed record BoardCombine(int RowOrdinal, BoardCombineOp Operation, int LeftRowOrdinal, int RightRowOrdinal, int Direction, int Element, long Value) : ArenaTransform;
+    /// <param name="LeftSet">The first source when it is a declared cell set, read in place of
+    /// <paramref name="LeftRowOrdinal"/>; <see langword="null"/> otherwise.</param>
+    /// <param name="RightSet">The second source when it is a declared cell set, read in place of
+    /// <paramref name="RightRowOrdinal"/>; <see langword="null"/> otherwise.</param>
+    public sealed record BoardCombine(int RowOrdinal, BoardCombineOp Operation, int LeftRowOrdinal, int RightRowOrdinal, int Direction, int Element, long Value,
+        CellSetRow? LeftSet = null, CellSetRow? RightSet = null) : ArenaTransform;
     /// <summary>Clears every enclosed group beside one board cell, writing the board's empty value over its
     /// members.</summary>
     /// <param name="RowOrdinal">The board's catalog ordinal.</param>
@@ -78,13 +85,6 @@ public abstract record ArenaTransform {
     /// <param name="PositionsRowOrdinal">The token-keyed row mapping each token to its current board cell, or -1
     /// for a direct board projection.</param>
     public sealed record Observe(int RowOrdinal, int SourceRowOrdinal, int MaskRowOrdinal, int PositionsRowOrdinal) : ArenaTransform;
-    /// <summary>Appends one value to a history row's ring.</summary>
-    /// <param name="RowOrdinal">The history row's catalog ordinal.</param>
-    /// <param name="Value">The raw literal pushed, in the row's kind; ignored when <paramref name="Bound"/> is
-    /// <see langword="true"/>.</param>
-    /// <param name="Bound">Whether the pushed value arrives in the binding rather than in
-    /// <paramref name="Value"/>; an application that supplies none refuses.</param>
-    public sealed record Push(int RowOrdinal, long Value, bool Bound = false) : ArenaTransform;
     /// <summary>Moves one bound live pool token and the matching selectively pushable outward run one topology cell.</summary>
     public sealed record PushRay(int PoolOrdinal, int CellFieldOrdinal, int ValueFieldOrdinal, int OriginBindingSlot, CompiledTopology Topology, int Direction, CompiledPattern Pattern, CompiledPattern PushPattern, CompiledPattern StopPattern, long Empty) : ArenaTransform;
     /// <summary>Stores a vector into a table unless a near duplicate is already there.</summary>
@@ -125,17 +125,19 @@ public abstract record ArenaTransform {
     /// <param name="DrawRowOrdinal">The stream-draw site for random selection, or <c>-1</c>.</param>
     /// <param name="Count">How many tokens move, each selected afresh from what remains.</param>
     public sealed record Transfer(int FromRowOrdinal, int ToRowOrdinal, ZoneSelector Selector, CellKey Key, bool InsertFirst, int DrawRowOrdinal, int Count) : ArenaTransform;
-    /// <summary>Writes one value into every board cell whose bit is set in a cell-set mask read from a
-    /// cell.</summary>
-    /// <param name="RowOrdinal">The board row's catalog ordinal, over a topology of at most 64 cells.</param>
-    /// <param name="SetRowOrdinal">The integer row the mask is read from.</param>
+    /// <summary>Writes one value into every board cell of a cell set: the bits of a mask read from a cell, or the
+    /// members of a declared cell set.</summary>
+    /// <param name="RowOrdinal">The board row's catalog ordinal; over a topology of at most 64 cells when the set is a
+    /// mask.</param>
+    /// <param name="SetRowOrdinal">The integer row the mask is read from, or <c>-1</c> for a declared set.</param>
     /// <param name="SetKey">The cell of that row; a dynamic key arrives in the binding instead.</param>
-    /// <param name="Value">The admitted value written to every masked cell.</param>
-    public sealed record WriteSet(int RowOrdinal, int SetRowOrdinal, CellKey SetKey, long Value) : ArenaTransform;
+    /// <param name="Value">The admitted value written to every member.</param>
+    /// <param name="Set">The declared cell set read in place of a mask, or <see langword="null"/>.</param>
+    public sealed record WriteSet(int RowOrdinal, int SetRowOrdinal, CellKey SetKey, long Value, CellSetRow? Set = null) : ArenaTransform;
 }
 /// <summary>The parts of an <see cref="ArenaTransform"/> a rule firing resolves fresh: the one dynamic key a
-/// transform may carry, the one live value a push may carry, and the two live zone ends a transfer may
-/// carry.</summary>
+/// transform may carry, the two live zone ends a transfer may carry, and the live pool mover a pushRay
+/// carries.</summary>
 /// <remarks>A binding is a value, so a firing substitutes without rebuilding the transform. Each row travels as
 /// its ordinal plus one, so the default carrier is <see cref="None"/> and substitutes nothing rather than
 /// addressing row zero.</remarks>
@@ -146,19 +148,15 @@ public readonly record struct ArenaTransformBinding {
     /// <summary>Initializes a binding.</summary>
     /// <param name="bindsKey">Whether <paramref name="key"/> replaces the transform's own key.</param>
     /// <param name="key">The resolved key; the invalid default names no cell and refuses.</param>
-    /// <param name="bindsValue">Whether <paramref name="value"/> replaces the transform's own value.</param>
-    /// <param name="value">The resolved raw value, in the destination row's kind.</param>
     /// <param name="fromRowOrdinal">The resolved source row, or <c>-1</c> to keep the transform's own.</param>
     /// <param name="toRowOrdinal">The resolved destination row, or <c>-1</c> to keep the transform's own.</param>
     /// <param name="bindsInstance">Whether <paramref name="instance"/> supplies a live pool mover.</param>
     /// <param name="instance">The live pool mover.</param>
-    public ArenaTransformBinding(bool bindsKey = false, CellKey key = default, bool bindsValue = false, long value = 0L, int fromRowOrdinal = -1, int toRowOrdinal = -1, bool bindsInstance = false, StateInstanceHandle instance = default) {
+    public ArenaTransformBinding(bool bindsKey = false, CellKey key = default, int fromRowOrdinal = -1, int toRowOrdinal = -1, bool bindsInstance = false, StateInstanceHandle instance = default) {
         BindsKey = bindsKey;
-        BindsValue = bindsValue;
         BindsInstance = bindsInstance;
         Instance = instance;
         Key = key;
-        Value = value;
         m_from = Math.Max(
             val1: 0,
             val2: (fromRowOrdinal + 1)
@@ -173,8 +171,6 @@ public readonly record struct ArenaTransformBinding {
     public static ArenaTransformBinding None => default;
     /// <summary>Gets a value indicating whether <see cref="Key"/> replaces the transform's own key.</summary>
     public bool BindsKey { get; }
-    /// <summary>Gets a value indicating whether <see cref="Value"/> replaces the transform's own value.</summary>
-    public bool BindsValue { get; }
     /// <summary>Gets a value indicating whether <see cref="Instance"/> supplies a live pool mover.</summary>
     public bool BindsInstance { get; }
     /// <summary>Gets the live pool mover.</summary>
@@ -185,21 +181,12 @@ public readonly record struct ArenaTransformBinding {
     public CellKey Key { get; }
     /// <summary>Gets the resolved destination row's catalog ordinal, or <c>-1</c>.</summary>
     public int ToRowOrdinal => (m_to - 1);
-    /// <summary>Gets the resolved raw value, in the destination row's kind.</summary>
-    public long Value { get; }
 
     /// <summary>Returns the key this binding substitutes, or the transform's own.</summary>
     /// <param name="own">The transform's own key.</param>
     /// <returns>The key to address with.</returns>
     public CellKey KeyOr(CellKey own) => (BindsKey
         ? Key
-        : own
-    );
-    /// <summary>Returns the value this binding substitutes, or the transform's own.</summary>
-    /// <param name="own">The transform's own value.</param>
-    /// <returns>The raw value to write.</returns>
-    public long ValueOr(long own) => (BindsValue
-        ? Value
         : own
     );
     /// <summary>Returns the source row this binding substitutes, or the transform's own.</summary>

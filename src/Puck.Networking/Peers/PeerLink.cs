@@ -48,6 +48,7 @@ public sealed class PeerLink : IAsyncDisposable {
 
     // Never disposed: SendAsync reads its token outside any lock, and a disposed source throws on that read.
     private readonly CancellationTokenSource m_closeSource = new();
+    private readonly TaskCompletionSource m_released = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Channel<PeerEvent> m_events = Channel.CreateBounded<PeerEvent>(options: new BoundedChannelOptions(capacity: EventsCapacity) {
         FullMode = BoundedChannelFullMode.Wait,
         SingleReader = true,
@@ -92,6 +93,10 @@ public sealed class PeerLink : IAsyncDisposable {
     public bool IsOpen => (Volatile.Read(location: ref m_closed) == 0);
     /// <summary>Gets the remote transport address.</summary>
     public EndPoint RemoteEndpoint => m_connection.RemoteEndpoint;
+    /// <summary>Gets a task that completes once the link has closed, for whatever reason, and has finished releasing
+    /// what it held: its connection and stream are disposed and it has left its <see cref="Peer"/>'s
+    /// <see cref="Peer.Links"/>. <see cref="Events"/> completes before this does.</summary>
+    public Task Released => m_released.Task;
     /// <summary>Gets the identity the remote side proved at handshake.</summary>
     public KeyId RemoteId { get; }
 
@@ -123,7 +128,11 @@ public sealed class PeerLink : IAsyncDisposable {
         } catch (Exception exception) when ((exception is IOException or ObjectDisposedException)) {
         }
 
-        m_onClosed?.Invoke(obj: this);
+        try {
+            m_onClosed?.Invoke(obj: this);
+        } finally {
+            m_released.TrySetResult();
+        }
     }
     private PeerEvent DecodeMessageFrame(ReadOnlySpan<byte> body) {
         var reader = new WireReader(bytes: body);
@@ -362,10 +371,10 @@ public sealed class PeerLink : IAsyncDisposable {
         try {
             // The deadline is the link's, not the caller's: its expiry closes the link, so the stream is only ever
             // aborted mid-frame by a close, never by a send that merely gave up waiting.
-            using var sendDeadline = new PeerDeadline(
-                m_closeSource.Token,
-                PeerWireProtocol.SendTimeout,
-                m_timeProvider
+            using var sendDeadline = new OperationDeadline(
+                caller: m_closeSource.Token,
+                timeout: PeerWireProtocol.SendTimeout,
+                timeProvider: m_timeProvider
             );
 
             await WireFrame.WriteAsync(

@@ -60,7 +60,7 @@
   "imports": [
     {
       "as": "arena",
-      "document": "../../../src/Puck.World/Assets/worlds/modules/arena.world.json"
+      "document": "../../../src/Puck.World/Assets/worlds/modules/arena"
     }
   ],
   "kits": {
@@ -131,10 +131,10 @@
   },
   "properties": {
     "names": [
-      "arena_hot",
-      "arena_flammable",
-      "arena_cold",
-      "arena_freezable"
+      "arena$hot",
+      "arena$flammable",
+      "arena$cold",
+      "arena$freezable"
     ]
   },
   "schema": "puck.world.definition.v1",

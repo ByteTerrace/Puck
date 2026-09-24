@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 
 namespace Puck.Physics.Tests;
@@ -129,19 +130,23 @@ public sealed class FixedFlockPipelineStressTests {
                 (velocities, nextVelocities) = (nextVelocities, velocities);
             }
             for (var step = 0; (step < 8); step++) { Step(step: step); }
-            var allocated = GC.GetAllocatedBytesForCurrentThread();
             var start = Stopwatch.GetTimestamp();
 
             for (var step = 8; (step < (Steps + 8)); step++) { Step(step: step); }
             var elapsed = Stopwatch.GetElapsedTime(startingTimestamp: start);
-
-            allocated = (GC.GetAllocatedBytesForCurrentThread() - allocated);
             var hash = Fnv1aHash.Create();
 
             for (var index = 0; (index < Count); index++) {
                 hash.Add(value: points[index].Position.X.Value); hash.Add(value: points[index].Position.Y.Value); hash.Add(value: points[index].Position.Z.Value);
                 hash.Add(value: velocities[index].X.Value); hash.Add(value: velocities[index].Y.Value); hash.Add(value: velocities[index].Z.Value);
             }
+
+            // Measured after the hash, so however many windows it opens, both orders hash the same steps.
+            var measuredStep = (Steps + 8);
+            var allocated = AllocationWindow.Least(window: () => {
+                for (var end = (measuredStep + Steps); (measuredStep < end); measuredStep++) { Step(step: measuredStep); }
+            });
+
             return (hash.Value, allocated, elapsed.TotalMilliseconds);
         }
 

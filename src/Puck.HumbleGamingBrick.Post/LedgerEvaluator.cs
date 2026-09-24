@@ -167,10 +167,7 @@ internal static class LedgerEvaluator {
                 );
             }
 
-            var outcome = ProbeRunner.Run(
-                budget: CaseBudget.ForFrames(frames: ledgerCase.FrameCap),
-                ledgerCase: ledgerCase
-            );
+            var outcome = ProbeRunner.Run(ledgerCase: ledgerCase);
             var recordedOutcome = ToLedgerOutcome(verdict: outcome.Verdict);
 
             return new CaseMeasurement(
@@ -190,13 +187,6 @@ internal static class LedgerEvaluator {
                 ),
                 Error: null,
                 Outcome: outcome
-            );
-        } catch (CaseBudgetExceededException exception) {
-            return new CaseMeasurement(
-                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
-                Entry: null,
-                Error: exception.Message,
-                Outcome: null
             );
         } catch (Exception exception) when ((exception is not OutOfMemoryException)) {
             return new CaseMeasurement(

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.Assets.Documents;
@@ -19,7 +20,7 @@ public sealed class WorldRigidCommandLawTests {
     [Fact]
     public void RigidImpulseWireLeafRoundTripsThroughSubmissionCodec() {
         var command = new WorldCommand.RigidImpulse(
-            Principal: WorldPrincipal.Seat(slot: 2),
+            Principal: Principal.Seat(slot: 2),
             EntityIndex: 7,
             Impulse: new Vector3(
                 x: 1.5f,
@@ -63,7 +64,7 @@ public sealed class WorldRigidCommandLawTests {
     [Fact]
     public void RigidImpulseAgainstNonRigidBodyIsRefusedByNameAndLeavesVelocityUntouched() {
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -160,11 +161,13 @@ public sealed class WorldRigidCommandLawTests {
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            GravityRaw = source.Gravity with { Uniform = new DocumentVector3(value: new Vector3(
+            GravityRaw = source.Gravity with {
+                Uniform = new DocumentVector3(value: new Vector3(
             x: 0f,
             y: -9.8f,
             z: 0f
-        )) },
+        )),
+            },
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
                 BodyContact = WorldBodyContactMode.Solid,
                 Collider = new WorldCollider.Sphere(Radius: 0.4f),
@@ -212,7 +215,7 @@ public sealed class WorldRigidCommandLawTests {
         var half = FixedQ4816.FromDouble(value: 0.5);
 
         using var control = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: control.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -265,7 +268,7 @@ public sealed class WorldRigidCommandLawTests {
     [Fact]
     public void ScaledRigidBallAtTheAuthoredEnvelopeFloorFallsAndSettlesWithoutThrowing() {
         using var fixture = Fixtures.FreshServer(definition: ScaledFallingRigidBallDocument(cellValue: FixedQ4816.FromDouble(value: 0.05)));
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -319,7 +322,7 @@ public sealed class WorldRigidCommandLawTests {
         );
 
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -389,7 +392,7 @@ public sealed class WorldRigidCommandLawTests {
     [Fact]
     public void TryApplyRigidImpulseRefusesAResultingVelocityOverTheCeilingWithoutThrowingAndControlStillApplies() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -440,7 +443,7 @@ public sealed class WorldRigidCommandLawTests {
     [Fact]
     public void TryApplyRigidImpulseRefusesComponentAdditionOverflowWithoutChangingVelocity() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -485,7 +488,7 @@ public sealed class WorldRigidCommandLawTests {
     [Fact]
     public void PhysicsQuiescentReadsFalseWhileFallingAndTrueOnceEveryRigidBodyRests() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,

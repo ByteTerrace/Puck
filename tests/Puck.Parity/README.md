@@ -26,20 +26,49 @@ change that changes a station, echoable in review. Census floors come from
 observed coverage at roughly half its value—a frame whose declared content
 collapses fails the gate before any pixel is compared.
 
+Every armed capture is exactly one manifest entry. Either it carries the
+`frame` and `census` of the frame that showed its armed tick, or it carries a
+`refusal` and a `detail` naming the ticks involved:
+
+| `refusal` | Meaning |
+|---|---|
+| `cameraInside` | The camera sat inside geometry (`map(cameraPos) <= 0`) at the armed tick. |
+| `busy` | Another capture still held the render chain when this one was armed. |
+| `stale` | The frame that served it showed a later tick; the detail names both ticks. |
+| `failed` | The readback, PNG write, or PNG decode failed. |
+| `unserved` | No frame served it: the run ended first, or the offscreen host's 60-second capture hold ran out. The detail names why the render chain could not serve it, such as "the engine's pipelines never installed". |
+
+A landed frame is named `<station>~<tick>.png` (`WorldCaptureRow.CaptureName`,
+a generated file name), so a station may not carry `~`. The comparator writes a
+failed capture's evidence into a directory with the same `<station>~<tick>`
+name.
+
+The comparator's content gate fails a capture that either side refused, and
+prints the refusal and its detail. A capture absent from a manifest is a
+producer defect, never a refusal. When a capture is armed, the fixed-step pump
+ends its catch-up burst there. The host then composes the frame for that tick
+before the next step, so a slow machine does not step past a capture.
+`WorldCaptureSchedulerLawTests` (`tests/Puck.World.Tests`) drives this without
+a GPU.
+
 `parity-inside.world.json` is the negative-path proof: its camera is authored
 inside solid geometry, so every scheduled capture must refuse with
-`cameraInside: true` and no frame written. If it ever produces a frame, the
-camera-validity gate is broken.
+`refusal: "cameraInside"` and no frame written. If it ever produces a frame,
+the camera-validity gate is broken.
 
 Editing a station: edit `parity.world.json`/`parity.sdf.json` directly (they
 are authored documents, not generated), re-run `puck parity`, and re-calibrate
 the station's contract entry from the run's observed deltas in the same
-change.
+change. Growing the shader interpreter also moves the deltas, because it
+changes each backend's generated code: benign ±1-LSB differences move around,
+and a boundary material-winner flip appears as an isolated multi-LSB tile
+delta. Examine such a delta before recalibrating a station.
 
-`paths.puck` (compiled to `paths.world.json`) is a separate offscreen fixture for bounded Path profiles:
+`paths.puck` is a separate offscreen fixture for bounded Path profiles:
 two circular lobes with a clamped polynomial shear, a smooth tapered quadratic
 stroke, an outline with a hole, and an anisotropically scaled cubic stroke.
-Boot it once with `--backend vulkan` and once with `--backend directx`, using
+Boot the source itself (`--world tests/Puck.Parity/paths.puck`) once with
+`--backend vulkan` and once with `--backend directx`, using
 separate `--state-dir` and `--capture-dir` directories. Feed `world.wait 100`,
 `wire.errors`, and `quit` on separate stdin lines. Its captures occur at ticks
 60 and 90. Compare the capture directories with `puck parity compare <vulkan>

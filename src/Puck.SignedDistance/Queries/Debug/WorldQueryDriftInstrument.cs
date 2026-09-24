@@ -101,7 +101,7 @@ public static class WorldQueryDriftInstrument {
     }
 
     /// <summary>Bakes a <see cref="WorldQueryArtifact"/> heightfield from <paramref name="evaluator"/>'s own
-    /// <see cref="SdfFieldEvaluator.TryGroundHeight"/> answers over a grid of cell centers covering
+    /// <see cref="IWorldQuery.TryGroundHeight"/> answers, one per cell, over a grid of cell centers covering
     /// <c>[minX,maxX] x [minZ,maxZ]</c> — the "evaluator-vs-baked" cross-check's baked half. Because the artifact is
     /// sourced from the evaluator, this cannot catch a systematic evaluator bug (that is the GPU channel's job); it
     /// catches a divergence in the query plumbing — <see cref="WorldQueryBaker"/>'s grid indexing/quantization or
@@ -126,7 +126,7 @@ public static class WorldQueryDriftInstrument {
     /// <exception cref="ArgumentException">A grid bound is invalid, the region holds more than
     /// <paramref name="maxCellCount"/> cells, or its coordinates are large enough that <see cref="float"/> cannot
     /// address one cell apart from the next.</exception>
-    public static WorldQueryArtifact BakeGroundHeightArtifact(SdfFieldEvaluator evaluator, float minX, float minZ, float maxX, float maxZ, float probeUp, float probeDown, int maxCellCount = WorldQueryBaker.DefaultMaxCellCount) {
+    public static WorldQueryArtifact BakeGroundHeightArtifact(IWorldQuery evaluator, float minX, float minZ, float maxX, float maxZ, float probeUp, float probeDown, int maxCellCount = WorldQueryBaker.DefaultMaxCellCount) {
         ArgumentNullException.ThrowIfNull(argument: evaluator);
 
         // Measure first, then walk integer cell indices, then bake through the baker. Measuring first keeps an

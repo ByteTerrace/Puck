@@ -1,6 +1,5 @@
 using System.Globalization;
 using Puck.Maths;
-using Puck.Physics.Motion;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
@@ -8,7 +7,6 @@ using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
 using IRuleEffect = Puck.State.Rules.IRuleEffect;
 using OperandSite = Puck.State.Rules.OperandSite;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
-using RuleRefusal = Puck.State.Rules.RuleRefusal;
 
 namespace Puck.World;
 
@@ -118,18 +116,32 @@ public static partial class WorldFactsCompiler {
         return new WorldFactsCompileContext(definition: definition);
     }
     /// <summary>Resolves the catalog ordinal of the document's <see cref="WorldIdentityFactLane"/> row, refusing by
-    /// name when the document declares none.</summary>
+    /// name when the document declares none or declares one carrying a value-over-time trait.</summary>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
     /// <param name="where">The site spelled in the refusal.</param>
     /// <returns>The lane row's catalog ordinal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <exception cref="RuleException">The document declares no keyed int lane row
+    /// (<see cref="WorldRuleRefusal.IdentityLaneUndeclared"/>), or its lane row declares a trait
+    /// (<see cref="WorldRuleRefusal.IdentityLaneTraited"/>).</exception>
     public static int ResolveIdentityLane(string ruleName, WorldFactsCompileContext context, string where) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        if (context.FindRow(name: WorldIdentityFactLane.RowName) is not { Kind: CellKind.Int, IsKeyed: true }) {
+        if (context.FindRow(name: WorldIdentityFactLane.RowName) is not { Kind: CellKind.Int, IsKeyed: true } lane) {
             throw new RuleException(
                 detail: $"{where} reads or writes an identity fact, but the document declares no keyed int row named '{WorldIdentityFactLane.RowName}' in state.world — a world carries facts only when it declares that lane",
                 refusal: WorldRuleRefusal.IdentityLaneUndeclared,
+                ruleName: ruleName
+            );
+        }
+        if (!WorldIdentityFactLane.TryAdmitTraits(
+            reason: out var reason,
+            row: lane
+        )) {
+            throw new RuleException(
+                detail: $"{where} reads or writes an identity fact, but {reason}",
+                refusal: WorldRuleRefusal.IdentityLaneTraited,
                 ruleName: ruleName
             );
         }
@@ -140,140 +152,71 @@ public static partial class WorldFactsCompiler {
         );
     }
 
-    internal static IRuleEffect ResolveBodyDesignation(WorldEffect.DesignateBody effect, string ruleName, WorldFactsCompileContext context) {
-        if (!Enum.IsDefined(value: effect.Kind)) {
+    /// <summary>Checks and lowers one body-motion effect in a world rule through <see cref="WorldBodyEffects"/>, the
+    /// check a kit's action lowers through, then resolves the body it names and, for a designation, the body it
+    /// designates.</summary>
+    /// <param name="effect">The authored effect; one of the four <see cref="WorldBodyEffects.IsBodyMotion"/> admits.</param>
+    /// <param name="ruleName">The rule being compiled.</param>
+    /// <param name="context">The compile context.</param>
+    /// <returns>The compiled effect.</returns>
+    /// <exception cref="RuleException">The effect names no body, addresses a target, or carries a value, duration,
+    /// direction, register or designation the effect refuses.</exception>
+    internal static IRuleEffect ResolveBodyMotion(ActionEffect effect, string ruleName, WorldFactsCompileContext context) {
+        if (!WorldBodyEffects.TryLower(
+            effect: effect,
+            form: out var form,
+            reason: out var reason,
+            refusal: out var refusal,
+            registerDeclared: register => context.Definition.TargetRegisters.Any(predicate: row => string.Equals(
+                a: row.Name,
+                b: register,
+                comparisonType: StringComparison.Ordinal
+            )),
+            scope: WorldBodyEffectScope.Rule
+        )) {
             throw new RuleException(
-                detail: $"'designateBody' kind '{effect.Kind}' is not defined",
-                refusal: RuleRefusal.EffectKindInadmissible,
-                ruleName: ruleName
-            );
-        }
-        if (!context.Definition.TargetRegisters.Any(predicate: row => string.Equals(
-            a: row.Name,
-            b: effect.Register,
-            comparisonType: StringComparison.Ordinal
-        ))) {
-            throw new RuleException(
-                detail: $"'designateBody' names undeclared register '{effect.Register}'",
-                refusal: RuleRefusal.EffectKindInadmissible,
+                detail: reason,
+                refusal: refusal,
                 ruleName: ruleName
             );
         }
 
         var address = context.ResolveBodyAddress(
-            reference: effect.Key,
+            reference: form.Key!,
             ruleName: ruleName,
-            verb: "designateBody"
+            verb: form.Verb
         );
         var targetKey = default(CellKey);
         CompiledCellRef? targetKeyFrom = null;
 
-        if (effect.Kind == WorldBodyDesignationKind.Body) {
-            if (effect.TargetKey is null) {
-                throw new RuleException(
-                    detail: "'designateBody' kind=body requires targetKey",
-                    refusal: RuleRefusal.EffectKindInadmissible,
-                    ruleName: ruleName
-                );
-            }
-
+        if (form.TargetKey is { } designated) {
             var target = context.ResolveBodyAddress(
-                reference: effect.TargetKey,
+                reference: designated,
                 ruleName: ruleName,
-                verb: "designateBody.targetKey"
+                verb: $"{form.Verb}.targetKey"
             );
 
             targetKey = target.Key;
             targetKeyFrom = target.KeyFrom;
-        } else if (effect.TargetKey is not null) {
-            throw new RuleException(
-                detail: "'designateBody' kind=clear does not admit targetKey",
-                refusal: RuleRefusal.EffectKindInadmissible,
-                ruleName: ruleName
-            );
         }
 
         return new WorldBodyMotionEffect(
             action: new WorldBodyAction(
-                Designation: effect.Kind,
-                Direction: default,
-                DurationTicks: 0UL,
-                Operation: BodyMotionOp.Designate,
-                Register: effect.Register,
+                Designation: form.Designation,
+                Direction: form.Direction,
+                DurationTicks: form.DurationTicks,
+                Operation: form.Operation,
+                Register: form.Register,
                 TargetKey: targetKey,
                 TargetKeyFrom: targetKeyFrom,
-                Value: default
+                Value: form.Value
             ),
-            describe: $"designateBody body:{effect.Key} {effect.Register} {effect.Kind}",
-            key: address.Key,
-            keyFrom: address.KeyFrom
-        );
-    }
-    internal static IRuleEffect ResolveBodyImpulse(WorldEffect.ApplyBodyImpulse effect, string ruleName, WorldFactsCompileContext context) {
-        var address = context.ResolveBodyAddress(
-            reference: effect.Key,
-            ruleName: ruleName,
-            verb: "applyBodyImpulse"
-        );
-        var magnitudeSquared = effect.BodyDirection.LengthSquared();
-
-        if (
-            !float.IsFinite(f: magnitudeSquared) ||
-            (magnitudeSquared <= 0f) ||
-            (MathF.Abs(x: (MathF.Sqrt(x: magnitudeSquared) - 1f)) > 0.0001f)
-        ) {
-            throw new RuleException(
-                detail: "'applyBodyImpulse' bodyDirection must be finite, non-zero, and unit length because the runtime does not normalize it",
-                refusal: RuleRefusal.EffectKindInadmissible,
-                ruleName: ruleName
-            );
-        }
-
-        return new WorldBodyMotionEffect(
-            action: new WorldBodyAction(
-                Direction: new FixedVector3(
-                    X: FixedQ4816.FromDouble(value: effect.BodyDirection.X),
-                    Y: FixedQ4816.FromDouble(value: effect.BodyDirection.Y),
-                    Z: FixedQ4816.FromDouble(value: effect.BodyDirection.Z)
-                ),
-                DurationTicks: RuleCompiler.DurationTicksExact(
-                    ruleName: ruleName,
-                    seconds: effect.DurationSeconds,
-                    verb: "applyBodyImpulse"
-                ),
-                Operation: BodyMotionOp.PlanarImpulse,
-                Value: RuleCompiler.ResolveFixedLiteral(
-                    field: "speed",
-                    ruleName: ruleName,
-                    value: effect.Speed,
-                    verb: "applyBodyImpulse"
-                )
-            ),
-            describe: $"applyBodyImpulse body:{effect.Key}",
-            key: address.Key,
-            keyFrom: address.KeyFrom
-        );
-    }
-    internal static IRuleEffect ResolveBodyVerticalVelocity(StateChannelRef key, decimal value, BodyMotionOp operation, string verb, string ruleName, WorldFactsCompileContext context) {
-        var address = context.ResolveBodyAddress(
-            reference: key,
-            ruleName: ruleName,
-            verb: verb
-        );
-
-        return new WorldBodyMotionEffect(
-            action: new WorldBodyAction(
-                Direction: default,
-                DurationTicks: 0UL,
-                Operation: operation,
-                Value: RuleCompiler.ResolveFixedLiteral(
-                    field: "value",
-                    ruleName: ruleName,
-                    value: value,
-                    verb: verb
-                )
-            ),
-            describe: $"{verb} body:{key} {value.ToString(provider: CultureInfo.InvariantCulture)}",
+            describe: effect switch {
+                WorldEffect.SetVerticalVelocity set => $"{form.Verb} body:{form.Key} {set.Velocity.ToString(provider: CultureInfo.InvariantCulture)}",
+                WorldEffect.ScaleVerticalVelocity scale => $"{form.Verb} body:{form.Key} {scale.Factor.ToString(provider: CultureInfo.InvariantCulture)}",
+                WorldEffect.Designate => $"{form.Verb} body:{form.Key} {form.Register} {form.Designation}",
+                _ => $"{form.Verb} body:{form.Key}",
+            },
             key: address.Key,
             keyFrom: address.KeyFrom
         );
@@ -455,13 +398,15 @@ public static partial class WorldFactsCompiler {
     }
     internal static IRuleEffect ResolvePoseCell(WorldEffect.PoseCell effect, string ruleName, WorldFactsCompileContext context) {
         var body = context.ResolveBodyRef(channel: "poseCell.key", ruleName: ruleName, start: 0, tokens: effect.Key.Split(':'));
-        if (WorldTopologyCompilation.Find(context.Definition, effect.Topology) is null ||
-            !float.IsFinite(effect.Offset.X) || !float.IsFinite(effect.Offset.Y) || !float.IsFinite(effect.Offset.Z)) {
+
+        if ((WorldTopologyCompilation.Find(definition: context.Definition, name: effect.Topology) is null) ||
+            !float.IsFinite(f: effect.Offset.X) || !float.IsFinite(f: effect.Offset.Y) || !float.IsFinite(f: effect.Offset.Z)) {
             throw new RuleException(detail: "poseCell requires a declared topology and a finite offset", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
         var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
+
         return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
-            new FixedVector3(FixedQ4816.FromDouble(effect.Offset.X), FixedQ4816.FromDouble(effect.Offset.Y), FixedQ4816.FromDouble(effect.Offset.Z)));
+            FixedVector3.FromVector3(value: effect.Offset));
     }
     internal static IRuleEffect ResolvePose(WorldEffect.Pose effect, string ruleName, WorldFactsCompileContext context) {
         CompiledCellRef? keyFrom = null;
@@ -549,11 +494,7 @@ public static partial class WorldFactsCompiler {
                 keyFrom: keyFrom,
                 pose: new CompiledWorldPose(
                     PitchRadians: FixedQ4816.FromDouble(value: (effect.PitchDegrees * DegreesToRadians)),
-                    Position: new FixedVector3(
-                        X: FixedQ4816.FromDouble(value: position.X),
-                        Y: FixedQ4816.FromDouble(value: position.Y),
-                        Z: FixedQ4816.FromDouble(value: position.Z)
-                    ),
+                    Position: FixedVector3.FromVector3(value: position),
                     RollRadians: FixedQ4816.FromDouble(value: (effect.RollDegrees * DegreesToRadians)),
                     YawRadians: FixedQ4816.FromDouble(value: (effect.YawDegrees * DegreesToRadians))
                 ),

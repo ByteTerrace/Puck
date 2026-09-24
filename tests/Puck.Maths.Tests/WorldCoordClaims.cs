@@ -162,7 +162,7 @@ internal static class WorldCoordClaims {
         );
         Assert.Equal(
             expected: 10,
-            actual: int.MinValue.LogarithmBase10()
+            actual: int.MinValue.DigitCount()
         );
         Assert.Equal(
             expected: 8,

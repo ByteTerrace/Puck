@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -5,7 +6,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// THE LAW: <c>games/mancala.world.json</c> is a self-contained, placement-addressed, reusable Mancala (Kalah)
+/// THE LAW: <c>games/mancala.puck</c> is a self-contained, placement-addressed, reusable Mancala (Kalah)
 /// module. Sowing is closed-form via cyclic distance arithmetic over 13 active pits, skipping the opponent's store.
 /// Landing the last seed in own store grants an extra turn. Landing in an empty own pit sweeps that seed and the
 /// opposite pit into own store. When either side empties, remaining seeds are swept into the respective store and
@@ -16,14 +17,14 @@ public sealed class MancalaModuleLawTests {
 
     private static void PlayPit(WorldFixture fixture, LoopbackTransport transport, int pit) {
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "mancalaSelectedPit",
             Key: WorldStateRow.SlotKey,
             Value: pit,
             Kind: WorldDocumentWriteKind.Set
         ));
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "mancalaMoveRequest",
             Key: WorldStateRow.SlotKey,
             Value: 1L,
@@ -44,20 +45,7 @@ public sealed class MancalaModuleLawTests {
 
         return board;
     }
-    private static long ReadCell(WorldFixture fixture, string row, string key) {
-        Assert.True(condition: WorldStateReader.TryRead(
-            definition: fixture.Server.Definition,
-            rowName: row,
-            key: key,
-            tick: fixture.Server.NextInputTick,
-            engineTick: fixture.Server.CompletedEngineTicks,
-            row: out _,
-            rawValue: out var raw,
-            text: out _
-        ));
-
-        return Assert.IsType<long>(@object: raw);
-    }
+    private static long ReadCell(WorldFixture fixture, string row, string key) => fixture.ReadNumeric(key: key, row: row);
     private static long ReadSlot(WorldFixture fixture, string row) => ReadCell(
         fixture: fixture,
         key: WorldStateRow.SlotKey,
@@ -66,7 +54,7 @@ public sealed class MancalaModuleLawTests {
     private static void SetPits(WorldFixture fixture, LoopbackTransport transport, params (int Pit, long Seeds)[] pits) {
         foreach (var (pit, seeds) in pits) {
             transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: "mancalaBoard",
                 Key: pit.ToString(),
                 Value: seeds,
@@ -78,7 +66,7 @@ public sealed class MancalaModuleLawTests {
     }
     private static void SetTurn(WorldFixture fixture, LoopbackTransport transport, int turn) {
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "mancalaTurn",
             Key: WorldStateRow.SlotKey,
             Value: turn,

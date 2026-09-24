@@ -1,6 +1,6 @@
 # Moth courtyard
 
-[moth-courtyard.world.json](moth-courtyard.world.json) imports
+[moth-courtyard.puck](moth-courtyard.puck) imports
 [the Moth studio](avatars/moth.md) through `basis`. All eight bodies share its creation;
 the courtyard supplies pose drivers, placement, cameras and environment.
 This is a diagnostic scene for visual inspection and GPU profiling.
@@ -48,13 +48,13 @@ before drawing performance conclusions from this deliberately expanded prototype
 
 ## Authoring
 
-[moth-courtyard.puck](moth-courtyard.puck) is the canonical source;
-[moth-courtyard.world.json](moth-courtyard.world.json) is its compiled runtime
-output, ignored by Git and generated during the build. Edit the source and regenerate the JSON. Do not decompile over the
-source again: that would discard its constants and collection expressions.
+[moth-courtyard.puck](moth-courtyard.puck) is the canonical source; the game's
+build compiles it into its own output. Edit the source and check it compiles. Do
+not decompile over the source: that would discard its constants and collection
+expressions.
 
 ```powershell
-dotnet run --project src/Puck.Cli -c Release -- compile src/Puck.World/Assets/worlds/moth-courtyard.puck -o src/Puck.World/Assets/worlds/moth-courtyard.world.json --validate
+dotnet run --project src/Puck.Cli -c Release -- compile src/Puck.World/Assets/worlds/moth-courtyard.puck -o artifacts/moth-courtyard.world.json --validate
 ```
 
 The `stations` table supplies the metadata, held pose cells, body placements and
@@ -69,7 +69,7 @@ define the landscape; their placement loops control the grove and grass clusters
 
 Use the full DSL freely; JSON-to-source round-trip fidelity and parity with the
 pre-refactor JSON are not requirements for this world. Check source changes with
-`puck fmt`, `puck lint --strict`, and `puck compile --validate`; run the compiled
+`puck format`, `puck lint --strict`, and `puck compile --validate`; run the compiled
 world to verify its intended behavior.
 
 ## Run the courtyard
@@ -77,11 +77,11 @@ world to verify its intended behavior.
 From the repository root, open it with:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/moth-courtyard.world.json --backend directx --width 1440 --height 900 --state-dir artifacts/moth-courtyard/state
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/moth-courtyard.puck --backend directx --width 1440 --height 900 --state-dir artifacts/moth-courtyard/state
 ```
 
 In an existing World session, use
-`world.load src/Puck.World/Assets/worlds/moth-courtyard.world.json`.
+`world.load src/Puck.World/Assets/worlds/moth-courtyard.puck`.
 Start a fresh session for the full keyboard/console input vocabulary: the new
 `skyToggle` channel must be present when the body command table is constructed.
 
@@ -154,7 +154,7 @@ the initial arrangement after experimentation.
 Use native 1440×900, one named camera, and the same lighting settings for each
 comparison. Keep all eight bodies alive even in the isolated camera: that view
 tests the cost of off-screen peers, not a one-body scene. Start with clouds off,
-warm the scene, then record several completed GPU frames with `world.gpu`.
+warm the scene, then record several completed GPU frames with `world.counters gpu`.
 Record `body.where` and `world.budget` beside them; sixteen submitted volumes
 are the eight pairs of jets, and enabling clouds adds three. A body must not
 also register a duplicate animated placement.

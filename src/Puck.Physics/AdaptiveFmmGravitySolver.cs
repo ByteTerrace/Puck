@@ -270,19 +270,10 @@ public sealed class AdaptiveFmmGravitySolver : IGravitySolver {
             bodies: bodies
         );
     }
-    private static FixedVector3 CheckedDifference(FixedVector3 left, FixedVector3 right) =>
-        new(
-            X: checked((left.X - right.X)),
-            Y: checked((left.Y - right.Y)),
-            Z: checked((left.Z - right.Z))
-        );
     private void CommitTranslation(int targetNodeIndex, FixedVector3 acceleration, GravityGradient combinedGradient, int representedSourceCount) {
         ref var node = ref m_nodes[targetNodeIndex];
 
-        node.LocalAcceleration = GravityKernel.AddChecked(
-            left: node.LocalAcceleration,
-            right: acceleration
-        );
+        node.LocalAcceleration = checked((node.LocalAcceleration + acceleration));
         node.LocalGradient = combinedGradient;
         m_multipoleToLocalTranslations++;
         m_approximatedSourceCount += representedSourceCount;
@@ -560,37 +551,19 @@ public sealed class AdaptiveFmmGravitySolver : IGravitySolver {
         if (node.FirstChild < 0) {
             for (var offset = 0; (offset < node.Count); offset++) {
                 var bodyIndex = m_bodyIndices[(node.Start + offset)];
-                var bodyOffset = CheckedDifference(
-                    left: bodies[bodyIndex].Position,
-                    right: node.ExpansionCenter
-                );
-                var local = GravityKernel.AddChecked(
-                    left: node.LocalAcceleration,
-                    right: node.LocalGradient.Apply(offset: bodyOffset)
-                );
+                var bodyOffset = checked((bodies[bodyIndex].Position - node.ExpansionCenter));
+                var local = checked((node.LocalAcceleration + node.LocalGradient.Apply(offset: bodyOffset)));
 
                 for (var deferredIndex = 0; (deferredIndex < deferredExpansionCount); deferredIndex++) {
                     ref readonly var deferred = ref m_deferredLocalExpansions[deferredIndex];
-                    var deferredOffset = CheckedDifference(
-                        left: bodies[bodyIndex].Position,
-                        right: deferred.Center
-                    );
-                    var deferredAcceleration = GravityKernel.AddChecked(
-                        left: deferred.Acceleration,
-                        right: deferred.Gradient.Apply(offset: deferredOffset)
-                    );
+                    var deferredOffset = checked((bodies[bodyIndex].Position - deferred.Center));
+                    var deferredAcceleration = checked((deferred.Acceleration + deferred.Gradient.Apply(offset: deferredOffset)));
 
-                    local = GravityKernel.AddChecked(
-                        left: local,
-                        right: deferredAcceleration
-                    );
+                    local = checked((local + deferredAcceleration));
                     m_deferredLocalExpansionEvaluations++;
                 }
 
-                accelerations[bodyIndex] = GravityKernel.AddChecked(
-                    left: accelerations[bodyIndex],
-                    right: local
-                );
+                accelerations[bodyIndex] = checked((accelerations[bodyIndex] + local));
                 m_localExpansionEvaluations++;
             }
 
@@ -613,19 +586,10 @@ public sealed class AdaptiveFmmGravitySolver : IGravitySolver {
                     right: node.LocalGradient,
                     sum: out var combinedGradient
                 )) {
-                    var childOffset = CheckedDifference(
-                        left: child.ExpansionCenter,
-                        right: node.ExpansionCenter
-                    );
-                    var shiftedAcceleration = GravityKernel.AddChecked(
-                        left: node.LocalAcceleration,
-                        right: node.LocalGradient.Apply(offset: childOffset)
-                    );
+                    var childOffset = checked((child.ExpansionCenter - node.ExpansionCenter));
+                    var shiftedAcceleration = checked((node.LocalAcceleration + node.LocalGradient.Apply(offset: childOffset)));
 
-                    child.LocalAcceleration = GravityKernel.AddChecked(
-                        left: child.LocalAcceleration,
-                        right: shiftedAcceleration
-                    );
+                    child.LocalAcceleration = checked((child.LocalAcceleration + shiftedAcceleration));
                     child.LocalGradient = combinedGradient;
                 } else {
                     m_deferredLocalExpansions[childDeferredExpansionCount] = new DeferredLocalExpansion(

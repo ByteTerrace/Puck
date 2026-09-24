@@ -64,8 +64,10 @@ A composition root pairs it with exactly one of:
 - `Puck.Platform.Linux.LinuxPlatformServiceRegistration.AddLinuxPlatformWindowing`
 
 Camera capture, recording, and audio-render registration follow the same
-shape (`AddWindowsCameraCapture`/`AddLinuxCameraCapture`, etc.)—this
-project holds no `AddCameraCapture`/`AddRecordingPlatform` of its own.
+shape: each platform package carries its own method
+(`AddWindowsCameraCapture`/`AddLinuxCameraCapture`,
+`AddWindowsRecordingPlatform`/`AddLinuxRecordingPlatform`, and so on), and
+this project registers none of them.
 
 `Puck.World`'s `WorldBootComposition`/`Program.cs` show the composition-root
 side of this: one `OperatingSystem.IsWindows()` branch per seam, picking

@@ -88,7 +88,7 @@ public sealed class SiloConsoleRouting {
     /// <param name="closed">Releases the host's admission when this session closes.</param>
     /// <returns>An independently ordered session owned by the caller.</returns>
     /// <exception cref="InvalidOperationException">The row is unavailable or already retired.</exception>
-    public IControlSession CreateControlSession(string worldId, CommandPrincipal? principal = null, Func<CommandMetadata, bool>? authorize = null, Action? closed = null) {
+    public IControlSession CreateControlSession(string worldId, Principal? principal = null, Func<CommandMetadata, bool>? authorize = null, Action? closed = null) {
         if (!m_byWorldId.TryGetValue(
             key: worldId,
             value: out var route
@@ -137,7 +137,7 @@ public sealed class SiloConsoleRouting {
             );
         }
         using var stopped = lifetime;
-        using var session = m_source().CreateSession(CommandPrincipal.Console);
+        using var session = m_source().CreateSession(Principal.Console);
 
         return await session.InvokeAsync(
             operation,
@@ -159,7 +159,7 @@ public sealed class SiloConsoleRouting {
                 result: result,
                 tag: worldId
             ),
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             scope: () => new RowNarrationScope(worldId: worldId),
             slot: slot
         );

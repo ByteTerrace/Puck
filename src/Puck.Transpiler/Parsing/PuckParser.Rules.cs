@@ -68,7 +68,7 @@ public static partial class PuckParser {
                     strA: buffer,
                     strB: "local "
                 ) == 0) &&
-                ((index == 0) || !(char.IsLetterOrDigit(c: buffer[(index - 1)]) || (buffer[(index - 1)] is '_' or '$' or '.' or ':')))
+                ((index == 0) || !(IdentifierSpelling.IsNameCharacter(character: buffer[(index - 1)]) || (buffer[(index - 1)] is '.' or ':')))
             ) {
                 var start = (index + 6);
 
@@ -76,11 +76,11 @@ public static partial class PuckParser {
                     start++;
                 }
 
-                var end = start;
+                var end = (start + IdentifierSpelling.ScanIdentifier(
+                    start: start,
+                    text: buffer
+                ));
 
-                while ((end < buffer.Length) && (char.IsLetterOrDigit(c: buffer[end]) || (buffer[end] == '_'))) {
-                    end++;
-                }
                 if (end > start) {
                     _ = names.Add(item: buffer[start..end]);
                 }
@@ -223,7 +223,7 @@ public static partial class PuckParser {
                     sawWhen = true;
                 }
             }
-            if (stmt is EffectStatementNode or ExpressionStatementNode or DecisionBlockNode) {
+            if (CarriesEffect(statement: stmt)) {
                 sawEffect = true;
             }
             statements.Add(item: stmt);
@@ -268,6 +268,13 @@ public static partial class PuckParser {
             Statements: statements
         );
     }
+    // Whether a rule-body statement fires something: an effect, a decision, or a compile-time `for` whose body
+    // does. A loop over an empty sequence still counts, since only lowering knows the sequence.
+    private static bool CarriesEffect(StatementNode statement) => statement switch {
+        EffectStatementNode or ExpressionStatementNode or DecisionBlockNode => true,
+        ForStatementNode loop => loop.Body.Any(predicate: CarriesEffect),
+        _ => false,
+    };
 
     // A rule's own wire fields. `mode = Edge` reads exactly like a cell assignment to the effect dispatcher, so
     // these names are routed to the property path first; a state row genuinely called one of them is backquoted.
@@ -294,15 +301,10 @@ public static partial class PuckParser {
             cursor.ResetPosition(position: saved);
         }
     }
-    private static StatementNode ParseRuleBodyStatement(ParseContext context, DiagnosticBag? diagnostics) {
-        SkipWhiteSpace(context: context);
+    // ParseRuleBodyStatement (the recovering entry point every call site above and the "for" body callback use) lives
+    // in PuckParser.cs beside ParseStatement, the document-level statement it mirrors.
+    private static StatementNode ParseRuleBodyStatementCore(ParseContext context, DiagnosticBag? diagnostics, int col, int line, int startOffset) {
         var cursor = context.Scanner.Cursor;
-        var startOffset = cursor.Offset;
-
-        var (line, col) = GetLineAndColumn(
-            buffer: context.Scanner.Buffer,
-            offset: startOffset
-        );
 
         if (AtPropertyNamed(
             context: context,
@@ -353,6 +355,25 @@ public static partial class PuckParser {
                 line: line,
                 startOffset: startOffset
             );
+        }
+
+        // A compile-time `for` in a rule body repeats locals as well as effects, so its body is read as a rule
+        // body's; `for each` is the pool iteration an effect statement spells.
+        var beforeFor = cursor.Position;
+
+        if (TryMatchKeyword(context: context, keyword: "for")) {
+            SkipWhiteSpace(context: context);
+            if (!TryMatchKeyword(context: context, keyword: "each")) {
+                return ParseForStatement(
+                    body: static (bodyContext, bodyDiagnostics) => ParseRuleBodyStatement(context: bodyContext, diagnostics: bodyDiagnostics),
+                    col: col,
+                    context: context,
+                    diagnostics: diagnostics,
+                    line: line,
+                    startOffset: startOffset
+                );
+            }
+            cursor.ResetPosition(position: beforeFor);
         }
 
         var effect = ParseEffectStatement(
@@ -427,7 +448,19 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);
-        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var name)) {
+
+        ExpressionNode? nameExpression = null;
+        string name;
+
+        // `local $"fit{t}"` inside a compile-time `for`: the name is not known until lowering, exactly as an
+        // interpolated rule name.
+        if ((cursor.Current == '$') && (cursor.PeekNext() == '"')) {
+            if (!TryReadName(admitted: NameForms.Interpolated | NameForms.String, context: context, spelling: out var localName, text: out _) || (localName.Expression is null)) {
+                throw CreateException(context: context, message: "Expected an interpolated name after 'local'");
+            }
+            nameExpression = localName.Expression;
+            name = string.Empty;
+        } else if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out name)) {
             throw CreateException(
                 context: context,
                 message: "Expected a name after 'local'"
@@ -464,6 +497,7 @@ public static partial class PuckParser {
                 Length: missingLen,
                 Line: line,
                 Name: name,
+                NameExpression: nameExpression,
                 Offset: startOffset
             );
         }
@@ -488,6 +522,7 @@ public static partial class PuckParser {
         );
 
         var operand = CreateOperand(span: span, text: text);
+
         if (text.Length == 0) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.LocalInitializerMissing,
@@ -495,7 +530,7 @@ public static partial class PuckParser {
                 span: span
             );
         } else {
-            ValidateOperand(diagnostics: diagnostics, operand: operand);
+            operand = ValidateOperand(diagnostics: diagnostics, operand: operand);
         }
 
         var len = (cursor.Offset - startOffset);
@@ -506,6 +541,7 @@ public static partial class PuckParser {
             Length: len,
             Line: line,
             Name: name,
+            NameExpression: nameExpression,
             Offset: startOffset
         );
     }
@@ -992,7 +1028,19 @@ public static partial class PuckParser {
         if (TryMatchKeyword(context: context, keyword: "for")) {
             SkipWhiteSpace(context: context);
             if (!TryMatchKeyword(context: context, keyword: "each")) {
-                cursor.ResetPosition(position: effectStartPosition);
+                // A compile-time `for` among effects repeats its effects once per element; `for each` is the pool
+                // iteration below.
+                return ParseForStatement(
+                    body: (bodyContext, bodyDiagnostics) => (ParseEffectStatement(context: bodyContext, diagnostics: bodyDiagnostics, insideTransaction: insideTransaction) ?? throw CreateException(
+                        context: bodyContext,
+                        message: $"Expected an effect statement inside a 'for', found '{bodyContext.Scanner.Cursor.Current}'"
+                    )),
+                    col: col,
+                    context: context,
+                    diagnostics: diagnostics,
+                    line: line,
+                    startOffset: startOffset
+                );
             } else {
                 SkipWhiteSpace(context: context);
                 if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var alias)) {
@@ -1057,20 +1105,6 @@ public static partial class PuckParser {
                 Rhs: rhs,
                 RowName: rowName
             );
-        }
-
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "countdown"
-        )) {
-            throw new PuckParseException(
-                "'countdown' is refused: write a due tick with 'schedule row in Ns' and read it back by comparing '$tick' against the row",
-                startOffset,
-                line,
-                col
-            ) {
-                Code = PuckDiagnosticCodes.CountdownStatementRetired,
-            };
         }
 
         if (TryMatchKeyword(
@@ -1290,14 +1324,9 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context: context, keyword: "draw")) {
-            if (!TryReadPileOperand(context: context, text: out var from)) {
-                throw CreateException(context: context, message: "Expected a source pile name after 'draw'");
-            }
-            SkipWhiteSpace(context: context);
-            _ = TryMatchKeyword(context: context, keyword: "to");
-            if (!TryReadPileOperand(context: context, text: out var to)) {
-                throw CreateException(context: context, message: "Expected a destination pile name after 'draw'");
-            }
+            var from = RequirePileOperand(context: context, message: "Expected a source pile name after 'draw'");
+            var to = RequireKeywordPileOperand(context: context, keyword: "to", message: "Expected a destination pile name after 'draw'");
+
             return new DrawStatementNode(
                 Column: col,
                 From: from,
@@ -1312,17 +1341,9 @@ public static partial class PuckParser {
             SkipWhiteSpace(context: context);
             var numLiteral = ParseNumberWithOptionalUnit(context: context);
             var count = Convert.ToInt32(value: numLiteral.Value);
+            var from = RequireKeywordPileOperand(context: context, keyword: "from", message: "Expected a source pile name after 'deal'");
+            var to = RequireKeywordPileOperand(context: context, keyword: "to", message: "Expected a destination pile name after 'deal'");
 
-            SkipWhiteSpace(context: context);
-            _ = TryMatchKeyword(context: context, keyword: "from");
-            if (!TryReadPileOperand(context: context, text: out var from)) {
-                throw CreateException(context: context, message: "Expected a source pile name after 'deal'");
-            }
-            SkipWhiteSpace(context: context);
-            _ = TryMatchKeyword(context: context, keyword: "to");
-            if (!TryReadPileOperand(context: context, text: out var to)) {
-                throw CreateException(context: context, message: "Expected a destination pile name after 'deal'");
-            }
             return new DealStatementNode(
                 Column: col,
                 Count: count,
@@ -1335,14 +1356,9 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context: context, keyword: "shuffle")) {
-            if (!TryReadPileOperand(context: context, text: out var pile)) {
-                throw CreateException(context: context, message: "Expected a pile name after 'shuffle'");
-            }
-            SkipWhiteSpace(context: context);
-            _ = TryMatchKeyword(context: context, keyword: "with");
-            if (!TryReadPileOperand(context: context, text: out var draw)) {
-                throw CreateException(context: context, message: "Expected a draw stream name after 'shuffle'");
-            }
+            var pile = RequirePileOperand(context: context, message: "Expected a pile name after 'shuffle'");
+            var draw = RequireKeywordPileOperand(context: context, keyword: "with", message: "Expected a draw stream name after 'shuffle'");
+
             return new ShuffleStatementNode(
                 Column: col,
                 Draw: draw,
@@ -1858,7 +1874,7 @@ public static partial class PuckParser {
 
         if (
             char.IsDigit(c: cursor.Current) ||
-            ((cursor.Current is '-' or '+') && (char.IsDigit(c: cursor.PeekNext()) || (cursor.PeekNext() == '.')))
+            ((cursor.Current == '-') && (char.IsDigit(c: cursor.PeekNext()) || (cursor.PeekNext() == '.')))
         ) {
             var saved = cursor.Position;
             var literal = ParseNumberWithOptionalUnit(context: context);
@@ -1923,6 +1939,7 @@ public static partial class PuckParser {
         );
 
         var operand = ValidatedOperand(diagnostics: diagnostics, span: opSpan, text: opText);
+
         return new RhsOperandNode(
             operand,
             opStart,
@@ -2026,5 +2043,16 @@ public static partial class PuckParser {
             return true;
         }
         return TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out text);
+    }
+    private static string RequirePileOperand(ParseContext context, string message) {
+        if (!TryReadPileOperand(context: context, text: out var text)) {
+            throw CreateException(context: context, message: message);
+        }
+        return text;
+    }
+    private static string RequireKeywordPileOperand(ParseContext context, string keyword, string message) {
+        SkipWhiteSpace(context: context);
+        _ = TryMatchKeyword(context: context, keyword: keyword);
+        return RequirePileOperand(context: context, message: message);
     }
 }

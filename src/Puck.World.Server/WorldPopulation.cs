@@ -174,7 +174,7 @@ public sealed partial class WorldPopulation {
     // Reused broadphase scratch. This used to be four population-sized stackallocs while the table ceiling was
     // 128; the few-thousand-body representation makes that a stack-overflow hazard. Keeping it population-local
     // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
-    private readonly DynamicContactBody[] m_dynamicContactBodies;
+    private readonly WorldSweepBody[] m_dynamicContactBodies;
     private readonly byte[] m_dynamicContactDegrees;
     // Active carry relationships, sorted by carrier index. The backing store is population-sized and reused so the
     // per-tick attachment pass visits only actual relationships and allocates nothing; it never scans Capacity.
@@ -317,7 +317,7 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_entries = new Entry[definition.Population.Capacity];
-        m_dynamicContactBodies = new DynamicContactBody[m_entries.Length];
+        m_dynamicContactBodies = new WorldSweepBody[m_entries.Length];
         m_dynamicContactDegrees = new byte[m_entries.Length];
         m_activeCarries = new CarryRelationship[m_entries.Length];
 
@@ -402,10 +402,10 @@ public sealed partial class WorldPopulation {
                 }
             }
         }
-        public required int Index { get; init; }
-        public required WorldActionStateLane Lane { get; init; }
         public WorldBody? Body { get; set; }
         public Vector3 BodyColor { get; set; }
+        public required int Index { get; init; }
+        public required WorldActionStateLane Lane { get; init; }
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can
         // override it, but an authority handoff preserves it.
         public required byte CatalogRig { get; set; }

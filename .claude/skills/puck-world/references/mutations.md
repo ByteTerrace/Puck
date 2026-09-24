@@ -112,7 +112,7 @@ journal → echo. Precisely:
 6. **Install.** Swap the live definition; `Install` rebuilds only the changed
    section's derived state, with a population rebuild when
    `AffectsPopulation(mutation)` (or a field change under the field provider).
-7. **Journal.** Append a `JournalEntry(Tick, Mutation)`. The `dirty` count in
+7. **Journal.** Append a `WorldJournalEntry(Tick, EngineTick, Mutation)` to `WorldDocument`'s journal. The `dirty` count in
    `world.status` IS the journal length.
 8. **Echo.** One `[world.mutation: … applied]` stderr line plus a
    `WorldEditEcho` carrying the submitting envelope's
@@ -168,9 +168,18 @@ table — a row added there grants nothing until relaunch.
   in-process by `tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).
-- **Save** (`world.save`): writes the canonical session snapshot (live levers,
-  census, runtime screen inserts fold into their document homes) and compacts
-  the journal.
+- **Save** (`world.save`): writes the authored document and compacts the
+  journal. `WorldSaveSnapshot.Compose` runs the authority fold
+  (`WorldSessionCapture.Capture`: peer-source default, machine declarations,
+  magazine selectors, moving `state` cells) and then the lever fold
+  (`WorldSessionLevers.Fold`: render levers, master volume, present target,
+  binding bar). Each fold reads the `*Raw` member and hands it back as the same
+  instance when the session agrees, so an omitted section stays omitted and a
+  lever folds only into an authored section. `world.status`'s drift hint names
+  each section the snapshot replaced (`WorldSessionCapture.DescribeDrift`).
+  `WorldSaveAuthoredDocumentLawTests` (`tests/Puck.World.Tests`) saves every
+  shipped, fixture (`tests/Puck.World.Tests/Fixtures`), and canary world and
+  reloads it.
 
 Named machine rows use the same mutation and undo pipeline. UpsertMachine and
 RemoveMachine affect machine preparation independently of screen, population,
@@ -191,15 +200,9 @@ out-of-lane bit aliases a REAL kind and would admit the wrong door silently.
 discovers the set by reflection and `Validate()` fails BOOT loudly on a
 missing attribute, an out-of-range ordinal, or a collision.
 
-The lane is `UInt128`. It was `ulong`, and ordinals 0–63 filled it exactly —
-that ceiling is what forced the widen, because a 65th kind on a 64-bit lane does
-not overflow loudly: `1UL << 64` becomes `1UL << 0` and silently admits
-`UpsertKit`. Ordinals 0–63 kept their exact meanings and their exact wire
-positions through the widen; nothing was renumbered. Free ordinals exist again,
-but a new kind is STILL a substrate decision that must survive consolidation
-review first (see "Adding a mutation kind" below) — the ceiling was healthy
-pressure against kind-proliferation, and widening it removed an arithmetic wall,
-not the design discipline behind it. Regenerate rather than trust this
+The lane is `UInt128`, with room past the last ordinal, but a new kind is a substrate
+decision that must survive consolidation review first (see "Adding a mutation
+kind" below). Regenerate rather than trust this
 table — it is a copy of the `[MutationKind]` attributes on `WorldMutation`'s
 nested records, which are the authority:
 
@@ -207,12 +210,12 @@ nested records, which are the authority:
 |---|---|
 | Kits | UpsertKit 0, RemoveKit 1, SetDefaultSeatKit 2, SetKitAssignment 3 |
 | Screens | UpsertScreen 4, RemoveScreen 5 |
-| Machines | UpsertMachine 84, RemoveMachine 85 |
+| Machines | UpsertMachine 76, RemoveMachine 77 |
 | Cameras | UpsertCamera 6, RemoveCamera 7 |
 | Spawns | SetSpawns 8 |
 | Motion | SetMotion 9 |
 | Properties | SetProperty 10 |
-| Population | SetPopulationDefaults 11, SetPopulationDistribution 76, SetPopulationCensus 77 |
+| Population | SetPopulationDefaults 11, SetPopulationDistribution 68, SetPopulationCensus 69 |
 | Render | SetRenderDefaults 12 |
 | Addons | UpsertAddon 13, RemoveAddon 14 |
 | Bindings | UpsertBindingOverlay 15, RemoveBindingOverlay 16 |
@@ -225,25 +228,25 @@ nested records, which are the authority:
 | Authoring | SetAuthoringDefaults 28 |
 | Collision | SetCollision 29 |
 | Host | SetHostDefaults 30 |
-| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33, SetViewSeatRig 78, SetViewSeatControl 79 |
+| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33, SetViewSeatRig 70, SetViewSeatControl 71, UpsertViewPipeline 74, RemoveViewPipeline 75, CommitViewPipeline 78 |
 | Looks | UpsertLook 34, RemoveLook 35, SetLookAssignment 36 |
-| Grants | UpsertGrant 39, RemoveGrant 40 |
-| Hud | UpsertHudPanel 41, RemoveHudPanel 42, UpsertHudElement 43, RemoveHudElement 44, SetHudDefaults 45 |
-| State | UpsertStateRow 46, RemoveStateRow 47 (whole row), UpsertStateCell 49, RemoveStateCell 50 (one cell), Generate 51 (one draw at a draw SITE), TransformState 75, Batch 81 |
-| InputHold | SetInputHold 48 |
-| Rules | UpsertWorldRule 52, RemoveWorldRule 53 |
-| Interactions | UpsertInteraction 54, RemoveInteraction 55 |
-| Groups | UpsertGroupKind 56, RemoveGroupKind 57, FormGroup 58, JoinGroup 59, LeaveGroup 60, KickMember 61, OfferOwnership 62, SettleOwnership 63 |
-| PlayerDefaults | SetPlayerDefaults 64, SetPlayerSeatLook 80 |
-| Dynamics | UpsertDynamics 71, RemoveDynamics 72 |
-| Curves | UpsertCurve 73, RemoveCurve 74 |
+| Grants | UpsertGrant 37, RemoveGrant 38 |
+| Hud | UpsertHudPanel 39, RemoveHudPanel 40, UpsertHudElement 41, RemoveHudElement 42, SetHudDefaults 43 |
+| State | UpsertStateRow 44, RemoveStateRow 45 (whole row), UpsertStateCell 47, RemoveStateCell 48 (one cell), Generate 49 (one draw at a draw SITE), TransformState 67, Batch 73 |
+| InputHold | SetInputHold 46 |
+| Rules | UpsertWorldRule 50, RemoveWorldRule 51 |
+| Interactions | UpsertInteraction 52, RemoveInteraction 53 |
+| Groups | UpsertGroupKind 54, RemoveGroupKind 55, FormGroup 56, JoinGroup 57, LeaveGroup 58, KickMember 59, OfferOwnership 60, SettleOwnership 61 |
+| PlayerDefaults | SetPlayerDefaults 62, SetPlayerSeatLook 72 |
+| Dynamics | UpsertDynamics 63, RemoveDynamics 64 |
+| Curves | UpsertCurve 65, RemoveCurve 66 |
 
-Ordinals 37/38 (the retired screen-link pair) are unassigned and never reused:
-machine cable linking is authored on the `Machine` source itself
-(`WorldMachineCable`), so cable edits ride `UpsertScreen`. Ordinals 65-70 (the
-retired market kinds) are unassigned and never reused: the local auction house
-dissolved into an escrowed conditional transfer over ordinary keyed rows,
-authored as rules — see [documents.md](documents.md)'s `state` section.
+The ordinals are dense from zero (`MutationKindMaskLawTests`); deleting a kind
+renumbers the kinds after it. Machine cable linking is authored on
+the `Machine` source itself (`WorldMachineCable`), so cable edits ride
+`UpsertScreen`; an auction is an escrowed conditional transfer over ordinary
+keyed rows, authored as rules — see [documents.md](documents.md)'s `state`
+section.
 
 Rules the catalog encodes:
 
@@ -251,9 +254,29 @@ Rules the catalog encodes:
   document at the compose boundary; `UpsertTune`/`UpsertPatch` load their
   referenced document off disk and canonicalize it there. Both REJECT a
   carried hash the pipeline did not itself compute.
+- **Pipeline overrides bind at the mutation door.** `TryPrepareMutation` runs
+  `TryAdmitPipelineOverrides` after whole-document validation, for every kind:
+  a `views.pipelines` row whose source, `overrides` or `output` changed, and
+  that names overrides or an output, has its source read through
+  `WorldServer.PipelineSources` (`WorldPipelineSources`, attached by
+  `WorldPostBuildWiring` in every boot shape) and its values bound through the
+  pass config schema (`ShaderPipelineSource.TryBindOverrides`). A
+  `CommitViewPipeline` composes against the row's fingerprint
+  (`WorldDefinitionFingerprint.ComputePipeline`) and also requires the source's
+  content and config-schema identities to equal the installed graph's.
+  Refusals read `pipeline.overrides/<WorldPipelineOverrideRefusal>: …`. Undo
+  replays compose only and never re-reads a source. A whole document binds
+  through the same row check (`WorldDocument.TryBindPipelineRows`): `ApplyRebuild`
+  runs it for `world.load` and `world.reload` (not `world.reset`, which
+  reinstalls an admitted base), and `WorldPostBuildWiring` runs it at boot
+  through `WorldServer.TryBindPipelineRows`, refusing the boot by name.
 - **No cascades.** `RemoveCreation`/`RemoveTune`/`RemovePatch` refuse while
   dependents reference them, naming the dependents — remove or retarget the
-  dependents first.
+  dependents first. "Who names a creation" is one walk,
+  `WorldDefinitionRows.EnumerateCreationReferences` (a placement's authored,
+  `respond`, contribution-slot, and deal-variant creations, a look's source, a
+  kit's `fromCreation` collider); `RemoveCreation`, the contribution retraction,
+  and the composition decompiler's door-prototype strip all ask it.
 - **Cross-row transaction.** `UpsertHudPanel` carries its child elements — the
   one whole-panel commit boundary; `UpsertHudElement` is a single-element
   read-modify-write on an already-declared panel.
@@ -273,7 +296,7 @@ Rules the catalog encodes:
   redefining it (`verbs:UpsertStateCell,RemoveStateCell`); `verbs:Generate` is the
   fire-without-redefine hold: it redraws the site but cannot re-author it.
 
-- **The one structural exemption.** `WorldPrincipal.World` — the world's own
+- **The one structural exemption.** `Principal.World` — the world's own
   authored program (a `rules` effect, a kit's `generate` effect) — is admitted by
   `TryAdmitMutation` BEFORE the table is consulted, keyed on the principal kind.
   It is not an actor: it holds no grant rows (the grant door refuses one by
@@ -287,7 +310,7 @@ Rules the catalog encodes:
   subject; the cursor advance is engine bookkeeping intrinsic to drawing, while
   re-authoring the site's facet, or the `generators` row it references, is an
   `UpsertStateRow` against that row, gated there. Sampling itself lives in
-  `Puck.State/GeneratorEngine.cs` because the BOOT resolver — which
+  `src/Puck.State.Generators/GeneratorEngine.cs` because the BOOT resolver — which
   runs before any server exists — must reach the identical code.
 
 ## Rule-effect sugar (`.puck`) → state mutation kind
@@ -353,31 +376,27 @@ evaluation took.
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog runs on a 128-bit lane; `puck search "\[MutationKind\(" src -M 0`
-against `WorldMutation.cs` gives the current kind count and declared ordinals (37/38 and
-65-70 are retired and never reused).** Ordinals above the highest declared one are free; a
-colliding ordinal is still a boot failure, not an
-option. A genuinely new kind is
-a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
-is this an existing kind's payload? Most proposals are — a new section reuses
-`UpsertStateCell`, a rule effect reuses an existing kind. That review is the
-gate that matters and it did not go away when the lane widened.
+**First, `puck search "\[MutationKind\(" src -M 0` against `WorldMutation.cs`
+gives the current kind count and declared ordinals.** A colliding ordinal is a
+boot failure. A genuinely new kind is a substrate decision and must survive
+consolidation review first: is this an existing kind's payload? Most proposals
+are — a new section reuses `UpsertStateCell`, a rule effect reuses an existing
+kind.
 
-The lane has already been widened once (`ulong` → `UInt128`), so a new kind no
-longer needs one. Should it ever fill again, the widen is ONE dedicated substrate
-commit — mask type + grant wire codec + document serialization +
-`world.grants`/`world.why` echoes — never inside a feature lane, and the proof
-has two halves that must BOTH be present: dual-run byte-identity over the
+Should the 128-bit lane ever fill, the widen is one dedicated substrate commit
+— mask type + grant wire codec + document serialization +
+`world.grants`/`world.why` echoes — never inside a feature change, and its proof
+has two halves that must both be present: dual-run byte-identity over the
 existing ordinals (necessary, but it passes on a codec that silently truncates
-the new range), AND a control exercising a bit past the old ceiling across the
+the new range), and a control exercising a bit past the old ceiling across the
 wire. The width is an implementation detail, not protocol: authored grants name
-verbs BY NAME and the ordinal is an internal dense index, so widening (or
-re-packing to reclaim a retired ordinal) is mechanical under supergreen. Only
-past the consolidation gate do the steps below apply.
+verbs by name and the ordinal is an internal dense index, so widening or
+re-packing ordinals is mechanical under supergreen. Only past the consolidation
+gate do the steps below apply.
 
 1. **Data:** the nested sealed record on `WorldMutation` with
-   `[MutationKind(ordinal, section)]` (the ordinal claimed by the widening
-   above). XML-doc the row semantics (rejection conditions, timing class) in the
+   `[MutationKind(ordinal, section)]` (the next ordinal past the last, keeping the set dense). XML-doc the row
+   semantics (rejection conditions, timing class) in the
    same style as its neighbors.
 2. **Server:** an arm in each of these `WorldServer` switches — `TryCompose`
    (compose the candidate) and `SectionOf` (which THROWS on a missing arm
@@ -401,7 +420,7 @@ past the consolidation gate do the steps below apply.
 A kind's CONSOLE reachability (steps above) is independent of its ADDON
 reachability: a guest submits a mutation through a Mutate handle's own
 hand-walked JSON door, `Addons.WorldAddonMutationDecoder`, which wires only a
-NAMED SUBSET of the 73 declared kinds today (10, as of this writing — the 5 HUD
+NAMED SUBSET of the declared kinds (10 — the 5 HUD
 kinds plus the 2 placement kinds, the 2 state kinds, and `SetInputHold`; the
 Properties/Interactions/Groups kinds are console-only, not addon-reachable; see
 [addons.md](addons.md#requests-queries-verdicts) for the exact list and the

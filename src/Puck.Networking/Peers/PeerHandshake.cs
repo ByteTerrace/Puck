@@ -48,9 +48,10 @@ internal static class PeerHandshake {
     /// like every other refusal this side decides.</summary>
     /// <param name="stream">The control stream.</param>
     /// <param name="frame">The frame, already known to carry the refused kind.</param>
+    /// <param name="timeProvider">The clock the refusal drain reads.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>The failure to report.</returns>
-    private static async Task<PeerFailure> ReadRefusedFrameAsync(Stream stream, WireFrameRead frame, CancellationToken ct) {
+    private static async Task<PeerFailure> ReadRefusedFrameAsync(Stream stream, WireFrameRead frame, TimeProvider timeProvider, CancellationToken ct) {
         var refusal = ReadRefusal(frame: frame);
 
         if (refusal.Refusal == PeerRefusal.RefusedByPeer) {
@@ -60,19 +61,21 @@ internal static class PeerHandshake {
         return await RefuseAsync(
             ct: ct,
             failure: refusal,
-            stream: stream
+            stream: stream,
+            timeProvider: timeProvider
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Writes a <see cref="PeerFrameKind.HelloRefused"/> frame naming <paramref name="failure"/>'s
     /// refusal (only the refusal byte crosses; the detail stays local), then drains the stream until the peer
-    /// closes or <see cref="PeerWireProtocol.RefusalDrainTimeout"/> elapses, so two sides refusing each other
-    /// do not both wait for <see cref="PeerWireProtocol.HandshakeTimeout"/>. Transport failures while refusing
+    /// closes or <see cref="PeerWireProtocol.RefusalDrainTimeout"/> elapses on <paramref name="timeProvider"/>, so two
+    /// sides refusing each other do not both wait for <see cref="PeerWireProtocol.HandshakeTimeout"/>. Transport failures while refusing
     /// are swallowed: the refusal is already decided.</summary>
     /// <param name="stream">The control stream.</param>
     /// <param name="failure">The refusal to send and return.</param>
+    /// <param name="timeProvider">The clock the drain reads.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns><paramref name="failure"/>, unchanged.</returns>
-    private static async Task<PeerFailure> RefuseAsync(Stream stream, PeerFailure failure, CancellationToken ct) {
+    private static async Task<PeerFailure> RefuseAsync(Stream stream, PeerFailure failure, TimeProvider timeProvider, CancellationToken ct) {
         try {
             await WireFrame.WriteAsync(
                 body: new[] { ((byte)failure.Refusal) },
@@ -81,9 +84,11 @@ internal static class PeerHandshake {
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            using var drain = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
-
-            drain.CancelAfter(delay: PeerWireProtocol.RefusalDrainTimeout);
+            using var drain = new OperationDeadline(
+                caller: ct,
+                timeProvider: timeProvider,
+                timeout: PeerWireProtocol.RefusalDrainTimeout
+            );
 
             await StreamDrain.UntilClosedAsync(
                 ct: drain.Token,
@@ -100,9 +105,10 @@ internal static class PeerHandshake {
     /// grammar violation the peer is told about as <see cref="PeerRefusal.HandshakeMalformed"/>.</summary>
     /// <param name="stream">The control stream.</param>
     /// <param name="failure">The read's failure.</param>
+    /// <param name="timeProvider">The clock a refusal's drain reads.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>The failure to report.</returns>
-    private static async Task<PeerFailure> RefuseReadFailureAsync(Stream stream, WireFailure failure, CancellationToken ct) {
+    private static async Task<PeerFailure> RefuseReadFailureAsync(Stream stream, WireFailure failure, TimeProvider timeProvider, CancellationToken ct) {
         if (failure.Refusal == WireRefusal.ConnectionClosed) {
             return new PeerFailure(
                 Detail: failure.ToString(),
@@ -116,7 +122,8 @@ internal static class PeerHandshake {
                 Detail: failure.ToString(),
                 Refusal: PeerRefusal.HandshakeMalformed
             ),
-            stream: stream
+            stream: stream,
+            timeProvider: timeProvider
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
 
@@ -126,7 +133,7 @@ internal static class PeerHandshake {
     /// <param name="stream">The control stream, opened by one side and accepted by the other.</param>
     /// <param name="onClosed">Invoked once the resulting link closes.</param>
     /// <param name="now">The verification-boundary clock read, overridable for tests.</param>
-    /// <param name="timeProvider">The established link's send deadline clock.</param>
+    /// <param name="timeProvider">The clock a refusal's drain and the established link's send deadline read.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>The established link, or the refusal that stopped the handshake:
     /// <see cref="PeerRefusal.ConnectionClosed"/> when the peer closed first (returned without writing anything),
@@ -160,7 +167,8 @@ internal static class PeerHandshake {
             return (null, await RefuseReadFailureAsync(
                 ct: ct,
                 failure: offerFrame.Failure,
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -168,7 +176,8 @@ internal static class PeerHandshake {
             return (null, await ReadRefusedFrameAsync(
                 ct: ct,
                 frame: offerFrame,
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -179,7 +188,8 @@ internal static class PeerHandshake {
                     Detail: $"expected a Hello offer, got frame kind {offerFrame.Kind}",
                     Refusal: PeerRefusal.HandshakeMalformed
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -205,7 +215,8 @@ internal static class PeerHandshake {
                     Detail: offerFailure.ToString(),
                     Refusal: PeerRefusal.HandshakeMalformed
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -216,7 +227,8 @@ internal static class PeerHandshake {
                     Detail: $"offered protocol key 0x{protocolKey:x16} != 0x{PeerWireProtocol.ProtocolKey:x16}",
                     Refusal: PeerRefusal.ProtocolMismatch
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -227,7 +239,8 @@ internal static class PeerHandshake {
                     Detail: $"the offered challenge is {peerChallenge.Length} bytes; {PeerWireProtocol.ChallengeBytes} are required",
                     Refusal: PeerRefusal.HandshakeMalformed
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -240,7 +253,8 @@ internal static class PeerHandshake {
                     Detail: "the transport proved no key",
                     Refusal: PeerRefusal.ChannelUnbound
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -251,7 +265,8 @@ internal static class PeerHandshake {
                     Detail: "the identity the peer offered is not the key its transport proved possession of",
                     Refusal: PeerRefusal.ChannelUnbound
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -264,7 +279,8 @@ internal static class PeerHandshake {
                     Detail: $"the offered subject public key info is {peerSubjectPublicKeyInfo.Length} bytes; no P-256 key is longer than {AttestationResourceLimits.SubjectPublicKeyInfoBytes}",
                     Refusal: PeerRefusal.IdentityKeyInvalid
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -290,7 +306,8 @@ internal static class PeerHandshake {
                     Detail: $"the offered subject public key info is not a P-256 key this host can import — {exception.GetType().Name}: {exception.Message}",
                     Refusal: PeerRefusal.IdentityKeyInvalid
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -315,7 +332,8 @@ internal static class PeerHandshake {
             return (null, await RefuseReadFailureAsync(
                 ct: ct,
                 failure: proofFrame.Failure,
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -323,7 +341,8 @@ internal static class PeerHandshake {
             return (null, await ReadRefusedFrameAsync(
                 ct: ct,
                 frame: proofFrame,
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -334,7 +353,8 @@ internal static class PeerHandshake {
                     Detail: $"expected a Hello proof, got frame kind {proofFrame.Kind}",
                     Refusal: PeerRefusal.HandshakeMalformed
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -351,7 +371,8 @@ internal static class PeerHandshake {
                     Detail: proofFailure.ToString(),
                     Refusal: PeerRefusal.HandshakeMalformed
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
@@ -369,7 +390,8 @@ internal static class PeerHandshake {
                     Detail: "the peer's proof did not verify against the identity it offered",
                     Refusal: PeerRefusal.IdentityUnproven
                 ),
-                stream: stream
+                stream: stream,
+                timeProvider: timeProvider
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 

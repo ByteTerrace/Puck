@@ -1,7 +1,6 @@
 # Content-search complete reference
 
-This preserves the full command, pattern, engine, and troubleshooting contract.
-Read the relevant section when the compact skill routes here.
+Read the relevant section when `SKILL.md` routes here.
 
 ## Contents
 
@@ -31,22 +30,21 @@ What stays outside it:
 ## Command
 
 ```text
-dotnet src/Puck.Cli/publish/Puck.Cli.dll search <pattern> [path] [options]
+dotnet <scratch-copy>/Puck.Cli.dll search <pattern> [path] [options]
 ```
 
-Run it from the repo root; every path below is repo-relative. If the portable
-published assembly is absent, bootstrap from the tracked project:
+Run it from the repo root; every path below is repo-relative. `<scratch-copy>`
+is a copy of the checkout's own `src/Puck.Cli/bin/Release/net10.0/` build (see
+`SKILL.md`); a published copy or the global tool lags the head. If that build is
+absent, bootstrap from the tracked project:
 
 ```text
 dotnet run --project src/Puck.Cli/Puck.Cli.csproj -c Release -- search <pattern> [path] [options]
 ```
 
 Every argument after `search` is the invocation documented below. The rest of
-this file writes just `search <pattern>` for short. Never rely exclusively on
-the ignored Windows launcher `src/Puck.Cli/publish/puck.exe`. Prefer the
-published framework-dependent invocation and one search over per-file loops.
-Refresh published output after tool changes with
-`dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish`.
+this file writes just `search <pattern>` for short. Prefer one search over
+per-file loops. Re-copy the build after tool changes.
 
 ## Flags (as built)
 
@@ -90,7 +88,7 @@ and exit 2. Write `search --files [path ...] [-g ...] [--not ...]`. `--files -q`
 is the bare existence probe (verified): no listing, exit 0 if any file would be
 searched and 1 if none.
 
-Defaults: the recursive walk skips `.git`, `artifacts`, `bin`, `obj`,
+Defaults: the recursive walk skips `.git`, `.tmp`, `artifacts`, `bin`, `obj`,
 `node_modules`, `publish`, `BenchmarkDotNet.Artifacts`, agent worktrees under
 `.claude/worktrees`, and binary files (NUL-byte sniff of the first 4 KiB). The
 build-artifact names are pruned because this repo publishes the tool into
@@ -98,9 +96,8 @@ build-artifact names are pruned because this repo publishes the tool into
 sources that would otherwise drain the `-M` cap before the walk reaches
 `src/Puck.Maths/`. `.claude/worktrees` is pruned because it holds live duplicate
 checkouts of this same repository: their copies answer a tree-wide query as if
-they were live consumers, which poisons find-usages and safe-to-delete sweeps
-(verified: a repo-root `namespace Puck.Maths` sweep returned 78 worktree files
-before the prune and zero after it). Explicitly named paths partly override this
+they were live consumers, which poisons find-usages and safe-to-delete sweeps.
+Explicitly named paths partly override this
 (verified): a named directory IS searched, even `bin`, `publish`, `.git` or
 `.claude/worktrees` — though skip-named subdirectories inside it are still
 pruned, and `-g`/`--not` still apply — and so is a file named inside one. A named
@@ -127,7 +124,7 @@ nothing — repeat the flag instead; `-g "*.cs" -g "*.md"` (includes OR
 together). Globs are case-sensitive even on Windows, and `-i` does not apply to
 them — it only affects the search pattern. `**` also differs from ripgrep: the
 `/`s around it stay literal, so `a/**/b` needs at least one intermediate
-directory — `src/**/*.cs` silently misses `src/foo.cs`, and `**/*.cs` misses
+directory — `src/Puck.Cli/**/*.cs` silently misses `src/Puck.Cli/Program.cs`, and `**/*.cs` misses
 top-level `.cs` files (exit 0 either way). For an extension filter use the
 basename form `-g "*.cs"`; for a whole subtree use `-g "src/**"` or
 `-g "src/**.cs"` — both cover every depth.
@@ -230,11 +227,10 @@ unaffected (`_*` absorbs the newline) and correctly handle empty files.
 
 **CRLF caveat (verified):** line mode strips `\r` before matching, so `^...$`
 is CRLF-safe there. Span mode searches the raw file text: `$` matches only
-immediately before `\n` (or at end of input), so on CRLF files — ~96% of this
-checkout's `.cs`/`.md` — `X$` silently never matches in `-s`, and a
-literal-`\n` join (`A\nB`) fails because `\r` intervenes. A single `_` is
-exactly one character and won't span `\r\n` either. In `-s`, write `X\r?$` and
-`A\r?\nB`, or join with `_*`/`_+` — the cookbook's `_*` recipes are CRLF-safe.
+immediately before `\n` (or at end of input). The checkout is LF except the
+`*.bat`, `*.cmd` and `*.slnx` files `.gitattributes` pins to CRLF; on those
+alone `X$` never matches in `-s` and `A\nB` fails because `\r` intervenes, so
+write `X\r?$` and `A\r?\nB` there, or join with `_*`/`_+`.
 `^` is unaffected.
 
 **No backreferences.** `\1`, named-group backrefs — unsupported (exit 2,

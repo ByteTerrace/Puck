@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -73,7 +74,7 @@ public sealed class WorldPhaseOrderLawTests {
     );
     // Admission is not a door of its own: the operation itself is submitted under the guard, and a refused guard
     // composes nothing.
-    private static bool Admits(WorldDefinition definition, PhaseGuard guard, WorldPrincipal actor) => WorldArenaTransforms.TryApply(
+    private static bool Admits(WorldDefinition definition, PhaseGuard guard, Principal actor) => WorldArenaTransforms.TryApply(
         actor: actor,
         candidate: out _,
         definition: definition,
@@ -98,9 +99,9 @@ public sealed class WorldPhaseOrderLawTests {
                 0,
                 sequence,
                 sequence,
-                WorldPrincipal.Console,
+                Principal.Console,
                 new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     Ray(),
                     guard
                 )),
@@ -121,7 +122,7 @@ public sealed class WorldPhaseOrderLawTests {
         );
 
         Assert.True(condition: Admits(
-            actor: WorldPrincipal.Seat(slot: 0),
+            actor: Principal.Seat(slot: 0),
             definition: definition,
             guard: new(
                 "turn",
@@ -129,7 +130,7 @@ public sealed class WorldPhaseOrderLawTests {
             )
         ));
         Assert.False(condition: Admits(
-            actor: WorldPrincipal.Seat(slot: 0),
+            actor: Principal.Seat(slot: 0),
             definition: definition,
             guard: new(
                 "turn",
@@ -140,7 +141,7 @@ public sealed class WorldPhaseOrderLawTests {
             condition: WorldArenaTransforms.TryApply(
                 definition,
                 Ray(),
-                WorldPrincipal.Seat(slot: 0),
+                Principal.Seat(slot: 0),
                 1,
                 "test",
                 out var advanced,
@@ -157,7 +158,7 @@ public sealed class WorldPhaseOrderLawTests {
             Read(definition: advanced).Sequence
         );
         Assert.False(condition: Admits(
-            actor: WorldPrincipal.Seat(slot: 0),
+            actor: Principal.Seat(slot: 0),
             definition: advanced,
             guard: new(
                 "turn",
@@ -165,7 +166,7 @@ public sealed class WorldPhaseOrderLawTests {
             )
         ));
         Assert.True(condition: Admits(
-            actor: WorldPrincipal.Seat(slot: 0),
+            actor: Principal.Seat(slot: 0),
             definition: Document(
                 Phase(sequence: 1),
                 Board()
@@ -234,7 +235,7 @@ public sealed class WorldPhaseOrderLawTests {
         );
 
         Assert.False(condition: Admits(
-            actor: WorldPrincipal.Seat(slot: 0),
+            actor: Principal.Seat(slot: 0),
             definition: definition,
             guard: new(
                 "turn",
@@ -242,7 +243,7 @@ public sealed class WorldPhaseOrderLawTests {
             )
         ));
         Assert.False(condition: Admits(
-            actor: WorldPrincipal.World,
+            actor: Principal.World,
             definition: definition,
             guard: new(
                 "turn",
@@ -250,7 +251,7 @@ public sealed class WorldPhaseOrderLawTests {
             )
         ));
         Assert.True(condition: Admits(
-            actor: WorldPrincipal.Seat(slot: 0),
+            actor: Principal.Seat(slot: 0),
             definition: definition,
             guard: new(
                 "turn",
@@ -301,7 +302,7 @@ public sealed class WorldPhaseOrderLawTests {
         );
 
         Assert.False(condition: Admits(
-            actor: WorldPrincipal.Seat(slot: 0),
+            actor: Principal.Seat(slot: 0),
             definition: definition,
             guard: new(
                 Participant: "seat1",
@@ -310,7 +311,7 @@ public sealed class WorldPhaseOrderLawTests {
             )
         ));
         Assert.True(condition: Admits(
-            actor: WorldPrincipal.World,
+            actor: Principal.World,
             definition: definition,
             guard: new(
                 Participant: "seat1",

@@ -31,7 +31,7 @@ public class ConstructSugarGuardLawTests {
         JsonNode? node = document;
 
         foreach (var segment in path.Split(separator: '/')) {
-            node = (int.TryParse(s: segment, result: out var index)
+            node = (int.TryParse(result: out var index, s: segment)
                 ? ((JsonArray)node!)[index]
                 : ((JsonObject)node!)[propertyName: segment]
             );
@@ -80,7 +80,6 @@ public class ConstructSugarGuardLawTests {
     public static TheoryData<string> Closed() => new(values: WorldConstructs.Table.Constructs
         .Where(predicate: static construct => !construct.Sugar.Open)
         .Select(selector: static construct => construct.Keyword));
-
     [MemberData(nameof(Closed))]
     [Theory]
     public void ADescribedConstructSugarsAndAnUndescribedKeySendsItToItsFallback(string keyword) {
@@ -110,14 +109,14 @@ public class ConstructSugarGuardLawTests {
         var sugared = Decompile(document: Compile(source: source));
 
         Assert.Contains(
-            expectedSubstring: keyword,
             actualString: sugared,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: keyword
         );
         Assert.DoesNotContain(
-            expectedSubstring: fallback,
             actualString: sugared,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: fallback
         );
 
         var document = Compile(source: source);
@@ -130,9 +129,9 @@ public class ConstructSugarGuardLawTests {
         var printed = Decompile(document: document);
 
         Assert.Contains(
-            expectedSubstring: fallback,
             actualString: printed,
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: fallback
         );
     }
     [Fact]

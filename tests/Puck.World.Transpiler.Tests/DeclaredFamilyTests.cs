@@ -34,17 +34,6 @@ public class DeclaredFamilyTests {
         }
         """;
 
-    private static (JsonObject Document, DiagnosticBag Diagnostics) Lower(string source) {
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
-    }
-
     private static WorldDefinition Deserialize(JsonObject document) => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: document.ToJsonString()));
     // The validator still compiles rules through the OLD compiler, which resolves no `state.families` and refuses a
     // live family index by name; it dies with the old substrate, so a declared family is proved against the new
@@ -56,23 +45,24 @@ public class DeclaredFamilyTests {
 
     [Fact]
     public void AConstantIndexOnADeclaredFamilyNamesItsMemberRowAndALiveIndexReachesTheCompiler() {
-        var (document, diagnostics) = Lower(source: GappedSource);
+        var (document, diagnostics) = WorldSources.LowerSource(source: GappedSource);
 
         Assert.DoesNotContain(collection: diagnostics, filter: d => (d.Severity == DiagnosticSeverity.Error));
 
-        var rules = Assert.IsType<JsonArray>(document["rules"]);
-        var constant = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(rules[0]?["effects"])[0]);
+        var rules = Assert.IsType<JsonArray>(@object: document["rules"]);
+        var constant = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rules[0]?["effects"])[0]);
 
         Assert.Equal("Pile2", constant["state"]?.ToString());
-        Assert.Null(constant["key"]);
+        Assert.Null(@object: constant["key"]);
 
-        var live = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(rules[1]?["effects"])[0]);
+        var live = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: rules[1]?["effects"])[0]);
 
         Assert.Equal("Pile[$local:k]", live["state"]?.ToString());
-        Assert.Null(live["key"]);
+        Assert.Null(@object: live["key"]);
 
         // Both spellings reach the arena: the constant one as a member row, the live one through state.families.
         var definition = Unvalidated(document: document);
+
         var (compiled, _) = WorldFactsCompiler.CompileDocument(definition: definition);
         var arena = new StateArena(
             catalog: definition.StateCatalog,
@@ -110,29 +100,40 @@ public class DeclaredFamilyTests {
         );
     }
 
-    [Fact]
-    public void AnIndexAtAFamilyGapNamesNoMemberAndReportsPuck090() {
-        var (_, diagnostics) = Lower(source: """
-            schema: "puck.world.definition.v1"
+    // Each refused declaration draws exactly one error.
+    private static readonly Dictionary<string, Refusal> Refusals = new(comparer: StringComparer.Ordinal) {
+        ["PUCK090: an index at a family gap names no member"] = new(
+            Body: "state {\n    world {\n        slot Pile[0, 2..3] = 0\n    }\n}\n\nrule \"gap\" {\n    Pile[1] = 1\n}\n",
+            Code: PuckDiagnosticCodes.FamilyIndexOutOfBounds,
+            Needle: "Pile[1] = 1"
+        ) { Alone = true },
+        ["PUCK090: a removal at a family gap names no member"] = new(
+            Body: "state {\n    world {\n        slot Pile[0, 2..3] = 0\n    }\n}\n\nrule \"gap\" {\n    remove Pile[1]\n}\n",
+            Code: PuckDiagnosticCodes.FamilyIndexOutOfBounds,
+            Needle: "remove Pile[1]"
+        ) { Alone = true },
+        ["PUCK099: a workflow step named twice"] = new(
+            Body: "state {\n    world {\n        slot board = 1\n    }\n}\n\nworkflow turn {\n    step act {\n        board = 0\n    }\n    step act {\n        board = 1\n    }\n}\n",
+            Code: PuckDiagnosticCodes.RuleGroupShapeInadmissible,
+            Needle: "step act"
+        ) { Alone = true, Mentions = "twice" },
+        ["PUCK099: maxPasses above the group ceiling"] = new(
+            Body: "state {\n    world {\n        slot board = 1\n    }\n}\n\nstabilize settle maxPasses(999) {\n    rule \"collapse\" {\n        board = 0\n    }\n}\n",
+            Code: PuckDiagnosticCodes.RuleGroupShapeInadmissible,
+            Needle: "stabilize settle maxPasses(999)"
+        ) { Alone = true, Mentions = "maxPasses" },
+    };
 
-            state {
-                world {
-                    slot Pile[0, 2..3] = 0
-                }
-            }
-
-            rule "gap" {
-                Pile[1] = 1
-            }
-            """);
-        var error = Assert.Single(collection: diagnostics, predicate: d => (d.Severity == DiagnosticSeverity.Error));
-
-        Assert.Equal(PuckDiagnosticCodes.FamilyIndexOutOfBounds, error.Code);
-    }
-
+    public static TheoryData<string> RefusalNames() => new(values: Refusals.Keys);
+    [MemberData(nameof(RefusalNames))]
+    [Theory]
+    public void ARefusedFamilyOrGroupNamesItsCodeAndLine(string name) => WorldSources.AssertRefused(
+        label: name,
+        refusal: Refusals[name]
+    );
     [Fact]
     public void AContiguousMemberListLowersIdenticallyToTheCountThatSpellsIt() {
-        var (ranged, _) = Lower(source: """
+        var (ranged, _) = WorldSources.LowerSource(source: """
             schema: "puck.world.definition.v1"
 
             state {
@@ -145,7 +146,7 @@ public class DeclaredFamilyTests {
                 Pile[1] = 1
             }
             """);
-        var (counted, _) = Lower(source: """
+        var (counted, _) = WorldSources.LowerSource(source: """
             schema: "puck.world.definition.v1"
 
             state {
@@ -164,10 +165,9 @@ public class DeclaredFamilyTests {
             expected: counted.ToJsonString()
         );
     }
-
     [Fact]
     public void AnInterpolatedStabilizeMemberNamesItsStepByTheNameItResolvesTo() {
-        var (document, diagnostics) = Lower(source: """
+        var (document, diagnostics) = WorldSources.LowerSource(source: """
             schema: "puck.world.definition.v1"
 
             let n = 3
@@ -187,27 +187,27 @@ public class DeclaredFamilyTests {
 
         Assert.DoesNotContain(collection: diagnostics, filter: d => (d.Severity == DiagnosticSeverity.Error));
 
-        var group = Assert.IsType<JsonObject>(Assert.Single(collection: Assert.IsType<JsonArray>(document["ruleGroups"])));
-        var step = Assert.IsType<JsonObject>(Assert.Single(collection: Assert.IsType<JsonArray>(group["steps"])));
+        var group = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: document["ruleGroups"])));
+        var step = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: group["steps"])));
 
-        Assert.Equal("settle_collapse-3", step["rule"]?.ToString());
+        Assert.Equal("settle$collapse-3", step["rule"]?.ToString());
 
         var definition = Deserialize(document: document);
+
         var (compiled, groups) = WorldFactsCompiler.CompileDocument(definition: definition);
 
         Assert.Equal(
             actual: compiled[0].Name,
-            expected: "settle_collapse-3"
+            expected: "settle$collapse-3"
         );
         Assert.Equal(
             actual: Assert.Single(collection: groups).Members,
             expected: [0]
         );
     }
-
     [Fact]
     public void AGroupNameNoHeaderCanCarryBareIsQuotedAndRoundTrips() {
-        var (document, diagnostics) = Lower(source: """
+        var (document, diagnostics) = WorldSources.LowerSource(source: """
             schema: "puck.world.definition.v1"
 
             state {
@@ -240,66 +240,16 @@ public class DeclaredFamilyTests {
             expectedSubstring: "set \"a set\": zone(board, 1..1)"
         );
 
-        var (again, _) = Lower(source: decompiled);
+        var (again, _) = WorldSources.LowerSource(source: decompiled);
 
         Assert.Equal(
             actual: again.ToJsonString(),
             expected: document.ToJsonString()
         );
     }
-
-    [Fact]
-    public void ADuplicateWorkflowStepNameReportsPuck099() {
-        var (_, diagnostics) = Lower(source: """
-            schema: "puck.world.definition.v1"
-
-            state {
-                world {
-                    slot board = 1
-                }
-            }
-
-            workflow turn {
-                step act {
-                    board = 0
-                }
-                step act {
-                    board = 1
-                }
-            }
-            """);
-        var error = Assert.Single(collection: diagnostics, predicate: d => (d.Severity == DiagnosticSeverity.Error));
-
-        Assert.Equal(PuckDiagnosticCodes.RuleGroupShapeInadmissible, error.Code);
-        Assert.Contains("twice", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AMaxPassesAboveTheGroupCeilingReportsPuck099() {
-        var (_, diagnostics) = Lower(source: """
-            schema: "puck.world.definition.v1"
-
-            state {
-                world {
-                    slot board = 1
-                }
-            }
-
-            stabilize settle maxPasses(999) {
-                rule "collapse" {
-                    board = 0
-                }
-            }
-            """);
-        var error = Assert.Single(collection: diagnostics, predicate: d => (d.Severity == DiagnosticSeverity.Error));
-
-        Assert.Equal(PuckDiagnosticCodes.RuleGroupShapeInadmissible, error.Code);
-        Assert.Contains("maxPasses", error.Message, StringComparison.Ordinal);
-    }
-
     [Fact]
     public void ADeclaredSetNamingNoDeclaredRowIsRefusedByTheValidator() {
-        var (document, diagnostics) = Lower(source: """
+        var (document, diagnostics) = WorldSources.LowerSource(source: """
             schema: "puck.world.definition.v1"
 
             state {

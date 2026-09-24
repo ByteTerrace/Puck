@@ -154,6 +154,11 @@ var report = new PostBattery<PostContext>(
     stages: stages
 ).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
+if (report.Abandoned) {
+    // A hung stage cannot be cancelled. The written report names it, and ending the process here keeps the hung
+    // thread from holding the run open.
+    Environment.Exit(exitCode: report.ExitCode);
+}
 var candidate = LedgerAcceptance.BuildCandidate(
     existing: existing,
     measurements: context.Measurements

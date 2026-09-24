@@ -1,8 +1,4 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -22,17 +18,13 @@ public sealed class CartridgeWideStateTests {
                 Name: "score"
             )],
         };
-    private static ICartridgeCompiler Compiler(string target) => ((target == "agb")
-        ? new AgbCartridgeCompiler()
-        : new HgbCartridgeCompiler()
-    );
 
     [InlineData("cgb")]
     [InlineData("agb")]
     [Theory]
     public void AWideComparisonReadsBothBytes(string target) {
         // 0x0200 against 0x00FF: the low bytes alone would answer the wrong way round.
-        var result = Compiler(target: target).Compile(document: Base(target: target) with {
+        var result = CartridgeProbe.Compiler(target: target).Compile(document: Base(target: target) with {
             Variables = [
                 new CartridgeVariable(
                 Initial: 512,
@@ -53,7 +45,7 @@ public sealed class CartridgeWideStateTests {
                 Name: "rank",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "score"),
-                    comparison: ActionStateComparison.Greater,
+                    comparison: ExpressionOp.Greater,
                     right: CartridgeExpressions.Of(state: "bar")
                 ),
                 Body: [
@@ -66,7 +58,10 @@ public sealed class CartridgeWideStateTests {
             )],
         });
 
-        using var machine = new WideProbe(result: result);
+        using var machine = new CartridgeProbe(
+            label: "wide",
+            result: result
+        );
 
         machine.Run(frames: 20);
 
@@ -80,12 +75,12 @@ public sealed class CartridgeWideStateTests {
     [Theory]
     public void AWideSlotCountsPastAByteAndReadsBackLittleEndian(string target) {
         // 300 additions of one: a byte slot would have wrapped to 44 long before the end.
-        var result = Compiler(target: target).Compile(document: Base(target: target) with {
+        var result = CartridgeProbe.Compiler(target: target).Compile(document: Base(target: target) with {
             Rules = [new CartridgeRule(
                 Name: "count",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "score"),
-                    comparison: ActionStateComparison.Less,
+                    comparison: ExpressionOp.Less,
                     right: CartridgeExpressions.Of(constant: 300)
                 ),
                 Body: [
@@ -99,16 +94,16 @@ public sealed class CartridgeWideStateTests {
             )],
         });
 
-        using var machine = new WideProbe(result: result);
+        using var machine = new CartridgeProbe(
+            label: "wide",
+            result: result
+        );
 
         machine.Run(frames: 60);
 
-        var address = result.Variables["score"];
-        var value = machine.Read(address: address) | (machine.Read(address: (address + 1)) << 8);
-
         // The gate stops it in 0..306: the last admitted add starts below 300 and carries at most six past it.
         Assert.InRange(
-            actual: value,
+            actual: machine.ReadWide(variable: "score"),
             high: 306,
             low: 300
         );
@@ -125,20 +120,19 @@ public sealed class CartridgeWideStateTests {
             )],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "wide slot"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "wide slot",
+            Name: "a wide slot in a sprite position",
+            Path: "sprites[0].x"
+        ).Holds();
     }
     [InlineData("cgb")]
     [InlineData("agb")]
     [Theory]
     public void AWideSubtractBorrowsAcrossTheLowByte(string target) {
         // 0x0100 - 1 is the case a byte-at-a-time subtract gets wrong without the borrow.
-        var result = Compiler(target: target).Compile(document: Base(target: target) with {
+        var result = CartridgeProbe.Compiler(target: target).Compile(document: Base(target: target) with {
             Variables = [new CartridgeVariable(
                 Initial: 256,
                 Max: 65535,
@@ -151,7 +145,7 @@ public sealed class CartridgeWideStateTests {
                 Name: "spend",
                 When: CartridgeExpressions.Gate(
                     left: CartridgeExpressions.Of(state: "done"),
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     right: CartridgeExpressions.Of(constant: 0)
                 ),
                 Body: [
@@ -170,7 +164,10 @@ public sealed class CartridgeWideStateTests {
             )],
         });
 
-        using var machine = new WideProbe(result: result);
+        using var machine = new CartridgeProbe(
+            label: "wide",
+            result: result
+        );
 
         machine.Run(frames: 30);
 
@@ -201,13 +198,12 @@ public sealed class CartridgeWideStateTests {
             )],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => error.Path.EndsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: ".operation"
-            )
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "has no sixteen-bit form",
+            Name: "a wide multiply",
+            Path: "rules[0].body[0].operation"
+        ).Holds();
     }
     [Fact]
     public void TheWindowBoundsTheDeclaredSlotsByBytesRatherThanByCount() {
@@ -223,37 +219,11 @@ public sealed class CartridgeWideStateTests {
             ))],
         };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => (error.Path == "variables")
-        );
-    }
-
-    private sealed class WideProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public WideProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "wide"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "wide"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "the variable window holds",
+            Name: "slots past the variable window",
+            Path: "variables"
+        ).Holds();
     }
 }

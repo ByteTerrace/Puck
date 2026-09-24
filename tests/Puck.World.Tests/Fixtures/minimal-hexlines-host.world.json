@@ -1,5 +1,5 @@
 {
-  "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
+  "basis": "../../../src/Puck.World/Assets/worlds/standard",
   "bodies": {
     "capacity": 40,
     "localSeats": 1
@@ -63,7 +63,7 @@
   },
   "imports": [
     {
-      "document": "../../../src/Puck.World/Assets/worlds/games/hexlines.world.json"
+      "document": "../../../src/Puck.World/Assets/worlds/games/hexlines"
     }
   ],
   "placements": {

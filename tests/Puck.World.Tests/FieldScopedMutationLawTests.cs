@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -26,11 +27,11 @@ public sealed class FieldScopedMutationLawTests {
             : SeatActivationPolicy.OnDemand))];
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetPopulationDistribution(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Distribution: distribution
         ));
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetPopulationCensus(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             SeatActivation: activation,
             NetworkPlayers: 0
         ));
@@ -68,11 +69,11 @@ public sealed class FieldScopedMutationLawTests {
         var control = views.SeatControl with { MinPitch = -0.2f };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetViewSeatRig(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             SeatRig: rig
         ));
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetViewSeatControl(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             SeatControl: control
         ));
         Assert.True(condition: fixture.Server.DrainAdministrative());

@@ -2,6 +2,17 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 // --state-roundtrip [rom]: the whole-machine savestate round-trip diagnostic.
 internal sealed partial class Diagnostics {
+    private static bool ReportStateRoundTrip(string label, StateRoundTripResult result) {
+        Console.WriteLine(value: $"  [{(result.Pass
+            ? "PASS"
+            : "FAIL")}] {label}  (image {result.ImageBytes} bytes)");
+        Console.WriteLine(value: $"           frame-boundary: {result.FrameBoundary}");
+        Console.WriteLine(value: $"           mid-frame:      {result.MidFrame}");
+        Console.WriteLine(value: $"           double-restore: {result.DoubleRestore}");
+
+        return result.Pass;
+    }
+
     /// <summary>
     /// Runs the whole-machine savestate round-trip diagnostic: every generated micro-ROM and, when
     /// <paramref name="romPath"/> is a real ROM on disk, that cartridge too. Each ROM is booted, snapshotted at a
@@ -14,26 +25,26 @@ internal sealed partial class Diagnostics {
         var failures = 0;
 
         foreach (var kind in MicroRoms.Kinds) {
-            var (pass, _) = StateRoundTripProbe.Run(
-                rom: MicroRoms.GenerateBytes(kind: kind),
+            if (!ReportStateRoundTrip(
                 label: $"micro:{kind}",
-                bios: BiosImage
-            );
-
-            if (!pass) {
+                result: StateRoundTripProbe.Run(
+                    bios: BiosImage,
+                    rom: MicroRoms.GenerateBytes(kind: kind)
+                )
+            )) {
                 ++failures;
             }
         }
 
         if (!string.IsNullOrEmpty(value: romPath)) {
             if (File.Exists(path: romPath)) {
-                var (pass, _) = StateRoundTripProbe.Run(
-                    rom: File.ReadAllBytes(path: romPath),
+                if (!ReportStateRoundTrip(
                     label: $"rom:{Path.GetFileName(path: romPath)}",
-                    bios: BiosImage
-                );
-
-                if (!pass) {
+                    result: StateRoundTripProbe.Run(
+                        bios: BiosImage,
+                        rom: File.ReadAllBytes(path: romPath)
+                    )
+                )) {
                     ++failures;
                 }
             } else {

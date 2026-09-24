@@ -121,7 +121,7 @@ internal static class TestReconciliation {
             value: wanted
         )
         ) {
-            return $"{at} expects a refusal carrying '{wanted}' and the run recorded '{recorded.Detail ?? string.Empty}': {declared.Command}";
+            return $"{at} expects a refusal carrying '{wanted}' and the run recorded '{(recorded.Detail ?? string.Empty)}': {declared.Command}";
         }
 
         return null;
@@ -131,8 +131,8 @@ internal static class TestReconciliation {
         why = recorded.Outcome switch {
             WorldScheduleSection.OutcomeUnreached => "was never reached",
             WorldScheduleSection.OutcomePending => "was still awaiting its answer when the export was written",
-            WorldScheduleSection.OutcomeUnroutable => $"had no ingress ({recorded.Detail ?? string.Empty})",
-            WorldScheduleSection.OutcomeFaulted => $"crashed its handler ({recorded.Detail ?? string.Empty})",
+            WorldScheduleSection.OutcomeUnroutable => $"had no ingress ({(recorded.Detail ?? string.Empty)})",
+            WorldScheduleSection.OutcomeFaulted => $"crashed its handler ({(recorded.Detail ?? string.Empty)})",
             _ => string.Empty,
         };
 

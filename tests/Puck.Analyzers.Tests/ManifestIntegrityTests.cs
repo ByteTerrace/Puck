@@ -140,13 +140,13 @@ public sealed class ManifestIntegrityTests {
             manifestJson: Manifest.Of(
                 format: "999",
                 entries: new ManifestEntry {
-                Id = Sources.TargetId,
-                Sha256 = Harness.Fingerprint(
+                    Id = Sources.TargetId,
+                    Sha256 = Harness.Fingerprint(
                     source: source,
                     id: Sources.TargetId
                 ),
-                Symbol = Sources.TargetSymbol,
-            }
+                    Symbol = Sources.TargetSymbol,
+                }
             )
         );
 
@@ -415,10 +415,14 @@ public sealed class ManifestIntegrityTests {
         );
 
         var shadow = Manifest.Of(new ManifestEntry { Id = Sources.TargetId, Sha256 = hash, Symbol = "M:Subject.Assembly.Somewhere.Else" });
-        var real = Manifest.Of(new ManifestEntry { Id = Sources.TargetId, Sha256 = new string(
+        var real = Manifest.Of(new ManifestEntry {
+            Id = Sources.TargetId,
+            Sha256 = new string(
             c: '0',
             count: 64
-        ), Symbol = Sources.TargetSymbol });
+        ),
+            Symbol = Sources.TargetSymbol,
+        });
 
         var result = Harness.Analyze(
             compilation: Harness.Compile(

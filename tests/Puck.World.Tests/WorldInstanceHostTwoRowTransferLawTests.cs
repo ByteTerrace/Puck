@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -14,38 +16,34 @@ namespace Puck.World.Tests;
 /// live arm).
 /// </summary>
 public sealed class WorldInstanceHostTwoRowTransferLawTests {
-    private static WorldInstanceHost BuildHost(Guid machineId, bool admitsSpawn = true) => new(
-        applicationStopping: CancellationToken.None,
-        admitsSpawn: admitsSpawn,
-        machineHostFactory: Fixtures.MachineHostFactory,
-        machineId: machineId,
-        resolver: new WorldSessionResolver(),
-        seats: WorldEmbodiedSeats.None,
-        stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-two-row-host-tests-").FullName
-    );
-    // A local seat (index < LocalSeatCount) never carries a forwarded arm — WorldPopulation.TryCaptureTransferredEntity
-    // only reads the PEER range, since a local seat's onward routing is the desktop's own seat router, never a
-    // forwarding lease. Exercising ForwardedBodies needs a body ALREADY active at a peer index with Source.IsLive,
-    // which needs peer capacity beyond the four local seats — Fixtures.BuildDocument's own capacity is pinned to
-    // exactly LocalSeatCount (see its own remarks), so this widens it the same way FederationTransferLawTests does.
-    private static WorldDefinition PeerPopulationDocument() {
-        var document = Fixtures.BuildDocument();
+    // The production host never deletes its own storage root on dispose (a real deployment's directory persists on
+    // purpose), so the scratch root comes back as its own TemporaryDirectory for the caller to dispose alongside it.
+    private static (WorldInstanceHost Host, TemporaryDirectory StateRoot) BuildHost(Guid machineId, bool admitsSpawn = true) {
+        var stateRoot = new TemporaryDirectory(prefix: "puck-two-row-host-tests-");
+        var host = new WorldInstanceHost(
+            applicationStopping: CancellationToken.None,
+            admitsSpawn: admitsSpawn,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            machineId: machineId,
+            resolver: new WorldSessionResolver(),
+            seats: WorldEmbodiedSeats.None,
+            stateRoot: stateRoot.RootPath
+        );
 
-        return document with {
-            PopulationRaw = document.Population with {
-                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
-                NetworkPlayers = 1,
-            },
-            Admission = [Fixtures.AnyAuthorityArrivals()],
-        };
+        return (host, stateRoot);
     }
 
     [Fact]
     public void LocalTransfer_Commits_LandsInDestination_AndForwardsAtTheSource() {
-        var document = PeerPopulationDocument();
+        // A local seat never carries a forwarded arm — WorldPopulation.TryCaptureTransferredEntity only reads the PEER
+        // range, since a local seat's onward routing is the desktop's own seat router, never a forwarding lease.
+        // Exercising ForwardedBodies needs a body already active at a peer index, so the document adds a peer slot.
+        var document = Fixtures.PeerPopulationDocument(networkPlayers: 1);
         const int PeerSlot = WorldBodiesLimits.LocalSeatCount;
 
-        using var host = BuildHost(machineId: Guid.NewGuid());
+        var (host, hostStateRoot) = BuildHost(machineId: Guid.NewGuid());
+        using var disposeHost = host;
+        using var disposeHostStateRoot = hostStateRoot;
         using var rowA = HostRow.Build(
             definition: document,
             name: "row-a"
@@ -73,7 +71,7 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
         }
 
         var transferId = host.EnqueueTransfer(
-            actingPrincipal: WorldPrincipal.Console,
+            actingPrincipal: Principal.Console,
             destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
             scope: WorldInstanceHost.TransferScope.Body,
             sourceInstance: "row-a",
@@ -103,7 +101,9 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
     }
     [Fact]
     public void LocalTransfer_ReachesReservedUncommitted_ThenInDoubtOnce_ThroughAFaultingPeerCall() {
-        using var host = BuildHost(machineId: Guid.NewGuid());
+        var (host, hostStateRoot) = BuildHost(machineId: Guid.NewGuid());
+        using var disposeHost = host;
+        using var disposeHostStateRoot = hostStateRoot;
         using var rowA = HostRow.Build(name: "row-a");
         using var rowB = HostRow.Build(name: "row-b");
 
@@ -119,13 +119,13 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
 
         Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
 
         _ = host.EnqueueTransfer(
-            actingPrincipal: WorldPrincipal.Console,
+            actingPrincipal: Principal.Console,
             destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
             scope: WorldInstanceHost.TransferScope.Body,
             sourceInstance: "row-a",

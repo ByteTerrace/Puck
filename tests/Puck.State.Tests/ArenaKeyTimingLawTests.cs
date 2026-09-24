@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Xunit;
 
@@ -111,7 +111,7 @@ public sealed class ArenaKeyTimingLawTests {
             }
         });
 
-        Assert.Equal(0L, before);
+        Assert.Equal(actual: before, expected: 0L);
     }
     [Fact]
     public void WarmSparseKeyMintReusesFarOrdinalMapStorage() {
@@ -155,6 +155,6 @@ public sealed class ArenaKeyTimingLawTests {
             }
         });
 
-        Assert.Equal(0L, before);
+        Assert.Equal(actual: before, expected: 0L);
     }
 }

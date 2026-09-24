@@ -40,8 +40,8 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
         }
         _ = text.Append(value: '}');
     }
-    private static string Describe(WorldServer server, string? filter) {
-        var definition = server.Definition;
+    private static string Describe(WorldStateReadView view, string? filter) {
+        var definition = view.Definition;
         var echo = CommandEcho.Open(verb: "world.tabletop");
         var matched = 0;
 
@@ -152,7 +152,7 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
 
         _ = echo.Field(
             key: "tick",
-            value: (server.NextInputTick - 1UL)
+            value: view.CompletedTick
         );
 
         return echo.Close();
@@ -166,29 +166,29 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            name: "world.tabletop",
-            description: "Echoes every placement carrying a board facet — its anchored frame (origin, cellSize, width, depth), its occupancy row's live cells, and any bound turn/verdict/move/plan rows: world.tabletop [placementId]. With a placement id, echoes only that tabletop.",
+            description: "Echoes every placement carrying a board facet — its anchored frame (origin, cellSize, width, depth), its occupancy row's live cells, and any bound turn/verdict/move/plan rows, as the caller's own disclosure shows them: world.tabletop [placementId]. With a placement id, echoes only that tabletop.",
             handler: (context, args) => {
                 if (args.Count > 1) {
                     return CommandResult.Error(output: "[world.tabletop: expected [placementId]]");
                 }
 
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveReadView(
                     context: context,
                     error: out var error,
-                    server: out var server,
-                    verb: "world.tabletop"
+                    verb: "world.tabletop",
+                    view: out var view
                 )) {
                     return error;
                 }
 
                 return new CommandResult(Output: Describe(
                     filter: ((args.Count == 1)
-                    ? args[0].ToString()
-                    : null),
-                    server: server
+                        ? args[0].ToString()
+                        : null),
+                    view: view
                 ));
-            }
+            },
+            name: "world.tabletop"
         );
     }
 }

@@ -1,26 +1,21 @@
-using System.Runtime.InteropServices;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
 using Puck.Vulkan.Messages;
-using static Puck.Vulkan.VulkanMarshalHelpers;
 
 namespace Puck.Vulkan;
 
 /// <summary>
-/// The native implementation of <see cref="IVulkanComputePipelineApi"/>, marshaling to the compute-pipeline,
-/// pipeline-layout, and descriptor-set-layout entry points resolved from the Vulkan loader. The compute
+/// The native implementation of <see cref="IVulkanComputePipelineApi"/>, marshaling to the compute-pipeline entry
+/// point resolved from the Vulkan loader, with its layouts made by <see cref="VulkanPipelineLayouts"/>. The compute
 /// counterpart of <see cref="VulkanNativeGraphicsPipelineApi"/>, without the fixed-function graphics state.
 /// </summary>
 public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipelineApi {
     private const uint ShaderStageComputeBit = 0x00000020;
     private const uint StructureTypeComputePipelineCreateInfo = 29;
-    private const uint StructureTypeDescriptorSetLayoutCreateInfo = 32;
-    private const uint StructureTypePipelineLayoutCreateInfo = 30;
     private const uint StructureTypePipelineShaderStageCreateInfo = 18;
 
     private readonly IAllocator m_allocator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeComputePipelineApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -31,38 +26,6 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         m_allocator = allocator;
     }
 
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateComputePipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateComputePipelines"u8
-            )),
-                CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreatePipelineLayout"u8
-            )),
-                CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateDescriptorSetLayout"u8
-            )),
-                DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyPipeline"u8
-            )),
-                DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyDescriptorSetLayout"u8
-            )),
-                DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyPipelineLayout"u8
-            )),
-            }
-        );
-    }
-
     /// <inheritdoc/>
     public VkResult CreateComputePipeline(
         VulkanComputePipelineCreateRequest request,
@@ -70,9 +33,8 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         out nint pipelineLayoutHandle,
         out nint pipelineHandle
     ) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
@@ -82,224 +44,73 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
             paramName: nameof(request)
         );
 
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
-
-        descriptorSetLayoutHandle = 0;
-        pipelineLayoutHandle = 0;
         pipelineHandle = 0;
 
-        nint bindingsPointer = 0;
-        nint setLayoutsPointer = 0;
-        nint pushConstantRangePointer = 0;
-        nint createInfoPointer = 0;
-        var entryPoint = IntPtr.Zero;
+        var layoutResult = VulkanPipelineLayouts.Create(
+            allocator: m_allocator,
+            bindings: request.DescriptorBindings,
+            descriptorSetLayoutHandle: out descriptorSetLayoutHandle,
+            device: request.Device,
+            pipelineLayoutHandle: out pipelineLayoutHandle,
+            pushConstantSize: request.PushConstantSize,
+            pushConstantStageFlags: request.PushConstantStageFlags
+        );
 
-        var pipelineLayoutCreateInfo = new VkPipelineLayoutCreateInfo {
-            SType = StructureTypePipelineLayoutCreateInfo,
+        if (!layoutResult.IsSuccess()) {
+            return layoutResult;
+        }
+
+        // Creation feedback (core in Vulkan 1.3) says whether the pipeline cache answered; the stack structs outlive
+        // the create call that reads them.
+        var feedback = default(VkPipelineCreationFeedback);
+        var stageFeedback = default(VkPipelineCreationFeedback);
+        var feedbackInfo = new VkPipelineCreationFeedbackCreateInfo {
+            PPipelineCreationFeedback = ((nint)(&feedback)),
+            PPipelineStageCreationFeedbacks = ((nint)(&stageFeedback)),
+            PipelineStageCreationFeedbackCount = 1,
+            SType = VkPipelineCreationFeedbackCreateInfo.StructureType,
         };
-        var bindings = (request.DescriptorBindings ?? []);
+        var createInfo = new VkComputePipelineCreateInfo {
+            BasePipelineHandle = 0,
+            BasePipelineIndex = -1,
+            Layout = pipelineLayoutHandle,
+            PNext = ((nint)(&feedbackInfo)),
+            SType = StructureTypeComputePipelineCreateInfo,
+            Stage = new VkPipelineShaderStageCreateInfo {
+                Module = request.ShaderModuleHandle,
+                PName = VulkanMarshalHelpers.MainEntryPoint,
+                SType = StructureTypePipelineShaderStageCreateInfo,
+                Stage = ShaderStageComputeBit,
+            },
+        };
+        var result = request.Device.CreateComputePipelines(
+            request.Device.Handle,
+            (request.PipelineCache?.Handle ?? 0),
+            1,
+            ((nint)(&createInfo)),
+            0,
+            out pipelineHandle
+        );
 
-        try {
-            if (bindings.Count > 0) {
-                var stride = Marshal.SizeOf<VkDescriptorSetLayoutBinding>();
-
-                bindingsPointer = m_allocator.Alloc(size: (stride * bindings.Count));
-
-                for (var index = 0; (index < bindings.Count); index++) {
-                    Marshal.StructureToPtr(
-                        fDeleteOld: false,
-                        ptr: (bindingsPointer + (index * stride)),
-                        structure: bindings[index]
-                    );
-                }
-
-                var setLayoutCreateInfo = new VkDescriptorSetLayoutCreateInfo {
-                    BindingCount = ((uint)bindings.Count),
-                    PBindings = bindingsPointer,
-                    SType = StructureTypeDescriptorSetLayoutCreateInfo,
-                };
-                var setLayoutResult = pointers.CreateDescriptorSetLayout(
-                    request.DeviceHandle,
-                    in setLayoutCreateInfo,
-                    0,
-                    out descriptorSetLayoutHandle
-                );
-
-                if (!setLayoutResult.IsSuccess()) {
-                    return setLayoutResult;
-                }
-
-                setLayoutsPointer = m_allocator.Alloc(size: IntPtr.Size);
-                Marshal.WriteIntPtr(
-                    ptr: setLayoutsPointer,
-                    val: descriptorSetLayoutHandle
-                );
-                pipelineLayoutCreateInfo.SetLayoutCount = 1;
-                pipelineLayoutCreateInfo.PSetLayouts = setLayoutsPointer;
-            }
-
-            if (request.PushConstantSize > 0) {
-                if (0 == request.PushConstantStageFlags) {
-                    throw new ArgumentException(
-                        message: "Push-constant stage flags must be non-zero when a push-constant range is requested.",
-                        paramName: nameof(request)
-                    );
-                }
-
-                pushConstantRangePointer = AllocateStruct(
-                    allocator: m_allocator,
-                    value: new VkPushConstantRange {
-                    Offset = 0,
-                    Size = request.PushConstantSize,
-                    StageFlags = request.PushConstantStageFlags,
-                }
-                );
-                pipelineLayoutCreateInfo.PushConstantRangeCount = 1;
-                pipelineLayoutCreateInfo.PPushConstantRanges = pushConstantRangePointer;
-            }
-
-            var layoutResult = pointers.CreatePipelineLayout(
-                request.DeviceHandle,
-                in pipelineLayoutCreateInfo,
-                0,
-                out pipelineLayoutHandle
+        if (result.IsSuccess()) {
+            request.PipelineCache?.Count(feedback: in feedback);
+        } else {
+            VulkanPipelineLayouts.Destroy(
+                descriptorSetLayoutHandle: descriptorSetLayoutHandle,
+                device: request.Device,
+                pipelineLayoutHandle: pipelineLayoutHandle
             );
-
-            if (!layoutResult.IsSuccess()) {
-                if (0 != descriptorSetLayoutHandle) {
-                    DestroyDescriptorSetLayout(
-                        deviceHandle: request.DeviceHandle,
-                        descriptorSetLayoutHandle: descriptorSetLayoutHandle
-                    );
-                    descriptorSetLayoutHandle = 0;
-                }
-
-                pipelineLayoutHandle = 0;
-                return layoutResult;
-            }
-
-            entryPoint = Marshal.StringToCoTaskMemUTF8(s: "main");
-
-            var createInfo = new VkComputePipelineCreateInfo {
-                BasePipelineHandle = 0,
-                BasePipelineIndex = -1,
-                Layout = pipelineLayoutHandle,
-                SType = StructureTypeComputePipelineCreateInfo,
-                Stage = new VkPipelineShaderStageCreateInfo {
-                    Module = request.ShaderModuleHandle,
-                    PName = entryPoint,
-                    SType = StructureTypePipelineShaderStageCreateInfo,
-                    Stage = ShaderStageComputeBit,
-                },
-            };
-
-            createInfoPointer = AllocateStruct(
-                allocator: m_allocator,
-                value: createInfo
-            );
-
-            var result = pointers.CreateComputePipelines(
-                request.DeviceHandle,
-                0,
-                1,
-                createInfoPointer,
-                0,
-                out pipelineHandle
-            );
-
-            if (!result.IsSuccess()) {
-                DestroyPipelineLayout(
-                    deviceHandle: request.DeviceHandle,
-                    pipelineLayoutHandle: pipelineLayoutHandle
-                );
-
-                if (0 != descriptorSetLayoutHandle) {
-                    DestroyDescriptorSetLayout(
-                        deviceHandle: request.DeviceHandle,
-                        descriptorSetLayoutHandle: descriptorSetLayoutHandle
-                    );
-                    descriptorSetLayoutHandle = 0;
-                }
-
-                pipelineLayoutHandle = 0;
-                pipelineHandle = 0;
-            }
-
-            return result;
-        } finally {
-            if (0 != bindingsPointer) {
-                m_allocator.Free(ptr: bindingsPointer);
-            }
-
-            if (0 != setLayoutsPointer) {
-                m_allocator.Free(ptr: setLayoutsPointer);
-            }
-
-            if (0 != pushConstantRangePointer) {
-                m_allocator.Free(ptr: pushConstantRangePointer);
-            }
-
-            if (0 != createInfoPointer) {
-                m_allocator.Free(ptr: createInfoPointer);
-            }
-
-            if (IntPtr.Zero != entryPoint) {
-                Marshal.FreeCoTaskMem(ptr: entryPoint);
-            }
+            descriptorSetLayoutHandle = 0;
+            pipelineLayoutHandle = 0;
+            pipelineHandle = 0;
         }
+
+        return result;
     }
     /// <inheritdoc/>
-    public void DestroyDescriptorSetLayout(nint deviceHandle, nint descriptorSetLayoutHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == descriptorSetLayoutHandle)
-        ) {
-            return;
-        }
-
-        GetPointers(deviceHandle: deviceHandle).DestroyDescriptorSetLayout(
-            deviceHandle,
-            descriptorSetLayoutHandle,
-            0
+    public void DestroyPipeline(VulkanDeviceCommands device, nint pipelineHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyPipeline,
+            handle: pipelineHandle
         );
-    }
-    /// <inheritdoc/>
-    public void DestroyPipeline(nint deviceHandle, nint pipelineHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == pipelineHandle)
-        ) {
-            return;
-        }
-
-        GetPointers(deviceHandle: deviceHandle).DestroyPipeline(
-            deviceHandle,
-            pipelineHandle,
-            0
-        );
-    }
-    /// <inheritdoc/>
-    public void DestroyPipelineLayout(nint deviceHandle, nint pipelineLayoutHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == pipelineLayoutHandle)
-        ) {
-            return;
-        }
-
-        GetPointers(deviceHandle: deviceHandle).DestroyPipelineLayout(
-            deviceHandle,
-            pipelineLayoutHandle,
-            0
-        );
-    }
-
-    private struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult> CreateComputePipelines;
-        public delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult> CreatePipelineLayout;
-        public delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult> CreateDescriptorSetLayout;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyPipeline;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyDescriptorSetLayout;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyPipelineLayout;
-    }
 }

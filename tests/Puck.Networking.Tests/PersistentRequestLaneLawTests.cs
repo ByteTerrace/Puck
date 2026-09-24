@@ -1,7 +1,6 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Networking.Tests;
@@ -14,14 +13,68 @@ file enum FakeRequestKind : byte {
 file enum FakeResponseKind : byte {
     Pong = 1,
 }
+/// <summary>A count a law awaits rather than polls: <see cref="ReachedAsync"/> completes once the count reaches a
+/// target, bounded only by the test's own token.</summary>
+file sealed class Tally {
+    private readonly Lock m_lock = new();
+    private TaskCompletionSource m_changed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private int m_count;
+
+    public int Count {
+        get {
+            lock (m_lock) {
+                return m_count;
+            }
+        }
+    }
+
+    public void Increment() {
+        TaskCompletionSource changed;
+
+        lock (m_lock) {
+            m_count++;
+            changed = m_changed;
+            m_changed = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        changed.TrySetResult();
+    }
+    public async Task ReachedAsync(int count) {
+        while (true) {
+            Task changed;
+
+            lock (m_lock) {
+                if (m_count >= count) {
+                    return;
+                }
+
+                changed = m_changed.Task;
+            }
+
+            await changed.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
+        }
+    }
+}
 /// <summary>A minimal <see cref="ILaneProtocol{TRequestKind,TResponseKind}"/> riding the real
 /// <see cref="HandshakeWireFormat"/>/<see cref="WireFrame"/> primitives, so these laws exercise the same wire
-/// grammar a production dialect would.</summary>
+/// grammar a production dialect would. It counts each step it enters, so a law can wait until the lane has reached
+/// the step whose deadline it is about to expire.</summary>
 file sealed class FakeLaneProtocol : ILaneProtocol<FakeRequestKind, FakeResponseKind> {
+    /// <summary>Gets the count of <see cref="AuthenticateAsync"/> calls.</summary>
+    public Tally Authentications { get; } = new();
+
     /// <summary>Gets or sets how many further <see cref="ReadResponseAsync"/> calls throw an
     /// <see cref="InvalidOperationException"/> before reading a byte — an exception outside the wire vocabulary, the
     /// shape a dialect's own bug takes.</summary>
     public int ReadResponseFaultsRemaining { get; set; }
+
+    /// <summary>Gets the count of <see cref="WriteRequestAsync"/> calls.</summary>
+    public Tally RequestWrites { get; } = new();
+    /// <summary>Gets the count of <see cref="ReadResponseAsync"/> calls — each one proves the request it answers was
+    /// written in full.</summary>
+    public Tally ResponseReads { get; } = new();
+
     /// <summary>Gets a value indicating whether <see cref="AuthenticateAsync"/> parks until its token is cancelled —
     /// a peer that accepts the connection and the Hello and then never completes the exchange.</summary>
     public bool StallsAuthentication { get; init; }
@@ -30,18 +83,24 @@ file sealed class FakeLaneProtocol : ILaneProtocol<FakeRequestKind, FakeResponse
     /// gives the dialect.</summary>
     public bool StallsRequestWrite { get; init; }
 
-    public Task AuthenticateAsync(Stream stream, string sourceAuthority, CancellationToken ct) => (StallsAuthentication
-        ? Task.Delay(
-            cancellationToken: ct,
-            millisecondsDelay: Timeout.Infinite
-        )
-        : Task.CompletedTask
-    );
+    public Task AuthenticateAsync(Stream stream, string sourceAuthority, CancellationToken ct) {
+        Authentications.Increment();
+
+        return (StallsAuthentication
+            ? Task.Delay(
+                cancellationToken: ct,
+                millisecondsDelay: Timeout.Infinite
+            )
+            : Task.CompletedTask
+        );
+    }
     public bool MayResend(FakeRequestKind kind) => (kind switch {
         FakeRequestKind.Submission => false,
         _ => true,
     });
     public async Task<LaneResponse<FakeResponseKind>> ReadResponseAsync(Stream stream, CancellationToken ct) {
+        ResponseReads.Increment();
+
         if (ReadResponseFaultsRemaining > 0) {
             ReadResponseFaultsRemaining--;
 
@@ -71,30 +130,66 @@ file sealed class FakeLaneProtocol : ILaneProtocol<FakeRequestKind, FakeResponse
         key: 0xF00D,
         stream: stream
     );
-    public Task WriteRequestAsync(Stream stream, FakeRequestKind kind, ReadOnlyMemory<byte> body, CancellationToken ct) => (StallsRequestWrite
-        ? Task.Delay(
-            cancellationToken: ct,
-            millisecondsDelay: Timeout.Infinite
-        )
-        : WireFrame.WriteAsync(
-            body: body,
-            ct: ct,
-            kind: ((byte)kind),
-            stream: stream
-        )
-    );
-}
+    public Task WriteRequestAsync(Stream stream, FakeRequestKind kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        RequestWrites.Increment();
 
-/// <summary>
-/// Laws for <see cref="PersistentRequestLane{TRequestKind,TResponseKind}"/> — the state machine
-/// <c>WorldRemoteAuthority</c>'s federation lanes now ride. Every scenario here drives the real class over a real
-/// loopback socket; nothing pokes its private fields.
-/// </summary>
-public sealed class PersistentRequestLaneLawTests {
-    // The lane is transport-neutral. This fixture deliberately injects a socket stream to isolate retry and
-    // deadline behavior; production World callers inject the shared authenticated QUIC peer network.
-    private static async ValueTask<Stream> ConnectTestStreamAsync(EndPoint endpoint, CancellationToken ct) {
-        if (endpoint is IPEndPoint { Port: 0 }) { throw new SocketException(errorCode: ((int)SocketError.ConnectionRefused)); }
+        return (StallsRequestWrite
+            ? Task.Delay(
+                cancellationToken: ct,
+                millisecondsDelay: Timeout.Infinite
+            )
+            : WireFrame.WriteAsync(
+                body: body,
+                ct: ct,
+                kind: ((byte)kind),
+                stream: stream
+            )
+        );
+    }
+}
+/// <summary>The lane's transport seam over loopback TCP, counted: every connect the lane asks for, the endpoint it
+/// named, and the stream it got back — so "never dialed again" and "the socket was released" are facts a law reads
+/// off the seam rather than races it runs against a listener. Port zero is a fixture marker, never dialed: it is
+/// refused through the same seam without waiting on the OS's SYN retry policy or racing another test for a recently
+/// released ephemeral port. A dialer built with an <c>admitted</c> count refuses every connect past it the same way,
+/// so a law that forbids a second connection gets a prompt answer it can count, never a request parked on a socket
+/// nobody serves.</summary>
+file sealed class LoopbackDialer(int admitted = int.MaxValue) {
+    private readonly List<EndPoint> m_dialed = [];
+    private readonly Lock m_lock = new();
+    private readonly List<Stream> m_streams = [];
+
+    public Tally Connects { get; } = new();
+
+    public IReadOnlyList<EndPoint> Dialed {
+        get {
+            lock (m_lock) {
+                return [.. m_dialed];
+            }
+        }
+    }
+    public IReadOnlyList<Stream> Streams {
+        get {
+            lock (m_lock) {
+                return [.. m_streams];
+            }
+        }
+    }
+
+    public async ValueTask<Stream> ConnectAsync(EndPoint endpoint, CancellationToken ct) {
+        int ordinal;
+
+        lock (m_lock) {
+            m_dialed.Add(item: endpoint);
+            ordinal = m_dialed.Count;
+        }
+
+        Connects.Increment();
+
+        if ((endpoint is IPEndPoint { Port: 0 }) || (ordinal > admitted)) {
+            throw new SocketException(errorCode: ((int)SocketError.ConnectionRefused));
+        }
+
         var socket = new Socket(
             protocolType: ProtocolType.Tcp,
             socketType: SocketType.Stream
@@ -105,14 +200,97 @@ public sealed class PersistentRequestLaneLawTests {
                 cancellationToken: ct,
                 remoteEP: endpoint
             );
-            return new NetworkStream(
-                socket,
-                ownsSocket: true
-            );
-        } catch { socket.Dispose(); throw; }
+        } catch {
+            socket.Dispose();
+
+            throw;
+        }
+
+        var stream = new NetworkStream(
+            ownsSocket: true,
+            socket: socket
+        );
+
+        lock (m_lock) {
+            m_streams.Add(item: stream);
+        }
+
+        return stream;
     }
-    // Port zero is a fixture marker, never dialed. Refuse through the same transport seam without waiting
-    // for the OS's SYN retry policy, or racing another test for a recently released ephemeral port.
+}
+/// <summary>Builds the lane every law drives: the counted dialer's seam, a <see cref="VirtualClock"/> nobody but the
+/// law advances, no connect retry delay unless a law asks for one, and the test's own token as the lifetime.</summary>
+file static class Lanes {
+    public static PersistentRequestLane<FakeRequestKind, FakeResponseKind> NewLane(Func<LaneRoute> route, LoopbackDialer dialer, VirtualClock? clock = null, FakeLaneProtocol? protocol = null, CancellationToken? lifetime = null, Action<Exception>? onUnavailable = null, TimeSpan? connectRetryDelay = null, TimeSpan? requestTimeout = null, TimeSpan? unavailableBackoff = null) => new(
+        connect: dialer.ConnectAsync,
+        connectRetryDelay: (connectRetryDelay ?? TimeSpan.Zero),
+        lifetime: (lifetime ?? TestContext.Current.CancellationToken),
+        onUnavailable: onUnavailable,
+        protocol: (protocol ?? new FakeLaneProtocol()),
+        requestTimeout: (requestTimeout ?? PersistentRequestLaneLawTests.RequestTimeout),
+        route: route,
+        sourceAuthority: "test-authority",
+        timeProvider: (clock ?? new VirtualClock()),
+        unavailableBackoff: (unavailableBackoff ?? PersistentRequestLaneLawTests.Backoff)
+    );
+}
+
+/// <summary>
+/// Laws for <see cref="PersistentRequestLane{TRequestKind,TResponseKind}"/> — the state machine
+/// <c>WorldRemoteAuthority</c>'s federation lanes ride. Every scenario drives the real class over a real loopback
+/// socket through a counted <see cref="LoopbackDialer"/>, on a <see cref="VirtualClock"/> the law alone advances: the
+/// per-request deadline, the connect retry delay, and the backoff window elapse only when a law says so, so no verdict
+/// here depends on how long anything took.
+/// </summary>
+public sealed class PersistentRequestLaneLawTests {
+    internal static readonly TimeSpan Backoff = TimeSpan.FromSeconds(value: 30);
+    internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(value: 10);
+
+    private static CancellationToken TestToken => TestContext.Current.CancellationToken;
+
+    /// <summary>Accepts one connection and reads its Hello; the caller owns the client.</summary>
+    private static async Task<(TcpClient Client, NetworkStream Stream)> AcceptHelloAsync(TcpListener listener) {
+        var client = await listener.AcceptTcpClientAsync(cancellationToken: TestToken);
+        var stream = client.GetStream();
+
+        await HandshakeWireFormat.TryReadExactAsync(
+            buffer: new byte[HandshakeWireFormat.HelloBytes],
+            ct: TestToken,
+            stream: stream
+        );
+
+        return (client, stream);
+    }
+    /// <summary>Reads one request and answers it with a Pong echoing its body.</summary>
+    private static async Task EchoAsync(Stream stream) {
+        var request = await ReadRequestAsync(stream: stream);
+
+        await WireFrame.WriteAsync(
+            body: request.Body,
+            ct: TestToken,
+            kind: ((byte)FakeResponseKind.Pong),
+            stream: stream
+        );
+    }
+    private static TcpListener Listen() {
+        var listener = new TcpListener(
+            localaddr: IPAddress.Loopback,
+            port: 0
+        );
+
+        listener.Start();
+
+        return listener;
+    }
+    private static Task<WireFrameRead> ReadRequestAsync(Stream stream) => WireFrame.ReadAsync(
+        ct: TestToken,
+        maxFrameBytes: 4096,
+        stream: stream
+    );
+    private static Func<LaneRoute> RouteTo(EndPoint endpoint) => () => new LaneRoute(
+        Description: endpoint.ToString()!,
+        Endpoint: endpoint
+    );
     private static IPEndPoint UnreachableEndpoint() => new(
         address: IPAddress.Loopback,
         port: 0
@@ -123,87 +301,31 @@ public sealed class PersistentRequestLaneLawTests {
     /// "report immediately" arm) turns the second request's answer into a refusal instead of a successful retry.</summary>
     [Fact]
     public async Task BreakOnEstablishedConnection_ReconnectsAndResendsOnce_WithoutEnteringBackoff() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-
-        using var deadline = Laws.SocketDeadline();
+        using var listener = Listen();
+        var dialer = new LoopbackDialer();
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
-                // First connection: answers request #1 normally, then closes without answering request #2 (the break).
-                using (var first = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token)) {
-                    var stream = first.GetStream();
+                // First connection: answers request #1, then reads request #2 and closes without answering (the break).
+                var (first, stream) = await AcceptHelloAsync(listener: listener);
 
-                    await HandshakeWireFormat.TryReadExactAsync(
-                        buffer: new byte[HandshakeWireFormat.HelloBytes],
-                        ct: deadline.Token,
-                        stream: stream
-                    );
-
-                    var request = await WireFrame.ReadAsync(
-                        stream: stream,
-                        maxFrameBytes: 4096,
-                        ct: deadline.Token
-                    );
-
-                    await WireFrame.WriteAsync(
-                        body: request.Body,
-                        ct: deadline.Token,
-                        kind: ((byte)FakeResponseKind.Pong),
-                        stream: stream
-                    );
-
-                    // The break: read and discard request #2, then close without a reply.
-                    _ = await WireFrame.ReadAsync(
-                        stream: stream,
-                        maxFrameBytes: 4096,
-                        ct: deadline.Token
-                    );
+                using (first) {
+                    await EchoAsync(stream: stream);
+                    _ = await ReadRequestAsync(stream: stream);
                 }
 
                 // Second connection: the resend of request #2 lands here and gets a real answer.
-                using var second = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var secondStream = second.GetStream();
+                var (second, secondStream) = await AcceptHelloAsync(listener: listener);
 
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: secondStream
-                );
-
-                var resend = await WireFrame.ReadAsync(
-                    stream: secondStream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: resend.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: secondStream
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+                using (second) {
+                    await EchoAsync(stream: secondStream);
+                }
+            }
         );
 
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+        using var lane = Lanes.NewLane(
+            dialer: dialer,
+            route: RouteTo(endpoint: listener.LocalEndpoint)
         );
 
         var first = await lane.Enqueue(
@@ -231,86 +353,40 @@ public sealed class PersistentRequestLaneLawTests {
             expected: ((byte)2),
             actual: Assert.Single(collection: second.Body.ToArray())
         );
+        Assert.Equal(
+            expected: 2,
+            actual: dialer.Connects.Count
+        );
         Assert.True(
             condition: lane.IsAvailable,
             userMessage: "a break on a live connection must not enter backoff"
         );
     }
     /// <summary>A break on an established connection while a kind the protocol refuses to re-send is in flight is
-    /// answered <see cref="WireRefusal.ConnectionClosed"/> with the request left in doubt: the peer received it exactly
-    /// once, no second connection is dialed, and the lane never enters backoff. Falsifier: skipping the
+    /// answered <see cref="WireRefusal.ConnectionClosed"/> with the request left in doubt: the lane dials exactly once,
+    /// and never enters backoff. Falsifier: skipping the
     /// <see cref="ILaneProtocol{TRequestKind,TResponseKind}.MayResend"/> check on the break arm re-sends the request
-    /// over a fresh connection, which the listener accepts and this law counts.</summary>
+    /// over a fresh connection, which the dialer counts before the answer can arrive.</summary>
     [Fact]
     public async Task BreakOnEstablishedConnection_WhenTheKindMayNotBeResent_AnswersConnectionClosed_AndSendsExactlyOnce() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-        var acceptedAgain = false;
-
-        using var deadline = Laws.SocketDeadline();
-        using var watch = CancellationTokenSource.CreateLinkedTokenSource(token: deadline.Token);
+        using var listener = Listen();
+        var dialer = new LoopbackDialer(admitted: 1);
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
-                // First connection: answers the ping normally, then closes without answering the submission (the break).
-                using (var first = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token)) {
-                    var stream = first.GetStream();
+                // Answers the ping, then reads the submission and closes without a reply (the break).
+                var (client, stream) = await AcceptHelloAsync(listener: listener);
 
-                    await HandshakeWireFormat.TryReadExactAsync(
-                        buffer: new byte[HandshakeWireFormat.HelloBytes],
-                        ct: deadline.Token,
-                        stream: stream
-                    );
-
-                    var ping = await WireFrame.ReadAsync(
-                        stream: stream,
-                        maxFrameBytes: 4096,
-                        ct: deadline.Token
-                    );
-
-                    await WireFrame.WriteAsync(
-                        body: ping.Body,
-                        ct: deadline.Token,
-                        kind: ((byte)FakeResponseKind.Pong),
-                        stream: stream
-                    );
-
-                    // The break: read and discard the submission, then close without a reply.
-                    _ = await WireFrame.ReadAsync(
-                        stream: stream,
-                        maxFrameBytes: 4096,
-                        ct: deadline.Token
-                    );
+                using (client) {
+                    await EchoAsync(stream: stream);
+                    _ = await ReadRequestAsync(stream: stream);
                 }
-
-                try {
-                    using var second = await listener.AcceptTcpClientAsync(cancellationToken: watch.Token);
-
-                    acceptedAgain = true;
-                } catch (OperationCanceledException) {
-                    // Nothing dialed again before the answer arrived — the passing outcome.
-                }
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+            }
         );
 
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+        using var lane = Lanes.NewLane(
+            dialer: dialer,
+            route: RouteTo(endpoint: listener.LocalEndpoint)
         );
 
         var first = await lane.Enqueue(
@@ -328,7 +404,6 @@ public sealed class PersistentRequestLaneLawTests {
             kind: FakeRequestKind.Submission
         );
 
-        watch.Cancel();
         await serverTask;
 
         Assert.False(condition: second.Ok);
@@ -340,46 +415,73 @@ public sealed class PersistentRequestLaneLawTests {
             actualString: second.Failure.Detail,
             expectedSubstring: "may or may not have been applied"
         );
-        Assert.False(
-            condition: acceptedAgain,
-            userMessage: "a kind the protocol refuses to re-send must never be dialed a second time"
+        Assert.Equal(
+            expected: 1,
+            actual: dialer.Connects.Count
         );
         Assert.True(
             condition: lane.IsAvailable,
             userMessage: "an in-doubt request must not enter backoff"
         );
     }
-    /// <summary>A connect failure is retried once, then declares the lane unreachable — never a third attempt.
-    /// Falsifier: changing the lifted <c>++connectFailures &gt;= 2</c> threshold to 3 makes the endpoint delegate
-    /// called a third time, turning this red.</summary>
+    /// <summary>A connect failure is retried once, exactly <c>connectRetryDelay</c> later on the lane's clock, and the
+    /// second failure declares the lane unreachable — never a third attempt. Falsifier: changing the
+    /// <c>++connectFailures &gt;= 2</c> threshold to 3 dials a third time; retrying without the delay dials the second
+    /// time before the clock has moved.</summary>
     [Fact]
-    public async Task ConnectFailure_DeclaresUnreachableAfterTwoAttempts_NeverThree() {
-        var unreachable = UnreachableEndpoint();
-        var attempts = 0;
+    public async Task ConnectFailure_RetriesOnceAfterTheRetryDelay_ThenDeclaresUnreachable_NeverThree() {
+        var clock = new VirtualClock();
+        var dialer = new LoopbackDialer();
+        var retryDelay = TimeSpan.FromMilliseconds(value: 5);
 
-        using var deadline = Laws.SocketDeadline();
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => {
-                Interlocked.Increment(location: ref attempts);
-
-                return new LaneRoute(
-                    Endpoint: unreachable,
-                    Description: unreachable.ToString()
-                );
-            },
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+        using var lane = Lanes.NewLane(
+            clock: clock,
+            connectRetryDelay: retryDelay,
+            dialer: dialer,
+            route: RouteTo(endpoint: UnreachableEndpoint())
         );
 
-        var response = await lane.Enqueue(
+        var answer = lane.Enqueue(
             body: [],
             kind: FakeRequestKind.Ping
         );
+
+        var retryArmed = clock.WhenArmedAsync(
+            count: 1,
+            ct: TestToken,
+            dueTime: retryDelay
+        );
+
+        Assert.Same(
+            expected: retryArmed,
+            actual: await Task.WhenAny(
+                task1: retryArmed,
+                task2: answer
+            )
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: dialer.Connects.Count
+        );
+
+        clock.Advance(by: retryDelay);
+
+        // A third attempt would arm the retry delay again rather than answer.
+        var thirdAttempt = clock.WhenArmedAsync(
+            count: 1,
+            ct: TestToken,
+            dueTime: retryDelay
+        );
+
+        Assert.Same(
+            expected: answer,
+            actual: await Task.WhenAny(
+                task1: answer,
+                task2: thirdAttempt
+            )
+        );
+
+        var response = await answer;
 
         Assert.False(condition: response.Ok);
         Assert.Equal(
@@ -388,179 +490,52 @@ public sealed class PersistentRequestLaneLawTests {
         );
         Assert.Equal(
             expected: 2,
-            actual: Volatile.Read(location: ref attempts)
-        );
-    }
-    /// <summary>A route republished between two connect attempts is picked up on the next attempt, but each
-    /// individual attempt connects to and records exactly one route generation — never an endpoint sampled from one
-    /// generation paired with a description sampled from another. The second listener never accepts a connection:
-    /// if a connect attempt read the route twice, the second read (returning the second generation) would leak into
-    /// either the socket dialed or the description recorded, and this would either connect to the wrong listener or
-    /// desynchronize the two.</summary>
-    [Fact]
-    public async Task Connect_NeverMixesOneRouteGenerationsEndpointWithAnothersDescription() {
-        using var listenerA = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-        using var listenerB = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listenerA.Start();
-        listenerB.Start();
-
-        var endpointA = ((IPEndPoint)listenerA.LocalEndpoint);
-        var endpointB = ((IPEndPoint)listenerB.LocalEndpoint);
-        var routeReads = 0;
-        var connectedToB = false;
-
-        using var deadline = Laws.SocketDeadline();
-        var serverTask = Task.Run(
-            function: async () => {
-                using var client = await listenerA.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var stream = client.GetStream();
-
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: stream
-                );
-
-                var request = await WireFrame.ReadAsync(
-                    stream: stream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: request.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: stream
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-        var watchBTask = Task.Run(
-            function: async () => {
-                try {
-                    using var client = await listenerB.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-
-                    connectedToB = true;
-                } catch (Exception exception) when ((exception is OperationCanceledException or SocketException)) {
-                    // Nothing ever dialed B before the listener was stopped — the passing outcome.
-                }
-            },
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => {
-                var reads = Interlocked.Increment(location: ref routeReads);
-
-                // Every read after the very first — including a second read inside the SAME connect attempt were
-                // one ever taken — returns the other generation, so a leaked second read is observable.
-                return ((reads == 1)
-                    ? new LaneRoute(
-                        Endpoint: endpointA,
-                        Description: endpointA.ToString()
-                    )
-                    : new LaneRoute(
-                        Endpoint: endpointB,
-                        Description: endpointB.ToString()
-                    )
-                );
-            },
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
-        );
-
-        var response = await lane.Enqueue(
-            body: [],
-            kind: FakeRequestKind.Ping
-        );
-
-        await serverTask;
-        listenerB.Stop();
-        await watchBTask;
-
-        Assert.True(
-            condition: response.Ok,
-            userMessage: response.Failure.ToString()
+            actual: dialer.Connects.Count
         );
         Assert.False(
-            condition: connectedToB,
-            userMessage: "a single connect attempt must never dial the second route generation"
+            condition: lane.IsAvailable,
+            userMessage: "two failed connects must enter backoff"
         );
     }
-    /// <summary>A connect attempt samples its route exactly once — the same snapshot serves the reconnect-needed
-    /// check, the socket it dials, and the description recorded for that socket. Falsifier: splitting the read into
-    /// two calls (one to decide the endpoint, a later one to record its description, as a route republished between
-    /// them would then let a socket connected to one endpoint get recorded under a different endpoint's
-    /// description) pushes the count above one and turns this red.</summary>
+    /// <summary>A connect attempt samples its route exactly once — the same snapshot serves the reconnect-needed check,
+    /// the socket it dials, and the description recorded for that socket — so one attempt never pairs one route
+    /// generation's endpoint with another's description. The route here answers its first read with a live endpoint
+    /// and every later read with another generation. Falsifier: splitting the read into two calls (one to decide the
+    /// endpoint, a later one to record its description) pushes the count above one, and a leaked second read reaches
+    /// the dialer as the other generation's endpoint.</summary>
     [Fact]
-    public async Task Connect_SamplesTheRouteExactlyOnce_PerAttempt() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
+    public async Task Connect_SamplesTheRouteExactlyOnce_PerAttempt_AndDialsOnlyThatGeneration() {
+        using var listener = Listen();
+        var endpointA = ((IPEndPoint)listener.LocalEndpoint);
+        var endpointB = new IPEndPoint(
+            address: IPAddress.Loopback,
+            port: endpointA.Port ^ 1
         );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
+        var dialer = new LoopbackDialer();
         var routeReads = 0;
-
-        using var deadline = Laws.SocketDeadline();
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
-                using var client = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var stream = client.GetStream();
+                var (client, stream) = await AcceptHelloAsync(listener: listener);
 
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: stream
-                );
-
-                var request = await WireFrame.ReadAsync(
-                    stream: stream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: request.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: stream
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+                using (client) {
+                    await EchoAsync(stream: stream);
+                }
+            }
         );
 
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => {
-                Interlocked.Increment(location: ref routeReads);
-
-                return new LaneRoute(
-                    Endpoint: endpoint,
-                    Description: endpoint.ToString()
-                );
-            },
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+        using var lane = Lanes.NewLane(
+            dialer: dialer,
+            route: () => ((Interlocked.Increment(location: ref routeReads) == 1)
+                ? new LaneRoute(
+                    Description: endpointA.ToString(),
+                    Endpoint: endpointA
+                )
+                : new LaneRoute(
+                    Description: endpointB.ToString(),
+                    Endpoint: endpointB
+                )
+            )
         );
 
         var response = await lane.Enqueue(
@@ -578,66 +553,44 @@ public sealed class PersistentRequestLaneLawTests {
             expected: 1,
             actual: Volatile.Read(location: ref routeReads)
         );
+        Assert.Equal(
+            expected: [endpointA],
+            actual: dialer.Dialed
+        );
     }
     /// <summary>A <c>connectRetryDelay</c> or <c>requestTimeout</c> outside [0, 1 day] is refused by the constructor,
     /// naming the parameter, before any worker starts; the bounds themselves are admitted. Falsifier: storing the
-    /// values unchecked lets a negative <c>requestTimeout</c> reach the per-attempt <c>CancelAfter</c>, which answers
-    /// every request <see cref="WireRefusal.LaneUnavailable"/> naming <see cref="ArgumentOutOfRangeException"/>
-    /// without ever touching a socket, and then makes <c>Dispose</c> throw from its bounded join — the one exception
-    /// its catch does not cover.</summary>
+    /// values unchecked lets a negative <c>requestTimeout</c> reach the per-attempt deadline, which answers every
+    /// request <see cref="WireRefusal.LaneUnavailable"/> naming <see cref="ArgumentOutOfRangeException"/> without ever
+    /// touching a socket, and then makes <c>Dispose</c> throw from its bounded join — the one exception its catch does
+    /// not cover.</summary>
     [Fact]
     public void Constructor_RefusesATimingOutsideItsRange_ByName() {
-        var unreachable = UnreachableEndpoint();
+        var dialer = new LoopbackDialer();
 
-        using var deadline = Laws.SocketDeadline();
-
-        PersistentRequestLane<FakeRequestKind, FakeResponseKind> Build(TimeSpan connectRetryDelay, TimeSpan requestTimeout) => new(
-            connect: ConnectTestStreamAsync,
+        PersistentRequestLane<FakeRequestKind, FakeResponseKind> Build(TimeSpan connectRetryDelay, TimeSpan requestTimeout) => Lanes.NewLane(
             connectRetryDelay: connectRetryDelay,
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
+            dialer: dialer,
             requestTimeout: requestTimeout,
-            route: () => new LaneRoute(
-                Endpoint: unreachable,
-                Description: unreachable.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+            route: RouteTo(endpoint: UnreachableEndpoint())
         );
 
-        var negativeTimeout = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            requestTimeout: TimeSpan.FromSeconds(value: -5)
-        ));
-        var timeoutOverADay = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            requestTimeout: (TimeSpan.FromDays(value: 1) + TimeSpan.FromTicks(value: 1))
-        ));
-        var negativeDelay = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
-            connectRetryDelay: TimeSpan.FromTicks(value: -1),
-            requestTimeout: TimeSpan.FromSeconds(value: 10)
-        ));
-        var delayOverADay = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
-            connectRetryDelay: (TimeSpan.FromDays(value: 1) + TimeSpan.FromTicks(value: 1)),
-            requestTimeout: TimeSpan.FromSeconds(value: 10)
-        ));
+        var refusals = new (TimeSpan ConnectRetryDelay, TimeSpan RequestTimeout, string ParamName)[] {
+            (TimeSpan.Zero, TimeSpan.FromSeconds(value: -5), "requestTimeout"),
+            (TimeSpan.Zero, (TimeSpan.FromDays(value: 1) + TimeSpan.FromTicks(value: 1)), "requestTimeout"),
+            (TimeSpan.FromTicks(value: -1), RequestTimeout, "connectRetryDelay"),
+            ((TimeSpan.FromDays(value: 1) + TimeSpan.FromTicks(value: 1)), RequestTimeout, "connectRetryDelay"),
+        };
 
-        Assert.Equal(
-            expected: "requestTimeout",
-            actual: negativeTimeout.ParamName
-        );
-        Assert.Equal(
-            expected: "requestTimeout",
-            actual: timeoutOverADay.ParamName
-        );
-        Assert.Equal(
-            expected: "connectRetryDelay",
-            actual: negativeDelay.ParamName
-        );
-        Assert.Equal(
-            expected: "connectRetryDelay",
-            actual: delayOverADay.ParamName
-        );
+        foreach (var (connectRetryDelay, requestTimeout, paramName) in refusals) {
+            Assert.Equal(
+                expected: paramName,
+                actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Build(
+                    connectRetryDelay: connectRetryDelay,
+                    requestTimeout: requestTimeout
+                )).ParamName
+            );
+        }
 
         // The control: both ends of the admitted range construct, and each lane disposes without throwing.
         using (Build(
@@ -652,52 +605,35 @@ public sealed class PersistentRequestLaneLawTests {
         )) {
         }
     }
-    /// <summary>An <c>onUnavailable</c> callback that disposes the lane returns promptly — it runs on the thread pool,
-    /// never on the worker that <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Dispose"/> joins — and
-    /// the request that raised it still gets its named refusal. Falsifier: invoking the callback on the worker makes
-    /// <c>Dispose</c> join the worker from the worker, parking the callback for the whole bounded join
-    /// (<c>requestTimeout</c> plus one second, eleven seconds here) before it can return — past the five-second bound
-    /// below — and stranding the request's answer behind it.</summary>
+    /// <summary>An <c>onUnavailable</c> callback that disposes the lane gets a real join — it runs on the thread pool,
+    /// never on the worker that <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Dispose"/> joins — so by
+    /// the time its <c>Dispose</c> returns the worker has stopped, and the request that raised it still gets its named
+    /// refusal. Falsifier: invoking the callback on the worker makes <c>Dispose</c> join the worker from the worker,
+    /// a join that can only be abandoned, so the worker is still running when <c>Dispose</c> returns.</summary>
     [Fact]
-    public async Task Dispose_FromInsideOnUnavailable_Returns() {
-        var unreachable = UnreachableEndpoint();
-        var callbackReturned = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    public async Task Dispose_FromInsideOnUnavailable_JoinsTheStoppedWorker() {
+        var callbackReturned = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         PersistentRequestLane<FakeRequestKind, FakeResponseKind>? lane = null;
 
-        using var deadline = Laws.SocketDeadline();
-
-        lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            onUnavailable: exception => {
+        lane = Lanes.NewLane(
+            dialer: new LoopbackDialer(),
+            onUnavailable: _ => {
                 lane!.Dispose();
-                _ = callbackReturned.TrySetResult();
+                callbackReturned.TrySetResult(result: lane.Completion.IsCompleted);
             },
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: unreachable,
-                Description: unreachable.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+            route: RouteTo(endpoint: UnreachableEndpoint())
         );
 
         try {
             var response = await lane.Enqueue(
                 body: [],
                 kind: FakeRequestKind.Ping
-            ).WaitAsync(
-                cancellationToken: deadline.Token,
-                timeout: TimeSpan.FromSeconds(value: 10)
-            );
+            ).WaitAsync(cancellationToken: TestToken);
 
-            await callbackReturned.Task.WaitAsync(
-                cancellationToken: deadline.Token,
-                timeout: TimeSpan.FromSeconds(value: 5)
+            Assert.True(
+                condition: await callbackReturned.Task.WaitAsync(cancellationToken: TestToken),
+                userMessage: "Dispose returned from inside onUnavailable while the worker was still running"
             );
-
             Assert.False(condition: response.Ok);
             Assert.Equal(
                 expected: WireRefusal.LaneUnavailable,
@@ -712,82 +648,49 @@ public sealed class PersistentRequestLaneLawTests {
     /// <see cref="CancellationTokenSource"/>, which throws <see cref="ObjectDisposedException"/>.</summary>
     [Fact]
     public void Dispose_Twice_IsIdempotent_AndNeverThrows() {
-        var unreachable = UnreachableEndpoint();
-
-        using var deadline = Laws.SocketDeadline();
-        var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: unreachable,
-                Description: unreachable.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+        var lane = Lanes.NewLane(
+            dialer: new LoopbackDialer(),
+            route: RouteTo(endpoint: UnreachableEndpoint())
         );
 
         lane.Dispose();
         lane.Dispose();
     }
-    /// <summary>A request queued after <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Dispose"/> is
-    /// answered <see cref="WireRefusal.LaneUnavailable"/> synchronously — the task is already complete when
-    /// <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Enqueue"/> returns — with no socket attempt, even
-    /// on a lane that served traffic before it was disposed. Falsifier: leaving the queue's writer open across
-    /// <c>Dispose</c> accepts the write, and with no worker left to drain it the task never completes.</summary>
-    [Fact]
-    public async Task EnqueueAfterDispose_AnswersLaneUnavailable_AtOnce() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-
-        using var deadline = Laws.SocketDeadline();
+    /// <summary>Once the lane stops — by <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Dispose"/>, or by
+    /// its lifetime token with no <c>Dispose</c> in between, the shape a host's shutdown token takes — its worker's
+    /// exit has already released the socket it connected (the peer parked on its next read sees
+    /// <see cref="WireRefusal.ConnectionClosed"/>), and a request queued afterwards is answered
+    /// <see cref="WireRefusal.LaneUnavailable"/> before <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Enqueue"/>
+    /// returns, even on a lane that served traffic. The law waits on
+    /// <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Completion"/>, so the late request meets the closed
+    /// queue rather than the exit drain. Falsifiers: dropping the socket only in <c>Dispose</c> leaves the
+    /// lifetime-stopped lane's stream open after its worker stopped; closing the queue only in <c>Dispose</c> accepts
+    /// the lifetime-stopped lane's late write, and with no worker left to drain it the task is still pending.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AfterTheLaneStops_TheSocketIsReleased_AndALateEnqueueIsAnsweredLaneUnavailableAtOnce(bool byDispose) {
+        using var listener = Listen();
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: TestToken);
+        var dialer = new LoopbackDialer();
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
-                using var client = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var stream = client.GetStream();
+                var (client, stream) = await AcceptHelloAsync(listener: listener);
 
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: stream
-                );
+                using (client) {
+                    await EchoAsync(stream: stream);
 
-                var request = await WireFrame.ReadAsync(
-                    stream: stream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: request.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: stream
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+                    // The lane's next move is to leave; a peer parked on the next frame sees that as a prefix EOF.
+                    return await ReadRequestAsync(stream: stream);
+                }
+            }
         );
 
-        var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+        using var lane = Lanes.NewLane(
+            dialer: dialer,
+            lifetime: lifetime.Token,
+            route: RouteTo(endpoint: listener.LocalEndpoint)
         );
 
         var served = await lane.Enqueue(
@@ -795,14 +698,31 @@ public sealed class PersistentRequestLaneLawTests {
             kind: FakeRequestKind.Ping
         );
 
-        await serverTask;
-
         Assert.True(
             condition: served.Ok,
             userMessage: served.Failure.ToString()
         );
 
-        lane.Dispose();
+        if (byDispose) {
+            lane.Dispose();
+        } else {
+            lifetime.Cancel();
+        }
+
+        await lane.Completion.WaitAsync(cancellationToken: TestToken);
+
+        Assert.False(
+            condition: Assert.Single(collection: dialer.Streams).CanRead,
+            userMessage: "the worker stopped without releasing the socket it connected"
+        );
+
+        var afterClose = await serverTask;
+
+        Assert.False(condition: afterClose.Ok);
+        Assert.Equal(
+            expected: WireRefusal.ConnectionClosed,
+            actual: afterClose.Failure.Refusal
+        );
 
         var late = lane.Enqueue(
             body: [2],
@@ -811,12 +731,11 @@ public sealed class PersistentRequestLaneLawTests {
 
         Assert.True(
             condition: late.IsCompleted,
-            userMessage: "a request queued after Dispose must be answered before Enqueue returns"
+            userMessage: "a request queued after the lane stopped must be answered before Enqueue returns"
         );
 
         var response = await late;
 
-        Assert.False(condition: response.Ok);
         Assert.Equal(
             expected: WireRefusal.LaneUnavailable,
             actual: response.Failure.Refusal
@@ -826,276 +745,57 @@ public sealed class PersistentRequestLaneLawTests {
             expectedSubstring: "is closed"
         );
     }
-    /// <summary>A request queued after the lifetime token cancelled — with no <c>Dispose</c> in between, the shape a
-    /// host's shutdown token takes — is answered <see cref="WireRefusal.LaneUnavailable"/> rather than stranded: the
-    /// worker's own exit closes the queue, so nothing can be written into a channel nobody reads. Falsifier: closing
-    /// the queue only in <c>Dispose</c> lets the write succeed, and with the worker gone the task below never
-    /// completes inside its bound.</summary>
-    [Fact]
-    public async Task EnqueueAfterLifetimeCancelled_AnswersLaneUnavailable_WithoutDispose() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-
-        using var deadline = Laws.SocketDeadline();
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: deadline.Token);
-        var serverTask = Task.Run(
-            function: async () => {
-                using var client = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var stream = client.GetStream();
-
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: stream
-                );
-
-                var request = await WireFrame.ReadAsync(
-                    stream: stream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: request.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: stream
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: lifetime.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
-        );
-
-        var served = await lane.Enqueue(
-            body: [1],
-            kind: FakeRequestKind.Ping
-        );
-
-        await serverTask;
-
-        Assert.True(
-            condition: served.Ok,
-            userMessage: served.Failure.ToString()
-        );
-
-        lifetime.Cancel();
-
-        // The worker leaves on the cancel; the pause lets it finish so the request below meets a closed queue rather
-        // than the exit drain — either answers it, but only the closed queue proves the door shut on the worker's exit.
-        await Task.Delay(
-            cancellationToken: deadline.Token,
-            delay: TimeSpan.FromMilliseconds(value: 200)
-        );
-
-        var response = await lane.Enqueue(
-            body: [2],
-            kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            cancellationToken: deadline.Token,
-            timeout: TimeSpan.FromSeconds(value: 5)
-        );
-
-        Assert.False(condition: response.Ok);
-        Assert.Equal(
-            expected: WireRefusal.LaneUnavailable,
-            actual: response.Failure.Refusal
-        );
-        Assert.Contains(
-            actualString: response.Failure.Detail,
-            expectedSubstring: "closed"
-        );
-    }
-    /// <summary>Cancelling the lifetime token with no <c>Dispose</c> in between releases the connected socket: the
-    /// peer parked on its next read observes the close (<see cref="WireRefusal.ConnectionClosed"/> at the prefix)
-    /// promptly, rather than holding a serving task on a connection that will never carry another frame until this
-    /// process's finalizer runs. Falsifier: dropping the socket only in <c>Dispose</c> leaves the peer's read pending
-    /// past the five-second bound below.</summary>
-    [Fact]
-    public async Task LifetimeCancelled_ReleasesTheSocket_WithoutDispose() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-
-        using var deadline = Laws.SocketDeadline();
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: deadline.Token);
-        var serverTask = Task.Run(
-            function: async () => {
-                using var client = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var stream = client.GetStream();
-
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: stream
-                );
-
-                var request = await WireFrame.ReadAsync(
-                    stream: stream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: request.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: stream
-                );
-
-                // The lane's next move is to leave; a peer parked on the next frame sees that as a prefix EOF.
-                return await WireFrame.ReadAsync(
-                    stream: stream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: lifetime.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
-        );
-
-        var served = await lane.Enqueue(
-            body: [1],
-            kind: FakeRequestKind.Ping
-        );
-
-        Assert.True(
-            condition: served.Ok,
-            userMessage: served.Failure.ToString()
-        );
-
-        lifetime.Cancel();
-
-        var afterClose = await serverTask.WaitAsync(
-            cancellationToken: deadline.Token,
-            timeout: TimeSpan.FromSeconds(value: 5)
-        );
-
-        Assert.False(condition: afterClose.Ok);
-        Assert.Equal(
-            expected: WireRefusal.ConnectionClosed,
-            actual: afterClose.Failure.Refusal
-        );
-    }
     /// <summary>A protocol that throws outside the wire vocabulary mid-exchange costs only that request: it is
     /// answered <see cref="WireRefusal.LaneUnavailable"/> naming the exception, the connection it happened on is
     /// dropped, the lane does not enter backoff, and the worker survives to serve the next request over a fresh
     /// connection. Falsifier: removing the catch-all around <c>ServeAsync</c> faults the worker on the first request,
-    /// whose completion is then never set, so the first <c>await</c> below hangs until its own bound.</summary>
+    /// which then completes <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Completion"/> without ever
+    /// answering the request.</summary>
     [Fact]
     public async Task ProtocolExceptionOutsideTheWireVocabulary_AnswersLaneUnavailable_AndKeepsWorkerAliveForTheNextRequest() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-
-        using var deadline = Laws.SocketDeadline();
+        using var listener = Listen();
+        var dialer = new LoopbackDialer();
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
                 // First connection: the request arrives, but the dialect throws before it reads any reply, so none is
                 // written; the lane drops this socket.
-                using (var first = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token)) {
-                    var stream = first.GetStream();
+                var (first, stream) = await AcceptHelloAsync(listener: listener);
 
-                    await HandshakeWireFormat.TryReadExactAsync(
-                        buffer: new byte[HandshakeWireFormat.HelloBytes],
-                        ct: deadline.Token,
-                        stream: stream
-                    );
-                    _ = await WireFrame.ReadAsync(
-                        stream: stream,
-                        maxFrameBytes: 4096,
-                        ct: deadline.Token
-                    );
+                using (first) {
+                    _ = await ReadRequestAsync(stream: stream);
                 }
 
                 // Second connection: the next request lands on a fresh socket and gets a real answer.
-                using var second = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var secondStream = second.GetStream();
+                var (second, secondStream) = await AcceptHelloAsync(listener: listener);
 
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: secondStream
-                );
-
-                var request = await WireFrame.ReadAsync(
-                    stream: secondStream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: request.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: secondStream
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+                using (second) {
+                    await EchoAsync(stream: secondStream);
+                }
+            }
         );
 
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
+        using var lane = Lanes.NewLane(
+            dialer: dialer,
             protocol: new FakeLaneProtocol { ReadResponseFaultsRemaining = 1 },
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+            route: RouteTo(endpoint: listener.LocalEndpoint)
         );
 
-        var first = await lane.Enqueue(
+        var answer = lane.Enqueue(
             body: [1],
             kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            cancellationToken: deadline.Token,
-            timeout: TimeSpan.FromSeconds(value: 10)
         );
+
+        // A worker the exception killed would complete before it ever answered.
+        Assert.Same(
+            expected: answer,
+            actual: await Task.WhenAny(
+                task1: answer,
+                task2: lane.Completion
+            ).WaitAsync(cancellationToken: TestToken)
+        );
+
+        var first = await answer;
 
         Assert.False(condition: first.Ok);
         Assert.Equal(
@@ -1110,10 +810,7 @@ public sealed class PersistentRequestLaneLawTests {
         var second = await lane.Enqueue(
             body: [2],
             kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            cancellationToken: deadline.Token,
-            timeout: TimeSpan.FromSeconds(value: 10)
-        );
+        ).WaitAsync(cancellationToken: TestToken);
 
         await serverTask;
 
@@ -1125,6 +822,10 @@ public sealed class PersistentRequestLaneLawTests {
             expected: ((byte)2),
             actual: Assert.Single(collection: second.Body.ToArray())
         );
+        Assert.Equal(
+            expected: 2,
+            actual: dialer.Connects.Count
+        );
         Assert.True(
             condition: lane.IsAvailable,
             userMessage: "a dialect's own exception is the request's answer, never a backoff"
@@ -1132,71 +833,42 @@ public sealed class PersistentRequestLaneLawTests {
     }
     /// <summary>A request that succeeds while the lane is inside its unreachable backoff clears that backoff at once:
     /// <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/> reports <see langword="true"/> again
-    /// long before the window would have expired on its own. Falsifier: resetting only the noted flag (not the
-    /// backoff deadline) on success leaves it <see langword="false"/> for the full thirty-second window this law never
-    /// waits out.</summary>
+    /// with the lane's clock never having moved, so nothing but the success can have cleared it. Falsifier: resetting
+    /// only the noted flag (not the backoff deadline) on success leaves it <see langword="false"/>.</summary>
     [Fact]
     public async Task QueuedSuccess_ResetsAvailability_InsideTheBackoffWindow() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
+        using var listener = Listen();
+        var clock = new VirtualClock();
         var unreachable = UnreachableEndpoint();
-        var reachable = ((IPEndPoint)listener.LocalEndpoint);
+        var reachable = listener.LocalEndpoint;
         var peerIsUp = false;
-
-        using var deadline = Laws.SocketDeadline();
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
-                using var client = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var stream = client.GetStream();
+                var (client, stream) = await AcceptHelloAsync(listener: listener);
 
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: stream
-                );
-
-                var request = await WireFrame.ReadAsync(
-                    stream: stream,
-                    maxFrameBytes: 4096,
-                    ct: deadline.Token
-                );
-
-                await WireFrame.WriteAsync(
-                    body: request.Body,
-                    ct: deadline.Token,
-                    kind: ((byte)FakeResponseKind.Pong),
-                    stream: stream
-                );
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+                using (client) {
+                    await EchoAsync(stream: stream);
+                }
+            }
         );
 
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
+        using var lane = Lanes.NewLane(
+            clock: clock,
+            dialer: new LoopbackDialer(),
+            // The route is republished from the absent peer to the live one between the two requests; the worker
+            // reads it after the queue handoff, which orders the write below before this read.
             route: () => {
-                // The route is republished from the absent peer to the live one between the two requests; the
-                // worker reads it after the queue handoff, which orders the write below before this read.
                 var endpoint = (Volatile.Read(location: ref peerIsUp)
                     ? reachable
                     : unreachable
                 );
 
                 return new LaneRoute(
-                    Endpoint: endpoint,
-                    Description: endpoint.ToString()
+                    Description: endpoint.ToString()!,
+                    Endpoint: endpoint
                 );
-            },
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+            }
         );
 
         var refused = await lane.Enqueue(
@@ -1229,6 +901,10 @@ public sealed class PersistentRequestLaneLawTests {
             condition: served.Ok,
             userMessage: served.Failure.ToString()
         );
+        Assert.Equal(
+            expected: TimeSpan.Zero,
+            actual: clock.Elapsed
+        );
         Assert.True(
             condition: lane.IsAvailable,
             userMessage: "a success inside the backoff window must clear the window at once"
@@ -1239,60 +915,35 @@ public sealed class PersistentRequestLaneLawTests {
     /// worker that ever let two requests share the stream concurrently would corrupt or misroute an answer.</summary>
     [Fact]
     public async Task SequentialEnqueue_ServesStrictFifoOrder_WithNoCrossTalk() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
         const int RequestCount = 16;
+
+        using var listener = Listen();
+        var dialer = new LoopbackDialer();
         var observedOrder = new List<int>();
-
-        using var deadline = Laws.SocketDeadline();
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
-                using var client = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token);
-                var stream = client.GetStream();
+                var (client, stream) = await AcceptHelloAsync(listener: listener);
 
-                await HandshakeWireFormat.TryReadExactAsync(
-                    buffer: new byte[HandshakeWireFormat.HelloBytes],
-                    ct: deadline.Token,
-                    stream: stream
-                );
+                using (client) {
+                    for (var index = 0; (index < RequestCount); index++) {
+                        var request = await ReadRequestAsync(stream: stream);
 
-                for (var index = 0; (index < RequestCount); index++) {
-                    var request = await WireFrame.ReadAsync(
-                        stream: stream,
-                        maxFrameBytes: 4096,
-                        ct: deadline.Token
-                    );
-
-                    observedOrder.Add(item: request.Body.Span[0]);
-                    await WireFrame.WriteAsync(
-                        body: request.Body,
-                        ct: deadline.Token,
-                        kind: ((byte)FakeResponseKind.Pong),
-                        stream: stream
-                    );
+                        observedOrder.Add(item: request.Body.Span[0]);
+                        await WireFrame.WriteAsync(
+                            body: request.Body,
+                            ct: TestToken,
+                            kind: ((byte)FakeResponseKind.Pong),
+                            stream: stream
+                        );
+                    }
                 }
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+            }
         );
 
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+        using var lane = Lanes.NewLane(
+            dialer: dialer,
+            route: RouteTo(endpoint: listener.LocalEndpoint)
         );
 
         var pending = new Task<LaneResponse<FakeResponseKind>>[RequestCount];
@@ -1304,7 +955,7 @@ public sealed class PersistentRequestLaneLawTests {
             );
         }
 
-        var results = await Task.WhenAll(pending);
+        var results = await Task.WhenAll(tasks: pending);
 
         await serverTask;
 
@@ -1326,96 +977,84 @@ public sealed class PersistentRequestLaneLawTests {
             ),
             actual: observedOrder
         );
-    }
-    /// <summary>A peer that takes the request and then never writes a byte is answered
-    /// <see cref="WireRefusal.RequestTimedOut"/> once the per-request deadline expires — inside the ten seconds a
-    /// consumer waits on the task, the bound <c>WorldRemoteAuthority</c> relies on — with the request written exactly
-    /// once, no reconnect, no second route sample, and the lane still available: a silent peer is neither an absent
-    /// one nor a reason to apply the request twice. Falsifier: bounding the read by the lifetime alone (no per-request
-    /// deadline) parks the worker until the runner's own budget; re-sending on expiry makes the listener see a second
-    /// connection and the route a second sample.</summary>
-    [Fact]
-    public async Task SilentPeerAfterTheRequestWasWritten_AnswersRequestTimedOut_WithoutResendOrBackoff() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
+        Assert.Equal(
+            expected: 1,
+            actual: dialer.Connects.Count
         );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-        var requestTimeout = TimeSpan.FromMilliseconds(value: 300);
-        var framesSeen = 0;
+    }
+    /// <summary>A peer that goes silent once the lane has reached the request write — either never answering a request
+    /// it took whole, or never taking the write at all (a full receive window) — is answered
+    /// <see cref="WireRefusal.RequestTimedOut"/> at exactly the per-request deadline on the lane's clock: one tick
+    /// short of it the request is still pending. The detail says whether the write completed, the request crossed the
+    /// wire at most once over exactly one connection with one route sample, and the lane is still available: a silent
+    /// peer is neither an absent one nor a reason to apply the request twice. Falsifiers: bounding the exchange by the
+    /// lifetime alone (no per-request deadline) leaves the request pending after the deadline; narrating every expiry
+    /// past <c>EnsureConnectedAsync</c> as "the request was written" misnames the stalled write; routing the expiry to
+    /// the connect-failure path dials a second time and enters backoff.</summary>
+    [Theory]
+    [InlineData(false, "the request was written", "did not complete", 1)]
+    [InlineData(true, "the request write did not complete", "the request was written", 0)]
+    public async Task SilentPeer_AnswersRequestTimedOut_AtExactlyTheDeadline_WithoutResendOrBackoff(bool stallsWrite, string detail, string forbiddenDetail, int framesDelivered) {
+        using var listener = Listen();
+        var clock = new VirtualClock();
+        var dialer = new LoopbackDialer(admitted: 1);
+        var protocol = new FakeLaneProtocol { StallsRequestWrite = stallsWrite };
         var routeReads = 0;
-        var acceptedAgain = false;
-
-        using var deadline = Laws.SocketDeadline();
-        using var watch = CancellationTokenSource.CreateLinkedTokenSource(token: deadline.Token);
         var serverTask = Task.Run(
+            cancellationToken: TestToken,
             function: async () => {
-                // The silent peer: takes every frame the lane writes and never answers; the connection ends only when
-                // the lane drops it, which is how the frame count becomes final.
-                using (var client = await listener.AcceptTcpClientAsync(cancellationToken: deadline.Token)) {
-                    var stream = client.GetStream();
+                // The silent peer takes every frame the lane delivers and never answers; the connection ends only when
+                // the lane drops it, which is what makes the frame count final.
+                var (client, stream) = await AcceptHelloAsync(listener: listener);
+                var frames = 0;
 
-                    await HandshakeWireFormat.TryReadExactAsync(
-                        buffer: new byte[HandshakeWireFormat.HelloBytes],
-                        ct: deadline.Token,
-                        stream: stream
-                    );
-
+                using (client) {
                     try {
-                        while ((await WireFrame.ReadAsync(
-                            stream: stream,
-                            maxFrameBytes: 4096,
-                            ct: deadline.Token
-                        )).Ok) {
-                            Interlocked.Increment(location: ref framesSeen);
+                        while ((await ReadRequestAsync(stream: stream)).Ok) {
+                            frames++;
                         }
                     } catch (IOException) {
                         // A reset instead of a clean close is the same end of the connection.
                     }
                 }
 
-                try {
-                    using var second = await listener.AcceptTcpClientAsync(cancellationToken: watch.Token);
-
-                    acceptedAgain = true;
-                } catch (OperationCanceledException) {
-                    // Nothing dialed again before the answer arrived — the passing outcome.
-                }
-            },
-            cancellationToken: TestContext.Current.CancellationToken
+                return frames;
+            }
         );
 
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: requestTimeout,
+        using var lane = Lanes.NewLane(
+            clock: clock,
+            dialer: dialer,
+            protocol: protocol,
             route: () => {
                 Interlocked.Increment(location: ref routeReads);
 
                 return new LaneRoute(
-                    Endpoint: endpoint,
-                    Description: endpoint.ToString()
+                    Description: listener.LocalEndpoint.ToString()!,
+                    Endpoint: listener.LocalEndpoint
                 );
-            },
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+            }
         );
 
-        var response = await lane.Enqueue(
+        var answer = lane.Enqueue(
             body: [1],
             kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            cancellationToken: deadline.Token,
-            timeout: TimeSpan.FromSeconds(value: 10)
         );
 
-        watch.Cancel();
-        await serverTask;
+        await (stallsWrite ? protocol.RequestWrites : protocol.ResponseReads).ReachedAsync(count: 1);
+        clock.Advance(by: (RequestTimeout - TimeSpan.FromTicks(value: 1)));
+        Assert.False(
+            condition: answer.IsCompleted,
+            userMessage: "the request was answered before its deadline"
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: clock.Armed(dueTime: RequestTimeout)
+        );
+
+        clock.Advance(by: TimeSpan.FromTicks(value: 1));
+
+        var response = await answer;
 
         Assert.False(condition: response.Ok);
         Assert.Equal(
@@ -1424,190 +1063,87 @@ public sealed class PersistentRequestLaneLawTests {
         );
         Assert.Contains(
             actualString: response.Failure.Detail,
+            expectedSubstring: detail
+        );
+        Assert.Contains(
+            actualString: response.Failure.Detail,
             expectedSubstring: "is not re-sent"
+        );
+        Assert.DoesNotContain(
+            actualString: response.Failure.Detail,
+            expectedSubstring: forbiddenDetail
+        );
+        Assert.Equal(
+            expected: framesDelivered,
+            actual: await serverTask
         );
         Assert.Equal(
             expected: 1,
-            actual: Volatile.Read(location: ref framesSeen)
+            actual: dialer.Connects.Count
         );
         Assert.Equal(
             expected: 1,
             actual: Volatile.Read(location: ref routeReads)
-        );
-        Assert.False(
-            condition: acceptedAgain,
-            userMessage: "a timed-out request must never be re-sent over a fresh connection"
         );
         Assert.True(
             condition: lane.IsAvailable,
             userMessage: "a silent peer is not an absent one; the lane must not enter backoff"
         );
     }
-    /// <summary>A request write that never completes — the dialect parks in it, as it would against a peer that took
-    /// the Hello and then stopped reading — is answered <see cref="WireRefusal.RequestTimedOut"/> once the per-request
-    /// deadline expires, with a detail saying the write did not complete, never one claiming the request was written,
-    /// over exactly one connection, with no re-send and the lane still available: a stalled reader is neither an
-    /// absent peer nor a connect failure. Falsifier: narrating every deadline expiry past <c>EnsureConnectedAsync</c>
-    /// as "the request was written" tells the caller the peer holds a request it never received whole; routing the
-    /// write's expiry to the connect-failure path dials a second time and enters backoff.</summary>
-    [Fact]
-    public async Task SilentPeerDuringTheRequestWrite_AnswersRequestTimedOut_SayingTheWriteDidNotComplete() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-        var requestTimeout = TimeSpan.FromMilliseconds(value: 300);
-        var accepted = 0;
-
-        using var deadline = Laws.SocketDeadline();
-        using var watch = CancellationTokenSource.CreateLinkedTokenSource(token: deadline.Token);
-        var serverTask = Task.Run(
-            function: async () => {
-                // The stalled reader: accepts every connection, takes its Hello, and never reads again; the connections
-                // are held open until the answer has arrived, and the count is how a second dial would show.
-                var held = new List<TcpClient>();
-
-                try {
-                    while (true) {
-                        var client = await listener.AcceptTcpClientAsync(cancellationToken: watch.Token);
-
-                        held.Add(item: client);
-                        Interlocked.Increment(location: ref accepted);
-                        await HandshakeWireFormat.TryReadExactAsync(
-                            buffer: new byte[HandshakeWireFormat.HelloBytes],
-                            ct: watch.Token,
-                            stream: client.GetStream()
-                        );
-                    }
-                } catch (OperationCanceledException) {
-                    // The answer arrived and the law stopped counting.
-                } finally {
-                    foreach (var client in held) {
-                        client.Dispose();
-                    }
-                }
-            },
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol { StallsRequestWrite = true },
-            requestTimeout: requestTimeout,
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
-        );
-
-        var response = await lane.Enqueue(
-            body: [1],
-            kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            cancellationToken: deadline.Token,
-            timeout: TimeSpan.FromSeconds(value: 10)
-        );
-
-        watch.Cancel();
-        await serverTask;
-
-        Assert.False(condition: response.Ok);
-        Assert.Equal(
-            expected: WireRefusal.RequestTimedOut,
-            actual: response.Failure.Refusal
-        );
-        Assert.Contains(
-            actualString: response.Failure.Detail,
-            expectedSubstring: "the request write did not complete"
-        );
-        Assert.DoesNotContain(
-            actualString: response.Failure.Detail,
-            expectedSubstring: "the request was written"
-        );
-        Assert.Equal(
-            expected: 1,
-            actual: Volatile.Read(location: ref accepted)
-        );
-        Assert.True(
-            condition: lane.IsAvailable,
-            userMessage: "a stalled reader is not an absent peer; the lane must not enter backoff"
-        );
-    }
     /// <summary>A peer that accepts the connection and the Hello but never completes authentication is a connect
-    /// failure bounded by the per-request deadline: two attempts each time out, the lane declares itself unreachable
-    /// (<see cref="WireRefusal.LaneUnavailable"/> naming the timeout, backoff entered) and the answer arrives in about
-    /// twice the deadline — never a third connection. Falsifier: leaving <c>EnsureConnectedAsync</c> outside the
-    /// attempt deadline parks the worker in the stalled authentication until the runner's own budget.</summary>
+    /// failure bounded by the per-request deadline: each of two attempts parks in authentication until its own
+    /// deadline fires on the lane's clock, and the second expiry declares the lane unreachable
+    /// (<see cref="WireRefusal.LaneUnavailable"/> naming the timeout, backoff entered) after exactly two deadlines of
+    /// clock time — never a third connection. Falsifier: leaving <c>EnsureConnectedAsync</c> outside the attempt
+    /// deadline leaves the first attempt parked when the clock fires.</summary>
     [Fact]
     public async Task StallInsideAuthenticate_DeclaresUnreachableAfterTwoTimedOutAttempts() {
-        using var listener = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
+        // The listener's backlog completes each connect and buffers each Hello; nothing ever answers, and the stall
+        // itself is the dialect's.
+        using var listener = Listen();
+        var clock = new VirtualClock();
+        var dialer = new LoopbackDialer();
+        var protocol = new FakeLaneProtocol { StallsAuthentication = true };
+
+        using var lane = Lanes.NewLane(
+            clock: clock,
+            dialer: dialer,
+            protocol: protocol,
+            route: RouteTo(endpoint: listener.LocalEndpoint)
         );
 
-        listener.Start();
-
-        var endpoint = ((IPEndPoint)listener.LocalEndpoint);
-        var requestTimeout = TimeSpan.FromMilliseconds(value: 500);
-        var accepted = 0;
-
-        using var deadline = Laws.SocketDeadline();
-        using var watch = CancellationTokenSource.CreateLinkedTokenSource(token: deadline.Token);
-        var serverTask = Task.Run(
-            function: async () => {
-                // Accepts every connection and holds it open without ever writing; the stall itself is the dialect's.
-                var held = new List<TcpClient>();
-
-                try {
-                    while (true) {
-                        held.Add(item: await listener.AcceptTcpClientAsync(cancellationToken: watch.Token));
-                        Interlocked.Increment(location: ref accepted);
-                    }
-                } catch (OperationCanceledException) {
-                    // The answer arrived and the law stopped counting.
-                } finally {
-                    foreach (var client in held) {
-                        client.Dispose();
-                    }
-                }
-            },
-            cancellationToken: TestContext.Current.CancellationToken
-        );
-
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol { StallsAuthentication = true },
-            requestTimeout: requestTimeout,
-            route: () => new LaneRoute(
-                Endpoint: endpoint,
-                Description: endpoint.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
-        );
-
-        var stopwatch = Stopwatch.StartNew();
-        var response = await lane.Enqueue(
+        var answer = lane.Enqueue(
             body: [],
             kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            cancellationToken: deadline.Token,
-            timeout: TimeSpan.FromSeconds(value: 10)
         );
-        var elapsed = stopwatch.Elapsed;
 
-        watch.Cancel();
-        await serverTask;
+        await protocol.Authentications.ReachedAsync(count: 1);
+        clock.Advance(by: RequestTimeout);
+
+        // The first expiry is a connect failure, so it retries rather than answers.
+        var secondAttempt = protocol.Authentications.ReachedAsync(count: 2);
+
+        Assert.Same(
+            expected: secondAttempt,
+            actual: await Task.WhenAny(
+                task1: secondAttempt,
+                task2: answer
+            )
+        );
+        clock.Advance(by: RequestTimeout);
+
+        // The second expiry answers rather than dialing a third time.
+        var thirdAttempt = protocol.Authentications.ReachedAsync(count: 3);
+
+        Assert.Same(
+            expected: answer,
+            actual: await Task.WhenAny(
+                task1: answer,
+                task2: thirdAttempt
+            )
+        );
+
+        var response = await answer;
 
         Assert.False(condition: response.Ok);
         Assert.Equal(
@@ -1620,13 +1156,11 @@ public sealed class PersistentRequestLaneLawTests {
         );
         Assert.Equal(
             expected: 2,
-            actual: Volatile.Read(location: ref accepted)
+            actual: dialer.Connects.Count
         );
-        // Two deadlines back to back plus the retry delay; the slack absorbs scheduling, never a third attempt.
-        Assert.InRange(
-            actual: elapsed,
-            high: ((2 * requestTimeout) + TimeSpan.FromSeconds(value: 2)),
-            low: requestTimeout
+        Assert.Equal(
+            expected: (2 * RequestTimeout),
+            actual: clock.Elapsed
         );
         Assert.False(
             condition: lane.IsAvailable,
@@ -1634,78 +1168,49 @@ public sealed class PersistentRequestLaneLawTests {
         );
     }
     /// <summary>A throwing <c>onUnavailable</c> callback is contained: the request whose connect failure raised it
-    /// still gets its named refusal, and the worker survives to serve a later <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Enqueue"/>.
-    /// Falsifier: letting the callback's exception escape <c>Unreachable</c> and back into <c>RunAsync</c>'s
-    /// unguarded <c>await ServeAsync(...)</c> faults the worker task before it ever completes the current request's
-    /// <see cref="TaskCompletionSource{TResult}"/>, so the first <c>await</c> below hangs until the test's own
-    /// deadline, and this turns red.</summary>
+    /// still gets its own refusal — the unreachable peer, never the callback's exception — and the worker survives to
+    /// serve a later <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.Enqueue"/>. Falsifier: invoking the
+    /// callback inline without containment lets its exception escape <c>Unreachable</c>, so the request is answered
+    /// with the callback's failure instead of the peer's.</summary>
     [Fact]
     public async Task ThrowingOnUnavailableCallback_FailsCurrentRequest_AndKeepsWorkerAliveForLaterEnqueues() {
-        var unreachable = UnreachableEndpoint();
-
-        using var deadline = Laws.SocketDeadline();
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
+        using var lane = Lanes.NewLane(
+            dialer: new LoopbackDialer(),
             onUnavailable: _ => throw new InvalidOperationException(message: "the callback itself is broken"),
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: unreachable,
-                Description: unreachable.ToString()
-            ),
-            sourceAuthority: "test-authority",
-            unavailableBackoff: TimeSpan.FromSeconds(value: 30)
+            route: RouteTo(endpoint: UnreachableEndpoint())
         );
 
-        var first = await lane.Enqueue(
-            body: [],
-            kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            timeout: TimeSpan.FromSeconds(value: 10),
-            cancellationToken: deadline.Token
-        );
+        for (var request = 0; (request < 2); request++) {
+            var response = await lane.Enqueue(
+                body: [],
+                kind: FakeRequestKind.Ping
+            ).WaitAsync(cancellationToken: TestToken);
 
-        Assert.False(condition: first.Ok);
-        Assert.Equal(
-            expected: WireRefusal.LaneUnavailable,
-            actual: first.Failure.Refusal
-        );
+            Assert.False(condition: response.Ok);
+            Assert.Equal(
+                expected: WireRefusal.LaneUnavailable,
+                actual: response.Failure.Refusal
+            );
+            Assert.Contains(
+                actualString: response.Failure.Detail,
+                expectedSubstring: "is unreachable"
+            );
+        }
 
-        var second = await lane.Enqueue(
-            body: [],
-            kind: FakeRequestKind.Ping
-        ).WaitAsync(
-            timeout: TimeSpan.FromSeconds(value: 10),
-            cancellationToken: deadline.Token
-        );
-
-        Assert.False(condition: second.Ok);
-        Assert.Equal(
-            expected: WireRefusal.LaneUnavailable,
-            actual: second.Failure.Refusal
-        );
+        Assert.False(condition: lane.Completion.IsCompleted);
     }
     /// <summary>Once unreachable, the lane reports <see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/>
-    /// as <see langword="false"/> for exactly its configured backoff window, then recovers.</summary>
+    /// as <see langword="false"/> for exactly its configured backoff window on its clock — still unavailable one tick
+    /// before the window closes, available at the tick it closes.</summary>
     [Fact]
     public async Task Unreachable_StaysUnavailableForTheBackoffWindow_ThenRecovers() {
-        var unreachable = UnreachableEndpoint();
+        var clock = new VirtualClock();
         var backoff = TimeSpan.FromMilliseconds(value: 200);
 
-        using var deadline = Laws.SocketDeadline();
-        using var lane = new PersistentRequestLane<FakeRequestKind, FakeResponseKind>(
-            connect: ConnectTestStreamAsync,
-            connectRetryDelay: TimeSpan.FromMilliseconds(value: 5),
-            lifetime: deadline.Token,
-            protocol: new FakeLaneProtocol(),
-            requestTimeout: TimeSpan.FromSeconds(value: 10),
-            route: () => new LaneRoute(
-                Endpoint: unreachable,
-                Description: unreachable.ToString()
-            ),
-            sourceAuthority: "test-authority",
+        using var lane = Lanes.NewLane(
+            clock: clock,
+            dialer: new LoopbackDialer(),
+            route: RouteTo(endpoint: UnreachableEndpoint()),
             unavailableBackoff: backoff
         );
 
@@ -1716,10 +1221,11 @@ public sealed class PersistentRequestLaneLawTests {
 
         Assert.False(condition: lane.IsAvailable);
 
-        await Task.Delay(
-            delay: (backoff + TimeSpan.FromMilliseconds(value: 100)),
-            cancellationToken: deadline.Token
-        );
+        clock.Advance(by: (backoff - TimeSpan.FromTicks(value: 1)));
+
+        Assert.False(condition: lane.IsAvailable);
+
+        clock.Advance(by: TimeSpan.FromTicks(value: 1));
 
         Assert.True(condition: lane.IsAvailable);
     }

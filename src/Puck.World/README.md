@@ -43,8 +43,13 @@ with named cameras and independent sky and volumetric-cloud toggles.
 For service extensions, use the [configuration guide](../Puck.World.Server/ExtensionConfiguration.md)
 and the [Azure example](Assets/hosting/azure.extensions.example.json). The operator
 selects the file with `--extensions-config-file`; `world.extensions.catalog`
-lists installed provider types and `world.extensions` reads back the configured
-connections. Imported world content cannot enable cloud access by itself.
+lists every composed [extension](../../docs/reference/extensions.md) and its
+contributions, and `world.extensions` reads back the configured connections and
+participants.
+World composes both Gaming Brick forges as built-ins and discovers the rest from
+`extensions` under the working directory and beside the executable; an
+installation it cannot use refuses the boot by name. Imported world content
+cannot enable cloud access by itself.
 
 The [granaries district](Assets/worlds/modules/README.md) renders the existing Azure
 deployment's storage inventory on the island's own plaza as an importable, authored
@@ -79,17 +84,90 @@ Precompilation does not rebuild C# sources or replace the portable build's
 manifest. Measure a published artifact with
 `puck bench startup --world-artifact artifacts/world/Puck.World.dll`.
 
+`--world` takes a `.world.json` document or a `.puck` source, which boots
+without a prior compile. A source that declares several worlds — a
+composition such as [Rulepush](../../worlds/rulepush/README.md) — boots the
+world it declares `entry world`; `--entry <name>` boots another of its declared
+worlds instead, which is how a level of a composition is worked on directly:
+
+```powershell
+dotnet run --project src/Puck.World -c Release -- --world worlds/rulepush/rulepush.puck
+dotnet run --project src/Puck.World -c Release -- --world worlds/rulepush/rulepush.puck --entry hedges
+```
+
+Either way the game stages every declared world under
+`<state-dir>/compositions/<source name>`, so each border crossing finds its
+neighbour, and prints one `[world] composition:` line naming the staging
+directory and the world it booted. A composition with no entry and no
+`--entry`, an `--entry` the source does not declare, and an `--entry` beside a
+world that is not a composition each refuse the boot by name.
+
+A document reference inside a world (`basis`, `imports`, `references`) names a
+document, such as `games/poker`, never a file. It resolves to the `.puck`
+source beside the referrer when one exists and to the `.world.json` document
+otherwise, so the source tree and the built output (`Assets/worlds` beside the
+executable, which carries compiled documents only) boot the same worlds.
+
+A `.puck` source compiles once: the boot, every basis and import it reads, and
+`world.reload` compile through one cache, kept per user in `compilations` under
+the [per-user Puck directory](../../docs/development/contributing.md#per-user-directory)
+and shared with the CLI, so a second boot of
+an unchanged source tree compiles nothing. A held compile is used only while
+every file it read — the source, its modules, its locks and assets, and every
+path it probed — still holds the same bytes, so an edit recompiles exactly the
+sources that read the edited file. The boot's own work (documents read and
+merged, sources compiled or answered from the cache, parses, validations,
+neighbour resolutions and more) is the `world.boot` work source every counters
+report reads.
+
+A boot takes its drawn definition from a
+[compiled world](../../docs/architecture/worlds.md#compiled-worlds) when one
+holds for the document: the `<name>.puckb` beside it, which the build ships for
+every world in `Assets/worlds` and `puck compile` writes, or the one a previous
+boot wrote into the per-user `compiled-worlds` cache, which every boot shares
+whatever its `--state-dir`. A boot that finds none, or finds chunks that no
+longer hold, derives them and writes the whole compiled world into that cache,
+leaving out the creation bakes: those a
+compiled world names fill the bake cache from the build's bake pack
+(`Assets/worlds/bakes.puckbake`), and a presentation bakes any that are
+missing in the background and keeps them in the per-user `bakes` cache
+([creation bakes](../../docs/architecture/worlds.md#creation-bakes)).
+
 Boot prints one line naming the world-definition file it loaded (an explicit
-`--world <path>` or the shipped `Assets/worlds/puck.world.json`), one naming
+`--world <path>` or the shipped `Assets/worlds/puck.world.json`), one
+`[world] compiled world:` line naming the compiled world it read, the chunks it
+kept, derived and deferred, and where it wrote one, one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
 flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
 choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
-because changing APIs rebuilds the whole render host.
+because changing APIs rebuilds the whole render host. `--debug-layers` creates
+the device with its backend's validation layer, printing `[vulkan-debug]` or
+`[d3d12-debug]` lines; `puck canary --debug-layers` and `puck qualify` pass it.
 
 `--help` (or `-h`) and `--version` exit before host setup: they do not load a
 world, open a window, or initialize storage. Use `--version` alone; the parser
 refuses combining it with other arguments. Invalid options exit with a diagnostic.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | The run ended normally. |
+| 1 | The boot was refused by its options, world document, or configuration. |
+| 2 | This host cannot run the boot: the selected graphics backend has no usable device, the operating system does not offer it (Direct3D 12 off Windows), or the QUIC listen endpoint cannot be bound (the address is in use, the operating system refused it, or QUIC is not offered here). Stderr carries one `[world.host: unsupported: <resource> unavailable: <reason>]` line, such as `vulkan device unavailable: …` or `quic listener 127.0.0.1:7777 unavailable: …`. |
+| other | A host pump or service failed; the exception and its stack trace go to stderr. |
+
+A backend raises `GpuDeviceUnavailableException` from its own device bring-up
+when the loader or driver is missing, no adapter meets its requirements, or the
+driver refuses the device. Both boot shapes report that as exit 2. The offscreen
+shape brings its device up while the host starts. The windowed shape brings it
+up in the window pump's presenter activation, before the window is shown. Either
+way, the failure is reported rather than surfacing inside the frame loop.
+`Program.cs` ends in `LauncherHostRun.RunAsync`, which maps both places to the
+exit code. A pump that fails for any other reason fails the run, so the process
+never exits 0 after a pump crashed. Teardown after such a failure still runs
+every step. A step that fails then is logged and never replaces the original
+failure. Each GPU consumer releases only what it allocated, so after a failed
+bring-up nothing asks for the device.
 
 Compiled SDF shaders can change within that running host: finish `CompileShaders`,
 then issue `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf` and inspect
@@ -103,7 +181,11 @@ the QUIC peer endpoint (`WorldPeerHost`) so a remote peer can join the same
 ordered domain a local script drives; `--connect <ip:port>` keeps the normal
 world/presentation composition while its local seats are authorized and driven
 by that remote authority. Listening and connecting may coexist on the shared
-`Puck.Networking.Peers.Peer`; neither is enabled by default. The networking
+`Puck.Networking.Peers.Peer`; neither is enabled by default. The listener binds
+while the host starts and narrates `[world.listen: bound <ip:port> …]`; port 0
+binds any free port, and that line names the one bound. An endpoint that is not
+an `ip:port` pair refuses the boot with exit 1, and one this host cannot bind
+exits 2 as described under the exit codes above. The networking
 library owns TLS, certificate-bound identity, and bounded message delivery;
 there is no TCP fallback. `PeerStream` adapts those messages to World's byte
 codecs. After that peer handshake, an interactive connection crosses two
@@ -178,19 +260,20 @@ drives both shapes, minus whatever presentation composed. The command
 VOCABULARY itself must be identical in every shape—the document validators
 check a world's `bindingOverlays`
 against whatever this composition registers, so a genuinely presentation-only
-verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
+verb (`world.fps` and the other graphics options, host and audio levers,
+recording) refuses as
 UNKNOWN over headless stdin, while `player.mode` (and the fly camera
 application it can activate) is CORE-registered (nothing in its dependency
 chain is GPU-typed), terminal-owned `console` is
-registered beside `quit`, and `world.screenshot`/`player.wheel.*` are
+registered beside `quit`, and `world.screenshot`, `player.wheel.*`,
+`view.override`/`world.view.*`, and `pipeline.*` are
 CORE-registered too but resolve their presentation dependency as OPTIONAL and
 refuse BY NAME at use instead of going unregistered—a headless boot that
 left a stock wheel sector unregistered would refuse the SAME boot document a
 windowed boot admits. `screen.*` is
 registered in EVERY shape (the machine host is core
-state, not presentation-fed): `screen.insert`/`.eject`/`.select`/`.options`/
-`.link`/`.unlink` apply through the ordered domain headless exactly as
-windowed, and `screen.source <index> camera|capture|desktop|view|qr` still
+state, not presentation-fed): `screen.insert`/`.eject` apply through the
+ordered domain headless exactly as windowed, and `screen.source <index> camera|capture|desktop|probe|view|qr` still
 attempts a real device open (or, for `qr`, a real encode) and reports the
 honest failure rather than refusing as unknown.
 `WorldBootComposition.cs` is the split: `AddWorldAuthoritativeCore` registers
@@ -208,8 +291,7 @@ screen. There is no `--offscreen` CLI flag; author it in the world document:
 ```
 
 Direct3D 12 is genuinely surfaceless (the device activates on its first GPU
-call, exactly like `Puck.Post`'s retired `PostDirectXDevice`—see
-`experimental/Puck.Post/PostDirectXDevice.cs`); Vulkan's device bring-up in
+call); Vulkan's device bring-up in
 this codebase is fused to a real native surface, so this shape stands up a
 native window through the SAME path the windowed shape uses but never shows
 it and never builds a swap chain against it—see
@@ -221,6 +303,23 @@ compose. `WorldBootComposition.AddWorldOffscreenPresentation` and
 per host-loop iteration, paced by the fixed-step pump rather than vsync) are
 the seams; the server steps exactly like `host.presentation: none`
 (`HeadlessWorldSimulation`).
+
+Because its frames are its only output, the offscreen host holds its clock
+for them: it never steps past an armed capture's tick until that capture is
+served or refused. Whatever keeps the render chain from serving the capture
+(the engine's pipelines still building on a cold driver shader cache, or a
+device being rebuilt), the host keeps producing frames and answering the
+console but steps no further tick, and the time it waits is spent, not owed,
+so serving the capture releases no burst. The hold is bounded: once the run
+has held its clock for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`),
+the capture is refused as `unserved` with the reason the chain gave, such as
+"the engine's pipelines never installed", and the run steps on; a later
+capture the chain still cannot serve is refused at once. `world.counters`
+reports the hold under `world.captures`: `world.captures.held` (engine ticks
+withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
+capture waited, which stays 0 offscreen). A capture still waiting when the run
+ends is refused as `unserved` before the render chain is disposed. The windowed
+host paces to its display and never holds.
 
 ## Seat controls and camera authoring
 
@@ -241,7 +340,28 @@ look; left-stick movement remains relative to character heading while held.
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
 `world.view.camera [player]` reads the same seat-owned state movement and both
-local/travel renderers use. The old mixed seat-look shape is not accepted.
+local/travel renderers use.
+
+A seat's camera reads its rig from the document of the authority the seat is
+routed to, and a rig operand bound to `state.<row>[.<key>]` reads that same
+authority's rows: the client's own state mirror while the seat is on the
+authority this client observes, and the routed authority's followed mirror,
+at that authority's delivered tick, once the seat travels to another. The chase
+framing's body scale, the seat's state-backed binding contexts and its radial
+wheel's label and icon rows read the routed authority the same way, so a seat
+never frames, binds or labels itself with the rows of a world it has left.
+The wheel's rings are rebuilt only when one of the label or icon cells they read
+changes, not on every state delivery.
+
+A seat's route can change on any thread: the tick thread commits a local
+transfer or runs a console verb, and a federated observer reports an onward
+handoff from its socket worker. Publishing the claim is safe from either, but
+what follows a route change rewrites the seat's bindings and binds its reads to
+a state mirror, and neither takes a lock. `WorldSeatAuthorityRouter.RouteChanged`
+therefore fires only on the thread that pumps and presents: `WorldHostStep`
+delivers the changes published since its last delivery before a step's
+intents, after the transfer drain, and after the other instances step. A
+subscriber may assume it runs on that thread.
 
 Binding contexts can also select complete control groups from gameplay state.
 A context family named `state:<row>` reads that declared world-state row: a
@@ -255,12 +375,41 @@ changes, held commands and chord/page latches from the old group are cleared.
 
 ## Shader pipelines
 
-A `views.pipelines` row names a pipeline instance and its source document or
-one-off shader. The source resolves relative to the world document. A layout
+A `views.pipelines` row names a pipeline instance and its source: a pipeline
+document, a one-off HLSL shader, or a shader package directory written by
+`puck shaders package`, which loads from its precompiled binaries with its
+source tree gone and no compiler on the machine. A document or shader source
+loads the package the game's build stored for it in `Assets/worlds/packages`
+when one matches, which is every source a shipped world names, and otherwise
+compiles in the background, which needs `dxc`; without `dxc` it is refused by
+`SHADERPKG_ABSENT` (see
+[the build's package store](../../docs/reference/shaders.md#the-builds-package-store)).
+Every pass is HLSL; it reads its
+time, pointer, camera and config from the generated frame block the
+[shader reference](../../docs/reference/shaders.md#the-frame-block)
+describes. A relative
+source resolves against the CURRENTLY LOADED document's own directory, on
+both the server's override gate and the rendering host: a `world.load` of a
+document from another directory moves that directory for every row the
+loaded document names, the same directory a live `pipeline.commit` binds
+against from that point on. A silo-hosted world has no local document file
+(its definition arrives from cloud storage), so a relative source there
+resolves against the executable's own directory instead. A layout
 slot selects the instance with `pipeline`; it can instead select a `camera`,
 but cannot select both. The row's optional camera supplies shader camera
 inputs, and `timeScale` seeds its presentation clock. `views.shaderToolchain`
-optionally selects the compiler-tools directory.
+optionally selects the directory holding `dxc`. `pipeline.sentinels <name> on`
+writes each frame-block word's echo sentinel in place of the frame values and
+config, which an [echo pass](../../docs/reference/shaders.md#pass-interfaces)
+reads back.
+
+A `views.graphs` row names an instance of a
+[frame graph](../../docs/reference/shaders.md#frame-graphs): its graph source,
+resolved like a pipeline source, a camera, a refresh divisor or rate, and
+inputs bound to other rows' outputs, with `views.graphBudget` as the
+scheduler's pass-pixel ceiling. The document validates the rows and
+`world.budget` prices each one by planning its source, but no view renders
+through a graph yet.
 
 Start the three-pass feedback example from the repository root:
 
@@ -286,31 +435,132 @@ pipeline.reset ink
 pipeline.time ink resume
 ```
 
-Edit [the simulation shader](Assets/pipelines/ink-simulation.glsl) while it runs.
+Edit [the simulation shader](Assets/pipelines/ink-simulation.hlsl) while it runs.
 Compilation happens in the background. A typo reports a source diagnostic and
 keeps the complete last successful pipeline running. Saving a correction
 installs a new candidate at a frame boundary. `pipeline.reload ink` requests
 compilation explicitly. A step advances time by 1/60 second and leaves the
 instance paused; reset clears feedback and time. `pipeline.inspect` shows the
-ordered passes, resource lifetimes, resolved image sizes and allocation bytes;
-GPU timings are marked unavailable when the backend supplies no timing data.
+GPU work of the newest completed submission, then the ordered passes, resource
+lifetimes, resolved image sizes and allocation bytes. Its first line ends with
+`work submission=S revision=R`, or `work unavailable` when nothing has completed
+since the last install, resize or reset. Each pass then has its own line,
+`work <pass> executed: dispatches=… draws=… barriers.image=… …`, followed by
+`work outside: …` for the finalizing work and `work lifetime: …` for the
+instance's counters, including the GPU objects it has created.
+`pipeline.status` repeats each instance's `work lifetime` line. The counts are
+the calls each pass records, so they are the same on both backends and never a
+measure of time. The first line also carries the instance's memory, in bytes:
+`owned=` (everything it holds, graphs still retiring included), `steady=` (the
+installed graph), `peak=` (what a reload of it would reach) and `budget=`.
+`pipeline.budget <name> <bytes>` caps an instance's
+[memory budget](../../docs/reference/shaders.md#memory-budget) below the
+device's, and `pipeline.budget <name> device` removes the cap. A reload whose
+peak does not fit is refused with `SHADERPIPE_BUDGET`, and the installed graph
+keeps running.
 `pipeline.capture` queues a PNG of the selected output, including while paused.
 The completion report says when the file has been written.
+
+`pipeline.set`, `pipeline.output` and `pipeline.time … scale` preview values
+for this session only. `pipeline.set` merges field by field: each field it
+names replaces that field, and `null` returns the field to the source's
+default. `pipeline.overrides <name>` shows every overridden field's committed
+value beside its preview, then the time scale and output the same way. It also
+shows the row revision the preview is based on and the source identity of the
+installed graph. `pipeline.commit <name>` writes the preview into the
+instance's `views.pipelines` row as `overrides`, `timeScale` and `output`, and
+`world.save` then writes the document:
+
+```text
+pipeline.set ink visualize {"exposure":0.5}
+pipeline.overrides ink
+pipeline.commit ink
+world.save
+```
+
+The commit refuses, naming the reason, when another edit moved the row since
+the preview began, or when the source changed after its graph installed (let
+the edit install and preview again). Moving the row discards the preview and
+shows the committed values. The shared pipeline file keeps its defaults, so
+another instance of the same source keeps its own values. Booting a document,
+`world.load` and `world.reload` bind every row's committed overrides against
+its source too, and refuse a value the source's config schema refuses by name,
+so a saved document never carries a value that would only be reported once a
+graph installs. The
+[shader reference](../../docs/reference/shaders.md#per-instance-overrides)
+states the contract.
+
+A row naming a package reads the same way:
+
+```text
+puck shaders package src/Puck.World/Assets/pipelines/ink.pipeline.json --output artifacts/packages/ink
+pipeline.load ink ../../../../artifacts/packages/ink
+pipeline.wait ink installed
+```
+
+A package refusal fails the instance's compilation with its code, such as
+`[pipeline: ink [SHADERPKG_FILE_PIN] …]`, and the last good graph keeps running.
+See [naming a package from a World](../../docs/reference/shaders.md#naming-a-package-from-a-world).
+
+A script waits for a pipeline the way a person watches `pipeline.status`, but
+with a deadline. `pipeline.wait <name> <phase> [seconds]` holds only the issuing
+session until the phase is reached or the deadline passes. The deadline is in
+presentation time, defaults to 30 seconds, and may be at most 600. It bounds
+liveness and is never a measurement. The phases are:
+
+- `compiled`: the latest requested compilation has completed.
+- `installed`: that compilation's candidate is the installed, allocated graph.
+- `submitted <frames>`: the installed graph has submitted that many frames
+  since its last reset.
+- `counted <submissions>`: the work counts of that many submissions since the
+  last reset (or since boot, if it was never reset) have completed, so
+  `pipeline.inspect` shows them.
+- `captured`: the latest `pipeline.capture` has been written or has failed.
+- `resized <width> <height>`: the host has asked the instance for that output
+  extent, because the layout slot showing it changed size, and the instance has
+  installed its graph at that extent.
+
+A candidate's shader modules and pipelines are built off the frame thread, and
+the instance keeps presenting its installed graph until they are ready; the
+candidate installs at the first frame after. A reload, an edit of the row and a
+resize replace the graph and are not steps, so a paused instance (paused, or at
+time scale zero) builds and installs them too and reaches `installed` and
+`resized` without a step. The install renders nothing and leaves `submitted`
+where it was. The instance keeps showing its last image, and paused captures
+read it, until a step, a resume or a reset renders through the new graph. A step
+taken while a replacement still builds waits for it, then renders once through
+it. An output selected on a graph installed while paused is published with that
+graph's first frame. When two edits arrive before the first has installed, the
+first is dropped and the runtime says so on stderr:
+`[pipeline: <name> superseded: compilation]` while it was still compiling, or
+`superseded: compiled candidate` when its compiled candidate was still queued or
+building. An edit that has already installed is simply replaced by the next one,
+with no line, so whether a quick second edit reports the first as superseded
+depends on compile and build timing, paused or not. After `pipeline.reset` on a paused instance,
+exactly one initialization frame renders, so `submitted 1` and `counted 1`
+are that frame. That frame never uses up a step: a step issued right after the
+reset renders one frame beyond it, so it is submission 2.
+Exactly one outcome follows on stderr:
+`[pipeline: <name> wait <phase> reached]`, `… failed: <why>`,
+`… unsupported: <why>`, or `… timed out after <seconds>s: <state>`. A load
+refused because a shader tool is absent reports `[pipeline: <name> unsupported:
+…]`. The `pipeline-*` canaries drive these phases
+offscreen on both backends; see [`puck canary`](../../docs/reference/cli.md#puck-canaryreal-world-behavioral-proofs).
 
 `pipeline.load <name> <source> [camera]` authors a row through normal world
 validation. The rendered host creates it only after the mutation is accepted.
 To try a one-off shader in the example's existing slot, run
-`pipeline.load ink ../pipelines/moth.glsl`; it replaces that instance's source
+`pipeline.load ink ../pipelines/moth.hlsl`; it replaces that instance's source
 through the same background compilation path. Return with
 `pipeline.load ink ../pipelines/ink.pipeline.json`.
 
 Loading a new row does not change the active layout: select its name in a layout
-slot. The [shader README](../Puck.Shaders/README.md#shader-pipelines-and-live-development)
-owns the pipeline document and source-language contracts.
+slot. The [shader reference](../../docs/reference/shaders.md#shader-pipelines-and-live-development)
+owns the pipeline document and pass contracts.
 
-[The Moth shader](Assets/pipelines/moth.glsl) remains a one-pass procedural
+[The Moth shader](Assets/pipelines/moth.hlsl) remains a one-pass procedural
 character example; its header controls poses and framing. Its
-[concept pack](../../docs/game/art/moth-concept-pack-2026-09-09/README.md) is the visual
+[concept pack](../../docs/game/art/moth-concept-pack/README.md) is the visual
 reference.
 ## The console
 
@@ -338,6 +588,12 @@ Facts a script needs:
   (`world.row.set` then `world.status`, `player.bind` then
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
   `world.wait` are the explicit waits.
+- **Timing.** The console drains before every fixed step. A piped script's
+  lines up to its first `world.wait` run before the first tick, and the line
+  after a `world.wait` that releases at tick R runs before tick R+1. The
+  [commands reference](../../docs/reference/commands.md#who-can-dispatch-a-command)
+  owns this contract. End a script with `quit` to stop the World when the script
+  ends; `--exit-after-seconds` stops it after a wall-clock time instead.
 - **Ordering.** Within one stdin batch, submissions apply in FIFO order
   across kinds—a grant before a command is visible to that command. The
   contract and its battery are in
@@ -403,9 +659,7 @@ Facts a script needs:
   gate's and capture scheduler's `PublishTick`—or, while boot is paused,
   drain an administrative mutation and release a stalled `world.wait`; step
   every other instance; run the shell's post-step; finish the seat intents.
-  It counts the host work a `world.wait` is clocked by, measures the per-phase
-  timing `world.timing` arms and feeds it to `Puck.Hosting.SimulationTimingReporter`
-  (the `[frame-timing] world-simulation …` worst-of-N digest), and is the
+  It counts the host work a `world.wait` is clocked by and is the
   `IWorldSimulationClock` the frame producer reads. `Puck.Launcher.FixedStepPump`
   (not in this project) owns the accumulator both boot shapes' hosted services
   drive it through.
@@ -443,18 +697,21 @@ Facts a script needs:
   `WorldPopulationCommandModule.cs` (world.players/.devices/.population),
   `ScreenCommandModule.cs` (`screen.*`—the machine host is core state that
   boots and steps in every shape, so its whole verb surface is registered
-  there too: `screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink`
-  apply through the ordered domain headless exactly as windowed, and
-  `screen.source <index> camera|capture|desktop|view|qr` still attempts a real
+  there too: `screen.insert`/`.eject` apply through the ordered domain headless exactly as windowed, and
+  `screen.source <index> camera|capture|desktop|probe|view|qr` still attempts a real
   device open (or, for `qr`, a real encode) and reports the honest failure
   rather than refusing as unknown), and
   most others are server-safe (registered in `AddWorldAuthoritativeCore`,
-  the fly camera application included—see above); `WorldCommandModule.cs`
-  (the graphics/GPU levers), `WorldHostCommandModule.cs`,
-  `WorldViewCommandModule.cs`, `WorldAudioCommandModule.cs`,
+  the fly camera application included—see above);
+  `WorldRenderLeverCommandModule.cs` (the render levers: shadows, ambient
+  occlusion, far field, cadence, render scale, quality and the rest) is
+  composed by both the windowed and the offscreen shapes; `WorldCommandModule.cs`
+  (frame rate, FPS target, screens, cameras, shader reload, debug view),
+  `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
-  genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`
-  and `WorldWheelCommandModule.cs` are core-registered but refuse by name at
+  genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`,
+  `WorldWheelCommandModule.cs`, `WorldViewCommandModule.cs`, and
+  `WorldPipelineCommandModule.cs` are core-registered but refuse by name at
   use when their presentation dependency is absent. Terminal-owned `console`
   is registered in every boot shape; `player.wheel.*` are the rows a world's
   own wheel-hold page binds.
@@ -485,7 +742,7 @@ Facts a script needs:
 - `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/`—the one shipped world, `worlds/puck.world.json` (the island; the
-  boot default), a delta over `worlds/standard.basis.json` (the standards as
+  boot default), a delta over `worlds/standard.world.json` (the standards as
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
   games under `worlds/games/`, each an imported fragment; the corner shards
@@ -501,10 +758,8 @@ Facts a script needs:
   wholesale `placements` replacement leaves dangling. See
   `src/Puck.World.Schema/README.md`, "Document composition"), the default recording document
   (`recordings/`), two shipped
-  WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world
-  today—the `arcade` addon was ported to a world `rules` section and its
-  compiled guest deleted before the addons themselves went unmounted), and an example `puck.sdf.v1`
-  document (`sdf/`).
+  WASM addons (`addons/`: `default`, `hudbuilder`; no shipped world mounts
+  either), and an example `puck.sdf.v1` document (`sdf/`).
 
 ## Cartridge authoring
 
@@ -525,12 +780,16 @@ families, their serialization contract, and the strict-parse rules are
 [`Puck.World.Schema`](../Puck.World.Schema/README.md)'s to describe. Live editing
 is one mutation vocabulary—validate the whole candidate, apply at the tick
 boundary, journal, `world.undo` by replay—owned by
-[`Puck.World.Server`](../Puck.World.Server/README.md). `world.save` writes a
-canonical session snapshot (live render levers, census, and runtime screen
-inserts fold into their document homes; every advancing `state` row/cell
-settles to its live value with its projected epoch reset to 0, so a reload
-resumes exactly where the save observed it instead of reading frozen—the
-live document itself is never touched), and `world.status` reports source,
+[`Puck.World.Server`](../Puck.World.Server/README.md). `world.save` writes the
+authored document, not the effective one: a section the world omits stays
+omitted, a section the session left alone is written as authored, and a moved
+session lever (render levers, master volume, present target, peer-source
+default, magazine selector) folds only into a section the world authors. The
+host's named machine declarations are written into `machines`, and every
+advancing `state` row/cell settles to its live value with its projected epoch
+reset to 0, so a reload resumes exactly where the save observed it instead of
+reading frozen. The live document itself is never touched. A world with a
+`basis` or `imports` saves as a delta over them. `world.status` reports source,
 counts, drift, and the journal length. `world.imports` reads back the whole
 basis-and-imports composition graph in merge order, each import with the alias
 it composed under (see
@@ -573,13 +832,13 @@ rather than one body-hop per tick. `body.impulse <x> <y> <z> [body]` applies
 an instantaneous world-space impulse
 and wakes a resting body; `world.rigid` reads the live census (mass,
 velocity, resting) and the same `quiescent` flag the `$physics:quiescent` rule
-operand reads. The shipped world's `billiardsTray`/`bowlingLane`/`dominoes`
+operand reads. The shipped world's `billiardsTray`/`bowlingLane`/`dominoRun`
 placements are the garden's proof fixture—see the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
-Each tabletop game—chess, poker, dominoes, billiards, bowling, tic-tac-toe,
+Each tabletop game—poker, dominoes, billiards, bowling, tic-tac-toe,
 hex lines, mancala, the solitaires—lives in its own file under `Assets/worlds/games/`, imported bare by
 `puck.world.json` (`WorldDefinition.Imports`; see the
 [`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents-composition.md#document-composition-basis-and-imports)),
@@ -589,11 +848,9 @@ each game's root placement row onto the market hall's floor (`parent: marketCour
 shared substrate—channels, kits, population capacity, spawn points, the island's own ground, hud/views,
 and everything no module's content touches—stays in `puck.world.json` itself; `world.imports` reads the
 resolved stack back. A module addresses the world through placements, never
-absolute coordinates: chess's squares and pieces carry `parent: tabletop`, its
-board topology anchors to that placement, its piece rows are keyed by
-placement id and read through `placement:$each`, and dominoes, billiards, and
-bowling anchor to marker placements of their own—so a module composes into
-any host that declares the placement it names. Hex lines (`hexlines.puck`)
+absolute coordinates: dominoes, billiards, and bowling anchor to marker
+placements of their own, so a module composes into any host that declares the
+placement it names. Hex lines (`hexlines.puck`)
 is a radius-4 hexagonal disk of 61 pointy-top tiles on `hexTable` with two stone
 trays, its `hexLinesBoard` topology unanchored today (a `board` facet admits only
 a Grid topology, so a host restating `hexTable` restates the topology's origin
@@ -622,151 +879,21 @@ row. Its six cells correspond to the `hound` carrier's keys (90-95), and
 `boneHolder` and `reporter` admit the garden's full body-index range. This
 identity data belongs to the garden rather than an imported game.
 
-The `tabletop` placement carries a `board` facet (the tabletop primitive—
-see the [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns))
-anchoring an 8x8 `chessBoard` Grid topology, and 32 `piece`-kit rigid bodies
-(the garden's chess set, shrunk-Wren scale beside the `drinkMe`/`eatMe`
-regions, now sited clear of the table's own footprint so the shrink and the
-approach never jostle a resting piece) prove it: two `pieceCode`-forEach
-rules (upright/tilted, gated on the `$upright:each` reserved channel so a
-knocked-over piece reads as displaced) derive each piece's live cell. The
-board's inverse trait supplies the last occupant's piece code at each square.
-A range-filtered reduction counts sampled pieces in cells 0..63; subtracting
-the occupied-square count detects excess occupants without another sampling
-effect or a separate per-piece rule. The census uses one empty-square mask:
-`$reduce:count:pieceCell:between:0:63 + popCount($board:mask:board:0:0) - 64`.
-The sampling edge is `settleHold == 60`. The counter's separate increment and
-reset gates write only when its value changes. An advancing clock would need
-to rebase its epoch on every moving tick; an integer conditional expression
-cannot read the bool-kind `$physics:quiescent` channel.
-A piece outside the board (captured or knocked clear) receives cell -1;
-it does not prevent its neighbours from being sampled. Every top-level state
-effect preflights and applies on its own; only a `transaction` groups effects
-atomically. A `body.pose`
-teleport clears the piece's rest latch (`WorldBody.Pose`), so a bare pose at
-the piece's resting height already un-rests it and re-settles it, crossing
-`$physics:quiescent`'s Edge on the settle with no impulse at all; a pose
-that drops the piece onto or above its support does the same through a real
-fall. Pair the pose with a `body.impulse` wake only when the proof wants the
-unsettled window to be impulse-shaped. Wake a piece along Y: the `piece` kit's own high
-rolling/Coulomb friction couples a horizontal wake into spin (the ball's
-known rolling-friction overshoot, here on a lighter body), so the unsettled
-window can run long enough to drift the piece across a cell boundary before
-it rests; a small vertical impulse re-settles in place instead.
-`$physics:quiescent` is POPULATION-WIDE—any other rigid body still
-settling (a just-released `carry` target tumbling, say) holds every board's
-own Edge-gated rules at bay too, so a board proof run alongside unrelated
-rigid activity can see two moves land on the same settle.
-
-The chess rules judge each stable physical observation against the last accepted
-position, `lastLegal`; `board` remains the physical observation. Rejected
-moves and unfinished captures leave accepted state intact, so a player can
-restore the board or finish the move without teaching the judge a new origin.
-The first collision-free settle seeds the initial position, allowing a host to
-set up a different position before play begins.
-
-The matcher constructs a candidate from the side-to-move's vacated source and
-new destination. When the king moved, its own source and destination resolve
-the pair even during castling. Empty masks resolve to `-1`. Ordinary moves
-clear the source and write the mover at the destination; en passant also clears
-the passed pawn's square; castling relocates the rook. A pawn reaching the last
-rank uses the observed replacement code. The matcher encodes all 14 possible
-cell values in four bit planes, then unions the planes' before/after XORs.
-This is an exact set of changed cells, including same-colour substitutions.
-A candidate's footprint contains its source,
-destination, and at most two extra cells. Any changed cell outside that footprint
-is a mismatch; direct reads compare the expected values inside it. Missing and
-overlapping addresses are counted only once, even for malformed candidates.
-This preserves a full-board comparison without a state-writing loop over 64 cells.
-`boardMismatch` counts differences from the constructed candidate and
-`boardChanged` counts differences from accepted state.
-`boardCollisions` counts excess upright occupants: two pieces on one square
-contribute one, and three contribute two. It detects identical piece codes too,
-even though the inverse board shows only the last occupant. Any collision
-prevents acceptance regardless of token order. The observation's declared range
-still reserves code 7, which the exact matcher distinguishes from every piece code.
-
-Each bit plane is a union of value ranges read through `$board:mask`:
-
-| Label bit | Value ranges setting that bit |
-|---|---|
-| 0 | -3..-2, 1..2, 5..6 |
-| 1 | -5..-3, 2..5 |
-| 2 | -4..3 |
-| 3 | 0..7 |
-
-For values -6 through 7, these memberships give the distinct labels
-`0, 2, 6, 7, 5, 4, 12, 13, 15, 14, 10, 11, 9, 8`. This Gray-code ordering
-needs only seven intervals per board, or 14 mask queries for the comparison.
-The closed alphabet makes the encoding lossless: equality of all four bits
-means equality of the original value, including empty cells and reserved code 7.
-
-Geometry then judges that candidate. Empty-ray patterns handle bishops, rooks,
-and queens; coordinate differences handle knights and single king steps; one
-relative-rank pawn expression serves both colours. Attack calculations use
-rule-local bindings instead of persistent intermediate rows. A king mask's
-lowest set bit supplies its local square. Topology shifts form the adjacent
-and two-files-away sets; shifting the adjacent set left and right again and
-removing the origin shares the two-file calculation. Vertical shifts produce pawn, king, and knight attack
-neighbourhoods. The topology drops shifts that leave the board, including at
-the sign-bit corner. Only the eight ray directions
-remain in the topology. The observed
-position must retain exactly one king of each colour and leave the mover's
-king unattacked. Castling additionally requires the home rook, a clear path,
-an unspent right, and safe origin and transit squares. Fixed source-square
-masks handle pawn, knight, and king transit attacks; board attack queries handle
-sliders. These masks are written in hexadecimal, one byte per rank. For example,
-`0x5000` marks e2 and g2, the black-pawn origins attacking f1; `byteSwap(0x5000)`
-reflects those ranks to e7 and g7, the white-pawn origins attacking f8.
-The knight and king transit masks use the same reflection.
-`castleRights` records four consumed rights: white queenside 1,
-white kingside 2, black queenside 4, black kingside 8. Only an accepted move
-consumes rights, including a capture of a home rook. A king move consumes both
-of its side's rights; restoring a displaced or illegally moved piece consumes
-neither.
-
-Acceptance commits the new `lastLegal`, turn, rights, en passant target, accepted
-check values, and promotion completion in one transaction. Lost home occupants
-project directly into rights: `parallelBitExtract` gathers rook losses at
-0, 7, 56, and 63 into the four right bits. King losses at 4 and 60 are extracted,
-deposited into bits 0 and 2, and multiplied by three to consume each king's pair.
-The masks are computed before the transaction; one write merges them with the
-already consumed rights. Board copies use `boardCombine` with capacity 64;
-empty cells can be absent from storage. Judging reads the current `turn`
-directly, which remains unchanged until acceptance commits.
-The accepted board declares the closed piece-code range -6 through 6. The ring of canonical board
-fingerprints and `repetitionCount` remain a diagnostic, updated after the
-transaction: symmetry reduction, hash collisions, omitted rights and en passant
-state, and the short history make them unsuitable for adjudicating repetition.
-There is no checkmate, stalemate, draw adjudication, or CPU player in this module.
-
-Promotion is one chess move even if physical replacement takes several settles.
-A pawn on the last rank marks `promotionPending`; its origin and turn remain
-uncommitted until a friendly knight, bishop, rook, or queen completes the exact
-candidate. Lifting the pawn does not commit or clear the pending choice. Restoring
-the accepted board cancels the pending marker. `move` records the candidate
-(`from`, `to`, `mover`, `captured`, `kind`); the mover remains the original pawn
-when it promotes. Kinds 1–4 mean quiet, capture, en passant, and castle; 0 means
-no candidate pair. `verdict` is 1 only for a complete accepted candidate, otherwise
-0. `illegalCount` counts exact, completed-looking candidates that fail legality,
-excluding a pending promotion; unmatched arrangements carry no assertion about
-player intent. The rules never reposition bodies. Castling both pieces within
-one settle remains necessary: a rook move that settles first can itself be a
-complete legal move.
-
-`world.tabletop` reads the frame, observation, and bound convenience rows;
-`world.state` reads the remaining diagnostics. `boardSquareLight` and
-`boardSquareDark` placements render the board using `boardColors`.
-The `plan` row remains writable and echoed but unrendered.
+Physical chess is not part of the shipped island: it is the Parlor package's
+[`chess.puck`](../../worlds/parlor/chess.puck), whose
+[README](../../worlds/parlor/README.md) covers play, its computer opponent, and
+verification. Its board uses the tabletop primitive (see the
+[schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),
+and `world.tabletop` reads the board's frame, observation, and bound rows.
 
 The garden also carries a hidden-hand poker table, state only, no card
-bodies, beside the chess set: heads-up fixed-limit hold'em, authored in
-`games/poker.world.json`. A `cards` token domain (52 identities) carries
+bodies: heads-up fixed-limit hold'em, authored in
+`games/poker.puck`. A `cards` token domain (52 identities) carries
 `rank` and `suit` attribute rows, each declaring a `keysOf: cards` domain so a
 hidden card's value inherits its owning zone's own visibility (see below) and
 an explicit `capacity: 52`, since a `keysOf` row that authors no capacity is
-priced at the 4096-cell row ceiling inside EVERY transform's storage term,
-document-wide, not just the poker table's own. Beside them sit the
+priced at the 4096-cell row ceiling by every transform and sweep that
+addresses it. Beside them sit the
 `deck`/`hand1`/`hand2`/`community` zone family, drawn through the
 `cardStream` streamDraw site, and the scalars, which live in keyed rows rather
 than one 128-cell slot row each: `phase` (`street`, `next`), `table` (button,
@@ -829,12 +956,12 @@ lane bits 1..13 and lane bit 0 reserved for the ace read low, and
 lanes (`bitField`), their union (the ranks present), the pairwise and
 triple-wise lane intersections (the ranks held twice, three times, four
 times), the straight and straight-flush runs (five shifted ANDs over the
-wheel-augmented word), the flush lane (`popCount >= 5`), then the category
+wheel-augmented word), the flush lane (`setBitCount >= 5`), then the category
 and its tiebreakers. The strength word is
 `category << 28 | primary << 14 | secondary`; within one category the
 tiebreakers are either rank masks (integer order is lexicographic by highest
 rank; the top-k of a mask is
-`x ^ parallelBitDeposit((1 << (popCount(x) - k)) - 1, x)`) or one
+`x ^ parallelBitDeposit((1 << (setBitCount(x) - k)) - 1, x)`) or one
 highest-rank index, never mixed, so the plain integer comparison the showdown
 makes IS the poker comparison. No sort, no per-rank pattern row, no scratch
 copy of the hand, and a live rank on every street for the seat that may see
@@ -855,13 +982,13 @@ public, `Hidden: Placeholder` visibility: each cell resolves through its
 OWNING zone's own visibility (`WorldStateDisclosure.Observer.CanRead`'s
 nested zones-by-domain lookup, which is *why* the `keysOf` domain cannot be
 dropped from either row), `deck` is authority-only, and `hand1`/`hand2` are
-each their own seat's direct, whole-row read of its own two cards
-(`WorldStateVisibility` is all-or-nothing at ROW scope, never partial; see
-the [Schema
+each their own seat's direct, whole-row read of its own two cards (the
+row's `StateVisibility` names that seat in `readers` and widens through its
+`readersFrom` audience row at the showdown; see the [Schema
 reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),
 which is why a hand never authors its own `Placeholder` policy.
 
-The garden also carries a 4x4x4 tic-tac-toe cube (Qubic), state only—the
+The garden also carries a 4x4x4 tic-tac-toe cube, state only—the
 `Box`-topology worked example the schema's own discrete-boards section names.
 `tttCube` is a `Box` `state.lattices` topology (width/depth/layers all 4,
 64 cells); `tttBoard` is a plain `cellsOf: tttCube` int row (0 empty, 1/2 the
@@ -930,12 +1057,81 @@ the locally loaded world's text remains fully rendered.
 ## The diegetic screens
 
 Three primitives, split cleanly: a **surface** (a `WorldScreen` slab in the
-document), a **source** (the signal it carries—a closed `WorldScreenSource`
-hierarchy: none, test pattern, booted machine, webcam, compositor capture, a
-jumbotron view of this same world through a placeable `WorldCamera`, the
-diegetic console, an authored QR code, a remote-session projection, or
-decal-rendered reading text), and a **route** (whether a player may engage it,
-and within what radius).
+document), a **source** (the signal it carries—a `WorldScreenSource`: none, a
+registered image producer, a booted machine's named output, a jumbotron view of
+this same world through a placeable `WorldCamera`, a probe's output, a
+remote-session projection, or decal-rendered reading text), and a **route**
+(whether a player may engage it, and within what radius).
+
+### Image producers
+
+A `producer` source names a registered image producer by id and hands it a
+settings object: `{ "$type": "producer", "id": "qr", "settings": { "payload":
+"…" } }`. The document model knows no producer by kind, so adding an emulator
+picture unit, a capture API or a video decoder is a registration, not a schema
+change. A producer registers twice, once per half:
+
+- its document shape, a `WorldImageProducerShape` in
+  `WorldImageProducerVocabulary` (`Puck.World.Schema`), which states its content
+  class and transport and checks its settings wherever a document validates.
+  The validator refuses an id no shape is registered under, and a settings
+  member the shape does not declare, by name.
+- its runtime, an `IWorldImageProducer` in `WorldImageProducers`
+  (`Puck.World.Client`), which opens an `IWorldImageFeed` for each screen that
+  names it. A registration is refused unless its id, content class and
+  transport match the shape's. The binder registers the shipped four; a host
+  adds its own as `IWorldImageProducer` services.
+
+The engine ships four producers, each with its settings record in
+`WorldImageProducerSettings`:
+
+| Id | Settings | Transport | Content class |
+|---|---|---|---|
+| `testPattern` | `width`, `height` | uploaded | deterministic |
+| `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
+| `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
+| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (Direct3D 12) or uploaded (Vulkan) | external |
+
+Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
+the one contract for an image entering rendering from outside a pass: its
+producer, transport, extent, pixel format, color encoding, cadence, stamp and
+content class. A feed whose content is external is the slot's live feed, which
+`screen.eject` clears. Any other feed is its declared feed, which survives an
+eject. A deterministic feed states the exact image it shows
+(`IImageSourceReference`), which the exact verdict `ImageSourceVerdict`
+compares a read-back against.
+
+**External content never reaches a capture.** Every external image, whether a
+camera, a desktop capture or a probe's output, resolves through
+`WorldCaptureGate`. While the gate fills, the image resolves to its declared
+capture fill (`ImageSourceDescriptor.CaptureFill`, opaque `#202020` by
+default), a 1×1 upload, and the producer's frame is never acquired. The gate
+covers screen slots, jumbotron renders of those screens, and HUD `Frame`
+elements. An offscreen host, which serves scheduled captures and `puck parity`,
+fills every frame. A windowed host fills from the frame a `world.screenshot`
+is armed for until two frames after it. On the first frame it fills with an
+external source bound, the jumbotron views render again, so no view shows an
+image it rendered from that source before; a view beyond that frame's
+offscreen budget (`OffscreenRenderBudget`) waits for its round-robin turn and
+may still show its older image. Simulation never
+reads the gate, and no external pixel reaches simulation state, a replay or the
+state hash.
+
+The machine, view, probe and session arms stay typed, because each names a row
+of the document (a machine instance, a camera, a probe, a destination). A new
+emulator joins as a machine engine in `WorldMachineCatalog`, again with no
+schema change. Text is a decal, not an image.
+
+A route's `input` names where a pointer hit on the screen's source goes:
+`Presentation` (the default, hover and highlight) or `Simulation`, where a
+pointer ray arriving as `source.pointer.origin`/`source.pointer.direction`
+command values is mapped in fixed point from the row alone
+(`WorldScreenMappings.Of`, the whole source inset by the glass bezel). The
+validator refuses `Passthrough` by name, because only a source the local user
+opened may send input to a host window. `world.screens` echoes each screen's
+destination as `input:<destination>`. The mapping and its laws are described in
+[the rendering plan's P13](../../docs/plans/rendering.md#p13--hit-to-source-mapping-and-input-destinations);
+nothing reads the ray from a live pointer yet.
 
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
@@ -947,7 +1143,8 @@ because a passive sensor cannot create player presence. A newly seen camera
 attaches to the lowest occupied, camera-less slot by default (seat 1 first); it
 never creates a seat. A `camera` frame source (a `screens` row, a
 probe socket, a HUD `Frame` element) names a **seat**, never a device: `{
-"$type": "camera", "sensor": "Color", "seat": 2 }`; `seat` absent means the
+"$type": "producer", "id": "camera", "settings": { "sensor": "Color", "seat": 2
+} }`; `seat` absent means the
 enclosing seat scope (an identity's own HUD panel, a seat-scoped probe socket)
 or seat 1 at world scope. `WorldScreenBinder` resolves `(seat, sensor)` to a
 live feed every frame (`roster.TryGetSeatDevice` → the device → its sensor's
@@ -965,8 +1162,8 @@ rather than on every retry.
 
 Camera demand—which (seat, sensor) pairs need an open feed, at what profile
 —is a live set, fully recomputed every produced frame from the actual
-consumers: camera-bound screen slots (`ScreenSlot.CameraSeat`/
-`CameraSensorKind`), retained probe sockets, and retained HUD `Frame`
+consumers: camera-bound screen slots (a slot's camera feed names its seat and
+sensor), retained probe sockets, and retained HUD `Frame`
 elements naming a camera; the richest requested profile wins when more than
 one consumer names the same pair. Nothing is declared once and remembered—
 `screen.source <i> camera …` moving away from a camera, `screen.eject`, a HUD
@@ -995,9 +1192,8 @@ provider maps—`SdfEngineNode` copies those maps' delegates ONCE, at
 construction, and never re-reads this binder's own dictionaries again, so
 only the cell indirection (never a brand-new delegate) is visible to an
 already-running renderer after a remove+reset. It still OWNS the genuinely presentation
-sources—a test pattern, an authored QR code, the webcam, compositor
-capture, or a jumbotron view—bound through `screen.source <index> <kind>`
-(`camera`, `capture`, `desktop`, `view`, `qr`; it ejects a
+sources—every producer feed and every jumbotron view—bound through `screen.source <index> <kind>`
+(`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
 present machine first, through the ordered domain) and `screen.eject` (which
 routes to whichever half—machine or
 local producer—actually holds the slot). A camera source row picks its
@@ -1040,9 +1236,9 @@ seat's authored value, and raw vendor read-backs—over the pipe (the device
 stays authoritative: values clamp to its reported envelope, members never authored
 leave driver defaults untouched, and removing an applied member restores its
 default). A QR is the one source with no
-per-frame cost at all: `QrEncoder` (in `Puck.World.Schema`) resolves the module
-grid and the binder rasterizes it ONCE at author time, then re-uploads the
-unchanged buffer only after a device loss. `world.identify <screenIndex>
+per-frame cost at all: `QrEncoder` resolves the module grid and `WorldQrFeed`
+rasterizes it once at author time, then re-uploads the unchanged buffer only
+after a device loss. `world.identify <screenIndex>
 [ecLevel]` (`WorldIdentifyCommandModule`) is a composition over that same live
 path rather than a source of its own: it mints the RUNNING world's identity—
 `puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>`—and hands it
@@ -1090,7 +1286,7 @@ Export needs the Direct3D 12 host: the exported image is opened by a Direct3D
 11 `OpenSharedResource1` elsewhere in the process, which cannot open a Vulkan
 host's opaque Vulkan-to-Vulkan export handle, so the Vulkan host refuses
 export outright rather than producing a handle nothing downstream can read.
-Day one exports exactly ONE physical image (the engine's own persistent
+Export carries exactly ONE physical image (the engine's own persistent
 output, re-rendered in place every refresh) with no second buffer to rotate
 into. A shared lease admits concurrent readers of the completed image and
 defers the next writer until all of them retire; export submission drains the
@@ -1099,8 +1295,9 @@ producer queue before publishing that image as readable.
 ## HUD frame elements
 
 A HUD `Frame` element (`WorldHudElementKind.Frame`) shows a live frame inside
-the banded overlay—the same four-arm `WorldFrameSource` vocabulary a screen
-samples (`camera`, `view`, `probe`, `capture`), never a pipeline of its own.
+the banded overlay—the same `WorldFrameSource` vocabulary a screen samples (a
+`producer`, a `view`, a `probe`), never a pipeline of its own; the camera and
+capture producers are the ones it shows.
 `WorldScreenBinder.DeclareFrameSource`/`TryAcquireFrame` take an explicit
 enclosing SEAT (the owning identity panel's slot for a player-scope panel,
 or seat 1 for a world-scope one) alongside the source, since a bare `camera`
@@ -1118,8 +1315,8 @@ whose membership is one of the inputs `ReconcileCameraDemand`
 produced frame, alongside every camera-bound screen slot and retained probe
 socket—see the seated-camera section above; the latter (`TryAcquireFrame`)
 reads the current frame, render-thread-side, once per produced frame. `WorldOverlayFrameSources` (`Puck.Overlays.IOverlayFrameSources`)
-is the integer-keyed adapter the compositor addresses: `WorldHudFeed.BuildElements`
-resolves a `Frame` element's `Source` to a key on the structure rebuild (world
+is the integer-keyed adapter the compositor addresses: `WorldHudFeed.BuildPanel`
+resolves each of a `Frame` element's ranked source candidates to a key on the structure rebuild (world
 panels at seat 1, a joined seat's own panel at its own seat), and the
 compositor calls `TryAcquire` each produced frame to bind the element's
 overlay slot. Two elements naming an identical (source, seat) pair share one
@@ -1164,8 +1361,8 @@ camera control surface. A socket's class is `frame` (any one frame source) or
 `strobePair` (a strobing infrared sensor's lit frame and the unlit frame kept
 before it—bound only to a `camera` source with sensor Infrared); an
 `optional` socket may be left unbound (a null input to the kernel). A socket
-source is the same four-arm `WorldFrameSource` vocabulary a screen samples:
-`camera` (a declared sensor and seat—`seat` absent means the enclosing
+source is the same `WorldFrameSource` vocabulary a screen samples: the
+`camera` producer (a declared sensor and seat—`seat` absent means the enclosing
 instance's own seat, the same convention a `screens` row and a HUD `Frame`
 element follow; every camera socket in one probe must resolve to the same seat,
 because one kernel run has one host graph; `profile` is honored while source
@@ -1173,10 +1370,10 @@ because one kernel run has one host graph; `profile` is honored while source
 authoring), `view` (a named `cameras[]` row's offscreen render, exported as a
 kernel-readable lease that holds the last complete image while a kernel reads),
 `probe` (another declared probe's
-own texture output, read back as a ring). `capture` remains part of the shared
-frame-source vocabulary but is refused on a probe socket until a kernel input
-host exists for it. The kind's `trigger`
-socket must bind a `camera` source: kernels run on that sensor's own camera
+own texture output, read back as a ring). Any other producer is part of the
+shared frame-source vocabulary but is refused on a probe socket until a kernel
+input host exists for it. The kind's `trigger`
+socket must bind a `camera` producer source: kernels run on that sensor's own camera
 graph, so it decides which `ICameraKernelHost` a run attaches to. A kind that
 declares an `output` writes a texture each cycle, at the extent its own
 `output.of` socket's source renders at; a screen shows it as a `probe` source
@@ -1230,30 +1427,31 @@ cycles/drops, latest capture age, channel values and confidence, every
 binding's conditioned value and write count, and (for a camera socket) the
 resolved device token (`camera<N>`, or `seat<N>-unassigned` when the socket's
 seat carries no camera)—a query, always echoing even under `wire.ack quiet`.
-A seat-relative row's instance is listed as `<id>@<seat>`; a single-instance
-row's is listed by its bare `<id>`. `probe.record <probe>[@<seat>] <path>
+A seat-relative row's instance is listed as `<id>$<seat>`, a generated name no probe id may spell; a single-instance
+row's is listed by its bare `<id>`. `probe.record <probe>[$<seat>] <path>
 <seconds>` arms a live recording of one instance's fresh readings to a
 `puck.probe.track.v1` document, sampled once per host frame (an instance
 faster than the host frame rate records its latest reading per frame); each
 sample carries its own capture time, and playback follows those times, so
 completion narrates on stderr with the sample count and the recorded cadence
-replays as recorded. The `@<seat>` suffix is required to name one instance of
+replays as recorded. The `$<seat>` suffix is required to name one instance of
 a seat-relative row (omitting it is refused as ambiguous, naming the live
 instances) and optional on a single-instance row. The recorded document plugs
 into a track-input probe in place of a live device—the hardware-free proof
-leg every probe admits. `probe.set <probe>[@<seat>] <field> <value>` patches
+leg every probe admits. `probe.set <probe>[$<seat>] <field> <value>` patches
 one float config field of a declared probe's kind live—the same constants
 write a `probe`-target parameter binding performs, bound only by the field's
 own declared range; a parameter binding targeting the same field overwrites a
-`probe.set` write on its own next changed reading. With no `@<seat>` suffix a
+`probe.set` write on its own next changed reading. With no `$<seat>` suffix a
 single-instance row's one instance is written and a seat-relative row's every
 live instance is written; with a suffix, only that one instance.
 
-The probe worlds that carried these examples (`brio-probe`, `brio-dual`, `brio-faerie`, `brio-seats`) retired
-with the prototype fold; the checked-in track `Assets/probes/tracks/brio-head.probe-track.json` and the verbs
-above are the surviving surface. A district that needs a camera reading authors its `probes` rows on the one world
-and proves them with `probe.status`, `body.channels`, and `wire.errors` as the retired worlds did; the kernel's own
-numbers are pinned hardware-free by `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs`.
+No shipped world declares a probe. The checked-in track
+`Assets/probes/tracks/brio-head.probe-track.json` and the verbs above are the
+probe surface. A district that needs a camera reading authors its `probes` rows
+on the one world and proves them with `probe.status`, `body.channels`, and
+`wire.errors`; the kernel's own numbers are pinned hardware-free by
+`tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs`.
 
 ## Graphics options
 
@@ -1261,12 +1459,12 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
 `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.timing`, `world.gpu`, `world.fps`. Render scale applies
+`world.debug-view`, `world.fps`. Render scale applies
 to both seat views and named cameras, multiplied by any layout-transition scale.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
-monotonic for a large instance field—read both `world.gpu` and `world.fps`
-at the intended population and view layout. `world.budget` is the DERIVED cost
+monotonic for a large instance field—read both `world.counters gpu` and
+`world.fps` at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
 their frozen envelopes, the Lipschitz step scale and march multiplier, the far
 distance with its reach multiplier, horizon-ray step tax, and far-plane fog
@@ -1281,6 +1479,47 @@ domains contribute their aggregate per-tick budget once, not once per follower.
 `body.targets <body>` includes the selected route's status and waypoint. Both
 `world.navigation` and `world.budget` are server-safe under `--headless`;
 the latter names the absent renderer while retaining all authoritative costs.
+
+`world.counters [<source-or-prefix>] [--json]` is the one work-counter
+readout, registered in every host shape. It discovers every
+`IWorkCounterSource` registered in the World's container and prints one section
+per source, sorted by name: the source's dotted name, then a `<kind> <value>`
+line per kind it counts. The boot server registers its own sources:
+`state.arena` and `state.search`, whose totals carry across a definition
+rebuild (`world.reload`, `world.load`, `world.reset`) that replaces the arena
+and search behind them, so a reading never goes down, and `state.rules`. A
+rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
+hits and each native tool's runs) and the process's shader loads,
+`shaders.sdf-kernels`, `shaders.fullscreen-pass` and `shaders.set-manifest`
+(loads and the bytecode bytes they read); each backend adds its
+`pipeline-cache.<backend>`, and Vulkan adds `procedures.vulkan`. A rendering
+shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
+baked and refused, and the field evaluations the bakes spent. The
+client registers `presentation.mirror`, the cells its state mirror read. A
+presented host registers `sdf.transforms`: the dynamic-transform rows packed,
+the bytes compared and the rows owed, summed over the main frame source and the
+frame source each session view composes for itself. A released session view's
+totals stay in the sum. The
+`allocation` section names the GC mode and the fewest managed bytes one read of
+every count allocated (`world.counters.read`, measured with
+`AllocationWindow.Measure`); only zero or not zero is meaningful. A render host
+adds the `gpu` section. Its header names
+the device as its backend reported it at creation — `backend`, `adapter`, PCI
+`vendor` and `device`, the driver version as displayed (`driver`) and as
+reported (`driver.raw`), `api`, and on Vulkan `driver.name`, `driver.id`,
+`conformance` and `pipeline-cache.uuid` — or says `device unavailable` before the device is brought up.
+The identity is recorded, never branched on. Then come each render node
+(`world`, its hosted pipelines, `overlay`, `view:<name>`) with its newest
+completed submission's per-pass counts and its created objects, or
+`work unavailable` until a submission completes. A filter selects whole dotted
+segments (`world.counters gpu`, `world.counters state`); a filter that selects
+nothing is refused and lists the sources. `--json` prints one line:
+`{"sources":[{"name":…,"counts":{"<kind>":<value>}}],"gpu":{"device":{…},"nodes":[…]},"allocation":{"gcMode":…,"windows":{…}},"kinds":{"<kind>":{"unit":…,"class":…}}}`.
+The `kinds` legend gives every reported kind's unit and class
+(`deterministic`, `per-backend-deterministic` or `pacing`), which
+`puck counters` reads to tag each count.
+A headless host has no `gpu` section. Counts only go up; read twice and
+subtract for a window.
 
 `world.sdf.dump <path>` exports the live packed GPU program as little-endian
 32-bit words, replacing the destination file. Use it to inspect the instructions,
@@ -1374,28 +1613,22 @@ Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
 manifests under `tests/Puck.World.Canaries/`—`sdf-decode-sign-refusal`
 (all twelve builder-mirrored sign fields) and `world-seat-binding-recompose`
 (a forced seat recompose against a registered command, cleanly, with no
-binding-narration) among them—see `src/Puck.Cli/README.md`'s `puck canary`
-section for the `stream` override that lets a `world.grant` claim bind its
+binding-narration) among them—see the
+[`puck canary` reference](../../docs/reference/cli.md#puck-canaryreal-world-behavioral-proofs)
+for the `stream` override that lets a `world.grant` claim bind its
 stderr-narrated confirmation. Strict-parse and mutation-all-or-nothing are
 proved in-process by
 `tests/Puck.World.Tests/{StrictParseLawTests,MutationAllOrNothingLawTests}.cs`,
-and cited repository paths are checked by `puck doc-links`.
+and cited repository paths are checked by `puck docs links`.
 `four-corners-sharded` is the stronger five-authority federation proof: four
 ground worlds plus the floating island, each its own real process on its own
 dynamic loopback endpoint, with one human-driven body ringing all four
 ground authorities purely through the router that follows a body wherever it
-now lives. `ordered-domain`,
-`headless-boot`, `lane-present-deletion`, `hud-document`, and
-`engagement-dissolution` have no committed battery at all—validate them by
-running the app. Principal/grant enforcement and engage/disengage authority
+now lives. Ordered-domain submission order, the headless boot, the HUD
+document, and engagement dissolution have no committed battery at all—validate
+them by running the app. Principal/grant enforcement and engage/disengage authority
 are proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
 `ControlApplicationLawTests` in `tests/Puck.World.Tests`.
-
-The former World proof suite (proof.cs and its standalone harnesses) was quarantined
-out of the build with the rest of `experimental/`; nothing has
-taken over its coverage, and its subcommand inventory lives in git history,
-not here. Do not cite it or re-derive a gate from it—the current
-verification story is the paragraph above.
 
 The [discrete state contract](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
 covers tabletop/card rules and turn-based tactics. `world.state.transform`

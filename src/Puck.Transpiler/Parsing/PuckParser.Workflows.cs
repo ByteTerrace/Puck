@@ -5,34 +5,10 @@ using Puck.Transpiler.Diagnostics;
 namespace Puck.Transpiler.Parsing;
 
 public static partial class PuckParser {
-    private static bool TryMatchStabilizeKeyword(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (TryMatchKeyword(context: context, keyword: "stabilize") && SkipSpacesOnLine(context: context)) {
-            if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out _)) {
-                cursor.ResetPosition(position: saved);
-                return TryMatchKeyword(context: context, keyword: "stabilize");
-            }
-        }
-
-        cursor.ResetPosition(position: saved);
-        return false;
-    }
-    private static bool TryMatchWorkflowKeyword(ParseContext context) {
-        var cursor = context.Scanner.Cursor;
-        var saved = cursor.Position;
-
-        if (TryMatchKeyword(context: context, keyword: "workflow") && SkipSpacesOnLine(context: context)) {
-            if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out _)) {
-                cursor.ResetPosition(position: saved);
-                return TryMatchKeyword(context: context, keyword: "workflow");
-            }
-        }
-
-        cursor.ResetPosition(position: saved);
-        return false;
-    }
+    private static bool TryMatchStabilizeKeyword(ParseContext context) =>
+        TryMatchKeywordFollowedByName(admitted: NameForms.Identifier | NameForms.String, context: context, keyword: "stabilize");
+    private static bool TryMatchWorkflowKeyword(ParseContext context) =>
+        TryMatchKeywordFollowedByName(admitted: NameForms.Identifier | NameForms.String, context: context, keyword: "workflow");
     private static StabilizeGroupNode ParseStabilizeBlock(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;
 
@@ -72,26 +48,12 @@ public static partial class PuckParser {
             SkipWhiteSpace(context: context);
         }
 
-        if (!TryConsume(c: '{', context: context)) {
-            throw CreateException(context: context, message: $"Expected '{{' starting body for stabilize '{name}'");
-        }
-
-        var statements = new List<StatementNode>();
-
-        SkipWhiteSpace(context: context);
-        while (!cursor.Eof && (cursor.Current != '}')) {
-            var stmt = ParseRuleScopeBodyStatement(context: context, diagnostics: diagnostics);
-
-            if (stmt is not null) {
-                statements.Add(item: stmt);
-            }
-            ConsumeSeparator(context: context);
-            SkipWhiteSpace(context: context);
-        }
-
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: $"Expected '}}' closing body for stabilize '{name}'");
-        }
+        var statements = ParseRuleScopeStatementsBlock(
+            blockKind: "stabilize",
+            context: context,
+            diagnostics: diagnostics,
+            name: name
+        );
 
         var len = (cursor.Offset - startOffset);
 
@@ -268,31 +230,11 @@ public static partial class PuckParser {
 
         throw CreateException(context: context, message: $"Expected 'step', 'repeatStep', or 'forEachStep' inside workflow at offset {startOffset}");
     }
-    private static List<StatementNode> ParseStepBody(ParseContext context, DiagnosticBag? diagnostics, string stepName) {
-        var cursor = context.Scanner.Cursor;
-
-        SkipWhiteSpace(context: context);
-        if (!TryConsume(c: '{', context: context)) {
-            throw CreateException(context: context, message: $"Expected '{{' starting body for step '{stepName}'");
-        }
-
-        var statements = new List<StatementNode>();
-
-        SkipWhiteSpace(context: context);
-        while (!cursor.Eof && (cursor.Current != '}')) {
-            var stmt = ParseRuleScopeBodyStatement(context: context, diagnostics: diagnostics);
-
-            if (stmt is not null) {
-                statements.Add(item: stmt);
-            }
-            ConsumeSeparator(context: context);
-            SkipWhiteSpace(context: context);
-        }
-
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: $"Expected '}}' closing body for step '{stepName}'");
-        }
-
-        return statements;
-    }
+    private static List<StatementNode> ParseStepBody(ParseContext context, DiagnosticBag? diagnostics, string stepName) =>
+        ParseRuleScopeStatementsBlock(
+            blockKind: "step",
+            context: context,
+            diagnostics: diagnostics,
+            name: stepName
+        );
 }

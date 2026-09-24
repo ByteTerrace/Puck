@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics.Fields;
 using Puck.World.Protocol;
@@ -6,18 +7,17 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
     // Per-placement memo for the response sweep's skip: the raw cell values (and whether each cell was present) a
-    // placement's State entries read the last time it was fully evaluated. Populated only for a placement whose
-    // every entry is a State condition — a Field entry has no comparably cheap "did anything move" proof (the field
-    // lattice steps every tick regardless), so such a placement is never entered here and is swept in full every
-    // tick exactly as before this facet gained a state arm.
-    private readonly Dictionary<string, (long[] Values, bool[] Present)> m_responseObservedValues = [];
+    // placement's State entries read the last time it was fully evaluated, and the holding mask the row carried after
+    // that sweep. Populated only for a placement whose every entry is a State condition — a Field entry has no
+    // comparably cheap "did anything move" proof (the field lattice steps every tick regardless), so such a placement
+    // is never entered here and is swept in full every tick. The mask catches a write the sweep did not make (an undo,
+    // a console upsert), which moves the row without moving any cell.
+    private readonly Dictionary<string, (long[] Values, bool[] Present, int Holding)> m_responseObservedValues = [];
 
-    /// <summary>Describes every placement carrying a response trait: its current prototype, and which authored
-    /// condition (if any) currently holds.</summary>
+    /// <summary>Describes every placement carrying a response trait: the prototype it shows, its authored one, and
+    /// which entries the last sweep recorded as holding.</summary>
     internal string DescribeResponses() {
-        var lattice = Host.Population.Fields;
         var lines = new List<string>();
-
         var placements = Host.Document.Definition.Placements;
 
         for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
@@ -27,16 +27,20 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            var matchedIndex = ResolveMatchingResponse(
-                lattice: lattice,
-                placement: placement,
-                responses: responses,
-                tick: m_lastCompletedTick
-            );
+            var holds = new List<string>();
 
-            lines.Add(item: ((matchedIndex >= 0)
-                ? $"'{placement.Id}' prototype={placement.PrototypeId} holds=[{matchedIndex}] {DescribeCondition(condition: responses[matchedIndex].When)} -> {responses[matchedIndex].PrototypeId}"
-                : $"'{placement.Id}' prototype={placement.PrototypeId} holds=none"));
+            for (var index = 0; (index < responses.Count); index++) {
+                if ((placement.Holding & (1 << index)) != 0) {
+                    holds.Add(item: $"[{index}] {DescribeCondition(condition: responses[index].When)} -> {responses[index].PrototypeId}");
+                }
+            }
+
+            lines.Add(item: $"'{placement.Id}' prototype={placement.ShownPrototypeId} authored={placement.PrototypeId} holds={((holds.Count == 0)
+                ? "none"
+                : string.Join(
+                    separator: ", ",
+                    values: holds
+                ))}");
         }
 
         return ((lines.Count == 0)
@@ -85,6 +89,7 @@ public sealed partial class WorldTick {
             if (
                 skippable &&
                 ObservedValuesUnchanged(
+                holding: placement.Holding,
                 placementId: placement.Id,
                 values: values[..count],
                 present: present[..count]
@@ -93,74 +98,68 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            if (skippable) {
-                m_responseObservedValues[placement.Id] = (values[..count].ToArray(), present[..count].ToArray());
-            } else if (m_responseObservedValues.Count > 0) {
-                m_responseObservedValues.Remove(key: placement.Id);
-            }
-
-            var matchedIndex = ResolveMatchingResponse(
+            var holding = ResolveHolding(
                 lattice: lattice,
                 placement: placement,
                 responses: responses,
                 tick: tick
             );
-
-            if (matchedIndex < 0) {
-                continue;
-            }
-
-            var target = responses[matchedIndex].PrototypeId;
-
-            if (string.Equals(
-                a: placement.PrototypeId,
-                b: target,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                continue;
-            }
-
-            var previous = placement.PrototypeId;
-
-            // WorldPrincipal.World — the same structural-exemption door StampContribution/RetractContribution use —
-            // so the swap is journalled and undoable through the ordinary UpsertPlacement compose arm.
-            if (!Host.TryApplyMutation(
+            var applied = (
+                (holding == placement.Holding) ||
+                Host.TryApplyMutation(
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0,
+                // Principal.World — the same structural-exemption door StampContribution/RetractContribution
+                // use — so the write is journalled and undoable through the ordinary UpsertPlacement compose arm.
                 mutation: new WorldMutation.UpsertPlacement(
-                    Placement: (placement with { PrototypeId = target }),
-                    Principal: WorldPrincipal.World
+                    Placement: (placement with { Holding = holding }),
+                    Principal: Principal.World
                 ),
                 preMetered: false,
                 tick: tick,
                 engineTick: CompletedEngineTicks
-            )) {
+            ));
+
+            if (skippable) {
+                m_responseObservedValues[placement.Id] = (values[..count].ToArray(), present[..count].ToArray(), (applied
+                    ? holding
+                    : placement.Holding));
+            } else if (m_responseObservedValues.Count > 0) {
+                m_responseObservedValues.Remove(key: placement.Id);
+            }
+
+            if (
+                (holding == placement.Holding) ||
+                !applied
+            ) {
                 continue;
             }
 
-            // A closure that captures this loop's own locals would be hoisted into a display class allocated on
-            // every iteration reaching this far — regardless of whether a sink is attached — because the compiler
-            // must ready that storage before the earlier writes to previous/target/matchedIndex above. Gating on
-            // HasNarrationSink first, and re-binding what the line needs into locals scoped to this block alone,
-            // keeps the format closure (and its allocation) inside the one branch that ever runs it.
             if (Host.Output.HasNarrationSink) {
                 var respondId = placement.Id;
-                var respondPrevious = previous;
-                var respondTarget = target;
-                var respondEntry = matchedIndex;
-                var respondDescribe = DescribeCondition(condition: responses[matchedIndex].When);
+                var respondShown = (placement with { Holding = holding });
+                var respondPrevious = placement.ShownPrototypeId;
+                var respondTarget = respondShown.ShownPrototypeId;
+                var respondEntry = WorldPlacementResponse.ShownEntry(placement: respondShown);
 
-                Host.Output.Narrate(
-                    channel: "world.respond",
-                    text: $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (entry {respondEntry}: {respondDescribe})]"
-                );
+                if (!string.Equals(
+                    a: respondPrevious,
+                    b: respondTarget,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    Host.Output.Narrate(
+                        channel: "world.respond",
+                        text: ((respondEntry >= 0)
+                            ? $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (entry {respondEntry}: {DescribeCondition(condition: responses[respondEntry].When)})]"
+                            : $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (no entry holds)]")
+                    );
+                }
             }
         }
     }
-    // The first authored entry whose condition holds, or -1 when none do. A Field condition resolves the
-    // placement's coupled cell once (unchanged from before this facet gained a state arm); a State condition needs
-    // no cell at all.
-    private int ResolveMatchingResponse(FieldLattice? lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
+    // One bit per authored entry whose condition holds, bit i for entry i. A Field condition resolves the placement's
+    // coupled cell once; a State condition needs no cell at all.
+    private int ResolveHolding(FieldLattice? lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
         var cell = 0;
         var hasCell = ((lattice is not null) && lattice.TryBodyCellOf(
             position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(
@@ -169,8 +168,9 @@ public sealed partial class WorldTick {
             )),
             cell: out cell
         ));
+        var holding = 0;
 
-        for (var index = 0; (index < responses.Count); index++) {
+        for (var index = 0; (index < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); index++) {
             var holds = (responses[index].When switch {
                 WorldPlacementResponseCondition.FieldCondition field => (hasCell && FieldConditionHolds(
                 cell: cell,
@@ -187,11 +187,11 @@ public sealed partial class WorldTick {
             });
 
             if (holds) {
-                return index;
+                holding |= (1 << index);
             }
         }
 
-        return -1;
+        return holding;
     }
     private bool FieldConditionHolds(WorldPlacementResponseCondition.FieldCondition condition, FieldLattice lattice, int cell, ulong tick) {
         if (!lattice.TryFieldIndex(
@@ -260,24 +260,25 @@ public sealed partial class WorldTick {
     private static void ReadResponseSnapshotCell(WorldDefinition definition, string row, string? key, ulong tick, ulong engineTick, Span<long> values, Span<bool> present, int index) {
         var found = (WorldStateReader.TryRead(
             definition: definition,
+            engineTick: engineTick,
             key: key,
             rawValue: out var raw,
             row: out _,
             rowName: row,
             text: out _,
-            tick: tick,
-            engineTick: engineTick
+            tick: tick
         ) && (raw is not null));
 
         present[index] = found;
         values[index] = (raw ?? 0L);
     }
-    private bool ObservedValuesUnchanged(string placementId, ReadOnlySpan<long> values, ReadOnlySpan<bool> present) {
+    private bool ObservedValuesUnchanged(string placementId, int holding, ReadOnlySpan<long> values, ReadOnlySpan<bool> present) {
         if (
             !m_responseObservedValues.TryGetValue(
             key: placementId,
             value: out var cached
         ) ||
+            (cached.Holding != holding) ||
             (cached.Values.Length != values.Length)
         ) {
             return false;

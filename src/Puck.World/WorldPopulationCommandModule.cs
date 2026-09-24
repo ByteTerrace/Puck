@@ -11,7 +11,7 @@ namespace Puck.World;
 /// The world's participant/census verb surface — SERVER-SAFE (registered in <c>AddWorldAuthoritativeCore</c>, headless
 /// or windowed alike): <c>world.players</c>, <c>world.devices</c>, <c>world.device-profiles</c>,
 /// <c>world.population</c>, <c>world.navigation</c>, <c>world.flock</c>, <c>world.decisions</c>, and <c>world.budget</c>. Split out of
-/// <see cref="WorldCommandModule"/> (which stays presentation-only — graphics levers, GPU timing, the diegetic-row
+/// <see cref="WorldCommandModule"/> (which stays presentation-only — graphics levers, the diegetic-row
 /// listings), because these verbs read pure roster/population/document state and never require a GPU, window, or audio
 /// device. <c>world.budget</c> accepts an optional render probe: windowed composition fills its render figures,
 /// while headless composition still reports every authoritative cost and names the absent renderer.
@@ -104,7 +104,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var ruleBudget = server.CostReport.WorkBudget;
         var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()}]";
+        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()}]";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {
@@ -292,6 +292,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.decisions",
             description: "Echoes authored choice policies and active bindings: selected option, last score, commitment, reconsideration cadence, and local random draw count.",
@@ -330,7 +331,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.budget"
@@ -359,6 +360,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.responses",
             description: "Reads every placement carrying a response trait back (Immediate): its current prototype and which authored when-condition (if any) currently holds at its coupled lattice cell.",
@@ -445,7 +447,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 // the inhabitant floor, and shrinking to fit is the right behavior. The echo leads with
                 // requested-vs-granted whenever the two differ, and a DENIED request is a THIRD, distinct
                 // outcome from "granted the full count" and "clamped to a lower one".
-                var actingPrincipal = context.ActingPrincipal();
+                var actingPrincipal = context.Principal;
                 string? notice = null;
 
                 if (count is { } resolvedCount) {

@@ -4,7 +4,6 @@
   "binding": "The positive leg boots a minimal fixture whose one lattice row carries the medium facet (a filled 5-unit-deep pool) and a medium-hold-kit body spawned dry above it. world.contacts 1 reads inMedium=false before any tick runs; body.pose teleports the body down into the pool and, after a short settle, world.contacts 1 reads inMedium=true; body.pose then teleports it back out and, before buoyancy has time to pull it back under, world.contacts 1 reads inMedium=false again — the flag genuinely flips both ways off the population's per-tick WorldFieldLattice.MediumSurface sample, not a one-shot boot fact. The discriminating leg runs the IDENTICAL script against the SAME fixture with the medium row's initial value authored 0 instead of 1 (an empty, still-declared pool) — the coupled cell never carries a positive medium value, so MediumSurface never resolves and the body reads inMedium=false at every occurrence; the positive leg's inMedium=true assertion never matches this transcript.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 6,
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {

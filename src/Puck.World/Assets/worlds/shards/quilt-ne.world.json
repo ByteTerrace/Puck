@@ -1,5 +1,5 @@
 {
-  "basis": "../puck.world.json",
+  "basis": "../puck",
   "documentId": "quilt-ne",
   "gravity": {
     "areas": []
@@ -25,19 +25,19 @@
     },
     {
       "name": "nw",
-      "document": "quilt-nw.world.json"
+      "document": "quilt-nw"
     },
     {
       "name": "se",
-      "document": "quilt-se.world.json"
+      "document": "quilt-se"
     },
     {
       "name": "sw",
-      "document": "quilt-sw.world.json"
+      "document": "quilt-sw"
     },
     {
       "name": "island",
-      "document": "../puck.world.json"
+      "document": "../puck"
     }
   ],
   "destinations": [

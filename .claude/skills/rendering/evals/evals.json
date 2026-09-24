@@ -1,0 +1,54 @@
+{
+  "skill_name": "rendering",
+  "evals": [
+    {
+      "id": 1,
+      "name": "add-blend-op-plan",
+      "prompt": "i want to add a new blend to the sdf vm - a chamfered subtraction with a variable bevel (think ChamferSubtraction but the bevel width comes from a second radius). before i write any code, give me the full list of every file/symbol i have to touch on the C# side and the HLSL side, what has to stay in sync, and how i'd verify it. dont implement it.",
+      "expected_output": "A change plan naming the SdfBlendOp enum and SDF_BLEND_* define, SdfProgramBuilder, SdfProgram validation and Lipschitz compose bound, the cull-margin channel (MaxSmoothBlendRadius halo), blendShape and blendShapeDual in both mapCore and mapGradCore, the kernel variant tiers, SdfFieldEvaluator.Compose (interpret or refuse by name), the ISA version decision, and verification via Puck.SignedDistance.Tests, the SdfVm build, and puck parity. It first asks whether the blend can be composed from existing vocabulary.",
+      "files": [],
+      "assertions": [
+        "Names both the C# enum (SdfBlendOp) and the matching SDF_BLEND_* define in sdf-vm.hlsli",
+        "Names both GPU walks: blendShape (scalar/mapCore) and blendShapeDual (gradient/mapGradCore)",
+        "Addresses the cull-margin halo for a soft blend (MaxSmoothBlendRadius or equivalent bound inflation)",
+        "Addresses the Lipschitz / step-scale compose bound (ComposeLipschitz or SdfProgram.Lipschitz)",
+        "Says SdfFieldEvaluator must interpret the new blend or refuse it by name, never substitute",
+        "Considers whether to bump SdfIsa.Version / SDF_ISA_VERSION",
+        "Checks whether the blend can be built from existing vocabulary before adding an instruction",
+        "Verification includes a real command that exists (dotnet test tests/Puck.SignedDistance.Tests, dotnet build src/Puck.SdfVm, or puck parity)",
+        "Cites no nonexistent symbol or verb (e.g. HasUnmaskableCompose, sdf.* verbs, gpu.timing)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "renderview-ao-no-effect",
+      "prompt": "ok this is driving me nuts. AO on the moth's wings has a weird dark band. i've been editing the AO code inside renderView in sdf-world.hlsli, rebuilt src/Puck.SdfVm, restarted Puck.World — and literally nothing changes, not even when i made calcAO return 1.0. what's going on, where should i actually be editing, and is there a faster loop than restarting the game every time?",
+      "expected_output": "Explains that ambient occlusion runs in the separate ambient dispatch (sdf-world-ambient.comp / sdf-surface.hlsli path) and that renderView's normal/AO code compiles only into the SDF_MONOLITHIC_VIEWS reference build, so edits there never ship. Points at the right file, recommends the build plus world.shaders.reload / world.shaders.status loop, and optionally world.ao / world.debug-view to isolate.",
+      "files": [],
+      "assertions": [
+        "Identifies that AO is computed in a separate ambient pass/dispatch, not in renderView",
+        "States that the renderView AO/normal code only compiles into the monolithic reference build (SDF_MONOLITHIC_VIEWS / #ifndef SDF_PRIMARY_READ)",
+        "Points to the file that actually hosts the shipped AO code (sdf-surface.hlsli and/or sdf-occlusion.hlsli / sdf-world-ambient.comp.hlsl)",
+        "Recommends world.shaders.reload (with world.shaders.status) instead of restarting",
+        "Notes that reload requires compiling the shaders first",
+        "Cites no nonexistent verb (sdf.normals, sdf.shadowcull, gpu.timing)"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "gpu-time-after-placements",
+      "prompt": "after adding about 200 static placements to my world the framerate tanked on my 4070. how do i figure out which GPU pass is eating the time, and are there runtime knobs to trade shadow/AO quality for speed while i investigate? also is there anything about capacity i should be worried about when adding more placements later?",
+      "expected_output": "A measurement recipe: world.cadence off for still scenes, world.counters gpu per-pass counted-work readout including primary/surface/ambient/views, world.budget; compare whole frame; judged by counted work, never wall-clock or GPU timestamps. Knobs: world.shadows, world.ao, world.ao-quality, world.shadow-mask auto|exact|camera-tile, world.shadow-march, world.render-scale, world.debug-view depth. Capacity: program words and instances grow on upload, dynamic transforms do not; probe branches; world.budget.",
+      "files": [],
+      "assertions": [
+        "Reads per-pass counted work straight from world.counters gpu, with no arming step",
+        "Mentions world.cadence off (or the cadence gate) so still scenes are measured",
+        "Pass breakdown reflects the split passes (mentions primary, surface or ambient, not only beam/views)",
+        "Names world.shadow-mask with its real modes (auto, exact, camera-tile) or another real shadow/AO lever (world.shadows, world.ao, world.ao-quality, world.shadow-march)",
+        "Mentions world.budget for program/instance cost",
+        "States program words/instances grow on upload (not a frozen envelope that throws)",
+        "Cites no nonexistent verb (sdf.grid, sdf.shadowcull, gpu.timing, sdf.bench)"
+      ]
+    }
+  ]
+}

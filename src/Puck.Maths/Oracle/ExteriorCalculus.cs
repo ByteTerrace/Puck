@@ -171,10 +171,9 @@ public sealed class ExteriorCalculus<TValue, TOps>
     /// <returns>The dimension.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The cell names no cell of this complex.</exception>
     public int CellDimension(int cell) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: cell);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: cell,
-            other: CellCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: CellCount,
+            value: cell
         );
 
         return m_dimensions[cell];
@@ -214,10 +213,9 @@ public sealed class ExteriorCalculus<TValue, TOps>
     /// <returns>The key of the interval from that cell to the top.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The cell names no cell of this complex.</exception>
     public long ChainKey(int cell) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: cell);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: cell,
-            other: CellCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: CellCount,
+            value: cell
         );
 
         return m_chainKey[cell];
@@ -265,10 +263,9 @@ public sealed class ExteriorCalculus<TValue, TOps>
     /// <returns>The key of the interval from the empty face to that cell.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The cell names no cell of this complex.</exception>
     public long CochainKey(int cell) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: cell);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: cell,
-            other: CellCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: CellCount,
+            value: cell
         );
 
         return m_cochainKey[cell];

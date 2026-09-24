@@ -1,208 +1,66 @@
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// A serial link cable between two machines, together with the deterministic pair-stepper the cable requires.
-/// Constructing the session wires the two machines' serial ports as peers (bits are exchanged synchronously inside the
-/// internally-clocked port's tick — see <see cref="SerialComponent"/>); the pair must then be advanced through the
-/// session: <see cref="Run"/> moves both machines forward by one shared wall-time budget (master-clock T-cycles, i.e.
-/// LCD dots — the same unit <see cref="Machine.Run"/> consumes, and a rate the DMG/Color models share in every speed
-/// mode), always stepping the machine that is further behind its own cumulative target, one instruction at a time,
-/// with ties going to the first machine. That interleave is a pure function of the two machines' states and the budget
-/// sequence — no wall clock, no thread scheduling — so a linked run is deterministic and replay-identical, and the
-/// per-machine targets are cumulative (anchored at connect), so instruction overshoot carries between calls instead of
-/// accreting into drift, exactly like <see cref="Machine.Run"/>'s own pacing.
+/// A serial link cable between two machines: the <see cref="LinkSession{TPort}"/> over <see cref="SerialComponent"/>.
+/// Constructing the session wires the two machines' serial ports as peers; bits are exchanged synchronously inside the
+/// internally-clocked port's tick (see <see cref="SerialComponent"/>), and the pair advances through the shared
+/// furthest-behind interleave.
 /// <para>
-/// Causality across the cable is instruction-atomic: when one machine's serial shifter exchanges a bit, the peer's
-/// state is its last instruction boundary — at most one instruction stale, well inside a normal-rate bit period
-/// (512 T-cycles). That is the finest an instruction-atomic core can offer; byte-level link protocols (the handshake
-/// style real link software uses) are exact under it. In a parallel-stepping fleet, a linked pair is one work item:
-/// never step the two machines on separate threads, and never advance either machine directly while the session is
-/// live. Disposing the session severs the cable; both machines then step independently again (an unfinished
-/// external-clock transfer stays pending, as on unplugged hardware).
+/// When one machine's serial shifter exchanges a bit, the peer's state is its last instruction boundary — at most one
+/// instruction stale, well inside a normal-rate bit period (512 T-cycles). That is the finest an instruction-atomic
+/// core can offer; byte-level link protocols (the handshake style real link software uses) are exact under it.
+/// Disposing the session leaves an unfinished external-clock transfer pending, as on unplugged hardware.
 /// </para>
 /// <para>
-/// Suspend/resume for a credit-preserving reconnect. Because stepping is instruction-atomic, a machine typically ends a
-/// budget having overshot its cumulative target by a few cycles; that overshoot is a credit that carries into the next
-/// budget. <see cref="Suspend"/> requires both ports to be transfer-idle (SC bit 7 clear) — it throws
+/// <see cref="LinkSession{TPort}.Suspend"/> requires both ports to be transfer-idle (SC bit 7 clear) and throws
 /// <see cref="InvalidOperationException"/> rather than severing a cable mid-transfer, since a round no console can
-/// recover would leave the resumed session unable to reconstruct hardware state. On success it severs the cable and
-/// hands back a <see cref="SerialLinkResumeToken"/> capturing both credits, and the resume constructor re-anchors each
-/// machine's target at <c>CycleCount − credit</c> so a snapshot/restore/reconnect cycle continues the exact pacing the
-/// suspend severed at. A naive reconnect (the plain constructor, which anchors targets at the current instant) instead
-/// discards the credit and runs those extra cycles, diverging the trace by construction.
-/// </para>
-/// <para>
-/// A live session that never severs snapshots the same credits through <see cref="PacingCredits"/> and re-anchors them
-/// through <see cref="ReanchorPacing"/> — the path a link's coupled rewind takes, where the cable stays wired and both
-/// machines are restored in place. That path has no transfer-idle requirement: an in-flight transfer is part of each
-/// machine's own snapshot, so a mid-transfer instant restores exactly.
+/// recover would leave the resumed session unable to reconstruct hardware state. The live
+/// <see cref="LinkSession{TPort}.ReanchorPacing"/> path has no such requirement.
 /// </para>
 /// </summary>
-public sealed class SerialLinkSession : IDisposable {
-    private readonly Machine m_first;
-    private readonly SerialComponent m_firstPort;
-    private readonly Machine m_second;
-    private readonly SerialComponent m_secondPort;
-
-    private bool m_disposed;
-    private ulong m_firstTarget;
-    private ulong m_secondTarget;
-
-    /// <summary>Connects two machines' serial ports and anchors the pair-stepper at their current instants. The
-    /// machines may sit at different points on their own timelines (one may have booted long before the other); the
-    /// cable defines "now" as the moment of connection, and every subsequent budget advances both by equal wall
-    /// time from there.</summary>
+public sealed class SerialLinkSession : LinkSession<SerialComponent> {
+    /// <summary>Initializes a new instance of the <see cref="SerialLinkSession"/> class, connecting two machines' serial
+    /// ports and anchoring the pair-stepper at their current instants.</summary>
     /// <param name="first">The first machine (the tie-break winner when both are equally behind).</param>
     /// <param name="second">The second machine.</param>
     /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Both arguments are the same instance.</exception>
     /// <exception cref="InvalidOperationException">Either machine's serial port is already linked.</exception>
-    public SerialLinkSession(MachineInstance first, MachineInstance second) {
-        ArgumentNullException.ThrowIfNull(argument: first);
-        ArgumentNullException.ThrowIfNull(argument: second);
-
-        var firstPort = first.GetRequiredService<SerialComponent>();
-        var secondPort = second.GetRequiredService<SerialComponent>();
-
-        SerialComponent.Connect(
-            first: firstPort,
-            second: secondPort
-        );
-
-        m_first = first.Machine;
-        m_firstPort = firstPort;
-        m_second = second.Machine;
-        m_secondPort = secondPort;
-        m_firstTarget = m_first.Clock.CycleCount;
-        m_secondTarget = m_second.Clock.CycleCount;
-    }
-    /// <summary>Reconnects a suspended pair, re-anchoring each machine's pacing target at <c>CycleCount − credit</c> so
-    /// the run continues the exact pacing the matching <see cref="Suspend"/> severed at — the credit-preserving path a
-    /// snapshot/restore/reconnect cycle needs. Use this (never the plain constructor) after restoring both machines from
-    /// snapshots taken across a <see cref="Suspend"/>.</summary>
+    public SerialLinkSession(MachineInstance first, MachineInstance second)
+        : base(
+        connect: SerialComponent.Connect,
+        disconnect: SerialComponent.Disconnect,
+        first: first,
+        second: second
+    ) { }
+    /// <summary>Initializes a new instance of the <see cref="SerialLinkSession"/> class for a suspended pair,
+    /// re-anchoring each machine's pacing target at <c>CycleCount − credit</c> so the run continues the exact pacing the
+    /// matching <see cref="LinkSession{TPort}.Suspend"/> severed at.</summary>
     /// <param name="first">The first machine, restored from its across-suspend snapshot (the tie-break winner).</param>
     /// <param name="second">The second machine, restored from its across-suspend snapshot.</param>
-    /// <param name="resumeToken">The token the matching <see cref="Suspend"/> returned.</param>
+    /// <param name="resumeToken">The token the matching suspend returned.</param>
     /// <exception cref="ArgumentNullException">Either machine is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Both machines are the same instance, or a credit exceeds its machine's own
-    /// cycle count — a token that does not fit either machine, the signature a reordered, substituted, or otherwise
-    /// corrupted token leaves behind.</exception>
+    /// cycle count.</exception>
     /// <exception cref="InvalidOperationException">Either machine's serial port is already linked.</exception>
-    public SerialLinkSession(MachineInstance first, MachineInstance second, SerialLinkResumeToken resumeToken)
-        : this(
-        // Validated before either port is connected: an oversized credit must fail here, never after the cable is
-        // already wired (there is no seam left to disconnect it through once construction has thrown).
-        first: LinkSessionStepper.RequireCreditFits(
-            credit: resumeToken.FirstCredit,
-            instance: first,
-            side: "first"
-        ),
-        second: LinkSessionStepper.RequireCreditFits(
-            credit: resumeToken.SecondCredit,
-            instance: second,
-            side: "second"
-        )
-    ) {
-        m_firstTarget = (m_first.Clock.CycleCount - resumeToken.FirstCredit);
-        m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
-    }
+    public SerialLinkSession(MachineInstance first, MachineInstance second, LinkResumeToken resumeToken)
+        : base(
+        connect: SerialComponent.Connect,
+        disconnect: SerialComponent.Disconnect,
+        first: first,
+        resumeToken: resumeToken,
+        second: second
+    ) { }
 
-    /// <summary>Gets the pair-stepper's live pacing state as each machine's instruction-overshoot credit — the same
-    /// quantity <see cref="Suspend"/> hands back, readable at any instant without severing the cable. A link that
-    /// snapshots its members must snapshot this beside them: it is the session's own state, not either machine's, so a
-    /// restore that reproduces both machines but re-anchors the targets at the landing instant discards the credit and
-    /// diverges the trace by construction.</summary>
-    public SerialLinkResumeToken PacingCredits =>
-        new(
-            FirstCredit: (m_first.Clock.CycleCount - m_firstTarget),
-            SecondCredit: (m_second.Clock.CycleCount - m_secondTarget)
-        );
-
-    /// <summary>Severs the cable: both serial ports lose their peer and the machines step independently again. The
-    /// machines themselves are untouched (they are owned by the caller, not the session).</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-
-        SerialComponent.Disconnect(port: m_firstPort);
-        SerialComponent.Disconnect(port: m_secondPort);
-    }
-    /// <summary>Re-anchors both pacing targets at <c>CycleCount − credit</c> without touching the cable — the
-    /// restore-side counterpart of <see cref="PacingCredits"/>, for a link that has just restored both machines into
-    /// the live session rather than reconnecting fresh ones.</summary>
-    /// <param name="credits">The credits captured beside the machines' states.</param>
-    /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
-    /// <exception cref="ArgumentException">A credit exceeds its machine's own cycle count.</exception>
-    public void ReanchorPacing(SerialLinkResumeToken credits) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-        LinkSessionStepper.RequireCreditFits(
-            credit: credits.FirstCredit,
-            cycleCount: m_first.Clock.CycleCount,
-            side: "first"
-        );
-        LinkSessionStepper.RequireCreditFits(
-            credit: credits.SecondCredit,
-            cycleCount: m_second.Clock.CycleCount,
-            side: "second"
-        );
-
-        m_firstTarget = (m_first.Clock.CycleCount - credits.FirstCredit);
-        m_secondTarget = (m_second.Clock.CycleCount - credits.SecondCredit);
-    }
-    /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically —
-    /// the seam a host drives in place of the two machines' own <see cref="Machine.Run"/> while they are linked.</summary>
-    /// <param name="tCycles">The number of T-cycles to advance each machine this call.</param>
-    /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
-    public void Run(ulong tCycles) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        LinkSessionStepper.Run(
-            first: m_first,
-            firstTarget: ref m_firstTarget,
-            second: m_second,
-            secondTarget: ref m_secondTarget,
-            tCycles: tCycles
-        );
-    }
-    /// <summary>Severs the cable and returns the credit token a later credit-preserving reconnect needs. Each machine's
-    /// credit is its instruction overshoot at this instant — the T-cycles it has already run past its cumulative link
-    /// target (always non-negative: a completed <see cref="Run"/> leaves each machine at or past its target). After
-    /// suspend the session is disposed like <see cref="Dispose"/>; both machines then step independently and may be
-    /// snapshotted, restored into fresh machines, and reconnected through the resume constructor with this token.
-    /// Suspend only at a transfer-idle instant (no transfer bit set on either port), never mid-transfer.</summary>
-    /// <returns>The token carrying both machines' overshoot credits.</returns>
-    /// <exception cref="ObjectDisposedException">The session has already been disposed.</exception>
-    /// <exception cref="InvalidOperationException">Either port has a transfer armed or in flight (SC bit 7 set).</exception>
-    public SerialLinkResumeToken Suspend() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        if (m_firstPort.IsTransferActive) {
+    /// <inheritdoc/>
+    /// <remarks>Refuses while either port has a transfer armed or in flight (SC bit 7 set).</remarks>
+    private protected override void RequireSeverable(SerialComponent firstPort, SerialComponent secondPort) {
+        if (firstPort.IsTransferActive) {
             throw new InvalidOperationException(message: "the first port has a transfer armed or in flight (SC bit 7 set); suspend only at a transfer-idle instant, never mid-transfer.");
         }
 
-        if (m_secondPort.IsTransferActive) {
+        if (secondPort.IsTransferActive) {
             throw new InvalidOperationException(message: "the second port has a transfer armed or in flight (SC bit 7 set); suspend only at a transfer-idle instant, never mid-transfer.");
         }
-
-        var token = new SerialLinkResumeToken(
-            FirstCredit: (m_first.Clock.CycleCount - m_firstTarget),
-            SecondCredit: (m_second.Clock.CycleCount - m_secondTarget)
-        );
-
-        Dispose();
-
-        return token;
     }
 }

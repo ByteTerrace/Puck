@@ -94,10 +94,9 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
     /// <returns>The predicate the block accepts.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The letter number is outside <see cref="LetterCount"/>.</exception>
     public TPredicate Minterm(int letter) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: letter);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: letter,
-            other: LetterCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: LetterCount,
+            value: letter
         );
 
         return m_minterms[letter];

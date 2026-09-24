@@ -39,12 +39,7 @@
     <ItemGroup>
         <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
         <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
-        <!-- The ray-query kernels (*.rq.comp.hlsl) need inline RayQuery (Shader Model 6.5+); they compile at the same
-             cs_6_6 / vulkan1.3 floor as every other kernel below, but keep their own rule so the DXIL pass emits DXR 1.1
-             inline ray tracing. EXCLUDE them from the plain compute batch. They compile to BOTH SPIR-V (Vulkan) and DXIL
-             (Direct3D 12 DXR 1.1) — inline ray tracing is expressible in both. -->
-        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" Exclude="Assets\Shaders\**\*.rq.comp.hlsl" />
-        <RayQueryComputeShaderSource Include="Assets\Shaders\**\*.rq.comp.hlsl" />
+        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
     </ItemGroup>
 

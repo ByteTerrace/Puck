@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>The four DMA channels with per-word priority preemption: between each read, channels 0→3 are
@@ -294,8 +296,8 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             // The engine's internal address registers ignore the bits below the transfer unit, so every bus access
             // is force-aligned here — the 8-bit save bus then sees the aligned byte on reads and the unrotated low
             // byte on writes (the hardware DMA-to-SRAM behavior).
-            var source = m_sourceLatch[ch] & ~(unit - 1u);
-            var destination = m_destinationLatch[ch] & ~(unit - 1u);
+            var source = m_sourceLatch[ch].AlignDown(alignment: unit);
+            var destination = m_destinationLatch[ch].AlignDown(alignment: unit);
 
             // Only an addressable source (>= 0x02000000) actually drives the bus; a BIOS-region source leaves the
             // previous latch in place (open bus). A halfword read mirrors into both halves of the latch.

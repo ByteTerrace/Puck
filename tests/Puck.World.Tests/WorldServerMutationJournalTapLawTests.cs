@@ -1,5 +1,7 @@
+using Puck.Commands;
 using Xunit;
 
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -11,13 +13,7 @@ namespace Puck.World.Tests;
 /// silo: a fresh, uncheckpointed server fed only the tapped-and-reencoded entry reaches the tapped mutation's own
 /// effect — the "mutate, kill before any checkpoint, restart, the mutation survives" claim.</summary>
 public sealed class WorldServerMutationJournalTapLawTests {
-    private static readonly WorldPrincipal Seller = WorldPrincipal.Seat(slot: 0);
-
-    private static WorldOwnedWorlds FreshProfiles(WorldDefinition definition) => new(
-        directory: Directory.CreateTempSubdirectory(prefix: "puck-journal-tap-tests-").FullName,
-        machineId: Guid.NewGuid(),
-        template: definition
-    );
+    private static readonly Principal Seller = Principal.Seat(slot: 0);
 
     [Fact]
     public void MutationJournalTap_DoesNotFireForARejectedMutation() {
@@ -91,6 +87,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
             engines: [],
             screens: definition.Screens
         );
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-journal-tap-tests-");
         var restoredServer = new WorldServer(
             definition: definition,
             envelope: new WorldRenderEnvelope(),
@@ -98,7 +95,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
             machines: restoredMachines,
             narrationSink: new WorldConsoleNarrationSink(),
             population: new WorldPopulation(definition: definition),
-            profiles: FreshProfiles(definition: definition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: definition)
         );
 
         Assert.True(

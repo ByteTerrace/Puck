@@ -348,40 +348,30 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     public void SetTraceSink(ICpuTraceSink? sink) =>
         m_traceSink = sink;
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: m_a);
-        writer.WriteByte(value: m_f);
-        writer.WriteByte(value: m_b);
-        writer.WriteByte(value: m_c);
-        writer.WriteByte(value: m_d);
-        writer.WriteByte(value: m_e);
-        writer.WriteByte(value: m_h);
-        writer.WriteByte(value: m_l);
-        writer.WriteUInt16(value: m_stackPointer);
-        writer.WriteUInt16(value: m_programCounter);
-        writer.WriteBoolean(value: m_halted);
-        writer.WriteBoolean(value: m_haltBug);
-        writer.WriteBoolean(value: m_lockedUp);
-        writer.WriteBoolean(value: m_interruptMasterEnable);
-        writer.WriteInt32(value: m_interruptEnableCountdown);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Byte(value: ref m_a);
+        transfer.Byte(value: ref m_f);
+        transfer.Byte(value: ref m_b);
+        transfer.Byte(value: ref m_c);
+        transfer.Byte(value: ref m_d);
+        transfer.Byte(value: ref m_e);
+        transfer.Byte(value: ref m_h);
+        transfer.Byte(value: ref m_l);
+        transfer.UInt16(value: ref m_stackPointer);
+        transfer.UInt16(value: ref m_programCounter);
+        transfer.Boolean(value: ref m_halted);
+        transfer.Boolean(value: ref m_haltBug);
+        transfer.Boolean(value: ref m_lockedUp);
+        transfer.Boolean(value: ref m_interruptMasterEnable);
+        transfer.Int32(value: ref m_interruptEnableCountdown);
     }
+
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
-        m_a = reader.ReadByte();
-        m_f = reader.ReadByte();
-        m_b = reader.ReadByte();
-        m_c = reader.ReadByte();
-        m_d = reader.ReadByte();
-        m_e = reader.ReadByte();
-        m_h = reader.ReadByte();
-        m_l = reader.ReadByte();
-        m_stackPointer = reader.ReadUInt16();
-        m_programCounter = reader.ReadUInt16();
-        m_halted = reader.ReadBoolean();
-        m_haltBug = reader.ReadBoolean();
-        m_lockedUp = reader.ReadBoolean();
-        m_interruptMasterEnable = reader.ReadBoolean();
-        m_interruptEnableCountdown = reader.ReadInt32();
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
 
         // The double-speed flag is snapshotted by KEY1, which loads before the CPU; re-apply it to the component clock,
         // whose speed is not itself part of the snapshot.

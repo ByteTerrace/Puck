@@ -67,13 +67,14 @@ public sealed class DmgCompatibilityState : IModeSwitchable, ISnapshotable {
             )
         );
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_isActive = reader.ReadBoolean();
-        m_key0Latched = reader.ReadBoolean();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBoolean(value: m_isActive);
-        writer.WriteBoolean(value: m_key0Latched);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Boolean(value: ref m_isActive);
+        transfer.Boolean(value: ref m_key0Latched);
     }
 }

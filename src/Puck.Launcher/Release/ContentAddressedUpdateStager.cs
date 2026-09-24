@@ -33,7 +33,13 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
         var reused = 0;
 
         foreach (var file in payload.Files) {
-            if (m_cache.Contains(hash: file.Hash)) {
+            if (!ContentPin.TryParse(
+                pin: out var pin,
+                text: file.Hash
+            )) {
+                return UpdateStageResult.Refuse(reason: $"file '{file.Path}' names '{file.Hash}', which is not a well-formed content pin");
+            }
+            if (m_cache.Contains(pin: pin)) {
                 reused++;
 
                 continue;
@@ -41,9 +47,9 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
 
             using var buffer = new MemoryStream();
             var found = await m_source.TryGetFileAsync(
-                hash: file.Hash,
+                cancellationToken: cancellationToken,
                 destination: buffer,
-                cancellationToken: cancellationToken
+                pin: pin
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (!found) {
@@ -51,13 +57,9 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             }
 
             var bytes = buffer.ToArray();
-            var actualHash = $"sha256/{ContentAddressedStore.ComputeHash(content: bytes)}";
+            var actualHash = ContentPin.Compute(content: bytes);
 
-            if (!string.Equals(
-                a: actualHash,
-                b: file.Hash,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            if (actualHash != pin) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' fetched with hash {actualHash}, expected {file.Hash} — refused rather than staged");
             }
 
@@ -72,20 +74,22 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
         );
 
         foreach (var file in payload.Files) {
-            if (!m_cache.TryGet(
-                hash: file.Hash,
-                content: out var bytes
-            )) {
+            if (
+                !ContentPin.TryParse(
+                pin: out var pin,
+                text: file.Hash
+            ) ||
+                !m_cache.TryGet(
+                content: out var bytes,
+                pin: pin
+            )
+            ) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' (hash {file.Hash}) is missing from the cache after staging — refused rather than writing a partial install");
             }
 
-            var actualHash = $"sha256/{ContentAddressedStore.ComputeHash(content: bytes)}";
+            var actualHash = ContentPin.Compute(content: bytes);
 
-            if (!string.Equals(
-                a: actualHash,
-                b: file.Hash,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            if (actualHash != pin) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' re-verified with hash {actualHash} at staging time, expected {file.Hash} — refused");
             }
 

@@ -7,22 +7,6 @@ namespace Puck.HumbleGamingBrick.Tests;
 /// have not been fetched into the local cache; a skip is not a pass on those rows, only the self-contained stages
 /// are then proven.</summary>
 public sealed class GateLaneTests {
-    private static string FindRepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (directory is not null) {
-            if (File.Exists(path: Path.Combine(
-                path1: directory.FullName,
-                path2: "Puck.slnx"
-            ))) {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new InvalidOperationException(message: "Puck.slnx not found above the test assembly");
-    }
     // Drain both pipes while the child runs. Cancellation must retire the child as well as the waiting task;
     // disposing Process alone only closes our handle and otherwise leaves the battery consuming CPU.
     private static async Task<(string Output, string Error)> WaitForExitAndDrainAsync(Process process, CancellationToken cancellation) {
@@ -67,7 +51,7 @@ public sealed class GateLaneTests {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
-            WorkingDirectory = FindRepositoryRoot(),
+            WorkingDirectory = RepositoryPaths.RequireRoot(),
         };
 
         startInfo.ArgumentList.Add(item: Path.Combine(
@@ -105,11 +89,12 @@ public sealed class GateLaneTests {
             await ((Task)waiting).ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
         }
     }
-    // A deadlocked self-contained stage cannot observe cancellation itself. The outer test deadline cancels
-    // our process wait, whose finally block terminates the battery and leaves a named timeout instead of a hang.
+    // The battery decides its own verdict however long a loaded host takes to run it. A deadlocked stage cannot
+    // observe cancellation, so the battery's hang guard abandons it and exits 2 with the stage named as hung; the
+    // wait here ends only with the battery or with the test run itself.
     [Fact]
     public async Task GateLaneIsGreen() {
-        var repositoryRoot = FindRepositoryRoot();
+        var repositoryRoot = RepositoryPaths.RequireRoot();
         var artifacts = Path.Combine(
             path1: Path.GetTempPath(),
             path2: "puck-gb-post-gate",
@@ -137,11 +122,7 @@ public sealed class GateLaneTests {
         }
 
         using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "dotnet did not start"));
-
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 120));
-        var cancellation = deadline.Token;
+        var cancellation = TestContext.Current.CancellationToken;
 
         var (stdout, stderr) = await WaitForExitAndDrainAsync(
             cancellation: cancellation,

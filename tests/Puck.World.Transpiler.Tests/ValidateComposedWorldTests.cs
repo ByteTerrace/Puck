@@ -18,14 +18,14 @@ public sealed class ValidateComposedWorldTests : IDisposable {
           }
         }
         """;
-    // The root placement row deliberately omits prototypeId and scale; standard.basis.json-style composition
+    // The root placement row deliberately omits prototypeId and scale; standard.world.json-style composition
     // supplies them by merging a same-id basis row over it. Reproduces the exact shape of the bug this entry point
     // fixes: WorldPlacement is a required-field record, so deserializing the root JSON alone throws before any
     // semantic check runs.
     private const string RootJson = """
         {
           "schema": "puck.world.definition.v1",
-          "basis": "basis.json",
+          "basis": "basis",
           "placements": {
             "rows": [
               { "id": "rock", "position": [0, 0, 0], "yawDegrees": 0 }
@@ -48,7 +48,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
         File.WriteAllText(
             Path.Combine(
                 path1: m_directory,
-                path2: "basis.json"
+                path2: "basis.world.json"
             ),
             BasisJson
         );
@@ -96,10 +96,10 @@ public sealed class ValidateComposedWorldTests : IDisposable {
     }
     [Fact]
     public void MultiWorldDiagnosticsComposeEachBasisBeforeValidation() {
-        File.WriteAllText(Path.Combine(path1: m_directory, path2: "basis.json"), BasisJson);
+        File.WriteAllText(Path.Combine(path1: m_directory, path2: "basis.world.json"), BasisJson);
         const string Source = """
                 module room() {
-                    basis: "basis.json"
+                    basis: "basis"
                     placements { rows [ { id: "rock" position [0, 0, 0] yawDegrees: 0 } ] }
                 }
                 world first = room()

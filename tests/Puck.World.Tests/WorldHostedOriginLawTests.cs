@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Numerics;
 
 using Xunit;
@@ -71,15 +72,15 @@ public sealed class WorldHostedOriginLawTests {
             ],
             References = [
                 Reference(
-                document: "quilt-ne.world.json",
+                document: "quilt-ne",
                 name: "toNe"
             ),
                 Reference(
-                document: "quilt-sw.world.json",
+                document: "quilt-sw",
                 name: "toSw"
             ),
                 Reference(
-                document: "quilt-island.world.json",
+                document: "quilt-island",
                 name: "toIsland"
             ),
             ],
@@ -111,11 +112,11 @@ public sealed class WorldHostedOriginLawTests {
             ],
             References = [
                 Reference(
-                document: "quilt-nw.world.json",
+                document: "quilt-nw",
                 name: "toNw"
             ),
                 Reference(
-                document: "quilt-se.world.json",
+                document: "quilt-se",
                 name: "toSe"
             ),
             ],
@@ -147,11 +148,11 @@ public sealed class WorldHostedOriginLawTests {
             ],
             References = [
                 Reference(
-                document: "quilt-ne.world.json",
+                document: "quilt-ne",
                 name: "toNe"
             ),
                 Reference(
-                document: "quilt-sw.world.json",
+                document: "quilt-sw",
                 name: "toSw"
             ),
             ],
@@ -183,11 +184,11 @@ public sealed class WorldHostedOriginLawTests {
             ],
             References = [
                 Reference(
-                document: "quilt-se.world.json",
+                document: "quilt-se",
                 name: "toSe"
             ),
                 Reference(
-                document: "quilt-nw.world.json",
+                document: "quilt-nw",
                 name: "toNw"
             ),
             ],
@@ -209,7 +210,7 @@ public sealed class WorldHostedOriginLawTests {
             ],
             References = [
                 Reference(
-                document: "quilt-nw.world.json",
+                document: "quilt-nw",
                 name: "toNw"
             ),
             ],
@@ -235,7 +236,7 @@ public sealed class WorldHostedOriginLawTests {
             await gate.Task.WaitAsync(cancellationToken: token);
             Assert.True(
                 condition: WorldCounterpartAttestation.TryCompose(
-                    quilt[document[..^WorldOwnedWorldFileName.Suffix.Length]],
+                    quilt[document],
                     document,
                     out var attestation,
                     out var reason
@@ -260,7 +261,7 @@ public sealed class WorldHostedOriginLawTests {
         gate.SetResult();
         var result = await load;
 
-        Assert.NotNull(@object: result.Definition);
+        Assert.NotNull(@object: result.Admission);
         Assert.Empty(value: result.Reason);
         Assert.Equal(
             actual: reads,
@@ -269,7 +270,7 @@ public sealed class WorldHostedOriginLawTests {
     }
     [Fact]
     public async Task FiveQuiltDocuments_PublishedToADirectoryStore_ResolveByIdAndValidate() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
 
         var target = new DirectoryObjectStorageTarget(rootPath: directory.RootPath);
         var store = PuckStorageTestComposition.BuildStore();
@@ -314,7 +315,7 @@ public sealed class WorldHostedOriginLawTests {
                     expected: WorldNeighbourResolutionKind.Attested
                 );
 
-                var expectedId = reference.NeighbourKey[..^WorldOwnedWorldFileName.Suffix.Length];
+                var expectedId = reference.NeighbourKey;
 
                 Assert.True(
                     condition: quilt.ContainsKey(key: expectedId),
@@ -344,7 +345,7 @@ public sealed class WorldHostedOriginLawTests {
     }
     [Fact]
     public async Task NeighbourSeamReadsDoNotRequireUnrelatedHostSettingsToValidate() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var store = PuckStorageTestComposition.BuildStore();
         var owner = Guid.NewGuid();
@@ -354,19 +355,17 @@ public sealed class WorldHostedOriginLawTests {
             definition: definition,
             reason: out _
         ));
-        var address = WorldOwnedWorldSync.HostedAddressFor(
-            owner,
-            SafeName.Parse(candidate: "quilt-island"),
-            "definition.json"
-        );
-
-        await store.WriteAsync(
-            target,
-            address,
-            WorldDefinitionSerialization.Serialize(definition: definition),
-            ObjectBlobWriteMode.Overwrite,
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        Assert.True(condition: (await new WorldAuthorityBlobStore(
+            store: store,
+            target: target
+        ).PublishDefinitionAsync(
+            new(
+                Owner: owner,
+                World: SafeName.Parse(candidate: "quilt-island")
+            ),
+            definition,
+            TestContext.Current.CancellationToken
+        )).Ok);
         var resolver = new WorldStorageNeighbourResolver(
             containerId: owner,
             @namespace: WorldStorageNamespace.Hosted,
@@ -376,7 +375,7 @@ public sealed class WorldHostedOriginLawTests {
 
         Assert.Equal(
             WorldNeighbourResolutionKind.Attested,
-            resolver.Resolve(document: "quilt-island.world.json").Kind
+            resolver.Resolve(document: "quilt-island").Kind
         );
         var origin = new WorldHostedOrigin(
             owner,

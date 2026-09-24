@@ -92,30 +92,23 @@ internal static class RegistryCommand {
         return 1;
     }
 
-    public static Command Create() {
-        var checkOption = new Option<bool>(name: "--check") {
-            Description = "Regenerate in memory and compare against docs/world-name-registry.md; write nothing, and exit 1 naming the first differing line.",
-        };
-        var command = new Command(
-            description: """
-            The world name registry, generated and checked.
+    public static Command Create() => CliOptions.CheckVerb(
+        checkDescription: "Regenerate in memory and compare against docs/world-name-registry.md; write nothing, and exit 1 naming the first differing line.",
+        description: """
+        The world name registry, generated and checked.
 
-            Generated from Puck.World.WorldNameRegistry (src/Puck.World.Schema) over the same
-            source-generated WorldJsonContext the engine loads a world document through: every
-            document field carrying a state, zone, rule, table, pattern, topology, generator,
-            field, or dynamics name, with the role it carries the name in. WorldModuleNamespace
-            reads the same registry to prefix an aliased import's names at compose time.
+        Generated from Puck.World.WorldNameRegistry (src/Puck.World.Schema) over the same
+        source-generated WorldJsonContext the engine loads a world document through: every
+        document field carrying a state, zone, rule, table, pattern, topology, generator,
+        field, or dynamics name, with the role it carries the name in. WorldModuleNamespace
+        reads the same registry to prefix an aliased import's names at compose time.
 
-            Both modes first exit 1 with every name-shaped document member the registry neither
-            registers nor excludes, so a document field added without a registration cannot pass.
+        Both modes first exit 1 with every name-shaped document member the registry neither
+        registers nor excludes, so a document field added without a registration cannot pass.
 
-            Written to: docs/world-name-registry.md.
-            """,
-            name: "registry"
-        ) { checkOption };
-
-        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: checkOption)));
-
-        return command;
-    }
+        Written to: docs/world-name-registry.md.
+        """,
+        name: "registry",
+        run: Run
+    );
 }

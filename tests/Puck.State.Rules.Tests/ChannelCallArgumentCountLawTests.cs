@@ -7,7 +7,6 @@ namespace Puck.State.Rules.Tests;
 /// channel spelled with the wrong number of arguments. No channel handler reads past the end of an empty argument
 /// list.</summary>
 public sealed class ChannelCallArgumentCountLawTests {
-    [Theory]
     [InlineData("$phase")]
     [InlineData("$board")]
     [InlineData("$match")]
@@ -17,10 +16,11 @@ public sealed class ChannelCallArgumentCountLawTests {
     [InlineData("$reduce")]
     [InlineData("$symmetry")]
     [InlineData("$search")]
+    [Theory]
     public void BareChannelIsRefused(string channel) {
         var rule = RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: channel,
                 Value: 0m
             ),

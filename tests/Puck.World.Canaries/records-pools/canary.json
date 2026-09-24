@@ -4,7 +4,6 @@
   "binding": "A request opens one rule that claims a capacity-one record, writes and copies 17, releases it, reclaims the same slot, and copies its reset default 7. Both lifetimes are released and the rule marks completion. The recording must replay exactly, including the dead-slot generation continuation. The alternate input leaves the gate closed and all three witness rows zero.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 3,
   "timeoutSeconds": 30,
   "fixtures": [],
   "positive": {

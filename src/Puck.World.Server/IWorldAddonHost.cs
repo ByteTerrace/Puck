@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -53,7 +54,7 @@ public interface IWorldAddonHost : IWorldExtensionRuntime {
     /// <param name="principal">The principal the grant confers on.</param>
     /// <param name="reach">The grant's channel reach, when it carries one.</param>
     /// <param name="channels">The world's channel table, for naming the ordinals.</param>
-    string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels);
+    string? DescribeUndeclaredGrantedChannels(Principal principal, ChannelReachMask? reach, WorldChannelTable channels);
     /// <summary>Writes the guest's input ring, runs <c>puck_on_tick</c>, and decodes/vocabulary-validates its output
     /// — the first of the three tick-boundary pump points, run at the very top.</summary>
     /// <param name="tick">The tick about to advance.</param>

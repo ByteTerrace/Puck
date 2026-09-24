@@ -603,7 +603,7 @@ public static class QueuedHostContractProbe {
                 oneSpanCore.Advance();
                 oneSpanRing.Record(
                     budget: 1L,
-                    hostAccumulator: 0UL,
+                    hostAccumulator: default,
                     input: in input
                 );
             }
@@ -637,7 +637,7 @@ public static class QueuedHostContractProbe {
                 impossibleCore.Advance();
                 impossibleRing.Record(
                     budget: 1L,
-                    hostAccumulator: 0UL,
+                    hostAccumulator: default,
                     input: in input
                 );
             } catch (InvalidOperationException) {
@@ -667,7 +667,7 @@ public static class QueuedHostContractProbe {
                 growingCore.Advance();
                 growingRing.Record(
                     budget: 1L,
-                    hostAccumulator: 0UL,
+                    hostAccumulator: default,
                     input: in input
                 );
             }
@@ -811,19 +811,19 @@ public static class QueuedHostContractProbe {
         core.Advance(frames: 4L);
         travel.Record(
             budget: 4L,
-            hostAccumulator: 0UL,
+            hostAccumulator: default,
             input: in input
         );
         core.Advance(frames: 2L);
         travel.Record(
             budget: 2L,
-            hostAccumulator: 0UL,
+            hostAccumulator: default,
             input: in input
         );
         core.Advance(frames: 2L);
         travel.Record(
             budget: 2L,
-            hostAccumulator: 0UL,
+            hostAccumulator: default,
             input: in input
         );
 
@@ -1439,15 +1439,17 @@ public static class QueuedHostContractProbe {
         public IGpuComputePipelineFactory ComputePipelineFactory => null!;
         public IGpuComputeRecorder ComputeRecorder => null!;
         public IGpuDescriptorAllocator DescriptorAllocator => null!;
+        public IGpuImageFactory ImageFactory => null!;
         public IGpuQueueSubmitter QueueSubmitter => null!;
         public IGpuShaderModuleFactory ShaderModuleFactory => null!;
         public IGpuStorageBufferFactory StorageBufferFactory => null!;
-        public IGpuStorageImageFactory StorageImageFactory => null!;
         public IGpuSurfaceTransferFactory SurfaceTransferFactory { get; } = factory;
     }
     private sealed class TestGpuDeviceContext : IGpuDeviceContext {
         public long AdapterLuid => 0;
         public nint DeviceHandle => 1;
+        public GpuDeviceIdentity? Identity => null;
+        public GpuMemoryProfile MemoryProfile => default;
 
         public void WaitIdle() { }
     }

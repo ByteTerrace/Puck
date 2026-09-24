@@ -6,27 +6,29 @@ namespace Puck.Cli.Tests;
 /// <summary>CONTRACT UNDER TEST: a run that ends before the tick its schedule declares records a TRUNCATED run —
 /// the manifest carries the authored tick beside the tick reached and says which it is, and every declared row the
 /// run never got to records itself as unreached rather than going missing.</summary>
-/// <remarks>The lever is a piped <c>quit</c> before the export tick. The world's own export file is a valid export
-/// of a real tick, so the manifest's own account is the only thing that can tell a stopped run from a finished
-/// one.</remarks>
+/// <remarks>The lever is a piped <c>quit</c> to a copy of the scheduled world whose <c>rateHz</c> is 0, so the run
+/// ends at tick 0 whatever the machine's load; a running world races its first row's tick against the pipe. The
+/// world's own export file is a valid export of a real tick, so the manifest's own account is the only thing that
+/// can tell a stopped run from a finished one.</remarks>
 public sealed class WorldScheduleTruncationLawTests {
     private const string ScheduledWorld = "phase-advance.world.json";
+    private const string StoppedWorld = "phase-advance-stopped.world.json";
 
     [Fact]
     public void ARunThatQuitsBeforeTheExportTickRecordsATruncatedRunAndItsUnreachedRows() {
-        var legDirectory = ScheduledWorldBoot.Leg(name: "truncated");
+        using var leg = ScheduledWorldBoot.Leg();
+        var legDirectory = leg.PathOf(name: "truncated");
         var scheduleDirectory = Path.Combine(
             path1: legDirectory,
             path2: "out"
         );
-        var process = ScheduledWorldBoot.Boot(
+
+        _ = ScheduledWorldBoot.Boot(
             legDirectory: legDirectory,
             scheduleDirectory: scheduleDirectory,
             script: "quit\n",
-            world: ScheduledWorld
+            world: StoppedWorld
         );
-
-        Assert.False(condition: process.TimedOut);
 
         var manifest = ScheduledWorldBoot.Manifest(scheduleDirectory: scheduleDirectory);
 
@@ -52,19 +54,19 @@ public sealed class WorldScheduleTruncationLawTests {
     }
     [Fact]
     public void ARunThatReachesTheExportTickRecordsNoTruncationAndEveryRowSubmitted() {
-        var legDirectory = ScheduledWorldBoot.Leg(name: "whole");
+        using var leg = ScheduledWorldBoot.Leg();
+        var legDirectory = leg.PathOf(name: "whole");
         var scheduleDirectory = Path.Combine(
             path1: legDirectory,
             path2: "out"
         );
-        var process = ScheduledWorldBoot.Boot(
+
+        _ = ScheduledWorldBoot.Boot(
             legDirectory: legDirectory,
             scheduleDirectory: scheduleDirectory,
             script: "world.wait 14\nquit\n",
             world: ScheduledWorld
         );
-
-        Assert.False(condition: process.TimedOut);
 
         var manifest = ScheduledWorldBoot.Manifest(scheduleDirectory: scheduleDirectory);
 

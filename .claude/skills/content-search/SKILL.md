@@ -14,20 +14,23 @@ than textual.
 
 ## Start the CLI from a clean checkout
 
-Run from the repository root. Prefer the already-built portable assembly:
+Run from the repository root with the checkout's own CLI build, never a
+published copy or the global `puck` tool, both of which lag the head. Copy
+`src/Puck.Cli/bin/Release/net10.0/` to a scratch directory and run the copy, so
+the running tool never locks the build output another build needs:
 
 ```text
-dotnet src/Puck.Cli/publish/Puck.Cli.dll search <pattern> [path] [options]
+dotnet <scratch-copy>/Puck.Cli.dll search <pattern> [path] [options]
 ```
 
-If it is absent, use the tracked project:
+If that build is absent, build it (`dotnet build src/Puck.Cli -c Release`) or
+run the tracked project directly:
 
 ```text
 dotnet run --project src/Puck.Cli/Puck.Cli.csproj -c Release -- search <pattern> [path] [options]
 ```
 
-Never depend exclusively on the ignored Windows launcher
-`src/Puck.Cli/publish/puck.exe`. If neither command can run, content search may
+If neither command can run, content search may
 fall back to the host's literal/regex search facility. State that fallback in
 the result, preserve the requested path/glob/case semantics, and do not claim
 support for Puck-only intersection, complement, or lookaround behavior.
@@ -41,8 +44,8 @@ support for Puck-only intersection, complement, or lookaround behavior.
 - Matching is case-sensitive by default. `-i` fixes the pattern and never the
   globs, and a stray case mismatch is the most common empty result.
 - Globs are not ripgrep's. Brace sets and character classes are literal
-  characters, and `**` requires an intermediate directory, so `src/**/*.cs`
-  silently misses `src/foo.cs`. Write `-g "*.cs"` for an extension and
+  characters, and `**` requires an intermediate directory, so `src/Puck.Cli/**/*.cs`
+  silently misses `src/Puck.Cli/Program.cs`. Write `-g "*.cs"` for an extension and
   `-g "src/**"` for a subtree, repeating `-g` instead of writing `{cs,md}`.
 - Treat exit `0` as a match, `1` as no match, and `2` as an error. When a result
   surprises you, `--files` prints exactly which files the run would read.
@@ -60,5 +63,4 @@ support for Puck-only intersection, complement, or lookaround behavior.
 
 Read [references/complete-reference.md](references/complete-reference.md) when
 you need exact flags, walk/glob behavior, engine semantics, syntax extensions,
-cookbook patterns, shell escaping, or known limitations. Its detailed contract
-is preserved rather than duplicated here.
+cookbook patterns, shell escaping, or known limitations.

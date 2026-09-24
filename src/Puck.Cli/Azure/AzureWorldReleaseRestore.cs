@@ -6,7 +6,7 @@ namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
     /// <summary>Captures a coherent recovery point through the source worker without stopping gameplay.</summary>
-    internal static Task<WorldReleaseFixtureManifest> CaptureWorldReleasePointAsync(Guid requestId, CancellationToken token) =>
+    internal static Task<WorldReleaseFixtureManifest> CaptureWorldReleasePointAsync(Guid requestId, TimeProvider clock, CancellationToken token) =>
         WithManagedWorldReleaseAsync(
             async (context, cancellationToken) => {
                 var state = (await context.Groups.LoadAsync(
@@ -27,6 +27,7 @@ internal static partial class AzureCommand {
                     token: cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 var workers = await StableWorkersAsync(
+                    clock: context.Clock,
                     group: context.ResourceGroup,
                     scaleSet: context.Group
                 ).ConfigureAwait(continueOnCapturedContext: false);
@@ -52,11 +53,12 @@ internal static partial class AzureCommand {
                 }
                 return point;
             },
+            clock,
             token
         );
     /// <summary>Inspects a point by default. Only explicit discard acknowledgement begins its durable restore.</summary>
     internal static Task<WorldReleaseRunResult> RestoreWorldReleaseAsync(Guid pointId, Guid? operationId,
-        bool discardProgress, CancellationToken token) => WithManagedWorldReleaseAsync(
+        bool discardProgress, TimeProvider clock, CancellationToken token) => WithManagedWorldReleaseAsync(
             async (context, cancellationToken) => {
                 var restores = new WorldReleaseRestore(
                     context.Blobs,
@@ -123,14 +125,12 @@ internal static partial class AzureCommand {
                     token: cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false);
             },
+            clock,
             token
         );
 
     private static void RequireClosedRewindDeployment(AzureWorldReleaseDeployment deployment) {
-        if (
-            !deployment.Configuration.ClosedGroupRewind ||
-            (deployment.Manifest.CoordinatorContract != WorldReleaseManifest.CurrentCoordinatorContract)
-        ) {
+        if (!deployment.Configuration.ClosedGroupRewind) {
             throw new InvalidDataException(message: "retained deployment cannot enforce the rewind boundary");
         }
     }

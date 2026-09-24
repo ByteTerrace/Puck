@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets.Documents;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
@@ -23,10 +24,6 @@ public static partial class CreationCanonicalizer {
         "noise", "drivers", "effectors",
     };
 
-    private static bool IsFinite(Vector3 vector) =>
-        (float.IsFinite(f: vector.X) && float.IsFinite(f: vector.Y) && float.IsFinite(f: vector.Z));
-    private static bool IsFinite(Quaternion quaternion) =>
-        (float.IsFinite(f: quaternion.X) && float.IsFinite(f: quaternion.Y) && float.IsFinite(f: quaternion.Z) && float.IsFinite(f: quaternion.W));
     // The behavior manifest normalizes to a canonical locomotion member name and drops a face/sound naming a missing
     // shape. A manifest that is entirely default (walk, no faces, no sounds) collapses to null so a creation without
     // behavioral facts round-trips byte-identically to one that never carried the manifest at all.
@@ -325,7 +322,7 @@ public static partial class CreationCanonicalizer {
                     Message: $"duplicate camera id {camera.Id}."
                 ));
             }
-            if (!IsFinite(vector: camera.Position)) {
+            if (!VectorFunctions.IsFinite(vector: camera.Position)) {
                 errors.Add(item: new(
                     Message: "position is non-finite.",
                     Path: $"cameras[{i}].position"
@@ -623,7 +620,7 @@ public static partial class CreationCanonicalizer {
                             Message: "direction is required for a surface target.",
                             Path: $"{path}.direction"
                         ));
-                    } else if (!IsFinite(vector: direction)) {
+                    } else if (!VectorFunctions.IsFinite(vector: direction)) {
                         errors.Add(item: new(
                             Message: "direction is non-finite.",
                             Path: $"{path}.direction"
@@ -677,7 +674,7 @@ public static partial class CreationCanonicalizer {
                         ));
                     }
                     if (target.Offset is { } offset) {
-                        if (!IsFinite(vector: offset)) {
+                        if (!VectorFunctions.IsFinite(vector: offset)) {
                             errors.Add(item: new(
                                 Message: "offset is non-finite.",
                                 Path: $"{path}.offset"
@@ -869,7 +866,7 @@ public static partial class CreationCanonicalizer {
                 wave: swing.Wave
             );
 
-            if (!IsFinite(vector: swing.Pivot)) {
+            if (!VectorFunctions.IsFinite(vector: swing.Pivot)) {
                 errors.Add(item: new(
                     Message: "pivot is non-finite.",
                     Path: $"{swingPath}.pivot"
@@ -919,7 +916,7 @@ public static partial class CreationCanonicalizer {
             errors.Add(item: new(Message: "the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), which a panel's scope cannot nest inside; remove the panel or the scope-forcing facet.", Path: path));
         }
 
-        var faceIsFinite = ((panel.Face is not { } face) || IsFinite(vector: face));
+        var faceIsFinite = ((panel.Face is not { } face) || VectorFunctions.IsFinite(vector: face));
         var faceIsDirection = (faceIsFinite && ((panel.Face is not { } authored) || (authored.Value != Vector3.Zero)));
 
         if (!faceIsFinite) {
@@ -1071,7 +1068,7 @@ public static partial class CreationCanonicalizer {
                 Path: $"{path}.driver"
             ));
         }
-        if (!IsFinite(vector: axis)) {
+        if (!VectorFunctions.IsFinite(vector: axis)) {
             errors.Add(item: new(
                 Message: "axis is non-finite.",
                 Path: $"{path}.axis"
@@ -1130,7 +1127,7 @@ public static partial class CreationCanonicalizer {
 
             switch (ops[i]) {
                 case ShapeDomainOp.Symmetry symmetry: {
-                        if (!IsFinite(vector: symmetry.Normal)) {
+                        if (!VectorFunctions.IsFinite(vector: symmetry.Normal)) {
                             errors.Add(item: new(
                                 Message: "normal is non-finite.",
                                 Path: $"{opPath}.normal"
@@ -1149,14 +1146,14 @@ public static partial class CreationCanonicalizer {
                         break;
                     }
                 case ShapeDomainOp.Repeat repeat: {
-                        if (!IsFinite(vector: repeat.Spacing)) {
+                        if (!VectorFunctions.IsFinite(vector: repeat.Spacing)) {
                             errors.Add(item: new(
                                 Message: "spacing is non-finite.",
                                 Path: $"{opPath}.spacing"
                             ));
                         }
                         if (repeat.Limit is { } limit) {
-                            if (!IsFinite(vector: limit)) {
+                            if (!VectorFunctions.IsFinite(vector: limit)) {
                                 errors.Add(item: new(
                                     Message: "limit is non-finite.",
                                     Path: $"{opPath}.limit"
@@ -1174,7 +1171,7 @@ public static partial class CreationCanonicalizer {
                         }
                         if (
                             (repeat.Origin is { } origin) &&
-                            !IsFinite(vector: origin)
+                            !VectorFunctions.IsFinite(vector: origin)
                         ) {
                             errors.Add(item: new(
                                 Message: "origin is non-finite.",
@@ -1204,7 +1201,7 @@ public static partial class CreationCanonicalizer {
                         }
                         if (
                             (polar.Origin is { } origin) &&
-                            !IsFinite(vector: origin)
+                            !VectorFunctions.IsFinite(vector: origin)
                         ) {
                             errors.Add(item: new(
                                 Message: "origin is non-finite.",
@@ -1305,24 +1302,23 @@ public static partial class CreationCanonicalizer {
                         Message: $"duplicate transform for shape id {transform.Id}."
                     ));
                 }
-                if (!IsFinite(vector: transform.Position)) {
+                if (!VectorFunctions.IsFinite(vector: transform.Position)) {
                     errors.Add(item: new(
                         Message: "position is non-finite.",
                         Path: $"frames[{i}].transforms[{j}].position"
                     ));
                 }
-                if (!IsFinite(vector: transform.Scale)) {
+                if (!VectorFunctions.IsFinite(vector: transform.Scale)) {
                     errors.Add(item: new(
                         Message: "scale is non-finite.",
                         Path: $"frames[{i}].transforms[{j}].scale"
                     ));
                 }
-                if (!IsFinite(quaternion: transform.Rotation)) {
-                    errors.Add(item: new(
-                        Message: "rotation is non-finite.",
-                        Path: $"frames[{i}].transforms[{j}].rotation"
-                    ));
-                }
+                ValidateRotation(
+                    errors: errors,
+                    path: $"frames[{i}].transforms[{j}].rotation",
+                    rotation: transform.Rotation
+                );
             }
         }
     }
@@ -1504,6 +1500,16 @@ public static partial class CreationCanonicalizer {
         for (var i = 0; (i < runs.Count); i++) {
             var run = runs[i];
 
+            if (ReportsAbsentMembers(
+                errors: errors,
+                members: [("text", run.Text), ("position", run.Position), ("rotation", run.Rotation)],
+                noun: "text run",
+                path: $"textRuns[{i}]",
+                subject: $"text run {i}"
+            )) {
+                continue;
+            }
+
             if (
                 (run.ShapeId is { } shapeId) &&
                 ((document.Shapes ?? []).All(predicate: shape => (shape.Id != shapeId)))
@@ -1514,18 +1520,17 @@ public static partial class CreationCanonicalizer {
                 ));
             }
 
-            if (!IsFinite(vector: run.Position)) {
+            if (!VectorFunctions.IsFinite(vector: run.Position)) {
                 errors.Add(item: new(
                     Message: "position is non-finite.",
                     Path: $"textRuns[{i}].position"
                 ));
             }
-            if (!IsFinite(quaternion: run.Rotation)) {
-                errors.Add(item: new(
-                    Message: "rotation is non-finite.",
-                    Path: $"textRuns[{i}].rotation"
-                ));
-            }
+            ValidateRotation(
+                errors: errors,
+                path: $"textRuns[{i}].rotation",
+                rotation: run.Rotation
+            );
             if (!float.IsFinite(f: run.EmHeight)) {
                 errors.Add(item: new(
                     Message: "emHeight is non-finite.",
@@ -1590,18 +1595,6 @@ public static partial class CreationCanonicalizer {
         return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
     }
 
-    // A non-finite/zero-length direction has no fold plane to normalize to, so it floors to the retired Mirror:
-    // true flag's exact plane (UnitX) rather than reaching SdfProgramBuilder.SymmetryPlane's own throwing guard.
-    private static Vector3 NormalizeDirection(Vector3 value) {
-        if (
-            !IsFinite(vector: value) ||
-            (value == Vector3.Zero)
-        ) {
-            return Vector3.UnitX;
-        }
-
-        return Vector3.Normalize(value: value);
-    }
     // Absent stays absent so a creation authored without domain ops keeps its canonical bytes and hash; a present
     // list is clamped to what each op's own SdfProgramBuilder method accepts (mirroring NormalizeWallpaper's old
     // clamp-in-full posture) and every optional member is written out in full.
@@ -1684,60 +1677,78 @@ public static partial class CreationCanonicalizer {
 
         return normalized;
     }
-    private static List<ShapeSlideDocument>? NormalizeSlides(IReadOnlyList<ShapeSlideDocument>? slides) {
-        if (slides is not { Count: > 0 } source) {
+    private static (DocumentVector3 Axis, DocumentScalar Amplitude, DocumentScalar? Phase, string Wave) NormalizeOscillation(
+        DocumentScalar amplitude,
+        DocumentVector3 axis,
+        float maxAmplitude,
+        DocumentScalar? phase,
+        string? wave
+    ) => (
+        Axis: NormalizeDirection(value: axis),
+        Amplitude: ((amplitude.Reference is not null)
+            ? amplitude
+            : NormalizeAmplitude(
+                max: maxAmplitude,
+                value: amplitude.Value
+            )),
+        Phase: ((phase is { Reference: not null } boundPhase)
+            ? boundPhase
+            : ((NormalizePhase(value: phase?.Value) is { } literalPhase)
+                ? new DocumentScalar(value: literalPhase)
+                : null)),
+        Wave: (wave ?? CreationWave.Sine)
+    );
+    private static List<T>? NormalizeOscillations<T>(
+        IReadOnlyList<T>? source,
+        float maxAmplitude,
+        Func<T, (DocumentVector3 Axis, DocumentScalar Amplitude, DocumentScalar? Phase, string? Wave)> unpack,
+        Func<T, DocumentVector3, DocumentScalar, DocumentScalar?, string, T> transform
+    ) {
+        if (source is not { Count: > 0 }) {
             return null;
         }
 
-        var normalized = new List<ShapeSlideDocument>(capacity: source.Count);
+        var normalized = new List<T>(capacity: source.Count);
 
-        foreach (var slide in source) {
-            normalized.Add(item: slide with {
-                Amplitude = ((slide.Amplitude.Reference is not null)
-                ? slide.Amplitude
-                : NormalizeAmplitude(
-                max: ShapeSlideDocument.MaxAmplitude,
-                value: slide.Amplitude.Value
-            )),
-                Axis = NormalizeDirection(value: slide.Axis),
-                Phase = ((slide.Phase is { Reference: not null } boundPhase)
-                ? boundPhase
-                : ((NormalizePhase(value: slide.Phase?.Value) is { } literalPhase)
-                    ? new DocumentScalar(value: literalPhase)
-                    : null)),
-                Wave = (slide.Wave ?? CreationWave.Sine),
-            });
+        foreach (var item in source) {
+            var (inAxis, inAmp, inPhase, inWave) = unpack(item);
+            var (axis, amplitude, phase, wave) = NormalizeOscillation(
+                amplitude: inAmp,
+                axis: inAxis,
+                maxAmplitude: maxAmplitude,
+                phase: inPhase,
+                wave: inWave
+            );
+
+            normalized.Add(item: transform(item, axis, amplitude, phase, wave));
         }
 
         return normalized;
     }
-    private static List<ShapeSwingDocument>? NormalizeSwings(IReadOnlyList<ShapeSwingDocument>? swings) {
-        if (swings is not { Count: > 0 } source) {
-            return null;
-        }
-
-        var normalized = new List<ShapeSwingDocument>(capacity: source.Count);
-
-        foreach (var swing in source) {
-            normalized.Add(item: swing with {
-                Amplitude = ((swing.Amplitude.Reference is not null)
-                ? swing.Amplitude
-                : NormalizeAmplitude(
-                max: ShapeSwingDocument.MaxAmplitude,
-                value: swing.Amplitude.Value
-            )),
-                Axis = NormalizeDirection(value: swing.Axis),
-                Phase = ((swing.Phase is { Reference: not null } boundPhase)
-                ? boundPhase
-                : ((NormalizePhase(value: swing.Phase?.Value) is { } literalPhase)
-                    ? new DocumentScalar(value: literalPhase)
-                    : null)),
-                Wave = (swing.Wave ?? CreationWave.Sine),
-            });
-        }
-
-        return normalized;
-    }
+    private static List<ShapeSlideDocument>? NormalizeSlides(IReadOnlyList<ShapeSlideDocument>? slides) =>
+        NormalizeOscillations(
+            maxAmplitude: ShapeSlideDocument.MaxAmplitude,
+            source: slides,
+            transform: static (slide, axis, amp, phase, wave) => slide with {
+                Amplitude = amp,
+                Axis = axis,
+                Phase = phase,
+                Wave = wave,
+            },
+            unpack: static slide => (slide.Axis, slide.Amplitude, slide.Phase, slide.Wave)
+        );
+    private static List<ShapeSwingDocument>? NormalizeSwings(IReadOnlyList<ShapeSwingDocument>? swings) =>
+        NormalizeOscillations(
+            maxAmplitude: ShapeSwingDocument.MaxAmplitude,
+            source: swings,
+            transform: static (swing, axis, amp, phase, wave) => swing with {
+                Amplitude = amp,
+                Axis = axis,
+                Phase = phase,
+                Wave = wave,
+            },
+            unpack: static swing => (swing.Axis, swing.Amplitude, swing.Phase, swing.Wave)
+        );
     private static float NormalizeAmplitude(float value, float max) =>
         Math.Clamp(
             value: (float.IsFinite(f: value)
@@ -1962,28 +1973,9 @@ public static partial class CreationCanonicalizer {
             return null;
         }
 
-        return (IsFinite(vector: origin)
+        return (VectorFunctions.IsFinite(vector: origin)
             ? origin
             : new DocumentVector3(value: Vector3.Zero));
-    }
-    // A finite, non-zero Face normalizes to unit length like a domain op's normal; absent stays absent so a
-    // default-face panel keeps its canonical bytes, and a zero or non-finite one is left as authored for Validate to
-    // refuse by name (NormalizeDirection would silently turn it into +X). Inset/Depth are left as authored (Validate
-    // refuses what is out of range, mirroring Rounding's own posture) — only Material, a plain palette-slot clamp,
-    // needs resolving here.
-    // A bound rotation keeps its reference: normalizing it would store the cell's value of the moment as a literal
-    // and drop the binding from every later canonical write-back. Written as statements on purpose — a conditional
-    // whose arms are the holder and a Quaternion takes Quaternion as its natural type and re-wraps a literal.
-    private static DocumentQuaternion NormalizeRotation(DocumentQuaternion? rotation) {
-        if (rotation is null) {
-            return Quaternion.Identity;
-        }
-
-        if (rotation.Reference is not null) {
-            return rotation;
-        }
-
-        return Quaternion.Normalize(value: rotation.Value);
     }
     // Shape/Inset/Width are left as authored (Validate refuses what is out of range, mirroring Panel's own
     // posture); only Material, a plain palette-slot clamp, needs resolving here.
@@ -2006,6 +1998,11 @@ public static partial class CreationCanonicalizer {
 
         return normalized;
     }
+    // A finite, non-zero Face normalizes to unit length like a domain op's normal; absent stays absent so a
+    // default-face panel keeps its canonical bytes, and a zero or non-finite one is left as authored for Validate to
+    // refuse by name (NormalizeDirection would silently turn it into +X). Inset/Depth are left as authored (Validate
+    // refuses what is out of range, mirroring Rounding's own posture) — only Material, a plain palette-slot clamp,
+    // needs resolving here.
     private static ShapePanelDocument? NormalizePanel(ShapePanelDocument? panel) {
         if (panel is null) {
             return null;
@@ -2013,7 +2010,7 @@ public static partial class CreationCanonicalizer {
 
         return panel with {
             Face = ((panel.Face is { } face)
-                ? ((IsFinite(vector: face) && (face.Value != Vector3.Zero))
+                ? ((VectorFunctions.IsFinite(vector: face) && (face.Value != Vector3.Zero))
                     ? NormalizeDirection(value: face.Value)
                     : face.Value)
                 : null),
@@ -2211,21 +2208,13 @@ public static partial class CreationCanonicalizer {
         for (var i = 0; (i < (document.Shapes?.Count ?? 0)); i++) {
             var shape = document.Shapes![i];
 
-            // A document that omits one of these deserializes with the member null, and every check below reads
-            // its value, so the omission is named here rather than left to throw inside the first read.
-            var absent = new[] { ("position", ((object?)shape.Position)), ("rotation", shape.Rotation), ("scale", shape.Scale) }
-                .Where(predicate: static member => (member.Item2 is null))
-                .Select(selector: static member => member.Item1)
-                .ToArray();
-
-            if (absent.Length != 0) {
-                foreach (var member in absent) {
-                    errors.Add(item: new(
-                        Message: $"shape '{shape.Id}' omits {member}, which every shape must author.",
-                        Path: $"shapes[{i}].{member}"
-                    ));
-                }
-
+            if (ReportsAbsentMembers(
+                errors: errors,
+                members: [("position", shape.Position), ("rotation", shape.Rotation), ("scale", shape.Scale)],
+                noun: "shape",
+                path: $"shapes[{i}]",
+                subject: $"shape '{shape.Id}'"
+            )) {
                 continue;
             }
 
@@ -2290,14 +2279,19 @@ public static partial class CreationCanonicalizer {
                     Message: $"blend '{blend}' is not recognized.",
                     Path: $"shapes[{i}].blend"
                 ));
+            } else if (shape.Blend is SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
+                errors.Add(item: new(
+                    Message: $"blend '{shape.Blend}' composes a closed field scope and cannot blend a shape; use a shape blend such as Union, SmoothUnion, Subtraction, or ChamferUnion.",
+                    Path: $"shapes[{i}].blend"
+                ));
             }
-            if (!IsFinite(vector: shape.Position)) {
+            if (!VectorFunctions.IsFinite(vector: shape.Position)) {
                 errors.Add(item: new(
                     Message: "position is non-finite.",
                     Path: $"shapes[{i}].position"
                 ));
             }
-            if (!IsFinite(vector: shape.Scale)) {
+            if (!VectorFunctions.IsFinite(vector: shape.Scale)) {
                 errors.Add(item: new(
                     Message: "scale is non-finite.",
                     Path: $"shapes[{i}].scale"
@@ -2337,15 +2331,14 @@ public static partial class CreationCanonicalizer {
                     ));
                 }
             }
-            if (!IsFinite(quaternion: shape.Rotation)) {
-                errors.Add(item: new(
-                    Message: "rotation is non-finite.",
-                    Path: $"shapes[{i}].rotation"
-                ));
-            }
+            ValidateRotation(
+                errors: errors,
+                path: $"shapes[{i}].rotation",
+                rotation: shape.Rotation
+            );
             if (
                 (shape.Joint is { } joint) &&
-                !IsFinite(vector: joint)
+                !VectorFunctions.IsFinite(vector: joint)
             ) {
                 errors.Add(item: new(
                     Message: "joint is non-finite.",

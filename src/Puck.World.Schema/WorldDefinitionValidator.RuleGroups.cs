@@ -111,7 +111,6 @@ public static partial class WorldDefinitionValidator {
             return [];
         }
     }
-
     // A declared cell set must name rows the document declares, because the algebra resolves a source by name at
     // lowering time and a name that resolves to nothing has no width to combine or complement against.
     private static void ValidateCellSets(WorldDefinition definition, List<string> errors) {
@@ -146,6 +145,10 @@ public static partial class WorldDefinitionValidator {
             }
             if (!names.Add(item: declared.Name.Value)) {
                 errors.Add(item: $"{path}.name '{declared.Name.Value}' is declared twice.");
+            }
+            // boardCombine and writeSet read a set of positions from one bare name, a board row's or a set's.
+            if (rows.Contains(item: declared.Name.Value)) {
+                errors.Add(item: $"{path}.name '{declared.Name.Value}' is also a state.world row; a transform reading a set of positions names one or the other.");
             }
             if (declared.Set is null) {
                 errors.Add(item: $"{path}.set is null.");

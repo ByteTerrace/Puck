@@ -29,6 +29,9 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
     private const int StepCount = 700;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "link-churn";
     /// <inheritdoc/>

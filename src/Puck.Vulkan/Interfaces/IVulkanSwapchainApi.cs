@@ -1,5 +1,6 @@
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -12,8 +13,8 @@ public interface IVulkanSwapchainApi {
     /// <param name="swapchainHandle">When this method returns, the created native <c>VkSwapchainKHR</c> handle.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the swapchain was created successfully.</returns>
     VkResult CreateSwapchain(VulkanSwapchainCreateRequest request, out nint swapchainHandle);
-    /// <summary>Destroys a swapchain.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the swapchain.</param>
+    /// <summary>Destroys a swapchain; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the swapchain.</param>
     /// <param name="swapchainHandle">The native <c>VkSwapchainKHR</c> handle to destroy.</param>
-    void DestroySwapchain(nint deviceHandle, nint swapchainHandle);
+    void DestroySwapchain(VulkanDeviceCommands device, nint swapchainHandle);
 }

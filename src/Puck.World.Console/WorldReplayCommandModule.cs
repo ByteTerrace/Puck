@@ -70,6 +70,13 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         if (!WorldReplayTape.IsValidName(name: name)) {
             return CommandResult.Error(output: "[replay.record: name must be non-empty, with no '.', '/', '\\', or other filename-invalid characters]");
         }
+        // The host mints its own recordings (an extension runtime's recovery recording) as generated file names.
+        if (!GeneratedName.TryValidateAuthoredFile(
+            name: name,
+            reason: out var reserved
+        )) {
+            return CommandResult.Error(output: $"[replay.record: {reserved}]");
+        }
 
         if (m_tape.Mode == WorldReplayMode.Recording) {
             return CommandResult.Error(output: $"[replay.record: busy — already recording '{m_tape.Name}'; replay.stop persists it or replay.cancel drops it first]");

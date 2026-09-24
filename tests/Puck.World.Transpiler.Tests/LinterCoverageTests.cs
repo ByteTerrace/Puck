@@ -12,31 +12,17 @@ public class LinterCoverageTests {
     [MemberData(nameof(GetShippedWorldSources))]
     [Theory]
     public void EveryCommittedSourceLintsCleanOfReferenceFindings(string relativePath) {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-
+        var compilation = ShippedWorlds.Compile(relativePath: relativePath);
         var diagnostics = new DiagnosticBag();
-        var sourceMap = new SourceMap();
-        var loweringResult = WorldCompiler.Compile(
-            basePath: Path.GetDirectoryName(path: fullPath),
-            cancellationToken: TestContext.Current.CancellationToken,
-            diagnostics: diagnostics,
-            source: File.ReadAllText(path: fullPath),
-            sourceMap: sourceMap
-        );
-
-        Assert.NotNull(@object: loweringResult.Json);
 
         PuckLinter.LintReferences(
-            loweringResult.Json,
-            sourceMap,
+            compilation.RequireJson(),
+            compilation.SourceMap,
             diagnostics,
-            sourcePath: fullPath
+            sourcePath: ShippedWorlds.PathOf(relativePath: relativePath)
         );
 
-        var referenceFindings = diagnostics.Where(predicate: d => ReferenceLintCodes.Contains(value: d.Code)).ToList();
+        var referenceFindings = diagnostics.Concat(second: compilation.Diagnostics).Where(predicate: d => ReferenceLintCodes.Contains(value: d.Code)).ToList();
 
         Assert.True(
             condition: (referenceFindings.Count == 0),
@@ -90,14 +76,14 @@ public class LinterCoverageTests {
     public static TheoryData<string> GetShippedWorldSources() => ShippedWorlds.Sources();
     [Fact]
     public void ModuleReferencingOnlyARootDeclaredNameYieldsNoFindingWhenLintedStandalone() {
-        // games/freecell.world.json declares no basis and reads names games/solitaire.world.json's own body
-        // supplies when it imports freecell as a sibling — a standalone lint pass over freecell alone cannot see
-        // that supplying document, so it must stay silent rather than guess.
+        // games/freecell.puck declares no basis and reads names games/solitaire.puck's own body supplies when it
+        // imports freecell as a sibling — a standalone lint pass over freecell alone cannot see that supplying
+        // document, so it must stay silent rather than guess.
         var fullPath = Path.Combine(
             path1: ShippedWorlds.FindDirectory(),
-            path2: "games/freecell.world.json"
+            path2: "games/freecell.puck"
         );
-        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
+        var decompiled = File.ReadAllText(path: fullPath);
 
         var diagnostics = new DiagnosticBag();
         var sourceMap = new SourceMap();
@@ -128,12 +114,7 @@ public class LinterCoverageTests {
     // verb — composing it as a root would report as missing every field its importer supplies.
     [Fact]
     public void ModuleWithNoSchemaAndNoBasisIsNotARoot() {
-        var fullPath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: "games/dominoes.world.json"
-        );
-
-        var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path: fullPath))!.AsObject();
+        var document = ShippedWorlds.Compile(relativePath: "games/dominoes.puck").RequireJson();
 
         Assert.Null(@object: document["schema"]);
         Assert.Null(@object: document["basis"]);
@@ -211,9 +192,9 @@ public class LinterCoverageTests {
     public void StandaloneRootWithNoBasisReportsItsOwnMisspelledStateRow() {
         var fullPath = Path.Combine(
             path1: ShippedWorlds.FindDirectory(),
-            path2: "games/backgammon.world.json"
+            path2: "games/backgammon.puck"
         );
-        var decompiled = WorldDecompiler.Decompile(jsonText: File.ReadAllText(path: fullPath));
+        var decompiled = File.ReadAllText(path: fullPath);
 
         const string Original = "when checkerPoint[w0] !=";
         const string Misspelled = "when checkerPointXTYPO[w0] !=";
@@ -224,7 +205,7 @@ public class LinterCoverageTests {
 
         Assert.True(
             condition: (typoAt >= 0),
-            userMessage: $"expected fixture text '{Original}' in the decompiled world — update this test if its own rule text changed."
+            userMessage: $"expected fixture text '{Original}' in the source — update this test if its own rule text changed."
         );
         var mutated = string.Concat(
             str0: decompiled.AsSpan(
@@ -287,7 +268,6 @@ public class LinterCoverageTests {
             ))
         );
     }
-
     // A fold names its family on the instruction and reads rows from a subprogram body, so the reference check
     // reaches both or a misbound fold lints clean.
     [Fact]

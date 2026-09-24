@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Bench;
 
@@ -14,11 +15,11 @@ internal static class StartupBenchmarks {
         var worlds = new Argument<string[]>(name: "worlds") { Arity = ArgumentArity.ZeroOrMore, Description = "World sources/documents. Default: a representative corpus of complete shipped worlds and game host fixtures." };
         var artifact = new Option<string?>("--world-artifact") { Description = "Existing World DLL; defaults to src/Puck.World/bin/Release/net10.0/Puck.World.dll. Never builds." };
         var output = new Option<string?>("--output") { Description = "Parent for a unique run directory containing report.json, transcripts, and captures." };
-        var samples = new Option<int>("--samples") { DefaultValueFactory = _ => 3 };
-        var timeout = new Option<int>("--timeout-seconds") { DefaultValueFactory = _ => 120 };
+        var samples = new Option<int>("--samples") { DefaultValueFactory = _ => 3, Description = "Fresh processes measured per world, 1 to 100." };
+        var timeout = new Option<int>("--timeout-seconds") { DefaultValueFactory = _ => 120, Description = "Seconds one sample may take before it is abandoned, 1 to 3600." };
         var headless = new Option<bool>("--headless") { Description = "Measure console readiness only; default launches the windowed renderer and requires a completed PNG capture." };
-        var width = new Option<int>("--width") { DefaultValueFactory = _ => 1280 };
-        var height = new Option<int>("--height") { DefaultValueFactory = _ => 720 };
+        var width = new Option<int>("--width") { DefaultValueFactory = _ => 1280, Description = "Window width in pixels for the rendered capture, 1 to 16384." };
+        var height = new Option<int>("--height") { DefaultValueFactory = _ => 720, Description = "Window height in pixels for the rendered capture, 1 to 16384." };
         var command = new Command(description: "Measure fresh-process World startup serially, with isolated persistence for every sample.", name: "startup") { worlds, artifact, output, samples, timeout, headless, width, height };
 
         command.SetAction(action: parse => Run(
@@ -56,11 +57,11 @@ internal static class StartupBenchmarks {
             ];
         }
         worlds = worlds.Select(selector: Path.GetFullPath).ToArray();
-        if (worlds.Any(predicate: path => !File.Exists(path: path)) || (worlds.Distinct(comparer: (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)).Count() != worlds.Length)) {
+        if (worlds.Any(predicate: path => !File.Exists(path: path)) || (worlds.Distinct(comparer: PuckPaths.Comparer).Count() != worlds.Length)) {
             Console.Error.WriteLine(value: "startup: every world must exist and occur exactly once.");
             return 2;
         }
-        var run = Path.GetFullPath(path: Path.Combine(path1: (output ?? Path.Combine(path1: root, path2: "artifacts/startup")), path2: Guid.NewGuid().ToString(format: "N"))).Replace(newChar: '/', oldChar: '\\');
+        var run = PuckPaths.Normalize(path: Path.Combine(path1: (output ?? Path.Combine(path1: root, path2: "artifacts/startup")), path2: Guid.NewGuid().ToString(format: "N")));
 
         Directory.CreateDirectory(path: run);
         var rows = new List<StartupSample>();

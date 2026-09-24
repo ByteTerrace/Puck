@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Maths;
 using Puck.Physics.Navigation;
 using Puck.World.Protocol;
@@ -6,81 +5,6 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
-    /// <summary>One entity-table slot's checkpointed simulation state — see <see cref="Capture"/>. Excludes
-    /// presentation-only fields (<c>LookIndex</c>) and read-back-only outcome strings, which the checkpoint's own
-    /// exclusion rule (<see cref="WorldServer.TryCaptureCheckpoint"/>) leaves for the next write to that slot to set.</summary>
-    public sealed record WorldPopulationEntryCheckpoint(
-        int Index,
-        byte KitIndex,
-        Vector3 BodyColor,
-        byte CatalogRig,
-        WorldTargetDesignation[] Designations,
-        int Generation,
-        bool IsAuthorityTransferred,
-        bool IsRemoteHuman,
-        WorldMobilityIdentity? Mobility,
-        int MobilityGeneration,
-        bool Parked,
-        long? ParkedUntilTick,
-        string? PlacementId,
-        FixedVector3 SpawnPosition,
-        FixedQ4816 SpawnYaw,
-        IReadOnlyList<WorldAdmissionGrant> AdmissionInstalledGrantTemplates,
-        IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> AdmissionRevokedKeys,
-        string IdentityDomain,
-        string IdentitySubject,
-        int ProducerAcquiredTarget,
-        FixedQ4816 ProducerActivityPhase,
-        FixedQ4816 ProducerActivityRate,
-        FixedQ4816 ProducerPhase,
-        FixedQ4816 ProducerPreferredAltitude,
-        FixedQ4816 ProducerWeaveFrequency,
-        long ProducerCurveArcRaw,
-        string? ProducerActiveName,
-        int ProducerActiveCurveIndex,
-        FixedVector3 Position,
-        FixedQ4816 Yaw,
-        WorldBody.TransferState DynamicState,
-        WorldBody.IntegrationResidue Residue,
-        WorldIdentityProjection? Profile,
-        WorldPopulationNavigationCheckpoint? Navigation = null,
-        WorldPopulationFlockCheckpoint Flock = default,
-        WorldPopulationAutonomyCheckpoint Autonomy = default
-    );
-    /// <summary>Cached local perception, timing residue, and observer-local attention stream.</summary>
-    /// <param name="Seeded">Whether the neighbor contribution has been sampled for this producer.</param>
-    /// <param name="Generation">The occupant generation that owns the attention stream.</param>
-    /// <param name="Desired">The unclamped, weighted neighbor contribution; goal and heading are not cached.</param>
-    /// <param name="RemainingTicks">Engine ticks until the next perception update.</param>
-    /// <param name="SampleOrdinal">Observer-local rotating sample position.</param>
-    /// <param name="Target">Last bounded sensed-target observation; never a live target-pose reference.</param>
-    public readonly record struct WorldPopulationFlockCheckpoint(bool Seeded, int Generation, FixedVector3 Desired,
-        ulong RemainingTicks, ulong SampleOrdinal, WorldFlockObservation? Target = null);
-    /// <summary>One non-human body's phased motion/steering cadence and reusable producer image.</summary>
-    public readonly record struct WorldPopulationAutonomyCheckpoint(
-        ulong MotionPeriodTicks,
-        ulong MotionElapsedTicks,
-        ulong MotionRemainingTicks,
-        ulong SteeringPeriodTicks,
-        ulong SteeringElapsedTicks,
-        ulong SteeringRemainingTicks,
-        PlayerIntent SteeringIntent,
-        bool SteeringSeeded
-    );
-    /// <summary>One body's cached deterministic route and producer binding.</summary>
-    public readonly record struct WorldPopulationNavigationCheckpoint(
-        int ActiveProducerDomainIndex,
-        int DomainIndex,
-        int GoalCell,
-        int Waypoint,
-        int ExpandedLast,
-        NavigationStatus Status,
-        int[] Path
-    );
-    /// <summary>The population's own checkpointed state — see <see cref="Capture"/>.</summary>
-    public sealed record WorldPopulationCheckpoint(int SimulatedCount, int Revision, byte SeatKit, IReadOnlyList<WorldPopulationEntryCheckpoint> Entries,
-        int[] Generations, NavigationSharedCheckpoint[]? SharedNavigation = null);
-
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
     /// <c>Step</c> and the next, never inside one.</summary>
@@ -115,6 +39,7 @@ public sealed partial class WorldPopulation {
 
             var residue = body.CaptureIntegrationResidue();
             var contactFieldObservationCurrent = (residue.LastContactFieldVersion == ContactFieldVersion);
+
             residue = residue with {
                 // Contact-field versions are process-local rebuild counters. A population checkpoint retains only
                 // equality with the current field, using canonical representatives so capture/restore/capture is

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 
 using Puck.Maths;
@@ -110,7 +111,7 @@ public sealed partial class WorldRuleHost {
     // The public Answer surface remains the trusted in-process read-back composer. An envelope, however, may have
     // arrived over WorldPeerHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
     // Console and pass through the same check using the permissive local seed rather than a separate bypass.
-    private QueryAnswer AnswerStateObservations(WorldPrincipal? principal, string? row = null) {
+    private QueryAnswer AnswerStateObservations(Principal? principal, string? row = null) {
         var time = Time;
         var rows = (WorldStateDisclosure.Compose(
             arena: Host.Arena,
@@ -132,7 +133,7 @@ public sealed partial class WorldRuleHost {
     /// <param name="query">The query.</param>
     /// <param name="principal">The querying principal.</param>
     /// <returns>The answer, or its refusal.</returns>
-    public QueryAnswer AnswerSubmittedQuery(WorldQuery query, WorldPrincipal principal) {
+    public QueryAnswer AnswerSubmittedQuery(WorldQuery query, Principal principal) {
         var subject = query.ObservationSubject();
         var verdict = Host.GrantTable.Allows(
             capability: WorldCapability.Observe,
@@ -289,7 +290,6 @@ public sealed partial class WorldRuleHost {
     /// <summary>Installs admission's pinned tables before boot reconciliation can query them.</summary>
     /// <param name="compilation">The boot definition's validated programs.</param>
     internal void InstallTables(WorldRuleCompilation compilation) => m_tables = compilation.Tables;
-
     /// <summary>Describes every static table the definition references: name, kind, entry count.</summary>
     internal string DescribeTables() {
         if (m_tables.Length == 0) {

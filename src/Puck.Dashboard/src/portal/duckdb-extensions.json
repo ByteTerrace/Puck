@@ -1,0 +1,14 @@
+{
+  "repository": "https://extensions.duckdb.org",
+  "version": "v1.5.5",
+  "files": {
+    "wasm_eh/httpfs": "e6b1b0cd9e61d3533733e72e00c215e44260913d1544e08c460e78de00d00223",
+    "wasm_eh/icu": "f84f5c192f05608bea916b78b75963ddc38d10981c236257a1a6950497662b08",
+    "wasm_eh/json": "74813e84d41c7b33402f24f466e1793ad48bd00259d089c516af85ce2ecc8223",
+    "wasm_eh/parquet": "31b294da2ef96f61e87246a0b1aa7580d20ad7ae37aa1e912fa0c7488192c5c6",
+    "wasm_mvp/httpfs": "f6cc9b686651ecf2cd806b89c0618fcd19cfd82bcfd8586dd725bc791dca0efb",
+    "wasm_mvp/icu": "c7dc00c6186f9d96a16ffa06b9529d39435898038d59c383bdc5e32811fe1046",
+    "wasm_mvp/json": "19c6b49a4e8d56afb89a2abe95bc83d11a51c3f349344d27e2c0556603072607",
+    "wasm_mvp/parquet": "78e7ed6c4dc87e950111863fc832136da1ba0904ec1af3ee6f04035a2616b672"
+  }
+}

@@ -7,7 +7,11 @@ namespace Puck.Platform.Windows.Hid;
 /// interfaces via CsWin32 (SetupAPI / overlapped <c>CreateFile</c>). On a non-Windows OS it reports no devices,
 /// so the manager simply finds nothing rather than failing.
 /// </summary>
-public sealed class Win32HidDeviceSource : IHidDeviceSource {
+/// <param name="timeProvider">The clock every opened device's timed reads run on; <see langword="null"/> is
+/// <see cref="TimeProvider.System"/>.</param>
+public sealed class Win32HidDeviceSource(TimeProvider? timeProvider = null) : IHidDeviceSource {
+    private readonly TimeProvider m_timeProvider = (timeProvider ?? TimeProvider.System);
+
     /// <inheritdoc />
     public IEnumerable<HidDeviceInfo> EnumerateInterfaces() {
         return (OperatingSystem.IsWindowsVersionAtLeast(
@@ -28,7 +32,10 @@ public sealed class Win32HidDeviceSource : IHidDeviceSource {
             minor: 1,
             build: 2600
         )
-            ? Win32HumanInterfaceDevice.Open(devicePath: devicePath)
+            ? Win32HumanInterfaceDevice.Open(
+                devicePath: devicePath,
+                timeProvider: m_timeProvider
+            )
             : null
         );
     }

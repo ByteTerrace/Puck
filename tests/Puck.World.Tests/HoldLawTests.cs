@@ -36,7 +36,7 @@ public sealed class HoldLawTests {
 
     private static WorldHold Air(BodyHoldKind kind = BodyHoldKind.Gravity, float lift = 0f, float thrust = 0f, WorldHoldGravity? gravity = null) => new(
         Bond: BodyHoldBond.Free,
-        Envelope: ((kind is BodyHoldKind.Gravity || ((kind == BodyHoldKind.Lift) && (lift < 1f)))
+        Envelope: (((kind is BodyHoldKind.Gravity) || ((kind == BodyHoldKind.Lift) && (lift < 1f)))
         ? DefaultEnvelope
         : null),
         Gravity: ((kind is BodyHoldKind.Gravity or BodyHoldKind.Lift)
@@ -243,18 +243,6 @@ public sealed class HoldLawTests {
         ordinal: StrafeOrdinal,
         value: FixedQ4816.One
     );
-    private static WorldBody JoinBody(WorldFixture fixture, int slot = 0) {
-        var actor = WorldPrincipal.Seat(slot: slot);
-
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: actor,
-            Slot: actor.Index,
-            IdentityName: null,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
-
-        return fixture.Server.Body(index: actor.Index)!;
-    }
     // Walks the body at the wall from open floor until it takes the wall row, returning the tick it took it on or
     // null. Forward (yaw 0) is -Z, straight at the wall's near face; strafe runs parallel to it.
     private static int? DriveIntoWall(WorldFixture fixture, WorldBody body, int ticks = 240, bool strafe = false) {
@@ -310,7 +298,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void DrivingIntoTheWall_TakesTheWallRow_NotTheGroundRowUnderTheFeet() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: body,
@@ -338,7 +326,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void DrivingALONGTheWall_KeepsTheGroundRow_WhereTheSameWorldTakesTheWallOnADriveIntoIt() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.Null(@object: DriveIntoWall(
             body: body,
@@ -347,7 +335,7 @@ public sealed class HoldLawTests {
         ));
         Assert.Equal(expected: "ground", actual: body.HoldName);
 
-        var control = JoinBody(fixture: fixture, slot: 1);
+        var control = fixture.JoinSeat(slot: 1);
 
         Assert.NotNull(@object: DriveIntoWall(
             body: control,
@@ -357,7 +345,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void TheSameDriveWithNoOnDrive_NeverTakesTheWall_ThoughTheWallStopsItJustTheSame() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(onDrive: false), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.Null(@object: DriveIntoWall(
             body: body,
@@ -369,7 +357,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void TheSameDriveIntoAnUNHOLDABLEPlacement_NeverTakesAnySurfaceRow() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holdable: false, holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.Null(@object: DriveIntoWall(
             body: body,
@@ -382,7 +370,7 @@ public sealed class HoldLawTests {
     public void AWallRowAscendsAtItsAuthoredSpeed_WhereHalfTheSpeedRisesHalfAsFar() {
         static double Rise(float speed) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(speed: speed), Air()]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Assert.NotNull(@object: DriveIntoWall(
                 body: body,
@@ -419,7 +407,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void ClimbingPastTheWallTop_ArrivesStandingOnIt_WhereAWorldWithNoGroundRowFallsInstead() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: body,
@@ -453,7 +441,7 @@ public sealed class HoldLawTests {
         );
 
         using var control = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(), Air()]));
-        var falling = JoinBody(fixture: control);
+        var falling = control.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: falling,
@@ -482,7 +470,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void DescendingToTheFloor_EndsTheWallRow_WhereTheSameDescentWellAboveItKeepsTheRow() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: body,
@@ -523,7 +511,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void TheReleaseChannelDropsTheRow_WhereTheIdenticalTickWithoutItKeepsIt() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: body,
@@ -547,7 +535,7 @@ public sealed class HoldLawTests {
         Assert.NotEqual(expected: "wall", actual: body.HoldName);
 
         using var control = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var keeper = JoinBody(fixture: control);
+        var keeper = control.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: keeper,
@@ -578,7 +566,7 @@ public sealed class HoldLawTests {
         var spend = new WorldHoldSpend(RatePerSecond: 4f, State: "stamina");
 
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(spend: spend), Air()], rateHz: Fixtures.DefaultRateHz, stamina: 0.25f));
-        var spender = JoinBody(fixture: fixture);
+        var spender = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: spender,
@@ -601,7 +589,7 @@ public sealed class HoldLawTests {
         Assert.True(condition: dropped, userMessage: "a spent slot must drop the row that spends it");
 
         using var control = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()], rateHz: Fixtures.DefaultRateHz, stamina: 0.25f));
-        var endless = JoinBody(fixture: control);
+        var endless = control.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: endless,
@@ -625,7 +613,7 @@ public sealed class HoldLawTests {
                 ceiling: true,
                 holds: [Wall(coneMax: coneMax, coneMin: 0f, onDrive: false, reach: 1.5f, release: null), Air()]
             ));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Pose(
                 body: body,
@@ -649,7 +637,7 @@ public sealed class HoldLawTests {
     public void AFreeRowWithFullLiftHovers_WhereTheSameRowWithNoLiftFalls_AndMoveUpClimbs() {
         static (double Drop, double Climb) Fly(float lift) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Air(kind: BodyHoldKind.Lift, lift: lift, thrust: 1f)]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Pose(
                 body: body,
@@ -686,7 +674,7 @@ public sealed class HoldLawTests {
     public void UpLeanLeansAPullingBodysATTITUDE_WhileItsContactAxisStaysWithGravity() {
         static (FixedVector3 Attitude, FixedVector3 Contact) OnWall(float upLean) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: upLean), Ground(), Air()]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Assert.NotNull(@object: DriveIntoWall(
                 body: body,
@@ -743,7 +731,7 @@ public sealed class HoldLawTests {
                 ceiling: true,
                 holds: [Wall(coneMax: 180f, coneMin: 100f, onDrive: false, reach: 1.5f, release: "release", upLean: upLean), Ground(), Air()]
             ));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Pose(
                 body: body,
@@ -806,9 +794,9 @@ public sealed class HoldLawTests {
     [Fact]
     public void TheFactMask_ReportsHoldingUnwalkableOnAWallRow_AndUnsupportedOnALiftRow() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
-        Assert.Equal(expected: BodyFacts.None, actual: (body.Facts & (BodyFacts.HoldingUnwalkable | BodyFacts.Unsupported)));
+        Assert.Equal(expected: BodyFacts.None, actual: body.Facts & (BodyFacts.HoldingUnwalkable | BodyFacts.Unsupported));
         Assert.DoesNotContain(actualString: body.DescribeWhere(index: 0), expectedSubstring: "holdingunwalkable");
         Assert.NotNull(@object: DriveIntoWall(
             body: body,
@@ -821,12 +809,12 @@ public sealed class HoldLawTests {
             ticks: 20
         );
 
-        Assert.Equal(expected: BodyFacts.HoldingUnwalkable, actual: (body.Facts & BodyFacts.HoldingUnwalkable));
+        Assert.Equal(expected: BodyFacts.HoldingUnwalkable, actual: body.Facts & BodyFacts.HoldingUnwalkable);
         Assert.Contains(actualString: body.DescribeWhere(index: 0), expectedSubstring: "holdingunwalkable");
         Assert.Equal(expected: BodyFactVocabulary.Describe(facts: body.Facts), actual: body.DescribeWhere(index: 0).Split(separator: "facts=")[1].Split(separator: " home=")[0]);
 
         using var flight = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Air(kind: BodyHoldKind.Lift, lift: 1f)]));
-        var flier = JoinBody(fixture: flight);
+        var flier = flight.JoinSeat();
 
         Pose(
             body: flier,
@@ -840,13 +828,13 @@ public sealed class HoldLawTests {
             ticks: 4
         );
 
-        Assert.Equal(expected: BodyFacts.Unsupported, actual: (flier.Facts & BodyFacts.Unsupported));
-        Assert.Equal(expected: BodyFacts.None, actual: (flier.Facts & BodyFacts.HoldingUnwalkable));
+        Assert.Equal(expected: BodyFacts.Unsupported, actual: flier.Facts & BodyFacts.Unsupported);
+        Assert.Equal(expected: BodyFacts.None, actual: flier.Facts & BodyFacts.HoldingUnwalkable);
     }
     [Fact]
     public void AHeldWallRow_IsEchoedByBodyHold_AndSurvivesAReplayReDriveWhereOmittingTheDriveDiverges() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(), Air()]));
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: body,
@@ -859,7 +847,7 @@ public sealed class HoldLawTests {
         static ulong[] DriveHashTrace(bool drive) => Fixtures.DriveHashTrace(
             document: BuildHoldDocument(holds: [Ground(), Wall(spend: new WorldHoldSpend(RatePerSecond: 0.5f, State: "stamina")), Air()], stamina: 4f),
             ticks: 240,
-            join: static fixture => JoinBody(fixture: fixture),
+            join: static fixture => fixture.JoinSeat(),
             perTick: (advancing, tick) => advancing.SubmitIntent(intent: (drive
                 ? Ascend()
                 : default))
@@ -873,7 +861,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void AHeldRowSurvivesACheckpointRestore_AndContinuesBitIdentically() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Ground(), Wall(spend: new WorldHoldSpend(RatePerSecond: 0.5f, State: "stamina")), Air()], stamina: 4f));
-        var uninterrupted = JoinBody(fixture: fixture);
+        var uninterrupted = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: uninterrupted,
@@ -999,9 +987,9 @@ public sealed class HoldLawTests {
             ? first
             : second
         );
-        var near = ReferenceEquals(objA: far, objB: first)
+        var near = (ReferenceEquals(objA: far, objB: first)
             ? second
-            : first;
+            : first);
 
         Assert.True(condition: (((double)near.FixedHome.X) < 1.0), userMessage: $"the near inhabitant's home is its own placement; it read {near.FixedHome}");
         Assert.True(condition: (((double)far.FixedHome.X) > 29.0), userMessage: $"the far inhabitant's home is its own placement; it read {far.FixedHome}");
@@ -1160,7 +1148,7 @@ public sealed class HoldLawTests {
         // with no lean, whose drawn axis never leaves gravity-up at all.
         static List<double> AttitudeTowardFace(float upLean) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: upLean), Ground(), Air()]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Assert.NotNull(@object: DriveIntoWall(
                 body: body,
@@ -1202,7 +1190,7 @@ public sealed class HoldLawTests {
         Assert.True(condition: (leaned[^1] > 0.9), userMessage: $"the turn must have finished inside the rested span; it read {leaned[^1]}");
 
         for (var tick = 1; (tick < leaned.Count); tick++) {
-            Assert.True(condition: (leaned[tick] >= (leaned[tick - 1] - 1e-4)), userMessage: $"the turn never reverses; tick {tick} read {leaned[tick]} after {leaned[tick - 1]}");
+            Assert.True(condition: (leaned[tick] >= (leaned[(tick - 1)] - 1e-4)), userMessage: $"the turn never reverses; tick {tick} read {leaned[tick]} after {leaned[(tick - 1)]}");
         }
 
         Assert.All(collection: upright, action: z => Assert.True(condition: (Math.Abs(value: z) < 1e-3), userMessage: $"an unleaned pull's drawn axis stays gravity-up; it read {z}"));
@@ -1214,7 +1202,7 @@ public sealed class HoldLawTests {
         // the same row at rest, which has no rise to carry and falls at once.
         static double RiseAfterRelease(bool climbing) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(), Ground(), Air()]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Assert.NotNull(@object: DriveIntoWall(
                 body: body,
@@ -1264,19 +1252,6 @@ public sealed class HoldLawTests {
         Assert.True(condition: (dropped <= 0d), userMessage: $"a body letting go at rest falls from rest; it moved {dropped}");
     }
 
-    // Raw fixed-point trace helpers: position, planar velocity, vertical velocity, and yaw, hex per component —
-    // the same shape DriveLawTests pins its own trace to.
-    private static string Hex(FixedQ4816 value) => value.Value.ToString(format: "x16", provider: System.Globalization.CultureInfo.InvariantCulture);
-    private static string TraceLine(WorldBody body) {
-        var state = body.CaptureTransferState();
-        var position = body.FixedPosition;
-
-        return string.Join(separator: ' ', value: [
-            Hex(value: position.X), Hex(value: position.Y), Hex(value: position.Z),
-            Hex(value: state.PlanarVelocity.X), Hex(value: state.PlanarVelocity.Y), Hex(value: state.PlanarVelocity.Z),
-            Hex(value: state.VerticalVelocity), Hex(value: body.FixedYaw),
-        ]);
-    }
     private static int MovedTicks(string[] control, string[] perturbed) {
         var moved = 0;
 
@@ -1540,25 +1515,25 @@ public sealed class HoldLawTests {
             var lines = new string[240];
             var gravity = new WorldHoldGravity(Fall: 23f, Rise: rise);
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(), Ground(gravity: gravity), Air(gravity: gravity)]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
             var tick = 0;
 
             Assert.NotNull(@object: DriveIntoWall(body: body, fixture: fixture));
             for (; (tick < 25); tick++) {
                 body.SubmitIntent(intent: Ascend());
                 fixture.Step();
-                lines[tick] = TraceLine(body: body);
+                lines[tick] = Fixtures.TraceLine(body: body);
             }
 
             body.SubmitIntent(intent: Channel(ordinal: ReleaseOrdinal, value: FixedQ4816.One));
             fixture.Step();
-            lines[tick] = TraceLine(body: body);
+            lines[tick] = Fixtures.TraceLine(body: body);
             tick++;
 
             for (; (tick < 240); tick++) {
                 body.SubmitIntent(intent: default);
                 fixture.Step();
-                lines[tick] = TraceLine(body: body);
+                lines[tick] = Fixtures.TraceLine(body: body);
             }
 
             return lines;
@@ -1821,19 +1796,19 @@ public sealed class HoldLawTests {
         static string[] Trace(float thrust) {
             var lines = new string[240];
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Air(kind: BodyHoldKind.Lift, lift: 1f, thrust: thrust)]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Pose(body: body, y: 6f, z: 10f);
 
             for (var tick = 0; (tick < 60); tick++) {
                 body.SubmitIntent(intent: default);
                 fixture.Step();
-                lines[tick] = TraceLine(body: body);
+                lines[tick] = Fixtures.TraceLine(body: body);
             }
             for (var tick = 60; (tick < 240); tick++) {
                 body.SubmitIntent(intent: Rise());
                 fixture.Step();
-                lines[tick] = TraceLine(body: body);
+                lines[tick] = Fixtures.TraceLine(body: body);
             }
 
             return lines;
@@ -1849,7 +1824,7 @@ public sealed class HoldLawTests {
     public void ARowWithNoThrust_IgnoresMoveUp_WhereTheSameRowWithFullThrustClimbs() {
         static double Climb(float thrust) {
             using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Air(kind: BodyHoldKind.Lift, lift: 1f, thrust: thrust)]));
-            var body = JoinBody(fixture: fixture);
+            var body = fixture.JoinSeat();
 
             Pose(body: body, y: 6f, z: 10f);
             Hold(body: body, fixture: fixture, intent: default, ticks: 60);
@@ -1934,7 +1909,7 @@ public sealed class HoldLawTests {
     [Fact]
     public void ALeanedBodyRestoredFromACheckpoint_ReturnsItsDrawnAxisLikeTheLiveBody_WhereANeverLeanedBodySeatsItInstead() {
         using var fixture = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: 1f), Ground(), Air()]));
-        var uninterrupted = JoinBody(fixture: fixture);
+        var uninterrupted = fixture.JoinSeat();
 
         Assert.NotNull(@object: DriveIntoWall(
             body: uninterrupted,
@@ -2024,7 +1999,7 @@ public sealed class HoldLawTests {
             }
 
             // The turn takes longer than the twelve ticks watched, which is what makes it a turn and not a seat.
-            Assert.Equal(expected: 0, actual: seated);
+            Assert.Equal(actual: seated, expected: 0);
             Assert.True(
                 condition: (((double)Up(body: restored).Y) < 0.999),
                 userMessage: $"the restored body must still be turning its axis back; it read {Up(body: restored)}"
@@ -2033,7 +2008,7 @@ public sealed class HoldLawTests {
             // The control: a body in the same world that never leaned. Its drawn axis is seated to ambient, so it
             // reads upright on the very first tick the same release is submitted.
             using var never = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: 1f), Ground(), Air()]));
-            var flat = JoinBody(fixture: never);
+            var flat = never.JoinSeat();
 
             Hold(
                 body: flat,
@@ -2042,7 +2017,7 @@ public sealed class HoldLawTests {
                 ticks: 1
             );
 
-            Assert.Null(@object: flat.HoldName is "wall" ? "wall" : null);
+            Assert.Null(@object: ((flat.HoldName is "wall") ? "wall" : null));
             Assert.True(
                 condition: (((double)Up(body: flat).Y) > 0.999),
                 userMessage: $"a body that never leaned is drawn upright at once; it read {Up(body: flat)}"
@@ -2056,6 +2031,7 @@ public sealed class HoldLawTests {
             }
         }
     }
+
     private static FixedVector3 Up(WorldBody body) => body.FixedOrientation.Rotate(vector: new FixedVector3(
         X: FixedQ4816.Zero,
         Y: FixedQ4816.One,

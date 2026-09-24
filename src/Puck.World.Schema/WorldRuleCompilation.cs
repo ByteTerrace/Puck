@@ -10,6 +10,7 @@ public sealed class WorldRuleCompilation {
 
     internal WorldRuleCompilation(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledRuleGroup[] groups, Puck.State.Rules.CompiledRule[] interactions, CompiledTable[] tables, WorldFactsCompileContext? context = null,
         (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)? work = null) {
+        WorldBootWork.Count(kind: WorldBootWork.RuleCompilations);
         Definition = definition;
         Rules = rules;
         Groups = groups;

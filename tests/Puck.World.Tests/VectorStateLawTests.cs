@@ -25,10 +25,10 @@ public sealed class VectorStateLawTests {
         return vector;
     }
     private static StateSpace SampleSpace(string name = "lore", int dimensions = 8) => new(
-        Dimensions: dimensions,
-        Model: "test-model",
-        Name: CellName.Parse(candidate: name),
-        Revision: "1"
+        dimensions: dimensions,
+        model: "test-model",
+        name: CellName.Parse(candidate: name),
+        revision: "1"
     );
     private static WorldDefinition BuildDocumentWithState(StateSpace[] spaces, WorldStateRow[] rows, WorldRule[]? rules = null) =>
         Fixtures.BuildDocument() with {
@@ -51,7 +51,7 @@ public sealed class VectorStateLawTests {
         var definition = BuildDocumentWithState(spaces: [space], rows: [memoriesRow]);
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        var peer = WorldPrincipal.Peer(generation: 1, index: 4);
+        var peer = Principal.Peer(generation: 1, index: 4);
         var vector = SampleVector(dimensions: 8, nonZeroIndex: 0);
 
         // 1. Ungranted write is refused
@@ -74,22 +74,22 @@ public sealed class VectorStateLawTests {
         var kinds = WorldMutationKindCatalog.KindsOf(section: WorldSection.State);
 
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Budget: 16,
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kinds,
-                Principal: peer,
+                Grantee: peer,
                 Subject: GrantSubject.Section(section: WorldSection.State)
             )
         );
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Capability: WorldCapability.Edit,
                 Exclusive: false,
-                Principal: peer,
+                Grantee: peer,
                 Subject: GrantSubject.State(name: "memories")
             )
         );
@@ -131,7 +131,7 @@ public sealed class VectorStateLawTests {
 
         // Enqueue mutation from Console
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "memories",
             Key: "m1",
             Value: 0L,
@@ -147,7 +147,7 @@ public sealed class VectorStateLawTests {
         Assert.Single(collection: stateRowAfterWrite.Cells);
 
         // Enqueue undo
-        fixture.Server.EnqueueUndo(count: 1, principal: WorldPrincipal.Console);
+        fixture.Server.EnqueueUndo(count: 1, principal: Principal.Console);
         fixture.Step();
 
         var stateRowAfterUndo = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories");
@@ -194,7 +194,7 @@ public sealed class VectorStateLawTests {
             Assert.NotNull(@object: restoredServer.Definition.Spaces);
             Assert.Single(collection: restoredServer.Definition.Spaces);
             Assert.Equal("lore", restoredServer.Definition.Spaces[0].Name.Value);
-            Assert.Equal(8, restoredServer.Definition.Spaces[0].Dimensions);
+            Assert.Equal(8, restoredServer.Definition.Spaces[0].Identity.Dimensions);
 
             var restoredRow = WorldDefinitionRows.FindStateRow(rows: restoredServer.Definition.State, name: "memories");
 
@@ -232,7 +232,7 @@ public sealed class VectorStateLawTests {
             Assert.NotNull(@object: reloadedDef.Spaces);
             Assert.Single(collection: reloadedDef.Spaces);
             Assert.Equal("lore", reloadedDef.Spaces[0].Name.Value);
-            Assert.Equal(8, reloadedDef.Spaces[0].Dimensions);
+            Assert.Equal(8, reloadedDef.Spaces[0].Identity.Dimensions);
 
             var reloadedRow = WorldDefinitionRows.FindStateRow(rows: reloadedDef.State, name: "memories");
 
@@ -284,7 +284,7 @@ public sealed class VectorStateLawTests {
             var vec = SampleVector(dimensions: 8, nonZeroIndex: (i % 8));
 
             transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: "events",
                 Key: keys[i],
                 Value: 0L,
@@ -395,7 +395,7 @@ public sealed class VectorStateLawTests {
                 )),
             ],
             Gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 State: "caravanAttacked",
                 Value: 1m
             ),
@@ -521,10 +521,17 @@ public sealed class VectorStateLawTests {
             Assert.True(condition: origCell.Value.AsVector.Span.SequenceEqual(other: obsCell.Vector.Components));
         }
 
-        // Hydrate back into definition (undisclosed state section becomes default empty)
+        // Hydrate back into definition: the vector observation arrives as a vector row in the space the projection
+        // carries for it
+        Assert.Equal(expected: space, actual: Assert.Single(collection: decoded.Spaces!));
         Assert.True(condition: WorldProjection.TryToDefinition(definition: out var hydrated, projection: decoded, reason: out var hydrateReason), userMessage: hydrateReason);
         Assert.NotNull(@object: hydrated);
-        Assert.Empty(collection: hydrated.State);
+
+        var hydratedRow = Assert.Single(collection: hydrated.State);
+
+        Assert.Equal(expected: "lore", actual: hydratedRow.Space);
+        Assert.Equal(expected: 256, actual: hydratedRow.Cells!.Count);
+        Assert.Equal(expected: space, actual: Assert.Single(collection: hydrated.StateRaw!.Spaces!));
     }
     [Fact]
     public void Vector_DigestEcho() {
@@ -601,7 +608,7 @@ public sealed class VectorStateLawTests {
         var commandSource = new TextCommandSource(registry: registry);
         var peerResults = new List<CommandResult>();
         using var peerSession = commandSource.CreateSession(
-            principal: CommandPrincipal.Peer(generation: 1, index: 4),
+            principal: Principal.Peer(generation: 1, index: 4),
             onResult: (_, res) => peerResults.Add(item: res)
         );
 
@@ -635,7 +642,7 @@ public sealed class VectorStateLawTests {
         var hiddenCommandSource = new TextCommandSource(registry: registryHidden);
         var hiddenResults = new List<CommandResult>();
         using var peerSession2 = hiddenCommandSource.CreateSession(
-            principal: CommandPrincipal.Peer(generation: 1, index: 4),
+            principal: Principal.Peer(generation: 1, index: 4),
             onResult: (_, res) => hiddenResults.Add(item: res)
         );
 
@@ -956,7 +963,7 @@ public sealed class VectorStateLawTests {
         );
     }
     [Fact]
-    public void Vector_WorldStateTransform_PrincipalHoldingEditOnlyOnInto_SucceedsForMixMeanNearestRemember() {
+    public void Vector_WorldStateTransform_PrincipalHoldingEditOnIntoAndObserveOnSource_SucceedsForMixMeanNearestRemember() {
         var space = SampleSpace(dimensions: 8, name: "lore");
         var vecA = SampleVector(dimensions: 8, nonZeroIndex: 0);
         var vecB = SampleVector(dimensions: 8, nonZeroIndex: 1);
@@ -1004,29 +1011,41 @@ public sealed class VectorStateLawTests {
         );
 
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var peer = WorldPrincipal.Peer(generation: 1, index: 4);
+        var peer = Principal.Peer(generation: 1, index: 4);
 
         var kinds = WorldMutationKindCatalog.KindsOf(section: WorldSection.State);
 
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Budget: 64,
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kinds,
-                Principal: peer,
+                Grantee: peer,
                 Subject: GrantSubject.Section(section: WorldSection.State)
+            )
+        );
+
+        // Each operation only reads the source table, so observe over it is the whole of its authority there.
+        fixture.Server.Grant(
+            actor: Principal.Console,
+            grant: new WorldGrant(
+                Budget: 64,
+                Capability: WorldCapability.Observe,
+                Exclusive: false,
+                Grantee: peer,
+                Subject: GrantSubject.State(name: "source")
             )
         );
 
         foreach (var targetName in new[] { "intoMix", "intoMean", "intoNearest", "intoRemember" }) {
             fixture.Server.Grant(
-                actor: WorldPrincipal.Console,
+                actor: Principal.Console,
                 grant: new WorldGrant(
                     Capability: WorldCapability.Edit,
                     Exclusive: false,
-                    Principal: peer,
+                    Grantee: peer,
                     Subject: GrantSubject.State(name: targetName)
                 )
             );

@@ -88,7 +88,7 @@ public sealed class WorldStateLiteralLawTests {
                 Name: CellName.Parse(candidate: "exact-literal"),
                 Gate: new ActionPredicate.CompareState(
                     State: sourceName.Value,
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: BeyondBinary32ExactInteger
                 ),
                 Effects: [new ActionEffect.SetState(
@@ -135,7 +135,7 @@ public sealed class WorldStateLiteralLawTests {
                 Name: CellName.Parse(candidate: "wide-literal"),
                 Gate: new ActionPredicate.CompareState(
                     State: sourceName.Value,
-                    Comparison: ActionStateComparison.Equal,
+                    Comparison: ExpressionOp.Equal,
                     Value: Value
                 ),
                 Effects: [new ActionEffect.SetState(
@@ -171,7 +171,7 @@ public sealed class WorldStateLiteralLawTests {
             Name: CellName.Parse(candidate: "oversized-literal"),
             Gate: new ActionPredicate.CompareState(
                 State: name.Value,
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 Value: decimal.MaxValue
             ),
             Effects: []
@@ -183,7 +183,7 @@ public sealed class WorldStateLiteralLawTests {
         ));
 
         Assert.Equal(
-            expected: Puck.State.Rules.RuleRefusal.StateCellUnaddressable,
+            expected: RuleRefusal.StateCellUnaddressable,
             actual: exception.Refusal
         );
         Assert.Contains(

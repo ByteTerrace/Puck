@@ -1,0 +1,53 @@
+{
+  "$schema": "puck.shader.pipeline.v1",
+  "name": "feedback",
+  "resources": [
+    {
+      "name": "history",
+      "kind": "Image",
+      "format": "R16G16B16A16Float",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 },
+      "history": true,
+      "initialization": "Zero"
+    },
+    {
+      "name": "gray",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    },
+    {
+      "name": "image",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    }
+  ],
+  "passes": [
+    {
+      "name": "accumulate",
+      "source": "../pipeline-feedback/accumulate.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "inputs": [ { "name": "history", "previousFrame": true, "binding": 1 } ],
+      "outputs": [ { "name": "history", "binding": 0 } ]
+    },
+    {
+      "name": "convert",
+      "source": "convert-broken.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "inputs": [ { "name": "history", "binding": 1 } ],
+      "outputs": [ { "name": "gray", "binding": 0 } ]
+    },
+    {
+      "name": "copy",
+      "source": "../pipeline-feedback/copy.hlsl",
+      "entryPoint": "main",
+      "kind": "Fullscreen",
+      "inputs": [ { "name": "gray", "binding": 0 } ],
+      "outputs": [ { "name": "image" } ]
+    }
+  ],
+  "outputs": ["image"]
+}

@@ -1,0 +1,3401 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 130,
+  "engineTick": 218400,
+  "hashes": {
+    "authoritative": "18d50fd4e8c705c9",
+    "capture": "1b1b87137bc05598",
+    "pose": "eb37ce8b855900cd",
+    "world": "1badafcce7386c33"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "well",
+        "kind": "Int",
+        "min": 0,
+        "max": 131071,
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": 131071
+          },
+          {
+            "key": "1",
+            "value": 131071
+          },
+          {
+            "key": "2",
+            "value": 57351
+          },
+          {
+            "key": "3",
+            "value": 57351
+          },
+          {
+            "key": "4",
+            "value": 57351
+          },
+          {
+            "key": "5",
+            "value": 57351
+          },
+          {
+            "key": "6",
+            "value": 57351
+          },
+          {
+            "key": "7",
+            "value": 57351
+          },
+          {
+            "key": "8",
+            "value": 57351
+          },
+          {
+            "key": "9",
+            "value": 57351
+          },
+          {
+            "key": "10",
+            "value": 57351
+          },
+          {
+            "key": "11",
+            "value": 57351
+          },
+          {
+            "key": "12",
+            "value": 57351
+          },
+          {
+            "key": "13",
+            "value": 57351
+          },
+          {
+            "key": "14",
+            "value": 57351
+          },
+          {
+            "key": "15",
+            "value": 57351
+          },
+          {
+            "key": "16",
+            "value": 57351
+          },
+          {
+            "key": "17",
+            "value": 57351
+          },
+          {
+            "key": "18",
+            "value": 57351
+          },
+          {
+            "key": "19",
+            "value": 57479
+          },
+          {
+            "key": "20",
+            "value": 57479
+          },
+          {
+            "key": "21",
+            "value": 57575
+          },
+          {
+            "key": "22",
+            "value": 58215
+          },
+          {
+            "key": "23",
+            "value": 58151
+          },
+          {
+            "key": "24",
+            "value": 131071
+          }
+        ]
+      },
+      {
+        "name": "shape",
+        "kind": "Int",
+        "min": 0,
+        "max": 15,
+        "capacity": 112,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 15
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 4
+          },
+          {
+            "key": "6",
+            "value": 4
+          },
+          {
+            "key": "7",
+            "value": 4
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 15
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 2
+          },
+          {
+            "key": "13",
+            "value": 2
+          },
+          {
+            "key": "14",
+            "value": 2
+          },
+          {
+            "key": "15",
+            "value": 2
+          },
+          {
+            "key": "16",
+            "value": 6
+          },
+          {
+            "key": "17",
+            "value": 6
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 6
+          },
+          {
+            "key": "21",
+            "value": 6
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 6
+          },
+          {
+            "key": "25",
+            "value": 6
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 6
+          },
+          {
+            "key": "29",
+            "value": 6
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 2
+          },
+          {
+            "key": "33",
+            "value": 7
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 2
+          },
+          {
+            "key": "37",
+            "value": 6
+          },
+          {
+            "key": "38",
+            "value": 2
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 7
+          },
+          {
+            "key": "42",
+            "value": 2
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 2
+          },
+          {
+            "key": "45",
+            "value": 3
+          },
+          {
+            "key": "46",
+            "value": 2
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": 6
+          },
+          {
+            "key": "49",
+            "value": 3
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 0
+          },
+          {
+            "key": "52",
+            "value": 2
+          },
+          {
+            "key": "53",
+            "value": 6
+          },
+          {
+            "key": "54",
+            "value": 4
+          },
+          {
+            "key": "55",
+            "value": 0
+          },
+          {
+            "key": "56",
+            "value": 0
+          },
+          {
+            "key": "57",
+            "value": 6
+          },
+          {
+            "key": "58",
+            "value": 3
+          },
+          {
+            "key": "59",
+            "value": 0
+          },
+          {
+            "key": "60",
+            "value": 1
+          },
+          {
+            "key": "61",
+            "value": 3
+          },
+          {
+            "key": "62",
+            "value": 2
+          },
+          {
+            "key": "63",
+            "value": 0
+          },
+          {
+            "key": "64",
+            "value": 3
+          },
+          {
+            "key": "65",
+            "value": 6
+          },
+          {
+            "key": "66",
+            "value": 0
+          },
+          {
+            "key": "67",
+            "value": 0
+          },
+          {
+            "key": "68",
+            "value": 4
+          },
+          {
+            "key": "69",
+            "value": 6
+          },
+          {
+            "key": "70",
+            "value": 2
+          },
+          {
+            "key": "71",
+            "value": 0
+          },
+          {
+            "key": "72",
+            "value": 0
+          },
+          {
+            "key": "73",
+            "value": 3
+          },
+          {
+            "key": "74",
+            "value": 6
+          },
+          {
+            "key": "75",
+            "value": 0
+          },
+          {
+            "key": "76",
+            "value": 2
+          },
+          {
+            "key": "77",
+            "value": 3
+          },
+          {
+            "key": "78",
+            "value": 1
+          },
+          {
+            "key": "79",
+            "value": 0
+          },
+          {
+            "key": "80",
+            "value": 1
+          },
+          {
+            "key": "81",
+            "value": 7
+          },
+          {
+            "key": "82",
+            "value": 0
+          },
+          {
+            "key": "83",
+            "value": 0
+          },
+          {
+            "key": "84",
+            "value": 6
+          },
+          {
+            "key": "85",
+            "value": 2
+          },
+          {
+            "key": "86",
+            "value": 2
+          },
+          {
+            "key": "87",
+            "value": 0
+          },
+          {
+            "key": "88",
+            "value": 0
+          },
+          {
+            "key": "89",
+            "value": 7
+          },
+          {
+            "key": "90",
+            "value": 4
+          },
+          {
+            "key": "91",
+            "value": 0
+          },
+          {
+            "key": "92",
+            "value": 2
+          },
+          {
+            "key": "93",
+            "value": 2
+          },
+          {
+            "key": "94",
+            "value": 3
+          },
+          {
+            "key": "95",
+            "value": 0
+          },
+          {
+            "key": "96",
+            "value": 4
+          },
+          {
+            "key": "97",
+            "value": 7
+          },
+          {
+            "key": "98",
+            "value": 0
+          },
+          {
+            "key": "99",
+            "value": 0
+          },
+          {
+            "key": "100",
+            "value": 2
+          },
+          {
+            "key": "101",
+            "value": 2
+          },
+          {
+            "key": "102",
+            "value": 6
+          },
+          {
+            "key": "103",
+            "value": 0
+          },
+          {
+            "key": "104",
+            "value": 0
+          },
+          {
+            "key": "105",
+            "value": 7
+          },
+          {
+            "key": "106",
+            "value": 1
+          },
+          {
+            "key": "107",
+            "value": 0
+          },
+          {
+            "key": "108",
+            "value": 3
+          },
+          {
+            "key": "109",
+            "value": 2
+          },
+          {
+            "key": "110",
+            "value": 2
+          },
+          {
+            "key": "111",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "kickX",
+        "kind": "Int",
+        "min": -2,
+        "max": 2,
+        "capacity": 80,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": -1
+          },
+          {
+            "key": "2",
+            "value": -1
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": -1
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 1
+          },
+          {
+            "key": "7",
+            "value": 1
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 1
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 1
+          },
+          {
+            "key": "22",
+            "value": 1
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 1
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": -1
+          },
+          {
+            "key": "27",
+            "value": -1
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": -1
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": -1
+          },
+          {
+            "key": "32",
+            "value": -1
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": -1
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": -1
+          },
+          {
+            "key": "37",
+            "value": -1
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": -1
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": -2
+          },
+          {
+            "key": "42",
+            "value": 1
+          },
+          {
+            "key": "43",
+            "value": -2
+          },
+          {
+            "key": "44",
+            "value": 1
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": -1
+          },
+          {
+            "key": "47",
+            "value": 2
+          },
+          {
+            "key": "48",
+            "value": -1
+          },
+          {
+            "key": "49",
+            "value": 2
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": -1
+          },
+          {
+            "key": "52",
+            "value": 2
+          },
+          {
+            "key": "53",
+            "value": -1
+          },
+          {
+            "key": "54",
+            "value": 2
+          },
+          {
+            "key": "55",
+            "value": 0
+          },
+          {
+            "key": "56",
+            "value": 2
+          },
+          {
+            "key": "57",
+            "value": -1
+          },
+          {
+            "key": "58",
+            "value": 2
+          },
+          {
+            "key": "59",
+            "value": -1
+          },
+          {
+            "key": "60",
+            "value": 0
+          },
+          {
+            "key": "61",
+            "value": 2
+          },
+          {
+            "key": "62",
+            "value": -1
+          },
+          {
+            "key": "63",
+            "value": 2
+          },
+          {
+            "key": "64",
+            "value": -1
+          },
+          {
+            "key": "65",
+            "value": 0
+          },
+          {
+            "key": "66",
+            "value": 1
+          },
+          {
+            "key": "67",
+            "value": -2
+          },
+          {
+            "key": "68",
+            "value": 1
+          },
+          {
+            "key": "69",
+            "value": -2
+          },
+          {
+            "key": "70",
+            "value": 0
+          },
+          {
+            "key": "71",
+            "value": 1
+          },
+          {
+            "key": "72",
+            "value": -2
+          },
+          {
+            "key": "73",
+            "value": 1
+          },
+          {
+            "key": "74",
+            "value": -2
+          },
+          {
+            "key": "75",
+            "value": 0
+          },
+          {
+            "key": "76",
+            "value": -2
+          },
+          {
+            "key": "77",
+            "value": 1
+          },
+          {
+            "key": "78",
+            "value": -2
+          },
+          {
+            "key": "79",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "kickY",
+        "kind": "Int",
+        "min": -2,
+        "max": 2,
+        "capacity": 80,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": -1
+          },
+          {
+            "key": "3",
+            "value": 2
+          },
+          {
+            "key": "4",
+            "value": 2
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": -1
+          },
+          {
+            "key": "8",
+            "value": 2
+          },
+          {
+            "key": "9",
+            "value": 2
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": -2
+          },
+          {
+            "key": "14",
+            "value": -2
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": -2
+          },
+          {
+            "key": "19",
+            "value": -2
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": -1
+          },
+          {
+            "key": "23",
+            "value": 2
+          },
+          {
+            "key": "24",
+            "value": 2
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": -1
+          },
+          {
+            "key": "28",
+            "value": 2
+          },
+          {
+            "key": "29",
+            "value": 2
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 1
+          },
+          {
+            "key": "33",
+            "value": -2
+          },
+          {
+            "key": "34",
+            "value": -2
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 1
+          },
+          {
+            "key": "38",
+            "value": -2
+          },
+          {
+            "key": "39",
+            "value": -2
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 1
+          },
+          {
+            "key": "44",
+            "value": -2
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": -2
+          },
+          {
+            "key": "49",
+            "value": 1
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 0
+          },
+          {
+            "key": "52",
+            "value": 0
+          },
+          {
+            "key": "53",
+            "value": -2
+          },
+          {
+            "key": "54",
+            "value": 1
+          },
+          {
+            "key": "55",
+            "value": 0
+          },
+          {
+            "key": "56",
+            "value": 0
+          },
+          {
+            "key": "57",
+            "value": 0
+          },
+          {
+            "key": "58",
+            "value": -1
+          },
+          {
+            "key": "59",
+            "value": 2
+          },
+          {
+            "key": "60",
+            "value": 0
+          },
+          {
+            "key": "61",
+            "value": 0
+          },
+          {
+            "key": "62",
+            "value": 0
+          },
+          {
+            "key": "63",
+            "value": -1
+          },
+          {
+            "key": "64",
+            "value": 2
+          },
+          {
+            "key": "65",
+            "value": 0
+          },
+          {
+            "key": "66",
+            "value": 0
+          },
+          {
+            "key": "67",
+            "value": 0
+          },
+          {
+            "key": "68",
+            "value": 2
+          },
+          {
+            "key": "69",
+            "value": -1
+          },
+          {
+            "key": "70",
+            "value": 0
+          },
+          {
+            "key": "71",
+            "value": 0
+          },
+          {
+            "key": "72",
+            "value": 0
+          },
+          {
+            "key": "73",
+            "value": 2
+          },
+          {
+            "key": "74",
+            "value": -1
+          },
+          {
+            "key": "75",
+            "value": 0
+          },
+          {
+            "key": "76",
+            "value": 0
+          },
+          {
+            "key": "77",
+            "value": 0
+          },
+          {
+            "key": "78",
+            "value": 1
+          },
+          {
+            "key": "79",
+            "value": -2
+          }
+        ]
+      },
+      {
+        "name": "award",
+        "kind": "Int",
+        "capacity": 5,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 100
+          },
+          {
+            "key": "2",
+            "value": 300
+          },
+          {
+            "key": "3",
+            "value": 500
+          },
+          {
+            "key": "4",
+            "value": 800
+          }
+        ]
+      },
+      {
+        "name": "gravity",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "1",
+            "value": 0,
+            "cycle": {
+              "power": 1,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          },
+          {
+            "key": "2",
+            "value": 0,
+            "cycle": {
+              "power": 3,
+              "output": "Step",
+              "ticksPerStep": 2
+            },
+            "clock": {}
+          },
+          {
+            "key": "3",
+            "value": 0,
+            "cycle": {
+              "power": 2,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          },
+          {
+            "key": "4",
+            "value": 0,
+            "cycle": {
+              "power": 5,
+              "output": "Step",
+              "ticksPerStep": 2
+            },
+            "clock": {}
+          },
+          {
+            "key": "5",
+            "value": 0,
+            "cycle": {
+              "power": 3,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          },
+          {
+            "key": "6",
+            "value": 0,
+            "cycle": {
+              "power": 5,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          },
+          {
+            "key": "7",
+            "value": 0,
+            "cycle": {
+              "power": 6,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          },
+          {
+            "key": "8",
+            "value": 0,
+            "cycle": {
+              "power": 15,
+              "output": "Step",
+              "ticksPerStep": 2
+            },
+            "clock": {}
+          },
+          {
+            "key": "9",
+            "value": 0,
+            "cycle": {
+              "power": 10,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          },
+          {
+            "key": "10",
+            "value": 0,
+            "cycle": {
+              "power": 15,
+              "output": "Step",
+              "ticksPerStep": 1
+            },
+            "clock": {}
+          }
+        ]
+      },
+      {
+        "name": "bag",
+        "kind": "Int",
+        "min": 0,
+        "max": 6,
+        "value": 6,
+        "draw": {
+          "generator": {
+            "source": "WeightedNumeric",
+            "bound": 1,
+            "mode": "RestartOnExhaustion",
+            "weighted": [
+              {
+                "value": 0,
+                "weight": 1
+              },
+              {
+                "value": 1,
+                "weight": 1
+              },
+              {
+                "value": 2,
+                "weight": 1
+              },
+              {
+                "value": 3,
+                "weight": 1
+              },
+              {
+                "value": 4,
+                "weight": 1
+              },
+              {
+                "value": 5,
+                "weight": 1
+              },
+              {
+                "value": 6,
+                "weight": 1
+              }
+            ]
+          },
+          "timing": "Event",
+          "skip": 0
+        },
+        "drawCursor": 6,
+        "drawnMasks": [
+          "0000000000000000000000000000000000000000000000000000000000000077"
+        ]
+      },
+      {
+        "name": "recent",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 4
+          },
+          {
+            "key": "2",
+            "value": 1
+          },
+          {
+            "key": "3",
+            "value": 5
+          },
+          {
+            "key": "4",
+            "value": 0
+          }
+        ],
+        "historyCursor": 5,
+        "domain": {
+          "$type": "ring",
+          "capacity": 7,
+          "empty": -1
+        }
+      },
+      {
+        "name": "kind",
+        "kind": "Int",
+        "min": 0,
+        "max": 6,
+        "value": 0
+      },
+      {
+        "name": "turn",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 0
+      },
+      {
+        "name": "px",
+        "kind": "Int",
+        "min": -3,
+        "max": 10,
+        "value": 2
+      },
+      {
+        "name": "py",
+        "kind": "Int",
+        "min": 0,
+        "max": 24,
+        "value": 4
+      },
+      {
+        "name": "lowest",
+        "kind": "Int",
+        "min": 0,
+        "max": 24,
+        "value": 4
+      },
+      {
+        "name": "resets",
+        "kind": "Int",
+        "min": 0,
+        "max": 15,
+        "value": 0
+      },
+      {
+        "name": "lockAt",
+        "kind": "Int",
+        "value": 135
+      },
+      {
+        "name": "held",
+        "kind": "Int",
+        "min": -1,
+        "max": 6,
+        "value": 4
+      },
+      {
+        "name": "holdUsed",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "stage",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 1
+      },
+      {
+        "name": "alive",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "score",
+        "kind": "Int",
+        "min": 0,
+        "max": 999999,
+        "overflow": "Saturate",
+        "value": 98
+      },
+      {
+        "name": "lines",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 0
+      },
+      {
+        "name": "level",
+        "kind": "Int",
+        "min": 1,
+        "max": 10,
+        "value": 1
+      },
+      {
+        "name": "lastClear",
+        "kind": "Int",
+        "min": 0,
+        "max": 4,
+        "value": 0
+      },
+      {
+        "name": "spawned",
+        "kind": "Int",
+        "value": 4
+      },
+      {
+        "name": "spawnedAt",
+        "kind": "Int",
+        "value": 66
+      },
+      {
+        "name": "locked",
+        "kind": "Int",
+        "value": 3
+      },
+      {
+        "name": "lockedAt",
+        "kind": "Int",
+        "value": 64
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "well",
+      "cells": [
+        {
+          "key": "0",
+          "value": 131071,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 131071,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 57351,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 57479,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 57479,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 57575,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 58215,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 58151,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 131071,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "shape",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "64",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "65",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "66",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "67",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "68",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "69",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "70",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "71",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "72",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "73",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "74",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "75",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "76",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "77",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "78",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "79",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "80",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "81",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "82",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "83",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "84",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "85",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "86",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "87",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "88",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "89",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "90",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "91",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "92",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "93",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "94",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "95",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "96",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "97",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "98",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "99",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "100",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "101",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "102",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "103",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "104",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "105",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "106",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "107",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "108",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "109",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "110",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "111",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "kickX",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "64",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "65",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "66",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "67",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "68",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "69",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "70",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "71",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "72",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "73",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "74",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "75",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "76",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "77",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "78",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "79",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "kickY",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": -2,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "64",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "65",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "66",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "67",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "68",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "69",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "70",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "71",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "72",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "73",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "74",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "75",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "76",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "77",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "78",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "79",
+          "value": -2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "award",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 100,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 300,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 500,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 800,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "gravity",
+      "cells": [
+        {
+          "key": "1",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 25,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "bag",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 6,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "recent",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "kind",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "turn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "px",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "py",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 4,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lowest",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 4,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "resets",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lockAt",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 135,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "held",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 4,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "holdUsed",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "stage",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "alive",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "score",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 98,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lines",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "level",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lastClear",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "spawned",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 4,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "spawnedAt",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 66,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "locked",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "lockedAt",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 64,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

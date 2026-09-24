@@ -4,7 +4,6 @@
   "binding": "The positive leg boots a draw site 'pick' on the declared source ringTwo (symmetryOrbit, ring 2, withoutReplacement) and a twelve-cell fixed lattice 'tiles' whose draw fill is the orbit of node 5 under the word [0,1,2,3,4,5] (twelve nodes, drawn without replacement, so the pass paints every orbit node once: eleven nonzero cells, mean 28.083 — the orbit's own average node index, stored in the fixed unit). A Level rule copies $symmetry:ring:pick into 'pickRing'. Three world.generate draws read nodes 28, 6 and 7 with the mask growing 0x40, 0x48, 0x58 (three distinct units of thirty), and 'pickRing' reads 2 after every draw. world.symmetry.word prints the fill's order and orbit. The discriminating leg re-authors both sources as uniformRange over every node: the same three draws read 166, 2 and 205 on rings 1, 0 and 7, no mask is carried, and the field's mean is the flat range's, so 'every draw on ring 2' is the orbit source and not the seed.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 5,
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {

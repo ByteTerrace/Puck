@@ -1,0 +1,9 @@
+# A fresh process on the saved document, whose row names the package with the saved override: the boot binds the
+# override against the package, and the installed graph renders it.
+pipeline.wait tint compiled 40
+pipeline.wait tint installed 10
+pipeline.overrides tint
+pipeline.reset tint
+pipeline.wait tint submitted 1 10
+pipeline.capture tint {run}/relaunched.png
+pipeline.wait tint captured 10

@@ -1,9 +1,10 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Puck.Assets;
 
 namespace Puck.Cli.Format;
 
-// Shared IO and safety for the disk rewrite phases (SourceRewrite and NamedArgsPhase), so the drift
+// Shared IO and safety for the disk rewrite phases (SourceRewrite and SemanticPhases), so the drift
 // tracking, the write guard, source-preserving write, and the summary live once.
 internal static class RewriteIo {
     private static int ErrorCount(string text) =>
@@ -19,9 +20,9 @@ internal static class RewriteIo {
     public static bool HasSyntaxErrors(string original, string rewritten) =>
         ((ErrorCount(text: original) > 0) || (ErrorCount(text: rewritten) > 0));
     // The shared drift/normalize summary plus any number of labelled problem buckets (corruption,
-    // non-convergence, ...). Exit code is 1 on any problem or on drift in check mode, else 0.
-    public static int Report(string label, int fileCount, IReadOnlyList<string> drifted, bool whatIf, params ReadOnlySpan<(string Reason, IReadOnlyList<string> Files)> problems) {
-        Console.Error.WriteLine(value: (whatIf
+    // non-convergence, ...). Exit code is 1 on any problem or, with --check, on drift; else 0.
+    public static int Report(string label, int fileCount, IReadOnlyList<string> drifted, bool check, params ReadOnlySpan<(string Reason, IReadOnlyList<string> Files)> problems) {
+        Console.Error.WriteLine(value: (check
             ? ((drifted.Count == 0)
                 ? $"{label}: consistent across {fileCount} files."
                 : $"{label}: {drifted.Count} file(s) drifted from the convention:")
@@ -46,45 +47,18 @@ internal static class RewriteIo {
             }
         }
 
-        return ((hadProblem || (whatIf && (drifted.Count > 0)))
+        return ((hadProblem || (check && (drifted.Count > 0)))
             ? 1
             : 0
         );
     }
     // Roslyn preserves the source's existing newline trivia. Write that text verbatim: normalizing the
     // whole string would also rewrite newlines INSIDE verbatim/raw literals and change runtime values.
-    // Phase 0 owns ordinary whitespace and line-ending policy.
-    public static void WriteText(string file, string text) {
-        // Replace the directory entry instead of truncating a file Roslyn or an editor may have mapped.
-        // Keep the temporary file beside its destination so replacement stays on the same volume.
-        var temporary = $"{file}.{Guid.NewGuid():N}.tmp";
-
-        try {
-            File.WriteAllText(
-                contents: text,
-                path: temporary
-            );
-            if (
-                !OperatingSystem.IsWindows() &&
-                File.Exists(path: file)
-            ) {
-                File.SetUnixFileMode(
-                    path: temporary,
-                    mode: File.GetUnixFileMode(path: file)
-                );
-            }
-            if (File.Exists(path: file)) {
-                File.Replace(
-                    destinationBackupFileName: null,
-                    destinationFileName: file,
-                    sourceFileName: temporary
-                );
-            } else {
-                File.Move(
-                    destFileName: file,
-                    sourceFileName: temporary
-                );
-            }
-        } finally { File.Delete(path: temporary); }
-    }
+    // Phase 0 owns ordinary whitespace and line-ending policy. The rename replaces the directory entry
+    // rather than truncating a file Roslyn or an editor may have mapped, and keeps an executable bit.
+    public static void WriteText(string file, string text) =>
+        AtomicFile.WriteAllText(
+            contents: text,
+            path: file
+        );
 }

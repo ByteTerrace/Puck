@@ -1,0 +1,23 @@
+// One rulepush level as a world: the room it stands in, the rule set stamped with the level's map, and the record a win
+// leaves. A win sets the visitor's own identity fact named for the level, which is what the overworld reads to open
+// the next gate; the fact travels with the visitor, so nothing crosses between the worlds except the visitor.
+
+import "rules.puck"
+import "room.puck"
+
+module level(centre: Point, record, layout) {
+  use room(centre: centre, size: [length(layout[0]) * 1m + 8m, length(layout) * 1m + 8m])
+  use rules(width: length(layout[0]), height: length(layout), layout: layout)
+
+  state {
+    world {
+      table identity capacity(32)
+    }
+  }
+
+  rule "cleared" {
+    when won == 1
+    mode: Edge
+    setIdentityFact(key: 0, fact: record, value: 1)
+  }
+}

@@ -20,15 +20,15 @@ public sealed class WorldAdjacencyLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "left-ref"),
-                "left.world.json"
+                "left"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "right-ref"),
-                "right.world.json"
+                "right"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "corner-ref"),
-                "corner.world.json"
+                "corner"
             ),
             ],
             Destinations = [
@@ -70,11 +70,11 @@ public sealed class WorldAdjacencyLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "source-ref"),
-                "source.world.json"
+                "source"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "corner-ref"),
-                "corner.world.json"
+                "corner"
             ),
             ],
             Destinations = [
@@ -110,11 +110,11 @@ public sealed class WorldAdjacencyLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "source-ref"),
-                "source.world.json"
+                "source"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "corner-ref"),
-                "corner.world.json"
+                "corner"
             ),
             ],
             Destinations = [
@@ -150,11 +150,11 @@ public sealed class WorldAdjacencyLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "left-ref"),
-                "left.world.json"
+                "left"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "right-ref"),
-                "right.world.json"
+                "right"
             ),
             ],
             Destinations = [
@@ -258,15 +258,15 @@ public sealed class WorldAdjacencyLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "source-ref"),
-                "source.world.json"
+                "source"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "corner-a-ref"),
-                "corner-a.world.json"
+                "corner-a"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "corner-b-ref"),
-                "corner-b.world.json"
+                "corner-b"
             ),
             ],
             Destinations = [
@@ -314,15 +314,15 @@ public sealed class WorldAdjacencyLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "source-ref"),
-                "source.world.json"
+                "source"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "corner-a-ref"),
-                "corner-a.world.json"
+                "corner-a"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "corner-b-ref"),
-                "corner-b.world.json"
+                "corner-b"
             ),
             ],
             Destinations = [
@@ -369,16 +369,12 @@ public sealed class WorldAdjacencyLawTests {
 
         return (left, right);
     }
-    private static FixedVector3 Fixed(double x, double y, double z) => new(
-        X: FixedQ4816.FromDouble(value: x),
-        Y: FixedQ4816.FromDouble(value: y),
-        Z: FixedQ4816.FromDouble(value: z)
-    );
+    private static FixedVector3 Fixed(double x, double y, double z) => Fixtures.FixedPoint(x: x, y: y, z: z);
     private static (WorldDefinition West, WorldDefinition East) Pair() {
         var west = Fixtures.BuildDocument() with {
             References = [new WorldReference(
                 SafeName.Parse(candidate: "east-ref"),
-                "east.world.json"
+                "east"
             )],
             Destinations = [new WorldDestination(
                 SafeName.Parse(candidate: "east"),
@@ -396,7 +392,7 @@ public sealed class WorldAdjacencyLawTests {
         var east = Fixtures.BuildDocument() with {
             References = [new WorldReference(
                 SafeName.Parse(candidate: "west-ref"),
-                "west.world.json"
+                "west"
             )],
             Destinations = [new WorldDestination(
                 SafeName.Parse(candidate: "west"),
@@ -441,13 +437,13 @@ public sealed class WorldAdjacencyLawTests {
             Destinations = [source.Destinations![0], source.Destinations[1]],
         };
         var resolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = VerifiedAttested(
+            ["left"] = VerifiedAttested(
             definition: left,
-            document: "left.world.json"
+            document: "left"
         ),
-            ["right.world.json"] = VerifiedAttested(
+            ["right"] = VerifiedAttested(
             definition: right,
-            document: "right.world.json"
+            document: "right"
         ),
         });
 
@@ -459,7 +455,7 @@ public sealed class WorldAdjacencyLawTests {
         Assert.Contains(
             actualString: refused,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "derives corner neighbour 'corner.world.json'"
+            expectedSubstring: "derives corner neighbour 'corner'"
         );
         Assert.Contains(
             actualString: refused,
@@ -672,9 +668,9 @@ public sealed class WorldAdjacencyLawTests {
             ],
         };
         var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> {
-            ["left.world.json"] = brokenLeft,
-            ["right.world.json"] = right,
-            ["corner.world.json"] = corner,
+            ["left"] = brokenLeft,
+            ["right"] = right,
+            ["corner"] = corner,
         });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
@@ -694,9 +690,9 @@ public sealed class WorldAdjacencyLawTests {
     public void DerivedCornerRefusalNamesAPayloadlessResolvedOutcomeRatherThanGoingBlank() {
         var (source, left, right, _) = Corner();
         var resolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = WorldNeighbourResolution.Resolved(definition: left),
-            ["right.world.json"] = WorldNeighbourResolution.Resolved(definition: right),
-            ["corner.world.json"] = default,
+            ["left"] = WorldNeighbourResolution.Resolved(definition: left),
+            ["right"] = WorldNeighbourResolution.Resolved(definition: right),
+            ["corner"] = default,
         });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
@@ -719,9 +715,9 @@ public sealed class WorldAdjacencyLawTests {
     public void DerivedCornerRefusalNamesTheUnavailableReason() {
         var (source, left, right, corner) = Corner();
         var resolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = WorldNeighbourResolution.Resolved(definition: left),
-            ["right.world.json"] = WorldNeighbourResolution.Resolved(definition: right),
-            ["corner.world.json"] = WorldNeighbourResolution.Unavailable(reason: "a distinctive named reason"),
+            ["left"] = WorldNeighbourResolution.Resolved(definition: left),
+            ["right"] = WorldNeighbourResolution.Resolved(definition: right),
+            ["corner"] = WorldNeighbourResolution.Unavailable(reason: "a distinctive named reason"),
         });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
@@ -745,11 +741,11 @@ public sealed class WorldAdjacencyLawTests {
             References = [
                 new WorldReference(
                 SafeName.Parse(candidate: "a-ref"),
-                "a.world.json"
+                "a"
             ),
                 new WorldReference(
                 SafeName.Parse(candidate: "b-ref"),
-                "b.world.json"
+                "b"
             ),
             ],
             Destinations = [
@@ -799,7 +795,7 @@ public sealed class WorldAdjacencyLawTests {
             condition: WorldCounterpartAttestation.TryCompose(
                 attestation: out var attestation,
                 definition: definition,
-                document: "self.world.json",
+                document: "self",
                 reason: out var reason
             ),
             userMessage: reason
@@ -990,14 +986,14 @@ public sealed class WorldAdjacencyLawTests {
     public void MixedResolvedAndVerifiedAttestedNeighboursShareOneCorner() {
         var (source, left, right, corner) = Corner();
         var resolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = WorldNeighbourResolution.Resolved(definition: left),
-            ["right.world.json"] = VerifiedAttested(
+            ["left"] = WorldNeighbourResolution.Resolved(definition: left),
+            ["right"] = VerifiedAttested(
             definition: right,
-            document: "right.world.json"
+            document: "right"
         ),
-            ["corner.world.json"] = VerifiedAttested(
+            ["corner"] = VerifiedAttested(
             definition: corner,
-            document: "corner.world.json"
+            document: "corner"
         ),
         });
 
@@ -1202,16 +1198,16 @@ public sealed class WorldAdjacencyLawTests {
             condition: WorldCounterpartAttestation.TryCompose(
                 attestation: out var attestation,
                 definition: corner,
-                document: "corner.world.json",
+                document: "corner",
                 reason: out var composeReason
             ),
             userMessage: composeReason
         );
 
         var unsignedResolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = WorldNeighbourResolution.Resolved(definition: left),
-            ["right.world.json"] = WorldNeighbourResolution.Resolved(definition: right),
-            ["corner.world.json"] = WorldNeighbourResolution.Attested(attestation: attestation!),
+            ["left"] = WorldNeighbourResolution.Resolved(definition: left),
+            ["right"] = WorldNeighbourResolution.Resolved(definition: right),
+            ["corner"] = WorldNeighbourResolution.Attested(attestation: attestation!),
         });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
@@ -1222,7 +1218,7 @@ public sealed class WorldAdjacencyLawTests {
         Assert.Contains(
             actualString: refused,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "cannot reach derived corner neighbour 'corner.world.json'"
+            expectedSubstring: "cannot reach derived corner neighbour 'corner'"
         );
         Assert.Contains(
             actualString: refused,
@@ -1231,9 +1227,9 @@ public sealed class WorldAdjacencyLawTests {
         );
 
         var verifiedResolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = WorldNeighbourResolution.Resolved(definition: left),
-            ["right.world.json"] = WorldNeighbourResolution.Resolved(definition: right),
-            ["corner.world.json"] = WorldNeighbourResolution.VerifiedAttested(
+            ["left"] = WorldNeighbourResolution.Resolved(definition: left),
+            ["right"] = WorldNeighbourResolution.Resolved(definition: right),
+            ["corner"] = WorldNeighbourResolution.VerifiedAttested(
             attestation: attestation!,
             subject: "subject"
         ),
@@ -1423,7 +1419,7 @@ public sealed class WorldAdjacencyLawTests {
             condition: WorldCounterpartAttestation.TryCompose(
                 attestation: out var leftAttestation,
                 definition: left,
-                document: "left.world.json",
+                document: "left",
                 reason: out var leftReason
             ),
             userMessage: leftReason
@@ -1432,7 +1428,7 @@ public sealed class WorldAdjacencyLawTests {
             condition: WorldCounterpartAttestation.TryCompose(
                 attestation: out var rightAttestation,
                 definition: right,
-                document: "right.world.json",
+                document: "right",
                 reason: out var rightReason
             ),
             userMessage: rightReason
@@ -1490,7 +1486,7 @@ public sealed class WorldAdjacencyLawTests {
         west = west with {
             Adjacencies = [west.Adjacencies![0] with { OnUnavailable = "missing-channel" }],
         };
-        var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east.world.json"] = east, ["west.world.json"] = west });
+        var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east"] = east, ["west"] = west });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
             definition: west,
@@ -1506,7 +1502,7 @@ public sealed class WorldAdjacencyLawTests {
     [Fact]
     public void ValidatorProvesReciprocalBoundaryAndRefusesDrift() {
         var (west, east) = Pair();
-        var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east.world.json"] = east, ["west.world.json"] = west });
+        var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east"] = east, ["west"] = west });
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidate(
@@ -1520,7 +1516,7 @@ public sealed class WorldAdjacencyLawTests {
         var drifted = east with {
             Adjacencies = [east.Adjacencies![0] with { Boundary = Boundary(yaw: -90f) with { Width = 7f } }],
         };
-        var driftResolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east.world.json"] = drifted, ["west.world.json"] = west });
+        var driftResolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east"] = drifted, ["west"] = west });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
             definition: west,
@@ -1549,9 +1545,9 @@ public sealed class WorldAdjacencyLawTests {
             ],
         };
         var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> {
-            ["left.world.json"] = left,
-            ["right.world.json"] = right,
-            ["corner.world.json"] = shiftedCorner,
+            ["left"] = left,
+            ["right"] = right,
+            ["corner"] = shiftedCorner,
         });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
@@ -1574,7 +1570,7 @@ public sealed class WorldAdjacencyLawTests {
                 yaw: -90f
             ) }],
         };
-        var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east.world.json"] = pitched, ["west.world.json"] = west });
+        var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> { ["east"] = pitched, ["west"] = west });
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
             definition: west,
@@ -1591,9 +1587,9 @@ public sealed class WorldAdjacencyLawTests {
     public void ValidatorRequiresTheDirectRouteForADerivedCornerPeer() {
         var (source, left, right, corner) = Corner();
         var resolver = new Resolver(definitions: new Dictionary<string, WorldDefinition> {
-            ["left.world.json"] = left,
-            ["right.world.json"] = right,
-            ["corner.world.json"] = corner,
+            ["left"] = left,
+            ["right"] = right,
+            ["corner"] = corner,
         });
 
         Assert.True(
@@ -1621,7 +1617,7 @@ public sealed class WorldAdjacencyLawTests {
         Assert.Contains(
             actualString: refused,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "derives corner neighbour 'corner.world.json'"
+            expectedSubstring: "derives corner neighbour 'corner'"
         );
         Assert.Contains(
             actualString: refused,
@@ -1638,17 +1634,17 @@ public sealed class WorldAdjacencyLawTests {
     public void VerifiedAttestedCornerProvesLikeAResolvedOne() {
         var (source, left, right, corner) = Corner();
         var resolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = VerifiedAttested(
+            ["left"] = VerifiedAttested(
             definition: left,
-            document: "left.world.json"
+            document: "left"
         ),
-            ["right.world.json"] = VerifiedAttested(
+            ["right"] = VerifiedAttested(
             definition: right,
-            document: "right.world.json"
+            document: "right"
         ),
-            ["corner.world.json"] = VerifiedAttested(
+            ["corner"] = VerifiedAttested(
             definition: corner,
-            document: "corner.world.json"
+            document: "corner"
         ),
         });
 
@@ -1664,7 +1660,7 @@ public sealed class WorldAdjacencyLawTests {
         // proving it: if the corner document was never actually asked for, this list would not name it, and this
         // test would go green for the wrong reason (nothing checked, not something proved).
         Assert.Contains(
-            "corner.world.json",
+            "corner",
             resolver.Requests
         );
     }
@@ -1678,17 +1674,17 @@ public sealed class WorldAdjacencyLawTests {
             ],
         };
         var resolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = VerifiedAttested(
+            ["left"] = VerifiedAttested(
             definition: left,
-            document: "left.world.json"
+            document: "left"
         ),
-            ["right.world.json"] = VerifiedAttested(
+            ["right"] = VerifiedAttested(
             definition: right,
-            document: "right.world.json"
+            document: "right"
         ),
-            ["corner.world.json"] = VerifiedAttested(
+            ["corner"] = VerifiedAttested(
             definition: widenedCorner,
-            document: "corner.world.json"
+            document: "corner"
         ),
         });
 
@@ -1719,17 +1715,17 @@ public sealed class WorldAdjacencyLawTests {
             ],
         };
         var resolver = new Resolver(resolutions: new Dictionary<string, WorldNeighbourResolution> {
-            ["left.world.json"] = VerifiedAttested(
+            ["left"] = VerifiedAttested(
             definition: left,
-            document: "left.world.json"
+            document: "left"
         ),
-            ["right.world.json"] = VerifiedAttested(
+            ["right"] = VerifiedAttested(
             definition: right,
-            document: "right.world.json"
+            document: "right"
         ),
-            ["corner.world.json"] = VerifiedAttested(
+            ["corner"] = VerifiedAttested(
             definition: shiftedCorner,
-            document: "corner.world.json"
+            document: "corner"
         ),
         });
 

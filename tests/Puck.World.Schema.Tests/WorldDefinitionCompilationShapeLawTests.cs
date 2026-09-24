@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Xunit;
 
@@ -100,24 +101,12 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
             }
             : row)).ToArray();
 
-        // The bound is on the STEADY-STATE cost of one value-only change, so the smallest of several identical
-        // calls is what it reads. WithWorldState registers the new section in a process-wide
-        // ConditionalWeakTable, and that table's own growth is paid inside whichever call happens to trigger it —
-        // a cost belonging to every WorldDefinition the process has built, not to this one. Measuring a single
-        // call makes this law's verdict depend on how many other tests ran before it.
+        // The bound is on the steady-state cost of one value-only change, so the least of several identical calls is
+        // what it reads. WithWorldState registers the new section in a process-wide ConditionalWeakTable, and that
+        // table's own growth is paid inside whichever call happens to trigger it — a cost belonging to every
+        // WorldDefinition the process has built, not to this one.
         var updated = original;
-        var allocated = long.MaxValue;
-
-        for (var attempt = 0; (attempt < 5); attempt++) {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
-            updated = original.WithWorldState(rows: rows);
-
-            allocated = Math.Min(
-                val1: allocated,
-                val2: (GC.GetAllocatedBytesForCurrentThread() - before)
-            );
-        }
+        var allocated = AllocationWindow.Measure(window: () => updated = original.WithWorldState(rows: rows));
 
         output.WriteLine(message: $"WithWorldState value-only change allocated {allocated} bytes.");
 

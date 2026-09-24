@@ -196,10 +196,12 @@ The worker applies these policies:
 - `IMachineRuntime.Advance` submits one segment and drains through a barrier
   before returning. Set optional input ports before advancing or submitting;
   submission captures their state before returning.
-- Engine ticks become core cycles through a remainder-carrying integer
-  accumulator (`Puck.Hosting.EngineTicks.PerSecond`). A core may change
-  `CyclesPerSecond`; the conversion still carries phase rather than
-  accumulating drift.
+- Engine ticks become core cycles through `RationalRateAccumulator.TakeCycleBudget`,
+  a remainder-carrying integer conversion against
+  `Puck.Hosting.EngineTicks.PerSecond`. A core may change `CyclesPerSecond`;
+  the conversion still carries phase rather than accumulating drift. A rewind
+  restores that phase with the core, and a durable checkpoint persists it as
+  its cycle remainder.
 - Pixels are repacked only when a new native frame completes for queued calls.
   The synchronous path forces a stage to preserve its contract.
 - GPU publication serializes uploads but does not hold the frame lock during
@@ -207,7 +209,9 @@ The worker applies these policies:
   the upload returns.
 - Audio crosses through a host-owned ring, so a consumer never touches the
   core's execution thread. When full, the ring drops the oldest audio and keeps
-  the newest emulated second.
+  the newest emulated second. It is the same `StereoSampleRing` both cores
+  buffer their own output in, so a host that stops draining finds the newest
+  second at every stage.
 - Dirty save flushing is debounced by native-frame transitions—300 native
   frames, roughly five seconds for the supported handheld cores—not by the
   number of host submissions.
@@ -226,7 +230,12 @@ part of authoritative history and must execute exactly once, in order.
 `StateWriter` and `StateReader` encode scalar widths little-endian and copy
 `WriteBlock<T>` spans verbatim; bulk values retain their in-memory layout.
 `Reset` reuses the writer’s backing buffer once its
-capacity is sufficient. `SnapshotSection` names each captured byte range;
+capacity is sufficient. A component whose save and load mirror each other
+lists its fields once, in a method generic over `IStateTransfer`, and runs
+that list through `StateSaveTransfer` to save and `StateLoadTransfer` to load,
+so the two directions cannot disagree about order or width. Each transfer
+member names the width it moves, so retyping a field fails to compile instead
+of silently changing the layout. `SnapshotSection` names each captured byte range;
 `SnapshotDivergence` compares two `SnapshotImage` values and reports the first
 differing section and byte offset.
 
@@ -239,8 +248,8 @@ core snapshots validate identity; raw capture buffers follow the same-core
 restriction in the synchronous contract.
 
 `RationalRateAccumulator` supplies both audio output stages with an exact rational
-emission cadence in integer arithmetic. Presentation resampling does not feed
-back into emulated state.
+emission cadence in integer arithmetic, and `StereoSampleRing` buffers what they
+emit. Presentation resampling does not feed back into emulated state.
 
 ## Durable checkpoints
 
@@ -321,7 +330,9 @@ every member through one shared cycle budget.
   seam. Disposing a member while it is lent severs the link first; a second
   concurrent severing caller (typically another member disposing itself at the
   same instant) waits for the first to finish rather than observing a false
-  "already severed" before the group thread has actually stopped.
+  "already severed" before the group thread has actually stopped. Every
+  severing caller raises `SeverWaiting` immediately before it waits, so a
+  caller can order work against severs that are known to be blocked.
 
 Cross-process transport is out of scope here. The seam it would carry is the
 group core's serializable state image plus each submitted segment; nothing in
@@ -331,13 +342,14 @@ this project reaches beyond the process.
 
 | Area | Types | Purpose |
 |---|---|---|
-| Serialization | `StateWriter`, `StateReader`, `SnapshotSection`, `ISnapshotable`, `SnapshotImage` | Little-endian whole-state capture/restore |
+| Serialization | `StateWriter`, `StateReader`, `IStateTransfer`, `StateSaveTransfer`, `StateLoadTransfer`, `SnapshotSection`, `ISnapshotable`, `SnapshotImage` | Little-endian whole-state capture/restore |
 | Divergence | `SnapshotDivergence` | Section-localized first-difference report |
 | Fork lifecycle | `ISnapshotableMachine`, `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine, TConfiguration>`, `MachineInstancePool<TMachine, TConfiguration>` | Pooled, ABA-safe forked-instance rentals |
 | Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore`, `QueuedWorkerLifecycle<TWorkItem>`, `IQueuedWorkItem<TSelf>` | Ordered off-thread emulation and complete-frame publication |
 | Time travel | `MachineTimeTravel<TInput>`, `ITimeTravelMachineCore<TInput>`, `ITimeTravelLookahead<TInput>` | Bounded rewind, persistent runahead, and fast-forward |
 | Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachineLinkPads`, `LinkPacer`, `ILinkPacerParticipants` | Group-owned cores, per-seat input, the shared interleave, and coupled time travel |
-| Output resampling | `RationalRateAccumulator` | Drift-free integer sample-rate accumulation for both audio stages |
+| Rate conversion | `RationalRateAccumulator` | Drift-free integer rate conversion: both audio stages' sample cadence and the host's tick-to-cycle budgets |
+| Audio output | `StereoSampleRing` | The drop-oldest stereo frame ring both cores and the queued worker buffer audio in |
 | Contract proof | `QueuedHostContractProbe`, `QueuedHostProbeResult` | Shared observable checks for concrete queued hosts |
 
 Each brick re-exposes the closed generics under its own bare name through a

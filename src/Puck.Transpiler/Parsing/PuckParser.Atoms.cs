@@ -1,5 +1,6 @@
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
+using Syntax = Puck.State.ExpressionSpelling;
 
 namespace Puck.Transpiler.Parsing;
 
@@ -7,6 +8,7 @@ public static partial class PuckParser {
     private static OperandExpressionNode CreateOperand(string text, Diagnostics.SourceSpan span) => CreateOperand(
         text: text, form: DocumentValueForm.Expression, offset: span.Offset, length: span.Length,
         line: span.Line, column: span.Column);
+
     /// <summary>Creates an operand from its text, with the interpolated strings the text holds parsed as its
     /// atoms.</summary>
     /// <param name="text">The operand text, trimmed.</param>
@@ -21,12 +23,14 @@ public static partial class PuckParser {
     public static OperandExpressionNode CreateOperand(string text, DocumentValueForm form, int offset = 0, int length = 0, int line = 1, int column = 1) {
         ArgumentNullException.ThrowIfNull(argument: text);
         var atoms = ScanAtoms(text: text);
-        Puck.State.ExpressionSpelling.TryParseSyntax(
+
+        Syntax.TryParseSyntax(
             text: text,
-            atoms: [.. atoms.Select(static atom => new Puck.State.ExpressionSpelling.SourceAtomSpan(atom.Start, atom.Length))],
+            atoms: [.. atoms.Select(selector: static atom => new Syntax.SourceAtomSpan(atom.Start, atom.Length))],
             syntax: out var syntax,
             error: out var error
         );
+
         return new OperandExpressionNode(
             Atoms: atoms,
             Column: column,

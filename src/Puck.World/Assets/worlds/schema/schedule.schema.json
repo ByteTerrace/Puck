@@ -4,10 +4,6 @@
     "null"
   ],
   "properties": {
-    "directory": {
-      "description": "The output directory this world\u0027s schedule writes into \u2014 the state export (ExportFileName) and the submission manifest (ManifestFileName). Relative to the process\u0027s current directory unless rooted, and only ever written when --schedule-dir armed the run, whose path replaces this one; two runs of the same document therefore target sibling directories without two document copies.",
-      "type": "string"
-    },
     "settleTicks": {
       "description": "How many ticks the world keeps stepping past the last scheduled command\u0027s tick before the export is written: the settle margin a Simulation-routed command\u0027s apply, the mutation drain, and the rules reading its result need. At least 1 \u2014 a zero margin would export at the same tick the last command was submitted, before it could have applied \u2014 and at most MaxSettleTicks.",
       "type": "integer"
@@ -50,6 +46,14 @@
               "null"
             ],
             "default": null
+          },
+          "world": {
+            "description": "The armed instance this row is submitted into, named by its Name, or null for the world this process booted with. A name no Instances entry declares is refused at validation.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
@@ -60,10 +64,40 @@
         "additionalProperties": false,
         "title": "WorldScheduleRow"
       }
+    },
+    "instances": {
+      "description": "The sibling worlds this run starts beside the booted one, in declaration order. Empty for a run over one world. Capacity MaxInstances.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One sibling world an armed run starts beside the world it booted with, the way world.instance.start starts one: its own document, its own authority, stepped in the same fixed step, and exported at the same tick.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The instance\u0027s name \u2014 a single safe path segment, the name a row\u0027s World addresses and the name its export file carries. boot is reserved for the world this process booted with.",
+            "type": "string"
+          },
+          "document": {
+            "description": "The sibling world document\u0027s name, resolved beside the document that declares it (WorldDocumentPaths).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "document"
+        ],
+        "additionalProperties": false,
+        "title": "WorldScheduleInstance"
+      },
+      "default": null
     }
   },
   "required": [
-    "directory",
     "settleTicks",
     "rows"
   ],

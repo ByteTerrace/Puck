@@ -13,9 +13,9 @@ public sealed class WorldVectorSchemaTests {
             Id: 0,
             Name: null,
             Type: SdfSolidPrimitive.Sphere,
-            Position: new DocumentVector3(0f, 0f, 0f),
-            Rotation: new DocumentQuaternion(0f, 0f, 0f, 1f),
-            Scale: new DocumentVector3(1f, 1f, 1f),
+            Position: new DocumentVector3(x: 0f, y: 0f, z: 0f),
+            Rotation: new DocumentQuaternion(w: 1f, x: 0f, y: 0f, z: 0f),
+            Scale: new DocumentVector3(x: 1f, y: 1f, z: 1f),
             Material: 0,
             Blend: SdfBlendOp.Union,
             Smooth: 0f,
@@ -39,23 +39,21 @@ public sealed class WorldVectorSchemaTests {
             HashRaw: canonical.Hash
         );
     }
-
     private static StateVector SampleVector(int dimensions) {
         var components = new sbyte[dimensions];
+
         components[0] = 127;
-        StateVector.TryCreate(components: components, vector: out var vector, error: out _);
+        StateVector.TryCreate(components: components, error: out _, vector: out var vector);
 
         return vector!;
     }
-
     private static StateSpace SampleSpace(string name = "lore", string model = "text-embedding-3-small", string revision = "1", int dimensions = 32) =>
         new(
-            Dimensions: dimensions,
-            Model: model,
-            Name: CellName.Parse(candidate: name),
-            Revision: revision
+            dimensions: dimensions,
+            model: model,
+            name: CellName.Parse(candidate: name),
+            revision: revision
         );
-
     private static WorldDefinition BuildDefinition(WorldStateRow[]? rows = null, StateSpace[]? spaces = null) =>
         new(
             Simulation: new WorldSimulationDefaults(RateHz: 240),
@@ -64,7 +62,6 @@ public sealed class WorldVectorSchemaTests {
                 World: rows
             )
         );
-
     private static string Validate(WorldDefinition definition) =>
         (WorldDefinitionValidator.TryValidateLocally(
             definition: definition,
@@ -97,7 +94,6 @@ public sealed class WorldVectorSchemaTests {
 
         Assert.Equal(expected: string.Empty, actual: Validate(definition: definition));
     }
-
     [Fact]
     public void VectorRowInfereSingleDefaultSpace() {
         var space = SampleSpace(dimensions: 32);
@@ -120,10 +116,10 @@ public sealed class WorldVectorSchemaTests {
 
         Assert.Equal(expected: string.Empty, actual: Validate(definition: definition));
     }
-
     [Fact]
     public void SpaceDimensionsOutOfRangeIsRefused() {
         var lowDim = BuildDefinition(spaces: [SampleSpace(dimensions: 4)]);
+
         Assert.Contains(
             actualString: Validate(definition: lowDim),
             comparisonType: StringComparison.Ordinal,
@@ -131,13 +127,13 @@ public sealed class WorldVectorSchemaTests {
         );
 
         var highDim = BuildDefinition(spaces: [SampleSpace(dimensions: 2048)]);
+
         Assert.Contains(
             actualString: Validate(definition: highDim),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "must be between 8 and 1024"
         );
     }
-
     [Fact]
     public void DuplicateSpaceNameIsRefused() {
         var definition = BuildDefinition(spaces: [
@@ -151,7 +147,6 @@ public sealed class WorldVectorSchemaTests {
             expectedSubstring: "is duplicated"
         );
     }
-
     [Fact]
     public void VectorRowWithoutSpaceWhenMultipleExistIsRefused() {
         var definition = BuildDefinition(
@@ -173,7 +168,6 @@ public sealed class WorldVectorSchemaTests {
             expectedSubstring: "without a declared space and multiple spaces are declared"
         );
     }
-
     [Fact]
     public void VectorRowWithUndeclaredSpaceIsRefused() {
         var definition = BuildDefinition(
@@ -193,7 +187,6 @@ public sealed class WorldVectorSchemaTests {
             expectedSubstring: "is not a declared space"
         );
     }
-
     [Fact]
     public void NonVectorRowDeclaringSpaceIsRefused() {
         var definition = BuildDefinition(
@@ -214,7 +207,6 @@ public sealed class WorldVectorSchemaTests {
             expectedSubstring: "only vector rows carry a space"
         );
     }
-
     [Fact]
     public void VectorRowRefusesDrawAndGatesDrive() {
         var definitionDraw = BuildDefinition(
@@ -228,6 +220,7 @@ public sealed class WorldVectorSchemaTests {
             ],
             spaces: [SampleSpace(name: "lore")]
         );
+
         Assert.Contains(
             actualString: Validate(definition: definitionDraw),
             comparisonType: StringComparison.Ordinal,
@@ -246,13 +239,13 @@ public sealed class WorldVectorSchemaTests {
             ],
             spaces: [SampleSpace(name: "lore")]
         );
+
         Assert.Contains(
             actualString: Validate(definition: definitionGate),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "declares gatesDrive on a vector row"
         );
     }
-
     [Fact]
     public void VectorRowPerByteCeilingExceededIsRefused() {
         var definition = BuildDefinition(
@@ -273,7 +266,6 @@ public sealed class WorldVectorSchemaTests {
             expectedSubstring: "exceeds the maximum per-row ceiling"
         );
     }
-
     [Fact]
     public void VectorCellDimensionsMismatchIsRefused() {
         var definition = BuildDefinition(
@@ -299,7 +291,6 @@ public sealed class WorldVectorSchemaTests {
             expectedSubstring: "must match space 'lore' dimensions 32"
         );
     }
-
     // A cell's own CellValue case now closes off the sibling-field bug this law used to test (a cell can no longer
     // carry both a Vector case and a stray numeric or text one): the surviving refusal is a cell of the WRONG case
     // altogether, caught by StateRow.TryAdmitKind.
@@ -321,6 +312,7 @@ public sealed class WorldVectorSchemaTests {
             ],
             spaces: [SampleSpace(dimensions: 32, name: "lore")]
         );
+
         Assert.Contains(
             actualString: Validate(definition: definitionInt),
             comparisonType: StringComparison.Ordinal,
@@ -343,13 +335,13 @@ public sealed class WorldVectorSchemaTests {
             ],
             spaces: [SampleSpace(dimensions: 32, name: "lore")]
         );
+
         Assert.Contains(
             actualString: Validate(definition: definitionText),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "declares kind Vector"
         );
     }
-
     [Fact]
     public void BasisMergeDetectsSpaceIdentityMismatch() {
         var basisJson = new JsonObject {
@@ -359,10 +351,10 @@ public sealed class WorldVectorSchemaTests {
                         ["name"] = "lore",
                         ["model"] = "model-A",
                         ["revision"] = "1",
-                        ["dimensions"] = 32
-                    }
-                }
-            }
+                        ["dimensions"] = 32,
+                    },
+                },
+            },
         };
 
         var overlayMismatch = new JsonObject {
@@ -372,10 +364,10 @@ public sealed class WorldVectorSchemaTests {
                         ["name"] = "lore",
                         ["model"] = "model-B",
                         ["revision"] = "1",
-                        ["dimensions"] = 32
-                    }
-                }
-            }
+                        ["dimensions"] = 32,
+                    },
+                },
+            },
         };
 
         var overlayMatch = new JsonObject {
@@ -385,10 +377,10 @@ public sealed class WorldVectorSchemaTests {
                         ["name"] = "lore",
                         ["model"] = "model-A",
                         ["revision"] = "1",
-                        ["dimensions"] = 32
-                    }
-                }
-            }
+                        ["dimensions"] = 32,
+                    },
+                },
+            },
         };
 
         var success = WorldDocumentBasis.TryMerge(
@@ -397,8 +389,9 @@ public sealed class WorldVectorSchemaTests {
             overlay: overlayMismatch,
             reason: out var mismatchReason
         );
-        Assert.False(success);
-        Assert.Contains(expectedSubstring: "redeclaration mismatch", actualString: mismatchReason);
+
+        Assert.False(condition: success);
+        Assert.Contains(actualString: mismatchReason, expectedSubstring: "redeclaration mismatch");
 
         var matchSuccess = WorldDocumentBasis.TryMerge(
             basis: basisJson,
@@ -406,31 +399,30 @@ public sealed class WorldVectorSchemaTests {
             overlay: overlayMatch,
             reason: out var matchReason
         );
-        Assert.True(matchSuccess);
-        Assert.NotNull(composed);
-    }
 
+        Assert.True(condition: matchSuccess);
+        Assert.NotNull(@object: composed);
+    }
     [Fact]
     public void HostIdentitySpaceValidationEnforcesIdentity() {
         var hostSpaces = new[] { SampleSpace(dimensions: 32, model: "model-A", name: "lore", revision: "1") };
         var matchingSpaces = new[] { SampleSpace(dimensions: 32, model: "model-A", name: "lore", revision: "1") };
         var differingSpaces = new[] { SampleSpace(dimensions: 64, model: "model-A", name: "lore", revision: "1") };
 
-        Assert.True(WorldIdentity.TryValidateSpacesAgainstHost(
+        Assert.True(condition: WorldIdentity.TryValidateSpacesAgainstHost(
             hostSpaces: hostSpaces,
             identitySpaces: matchingSpaces,
             reason: out var okReason
         ));
-        Assert.Equal(expected: string.Empty, actual: okReason);
+        Assert.Equal(actual: okReason, expected: string.Empty);
 
-        Assert.False(WorldIdentity.TryValidateSpacesAgainstHost(
+        Assert.False(condition: WorldIdentity.TryValidateSpacesAgainstHost(
             hostSpaces: hostSpaces,
             identitySpaces: differingSpaces,
             reason: out var failReason
         ));
-        Assert.Contains(expectedSubstring: "does not match host space identity", actualString: failReason);
+        Assert.Contains(actualString: failReason, expectedSubstring: "does not match host space identity");
     }
-
     [Fact]
     public void VectorCellRefusesAdvanceDynamicsAndCycle() {
         var space = SampleSpace(dimensions: 32);
@@ -443,7 +435,7 @@ public sealed class WorldVectorSchemaTests {
                         new StateCell(
                             Key: WorldStateRow.SlotKey,
                             Value: CellValue.Vector(components: vector.Memory),
-                            Advance: new StateAdvance(1, 1)
+                            Advance: new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 1)
                         )
                     ],
                     Kind: CellKind.Vector,
@@ -452,7 +444,8 @@ public sealed class WorldVectorSchemaTests {
             ],
             spaces: [space]
         );
-        Assert.Contains("declares advance on a vector cell — vector cells do not accumulate.", Validate(defAdvance));
+
+        Assert.Contains("declares advance on a vector cell — vector cells do not accumulate.", Validate(definition: defAdvance));
 
         var defDynamics = BuildDefinition(
             rows: [
@@ -461,7 +454,7 @@ public sealed class WorldVectorSchemaTests {
                         new StateCell(
                             Key: WorldStateRow.SlotKey,
                             Value: CellValue.Vector(components: vector.Memory),
-                            Dynamics: new StateDynamics("dynRow")
+                            Dynamics: new StateDynamics(Row: "dynRow")
                         )
                     ],
                     Kind: CellKind.Vector,
@@ -470,7 +463,8 @@ public sealed class WorldVectorSchemaTests {
             ],
             spaces: [space]
         );
-        Assert.Contains("declares dynamics on a vector cell — vector cells do not ease.", Validate(defDynamics));
+
+        Assert.Contains("declares dynamics on a vector cell — vector cells do not ease.", Validate(definition: defDynamics));
 
         var defCycle = BuildDefinition(
             rows: [
@@ -488,14 +482,14 @@ public sealed class WorldVectorSchemaTests {
             ],
             spaces: [space]
         );
-        Assert.Contains("declares cycle on a vector cell — vector cells do not turn.", Validate(defCycle));
-    }
 
+        Assert.Contains("declares cycle on a vector cell — vector cells do not turn.", Validate(definition: defCycle));
+    }
     [Fact]
     public void HudRefusesVectorRowBinding() {
         var space = SampleSpace(dimensions: 32);
         var vector = SampleVector(dimensions: 32);
-        var unitRect = new WorldHudRect(0f, 0f, 100f, 100f);
+        var unitRect = new WorldHudRect(Height: 100f, Width: 100f, X: 0f, Y: 0f);
         var definition = BuildDefinition(
             rows: [
                 new WorldStateRow(
@@ -525,13 +519,13 @@ public sealed class WorldVectorSchemaTests {
                         ]
                     )
                 ]
-            )
+            ),
         };
 
-        var reason = Validate(definition);
-        Assert.Contains("addresses vector row 'situation' — a HUD element cannot bind to a vector row.", reason);
-    }
+        var reason = Validate(definition: definition);
 
+        Assert.Contains(actualString: reason, expectedSubstring: "addresses vector row 'situation' — a HUD element cannot bind to a vector row.");
+    }
     [Fact]
     public void ResponseRefusesVectorRow() {
         var space = SampleSpace(dimensions: 32);
@@ -552,14 +546,14 @@ public sealed class WorldVectorSchemaTests {
                     new WorldPlacement(
                         Id: "pl1",
                         PrototypeId: "proto1",
-                        Position: new DocumentVector3(0f, 0f, 0f),
+                        Position: new DocumentVector3(x: 0f, y: 0f, z: 0f),
                         YawDegrees: 0f,
                         Scale: 1f,
                         Respond: [
                             new WorldPlacementResponse(
                                 When: new WorldPlacementResponseCondition.StateCondition(
                                     State: "situation",
-                                    Comparison: ActionStateComparison.Equal,
+                                    Comparison: ExpressionOp.Equal,
                                     Value: 10f
                                 ),
                                 PrototypeId: "proto1"
@@ -567,13 +561,13 @@ public sealed class WorldVectorSchemaTests {
                         ]
                     )
                 ]
-            )
+            ),
         };
 
-        var reason = Validate(definition);
-        Assert.Contains("references state row 'situation', which is kind=Vector — a response compares numbers, never Vector.", reason);
-    }
+        var reason = Validate(definition: definition);
 
+        Assert.Contains(actualString: reason, expectedSubstring: "references state row 'situation', which is kind=Vector — a response compares numbers, never Vector.");
+    }
     [Fact]
     public void SearchRefusesVectorTokens() {
         var space = SampleSpace(dimensions: 32);
@@ -582,7 +576,7 @@ public sealed class WorldVectorSchemaTests {
             rows: [
                 new WorldStateRow(
                     Capacity: 4,
-                    Cells: [new StateCell(Key: CellName.Parse("t1"), Value: CellValue.Vector(components: vector.Memory))],
+                    Cells: [new StateCell(Key: CellName.Parse(candidate: "t1"), Value: CellValue.Vector(components: vector.Memory))],
                     Kind: CellKind.Vector,
                     Name: CellName.Parse(candidate: "vTokens")
                 ),
@@ -609,33 +603,33 @@ public sealed class WorldVectorSchemaTests {
                         Zones: ["z1", "z2"]
                     )
                 ]
-            )
+            ),
         };
 
-        var reason = Validate(definition);
-        Assert.Contains("tokens 'vTokens' must be the keyed row the zones draw their tokens from", reason);
-    }
+        var reason = Validate(definition: definition);
 
+        Assert.Contains(actualString: reason, expectedSubstring: "tokens 'vTokens' must be the keyed row the zones draw their tokens from");
+    }
     [Fact]
     public void BindingRefusesVectorControlContext() {
         var doc = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [],
             Chords: [],
-            Contexts: [new BindingContextDefinition(Family: "state:vRow", State: "1", Group: "g1")]
+            Contexts: [new BindingContextDefinition(Family: "state:vRow", Group: "g1", State: "1")]
         );
         var errors = new List<string>();
+
         WorldStateBindingContext.Validate(
             document: doc,
             stateRows: new Dictionary<string, WorldStateRow> {
-                ["vRow"] = new WorldStateRow(Kind: CellKind.Vector, Name: CellName.Parse("vRow"))
+                ["vRow"] = new WorldStateRow(Kind: CellKind.Vector, Name: CellName.Parse(candidate: "vRow")),
             },
             errors: errors
         );
 
-        Assert.Contains(errors, e => e.Contains("whose row is kind vector — vector rows cannot serve as control contexts"));
+        Assert.Contains(collection: errors, filter: e => e.Contains(value: "whose row is kind vector — vector rows cannot serve as control contexts"));
     }
-
     [Fact]
     public void Defect3_UnauthoredCapacityVectorTableUsesDefaultRoom() {
         var space = SampleSpace(dimensions: 128);
@@ -650,7 +644,7 @@ public sealed class WorldVectorSchemaTests {
             spaces: [space]
         );
 
-        Assert.Equal(string.Empty, Validate(definition));
+        Assert.Equal(string.Empty, Validate(definition: definition));
     }
 }
 

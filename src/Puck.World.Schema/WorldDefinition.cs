@@ -129,6 +129,14 @@ public sealed partial record WorldDefinition(
     /// against, so a non-null basis on that path refuses rather than resolving.</remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Basis { get; init; }
+    /// <summary>Gets the directory every relative path this document authors resolves beside
+    /// (<see cref="WorldDocumentPaths"/>): the full, forward-slashed directory of the file it was loaded from, the
+    /// source directory of a compiled <c>.puck</c> world, or <see langword="null"/> for a document with no directory
+    /// (read from stdin, built in memory, delivered over the wire), which resolves only absolute paths.</summary>
+    /// <remarks>Not document content: never serialized, and never part of a hash or a pin. A <c>with</c> copy
+    /// carries it; a door that rebuilds a definition from its JSON restores it from the definition it rebuilt.</remarks>
+    [JsonIgnore]
+    public string? DocumentDirectory { get; init; }
     /// <summary>Gets the per-world binding overlays — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldBindingOverlay> BindingOverlays => (BindingOverlaysRaw ?? []);
@@ -174,7 +182,9 @@ public sealed partial record WorldDefinition(
     public string DefaultSeatKit => (DefaultSeatKitRaw ?? ((Kits.Count == 1)
         ? Kits[0].Name
         : string.Empty));
-    /// <summary>Gets the stable document id used when this world submits to another document.</summary>
+    /// <summary>Gets the stable document id used when this world submits to another document, or
+    /// <see langword="null"/> when the document authors none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DocumentId { get; init; }
     /// <summary>Gets the named second-order "personality" rows every follower consumer (looks, camera booms, kit
     /// planar shaping, state cells) names by <see cref="DynamicsRow.Name"/> — ABSENT resolves to none, so an
@@ -391,6 +401,32 @@ public sealed partial record WorldDefinition(
     /// <summary>Gets the declared symbolic value domains a row may name — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<StateEnum> Enums => (StateRaw?.Enums ?? []);
+
+    /// <summary>Returns the declared enum a state row draws its cells from.</summary>
+    /// <param name="row">The row.</param>
+    /// <returns>The enum <paramref name="row"/> names, or <see langword="null"/> when it names none or names one the
+    /// section does not declare.</returns>
+    public StateEnum? EnumOf(WorldStateRow row) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        return StateEnum.Named(
+            enums: Enums,
+            name: row.Enum
+        );
+    }
+    /// <summary>Returns the declared enum a record field draws its values from.</summary>
+    /// <param name="field">The field.</param>
+    /// <returns>The enum <paramref name="field"/> names, or <see langword="null"/> when it names none or names one
+    /// the section does not declare.</returns>
+    public StateEnum? EnumOf(StatePoolField field) {
+        ArgumentNullException.ThrowIfNull(argument: field);
+
+        return StateEnum.Named(
+            enums: Enums,
+            name: field.Enum
+        );
+    }
+
     /// <summary>Gets the declared vector embedding spaces — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<StateSpace> Spaces => (StateRaw?.Spaces ?? []);

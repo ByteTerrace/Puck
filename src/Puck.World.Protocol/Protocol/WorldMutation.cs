@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.World.Protocol;
 
 /// <summary>
@@ -13,73 +15,73 @@ namespace Puck.World.Protocol;
 /// <see cref="WorldCapability.Mutate"/> over the mutation's <see cref="WorldSection"/> before it applies. The base is
 /// positional (uniform with <see cref="WorldCommand"/> and <see cref="SessionRequest"/>); the hierarchy stays closed by
 /// convention (every kind is a nested sealed record). Every kind also carries a <see cref="MutationKindAttribute"/>
-/// declaring its stable dispatch ordinal and the section it targets — discovered and validated at boot by
+/// declaring its declared dispatch ordinal and the section it targets — discovered and validated at boot by
 /// <see cref="WorldMutationKindCatalog"/> (see that type's remarks).</remarks>
 /// <param name="Principal">The acting identity the mutation is checked against.</param>
-public abstract record WorldMutation(WorldPrincipal Principal) {
+public abstract record WorldMutation(Principal Principal) {
     /// <summary>Upserts a named machine. Configuration changes prepare a replacement before admission;
     /// changing only its running state preserves hardware state and generation.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Machine">The complete instance declaration.</param>
-    [MutationKind(ordinal: 84, section: WorldSection.Machines)]
-    public sealed record UpsertMachine(WorldPrincipal Principal, WorldMachine Machine) : WorldMutation(Principal);
+    [MutationKind(ordinal: 76, section: WorldSection.Machines)]
+    public sealed record UpsertMachine(Principal Principal, WorldMachine Machine) : WorldMutation(Principal);
     /// <summary>Removes an instance after full-document validation proves that its references remain sound.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The instance to remove.</param>
-    [MutationKind(ordinal: 85, section: WorldSection.Machines)]
-    public sealed record RemoveMachine(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 77, section: WorldSection.Machines)]
+    public sealed record RemoveMachine(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a locomotion kit row addressed by <see cref="WorldKit.Name"/> — replaces the matching row or
     /// appends a new one.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Kit">The whole kit row.</param>
     [MutationKind(ordinal: 0, section: WorldSection.Kits)]
-    public sealed record UpsertKit(WorldPrincipal Principal, WorldKit Kit) : WorldMutation(Principal);
+    public sealed record UpsertKit(Principal Principal, WorldKit Kit) : WorldMutation(Principal);
     /// <summary>Removes the kit row named <paramref name="Name"/>. Rejected loudly if the composed document then names
     /// no seat kit or leaves an assignment table dangling (full-document revalidation).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The kit row name to remove.</param>
     [MutationKind(ordinal: 1, section: WorldSection.Kits)]
-    public sealed record RemoveKit(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemoveKit(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Sets the default seat kit (by name). Rejected if the name matches no kit row.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The kit row name every seat body constructs from.</param>
     [MutationKind(ordinal: 2, section: WorldSection.Kits)]
-    public sealed record SetDefaultSeatKit(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record SetDefaultSeatKit(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Replaces the kit→entity assignment policy (the whole <see cref="WorldRowAssignment"/> row).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Assignment">The assignment policy.</param>
     [MutationKind(ordinal: 3, section: WorldSection.Kits)]
-    public sealed record SetKitAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
+    public sealed record SetKitAssignment(Principal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
     /// <summary>Upserts a diegetic screen addressed by <see cref="WorldScreen.Index"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Screen">The whole screen row.</param>
     [MutationKind(ordinal: 4, section: WorldSection.Screens)]
-    public sealed record UpsertScreen(WorldPrincipal Principal, WorldScreen Screen) : WorldMutation(Principal);
+    public sealed record UpsertScreen(Principal Principal, WorldScreen Screen) : WorldMutation(Principal);
     /// <summary>Removes the screen at <paramref name="Index"/>. Rejected if no screen declares that index.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Index">The engine screen-surface index to remove.</param>
     [MutationKind(ordinal: 5, section: WorldSection.Screens)]
-    public sealed record RemoveScreen(WorldPrincipal Principal, int Index) : WorldMutation(Principal);
+    public sealed record RemoveScreen(Principal Principal, int Index) : WorldMutation(Principal);
     /// <summary>Upserts a placeable camera addressed by <see cref="WorldCamera.Name"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Camera">The whole camera row.</param>
     [MutationKind(ordinal: 6, section: WorldSection.Cameras)]
-    public sealed record UpsertCamera(WorldPrincipal Principal, WorldCamera Camera) : WorldMutation(Principal);
+    public sealed record UpsertCamera(Principal Principal, WorldCamera Camera) : WorldMutation(Principal);
     /// <summary>Removes the camera named <paramref name="Name"/>. Rejected if a View screen still references it.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The camera name to remove.</param>
     [MutationKind(ordinal: 7, section: WorldSection.Cameras)]
-    public sealed record RemoveCamera(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemoveCamera(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Replaces the whole seat spawn-point list (order maps slots; takes effect at the next seat activation).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Spawns">The spawn points.</param>
     [MutationKind(ordinal: 8, section: WorldSection.Spawns)]
-    public sealed record SetSpawns(WorldPrincipal Principal, IReadOnlyList<WorldSpawnPoint> Spawns) : WorldMutation(Principal);
+    public sealed record SetSpawns(Principal Principal, IReadOnlyList<WorldSpawnPoint> Spawns) : WorldMutation(Principal);
     /// <summary>Replaces the profileless locomotion defaults.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Motion">The motion tuning.</param>
     [MutationKind(ordinal: 9, section: WorldSection.Motion)]
-    public sealed record SetMotion(WorldPrincipal Principal, WorldMotionDefaults Motion) : WorldMutation(Principal);
+    public sealed record SetMotion(Principal Principal, WorldMotionDefaults Motion) : WorldMutation(Principal);
     /// <summary>Declares (idempotently — re-declaring is a no-op) or removes a property name in the registry — one
     /// kind, two shapes, distinguished by <see cref="Remove"/>: the same one-kind-two-shapes pattern
     /// <see cref="SettleOwnership"/> uses for accept/reclaim. A property registration carries only a name and the
@@ -96,41 +98,41 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The property name to declare or remove.</param>
     /// <param name="Remove"><see langword="false"/> to declare/re-declare; <see langword="true"/> to remove.</param>
     [MutationKind(ordinal: 10, section: WorldSection.Properties)]
-    public sealed record SetProperty(WorldPrincipal Principal, string Name, bool Remove = false) : WorldMutation(Principal);
+    public sealed record SetProperty(Principal Principal, string Name, bool Remove = false) : WorldMutation(Principal);
     /// <summary>Replaces the census defaults (document-only; the live census stays the <c>world.population</c> verb's
     /// session state).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Population">The census defaults.</param>
     [MutationKind(ordinal: 11, section: WorldSection.Population)]
-    public sealed record SetPopulationDefaults(WorldPrincipal Principal, WorldBodiesDefaults Population) : WorldMutation(Principal);
+    public sealed record SetPopulationDefaults(Principal Principal, WorldBodiesDefaults Population) : WorldMutation(Principal);
     /// <summary>Replaces the render-lever defaults and quality-preset table (document-only; live render levers stay
     /// <c>WorldRenderSettings</c>).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Render">The render defaults.</param>
     [MutationKind(ordinal: 12, section: WorldSection.Render)]
-    public sealed record SetRenderDefaults(WorldPrincipal Principal, WorldRenderDefaults Render) : WorldMutation(Principal);
+    public sealed record SetRenderDefaults(Principal Principal, WorldRenderDefaults Render) : WorldMutation(Principal);
     /// <summary>Upserts a data-side addon descriptor addressed by <see cref="WorldAddonRow.Name"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Addon">The addon row.</param>
     [MutationKind(ordinal: 13, section: WorldSection.Addons)]
-    public sealed record UpsertAddon(WorldPrincipal Principal, WorldAddonRow Addon) : WorldMutation(Principal);
+    public sealed record UpsertAddon(Principal Principal, WorldAddonRow Addon) : WorldMutation(Principal);
     /// <summary>Removes the addon named <paramref name="Name"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The addon name to remove.</param>
     [MutationKind(ordinal: 14, section: WorldSection.Addons)]
-    public sealed record RemoveAddon(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemoveAddon(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a per-world binding overlay addressed by <see cref="WorldBindingOverlay.Id"/> — replaces the
     /// matching row or appends a new one. Rejected loudly if the composed mapping (default ⊕ every overlay) then fails to
     /// compile.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Overlay">The whole overlay row.</param>
     [MutationKind(ordinal: 15, section: WorldSection.Bindings)]
-    public sealed record UpsertBindingOverlay(WorldPrincipal Principal, WorldBindingOverlay Overlay) : WorldMutation(Principal);
+    public sealed record UpsertBindingOverlay(Principal Principal, WorldBindingOverlay Overlay) : WorldMutation(Principal);
     /// <summary>Removes the binding overlay with id <paramref name="Id"/>. Rejected if no overlay declares that id.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The overlay id to remove.</param>
     [MutationKind(ordinal: 16, section: WorldSection.Bindings)]
-    public sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+    public sealed record RemoveBindingOverlay(Principal Principal, string Id) : WorldMutation(Principal);
     /// <summary>Upserts a creation asset row addressed by <see cref="WorldPrototype.Id"/>. The compose boundary
     /// canonicalizes the row's document (doc + hash always come from the same <see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}"/>)
     /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
@@ -138,61 +140,63 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Creation">The whole creation row.</param>
     [MutationKind(ordinal: 17, section: WorldSection.Creations)]
-    public sealed record UpsertCreation(WorldPrincipal Principal, WorldPrototype Creation) : WorldMutation(Principal);
+    public sealed record UpsertCreation(Principal Principal, WorldPrototype Creation) : WorldMutation(Principal);
     /// <summary>Removes the creation row with id <paramref name="Id"/>. Rejected loudly when no row declares that id
-    /// or when live placements still reference it (the conservative no-cascade ruling — remove the placements first).</summary>
+    /// or when any row still names it (<c>WorldDefinitionRows.EnumerateCreationReferences</c>: a placement's authored,
+    /// response, slot, or dealt creation, a look, or a kit collider) — the conservative no-cascade ruling, which names
+    /// the referent to remove first.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The creation id to remove.</param>
     [MutationKind(ordinal: 18, section: WorldSection.Creations)]
-    public sealed record RemoveCreation(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+    public sealed record RemoveCreation(Principal Principal, string Id) : WorldMutation(Principal);
     /// <summary>Upserts a placement instance row addressed by <see cref="WorldPlacement.Id"/>. Rejected loudly
     /// when it names no creation row, violates the placement policy envelope, or would exceed the probed render
     /// envelope (the capacity-honesty contract).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Placement">The whole placement row.</param>
     [MutationKind(ordinal: 19, section: WorldSection.Placements)]
-    public sealed record UpsertPlacement(WorldPrincipal Principal, WorldPlacement Placement) : WorldMutation(Principal);
+    public sealed record UpsertPlacement(Principal Principal, WorldPlacement Placement) : WorldMutation(Principal);
     /// <summary>Removes the placement row with id <paramref name="Id"/>. Rejected if no row declares that id.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The placement id to remove.</param>
     [MutationKind(ordinal: 20, section: WorldSection.Placements)]
-    public sealed record RemovePlacement(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+    public sealed record RemovePlacement(Principal Principal, string Id) : WorldMutation(Principal);
     /// <summary>Upserts a placeable speaker addressed by <see cref="WorldSpeaker.Name"/> (the camera pair's audio
     /// sibling — whole-row, <c>$type fixed|anchored|bed</c>).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Speaker">The whole speaker row.</param>
     [MutationKind(ordinal: 21, section: WorldSection.Speakers)]
-    public sealed record UpsertSpeaker(WorldPrincipal Principal, WorldSpeaker Speaker) : WorldMutation(Principal);
+    public sealed record UpsertSpeaker(Principal Principal, WorldSpeaker Speaker) : WorldMutation(Principal);
     /// <summary>Removes the speaker named <paramref name="Name"/>. Rejected if no row declares that name.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The speaker name to remove.</param>
     [MutationKind(ordinal: 22, section: WorldSection.Speakers)]
-    public sealed record RemoveSpeaker(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemoveSpeaker(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a tune asset row addressed by <see cref="WorldTune.Name"/>. The compose boundary loads the
     /// referenced <c>puck.tune.v1</c> document, canonicalizes it, and rejects a hash the pipeline did not itself
     /// compute — the referenced twin of <see cref="UpsertCreation"/>'s embedded-document rule.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Tune">The whole tune row.</param>
     [MutationKind(ordinal: 23, section: WorldSection.Tunes)]
-    public sealed record UpsertTune(WorldPrincipal Principal, WorldTune Tune) : WorldMutation(Principal);
+    public sealed record UpsertTune(Principal Principal, WorldTune Tune) : WorldMutation(Principal);
     /// <summary>Removes the tune row named <paramref name="Name"/>. Rejected loudly while speakers still reference it
     /// (the conservative no-cascade ruling — retarget or remove the speakers first).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The tune name to remove.</param>
     [MutationKind(ordinal: 24, section: WorldSection.Tunes)]
-    public sealed record RemoveTune(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemoveTune(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Name"/> — the <c>puck.synthesizer-patch.v1</c>
     /// twin of <see cref="UpsertTune"/>, same load + canonicalize + hash-pin boundary.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Patch">The whole patch row.</param>
     [MutationKind(ordinal: 25, section: WorldSection.Patches)]
-    public sealed record UpsertPatch(WorldPrincipal Principal, WorldPatch Patch) : WorldMutation(Principal);
+    public sealed record UpsertPatch(Principal Principal, WorldPatch Patch) : WorldMutation(Principal);
     /// <summary>Removes the patch row named <paramref name="Name"/>. Rejected loudly while speakers or emission
     /// facets still reference it (no cascade — the dependents are named).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The patch name to remove.</param>
     [MutationKind(ordinal: 26, section: WorldSection.Patches)]
-    public sealed record RemovePatch(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemovePatch(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Replaces the audio host-section defaults (the whole <see cref="WorldAudioDefaults"/> row). Applies
     /// live: the emitter-derivation coalescing, the listener policy, and the cue table read the delivered row.
     /// <c>MasterGain</c> follows the lever-precedence rule: it flows live only until the <c>world.volume</c> session
@@ -201,7 +205,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Audio">The audio defaults row.</param>
     [MutationKind(ordinal: 27, section: WorldSection.Audio)]
-    public sealed record SetAudioDefaults(WorldPrincipal Principal, WorldAudioDefaults Audio) : WorldMutation(Principal);
+    public sealed record SetAudioDefaults(Principal Principal, WorldAudioDefaults Audio) : WorldMutation(Principal);
     /// <summary>Replaces the whole editor/authoring policy row. A single whole-row mutation carries both
     /// consumption classes the row holds (see <see cref="WorldPlacementPolicyDefaults"/>'s remarks): the boot-consumed
     /// headroom/repeat-cap fields apply at the next boot (the frozen render-envelope probe cannot retroactively grow),
@@ -210,52 +214,49 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Authoring">The whole authoring policy row.</param>
     [MutationKind(ordinal: 28, section: WorldSection.Authoring)]
-    public sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldPlacementPolicyDefaults Authoring) : WorldMutation(Principal);
+    public sealed record SetAuthoringDefaults(Principal Principal, WorldPlacementPolicyDefaults Authoring) : WorldMutation(Principal);
     /// <summary>Replaces the whole contact-solver tuning (the <see cref="WorldCollision"/> section). Applies live: the
     /// population rebuilds the collider set and hands it to every body on the next tick.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Collision">The contact-solver tuning.</param>
     [MutationKind(ordinal: 29, section: WorldSection.Collision)]
-    public sealed record SetCollision(WorldPrincipal Principal, WorldCollision Collision) : WorldMutation(Principal);
-    /// <summary>Replaces the whole host-section defaults row (window/backend/present/pacing/timing/genlock). Document-
+    public sealed record SetCollision(Principal Principal, WorldCollision Collision) : WorldMutation(Principal);
+    /// <summary>Replaces the whole host-section defaults row (window/backend/present/pacing/genlock). Document-
     /// defaults class: the boot-only fields take effect at the next boot (a running window cannot resize its backend or
-    /// surface), and the two live-lever fields (<c>TargetHertz</c> via <c>world.target</c>, <c>Timing</c> via
-    /// <c>world.timing</c>) set the value the next boot wakes on — <c>world.save</c> folds the running levers back into
-    /// them. The row is validated immediately, so a bad value is rejected loudly regardless of when it applies.</summary>
+    /// surface), and the live-lever field (<c>TargetHertz</c> via <c>world.target</c>) sets the value the next boot
+    /// wakes on — <c>world.save</c> folds the running lever back into it. The row is validated immediately, so a bad
+    /// value is rejected loudly regardless of when it applies.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Host">The whole host defaults row.</param>
     [MutationKind(ordinal: 30, section: WorldSection.Host)]
-    public sealed record SetHostDefaults(WorldPrincipal Principal, WorldHostDefaults Host) : WorldMutation(Principal);
+    public sealed record SetHostDefaults(Principal Principal, WorldHostDefaults Host) : WorldMutation(Principal);
     /// <summary>Replaces the whole window-composition defaults row — the seat framing plus the authored layouts (see
     /// <see cref="WorldViewDefaults"/>). Applies live: the frame source recompiles the seat rigs and the composer reads
     /// the new layouts on the next produced frame. The <c>world.row.set views.seatRig</c> verb RMWs the seat rig into this.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Views">The whole views defaults row.</param>
     [MutationKind(ordinal: 31, section: WorldSection.Views)]
-    public sealed record SetViewDefaults(WorldPrincipal Principal, WorldViewDefaults Views) : WorldMutation(Principal);
+    public sealed record SetViewDefaults(Principal Principal, WorldViewDefaults Views) : WorldMutation(Principal);
     /// <summary>Replaces the whole player-defaults row — the seed palette, the picker tuning, and the control feel a
     /// seat of this document wakes with. Applies live: every seat still sitting at the world's own feel picks the new
     /// policy up on its very next drag, while a seat carrying its own profile's feel is deliberately untouched. The
     /// <c>world.row.set playerDefaults.seatLook</c> verb RMWs the feel into this.</summary>
-    /// <remarks>Ordinal 64 because ordinals are append-only — they ride the replay wire, so renumbering to sit this
-    /// beside the other whole-row section writes would invalidate every recorded tape. Position in this file is
-    /// topical; the ordinal is not.</remarks>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Defaults">The whole player-defaults row.</param>
-    [MutationKind(ordinal: 64, section: WorldSection.PlayerDefaults)]
-    public sealed record SetPlayerDefaults(WorldPrincipal Principal, WorldPlayerDefaults Defaults) : WorldMutation(Principal);
+    [MutationKind(ordinal: 62, section: WorldSection.PlayerDefaults)]
+    public sealed record SetPlayerDefaults(Principal Principal, WorldPlayerDefaults Defaults) : WorldMutation(Principal);
     /// <summary>Upserts one named window layout addressed by <see cref="WorldViewLayout.Name"/> — replaces the matching
     /// row or appends a new one (the views section's layout grain).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Layout">The whole layout row.</param>
     [MutationKind(ordinal: 32, section: WorldSection.Views)]
-    public sealed record UpsertViewLayout(WorldPrincipal Principal, WorldViewLayout Layout) : WorldMutation(Principal);
+    public sealed record UpsertViewLayout(Principal Principal, WorldViewLayout Layout) : WorldMutation(Principal);
     /// <summary>Removes the window layout named <paramref name="Name"/>. Always allowed — the composer falls back to the
     /// authored/built-in selection when the active layout is removed.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The layout name to remove.</param>
     [MutationKind(ordinal: 33, section: WorldSection.Views)]
-    public sealed record RemoveViewLayout(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemoveViewLayout(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a look row (whole-row, keyed by name) into the <see cref="WorldSection.Looks"/> section. Applies
     /// live — the population re-resolves the look table and the client rebuilds the avatar program (the appearance
     /// change is visible the next frame). Riding the render-envelope gate: a creation look changes the emitted program
@@ -263,40 +264,38 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Look">The whole look row.</param>
     [MutationKind(ordinal: 34, section: WorldSection.Looks)]
-    public sealed record UpsertLook(WorldPrincipal Principal, WorldLook Look) : WorldMutation(Principal);
+    public sealed record UpsertLook(Principal Principal, WorldLook Look) : WorldMutation(Principal);
     /// <summary>Removes a look row by name. Rejected loudly by full-document revalidation while the look assignment
     /// table still names it.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The look name to remove.</param>
     [MutationKind(ordinal: 35, section: WorldSection.Looks)]
-    public sealed record RemoveLook(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    public sealed record RemoveLook(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Sets the look→entity assignment policy (the same <see cref="WorldRowAssignment"/> primitive the kit
     /// assignment uses). Applies live.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Assignment">The look assignment policy.</param>
     [MutationKind(ordinal: 36, section: WorldSection.Looks)]
-    public sealed record SetLookAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
-    // Ordinals 37/38 (UpsertScreenLink/RemoveScreenLink) are retired: machine cable linking is authored on the
-    // Machine source itself (WorldMachineCable), so cable edits ride UpsertScreen. Never reassign them.
+    public sealed record SetLookAssignment(Principal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
     /// <summary>Upserts a document-authored grant row (see <see cref="WorldDefinition.Grants"/>) — replaces the row
-    /// matching the same (<see cref="WorldGrant.Principal"/>, <see cref="WorldGrant.Capability"/>,
+    /// matching the same (<see cref="WorldGrant.Grantee"/>, <see cref="WorldGrant.Capability"/>,
     /// <see cref="WorldGrant.Subject"/>) triple, or appends a new one; a bare re-set of an existing triple changes
     /// only <see cref="WorldGrant.Exclusive"/>. Document-only, like <see cref="UpsertAddon"/>: this mutation edits
     /// what the next boot applies through <c>Server.WorldServer.Grant</c> — it never touches the live grant
     /// table <c>world.grant</c>/<c>world.revoke</c> administer, so a row added here grants nothing until a relaunch.</summary>
     /// <param name="Principal">The acting identity (checked against Mutate/section:grants).</param>
     /// <param name="Row">The whole grant row.</param>
-    [MutationKind(ordinal: 39, section: WorldSection.Grants)]
-    public sealed record UpsertGrant(WorldPrincipal Principal, WorldGrant Row) : WorldMutation(Principal);
+    [MutationKind(ordinal: 37, section: WorldSection.Grants)]
+    public sealed record UpsertGrant(Principal Principal, WorldGrant Row) : WorldMutation(Principal);
     /// <summary>Removes the document-authored grant row matching <paramref name="Target"/>'s
-    /// (<see cref="WorldGrant.Principal"/>, <see cref="WorldGrant.Capability"/>, <see cref="WorldGrant.Subject"/>) —
+    /// (<see cref="WorldGrant.Grantee"/>, <see cref="WorldGrant.Capability"/>, <see cref="WorldGrant.Subject"/>) —
     /// <see cref="WorldGrant.Exclusive"/> is ignored, matching <c>world.revoke</c>'s own shape. Rejected if no row
     /// matches. Document-only, like <see cref="RemoveAddon"/>: never touches the live grant table.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Target">The (principal, capability, subject) to remove — <see cref="WorldGrant.Exclusive"/> is
     /// ignored.</param>
-    [MutationKind(ordinal: 40, section: WorldSection.Grants)]
-    public sealed record RemoveGrant(WorldPrincipal Principal, WorldGrant Target) : WorldMutation(Principal);
+    [MutationKind(ordinal: 38, section: WorldSection.Grants)]
+    public sealed record RemoveGrant(Principal Principal, WorldGrant Target) : WorldMutation(Principal);
     /// <summary>Upserts a HUD panel row addressed by <see cref="WorldHudPanel.Id"/> — replaces the matching row or
     /// appends a new one. The panel's <see cref="WorldHudPanel.Elements"/> travel with it: this is the cross-row
     /// transaction boundary a whole panel (chrome + every child element) commits under, distinct from
@@ -305,14 +304,14 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <see cref="WorldHudCapacity.MaxElementsPerPanel"/>, or when an element names an unknown binding.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Panel">The whole panel row, elements included.</param>
-    [MutationKind(ordinal: 41, section: WorldSection.Hud)]
-    public sealed record UpsertHudPanel(WorldPrincipal Principal, WorldHudPanel Panel) : WorldMutation(Principal);
+    [MutationKind(ordinal: 39, section: WorldSection.Hud)]
+    public sealed record UpsertHudPanel(Principal Principal, WorldHudPanel Panel) : WorldMutation(Principal);
     /// <summary>Removes the HUD panel row with id <paramref name="Id"/> (its elements go with it). Rejected if no row
     /// declares that id.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The panel id to remove.</param>
-    [MutationKind(ordinal: 42, section: WorldSection.Hud)]
-    public sealed record RemoveHudPanel(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+    [MutationKind(ordinal: 40, section: WorldSection.Hud)]
+    public sealed record RemoveHudPanel(Principal Principal, string Id) : WorldMutation(Principal);
     /// <summary>Upserts one HUD element (whole-row, keyed by <see cref="WorldHudElement.Id"/>) inside an
     /// already-declared panel — a read-modify-write on that panel's <see cref="WorldHudPanel.Elements"/> list, replacing
     /// the matching row or appending a new one. Rejected loudly when no panel named <paramref name="PanelId"/> exists,
@@ -321,20 +320,20 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="PanelId">The owning panel's id.</param>
     /// <param name="Element">The whole element row.</param>
-    [MutationKind(ordinal: 43, section: WorldSection.Hud)]
-    public sealed record UpsertHudElement(WorldPrincipal Principal, string PanelId, WorldHudElement Element) : WorldMutation(Principal);
+    [MutationKind(ordinal: 41, section: WorldSection.Hud)]
+    public sealed record UpsertHudElement(Principal Principal, string PanelId, WorldHudElement Element) : WorldMutation(Principal);
     /// <summary>Removes one HUD element by id from an already-declared panel. Rejected if the panel or the element does
     /// not exist.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="PanelId">The owning panel's id.</param>
     /// <param name="ElementId">The element id to remove.</param>
-    [MutationKind(ordinal: 44, section: WorldSection.Hud)]
-    public sealed record RemoveHudElement(WorldPrincipal Principal, string PanelId, string ElementId) : WorldMutation(Principal);
+    [MutationKind(ordinal: 42, section: WorldSection.Hud)]
+    public sealed record RemoveHudElement(Principal Principal, string PanelId, string ElementId) : WorldMutation(Principal);
     /// <summary>Replaces the HUD section's defaults row (see <see cref="WorldHudDefaults"/>). Applies live.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Defaults">The whole HUD defaults row.</param>
-    [MutationKind(ordinal: 45, section: WorldSection.Hud)]
-    public sealed record SetHudDefaults(WorldPrincipal Principal, WorldHudDefaults Defaults) : WorldMutation(Principal);
+    [MutationKind(ordinal: 43, section: WorldSection.Hud)]
+    public sealed record SetHudDefaults(Principal Principal, WorldHudDefaults Defaults) : WorldMutation(Principal);
     /// <summary>Upserts a <c>state</c> row addressed by <see cref="StateRow.Name"/> — replaces the matching row
     /// or appends a new one. Applies live. Checked twice: the standard <see cref="WorldCapability.Mutate"/> hold over
     /// <see cref="WorldSection.State"/> every mutation kind requires, plus a second, row-scoped
@@ -343,14 +342,14 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// gate.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The whole state row.</param>
-    [MutationKind(ordinal: 46, section: WorldSection.State)]
-    public sealed record UpsertStateRow(WorldPrincipal Principal, WorldStateRow Row) : WorldMutation(Principal);
+    [MutationKind(ordinal: 44, section: WorldSection.State)]
+    public sealed record UpsertStateRow(Principal Principal, WorldStateRow Row) : WorldMutation(Principal);
     /// <summary>Removes the state row named <paramref name="Name"/>. Rejected if no row declares that name. Checked
     /// twice — see <see cref="UpsertStateRow"/>'s remarks.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The state row name to remove.</param>
-    [MutationKind(ordinal: 47, section: WorldSection.State)]
-    public sealed record RemoveStateRow(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 45, section: WorldSection.State)]
+    public sealed record RemoveStateRow(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts one cell inside an already-declared <see cref="WorldStateRow"/> — a per-cell write, never a
     /// whole-row re-authoring (that is <see cref="UpsertStateRow"/>'s job). Applies live. Rejected loudly (compose
     /// failure, definition unchanged) if <see cref="Row"/> names no state row; rejected by the whole-document
@@ -398,21 +397,21 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// projection — which is what lets a bound press (<c>player.state.cell.toggle</c>) flip a cell in whatever world
     /// the seat is actually in.</param>
     /// <param name="Vector">The vector value for a vector row, or <see langword="null"/>.</param>
-    [MutationKind(ordinal: 49, section: WorldSection.State)]
-    public sealed record UpsertStateCell(WorldPrincipal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null, IReadOnlyList<string>? CycleTokens = null, StateVector? Vector = null) : WorldMutation(Principal);
+    [MutationKind(ordinal: 47, section: WorldSection.State)]
+    public sealed record UpsertStateCell(Principal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null, IReadOnlyList<string>? CycleTokens = null, StateVector? Vector = null) : WorldMutation(Principal);
     /// <summary>Removes one cell from an already-declared <see cref="WorldStateRow"/>. Rejected if <see cref="Row"/>
     /// names no state row, or if no cell inside it carries <see cref="Key"/>. Checked twice — see
     /// <see cref="UpsertStateCell"/>'s remarks.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The carrying row's name.</param>
     /// <param name="Key">The key to remove.</param>
-    [MutationKind(ordinal: 50, section: WorldSection.State)]
-    public sealed record RemoveStateCell(WorldPrincipal Principal, string Row, string Key) : WorldMutation(Principal);
+    [MutationKind(ordinal: 48, section: WorldSection.State)]
+    public sealed record RemoveStateCell(Principal Principal, string Row, string Key) : WorldMutation(Principal);
     /// <summary>Replaces the participant input-hold policy.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Settings">The whole input-hold section.</param>
-    [MutationKind(ordinal: 48, section: WorldSection.InputHold)]
-    public sealed record SetInputHold(WorldPrincipal Principal, WorldInputHoldSettings Settings) : WorldMutation(Principal);
+    [MutationKind(ordinal: 46, section: WorldSection.InputHold)]
+    public sealed record SetInputHold(Principal Principal, WorldInputHoldSettings Settings) : WorldMutation(Principal);
     /// <summary>
     /// Runs one emission of a generator row (a <see cref="WorldStateRow"/> declaring a <see cref="StateGenerator"/>)
     /// and writes the space-joined result into a text cell — the sampling primitive the whole Markov family reduces
@@ -447,56 +446,56 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Row">The draw site's row name.</param>
     /// <param name="Keys">On a keyed site, the cells to redraw with every other cell held (a dice hold); null redraws
     /// every cell. Refused on a slot site.</param>
-    [MutationKind(ordinal: 51, section: WorldSection.State)]
-    public sealed record Generate(WorldPrincipal Principal, string Row, IReadOnlyList<string>? Keys = null) : WorldMutation(Principal);
+    [MutationKind(ordinal: 49, section: WorldSection.State)]
+    public sealed record Generate(Principal Principal, string Row, IReadOnlyList<string>? Keys = null) : WorldMutation(Principal);
     /// <summary>Upserts a world rule addressed by <see cref="Rule.Name"/> — the authoring door for the
     /// <c>rules</c> section, never the firing one: a rule evaluating and its effects applying both ride
-    /// <see cref="WorldPrincipal.World"/> and never submit this kind. Rejected loudly if the rule fails to compile
+    /// <see cref="Principal.World"/> and never submit this kind. Rejected loudly if the rule fails to compile
     /// against the candidate document (an undeclared state row or cell, an inadmissible predicate/effect kind for
     /// world scope, an unknown reserved channel) — see <c>WorldFactsCompiler</c>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Rule">The whole rule row.</param>
-    [MutationKind(ordinal: 52, section: WorldSection.Rules)]
-    public sealed record UpsertWorldRule(WorldPrincipal Principal, WorldRule Rule) : WorldMutation(Principal);
+    [MutationKind(ordinal: 50, section: WorldSection.Rules)]
+    public sealed record UpsertWorldRule(Principal Principal, WorldRule Rule) : WorldMutation(Principal);
     /// <summary>Removes the world rule named <paramref name="Name"/>. Rejected if no rule declares that name.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The rule name to remove — a <see cref="CellName"/>, the same validated-identifier type
     /// <see cref="Rule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
     /// (or the JSON converter) instead of travelling as a miss.</param>
-    [MutationKind(ordinal: 53, section: WorldSection.Rules)]
-    public sealed record RemoveWorldRule(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 51, section: WorldSection.Rules)]
+    public sealed record RemoveWorldRule(Principal Principal, CellName Name) : WorldMutation(Principal);
     /// <summary>Upserts an interaction row addressed by <see cref="WorldInteraction.Name"/> — replaces the matching
     /// row or appends a new one. The authoring door for the <c>interactions</c> section, never the firing one: an
-    /// interaction evaluating and its effects applying both ride <see cref="WorldPrincipal.World"/> and never submit
+    /// interaction evaluating and its effects applying both ride <see cref="Principal.World"/> and never submit
     /// this kind (the same split <see cref="UpsertWorldRule"/> draws for rules). Rejected loudly if the row fails to
     /// compile against the candidate document — an unregistered <c>left</c>/<c>right</c> property, an unknown region
     /// placement, or an inadmissible effect kind — see <c>WorldFactsCompiler.CompileAllInteractions</c>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Interaction">The whole interaction row.</param>
-    [MutationKind(ordinal: 54, section: WorldSection.Interactions)]
-    public sealed record UpsertInteraction(WorldPrincipal Principal, WorldInteraction Interaction) : WorldMutation(Principal);
+    [MutationKind(ordinal: 52, section: WorldSection.Interactions)]
+    public sealed record UpsertInteraction(Principal Principal, WorldInteraction Interaction) : WorldMutation(Principal);
     /// <summary>Removes the interaction named <paramref name="Name"/>. Rejected if no interaction declares that
     /// name.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The interaction name to remove — a <see cref="CellName"/>, the same
     /// validated-identifier type <see cref="WorldInteraction.Name"/> itself rides, so a name this mutation could
     /// never match is refused at the verb (or the JSON converter) instead of travelling as a miss.</param>
-    [MutationKind(ordinal: 55, section: WorldSection.Interactions)]
-    public sealed record RemoveInteraction(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 53, section: WorldSection.Interactions)]
+    public sealed record RemoveInteraction(Principal Principal, CellName Name) : WorldMutation(Principal);
     /// <summary>Upserts a group kind addressed by <see cref="WorldGroupKind.Name"/> — replaces the matching row or
     /// appends a new one. Rejected loudly if the resulting kind set contains two kinds identical in every
     /// behavior-bearing field except <see cref="WorldGroupKind.Capacity"/> (a capacity-only difference is a value, not
     /// a kind).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Kind">The whole kind row.</param>
-    [MutationKind(ordinal: 56, section: WorldSection.Groups)]
-    public sealed record UpsertGroupKind(WorldPrincipal Principal, WorldGroupKind Kind) : WorldMutation(Principal);
+    [MutationKind(ordinal: 54, section: WorldSection.Groups)]
+    public sealed record UpsertGroupKind(Principal Principal, WorldGroupKind Kind) : WorldMutation(Principal);
     /// <summary>Removes the group kind named <paramref name="Name"/>. Rejected loudly while a live group row still
     /// names it (the conservative no-cascade ruling — remove or re-kind the groups first).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The kind name to remove.</param>
-    [MutationKind(ordinal: 57, section: WorldSection.Groups)]
-    public sealed record RemoveGroupKind(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 55, section: WorldSection.Groups)]
+    public sealed record RemoveGroupKind(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Forms a new, empty runtime group row of a declared kind. Rejected loudly if <see cref="Id"/> is
     /// already taken or <see cref="KindName"/> names no declared kind (validated vocabulary — unknown-by-name).
     /// Never written back to the server's base document, so a whole-document rebuild (<c>world.reset</c>/<c>.load</c>/
@@ -504,19 +503,18 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Id">The new group's stable id.</param>
     /// <param name="KindName">The declared kind it forms under.</param>
-    [MutationKind(ordinal: 58, section: WorldSection.Groups)]
-    public sealed record FormGroup(WorldPrincipal Principal, string Id, string KindName) : WorldMutation(Principal);
+    [MutationKind(ordinal: 56, section: WorldSection.Groups)]
+    public sealed record FormGroup(Principal Principal, string Id, string KindName) : WorldMutation(Principal);
     /// <summary>Adds <see cref="Member"/> to the group named <see cref="GroupId"/>. Rejected loudly if the group does
     /// not exist, <see cref="Member"/> already belongs, admitting it would exceed the kind's declared
-    /// <see cref="WorldGroupKind.Capacity"/>, or <see cref="Member"/> is not a legitimate member kind (a
-    /// <see cref="PrincipalKind.Group"/> value is refused by name — flat only, a member is a principal, never a
-    /// group; <see cref="PrincipalKind.World"/>/<see cref="PrincipalKind.Document"/> are refused the same way — neither
-    /// is a real actor).</summary>
+    /// <see cref="WorldGroupKind.Capacity"/>, or <see cref="Member"/> is not a legitimate member kind (a member is
+    /// an actor, never a group; <see cref="PrincipalKind.World"/> is refused by name, since the world's own program
+    /// holds no membership).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="GroupId">The target group's id.</param>
     /// <param name="Member">The principal to admit.</param>
-    [MutationKind(ordinal: 59, section: WorldSection.Groups)]
-    public sealed record JoinGroup(WorldPrincipal Principal, string GroupId, WorldPrincipal Member) : WorldMutation(Principal);
+    [MutationKind(ordinal: 57, section: WorldSection.Groups)]
+    public sealed record JoinGroup(Principal Principal, string GroupId, Principal Member) : WorldMutation(Principal);
     /// <summary>Removes <see cref="Member"/> from the group named <see cref="GroupId"/> — voluntary self-departure:
     /// always just removes the one row (never the kind's <see cref="WorldGroupKind.EvictionPolicy"/>, which governs
     /// <see cref="KickMember"/> alone), then dissolves the whole group if that empties it and the kind's
@@ -525,8 +523,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="GroupId">The target group's id.</param>
     /// <param name="Member">The principal to remove.</param>
-    [MutationKind(ordinal: 60, section: WorldSection.Groups)]
-    public sealed record LeaveGroup(WorldPrincipal Principal, string GroupId, WorldPrincipal Member) : WorldMutation(Principal);
+    [MutationKind(ordinal: 58, section: WorldSection.Groups)]
+    public sealed record LeaveGroup(Principal Principal, string GroupId, Principal Member) : WorldMutation(Principal);
     /// <summary>Removes <see cref="Member"/> from the group named <see cref="GroupId"/> under the kind's own
     /// <see cref="WorldGroupKind.EvictionPolicy"/> — <see cref="WorldGroupEvictionPolicy.Remove"/> drops only the
     /// member's row (then dissolves the group under the same <see cref="WorldGroupLifetime.Ephemeral"/> rule
@@ -537,8 +535,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="GroupId">The target group's id.</param>
     /// <param name="Member">The principal to remove.</param>
-    [MutationKind(ordinal: 61, section: WorldSection.Groups)]
-    public sealed record KickMember(WorldPrincipal Principal, string GroupId, WorldPrincipal Member) : WorldMutation(Principal);
+    [MutationKind(ordinal: 59, section: WorldSection.Groups)]
+    public sealed record KickMember(Principal Principal, string GroupId, Principal Member) : WorldMutation(Principal);
     /// <summary>Places a Principal-owned subject into escrow — the durable intermediate owner a trade parks a
     /// subject in, owned by neither party while it holds (see <see cref="OwnershipOwnerKind.Escrow"/>). Rejected
     /// loudly if <see cref="Subject"/> names no declared <see cref="WorldOwnership"/> row, that row's owner is not
@@ -553,8 +551,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Subject">The subject to place into escrow.</param>
     /// <param name="Recipient">The principal named to accept the subject.</param>
     /// <param name="DeadlineTick">The tick at or after which a reclaim (see <see cref="SettleOwnership"/>) admits.</param>
-    [MutationKind(ordinal: 62, section: WorldSection.Groups)]
-    public sealed record OfferOwnership(WorldPrincipal Principal, OwnershipSubject Subject, WorldPrincipal Recipient, long DeadlineTick) : WorldMutation(Principal);
+    [MutationKind(ordinal: 60, section: WorldSection.Groups)]
+    public sealed record OfferOwnership(Principal Principal, OwnershipSubject Subject, Principal Recipient, long DeadlineTick) : WorldMutation(Principal);
     /// <summary>Resolves a subject currently held in escrow — the only door back out of the state
     /// <see cref="OfferOwnership"/> enters. Two shapes under one kind, distinguished by <see cref="Reclaim"/>: an
     /// accept (<see langword="false"/>) transfers ownership to the escrow's own named
@@ -562,7 +560,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// reclaim (<see langword="true"/>) returns ownership to the escrow's own named
     /// <see cref="OwnershipEscrow.Offerer"/>, admitted only once the tick this mutation applies at has reached
     /// <see cref="OwnershipEscrow.DeadlineTick"/> and <see cref="Principal"/> is either that offerer or
-    /// <see cref="WorldPrincipal.World"/> (the engine's own automatic sweep — see
+    /// <see cref="Principal.World"/> (the engine's own automatic sweep — see
     /// <c>Server.WorldGrants.ReclaimExpiredEscrows</c> — which fires this same mutation once a deadline passes with
     /// no accept, so recovery needs no operator action). Rejected loudly if <see cref="Subject"/> names no declared
     /// row or that row's owner is not <see cref="OwnershipOwnerKind.Escrow"/> — in particular, a
@@ -571,80 +569,76 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// field directly" two-submission race — every transfer must pass through the escrow intermediate, so at most one
     /// of a racing accept/reclaim pair (drained in submission order at the same tick boundary) can ever find the row
     /// still in escrow; the other finds it already resolved and refuses, never double-applies.</summary>
-    /// <param name="Principal">The acting identity — the escrow's recipient (accept) or offerer/<see cref="WorldPrincipal.World"/> (reclaim).</param>
+    /// <param name="Principal">The acting identity — the escrow's recipient (accept) or offerer/<see cref="Principal.World"/> (reclaim).</param>
     /// <param name="Subject">The subject to resolve out of escrow.</param>
     /// <param name="Reclaim"><see langword="false"/> for an accept by the named recipient; <see langword="true"/> for
     /// a reclaim to the named offerer once the deadline has passed.</param>
-    [MutationKind(ordinal: 63, section: WorldSection.Groups)]
-    public sealed record SettleOwnership(WorldPrincipal Principal, OwnershipSubject Subject, bool Reclaim) : WorldMutation(Principal);
-    // Ordinals 65-70 (CreateMarketListing/PlaceMarketBid/BuyoutMarketListing/CancelMarketListing/
-    // SettleMarketListing/PruneMarketListings) are retired: the local auction house dissolved into an escrowed
-    // conditional transfer over ordinary keyed rows, authored as rules (AddState/SetState/ScheduleState/PushState)
-    // rather than a bespoke mutation kind. Never reassign them.
+    [MutationKind(ordinal: 61, section: WorldSection.Groups)]
+    public sealed record SettleOwnership(Principal Principal, OwnershipSubject Subject, bool Reclaim) : WorldMutation(Principal);
     /// <summary>Upserts a dynamics row (whole-row, keyed by name) into the <see cref="WorldSection.Dynamics"/>
     /// section. Applies live — a kit's planar follower, a camera boom, and a look/state follower all read the
     /// resolved row fresh on their next compile/step, keeping any live follower state.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The whole dynamics row.</param>
-    [MutationKind(ordinal: 71, section: WorldSection.Dynamics)]
-    public sealed record UpsertDynamics(WorldPrincipal Principal, DynamicsRow Row) : WorldMutation(Principal);
+    [MutationKind(ordinal: 63, section: WorldSection.Dynamics)]
+    public sealed record UpsertDynamics(Principal Principal, DynamicsRow Row) : WorldMutation(Principal);
     /// <summary>Removes a dynamics row by name. Rejected loudly by full-document revalidation while any consumer
     /// (a look, a kit, a camera program, a state cell) still names it.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The dynamics row name to remove.</param>
-    [MutationKind(ordinal: 72, section: WorldSection.Dynamics)]
-    public sealed record RemoveDynamics(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 64, section: WorldSection.Dynamics)]
+    public sealed record RemoveDynamics(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a curves row (whole-row, keyed by name) into the <see cref="WorldSection.Curves"/> section.
     /// Applies live — a camera path op and a sim curve-follow target both read the resolved row's compiled spline
     /// fresh on their next compile/step.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The whole curves row.</param>
-    [MutationKind(ordinal: 73, section: WorldSection.Curves)]
-    public sealed record UpsertCurve(WorldPrincipal Principal, WorldCurveRow Row) : WorldMutation(Principal);
+    [MutationKind(ordinal: 65, section: WorldSection.Curves)]
+    public sealed record UpsertCurve(Principal Principal, WorldCurveRow Row) : WorldMutation(Principal);
     /// <summary>Removes a curves row by name. Rejected loudly by full-document revalidation while any consumer (a
     /// camera program, a body-motion program) still names it.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The curves row name to remove.</param>
-    [MutationKind(ordinal: 74, section: WorldSection.Curves)]
-    public sealed record RemoveCurve(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 66, section: WorldSection.Curves)]
+    public sealed record RemoveCurve(Principal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Applies one bounded state transform atomically, checking edit reach over every touched row.</summary>
     /// <param name="Principal">The stamped acting identity.</param>
     /// <param name="Transform">The typed operation.</param>
     /// <param name="Guard">Optional admission against a phase generation and the stamped actor.</param>
-    [MutationKind(ordinal: 75, section: WorldSection.State)]
-    public sealed record TransformState(WorldPrincipal Principal, StateTransform Transform, PhaseGuard? Guard = null) : WorldMutation(Principal);
+    [MutationKind(ordinal: 67, section: WorldSection.State)]
+    public sealed record TransformState(Principal Principal, StateTransform Transform, PhaseGuard? Guard = null) : WorldMutation(Principal);
     /// <summary>Sets the population's spawn distribution alone, composed against the population row as it stands when
     /// the mutation applies — never a whole-row replacement built from a snapshot the console read earlier, which
     /// another queued edit to a sibling field would silently revert.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Distribution">The spawn distribution.</param>
-    [MutationKind(ordinal: 76, section: WorldSection.Population)]
-    public sealed record SetPopulationDistribution(WorldPrincipal Principal, WorldDistribution Distribution) : WorldMutation(Principal);
+    [MutationKind(ordinal: 68, section: WorldSection.Population)]
+    public sealed record SetPopulationDistribution(Principal Principal, WorldDistribution Distribution) : WorldMutation(Principal);
     /// <summary>Sets the population's census figures alone — the per-seat activation policy and the network player
     /// count — composed against the population row as it stands when the mutation applies.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="SeatActivation">The per-local-seat activation policy.</param>
     /// <param name="NetworkPlayers">The network player count.</param>
-    [MutationKind(ordinal: 77, section: WorldSection.Population)]
-    public sealed record SetPopulationCensus(WorldPrincipal Principal, IReadOnlyList<SeatActivationPolicy> SeatActivation, int NetworkPlayers) : WorldMutation(Principal);
+    [MutationKind(ordinal: 69, section: WorldSection.Population)]
+    public sealed record SetPopulationCensus(Principal Principal, IReadOnlyList<SeatActivationPolicy> SeatActivation, int NetworkPlayers) : WorldMutation(Principal);
     /// <summary>Sets the views section's seat rig alone, composed against the views row as it stands when the
     /// mutation applies.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="SeatRig">The seat camera program.</param>
-    [MutationKind(ordinal: 78, section: WorldSection.Views)]
-    public sealed record SetViewSeatRig(WorldPrincipal Principal, WorldCameraProgram SeatRig) : WorldMutation(Principal);
+    [MutationKind(ordinal: 70, section: WorldSection.Views)]
+    public sealed record SetViewSeatRig(Principal Principal, WorldCameraProgram SeatRig) : WorldMutation(Principal);
     /// <summary>Sets the views section's seat control alone, composed against the views row as it stands when the
     /// mutation applies.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="SeatControl">The seat view control.</param>
-    [MutationKind(ordinal: 79, section: WorldSection.Views)]
-    public sealed record SetViewSeatControl(WorldPrincipal Principal, WorldSeatViewControl SeatControl) : WorldMutation(Principal);
+    [MutationKind(ordinal: 71, section: WorldSection.Views)]
+    public sealed record SetViewSeatControl(Principal Principal, WorldSeatViewControl SeatControl) : WorldMutation(Principal);
     /// <summary>Sets the player defaults' seat look alone, composed against the player-defaults row as it stands when
     /// the mutation applies.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="SeatLook">The seat camera feel.</param>
-    [MutationKind(ordinal: 80, section: WorldSection.PlayerDefaults)]
-    public sealed record SetPlayerSeatLook(WorldPrincipal Principal, WorldSeatCameraFeel SeatLook) : WorldMutation(Principal);
+    [MutationKind(ordinal: 72, section: WorldSection.PlayerDefaults)]
+    public sealed record SetPlayerSeatLook(Principal Principal, WorldSeatCameraFeel SeatLook) : WorldMutation(Principal);
     /// <summary>Several mutations installed as one: composed in order against one candidate, validated once, journaled
     /// once, and replayed as one — the carrier a rule's <c>transaction</c> effect commits through. Admission checks
     /// every member on its own terms; a member that would be refused alone refuses the batch.</summary>
@@ -657,8 +651,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="ExpectedSpatialReads">Optional bounded spatial read dependencies. Each region is re-queried at
     /// commit, so occupation, clearance, extents, parent frames, and newly entering obstacles are guarded together.</param>
     /// <param name="ExpectedInputs">Optional explicitly named placement and state input dependencies.</param>
-    [MutationKind(ordinal: 81, section: WorldSection.State)]
-    public sealed record Batch(WorldPrincipal Principal, [property: System.Text.Json.Serialization.JsonConverter(typeof(WorldMutationListJsonConverter))] IReadOnlyList<WorldMutation> Mutations,
+    [MutationKind(ordinal: 73, section: WorldSection.State)]
+    public sealed record Batch(Principal Principal, [property: System.Text.Json.Serialization.JsonConverter(typeof(WorldMutationListJsonConverter))] IReadOnlyList<WorldMutation> Mutations,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ExpectedDefinition = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateExpectation>? ExpectedCells = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? ExpectedStateRows = null,
@@ -697,7 +691,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
                         (cells[index] is not { } cell) ||
                         string.IsNullOrWhiteSpace(value: cell.Row) ||
                         (cell.Key is { Length: 0 }) ||
-                        !Enum.IsDefined(value: cell.Comparison) ||
+                        !cell.Comparison.IsComparison() ||
                         ((cell.Kind is { } kind) && !Enum.IsDefined(value: kind))
                     ) { return false; }
                 }
@@ -720,12 +714,31 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// mutation's.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Pipeline">The whole pipeline row.</param>
-    [MutationKind(ordinal: 82, section: WorldSection.Views)]
-    public sealed record UpsertViewPipeline(WorldPrincipal Principal, WorldViewPipeline Pipeline) : WorldMutation(Principal);
+    [MutationKind(ordinal: 74, section: WorldSection.Views)]
+    public sealed record UpsertViewPipeline(Principal Principal, WorldViewPipeline Pipeline) : WorldMutation(Principal);
     /// <summary>Removes a <c>views.pipelines</c> row by name. Rejected loudly by full-document revalidation while any
     /// <c>views.layouts</c> slot (<c>WorldViewSlot.Pipeline</c>) still names it.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Name">The pipeline name to remove.</param>
-    [MutationKind(ordinal: 83, section: WorldSection.Views)]
-    public sealed record RemoveViewPipeline(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    [MutationKind(ordinal: 75, section: WorldSection.Views)]
+    public sealed record RemoveViewPipeline(Principal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Commits one pipeline instance's previewed presentation into its <c>views.pipelines</c> row: the
+    /// parameter overrides, the time scale and the selected output replace the row's own, and every other member is
+    /// kept. The commit names what the preview was based on, and each is checked when it applies: a row whose
+    /// revision moved refuses it as stale, and a source whose content or config schema no longer matches the
+    /// installed graph's refuses it as incompatible, so a value tuned against one revision is never recorded against
+    /// another and a preview never lands on a different instance.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The pipeline instance to commit.</param>
+    /// <param name="Revision">The <c>WorldDefinitionFingerprint.ComputePipeline</c> of the row the preview was based
+    /// on.</param>
+    /// <param name="SourceIdentity">The content identity of the source the installed graph was compiled from.</param>
+    /// <param name="ConfigIdentity">The identity of that source's parameter schemas.</param>
+    /// <param name="TimeScale">The committed clock rate.</param>
+    /// <param name="Output">The committed image version, or <see langword="null"/> for the source's first output.</param>
+    /// <param name="Overrides">The committed overrides by pass name, or <see langword="null"/> for none.</param>
+    [MutationKind(ordinal: 78, section: WorldSection.Views)]
+    public sealed record CommitViewPipeline(Principal Principal, string Name, string Revision, string SourceIdentity, string ConfigIdentity, float TimeScale,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Output = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, System.Text.Json.JsonElement>? Overrides = null) : WorldMutation(Principal);
 }

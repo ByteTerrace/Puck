@@ -23,7 +23,9 @@ namespace Puck.World;
 /// <para><b>Measurement protocol.</b> Device: an RTX 4070 (the other three calibrated GPUs in the support matrix
 /// were not re-run for this measurement). Harness: <c>Puck.Launcher</c> + <c>SdfWorldRenderBuilder</c> driving a
 /// purpose-built <c>ISdfFrameSource</c> through <c>Puck.SdfVm.Debug.SdfBenchScene</c>'s <c>DynamicMatrix</c> ladder
-/// (<c>SdfBenchWorkloads.BuildDynamicMatrixLadder</c>). Matrix: N in
+/// (<c>SdfBenchWorkloads.BuildDynamicMatrixLadder</c>) — both retired along with the engine's GPU-timestamp
+/// measurement path; this is dated evidence for the pinned constant below, and a re-measurement needs a
+/// work-counter-based harness, not a reproduction of this recipe. Matrix: N in
 /// {0, 256, 1024, 4096, 16384} spheres (the CoreOps views kernel variant — Sphere + Translate/TransformDynamic only,
 /// no exotic op) x placement {Clustered (the whole count packed into one fixed ~2.2-unit footprint — the worst-tile
 /// case), Uniform (a centered 3D grid, spacing grows with N), FarCorners (N split across eight local clusters ~8

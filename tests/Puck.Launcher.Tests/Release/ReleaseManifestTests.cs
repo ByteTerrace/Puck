@@ -202,6 +202,30 @@ public sealed class ReleaseManifestTests {
             )
         );
     }
+    [InlineData(null)]
+    [InlineData("sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [Theory]
+    public void Validate_RefusesUppercaseOrAbsentContentHash(string? hash) {
+        var bad = ValidDocument() with {
+            Payloads = [new ReleasePayload(
+                Rid: "win-x64",
+                Files: [new ReleasePayloadFile(
+                        Hash: hash!,
+                        Path: "a.dll",
+                        Size: 1
+                    )]
+            )],
+        };
+        var errors = ReleaseCanonicalizer.Validate(document: bad);
+
+        Assert.Contains(
+            collection: errors,
+            filter: error => error.Path.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: ".hash"
+            )
+        );
+    }
     [Fact]
     public void Validate_RefusesRolloutPercentOutOfRange() {
         var bad = ValidDocument() with { Rollout = new ReleaseRollout(Percent: 101) };

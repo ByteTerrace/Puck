@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -16,7 +15,6 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
     private const uint VkStructureTypeSwapchainCreateInfoKhr = 1000001000;
 
     private readonly IAllocator m_allocator;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeSwapchainApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -27,44 +25,35 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
         m_allocator = allocator;
     }
 
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateSwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateSwapchainKHR"u8
-            )),
-                DestroySwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroySwapchainKHR"u8
-            )),
-            }
-        );
-    }
-    private unsafe nint MarshalQueueFamilyIndices(IReadOnlyList<uint> queueFamilyIndices) {
-        if (0 == queueFamilyIndices.Count) {
-            return 0;
+    // A swapchain handle exists only once this check has passed on its device, so the other VK_KHR_swapchain entry
+    // points (acquire, present, image enumeration, destroy) are reached only when they are resolved and call straight
+    // through the table.
+    private static unsafe void RequireSwapchainCommands(VulkanDeviceCommands device) {
+        if (device.AcquireNextImageKhr is null) {
+            throw VulkanProcResolver.MissingDeviceProc(functionName: "vkAcquireNextImageKHR"u8);
         }
 
-        var buffer = m_allocator.Alloc(size: (sizeof(uint) * queueFamilyIndices.Count));
-
-        for (var index = 0; (index < queueFamilyIndices.Count); index++) {
-            Marshal.WriteInt32(
-                ofs: (index * sizeof(uint)),
-                ptr: buffer,
-                val: unchecked((int)queueFamilyIndices[index])
-            );
+        if (device.CreateSwapchainKhr is null) {
+            throw VulkanProcResolver.MissingDeviceProc(functionName: "vkCreateSwapchainKHR"u8);
         }
 
-        return buffer;
+        if (device.DestroySwapchainKhr is null) {
+            throw VulkanProcResolver.MissingDeviceProc(functionName: "vkDestroySwapchainKHR"u8);
+        }
+
+        if (device.GetSwapchainImagesKhr is null) {
+            throw VulkanProcResolver.MissingDeviceProc(functionName: "vkGetSwapchainImagesKHR"u8);
+        }
+
+        if (device.QueuePresentKhr is null) {
+            throw VulkanProcResolver.MissingDeviceProc(functionName: "vkQueuePresentKHR"u8);
+        }
     }
 
     /// <inheritdoc/>
     public VkResult CreateSwapchain(VulkanSwapchainCreateRequest request, out nint swapchainHandle) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
@@ -74,9 +63,14 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
             paramName: nameof(request)
         );
 
-        var createSwapchain = GetPointers(deviceHandle: request.DeviceHandle).CreateSwapchainKhr;
+        RequireSwapchainCommands(device: request.Device);
 
-        var queueIndicesBuffer = MarshalQueueFamilyIndices(queueFamilyIndices: request.QueueFamilyIndices);
+        var createSwapchain = request.Device.CreateSwapchainKhr;
+
+        var queueIndicesBuffer = VulkanMarshalHelpers.AllocateArray(
+            allocator: m_allocator,
+            values: request.QueueFamilyIndices
+        );
 
         try {
             var createInfo = new VkSwapchainCreateInfoKhr {
@@ -104,37 +98,19 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
             };
 
             return createSwapchain(
-                request.DeviceHandle,
+                request.Device.Handle,
                 in createInfo,
                 0,
                 out swapchainHandle
             );
         } finally {
-            if (0 != queueIndicesBuffer) {
-                m_allocator.Free(ptr: queueIndicesBuffer);
-            }
+            m_allocator.Free(ptr: queueIndicesBuffer);
         }
     }
     /// <inheritdoc/>
-    public void DestroySwapchain(nint deviceHandle, nint swapchainHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == swapchainHandle)
-        ) {
-            return;
-        }
-
-        var destroySwapchain = GetPointers(deviceHandle: deviceHandle).DestroySwapchainKhr;
-
-        destroySwapchain(
-            deviceHandle,
-            swapchainHandle,
-            0
+    public void DestroySwapchain(VulkanDeviceCommands device, nint swapchainHandle) =>
+        device?.Destroy(
+            destroy: device.DestroySwapchainKhr,
+            handle: swapchainHandle
         );
-    }
-
-    private unsafe struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult> CreateSwapchainKhr;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroySwapchainKhr;
-    }
 }

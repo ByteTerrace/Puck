@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <!-- The Azure SDK credential chain and the OpenAI client are reflection-driven, like the Harness it serves.
+             The OpenAI client reaches Azure through its v1 endpoint; Azure.AI.OpenAI is not used because its current
+             release binds an OpenAI client constructor the OpenAI package no longer ships. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <PuckKind>Production</PuckKind>
+        <!-- Installed beside a host and discovered, never referenced by one. -->
+        <PuckLayer>Optional extensions</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Azure.Identity" Version="1.21.0" />
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="[10.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.World.AgentHarness\Puck.World.AgentHarness.csproj" />
+    </ItemGroup>
+</Project>

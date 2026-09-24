@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Commands;
 using Puck.Storage;
 using Puck.World.Embeddings;
@@ -40,7 +41,7 @@ public sealed class EmbeddingConnectionLawTests {
     ) {
         var baseDoc = Fixtures.BuildDocument();
         IReadOnlyList<StateSpace>? spaces = (includeSpace
-            ? [new StateSpace(Name: CellName.Parse(candidate: spaceName), Model: "puck-fixture", Revision: "1", Dimensions: spaceDimensions)]
+            ? [new StateSpace(name: CellName.Parse(candidate: spaceName), model: "puck-fixture", revision: "1", dimensions: spaceDimensions)]
             : null);
 
         return baseDoc with {
@@ -84,7 +85,7 @@ public sealed class EmbeddingConnectionLawTests {
             embeddings.Add(item: new WorldExtensionEmbeddingSettings(
                 Name: $"conn{suffix}",
                 Provider: "fixture",
-                Client: WorldPrincipal.Console.Describe(),
+                Client: Principal.Console.Describe(),
                 Space: space,
                 Requests: ((connectionCount > 1) ? $"{requests}{suffix}" : requests),
                 Results: ((connectionCount > 1) ? $"{results}{suffix}" : results),
@@ -110,7 +111,7 @@ public sealed class EmbeddingConnectionLawTests {
             Operations: [],
             Clients: [
                 new WorldExtensionClientSettings(
-                    Principal: WorldPrincipal.Console.Describe(),
+                    Principal: Principal.Console.Describe(),
                     Operations: [],
                     Requests: Requests()
                 )
@@ -120,19 +121,16 @@ public sealed class EmbeddingConnectionLawTests {
             Embeddings: embeddings
         );
     }
-    private static WorldExtensionRegistry<WorldExtensionEmbeddingProviderType> FixtureTypes() => new(
-        extensions: [
-            new WorldExtensionEmbeddingProviderType(
-                Create: FixtureConfiguredEmbeddingProvider.Create,
-                Type: "embedding.fixture"
-            )
-        ],
-        keyOf: static type => type.Type
-    );
-    private static WorldExtensionRegistry<WorldExtensionProviderType> EmptyOperationTypes() => new(
-        extensions: [],
-        keyOf: static type => type.Type
-    );
+    private static PuckExtensionSet Embeddings(params WorldExtensionEmbeddingProviderType[] types) => PuckExtensionSet.Compose(extensions: [new TestExtension(
+        name: "embeddings",
+        register: registry => {
+            foreach (var type in types) { registry.AddEmbedding(provider: type); }
+        }
+    )]);
+    private static PuckExtensionSet FixtureTypes() => Embeddings(new WorldExtensionEmbeddingProviderType(
+        Create: FixtureConfiguredEmbeddingProvider.Create,
+        Type: "embedding.fixture"
+    ));
     private static DirectoryObjectStorageTarget Target() => new("unused");
     private static async Task StepRuntimeAsync(WorldConfiguredExtensions runtime, WorldServer server, ulong tick) {
         server.DrainAdministrative();
@@ -147,13 +145,13 @@ public sealed class EmbeddingConnectionLawTests {
     private static void UpsertRequest(WorldServer server, string key, string text) {
         using var edit = new WorldRecordedExtension(
             server,
-            WorldPrincipal.Console,
+            Principal.Console,
             [new(Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(section: WorldSection.State))],
             8
         );
 
         edit.Submit(mutation: new WorldMutation.UpsertStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             "requests",
             key,
             0,
@@ -162,16 +160,33 @@ public sealed class EmbeddingConnectionLawTests {
         ));
         server.DrainAdministrative();
     }
-    private static void RemoveRequest(WorldServer server, string key) {
+    // Composing the extensions over a fresh world booted from the document must refuse the configuration.
+    private static void AssertCreateThrows<TException>(WorldExtensionConfiguration configuration, WorldDefinition document) where TException : Exception {
+        using var world = Fixtures.FreshServer(definition: document);
+
+        AssertCreateThrows<TException>(
+            configuration: configuration,
+            world: world
+        );
+    }
+    // Composing the extensions over a world must refuse the configuration with the named exception type.
+    private static void AssertCreateThrows<TException>(WorldExtensionConfiguration configuration, WorldFixture world) where TException : Exception => Assert.Throws<TException>(testCode: () => WorldConfiguredExtensions.Create(
+        configuration: configuration,
+        server: world.Server,
+        store: new FakeObjectBlobStore(),
+        target: Target(),
+        captureCause: static () => "cause",
+        extensions: FixtureTypes()
+    )); private static void RemoveRequest(WorldServer server, string key) {
         using var edit = new WorldRecordedExtension(
             server,
-            WorldPrincipal.Console,
+            Principal.Console,
             [new(Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(section: WorldSection.State))],
             8
         );
 
         edit.Submit(mutation: new WorldMutation.RemoveStateCell(
-            WorldPrincipal.Console,
+            Principal.Console,
             "requests",
             key
         ));
@@ -181,55 +196,22 @@ public sealed class EmbeddingConnectionLawTests {
     [Fact]
     public void Law1_CompositionRefusals_RejectInvalidConfigurations() {
         // 1a: Undeclared space in world definition
-        {
-            var docNoSpace = Document(spaceName: "other_space");
-            using var world = Fixtures.FreshServer(definition: docNoSpace);
-            var config = Configuration(space: "lore");
-
-            Assert.Throws<ArgumentException>(testCode: () => WorldConfiguredExtensions.Create(
-                configuration: config,
-                types: EmptyOperationTypes(),
-                server: world.Server,
-                store: new FakeObjectBlobStore(),
-                target: Target(),
-                captureCause: static () => "cause",
-                embeddingTypes: FixtureTypes()
-            ));
-        }
+        AssertCreateThrows<ArgumentException>(
+            configuration: Configuration(space: "lore"),
+            document: Document(spaceName: "other_space")
+        );
 
         // 1b: Space identity mismatch (provider dimensions != world space dimensions)
-        {
-            var doc256 = Document(spaceDimensions: 256);
-            using var world = Fixtures.FreshServer(definition: doc256);
-            var config128 = Configuration(dimensions: 128);
-
-            Assert.Throws<ArgumentException>(testCode: () => WorldConfiguredExtensions.Create(
-                configuration: config128,
-                types: EmptyOperationTypes(),
-                server: world.Server,
-                store: new FakeObjectBlobStore(),
-                target: Target(),
-                captureCause: static () => "cause",
-                embeddingTypes: FixtureTypes()
-            ));
-        }
+        AssertCreateThrows<ArgumentException>(
+            configuration: Configuration(dimensions: 128),
+            document: Document(spaceDimensions: 256)
+        );
 
         // 1c: Table capacities < MaximumItems
-        {
-            var docSmallReq = Document(reqCapacity: 8);
-            using var world = Fixtures.FreshServer(definition: docSmallReq);
-            var configLargeMax = Configuration(maxItems: 16);
-
-            Assert.Throws<ArgumentException>(testCode: () => WorldConfiguredExtensions.Create(
-                configuration: configLargeMax,
-                types: EmptyOperationTypes(),
-                server: world.Server,
-                store: new FakeObjectBlobStore(),
-                target: Target(),
-                captureCause: static () => "cause",
-                embeddingTypes: FixtureTypes()
-            ));
-        }
+        AssertCreateThrows<ArgumentException>(
+            configuration: Configuration(maxItems: 16),
+            document: Document(reqCapacity: 8)
+        );
 
         // 1d: Exclusivity: duplicate table used across connections
         {
@@ -247,23 +229,18 @@ public sealed class EmbeddingConnectionLawTests {
                     )
                 ],
                 Operations: [],
-                Clients: [new WorldExtensionClientSettings(Principal: WorldPrincipal.Console.Describe(), Operations: [], Requests: Requests())],
+                Clients: [new WorldExtensionClientSettings(Principal: Principal.Console.Describe(), Operations: [], Requests: Requests())],
                 Connections: [],
                 Embeddings: [
-                    new WorldExtensionEmbeddingSettings(Name: "c1", Provider: "fixture", Client: WorldPrincipal.Console.Describe(), Space: "lore", Requests: "requests", Results: "results", Status: "status"),
-                    new WorldExtensionEmbeddingSettings(Name: "c2", Provider: "fixture", Client: WorldPrincipal.Console.Describe(), Space: "lore", Requests: "requests", Results: "results", Status: "status"),
+                    new WorldExtensionEmbeddingSettings(Name: "c1", Provider: "fixture", Client: Principal.Console.Describe(), Space: "lore", Requests: "requests", Results: "results", Status: "status"),
+                    new WorldExtensionEmbeddingSettings(Name: "c2", Provider: "fixture", Client: Principal.Console.Describe(), Space: "lore", Requests: "requests", Results: "results", Status: "status"),
                 ]
             );
 
-            Assert.Throws<ArgumentException>(testCode: () => WorldConfiguredExtensions.Create(
+            AssertCreateThrows<ArgumentException>(
                 configuration: badConfig,
-                types: EmptyOperationTypes(),
-                server: world.Server,
-                store: new FakeObjectBlobStore(),
-                target: Target(),
-                captureCause: static () => "cause",
-                embeddingTypes: FixtureTypes()
-            ));
+                world: world
+            );
         }
 
         // 1e: Wrong CellKind: requests is not Text, or results is not Vector
@@ -271,15 +248,10 @@ public sealed class EmbeddingConnectionLawTests {
             var docWrongReq = Document(reqKind: CellKind.Int);
             using var world = Fixtures.FreshServer(definition: docWrongReq);
 
-            Assert.Throws<InvalidOperationException>(testCode: () => WorldConfiguredExtensions.Create(
+            AssertCreateThrows<InvalidOperationException>(
                 configuration: Configuration(),
-                types: EmptyOperationTypes(),
-                server: world.Server,
-                store: new FakeObjectBlobStore(),
-                target: Target(),
-                captureCause: static () => "cause",
-                embeddingTypes: FixtureTypes()
-            ));
+                world: world
+            );
         }
 
         // 1f: Bounds: >16 connections, maxItems out of [1, 128], batchSize out of [1, 2048], retryTicks < 1
@@ -289,12 +261,11 @@ public sealed class EmbeddingConnectionLawTests {
 
             void TryCreate(WorldExtensionConfiguration badConfig) => WorldConfiguredExtensions.Create(
                 configuration: badConfig,
-                types: EmptyOperationTypes(),
                 server: world.Server,
                 store: new FakeObjectBlobStore(),
                 target: Target(),
                 captureCause: static () => "cause",
-                embeddingTypes: FixtureTypes()
+                extensions: FixtureTypes()
             );
 
             // >16 connections
@@ -324,12 +295,11 @@ public sealed class EmbeddingConnectionLawTests {
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: world.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: FixtureTypes()
+            extensions: FixtureTypes()
         );
 
         UpsertRequest(server: world.Server, key: "req-1", text: "Bandits ambushed the caravan on the north road");
@@ -370,27 +340,23 @@ public sealed class EmbeddingConnectionLawTests {
         var config = Configuration(cacheEntries: 64);
 
         var callCount = new StrongBox<int>(value: 0);
-        var countingTypes = new WorldExtensionRegistry<WorldExtensionEmbeddingProviderType>(
-            extensions: [
-                new WorldExtensionEmbeddingProviderType(
-                    Type: "embedding.fixture",
-                    Create: json => new CountingEmbeddingProvider(
-                        inner: FixtureConfiguredEmbeddingProvider.Create(settings: json),
-                        counter: callCount
-                    )
+        var countingTypes = Embeddings(
+            new WorldExtensionEmbeddingProviderType(
+                Type: "embedding.fixture",
+                Create: json => new CountingEmbeddingProvider(
+                    inner: FixtureConfiguredEmbeddingProvider.Create(settings: json),
+                    counter: callCount
                 )
-            ],
-            keyOf: static type => type.Type
+            )
         );
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: world.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: countingTypes
+            extensions: countingTypes
         );
 
         var text = "A stranger shared bread and water with the guards";
@@ -434,31 +400,27 @@ public sealed class EmbeddingConnectionLawTests {
         var config = Configuration(cacheEntries: 0);
 
         var tcs = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-        var delayingTypes = new WorldExtensionRegistry<WorldExtensionEmbeddingProviderType>(
-            extensions: [
-                new WorldExtensionEmbeddingProviderType(
-                    Type: "embedding.fixture",
-                    Create: json => {
-                        var fixture = FixtureConfiguredEmbeddingProvider.Create(settings: json);
+        var delayingTypes = Embeddings(
+            new WorldExtensionEmbeddingProviderType(
+                Type: "embedding.fixture",
+                Create: json => {
+                    var fixture = FixtureConfiguredEmbeddingProvider.Create(settings: json);
 
-                        return new DelegatingConfiguredEmbeddingProvider(
-                            bind: s => new DelayingEmbeddingSource(inner: fixture.BindEmbedding(settings: s), tcs: tcs),
-                            dispose: fixture.Dispose
-                        );
-                    }
-                )
-            ],
-            keyOf: static type => type.Type
+                    return new DelegatingConfiguredEmbeddingProvider(
+                        bind: s => new DelayingEmbeddingSource(inner: fixture.BindEmbedding(settings: s), tcs: tcs),
+                        dispose: fixture.Dispose
+                    );
+                }
+            )
         );
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: world.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: delayingTypes
+            extensions: delayingTypes
         );
 
         // Step 1: Add initial request text
@@ -519,30 +481,26 @@ public sealed class EmbeddingConnectionLawTests {
         var config = Configuration(retryTicks: retryTicks, cacheEntries: 0);
 
         var callCount = new StrongBox<int>(value: 0);
-        var refusingTypes = new WorldExtensionRegistry<WorldExtensionEmbeddingProviderType>(
-            extensions: [
-                new WorldExtensionEmbeddingProviderType(
-                    Type: "embedding.fixture",
-                    Create: _ => new DelegatingConfiguredEmbeddingProvider(
-                        bind: _ => new RefusingEmbeddingSource(
-                            identity: new EmbeddingIdentity(Dimensions: 256, Model: "puck-fixture", Revision: "1"),
-                            callCounter: callCount
-                        ),
-                        dispose: static () => { }
-                    )
+        var refusingTypes = Embeddings(
+            new WorldExtensionEmbeddingProviderType(
+                Type: "embedding.fixture",
+                Create: _ => new DelegatingConfiguredEmbeddingProvider(
+                    bind: _ => new RefusingEmbeddingSource(
+                        identity: new EmbeddingIdentity(Dimensions: 256, Model: "puck-fixture", Revision: "1"),
+                        callCounter: callCount
+                    ),
+                    dispose: static () => { }
                 )
-            ],
-            keyOf: static type => type.Type
+            )
         );
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: world.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: refusingTypes
+            extensions: refusingTypes
         );
 
         UpsertRequest(server: world.Server, key: "req-1", text: "Refuse me");
@@ -574,31 +532,27 @@ public sealed class EmbeddingConnectionLawTests {
         var config = Configuration(cacheEntries: 0);
 
         var tcs = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-        var delayingTypes = new WorldExtensionRegistry<WorldExtensionEmbeddingProviderType>(
-            extensions: [
-                new WorldExtensionEmbeddingProviderType(
-                    Type: "embedding.fixture",
-                    Create: json => {
-                        var fixture = FixtureConfiguredEmbeddingProvider.Create(settings: json);
+        var delayingTypes = Embeddings(
+            new WorldExtensionEmbeddingProviderType(
+                Type: "embedding.fixture",
+                Create: json => {
+                    var fixture = FixtureConfiguredEmbeddingProvider.Create(settings: json);
 
-                        return new DelegatingConfiguredEmbeddingProvider(
-                            bind: s => new DelayingEmbeddingSource(inner: fixture.BindEmbedding(settings: s), tcs: tcs),
-                            dispose: fixture.Dispose
-                        );
-                    }
-                )
-            ],
-            keyOf: static type => type.Type
+                    return new DelegatingConfiguredEmbeddingProvider(
+                        bind: s => new DelayingEmbeddingSource(inner: fixture.BindEmbedding(settings: s), tcs: tcs),
+                        dispose: fixture.Dispose
+                    );
+                }
+            )
         );
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: world.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: delayingTypes
+            extensions: delayingTypes
         );
 
         UpsertRequest(server: world.Server, key: "req-1", text: "To be removed");
@@ -624,12 +578,11 @@ public sealed class EmbeddingConnectionLawTests {
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: liveWorld.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: FixtureTypes()
+            extensions: FixtureTypes()
         );
 
         UpsertRequest(server: liveWorld.Server, key: "msg-1", text: "Alpha text");
@@ -664,15 +617,14 @@ public sealed class EmbeddingConnectionLawTests {
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: world.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: FixtureTypes()
+            extensions: FixtureTypes()
         );
 
-        var client = runtime.Client(principal: WorldPrincipal.Console);
+        var client = runtime.Client(principal: Principal.Console);
 
         // Live replay suppresses recorded extensions
         world.Server.SuppressRecordedExtensions();
@@ -693,13 +645,13 @@ public sealed class EmbeddingConnectionLawTests {
                     var text = args.Tail(start: 0);
                     using var edit = new WorldRecordedExtension(
                         server,
-                        WorldPrincipal.Console,
+                        Principal.Console,
                         [new(Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(section: WorldSection.State))],
                         8
                     );
 
                     edit.Submit(mutation: new WorldMutation.UpsertStateCell(
-                        WorldPrincipal.Console,
+                        Principal.Console,
                         "requests",
                         "chat-msg-1",
                         0,
@@ -722,19 +674,18 @@ public sealed class EmbeddingConnectionLawTests {
 
         await using var runtime = WorldConfiguredExtensions.Create(
             configuration: config,
-            types: EmptyOperationTypes(),
             server: world.Server,
             store: new FakeObjectBlobStore(),
             target: Target(),
             captureCause: static () => "cause",
-            embeddingTypes: FixtureTypes()
+            extensions: FixtureTypes()
         );
 
         // Execute chat command to speak line into requests table
         var chatModule = new ChatTestCommandModule(server: world.Server);
         var registry = new CommandRegistry(modules: [chatModule]);
         var source = new TextCommandSource(registry: registry);
-        using var session = source.CreateSession(principal: CommandPrincipal.Console);
+        using var session = source.CreateSession(principal: Principal.Console);
 
         session.Enqueue(line: "chat.say Where is the road north?");
         source.Collect();

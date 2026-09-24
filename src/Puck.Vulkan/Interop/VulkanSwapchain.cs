@@ -11,8 +11,8 @@ public sealed class VulkanSwapchain : IDisposable {
 
     private bool m_disposed;
 
-    /// <summary>Gets the native <c>VkDevice</c> handle that owns the swapchain.</summary>
-    public nint DeviceHandle { get; }
+    /// <summary>Gets the command table of the logical device that owns the swapchain.</summary>
+    public VulkanDeviceCommands Device { get; }
     /// <summary>Gets the native <c>VkSwapchainKHR</c> handle, or zero once the swapchain has been disposed.</summary>
     public nint Handle { get; private set; }
     /// <summary>Gets the height, in pixels, of the swapchain images.</summary>
@@ -24,16 +24,16 @@ public sealed class VulkanSwapchain : IDisposable {
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSwapchain"/> class, taking ownership of an existing native swapchain handle.</summary>
     /// <param name="swapchainHandle">The native <c>VkSwapchainKHR</c> handle to own.</param>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the swapchain.</param>
+    /// <param name="device">The command table of the logical device that owns the swapchain.</param>
     /// <param name="imageFormat">The format of the swapchain images, as a <c>VkFormat</c> value.</param>
     /// <param name="imageExtentWidth">The width, in pixels, of the swapchain images.</param>
     /// <param name="imageExtentHeight">The height, in pixels, of the swapchain images.</param>
     /// <param name="swapchainApi">The API used to destroy the swapchain on disposal.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="swapchainApi"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="swapchainHandle"/> or <paramref name="deviceHandle"/> is zero.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="swapchainApi"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="swapchainHandle"/> is zero.</exception>
     public VulkanSwapchain(
         nint swapchainHandle,
-        nint deviceHandle,
+        VulkanDeviceCommands device,
         uint imageFormat,
         uint imageExtentWidth,
         uint imageExtentHeight,
@@ -47,14 +47,10 @@ public sealed class VulkanSwapchain : IDisposable {
             paramName: nameof(swapchainHandle)
         );
 
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
+        ArgumentNullException.ThrowIfNull(argument: device);
 
         Handle = swapchainHandle;
-        DeviceHandle = deviceHandle;
+        Device = device;
         ImageFormat = imageFormat;
         ImageExtentWidth = imageExtentWidth;
         ImageExtentHeight = imageExtentHeight;
@@ -67,14 +63,11 @@ public sealed class VulkanSwapchain : IDisposable {
             return;
         }
 
-        if (0 != Handle) {
-            m_swapchainApi.DestroySwapchain(
-                deviceHandle: DeviceHandle,
-                swapchainHandle: Handle
-            );
-            Handle = 0;
-        }
-
+        m_swapchainApi.DestroySwapchain(
+            device: Device,
+            swapchainHandle: Handle
+        );
+        Handle = 0;
         m_disposed = true;
     }
 }

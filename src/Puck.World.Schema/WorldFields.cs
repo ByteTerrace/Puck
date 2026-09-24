@@ -577,7 +577,7 @@ public sealed class WorldLatticeScalarJsonConverter : System.Text.Json.Serializa
 /// <param name="Comparison">The comparison.</param>
 /// <param name="Value">The scalar compared against (literal or state-row reference).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldCondition(string Field, ActionStateComparison Comparison, WorldLatticeScalar Value);
+public sealed record WorldFieldCondition(string Field, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, WorldLatticeScalar Value);
 /// <summary>One per-cell write of a <see cref="WorldReaction.Transform"/>.</summary>
 /// <param name="Field">The field written at the cell.</param>
 /// <param name="Op">Set or add.</param>
@@ -623,7 +623,7 @@ public abstract record WorldReaction {
     /// <param name="Comparison">The comparison.</param>
     /// <param name="Value">The constant compared against.</param>
     /// <param name="Row">The keyed int state row written, keyed by body index.</param>
-    public sealed record Expose(string Field, ActionStateComparison Comparison, WorldLatticeScalar Value, string Row) : WorldReaction;
+    public sealed record Expose(string Field, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, WorldLatticeScalar Value, string Row) : WorldReaction;
     /// <summary>Moves <paramref name="Field"/> downhill, cell to cell, over the combined surface height of
     /// <paramref name="Over"/> plus <paramref name="Field"/>'s own value -- mass-conserving except where a cell's
     /// clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each

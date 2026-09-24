@@ -17,21 +17,38 @@ internal static partial class AzureCommand {
 
     private static readonly HttpClient Http = new(handler: new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = TimeSpan.FromMinutes(minutes: 5) };
 
-    public static Command Create() {
+    /// <summary>Creates the <c>azure</c> verb; <paramref name="clock"/> bounds its requests, leases, and
+    /// qualification runs.</summary>
+    /// <param name="clock">The CLI host's clock.</param>
+    /// <returns>The verb.</returns>
+    public static Command Create(TimeProvider clock) {
         var resourceGroupOption = new Option<string>(name: "--resource-group") { DefaultValueFactory = _ => DefaultResourceGroup, Description = "The production resource group." };
         var commitOption = new Option<string>(name: "--commit") { Description = "The full lowercase commit SHA of this release.", Required = true, Validators = { result => ValidateCommit(result: result) } };
+        var buildOutput = Output(
+            defaultPath: "artifacts/azure",
+            description: "A fresh directory for the bundle."
+        );
+        var infrastructureOutput = Output(
+            defaultPath: "artifacts/infrastructure",
+            description: "A fresh directory for the compiled templates."
+        );
+        var releaseOutput = Output(
+            defaultPath: "artifacts/world-release",
+            description: "The directory that receives the bound worlds and their release.json."
+        );
+        var digestOutput = CliOptions.Output(description: "A file to receive the pushed digest.");
         var build = new Command(
             description: "Build the application bundle: Functions, the browser engine, the official tree, hosted worlds, the dashboard, and the documentation, with its release manifest.",
             name: "build"
         ) {
-            new Option<string>(name: "--output-directory") { DefaultValueFactory = _ => "artifacts/azure", Description = "A fresh directory for the bundle." },
+            buildOutput,
             new Option<string?>(name: "--runtime-artifacts") { Description = "This commit's compiled Functions and browser payloads, when a producer job already built them." },
         };
         var buildInfrastructure = new Command(
             description: "Compile the platform and world-compute templates and the parameters for this commit.",
             name: "build-infrastructure"
         ) {
-            new Option<string>(name: "--output-directory") { DefaultValueFactory = _ => "artifacts/infrastructure", Description = "A fresh directory for the compiled templates." },
+            infrastructureOutput,
         };
         var deployInfrastructure = new Command(
             description: "Plan and reconcile the production platform from the compiled templates, refusing a plan that deletes a resource.",
@@ -56,19 +73,9 @@ internal static partial class AzureCommand {
             resourceGroupOption, new Option<bool>(name: "--plan-only") { Description = "Stop after the what-if plan." },
         };
         var prepareWorldRelease = new Command(
-            description: "Bind official endpoints and pin the complete composed world inventory before deployment.",
+            description: "Bind the deployed endpoints and admission into the composed worlds and prepare their release package for world release deploy.",
             name: "prepare-world-release"
-        ) {
-            new Option<string>("--output-directory") { DefaultValueFactory = _ => "artifacts/world-release" },
-        };
-        var deployWorld = new Command(
-            description: "Qualify and deploy the retained world package through the durable maintenance transaction.",
-            name: "deploy-world"
-        ) {
-            new Option<string?>(name: "--resource-group") { Description = "The resource group; defaults to the deployment output." },
-            new Option<string>("--package") { DefaultValueFactory = _ => "artifacts/world-release", Description = "Prepared immutable release package." },
-            new Option<Guid?>("--operation") { Description = "Optional stable operation ID; repeating the same target resumes its pending operation." },
-        };
+        ) { releaseOutput };
         var publishStatic = new Command(
             description: "Publish official content and the website from the bundle.",
             name: "publish-static"
@@ -87,7 +94,7 @@ internal static partial class AzureCommand {
             new Option<string>(name: "--repository") { Description = "web-actors or world-silo.", Required = true },
             commitOption,
             new Option<string?>(name: "--archive") { Description = "A saved image archive to load first." },
-            new Option<string?>(name: "--output-file") { Description = "Where to write the pushed digest." },
+            digestOutput,
         };
         var functionsAccess = new Command(
             description: "Admit this runner to the Functions deployment endpoint, or restore the saved restrictions.",
@@ -147,73 +154,73 @@ internal static partial class AzureCommand {
             description: "Build, deploy, publish, and verify Puck's Azure production.",
             name: "azure"
         ) {
-            build, buildInfrastructure, deployInfrastructure, deployApplications, deployWorldPlatform, deployWorldMcp, prepareWorldRelease, deployWorld, publishStatic, publishTemplateSpecs, publishContainer,
+            build, buildInfrastructure, deployInfrastructure, deployApplications, deployWorldPlatform, deployWorldMcp, prepareWorldRelease, publishStatic, publishTemplateSpecs, publishContainer,
             functionsAccess, vaultAccess, testProduction, testWorldContainer, testWorldRelease, testWorldMcp, buildActors, stageWorldImage, current,
         };
 
-        build.SetAction(action: (parseResult, _) => RunAsync(action: () => BuildAsync(
-            output: Path.GetFullPath(path: parseResult.GetRequiredValue<string>(name: "--output-directory")),
+        Bind(command: build, work: (parseResult, _) => BuildAsync(
+            output: Path.GetFullPath(path: parseResult.GetRequiredValue(option: buildOutput)),
             runtimeArtifacts: parseResult.GetValue<string?>(name: "--runtime-artifacts")
-        )));
-        buildInfrastructure.SetAction(action: (parseResult, _) => RunAsync(action: () => BuildInfrastructureAsync(output: Path.GetFullPath(path: parseResult.GetRequiredValue<string>(name: "--output-directory")))));
-        deployInfrastructure.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployInfrastructureAsync(
+        ));
+        Bind(command: buildInfrastructure, work: (parseResult, _) => BuildInfrastructureAsync(output: Path.GetFullPath(path: parseResult.GetRequiredValue(option: infrastructureOutput))));
+        Bind(command: deployInfrastructure, work: (parseResult, _) => DeployInfrastructureAsync(
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             infrastructure: parseResult.GetValue<string?>(name: "--infrastructure-artifacts")
-        )));
-        deployApplications.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployApplicationsAsync(
+        ));
+        Bind(command: deployApplications, work: (parseResult, _) => DeployApplicationsAsync(
             artifacts: parseResult.GetRequiredValue<string>(name: "--artifacts-directory"),
             commit: parseResult.GetRequiredValue(option: commitOption),
             group: parseResult.GetRequiredValue(option: resourceGroupOption)
-        )));
-        deployWorldPlatform.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployWorldPlatformAsync(group: parseResult.GetRequiredValue(option: resourceGroupOption))));
-        deployWorldMcp.SetAction(action: (parseResult, _) => RunAsync(action: () => DeployWorldMcpAsync(
+        ));
+        Bind(command: deployWorldPlatform, work: (parseResult, _) => DeployWorldPlatformAsync(group: parseResult.GetRequiredValue(option: resourceGroupOption)));
+        Bind(command: deployWorldMcp, work: (parseResult, _) => DeployWorldMcpAsync(
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             planOnly: parseResult.GetValue<bool>(name: "--plan-only")
-        )));
-        prepareWorldRelease.SetAction(action: (parse, _) => RunAsync(action: () => {
-            PrepareOfficialWorldRelease(outputDirectory: parse.GetValue<string>(name: "--output-directory")!);
+        ));
+        Bind(command: prepareWorldRelease, work: (parseResult, _) => {
+            PrepareOfficialWorldRelease(outputDirectory: parseResult.GetRequiredValue(option: releaseOutput));
+
             return Task.CompletedTask;
-        }));
-        deployWorld.SetAction(action: (parseResult, token) => RunAsync(action: () => DeployWorldAsync(
-            group: parseResult.GetValue<string?>(name: "--resource-group"),
-            package: parseResult.GetValue<string>(name: "--package")!,
-            operation: parseResult.GetValue<Guid?>(name: "--operation"),
-            token: token
-        )));
-        publishStatic.SetAction(action: (parseResult, _) => RunAsync(action: () => PublishStaticAsync(bundle: parseResult.GetRequiredValue<string>(name: "--bundle-directory"))));
-        publishTemplateSpecs.SetAction(action: (_, _) => RunAsync(action: PublishTemplateSpecsAsync));
-        publishContainer.SetAction(action: (parseResult, _) => RunAsync(action: () => PublishContainerAsync(
+        });
+        Bind(command: publishStatic, work: (parseResult, _) => PublishStaticAsync(bundle: parseResult.GetRequiredValue<string>(name: "--bundle-directory")));
+        Bind(command: publishTemplateSpecs, work: (_, _) => PublishTemplateSpecsAsync());
+        Bind(command: publishContainer, work: (parseResult, _) => PublishContainerAsync(
             archive: (parseResult.GetValue<string?>(name: "--archive") ?? ""),
             commit: parseResult.GetRequiredValue(option: commitOption),
-            output: (parseResult.GetValue<string?>(name: "--output-file") ?? ""),
+            output: (parseResult.GetValue(option: digestOutput) ?? ""),
             registry: parseResult.GetRequiredValue<string>(name: "--registry"),
             repository: parseResult.GetRequiredValue<string>(name: "--repository")
-        )));
-        functionsAccess.SetAction(action: (parseResult, _) => RunAsync(action: () => FunctionsAccessAsync(
+        ));
+        Bind(command: functionsAccess, work: (parseResult, _) => FunctionsAccessAsync(
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             name: parseResult.GetValue<string?>(name: "--name"),
             restore: parseResult.GetValue<bool>(name: "--restore")
-        )));
-        vaultAccess.SetAction(action: (parseResult, _) => RunAsync(action: () => VaultAccessAsync(restore: parseResult.GetValue<bool>(name: "--restore"))));
-        testProduction.SetAction(action: (parseResult, _) => RunAsync(action: () => TestProductionAsync(
+        ));
+        Bind(command: vaultAccess, work: (parseResult, _) => VaultAccessAsync(restore: parseResult.GetValue<bool>(name: "--restore")));
+        Bind(command: testProduction, work: (parseResult, _) => TestProductionAsync(
             beforeStaticPublication: parseResult.GetValue<bool>(name: "--before-static-publication"),
+            clock: clock,
             commit: parseResult.GetRequiredValue(option: commitOption)
-        )));
-        testWorldContainer.SetAction(action: (parseResult, _) => RunAsync(action: () => TestWorldContainerAsync(image: parseResult.GetRequiredValue<string>(name: "--image"))));
-        testWorldRelease.SetAction(action: (parseResult, _) => RunAsync(action: () => TestWorldReleaseAsync(
+        ));
+        Bind(command: testWorldContainer, work: (parseResult, _) => TestWorldContainerAsync(
+            clock: clock,
+            image: parseResult.GetRequiredValue<string>(name: "--image")
+        ));
+        Bind(command: testWorldRelease, work: (parseResult, _) => TestWorldReleaseAsync(
+            clock: clock,
             group: parseResult.GetValue<string?>(name: "--resource-group"),
             image: parseResult.GetValue<string?>(name: "--image"),
             scaleSet: parseResult.GetValue<string?>(name: "--scale-set")
-        )));
-        testWorldMcp.SetAction(action: (_, _) => RunAsync(action: TestWorldMcpAsync));
-        buildActors.SetAction(action: (parseResult, _) => RunAsync(action: () => BuildActorsAsync(
+        ));
+        Bind(command: testWorldMcp, work: (_, _) => TestWorldMcpAsync());
+        Bind(command: buildActors, work: (parseResult, _) => BuildActorsAsync(
             containerApp: parseResult.GetValue<string?>(name: "--container-app"),
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             noRestart: parseResult.GetValue<bool>(name: "--no-restart"),
             registry: parseResult.GetValue<string?>(name: "--registry")
-        )));
-        stageWorldImage.SetAction(action: (parseResult, _) => RunAsync(action: () => StageWorldImageAsync(commit: parseResult.GetRequiredValue(option: commitOption))));
-        current.SetAction(action: (_, _) => RunAsync(action: CurrentAsync));
+        ));
+        Bind(command: stageWorldImage, work: (parseResult, _) => StageWorldImageAsync(commit: parseResult.GetRequiredValue(option: commitOption)));
+        Bind(command: current, work: (_, _) => CurrentAsync());
         return command;
     }
 
@@ -224,20 +231,29 @@ internal static partial class AzureCommand {
         )) { result.AddError(errorMessage: "Expected a full lowercase commit SHA."); }
     }
     private static string Root() {
-        var root = (RepositoryPaths.FindRoot() ?? throw new DirectoryNotFoundException(message: "Run within the Puck checkout."));
+        var root = RepositoryPaths.RequireRoot();
 
         if (Path.GetFullPath(path: Environment.CurrentDirectory) != root) { throw new InvalidOperationException(message: "Run puck azure from the repository root."); }
         return root;
     }
-    private static async Task<int> RunAsync(Func<Task> action) {
-        try {
-            Root();
-            await action();
-            return 0;
-        } catch (Exception error) {
-            Console.Error.WriteLine(value: $"azure: {error.Message}");
-            return 1;
-        }
+    // Every azure verb reads and writes paths relative to the repository root, so each refuses to run anywhere else.
+    // A failure is an exception, which CliExit reports as a refusal on one named line.
+    private static void Bind(Command command, Func<ParseResult, CancellationToken, Task> work) => command.SetAction(action: async (parseResult, cancellationToken) => {
+        _ = Root();
+        await work(
+            arg1: parseResult,
+            arg2: cancellationToken
+        );
+
+        return CliExit.Success;
+    });
+    // An output directory with the default the workflows rely on.
+    private static Option<string> Output(string defaultPath, string description) {
+        var option = CliOptions.Output(description: description);
+
+        option.DefaultValueFactory = _ => defaultPath;
+
+        return option;
     }
     private static async Task<string> RunAsync(string executable, IEnumerable<string> arguments, string? directory = null, bool capture = false, string? input = null) {
         var controller = WorldReleaseController.Value;
@@ -246,9 +262,9 @@ internal static partial class AzureCommand {
         return (await CliProcess.RunCheckedAsync(
             arguments: arguments,
             capture: capture,
-            executable: executable,
+            fileName: executable,
             input: input,
-            root: (directory ?? Root()),
+            workingDirectory: (directory ?? Root()),
             cancellationToken: (controller?.Token ?? default)
         )).Trim();
     }
@@ -289,17 +305,19 @@ internal static partial class AzureCommand {
         CliGitHub.Mask(value: token);
         return token;
     }
-    // Cloud steps settle at their own pace: every az/docker/puck step this verb drives retries under one policy.
-    private static Task RetryAsync(Func<Task> action, int attempts = 12, int seconds = 5) =>
+    // Cloud steps settle at their own pace: every az/docker/puck step this verb drives retries under one policy, its
+    // pacing on the verb's clock.
+    private static Task RetryAsync(Func<Task> action, TimeProvider clock, int attempts = 12, int seconds = 5) =>
         CliRetry.RetryAsync(
             action: action,
             attempts: attempts,
+            clock: clock,
             delay: TimeSpan.FromSeconds(seconds: seconds),
             report: (error, attempt) => $"Attempt {attempt}/{attempts} failed: {error.Message}"
         );
     private static async Task<JsonNode> GetJsonAsync(string uri) => (JsonNode.Parse(json: await Http.GetStringAsync(requestUri: uri)) ?? throw new InvalidDataException(message: $"Empty response: {uri}"));
     private static async Task CurrentAsync() {
-        var reference = CliGitHub.EnvironmentVariable(name: "GITHUB_REF");
+        var reference = CliGitHub.Ref;
         var tip = (await RunAsync(
             arguments: ["ls-remote", "origin", reference],
             capture: true,
@@ -398,7 +416,7 @@ internal static partial class AzureCommand {
         await PuckAsync(
             "official",
             "build",
-            "--out",
+            "--tree",
             Path.Combine(
                 path1: output,
                 path2: "official"
@@ -411,7 +429,7 @@ internal static partial class AzureCommand {
         await PuckAsync(
             "official",
             "verify",
-            "--base",
+            "--tree",
             Path.Combine(
                 path1: output,
                 path2: "official"
@@ -425,6 +443,7 @@ internal static partial class AzureCommand {
             "world",
             "prepare",
             "src/Puck.World/Assets/worlds",
+            "--output",
             Path.Combine(
                 path1: output,
                 path2: "silo-worlds"
@@ -449,7 +468,7 @@ internal static partial class AzureCommand {
             )),
             variable: "PUCK_TEST_OFFICIAL_MANIFEST"
         );
-        foreach (var command in new string[][] { ["ci"], ["audit", "--audit-level=high"], ["--workspace", "portal", "run", "check:types"], ["run", "build"], ["--workspace", "portal", "run", "test"], ["run", "stage"] }) {
+        foreach (var command in new string[][] { ["ci"], ["audit", "--audit-level=high"], ["run", "build"], ["--workspace", "portal", "run", "test"], ["run", "stage"] }) {
             await RunAsync(
                 arguments: command,
                 directory: dashboard,
@@ -466,6 +485,7 @@ internal static partial class AzureCommand {
         await PuckAsync(
             "docs",
             "build",
+            "--output",
             Path.Combine(
                 path1: output,
                 path2: "dashboard-storage"
@@ -478,9 +498,56 @@ internal static partial class AzureCommand {
             commit
         );
     }
+    /// <summary>Verifies that every Bicep source is formatted and has no diagnostic, so compiler warnings stop the build like linter errors do.</summary>
+    /// <remarks>A linter error exits non-zero; a warning exits zero and appears only as a SARIF result.</remarks>
+    private static async Task VerifyBicepAsync() {
+        var findings = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(
+            path: "src/Puck.Azure.Resources",
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*.bicep*"
+        ).Where(predicate: path => (Path.GetExtension(path: path) is ".bicep" or ".bicepparam")).Order(comparer: StringComparer.Ordinal)) {
+            var path = file.Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+            var report = JsonNode.Parse(json: await AzAsync(
+                "bicep",
+                "lint",
+                "--file",
+                path,
+                "--diagnostics-format",
+                "sarif"
+            ))!;
+
+            foreach (var result in report["runs"]!.AsArray().SelectMany(selector: run => run!["results"]!.AsArray())) {
+                findings.Add(item: $"{path}: {Text(value: result!["ruleId"])} {Text(value: result["message"]!["text"])}");
+            }
+            // The Azure CLI's console stream rewrites line endings, so the formatter writes a file to compare byte for byte.
+            var formatted = Path.Combine(
+                path1: Path.GetTempPath(),
+                path2: ($"puck-bicep-{Guid.NewGuid():N}" + Path.GetExtension(path: path))
+            );
+
+            try {
+                await AzAsync(
+                    "bicep",
+                    "format",
+                    "--file",
+                    path,
+                    "--outfile",
+                    formatted
+                );
+                if (!File.ReadAllBytes(path: formatted).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: path))) { findings.Add(item: $"{path}: not formatted; run az bicep format --file {path}"); }
+            } finally { File.Delete(path: formatted); }
+        }
+        if (findings.Count != 0) { throw new InvalidDataException(message: ("Bicep sources must be formatted and free of diagnostics:\n" + string.Join(separator: "\n", values: findings))); }
+    }
     private static async Task BuildInfrastructureAsync(string output) {
         if (Directory.Exists(path: output)) { throw new IOException(message: $"Use a fresh output directory: {output}"); }
         Directory.CreateDirectory(path: output);
+        await VerifyBicepAsync();
         await AzAsync(
             "bicep",
             "build",

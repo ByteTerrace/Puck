@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
@@ -46,24 +47,9 @@ public sealed class FlockLawTests {
             }],
         };
     }
-    private static WorldAuthorityHostRowCheckpoint HostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     private static WorldBody Join(WorldFixture fixture, int slot, FixedVector3 position, bool flock = true) {
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: slot),
+            Principal: Principal.Seat(slot: slot),
             Slot: slot,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -81,12 +67,7 @@ public sealed class FlockLawTests {
             : IntentSource.Idle));
         return body;
     }
-    private static FixedVector3 Position(int x, int y = 0, int z = 0) =>
-        new(
-            X: FixedQ4816.FromInteger(value: x),
-            Y: FixedQ4816.FromInteger(value: y),
-            Z: FixedQ4816.FromInteger(value: z)
-        );
+    private static FixedVector3 Position(int x, int y = 0, int z = 0) => Fixtures.FixedPoint(x: x, y: y, z: z);
     private static WorldFlockProfile Profile(float cadence = 0) => new(
         Range: 20,
         SeparationRadius: 1,
@@ -144,7 +125,7 @@ public sealed class FlockLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var captured,
-                hostRow: HostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason
@@ -236,7 +217,7 @@ public sealed class FlockLawTests {
             0,
             Position(0)
         );
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplyDesignation(
             new WorldDesignation(
@@ -524,7 +505,7 @@ public sealed class FlockLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: HostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var reason
             ),
             userMessage: reason

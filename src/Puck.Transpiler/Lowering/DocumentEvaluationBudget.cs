@@ -1,4 +1,5 @@
 using Puck.Transpiler.Diagnostics;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Puck.Transpiler.Lowering;
@@ -45,43 +46,73 @@ public sealed class DocumentEvaluationBudget {
     public JsonNode? Copy(JsonNode? value, SourceSpan span) {
         Charge(
             depth: 0,
-            node: value
+            node: value,
+            span: span
         );
         return value?.DeepClone();
-        void Charge(JsonNode? node, int depth) {
-            if (depth >= DepthLimit) { throw new DocumentEvaluationException(
-                "Generated JSON exceeds 64 levels of nesting.",
-                span
-            ); }
-            Spend(
-                count: 1,
-                span: span
-            );
-            switch (node) {
-                case JsonArray array:
-                    foreach (var item in array) { Charge(
-                        depth: (depth + 1),
-                        node: item
-                    ); }
-                    break;
-                case JsonObject obj:
-                    foreach (var pair in obj) { Spend(
+    }
+    /// <summary>Takes a value the evaluation built itself into output, charging it exactly as <see cref="Copy"/>
+    /// charges a borrowed one.</summary>
+    /// <param name="value">A value no binding, cache or other container holds.</param>
+    /// <param name="span">The expression that built it.</param>
+    /// <returns><paramref name="value"/> itself.</returns>
+    /// <remarks>A value reaches output either way at the same cost to the budget, so whether it had to be copied
+    /// never changes what a compilation is allowed to produce.</remarks>
+    public JsonNode? Adopt(JsonNode? value, SourceSpan span) {
+        Charge(
+            depth: 0,
+            node: value,
+            span: span
+        );
+        return value;
+    }
+
+    private void Charge(JsonNode? node, int depth, SourceSpan span) {
+        if (depth >= DepthLimit) {
+            throw new DocumentEvaluationException(
+            "Generated JSON exceeds 64 levels of nesting.",
+            span
+        );
+        }
+        Spend(
+            count: 1,
+            span: span
+        );
+        switch (node) {
+            case JsonArray array:
+                for (var index = 0; (index < array.Count); index++) {
+                    Charge(
+                    depth: (depth + 1),
+                    node: array[index],
+                    span: span
+                );
+                }
+                break;
+            case JsonObject obj:
+                for (var index = 0; (index < obj.Count); index++) {
+                    var pair = obj.GetAt(index: index);
+
+                    Spend(
                         count: pair.Key.Length,
                         span: span
-                    ); Charge(
-                        pair.Value,
-                        (depth + 1)
-                    ); }
-                    break;
-                case JsonValue scalar when scalar.TryGetValue<string>(value: out var text):
-                    Spend(
-                        count: text.Length,
+                    );
+                    Charge(
+                        depth: (depth + 1),
+                        node: pair.Value,
                         span: span
                     );
-                    break;
-            }
+                }
+                break;
+            // Asking a number for text boxes it, so only a value that is text is asked.
+            case JsonValue scalar when ((scalar.GetValueKind() == JsonValueKind.String) && scalar.TryGetValue<string>(value: out var text)):
+                Spend(
+                    count: text.Length,
+                    span: span
+                );
+                break;
         }
     }
+
     /// <summary>Enters one recursive evaluation, charging work and depth.</summary>
     /// <param name="span">The evaluated source.</param>
     /// <returns>A scope that releases depth when disposed.</returns>
@@ -127,6 +158,10 @@ public sealed class DocumentEvaluationBudget {
         public void Dispose() => --m_budget.m_depth;
     }
 }
+/// <summary>The refusal a read of a <see cref="DocumentScope.BindRefused"/> binding's value reports.</summary>
+/// <param name="Code">The diagnostic code.</param>
+/// <param name="Message">The refusal, naming the spellings that do read.</param>
+public sealed record DocumentBindingRefusal(string Code, string Message);
 /// <summary>A source-located refusal that stops an unsafe or undefined evaluation.</summary>
 public sealed class DocumentEvaluationException : Exception {
     /// <summary>Gets the diagnostic code.</summary>

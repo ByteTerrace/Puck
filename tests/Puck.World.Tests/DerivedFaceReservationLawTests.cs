@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 
 using Xunit;
@@ -28,7 +29,7 @@ public sealed class DerivedFaceReservationLawTests {
         var authoring = (fixture.Server.Definition.Authoring with { DerivedFaceScreens = derivedFaceScreens });
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetAuthoringDefaults(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Authoring: authoring
         ));
         fixture.Step();

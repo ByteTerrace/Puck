@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Buffers.Binary;
-using System.Runtime.Intrinsics.X86;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -19,47 +18,57 @@ public static partial class ExpressionArithmetic {
         value = 0;
         if (kind is not (CellKind.Int or CellKind.Fixed)) { return false; }
         switch (operation) {
-            case ExpressionOp.Add: return Narrow(
+            case ExpressionOp.Add:
+                return Narrow(
                 value: out value,
                 wide: (((Int128)left) + right)
             );
-            case ExpressionOp.Subtract: return Narrow(
+            case ExpressionOp.Subtract:
+                return Narrow(
                 value: out value,
                 wide: (((Int128)left) - right)
             );
-            case ExpressionOp.Minimum: value = Math.Min(
+            case ExpressionOp.Minimum:
+                value = Math.Min(
                 val1: left,
                 val2: right
             ); return true;
-            case ExpressionOp.Maximum: value = Math.Max(
+            case ExpressionOp.Maximum:
+                value = Math.Max(
                 val1: left,
                 val2: right
             ); return true;
-            case ExpressionOp.Equal: value = ((left == right)
+            case ExpressionOp.Equal:
+                value = ((left == right)
                 ? 1L
                 : 0L
             ); return true;
-            case ExpressionOp.NotEqual: value = ((left != right)
+            case ExpressionOp.NotEqual:
+                value = ((left != right)
                 ? 1L
                 : 0L
             ); return true;
-            case ExpressionOp.Less: value = ((left < right)
+            case ExpressionOp.Less:
+                value = ((left < right)
                 ? 1L
                 : 0L
             ); return true;
-            case ExpressionOp.LessOrEqual: value = ((left <= right)
+            case ExpressionOp.LessOrEqual:
+                value = ((left <= right)
                 ? 1L
                 : 0L
             ); return true;
-            case ExpressionOp.Greater: value = ((left > right)
+            case ExpressionOp.Greater:
+                value = ((left > right)
                 ? 1L
                 : 0L
             ); return true;
-            case ExpressionOp.GreaterOrEqual: value = ((left >= right)
+            case ExpressionOp.GreaterOrEqual:
+                value = ((left >= right)
                 ? 1L
                 : 0L
             ); return true;
-            case ExpressionOp.Modulo:
+            case ExpressionOp.Remainder:
                 // The raw remainder is the remainder in either kind (Q48.16 bits share one scale); -1 divides
                 // everything, so it reads zero rather than faulting on long.MinValue.
                 if (right == 0) { return false; }
@@ -114,17 +123,11 @@ public static partial class ExpressionArithmetic {
                 return true;
             case ExpressionOp.ParallelBitExtract:
                 if (kind != CellKind.Int) { return false; }
-                value = ((long)ParallelExtract(
-                    mask: ((ulong)right),
-                    value: ((ulong)left)
-                ));
+                value = ((long)((ulong)left).ParallelBitExtract(mask: ((ulong)right)));
                 return true;
             case ExpressionOp.ParallelBitDeposit:
                 if (kind != CellKind.Int) { return false; }
-                value = ((long)ParallelDeposit(
-                    mask: ((ulong)right),
-                    value: ((ulong)left)
-                ));
+                value = ((long)((ulong)left).ParallelBitDeposit(mask: ((ulong)right)));
                 return true;
             case ExpressionOp.RepeatBits:
                 if (
@@ -154,10 +157,12 @@ public static partial class ExpressionArithmetic {
                 );
             case ExpressionOp.Divide:
                 if (right == 0) { return false; }
-                if (kind == CellKind.Int) { return Narrow(
+                if (kind == CellKind.Int) {
+                    return Narrow(
                     value: out value,
                     wide: (((Int128)left) / right)
-                ); }
+                );
+                }
                 var numerator = ((UInt128)((left < 0)
                     ? -((Int128)left)
                     : left));
@@ -197,7 +202,7 @@ public static partial class ExpressionArithmetic {
             case ExpressionOp.Negate:
                 if (operand == long.MinValue) { return false; }
                 value = -operand; return true;
-            case ExpressionOp.Abs:
+            case ExpressionOp.Absolute:
                 if (operand == long.MinValue) { return false; }
                 value = Math.Abs(value: operand); return true;
             case ExpressionOp.Sign: value = Math.Sign(value: operand); return true;
@@ -207,13 +212,13 @@ public static partial class ExpressionArithmetic {
 
         switch (operation) {
             case ExpressionOp.BitNot: value = ~operand; return true;
-            case ExpressionOp.PopCount: value = BitOperations.PopCount(value: bits); return true;
+            case ExpressionOp.SetBitCount: value = BitOperations.PopCount(value: bits); return true;
             case ExpressionOp.LeadingZeroCount: value = BitOperations.LeadingZeroCount(value: bits); return true;
             case ExpressionOp.TrailingZeroCount: value = BitOperations.TrailingZeroCount(value: bits); return true;
-            case ExpressionOp.LowestSetBit: value = ((long)(bits & (~bits + 1UL))); return true;
-            case ExpressionOp.ClearLowestSetBit: value = ((long)(bits & (bits - 1UL))); return true;
+            case ExpressionOp.LowestSetBit: value = ((long)bits.LowestSetBit()); return true;
+            case ExpressionOp.ClearLowestSetBit: value = ((long)bits.ClearLowestSetBit()); return true;
             case ExpressionOp.ByteSwap: value = ((long)BinaryPrimitives.ReverseEndianness(value: bits)); return true;
-            case ExpressionOp.BitReverse: value = ((long)ReverseBits(bits: bits)); return true;
+            case ExpressionOp.ReverseBits: value = ((long)bits.ReverseBits()); return true;
             case ExpressionOp.ReplicationMask:
                 if (!IsReplicationWidth(width: operand)) { return false; }
                 value = unchecked((long)((int)operand).ReplicationMask<ulong>());
@@ -235,7 +240,7 @@ public static partial class ExpressionArithmetic {
             (width > 64) ||
             ((offset + width) > 64)
         ) { return false; }
-        field = ((long)((((ulong)value) >> ((int)offset)) & FieldMask(width: ((int)width))));
+        field = ((long)((((ulong)value) >> ((int)offset)) & ((int)width).LowMask<ulong>()));
         return true;
     }
     /// <summary>Replaces the bit field of <paramref name="width"/> bits at <paramref name="offset"/> with the low
@@ -254,64 +259,14 @@ public static partial class ExpressionArithmetic {
             (width > 64) ||
             ((offset + width) > 64)
         ) { return false; }
-        var mask = (FieldMask(width: ((int)width)) << ((int)offset));
+        var mask = (((int)width).LowMask<ulong>() << ((int)offset));
 
         inserted = ((long)((((ulong)value) & ~mask) | ((((ulong)field) << ((int)offset)) & mask)));
         return true;
     }
 
-    private static ulong FieldMask(int width) => ((width == 64)
-        ? ulong.MaxValue
-        : ((1UL << width) - 1UL)
-    );
-    private static bool IsReplicationWidth(long width) => (width is 1 or 2 or 4 or 8 or 16 or 32 or 64);
-    // BMI2 when the machine has it; the software forms walk the mask's set bits from the bottom and are bit-exact
-    // with the instructions, so a replay agrees across machines either way.
-    private static ulong ParallelExtract(ulong value, ulong mask) {
-        if (Bmi2.X64.IsSupported) {
-            return Bmi2.X64.ParallelBitExtract(
-                mask: mask,
-                value: value
-            );
-        }
-        var result = 0UL;
-        var bit = 0;
-
-        while (mask != 0UL) {
-            var lowest = mask & (~mask + 1UL);
-
-            if ((value & lowest) != 0UL) { result |= (1UL << bit); }
-            bit++;
-            mask &= (mask - 1UL);
-        }
-        return result;
-    }
-    private static ulong ParallelDeposit(ulong value, ulong mask) {
-        if (Bmi2.X64.IsSupported) {
-            return Bmi2.X64.ParallelBitDeposit(
-                mask: mask,
-                value: value
-            );
-        }
-        var result = 0UL;
-        var bit = 0;
-
-        while (mask != 0UL) {
-            var lowest = mask & (~mask + 1UL);
-
-            if (((value >> bit) & 1UL) != 0UL) { result |= lowest; }
-            bit++;
-            mask &= (mask - 1UL);
-        }
-        return result;
-    }
-    // Bit reversal by successive swaps of halves, pairs, nibbles, then the byte order.
-    private static ulong ReverseBits(ulong bits) {
-        bits = ((bits >> 1) & 0x5555555555555555UL) | ((bits & 0x5555555555555555UL) << 1);
-        bits = ((bits >> 2) & 0x3333333333333333UL) | ((bits & 0x3333333333333333UL) << 2);
-        bits = ((bits >> 4) & 0x0F0F0F0F0F0F0F0FUL) | ((bits & 0x0F0F0F0F0F0F0F0FUL) << 4);
-        return BinaryPrimitives.ReverseEndianness(value: bits);
-    }
+    // Every width from one bit through the whole word; a width that does not divide 64 truncates its last copy.
+    private static bool IsReplicationWidth(long width) => (width is >= 1 and <= 64);
     private static bool Narrow(Int128 wide, out long value) {
         if (
             (wide < long.MinValue) ||

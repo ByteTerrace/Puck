@@ -20,6 +20,29 @@ public sealed class WorldCompositionLinksTests {
 
         Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic => diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "id is not text"));
     }
+    // A spawn's position has one spelling, `at`; the retired `position` is refused by name, and `at` lowers to the
+    // spawn point's position.
+    [InlineData("spawn arrival { position [3m, 0m, 4m] }", false)]
+    [InlineData("spawn arrival { at [3m, 0m, 4m] }", true)]
+    [Theory]
+    public void ASpawnWritesItsPositionOnlyAsAt(string source, bool admitted) {
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            defaultSchema: "puck.world.definition.v1",
+            imports: ImportHandling.Ignore,
+            source: source
+        );
+
+        if (!admitted) {
+            Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic => diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "admits only at and yaw"));
+
+            return;
+        }
+
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport());
+        Assert.True(condition: DocumentNumbers.TryExact(node: compilation.RequireJson()["spawnPoints"]![0]!["position"]![2], number: out var z));
+        Assert.Equal(actual: z, expected: 4m);
+    }
     [Fact]
     public void GroundWithoutCenterEmitsAValidWorldAtTheOrigin() {
         var compilation = WorldCompiler.Compile(
@@ -33,7 +56,29 @@ public sealed class WorldCompositionLinksTests {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: json.ToJsonString()));
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition, out var reason, neighbours: null), userMessage: reason);
-        Assert.Equal(expected: "ground-floor", actual: definition.Creations.Single().Id);
+        Assert.Equal(expected: "ground$floor", actual: definition.Creations.Single().Id);
+    }
+    // An aliased use names everything its module declares under the alias, a ground's generated placement and
+    // prototype included, so two aliased uses of one module stand two grounds. The mutation proof is the first
+    // assertion: with placements and prototypes left out of the module namespace, both uses write 'floor' and
+    // 'ground$floor' and the document refuses the duplicates.
+    [Fact]
+    public void TwoAliasedUsesOfOneModuleStandTwoGrounds() {
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            defaultSchema: "puck.world.definition.v1",
+            imports: ImportHandling.Ignore,
+            source: "module room() {\n  ground floor { size [12m, 8m] }\n}\n\nuse room as a()\nuse room as b()\n"
+        );
+
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport());
+
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: compilation.RequireJson().ToJsonString()));
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition, out var reason, neighbours: null), userMessage: reason);
+        Assert.Equal(expected: ["a$ground$floor", "b$ground$floor"], actual: definition.Creations.Select(selector: static creation => creation.Id));
+        Assert.Equal(expected: ["a$floor", "b$floor"], actual: definition.Placements.Select(selector: static placement => placement.Id));
+        Assert.Equal(expected: ["a$ground$floor", "b$ground$floor"], actual: definition.Placements.Select(selector: static placement => placement.PrototypeId));
     }
     [Fact]
     public void CompositionEndpointUnitsLowerToWorldUnitsAndDegrees() {
@@ -59,11 +104,13 @@ public sealed class WorldCompositionLinksTests {
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport());
         var west = compilation.Worlds.Single(predicate: output => (output.Name == "west")).Json;
 
-        Assert.True(condition: DocumentNumbers.TryExact(west["adjacencies"]![0]!["hysteresis"], out var hysteresis));
-        Assert.True(condition: DocumentNumbers.TryExact(west["spawnPoints"]![0]!["yawDegrees"], out var yaw));
+        Assert.True(condition: DocumentNumbers.TryExact(node: west["adjacencies"]![0]!["hysteresis"], number: out var hysteresis));
+        Assert.True(condition: DocumentNumbers.TryExact(node: west["spawnPoints"]![0]!["yawDegrees"], number: out var yaw));
         Assert.Equal(actual: hysteresis, expected: 2m);
         Assert.Equal(actual: yaw, expected: 90m);
         Assert.Null(@object: west["$composition"]);
+        Assert.Equal(expected: "wing$floor", actual: west["placements"]!["rows"]![0]!["id"]!.GetValue<string>());
+        Assert.Equal(expected: "wing$ground$floor", actual: west["prototypes"]![0]!["id"]!.GetValue<string>());
     }
     [Fact]
     public void GroundBorderGeneratesReciprocalTopology() {
@@ -76,7 +123,7 @@ public sealed class WorldCompositionLinksTests {
         WorldCompositionLinks.Apply(worlds, [new WorldCompositionLink(
             Kind: "border", LeftWorld: "west", LeftEndpoint: "east",
             RightWorld: "east", RightEndpoint: "west",
-            Options: new JsonObject { ["height"] = 12 }, Origin: new SourceOrigin(SourceSpan.None, null, null)
+            Options: new JsonObject { ["height"] = 12 }, Origin: new SourceOrigin(ModuleInstancePath: null, SourcePath: null, Span: SourceSpan.None)
         )], diagnostics);
 
         Assert.False(condition: diagnostics.HasErrors);
@@ -87,7 +134,7 @@ public sealed class WorldCompositionLinksTests {
         Assert.Equal(expected: "east", actual: east["counterpart"]?.GetValue<string>());
         Assert.Equal(expected: 90d, actual: west["boundary"]?["outwardYawDegrees"]?.GetValue<double>());
         Assert.Equal(expected: -90d, actual: east["boundary"]?["outwardYawDegrees"]?.GetValue<double>());
-        Assert.Equal(expected: "east.world.json", actual: worlds["west"]["references"]?[0]?["document"]?.GetValue<string>());
+        Assert.Equal(expected: "east", actual: worlds["west"]["references"]?[0]?["document"]?.GetValue<string>());
     }
     [Fact]
     public void PitchedBorderUsesWrittenFrameAndCarriesAuthoredHysteresis() {
@@ -100,7 +147,7 @@ public sealed class WorldCompositionLinksTests {
             ["height"] = 90,
         };
 
-        WorldCompositionLinks.Apply(worlds, [new WorldCompositionLink("border", "island", "under", "corner", "sky", options, SourceSpan.None)], diagnostics);
+        WorldCompositionLinks.Apply(worlds, [new WorldCompositionLink(kind: "border", leftEndpoint: "under", leftWorld: "island", options: options, rightEndpoint: "sky", rightWorld: "corner", span: SourceSpan.None)], diagnostics);
 
         Assert.False(condition: diagnostics.HasErrors);
         Assert.Equal(expected: -90d, actual: worlds["island"]["adjacencies"]?[0]?["boundary"]?["outwardPitchDegrees"]?.GetValue<double>());
@@ -110,7 +157,7 @@ public sealed class WorldCompositionLinksTests {
         var widened = new Dictionary<string, JsonObject> { ["a"] = [], ["b"] = [] };
         var widenedDiagnostics = new DiagnosticBag();
 
-        WorldCompositionLinks.Apply(widened, [new WorldCompositionLink("border", "a", "under", "b", "sky", options, SourceSpan.None)], widenedDiagnostics);
+        WorldCompositionLinks.Apply(widened, [new WorldCompositionLink(kind: "border", leftEndpoint: "under", leftWorld: "a", options: options, rightEndpoint: "sky", rightWorld: "b", span: SourceSpan.None)], widenedDiagnostics);
         Assert.False(condition: widenedDiagnostics.HasErrors);
         Assert.Equal(expected: 2, actual: widened["a"]["adjacencies"]?[0]?["hysteresis"]?.GetValue<int>());
     }
@@ -126,7 +173,7 @@ public sealed class WorldCompositionLinksTests {
             ["height"] = 4,
         };
 
-        WorldCompositionLinks.Apply(worlds, [new WorldCompositionLink("border", "a", "edge", "b", "edge", options, SourceSpan.None)], diagnostics);
+        WorldCompositionLinks.Apply(worlds, [new WorldCompositionLink(kind: "border", leftEndpoint: "edge", leftWorld: "a", options: options, rightEndpoint: "edge", rightWorld: "b", span: SourceSpan.None)], diagnostics);
 
         Assert.True(condition: diagnostics.HasErrors);
         Assert.Empty(collection: worlds["a"]);
@@ -213,7 +260,7 @@ public sealed class WorldCompositionLinksTests {
 
         Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport());
         Assert.Equal(expected: "mapped", actual: source["placements"]?["rows"]?[0]?["faceSources"]?[0]?["portal"]?["arrival"]?.GetValue<string>());
-        Assert.Equal(expected: "return-island-arch1/portal", actual: source["placements"]?["rows"]?[0]?["faceSources"]?[0]?["portal"]?["counterpart"]?.GetValue<string>());
+        Assert.Equal(expected: "return$island$arch1/portal", actual: source["placements"]?["rows"]?[0]?["faceSources"]?[0]?["portal"]?["counterpart"]?.GetValue<string>());
         Assert.Equal(expected: 3, actual: destination["placements"]?["rows"]?[0]?["position"]?[0]?.GetValue<int>());
         foreach (var world in worlds.Values) {
             var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: world.ToJsonString()));
@@ -257,9 +304,9 @@ public sealed class WorldCompositionLinksTests {
         var island = islandOutput.Json;
         var parlor = parlorOutput.Json;
 
-        Assert.Equal(expected: "return-island-arch1/portal", actual: island["placements"]?["rows"]?[0]?["faceSources"]?[0]?["portal"]?["counterpart"]?.GetValue<string>());
-        Assert.Equal(expected: "return-island-arch1", actual: parlor["placements"]?["rows"]?[0]?["id"]?.GetValue<string>());
-        Assert.True(condition: islandOutput.SourceMap.TryGetOrigin("/placements/rows/0/faceSources/0/portal", out var portalOrigin));
+        Assert.Equal(expected: "return$island$arch1/portal", actual: island["placements"]?["rows"]?[0]?["faceSources"]?[0]?["portal"]?["counterpart"]?.GetValue<string>());
+        Assert.Equal(expected: "return$island$arch1", actual: parlor["placements"]?["rows"]?[0]?["id"]?.GetValue<string>());
+        Assert.True(condition: islandOutput.SourceMap.TryGetOrigin(jsonPointer: "/placements/rows/0/faceSources/0/portal", origin: out var portalOrigin));
         Assert.Equal(expected: "composition.puck", actual: portalOrigin.SourcePath);
         foreach (var world in compilation.Worlds) {
             var definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: world.Json.ToJsonString()));
@@ -275,17 +322,17 @@ public sealed class WorldCompositionLinksTests {
         var span = new SourceSpan(Column: 1, Length: 18, Line: 4, Offset: 20);
         SourceOrigin origin;
 
-        using (maps["a"].PushOrigin(sourcePath: "composition.puck", moduleInstance: "generated"))
+        using (maps["a"].PushOrigin(moduleInstance: "generated", sourcePath: "composition.puck"))
         using (maps["a"].PushOrigin(moduleInstance: "second")) {
-            origin = maps["a"].CaptureOrigin(span);
+            origin = maps["a"].CaptureOrigin(span: span);
         }
         var options = new JsonObject { ["center"] = new JsonArray(0, 0, 0), ["width"] = 4, ["height"] = 6 };
 
-        WorldCompositionLinks.Apply(worlds, [new WorldCompositionLink("border", "a", "east", "b", "west", options, origin)], diagnostics, maps);
+        WorldCompositionLinks.Apply(worlds, [new WorldCompositionLink(Kind: "border", LeftEndpoint: "east", LeftWorld: "a", Options: options, Origin: origin, RightEndpoint: "west", RightWorld: "b")], diagnostics, maps);
 
         Assert.False(condition: diagnostics.HasErrors, userMessage: diagnostics.FormatReport());
-        Assert.True(condition: maps["a"].TryGetOrigin("/adjacencies/0", out var registered));
-        Assert.Equal(expected: origin, actual: registered);
+        Assert.True(condition: maps["a"].TryGetOrigin(jsonPointer: "/adjacencies/0", origin: out var registered));
+        Assert.Equal(actual: registered, expected: origin);
     }
     [Fact]
     public void DoorRefusesMalformedPlacementIdWithoutMutatingTopology() {

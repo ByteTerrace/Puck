@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.World.Protocol;
 
 /// <summary>A guest-facing reference into one <c>Server.WorldHandleTable</c> slot — an index plus the generation its
@@ -21,4 +23,4 @@ namespace Puck.World.Protocol;
 /// <param name="Generation">The slot's generation at mint time.</param>
 /// <param name="TablePrincipal">The principal of the handle table that minted this handle.</param>
 /// <param name="TableCapability">The capability of the handle table that minted this handle.</param>
-public readonly record struct WorldHandle(int Index, int Generation, WorldPrincipal TablePrincipal, WorldCapability TableCapability);
+public readonly record struct WorldHandle(int Index, int Generation, Principal TablePrincipal, WorldCapability TableCapability);

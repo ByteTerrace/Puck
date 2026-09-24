@@ -1,0 +1,16 @@
+# The boot row compiles in the background; time scale zero holds the instance at its first frame.
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+# Explicit configuration with exposure zero, rendered as the one initialization frame after a reset.
+pipeline.set ink simulation {"decay":0.987}
+pipeline.set ink visualize {"exposure":0}
+pipeline.reset ink
+pipeline.wait ink submitted 1 10
+pipeline.capture ink {run}/exposure-zero.png
+pipeline.wait ink captured 10
+# Exposure restored, rendered the same way.
+pipeline.set ink visualize {"exposure":1}
+pipeline.reset ink
+pipeline.wait ink submitted 1 10
+pipeline.capture ink {run}/exposure-one.png
+pipeline.wait ink captured 10

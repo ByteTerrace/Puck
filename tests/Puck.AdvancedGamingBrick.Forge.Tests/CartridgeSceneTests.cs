@@ -1,8 +1,4 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
-
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
@@ -21,7 +17,7 @@ public sealed class CartridgeSceneTests {
             Name: $"scene{phase}",
             When: CartridgeExpressions.Gate(
                 left: CartridgeExpressions.Of(state: "ph"),
-                comparison: ActionStateComparison.Equal,
+                comparison: ExpressionOp.Equal,
                 right: CartridgeExpressions.Of(constant: phase)
             ),
             Body: [
@@ -38,10 +34,6 @@ public sealed class CartridgeSceneTests {
                 ),
             ]
         );
-    private static ICartridgeCompiler Compiler(string target) => ((target == "agb")
-        ? new AgbCartridgeCompiler()
-        : new HgbCartridgeCompiler()
-    );
     private static CartridgeDocument Document(string target, string? scene) =>
         CartridgeDocuments.Create(
             target: target,
@@ -89,12 +81,15 @@ public sealed class CartridgeSceneTests {
     [InlineData("agb")]
     [Theory]
     public void ADeclaredSceneRunsOneArmPerFrame(string target) {
-        var result = Compiler(target: target).Compile(document: Document(
+        var result = CartridgeProbe.Compiler(target: target).Compile(document: Document(
             scene: "ph",
             target: target
         ));
 
-        using var machine = new SceneProbe(result: result);
+        using var machine = new CartridgeProbe(
+            label: "scene",
+            result: result
+        );
 
         machine.Run(frames: Frames);
 
@@ -113,45 +108,20 @@ public sealed class CartridgeSceneTests {
     [Theory]
     public void AnUndeclaredGuardLetsEveryArmRunInOneFrame(string target) {
         // The control. Without it the test above would also pass on a machine that never ran the rules at all.
-        var result = Compiler(target: target).Compile(document: Document(
+        var result = CartridgeProbe.Compiler(target: target).Compile(document: Document(
             scene: null,
             target: target
         ));
 
-        using var machine = new SceneProbe(result: result);
+        using var machine = new CartridgeProbe(
+            label: "scene",
+            result: result
+        );
 
         machine.Run(frames: Frames);
 
         foreach (var counter in new[] { "a", "b", "c" }) {
             Assert.True(condition: (machine.Read(address: result.Variables[counter]) > ((Frames / 3) + 2)));
-        }
-    }
-
-    private sealed class SceneProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public SceneProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "scene"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "scene"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
         }
     }
 }

@@ -1,7 +1,8 @@
+using Puck.Commands;
 using System.Numerics;
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
-using Puck.SignedDistance;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -17,44 +18,12 @@ public sealed class PlacementResponseLawTests {
     private const string PlacementId = "grove";
     private const string TargetCreation = "stump";
 
-    private static WorldPrototype Creation(string id) {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: id,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: id
-        );
-
-        return new WorldPrototype(
-            Id: id,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     private static WorldDefinition Document(IReadOnlyList<WorldPlacementResponse>? respond) {
         var document = Fixtures.BuildDocument();
 
         return (document with {
             StateRaw = FieldsSection(),
-            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation)],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.UnitSphere(id: TargetCreation)],
             PlacementRowsRaw = [
                 new WorldPlacement(
                 Id: PlacementId,
@@ -67,7 +36,7 @@ public sealed class PlacementResponseLawTests {
             ],
         });
     }
-    private static WorldPlacementResponse Entry(ActionStateComparison comparison, float threshold, string prototypeId) => new(
+    private static WorldPlacementResponse Entry(ExpressionOp comparison, float threshold, string prototypeId) => new(
         When: new WorldPlacementResponseCondition.FieldCondition(
             Comparison: comparison,
             Field: FieldName,
@@ -116,16 +85,14 @@ public sealed class PlacementResponseLawTests {
     private static string PrototypeOf(WorldFixture fixture) => WorldDefinitionRows.FindPlacement(
         id: PlacementId,
         placements: fixture.Server.Definition.Placements
-    )!.PrototypeId;
+    )!.ShownPrototypeId;
 
-    /// <summary>A holding condition swaps the prototype; the row is left exactly as it reads once nothing holds
-    /// (the facet only ever SELECTS on a match, it never reverts) — proved by an unreachable second entry that a
-    /// later tick could otherwise have satisfied.</summary>
+    /// <summary>A condition the field never reaches leaves the row showing its authored prototype.</summary>
     [Fact]
     public void ANonHoldingConditionNeverSwaps() {
         using var fixture = Fixtures.FreshServer(definition: Document(respond: [
             Entry(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 prototypeId: TargetCreation,
                 threshold: 999f
             ),
@@ -157,7 +124,7 @@ public sealed class PlacementResponseLawTests {
 
         using var present = Fixtures.FreshServer(definition: Document(respond: [
             Entry(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 prototypeId: TargetCreation,
                 threshold: 0.5f
             ),
@@ -181,17 +148,17 @@ public sealed class PlacementResponseLawTests {
 
         using var firstWins = Fixtures.FreshServer(definition: (Document(respond: [
             Entry(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 prototypeId: TargetCreation,
                 threshold: 0.2f
             ),
             Entry(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 prototypeId: SecondTarget,
                 threshold: 0.2f
             ),
         ]) with {
-            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: SecondTarget)],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.UnitSphere(id: TargetCreation), CreationFixtures.UnitSphere(id: SecondTarget)],
         }));
 
         for (var index = 0; (index < 3); index++) {
@@ -205,17 +172,17 @@ public sealed class PlacementResponseLawTests {
 
         using var secondWins = Fixtures.FreshServer(definition: (Document(respond: [
             Entry(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 prototypeId: SecondTarget,
                 threshold: 0.2f
             ),
             Entry(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 prototypeId: TargetCreation,
                 threshold: 0.2f
             ),
         ]) with {
-            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: SecondTarget)],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.UnitSphere(id: TargetCreation), CreationFixtures.UnitSphere(id: SecondTarget)],
         }));
 
         for (var index = 0; (index < 3); index++) {
@@ -234,7 +201,7 @@ public sealed class PlacementResponseLawTests {
     public void TheSwapTickIsDeterministicAcrossIndependentRuns() {
         WorldDefinition Build() => Document(respond: [
             Entry(
-                comparison: ActionStateComparison.GreaterOrEqual,
+                comparison: ExpressionOp.GreaterOrEqual,
                 prototypeId: TargetCreation,
                 threshold: 0.5f
             ),
@@ -274,38 +241,6 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
     private const string PlacementId = "grove";
     private const string TargetCreation = "stump";
 
-    private static WorldPrototype Creation(string id) {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: id,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: id
-        );
-
-        return new WorldPrototype(
-            Id: id,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     // No fields section at all — the state arm reads an ordinary rule-written row, never a lattice cell. A rule with
     // no gate (Level trigger) fires every tick, so the counter is exactly the completed tick count.
     private static WorldDefinition CrossingDocument() {
@@ -325,7 +260,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
                         Value: 1
                     )]
             )],
-            CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation)],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.UnitSphere(id: TargetCreation)],
             PlacementRowsRaw = [
                 new WorldPlacement(
                 Id: PlacementId,
@@ -337,7 +272,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
                         new WorldPlacementResponse(
                         When: new WorldPlacementResponseCondition.StateCondition(
                             State: CounterRow,
-                            Comparison: ActionStateComparison.GreaterOrEqual,
+                            Comparison: ExpressionOp.GreaterOrEqual,
                             Value: 3
                         ),
                         PrototypeId: TargetCreation
@@ -350,7 +285,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
     private static string PrototypeOf(WorldFixture fixture) => WorldDefinitionRows.FindPlacement(
         id: PlacementId,
         placements: fixture.Server.Definition.Placements
-    )!.PrototypeId;
+    )!.ShownPrototypeId;
 
     /// <summary>The row climbs 1/tick from a rule with no gate; the swap lands the moment it reaches 3, not
     /// before.</summary>
@@ -375,6 +310,38 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
             expected: TargetCreation,
             actual: PrototypeOf(fixture: fixture)
         );
+    }
+    /// <summary>A response lasts exactly as long as its condition: the row shows the entry while the slot holds and
+    /// its authored prototype once it stops, and the authored prototype itself is never overwritten.</summary>
+    [Fact]
+    public void ARowShowsItsAuthoredPrototypeOnceNoEntryHolds() {
+        var document = CrossingDocument();
+        using var fixture = Fixtures.FreshServer(definition: document with { Rules = [] });
+
+        void Set(long value) {
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+                Principal: Principal.Console,
+                Row: CounterRow,
+                Key: StateRow.SlotKey.Value,
+                Value: value,
+                Kind: WorldDocumentWriteKind.Set
+            ));
+            fixture.Step();
+            fixture.Step();
+        }
+        WorldPlacement Row() => WorldDefinitionRows.FindPlacement(
+            id: PlacementId,
+            placements: fixture.Server.Definition.Placements
+        )!;
+
+        fixture.Step();
+        Set(value: 3L);
+        Assert.Equal(expected: TargetCreation, actual: Row().ShownPrototypeId);
+        Assert.Equal(expected: 1, actual: Row().Holding);
+        Set(value: 0L);
+        Assert.Equal(expected: BaseCreation, actual: Row().ShownPrototypeId);
+        Assert.Equal(expected: 0, actual: Row().Holding);
+        Assert.Equal(expected: BaseCreation, actual: Row().PrototypeId);
     }
     // Breaking the source change once (stash it, re-run, restore) turns this red: without the skip, every placement
     // re-reads and re-compares its row every tick regardless of whether it moved, so the "with" and "without" medians
@@ -402,7 +369,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
                     ? [new WorldPlacementResponse(
                                 When: new WorldPlacementResponseCondition.StateCondition(
                                     State: CounterRow,
-                                    Comparison: ActionStateComparison.GreaterOrEqual,
+                                    Comparison: ExpressionOp.GreaterOrEqual,
                                     Value: 999_999
                                 ),
                                 PrototypeId: BaseCreation
@@ -418,7 +385,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
                     Kind: CellKind.Int
                 ),
                 ]),
-                CreationsRaw = [Creation(id: BaseCreation)],
+                CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation)],
                 PlacementRowsRaw = placements,
             });
         }
@@ -432,10 +399,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
             var samples = new long[SampleTicks];
 
             for (var index = 0; (index < samples.Length); index++) {
-                var before = GC.GetAllocatedBytesForCurrentThread();
-
-                fixture.Step();
-                samples[index] = (GC.GetAllocatedBytesForCurrentThread() - before);
+                samples[index] = AllocationWindow.Total(window: () => fixture.Step());
             }
 
             Array.Sort(array: samples);

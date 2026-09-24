@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -14,9 +15,9 @@ public sealed class WorldGroupMembershipLawTests {
             World: SafeName.Parse(candidate: "social-world")
         );
         var qualified = WorldMemberRef.VerifiedIdentity(identity: identity);
-        var seat0 = WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0));
-        var seat1 = WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1));
-        var console = WorldMemberRef.Local(principal: WorldPrincipal.Console);
+        var seat0 = WorldMemberRef.Local(principal: Principal.Seat(slot: 0));
+        var seat1 = WorldMemberRef.Local(principal: Principal.Seat(slot: 1));
+        var console = WorldMemberRef.Local(principal: Principal.Console);
 
         var section = new WorldGroupsSection(
             Kinds: [
@@ -361,7 +362,7 @@ public sealed class WorldGroupMembershipLawTests {
     }
     [Fact]
     public void MemberRef_LocalCannotSatisfyVerifiedArm() {
-        var local = WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0));
+        var local = WorldMemberRef.Local(principal: Principal.Seat(slot: 0));
 
         Assert.True(condition: local.IsCanonical());
         Assert.False(condition: WorldMemberRef.TryParseCanonical(
@@ -394,14 +395,14 @@ public sealed class WorldGroupMembershipLawTests {
     [Fact]
     public void Roster_DuplicateAndCapacityRefuse_AndDistinctMembersPass() {
         var first = new WorldGroupMember(
-            Ref: WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 0)),
+            Ref: WorldMemberRef.Local(principal: Principal.Seat(slot: 0)),
             Role: "member",
             JoinOrdinal: 0,
             Tags: ["front"]
         );
         var duplicate = first with { JoinOrdinal = 1 };
         var second = new WorldGroupMember(
-            Ref: WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
+            Ref: WorldMemberRef.Local(principal: Principal.Seat(slot: 1)),
             Role: "member",
             JoinOrdinal: 1,
             Tags: ["back"]
@@ -507,7 +508,7 @@ public sealed class WorldGroupMembershipLawTests {
             Members = [
                 ..friendship.Members,
                 new WorldGroupMember(
-                Ref: WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 2)),
+                Ref: WorldMemberRef.Local(principal: Principal.Seat(slot: 2)),
                 Role: "friend",
                 JoinOrdinal: 2
             )

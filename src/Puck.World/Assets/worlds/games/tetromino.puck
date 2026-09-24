@@ -1,0 +1,875 @@
+// Tetromino: the falling-block game played with the seven one-sided tetrominoes, the four-square pieces I, O,
+// T, S, Z, J and L. Pieces fall into a well ten columns wide; a row filled from wall to wall clears, and the rows
+// above it drop into its place. The game ends when a new piece has no room to appear.
+//
+// The rules follow the published modern rule set: pieces arrive from a shuffled bag of all seven, rotation uses the
+// Super Rotation System with its wall-kick tests, a landed piece locks after half a second (reset by up to fifteen
+// moves), and a hold slot keeps one piece aside once per drop. Score is 100, 300, 500 or 800 times the level for a
+// clear of one to four rows, plus one a row for a soft drop and two a row for a hard drop; the level rises every ten
+// rows and speeds up gravity. Reductions, stated rather than left to be discovered: there is no auto-repeat on a
+// held move, no preview queue beyond the next piece, no T-spin or back-to-back bonus, and a rotation cannot kick a
+// piece above the top of the well.
+//
+// The '.puck' source is canonical: edit it and compile, never the '.world.json' beside it.
+//
+// The well is a keyed row of line masks, row 0 at the top. Rows 2 to 23 are the playing rows: 2 and 3 above the
+// visible twenty, where pieces appear. Bit c + 3 of a line is column c; bits 0 to 2 and 13 to 15 are the walls,
+// always set, so an empty playing row reads 57351 and a full one 65535. Rows 0, 1 and 24 are the ceiling and the
+// floor: every bit set, and bit 16 besides, so they stop a piece but never read as a full row. A piece is its kind,
+// its rotation and the top-left corner of its four-by-four box; its shape is four row masks, bit b standing for box
+// column b.
+
+schema: "puck.world.definition.v1"
+documentId: "tetromino"
+
+host {
+  presentation: Windowed
+  backend: auto
+  width: 960
+  height: 960
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentMode: Immediate
+  targetHertz: 60
+  exitAfterSeconds: 0
+}
+
+simulation {
+  rateHz: 30
+}
+
+let open = 57351
+let guard = 131071
+let spawnColumn = 3
+let spawnRow = 2
+
+// The seven pieces in the order I, O, T, S, Z, J, L, each as four rotations (spawn, clockwise, twice, counter-
+// clockwise) of four row masks. I turns inside a four-by-four box, O never moves, and the rest turn inside the box's
+// top-left three-by-three.
+let shapes = [
+  [[0, 15, 0, 0], [4, 4, 4, 4], [0, 0, 15, 0], [2, 2, 2, 2]],
+  [[6, 6, 0, 0], [6, 6, 0, 0], [6, 6, 0, 0], [6, 6, 0, 0]],
+  [[2, 7, 0, 0], [2, 6, 2, 0], [0, 7, 2, 0], [2, 3, 2, 0]],
+  [[6, 3, 0, 0], [2, 6, 4, 0], [0, 6, 3, 0], [1, 3, 2, 0]],
+  [[3, 6, 0, 0], [4, 6, 2, 0], [0, 3, 6, 0], [2, 3, 1, 0]],
+  [[1, 7, 0, 0], [6, 2, 2, 0], [0, 7, 4, 0], [2, 2, 3, 0]],
+  [[4, 7, 0, 0], [2, 2, 6, 0], [0, 7, 1, 0], [3, 2, 2, 0]]
+]
+
+// The wall-kick tests, as the rule set publishes them: x to the right and y UP. For each starting rotation, the five
+// offsets a clockwise turn tries in order, then the five a counter-clockwise turn tries. The first table serves J,
+// L, S, T and Z (and O, whose first test always fits); the second serves I.
+let kicks = [
+  [
+    [[[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]], [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]],
+    [[[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]], [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]]],
+    [[[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]], [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]]],
+    [[[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]], [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]]]
+  ],
+  [
+    [[[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]], [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]],
+    [[[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]], [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]]],
+    [[[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]], [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]]],
+    [[[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]], [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]]]
+  ]
+]
+
+// Gravity per level, as a cycle over the simulation tick: [ticksPerStep, power] reads zero once every
+// ticksPerStep * 30 / gcd(power, 30) ticks, so level 1 drops a row a second and level 10 fifteen a second.
+let paces = [[1, 1], [2, 3], [1, 2], [2, 5], [1, 3], [1, 5], [1, 6], [2, 15], [1, 10], [1, 15]]
+
+// ---- The seat -------------------------------------------------------------------------------------------------
+// The game is played through seat 1's own channels, so the world carries one seated body. There is nothing to stand
+// on and no gravity: the body floats where it appears and only its channels matter.
+
+grants [
+  {
+    capability: Mutate
+    grantee: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: Edit
+    grantee: "seat1"
+    subject: "all"
+  }
+  {
+    capability: Control
+    grantee: "seat1"
+    subject: "all"
+  }
+  {
+    capability: Drive
+    grantee: "seat1"
+    subject: "all"
+  }
+]
+
+channels [
+  { name: "left", shape: Binary, composition: true }
+  { name: "right", shape: Binary, composition: true }
+  { name: "down", shape: Binary, composition: true }
+  { name: "drop", shape: Binary, composition: true }
+  { name: "clockwise", shape: Binary, composition: true }
+  { name: "counter", shape: Binary, composition: true }
+  { name: "hold", shape: Binary, composition: true }
+  { name: "restart", shape: Binary, composition: true }
+]
+
+// The arrow keys and the d-pad move, soft-drop and hard-drop; X and Z turn; C holds; Enter or Start restarts.
+bindingOverlays [
+  {
+    id: "well"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              { channel: "left", sources ["keyboard.arrowLeft", "gamepad.dpadLeft"] }
+              { channel: "right", sources ["keyboard.arrowRight", "gamepad.dpadRight"] }
+              { channel: "down", sources ["keyboard.arrowDown", "gamepad.dpadDown"] }
+              { channel: "drop", sources ["keyboard.space", "gamepad.dpadUp"] }
+              { channel: "clockwise", sources ["keyboard.x", "gamepad.buttonEast"] }
+              { channel: "counter", sources ["keyboard.z", "gamepad.buttonSouth"] }
+              { channel: "hold", sources ["keyboard.c", "gamepad.buttonWest"] }
+              { channel: "restart", sources ["keyboard.enter", "gamepad.start"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
+views {
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: "World"
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 9, pitch: 0.9, yaw: 0)
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+      fieldOfView(fieldOfViewRadians: 0.9599)
+    ]
+  }
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "still"
+    operations [
+      CommitPose
+    ]
+    version: "puck.body.program.v1"
+  }
+]
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, 0, 0]
+}
+
+bodies {
+  capacity: 1
+  localSeats: 1
+  sleepAfterSeconds: 0
+}
+
+defaultSeatKit: "player"
+
+kits {
+  rows [
+    {
+      bodyContact: Overlap
+      bodyMotionProgram: "still"
+      collider: capsule(endpoint: [0, 1, 0], radius: 0.35)
+      motion {
+        facingSnap: false
+        holds [
+          {
+            bond: Free
+            hold: None
+            name: "floating"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+        }
+      }
+      name: "player"
+    }
+  ]
+}
+
+// ---- The full row ---------------------------------------------------------------------------------------------
+// Read over the well's own word, top row first: occurrence k of a full line is the k-th full row from the top.
+
+pattern fullRow: Int {
+  symbols {
+    filled = 65535
+  }
+  match: filled
+}
+
+// ---- Moving and turning -----------------------------------------------------------------------------------------
+// Each move tests the piece's four row masks against the well at the new place. A move or turn that lands resets
+// the lock delay, at most fifteen times before the piece reaches a lower row.
+
+template shift(name, press, dx) {
+  rule $"{name}" {
+    when stage == 1 and channel(1, press) >= 0.5
+    mode: Edge
+    for i in range(0, 4) {
+      local $"hit{i}" = well[py + i] & (shape[kind * 16 + turn * 4 + i] << (px + 3 + dx))
+    }
+    if (hit0 | hit1 | hit2 | hit3) == 0 {
+      px = px + dx
+      if resets < 15 {
+        resets = resets + 1
+        schedule lockAt in 0.5s
+      }
+    }
+  }
+}
+
+shift(name: "move-left", press: left, dx: -1)
+shift(name: "move-right", press: right, dx: 1)
+
+// A turn tries the five kick offsets its piece family publishes for this starting rotation and direction, and takes
+// the first at which the turned piece fits.
+template spin(name, press, direction) {
+  rule $"{name}" {
+    when stage == 1 and channel(1, press) >= 0.5
+    mode: Edge
+    local target = (turn + 1 + 2 * direction) % 4
+    local tests = (kind == 0) * 40 + turn * 10 + direction * 5
+    for i in range(0, 4) {
+      local $"m{i}" = shape[kind * 16 + target * 4 + i]
+    }
+    for t in range(0, 5) {
+      local $"x{t}" = px + 3 + kickX[tests + t]
+      local $"y{t}" = py + kickY[tests + t]
+      local $"fit{t}" = ((well[($"y{t}")] & (m0 << $"x{t}")) | (well[($"y{t}" + 1)] & (m1 << $"x{t}")) | (well[($"y{t}" + 2)] & (m2 << $"x{t}")) | (well[($"y{t}" + 3)] & (m3 << $"x{t}"))) == 0
+    }
+    local pick = fit0 ? 0 : (fit1 ? 1 : (fit2 ? 2 : (fit3 ? 3 : (fit4 ? 4 : -1))))
+    if pick >= 0 {
+      px = px + kickX[tests + pick]
+      py = py + kickY[tests + pick]
+      turn = target
+      if resets < 15 {
+        resets = resets + 1
+        schedule lockAt in 0.5s
+      }
+    }
+  }
+}
+
+spin(name: "turn-clockwise", press: clockwise, direction: 0)
+spin(name: "turn-counter", press: counter, direction: 1)
+
+// ---- Falling ----------------------------------------------------------------------------------------------------
+// Gravity drops the piece a row each time the level's cycle comes round; a soft drop drops it a row every tick the
+// key is held. Reaching a lower row than before restores the fifteen lock resets.
+
+rule "gravity" {
+  when stage == 1 and gravity[(level)] == 0
+  mode: Edge
+  for i in range(0, 4) {
+    local $"hit{i}" = well[py + 1 + i] & (shape[kind * 16 + turn * 4 + i] << (px + 3))
+  }
+  if (hit0 | hit1 | hit2 | hit3) == 0 {
+    py = py + 1
+    schedule lockAt in 0.5s
+    if py > lowest {
+      lowest = py
+      resets = 0
+    }
+  }
+}
+
+rule "soft-drop" {
+  when stage == 1 and channel(1, down) >= 0.5
+  for i in range(0, 4) {
+    local $"hit{i}" = well[py + 1 + i] & (shape[kind * 16 + turn * 4 + i] << (px + 3))
+  }
+  if (hit0 | hit1 | hit2 | hit3) == 0 {
+    py = py + 1
+    score = score + 1
+    schedule lockAt in 0.5s
+    if py > lowest {
+      lowest = py
+      resets = 0
+    }
+  }
+}
+
+// A hard drop falls as far as the piece fits and locks at once. room{d} is 1 while the piece fits at every depth
+// from one to d rows below where it is; a piece falls at most 22 rows, from the top playing row to the floor.
+rule "hard-drop" {
+  when stage == 1 and channel(1, drop) >= 0.5
+  mode: Edge
+  for i in range(0, 4) {
+    local $"m{i}" = shape[kind * 16 + turn * 4 + i] << (px + 3)
+  }
+  local room0 = 1
+  for d in range(1, 23) {
+    local $"room{d}" = $"room{d - 1}" * (((well[(py + $"{d}")] & m0) | (well[(py + $"{d + 1}")] & m1) | (well[(py + $"{d + 2}")] & m2) | (well[(py + $"{d + 3}")] & m3)) == 0)
+  }
+  local fall = room1 + room2 + room3 + room4 + room5 + room6 + room7 + room8 + room9 + room10 + room11 + room12 + room13 + room14 + room15 + room16 + room17 + room18 + room19 + room20 + room21 + room22
+  py = py + fall
+  score = score + 2 * fall
+  lockAt = $tick
+}
+
+// ---- Hold ---------------------------------------------------------------------------------------------------
+// Once per piece, the falling piece goes into the hold slot and the held one (or, the first time, the next piece)
+// comes out at the top. A piece that comes out with no room ends the game.
+
+rule "hold" {
+  when stage == 1 and holdUsed == 0 and channel(1, hold) >= 0.5
+  mode: Edge
+  local was = kind
+  local next = (held < 0) ? bag : held
+  for i in range(0, 4) {
+    local $"hit{i}" = well[$"{spawnRow + i}"] & (shape[next * 16 + i] << (spawnColumn + 3))
+  }
+  kind = next
+  if held < 0 {
+    push recent = bag
+    generate(row: bag)
+  }
+  held = was
+  turn = 0
+  px = spawnColumn
+  py = spawnRow
+  lowest = spawnRow
+  resets = 0
+  holdUsed = 1
+  schedule lockAt in 0.5s
+  if (hit0 | hit1 | hit2 | hit3) != 0 {
+    alive = 0
+    stage = 0
+  }
+}
+
+// ---- A game over, and the next game ---------------------------------------------------------------------------
+
+rule "top-out" {
+  when alive == 1 and stage == 0 and (s0 | s1 | s2 | s3) != 0
+  for i in range(0, 4) {
+    local $"s{i}" = well[$"{spawnRow + i}"] & (shape[bag * 16 + i] << (spawnColumn + 3))
+  }
+  alive = 0
+}
+
+rule "restart" {
+  when alive == 0 and channel(1, restart) >= 0.5
+  mode: Edge
+  for row in range(2, 24) {
+    well[$"{row}"] = open
+  }
+  score = 0
+  lines = 0
+  level = 1
+  held = -1
+  stage = 0
+  alive = 1
+}
+
+// ---- One piece's life -------------------------------------------------------------------------------------------
+// The cursor spawns a piece, waits while it falls until it has rested on the stack for the lock delay, writes it
+// into the well, and clears the rows it filled. Only the step under the cursor is evaluated, so a piece is never
+// spawned while another falls; stage mirrors the cursor for the rules outside the workflow.
+
+workflow piece {
+  step spawn {
+    for i in range(0, 4) {
+      local $"s{i}" = well[$"{spawnRow + i}"] & (shape[bag * 16 + i] << (spawnColumn + 3))
+    }
+    when alive == 1 and stage == 0 and (s0 | s1 | s2 | s3) == 0
+    kind = bag
+    push recent = bag
+    generate(row: bag)
+    turn = 0
+    px = spawnColumn
+    py = spawnRow
+    lowest = spawnRow
+    resets = 0
+    holdUsed = 0
+    schedule lockAt in 0.5s
+    spawned = spawned + 1
+    spawnedAt = $tick
+    stage = 1
+  }
+
+  step fall {
+    for i in range(0, 4) {
+      local $"hit{i}" = well[py + 1 + i] & (shape[kind * 16 + turn * 4 + i] << (px + 3))
+    }
+    when stage == 1 and (hit0 | hit1 | hit2 | hit3) != 0 and $tick >= lockAt
+    stage = 2
+  }
+
+  // A piece resting wholly in the two rows above the visible well locks out and ends the game.
+  step lock {
+    for i in range(0, 4) {
+      local $"m{i}" = shape[kind * 16 + turn * 4 + i] << (px + 3)
+    }
+    local bottom = (m3 != 0) ? 3 : ((m2 != 0) ? 2 : 1)
+    when stage == 2
+    for i in range(0, 4) {
+      if $"m{i}" != 0 {
+        well[py + i] = well[py + i] | $"m{i}"
+      }
+    }
+    locked = locked + 1
+    lockedAt = $tick
+    stage = 3
+    if py + bottom < spawnRow + 2 {
+      alive = 0
+    }
+  }
+
+  // Occurrence k of the full-row pattern is the k-th full row from the top. Clearing them top first leaves every
+  // lower one where the pattern found it: row r takes row r - 1 for every playing row r down to the cleared one,
+  // and the top playing row opens.
+  step clear {
+    for k in range(0, 4) {
+      local $"row{k}" = match(fullRow, well, at, k)
+    }
+    local clears = (row0 >= 0) + (row1 >= 0) + (row2 >= 0) + (row3 >= 0)
+    when stage == 3
+    for k in range(0, 4) {
+      for r in map(range(0, 21), n => 23 - n) {
+        if $"row{k}" >= r {
+          well[$"{r}"] = well[$"{r - 1}"]
+        }
+      }
+      if $"row{k}" >= 0 {
+        well[$"{spawnRow}"] = open
+      }
+    }
+    lines = lines + clears
+    score = score + award[(clears)] * level
+    level = minimum(1 + lines / 10, 10)
+    lastClear = clears
+    stage = 0
+  }
+}
+
+state {
+  world {
+    row {
+      name: "well"
+      kind: "Int"
+      capacity: 25
+      min: 0
+      max: guard
+      cells: map(range(0, 25), r => {
+        key: $"{r}",
+        value: r < 2 ? guard : r > 23 ? guard : open
+      }
+      )
+    }
+
+    row {
+      name: "shape"
+      kind: "Int"
+      capacity: 112
+      min: 0
+      max: 15
+      cells: map(range(0, 112), n => {
+        key: $"{n}",
+        value: shapes[floor(n / 16)][floor((n % 16) / 4)][n % 4]
+      }
+      )
+    }
+
+    row {
+      name: "kickX"
+      kind: "Int"
+      capacity: 80
+      min: -2
+      max: 2
+      cells: map(range(0, 80), n => {
+        key: $"{n}",
+        value: kicks[floor(n / 40)][floor((n % 40) / 10)][floor((n % 10) / 5)][n % 5][0]
+      }
+      )
+    }
+
+    row {
+      name: "kickY"
+      kind: "Int"
+      capacity: 80
+      min: -2
+      max: 2
+      cells: map(range(0, 80), n => {
+        key: $"{n}",
+        value: 0 - kicks[floor(n / 40)][floor((n % 40) / 10)][floor((n % 10) / 5)][n % 5][1]
+      }
+      )
+    }
+
+    table award capacity(5) {
+      "0" = 0
+      "1" = 100
+      "2" = 300
+      "3" = 500
+      "4" = 800
+    }
+
+    row {
+      name: "gravity"
+      kind: "Int"
+      cells: map(range(0, 10), n => {
+        key: $"{n + 1}",
+        value: 0,
+        cycle {
+          output: "Step",
+          ticksPerStep: paces[n][0],
+          power: paces[n][1]
+        }
+      }
+      )
+    }
+
+    // The next piece: a bag of all seven, each drawn once before the bag refills.
+    row {
+      name: "bag"
+      kind: "Int"
+      min: 0
+      max: 6
+      draw {
+        generator {
+          source: "WeightedNumeric"
+          mode: "RestartOnExhaustion"
+          weighted: map(range(0, 7), k => {
+            value: k,
+            weight: 1
+          }
+          )
+        }
+        timing: "Event"
+      }
+    }
+
+    row {
+      domain: ring(capacity: 7, empty: -1)
+      kind: "Int"
+      name: "recent"
+    }
+
+    slot kind = 0 bounds(0..6)
+
+    slot turn = 0 bounds(0..3)
+
+    slot px = 3 bounds(-3..10)
+
+    slot py = 2 bounds(0..24)
+
+    slot lowest = 2 bounds(0..24)
+
+    slot resets = 0 bounds(0..15)
+
+    slot lockAt = 0
+
+    slot held = -1 bounds(-1..6)
+
+    slot holdUsed = 0 bounds(0..1)
+
+    slot stage = 0 bounds(0..3)
+
+    slot alive = 1 bounds(0..1)
+
+    slot score = 0 bounds(0..999999, overflow: Saturate)
+
+    slot lines = 0 bounds(0..9999)
+
+    slot level = 1 bounds(1..10)
+
+    slot lastClear = 0 bounds(0..4)
+
+    slot spawned = 0
+
+    slot spawnedAt = 0
+
+    slot locked = 0
+
+    slot lockedAt = 0
+  }
+}
+
+// ---- Tests ----------------------------------------------------------------------------------------------------
+// Rows are well keys: 23 is the bottom playing row. A test that needs particular pieces sets the next one through the
+// bag's own cell before the piece in play locks; the draw that follows still advances the bag. The first piece
+// appears on tick 1. An O sits in box columns 1 and 2, so it appears over columns 4 and 5 and four moves left put it
+// over columns 0 and 1.
+
+// Two O pieces fill columns 0 to 3 of the bottom two rows and a third fills 4 and 5, completing the bottom row the
+// test started with columns 6 to 9 of. The second row keeps columns 0 to 5 and drops into the bottom row's place.
+test "three pieces lock and one row clears" {
+  given {
+    bag = 1
+    well[23] = 65031
+  }
+  when {
+    ticks 2
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: world.state.cell.set bag $value 1
+    seat1: body.press drop 1 0.1
+    ticks 8
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: world.state.cell.set bag $value 1
+    seat1: body.press drop 1 0.1
+    ticks 8
+    seat1: body.press drop 1 0.1
+    ticks 8
+  }
+  expect {
+    locked == 3
+    lines == 1
+    lastClear == 1
+    well[23] == 57855
+    well[22] == 57351
+  }
+}
+
+// Columns 0 to 8 of the bottom four rows are full. An I turned upright and moved to the right wall fills column 9
+// of all four at once.
+test "an upright I clears four rows at once" {
+  given {
+    bag = 0
+    well[20] = 61439
+    well[21] = 61439
+    well[22] = 61439
+    well[23] = 61439
+  }
+  when {
+    ticks 2
+    seat1: body.press clockwise 1 0.1
+    ticks 5
+    seat1: body.press right 1 0.1
+    ticks 5
+    seat1: body.press right 1 0.1
+    ticks 5
+    seat1: body.press right 1 0.1
+    ticks 5
+    seat1: body.press right 1 0.1
+    ticks 5
+    seat1: body.press drop 1 0.1
+    ticks 8
+  }
+  expect {
+    lines == 4
+    lastClear == 4
+    well[20] == 57351
+    well[21] == 57351
+    well[22] == 57351
+    well[23] == 57351
+    score == 836
+  }
+}
+
+// Seven pieces appear before the bag refills, and each is a different one of the seven.
+test "a bag deals each of the seven pieces once" {
+  when {
+    ticks 2
+    seat1: body.press drop 1 0.1
+    ticks 8
+    seat1: body.press drop 1 0.1
+    ticks 8
+    seat1: body.press drop 1 0.1
+    ticks 8
+    seat1: body.press drop 1 0.1
+    ticks 8
+    seat1: body.press drop 1 0.1
+    ticks 8
+    seat1: body.press drop 1 0.1
+    ticks 8
+  }
+  expect {
+    spawned == 7
+    ((1 << history(recent, 0)) | (1 << history(recent, 1)) | (1 << history(recent, 2)) | (1 << history(recent, 3)) | (1 << history(recent, 4)) | (1 << history(recent, 5)) | (1 << history(recent, 6))) == 127
+  }
+}
+
+// Every visible row is full but for column 9, so the first piece rests the moment it appears. Its lock deadline is
+// half a second, fifteen ticks, after it appears; the fall step passes on that tick and the lock step writes the
+// piece on the next. It rests wholly above the visible rows, so it locks out.
+test "a resting piece locks when its lock delay runs out" {
+  given {
+    bag = 1
+    well[4] = 61439
+    well[5] = 61439
+    well[6] = 61439
+    well[7] = 61439
+    well[8] = 61439
+    well[9] = 61439
+    well[10] = 61439
+    well[11] = 61439
+    well[12] = 61439
+    well[13] = 61439
+    well[14] = 61439
+    well[15] = 61439
+    well[16] = 61439
+    well[17] = 61439
+    well[18] = 61439
+    well[19] = 61439
+    well[20] = 61439
+    well[21] = 61439
+    well[22] = 61439
+    well[23] = 61439
+  }
+  when {
+    ticks 30
+  }
+  expect {
+    locked == 1
+    lockedAt - spawnedAt == 16
+    alive == 0
+  }
+}
+
+// Clearing a row from a score a hair below the top would carry it past 999999; the score row saturates there instead.
+test "the score saturates at its ceiling" {
+  given {
+    bag = 1
+    score = 999950
+    well[23] = 65511
+  }
+  when {
+    ticks 2
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press drop 1 0.1
+    ticks 8
+  }
+  expect {
+    lines == 1
+    score == 999999
+  }
+}
+
+// Columns 3 to 6 of both rows a piece appears in are taken, so the first piece has nowhere to appear.
+test "a piece with no room to appear ends the game" {
+  given {
+    well[2] = 58311
+    well[3] = 58311
+  }
+  when {
+    ticks 5
+  }
+  expect {
+    alive == 0
+    spawned == 0
+  }
+}
+
+// A T turned clockwise and moved to the left wall stands in columns 0 and 1. Turning it again would put its flat
+// side through the wall, so the second of its five tests, one column right, is the one that fits.
+test "a turn against the wall kicks the piece clear" {
+  given {
+    bag = 2
+  }
+  when {
+    ticks 2
+    seat1: body.press clockwise 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press left 1 0.1
+    ticks 5
+    seat1: body.press clockwise 1 0.1
+    ticks 5
+  }
+  expect {
+    turn == 2
+    px == 0
+  }
+}
+
+// The first hold puts the piece aside and brings out the next one; a second hold before the next piece does nothing.
+test "hold keeps one piece aside once per drop" {
+  given {
+    bag = 0
+  }
+  when {
+    ticks 2
+    seat1: body.press hold 1 0.1
+    ticks 5
+    seat1: body.press hold 1 0.1
+    ticks 5
+  }
+  expect {
+    held == 0
+    holdUsed == 1
+    kind == history(recent, 0)
+    spawned == 1
+  }
+}
+
+// Holding the soft-drop key drops the piece a row every tick and scores a point a row.
+test "a soft drop falls a row a tick and scores each row" {
+  given {
+    bag = 1
+  }
+  when {
+    ticks 2
+    seat1: body.press down 1 0.3
+    ticks 12
+  }
+  expect {
+    score >= 8
+    score <= py - 2
+  }
+}

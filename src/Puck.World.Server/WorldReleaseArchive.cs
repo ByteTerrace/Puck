@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using System.Text.Json;
+using Puck.Assets;
 using Puck.Storage;
 
 namespace Puck.World.Server;
@@ -16,10 +16,12 @@ public sealed class WorldReleaseArchive {
     public WorldReleaseArchive(IObjectBlobStore store, ObjectStorageTarget target, Guid owner, int maximumFileBytes = ((64 * 1024) * 1024)) {
         m_store = (store ?? throw new ArgumentNullException(paramName: nameof(store)));
         m_target = (target ?? throw new ArgumentNullException(paramName: nameof(target)));
-        if (owner == Guid.Empty) { throw new ArgumentException(
+        if (owner == Guid.Empty) {
+            throw new ArgumentException(
             message: "A release archive requires an owner.",
             paramName: nameof(owner)
-        ); }
+        );
+        }
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumFileBytes);
         m_owner = owner;
         m_maximumFileBytes = maximumFileBytes;
@@ -58,11 +60,11 @@ public sealed class WorldReleaseArchive {
             );
         }
     }
-    private static string Digest(string pin) => (((pin is { Length: 71 }) && pin.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "sha256/"
-    ) && pin[7..].All(predicate: c => (char.IsAsciiDigit(c: c) || (c is >= 'a' and <= 'f'))))
-        ? pin[7..]
+    private static string Digest(string pin) => (ContentPin.TryParse(
+        pin: out var parsed,
+        text: pin
+    )
+        ? parsed.Hex
         : throw new InvalidDataException(message: "release archive requires a full lowercase SHA-256 pin")
     );
     private static SortedDictionary<string, string> Files(WorldReleaseManifest manifest) {
@@ -77,14 +79,18 @@ public sealed class WorldReleaseArchive {
         }
         var files = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        foreach (var definition in manifest.Definitions) { Add(
+        foreach (var definition in manifest.Definitions) {
+            Add(
             path: manifest.DefinitionFiles[definition.Key],
             pin: definition.Value
-        ); }
-        foreach (var artifact in manifest.Artifacts) { Add(
+        );
+        }
+        foreach (var artifact in manifest.Artifacts) {
+            Add(
             path: artifact.Key,
             pin: artifact.Value
-        ); }
+        );
+        }
         return files;
 
         void Add(string path, string pin) {
@@ -114,7 +120,7 @@ public sealed class WorldReleaseArchive {
         $"{WorldOwnedWorldSync.HostedPrivateNamespace}/releases/manifests/{Digest(pin: pin)}.json"
     );
     private static void VerifyPin(ReadOnlySpan<byte> bytes, string expected) {
-        if (Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)) != Digest(pin: expected)) { throw new InvalidDataException(message: "retained release content does not match its pin"); }
+        if (ContentPin.Compute(content: bytes).Hex != Digest(pin: expected)) { throw new InvalidDataException(message: "retained release content does not match its pin"); }
     }
     private async Task WriteImmutableAsync(ObjectBlobAddress address, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken) {
         var result = await m_store.WriteAsync(
@@ -186,7 +192,7 @@ public sealed class WorldReleaseArchive {
         var manifestBytes = WorldReleaseManifest.Canonicalize(manifest: manifest);
         var frozen = Decode(
             bytes: manifestBytes,
-            expectedIdentity: ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: manifestBytes)))
+            expectedIdentity: ContentPin.Compute(content: manifestBytes).ToString()
         );
 
         if (!WorldReleaseManifest.TryVerify(
@@ -222,10 +228,12 @@ public sealed class WorldReleaseArchive {
     }
     /// <summary>Checks every retained file before a deployment may drain the serving release.</summary>
     public async Task VerifyAsync(WorldReleaseManifest manifest, CancellationToken cancellationToken = default) {
-        foreach (var path in Files(manifest: manifest).Keys) { _ = await ReadFileAsync(
+        foreach (var path in Files(manifest: manifest).Keys) {
+            _ = await ReadFileAsync(
             cancellationToken: cancellationToken,
             manifest: manifest,
             relativePath: path
-        ).ConfigureAwait(continueOnCapturedContext: false); }
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        }
     }
 }

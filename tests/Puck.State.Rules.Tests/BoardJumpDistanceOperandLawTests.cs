@@ -47,7 +47,7 @@ public sealed class BoardJumpDistanceOperandLawTests {
     private static Rule Rule() => RulesFixture.Rule(
         effects: [new ActionEffect.SetState(Key: "0", State: "board", Value: 1m)],
         gate: new ActionPredicate.CompareState(
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Key: "0",
             State: "$board:jumpDistance:board:cell:destination:to",
             Value: 0m

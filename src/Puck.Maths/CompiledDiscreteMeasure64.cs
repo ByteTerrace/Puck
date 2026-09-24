@@ -242,20 +242,20 @@ public readonly record struct CompiledDiscreteMeasure64 {
         var radicand = commonField.Radicand;
 
         if (
-            !TryInt64Coefficient(
-            result: out var boundedRateRational,
+            !BinaryIntegerFunctions.TryNarrow(
+            result: out long boundedRateRational,
             value: rateRational
         ) ||
-            !TryInt64Coefficient(
-            result: out var boundedRateSurd,
+            !BinaryIntegerFunctions.TryNarrow(
+            result: out long boundedRateSurd,
             value: rateSurd
         ) ||
-            !TryInt64Coefficient(
-            result: out var boundedOffsetRational,
+            !BinaryIntegerFunctions.TryNarrow(
+            result: out long boundedOffsetRational,
             value: offsetRational
         ) ||
-            !TryInt64Coefficient(
-            result: out var boundedOffsetSurd,
+            !BinaryIntegerFunctions.TryNarrow(
+            result: out long boundedOffsetSurd,
             value: offsetSurd
         ) ||
             !TryPositiveInt64(
@@ -312,7 +312,7 @@ public readonly record struct CompiledDiscreteMeasure64 {
     }
     private static bool TryDifferenceInt64(Int128 left, Int128 right, out long result) {
         try {
-            return TryInt64(
+            return BinaryIntegerFunctions.TryNarrow(
                 result: out result,
                 value: checked((left - right))
             );
@@ -320,28 +320,6 @@ public readonly record struct CompiledDiscreteMeasure64 {
             result = 0L;
             return false;
         }
-    }
-    private static bool TryInt64(Int128 value, out long result) {
-        if (
-            (value < long.MinValue) ||
-            (value > long.MaxValue)
-        ) {
-            result = 0L;
-            return false;
-        }
-        result = ((long)value);
-        return true;
-    }
-    private static bool TryInt64Coefficient(BigInteger value, out long result) {
-        if (
-            (value < long.MinValue) ||
-            (value > long.MaxValue)
-        ) {
-            result = 0L;
-            return false;
-        }
-        result = ((long)value);
-        return true;
     }
     private bool TryLowerBoundCore(Int128 amount, out long index) {
         var minimum = ((Int128)long.MinValue);
@@ -648,7 +626,7 @@ public readonly record struct CompiledDiscreteMeasure64 {
             : Int128.Zero)
         );
 
-        return TryInt64(
+        return BinaryIntegerFunctions.TryNarrow(
             value: ((((Int128)IntegralRate) + fractionalAdvance) + offsetChange),
             result: out amount
         );
@@ -718,7 +696,7 @@ public readonly record struct CompiledDiscreteMeasure64 {
             boundary: out var boundary,
             index: index
         ) &&
-            TryInt64(
+            BinaryIntegerFunctions.TryNarrow(
             result: out cumulative,
             value: boundary
         )
@@ -786,14 +764,6 @@ public readonly record struct CompiledDiscreteMeasure64 {
         Quadratic,
     }
     private readonly record struct UInt256(UInt128 High, UInt128 Low) : IComparable<UInt256> {
-        private static int BitLength(UInt128 value) {
-            var high = ((ulong)(value >> 64));
-
-            return ((high != 0UL)
-                ? (128 - BitOperations.LeadingZeroCount(value: high))
-                : (64 - BitOperations.LeadingZeroCount(value: ((ulong)value)))
-            );
-        }
         private UInt256 ShiftLeftTwoBits() => new(
             High: (High << 2) | (Low >> 126),
             Low: (Low << 2)
@@ -812,11 +782,11 @@ public readonly record struct CompiledDiscreteMeasure64 {
         );
 
         public int CompareTo(UInt256 other) {
-            var highComparison = High.CompareTo(value: other.High);
-
-            return ((highComparison != 0)
-                ? highComparison
-                : Low.CompareTo(value: other.Low)
+            return LexicographicOrder.Compare(
+                leftPrimary: High,
+                leftSecondary: Low,
+                rightPrimary: other.High,
+                rightSecondary: other.Low
             );
         }
         public static UInt256 Multiply(UInt128 left, UInt128 right) {

@@ -18,7 +18,8 @@
         <PublishTrimmed>true</PublishTrimmed>
         <TrimMode>partial</TrimMode>
         <InvariantGlobalization>true</InvariantGlobalization>
-        <!-- No console, no window, no file system, no threads: WasmEnableSIMD/WasmEnableExceptionHandling stay at
+        <!-- No console, no window, no threads, and a file system only in memory (the mounted .puck workspace):
+             WasmEnableSIMD/WasmEnableExceptionHandling stay at
              their SDK defaults; single-threaded per the plan's own API contract (JSON-string marshalling, no
              cross-thread state). -->
         <WasmEnableThreads>false</WasmEnableThreads>
@@ -47,6 +48,12 @@
              call sites (schema/name-registry reflection, the puck.creation.v1 embedded-document converter, JsonNode
              diffing in WorldDocumentBasis) are reachable from this project's own Engine/Exports surface today. -->
         <NoWarn>$(NoWarn);IL2026;IL2070;IL2075;IL3050</NoWarn>
+        <!-- Parlot (Puck.Transpiler's scanner) collapses its trim analysis to one IL2104 for the package. Every warning
+             behind it sits in Parlot's parser-combinator compilation (Parser<T>.Compile, SequenceCompileHelper,
+             NumberLiteralBase's static constructor: IL2026, IL2055, IL2072, IL2075, IL2090), and Puck's parser uses
+             only Parlot's scanner, cursor and parse context, never a combinator. Copying the package untrimmed does
+             not stop the analysis, so the collapsed warning is recorded here, with the README's trim baseline. -->
+        <NoWarn>$(NoWarn);IL2104</NoWarn>
         <!-- A trimmed publish defaults this feature switch off, so System.Text.Json.JsonSerializer's generic
              Serialize<T>/Deserialize<T>(…, JsonSerializerOptions) overloads (never the JsonTypeInfo<T> ones this
              project's own Engine code uses) throw NotSupportedException("JsonSerializerIsReflectionDisabled") the
@@ -62,6 +69,10 @@
         <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
         <ProjectReference Include="..\Puck.State.Rules\Puck.State.Rules.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <!-- The authoring toolchain the studio edits .puck sources through: compile, diagnostics, composition of a
+             source's basis/imports graph, and the language server, run unchanged over the workspace mounted in the
+             runtime's in-memory file system (Engine/BrowserWorkspace.cs). -->
+        <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

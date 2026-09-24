@@ -23,10 +23,12 @@ internal static partial class Oracles {
     public static BigInteger ColexRank(ReadOnlySpan<int> elements) {
         var rank = BigInteger.Zero;
 
-        for (var i = 0; (i < elements.Length); ++i) { rank += CombinatorialCount(
+        for (var i = 0; (i < elements.Length); ++i) {
+            rank += CombinatorialCount(
             elements[i],
             (i + 1)
-        ); }
+        );
+        }
         return rank;
     }
     public static BigInteger LexicographicRank(ReadOnlySpan<int> elements) {

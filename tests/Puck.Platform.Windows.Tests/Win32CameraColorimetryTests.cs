@@ -4,21 +4,18 @@ using Xunit;
 namespace Puck.Platform.Windows.Tests;
 
 public sealed class Win32CameraColorimetryTests {
-    [InlineData("YUY2", 0u, 0u, 0u)]
-    [InlineData("YUY2", 2u, 1u, 0u)]
-    [InlineData("NV12", 0u, 0u, 0u)]
-    [InlineData("NV12", 1u, 2u, 0x6u)]
-    [InlineData("L8", 0u, 0u, 0u)]
+    [InlineData("YUY2")]
+    [InlineData("NV12")]
+    [InlineData("L8")]
     [SupportedOSPlatform("windows10.0.19041")]
     [Theory]
-    public void Every_generated_kernel_compiles(string subtype, uint matrix, uint range, uint siting) {
-        Win32D3D11CameraFrameConverter.ValidateShader(
-            colorimetry: new Win32CameraColorimetry(
-                ChromaSiting: siting,
-                Matrix: matrix,
-                NominalRange: range
-            ),
-            subtype: subtype
+    public void Every_subtype_converts_through_a_kernel_compiled_at_build(string subtype) {
+        var bytecode = File.ReadAllBytes(path: Win32D3D11CameraFrameConverter.KernelPath(subtype: subtype));
+
+        // A DXBC container opens with its four-character code.
+        Assert.Equal(
+            actual: System.Text.Encoding.ASCII.GetString(bytes: bytecode, count: 4, index: 0),
+            expected: "DXBC"
         );
     }
     [Fact]
@@ -42,30 +39,20 @@ public sealed class Win32CameraColorimetryTests {
     }
     [Fact]
     [SupportedOSPlatform("windows10.0.19041")]
-    public void Shader_selection_honors_colorimetry_and_chroma_siting() {
-        var shader = Win32D3D11CameraFrameConverter.Shader(
-            colorimetry: new Win32CameraColorimetry(
+    public void Conversion_constants_honor_colorimetry_and_chroma_siting() {
+        // BT.601, full range, chroma cosited on both axes.
+        Assert.Equal(
+            actual: Win32D3D11CameraFrameConverter.ConversionConstants(colorimetry: new Win32CameraColorimetry(
                 ChromaSiting: 0x6u,
                 Matrix: 2u,
                 NominalRange: 1u
-            ),
-            subtype: "NV12"
+            )),
+            expected: [0f, 255f, 255f, 0f, 1.402f, 0.344136f, 0.714136f, 1.772f, 0f, 0f, 0f, 0f]
         );
-
-        Assert.Contains(
-            actualString: shader,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "1.402 * v"
-        );
-        Assert.Contains(
-            actualString: shader,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "float2(0.0, 0.0)"
-        );
-        Assert.DoesNotContain(
-            actualString: shader,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "1.5748 * v"
+        // The Media Foundation defaults: BT.709, limited range, chroma centered.
+        Assert.Equal(
+            actual: Win32D3D11CameraFrameConverter.ConversionConstants(colorimetry: new Win32CameraColorimetry()),
+            expected: [16f, 219f, 224f, 0f, 1.5748f, 0.187324f, 0.468124f, 1.8556f, 0.5f, 0.5f, 0f, 0f]
         );
     }
     [Fact]

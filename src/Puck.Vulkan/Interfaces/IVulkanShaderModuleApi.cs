@@ -1,5 +1,6 @@
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -12,8 +13,8 @@ public interface IVulkanShaderModuleApi {
     /// <param name="moduleHandle">When this method returns, the created native <c>VkShaderModule</c> handle.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the shader module was created successfully.</returns>
     VkResult CreateShaderModule(VulkanShaderModuleCreateRequest request, out nint moduleHandle);
-    /// <summary>Destroys a shader module.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the shader module.</param>
+    /// <summary>Destroys a shader module; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the shader module.</param>
     /// <param name="moduleHandle">The native <c>VkShaderModule</c> handle to destroy.</param>
-    void DestroyShaderModule(nint deviceHandle, nint moduleHandle);
+    void DestroyShaderModule(VulkanDeviceCommands device, nint moduleHandle);
 }

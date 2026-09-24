@@ -16,7 +16,7 @@ internal readonly record struct BodyEffectOutput(int SourceIndex, int TargetInde
 /// population advance pass (the same staged-output shape <see cref="WorldDesignation"/> already uses) and enqueued
 /// through the ordinary mutation pipeline afterwards by <c>WorldServer.Step</c>. It carries no source entity index:
 /// the site is a world-global state row, never body-relative, and the acting principal is
-/// <see cref="Protocol.WorldPrincipal.World"/> for every firing regardless of which body fired it — the effect is the
+/// <see cref="Puck.Commands.Principal.World"/> for every firing regardless of which body fired it — the effect is the
 /// world's authored program acting, not the seat (see that principal's own remarks).</summary>
 /// <param name="Row">The draw site's row name.</param>
 public readonly record struct WorldGeneratorInvocation(string Row);

@@ -23,10 +23,10 @@
 //   pipeline.load compare-pipeline <src>  - Dynamically load another pipeline shader
 
 schema: "puck.world.definition.v1"
-basis: "../avatars/moth.world.json"
+basis: "../avatars/moth"
 documentId: "puck-shader-compare-v1"
 
-let pipelineSource = "../../pipelines/moth.glsl"
+let pipelineSource = "../../pipelines/moth.hlsl"
 let pipelineName = "compare-pipeline"
 
 cameras [

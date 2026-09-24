@@ -20,6 +20,9 @@ internal sealed class SolarReplayStage : IPostStage<PostContext> {
     private static readonly byte[] Script = [255, 200, 128, 64, 1, 0, 128, 255];
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "solar-replay";
     /// <inheritdoc/>

@@ -1,0 +1,93 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "games/go.puck",
+  "host": {
+    "kind": "document"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 4
+    },
+    {
+      "set": {
+        "row": "stone",
+        "key": "play",
+        "value": 161
+      }
+    },
+    {
+      "advance": 2
+    },
+    {
+      "set": {
+        "row": "stone",
+        "key": "play",
+        "value": 180
+      }
+    },
+    {
+      "advance": 2
+    },
+    {
+      "set": {
+        "row": "stone",
+        "key": "play",
+        "value": 179
+      }
+    },
+    {
+      "advance": 2
+    },
+    {
+      "set": {
+        "row": "stone",
+        "key": "play",
+        "value": 0
+      }
+    },
+    {
+      "advance": 2
+    },
+    {
+      "set": {
+        "row": "stone",
+        "key": "play",
+        "value": 181
+      }
+    },
+    {
+      "advance": 2
+    },
+    {
+      "set": {
+        "row": "stone",
+        "key": "play",
+        "value": 1
+      }
+    },
+    {
+      "advance": 2
+    },
+    {
+      "set": {
+        "row": "stone",
+        "key": "play",
+        "value": 199
+      }
+    },
+    {
+      "advance": 2
+    },
+    {
+      "set": {
+        "row": "aiSide",
+        "key": "$value",
+        "value": 2
+      }
+    },
+    {
+      "advance": 150
+    }
+  ]
+}

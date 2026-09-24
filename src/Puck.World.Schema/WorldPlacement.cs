@@ -359,7 +359,8 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// creation eyes derive <see cref="WorldCamera"/> feeds and its declared faces derive screens (both at the delivery
 /// boundary, never written to the document).
 /// </summary>
-/// <param name="Id">The row's stable string id (its mutation address).</param>
+/// <param name="Id">The row's stable string id (its mutation address). It may not carry <c>:</c> or be exactly
+/// <c>$each</c> (<see cref="TryValidateId"/>).</param>
 /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/> (must resolve; removal of a referenced
 /// creation rejects loudly).</param>
 /// <param name="Position">The stamp position — world space when <paramref name="Parent"/> is null (today's behavior,
@@ -407,7 +408,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the
 /// row shows and for how long, never its transform.</param>
 /// <param name="Respond">The placement's response facet (see <see cref="WorldPlacementResponse"/>) — the ordered
-/// state-driven prototype swaps a lattice-field condition can fire, or <see langword="null"/> for an ordinary
+/// prototype swaps a lattice-field or state-cell condition fires, or <see langword="null"/> for an ordinary
 /// placement that always shows <paramref name="PrototypeId"/>. Omitted from the wire when null. Refused together
 /// with <paramref name="Attach"/>, <paramref name="Inhabit"/>, and <paramref name="FaceSources"/>.</param>
 /// <param name="Grip">The placement's grip facet (see <see cref="WorldPlacementGrip"/>) — overrides the world's
@@ -435,6 +436,13 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <param name="Spatial">Named occupation, clearance, and influence volumes in this placement's local frame. The
 /// compiled static-query eligibility is exposed by <see cref="WorldSpatialQueryIndex.Unsupported"/>; ordinary
 /// inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.</param>
+/// <param name="Holding">Which of <paramref name="Respond"/>'s entries held at the last response sweep, one bit per
+/// entry in authored order (bit <c>i</c> for entry <c>i</c>); 0 while none holds, and always 0 on a row without
+/// <paramref name="Respond"/>. The response sweep writes it; the row shows the lowest set bit's entry, else its own
+/// authored <paramref name="PrototypeId"/> (<see cref="ShownPrototypeId"/>). Refused on a row without
+/// <paramref name="Respond"/> and with a bit at or past its entry count. A reader whose disclosure withholds a cell an
+/// entry reads is handed the mask without that entry's bit (<see cref="WorldPlacementResponse.Disclosed"/>). Omitted
+/// from the wire when 0.</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -456,8 +464,50 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null
-);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int Holding = 0
+) {
+    /// <summary>The body-reference token a rule's <c>placement:$each</c> binds to its <c>forEach</c> key; no placement
+    /// may be named it.</summary>
+    public const string EachToken = "$each";
+
+    /// <summary>Gets the creation the row draws and collides as: the prototype of the first <see cref="Respond"/>
+    /// entry <see cref="Holding"/> marks, else the authored <see cref="PrototypeId"/>.</summary>
+    [JsonIgnore]
+    public string ShownPrototypeId => WorldPlacementResponse.Shown(placement: this);
+
+    /// <summary>Validates a placement id against the channel spellings that name a placement: it may not carry
+    /// <c>:</c>, which separates a reserved channel's arguments (<c>$region:&lt;placementId&gt;</c>,
+    /// <c>$influence:&lt;channel&gt;:&lt;placementId&gt;</c>, <c>placement:&lt;id&gt;</c>), and it may not be exactly
+    /// <see cref="EachToken"/>, which <c>placement:$each</c> reads as the iterated key.</summary>
+    /// <param name="id">The placement id.</param>
+    /// <param name="reason">Why the id was refused, naming the rule, or empty on success.</param>
+    /// <returns><see langword="true"/> when a channel can name the placement unambiguously.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="id"/> is <see langword="null"/>.</exception>
+    public static bool TryValidateId(string id, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: id);
+
+        if (id.Contains(value: ':')) {
+            reason = $"placement id '{id}' carries ':', which separates a channel's arguments ('$region:<placementId>', '$influence:<channel>:<placementId>'); write an id without ':'";
+
+            return false;
+        }
+
+        if (string.Equals(
+            a: id,
+            b: EachToken,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"placement id '{id}' is the token 'placement:{EachToken}' reads as the enclosing rule's forEach key; choose another id";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+}
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {
     /// <summary>The worst-case, seed-independent materialized copy count a placement's distribution could ever

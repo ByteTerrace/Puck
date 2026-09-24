@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Parsing;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -21,6 +23,12 @@ public static partial class WorldDecompiler {
     private static bool IsPoolFieldReference(JsonNode? node) => (
         (node is not JsonValue) &&
         (StateChannelRefJsonConverter.FromNode(node: node).PoolField is not null)
+    );
+    // Whether an expression program is one read of a pool field and nothing else.
+    private static bool ReadsOnePoolField(JsonNode? program) => (
+        (program?["instructions"] is JsonArray { Count: 1 } instructions) &&
+        (instructions[0]?["op"]?.ToString() == "Operand") &&
+        IsPoolFieldReference(node: instructions[0]?["name"])
     );
     // Whether every row in a `rules` array is a rule the `rule "name" { }` grammar can carry. A row with no `name`
     // is a WorldDocumentBasis merge directive, not a rule: it has no name to quote and no effects to author, and
@@ -69,6 +77,32 @@ public static partial class WorldDecompiler {
             count: (indentLevel * 4)
         );
         var name = (rule["name"]?.ToString() ?? "");
+
+        if (
+            TrySplitScopedName(
+            local: out var local,
+            name: name,
+            scopes: out var scopes
+        ) &&
+            (scopes.Length > 0)
+        ) {
+            AppendScoped(
+                body: level => AppendRuleBlock(
+                    indentLevel: level,
+                    rule: RenamedRule(
+                        name: local,
+                        rule: rule
+                    ),
+                    sb: sb
+                ),
+                indentLevel: indentLevel,
+                sb: sb,
+                scopes: scopes
+            );
+
+            return;
+        }
+
         var block = new StringBuilder();
 
         using (ExpressionSpelling.WithLocals(locals: RuleLocalNames(rule: rule))) {
@@ -78,7 +112,7 @@ public static partial class WorldDecompiler {
                 ? $" for each {binding} in {pool}"
                 : "");
 
-            block.AppendLine(CultureInfo.InvariantCulture, $"{indent}rule \"{EscapeString(s: name)}\"{poolHeader} {{");
+            block.AppendLine(CultureInfo.InvariantCulture, $"{indent}rule {PuckStrings.Write(value: name)}{poolHeader} {{");
             AppendRuleBody(
                 indentLevel: (indentLevel + 1),
                 rule: rule,
@@ -388,7 +422,7 @@ public static partial class WorldDecompiler {
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{indent}option \"{EscapeString(s: name)}\" {{"
+            $"{indent}option {PuckStrings.Write(value: name)} {{"
         );
 
         if (option["gate"] is JsonObject gate) {
@@ -468,12 +502,11 @@ public static partial class WorldDecompiler {
         node: node
     );
     private static bool IsPredicateSafeForGateSugar(JsonObject node) => node["$type"]?.ToString() switch {
-        // `comparison` and `kind` must be spelled exactly as their own enum members: the engine's converter accepts
-        // any casing, but the sugar can only reproduce the canonical spelling, and printing a different one back
-        // changes the document. `value` and `comparandState` together contradict `CompareState`'s own
-        // exactly-one-of contract and the sugar carries only one of them; a key present with an explicit JSON null
-        // is also unrepresentable, since the comparand text the sugar prints always recompiles to a real value.
-        "compareState" => (PuckDslVocabulary.TryParseCanonicalComparisonName(
+        // `comparison` and `kind` must be spelled exactly as their own enum members: the sugar can only reproduce
+        // the canonical spelling, and printing a different one back changes the document. `value` and
+        // `comparandState` together contradict `CompareState`'s own exactly-one-of contract and the sugar carries
+        // only one of them; a key present with an explicit JSON null is also unrepresentable, since the comparand text the sugar prints always recompiles to a real value.
+        "compareState" => (ExpressionComparisons.TryParseName(
         node["comparison"]?.ToString(),
         out _
     )
@@ -492,7 +525,7 @@ public static partial class WorldDecompiler {
         // A `compareValue` whose two operands are simple enough to re-lower as `compareState` can only keep its
         // `$type` when the printed text carries a kind annotation forcing it back (`LowerComparison` treats any
         // annotation as that force), so a node with no `kind` at all in that position has no sugar spelling.
-        "compareValue" => (PuckDslVocabulary.TryParseCanonicalComparisonName(
+        "compareValue" => (ExpressionComparisons.TryParseName(
         node["comparison"]?.ToString(),
         out _
     )
@@ -624,23 +657,25 @@ public static partial class WorldDecompiler {
         return $"{left} {symbol} {right}";
     }
     // Whether the operands are simple enough that `LowerComparison` would read the bare `left cmp right` text back
-    // as a `compareState` node — the one case where a `Fixed` kind must still be printed, since the annotation is
-    // what keeps the node a `compareValue` on recompile.
+    // as a `compareState` node, so a kindless `compareValue` over them has no bare spelling. A comparison reading a
+    // pool field (`t.noun == text`) lowers to a kindless `compareValue` before that shape is asked, so it has one.
     private static bool CompareValueNeedsKindAnnotation(JsonObject node) =>
+        (!ReadsOnePoolField(program: node["left"]) &&
+        !ReadsOnePoolField(program: node["right"]) &&
         (WorldDocumentEmitter.ClassifyBareComparison(
             WorldExpressionJson.SourceText(node: node["left"]),
             WorldExpressionJson.SourceText(node: node["right"]),
             out _,
             out _
         )
-            != WorldDocumentEmitter.BareComparisonShape.CompareValue);
+            != WorldDocumentEmitter.BareComparisonShape.CompareValue));
     // A kind annotation is wrapped in parens around the WHOLE comparison it names, `(left cmp right : Int)`,
     // unconditionally of where the comparison sits: printed bare, the suffix would trail whatever came textually
     // last in an `and`/`or` chain (`FormatConjunction` joins operands with no delimiter of its own), leaving a
     // reader unable to tell whether it annotates that one comparison or the entire chain. Wrapping reuses the
     // parenthesized-subgate grammar the language already has (`when (Gate)` — `ParseAtom`'s leading-`(` case), so
-    // nothing in `Parsing/` changes. `Fixed` is the default and stays elided wherever the bare text re-lowers to a
-    // `compareValue` on its own.
+    // nothing in `Parsing/` changes. A comparison with no kind infers it, so it prints bare; a declared kind is
+    // always printed, since the bare text would re-lower to an inferred one.
     private static string FormatCompareValue(JsonObject node) {
         // A composed operand is parenthesized: the comparison joins the two printed operands with its own symbol,
         // and an operand whose own top-level operator binds looser than a comparison would otherwise re-parse as a
@@ -656,20 +691,17 @@ public static partial class WorldDecompiler {
         )) {
             return comparison;
         }
-        return (((kind == CellKind.Int) || CompareValueNeedsKindAnnotation(node: node))
-            ? $"({comparison} : {Enum.GetName(value: kind)})"
-            : comparison
-        );
+        return $"({comparison} : {Enum.GetName(value: kind)})";
     }
     // Only ever reached for a node `IsPredicateSafeForGateSugar` already accepted, which is what guarantees the wire
     // spelling names an enum member exactly.
     private static string ComparisonToSymbol(string? comparison) =>
-        (PuckDslVocabulary.TryParseCanonicalComparisonName(
+        (ExpressionComparisons.TryParseName(
             comparison: out var parsed,
             name: comparison
         )
-            ? PuckDslVocabulary.SymbolFor(comparison: parsed)
-            : throw new InvalidOperationException(message: $"'{comparison}' does not name an ActionStateComparison member")
+            ? parsed.Symbol()
+            : throw new InvalidOperationException(message: $"'{comparison}' does not name a comparison")
         );
     // ---- Effect statement inverse (§2) ---------------------------------------------------------------------
 
@@ -831,9 +863,9 @@ public static partial class WorldDecompiler {
     // literal `state[key]` splice would get wrong, and the source dialect backquotes a keyless plain name one of
     // the caller's `ExpressionSpelling.WithLocals` locals shadows.
     private static string FormatRowRef(string name, string? key) {
-        var dottedParts = name.Split('.');
+        var dotted = QualifiedName.Parse(text: name);
 
-        if ((dottedParts.Length == 2) && dottedParts.All(predicate: IsDeclarationIdentifier)) {
+        if ((dotted.Segments.Count == 2) && dotted.Segments.All(predicate: static part => IdentifierSpelling.IsName(text: part))) {
             if (key is null) {
                 return name;
             }
@@ -848,7 +880,7 @@ public static partial class WorldDecompiler {
                 var keyStart = dottedText.LastIndexOf(value: '[');
 
                 if (keyStart >= 0) {
-                    return $"{dottedParts[0]}{dottedText[keyStart..]}.{dottedParts[1]}";
+                    return $"{dotted.Head}{dottedText[keyStart..]}{QualifiedName.Separator}{dotted.Last}";
                 }
             }
         }
@@ -865,9 +897,12 @@ public static partial class WorldDecompiler {
     }
     // Whether an effect's own `state`/`key` target is safe to spell as `RowRef` sugar (§2.2) at all — see
     // `RowRefRoundTrips`.
+    // A target the operand grammar must backquote (a generated `alias$name`) opens no statement a rule body reads, so
+    // it prints in call form.
     private static bool IsEffectTargetSafe(JsonObject obj) => (
         (IsPoolFieldReference(node: obj["state"]) && (obj["key"] is null)) ||
-        RowRefRoundTrips(FormatStateReference(node: obj["state"]), obj["key"]?.ToString())
+        (RowRefRoundTrips(FormatStateReference(node: obj["state"]), obj["key"]?.ToString()) &&
+        !FormatRowRefTarget(obj: obj).StartsWith(value: '`'))
     );
     // The RHS classification table (§2.3), shared by setState/addState/push: `text` (setState only), `valueSeconds`,
     // `expression` (printed verbatim, but only when it round-trips as one — see

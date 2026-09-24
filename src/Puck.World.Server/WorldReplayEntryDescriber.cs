@@ -51,7 +51,7 @@ public static class WorldReplayEntryDescriber {
         WorldComposition.SelectCamera camera => $"composition camera={(camera.Name ?? "auto")}",
         _ => $"composition {composition.GetType().Name}",
     };
-    private static string DescribeGrant(WorldGrant grant) => $"{grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()} -> {grant.Principal.Describe()}{(grant.Exclusive
+    private static string DescribeGrant(WorldGrant grant) => $"{grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()} -> {grant.Grantee.Describe()}{(grant.Exclusive
         ? " exclusive"
         : "")}";
     // Every non-zero lane of a segment's held intent, named — the vector as the operator typed it.

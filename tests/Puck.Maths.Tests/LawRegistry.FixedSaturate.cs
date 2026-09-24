@@ -9,15 +9,11 @@ internal static partial class LawRegistry {
     );
 
     private static LawCase[] FixedSaturateCases() => [
-        Case(
+        SweptCase(
+            claim: FixedSaturateClaims.ClampsToTheExtremes,
+            domain: FixedSaturateDomain,
             id: "core.fixed-saturate-clamps-to-the-extremes",
-            run: () => Laws.SweptClaim(
-                claim: FixedSaturateClaims.ClampsToTheExtremes,
-                domain: FixedSaturateDomain,
-                lawId: "core.fixed-saturate-clamps-to-the-extremes",
-                tier: Tier.Default,
-                width: 4
-            )
+            width: 4
         ),
     ];
 }

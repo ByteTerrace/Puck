@@ -1,11 +1,12 @@
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
 
 public sealed class WorldBootValidationLawTests {
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void DrawCannotHideAnInvalidSourceOrReplaceAnInvalidAuthoredCell(bool invalidCell) {
         var definition = new WorldDefinition(Simulation: new WorldSimulationDefaults(RateHz: 240))
             .WithWorldState(rows: [new WorldStateRow(Name: CellName.Parse(candidate: "roll"), Kind: CellKind.Int,
@@ -13,13 +14,13 @@ public sealed class WorldBootValidationLawTests {
                 Cells: (invalidCell ? [new StateCell(CellName.Parse(candidate: "die"), CellValue.Int(value: 0))] : null),
                 Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.UniformRange,
                     RangeMin: 1, RangeMax: (invalidCell ? 6 : 7)), Timing: DrawTiming.Boot))]);
-        Assert.False(WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(definition: definition),
-            "invalid-draw", out var admission, out var reason));
-        Assert.Null(admission);
-        Assert.Contains("state[0]", reason);
-        Assert.Contains((invalidCell ? "min" : "admissible domain"), reason);
-    }
 
+        Assert.False(condition: WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(definition: definition),
+            "invalid-draw", out var admission, out var reason));
+        Assert.Null(@object: admission);
+        Assert.Contains(actualString: reason, expectedSubstring: "state.world[0]");
+        Assert.Contains(actualString: reason, expectedSubstring: (invalidCell ? "min" : "admissible domain"));
+    }
     [Fact]
     public void MalformedInlineDrawSourceRefusesBeforeMaskTraversal() {
         var definition = new WorldDefinition(Simulation: new WorldSimulationDefaults(RateHz: 240))
@@ -27,16 +28,16 @@ public sealed class WorldBootValidationLawTests {
                 Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.WeightedNumeric,
                     Mode: GeneratorMode.WithoutReplacement, Weighted: [null!]), Timing: DrawTiming.Boot),
                 DrawnMasks: [default])]);
-        Assert.False(WorldDefinitionValidator.TryAdmit(definition, null, null, out _, out _));
-        Assert.False(WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(definition: definition),
-            "malformed-source", out var admission, out var reason));
-        Assert.Null(admission);
-        Assert.NotEmpty(reason);
-    }
 
-    [Theory]
+        Assert.False(condition: WorldDefinitionValidator.TryAdmit(admission: out _, definition: definition, machines: null, neighbours: null, reason: out _));
+        Assert.False(condition: WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(definition: definition),
+            "malformed-source", out var admission, out var reason));
+        Assert.Null(@object: admission);
+        Assert.NotEmpty(collection: reason);
+    }
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void BackendRowSettlesToOneLiteralAndRejectsAnAuthoredConflict(bool conflict) {
         var definition = new WorldDefinition(Simulation: new WorldSimulationDefaults(RateHz: 240),
             HostRaw: WorldHostDefaults.Absent with {
@@ -49,40 +50,41 @@ public sealed class WorldBootValidationLawTests {
                 Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Text(value: "auto"))])]);
         var accepted = WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(definition: definition),
             "backend", out var admission, out var reason);
-        Assert.Equal(!conflict, accepted);
+
+        Assert.Equal(actual: accepted, expected: !conflict);
         if (conflict) {
-            Assert.Null(admission);
-            Assert.Contains("both 'backend' and 'backendRow'", reason);
+            Assert.Null(@object: admission);
+            Assert.Contains(actualString: reason, expectedSubstring: "both 'backend' and 'backendRow'");
             return;
         }
-        Assert.NotNull(admission);
-        Assert.Null(admission.Definition.Host.BackendRow);
+        Assert.NotNull(@object: admission);
+        Assert.Null(@object: admission.Definition.Host.BackendRow);
         Assert.Equal(WorldHostTokens.ParseBackend(token: "auto"), admission.Definition.Host.Backend);
         Assert.Equal("auto", admission.Definition.AuthoredState[0].Cells![0].Value.AsText);
-        Assert.True(WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(admission.Definition),
-            "backend-reloaded", out var reloaded, out reason), reason);
+        Assert.True(condition: WorldDefinitionLoader.TryLoadForAdmission(WorldDefinitionSerialization.Serialize(definition: admission.Definition),
+            "backend-reloaded", out var reloaded, out reason), userMessage: reason);
         Assert.Equal(admission.Definition.Host, reloaded!.Definition.Host);
     }
-
     [Fact]
     public void DrawResolverAllocatesNothingWhenAllRowsAreAlreadyFilled() {
         var literal = new WorldDefinition(Simulation: new WorldSimulationDefaults(RateHz: 240))
             .WithWorldState(rows: [new WorldStateRow(Name: CellName.Parse(candidate: "value"), Kind: CellKind.Int,
                 Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 3))])]);
+
         for (var warm = 0; (warm < 100); warm++) {
             WorldDrawBootResolver.TryResolve(definition: literal, instanceIdentity: "boot", reason: out _, resolved: out _);
         }
-        var before = GC.GetAllocatedBytesForCurrentThread();
         var unchanged = true;
-        for (var iteration = 0; (iteration < 1000); iteration++) {
-            unchanged &= (WorldDrawBootResolver.TryResolve(definition: literal, instanceIdentity: "boot", reason: out _, resolved: out var resolved) &&
-                ReferenceEquals(objA: literal, objB: resolved));
-        }
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        var allocated = AllocationWindow.Least(window: () => {
+            for (var iteration = 0; (iteration < 1000); iteration++) {
+                unchanged &= (WorldDrawBootResolver.TryResolve(definition: literal, instanceIdentity: "boot", reason: out _, resolved: out var resolved) &&
+                    ReferenceEquals(objA: literal, objB: resolved));
+            }
+        });
+
         Assert.True(condition: unchanged);
         Assert.Equal(actual: allocated, expected: 0);
     }
-
     [Fact]
     public void DrawResolverPreservesIdentityOnlyWhenNoBootValueChanges() {
         var literal = new WorldDefinition(Simulation: new WorldSimulationDefaults(RateHz: 240));
@@ -102,7 +104,7 @@ public sealed class WorldBootValidationLawTests {
 
         Assert.True(condition: WorldDrawBootResolver.TryResolve(definition: authored, instanceIdentity: "boot", reason: out reason, resolved: out var drawn), userMessage: reason);
         Assert.NotSame(actual: drawn, expected: authored);
-        Assert.Null(authored.AuthoredState[0].Cells);
+        Assert.Null(@object: authored.AuthoredState[0].Cells);
         Assert.InRange(drawn.AuthoredState[0].Cells![0].Value.Raw, 1L, 6L);
         Assert.True(condition: WorldDrawBootResolver.TryResolve(definition: drawn, instanceIdentity: "boot", reason: out reason, resolved: out var reloaded), userMessage: reason);
         Assert.Same(actual: reloaded, expected: drawn);

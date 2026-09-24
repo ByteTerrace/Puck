@@ -292,18 +292,24 @@ public sealed class WorldCameraProgramValidationLawTests {
             userMessage: controlReason
         );
     }
-    [Fact]
-    public void AMissingNameIsRefusedByName() => Refuses(
-        control: Program(
+    // A program's identity is its name and its version; a blank name or an unknown version refuses by name.
+    [InlineData("name", ".name is required")]
+    [InlineData("version", "must be 'puck.camera.program.v1'")]
+    [Theory]
+    public void AMalformedProgramIdentityIsRefusedByName(string member, string expected) {
+        var control = Program(
             "probe-rig",
             Fov()
-        ),
-        denied: (Program(
-            "probe-rig",
-            Fov()
-        ) with { Name = "  " }),
-        expected: ".name is required"
-    );
+        );
+
+        Refuses(
+            control: control,
+            denied: ((member == "name")
+                ? (control with { Name = "  " })
+                : (control with { Version = "puck.camera.v0" })),
+            expected: expected
+        );
+    }
     [Fact]
     public void ANegativeFocusDistanceIsRefusedByName() => Refuses(
         control: Program(
@@ -575,18 +581,6 @@ public sealed class WorldCameraProgramValidationLawTests {
         // Control: the same document without the extra member parses.
         _ = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: document));
     }
-    [Fact]
-    public void AnUnsupportedVersionIsRefusedByName() => Refuses(
-        control: Program(
-            "probe-rig",
-            Fov()
-        ),
-        denied: (Program(
-            "probe-rig",
-            Fov()
-        ) with { Version = "puck.camera.v0" }),
-        expected: "must be 'puck.camera.program.v1'"
-    );
     [Fact]
     public void MoreOperationsThanTheCeilingAreRefusedByName() {
         var operations = new List<WorldCameraProgramOp> { Fov() };

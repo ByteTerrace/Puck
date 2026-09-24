@@ -634,12 +634,14 @@ public sealed partial class WorldPopulation {
         );
 
         if (producer.Flock is not null) {
-            sensors = sensors with { FlockDesired = BlendFlockPreference(
+            sensors = sensors with {
+                FlockDesired = BlendFlockPreference(
                 index,
                 entry,
                 producer.Flock,
                 sensors.Candidate
-            ) };
+            ),
+            };
         } else {
             entry.ProducerState.FlockSeeded = false;
         }
@@ -1095,7 +1097,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Names the edge/action subset of a captured body state so another world can restore it without
     /// assuming the two documents assigned the same ordinals.</summary>
-    public WorldTransferActionContinuity NameTransferActionContinuity(int slot, WorldBody.TransferState state) {
+    public WorldTransferActionContinuity NameTransferActionContinuity(int slot, WorldBodyTransferState state) {
         var channels = new List<WorldTransferChannelEdge>();
 
         for (var ordinal = 0; (ordinal < Math.Min(

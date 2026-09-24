@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -16,7 +17,7 @@ internal sealed class WorldPreparedMutation(
     IWorldAddonPreparedPlan? addonPlan,
     IWorldMachinePreparedPlan? machinePlan,
     int[]? tickWrittenEntity,
-    WorldPrincipal[]? tickWrittenPrincipal,
+    Principal[]? tickWrittenPrincipal,
     bool[]? tickCollided,
     CellName? evictedKey,
     ulong tick,
@@ -38,7 +39,7 @@ internal sealed class WorldPreparedMutation(
     public ulong Tick { get; } = tick;
     public bool[]? TickCollided { get; } = tickCollided;
     public int[]? TickWrittenEntity { get; } = tickWrittenEntity;
-    public WorldPrincipal[]? TickWrittenPrincipal { get; } = tickWrittenPrincipal;
+    public Principal[]? TickWrittenPrincipal { get; } = tickWrittenPrincipal;
 
     /// <summary>Records that the addon host committed its plan, so disposal leaves it alone.</summary>
     public void MarkAddonCommitted() => m_addonSettled = true;

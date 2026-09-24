@@ -49,7 +49,7 @@ public sealed class LatticeFunctionLawTests {
             0L,
             Eval(text: "cycleDistance(5, 5, 14)")
         );
-        Assert.False(condition: TryEval(text: "remainder(1, 0)"));
+        Assert.False(condition: TryEval(text: "floorModulo(1, 0)"));
         Assert.False(condition: TryEval(text: "cycleForward(0, 1, 0)"));
         Assert.False(condition: TryEval(text: "cycleDistance(0, 1, -14)"));
     }
@@ -99,11 +99,11 @@ public sealed class LatticeFunctionLawTests {
     public void ModIsFloored(long a, long m, long expected) {
         Assert.Equal(
             expected,
-            Eval(text: $"remainder({a}, {m})")
+            Eval(text: $"floorModulo({a}, {m})")
         );
         Assert.Equal(
             a.FloorModulo(modulus: m),
-            Eval(text: $"remainder({a}, {m})")
+            Eval(text: $"floorModulo({a}, {m})")
         );
     }
     [Fact]
@@ -235,7 +235,7 @@ public sealed class LatticeFunctionLawTests {
     [InlineData(-5, -1)]
     [Theory]
     public void SquareIndicesRoundTripThroughTheGaussianBasis(int x, int y) {
-        var index = Eval(text: $"square({x}, {y})");
+        var index = Eval(text: $"squareIndex({x}, {y})");
         var expected = SquareIndex.FromCoordinate(coordinate: new SquareCoordinate(
             X: x,
             Y: y
@@ -284,7 +284,7 @@ public sealed class LatticeFunctionLawTests {
             Eval(text: $"squareRotate({index}, 4)")
         );
         Assert.Equal(
-            Eval(text: $"square({-y}, {x})"),
+            Eval(text: $"squareIndex({-y}, {x})"),
             Eval(text: $"squareRotate({index}, 1)")
         );
         Assert.Equal(
@@ -292,23 +292,23 @@ public sealed class LatticeFunctionLawTests {
             Eval(text: $"squareMirror(squareMirror({index}))")
         );
         Assert.Equal(
-            Eval(text: $"square({y}, {x})"),
+            Eval(text: $"squareIndex({y}, {x})"),
             Eval(text: $"squareSwap({index})")
         );
         Assert.Equal(
-            Eval(text: $"squareAdd({index}, square(2, -1))"),
+            Eval(text: $"squareAdd({index}, squareIndex(2, -1))"),
             Eval(text: $"squareTranslate({index}, 2, -1)")
         );
         Assert.Equal(
             index,
-            Eval(text: $"squareAdd(square(2, -1), squareSubtract({index}, square(2, -1)))")
+            Eval(text: $"squareAdd(squareIndex(2, -1), squareSubtract({index}, squareIndex(2, -1)))")
         );
         Assert.Equal(
             index,
             Eval(text: $"squareMultiply({index}, 1)")
         );
         Assert.Equal(
-            Eval(text: $"square({(x * 3)}, {(y * 3)})"),
+            Eval(text: $"squareIndex({(x * 3)}, {(y * 3)})"),
             Eval(text: $"squareScale({index}, 3)")
         );
     }
@@ -380,6 +380,13 @@ public sealed class LatticeFunctionLawTests {
                 );
             }
         }
+        // A member is read from the subset subsetAt decodes, so it shares that function's universe: a mask's 64.
+        Assert.Equal(
+            63L,
+            Eval(text: "subsetMember(64, 64, 0, 63)")
+        );
+        Assert.False(condition: TryEval(text: "subsetMember(65, 1, 0, 0)"));
+        Assert.False(condition: TryEval(text: "subsetAt(65, 1, 0)"));
         Assert.Equal(
             0L,
             Eval(text: "subsetRank(8, 7)")

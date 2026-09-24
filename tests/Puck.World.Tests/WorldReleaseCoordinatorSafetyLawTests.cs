@@ -12,6 +12,7 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
 
     private static WorldReleaseManifest Manifest(char image) => new() {
+        CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
         Label = "coordinator-test",
         SourceRevision = new string(
         c: image,
@@ -21,10 +22,12 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         c: image,
         count: 64
     )),
-        Definitions = new Dictionary<string, string> { ["row"] = ("sha256/" + new string(
+        Definitions = new Dictionary<string, string> {
+            ["row"] = ("sha256/" + new string(
         c: 'd',
         count: 64
-    )) },
+    )),
+        },
         DefinitionFiles = new Dictionary<string, string> { ["row"] = "row.world.json" },
         Artifacts = new Dictionary<string, string>(),
         PersistenceContract = "puck.world.persistence.v1",
@@ -117,11 +120,11 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         group = Required(result: await groups.AdvanceAsync(
             group,
             group.Record with {
-            PendingPhase = WorldReleaseOperationPhase.Drain,
-            Admission = WorldReleaseAdmissionState.Closed,
-            RecoveryRoots = new Dictionary<string, string> { [$"{owner:D}/row"] = "protected-root" },
-            Revision = (group.Record.Revision + 1),
-        },
+                PendingPhase = WorldReleaseOperationPhase.Drain,
+                Admission = WorldReleaseAdmissionState.Closed,
+                RecoveryRoots = new Dictionary<string, string> { [$"{owner:D}/row"] = "protected-root" },
+                Revision = (group.Record.Revision + 1),
+            },
             Token
         ));
         foreach (var phase in new[] { WorldReleaseOperationPhase.Activate, WorldReleaseOperationPhase.Verify }) {

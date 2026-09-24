@@ -18,11 +18,16 @@ public sealed record WorldSiloFederation(string KeyFile) {
 /// <param name="World">The world id under that owner's container — the grain key's own extension.</param>
 /// <param name="Federation">This row's own signing key.</param>
 /// <param name="Pinned">Whether this row activates at silo start and never idle-deactivates.</param>
+/// <param name="Extensions">The path of this row's host-approved extension configuration
+/// (<c>puck.world.extensions.v1</c>) — the same document a local World reads through <c>--extensions-config-file</c> —
+/// or <see langword="null"/> when the row runs no configured operations, connections, observations, embeddings, or
+/// participants. Host state, never published inside a document; no two rows share one file.</param>
 public sealed record WorldSiloWorldRow(
     Guid Owner,
     SafeName World,
     WorldSiloFederation Federation,
-    bool Pinned = false
+    bool Pinned = false,
+    string? Extensions = null
 );
 /// <summary>The declared door budget — a silo-document field, never a hard-coded platform constant: the document
 /// declares its own limit, and a deployment lane writes a platform-derived value into it when one exists.</summary>
@@ -46,12 +51,12 @@ public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string
     public bool ClosedGroupRewind { get; init; }
 }
 /// <summary>Deployment-owned lifecycle observation and local health configuration.</summary>
-/// <param name="ShutdownSeconds">Maximum time allowed for operator or deployment retirement.</param>
+/// <param name="ShutdownSeconds">Maximum time, on the silo's clock, allowed for operator or deployment retirement, a pinned reload, or a release control request.</param>
 /// <param name="HealthPort">HTTP health port; retirement requests are accepted only from loopback.</param>
 /// <param name="Observer">Optional installed extension supplying host retirement deadlines; absent means no external observation.</param>
-/// <param name="ProgressTimeoutSeconds">Maximum wall-clock age of a completed simulation step before liveness fails.</param>
-/// <param name="CheckpointTimeoutSeconds">Maximum wall-clock age of a successful checkpoint before readiness fails.</param>
-/// <param name="JournalTimeoutSeconds">Maximum wall-clock interval without journal progress while appends are pending.</param>
+/// <param name="ProgressTimeoutSeconds">Maximum age, on the silo's clock, of a completed simulation step before liveness fails; also bounds each health request.</param>
+/// <param name="CheckpointTimeoutSeconds">Maximum age, on the silo's clock, of a successful checkpoint before readiness fails.</param>
+/// <param name="JournalTimeoutSeconds">Maximum interval, on the silo's clock, without journal progress while appends are pending.</param>
 /// <param name="JournalBacklogLimit">Maximum outstanding journal appends admitted as healthy.</param>
 public sealed record WorldSiloLifecycle(
     int ShutdownSeconds,

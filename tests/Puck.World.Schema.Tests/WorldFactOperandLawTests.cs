@@ -106,8 +106,54 @@ public sealed class WorldFactOperandLawTests {
         Assert.Null(@object: reader.Influence);
         Assert.True(condition: fact.IsAbsent);
     }
+    [Fact]
+    public void AnIdentityFactReadsItsLaneCellLiveAtTheEvaluationsTime() {
+        var reader = new RecordingWorldFacts(section: new StateSection(Rows: [new StateRow(
+                Name: CellName.Parse(candidate: WorldIdentityFactLane.RowName),
+                Kind: CellKind.Int,
+                Capacity: 4,
+                Advance: new StateAdvance(
+                    PerSecondDenominator: 1L,
+                    PerSecondNumerator: 1L
+                ),
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: WorldIdentityFactLane.Key(
+                            bodyIndex: 0,
+                            fact: "hp"
+                        )),
+                        Value: CellValue.Int(value: 3L)
+                    )]
+            )])) {
+            ResolvedBody = 0,
+        };
+        var operand = new WorldIdentityFactOperand(
+            body: default,
+            capacity: 1,
+            fact: "hp",
+            laneOrdinal: 0
+        );
+
+        Assert.Equal(
+            actual: operand.Read(
+                facet: reader,
+                reader: reader
+            ).Value,
+            expected: 3L
+        );
+
+        reader.EngineTick = (2UL * ((ulong)Puck.Maths.FixedTickConversion.TicksPerSecond));
+
+        Assert.Equal(
+            actual: operand.Read(
+                facet: reader,
+                reader: reader
+            ).Value,
+            expected: 5L
+        );
+    }
 }
-/// <summary>A host that serves no world fact but the influence read, recording the operand it was handed.</summary>
+/// <summary>A host that serves no world fact but the influence read and one configurable body resolution, recording
+/// the influence operand it was handed.</summary>
 public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
     private readonly long[] m_scratch = new long[64];
@@ -191,8 +237,12 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     public RuleFact Read(NavigationOperand operand) => Unserved();
     /// <inheritdoc/>
     public RuleFact Read(BoardCellOfOperand operand) => Unserved();
+
+    /// <summary>Gets or sets the body index every body reference resolves to; <c>-1</c> resolves none.</summary>
+    public int ResolvedBody { get; set; } = -1;
+
     /// <inheritdoc/>
-    public int ResolveBody(in CompiledBodyRef bodyRef) => -1;
+    public int ResolveBody(in CompiledBodyRef bodyRef) => ResolvedBody;
     /// <inheritdoc/>
     public bool TryReadHostOwnedCell(int rowOrdinal, int cell, out long value) {
         value = 0L;

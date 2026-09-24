@@ -5,6 +5,8 @@ It provides the Vulkan surface presenter, command-buffer recording, compute
 service registration, and the small blit shaders used to present a surface.
 The project owns this presentation seam; Vulkan loading and resource APIs stay
 in `Puck.Vulkan`, and shader compilation follows the shared build targets.
+`VulkanRenderer` reports its device to backend-neutral code as the device
+command table's token, as described in [the Vulkan backend](../../docs/rendering/vulkan.md#command-tables).
 
 ## Usage
 

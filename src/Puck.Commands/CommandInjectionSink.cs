@@ -12,18 +12,18 @@ namespace Puck.Commands;
 /// a principal of its own choosing.
 /// </remarks>
 public sealed class CommandInjectionSink {
-    private readonly CommandPrincipal m_principal;
+    private readonly Principal m_principal;
     private readonly InputRouter m_router;
     private readonly int m_slot;
 
-    internal CommandInjectionSink(InputRouter router, CommandPrincipal principal, int slot) {
+    internal CommandInjectionSink(InputRouter router, Principal principal, int slot) {
         m_principal = principal;
         m_router = router;
         m_slot = slot;
     }
 
     /// <summary>Gets the identity every command this sink queues acts as.</summary>
-    public CommandPrincipal Principal => m_principal;
+    public Principal Principal => m_principal;
 
     // Queues one pre-resolved command under this sink's bound identity and lane. Internal: the registry's text path is
     // the only producer, and admitting an external one would mean admitting whatever principal it asserted.

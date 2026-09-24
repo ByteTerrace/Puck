@@ -111,7 +111,7 @@ public sealed class WorldPitchedSeamIsometryLawTests {
                 a: mapped.YawRadians,
                 b: travelerYaw
             ) <= ErrorBudgetRaw),
-            userMessage: $"arrival yaw {(double)mapped.YawRadians} turned away from {(double)travelerYaw}"
+            userMessage: $"arrival yaw {((double)mapped.YawRadians)} turned away from {((double)travelerYaw)}"
         );
         Assert.True(
             condition: (RawAbs(
@@ -125,7 +125,7 @@ public sealed class WorldPitchedSeamIsometryLawTests {
                 a: mapped.VerticalVelocity,
                 b: vertical
             ) <= ErrorBudgetRaw),
-            userMessage: $"arrival vertical velocity {(double)mapped.VerticalVelocity} is not the departure's {(double)vertical}"
+            userMessage: $"arrival vertical velocity {((double)mapped.VerticalVelocity)} is not the departure's {((double)vertical)}"
         );
     }
     /// <summary>A flat pair authored at one yaw on both sides is a seam with a half turn in it: the arrival is the
@@ -268,7 +268,7 @@ public sealed class WorldPitchedSeamIsometryLawTests {
             ),
             to: Fixed(
                 x: 1.5,
-                y: (80.0 + threshold + 0.25),
+                y: ((80.0 + threshold) + 0.25),
                 z: -2.25
             ),
             outwardThreshold: outward
@@ -283,7 +283,7 @@ public sealed class WorldPitchedSeamIsometryLawTests {
             destination: in destination,
             point: Fixed(
                 x: 1.5,
-                y: (80.0 + threshold + 0.25),
+                y: ((80.0 + threshold) + 0.25),
                 z: -2.25
             ),
             source: in source

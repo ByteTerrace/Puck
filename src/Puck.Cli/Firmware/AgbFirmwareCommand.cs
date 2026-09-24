@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.ComponentModel;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Firmware;
 
@@ -73,8 +74,8 @@ internal static class AgbFirmwareCommand {
                         path2: name
                     ), "-o", path]);
                 _ = await CliProcess.RunCheckedAsync(
-                    root: temporary,
-                    executable: clang,
+                    workingDirectory: temporary,
+                    fileName: clang,
                     arguments: arguments,
                     capture: true
                 );
@@ -87,8 +88,8 @@ internal static class AgbFirmwareCommand {
             );
 
             _ = await CliProcess.RunCheckedAsync(
-                root: temporary,
-                executable: linker,
+                workingDirectory: temporary,
+                fileName: linker,
                 arguments: ["-T", Path.Combine(
                         path1: source,
                         path2: "firmware.ld"
@@ -111,9 +112,7 @@ internal static class AgbFirmwareCommand {
                 !string.Equals(
                 a: Path.GetDirectoryName(path: actual),
                 b: parent,
-                comparisonType: (OperatingSystem.IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal)
+                comparisonType: PuckPaths.Comparison
             ) ||
                 !Path.GetFileName(path: actual).StartsWith(
                 comparisonType: StringComparison.Ordinal,

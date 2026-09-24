@@ -26,7 +26,17 @@ pivot, in creation units, capped at 4.
 `curve:<row>`.
 
 A shape carrying `domain` folds may carry neither, since a fold rides its
-parent's frame.
+parent's frame. It may still carry a `parent`: the folded shape rides its own
+per-shape slot, packed with the rigid delta the parent's chain imparts (identity
+with no parent, translation in placement units), and its chain applies
+`Scale(placementScale)`, the domain ops, then its own rest pose, so the fold
+plane travels with the parent's driver and effector motion at any look scale.
+Its cull bound rides that slot with the static stamper's `RenderReach` radius.
+It refuses a named `frames` entry and a look `partDynamics` follower, and a frame
+posing its parent moves the parent alone, since a frame replaces a base pose
+outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
+`TryBodyPartAuthoredPose` compose its rest pose onto the carried frame and agree.
+`CreationDomainParentLawTests` pins this.
 
 ## Drivers
 
@@ -42,7 +52,10 @@ blendOutSeconds }`. Everything animated names one.
 `cadence` is capped at 256 in magnitude. `when` takes up to 4 gate tokens from
 the body-facts vocabulary plus `moving`, `still`, and `always`; `always` may not
 appear in a conjunction and `moving` with `still` is refused. Blend times default
-to a 0.15 second ease.
+to a 0.15 second ease. `blendInSeconds`/`blendOutSeconds` are finite
+non-negative exponential time constants; zero is immediate on a positive render
+delta. They control gate weights independently of phase cadence and the shared
+movement-speed filter (`CreationAnimationLawTests`).
 
 ## Chains and effectors
 
@@ -65,6 +78,13 @@ A `target` is `{ kind }` of `surface`, `body`, or `state`:
 A `plant` is `{ driver, window, swingWeight }`, where the window is a
 `[from, to]` pair in [0, 2π) that wraps when `from` exceeds `to`. This is what
 keeps a foot still while the gait carries the body past it.
+
+`swingWeight` is a nullable fraction in [0, 1] controlling the target's influence
+outside the plant window while the driver is active: zero releases to the
+authored swing, omission keeps following the target, and driver rest restores
+contact influence. A false effector `when` gate clears the latch, so
+reacquisition cannot reuse a pre-flight world target. `CreationEffectorLawTests`
+holds the pack-path controls; Moth opts into zero swing influence.
 
 Chain refusals worth recognizing:
 

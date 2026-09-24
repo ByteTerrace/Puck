@@ -313,22 +313,14 @@ public static partial class WorldDefinitionValidator {
 
         if (
             (authoring.LayoutCell is { } layoutCell) &&
-            !(BindableState.TryParseBinding(
-            key: out var layoutKey,
-            row: out _,
-            value: layoutCell
-        ) && (layoutKey is not null))
+            (StateBinding.Parse(token: layoutCell) is not (_, not null, _))
         ) {
             errors.Add(item: $"{path}.layoutCell '{layoutCell}' must be spelled state.<row>.<key>.");
         }
 
         if (
             (authoring.ModelCell is { } modelCell) &&
-            !(BindableState.TryParseBinding(
-            key: out var modelKey,
-            row: out _,
-            value: modelCell
-        ) && (modelKey is not null))
+            (StateBinding.Parse(token: modelCell) is not (_, not null, _))
         ) {
             errors.Add(item: $"{path}.modelCell '{modelCell}' must be spelled state.<row>.<key>.");
         }

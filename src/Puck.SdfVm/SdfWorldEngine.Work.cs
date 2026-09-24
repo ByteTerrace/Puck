@@ -1,0 +1,55 @@
+using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
+
+namespace Puck.SdfVm;
+
+public sealed partial class SdfWorldEngine {
+    // Pass indices into PassLabelTable, in submission order.
+    private const int UploadPass = 0;
+    private const int SkyPass = 1;
+    private const int MaskPass = 2;
+    private const int BeamPass = 3;
+    private const int CullArgsPass = 4;
+    private const int PrimaryPass = 5;
+    private const int SurfacePass = 6;
+    private const int AmbientPass = 7;
+    private const int ViewsPass = 8;
+    private const int CompositePass = 9;
+
+    // The ledger every wrapped GPU service counts into: the owner's (a node or view that outlives device-loss rebuilds)
+    // or the engine's own.
+    private readonly GpuWorkLedger m_work;
+
+    // The pass configuration's revision: one more for every UploadProgram and every InstallReload that installs a
+    // pipeline, so a sample says which program and kernel set its counts ran under.
+    private long m_workRevision;
+
+    /// <summary>Gets the labels of the passes a cadence-skipped frame does not run, in pass order. Every other pass of
+    /// <see cref="PassLabels"/> runs on every frame: <c>upload</c> copies whatever changed in the frame's tables
+    /// whatever the passes do with them, and <c>composite</c> re-composites the retained view images.</summary>
+    public static ReadOnlySpan<string> CadenceSkippedPassLabels =>
+        PassLabelTable.AsSpan(
+            length: ((ViewsPass - SkyPass) + 1),
+            start: SkyPass
+        );
+    /// <summary>Gets the render passes' labels, in submission order — the GPU work ledger's per-pass column names
+    /// (<see cref="Work"/>) and the width a caller sizes a per-pass read to.</summary>
+    public static ReadOnlySpan<string> PassLabels => PassLabelTable;
+    /// <summary>Gets the GPU work this engine recorded: per pass, for the newest submission known to have completed.
+    /// A frame's host-visible uploads, brick uploads and bakes, and the barriers before its first pass are counted
+    /// outside every pass. A pass the cadence gate skipped reads skipped, not zero.</summary>
+    public IGpuWorkSource Work =>
+        m_work;
+    /// <summary>Gets the GPU objects this engine's ledger has seen created (pipelines, shader modules, images,
+    /// buffers, descriptor pools and sets), over the ledger's whole life.</summary>
+    public IWorkCounterSource WorkLifetime =>
+        m_work;
+
+    private void ReconfigureWork() {
+        m_workRevision++;
+        m_work.Configure(
+            passLabels: PassLabelTable,
+            revision: m_workRevision
+        );
+    }
+}

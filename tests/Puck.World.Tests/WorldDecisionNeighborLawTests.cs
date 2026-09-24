@@ -1,4 +1,6 @@
+using Puck.Commands;
 using System.Diagnostics;
+using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -82,7 +84,7 @@ public sealed class WorldDecisionNeighborLawTests {
     );
     private static WorldBody Join(WorldFixture fixture, int index, int x, int z = 0) {
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            WorldPrincipal.Seat(slot: index),
+            Principal.Seat(slot: index),
             index,
             null,
             WorldProtocol.WireProtocolKey
@@ -132,7 +134,7 @@ public sealed class WorldDecisionNeighborLawTests {
         "entries"
     )!.Cells![0].Value.AsInt;
     private static void Appeal(WorldFixture fixture, int index, long value) => fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(
-        WorldPrincipal.Console,
+        Principal.Console,
         "appeal",
         index.ToString(),
         value,
@@ -344,7 +346,7 @@ public sealed class WorldDecisionNeighborLawTests {
             ),
             Gate = new ActionPredicate.CompareState(
                 "appeal",
-                ActionStateComparison.Greater,
+                ExpressionOp.Greater,
                 0,
                 Key: "$right"
             ),
@@ -498,7 +500,7 @@ public sealed class WorldDecisionNeighborLawTests {
             Options = [policy.Options[0] with {
             Gate = new ActionPredicate.CompareState(
                 "appeal",
-                ActionStateComparison.Greater,
+                ExpressionOp.Greater,
                 0,
                 Key: "$right"
             ),
@@ -759,7 +761,7 @@ public sealed class WorldDecisionNeighborLawTests {
             Score = Constant(value: 1), Effects = [], Gate = (rejectAll
             ? new ActionPredicate.CompareState(
                     "appeal",
-                    ActionStateComparison.Less,
+                    ExpressionOp.Less,
                     0,
                     Key: "$right"
                 )
@@ -823,11 +825,8 @@ public sealed class WorldDecisionNeighborLawTests {
                 tick: 0
             );
             }
-            var bestBytes = long.MaxValue;
-            var bestTime = TimeSpan.MaxValue;
-
-            for (var sample = 0; (sample < 3); sample++) {
-                var bytes = GC.GetAllocatedBytesForCurrentThread();
+            var time = TimeSpan.Zero;
+            var bytes = AllocationWindow.Measure(window: () => {
                 var start = Stopwatch.GetTimestamp();
 
                 for (var i = 0; (i < 32); i++) {
@@ -837,15 +836,10 @@ public sealed class WorldDecisionNeighborLawTests {
                 );
                 }
 
-                var allocated = (GC.GetAllocatedBytesForCurrentThread() - bytes);
+                time = Stopwatch.GetElapsedTime(startingTimestamp: start);
+            });
 
-                if (allocated < bestBytes) {
-                    bestBytes = allocated;
-                    bestTime = Stopwatch.GetElapsedTime(startingTimestamp: start);
-                }
-            }
-
-            return (bestBytes, bestTime);
+            return (bytes, time);
         }
         var measured = Run(f: subject); var baseline = Run(f: control);
 
@@ -910,7 +904,7 @@ public sealed class WorldDecisionNeighborLawTests {
     [Fact]
     public void CommittedWorldEffectsRoundTripButRemainForbiddenAtBothLiveCodecDoors() {
         var effect = new WorldMutation.UpsertStateCell(
-            WorldPrincipal.World,
+            Principal.World,
             "entries",
             "$value",
             1,
@@ -947,7 +941,7 @@ public sealed class WorldDecisionNeighborLawTests {
             failure: out _,
             mutation: out _
         ));
-        var external = effect with { Principal = WorldPrincipal.Console };
+        var external = effect with { Principal = Principal.Console };
 
         Assert.True(
             condition: WorldSubmissionCodec.TryEncodeMutation(
@@ -970,7 +964,7 @@ public sealed class WorldDecisionNeighborLawTests {
             expected: external
         );
         Assert.False(condition: WorldSubmissionCodec.TryEncodeCommittedMutation(
-            effect with { Principal = WorldPrincipal.World with { Index = 1 } },
+            effect with { Principal = Principal.World with { Index = 1 } },
             out _,
             out _
         ));

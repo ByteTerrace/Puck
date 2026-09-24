@@ -1,9 +1,13 @@
+using Puck.Abstractions;
+using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Xml.Linq;
 using Puck.Abstractions.Documents;
 
@@ -40,6 +44,7 @@ public static partial class WorldSchema {
     // duplicate content saves, and a two/three-word leaf isn't a "shape" a reader benefits from finding by name.
     private const int HoistMinimumLength = 60;
 
+    private static readonly ConcurrentDictionary<string, Lazy<SplitSchema>> ExportCache = new(comparer: StringComparer.Ordinal);
     // Every assembly whose types the document embeds; each one's generated XML doc file rides beside the DLL.
     private static readonly (string FileName, Type Anchor)[] XmlDocumentationFiles = [
         ("Puck.World.Schema.xml", typeof(WorldDefinition)),
@@ -53,6 +58,9 @@ public static partial class WorldSchema {
 
     /// <summary>The file name shared shapes live under, inside the sections directory.</summary>
     public const string CommonDefsFileName = "common.schema.json";
+    /// <summary>The counters report schema's stable identity — the tag <see cref="WorldCountersReport.SchemaVersion"/>
+    /// carries.</summary>
+    public const string CountersReportSchemaId = WorldCountersReport.SchemaVersion;
     /// <summary>The JSON Schema draft this document declares.</summary>
     public const string DraftUri = "https://json-schema.org/draft/2020-12/schema";
     /// <summary>The projection schema's stable identity — the tag <see cref="WorldProjectionDocument.SchemaVersion"/>
@@ -65,7 +73,13 @@ public static partial class WorldSchema {
     /// <summary>The silo schema's stable identity — the same tag <see cref="WorldSiloDefinition.SchemaVersion"/> carries.</summary>
     public const string SiloSchemaId = WorldSiloDefinition.SchemaVersion;
 
-    private static readonly Lazy<IReadOnlyDictionary<string, XElement>?> XmlDocIndex = new(valueFactory: LoadXmlDocIndex);
+    private static readonly Lazy<XmlDocumentation?> XmlDocIndex = new(valueFactory: static () => LoadXmlDocIndex(files: XmlDocumentationFiles));
+    // Every type's converter and metadata as WorldJsonContext resolves them, null where the context has none (a miss
+    // is an exception, so each type is asked once). The context's options are process-wide and immutable once used.
+    private static readonly ConcurrentDictionary<Type, JsonConverter?> Converters = new();
+    private static readonly ConcurrentDictionary<Type, string> FriendlyTypeNames = new();
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> PropertiesByJsonName = new();
+    private static readonly ConcurrentDictionary<Type, JsonTypeInfo?> TypeInfos = new();
 
     /// <summary>Gets whether every XML documentation file the schema draws on was found and loaded. <see langword="false"/>
     /// means <see cref="Export"/> still succeeds but every node's <c>description</c> is omitted — a caller (the
@@ -90,58 +104,6 @@ public static partial class WorldSchema {
     /// <param name="ConfigSchema">The set's config JSON Schema (<c>Puck.Shaders.ShaderSetManifest.ConfigJsonSchema</c>).</param>
     public sealed record PostRenderExtensionSchema(string Id, JsonObject ConfigSchema);
 
-    private static bool AllowsNull(JsonNode node) {
-        if (node is not JsonObject obj) {
-            return false;
-        }
-        if (
-            (obj["type"] is JsonValue scalarType) &&
-            scalarType.TryGetValue<string>(value: out var typeName) &&
-            string.Equals(
-            a: typeName,
-            b: "null",
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            return true;
-        }
-
-        foreach (var key in new[] { "type", "enum", "anyOf", "oneOf" }) {
-            if (obj[key] is not JsonArray values) {
-                continue;
-            }
-            foreach (var value in values) {
-                if (value is null) {
-                    return true;
-                }
-                if (
-                    (value is JsonValue token) &&
-                    token.TryGetValue<string>(value: out var text) &&
-                    string.Equals(
-                    a: text,
-                    b: "null",
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    return true;
-                }
-                if (
-                    (value is JsonObject arm) &&
-                    (arm["type"] is JsonValue armType) &&
-                    armType.TryGetValue<string>(value: out var armTypeName) &&
-                    string.Equals(
-                    a: armTypeName,
-                    b: "null",
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
     private static void AppendChildren(StringBuilder builder, XElement element) {
         foreach (var child in element.Nodes()) {
             AppendDocNode(
@@ -251,7 +213,7 @@ public static partial class WorldSchema {
     // grammar like GrantSubject's "body:<n>" — see WorldSchema's own sweep notes) and is left exactly as the
     // exporter produced it. Never widens an ALREADY-typed node (a $type union arm, a native enum) — only ever adds to the fully
     // permissive `{}` AsObjectNode just promoted.
-    private static void ApplyConverterVocabulary(JsonObject obj, Type propertyType, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+    private static void ApplyConverterVocabulary(JsonObject obj, Type propertyType, ExportRun run) {
         if (
             obj.ContainsKey(propertyName: "type") ||
             obj.ContainsKey(propertyName: "enum") ||
@@ -277,12 +239,11 @@ public static partial class WorldSchema {
         )) {
             // The converter describes its own node; an object arm it references is exported through the same
             // transform so its members are described and hoisted like any other shape.
-            var shape = nodeConverter.BuildSchema(exportType: type => ExportNested(
-                index: index,
-                nested: nested,
-                type: type,
-                typesByNode: typesByNode
-            ));
+            var shape = BuildConverterShape(
+                converter: nodeConverter,
+                propertyType: propertyType,
+                run: run
+            );
 
             foreach (var (name, value) in shape.ToList()) {
                 shape.Remove(propertyName: name);
@@ -342,6 +303,82 @@ public static partial class WorldSchema {
             obj["enum"] = enumArray;
         }
     }
+    // A member-level converter narrows one member below its type's own vocabulary — a comparison is an ExpressionOp
+    // restricted to six names — so its tokens replace whatever the type's node listed, and the node is recorded as
+    // the converter's own shape: titled, hoisted, described and typed for the converter
+    // (ExpressionComparisonJsonConverter is ExpressionComparison), never as the whole enum.
+    private static bool TryApplyMemberVocabulary(JsonObject obj, Type propertyType, JsonConverter? memberConverter, ExportRun run) {
+        if (memberConverter is not IJsonSchemaStringConverter { SchemaTokens: { Count: > 0 } tokens }) {
+            return false;
+        }
+
+        var nullable = (Nullable.GetUnderlyingType(nullableType: propertyType) is not null);
+        var enumArray = new JsonArray();
+
+        foreach (var token in tokens) {
+            enumArray.Add(item: token);
+        }
+
+        if (nullable) {
+            enumArray.Add(item: null);
+        }
+
+        obj.Remove(propertyName: "anyOf");
+        obj["type"] = (nullable
+            ? new JsonArray(
+                "string",
+                "null"
+            )
+            : "string"
+        );
+        obj["enum"] = enumArray;
+        run.TypesByNode[obj] = memberConverter.GetType();
+        StampTitle(
+            obj: obj,
+            type: memberConverter.GetType()
+        );
+
+        return true;
+    }
+    // A node converter's shape, owned by the caller. In the split export each (type, open types) shape is built once
+    // and every occurrence takes a typed copy; the unsplit exports build every occurrence, since their nested exports
+    // record where each one first appears.
+    private static JsonObject BuildConverterShape(IJsonSchemaNodeConverter converter, Type propertyType, ExportRun run) {
+        if (run.Nested is not null) {
+            return converter.BuildSchema(exportType: type => ExportNested(
+                run: run,
+                type: type
+            ));
+        }
+
+        var memos = (CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: run.InlineShapes,
+            exists: out _,
+            key: (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType)
+        ) ??= []);
+        JsonObject? shape = null;
+
+        foreach (var (open, known) in memos) {
+            if (open.SetEquals(other: run.InlineOpen)) {
+                shape = known;
+
+                break;
+            }
+        }
+
+        if (shape is null) {
+            shape = converter.BuildSchema(exportType: type => ExportNested(
+                run: run,
+                type: type
+            ));
+            memos.Add(item: (run.InlineOpen.ToHashSet(), shape));
+        }
+
+        return ((JsonObject)CloneTyped(
+            node: shape,
+            typesByNode: run.TypesByNode
+        ));
+    }
     // Normalizes a schema node to an annotatable object, promoting a permissive `true` leaf (an unconstrained
     // schema — e.g. a custom-converted member the exporter cannot introspect, like Vector3) to `{}` in place so a
     // description can still attach without narrowing what the node accepts. Returns null for anything else (a
@@ -365,34 +402,31 @@ public static partial class WorldSchema {
 
         return null;
     }
-    private static string ChooseDefName(JsonNode node, HoistState state) {
-        var baseName = (state.TypesByNode.TryGetValue(
-            key: node,
-            value: out var type
-        )
+    private static string ChooseDefName(Type? type, bool allowsNull, HashSet<string> usedNames) {
+        var baseName = ((type is not null)
             ? FriendlyTypeName(type: type)
             : "Shape"
         );
 
-        if (state.UsedNames.Add(item: baseName)) {
+        if (usedNames.Add(item: baseName)) {
             return baseName;
         }
 
         // The exporter materializes T and nullable T as distinct shapes but reports the same TypeInfo.Type for
         // both. Give that meaningful distinction a meaningful name instead of leaking traversal order through a
         // numeric suffix in the generated schema.
-        var qualifiedName = $"{baseName}{(AllowsNull(node: node)
+        var qualifiedName = $"{baseName}{(allowsNull
             ? "Nullable"
             : "NonNullable")}";
 
-        if (state.UsedNames.Add(item: qualifiedName)) {
+        if (usedNames.Add(item: qualifiedName)) {
             return qualifiedName;
         }
 
         for (var suffix = 2; ; suffix++) {
             var candidate = $"{qualifiedName}{suffix}";
 
-            if (state.UsedNames.Add(item: candidate)) {
+            if (usedNames.Add(item: candidate)) {
                 return candidate;
             }
         }
@@ -405,104 +439,6 @@ public static partial class WorldSchema {
                 separator: ((char[]?)null)
             )
         ).Trim();
-    // Non-mutating pre-pass: computes every hoist candidate's group-key text (GroupKeyText — its RAW, pre-dedup
-    // content minus the occurrence annotations) and tallies how many
-    // times each key occurs across the whole tree. A candidate whose ORIGIN is one of the exporter's own
-    // $ref targets (see ExporterRefTargets) is included regardless of count or IsHoistCandidate's shape test — a
-    // recursive shape's own target needs a def no matter how many times its content otherwise repeats. The result
-    // is a per-NODE decision — group membership — fixed before any mutation happens, so the actual hoisting walk
-    // (HashConsWalk) never has to recompute a node's "does this repeat" question from text that a sibling's
-    // earlier mutation may have already made stale.
-    private static void CollectHoistGroups(JsonNode node, HoistState state) {
-        if (node is JsonObject obj) {
-            if (ContainsRefKey(obj: obj)) {
-                return;
-            }
-
-            foreach (var (_, child) in obj) {
-                if (child is JsonObject or JsonArray) {
-                    CollectHoistGroups(
-                        node: child,
-                        state: state
-                    );
-                }
-            }
-
-            var forced = (state.OriginByNode.TryGetValue(
-                key: obj,
-                value: out var candidateOrigin
-            ) && state.ExporterRefTargets.Contains(item: candidateOrigin));
-
-            if (
-                !forced &&
-                !IsHoistCandidate(obj: obj)
-            ) {
-                return;
-            }
-
-            var text = GroupKeyText(
-                obj: obj,
-                state: state
-            );
-
-            if (
-                !forced &&
-                (text.Length < HoistMinimumLength)
-            ) {
-                return;
-            }
-
-            state.CandidateText[obj] = text;
-            state.RawTextCounts[text] = (state.RawTextCounts.GetValueOrDefault(key: text) + 1);
-        } else if (node is JsonArray arr) {
-            foreach (var child in arr) {
-                if (child is JsonObject or JsonArray) {
-                    CollectHoistGroups(
-                        node: child,
-                        state: state
-                    );
-                }
-            }
-        }
-    }
-    // Every $ref target anywhere in node, regardless of what other keywords sit alongside "$ref" on the same
-    // node (see TryGetAbsoluteRefTarget) — walked over the document exactly as the exporter produced it, before
-    // any expansion.
-    private static void CollectRefTargets(JsonNode node, HashSet<string> targets) {
-        if (node is JsonObject obj) {
-            if (TryGetAbsoluteRefTarget(
-                refObj: obj,
-                target: out var target
-            )) {
-                targets.Add(item: target);
-            }
-
-            foreach (var (key, value) in obj) {
-                if (
-                    !string.Equals(
-                    a: key,
-                    b: "$ref",
-                    comparisonType: StringComparison.Ordinal
-                ) &&
-                    (value is not null)
-                ) {
-                    CollectRefTargets(
-                        node: value,
-                        targets: targets
-                    );
-                }
-            }
-        } else if (node is JsonArray arr) {
-            foreach (var value in arr) {
-                if (value is not null) {
-                    CollectRefTargets(
-                        node: value,
-                        targets: targets
-                    );
-                }
-            }
-        }
-    }
     private static string CompactSerialize(JsonNode node) {
         using var stream = new MemoryStream();
 
@@ -517,219 +453,16 @@ public static partial class WorldSchema {
     // the exporter's own $ref sites do (draft 2020-12 keeps sibling keywords meaningful).
     private static bool ContainsRefKey(JsonObject obj) =>
         ((obj["$ref"] is JsonValue value) && value.TryGetValue<string>(value: out _));
-    private static string EscapePointerSegment(string segment) =>
-        (((segment.IndexOf(value: '~') >= 0) || (segment.IndexOf(value: '/') >= 0))
-            ? segment.Replace(
-                newValue: "~0",
-                oldValue: "~"
-            ).Replace(
-                newValue: "~1",
-                oldValue: "/"
-            )
-            : segment
+    private static (JsonObject Root, ExportRun Run) ExportMergedWithTypes() {
+        var run = new ExportRun(
+            index: XmlDocIndex.Value,
+            nested: null
         );
-    // Depth-first expansion of every $ref, with cycle detection via activePaths — the FULL ancestry chain of
-    // document-absolute paths currently being expanded, ordinary nesting and $ref jumps alike (every call pushes
-    // its own currentPath for its duration, not just a ref-jump target) — and via activeTypes, the CLR types of
-    // the nodes on that same chain. A $ref is genuinely recursive when its target is an ancestor of itself by
-    // path, OR when its target's type is already being expanded: a polymorphic union whose arms each hold the
-    // union again is regenerated by the exporter once per recursive member before it starts emitting $refs, so
-    // every level's refs point at a DIFFERENT path of the same type, and by path alone each level multiplies the
-    // expansion by its ref count — exponential in the member count. Either way the ref is left as-is, an opaque
-    // marker for FixupCyclicMarkers to repoint later. Every other $ref — including ones the exporter emitted
-    // purely because the SAME concrete TypeInfo recurred in an unrelated branch — is fully substituted, so
-    // category-1 (exporter-deduplicated) and category-2 (independently regenerated, e.g. a polymorphic union arm)
-    // duplicates both end up as plain inline text for one uniform dedup pass.
-    private static JsonNode ExpandRefs(
-        JsonNode node,
-        Dictionary<string, JsonNode> pathIndex,
-        Dictionary<JsonNode, Type> typesByNode,
-        Dictionary<JsonNode, Type> expandedTypes,
-        Dictionary<JsonNode, string> originByNode,
-        HashSet<string> activePaths,
-        HashSet<Type> activeTypes,
-        string currentPath) {
-        if (
-            (node is JsonObject refObj) &&
-            TryGetAbsoluteRefTarget(
-            refObj: refObj,
-            target: out var targetPath
-        )
-        ) {
-            var siblings = refObj.Where(predicate: kv => !string.Equals(
-                a: kv.Key,
-                b: "$ref",
-                comparisonType: StringComparison.Ordinal
-            )).ToList();
-
-            var recursiveByType = (pathIndex.TryGetValue(
-                key: targetPath,
-                value: out var targetForType
-            ) && typesByNode.TryGetValue(
-                key: targetForType,
-                value: out var targetType
-            ) && activeTypes.Contains(item: targetType));
-
-            if (
-                activePaths.Contains(item: targetPath) ||
-                recursiveByType
-            ) {
-                // A genuine cycle — preserve any sibling keywords (e.g. an occurrence-specific "default") next to
-                // the still-raw marker; FixupCyclicMarkers repoints only the "$ref" value once its target has a def.
-                var marker = new JsonObject { ["$ref"] = targetPath };
-
-                // A sibling's own value may be a literal JSON null (e.g. an optional property's own
-                // "default": null) — System.Text.Json.Nodes represents that as a C# null reference, not a
-                // JsonValue wrapping null, so the key still has to be written, just without recursing into it.
-                foreach (var (key, value) in siblings) {
-                    marker[key] = ((value is not null)
-                        ? ExpandRefs(
-                            node: value,
-                            pathIndex: pathIndex,
-                            typesByNode: typesByNode,
-                            expandedTypes: expandedTypes,
-                            originByNode: originByNode,
-                            activePaths: activePaths,
-                            activeTypes: activeTypes,
-                            currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
-                        )
-                        : null
-                    );
-                }
-
-                return marker;
-            }
-
-            if (!pathIndex.TryGetValue(
-                key: targetPath,
-                value: out var targetNode
-            )) {
-                throw new InvalidOperationException(message: $"schema: $ref '{targetPath}' does not resolve within the generated document.");
-            }
-
-            // The recursive call pushes targetPath itself (as its own currentPath) for the duration of expanding
-            // the target — no separate push here, so a ref chain and ordinary nesting share the exact same
-            // ancestry bookkeeping. Any sibling keywords on THIS occurrence (not part of the shared target) are
-            // merged on top of the target's own clone afterward — an occurrence-specific "default" overrides
-            // (harmlessly, when it agrees, as it always has so far) whatever the target's own natural position
-            // already carries.
-            var expandedTarget = ExpandRefs(
-                activePaths: activePaths,
-                activeTypes: activeTypes,
-                currentPath: targetPath,
-                expandedTypes: expandedTypes,
-                node: targetNode,
-                originByNode: originByNode,
-                pathIndex: pathIndex,
-                typesByNode: typesByNode
-            );
-
-            if (
-                (siblings.Count == 0) ||
-                (expandedTarget is not JsonObject targetObj)
-            ) {
-                return expandedTarget;
-            }
-
-            foreach (var (key, value) in siblings) {
-                targetObj[key] = ((value is not null)
-                    ? ExpandRefs(
-                        node: value,
-                        pathIndex: pathIndex,
-                        typesByNode: typesByNode,
-                        expandedTypes: expandedTypes,
-                        originByNode: originByNode,
-                        activePaths: activePaths,
-                        activeTypes: activeTypes,
-                        currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
-                    )
-                    : null
-                );
-            }
-
-            return targetObj;
-        }
-
-        var pushed = activePaths.Add(item: currentPath);
-        var pushedType = (typesByNode.TryGetValue(
-            key: node,
-            value: out var ownType
-        ) && activeTypes.Add(item: ownType));
-        JsonNode result;
-
-        try {
-            if (node is JsonObject obj) {
-                var newObj = new JsonObject();
-
-                foreach (var (key, value) in obj) {
-                    newObj[key] = ((value is not null)
-                        ? ExpandRefs(
-                            node: value,
-                            pathIndex: pathIndex,
-                            typesByNode: typesByNode,
-                            expandedTypes: expandedTypes,
-                            originByNode: originByNode,
-                            activePaths: activePaths,
-                            activeTypes: activeTypes,
-                            currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
-                        )
-                        : null
-                    );
-                }
-
-                result = newObj;
-            } else if (node is JsonArray arr) {
-                var newArr = new JsonArray();
-
-                for (var i = 0; (i < arr.Count); i++) {
-                    var value = arr[i];
-
-                    newArr.Add(item: ((value is not null)
-                        ? ExpandRefs(
-                            activePaths: activePaths,
-                            activeTypes: activeTypes,
-                            currentPath: $"{currentPath}/{i}",
-                            expandedTypes: expandedTypes,
-                            node: value,
-                            originByNode: originByNode,
-                            pathIndex: pathIndex,
-                            typesByNode: typesByNode
-                        )
-                        : null));
-                }
-
-                result = newArr;
-            } else {
-                result = node.DeepClone()!;
-            }
-        } finally {
-            if (pushed) {
-                activePaths.Remove(item: currentPath);
-            }
-            if (pushedType) {
-                activeTypes.Remove(item: ownType!);
-            }
-        }
-
-        if (ownType is not null) {
-            expandedTypes[result] = ownType;
-        }
-
-        originByNode[result] = currentPath;
-
-        return result;
-    }
-    private static (JsonObject Root, Dictionary<JsonNode, Type> TypesByNode) ExportMergedWithTypes() {
-        var index = XmlDocIndex.Value;
-        var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
-        NestedExports? nested = null;
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
-            index: index,
-            nested: nested,
             node: node,
-            typesByNode: typesByNode
+            run: run
         ),
         };
         var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
@@ -760,7 +493,7 @@ public static partial class WorldSchema {
             );
         }
 
-        return (root, typesByNode);
+        return (root, run);
     }
     // Turns the internal "$defs/Name" placeholder every hoist produces into its final, file-aware form: a bare
     // same-document pointer for a reference that itself lives inside common.schema.json, a relative cross-file
@@ -817,24 +550,29 @@ public static partial class WorldSchema {
     // The SAME PropertyNamingPolicy (CamelCase) WorldJsonContext itself is configured with — matched by comparing
     // EVERY public instance property's own camelCased name, never assuming the JSON name lowercases its first
     // character alone (a policy change would silently break an assumption like that; this asks the policy itself).
-    private static PropertyInfo? FindPropertyByJsonName(Type ownerType, string jsonName) {
-        foreach (var property in ownerType.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
-            if (string.Equals(
-                a: JsonNamingPolicy.CamelCase.ConvertName(name: property.Name),
-                b: jsonName,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return property;
-            }
-        }
+    // Keyed by the type alone so the reflection walk runs on a parameter (IL2070, which the browser publish records)
+    // rather than on a tuple field (IL2080, which it does not); the first property to claim a name keeps it.
+    private static PropertyInfo? FindPropertyByJsonName(Type ownerType, string jsonName) =>
+        PropertiesByJsonName.GetOrAdd(
+            key: ownerType,
+            valueFactory: static owner => {
+                var properties = new Dictionary<string, PropertyInfo>(comparer: StringComparer.Ordinal);
 
-        return null;
-    }
+                foreach (var property in owner.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
+                    properties.TryAdd(
+                        key: JsonNamingPolicy.CamelCase.ConvertName(name: property.Name),
+                        value: property
+                    );
+                }
+
+                return properties;
+            }
+        ).GetValueOrDefault(key: jsonName);
     // Repoints a leftover recursive marker — a $ref that still carries its ORIGINAL absolute document pointer,
-    // because HashConsWalk skips ref-only nodes rather than treating their pointer text as hashable content — at
-    // whatever def its target was hoisted to. Every such target is one of ExporterRefTargets, and CollectHoistGroups
-    // forces exactly those into a def regardless of count, so a match here is guaranteed by construction.
-    private static void FixupCyclicMarkers(JsonNode node, HoistState state) {
+    // because the hoist treats reference nodes as opaque rather than as hashable content — at whatever def its
+    // target was hoisted to. Every such target is an exporter $ref target, and the hoist forces exactly those into
+    // a def regardless of count, so a match here is guaranteed by construction.
+    private static void FixupCyclicMarkers(JsonNode node, Dictionary<string, string> targetDefNames) {
         if (node is JsonObject obj) {
             if (ContainsRefKey(obj: obj)) {
                 var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
@@ -843,7 +581,7 @@ public static partial class WorldSchema {
                     comparisonType: StringComparison.Ordinal,
                     value: "$defs/"
                 )) {
-                    if (!state.OriginalPathToDefName.TryGetValue(
+                    if (!targetDefNames.TryGetValue(
                         key: value,
                         value: out var name
                     )) {
@@ -864,7 +602,7 @@ public static partial class WorldSchema {
                     ) {
                         FixupCyclicMarkers(
                             node: child,
-                            state: state
+                            targetDefNames: targetDefNames
                         );
                     }
                 }
@@ -876,7 +614,7 @@ public static partial class WorldSchema {
                 if (child is not null) {
                     FixupCyclicMarkers(
                         node: child,
-                        state: state
+                        targetDefNames: targetDefNames
                     );
                 }
             }
@@ -885,7 +623,7 @@ public static partial class WorldSchema {
                 if (child is not null) {
                     FixupCyclicMarkers(
                         node: child,
-                        state: state
+                        targetDefNames: targetDefNames
                     );
                 }
             }
@@ -897,11 +635,27 @@ public static partial class WorldSchema {
             newChar: '.',
             oldChar: '+'
         );
-    private static string FriendlyTypeName(Type type) {
+    private static string FriendlyTypeName(Type type) =>
+        FriendlyTypeNames.GetOrAdd(
+            key: type,
+            valueFactory: FriendlyTypeNameUncached
+        );
+    private static string FriendlyTypeNameUncached(Type type) {
         var underlying = Nullable.GetUnderlyingType(nullableType: type);
 
         if (underlying is not null) {
             type = underlying;
+        }
+
+        if (
+            typeof(IJsonSchemaStringConverter).IsAssignableFrom(c: type) &&
+            type.Name.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: nameof(JsonConverter)
+            )
+        ) {
+            // A member-level vocabulary converter's own shape is named for what it reads (see TryApplyMemberVocabulary).
+            return type.Name[..^nameof(JsonConverter).Length];
         }
 
         if (!type.IsGenericType) {
@@ -933,112 +687,6 @@ public static partial class WorldSchema {
 
         return (name + string.Concat(values: arguments.Select(selector: FriendlyTypeName)));
     }
-    private static JsonNode GroupKeyNode(JsonNode node, HoistState state, bool isRoot) {
-        if (node is JsonObject obj) {
-            string? token = null;
-
-            if (
-                (obj["$ref"] is JsonValue value) &&
-                value.TryGetValue<string>(value: out var pointer)
-            ) {
-                token = (state.MarkerKeyByPointer.TryGetValue(
-                    key: pointer,
-                    value: out var markerKey
-                )
-                    ? markerKey
-                    : pointer
-                );
-            } else if (
-                !isRoot &&
-                state.OriginByNode.TryGetValue(
-                key: obj,
-                value: out var origin
-            ) &&
-                state.ExporterRefTargets.Contains(item: origin)
-            ) {
-                token = (state.TypesByNode.TryGetValue(
-                    key: obj,
-                    value: out var targetType
-                )
-                    ? $"cycle:{FriendlyTypeName(type: targetType)}"
-                    : origin
-                );
-            }
-
-            if (token is not null) {
-                // The site annotations stay beside the token — they are what the collapsed subtree's own hoist
-                // will leave beside its $ref, so two parents unify exactly when their reduced contents will.
-                var collapsed = new JsonObject { ["$ref"] = token };
-
-                if (obj["description"] is JsonValue siteDescription) {
-                    collapsed["description"] = siteDescription.DeepClone();
-                }
-
-                if (obj.TryGetPropertyValue(
-                    jsonNode: out var siteDefault,
-                    propertyName: "default"
-                )) {
-                    collapsed["default"] = siteDefault?.DeepClone();
-                }
-
-                return collapsed;
-            }
-
-            var result = new JsonObject();
-
-            foreach (var (key, child) in obj) {
-                if (
-                    isRoot &&
-                    (key is "description" or "default")
-                ) {
-                    continue;
-                }
-
-                result[key] = ((child is null)
-                    ? null
-                    : GroupKeyNode(
-                        isRoot: false,
-                        node: child,
-                        state: state
-                    )
-                );
-            }
-
-            return result;
-        }
-
-        if (node is JsonArray arr) {
-            var result = new JsonArray();
-
-            foreach (var child in arr) {
-                result.Add(item: ((child is null)
-                    ? null
-                    : GroupKeyNode(
-                        isRoot: false,
-                        node: child,
-                        state: state
-                    )));
-            }
-
-            return result;
-        }
-
-        return node.DeepClone()!;
-    }
-    // A candidate's group key: its content with the occurrence annotations removed and every recursion-involved
-    // shape spelled canonically. "description" and "default" on the candidate's ROOT come from the property site
-    // where the type is USED (Transform resolves the site's own <summary> first), so two occurrences of one shared
-    // shape differ exactly there — the hoist moves both keywords to the $ref site instead, and the key must be
-    // equally blind. A recursive shape appears CUT at a path-dependent depth (one occurrence keeps a raw marker
-    // where another carries a full extra unrolling), so both a marker and an inline forced-def subtree collapse to
-    // the same cycle:{TypeName} token — the spelling the reduced content converges to after its own hoist. Inner
-    // property annotations stay in the key: they come from the shape's own declaration and are part of it.
-    private static string GroupKeyText(JsonObject obj, HoistState state) =>
-        CompactSerialize(node: GroupKeyNode(
-            isRoot: true,
-            node: obj,
-            state: state
-        ));
     // Whether a document root type declares an [JsonExtensionData] member — the root patternProperties carve-out
     // below applies only to a family that actually has an extension bag to carve a hole for.
     private static bool HasJsonExtensionData(Type rootType) {
@@ -1050,167 +698,6 @@ public static partial class WorldSchema {
 
         return false;
     }
-    // Post-order: children are hash-consed (and possibly replaced with a $defs placeholder) before a parent that
-    // is ITSELF a group member gets promoted, so a promoted def's stored content already reflects any child that
-    // was itself hoisted — the standard maximal-sharing behavior (compareState's five copies collapse to one def
-    // that itself references the one ComparandKey def, rather than five copies of ComparandKey's full body).
-    // Group MEMBERSHIP itself, though, was already decided by CollectHoistGroups — this pass only decides, per
-    // member, whether it is the first (creates the def) or a later one (references it already exists).
-    private static JsonNode HashConsWalk(JsonNode node, HoistState state) {
-        if (node is JsonObject obj) {
-            if (ContainsRefKey(obj: obj)) {
-                return obj;
-            }
-
-            foreach (var key in obj.Select(selector: kv => kv.Key).ToList()) {
-                var child = obj[key];
-
-                if (child is JsonObject or JsonArray) {
-                    var replaced = HashConsWalk(
-                        node: child,
-                        state: state
-                    );
-
-                    if (!ReferenceEquals(
-                        objA: replaced,
-                        objB: child
-                    )) {
-                        obj[key] = replaced;
-                    }
-                }
-            }
-
-            if (!state.NodeGroupKey.TryGetValue(
-                key: obj,
-                value: out var groupKey
-            )) {
-                return obj;
-            }
-
-            if (!state.GroupToDefName.TryGetValue(
-                key: groupKey,
-                value: out var name
-            )) {
-                name = ChooseDefName(
-                    node: obj,
-                    state: state
-                );
-
-                // The def keeps the SHAPE only: the occurrence annotations ride each $ref site instead (see
-                // GroupKeyText), and the def's own description — when the type declares one — is the type-level
-                // <summary>, the doc that is true at every site.
-                var content = ((JsonObject)obj.DeepClone());
-
-                content.Remove(propertyName: "description");
-                content.Remove(propertyName: "default");
-
-                if (
-                    state.TypesByNode.TryGetValue(
-                    key: obj,
-                    value: out var defType
-                ) &&
-                    (XmlDocIndex.Value is { } index) &&
-                    TryGetSummary(
-                    index: index,
-                    memberDocId: TypeDocId(type: defType),
-                    text: out var typeSummary
-                ) &&
-                    (typeSummary is not null)
-                ) {
-                    Prepend(
-                        obj: content,
-                        propertyName: "description",
-                        value: typeSummary
-                    );
-                }
-
-                state.CommonDefs[name] = content;
-                state.GroupToDefName[groupKey] = name;
-            }
-
-            if (state.OriginByNode.TryGetValue(
-                key: obj,
-                value: out var origin
-            )) {
-                state.OriginalPathToDefName[origin] = name;
-            }
-
-            var placeholder = new JsonObject { ["$ref"] = $"$defs/{name}" };
-
-            // The occurrence annotations, re-sited beside the reference (draft 2020-12 keeps keywords beside
-            // "$ref" meaningful). A site description matching the def's own is dropped — it was the type-summary
-            // fallback, already stated once on the def.
-            if (
-                (obj["description"] is JsonValue siteDescription) &&
-                !((state.CommonDefs[name] is JsonObject defContent) && JsonNode.DeepEquals(
-                node1: defContent["description"],
-                node2: siteDescription
-            ))
-            ) {
-                placeholder["description"] = siteDescription.DeepClone();
-            }
-
-            if (obj.TryGetPropertyValue(
-                jsonNode: out var siteDefault,
-                propertyName: "default"
-            )) {
-                placeholder["default"] = siteDefault?.DeepClone();
-            }
-
-            return placeholder;
-        }
-
-        if (node is JsonArray arr) {
-            for (var i = 0; (i < arr.Count); i++) {
-                var child = arr[i];
-
-                if (child is JsonObject or JsonArray) {
-                    var replaced = HashConsWalk(
-                        node: child,
-                        state: state
-                    );
-
-                    if (!ReferenceEquals(
-                        objA: replaced,
-                        objB: child
-                    )) {
-                        arr[i] = replaced;
-                    }
-                }
-            }
-
-            return arr;
-        }
-
-        return node;
-    }
-    private static void IndexPaths(JsonNode node, string path, Dictionary<string, JsonNode> index) {
-        index[path] = node;
-
-        if (node is JsonObject obj) {
-            foreach (var (key, value) in obj) {
-                if (value is not null) {
-                    IndexPaths(
-                        node: value,
-                        path: $"{path}/{EscapePointerSegment(segment: key)}",
-                        index: index
-                    );
-                }
-            }
-        } else if (node is JsonArray arr) {
-            for (var i = 0; (i < arr.Count); i++) {
-                var value = arr[i];
-
-                if (value is not null) {
-                    IndexPaths(
-                        index: index,
-                        node: value,
-                        path: $"{path}/{i}"
-                    );
-                }
-            }
-        }
-    }
     private static bool IsCollectionLike(Type genericDefinition) =>
         ((genericDefinition == typeof(List<>)) ||
         (genericDefinition == typeof(IReadOnlyList<>)) ||
@@ -1221,11 +708,6 @@ public static partial class WorldSchema {
     // ---- bundling --------------------------------------------------------------------------------------------
     // Bundle() and its own titled-shape hoist live in WorldSchema.Bundle.cs.
 
-    // A hoist candidate is a genuine named SHAPE — an object type (has "properties"), an enum, or a $type union
-    // (has "anyOf") — never a bare leaf (a plain {"type":"string"} with a coincidentally-matching description
-    // isn't a shared concept worth a name), and long enough that a $ref costs fewer bytes than it saves.
-    private static bool IsHoistCandidate(JsonObject obj) =>
-        (obj.ContainsKey(propertyName: "properties") || obj.ContainsKey(propertyName: "enum") || obj.ContainsKey(propertyName: "anyOf"));
     private static bool IsPlaceholderRef(JsonObject obj, out string name) {
         if (ContainsRefKey(obj: obj)) {
             var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
@@ -1263,10 +745,10 @@ public static partial class WorldSchema {
     }
     // Every listed file must load: a missing one would silently drop every description its assembly owns, and
     // the schema check would then fail on content rather than name the absent file.
-    private static IReadOnlyDictionary<string, XElement>? LoadXmlDocIndex() {
+    private static XmlDocumentation? LoadXmlDocIndex(IReadOnlyList<(string FileName, Type Anchor)> files) {
         var index = new Dictionary<string, XElement>(comparer: StringComparer.Ordinal);
 
-        foreach (var (fileName, anchor) in XmlDocumentationFiles) {
+        foreach (var (fileName, anchor) in files) {
             var path = LocateXmlDocumentationFile(
                 anchor: anchor,
                 fileName: fileName
@@ -1294,17 +776,14 @@ public static partial class WorldSchema {
             }
         }
 
-        return index;
+        return new XmlDocumentation(members: index);
     }
-    // Beside AppContext.BaseDirectory covers every real caller (puck.exe's own output directory, where a
+    // Beside the executable (PuckPaths.Shipped) covers every real caller (puck.exe's own output directory, where a
     // referenced project's generated XML doc file is copied alongside its DLL — the same pattern
     // Puck.Maths.xml already rides for this CLI); the owning assembly's own location is the fallback for a host
     // that loads it from elsewhere.
     private static string? LocateXmlDocumentationFile(Type anchor, string fileName) {
-        var beside = Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: fileName
-        );
+        var beside = PuckPaths.Shipped(relativePath: fileName);
 
         if (File.Exists(path: beside)) {
             return beside;
@@ -1344,20 +823,11 @@ public static partial class WorldSchema {
     private static void Prepend(JsonObject obj, string propertyName, JsonNode value) {
         // A converter may already supply this annotation; the outer property site replaces it.
         obj.Remove(propertyName: propertyName);
-        var existing = obj.ToList();
-
-        obj.Clear();
-        obj.Add(
+        obj.Insert(
+            index: 0,
             propertyName: propertyName,
             value: value
         );
-
-        foreach (var (key, existingValue) in existing) {
-            obj.Add(
-                propertyName: key,
-                value: existingValue
-            );
-        }
     }
     // Strips XML doc markup down to hover-readable prose: <see cref="T:X.Y"/>/<see langword="null"/> become their
     // short name/word, <paramref name="X"/> becomes X, <para> becomes a paragraph break collapsed to one space
@@ -1381,7 +851,7 @@ public static partial class WorldSchema {
     // case a positional parameter shadows rather than reuses an inherited property, where Roslyn does not
     // synthesize one), then — for a node with no containing property at all (an array's item schema, a $type
     // union's own arm) — the node's OWN type <summary>.
-    private static string? ResolveDescription(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement> index) {
+    private static string? ResolveDescription(JsonSchemaExporterContext context, XmlDocumentation index) {
         if (context.PropertyInfo is { AttributeProvider: MemberInfo member }) {
             return ResolveDescriptionForMember(
                 index: index,
@@ -1389,37 +859,46 @@ public static partial class WorldSchema {
             );
         }
 
-        return (TryGetSummary(
+        return TypeSummary(
             index: index,
-            memberDocId: TypeDocId(type: context.TypeInfo.Type),
-            text: out var typeSummary
-        )
-            ? typeSummary
-            : null
+            type: context.TypeInfo.Type
         );
     }
     // The property-branch half of ResolveDescription's own resolution order, factored out so
     // RestoreSkippedPropertyAnnotations — which has a reflected MemberInfo but no JsonSchemaExporterContext, since
     // the exporter never called back for the node it is fixing up — can resolve a description the SAME way.
-    private static string? ResolveDescriptionForMember(MemberInfo member, IReadOnlyDictionary<string, XElement> index) {
-        if (TryGetSummary(
-            index: index,
-            memberDocId: MemberDocId(member: member),
-            text: out var ownSummary
-        )) {
-            return ownSummary;
-        }
-
-        return (TryGetParam(
-            index: index,
-            parameterName: member.Name,
-            typeDocId: TypeDocId(type: member.DeclaringType!),
-            text: out var paramSummary
-        )
-            ? paramSummary
-            : null
+    private static string? ResolveDescriptionForMember(MemberInfo member, XmlDocumentation index) =>
+        index.MemberDescriptions.GetOrAdd(
+            factoryArgument: index,
+            key: member,
+            valueFactory: static (member, index) => (TryGetSummary(
+                index: index,
+                memberDocId: MemberDocId(member: member),
+                text: out var ownSummary
+            )
+                ? ownSummary
+                : (TryGetParam(
+                    index: index,
+                    parameterName: member.Name,
+                    typeDocId: TypeDocId(type: member.DeclaringType!),
+                    text: out var paramSummary
+                )
+                    ? paramSummary
+                    : null))
         );
-    }
+    // The type's own <summary>, or null when it has none.
+    private static string? TypeSummary(Type type, XmlDocumentation index) =>
+        index.TypeSummaries.GetOrAdd(
+            factoryArgument: index,
+            key: type,
+            valueFactory: static (type, index) => (TryGetSummary(
+                index: index,
+                memberDocId: TypeDocId(type: type),
+                text: out var summary
+            )
+                ? summary
+                : null)
+        );
     // Runs once, over the whole merged document, after every node has its provisional StampTitle spelling —
     // a bare FriendlyTypeName, blind to any other type sharing it. Groups every stamped title by the DISTINCT
     // CLR types it names (Nullable<T> and T unwrap to the same type, so a nullable/non-nullable pair of one type
@@ -1431,10 +910,10 @@ public static partial class WorldSchema {
     // "$type" const the discriminator adds) and bare (a site declared as the derived type itself carries none).
     // Both are the same CLR type, so ResolveTitleCollisions sees no collision, yet the bundle cannot name two
     // shapes with one title: the bare shape takes the suffix "Bare", and the arm keeps the type's own name.
-    private static void ResolveDiscriminatorSplits(Dictionary<JsonNode, Type> typesByNode) {
+    private static void ResolveDiscriminatorSplits(ExportRun run) {
         var nodesByTitle = new Dictionary<string, List<JsonObject>>(comparer: StringComparer.Ordinal);
 
-        foreach (var (node, _) in typesByNode) {
+        foreach (var (node, _) in run.TypesByNode) {
             if (
                 (node is not JsonObject obj) ||
                 (obj["title"] is not JsonValue titleValue) ||
@@ -1456,21 +935,36 @@ public static partial class WorldSchema {
 
         foreach (var (title, nodes) in nodesByTitle) {
             if (
-                !nodes.Any(predicate: CarriesDiscriminator) ||
-                nodes.All(predicate: CarriesDiscriminator)
+                !nodes.Any(predicate: obj => CarriesDiscriminator(
+                    obj: obj,
+                    run: run
+                )) ||
+                nodes.All(predicate: obj => CarriesDiscriminator(
+                    obj: obj,
+                    run: run
+                ))
             ) {
                 continue;
             }
 
             foreach (var obj in nodes) {
-                if (!CarriesDiscriminator(obj: obj)) {
+                if (!CarriesDiscriminator(
+                    obj: obj,
+                    run: run
+                )) {
                     obj["title"] = $"{title}Bare";
                 }
             }
         }
     }
-    private static bool CarriesDiscriminator(JsonObject obj) =>
-        ((obj["properties"] is JsonObject properties) && (properties["$type"] is JsonObject discriminator) && discriminator.ContainsKey(propertyName: "const"));
+    private static bool CarriesDiscriminator(JsonObject obj, ExportRun run) =>
+        ((ResolveInline(
+            node: obj["properties"],
+            run: run
+        ) is JsonObject properties) && (ResolveInline(
+            node: properties["$type"],
+            run: run
+        ) is JsonObject discriminator) && discriminator.ContainsKey(propertyName: "const"));
     private static void ResolveTitleCollisions(Dictionary<JsonNode, Type> typesByNode) {
         var typesByTitle = new Dictionary<string, HashSet<Type>>(comparer: StringComparer.Ordinal);
 
@@ -1542,7 +1036,7 @@ public static partial class WorldSchema {
             }
         }
     }
-    private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+    private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, ExportRun run) {
         var property = FindPropertyByJsonName(
             jsonName: jsonName,
             ownerType: ownerType
@@ -1552,32 +1046,38 @@ public static partial class WorldSchema {
             return;
         }
 
-        typesByNode[propertyObject] = property.PropertyType;
+        run.TypesByNode[propertyObject] = property.PropertyType;
         StampTitle(
             obj: propertyObject,
             type: property.PropertyType
         );
 
         ApplyCollectionVocabulary(
-            index: index,
-            nested: nested,
             obj: propertyObject,
             propertyType: property.PropertyType,
-            typesByNode: typesByNode
+            run: run
         );
 
-        ApplyConverterVocabulary(
-            index: index,
-            nested: nested,
+        if (!TryApplyMemberVocabulary(
+            memberConverter: ((property.GetCustomAttribute<JsonConverterAttribute>()?.ConverterType is { } converterType)
+                ? (Activator.CreateInstance(type: converterType) as JsonConverter)
+                : null
+            ),
             obj: propertyObject,
             propertyType: property.PropertyType,
-            typesByNode: typesByNode
-        );
+            run: run
+        )) {
+            ApplyConverterVocabulary(
+                obj: propertyObject,
+                propertyType: property.PropertyType,
+                run: run
+            );
+        }
 
         if (
-            (index is not null) &&
+            (run.Index is not null) &&
             (ResolveDescriptionForMember(
-            index: index,
+            index: run.Index,
             member: property
         ) is { } description)
         ) {
@@ -1594,7 +1094,22 @@ public static partial class WorldSchema {
     // typesByNode carries no entry for it (Transform unconditionally records one for every node it visits, even a
     // node with no resolvable description). Every other node in typesByNode was already fully annotated by
     // Transform itself and is left alone.
-    private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+    private static void RestoreSkippedPropertyAnnotations(JsonNode node, ExportRun run) {
+        // An inline export is walked where it is first reached, once for every occurrence.
+        if (TryGetInlineRoot(
+            node: node,
+            root: out var inlineRoot
+        )) {
+            if (run.InlineRestored.Add(item: inlineRoot)) {
+                RestoreSkippedPropertyAnnotations(
+                    node: run.InlineRoots[inlineRoot],
+                    run: run
+                );
+            }
+
+            return;
+        }
+
         // Creation documents own their serializer and annotation walk; WorldJsonContext's converter repairs do not apply.
         if (
             (node is JsonObject creation) &&
@@ -1604,48 +1119,56 @@ public static partial class WorldSchema {
         }
         if (node is JsonObject obj) {
             if (
-                typesByNode.TryGetValue(
+                run.TypesByNode.TryGetValue(
                 key: obj,
                 value: out var ownerType
             ) &&
                 (obj["properties"] is JsonObject propertiesObject)
             ) {
-                foreach (var (jsonName, propertyValue) in propertiesObject) {
+                for (var index = 0; (index < propertiesObject.Count); index++) {
+                    var (jsonName, propertyValue) = propertiesObject.GetAt(index: index);
+
                     if (
-                        (propertyValue is JsonObject propertyObject) &&
+                        (ResolveInline(
+                        node: propertyValue,
+                        run: run
+                    ) is JsonObject propertyObject) &&
                         !ContainsRefKey(obj: propertyObject) &&
-                        !typesByNode.ContainsKey(key: propertyObject)
+                        !run.TypesByNode.ContainsKey(key: propertyObject)
                     ) {
+                        // An inline export's root is annotated by Transform like any exported node, and one shared
+                        // by occurrences under different owners could not take a per-owner repair.
+                        if (!ReferenceEquals(
+                            objA: propertyObject,
+                            objB: propertyValue
+                        )) {
+                            throw new InvalidOperationException(message: $"schema: the inline export at '{jsonName}' was left unannotated by the exporter.");
+                        }
+
                         RestoreSkippedProperty(
-                            index: index,
                             jsonName: jsonName,
-                            nested: nested,
                             ownerType: ownerType,
                             propertyObject: propertyObject,
-                            typesByNode: typesByNode
+                            run: run
                         );
                     }
                 }
             }
 
-            foreach (var (_, child) in obj) {
-                if (child is not null) {
+            for (var index = 0; (index < obj.Count); index++) {
+                if (obj.GetAt(index: index).Value is { } child) {
                     RestoreSkippedPropertyAnnotations(
-                        index: index,
-                        nested: nested,
                         node: child,
-                        typesByNode: typesByNode
+                        run: run
                     );
                 }
             }
         } else if (node is JsonArray arr) {
-            foreach (var child in arr) {
-                if (child is not null) {
+            for (var index = 0; (index < arr.Count); index++) {
+                if (arr[index] is { } child) {
                     RestoreSkippedPropertyAnnotations(
-                        index: index,
-                        nested: nested,
                         node: child,
-                        typesByNode: typesByNode
+                        run: run
                     );
                 }
             }
@@ -1715,8 +1238,8 @@ public static partial class WorldSchema {
             Common: new JsonObject { ["$defs"] = common }
         );
     }
-    // Names a node after the CLR type it came from, so json-schema-to-typescript (via the bundle's own $defs, see
-    // Bundle) and a person reading the schema both see WorldStateRow rather than an anonymous literal. Every
+    // Names a node after the CLR type it came from, so the TypeScript types (via the bundle's own $defs, see Bundle
+    // and ToTypeScript) and a person reading the schema both see WorldStateRow rather than an anonymous literal. Every
     // occurrence of a titled type is stamped alike; ResolveTitleCollisions corrects a same-name clash across
     // distinct types once the whole document is known. Left untouched for anything IsTitledType refuses — a
     // collection, a primitive, or a converter-hidden shape with no CLR identity of its own worth naming.
@@ -1731,7 +1254,7 @@ public static partial class WorldSchema {
     // assembly's XML documentation, teaches a custom-converted node its own "type"/"enum" (see
     // ApplyConverterVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
     // reserved-prefix carve-out.
-    private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+    private static JsonNode Transform(JsonSchemaExporterContext context, JsonNode node, ExportRun run) {
         if (
             (node is JsonObject alreadyRef) &&
             alreadyRef.ContainsKey(propertyName: "$ref")
@@ -1741,11 +1264,11 @@ public static partial class WorldSchema {
             return node;
         }
 
-        var description = ((index is null)
+        var description = ((run.Index is null)
             ? null
             : ResolveDescription(
                 context: context,
-                index: index
+                index: run.Index
             )
         );
         var obj = AsObjectNode(node: ref node);
@@ -1755,7 +1278,7 @@ public static partial class WorldSchema {
             return node;
         }
 
-        typesByNode[obj] = context.TypeInfo.Type;
+        run.TypesByNode[obj] = context.TypeInfo.Type;
 
         // The document root carries its own hand-written title ("Puck world definition (puck.world.definition.v1)" and
         // its projection/silo counterparts, added after Transform runs) — StampTitle would collide with it.
@@ -1767,20 +1290,23 @@ public static partial class WorldSchema {
         }
 
         ApplyCollectionVocabulary(
-            index: index,
-            nested: nested,
             obj: obj,
-            typeInfo: context.TypeInfo,
-            typesByNode: typesByNode
+            run: run,
+            typeInfo: context.TypeInfo
         );
 
-        ApplyConverterVocabulary(
-            index: index,
-            nested: nested,
+        if (!TryApplyMemberVocabulary(
+            memberConverter: context.PropertyInfo?.CustomConverter,
             obj: obj,
             propertyType: context.TypeInfo.Type,
-            typesByNode: typesByNode
-        );
+            run: run
+        )) {
+            ApplyConverterVocabulary(
+                obj: obj,
+                propertyType: context.TypeInfo.Type,
+                run: run
+            );
+        }
 
         if (description is not null) {
             Prepend(
@@ -1830,8 +1356,8 @@ public static partial class WorldSchema {
 
         return false;
     }
-    private static bool TryGetParam(IReadOnlyDictionary<string, XElement> index, string parameterName, string typeDocId, out string? text) {
-        if (index.TryGetValue(
+    private static bool TryGetParam(XmlDocumentation index, string parameterName, string typeDocId, out string? text) {
+        if (index.Members.TryGetValue(
             key: typeDocId,
             value: out var type
         )) {
@@ -1854,9 +1380,34 @@ public static partial class WorldSchema {
         return false;
     }
 
+    // The model assemblies' XML documentation by member id, with each rendered text memoized: the exporter asks for
+    // the same member's text at every occurrence of its type.
+    private sealed class XmlDocumentation(Dictionary<string, XElement> members) {
+        public ConcurrentDictionary<MemberInfo, string?> MemberDescriptions { get; } = new();
+        public Dictionary<string, XElement> Members { get; } = members;
+        public ConcurrentDictionary<string, string?> Summaries { get; } = new(comparer: StringComparer.Ordinal);
+        public ConcurrentDictionary<Type, string?> TypeSummaries { get; } = new();
+    }
+    // One export's state: the XML documentation, the CLR type Transform recorded for every node it annotated, and
+    // how a node converter's nested export is shared (see ExportNested).
+    private sealed class ExportRun(XmlDocumentation? index, NestedExports? nested) {
+        public XmlDocumentation? Index { get; } = index;
+        // Split export only: every inline export by the types it was made inside of, as an index into InlineRoots.
+        public Dictionary<Type, List<(HashSet<Type> Open, int Root)>> InlineExports { get; } = [];
+        // The types whose inline export is being built.
+        public HashSet<Type> InlineOpen { get; } = [];
+        // Which inline exports RestoreSkippedPropertyAnnotations has already walked.
+        public HashSet<int> InlineRestored { get; } = [];
+        public List<JsonNode> InlineRoots { get; } = [];
+        // A node converter's shape by the (Nullable-unwrapped) type it describes and the types it was built inside
+        // of; like an inline export, it is a pure function of the two.
+        public Dictionary<Type, List<(HashSet<Type> Open, JsonObject Shape)>> InlineShapes { get; } = [];
+        public NestedExports? Nested { get; } = nested;
+        public Dictionary<JsonNode, Type> TypesByNode { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+    }
     // A nested export's occurrences within one unsplit document: the first exports in full and every later one is
     // a placeholder ResolveNestedRefs repoints at it by JSON pointer once the tree is final — the same device the
-    // exporter's own cache uses for a repeated type. The split export passes no cache: its hoist dedups by content.
+    // exporter's own cache uses for a repeated type. The split export shares inline exports instead (ExportNested).
     private sealed class NestedExports {
         public Dictionary<Type, JsonNode> First { get; } = [];
         public List<(Type Type, JsonObject Placeholder)> Later { get; } = [];
@@ -1865,57 +1416,160 @@ public static partial class WorldSchema {
         public HashSet<Type> Open { get; } = [];
     }
 
-    // The types an export that hoists nothing is inside of. It has no first export to point back at, so a shape that
-    // reaches itself is left open at the point it recurs and described where it first appears.
-    [ThreadStatic]
-    private static HashSet<Type>? InlineOpen;
+    // Exports type's schema for a node converter's arm. The unsplit exports share one first export per type through
+    // run.Nested. The split export inlines every occurrence; an inline export is a pure function of the types it is
+    // already inside of, so each (type, open types) export is made once and every occurrence is a placeholder for it.
+    private static JsonNode ExportNested(Type type, ExportRun run) {
+        if (run.Nested is { } nested) {
+            if (nested.First.ContainsKey(key: type) || nested.Open.Contains(item: type)) {
+                var placeholder = new JsonObject();
 
-    private static JsonNode ExportNested(Type type, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
-        if (
-            (nested is null) &&
-            !(InlineOpen ??= []).Add(item: type)
-        ) {
+                nested.Later.Add(item: (type, placeholder));
+
+                return placeholder;
+            }
+
+            nested.Open.Add(item: type);
+
+            var first = ExportType(
+                run: run,
+                type: type
+            );
+
+            nested.Open.Remove(item: type);
+            nested.First.Add(
+                key: type,
+                value: first
+            );
+
+            return first;
+        }
+
+        // A shape that reaches itself inside an inline export has no first export to point back at, so it is left
+        // open at the point it recurs and described where it first appears.
+        if (run.InlineOpen.Contains(item: type)) {
             return new JsonObject { ["$comment"] = $"{type.Name} holds itself here; its shape is the one described where it first appears." };
         }
 
-        if (
-            (nested is not null) &&
-            (nested.First.ContainsKey(key: type) || nested.Open.Contains(item: type))
-        ) {
-            var placeholder = new JsonObject();
+        var memos = (CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: run.InlineExports,
+            exists: out _,
+            key: type
+        ) ??= []);
 
-            nested.Later.Add(item: (type, placeholder));
-
-            return placeholder;
+        foreach (var (open, root) in memos) {
+            if (open.SetEquals(other: run.InlineOpen)) {
+                return InlinePlaceholder(root: root);
+            }
         }
 
-        var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => Transform(
-            context: context,
-            index: index,
-            nested: nested,
-            node: node,
-            typesByNode: typesByNode
-        ),
-            TreatNullObliviousAsNonNullable = true,
-        };
-        _ = nested?.Open.Add(item: type);
+        var entryOpen = run.InlineOpen.ToHashSet();
 
-        var exported = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
-            exporterOptions: exporterOptions,
+        run.InlineOpen.Add(item: type);
+
+        var exported = ExportType(
+            run: run,
             type: type
         );
 
-        _ = nested?.Open.Remove(item: type);
-        if (nested is null) {
-            _ = InlineOpen!.Remove(item: type);
-        }
-        nested?.First.Add(
-            key: type,
-            value: exported
-        );
+        run.InlineOpen.Remove(item: type);
+        run.InlineRoots.Add(item: exported);
+        memos.Add(item: (entryOpen, (run.InlineRoots.Count - 1)));
 
-        return exported;
+        return InlinePlaceholder(root: (run.InlineRoots.Count - 1));
+    }
+
+    // An inline export's occurrence: a one-member object naming the export in ExportRun.InlineRoots. The export
+    // itself is never attached to the document, so every occurrence shares it; each pass reads through the
+    // placeholder (ResolveInline), and the hoist expands it where it stands.
+    private const string InlineExportKey = "$puck:inline";
+
+    private static JsonObject InlinePlaceholder(int root) =>
+        new() { [InlineExportKey] = root };
+    private static bool TryGetInlineRoot(JsonNode? node, out int root) {
+        if (
+            (node is JsonObject { Count: 1 } obj) &&
+            (obj.GetAt(index: 0) is { Key: InlineExportKey, Value: JsonValue id })
+        ) {
+            root = id.GetValue<int>();
+
+            return true;
+        }
+
+        root = -1;
+
+        return false;
+    }
+    private static JsonNode? ResolveInline(JsonNode? node, ExportRun run) =>
+        (TryGetInlineRoot(
+            node: node,
+            root: out var root
+        )
+            ? run.InlineRoots[root]
+            : node
+        );
+    private static JsonNode ExportType(Type type, ExportRun run) {
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => Transform(
+            context: context,
+            node: node,
+            run: run
+        ),
+            TreatNullObliviousAsNonNullable = true,
+        };
+
+        return WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+            exporterOptions: exporterOptions,
+            type: type
+        );
+    }
+    // A deep copy of node in which every copy carries its original's recorded type.
+    private static JsonNode CloneTyped(JsonNode node, Dictionary<JsonNode, Type> typesByNode) {
+        JsonNode clone;
+
+        if (node is JsonObject obj) {
+            var copy = new JsonObject();
+
+            for (var index = 0; (index < obj.Count); index++) {
+                var (name, value) = obj.GetAt(index: index);
+
+                copy[name] = ((value is not null)
+                    ? CloneTyped(
+                        node: value,
+                        typesByNode: typesByNode
+                    )
+                    : null
+                );
+            }
+
+            clone = copy;
+        } else if (node is JsonArray arr) {
+            var copy = new JsonArray();
+
+            for (var index = 0; (index < arr.Count); index++) {
+                var value = arr[index];
+
+                copy.Add(item: ((value is not null)
+                    ? CloneTyped(
+                        node: value,
+                        typesByNode: typesByNode
+                    )
+                    : null));
+            }
+
+            clone = copy;
+        } else {
+            clone = node.DeepClone();
+        }
+
+        if (typesByNode.TryGetValue(
+            key: node,
+            value: out var type
+        )) {
+            typesByNode[clone] = type;
+        }
+
+        return clone;
     }
     private static void ResolveNestedRefs(JsonObject root, NestedExports nested) {
         foreach (var (type, placeholder) in nested.Later) {
@@ -1960,13 +1614,32 @@ public static partial class WorldSchema {
 
         return string.Concat(values: segments.Select(selector: static segment => ("/" + segment)));
     }
+    private static JsonConverter? ResolveConverter(Type type) =>
+        Converters.GetOrAdd(
+            key: (Nullable.GetUnderlyingType(nullableType: type) ?? type),
+            valueFactory: static effectiveType => {
+                try {
+                    return WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
+                } catch (NotSupportedException) {
+                    return null;
+                }
+            }
+        );
+    private static JsonTypeInfo? ResolveTypeInfo(Type type) =>
+        TypeInfos.GetOrAdd(
+            key: type,
+            valueFactory: static type => {
+                try {
+                    return WorldJsonContext.Default.Options.GetTypeInfo(type: type);
+                } catch (NotSupportedException) {
+                    return null;
+                }
+            }
+        );
     private static bool TryGetNodeConverter(Type propertyType, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IJsonSchemaNodeConverter? converter) {
-        var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
-        JsonConverter? resolved;
+        var resolved = ResolveConverter(type: propertyType);
 
-        try {
-            resolved = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
-        } catch (NotSupportedException) {
+        if (resolved is null) {
             converter = null;
 
             return false;
@@ -1982,12 +1655,9 @@ public static partial class WorldSchema {
     // never a generator-side map from CLR type to token list, so a new closed-vocabulary converter needs only the
     // interface, not a matching edit here.
     private static bool TryGetStringVocabulary(Type propertyType, out IReadOnlyList<string>? tokens) {
-        var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
-        JsonConverter? converter;
+        var converter = ResolveConverter(type: propertyType);
 
-        try {
-            converter = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
-        } catch (NotSupportedException) {
+        if (converter is null) {
             tokens = null;
 
             return false;
@@ -2006,12 +1676,9 @@ public static partial class WorldSchema {
     // Resolves a custom converter that accepts more than one JSON primitive representation (for example,
     // BindableScalar's number-or-string wire form). This runs before the string-only vocabulary seam above.
     private static bool TryGetTypeVocabulary(Type propertyType, out IReadOnlyList<string> types) {
-        var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
-        JsonConverter? converter;
+        var converter = ResolveConverter(type: propertyType);
 
-        try {
-            converter = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
-        } catch (NotSupportedException) {
+        if (converter is null) {
             types = [];
 
             return false;
@@ -2030,22 +1697,19 @@ public static partial class WorldSchema {
 
         return true;
     }
-    private static bool TryGetSummary(IReadOnlyDictionary<string, XElement> index, string memberDocId, out string? text) {
-        if (
-            index.TryGetValue(
+    private static bool TryGetSummary(XmlDocumentation index, string memberDocId, out string? text) {
+        text = index.Summaries.GetOrAdd(
+            factoryArgument: index,
             key: memberDocId,
-            value: out var member
-        ) &&
-            (member.Element(name: "summary") is { } summary)
-        ) {
-            text = RenderDocText(root: summary);
+            valueFactory: static (memberDocId, index) => ((index.Members.TryGetValue(
+                key: memberDocId,
+                value: out var member
+            ) && (member.Element(name: "summary") is { } summary))
+                ? RenderDocText(root: summary)
+                : null)
+        );
 
-            return true;
-        }
-
-        text = null;
-
-        return false;
+        return (text is not null);
     }
     private static string TypeDocId(Type type) =>
         $"T:{FormatDeclaringType(type: type)}";
@@ -2053,14 +1717,33 @@ public static partial class WorldSchema {
     /// <summary>Exports the split JSON Schema for <see cref="WorldDefinition"/>.</summary>
     /// <param name="postRenderExtensions">The shipped post-render extensions: <c>render.extensions[].id</c> becomes an
     /// enum over their ids and each entry's <c>config</c> validates against the schema of the set its id names.</param>
+    /// <returns>A split the caller owns and may mutate. The schema is a pure function of the loaded model and the
+    /// extensions, so it is generated once per process and extension set, and every call returns a deep copy.</returns>
     public static SplitSchema Export(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
         ArgumentNullException.ThrowIfNull(postRenderExtensions);
 
-        var (merged, typesByNode) = ExportMergedWithTypes();
+        var key = string.Join(
+            separator: '\n',
+            values: postRenderExtensions.Select(selector: static extension => $"{extension.Id}\0{extension.ConfigSchema.ToJsonString()}")
+        );
+        var split = ExportCache.GetOrAdd(
+            key: key,
+            valueFactory: _ => new Lazy<SplitSchema>(valueFactory: () => ExportUncached(postRenderExtensions: postRenderExtensions))
+        ).Value;
 
-        ResolveTitleCollisions(typesByNode: typesByNode);
+        return new SplitSchema(
+            Common: split.Common.DeepClone().AsObject(),
+            Root: split.Root.DeepClone().AsObject(),
+            Sections: [.. split.Sections.Select(selector: static section => (section.Name, section.Node.DeepClone()))]
+        );
+    }
 
-        ResolveDiscriminatorSplits(typesByNode: typesByNode);
+    private static SplitSchema ExportUncached(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
+        var (merged, run) = ExportMergedWithTypes();
+
+        ResolveTitleCollisions(typesByNode: run.TypesByNode);
+
+        ResolveDiscriminatorSplits(run: run);
 
         ApplySelfIdentification(
             root: merged,
@@ -2082,116 +1765,26 @@ public static partial class WorldSchema {
         // (already known from typesByNode) since there is no JsonSchemaExporterContext left to ask.
         RestoreSkippedPropertyAnnotations(
             node: merged,
-            index: XmlDocIndex.Value,
-            nested: null,
-            typesByNode: typesByNode
+            run: run
         );
 
-        var pathIndex = new Dictionary<string, JsonNode>(comparer: StringComparer.Ordinal);
-
-        IndexPaths(
-            index: pathIndex,
-            node: merged,
-            path: "#"
+        // Fully expand every $ref the exporter itself emitted for a repeated (but non-recursive) type, so duplicate
+        // content the exporter caught and duplicate content it didn't (polymorphic union arms bypass its cache — see
+        // the class doc) are grouped alike, then hoist every repeated shape into common.schema.json.
+        var hoist = new HoistPass(
+            merged: merged,
+            run: run
         );
-
-        // Every $ref target the exporter's OWN output already carried, before any expansion — the set Bundle
-        // needs to tell "the exporter recognized this shape as repeated" (one shared copy, referenced by document
-        // pointer, is how the un-split generator represents it) apart from "independently regenerated every
-        // occurrence" (full duplication is how the un-split generator represents THAT).
-        var exporterRefTargets = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        CollectRefTargets(
-            node: merged,
-            targets: exporterRefTargets
-        );
-
-        var originByNode = new Dictionary<JsonNode, string>(comparer: ReferenceEqualityComparer.Instance);
-        var expandedTypes = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
-
-        // Fully expand every $ref the exporter itself emitted for a repeated (but non-recursive) type, so
-        // duplicate content the exporter caught and duplicate content it didn't (polymorphic union arms bypass
-        // its cache — see the class doc) both end up as plain inlined text, ready for one uniform dedup pass.
-        // A GENUINELY recursive $ref (its own target is an ancestor of itself) cannot be expanded — inlining it
-        // would never terminate — so it is left as a marker for the fixup pass below.
-        var expanded = ((JsonObject)ExpandRefs(
-            node: merged,
-            pathIndex: pathIndex,
-            typesByNode: typesByNode,
-            expandedTypes: expandedTypes,
-            originByNode: originByNode,
-            activePaths: new HashSet<string>(comparer: StringComparer.Ordinal),
-            activeTypes: [],
-            currentPath: "#"
-        ));
-
-        // Group keys spell a recursive marker by its target's TYPE name (unresolvable targets keep the raw
-        // pointer, degrading to the per-path grouping such a marker had anyway).
-        var markerKeyByPointer = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var target in exporterRefTargets) {
-            markerKeyByPointer[target] = ((pathIndex.TryGetValue(
-                key: target,
-                value: out var targetNode
-            ) && typesByNode.TryGetValue(
-                key: targetNode,
-                value: out var targetType
-            ))
-                ? $"cycle:{FriendlyTypeName(type: targetType)}"
-                : target
-            );
-        }
-
-        var state = new HoistState {
-            NodeGroupKey = new Dictionary<JsonNode, string>(comparer: ReferenceEqualityComparer.Instance),
-            CandidateText = new Dictionary<JsonNode, string>(comparer: ReferenceEqualityComparer.Instance),
-            RawTextCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal),
-            GroupToDefName = new Dictionary<string, string>(comparer: StringComparer.Ordinal),
-            CommonDefs = new JsonObject(),
-            TypesByNode = expandedTypes,
-            OriginByNode = originByNode,
-            OriginalPathToDefName = new Dictionary<string, string>(comparer: StringComparer.Ordinal),
-            UsedNames = new HashSet<string>(comparer: StringComparer.Ordinal),
-            MarkerKeyByPointer = markerKeyByPointer,
-            // Every path the exporter's OWN output already referenced via $ref — including a recursive shape's
-            // self-reference, which is exactly one such reference — has to be common-def-addressable in the split
-            // output too, regardless of whether IsHoistCandidate's content-shape heuristic would otherwise have
-            // picked it up (a bare List<string> "rows" wrapper, for instance, carries neither "properties" nor
-            // "enum" nor "anyOf", but the exporter's own TypeInfo cache still shares it via $ref).
-            ExporterRefTargets = exporterRefTargets,
-        };
-
-        CollectHoistGroups(
-            node: expanded,
-            state: state
-        );
-
-        foreach (var (candidateNode, text) in state.CandidateText) {
-            var forced = (state.OriginByNode.TryGetValue(
-                key: candidateNode,
-                value: out var candidateOrigin
-            ) && state.ExporterRefTargets.Contains(item: candidateOrigin));
-
-            if (
-                (state.RawTextCounts[text] >= 2) ||
-                forced
-            ) {
-                state.NodeGroupKey[candidateNode] = text;
-            }
-        }
-
-        var reduced = ((JsonObject)HashConsWalk(
-            node: expanded,
-            state: state
-        ));
+        var reduced = hoist.Run(merged: merged);
+        var targetDefNames = hoist.TargetDefNames();
 
         FixupCyclicMarkers(
             node: reduced,
-            state: state
+            targetDefNames: targetDefNames
         );
         FixupCyclicMarkers(
-            node: state.CommonDefs,
-            state: state
+            node: hoist.CommonDefs,
+            targetDefNames: targetDefNames
         );
 
         FinalizeRefs(
@@ -2199,15 +1792,16 @@ public static partial class WorldSchema {
             node: reduced
         );
         FinalizeRefs(
-            node: state.CommonDefs,
+            node: hoist.CommonDefs,
             insideCommon: true
         );
 
         return Split(
             reduced: reduced,
-            common: state.CommonDefs
+            common: hoist.CommonDefs
         );
     }
+
     /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,
     /// deliberately: the projection has no top-level section a person opens on its own, so the split
     /// <see cref="WorldDefinition"/> takes buys nothing here.</summary>
@@ -2216,16 +1810,16 @@ public static partial class WorldSchema {
     public static JsonObject ExportProjection(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
         ArgumentNullException.ThrowIfNull(postRenderExtensions);
 
-        var index = XmlDocIndex.Value;
-        var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
         var nested = new NestedExports();
+        var run = new ExportRun(
+            index: XmlDocIndex.Value,
+            nested: nested
+        );
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
-            index: index,
-            nested: nested,
             node: node,
-            typesByNode: typesByNode
+            run: run
         ),
         };
         var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
@@ -2257,10 +1851,8 @@ public static partial class WorldSchema {
         }
 
         RestoreSkippedPropertyAnnotations(
-            index: index,
-            nested: nested,
             node: root,
-            typesByNode: typesByNode
+            run: run
         );
         ApplyPostRenderExtensions(
             extensions: postRenderExtensions,
@@ -2273,26 +1865,43 @@ public static partial class WorldSchema {
 
         return root;
     }
+    /// <summary>Exports the JSON Schema for <see cref="WorldCountersReport"/> as one document.</summary>
+    /// <returns>The generated schema root.</returns>
+    public static JsonObject ExportCountersReport() =>
+        ExportDocument(
+            schemaId: CountersReportSchemaId,
+            title: $"Puck counters report ({CountersReportSchemaId})",
+            type: typeof(WorldCountersReport)
+        );
     /// <summary>Exports the JSON Schema for <see cref="WorldSiloDefinition"/> as one document. Unsplit, like
     /// <see cref="ExportProjection"/>: a six-field document has no section large enough to earn a file of its
     /// own.</summary>
     /// <returns>The generated schema root.</returns>
-    public static JsonObject ExportSilo() {
-        var index = XmlDocIndex.Value;
-        var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+    public static JsonObject ExportSilo() =>
+        ExportDocument(
+            schemaId: SiloSchemaId,
+            title: $"Puck world silo ({SiloSchemaId})",
+            type: typeof(WorldSiloDefinition)
+        );
+
+    // Exports one unsplit document family carried by WorldJsonContext: identity first, then the generated shape with
+    // its descriptions, nested exports resolved, and the self-identification block.
+    private static JsonObject ExportDocument(Type type, string schemaId, string title, JsonSerializerOptions? options = null, XmlDocumentation? index = null) {
         var nested = new NestedExports();
+        var run = new ExportRun(
+            index: (index ?? XmlDocIndex.Value),
+            nested: nested
+        );
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
-            index: index,
-            nested: nested,
             node: node,
-            typesByNode: typesByNode
+            run: run
         ),
         };
-        var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+        var schema = (options ?? WorldJsonContext.Default.Options).GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
-            type: typeof(WorldSiloDefinition)
+            type: type
         );
         var root = schema.AsObject();
         var generated = root.ToList();
@@ -2304,11 +1913,11 @@ public static partial class WorldSchema {
         );
         root.Add(
             propertyName: "$id",
-            value: SiloSchemaId
+            value: schemaId
         );
         root.Add(
             propertyName: "title",
-            value: "Puck world silo (puck.silo.configuration.v1)"
+            value: title
         );
 
         foreach (var (propertyName, value) in generated) {
@@ -2319,10 +1928,8 @@ public static partial class WorldSchema {
         }
 
         RestoreSkippedPropertyAnnotations(
-            index: index,
-            nested: nested,
             node: root,
-            typesByNode: typesByNode
+            run: run
         );
         ResolveNestedRefs(
             nested: nested,
@@ -2330,11 +1937,12 @@ public static partial class WorldSchema {
         );
         ApplySelfIdentification(
             root: root,
-            schemaVersion: SiloSchemaId
+            schemaVersion: schemaId
         );
 
         return root;
     }
+
     /// <summary>Exports a node's canonical text form: UTF-8 with no BOM, LF newlines, two-space indentation, and
     /// exactly one trailing newline — the same conventions <see cref="WorldDefinitionSerialization.Save"/> uses for
     /// a world document, so a checked-in artifact stays diffable and git-friendly, and two runs over an unchanged
@@ -2352,46 +1960,5 @@ public static partial class WorldSchema {
         stream.WriteByte(value: ((byte)'\n'));
 
         return Encoding.UTF8.GetString(bytes: stream.ToArray());
-    }
-
-    // ---- split / hoist machinery ---------------------------------------------------------------------------
-
-    // Hash-consing bookkeeping threaded through one Export() call, across CollectHoistGroups (decides group
-    // membership from raw, pre-dedup text) and HashConsWalk (the mutating pass that actually promotes one member
-    // per group to a def and points every member at it). OriginalPathToDefName lets the cyclic-marker fixup pass
-    // repoint a leftover recursive $ref (still carrying its ORIGINAL absolute document pointer) at whatever def
-    // its target ended up becoming.
-    private sealed class HoistState {
-        public required Dictionary<JsonNode, string> CandidateText { get; init; }
-        public required JsonObject CommonDefs { get; init; }
-        // "Must have a def, regardless of IsHoistCandidate/size" is an ORIGIN property (the exporter's own $ref
-        // pointed at this document-absolute path), not a property of any one clone — a recursive
-        // List<ActionPredicate> "predicates" wrapper is reached naturally at motion's own gate, AND via three
-        // separate $ref expansions at onPress/onFact/rules (four independent clones, one shared origin), so
-        // testing membership by NODE INSTANCE would catch at most one of the four. Checking the ORIGIN through
-        // OriginByNode instead catches all of them uniformly.
-        public required HashSet<string> ExporterRefTargets { get; init; }
-        public required Dictionary<string, string> GroupToDefName { get; init; }
-        // The canonical group-key spelling of a genuinely recursive $ref marker, keyed by its document-absolute
-        // pointer: two clones of the same recursive shape reached through DIFFERENT expansion paths carry markers
-        // with different pointer text, which would split one shared shape into per-path groups (each minting a
-        // suffixed def name) even though every marker resolves to the same def after FixupCyclicMarkers. Keying
-        // the marker by its TARGET'S type name instead makes the group key blind to the path.
-        public required Dictionary<string, string> MarkerKeyByPointer { get; init; }
-        // Per-node group membership, decided ENTIRELY up front (CollectHoistGroups) from each candidate's RAW,
-        // pre-dedup text — never recomputed mid-walk. A node's OWN reduced text changes the moment any of its
-        // children gets hoisted, so deciding group membership from a text recomputed during the same mutating
-        // walk is order-dependent: two nodes that are byte-identical BEFORE any hoisting (e.g. onPress's and
-        // onRelease's copies of the same effect, onRelease's being a deep clone of onPress's) can end up compared
-        // at different MOMENTS in that mutation, with one already child-reduced and the other not, so their
-        // CURRENT text no longer matches even though they are the same shape. Group membership fixed against raw
-        // text sidesteps that entirely; only the def's stored CONTENT (built the first time a member of a group is
-        // reached) needs to reflect already-reduced children, which post-order recursion guarantees regardless.
-        public required Dictionary<JsonNode, string> NodeGroupKey { get; init; }
-        public required Dictionary<JsonNode, string> OriginByNode { get; init; }
-        public required Dictionary<string, string> OriginalPathToDefName { get; init; }
-        public required Dictionary<string, int> RawTextCounts { get; init; }
-        public required Dictionary<JsonNode, Type> TypesByNode { get; init; }
-        public required HashSet<string> UsedNames { get; init; }
     }
 }

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -9,7 +10,7 @@ public sealed class WorldPoolCarrierLawTests {
     internal static CellName Name(string value) => CellName.Parse(candidate: value);
     internal static void JoinAttachedSeats(WorldFixture fixture) {
         for (var slot = 0; (slot < 2); slot++) {
-            var actor = WorldPrincipal.Seat(slot: slot);
+            var actor = Principal.Seat(slot: slot);
 
             Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
                 Principal: actor,
@@ -79,9 +80,9 @@ public sealed class WorldPoolCarrierLawTests {
 
         Assert.Contains("pool carrier names an undeclared pool", refusal.Message);
     }
-    [InlineData("$pool_fighters_live")]
-    [InlineData("$pool_fighters_generation")]
-    [InlineData("$pool_fighters_field_hits")]
+    [InlineData("$pool$fighters$live")]
+    [InlineData("$pool$fighters$generation")]
+    [InlineData("$pool$fighters$field$hits")]
     [Theory]
     public void APropertyNamingGeneratedPoolStorageIsRefusedAsAnUndeclaredRow(string generated) {
         var document = DynamicDocument();
@@ -103,7 +104,7 @@ public sealed class WorldPoolCarrierLawTests {
         var document = DynamicDocument();
         var carrier = document.Properties!.Carriers![0];
 
-        document = document with { Properties = document.Properties with { Carriers = [carrier with { Bindings = carrier.Bindings.Take(2).ToArray() }] } };
+        document = document with { Properties = document.Properties with { Carriers = [carrier with { Bindings = carrier.Bindings.Take(count: 2).ToArray() }] } };
         var refusal = Assert.Throws<InvalidOperationException>(testCode: () => WorldDefinitionValidator.Validate(definition: document, neighbours: null));
 
         Assert.Contains("must map every member", refusal.Message);

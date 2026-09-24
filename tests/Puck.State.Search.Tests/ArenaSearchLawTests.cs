@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 
 using Xunit;
@@ -77,7 +78,7 @@ public sealed class ArenaSearchLawTests {
                     Kind: SearchShapeKind.Relocate,
                     Displace: false,
                     Directions: [],
-                    PairWithIndex: -1
+                    CompanionIndex: -1
                 )],
             Counts: "counts",
             Iterations: iterations,
@@ -423,12 +424,9 @@ public sealed class ArenaSearchLawTests {
                 Active: false,
                 ChildCount: [],
                 Count: 0,
-                ExpandShape: 0,
-                ExpandTarget: 0,
-                ExpandToken: 0,
-                Expanded: [],
                 FirstChild: [],
                 Iteration: 0,
+                NextSibling: [],
                 Parent: [],
                 Path: [],
                 PathLength: 0,
@@ -436,6 +434,8 @@ public sealed class ArenaSearchLawTests {
                 PlayCount: 0,
                 PlayoutPlies: 0,
                 Scan: 0,
+                ScanStart: [],
+                Scanned: [],
                 Seed: 0UL,
                 Shape: [],
                 Start: 0,
@@ -493,8 +493,9 @@ public sealed class ArenaSearchLawTests {
             reason: out _
         ));
     }
-    // A tree checkpoint's path and node pool are indexed by the walk, so a node outside the pool, a child run past
-    // it, or a node naming no candidate is refused.
+    // A tree checkpoint's path and node pool are indexed by the walk, so a node outside the pool, a child list that
+    // leaves it, disowns its parent, cycles, or disagrees with its count, a scan past the node's candidates, or a node
+    // naming no candidate is refused.
     [Fact]
     public void ATreeCheckpointWhoseNodesPointOutsideThePoolIsRefused() {
         var position = new Position(rows: Board(
@@ -507,7 +508,7 @@ public sealed class ArenaSearchLawTests {
                 cells: 3,
                 depth: 2,
                 iterations: 64,
-                method: SearchMethod.Tree,
+                method: SearchMethod.MonteCarlo,
                 nodes: 8,
                 scored: true
             ),
@@ -552,12 +553,18 @@ public sealed class ArenaSearchLawTests {
             (tree with { Path = Bent(from: tree.Path, index: 0, value: -1) }),
             (tree with { ChildCount = Bent(from: tree.ChildCount, index: 0, value: (tree.Count + 1)) }),
             (tree with { FirstChild = Bent(from: tree.FirstChild, index: 0, value: -1) }),
+            (tree with { FirstChild = Bent(from: tree.FirstChild, index: 0, value: tree.Count) }),
+            (tree with { NextSibling = Bent(from: tree.NextSibling, index: 1, value: 1) }),
+            (tree with { NextSibling = Bent(from: tree.NextSibling, index: 1, value: -2) }),
+            (tree with { Parent = Bent(from: tree.Parent, index: 1, value: 1) }),
+            (tree with { Scanned = Bent(from: tree.Scanned, index: 0, value: 4) }),
+            (tree with { ScanStart = Bent(from: tree.ScanStart, index: 0, value: 3) }),
             (tree with { Shape = Bent(from: tree.Shape, index: 1, value: -1) }),
             (tree with { Token = Bent(from: tree.Token, index: 1, value: 1) }),
             (tree with { Target = Bent(from: tree.Target, index: 1, value: 3) }),
-            (tree with { ExpandShape = -1 }),
             (tree with { Scan = -1 }),
             (tree with { Visits = null! }),
+            (tree with { NextSibling = null! }),
         }) {
             Assert.False(condition: target.TryRestore(
                 checkpoint: new ArenaSearchCheckpoint(Jobs: [(job with { Tree = bent })]),
@@ -680,17 +687,15 @@ public sealed class ArenaSearchLawTests {
             ), userMessage: reason);
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var step = 0; (step < 8); step++) {
-            _ = search.Step(
-                apply: apply,
-                engineTick: 0UL,
-                tick: 1UL
-            );
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        var allocated = AllocationWindow.Least(window: () => {
+            for (var step = 0; (step < 8); step++) {
+                _ = search.Step(
+                    apply: apply,
+                    engineTick: 0UL,
+                    tick: 1UL
+                );
+            }
+        });
 
         Assert.True(condition: search.Status(index: 0).Running);
         Assert.Equal(
@@ -749,17 +754,15 @@ public sealed class ArenaSearchLawTests {
             ), userMessage: reason);
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var step = 0; (step < 8); step++) {
-            _ = search.Step(
-                apply: apply,
-                engineTick: 0UL,
-                tick: 1UL
-            );
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        var allocated = AllocationWindow.Least(window: () => {
+            for (var step = 0; (step < 8); step++) {
+                _ = search.Step(
+                    apply: apply,
+                    engineTick: 0UL,
+                    tick: 1UL
+                );
+            }
+        });
 
         Assert.True(condition: search.Status(index: 0).Running);
         Assert.Equal(
@@ -884,6 +887,7 @@ public sealed class ArenaSearchLawTests {
         ? value.AsInt
         : 0L
     );
+
     // A jump walks a board's neighbours, so a job that names no board cannot hold one: the plan refuses it by name
     // when it is resolved rather than dereferencing a topology it does not have mid-search.
     [Fact]

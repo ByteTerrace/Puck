@@ -168,27 +168,8 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
     }
 
     /// <inheritdoc/>
-    public bool LineOfSight(FixedPosition from, FixedPosition to) {
-        var delta = (to - from);
-        var distance = delta.Length;
-
-        if (distance <= FixedQ4816.Zero) {
-            return true;
-        }
-
-        var probeDistance = (distance - SdfFieldMarch.LineOfSightSkin);
-
-        if (probeDistance <= FixedQ4816.Zero) {
-            return true;
-        }
-
-        return !Raycast(
-            dir: delta,
-            hit: out _,
-            maxDist: probeDistance,
-            origin: from
-        );
-    }
+    public bool LineOfSight(FixedPosition from, FixedPosition to) =>
+        SdfFieldMarch.LineOfSight(from: from, raycast: Raycast, to: to);
     /// <inheritdoc/>
     /// <remarks>Answers exactly what the exact evaluator answers: the bound decides only where its scaled value
     /// already clears the radius, which the exact value then clears too.</remarks>

@@ -1,16 +1,13 @@
 namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Every diagnostic identifier the transpiler reports, each declared exactly once. Report sites name a
-/// constant here rather than a literal, so a code cannot be minted twice for two different meanings. A retired code
-/// stays declared and unused rather than being recycled.</summary>
+/// constant here rather than a literal, so a code cannot be minted twice for two different meanings. A new code may
+/// take any number no constant here declares.</summary>
 public static class PuckDiagnosticCodes {
     /// <summary>An addon hash defect.</summary>
     public const string AddonHash = "PUCK023";
     /// <summary>An addon payload defect.</summary>
     public const string AddonPayload = "PUCK021";
-    /// <summary>PUCK109: a source spells the retired <c>countdown</c> statement. A due tick is written with
-    /// <c>schedule row in Ns</c> and read back by comparing <c>$tick</c> against the row.</summary>
-    public const string CountdownStatementRetired = "PUCK109";
     /// <summary>A <c>local</c> missing or carrying an unparsable initializer.</summary>
     public const string LocalInitializerMissing = "PUCK007";
     /// <summary>A <c>local</c> missing its required kind annotation.</summary>
@@ -24,7 +21,7 @@ public static class PuckDiagnosticCodes {
     /// (<c>host { }</c>, <c>cameras [ ]</c>); the colon is what marks a scalar leaf, so there is exactly one
     /// spelling for each.</summary>
     public const string ColonBeforeContainer = "PUCK040";
-    /// <summary>A basis or import graph the composer refused.</summary>
+    /// <summary>A basis or import graph the composer refused, or a composition whose links or entry it cannot carry.</summary>
     public const string CompositionRefused = "PUCK035";
     /// <summary>A <c>decision</c> missing its required <c>periodSeconds</c>.</summary>
     public const string DecisionPeriodMissing = "PUCK029";
@@ -45,6 +42,10 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK046: a <c>for</c> body assigning a field rather than emitting a row. Building a value from a
     /// sequence is <c>map</c>'s job, in value position.</summary>
     public const string ForAssignsAField = "PUCK046";
+    /// <summary>PUCK114: a statement a rule body's <c>for</c> cannot repeat — a <c>when</c>, a <c>decision</c> or a
+    /// nested <c>rule</c>. A rule has one gate and one decision, so a loop inside it repeats only locals and
+    /// effects.</summary>
+    public const string ForRepeatsARuleMember = "PUCK114";
     /// <summary>PUCK044: a <c>for</c> whose sequence is not an array known at compile time.</summary>
     public const string ForSequenceRefused = "PUCK044";
     /// <summary>An import graph defect (cycle, duplicate alias).</summary>
@@ -61,8 +62,6 @@ public static class PuckDiagnosticCodes {
     public const string LambdaOutsideBuiltin = "PUCK042";
     /// <summary>A duplicate key in one block.</summary>
     public const string LintDuplicateKey = "PUCK_LINT_002";
-    /// <summary>An empty block.</summary>
-    public const string LintEmptyBlock = "PUCK_LINT_004";
     /// <summary>A shadowed declaration.</summary>
     public const string LintShadowedDeclaration = "PUCK_LINT_003";
     /// <summary>A reserved-channel prefix matching no known channel.</summary>
@@ -203,7 +202,7 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK066: a <c>grid</c> reusing a topology name already declared by another <c>grid</c> or an
     /// explicitly authored <c>state.lattices</c> entry.</summary>
     public const string StateDeclarationDuplicateTopologyName = "PUCK066";
-    /// <summary>PUCK070: a floating-point column type (<c>REAL</c>, <c>FLOAT</c>, <c>DOUBLE</c>) in a SQL table declaration — state holds no floats, use <c>FIXED</c>.</summary>
+    /// <summary>PUCK070: a SQL column or slot type the dialect does not admit; a floating-point one (<c>REAL</c>, <c>FLOAT</c>, <c>DOUBLE</c>) is told state holds no floats, use <c>FIXED</c>.</summary>
     public const string SqlUnsupportedType = "PUCK070";
     /// <summary>PUCK071: a composite <c>PRIMARY KEY (a, b)</c> in a SQL table declaration — a state cell has exactly one key.</summary>
     public const string SqlCompositePrimaryKey = "PUCK071";
@@ -243,7 +242,7 @@ public static class PuckDiagnosticCodes {
     public const string VectorFilterInvalid = "PUCK088";
     /// <summary>PUCK089: a family size that is not a positive integer known at compile time.</summary>
     public const string FamilySizeInvalid = "PUCK089";
-    /// <summary>PUCK090: a compile-time family index outside the family's bounds.</summary>
+    /// <summary>PUCK090: a compile-time family index that names no member of the family, outside its bounds or at a gap.</summary>
     public const string FamilyIndexOutOfBounds = "PUCK090";
     /// <summary>PUCK091: an enum or enum member that was not declared.</summary>
     public const string EnumMemberUnknown = "PUCK091";
@@ -272,14 +271,43 @@ public static class PuckDiagnosticCodes {
     /// call's own argument, so the statement is written <c>transform call(...)</c>.</summary>
     public const string TransformResultLabel = "PUCK103";
     /// <summary>PUCK104: a <c>test</c> declaration's own shape — a body member that is not <c>given</c>,
-    /// <c>when</c> or <c>expect</c>, one of those written twice or out of order, a <c>with module(...)</c> subject,
-    /// a test with no expectation, or two tests of one document naming the same generated world.</summary>
+    /// <c>when</c> or <c>expect</c>, one of those written twice or out of order, a test with no expectation, a
+    /// <c>with</c> subject naming a template rather than a module, or two tests of one document naming the same
+    /// generated world.</summary>
     public const string TestShapeInadmissible = "PUCK104";
     /// <summary>PUCK105: a line inside a <c>test</c> block the generated test world cannot carry — a
     /// <c>given</c> line that is not a cell assignment to a literal, a <c>when</c> step that is neither
     /// <c>ticks &lt;n&gt;</c> nor <c>seat&lt;n&gt;: &lt;command line&gt;</c>, a step acting as something other than a
     /// seat, or a command outside the scheduled step vocabulary.</summary>
     public const string TestStepInadmissible = "PUCK105";
+    /// <summary>PUCK113: a name the author wrote, bare or quoted, in a spelling Puck reserves for the names it
+    /// generates (<c>Puck.State.GeneratedName</c>): a <c>$</c> inside or a <c>~</c> anywhere in a document name, such as
+    /// a row, a rule, a placement or a destination, or a <c>~</c> in a world name. A name headed by the alias of one of
+    /// the document's own aliased imports (<c>dive$diveCourt</c>) is that import's, restated where it is written.</summary>
+    public const string GeneratedNameReserved = "PUCK113";
+    /// <summary>PUCK115: an enum member spelled like a <c>let</c> or a module parameter in the same scope, or a bare
+    /// read of a member two enums in the same scope declare. A bare member name reads as the member's ordinal, so it
+    /// cannot keep a second meaning; rename one, or read the member qualified (<c>Enum.member</c>). A shared member is
+    /// reported where it is read bare; a position that takes a name, not a value, keeps its spelling.</summary>
+    public const string EnumMemberShadowsConstant = "PUCK115";
+    /// <summary>PUCK116: a placement id a channel cannot name — one carrying <c>:</c>, which separates a reserved
+    /// channel's arguments (<c>$region:&lt;placementId&gt;</c>), or one exactly <c>$each</c>, the token
+    /// <c>placement:$each</c> binds to a rule's <c>forEach</c> key.</summary>
+    public const string PlacementIdReserved = "PUCK116";
+    /// <summary>PUCK117: a module alias spelled like a row, pool, <c>let</c> or module parameter of the scope that
+    /// uses it. The scope reads a name the instance declares as <c>alias.name</c>, which would also spell a cell of the
+    /// row or a member of the constant; rename one.</summary>
+    public const string ModuleAliasShadowsName = "PUCK117";
+    /// <summary>PUCK118: an information notice that the engine's validation of a world deferred a check to the host
+    /// that runs it, because the host diagnosing the source carries no catalog for it (a machine engine, a
+    /// post-render extension, a probe kind). A deferral is no finding against the author: it never fails a
+    /// compile or a composition.</summary>
+    public const string SemanticValidationDeferred = "PUCK118";
+    /// <summary>PUCK119: a state row names an enum its composed world's state section does not declare — a
+    /// <c>table</c>/<c>slot</c>/<c>grid</c> written <c>: Enum</c> or a <c>row { enum: Enum }</c>, refused by the
+    /// validation of the composed world — or a record field <c>field: Enum</c> names one its document does not declare.
+    /// Declare it with <c>enum Enum { … }</c>; a cell kind is never written.</summary>
+    public const string StateEnumUndeclared = "PUCK119";
     /// <summary>PUCK_LINT_010: a literal mix weight's share is below 1/64; consider mean over a history table.</summary>
     public const string VectorMixStall = "PUCK_LINT_010";
 }

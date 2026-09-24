@@ -76,18 +76,21 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     public ulong TrafficFingerprint =>
         Volatile.Read(location: ref m_trafficFingerprint);
 
-    // The only writer is the group's own execution thread (transfer completion fires from inside RunCycles), so the
-    // increment/fold itself needs no interlock; the write is volatile only so CompletedTransfers/TrafficFingerprint's
-    // Volatile.Read from another thread observes it.
-    private void Fold(byte value) {
+    // One completed transfer on the port tagged `port` (0x01 first, 0x02 second): counts it, folds the shifted-in byte and
+    // then the port tag into the fingerprint, and chains to the observer the port held before the cable. The only writer
+    // is the group's own execution thread (transfer completion fires from inside RunCycles), so the increment/fold itself
+    // needs no interlock; the write is volatile only so CompletedTransfers/TrafficFingerprint's Volatile.Read from
+    // another thread observes it.
+    private void Fold(byte value, ulong port, Action<byte>? previousObserver) {
         Volatile.Write(
             location: ref m_completedTransfers,
             value: (m_completedTransfers + 1)
         );
         Volatile.Write(
             location: ref m_trafficFingerprint,
-            value: ((m_trafficFingerprint ^ value) * FnvPrime)
+            value: ((((m_trafficFingerprint ^ value) * FnvPrime) ^ port) * FnvPrime)
         );
+        previousObserver?.Invoke(obj: value);
     }
     private static void Grow(ref byte[] buffer, int length) {
         if (buffer.Length < length) {
@@ -96,22 +99,18 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     }
     // The two sides fold under distinct tags so a fingerprint distinguishes which port received a byte, not merely that
     // one did.
-    private void OnFirstTransferCompleted(byte value) {
-        Fold(value: value);
-        Volatile.Write(
-            location: ref m_trafficFingerprint,
-            value: ((m_trafficFingerprint ^ 0x01UL) * FnvPrime)
+    private void OnFirstTransferCompleted(byte value) =>
+        Fold(
+            port: 0x01UL,
+            previousObserver: m_firstPreviousObserver,
+            value: value
         );
-        m_firstPreviousObserver?.Invoke(obj: value);
-    }
-    private void OnSecondTransferCompleted(byte value) {
-        Fold(value: value);
-        Volatile.Write(
-            location: ref m_trafficFingerprint,
-            value: ((m_trafficFingerprint ^ 0x02UL) * FnvPrime)
+    private void OnSecondTransferCompleted(byte value) =>
+        Fold(
+            port: 0x02UL,
+            previousObserver: m_secondPreviousObserver,
+            value: value
         );
-        m_secondPreviousObserver?.Invoke(obj: value);
-    }
 
     /// <inheritdoc/>
     public void ApplyInput(in MachineLinkPads input) {
@@ -188,7 +187,7 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
             start: 0
         ));
 
-        var credits = new SerialLinkResumeToken(
+        var credits = new LinkResumeToken(
             FirstCredit: reader.ReadUInt64(),
             SecondCredit: reader.ReadUInt64()
         );

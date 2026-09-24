@@ -1,5 +1,4 @@
 using Puck.Abstractions.Gpu;
-using Puck.Hosting;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -12,23 +11,15 @@ namespace Puck.SdfVm;
 /// Frames may carry fewer views than the capacity, never more; the kernels' source array caps it at 5.</param>
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
 /// is always bound so the binding stays valid for a static scene). The engine automatically raises this floor to the
-/// program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. A plain per-engine choice with no fixed ceiling —
-/// hundreds of slots cost 32 bytes each and an O(capacity) per-frame upload; excess transforms in a frame beyond the
-/// capacity are dropped.</param>
+/// program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. Each slot costs 48 bytes of host mirror and
+/// device table, and a frame uploads only the slots that changed; the table's whole-table first copy bounds it at
+/// <see cref="SdfWorldEngine.MaxFrameUploadTableWords"/> words, and a larger capacity is refused by name. Excess
+/// transforms in a frame beyond the capacity are dropped.</param>
 /// <param name="CreateOutputImage">An optional factory for the output image. When it returns an
-/// <see cref="IGpuExportableStorageImage"/>, the engine runs in <em>export</em> mode: each submitted frame ends in the
+/// <see cref="IGpuExportableImage"/>, the engine runs in <em>export</em> mode: each submitted frame ends in the
 /// cross-backend handoff layout and <see cref="SdfWorldEngine.SubmitFrame"/> drains the producer queue so the shared
 /// handle may be consumed on another device. When <see langword="null"/>, a plain same-device storage image is
-/// created from the resolved <see cref="IGpuStorageImageFactory"/>.</param>
-/// <param name="TimingFactory">An optional GPU timing pool factory; with <paramref name="TimingRecorder"/>, enables
-/// the per-pass timestamp marks (gated on the device reporting usable timestamps).</param>
-/// <param name="TimingRecorder">An optional GPU timing recorder (see <paramref name="TimingFactory"/>).</param>
-/// <param name="LiveArmedTiming">When <see langword="true"/> (the live node path), the timing pools are created lazily
-/// on the first armed frame and each frame consults <see cref="GpuTimingControl.Shared"/> — a disarmed frame skips the
-/// timestamp writes/reads at near-zero cost, so timing arms and disarms mid-session with no rebuild. When
-/// <see langword="false"/> (the default, the waited harness/measure path), timing runs eagerly the moment a supported
-/// factory + recorder are supplied — the pools are created at construction and every frame is timed, never consulting
-/// the shared arming control.</param>
+/// created from the resolved <see cref="IGpuImageFactory"/>.</param>
 /// <param name="ProgramWordCapacity">An optional initial reserve in packed words (the engine always provisions at
 /// least <paramref name="Program"/>'s length). <see cref="SdfWorldEngine.UploadProgram"/> grows it as needed;
 /// reserving expected content here avoids reallocations during authoring.</param>
@@ -44,15 +35,17 @@ namespace Puck.SdfVm;
 /// SampledRegion world uncarved rather than a box-shaped hole. Only <see cref="SdfWorldEngine.RequestBrickBake"/> stays a
 /// loud rejection on a pool-less engine (nothing to bake into). The pool is a persistent device-local buffer the sliced
 /// background bake (<see cref="SdfWorldEngine.RequestBrickBake"/>) writes and the beam + views kernels sample.</param>
+/// <param name="WorkLedger">The ledger the engine counts its GPU work into, owned by the caller so that submission
+/// identities keep increasing when the caller rebuilds the engine (after a device loss, say); created with
+/// <see cref="SdfWorldEngine.FrameRingSize"/> frames in flight. The caller invalidates it when it drops an engine.
+/// When <see langword="null"/>, the engine creates its own.</param>
 public sealed record SdfWorldEngineOptions(
     SdfProgram Program,
     uint ViewportCapacity = SdfWorldEngine.MaxViewports,
     int DynamicTransformCapacity = 1,
-    Func<IGpuDeviceContext, IGpuStorageImage>? CreateOutputImage = null,
-    IGpuTimingPoolFactory? TimingFactory = null,
-    IGpuTimingRecorder? TimingRecorder = null,
+    Func<IGpuDeviceContext, IGpuImage>? CreateOutputImage = null,
     int ProgramWordCapacity = 0,
     int InstanceCapacity = 0,
-    bool LiveArmedTiming = false,
-    int BrickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity
+    int BrickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity,
+    GpuWorkLedger? WorkLedger = null
 );

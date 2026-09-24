@@ -2,7 +2,7 @@
     <PropertyGroup>
         <AssemblyName>Puck.Input</AssemblyName>
         <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
-        <Description>Normalizes controller reports and window input into a provider-neutral stream for command capture and deterministic simulations. It provides device protocols, player slots, per-frame coalescing, sub-frame timestamps, motion fusion, haptics, and the physical-control vocabulary without operating-system transports. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <Description>Normalizes controller reports and window input into a provider-neutral stream for command capture and deterministic simulations. It provides device protocols, player slots, per-frame coalescing, sub-frame timestamps, motion fusion, haptics, and the physical-control vocabulary without operating-system transports. Licensed under the Apache License 2.0.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Input</PackageId>
         <PackageTags>controllers;gamepad;hid;input;motion-fusion;simulation</PackageTags>

@@ -1,102 +1,112 @@
-using Microsoft.CodeAnalysis;
-
-using Puck.Cli.Format.Rewriters;
-
 namespace Puck.Cli.Format;
 
-// One pass of the format pipeline. `Apply` is null for the semantic pass, which resolves symbols against
-// a Compilation and therefore runs as its own disk phase instead of through the syntactic pipeline.
-internal sealed record FormatPass(string Name, bool Default, Func<SyntaxNode, SyntaxNode>? Apply) {
-    public bool Semantic => (Apply is null);
+// How a pass runs. A syntactic pass rewrites one C# syntax tree at a time through the re-parsing pipeline; a semantic
+// pass resolves symbols against a project compilation and runs as its own disk phase; the .puck pass parses and
+// prints each .puck source.
+internal enum FormatPassKind {
+    Syntactic,
+    Semantic,
+    Puck,
 }
-// The single pass table. The known-name set, the -Only error text, the syntactic pipeline and the
-// bare-`format` default set all derive from it, so there is no second list to keep in agreement.
+// One pass of the format pipeline, named as --only spells it.
+internal sealed record FormatPass(string Name, bool Default, FormatPassKind Kind) {
+    public bool Semantic => (Kind == FormatPassKind.Semantic);
+    public bool Syntactic => (Kind == FormatPassKind.Syntactic);
+}
+// The single pass table. The known-name set, the --only error text, the syntactic pipeline and the bare-`format`
+// default set all derive from it, so there is no second list to keep in agreement. It names passes and carries no
+// Roslyn type, so building the command tree (and printing its help) loads no compiler: SyntacticPasses maps a name
+// to its rewriter.
 internal static class FormatPasses {
     // Canonical order — the order the syntactic pipeline runs in, and the order the error text lists.
     // `Default: true` marks the bare-`format` set: the baseline house normalizers. The vertical
-    // line-wrappers (logical-lines, arg-lines, ternary-lines) stay opt-in via -Only, because their
+    // line-wrappers (logical-lines, arg-lines, ternary-lines) stay opt-in via --only, because their
     // one-per-line layout is a deliberate choice rather than a baseline. named-args is in despite its
-    // semantic cost. NOTE: the tree is not swept to these, so a bare `format`/`-WhatIf` reports (and
-    // fixes) drift until a deliberate tree-wide run converts it.
+    // semantic cost.
     public static readonly FormatPass[] All = [
         new(
-            Name: "attr-order",
             Default: true,
-            Apply: static node => new AttrRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "attr-order"
         ),
         new(
-            Name: "member-groups",
             Default: false,
-            Apply: static node => new MemberGroupsRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "member-groups"
         ),
         new(
-            Name: "member-spacing",
             Default: true,
-            Apply: static node => new MemberSpacingRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "member-spacing"
         ),
         new(
-            Name: "member-order",
             Default: true,
-            Apply: static node => new MemberOrderRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "member-order"
         ),
         new(
-            Apply: null,
             Default: true,
+            Kind: FormatPassKind.Semantic,
             Name: "null-pattern"
         ),
         new(
-            Name: "string-merge",
             Default: true,
-            Apply: static node => new StringMergeRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "string-merge"
         ),
         new(
-            Name: "paren-clarity",
             Default: true,
-            Apply: static node => new ParenClarityRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "paren-clarity"
         ),
         new(
-            Name: "logical-lines",
             Default: false,
-            Apply: static node => new LogicalLinesRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "logical-lines"
         ),
         new(
-            Name: "arg-lines",
             Default: false,
-            Apply: static node => new ArgLinesRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "arg-lines"
         ),
         new(
-            Name: "ternary-lines",
             Default: false,
-            Apply: static node => new TernaryLinesRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "ternary-lines"
         ),
         new(
-            Name: "init-order",
             Default: true,
-            Apply: static node => new InitOrderRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "init-order"
         ),
         new(
-            Name: "trailing-comma",
             Default: true,
-            Apply: static node => new TrailingCommaRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "trailing-comma"
         ),
         new(
-            Name: "decl-spacing",
             Default: true,
-            Apply: static node => new DeclSpacingRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "decl-spacing"
         ),
         new(
-            Name: "literal-var",
             Default: true,
-            Apply: static node => new LiteralVarRewriter().Visit(node: node)!
+            Kind: FormatPassKind.Syntactic,
+            Name: "literal-var"
         ),
         new(
-            Apply: null,
             Default: true,
+            Kind: FormatPassKind.Semantic,
             Name: "named-args"
+        ),
+        new(
+            Default: true,
+            Kind: FormatPassKind.Puck,
+            Name: "puck"
         ),
     ];
 
-    // The pass names in canonical order, for the unknown-pass error.
+    // The pass names in canonical order, for help and the unknown-pass error.
     public static string Names =>
         string.Join(
             separator: ", ",

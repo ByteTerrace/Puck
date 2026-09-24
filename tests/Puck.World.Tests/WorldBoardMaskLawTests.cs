@@ -1,6 +1,4 @@
 using Puck.Assets.Documents;
-using Puck.World.Protocol;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -9,21 +7,6 @@ namespace Puck.World.Tests;
 /// bits at an edge, bit-algebra composing two masks, the composed set landing back on a board via <c>writeSet</c>,
 /// and the ceilings that refuse.</summary>
 public sealed class WorldBoardMaskLawTests {
-    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
-        Assert.True(
-            condition: WorldArenaTransforms.TryApply(
-                definition,
-                transform,
-                WorldPrincipal.World,
-                1,
-                "test",
-                out var candidate,
-                out var reason
-            ),
-            userMessage: reason
-        );
-        return candidate!;
-    }
     private static StateCell Cell(string key, long value = 1) => new(
         Name(value: key),
         CellValue.Int(value: value)
@@ -78,22 +61,6 @@ public sealed class WorldBoardMaskLawTests {
         }
         return result;
     }
-    private static WorldStateRow Slot(string name, long value = 0) => new(
-        Name(value: name),
-        CellKind.Int,
-        Cells: [new StateCell(
-                WorldStateRow.SlotKey,
-                CellValue.Int(value: value)
-            )]
-    );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
 
     [Fact]
     public void ASetLandsBackOnTheBoardThroughWriteSetAndBitAlgebraComposesTwoBoardsIntoOne() {
@@ -130,10 +97,10 @@ public sealed class WorldBoardMaskLawTests {
             Domain: new StateDomain.CellsOf("map")
         );
         var definition = Document(
-            [board, other, target, Slot(
+            [board, other, target, StateFixtures.IntSlot(
                     name: "mask",
                     value: 0b1010L
-                ), Slot("both"), Slot("either"), Slot("onlyLeft"), Slot("complement")],
+                ), StateFixtures.IntSlot("both"), StateFixtures.IntSlot("either"), StateFixtures.IntSlot("onlyLeft"), StateFixtures.IntSlot("complement")],
             [
             new WorldRule(
                     Name(value: "both"),
@@ -174,7 +141,7 @@ public sealed class WorldBoardMaskLawTests {
         ]
         );
 
-        var painted = Apply(
+        var painted = StateFixtures.Apply(
             definition: definition,
             transform: new StateTransform.WriteSet(
                 "board",
@@ -215,7 +182,7 @@ public sealed class WorldBoardMaskLawTests {
         // Every op the old row-vs-row `combine` transform offered is now composed once from $board:mask reads and
         // the generic bit operators, then lands back on the target board through the one writeSet transform: no
         // second vocabulary for the same board algebra.
-        var both = Apply(
+        var both = StateFixtures.Apply(
             definition: fixture.Server.Definition,
             transform: new StateTransform.WriteSet(
                 "target",
@@ -235,7 +202,7 @@ public sealed class WorldBoardMaskLawTests {
             document: both,
             row: "target"
         ).Cells!);
-        var either = Apply(
+        var either = StateFixtures.Apply(
             definition: fixture.Server.Definition,
             transform: new StateTransform.WriteSet(
                 "target",
@@ -251,7 +218,7 @@ public sealed class WorldBoardMaskLawTests {
                 row: "target"
             )
         );
-        var onlyLeft = Apply(
+        var onlyLeft = StateFixtures.Apply(
             definition: fixture.Server.Definition,
             transform: new StateTransform.WriteSet(
                 "target",
@@ -268,7 +235,7 @@ public sealed class WorldBoardMaskLawTests {
             )
         );
         // BitNot complements past the topology's own cell count; writeSet clips the write to the board's real cells.
-        var complement = Apply(
+        var complement = StateFixtures.Apply(
             definition: fixture.Server.Definition,
             transform: new StateTransform.WriteSet(
                 "target",
@@ -298,7 +265,7 @@ public sealed class WorldBoardMaskLawTests {
             Domain: new StateDomain.CellsOf("map")
         );
         var definition = Document(
-            [wide, small, Slot("mask")],
+            [wide, small, StateFixtures.IntSlot("mask")],
             [new WorldRule(
                     Name(value: "mask"),
                     [new ActionEffect.SetState(
@@ -326,7 +293,7 @@ public sealed class WorldBoardMaskLawTests {
         );
 
         var shifted = Document(
-            [wide, small, Slot("mask")],
+            [wide, small, StateFixtures.IntSlot("mask")],
             [new WorldRule(
                     Name(value: "shift"),
                     [new ActionEffect.SetState(
@@ -359,7 +326,7 @@ public sealed class WorldBoardMaskLawTests {
         );
 
         var mixed = Document(
-            [wide, small, Slot("mask")],
+            [wide, small, StateFixtures.IntSlot("mask")],
             [],
             [],
             lattices: [Grid(
@@ -409,7 +376,7 @@ public sealed class WorldBoardMaskLawTests {
             Domain: new StateDomain.CellsOf("map")
         );
         var definition = Document(
-            [board, Slot("mask"), Slot("east"), Slot("north")],
+            [board, StateFixtures.IntSlot("mask"), StateFixtures.IntSlot("east"), StateFixtures.IntSlot("north")],
             [
             new WorldRule(
                     Name(value: "mask"),
@@ -458,9 +425,7 @@ public sealed class WorldBoardMaskLawTests {
 
         Assert.Equal(
             0b0110L,
-            Value(
-                fixture: fixture,
-                row: "mask"
+            fixture.SlotValue(row: "mask"
             )
         );
         var expectedEast = Shift(
@@ -471,9 +436,7 @@ public sealed class WorldBoardMaskLawTests {
 
         Assert.Equal(
             expectedEast,
-            Value(
-                fixture: fixture,
-                row: "east"
+            fixture.SlotValue(row: "east"
             )
         );
         Assert.NotEqual(
@@ -488,9 +451,7 @@ public sealed class WorldBoardMaskLawTests {
                 mask: 0b1001L,
                 topology: topology
             ),
-            Value(
-                fixture: fixture,
-                row: "north"
+            fixture.SlotValue(row: "north"
             )
         );
     }

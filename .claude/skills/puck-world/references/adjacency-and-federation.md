@@ -35,6 +35,14 @@ carries, echoed with the unavailable treatment by `world.adjacencies`. Portals
 remain intentional authored travel and are not used to represent seamless
 topology.
 
+Past the seam, a body that crossed is the destination's seat. The destination's
+rules read its input with `channel(1, name)` exactly as they read a seat that
+booted there, and its owned identity, facts included, arrives with it. The
+[rulepush package](../../../../worlds/rulepush/README.md) relies on both: a level hears
+the visitor's presses, a win writes an identity fact, and the overworld opens a
+gate from the fact the visitor carries back. Its `rulepush-overworld` canary is the
+end-to-end check.
+
 A shard names one document several times over — its own `basis`, each adjacency
 neighbour, each derived corner destination — and a composed document is reused
 per resolved path when every file its composition read still holds the bytes it
@@ -44,7 +52,11 @@ no clock takes part in either). `world.adjacencies` names `composed=shared` or
 authority is not running here. The process totals sit on `world.status`
 (`documents composed N shared M held K (B bytes)`) and on the boot's own
 `[world.documents]` line, since they belong to the process rather than to one
-instance's rows. `held` is one image per distinct document path this process
+instance's rows; the two counts are the `world.boot` work source's
+`world.boot.compositions` and `world.boot.compositions-shared`. A neighbour's
+resolved document is held against the composed image it was parsed from
+(`WorldFileNeighbourResolver`), so a border proved again — a boot's admission
+and then its completion — parses that neighbour once. `held` is one image per distinct document path this process
 composed; the store is not capped, so `B` is what to read when a host composes
 unusually many documents.
 
@@ -248,9 +260,10 @@ The bridge is why holding jump across a handoff remains one physical hold
 rather than release-then-press. `body.press`, `body.channels`,
 `body.state`, `body.targets`, `world.contacts`, and `body.where` follow
 the same seat route after a crossing, and so do the seat-routed document
-writes `player.row.set`/`body.state.cell.set` — the `world.row.set`/
+writes `player.row.set`/`player.state.cell.set` — the `world.row.set`/
 `world.state.cell.set` grammars submitted through the seat's current
-authority (`WorldFederatedServerLink.SubmitWorldMutation` → the federation
+authority (`ServerLinkSubmissions.SubmitWorldMutation` over
+`WorldFederatedServerLink.SubmitEnvelope` → the federation
 `Routed` lane → `WorldForwardedAuthority.TryApplySubmission`, where the
 DESTINATION re-stamps the envelope with the traveler's own transfer principal
 and its ordinary admission door — row-scoped grants included — decides it; the
@@ -327,7 +340,7 @@ says nothing about it:
   `Transfer` records the decided outcome as narration, not a re-executed
   handshake.
 
-What IS now taped on the submission side: every document mutation, whatever
+What IS taped on the submission side: every document mutation, whatever
 ingress it arrived through. `WorldServer.MutationTap` fires at the envelope
 dispatch every submission shares, so a local console write, an admitted socket
 peer's, and a traveller's submission forwarded by its source authority
@@ -402,6 +415,12 @@ passes `IsConfigured`; the first proof it refuses reveals it, and the same gate
 closes on it from then on. Every refused `WorldFederationAnswer`, lane-refused
 ones included, carries `WorldFederationResponse.Refusal` as its kind.
 
+`WorldRemoteAuthority` dials through its host's one `WorldPeerNetwork` (never a
+second) and runs every bound it keeps — `LaneRequestTimeout`,
+`ConnectRetryDelay`, `RoutedRequestDeadline`, reconnect pacing — on that
+network's `Clock`, so a law drives them with `VirtualClock` rather than wall
+time (`FederationTransferLawTests.RemoteAuthority_ClosesTheSigningGate…`).
+
 Every transfer step answers. A step that ran out of time is a named refusal,
 never "ask again": a caller told to retry would hold the transfer while the
 adjacency scan minted a second crossing for the same seat, landing the traveler
@@ -432,7 +451,7 @@ dynamic loopback endpoint and trusting the others' generated federation
 identity, with one driven body crossing NW's east face onto NE's own process.
 
 A body that arrives over a federation hop is minted rigid on the destination,
-and `WorldInstanceHost.Transfers` refuses a rigid body's own transfer by name,
+and `WorldInstanceHost.Transfers.cs` refuses a rigid body's own transfer by name,
 so a federated ring cannot be driven past its first hop today. Vertical/island
 crossing, retained dual-stick camera/movement control, autonomous producer
 travellers, derived diagonal peers, and cross-authority contact-pair settling

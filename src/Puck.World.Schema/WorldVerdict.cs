@@ -23,11 +23,13 @@ public sealed record WorldVerdictTrait(string Gate, CellName Status);
 public static class WorldVerdict {
     /// <summary>The status code a rule writes when its gate did not hold. A verdict fails on this value.</summary>
     public const long Fail = 2L;
+
     /// <summary>The reserved cell key carrying the simulation tick of the rule firing that last wrote the row — the
     /// engine's own stamp, minted by the effect door and never authored. A status carrying a code with no stamp
     /// beside it moved through some door other than a rule's firing, which is what makes "no rule ever evaluated
     /// this" checkable.</summary>
     public static readonly CellName FiredTickKey = CellName.Parse(candidate: "$firedTick");
+
     /// <summary>The largest admitted <see cref="WorldVerdictTrait.Gate"/> length, in characters.</summary>
     public const int MaxGateLength = 240;
     /// <summary>The largest admitted verdict-row count in one document.</summary>

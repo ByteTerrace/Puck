@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -38,24 +39,22 @@ public sealed class BodyUpPolicyLawTests {
         )
     );
 
-    private static void AssertNotYawOnly(WorldBody body, string context) {
-        var orientation = body.FixedOrientation;
-
-        Assert.False(
-            condition: ((orientation.X == FixedQ4816.Zero) && (orientation.Z == FixedQ4816.Zero)),
-            userMessage: $"{context}: expected a surface-derived raw orientation, got W={orientation.W.Value} X={orientation.X.Value} Y={orientation.Y.Value} Z={orientation.Z.Value}"
-        );
-    }
-    private static void AssertYawOnly(WorldBody body, string context) {
+    private static void AssertNotYawOnly(WorldBody body, string context) => AssertYawOnly(
+        body: body,
+        context: context,
+        expected: false
+    );
+    // A yaw-only orientation carries no X or Z quaternion component; a surface-derived one does.
+    private static void AssertYawOnly(WorldBody body, string context, bool expected = true) {
         var orientation = body.FixedOrientation;
 
         Assert.True(
-            condition: ((orientation.X == FixedQ4816.Zero) && (orientation.Z == FixedQ4816.Zero)),
-            userMessage: $"{context}: expected yaw-only raw orientation, got W={orientation.W.Value} X={orientation.X.Value} Y={orientation.Y.Value} Z={orientation.Z.Value}"
+            condition: (((orientation.X == FixedQ4816.Zero) && (orientation.Z == FixedQ4816.Zero)) == expected),
+            userMessage: $"{context}: expected {(expected ? "yaw-only" : "a surface-derived")} raw orientation, got W={orientation.W.Value} X={orientation.X.Value} Y={orientation.Y.Value} Z={orientation.Z.Value}"
         );
     }
-    private static WorldPrincipal JoinSeat(WorldFixture fixture) {
-        var actor = WorldPrincipal.Seat(slot: Fixtures.GradientUpSeatSlot);
+    private static Principal JoinSeat(WorldFixture fixture) {
+        var actor = Principal.Seat(slot: Fixtures.GradientUpSeatSlot);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -126,7 +125,7 @@ public sealed class BodyUpPolicyLawTests {
                 Kind: WorldRebuildKind.Load,
                 PathHint: "body-up-policy-rebuild-probe.world.json"
             ),
-            principal: WorldPrincipal.Console
+            principal: Principal.Console
         );
         fixture.Step();
 

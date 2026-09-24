@@ -522,42 +522,62 @@ internal static class SuiteCatalog {
 
         return cases;
 
-        static void AddVisual(List<LedgerCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative) {
-            var rom = FromRelative(
-                relative: romRelative,
-                root: suiteRoot
+        static void AddVisual(List<LedgerCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative) =>
+            AddDualModelScreenshotCase(
+                cases: cases,
+                cgbImageRelative: cgbImageRelative,
+                dmgImageRelative: dmgImageRelative,
+                frameCap: BlarggVisualFrameCap,
+                romRelative: romRelative,
+                suite: "blargg-visual",
+                suiteRoot: suiteRoot
             );
-
-            if (!File.Exists(path: rom)) {
-                return;
-            }
-
-            cases.Add(item: new LedgerCase(
-                ExpectedImageCandidates: [FromRelative(
-                        relative: dmgImageRelative,
-                        root: suiteRoot
-                    )],
-                FrameCap: BlarggVisualFrameCap,
-                FullPath: rom,
-                Model: ConsoleModel.DmgC,
-                Probe: ProbeKind.Screenshot,
-                RelativePath: romRelative,
-                Suite: "blargg-visual"
-            ));
-            cases.Add(item: new LedgerCase(
-                ExpectedImageCandidates: [FromRelative(
-                        relative: cgbImageRelative,
-                        root: suiteRoot
-                    )],
-                FrameCap: BlarggVisualFrameCap,
-                FullPath: rom,
-                Model: ConsoleModel.CgbE,
-                Probe: ProbeKind.Screenshot,
-                RelativePath: romRelative,
-                Suite: "blargg-visual"
-            ));
-        }
     }
+
+    private static void AddDualModelScreenshotCase(
+        List<LedgerCase> cases,
+        string suiteRoot,
+        string suite,
+        string romRelative,
+        string dmgImageRelative,
+        string cgbImageRelative,
+        int frameCap
+    ) {
+        var rom = FromRelative(
+            relative: romRelative,
+            root: suiteRoot
+        );
+
+        if (!File.Exists(path: rom)) {
+            return;
+        }
+
+        cases.Add(item: new LedgerCase(
+            ExpectedImageCandidates: [FromRelative(
+                relative: dmgImageRelative,
+                root: suiteRoot
+            )],
+            FrameCap: frameCap,
+            FullPath: rom,
+            Model: ConsoleModel.DmgC,
+            Probe: ProbeKind.Screenshot,
+            RelativePath: romRelative,
+            Suite: suite
+        ));
+        cases.Add(item: new LedgerCase(
+            ExpectedImageCandidates: [FromRelative(
+                relative: cgbImageRelative,
+                root: suiteRoot
+            )],
+            FrameCap: frameCap,
+            FullPath: rom,
+            Model: ConsoleModel.CgbE,
+            Probe: ProbeKind.Screenshot,
+            RelativePath: romRelative,
+            Suite: suite
+        ));
+    }
+
     /// <summary>BullyGB ships one ROM and one image shared across both models (the howto's own DMG-C failure is a
     /// recorded fact the ledger records, not a reason to skip the model).</summary>
     public static IReadOnlyList<LedgerCase> BullyRoms(string? root) {
@@ -641,19 +661,19 @@ internal static class SuiteCatalog {
             )
         );
     }
-    /// <summary>dmg-acid2 runs its one ROM on both target models against their respective expected images.</summary>
-    public static IReadOnlyList<LedgerCase> DmgAcid2Roms(string? root) {
+
+    private static IReadOnlyList<LedgerCase> CreateDualModelAcidCase(string? root, string suite, int frameCap) {
         if (root is null) {
             return [];
         }
 
         var directory = SuiteDir(
-            relative: "dmg-acid2",
+            relative: suite,
             root: root
         );
         var rom = Path.Combine(
             path1: directory,
-            path2: "dmg-acid2.gb"
+            path2: $"{suite}.gb"
         );
 
         if (!File.Exists(path: rom)) {
@@ -663,30 +683,38 @@ internal static class SuiteCatalog {
         return [
             new LedgerCase(
                 ExpectedImageCandidates: [Path.Combine(
-                        path1: directory,
-                        path2: "dmg-acid2-dmg.png"
-                    )],
-                FrameCap: AcidScreenshotFrameCap,
+                    path1: directory,
+                    path2: $"{suite}-dmg.png"
+                )],
+                FrameCap: frameCap,
                 FullPath: rom,
                 Model: ConsoleModel.DmgC,
                 Probe: ProbeKind.Screenshot,
-                RelativePath: "dmg-acid2.gb",
-                Suite: "dmg-acid2"
+                RelativePath: $"{suite}.gb",
+                Suite: suite
             ),
             new LedgerCase(
                 ExpectedImageCandidates: [Path.Combine(
-                        path1: directory,
-                        path2: "dmg-acid2-cgb.png"
-                    )],
-                FrameCap: AcidScreenshotFrameCap,
+                    path1: directory,
+                    path2: $"{suite}-cgb.png"
+                )],
+                FrameCap: frameCap,
                 FullPath: rom,
                 Model: ConsoleModel.CgbE,
                 Probe: ProbeKind.Screenshot,
-                RelativePath: "dmg-acid2.gb",
-                Suite: "dmg-acid2"
+                RelativePath: $"{suite}.gb",
+                Suite: suite
             ),
         ];
     }
+
+    /// <summary>dmg-acid2 runs its one ROM on both target models against their respective expected images.</summary>
+    public static IReadOnlyList<LedgerCase> DmgAcid2Roms(string? root) =>
+        CreateDualModelAcidCase(
+            frameCap: AcidScreenshotFrameCap,
+            root: root,
+            suite: "dmg-acid2"
+        );
     /// <summary>
     /// gambatte's own result convention, ported from <c>test/testrunner.cpp</c>'s <c>main()</c>: a ROM's file stem is
     /// scanned for <c>dmg08_cgb04c_out</c> (one shared expected value for both models), else <c>dmg08_out</c> (a DMG
@@ -1268,41 +1296,16 @@ internal static class SuiteCatalog {
                 Suite: "scribbltests"
             ));
         }
-        static void AddSeparate(List<LedgerCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative, int frameCap) {
-            var rom = FromRelative(
-                relative: romRelative,
-                root: suiteRoot
+        static void AddSeparate(List<LedgerCase> cases, string suiteRoot, string romRelative, string dmgImageRelative, string cgbImageRelative, int frameCap) =>
+            AddDualModelScreenshotCase(
+                cases: cases,
+                cgbImageRelative: cgbImageRelative,
+                dmgImageRelative: dmgImageRelative,
+                frameCap: frameCap,
+                romRelative: romRelative,
+                suite: "scribbltests",
+                suiteRoot: suiteRoot
             );
-
-            if (!File.Exists(path: rom)) {
-                return;
-            }
-
-            cases.Add(item: new LedgerCase(
-                ExpectedImageCandidates: [FromRelative(
-                        relative: dmgImageRelative,
-                        root: suiteRoot
-                    )],
-                FrameCap: frameCap,
-                FullPath: rom,
-                Model: ConsoleModel.DmgC,
-                Probe: ProbeKind.Screenshot,
-                RelativePath: romRelative,
-                Suite: "scribbltests"
-            ));
-            cases.Add(item: new LedgerCase(
-                ExpectedImageCandidates: [FromRelative(
-                        relative: cgbImageRelative,
-                        root: suiteRoot
-                    )],
-                FrameCap: frameCap,
-                FullPath: rom,
-                Model: ConsoleModel.CgbE,
-                Probe: ProbeKind.Screenshot,
-                RelativePath: romRelative,
-                Suite: "scribbltests"
-            ));
-        }
         static void AddUnrunnable(List<LedgerCase> cases, string suiteRoot, string romRelative, string reason) {
             var rom = FromRelative(
                 relative: romRelative,
@@ -1336,51 +1339,12 @@ internal static class SuiteCatalog {
         }
     }
     /// <summary>strikethrough ships one ROM and a separate per-model image.</summary>
-    public static IReadOnlyList<LedgerCase> StrikethroughRoms(string? root) {
-        if (root is null) {
-            return [];
-        }
-
-        var directory = SuiteDir(
-            relative: "strikethrough",
-            root: root
+    public static IReadOnlyList<LedgerCase> StrikethroughRoms(string? root) =>
+        CreateDualModelAcidCase(
+            frameCap: StrikethroughFrameCap,
+            root: root,
+            suite: "strikethrough"
         );
-        var rom = Path.Combine(
-            path1: directory,
-            path2: "strikethrough.gb"
-        );
-
-        if (!File.Exists(path: rom)) {
-            return [];
-        }
-
-        return [
-            new LedgerCase(
-                ExpectedImageCandidates: [Path.Combine(
-                        path1: directory,
-                        path2: "strikethrough-dmg.png"
-                    )],
-                FrameCap: StrikethroughFrameCap,
-                FullPath: rom,
-                Model: ConsoleModel.DmgC,
-                Probe: ProbeKind.Screenshot,
-                RelativePath: "strikethrough.gb",
-                Suite: "strikethrough"
-            ),
-            new LedgerCase(
-                ExpectedImageCandidates: [Path.Combine(
-                        path1: directory,
-                        path2: "strikethrough-cgb.png"
-                    )],
-                FrameCap: StrikethroughFrameCap,
-                FullPath: rom,
-                Model: ConsoleModel.CgbE,
-                Probe: ProbeKind.Screenshot,
-                RelativePath: "strikethrough.gb",
-                Suite: "strikethrough"
-            ),
-        ];
-    }
     /// <summary>Each turtle-tests case ships one image shared across both models.</summary>
     public static IReadOnlyList<LedgerCase> TurtleTestsRoms(string? root) {
         if (root is null) {

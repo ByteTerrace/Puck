@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -37,11 +38,11 @@ namespace Puck.World.Tests;
 /// </remarks>
 public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
     // Sorts the grant capture's per-row dictionary-derived lists by row key, so a revoke-then-re-grant of the same
-    // row (the restore-release/reconnect-re-mint pair) compares equal to a table that never moved. The Principals
+    // row (the restore-release/reconnect-re-mint pair) compares equal to a table that never moved. The Grantees
     // list and its per-capability sets are left untouched — their order survives a same-row release/re-mint.
     private static WorldAuthorityCheckpoint NormalizeGrantRowOrder(WorldAuthorityCheckpoint checkpoint) {
-        static string KeyOf(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) =>
-            $"{principal.Describe()}|{capability}|{subject.Describe()}";
+        static string KeyOf(Grantee grantee, WorldCapability capability, GrantSubject subject) =>
+            $"{grantee.Describe()}|{capability}|{subject.Describe()}";
 
         var grants = checkpoint.Grants;
 
@@ -50,7 +51,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
                 Budgets = [.. grants.Budgets.OrderBy(
                 keySelector: static row => KeyOf(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject
                 ),
                 comparer: StringComparer.Ordinal
@@ -58,7 +59,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
                 EventBudgets = [.. grants.EventBudgets.OrderBy(
                 keySelector: static row => KeyOf(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject
                 ),
                 comparer: StringComparer.Ordinal
@@ -66,7 +67,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
                 HoldCeilings = [.. grants.HoldCeilings.OrderBy(
                 keySelector: static row => KeyOf(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject
                 ),
                 comparer: StringComparer.Ordinal
@@ -74,7 +75,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
                 ChannelReach = [.. grants.ChannelReach.OrderBy(
                 keySelector: static row => KeyOf(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject
                 ),
                 comparer: StringComparer.Ordinal
@@ -82,7 +83,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
                 KindMasks = [.. grants.KindMasks.OrderBy(
                 keySelector: static row => KeyOf(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject
                 ),
                 comparer: StringComparer.Ordinal
@@ -90,7 +91,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
                 WriteMasks = [.. grants.WriteMasks.OrderBy(
                 keySelector: static row => KeyOf(
                     capability: row.Capability,
-                    principal: row.Principal,
+                    grantee: row.Grantee,
                     subject: row.Subject
                 ),
                 comparer: StringComparer.Ordinal
@@ -98,7 +99,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
                 Exclusive = [.. grants.Exclusive.OrderBy(
                 keySelector: static row => KeyOf(
                     capability: row.Capability,
-                    principal: row.Holder,
+                    grantee: row.Holder,
                     subject: row.Subject
                 ),
                 comparer: StringComparer.Ordinal
@@ -109,7 +110,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
 
     [Fact]
     public void Host_roundtrip_identity_committed_transfer() {
-        var (host, rowA, rowB, machineId) = HostRoundtripFixture.BuildCommittedScenario();
+        var (host, rowA, rowB, machineId, stateRoot) = HostRoundtripFixture.BuildCommittedScenario();
+        using var disposeHost = host;
+        using var disposeStateRoot = stateRoot;
         using var disposeA = rowA;
         using var disposeB = rowB;
 
@@ -121,11 +124,13 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+        var (restoredHost, restoredA, restoredB, restoredStateRoot) = HostRoundtripFixture.RestoreBoth(
             checkpointA: decodedA,
             checkpointB: decodedB,
             machineId: machineId
         );
+        using var disposeRestoredHost = restoredHost;
+        using var disposeRestoredStateRoot = restoredStateRoot;
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -173,7 +178,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
     /// own first retry — so both sides commit on the SAME tail tick and the hash trajectories never diverge.</summary>
     [Fact]
     public void Host_roundtrip_identity_in_doubt_transfer() {
-        var (host, rowA, rowB, machineId, _) = HostRoundtripFixture.BuildInDoubtScenario();
+        var (host, rowA, rowB, machineId, _, stateRoot) = HostRoundtripFixture.BuildInDoubtScenario();
+        using var disposeHost = host;
+        using var disposeStateRoot = stateRoot;
         using var disposeA = rowA;
         using var disposeB = rowB;
 
@@ -188,11 +195,13 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+        var (restoredHost, restoredA, restoredB, restoredStateRoot) = HostRoundtripFixture.RestoreBoth(
             checkpointA: decodedA,
             checkpointB: decodedB,
             machineId: machineId
         );
+        using var disposeRestoredHost = restoredHost;
+        using var disposeRestoredStateRoot = restoredStateRoot;
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -252,7 +261,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
     /// divergence would still fail this law.</para></summary>
     [Fact]
     public void Host_roundtrip_identity_peer_range_transfer() {
-        var (host, rowA, rowB, machineId, peerSlot) = HostRoundtripFixture.BuildPeerRangeCommittedScenario();
+        var (host, rowA, rowB, machineId, peerSlot, stateRoot) = HostRoundtripFixture.BuildPeerRangeCommittedScenario();
+        using var disposeHost = host;
+        using var disposeStateRoot = stateRoot;
         using var disposeA = rowA;
         using var disposeB = rowB;
 
@@ -269,11 +280,13 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+        var (restoredHost, restoredA, restoredB, restoredStateRoot) = HostRoundtripFixture.RestoreBoth(
             checkpointA: decodedA,
             checkpointB: decodedB,
             machineId: machineId
         );
+        using var disposeRestoredHost = restoredHost;
+        using var disposeRestoredStateRoot = restoredStateRoot;
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -282,7 +295,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         // The restore released the parked generation's rows (a parked peer's authority never survives the
         // connection it belonged to), so model the genuine reconnect the way the admission door's resume arm now
         // does: resume the body, then re-mint the entry's own admission templates through the ordinary grant door.
-        var restoredPeerHeld = restoredB.Server.Grants.Held(principal: WorldPrincipal.Peer(
+        var restoredPeerHeld = restoredB.Server.Grants.Held(grantee: Principal.Peer(
             index: peerSlot,
             generation: destinationEntry.Generation
         ));
@@ -299,9 +312,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
 
         foreach (var template in destinationEntry.AdmissionInstalledGrantTemplates) {
             restoredB.Server.Grant(
-                actor: WorldPrincipal.Console,
+                actor: Principal.Console,
                 grant: new WorldGrant(
-                    Principal: resumedEntry.Identity,
+                    Grantee: resumedEntry.Identity,
                     Capability: template.Capability,
                     Subject: template.SubjectFor(bodyIndex: peerSlot),
                     Exclusive: template.Exclusive,

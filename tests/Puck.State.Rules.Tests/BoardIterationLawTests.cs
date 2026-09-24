@@ -28,8 +28,8 @@ public sealed class BoardIterationLawTests {
         var cursor = 0;
 
         while (arena.TryNextCell(
-            key: out var key,
             cursor: ref cursor,
+            key: out var key,
             rowOrdinal: ordinal
         )) {
             keys.Add(item: arena.Catalog.Keys[key].Value);

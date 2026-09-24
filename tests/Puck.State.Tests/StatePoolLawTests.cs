@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Xunit;
 using System.Text.Json;
 
@@ -75,8 +75,8 @@ public sealed class StatePoolLawTests {
 
         Assert.True(condition: arena.TryClaim(handle: out var second, poolOrdinal: 0, reason: out reason), userMessage: reason);
         Assert.Equal(expected: (0, 0, 1L), actual: (second.PoolOrdinal, second.Slot, second.Generation));
-        Assert.True(condition: arena.TryResolvePoolSlot(poolOrdinal: 0, slot: 0, handle: out var current));
-        Assert.Equal(expected: second, actual: current);
+        Assert.True(condition: arena.TryResolvePoolSlot(handle: out var current, poolOrdinal: 0, slot: 0));
+        Assert.Equal(actual: current, expected: second);
         Assert.True(condition: arena.TryRead(fieldOrdinal: 0, handle: second, value: out var score));
         Assert.Equal(expected: 7L, actual: score.AsInt);
     }
@@ -279,27 +279,27 @@ public sealed class StatePoolLawTests {
         var arena = new StateArena(catalog: catalog, section: section, time: ArenaTime.Origin);
         var claimTime = ArenaTime.At(engineTick: 50_400UL, tick: 3UL);
 
-        Assert.True(condition: arena.TryClaim(poolOrdinal: 0, time: claimTime, handle: out var first, reason: out var reason), userMessage: reason);
+        Assert.True(condition: arena.TryClaim(handle: out var first, poolOrdinal: 0, reason: out var reason, time: claimTime), userMessage: reason);
         var oneSecondLater = claimTime with { EngineTick = 100_800UL };
 
-        Assert.True(condition: arena.TryReadLive(handle: first, fieldOrdinal: 0, time: oneSecondLater, value: out var advanced));
+        Assert.True(condition: arena.TryReadLive(fieldOrdinal: 0, handle: first, time: oneSecondLater, value: out var advanced));
         Assert.Equal(expected: 8L, actual: advanced.AsInt);
-        Assert.True(condition: arena.TryWriteLive(handle: first, fieldOrdinal: 0, operand: 2L, write: StateWriteKind.Add, time: oneSecondLater, reason: out reason), userMessage: reason);
+        Assert.True(condition: arena.TryWriteLive(fieldOrdinal: 0, handle: first, operand: 2L, reason: out reason, time: oneSecondLater, write: StateWriteKind.Add), userMessage: reason);
 
         var published = Assert.Single(collection: arena.ToPools());
         var restoredSection = section with { Pools = [published] };
         var restored = new StateArena(catalog: StateCatalog.Compile(section: restoredSection), section: restoredSection, time: oneSecondLater);
         var restoredHandle = Assert.Single(collection: restored.SnapshotPool(poolOrdinal: 0));
 
-        Assert.True(condition: restored.TryReadLive(handle: restoredHandle, fieldOrdinal: 0, time: oneSecondLater, value: out var restoredValue));
+        Assert.True(condition: restored.TryReadLive(fieldOrdinal: 0, handle: restoredHandle, time: oneSecondLater, value: out var restoredValue));
         Assert.Equal(expected: 10L, actual: restoredValue.AsInt);
 
         Assert.True(condition: restored.TryRelease(handle: restoredHandle, reason: out reason), userMessage: reason);
         var reclaimTime = oneSecondLater with { EngineTick = 151_200UL };
 
-        Assert.True(condition: restored.TryClaim(poolOrdinal: 0, time: reclaimTime, handle: out var replacement, reason: out reason), userMessage: reason);
+        Assert.True(condition: restored.TryClaim(handle: out var replacement, poolOrdinal: 0, reason: out reason, time: reclaimTime), userMessage: reason);
         Assert.Equal(expected: 1L, actual: replacement.Generation);
-        Assert.True(condition: restored.TryReadLive(handle: replacement, fieldOrdinal: 0, time: reclaimTime, value: out var fresh));
+        Assert.True(condition: restored.TryReadLive(fieldOrdinal: 0, handle: replacement, time: reclaimTime, value: out var fresh));
         Assert.Equal(expected: 7L, actual: fresh.AsInt);
     }
     [Fact]
@@ -318,7 +318,7 @@ public sealed class StatePoolLawTests {
         var pool = arena.Catalog.Pools[0];
         var rows = pool.Fields.Select(selector: static field => field.RowOrdinal).Append(element: pool.DomainRowOrdinal).Append(element: pool.GenerationRowOrdinal).Order().ToArray();
 
-        arena.ConfigureUndo(plans: [new ArenaUndoPlan(Name: "turn", Rows: rows, Depth: 1)]);
+        arena.ConfigureUndo(plans: [new ArenaUndoPlan(Depth: 1, Name: "turn", Rows: rows)]);
         var before = arena.ComputeHash();
 
         arena.BeginUndoTurn(group: "turn");
@@ -336,7 +336,7 @@ public sealed class StatePoolLawTests {
 
         Assert.Equal(expected: clock, actual: score.Clock);
         Assert.Equal(expected: 9L, actual: score.Value.AsInt);
-        Assert.True(condition: arena.TryRewindTurn(group: "turn", reason: out reason), userMessage: reason);
+        Assert.True(condition: arena.TryRewindGroup(group: "turn", reason: out reason), userMessage: reason);
         Assert.Equal(expected: before, actual: arena.ComputeHash());
     }
     [Fact]
@@ -346,18 +346,18 @@ public sealed class StatePoolLawTests {
             var fieldRow = arena.Catalog.Pools[0].Fields[0].RowOrdinal;
             var slot = (arena.Layout[fieldRow].CellStart + position);
             var entries = new[] {
-                new ArenaUndoEntrySnapshot(ArenaColumn.ClockEpochTick, slot, 3L, null, null, null, null, null),
-                new ArenaUndoEntrySnapshot(ArenaColumn.ClockEpochEngineTick, slot, 5L, null, null, null, null, null),
-                new ArenaUndoEntrySnapshot(ArenaColumn.ClockY0, slot, 7L, null, null, null, null, null),
-                new ArenaUndoEntrySnapshot(ArenaColumn.ClockV0, slot, 11L, null, null, null, null, null),
-                new ArenaUndoEntrySnapshot(ArenaColumn.ClockSubstepTicks, slot, 13L, null, null, null, null, null),
+                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockEpochTick, Components: null, Index: slot, MemberKey: null, Number: 3L, Observation: null, Text: null, Visibility: null),
+                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockEpochEngineTick, Components: null, Index: slot, MemberKey: null, Number: 5L, Observation: null, Text: null, Visibility: null),
+                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockY0, Components: null, Index: slot, MemberKey: null, Number: 7L, Observation: null, Text: null, Visibility: null),
+                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockV0, Components: null, Index: slot, MemberKey: null, Number: 11L, Observation: null, Text: null, Visibility: null),
+                new ArenaUndoEntrySnapshot(Column: ArenaColumn.ClockSubstepTicks, Components: null, Index: slot, MemberKey: null, Number: 13L, Observation: null, Text: null, Visibility: null),
             };
 
-            arena.ConfigureUndo(plans: [new ArenaUndoPlan(Name: "turn", Rows: [fieldRow], Depth: 1)]);
-            var snapshot = new ArenaUndoSnapshot(Groups: [new ArenaUndoGroupSnapshot(Name: "turn", Depth: 1, Rows: [fieldRow], Segments: [new ArenaUndoSegmentSnapshot(Rewindable: true, Entries: entries)], Pending: null)]);
+            arena.ConfigureUndo(plans: [new ArenaUndoPlan(Depth: 1, Name: "turn", Rows: [fieldRow])]);
+            var snapshot = new ArenaUndoSnapshot(Groups: [new ArenaUndoGroupSnapshot(Name: "turn", Depth: 1, Rows: [fieldRow], Segments: [new ArenaUndoSegmentSnapshot(Entries: entries, Rewindable: true)], Pending: null)]);
 
-            Assert.True(condition: arena.TryImportUndoSnapshot(snapshot: snapshot, reason: out var reason), userMessage: reason);
-            Assert.True(condition: arena.TryRewindTurn(group: "turn", reason: out reason), userMessage: reason);
+            Assert.True(condition: arena.TryImportUndoSnapshot(reason: out var reason, snapshot: snapshot), userMessage: reason);
+            Assert.True(condition: arena.TryRewindGroup(group: "turn", reason: out reason), userMessage: reason);
             return arena;
         }
 
@@ -565,6 +565,6 @@ public sealed class StatePoolLawTests {
 
         Assert.False(condition: second.TryResolve(handle: firstHandle, position: out _));
         Assert.False(condition: second.TryResolve(handle: default, position: out _));
-        Assert.True(condition: second.TryResolve(handle: second.Catalog.CreateInstanceHandle(poolOrdinal: 0, slot: 0, generation: 0L), position: out _));
+        Assert.True(condition: second.TryResolve(handle: second.Catalog.CreateInstanceHandle(generation: 0L, poolOrdinal: 0, slot: 0), position: out _));
     }
 }

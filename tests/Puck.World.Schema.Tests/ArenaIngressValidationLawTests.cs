@@ -86,10 +86,10 @@ public sealed class ArenaIngressValidationLawTests {
             ),
             _ => new WorldStateSection(
                 Spaces: [new StateSpace(
-                        Dimensions: 16,
-                        Model: "test",
-                        Name: Name(value: "emb"),
-                        Revision: "1"
+                        dimensions: 16,
+                        model: "test",
+                        name: Name(value: "emb"),
+                        revision: "1"
                     )],
                 World: [new WorldStateRow(
                         Name: Name(value: "point"),

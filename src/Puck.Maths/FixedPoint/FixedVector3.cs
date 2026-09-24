@@ -32,6 +32,24 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
         ? squaredLength
         : FixedQ4816.MaxValue
     );
+    /// <summary>Gets the unit vector along the X axis.</summary>
+    public static FixedVector3 UnitX => new(
+        X: FixedQ4816.One,
+        Y: FixedQ4816.Zero,
+        Z: FixedQ4816.Zero
+    );
+    /// <summary>Gets the unit vector along the Y axis.</summary>
+    public static FixedVector3 UnitY => new(
+        X: FixedQ4816.Zero,
+        Y: FixedQ4816.One,
+        Z: FixedQ4816.Zero
+    );
+    /// <summary>Gets the unit vector along the Z axis.</summary>
+    public static FixedVector3 UnitZ => new(
+        X: FixedQ4816.Zero,
+        Y: FixedQ4816.Zero,
+        Z: FixedQ4816.One
+    );
     /// <summary>Gets the zero vector.</summary>
     public static FixedVector3 Zero => AdditiveIdentity;
 
@@ -45,6 +63,18 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             Y: (left.Y + right.Y),
             Z: (left.Z + right.Z)
         );
+    /// <summary>Adds two vectors componentwise, throwing when any component sum leaves the carrier.</summary>
+    /// <param name="left">The first addend.</param>
+    /// <param name="right">The second addend.</param>
+    /// <returns>The componentwise sum.</returns>
+    /// <exception cref="OverflowException">A component sum is outside the representable range. Components are summed
+    /// in X, Y, Z order, so the first one that overflows is the one that throws.</exception>
+    public static FixedVector3 operator checked +(FixedVector3 left, FixedVector3 right) =>
+        new(
+            X: checked((left.X + right.X)),
+            Y: checked((left.Y + right.Y)),
+            Z: checked((left.Z + right.Z))
+        );
     /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/> componentwise.</summary>
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
@@ -55,6 +85,19 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             Y: (left.Y - right.Y),
             Z: (left.Z - right.Z)
         );
+    /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/> componentwise, throwing when any
+    /// component difference leaves the carrier.</summary>
+    /// <param name="left">The minuend.</param>
+    /// <param name="right">The subtrahend.</param>
+    /// <returns>The componentwise difference.</returns>
+    /// <exception cref="OverflowException">A component difference is outside the representable range. Components are
+    /// subtracted in X, Y, Z order, so the first one that overflows is the one that throws.</exception>
+    public static FixedVector3 operator checked -(FixedVector3 left, FixedVector3 right) =>
+        new(
+            X: checked((left.X - right.X)),
+            Y: checked((left.Y - right.Y)),
+            Z: checked((left.Z - right.Z))
+        );
     /// <summary>Negates a vector componentwise.</summary>
     /// <param name="value">The vector to negate.</param>
     /// <returns>The vector pointing the opposite way, each component negated.</returns>
@@ -63,6 +106,17 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             X: (-value.X),
             Y: (-value.Y),
             Z: (-value.Z)
+        );
+    /// <summary>Negates a vector componentwise, throwing when any component has no representable negation.</summary>
+    /// <param name="value">The vector to negate.</param>
+    /// <returns>The vector pointing the opposite way, each component negated.</returns>
+    /// <exception cref="OverflowException">A component is <see cref="FixedQ4816.MinValue"/>. Components are negated
+    /// in X, Y, Z order, so the first such component is the one that throws.</exception>
+    public static FixedVector3 operator checked -(FixedVector3 value) =>
+        new(
+            X: checked(-value.X),
+            Y: checked(-value.Y),
+            Z: checked(-value.Z)
         );
     /// <summary>Scales a vector by a scalar.</summary>
     /// <param name="vector">The vector to scale.</param>
@@ -73,6 +127,18 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             X: (vector.X * scalar),
             Y: (vector.Y * scalar),
             Z: (vector.Z * scalar)
+        );
+    /// <summary>Scales a vector by a scalar, throwing when any rounded component product leaves the carrier.</summary>
+    /// <param name="vector">The vector to scale.</param>
+    /// <param name="scalar">The scale factor.</param>
+    /// <returns>The scaled vector, each component rounded to nearest with ties to even.</returns>
+    /// <exception cref="OverflowException">A rounded component product is outside the representable range. Components
+    /// are scaled in X, Y, Z order, so the first one that overflows is the one that throws.</exception>
+    public static FixedVector3 operator checked *(FixedVector3 vector, FixedQ4816 scalar) =>
+        new(
+            X: checked((vector.X * scalar)),
+            Y: checked((vector.Y * scalar)),
+            Z: checked((vector.Z * scalar))
         );
     /// <summary>Divides a vector by a scalar componentwise.</summary>
     /// <param name="vector">The dividend vector.</param>
@@ -106,6 +172,42 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
         return true;
     }
 
+    /// <summary>Takes the absolute value of each component.</summary>
+    /// <param name="value">The vector whose components are made non-negative.</param>
+    /// <returns>The vector of <see cref="FixedQ4816.Abs"/> applied to each component.</returns>
+    /// <exception cref="OverflowException">A component is <see cref="FixedQ4816.MinValue"/>, whose magnitude is
+    /// unrepresentable.</exception>
+    public static FixedVector3 Abs(FixedVector3 value) =>
+        new(
+            X: FixedQ4816.Abs(value: value.X),
+            Y: FixedQ4816.Abs(value: value.Y),
+            Z: FixedQ4816.Abs(value: value.Z)
+        );
+    /// <summary>Restricts each component to the inclusive range its bounds' matching components give.</summary>
+    /// <param name="value">The vector to clamp.</param>
+    /// <param name="minimum">The inclusive lower bound, per component.</param>
+    /// <param name="maximum">The inclusive upper bound, per component.</param>
+    /// <returns>The vector of <see cref="FixedQ4816.Clamp"/> applied to each component.</returns>
+    /// <exception cref="ArgumentException">A component of <paramref name="minimum"/> is greater than the matching
+    /// component of <paramref name="maximum"/>.</exception>
+    public static FixedVector3 Clamp(FixedVector3 value, FixedVector3 minimum, FixedVector3 maximum) =>
+        new(
+            X: FixedQ4816.Clamp(
+                value: value.X,
+                minimum: minimum.X,
+                maximum: maximum.X
+            ),
+            Y: FixedQ4816.Clamp(
+                value: value.Y,
+                minimum: minimum.Y,
+                maximum: maximum.Y
+            ),
+            Z: FixedQ4816.Clamp(
+                value: value.Z,
+                minimum: minimum.Z,
+                maximum: maximum.Z
+            )
+        );
     /// <summary>The cross product of two vectors — integer-only, deterministic.</summary>
     /// <param name="left">The first vector.</param>
     /// <param name="right">The second vector.</param>
@@ -135,6 +237,18 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             Z: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.X.Value) * right.Y.Value) - (((Int128)left.Y.Value) * right.X.Value)))))
         );
     }
+    /// <summary>Divides one vector by another componentwise.</summary>
+    /// <param name="left">The dividend vector.</param>
+    /// <param name="right">The divisor vector.</param>
+    /// <returns>The vector of <see cref="FixedQ4816"/> quotients, each rounded to nearest with ties to even and
+    /// wrapping on overflow, exactly as the scalar <c>/</c> operator does.</returns>
+    /// <exception cref="DivideByZeroException">A component of <paramref name="right"/> is zero.</exception>
+    public static FixedVector3 Divide(FixedVector3 left, FixedVector3 right) =>
+        new(
+            X: (left.X / right.X),
+            Y: (left.Y / right.Y),
+            Z: (left.Z / right.Z)
+        );
     /// <summary>The dot product of two vectors — integer-only, deterministic.</summary>
     /// <param name="left">The first vector.</param>
     /// <param name="right">The second vector.</param>
@@ -157,6 +271,60 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             (((((Int128)left.X.Value) * right.X.Value) +
             (((Int128)left.Y.Value) * right.Y.Value)) +
             (((Int128)left.Z.Value) * right.Z.Value)))));
+    }
+    /// <summary>Intersects the ray <c>origin + t·direction</c>, <c>t ≥ 0</c>, with the plane through
+    /// <paramref name="planePoint"/> whose normal is <paramref name="planeNormal"/> — integer-only, deterministic.</summary>
+    /// <param name="origin">The ray's origin.</param>
+    /// <param name="direction">The ray's direction; it need not be unit length, and <paramref name="distance"/> is
+    /// measured in multiples of it.</param>
+    /// <param name="planePoint">Any point on the plane.</param>
+    /// <param name="planeNormal">The plane's normal; it need not be unit length, and either orientation names the same
+    /// plane.</param>
+    /// <param name="distance">The ray parameter <c>t</c> of the hit when this returns <see langword="true"/>, zero
+    /// otherwise: <c>n / d</c> rounded once to nearest with ties to even, where <c>n</c> is
+    /// <see cref="Dot"/><c>(planePoint − origin, planeNormal)</c> (the difference wrapping as the <c>-</c> operator
+    /// does) and <c>d</c> is <see cref="Dot"/><c>(direction, planeNormal)</c>.</param>
+    /// <returns><see langword="false"/> when <c>d</c> is zero (the ray runs parallel to the plane, or a vector is
+    /// zero), when the exact quotient <c>n / d</c> is negative (the plane lies behind the origin), or when the rounded
+    /// quotient leaves the carrier; <see langword="true"/> otherwise, including an origin on the plane
+    /// (<c>t = 0</c>).</returns>
+    public static bool TryIntersectPlane(FixedVector3 origin, FixedVector3 direction, FixedVector3 planePoint, FixedVector3 planeNormal, out FixedQ4816 distance) {
+        var denominator = Dot(
+            left: direction,
+            right: planeNormal
+        ).Value;
+        var numerator = Dot(
+            left: (planePoint - origin),
+            right: planeNormal
+        ).Value;
+
+        distance = FixedQ4816.Zero;
+
+        if (
+            (denominator == 0L) ||
+            ((numerator != 0L) && ((numerator < 0L) != (denominator < 0L)))
+        ) {
+            return false;
+        }
+        if (
+            !FusedArithmetic.TryDivideMagnitudeRounded(
+                denominatorMagnitude: FixedVectorMath.RawMagnitude(value: denominator),
+                fractionBitCount: FixedQ4816.FractionBitCount,
+                numeratorMagnitude: FixedVectorMath.RawMagnitude(value: numerator),
+                quotient: out var magnitude
+            ) ||
+            !FusedArithmetic.TryNarrowSignedMagnitude(
+                magnitude: magnitude,
+                negative: false,
+                result: out var raw
+            )
+        ) {
+            return false;
+        }
+
+        distance = FixedQ4816.FromRawBits(value: raw);
+
+        return true;
     }
     /// <summary>Converts a single-precision <see cref="System.Numerics.Vector3"/> componentwise into fixed point —
     /// the inbound counterpart of <see cref="ToVector3"/>, and the ONE door an authored or renderer-side float takes
@@ -192,6 +360,36 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
                 from: from.Z,
                 to: to.Z,
                 amount: amount
+            )
+        );
+    /// <summary>Takes the greater of each pair of matching components.</summary>
+    /// <param name="left">The first vector.</param>
+    /// <param name="right">The second vector.</param>
+    /// <returns>The vector of <see cref="FixedQ4816.Max"/> applied to each component pair.</returns>
+    public static FixedVector3 Max(FixedVector3 left, FixedVector3 right) =>
+        new(
+            X: FixedQ4816.Max(
+                x: left.X,
+                y: right.X
+            ),
+            Y: FixedQ4816.Max(
+                x: left.Y,
+                y: right.Y
+            ),
+            Z: FixedQ4816.Max(
+                x: left.Z,
+                y: right.Z
+            )
+        );
+    /// <summary>Takes the greatest of a vector's three components.</summary>
+    /// <param name="value">The vector to read.</param>
+    /// <returns>The largest of <see cref="X"/>, <see cref="Y"/> and <see cref="Z"/>.</returns>
+    public static FixedQ4816 MaxComponent(FixedVector3 value) =>
+        FixedQ4816.Max(
+            x: value.X,
+            y: FixedQ4816.Max(
+                x: value.Y,
+                y: value.Z
             )
         );
     /// <summary>Moves a vector toward a target by no more than a non-negative distance.</summary>
@@ -281,6 +479,17 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             Z: (current.Z + stepZ)
         );
     }
+    /// <summary>Multiplies two vectors componentwise (the Hadamard product).</summary>
+    /// <param name="left">The first factor.</param>
+    /// <param name="right">The second factor.</param>
+    /// <returns>The vector of <see cref="FixedQ4816"/> products, each rounded to nearest with ties to even and
+    /// wrapping on overflow, exactly as the scalar <c>*</c> operator does.</returns>
+    public static FixedVector3 Multiply(FixedVector3 left, FixedVector3 right) =>
+        new(
+            X: (left.X * right.X),
+            Y: (left.Y * right.Y),
+            Z: (left.Z * right.Z)
+        );
     /// <summary>Normalizes the vector to Q16 unit length at every representable input scale. The calculation applies
     /// one common power-of-two scale before its exact sum of squares, so tiny directions do not disappear and extreme
     /// directions do not overflow. Zero normalizes to <see cref="Zero"/>.</summary>
@@ -355,6 +564,16 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             right: normal
         );
     }
+    /// <summary>Rounds each component to the nearest whole number, ties to even.</summary>
+    /// <param name="value">The vector to round.</param>
+    /// <returns>The vector of <see cref="FixedQ4816.Round"/> applied to each component.</returns>
+    /// <exception cref="OverflowException">A rounded component exceeds <see cref="FixedQ4816.MaxValue"/>.</exception>
+    public static FixedVector3 Round(FixedVector3 value) =>
+        new(
+            X: FixedQ4816.Round(value: value.X),
+            Y: FixedQ4816.Round(value: value.Y),
+            Z: FixedQ4816.Round(value: value.Z)
+        );
     /// <summary>Converts to a single-precision <see cref="System.Numerics.Vector3"/> for presentation (the renderer).</summary>
     /// <returns>The nearest single-precision vector; precision may be lost for large magnitudes.</returns>
     public System.Numerics.Vector3 ToVector3() =>

@@ -1,0 +1,13 @@
+# Compilation, then installation; paused and reset, the instance renders its one initialization frame.
+pipeline.wait geometry compiled 40
+pipeline.wait geometry installed 10
+pipeline.time geometry pause
+pipeline.reset geometry
+pipeline.wait geometry submitted 1 10
+# The published image: the two geometry passes' color, sampled by the fullscreen pass.
+pipeline.capture geometry {run}/image.png
+pipeline.wait geometry captured 10
+# The orientation check: a compute pass's top-red, bottom-blue rows, sampled by the fullscreen adapter's UV.
+pipeline.output geometry oriented
+pipeline.capture geometry {run}/oriented.png
+pipeline.wait geometry captured 10

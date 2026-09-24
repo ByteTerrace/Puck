@@ -18,61 +18,14 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
     private const uint StructureTypeImageCreateInfo = 14;
     private const uint StructureTypeMemoryAllocateInfo = 5;
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
-
-    private InstancePointers GetInstancePointers(nint instanceHandle) {
-        return m_instancePointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(
-                functionName: "vkGetPhysicalDeviceMemoryProperties"u8,
-                instanceHandle: handle
-            )),
-            }
-        );
-    }
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateImage = ((delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkCreateImage"u8
-            )),
-                DestroyImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkDestroyImage"u8
-            )),
-                GetImageMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkGetImageMemoryRequirements"u8
-            )),
-                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkAllocateMemory"u8
-            )),
-                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkFreeMemory"u8
-            )),
-                BindImageMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
-                deviceHandle: handle,
-                functionName: "vkBindImageMemory"u8
-            )),
-            }
-        );
-    }
     private static void ValidateCreateRequest(VulkanOffscreenImageCreateRequest request) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Device,
             paramName: nameof(request)
         );
 
-        VulkanArgument.RequireHandle(
-            handle: request.InstanceHandle,
-            handleDescription: "instance",
+        ArgumentNullException.ThrowIfNull(
+            argument: request.Instance,
             paramName: nameof(request)
         );
 
@@ -96,8 +49,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
     public VulkanOffscreenImageCreateResult CreateColorImage(VulkanOffscreenImageCreateRequest request) {
         ValidateCreateRequest(request: request);
 
-        var pointers = GetPointers(deviceHandle: request.DeviceHandle);
-        var getPhysicalDeviceMemoryProperties = GetInstancePointers(instanceHandle: request.InstanceHandle).GetPhysicalDeviceMemoryProperties;
+        var getPhysicalDeviceMemoryProperties = request.Instance.GetPhysicalDeviceMemoryProperties;
 
         nint imageHandle = 0;
         nint memoryHandle = 0;
@@ -121,14 +73,14 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 Usage = request.UsageFlags,
             };
 
-            pointers.CreateImage(
-                request.DeviceHandle,
+            request.Device.CreateImage(
+                request.Device.Handle,
                 in createInfo,
                 0,
                 out imageHandle
             ).ThrowIfFailed(operation: "vkCreateImage");
-            pointers.GetImageMemoryRequirements(
-                request.DeviceHandle,
+            request.Device.GetImageMemoryRequirements(
+                request.Device.Handle,
                 imageHandle,
                 out var memoryRequirements
             );
@@ -138,7 +90,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
             );
             var allocateInfo = new VkMemoryAllocateInfo {
                 AllocationSize = memoryRequirements.Size,
-                MemoryTypeIndex = VulkanNativeBufferSupport.FindMemoryTypeIndex(
+                MemoryTypeIndex = VulkanMemoryTypes.FindIndex(
                 memoryProperties: in memoryProperties,
                 memoryTypeBits: memoryRequirements.MemoryTypeBits,
                 preferredProperties: MemoryPropertyDeviceLocalBit,
@@ -148,14 +100,14 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 SType = StructureTypeMemoryAllocateInfo,
             };
 
-            pointers.AllocateMemory(
-                request.DeviceHandle,
+            request.Device.AllocateMemory(
+                request.Device.Handle,
                 in allocateInfo,
                 0,
                 out memoryHandle
             ).ThrowIfFailed(operation: "vkAllocateMemory");
-            pointers.BindImageMemory(
-                request.DeviceHandle,
+            request.Device.BindImageMemory(
+                request.Device.Handle,
                 imageHandle,
                 memoryHandle,
                 0
@@ -166,62 +118,20 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
                 MemoryHandle: memoryHandle
             );
         } catch {
-            if (0 != imageHandle) {
-                pointers.DestroyImage(
-                    request.DeviceHandle,
-                    imageHandle,
-                    0
-                );
-            }
-
-            if (0 != memoryHandle) {
-                pointers.FreeMemory(
-                    request.DeviceHandle,
-                    memoryHandle,
-                    0
-                );
-            }
+            request.Device.Destroy(
+                destroy: request.Device.DestroyImage,
+                handle: imageHandle,
+                memoryHandle: memoryHandle
+            );
 
             throw;
         }
     }
     /// <inheritdoc/>
-    public void DestroyColorImage(nint deviceHandle, nint imageHandle, nint memoryHandle) {
-        if (
-            (0 == deviceHandle) ||
-            ((0 == imageHandle) && (0 == memoryHandle))
-        ) {
-            return;
-        }
-
-        var pointers = GetPointers(deviceHandle: deviceHandle);
-
-        if (0 != imageHandle) {
-            pointers.DestroyImage(
-                deviceHandle,
-                imageHandle,
-                0
-            );
-        }
-
-        if (0 != memoryHandle) {
-            pointers.FreeMemory(
-                deviceHandle,
-                memoryHandle,
-                0
-            );
-        }
-    }
-
-    private struct DevicePointers {
-        public delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult> CreateImage;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyImage;
-        public delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void> GetImageMemoryRequirements;
-        public delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult> AllocateMemory;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, void> FreeMemory;
-        public delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult> BindImageMemory;
-    }
-    private struct InstancePointers {
-        public delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void> GetPhysicalDeviceMemoryProperties;
-    }
+    public void DestroyColorImage(VulkanDeviceCommands device, nint imageHandle, nint memoryHandle) =>
+        device?.Destroy(
+            destroy: device.DestroyImage,
+            handle: imageHandle,
+            memoryHandle: memoryHandle
+        );
 }

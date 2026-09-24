@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using Puck.Recording.Document;
 
 namespace Puck.World;
@@ -19,13 +20,9 @@ internal sealed record RecordingDocumentSource(RecordingDocument Document, strin
 /// a named reason and a non-zero exit, exactly as <see cref="WorldDefinitionLoader"/> treats <c>--world</c>. Only the
 /// implicit default path falls back to the baked <see cref="RecordingDocument.CreateDefault"/>, and it says so.</remarks>
 internal static class RecordingDocumentLoader {
-    /// <summary>The default recording file, resolved against <see cref="AppContext.BaseDirectory"/> when no
+    /// <summary>The default recording file this build ships, resolved through <see cref="PuckPaths.Shipped"/> when no
     /// <c>--recording</c> path is supplied.</summary>
-    public static readonly string DefaultRelativePath = Path.Combine(
-        path1: "Assets",
-        path2: "recordings",
-        path3: "default.recording.json"
-    );
+    public const string DefaultRelativePath = "Assets/recordings/default.recording.json";
 
     // Read → validate through the document's own loader, naming the three failure classes apart: an ABSENT file, an
     // UNREADABLE file, and an INVALID document. A broad catch is deliberate — a load boundary must never throw.
@@ -79,10 +76,7 @@ internal static class RecordingDocumentLoader {
         var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
         var path = (explicitly
             ? Path.GetFullPath(path: explicitPath!)
-            : Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: DefaultRelativePath
-            )
+            : PuckPaths.Shipped(relativePath: DefaultRelativePath)
         );
 
         if (TryLoadFile(

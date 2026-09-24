@@ -60,10 +60,12 @@ public sealed class RemoteMcpProxyTests {
                 ))
             );
         }
-        if (failure == "duplicate-caller") { http.DefaultRequestHeaders.Add(
+        if (failure == "duplicate-caller") {
+            http.DefaultRequestHeaders.Add(
             name: "ClientAuthorization",
             value: ("Bearer " + fixture.Token("bob"))
-        ); }
+        );
+        }
         using var response = await http.PostAsync(
             "/mcp",
             new StringContent(
@@ -148,13 +150,13 @@ public sealed class RemoteMcpProxyTests {
             Token,
             embedded: true,
             configure: builder => {
-            builder.Services.AddAuthentication().AddCookie(authenticationScheme: "host-auth");
-            builder.Services.Configure<AuthenticationOptions>(configureOptions: options => {
-                options.DefaultAuthenticateScheme = "host-auth";
-                options.DefaultChallengeScheme = "host-challenge";
-                options.DefaultForbidScheme = "host-forbid";
-            });
-        }
+                builder.Services.AddAuthentication().AddCookie(authenticationScheme: "host-auth");
+                builder.Services.Configure<AuthenticationOptions>(configureOptions: options => {
+                    options.DefaultAuthenticateScheme = "host-auth";
+                    options.DefaultChallengeScheme = "host-challenge";
+                    options.DefaultForbidScheme = "host-forbid";
+                });
+            }
         );
         var options = fixture.App.Services.GetRequiredService<IOptions<AuthenticationOptions>>().Value;
 
@@ -238,7 +240,7 @@ public sealed class RemoteMcpProxyTests {
         public override ValueTask<CallToolResult> CallServiceAsync(RemoteMcpCaller caller, CallToolRequestParams request, CancellationToken cancellationToken) {
             Assertion = caller.UserAssertion;
             Subject = caller.Subject;
-            return ValueTask.FromResult(new CallToolResult { Content = [new TextContentBlock { Text = "Verified." }] });
+            return ValueTask.FromResult(result: new CallToolResult { Content = [new TextContentBlock { Text = "Verified." }] });
         }
     }
 }

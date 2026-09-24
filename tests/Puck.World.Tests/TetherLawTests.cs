@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.World.Authoring;
 using Puck.Hosting;
@@ -202,21 +203,6 @@ public sealed class TetherLawTests {
         ordinal: DetachOrdinal,
         value: FixedQ4816.One
     );
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
     private static PlayerIntent Forward() => default(PlayerIntent).WithChannel(
         ordinal: ForwardOrdinal,
         value: FixedQ4816.One
@@ -232,18 +218,6 @@ public sealed class TetherLawTests {
         obj: body,
         parameters: null
     );
-    private static WorldBody JoinBody(WorldFixture fixture, int slot = 0) {
-        var actor = WorldPrincipal.Seat(slot: slot);
-
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: actor,
-            Slot: actor.Index,
-            IdentityName: null,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        )).Accepted);
-
-        return fixture.Server.Body(index: actor.Index)!;
-    }
     private static PlayerIntent ReelIn() => default(PlayerIntent).WithChannel(
         ordinal: ReelOrdinal,
         value: -FixedQ4816.One
@@ -252,7 +226,7 @@ public sealed class TetherLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: EmptyHostRow(),
+                hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out var refusal
             ),
             userMessage: refusal
@@ -300,18 +274,20 @@ public sealed class TetherLawTests {
         // The fixture's post sits at world Z -5; move it past the facet's authored maxAnchorDistance (20) so the
         // directed aim query finds nothing.
         var farPlacements = farDocument.Placements.Select(selector: row => ((row.Id == "post1")
-            ? (row with { Position = new Vector3(
+            ? (row with {
+                Position = new Vector3(
                 x: 0f,
                 y: 0f,
                 z: -25f
-            ) })
+            ),
+            })
             : row)).ToList();
         var far = farDocument with {
             PlacementsRaw = (farDocument.PlacementsRaw! with { Rows = farPlacements }),
         };
 
         using var farFixture = Fixtures.FreshServer(definition: far);
-        var farBody = JoinBody(fixture: farFixture);
+        var farBody = farFixture.JoinSeat();
 
         farBody.SubmitIntent(intent: Attach());
         farFixture.Step();
@@ -319,7 +295,7 @@ public sealed class TetherLawTests {
         Assert.Null(@object: farBody.TetherLength);
 
         using var nearFixture = Fixtures.FreshServer(definition: BuildTetherDocument(includeWall: false));
-        var nearBody = JoinBody(fixture: nearFixture);
+        var nearBody = nearFixture.JoinSeat();
 
         nearBody.SubmitIntent(intent: Attach());
         nearFixture.Step();
@@ -371,7 +347,7 @@ public sealed class TetherLawTests {
         var scaled = scaledDocument with { KitRowsRaw = [scaledKit] };
 
         using var scaledFixture = Fixtures.FreshServer(definition: scaled);
-        var scaledBody = JoinBody(fixture: scaledFixture);
+        var scaledBody = scaledFixture.JoinSeat();
 
         scaledBody.SetTetherToWorldPoint(
             anchor: new FixedVector3(
@@ -405,7 +381,7 @@ public sealed class TetherLawTests {
         var unitDocument = BuildTetherDocument(includeWall: false);
 
         using var unitFixture = Fixtures.FreshServer(definition: unitDocument);
-        var unitBody = JoinBody(fixture: unitFixture);
+        var unitBody = unitFixture.JoinSeat();
 
         unitBody.SetTetherToWorldPoint(
             anchor: new FixedVector3(
@@ -467,7 +443,7 @@ public sealed class TetherLawTests {
         var document = BuildTetherDocument(includeWall: false);
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         body.SubmitIntent(intent: Attach());
         fixture.Step();
@@ -513,7 +489,7 @@ public sealed class TetherLawTests {
         var withoutFacet = Fixtures.BuildDocument();
 
         using var fixture = Fixtures.FreshServer(definition: withoutFacet);
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.False(condition: body.HasTetherFacet);
 
@@ -527,7 +503,7 @@ public sealed class TetherLawTests {
         var withFacet = BuildTetherDocument(includeWall: false);
 
         using var tetheredFixture = Fixtures.FreshServer(definition: withFacet);
-        var tetheredBody = JoinBody(fixture: tetheredFixture);
+        var tetheredBody = tetheredFixture.JoinSeat();
 
         Assert.True(condition: tetheredBody.HasTetherFacet);
 
@@ -558,7 +534,7 @@ public sealed class TetherLawTests {
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         body.SubmitIntent(intent: Attach());
         fixture.Step();
@@ -569,7 +545,7 @@ public sealed class TetherLawTests {
         };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertKit(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Kit: retunedKit
         ));
         fixture.Step();
@@ -610,7 +586,7 @@ public sealed class TetherLawTests {
         );
 
         using var changedFixture = Fixtures.FreshServer(definition: changedDocument);
-        var changedBody = JoinBody(fixture: changedFixture);
+        var changedBody = changedFixture.JoinSeat();
 
         changedBody.SubmitIntent(intent: Attach());
         changedFixture.Step();
@@ -621,7 +597,7 @@ public sealed class TetherLawTests {
         };
 
         changedFixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertKit(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Kit: retunedKit
         ));
         changedFixture.Step();
@@ -646,7 +622,7 @@ public sealed class TetherLawTests {
         var sameDocument = BuildTetherDocument(includeWall: false);
 
         using var sameFixture = Fixtures.FreshServer(definition: sameDocument);
-        var sameBody = JoinBody(fixture: sameFixture);
+        var sameBody = sameFixture.JoinSeat();
 
         sameBody.SubmitIntent(intent: Attach());
         sameFixture.Step();
@@ -659,7 +635,7 @@ public sealed class TetherLawTests {
         };
 
         sameFixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertKit(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Kit: retunedSpeedKit
         ));
         sameFixture.Step();
@@ -795,10 +771,12 @@ public sealed class TetherLawTests {
             var document = BuildTetherDocument();
             var kits = document.Kits.ToList();
 
-            kits[0] = kits[0] with { Tether = mutate(
+            kits[0] = kits[0] with {
+                Tether = mutate(
                 kits[0].Tether!,
                 float.Epsilon
-            ) };
+            ),
+            };
 
             Assert.False(
                 condition: WorldDefinitionValidator.TryValidateLocally(
@@ -812,10 +790,12 @@ public sealed class TetherLawTests {
                 expectedSubstring: token
             );
 
-            kits[0] = kits[0] with { Tether = mutate(
+            kits[0] = kits[0] with {
+                Tether = mutate(
                 kits[0].Tether!,
                 control
-            ) };
+            ),
+            };
 
             Assert.True(
                 condition: WorldDefinitionValidator.TryValidateLocally(
@@ -831,13 +811,9 @@ public sealed class TetherLawTests {
         var document = Fixtures.BuildDocument();
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var anchorBody = JoinBody(
-            fixture: fixture,
-            slot: 0
+        var anchorBody = fixture.JoinSeat(slot: 0
         );
-        var tetheredBody = JoinBody(
-            fixture: fixture,
-            slot: 1
+        var tetheredBody = fixture.JoinSeat(slot: 1
         );
         var length = FixedQ4816.FromInteger(value: 4L);
 
@@ -899,7 +875,7 @@ public sealed class TetherLawTests {
         var document = BuildTetherDocument(includeWall: false);
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         body.SubmitIntent(intent: Attach());
         fixture.Step();
@@ -910,7 +886,7 @@ public sealed class TetherLawTests {
     [Fact]
     public void TetherCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically() {
         using var fixture = Fixtures.FreshServer(definition: BuildTetherDocument(includeWall: false));
-        var uninterruptedBody = JoinBody(fixture: fixture);
+        var uninterruptedBody = fixture.JoinSeat();
 
         uninterruptedBody.SubmitIntent(intent: Attach());
         fixture.Step();
@@ -969,7 +945,7 @@ public sealed class TetherLawTests {
         );
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var body = JoinBody(fixture: fixture);
+        var body = fixture.JoinSeat();
 
         Assert.True(condition: body.TryDescribeActionState(
             kind: out var kind,

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -16,7 +17,7 @@ public sealed class StateCompletionReviewTests {
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: row with { Cycle = null }
         ));
         fixture.Step();
@@ -24,37 +25,37 @@ public sealed class StateCompletionReviewTests {
         // At simulation tick zero cosine is exactly 1.0, regardless of the stored phase of zero.
         Assert.Equal(65536L, fixture.Server.Definition.State.Single().Cells!.Single().Value.Raw);
     }
-
     [Fact]
     public void ChangingRowDefaultDoesNotRestartAnExplicitCellOverride() {
         var row = new WorldStateRow(
             Name: CellName.Parse(candidate: "reviewOverride"),
             Kind: CellKind.Int,
             Capacity: 8,
-            Advance: new StateAdvance(PerSecondNumerator: 50400, PerSecondDenominator: 1),
+            Advance: new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 50400),
             Cells: [new StateCell(
                 Key: CellName.Parse(candidate: "a"),
                 Value: CellValue.Int(value: 10L),
-                Advance: new StateAdvance(PerSecondNumerator: 100800, PerSecondDenominator: 1)
+                Advance: new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 100800)
             )]
         );
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
+
         fixture.Step();
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
-            Principal: WorldPrincipal.Console,
-            Row: row with { Advance = new StateAdvance(PerSecondNumerator: 151200, PerSecondDenominator: 1) }
+            Principal: Principal.Console,
+            Row: row with { Advance = new StateAdvance(PerSecondDenominator: 1, PerSecondNumerator: 151200) }
         ));
         fixture.Step();
 
-        Assert.True(WorldStateReader.TryRead(
+        Assert.True(condition: WorldStateReader.TryRead(
             definition: fixture.Server.Definition,
             rowName: "reviewOverride",
             key: "a",
-            tick: fixture.Server.NextInputTick - 1,
+            tick: (fixture.Server.NextInputTick - 1),
             engineTick: fixture.Server.CompletedEngineTicks,
             row: out _, rawValue: out var actual, text: out _
         ));
         // The cell's own rate is two units per engine tick throughout the row-default edit.
-        Assert.Equal(10L + 2L * (long)fixture.Server.CompletedEngineTicks, actual);
+        Assert.Equal((10L + (2L * ((long)fixture.Server.CompletedEngineTicks))), actual);
     }
 }

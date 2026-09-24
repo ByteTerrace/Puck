@@ -771,6 +771,60 @@ internal static partial class Subjects {
             if (bits > peak) { peak = bits; }
         }
 
+        // Clears the stage's column below the pivot (by rows) or its row right of it (by columns) — one pass on the
+        // matrix or its transpose — swapping a line with a nonzero remainder into the pivot position.
+        bool ClearLines(int stage, bool byRows) {
+            var clean = true;
+
+            for (var line = (stage + 1); (line < order); ++line) {
+                var entry = PlainLineIndex(
+                    byRows: byRows,
+                    line: line,
+                    order: order,
+                    position: stage
+                );
+
+                if (matrix[entry].IsZero) { continue; }
+
+                var quotient = BigInteger.Divide(
+                    dividend: matrix[entry],
+                    divisor: matrix[((stage * order) + stage)]
+                );
+
+                for (var position = 0; (position < order); ++position) {
+                    var target = PlainLineIndex(
+                        byRows: byRows,
+                        line: line,
+                        order: order,
+                        position: position
+                    );
+
+                    matrix[target] -= (quotient * matrix[PlainLineIndex(
+                        byRows: byRows,
+                        line: stage,
+                        order: order,
+                        position: position
+                    )]);
+
+                    Observe(value: matrix[target]);
+                }
+
+                if (!matrix[entry].IsZero) {
+                    SwapPlainLines(
+                        byRows: byRows,
+                        first: stage,
+                        matrix: matrix,
+                        order: order,
+                        second: line
+                    );
+
+                    clean = false;
+                }
+            }
+
+            return clean;
+        }
+
         foreach (var entry in matrix) { Observe(value: entry); }
 
         for (var stage = 0; (stage < order); ++stage) {
@@ -782,78 +836,28 @@ internal static partial class Subjects {
                 stage: stage
             )) { break; }
 
-            SwapPlainRows(
+            SwapPlainLines(
+                byRows: true,
                 first: stage,
                 matrix: matrix,
                 order: order,
                 second: pivotRow
             );
-            SwapPlainColumns(
+            SwapPlainLines(
+                byRows: false,
                 first: stage,
                 matrix: matrix,
                 order: order,
                 second: pivotColumn
             );
 
-            while (true) {
-                var clean = true;
-
-                for (var row = (stage + 1); (row < order); ++row) {
-                    if (matrix[((row * order) + stage)].IsZero) { continue; }
-
-                    var quotient = BigInteger.Divide(
-                        dividend: matrix[((row * order) + stage)],
-                        divisor: matrix[((stage * order) + stage)]
-                    );
-
-                    for (var column = 0; (column < order); ++column) {
-                        matrix[((row * order) + column)] -= (quotient * matrix[((stage * order) + column)]);
-
-                        Observe(value: matrix[((row * order) + column)]);
-                    }
-
-                    if (!matrix[((row * order) + stage)].IsZero) {
-                        SwapPlainRows(
-                            first: stage,
-                            matrix: matrix,
-                            order: order,
-                            second: row
-                        );
-
-                        clean = false;
-                    }
-                }
-
-                if (!clean) { continue; }
-
-                for (var column = (stage + 1); (column < order); ++column) {
-                    if (matrix[((stage * order) + column)].IsZero) { continue; }
-
-                    var quotient = BigInteger.Divide(
-                        dividend: matrix[((stage * order) + column)],
-                        divisor: matrix[((stage * order) + stage)]
-                    );
-
-                    for (var row = 0; (row < order); ++row) {
-                        matrix[((row * order) + column)] -= (quotient * matrix[((row * order) + stage)]);
-
-                        Observe(value: matrix[((row * order) + column)]);
-                    }
-
-                    if (!matrix[((stage * order) + column)].IsZero) {
-                        SwapPlainColumns(
-                            first: stage,
-                            matrix: matrix,
-                            order: order,
-                            second: column
-                        );
-
-                        clean = false;
-                    }
-                }
-
-                if (clean) { break; }
-            }
+            while (!ClearLines(
+                byRows: true,
+                stage: stage
+            ) || !ClearLines(
+                byRows: false,
+                stage: stage
+            )) { }
         }
 
         return peak;
@@ -875,18 +879,31 @@ internal static partial class Subjects {
 
         return false;
     }
-    private static void SwapPlainColumns(BigInteger[] matrix, int order, int first, int second) {
+    // The flat index of entry (line, position) with lines read as rows or as columns, so a row operation and its column
+    // twin are one operation on the matrix or its transpose.
+    private static int PlainLineIndex(int order, bool byRows, int line, int position) =>
+        (byRows
+            ? ((line * order) + position)
+            : ((position * order) + line)
+        );
+    private static void SwapPlainLines(BigInteger[] matrix, int order, bool byRows, int first, int second) {
         if (first == second) { return; }
 
-        for (var row = 0; (row < order); ++row) {
-            (matrix[((row * order) + first)], matrix[((row * order) + second)]) = (matrix[((row * order) + second)], matrix[((row * order) + first)]);
-        }
-    }
-    private static void SwapPlainRows(BigInteger[] matrix, int order, int first, int second) {
-        if (first == second) { return; }
+        for (var position = 0; (position < order); ++position) {
+            var one = PlainLineIndex(
+                byRows: byRows,
+                line: first,
+                order: order,
+                position: position
+            );
+            var other = PlainLineIndex(
+                byRows: byRows,
+                line: second,
+                order: order,
+                position: position
+            );
 
-        for (var column = 0; (column < order); ++column) {
-            (matrix[((first * order) + column)], matrix[((second * order) + column)]) = (matrix[((second * order) + column)], matrix[((first * order) + column)]);
+            (matrix[one], matrix[other]) = (matrix[other], matrix[one]);
         }
     }
     // The rank of an integer matrix over GF(2), by a plain bit sweep. It answers the question the field materials
@@ -1301,11 +1318,12 @@ internal static partial class Subjects {
 
         return order;
     }
+
     // The simplicial complex generated by a list of top faces: every nonempty subset is a cell, cells are ordered by
     // dimension then lexicographically, and a facet enters its coface's boundary with the sign of the position it
     // drops. Nothing here reads the presented algebra — it is the input data, and the alternating sign rule is what
     // makes the chain-complex condition a fact to be measured rather than one to be assumed.
-    private static (int[] Dimensions, (int Face, int Coface, int Sign)[] Incidences) SimplicialComplex(int[][] topFaces) {
+    internal static (int[] Dimensions, (int Face, int Coface, int Sign)[] Incidences) SimplicialComplex(int[][] topFaces) {
         var collected = new List<int[]>();
 
         void Collect(int[] face) {
@@ -1371,6 +1389,7 @@ internal static partial class Subjects {
 
         return (dimensions, incidences.ToArray());
     }
+
     private static int CompareFaces(int[] left, int[] right) {
         if (left.Length != right.Length) { return left.Length.CompareTo(value: right.Length); }
 

@@ -134,7 +134,7 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
                 )
             )
         );
-        var tree = ((method == SearchMethod.Tree)
+        var tree = ((method == SearchMethod.MonteCarlo)
             // A tree step selects among a node's children or decodes one flat candidate, opens it, scores the
             // leaf, and folds the value back along the path.
             ? SaturatingAdd(
@@ -170,13 +170,12 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
             ),
             // A tree job holds its path and its playout open together; a walk holds one scope a ply and one for a
             // chance draw.
-            Scopes: ((method == SearchMethod.Tree)
+            Scopes: ((method == SearchMethod.MonteCarlo)
                 ? ((2 * depth) + 2)
                 : (depth + 1)),
             TreeStep: tree
         );
     }
-
     /// <summary>Returns what reopening a suspended job's scopes costs.</summary>
     /// <param name="scopes">The scopes held open.</param>
     /// <returns>The work units.</returns>

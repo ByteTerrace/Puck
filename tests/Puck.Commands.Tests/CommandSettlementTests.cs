@@ -33,7 +33,7 @@ public sealed class CommandSettlementTests {
         var settled = new List<(string Line, CommandResult Result)>();
         using var session = source.CreateSession(
             onSettled: (line, result) => settled.Add(item: (line, result)),
-            principal: CommandPrincipal.Console
+            principal: Principal.Console
         );
 
         session.Enqueue(line: "now");
@@ -52,7 +52,7 @@ public sealed class CommandSettlementTests {
         using var session = source.CreateSession(
             onResult: (_, result) => results.Add(item: result),
             onSettled: (_, result) => settled.Add(item: result),
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             simulationSink: router.ConsoleTextSink
         );
 
@@ -78,7 +78,7 @@ public sealed class CommandSettlementTests {
         var settled = new List<string>();
         using var session = source.CreateSession(
             onSettled: (line, result) => settled.Add(item: $"{line} -> {result.Output}"),
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             simulationSink: router.ConsoleTextSink
         );
 
@@ -103,7 +103,7 @@ public sealed class CommandSettlementTests {
         var results = new List<string>();
         using var session = source.CreateSession(
             onResult: (line, _) => results.Add(item: line),
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             simulationSink: router.ConsoleTextSink
         );
 
@@ -119,12 +119,12 @@ public sealed class CommandSettlementTests {
     public void SettlingSessionsSerializeSimulationLinesEvenWithQuietAcknowledgements() {
         var settlement = new CommandSettlement();
 
-        var (source, router, registry) = Host(settlement);
+        var (source, router, registry) = Host(settlement: settlement);
         var settled = new List<string>();
 
         _ = registry.Submit(line: "wire.ack quiet");
-        using var session = source.CreateSession(principal: CommandPrincipal.Console,
-            simulationSink: router.ConsoleTextSink, onSettled: (line, _) => settled.Add(line));
+        using var session = source.CreateSession(principal: Principal.Console,
+            simulationSink: router.ConsoleTextSink, onSettled: (line, _) => settled.Add(item: line));
 
         session.Enqueue(line: "edit");
         session.Enqueue(line: "later");
@@ -133,7 +133,7 @@ public sealed class CommandSettlementTests {
         source.Collect();
         Tick(registry: registry, router: router, tick: 2);
         Assert.Empty(collection: settled);
-        settlement.Settle(new CommandResult("done"));
+        settlement.Settle(result: new CommandResult("done"));
         source.Collect();
         Tick(registry: registry, router: router, tick: 3);
         Assert.Equal(actual: settled, expected: ["edit", "later"]);
@@ -142,10 +142,10 @@ public sealed class CommandSettlementTests {
     public void CancellationSettlesCurrentAndAbandonedCommands() {
         var (source, router, registry) = Host();
         var settled = new List<CommandResult>();
-        using var first = source.CreateSession(principal: CommandPrincipal.Console,
-            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => settled.Add(result));
-        using var second = source.CreateSession(principal: CommandPrincipal.Console,
-            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => settled.Add(result));
+        using var first = source.CreateSession(principal: Principal.Console,
+            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => settled.Add(item: result));
+        using var second = source.CreateSession(principal: Principal.Console,
+            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => settled.Add(item: result));
 
         first.Enqueue(line: "cancel");
         second.Enqueue(line: "later");
@@ -162,20 +162,20 @@ public sealed class CommandSettlementTests {
     public void BrokenResultObserversCannotInterruptOtherSessionsOrStrandTheBarrier() {
         var settlement = new CommandSettlement();
 
-        var (source, router, registry) = Host(settlement);
+        var (source, router, registry) = Host(settlement: settlement);
         var seen = new List<CommandResult>();
-        using var broken = source.CreateSession(principal: CommandPrincipal.Console,
+        using var broken = source.CreateSession(principal: Principal.Console,
             simulationSink: router.ConsoleTextSink,
             onResult: (_, _) => throw new IOException(message: "output closed"),
             onSettled: (_, _) => throw new OperationCanceledException());
-        using var healthy = source.CreateSession(principal: CommandPrincipal.Console,
-            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => seen.Add(result));
+        using var healthy = source.CreateSession(principal: Principal.Console,
+            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => seen.Add(item: result));
 
         broken.Enqueue(line: "edit");
         healthy.Enqueue(line: "edit");
         source.Collect();
         Tick(registry: registry, router: router, tick: 1);
-        settlement.Settle(new CommandResult("done"));
+        settlement.Settle(result: new CommandResult("done"));
         Assert.Single(collection: seen);
         broken.Enqueue(line: "now");
         source.Collect();
@@ -187,13 +187,13 @@ public sealed class CommandSettlementTests {
     public void DiscardedCapturedCommandsSettleAndReleaseTheirSession(bool overflow) {
         var (source, router, registry) = Host();
         var settled = new List<CommandResult>();
-        using var session = source.CreateSession(principal: CommandPrincipal.Console,
-            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => settled.Add(result));
+        using var session = source.CreateSession(principal: Principal.Console,
+            simulationSink: router.ConsoleTextSink, onSettled: (_, result) => settled.Add(item: result));
 
         session.Enqueue(line: "later");
         source.Collect();
         if (overflow) {
-            using var flood = source.CreateSession(principal: CommandPrincipal.Console, simulationSink: router.ConsoleTextSink);
+            using var flood = source.CreateSession(principal: Principal.Console, simulationSink: router.ConsoleTextSink);
 
             for (var index = 0; (index < InputRouter.MaxCapturedInjections); index++) {
                 flood.Enqueue(line: "later");
@@ -244,7 +244,7 @@ public sealed class CommandSettlementTests {
     private sealed class NoBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
 }

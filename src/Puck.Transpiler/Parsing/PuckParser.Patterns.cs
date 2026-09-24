@@ -135,6 +135,7 @@ public static partial class PuckParser {
                 case "value": {
                         SkipWhiteSpace(context: context);
                         var valueStart = cursor.Offset;
+
                         if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var valueText)) {
                             throw CreateException(
                                 context: context,

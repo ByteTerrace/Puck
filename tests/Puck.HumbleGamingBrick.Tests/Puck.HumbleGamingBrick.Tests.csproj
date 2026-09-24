@@ -13,6 +13,9 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
+    </ItemGroup>
+    <ItemGroup>
         <!-- The battery executable is the subject: the facts launch it and read its exit code and summary. -->
         <ProjectReference Include="..\..\src\Puck.HumbleGamingBrick.Post\Puck.HumbleGamingBrick.Post.csproj" />
     </ItemGroup>

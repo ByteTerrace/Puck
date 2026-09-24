@@ -1,12 +1,84 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers per-cell background palettes and per-sprite object palettes reaching the screen.</summary>
 public sealed class CartridgePaletteTests {
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "no background palette",
+            Document: Bad() with { Palettes = new CartridgePalettes(
+                Background: [],
+                Object: [Palette(
+                        colors: 4,
+                        ink: 0
+                    )]
+            ) },
+            Path: "palettes.background",
+            Fragment: "Expected an array with 1..8"
+        ),
+        new(
+            Name: "a short palette",
+            Document: Bad() with { Palettes = new CartridgePalettes(
+                Background: [[1, 2]],
+                Object: [Palette(
+                        colors: 4,
+                        ink: 0
+                    )]
+            ) },
+            Path: "palettes.background[0]",
+            Fragment: "Expected 4 RGB555 integers"
+        ),
+        new(
+            Name: "a colour past fifteen bits",
+            Document: Bad() with { Palettes = new CartridgePalettes(
+                Background: [[1, 2, 3, 99999]],
+                Object: [Palette(
+                        colors: 4,
+                        ink: 0
+                    )]
+            ) },
+            Path: "palettes.background[0]",
+            Fragment: "RGB555 integers in 0..32767"
+        ),
+        new(
+            Name: "a short cell palette map",
+            Document: Bad() with { MapPalettes = new int[16] },
+            Path: "mapPalettes",
+            Fragment: "1024 entries"
+        ),
+        new(
+            Name: "a cell on an undeclared palette",
+            Document: Bad() with { MapPalettes = [.. Enumerable.Repeat(
+                    count: 1024,
+                    element: 3
+                )] },
+            Path: "mapPalettes",
+            Fragment: "background palette that is not declared"
+        ),
+        new(
+            Name: "a sprite on an undeclared palette",
+            Document: Bad() with {
+                Sprites = [new CartridgeSprite(
+                    Name: "s",
+                    Tile: CartridgeExpressions.Of(constant: 0),
+                    X: CartridgeExpressions.Of(constant: 0),
+                    Y: CartridgeExpressions.Of(constant: 0),
+                    Visible: CartridgeExpressions.Of(constant: 1),
+                    Palette: CartridgeExpressions.Of(constant: 5)
+                )],
+            },
+            Path: "sprites[0].palette",
+            Fragment: "object palette that is not declared"
+        ),
+    ];
+
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
+
+    private static CartridgeDocument Bad() => CartridgeDocuments.Create(
+        target: "cgb",
+        title: "PALBAD"
+    );
     private static int[] Palette(int colors, int ink) {
         var entries = new int[colors];
 
@@ -15,27 +87,6 @@ public sealed class CartridgePaletteTests {
         }
 
         return entries;
-    }
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
-
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
-    private static PaletteProbe Run(CartridgeDocument document, int frames) {
-        ICartridgeCompiler compiler = ((document.Target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-        var machine = new PaletteProbe(result: compiler.Compile(document: document));
-
-        machine.Run(frames: frames);
-        return machine;
     }
 
     [InlineData("cgb")]
@@ -94,9 +145,10 @@ public sealed class CartridgePaletteTests {
             Map = cells,
             MapPalettes = palettes,
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
-            frames: 20
+            frames: 20,
+            label: "palette"
         );
 
         // Columns 0..7 sit on palette zero and 8.. on palette one, so compare across that boundary.
@@ -128,100 +180,10 @@ public sealed class CartridgePaletteTests {
             )
         );
     }
-    [Fact]
-    public void ValidationChecksPaletteShapeAndReferences() {
-        var document = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "PALBAD"
-        );
-
-        Refuses(
-            document: document with { Palettes = new CartridgePalettes(
-                Background: [],
-                Object: [Palette(
-                        colors: 4,
-                        ink: 0
-                    )]
-            ) },
-            fragment: "Expected an array with 1..8"
-        );
-        Refuses(
-            document: document with { Palettes = new CartridgePalettes(
-                Background: [[1, 2]],
-                Object: [Palette(
-                        colors: 4,
-                        ink: 0
-                    )]
-            ) },
-            fragment: "Expected 4 RGB555 integers"
-        );
-        Refuses(
-            document: document with { Palettes = new CartridgePalettes(
-                Background: [[1, 2, 3, 99999]],
-                Object: [Palette(
-                        colors: 4,
-                        ink: 0
-                    )]
-            ) },
-            fragment: "RGB555 integers in 0..32767"
-        );
-        Refuses(
-            document: document with { MapPalettes = new int[16] },
-            fragment: "1024 entries"
-        );
-        Refuses(
-            document: document with { MapPalettes = [.. Enumerable.Repeat(
-                    count: 1024,
-                    element: 3
-                )] },
-            fragment: "background palette that is not declared"
-        );
-        Refuses(
-            document: document with {
-                Sprites = [new CartridgeSprite(
-                    Name: "s",
-                    Tile: CartridgeExpressions.Of(constant: 0),
-                    X: CartridgeExpressions.Of(constant: 0),
-                    Y: CartridgeExpressions.Of(constant: 0),
-                    Visible: CartridgeExpressions.Of(constant: 1),
-                    Palette: CartridgeExpressions.Of(constant: 5)
-                )],
-            },
-            fragment: "object palette that is not declared"
-        );
-    }
-
-    private sealed class PaletteProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public PaletteProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "palette"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "palette"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public uint Pixel(int x, int y) => (m_agb?.ReadPixel(
-            x: x,
-            y: y
-        ) ?? m_hgb!.ReadPixel(
-            x: x,
-            y: y
-        ));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationChecksPaletteShapeAndReferences(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

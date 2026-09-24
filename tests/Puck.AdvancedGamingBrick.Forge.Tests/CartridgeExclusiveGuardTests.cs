@@ -76,7 +76,7 @@ public sealed class CartridgeExclusiveGuardTests {
             Name: name,
             When: CartridgeExpressions.Gate(
                 left: CartridgeExpressions.Of(state: "ph"),
-                comparison: ActionStateComparison.Equal,
+                comparison: ExpressionOp.Equal,
                 right: CartridgeExpressions.Of(constant: phase)
             ),
             Body: [.. body]
@@ -250,10 +250,12 @@ public sealed class CartridgeExclusiveGuardTests {
                 work: 4
             )]) with { Scene = "nowhere" };
 
-        Assert.Contains(
-            collection: CartridgeDocuments.Validate(document: document),
-            filter: error => (error.Path == "scene")
-        );
+        new CartridgeRefusal(
+            Document: document,
+            Fragment: "names no declared variable",
+            Name: "a scene naming no variable",
+            Path: "scene"
+        ).Holds();
     }
     [Fact]
     public void RulesGuardedOnDifferentValuesOfOneVariableChargeOnlyTheDearest() {

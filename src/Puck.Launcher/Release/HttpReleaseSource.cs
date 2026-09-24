@@ -1,4 +1,5 @@
 using System.Net;
+using Puck.Assets;
 
 namespace Puck.Launcher.Release;
 
@@ -18,20 +19,12 @@ public sealed class HttpReleaseSource(HttpClient httpClient, Uri baseUri) : IRel
     private readonly HttpClient m_httpClient = httpClient;
 
     /// <inheritdoc/>
-    public async Task<bool> TryGetFileAsync(string hash, Stream destination, CancellationToken cancellationToken) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: hash);
+    public async Task<bool> TryGetFileAsync(ContentPin pin, Stream destination, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: destination);
 
-        var hex = (hash.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "sha256/"
-        )
-            ? hash["sha256/".Length..]
-            : hash
-        );
         var fileUri = new Uri(
             baseUri: m_baseUri,
-            relativeUri: $"objects/sha256/{hex[..2]}/{hex}"
+            relativeUri: ContentAddressedStore.ObjectRelativePath(pin: pin)
         );
 
         try {

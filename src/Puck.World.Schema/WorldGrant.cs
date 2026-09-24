@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
@@ -5,7 +6,7 @@ using Puck.Abstractions.Documents;
 namespace Puck.World.Protocol;
 
 /// <summary>The coarse capability verbs a <see cref="WorldGrant"/> confers — the closed set the server checks a
-/// submission's <see cref="WorldPrincipal"/> against at each write boundary. A genre world arrives as different data
+/// submission's <see cref="Principal"/> against at each write boundary. A genre world arrives as different data
 /// (new subjects, new sections), never a new capability.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldCapability>))]
 public enum WorldCapability : byte {
@@ -115,7 +116,7 @@ public enum WorldSection : byte {
     /// <summary>The window-composition defaults — the seat rig, the authored named layouts, and the authored shader
     /// pipelines (the <c>WorldMutation.SetViewDefaults</c> / <c>WorldMutation.UpsertViewLayout</c> /
     /// <c>WorldMutation.RemoveViewLayout</c> / <c>WorldMutation.UpsertViewPipeline</c> /
-    /// <c>WorldMutation.RemoveViewPipeline</c> mutations).</summary>
+    /// <c>WorldMutation.RemoveViewPipeline</c> / <c>WorldMutation.CommitViewPipeline</c> mutations).</summary>
     Views,
 
     /// <summary>The look rows and the look→entity assignment policy — the appearance peer of <see cref="Kits"/>,
@@ -146,7 +147,7 @@ public enum WorldSection : byte {
 
     /// <summary>The world-scoped <c>rules</c> rows — targeted by <c>WorldMutation.UpsertWorldRule</c> /
     /// <c>WorldMutation.RemoveWorldRule</c>. Gates authoring a rule only. A rule's own evaluation and its
-    /// fired effects never consult this table: they act as <see cref="WorldPrincipal.World"/>, which
+    /// fired effects never consult this table: they act as <see cref="Principal.World"/>, which
     /// <c>Server.WorldServer.TryAdmitMutation</c> exempts structurally — the same standing a per-body
     /// <c>ActionEffect</c> has always had (an authored program is the world acting on itself, not an actor
     /// submitting). Holding Mutate here is therefore holding the power to write the program, which is the only
@@ -171,7 +172,7 @@ public enum WorldSection : byte {
     /// <summary>The <c>interactions</c> section — the generalized property-interaction table, targeted by
     /// <c>WorldMutation.UpsertInteraction</c>/<c>WorldMutation.RemoveInteraction</c>. Gates authoring an interaction only, on the same terms
     /// <see cref="Rules"/> does: an interaction's own evaluation and its fired effects act as
-    /// <see cref="WorldPrincipal.World"/>, structurally exempt from this table — see <see cref="Rules"/>'s remarks
+    /// <see cref="Principal.World"/>, structurally exempt from this table — see <see cref="Rules"/>'s remarks
     /// and <c>WorldGrants</c>'s untrusted-narrowing rule, which extends to this section for the identical laundering
     /// reason.</summary>
     Interactions,
@@ -268,11 +269,11 @@ public enum GrantSubjectKind : byte {
     Adjacency,
 
     /// <summary>A single named machine instance for live machine operation control.</summary>
-    Machine = 12,
+    Machine,
 }
 /// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, a document section,
 /// or one named row of a section. A zero-alloc value key into the grant table's per-capability subject sets: row names
-/// are strings, so the subject matches <see cref="WorldPrincipal"/>'s shape (an index lane plus a nullable string lane;
+/// are strings, so the subject matches <see cref="Principal"/>'s shape (an index lane plus a nullable string lane;
 /// record-struct equality covers both).</summary>
 /// <param name="Kind">The subject flavor.</param>
 /// <param name="Value">The 0-based body/screen/seat index, or the <see cref="WorldSection"/> ordinal for a section;
@@ -285,10 +286,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Kind: GrantSubjectKind.All,
         Value: 0
     );
-    /// <summary>Gets the shared window-composition authority subject. Not reachable from the console: this is the only site
-    /// that constructs it (the grant seed does so directly), and <c>world.grant</c>/<c>world.revoke</c> parse no token
-    /// for it, so a composition row can be echoed by <c>world.grants</c> but never granted or revoked. The
-    /// exclusive-acquisition story it exists for is unimplementable until the grammar can name it.</summary>
+    /// <summary>Gets the shared window-composition authority subject for live layout/camera composition overrides (<c>view.override</c>).</summary>
     public static GrantSubject Composition { get; } = new(
         Kind: GrantSubjectKind.Composition,
         Value: 0
@@ -381,7 +379,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Kind: GrantSubjectKind.State,
         Value: 0
     );
-    /// <summary>Parses a subject token (<c>all</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
+    /// <summary>Parses a subject token (<c>all</c> | <c>composition</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
     /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c> | <c>seat:&lt;n&gt;</c> |
     /// <c>creation:&lt;id&gt;</c> | <c>placement:&lt;id&gt;</c> | <c>adjacency:&lt;name&gt;</c> | <c>machine:&lt;name&gt;</c>) — shared by
     /// <c>Puck.World.GrantSubjectJsonConverter</c>
@@ -401,6 +399,15 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
             comparisonType: StringComparison.OrdinalIgnoreCase,
             other: "all"
         )) {
+            return true;
+        }
+
+        if (token.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "composition"
+        )) {
+            subject = Composition;
+
             return true;
         }
 
@@ -601,7 +608,7 @@ public enum GrantRule : byte {
     WildcardHold,
 
     /// <summary>Allowed — the caller holds no row of its own, but is a current member of a group whose own row (a
-    /// grant to <see cref="WorldPrincipal.Group"/>) names the subject or its wildcard. Decided fresh on every check
+    /// grant to <see cref="Grantee.Group"/>) names the subject or its wildcard. Decided fresh on every check
     /// against the group table's live membership (never cached at grant time), so a member who leaves is denied on
     /// its very next check — the hold evaporates, it is never latched. <see cref="GrantVerdict.Group"/> names which
     /// group decided it. Checked only after the caller's own concrete/wildcard rows miss — a principal's own hold
@@ -624,7 +631,7 @@ public enum GrantRule : byte {
     /// <c>WorldStateRow.GatesDrive</c> (a state fact, not a grant): refused regardless of any Drive hold the caller
     /// genuinely has, including an exclusive reservation, for as long as that cell reads nonzero. Scoped to the
     /// intent-admission door alone (<c>WorldServer.ApplyIntentSubmission</c>) and its <c>world.why</c> read-back —
-    /// never folded into the general <see cref="WorldPrincipal"/> capability check every other Drive/body query
+    /// never folded into the general <see cref="Principal"/> capability check every other Drive/body query
     /// (session join/leave, an administrator's own lookup) also runs, because those ask "may this principal ever
     /// drive this body", a question a temporary status effect must not answer for them.
     /// <see cref="GrantVerdict.GateRow"/> names the deciding row.</summary>
@@ -646,7 +653,7 @@ public enum GrantRule : byte {
 /// <see cref="GrantRule.OwnershipHold"/>; <see langword="null"/> otherwise.</param>
 /// <param name="GateRow">The deciding state row's name, for <see cref="GrantRule.DriveGated"/>; <see langword="null"/>
 /// otherwise.</param>
-public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reserver = null, string? Group = null, string? GateRow = null) {
+public readonly record struct GrantVerdict(GrantRule Rule, Grantee? Reserver = null, string? Group = null, string? GateRow = null) {
     /// <summary>Gets a value indicating whether the check passed — <see langword="true"/> for the five allowing rules.</summary>
     public bool IsAllowed => (Rule is GrantRule.ReserverMatch or GrantRule.ConcreteHold or GrantRule.WildcardHold or GrantRule.GroupHold or GrantRule.OwnershipHold);
 
@@ -689,7 +696,7 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
     /// <param name="dropped">What was dropped as a result of the refusal, appended as <c>" — {dropped}"</c>; omitted
     /// when <see langword="null"/>.</param>
     /// <returns>The denial sentence.</returns>
-    public string DescribeRefusal(WorldPrincipal actor, string verb, string subject, string? dropped = null) {
+    public string DescribeRefusal(Principal actor, string verb, string subject, string? dropped = null) {
         var sentence = $"{actor.Describe()} cannot {verb} {subject} ({DescribeDenial()})";
 
         return ((dropped is null)
@@ -698,14 +705,14 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
         );
     }
 }
-/// <summary>One grant row — the wire payload of <c>world.grant</c>/<c>world.revoke</c>: a principal holds a capability
+/// <summary>One grant row — the wire payload of <c>world.grant</c>/<c>world.revoke</c>: a grantee holds a capability
 /// over a subject, optionally exclusive (the engagement latch generalized — acquiring an exclusive grant a live holder
 /// owns is rejected). Revoke ignores <see cref="Exclusive"/>. The same shape doubles as the document row of
 /// <see cref="WorldDefinition.Grants"/> — a world shipping a hold reviewably rather than only typing it live — applied
 /// at boot through the identical <c>Server.WorldServer.Grant</c> path <c>world.grant</c> submits through, so an
 /// illegitimate or conflicting authored row prints the same loud accept/reject line an operator would see typing it.
 /// One shape, one decision procedure, whichever door authority walks through.</summary>
-/// <param name="Principal">The acting identity the grant is for.</param>
+/// <param name="Grantee">What holds the grant — an actor, a group, or another document.</param>
 /// <param name="Capability">The capability conferred.</param>
 /// <param name="Subject">The subject the capability scopes to.</param>
 /// <param name="Exclusive">Whether the grant is held exclusively (single holder per capability+subject).</param>
@@ -753,7 +760,7 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
 /// whole-row <c>UpsertStateRow</c>/<c>RemoveStateRow</c> that could re-author the row's envelope. An unmasked Edit
 /// row keeps full reach over its subject, so deny-by-default plus opt-in narrowing holds and no seeded row changes
 /// meaning. A <see langword="null"/> mask on a re-grant of the same
-/// (<see cref="Principal"/>, <see cref="Capability"/>, <see cref="Subject"/>) row clears a previously-recorded mask
+/// (<see cref="Grantee"/>, <see cref="Capability"/>, <see cref="Subject"/>) row clears a previously-recorded mask
 /// — unlike <see cref="Budget"/>/<see cref="Reach"/>, which only ever write when the incoming grant carries one and
 /// otherwise leave the prior value untouched; a mask a re-grant does not repeat is a mask the operator meant to take
 /// back, not one this door defaults into surviving silently. Revoking the row clears it outright. When a principal
@@ -787,7 +794,7 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
 /// <param name="HoldCeiling">The timed-channel-press ceiling in raw Q16.16 seconds. Legal only on a
 /// <see cref="WorldCapability.Drive"/> row and bounded by the server's engine backstop. Omission selects
 /// <see cref="DefaultHoldSeconds"/>; zero forbids timed holds while leaving live held input untouched.</param>
-public readonly record struct WorldGrant(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, bool Exclusive, ushort? Budget = null, ChannelReachMask? Reach = null, ChannelConsentMask? Consent = null, long? Ceiling = null, MutationKindMask? KindMask = null, ushort? EventBudget = null, long? HoldCeiling = null, DocumentWriteMask? WriteMask = null) {
+public readonly record struct WorldGrant(Grantee Grantee, WorldCapability Capability, GrantSubject Subject, bool Exclusive, ushort? Budget = null, ChannelReachMask? Reach = null, ChannelConsentMask? Consent = null, long? Ceiling = null, MutationKindMask? KindMask = null, ushort? EventBudget = null, long? HoldCeiling = null, DocumentWriteMask? WriteMask = null) {
     /// <summary>The default timed-press policy, in seconds, for a Drive row that omits <see cref="HoldCeiling"/>.</summary>
     public const float DefaultHoldSeconds = 2f;
 }
@@ -795,7 +802,7 @@ public readonly record struct WorldGrant(WorldPrincipal Principal, WorldCapabili
 /// <see cref="WorldAddonRow.Requests"/>) — a designation only, never authority: requesting is not receiving. Deny by
 /// default holds regardless of what a manifest names here; the console's grant table (live, via <c>world.grant</c>) or
 /// the document's own <see cref="WorldDefinition.Grants"/> section decide what subset, if any, is actually held. The
-/// requesting principal is always the addon's own <see cref="WorldPrincipal.Addon"/> identity — implicit, never carried
+/// requesting principal is always the addon's own <see cref="Principal.Addon"/> identity — implicit, never carried
 /// on the row itself, because a manifest can only ever ask on its own behalf.</summary>
 /// <param name="Capability">The capability requested.</param>
 /// <param name="Subject">The subject requested.</param>

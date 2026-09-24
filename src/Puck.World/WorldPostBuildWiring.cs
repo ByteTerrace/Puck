@@ -73,13 +73,6 @@ internal static class WorldPostBuildWiring {
             return false;
         }
 
-        // The QUIC socket door: bound ONLY when host.listen/--listen names an endpoint — a world with no Listen field
-        // never opens a socket, exactly like a headless flag never opening a window. Started here (not a factory)
-        // so it observes the fully-built container's WorldHostSettings singleton.
-        if (services.GetRequiredService<WorldHostSettings>().Listen is { } listen) {
-            services.GetRequiredService<WorldPeerHost>().Start(listen: listen);
-        }
-
         // The affordance vocabulary goes live here — the first post-container point on the boot path where the built
         // registry exists (whichever verbs THIS boot shape actually composed). From now on every binding door
         // (player.bind, recomposes, the document validators) refuses a command name the registry does not carry; the
@@ -93,29 +86,17 @@ internal static class WorldPostBuildWiring {
 
         seatBindings.ValidateAffordancesLoudly();
 
-        // THE CROSSING-PARITY BINDING SWAP: wired here rather than a presentation-only composition method because
-        // bindings/channels resolve on the console/peer input path in EVERY boot shape, headless included, and
-        // headless and presented shapes share the input lifecycle, while this event still applies the route edge
-        // immediately. The instant WorldSeatAuthorityRouter publishes a changed claim,
-        // changed (a crossing in or out — see that event's own remarks), recompose that ONE seat's binding pages,
-        // wheels, and channel vocabulary from its NEW route's own document (WorldInstanceHost.ResolveRoutedDefinition
-        // — the identical routed-definition lookup WorldSeatViewInput already subscribes to this same event for,
-        // to reclamp the pitch instead). WorldSimulation's own per-tick SyncSeat loop (windowed only) would reach the
-        // SAME state one poll later in the ordinary case — this is the explicit, shape-independent edge, not a
-        // parallel mechanism.
+        // The crossing's binding swap, wired here rather than in a presentation-only composition method because
+        // bindings and channels resolve on the console and peer input path in every boot shape, headless included.
+        // A changed claim recomposes that one seat from its new route's document; WorldSimulation's per-tick
+        // PublishSeats (windowed only) reaches the same state one step later. The edge is delivered by WorldHostStep
+        // on the pump thread, whichever thread published the claim.
         var seatRouter = services.GetRequiredService<WorldSeatAuthorityRouter>();
 
-        seatRouter.RouteChanged += slot => {
-            if (seatRouter.TryRoute(slot: slot) is { } route) {
-                seatBindings.SyncSeat(
-                    slot: slot,
-                    definition: route.Endpoint.Definition,
-                    engineTick: route.Endpoint.EngineTick,
-                    entityIndex: route.EntityIndex,
-                    nextInputTick: route.Endpoint.NextInputTick
-                );
-            }
-        };
+        seatBindings.FollowRoutes(
+            client: services.GetRequiredService<WorldClient>(),
+            routes: seatRouter
+        );
 
         // THE CAMERA-APPLICATION TEARDOWN SEAM: a world load/reload/reset (or a crossing) reseeds a seat's authored
         // mode families to their defaults, dropping the camera-targeting state a live camera application was composed
@@ -165,9 +146,7 @@ internal static class WorldPostBuildWiring {
         // when NEITHER transport is present, in which case an authored adjacency refuses by
         // name rather than passing unproven — unreachable, not this method's own choice.
         var fileNeighbours = new WorldFileNeighbourResolver(
-            baseDirectory: () => ((Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory)
-            ? directory
-            : AppContext.BaseDirectory),
+            baseDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: worldSource.SourcePath),
             catalogFingerprint: machineCatalogFingerprint,
             catalog: machineCatalog
         );
@@ -180,8 +159,9 @@ internal static class WorldPostBuildWiring {
         var admission = worldSource.Admission;
         bool admitted;
         string vocabularyReason;
-        if ((admission is not null) && admission.AppliesTo(worldSource.Definition, machineCatalog)) {
-            admitted = WorldDefinitionValidator.TryCompleteAdmission(admission, machineCatalog, neighbours, out vocabularyReason);
+
+        if ((admission is not null) && admission.AppliesTo(definition: worldSource.Definition, machines: machineCatalog)) {
+            admitted = WorldDefinitionValidator.TryCompleteAdmission(admission: admission, machines: machineCatalog, neighbours: neighbours, reason: out vocabularyReason);
         } else {
             admitted = WorldDefinitionValidator.TryValidate(worldSource.Definition, out vocabularyReason, neighbours, machineCatalog);
         }
@@ -195,12 +175,18 @@ internal static class WorldPostBuildWiring {
         // reset) that gets it — see WorldServer.Neighbours' own remarks on why nothing else does.
         var server = services.GetRequiredService<WorldServer>();
 
+        // The override gate reads a row's source from the same directory the rendering host compiles it against, in
+        // every boot shape, so a headless and a rendered host accept the same pipeline commits.
+        server.PipelineSources = new WorldPipelineSources(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: services.GetRequiredService<WorldDefinitionSource>().SourcePath));
+        if (!server.TryBindPipelineRows(reason: out var pipelineReason)) {
+            Console.Error.WriteLine(value: $"[world] definition refused: {pipelineReason}");
+
+            return false;
+        }
         server.Neighbours = neighbours;
         server.RebuildNeighbours = candidatePath => WorldCompositeNeighbourResolver.Compose(
             new WorldFileNeighbourResolver(
-                baseDirectory: () => ((Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory)
-            ? directory
-            : AppContext.BaseDirectory),
+                baseDirectory: () => WorldDocumentPaths.DirectoryOf(documentPath: candidatePath),
                 catalogFingerprint: machineCatalogFingerprint,
                 catalog: machineCatalog
             ),
@@ -235,6 +221,7 @@ internal static class WorldPostBuildWiring {
         // toasts are presentation-only (AddWorldPresentation registers it); the stable
         // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
         var toasts = services.GetService<OverlayToastStore>();
+        var pipelineRuntime = services.GetService<WorldPipelineRuntime>();
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
@@ -250,6 +237,9 @@ internal static class WorldPostBuildWiring {
 
         var scheduleRunner = services.GetRequiredService<WorldScheduleRunner>();
 
+        // The boot row is admitted by the time this runs, so a sibling world the armed document declares can start
+        // beside it before the first step.
+        scheduleRunner.ArmInstances();
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
             // A scheduled command's own mutation verdict arrives here and nowhere else, so a test world that
             // schedules a command the world must refuse has that refusal recorded in the schedule manifest.
@@ -286,6 +276,9 @@ internal static class WorldPostBuildWiring {
                 (echo.RebuildOrigin is { } origin)
             ) {
                 definitionSource.SourcePath = origin;
+                // The rendering host resolves views.pipelines sources against this same moved directory from here
+                // on — presentation-only, so a headless boot has no runtime to rebase.
+                pipelineRuntime?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
             }
 
             // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.
@@ -331,17 +324,16 @@ internal static class WorldPostBuildWiring {
 
         // THE SAVE-EFFECT TAP: a world rule's 'save' effect performs engine I/O directly rather than composing a
         // WorldMutation (see WorldEffect.Save's remarks for why), so WorldServer cannot run it through the ordinary
-        // mutation pipeline — and cannot run the CAPTURE itself either: Puck.World.Server references no rendering or
-        // input, and WorldSessionCapture.Capture (the world.save fold) needs the live render levers, screen binder,
-        // audio director, and pacing control, all composition-root state. This closure runs the IDENTICAL fold
-        // WorldMutationCommandModule's own 'world.save' verb runs, to the world's own loaded file (never an authored
+        // mutation pipeline — and cannot compose the snapshot itself either: Puck.World.Server references no rendering
+        // or input, and the lever half of the world.save fold needs the live render levers, audio director, and pacing
+        // control, all composition-root state. This closure composes the IDENTICAL snapshot (WorldSaveSnapshot)
+        // WorldMutationCommandModule's own 'world.save' verb writes, to the world's own loaded file (never an authored
         // path — see the effect's remarks on why), and compacts the journal on success exactly like a manual save.
         // A write failure (disk full, the target's directory gone, a read-only file) is caught and narrated on
         // stderr by name; the firing tick is not rolled back, because nothing durable in it depended on the save
         // succeeding.
         var worldServer = services.GetRequiredService<WorldServer>();
         var renderSettings = services.GetRequiredService<WorldRenderSettings>();
-        var screenBinder = services.GetRequiredService<WorldScreenBinder>();
         var pacing = services.GetRequiredService<PresentPacingControl>();
         var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
 
@@ -364,16 +356,13 @@ internal static class WorldPostBuildWiring {
             var target = definitionSource.SourcePath;
 
             try {
-                var snapshot = WorldSessionCapture.Capture(
-                    definition: worldServer.Definition,
-                    render: renderSettings,
-                    population: worldServer.Population,
-                    binder: screenBinder,
+                var snapshot = WorldSaveSnapshot.Compose(
                     audio: audioDirector,
                     bindingBar: bindingBarVisibility,
                     pacing: pacing,
-                    tick: tick,
-                    engineTick: worldServer.CompletedEngineTicks
+                    render: renderSettings,
+                    server: worldServer,
+                    tick: tick
                 );
                 var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                     basisPath: out var basisPath,
@@ -465,20 +454,16 @@ internal static class WorldPostBuildWiring {
         // is indistinguishable from a capture that succeeded — the silent-success shape this repository has already
         // been bitten by. Say it out loud instead, at ApplicationStopped (every hosted service has stopped, so the
         // render loop is provably finished and an outstanding request provably never will be served). The scheduled
-        // `captures` rows drain FIRST, at the same instant: a station whose readback landed on the run's last
-        // composed frame has no later tick-complete hook to manifest it, so WorldCaptureScheduler.Drain finalizes it
-        // here — otherwise the PNG exists, stderr says it was captured, and manifest.json silently lacks the row.
-        // Presentation-only: a headless boot has no render probe and world.screenshot refuses there anyway.
+        // `captures` rows are not drained here: the host loop settles them (IFixedStepSimulation.SettleOwedFrames,
+        // WorldCaptureScheduler.Drain) before it disposes the render root, while the chain that would have served
+        // them is still alive. Presentation-only: a headless boot has no render probe and world.screenshot refuses
+        // there anyway.
         // THE SCHEDULE DRAIN, every boot shape: a run that ended before its export tick must leave a manifest
         // saying where it got to rather than an empty directory a reader cannot tell from a crash.
         services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: scheduleRunner.Drain);
 
         if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
-            var captureScheduler = services.GetRequiredService<WorldCaptureScheduler>();
-
             services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: () => {
-                captureScheduler.Drain();
-
                 if (renderProbe.Render?.PendingCapturePath is { } pending) {
                     Console.Error.WriteLine(value: $"[world.screenshot] WARNING: a capture of {pending} was still pending when the run ended — no frame composed after it was armed, so NO FILE WAS WRITTEN.");
                 }
@@ -510,7 +495,7 @@ internal static class WorldPostBuildWiring {
         // adjacency neighbours and every derived corner all name the same island document, and the shared figure is
         // what says so out loud instead of leaving it to a wall-clock reading of the boot. world.status answers the
         // same four numbers on demand.
-        Console.Error.WriteLine(value: $"[world.documents] {WorldDefinitionFileSource.DocumentsComposed} composed, {WorldDefinitionFileSource.DocumentCompositionsShared} shared, {WorldDefinitionFileSource.ComposedDocumentsHeld} held ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)");
+        Console.Error.WriteLine(value: $"[world.documents] {WorldBootWork.Current.Read(kind: WorldBootWork.Compositions)} composed, {WorldBootWork.Current.Read(kind: WorldBootWork.CompositionsShared)} shared, {WorldDefinitionFileSource.ComposedDocumentsHeld} held ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)");
 
         return true;
     }

@@ -8,12 +8,15 @@ using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler;
+using Puck.World;
 
 namespace Puck.Cli.Transpiler;
 
 /// <summary>
-/// The <c>puck compile</c> verb: compiles <c>.puck</c> DSL sources into canonical JSON definitions in input order.
-/// Supports resilient diagnostics, dependency resolution, engine schema validation, and watch mode.
+/// The <c>puck compile</c> verb: compiles <c>.puck</c> DSL sources into canonical JSON definitions in input order, and
+/// writes each world document's compiled world (<c>Puck.World.CompiledWorld</c>) beside it; a <c>.world.json</c>
+/// document given as a path contributes its compiled world alone. Supports resilient diagnostics, dependency
+/// resolution, engine schema validation, and watch mode.
 /// </summary>
 internal static partial class CompileCommand {
     internal static int Run(
@@ -23,7 +26,9 @@ internal static partial class CompileCommand {
         bool strict,
         bool validate,
         bool bundle,
-        bool updateAssets = false
+        bool updateAssets = false,
+        IDictionary<string, string>? written = null,
+        BakePackPlan? pack = null
     ) {
         var fullPath = Path.GetFullPath(path: path);
 
@@ -37,14 +42,30 @@ internal static partial class CompileCommand {
             : null
         );
 
+        if (WorldDocumentName.IsDocumentFile(path: fullPath)) {
+            if (watch || updateAssets) {
+                Console.Error.WriteLine(value: "error: --watch and --update-assets apply to .puck sources; a world document compiles only to its compiled world.");
+                return 1;
+            }
+
+            return CompileDocument(
+                besidePath: (outputPath ?? fullPath),
+                documentPath: fullPath,
+                pack: pack,
+                written: written
+            );
+        }
+
         if (!watch) {
             return ExecuteCompilation(
                 bundle: bundle,
                 outputPath: outputPath,
+                pack: pack,
                 sourcePath: fullPath,
                 strict: strict,
                 updateAssets: updateAssets,
-                validate: validate
+                validate: validate,
+                written: written
             );
         }
 
@@ -64,7 +85,9 @@ internal static partial class CompileCommand {
         bool strict,
         bool validate,
         bool bundle,
-        bool updateAssets = false
+        bool updateAssets = false,
+        IDictionary<string, string>? written = null,
+        BakePackPlan? pack = null
     ) {
         var diagnostics = new DiagnosticBag();
         string sourceText;
@@ -90,7 +113,7 @@ internal static partial class CompileCommand {
         );
 
         if (!isCartridge) {
-            return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate);
+            return ExecuteWorldCompilation(imports: imports, outputPath: outputPath, pack: pack, source: sourceText, sourcePath: sourcePath, strict: strict, updateAssets: updateAssets, validate: validate, written: written);
         }
         if (updateAssets) {
             Console.Error.WriteLine(value: "error: --update-assets applies to world asset references; cartridge sources do not use a world asset lock.");
@@ -153,7 +176,7 @@ internal static partial class CompileCommand {
             outputPath ??= Path.ChangeExtension(
                 extension: (isCartridge
                 ? ".cartridge.json"
-                : ".world.json"),
+                : WorldDocumentName.DocumentSuffix),
                 path: sourcePath
             );
             var outputDirectory = Path.GetDirectoryName(path: outputPath);
@@ -360,11 +383,11 @@ internal static partial class CompileCommand {
     }
 
     public static Command Create() {
-        var pathArgument = new Argument<string[]>(name: "paths") { Arity = ArgumentArity.OneOrMore, Description = "Paths to .puck sources, compiled in input order in one process. Stops on the first failure." };
+        var pathArgument = new Argument<string[]>(name: "paths") { Arity = ArgumentArity.OneOrMore, Description = "Paths to .puck sources, or .world.json documents to write only the compiled world of, compiled in input order in one process. Stops on the first failure." };
         var outputOption = new Option<string?>(
             name: "--output",
             aliases: ["-o"]
-        ) { Description = "Destination JSON path, or destination directory for a source with world declarations." };
+        ) { Description = "Destination JSON path, or destination directory for a source with world declarations; for a .world.json document, the path its compiled world sits beside (or the .puckb file itself)." };
         var watchOption = new Option<bool>(
             name: "--watch",
             aliases: ["-w"]
@@ -373,9 +396,12 @@ internal static partial class CompileCommand {
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document." };
         var bundleOption = new Option<bool>(name: "--bundle") { Description = "Inline and bundle all imported .puck module ASTs into a single standalone document." };
         var assetsOption = new Option<bool>(name: "--update-assets") { Description = "Explicitly refresh the source's asset hash lock after successful compilation and validation." };
+        var treeOption = new Option<string?>(name: "--tree") { Description = "Mirror the sources, which must lie under this directory, into the --output directory: each world document is written where its source sits relative to the tree with its compiled world (.puckb) beside it, the bakes they name ship once in one bake pack (bakes.puckbake) at the output's root, every pipeline source they name ships compiled as a shader package in the store (packages/) at the output's root, a .world.json source ships as it stands with its compiled world unless the .puck source of its exact name emits that name, and every other *.world.json, *.puckb, *.puckbake and stored package under --output is removed, so the output holds exactly this run's worlds." };
+        var checkOption = new Option<bool>(name: "--check") { Description = "With --tree, compile into a scratch directory and compare it with --output instead of writing there: exit 1 naming every file a fresh run writes that --output lacks or holds with other bytes, and every document, compiled world, bake pack or stored package --output holds that the run does not write. Writes nothing under --output." };
+        var writtenOption = new Option<string?>(name: "--written") { Description = "With --tree, write the files the run left under --output to this file once it succeeds, one output-relative path with forward slashes per line, and remove it before the run starts, so it exists only for a whole run." };
 
         var command = new Command(
-            description: "Compile .puck source files into canonical JSON world or cartridge definitions.",
+            description: "Compile .puck source files into canonical JSON world or cartridge definitions, and each world document into its compiled world (.puckb) beside it.",
             name: "compile"
         ) {
             pathArgument,
@@ -385,16 +411,53 @@ internal static partial class CompileCommand {
             validateOption,
             bundleOption,
             assetsOption,
+            treeOption,
+            writtenOption,
+            checkOption,
         };
 
         command.Validators.Add(item: result => {
             if (result.GetValue(option: assetsOption) && result.GetValue(option: watchOption)) { result.AddError(errorMessage: "--update-assets cannot be combined with --watch; asset changes must be accepted explicitly."); }
-            if ((result.GetValue(argument: pathArgument)?.Length > 1) &&
+            if (result.GetValue(option: treeOption) is not null) {
+                if ((result.GetValue(option: outputOption) is null) || result.GetValue(option: watchOption) || result.GetValue(option: assetsOption)) {
+                    result.AddError(errorMessage: "--tree requires --output (the mirrored tree's directory) and cannot be combined with --watch or --update-assets.");
+                }
+                if (result.GetValue(option: checkOption) && (result.GetValue(option: writtenOption) is not null)) {
+                    result.AddError(errorMessage: "--check writes nothing, so it takes no --written report.");
+                }
+            } else if (result.GetValue(option: checkOption)) {
+                result.AddError(errorMessage: "--check compares a --tree run with its --output and requires --tree.");
+            } else if (result.GetValue(option: writtenOption) is not null) {
+                result.AddError(errorMessage: "--written reports a --tree run and requires --tree.");
+            } else if ((result.GetValue(argument: pathArgument)?.Length > 1) &&
                 ((result.GetValue(option: outputOption) is not null) || result.GetValue(option: watchOption))) {
                 result.AddError(errorMessage: "--output and --watch require exactly one source file.");
             }
         });
         command.SetAction(action: parseResult => {
+            if ((parseResult.GetValue(option: treeOption) is { } checkedTree) && parseResult.GetValue(option: checkOption)) {
+                return RunTreeCheck(
+                    bundle: parseResult.GetValue(option: bundleOption),
+                    output: parseResult.GetRequiredValue(option: outputOption)!,
+                    paths: parseResult.GetRequiredValue(argument: pathArgument),
+                    strict: parseResult.GetValue(option: strictOption),
+                    tree: checkedTree,
+                    validate: parseResult.GetValue(option: validateOption)
+                );
+            }
+
+            if (parseResult.GetValue(option: treeOption) is { } tree) {
+                return RunTree(
+                    bundle: parseResult.GetValue(option: bundleOption),
+                    output: parseResult.GetRequiredValue(option: outputOption)!,
+                    paths: parseResult.GetRequiredValue(argument: pathArgument),
+                    report: parseResult.GetValue(option: writtenOption),
+                    strict: parseResult.GetValue(option: strictOption),
+                    tree: tree,
+                    validate: parseResult.GetValue(option: validateOption)
+                );
+            }
+
             foreach (var path in parseResult.GetRequiredValue(argument: pathArgument)) {
                 var exitCode = Run(
                     bundle: parseResult.GetValue(option: bundleOption),

@@ -21,8 +21,8 @@
 #include "sdf-world.hlsli"
 
 // The per-view source textures — the SAME binding/register as sdf-world-views.comp.hlsl's own declaration (binding
-// 4, register u1), so the shared views layout resolves identically regardless of which of the two kernels is bound.
-[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u1);
+// 4, register u0), so the shared views layout resolves identically regardless of which of the two kernels is bound.
+[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u0);
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {

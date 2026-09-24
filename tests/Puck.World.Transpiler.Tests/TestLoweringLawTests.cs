@@ -11,8 +11,9 @@ namespace Puck.World.Transpiler.Tests;
 public class TestLoweringLawTests {
     private static string Canonical(JsonNode node) =>
         Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node));
-    private static WorldCompilation Green(string source, string? sourcePath = null) {
+    private static WorldCompilation Green(string source, string? sourcePath = null, bool allowMultiple = false) {
         var compilation = WorldCompiler.Compile(
+            allowMultiple: allowMultiple,
             cancellationToken: TestContext.Current.CancellationToken,
             source: source,
             sourcePath: sourcePath
@@ -25,6 +26,11 @@ public class TestLoweringLawTests {
 
         return compilation;
     }
+    // Every document a source publishes, named: the one it lowers to, or one per `world` statement.
+    private static IReadOnlyList<(string Name, string Json)> Published(WorldCompilation compilation) => ((compilation.Worlds.Count > 0)
+        ? [.. compilation.Worlds.Select(selector: static world => (world.Name, Canonical(node: world.Json)))]
+        : [("", Canonical(node: compilation.RequireJson()))]
+    );
     private static JsonObject OneWorld(string source) => Assert.Single(collection: Green(source: source).TestWorlds).Json;
     // The source with every `test` block cut out, brace by brace — what an author would be left with if they
     // deleted the tests by hand.
@@ -86,13 +92,11 @@ public class TestLoweringLawTests {
         comparisonType: StringComparison.Ordinal,
         value: "\ntest \""
     )));
-
     public static TheoryData<string, string> InadmissibleLines() => new() {
         { "given {\n        hp = notALiteral\n    }\n    expect {\n        hp == 1\n    }", "from something other than a literal" },
         { "given {\n        missingRow = 1\n    }\n    expect {\n        hp == 1\n    }", "which this world's state section does not declare" },
         { "when {\n        seat1: world.save out.json\n    }\n    expect {\n        hp == 1\n    }", "is not a scheduled step verb" },
     };
-
     [Fact]
     public void AWorldWithTestsCompilesToTheDocumentItWouldWithoutThem() {
         var tested = Green(source: TestConstructLawTests.Doc(body: """
@@ -144,19 +148,22 @@ public class TestLoweringLawTests {
         );
 
         var tested = Green(
+            allowMultiple: true,
             source: source,
             sourcePath: sourcePath
         );
 
         Assert.NotEmpty(collection: tested.TestWorlds);
         Assert.Equal(
-            actual: Canonical(node: tested.RequireJson()),
-            expected: Canonical(node: Green(
+            actual: Published(compilation: tested),
+            expected: Published(compilation: Green(
+                allowMultiple: true,
                 source: stripped,
                 sourcePath: sourcePath
-            ).RequireJson())
+            ))
         );
     }
+
     private const string KindsDoc = """
         schema: "puck.world.definition.v1"
         documentId: "kinds"
@@ -183,10 +190,6 @@ public class TestLoweringLawTests {
 
         """;
 
-    private static JsonObject Row(JsonObject world, string name) => world["state"]!["world"]!.AsArray()
-        .OfType<JsonObject>()
-        .Single(predicate: candidate => (candidate["name"]!.GetValue<string>() == name));
-
     // A given value is spelled the way an authored cell of the row's kind is: a Fixed row's as the decimal string
     // the emitter writes, a Bool row's as a JSON boolean, a Text row's as a string.
     [Fact]
@@ -195,28 +198,28 @@ public class TestLoweringLawTests {
         var authored = Green(source: KindsDoc).RequireJson();
 
         Assert.Equal(
-            actual: Row(
+            actual: TestWorldFixtures.Row(
                 name: "speed",
                 world: world
             )["value"]!.GetValueKind(),
-            expected: Row(
+            expected: TestWorldFixtures.Row(
                 name: "speed",
                 world: authored
             )["value"]!.GetValueKind()
         );
         Assert.Equal(
-            actual: Row(
+            actual: TestWorldFixtures.Row(
                 name: "speed",
                 world: world
             )["value"]!.GetValue<string>(),
             expected: "2.25"
         );
-        Assert.False(condition: Row(
+        Assert.False(condition: TestWorldFixtures.Row(
             name: "open",
             world: world
         )["value"]!.GetValue<bool>());
         Assert.Equal(
-            actual: Row(
+            actual: TestWorldFixtures.Row(
                 name: "label",
                 world: world
             )["value"]!.GetValue<string>(),
@@ -229,8 +232,8 @@ public class TestLoweringLawTests {
     [Fact]
     public void AnExpectationFoldsAnIntReadIntoItsVerdictAndAFixedReadIntoAWitnessOfThatKind() {
         var world = OneWorld(source: KindsDoc);
-        var keys = Row(
-            name: "kinds-1",
+        var keys = TestWorldFixtures.Row(
+            name: "expect$1",
             world: world
         )["cells"]!.AsArray()
             .Select(selector: static cell => cell!["key"]!.GetValue<string>())
@@ -238,17 +241,17 @@ public class TestLoweringLawTests {
 
         Assert.Equal(
             actual: keys,
-            expected: ["status", "hp"]
+            expected: ["$status", "hp"]
         );
 
-        var witness = Row(
-            name: "kinds-1-fixed",
+        var witness = TestWorldFixtures.Row(
+            name: "expect$1$fixed",
             world: world
         );
 
         Assert.Equal(
             actual: witness["witness"]!.GetValue<string>(),
-            expected: "kinds-1"
+            expected: "expect$1"
         );
         Assert.Equal(
             actual: witness["kind"]!.GetValue<string>(),
@@ -266,7 +269,7 @@ public class TestLoweringLawTests {
 
         Assert.Equal(
             actual: fold["state"]!.GetValue<string>(),
-            expected: "kinds-1-fixed"
+            expected: "expect$1$fixed"
         );
     }
     [Fact]
@@ -311,7 +314,7 @@ public class TestLoweringLawTests {
 
         Assert.Equal(
             actual: verdict["name"]!.GetValue<string>(),
-            expected: "armour-arrives-1"
+            expected: "expect$1"
         );
         Assert.Equal(
             actual: verdict["verdict"]!["gate"]!.GetValue<string>(),
@@ -322,7 +325,7 @@ public class TestLoweringLawTests {
                 separator: " ",
                 values: verdict["cells"]!.AsArray().OfType<JsonObject>().Select(selector: static cell => cell["key"]!.GetValue<string>())
             ),
-            expected: "status armour hp"
+            expected: "$status armour hp"
         );
 
         // A given line lands on the row's own boot value rather than on a schedule row — through `value` for a
@@ -335,7 +338,7 @@ public class TestLoweringLawTests {
             expected: 4L
         );
 
-        var rule = world["rules"]!.AsArray().OfType<JsonObject>().Single(predicate: static candidate => (candidate["name"]!.GetValue<string>() == "test-armour-arrives-1"));
+        var rule = world["rules"]!.AsArray().OfType<JsonObject>().Single(predicate: static candidate => (candidate["name"]!.GetValue<string>() == "expect$1"));
 
         // The gate is the firing tick and nothing else: the expectation is the effect's own condition, so the rule
         // fires once and a verdict that would be false before the last tick is never written as a failure.
@@ -349,13 +352,243 @@ public class TestLoweringLawTests {
         );
     }
     [Fact]
+    public void ARefusedStepDeclaresTheRefusalItsRowMustRecord() {
+        var source = TestConstructLawTests.Doc(body: """
+            test "a read and two refusals" {
+                when {
+                    seat1: world.state armour
+                    seat2 refused "is not disclosed": world.state armour $value
+                    seat2 refused: world.state.cell.set armour $value 9
+                    ticks 1
+                }
+                expect {
+                    armour == 0
+                }
+            }
+            """);
+        var rows = OneWorld(source: source)["schedule"]!["rows"]!.AsArray().OfType<JsonObject>().ToArray();
+
+        // A step that declares nothing lands as an ordinary submission, with no expectation member at all.
+        Assert.Null(@object: rows[0]["expect"]);
+        Assert.Null(@object: rows[0]["refusal"]);
+        Assert.Equal(
+            actual: rows[1]["expect"]!.GetValue<string>(),
+            expected: "Refused"
+        );
+        Assert.Equal(
+            actual: rows[1]["refusal"]!.GetValue<string>(),
+            expected: "is not disclosed"
+        );
+        Assert.Equal(
+            actual: rows[1]["command"]!.GetValue<string>(),
+            expected: "world.state armour $value"
+        );
+        Assert.Equal(
+            actual: rows[2]["expect"]!.GetValue<string>(),
+            expected: "Refused"
+        );
+        Assert.Null(@object: rows[2]["refusal"]);
+
+        // The spelling prints back as written, and the printed source reads back to the same schedule.
+        var formatted = (Puck.Transpiler.Formatting.PuckPrinter.Format(
+            source: source,
+            vocabulary: Puck.World.Transpiler.Lowering.WorldDocumentVocabulary.Instance
+        ).Value ?? string.Empty);
+
+        Assert.Contains(actualString: formatted, comparisonType: StringComparison.Ordinal, expectedSubstring: "seat2 refused \"is not disclosed\": world.state armour $value\n");
+        Assert.Contains(actualString: formatted, comparisonType: StringComparison.Ordinal, expectedSubstring: "seat2 refused: world.state.cell.set armour $value 9\n");
+        Assert.Equal(
+            actual: Canonical(node: OneWorld(source: formatted)["schedule"]!),
+            expected: Canonical(node: OneWorld(source: source)["schedule"]!)
+        );
+    }
+    [Fact]
     public void ATestInsideAnotherConstructIsRefusedByName() => Assert.Contains(
         actualString: TestConstructLawTests.Refusal(
             code: PuckDiagnosticCodes.TestShapeInadmissible,
             source: $"schema: \"puck.world.definition.v1\"\n\n{TestWorldFixtures.Rows}\n\nhost {{\n    test \"nested\" {{\n        expect {{\n            hp == 1\n        }}\n    }}\n}}\n"
         ),
-        expectedSubstring: "stands at the document's own root"
+        expectedSubstring: "stands at the root of the document or the module body it is about"
     );
+    // A test with a module subject is about the module, so its world is the module standing on its own: the rows
+    // the module declares, under the arguments the test gave it, and nothing the enclosing document declares.
+    [Fact]
+    public void AModuleSubjectGeneratesTheModuleStandingOnItsOwn() {
+        var compilation = Green(source: TestWorldFixtures.ModuleSource);
+        var world = Assert.Single(collection: compilation.TestWorlds);
+
+        Assert.Equal(
+            actual: world.Name,
+            expected: "world~the-plating-arrives"
+        );
+        Assert.Equal(
+            actual: world.Json["documentId"]!.GetValue<string>(),
+            expected: "world~the-plating-arrives"
+        );
+        Assert.Equal(
+            actual: TestWorldFixtures.Row(
+                name: "armour",
+                world: world.Json
+            )["value"]!.GetValue<long>(),
+            expected: 3L
+        );
+        Assert.Equal(
+            actual: world.Json["state"]!["world"]!.AsArray()
+                .OfType<JsonObject>()
+                .Single(predicate: static candidate => (candidate["verdict"] is not null))["verdict"]!["gate"]!
+                .GetValue<string>(),
+            expected: "armour == 3"
+        );
+    }
+    // A module brings its tests to every use, under that use's own arguments. The module's test states a boot value
+    // of nothing, so what it boots at is what the use asked for.
+    [Fact]
+    public void AModulesOwnTestRunsAtEveryUseUnderThatUsesArguments() {
+        var compilation = Green(source: $"""
+            schema: "puck.world.definition.v1"
+            documentId: "keep"
+
+            {TestWorldFixtures.InlineArmoury}
+
+            use armoury(plating: 2)
+            use armoury(plating: 5)
+            """);
+
+        Assert.Equal(
+            actual: compilation.TestWorlds.Select(selector: static world => world.Test).ToArray(),
+            expected: ["armoury a seat's write reaches the plating", "armoury 2 a seat's write reaches the plating"]
+        );
+        Assert.Equal(
+            actual: compilation.TestWorlds.Select(selector: static world => TestWorldFixtures.Row(
+                name: "armour",
+                world: world.Json
+            )["value"]!.GetValue<long>()).ToArray(),
+            expected: [2L, 5L]
+        );
+    }
+    // A module that uses another module carries that one's tests up too, and each stays a test of the module it
+    // came from, under the arguments the inner use supplied for this outer instantiation.
+    [Fact]
+    public void AModuleCarriesTheTestsOfTheModulesItUses() {
+        var compilation = Green(source: string.Join(
+            separator: "\n",
+            values: ((string[])[
+                "schema: \"puck.world.definition.v1\"",
+                "documentId: \"keep\"",
+                "",
+                TestWorldFixtures.InlineArmoury,
+                "",
+                "module keep(thickness) {",
+                "    state {",
+                "        world {",
+                "            slot banner = 1",
+                "        }",
+                "    }",
+                "",
+                "    use armoury(plating: thickness)",
+                "}",
+                "",
+                "use keep(thickness: 2)",
+                "use keep(thickness: 5)",
+            ])
+        ));
+
+        Assert.Equal(
+            actual: compilation.TestWorlds.Select(selector: static world => world.Test).ToArray(),
+            expected: ["keep armoury a seat's write reaches the plating", "keep 2 armoury a seat's write reaches the plating"]
+        );
+        Assert.Equal(
+            actual: compilation.TestWorlds.Select(selector: static world => TestWorldFixtures.Row(
+                name: "armour",
+                world: world.Json
+            )["value"]!.GetValue<long>()).ToArray(),
+            expected: [2L, 5L]
+        );
+
+        // The subject stays the module the test came from, so the enclosing module's own rows are not in it.
+        foreach (var world in compilation.TestWorlds) {
+            Assert.DoesNotContain(
+                collection: world.Json["state"]!["world"]!.AsArray().OfType<JsonObject>(),
+                filter: static row => (row["name"]!.GetValue<string>() == "banner")
+            );
+        }
+    }
+    // Two uses that read identically ask for the same thing, so the module's test runs once.
+    [Fact]
+    public void AModulesOwnTestRunsOncePerDistinctUse() => Assert.Single(collection: Green(source: $"""
+        schema: "puck.world.definition.v1"
+        documentId: "keep"
+
+        {TestWorldFixtures.InlineArmoury}
+
+        use armoury as left(plating: 2)
+        use armoury as right(plating: 2)
+        """).TestWorlds);
+    // A `world` declaration is a use like any other, so each declared world runs the module's test under its own
+    // arguments and names the generated world after itself.
+    [Fact]
+    public void AWorldDeclarationRunsItsModulesOwnTest() {
+        var compilation = WorldCompiler.Compile(
+            allowMultiple: true,
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: $"""
+                {TestWorldFixtures.InlineArmoury}
+
+                world west = armoury(plating: 2)
+                world east = armoury(plating: 5)
+                """
+        );
+
+        Assert.False(
+            condition: compilation.Diagnostics.HasErrors,
+            userMessage: string.Join(separator: Environment.NewLine, values: compilation.Diagnostics)
+        );
+        Assert.Equal(
+            actual: compilation.TestWorlds.Select(selector: static world => world.Name).ToArray(),
+            expected: ["west~a-seat-s-write-reaches-the-plating", "east~a-seat-s-write-reaches-the-plating"]
+        );
+    }
+    // A source that emits its worlds by name has no default world, so a subjectless test at its root says which one
+    // each line is about — even when it declares only one.
+    [Fact]
+    public void ASubjectlessTestAtACompositionRootNamesTheWorldEachLineIsAbout() {
+        var refused = WorldCompiler.Compile(
+            allowMultiple: true,
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: $"{TestWorldFixtures.InlineArmoury}\n\nentry world west = armoury(plating: 2)\n\ntest \"a claim naming no world\" {{\n    expect {{\n        armour == 2\n    }}\n}}\n"
+        );
+
+        Assert.Contains(
+            actualString: refused.Diagnostics.First(predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.TestStepInadmissible)).Message,
+            expectedSubstring: "names no world"
+        );
+
+        var addressed = Green(
+            allowMultiple: true,
+            source: $"{TestWorldFixtures.InlineArmoury}\n\nentry world west = armoury(plating: 2)\n\ntest \"a claim naming its world\" {{\n    expect {{\n        west {{\n            armour == 2\n        }}\n    }}\n}}\n"
+        );
+
+        Assert.Contains(
+            collection: addressed.TestWorlds,
+            filter: static world => (world.Name == "world~a-claim-naming-its-world")
+        );
+    }
+    // A world compiled without its tests is what a world compiled with them is, and a module's tests are no
+    // exception: the use that brings them writes nothing into the document.
+    [Fact]
+    public void AUseThatBringsModuleTestsCompilesToTheDocumentItWouldWithoutThem() {
+        const string Head = "schema: \"puck.world.definition.v1\"\ndocumentId: \"keep\"\n\n";
+        const string Tail = "\n\nuse armoury(plating: 2)\n";
+        const string Untested = "module armoury(plating) {\n    state {\n        world {\n            slot armour = plating\n        }\n    }\n}";
+        const string Tested = "module armoury(plating) {\n    state {\n        world {\n            slot armour = plating\n        }\n    }\n\n    test \"the module's own\" {\n        expect {\n            armour == 2\n        }\n    }\n}";
+        var tested = Green(source: ((Head + Tested) + Tail));
+
+        Assert.NotEmpty(collection: tested.TestWorlds);
+        Assert.Equal(
+            actual: Canonical(node: tested.RequireJson()),
+            expected: Canonical(node: Green(source: ((Head + Untested) + Tail)).RequireJson())
+        );
+    }
     [Fact]
     public void TwoTestsGeneratingOneWorldAreRefusedByName() => Assert.Contains(
         actualString: TestConstructLawTests.Refusal(

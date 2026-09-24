@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
@@ -12,7 +13,6 @@ public sealed class ShaderPipelineLoaderTests {
         new(
             name,
             (name + ".hlsl"),
-            ShaderSourceLanguage.Hlsl,
             "main",
             ShaderPipelinePassKind.Compute,
             inputs,
@@ -39,13 +39,15 @@ public sealed class ShaderPipelineLoaderTests {
         ),
         };
 
-        foreach (var pass in passes) { File.WriteAllText(
+        foreach (var pass in passes) {
+            File.WriteAllText(
             Path.Combine(
                 path1: fixture.Directory,
                 path2: pass.Source
             ),
             "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }"
-        ); }
+        );
+        }
         var path = Path.Combine(
             path1: fixture.Directory,
             path2: "graph.pipeline.json"
@@ -78,6 +80,10 @@ public sealed class ShaderPipelineLoaderTests {
         );
 
         Assert.Null(@object: result.Pipeline);
+        Assert.Equal(
+            expected: ShaderPipelineLoadStatus.Failed,
+            actual: result.Status
+        );
         Assert.Contains(
             "failed pass 'two'",
             result.Message
@@ -102,10 +108,12 @@ public sealed class ShaderPipelineLoaderTests {
             contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }",
             path: source
         );
-        var runner = new Runner { BeforeFirstRun = () => File.AppendAllText(
+        var runner = new Runner {
+            BeforeFirstRun = () => File.AppendAllText(
             contents: "\n// edited during compilation",
             path: source
-        ) };
+        ),
+        };
         var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(
             Path.Combine(
                 path1: fixture.Directory,
@@ -120,7 +128,10 @@ public sealed class ShaderPipelineLoaderTests {
         );
 
         Assert.Null(@object: first.Pipeline);
-        Assert.True(condition: first.RetryRecommended);
+        Assert.Equal(
+            expected: ShaderPipelineLoadStatus.Retry,
+            actual: first.Status
+        );
         Assert.Contains(
             source,
             first.Dependencies
@@ -132,7 +143,97 @@ public sealed class ShaderPipelineLoaderTests {
         );
 
         Assert.NotNull(@object: second.Pipeline);
-        Assert.False(condition: second.RetryRecommended);
+        Assert.Equal(
+            expected: ShaderPipelineLoadStatus.Compiled,
+            actual: second.Status
+        );
+    }
+    [Fact]
+    public void A_missing_compiler_is_unsupported_rather_than_a_failed_candidate() {
+        using var fixture = new Fixture();
+        var source = Path.Combine(
+            path1: fixture.Directory,
+            path2: "pass.hlsl"
+        );
+
+        File.WriteAllText(
+            contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }",
+            path: source
+        );
+        var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(
+            Path.Combine(
+                path1: fixture.Directory,
+                path2: "cache"
+            ),
+            new Runner { MissingTool = true }
+        ));
+        var result = loader.Load(
+            "missing",
+            source,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Null(@object: result.Pipeline);
+        Assert.Equal(
+            expected: ShaderPipelineLoadStatus.Unsupported,
+            actual: result.Status
+        );
+        Assert.Contains(
+            source,
+            result.Dependencies
+        );
+    }
+    [Fact]
+    public void Native_tools_see_a_snapshot_whose_length_does_not_grow_with_the_source_depth() {
+        using var fixture = new Fixture();
+        var deep = Path.Combine(paths: [fixture.Directory, .. Enumerable.Repeat(
+            count: 12,
+            element: "a-directory-name-of-some-length"
+        )]);
+
+        Directory.CreateDirectory(path: deep);
+        var source = Path.Combine(
+            path1: deep,
+            path2: "pass.hlsl"
+        );
+
+        File.WriteAllText(
+            contents: "#include \"shared.hlsli\"\n[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { }",
+            path: source
+        );
+        File.WriteAllText(
+            contents: "// shared",
+            path: Path.Combine(
+                path1: deep,
+                path2: "shared.hlsli"
+            )
+        );
+        var cache = Path.Combine(
+            path1: fixture.Directory,
+            path2: "cache"
+        );
+        var runner = new Runner();
+        var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(
+            cache,
+            runner
+        )).Load(
+            "deep",
+            source,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(
+            expected: ShaderPipelineLoadStatus.Compiled,
+            actual: result.Status
+        );
+        Assert.NotEmpty(collection: runner.Calls);
+        Assert.All(
+            collection: runner.Calls.SelectMany(selector: static call => call),
+            action: argument => Assert.DoesNotContain(
+                actualString: argument,
+                expectedSubstring: "a-directory-name-of-some-length"
+            )
+        );
     }
 
     private sealed class Fixture : IDisposable {
@@ -152,17 +253,24 @@ public sealed class ShaderPipelineLoaderTests {
         private int m_calls;
 
         public Action? BeforeFirstRun { get; init; }
+        public List<IReadOnlyList<string>> Calls { get; } = [];
         public int FailCall { get; init; }
+        // Every launch fails the way Process.Start does for an executable absent from the search path.
+        public bool MissingTool { get; init; }
 
-        public Task<ShaderProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
+        public Task<ChildProcessResult> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
             cancellationToken.ThrowIfCancellationRequested();
+            if (MissingTool) { throw new System.ComponentModel.Win32Exception(message: $"{fileName} was not found"); }
             m_calls++;
+            Calls.Add(item: [.. arguments]);
             if (m_calls == 1) { BeforeFirstRun?.Invoke(); }
-            if (m_calls == FailCall) { return Task.FromResult(new ShaderProcessResult(
-                1,
-                string.Empty,
-                "deliberate compiler error"
-            )); }
+            if (m_calls == FailCall) {
+                return Task.FromResult(result: new ChildProcessResult(
+                ExitCode: 1,
+                Stderr: "deliberate compiler error",
+                Stdout: string.Empty
+            ));
+            }
             for (var index = 0; ((index + 1) < arguments.Count); index++) {
                 if (arguments[index] is "-Fo" or "-o" or "--output") {
                     File.WriteAllBytes(
@@ -172,10 +280,10 @@ public sealed class ShaderPipelineLoaderTests {
                     break;
                 }
             }
-            return Task.FromResult(new ShaderProcessResult(
-                0,
-                string.Empty,
-                string.Empty
+            return Task.FromResult(result: new ChildProcessResult(
+                ExitCode: 0,
+                Stderr: string.Empty,
+                Stdout: string.Empty
             ));
         }
     }

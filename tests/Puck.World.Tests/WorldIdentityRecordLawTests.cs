@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 using System.Text;
 using Puck.World.Protocol;
@@ -55,7 +56,7 @@ public sealed class WorldIdentityRecordLawTests {
         var request = new WorldTransferReservationRequest(TransferId: 1, SourceAuthority: "source", SourceRateHz: 240,
             SourceTick: 0, DeadlineSourceTick: 60, Border: "east", BorderCapacity: null,
             PartyAllOrNothing: true, PeerAdmission: true, Members: [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console, PreferredSlot: 0, Identity: identity, Source: default,
+                Principal: Principal.Console, PreferredSlot: 0, Identity: identity, Source: default,
                 BodyColor: Vector3.One, CatalogRig: 0,
                 Mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 0, Incarnation: address)
             )]);

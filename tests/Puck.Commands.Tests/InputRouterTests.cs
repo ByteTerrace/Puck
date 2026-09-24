@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.Commands.Tests;
@@ -133,44 +134,30 @@ public sealed class InputRouterTests {
             );
         }
 
-        var captureAllocated = 0L;
-        var drainAllocated = 0L;
         var observedEntries = 0;
+        var next = 1_024UL;
 
-        for (var tick = 1_024UL; (tick < 2_048UL); tick++) {
-            var beforeCapture = GC.GetAllocatedBytesForCurrentThread();
-
-            CaptureBatch(
-                captureTick: tick,
-                router: router
-            );
-            var afterCapture = GC.GetAllocatedBytesForCurrentThread();
-
-            clock.NowTicks = tick;
-            InjectBatch(registry: registry);
-            var beforeDrain = GC.GetAllocatedBytesForCurrentThread();
-
-            observedEntries += router.SnapshotForTick(
-                tick: tick,
-                windowEndTick: ulong.MaxValue
-            ).Lanes[0].Entries.Count;
-            var afterDrain = GC.GetAllocatedBytesForCurrentThread();
-
-            captureAllocated += (afterCapture - beforeCapture);
-            drainAllocated += (afterDrain - beforeDrain);
-        }
-
+        Assert.Equal(
+            actual: AllocationWindow.Least(window: () => {
+                for (var end = (next + 1_024UL); (next < end); next++) {
+                    CaptureBatch(
+                        captureTick: next,
+                        router: router
+                    );
+                    clock.NowTicks = next;
+                    InjectBatch(registry: registry);
+                    observedEntries += router.SnapshotForTick(
+                        tick: next,
+                        windowEndTick: ulong.MaxValue
+                    ).Lanes[0].Entries.Count;
+                }
+            }),
+            expected: 0L
+        );
+        // Each tick drains the four queued text commands; the unbound presses raise no entry.
         Assert.Equal(
             actual: observedEntries,
-            expected: 4_096
-        );
-        Assert.Equal(
-            actual: captureAllocated,
-            expected: 0L
-        );
-        Assert.Equal(
-            actual: drainAllocated,
-            expected: 0L
+            expected: (4 * ((int)(next - 1_024UL)))
         );
     }
     [Fact]
@@ -499,25 +486,24 @@ public sealed class InputRouterTests {
             );
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
         var observedEntries = 0;
+        var next = 33UL;
 
-        for (var tick = 33UL; (tick < 1_057UL); tick++) {
-            observedEntries += router.SnapshotForTick(
-                tick: tick,
-                windowEndTick: ulong.MaxValue
-            ).Lanes[0].Entries.Count;
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
+        Assert.Equal(
+            actual: AllocationWindow.Least(window: () => {
+                for (var end = (next + 1_024UL); (next < end); next++) {
+                    observedEntries += router.SnapshotForTick(
+                        tick: next,
+                        windowEndTick: ulong.MaxValue
+                    ).Lanes[0].Entries.Count;
+                }
+            }),
+            expected: 0L
+        );
+        // The held press re-asserts once on every tick a window snapshots.
         Assert.Equal(
             actual: observedEntries,
-            expected: 1_024
-        );
-        Assert.Equal(
-            actual: allocated,
-            expected: 0L
+            expected: ((int)(next - 33UL))
         );
     }
     [Fact]
@@ -1059,8 +1045,8 @@ public sealed class InputRouterTests {
         }
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
     }
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;

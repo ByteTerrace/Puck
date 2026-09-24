@@ -1,33 +1,14 @@
 using Puck.Transpiler.Ast;
-using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
 public class ParserSugarTests {
     private static RuleBlockNode FirstRule(DocumentNode doc) => Assert.IsType<RuleBlockNode>(@object: doc.Statements[0]);
-    private static DocumentNode ParseClean(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-
-        var (doc, diagnostics) = PuckParser.ParseDocumentWithDiagnostics(source);
-        Assert.NotNull(@object: doc);
-        Assert.False(
-            condition: diagnostics.HasErrors,
-            userMessage: diagnostics.FormatReport(source)
-        );
-        return doc!;
-    }
-    private static (DocumentNode? Document, DiagnosticBag Diagnostics) ParseWithDiagnostics(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var result = PuckParser.ParseDocumentWithDiagnostics(source);
-
-        return (result.Value, result.Diagnostics);
-    }
 
     [Fact]
     public void AddCellStatement() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 solitaireFreecell[moves] += 1
             }
@@ -44,48 +25,122 @@ public class ParserSugarTests {
         );
         Assert.IsType<RhsOperandNode>(@object: add.Rhs);
     }
-    [Fact]
-    public void AColonChannelInCodeReportsPuck106AndOneInsideAStringLiteralDoesNot() {
-        var (_, refused) = ParseWithDiagnostics(body: """
-            rule "r" {
-                when $physics:quiescent == 1
-                hp += 1
-            }
-            """);
-        Assert.Contains(
-            collection: refused,
-            filter: d => (d.Code == "PUCK106")
-        );
 
-        var (_, admitted) = ParseWithDiagnostics(body: """
+    private static readonly Dictionary<string, Refusal> Refusals = new(comparer: StringComparer.Ordinal) {
+        ["PUCK004: a chained comparison"] = new(
+            Body: "rule \"r\" {\n    when a == 1 == 2\n    flag = 1\n}\n",
+            Code: "PUCK004",
+            Needle: "when a == 1 == 2"
+        ),
+        ["PUCK009: text added to a cell"] = new(
+            Body: "rule \"r\" {\n    hp += \"oops\"\n}\n",
+            Code: "PUCK009",
+            Needle: "hp += \"oops\""
+        ),
+        ["PUCK010: a schedule delay without its seconds suffix"] = new(
+            Body: "rule \"r\" {\n    schedule respawnAt in 2\n}\n",
+            Code: "PUCK010",
+            Needle: "schedule respawnAt in 2"
+        ),
+        ["PUCK012: a second when clause"] = new(
+            Body: "rule \"r\" {\n    when a == 1\n    when b == 2\n    flag = 1\n}\n",
+            Code: "PUCK012",
+            Needle: "when b == 2"
+        ),
+        ["PUCK013: an option without a score"] = new(
+            Body: "rule \"r\" {\n    decision {\n        periodSeconds: 1s\n        option \"a\" {\n            when hp == 1\n        }\n    }\n    flag = 1\n}\n",
+            Code: "PUCK013",
+            Needle: "option \"a\""
+        ),
+        ["PUCK014: a second onFailure"] = new(
+            Body: "rule \"r\" {\n    transaction {\n        flag = 1\n    }\n    onFailure {\n        a = 1\n    }\n    onFailure {\n        b = 1\n    }\n}\n",
+            Code: "PUCK014",
+            Needle: "onFailure"
+        ),
+        ["PUCK019: a transaction inside a transaction"] = new(
+            Body: "rule \"r\" {\n    transaction {\n        flag = 1\n        transaction {\n            other = 2\n        }\n    }\n}\n",
+            Code: "PUCK019",
+            Needle: "transaction"
+        ),
+        ["PUCK026: a rule with no effects"] = new(
+            Body: "rule \"empty\" {\n    when a == 1\n}\n",
+            Code: "PUCK026",
+            Needle: "rule \"empty\""
+        ),
+        ["PUCK028: a bare and an explicit solid"] = new(
+            Body: "placements {\n    placement \"debugRoom\" {\n        prototype: debugRoom\n        solid\n        solid { margin: 0.2 }\n    }\n}\n",
+            Code: "PUCK028",
+            Needle: "placement \"debugRoom\""
+        ),
+        ["PUCK029: a decision without periodSeconds"] = new(
+            Body: "rule \"r\" {\n    decision {\n        option \"a\" {\n            score: 1\n        }\n    }\n    flag = 1\n}\n",
+            Code: "PUCK029",
+            Needle: "decision"
+        ),
+        ["PUCK106: a colon channel written in code"] = new(
+            Body: "rule \"r\" {\n    when $physics:quiescent == 1\n    hp += 1\n}\n",
+            Code: "PUCK106",
+            Needle: "$physics:quiescent"
+        ),
+        ["PUCK108: a local that spells its kind"] = new(
+            Body: "rule \"r\" {\n    local dx : Int = 5\n    flag = dx\n}\n",
+            Code: "PUCK108",
+            Needle: "local dx : Int = 5"
+        ),
+    };
+
+    public static TheoryData<string> RefusalNames() => new(values: Refusals.Keys);
+    [MemberData(nameof(RefusalNames))]
+    [Theory]
+    public void ARefusedSugarStatementNamesItsCodeAndLine(string name) {
+        var refusal = Refusals[name];
+
+        var (document, diagnostics) = WorldSources.Parse(body: refusal.Body);
+
+        // A refusal is drawn about a tree the parser still recovered.
+        Assert.NotNull(@object: document);
+        WorldSources.AssertRefusedBy(
+            diagnostics: diagnostics,
+            label: name,
+            refusal: refusal
+        );
+    }
+    [Fact]
+    public void AColonChannelInsideAStringLiteralIsNotRefused() {
+        var (_, admitted) = WorldSources.Parse(body: """
             rule "r" {
                 when similarity(mood, embed("$physics:quiescent")) > 0
                 hp += 1
             }
             """);
+
         Assert.DoesNotContain(
             collection: admitted,
             filter: d => (d.Code == "PUCK106")
         );
     }
     [Fact]
-    public void AddCellWithTextRhsReportsPuck009() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
+    public void AScheduleWithoutItsSecondsSuffixStillReadsItsDelay() {
+        var (document, _) = WorldSources.Parse(body: """
             rule "r" {
-                hp += "oops"
+                schedule respawnAt in 2
             }
             """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK009")
+        var schedule = Assert.IsType<ScheduleStatementNode>(@object: FirstRule(doc: document!).Statements[0]);
+
+        Assert.Equal(
+            2m,
+            schedule.DelaySeconds
         );
     }
-    [Fact]
-    public void AsKindSuffixIsEquivalentToColonForm() {
-        var doc = ParseClean(body: """
-            rule "r" {
-                when solitaireFreecell[from] != solitaireFreecell[to] as Int
+    // `: Int` and `as Int` are one annotation: it forces compareValue and is stripped from the operand it follows.
+    [InlineData(": Int")]
+    [InlineData("as Int")]
+    [Theory]
+    public void AKindSuffixForcesCompareValueAndIsStrippedFromItsOperand(string suffix) {
+        var doc = WorldSources.ParseClean(body: $$"""
+            rule "solitaireFreecell-move" {
+                when solitaireFreecell[from] != solitaireFreecell[to] {{suffix}}
                 flag = 1
             }
             """);
@@ -101,9 +156,31 @@ public class ParserSugarTests {
             cmp.Kind
         );
     }
+    // Inside a rule body a bracket after a name is its cell key, and a `$zones[...]` row reference keeps its own
+    // brackets while the key after it folds to a cell channel.
+    [InlineData("hp[$each] = 1", "hp", "$each")]
+    [InlineData("$zones[solitaireFreecell[from]][solitaireFreecell[card]] = 1", "$zones[solitaireFreecell[from]]", "$cell:solitaireFreecell:card")]
+    [Theory]
+    public void ABracketAfterANameInsideARuleBodyIsItsCellKey(string statement, string name, string key) {
+        var doc = WorldSources.ParseClean(body: $$"""
+            rule "r" {
+                {{statement}}
+            }
+            """);
+        var set = Assert.IsType<SetCellStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
+
+        Assert.Equal(
+            name,
+            set.Target.Name
+        );
+        Assert.Equal(
+            key,
+            set.Target.Key
+        );
+    }
     [Fact]
     public void BackquotedReplacePropertyUsesGenericPropertyPath() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 `$replace`: true
                 flag = 1
@@ -127,7 +204,7 @@ public class ParserSugarTests {
 
     [Fact]
     public void BareComparisonGate() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "tabletop-settle-hold-reset" {
                 when physics(quiescent) != 1
                 flag = 1
@@ -153,7 +230,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void BarePlacementSolidFlagBecomesFlagStatement() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             placements {
                 placement "debugRoom" {
                     prototype: debugRoom
@@ -182,22 +259,8 @@ public class ParserSugarTests {
     // §3 — rule / decision / option / local
 
     [Fact]
-    public void LocalWithExplicitKindReportsPuck108() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                local dx : Int = 5
-                flag = dx
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK108")
-        );
-    }
-    [Fact]
     public void LocalCapturesExpressionVerbatim() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 local dx = hp - 1
                 flag = dx
@@ -215,77 +278,8 @@ public class ParserSugarTests {
         );
     }
     [Fact]
-    public void BothBareAndExplicitSolidReportsPuck028() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            placements {
-                placement "debugRoom" {
-                    prototype: debugRoom
-                    solid
-                    solid { margin: 0.2 }
-                }
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK028")
-        );
-    }
-    [Fact]
-    public void BracketAfterIdentifierMeansCellKeyInsideRuleBody() {
-        var doc = ParseClean(body: """
-            rule "r" {
-                hp[$each] = 1
-            }
-            """);
-        var set = Assert.IsType<SetCellStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
-
-        Assert.Equal(
-            "hp",
-            set.Target.Name
-        );
-        Assert.Equal(
-            "$each",
-            set.Target.Key
-        );
-    }
-    [Fact]
-    public void ChainedComparisonReportsPuck004() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                when a == 1 == 2
-                flag = 1
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK004")
-        );
-    }
-    [Fact]
-    public void ColonKindSuffixForcesCompareValueAndStripsFromOperand() {
-        var doc = ParseClean(body: """
-            rule "solitaireFreecell-move" {
-                when solitaireFreecell[from] != solitaireFreecell[to] : Int
-                flag = 1
-            }
-            """);
-        var when = Assert.IsType<WhenStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
-        var cmp = Assert.IsType<ComparisonPredicateNode>(@object: when.Predicate);
-
-        Assert.Equal(
-            "solitaireFreecell[to]",
-            cmp.Right.Text
-        );
-        Assert.Equal(
-            "Int",
-            cmp.Kind
-        );
-    }
-    [Fact]
     public void ComparandRowGateStaysCompareStateShaped() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "solitaireFreecell-source" {
                 when solitaireFreecell[request] != solitaireFreecell[applied]
                 flag = 1
@@ -305,26 +299,8 @@ public class ParserSugarTests {
         Assert.Null(@object: cmp.Kind);
     }
     [Fact]
-    public void DecisionMissingPeriodSecondsReportsPuck029() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                decision {
-                    option "a" {
-                        score: 1
-                    }
-                }
-                flag = 1
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK029")
-        );
-    }
-    [Fact]
     public void DecisionWithOptionInterruptAndOnNoChoice() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "choose-companion" {
                 forEach: hound
                 decision {
@@ -377,29 +353,8 @@ public class ParserSugarTests {
         Assert.Single(collection: onNoChoice.Effects);
     }
     [Fact]
-    public void DuplicateOnFailureReportsPuck014() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                transaction {
-                    flag = 1
-                }
-                onFailure {
-                    a = 1
-                }
-                onFailure {
-                    b = 1
-                }
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK014")
-        );
-    }
-    [Fact]
     public void ExpressionOperandKeepsFullTextWithKindSuffixStripped() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "rumor" {
                 when boneHolderClaimMark[$each] != boneHolder[0] << 32 | claimSeq : Int
                 flag = 1
@@ -423,7 +378,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void FlatFourWayConjunctionStaysOneAndNode() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "solitaireFreecell-move" {
                 when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[from] != solitaireFreecell[to] : Int
                 flag = 1
@@ -445,7 +400,7 @@ public class ParserSugarTests {
 
     [Fact]
     public void InlineArrayPropertySugarStillWorksOutsideRuleBody() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             host {
                 tags [1, 2, 3]
             }
@@ -460,26 +415,8 @@ public class ParserSugarTests {
         Assert.IsType<ArrayExpressionNode>(@object: prop.Value);
     }
     [Fact]
-    public void NestedTransactionReportsPuck019() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                transaction {
-                    flag = 1
-                    transaction {
-                        other = 2
-                    }
-                }
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK019")
-        );
-    }
-    [Fact]
     public void NotWrappingComparisonInsideAll() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "tabletop-derive-cell-tilted" {
                 when settleHold == 60 and not upright(placement, $each) >= 0.5
                 flag = 1
@@ -512,27 +449,8 @@ public class ParserSugarTests {
         );
     }
     [Fact]
-    public void OptionMissingScoreReportsPuck013() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                decision {
-                    periodSeconds: 1s
-                    option "a" {
-                        when hp == 1
-                    }
-                }
-                flag = 1
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK013")
-        );
-    }
-    [Fact]
     public void ParenthesizedSubgateStaysOneOpaqueChild() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 when (a == 1 and b == 2) or c == 3
                 flag = 1
@@ -555,7 +473,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void PushRemoveSchedule() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 push queue = 5
                 remove buffer[slot]
@@ -593,71 +511,11 @@ public class ParserSugarTests {
             schedule.DelaySeconds
         );
     }
-    [Fact]
-    public void CountdownReportsPuck107NamingSchedule() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                countdown timer
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK109")
-        );
-    }
-    [Fact]
-    public void RuleWithNoEffectsReportsPuck026() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "empty" {
-                when a == 1
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK026")
-        );
-    }
-    [Fact]
-    public void ScheduleWithoutSecondsSuffixReportsPuck010() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                schedule respawnAt in 2
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK010")
-        );
-        var schedule = Assert.IsType<ScheduleStatementNode>(@object: FirstRule(doc: doc!).Statements[0]);
-
-        Assert.Equal(
-            2m,
-            schedule.DelaySeconds
-        );
-    }
-    [Fact]
-    public void SecondWhenClauseReportsPuck012() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
-            rule "r" {
-                when a == 1
-                when b == 2
-                flag = 1
-            }
-            """);
-        Assert.NotNull(@object: doc);
-        Assert.Contains(
-            collection: diagnostics,
-            filter: d => (d.Code == "PUCK012")
-        );
-    }
     // §2 — effect statements
 
     [Fact]
     public void SetCellWithOperandRhs() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 pieceCell[$each] = board(cellOf, board, placement, $each)
             }
@@ -682,7 +540,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void SetCellWithSecondsRhs() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 cooldown = 3s
             }
@@ -697,7 +555,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void SetCellWithStringRhs() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 label = "hello"
             }
@@ -714,7 +572,7 @@ public class ParserSugarTests {
 
     [Fact]
     public void ShapeBlockParsesAsOrdinaryTargetedNamedBlock() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             shape Cylinder "meadow" {
                 id: 0
                 position [0, -2.5, 0]
@@ -738,7 +596,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void TransactionWithOnFailure() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "solitaireFreecell-move" {
                 transaction {
                     solitaireFreecell[moves] += 1
@@ -760,7 +618,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void TransformWrapsCallExpression() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 transform boardCombine(row: board, operation: Shift)
             }
@@ -782,7 +640,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void UnaryMinusInsideGateOperandsValidatesCleanly() {
-        var (doc, diagnostics) = ParseWithDiagnostics(body: """
+        var (doc, diagnostics) = WorldSources.Parse(body: """
             rule "r" {
                 when hp - 1 == -1
                 flag = 1
@@ -807,7 +665,7 @@ public class ParserSugarTests {
     }
     [Fact]
     public void ZoneChannelCallArgumentParsesAsOneIdentifier() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "solitaireFreecell-move" {
                 transaction {
                     transform transfer(from: $zones[solitaireFreecell[from]], to: $zones[solitaireFreecell[to]], selector: Slice, key: $cell:solitaireFreecell:card)
@@ -853,26 +711,8 @@ public class ParserSugarTests {
         );
     }
     [Fact]
-    public void ZonesFoldedRowRefSplitsNameAndCellKey() {
-        var doc = ParseClean(body: """
-            rule "r" {
-                $zones[solitaireFreecell[from]][solitaireFreecell[card]] = 1
-            }
-            """);
-        var set = Assert.IsType<SetCellStatementNode>(@object: FirstRule(doc: doc).Statements[0]);
-
-        Assert.Equal(
-            "$zones[solitaireFreecell[from]]",
-            set.Target.Name
-        );
-        Assert.Equal(
-            "$cell:solitaireFreecell:card",
-            set.Target.Key
-        );
-    }
-    [Fact]
     public void DrawDealShuffleStatements_ParseSuccessfully() {
-        var doc = ParseClean(body: """
+        var doc = WorldSources.ParseClean(body: """
             rule "r" {
                 draw deck to hand
                 deal 5 from deck to hand

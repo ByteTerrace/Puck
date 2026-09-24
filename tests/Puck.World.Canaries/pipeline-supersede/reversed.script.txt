@@ -1,0 +1,24 @@
+# The positive script with the two edits in the opposite order: halving first, then one minus the history, which is
+# now the latest and wins.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+pipeline.time feedback pause
+pipeline.reset feedback
+pipeline.wait feedback submitted 1 10
+pipeline.step feedback
+pipeline.wait feedback submitted 2 10
+pipeline.load feedback halved.pipeline.json
+pipeline.status
+pipeline.load feedback ../pipeline-edit/corrected.pipeline.json
+pipeline.status
+pipeline.capture feedback {run}/during.png
+pipeline.wait feedback captured 10
+pipeline.wait feedback compiled 40
+pipeline.capture feedback {run}/held.png
+pipeline.wait feedback captured 10
+# Submission 3 renders through the inverted edit: 1 - 3/16 = 13/16.
+pipeline.step feedback
+pipeline.wait feedback installed 10
+pipeline.wait feedback submitted 3 10
+pipeline.capture feedback {run}/post-edit.png
+pipeline.wait feedback captured 10

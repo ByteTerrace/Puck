@@ -161,27 +161,14 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     }
     // Wires two ports as link peers. Internal (not public) on purpose: SerialLinkSession is the one blessed connect
     // seam, because a connected pair must also be STEPPED as a pair — the session owns both halves.
-    internal static void Connect(SerialComponent first, SerialComponent second) {
-        if (ReferenceEquals(
-            objA: first,
-            objB: second
-        )) {
-            throw new ArgumentException(
-                message: "A serial port cannot be linked to itself.",
-                paramName: nameof(second)
-            );
-        }
-
-        if (
-            (first.m_peer is not null) ||
-            (second.m_peer is not null)
-        ) {
-            throw new InvalidOperationException(message: "A serial port is already linked; disconnect its session first.");
-        }
-
-        first.m_peer = second;
-        second.m_peer = first;
-    }
+    internal static void Connect(SerialComponent first, SerialComponent second) =>
+        PeerCable.Connect<ISerialPeer>(
+            first: first,
+            firstPeer: ref first.m_peer,
+            port: "A serial port",
+            second: second,
+            secondPeer: ref second.m_peer
+        );
     // Severs a device peer attached with AttachPeer; a no-op for an unlinked port. A device peer holds no back-reference,
     // so only this port's peer is cleared.
     internal static void DetachPeer(SerialComponent port) =>
@@ -220,12 +207,8 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     public void ApplyModel(ConsoleModel model) =>
         m_supportsColor = model.SupportsColor();
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_data = reader.ReadByte();
-        m_control = reader.ReadByte();
-        m_bitsRemaining = reader.ReadInt32();
-        m_lastDivBit = reader.ReadBoolean();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <summary>Returns how many further T-cycles this unit can absorb without shifting: unbounded with no
     /// internal-clock transfer in flight, else every cycle before the next falling edge of its DIV bit.</summary>
     public int QuietCycles() {
@@ -255,12 +238,16 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
                 : FastClock))
         );
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: m_data);
-        writer.WriteByte(value: m_control);
-        writer.WriteInt32(value: m_bitsRemaining);
-        writer.WriteBoolean(value: m_lastDivBit);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Byte(value: ref m_data);
+        transfer.Byte(value: ref m_control);
+        transfer.Int32(value: ref m_bitsRemaining);
+        transfer.Boolean(value: ref m_lastDivBit);
     }
+
     /// <summary>Absorbs T-cycles that <see cref="QuietCycles"/> allowed, after the divider has advanced: only the
     /// edge detector's last sample follows.</summary>
     public void Skip() =>

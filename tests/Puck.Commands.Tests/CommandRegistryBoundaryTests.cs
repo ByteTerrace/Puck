@@ -223,7 +223,7 @@ public sealed class CommandRegistryBoundaryTests {
         var source = new TextCommandSource(registry: writer);
         var session = source.CreateSession(
             onResult: (line, _) => submitted.Add(item: line),
-            principal: CommandPrincipal.Console,
+            principal: Principal.Console,
             simulationSink: router.ConsoleTextSink
         );
 
@@ -392,8 +392,8 @@ public sealed class CommandRegistryBoundaryTests {
             );
         }
     }
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class FixedBindings(string command) : IInputBindings {
         private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: command)];

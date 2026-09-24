@@ -36,7 +36,8 @@ public sealed class ExpressionSpellingLawTests {
     [InlineData("`sum` + 1")]
     [InlineData("`count` * `any`")]
     [InlineData("`dot` - `boardShift`")]
-    [InlineData("`vector` + `embed`")]
+    // A vector literal keyword opens a literal only before a parenthesis, so a row named like one prints bare.
+    [InlineData("vector + embed")]
     public void ANameThatWouldBindDifferentlyBareKeepsItsBackquotes(string text) {
         Assert.True(
             condition: ExpressionSpelling.TryParse(
@@ -190,7 +191,7 @@ public sealed class ExpressionSpellingLawTests {
     // Static pool fields carry their pool, slot, and field as typed members and round-trip through infix spelling.
     [Fact]
     public void AStaticPoolFieldRoundTripsAsATypedReference() {
-        var expected = Instruction.Operand(name: StateChannelRef.OfStaticPoolField(pool: "pieces", slot: 5, field: "health"));
+        var expected = Instruction.Operand(name: StateChannelRef.OfStaticPoolField(field: "health", pool: "pieces", slot: 5));
 
         Assert.Equal([expected], Parse(text: "pieces[5].health"));
         Assert.Equal("pieces[5].health", ExpressionSpelling.Print(instructions: [expected]));
@@ -427,10 +428,10 @@ public sealed class ExpressionSpellingLawTests {
         );
         Assert.Equal(
             [S("m"), Instruction.Board(index: "north",
-                    operation: ExpressionOp.BoardFill,
+                    operation: ExpressionOp.BoardRay,
                     topology: "board"
                 )],
-            Parse(text: "boardFill(m, board, north)")
+            Parse(text: "boardRay(m, board, north)")
         );
         Assert.Equal(
             [S("m"), Instruction.Board(index: "rot180",
@@ -440,12 +441,8 @@ public sealed class ExpressionSpellingLawTests {
             Parse(text: "boardImage(m, board, rot180)")
         );
         Assert.Equal(
-            [S("m"), Instruction.Of(operation: ExpressionOp.PopCount)],
+            [S("m"), Instruction.Of(operation: ExpressionOp.SetBitCount)],
             Parse(text: "setBitCount(m)")
-        );
-        Assert.Equal(
-            [S("c"), S("a"), S("b"), Instruction.Of(operation: ExpressionOp.Select)],
-            Parse(text: "select(c, a, b)")
         );
     }
     [InlineData("a + b * c", "a", "b", "c", "multiply", "add")]
@@ -454,7 +451,7 @@ public sealed class ExpressionSpellingLawTests {
     [InlineData("a << 2 & b", "a", "2", "shiftLeft", "b", "bitAnd")]
     [InlineData("a == b | c", "a", "b", "equal", "c", "bitOr")]
     [InlineData("a >>> 1 ^ b", "a", "1", "shiftRightLogical", "b", "bitXor")]
-    [InlineData("a % 3 >= b", "a", "3", "modulo", "b", "greaterOrEqual")]
+    [InlineData("a % 3 >= b", "a", "3", "remainder", "b", "greaterOrEqual")]
     [Theory]
     public void PrecedenceFollowsC(string text, params string[] expected) {
         Assert.Equal(
@@ -495,6 +492,20 @@ public sealed class ExpressionSpellingLawTests {
         Assert.Equal(
             parsed,
             Parse(text: printed)
+        );
+    }
+    // The conditional is spelled `condition ? whenTrue : whenFalse` and nothing else, in a rule and in a document
+    // value alike: no call name reaches the operation.
+    [Fact]
+    public void TheConditionalHasOneSpelling() {
+        Assert.Null(@object: ExpressionOperators.Find(operation: ExpressionOp.Select)!.Name);
+        Assert.DoesNotContain(
+            collection: ExpressionOperators.Calls.Values,
+            filter: static row => (row.Operation == ExpressionOp.Select)
+        );
+        Assert.DoesNotContain(
+            collection: ExpressionVocabulary.Functions.Values,
+            filter: static function => (function.Operation == ExpressionOp.Select)
         );
     }
     [Fact]

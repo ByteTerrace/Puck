@@ -23,16 +23,15 @@ internal static class CoreSurfaceClaims {
         Assert.Equal(expected: 9, actual: (-999).DigitalRoot());
         Assert.Equal(expected: [5, 4, 3, 2, 1], actual: 12345.EnumerateDigits().ToArray());
         Assert.Equal(expected: 243, actual: 3.Exponentiate(exponent: 5));
-        Assert.Equal(expected: 0b100U, actual: 0b1100U.ExtractLowestSetBit());
+        Assert.Equal(expected: 0b100U, actual: 0b1100U.LowestSetBit());
         Assert.Equal(expected: 0b1000U, actual: 0b1011U.FillFromLowestClearBit());
         Assert.Equal(expected: 0b1111U, actual: 0b1000U.FillFromLowestSetBit());
         Assert.Equal(expected: 2, actual: (-7).FloorModulo(modulus: 3));
         Assert.Equal(expected: 12U, actual: 48U.GreatestCommonDivisor(other: 36U));
         Assert.Equal(expected: 144U, actual: 48U.LeastCommonMultiple(other: 36U));
-        Assert.Equal(expected: 4U, actual: 0b1000U.LeastSignificantBit());
         Assert.Equal(expected: 5, actual: 12345.LeastSignificantDigit());
-        Assert.Equal(expected: 5, actual: 12345.LogarithmBase10());
-        Assert.Equal(expected: 4U, actual: 0b1000U.MostSignificantBit());
+        Assert.Equal(expected: 5, actual: 12345.DigitCount());
+        Assert.Equal(expected: 4U, actual: 0b1000U.BitLength());
         Assert.Equal(expected: 1, actual: 12345.MostSignificantDigit());
 
         foreach (var value in new uint[] { 1U, 2U, 3U, 5U, 7U, 11U, 0x0010_0001U }) {
@@ -429,9 +428,9 @@ internal static class CoreSurfaceClaims {
 
         Assert.Equal(expected: twoSqrt2.Field, actual: sqrt8.Field);
         Assert.Equal(expected: new BigInteger(value: 2), actual: sqrt8.SurdNumerator);
-        Assert.Equal(expected: twoSqrt2, actual: sqrt8);
+        Assert.Equal(actual: sqrt8, expected: twoSqrt2);
         Assert.Equal(expected: twoSqrt2.GetHashCode(), actual: sqrt8.GetHashCode());
-        Assert.Equal(expected: eight.Element(rationalNumerator: 0, surdNumerator: 2, denominator: 1), actual: sqrt8);
+        Assert.Equal(expected: eight.Element(denominator: 1, rationalNumerator: 0, surdNumerator: 2), actual: sqrt8);
         Assert.Equal(expected: twoSqrt2, actual: (eight.Sqrt + eight.Sqrt));
         Assert.Equal(expected: RealQuadratic.Rational(value: 2), actual: (eight.Sqrt * eight.Sqrt));
 
@@ -442,7 +441,7 @@ internal static class CoreSurfaceClaims {
         var plain = RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1031);
 
         Assert.NotEqual(expected: plain.Field, actual: hidden.Field);
-        Assert.Equal(expected: plain, actual: hidden);
+        Assert.Equal(actual: hidden, expected: plain);
         Assert.Equal(expected: plain.GetHashCode(), actual: hidden.GetHashCode());
         Assert.Equal(expected: 0, actual: hidden.CompareTo(other: plain));
         Assert.Equal(expected: RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 2062), actual: (hidden + plain));
@@ -455,13 +454,13 @@ internal static class CoreSurfaceClaims {
         Assert.Equal(expected: RealQuadratic.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: -1), actual: conjugate);
         Assert.Equal(expected: RealQuadratic.FromRational(value: golden.Norm()), actual: (golden * conjugate));
         Assert.Equal(expected: RealQuadratic.FromRational(value: golden.Trace()), actual: (golden + conjugate));
-        Assert.Equal(expected: new Rational(Numerator: -1, Denominator: 1), actual: golden.Norm());
+        Assert.Equal(expected: new Rational(Denominator: 1, Numerator: -1), actual: golden.Norm());
         Assert.Equal(expected: Rational.One, actual: golden.Trace());
-        Assert.Equal(expected: new Rational(Numerator: 1, Denominator: 2), actual: golden.RationalPart);
-        Assert.Equal(expected: new Rational(Numerator: 1, Denominator: 2), actual: golden.SurdPart);
+        Assert.Equal(expected: new Rational(Denominator: 2, Numerator: 1), actual: golden.RationalPart);
+        Assert.Equal(expected: new Rational(Denominator: 2, Numerator: 1), actual: golden.SurdPart);
         Assert.Equal(expected: RealQuadraticField.Create(radicand: 5), actual: golden.Field);
         Assert.Equal(expected: RealQuadraticField.Rationals, actual: RealQuadratic.One.Field);
-        Assert.Equal(expected: RealQuadratic.Rational(denominator: 3, numerator: 2), actual: RealQuadratic.FromRational(value: new Rational(Numerator: 4, Denominator: 6)));
+        Assert.Equal(expected: RealQuadratic.Rational(denominator: 3, numerator: 2), actual: RealQuadratic.FromRational(value: new Rational(Denominator: 6, Numerator: 4)));
 
         // A perfect-square radicand folds into the rational part, and different fields refuse to combine.
         Assert.Equal(expected: RealQuadratic.Rational(value: 7), actual: RealQuadratic.Create(denominator: 1, radicand: 9, rationalNumerator: 1, surdNumerator: 2));
@@ -509,10 +508,11 @@ internal static class CoreSurfaceClaims {
                 foreach (var exponent in exponents) {
                     foreach (var signed in new[] { value, -value }) {
                         var converted = BigIntegerFunctions.ToDouble(binaryExponent: exponent, value: signed);
+
                         var (numerator, denominator) = ((exponent >= 0) ? ((signed << exponent), BigInteger.One) : (signed, (BigInteger.One << -exponent)));
 
                         Assert.True(
-                            condition: Oracles.IsNearestDouble(numerator: numerator, denominator: denominator, candidate: converted),
+                            condition: Oracles.IsNearestDouble(candidate: converted, denominator: denominator, numerator: numerator),
                             userMessage: $"ToDouble({signed}, {exponent}) = {converted} is not the nearest double"
                         );
                     }
@@ -531,19 +531,20 @@ internal static class CoreSurfaceClaims {
         Assert.Throws<ArgumentException>(testCode: () => BigIntegerFunctions.ToDouble(binaryExponent: 0, hasRemainder: true, truncatedMagnitude: ((BigInteger.One << 53) - 1)));
         Assert.Equal(expected: 0.0, actual: BigIntegerFunctions.ToDouble(binaryExponent: 0, hasRemainder: false, truncatedMagnitude: BigInteger.Zero));
 
-        foreach (var (numerator, denominator) in new (BigInteger, BigInteger)[] { (1, 3), (2, 3), ((BigInteger.One << 100) + 7, 1000003), (5, (BigInteger.One << 1076)) }) {
-            var scale = (100 + Math.Max(val1: 0, val2: (int)((long)denominator.GetBitLength() - (long)numerator.GetBitLength())));
+        foreach (var (numerator, denominator) in new (BigInteger, BigInteger)[] { (1, 3), (2, 3), (((BigInteger.One << 100) + 7), 1000003), (5, (BigInteger.One << 1076)) }) {
+            var scale = (100 + Math.Max(val1: 0, val2: ((int)(((long)denominator.GetBitLength()) - ((long)numerator.GetBitLength())))));
             var quotient = BigInteger.DivRem(dividend: (numerator << scale), divisor: denominator, remainder: out var remainder);
             var converted = BigIntegerFunctions.ToDouble(binaryExponent: -scale, hasRemainder: !remainder.IsZero, truncatedMagnitude: quotient);
 
             Assert.True(
-                condition: Oracles.IsNearestDouble(numerator: numerator, denominator: denominator, candidate: converted),
+                condition: Oracles.IsNearestDouble(candidate: converted, denominator: denominator, numerator: numerator),
                 userMessage: $"truncated ToDouble({numerator}/{denominator}) = {converted} is not the nearest double"
             );
         }
 
         return null;
     }
+
     // Whether candidate is the double nearest an exact real-quadratic value: the value is ordered against the exact
     // midpoints between the candidate and its binary64 neighbours, with a tie admitted only toward an even mantissa.
     private static bool IsNearestDouble(RealQuadratic value, double candidate) {
@@ -572,13 +573,14 @@ internal static class CoreSurfaceClaims {
     }
     private static (BigInteger Mantissa, int Exponent) Decompose(double value) {
         var bits = BitConverter.DoubleToInt64Bits(value: value);
-        var biasedExponent = (int)((bits >> 52) & 0x7FFL);
-        var fraction = (bits & 0xFFFFFFFFFFFFFL);
-        var mantissa = ((biasedExponent == 0) ? fraction : (fraction | (1L << 52)));
+        var biasedExponent = ((int)((bits >> 52) & 0x7FFL));
+        var fraction = bits & 0xFFFFFFFFFFFFFL;
+        var mantissa = ((biasedExponent == 0) ? fraction : fraction | (1L << 52));
         var exponent = ((biasedExponent == 0) ? -1074 : (biasedExponent - 1075));
 
         return (((bits < 0L) ? -new BigInteger(value: mantissa) : new BigInteger(value: mantissa)), exponent);
     }
+
     public static string? PrimeExtensionsSurface() {
         for (uint value = 0; (value <= 2048); ++value) {
             Assert.Equal(expected: IsPrimeByTrialDivision(value: ((int)value)), actual: value.IsPrime());

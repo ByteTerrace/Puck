@@ -1,12 +1,14 @@
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>
-/// The serialized home for every law that reads <see cref="WorldDefinitionFileSource"/>'s process-wide composition
-/// accounting. The counts belong to the process, not to a test, so a class composing a document beside one of these
-/// laws moves the numbers it is asserting on. Runs one class at a time, apart from every parallel collection.
+/// The serialized home for every law that reads <see cref="WorldDefinitionFileSource"/>'s process-wide held
+/// composed images. The images belong to the process, not to a test, so a class composing a document beside one of
+/// these laws decides whether a composition it is counting merges or is served from an image. Runs one class at a
+/// time, apart from every parallel collection.
 /// </summary>
 [CollectionDefinition(name: Name, DisableParallelization = true)]
 public sealed class DocumentCompositionCollection {
@@ -24,12 +26,12 @@ public sealed class DocumentCompositionCollection {
 public sealed class WorldNeighbourComposeReuseLawTests {
     [Fact]
     public void ObservingALocalNeighbourLoadsOnceAndReusesItsRunningAuthority() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        files.WriteFlatDocument(name: "basis.world.json");
-        var target = files.WriteText(name: "target.world.json", text: """{"basis":"basis.world.json"}""");
+        files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
+        var target = files.WriteText(name: "target.world.json", text: """{"basis":"basis"}""");
         var source = Fixtures.BuildDocument() with {
-            References = [new WorldReference(SafeName.Parse(candidate: "target"), target)],
+            References = [new WorldReference(SafeName.Parse(candidate: "target"), WorldDocumentName.OfDocumentFile(path: target))],
             Destinations = [new WorldDestination(SafeName.Parse(candidate: "neighbour"), "target",
                 WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
         };
@@ -46,6 +48,9 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         host.AdmitBoot(row: boot.Instance);
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
+        var work = new WorldBootWork();
+        using var attribution = WorldBootWork.Attribute(work: work);
+
         Assert.True(condition: host.TryResolveObservedProjection(boot.Instance, "neighbour", out var name,
             out var generation, out var definition, out var attach, out var reason), userMessage: reason);
         Assert.NotNull(@object: definition);
@@ -53,7 +58,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         Assert.True(condition: host.TryDescribeDocumentSharing(name: name, shared: out var shared));
         Assert.False(condition: shared);
         // A second load between choosing local hosting and admitting the instance would reuse the held image.
-        Assert.Equal(0L, WorldDefinitionFileSource.DocumentCompositionsShared);
+        Assert.Equal(0L, work.Read(kind: WorldBootWork.CompositionsShared));
 
         File.WriteAllText(contents: "not a document", path: target);
         Assert.True(condition: host.TryResolveObservedProjection(boot.Instance, "neighbour", out var sameName,
@@ -86,6 +91,9 @@ public sealed class WorldNeighbourComposeReuseLawTests {
     public void AShardWhoseBasisAndNeighboursNameOneIsland_MergesEachDocumentExactlyOnce() {
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
+        var work = new WorldBootWork();
+        using var attribution = WorldBootWork.Attribute(work: work);
+
         var shard = ShardPath(name: "quilt-nw.world.json");
 
         Assert.False(condition: WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: IslandPath));
@@ -105,12 +113,12 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         // the count of merges performed equals the count of documents held.
         Assert.True(condition: WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: IslandPath));
         Assert.True(
-            condition: (WorldDefinitionFileSource.DocumentCompositionsShared > 0L),
+            condition: (work.Read(kind: WorldBootWork.CompositionsShared) > 0L),
             userMessage: "a shard boot reaches the same documents several times; none of those reaches merged again"
         );
         Assert.Equal(
             expected: ((long)WorldDefinitionFileSource.ComposedDocumentsHeld),
-            actual: WorldDefinitionFileSource.DocumentsComposed
+            actual: work.Read(kind: WorldBootWork.Compositions)
         );
     }
     [Fact]
@@ -118,8 +126,8 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
         var resolver = ResolverBesideShards();
-        var first = resolver.Resolve(document: "../puck.world.json");
-        var second = resolver.Resolve(document: "../puck.world.json");
+        var first = resolver.Resolve(document: "../puck");
+        var second = resolver.Resolve(document: "../puck");
 
         Assert.Equal(
             expected: WorldNeighbourResolutionKind.Resolved,
@@ -173,11 +181,11 @@ public sealed class WorldNeighbourComposeReuseLawTests {
     }
     [Fact]
     public void AnEditedBasis_IsNeverServedFromAHeldImage() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
         var root = files.WriteText(
             name: "root.world.json",
-            text: /*lang=json*/ """{ "basis": "basis.world.json" }"""
+            text: /*lang=json*/ """{ "basis": "basis" }"""
         );
 
         _ = files.WriteText(
@@ -220,13 +228,13 @@ public sealed class WorldNeighbourComposeReuseLawTests {
     }
     [Fact]
     public void AHeldImage_NeverStretchesTheCompositionDepthRule() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
         // A chain exactly as long as the rule admits: MaxChainDepth documents, the last one flat.
         for (var index = 0; (index < (WorldDocumentBasis.MaxChainDepth - 1)); index++) {
             _ = files.WriteText(
                 name: $"link{index}.world.json",
-                text: $$"""{ "basis": "link{{(index + 1)}}.world.json" }"""
+                text: $$"""{ "basis": "link{{(index + 1)}}" }"""
             );
         }
 
@@ -254,7 +262,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         // that ignored its own reach would compose a chain the rule forbids.
         var above = files.WriteText(
             name: "above.world.json",
-            text: /*lang=json*/ """{ "basis": "link0.world.json" }"""
+            text: /*lang=json*/ """{ "basis": "link0" }"""
         );
 
         Assert.False(condition: WorldDefinitionFileSource.TryComposeDocumentTree(

@@ -79,9 +79,9 @@ public sealed partial class WorldStampPool {
                 value: (posedTip * placementScale)
             ));
             var resolved = TryResolveTarget(
-                bodyIndex: (live.BodyIndex ?? -1),
                 client: client,
                 effector: effector,
+                reads: live.Reads,
                 rootRotation: rootRotation,
                 target: out var targetWorld,
                 tipWorld: tipWorld
@@ -91,9 +91,7 @@ public sealed partial class WorldStampPool {
                 facts: facts,
                 gate: effector.When,
                 moving: moving,
-                definition: client.Definition,
-                tick: client.Tick,
-                bodyIndex: (live.BodyIndex ?? -1)
+                reads: live.Reads
             );
             var contactWeight = 1f;
 
@@ -386,7 +384,7 @@ public sealed partial class WorldStampPool {
     }
     // The effector's world-space goal this frame, or false when nothing answers — a probe that finds no surface, a
     // body target that is not live, a state cell that holds no point.
-    private static bool TryResolveTarget(CreationEffectorDocument effector, WorldClient client, Vector3 tipWorld, Quaternion rootRotation, int bodyIndex, out Vector3 target) {
+    private static bool TryResolveTarget(CreationEffectorDocument effector, WorldClient client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, out Vector3 target) {
         target = tipWorld;
 
         var goal = effector.Target;
@@ -415,10 +413,8 @@ public sealed partial class WorldStampPool {
                     return (
                         (goal.Reference is { } reference) &&
                         WorldGaitDrivers.TryReadStateVector(
-                        bodyIndex: bodyIndex,
-                        definition: client.Definition,
+                        reads: reads,
                         reference: reference,
-                        tick: client.Tick,
                         value: out target
                     )
                     );

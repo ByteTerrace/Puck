@@ -15,15 +15,18 @@ internal sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs
     public async Task ApplyAsync(string directory, WorldSiloDefinition definition, WorldReleaseManifest source,
         WorldReleaseManifest target, CancellationToken token) {
         if (
+            !WorldReleaseManifest.TryValidate(
+            manifest: source,
+            reason: out var reason
+        ) ||
+            !WorldReleaseManifest.TryValidate(
+            manifest: target,
+            reason: out reason
+        ) ||
             !WorldReleaseCompatibility.TryCheckStructuralCompatibility(
             candidate: target,
             previous: source,
-            reason: out var reason
-        ) ||
-            !WorldReleaseCompatibility.TryRequireMetadataCoordinator(
-            reason: out reason,
-            source: source,
-            target: target
+            reason: out reason
         )
         ) {
             throw new InvalidDataException(message: reason);

@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Testing;
 using System.Numerics;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -14,19 +16,6 @@ namespace Puck.World.Tests;
 
 /// <summary>Laws for the document-to-fixed point/planet gravity authoring seam.</summary>
 public sealed class GravityAuthoringLawTests {
-    private sealed class TemporaryStateDirectory : IDisposable {
-        public string Path { get; } = Directory.CreateTempSubdirectory(prefix: "puck-gravity-checkpoint-").FullName;
-
-        public void Dispose() {
-            if (Directory.Exists(path: Path)) {
-                Directory.Delete(
-                    path: Path,
-                    recursive: true
-                );
-            }
-        }
-    }
-
     private static WorldDefinition AttachedAreaDefinition(bool zeroAcceleration = false) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var placement = Assert.Single(collection: source.Placements) with {
@@ -154,7 +143,7 @@ public sealed class GravityAuthoringLawTests {
     [Theory]
     public void AttachedArea_CheckpointRestoreContinuesBitIdenticallyOnTheNextSolve(bool zeroAcceleration) {
         using var fixture = Fixtures.FreshServer(definition: AttachedAreaDefinition(zeroAcceleration: zeroAcceleration));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             actor,
@@ -212,9 +201,9 @@ public sealed class GravityAuthoringLawTests {
             engines: [],
             screens: restoredDefinition.Screens
         );
-        using var stateDirectory = new TemporaryStateDirectory();
+        using var stateDirectory = new TemporaryDirectory();
         var profiles = new WorldOwnedWorlds(
-            directory: stateDirectory.Path,
+            directory: stateDirectory.RootPath,
             machineId: Guid.NewGuid(),
             template: restoredDefinition
         );
@@ -577,7 +566,7 @@ public sealed class GravityAuthoringLawTests {
     public void LocalArea_RidesTheExistingAuthoritativePlacementAttachmentPose() {
         var definition = AttachedAreaDefinition();
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         fixture.Step();
         Assert.Equal(
@@ -1004,7 +993,7 @@ public sealed class GravityAuthoringLawTests {
         ));
         using var inside = Fixtures.FreshServer(definition: Definition(radius: 1000f));
         using var outside = Fixtures.FreshServer(definition: Definition(radius: 1f));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: inside.Server.ApplySession(request: new SessionRequest.Join(
             actor,

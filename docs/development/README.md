@@ -12,6 +12,9 @@ deploying Puck.
   assets, and distribution process.
 - [CI and releases](ci.md) explains the GitHub Actions workflows, artifact
   boundaries, release batches, and Azure deployment procedures.
+- [Qualifying a package](qualification.md) explains how `puck qualify` holds a
+  published `Puck.World` package to the release profile, and what each verdict
+  means.
 
 The [architecture guide](../architecture/README.md) explains the engine
 boundaries that the development procedures verify.

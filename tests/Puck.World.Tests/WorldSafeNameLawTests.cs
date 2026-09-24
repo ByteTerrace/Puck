@@ -1,6 +1,6 @@
+using Puck.Commands;
 using Xunit;
 
-using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
 
@@ -102,17 +102,19 @@ public sealed class WorldSafeNameLawTests {
             Id: SafeName.Parse(candidate: longGroupId),
             KindName: "party",
             Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
+                    WorldMemberRef.Local(principal: Principal.Seat(slot: 1)),
                     null,
                     0
                 )]
         ),
         };
-        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(
+        var definition = Fixtures.BuildDocument() with {
+            Groups = new WorldGroupsSection(
             Groups: groups,
             Kinds: [kind],
             Ownership: []
-        ) };
+        ),
+        };
         var destination = new WorldDestination(
             Name: SafeName.Parse(candidate: longName),
             Reference: "ref",
@@ -121,7 +123,7 @@ public sealed class WorldSafeNameLawTests {
             Selector: new WorldGroupSelector.Named(Group: longGroupId)
         );
         var cohort = new[] { new WorldSessionResolver.CohortMember(
-            Principal: WorldPrincipal.Seat(slot: 1),
+            Principal: Principal.Seat(slot: 1),
             IdentityId: null
         ) };
 
@@ -163,17 +165,19 @@ public sealed class WorldSafeNameLawTests {
                 Id: SafeName.Parse(candidate: groupId),
                 KindName: "party",
                 Members: [new WorldGroupMember(
-                        WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
+                        WorldMemberRef.Local(principal: Principal.Seat(slot: 1)),
                         null,
                         0
                     )]
             ),
             };
-            var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(
+            var definition = Fixtures.BuildDocument() with {
+                Groups = new WorldGroupsSection(
                 Groups: groups,
                 Kinds: [kind],
                 Ownership: []
-            ) };
+            ),
+            };
             var destination = new WorldDestination(
                 Name: SafeName.Parse(candidate: name),
                 Reference: "ref",
@@ -182,7 +186,7 @@ public sealed class WorldSafeNameLawTests {
                 Selector: new WorldGroupSelector.Named(Group: groupId)
             );
             var cohort = new[] { new WorldSessionResolver.CohortMember(
-                Principal: WorldPrincipal.Seat(slot: 1),
+                Principal: Principal.Seat(slot: 1),
                 IdentityId: null
             ) };
 

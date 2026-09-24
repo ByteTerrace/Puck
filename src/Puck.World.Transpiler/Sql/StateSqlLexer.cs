@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Puck.State;
 using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Sql;
@@ -35,23 +36,22 @@ public enum SqlTokenKind {
     Divide,
     Modulo
 }
-
 public sealed record SqlToken(
     SqlTokenKind Kind,
     string Text,
     object? Value,
     SourceSpan Span
 );
-
 public sealed class StateSqlLexer {
     private readonly string m_source;
     private readonly int m_baseOffset;
     private readonly int m_baseLine;
     private readonly int m_baseColumn;
+
     private int m_cursor;
 
     public StateSqlLexer(string source, int baseOffset = 0, int baseLine = 1, int baseColumn = 1) {
-        m_source = source ?? string.Empty;
+        m_source = (source ?? string.Empty);
         m_baseOffset = baseOffset;
         m_baseLine = baseLine;
         m_baseColumn = baseColumn;
@@ -65,10 +65,11 @@ public sealed class StateSqlLexer {
             SkipWhiteSpaceAndComments();
 
             if (m_cursor >= m_source.Length) {
-                var eofSpan = (m_source.Length > 0)
-                    ? CreateSpan(m_source.Length - 1, 1)
-                    : CreateSpan(0, 1);
-                tokens.Add(new SqlToken(SqlTokenKind.Eof, string.Empty, null, eofSpan));
+                var eofSpan = ((m_source.Length > 0)
+                    ? CreateSpan((m_source.Length - 1), 1)
+                    : CreateSpan(length: 1, start: 0));
+
+                tokens.Add(item: new SqlToken(Kind: SqlTokenKind.Eof, Span: eofSpan, Text: string.Empty, Value: null));
                 break;
             }
 
@@ -77,16 +78,16 @@ public sealed class StateSqlLexer {
 
             // String literal: '...' or "..."
             if (c is '\'' or '"') {
-                tokens.Add(ReadStringLiteral(c, start, diagnostics));
+                tokens.Add(item: ReadStringLiteral(diagnostics: diagnostics, quoteChar: c, start: start));
                 continue;
             }
 
             // Numeric literal
-            var prevToken = (tokens.Count > 0) ? tokens[^1] : null;
-            var canBeBinaryOp = (prevToken is not null) && (prevToken.Kind is SqlTokenKind.Identifier or SqlTokenKind.NumberLiteral or SqlTokenKind.StringLiteral or SqlTokenKind.BooleanLiteral or SqlTokenKind.CloseParen);
+            var prevToken = ((tokens.Count > 0) ? tokens[^1] : null);
+            var canBeBinaryOp = ((prevToken is not null) && (prevToken.Kind is SqlTokenKind.Identifier or SqlTokenKind.NumberLiteral or SqlTokenKind.StringLiteral or SqlTokenKind.BooleanLiteral or SqlTokenKind.CloseParen));
 
-            if (char.IsAsciiDigit(c) || (!canBeBinaryOp && (c is '+' or '-') && (m_cursor + 1 < m_source.Length) && char.IsAsciiDigit(m_source[m_cursor + 1]))) {
-                tokens.Add(ReadNumberLiteral(start));
+            if (char.IsAsciiDigit(c: c) || (!canBeBinaryOp && (c is '+' or '-') && ((m_cursor + 1) < m_source.Length) && char.IsAsciiDigit(c: m_source[(m_cursor + 1)]))) {
+                tokens.Add(item: ReadNumberLiteral(start: start));
                 continue;
             }
 
@@ -94,104 +95,105 @@ public sealed class StateSqlLexer {
             switch (c) {
                 case '(':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.OpenParen, "(", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.OpenParen, "(", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case ')':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.CloseParen, ")", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.CloseParen, ")", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '[':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.OpenBracket, "[", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.OpenBracket, "[", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case ']':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.CloseBracket, "]", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.CloseBracket, "]", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case ',':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Comma, ",", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Comma, ",", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case ';':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Semicolon, ";", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Semicolon, ";", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case ':':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Colon, ":", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Colon, ":", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '.':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Dot, ".", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Dot, ".", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '+':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Plus, "+", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Plus, "+", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '-':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Minus, "-", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Minus, "-", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '*':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Multiply, "*", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Multiply, "*", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '/':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Divide, "/", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Divide, "/", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '%':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Modulo, "%", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Modulo, "%", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '=':
                     m_cursor++;
-                    tokens.Add(new SqlToken(SqlTokenKind.Equal, "=", null, CreateSpan(start, 1)));
+                    tokens.Add(item: new SqlToken(SqlTokenKind.Equal, "=", null, CreateSpan(length: 1, start: start)));
                     continue;
                 case '<':
                     m_cursor++;
                     if ((m_cursor < m_source.Length) && (m_source[m_cursor] == '>')) {
                         m_cursor++;
-                        tokens.Add(new SqlToken(SqlTokenKind.NotEqual, "<>", null, CreateSpan(start, 2)));
+                        tokens.Add(item: new SqlToken(SqlTokenKind.NotEqual, "<>", null, CreateSpan(length: 2, start: start)));
                     } else if ((m_cursor < m_source.Length) && (m_source[m_cursor] == '=')) {
                         m_cursor++;
                         if ((m_cursor < m_source.Length) && (m_source[m_cursor] == '>')) {
                             m_cursor++;
-                            tokens.Add(new SqlToken(SqlTokenKind.CosineDistance, "<=>", null, CreateSpan(start, 3)));
+                            tokens.Add(item: new SqlToken(SqlTokenKind.CosineDistance, "<=>", null, CreateSpan(length: 3, start: start)));
                         } else {
-                            tokens.Add(new SqlToken(SqlTokenKind.LessOrEqual, "<=", null, CreateSpan(start, 2)));
+                            tokens.Add(item: new SqlToken(SqlTokenKind.LessOrEqual, "<=", null, CreateSpan(length: 2, start: start)));
                         }
                     } else {
-                        tokens.Add(new SqlToken(SqlTokenKind.Less, "<", null, CreateSpan(start, 1)));
+                        tokens.Add(item: new SqlToken(SqlTokenKind.Less, "<", null, CreateSpan(length: 1, start: start)));
                     }
                     continue;
                 case '>':
                     m_cursor++;
                     if ((m_cursor < m_source.Length) && (m_source[m_cursor] == '=')) {
                         m_cursor++;
-                        tokens.Add(new SqlToken(SqlTokenKind.GreaterOrEqual, ">=", null, CreateSpan(start, 2)));
+                        tokens.Add(item: new SqlToken(SqlTokenKind.GreaterOrEqual, ">=", null, CreateSpan(length: 2, start: start)));
                     } else {
-                        tokens.Add(new SqlToken(SqlTokenKind.Greater, ">", null, CreateSpan(start, 1)));
+                        tokens.Add(item: new SqlToken(SqlTokenKind.Greater, ">", null, CreateSpan(length: 1, start: start)));
                     }
                     continue;
                 case '!':
-                    if ((m_cursor + 1 < m_source.Length) && (m_source[m_cursor + 1] == '=')) {
+                    if (((m_cursor + 1) < m_source.Length) && (m_source[(m_cursor + 1)] == '=')) {
                         m_cursor += 2;
-                        tokens.Add(new SqlToken(SqlTokenKind.NotEqual, "!=", null, CreateSpan(start, 2)));
+                        tokens.Add(item: new SqlToken(SqlTokenKind.NotEqual, "!=", null, CreateSpan(length: 2, start: start)));
                         continue;
                     }
                     break;
             }
 
             // Word: identifier or keyword
-            if (char.IsAsciiLetter(c) || (c == '_') || (c == '@')) {
-                tokens.Add(ReadWord(start));
+            if (IdentifierSpelling.IsStart(character: c) || (c == '@')) {
+                tokens.Add(item: ReadWord(start: start));
                 continue;
             }
 
             // Unexpected character
             m_cursor++;
-            var errSpan = CreateSpan(start, 1);
+            var errSpan = CreateSpan(length: 1, start: start);
+
             diagnostics.ReportError(
                 code: PuckDiagnosticCodes.SqlSyntaxError,
                 message: $"Unexpected character '{c}' in SQL dialect",
@@ -205,14 +207,15 @@ public sealed class StateSqlLexer {
     private void SkipWhiteSpaceAndComments() {
         while (m_cursor < m_source.Length) {
             var c = m_source[m_cursor];
-            if (char.IsWhiteSpace(c)) {
+
+            if (char.IsWhiteSpace(c: c)) {
                 m_cursor++;
                 continue;
             }
 
             // Line comments: -- or //
-            if (((c == '-') && (m_cursor + 1 < m_source.Length) && (m_source[m_cursor + 1] == '-')) ||
-                ((c == '/') && (m_cursor + 1 < m_source.Length) && (m_source[m_cursor + 1] == '/'))) {
+            if (((c == '-') && ((m_cursor + 1) < m_source.Length) && (m_source[(m_cursor + 1)] == '-')) ||
+                ((c == '/') && ((m_cursor + 1) < m_source.Length) && (m_source[(m_cursor + 1)] == '/'))) {
                 m_cursor += 2;
                 while ((m_cursor < m_source.Length) && (m_source[m_cursor] is not '\n' and not '\r')) {
                     m_cursor++;
@@ -221,10 +224,10 @@ public sealed class StateSqlLexer {
             }
 
             // Block comments: /* ... */
-            if ((c == '/') && (m_cursor + 1 < m_source.Length) && (m_source[m_cursor + 1] == '*')) {
+            if ((c == '/') && ((m_cursor + 1) < m_source.Length) && (m_source[(m_cursor + 1)] == '*')) {
                 m_cursor += 2;
                 while (m_cursor < m_source.Length) {
-                    if ((m_source[m_cursor] == '*') && (m_cursor + 1 < m_source.Length) && (m_source[m_cursor + 1] == '/')) {
+                    if ((m_source[m_cursor] == '*') && ((m_cursor + 1) < m_source.Length) && (m_source[(m_cursor + 1)] == '/')) {
                         m_cursor += 2;
                         break;
                     }
@@ -236,17 +239,17 @@ public sealed class StateSqlLexer {
             break;
         }
     }
-
     private SqlToken ReadStringLiteral(char quoteChar, int start, DiagnosticBag diagnostics) {
         m_cursor++; // Skip opening quote
         var sb = new StringBuilder();
 
         while (m_cursor < m_source.Length) {
             var c = m_source[m_cursor];
-            if (c == '\\' && quoteChar == '"') {
+
+            if ((c == '\\') && (quoteChar == '"')) {
                 m_cursor++;
                 if (m_cursor < m_source.Length) {
-                    sb.Append(m_source[m_cursor]);
+                    sb.Append(value: m_source[m_cursor]);
                     m_cursor++;
                 }
                 continue;
@@ -256,33 +259,35 @@ public sealed class StateSqlLexer {
                 m_cursor++;
                 // Check for '' escape in SQL single quotes
                 if ((quoteChar == '\'') && (m_cursor < m_source.Length) && (m_source[m_cursor] == '\'')) {
-                    sb.Append('\'');
+                    sb.Append(value: '\'');
                     m_cursor++;
                     continue;
                 }
                 break;
             }
 
-            sb.Append(c);
+            sb.Append(value: c);
             m_cursor++;
         }
 
         var text = sb.ToString();
-        var len = m_cursor - start;
-        return new SqlToken(SqlTokenKind.StringLiteral, text, text, CreateSpan(start, len));
-    }
+        var len = (m_cursor - start);
 
+        return new SqlToken(SqlTokenKind.StringLiteral, text, text, CreateSpan(length: len, start: start));
+    }
     private SqlToken ReadNumberLiteral(int start) {
         if (m_source[m_cursor] is '+' or '-') {
             m_cursor++;
         }
 
         var isDecimal = false;
+
         while (m_cursor < m_source.Length) {
             var c = m_source[m_cursor];
-            if (char.IsAsciiDigit(c)) {
+
+            if (char.IsAsciiDigit(c: c)) {
                 m_cursor++;
-            } else if ((c == '.') && !isDecimal && (m_cursor + 1 < m_source.Length) && char.IsAsciiDigit(m_source[m_cursor + 1])) {
+            } else if ((c == '.') && !isDecimal && ((m_cursor + 1) < m_source.Length) && char.IsAsciiDigit(c: m_source[(m_cursor + 1)])) {
                 isDecimal = true;
                 m_cursor++;
             } else {
@@ -291,21 +296,21 @@ public sealed class StateSqlLexer {
         }
 
         var text = m_source[start..m_cursor];
-        var len = m_cursor - start;
+        var len = (m_cursor - start);
 
         if (isDecimal) {
             decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var decVal);
-            return new SqlToken(SqlTokenKind.NumberLiteral, text, decVal, CreateSpan(start, len));
+            return new SqlToken(SqlTokenKind.NumberLiteral, text, decVal, CreateSpan(length: len, start: start));
         }
 
         long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longVal);
-        return new SqlToken(SqlTokenKind.NumberLiteral, text, longVal, CreateSpan(start, len));
+        return new SqlToken(SqlTokenKind.NumberLiteral, text, longVal, CreateSpan(length: len, start: start));
     }
-
     private SqlToken ReadWord(int start) {
         while (m_cursor < m_source.Length) {
             var c = m_source[m_cursor];
-            if (char.IsAsciiLetterOrDigit(c) || (c == '_')) {
+
+            if (IdentifierSpelling.IsPart(character: c)) {
                 m_cursor++;
             } else {
                 break;
@@ -313,25 +318,34 @@ public sealed class StateSqlLexer {
         }
 
         var text = m_source[start..m_cursor];
-        var len = m_cursor - start;
-        var span = CreateSpan(start, len);
+        var len = (m_cursor - start);
+        var span = CreateSpan(length: len, start: start);
 
-        if (string.Equals(text, "TRUE", StringComparison.OrdinalIgnoreCase)) {
-            return new SqlToken(SqlTokenKind.BooleanLiteral, text, true, span);
+        if (string.Equals(a: text, b: "TRUE", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return new SqlToken(Kind: SqlTokenKind.BooleanLiteral, Span: span, Text: text, Value: true);
         }
-        if (string.Equals(text, "FALSE", StringComparison.OrdinalIgnoreCase)) {
-            return new SqlToken(SqlTokenKind.BooleanLiteral, text, false, span);
+        if (string.Equals(a: text, b: "FALSE", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return new SqlToken(Kind: SqlTokenKind.BooleanLiteral, Span: span, Text: text, Value: false);
         }
-        if (string.Equals(text, "NULL", StringComparison.OrdinalIgnoreCase)) {
-            return new SqlToken(SqlTokenKind.NullLiteral, text, null, span);
-        }
-
-        if (IsKeyword(text)) {
-            return new SqlToken(SqlTokenKind.Keyword, text, null, span);
+        if (string.Equals(a: text, b: "NULL", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return new SqlToken(Kind: SqlTokenKind.NullLiteral, Span: span, Text: text, Value: null);
         }
 
-        return new SqlToken(SqlTokenKind.Identifier, text, text, span);
+        if (IsKeyword(word: text)) {
+            return new SqlToken(Kind: SqlTokenKind.Keyword, Span: span, Text: text, Value: null);
+        }
+
+        return new SqlToken(Kind: SqlTokenKind.Identifier, Span: span, Text: text, Value: text);
     }
+
+    /// <summary>Whether the dialect reads <paramref name="word"/>, in any case, as something other than an
+    /// identifier: a keyword, a boolean literal, or <c>NULL</c>.</summary>
+    /// <param name="word">The word.</param>
+    /// <returns><see langword="true"/> when the word never reads as an identifier.</returns>
+    public static bool IsReservedWord(string word) => (
+        IsKeyword(word: word) ||
+        (word.ToUpperInvariant() is "TRUE" or "FALSE" or "NULL")
+    );
 
     private static bool IsKeyword(string word) {
         return word.ToUpperInvariant() switch {
@@ -352,13 +366,12 @@ public sealed class StateSqlLexer {
             _ => false
         };
     }
-
     private SourceSpan CreateSpan(int start, int length) {
         // Compute line and column relative to m_baseOffset, m_baseLine, m_baseColumn
         var line = m_baseLine;
         var col = m_baseColumn;
 
-        for (var i = 0; i < start; i++) {
+        for (var i = 0; (i < start); i++) {
             if (m_source[i] == '\n') {
                 line++;
                 col = 1;
@@ -367,6 +380,6 @@ public sealed class StateSqlLexer {
             }
         }
 
-        return new SourceSpan(m_baseOffset + start, length, line, col);
+        return new SourceSpan(Column: col, Length: length, Line: line, Offset: (m_baseOffset + start));
     }
 }

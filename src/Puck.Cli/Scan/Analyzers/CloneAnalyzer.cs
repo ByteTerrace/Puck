@@ -13,7 +13,7 @@ namespace Puck.Cli.Scan.Analyzers;
 // structurally identical code, two passes deep:
 //   unit  — a whole callable body (method / ctor / dtor / operator / conversion / property-or-indexer-
 //           or-event accessor / local function), block- or expression-bodied.
-//   block — a nested `{...}` (an if/else/loop/using/lock/try/switch-section body) of >= -MinStatements
+//   block — a nested `{...}` (an if/else/loop/using/lock/try/switch-section body) of >= --min-statements
 //           statements, reported ONLY when its enclosing unit is NOT itself a clone (partial
 //           copy-paste) and only at the OUTERMOST duplicated nesting level, so a method's inner blocks
 //           never double-count.
@@ -22,13 +22,13 @@ namespace Puck.Cli.Scan.Analyzers;
 // changed-constant copies — Type-2 clones — still collide) and an EXACT hash over the raw token text
 // (verbatim Type-1 copies). Clustering is on the structural hash; `exactCount` reports how many of a
 // cluster's members are byte-identical, so triage sees verbatim vs renamed at a glance. Clusters are
-// gated by token weight (-MinTokens) — two one-line getters share a fingerprint but are not a refactor
+// gated by token weight (--min-tokens) — two one-line getters share a fingerprint but are not a refactor
 // target.
 //
 // Members are `abiTainted`-tagged when they live in a marshalling/ABI context (a VulkanNative* file, the
 // Vulkan/Bindings tree, or a Vk*-named type), because that duplication is a deliberate ABI mirror rather
 // than a cleanup target — the tag lets a triage pass separate contract from copy-paste. Detection is
-// purely syntactic (no semantic model). One JSONL record per cluster; -Grouped emits a per-cluster
+// purely syntactic (no semantic model). One JSONL record per cluster; --grouped emits a per-cluster
 // work-list (one chunk = one cluster) for a fan-out triage; like its siblings it hand-writes its json.
 // Output is fully deterministic (files, members, and clusters are all ordered) so re-runs diff cleanly.
 internal sealed class CloneAnalyzer : ISourceAnalyzer {

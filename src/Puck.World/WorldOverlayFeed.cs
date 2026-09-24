@@ -37,6 +37,8 @@ internal sealed class WorldOverlayFeed {
     // Per-SEAT chord-hint cache: the hint lines are formatted once per published view (views are immutable and
     // reference-stable per page), so the per-frame publish is a reference handoff.
     private readonly BindingPageView?[] m_hintViews;
+    // Each seat's icon-row cells, read through whichever mirror the seat is routed to.
+    private readonly WorldStateCells[] m_iconCells;
     private readonly WorldIconTable m_icons;
     private readonly OverlayBindingModifier[][] m_modifiers;
     // One cached pressed-probe delegate per SEAT SLOT (the router's held state is slot-keyed), so the per-frame
@@ -49,8 +51,8 @@ internal sealed class WorldOverlayFeed {
     private readonly Func<string, OverlayResolvedGlyph> m_resolveBadge;
     // Same "mutable cell + preallocated delegate" shape as m_resolveBadge: the per-tick input is WHICH state row
     // this seat's bar named (m_currentIconRow), so the delegate is allocated once rather than per seat per tick.
-    // Nothing is cached across ticks — the row's cells are live, so an ordinary state mutation retargets an icon
-    // between frames.
+    // Each seat's cells keep their mirror registrations (m_iconCells) but no value: the row's cells are live, so an
+    // ordinary state mutation retargets an icon between frames.
     private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
     private readonly OverlayBindingSeat[] m_seats;
@@ -87,24 +89,27 @@ internal sealed class WorldOverlayFeed {
         m_bindingBar = bindingBar;
         m_gamepads = gamepads;
         m_icons = icons;
+        m_iconCells = new WorldStateCells[PlayerRoster.MaxSlots];
+
+        for (var index = 0; (index < PlayerRoster.MaxSlots); index++) {
+            m_iconCells[index] = new WorldStateCells();
+        }
+
         m_resolveIcon = action => {
             m_bindings.GetRoutedState(
-                definition: out var definition,
+                definition: out _,
                 slot: m_currentSlot,
-                engineTick: out var engineTick,
-                tick: out var tick
+                state: out var state
             );
 
-            return (((m_currentIconRow is { Length: > 0 } row) && (action is { Length: > 0 }) && WorldStateReader.TryRead(
-                definition: definition,
+            // The icon row's cell keyed by the action, read through the seat's routed state mirror.
+            return (m_iconCells[m_currentSlot].TryText(
                 key: action,
-                rawValue: out _,
-                row: out _,
-                rowName: row,
-                text: out var iconName,
-                tick: tick,
-                engineTick: engineTick
-            ))
+                mirror: state,
+                rowReference: m_currentIconRow,
+                slot: out _,
+                text: out var iconName
+            )
                 ? icons.ResolveIcon(name: iconName)
                 : OverlayResolvedGlyph.None
             );
@@ -261,13 +266,7 @@ internal sealed class WorldOverlayFeed {
 
             // "What does this action look like" is a lookup in authored state, not an engine table: the bar names
             // the row, the bound action names the cell, the cell's value names the icon.
-            m_currentIconRow = (WorldStateBindingContext.TryParseRowReference(
-                reference: authoring.IconRow,
-                rowName: out var iconRowName
-            )
-                ? iconRowName
-                : null
-            );
+            m_currentIconRow = authoring.IconRow;
             // The bar's opacity: the split-screen quieting lever times the visibility condition's presence, so a
             // fading "recently" condition eases the bar out instead of cutting it.
             var barAlpha = (((joined > 1)

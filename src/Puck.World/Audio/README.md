@@ -150,7 +150,7 @@ core's own proofs, if any, live beside it in `Puck.Audio`, not here.
 `tests/Puck.World.Canaries/music-conditional-layer-and-embellishment` proves
 the embellishment and unconditional-layer lanes through the real windowed
 composition root; `tests/Puck.World.Canaries/instrument-clock-source` proves
-the diegetic-instrument engage → `world.instrument-clock` → clock-fold path
+the diegetic-instrument engage → `WorldServer.InstrumentClockBoundary` → clock-fold path
 the same way; `tests/Puck.World.Canaries/voice-babble` proves the babble
 playback lane fires four distinct syllable triggers (never one sustained
 tone) and that the mix measurably produces signal.

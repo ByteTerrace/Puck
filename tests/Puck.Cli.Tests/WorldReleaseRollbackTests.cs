@@ -33,13 +33,13 @@ public sealed class WorldReleaseRollbackTests {
             ("release-b", "release-a"),
             AzureCommand.GetWorldReleaseRollbackPair(record)
         );
-        var error = Assert.Throws<InvalidOperationException>(() => AzureCommand.GetWorldReleaseRollbackPair(record with { RollbackEligible = false }));
+        var error = Assert.Throws<InvalidOperationException>(testCode: () => AzureCommand.GetWorldReleaseRollbackPair(record with { RollbackEligible = false }));
 
         Assert.Contains(
             "finalized window",
             error.Message
         );
-        error = Assert.Throws<InvalidOperationException>(() => AzureCommand.GetWorldReleaseRollbackPair(record with { Admission = WorldReleaseAdmissionState.Closed }));
+        error = Assert.Throws<InvalidOperationException>(testCode: () => AzureCommand.GetWorldReleaseRollbackPair(record with { Admission = WorldReleaseAdmissionState.Closed }));
         Assert.Contains(
             "resume",
             error.Message
@@ -73,7 +73,7 @@ public sealed class WorldReleaseRollbackTests {
 
             await process.WaitForExitAsync(cancellationToken: token);
             Assert.Equal(
-                1,
+                CliExit.Refused,
                 process.ExitCode
             );
             Assert.Empty(value: await output);
@@ -81,7 +81,7 @@ public sealed class WorldReleaseRollbackTests {
 
             Assert.StartsWith(
                 actualString: diagnostic,
-                expectedStartString: "world release: "
+                expectedStartString: $"puck world release {verb}: "
             );
             Assert.Contains(
                 actualString: diagnostic,
@@ -102,9 +102,9 @@ public sealed class WorldReleaseRollbackTests {
         var record = Committed;
         var operation = record.PendingOperationId!.Value;
 
-        Assert.Throws<InvalidOperationException>(() => AzureCommand.GetWorldReleaseRollbackPair(
-            record,
-            operation
+        Assert.Throws<InvalidOperationException>(testCode: () => AzureCommand.GetWorldReleaseRollbackPair(
+            operationId: operation,
+            record: record
         ));
         record = record with {
             PendingOperationId = null,
@@ -114,9 +114,9 @@ public sealed class WorldReleaseRollbackTests {
             PendingPhase = null,
             History = [new() { OperationId = operation, Result = "committed", SourceRelease = "release-a", TargetRelease = "release-b" }],
         };
-        Assert.Throws<InvalidOperationException>(() => AzureCommand.GetWorldReleaseRollbackPair(
-            record,
-            operation
+        Assert.Throws<InvalidOperationException>(testCode: () => AzureCommand.GetWorldReleaseRollbackPair(
+            operationId: operation,
+            record: record
         ));
         Assert.Equal(
             ("release-b", "release-a"),
@@ -142,7 +142,7 @@ public sealed class WorldReleaseRollbackTests {
             ? WorldReleaseAdmissionState.Open
             : WorldReleaseAdmissionState.Closed),
         };
-        var error = Assert.Throws<InvalidOperationException>(() => AzureCommand.GetWorldReleaseRollbackPair(record));
+        var error = Assert.Throws<InvalidOperationException>(testCode: () => AzureCommand.GetWorldReleaseRollbackPair(record));
 
         Assert.Contains(
             record.PendingOperationId!.Value.ToString(format: "D"),

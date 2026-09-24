@@ -67,11 +67,6 @@ public sealed class WorldSolidField : IContactField {
     private readonly IWorldQuery m_query;
     private readonly FixedFieldContactSolver m_solver;
 
-    private static readonly FixedVector3 UnitY = new(
-        X: FixedQ4816.Zero,
-        Y: FixedQ4816.One,
-        Z: FixedQ4816.Zero
-    );
     // The hold policy per compiled material id — TryBuild adds exactly one material per solid screen and per solid
     // placement, so a probe's reported material id IS the row that composed it. A material id outside these (the
     // field lattice's own terrain, which no placement row owns) falls back to the world's collision.defaultHold.
@@ -387,7 +382,7 @@ public sealed class WorldSolidField : IContactField {
                 (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -409,7 +404,7 @@ public sealed class WorldSolidField : IContactField {
             // lattice, reflected frames via fixed quaternion composition) and rounded exactly to float, so every
             // machine encodes bit-identical constants — the evaluator itself stays fixed point throughout.
             var fixedRotation = FixedQuaternion.FromAxisAngle(
-                axis: UnitY,
+                axis: FixedVector3.UnitY,
                 angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
             );
 
@@ -478,6 +473,8 @@ public sealed class WorldSolidField : IContactField {
 
         var program = builder.Build(buildInstanceGrid: false);
         SdfFieldEvaluator evaluator;
+
+        WorldBootWork.Count(kind: WorldBootWork.ShapeBuilds);
 
         try {
             evaluator = new SdfFieldEvaluator(program: program);

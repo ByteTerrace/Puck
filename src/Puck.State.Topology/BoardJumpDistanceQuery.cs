@@ -17,7 +17,7 @@ public sealed class BoardJumpDistanceQuery : BoardQuery {
     /// <summary>Gets whether the destination is read from live state.</summary>
     public bool TargetIsLive { get; }
     /// <inheritdoc/>
-    public override long Visits => (long)Topology.CellCount * (2 * Topology.DirectionCount + 1);
+    public override long Visits => (((long)Topology.CellCount) * ((2 * Topology.DirectionCount) + 1));
 
     /// <summary>Returns the shortest chain length, zero for the source itself, or -1 for an invalid or
     /// unreachable destination. Each cell enters the queue once: O(cells × directions), including cycles.</summary>
@@ -27,7 +27,8 @@ public sealed class BoardJumpDistanceQuery : BoardQuery {
     /// <param name="target">The resolved destination cell.</param>
     public long Evaluate(ReadOnlySpan<long> values, long empty, int source, int target) {
         var count = Topology.CellCount;
-        if ((uint)source >= count || (uint)target >= count) {
+
+        if ((((uint)source) >= count) || (((uint)target) >= count)) {
             return -1;
         }
         if (source == target) {
@@ -36,26 +37,32 @@ public sealed class BoardJumpDistanceQuery : BoardQuery {
         if (values[target] != empty) {
             return -1;
         }
-        var storage = System.Buffers.ArrayPool<int>.Shared.Rent(count * 2);
+        var storage = System.Buffers.ArrayPool<int>.Shared.Rent(minimumLength: (count * 2));
+
         try {
-            var distance = storage.AsSpan(0, count);
-            var queue = storage.AsSpan(count, count);
-            distance.Fill(-1);
+            var distance = storage.AsSpan(length: count, start: 0);
+            var queue = storage.AsSpan(length: count, start: count);
+
+            distance.Fill(value: -1);
             distance[source] = 0;
             queue[0] = source;
             var tail = 1;
-            for (var head = 0; head < tail; head++) {
+
+            for (var head = 0; (head < tail); head++) {
                 var cell = queue[head];
-                for (var direction = 0; direction < Topology.DirectionCount; direction++) {
-                    var middle = Topology.Neighbour(cell, direction);
-                    if (middle < 0 || middle == source || values[middle] == empty) {
+
+                for (var direction = 0; (direction < Topology.DirectionCount); direction++) {
+                    var middle = Topology.Neighbour(cell: cell, direction: direction);
+
+                    if ((middle < 0) || (middle == source) || (values[middle] == empty)) {
                         continue;
                     }
-                    var landing = Topology.Neighbour(middle, direction);
-                    if (landing < 0 || distance[landing] >= 0 || values[landing] != empty) {
+                    var landing = Topology.Neighbour(cell: middle, direction: direction);
+
+                    if ((landing < 0) || (distance[landing] >= 0) || (values[landing] != empty)) {
                         continue;
                     }
-                    distance[landing] = distance[cell] + 1;
+                    distance[landing] = (distance[cell] + 1);
                     if (landing == target) {
                         return distance[landing];
                     }

@@ -1,0 +1,888 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 2941,
+  "engineTick": 4940880,
+  "hashes": {
+    "authoritative": "fc16911919544e74",
+    "capture": "891687f709193162",
+    "pose": "3dde97c0aa76a91a",
+    "world": "7538eb54a7c779e2"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "paddleballRallyClock",
+        "kind": "Int",
+        "min": 0,
+        "max": 3600,
+        "value": 0,
+        "clock": {
+          "epochTick": 2842,
+          "epochEngineTick": 4774560
+        },
+        "advance": {
+          "perSecondNumerator": 1,
+          "perSecondDenominator": 1
+        }
+      },
+      {
+        "name": "paddleballServeSpeed",
+        "kind": "Fixed",
+        "value": "2"
+      },
+      {
+        "name": "paddleballSpin",
+        "kind": "Fixed",
+        "value": "0",
+        "clock": {
+          "epochTick": 2860,
+          "epochEngineTick": 4804800
+        },
+        "dynamics": {
+          "row": "paddleballSpinEase"
+        }
+      },
+      {
+        "name": "paddleballInPlay",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "paddleballServeSide",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "paddleballServeTimer",
+        "kind": "Int",
+        "value": 2890
+      },
+      {
+        "name": "paddleballServeSerial",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 25
+      },
+      {
+        "name": "paddleballServeApplied",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 25
+      },
+      {
+        "name": "paddleballServes",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 22
+      },
+      {
+        "name": "paddleballRefused",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 3
+      },
+      {
+        "name": "paddleballDeadBalls",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 1
+      },
+      {
+        "name": "paddleballLets",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 1
+      },
+      {
+        "name": "paddleballRally",
+        "kind": "Int",
+        "min": 0,
+        "max": 999,
+        "value": 0
+      },
+      {
+        "name": "paddleballLongestRally",
+        "kind": "Int",
+        "min": 0,
+        "max": 999,
+        "value": 2
+      },
+      {
+        "name": "paddleballPressure",
+        "kind": "Int",
+        "min": 0,
+        "max": 999999,
+        "value": 1281
+      },
+      {
+        "name": "paddleballWinner",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 1
+      },
+      {
+        "name": "paddleballWestGoalSerial",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 10
+      },
+      {
+        "name": "paddleballWestGoalApplied",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 10
+      },
+      {
+        "name": "paddleballEastGoalSerial",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 12
+      },
+      {
+        "name": "paddleballEastGoalApplied",
+        "kind": "Int",
+        "min": 0,
+        "max": 9999,
+        "value": 12
+      }
+    ],
+    "enums": [
+      {
+        "name": "PaddleballBallBody",
+        "members": [
+          "Detached",
+          "Ball"
+        ]
+      },
+      {
+        "name": "PaddleballPaddleBody",
+        "members": [
+          "Detached",
+          "East",
+          "West"
+        ]
+      }
+    ],
+    "records": [
+      {
+        "name": "PaddleballBall",
+        "fields": [
+          {
+            "name": "body",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": "PaddleballBallBody",
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "active",
+            "kind": "Bool",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Bool",
+              "value": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "PaddleballPaddle",
+        "fields": [
+          {
+            "name": "body",
+            "kind": "Int",
+            "min": null,
+            "max": null,
+            "overflow": "Refuse",
+            "enum": "PaddleballPaddleBody",
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "hits",
+            "kind": "Int",
+            "min": 0,
+            "max": 9999,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "rally",
+            "kind": "Int",
+            "min": 0,
+            "max": 999,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          },
+          {
+            "name": "score",
+            "kind": "Int",
+            "min": 0,
+            "max": 99,
+            "overflow": "Refuse",
+            "enum": null,
+            "space": null,
+            "dimensions": null,
+            "advance": null,
+            "default": {
+              "kind": "Int",
+              "value": 0
+            }
+          }
+        ]
+      }
+    ],
+    "pools": [
+      {
+        "name": "paddleballBalls",
+        "record": "PaddleballBall",
+        "capacity": 1,
+        "snapshot": {
+          "generations": [
+            0
+          ],
+          "live": [
+            {
+              "slot": 0,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "active",
+                  "clock": null,
+                  "value": {
+                    "kind": "Bool",
+                    "value": true
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "initial": null
+      },
+      {
+        "name": "paddleballPaddles",
+        "record": "PaddleballPaddle",
+        "capacity": 2,
+        "snapshot": {
+          "generations": [
+            0,
+            0
+          ],
+          "live": [
+            {
+              "slot": 0,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "hits",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "rally",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "score",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 11
+                  }
+                }
+              ]
+            },
+            {
+              "slot": 1,
+              "values": [
+                {
+                  "field": "body",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 2
+                  }
+                },
+                {
+                  "field": "hits",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                },
+                {
+                  "field": "rally",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 2
+                  }
+                },
+                {
+                  "field": "score",
+                  "clock": null,
+                  "value": {
+                    "kind": "Int",
+                    "value": 10
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "initial": null
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "paddleballRallyClock",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballServeSpeed",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 131072,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballSpin",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballInPlay",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballServeSide",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballServeTimer",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2890,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballServeSerial",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 25,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballServeApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 25,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballServes",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 22,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballRefused",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballDeadBalls",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballLets",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballRally",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballLongestRally",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballPressure",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1281,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballWinner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballWestGoalSerial",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 10,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballWestGoalApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 10,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballEastGoalSerial",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 12,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "paddleballEastGoalApplied",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 12,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballBalls$live",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballBalls$generation",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballBalls$field$body",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballBalls$field$active",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballPaddles$live",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballPaddles$generation",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballPaddles$field$body",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballPaddles$field$hits",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballPaddles$field$rally",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 2,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "$pool$paddleballPaddles$field$score",
+      "cells": [
+        {
+          "key": "0",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 10,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "puck.release.profile.v1",
+  "x-puck": {
+    "schemaVersion": "puck.release.profile.v1",
+    "generator": "Puck.World.WorldSchema"
+  },
+  "title": "Puck release profile (puck.release.profile.v1)",
+  "description": "A puck.release.profile.v1 document: what puck qualify holds a producer-built Puck.World package to. It records how the package was published and where a World run finds a shader compiler, the functional canaries run against the package, the stability matrix (every backend, resolution and workload), each workload\u0027s warm-up, soak and churn in ticks and frames, never in time, the memory threshold of every matrix cell, and the checks qualification defers with the reason each is deferred.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "schema": {
+      "description": "The document schema tag, SchemaVersion.",
+      "type": "string",
+      "const": "puck.release.profile.v1"
+    },
+    "publish": {
+      "description": "How the package is published and how a World run in it finds a shader compiler.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "The publish mode the package\u0027s entry assembly must show.",
+          "enum": [
+            "ReadyToRun"
+          ],
+          "title": "ReleasePublishMode"
+        },
+        "entryAssembly": {
+          "description": "The entry assembly\u0027s file name inside the package, which a leg launches with dotnet.",
+          "type": "string"
+        },
+        "compiler": {
+          "description": "Where a World run in the package finds a shader compiler.",
+          "enum": [
+            "None",
+            "Path"
+          ],
+          "title": "ReleaseCompilerDiscovery"
+        }
+      },
+      "required": [
+        "mode",
+        "entryAssembly",
+        "compiler"
+      ],
+      "additionalProperties": false,
+      "title": "ReleasePublish"
+    },
+    "backends": {
+      "description": "The graphics backends every cell runs on, in the order they run.",
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "debugLayers": {
+      "description": "The backends whose validation layer every leg on them enables, by booting its World with --debug-layers. A leg on a listed backend fails on any validation message; a leg on an unlisted backend runs with its layer off.",
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "functional": {
+      "description": "The puck canary proofs run against the package\u0027s own World before the matrix: the functional half of qualification.",
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "resolutions": {
+      "description": "The offscreen output extents every workload runs at.",
+      "type": "array",
+      "items": {
+        "description": "One offscreen output extent.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "width": {
+            "description": "The width in pixels; even, so a half-size resize is exact.",
+            "type": "integer"
+          },
+          "height": {
+            "description": "The height in pixels; even, so a half-size resize is exact.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ],
+        "additionalProperties": false,
+        "title": "QualificationResolution"
+      }
+    },
+    "workloads": {
+      "description": "What each cell boots and does.",
+      "type": "array",
+      "items": {
+        "description": "What one workload boots and does in every cell it runs in. Lengths are ticks of the world\u0027s own simulation clock or frames the pipeline instance submits, never time.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The workload\u0027s name: lowercase letters, digits and hyphens, since it names files and cells.",
+            "type": "string"
+          },
+          "world": {
+            "description": "The world document the cell boots, relative to the package directory with forward slashes; a .world.json document, which a generated overlay beside it takes as its basis.",
+            "type": "string"
+          },
+          "warmupTicks": {
+            "description": "The ticks run before the first reading.",
+            "type": "integer"
+          },
+          "soakTicks": {
+            "description": "The ticks of each soak window, across which no GPU object may be created.",
+            "type": "integer"
+          },
+          "worldReloads": {
+            "description": "How many times the cell reloads the world document from disk.",
+            "type": "integer"
+          },
+          "pipeline": {
+            "description": "The pipeline instance the cell churns, or null for none.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "instance": {
+                "description": "The views.pipelines row\u0027s name.",
+                "type": "string"
+              },
+              "layout": {
+                "description": "The views.layouts row whose slot shows the instance.",
+                "type": "string"
+              },
+              "settleFrames": {
+                "description": "The submissions counted after each reset before the instance is inspected, enough for a replaced graph and its held images to retire.",
+                "type": "integer"
+              },
+              "reloads": {
+                "description": "How many times the instance recompiles and installs its source (pipeline.reload).",
+                "type": "integer"
+              },
+              "resizes": {
+                "description": "How many times the instance\u0027s slot shrinks to half its extent on each axis and returns.",
+                "type": "integer"
+              },
+              "loads": {
+                "description": "How many times the instance is unloaded (its row removed) and loaded again as a new instance.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "instance",
+              "layout",
+              "settleFrames",
+              "reloads",
+              "resizes",
+              "loads"
+            ],
+            "additionalProperties": false,
+            "title": "QualificationPipeline"
+          },
+          "timeoutSeconds": {
+            "description": "The wall-clock ceiling a leg is killed at: a backstop for a hung World, never a measurement or a threshold.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "world",
+          "warmupTicks",
+          "soakTicks",
+          "worldReloads",
+          "pipeline",
+          "timeoutSeconds"
+        ],
+        "additionalProperties": false,
+        "title": "QualificationWorkload"
+      }
+    },
+    "thresholds": {
+      "description": "One memory threshold row per matrix cell.",
+      "type": "array",
+      "items": {
+        "description": "The memory threshold of one matrix cell.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "workload": {
+            "description": "The workload\u0027s name.",
+            "type": "string"
+          },
+          "backend": {
+            "description": "The backend.",
+            "type": "string"
+          },
+          "width": {
+            "description": "The resolution\u0027s width.",
+            "type": "integer"
+          },
+          "height": {
+            "description": "The resolution\u0027s height.",
+            "type": "integer"
+          },
+          "peakOwnedPipelineBytes": {
+            "description": "The most bytes the workload\u0027s pipeline instance may own or plan to own at once, read from every pipeline.inspect\u0027s owned= and peak=; required for a workload with a pipeline, and null for one without.",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "workload",
+          "backend",
+          "width",
+          "height",
+          "peakOwnedPipelineBytes"
+        ],
+        "additionalProperties": false,
+        "title": "QualificationThreshold"
+      }
+    },
+    "deferred": {
+      "description": "The checks qualification does not make yet, each with why.",
+      "type": "array",
+      "items": {
+        "description": "A check qualification does not make yet.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "check": {
+            "description": "The check.",
+            "enum": [
+              "DeviceLocalPeak",
+              "FrameTime",
+              "ReloadStall"
+            ],
+            "title": "QualificationDeferredCheck"
+          },
+          "reason": {
+            "description": "Why it is deferred and what it waits on.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "title": "QualificationDeferral"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "publish",
+    "backends",
+    "debugLayers",
+    "functional",
+    "resolutions",
+    "workloads",
+    "thresholds",
+    "deferred"
+  ],
+  "additionalProperties": false
+}

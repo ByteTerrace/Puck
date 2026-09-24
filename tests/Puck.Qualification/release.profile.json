@@ -1,0 +1,141 @@
+{
+  "schema": "puck.release.profile.v1",
+  "publish": {
+    "mode": "ReadyToRun",
+    "entryAssembly": "Puck.World.dll",
+    "compiler": "None"
+  },
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "debugLayers": [
+    "vulkan",
+    "directx"
+  ],
+  "functional": [
+    "pipeline-feedback",
+    "pipeline-ink",
+    "pipeline-edit",
+    "pipeline-supersede",
+    "pipeline-shapes",
+    "pipeline-resize",
+    "pipeline-counters",
+    "pipeline-override",
+    "pipeline-package",
+    "pipeline-budget",
+    "pipeline-churn",
+    "world-counters",
+    "source-conversion",
+    "sdf-decode-sign-refusal"
+  ],
+  "resolutions": [
+    {
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "width": 1920,
+      "height": 1080
+    }
+  ],
+  "workloads": [
+    {
+      "name": "forcing-world",
+      "world": "Assets/worlds/puck.world.json",
+      "warmupTicks": 300,
+      "soakTicks": 1800,
+      "worldReloads": 2,
+      "pipeline": null,
+      "timeoutSeconds": 900
+    },
+    {
+      "name": "ink-pipeline",
+      "world": "Assets/worlds/pipeline.world.json",
+      "warmupTicks": 120,
+      "soakTicks": 900,
+      "worldReloads": 0,
+      "pipeline": {
+        "instance": "ink",
+        "layout": "pipeline",
+        "settleFrames": 4,
+        "reloads": 3,
+        "resizes": 3,
+        "loads": 3
+      },
+      "timeoutSeconds": 600
+    }
+  ],
+  "thresholds": [
+    {
+      "workload": "forcing-world",
+      "backend": "vulkan",
+      "width": 1280,
+      "height": 800,
+      "peakOwnedPipelineBytes": null
+    },
+    {
+      "workload": "forcing-world",
+      "backend": "vulkan",
+      "width": 1920,
+      "height": 1080,
+      "peakOwnedPipelineBytes": null
+    },
+    {
+      "workload": "forcing-world",
+      "backend": "directx",
+      "width": 1280,
+      "height": 800,
+      "peakOwnedPipelineBytes": null
+    },
+    {
+      "workload": "forcing-world",
+      "backend": "directx",
+      "width": 1920,
+      "height": 1080,
+      "peakOwnedPipelineBytes": null
+    },
+    {
+      "workload": "ink-pipeline",
+      "backend": "vulkan",
+      "width": 1280,
+      "height": 800,
+      "peakOwnedPipelineBytes": 155648000
+    },
+    {
+      "workload": "ink-pipeline",
+      "backend": "vulkan",
+      "width": 1920,
+      "height": 1080,
+      "peakOwnedPipelineBytes": 315187200
+    },
+    {
+      "workload": "ink-pipeline",
+      "backend": "directx",
+      "width": 1280,
+      "height": 800,
+      "peakOwnedPipelineBytes": 155648000
+    },
+    {
+      "workload": "ink-pipeline",
+      "backend": "directx",
+      "width": 1920,
+      "height": 1080,
+      "peakOwnedPipelineBytes": 315187200
+    }
+  ],
+  "deferred": [
+    {
+      "check": "DeviceLocalPeak",
+      "reason": "No reading of the device-local bytes a World process has allocated exists: the memory profile reports what the device has, not what the World uses, and only a pipeline instance counts its own bytes. A process-wide reading needs a byte count on the neutral GPU services, which P7's device-bound services own."
+    },
+    {
+      "check": "FrameTime",
+      "reason": "Frame-time median and tail need wall-clock and GPU timing, which are deferred with no date; qualification sets no frame-time threshold."
+    },
+    {
+      "check": "ReloadStall",
+      "reason": "How long a reload stalls presentation needs wall-clock timing, which is deferred with no date; qualification counts that every reload installs, never how long it took."
+    }
+  ]
+}

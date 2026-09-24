@@ -21,7 +21,7 @@ public sealed partial class WorldStateCommandModule {
                 if (link is IPrincipalServerLink stamped) {
                     stamped.Query(
                         new WorldQuery.StateObservations(),
-                        context.ActingPrincipal(),
+                        context.Principal,
                         Complete
                     );
                 } else {
@@ -61,13 +61,8 @@ public sealed partial class WorldStateCommandModule {
             description: "Prints named physical and discrete topology declarations and compiled addressing costs.",
             routing: CommandRouting.Immediate,
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.topologies"
-                ) is { } refusal) {
-                    return refusal;
-                }
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveServerWithoutArguments(
+                    args: in args,
                     context: context,
                     error: out var error,
                     server: out var server,
@@ -115,13 +110,8 @@ public sealed partial class WorldStateCommandModule {
             description: "Echoes every compiled pattern language: kind, refined letters, machine states against the row's budget, and the attribute row a zone source reads.",
             routing: CommandRouting.Immediate,
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.patterns"
-                ) is { } refusal) {
-                    return refusal;
-                }
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveServerWithoutArguments(
+                    args: in args,
                     context: context,
                     error: out var error,
                     server: out var server,
@@ -138,13 +128,8 @@ public sealed partial class WorldStateCommandModule {
             description: "Echoes every static lookup table the document references: name, value kind, and entry count.",
             routing: CommandRouting.Immediate,
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.tables"
-                ) is { } refusal) {
-                    return refusal;
-                }
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveServerWithoutArguments(
+                    args: in args,
                     context: context,
                     error: out var error,
                     server: out var server,
@@ -186,7 +171,7 @@ public sealed partial class WorldStateCommandModule {
         yield return CommandDefinition.WithWireArgs(
             name: "world.observe",
             bindability: CommandBindability.Unbindable,
-            description: "Composes the literal state observations an EXPLICITLY NAMED principal would see — the read-back side of a hidden-hand table, for inspecting another seat's disclosure without submitting as it: world.observe <principal>. Same token grammar as world.grant (WorldPrincipal.TryParse). Unlike world.state.observe (which reads the CALLER's own stamped identity), this composes for the named principal directly through WorldStateDisclosure.Compose, the same trusted-authority read world.why/world.grants already use — a console/authority tool, not a wire capability check.",
+            description: "Composes the literal state observations an EXPLICITLY NAMED principal would see — the read-back side of a hidden-hand table, for inspecting another seat's disclosure without submitting as it: world.observe <principal>. Same token grammar as world.grant (PrincipalTokens.TryParse). Unlike world.state.observe (which reads the CALLER's own stamped identity), this composes for the named principal directly through WorldStateDisclosure.Compose, the same trusted-authority read world.why/world.grants already use — a console/authority tool, not a wire capability check.",
             routing: CommandRouting.Immediate,
             handler: (context, args) => {
                 if (args.Count != 1) {
@@ -203,11 +188,20 @@ public sealed partial class WorldStateCommandModule {
                 )) {
                     return error;
                 }
-                if (!WorldGrantCommandModule.TryParsePrincipal(
-                    args[0].ToString(),
-                    out var principal
+                if (!PrincipalTokens.TryParse(
+                    principal: out var principal,
+                    token: args[0].ToString()
                 )) {
-                    return CommandResult.Error(output: $"[world.observe: unknown principal '{args[0]}' — {WorldPrincipal.TokenGrammar}]");
+                    return CommandResult.Error(output: $"[world.observe: unknown principal '{args[0]}' — {PrincipalTokens.Grammar}]");
+                }
+                // Only the operator composes another principal's view; anyone else observes itself alone.
+                var acting = context.Principal;
+
+                if (
+                    (acting.Kind != PrincipalKind.Console) &&
+                    (acting != principal)
+                ) {
+                    return CommandResult.Error(output: $"[world.observe: refused — {acting.Describe()} may observe only itself, not {principal.Describe()}]");
                 }
                 var time = server.Time;
                 var rows = (WorldStateDisclosure.Compose(
@@ -235,6 +229,30 @@ public sealed partial class WorldStateCommandModule {
                         verb: "world.match"
                     );
                 }
+                if (!authority.TryResolveReadView(
+                    context: context,
+                    error: out var viewError,
+                    verb: "world.match",
+                    view: out var view
+                )) {
+                    return viewError;
+                }
+                var pattern = args[0].ToString();
+                var row = args[1].ToString();
+
+                // The walk reads the live store, which the view cannot narrow, so it runs only over rows the reader's
+                // disclosure carries whole: the word's row and, for a keyed walk, the attribute row it reads per token.
+                foreach (var read in ((args.Count == 3)
+                    ? new[] { row, args[2].ToString() }
+                    : new[] { row })) {
+                    if (view.Withheld(row: read) is not null) {
+                        return CommandResult.Error(output: view.Refusal(
+                            key: null,
+                            row: read,
+                            verb: "world.match"
+                        ));
+                    }
+                }
                 if (!authority.TryResolveServer(
                     context: context,
                     error: out var error,
@@ -243,8 +261,6 @@ public sealed partial class WorldStateCommandModule {
                 )) {
                     return error;
                 }
-                var pattern = args[0].ToString();
-                var row = args[1].ToString();
 
                 return new CommandResult(Output: ((args.Count == 4)
                     ? server.DescribeMatch(
@@ -316,7 +332,7 @@ public sealed partial class WorldStateCommandModule {
             }
             return link.Submit(
                 new WorldMutation.TransformState(
-                    context.ActingPrincipal(),
+                    context.Principal,
                     operation,
                     guard
                 ),
@@ -327,7 +343,7 @@ public sealed partial class WorldStateCommandModule {
             return CommandResult.Error(output: $"invalid state transform: {exception.Message}");
         }
     }
-    private static string DescribeDiscrete(WorldServer server, WorldStateRow row) {
+    private static string DescribeDiscrete(WorldStateRow row) {
         if (row.Phase is { } phase) {
             return $" phase sequence={phase.Sequence}";
         }

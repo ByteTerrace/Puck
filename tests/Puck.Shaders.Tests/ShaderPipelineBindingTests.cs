@@ -22,7 +22,6 @@ public sealed class ShaderPipelineBindingTests {
         new(
             "pass",
             "pass.hlsl",
-            ShaderSourceLanguage.Hlsl,
             "main",
             ShaderPipelinePassKind.Compute,
             [input],
@@ -61,7 +60,7 @@ public sealed class ShaderPipelineBindingTests {
 
         Assert.Contains(
             collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_FULLSCREEN_ATTACHMENT_BINDING")
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_GRAPHICS_ATTACHMENT_BINDING")
         );
     }
     [Fact]
@@ -132,10 +131,10 @@ public sealed class ShaderPipelineBindingTests {
         );
     }
     [Fact]
-    public void Persistent_history_still_requires_initialized_first_frame_contents() {
+    public void History_still_requires_initialized_first_frame_contents() {
         var definition = new ShaderPipelineDefinition(
             "history",
-            [Image("output") with { Persistent = true, History = true }],
+            [Image("output") with { History = true }],
             [Pass(
                     input: new(
                         "output",
@@ -153,22 +152,6 @@ public sealed class ShaderPipelineBindingTests {
         );
     }
     [Fact]
-    public void Shadertoy_output_binding_must_match_the_adapter() {
-        var authored = Pass(
-            input: "input",
-            output: new(
-                "output",
-                Binding: 4
-            )
-        ) with { Language = ShaderSourceLanguage.ShadertoyGlsl };
-        var error = Assert.Throws<ShaderPipelineCompilationException>(testCode: () => new ShaderPipelineCompiler().Compile(definition: Definition(pass: authored)));
-
-        Assert.Contains(
-            collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_SHADERTOY_BINDINGS")
-        );
-    }
-    [Fact]
     public void Sparse_fullscreen_input_is_refused_before_native_pipeline_creation() {
         var pass = Pass(
             input: new(
@@ -181,7 +164,7 @@ public sealed class ShaderPipelineBindingTests {
 
         Assert.Contains(
             collection: error.Diagnostics,
-            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_FULLSCREEN_BINDING")
+            filter: diagnostic => (diagnostic.Code == "SHADERPIPE_GRAPHICS_BINDING")
         );
     }
 }

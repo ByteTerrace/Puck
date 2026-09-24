@@ -536,8 +536,32 @@
     },
     {
       "CoveredBy": [
+        "integer.align-bit-oracle",
+        "integer.bit-kernel-refusals"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.AlignDown(T,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.align-bit-oracle",
+        "integer.bit-kernel-refusals"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.AlignUp(T,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.binary-integer-contracts"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.BitLength(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.binary-integer-contracts",
         "core.bitwise-pair-signed-narrow-and-wide-carriers",
+        "integer.morton-paths-bit-oracle",
         "scalar.binary-integer-wide-carrier-vs-oracle"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.BitwisePair(TInput,TInput)",
@@ -545,11 +569,28 @@
     },
     {
       "CoveredBy": [
+        "integer.bit-kernel-refusals",
+        "integer.morton-paths-bit-oracle"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.BitwiseTriple(TInput,TInput,TInput)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "core.binary-integer-contracts",
         "core.bitwise-pair-signed-narrow-and-wide-carriers",
+        "integer.morton-paths-bit-oracle",
         "scalar.binary-integer-wide-carrier-vs-oracle"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.BitwiseUnpair(TInput)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.bit-kernel-refusals",
+        "integer.morton-paths-bit-oracle"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.BitwiseUntriple(TInput)",
       "State": "covered"
     },
     {
@@ -564,6 +605,14 @@
         "core.binary-integer-contracts"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.ClearLowestSetBit(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.binary-integer-contracts",
+        "core.binary-integer-signed-extremes-and-refusals"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.DigitCount(T)",
       "State": "covered"
     },
     {
@@ -589,13 +638,6 @@
         "scalar.binary-integer-wide-carrier-vs-oracle"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.Exponentiate(T,T)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
-        "core.binary-integer-contracts"
-      ],
-      "Id": "Puck.Maths.BinaryIntegerFunctions.ExtractLowestSetBit(T)",
       "State": "covered"
     },
     {
@@ -653,13 +695,6 @@
     },
     {
       "CoveredBy": [
-        "core.binary-integer-contracts"
-      ],
-      "Id": "Puck.Maths.BinaryIntegerFunctions.LeastSignificantBit(T)",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
         "core.binary-integer-contracts",
         "core.binary-integer-signed-extremes-and-refusals"
       ],
@@ -668,17 +703,17 @@
     },
     {
       "CoveredBy": [
-        "core.binary-integer-contracts",
-        "core.binary-integer-signed-extremes-and-refusals"
+        "integer.bit-kernel-refusals",
+        "integer.low-mask-bit-oracle"
       ],
-      "Id": "Puck.Maths.BinaryIntegerFunctions.LogarithmBase10(T)",
+      "Id": "Puck.Maths.BinaryIntegerFunctions.LowMask(System.Int32)",
       "State": "covered"
     },
     {
       "CoveredBy": [
         "core.binary-integer-contracts"
       ],
-      "Id": "Puck.Maths.BinaryIntegerFunctions.MostSignificantBit(T)",
+      "Id": "Puck.Maths.BinaryIntegerFunctions.LowestSetBit(T)",
       "State": "covered"
     },
     {
@@ -687,6 +722,38 @@
         "core.binary-integer-signed-extremes-and-refusals"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.MostSignificantDigit(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.bit-kernel-refusals",
+        "integer.fermat-mask-bit-oracle"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.NthFermatMask(System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.bit-kernel-refusals",
+        "integer.power-of-two-bit-oracle"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.NthPowerOfTwo(System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.bit-kernel-refusals",
+        "integer.parallel-bit-deposit-extract-bit-oracle"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.ParallelBitDeposit(T,T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.bit-kernel-refusals",
+        "integer.parallel-bit-deposit-extract-bit-oracle"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.ParallelBitExtract(T,T)",
       "State": "covered"
     },
     {
@@ -760,6 +827,28 @@
         "core.binary-integer-contracts"
       ],
       "Id": "Puck.Maths.BinaryIntegerFunctions.RotateDigitsRight(T,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.bit-kernel-refusals",
+        "integer.smear-below-highest-set-bit-bit-oracle"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.SmearBelowHighestSetBit(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.try-add-and-try-narrow-vs-exact"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.TryAdd(T,T,T&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.try-add-and-try-narrow-vs-exact"
+      ],
+      "Id": "Puck.Maths.BinaryIntegerFunctions.TryNarrow(TWide,TNarrow&)",
       "State": "covered"
     },
     {
@@ -1013,6 +1102,20 @@
         "polynomial.shifts-are-monomial-arithmetic"
       ],
       "Id": "Puck.Maths.BinaryPolynomial.op_UnsignedRightShift(Puck.Maths.BinaryPolynomial,System.Int32)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.fast-parallel-bits-decision-table"
+      ],
+      "Id": "Puck.Maths.BitManipulation.HasFastParallelBits",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.fast-parallel-bits-decision-table"
+      ],
+      "Id": "Puck.Maths.BitManipulation.IsParallelBitsFast(System.String,System.Int32,System.Boolean)",
       "State": "covered"
     },
     {
@@ -5251,6 +5354,7 @@
         "complex.mul-purity",
         "complex.mul-vs-oracle",
         "complex.multiplicative-identity",
+        "complex.multiply-routes-allocate-nothing",
         "complex.twin-quad",
         "deep.complex-mul-vs-oracle",
         "presented.clifford-planar-complex-twin",
@@ -8550,6 +8654,13 @@
       "CoveredBy": [
         "core.fixed-saturate-clamps-to-the-extremes"
       ],
+      "Id": "Puck.Maths.FixedSaturate.Add(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.fixed-saturate-clamps-to-the-extremes"
+      ],
       "Id": "Puck.Maths.FixedSaturate.ToInt64(System.Int128)",
       "State": "covered"
     },
@@ -8960,9 +9071,23 @@
     },
     {
       "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.Abs(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector.identity-and-negation"
       ],
       "Id": "Puck.Maths.FixedVector3.AdditiveIdentity",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.Clamp(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
       "State": "covered"
     },
     {
@@ -8977,6 +9102,13 @@
         "vector.space-products-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedVector3.Cross(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.Divide(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
       "State": "covered"
     },
     {
@@ -9031,10 +9163,31 @@
     },
     {
       "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.Max(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.MaxComponent(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector.move-toward-boundaries-and-segment",
         "vector.move-toward-carrier-extremes"
       ],
       "Id": "Puck.Maths.FixedVector3.MoveToward(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.Multiply(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
       "State": "covered"
     },
     {
@@ -9058,9 +9211,24 @@
     },
     {
       "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.Round(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector.presentation-ladder"
       ],
       "Id": "Puck.Maths.FixedVector3.ToVector3()",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.ray-plane-known-hits",
+        "vector.ray-plane-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.TryIntersectPlane(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816&)",
       "State": "covered"
     },
     {
@@ -9080,6 +9248,27 @@
         "vector.space-full-width-oracle-and-length-policy"
       ],
       "Id": "Puck.Maths.FixedVector3.TryLengthSquared(Puck.Maths.FixedQ4816&)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.unit-axes-are-exact"
+      ],
+      "Id": "Puck.Maths.FixedVector3.UnitX",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.unit-axes-are-exact"
+      ],
+      "Id": "Puck.Maths.FixedVector3.UnitY",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.unit-axes-are-exact"
+      ],
+      "Id": "Puck.Maths.FixedVector3.UnitZ",
       "State": "covered"
     },
     {
@@ -9135,6 +9324,34 @@
         "vector.identity-and-negation"
       ],
       "Id": "Puck.Maths.FixedVector3.op_Addition(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.op_CheckedAddition(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.op_CheckedMultiply(Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.op_CheckedSubtraction(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.componentwise-helpers-vs-oracle"
+      ],
+      "Id": "Puck.Maths.FixedVector3.op_CheckedUnaryNegation(Puck.Maths.FixedVector3)",
       "State": "covered"
     },
     {
@@ -9278,6 +9495,13 @@
         "core.fnv1a-published-vector"
       ],
       "Id": "Puck.Maths.Fnv1aHash.Add(System.ReadOnlySpan<System.Byte>)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "core.fnv1a-published-vector"
+      ],
+      "Id": "Puck.Maths.Fnv1aHash.Add(System.String)",
       "State": "covered"
     },
     {
@@ -11871,6 +12095,13 @@
         "core.layer-sequence-walker-and-bounded-horizon"
       ],
       "Id": "Puck.Maths.LayerSequence.Triangular",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "integer.lexicographic-order-vs-oracle"
+      ],
+      "Id": "Puck.Maths.LexicographicOrder.Compare(TPrimary,TPrimary,TSecondary,TSecondary)",
       "State": "covered"
     },
     {
@@ -17203,6 +17434,7 @@
         "algebra.fractional-mul-vs-oracle",
         "algebra.monogenic-degree2-and-degree3-match-independent-reference",
         "algebra.real-quadratic-twin-lane",
+        "complex.multiply-routes-allocate-nothing",
         "complex.twin-quad",
         "deep.fractional-mul-vs-oracle",
         "dual.twin-quad",
@@ -24320,6 +24552,13 @@
         "core.unsigned-square-root-uint128-carrier-boundary"
       ],
       "Id": "Puck.Maths.UnsignedNumberFunctions.SquareRoot(T)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector-functions.is-finite-vs-oracle"
+      ],
+      "Id": "Puck.Maths.VectorFunctions.IsFinite(System.Numerics.Vector3)",
       "State": "covered"
     },
     {

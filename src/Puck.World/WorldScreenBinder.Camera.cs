@@ -12,7 +12,7 @@ using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
-using Puck.SdfVm;
+using Puck.Hosting;
 using Puck.SdfVm.Views;
 using Puck.World.Client;
 
@@ -118,11 +118,15 @@ internal sealed partial class WorldScreenBinder {
         }
 
         slot.ClearLive();
-        slot.CameraSeat = seat;
-        slot.CameraSensorKind = sensor;
+        slot.LiveFeed = new CameraSlotFeed(
+            binder: this,
+            profile: null,
+            seat: seat,
+            sensor: sensor
+        );
         slot.DeclaredFault = null;
-        // Demand resolves at the next publish (ReconcileCameraDemand reads CameraSeat/CameraSensorKind directly) —
-        // one produced frame's seam between this bind and the seat's device/feed appearing live.
+        // Demand resolves at the next publish (ReconcileCameraDemand reads the slot's camera feed directly) — one
+        // produced frame's seam between this bind and the seat's device/feed appearing live.
 
         return (Ok: true, Message: $"screen {index} showing seat {seat}'s {SensorName(sensor: sensor)} webcam");
     }
@@ -328,13 +332,13 @@ internal sealed partial class WorldScreenBinder {
     }
 
     /// <summary>Retains one live probe instance's camera feed demand at the socket's authored profile.</summary>
-    public void RetainProbeCameraDemand(WorldScreenSource.Camera camera, int contextSeat) =>
+    public void RetainProbeCameraDemand(WorldCameraSettings camera, int contextSeat) =>
         RetainProbeCameraDemandCore(
             camera: camera,
             contextSeat: contextSeat
         );
     /// <summary>Releases one live probe instance's camera feed demand.</summary>
-    public void ReleaseProbeCameraDemand(WorldScreenSource.Camera camera, int contextSeat) =>
+    public void ReleaseProbeCameraDemand(WorldCameraSettings camera, int contextSeat) =>
         ReleaseProbeCameraDemandCore(
             camera: camera,
             contextSeat: contextSeat
@@ -393,7 +397,7 @@ internal sealed partial class WorldScreenBinder {
     }
     // The four per-frame reads a ScreenSlot bound to (CameraSeat, CameraSensorKind) makes — thin wrappers over
     // TryResolveCamera so the slot itself carries no camera machinery of its own.
-    private SdfScreenSourceFrame AcquireCameraFrame(int seat, WorldCameraSensor sensor) =>
+    private GpuImageLease AcquireCameraFrame(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
             fault: out _,
@@ -772,8 +776,8 @@ internal sealed partial class WorldScreenBinder {
     // producer declares its format: the source-reader tier uses BGRA, the coordinated compute tier and every probe
     // output RGBA. All are sampled directly, so no renderer-wide convention leaks.
     [SupportedOSPlatform("windows10.0.10240")]
-    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, SurfaceFormat format, int width, int height, out IReadOnlyList<IGpuExportableStorageImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out string fault) {
-        var allocated = new IGpuExportableStorageImage[CameraTargetCount];
+    private bool TryProvisionSharedRing(long adapterLuid, IGpuDeviceContext deviceContext, SurfaceFormat format, int width, int height, out IReadOnlyList<IGpuExportableImage> images, out IGpuSurfaceImport[]? imports, out nint[]? importedViews, out string fault) {
+        var allocated = new IGpuExportableImage[CameraTargetCount];
         var handles = new nint[allocated.Length];
         IGpuSurfaceImport[]? createdImports = null;
         nint[]? createdViews = null;
@@ -798,7 +802,7 @@ internal sealed partial class WorldScreenBinder {
             var export = (m_cameraExport ??= new DirectXGpuSurfaceExportFactory());
 
             for (var index = 0; (index < allocated.Length); index++) {
-                allocated[index] = export.CreateSimultaneousAccessStorageImage(
+                allocated[index] = export.CreateSimultaneousAccessImage(
                     deviceContext: targetContext,
                     format: pixelFormat,
                     height: checked((uint)height),
@@ -911,7 +915,7 @@ internal sealed partial class WorldScreenBinder {
         feed.LastFrameVersion = version;
         feed.Live = true;
         feed.Fault = null;
-        feed.Light = AverageColor(pixels: panelSurface.Pixels.Span);
+        feed.Light = WorldImageLight.Average(bgra: panelSurface.Pixels.Span);
         ApplyCameraControlsFor(device: device);
     }
     // Reader construction can succeed while a multiplexing driver delivers only one selected sensor. Count cadence
@@ -1322,7 +1326,10 @@ internal sealed partial class WorldScreenBinder {
         var map = new Dictionary<int, WorldCameraControls?>();
 
         foreach (var screen in screens) {
-            if (screen.Source is WorldScreenSource.Camera camera) {
+            if (WorldImageProducerSettings.TryCamera(
+                camera: out var camera,
+                source: screen.Source
+            )) {
                 var seat = (camera.Seat ?? 1);
 
                 if (!map.ContainsKey(key: seat)) {
@@ -1414,7 +1421,7 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        public SdfScreenSourceFrame AcquireFrame() {
+        public GpuImageLease AcquireFrame() {
             if (
                 !Live ||
                 m_retired
@@ -1440,7 +1447,7 @@ internal sealed partial class WorldScreenBinder {
             m_releaseCpuFrame ??= ReleaseCpuFrame;
             ++m_outstandingCpuFrames;
 
-            return new SdfScreenSourceFrame(
+            return new GpuImageLease(
                 ImageViewHandle: handle,
                 Release: m_releaseCpuFrame
             );
@@ -1506,7 +1513,7 @@ internal sealed partial class WorldScreenBinder {
     // (so a producer close cannot destroy the texture while an already-submitted renderer frame still samples it).
     // All methods run on the render thread except the ring's producer-side checks.
     private sealed class CameraGpuTargetSet {
-        private readonly IReadOnlyList<IGpuExportableStorageImage> m_images;
+        private readonly IReadOnlyList<IGpuExportableImage> m_images;
         private readonly nint[]? m_importedViews;
         private readonly IGpuSurfaceImport[]? m_imports;
         private readonly Action<int> m_release;
@@ -1521,7 +1528,7 @@ internal sealed partial class WorldScreenBinder {
         /// the set, so a per-frame reader never re-derives them.</summary>
         public IReadOnlyList<nint> SharedHandles => m_sharedHandles;
 
-        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableStorageImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring) {
+        public CameraGpuTargetSet(IReadOnlyList<IGpuExportableImage> images, nint[]? importedViews, IGpuSurfaceImport[]? imports, ISharedSlotRing ring) {
             m_images = images;
             m_importedViews = importedViews;
             m_imports = imports;
@@ -1583,7 +1590,7 @@ internal sealed partial class WorldScreenBinder {
                 DisposeResources();
             }
         }
-        public bool TryAcquire(out SdfScreenSourceFrame frame) {
+        public bool TryAcquire(out GpuImageLease frame) {
             if (
                 m_retired ||
                 !m_stream.TryAcquireLatest(slot: out var slot)
@@ -1607,7 +1614,7 @@ internal sealed partial class WorldScreenBinder {
 
             var handle = Handle(slot: slot);
 
-            frame = new SdfScreenSourceFrame(
+            frame = new GpuImageLease(
                 ImageViewHandle: handle,
                 Release: m_release,
                 ReleaseToken: slot

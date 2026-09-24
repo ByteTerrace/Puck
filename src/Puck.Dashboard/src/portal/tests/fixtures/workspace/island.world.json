@@ -1,0 +1,7 @@
+{
+  "schema": "puck.world.definition.v1",
+  "documentId": "island",
+  "imports": [
+    { "document": "games/token", "as": "token" }
+  ]
+}

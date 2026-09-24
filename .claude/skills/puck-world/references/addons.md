@@ -149,8 +149,8 @@ WITHOUT recording it (the tape pins receipts and re-runs the guests):
 ## Channels and the wire
 
 `AddonChannelKind`: `Input = 1`, `Request = 2`, `Response = 3` (ordinals 4
-and 5 — the former Geometry/Overlay lanes — are retired permanently; a
-descriptor naming them refuses the mount). Pairing rules: Request without
+and 5 are unassigned; a descriptor naming them refuses the mount). Pairing
+rules: Request without
 Response (or vice versa) refuses; declaring Input requires the
 Request+Response pair (disclosures ride Response — an Input-only guest is
 provably inert).
@@ -189,15 +189,15 @@ refuse a guest built against fewer verbs.
 withheld/inert. `Addons.WorldAddonMutationDecoder` wires 10 of
 the declared kinds today: the 5 HUD kinds
 (`UpsertHudPanel`/`RemoveHudPanel`/`UpsertHudElement`/`RemoveHudElement`/
-`SetHudDefaults`, ordinals 41-45), the 2 placement kinds
+`SetHudDefaults`, ordinals 39-43), the 2 placement kinds
 (`UpsertPlacement`/`RemovePlacement`, ordinals 19-20 — the FULL
 `WorldPlacement` wire shape the document validator accepts: transform
 (position/yawDegrees/scale), repeat, mirror, emission, solid, inhabit,
-faceSources — including the full 8-variant `WorldScreenSource` union each
-face source carries — region, and attach), the 2 state kinds
-(`UpsertStateRow`/`RemoveStateRow`, ordinals 46-47, every non-generator
+faceSources — whose `WorldScreenSource` decodes `none`, `machine`,
+`producer` (its settings object carried whole) and `view` — region, and attach), the 2 state kinds
+(`UpsertStateRow`/`RemoveStateRow`, ordinals 44-45, every non-generator
 `WorldStateRow` variant: int/fixed/bool/text), and `SetInputHold`
-(ordinal 48). Every OTHER declared `WorldMutation` kind still
+(ordinal 46). Every OTHER declared `WorldMutation` kind still
 decodes to `AddonMutateRefusal.DecodeFailed` → `Verdict::MalformedPayload`
 regardless of grants or verb masks — a decoder gap, not an authority one;
 wiring a new kind in is additive (a new `case` arm), never a change to the
@@ -234,9 +234,8 @@ retryable). Handle pairs validate at APPLICATION, never at decode. The
 vocabulary through `AddonMutateRefusals.ToVerdict`.
 
 `AddonCapabilityMask` bits: `Drive = 1<<0`, `Observe = 1<<1`,
-`Reserved = 1<<2` (the permanently reserved hole where `Present` was —
-never compacted, never reused; naming it in an Ask resolves to no
-capability), `Control = 1<<3`, `Mutate = 1<<4`, `Edit = 1<<5`.
+`Control = 1<<2`, `Mutate = 1<<3`, `Edit = 1<<4`; any other bit in an Ask resolves
+to no capability.
 
 ## Fuel
 
@@ -298,7 +297,7 @@ no separate lifecycle leaf left to reason about arming against.
 The host delivers world events as host-written `Observation` cells (verbs
 1-12 on `AddonAbi.ObservationVerbs`, prefix growth beside `GrantedBody` —
 the ABI pin never bumps). Five families are WORLD-scoped, collected once per
-tick by `Server/WorldEventFeed.cs` after the population settles: seat
+tick by `src/Puck.World.Server/WorldEventFeed.cs` after the population settles: seat
 join/leave, region enter/exit (a placement's `WorldPlacementRegion` facet —
 a named sphere, addressed by the carrying placement's own `Id`), collision
 pairs (a flat proximity test — NOT the physical contact resolver, which has
@@ -316,14 +315,13 @@ a `(screen, address, length)` row) and reads `Server.WorldMachineHost`
 DIRECTLY (`WorldMachineHost` implements `IWorldMachineMemoryPeek` itself,
 reached through the always-present `WorldServer.Machines`) —
 **publishes in every boot shape**: machines boot and step server-side,
-headless included, so
-this family is no longer inert there — the former settable
-`WorldServer.MachineMemoryPeek` seam, populated only when presentation
-composed a screen binder, is gone.
+headless included.
 
 A family materializes for a guest through the SAME requested ∧ granted rule
-every other capability here uses: `WorldAddonRuntime.IsEventGated` checks
-`IsRequested ∧ Allows ∧ TryGetEventBudget`. The gating subject IS the
+every other capability here uses: `WorldAddonRuntime.EventGate`
+(`WorldAddonRuntime.Events.cs`) checks `IsRequested ∧ Allows ∧
+TryGetEventBudget`, then reports the family `Available` or `Exhausted`
+against the per-subject event count. The gating subject IS the
 family — `Observe/body:<n>` (collision + route), `Observe/region:<name>`
 (enter/exit), `Observe/seat:<n>` (join/leave), `Observe/screen:<n>`
 (machine-memory), `Observe/adjacency:<name>` (link established/dropped —
@@ -361,9 +359,8 @@ shared grant leaf.
 ## The shipped example
 
 `src/Puck.World/Assets/addons/puck-addon-default.wasm` (source under
-`wasm/puck-addon-default/`) — none of the four shipped worlds mounts it today
-(the `default` world that once did was retired under the four-world charter);
-it ships as an asset, ready to author into any world's `addons` row: the
+`wasm/puck-addon-default/`) — no shipped world mounts it; it ships as an
+asset, ready to author into any world's `addons` row: the
 dead-reckoning clamp-walk ghost — consumes the `GrantedBody` disclosure for
 a Drive handle, asks for Observe, dead-reckons off pose answers, and emits
 NOTHING when no pose is held (a refused grant leaves the ghost standing,

@@ -32,7 +32,9 @@ destinations before this path is changed.
 Emulated channel outputs and the Direct Sound mix are integer state. Exact
 absolute levels, SOUNDBIAS PWM resolution, and clipping should be calibrated
 from hardware captures. Host sample cadence uses exact rational accumulation
-with carried remainder.
+with carried remainder. The host output ring is the shared `StereoSampleRing`:
+it holds one emulated second of whole stereo frames, and a host that falls
+behind loses the oldest frames rather than the newest.
 
 Band-limited resampling is a presentation improvement: consume timestamped
 integer edge events or samples after the deterministic core boundary. Do not

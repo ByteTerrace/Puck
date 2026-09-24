@@ -1,0 +1,19 @@
+# Compilation, then installation, each under its own bounded deadline.
+pipeline.wait feedback compiled 40
+pipeline.wait feedback installed 10
+# Pause and reset: the paused instance renders one initialization frame, the first submission since the reset.
+pipeline.time feedback pause
+pipeline.reset feedback
+pipeline.wait feedback counted 1 10
+# Two reads of that completed submission; a paused instance submits nothing more until it is stepped.
+pipeline.inspect feedback
+pipeline.inspect feedback
+pipeline.status
+# One step is the second submission since the reset.
+pipeline.step feedback
+pipeline.wait feedback counted 2 10
+pipeline.inspect feedback
+# Another reset: its initialization frame is the first submission since it, and identities never go back.
+pipeline.reset feedback
+pipeline.wait feedback counted 1 10
+pipeline.inspect feedback

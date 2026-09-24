@@ -300,96 +300,78 @@ internal static class FixedPointConvert {
 
         return false;
     }
+
+    private delegate bool TryConvertPeerDelegate<TSelf, TOther>(TSelf value, int fractionBitCount, out TOther result);
+
+    private static bool TryConvertToCore<TSelf, TOther>(
+        TSelf value,
+        int fractionBitCount,
+        TryConvertPeerDelegate<TSelf, TOther> tryConvertPeer,
+        Func<decimal, TOther> create,
+        out TOther result
+    )
+        where TSelf : struct, INumberBase<TSelf>
+        where TOther : INumberBase<TOther> {
+        if (typeof(TOther) == typeof(TSelf)) {
+            result = Unsafe.As<TSelf, TOther>(source: ref value);
+
+            return true;
+        }
+
+        if (tryConvertPeer(value, fractionBitCount, out result)) {
+            return true;
+        }
+
+        if (TrySetFloating(
+            fractionBitCount: fractionBitCount,
+            result: out result,
+            value: value
+        )) {
+            return true;
+        }
+
+        if (!IsKnownBclNumeric<TOther>()) {
+            result = default!;
+
+            return false;
+        }
+
+        try {
+            result = create(ToDecimal(
+                fractionBitCount: fractionBitCount,
+                value: value
+            ));
+
+            return true;
+        } catch (NotSupportedException) {
+            result = default!;
+
+            return false;
+        }
+    }
+
     /// <summary>Implements the checked outbound generic-math conversion shared by the signed fixed-point carriers.</summary>
     internal static bool TryConvertToChecked<TSelf, TOther>(TSelf value, int fractionBitCount, out TOther result)
         where TSelf : struct, INumberBase<TSelf>
-        where TOther : INumberBase<TOther> {
-        if (typeof(TOther) == typeof(TSelf)) {
-            result = Unsafe.As<TSelf, TOther>(source: ref value);
-
-            return true;
-        }
-
-        if (TryConvertPeerToChecked(
+        where TOther : INumberBase<TOther> =>
+        TryConvertToCore(
+            create: TOther.CreateChecked,
             fractionBitCount: fractionBitCount,
             result: out result,
+            tryConvertPeer: TryConvertPeerToChecked,
             value: value
-        )) {
-            return true;
-        }
-
-        if (TrySetFloating(
-            fractionBitCount: fractionBitCount,
-            result: out result,
-            value: value
-        )) {
-            return true;
-        }
-
-        if (!IsKnownBclNumeric<TOther>()) {
-            result = default!;
-
-            return false;
-        }
-
-        try {
-            result = TOther.CreateChecked(value: ToDecimal(
-                fractionBitCount: fractionBitCount,
-                value: value
-            ));
-
-            return true;
-        } catch (NotSupportedException) {
-            result = default!;
-
-            return false;
-        }
-    }
+        );
     /// <summary>Implements the saturating outbound generic-math conversion shared by the signed fixed-point carriers.</summary>
     internal static bool TryConvertToSaturating<TSelf, TOther>(TSelf value, int fractionBitCount, out TOther result)
         where TSelf : struct, INumberBase<TSelf>
-        where TOther : INumberBase<TOther> {
-        if (typeof(TOther) == typeof(TSelf)) {
-            result = Unsafe.As<TSelf, TOther>(source: ref value);
-
-            return true;
-        }
-
-        if (TryConvertPeerToSaturating(
+        where TOther : INumberBase<TOther> =>
+        TryConvertToCore(
+            create: TOther.CreateSaturating,
             fractionBitCount: fractionBitCount,
             result: out result,
+            tryConvertPeer: TryConvertPeerToSaturating,
             value: value
-        )) {
-            return true;
-        }
-
-        if (TrySetFloating(
-            fractionBitCount: fractionBitCount,
-            result: out result,
-            value: value
-        )) {
-            return true;
-        }
-
-        if (!IsKnownBclNumeric<TOther>()) {
-            result = default!;
-
-            return false;
-        }
-
-        try {
-            result = TOther.CreateSaturating(value: ToDecimal(
-                fractionBitCount: fractionBitCount,
-                value: value
-            ));
-
-            return true;
-        } catch (NotSupportedException) {
-            result = default!;
-
-            return false;
-        }
-    }
+        );
     /// <summary>Implements the truncating outbound generic-math conversion shared by the signed fixed-point carriers.</summary>
     internal static bool TryConvertToTruncating<TSelf, TOther>(TSelf value, int fractionBitCount, out TOther result)
         where TSelf : struct, INumberBase<TSelf>

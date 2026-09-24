@@ -1,0 +1,23 @@
+[
+  {
+    "Id": "vector-functions.is-finite-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "IsFinite"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "VectorFunctions.IsFinite(Vector3), which resolves through Vector3.IsFinite and Vector3.AllWhereAllBitsSet's lane-mask reduction",
+        "Against": "componentwise float.IsFinite on each of the vector's three lanes, over the full cross product of a representative lane battery (zero, signed unit and ordinary magnitudes, the smallest subnormal, both carrier extremes, both infinities, and NaN) — a scalar per-lane route sharing no code with the vector's SIMD mask reduction",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

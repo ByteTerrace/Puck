@@ -49,13 +49,9 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     private readonly IApu m_apu;
     private readonly IKey1 m_key1;
 
-    private int m_capacityFrames;
-    private int m_frameCount;
     private RationalRateAccumulator m_phase;
-    private int m_readFrame;
-    private short[] m_ring;
+    private StereoSampleRing m_ring;
     private int m_sampleRate;
-    private int m_writeFrame;
 
     /// <summary>Initializes a new instance of the <see cref="AudioOutputComponent"/> class, wired to the APU whose
     /// channel outputs it mixes and the speed unit that tells it how wide a CPU T-cycle is. Output starts disabled;
@@ -69,12 +65,11 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
 
         m_apu = apu;
         m_key1 = key1;
-        m_ring = [];
     }
 
     /// <inheritdoc/>
     public int AvailableSampleCount =>
-        (m_frameCount * 2);
+        m_ring.SampleCount;
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
@@ -89,7 +84,7 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
         // Powered off, every DAC is off and the register file is cleared: the output is true silence, not the
         // recentered flat level a powered-but-silent mix produces.
         if ((m_apu.ReadRegister(address: MemoryMap.AudioMasterControl) & MasterPower) == 0) {
-            PushFrame(
+            m_ring.Push(
                 left: 0,
                 right: 0
             );
@@ -118,7 +113,7 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
         if ((nr51 & 0x04) != 0) { right += channel3; }
         if ((nr51 & 0x08) != 0) { right += channel4; }
 
-        PushFrame(
+        m_ring.Push(
             left: MixSide(
                 gatedSum: left,
                 volume: (nr50 >> 4) & 0x07
@@ -141,21 +136,6 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     // side's NR50 volume as (volume + 1) / 8. The extremes land at -16384 and +14336, comfortably inside 16 bits.
     private static short MixSide(int gatedSum, int volume) =>
         ((short)((((gatedSum * MixScale) - MixMidpoint) * (volume + 1)) / 8));
-    // Append one frame to the ring; when full, the oldest frame is dropped so the buffer always holds the newest
-    // emulated second of audio (a stalled host loses the past, never the present).
-    private void PushFrame(short left, short right) {
-        if (m_frameCount == m_capacityFrames) {
-            m_readFrame = ((m_readFrame + 1) % m_capacityFrames);
-            --m_frameCount;
-        }
-
-        var index = (m_writeFrame * 2);
-
-        m_ring[index] = left;
-        m_ring[(index + 1)] = right;
-        m_writeFrame = ((m_writeFrame + 1) % m_capacityFrames);
-        ++m_frameCount;
-    }
 
     /// <inheritdoc/>
     public void Configure(int sampleRate) {
@@ -165,16 +145,9 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
             other: DotsPerSecond
         );
 
-        m_capacityFrames = sampleRate;
-        m_frameCount = 0;
         m_phase.Reset();
-        m_readFrame = 0;
-        m_ring = ((sampleRate > 0)
-            ? new short[(sampleRate * 2)]
-            : []
-        );
+        m_ring.Configure(capacityFrames: sampleRate);
         m_sampleRate = sampleRate;
-        m_writeFrame = 0;
     }
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
@@ -182,10 +155,8 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
 
         // Nothing was saved; a restore resets the stream so a rewound machine does not replay stale output. The
         // configured sample rate is host configuration and survives untouched.
-        m_frameCount = 0;
         m_phase.Reset();
-        m_readFrame = 0;
-        m_writeFrame = 0;
+        m_ring.Clear();
     }
     /// <summary>Returns how many further T-cycles the resampler can absorb before it next emits a frame; unbounded
     /// with no sink configured.</summary>
@@ -200,24 +171,8 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
         ));
     }
     /// <inheritdoc/>
-    public int ReadSamples(Span<short> destination) {
-        var frames = Math.Min(
-            val1: (destination.Length / 2),
-            val2: m_frameCount
-        );
-
-        for (var frame = 0; (frame < frames); ++frame) {
-            var index = (m_readFrame * 2);
-
-            destination[(frame * 2)] = m_ring[index];
-            destination[((frame * 2) + 1)] = m_ring[(index + 1)];
-            m_readFrame = ((m_readFrame + 1) % m_capacityFrames);
-        }
-
-        m_frameCount -= frames;
-
-        return (frames * 2);
-    }
+    public int ReadSamples(Span<short> destination) =>
+        m_ring.Read(destination: destination);
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         // Intentionally empty: the output stage carries no emulated state (see the class remarks), and writing

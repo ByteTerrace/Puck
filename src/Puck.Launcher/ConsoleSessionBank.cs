@@ -120,7 +120,7 @@ public sealed class ConsoleSessionBank : IConsoleSessions, ICommandObserver {
     /// <inheritdoc/>
     public void OnCommand(in CommandActivation activation) {
         if (
-            (activation.Principal.Kind != CommandPrincipalKind.Seat) ||
+            (activation.Principal.Kind != PrincipalKind.Seat) ||
             (((uint)activation.Slot) >= ((uint)m_sessions.Length))
         ) {
             return;

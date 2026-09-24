@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -208,7 +207,7 @@ internal static class GravityOctree {
             val1: 1UL,
             val2: ((unchecked((ulong)maximumSpan) + 1UL) >> 1)
         );
-        var halfRaw = BitOperations.RoundUpToPowerOf2(value: requiredHalf);
+        var halfRaw = requiredHalf.NextPowerOfTwo();
 
         if (
             (halfRaw == 0UL) ||

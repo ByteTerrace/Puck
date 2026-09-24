@@ -1,12 +1,8 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Text;
 using Microsoft.Win32.SafeHandles;
 using Puck.Maths;
 using Puck.Platform.Probes;
-using Windows.Win32;
-using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D11;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
@@ -78,12 +74,13 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         ArgumentNullException.ThrowIfNull(ring);
 
         if (
-            string.IsNullOrEmpty(value: request.KernelSource) ||
+            request.AccumulateBytecode.IsEmpty ||
+            request.FinalizeBytecode.IsEmpty ||
             string.IsNullOrEmpty(value: request.AccumulateEntry) ||
             string.IsNullOrEmpty(value: request.FinalizeEntry)
         ) {
             throw new ArgumentException(
-                message: "a probe kernel request needs kernel source and both entry points.",
+                message: "a probe kernel request needs both entry points and their bytecode.",
                 paramName: nameof(request)
             );
         }
@@ -305,15 +302,15 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                 m_dispatchHeight = triggerHeight;
             }
 
-            accumulateShader = CompileShader(
+            accumulateShader = CreateShader(
+                bytecode: request.AccumulateBytecode.Span,
                 device: device,
-                entry: request.AccumulateEntry,
-                source: request.KernelSource
+                entry: request.AccumulateEntry
             );
-            finalizeShader = CompileShader(
+            finalizeShader = CreateShader(
+                bytecode: request.FinalizeBytecode.Span,
                 device: device,
-                entry: request.FinalizeEntry,
-                source: request.KernelSource
+                entry: request.FinalizeEntry
             );
 
             var queryDescription = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
@@ -357,13 +354,6 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     public long Cycles => Interlocked.Read(location: ref m_cycles);
     public long Drops => Interlocked.Read(location: ref m_drops);
 
-    /// <summary>Compiles a kernel entry point without creating a shader — the manifest validation check.</summary>
-    public static void Compile(string source, string entry) {
-        Release(value: CompileShaderBytecode(
-            entry: entry,
-            source: source
-        ));
-    }
     public void SetConstants(ReadOnlyMemory<byte> constants) {
         if (constants.Length != m_constantsLength) {
             throw new ArgumentException(
@@ -648,76 +638,22 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             );
         }
     }
-    private static ID3D11ComputeShader* CompileShader(ID3D11Device* device, string entry, string source) {
-        var code = CompileShaderBytecode(
-            entry: entry,
-            source: source
-        );
+    private static ID3D11ComputeShader* CreateShader(ID3D11Device* device, string entry, ReadOnlySpan<byte> bytecode) {
+        ID3D11ComputeShader* shader = null;
 
-        try {
-            ID3D11ComputeShader* shader = null;
-
+        fixed (byte* code = bytecode) {
             device->CreateComputeShader(
-                pShaderBytecode: code->GetBufferPointer(),
-                BytecodeLength: code->GetBufferSize(),
+                pShaderBytecode: code,
+                BytecodeLength: ((nuint)bytecode.Length),
                 pClassLinkage: null,
                 ppComputeShader: &shader
             );
-
-            return ((shader is null)
-                ? throw new InvalidOperationException(message: $"D3D11 probe kernel '{entry}' creation returned no shader")
-                : shader
-            );
-        } finally {
-            Release(value: code);
         }
-    }
-    private static ID3DBlob* CompileShaderBytecode(string entry, string source) {
-        var bytes = Encoding.UTF8.GetBytes(s: source);
-        ID3DBlob* code = null;
-        ID3DBlob* errors = null;
 
-        try {
-            fixed (byte* sourceBytes = bytes) {
-                var result = PInvoke.D3DCompile(
-                    pSrcData: sourceBytes,
-                    SrcDataSize: ((nuint)bytes.Length),
-                    pSourceName: "puck-probe.hlsl",
-                    pDefines: null,
-                    pInclude: null,
-                    pEntrypoint: entry,
-                    pTarget: "cs_5_0",
-                    Flags1: 0,
-                    Flags2: 0,
-                    ppCode: &code,
-                    ppErrorMsgs: &errors
-                );
-
-                if (result.Value < 0) {
-                    var message = ((errors is null)
-                        ? "unknown shader compiler error"
-                        : Marshal.PtrToStringUTF8(
-                            ((nint)errors->GetBufferPointer()),
-                            checked((int)errors->GetBufferSize())
-                        )
-                    );
-
-                    throw new COMException(
-                        errorCode: result.Value,
-                        message: $"probe kernel '{entry}' failed to compile: {message}"
-                    );
-                }
-            }
-
-            var compiled = code;
-
-            code = null;
-
-            return compiled;
-        } finally {
-            Release(value: errors);
-            Release(value: code);
-        }
+        return ((shader is null)
+            ? throw new InvalidOperationException(message: $"D3D11 probe kernel '{entry}' creation returned no shader")
+            : shader
+        );
     }
     private static void Release<T>(T* value) where T : unmanaged {
         if (value is not null) {

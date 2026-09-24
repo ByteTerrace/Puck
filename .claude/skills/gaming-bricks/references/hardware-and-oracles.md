@@ -49,10 +49,8 @@ with display dots.
 - The serial shifter advances on each falling edge of DIV counter bit 8 in
   normal mode or bit 3 in CGB-fast mode.
 - Detect the edge on the free-running counter. Writing SC arms a transfer but
-  does not reset or re-phase the clock. These semantics supersede an older
-  "bit 7, one shift per two falling edges" phrasing — equivalent for natural
-  increments, divergent under DIV writes or SC re-phasing. The acceptance
-  `boot_sclk_align` case pins the rule: edges align to the counter's reset
+  does not reset or re-phase the clock. The acceptance `boot_sclk_align`
+  case pins the rule: edges align to the counter's reset
   time, never to when SC is written.
 - TIMA increments on the falling edge of the TAC-selected DIV bit while
   enabled. A DIV write can therefore cause a timer increment, and the
@@ -99,7 +97,7 @@ at the same instants.
 
 A read and a write reach the unit at different points inside their machine
 cycle — a write on the drive instant, a read `LeadingTCyclesBeforeRead` later
-(`Sm83.Decode`) — so a read observes one more audio tick than the write that set
+(`Sm83.Decode.cs`) — so a read observes one more audio tick than the write that set
 the event up. The generators carry
 that skew in their countdown loads; the write-side predicates undo it by
 looking one tick ahead (`PeekSquare`, `PeekWaveFetch`). Move one and the other
@@ -139,7 +137,7 @@ The DI-owning instance/fork/pool lifecycle also lives in `Puck.GamingBricks`, as
 one generic triad closed over an `ISnapshotableMachine` marker interface:
 `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine,
 TConfiguration>`, and `MachineInstancePool<TMachine, TConfiguration>`. Each
-brick re-exposes its own closure under its historical bare name (`MachineFork`/
+brick re-exposes its own closure under a bare name (`MachineFork`/
 `MachineInstance` for `Puck.HumbleGamingBrick`, `AgbMachineFork`/
 `AgbMachineInstance` for `Puck.AdvancedGamingBrick`) through a `global using`
 alias in that project's `GlobalUsings.cs` — searching for a declared
@@ -147,6 +145,20 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
 `src/Puck.GamingBricks/MachineInstance.cs` under the generic name.
 
 - Snapshot bytes are the state-of-record determinism surface.
+- Every component of both cores lists its snapshotted fields once, in a
+  `TransferState` (a Humble mapper's `TransferRegisters`) generic over
+  `IStateTransfer`; `SaveState` and `LoadState` run that list through
+  `StateSaveTransfer` and `StateLoadTransfer`. A part a component owns (an AGB
+  PSG channel, a Direct Sound FIFO, the shared `RationalRateAccumulator`) moves
+  through its own `TransferState` inside the owner's list. An AGB peripheral's
+  scheduled event moves through `AgbScheduler.TransferEvent`, which re-arms it
+  on load. Load-only work (a derived mask, a range check, re-derived timer
+  events) follows the transfer in `LoadState`.
+- `ComponentSnapshotLayoutLawTests` in `tests/Puck.HumbleGamingBrick.Tests` and
+  `tests/Puck.AdvancedGamingBrick.Tests` pins every component's layout by
+  seeding each field from its name. A deliberate layout change re-records that
+  component's value and bumps `MachineIdentity.CurrentVersion` (Humble) or
+  `AgbMachineIdentity.CurrentVersion` (Advanced) in the same change.
 - `--hash-divergence` localizes a mismatch between two executions in one
   process and one build.
 - Use `--dump-snapshot` and an offline section-table diff for cross-build byte
@@ -195,7 +207,7 @@ one lag constant in isolation.
   every one of our register edges lands three dots later in absolute time than
   the corresponding SameBoy edge. That gap is not slack — it is the exact
   compensation for the two cores' read conventions. Our CPU latches an I/O read
-  two T-cycles into the access (`Sm83.Decode`'s `LeadingTCyclesBeforeRead`), so a
+  two T-cycles into the access (`LeadingTCyclesBeforeRead` in `Sm83.Decode.cs`), so a
   read whose machine cycle begins at dot C observes every edge through C+2;
   SameBoy reads at the drive instant, and its display state machine runs on a
   half-dot grid whose `GB_SLEEP` executes an event only once time has passed it,
@@ -205,39 +217,15 @@ one lag constant in isolation.
   `lcdon_write_timing-GS`, `hblank_ly_scx_timing-GS` and
   `intr_2_mode0_timing_sprites` is divergence-free for 120 frames against a
   boot-ROM-booted SameBoy, which is the evidence.
-- Do not re-derive the schedule by moving the PPU onto SameBoy's dots. All three
-  decompositions of that idea are measured and refuted, the coupled one included.
-  Moving both conventions together — a read taken at the machine cycle's drive
-  instant, the first line after an LCD enable at 448 dots, and every calibrated
-  constant re-derived so the CPU-observed edges land two dots earlier in the line
-  and the pixel pipeline two dots earlier still — is reachable and holds the whole
-  hardware tier: every mooneye acceptance group, blargg including `dmg_sound` and
-  `cgb_sound`, sst-sm83, the boot handoff, and every Tier A and Tier C stage stay
-  green, the `--cosim` `cpu` stream stays divergence-free, and the `ppu-pixel`
-  stream on `lycint_dmgpalette_during_m3_1` becomes content-identical to SameBoy
-  for 120 frames with both cores painting the mid-mode-3 palette from LY 1 x 157.
-  It closes what it is for — `lycint_dmgpalette_during_m3_1`/`_2` go pixel-exact
-  and `_3`/`_4` fall 429 → 143 — and loses far more than it closes: mealybug drops
-  from 3 exact to 2 and its differing-pixel total goes 26,135 → 43,957 with all 33
-  moved rows worse, AGE goes 2,886 → 8,462, and gambatte goes 285,900 → 427,834
-  and 82 cases net. The cost is the pipeline's move and nothing else: restoring
-  only the pipeline's absolute position (a longer mode-3 entry latency) returns
-  mealybug bit-for-bit to its recorded ledger. Nor can the pipeline be held while
-  the LYC interrupt moves in its place — a two-dot-later interrupt view takes
-  `acceptance-ppu` from 34 to 20 — and holding the pipeline while moving only the
-  read view blocks on `intr_2_mode0_timing_sprites` (DmgC and CgbE), first
-  divergence at master cycle 11,218,088, `pc=0BDD`, an IF read returning 0xA3 on
-  SameBoy and 0xA0 here. SameBoy's pixel dots and the screenshot corpus disagree
-  by two dots, and the corpus is the gate. The two older decompositions fail
-  sooner: shortening the first line to 449 and giving the register view a +3
-  polled-event phase (carrying the polled mode lags with it) leaves the polled
-  STAT and LY dots exactly where they are but moves the interrupt raise and the
-  memory locks three dots early, which fails `hblank_ly_scx_timing`,
-  `intr_2_mode0_timing`, `intr_2_mode0_timing_sprites`, `intr_2_mode3_timing`,
-  `intr_2_oam_ok_timing`, `lcdon_timing` and `lcdon_write_timing`; moving only the
-  pixel pipeline three dots early (`Mode3EntryLatency` 8→5 with the mode-0 group
-  trailing the 160th pop) keeps every acceptance case green but takes the
-  mealybug/AGE error from 65.7k to about 78k differing pixels.
+- Do not re-derive the schedule by moving the PPU onto SameBoy's dots. Every
+  decomposition of that idea — moving the read convention and first-line length
+  together, holding the pipeline while moving the LYC interrupt or the read view,
+  shortening the first line with a +3 polled-event phase, or moving only the pixel
+  pipeline — is measured and refuted: each fails named acceptance cases or closes
+  the `lycint_dmgpalette_during_m3_*` rows while losing far more of the mealybug,
+  AGE and gambatte screenshot corpus, and the corpus is the gate (SameBoy's pixel
+  dots and the corpus disagree by two dots). The measurements live in
+  [Refuted PPU schedule decompositions](../../../../docs/emulation/hgb/post-and-conformance.md#refuted-ppu-schedule-decompositions).
 - The pixel pipeline carries the same three-dot offset the register edges do, and
   the `--cosim` `ppu-pixel` walk cannot show it: that walk compares content only
   and reports our own cycle. Measure the offset with SameBoy's per-dot trace
@@ -332,8 +320,8 @@ one lag constant in isolation.
   VRAM write, and OAM write by zero dots; OAM read by zero on monochrome and
   one on Color; the mode-0 interrupt by one, reduced to zero on Color at single
   speed. Double speed adds one dot to the polled STAT flip.
-- STAT mode 0 and VRAM-read availability change together. Pokémon Gold's
-  Trade Center poll-STAT-then-read path depends on that ordering.
+- STAT mode 0 and VRAM-read availability change together. A game that polls
+  STAT and then reads VRAM depends on that ordering.
 - The OAM STAT pulse fires on the LY write, one dot before STAT shows mode 2.
   Its tail overlaps the comparison-valid dot so a held LY=LYC condition does
   not retrigger.
@@ -360,7 +348,8 @@ one lag constant in isolation.
   `lycint_dmgpalette_during_m3_*` off pixel-exact (their first pixel divergence is
   two columns, LY 1 x 155 against SameBoy's x 157) while their non-interrupt
   siblings improved. No
-  write phase closes both: `MonochromePalette` at one T-cycle early instead of
+  write phase closes both: committing the monochrome palette writes
+  (`Ppu.RecordWrite`'s `BGP`/`OBP0`/`OBP1` case) one T-cycle early instead of
   two moves those four ROMs from 286/429 to 143 and costs fifteen others. Closing
   it means the first line's length, which the register families pin — see the
   refuted decompositions above.

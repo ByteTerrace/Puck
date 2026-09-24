@@ -239,7 +239,7 @@ public sealed partial class StateArena {
     }
     // The one door every number column is written through: it journals what it overwrote while a scope is open,
     // settles the version immediately when none is, and moves the row's generation either way.
-    private void WriteNumber(ArenaColumn column, int index, long value, bool tailPush = false) {
+    private void WriteNumber(ArenaColumn column, int index, long value) {
         var previous = ReadNumberRaw(
             column: column,
             index: index
@@ -268,11 +268,10 @@ public sealed partial class StateArena {
         );
         BumpGeneration(
             column: column,
-            index: index,
-            tailPush: tailPush
+            index: index
         );
     }
-    private void WriteReference(ArenaColumn column, int index, object? value, bool tailPush = false) {
+    private void WriteReference(ArenaColumn column, int index, object? value) {
         var previous = ReadReferenceRaw(
             column: column,
             index: index
@@ -304,8 +303,7 @@ public sealed partial class StateArena {
         );
         BumpGeneration(
             column: column,
-            index: index,
-            tailPush: tailPush
+            index: index
         );
     }
     private bool Differs(ArenaJournalEntry entry) {

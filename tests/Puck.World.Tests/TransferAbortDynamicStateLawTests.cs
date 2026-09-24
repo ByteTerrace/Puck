@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Maths;
@@ -22,7 +23,7 @@ public sealed class TransferAbortDynamicStateLawTests {
     [Fact]
     public void DetachThenRestore_DynamicState_RoundTripsExactly_AndNeverReinstatesPark() {
         using var fixture = Fixtures.FreshServer();
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -114,7 +115,7 @@ public sealed class TransferAbortDynamicStateLawTests {
             actual: restoredBody.FixedPreviousPosition
         );
 
-        // Dynamic state — THIS widening's own proof. Compared field-by-field (never via TransferState record
+        // Dynamic state — THIS widening's own proof. Compared field-by-field (never via WorldBodyTransferState record
         // equality) because CaptureTransferState defensively copies its two arrays, so two logically-identical
         // captures never share array identity.
         var restoredState = restoredBody.CaptureTransferState();

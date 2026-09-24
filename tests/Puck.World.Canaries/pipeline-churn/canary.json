@@ -1,0 +1,974 @@
+{
+  "id": "pipeline-churn",
+  "title": "A running pipeline instance survives repeated graph replacement and unload and reload with work in flight, and renders exactly its last loaded graph",
+  "binding": "Both legs boot the pipeline-feedback graph offscreen and let it run. Three times over, the running instance replaces its graph twice (the corrected edit, then the feedback graph), each install retiring the replaced graph behind submissions still in flight, with a reset and three submissions after each; then its layout slot stops showing it, its views.pipelines row is removed, which releases the instance (a following pipeline.inspect is refused), and the row is loaded again as a new instance that compiles, installs and submits four frames. Run with puck canary --debug-layers, the validation layers must report nothing: any [vulkan-debug] validation line or any [d3d12-debug] line fails both legs; the loader's general notices about the machine's own layers do not. Finally the instance is paused and reset and steps to submission 2, which the positive leg's last reload, the feedback graph, renders as 2/16. Before the capture creates the readback's staging buffer the instance owns exactly its installed graph, 49152 bytes; both backends' readbacks keep that buffer for the next capture of the same extent, so after the capture it owns 53248 bytes, the graph plus exactly 32 x 32 x 4. The discriminating leg's last reload loads the corrected edit instead, so submission 2 reads 1 - 2/16 and the positive leg's pixel oracle turns red.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-churn/fixture.world.json",
+    "script": "churn.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.remove",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "outcome": "refused"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.remove",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "outcome": "refused"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.remove",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 3,
+        "outcome": "refused"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 23,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-last-reload-renders-two-sixteenths",
+        "capture": "churned.png",
+        "extent": [
+          32,
+          32
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.125,
+          0.125,
+          0.125,
+          1
+        ],
+        "maximum": [
+          0.125,
+          0.125,
+          0.125,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "every-unload-releases-the-instance",
+        "stream": "stderr",
+        "match": "exact",
+        "text": "[pipeline.inspect: 'feedback' has no rendered pipeline instance]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-candidate-is-refused",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[pipeline: feedback GPU candidate refused: ",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-vulkan-validation-message",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[vulkan-debug] validation ",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-direct3d-debug-layer-message",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[d3d12-debug] ",
+        "present": false
+      },
+      {
+        "type": "response",
+        "name": "final-inspection",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "owned",
+            "field": "owned"
+          },
+          {
+            "name": "steady",
+            "field": "steady"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-instance-owns-exactly-its-installed-graph",
+        "operator": "equal",
+        "left": {
+          "value": "owned"
+        },
+        "right": {
+          "value": "steady"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-installed-graph-is-its-49152-bytes",
+        "operator": "equal",
+        "left": {
+          "value": "steady"
+        },
+        "right": {
+          "literal": 49152
+        }
+      },
+      {
+        "type": "response",
+        "name": "inspection-after-the-capture",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "ownedAfterCapture",
+            "field": "owned"
+          },
+          {
+            "name": "steadyAfterCapture",
+            "field": "steady"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-graph-is-unchanged-by-the-capture",
+        "operator": "equal",
+        "left": {
+          "value": "steadyAfterCapture"
+        },
+        "right": {
+          "value": "steady"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-kept-readback-staging-adds-exactly-32x32x4-bytes",
+        "operator": "equal",
+        "left": {
+          "value": "ownedAfterCapture"
+        },
+        "right": {
+          "literal": 53248
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-churn/fixture.world.json",
+    "script": "churn-ends-corrected.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.remove",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "outcome": "refused"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 10,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.remove",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "outcome": "refused"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 8,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.remove",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 3,
+        "outcome": "refused"
+      },
+      {
+        "verb": "pipeline.load",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.status",
+        "occurrence": 9,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.step",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 23,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.inspect",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-corrected-reload-renders-one-minus-two-sixteenths",
+        "capture": "churned.png",
+        "extent": [
+          32,
+          32
+        ],
+        "region": [
+          0.03125,
+          0.03125,
+          0.96875,
+          0.96875
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.875,
+          0.875,
+          0.875,
+          1
+        ],
+        "maximum": [
+          0.875,
+          0.875,
+          0.875,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "every-unload-releases-the-instance",
+        "stream": "stderr",
+        "match": "exact",
+        "text": "[pipeline.inspect: 'feedback' has no rendered pipeline instance]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-candidate-is-refused",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[pipeline: feedback GPU candidate refused: ",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-vulkan-validation-message",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[vulkan-debug] validation ",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "no-direct3d-debug-layer-message",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[d3d12-debug] ",
+        "present": false
+      },
+      {
+        "type": "response",
+        "name": "final-inspection",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "owned",
+            "field": "owned"
+          },
+          {
+            "name": "steady",
+            "field": "steady"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-instance-owns-exactly-its-installed-graph",
+        "operator": "equal",
+        "left": {
+          "value": "owned"
+        },
+        "right": {
+          "value": "steady"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-installed-graph-is-its-49152-bytes",
+        "operator": "equal",
+        "left": {
+          "value": "steady"
+        },
+        "right": {
+          "literal": 49152
+        }
+      },
+      {
+        "type": "response",
+        "name": "inspection-after-the-capture",
+        "stream": "stdout",
+        "verb": "pipeline.inspect",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "ownedAfterCapture",
+            "field": "owned"
+          },
+          {
+            "name": "steadyAfterCapture",
+            "field": "steady"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-graph-is-unchanged-by-the-capture",
+        "operator": "equal",
+        "left": {
+          "value": "steadyAfterCapture"
+        },
+        "right": {
+          "value": "steady"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "the-kept-readback-staging-adds-exactly-32x32x4-bytes",
+        "operator": "equal",
+        "left": {
+          "value": "ownedAfterCapture"
+        },
+        "right": {
+          "literal": 53248
+        }
+      }
+    ]
+  }
+}

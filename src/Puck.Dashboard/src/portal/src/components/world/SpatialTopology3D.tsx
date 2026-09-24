@@ -1,10 +1,12 @@
-import React, { useLayoutEffect, useMemo, useRef, useEffect } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useEffect, useState } from "react";
+import { useComputedColorScheme } from "@mantine/core";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, OrthographicCamera, Html } from "@react-three/drei";
 import { Box3, Color, InstancedMesh, Matrix4, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { SceneProjection, SceneCell } from "../../authoring/sceneProjection";
 import { appearanceFor, type ValueAppearance } from "../../authoring/presentation";
+import classes from "./SpatialTopology3D.module.css";
 
 export interface ViewportMetrics { frames: number; calls: number; triangles: number; geometries: number; textures: number }
 export interface SpatialTopology3DProps {
@@ -22,8 +24,35 @@ export interface SpatialTopology3DProps {
   onMetricsReady: (read: (() => ViewportMetrics) | null) => void;
 }
 
-function CellInstances({ scene, visible, values, empty, bindings, selection, highlights, onSelect, shape }: Pick<SpatialTopology3DProps,
-  "scene" | "visible" | "values" | "empty" | "bindings" | "selection" | "highlights" | "onSelect"> & { shape: "cube" | "sphere" | "diamond" }) {
+/** The scene's theme colors, each resolved to an `rgb()` string three.js can parse. */
+interface ScenePalette { background: string; layer: string; relationship: string; selected: string; highlighted: string }
+
+/**
+ * three.js cannot read CSS variables, so the scene resolves the theme's tokens once per color scheme: each is set
+ * as a hidden probe's `color` inside the canvas container, and the computed value comes back as `rgb()` whatever
+ * the token's own spelling (a palette reference, a hex, a scheme-dependent value).
+ */
+function readScenePalette(host: HTMLElement): ScenePalette {
+  const probe = host.ownerDocument.createElement("span");
+  probe.hidden = true;
+  host.append(probe);
+  const resolve = (token: string) => {
+    probe.style.color = `var(${token})`;
+    return getComputedStyle(probe).color;
+  };
+  const palette: ScenePalette = {
+    background: resolve("--puck-surface-sunken"),
+    layer: resolve("--puck-line"),
+    relationship: resolve("--mantine-color-dimmed"),
+    selected: resolve("--accent-2"),
+    highlighted: resolve("--mantine-color-anchor"),
+  };
+  probe.remove();
+  return palette;
+}
+
+function CellInstances({ scene, visible, values, empty, bindings, selection, highlights, onSelect, shape, palette }: Pick<SpatialTopology3DProps,
+  "scene" | "visible" | "values" | "empty" | "bindings" | "selection" | "highlights" | "onSelect"> & { shape: "cube" | "sphere" | "diamond"; palette: ScenePalette }) {
   const mesh = useRef<InstancedMesh>(null);
   const { invalidate } = useThree();
   const cache = useRef<{ positions: string[]; colors: string[] }>({ positions: [], colors: [] });
@@ -47,7 +76,7 @@ function CellInstances({ scene, visible, values, empty, bindings, selection, hig
         target.instanceMatrix.addUpdateRange(i * 16, 16);
         cache.current.positions[i] = stamp; moved = true;
       }
-      const tint = selected ? "#ffe3a3" : highlights?.has(cell.ordinal) ? "#67e8f9" : appearance.color;
+      const tint = selected ? palette.selected : highlights?.has(cell.ordinal) ? palette.highlighted : appearance.color;
       if (cache.current.colors[i] !== tint) {
         target.setColorAt(i, color.set(tint));
         target.instanceColor!.addUpdateRange(i * 3, 3);
@@ -57,7 +86,7 @@ function CellInstances({ scene, visible, values, empty, bindings, selection, hig
     if (moved) { target.instanceMatrix.needsUpdate = true; target.computeBoundingSphere(); }
     if (colored && target.instanceColor) target.instanceColor.needsUpdate = true;
     invalidate();
-  }, [visible, values, empty, bindings, selection, highlights, scene.unit, matrix, color, invalidate]);
+  }, [visible, values, empty, bindings, selection, highlights, scene.unit, matrix, color, invalidate, palette]);
 
   return (
     <instancedMesh ref={mesh} args={[undefined, undefined, scene.cells.length]} frustumCulled={false}
@@ -73,7 +102,7 @@ function CellInstances({ scene, visible, values, empty, bindings, selection, hig
   );
 }
 
-function Scene({ scene, visible, values, empty, bindings, selection, highlights, onSelect, cameraRequest, orthographic, relationships, onMetricsReady }: SpatialTopology3DProps) {
+function Scene({ scene, visible, values, empty, bindings, selection, highlights, onSelect, cameraRequest, orthographic, relationships, onMetricsReady, palette }: SpatialTopology3DProps & { palette: ScenePalette }) {
   const controls = useRef<OrbitControlsImpl>(null);
   const { camera, invalidate, size, gl } = useThree();
   const frames = useRef(0);
@@ -123,32 +152,47 @@ function Scene({ scene, visible, values, empty, bindings, selection, highlights,
   const batches = useMemo(() => (["cube", "sphere", "diamond"] as const).map(shape => [shape,
     visible.filter(cell => (appearanceFor(values.get(cell.ordinal) ?? empty, bindings).shape ?? "cube") === shape),
   ] as const), [visible, values, empty, bindings]);
+  // The demand frame loop redraws only when asked; a scheme flip changes every themed color at once.
+  useEffect(() => { invalidate(); }, [palette, invalidate]);
   const primary = visible.find(c => selection.has(c.ordinal));
   return <>
+    <color attach="background" args={[palette.background]} />
     <ambientLight intensity={1.5} />
     <directionalLight position={[6, 10, 8]} intensity={2} />
     <OrbitControls ref={controls} makeDefault enableDamping={false} />
     {batches.map(([shape, cells]) => cells.length > 0 && <CellInstances key={shape} shape={shape} visible={cells}
-      scene={scene} values={values} empty={empty} bindings={bindings} selection={selection} highlights={highlights} onSelect={onSelect} />)}
+      scene={scene} values={values} empty={empty} bindings={bindings} selection={selection} highlights={highlights} onSelect={onSelect} palette={palette} />)}
     <lineSegments>
       <bufferGeometry><bufferAttribute attach="attributes-position" args={[layerLines, 3]} /></bufferGeometry>
-      <lineBasicMaterial color="#536273" transparent opacity={0.55} />
+      <lineBasicMaterial color={palette.layer} transparent opacity={0.9} />
     </lineSegments>
     {relationships && relationships.length > 0 && <lineSegments>
       <bufferGeometry><bufferAttribute attach="attributes-position" args={[relationships, 3]} /></bufferGeometry>
-      <lineBasicMaterial color="#8cacc1" transparent opacity={0.25} />
+      <lineBasicMaterial color={palette.relationship} transparent opacity={0.35} />
     </lineSegments>}
-    {primary && <Html position={primary.position} center style={{ pointerEvents: "none", transform: "translateY(-32px)", whiteSpace: "nowrap" }}>
-      <span className="studio-scene-label">#{primary.ordinal} · {appearanceFor(values.get(primary.ordinal) ?? empty, bindings).label}</span>
+    {primary && <Html position={primary.position} center className={classes.labelAnchor}>
+      <span className={classes.label}>#{primary.ordinal} · {appearanceFor(values.get(primary.ordinal) ?? empty, bindings).label}</span>
     </Html>}
   </>;
 }
 
-const SpatialTopology3D = React.memo((props: SpatialTopology3DProps) => <div className="studio-3d" role="img"
-  aria-label={"Spatial view of " + props.scene.cells.length + " cells. Use the 2D view or cell address inspector for keyboard selection."}>
-  <Canvas frameloop="demand" dpr={[1, 1.5]} gl={{ antialias: true, alpha: false }} onCreated={({ gl }) => gl.setClearColor("#151d27")}>
-    {props.orthographic ? <OrthographicCamera makeDefault position={[8, 6, 10]} /> : <PerspectiveCamera makeDefault fov={45} position={[8, 6, 10]} />}
-    <Scene {...props} />
-  </Canvas>
-</div>);
+function SpatialViewport(props: SpatialTopology3DProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const colorScheme = useComputedColorScheme("light");
+  const [palette, setPalette] = useState<ScenePalette | null>(null);
+  // Re-resolve the theme's colors whenever the scheme flips; the canvas mounts once the first read lands.
+  useLayoutEffect(() => {
+    if (host.current) setPalette(readScenePalette(host.current));
+  }, [colorScheme]);
+
+  return <div ref={host} className={classes.viewport} role="img"
+    aria-label={"Spatial view of " + props.scene.cells.length + " cells. Use the 2D view or cell address inspector for keyboard selection."}>
+    {palette && <Canvas frameloop="demand" dpr={[1, 1.5]} gl={{ antialias: true, alpha: false }}>
+      {props.orthographic ? <OrthographicCamera makeDefault position={[8, 6, 10]} /> : <PerspectiveCamera makeDefault fov={45} position={[8, 6, 10]} />}
+      <Scene {...props} palette={palette} />
+    </Canvas>}
+  </div>;
+}
+
+const SpatialTopology3D = React.memo(SpatialViewport);
 export default SpatialTopology3D;

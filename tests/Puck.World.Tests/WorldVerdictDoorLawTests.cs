@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -76,7 +77,7 @@ public sealed class WorldVerdictDoorLawTests {
     private static WorldRule Decide(string name, long when, long status) => new(
         Name: CellName.Parse(candidate: name),
         Gate: new ActionPredicate.CompareState(
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Key: "n",
             State: Counter,
             Value: when
@@ -112,7 +113,7 @@ public sealed class WorldVerdictDoorLawTests {
     private static void Lower(WorldFixture fixture) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
         Key: "f",
         Kind: WorldDocumentWriteKind.Set,
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: Flag,
         Value: 0L
     ));
@@ -126,7 +127,7 @@ public sealed class WorldVerdictDoorLawTests {
     private static void Set(WorldFixture fixture, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
         Key: "n",
         Kind: WorldDocumentWriteKind.Set,
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: Counter,
         Value: value
     ));
@@ -308,7 +309,7 @@ public sealed class WorldVerdictDoorLawTests {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
                 Key: "f",
                 Kind: WorldDocumentWriteKind.Set,
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: Witness,
                 Value: 1L
             ));
@@ -345,7 +346,7 @@ public sealed class WorldVerdictDoorLawTests {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
                 Key: "ok",
                 Kind: WorldDocumentWriteKind.Set,
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 Row: Verdict,
                 Value: WorldVerdict.Pass
             ));

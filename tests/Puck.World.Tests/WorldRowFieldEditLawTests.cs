@@ -146,7 +146,7 @@ public sealed class WorldRowFieldEditLawTests {
     private static void WriteArmLift(HostRow row, string text) => row.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
         Kind: WorldDocumentWriteKind.Set,
         Key: WorldStateRow.SlotKey.Value,
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: "armLift",
         Text: text,
         Value: 0L

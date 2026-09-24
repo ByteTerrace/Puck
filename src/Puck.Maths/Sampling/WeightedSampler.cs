@@ -1,4 +1,3 @@
-using System.Numerics;
 
 namespace Puck.Maths;
 
@@ -175,7 +174,7 @@ public sealed class AliasTable<TElement> {
         }
 
         // Vose partition in exact integers: scaled_i = weight_i · columnCount versus a column budget of totalWeight.
-        var columnCount = ((int)BitOperations.RoundUpToPowerOf2(value: ((uint)count)));
+        var columnCount = ((int)((uint)count).NextPowerOfTwo());
         var elements = new TElement[count];
         var scaled = new UInt128[columnCount];
 

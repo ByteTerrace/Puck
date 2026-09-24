@@ -10,6 +10,7 @@ internal static partial class AzureCommand {
 
         if (source is not null) {
             var workers = await StableWorkersAsync(
+                clock: context.Clock,
                 group: context.ResourceGroup,
                 scaleSet: context.Group
             ).ConfigureAwait(continueOnCapturedContext: false);

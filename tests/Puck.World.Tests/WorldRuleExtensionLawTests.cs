@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Puck.Physics.Fields;
 using Puck.Maths;
@@ -155,7 +157,7 @@ public sealed class WorldRuleExtensionLawTests {
                     Gate: new ActionPredicate.Not(Predicate: new ActionPredicate.Any(Predicates: [
                     new ActionPredicate.CompareState(
                             State: "source",
-                            Comparison: ActionStateComparison.Equal,
+                            Comparison: ExpressionOp.Equal,
                             Value: 0m
                         ),
                 ])),
@@ -213,12 +215,12 @@ public sealed class WorldRuleExtensionLawTests {
                     Gate: new ActionPredicate.Any(Predicates: [
                     new ActionPredicate.CompareState(
                             State: "a",
-                            Comparison: ActionStateComparison.Equal,
+                            Comparison: ExpressionOp.Equal,
                             Value: 2m
                         ),
                     new ActionPredicate.Not(Predicate: new ActionPredicate.CompareState(
                             State: "b",
-                            Comparison: ActionStateComparison.Equal,
+                            Comparison: ExpressionOp.Equal,
                             Value: 1m
                         )),
                 ]),
@@ -329,7 +331,7 @@ public sealed class WorldRuleExtensionLawTests {
                                     Name: "atomic.probe",
                                     Key: "0"
                                 ),
-                        new WorldEffect.SetBodyVerticalVelocity(
+                        new WorldEffect.SetVerticalVelocity(
                                     Key: "0",
                                     Velocity: 7m
                                 ),
@@ -349,7 +351,7 @@ public sealed class WorldRuleExtensionLawTests {
         WorldGameplayCue? cue = null;
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -392,7 +394,7 @@ public sealed class WorldRuleExtensionLawTests {
                                     State: "target",
                                     Value: 9m
                                 ),
-                        new WorldEffect.DesignateBody(
+                        new WorldEffect.Designate(
                                     Key: "0",
                                     Kind: WorldBodyDesignationKind.Body,
                                     Register: "focus",
@@ -416,7 +418,7 @@ public sealed class WorldRuleExtensionLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -474,7 +476,7 @@ public sealed class WorldRuleExtensionLawTests {
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
 
         Assert.Equal<Enum>(
-            expected: Puck.State.Rules.RuleEffectRefusal.Arithmetic,
+            expected: RuleEffectRefusal.Arithmetic,
             actual: diagnostic.Refusal
         );
         Assert.Equal(
@@ -627,7 +629,7 @@ public sealed class WorldRuleExtensionLawTests {
             Name: CellName.Parse(candidate: $"key-{index}"),
             Gate: new ActionPredicate.CompareState(
                 State: "values",
-                Comparison: ActionStateComparison.Equal,
+                Comparison: ExpressionOp.Equal,
                 Value: 2m,
                 Key: key
             ),
@@ -676,18 +678,16 @@ public sealed class WorldRuleExtensionLawTests {
             staticFixture.Step();
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var sample = 0; (sample < 256); sample++) {
-            dynamicFixture.Step();
-        }
-        var dynamicAllocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        before = GC.GetAllocatedBytesForCurrentThread();
-        for (var sample = 0; (sample < 256); sample++) {
-            staticFixture.Step();
-        }
-        var staticAllocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        var dynamicAllocated = AllocationWindow.Measure(window: () => {
+            for (var sample = 0; (sample < 256); sample++) {
+                dynamicFixture.Step();
+            }
+        });
+        var staticAllocated = AllocationWindow.Measure(window: () => {
+            for (var sample = 0; (sample < 256); sample++) {
+                staticFixture.Step();
+            }
+        });
 
         Assert.True(
             condition: (dynamicAllocated <= (staticAllocated + (64 * 1024))),
@@ -984,12 +984,12 @@ public sealed class WorldRuleExtensionLawTests {
                     Gate: new ActionPredicate.All(Predicates: [
                     new ActionPredicate.CompareState(
                             State: "$argmax:scores:where:eligible",
-                            Comparison: ActionStateComparison.Equal,
+                            Comparison: ExpressionOp.Equal,
                             Value: 1m
                         ),
                     new ActionPredicate.CompareState(
                             State: "$reduce:sum:scores:where:eligible",
-                            Comparison: ActionStateComparison.Equal,
+                            Comparison: ExpressionOp.Equal,
                             Value: 7m
                         ),
                 ]),
@@ -1003,13 +1003,13 @@ public sealed class WorldRuleExtensionLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 1),
+            Principal: Principal.Seat(slot: 1),
             Slot: 1,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -1043,7 +1043,7 @@ public sealed class WorldRuleExtensionLawTests {
         WorldGameplayCue? observed = null;
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -1127,15 +1127,15 @@ public sealed class WorldRuleExtensionLawTests {
                     Name: Name(value: "launch"),
                     Mode: ActionTriggerMode.Edge,
                     Effects: [
-                    new WorldEffect.SetBodyVerticalVelocity(
+                    new WorldEffect.SetVerticalVelocity(
                             Key: "0",
                             Velocity: 5m
                         ),
-                    new WorldEffect.ScaleBodyVerticalVelocity(
+                    new WorldEffect.ScaleVerticalVelocity(
                             Factor: 0.5m,
                             Key: "0"
                         ),
-                    new WorldEffect.ApplyBodyImpulse(
+                    new WorldEffect.PlanarImpulse(
                             Key: "0",
                             BodyDirection: new DocumentVector3(
                                 x: 0f,
@@ -1145,7 +1145,7 @@ public sealed class WorldRuleExtensionLawTests {
                             Speed: 3m,
                             DurationSeconds: 0.01m
                         ),
-                    new WorldEffect.DesignateBody(
+                    new WorldEffect.Designate(
                             Key: "0",
                             Kind: WorldBodyDesignationKind.Body,
                             Register: "focus",
@@ -1165,13 +1165,13 @@ public sealed class WorldRuleExtensionLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: 1),
+            Principal: Principal.Seat(slot: 1),
             Slot: 1,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey

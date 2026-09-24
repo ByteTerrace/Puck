@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Serialization;
 using Puck.World.Authoring;
 using Puck.Maths;
@@ -13,8 +14,9 @@ namespace Puck.World;
 /// placement row named <c>&lt;template&gt;/&lt;cellKey&gt;</c> (<see cref="ChildId"/>) with
 /// <see cref="WorldPlacement.Parent"/> naming the template and the region's dealt offset as its local position,
 /// written and removed through ordinary <c>UpsertPlacement</c>/<c>RemovePlacement</c> mutations under
-/// <c>WorldPrincipal.World</c> by the per-tick sweep (<c>Server.WorldServer.SweepPlacementDeals</c>), so a dealt
-/// instance journals, undoes, replays, and rebuilds colliders through the one placement door.
+/// <c>Principal.World</c> by the per-tick sweep (<c>Server.WorldTick.SweepPlacementDeals</c>), so a dealt
+/// instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick
+/// re-deals lands in that tick's one mutation.
 /// </summary>
 /// <remarks>
 /// <para>A child keeps its allocated <see cref="WorldPlacement.DealSlot"/> while its cell is present. Instance-owned
@@ -26,6 +28,10 @@ namespace Puck.World;
 /// would have. <see cref="Preserve"/> controls subsequent reconciliation with the template.</para>
 /// <para>The sweep re-deals only when the dealt row, the variant row, or the template itself changes: an undo that
 /// removes the children a sweep added stays undone until the row moves again.</para>
+/// <para>A child is a reading of the cells it was dealt from, so a reader is shown it as the deal would deal it from
+/// the rows that reader may read (<see cref="WorldStateDisclosure.Disclose"/>, the wire projection and a seat's console
+/// alike): absent where the dealt cell is withheld, showing the template's own prototype where the variant cell
+/// is.</para>
 /// <para>Refused alongside <see cref="WorldPlacement.Inhabit"/>, <see cref="WorldPlacement.Attach"/>,
 /// <see cref="WorldPlacement.Respond"/>, <see cref="WorldPlacement.Mirror"/>, and
 /// <see cref="WorldPlacement.FaceSources"/>; requires a <see cref="WorldPlacement.Distribution"/> whose region
@@ -169,6 +175,64 @@ public sealed record WorldPlacementDeal(
     ).Length,
         _ => 0,
     };
+    /// <summary>Returns the prototype a child dealt for <paramref name="key"/> shows: the variant row's same-keyed cell
+    /// selects from <see cref="WorldPlacementDealVariants.Map"/> by its text, or by its integer value spelled as text;
+    /// no variants, no cell, or no entry deals <paramref name="templatePrototype"/>. The deal sweep and the
+    /// disclosure door both read a child's prototype through this one resolution, so a child re-dealt from a row with
+    /// its withheld cells removed is exactly the child the sweep would deal from that row.</summary>
+    /// <param name="key">The dealt cell's key.</param>
+    /// <param name="variantRow">The variant row as the reader holds it, or <see langword="null"/>.</param>
+    /// <param name="templatePrototype">The template's own prototype.</param>
+    public string ResolvePrototype(string key, WorldStateRow? variantRow, string templatePrototype) {
+        if (
+            (Variants is not { Map: { } map }) ||
+            (variantRow?.Cells is not { } cells)
+        ) {
+            return templatePrototype;
+        }
+
+        for (var index = 0; (index < cells.Count); index++) {
+            var cell = cells[index];
+
+            if (!string.Equals(
+                a: cell.Key.Value,
+                b: key,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                continue;
+            }
+
+            if (cell.Value.HasValue && (cell.Value.Kind == CellKind.Text)) {
+                return (map.TryGetValue(
+                    key: cell.Value.AsText,
+                    value: out var byText
+                )
+                    ? byText
+                    : templatePrototype
+                );
+            }
+
+            foreach (var (spelled, prototype) in map) {
+                if (
+                    long.TryParse(
+                    s: spelled,
+                    style: NumberStyles.Integer,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var spelledValue
+                ) &&
+                    cell.Value.HasValue &&
+                    (cell.Value.Kind is CellKind.Int or CellKind.Fixed or CellKind.Bool) &&
+                    (spelledValue == cell.Value.Raw)
+                ) {
+                    return prototype;
+                }
+            }
+
+            return templatePrototype;
+        }
+
+        return templatePrototype;
+    }
     /// <summary>Returns whether <paramref name="placement"/> is a dealt child: it names a parent carrying a deal facet and
     /// spells that parent's child id shape.</summary>
     /// <param name="placement">The placement row.</param>

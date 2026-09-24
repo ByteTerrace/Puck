@@ -3,6 +3,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Overlays;
+using Puck.Testing;
 
 using Xunit;
 
@@ -10,6 +11,10 @@ namespace Puck.World.Tests;
 
 /// <summary>Laws for the fixed frame-slot table's host-owned lease lifecycle and visible capacity refusal.</summary>
 public sealed class OverlayFrameSlotsLawTests {
+    // The node wraps its GPU services at construction; the early-exit and device-loss paths this suite drives never
+    // record through them.
+    private static readonly FakeGpuDevice Unused = new(reportVersion: 0);
+
     private static UnifiedOverlayNode BuildNode(List<string> events, IRenderNode inner) => new(
         capacity: new OverlayCapacity(
             BindingBarMaxBanks: 0,
@@ -36,18 +41,20 @@ public sealed class OverlayFrameSlotsLawTests {
         inner: inner,
         services: new OverlayServices {
             BytecodeExtension = ".test",
-            CommandRecorder = null!,
-            CreateRenderTarget = static (_, _) => null!,
-            DescriptorAllocator = null!,
+            CommandPoolFactory = Unused,
+            CommandRecorder = Unused,
+            DescriptorAllocator = Unused,
             DeviceContext = new FixedDeviceContext(),
             FrameSources = new RecordingFrameSources(events: events),
-            PipelineFactory = null!,
-            QueueSubmitter = null!,
-            ShaderModuleFactory = null!,
+            GeometryBufferFactory = Unused,
+            ImageFactory = Unused,
+            PipelineFactory = Unused,
+            QueueSubmitter = Unused,
+            RenderPassFactory = Unused,
+            ShaderModuleFactory = Unused,
             StorageBufferBinding = 0,
-            StorageBufferFactory = null!,
-            SurfaceTransferFactory = null!,
-            VertexBufferFactory = null!,
+            StorageBufferFactory = Unused,
+            SurfaceTransferFactory = Unused,
         },
         sources: new UnifiedOverlaySources(
             Console: null,
@@ -270,15 +277,17 @@ public sealed class OverlayFrameSlotsLawTests {
     }
 
     private sealed class RecordingFence(List<string> events) : IGpuSubmissionFence {
+        public bool IsSignaled => true;
+
         public void Dispose() { }
         public void Wait() => events.Add(item: "wait");
     }
     private sealed class RecordingFrameSources(List<string> events) : IOverlayFrameSources {
         public int AcquisitionCount { get; private set; }
 
-        public bool TryAcquire(int key, out OverlayFrameLease lease) {
+        public bool TryAcquire(int key, out GpuImageLease lease) {
             AcquisitionCount++;
-            lease = new OverlayFrameLease(
+            lease = new GpuImageLease(
                 ImageViewHandle: (key + 1),
                 Release: token => events.Add(item: $"release:{token}"),
                 ReleaseToken: key
@@ -292,6 +301,8 @@ public sealed class OverlayFrameSlotsLawTests {
     private sealed class FixedDeviceContext : IGpuDeviceContext {
         public long AdapterLuid => 0L;
         public nint DeviceHandle => 0;
+        public GpuDeviceIdentity? Identity => null;
+        public GpuMemoryProfile MemoryProfile => default;
 
         public void WaitIdle() { }
     }

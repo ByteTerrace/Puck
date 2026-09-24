@@ -16,12 +16,10 @@ internal static class LandingReflog {
         suggestion = string.Empty;
         when = string.Empty;
 
-        var output = Git.Capture(
-            "reflog",
-            "--date=iso",
-            "--format=%h|%gd|%gs|%cd",
-            "-60"
-        );
+        var output = CliGit.Run(
+            arguments: ["reflog", "--date=iso", "--format=%h|%gd|%gs|%cd", "-60"],
+            repository: "."
+        ).Stdout;
 
         foreach (var line in output.Split(separator: '\n')) {
             var text = line.TrimEnd(trimChar: '\r');

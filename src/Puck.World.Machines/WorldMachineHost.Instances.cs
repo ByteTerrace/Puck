@@ -112,9 +112,9 @@ public sealed partial class WorldMachineHost {
             return false;
         }
         if (
-            !m_engines.TryGet(
+            !Catalog.Engines.TryGetValue(
             key: live.Declaration.Engine,
-            extension: out var engine
+            value: out var engine
         ) ||
             (engine is not IMachineOperationProvider provider)
         ) {
@@ -639,59 +639,59 @@ public sealed partial class WorldMachineHost {
             configuration: tree,
             descriptor: engine.Descriptor.Configuration,
             visitor: site => {
-            if (site.Field.Role is not (MachineFieldRole.ContentPath or MachineFieldRole.AssetPath)) {
-                return;
-            }
-            var path = site.Value!.GetValue<string>();
+                if (site.Field.Role is not (MachineFieldRole.ContentPath or MachineFieldRole.AssetPath)) {
+                    return;
+                }
+                var path = site.Value!.GetValue<string>();
 
-            if (!TryReadContent(
-                path,
-                documentRelative: true,
-                out var source,
-                out var fault
-            )) {
-                throw new ArgumentException(message: $"configuration.{site.Path}: {fault}");
-            }
-            var image = source;
-            PreparedMachineContent? content = null;
-
-            if (
-                (site.Field.Role == MachineFieldRole.ContentPath) &&
-                !TryResolveContent(
-                bytes: out image,
-                cartridge: out _,
-                compilation: out content,
-                content: source,
-                contentPath: path,
-                engine: engine,
-                fault: out fault
-            )
-            ) {
-                throw new ArgumentException(message: $"configuration.{site.Path}: {fault}");
-            }
-            var admission = m_contentAdmissionPolicy.Evaluate(request: new MachineContentAdmissionRequest(
-                EngineId: engine.Id,
-                FieldPath: site.Path,
-                Role: site.Field.Role,
-                VerifiedSourceFormat: content?.VerifiedSourceFormat,
-                SourceBytes: source,
-                ExecutableBytes: image
-            ));
-
-            if (!admission.Allowed) {
-                throw new MachineContentException($"configuration.{site.Path}: content admission refused ({admission.Code}): {admission.Detail}");
-            }
-            assets.Add(
-                key: site.Path,
-                value: new(
+                if (!TryReadContent(
                     path,
-                    image,
-                    WorldDefinitionFileSource.ComputeContentHash(content: source),
-                    source,
-                    content
+                    documentRelative: true,
+                    out var source,
+                    out var fault
+                )) {
+                    throw new ArgumentException(message: $"configuration.{site.Path}: {fault}");
+                }
+                var image = source;
+                PreparedMachineContent? content = null;
+
+                if (
+                    (site.Field.Role == MachineFieldRole.ContentPath) &&
+                    !TryResolveContent(
+                    bytes: out image,
+                    cartridge: out _,
+                    compilation: out content,
+                    content: source,
+                    contentPath: path,
+                    engine: engine,
+                    fault: out fault
                 )
-            );
-        }
+                ) {
+                    throw new ArgumentException(message: $"configuration.{site.Path}: {fault}");
+                }
+                var admission = m_contentAdmissionPolicy.Evaluate(request: new MachineContentAdmissionRequest(
+                    EngineId: engine.Id,
+                    FieldPath: site.Path,
+                    Role: site.Field.Role,
+                    VerifiedSourceFormat: content?.VerifiedSourceFormat,
+                    SourceBytes: source,
+                    ExecutableBytes: image
+                ));
+
+                if (!admission.Allowed) {
+                    throw new MachineContentException($"configuration.{site.Path}: content admission refused ({admission.Code}): {admission.Detail}");
+                }
+                assets.Add(
+                    key: site.Path,
+                    value: new(
+                        path,
+                        image,
+                        WorldDefinitionFileSource.ComputeContentHash(content: source),
+                        source,
+                        content
+                    )
+                );
+            }
         );
         return new(
             configuration.Clone(),

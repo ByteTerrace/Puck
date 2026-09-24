@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Assets.Documents;
@@ -147,7 +148,7 @@ public sealed class MusicReplayReDerivabilityLawTests {
     }
     private static IReadOnlyList<string> RunLayeredScriptAndCollect(string assetDirectory) {
         using var fixture = Fixtures.FreshServer(definition: BuildLayeredMusicDocument(assetDirectory: assetDirectory));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

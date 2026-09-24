@@ -14,7 +14,9 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\AllocationWindow.cs" Link="AllocationWindow.cs" />
+        <Compile Include="..\Shared\IdentifierCorpus.cs" Link="IdentifierCorpus.cs" />
+        <Compile Include="..\Shared\SpellingLaws.cs" Link="SpellingLaws.cs" />
+        <Compile Include="..\Shared\TopologyArenaFixture.cs" Link="TopologyArenaFixture.cs" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.State\Puck.State.csproj" />

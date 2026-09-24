@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "games/reversi.world.json",
+  "world": "games/reversi.puck",
   "host": {
     "kind": "document"
   },

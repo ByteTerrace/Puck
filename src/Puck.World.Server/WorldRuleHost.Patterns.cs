@@ -21,147 +21,17 @@ public sealed partial class WorldRuleHost {
         }
 
         m_patterns = patterns;
-        m_patternWord = ((patterns.Count == 0)
-            ? []
-            : new long[WordCeiling(definition: definition)]
-        );
     }
-
-    // The longest word any source in this document can produce: the widest row ceiling, capped at the word cap.
-    private static int WordCeiling(WorldDefinition definition) {
-        var ceiling = 1;
-
-        foreach (var row in definition.State) {
-            ceiling = Math.Max(
-                val1: ceiling,
-                val2: (row.Capacity ?? row.CellCeiling)
-            );
-        }
-
-        return Math.Min(
-            val1: ceiling,
-            val2: PatternCapacity.MaxWord
-        );
-    }
-
-    // $match: — the word is read at this tick through compiled row handles (no name scan) and the same per-cell
-    // read every other state read uses, so an advancing attribute cell reads its live value. Acceptance is 1 or 0
-    // and nothing else: every source fits the word buffer, and a board origin that names no cell reads the empty
-    // word, which the pattern decides like any other.
-    private long[] m_patternWord = [];
-
-    // The token a pattern value expression is evaluating for; set only for the duration of one word read.
-
-    // A zone's cells in pile order read through its attribute row, a history ring oldest push first, or a keyed
-    // row's own cells in cell order.
-    private static int ReadWord(WorldStateRow row, WorldStateRow source, ulong tick, ulong engineTick, Span<long> word, string? start) {
-        var length = 0;
-
-        if (row.EffectiveDomain is StateDomain.Ring history) {
-            var count = ((int)Math.Min(
-                val1: row.HistoryCursor,
-                val2: history.Capacity
-            ));
-
-            for (var age = (count - 1); (age >= 0); age--) {
-                word[length++] = ReadHistorySlot(
-                    age: age,
-                    history: history,
-                    row: row,
-                    tick: tick
-                );
-            }
-
-            return length;
-        }
-
-        var cells = (row.Cells ?? []);
-
-        for (var index = PatternOperand.StartIndex(
-            cells: cells,
-            start: start
-        ); (index < cells.Count); index++) {
-            StateReader.ReadCell(
-                row: source,
-                key: cells[index].Key.Value,
-                tick: tick,
-                engineTick: engineTick,
-                rawValue: out var raw,
-                text: out _
-            );
-            word[length++] = (raw ?? 0L);
-        }
-
-        return length;
-    }
-    // A zone's tokens in pile order, each read through the pattern's value expression with $token bound to it; an
-    // expression that fails on a token reads that letter as zero.
-    private int ReadTupleWord(WorldStateRow row, CompiledExpressionToken[] expression, CellKind kind, ulong tick, Span<long> word, string? start) {
-        var length = 0;
-        var cells = (row.Cells ?? []);
-
-        try {
-            for (var index = PatternOperand.StartIndex(
-                cells: cells,
-                start: start
-            ); (index < cells.Count); index++) {
-                _ = Host.Arena.Keys.TryResolve(
-                    key: out var tokenKey,
-                    name: cells[index].Key
-                );
-                BoundTokenKey = tokenKey;
-                BoundPreviousKey = default;
-                if (index > 0) {
-                    _ = Host.Arena.Keys.TryResolve(
-                        key: out var previousKey,
-                        name: cells[(index - 1)].Key
-                    );
-                    BoundPreviousKey = previousKey;
-                }
-                word[length++] = (RuleExpressions.TryEvaluate(
-                    fault: out _,
-                    kind: kind,
-                    program: expression,
-                    reader: this,
-                    value: out var raw
-                )
-                    ? raw
-                    : 0L
-                );
-            }
-        } finally {
-            BoundTokenKey = default;
-            BoundPreviousKey = default;
-        }
-
-        return length;
-    }
-    // The slot pushed `age` pushes ago is (cursor - 1 - age) mod capacity, and the ring's cells ARE its slots in
-    // order (the validator's invariant), so the value is one index away; a slot never written reads the empty value.
-    private static long ReadHistorySlot(WorldStateRow row, StateDomain.Ring history, long age, ulong tick) {
-        if (age >= Math.Min(
-            val1: row.HistoryCursor,
-            val2: history.Capacity
-        )) {
-            return history.Empty;
-        }
-
-        var slot = ((int)(((row.HistoryCursor - 1L) - age) % history.Capacity));
-        var cells = row.Cells;
-
-        // Ring slots carry no time trait (the validator's rule), so the stored raw IS the live value.
-        return (((cells is null) || (slot >= cells.Count))
-            ? history.Empty
-            : cells[slot].Value.Raw
-        );
-    }
-
     /// <summary>Walks one word through a pattern at the console and narrates every step: the raw values, the letter
-    /// each reads as, the state after it, and the verdicts.</summary>
+    /// each reads as, the state after it, and the verdicts. The word is read off the arena at this host's
+    /// <see cref="Time"/> through the same reads a <c>$match</c> operand takes
+    /// (<see cref="PatternOperand.ReadWord"/> and <see cref="ArenaBoards.TryReadRay"/>), so it narrates what a rule
+    /// matches.</summary>
     /// <param name="patternName">The pattern.</param>
     /// <param name="rowName">The source row.</param>
     /// <param name="attribute">For a zone source, the attribute row; ignored otherwise.</param>
-    /// <param name="key">For a board source, the origin cell.</param>
+    /// <param name="key">For a board source, the origin cell; for a word source, the token the word starts at, or
+    /// <see langword="null"/> for the first.</param>
     /// <param name="direction">For a board source, a direction name or <c>any</c>.</param>
     /// <returns>A deterministic, headless-safe read-back, or a refusal by name.</returns>
     internal string DescribeMatch(string patternName, string rowName, string? attribute, string? key, string? direction) {
@@ -179,16 +49,22 @@ public sealed partial class WorldRuleHost {
                 return $"[world.match: '{rowName}' names no state row]";
             }
 
-            var tick = Host.CompletedTick;
-            var engineTick = Host.CompletedEngineTicks;
+            var arena = Arena;
+
+            if (!arena.Catalog.TryResolve(
+                handle: out var handle,
+                lane: StateLane.Document,
+                name: rowName
+            )) {
+                return $"[world.match: '{rowName}' names no arena row]";
+            }
+
+            var rowOrdinal = handle.Ordinal;
             var word = new long[PatternCapacity.MaxWord];
             var lines = new List<string>();
 
             if (row.EffectiveDomain is StateDomain.CellsOf board) {
-                if (WorldTopologyCompilation.Find(
-                    definition: Host.Definition,
-                    name: board.Topology
-                ) is not { } topology) {
+                if (arena.Layout[rowOrdinal].Topology is not { } topology) {
                     return $"[world.match: '{rowName}' names no compiled topology]";
                 }
                 if (
@@ -205,12 +81,6 @@ public sealed partial class WorldRuleHost {
                 }
 
                 var values = new long[topology.CellCount];
-
-                BoardQueries.Read(
-                    row: row,
-                    topology: topology,
-                    values: values
-                );
                 var first = ((direction == "any")
                     ? 0
                     : topology.Direction(token: direction)
@@ -224,25 +94,27 @@ public sealed partial class WorldRuleHost {
                     return $"[world.match: '{direction}' is not a direction of '{board.Topology}']";
                 }
                 for (var walked = first; (walked <= last); walked++) {
-                    var length = BoardQueries.ReadRay(
+                    if (!ArenaBoards.TryReadRay(
+                        arena: arena,
                         direction: walked,
                         origin: origin,
-                        topology: topology,
+                        ray: out var ray,
+                        reason: out var rayReason,
+                        rowOrdinal: rowOrdinal,
                         values: values,
                         word: word
-                    );
+                    )) {
+                        return $"[world.match: {rayReason}]";
+                    }
 
                     lines.Add(item: $"direction {walked}: {Narrate(
                         pattern: pattern,
-                        values: word.AsSpan(
-                            length: length,
-                            start: 0
-                        )
+                        values: ray
                     )}");
                 }
             } else {
-                var source = row;
-                int length;
+                CompiledExpressionToken[]? expression = null;
+                var attributeOrdinal = -1;
 
                 if (
                     (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) &&
@@ -253,41 +125,51 @@ public sealed partial class WorldRuleHost {
                         pattern: pattern.Source,
                         tokenDomain: zone.Row.Value,
                         ruleName: "world.match",
-                        tokens: out var expression,
+                        tokens: out expression,
                         reason: out var valueReason
                     )) {
                         return $"[world.match: {valueReason}]";
                     }
-                    length = ReadTupleWord(
-                        row,
-                        expression!,
-                        pattern.Source.Kind,
-                        tick,
-                        word,
-                        key
-                    );
-                } else {
-                    if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
-                        if (
-                            (attribute is null) ||
-                            (WorldDefinitionRows.FindStateRow(
-                            rows: Host.Definition.State,
-                            name: attribute
-                        ) is not { } attributeRow)
-                        ) {
-                            return "[world.match: a zone source needs its attribute row]";
-                        }
-                        source = attributeRow;
+                } else if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
+                    if (
+                        (attribute is null) ||
+                        !arena.Catalog.TryResolve(
+                        handle: out var attributeHandle,
+                        lane: StateLane.Document,
+                        name: attribute
+                    )
+                    ) {
+                        return "[world.match: a zone source needs its attribute row]";
                     }
-                    length = ReadWord(
-                        engineTick: engineTick,
-                        row: row,
-                        source: source,
-                        start: key,
-                        tick: tick,
-                        word: word
+
+                    attributeOrdinal = attributeHandle.Ordinal;
+                }
+
+                var start = 0;
+
+                if (key is not null) {
+                    start = (arena.Keys.TryResolve(
+                        key: out var startKey,
+                        name: key
+                    )
+                        ? PatternOperand.StartPosition(
+                            arena: arena,
+                            key: startKey,
+                            rowOrdinal: rowOrdinal
+                        )
+                        : int.MaxValue
                     );
                 }
+
+                var length = PatternOperand.ReadWord(
+                    attributeOrdinal: attributeOrdinal,
+                    kind: pattern.Source.Kind,
+                    reader: this,
+                    rowOrdinal: rowOrdinal,
+                    start: start,
+                    tokenExpression: expression,
+                    word: word
+                );
 
                 lines.Add(item: Narrate(
                     pattern: pattern,

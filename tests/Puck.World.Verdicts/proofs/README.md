@@ -18,3 +18,15 @@ Both are basis deltas over the parent directory's self-contained
 the same step as `../sources/seat-writes-a-cell.puck`, claiming a value the step
 never writes. `puck test` exits 1 and the line names the gate as the author
 wrote it beside the value it read.
+
+`wrong-module-expectation.puck` is the module subject's red half: the same
+module stood up with the same arguments as `../sources/a-module-and-its-use.puck`
+uses, claiming a plating it was not given. The generation line names the module
+and the arguments, so the run says which instantiation failed.
+
+`uncrossed-border.puck` is the distributed test's red half: the same two plots
+and the same border as `../composition/composition.puck`, with the body posed
+beside the seam and never sent across it. The near world's verdict passes and the
+far world's fails, so the failure is about the crossing rather than about the
+body existing; the line names the world, the gate and the occupancy the far
+world's rule read.

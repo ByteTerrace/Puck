@@ -1,6 +1,6 @@
 # Shader Compare Tool
 
-`shader-compare.world.json` provides a side-by-side comparison studio between a procedural pipeline shader (e.g. GLSL raymarched SDF character or screen shader) and a native Puck SDF model/character.
+[shader-compare.puck](shader-compare.puck) provides a side-by-side comparison studio between a procedural pipeline shader (e.g. an HLSL raymarched SDF character or screen shader) and a native Puck SDF model/character.
 
 Moth is configured as the default comparison pair, but the tool is generic: it can be redirected to compare any pipeline shader against any native SDF model.
 
@@ -9,18 +9,18 @@ Moth is configured as the default comparison pair, but the tool is generic: it c
 Run from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/tools/shader-compare.world.json --exit-after-seconds 0
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/tools/shader-compare.puck --exit-after-seconds 0
 ```
 
 With an existing Release build:
 
 ```powershell
-dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/tools/shader-compare.world.json --exit-after-seconds 0
+dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/tools/shader-compare.puck --exit-after-seconds 0
 ```
 
 ## How It Works
 
-- The **left slot** (50% width) renders the pipeline shader (`compare-pipeline`, by default [moth.glsl](../../pipelines/moth.glsl)).
+- The **left slot** (50% width) renders the pipeline shader (`compare-pipeline`, by default [moth.hlsl](../../pipelines/moth.hlsl)).
 - The **right slot** (50% width) renders the native SDF model from [moth.puck](../avatars/moth.puck).
 - Both viewports read the identical paired camera, maintaining synchronized perspective, framing, and field of view.
 
@@ -44,7 +44,7 @@ In the running Puck console or via the MCP operator interface:
   ```text
   pipeline.watch compare-pipeline on
   ```
-  Watches the underlying `.glsl` shader file and recompiles automatically whenever saved.
+  Watches the underlying `.hlsl` shader file and recompiles automatically whenever saved.
 
 - **Manual Recompile**:
   ```text
@@ -53,7 +53,7 @@ In the running Puck console or via the MCP operator interface:
 
 - **Swap Pipeline Shader**:
   ```text
-  pipeline.load compare-pipeline <path-to-shader.glsl> [camera]
+  pipeline.load compare-pipeline <path-to-shader.hlsl> [camera]
   ```
   Points the comparison slot to any other pipeline shader.
 
@@ -75,5 +75,5 @@ In the running Puck console or via the MCP operator interface:
 To point `shader-compare.puck` at a different default pair:
 
 1. Update `basis:` to point to the desired `.puck` world or avatar definition.
-2. Update `let pipelineSource = "..."` to point to the desired `.glsl` shader.
+2. Update `let pipelineSource = "..."` to point to the desired `.hlsl` shader.
 3. Run `puck compile src/Puck.World/Assets/worlds/tools/shader-compare.puck --validate`.

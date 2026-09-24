@@ -1,4 +1,4 @@
-using Puck.World.Protocol;
+using Puck.Commands;
 
 namespace Puck.World;
 

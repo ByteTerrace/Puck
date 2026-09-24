@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using Puck.Abstractions.Machines;
 using Puck.Networking;
@@ -147,7 +148,7 @@ public sealed class MachineOperationProtocolLawTests {
             routeTransition: static (_, _, _) => { },
             seatCount: 4
         );
-        var addon = WorldPrincipal.Addon(name: "tool");
+        var addon = Principal.Addon(name: "tool");
 
         Assert.False(condition: grants.Allows(
             addon,

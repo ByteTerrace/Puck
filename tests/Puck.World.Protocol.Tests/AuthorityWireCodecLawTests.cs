@@ -150,13 +150,13 @@ public sealed class AuthorityWireCodecLawTests {
         IReadOnlyList<WorldMutationJournalEntry> entries = [
             new WorldMutationJournalEntry(
                 Encoded: new byte[] { 1, 2, 3 },
-                Tick: 1UL,
-                EngineTick: 1UL
+                EngineTick: 1UL,
+                Tick: 1UL
             ),
             new WorldMutationJournalEntry(
                 Encoded: new byte[] { 4, 5 },
-                Tick: 2UL,
-                EngineTick: 2UL
+                EngineTick: 2UL,
+                Tick: 2UL
             ),
         ];
         var encoded = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: entries);
@@ -191,41 +191,23 @@ public sealed class AuthorityWireCodecLawTests {
         );
     }
     [Fact]
-    public void LatestPointerRoundTripsAndRefusesAForeignMagic() {
-        var encoded = WorldAuthorityStoreWireCodec.EncodeLatestPointer(
-            hash: "abc123",
-            ordinal: 7,
-            tick: 12345UL
-        );
-
-        Assert.True(
-            condition: WorldAuthorityStoreWireCodec.TryDecodeLatestPointer(
-                bytes: encoded,
-                hash: out var hash,
-                ordinal: out var ordinal,
-                reason: out var reason,
-                tick: out var tick
-            ),
-            userMessage: reason
-        );
-        Assert.Equal(
-            actual: (ordinal, tick, hash),
-            expected: (7L, 12345UL, "abc123")
-        );
-
-        var corrupted = encoded.ToArray();
+    public void JournalPageRefusesAForeignMagic() {
+        var corrupted = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldMutationJournalEntry(
+            Encoded: new byte[] { 1 },
+            EngineTick: 1UL,
+            Tick: 1UL
+        )]);
 
         corrupted[0] ^= 0xFF;
-        Assert.False(condition: WorldAuthorityStoreWireCodec.TryDecodeLatestPointer(
+        Assert.False(condition: WorldAuthorityStoreWireCodec.TryDecodeJournalPage(
             bytes: corrupted,
-            hash: out _,
-            ordinal: out _,
-            reason: out var refusal,
-            tick: out _
+            entries: out var entries,
+            reason: out var refusal
         ));
-        Assert.NotEqual(
-            actual: refusal,
-            expected: string.Empty
+        Assert.Empty(collection: entries);
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: "journal magic"
         );
     }
 }

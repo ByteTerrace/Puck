@@ -1,7 +1,6 @@
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
-using RuleRefusal = Puck.State.Rules.RuleRefusal;
 
 namespace Puck.World;
 

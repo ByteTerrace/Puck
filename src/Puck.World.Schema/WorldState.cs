@@ -270,9 +270,12 @@ public sealed record WorldStateRow(
 
     /// <inheritdoc/>
     /// <remarks>A verdict row mints <see cref="WorldVerdict.FiredTickKey"/> beside the slot key: the effect door
-    /// stamps it, so the arena's export, the state hash and a checkpoint all carry it as an ordinary cell.</remarks>
+    /// stamps it, so the arena's export, the state hash and a checkpoint all carry it as an ordinary cell. It also
+    /// mints the status cell its trait names, so a status key may take the reserved prefix — the one a
+    /// <c>.puck</c> <c>expect</c> line lowers to, <c>$status</c>, which no value the gate saw can be recorded
+    /// under.</remarks>
     public override bool MintsReservedCell(CellName key) => (
         (key == SlotKey) ||
-        ((Verdict is not null) && (key == WorldVerdict.FiredTickKey))
+        ((Verdict is { } verdict) && ((key == WorldVerdict.FiredTickKey) || (key == verdict.Status)))
     );
 }

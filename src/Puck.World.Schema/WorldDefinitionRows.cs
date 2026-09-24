@@ -69,6 +69,73 @@ public static class WorldDefinitionRows {
             }
         }
     }
+    /// <summary>Enumerates every declared reference to a <c>prototypes</c> (creation) row across the document: a
+    /// placement's authored <c>prototypeId</c>, each of its <c>respond</c> entries, its contribution slot's
+    /// <c>slotCreationId</c>, and each creation its deal's variant map deals (<c>Section</c> <c>"placements"</c>), a
+    /// look's creation source (<c>"looks"</c>), and a kit's <c>fromCreation</c> collider (<c>"kits"</c>) — the one walk
+    /// every "is this creation still named" question shares: a creation removal's refusal, a retraction deciding
+    /// whether a contributed creation may go, and the decompiler deciding whether a door's copied prototype is the
+    /// door's alone.</summary>
+    /// <param name="definition">The document to walk.</param>
+    /// <returns>One entry per declared reference, in authored order: <c>Section</c> is the referencing area,
+    /// <c>Path</c> locates the specific reference within it, and <c>RowName</c> is the creation id it names.</returns>
+    public static IEnumerable<(string Section, string Path, string RowName)> EnumerateCreationReferences(WorldDefinition definition) {
+        foreach (var placement in definition.Placements) {
+            if (placement is null) {
+                continue;
+            }
+
+            yield return ("placements", $"placements.{placement.Id}.prototypeId", placement.PrototypeId);
+
+            var responses = (placement.Respond ?? []);
+
+            for (var index = 0; (index < responses.Count); index++) {
+                if (responses[index] is { } response) {
+                    yield return ("placements", $"placements.{placement.Id}.respond[{index}].prototypeId", response.PrototypeId);
+                }
+            }
+
+            if (placement.Contribution is { } contribution) {
+                yield return ("placements", $"placements.{placement.Id}.contribution.slotCreationId", contribution.SlotCreationId);
+            }
+
+            if (placement.Deal?.Variants?.Map is { } variants) {
+                foreach (var (cell, prototype) in variants) {
+                    yield return ("placements", $"placements.{placement.Id}.deal.variants.map['{cell}']", prototype);
+                }
+            }
+        }
+
+        foreach (var look in definition.Looks) {
+            if (look?.Source is WorldLookSource.Creation creation) {
+                yield return ("looks", $"looks.{look.Name}.source.prototypeId", creation.PrototypeId.Value);
+            }
+        }
+
+        foreach (var kit in definition.Kits) {
+            if (kit?.Collider is WorldCollider.FromCreation collider) {
+                yield return ("kits", $"kits.{kit.Name}.collider.prototypeId", collider.PrototypeId);
+            }
+        }
+    }
+    /// <summary>Returns where a document still names one creation — the first entry
+    /// <see cref="EnumerateCreationReferences"/> yields for it.</summary>
+    /// <param name="definition">The document to walk.</param>
+    /// <param name="creationId">The creation id.</param>
+    /// <returns>The referencing path, or <see langword="null"/> when nothing in the document names the creation.</returns>
+    public static string? FindCreationReference(WorldDefinition definition, string creationId) {
+        foreach (var (_, path, name) in EnumerateCreationReferences(definition: definition)) {
+            if (string.Equals(
+                a: name,
+                b: creationId,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return path;
+            }
+        }
+
+        return null;
+    }
     /// <summary>Enumerates every declared reference to a <c>dynamics</c> row across the document: a camera's own rig
     /// and the world's <c>views.seatRig</c>/<c>views.cameraRig</c> (<c>Section</c> <c>"cameras"</c>), a look's root
     /// follower (<c>"looks"</c>) and per-part followers (<c>"parts"</c>), a kit's planar shaping (<c>"kits"</c>), and

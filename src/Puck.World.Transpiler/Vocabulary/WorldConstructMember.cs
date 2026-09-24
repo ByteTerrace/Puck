@@ -13,7 +13,6 @@ public sealed record WorldConstructParameter(
     string Summary,
     bool Required = true
 );
-
 /// <summary>One member of a described construct: how it is written, what it lowers to, and the default the
 /// printer elides it against.</summary>
 /// <param name="AdmittedKinds">The cell kinds the construct's own <c>kind</c> must be one of before this member is
@@ -74,10 +73,10 @@ public sealed record WorldConstructMember(
             values: Parameters.Select(selector: static parameter => $"{parameter.Name}: {parameter.Type}")
         )})"
         : Position switch {
-        WorldMemberPosition.Modifier => $"{Name}(…)",
-        WorldMemberPosition.Property => $"{Name}:",
-        WorldMemberPosition.Cell => Name,
-        WorldMemberPosition.Body => Name,
-        _ => Name,
-    });
+            WorldMemberPosition.Modifier => $"{Name}(…)",
+            WorldMemberPosition.Property => $"{Name}:",
+            WorldMemberPosition.Cell => Name,
+            WorldMemberPosition.Body => Name,
+            _ => Name,
+        });
 }

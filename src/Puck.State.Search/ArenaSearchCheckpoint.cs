@@ -38,28 +38,27 @@ public readonly record struct ArenaSearchScopeCheckpoint(int Shape, int Token, i
 /// <param name="Count">How many nodes the pool holds.</param>
 /// <param name="Iteration">How many iterations have completed.</param>
 /// <param name="Seed">The draw stream's position.</param>
-/// <param name="ExpandShape">The expansion's shape cursor.</param>
-/// <param name="ExpandToken">The expansion's token cursor.</param>
-/// <param name="ExpandTarget">The expansion's candidate cursor.</param>
 /// <param name="Scan">How many candidates the current playout ply has tried.</param>
 /// <param name="Start">The flat candidate index the current playout ply scans from.</param>
 /// <param name="PlayoutPlies">How many plies the playout has taken.</param>
 /// <param name="PlayCount">How many of the open scopes belong to the playout rather than the path.</param>
 /// <param name="Parent">Each node's parent, or <c>-1</c>.</param>
-/// <param name="FirstChild">Each node's first child, or <c>-1</c>.</param>
+/// <param name="FirstChild">Each node's eldest child, or <c>-1</c>.</param>
+/// <param name="NextSibling">Each node's next younger sibling, or <c>-1</c>.</param>
 /// <param name="ChildCount">Each node's child count.</param>
 /// <param name="Visits">Each node's visit count.</param>
 /// <param name="Total">Each node's folded total.</param>
 /// <param name="Shape">Each node's candidate shape.</param>
 /// <param name="Token">Each node's candidate token.</param>
 /// <param name="Target">Each node's candidate index.</param>
-/// <param name="Expanded">Whether each node has been expanded.</param>
+/// <param name="Scanned">How many of its candidates each node's expansion has scanned.</param>
+/// <param name="ScanStart">The flat candidate index each node's expansion scans from.</param>
 /// <param name="Path">The path from the root, as node indices.</param>
 /// <param name="PathLength">How many entries of <paramref name="Path"/> are live.</param>
 public sealed record ArenaSearchTreeCheckpoint(
-    bool Active, int Phase, int Count, int Iteration, ulong Seed, int ExpandShape, int ExpandToken, int ExpandTarget, int Scan, int Start, int PlayoutPlies, int PlayCount,
-    int[] Parent, int[] FirstChild, int[] ChildCount, long[] Visits, long[] Total, int[] Shape, int[] Token, int[] Target, long[] Expanded,
-    int[] Path, int PathLength
+    bool Active, int Phase, int Count, int Iteration, ulong Seed, int Scan, int Start, int PlayoutPlies, int PlayCount,
+    int[] Parent, int[] FirstChild, int[] NextSibling, int[] ChildCount, long[] Visits, long[] Total, int[] Shape, int[] Token, int[] Target,
+    int[] Scanned, int[] ScanStart, int[] Path, int PathLength
 );
 /// <summary>One job's checkpointed progress.</summary>
 /// <param name="Name">The job name.</param>

@@ -98,6 +98,14 @@ Both are render-only detail that reuses a shape's own geometry.
 exceed the shape's smallest local half-extent; `|depth|` may not exceed the
 eroded copy's full extent along the face.
 
+`face` is normalized; null means +Z, and a zero-length face is refused by name.
+`inset` and `depth` are creation units that the animated pool scales by the
+placement. `ShapePanelDocument.Resolve` is the one derivation both emission paths
+read, and the static probe reserves two chains per panelled shape
+(`CreationStampEmitter.PerCopyInstanceCount`). The contact field never reads a
+panel, so a panelled solid placement's collider is unchanged. A panel is refused
+by name on a `Plane`. Verify with `ShapePanelLawTests`.
+
 `trims` is up to four `{ shape, width, material, inset }`. Each re-reads an
 **earlier** shape's primitive geometry and pose and lays a band of `width` along
 it. The referenced shape may carry neither domain folds nor a group, because a
@@ -112,8 +120,9 @@ The builder allows exactly one level of field scope. Scopes may sequence, never
 nest, and that single depth is what all three rules are competing for.
 
 **1. A shape takes its own scope** when it carries any of `dilate`, `onion`,
-`panel`, `flare`, `shear`, `bumps`, `erode`, `cells`, or is a non-uniformly
-scaled sphere or ellipsoid. The scope clamps that shape's Lipschitz factor onto
+`panel`, `flare`, `shear`, `bumps`, `erode`, or `cells`. Squashing a sphere or
+ellipsoid never does: every ellipsoid is the exact 1-Lipschitz exponent-2
+superellipsoid gauge, whatever its scale. The scope clamps that shape's Lipschitz factor onto
 its own candidate at the pop. If that shape is already inside a group or
 creation scope, the enclosing pop owns the bound and its other members share
 the clamp. Only an unscoped chain contributes to the program-wide step scale.

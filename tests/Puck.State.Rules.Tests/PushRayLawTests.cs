@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Xunit;
 
@@ -115,16 +116,15 @@ public sealed class PushRayLawTests {
             fixture.Arena.Rewind(mark: mark);
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
         var allApplied = true;
+        var allocated = AllocationWindow.Least(window: () => {
+            for (var sample = 0; (sample < 64); sample++) {
+                var mark = fixture.Arena.BeginScope();
 
-        for (var sample = 0; (sample < 64); sample++) {
-            var mark = fixture.Arena.BeginScope();
-
-            allApplied &= Apply(fixture, origin: 0, moved: out _, refusal: out _);
-            fixture.Arena.Rewind(mark: mark);
-        }
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+                allApplied &= Apply(fixture, origin: 0, moved: out _, refusal: out _);
+                fixture.Arena.Rewind(mark: mark);
+            }
+        });
 
         Assert.True(condition: allApplied);
         Assert.Equal(actual: allocated, expected: 0L);
@@ -146,16 +146,15 @@ public sealed class PushRayLawTests {
             fixture.Arena.Rewind(mark: mark);
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
         var allApplied = true;
+        var allocated = AllocationWindow.Least(window: () => {
+            for (var sample = 0; (sample < 16); sample++) {
+                var mark = fixture.Arena.BeginScope();
 
-        for (var sample = 0; (sample < 16); sample++) {
-            var mark = fixture.Arena.BeginScope();
-
-            allApplied &= Apply(fixture, origin: 0, moved: out _, refusal: out _);
-            fixture.Arena.Rewind(mark: mark);
-        }
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+                allApplied &= Apply(fixture, origin: 0, moved: out _, refusal: out _);
+                fixture.Arena.Rewind(mark: mark);
+            }
+        });
 
         Assert.True(condition: allApplied);
         Assert.Equal(actual: allocated, expected: 0L);

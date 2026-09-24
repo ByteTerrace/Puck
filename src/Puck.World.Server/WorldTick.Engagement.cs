@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -24,6 +25,7 @@ public sealed partial class WorldTick {
         reason = $"screen {target.Value} does not exist";
         return false;
     }
+
     private bool CheckScreenEngagePolicy(int entityIndex, WorldScreen screen, out string reason) {
         if (!screen.Route.Engageable) {
             reason = $"screen {screen.Index} is not engageable";
@@ -55,6 +57,7 @@ public sealed partial class WorldTick {
         reason = string.Empty;
         return true;
     }
+
     // body.press and body.stop are read back SYNCHRONOUSLY by their console handlers immediately after a submit
     // (WorldPopulation.PressRefusal/StopRefusal, mirroring MotionRefusal) — so a refusal that reaches EITHER of
     // ApplyCommand's early returns above (the grant-table denial, the missing/inactive body) must leave a note
@@ -79,9 +82,10 @@ public sealed partial class WorldTick {
                 break;
         }
     }
+
     // Whether the principal's application set names anything other than its own body — the "already engaged" test
     // the context-button probe skips on. Reads the one storage; there is no separate latch to consult.
-    private bool HasComposedApplication(WorldPrincipal principal) {
+    private bool HasComposedApplication(Principal principal) {
         var own = GrantSubject.Body(index: principal.Index);
 
         foreach (var application in Host.GrantTable.Applications(principal: principal)) {
@@ -92,11 +96,12 @@ public sealed partial class WorldTick {
 
         return false;
     }
+
     /// <summary>Queues one principal's effective Control-route change onto the ordered domain.</summary>
     /// <param name="principal">The principal whose route moved.</param>
     /// <param name="previous">The route it held, or <see langword="null"/>.</param>
     /// <param name="current">The route it holds now, or <see langword="null"/>.</param>
-    internal void QueueRouteTransition(WorldPrincipal principal, GrantSubject? previous, GrantSubject? current) {
+    internal void QueueRouteTransition(Principal principal, GrantSubject? previous, GrantSubject? current) {
         var sourceBody = principal.Kind switch {
             PrincipalKind.Seat => principal.Index,
             PrincipalKind.Peer => principal.Index,
@@ -121,6 +126,7 @@ public sealed partial class WorldTick {
             );
         }
     }
+
     // Records this tick's (entity, principal) write; when a DIFFERENT principal already wrote the SAME entity earlier
     // in this same tick, prints one loud, attributed line — but ONLY the first tick this body transitions into a
     // contended state (see m_contended's own remarks: the check reads LAST tick's settled outcome, never this tick's
@@ -130,7 +136,7 @@ public sealed partial class WorldTick {
     // this closes. Allocation-free: past m_tickWrittenEntity's sized capacity (see its own remarks) the tracked set
     // simply stops growing, so a body written for the first time after saturation goes unreported this tick. That is a
     // DIAGNOSTIC degrading, never a write changing — the deliberate trade against resizing on the hot path.
-    private void ReportContention(int entityIndex, WorldPrincipal principal) {
+    private void ReportContention(int entityIndex, Principal principal) {
         for (var index = 0; (index < m_tickWrittenCount); index++) {
             if (m_tickWrittenEntity[index] != entityIndex) {
                 continue;
@@ -196,7 +202,7 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            var principal = WorldPrincipal.Seat(slot: slot);
+            var principal = Principal.Seat(slot: slot);
 
             // A seat that has composed anything beyond its own body keeps that set — composing off an unrelated
             // button press over an active possession/mirror is not this feature's job.
@@ -243,6 +249,7 @@ public sealed partial class WorldTick {
             }
         }
     }
+
     /// <summary>Determines whether <paramref name="bodyIndex"/> carries a nonzero cell on a state row declaring
     /// <see cref="WorldStateRow.GatesDrive"/> — Composition-core's CC/death gating (Seam A), the one rule both
     /// Drive-admission doors consult (<see cref="ApplyIntentSubmission"/>'s per-tick channel submission,
@@ -280,7 +287,7 @@ public sealed partial class WorldTick {
     // WorldPopulation.CollectInhabitants' (small, per-placement) result. Stops at the first possessed inhabitant: one
     // is enough to refuse the whole despawn, and a multi-count Inhabit facet is rare enough that finding every
     // possessed slot before refusing would not change the operator's remedy.
-    internal bool TryFindPossessedInhabitant(string placementId, out int bodyIndex, out WorldPrincipal holder) {
+    internal bool TryFindPossessedInhabitant(string placementId, out int bodyIndex, out Grantee holder) {
         Host.Population.CollectInhabitants(
             into: m_possessedInhabitantScratch,
             placementId: placementId

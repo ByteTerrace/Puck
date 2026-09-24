@@ -17,7 +17,7 @@ internal sealed class WorldScheduleCommandModule(WorldServer server) : ICommandM
         var rows = schedule.Rows;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
             (WorldScheduleRoot.IsArmed
-                ? $"[world.schedule: armed directory {WorldScheduleRoot.Resolve(authored: schedule.Directory)} rows {rows.Count} settle {schedule.SettleTicks} export tick {schedule.ExportTick}]"
+                ? $"[world.schedule: armed directory {WorldScheduleRoot.Directory} rows {rows.Count} settle {schedule.SettleTicks} export tick {schedule.ExportTick}]"
                 : $"[world.schedule: unarmed — this boot passed no --schedule-dir, so no row is submitted and no export is written; rows {rows.Count} settle {schedule.SettleTicks} export tick {schedule.ExportTick}]"),
         };
 
@@ -139,6 +139,7 @@ internal sealed class WorldScheduleCommandModule(WorldServer server) : ICommandM
             : Describe())
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.verdicts",
             description: "Reads every verdict row (Immediate, no arguments): the row's name, its status (pass, fail, or never evaluated), the gate it claims, and the values its gate saw. A document declaring no verdict row reports none, never a refusal.",

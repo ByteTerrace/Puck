@@ -7,16 +7,25 @@ namespace Puck.World.Client;
 /// The one-writer authority table for locally occupied seats. Each cell is a CAS-published
 /// <see cref="WorldAuthorityRoute"/>; rendering, input, audio, HUD, bindings, targeting, and read-back consume the
 /// same claim rather than independently interpreting an instance name.
+/// <para>A claim is published from whichever thread learns of it: the tick thread for a local transfer or a console
+/// verb, and a federated observer's socket worker for an onward handoff. <see cref="RouteChanged"/> is raised only by
+/// <see cref="DeliverRouteChanges"/>, which the one thread that pumps and presents calls at the fixed points of its
+/// step, so a subscriber that changes seat state or reads a state mirror never runs beside the presentation that reads
+/// them.</para>
 /// </summary>
 public sealed class WorldSeatAuthorityRouter {
     private readonly WorldAuthorityRoute?[] m_routes = new WorldAuthorityRoute?[WorldSeatBindings.SeatCount];
 
+    // One bit per seat whose claim changed since the last delivery, set by the publishing thread and taken whole by the
+    // presentation thread.
+    private int m_owed;
     private int m_revision;
 
     /// <summary>Monotonic presentation watch bumped for every successful complete-claim publication.</summary>
     public int Revision => Volatile.Read(location: ref m_revision);
 
-    /// <summary>Raised after a successful claim change.</summary>
+    /// <summary>Raised on the presentation thread, by <see cref="DeliverRouteChanges"/>, once for each seat whose claim
+    /// changed since the last delivery. A claim published while nothing subscribes owes no edge.</summary>
     public event Action<int>? RouteChanged;
 
     // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery the world's own
@@ -26,6 +35,18 @@ public sealed class WorldSeatAuthorityRouter {
         text: text,
         value: instanceName
     );
+    // Records a published claim change: the presentation watch moves at once, and the edge waits for the presentation
+    // thread's next delivery.
+    private void Owe(int slot) {
+        _ = Interlocked.Increment(location: ref m_revision);
+
+        if (RouteChanged is not null) {
+            _ = Interlocked.Or(
+                location1: ref m_owed,
+                value: (1 << slot)
+            );
+        }
+    }
 
     /// <summary>Whether any locally followed seat currently claims this exact generation-addressed entity.</summary>
     public bool Claims(in WorldEntityAddress entity) {
@@ -66,13 +87,34 @@ public sealed class WorldSeatAuthorityRouter {
             objB: expected
         )) {
             current = next;
-            _ = Interlocked.Increment(location: ref m_revision);
-            RouteChanged?.Invoke(obj: slot);
+            Owe(slot: slot);
             return true;
         }
 
         current = (observed ?? throw new InvalidOperationException(message: $"seat {(slot + 1)} lost its authority claim"));
         return false;
+    }
+    /// <summary>Raises <see cref="RouteChanged"/> for every seat whose claim changed since the last delivery, in seat
+    /// order, on the calling thread. Only the thread that pumps and presents calls this, at the fixed points of its
+    /// step, so a claim a socket worker publishes reaches its subscribers on the presentation turn after it.</summary>
+    /// <returns>The number of seats delivered.</returns>
+    public int DeliverRouteChanges() {
+        var owed = Interlocked.Exchange(
+            location1: ref m_owed,
+            value: 0
+        );
+        var delivered = 0;
+
+        for (var slot = 0; (owed != 0); slot++) {
+            if ((owed & 1) != 0) {
+                RouteChanged?.Invoke(obj: slot);
+                delivered++;
+            }
+
+            owed >>= 1;
+        }
+
+        return delivered;
     }
     /// <summary>Publishes a new endpoint/entity claim using the currently observed route as the CAS comparand.</summary>
     public WorldAuthorityRoute Publish(int slot, WorldAuthorityEndpoint endpoint, WorldEntityAddress entity) {
@@ -109,8 +151,7 @@ public sealed class WorldSeatAuthorityRouter {
                 ),
                 objB: previous
             )) {
-                _ = Interlocked.Increment(location: ref m_revision);
-                RouteChanged?.Invoke(obj: slot);
+                Owe(slot: slot);
                 return next;
             }
         }

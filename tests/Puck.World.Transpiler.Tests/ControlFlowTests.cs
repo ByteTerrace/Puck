@@ -135,7 +135,7 @@ public class ControlFlowTests {
             }
             """;
 
-        var formatted = PuckFormat.Format(Source);
+        var formatted = PuckFormat.Format(source: Source);
         var rule = Assert.IsType<RuleBlockNode>(@object: PuckParser.ParseDocument(formatted).Statements[0]);
         var branch = Assert.IsType<IfStatementNode>(@object: rule.Statements[0]);
         var loop = Assert.IsType<RepeatStatementNode>(@object: Assert.Single(collection: branch.Then));

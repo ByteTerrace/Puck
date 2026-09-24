@@ -32,7 +32,7 @@ public static class CartridgeExpressions {
         ExpressionOp.Subtract,
         ExpressionOp.Multiply,
         ExpressionOp.Divide,
-        ExpressionOp.Modulo,
+        ExpressionOp.Remainder,
         ExpressionOp.BitAnd,
         ExpressionOp.BitOr,
         ExpressionOp.BitXor,
@@ -113,7 +113,7 @@ public static class CartridgeExpressions {
     /// <returns>The predicate.</returns>
     /// <remarks>A cartridge carries no fixed-point domain, so the comparison's kind is never anything else; this is the
     /// spelling that cannot get it wrong.</remarks>
-    public static ActionPredicate Gate(ExpressionProgram left, ActionStateComparison comparison, ExpressionProgram right) =>
+    public static ActionPredicate Gate(ExpressionProgram left, ExpressionOp comparison, ExpressionProgram right) =>
         new ActionPredicate.CompareValue(
             Comparison: comparison,
             Kind: CellKind.Int,
@@ -209,7 +209,7 @@ public static class CartridgeExpressions {
                 button: button,
                 mode: mode
             ),
-            comparison: ActionStateComparison.Equal,
+            comparison: ExpressionOp.Equal,
             right: Of(constant: 1)
         );
     /// <summary>Returns the spelling an instruction is named by, for a refusal that quotes the author.</summary>

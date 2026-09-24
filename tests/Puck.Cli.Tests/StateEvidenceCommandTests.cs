@@ -12,8 +12,8 @@ public sealed class StateEvidenceCommandTests {
     [InlineData("llvm-mca 19.1.6\n", false, "")]
     [Theory]
     public void LlvmVersionIsReadAsOneExactToken(string output, bool expectedSuccess, string expectedVersion) {
-        Assert.Equal(expectedSuccess, StateEvidenceCommand.TryReadLlvmVersion(output, out var version));
-        Assert.Equal(expectedVersion, version);
+        Assert.Equal(expectedSuccess, StateEvidenceCommand.TryReadLlvmVersion(output: output, version: out var version));
+        Assert.Equal(actual: version, expected: expectedVersion);
     }
     [Fact]
     public void InstructionRowsAreReadWithoutMistakingSummaryOrResourceRowsForEvidence() {
@@ -63,17 +63,57 @@ public sealed class StateEvidenceCommandTests {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-state-evidence-");
 
         try {
-            var inventory = StateEvidenceCommand.BuildInventory(directory.FullName);
+            var inventory = StateEvidenceCommand.BuildInventory(repositoryRoot: directory.FullName);
 
             Assert.Equal(ReferenceScheduleManifest.Digest, inventory.ManifestDigest);
-            Assert.All(inventory.Kernels.SelectMany(static kernel => kernel.Sources), static source => {
-                Assert.Null(source.ActualSha256);
-                Assert.False(source.Matches);
+            Assert.All(inventory.Kernels.SelectMany(selector: static kernel => kernel.Sources), static source => {
+                Assert.Null(@object: source.ActualSha256);
+                Assert.False(condition: source.Matches);
             });
-            Assert.Contains(inventory.Kernels, static kernel => (kernel.UnresolvedTargets.Count > 0));
-            Assert.All(inventory.MemoryGaps, static memoryClass => Assert.NotEmpty(memoryClass.Value));
+            Assert.Contains(collection: inventory.Kernels, filter: static kernel => (kernel.UnresolvedTargets.Count > 0));
+            Assert.All(inventory.MemoryGaps, static memoryClass => Assert.NotEmpty(collection: memoryClass.Value));
+            Assert.Equal(
+                ReferenceSchedule.Coverage.Select(selector: static entry => (entry.Vocabulary, entry.Registered, entry.Priced, entry.Unmodeled.Count)),
+                inventory.Coverage.Select(selector: static entry => (entry.Vocabulary, entry.Registered, entry.Priced, entry.Unmodeled.Count))
+            );
+            Assert.Contains(collection: inventory.Coverage, filter: static entry => (entry.Unmodeled.Count > 0));
         } finally {
             directory.Delete(recursive: true);
         }
+    }
+    [Fact]
+    public async Task CaptureRefusesAnAbsentPinnedCompilerByNameRatherThanSubstitutingOne() {
+        var root = StateEvidenceCommand.RepositoryRoot;
+
+        Assert.NotNull(@object: root);
+
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-state-capture-");
+        string text;
+
+        try {
+            var (exitCode, _, refusal) = await ConsoleCapture.RunSplitAsync(run: () => ReferenceCapture.RunAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                clock: TimeProvider.System,
+                directory: directory.FullName,
+                options: new(
+                    Ilc: Path.Combine(path1: directory.FullName, path2: "no-such-ilc.exe"),
+                    LlvmMca: null,
+                    LlvmObjdump: null,
+                    NuGetPackages: null,
+                    ReuseLowering: false
+                ),
+                repositoryRoot: root
+            ));
+
+            Assert.Equal(actual: exitCode, expected: 2);
+            Assert.Empty(collection: Directory.GetFiles(path: directory.FullName));
+            text = refusal;
+        } finally {
+            directory.Delete(recursive: true);
+        }
+
+        Assert.Contains(ReferenceScheduleManifest.Targets[0].Build.IlCompiler, text, StringComparison.Ordinal);
+        Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "no-such-ilc.exe");
+        Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "--ilc");
     }
 }

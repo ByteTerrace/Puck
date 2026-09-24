@@ -27,34 +27,6 @@ internal static class SamplingDistributionClaims {
     /// table's published rule, reused here so one rule governs every derived band in this file.</summary>
     private const double StandardErrorBand = 8.0;
 
-    /// <summary>The exact star discrepancy of <paramref name="sequence"/>'s first <paramref name="pointCount"/> points:
-    /// the returned numerator over the returned denominator (<paramref name="pointCount"/> · 2³²) is
-    /// <c>max_i max((i+1)/N − x_i, x_i − i/N)</c> with no rounding anywhere, rather than a floating-point
-    /// sort-and-scan.</summary>
-    /// <param name="sequence">The sequence to measure.</param>
-    /// <param name="pointCount">How many of its opening points to measure.</param>
-    /// <returns>The discrepancy as an exact rational.</returns>
-    private static (BigInteger Numerator, BigInteger Denominator) ExactStarDiscrepancy(CertifiedLowDiscrepancy sequence, int pointCount) {
-        var points = new uint[pointCount];
-
-        for (var i = 0; (i < pointCount); ++i) { points[i] = sequence.Point(index: ((ulong)(i + 1))).Value; }
-
-        Array.Sort(array: points);
-
-        var denominator = (((BigInteger)pointCount) << 32);
-        var numerator = BigInteger.Zero;
-
-        for (var i = 0; (i < pointCount); ++i) {
-            var upper = ((((BigInteger)(i + 1)) << 32) - (((BigInteger)points[i]) * pointCount));
-            var lower = ((((BigInteger)points[i]) * pointCount) - (((BigInteger)i) << 32));
-
-            if (upper > numerator) { numerator = upper; }
-            if (lower > numerator) { numerator = lower; }
-        }
-
-        return (numerator, denominator);
-    }
-
     // ---- the alias table ----
 
     /// <summary>
@@ -201,7 +173,7 @@ internal static class SamplingDistributionClaims {
             }
 
             foreach (var pointCount in scales) {
-                var (numerator, denominator) = ExactStarDiscrepancy(
+                var (numerator, denominator) = SamplingClaims.ExactStarDiscrepancy(
                     pointCount: pointCount,
                     sequence: sequence
                 );
@@ -246,19 +218,19 @@ internal static class SamplingDistributionClaims {
         );
 
         foreach (var pointCount in new[] { 1024, 4096, 16384 }) {
-            var (goldenNumerator, _) = ExactStarDiscrepancy(
+            var (goldenNumerator, _) = SamplingClaims.ExactStarDiscrepancy(
                 pointCount: pointCount,
                 sequence: golden
             );
-            var (silverNumerator, _) = ExactStarDiscrepancy(
+            var (silverNumerator, _) = SamplingClaims.ExactStarDiscrepancy(
                 pointCount: pointCount,
                 sequence: silver
             );
-            var (sqrt50Numerator, _) = ExactStarDiscrepancy(
+            var (sqrt50Numerator, _) = SamplingClaims.ExactStarDiscrepancy(
                 pointCount: pointCount,
                 sequence: sqrt50
             );
-            var (badKNumerator, _) = ExactStarDiscrepancy(
+            var (badKNumerator, _) = SamplingClaims.ExactStarDiscrepancy(
                 pointCount: pointCount,
                 sequence: badK
             );

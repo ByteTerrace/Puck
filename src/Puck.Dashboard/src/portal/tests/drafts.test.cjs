@@ -1,13 +1,12 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const fs = require('node:fs');
-const ts = require('typescript');
 
-require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, file);
+require('./support/register.cjs');
 
-const { LocalDraftStore, DraftRefusal, MAX_REVISIONS_PER_DRAFT } = require('../src/document/localDrafts.ts');
+const { LocalDraftStore, DraftRefusal, MAX_REVISIONS_PER_DRAFT, readDraftListing } = require('../src/document/localDrafts.ts');
+const { MAX_DOCUMENT_BYTES } = require('../src/document/intake.ts');
+
+const DRAFTS_KEY = 'byteterrace.puck.studioSourceDrafts';
 
 function memoryStorage() {
   const entries = new Map();
@@ -24,16 +23,16 @@ test('a fresh store lists nothing and loads nothing', () => {
   assert.equal(store.load('anything'), undefined);
 });
 
-test('save creates a draft with one revision, and list/load see it', () => {
+test('save creates a draft with one revision of changed files, and list/load see it', () => {
   const store = new LocalDraftStore(memoryStorage());
-  const draft = store.save('my-draft', 'My Draft', 'puck.world.json', '{"a":1}', 'Opened document');
+  const draft = store.save('my-draft', 'My Draft', 'games/klondike', { 'games/klondike.puck': 'rule "a" {}' }, '1 changed file');
 
   assert.equal(draft.id, 'my-draft');
   assert.equal(draft.title, 'My Draft');
-  assert.equal(draft.documentName, 'puck.world.json');
+  assert.equal(draft.documentName, 'games/klondike');
   assert.equal(draft.revisions.length, 1);
-  assert.equal(draft.revisions[0].text, '{"a":1}');
-  assert.equal(draft.revisions[0].label, 'Opened document');
+  assert.deepEqual(draft.revisions[0].files, { 'games/klondike.puck': 'rule "a" {}' });
+  assert.equal(draft.revisions[0].label, '1 changed file');
   assert.ok(draft.revisions[0].savedAt.length > 0);
 
   assert.deepEqual(store.list().map((d) => d.id), ['my-draft']);
@@ -43,25 +42,31 @@ test('save creates a draft with one revision, and list/load see it', () => {
 test('repeated saves prepend revisions, newest first, capped at ten', () => {
   const store = new LocalDraftStore(memoryStorage());
   for (let i = 0; i < MAX_REVISIONS_PER_DRAFT + 5; i += 1) {
-    store.save('my-draft', 'My Draft', 'puck.world.json', `{"i":${i}}`, `edit ${i}`);
+    store.save('my-draft', 'My Draft', 'counter', { 'counter.puck': `// ${i}` }, `edit ${i}`);
   }
   const draft = store.load('my-draft');
   assert.equal(draft.revisions.length, MAX_REVISIONS_PER_DRAFT);
-  // Newest first: the very last save (i = 14) leads, and the ten kept are the ten most recent.
-  assert.equal(draft.revisions[0].text, '{"i":14}');
-  assert.equal(draft.revisions[MAX_REVISIONS_PER_DRAFT - 1].text, '{"i":5}');
+  assert.equal(draft.revisions[0].files['counter.puck'], '// 14');
+  assert.equal(draft.revisions[MAX_REVISIONS_PER_DRAFT - 1].files['counter.puck'], '// 5');
 });
 
 test('a later save keeps an existing title when a blank one is supplied', () => {
   const store = new LocalDraftStore(memoryStorage());
-  store.save('my-draft', 'First Title', 'puck.world.json', '{}', 'first');
-  const draft = store.save('my-draft', '', 'puck.world.json', '{}', 'second');
+  store.save('my-draft', 'First Title', 'counter', {}, 'first');
+  const draft = store.save('my-draft', '', 'counter', {}, 'second');
   assert.equal(draft.title, 'First Title');
+});
+
+test('a draft over the 2 MB cap is refused by name and nothing is written', () => {
+  const backing = memoryStorage();
+  const store = new LocalDraftStore(backing);
+  assert.throws(() => store.save('big', 'Big', 'counter', { 'counter.puck': 'x'.repeat(MAX_DOCUMENT_BYTES) }, 'big'), /byte cap/);
+  assert.equal(backing.entries.size, 0);
 });
 
 test('delete removes a draft and reports whether one existed', () => {
   const store = new LocalDraftStore(memoryStorage());
-  store.save('my-draft', 'My Draft', 'puck.world.json', '{}', 'opened');
+  store.save('my-draft', 'My Draft', 'counter', {}, 'opened');
   assert.equal(store.delete('my-draft'), true);
   assert.equal(store.load('my-draft'), undefined);
   assert.equal(store.delete('my-draft'), false);
@@ -70,17 +75,21 @@ test('delete removes a draft and reports whether one existed', () => {
 test('an invalid id is refused by name, for both save and delete, without touching storage', () => {
   const backing = memoryStorage();
   const store = new LocalDraftStore(backing);
-  assert.throws(() => store.save('Not Valid!', 't', 'n', '{}', 'l'), DraftRefusal);
+  assert.throws(() => store.save('Not Valid!', 't', 'n', {}, 'l'), DraftRefusal);
   assert.throws(() => store.delete('constructor'), DraftRefusal);
   assert.equal(backing.entries.size, 0);
 });
 
-test('unreadable storage (corrupt JSON) refuses by name rather than silently starting empty', () => {
-  const backing = memoryStorage();
-  backing.setItem('byteterrace.puck.studioDrafts.v1', 'not json');
-  const store = new LocalDraftStore(backing);
-  assert.throws(() => store.list(), DraftRefusal);
-  assert.throws(() => store.save('my-draft', 't', 'n', '{}', 'l'), DraftRefusal);
+test('unreadable storage refuses by name rather than silently starting empty, and the listing reports it', () => {
+  for (const raw of ['not json', '{"broken":{"id":"broken"}}', '{"a":{"id":"a","title":"A","documentName":"n","revisions":[{"files":{"x":1},"label":"l","savedAt":"s"}]}}']) {
+    const backing = memoryStorage();
+    backing.setItem(DRAFTS_KEY, raw);
+    const store = new LocalDraftStore(backing);
+    assert.throws(() => store.list(), DraftRefusal);
+    assert.throws(() => store.save('my-draft', 't', 'n', {}, 'l'), DraftRefusal);
+    assert.match(readDraftListing(store).error, /unreadable/);
+    assert.equal(backing.getItem(DRAFTS_KEY), raw, 'the unreadable library is left as it was');
+  }
 });
 
 test('a storage write failure (quota exceeded) refuses by name and never throws a raw error', () => {
@@ -89,14 +98,14 @@ test('a storage write failure (quota exceeded) refuses by name and never throws 
     setItem: () => { throw new Error('QuotaExceededError'); },
   };
   const store = new LocalDraftStore(backing);
-  assert.throws(() => store.save('my-draft', 't', 'n', '{}', 'l'), DraftRefusal);
+  assert.throws(() => store.save('my-draft', 't', 'n', {}, 'l'), DraftRefusal);
 });
 
 test('multiple drafts are independent', () => {
   const store = new LocalDraftStore(memoryStorage());
-  store.save('draft-a', 'A', 'puck.world.json', '{"a":1}', 'a1');
-  store.save('draft-b', 'B', 'games/tictactoe.world.json', '{"b":1}', 'b1');
+  store.save('draft-a', 'A', 'counter', { 'counter.puck': 'a' }, 'a1');
+  store.save('draft-b', 'B', 'games/token', { 'games/token.puck': 'b' }, 'b1');
   assert.deepEqual(store.list().map((d) => d.id).sort(), ['draft-a', 'draft-b']);
-  assert.equal(store.load('draft-a').documentName, 'puck.world.json');
-  assert.equal(store.load('draft-b').documentName, 'games/tictactoe.world.json');
+  assert.equal(store.load('draft-a').documentName, 'counter');
+  assert.equal(store.load('draft-b').documentName, 'games/token');
 });

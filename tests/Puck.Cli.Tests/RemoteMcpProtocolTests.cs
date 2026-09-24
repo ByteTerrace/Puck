@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Puck.Hosting;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -59,12 +60,14 @@ public sealed class RemoteMcpProtocolTests {
         );
 
         request.Headers.Accept.ParseAdd(input: "application/json, text/event-stream");
-        if (failure != "missing") { request.Headers.Add(
+        if (failure != "missing") {
+            request.Headers.Add(
             name: "MCP-Protocol-Version",
             value: ((failure == "version")
             ? "2099-01-01"
             : "2026-07-28")
-        ); }
+        );
+        }
         request.Headers.Add(
             name: "Mcp-Method",
             value: ((failure == "method")
@@ -94,10 +97,12 @@ public sealed class RemoteMcpProtocolTests {
         Assert.False(condition: response.Headers.Contains(name: "Mcp-Session-Id"));
         var payload = await response.Content.ReadAsStringAsync(cancellationToken: Token);
         // The protocol permits both JSON and request-scoped SSE responses, including RPC errors.
-        if (response.Content.Headers.ContentType?.MediaType == "text/event-stream") { payload = payload.Split('\n').Single(predicate: line => line.StartsWith(
+        if (response.Content.Headers.ContentType?.MediaType == "text/event-stream") {
+            payload = payload.Split('\n').Single(predicate: line => line.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: "data:"
-        ))[5..]; }
+        ))[5..];
+        }
         using var result = JsonDocument.Parse(payload);
 
         Assert.True(condition: result.RootElement.TryGetProperty(
@@ -143,30 +148,32 @@ public sealed class RemoteMcpProtocolTests {
         );
         var id = attached.StructuredContent!.Value.GetProperty(propertyName: "attachmentId").GetString();
 
+        // Shorter than every other bound the request carries — the exec timeout it names and the gateway's request
+        // deadline — so the token's own remaining lifetime is the deadline that ends it.
+        var lifetime = TimeSpan.FromSeconds(seconds: 110);
+
         http.DefaultRequestHeaders.Authorization = new(
             "Bearer",
-            fixture.Token(lifetimeSeconds: 3)
+            fixture.Token(lifetimeSeconds: ((int)lifetime.TotalSeconds))
         );
-        var arguments = new Dictionary<string, object?> { ["attachmentId"] = id, ["command"] = "wait" };
+        var arguments = new Dictionary<string, object?> { ["attachmentId"] = id, ["command"] = "wait", ["timeoutMs"] = ControlLimits.TimeoutMilliseconds };
         var wait = client.CallToolAsync(
             "puck_exec",
             arguments,
             cancellationToken: Token
         ).AsTask();
 
-        await fixture.Entered.Reader.ReadAsync(cancellationToken: Token).AsTask().WaitAsync(
-            TimeSpan.FromSeconds(seconds: 5),
-            Token
+        await fixture.Entered.Reader.ReadAsync(cancellationToken: Token);
+        await fixture.Clock.ExpireAsync(
+            ct: Token,
+            dueTime: lifetime,
+            pending: wait
         );
-        Assert.NotNull(@object: await Record.ExceptionAsync(testCode: () => wait.WaitAsync(
-            TimeSpan.FromSeconds(seconds: 8),
-            Token
-        )));
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: Token); deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 5));
-        while (Volatile.Read(location: ref fixture.Active) != 0) { await Task.Delay(
-            10,
-            deadline.Token
-        ); }
+        Assert.NotNull(@object: await Record.ExceptionAsync(testCode: () => wait));
+        await fixture.WhenAsync(
+            condition: () => (fixture.Active == 0),
+            ct: Token
+        );
         http.DefaultRequestHeaders.Authorization = new(
             "Bearer",
             fixture.Token()

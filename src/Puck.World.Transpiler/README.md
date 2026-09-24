@@ -15,7 +15,9 @@ a real placement face and `arrival` to a spawn point; it writes the destination/
 return arch in `b`. Every generated reference names the sibling `<world>.world.json` output.
 
 `ground floor { center [0, 0, 0] size [12m, 12m] }` emits an ordinary solid box placement and supplies the
-compile-time side geometry used by borders. `spawn arrival { at [0, 0, 4m] yaw: 0deg }` emits an ordinary spawn
+compile-time side geometry used by borders. Under `use patch as wing`, the ground's placement is `wing$floor` and its
+generated prototype `wing$ground$floor`, like every name the instance declares, and a border names it through the
+alias (`west.wing.floor.east`), so two aliased uses of one module stand two grounds. `spawn arrival { at [0, 0, 4m] yaw: 0deg }` emits an ordinary spawn
 point. Their composition-only descriptors are removed before canonical JSON is returned.
 
 The `puck.world.definition.v1` VOCABULARY for the `.puck` authoring language: it compiles a parsed document to world JSON
@@ -32,15 +34,56 @@ authoring layer: JSON stays the wire form and the checked-in source of every shi
 `WorldCompiler.Compile`/`CompileFile` ([`WorldCompiler.cs`](WorldCompiler.cs)) is the one entry point into that
 pipeline: source text in, canonical document out, having parsed with this vocabulary, walked the import graph
 (`ImportHandling` picks validate, bundle, or neither) and resolved authored vector text against the
-`.embeddings.json` lock beside the source. `asset "path"` additionally checks the root source's `.assets.json`
-lock; explicit refresh prepares pins without writing until the caller saves after validation. See
+`.embeddings.json` lock beside the source. `asset "path"` additionally checks the `<stem>.assets.json` lock beside the root
+source; explicit refresh prepares pins without writing until the caller saves after validation. See
 [pinning file assets](../../docs/authoring/README.md#pinning-file-assets) for the CLI workflow.
 Pass `allowMultiple: true` to consume composition outputs through `WorldCompilation.Worlds`; each output owns
-its JSON and source map. `RequireJson` refuses an ambiguous composition. The CLI writes each declared world
+its JSON and source map. `RequireJson` refuses an ambiguous composition.
+`WorldCompilation.TestWorlds` carries the generated world each `test` block asked for, beside — never inside —
+the documents above: a source compiles to the same bytes whether or not it, or a module it uses, writes tests.
+A block with no `with` clause is added to the document it stands in; one with a subject stands that module up on
+its own under the test's arguments; and a block written inside a `module` body is carried to every `use` and
+every `world name = module(arguments)`, restated there under that instantiation's arguments and named for the
+instance, once per distinct instantiation. A block with no `with` clause at the root of a source that emits
+worlds by name is the composed run: one document per world, carried as `WorldTestWorld.Json` for the first
+declared one and `WorldTestWorld.Siblings` for the rest, with that first document's `schedule.instances` arming
+them and its `references` rows repointed at the generated file names. Booting them is `puck test`'s, not this
+assembly's. The CLI writes each declared world
 beside the source, or into the directory named by `--output`. `WorldDocumentEmitter`'s lowering is internal to this assembly, so
 `puck compile`, `puck lint`, `puck embed`, the language server, the game's boot path, the basis composer and every test harness run the
 same stages in the same order rather than each assembling its own. The cartridge vocabulary is this one's peer and
 lowers through `CartridgeDocumentEmitter`, which no world code reaches.
+
+A door that needs only a source's documents compiles through
+[`Composition/WorldCompileCache`](Composition/WorldCompileCache.cs) instead: the game's boot loader, the basis
+composer every basis and import reads through (and so `world.reload`), and `puck test`'s compile of the source its
+tests generate worlds from. A compile reads the file system only through `Puck.Transpiler`'s `CompileInputs`, which
+records every fact it learned — the bytes of the source, of each module the import walk read, of the embedding and
+asset locks and of every hashed asset, every path it only probed, absent or present, and every directory whose
+names it resolved a basis in — and a held compile is served again only while every one of those facts still holds,
+so editing a module recompiles exactly the sources that import it and nothing is compiled twice unchanged.
+
+A document name resolves through one index per directory,
+[`Composition/WorldSourceIndex`](Composition/WorldSourceIndex.cs): each `.world.json` document carries the name it
+spells and each `.puck` source exactly the names it emits (`WorldCompilation.EmittedNames`), whatever its stem, read
+from its parse alone (`WorldSourceDeclaration`) — never a compile, since a compile reads its own basis through the
+same index. A source emits nothing when it names no schema or basis, declares no world, and holds only `let`,
+`template`/`module`, `.puck` imports and `test` blocks at its top level (a module library); each world it declares
+when it declares any; and its stem otherwise. The lowering admits a world only as the parse reads it, declared at the
+top level under a written name, so the index and every compile agree by construction, and a law holds them to agree
+over every tracked source. The composer, `puck compile --tree` and the official build all resolve names through it.
+Resolving a name reads the directory's listing and every source there through `CompileInputs`, so a compile that
+resolved its basis is served again only while no file there was added, removed or renamed in any letter case and no
+source there changed its bytes; the index holds each parsed declaration by the digest of the bytes it came from. Held compiles live in memory and, once a host calls
+`Persist` (the game and the CLI name `compilations` in the per-user Puck directory), on disk under an identity of the
+compiler's own assembly closure, so a later process compiles nothing an earlier one compiled. That identity names the
+entry file together with the source's key, its full path spelled with `/` and case-folded where the file system
+ignores case, so different builds sharing the directory keep their own entries instead of evicting each other's. A
+write keeps the directory to `MaxPersistedEntries` entries and removes the temporary files an interrupted write left.
+Concurrent misses on one source compile it once, the rest waiting for that compile, and every file fact a compile
+records is a full path. A failed compile is never held. Each compile and each answer counts under the `world.boot` work source (`world.boot.compiles`,
+`world.boot.puck-cache-hits`). [`Composition/WorldSourceLoader`](Composition/WorldSourceLoader.cs) admits a compiled
+single-document source exactly as the game boots one.
 
 ## The construct table
 
@@ -61,7 +104,7 @@ one edit there; the sections below narrate what those rows mean.
 
 ```puck
 schema: "puck.world.definition.v1"
-basis: "worlds/base.puck"
+basis: "worlds/base"
 
 let name = expression                 // compile-time constant
 template name(param, param2 = default) { ... }
@@ -84,7 +127,8 @@ A container value is written as a block and a scalar takes a colon—`host { }`,
 rule is about the punctuation in front of a literal, not about what the value turns out to be; a call's named
 argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a statement.
 
-Expressions: `+ - * /` (C precedence via additive/multiplicative), `.` member access, `(...)` calls,
+Expressions: the rule language's infix operators, grouped by the binding the operator table
+(`Puck.State.ExpressionOperators`) gives them ([Comparisons are 1 or 0](../../docs/reference/dsl.md#comparisons-are-1-or-0)), `.` member access, `(...)` calls,
 `[a, b]` arrays, `{ k: v }` objects, `a..b` ranges, `#rrggbb[aa]` colors, and number literals with an optional unit
 suffix (`s ms hz rad deg m mm cm % pct`), every one of which is checked against the field-dimension table in
 `Lowering/WorldDocumentEmitterUnits` (which says which field is a length or a time; what the suffix is worth is
@@ -106,7 +150,7 @@ literal's properties and on a block's property lines alike.
 ```puck
 setState(state: mancalaBoard, key: 6, expression: final0)
 transform sort(row: heartsHand, by: [{ row: heartsRank, descending: false }])
-designateBody(key: $each, kind: Body, register: "companion", targetKey: $right)
+designate(key: $each, register: "companion", targetKey: $right)
 
 rule "advance" {
   mode: Level
@@ -136,7 +180,8 @@ holds its operands as text alone and reads no atom; the line's call form does.
 A computed state reference to a pool field is materialized as the
 same structured reference as a bare field; this also applies to references inside bound objects and lists.
 The empty string names nothing and stays `""`. A name that is not one bare word is backquoted, the operand
-grammar's own quoting; a literal backquote in the name requires an interpolated string instead.
+grammar's own quoting, which has no escape: a state row or cell key cannot hold a backquote, and any other name
+holding one is written as an interpolated string instead.
 
 A bare expression or a computed key resolves compile-time bindings before it names rows, so a `let` that
 shares a row's name shadows the row: give the binding another name. One bare word that is a key, as a member's
@@ -181,10 +226,11 @@ single state reads lowers to `compareState`; anything else, or an explicit `: In
 suffix (which always forces it, even for two simple reads), lowers to `compareValue`. The suffix binds to the one
 comparison it follows, never to an enclosing `and`/`or` chain—but printed bare at the end of a chain it reads as
 though it scoped the whole thing, so wrap the annotated comparison in its own `(Operand cmp Operand : Kind)` (the
-generic `when (Gate)` grouping above) whenever it sits beside `and`/`or`. `WorldDecompiler` always wraps and prints
-an explicit `Int`. `Fixed` is the default and is elided only where the bare text re-lowers to `compareValue` on its
-own; over two plain row reads the annotation is what keeps the node a `compareValue`, so it is printed there too,
-and a `compareValue` carrying no `kind` at all over two plain reads has no sugar spelling and prints call-form.
+generic `when (Gate)` grouping above) whenever it sits beside `and`/`or`. An unsuffixed comparison lowers with no
+`kind`, and the engine infers one the way it infers a local's: `Int`, unless both sides are constants and one holds a
+fraction. `WorldDecompiler` prints a declared kind wrapped, `(left cmp right : Kind)`, and a kindless comparison bare;
+a kindless `compareValue` over two plain row reads has no bare spelling, since that text lowers to `compareState`,
+so it prints call-form.
 
 ### Rules
 
@@ -199,6 +245,12 @@ an authored `else if Gate { }` and an authored `else { if Gate { } }`—so a cha
 decompiles the same way a single branch does, with no separate case anywhere. A `transaction` may sit inside an
 `if`'s branch when the `if` is not itself already inside one (transactions still never nest—PUCK019); `repeat` and
 `break` still have nothing to lower onto in a straight-line rule body and stay refused as PUCK037.
+
+A compile-time `for` inside a rule or step body, or inside any effect list, is unrolled before the body lowers
+(`DocumentLowering.ExpandBody`): the rule carries the locals and effects each iteration produced, lowered under that
+iteration's bindings, so the rule compiler and the work sheet see only ordinary statements. A local declared in a
+loop takes an interpolated name (`local $"fit{t}"`) and is read by its resolved name anywhere in the rule. A
+`when`, a `decision` or a nested `rule` inside such a loop is PUCK114.
 
 `row[key]` (a *row reference*) is read as one span—a name plus zero or more adjacent `[...]` groups—and
 resolved through `ExpressionSpelling` to exactly one state-read token; a literal key may equally be spelled
@@ -263,7 +315,16 @@ spells no kind either and the document carries none: the rule compiler takes the
 which the rows it reads decide (`Int` for an expression over `Int` rows, a fractional literal compared against one
 included; `Fixed` over `Fixed` rows; `Fixed` for constants alone that hold a fraction). A source that still spells `table`/`slot`/
 `grid name : Int`/`Fixed`/`Bool`/`Text`/`Vector`, or `local name : Int`/`Fixed`, is PUCK107/PUCK108, naming the
-annotation as retired. All four are core grammar (`Ast/StateDeclarationNodes.cs`,
+annotation as retired. Any other word after the `:` names the enum the row's cells are drawn from, as a record
+field's type does (`slot left: Element = Air`): the row is `Int`, carries `enum`, and the enum reaches
+`state.enums` through the same `MaterializeRuntimeEnum` a record field and an explicit `row { enum: Element }`
+use, and a world document carries every enum it declares there (`MaterializeDeclaredEnums`). A document with a
+`basis` lowers against the enums its basis's composed document declares (`WorldCompiler` reads them through
+`PuckDocumentComposer`, and the compile rests on every file that read touched), so a member it writes reads as the
+basis reads it and the basis, not the child, carries the enum. A name no enum it can see declares stays on the row
+or field, and the validation of the composed world refuses one the composed section does not hold as PUCK119 at the
+line that names it (the engine words that refusal once, `WorldDefinitionValidator.UndeclaredRowEnum` and
+`UndeclaredRecordFieldEnum`); a record's name there is PUCK107, pointing at `pool`. All four are core grammar (`Ast/StateDeclarationNodes.cs`,
 `Parsing/PuckParser.StateDeclarations.cs`) — the parser knows only the shape (a name, zero or more `name(args)`
 modifier calls, and an optional `{ ... }*` body: `key = value modifiers*` cell entries for `table`/`grid`, bare
 `token` entries for `pile`); it assigns no meaning to a modifier or keyword name, so a second document vocabulary
@@ -350,6 +411,11 @@ shape is core, though every one of these particular messages is raised by the wo
 | PUCK050 | `state.world` authored more than once (array + block, block + block, or array + array). |
 | PUCK051 | A duplicate row name in one `state.world`, or a duplicate cell key in one table/grid. |
 | PUCK052 | A row name or cell/token key carrying the reserved `$` prefix. |
+| PUCK113 | A declared name carrying `$` past its first character or `~` anywhere — the [generated-name](../../docs/reference/dsl.md#generated-names) spellings — or a world or source file name carrying `~`. Raised once the document lowers, for every declaration the name registry lists, every row `id`, every declared cell key and every reference or destination `name` the compiler did not generate itself, and where a rule scope, `stabilize` group or `workflow` names what it holds. |
+| PUCK115 | An `enum` member spelled like a `let` or a module parameter in the same scope, or a bare read of a member two enums declare (`Rook` in both `Piece` and `Tower`). A bare member reads as its ordinal, so it cannot keep a second meaning; rename one, or read the member qualified (`Piece.Rook`). A member of an enum the basis declares is refused at the `basis` line. |
+| PUCK116 | A placement id carrying `:` (it separates a channel's arguments, `$region:<placementId>`) or spelled exactly `$each` (the token `placement:$each` binds to a rule's `forEach` key), on a `placements` row or an `upsertPlacement` effect. The loader and the live mutation door refuse the same ids by name (`WorldPlacement.TryValidateId`). |
+| PUCK117 | A module alias spelled like a row, pool, `let` or module parameter of the scope that uses it (`slot a` beside `use room as a()`). The scope reads a name the instance declares as `a.name`, which would also spell a cell or member of `a`; rename one. |
+| PUCK119 | A `table`/`slot`/`grid` written `: Enum`, a `row { enum: Enum }`, or a record field `field: Enum` naming an enum the composed world does not declare, at the line that names it. |
 | PUCK053 | A default/bound literal that does not fit the row's kind. |
 | PUCK054 | `capacity(n)` smaller than the table's/pile's own authored cell/token count. |
 | PUCK055 | A modifier the declaration's shape or kind refuses — `bounds`/`advance` on `Bool`/`Text`, `capacity` on a `slot`. |
@@ -450,13 +516,15 @@ registers `sql`, supplies its lexer, and owns parsing and lowering. The cartridg
 
 | Code | Severity | Refusal |
 |---|---|---|
-| PUCK070 | Error | Floating-point column type (`REAL`, `FLOAT`, `DOUBLE`) in a SQL table declaration — state holds no floats, use `FIXED`. |
+| PUCK070 | Error | A column or slot type outside `INT`, `FIXED`, `BOOL`, `TEXT` and `VECTOR` and their aliases; a floating-point type (`REAL`, `FLOAT`, `DOUBLE`) is told that state holds no floats and to use `FIXED`. |
 | PUCK071 | Error | Composite `PRIMARY KEY (a, b)` in a SQL table declaration — a state cell has exactly one key. |
 | PUCK072 | Error | `CHECK` constraint shape outside `BETWEEN a AND b`, `>= a`, or `<= b`. |
 | PUCK073 | Error | Unsupported SQL clause or construct (`GROUP BY`, `HAVING`, `WINDOW`, `LIMIT`, cross-key `JOIN`, `UNION`, `TRIGGER`, etc.). |
 | PUCK074 | Error | Set-based `UPDATE` reading a column it writes at other keys — self-referential multi-key updates are refused. |
 | PUCK075 | Error | Inserted row missing a `NOT NULL` column that declares no default value. |
-| PUCK076 | Error | Syntax or grammatical refusal inside a `sql { ... }` block. |
+| PUCK076 | Error | Syntax or grammatical refusal inside a `sql { ... }` block, including a column with no type and a table with no primary key. |
+
+Each fault is reported once, at the text that carries it. A column written without a type is refused for that alone, not again for the primary key it may have been meant to be, and a comparison naming an unknown column is refused at the column and lowers no further.
 
 Shared state declaration and semantic codes also apply:
 - **PUCK051**: Duplicate table/slot name or duplicate inserted primary key.
@@ -483,7 +551,7 @@ Shared state declaration and semantic codes also apply:
 | PUCK078 | Error | Vector row names no space and document has no default, names an undeclared space, or a non-Vector row declares a space. |
 | PUCK079 | Error | Authored text in a vector slot or `embed(...)` has no lock entry; run `puck embed`. |
 | PUCK080 | Error | Lock file's model, revision, or dimensions differ from the declared space; run `puck embed`. |
-| PUCK081 | Error | Vector literal is not valid base64url, has wrong dimension count, contains prohibited -128, or fails unit sphere admission. |
+| PUCK081 | Error | Vector literal is not valid base64url, has a component count other than its space's dimensions, contains prohibited -128, or fails unit sphere admission — wherever it is written, in a native row or rule or in a SQL `INSERT`, `UPDATE` or `DEFAULT`. |
 | PUCK082 | Error | Vector literal or `embed(...)` appears where no vector value is admitted. |
 | PUCK083 | Error | Vector row capacity × dimensions exceeds per-row cell ceiling or section budget. |
 | PUCK084 | Error | Vector operation names a non-vector operand, mixes spaces, or provides invalid arguments to `nearest` / `remember`. |
@@ -555,6 +623,11 @@ in the set when some member row holds it with a value inside the band, so such a
 over the same token domain and with none of a different width. A family that mixes slot members with ordered or
 keyed ones, or whose members stand over different token domains, has no one carrier and is refused.
 
+A transform that reads a set of positions names a declared set bare, the way it names a board row:
+`transform boardCombine(row: marked, operation: Copy, left: liberties)` or
+`transform writeSet(row: grid, set: liberties, value: 0)`. What the set reads as there is described in
+[Read a declared set](../../docs/reference/state/topologies.md#read-a-declared-set).
+
 | Code | Severity | Refusal |
 |---|---|---|
 | PUCK101 | Error | A `set` declaration the cell-set algebra refuses. |
@@ -562,7 +635,8 @@ keyed ones, or whose members stand over different token domains, has no one carr
 ## Rule groups
 
 `stabilize` and `workflow` each lower to one `ruleGroups` row plus the rules it claims, named
-`<group>_<rule>`:
+`<group>$<rule>` — a [generated name](../../docs/reference/dsl.md#generated-names), which no author-written
+rule can spell:
 
 ```puck
 stabilize settleBoard maxPasses(32) until board.unstable == 0 {
@@ -617,6 +691,16 @@ family index to select it by.
 | PUCK102 | Error | A duplicate member index, a descending range, or a member list that mixes named rows with indices. |
 
 ## Decompiling
+
+A name the compiler generated prints back as the construct that generated it, never as an authored name, which
+PUCK113 would refuse: `Decompiler/WorldDecompiler.GeneratedNames.cs` reads a `ground` block back from its
+prototype and placement (regenerated through the emitter's own `GroundRows` and compared), prints a rule or group
+whose name joins scopes (`outer$inner`) inside one `rules` scope per part, and reads a generated test world's
+verdict rows, witnesses, verdict rules and schedule back as its `test` block. `WorldDecompiler.DecompileComposition`
+takes the worlds one composition emitted and prints the composition source: each world a module and a `world`
+declaration, each `border` and `door` read back from the rows `WorldCompositionLinks` generated and verified by
+reapplying them. Any other generated-form name — a hand-written document spelling one, a pool's catalog row, an
+identity row, one world of a composition read alone — throws `WorldDecompileRefusedException` naming it.
 
 `WorldDecompiler.Decompile` opens every file with a one-time-import header comment (`let`/`template` cannot be
 recovered on a re-run) and inverts `rules`/`shapes`/`placements`/`prototypes` into the sugar above, eliding a
@@ -689,8 +773,8 @@ no text that recompiles to a null comparand.
 ## Diagnostics
 
 New codes: PUCK002 (operand failed `ExpressionSpelling.TryParse`), PUCK003 (a row reference wasn't exactly one
-state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word on a comparison), PUCK006 (retired —
-a `local`'s kind is inferred, never required), PUCK007 (`local` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
+state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word on a comparison), PUCK006 (never
+emitted: a `local`'s kind is inferred, never required), PUCK007 (`local` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry—a string
 on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a time unit, or carrying one the seconds dimension does not admit), PUCK011 (`rule`
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing
 name or a missing `score`), PUCK014 (`onFailure` used more than once on one `transaction`), PUCK019 (nested
@@ -703,14 +787,22 @@ vocabulary's straight-line rule body), PUCK039 (a compound-assignment operator; 
 every instantiation would mint the same name — write `rule $"…{param}"` instead), PUCK103 (a `transform` written
 with a result label; the destination is the call's own argument, so write `transform call(...)`), PUCK104 (a
 `test` declaration's own shape — a body member that is not `given`/`when`/`expect`, one of those twice or out of
-order, a `with module(...)` subject, no expectation, a test outside the document's root, or two tests generating one
-world), PUCK105 (a line inside a `test` block a generated test world cannot carry — a `given` line that is not a
-cell assignment to a literal, a `when` step that is neither `ticks <n>` nor `seat<n>: <command line>`, a step
-acting as something other than a seat, or a command outside the scheduled step vocabulary), PUCK107 (a
+order, no expectation, a `with` subject naming a template rather than a module, a test outside the root of the
+document or module body it is about, or two tests generating one world), PUCK105 (a line inside a `test` block a generated test world cannot carry — a `given` line that is not a
+cell assignment to a literal, a `when` step that is neither `ticks <n>` nor `seat<n> [refused ["text"]]: <command line>`, a step
+acting as something other than a seat, a command outside the scheduled step vocabulary, or a world-addressing
+fault: a line naming no world at a composition root, a world the source does not declare, a world block written
+inside another or in a test about one world, a `ticks` step inside a world block, or a step addressing another
+world with a verb whose grammar carries no world token), PUCK107 (a
 `table`/`slot`/`grid` declaration still spells its kind explicitly — the kind is inferred, see
 [State declarations](#state-declarations) above), PUCK108 (a `local` still spells its kind explicitly — the kind is
 inferred from its expression). The `table`/`slot`/`pile`/`grid` declaration refusals (PUCK049–PUCK066) are listed in
 [State declarations](#state-declarations) above.
+
+The engine's validation of a composed world reports each refusal as PUCK030 (an error), a row or record field
+naming an undeclared enum as PUCK119, and each check it deferred to
+the host that runs the world — a machine engine, post-render extension or probe kind the diagnosing host carries no
+catalog for — as PUCK118, an information notice that never fails a compile or a composition.
 
 `PUCK008`/`PUCK013`/`PUCK014` also cover a rule-body-only keyword found where an ordinary statement belongs
 (`option "x" { }` outside a `decision`, `push x = 1` outside a rule), named at the keyword's own span.
@@ -760,20 +852,107 @@ always runs and always reports. Every other check is Information severity; the s
 
 ## Editor tooling
 
-The [VS Code extension](../../editors/vscode/README.md) starts this server through `puck lsp` when a Puck document opens. Its setup guide covers CLI paths, packaging, and restarting the server.
+The [VS Code extension](../../editors/vscode/README.md) starts this server through `puck lsp` when a Puck document opens. Its setup guide covers CLI paths, packaging, and restarting the server. World Studio runs the same server inside the browser engine ([Puck.World.Browser](../Puck.World.Browser/README.md)).
+
+`Lsp/PuckLanguageServer.cs` separates the protocol from its transport. `Handle(message, send)` takes one JSON-RPC
+message and hands every message it writes in reply to `send`, in order; a message that is not JSON, or whose
+handling throws, is answered with a `window/logMessage` and the session stays open. `RunAsync(input, output)` is the
+stdio host `puck lsp` runs. `Lsp/LspFraming.cs` is the protocol's base framing — a `Content-Length` header block,
+then exactly that many UTF-8 body bytes — and the one implementation of it: the stdio host reads and writes through
+it, and so does any client that drives the server over its streams. A stream that ends inside a message, or a header
+with no positive length, is refused with `InvalidDataException`; the host treats that as the end of the session.
+
+### When diagnostics run
+
+A diagnosis runs in two tiers (`Validation/WorldSourceDiagnostics.cs`). The source tier (`DiagnoseSource`) is the
+compile: parse, import walk, lowering and lint, reading the source and the modules it imports. The semantic tier
+(`DiagnoseSemantic`) composes the world through its `basis` and runtime imports and runs the engine's validation and
+the reference lint over the source tier's own compilation; it runs only when the source tier reported no error, and
+costs as much as the composed world is large. How deep a session goes is the client's choice, read from
+`initialize`'s `initializationOptions.diagnostics`: `"source"` runs the source tier alone, and anything else, or
+nothing, runs both (`PuckDiagnosticDepth.Full`), which is what VS Code and `puck lsp` get. World Studio runs its
+language worker at `"source"` and takes the semantic tier from its world worker.
+
+An edit (`didOpen`, `didChange`) records the text and its version and marks the document pending; it never
+diagnoses, so a request that arrives right behind the edit that flushed it (completion, hover, semantic tokens,
+formatting, document symbols) answers at once from the latest text and never waits on a diagnosis. Pending work runs
+while the input is quiet, one unit at a time, most recently marked first (`Lsp/PuckLanguageServer.Diagnostics.cs`):
+`TakePendingDiagnosis` takes the next unit — a document's source tier at its latest text, or the semantic tier its
+current source tier left pending — `Diagnose` runs it without touching server state, and `CompleteDiagnosis`
+publishes it only when the document has not been marked again since the snapshot, so a superseded version is never
+diagnosed to publication and a stale result is never published. At full depth a clean source tier publishes and
+leaves its semantic tier pending as a unit of its own, so requests interleave between the two; that unit's publish
+carries both tiers' diagnostics, and an edit before it runs forgets it. `RunPendingDiagnosis` takes, runs and
+completes one unit. A `publishDiagnostics` carries the version it diagnosed, which a client that drops a mismatched
+version (CodeMirror's) relies on.
+
+The stdio host reads ahead of handling and handles each message as soon as it is read. It runs a unit only while no
+read message waits, off its read loop, and cancels it through its `CancellationToken` the moment a message marks that
+document again; when the input ends, the pending work runs before the loop ends. The browser engine's worker cannot
+interrupt a running call, so it runs one unit per quiet turn (`LspIdle`) instead. Marking a document also marks
+every open document that read it through a `basis` or an import at its last diagnosis that parsed, directly or
+through another open document, behind the edited one, so the edited document is diagnosed first.
+`SourceDiagnoses` and `SemanticDiagnoses` count the units run; `LspDiagnosticSchedulingTests` holds the policy to
+counts: a burst of edits then quiet is one source-tier unit (and one semantic-tier unit at full depth) at the last
+version, requests during pending work run none, an edit between the tiers forgets the superseded semantic tier, and a
+superseded result is never published.
+
+The stdio host's diagnosis on the thread pool and its read loop's own compiles (hover and completion lower the open
+document) run side by side without serializing, because everything both reach is safe to share: the composed-image
+cache is a concurrent dictionary of immutable entries, the compile cache re-checks every file fact before it serves a
+held compile and compiles one source once however many callers miss on it, every process counter is
+`Interlocked`, per-document caches are `ConditionalWeakTable`s, the schema, vocabulary and
+construct tables are `Lazy` or built once and only read, evaluation scratch and the printer's and lowering's ambient
+state are `[ThreadStatic]`, and the local document source is installed once under a lock. The server's own document
+state is touched only on the loop; a unit reads its snapshot alone. `ConcurrentDiagnosisLawTests` runs diagnoses and
+loop-style compiles side by side and holds every result to the same work run alone, and holds the stdio host to
+returning only after the diagnosis it started has; `WorldCompileCacheConcurrencyLawTests` races misses, edits,
+persisted reads and writes against one directory-backed cache.
+
+### Semantic tokens
+
+`textDocument/semanticTokens/full` (`Lsp/PuckSemanticTokens.cs`) colours a source by role — property, variable,
+keyword, function, type, string, number, enum member, operator, comment, with a `declaration` modifier on the name a
+`let`, `for`, `template`, `module` or composition `world` declares — the roles the extension's TextMate grammar
+distinguishes. Lexical boundaries are the parser's own: strings, raw strings, backquoted names and comments end where
+`SourceLexemes.End` says, identifiers are `IdentifierSpelling`'s, an interpolation's literal runs are strings while
+its hole braces are keywords and its expression is classified as code, and a unit suffix is one `UnitConversion`
+accepts, and an operator is one token however many characters spell it, the infix ones read from the operator table
+(`Puck.State.ExpressionOperators`), so `>>>` is never three `>`. A statement's first word is a construct keyword when
+a name or string follows it and a member when `{` or `[` follows after a space; a word followed by `:` is a member
+anywhere except the row a `slot`, `table` or `grid` declares, whose `: Enum` leaves it the name it is without one.
+Brackets, braces and separators carry no
+token, so an editor's bracket colouring keeps them, and an embedded-language body (`sql { … }`) carries none, so the
+editor's grammar for that language colours it. Classification is lexical and never fails on a source mid-edit; it
+does not resolve what a name refers to. Tokens are encoded one line per piece, so a multi-line string or comment
+needs no client support for multi-line tokens. `SemanticTokenTests` holds every token of every sample inside its text
+and free of overlap, and pins the roles case by case.
 
 The diagnostics the server publishes and the ones `puck lint` prints are both
-`Validation/WorldSourceDiagnostics.Diagnose`: a compile through `WorldCompiler.Compile`, the lint, the engine's
-validation of the composed world when the document is a root, then the reference lint. A buffer with no file path
+`Validation/WorldSourceDiagnostics`: a compile through `WorldCompiler.Compile` and the lint (the source tier), then
+the engine's validation of the composed world when the document is a root and the reference lint (the semantic
+tier). `puck lint` always runs both. A buffer with no file path
 cannot compose a `basis` or an import, so a document naming either is diagnosed no further than its lowering; a
 document naming neither is validated as it stands. A source in another vocabulary is parsed with that vocabulary and
 handed to the dispatcher the host supplied, which is how a cartridge is diagnosed.
 
+A finding raised after lowering carries a JSON pointer, which the source map turns into a line. The lowering
+registers every element an author writes at its own pointer — a `rule`, each object in an array written element by
+element (`rules [ { … } ]`, `patterns [ … ]`, `state { world [ … ] }`), each row and rule a `sql` statement lowers
+to, the lattice a `grid` declares — so a finding about one element lands on the construct that wrote it
+(`SourceMapElementLawTests`). The validation of a composed world names paths into the composed document, where a
+basis's and an import's rows come ahead of the root's own, so `WorldSemanticValidator` traces each path back into
+the root's own lowered document before reading the map (`WorldDocumentBasis.TraceToLayer`, following each list row
+by the key its merge used): a finding about the root's k-th row lands on that row whatever the basis contributes
+(`BasisCompositionLawTests`). A finding about a row only a `basis` or runtime import supplied traces to no node of
+the root and reports without a span.
+
 `Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords (`if`/`else` included), `table`/
 `slot`/`pile`/`grid`/`row` and their `bounds`/`advance`/`capacity`/`behavior`/`dimensions`/`wrap`/`cellSize`/
 `origin`/`band`/`empty`/`positions`/`inverse` modifiers, and the `Puck.State` predicate/effect/`CellKind`
-discriminators; hover on a declared `state` row name (its `kind`, and `capacity`/`domain` when present, via a
-best-effort lower of the open document) and on each declaration keyword and modifier itself; and `documentSymbol`
+discriminators; hover on a declared `state` row name (its `kind`, and `capacity`/`domain` when present) and on a
+declared enum's name, wherever it is written, including a row's `: Enum` (its members), both via a best-effort lower
+of the open document, and on each declaration keyword and modifier itself; and `documentSymbol`
 entries for `rule` blocks (with `when`/`local`/`decision` children) and for a `state.world` declaration block (with
 `table`/`slot`/`pile`/`grid`/`row` children — a table's own cell keys and a pile's own tokens as their children in
 turn).
@@ -787,7 +966,8 @@ far enough to see its declared rows.
 
 Hover also shows declarations for document-level `let` constants, templates (including parameter defaults),
 import aliases, template and lambda parameters, loop variables, and rule locals. Loop parameters and rule locals
-are resolved within their enclosing scope. Contiguous `//` comments immediately above a declaration accompany
+are resolved within their enclosing scope, which hover finds through `SyntaxWalk.PathAt`, so a name inside a `when`
+gate or an effect resolves as one written anywhere else does. Contiguous `//` comments immediately above a declaration accompany
 its popup. Collection functions show their signatures and behavior; scalar function arity, domain, and operation
 come from `Puck.State.ExpressionVocabulary`. Declaration cards quote source rather than evaluating it, so units
 and expressions remain as authored and recoverable declarations still work while the document has syntax errors.
@@ -799,18 +979,19 @@ Comments, string contents, and whitespace do not trigger symbol hover. Imported 
 expression result types are not resolved by these cards.
 
 Formatting is printing: `Puck.Transpiler`'s `PuckPrinter` parses a source and prints its tree, and the language
-server's formatting request and `puck fmt` are the same pass. Reader and printer share one escape grammar
+server's formatting request and `puck format` are the same pass and write the same text; the editor's `tabSize` and
+`insertSpaces` are ignored. Reader and printer share one escape grammar
 (`Parsing/PuckStrings.cs`) - a backslash, a quote, `n`, `r`, `t`, `0`, a `uXXXX` code unit, and a backslash in
 front of anything else refused - so the printer writes only what the reader reads back and a formatted source
 cannot mean something else. A raw fence carries no escapes and is printed back as a fence whenever it reads
-back exactly. Layout is the printer's own — two spaces, Egyptian braces, one statement per line — except for what the parse
+back exactly. Layout is the printer's own — `PuckPrinter.IndentWidth` (two) spaces, Egyptian braces, one statement per line — except for what the parse
 carries in as trivia: every comment keeps its line, a run of blank lines keeps its length, an array, object or
 argument list keeps the line breaks and the line-end commas its author wrote, a numeric literal keeps its base, and
 a name keeps its bare-or-quoted spelling. A cell key prints through `Puck.State`'s own fold, so an effect target
 reads the way the gate above it does. One comment moves: one written inside a construct's header, between its
 first word and its `{`, since a `//` left in place would swallow the brace — it prints above the statement, and a
 `/* */` written after the header's name prints right after the first word. A document that does not parse has no tree to
-print, so the editor keeps what is being typed and `puck fmt` reports the failure rather than writing a file.
+print, so the editor keeps what is being typed and `puck format` reports the failure rather than writing a file.
 
 Unused-binding analysis follows references in loops, array indexing, lambda bodies, interpolated strings, and exports.
 

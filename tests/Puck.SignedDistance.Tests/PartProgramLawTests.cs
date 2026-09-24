@@ -436,12 +436,15 @@ public sealed class PartProgramLawTests {
             slotB: 2
         );
 
-        instructions[^1] = instructions[^1] with { Blend = ((uint)blend), Data1 = new Vector4(
+        instructions[^1] = instructions[^1] with {
+            Blend = ((uint)blend),
+            Data1 = new Vector4(
             w: 0f,
             x: 0.2f,
             y: 0f,
             z: 0f
-        ) };
+        ),
+        };
         Assert.Equal(
             0,
             PartTable(words: Build(
@@ -664,12 +667,15 @@ public sealed class PartProgramLawTests {
         instructions.Add(item: Shape(
             material: 0,
             radius: 1
-        ) with { Blend = ((uint)blend), Data1 = new Vector4(
+        ) with {
+            Blend = ((uint)blend),
+            Data1 = new Vector4(
             w: 0,
             x: 0.2f,
             y: 0,
             z: 0
-        ) });
+        ),
+        });
         var words = Build(
             instructions,
             [Range(

@@ -55,7 +55,7 @@ public sealed class AddonHost : IDisposable {
     public IReadOnlyList<AddonInstance> Instances => m_instances;
 
     private static string DescribeInstance(AddonInstance addon) {
-        var petname = ContentPetname.From(hashHex: $"{addon.Hash.Value:x16}");
+        var petname = ContentPetname.From(hashHex: addon.Hash.Hex);
 
         return $"{petname}  {addon.Hash}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
     }
@@ -71,7 +71,7 @@ public sealed class AddonHost : IDisposable {
                 !string.Equals(
                 a: info.ContentHash.ToString(),
                 b: pin,
-                comparisonType: StringComparison.OrdinalIgnoreCase
+                comparisonType: StringComparison.Ordinal
             )
             ) {
                 return new AddonInstance(

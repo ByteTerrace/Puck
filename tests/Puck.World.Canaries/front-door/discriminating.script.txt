@@ -5,6 +5,6 @@ player.identity amber
 world.wait 5
 body.pose 0 0 0 0 0 0 0
 world.wait 8
-world.state studio_look
+world.state studio$look
 identity.facts
 world.placements

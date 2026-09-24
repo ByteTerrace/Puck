@@ -14,7 +14,7 @@ malformed journal base is refused before replacing live state.
 and after replacing the arena; output rows remain unchanged by that refusal.
 
 `WorldRigidDynamicsLawTests` checks exact-touch floor spawns and grounded, rising,
-and falling facts through rest, impulse, flight, and landing. `PongContactLawTests`
+and falling facts through rest, impulse, flight, and landing. `PaddleballContactLawTests`
 checks the shipped ball and court from both touching and elevated spawns.
 
 `SeamCrossingOrchestrationLawTests` exercises authored adjacency hysteresis through
@@ -32,14 +32,31 @@ Use the smallest fixture that exercises the behavior under test:
 - `AuthoredGameFixtures.Program` loads a shipped game's state, rules, patterns,
   and tables into that minimal world. A poker hand must not build the Nexus
   navigation graph or simulate unrelated creatures.
-- `RuleArenaFixture` compiles a state program once per test, then loads every
-  candidate's values into the arena and judges it as one tick, with the derived
-  boards the arena's own import recomputes. Exhaustive rule checks retain all
-  candidate combinations; physical sampling and mutation admission use server
-  tests alongside them.
+- `RuleArenaFixture` compiles a state program once per test, then loads each
+  candidate into the arena and judges it as one tick, with the derived boards
+  the arena's own import recomputes. A row the arena already holds unchanged —
+  the same row instance, its generation unmoved — is not reloaded, so build
+  candidates by replacing only the rows that vary and reuse the rest. Exhaustive
+  rule checks retain all candidate combinations; physical sampling and mutation
+  admission use server tests alongside them.
+- A deterministic run several laws read is computed once and shared as its
+  immutable results, never as a live server: `ShippedWorldIdleRuns` holds two
+  independent idle boots of the island, and `ShippedWorldStateBaselines.Run`
+  one replay per shipped world.
 - Composition checks load the complete Nexus once. Placement-identity checks
   retain its complete placement order and kit assignments, but use one-cell
   navigation domains because they do not advance the simulation.
+  `AuthoredGameFixtures.Load` loads each shipped or fixture world once per run;
+  derive from the shared definition with `with`, never mutate it.
+
+Build a law's raw material from the shared fixtures rather than a private
+copy: `CreationFixtures` for creation documents, prototypes, and both emission
+paths (including the one worst-case pool probe), `StateFixtures` for slot rows,
+cells, state reads and writes, `AudioAssetFixtures` for music, tune, and patch
+rows, `ClientFixtures` for a server-less client, `WorldFixture.JoinSeat` and
+`SettleSearch` for a live server, and `Laws` for every denial with its control.
+A family of laws that differ only in data is one theory whose rows name the
+cases.
 
 Step until the observable operation completes, with a finite failure bound.
 Use a fixed tick window when elapsed simulation time is itself the claim.
@@ -99,24 +116,20 @@ and completes after one pump boundary without registering routes again.
 This checks the coordinator and storage behavior in one compiled engine; packaged
 runtime and live Azure acceptance remain separate.
 
-`WorldReleaseCoordinatorContractLawTests` checks immutable coordinator requirements
-and legacy identity preservation. Set `PUCK_TEST_PREVIOUS_WORLD_SERVER` to a
-`Puck.World.Server.dll` from before coordinator contracts, and
-`PUCK_TEST_PREVIOUS_METADATA_SERVER` to one supporting only the metadata contract.
-Each previous archive reader runs in an isolated assembly context, accepts its
-supported control and refuses the new receipt requirement without writing.
-Each binary-dependent case skips when its variable is absent;
-its output records the reader's SHA-256 for provenance.
+`WorldReleaseCoordinatorContractLawTests` checks that every canonical manifest
+carries the one coordinator contract and that a missing or different contract is
+refused by name. `WorldReleasePinLawTests` checks that manifest pins and the
+engine image digest refuse uppercase hex.
 
 `WorldAuthorityReceiptSnapshotLawTests` checks a selected root's original index
 and complete receipt chain, excludes later publications, and refuses corrupt or
 inconsistent graphs. `WorldReleaseReceiptFixtureLawTests` reconstructs a disposable
 authority around a real checkpoint with journaled edits. It verifies receipt
 lookups and duplicate/conflicting operation decisions after continuation, plus
-interrupted uploads and a competing root writer. `WorldReleaseCutoverLawTests`
+interrupted uploads, a competing root writer and an existing root. `WorldReleaseCutoverLawTests`
 also delays the live export's root read while a later mutation arrives, and checks
 that cancellation leaves the publication queue usable. Archive laws cover receipt
-pins, interrupted uploads, canonical decoding and missing legacy proof. Independent
+pins, interrupted uploads, canonical decoding and a row missing its receipt pin. Independent
 receipt lookups and duplicate retries inside each packaged engine are checked by
 the CLI Docker qualification controls; different-build compatibility still needs
 evidence from the actual release pair.

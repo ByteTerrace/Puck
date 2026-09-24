@@ -85,29 +85,10 @@ public sealed class WorldCurveCommandModule(IWorldConsoleAuthority authority) : 
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.curves",
+        yield return authority.CreateServerQueryCommand(
             description: "Reports the curves census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one segment per row — the authored closed flag and knot count, the compiled segment count and total arc length (the SAME derivation the camera path op and the sim curve-follow target read), and how many document members reference it.",
-            handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(
-                    args: args,
-                    verb: "world.curves"
-                ) is { } refusal) {
-                    return refusal;
-                }
-
-                if (!authority.TryResolveServer(
-                    context: context,
-                    error: out var error,
-                    server: out var server,
-                    verb: "world.curves"
-                )) {
-                    return error;
-                }
-
-                return new CommandResult(Output: DescribeCurves(definition: server.Definition));
-            }
+            describe: server => DescribeCurves(definition: server.Definition),
+            name: "world.curves"
         );
     }
 }

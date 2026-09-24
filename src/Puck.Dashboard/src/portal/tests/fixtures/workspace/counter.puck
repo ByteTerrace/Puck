@@ -1,0 +1,15 @@
+// A root world with one register and one rule: the smallest source the studio can edit, check, and preview.
+schema: "puck.world.definition.v1"
+documentId: "counter"
+
+state {
+  world {
+    slot score = 0
+  }
+}
+
+rule "score-up" {
+  when score < 3
+  mode: Edge
+  score += 1
+}

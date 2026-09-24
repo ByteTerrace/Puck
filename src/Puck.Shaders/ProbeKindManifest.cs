@@ -3,78 +3,31 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Maths;
 
 namespace Puck.Shaders;
 
 /// <summary>A <see cref="ProbeKindManifest"/> socket's shape: what a bound <c>WorldFrameSource</c> must supply.</summary>
-[JsonConverter(typeof(ProbeSocketClassJsonConverter))]
+[JsonConverter(typeof(StrictEnumConverter<ProbeSocketClass>))]
 public enum ProbeSocketClass {
     /// <summary>Any one frame.</summary>
+    [JsonStringEnumMemberName(name: "frame")]
     Frame = 0,
     /// <summary>A strobing infrared sensor's lit frame and the unlit frame kept before it — two consecutive
     /// kernel registers, lit then unlit.</summary>
+    [JsonStringEnumMemberName(name: "strobePair")]
     StrobePair = 1,
-}
-/// <summary>Converts <see cref="ProbeSocketClass"/> to/from its lower camelCase JSON string. Hand-written (not a
-/// reflection-based <c>JsonStringEnumConverter</c> naming policy) to stay AOT/trim-safe.</summary>
-public sealed class ProbeSocketClassJsonConverter : JsonConverter<ProbeSocketClass> {
-    /// <inheritdoc/>
-    public override ProbeSocketClass Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var text = reader.GetString();
-
-        return text switch {
-            "frame" => ProbeSocketClass.Frame,
-            "strobePair" => ProbeSocketClass.StrobePair,
-            _ => throw new JsonException(message: $"Unrecognized probe socket class '{text}'; expected frame or strobePair."),
-        };
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, ProbeSocketClass value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: value switch {
-            ProbeSocketClass.Frame => "frame",
-            ProbeSocketClass.StrobePair => "strobePair",
-            _ => throw new ArgumentOutOfRangeException(
-            nameof(value),
-            value,
-            "The probe socket class is not defined."
-        ),
-        });
-    }
 }
 /// <summary>Where a <see cref="ProbeKindManifest"/> probe kind runs, in the document's own vocabulary; the
 /// document never states a runtime, only this class.</summary>
-[JsonConverter(typeof(ProbeKindClassJsonConverter))]
+[JsonConverter(typeof(StrictEnumConverter<ProbeKindClass>))]
 public enum ProbeKindClass {
     /// <summary>Handwritten GPU compute against the camera's own shared frame, on the kind's own device/thread.</summary>
+    [JsonStringEnumMemberName(name: "kernel")]
     Kernel = 0,
     /// <summary>An out-of-process model host reading the shared frame read-only on its own device.</summary>
+    [JsonStringEnumMemberName(name: "model")]
     Model = 1,
-}
-/// <summary>Converts <see cref="ProbeKindClass"/> to/from its lower camelCase JSON string. Hand-written (not a
-/// reflection-based <c>JsonStringEnumConverter</c> naming policy) to stay AOT/trim-safe.</summary>
-public sealed class ProbeKindClassJsonConverter : JsonConverter<ProbeKindClass> {
-    /// <inheritdoc/>
-    public override ProbeKindClass Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var text = reader.GetString();
-
-        return text switch {
-            "kernel" => ProbeKindClass.Kernel,
-            "model" => ProbeKindClass.Model,
-            _ => throw new JsonException(message: $"Unrecognized probe kind class '{text}'; expected kernel or model."),
-        };
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, ProbeKindClass value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: value switch {
-            ProbeKindClass.Kernel => "kernel",
-            ProbeKindClass.Model => "model",
-            _ => throw new ArgumentOutOfRangeException(
-            nameof(value),
-            value,
-            "The probe kind class is not defined."
-        ),
-        });
-    }
 }
 /// <summary>A <see cref="ProbeKindManifest"/>'s declared socket: a document row plugs one <c>WorldFrameSource</c>
 /// into it.</summary>
@@ -167,6 +120,23 @@ public sealed partial record ProbeKindManifest(
     [JsonIgnore]
     public string Directory { get; private init; } = "";
 
+    /// <summary>Returns where the build wrote one kernel entry point's Direct3D 11 compute bytecode: beside the kernel
+    /// source, as <c>&lt;source stem&gt;.&lt;entry&gt;.dxbc</c>, the name the shared shader recipe's
+    /// <c>CompileDirect3D11Kernels</c> target writes. A build off Windows writes none.</summary>
+    /// <param name="entry">The entry point, <see cref="ProbeKindKernel.Accumulate"/> or
+    /// <see cref="ProbeKindKernel.Finalize"/>.</param>
+    /// <returns>The path.</returns>
+    /// <exception cref="InvalidOperationException">The kind declares no kernel.</exception>
+    public string KernelBytecodePath(string entry) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: entry);
+
+        var kernel = (Kernel ?? throw new InvalidOperationException(message: $"probe kind '{Name}' declares no kernel."));
+
+        return Path.Combine(
+            path1: Directory,
+            path2: $"{Path.GetFileNameWithoutExtension(path: kernel.Source)}.{entry}.dxbc"
+        );
+    }
     /// <summary>Reads, parses, and validates a manifest file: the <c>$schema</c> tag, the name against the file
     /// stem, the channel list (non-empty, at most <see cref="MaxChannels"/>, unique names, each neutral inside its
     /// own range), a kernel-class kind's kernel block and source file, and the config schema.</summary>
@@ -364,6 +334,37 @@ public sealed partial record ProbeKindManifest(
     /// 16, so <see cref="ConstantsBlock"/> pads the packed fields up to it.</summary>
     public const int ConstantsBlockAlignment = 16;
 
+    /// <summary>Computes each field's byte offset under HLSL constant-buffer packing, the rule a kernel's hand-declared
+    /// <c>cbuffer</c> follows: fields are laid out in declaration order, every field starts on a 4-byte boundary, and a
+    /// vector that would straddle a 16-byte boundary is bumped to the next 16-byte row. There is no other padding, and
+    /// the block's size is the end of its last field.</summary>
+    /// <param name="types">The field types, in declaration order.</param>
+    /// <param name="sizeBytes">The block's byte size.</param>
+    /// <returns>One byte offset per field.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="types"/> is <see langword="null"/>.</exception>
+    public static uint[] ConstantOffsets(IReadOnlyList<ShaderValueType> types, out uint sizeBytes) {
+        ArgumentNullException.ThrowIfNull(argument: types);
+
+        const uint RowBytes = 16;
+        var offsets = new uint[types.Count];
+        var end = 0u;
+
+        for (var index = 0; (index < types.Count); index++) {
+            var size = types[index].SizeBytes();
+            var offset = end;
+
+            if (((offset % RowBytes) + size) > RowBytes) {
+                offset = ((((offset + RowBytes) - 1) / RowBytes) * RowBytes);
+            }
+
+            offsets[index] = offset;
+            end = (offset + size);
+        }
+
+        sizeBytes = end;
+
+        return offsets;
+    }
     /// <summary>Finds where one config field sits inside <see cref="ConstantsBlock"/>'s packed bytes.</summary>
     /// <param name="field">The config field name.</param>
     /// <param name="offset">The field's byte offset, set only when this returns <see langword="true"/>.</param>
@@ -385,7 +386,7 @@ public sealed partial record ProbeKindManifest(
             index++;
         }
 
-        var offsets = ShaderPushConstantLayout.ComputeOffsets(
+        var offsets = ConstantOffsets(
             sizeBytes: out _,
             types: types
         );
@@ -413,9 +414,8 @@ public sealed partial record ProbeKindManifest(
         return false;
     }
     /// <summary>Packs bound config values into the kernel's constant-buffer bytes, in <see cref="Config"/>'s
-    /// declaration order under the same packing rule as a shader set's push-constant block
-    /// (<see cref="ShaderPushConstantLayout.ComputeOffsets"/>), then pads the block to a multiple of
-    /// <see cref="ConstantsBlockAlignment"/>.</summary>
+    /// declaration order under HLSL constant-buffer packing (<see cref="ConstantOffsets"/>), then pads the block to a
+    /// multiple of <see cref="ConstantsBlockAlignment"/>.</summary>
     /// <param name="values">This kind's bound config (<see cref="BindConfig"/>).</param>
     /// <returns>The packed bytes; empty when the kind takes no configuration.</returns>
     public ReadOnlyMemory<byte> ConstantsBlock(ShaderConfigValues values) {
@@ -433,11 +433,11 @@ public sealed partial record ProbeKindManifest(
             index++;
         }
 
-        var offsets = ShaderPushConstantLayout.ComputeOffsets(
+        var offsets = ConstantOffsets(
             sizeBytes: out var sizeBytes,
             types: types
         );
-        var paddedSize = (((((int)sizeBytes) + (ConstantsBlockAlignment - 1)) / ConstantsBlockAlignment) * ConstantsBlockAlignment);
+        var paddedSize = ((int)sizeBytes).AlignUp(alignment: ConstantsBlockAlignment);
         var block = new byte[paddedSize];
 
         index = 0;

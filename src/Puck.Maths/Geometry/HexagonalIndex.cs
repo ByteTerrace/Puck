@@ -32,10 +32,9 @@ public readonly record struct HexagonalIndex
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> lies outside the admitted index range.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public HexagonalIndex(long value) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: value);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: value,
-            other: MaxValue
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: MaxValue,
+            value: value
         );
         Value = value;
     }
@@ -115,18 +114,21 @@ public readonly record struct HexagonalIndex
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static long RingStart(long radius) => (1 + ((3 * radius) * (radius - 1)));
-
-    /// <summary>Reflects across the real axis, directly on the ring offset: Eisenstein conjugation <c>(Q, R) → (Q − R, −R)</c>.</summary>
-    /// <returns>The reflected cell. Two reflections are the identity.</returns>
-    public HexagonalIndex Conjugate() {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private HexagonalIndex Reflect(long multiplier) {
         if (Value == 0) { return this; }
         var (radius, offset) = Locate(value: Value);
-        var reflected = ((2 * (radius - 1)) - offset);
+        var reflected = (((multiplier * radius) - 2) - offset);
 
         if (reflected < 0) { reflected += (6 * radius); }
 
         return new(value: (RingStart(radius: radius) + reflected));
     }
+
+    /// <summary>Reflects across the real axis, directly on the ring offset: Eisenstein conjugation <c>(Q, R) → (Q − R, −R)</c>.</summary>
+    /// <returns>The reflected cell. Two reflections are the identity.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public HexagonalIndex Conjugate() => Reflect(multiplier: 2);
     /// <summary>Computes the exact hex-grid distance between two encoded cells.</summary>
     /// <param name="left">The first cell.</param>
     /// <param name="right">The second cell.</param>
@@ -193,6 +195,36 @@ public readonly record struct HexagonalIndex
 
         return new(value: (RingStart(radius: radius) + rotated));
     }
+
+    internal static (long ScaledRadius, long ScaledOffset) ScaleRing(
+        int factor,
+        int fullTurnMultiplier,
+        int halfTurnMultiplier,
+        long maxRadius,
+        long offset,
+        string overflowMessage,
+        long radius
+    ) {
+        var magnitude = Math.Abs(value: ((long)factor));
+        var scaledRadius = (radius * magnitude);
+
+        if (scaledRadius > maxRadius) {
+            throw new OverflowException(message: overflowMessage);
+        }
+
+        var scaledOffset = ((magnitude * (offset + 1)) - 1);
+
+        if (factor < 0) {
+            scaledOffset += (halfTurnMultiplier * scaledRadius);
+
+            if (scaledOffset >= (fullTurnMultiplier * scaledRadius)) {
+                scaledOffset -= (fullTurnMultiplier * scaledRadius);
+            }
+        }
+
+        return (scaledRadius, scaledOffset);
+    }
+
     /// <summary>Multiplies both coordinates by a signed integer directly on the ring and offset.</summary>
     /// <param name="factor">The scale; negative values also apply a half-turn.</param>
     /// <returns>The scaled cell. Zero maps every cell to the origin.</returns>
@@ -203,30 +235,24 @@ public readonly record struct HexagonalIndex
             (Value == 0) ||
             (factor == 0)
         ) { return default; }
+
         var (radius, offset) = Locate(value: Value);
-        var magnitude = Math.Abs(value: ((long)factor));
-        var scaledRadius = (radius * magnitude);
+        var (scaledRadius, scaledOffset) = ScaleRing(
+            factor: factor,
+            fullTurnMultiplier: 6,
+            halfTurnMultiplier: 3,
+            maxRadius: MaxRadius,
+            offset: offset,
+            overflowMessage: "The scaled cell lies outside the complete-ring index domain.",
+            radius: radius
+        );
 
-        if (scaledRadius > MaxRadius) { throw new OverflowException(message: "The scaled cell lies outside the complete-ring index domain."); }
-        var scaledOffset = ((magnitude * (offset + 1)) - 1);
-
-        if (factor < 0) {
-            scaledOffset += (3 * scaledRadius);
-            if (scaledOffset >= (6 * scaledRadius)) { scaledOffset -= (6 * scaledRadius); }
-        }
         return new(value: (RingStart(radius: scaledRadius) + scaledOffset));
     }
     /// <summary>Exchanges Q and R directly on the ring offset.</summary>
     /// <returns>The reflected cell; exchanging twice is the identity.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public HexagonalIndex Swap() {
-        if (Value == 0) { return this; }
-        var (radius, offset) = Locate(value: Value);
-        var reflected = (((4 * radius) - 2) - offset);
-
-        if (reflected < 0) { reflected += (6 * radius); }
-        return new(value: (RingStart(radius: radius) + reflected));
-    }
+    public HexagonalIndex Swap() => Reflect(multiplier: 4);
     /// <summary>Decodes this index to the Eisenstein coordinate used by <see cref="HexagonalCoordinate"/>.</summary>
     /// <returns>The cell's exact integer coordinate.</returns>
     public HexagonalCoordinate ToCoordinate() {

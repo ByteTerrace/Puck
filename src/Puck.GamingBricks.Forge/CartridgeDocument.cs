@@ -330,7 +330,7 @@ public sealed record CartridgeTarget(string State, string? Key = null);
 /// <param name="Kind">set, if, repeat, break, map, blit, save, load, play, stop, clock or fade.</param>
 /// <param name="Target">For set: the destination slot or array element.</param>
 /// <param name="Operation">For set: how the value combines with the destination's current contents, named from the
-/// engine's opcode vocabulary (<see cref="ExpressionOp"/>) — Add, Subtract, Multiply, Divide, Modulo, BitAnd, BitOr,
+/// engine's opcode vocabulary (<see cref="ExpressionOp"/>) — Add, Subtract, Multiply, Divide, Remainder, BitAnd, BitOr,
 /// BitXor, ShiftLeft or ShiftRight. Absent replaces the destination outright, which is what "set" means and what no
 /// opcode spells. <see cref="CartridgeOperations.Combines"/> is the admitted subset.</param>
 /// <param name="Value">For set: the source expression, evaluated when the step executes.</param>

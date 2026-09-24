@@ -12,7 +12,7 @@ namespace Puck.Commands;
 /// thread and submits each non-blank line, surfacing the line and its <see cref="CommandResult"/>
 /// through its session's result callback. The queue is thread-safe, so background producers may enqueue while the
 /// frame thread collects.
-/// <para><see cref="Enqueue"/> uses the administrative <see cref="CommandPrincipal.Console"/> session. A host can
+/// <para><see cref="Enqueue"/> uses the administrative <see cref="Principal.Console"/> session. A host can
 /// mint a seat-bound ingress with <see cref="CreateSeatSession"/>; callers can submit through it but cannot alter its
 /// fixed principal or slot.</para>
 /// </remarks>
@@ -145,13 +145,50 @@ public sealed class TextCommandSource : ITextCommandSink {
             }
         }
     }
+
+    /// <summary>Gets a value indicating whether the administrative session can make no further progress until a fixed
+    /// step runs: its own hold stands (a tick wait), or its next queued line is held behind a Simulation submission
+    /// only a step applies. Because the session is FIFO, every line queued ahead of that point has already run.</summary>
+    /// <remarks>Read on the thread that calls <see cref="Collect"/>, after the drain.</remarks>
+    public bool AdministrativeSessionAwaitsStep {
+        get {
+            var session = m_administrativeSession;
+
+            if (session.IsHolding()) {
+                return true;
+            }
+
+            if (
+                !session.HasPendingSimulationSubmission ||
+                !session.TryPeekPending(work: out var work) ||
+                (work is null) ||
+                work.IsTerminal
+            ) {
+                return false;
+            }
+
+            if (work.Line is not { } line) {
+                return true;
+            }
+
+            var content = line.AsSpan().TrimStart();
+
+            // A comment drains at once, and a further Simulation line joins the pending snapshot: neither waits.
+            return (
+                !content.IsEmpty &&
+                (content[0] != '#') &&
+                (session.SettlesResults || !m_registry.RoutesToSimulation(line: line))
+            );
+        }
+    }
+
     /// <summary>Creates a seat-authenticated text session over this source's shared queue and registry.</summary>
     /// <param name="router">The input router that mints the session's fixed simulation ingress.</param>
     /// <param name="slot">The local seat slot.</param>
     /// <param name="onResult">An optional callback for synchronous results produced by this session.</param>
     /// <param name="dueNextTick">Whether a simulation-routed line is due in the next tick that snapshots input
     /// rather than at the capture clock's now (<see cref="TextCommandSession.DueNextTick"/>).</param>
-    /// <returns>A text sink permanently stamped as <see cref="CommandPrincipal.Seat"/> for <paramref name="slot"/>.</returns>
+    /// <returns>A text sink permanently stamped as <see cref="Principal.Seat"/> for <paramref name="slot"/>.</returns>
     public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null, bool dueNextTick = false) {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
@@ -169,7 +206,7 @@ public sealed class TextCommandSource : ITextCommandSink {
         return CreateSession(
             dueNextTick: dueNextTick,
             onResult: onResult,
-            principal: CommandPrincipal.Seat(slot: slot),
+            principal: Principal.Seat(slot: slot),
             simulationSink: router.CreateSeatTextSink(slot: slot),
             slot: slot
         );
@@ -198,7 +235,7 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// handler started (<see cref="CommandResult.Settlement"/>). A line refused at submission settles with that
     /// refusal. A session that settles results holds its next line until the line before it has settled; one that
     /// passes <see langword="null"/> keeps submit-time ordering.</param>
-    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null, bool dueNextTick = false, Action<string, CommandResult>? onSettled = null) {
+    public TextCommandSession CreateSession(Principal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null, bool dueNextTick = false, Action<string, CommandResult>? onSettled = null) {
         return new TextCommandSession(
             authorize: authorize,
             dueNextTick: dueNextTick,
@@ -246,12 +283,16 @@ public sealed class TextCommandSource : ITextCommandSink {
         ArgumentNullException.ThrowIfNull(registry);
 
         m_registry = registry;
+        // The administrative session is the piped-script ingress, so its simulation-routed lines are due in the next
+        // step that snapshots input: a line released between two steps of a catch-up burst lands in the step right
+        // after, not in whichever later step the wall-clock capture stamp first falls inside.
         m_administrativeSession = new TextCommandSession(
-            source: this,
-            principal: CommandPrincipal.Console,
-            slot: 0,
+            dueNextTick: true,
+            onResult: onResult,
+            principal: Principal.Console,
             simulationSink: null,
-            onResult: onResult
+            slot: 0,
+            source: this
         );
     }
 }

@@ -333,9 +333,9 @@ public sealed class WorldBodyFactOperand : WorldFactOperand {
         return m_read(arg: facet);
     }
 }
-/// <summary>One fact on the identity a body drives under, read from the body's lane cell in the world's reserved
-/// <see cref="WorldIdentityFactLane"/> row (<see cref="WorldRuleFacts.IdentityPrefix"/>); a body driving under no
-/// identity, or a fact the identity never wrote, reads 0.</summary>
+/// <summary>One fact on the identity a body drives under: the live value, at the evaluation's time, of the body's lane
+/// cell in the world's reserved <see cref="WorldIdentityFactLane"/> row (<see cref="WorldRuleFacts.IdentityPrefix"/>);
+/// a body driving under no identity, or a fact the identity never wrote, reads 0.</summary>
 public sealed class WorldIdentityFactOperand : WorldFactOperand {
     private readonly CompiledBodyRef m_body;
     private readonly CellKey[] m_laneKeys;
@@ -363,7 +363,7 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
     private CellKey LaneKey(StateArena arena, int bodyIndex) {
         var keys = arena.Keys;
 
-        if (!ReferenceEquals(m_laneKeyTable, keys)) {
+        if (!ReferenceEquals(objA: m_laneKeyTable, objB: keys)) {
             Array.Clear(array: m_laneKeys);
             m_laneKeyTable = keys;
         }
@@ -423,13 +423,15 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
             bodyIndex: index,
             arena: reader.Arena
         );
+        var time = reader.Time;
 
         return RuleFact.Finite(
             kind: CellKind.Int,
-            value: ((key.IsValid && reader.Arena.TryReadRaw(
+            value: ((key.IsValid && reader.Arena.TryReadLiveNumber(
                 key: key,
-                raw: out var value,
-                rowOrdinal: LaneOrdinal
+                rowOrdinal: LaneOrdinal,
+                time: in time,
+                value: out var value
             ))
             ? value
             : 0L)

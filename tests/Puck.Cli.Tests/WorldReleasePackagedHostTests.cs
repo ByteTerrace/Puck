@@ -15,9 +15,9 @@ namespace Puck.Cli.Tests;
 public sealed class WorldReleasePackagedHostTests {
     private static Task<string> DockerAsync(IReadOnlyList<string> arguments, CancellationToken token) =>
         CliProcess.RunCheckedAsync(
-            Environment.CurrentDirectory,
-            "docker",
-            arguments,
+            workingDirectory: Environment.CurrentDirectory,
+            fileName: "docker",
+            arguments: arguments,
             capture: true,
             cancellationToken: token
         );
@@ -53,13 +53,10 @@ public sealed class WorldReleasePackagedHostTests {
     [Theory]
     [Trait("Category", "Docker")]
     public async Task PackagedHostLoadsMachinesAndConfiguredServices(string entryPoint) {
-        var image = Environment.GetEnvironmentVariable(variable: "PUCK_TEST_WORLD_IMAGE");
+        var token = TestContext.Current.CancellationToken;
 
-        if (image is null) { Assert.Skip(reason: "Set PUCK_TEST_WORLD_IMAGE to the candidate silo image."); return; }
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        deadline.CancelAfter(delay: TimeSpan.FromMinutes(minutes: 2));
-        var token = deadline.Token;
+        if (await CandidateWorldImage.TryResolveIdAsync(cancellationToken: token) is null) { Assert.Skip(reason: $"Build the candidate silo image as {CandidateWorldImage.Tag} to run this law."); return; }
+        var image = CandidateWorldImage.Tag;
         var temporary = Directory.CreateTempSubdirectory(prefix: "puck-packaged-host-");
         var container = ("puck-packaged-host-" + Guid.NewGuid().ToString(format: "N"));
         var started = false;
@@ -86,7 +83,7 @@ public sealed class WorldReleasePackagedHostTests {
                     new WorldMachine(
                         "cgb",
                         "gaming-brick",
-                        JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = "../cartridges/tetris.cgb.cartridge.json" } })
+                        JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = "../cartridges/tetromino.cgb.cartridge.json" } })
                     ),
                     new WorldMachine(
                         "agb",
@@ -119,6 +116,7 @@ public sealed class WorldReleasePackagedHostTests {
                 token: token
             ))![0]!["Id"]!.GetValue<string>();
             var release = new WorldReleaseManifest {
+                CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
                 Label = "packaged-host",
                 SourceRevision = "test",
                 EngineImageDigest = digest,
@@ -147,11 +145,11 @@ public sealed class WorldReleasePackagedHostTests {
                     target: remote
                 )
             ).BuildAsync(
-                release,
-                owner,
-                null,
-                fixture,
-                token
+                directory: fixture,
+                owner: owner,
+                release: release,
+                snapshot: null,
+                token: token
             );
             var config = JsonNode.Parse(File.ReadAllBytes(path: Path.Combine(
                 path1: fixture,
@@ -211,24 +209,18 @@ public sealed class WorldReleasePackagedHostTests {
             );
             started = true;
             if (entryPoint == "silo-mcp-conflict") {
-                while ((await DockerAsync(
-                    arguments: ["inspect", "--format", "{{.State.Running}}", container],
-                    token: token
-                )).Trim() == "true") {
-                    await Task.Delay(
-                        cancellationToken: token,
-                        millisecondsDelay: 200
-                    );
-                }
+                // docker wait returns when the container stops and prints its exit code.
                 Assert.NotEqual(
                     "0",
                     (await DockerAsync(
-                        arguments: ["inspect", "--format", "{{.State.ExitCode}}", container],
+                        arguments: ["wait", container],
                         token: token
                     )).Trim()
                 );
                 return;
             }
+            // The host publishes readiness only on its health endpoint, so the first 200 it answers is the signal; the
+            // container must keep running while it is awaited.
             while (true) {
                 Assert.Equal(
                     "true",
@@ -298,16 +290,15 @@ public sealed class WorldReleasePackagedHostTests {
                 )).Trim()
             );
         } finally {
-            using var cleanup = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 30));
-
+            // Removal runs even when the test was cancelled, or the detached container would outlive the run.
             if (started) {
                 TestContext.Current.TestOutputHelper?.WriteLine(message: await DockerAsync(
                     arguments: ["logs", container],
-                    token: cleanup.Token
+                    token: CancellationToken.None
                 ));
                 await DockerAsync(
                     arguments: ["rm", "--force", container],
-                    token: cleanup.Token
+                    token: CancellationToken.None
                 );
             }
             temporary.Delete(recursive: true);

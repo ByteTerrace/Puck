@@ -4,7 +4,6 @@
   "binding": "The positive leg boots a four-cell lattice whose only row carries a draw paint fill from an inline weightedNumeric source in restartOnExhaustion mode with three outcomes totalling four units (0.25 with multiplicity two, 0.5, 1.0). world.fields reads nonzero=4 mean=0.5 at boot: every cell painted and the mean exactly (0.25+0.25+0.5+1.0)/4, which only a pass drawing each unit once can produce. world.state shows the row's pass at cursor=0 masks=none; each world.generate advances the pass by the cell count (cursor 4 then 8) with the four-unit mask fully drawn (masks=0xF) and the field repainted to the same exact mean. The discriminating leg boots the same lattice with no draw fill: the field stays at nonzero=0 mean=0, no pass reads back, and both generates are refused by name as a lattice row with no draw paint.",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 5,
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {

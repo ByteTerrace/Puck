@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Puck.SignedDistance;
 
@@ -80,8 +81,8 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>The largest exponent a <see cref="Superellipsoid"/> admits — see its own remarks for the 1-Lipschitz
     /// proof this interval is sized to.</summary>
     public const float MaxSuperellipsoidExponent = 8f;
-    /// <summary>The smallest exponent a <see cref="Superellipsoid"/> admits — the ellipsoid limit; see its own
-    /// remarks for the 1-Lipschitz proof this interval is sized to.</summary>
+    /// <summary>The smallest exponent a <see cref="Superellipsoid"/> admits — the ellipsoid itself, the exponent every
+    /// ellipsoid in the ISA is emitted at; see its own remarks for the 1-Lipschitz proof this interval is sized to.</summary>
     public const float MinSuperellipsoidExponent = 2f;
     /// <summary>The most screen surfaces one program may declare (matches <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract separate from the
@@ -387,53 +388,55 @@ public sealed partial class SdfProgramBuilder {
     // mistake. Each enum here is a contiguous uint range starting at 0 (KEEP IN SYNC with its own file), so a single
     // upper-bound compare is the whole defined-set test — cheaper than Enum.IsDefined's reflection lookup and exact
     // for a contiguous enum.
+    private static void RequireDefined<TEnum>(TEnum value, TEnum maximum, string paramName) where TEnum : struct, Enum {
+        var rawValue = Unsafe.As<TEnum, uint>(source: ref value);
+        var rawMaximum = Unsafe.As<TEnum, uint>(source: ref maximum);
+
+        if (rawValue > rawMaximum) {
+            RequirePackedEnumValue(
+                actualValue: value,
+                enumName: typeof(TEnum).Name,
+                maximum: rawMaximum,
+                paramName: paramName,
+                value: rawValue
+            );
+        }
+    }
     private static void RequireDefined(SdfBlendOp value, string paramName) =>
-        RequirePackedEnumValue(
-            value: ((uint)value),
-            maximum: ((uint)SdfBlendOp.StairsSubtraction),
-            actualValue: value,
-            enumName: nameof(SdfBlendOp),
-            paramName: paramName
+        RequireDefined(
+            maximum: SdfBlendOp.StairsSubtraction,
+            paramName: paramName,
+            value: value
         );
     private static void RequireDefined(SdfPolarAxis value, string paramName) =>
-        RequirePackedEnumValue(
-            value: ((uint)value),
-            maximum: ((uint)SdfPolarAxis.Z),
-            actualValue: value,
-            enumName: nameof(SdfPolarAxis),
-            paramName: paramName
+        RequireDefined(
+            maximum: SdfPolarAxis.Z,
+            paramName: paramName,
+            value: value
         );
     private static void RequireDefined(SdfNoiseFlavor value, string paramName) =>
-        RequirePackedEnumValue(
-            value: ((uint)value),
-            maximum: ((uint)SdfNoiseFlavor.Gaussian),
-            actualValue: value,
-            enumName: nameof(SdfNoiseFlavor),
-            paramName: paramName
+        RequireDefined(
+            maximum: SdfNoiseFlavor.Gaussian,
+            paramName: paramName,
+            value: value
         );
     private static void RequireDefined(SdfWallpaperGroup value, string paramName) =>
-        RequirePackedEnumValue(
-            value: ((uint)value),
-            maximum: ((uint)SdfWallpaperGroup.P6M),
-            actualValue: value,
-            enumName: nameof(SdfWallpaperGroup),
-            paramName: paramName
+        RequireDefined(
+            maximum: SdfWallpaperGroup.P6M,
+            paramName: paramName,
+            value: value
         );
     private static void RequireDefined(SdfWallpaperPlane value, string paramName) =>
-        RequirePackedEnumValue(
-            value: ((uint)value),
-            maximum: ((uint)SdfWallpaperPlane.YZ),
-            actualValue: value,
-            enumName: nameof(SdfWallpaperPlane),
-            paramName: paramName
+        RequireDefined(
+            maximum: SdfWallpaperPlane.YZ,
+            paramName: paramName,
+            value: value
         );
     private static void RequireDefined(SdfLift value, string paramName) =>
-        RequirePackedEnumValue(
-            value: ((uint)value),
-            maximum: ((uint)SdfLift.Extrude),
-            actualValue: value,
-            enumName: nameof(SdfLift),
-            paramName: paramName
+        RequireDefined(
+            maximum: SdfLift.Extrude,
+            paramName: paramName,
+            value: value
         );
     // A direction the builder NORMALIZES host-side: a zero-length (or underflowing) vector divides by zero and packs
     // NaN into the lane the shader trusts to be a unit vector, so the normalized result is what has to be finite.
@@ -477,11 +480,7 @@ public sealed partial class SdfProgramBuilder {
         }
     }
     private static void RequireFinite(Vector3 value, string paramName, string subject) {
-        if (
-            !float.IsFinite(f: value.X) ||
-            !float.IsFinite(f: value.Y) ||
-            !float.IsFinite(f: value.Z)
-        ) {
+        if (!Puck.Maths.VectorFunctions.IsFinite(vector: value)) {
             throw new ArgumentOutOfRangeException(
                 message: $"{subject} must be finite on every component.",
                 paramName: paramName

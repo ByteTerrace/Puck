@@ -1,4 +1,4 @@
-using Puck.Testing;
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -62,8 +62,8 @@ public sealed class ArenaScratchLawTests {
         });
 
         Assert.Equal(
-            0L,
-            before
+            actual: before,
+            expected: 0L
         );
     }
     [Fact]

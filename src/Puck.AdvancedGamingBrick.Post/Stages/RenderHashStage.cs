@@ -39,6 +39,9 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
     }
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "render-hash";
     /// <inheritdoc/>

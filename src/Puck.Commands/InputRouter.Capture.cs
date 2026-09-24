@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Commands;
 
 // The capture half of the router: the two ingress queues, their bounds, and the drain that turns them into one
@@ -236,11 +238,11 @@ public sealed partial class InputRouter {
         }
     }
     private static int CompareCaptureOrder(ulong leftTick, ulong leftSequence, ulong rightTick, ulong rightSequence) {
-        var byTime = leftTick.CompareTo(value: rightTick);
-
-        return ((byTime != 0)
-            ? byTime
-            : leftSequence.CompareTo(value: rightSequence)
+        return LexicographicOrder.Compare(
+            leftPrimary: leftTick,
+            leftSecondary: leftSequence,
+            rightPrimary: rightTick,
+            rightSecondary: rightSequence
         );
     }
     private void DrainDue(ulong windowEndTick) {

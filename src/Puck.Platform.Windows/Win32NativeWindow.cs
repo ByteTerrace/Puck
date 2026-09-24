@@ -1095,8 +1095,8 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 var virtualDesktop = ((mouse.Flags & RiMouseVirtualDesktop) != 0);
 
                 state.PendingDelta += new Vector2(
-                    (((mouse.LastX - previousX) / 65535f) * User32.GetSystemMetrics((virtualDesktop ? SmCxVirtualScreen : SmCxScreen))),
-                    (((mouse.LastY - previousY) / 65535f) * User32.GetSystemMetrics((virtualDesktop ? SmCyVirtualScreen : SmCyScreen)))
+                    x: (((mouse.LastX - previousX) / 65535f) * User32.GetSystemMetrics(index: (virtualDesktop ? SmCxVirtualScreen : SmCxScreen))),
+                    y: (((mouse.LastY - previousY) / 65535f) * User32.GetSystemMetrics(index: (virtualDesktop ? SmCyVirtualScreen : SmCyScreen)))
                 );
             }
 

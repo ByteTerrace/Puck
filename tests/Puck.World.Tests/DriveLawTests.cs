@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using System.Globalization;
@@ -455,7 +456,7 @@ public sealed class DriveLawTests {
     // their own clamp by the last tick.
     private static FixedQ4816 SaturatedDrivePitch(WorldDefinition definition) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -510,7 +511,7 @@ public sealed class DriveLawTests {
     ];
     private static string[] Trace(WorldDefinition definition) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

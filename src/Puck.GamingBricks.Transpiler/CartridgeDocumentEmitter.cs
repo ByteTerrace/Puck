@@ -19,20 +19,11 @@ public static class CartridgeDocumentEmitter {
         ["-"] = nameof(ExpressionOp.Subtract),
         ["*"] = nameof(ExpressionOp.Multiply),
         ["/"] = nameof(ExpressionOp.Divide),
-        ["%"] = nameof(ExpressionOp.Modulo),
+        ["%"] = nameof(ExpressionOp.Remainder),
         ["^"] = nameof(ExpressionOp.BitXor),
         ["|"] = nameof(ExpressionOp.BitOr),
         ["<<"] = nameof(ExpressionOp.ShiftLeft),
         [">>"] = nameof(ExpressionOp.ShiftRight),
-    };
-    // The infix comparators, and the engine comparison each stands for.
-    private static readonly Dictionary<string, string> Comparisons = new(comparer: StringComparer.Ordinal) {
-        ["=="] = nameof(ActionStateComparison.Equal),
-        ["!="] = nameof(ActionStateComparison.NotEqual),
-        ["<"] = nameof(ActionStateComparison.Less),
-        ["<="] = nameof(ActionStateComparison.LessOrEqual),
-        [">"] = nameof(ActionStateComparison.Greater),
-        [">="] = nameof(ActionStateComparison.GreaterOrEqual),
     };
     // Which call-form action arguments carry an expression rather than a plain string. A field named here is
     // converted; everything else is written through as the lowered value.
@@ -213,9 +204,12 @@ public static class CartridgeDocumentEmitter {
     private static JsonArray LowerActions(IReadOnlyList<StatementNode> statements, DocumentScope scope) {
         var arr = new JsonArray();
 
-        foreach (var statement in statements) {
+        foreach (var (statement, iteration) in DocumentLowering.ExpandBody(
+            scope: scope,
+            statements: statements
+        )) {
             if (LowerAction(
-                scope: scope,
+                scope: iteration,
                 statement: statement
             ) is { } action) {
                 arr.AppendNode(item: action);
@@ -342,10 +336,20 @@ public static class CartridgeDocumentEmitter {
         var positionalIndex = 0;
 
         foreach (var argument in call.Arguments) {
-            var key = (argument.Name ?? (CartridgeVocabulary.Instance.NameCallArgument(
+            // A positional argument takes the member name the vocabulary gives its position; a position the
+            // vocabulary names nothing for is refused rather than given a made-up member.
+            if ((argument.Name ?? CartridgeVocabulary.Instance.NameCallArgument(
                 callName: call.Name,
                 positionalIndex: positionalIndex
-            ) ?? $"arg{positionalIndex}"));
+            )) is not { } key) {
+                Refuse(
+                    scope: scope,
+                    span: argument.Value.Span,
+                    message: $"'{call.Name}' names no positional argument {(positionalIndex + 1)}; write that argument by its member name"
+                );
+
+                return null;
+            }
 
             if (OperandArguments.Contains(item: key)) {
                 var operand = CartridgeOperand.FromExpression(
@@ -410,9 +414,9 @@ public static class CartridgeDocumentEmitter {
                 }
 
             case ComparisonPredicateNode comparison: {
-                    if (!Comparisons.TryGetValue(
-                        key: comparison.Comparator,
-                        value: out var spelling
+                    if (!ExpressionComparisons.TryParseSymbol(
+                        comparison: out var parsedComparison,
+                        symbol: comparison.Comparator
                     )) {
                         Refuse(
                             scope: scope,
@@ -448,7 +452,7 @@ public static class CartridgeDocumentEmitter {
                     }
 
                     return Compare(
-                        comparison: spelling,
+                        comparison: Enum.GetName(value: parsedComparison)!,
                         left: left,
                         right: right
                     );
@@ -470,7 +474,7 @@ public static class CartridgeDocumentEmitter {
 
                     return Compare(
                         left: JsonValue.Create(value: $"{CartridgeExpressions.KeyPrefix}{button}:{mode}"),
-                        comparison: nameof(ActionStateComparison.Equal),
+                        comparison: nameof(ExpressionOp.Equal),
                         right: JsonValue.Create(value: "1")
                     );
                 }
@@ -489,18 +493,21 @@ public static class CartridgeDocumentEmitter {
         JsonNode? conditions = null;
         var body = new JsonArray();
 
-        foreach (var statement in rule.Statements) {
+        foreach (var (statement, iteration) in DocumentLowering.ExpandBody(
+            scope: scope,
+            statements: rule.Statements
+        )) {
             if (statement is WhenStatementNode gate) {
                 conditions = LowerGate(
                     predicate: gate.Predicate,
-                    scope: scope
+                    scope: iteration
                 );
 
                 continue;
             }
 
             if (LowerAction(
-                scope: scope,
+                scope: iteration,
                 statement: statement
             ) is { } action) {
                 body.AppendNode(item: action);

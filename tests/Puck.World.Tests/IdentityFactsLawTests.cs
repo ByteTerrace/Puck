@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Abstractions.Counting;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -15,7 +17,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
     private const string Fact = "dived";
     private const int LaneCapacity = 16;
 
-    private static readonly WorldPrincipal Seat = WorldPrincipal.Seat(slot: 0);
+    private static readonly Principal Seat = Principal.Seat(slot: 0);
 
     [Fact]
     public void EffectWritesLaneAndPersistedRowTogether_LaneZeroesWhenSeatLeaves() {
@@ -218,6 +220,97 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         ));
     }
     [Fact]
+    public void ATraitedLaneIsRefusedByNameAtBothDoors() {
+        var advance = new StateAdvance(
+            PerSecondDenominator: 1L,
+            PerSecondNumerator: 60L
+        );
+        var lanes = new (WorldStateRow Lane, string Trait)[] {
+            (LaneRow() with { Advance = advance }, "advance"),
+            (LaneRow() with {
+                Cells = [new StateCell(
+                    Advance: advance,
+                    Key: CellName.Parse(candidate: WorldIdentityFactLane.Key(
+                        bodyIndex: 0,
+                        fact: Fact
+                    )),
+                    Value: CellValue.Int(value: 0L)
+                )],
+            }, $"cells['0{WorldIdentityFactLane.Separator}{Fact}'].advance"),
+        };
+
+        foreach (var (lane, trait) in lanes) {
+            foreach (var rule in new[] { WriteRule(), ReadRule() }) {
+                var definition = Fixtures.BuildDocument() with {
+                    StateRaw = new WorldStateSection(World: [lane, IntSlot(name: "seen")]),
+                    Rules = [rule],
+                };
+
+                Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+                    definition: definition,
+                    reason: out var reason
+                ));
+                Assert.Contains(
+                    actualString: reason,
+                    expectedSubstring: $"'{WorldIdentityFactLane.RowName}' is the reserved identity fact lane and declares {trait}"
+                );
+
+                var refused = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: definition));
+
+                Assert.Equal(
+                    expected: WorldRuleRefusal.IdentityLaneTraited,
+                    actual: refused.Refusal
+                );
+                Assert.Contains(
+                    actualString: refused.Message,
+                    expectedSubstring: trait
+                );
+            }
+        }
+    }
+    [Fact]
+    public void ARefusedLaneWriteReportsItsOwnReasonNotAMints() {
+        // The lane's envelope stops at 2, so the tick-valued fact lands on the first ticks and is then refused by
+        // the envelope; the cell already exists, so no mint is attempted and none speaks for the refusal.
+        var document = Document(rules: [TickRule()]) with {
+            StateRaw = new WorldStateSection(World: [LaneRow() with { Max = 2L }, IntSlot(name: "seen")]),
+        };
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+
+        Join(
+            fixture: fixture,
+            identity: IdentityName
+        );
+
+        for (var tick = 0; (tick < 4); tick++) {
+            fixture.Step();
+        }
+
+        var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
+
+        Assert.Equal(
+            expected: WorldRuleEffectRefusal.IdentityFactUnwritable,
+            actual: diagnostic.Refusal
+        );
+        Assert.Contains(
+            actualString: diagnostic.Detail,
+            expectedSubstring: "envelope"
+        );
+        Assert.DoesNotContain(
+            actualString: diagnostic.Detail,
+            expectedSubstring: "already holds"
+        );
+        Assert.Equal(
+            expected: 2L,
+            actual: Lane(
+                body: 0,
+                fact: "ticks",
+                fixture: fixture
+            )
+        );
+    }
+    [Fact]
     public void SeatDrivingUnderNoIdentityIsRefusedNotMinted() {
         using var fixture = Fixtures.FreshServer(definition: Document(rules: [WriteRule()]));
 
@@ -362,10 +455,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         var samples = new long[32];
 
         for (var tick = 0; (tick < samples.Length); tick++) {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
-            fixture.Step();
-            samples[tick] = (GC.GetAllocatedBytesForCurrentThread() - before);
+            samples[tick] = AllocationWindow.Total(window: () => fixture.Step());
         }
 
         Array.Sort(array: samples);
@@ -446,7 +536,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             )],
         Gate: new ActionPredicate.CompareState(
             State: WorldRuleFacts.Population,
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: 1m
         ),
         Mode: mode
@@ -459,7 +549,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             )],
         Gate: new ActionPredicate.CompareState(
             State: WorldRuleFacts.Population,
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: 1m
         )
     );
@@ -472,7 +562,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             )],
         Gate: new ActionPredicate.CompareState(
             State: WorldRuleFacts.Population,
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: 1m
         )
     );
@@ -484,7 +574,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             )],
         Gate: new ActionPredicate.CompareState(
             State: WorldRuleFacts.Population,
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: 1m
         )
     );
@@ -496,7 +586,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             )],
         Gate: new ActionPredicate.CompareState(
             State: $"{WorldRuleFacts.IdentityPrefix}body:0:{Fact}",
-            Comparison: ActionStateComparison.Equal,
+            Comparison: ExpressionOp.Equal,
             Value: 1m
         )
     );
@@ -525,7 +615,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
     private static long PersistedFact(string directory, string identity, string fact) {
         var document = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: Path.Combine(
             path1: directory,
-            path2: WorldOwnedWorldFileName.For(id: SafeName.Parse(candidate: identity))
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: identity))
         )));
         var facts = document.Identity!.FactsOrDefault;
         var row = Assert.IsType<WorldStateRow>(@object: WorldDefinitionRows.FindStateRow(

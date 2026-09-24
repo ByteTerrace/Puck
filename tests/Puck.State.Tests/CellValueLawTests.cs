@@ -160,7 +160,6 @@ public sealed class CellValueLawTests {
             actual: restored!.Cells![0].Value
         );
     }
-
     // The authored grammar, per kind: a decimal spelling for Fixed (never its raw bits), true/false for Bool, a
     // plain integer otherwise. Text and vector carry their own payloads, so a numeric token against either is
     // refused by name rather than guessed at. `Raw` hands back the one number the row's column stores.
@@ -185,12 +184,42 @@ public sealed class CellValueLawTests {
             expected: raw
         );
     }
+    [InlineData(CellKind.Int, -17L, -17L)]
+    [InlineData(CellKind.Fixed, 0x0001_8000L, 0x0001_8000L)]
+    [InlineData(CellKind.Bool, 0L, 0L)]
+    [InlineData(CellKind.Bool, -5L, 1L)]
     [Theory]
+    public void ANumericCaseBuiltFromItsStoredNumberReadsThatNumberBack(CellKind kind, long raw, long stored) {
+        var value = CellValue.FromNumber(
+            kind: kind,
+            raw: raw
+        );
+
+        Assert.Equal(
+            actual: value.Kind,
+            expected: kind
+        );
+        Assert.Equal(
+            actual: value.Raw,
+            expected: stored
+        );
+    }
+    [InlineData(CellKind.Text)]
+    [InlineData(CellKind.Vector)]
+    [InlineData(((CellKind)0xFF))]
+    [Theory]
+    public void ACaseWhosePayloadIsNoNumberIsNeverBuiltFromOne(CellKind kind) {
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => CellValue.FromNumber(
+            kind: kind,
+            raw: 1L
+        ));
+    }
     [InlineData(CellKind.Int, "1.5")]
     [InlineData(CellKind.Bool, "1")]
     [InlineData(CellKind.Fixed, "yes")]
     [InlineData(CellKind.Text, "anything")]
     [InlineData(CellKind.Vector, "anything")]
+    [Theory]
     public void ATokenTheRowKindDoesNotSpellIsRefusedByName(CellKind kind, string token) {
         Assert.False(condition: CellValue.TryParse(
             kind: kind,

@@ -16,6 +16,7 @@ public sealed class WorkSheetBoundLawTests {
             multiplier: multiplier,
             rule: rule
         );
+
         var (_, work) = RuleWorkBudget.Tally(
             contributors: [line],
             writers: RuleWorkBudget.CountWriters(rules: [(rule, multiplier)])
@@ -45,6 +46,7 @@ public sealed class WorkSheetBoundLawTests {
                     Name: "unpriced"
                 )],
         });
+
         var (work, _) = Sheet(
             multiplier: 1L,
             rule: unpriced
@@ -67,6 +69,7 @@ public sealed class WorkSheetBoundLawTests {
             row: "score",
             value: 1m
         ));
+
         var (work, _) = Sheet(
             multiplier: long.MaxValue,
             rule: rule
@@ -75,11 +78,11 @@ public sealed class WorkSheetBoundLawTests {
         Assert.True(condition: work.IsOverflow);
         Assert.False(condition: work.Fits(ceiling: long.MaxValue));
     }
-    [Theory]
     [InlineData(0L, 1, 0L)]
     [InlineData(1L, 1, 3L)]
     [InlineData(4L, 1, 30L)]
     [InlineData(5L, 2, 60L)]
+    [Theory]
     public void AnInsertionSortIsPricedAtEveryPairAReversedInputCompares(long count, int keys, long expected) => Assert.Equal(
         RuleWork.Known(units: expected),
         RuleWorkBudget.InsertionSortWork(
@@ -134,17 +137,18 @@ public sealed class WorkSheetBoundLawTests {
                 )]
         )[0].CostBreakdown(context: context).Effects.Units;
 
-        // Both sorts pay the same transaction floor over the same section; they differ by the insertion sort of
-        // each row at its full capacity.
-        Assert.Equal(
-            (RuleWorkBudget.InsertionSortWork(
-                count: 12L,
-                keys: 1
-            ).Units - RuleWorkBudget.InsertionSortWork(
-                count: 4L,
-                keys: 1
-            ).Units),
-            (Sorting(row: "pile") - Sorting(row: "heap"))
-        );
+        // Both sorts pay the same fixed door; each row's own capacity sizes the rest, and the insertion sort at that
+        // capacity is part of it, so the wider row costs at least the difference of the two sorts more.
+        Assert.True(condition: (Sorting(row: "heap") >= RuleWorkBudget.InsertionSortWork(
+            count: 4L,
+            keys: 1
+        ).Units));
+        Assert.True(condition: ((Sorting(row: "pile") - Sorting(row: "heap")) >= (RuleWorkBudget.InsertionSortWork(
+            count: 12L,
+            keys: 1
+        ).Units - RuleWorkBudget.InsertionSortWork(
+            count: 4L,
+            keys: 1
+        ).Units)));
     }
 }

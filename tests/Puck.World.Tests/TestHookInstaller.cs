@@ -12,13 +12,10 @@ namespace Puck.World.Tests;
 /// rather than a stand-in that could drift from them.
 /// </summary>
 internal static class TestHookInstaller {
-    internal static WorldMachineCatalog CreateMachineCatalog() {
-        var registry = new WorldMachineExtensionRegistry();
-
-        new HumbleGamingBrickExtension().Initialize(registry: registry);
-        new AdvancedGamingBrickExtension().Initialize(registry: registry);
-        return registry.Build();
-    }
+    internal static WorldMachineCatalog CreateMachineCatalog() => WorldMachineCatalog.From(extensions: Puck.Abstractions.PuckExtensionSet.Compose(extensions: [
+        new AdvancedGamingBrickExtension(),
+        new HumbleGamingBrickExtension(),
+    ]));
     [ModuleInitializer]
     internal static void Install() {
         WorldSchemaVocabularyHooks.Install(

@@ -1,4 +1,6 @@
 using System.Text.Json.Nodes;
+using Puck.State;
+using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 
@@ -23,7 +25,7 @@ public sealed record WorldCompositionLink(
     /// <param name="options">The authored link options.</param>
     /// <param name="span">The link's source span.</param>
     public WorldCompositionLink(string kind, string leftWorld, string leftEndpoint, string rightWorld, string rightEndpoint, JsonObject options, SourceSpan span)
-        : this(kind, leftWorld, leftEndpoint, rightWorld, rightEndpoint, options, new SourceOrigin(span, null, null)) { }
+        : this(kind, leftWorld, leftEndpoint, rightWorld, rightEndpoint, options, new SourceOrigin(ModuleInstancePath: null, SourcePath: null, Span: span)) { }
 
     /// <summary>Gets the source span used for link refusals and compilation-budget accounting.</summary>
     public SourceSpan Span => Origin.Span;
@@ -128,8 +130,8 @@ public static class WorldCompositionLinks {
             Refuse(diagnostics: diagnostics, link: link, message: "automatic border ground sides must face one another (north/south or east/west).");
             return;
         }
-        var leftReserved = TryReserveTopology(left, link.LeftEndpoint, link.RightWorld, out var leftDestination, out var leftTopologyReason);
-        var rightReserved = TryReserveTopology(right, link.RightEndpoint, link.LeftWorld, out var rightDestination, out var rightTopologyReason);
+        var leftReserved = TryReserveTopology(left, LinkName(from: link.LeftEndpoint), link.RightWorld, out var leftDestination, out var leftTopologyReason);
+        var rightReserved = TryReserveTopology(right, LinkName(from: link.RightEndpoint), link.LeftWorld, out var rightDestination, out var rightTopologyReason);
 
         if (!leftReserved || !rightReserved) {
             Refuse(diagnostics: diagnostics, link: link, message: $"border topology collides with authored rows: {leftTopologyReason}{rightTopologyReason}");
@@ -170,7 +172,7 @@ public static class WorldCompositionLinks {
             Refuse(link, diagnostics, $"spawn '{link.RightEndpoint}' must declare a finite position and yawDegrees.");
             return;
         }
-        var returnId = $"return-{link.LeftWorld}-{link.LeftEndpoint}";
+        var returnId = ReturnArchName(endpoint: link.LeftEndpoint, world: link.LeftWorld);
 
         if (FindNamed((right["placements"]?["rows"] as JsonArray), "id", returnId) is not null) {
             Refuse(link, diagnostics, $"generated return arch placement '{returnId}' already exists in world '{link.RightWorld}'.");
@@ -197,8 +199,9 @@ public static class WorldCompositionLinks {
                 Refuse(link, diagnostics, $"arch placement '{link.LeftEndpoint}' has malformed face source metadata.");
                 return;
             }
-            if (sourceType is not ("none" or "testPattern" or "console" or "qr")) {
-                Refuse(link, diagnostics, $"arch placement '{link.LeftEndpoint}' uses dependent face source '{sourceType}'; a generated return arch accepts only self-contained none, testPattern, console, or qr sources on every copied face.");
+            // A producer names no row of the document, so it is self-contained; every other kind names one.
+            if (sourceType is not ("none" or "producer")) {
+                Refuse(link, diagnostics, $"arch placement '{link.LeftEndpoint}' uses dependent face source '{sourceType}'; a generated return arch accepts only self-contained none or producer sources on every copied face.");
                 return;
             }
         }
@@ -230,8 +233,8 @@ public static class WorldCompositionLinks {
             Refuse(link, diagnostics, $"arch placement '{link.LeftEndpoint}' has malformed id or face metadata.");
             return;
         }
-        var outwardReserved = TryReserveTopology(left, link.LeftEndpoint, link.RightWorld, out var outward, out var outwardReason);
-        var returnReserved = TryReserveTopology(right, link.LeftWorld, link.LeftWorld, out var returning, out var returnReason);
+        var outwardReserved = TryReserveTopology(left, LinkName(from: link.LeftEndpoint), link.RightWorld, out var outward, out var outwardReason);
+        var returnReserved = TryReserveTopology(right, LinkName(from: link.LeftEndpoint, world: link.LeftWorld), link.LeftWorld, out var returning, out var returnReason);
 
         if (!outwardReserved || !returnReserved) {
             Refuse(diagnostics: diagnostics, link: link, message: $"door topology collides with authored rows: {outwardReason}{returnReason}");
@@ -265,9 +268,10 @@ public static class WorldCompositionLinks {
             return true;
         }
 
-        var split = endpoint.LastIndexOf(value: '.');
-        var groundName = ((split > 0) ? endpoint[..split] : string.Empty);
-        var side = ((split > 0) ? endpoint[(split + 1)..] : endpoint);
+        var dotted = QualifiedName.Parse(text: endpoint);
+        var split = (dotted.Qualifier.Length > 0);
+        var groundName = (split ? InstanceName(reference: dotted.Qualifier) : string.Empty);
+        var side = (split ? dotted.Last : endpoint);
         var grounds = (world["$composition"]?["grounds"] as JsonArray);
         var ground = ((groundName.Length == 0)
             ? ((grounds?.Count == 1) ? (grounds[0] as JsonObject) : null)
@@ -317,20 +321,42 @@ public static class WorldCompositionLinks {
         ["width"] = width,
         ["height"] = height,
     };
-    private static bool TryReserveTopology(JsonObject world, string preferredName, string otherWorld, out string destinationName, out string reason) {
-        destinationName = preferredName.Replace(newChar: '-', oldChar: '.');
+
+    // The first part of the reference and destination a link generates in each world it joins, and of the arch a door
+    // generates in the world it returns from.
+    internal const string LinkHead = "link";
+    internal const string ReturnHead = "return";
+
+    // A ground or placement an endpoint names through the module instances that declared it, written
+    // `wing.floor`, is the name the instance declared it under, `wing$floor`: a ground or a placement name never
+    // carries a dot of its own.
+    private static string InstanceName(string reference) => reference.Replace(newChar: GeneratedName.Joiner, oldChar: '.');
+
+    // An endpoint as written (`ground.north`, `arch/portal`) split into the parts a generated name joins.
+    internal static string[] EndpointParts(string endpoint) => endpoint.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ['.', '/']);
+    // The reference and destination a link generates for travel out of one endpoint: `link$ground$north`, or, where
+    // it returns through a door into the world it came from, `link$hub$arch` — the world and endpoint the door opened
+    // from, so two doors into one world each keep their own way back. The decompiler reads a link back by the names
+    // this writes.
+    internal static string LinkName(string from, string? world = null) => GeneratedName.Join(parts: [LinkHead, .. ((world is null) ? [] : new[] { world }), .. EndpointParts(endpoint: from)]);
+    // The arch a door generates in the world it arrives in, standing for the arch it opened from:
+    // `return$<world>$<arch>[$<face>]`.
+    internal static string ReturnArchName(string world, string endpoint) => GeneratedName.Join(parts: [ReturnHead, world, .. EndpointParts(endpoint: endpoint)]);
+
+    private static bool TryReserveTopology(JsonObject world, string destinationName, string otherWorld, out string reservedName, out string reason) {
+        reservedName = destinationName;
         reason = string.Empty;
         if ((FindNamed(Rows(name: "references", world: world), "name", destinationName) is not null) || (FindNamed(Rows(name: "destinations", world: world), "name", destinationName) is not null)) {
             reason = $" generated name '{destinationName}' is already declared;";
             return false;
         }
-        Rows(name: "references", world: world).AppendNode(item: new JsonObject { ["name"] = destinationName, ["document"] = $"{otherWorld}.world.json" });
+        Rows(name: "references", world: world).AppendNode(item: new JsonObject { ["name"] = destinationName, ["document"] = otherWorld });
         Rows(name: "destinations", world: world).AppendNode(item: new JsonObject { ["name"] = destinationName, ["reference"] = destinationName, ["durability"] = "persisted", ["scope"] = "global" });
         return true;
     }
     private static bool TryFindFace(JsonObject world, string endpoint, out JsonObject face, out JsonObject placement, out string reason) {
         var slash = endpoint.IndexOf(value: '/');
-        var placementName = ((slash > 0) ? endpoint[..slash] : endpoint);
+        var placementName = InstanceName(reference: ((slash > 0) ? endpoint[..slash] : endpoint));
         var faceName = ((slash > 0) ? endpoint[(slash + 1)..] : "portal");
 
         placement = FindNamed((world["placements"]?["rows"] as JsonArray), "id", placementName)!;
@@ -471,8 +497,8 @@ public static class WorldCompositionLinks {
         return true;
     }
     private static bool AreOppositeCardinalSides(string leftEndpoint, string rightEndpoint) {
-        var left = leftEndpoint[(leftEndpoint.LastIndexOf(value: '.') + 1)..];
-        var right = rightEndpoint[(rightEndpoint.LastIndexOf(value: '.') + 1)..];
+        var left = QualifiedName.Parse(text: leftEndpoint).Last;
+        var right = QualifiedName.Parse(text: rightEndpoint).Last;
 
         return ((left, right) is ("north", "south") or ("south", "north") or ("east", "west") or ("west", "east"));
     }

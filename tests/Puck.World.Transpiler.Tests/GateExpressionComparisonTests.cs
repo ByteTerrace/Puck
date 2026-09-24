@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
-using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Parsing;
 using Xunit;
 
@@ -25,17 +24,6 @@ public class GateExpressionComparisonTests {
         var when = Assert.IsType<WhenStatementNode>(@object: rule.Statements[0]);
 
         return Assert.IsType<ComparisonPredicateNode>(@object: when.Predicate);
-    }
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
     }
 
     [Fact]
@@ -98,7 +86,7 @@ public class GateExpressionComparisonTests {
     }
     [Fact]
     public void ACoalescedEndpointReadLowersToCompareValue() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 when (face[zone(pile, last)] ?? 1) == 0
                 table[busy] = 1

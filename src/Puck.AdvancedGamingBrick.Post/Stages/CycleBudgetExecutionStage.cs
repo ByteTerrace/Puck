@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -46,27 +47,50 @@ internal sealed class CycleBudgetExecutionStage : IPostStage<PostContext> {
             ("Thumb", ThumbLoop(), false),
         };
 
+        // Without a verified retail BIOS the IRQ variants cannot be compared cycle-for-cycle, so only the ARM, Thumb and
+        // RAM/DMA programs run and the detail says so.
+        var irqNote = string.Empty;
+
         if (AgbBiosProfile.Identify(image: context.BiosImage.Span).IsCycleParityTrustworthy) {
             foreach (var kind in MicroRoms.Kinds) {
                 cases.Add(item: (kind, MicroRoms.GenerateBytes(kind: kind), false));
             }
         } else {
-            Console.WriteLine(value: "  IRQ variants omitted: verified retail BIOS required; ARM, Thumb and RAM/DMA cases still run.");
+            irqNote = "; IRQ variants omitted (verified retail BIOS required)";
         }
+
+        var rows = new List<PostCaseResult>(capacity: cases.Count);
+
         foreach (var (label, rom, ram) in cases) {
+            var start = Stopwatch.GetTimestamp();
+
             var (pass, detail) = ExecutionComparisonProbe.Run(
                 rom: rom,
                 bios: context.BiosImage,
                 label: label,
                 mutableRam: ram
             );
-            Console.WriteLine(value: $"  [{(pass
-                ? "PASS"
-                : "FAIL")}] {detail}");
+
+            rows.Add(item: new PostCaseResult(
+                Detail: detail,
+                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+                Name: label,
+                Verdict: (pass
+                    ? PostCaseVerdict.Pass
+                    : PostCaseVerdict.Mismatch)
+            ));
+
             if (!pass) {
-                return PostStageOutcome.Fail(detail: detail);
+                return PostStageOutcome.Fail(
+                    cases: rows,
+                    detail: detail
+                );
             }
         }
-        return PostStageOutcome.Pass(detail: $"{cases.Count} programs matched instruction stepping at every state/audio checkpoint");
+
+        return PostStageOutcome.Pass(
+            cases: rows,
+            detail: $"{cases.Count} programs matched instruction stepping at every state/audio checkpoint{irqNote}"
+        );
     }
 }

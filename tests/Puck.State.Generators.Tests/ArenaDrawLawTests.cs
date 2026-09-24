@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.State.Generators.Tests;
@@ -13,13 +14,11 @@ public sealed class ArenaDrawLawTests {
         Assert.True(
             condition: ArenaDraws.TryFire(
                 arena: arena,
-                documentSeed: seed,
                 generator: TopologyArenaFixture.Bag(),
-                instanceIdentity: "law",
                 reason: out var reason,
                 result: out var result,
                 rowOrdinal: TopologyArenaFixture.Deal,
-                site: "deal"
+                seed: GeneratorEngine.ComputeDrawSeed(documentSeed: seed, instanceIdentity: "law", site: "deal")
             ),
             userMessage: reason
         );
@@ -78,13 +77,11 @@ public sealed class ArenaDrawLawTests {
         // The pass is exhausted, and an exhausting source refuses the whole emission rather than redrawing.
         Assert.False(condition: ArenaDraws.TryFire(
             arena: arena,
-            documentSeed: Seed,
             generator: TopologyArenaFixture.Bag(),
-            instanceIdentity: "law",
             reason: out var exhausted,
             result: out _,
             rowOrdinal: TopologyArenaFixture.Deal,
-            site: "deal"
+            seed: GeneratorEngine.ComputeDrawSeed(documentSeed: Seed, instanceIdentity: "law", site: "deal")
         ));
         Assert.NotEqual(
             actual: exhausted,
@@ -166,13 +163,11 @@ public sealed class ArenaDrawLawTests {
         );
         Assert.False(condition: ArenaDraws.TryFire(
             arena: arena,
-            documentSeed: Seed,
             generator: TopologyArenaFixture.Bag(),
-            instanceIdentity: "law",
             reason: out var reason,
             result: out _,
             rowOrdinal: TopologyArenaFixture.History,
-            site: "history"
+            seed: GeneratorEngine.ComputeDrawSeed(documentSeed: Seed, instanceIdentity: "law", site: "history")
         ));
         Assert.Contains(
             actualString: reason,

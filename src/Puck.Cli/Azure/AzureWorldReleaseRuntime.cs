@@ -11,6 +11,7 @@ internal static partial class AzureCommand {
         public int HealthPort => Parameters["configuration"]!["lifecycle"]!["healthPort"]!.GetValue<int>();
         public string Image => Text(value: Parameters["release"]);
         public JsonObject Parameters => Configuration.Parameters;
+        public string Priority => WorldPriority(compute: Parameters["configuration"]!["compute"]!);
         public int ShutdownSeconds => Parameters["configuration"]!["lifecycle"]!["shutdownSeconds"]!.GetValue<int>();
     }
     /// <summary>Runs the shared release transaction against the existing single-worker VMSS and private store.</summary>
@@ -19,7 +20,7 @@ internal static partial class AzureCommand {
         WorldReleaseGroupStore groups, WorldAuthorityBlobStore authority, WorldReleaseArchive archive,
         WorldReleaseRestore restores,
         AzureWorldReleaseDeployment? source, AzureWorldReleaseDeployment target,
-        Func<CancellationToken, Task> initializeBootstrap) : IWorldReleaseRuntime {
+        Func<CancellationToken, Task> initializeBootstrap, TimeProvider clock) : IWorldReleaseRuntime {
         private static readonly JsonSerializerOptions Json = new(defaults: JsonSerializerDefaults.Web);
 
         private readonly WorldAuthorityIdentity[] m_identities = target.Manifest.Definitions.Keys.Select(selector: ParseIdentity).ToArray();
@@ -53,6 +54,7 @@ internal static partial class AzureCommand {
         private async Task EnsureWorkerAsync(AzureWorldReleaseDeployment deployment, CancellationToken cancellationToken) {
             cancellationToken.ThrowIfCancellationRequested();
             var workers = await StableWorkersAsync(
+                clock: clock,
                 group: resourceGroup,
                 scaleSet: scaleSet
             ).ConfigureAwait(continueOnCapturedContext: false);
@@ -94,8 +96,10 @@ internal static partial class AzureCommand {
                 value: deployment.Configuration.ComputeTemplate
             );
             await ApplyWorldComputeAsync(
+                clock: clock,
                 group: resourceGroup,
                 parameters: path,
+                priority: deployment.Priority,
                 retainedTemplate: template,
                 scaleSet: scaleSet
             ).ConfigureAwait(continueOnCapturedContext: false);

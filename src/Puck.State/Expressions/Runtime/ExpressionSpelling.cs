@@ -4,20 +4,25 @@ using System.Text;
 namespace Puck.State;
 
 /// <summary>
-/// The infix front end of the expression IR — <c>"min(damage, hp) * 2 - armor[$each]"</c> — and its inverse. It is
+/// The infix front end of the expression IR — <c>"minimum(damage, hp) * 2 - armor[$each]"</c> — and its inverse. It is
 /// syntax only: a spelling parses to exactly the <see cref="Instruction"/> list an author could have written by
 /// hand, and printing a program yields a spelling that parses back to it. Every instruction has one spelling:
 /// <list type="bullet">
 /// <item><c>+ - * / %</c>, <c>&amp; | ^ ~</c>, <c>&lt;&lt; &gt;&gt; &gt;&gt;&gt;</c>, <c>== != &lt; &lt;= &gt; &gt;=</c>,
-/// unary <c>-</c>, and <c>condition ? whenTrue : whenFalse</c> (<c>select</c>), with C precedence.</item>
-/// <item>Named forms as calls: <c>min(a, b)</c>, <c>max</c>, <c>clamp(value, min, max)</c>, <c>abs</c>, <c>sign</c>,
-/// <c>popCount</c>, <c>leadingZeroCount</c>, <c>trailingZeroCount</c>, <c>lowestSetBit</c>,
-/// <c>clearLowestSetBit</c>, <c>byteSwap</c>, <c>bitReverse</c>, <c>rotateLeft(value, count)</c>,
+/// unary <c>-</c> and <c>~</c>, and <c>condition ? whenTrue : whenFalse</c> (<see cref="ExpressionOp.Select"/>), with
+/// C precedence.</item>
+/// <item>Named forms as calls, spelled as <see cref="ExpressionOperators.Calls"/> keys them: among them
+/// <c>minimum(a, b)</c>, <c>maximum</c>, <c>clamp(value, lower, upper)</c>, <c>absolute</c>, <c>sign</c>,
+/// <c>setBitCount</c>, <c>leadingZeroCount</c>, <c>trailingZeroCount</c>, <c>lowestSetBit</c>,
+/// <c>clearLowestSetBit</c>, <c>byteSwap</c>, <c>reverseBits</c>, <c>rotateLeft(value, count)</c>,
 /// <c>replicationMask(width)</c>, <c>repeatBits(pattern, width)</c>,
 /// <c>rotateRight</c>, <c>parallelBitExtract(value, mask)</c>, <c>parallelBitDeposit</c>,
 /// <c>bitField(value, offset, width)</c>, <c>bitInsert(value, field, offset, width)</c>,
-/// <c>boardShift(mask, topology, direction)</c>, <c>boardImage(mask, topology, element)</c>,
-/// <c>select(condition, whenTrue, whenFalse)</c>, and <c>isAbsent(operand)</c>.</item>
+/// and <c>isAbsent(operand)</c>; and, parsed through their own arm,
+/// <c>boardShift(mask, topology, direction)</c>, <c>boardRay</c>, and <c>boardImage(mask, topology, element)</c>.</item>
+/// <item>A row reduction is <c>count(row)</c>, <c>sum</c>, <c>max</c>, or <c>min</c>, optionally followed by
+/// <c>where: filter</c> and the <c>atLeast: lower, atMost: upper</c> pair; it reads the <c>$reduce:</c> channel it
+/// spells.</item>
 /// <item><c>operand ?? fallback</c> is the coalesce operator, binding looser than every other binary operator and
 /// tighter than the ternary.</item>
 /// <item>A fold over a family is <c>all(family, member -&gt; expr)</c> and its siblings <c>any</c>, <c>count</c>,
@@ -42,13 +47,12 @@ namespace Puck.State;
 /// the one place the two uses of <c>:</c> could meet.
 /// </summary>
 public static partial class ExpressionSpelling {
-    private const int CoalesceLevel = 2;
-    // One step tighter than a relational comparison, so an operand whose own operator binds looser prints inside
-    // parentheses and the joined `left cmp right` text re-parses as the program it was printed from.
-    private const int ComparisonOperandLevel = 8;
-    private const int PrimaryLevel = 12;
-    private const int TernaryLevel = 1;
-    private const int UnaryLevel = 11;
+    // Every level is read off the table's Binding column: the ternary looser than any infix operator, a prefix one
+    // tighter, and a comparison operand one step tighter than a relational comparison, so `left cmp right` re-parses.
+    private static readonly int ComparisonOperandLevel = (ExpressionOperators.Find(operation: ExpressionOp.Less)!.Binding + 1);
+    private static readonly int TernaryLevel = (ExpressionOperators.Infix.Min(selector: static row => row.Binding) - 1);
+    private static readonly int UnaryLevel = (ExpressionOperators.Infix.Max(selector: static row => row.Binding) + 1);
+    private static readonly int PrimaryLevel = (UnaryLevel + 1);
 
     /// <summary>The longest spelling admitted, in characters: a bound on the parser's input rather than on the
     /// expression, whose token ceiling still applies to what it parses to.</summary>
@@ -131,8 +135,8 @@ public static partial class ExpressionSpelling {
                 text: name
             ) ||
             (call.Count == 0) ||
-            Calls.ContainsKey(key: call.Channel) ||
-            IsReservedCallName(name: call.Channel)
+            IsReservedName(name: call.Channel) ||
+            IsLiteralKeyword(name: call.Channel)
         ) {
             return false;
         }
@@ -162,7 +166,7 @@ public static partial class ExpressionSpelling {
 
             for (var index = 0; (shaped && (index < tail.Length));) {
                 if ((tail[index] == "where") && ((index + 1) < tail.Length)) {
-                    options.Append(value: ", where: ").Append(value: QuoteName(name: tail[(index + 1)]));
+                    options.Append(value: ", where: ").Append(value: PrintName(name: tail[(index + 1)]));
                     index += 2;
                 } else if ((tail[index] == "between") && ((index + 2) < tail.Length)) {
                     options.Append(value: ", atLeast: ").Append(value: tail[(index + 1)]).Append(value: ", atMost: ").Append(value: tail[(index + 2)]);
@@ -209,8 +213,8 @@ public static partial class ExpressionSpelling {
         ExpressionOp.Sum => "sum",
         _ => null,
     };
-    private static bool IsNamePart(char character) => (char.IsLetterOrDigit(c: character) || (character == '_') || (character == '$') || (character == '.'));
-    private static bool IsNameStart(char character) => (char.IsLetter(c: character) || (character == '_') || (character == '$'));
+    // A name continues with the identifier rule's characters and the dot a dotted path carries.
+    private static bool IsNamePart(char character) => (IdentifierSpelling.IsPart(character: character) || (character == '.'));
     private static bool IsNumberLexeme(string text) {
         if (
             (text.Length == 0) ||
@@ -270,18 +274,15 @@ public static partial class ExpressionSpelling {
 
         return true;
     }
-    // Binding strength, C's order: the ternary is loosest, a primary tightest.
-    private static int Level(string symbol) => symbol switch {
-        "??" => CoalesceLevel,
-        "|" => 3,
-        "^" => 4,
-        "&" => 5,
-        "==" or "!=" => 6,
-        "<" or "<=" or ">" or ">=" => 7,
-        "<<" or ">>" or ">>>" => 8,
-        "+" or "-" => 9,
-        _ => 10,
-    };
+    // An infix operator binds as its table row says (ExpressionOperator.Binding); the ternary is looser than every
+    // row, and a unary operator and a primary tighter.
+    private static int Level(string symbol) => (ExpressionOperators.TryFindSymbol(
+        descriptor: out var row,
+        symbol: symbol
+    )
+        ? row!.Binding
+        : PrimaryLevel
+    );
     // A "$zones[" segment inside a reserved name carries its whole bracketed index — colons, nested brackets and all —
     // so "$match:run:$zones[game[from]]:prefix" lexes as one name. Answers the index of the closing bracket, or -1
     // when the bracket at `bracket` does not open a live-zone index or never closes.
@@ -364,7 +365,7 @@ public static partial class ExpressionSpelling {
             case { Payload: InstructionPayload.Board board }:
                 return (((stack.Count >= 1) && (instruction.Operation switch {
                     ExpressionOp.BoardShift => "boardShift",
-                    ExpressionOp.BoardFill => "boardFill",
+                    ExpressionOp.BoardRay => "boardRay",
                     ExpressionOp.BoardImage => "boardImage",
                     _ => null,
                 } is { } boardName))
@@ -486,17 +487,6 @@ public static partial class ExpressionSpelling {
         }
         return result;
     }
-    private static string QuoteName(string name) =>
-        (RowNameNeedsBackquoteForDotSafety(name: name)
-            ? $"`{name}`"
-            : (IsBareName(name: name)
-                ? name
-                : $"`{name}`"
-        ));
-    // A row name printed bare re-parses through ParsePrimary's own dot-access split, not through ParseKey (which
-    // never splits): an unreserved name carrying a literal dot must print backquoted, or its printed form would
-    // re-parse as a dotted read of a different row entirely, rather than the one whole name it started as.
-    private static bool RowNameNeedsBackquoteForDotSafety(string name) => (!name.StartsWith(value: '$') && name.Contains(value: '.'));
     // "$table:t[:column]:<key>" splits before its key: a "$"-spelled key ("$local:x", "$cell:r:k", "$each") at the
     // last ":$", else the last colon.
     private static bool TrySplitTableKey(string name, out string table, out string key) {
@@ -572,7 +562,7 @@ public static partial class ExpressionSpelling {
                 (colon > 0) &&
                 (colon < (rest.Length - 1))
             ) {
-                into.Append(value: QuoteName(name: rest[..colon])).Append(value: '[');
+                into.Append(value: PrintName(name: rest[..colon])).Append(value: '[');
                 AppendKey(
                     into: into,
                     key: rest[(colon + 1)..]
@@ -592,10 +582,20 @@ public static partial class ExpressionSpelling {
             return;
         }
 
-        into.Append(value: ((IsBareName(name: key) || IsNumberLexeme(text: key))
+        into.Append(value: ((IsKeyName(name: key) || IsNumberLexeme(text: key))
             ? key
             : $"`{key}`"));
     }
+
+    // Inside brackets a bare name is a literal key whatever it spells, so no reserved word needs its backquotes there.
+    private static bool IsKeyName(string name) => (
+        (name.Length > 0) &&
+        (ScanBareName(
+            start: 0,
+            text: name
+        ) == name.Length)
+    );
+
     /// <summary>Returns the author's spelling of a cell key.</summary>
     /// <param name="key">The key as the document carries it.</param>
     /// <returns>The spelling a key reader folds back to <paramref name="key"/>.</returns>
@@ -609,18 +609,12 @@ public static partial class ExpressionSpelling {
 
         return builder.ToString();
     }
-    /// <summary>Whether a name prints bare, without backquotes.</summary>
-    /// <param name="name">The name.</param>
-    /// <returns><see langword="true"/> when the name lexes as one bare identifier.</returns>
-    public static bool IsBareName(string name) =>
-        ((ScanBareName(
-            start: 0,
-            text: name
-        ) == name.Length) && (name.Length > 0) && !Calls.ContainsKey(key: name) && !IsReservedCallName(name: name));
 
-    // The names the parser reads as a call or a literal before it considers a row: the folds, the vector functions,
-    // the board queries, and the two vector literal keywords. None of them is in the operator table's call list.
-    private static bool IsReservedCallName(string name) => (IsFoldName(name: name) || (name is "dot" or "similarity" or "identical" or "boardShift" or "boardFill" or "boardImage" or "vector" or "embed"));
+    // The names the parser reads as a call before it considers a row: the folds, the vector functions and the board
+    // queries. None of them is in the operator table's call list.
+    private static bool IsReservedCallName(string name) => (IsFoldName(name: name) || (name is "dot" or "similarity" or "identical" or "boardShift" or "boardRay" or "boardImage"));
+    // Followed by an opening parenthesis, these open a vector literal rather than a channel call; a bare one is a row.
+    private static bool IsLiteralKeyword(string name) => (name is "vector" or "embed");
     // A fold binds its member to a plain variable: one bare name, undotted, unreserved, and not a function's.
     private static bool IsBinderName(string name) => (IsBareName(name: name) && !name.Contains(value: '.') && !name.StartsWith(value: '$'));
 
@@ -647,31 +641,39 @@ public static partial class ExpressionSpelling {
     public static string Print(IReadOnlyList<Instruction> instructions) =>
         Print(program: new ExpressionProgram(Instructions: instructions));
     /// <summary>Scans one bare name out of <paramref name="text"/> starting at <paramref name="start"/>, on exactly
-    /// the terms this lexer's own names obey: a letter/<c>_</c>/<c>$</c> start, letter/digit/<c>_</c>/<c>$</c>/<c>.</c>
-    /// continuations, and — once the name opens with <c>$</c> — <c>:segment</c> continuations, signed <c>:-N</c>
-    /// offsets, and a <see cref="RuleFacts.LiveZonePrefix"/> group folded whole into the name. This is the one
-    /// implementation of that walk: <see cref="IsBareName"/> asks it whether a whole string is one name, and callers
-    /// outside this assembly (the <c>.puck</c> parser and formatter) scan with it rather than carrying a copy.</summary>
+    /// the terms this lexer's own names obey: a name by <see cref="IdentifierSpelling.ScanName"/>, continued by
+    /// identifier characters and the <c>.</c> of a dotted path (a dotted segment may open with the
+    /// <see cref="IdentifierSpelling.Sigil"/>), and — once the name opens with the sigil — <c>:segment</c>
+    /// continuations (a segment may itself open with the sigil), signed <c>:-N</c> offsets, and a
+    /// <see cref="RuleFacts.LiveZonePrefix"/> group folded whole into the name. This is the one implementation of that
+    /// walk: the lexer and <see cref="IsBareName"/> scan with it, and callers outside this assembly (the <c>.puck</c>
+    /// parser and formatter) scan with it rather than carrying a copy.</summary>
     /// <param name="text">The text to scan.</param>
     /// <param name="start">The offset to scan from.</param>
     /// <returns>The name's length in characters, or 0 when <paramref name="start"/> does not open a name.</returns>
     public static int ScanBareName(string text, int start) {
         ArgumentNullException.ThrowIfNull(argument: text);
 
-        if (
-            (start < 0) ||
-            (start >= text.Length) ||
-            !IsNameStart(character: text[start])
-        ) {
+        var head = IdentifierSpelling.ScanName(
+            start: start,
+            text: text
+        );
+
+        if (head == 0) {
             return 0;
         }
-        var reserved = (text[start] == '$');
-        var index = (start + 1);
+        var reserved = (text[start] == IdentifierSpelling.Sigil);
+        var index = (start + head);
 
         while (index < text.Length) {
             var character = text[index];
 
-            if (IsNamePart(character: character)) {
+            // A segment may open with the sigil: a reserved name's ":$each", and a dotted "row.$each" that stays one
+            // name so its reader refuses it by name.
+            if (
+                IsNamePart(character: character) ||
+                ((character == IdentifierSpelling.Sigil) && ((text[(index - 1)] == '.') || (reserved && (text[(index - 1)] == ':'))))
+            ) {
                 index++;
                 continue;
             }
@@ -679,7 +681,7 @@ public static partial class ExpressionSpelling {
                 reserved &&
                 (character == ':') &&
                 ((index + 1) < text.Length) &&
-                (IsNamePart(character: text[(index + 1)]) || IsSignedSegment(
+                (IsNamePart(character: text[(index + 1)]) || (text[(index + 1)] == IdentifierSpelling.Sigil) || IsSignedSegment(
                 index: (index + 1),
                 text: text
             ))
@@ -788,7 +790,7 @@ public static partial class ExpressionSpelling {
                 continue;
             }
 
-            var length = (((text[index] == '$') && ((index == 0) || !(char.IsLetterOrDigit(c: text[(index - 1)]) || (text[(index - 1)] is '_' or '.' or '`'))))
+            var length = (((text[index] == IdentifierSpelling.Sigil) && ((index == 0) || !(IdentifierSpelling.IsPart(character: text[(index - 1)]) || (text[(index - 1)] is '.' or '`'))))
                 ? ScanBareName(
                     start: index,
                     text: text
@@ -1033,7 +1035,7 @@ public static partial class ExpressionSpelling {
     /// <param name="text">The spelling, when the program is well-formed.</param>
     /// <returns><see langword="false"/> when the program underflows, leaves more than one value, or carries an
     /// instruction the infix grammar does not spell — a <see cref="ExpressionOp.Call"/> into a shared subprogram,
-    /// which only the lowering that built it can name.</returns>
+    /// which only the IR form spells.</returns>
     public static bool TryPrint(ExpressionProgram program, out string text) =>
         TryPrint(
             parentLevel: 0,
@@ -1144,6 +1146,7 @@ public static partial class ExpressionSpelling {
             return (Subprograms.Count - 1);
         }
     }
+
     /// <summary>A parsed operand node, shared by source binding and runtime expression emission.</summary>
     public abstract record SyntaxNode {
         internal abstract int Level { get; }
@@ -1170,6 +1173,7 @@ public static partial class ExpressionSpelling {
         internal override void Emit(List<Instruction> into, ProgramBuilder builder) => into.Add(item: Instruction.Constant(value: Value));
         internal override void PrintBare(StringBuilder into) => into.Append(value: Value.ToString(provider: CultureInfo.InvariantCulture));
     }
+
     private sealed record StateRead(string Name, string? Key, bool Quoted = false, StateChannelRef? TypedName = null) : SyntaxNode {
         internal override int Level => PrimaryLevel;
 
@@ -1198,9 +1202,9 @@ public static partial class ExpressionSpelling {
                     name: name
                 )
             ) {
-                into.Append(value: (Quoted
-                    ? $"`{name}`"
-                    : QuoteName(name: name)
+                into.Append(value: PrintName(
+                    name: name,
+                    quoted: Quoted
                 ));
             }
             if (key is { } spelled) {
@@ -1231,11 +1235,12 @@ public static partial class ExpressionSpelling {
             // KEEP IN SYNC with the lexer's double-quoted string rule: it unescapes exactly \\ and \".
             into.Append(value: "embed(\"").Append(value: Text.Replace(newValue: "\\\\", oldValue: "\\").Replace(newValue: "\\\"", oldValue: "\"")).Append(value: '"');
             if (Space is not null) {
-                into.Append(value: ", space: ").Append(value: QuoteName(name: Space));
+                into.Append(value: ", space: ").Append(value: PrintName(name: Space));
             }
             into.Append(value: ')');
         }
     }
+
     /// <summary>A prefix arithmetic operation.</summary>
     /// <param name="Operator">The operator spelling.</param>
     /// <param name="Operand">The operand.</param>
@@ -1339,6 +1344,7 @@ public static partial class ExpressionSpelling {
             );
         }
     }
+
     private sealed record Call(string Name, SyntaxNode[] Arguments, string[] Names) : SyntaxNode {
         internal override int Level => PrimaryLevel;
 
@@ -1371,9 +1377,9 @@ public static partial class ExpressionSpelling {
                 operation: ExpressionOp.BoardShift,
                 topology: Names[0]
             ),
-                "boardFill" => Instruction.Board(
+                "boardRay" => Instruction.Board(
                 index: Names[1],
-                operation: ExpressionOp.BoardFill,
+                operation: ExpressionOp.BoardRay,
                 topology: Names[0]
             ),
                 "boardImage" => Instruction.Board(
@@ -1395,7 +1401,7 @@ public static partial class ExpressionSpelling {
                 );
             }
             foreach (var name in Names) {
-                into.Append(value: ", ").Append(value: QuoteName(name: name));
+                into.Append(value: ", ").Append(value: PrintName(name: name));
             }
             into.Append(value: ')');
         }
@@ -1429,7 +1435,7 @@ public static partial class ExpressionSpelling {
             ));
         }
         internal override void PrintBare(StringBuilder into) {
-            into.Append(value: Name).Append(value: '(').Append(value: QuoteName(name: Family)).Append(value: ", ").Append(value: Binder).Append(value: " -> ");
+            into.Append(value: Name).Append(value: '(').Append(value: PrintName(name: Family)).Append(value: ", ").Append(value: Binder).Append(value: " -> ");
             Body.Print(
                 into: into,
                 parentLevel: 0,
@@ -1583,49 +1589,12 @@ public static partial class ExpressionSpelling {
                 }
                 return;
             }
-            if (IsNameStart(character: character)) {
-                var reserved = (character == '$');
-                var end = (m_position + 1);
+            if (ScanBareName(
+                start: m_position,
+                text: text
+            ) is var nameLength and > 0) {
+                var end = (m_position + nameLength);
 
-                while (end < text.Length) {
-                    if (IsNamePart(character: text[end])) {
-                        end++;
-                        continue;
-                    }
-                    if (
-                        reserved &&
-                        (text[end] == ':') &&
-                        ((end + 1) < text.Length) &&
-                        IsNamePart(character: text[(end + 1)])
-                    ) {
-                        end++;
-                        continue;
-                    }
-                    if (
-                        reserved &&
-                        (text[end] == ':') &&
-                        IsSignedSegment(
-                        index: (end + 1),
-                        text: text
-                    )
-                    ) {
-                        end += 2;
-                        continue;
-                    }
-                    if (
-                        reserved &&
-                        (LiveZoneIndexEnd(
-                        bracket: end,
-                        start: m_position,
-                        text: text
-                    ) is var close) &&
-                        (close > 0)
-                    ) {
-                        end = (close + 1);
-                        continue;
-                    }
-                    break;
-                }
                 m_kind = Lexeme.Name;
                 m_value = text[m_position..end];
                 m_position = end;
@@ -1647,10 +1616,13 @@ public static partial class ExpressionSpelling {
             }
             throw Fail(message: $"unexpected character '{character}'");
         }
-        private static string? BinaryOperator(string symbol) => symbol switch {
-            "+" or "-" or "*" or "/" or "%" or "&" or "|" or "^" or "<<" or ">>" or ">>>" or "==" or "!=" or "<" or "<=" or ">" or ">=" or "??" => symbol,
-            _ => null,
-        };
+        private static string? BinaryOperator(string symbol) => (ExpressionOperators.TryFindSymbol(
+            descriptor: out _,
+            symbol: symbol
+        )
+            ? symbol
+            : null
+        );
         private void Expect(string punctuation) {
             if (!Accept(punctuation: punctuation)) {
                 throw Fail(message: $"expected '{punctuation}'{Found()}");
@@ -2041,7 +2013,7 @@ public static partial class ExpressionSpelling {
                         }
                         if (
                             !quoted &&
-                            (name is "boardShift" or "boardFill" or "boardImage")
+                            (name is "boardShift" or "boardRay" or "boardImage")
                         ) {
                             return ParseCall(
                                 arity: 1,
@@ -2168,7 +2140,7 @@ public static partial class ExpressionSpelling {
         private SyntaxNode ParseTernary() {
             Descend();
 
-            var condition = ParseBinary(minimumLevel: 2);
+            var condition = ParseBinary(minimumLevel: (TernaryLevel + 1));
 
             if (!Accept(punctuation: "?")) {
                 m_depth--;

@@ -1,7 +1,6 @@
 using System.CommandLine;
 
 using Puck.Mcp;
-using Puck.Networking;
 
 namespace Puck.Cli.Mcp;
 
@@ -9,35 +8,6 @@ namespace Puck.Cli.Mcp;
 // OAuth-protected HTTP extension composed over an owned World silo. The command validator is what guarantees a
 // complete pair reaches RunAsync, so the branch there reads a non-null path without re-checking its partner.
 internal static class McpCommand {
-    private static string ResolveAttachmentPath(string? attachmentPath) {
-        if (!string.IsNullOrEmpty(value: attachmentPath) && !string.Equals(a: attachmentPath, b: "latest", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            return attachmentPath;
-        }
-
-        var tempDirectory = Path.GetTempPath();
-        var files = Directory.GetFiles(
-            path: tempDirectory,
-            searchPattern: "puck-control-*.json"
-        );
-
-        if (files.Length == 0) {
-            throw new FileNotFoundException(message: $"No active Puck control attachment found in '{tempDirectory}'. Start Puck and run 'world.control start' in the console first.");
-        }
-
-        var candidates = files
-            .Select(selector: path => new FileInfo(fileName: path))
-            .OrderByDescending(keySelector: file => file.LastWriteTimeUtc);
-
-        foreach (var file in candidates) {
-            try {
-                _ = LocalEndpointCapability.ReadDescriptor(path: file.FullName);
-
-                return file.FullName;
-            } catch (Exception error) when ((error is UnauthorizedAccessException or IOException or InvalidDataException)) { }
-        }
-
-        throw new FileNotFoundException(message: $"No readable Puck control attachment found in '{tempDirectory}'. Start Puck and run 'world.control start' in the console first.");
-    }
     private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, CancellationToken cancellationToken) {
         // The root already turns Ctrl+C and SIGTERM into this token with no deadline; this handler adds Ctrl+Break,
         // so every console interrupt is a graceful drain rather than a tear-down mid-session.
@@ -60,11 +30,13 @@ internal static class McpCommand {
                     .ConfigureAwait(continueOnCapturedContext: false);
             }
 
-            var resolvedAttachmentPath = ResolveAttachmentPath(attachmentPath: attachmentPath);
-
+            // Worlds publish their capability files in the user's temporary directory, so following the newest World
+            // is following that directory.
             await OperatorMcpServer
                 .RunAsync(
-                attachmentPath: resolvedAttachmentPath,
+                target: (((attachmentPath is null) || string.Equals(a: attachmentPath, b: "latest", comparisonType: StringComparison.OrdinalIgnoreCase))
+                    ? Path.GetTempPath()
+                    : attachmentPath),
                 cancellationToken: stop.Token,
                 input: Console.OpenStandardInput(),
                 output: Console.OpenStandardOutput()
@@ -83,7 +55,7 @@ internal static class McpCommand {
 
     public static Command Create() {
         var attachOption = new Option<string?>(name: "--attach") {
-            Description = "The attachment file printed by `world.control start` in a running World's console, or `latest` to attach to the most recent active World. When omitted with --profile operator, defaults to `latest`.",
+            Description = "The attachment file printed by `world.control start` in a running World's console, or `latest` to follow the newest running World across restarts. When omitted with --profile operator, defaults to `latest`. Each tool call attaches on demand, so the adapter may start before any World.",
         };
         var httpOption = new Option<string?>(name: "--http") {
             Description = "The remote MCP deployment configuration — listener, OAuth protected-resource settings, and grants — monitored for grant changes while hosting. Requires --silo.",
@@ -95,16 +67,18 @@ internal static class McpCommand {
             Description = "The silo document (puck.silo.configuration.v1) to run, forwarded to Puck.World.Silo unchanged; the MCP extension composes over that host. Requires --http.",
         };
         var command = new Command(
-            description: """
-            Optional Puck Console/MCP hosting over local stdio or OAuth-protected HTTP. Both target MCP 2026-07-28; local stdio also answers the initialize handshake of earlier revisions.
+            description: "Host the Puck Console over MCP, on local stdio or OAuth-protected HTTP.",
+            name: "mcp"
+        ) { attachOption, httpOption, profileOption, siloOption };
+
+        command.Detail(detail: """
+            Both shapes target MCP 2026-07-28; local stdio also answers the initialize handshake of earlier revisions.
 
               puck mcp --profile operator [--attach <attachment file|latest>]    local stdio, one attachment
               puck mcp --silo <silo.json> --http <configuration.json>           hosted HTTP over an owned World silo
 
             The two shapes are exclusive; options never mix across them.
-            """,
-            name: "mcp"
-        ) { attachOption, httpOption, profileOption, siloOption };
+            """);
 
         profileOption.AcceptOnlyFromAmong(values: ["operator"]);
         command.Validators.Add(item: result => {

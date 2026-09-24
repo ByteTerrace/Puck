@@ -20,6 +20,21 @@ internal sealed record WorldScheduleManifestEntry(
 /// the edit applied on: the manifest records only facts a rerun of the same document reproduces exactly, so
 /// <c>puck test</c> can compare two legs' manifests byte for byte.</remarks>
 internal sealed record WorldScheduleManifestEcho(bool Rejected, string Message);
+/// <summary>One world an armed run exported at the export tick.</summary>
+/// <param name="World">The world's name — <see cref="WorldScheduleSection.BootWorldName"/> for the world this
+/// process booted with, else the armed instance's own name.</param>
+/// <param name="Export">The export's file name beside this manifest.</param>
+/// <param name="Tick">The tick this world's export was taken at, on its own authority timeline.</param>
+/// <param name="Started">Whether this world is running; a sibling the run could not start exports nothing and
+/// carries the reason.</param>
+/// <param name="Reason">Why a sibling did not start, or <see langword="null"/>.</param>
+internal sealed record WorldScheduleManifestWorld(
+    string World,
+    string Export,
+    ulong Tick,
+    bool Started,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Reason
+);
 /// <summary>The <c>schedule.json</c> document a scheduled run writes beside its state export.</summary>
 /// <param name="Schema">The manifest's schema id.</param>
 /// <param name="World">The world document's file name.</param>
@@ -29,6 +44,8 @@ internal sealed record WorldScheduleManifestEcho(bool Rejected, string Message);
 /// <param name="Truncated">Whether the run ended before it reached <paramref name="AuthoredExportTick"/>, so the
 /// export beside this manifest is what the world reached rather than what it was asked for.</param>
 /// <param name="Export">The state export's file name.</param>
+/// <param name="Worlds">One entry per world this run exported: the booted one, then each armed instance in
+/// declaration order.</param>
 /// <param name="Submissions">One entry per DECLARED row, in declaration order, whether or not its tick was ever
 /// reached; a row the run never published records <see cref="WorldScheduleSection.OutcomeUnreached"/>.</param>
 /// <param name="Echoes">Every local edit verdict the run recorded.</param>
@@ -39,6 +56,7 @@ internal sealed record WorldScheduleManifest(
     ulong ExportTick,
     bool Truncated,
     string Export,
+    IReadOnlyList<WorldScheduleManifestWorld> Worlds,
     IReadOnlyList<WorldScheduleManifestEntry> Submissions,
     IReadOnlyList<WorldScheduleManifestEcho> Echoes
 );
@@ -62,11 +80,16 @@ internal sealed record WorldScheduleManifest(
 internal sealed class WorldScheduleRunner : ICommandObserver {
     private sealed class Landed {
         public string Command = string.Empty;
+
         public string? Detail;
+
         public string Outcome = WorldScheduleSection.OutcomePending;
+
         public bool Pending;
-        public CommandPrincipal Principal;
+        public Principal Principal;
+
         public string PrincipalLabel = string.Empty;
+
         public ulong Tick;
     }
 
@@ -82,36 +105,56 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
     };
 
     private readonly string m_directory;
+
     private readonly List<WorldScheduleManifestEcho> m_echoes = [];
+
     private readonly ulong m_exportTick;
+    private readonly WorldInstanceHost m_instances;
+
     private readonly List<Landed> m_landed = [];
+
     private readonly Func<CommandRegistry> m_registry;
     private readonly Func<InputRouter> m_router;
+
     private readonly WorldTickSchedule<Landed> m_schedule = new();
+
     private readonly WorldServer m_server;
+
     private readonly Dictionary<string, TextCommandSession> m_sessions = new(comparer: StringComparer.Ordinal);
+
     private readonly Func<TextCommandSource> m_source;
+
+    // One entry per world this run exports, in the order the manifest lists them: the booted world first, then each
+    // armed sibling. A sibling that refused to start keeps its entry so the manifest says why rather than dropping
+    // the world the document asked for.
+    private readonly List<WorldScheduleManifestWorld> m_worlds = [];
+
+    private readonly string m_worldDirectory;
     private readonly string m_worldFile;
 
+    private bool m_armedInstances;
     private bool m_exported;
 
-    public WorldScheduleRunner(WorldServer server, WorldDefinitionSource definitionSource, Func<TextCommandSource> source, Func<CommandRegistry> registry, Func<InputRouter> router) {
+    public WorldScheduleRunner(WorldServer server, WorldDefinitionSource definitionSource, Func<TextCommandSource> source, Func<CommandRegistry> registry, Func<InputRouter> router, WorldInstanceHost instances) {
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: definitionSource);
+        ArgumentNullException.ThrowIfNull(argument: instances);
         ArgumentNullException.ThrowIfNull(argument: registry);
         ArgumentNullException.ThrowIfNull(argument: router);
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        m_instances = instances;
         m_registry = registry;
         m_router = router;
         m_server = server;
         m_source = source;
+        m_worldDirectory = WorldDocumentPaths.DirectoryOf(documentPath: definitionSource.SourcePath);
         m_worldFile = Path.GetFileName(path: definitionSource.SourcePath);
 
         var schedule = server.Definition.Schedule;
 
-        m_directory = ((schedule is { } declared) && WorldScheduleRoot.IsArmed
-            ? WorldScheduleRoot.Resolve(authored: declared.Directory)
+        m_directory = (((schedule is not null) && WorldScheduleRoot.IsArmed)
+            ? WorldScheduleRoot.Directory
             : string.Empty
         );
         m_exportTick = (schedule?.ExportTick ?? 0UL);
@@ -135,7 +178,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
             }
 
             var landed = new Landed {
-                Command = row.Command,
+                Command = WorldScheduleCommands.EffectiveCommand(row: row),
                 Outcome = WorldScheduleSection.OutcomeUnreached,
                 PrincipalLabel = row.Principal,
                 Tick = row.Tick,
@@ -166,7 +209,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
         m_exported = true;
 
         if (m_directory.Length == 0) {
-            Console.Error.WriteLine(value: $"[schedule] tick {tick}: schedule.directory did not resolve — nothing written.");
+            Console.Error.WriteLine(value: $"[schedule] tick {tick}: no schedule directory was armed — nothing written.");
 
             return;
         }
@@ -183,6 +226,32 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
                 bytes: WorldStateExport.ToCanonicalJson(server: m_server),
                 path: exportPath
             );
+
+            // Every armed sibling is exported at this same host step, so the set of exports describes one moment of
+            // the composed run rather than each world's own idea of when it was asked.
+            var worlds = new List<WorldScheduleManifestWorld>(capacity: (m_worlds.Count + 1)) {
+                new(
+                Export: WorldScheduleSection.ExportFileName,
+                Reason: null,
+                Started: true,
+                Tick: tick,
+                World: WorldScheduleSection.BootWorldName
+            ),
+            };
+
+            foreach (var sibling in m_worlds) {
+                worlds.Add(item: ((m_instances.TryGet(
+                    instance: out var instance,
+                    name: sibling.World
+                ) && (instance is { } running))
+                    ? ExportInstance(
+                        instance: running,
+                        sibling: sibling,
+                        tick: tick
+                    )
+                    : (sibling with { Started = false, Reason = (sibling.Reason ?? "the instance is no longer admitted") })
+                ));
+            }
             File.WriteAllText(
                 contents: JsonSerializer.Serialize(
                     options: ManifestSerializerOptions,
@@ -200,7 +269,8 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
                             Principal: landed.PrincipalLabel,
                             Tick: landed.Tick
                         ))],
-                        World: m_worldFile
+                        World: m_worldFile,
+                        Worlds: worlds
                     )
                 ),
                 path: Path.Combine(
@@ -212,6 +282,21 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException)) {
             Console.Error.WriteLine(value: $"[schedule] tick {tick}: the export could not be written: {exception.Message}");
         }
+    }
+    private WorldScheduleManifestWorld ExportInstance(WorldInstance instance, WorldScheduleManifestWorld sibling, ulong tick) {
+        var server = instance.Server;
+        var exportPath = Path.Combine(
+            path1: m_directory,
+            path2: sibling.Export
+        );
+
+        File.WriteAllBytes(
+            bytes: WorldStateExport.ToCanonicalJson(server: server),
+            path: exportPath
+        );
+        Console.Error.WriteLine(value: $"[schedule] tick {tick}: export '{sibling.World}' -> {exportPath}");
+
+        return (sibling with { Started = true, Tick = (server.NextInputTick - 1UL) });
     }
     private void Submit(Landed landed) {
         var tick = landed.Tick;
@@ -280,7 +365,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
 
         // Seats only: the section refuses every other principal label at validation, so a label reaching here that
         // is not a seat is a validator that stopped agreeing with this door.
-        if (!WorldPrincipal.TryParse(
+        if (!PrincipalTokens.TryParse(
             principal: out var parsed,
             token: principal
         ) || (parsed.Kind != PrincipalKind.Seat)) {
@@ -301,6 +386,71 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
         return true;
     }
 
+    /// <summary>Starts every sibling world the armed document declares, the way <c>world.instance.start</c> starts
+    /// one: its own document and authority, stepped in this host's own fixed step and exported at the same tick.
+    /// A no-op on an unarmed boot and on a document declaring none.</summary>
+    /// <remarks>Called once, after the container is built and the boot row is admitted — an instance cannot start
+    /// before the host holds the world this process booted with.</remarks>
+    public void ArmInstances() {
+        if (
+            m_armedInstances ||
+            !IsArmed ||
+            (m_server.Definition.Schedule?.Instances is not { Count: > 0 } declared)
+        ) {
+            return;
+        }
+
+        m_armedInstances = true;
+
+        foreach (var instance in declared) {
+            if (instance is null) {
+                continue;
+            }
+
+            // A sibling is named the way a `references` row names one: relative to the document that declared it,
+            // so an armed set travels as one directory rather than binding to the process's launch directory.
+            var started = m_instances.TryStart(
+                instance: out var row,
+                name: instance.Name,
+                path: WorldDocumentPaths.Resolve(
+                    documentDirectory: m_worldDirectory,
+                    path: WorldDocumentName.DocumentFile(name: instance.Document)
+                ),
+                reason: out var reason
+            );
+
+            // Every world is exported at the host step boot's export tick falls on, so an instance running at
+            // another rate would be exported at whatever tick its own accumulator had reached — a coordinate the
+            // document never named. Refused rather than exported under a tick nobody asked for.
+            if (
+                started &&
+                (row is { } admitted) &&
+                (admitted.Server.Definition.SimulationRateHz != m_server.Definition.SimulationRateHz)
+            ) {
+                started = false;
+                reason = $"its simulation.rateHz {admitted.Server.Definition.SimulationRateHz} differs from the booted world's {m_server.Definition.SimulationRateHz} — an armed run exports every world at one host step, which is a coordinate only worlds sharing a rate reach together";
+
+                _ = m_instances.TryStop(
+                    name: instance.Name,
+                    reason: out _
+                );
+            }
+
+            m_worlds.Add(item: new WorldScheduleManifestWorld(
+                Export: WorldScheduleSection.ExportFileNameFor(world: instance.Name),
+                Reason: (started
+                    ? null
+                    : reason),
+                Started: started,
+                Tick: 0UL,
+                World: instance.Name
+            ));
+            Console.Error.WriteLine(value: (started
+                ? $"[schedule] armed '{instance.Name}' from {instance.Document}"
+                : $"[schedule] '{instance.Name}' did not start — {reason}"
+            ));
+        }
+    }
     /// <summary>Records a truncated run when the run ended before the authored export tick: the export beside the
     /// manifest is what the world reached, and the manifest says so rather than presenting it as the export.</summary>
     public void Drain() {

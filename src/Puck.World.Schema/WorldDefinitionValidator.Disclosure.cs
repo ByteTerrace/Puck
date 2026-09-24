@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World;
@@ -181,11 +182,11 @@ public static partial class WorldDefinitionValidator {
 
         foreach (var reader in readers) {
             if (
-                !WorldPrincipal.TryParseCanonical(
+                !PrincipalTokens.TryParseCanonical(
                 principal: out var actor,
                 token: reader
             ) ||
-                (actor.Kind is PrincipalKind.World or PrincipalKind.Group) ||
+                (actor.Kind == PrincipalKind.World) ||
                 !seen.Add(item: reader)
             ) {
                 errors.Add(item: $"state row '{name}': visibility readers must be distinct canonical authenticated principals.");

@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Attestation;
 
 namespace Puck.Launcher.Release;
@@ -53,11 +54,10 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
         }
     }
 }
-/// <summary>A file-backed <see cref="IReleaseSequenceStore"/>: one small text file, written atomically
-/// (write-to-temp then rename) exactly like <see cref="Puck.Assets.ContentAddressedStore"/>'s own writes — the
-/// mark a compromised CDN cannot roll back by replaying old bytes, because it is never carried in the bytes being
-/// replayed.</summary>
-/// <param name="filePath">The mark file's path (created on first <see cref="Advance"/>; its parent directory must exist).</param>
+/// <summary>A file-backed <see cref="IReleaseSequenceStore"/>: one small text file, written through
+/// <see cref="AtomicFile"/> — the mark a compromised CDN cannot roll back by replaying old bytes, because it is never
+/// carried in the bytes being replayed.</summary>
+/// <param name="filePath">The mark file's path (created, with its parent directory, on first <see cref="Advance"/>).</param>
 public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequenceStore {
     private readonly string m_filePath = Path.GetFullPath(path: filePath);
     private readonly Lock m_gate = new();
@@ -89,21 +89,9 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     /// <inheritdoc/>
     public void Advance(ReplayCommitRequirement requirement) {
         lock (m_gate) {
-            var directory = Path.GetDirectoryName(path: m_filePath)!;
-            var tmpPath = Path.Combine(
-                path1: directory,
-                path2: $"{Guid.NewGuid():n}.tmp"
-            );
-
-            _ = Directory.CreateDirectory(path: directory);
-            File.WriteAllText(
-                path: tmpPath,
-                contents: $"{requirement.Domain}\t{requirement.Subject}\t{requirement.EpochStartUnixSeconds}\t{requirement.Sequence}"
-            );
-            File.Move(
-                destFileName: m_filePath,
-                overwrite: true,
-                sourceFileName: tmpPath
+            AtomicFile.WriteAllText(
+                contents: $"{requirement.Domain}\t{requirement.Subject}\t{requirement.EpochStartUnixSeconds}\t{requirement.Sequence}",
+                path: m_filePath
             );
         }
     }

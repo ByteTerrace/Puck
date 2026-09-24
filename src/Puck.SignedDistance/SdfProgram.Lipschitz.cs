@@ -178,7 +178,7 @@ public sealed partial class SdfProgram {
                         // The scope's own bound becomes a BAKED per-candidate scale: Data1.y = 1/L_scope, applied by
                         // mapCore/mapGradCore (and the CPU evaluator) to the scope's field at the pop — a positively
                         // scaled distance keeps its zero set, and (1/L)·f of an L-Lipschitz f is exactly 1-Lipschitz,
-                        // so the scope's warps/relief/eccentricity stop taxing the GLOBAL step scale. A factor-1 scope
+                        // so the scope's warps/relief stop taxing the GLOBAL step scale. A factor-1 scope
                         // stays unpatched (Data1.y = 0 reads as no scale), keeping existing programs byte-identical.
                         var scopeLipschitz = MathF.Max(
                             x: accumulator,
@@ -215,7 +215,7 @@ public sealed partial class SdfProgram {
             }
         }
 
-        // stepScale = 1 / max(L, 1), clamped to (0, 1]. A warp-free, eccentricity-free, seam-free program composes
+        // stepScale = 1 / max(L, 1), clamped to (0, 1]. A warp-free, seam-free program composes
         // nothing but factor-1 candidates through max-only arms, so L == 1 exactly and this returns 1.0f to the bit
         // (max(1,1) = 1, 1/1 = 1). A non-finite accumulator is refused, never clamped: the shader reads a non-positive
         // step scale as "no clamp", and a silent floor would hide the authored warp that overflowed it.
@@ -251,10 +251,9 @@ public sealed partial class SdfProgram {
     // Per chain: domain ops that are isometries / non-expansive projections / field ops (Translate/Rotate/
     // TransformDynamic/Symmetry/Repeat/RepeatLimited/WallpaperFold/Elongate/Onion/Dilate; Scale is handled
     // conservatively by the runtime distanceScale) contribute factor 1. A coordinate-keyed plane rotation
-    // (RotatePlane) contributes the EXACT operator norm of its Jacobian over the chain's reach rho; an
-    // ellipsoid (whose SDF can underestimate) contributes its eccentricity. A chain's factor is the product of its
-    // domain-op factors times the max shape-approx factor in it (a twisted ellipsoid compounds both errors). A
-    // warp-free, eccentricity-free chain yields exactly 1.
+    // (RotatePlane) contributes the EXACT operator norm of its Jacobian over the chain's reach rho. Every shape body is
+    // itself 1-Lipschitz (the ellipsoid rides the superellipsoid's exact gauge), so a shape contributes only its reach,
+    // never a factor. A chain's factor is the product of its domain-op factors; a warp-free chain yields exactly 1.
     //
     // A warp's reach rho depends on shapes that can appear AFTER it in the chain (the usual Translate/warp/Shape
     // order), so the chain's warp rates and its reach accumulate as the walk proceeds and fold together at chain end.
@@ -273,7 +272,6 @@ public sealed partial class SdfProgram {
         // Each warp's |rate|, whether its keyed coordinate lies inside the plane it rotates (see BendOperatorNorm), and
         // the min-axis scale accumulated before it.
         var chainWarpRates = new List<(float Rate, bool KeyInRotatedPlane, float MinScale)>();
-        var chainShapeApproxMax = 1.0f;   // max ellipsoid eccentricity among the chain's shapes (1 = none / perfectly round)
         var chainShapeReach = 0.0f;       // max local bounding radius among the chain's shapes, outer frame
         var chainTranslateReach = 0.0f;   // sum of |translate offset| accumulated on the chain, outer frame
         var chainLogSphereProduct = 1.0f; // product of the chain's log-spherical shell-fold factors exp(w/2) (1 = none)
@@ -296,7 +294,6 @@ public sealed partial class SdfProgram {
                 chainFactors.Add(item: (((FoldChainLipschitz(
                     reach: (chainTranslateReach + chainShapeReach),
                     reachWarps: chainReachWarps,
-                    shapeApproxMax: chainShapeApproxMax,
                     warpRates: chainWarpRates
                 ) * chainLogSphereProduct) * (chainHasShapeBlend
                     ? chainDisplaceWarpProduct
@@ -308,7 +305,6 @@ public sealed partial class SdfProgram {
                 hasShapeByChain.Add(item: chainHasShapeBlend);
                 chainHasShapeBlend = false;
                 chainWarpRates.Clear();
-                chainShapeApproxMax = 1.0f;
                 chainShapeReach = 0.0f;
                 chainTranslateReach = 0.0f;
                 chainLogSphereProduct = 1.0f;
@@ -368,13 +364,6 @@ public sealed partial class SdfProgram {
                                 sweepCurves: sweepCurves
                             ) * maxScale)
                         );
-
-                        if (((SdfShapeType)instruction.Shape) == SdfShapeType.Ellipsoid) {
-                            chainShapeApproxMax = MathF.Max(
-                                x: chainShapeApproxMax,
-                                y: EllipsoidEccentricity(instruction: instruction)
-                            );
-                        }
 
                         break;
                     }
@@ -515,7 +504,6 @@ public sealed partial class SdfProgram {
         chainFactors.Add(item: (((FoldChainLipschitz(
             reach: (chainTranslateReach + chainShapeReach),
             reachWarps: chainReachWarps,
-            shapeApproxMax: chainShapeApproxMax,
             warpRates: chainWarpRates
         ) * chainLogSphereProduct) * (chainHasShapeBlend
             ? chainDisplaceWarpProduct
@@ -557,8 +545,11 @@ public sealed partial class SdfProgram {
             var cosine = (-amount / (bulge * MathF.PI));
 
             if (MathF.Abs(x: cosine) <= 1.0f) {
-                var criticalT = (MathF.Acos(x: cosine) / MathF.PI);
-                var criticalS = ((startScale + (amount * criticalT)) + (bulge * MathF.Sin(x: (MathF.PI * criticalT))));
+                // sin(pi*t) at the critical point is sin(acos(cosine)) = sqrt(1 - cosine^2), non-negative over acos's range
+                // [0, pi], and acos is PortableAcos, so the extrema carry the same bits on every machine.
+                var c = ((double)cosine);
+                var criticalT = (PortableAcos(x: c) / Math.PI);
+                var criticalS = ((float)((startScale + (amount * criticalT)) + (bulge * Math.Sqrt(d: (1.0 - (c * c))))));
 
                 min = MathF.Min(
                     x: min,
@@ -573,7 +564,44 @@ public sealed partial class SdfProgram {
 
         return (min, max);
     }
+    /// <summary>
+    /// The arccosine of <paramref name="x"/> in [-1, 1], computed with scalar double addition, subtraction,
+    /// multiplication, division and a correctly rounded square root only, in a fixed order, so the result carries the
+    /// same bits on every machine and runtime. The platform library's <see cref="Math.Acos(double)"/> is not specified
+    /// to the last bit, and a flare's extrema feed reach and budget decisions that must agree everywhere.
+    /// </summary>
+    /// <param name="x">The cosine, in [-1, 1].</param>
+    /// <returns>The angle in [0, pi], within a few units in the last place of the true arccosine.</returns>
+    public static double PortableAcos(double x) {
+        // acos(x) = pi/2 - asin(x) for |x| <= 1/2; beyond it, acos(x) = 2*asin(sqrt((1 - x)/2)) and
+        // acos(-x) = pi - acos(x), which keep the series argument within 1/2.
+        if (x > 0.5) {
+            return (2.0 * PortableAsin(x: Math.Sqrt(d: ((1.0 - x) * 0.5))));
+        }
+        if (x < -0.5) {
+            return (Math.PI - (2.0 * PortableAsin(x: Math.Sqrt(d: ((1.0 + x) * 0.5)))));
+        }
 
+        return ((0.5 * Math.PI) - PortableAsin(x: x));
+    }
+
+    // asin(x) = sum over n of a_n * x^(2n+1) / (2n+1), with a_0 = 1 and a_(n+1) = a_n * (2n+1)/(2n+2). For |x| <= 1/2 each
+    // term is at most a quarter of the one before, so 30 terms leave a remainder below 2^-60 of the result; the count is
+    // fixed, never data-dependent, so every machine performs the same operations.
+    private static double PortableAsin(double x) {
+        var square = (x * x);
+        var power = x;
+        var coefficient = 1.0;
+        var sum = 0.0;
+
+        for (var n = 0; (n < 30); n++) {
+            sum += ((coefficient * power) / ((2 * n) + 1));
+            coefficient *= (((2.0 * n) + 1.0) / ((2.0 * n) + 2.0));
+            power *= square;
+        }
+
+        return sum;
+    }
     // AxialProfile's conservative operator-norm bound over the chain's reach rho (see SdfOp.AxialProfile): the warp's Jacobian is
     // diag(1/s, 1, 1/s) plus a rank-1 shear from ds/dy (moving along y rescales x and z), so the triangle inequality
     // bounds its operator norm by max(1/s, 1) + rho_flared*|ds/dy|/s^2. The shear scales with the radial distance of
@@ -591,7 +619,7 @@ public sealed partial class SdfProgram {
     // by distanceScale = 1/maxS, so the returned candidate field really is that much flatter. Its true Lipschitz constant
     // is distanceScale * ||J|| * L_rest <= 1. Unlike CellJitter (whose ratio is an unscaled boundary-discontinuity
     // factor that must not pull down other factors), a sub-unity factor here reflects a physical flattening of the
-    // candidate field and legitimately offsets same-chain warps or shape eccentricity.
+    // candidate field and legitimately offsets same-chain warps.
     private static float FlareOperatorNorm(float amount, float bulge, float inverseSpan, float distanceScale, float reach, float startScale) {
         if (
             (amount == 0.0f) &&

@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.World.Protocol;
 
 /// <summary>One peer identity affected by an ordered admission/disconnect event.</summary>
@@ -16,7 +18,7 @@ namespace Puck.World.Protocol;
 /// the exact admission row; a committed destination admission starts without it.</param>
 /// <param name="CatalogRig">The occupant-owned procedural appearance rig, recorded so replay restores the same shape
 /// even when authority admission selected another population slot.</param>
-public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, WorldPrincipal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig);
+public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, Principal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig);
 /// <summary>Server-authored entries in the same ordered domain as submissions. They are not submission payloads and
 /// can never arrive from a client.</summary>
 public abstract record WorldServerEvent {

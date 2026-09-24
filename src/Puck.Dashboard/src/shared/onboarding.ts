@@ -1,48 +1,32 @@
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import type { HostDispatch, HostState, HostThunkExtra } from "./store";
-
-export type OnboardingStatus =
-  | "checking"
-  | "error"
-  | "idle"
-  | "onboarding"
-  | "ready";
-
-export interface OnboardingState {
-  error?: string;
-  status: OnboardingStatus;
-}
+import type { TokenCredential } from "@azure/identity";
+import {
+  catchError,
+  concat,
+  concatMap,
+  defer,
+  EmptyError,
+  first,
+  map,
+  type Observable,
+  of,
+  switchMap,
+  take,
+  throwError,
+  timer,
+} from "rxjs";
+import { type ActorRefFrom, assign, fromObservable, setup } from "xstate";
 
 interface SelfOnboardResponse {
   State?: string;
   state?: string;
 }
 
+/** One self-onboarding call; the protocol below decides when to make each. */
+export type OnboardingRequest = (method: "GET" | "POST") => Promise<{ state: string }>;
+
 const POLL_ATTEMPT_LIMIT = 60;
 const POLL_INTERVAL_MILLISECONDS = 5000;
 const SELF_ONBOARD_PATH = "/api/self-onboard";
-
-const initialState: OnboardingState = { status: "idle" };
-
-export const onboardingSlice = createSlice({
-  initialState,
-  name: "onboarding",
-  reducers: {
-    failed(state, action: PayloadAction<string>) {
-      state.error = action.payload;
-      state.status = "error";
-    },
-    statusChanged(state, action: PayloadAction<OnboardingStatus>) {
-      state.error = undefined;
-      state.status = action.payload;
-    },
-  },
-});
-
-const { failed, statusChanged } = onboardingSlice.actions;
-
-const delay = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 async function sendSelfOnboardRequest(
   accessToken: string,
@@ -73,67 +57,111 @@ async function sendSelfOnboardRequest(
   };
 }
 
-export const ensureOnboarded =
-  (scopes: string[]) =>
-  async (
-    dispatch: HostDispatch,
-    getState: () => HostState,
-    extra: HostThunkExtra,
-  ): Promise<void> => {
-    const { status } = (getState() as { onboarding: OnboardingState })
-      .onboarding;
+const isReady = (state: string) => "Ready" === state || "Migrating" === state;
 
-    if ("idle" !== status && "error" !== status) {
-      return;
+export interface OnboardingPolling {
+  attempts: number;
+  intervalMilliseconds: number;
+}
+
+/**
+ * The self-onboarding protocol as a stream of statuses, ending with "ready" or an error. It POSTs unconditionally
+ * first, never GET-and-skip: for an already-provisioned user the POST is what deposits a fresh escrow and triggers a
+ * pending partition migration, which a GET alone would report as Ready and never fire. The POST is idempotent and
+ * fast for users with nothing to do. Until provisioning completes it polls, re-POSTing whenever the account reports
+ * it is not onboarded. Migrating counts as ready: the data stays reachable at its recorded home for the whole
+ * migration (reads throughout; writes are frozen until the flip and surface as errors).
+ */
+export function onboardingProgress(
+  request: (method: "GET" | "POST") => Promise<{ state: string }>,
+  polling: OnboardingPolling = { attempts: POLL_ATTEMPT_LIMIT, intervalMilliseconds: POLL_INTERVAL_MILLISECONDS },
+): Observable<"onboarding" | "ready"> {
+  const poll$ = timer(polling.intervalMilliseconds, polling.intervalMilliseconds).pipe(
+    take(polling.attempts),
+    concatMap(() => defer(() => request("GET"))),
+    concatMap((result) => ("NotOnboarded" === result.state ? defer(() => request("POST")) : of(result))),
+    first((result) => isReady(result.state)),
+    catchError((error: unknown) =>
+      throwError(() =>
+        error instanceof EmptyError ? new Error("Onboarding did not complete within the expected time frame.") : error,
+      ),
+    ),
+    map(() => "ready" as const),
+  );
+
+  return defer(() => request("POST")).pipe(
+    switchMap((start) => (isReady(start.state) ? of("ready" as const) : concat(of("onboarding" as const), poll$))),
+  );
+}
+
+
+/** Self-onboarding calls authorized as the signed-in user. */
+export function selfOnboardRequest(tokenCredential: TokenCredential, scopes: string[]): OnboardingRequest {
+  return async (method) => {
+    const token = await tokenCredential.getToken(scopes);
+
+    if (!token) {
+      throw new Error("No access token was issued for account setup.");
     }
 
-    dispatch(statusChanged("checking"));
-
-    try {
-      const getAccessToken = async () =>
-        (await extra.tokenCredential.getToken(scopes))!.token;
-      // POST unconditionally, never GET-and-skip: for an already-provisioned user the POST is
-      // what deposits a fresh escrow and triggers a pending partition migration — a GET alone
-      // would report Ready and the migration would never fire. The POST is idempotent and fast
-      // for users with nothing to do.
-      const startResult = await sendSelfOnboardRequest(
-        await getAccessToken(),
-        "POST",
-      );
-
-      // Migrating counts as ready: the data stays reachable at its recorded home for the whole
-      // migration (reads throughout; writes are frozen until the flip and surface as errors).
-      if ("Ready" === startResult.state || "Migrating" === startResult.state) {
-        dispatch(statusChanged("ready"));
-
-        return;
-      }
-
-      dispatch(statusChanged("onboarding"));
-
-      for (let attempt = 0; attempt < POLL_ATTEMPT_LIMIT; attempt++) {
-        await delay(POLL_INTERVAL_MILLISECONDS);
-
-        const pollResult = await sendSelfOnboardRequest(
-          await getAccessToken(),
-          "GET",
-        );
-
-        if ("Ready" === pollResult.state || "Migrating" === pollResult.state) {
-          dispatch(statusChanged("ready"));
-
-          return;
-        }
-
-        if ("NotOnboarded" === pollResult.state) {
-          await sendSelfOnboardRequest(await getAccessToken(), "POST");
-        }
-      }
-
-      dispatch(
-        failed("Onboarding did not complete within the expected time frame."),
-      );
-    } catch (e) {
-      dispatch(failed(e instanceof Error ? e.message : String(e)));
-    }
+    return sendSelfOnboardRequest(token.token, method);
   };
+}
+
+export interface OnboardingInput {
+  polling?: OnboardingPolling;
+  request: OnboardingRequest;
+}
+
+/**
+ * The account's setup lifecycle, one per page. It waits for sign-in, then runs the protocol above (`onboardingProgress`)
+ * as an invoked observable: `working.checking` covers the first POST, `working.onboarding` the polling, and the
+ * protocol's end is `ready` or `failed`. A failure is retried by the author (`RETRY`) or by the next sign-in
+ * notice; leaving `working` stops the poll. Readers ask questions rather than naming states: the `busy` tag while
+ * setup runs, and `snapshot.can({ type: "RETRY" })` for a failure worth offering a retry.
+ */
+export const onboardingMachine = setup({
+  types: {
+    context: {} as { error: string | null; input: OnboardingInput },
+    events: {} as { type: "RETRY" } | { type: "SIGNED_IN" },
+    input: {} as OnboardingInput,
+    tags: {} as "busy",
+  },
+  actors: {
+    progress: fromObservable(({ input }: { input: OnboardingInput }) => onboardingProgress(input.request, input.polling)),
+  },
+}).createMachine({
+  id: "onboarding",
+  context: ({ input }) => ({ error: null, input }),
+  initial: "signedOut",
+  states: {
+    signedOut: {
+      on: { SIGNED_IN: "working" },
+    },
+    working: {
+      tags: "busy",
+      entry: assign({ error: null }),
+      initial: "checking",
+      invoke: {
+        src: "progress",
+        input: ({ context }) => context.input,
+        onSnapshot: { guard: ({ event }) => "onboarding" === event.snapshot.context, target: ".onboarding" },
+        onDone: "ready",
+        onError: {
+          actions: assign({ error: ({ event }) => (event.error instanceof Error ? event.error.message : String(event.error)) }),
+          target: "failed",
+        },
+      },
+      states: {
+        checking: {},
+        onboarding: {},
+      },
+    },
+    ready: {},
+    failed: {
+      on: { RETRY: "working", SIGNED_IN: "working" },
+    },
+  },
+});
+
+export type OnboardingActor = ActorRefFrom<typeof onboardingMachine>;

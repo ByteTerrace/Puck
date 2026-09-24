@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -21,7 +22,7 @@ public sealed class WorldExtensionLawTests {
         );
     private static WorldRecordedExtension Extension(WorldServer server) => new(
         server,
-        WorldPrincipal.Console,
+        Principal.Console,
         [new(
                 Capability: WorldCapability.Mutate,
                 Subject: GrantSubject.Section(section: WorldSection.State)
@@ -40,7 +41,7 @@ public sealed class WorldExtensionLawTests {
         4
     );
     private static WorldMutation.UpsertStateRow Mutation() => new(
-        Principal: WorldPrincipal.Console,
+        Principal: Principal.Console,
         Row: new WorldStateRow(
             Name: CellName.Parse(candidate: "external-result"),
             Kind: CellKind.Int
@@ -179,7 +180,7 @@ public sealed class WorldExtensionLawTests {
         using var fixture = Fixtures.FreshServer();
         using var extension = new WorldRecordedExtension(
             fixture.Server,
-            WorldPrincipal.Console,
+            Principal.Console,
             [new(
                     Capability: WorldCapability.Mutate,
                     Subject: GrantSubject.Section(section: WorldSection.State)
@@ -390,10 +391,12 @@ public sealed class WorldExtensionLawTests {
                 )).Status
             );
         } finally {
-            if (Directory.Exists(path: path)) { Directory.Delete(
+            if (Directory.Exists(path: path)) {
+                Directory.Delete(
                 path,
                 recursive: true
-            ); }
+            );
+            }
         }
     }
     [InlineData(WorldExternalOperationStatus.Succeeded)]
@@ -517,7 +520,7 @@ public sealed class WorldExtensionLawTests {
         using var fixture = Fixtures.FreshServer();
         using var extension = new WorldRecordedExtension(
             fixture.Server,
-            WorldPrincipal.Console,
+            Principal.Console,
             [new(
                     Capability: WorldCapability.Mutate,
                     Subject: GrantSubject.Placement(id: "creature")
@@ -552,7 +555,7 @@ public sealed class WorldExtensionLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => noRequest.Observe(query: query));
         using var denied = new WorldRecordedExtension(
             fixture.Server,
-            WorldPrincipal.Addon(name: "observer"),
+            Principal.Addon(name: "observer"),
             [new(
                     Capability: WorldCapability.Observe,
                     Subject: query.ObservationSubject()
@@ -563,7 +566,7 @@ public sealed class WorldExtensionLawTests {
         Assert.True(condition: denied.Observe(query: query).Refused);
         using var allowed = new WorldRecordedExtension(
             fixture.Server,
-            WorldPrincipal.Console,
+            Principal.Console,
             [new(
                     Capability: WorldCapability.Observe,
                     Subject: query.ObservationSubject()
@@ -716,17 +719,17 @@ public sealed class WorldExtensionLawTests {
         using var fixture = Fixtures.FreshServer();
         using var extension = Extension(server: fixture.Server);
 
-        Assert.Throws<InvalidOperationException>(testCode: () => extension.Submit(mutation: Mutation() with { Principal = WorldPrincipal.Addon(name: "other") }));
+        Assert.Throws<InvalidOperationException>(testCode: () => extension.Submit(mutation: Mutation() with { Principal = Principal.Addon(name: "other") }));
         Assert.Throws<InvalidOperationException>(testCode: () => extension.Submit(mutation: new WorldMutation.Batch(
-            WorldPrincipal.Console,
+            Principal.Console,
             [Mutation(), new WorldMutation.RemoveAddon(
-                    WorldPrincipal.Console,
+                    Principal.Console,
                     "probe"
                 )]
         )));
         using var ungranted = new WorldRecordedExtension(
             fixture.Server,
-            WorldPrincipal.Addon(name: "ungranted"),
+            Principal.Addon(name: "ungranted"),
             [new(
                     Capability: WorldCapability.Mutate,
                     Subject: GrantSubject.Section(section: WorldSection.State)

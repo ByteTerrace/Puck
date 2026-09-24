@@ -1,0 +1,80 @@
+/*
+  The accessible plan: quiet tiles on the viewport's sunken well. Each tile's value takes its authored appearance color
+  from --cell-color (document data, set per tile), deepened in light mode so it reads on a raised surface.
+*/
+
+.plan {
+  min-height: rem(360px);
+  padding: var(--mantine-spacing-md);
+
+  @mixin smaller-than $mantine-breakpoint-sm {
+    padding: var(--mantine-spacing-xs);
+  }
+}
+
+.board {
+  min-height: rem(300px);
+  padding: var(--mantine-spacing-xs);
+  overflow-x: auto;
+}
+
+.grid {
+  display: grid;
+  gap: rem(6px);
+  max-width: rem(640px);
+  margin: 0 auto;
+
+  @mixin smaller-than $mantine-breakpoint-xs {
+    gap: rem(4px);
+  }
+}
+
+.cell {
+  position: relative;
+  min-width: rem(44px);
+  min-height: rem(56px);
+  aspect-ratio: 1.2;
+  padding: var(--mantine-spacing-xs);
+  border: 1px solid var(--puck-line);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--puck-surface-raised);
+  color: var(--mantine-color-text);
+  font: inherit;
+  cursor: pointer;
+
+  @mixin hover {
+    border-color: var(--mantine-color-dimmed);
+  }
+
+  &[data-highlighted] {
+    border-color: var(--accent-2);
+    box-shadow: inset 0 0 0 1px var(--accent-2);
+  }
+
+  &[aria-pressed="true"] {
+    border-color: var(--accent-2);
+    background-color: color-mix(in oklab, var(--accent-2) 12%, var(--puck-surface-raised));
+    box-shadow: inset 0 0 0 2px var(--accent-2);
+  }
+}
+
+.index {
+  position: absolute;
+  top: rem(4px);
+  left: rem(6px);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: rem(11px);
+  line-height: 1;
+  color: var(--mantine-color-dimmed);
+}
+
+.value {
+  display: block;
+  margin-top: rem(8px);
+  overflow: hidden;
+  font-size: clamp(rem(14px), 1.6vw, rem(24px));
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: light-dark(color-mix(in oklab, var(--cell-color) 62%, var(--mantine-color-black)), var(--cell-color));
+}

@@ -1,0 +1,41 @@
+/* A fixed-height frame: the one-line status, then the read-only JSON, which scrolls inside itself. */
+.frame {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: clamp(rem(360px), 64dvh, rem(760px));
+  min-width: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-width: 0;
+  height: rem(36px);
+}
+
+.pointer {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mantine-font-family-monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer {
+  min-height: 0;
+
+  & :global(.cm-editor) {
+    height: 100%;
+  }
+}

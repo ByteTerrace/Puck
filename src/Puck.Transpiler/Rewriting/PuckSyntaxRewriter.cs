@@ -46,13 +46,13 @@ public abstract partial class PuckSyntaxRewriter {
             );
         }
         if ((original is OperandExpressionNode sourceOperand) && (rewritten is OperandExpressionNode changedOperand) &&
-            !string.Equals(sourceOperand.Text, changedOperand.Text, StringComparison.Ordinal) &&
-            ReferenceEquals(sourceOperand.Syntax, changedOperand.Syntax)) {
+            !string.Equals(a: sourceOperand.Text, b: changedOperand.Text, comparisonType: StringComparison.Ordinal) &&
+            ReferenceEquals(objA: sourceOperand.Syntax, objB: changedOperand.Syntax)) {
             throw new PuckRewriteException("An operand rewrite changed Text but retained its parsed Syntax; rebuild the operand through PuckParser.CreateOperand or use RewriteOperandSyntax.");
         }
         if ((original is OperandExpressionNode operand) && (rewritten is OperandExpressionNode replacedOperand) &&
             string.Equals(a: operand.Text, b: replacedOperand.Text, comparisonType: StringComparison.Ordinal) &&
-            !Equals(operand.Syntax, replacedOperand.Syntax)) {
+            !Equals(objA: operand.Syntax, objB: replacedOperand.Syntax)) {
             throw PuckRewriteException.ShadowedText(member: nameof(OperandExpressionNode.Text), node: original, text: operand.Text);
         }
     }
@@ -188,6 +188,11 @@ public abstract partial class PuckSyntaxRewriter {
         BinaryExpressionNode binary => (binary with { Left = this.Rewritten(node: binary.Left), Right = this.Rewritten(node: binary.Right) }),
         CallExpressionNode call => (call with { Arguments = this.RewrittenNodes(nodes: call.Arguments) }),
         ColorExpressionNode leaf => leaf,
+        ConditionalExpressionNode conditional => (conditional with {
+            Condition = this.Rewritten(node: conditional.Condition),
+            WhenFalse = this.Rewritten(node: conditional.WhenFalse),
+            WhenTrue = this.Rewritten(node: conditional.WhenTrue),
+        }),
         IdentifierExpressionNode leaf => leaf,
         IndexExpressionNode index => (index with { Index = this.Rewritten(node: index.Index), Target = this.Rewritten(node: index.Target) }),
         InterpolatedStringNode interpolated => (interpolated with { Segments = this.RewrittenSegments(segments: interpolated.Segments) }),
@@ -215,18 +220,24 @@ public abstract partial class PuckSyntaxRewriter {
             Default = this.RewrittenOrNull(node: field.Default),
             Modifiers = this.RewrittenNodes(nodes: field.Modifiers),
         }),
-        RowRefNode leaf => leaf,
+        RowRefNode row => ((row.KeyAtom is { } atom)
+            ? this.RewrittenKeyAtom(atom: atom, row: row)
+            : row
+        ),
         StateCellEntryNode cell => (cell with { Modifiers = this.RewrittenNodes(nodes: cell.Modifiers), Value = this.Rewritten(node: cell.Value) }),
         StateModifierNode modifier => (modifier with { Arguments = this.RewrittenNodes(nodes: modifier.Arguments) }),
         StatePileTokenNode leaf => leaf,
         TemplateParameterNode parameter => (parameter with { DefaultValue = this.RewrittenOrNull(node: parameter.DefaultValue) }),
         TestExpectBlockNode block => (block with { Expectations = this.RewrittenNodes(nodes: block.Expectations) }),
+        TestExpectWorldNode addressed => (addressed with { Expectations = this.RewrittenNodes(nodes: addressed.Expectations) }),
         TestExpectationNode expectation => (expectation with { Predicate = this.Rewritten(node: expectation.Predicate) }),
         TestGivenBlockNode block => (block with { Cells = this.RewrittenNodes(nodes: block.Cells) }),
         TestGivenNode cell => (cell with { Target = this.Rewritten(node: cell.Target), Value = this.Rewritten(node: cell.Value) }),
+        TestGivenWorldNode addressed => (addressed with { Cells = this.RewrittenNodes(nodes: addressed.Cells) }),
         TestSeatStepNode leaf => leaf,
         TestTicksStepNode leaf => leaf,
         TestWhenBlockNode block => (block with { Steps = this.RewrittenNodes(nodes: block.Steps) }),
+        TestWhenWorldNode addressed => (addressed with { Steps = this.RewrittenNodes(nodes: addressed.Steps) }),
         _ => throw PuckRewriteException.UnknownKind(node: node),
     });
     /// <summary>Returns <paramref name="predicate"/> with every child rewritten.</summary>
@@ -276,7 +287,7 @@ public abstract partial class PuckSyntaxRewriter {
         ImportNode leaf => leaf,
         InterruptStatementNode interrupt => (interrupt with { Predicate = this.Rewritten(node: interrupt.Predicate) }),
         LetNode declaration => (declaration with { Value = this.Rewritten(node: declaration.Value) }),
-        LocalStatementNode local => local with { Expression = this.Rewritten(node: local.Expression) },
+        LocalStatementNode local => local with { Expression = this.Rewritten(node: local.Expression), NameExpression = this.RewrittenOrNull(node: local.NameExpression) },
         OnNoChoiceBlockNode fallback => (fallback with { Effects = this.DescendStatements(statements: fallback.Effects) }),
         OptionBlockNode option => (option with { Statements = this.DescendStatements(statements: option.Statements) }),
         PatternDeclarationNode declaration => (declaration with { Symbols = this.RewrittenNodes(nodes: declaration.Symbols), Value = this.RewrittenOrNull(node: declaration.Value) }),
@@ -335,6 +346,7 @@ public abstract partial class PuckSyntaxRewriter {
         TestDeclarationNode declaration => (declaration with {
             Expect = this.RewrittenOrNull(node: declaration.Expect),
             Given = this.RewrittenOrNull(node: declaration.Given),
+            Subject = this.RewrittenOrNull(node: declaration.Subject),
             When = this.RewrittenOrNull(node: declaration.When),
         }),
         WhenStatementNode gate => (gate with { Predicate = this.Rewritten(node: gate.Predicate) }),

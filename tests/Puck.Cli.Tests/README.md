@@ -14,6 +14,12 @@ missing overlays fail rendered samples, and process output carries elapsed obser
 without closing input early, and that early exit and timeout remain bounded. Actual startup performance
 requires running `puck bench startup` against the built World executable.
 
+`ShippedSourceLintLawTests` runs `puck lint --strict` over every tracked source
+under `worlds`, `src/Puck.World/Assets` and `tests/Puck.World.Verdicts`, so an
+error or warning in a shipped world or cartridge fails the suite with the report
+the verb printed. `FormatProjectionLawTests` holds every tracked source outside
+`experimental` to what `puck format` prints.
+
 `CompileBatchTests` verifies ordered compilation, independent source bindings,
 byte parity with single-source compilation, stopping on failure, and refusal
 of batch requests with a shared output path or watch mode.
@@ -23,6 +29,20 @@ named world documents, that a refused member publishes none of them, and that
 the semantic-validation gate on an update, stale-byte refusal without output
 replacement, and the current refusal to relocate an asset-bearing document.
 
+`WorldArtifactBuildLawTests` count builds of the stored `Puck.World` artifact
+over small git checkouts of their own, with a counting builder in place of
+`dotnet build`. Two resolutions of an unchanged tree build once, and concurrent
+resolutions of one source state share one build. A one-byte uncommitted change
+under the World's closure produces a new key, while documentation and
+unreferenced projects do not. A publish that loses the race keeps the winner's
+build. Pruning keeps the most recently used builds and every leased one, and a
+killed run's leftover directories and lock files are removed only after six hours.
+`WorldArtifactClosureLawTests` evaluates the World's project graph with MSBuild
+and requires every input it names to lie under a keyed path.
+`CanaryListenerLawTests` checks that the canary port probe hands out UDP ports.
+It also checks that a World refusing its listener is classified as an
+infrastructure failure rather than unsupported.
+
 The release laws cover immutable deployment configuration references, exclusive
 controller ownership, complete official package preparation, registry retention
 readback, bootstrap refusal over existing gameplay, and cancellation of an owned
@@ -30,7 +50,7 @@ child process. `WorldReleaseRollbackTests` verifies rollback directly from an
 admitted commit, refusal during unfinished maintenance, and finalization closing
 eligibility. `WorldReleaseGuestGuardTests` checks the Python guest guard against
 the C# durable group wire format, including stale operations and recovery roles.
-It requires Python 3 on PATH, or `PUCK_TEST_PYTHON` naming the executable.
+It requires Python 3 on PATH (`python` on Windows, `python3` elsewhere).
 `WorldReleaseAzureLeaseTests` uses the actual Azure
 SDK against an isolated local Azurite container. Load
 `mcr.microsoft.com/azure-storage/azurite:3.35.0` and start Docker to run that law;
@@ -41,20 +61,20 @@ not contact a production storage account.
 test keys, retained checkpoint bytes and machine identity, incomplete-export
 refusal, metadata publication in both directions, and refusal of simulation edits
 before Docker starts. It checks original receipt lookups and excludes later receipts
-in materialized fixtures. Set `PUCK_TEST_WORLD_IMAGE` to a locally built world-silo
-image to run an unchanged-definition control and a metadata release pair, each
+in materialized fixtures. Build the checkout's world-silo image as
+`puck/world-silo:candidate`
+(`docker build --file src/Puck.World.Silo/Dockerfile --tag puck/world-silo:candidate .`)
+to run an unchanged-definition control and a metadata release pair, each
 through four Docker qualification legs. The metadata control uses the public
 `qualify` command, including retention of both packages, and verifies that the
 source export survives unchanged. This optional same-image control verifies the
 export and runner path; compatibility between builds needs separate pair evidence.
 The outer test reads receipt history from container-written forward and rollback
-stores and checks each image's version-2 receipt proof. `WorldReleaseReceiptProofTests`
+stores and checks each image's receipt proof. `WorldReleaseReceiptProofTests`
 covers complete lookups, duplicate and conflicting retries, unchanged roots, and
-new receipts after continuation. Set `PUCK_TEST_PREVIOUS_WORLD_IMAGE` to a distinct
-older image with version-1 exercise reports to verify its named refusal without a
-qualification receipt; `PUCK_TEST_WORLD_IMAGE` must also be set for this control.
-Set `PUCK_TEST_RELEASE_EVIDENCE_DIRECTORY` to retain those Docker legs and their
-hash evidence outside the test's temporary directory for inspection.
+new receipts after continuation.
+Those Docker legs and their hash evidence are retained for inspection in
+`world-release-evidence` beside the test assembly, replaced by the next run.
 
 `WorldReleasePackagedHostTests` uses that candidate image through the default silo
 entry point and both silo/CLI MCP entry points. Each process must activate and

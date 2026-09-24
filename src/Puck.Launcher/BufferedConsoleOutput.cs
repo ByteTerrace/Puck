@@ -1,5 +1,7 @@
 using System.Text;
 
+using Puck.Commands;
+
 namespace Puck.Launcher;
 
 /// <summary>
@@ -58,17 +60,25 @@ public sealed class BufferedConsoleOutput : IDisposable {
     public void Flush() {
         m_writer.Flush();
     }
-    /// <summary>Writes one REFUSED line to standard error, so a rejection is distinguishable from ordinary transcript
+    /// <summary>Writes one REFUSED result to standard error, so a rejection is distinguishable from ordinary transcript
     /// output by stream and not only by wording. The buffered stdout is flushed first, so a reader merging the two
-    /// streams still sees strict submission order across them.</summary>
-    /// <param name="value">The line to write.</param>
+    /// streams still sees strict submission order across them. The result is framed as one
+    /// <see cref="ConsoleRecord"/>.</summary>
+    /// <param name="value">The result's text.</param>
     public void WriteErrorLine(string value) {
         m_writer.Flush();
-        m_errorWriter.WriteLine(value: value);
+        ConsoleRecord.Write(
+            record: value,
+            writer: m_errorWriter
+        );
     }
-    /// <summary>Appends one echoed line to the buffer (not flushed until <see cref="Flush"/>).</summary>
-    /// <param name="value">The line to write.</param>
+    /// <summary>Appends one echoed result to the buffer (not flushed until <see cref="Flush"/>), framed as one
+    /// <see cref="ConsoleRecord"/>.</summary>
+    /// <param name="value">The result's text.</param>
     public void WriteLine(string value) {
-        m_writer.WriteLine(value: value);
+        ConsoleRecord.Write(
+            record: value,
+            writer: m_writer
+        );
     }
 }

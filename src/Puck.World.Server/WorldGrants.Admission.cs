@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
@@ -79,7 +80,6 @@ public sealed partial class WorldGrants {
             RosterEcho: string.Empty
         );
     }
-
     /// <summary>Disconnects one remote-human peer connection: revokes every grant that generation held and drops the
     /// body, through the same <see cref="WorldServerEvent.PeerDisconnected"/> ordered-domain path a census shrink
     /// uses. <c>Server.WorldPeerHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
@@ -91,7 +91,6 @@ public sealed partial class WorldGrants {
             ordered: true
         );
     }
-
     /// <summary>Removes a peer admitted by a transfer whose multi-member commit is rolling back, including every
     /// generation-scoped grant minted with it.</summary>
     internal void RollbackTransferredEntity(int slot) {
@@ -101,7 +100,7 @@ public sealed partial class WorldGrants {
         )) {
             foreach (var grant in Rows(principal: peer.Identity)) {
                 ApplyRevoke(
-                    actor: WorldPrincipal.Console,
+                    actor: Principal.Console,
                     grant: grant
                 );
             }
@@ -111,7 +110,6 @@ public sealed partial class WorldGrants {
             slot: slot
         );
     }
-
     /// <summary>Admits one remote-human peer connection through the population door and dispatches the
     /// <see cref="WorldServerEvent.PeerAdmitted"/> event through the same ordered domain every other lifecycle event
     /// drains through. Trusted QUIC and OAuth host adapters call this only from the
@@ -258,7 +256,7 @@ public sealed partial class WorldGrants {
         var templates = new List<WorldAdmissionGrant>();
 
         foreach (var grant in mintedGrants) {
-            if (grant.Principal != peer.Identity) {
+            if (grant.Grantee != peer.Identity) {
                 continue;
             }
 
@@ -312,15 +310,16 @@ public sealed partial class WorldGrants {
             );
         }
     }
+
     // Builds the concrete minted grant rows for one just-admitted peer from its verified admission templates. A
     // template can carry neither the Principal nor a body subject — both are unknowable until admission assigns an
     // index and generation — so those are the only fields this fills in; every other field passes through unchanged.
-    private static List<WorldGrant> BuildAdmissionGrants(WorldPrincipal principal, int bodyIndex, IReadOnlyList<WorldAdmissionGrant> templates) {
+    private static List<WorldGrant> BuildAdmissionGrants(Principal principal, int bodyIndex, IReadOnlyList<WorldAdmissionGrant> templates) {
         var minted = new List<WorldGrant>(capacity: templates.Count);
 
         foreach (var template in templates) {
             minted.Add(item: new WorldGrant(
-                Principal: principal,
+                Grantee: principal,
                 Capability: template.Capability,
                 Subject: template.SubjectFor(bodyIndex: bodyIndex),
                 Exclusive: template.Exclusive,
@@ -337,7 +336,7 @@ public sealed partial class WorldGrants {
 
         foreach (var peer in admitted) {
             minted.Add(item: new WorldGrant(
-                Principal: peer.Identity,
+                Grantee: peer.Identity,
                 Capability: WorldCapability.Control,
                 Subject: GrantSubject.All,
                 Exclusive: false
@@ -346,6 +345,7 @@ public sealed partial class WorldGrants {
 
         return minted;
     }
+
     // Re-establishes admission grants for every peer connection ApplyRebuild's snapshot pass captured (admitted,
     // NOT parked — see that pass's own remarks) — after WorldGrants.Reset wiped the whole runtime grant table. A
     // peer is a CONNECTION, not a document row or a boot-time seat, so nothing in WorldGrants.Reset or the
@@ -435,7 +435,7 @@ public sealed partial class WorldGrants {
 
                 if (TryApplyGrant(
                     grant: new WorldGrant(
-                        Principal: principal,
+                        Grantee: principal,
                         Capability: template.Capability,
                         Subject: template.SubjectFor(bodyIndex: index),
                         Exclusive: template.Exclusive,
@@ -443,7 +443,7 @@ public sealed partial class WorldGrants {
                         EventBudget: template.EventBudget,
                         KindMask: template.KindMask
                     ),
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 )) {
                     installedTemplates.Add(item: template);
                 }
@@ -460,6 +460,7 @@ public sealed partial class WorldGrants {
             );
         }
     }
+
     private void StageOwnedState(int slot, WorldIdentity? profile) {
         if (
             (profile is null) ||
@@ -789,7 +790,7 @@ public sealed partial class WorldGrants {
     /// <param name="connectionId">The submitting envelope's connection id (see <see cref="WorldEditEcho.ConnectionId"/>);
     /// defaults to the local connection for a direct caller with no originating envelope.</param>
     /// <param name="correlationId">The submitting envelope's correlation id; defaults to none.</param>
-    internal void ApplySessionLever(WorldSessionLever lever, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
+    internal void ApplySessionLever(WorldSessionLever lever, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
         if (Allows(
             principal: principal,
             capability: WorldCapability.Mutate,

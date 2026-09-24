@@ -13,7 +13,8 @@ documentation, and this skill with them when guidance disagrees.
 
 1. Declare every law in TWO places and nowhere else: the declaration — id, tier,
    covered members, legs — as a JSON row in `tests/Puck.Maths.Tests/laws/<family>.json`,
-   and one `Case(id, run)` binding in `LawRegistry.cs`. Never add an isolated
+   and one binding in `LawRegistry.cs` (`ClaimCase`, `SweptCase`, or
+   `Case(id, run)` for any other run). Never add an isolated
    `[Fact]` that bypasses registration. A declaration without a binding, or a
    binding without a declaration, fails the Default-tier parity gate by name.
 2. Choose the cheapest honest tier and stay within its budget — by measured COST,
@@ -26,9 +27,19 @@ documentation, and this skill with them when guidance disagrees.
    implementation is not an oracle.
 6. Classify every affected public Maths member in the coverage ratchet with a
    real law or a precise waiver.
-7. Regenerate machine-owned registers and reports; never hand-edit them.
+7. Regenerate machine-owned registers and reports with
+   `puck baselines maths-ledger`; never hand-edit them. A test run writes
+   only to the build output and never changes the checkout.
 8. Prove the new law bites by applying a plausible mutation, observing the
    intended failure, restoring the implementation, and observing the pass.
+
+## Run a tier
+
+A plain `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`
+runs Smoke + Default. Deep, Exhaustive and Smoke alone run only when selected
+with `--settings tests/Puck.Maths.Tests/<tier>.runsettings`; a `--filter` on the
+`tier` trait cannot select them, because it is combined with the default's
+filter.
 
 ## Load the full reference selectively
 
@@ -45,5 +56,3 @@ rules, mutation procedure, or deliberate-correction rules.
 | [`content-search`](../content-search/SKILL.md) | Finding law ids, declarations, member names, or textual patterns across the suite. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, overloads, implementers, or rename and deletion safety. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Verifying a Maths change that reaches emulator code and its dedicated batteries. |
-
-No repository skill currently owns the quarantined engine or document gates.

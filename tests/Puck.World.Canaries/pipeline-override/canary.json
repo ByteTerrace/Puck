@@ -1,0 +1,79 @@
+{
+  "id": "pipeline-override",
+  "title": "A committed pipeline parameter override is saved into the world document and renders after a relaunch on it",
+  "binding": "Both legs boot an offscreen 256x256 world showing the shipped ink pipeline with time scale zero, point the row at the shared ink source by an absolute path, preview exposure zero on the visualize pass, and save the document into the run directory; the runner then relaunches the World on that saved document, which resets the instance and captures its one initialization frame. The visualize pass writes mix(background, pigment * exposure, t) with background (0.018, 0.027, 0.060), so at the committed exposure zero every pixel is background * (1 - t), at or below the background within one code, and the pen at (0.77, 0.5), where t is near one, is dark. The positive leg commits the preview before saving; the discriminating leg never commits, so the saved row carries no override, the relaunch renders the source's default exposure one, the pen carries pigment, and the at-or-below-background and dark-pen observations turn red.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pipeline-override/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reload", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.commit", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.overrides", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.save", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "relaunch": {
+      "world": "override.world.json",
+      "script": "relaunch.script.txt",
+      "commands": [
+        { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+        { "verb": "pipeline.overrides", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+        { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" }
+      ]
+    },
+    "expect": [
+      { "type": "line", "name": "the commit applies", "stream": "stderr", "match": "exact", "text": "[world.mutation: CommitViewPipeline 'ink' applied]", "present": true },
+      { "type": "line", "name": "the committed exposure is read back", "stream": "stdout", "match": "contains", "text": "  visualize.exposure committed=0 pending=-", "present": true },
+      { "type": "imageRegion", "name": "relaunched-at-or-below-background", "capture": "relaunched.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": true },
+      { "type": "imageRegion", "name": "relaunched-pen-dark", "capture": "relaunched.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "every", "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pipeline-override/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.row.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.reload", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "pipeline.set", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "pipeline.overrides", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.save", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "relaunch": {
+      "world": "override.world.json",
+      "script": "relaunch.script.txt",
+      "commands": [
+        { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.wait", "occurrence": 2, "outcome": "accepted" },
+        { "verb": "pipeline.overrides", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.reset", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.wait", "occurrence": 3, "outcome": "accepted" },
+        { "verb": "pipeline.capture", "occurrence": 1, "outcome": "accepted" },
+        { "verb": "pipeline.wait", "occurrence": 4, "outcome": "accepted" }
+      ]
+    },
+    "expect": [
+      { "type": "line", "name": "the preview is shown uncommitted", "stream": "stdout", "match": "contains", "text": "  visualize.exposure committed=- pending=0", "present": true },
+      { "type": "line", "name": "nothing is committed", "stream": "stderr", "match": "contains", "text": "CommitViewPipeline", "present": false },
+      { "type": "imageRegion", "name": "default-exposure-exceeds-background", "capture": "relaunched.png", "extent": [256, 256], "region": [0, 0, 1, 1], "reduce": "every", "maximum": [0.018, 0.027, 0.06, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "default-exposure-pen-is-lit", "capture": "relaunched.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "every", "maximum": [0, 0, 0, 1], "toleranceCodes": 1, "holds": false },
+      { "type": "imageRegion", "name": "default-exposure-pigment-at-pen", "capture": "relaunched.png", "extent": [256, 256], "region": [0.765, 0.495, 0.775, 0.505], "reduce": "mean", "minimum": [0, 0.5, 0, 1], "toleranceCodes": 1, "holds": true }
+    ]
+  }
+}

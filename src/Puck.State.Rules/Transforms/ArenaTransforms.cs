@@ -77,13 +77,6 @@ public static partial class ArenaTransforms {
             observe: observe,
             refusal: out refusal
         ),
-            ArenaTransform.Push push => TryPush(
-            binding: in binding,
-            context: in context,
-            moved: out moved,
-            push: push,
-            refusal: out refusal
-        ),
             ArenaTransform.PushRay pushRay => TryPushRay(
             binding: in binding,
             context: in context,

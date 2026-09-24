@@ -20,7 +20,6 @@ public sealed class OnboardingOptions {
     public string AttributeName { get; set; } = "ObjectId";
     public string AttributeSetName { get; set; } = "ByteTerraceUsers";
 }
-
 /// <summary>
 /// The four provisioning steps. Every step is idempotent; EscrowKeysAsync doubles as the
 /// ABAC-propagation probe — it fails with 403 until the directory attribute is visible
@@ -120,7 +119,6 @@ public interface IUserProvisioningService {
         CancellationToken cancellationToken
     );
 }
-
 /// <summary>
 /// One bounded slice of a migration copy or drain. <see cref="IsCompleted"/> means the prefix has
 /// been fully processed; otherwise call again (passing <see cref="ContinuationToken"/> for copies —
@@ -140,7 +138,6 @@ internal sealed record UserKey(
     string Id,
     byte[] PublicKey
 );
-
 
 public sealed class DefaultUserProvisioningService(
     GraphServiceClient graphServiceClient,
@@ -238,10 +235,9 @@ public sealed class DefaultUserProvisioningService(
                         cancellationToken: cancellationToken
                     );
             } catch (ODataError e)
-              when (400 == e.ResponseStatusCode) { } // User is already a member of the group, ignore.
+              when ((400 == e.ResponseStatusCode)) { } // User is already a member of the group, ignore.
         }
     }
-
     public async Task CreateStorageAsync(
         int partition,
         string userObjectId,
@@ -260,7 +256,6 @@ public sealed class DefaultUserProvisioningService(
                 publicAccessType: PublicAccessType.None
             );
     }
-
     public async Task<JsonObject> EscrowKeysAsync(
         int partition,
         string userAssertion,
@@ -378,8 +373,8 @@ public sealed class DefaultUserProvisioningService(
         // to the same key on every call instead of flip-flopping.
         var keyDirectory = fileNamesByDirectory
             .Where(predicate: entry =>
-                entry.Value.Contains(item: PrivateKeyFileName) &&
-                entry.Value.Contains(item: PublicKeyFileName)
+                (entry.Value.Contains(item: PrivateKeyFileName) &&
+                entry.Value.Contains(item: PublicKeyFileName))
             )
             .Select(selector: entry => entry.Key)
             .Order(comparer: StringComparer.Ordinal)
@@ -422,7 +417,6 @@ public sealed class DefaultUserProvisioningService(
                 }
             );
     }
-
     public async Task SetStorageAccessAsync(
         bool canRead,
         bool canWrite,
@@ -445,7 +439,6 @@ public sealed class DefaultUserProvisioningService(
             metadata: metadata
         );
     }
-
     public async Task SetGuestAccessAsync(
         string guestAccess,
         int partition,
@@ -464,7 +457,6 @@ public sealed class DefaultUserProvisioningService(
             metadata: metadata
         );
     }
-
     public async Task SetStorageFrozenAsync(
         bool frozen,
         int partition,
@@ -484,7 +476,6 @@ public sealed class DefaultUserProvisioningService(
             metadata: metadata
         );
     }
-
     public async Task<MigrationBatch> CopyPrefixAsHostAsync(
         int sourcePartition,
         int targetPartition,
@@ -507,7 +498,6 @@ public sealed class DefaultUserProvisioningService(
             targetContainerClient: GetHostContainerClient(partition: targetPartition, userObjectId: userObjectId)
         );
     }
-
     public async Task<MigrationBatch> CopyPrefixAsUserAsync(
         int sourcePartition,
         int targetPartition,
@@ -545,7 +535,6 @@ public sealed class DefaultUserProvisioningService(
             )
         );
     }
-
     public Task<MigrationBatch> DeletePrefixAsHostAsync(
         int partition,
         string prefix,
@@ -557,7 +546,6 @@ public sealed class DefaultUserProvisioningService(
             containerClient: GetHostContainerClient(partition: partition, userObjectId: userObjectId),
             prefix: prefix
         );
-
     public Task<MigrationBatch> DeletePrefixAsUserAsync(
         int partition,
         string prefix,
@@ -580,7 +568,7 @@ public sealed class DefaultUserProvisioningService(
 
     // Put Blob From URL rejects sources over 5000 MiB; fail with an actionable message instead of
     // a generic storage error so the paused migration's log says exactly which blob is stuck.
-    private const long MaxSyncCopySourceLength = (5_000L * 1024 * 1024);
+    private const long MaxSyncCopySourceLength = ((5_000L * 1024) * 1024);
     private const int MigrationPageSize = 32;
 
     private static async Task<MigrationBatch> CopyPrefixCoreAsync(
@@ -661,7 +649,6 @@ public sealed class DefaultUserProvisioningService(
             ProcessedCount: 0
         );
     }
-
     private static async Task<MigrationBatch> DeletePrefixCoreAsync(
         BlobContainerClient containerClient,
         string prefix,
@@ -692,7 +679,7 @@ public sealed class DefaultUserProvisioningService(
 
                     ++deletedCount;
                 } catch (RequestFailedException e)
-                  when ((409 == e.Status) && ("DirectoryIsNotEmpty" == e.ErrorCode)) {
+                  when (((409 == e.Status) && ("DirectoryIsNotEmpty" == e.ErrorCode))) {
                     // Hierarchical-namespace directory stub whose children are still present.
                     // Directories sort before their children, so the children fall later in this
                     // or a subsequent slice; once they're gone, re-enumeration deletes the stub.

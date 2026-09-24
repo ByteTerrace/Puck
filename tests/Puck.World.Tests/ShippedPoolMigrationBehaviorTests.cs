@@ -51,23 +51,23 @@ public sealed class ShippedPoolMigrationBehaviorTests {
         Assert.Equal(actual: actual, expected: [1L, 1L, 1L, 1L, 2L, 1L, 40L, 129L, 1L, 0L, 0L, 1L, 2L, 0L, 183L, 0L, 1L]);
     }
     [Fact]
-    public void PongSequencePreservesScoringAndRallyOutcomeAcrossPaddlePoolMigration() {
-        var export = JsonNode.Parse(utf8Json: ShippedWorldStateBaselines.Run(name: "pong").Export)!.AsObject();
+    public void PaddleballSequencePreservesScoringAndRallyOutcomeAcrossPaddlePoolMigration() {
+        var export = JsonNode.Parse(utf8Json: ShippedWorldStateBaselines.Run(name: "paddleball").Export)!.AsObject();
 
         Assert.Equal(
             expected: [1L, 1L, 11L, 1L, 2L, 10L, 1L],
             actual: [
-                PoolField(export: export, fieldName: "hits", poolName: "pongPaddles", slot: 0),
-                PoolField(export: export, fieldName: "rally", poolName: "pongPaddles", slot: 0),
-                PoolField(export: export, fieldName: "score", poolName: "pongPaddles", slot: 0),
-                PoolField(export: export, fieldName: "hits", poolName: "pongPaddles", slot: 1),
-                PoolField(export: export, fieldName: "rally", poolName: "pongPaddles", slot: 1),
-                PoolField(export: export, fieldName: "score", poolName: "pongPaddles", slot: 1),
-                WorldValue(export: export, rowName: "pongWinner"),
+                PoolField(export: export, fieldName: "hits", poolName: "paddleballPaddles", slot: 0),
+                PoolField(export: export, fieldName: "rally", poolName: "paddleballPaddles", slot: 0),
+                PoolField(export: export, fieldName: "score", poolName: "paddleballPaddles", slot: 0),
+                PoolField(export: export, fieldName: "hits", poolName: "paddleballPaddles", slot: 1),
+                PoolField(export: export, fieldName: "rally", poolName: "paddleballPaddles", slot: 1),
+                PoolField(export: export, fieldName: "score", poolName: "paddleballPaddles", slot: 1),
+                WorldValue(export: export, rowName: "paddleballWinner"),
             ]
         );
-        Assert.Equal(1L, PoolField(export: export, fieldName: "body", poolName: "pongBalls", slot: 0));
-        Assert.Equal(1L, PoolField(export: export, fieldName: "body", poolName: "pongPaddles", slot: 0));
-        Assert.Equal(2L, PoolField(export: export, fieldName: "body", poolName: "pongPaddles", slot: 1));
+        Assert.Equal(1L, PoolField(export: export, fieldName: "body", poolName: "paddleballBalls", slot: 0));
+        Assert.Equal(1L, PoolField(export: export, fieldName: "body", poolName: "paddleballPaddles", slot: 0));
+        Assert.Equal(2L, PoolField(export: export, fieldName: "body", poolName: "paddleballPaddles", slot: 1));
     }
 }

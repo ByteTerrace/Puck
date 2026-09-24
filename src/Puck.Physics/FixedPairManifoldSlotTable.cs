@@ -66,42 +66,15 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     void IManifoldSlotState.ClearWarmStart() {
         NormalImpulseRaw = 0L;
     }
-    readonly ulong IManifoldSlotState.Fold(ulong digest, int step) {
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: (Occupied
-            ? 1L
-            : 0L)
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: SourceId
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: FeatureId
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: NormalImpulseRaw
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: Normal.X.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: Normal.Y.Value
-        );
-        digest = FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: Normal.Z.Value
-        );
-
-        return FixedRigidArithmetic.Fold(
-            digest: digest,
-            value: ((long)(step - LastTouchedStep))
-        );
+    readonly void IManifoldSlotState.Fold(ref Fnv1aHash digest, int step) {
+        digest.Add(value: (Occupied ? 1L : 0L));
+        digest.Add(value: ((long)SourceId));
+        digest.Add(value: ((long)FeatureId));
+        digest.Add(value: NormalImpulseRaw);
+        digest.Add(value: Normal.X.Value);
+        digest.Add(value: Normal.Y.Value);
+        digest.Add(value: Normal.Z.Value);
+        digest.Add(value: ((long)(step - LastTouchedStep)));
     }
     void IManifoldSlotState.MarkIdle() {
         Disposition = FixedPairManifoldSlotDisposition.Idle;
@@ -180,12 +153,11 @@ public sealed class FixedPairManifoldSlotTable {
             step: step
         );
     /// <summary>Folds every slot's persistent state into a running digest, in slot index order.</summary>
-    /// <param name="digest">The running digest.</param>
+    /// <param name="digest">The running digest, advanced in place.</param>
     /// <param name="step">The current step ordinal, so the folded age is RELATIVE.</param>
-    /// <returns>The updated digest.</returns>
-    public ulong Fold(ulong digest, int step) => FixedManifoldSlotCore.Fold(
+    public void Fold(ref Fnv1aHash digest, int step) => FixedManifoldSlotCore.Fold(
         capacity: Capacity,
-        digest: digest,
+        digest: ref digest,
         slots: m_slots,
         step: step
     );

@@ -16,13 +16,6 @@ internal readonly record struct PreparedGravityDisplacement(
     FixedQ4816 DistanceSquared
 );
 internal static class GravityKernel {
-    private static FixedVector3 ScaleChecked(FixedVector3 vector, FixedQ4816 scalar) =>
-        new(
-            X: checked((vector.X * scalar)),
-            Y: checked((vector.Y * scalar)),
-            Z: checked((vector.Z * scalar))
-        );
-
     public static FixedVector3 Acceleration(in PreparedGravityInteraction interaction, FixedQ4816 sourceMass, FixedQ4816 gravitationalConstant) {
         if (
             (sourceMass <= FixedQ4816.Zero) ||
@@ -38,10 +31,7 @@ internal static class GravityKernel {
         var inverseSquareStrength = checked((numerator / interaction.SoftenedDistanceSquared));
         var scale = checked((inverseSquareStrength / interaction.SoftenedDistance));
 
-        return ScaleChecked(
-            vector: interaction.Delta,
-            scalar: scale
-        );
+        return checked((interaction.Delta * scale));
     }
     public static void AccumulatePair(
         ReadOnlySpan<GravityBody> bodies,
@@ -74,40 +64,24 @@ internal static class GravityKernel {
                 gravitationalConstant: parameters.GravitationalConstant
             );
 
-            accelerations[firstIndex] = AddChecked(
-                left: accelerations[firstIndex],
-                right: acceleration
-            );
+            accelerations[firstIndex] = checked((accelerations[firstIndex] + acceleration));
             exactSourceEvaluations++;
         }
 
         if (first.Mass > FixedQ4816.Zero) {
-            var reverseInteraction = interaction with { Delta = Reverse(vector: interaction.Delta) };
+            var reverseInteraction = interaction with { Delta = checked(-interaction.Delta) };
             var acceleration = Acceleration(
                 interaction: in reverseInteraction,
                 sourceMass: first.Mass,
                 gravitationalConstant: parameters.GravitationalConstant
             );
 
-            accelerations[secondIndex] = AddChecked(
-                left: accelerations[secondIndex],
-                right: acceleration
-            );
+            accelerations[secondIndex] = checked((accelerations[secondIndex] + acceleration));
             exactSourceEvaluations++;
         }
     }
-    public static FixedVector3 AddChecked(FixedVector3 left, FixedVector3 right) =>
-        new(
-            X: checked((left.X + right.X)),
-            Y: checked((left.Y + right.Y)),
-            Z: checked((left.Z + right.Z))
-        );
     public static PreparedGravityDisplacement PrepareDisplacement(FixedVector3 target, FixedVector3 source) {
-        var delta = new FixedVector3(
-            X: checked((source.X - target.X)),
-            Y: checked((source.Y - target.Y)),
-            Z: checked((source.Z - target.Z))
-        );
+        var delta = checked((source - target));
 
         if (!delta.TryLengthSquared(squaredLength: out var distanceSquared)) {
             throw new OverflowException(message: "A source-to-target squared distance exceeds Q48.16 range.");
@@ -143,12 +117,6 @@ internal static class GravityKernel {
             SoftenedDistance: softenedDistance
         );
     }
-    public static FixedVector3 Reverse(FixedVector3 vector) =>
-        new(
-            X: checked(-vector.X),
-            Y: checked(-vector.Y),
-            Z: checked(-vector.Z)
-        );
     /// <summary>Rounds <c>numerator / positiveDenominator</c> to the nearest <see cref="long"/>, ties to even, the
     /// rounding itself owned by <see cref="FusedArithmetic.TryDivideMagnitudeRounded"/>.</summary>
     public static long RoundDivide(Int128 numerator, ulong positiveDenominator) {

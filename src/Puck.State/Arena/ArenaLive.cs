@@ -89,7 +89,7 @@ public sealed partial class StateArena {
         if (!layout.HasTraits || (layout.Kind is CellKind.Text or CellKind.Vector)) {
             value = ValueAt(layout: in layout, slot: slot);
         } else {
-            value = NumericValue(kind: layout.Kind, raw: LiveNumberAt(key: key, rowOrdinal: rowOrdinal, slot: slot, time: in time));
+            value = CellValue.FromNumber(kind: layout.Kind, raw: LiveNumberAt(key: key, rowOrdinal: rowOrdinal, slot: slot, time: in time));
         }
         return true;
     }
@@ -108,8 +108,31 @@ public sealed partial class StateArena {
         value = 0L;
         return false;
     }
+    /// <summary>Reads the live number at one position of a row — a pile position on an ordered row, a cell ordinal
+    /// on a lattice, a ring slot, or a declaration position on an ordinary keyed row — without materializing a
+    /// carrier.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="position">The position within the row.</param>
+    /// <param name="time">The clocks the traits are evaluated against.</param>
+    /// <param name="value">The live raw value on success; otherwise zero.</param>
+    /// <returns><see langword="true"/> when the position holds a numeric cell.</returns>
+    /// <exception cref="InvalidOperationException">The row belongs to a pool; use a handle or held-cell cursor.</exception>
+    public bool TryReadLiveNumberAt(int rowOrdinal, int position, in ArenaTime time, out long value) {
+        RequirePositionalRow(rowOrdinal: rowOrdinal);
+        if (
+            TryRowLayout(layout: out var layout, rowOrdinal: rowOrdinal) &&
+            (((uint)position) < ((uint)layout.CellCapacity)) &&
+            (layout.Kind is not (CellKind.Text or CellKind.Vector)) &&
+            Bit(index: (layout.CellStart + position), words: m_presence)
+        ) {
+            value = LiveNumberAtSlot(rowOrdinal: rowOrdinal, slot: (layout.CellStart + position), time: in time);
+            return true;
+        }
+        value = 0L;
+        return false;
+    }
 
-    // Both public read forms share the same numeric evaluator after resolving storage exactly once.
+    // Every public live read form shares this numeric evaluator after resolving storage exactly once.
     // Boolean normalization matches CellValue.Bool even when an advancing trait produces a nonzero integer.
     private long LiveNumberAt(int rowOrdinal, int slot, CellKey key, in ArenaTime time) {
         ref readonly var layout = ref m_layout[rowOrdinal];
@@ -125,11 +148,20 @@ public sealed partial class StateArena {
         }
         return ((layout.Kind == CellKind.Bool) ? ((raw != 0L) ? 1L : 0L) : raw);
     }
-    private static CellValue NumericValue(CellKind kind, long raw) => kind switch {
-        CellKind.Fixed => CellValue.Fixed(rawBits: raw),
-        CellKind.Bool => CellValue.Bool(value: (raw != 0L)),
-        _ => CellValue.Int(value: raw),
-    };
+    // A present numeric slot's live value, resolving the slot's key only when the row declares a trait to resolve.
+    private long LiveNumberAtSlot(int rowOrdinal, int slot, in ArenaTime time) {
+        ref readonly var layout = ref m_layout[rowOrdinal];
+
+        return LiveNumberAt(
+            key: (layout.HasTraits
+                ? KeyAtSlot(layout: in layout, slot: slot)
+                : default
+            ),
+            rowOrdinal: rowOrdinal,
+            slot: slot,
+            time: in time
+        );
+    }
 
     /// <summary>Attempts an explicit numeric write against a cell's live value, rebasing the clock the trait reads
     /// from.</summary>

@@ -7,8 +7,8 @@ draws can take the control plane away). Every capability is a verb; `help` is
 generated from the registered commands. Infrastructure lives in
 `src/Puck.Commands/` (`CommandRegistry.cs`, `CommandDefinition.cs`,
 `CommandRouting.cs`, `TextCommandSource.cs`, `WireArgs.cs`); the modules
-live in `src/Puck.World/*CommandModule.cs` and, for the server-only doors
-moved out of `Puck.World`, `src/Puck.World.Console/*CommandModule.cs` (see
+live in `src/Puck.World/*CommandModule.cs` and, for the server-only doors,
+`src/Puck.World.Console/*CommandModule.cs` (see
 the project table in the main `SKILL.md`).
 
 ## Contents
@@ -19,7 +19,7 @@ the project table in the main `SKILL.md`).
 - The stdin drain barrier and `world.wait`
 - The mirror
 - Screenshots
-- `.puck`-booted worlds: `world.reload`/`world.save` are JSON-only today
+- `.puck`-booted worlds: `world.reload` recompiles, `world.save` refuses the source
 - The document has ONE door — do not add a per-section verb
 - Grammar conventions for new verbs
 
@@ -57,7 +57,17 @@ stops at the two factories MISSES most registration sites — the wrappers carry
 
 `Bindability` is required (`Unspecified` throws at construction). The
 description IS the help text — `help` prints `name - description` for every
-registered command, which is why descriptions here are long.
+registered command, which is why descriptions here are long. Both factories take
+an `audience`: `CommandAudience.Operator` makes the registry refuse the verb for
+every principal but the console, before the handler runs, on every dispatch path
+(`CommandAudienceLawTests`). The evaluation diagnostics — `world.rule.trace`,
+`world.rule.failures`, `world.search`, `world.decisions`, `world.responses`,
+`world.rules`, `world.verdicts` — are operator verbs, because each prints values
+the rules computed, which may derive from state a seat is not shown.
+`world.affordances` publishes each verb's `audience`, and
+`ScheduledStepVocabularyLawTests` pins the live host's operator set to exactly
+that list, so a diagnostic added in any module (the `Puck.World`-resident ones
+included) must declare its audience or fail the law.
 
 ## Routing — the determinism class
 
@@ -73,7 +83,7 @@ registered command, which is why descriptions here are long.
   operation, or call a side path that is refused while recording.
 
 A fast text path serves `WithWireArgs`+`Immediate` lines with no quotes/`@`
-(zero-copy tokenization, principal stamped `CommandPrincipal.Console`);
+(zero-copy tokenization, principal stamped `Principal.Console`);
 everything else takes the full parse. Simulation lines are excluded from
 the fast path by construction.
 
@@ -83,11 +93,23 @@ Handlers return data (`CommandResult`), never write streams. The host sink
 in `Program.cs` splits: `IsError` → stderr, otherwise → stdout; then the
 mirror records the line. Engine narration (`[world.addon: …]`,
 `[unified-overlay] …`, `[world.mutation: …]`, boot origin lines) goes
-straight to stderr. **Capture both streams or you read half the
+straight to stderr, and so does every host log line (`Program.cs` sets the
+console logger's `LogToStandardErrorThreshold` to `Trace`, as the silo does),
+so stdout carries only answers a script parses. **Capture both streams or you read half the
 conversation.** Echo format is one bracketed assertable line:
 `[verb: field=x field=y]`; refusals share the shape and set `IsError`. The
 pervasive convention: a no-arg invocation of a lever verb echoes the
 current value.
+
+Every result and every narration reaches its stream as one record
+(`Puck.Commands.ConsoleRecord`, written by `BufferedConsoleOutput` and
+`WorldConsoleNarrationSink`): its first line starts at column zero and each
+further line of the same record is indented two spaces. `world.state`'s
+dump, `world.symmetry <a> <b>`, `world.rule.trace`'s read-back, `help`, and
+the lines of `world.counters` and `pipeline.inspect` are one record each,
+so an unindented line always opens a new answer and two identical one-line
+answers stay two. A reader matching a continuation line exactly includes the
+indent.
 
 Three echo models — do not conflate them:
 
@@ -99,7 +121,10 @@ Three echo models — do not conflate them:
 3. **Mutation verbs** return `CommandResult.None` with NO synchronous echo;
    the accept/reject narration arrives at the tick boundary through
    `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection
-   increments `wire.errors` via `NoteDeferredRejection`. A verb that submits
+   increments `wire.errors` via `NoteDeferredRejection`. A mutation the World
+   makes itself (principal `world`: a deal or response sweep's, a rule's
+   document-row effect) was submitted by no session and raises no echo — it
+   narrates on stderr alone. A verb that submits
    through the registering `Submit(link, mutation, echoes, verb)` overload
    (`WorldDeferredVerbEchoes`; the `world.row.set`/`world.row.remove`/`world.assign`/
    `world.state.transform`/`world.state.act` family) also gets a per-verb
@@ -188,7 +213,7 @@ Blank lines and `#` comments
 are skipped, so piped scripts can be self-documenting. **The barrier holds
 `Immediate` lines and queued host operations** — it fences reads behind writes; it does not delay
 Simulation traffic. It releases whether or not the submission's handler
-dispatched or threw, so a throwing verb can no longer strand a session's stdin.
+dispatched or threw, so a throwing verb cannot strand a session's stdin.
 
 `world.wait <ticks>` (`WorldWaitCommandModule` + `WorldConsoleWaitGate`) is
 the explicit wait: Immediate, 1..144000 ticks, clocked by completed host-work
@@ -202,15 +227,46 @@ barrier holds `world.wait` itself until a preceding mutation lands, so its
 countdown starts from a tick that already contains it. Use it for
 read-after-write across ticks (e.g. asserting motion after input).
 
-**The release is AT LEAST, never exactly-at.** The host loop drains stdin
-once per iteration and `FixedStepPump.Advance` may run a catch-up burst of
-fixed steps in one call (bounded by `maxFrameTicks`, 1/4 s = 60 steps at
-240 Hz), so a read following a released wait can land tens of ticks past R
-on a loaded machine — and the sim is deliberately never console-paced. An
-exact-text assertion after a wait must therefore observe STATIONARY state
-(a settled pose, a rest value), never a still-moving quantity; a body in
-free fall or mid-decay reads differently per slipped tick and flakes under
-load.
+**The release is exact.** `FixedStepPump` runs the host's console drain
+(`TextCommandSource.Collect`, then the buffered-output flush) before EVERY
+step, including each step of a catch-up burst (`FixedStepPump.CreateHosted`
+wires it for the windowed, headless, and offscreen hosts alike). The line after
+a wait releasing at R therefore runs after tick R completes and before tick
+R+1 steps: an `Immediate` read observes the state at R, and a `Simulation`
+line applies in tick R+1, because the administrative stdin session is
+`DueNextTick` (its Simulation lines are due in the next step that snapshots
+input, not at the wall-clock capture stamp). The same schedule of waits gives
+the same ticks on a loaded machine; the sim is still never console-paced.
+`WorldWaitTickExactnessLawTests` pins this against the real verb and pump.
+
+First step (`FixedStepPump.CreateHosted`): the pump takes no step until
+either `StandardInputBacklog` is released or
+`TextCommandSource.AdministrativeSessionAwaitsStep` is true after a drain.
+`StandardInputReaderService` claims the backlog at construction and releases it
+at EOF, on a read failure, for an interactive terminal, or when its first read
+would wait on a pipe that has never delivered a byte (an idle IDE or supervisor
+pipe, a companion authority's empty stdin). An empty pipe after the first byte
+releases nothing: a writer pausing between chunks looks identical to one that
+has finished. The session awaits a step when its `world.wait` hold stands or its
+next queued line is held behind a pending Simulation submission; since the
+session is FIFO, every line ahead of that point has run. So a piped script's
+lines up to its first wait (or first read-after-write) run before tick 1 however
+the writer chunks the pipe. The backlog release is sampled before the drain, so
+a release that lands mid-drain waits one frame instead of stepping without the
+lines queued with it (`FixedStepPumpStepGateTests`). Once one step has run the
+gate latches open. Whole steps due while it is shut are discarded, not owed. A
+script with no wait and no read-after-write, piped through a pipe that stays
+open, never steps until the pipe closes; a writer whose first byte arrives after
+the World's first stdin read is treated as silent. A line that arrives after
+stepping has begun lands in whatever tick drains it, so put a `world.wait` in
+front of anything whose tick matters.
+
+`quit` (`TerminalCommandModule`; `SiloStdinRouter` routes it as
+a process verb) is Immediate, so the barrier and `world.wait` hold it behind
+everything its session queued earlier. Once it runs, `mayStep` refuses further
+steps and the host loop exits on `TerminalControl.TryConsumeExit`. Echo:
+`[quit: exiting]`. End a script with `quit` to make the run last exactly as
+long as the script; `--exit-after-seconds` remains the wall-clock stop.
 
 ## The tape
 
@@ -222,7 +278,7 @@ is open. Backtick belongs to the terminal's always-active binding plane, not
 to any world page, so a page or chord override cannot remove the way out.
 `console [on|off]` is a terminal verb, like `quit`; a seated activation targets
 its invoking slot. Administrative stdin remains the separate
-`CommandPrincipal.Console` ingress and must name its target explicitly:
+`Principal.Console` ingress and must name its target explicitly:
 `console [on|off] <player>` (or `console <player>` to toggle). Administrative
 exchanges and deferred edit verdicts live on their own operator tape and mirror
 onto the currently displayed seat-one tape until presentation grows a separate
@@ -275,25 +331,23 @@ the PNG; failure carries an exception, including disposal before service.
 tick wait alone does not prove a particular request finished. Cancelling an
 await does not cancel the accepted capture or release its output path for reuse.
 
-## `.puck`-booted worlds: `world.reload`/`world.save` are JSON-only today
+### `world.sdf.dump` — the packed program
 
-A world booted from `.puck` source (`--world <x>.puck`, transparently
-compiled by `src/Puck.World/PuckWorldLoader.cs`) is compiled ONCE, at boot.
-`WorldMutationCommandModule`'s `world.reload` and no-arg `world.save` do not
-know the source was `.puck` and do not re-invoke the compiler:
+`world.sdf.dump <path>` copies the initialized renderer's live packed program
+to little-endian uint32 words, replacing the destination. It excludes capacity
+headroom, dynamic transforms and the frame grid; use the current `SdfProgram`
+layout to inspect it. It is a CPU-side diagnostic copy, not a GPU readback or
+loadable asset, and leaves simulation and rendering unchanged.
 
-- `world.reload` re-reads `definitionSource.SourcePath` through
-  `WorldDefinitionFileSource.TryLoad`, a JSON-only reader — reloading a
-  `.puck`-booted world fails to parse rather than recompiling it.
-- No-arg `world.save` writes canonical JSON to `definitionSource.SourcePath`
-  — on a `.puck`-booted world this overwrites the `.puck` source with
-  compiled JSON. `world.save <path>` to an explicit, different path is safe.
+## `.puck`-booted worlds: `world.reload` recompiles, `world.save` refuses the source
 
-Until this is fixed, the artist loop for a `.puck`-booted world is: edit the
-`.puck` file, then restart the world — do not `world.reload` it, and only
-`world.save` to a path that is not the `.puck` source. A JSON-booted world's
-`world.reload`/no-arg `world.save` are unaffected and behave exactly as their
-own verb descriptions state.
+A world booted from `.puck` source (`--world <x>.puck`, compiled by
+`src/Puck.World/PuckWorldLoader.cs`) reloads from that source: `world.reload`
+re-reads the current origin and recompiles it, CAS-pinning the document it
+lowers to, so an edit that lowers identically keeps the pin. `world.save` with
+no argument, or to any `.puck` target, is refused by name because canonical
+JSON would overwrite the source; name a JSON path instead. The artist loop for
+a `.puck`-booted world is: edit the `.puck` file, then `world.reload`.
 
 ## The document has ONE door — do not add a per-section verb
 
@@ -328,13 +382,13 @@ patch against a working copy of the live document, echoes that plan
 (`[creation.sculpt: planned=<name> <path>=<verdict> …]`), and composes each
 distinct row it touched through the row door's own section table
 (`WorldRowCommandModule.TryComposeEditedRow`/`TryComposeRemove`, one
-`WorldMutation` per row, stamped with `context.ActingPrincipal()` — a seat's
+`WorldMutation` per row, stamped with `context.Principal` — a seat's
 sculpt lands as that seat and is refused where that seat lacks `Mutate` over
 the section), claims each row in the shared `WorldRowStepWindowGuard`, and
 submits over the link like any buffered mutation — the same whole-document
 revalidation, tick-boundary apply, recorded tape entry, and deferred
 `[creation.sculpt: …]` verdict echo. It never re-dispatches text lines: a
-nested `Registry.Submit` would stamp the shared injection sink's Console
+nested `CommandRegistry.Submit` would stamp the shared injection sink's Console
 identity over the issuer. All-or-nothing: a row that fails to compose, a row
 already claimed this tick window (`row '<identity>' already has an edit
 buffered this tick — fence with world.wait`), or a patch fault refuses by
@@ -443,11 +497,11 @@ longer matches its own content.
   describes when the command handler runs. For example,
   `world.row.set addons`/`world.row.remove addons` — the door that mounts,
   unmounts, reloads, enables, and disables an addon — is Simulation-routed
-  and buffers a `PendingOp.Mutate` for the tick boundary, exactly like any
+  and buffers a `WorldPendingOp.Mutate` for the tick boundary, exactly like any
   other `world.row.set`/`.remove`. The drain barrier makes a following
   `world.addons` read wait for settled state.
 - New decision surface ⇒ read-back verb in the same change.
-- A `.puck` world is authored and checked offline (`puck fmt`/`puck
+- A `.puck` world is authored and checked offline (`puck format`/`puck
   lint`/`puck compile`, `puck-dsl`) and booted via `--world <x>.puck`;
   `world.row.set`/`.remove` and the field/list-element doors above remain the
   LIVE runtime mutation surface for an already-booted session — complementary
@@ -470,13 +524,48 @@ Discrete state commands: `world.state.transform <transform-json>` and
 `world.state.act <phase-row> <sequence> <transform-json>` are Simulation-routed,
 stamp the caller, and register deferred refusal echoes. `world.topologies`
 and `world.state.observe` are Immediate read-backs. The latter uses a stamped
-query and returns observation JSON; `world.state` remains an authority-console
-read-back. `world.observe <principal>` is the third: an Immediate,
-authority-side composition of `WorldStateDisclosure.Compose` for an EXPLICITLY
-named principal (`WorldPrincipal.TryParse`'s token grammar, the same
-`world.grant`/`world.why` take), so a single console session can inspect what
+query and returns observation JSON. `world.observe <principal>` is the third: an
+Immediate composition of `WorldStateDisclosure.Compose` for an EXPLICITLY named
+principal (`PrincipalTokens.TryParse`'s token grammar, the same
+`world.grant`/`world.why` take), so the operator's console can inspect what
 seat1 sees and what seat2 sees without submitting as either — the read-back
-side of a hidden-hand table (see the garden's `games/poker.world.json` poker table).
+side of a hidden-hand table (see `games/poker.puck`). Any other principal may
+name only itself; naming another is refused by name.
+
+**Disclosure chokepoint.** A seat's own console session reaches every verb, so a
+read-back of state values never reads `WorldServer.Definition` for it directly.
+`IWorldConsoleAuthority.ReadView` (reached through `TryResolveReadView`) mints a
+`WorldStateReadView`: the live document as `WorldStateDisclosure.Disclose` shows it
+to the acting principal, and the whole document for the console — its placements
+included, each dealt child re-dealt from the rows the principal may read, and each
+responsive placement whose `respond` conditions read a row withholding a cell from
+the principal handed its `holding` mask without the entries that read a withheld
+cell, so it shows the first entry left, or its authored prototype. `world.state`,
+`world.row`, `world.tabletop`, `world.hud.template` and `world.placements` read through it; `world.match`
+refuses a row the view withholds anything from. A direct read of a withheld cell is
+refused by name — `[world.state: 'vault'.'$value' is not disclosed to seat2 — its
+visibility withholds it]` — alike for a withheld key and an absent one, so a refusal
+never says which keys exist; a listing shows the row's `hidden` policy (nothing, a
+count, or one placeholder per cell) and none of a restricted row's draw or ring
+bookkeeping. `ConsoleDisclosureLawTests` sweeps every console-module verb as a
+non-reader for three sentinel values and carries the mutation proof (an authority
+minting the operator's view leaks through several verbs at once). A new read-back
+of state values reads through the view; one in `Puck.World` builds it with
+`WorldStateReadView.Of(server, context.Principal)`.
+
+**Local presentation is not filtered.** The local HUD, view bindings and
+`world.hud`'s echo of them resolve against the live document for the one shared
+screen: the author chooses what that screen shows, and a binding to a restricted
+row shows it to everyone in the room. The disclosure boundary for a remote peer is
+the wire projection (`WorldProjection.Compose` → `WorldStateDisclosure.Disclose`, which
+carries the dealt and responsive placements too), and for a local seat's console it is
+the read view above; `LineupDealLawTests` holds both for lineup's hidden galleries and
+`PlacementResponseDisclosureLawTests` for a gate swapped on a hidden slot. On the
+federation lanes a traveler's route answer and its `ObserveTraveler` stream compose for
+the traveler's own peer principal (`WorldFederationCodec.EncodeRoute` derives it from the
+route's entity), while the plain `Observe` lane authenticates a source namespace, names no
+body, and composes for the public observer
+(`FederationTransferLawTests.ARemoteTravelerIsHandedItsOwnHiddenStateAndNoneOfAnothers`).
 Operators and limits live in the Schema README's discrete-state section rather
 than a second command vocabulary here.
 
@@ -486,12 +575,42 @@ headless hosts. `pipeline.load <name> <source> [camera]` upserts a
 reconciles accepted rows, creates instances, and schedules complete pipeline
 compilation in the background. A refused mutation must never create a GPU
 instance. `pipeline.reload`, `pipeline.watch`, `pipeline.time`, `pipeline.step`,
-`pipeline.reset`, `pipeline.output` and `pipeline.status` control presentation
-or report state; controls that need a renderer refuse when none exists.
+`pipeline.reset`, `pipeline.sentinels`, `pipeline.output`, `pipeline.capture` and
+`pipeline.status` control presentation or report state; controls that need a renderer refuse
+when none exists. `pipeline.set` (a field-by-field merge; `null` restores the
+source default), `pipeline.output` and `pipeline.time … scale` are session
+previews on `WorldPipelineRuntime.Entry`; a move of the row's revision
+discards them. `pipeline.commit <name>` (Simulation-routed) submits
+`CommitViewPipeline` built by `Entry.TryPrepareCommit`, which takes only that
+entry's preview. `pipeline.overrides <name>` (Immediate, headless too) prints
+`<pass>.<field> committed=… pending=…` lines, then the time scale and output,
+with the row revision and installed source identity on the first line. `pipeline.wait <name> compiled|installed|captured [seconds]`
+`pipeline.wait <name> submitted|counted <frames> [seconds]` and
+`pipeline.wait <name> resized <width> <height> [seconds]` hold only the issuing
+session (`TextCommandSession.HoldWhile`) until the phase or a presentation-time
+deadline; the hold predicate reports exactly one
+`[pipeline: <name> wait <phase> reached|failed: …|unsupported: …|timed out …]`
+line on stderr, so a script never polls. Use it, not `world.wait`, before a
+pipeline capture: `world.wait` counts simulation ticks, not compilation or
+submitted frames. `counted` waits for completed per-pass work counts (relative
+to the last reset, like `submitted`); `pipeline.inspect` prints them, one
+`work <pass> executed: …` line per pass (`GpuWorkReport`), and the first line carries
+`work submission=S revision=R` for a canary's `response` extraction, after
+`owned=`, `steady=`, `peak=` and `budget=` byte fields. `pipeline.budget
+<name> [<bytes>|device]` (Immediate) sets or clears `ShaderPipelineRenderNode.BudgetCapBytes`,
+which only lowers the device's budget, and prints `budget= device= cap= owned=
+steady= peak=`; a candidate whose peak does not fit fails `installed` or
+`resized` with `SHADERPIPE_BUDGET` and the installed graph keeps running. A paused
+reset's initialization frame never consumes a pending `pipeline.step`; the step
+renders one frame beyond it. A reload, a row upsert or a resize is not a step:
+a paused (or time-scale-zero) instance installs it without rendering, so
+`installed` and `resized` never wait for `pipeline.step`, and the instance
+keeps showing its last image until a step, resume or reset.
 `WorldPipelineRuntime.PumpWatches` installs completed candidates on the frame
 thread and watches source dependencies with a 150 ms debounce. Shader errors
 retain the previous complete pipeline. Frame inputs are filled once per
-instance, even when several view slots show it. The pointer follows the
-Shadertoy pixel convention; clocks and feedback remain presentation state.
+instance, even when several view slots show it. The pointer is in the slot's
+pixels with the origin at the bottom-left; clocks and feedback remain
+presentation state.
 See [the World workflow](../../../../src/Puck.World/README.md#shader-pipelines)
-and [the pipeline contract](../../../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development).
+and [the pipeline contract](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development).

@@ -1,0 +1,9 @@
+# A fresh process on the saved document: the row's committed values are all it knows.
+pipeline.wait ink compiled 40
+pipeline.wait ink installed 10
+pipeline.overrides ink
+# The one initialization frame after a reset renders with the installed graph's committed values.
+pipeline.reset ink
+pipeline.wait ink submitted 1 10
+pipeline.capture ink {run}/relaunched.png
+pipeline.wait ink captured 10

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Hosting;
 using Puck.World.Protocol;
 
@@ -69,7 +70,7 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldTick.DescribeMusicState"/>
     public string DescribeMusicState() => m_tick.DescribeMusicState();
     /// <inheritdoc cref="WorldTick.DescribePlacements"/>
-    public string DescribePlacements() => m_tick.DescribePlacements();
+    public string DescribePlacements(WorldStateReadView view) => m_tick.DescribePlacements(view: view);
     /// <inheritdoc cref="WorldTick.DescribeResponses"/>
     public string DescribeResponses() => m_tick.DescribeResponses();
     /// <inheritdoc cref="WorldTick.DispatchServerEvent"/>
@@ -88,6 +89,7 @@ public sealed partial class WorldServer {
             leaseId: leaseId,
             submission: in submission
         );
+
     /// <inheritdoc cref="WorldTick.MusicEmbellishmentTap"/>
     public Action<string>? MusicEmbellishmentTap {
         get => m_tick.MusicEmbellishmentTap;
@@ -103,6 +105,7 @@ public sealed partial class WorldServer {
         get => m_tick.MusicTransitionTap;
         set => m_tick.MusicTransitionTap = value;
     }
+
     /// <inheritdoc cref="WorldTick.ReadClockPhaseError"/>
     public long ReadClockPhaseError() => m_tick.ReadClockPhaseError();
     /// <inheritdoc cref="WorldTick.ReleaseFederatedIntents"/>
@@ -138,7 +141,7 @@ public sealed partial class WorldServer {
             verdict: out verdict
         );
     /// <inheritdoc cref="WorldTick.TryFindPossessedInhabitant"/>
-    public bool TryFindPossessedInhabitant(string placementId, out int bodyIndex, out WorldPrincipal holder) =>
+    public bool TryFindPossessedInhabitant(string placementId, out int bodyIndex, out Grantee holder) =>
         m_tick.TryFindPossessedInhabitant(
             bodyIndex: out bodyIndex,
             holder: out holder,
@@ -157,16 +160,16 @@ public sealed partial class WorldServer {
             bodyIndex: bodyIndex,
             border: out border
         );
-    /// <inheritdoc cref="WorldTick.TryTransferredPrincipal(string, ulong, int, out WorldPrincipal)"/>
-    public bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out WorldPrincipal principal) =>
+    /// <inheritdoc cref="WorldTick.TryTransferredPrincipal(string, ulong, int, out Principal)"/>
+    public bool TryTransferredPrincipal(string sourceAuthority, ulong transferId, int ordinal, out Principal principal) =>
         m_tick.TryTransferredPrincipal(
             ordinal: ordinal,
             principal: out principal,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         );
-    /// <inheritdoc cref="WorldTick.TryTransferredPrincipal(string, in WorldMobilityIdentity, out WorldPrincipal)"/>
-    public bool TryTransferredPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out WorldPrincipal principal) =>
+    /// <inheritdoc cref="WorldTick.TryTransferredPrincipal(string, in WorldMobilityIdentity, out Principal)"/>
+    public bool TryTransferredPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out Principal principal) =>
         m_tick.TryTransferredPrincipal(
             mobility: in mobility,
             principal: out principal,

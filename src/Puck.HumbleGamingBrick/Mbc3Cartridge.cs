@@ -159,25 +159,6 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
     }
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
-        m_ramBankOrRtcRegister = reader.ReadInt32();
-        m_latchTrigger = reader.ReadByte();
-        m_halted = reader.ReadBoolean();
-        m_dotAccumulator = reader.ReadInt32();
-        m_seconds = reader.ReadInt32();
-        m_minutes = reader.ReadInt32();
-        m_hours = reader.ReadInt32();
-        m_dayCounter = reader.ReadInt32();
-        m_dayCarry = reader.ReadInt32();
-        m_latchedSeconds = reader.ReadInt32();
-        m_latchedMinutes = reader.ReadInt32();
-        m_latchedHours = reader.ReadInt32();
-        m_latchedDayCounter = reader.ReadInt32();
-        m_latchedDayCarry = reader.ReadInt32();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBankOrRtcRegister & 0x03) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
     /// <inheritdoc/>
@@ -188,23 +169,23 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
             romBank: m_romBank
         );
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
-        writer.WriteInt32(value: m_ramBankOrRtcRegister);
-        writer.WriteByte(value: m_latchTrigger);
-        writer.WriteBoolean(value: m_halted);
-        writer.WriteInt32(value: m_dotAccumulator);
-        writer.WriteInt32(value: m_seconds);
-        writer.WriteInt32(value: m_minutes);
-        writer.WriteInt32(value: m_hours);
-        writer.WriteInt32(value: m_dayCounter);
-        writer.WriteInt32(value: m_dayCarry);
-        writer.WriteInt32(value: m_latchedSeconds);
-        writer.WriteInt32(value: m_latchedMinutes);
-        writer.WriteInt32(value: m_latchedHours);
-        writer.WriteInt32(value: m_latchedDayCounter);
-        writer.WriteInt32(value: m_latchedDayCarry);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Boolean(value: ref m_ramEnabled);
+        transfer.Int32(value: ref m_romBank);
+        transfer.Int32(value: ref m_ramBankOrRtcRegister);
+        transfer.Byte(value: ref m_latchTrigger);
+        transfer.Boolean(value: ref m_halted);
+        transfer.Int32(value: ref m_dotAccumulator);
+        transfer.Int32(value: ref m_seconds);
+        transfer.Int32(value: ref m_minutes);
+        transfer.Int32(value: ref m_hours);
+        transfer.Int32(value: ref m_dayCounter);
+        transfer.Int32(value: ref m_dayCarry);
+        transfer.Int32(value: ref m_latchedSeconds);
+        transfer.Int32(value: ref m_latchedMinutes);
+        transfer.Int32(value: ref m_latchedHours);
+        transfer.Int32(value: ref m_latchedDayCounter);
+        transfer.Int32(value: ref m_latchedDayCarry);
     }
 
     /// <inheritdoc/>

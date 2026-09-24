@@ -12,10 +12,12 @@ internal static partial class AzureCommand {
                 cancellationToken: token,
                 deploymentGroup: group
             ),
+            TimeProvider.System,
             cancellationToken
         );
-    /// <summary>Closes the current admitted rollback window with one guarded write, retaining recovery history.</summary>
-    internal static Task<WorldReleaseGroupSnapshot> FinalizeWorldReleaseAsync(CancellationToken cancellationToken) =>
+    /// <summary>Closes the current admitted rollback window with one guarded write, retaining recovery history. The
+    /// controller lease that write holds runs on <paramref name="clock"/>.</summary>
+    internal static Task<WorldReleaseGroupSnapshot> FinalizeWorldReleaseAsync(TimeProvider clock, CancellationToken cancellationToken) =>
         WithWorldReleaseStoreAsync(
             async (groups, group, token) => {
                 var current = (await groups.LoadAsync(
@@ -40,11 +42,13 @@ internal static partial class AzureCommand {
                 if (!finalized.Ok) { throw new InvalidOperationException(message: finalized.Detail); }
                 return finalized.Snapshot!.Value;
             },
+            clock,
             cancellationToken,
             exclusive: true
         );
 
-    private static async Task<T> WithWorldReleaseStoreAsync<T>(Func<WorldReleaseGroupStore, string, CancellationToken, Task<T>> action, CancellationToken cancellationToken, bool exclusive = false) {
+    private static async Task<T> WithWorldReleaseStoreAsync<T>(Func<WorldReleaseGroupStore, string, CancellationToken, Task<T>> action, TimeProvider clock,
+        CancellationToken cancellationToken, bool exclusive = false) {
         var outputs = Outputs();
         var configuration = Value(
             key: "worldSiloConfiguration",
@@ -82,6 +86,7 @@ internal static partial class AzureCommand {
                     group,
                     token
                 ),
+                clock,
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false)
             : await action(

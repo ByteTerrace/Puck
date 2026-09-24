@@ -55,6 +55,22 @@ internal delegate (long U, long V) PowerOp(long p, long q, ulong exponent);
 internal static class Laws {
     private static void Fail(string lawId, Domain domain, long index, string detail) =>
         Assert.Fail(message: $"{lawId} [{domain.Key}] seed={domain.Seed(index: index)} k={index} {detail}");
+    // Runs a fixed-basis body and fails the law with its counterexample text, or with what it threw.
+    private static void Holds(string lawId, Func<string?> body) {
+        string? detail;
+
+        try {
+            detail = body();
+        } catch (Exception exception) {
+            Assert.Fail(message: $"{lawId} threw {exception.GetType().Name}: {exception.Message}");
+
+            return;
+        }
+
+        if (detail is not null) {
+            Assert.Fail(message: $"{lawId} {detail}");
+        }
+    }
     private static int FirstDifference(ReadOnlySpan<long> left, ReadOnlySpan<long> right) {
         for (var lane = 0; (lane < left.Length); ++lane) {
             if (left[lane] != right[lane]) { return lane; }
@@ -118,20 +134,10 @@ internal static class Laws {
     /// in this module and the registry keeps its declaration-only shape.</summary>
     public static void Claim(string lawId, Func<string?> claim) {
         LawShapes.Report(shape: LawShape.Claim);
-
-        string? detail;
-
-        try {
-            detail = claim();
-        } catch (Exception exception) {
-            Assert.Fail(message: $"{lawId} threw {exception.GetType().Name}: {exception.Message}");
-
-            return;
-        }
-
-        if (detail is not null) {
-            Assert.Fail(message: $"{lawId} {detail}");
-        }
+        Holds(
+            body: claim,
+            lawId: lawId
+        );
     }
     /// <summary>ConjugateSymmetry: conjugation is an involution that distributes over multiplication —
     /// <c>conj(a·b) == conj(a)·conj(b)</c> for the commutative planar algebras.</summary>
@@ -282,20 +288,10 @@ internal static class Laws {
     /// <param name="counterexample">The fixed witness for the false statement.</param>
     public static void KnownFalse(string lawId, Func<string?> counterexample) {
         LawShapes.Report(shape: LawShape.Divergence);
-
-        string? detail;
-
-        try {
-            detail = counterexample();
-        } catch (Exception exception) {
-            Assert.Fail(message: $"{lawId} threw {exception.GetType().Name}: {exception.Message}");
-
-            return;
-        }
-
-        if (detail is not null) {
-            Assert.Fail(message: $"{lawId} {detail}");
-        }
+        Holds(
+            body: counterexample,
+            lawId: lawId
+        );
     }
     /// <summary>Möbius exactness/oracle law: the projective step's denominator is the input numerator and its numerator
     /// matches the oracle recomputation (exact for integer relations, one rounding otherwise).</summary>
@@ -518,38 +514,14 @@ internal static class Laws {
         }
     }
     /// <summary>BitIdenticalToOracle for a scalar-valued element operation (a norm).</summary>
-    public static void ScalarMatchesOracle(string lawId, Domain domain, Tier tier, ScalarElemOp subject, ScalarElemOp oracle) {
-        LawShapes.Report(shape: LawShape.OracleAgreement);
-
-        var (index, _) = Frontier.Consume(
-            key: domain.Key,
-            block: domain.Block
-        );
-
-        foreach (var (u, v) in Domains.Pairs(
+    public static void ScalarMatchesOracle(string lawId, Domain domain, Tier tier, ScalarElemOp subject, ScalarElemOp oracle) =>
+        ScalarBinaryMatchesOracle(
             domain: domain,
-            index: index,
+            lawId: lawId,
+            oracle: oracle.Invoke,
+            subject: subject.Invoke,
             tier: tier
-        )) {
-            var actual = subject(
-                u,
-                v
-            );
-            var expected = oracle(
-                u,
-                v
-            );
-
-            if (actual != expected) {
-                Fail(
-                    detail: $"operands=({u},{v}) subject={actual} oracle={expected}",
-                    domain: domain,
-                    index: index,
-                    lawId: lawId
-                );
-            }
-        }
-    }
+        );
     /// <summary>TwinIdentity for two scalar-valued element operations that must agree bit-for-bit, with the third leg
     /// beside them. The scalar sibling of <see cref="TwinBinary"/>, for a norm twin whose second side is a SUBJECT and
     /// so must never sit in an oracle-shaped slot.</summary>

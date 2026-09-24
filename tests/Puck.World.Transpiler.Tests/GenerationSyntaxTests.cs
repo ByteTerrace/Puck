@@ -7,25 +7,6 @@ namespace Puck.World.Transpiler.Tests;
 // Interpolation, raw strings, `for`, indexing and the number builtins: the pieces that let a document say how its
 // data is generated instead of listing it.
 public class GenerationSyntaxTests {
-    private static WorldCompilation Compile(string body) =>
-        WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: $"schema: \"puck.world.definition.v1\"\n\n{body}"
-        );
-    private static JsonObject Lower(string body) {
-        var compilation = Compile(body: body);
-
-        Assert.False(
-            condition: compilation.Diagnostics.HasErrors,
-            userMessage: string.Join(
-                separator: "\n",
-                values: compilation.Diagnostics.Select(selector: d => $"{d.Code}: {d.Message}")
-            )
-        );
-
-        return compilation.RequireJson();
-    }
-    private static DiagnosticBag LowerForDiagnostics(string body) => Compile(body: body).Diagnostics;
     private static string Text(JsonNode? node) => Assert.IsAssignableFrom<JsonValue>(@object: node).GetValue<string>();
 
     [Fact]
@@ -33,7 +14,7 @@ public class GenerationSyntaxTests {
         // What makes the kept value safe to keep: a `let` is a document-level value, lowered with no locals in
         // scope, so it reads the same at every reference rather than picking up whichever loop happens to enclose
         // the one that lowered it first.
-        var rows = Assert.IsType<JsonArray>(@object: Lower(body: """
+        var rows = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
             let i = 99
             let fixed = i
 
@@ -65,7 +46,7 @@ public class GenerationSyntaxTests {
         // each layer rebuilt the whole of the layer beneath it, once per element. Six layers over 64 elements is
         // 64^6 rebuilds if the value is not kept, and finishes immediately if it is — so this stands as a
         // complexity guard, not merely a correctness one.
-        var lowered = Lower(body: """
+        var lowered = WorldSources.LowerClean(body: """
             let a0 = map(range(0, 64), i => i)
             let a1 = map(range(0, 64), i => a0[i] + 1)
             let a2 = map(range(0, 64), i => a1[i] + 1)
@@ -85,55 +66,28 @@ public class GenerationSyntaxTests {
     public void TestAPlainStringNeverInterpolates() {
         Assert.Equal(
             "{leg}",
-            Text(node: Lower(body: """
+            Text(node: WorldSources.LowerClean(body: """
             let leg = "braid"
 
             documentId: "{leg}"
             """)["documentId"])
         );
     }
-    [Fact]
-    public void TestARawStringCarriesItsTextVerbatim() {
-        const string Fence = "\"\"\"";
-        var lowered = Lower(body: ((("documentId: " + Fence) + "\n    first\n      second\n    ") + Fence));
-
-        // The closing fence sets the indent that comes off every line; relative indentation survives.
-        Assert.Equal(
-            "first\n  second",
-            Text(node: lowered["documentId"])
-        );
-    }
-    [Fact]
-    public void TestARawStringInterpolatesUnderTheDollarPrefix() {
-        const string Fence = "\"\"\"";
-        var lowered = Lower(body: ((("let leg = \"braid\"\n\ndocumentId: $" + Fence) + "\n    {leg}-1\n    ") + Fence));
-
-        Assert.Equal(
-            "braid-1",
-            Text(node: lowered["documentId"])
-        );
-    }
-    [Fact]
-    public void TestARawStringTakesNoEscapes() {
-        const string Fence = "\"\"\"";
-        var lowered = Lower(body: ((("documentId: " + Fence) + "\n    a\\nb\n    ") + Fence));
-
-        Assert.Equal(
-            "a\\nb",
-            Text(node: lowered["documentId"])
-        );
-    }
-    [Fact]
-    public void TestAWholeNumberHolePrintsWithoutADecimalPoint() {
-        Assert.Equal(
-            "root-1",
-            Text(node: Lower(body: """documentId: $"root-{floor(7 / 4)}" """)["documentId"])
-        );
-    }
+    // A raw string's closing fence sets the indent that comes off every line, so relative indentation survives; it
+    // interpolates only under the `$` prefix and takes no escapes.
+    [InlineData("documentId: \"\"\"\n    first\n      second\n    \"\"\"", "first\n  second")]
+    [InlineData("let leg = \"braid\"\n\ndocumentId: $\"\"\"\n    {leg}-1\n    \"\"\"", "braid-1")]
+    [InlineData("documentId: \"\"\"\n    a\\nb\n    \"\"\"", "a\\nb")]
+    [InlineData("documentId: $\"root-{floor(7 / 4)}\" ", "root-1")]
+    [Theory]
+    public void TestAStringLowersToItsText(string body, string text) => Assert.Equal(
+        text,
+        Text(node: WorldSources.LowerClean(body: body)["documentId"])
+    );
     [Fact]
     public void TestAnIndexOnTheNextLineIsTheNextElement() {
         // An array's elements are newline-separated, so a '[' opening a line is never an index on the line above.
-        var rows = Assert.IsType<JsonArray>(@object: Lower(body: """
+        var rows = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
             curve [
                 [0, 0]
                 [1, 0.5]
@@ -153,13 +107,13 @@ public class GenerationSyntaxTests {
     public void TestDoubledBracesAreOneLiteralBrace() {
         Assert.Equal(
             "{x}",
-            Text(node: Lower(body: """documentId: $"{{x}}" """)["documentId"])
+            Text(node: WorldSources.LowerClean(body: """documentId: $"{{x}}" """)["documentId"])
         );
     }
     [Fact]
     public void TestForBindingIsGoneAfterTheLoop() {
         // The binding is a local: it shadows nothing permanently and does not leak past its own iteration.
-        var lowered = Lower(body: """
+        var lowered = WorldSources.LowerClean(body: """
             let i = "outer"
 
             for i in range(0, 1) {
@@ -175,7 +129,7 @@ public class GenerationSyntaxTests {
     }
     [Fact]
     public void TestForBindsTheIndexWhenAsked() {
-        var rows = Assert.IsType<JsonArray>(@object: Lower(body: """
+        var rows = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
             prototypes {
                 for (name, i) in ["near", "far"] {
                     prototype $"{name}-{i}" {
@@ -195,7 +149,7 @@ public class GenerationSyntaxTests {
     }
     [Fact]
     public void TestForEmitsItsBodyOncePerElement() {
-        var rows = Assert.IsType<JsonArray>(@object: Lower(body: """
+        var rows = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
             prototypes {
                 for i in range(0, 3) {
                     prototype $"view-{i}" {
@@ -224,7 +178,7 @@ public class GenerationSyntaxTests {
     }
     [Fact]
     public void TestForKeepsDocumentOrderAroundIt() {
-        var rows = Assert.IsType<JsonArray>(@object: Lower(body: """
+        var rows = Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: """
             prototypes {
                 prototype "first" {
                 }
@@ -246,7 +200,7 @@ public class GenerationSyntaxTests {
     }
     [Fact]
     public void TestIndexingReadsArraysAndObjects() {
-        var lowered = Lower(body: """
+        var lowered = WorldSources.LowerClean(body: """
             let rows = [10, 20, 30]
             let named = { alpha: "a", beta: "b" }
 
@@ -265,7 +219,7 @@ public class GenerationSyntaxTests {
     }
     [Fact]
     public void TestInterpolationSubstitutesItsHoles() {
-        var lowered = Lower(body: """
+        var lowered = WorldSources.LowerClean(body: """
             let strand = 1
             let leg = "braid"
 
@@ -279,7 +233,7 @@ public class GenerationSyntaxTests {
     }
     [Fact]
     public void TestNumberBuiltins() {
-        var lowered = Lower(body: """
+        var lowered = WorldSources.LowerClean(body: """
             a: floor(7 / 2)
             b: ceiling(7 / 2)
             c: absolute(0 - 3)
@@ -316,7 +270,7 @@ public class GenerationSyntaxTests {
     [Fact]
     public void TestRefusalsAreNamed() {
         Assert.Contains(
-            collection: LowerForDiagnostics(body: """
+            collection: WorldSources.Diagnose(body: """
             let rows = [1, 2]
 
             width: rows[5]
@@ -325,7 +279,7 @@ public class GenerationSyntaxTests {
         );
 
         Assert.Contains(
-            collection: LowerForDiagnostics(body: """
+            collection: WorldSources.Diagnose(body: """
             for i in 3 {
             }
             """),

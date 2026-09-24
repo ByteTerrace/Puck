@@ -22,8 +22,14 @@ internal static class WorldCaptureRoot {
         OverridePath = Path.GetFullPath(path: path);
     }
     /// <summary>Resolves the effective capture directory: the boot override when present, else
-    /// <paramref name="authored"/> resolved against the current directory.</summary>
-    /// <param name="authored">The document's <c>captures.directory</c>.</param>
-    public static string Resolve(string authored) =>
-        (OverridePath ?? Path.GetFullPath(path: authored));
+    /// <paramref name="captures"/>' own directory (<see cref="WorldCapturesSection.ResolveDirectory"/>), which is
+    /// under the run's state root unless the document names one beside itself.</summary>
+    /// <param name="captures">The document's <c>captures</c> section.</param>
+    /// <param name="documentDirectory">The document's directory.</param>
+    /// <returns>The rooted capture directory.</returns>
+    public static string Resolve(WorldCapturesSection captures, string? documentDirectory) =>
+        (OverridePath ?? captures.ResolveDirectory(
+            documentDirectory: documentDirectory,
+            stateRoot: Path.GetFullPath(path: Server.WorldStateRoot.Resolve())
+        ));
 }

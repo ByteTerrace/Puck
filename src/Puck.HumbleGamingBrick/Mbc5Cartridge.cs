@@ -51,13 +51,6 @@ public sealed class Mbc5Cartridge : CartridgeBase {
         (m_isRumbleVariant && m_motorOn);
 
     /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_ramBank = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
-        m_motorOn = reader.ReadBoolean();
-    }
-    /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         ((m_ramBank * RamBankSize) + (address - MemoryMap.ExternalRamStart));
     /// <inheritdoc/>
@@ -68,11 +61,11 @@ public sealed class Mbc5Cartridge : CartridgeBase {
             romBank: m_romBank
         );
     /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
-        writer.WriteBoolean(value: m_motorOn);
+    protected override void TransferRegisters<TTransfer>(TTransfer transfer) {
+        transfer.Int32(value: ref m_ramBank);
+        transfer.Boolean(value: ref m_ramEnabled);
+        transfer.Int32(value: ref m_romBank);
+        transfer.Boolean(value: ref m_motorOn);
     }
 
     /// <inheritdoc/>

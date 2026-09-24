@@ -16,7 +16,7 @@
         "type": "object",
         "properties": {
           "name": {
-            "description": "A validated state-section row name or cell key \u2014 the base SafeName rule plus no dot anywhere, which is what makes the state.\u003Crow\u003E.\u003Ckey\u003E HUD binding grammar unambiguous by construction: splitting a bound token on \u0027.\u0027 can never mistake part of a row or cell name for a grammar separator, because neither can hold one. A row\u0027s reserved slot key (\u0022$value\u0022) is unaffected \u2014 \u0027$\u0027 is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors.",
+            "description": "A validated state-section row name or cell key \u2014 the base SafeName rule plus no dot anywhere, which is what makes the state.\u003Crow\u003E.\u003Ckey\u003E HUD binding grammar unambiguous by construction: splitting a bound token on \u0027.\u0027 can never mistake part of a row or cell name for a grammar separator, because neither can hold one. It holds no backquote either, the expression language\u0027s quote for a name, so every row and cell key can be written in an expression. A row\u0027s reserved slot key (\u0022$value\u0022) is unaffected \u2014 \u0027$\u0027 is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors. A generated name (GeneratedName, turn$east) is a legal CellName for the same reason; the doors an author writes through refuse it, not this type.",
             "type": "string"
           },
           "kind": {
@@ -357,7 +357,7 @@
                     "const": "ring"
                   },
                   "capacity": {
-                    "description": "How many pushes the ring keeps, 1..128.",
+                    "description": "How many pushes the ring keeps, from 1 to MaxCellsPerRow.",
                     "type": "integer"
                   },
                   "empty": {
@@ -375,7 +375,7 @@
             ]
           },
           "inverse": {
-            "description": "A CellsOf row\u0027s declared inverse: the board\u0027s cells are not authored directly but derived from a keyed Tokens row naming cells of the same topology and a Codes row keyed the same way, giving each token\u0027s code. Legitimate only on a Int row whose EffectiveDomain is CellsOf and that carries no field trait \u2014 a document project\u0027s validator enforces both.",
+            "description": "A CellsOf row\u0027s declared inverse: the board\u0027s cells are not authored directly but derived from a keyed Tokens row naming cells of the same topology and a Codes row keyed the same way, giving each token\u0027s code. Legitimate only on a Int or Bool row (TryProveDerivedDomain) whose EffectiveDomain is CellsOf and that carries no field trait \u2014 a document project\u0027s validator enforces both.",
             "type": "object",
             "properties": {
               "tokens": {
@@ -647,7 +647,7 @@
             "additionalProperties": false
           },
           "witness": {
-            "description": "A validated state-section row name or cell key \u2014 the base SafeName rule plus no dot anywhere, which is what makes the state.\u003Crow\u003E.\u003Ckey\u003E HUD binding grammar unambiguous by construction: splitting a bound token on \u0027.\u0027 can never mistake part of a row or cell name for a grammar separator, because neither can hold one. A row\u0027s reserved slot key (\u0022$value\u0022) is unaffected \u2014 \u0027$\u0027 is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors.",
+            "description": "A validated state-section row name or cell key \u2014 the base SafeName rule plus no dot anywhere, which is what makes the state.\u003Crow\u003E.\u003Ckey\u003E HUD binding grammar unambiguous by construction: splitting a bound token on \u0027.\u0027 can never mistake part of a row or cell name for a grammar separator, because neither can hold one. It holds no backquote either, the expression language\u0027s quote for a name, so every row and cell key can be written in an expression. A row\u0027s reserved slot key (\u0022$value\u0022) is unaffected \u2014 \u0027$\u0027 is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors. A generated name (GeneratedName, turn$east) is a legal CellName for the same reason; the doors an author writes through refuse it, not this type.",
             "type": "string"
           }
         },
@@ -1615,7 +1615,7 @@
                                 "type": "string"
                               },
                               "comparison": {
-                                "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+                                "$ref": "./common.schema.json#/$defs/ExpressionComparison",
                                 "description": "The comparison."
                               },
                               "value": {
@@ -1714,7 +1714,7 @@
                           "type": "string"
                         },
                         "comparison": {
-                          "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+                          "$ref": "./common.schema.json#/$defs/ExpressionComparison",
                           "description": "The comparison."
                         },
                         "value": {
@@ -1980,7 +1980,7 @@
                   "type": "string"
                 },
                 "kind": {
-                  "$ref": "./common.schema.json#/$defs/CellKind",
+                  "$ref": "./common.schema.json#/$defs/CellKindNonNullable",
                   "default": "Int"
                 },
                 "min": {

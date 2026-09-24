@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Xunit;
@@ -21,7 +22,7 @@ public sealed class RowScopedGrantLawTests {
     /// act.</summary>
     private const string SlotRow = "slot-nw";
 
-    private static readonly WorldPrincipal Partner = WorldPrincipal.Peer(
+    private static readonly Principal Partner = Principal.Peer(
         generation: 1,
         index: 4
     );
@@ -29,17 +30,17 @@ public sealed class RowScopedGrantLawTests {
     /// <summary>A server over the collider-bearing fixture document — the only code-built document carrying a
     /// creation and a placement row, which is what <see cref="HostRow"/> names.</summary>
     private static WorldFixture FreshSlottedServer() => Fixtures.FreshServer(definition: Fixtures.BuildGradientUpDocument(gradientUp: false));
-    private static bool GrantAndObserveHeld(WorldFixture fixture, GrantSubject subject, MutationKindMask? kinds, WorldPrincipal? principal = null) {
+    private static bool GrantAndObserveHeld(WorldFixture fixture, GrantSubject subject, MutationKindMask? kinds, Principal? principal = null) {
         var holder = (principal ?? Partner);
 
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Budget: 16,
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kinds,
-                Principal: holder,
+                Grantee: holder,
                 Subject: subject
             )
         );
@@ -52,13 +53,13 @@ public sealed class RowScopedGrantLawTests {
     }
     private static void GrantSlot(WorldFixture fixture, string row, MutationKindMask kinds) {
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: new WorldGrant(
                 Budget: 16,
                 Capability: WorldCapability.Mutate,
                 Exclusive: false,
                 KindMask: kinds,
-                Principal: Partner,
+                Grantee: Partner,
                 Subject: GrantSubject.Placement(id: row)
             )
         );
@@ -107,7 +108,7 @@ public sealed class RowScopedGrantLawTests {
     public void AddonHoldsNoRowScopedRow_RowSubjectRefused_SectionSubjectHeld() {
         using var fixture = FreshSlottedServer();
         // The addon name the fixture document declares — an undeclared one would be refused for a different reason.
-        var addon = WorldPrincipal.Addon(name: "probe");
+        var addon = Principal.Addon(name: "probe");
 
         Laws.RefusalWithControl(
             lawId: "authority.addon-holds-no-row-scoped-mutate-row",
@@ -227,13 +228,13 @@ public sealed class RowScopedGrantLawTests {
             ),
             controlOutcome: () => {
                 fixture.Server.Grant(
-                    actor: WorldPrincipal.Console,
+                    actor: Principal.Console,
                     grant: new WorldGrant(
                         Budget: 16,
                         Capability: WorldCapability.Mutate,
                         Exclusive: false,
                         KindMask: everyPlacementKind,
-                        Principal: Partner,
+                        Grantee: Partner,
                         Subject: GrantSubject.Section(section: WorldSection.Placements)
                     )
                 );

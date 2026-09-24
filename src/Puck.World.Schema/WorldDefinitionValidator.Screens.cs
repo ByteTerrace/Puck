@@ -1,6 +1,6 @@
-using System.Text;
-using Puck.Hosting;
-using Puck.Assets.Qr;
+using System.Text.Json;
+using Puck.Commands;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -73,7 +73,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         for (var index = 0; (index < value.Entries.Count); index++) {
-            _ = ValidateScreenSource(
+            ValidateScreenSource(
                 definition: definition,
                 source: value.Entries[index],
                 path: $"{path}.entries[{index}]",
@@ -84,64 +84,10 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void ValidateProfile(WorldFeedProfile profile, string path, List<string> errors) {
-        if (
-            (profile.Width <= 0) ||
-            (profile.Height <= 0) ||
-            (profile.Width > MaxSurfaceDimension) ||
-            (profile.Height > MaxSurfaceDimension)
-        ) {
-            errors.Add(item: $"{path} dimensions must be within 1..{MaxSurfaceDimension}.");
-        }
-
-        try {
-            _ = EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz);
-        } catch (ArgumentException exception) {
-            errors.Add(item: $"{path}.refreshRateHz is invalid: {exception.Message}");
-        }
-    }
-    // The QR source gate: a non-empty payload that FITS the encoder's supported version range at the requested level, a
-    // recognized EC-level letter, and a non-negative quiet zone. The capacity question is asked of the ENCODER
-    // (QrEncoder.TryFindVersion) rather than re-derived here, so an authoring-time refusal names the identical byte
-    // count and capacity a live screen.source <index> qr refusal names — one arithmetic, one message, no drift.
-    private static void ValidateQr(WorldScreenSource.Qr qr, string path, List<string> errors) {
-        if (string.IsNullOrEmpty(value: qr.Payload)) {
-            errors.Add(item: $"{path}.qr.payload is required.");
-
-            return;
-        }
-
-        if (!QrErrorCorrection.TryParse(
-            text: qr.EcLevel,
-            level: out var level
-        )) {
-            errors.Add(item: $"{path}.qr.ecLevel '{qr.EcLevel}' must be one of {QrErrorCorrection.Vocabulary}.");
-
-            return;
-        }
-
-        if (qr.QuietZoneModules < 0) {
-            errors.Add(item: $"{path}.qr.quietZoneModules {qr.QuietZoneModules} must be non-negative.");
-        }
-
-        if (!QrEncoder.TryFindVersion(
-            payloadByteCount: Encoding.UTF8.GetByteCount(s: qr.Payload),
-            level: level,
-            version: out _,
-            error: out var capacityError
-        )) {
-            errors.Add(item: $"{path}.qr.payload: {capacityError}.");
-        }
-    }
-
     // The references section: null names nothing. Each row's Name already crossed SafeName at JSON parse, so
     // this pass owns only uniqueness within the section and a non-empty Document — no boot-time file-existence
     // check (resolving a reference's Document is a future consumer's job). Returns the validated name set so a
     // later pass (a placement face's portal facet) can refuse an undeclared destination by name.
-    /// <summary>The reserved prefix a <see cref="WorldReference.Document"/> must never begin with — the owner-named
-    /// arm's own <see cref="WorldReference.NeighbourKey"/> spelling, so a document string authored to collide with it
-    /// can never be handed to the local file resolver in place of a signature-checked one.</summary>
-    private const string OwnerNeighbourKeyPrefix = "owner/";
 
     // One authored camera subject: a placement id must resolve, a world point must be finite; a reference needs no
     // check of its own (it names the program's externally supplied reference pose).
@@ -160,7 +106,7 @@ public static partial class WorldDefinitionValidator {
 
                 break;
             case WorldCameraSubject.WorldPoint worldPoint:
-                if (!IsFinite(value: worldPoint.Point)) {
+                if (!VectorFunctions.IsFinite(vector: worldPoint.Point)) {
                     errors.Add(item: $"{path}.point must contain finite coordinates.");
                 }
 
@@ -241,7 +187,7 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 case WorldCameraProgramOp.Offset offset:
-                    if (!IsFinite(value: offset.Value)) {
+                    if (!VectorFunctions.IsFinite(vector: offset.Value)) {
                         errors.Add(item: $"{opPath}.value must contain finite coordinates.");
                     }
 
@@ -262,7 +208,7 @@ public static partial class WorldDefinitionValidator {
                     } else {
                         if (
                             (lookAt.TargetOffset is { } lookAtOffset) &&
-                            !IsFinite(value: lookAtOffset)
+                            !VectorFunctions.IsFinite(vector: lookAtOffset)
                         ) {
                             errors.Add(item: $"{opPath}.targetOffset must contain finite coordinates.");
                         }
@@ -304,7 +250,7 @@ public static partial class WorldDefinitionValidator {
 
                     if (
                         (orbit.PivotOffset is { } pivotOffset) &&
-                        !IsFinite(value: pivotOffset)
+                        !VectorFunctions.IsFinite(vector: pivotOffset)
                     ) {
                         errors.Add(item: $"{opPath} needs a finite pivotOffset.");
                     }
@@ -634,6 +580,14 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.kit '{kit}' names no kit carrying a pad map.");
         }
+        if (route.Input == SourceDestination.Passthrough) {
+            errors.Add(item: $"{path}.input 'Passthrough' is refused: host passthrough exists only for a source the local user opened on their own machine, and a world document, whether authored locally or arrived through a portal, can never create a passthrough source or send it input.");
+        } else if (
+            (route.Input is { } input) &&
+            !Enum.IsDefined(value: input)
+        ) {
+            errors.Add(item: $"{path}.input {((int)input)} is not a destination.");
+        }
     }
     // A screen's memory bindings: each window fits the engine's addressable bus, names a declared kind=Int row on
     // the same (row, key) pair rule every other named-cell reference in this document follows, and spells a known
@@ -727,15 +681,13 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    // The one frame-source gate, shared by a screen row/magazine entry's own Camera/View/Probe/Capture arms
-    // (ValidateScreenSource) and a probe socket (WorldDefinitionValidator.Probes.cs' ValidateProbeStream): a
-    // camera's sensor is defined (and, when authored, its profile/vendor controls/seat, the last within
-    // 1..population.localSeats — shared by every consumer naming a seat: screens, probe sockets, HUD frames); a view names a declared
-    // cameras[] row; a probe names another declared probes[] row; a capture's selector/profile are shaped like the
-    // screen validator's own capture gate. A probe socket binding a Camera source has no meaningful use for
-    // Profile (a probe kernel reads the hosting camera graph's existing feed rather than negotiating its own
-    // capture extent) — validated to the SAME shape as a screen row anyway rather than forking a second, looser
-    // gate for one field nobody reads. Self-reference (a probe socket naming its own enclosing row) is the ONE rule
+    // The one frame-source gate, shared by a screen row/magazine entry's own Producer/View/Probe arms
+    // (ValidateScreenSource) and a probe socket (WorldDefinitionValidator.Probes.cs' ValidateProbeStream): a producer
+    // names a registered producer whose shape accepts its settings (WorldImageProducerVocabulary); a view names a
+    // declared cameras[] row; a probe names another declared probes[] row. A probe socket binding a camera source has
+    // no meaningful use for its profile (a probe kernel reads the hosting camera graph's existing feed rather than
+    // negotiating its own capture extent) — validated to the same shape as a screen row anyway rather than forking a
+    // second, looser gate for one field nobody reads. Self-reference (a probe socket naming its own enclosing row) is the ONE rule
     // this method cannot see — the caller checks it, since only a probe socket call site knows which probe is
     // enclosing. Internal (not private): HudRowValidation.ValidateElement (HudValidation.cs) is a separate class in
     // this same assembly that reuses this exact gate for a hud.panels Frame element's own bound source — widening the
@@ -747,51 +699,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} is required.");
 
                 break;
-            case WorldScreenSource.Camera camera:
-                if (camera.Profile is { } cameraProfile) {
-                    ValidateProfile(
-                        errors: errors,
-                        path: $"{path}.camera",
-                        profile: cameraProfile
-                    );
-                }
-
-                if (!Enum.IsDefined(value: camera.Sensor)) {
-                    errors.Add(item: $"{path}.camera.sensor '{camera.Sensor}' is not recognized.");
-                }
-
-                if (
-                    (camera.Seat is { } seat) &&
-                    ((seat < 1) || (seat > definition.Population.LocalSeats))
-                ) {
-                    errors.Add(item: $"{path}.camera.seat {seat} is outside 1..{definition.Population.LocalSeats} (population.localSeats).");
-                }
-
-                if (camera.Controls?.Vendor is { } vendorControls) {
-                    for (var index = 0; (index < vendorControls.Count); index++) {
-                        var control = vendorControls[index];
-
-                        if (control is null) {
-                            errors.Add(item: $"{path}.camera.controls.vendor[{index}] is required.");
-
-                            continue;
-                        }
-
-                        if (
-                            (control.Id < byte.MinValue) ||
-                            (control.Id > byte.MaxValue)
-                        ) {
-                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].id {control.Id} is outside 0..255.");
-                        }
-
-                        if (
-                            (control.Value < byte.MinValue) ||
-                            (control.Value > byte.MaxValue)
-                        ) {
-                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].value {control.Value} is outside 0..255.");
-                        }
-                    }
-                }
+            case WorldScreenSource.Producer producer:
+                WorldImageProducerVocabulary.Validate(
+                    definition: definition,
+                    errors: errors,
+                    path: path,
+                    source: producer
+                );
 
                 break;
             case WorldScreenSource.View view:
@@ -809,23 +723,6 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
-            case WorldScreenSource.Capture capture:
-                // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).
-                if (capture.MonitorIndex is { } monitorIndex) {
-                    if (monitorIndex < 0) {
-                        errors.Add(item: $"{path}.capture.monitorIndex must be non-negative.");
-                    }
-                } else if (string.IsNullOrWhiteSpace(value: capture.WindowTitle)) {
-                    errors.Add(item: $"{path}.capture.windowTitle is required.");
-                }
-
-                ValidateProfile(
-                    profile: capture.Profile,
-                    path: $"{path}.capture",
-                    errors: errors
-                );
-
-                break;
             default:
                 errors.Add(item: $"{path} is an unrecognized frame source kind.");
 
@@ -834,9 +731,8 @@ public static partial class WorldDefinitionValidator {
     }
 
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
-    // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
-    // live CONSOLE (the caller counts these against the one-live ceiling).
-    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors, ICollection<string>? deferred) {
+    // real duplication risk (a magazine entry could otherwise name an undeclared camera).
+    private static void ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors, ICollection<string>? deferred) {
         var cameras = scope.Cameras;
         var destinationNames = scope.DestinationNames;
         var fontNames = scope.FontNames;
@@ -846,7 +742,7 @@ public static partial class WorldDefinitionValidator {
             case null:
                 errors.Add(item: $"{path} is required.");
 
-                return false;
+                return;
             case WorldScreenSource.Machine machine:
                 if (string.IsNullOrWhiteSpace(value: machine.Instance)) {
                     errors.Add(item: $"{path}.machine.instance is required.");
@@ -882,20 +778,9 @@ public static partial class WorldDefinitionValidator {
                     deferred?.Add(item: $"{path}.machine.output: validation of output '{machine.Output}' is deferred because no machine catalog was supplied.");
                 }
 
-                return false;
-            case WorldScreenSource.TestPattern pattern:
-                if (
-                    (pattern.Width <= 0) ||
-                    (pattern.Height <= 0) ||
-                    (pattern.Width > MaxSurfaceDimension) ||
-                    (pattern.Height > MaxSurfaceDimension)
-                ) {
-                    errors.Add(item: $"{path} test-pattern dimensions must be within 1..{MaxSurfaceDimension}.");
-                }
-
-                return false;
+                return;
             case WorldFrameSource frame:
-                // Camera/View/Probe/Capture — the frame-producing arms — share ONE gate with a probe socket's own
+                // Producer/View/Probe — the frame-producing arms — share one gate with a probe socket's own
                 // bound source (ValidateFrameSource above).
                 ValidateFrameSource(
                     cameras: cameras,
@@ -905,31 +790,7 @@ public static partial class WorldDefinitionValidator {
                     source: frame
                 );
 
-                return false;
-            case WorldScreenSource.Console console:
-                if (
-                    (console.Rows < 1) ||
-                    (console.Rows > 120)
-                ) {
-                    errors.Add(item: $"{path}.console.rows {console.Rows} is outside 1..120.");
-                }
-
-                if (
-                    (console.Columns < 1) ||
-                    (console.Columns > 400)
-                ) {
-                    errors.Add(item: $"{path}.console.columns {console.Columns} is outside 1..400.");
-                }
-
-                return true;
-            case WorldScreenSource.Qr qr:
-                ValidateQr(
-                    errors: errors,
-                    path: path,
-                    qr: qr
-                );
-
-                return false;
+                return;
             case WorldScreenSource.Session session:
                 // No placement face reaches here (a top-level screens row or magazine entry) — portal:null makes
                 // ValidateSessionSource refuse Window unconditionally, which is correct: there is no face for a
@@ -942,7 +803,7 @@ public static partial class WorldDefinitionValidator {
                     session: session
                 );
 
-                return false;
+                return;
             case WorldScreenSource.Text text:
                 ValidateTextSource(
                     definition: definition,
@@ -953,9 +814,9 @@ public static partial class WorldDefinitionValidator {
                     text: text
                 );
 
-                return false;
+                return;
             default:
-                return false;
+                return;
         }
     }
     private static void ValidateSeatControl(WorldSeatViewControl control, string path, List<string> errors) {
@@ -1029,17 +890,17 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         if (
-            !IsFinite(value: gyro.DeadZone) ||
+            !VectorFunctions.IsFinite(vector: gyro.DeadZone) ||
             (gyro.DeadZone.X < 0f) ||
             (gyro.DeadZone.Y < 0f) ||
             (gyro.DeadZone.Z < 0f)
         ) {
             errors.Add(item: $"{path}.gyro.deadZone components must be finite and non-negative.");
         }
-        if (!IsFinite(value: gyro.Yaw)) {
+        if (!VectorFunctions.IsFinite(vector: gyro.Yaw)) {
             errors.Add(item: $"{path}.gyro.yaw components must be finite.");
         }
-        if (!IsFinite(value: gyro.Pitch)) {
+        if (!VectorFunctions.IsFinite(vector: gyro.Pitch)) {
             errors.Add(item: $"{path}.gyro.pitch components must be finite.");
         }
     }
@@ -1278,7 +1139,31 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.timeScale {pipeline.TimeScale} must be finite and non-negative.");
             }
+
+            if (
+                (pipeline.Output is { } output) &&
+                string.IsNullOrWhiteSpace(value: output)
+            ) {
+                errors.Add(item: $"{path}.output must name an image version when present.");
+            }
+
+            // The shape of an override set; the source's config schema binds the values themselves.
+            foreach (var (pass, config) in (pipeline.Overrides ?? new Dictionary<string, JsonElement>())) {
+                if (string.IsNullOrWhiteSpace(value: pass)) {
+                    errors.Add(item: $"{path}.overrides names an empty pass.");
+                } else if (config.ValueKind != JsonValueKind.Object) {
+                    errors.Add(item: $"{path}.overrides.{pass} must be an object of config fields.");
+                } else if (!config.EnumerateObject().Any()) {
+                    errors.Add(item: $"{path}.overrides.{pass} overrides no field; omit the pass instead.");
+                }
+            }
         }
+
+        ValidateGraphs(
+            cameras: cameras,
+            errors: errors,
+            views: views
+        );
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var layouts = views.Layouts;

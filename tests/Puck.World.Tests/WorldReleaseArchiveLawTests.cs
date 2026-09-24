@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using Puck.Storage;
 using Puck.World.Server;
@@ -9,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldReleaseArchiveLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    private static WorldReleaseManifest Package(TempWorldDirectory directory, Guid owner) {
+    private static WorldReleaseManifest Package(TemporaryDirectory directory, Guid owner) {
         var definition = Fixtures.DefaultWorldBytes();
 
         directory.WriteBytes(
@@ -21,6 +22,7 @@ public sealed class WorldReleaseArchiveLawTests {
             "asset"u8.ToArray()
         );
         return new() {
+            CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
             Label = "retained-test",
             SourceRevision = new string(
             c: 'a',
@@ -41,7 +43,7 @@ public sealed class WorldReleaseArchiveLawTests {
 
     [Fact]
     public async Task CorruptRetainedContentIsRejectedAndCannotBeSilentlyOverwritten() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var owner = Guid.NewGuid();
         var blobs = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
@@ -102,7 +104,7 @@ public sealed class WorldReleaseArchiveLawTests {
     }
     [Fact]
     public async Task InterruptedUploadDoesNotPublishManifestAndRetryUsesTheRetainedBytes() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var owner = Guid.NewGuid();
         var blobs = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(Path.Combine(
@@ -166,7 +168,7 @@ public sealed class WorldReleaseArchiveLawTests {
     }
     [Fact]
     public async Task RetainedPackageSurvivesUploaderLossAndLocalFileChanges() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var owner = Guid.NewGuid();
         var blobs = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(Path.Combine(

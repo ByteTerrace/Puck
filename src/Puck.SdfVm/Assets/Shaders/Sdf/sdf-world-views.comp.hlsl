@@ -1,10 +1,11 @@
 // Shared dispatch for primary, surface, ambient and views. Each wrapper selects its pass macro; views reads the
-// resulting hit records and shades each source texture. SDF_MONOLITHIC_VIEWS retains the combined reference walk.
+// resulting visibility records and shades each source texture. SDF_MONOLITHIC_VIEWS retains the combined reference walk.
 // Composite places each source or child into its region. All four hit passes use an 8x8 workgroup and identical
 // indirect tile bbox, camera, masks and active-pixel tests.
 // The shared layout carries dynamic transforms, screen sources, and the read-only instance mask (binding 7 / t37,
 // after screen sources t5..t36). Instance-cull produces that mask; the beam reads it at its own t3 binding.
-// Primary hit records are appended at binding 49 / u6. Unused shading resources compile out of primary traversal.
+// Primary, surface and ambient write the visibility records at binding 49 / u5; views reads them at binding 50 / t45
+// (sdf-visibility.hlsli). Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
 #if !defined(SDF_PRIMARY_PASS) && !defined(SDF_MONOLITHIC_VIEWS)
 #define SDF_PRIMARY_READ
@@ -28,16 +29,18 @@
 // Primary and surface exit before group gathers; ambient and views each execute their own uniform gather.
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_PART_RAY_BOUNDS
-// Declared before the shared world include so primary traversal can read the appended part bounds.
-[[vk::binding(3, 0)]] RWStructuredBuffer<float> tiles : register(u0);
+// The beam's tile planes and part bounds, read-only in every hit pass. Declared before the shared world include so
+// primary traversal can read the appended part bounds. register(t44): the engine appends it after the bounded
+// volumes (t43) in the views binding order.
+[[vk::binding(3, 0)]] StructuredBuffer<float> tiles : register(t44);
 #include "sdf-world.hlsli"
 
 // The program is at binding 1 (sdf-vm.hlsli, register t0), the viewport table at binding 2 (sdf-world.hlsli,
-// register t1), the dynamic-transform buffer at binding 9 (sdf-vm.hlsli, register t2), the read-only cull buffer at
-// binding 3 (register u0). The per-view source textures (one per viewport, an array) are LAST at binding 4 so their
-// heap slots don't overlap the fixed bindings above on the linear Direct3D 12 descriptor table; Stage 1 writes view N
-// into sources[N] at its view-local pixel.
-[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u1);
+// register t1), the dynamic-transform buffer at binding 9 (sdf-vm.hlsli, register t2). The per-view source textures
+// (one per viewport, an array) at binding 4 are the layout's first UAVs (u0..u4); the Direct3D 12 heap slots are
+// packed per binding, so the array never overlaps a fixed binding. Stage 1 writes view N into sources[N] at its
+// view-local pixel.
+[[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u0);
 // The surviving-tile bbox group origin from the cull-args pass (sdf-cull-args.comp): the dispatch is origin-anchored,
 // so this offsets each invocation onto the bbox's pixels. The all-empty margins outside the bbox are never dispatched.
 // register(t3): the SRVs are program t0, viewport t1, dynamicTransforms t2, then this. The screen-surface table

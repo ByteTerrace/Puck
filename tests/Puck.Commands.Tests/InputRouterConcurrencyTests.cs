@@ -15,10 +15,8 @@ public sealed class InputRouterConcurrencyTests {
     public async Task EveryConcurrentlyCapturedSignalIsSnapshotOnceInItsProducersOrder() {
         const int PerProducer = 250;
         const int ProducerCount = 4;
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
-
-        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 10));
-
+        // Cancelled when the test body leaves, so a failed drain releases every producer rather than stranding it.
+        using var producersStop = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
         var router = new InputRouter(
             registry: new CommandRegistry(modules: [new ProbeModule()]),
             bindings: new AnySourceBindings(),
@@ -32,18 +30,18 @@ public sealed class InputRouterConcurrencyTests {
 
             producers[producer] = Task.Factory.StartNew(
                 action: () => {
-                start.SignalAndWait(cancellationToken: deadline.Token);
+                    start.SignalAndWait(cancellationToken: producersStop.Token);
 
-                for (var index = 0; (index < PerProducer); index++) {
-                    deadline.Token.ThrowIfCancellationRequested();
-                    // A TEXT signal folds into exactly one entry and leaves no held state behind, so the lane carries
-                    // the capture stream itself rather than a re-assertion of it.
-                    router.Capture(signal: InputSignal.Typed(
-                        source: $"p{producer}.{index}",
-                        text: "x"
-                    ));
-                }
-            },
+                    for (var index = 0; (index < PerProducer); index++) {
+                        producersStop.Token.ThrowIfCancellationRequested();
+                        // A TEXT signal folds into exactly one entry and leaves no held state behind, so the lane carries
+                        // the capture stream itself rather than a re-assertion of it.
+                        router.Capture(signal: InputSignal.Typed(
+                            source: $"p{producer}.{index}",
+                            text: "x"
+                        ));
+                    }
+                },
                 cancellationToken: CancellationToken.None,
                 creationOptions: TaskCreationOptions.LongRunning,
                 scheduler: TaskScheduler.Default
@@ -65,18 +63,18 @@ public sealed class InputRouterConcurrencyTests {
             }
         }
         try {
-            start.SignalAndWait(cancellationToken: deadline.Token);
+            start.SignalAndWait(cancellationToken: producersStop.Token);
             while (!producers.All(predicate: static producer => producer.IsCompleted)) {
-                deadline.Token.ThrowIfCancellationRequested();
+                producersStop.Token.ThrowIfCancellationRequested();
                 Drain();
                 Thread.Yield();
             }
             // Await faults on the test thread. Once every producer has finished, one final drain must contain
             // all remaining signals; missing data should fail immediately, not spin through a million ticks.
-            await Task.WhenAll(producers).WaitAsync(cancellationToken: deadline.Token);
+            await Task.WhenAll(producers).WaitAsync(cancellationToken: producersStop.Token);
             Drain();
         } finally {
-            deadline.Cancel();
+            producersStop.Cancel();
         }
 
         Assert.Equal(
@@ -123,8 +121,8 @@ public sealed class InputRouterConcurrencyTests {
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
     }
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {

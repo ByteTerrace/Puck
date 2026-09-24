@@ -237,7 +237,7 @@ public sealed class Peer : IAsyncDisposable {
             HandshakeFinished();
         }
     }
-    private PeerDeadline Deadline(CancellationToken ct, TimeSpan timeout) => new(
+    private OperationDeadline Deadline(CancellationToken ct, TimeSpan timeout) => new(
         caller: ct,
         timeProvider: m_timeProvider,
         timeout: timeout

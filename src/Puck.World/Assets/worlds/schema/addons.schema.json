@@ -15,7 +15,7 @@
         "type": "string"
       },
       "modulePath": {
-        "description": "The WASM module file path (machine-local; existence/hash verification is the run path\u0027s job).",
+        "description": "The WASM module file path, resolved beside the document that authors the row (WorldDocumentPaths); existence and hash verification are the run path\u0027s job.",
         "type": "string"
       },
       "hash": {

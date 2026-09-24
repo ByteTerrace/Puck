@@ -1,7 +1,7 @@
-using System.Security.Cryptography;
-using System.Text.Json;
-
 using System.CommandLine;
+using System.Text.Json;
+using Puck.Abstractions;
+using Puck.Assets;
 
 namespace Puck.Cli.Branding;
 
@@ -12,15 +12,6 @@ namespace Puck.Cli.Branding;
 internal static class BrandingCommand {
     private const string ManifestRelativePath = "branding/manifest.json";
     private const string ManifestSchema = "puck.branding.v1";
-
-    private static StringComparer PathComparer => (OperatingSystem.IsWindows()
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal
-    );
-    private static StringComparison PathComparison => (OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
-        : StringComparison.Ordinal
-    );
 
     private sealed record Asset(string Id, string Source, string Hash);
     private sealed record Copy(string AssetId, string Path, bool Deferred);
@@ -99,7 +90,7 @@ internal static class BrandingCommand {
                 keySelector: static asset => asset.Id,
                 comparer: StringComparer.Ordinal
             );
-            var canonicalPaths = new HashSet<string>(comparer: PathComparer);
+            var canonicalPaths = new HashSet<string>(comparer: PuckPaths.Comparer);
             var canonicalFiles = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
             foreach (var asset in assets) {
@@ -175,7 +166,7 @@ internal static class BrandingCommand {
                 }
             }
 
-            var destinationPaths = new HashSet<string>(comparer: PathComparer);
+            var destinationPaths = new HashSet<string>(comparer: PuckPaths.Comparer);
             var plans = new List<CopyPlan>();
 
             foreach (var copy in copies) {
@@ -395,13 +386,6 @@ internal static class BrandingCommand {
         b: expected,
         comparisonType: StringComparison.Ordinal
     );
-    private static string HashFile(string path) => Convert.ToHexString(inArray: HashStream(path: path)).ToLowerInvariant();
-    private static byte[] HashStream(string path) {
-        using var stream = File.OpenRead(path: path);
-
-        return SHA256.HashData(source: stream);
-    }
-    private static bool IsSha256(string hash) => ((hash.Length == 64) && hash.All(predicate: static character => char.IsAsciiHexDigit(c: character)));
     private static List<Asset> LoadAssets(JsonElement root, List<string> problems) {
         var assets = new List<Asset>();
 
@@ -451,15 +435,18 @@ internal static class BrandingCommand {
                 continue;
             }
 
-            if (!IsSha256(hash: hash)) {
+            if (!ContentPin.TryParseHex(
+                hex: hash,
+                pin: out _
+            )) {
                 problems.Add(item: $"branding asset {id} has an invalid SHA-256 hash");
                 continue;
             }
 
             assets.Add(item: new Asset(
+                Hash: hash,
                 Id: id,
-                Source: source,
-                Hash: hash.ToLowerInvariant()
+                Source: source
             ));
         }
 
@@ -600,7 +587,7 @@ internal static class BrandingCommand {
         hash = null;
         problem = null;
         try {
-            hash = HashFile(path: path);
+            hash = ContentPin.OfFile(path: path).Hex;
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             problem = $"branding file could not be hashed: {path} ({exception.Message})";
@@ -636,7 +623,7 @@ internal static class BrandingCommand {
 
         if (!fullPath.StartsWith(
             value: prefix,
-            comparisonType: PathComparison
+            comparisonType: PuckPaths.Comparison
         )) {
             problem = $"{kind} escapes the repository: {relativePath}";
             return false;
@@ -658,17 +645,10 @@ internal static class BrandingCommand {
         return true;
     }
 
-    public static Command Create() {
-        var checkOption = new Option<bool>(name: "--check") {
-            Description = "Check canonical hashes, distributed copies, and required wiring without writing; exit 1 on drift.",
-        };
-        var command = new Command(
-            description: "Synchronize and check the maintained branding assets.",
-            name: "branding"
-        ) { checkOption };
-
-        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: checkOption)));
-
-        return command;
-    }
+    public static Command Create() => CliOptions.CheckVerb(
+        checkDescription: "Check canonical hashes, distributed copies, and required wiring without writing; exit 1 on drift.",
+        description: "Synchronize and check the maintained branding assets.",
+        name: "branding",
+        run: Run
+    );
 }

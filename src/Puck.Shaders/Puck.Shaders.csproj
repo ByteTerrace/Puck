@@ -14,6 +14,7 @@
     </ItemGroup>
     <ItemGroup>
         <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive\PuckShaderHashSidecars.cs" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckDirect3D11KernelBytecode.cs" Pack="true" PackagePath="buildTransitive\PuckDirect3D11KernelBytecode.cs" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)..\..\build\Shaders.targets" Pack="true" PackagePath="buildTransitive\ByteTerrace.Puck.Shaders.targets" Visible="false" />
     </ItemGroup>
     <ItemGroup>
@@ -22,9 +23,18 @@
         <Content Include="Assets\Runtime\pipeline-preview.vert.hlsl;Assets\Runtime\pipeline-preview.frag.hlsl;Assets\Runtime\pipeline-preview.vert.spv;Assets\Runtime\pipeline-preview.frag.spv;Assets\Runtime\pipeline-preview.vert.dxil;Assets\Runtime\pipeline-preview.frag.dxil" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
-        <!-- puck.probe.v1 kind manifests and their kernel HLSL sources: plain content, never fed to the
-             HLSL-to-SPIR-V/DXIL recipe (build/Shaders.targets), since a kernel compiles at cs_5_0 on its own device
-             at run time (Win32D3D11ProbeKernelRunner), not ahead of time. -->
-        <Content Include="Assets\Probes\**" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), compiled to SPIR-V and
+             DXIL at build and shipped by the shared CollectShaderBytecode target. -->
+        <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
+        <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
+        <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- puck.probe.v1 kind manifests and their kernel HLSL sources ship as content; each kernel's entry points compile
+             to cs_5_0 DXBC at build (CompileDirect3D11Kernels in build/Shaders.targets), which ships beside them, because a
+             kernel runs on a camera graph's own Direct3D 11 device and compiles nothing there. -->
+        <Content Include="Assets\Probes\**" Exclude="Assets\Probes\**\*.dxbc" CopyToOutputDirectory="PreserveNewest" />
+        <Direct3D11KernelSource Include="Assets\Probes\faerie.hlsl;Assets\Probes\ir-blob.hlsl;Assets\Probes\ir-marker.hlsl" Entries="accumulate;finalize" />
     </ItemGroup>
 </Project>

@@ -1,5 +1,6 @@
 // Shared physical parlor: controls, viewing, motion and collision defaults.
-// Games refine only their camera, body capacity and piece-specific physics.
+// Games own their seats, camera, body capacity and piece-specific physics, so the basis alone is a valid,
+// bodiless world.
 schema: "puck.world.definition.v1"
 
 host {
@@ -12,29 +13,27 @@ host {
   presentMode: Immediate
   targetHertz: 60
   exitAfterSeconds: 0
-  rayQuery: false
-  timing: false
 }
 
 grants [
   {
     capability: Mutate
-    principal: "seat1"
+    grantee: "seat1"
     subject: "section:state"
   }
   {
     capability: Edit
-    principal: "seat1"
+    grantee: "seat1"
     subject: "all"
   }
   {
     capability: Control
-    principal: "seat1"
+    grantee: "seat1"
     subject: "all"
   }
   {
     capability: Drive
-    principal: "seat1"
+    grantee: "seat1"
     subject: "all"
   }
 ]
@@ -114,7 +113,6 @@ gravity {
 
 bodies {
   sleepAfterSeconds: 1
-  localSeats: 1
 }
 
 placements {

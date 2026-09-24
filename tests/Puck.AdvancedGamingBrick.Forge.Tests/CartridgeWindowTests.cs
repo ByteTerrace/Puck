@@ -1,33 +1,56 @@
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Framework;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers the panel drawn over the background: it appears where placed and hides on request.</summary>
 public sealed class CartridgeWindowTests {
-    private static void Refuses(CartridgeDocument document, string fragment) {
-        var errors = CartridgeDocuments.Validate(document: document);
+    private static readonly CartridgeRefusal[] Refusals = [
+        new(
+            Name: "a map that is not full size",
+            Document: Panel(
+                map: new int[16],
+                palettes: null
+            ),
+            Path: "window.map",
+            Fragment: "Expected an array with 1024..1024"
+        ),
+        new(
+            Name: "a tile outside the bank",
+            Document: Panel(
+                map: [.. Enumerable.Repeat(
+                        count: 1024,
+                        element: 9
+                    )],
+                palettes: null
+            ),
+            Path: "window.map",
+            Fragment: "outside the authored tile bank"
+        ),
+        new(
+            Name: "a short cell palette map",
+            Document: Panel(
+                map: new int[1024],
+                palettes: new int[8]
+            ),
+            Path: "window.mapPalettes",
+            Fragment: "1024 entries"
+        ),
+    ];
 
-        Assert.Contains(
-            collection: errors,
-            filter: error => error.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: fragment
-            )
-        );
-    }
-    private static WindowProbe Run(CartridgeDocument document, int frames) {
-        ICartridgeCompiler compiler = ((document.Target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-        var machine = new WindowProbe(result: compiler.Compile(document: document));
+    public static TheoryData<string> RefusalNames => CartridgeRefusal.Names(table: Refusals);
 
-        machine.Run(frames: frames);
-        return machine;
-    }
+    private static CartridgeDocument Panel(int[] map, int[]? palettes) => CartridgeDocuments.Create(
+        target: "cgb",
+        title: "PANELBAD"
+    ) with {
+        Window = new CartridgeWindow(
+        Map: map,
+        MapPalettes: palettes,
+        X: CartridgeExpressions.Of(constant: 0),
+        Y: CartridgeExpressions.Of(constant: 0),
+        Visible: CartridgeExpressions.Of(constant: 1)
+    ),
+    };
     private static int[] Shade(string target, int ink) {
         var entries = new int[((target == "agb")
             ? 16
@@ -112,9 +135,10 @@ public sealed class CartridgeWindowTests {
             ]
             )],
         };
-        using var machine = Run(
+        using var machine = CartridgeProbe.Boot(
             document: document,
-            frames: 20
+            frames: 20,
+            label: "panel"
         );
 
         // Above and left of the corner is background; below and right is the panel's own tile.
@@ -132,80 +156,10 @@ public sealed class CartridgeWindowTests {
             expected: outside
         );
     }
-    [Fact]
-    public void ValidationChecksThePanelsMapAndPlacement() {
-        var document = CartridgeDocuments.Create(
-            target: "cgb",
-            title: "PANELBAD"
-        );
-        var full = new int[1024];
-
-        Refuses(
-            document: document with { Window = new CartridgeWindow(
-                Map: new int[16],
-                MapPalettes: null,
-                X: CartridgeExpressions.Of(constant: 0),
-                Y: CartridgeExpressions.Of(constant: 0),
-                Visible: CartridgeExpressions.Of(constant: 1)
-            ) },
-            fragment: "Expected an array with 1024..1024"
-        );
-        Refuses(
-            document: document with { Window = new CartridgeWindow(
-                Map: [.. Enumerable.Repeat(
-                        count: 1024,
-                        element: 9
-                    )],
-                MapPalettes: null,
-                X: CartridgeExpressions.Of(constant: 0),
-                Y: CartridgeExpressions.Of(constant: 0),
-                Visible: CartridgeExpressions.Of(constant: 1)
-            ) },
-            fragment: "outside the authored tile bank"
-        );
-        Refuses(
-            document: document with { Window = new CartridgeWindow(
-                Map: full,
-                MapPalettes: new int[8],
-                X: CartridgeExpressions.Of(constant: 0),
-                Y: CartridgeExpressions.Of(constant: 0),
-                Visible: CartridgeExpressions.Of(constant: 1)
-            ) },
-            fragment: "1024 entries"
-        );
-    }
-
-    private sealed class WindowProbe : IDisposable {
-        private readonly AgbVerifyMachineDriver? m_agb;
-        private readonly VerifyMachineDriver? m_hgb;
-
-        public WindowProbe(CartridgeCompilation result) {
-            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
-                rom: result.Rom,
-                label: "panel"
-            ); } else { m_hgb = new VerifyMachineDriver(
-                rom: result.Rom,
-                label: "panel"
-            ); }
-        }
-
-        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
-        public uint Pixel(int x, int y) => (m_agb?.ReadPixel(
-            x: x,
-            y: y
-        ) ?? m_hgb!.ReadPixel(
-            x: x,
-            y: y
-        ));
-        public void Run(int frames) {
-            m_agb?.RunFrames(
-                frames: frames,
-                keys: AgbKeys.None
-            );
-            m_hgb?.RunFrames(
-                buttons: JoypadButtons.None,
-                frames: frames
-            );
-        }
-    }
+    [MemberData(memberName: nameof(RefusalNames))]
+    [Theory]
+    public void ValidationChecksThePanelsMapAndPlacement(string refusal) => CartridgeRefusal.Holds(
+        name: refusal,
+        table: Refusals
+    );
 }

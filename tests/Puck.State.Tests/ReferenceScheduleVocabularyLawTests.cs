@@ -43,6 +43,89 @@ public sealed class ReferenceScheduleVocabularyLawTests {
         );
     }
     [Fact]
+    public void EveryStateTransformArmCarriesExactlyOneCoefficient() {
+        var arms = typeof(StateTransform)
+            .GetCustomAttributes(
+                attributeType: typeof(JsonDerivedTypeAttribute),
+                inherit: false
+            )
+            .Cast<JsonDerivedTypeAttribute>()
+            .Select(selector: attribute => ((string)attribute.TypeDiscriminator!));
+
+        Assert.Equal(
+            arms.Order(),
+            Of(vocabulary: "transform").Select(selector: coefficient => coefficient.Operation).Order()
+        );
+    }
+    [Fact]
+    public void EveryDrawSourceAndSearchArmCarriesExactlyOneCoefficient() {
+        Assert.Equal(
+            Enum.GetValues<GeneratorSource>().Select(selector: source => source.ToString()).Order(),
+            Of(vocabulary: "generator").Select(selector: coefficient => coefficient.Operation).Order()
+        );
+        Assert.Equal(
+            Enum.GetValues<SearchMethod>().Select(selector: method => method.ToString()).Order(),
+            Of(vocabulary: "search.method").Select(selector: coefficient => coefficient.Operation).Order()
+        );
+        Assert.Equal(
+            Enum.GetValues<SearchShapeKind>().Select(selector: shape => shape.ToString()).Order(),
+            Of(vocabulary: "search.shape").Select(selector: coefficient => coefficient.Operation).Order()
+        );
+    }
+    [Fact]
+    public void EveryShapeParameterIsADistinctQualifiedName() {
+        foreach (var coefficient in ReferenceScheduleManifest.Coefficients) {
+            Assert.Equal(
+                coefficient.ShapeParameters.Count,
+                coefficient.ShapeParameters.Distinct(comparer: StringComparer.Ordinal).Count()
+            );
+            foreach (var parameter in coefficient.ShapeParameters) {
+                Assert.False(condition: string.IsNullOrWhiteSpace(value: parameter));
+                Assert.Contains(
+                    actualString: parameter,
+                    comparisonType: StringComparison.Ordinal,
+                    expectedSubstring: "."
+                );
+            }
+        }
+    }
+    [Fact]
+    public void CoverageAccountsForEveryRegisteredCoefficientExactly() {
+        var coverage = ReferenceSchedule.Coverage;
+
+        Assert.Equal(
+            ReferenceScheduleManifest.Coefficients.Select(selector: coefficient => coefficient.Vocabulary).Distinct(comparer: StringComparer.Ordinal).Order(),
+            coverage.Select(selector: entry => entry.Vocabulary)
+        );
+        Assert.Equal(
+            ReferenceScheduleManifest.Coefficients.Count,
+            coverage.Sum(selector: entry => entry.Registered)
+        );
+        foreach (var entry in coverage) {
+            var registered = Of(vocabulary: entry.Vocabulary);
+
+            Assert.Equal(
+                registered.Count,
+                entry.Registered
+            );
+            Assert.Equal(
+                registered.Count(predicate: coefficient => coefficient.Bound.IsKnown),
+                entry.Priced
+            );
+            Assert.Equal(
+                (entry.Registered - entry.Priced),
+                entry.Unmodeled.Count
+            );
+            foreach (var operation in entry.Unmodeled) {
+                Assert.True(condition: registered.Single(predicate: coefficient => string.Equals(
+                    a: coefficient.Operation,
+                    b: operation,
+                    comparisonType: StringComparison.Ordinal
+                )).Bound.IsUnmodeled);
+            }
+        }
+    }
+    [Fact]
     public void EveryCoefficientIsEitherPricedByAKernelOrExplicitlyUnmodeled() {
         var kernels = ReferenceScheduleManifest.Kernels.ToDictionary(
             comparer: StringComparer.Ordinal,

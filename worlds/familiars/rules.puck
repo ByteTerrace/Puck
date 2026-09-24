@@ -1,0 +1,875 @@
+// The familiars rule set, written once and themed by nothing. Every name a player reads (an element, a species, a
+// move, a status, a season) and every number that balances the game arrives as a module argument, so a game that
+// wants its own setting stamps this module with its own data. seasons.puck is the default ruleset.
+//
+// The combat is real time, in the manner of a hunter's pet: the player strikes by hand, one of their familiars at a
+// time fights beside them, and wild familiars fight back. Nothing here chooses for anyone. A fighting combatant with
+// a target hits it with its basic move whenever that move is ready. A wild familiar turns on whoever hits it first,
+// and on the player when that target leaves the fight. Every other action is an order the player gives.
+//
+// ---- Arguments ------------------------------------------------------------------------------------------------------
+//
+//   elements  [{ name, season }]. Index `length(elements)` is one more element, none: the element of the player and
+//             of the player's strike, neutral in both directions.
+//   chart     (E + 1)^2 effectiveness values in quarters, row-major by attacker then defender, where E is
+//             `length(elements)`: 0 immune, 2 resisted, 4 neutral, 8 strong. A hit multiplies the cells for the
+//             defender's two elements, so its factor is in sixteenths: 16 is x1, 64 is x4.
+//   seasons   [{ name }], in the order the season clock turns through them.
+//   statuses  [{ name, seconds }], exactly two. Status 1 wounds: a sixteenth of the victim's greatest health every
+//             second. Status 2 stuns: no attack and no order while it lasts.
+//   moves     [{ name, element, power, seconds, status }]. `seconds` is the cooldown and `status` is 0, 1 or 2. The
+//             last move is the player's strike.
+//   species   [{ name, first, second, health, power, guard, basic, special, acquire, catchRate, treat }]. `second`
+//             is none for a single-element species. `acquire` is a mask of the ways it joins the player: 1 catching,
+//             2 taming, 4 befriending. `treat` is the treat it loves, which counts double.
+//   tuning    the balance and the player; seasons.puck documents every member.
+//
+// ---- Combatants -----------------------------------------------------------------------------------------------------
+//
+// A combatant is a slot, 0 to `tuning.slots - 1`, and every per-combatant fact is one Int row keyed by slot. Slot 0 is
+// the player. `famRole` holds 0 for an empty slot, 1 for the player, 2 for a wild familiar and 3 for one of the
+// player's own. A familiar keeps its slot for life, so joining the player changes its role and nothing else.
+//
+// ---- Orders ---------------------------------------------------------------------------------------------------------
+//
+// The player writes `famOrder[verb]`, `famOrder[target]` and `famOrder[arg]`, then adds one to `famOrder[request]`.
+// The order is judged on the next tick and `famOrder[result]` answers it.
+//
+//   verb   1 strike    the player hits wild `target` with the strike
+//          2 attack    the active familiar takes wild `target` as its target
+//          3 special   the active familiar uses its special move on wild `target` now
+//          4 stop      the active familiar drops its target
+//          5 summon    familiar `target` becomes the active familiar
+//          6 dismiss   the active familiar steps back
+//          7 lure      throw a lure at wild `target`, to catch it
+//          8 tame      begin taming wild `target`
+//          9 treat     give a treat of season `arg` to `target`, wild or the player's own
+//         10 revive    spend a tonic on fainted familiar `target`
+//         11 release   let familiar `target` go
+//         12 forage    search for a wild familiar
+//
+//   result  1 done
+//          -1 no such verb                        -7 this species does not join that way
+//          -2 not a target this verb takes        -8 the familiar disobeys
+//          -3 not ready yet                       -9 already doing that
+//          -4 cannot act: fainted or stunned     -10 not weak enough to tame
+//          -5 none left in the bag               -11 the wild familiar is hostile
+//          -6 the stable is full                 -12 no room for another wild familiar
+//
+// A lure lands a tick later: `famCatch[result]` is 1 for a catch, -1 for a miss (the familiar turns on the player)
+// and -2 when the target left the fight first. Taming lasts `tuning.tameSeconds`, and any damage the player takes,
+// a stun, or the target leaving breaks it: `famTame[result]` is 1 when it completes and -1 when it breaks.
+
+module rules(elements, chart, seasons, statuses, moves, species, tuning) {
+  let none = length(elements)
+  let width = none + 1
+  let rate = tuning.rateHz
+  let slots = tuning.slots
+  let starters = tuning.starters
+  let strike = length(moves) - 1
+  let strikeTicks = floor(moves[strike].seconds * rate)
+  let seasonCount = length(seasons)
+  let seasonTicks = floor(tuning.seasonSeconds * rate)
+  let swapTicks = floor(tuning.swapSeconds * rate)
+  let tameTicks = floor(tuning.tameSeconds * rate)
+  let respawnTicks = floor(tuning.respawnSeconds * rate)
+  let player = tuning.player
+
+  // The forage table: for each season, a hundred rolls dealt over a bag that holds every species once and each
+  // in-season species `tuning.inSeasonWeight` times, so the season decides what the player mostly meets.
+  let speciesSeason = map(species, (s, i) => { index: i, season: elements[s.first].season })
+  let forageBags = map(seasons, (season, s) => reduce(speciesSeason, [], (bag, x) => concat(bag, map(range(0, (x.season == s ? tuning.inSeasonWeight : 1)), k => x.index))))
+  let forageCells = reduce(range(0, seasonCount), [], (all, s) => concat(all, map(range(0, 100), r => { key: $"{s * 100 + r}", value: forageBags[s][floor(r * length(forageBags[s]) / 100)] })))
+
+  // Slot 0 is the player, slots 1 up to the starter count hold the starters, and every other slot starts empty.
+  let slotList = range(0, slots)
+  let columns = [
+    { name: "famId", values: slotList }
+    { name: "famRole", values: map(slotList, i => (i == 0 ? 1 : ((i >= 1) * (i <= length(starters)) ? 3 : 0))) }
+    { name: "famSpecies", values: map(slotList, i => ((i >= 1) * (i <= length(starters)) ? starters[i - 1] : -1)) }
+    { name: "famBorn", values: map(slotList, i => (i == 0 ? 1 : 0)) }
+    { name: "famFirst", values: map(slotList, i => none) }
+    { name: "famSecond", values: map(slotList, i => none) }
+    { name: "famHealth", values: map(slotList, i => (i == 0 ? player.health : 0)) }
+    { name: "famMaxHealth", values: map(slotList, i => (i == 0 ? player.health : 0)) }
+    { name: "famPower", values: map(slotList, i => (i == 0 ? player.power : 0)) }
+    { name: "famGuard", values: map(slotList, i => (i == 0 ? player.guard : 0)) }
+    { name: "famBasic", values: map(slotList, i => (i == 0 ? strike : -1)) }
+    { name: "famSpecial", values: map(slotList, i => (i == 0 ? strike : -1)) }
+    { name: "famTarget", values: map(slotList, i => -1) }
+    { name: "famReady", values: map(slotList, i => 0) }
+    { name: "famSpecialReady", values: map(slotList, i => 0) }
+    { name: "famStatus", values: map(slotList, i => 0) }
+    { name: "famStatusUntil", values: map(slotList, i => 0) }
+    { name: "famStatusNext", values: map(slotList, i => 0) }
+    { name: "famLoyalty", values: map(slotList, i => ((i >= 1) * (i <= length(starters)) ? tuning.starterLoyalty : 0)) }
+    { name: "famAffection", values: map(slotList, i => 0) }
+    { name: "famDown", values: map(slotList, i => 0) }
+    { name: "famJoin", values: map(slotList, i => 0) }
+    { name: "famHitPending", values: map(slotList, i => 0) }
+    { name: "famHitTarget", values: map(slotList, i => -1) }
+    { name: "famHitMove", values: map(slotList, i => -1) }
+  ]
+
+  simulation {
+    rateHz: rate
+  }
+
+  state {
+    world {
+      // ---- The ruleset, as rows the rules read ----
+      row {
+        name: "famElementName"
+        kind: "Text"
+        capacity: width
+        cells: concat(map(elements, (e, i) => { key: $"{i}", value: e.name }), [{ key: $"{none}", value: "None" }])
+      }
+
+      row {
+        name: "famElementSeason"
+        kind: "Int"
+        capacity: width
+        cells: concat(map(elements, (e, i) => { key: $"{i}", value: e.season }), [{ key: $"{none}", value: -1 }])
+      }
+
+      row {
+        name: "famChart"
+        kind: "Int"
+        capacity: width * width
+        cells: map(chart, (v, i) => { key: $"{i}", value: v })
+      }
+
+      row {
+        name: "famSeasonName"
+        kind: "Text"
+        capacity: seasonCount
+        cells: map(seasons, (s, i) => { key: $"{i}", value: s.name })
+      }
+
+      row {
+        name: "famStatusName"
+        kind: "Text"
+        capacity: 3
+        cells: concat([{ key: "0", value: "None" }], map(statuses, (s, i) => { key: $"{i + 1}", value: s.name }))
+      }
+
+      row {
+        name: "famStatusTicks"
+        kind: "Int"
+        capacity: 3
+        cells: concat([{ key: "0", value: 0 }], map(statuses, (s, i) => { key: $"{i + 1}", value: floor(s.seconds * rate) }))
+      }
+
+      row {
+        name: "famMoveName"
+        kind: "Text"
+        capacity: length(moves)
+        cells: map(moves, (m, i) => { key: $"{i}", value: m.name })
+      }
+
+      row {
+        name: "famMoveElement"
+        kind: "Int"
+        capacity: length(moves)
+        cells: map(moves, (m, i) => { key: $"{i}", value: m.element })
+      }
+
+      row {
+        name: "famMovePower"
+        kind: "Int"
+        capacity: length(moves)
+        cells: map(moves, (m, i) => { key: $"{i}", value: m.power })
+      }
+
+      row {
+        name: "famMoveCooldown"
+        kind: "Int"
+        capacity: length(moves)
+        cells: map(moves, (m, i) => { key: $"{i}", value: floor(m.seconds * rate) })
+      }
+
+      row {
+        name: "famMoveStatus"
+        kind: "Int"
+        capacity: length(moves)
+        cells: map(moves, (m, i) => { key: $"{i}", value: m.status })
+      }
+
+      row {
+        name: "famSpeciesName"
+        kind: "Text"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.name })
+      }
+
+      row {
+        name: "famSpeciesFirst"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.first })
+      }
+
+      row {
+        name: "famSpeciesSecond"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.second })
+      }
+
+      row {
+        name: "famSpeciesHealth"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.health })
+      }
+
+      row {
+        name: "famSpeciesPower"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.power })
+      }
+
+      row {
+        name: "famSpeciesGuard"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.guard })
+      }
+
+      row {
+        name: "famSpeciesBasic"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.basic })
+      }
+
+      row {
+        name: "famSpeciesSpecial"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.special })
+      }
+
+      row {
+        name: "famSpeciesAcquire"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.acquire })
+      }
+
+      row {
+        name: "famSpeciesCatchRate"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.catchRate })
+      }
+
+      row {
+        name: "famSpeciesTreat"
+        kind: "Int"
+        capacity: length(species)
+        cells: map(species, (s, i) => { key: $"{i}", value: s.treat })
+      }
+
+      row {
+        name: "famForage"
+        kind: "Int"
+        capacity: 100 * seasonCount
+        cells: forageCells
+      }
+
+      // ---- The combatants, one row per fact, keyed by slot ----
+      for c in columns {
+        row {
+          name: c.name
+          kind: "Int"
+          capacity: slots
+          cells: map(slotList, i => { key: $"{i}", value: c.values[i] })
+        }
+      }
+
+      // ---- The player's bag, the season clock and the orders ----
+      row {
+        name: "famTreats"
+        kind: "Int"
+        capacity: seasonCount
+        cells: map(seasons, (s, i) => { key: $"{i}", value: tuning.treats })
+      }
+
+      table famBag {
+        lures = tuning.lures
+        tonics = tuning.tonics
+      }
+
+      table famOrder {
+        verb = 0
+        target = -1
+        arg = 0
+        request = 0
+        applied = 0
+        result = 0
+      }
+
+      slot famActive = -1
+      slot famSwapReady = 0
+      slot famSeason = 0
+      slot famSeasonEnds = seasonTicks
+      slot famStableCount = length(starters)
+      slot famWildCount = 0
+      slot famRespawnAt = 0
+
+      table famTame {
+        active = 0
+        target = -1
+        until = 0
+        health = 0
+        result = 0
+      }
+
+      table famCatch {
+        pending = 0
+        target = -1
+        at = 0
+        chance = 0
+        result = 0
+      }
+
+      table famForaging {
+        pending = 0
+        at = 0
+        slot = -1
+      }
+
+      // The two dice: the lure's catch roll and the forage roll, each 1 to 100.
+      row {
+        name: "famCatchRoll"
+        kind: "Int"
+        draw {
+          generator {
+            source: "UniformRange"
+            rangeMin: 1
+            rangeMax: 100
+          }
+          timing: "Event"
+        }
+      }
+
+      row {
+        name: "famForageRoll"
+        kind: "Int"
+        draw {
+          generator {
+            source: "UniformRange"
+            rangeMin: 1
+            rangeMax: 100
+          }
+          timing: "Event"
+        }
+      }
+
+      // The last hit landed, for a reader that wants to show it: `factor` is in sixteenths.
+      table famLastHit {
+        attacker = -1
+        defender = -1
+        move = -1
+        damage = 0
+        factor = 0
+      }
+
+      table famTally {
+        caught = 0
+        tamed = 0
+        befriended = 0
+        defeated = 0
+        fainted = 0
+        fallen = 0
+        released = 0
+        left = 0
+      }
+    }
+  }
+
+  // ---- The season clock ---------------------------------------------------------------------------------------------
+  rule "fam-season" {
+    when $tick >= famSeasonEnds
+    mode: Level
+    famSeason = floorModulo(famSeason + 1, seasonCount)
+    famSeasonEnds = famSeasonEnds + seasonTicks
+  }
+
+  rule "fam-respawn" {
+    when famDown[0] == 1 and $tick >= famRespawnAt
+    mode: Level
+    famHealth[0] = famMaxHealth[0]
+    famDown[0] = 0
+    famStatus[0] = 0
+  }
+
+  // ---- Orders -------------------------------------------------------------------------------------------------------
+  rule "fam-strike" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 1
+    local who = famOrder[target]
+    local able = (famDown[0] == 0) * (famStatus[0] != 2)
+    local foe = (famRole[(who)] == 2) * (famDown[(who)] == 0)
+    local code = able == 0 ? -4 : (foe == 0 ? -2 : ($tick < famReady[0] ? -3 : 1))
+    mode: Level
+    if code == 1 {
+      famHitPending[0] = 1
+      famHitTarget[0] = who
+      famHitMove[0] = strike
+      famReady[0] = $tick + strikeTicks
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-attack" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 2
+    local who = famOrder[target]
+    local p = famActive
+    local foe = (famRole[(who)] == 2) * (famDown[(who)] == 0)
+    local code = p < 0 ? -2 : (foe == 0 ? -2 : (famLoyalty[(p)] < tuning.obey ? -8 : 1))
+    mode: Level
+    if code == 1 {
+      famTarget[(p)] = who
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-special" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 3
+    local who = famOrder[target]
+    local p = famActive
+    local move = famSpecial[(p)]
+    local foe = (famRole[(who)] == 2) * (famDown[(who)] == 0)
+    local code = p < 0 ? -2 : (famStatus[(p)] == 2 ? -4 : (foe == 0 ? -2 : (famLoyalty[(p)] < tuning.obey ? -8 : ($tick < famSpecialReady[(p)] ? -3 : 1))))
+    mode: Level
+    if code == 1 {
+      famHitPending[(p)] = 1
+      famHitTarget[(p)] = who
+      famHitMove[(p)] = move
+      famSpecialReady[(p)] = $tick + famMoveCooldown[(move)]
+      famTarget[(p)] = who
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-stop" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 4
+    local p = famActive
+    local code = p < 0 ? -2 : 1
+    mode: Level
+    if code == 1 {
+      famTarget[(p)] = -1
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-summon" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 5
+    local who = famOrder[target]
+    local p = famActive
+    local own = (famRole[(who)] == 3) * (famDown[(who)] == 0)
+    local code = famDown[0] == 1 ? -4 : (own == 0 ? -2 : (who == p ? -9 : ($tick < famSwapReady ? -3 : 1)))
+    mode: Level
+    if code == 1 {
+      if p >= 0 {
+        famTarget[(p)] = -1
+      }
+      famActive = who
+      famTarget[(who)] = -1
+      famSwapReady = $tick + swapTicks
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-dismiss" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 6
+    local p = famActive
+    local code = p < 0 ? -2 : 1
+    mode: Level
+    if code == 1 {
+      famTarget[(p)] = -1
+      famActive = -1
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-lure" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 7
+    local who = famOrder[target]
+    local kin = famSpecies[(who)]
+    local able = (famDown[0] == 0) * (famStatus[0] != 2)
+    local foe = (famRole[(who)] == 2) * (famDown[(who)] == 0)
+    local joins = famSpeciesAcquire[(kin)] & 1
+    local code = able == 0 ? -4 : (foe == 0 ? -2 : (joins == 0 ? -7 : (famBag[lures] < 1 ? -5 : (famStableCount >= tuning.stable ? -6 : (famCatch[pending] == 1 ? -9 : 1)))))
+    mode: Level
+    if code == 1 {
+      famBag[lures] += -1
+      generate(row: famCatchRoll)
+      famCatch[pending] = 1
+      famCatch[target] = who
+      famCatch[at] = $tick + 1
+      famCatch[result] = 0
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-tame-begins" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 8
+    local who = famOrder[target]
+    local kin = famSpecies[(who)]
+    local able = (famDown[0] == 0) * (famStatus[0] != 2)
+    local foe = (famRole[(who)] == 2) * (famDown[(who)] == 0)
+    local joins = famSpeciesAcquire[(kin)] & 2
+    local weak = famHealth[(who)] * 100 <= famMaxHealth[(who)] * tuning.tameBelow
+    local code = able == 0 ? -4 : (foe == 0 ? -2 : (joins == 0 ? -7 : (famTame[active] == 1 ? -9 : (famStableCount >= tuning.stable ? -6 : (weak == 0 ? -10 : 1)))))
+    mode: Level
+    if code == 1 {
+      famTame[active] = 1
+      famTame[target] = who
+      famTame[until] = $tick + tameTicks
+      famTame[health] = famHealth[0]
+      famTame[result] = 0
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-treat" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 9
+    local who = famOrder[target]
+    local kin = famSpecies[(who)]
+    local kind = famOrder[arg]
+    local mine = (famRole[(who)] == 3)
+    local foe = (famRole[(who)] == 2) * (famDown[(who)] == 0)
+    local joins = famSpeciesAcquire[(kin)] & 4
+    local gain = tuning.treatAffection * (1 + (famSpeciesTreat[(kin)] == kind))
+    local fond = famAffection[(who)] + gain >= tuning.befriendAt
+    local known = (kind >= 0) * (kind < seasonCount)
+    local code = known == 0 ? -2 : (famTreats[(kind)] < 1 ? -5 : (mine == 1 ? 1 : (foe == 0 ? -2 : (famTarget[(who)] >= 0 ? -11 : (joins == 0 ? -7 : (famStableCount >= tuning.stable ? -6 : 1))))))
+    mode: Level
+    if code == 1 {
+      famTreats[(kind)] += -1
+      if mine == 1 {
+        famLoyalty[(who)] = minimum(tuning.loyaltyMost, famLoyalty[(who)] + tuning.treatLoyalty)
+      } else {
+        famAffection[(who)] += gain
+        if fond == 1 {
+          famJoin[(who)] = tuning.befriendLoyalty
+          famTally[befriended] += 1
+        }
+      }
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-revive" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 10
+    local who = famOrder[target]
+    local fallen = (famRole[(who)] == 3) * (famDown[(who)] == 1)
+    local code = fallen == 0 ? -2 : (famBag[tonics] < 1 ? -5 : 1)
+    mode: Level
+    if code == 1 {
+      famBag[tonics] += -1
+      famHealth[(who)] = famMaxHealth[(who)] / 2
+      famDown[(who)] = 0
+      famStatus[(who)] = 0
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-release" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 11
+    local who = famOrder[target]
+    local code = famRole[(who)] != 3 ? -2 : (who == famActive ? -9 : 1)
+    mode: Level
+    if code == 1 {
+      famRole[(who)] = 0
+      famSpecies[(who)] = -1
+      famBorn[(who)] = 0
+      famLoyalty[(who)] = 0
+      famDown[(who)] = 0
+      famStatus[(who)] = 0
+      famTarget[(who)] = -1
+      famStableCount += -1
+      famTally[released] += 1
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-forage" {
+    when famOrder[request] != famOrder[applied] and famOrder[verb] == 12
+    local code = famDown[0] == 1 ? -4 : (famForaging[pending] == 1 ? -9 : (famWildCount >= tuning.wild ? -12 : 1))
+    mode: Level
+    if code == 1 {
+      generate(row: famForageRoll)
+      famForaging[pending] = 1
+      famForaging[at] = $tick + 1
+    }
+    famOrder[result] = code
+    famOrder[applied] = famOrder[request]
+  }
+
+  rule "fam-unknown-order" {
+    when famOrder[request] != famOrder[applied] and (famOrder[verb] < 1 or famOrder[verb] > 12)
+    mode: Level
+    famOrder[result] = -1
+    famOrder[applied] = famOrder[request]
+  }
+
+  // ---- Arrivals: a forage, a catch, a familiar joining, and the stats a new familiar is born with -------------------
+  rule "fam-forage-arrives" {
+    when famForaging[pending] == 1 and $tick >= famForaging[at] and famRole[$each] == 0 and famId[$each] > 0
+    forEach: famRole
+    mode: Level
+    famRole[$each] = 2
+    famSpecies[$each] = famForage[famSeason * 100 + famForageRoll - 1]
+    famBorn[$each] = 0
+    famTarget[$each] = -1
+    famAffection[$each] = 0
+    famLoyalty[$each] = 0
+    famStatus[$each] = 0
+    famDown[$each] = 0
+    famWildCount += 1
+    famForaging[pending] = 0
+    famForaging[slot] = famId[$each]
+  }
+
+  rule "fam-catch" {
+    when famCatch[pending] == 1 and $tick >= famCatch[at]
+    local who = famCatch[target]
+    local kin = famSpecies[(who)]
+    local still = (famRole[(who)] == 2) * (famDown[(who)] == 0)
+    local most = maximum(1, famMaxHealth[(who)])
+    local odds = famSpeciesCatchRate[(kin)] * (3 * most - 2 * famHealth[(who)]) / (3 * most) + (famStatus[(who)] != 0) * tuning.statusCatchBonus
+    mode: Level
+    famCatch[pending] = 0
+    famCatch[chance] = odds
+    if still == 0 {
+      famCatch[result] = -2
+    } else if famCatchRoll <= odds {
+      famCatch[result] = 1
+      famJoin[(who)] = tuning.catchLoyalty
+      famTally[caught] += 1
+    } else {
+      famCatch[result] = -1
+      famTarget[(who)] = 0
+    }
+  }
+
+  rule "fam-join" {
+    when famJoin[$each] > 0
+    forEach: famJoin
+    mode: Level
+    if famRole[$each] == 2 and famStableCount < tuning.stable {
+      famRole[$each] = 3
+      famLoyalty[$each] = famJoin[$each]
+      famTarget[$each] = -1
+      famAffection[$each] = 0
+      famStatus[$each] = 0
+      famStableCount += 1
+      famWildCount += -1
+    }
+    famJoin[$each] = 0
+  }
+
+  rule "fam-born" {
+    when famBorn[$each] == 0 and famRole[$each] >= 2
+    forEach: famBorn
+    local s = famSpecies[$each]
+    mode: Level
+    famFirst[$each] = famSpeciesFirst[(s)]
+    famSecond[$each] = famSpeciesSecond[(s)]
+    famMaxHealth[$each] = famSpeciesHealth[(s)]
+    famHealth[$each] = famSpeciesHealth[(s)]
+    famPower[$each] = famSpeciesPower[(s)]
+    famGuard[$each] = famSpeciesGuard[(s)]
+    famBasic[$each] = famSpeciesBasic[(s)]
+    famSpecial[$each] = famSpeciesSpecial[(s)]
+    famReady[$each] = 0
+    famSpecialReady[$each] = 0
+    famBorn[$each] = 1
+  }
+
+  // ---- Combat -------------------------------------------------------------------------------------------------------
+  // A target stays valid while it can still be fought. The player's familiar fights only wild familiars; a wild
+  // familiar fights the player or the active familiar, and turns on the player when its target leaves the fight.
+  rule "fam-target-check" {
+    when famTarget[$each] >= 0
+    forEach: famTarget
+    local who = famTarget[$each]
+    local wild = famRole[$each] == 2
+    local alive = famDown[(who)] == 0
+    local towardWild = (famRole[(who)] == 2) * alive
+    local towardPlayer = (who == 0) * (famDown[0] == 0) + (famRole[(who)] == 3) * (who == famActive) * alive
+    local valid = wild == 1 ? towardPlayer : towardWild
+    mode: Level
+    if valid == 0 {
+      if wild == 1 and famDown[0] == 0 {
+        famTarget[$each] = 0
+      } else {
+        famTarget[$each] = -1
+      }
+    }
+  }
+
+  rule "fam-auto-attack" {
+    when famTarget[$each] >= 0 and famHitPending[$each] == 0 and famDown[$each] == 0 and famStatus[$each] != 2 and $tick >= famReady[$each]
+    forEach: famTarget
+    local move = famBasic[$each]
+    local fighting = (famRole[$each] == 2) + (famRole[$each] == 3) * (famId[$each] == famActive)
+    mode: Level
+    if fighting > 0 {
+      famHitPending[$each] = 1
+      famHitTarget[$each] = famTarget[$each]
+      famHitMove[$each] = move
+      famReady[$each] = $tick + famMoveCooldown[(move)]
+    }
+  }
+
+  // One hit: the move's power scaled by the attacker's power over the defender's guard, times the chart factor, half
+  // again when the move shares an element with its user, and a quarter again when the move's element is in season.
+  // A strong hit (factor above x1) inflicts the move's status.
+  rule "fam-hit" {
+    when famHitPending[$each] == 1
+    forEach: famHitPending
+    local d = famHitTarget[$each]
+    local move = famHitMove[$each]
+    local e = famMoveElement[(move)]
+    local firstCell = e * width + famFirst[(d)]
+    local secondCell = e * width + famSecond[(d)]
+    local onFirst = famChart[(firstCell)]
+    local onSecond = famChart[(secondCell)]
+    local factor = onFirst * onSecond
+    local same = (e != none) * ((e == famFirst[$each]) + (e == famSecond[$each]) > 0)
+    local timely = (e != none) * (famElementSeason[(e)] == famSeason)
+    local base = famMovePower[(move)] * famPower[$each] / maximum(1, famGuard[(d)])
+    local plain = base * factor / 16
+    local owned = plain + same * plain / 2
+    local total = owned + timely * owned / 4
+    local damage = factor == 0 ? 0 : maximum(1, total)
+    local status = famMoveStatus[(move)]
+    local live = famDown[(d)] == 0
+    local provoked = (famRole[(d)] == 2) * (famTarget[(d)] < 0)
+    local calmed = famRole[(d)] == 2
+    mode: Level
+    famHitPending[$each] = 0
+    if live == 1 {
+      famHealth[(d)] = maximum(0, famHealth[(d)] - damage)
+      famLastHit[attacker] = famId[$each]
+      famLastHit[defender] = d
+      famLastHit[move] = move
+      famLastHit[damage] = damage
+      famLastHit[factor] = factor
+      if status > 0 and factor > 16 {
+        famStatus[(d)] = status
+        famStatusUntil[(d)] = $tick + famStatusTicks[(status)]
+        famStatusNext[(d)] = $tick + rate
+      }
+      if calmed == 1 {
+        famAffection[(d)] = 0
+      }
+      if provoked == 1 {
+        famTarget[(d)] = famId[$each]
+      }
+    }
+  }
+
+  rule "fam-wound" {
+    when famStatus[$each] == 1 and famDown[$each] == 0 and $tick >= famStatusNext[$each]
+    forEach: famStatus
+    mode: Level
+    famHealth[$each] = maximum(0, famHealth[$each] - maximum(1, famMaxHealth[$each] / 16))
+    famStatusNext[$each] = famStatusNext[$each] + rate
+  }
+
+  rule "fam-status-ends" {
+    when famStatus[$each] != 0 and $tick >= famStatusUntil[$each]
+    forEach: famStatus
+    mode: Level
+    famStatus[$each] = 0
+  }
+
+  // A combatant at no health falls. The player comes back after `tuning.respawnSeconds` and their familiar steps
+  // back; a wild familiar is defeated and its slot empties, and the active familiar that was fighting it gains
+  // loyalty; one of the player's familiars faints and loses loyalty until a tonic revives it.
+  rule "fam-faint" {
+    when famHealth[$each] == 0 and famDown[$each] == 0 and famRole[$each] != 0
+    forEach: famHealth
+    local role = famRole[$each]
+    local p = famActive
+    local credited = (p >= 0) * (famTarget[(p)] == famId[$each])
+    mode: Level
+    famStatus[$each] = 0
+    famTarget[$each] = -1
+    if role == 1 {
+      famDown[$each] = 1
+      famRespawnAt = $tick + respawnTicks
+      if p >= 0 {
+        famTarget[(p)] = -1
+      }
+      famActive = -1
+      famTally[fallen] += 1
+    } else if role == 2 {
+      famRole[$each] = 0
+      famSpecies[$each] = -1
+      famBorn[$each] = 0
+      famWildCount += -1
+      famTally[defeated] += 1
+      if credited == 1 {
+        famLoyalty[(p)] = minimum(tuning.loyaltyMost, famLoyalty[(p)] + tuning.winLoyalty)
+      }
+    } else {
+      famDown[$each] = 1
+      famLoyalty[$each] = maximum(0, famLoyalty[$each] - tuning.faintLoyalty)
+      famTally[fainted] += 1
+      if famId[$each] == p {
+        famActive = -1
+      }
+    }
+  }
+
+  // ---- Taming, and a familiar that leaves -------------------------------------------------------------------------
+  rule "fam-tame" {
+    when famTame[active] == 1
+    local who = famTame[target]
+    local broken = (famHealth[0] < famTame[health]) + (famDown[0] == 1) + (famStatus[0] == 2) + (famRole[(who)] != 2) + (famDown[(who)] == 1)
+    mode: Level
+    if broken > 0 {
+      famTame[active] = 0
+      famTame[result] = -1
+    } else if $tick >= famTame[until] {
+      famTame[active] = 0
+      famTame[result] = 1
+      famJoin[(who)] = tuning.tameLoyalty
+      famTally[tamed] += 1
+    }
+  }
+
+  // A familiar with no loyalty left goes back to the wild, calm, the next time it stands.
+  rule "fam-leaves" {
+    when famRole[$each] == 3 and famLoyalty[$each] <= 0 and famDown[$each] == 0
+    forEach: famRole
+    mode: Level
+    if famId[$each] == famActive {
+      famActive = -1
+    }
+    famRole[$each] = 2
+    famTarget[$each] = -1
+    famAffection[$each] = 0
+    famStableCount += -1
+    famWildCount += 1
+    famTally[left] += 1
+  }
+}

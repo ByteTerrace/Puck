@@ -5,23 +5,22 @@ using Puck.World.Server;
 
 namespace Puck.World.Embeddings;
 
-/// <summary>First-class world extension registering embedding.fixture and embedding.azure-openai provider types.</summary>
-public sealed class WorldEmbeddingsExtension : IWorldExtension {
+/// <summary>Contributes the <c>embedding.fixture</c> and <c>embedding.azure-openai</c> embedding provider types.</summary>
+public sealed class WorldEmbeddingsExtension : IPuckExtension {
     /// <inheritdoc />
-    public string Name => "Embeddings";
+    public string Name => "Puck.World.Embeddings";
 
     /// <inheritdoc />
-    public void Register(IWorldExtensionRegistry registry) {
+    public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.RegisterEmbedding(provider: new WorldExtensionEmbeddingProviderType(
-            Type: "embedding.fixture",
-            Create: FixtureConfiguredEmbeddingProvider.Create
+        registry.AddEmbedding(provider: new WorldExtensionEmbeddingProviderType(
+            Create: FixtureConfiguredEmbeddingProvider.Create,
+            Type: "embedding.fixture"
         ));
-
-        registry.RegisterEmbedding(provider: new WorldExtensionEmbeddingProviderType(
-            Type: "embedding.azure-openai",
-            Create: AzureOpenAiConfiguredEmbeddingProvider.Create
+        registry.AddEmbedding(provider: new WorldExtensionEmbeddingProviderType(
+            Create: AzureOpenAiConfiguredEmbeddingProvider.Create,
+            Type: "embedding.azure-openai"
         ));
     }
 }

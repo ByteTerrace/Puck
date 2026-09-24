@@ -4,6 +4,25 @@ World shading runs after the marcher accepts a hit. The field, analytic normal,
 material state, and configured lights feed a shared shader path on both GPU
 backends.
 
+## Hit acceptance
+
+A primary ray's hit threshold is its pixel footprint at the sample depth. A
+sample inside that threshold is not accepted at once: the ray refines with
+plain steps until the field falls below a quarter of the threshold, or until an
+eight-step refinement budget is spent. A ray passing within a pixel of a thin
+feature therefore shades whatever lies behind it, rather than the feature,
+whichever depths its samples land at. Step phase varies with each 16-pixel
+tile's march start and instance mask, so an edge decided by phase would break
+thin lines into tile-periodic dashes. Features narrower than a pixel are point-sampled; author lines at least about
+two pixels wide at their intended framing. A ray that passes a silhouette and
+reaches sky is still accepted at its closest approach, which feeds the coverage
+filter below.
+
+To check a change to hit acceptance, yaw the camera slightly over thin raised
+lines and count edge transitions. Edges on 16-pixel tile columns
+(`x % 16 == 0`) should be about 1/16 of all edges, the share any one column in
+sixteen would get; a larger share means step phase is deciding edges.
+
 ## Silhouette coverage and filtering
 
 The deferred views pass softens grazing silhouette hits only when a cardinal

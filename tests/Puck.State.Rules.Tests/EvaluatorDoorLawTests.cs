@@ -120,7 +120,7 @@ public sealed class EvaluatorDoorLawTests {
                         Name: RulesFixture.Name(value: "step")
                     )],
                 Gate: EvaluatorFixture.Compare(
-                    comparison: ActionStateComparison.Equal,
+                    comparison: ExpressionOp.Equal,
                     row: "flag",
                     value: 0m
                 )

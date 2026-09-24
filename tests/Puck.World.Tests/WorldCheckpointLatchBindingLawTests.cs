@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -7,24 +9,11 @@ namespace Puck.World.Tests;
 /// <summary>A latch entry's binding is an interned cell-key ordinal, which a catalog that interned its keys in
 /// another order gives another name. The checkpoint therefore carries the key's name and re-interns it on the way
 /// back in.</summary>
-public sealed class WorldCheckpointLatchBindingLawTests {
+public sealed class WorldCheckpointLatchBindingLawTests : IDisposable {
     private const string RuleName = "bump";
 
-    private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
-        AnnouncedCrossingHolds: [],
-        AppliedTransferHighWater: null,
-        AppliedTransferIds: [],
-        ElapsedEngineTicks: 0,
-        ForwardedBodies: [],
-        FreshCounter: 0,
-        InDoubtTransfers: [],
-        IsPaused: false,
-        NextTransferId: 1,
-        PortalOccupancy: [],
-        Retained: false,
-        ScheduleAccumulatorTicks: 0,
-        SeededArrivals: []
-    );
+    private readonly List<IDisposable> m_scratch = [];
+
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     // `marks` gates an Edge rule per key; `hits` counts its crossings. Declaring the two marks in one order or the
     // other is what moves 'alpha' and 'beta' between intern ordinals.
@@ -74,7 +63,7 @@ public sealed class WorldCheckpointLatchBindingLawTests {
                         )],
                     ForEach: "marks",
                     Gate: new ActionPredicate.CompareState(
-                        Comparison: ActionStateComparison.GreaterOrEqual,
+                        Comparison: ExpressionOp.GreaterOrEqual,
                         Key: "$each",
                         State: "marks",
                         Value: 1m
@@ -87,18 +76,23 @@ public sealed class WorldCheckpointLatchBindingLawTests {
         server.Definition.State,
         "hits"
     )!.Cells ?? []).First(predicate: cell => (cell.Key.Value == key)).Value.Raw;
-    private static WorldServer Restore(WorldAuthorityCheckpoint checkpoint) {
+    private WorldServer Restore(WorldAuthorityCheckpoint checkpoint) {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
+        var machines = new WorldMachineHost(
+            engines: [],
+            screens: definition.Screens
+        );
+        var profilesDirectory = new TemporaryDirectory(prefix: "puck-latch-binding-tests-");
+
+        m_scratch.Add(item: machines);
+        m_scratch.Add(item: profilesDirectory);
 
         var (server, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
-            machines: new WorldMachineHost(
-                engines: [],
-                screens: definition.Screens
-            ),
+            machines: machines,
             profiles: new WorldOwnedWorlds(
-                directory: Directory.CreateTempSubdirectory(prefix: "puck-latch-binding-tests-").FullName,
+                directory: profilesDirectory.RootPath,
                 machineId: Guid.NewGuid(),
                 template: definition
             )
@@ -107,6 +101,12 @@ public sealed class WorldCheckpointLatchBindingLawTests {
         return server;
     }
 
+    /// <inheritdoc/>
+    public void Dispose() {
+        foreach (var disposable in m_scratch) {
+            disposable.Dispose();
+        }
+    }
     // The checkpoint carries no lane section of its own: the arena's participant and identity slot lanes are not in
     // its export, body action state rides the population's codec, and an identity's fact row is an ordinary document
     // row. This is what says nothing the hash folds is left behind by that division.
@@ -116,7 +116,7 @@ public sealed class WorldCheckpointLatchBindingLawTests {
 
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
-            Principal: WorldPrincipal.Seat(slot: 0),
+            Principal: Principal.Seat(slot: 0),
             Slot: 0,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
@@ -128,7 +128,7 @@ public sealed class WorldCheckpointLatchBindingLawTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out var refusal
         ), userMessage: refusal);
 
@@ -155,7 +155,7 @@ public sealed class WorldCheckpointLatchBindingLawTests {
 
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out var refusal
         ), userMessage: refusal);
 
@@ -205,7 +205,7 @@ public sealed class WorldCheckpointLatchBindingLawTests {
         );
         Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
             checkpoint: out var checkpoint,
-            hostRow: EmptyHostRow(),
+            hostRow: WorldAuthorityHostRowCheckpoint.Empty,
             reason: out var refusal
         ), userMessage: refusal);
 
@@ -228,7 +228,7 @@ public sealed class WorldCheckpointLatchBindingLawTests {
         restored.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
             Key: "beta",
             Kind: WorldDocumentWriteKind.Set,
-            Principal: WorldPrincipal.Console,
+            Principal: Principal.Console,
             Row: "marks",
             Value: 1L
         ));

@@ -36,8 +36,6 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
     /// already applies to the rule trace.</summary>
     public const int MaxHostFacts = 4096;
 
-    private readonly string[] m_drawSites;
-
     private readonly List<BrowserHostFact> m_hostFacts = [];
 
     /// <summary>Initializes the host over one arena.</summary>
@@ -51,25 +49,9 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
         dynamics: dynamics,
         generators: generators,
         instanceIdentity: instanceIdentity,
+        sites: ((arena is null) ? null : WorldDrawSites.Of(catalog: arena.Catalog)),
         ticksPerSecond: ticksPerSecond
     ) {
-        var descriptors = arena!.Catalog.Descriptors;
-
-        m_drawSites = new string[descriptors.Count];
-
-        for (var ordinal = 0; (ordinal < descriptors.Count); ordinal++) {
-            var name = descriptors[ordinal].Name;
-
-            m_drawSites[ordinal] = (CellName.TryParse(
-                candidate: name,
-                name: out var row,
-                reason: out _
-            )
-                ? WorldDrawSites.StateRow(rowName: row)
-                : name
-            );
-        }
-
         Evaluator = new RuleEvaluator(host: this);
     }
 
@@ -84,10 +66,6 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
     /// evaluates each rule, since the evaluator carries no rule identity a host can read.</summary>
     public string RuleName { get; set; } = string.Empty;
 
-    // The world's draw streams are keyed by "state.<row>", so a state row's site cannot collide with a draw site of
-    // another kind. Every site string is resolved once at construction: the seed ladder reads one per fired draw.
-    /// <inheritdoc/>
-    public override string DrawSite(int rowOrdinal) => m_drawSites[rowOrdinal];
     // An arm that lands outside the arena has no host here to land on. It does nothing outward and reports success,
     // so a firing whose effects wrote the arena still commits rather than rewinding on an arm this build cannot run.
     /// <inheritdoc/>

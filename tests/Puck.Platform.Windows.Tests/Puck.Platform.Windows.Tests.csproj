@@ -20,6 +20,12 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Platform.Windows\Puck.Platform.Windows.csproj" />
+        <!-- The shipped probe kinds and the build that compiles their kernels beside their sources. -->
+        <ProjectReference Include="..\..\src\Puck.Shaders\Puck.Shaders.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- A test-only kernel, compiled to cs_5_0 bytecode beside its source by the same recipe as a shipped one. -->
+        <Direct3D11KernelSource Include="Assets\Probes\bound-mask.hlsl" Entries="accumulate;finalize" />
     </ItemGroup>
     <ItemGroup>
         <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->

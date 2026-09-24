@@ -208,7 +208,7 @@
   "music": [
     {
       "name": "instrument-clock-source-canary",
-      "source": "Assets/worlds/music/canary-instrument-clock-source.music.json",
+      "source": "canary-instrument-clock-source.music.json",
       "hash": "ab2faa3ad4cec3f69d74fd6a384803e8304991c32cc392b6e76649f7e046f82c"
     }
   ]

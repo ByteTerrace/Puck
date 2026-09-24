@@ -289,10 +289,9 @@ public sealed class ReflectionSystem {
     /// <see cref="Points"/> — which is why it carries a cap of its own.
     /// </remarks>
     public bool TryEnumerateGroup(long searchLimit, out ReadOnlyMemory<int> permutations, out GroupObstruction obstruction) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: searchLimit);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            value: searchLimit,
-            other: MaximumSearchLimit
+        ArgumentRange.ThrowIfNotThrough(
+            maximum: MaximumSearchLimit,
+            value: searchLimit
         );
 
         var mirrorCount = m_mirrors.Length;

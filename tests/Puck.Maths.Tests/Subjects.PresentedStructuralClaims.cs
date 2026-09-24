@@ -388,7 +388,7 @@ internal static partial class Subjects {
             negativeCount: 1,
             positiveCount: 4
         ));
-        var certificate = conformal.Certify(overlapLimit: (1L << 20));
+        var certificate = conformal.Certify(tupleLimit: (1L << 20));
 
         if (
             !certificate.IsAssociative ||
@@ -413,7 +413,7 @@ internal static partial class Subjects {
             negativeCount: 0,
             positiveCount: 2
         ));
-        var degenerate = degenerateAlgebra.Certify(overlapLimit: (1L << 20));
+        var degenerate = degenerateAlgebra.Certify(tupleLimit: (1L << 20));
         var degenerateCompiled = degenerateAlgebra.Compile();
 
         if (0 == degenerate.ZeroDivisorWitness.Length) {
@@ -466,7 +466,7 @@ internal static partial class Subjects {
         );
         var algebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: presentation);
         var generator = algebra.Generator(symbol: 0);
-        var certificate = algebra.Certify(overlapLimit: long.MaxValue);
+        var certificate = algebra.Certify(tupleLimit: long.MaxValue);
 
         if (algebra.AreEqual(
             left: algebra.Identity,
@@ -506,9 +506,9 @@ internal static partial class Subjects {
             .GetParameters()
             .Single();
 
-        return (("overlapLimit" == parameter.Name)
-            ? null
-            : $"Certify broke the historical named-argument contract by exposing its basis-tuple budget as '{parameter.Name}'"
+        return (parameter.Name!.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "overlap")
+            ? $"Certify names its basis-tuple budget '{parameter.Name}', claiming a rewrite-overlap search it never runs"
+            : null
         );
     }
     /// <summary>Proves the Cayley–Dickson tower's compiled charges equal to the doubling recursion at floors two
@@ -578,7 +578,7 @@ internal static partial class Subjects {
                 }
             }
 
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
             var expectedAssociative = (floors <= 2);
             var expectedAlternative = (floors <= 3);
 
@@ -626,7 +626,7 @@ internal static partial class Subjects {
 
             // A bounded search that ran out reports THAT, distinctly from having found no ambiguity, and issues no flag
             // it did not prove.
-            var truncated = algebra.Certify(overlapLimit: 4L);
+            var truncated = algebra.Certify(tupleLimit: 4L);
 
             if (
                 (ClosureOutcome.SearchLimitReached != truncated.Outcome) ||
@@ -719,8 +719,8 @@ internal static partial class Subjects {
                 }
             }
 
-            var liveCertificate = live.Certify(overlapLimit: (1L << 22));
-            var flatCertificate = flat.Certify(overlapLimit: (1L << 22));
+            var liveCertificate = live.Certify(tupleLimit: (1L << 22));
+            var flatCertificate = flat.Certify(tupleLimit: (1L << 22));
 
             if (
                 (liveCertificate.IsAssociative != flatCertificate.IsAssociative) ||
@@ -910,7 +910,7 @@ internal static partial class Subjects {
                 material: default
             )
         ));
-        var pairedCertificate = paired.Certify(overlapLimit: (1L << 22));
+        var pairedCertificate = paired.Certify(tupleLimit: (1L << 22));
         var pairedSensitive = 0;
 
         if (
@@ -988,7 +988,7 @@ internal static partial class Subjects {
         // A 3-cochain that is NOT a cocycle is carried, computed and witnessed rather than refused: the object works,
         // and the certificate says what it lost.
         var perturbed = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: PerturbedCochainPresentation());
-        var perturbedCertificate = perturbed.Certify(overlapLimit: (1L << 20));
+        var perturbedCertificate = perturbed.Certify(tupleLimit: (1L << 20));
 
         if (
             perturbedCertificate.IsCoherent ||
@@ -1163,7 +1163,7 @@ internal static partial class Subjects {
                 return $"dihedral({bond}): {presentation.NormalFormCount} normal form(s) against an order of {order}, compiled={presentation.HasCompiledNormalFormBasis}";
             }
 
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
 
             if (
                 (ClosureOutcome.BasisAssociativityVerified != certificate.Outcome) ||
@@ -1291,7 +1291,7 @@ internal static partial class Subjects {
 
             if (order > 24) { continue; }
 
-            var certificate = algebra.Certify(overlapLimit: (1L << 22));
+            var certificate = algebra.Certify(tupleLimit: (1L << 22));
 
             if (
                 (ClosureOutcome.BasisAssociativityVerified != certificate.Outcome) ||
@@ -1713,7 +1713,7 @@ internal static partial class Subjects {
             material: default
         );
         var algebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: presentation);
-        var certificate = algebra.Certify(overlapLimit: (1L << 20));
+        var certificate = algebra.Certify(tupleLimit: (1L << 20));
 
         if (
             presentation.HasFiniteNormalForms ||

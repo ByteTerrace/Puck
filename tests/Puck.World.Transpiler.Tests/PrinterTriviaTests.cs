@@ -9,7 +9,7 @@ public class PrinterTriviaTests {
     // and compare against the bytes that went in.
     private static void RoundTrips(string source) {
         Assert.Equal(
-            actual: PuckFormat.Format(source),
+            actual: PuckFormat.Format(source: source),
             expected: source
         );
     }
@@ -51,7 +51,7 @@ public class PrinterTriviaTests {
         const string Source = "host {\n  a: 1\n\n\n\n  b: 2\n}\n";
 
         Assert.Equal(
-            actual: PuckFormat.Format(Source),
+            actual: PuckFormat.Format(source: Source),
             expected: Source
         );
     }
@@ -119,7 +119,7 @@ public class PrinterTriviaTests {
         ));
 
         Assert.Equal(
-            actual: PuckFormat.Format(source),
+            actual: PuckFormat.Format(source: source),
             expected: source
         );
     }

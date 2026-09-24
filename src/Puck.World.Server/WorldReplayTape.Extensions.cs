@@ -47,6 +47,7 @@ public sealed partial class WorldReplayTape {
             DefinitionJson = [.. m_definitionJson],
             ForkedFrom = m_forkedFrom,
             MountedAddons = [.. m_mountedAddons],
+            PipelineSourceDirectory = m_pipelineSourceDirectory,
             RecordedAuthoritativeHashes = [.. m_liveAuthoritativeHashes],
             RecordedHashes = [.. m_liveHashes],
             Seats = [.. m_seats],

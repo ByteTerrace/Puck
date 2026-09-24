@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -70,7 +71,7 @@ public sealed partial class WorldTick {
                 // when the seat authored none; StageContribution already refused every untrusted delta in that case,
                 // so an empty vector can only be reached with a trusted-only (unpooled) contribution set.
                 var ceilings = Host.GrantTable.PoolCeilings(
-                    seat: WorldPrincipal.Seat(slot: seat),
+                    seat: Principal.Seat(slot: seat),
                     subject: GrantSubject.Body(index: seat)
                 );
 
@@ -164,6 +165,7 @@ public sealed partial class WorldTick {
             m_hasOwnerBase[seat] = false;
         }
     }
+
     // Whether a document-authored `grants` row belongs to the CROSS-DOCUMENT write-back channel rather than to the
     // live table — a `document:<id>` principal, whose capability Server.WorldOwnedWorlds.Decide and
     // TryReadDurableState resolve by reading the OWNER'S DOCUMENT directly. Both replays (the constructor's and the
@@ -171,12 +173,13 @@ public sealed partial class WorldTick {
     // .Conflicts rule (-1b) — a live row for one is budget-less, mask-less, and read by nothing), so replaying them
     // would print a loud rejection for data the document is CORRECT to carry. Skipping is not hiding them: they are
     // echoed by `world.grants` as document-authored rows, which is where they actually live and act.
-    internal static bool IsDocumentChannelRow(WorldGrant grant) => (grant.Principal.Kind == PrincipalKind.Document);
+    internal static bool IsDocumentChannelRow(WorldGrant grant) => (grant.Grantee.Kind == GranteeKind.Document);
+
     // Find-or-add PRINCIPAL's read-back contributor row within bodyIndex's slice, merging channel-mask bits when the
     // SAME principal reaches this method more than once THIS tick (a guest whose separate acts each touch one
     // channel). Past MaxReadContributorsPerSeat the read-back saturates — the same diagnostic-degrades trade
     // ReportContention makes above — rather than resizing on the contribution path.
-    private void RecordContributor(int bodyIndex, WorldPrincipal principal, bool trusted, ChannelHeldMask channelMask) {
+    private void RecordContributor(int bodyIndex, Principal principal, bool trusted, ChannelHeldMask channelMask) {
         var baseSlot = (bodyIndex * MaxReadContributorsPerSeat);
         var count = m_channelReadContributorCount[bodyIndex];
 
@@ -249,7 +252,7 @@ public sealed partial class WorldTick {
     //     received" shape, not a second refusal channel. An ordinal accepted through the POOLED branch alone marks
     //     m_untrustedAcceptedMask, regardless of the delta's own value — a cancelling pair of contributors must
     //     still read back as "the pool was reached," never as "nothing happened" (body.channels' ceiling report).
-    private void StageContribution(int bodyIndex, WorldPrincipal principal, in IntentSubmission submission) {
+    private void StageContribution(int bodyIndex, Principal principal, in IntentSubmission submission) {
         var isConsoleOrSeat = (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
         var isAddon = (principal.Kind == PrincipalKind.Addon);
         var trustedInFold = (isConsoleOrSeat || isAddon);
@@ -264,7 +267,7 @@ public sealed partial class WorldTick {
         // trusted addon's own declared Reach is the whole gate; there is no seat consent for it to consult.
         var ceilings = ((!isConsoleOrSeat && !isAddon)
             ? Host.GrantTable.PoolCeilings(
-                seat: WorldPrincipal.Seat(slot: bodyIndex),
+                seat: Principal.Seat(slot: bodyIndex),
                 subject: subject
             )
             : default

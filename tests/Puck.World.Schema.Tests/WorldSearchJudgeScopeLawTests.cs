@@ -64,23 +64,23 @@ public sealed class WorldSearchJudgeScopeLawTests {
             ]),
             Rules: [
                 Copy(
-                    name: "threat-from-pieces",
                     from: "pieces",
+                    name: "threat-from-pieces",
                     to: "threat"
                 ),
                 Copy(
-                    name: "verdict-from-threat",
                     from: "threat",
+                    name: "verdict-from-threat",
                     to: "verdict"
                 ),
                 Copy(
-                    name: "material-from-pieces",
                     from: "pieces",
+                    name: "material-from-pieces",
                     to: "material"
                 ),
                 Copy(
-                    name: "other-game",
                     from: "otherGame",
+                    name: "other-game",
                     to: "otherScore"
                 ),
             ]
@@ -116,7 +116,6 @@ public sealed class WorldSearchJudgeScopeLawTests {
         )),
         expected: ["threat-from-pieces", "verdict-from-threat", "material-from-pieces"]
     );
-
     [Fact]
     public void AReachedDerivedBoardKeepsItsInverseProducersTransitively() {
         var definition = new WorldDefinition(
@@ -130,11 +129,11 @@ public sealed class WorldSearchJudgeScopeLawTests {
             )], World: [
                 Keyed(name: "pieces"),
                 Keyed(name: "codes"),
-                Derived(name: "mask", tokens: "pieces", codes: "codes") with {
+                Derived(codes: "codes", name: "mask", tokens: "pieces") with {
                     Cells = [new StateCell(
                         Key: CellName.Parse(candidate: "0"),
                         Value: CellValue.Int(value: 0L)
-                    )]
+                    )],
                 },
                 Slot(name: "turn"),
                 Slot(name: "verdict"),
@@ -142,9 +141,9 @@ public sealed class WorldSearchJudgeScopeLawTests {
                 Slot(name: "unrelatedResult"),
             ]),
             Rules: [
-                CopyCell(name: "codes-from-pieces", from: "pieces", fromKey: "piece", to: "codes", key: "piece"),
+                CopyCell(from: "pieces", fromKey: "piece", key: "piece", name: "codes-from-pieces", to: "codes"),
                 CopyCell(name: "verdict-from-mask", from: "mask", fromKey: "0", to: "verdict"),
-                Copy(name: "unrelated-rule", from: "unrelated", to: "unrelatedResult"),
+                Copy(from: "unrelated", name: "unrelated-rule", to: "unrelatedResult"),
             ]
         );
         var judge = WorldSearchCompilation.JudgeRules(rules: WorldFactsCompiler.CompileAll(definition: definition));
@@ -163,7 +162,7 @@ public sealed class WorldSearchJudgeScopeLawTests {
 
         Assert.Equal(
             ["codes-from-pieces", "verdict-from-mask"],
-            scoped.Select(static rule => rule.Name).ToArray()
+            scoped.Select(selector: static rule => rule.Name).ToArray()
         );
     }
 }

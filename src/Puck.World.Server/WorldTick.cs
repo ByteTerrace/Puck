@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -25,7 +26,7 @@ public sealed partial class WorldTick {
     // an entity already written this tick by a DIFFERENT principal is a genuine conflict between two distinct Drive
     // grants over one body — Step reports it loudly rather than letting the later one silently overwrite the earlier.
     private int[] m_tickWrittenEntity = new int[WorldBodiesLimits.LocalSeatCount];
-    private WorldPrincipal[] m_tickWrittenPrincipal = new WorldPrincipal[WorldBodiesLimits.LocalSeatCount];
+    private Principal[] m_tickWrittenPrincipal = new Principal[WorldBodiesLimits.LocalSeatCount];
     // Whether the matching m_tickWrittenEntity slot saw a SECOND, different-principal write THIS tick — read once the
     // whole drain AND the addon contributions have finished (see Step) to settle m_contended for real, since which
     // submission a queue happens to dequeue first says nothing about whether the body was genuinely contended for the
@@ -86,7 +87,7 @@ public sealed partial class WorldTick {
     // ceiling on paper), and whether the untrusted pool step actually bound the value (Evaluate's poolClamped output).
     private readonly long[] m_channelReadCeiling = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
     private readonly bool[] m_channelReadClamped = new bool[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly WorldPrincipal[] m_channelReadContributor = new WorldPrincipal[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
+    private readonly Principal[] m_channelReadContributor = new Principal[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
     private readonly bool[] m_channelReadContributorTrusted = new bool[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
     private readonly ChannelHeldMask[] m_channelReadContributorMask = new ChannelHeldMask[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
     private readonly int[] m_channelReadContributorCount = new int[WorldBodiesLimits.LocalSeatCount];
@@ -98,6 +99,7 @@ public sealed partial class WorldTick {
     // Guarded by m_authorityGate — reached from the tick thread and from socket workers' authority operations alike;
     // this is a plain Queue<T> only because EnqueueOrdered is its single door and holds that gate.
     private readonly Queue<WorldOrderedEntry> m_ordered = new();
+
     // The contributor rows that reached the last write, per seat, capped at MaxReadContributorsPerSeat — a
     // find-or-add slice (RecordContributor) tagging each contributing principal trusted/untrusted plus a bitmask of
     // which ordinals its delta reached, so a channel's read-back can list who touched it without a per-channel list.
@@ -106,6 +108,7 @@ public sealed partial class WorldTick {
     /// <summary>The per-seat cap on recorded contributor rows; past it the read-back saturates rather than
     /// resizing on the contribution path.</summary>
     internal const int MaxReadContributorsPerSeat = 8;
+
     // Per-body "the last FULLY-DRAINED tick reported this body contended" latch — the SAME once-per-episode shape as
     // m_driveDenied (checked BEFORE the current tick's outcome overwrites it, so the transition into a contended state
     // logs once, not the state itself), so two addons left permanently double-granted over one body log the collision
@@ -127,6 +130,7 @@ public sealed partial class WorldTick {
     // socket's state after a reconnect.
     private readonly WorldFederatedIntentState[] m_federatedIntents;
     private readonly EntitySnapshot[] m_snapshotEntries;
+
     // Reentrancy guard, guarded by m_authorityGate with m_ordered: DrainOrdered dequeues and applies until empty, so
     // a re-entrant enqueue from inside an apply is a defined no-op (re-enqueue, return to the outer drain) instead
     // of a stack-recursive double-drain. Because the gate is held across every drain, this flag is never set by one
@@ -148,8 +152,10 @@ public sealed partial class WorldTick {
     internal ulong CompletedEngineTicks => m_lastCompletedEngineTicks;
     /// <summary>Gets the tick the latest authoritative step completed, or zero before the first step.</summary>
     internal ulong CompletedTick => m_lastCompletedTick;
+
     /// <summary>Gets the server whose document, arena, entity table, grants and narration this tick advances.</summary>
     private WorldServer Host => m_host;
+
     /// <summary>Gets the per-tick intent queue, drained at the step boundary after the live-edit ops.</summary>
     internal Queue<IntentSubmission> Intents => m_intents;
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
@@ -170,7 +176,7 @@ public sealed partial class WorldTick {
     internal bool[] ChannelReadClamped => m_channelReadClamped;
     /// <summary>Gets the contributor rows that reached the last write, per seat, capped at
     /// <see cref="MaxReadContributorsPerSeat"/>.</summary>
-    internal WorldPrincipal[] ChannelReadContributor => m_channelReadContributor;
+    internal Principal[] ChannelReadContributor => m_channelReadContributor;
     /// <summary>Gets how many contributor rows each seat's slice currently holds.</summary>
     internal int[] ChannelReadContributorCount => m_channelReadContributorCount;
     /// <summary>Gets the channel ordinals each recorded contributor's delta reached.</summary>
@@ -186,7 +192,7 @@ public sealed partial class WorldTick {
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>
     internal int[] TickWrittenEntity => m_tickWrittenEntity;
     /// <summary>Gets the principals that wrote the matching <see cref="TickWrittenEntity"/> slot.</summary>
-    internal WorldPrincipal[] TickWrittenPrincipal => m_tickWrittenPrincipal;
+    internal Principal[] TickWrittenPrincipal => m_tickWrittenPrincipal;
 
     /// <summary>Initializes the facade over the server it advances and the document it boots on.</summary>
     /// <param name="host">The owning server.</param>
@@ -213,6 +219,7 @@ public sealed partial class WorldTick {
             // WorldDefinitionValidator — this load is expected to succeed by construction.
             if (!WorldAssetRowLoader.TryLoadMusic(
                 document: out var score,
+                documentDirectory: definition.DocumentDirectory,
                 error: out var loadError,
                 row: row
             )) {
@@ -249,7 +256,7 @@ public sealed partial class WorldTick {
     /// <param name="collided">The new collision flags.</param>
     /// <param name="entity">The new written-entity indices.</param>
     /// <param name="principal">The new writing principals.</param>
-    internal void AdoptContentionArrays(bool[] collided, int[] entity, WorldPrincipal[] principal) {
+    internal void AdoptContentionArrays(bool[] collided, int[] entity, Principal[] principal) {
         m_tickCollided = collided;
         m_tickWrittenEntity = entity;
         m_tickWrittenPrincipal = principal;

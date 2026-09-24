@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -30,6 +31,7 @@ public sealed class WorldExtensions {
     /// <summary>Gets the live integration epoch. Every attached extension carries the epoch it was admitted under;
     /// a suppression bumps this, which is what retires a whole generation of runtimes at once.</summary>
     private long Epoch => m_epoch;
+
     /// <summary>Gets the number of external operations currently dispatched and not yet settled — the count a
     /// retirement freeze and a replay entry both refuse on.</summary>
     internal int ExternalOperationsInFlight => m_externalOperationsInFlight;
@@ -44,7 +46,7 @@ public sealed class WorldExtensions {
     /// <param name="principal">The runtime's own principal.</param>
     /// <param name="requests">The capabilities the runtime requested at mount.</param>
     /// <returns>Whether the request set covers the mutation.</returns>
-    internal static bool RequestsAllow(WorldMutation mutation, WorldPrincipal principal, IReadOnlyList<WorldCapabilityRequest> requests) =>
+    internal static bool RequestsAllow(WorldMutation mutation, Principal principal, IReadOnlyList<WorldCapabilityRequest> requests) =>
         ((mutation.Principal == principal) && ((mutation is WorldMutation.Batch batch)
             ? batch.Mutations.All(predicate: member => RequestsAllow(
                 mutation: member,
@@ -174,7 +176,7 @@ public sealed class WorldExtensions {
     /// <param name="principal">The runtime's principal.</param>
     /// <returns>The query answer.</returns>
     /// <exception cref="InvalidOperationException">The epoch is retired.</exception>
-    internal QueryAnswer Observe(long epoch, WorldQuery query, WorldPrincipal principal) {
+    internal QueryAnswer Observe(long epoch, WorldQuery query, Principal principal) {
         Check(epoch: epoch);
         return m_server.AnswerSubmittedQuery(
             principal: principal,

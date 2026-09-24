@@ -1,6 +1,6 @@
 # Puck.Embeddings
 
-`Puck.Embeddings` defines embedding generators, embedding identity, and quantization
+`Puck.Embeddings` defines embedding generators, batching, and quantization
 for deterministic simulation state in Puck.
 
 The simulation never runs a model directly:
@@ -10,10 +10,11 @@ The simulation never runs a model directly:
 
 ## Embedding identity
 
-An `EmbeddingIdentity` describes the configuration of an embedding space:
-- `Model`: the model name (e.g. `puck-fixture` or `text-embedding-3-small`).
-- `Revision`: model revision string.
-- `Dimensions`: dimensionality in `[8, 1024]`.
+Every generator is built for one `Puck.State.EmbeddingIdentity`: the model name
+(for example, `puck-fixture` or `text-embedding-3-small`), its revision, and a
+dimension count from 8 to 1,024. `Puck.State` owns the identity and its limits,
+so this package references `Puck.State`. See
+[Vectors and embedding spaces](../../docs/reference/state/vectors.md#declare-a-space-and-vector-rows).
 
 ## Embedding generators
 

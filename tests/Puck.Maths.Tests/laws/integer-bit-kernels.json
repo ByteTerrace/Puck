@@ -1,0 +1,257 @@
+[
+  {
+    "Id": "integer.power-of-two-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "NthPowerOfTwo"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "NthPowerOfTwo<T> for every exponent from zero through the word width minus one in all twelve built-in fixed-width integer carriers, read back as the carrier's own bit string, so the signed top exponent is the lone sign bit.",
+        "Against": "The single set bit at the exponent in a 128-bit test bit string, compared on the carrier's masked bits; it shares no carrier shift semantics with the subject. ENVELOPE: exponent refusals belong to integer.bit-kernel-refusals.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.low-mask-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LowMask"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "LowMask<T> for every count from zero through the word width in all twelve built-in fixed-width integer carriers, including both ends where (1 << count) - 1 fails, plus BigInteger counts zero through two hundred.",
+        "Against": "Oracles.WordMask builds the low ones of a 128-bit test bit string, taking the full 128-bit width as its own branch so no test shift reaches the carrier width; BigInteger counts compare against an unbounded shift. ENVELOPE: on a BMI2 host the carriers through 64 bits run BZHI; the two-shift fallback runs here only for the 128-bit carriers and BigInteger, and for narrower carriers only on a host without BMI2.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.smear-below-highest-set-bit-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "SmearBelowHighestSetBit"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SmearBelowHighestSetBit<T> over all twelve built-in fixed-width integer carriers, on a 128-bit domain word truncated to each carrier and again shifted right by a domain-chosen count so short bit lengths are swept, including zero and negative signed values.",
+        "Against": "Oracles.SmearBelowHighestSetBit scans the carrier's bit string down from the top for the first set bit and returns the ones at and below it; it shares no leading-zero count, BitLength or BZHI with the subject.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.align-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "AlignDown"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "AlignUp"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "AlignDown<T> and AlignUp<T> over all twelve built-in fixed-width integer carriers at every positive power-of-two alignment a domain selector reaches, on domain words that include both carrier extremes, so AlignUp's wrap past the top and signed rounding toward negative infinity are both exercised.",
+        "Against": "Oracles.Align rounds the mathematical value by exact BigInteger floored or ceiling division and multiplies back, then reduces the result modulo two to the carrier width; it shares no mask arithmetic with the subject.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.parallel-bit-deposit-extract-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ParallelBitDeposit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ParallelBitExtract"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ParallelBitDeposit<T> and ParallelBitExtract<T> over all twelve built-in fixed-width integer carriers with a dense domain mask and a sparse mask derived from it, including negative signed masks whose sign bit selects the carrier's top position.",
+        "Against": "Oracles.DepositBits and Oracles.ExtractBits walk every carrier position from the bottom in a 128-bit test bit string, counting source or destination bits as they go; they share no PDEP, PEXT, lowest-set-bit walk or subject helper.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The private portable kernels ParallelBitDepositInSoftware and ParallelBitExtractInSoftware, resolved by reflection, are held to the same oracle on the same operands, so on a host where BitManipulation.HasFastParallelBits holds the hardware path and the portable path agree bit for bit with each other. ENVELOPE: on a host without fast BMI2 — no BMI2, or AMD before Zen 3 — the public members run the portable kernels and the hardware path is not reached.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.fast-parallel-bits-decision-table",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BitManipulation",
+        "Name": "IsParallelBitsFast"
+      },
+      {
+        "Type": "Puck.Maths.BitManipulation",
+        "Name": "HasFastParallelBits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BitManipulation.IsParallelBitsFast over a named processor table: Excavator (AMD 0x15), Zen 1 and Zen 2 (AMD 0x17), AMD 0x18, Hygon Dhyana (HygonGenuine 0x18), Zen 3 and Zen 4 (AMD 0x19) and Zen 5 (AMD 0x1A) with BMI2, Intel family 6 with and without BMI2, and Zen 4 with BMI2 unreported.",
+        "Against": "Subjects.FastParallelBitsRows, a hand-written expectation per processor: fast for Zen 3 and later and for Intel with BMI2, slow for every AMD family before 0x19, for Hygon's licensed Zen 1, and for any processor without BMI2.",
+        "Shared": "",
+        "Citation": "AMD and Intel CPUID documentation for the display families; Agner Fog's instruction tables and uops.info for the microcoded, mask-dependent PDEP/PEXT latency on Zen 1 and Zen 2, which Hygon's Dhyana inherits as a licensed Zen 1, and the few-cycle latency on Zen 3 and later and on Intel since Haswell.",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "BitManipulation.HasFastParallelBits equals IsParallelBitsFast applied to this host's CPUID leaf 0 vendor and leaf 1 display family, decoded in the claim body character by character with no call into the subject's reader, so a reader that drops or misplaces the extended family fails here on any AMD host from Zen 3 on. ENVELOPE: only the host running the suite is read, and a vendor misread moves the decision only on an AMD or Hygon host before Zen 3, so a Zen 3-or-later or Intel host cannot see one; a host that is not x86 checks only that the gate is false.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.morton-paths-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwisePair"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseTriple"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseUnpair"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseUntriple"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The two- and three-way Morton interleaves and their inverses over signed and unsigned carrier pairs from 8 through 128 bits, including results narrower than twice (or three times) the operand, results much wider than the operand, and components wider than the half or third of the input they gather.",
+        "Against": "Oracles.Interleave places bit i of operand a at ways * i + a and Oracles.Deinterleave reads it back, both position by position in a 128-bit test bit string, dropping every position outside the result; they share no Fermat or one-in-three mask, no ladder and no PDEP or PEXT.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The private SWAR forms BitwisePairBySwar, BitwiseUnpairBySwar, BitwiseTripleBySwar and BitwiseUntripleBySwar, resolved by reflection, are held to the same oracle on the same operands, so the SWAR ladders, including the one-in-three masks built by truncated replication, agree bit for bit with the PDEP/PEXT path on a host where BitManipulation.HasFastParallelBits holds. ENVELOPE: elsewhere the public members run the SWAR forms and the PDEP/PEXT path is not reached.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.bit-kernel-refusals",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "NthPowerOfTwo"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "NthFermatMask"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "LowMask"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "AlignDown"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "AlignUp"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ParallelBitDeposit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ParallelBitExtract"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "SmearBelowHighestSetBit"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseTriple"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseUntriple"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Every carrier refuses an exponent below zero or at the width (NthPowerOfTwo) or at log2 of the width (NthFermatMask) naming exponent, a count below zero or above the width naming count, and an alignment of zero, three, all-ones minus one, or a signed carrier's negative top power naming alignment, each with ArgumentOutOfRangeException. BigInteger refuses a negative exponent or count and a non-power-of-two alignment the same way, rounds exact multiples of 2^70 around 2^200 in both directions without wrapping, and is refused with NotSupportedException by NthFermatMask, both scatter members, SmearBelowHighestSetBit and both triple members.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Rules.Tests;
@@ -35,15 +36,15 @@ public sealed class PatternOccurrenceLawTests {
         var pattern = Pattern();
         long[] word = [9, 1, 2, 3, 1, 2, 3, 9];
 
-        Assert.True(pattern.TryFindOccurrence(word, 0, out var first, out var firstLength));
-        Assert.True(pattern.TryFindOccurrence(word, 1, out var second, out var secondLength));
-        Assert.False(pattern.TryFindOccurrence(word, 2, out var absent, out var absentLength));
-        Assert.Equal(1, first);
-        Assert.Equal(3, firstLength);
-        Assert.Equal(4, second);
-        Assert.Equal(3, secondLength);
-        Assert.Equal(-1, absent);
-        Assert.Equal(0, absentLength);
+        Assert.True(condition: pattern.TryFindOccurrence(length: out var firstLength, occurrence: 0, start: out var first, values: word));
+        Assert.True(condition: pattern.TryFindOccurrence(length: out var secondLength, occurrence: 1, start: out var second, values: word));
+        Assert.False(condition: pattern.TryFindOccurrence(length: out var absentLength, occurrence: 2, start: out var absent, values: word));
+        Assert.Equal(actual: first, expected: 1);
+        Assert.Equal(actual: firstLength, expected: 3);
+        Assert.Equal(actual: second, expected: 4);
+        Assert.Equal(actual: secondLength, expected: 3);
+        Assert.Equal(actual: absent, expected: -1);
+        Assert.Equal(actual: absentLength, expected: 0);
     }
     [InlineData("$match:run:board:E:at:1", MatchFacet.At, 1)]
     [InlineData("$match:run:board:E:length:2", MatchFacet.Length, 2)]
@@ -54,7 +55,7 @@ public sealed class PatternOccurrenceLawTests {
         var context = RulesFixture.Context();
         var rule = RulesFixture.Rule(
             gate: new ActionPredicate.CompareState(
-                Comparison: ActionStateComparison.GreaterOrEqual,
+                Comparison: ExpressionOp.GreaterOrEqual,
                 Key: StateChannelRef.OfNullable(spelling: (spelling.Contains(comparisonType: StringComparison.Ordinal, value: ":board:") ? "0" : null)),
                 State: spelling,
                 Value: 0m
@@ -80,17 +81,12 @@ public sealed class PatternOccurrenceLawTests {
         var pattern = Pattern();
         long[] word = [9, 1, 2, 3, 1, 2, 3, 9];
 
-        _ = pattern.TryFindOccurrence(word, 1, out _, out _);
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var repeat = 0; (repeat < 256); repeat++) {
-            _ = pattern.TryFindOccurrence(word, 1, out _, out _);
-        }
-
-        Assert.Equal(0L, (GC.GetAllocatedBytesForCurrentThread() - before));
+        _ = pattern.TryFindOccurrence(length: out _, occurrence: 1, start: out _, values: word);
+        Assert.Equal(0L, AllocationWindow.Least(window: () => {
+            for (var repeat = 0; (repeat < 256); repeat++) {
+                _ = pattern.TryFindOccurrence(length: out _, occurrence: 1, start: out _, values: word);
+            }
+        }));
     }
     [Fact]
     public void NounIsPropertyOccurrencesAgreeWithBruteForceAcrossBoardAxes() {
@@ -122,9 +118,9 @@ public sealed class PatternOccurrenceLawTests {
 
                 var found = pattern.TryFindOccurrence(word, occurrence: 0, out var actual, out var length);
 
-                Assert.Equal((expected >= 0), found);
-                Assert.Equal(expected, actual);
-                Assert.Equal(((expected >= 0) ? 3 : 0), length);
+                Assert.Equal(actual: found, expected: (expected >= 0));
+                Assert.Equal(actual: actual, expected: expected);
+                Assert.Equal(actual: length, expected: ((expected >= 0) ? 3 : 0));
             }
         }
     }

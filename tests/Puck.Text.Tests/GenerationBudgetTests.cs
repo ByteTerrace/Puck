@@ -18,9 +18,9 @@ public sealed class GenerationBudgetTests {
             source.Token
         );
 
-        budget.Work(5);
+        budget.Work(amount: 5);
         source.Cancel();
-        Assert.Throws<OperationCanceledException>(() => budget.Work());
+        Assert.Throws<OperationCanceledException>(testCode: () => budget.Work());
         Assert.Throws<OperationCanceledException>(testCode: () => Generate(
             limits: new(),
             token: source.Token
@@ -63,14 +63,14 @@ public sealed class GenerationBudgetTests {
             default
         );
 
-        budget.Geometry(2);
-        Assert.Throws<InvalidDataException>(() => budget.Geometry(2));
+        budget.Geometry(amount: 2);
+        Assert.Throws<InvalidDataException>(testCode: () => budget.Geometry(amount: 2));
         var work = new FontGenerationBudget(
             new() { MaxWork = long.MaxValue },
             default
         );
 
-        work.Work(long.MaxValue);
-        Assert.Throws<InvalidDataException>(() => work.Work());
+        work.Work(amount: long.MaxValue);
+        Assert.Throws<InvalidDataException>(testCode: () => work.Work());
     }
 }

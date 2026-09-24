@@ -167,20 +167,6 @@ internal static class FixedContributionFoldClaims {
 
         return accumulator;
     }
-    private static string? Refusal<TException>(Action action, string parameterName) where TException : ArgumentException {
-        try {
-            action();
-
-            return $"accepted invalid configuration instead of throwing {typeof(TException).Name} naming '{parameterName}'";
-        } catch (TException exception) {
-            return ((exception.ParamName == parameterName)
-                ? null
-                : $"threw {typeof(TException).Name} naming '{exception.ParamName}' rather than '{parameterName}'"
-            );
-        } catch (Exception exception) {
-            return $"threw {exception.GetType().Name} rather than {typeof(TException).Name} naming '{parameterName}'";
-        }
-    }
     private static string Render(long? nullable) =>
         (nullable?.ToString() ?? "null");
     private static long StrictGreaterQuantize(long raw, long thresholdRaw, long minimumRaw, long maximumRaw) =>
@@ -323,7 +309,9 @@ internal static class FixedContributionFoldClaims {
     /// <summary>Checks all three named configuration refusals and the legal zero-radius boundary.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when every refusal names its parameter.</returns>
     public static string? ConfigurationRefusals() {
-        if (Refusal<ArgumentException>(
+        if (Refuses(
+            type: typeof(ArgumentException),
+            what: "the configuration",
             action: static () => FixedContributionFold.Evaluate(
                 baseline: FixedQ4816.Zero,
                 poolDeltaRaw: 0L,
@@ -339,7 +327,9 @@ internal static class FixedContributionFoldClaims {
             return invertedFailure;
         }
 
-        if (Refusal<ArgumentOutOfRangeException>(
+        if (Refuses(
+            type: typeof(ArgumentOutOfRangeException),
+            what: "the configuration",
             action: static () => FixedContributionFold.Evaluate(
                 baseline: FixedQ4816.Zero,
                 poolDeltaRaw: 0L,
@@ -356,7 +346,9 @@ internal static class FixedContributionFoldClaims {
         }
 
         foreach (var threshold in new[] { FixedQ4816.NegativeOne, (FixedQ4816.One + FixedQ4816.Epsilon) }) {
-            if (Refusal<ArgumentOutOfRangeException>(
+            if (Refuses(
+            type: typeof(ArgumentOutOfRangeException),
+            what: "the configuration",
                 action: () => FixedContributionFold.Evaluate(
                     baseline: FixedQ4816.Zero,
                     poolDeltaRaw: 0L,

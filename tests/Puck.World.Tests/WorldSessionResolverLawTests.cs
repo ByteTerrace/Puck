@@ -1,6 +1,6 @@
+using Puck.Commands;
 using Xunit;
 
-using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
 
@@ -37,7 +37,7 @@ public sealed class WorldSessionResolverLawTests {
             Id: SafeName.Parse(candidate: "alpha"),
             KindName: "party",
             Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
+                    WorldMemberRef.Local(principal: Principal.Seat(slot: 1)),
                     null,
                     0
                 )]
@@ -47,7 +47,7 @@ public sealed class WorldSessionResolverLawTests {
             Id: SafeName.Parse(candidate: "gamma"),
             KindName: "party",
             Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 3)),
+                    WorldMemberRef.Local(principal: Principal.Seat(slot: 3)),
                     null,
                     0
                 )],
@@ -59,7 +59,7 @@ public sealed class WorldSessionResolverLawTests {
             Id: SafeName.Parse(candidate: "delta"),
             KindName: "party",
             Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 4)),
+                    WorldMemberRef.Local(principal: Principal.Seat(slot: 4)),
                     null,
                     0
                 )],
@@ -69,7 +69,7 @@ public sealed class WorldSessionResolverLawTests {
             Id: SafeName.Parse(candidate: "epsilon"),
             KindName: "party",
             Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 4)),
+                    WorldMemberRef.Local(principal: Principal.Seat(slot: 4)),
                     null,
                     0
                 )],
@@ -77,18 +77,20 @@ public sealed class WorldSessionResolverLawTests {
         ),
         };
 
-        return Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(
+        return Fixtures.BuildDocument() with {
+            Groups = new WorldGroupsSection(
             Groups: groups,
             Kinds: [kind],
             Ownership: []
-        ) };
+        ),
+        };
     }
     private static WorldSessionResolver.CohortMember[] Cohort(params (int Slot, string? IdentityId)[] members) {
         var result = new WorldSessionResolver.CohortMember[members.Length];
 
         for (var index = 0; (index < members.Length); index++) {
             result[index] = new WorldSessionResolver.CohortMember(
-                Principal: WorldPrincipal.Seat(slot: members[index].Slot),
+                Principal: Principal.Seat(slot: members[index].Slot),
                 IdentityId: members[index].IdentityId
             );
         }
@@ -336,7 +338,7 @@ public sealed class WorldSessionResolverLawTests {
             Id: SafeName.Parse(candidate: "north"),
             KindName: "party",
             Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
+                    WorldMemberRef.Local(principal: Principal.Seat(slot: 1)),
                     null,
                     0
                 )],
@@ -346,18 +348,20 @@ public sealed class WorldSessionResolverLawTests {
             Id: SafeName.Parse(candidate: "south"),
             KindName: "party",
             Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 2)),
+                    WorldMemberRef.Local(principal: Principal.Seat(slot: 2)),
                     null,
                     0
                 )],
             Tags: ["shared"]
         ),
         };
-        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(
+        var definition = Fixtures.BuildDocument() with {
+            Groups = new WorldGroupsSection(
             Groups: groups,
             Kinds: [kind],
             Ownership: []
-        ) };
+        ),
+        };
         var destination = TaggedGroupDestination(
             name: "lodge-cohort",
             tag: "shared"
@@ -458,102 +462,14 @@ public sealed class WorldSessionResolverLawTests {
             actual: second.InstanceName
         );
     }
-    // P0 — CROSS-ARM NAME COLLISION (adversarial review, post-G1). G1 above made the SCOPED branch injective within
-    // itself, but the GLOBAL branch used to emit `destinationName` RAW, unwrapped, into the SAME name space the
-    // scoped branch's netstring OUTPUT lives in. Destination 'a' + scope key 'user:b' netstring-encodes to
-    // "1~a4~user1~b" (ScopedSegment("a") + ScopedSegment("user") + ScopedSegment("b")) — a GLOBAL destination
-    // literally spelled that way used to mint the IDENTICAL instance name as the unrelated scoped pair, silently
-    // overwriting the reverse index (WorldSessionResolver.MintInstanceName's own remarks). This law is RED against
-    // the pre-fix scheme and proves the crafted pair now resolves to DISTINCT instances with independent caches,
-    // mirroring G1's own proof shape one level up (both arms now open with their own netstring-wrapped KIND
-    // segment).
-    [Fact]
-    public void MintInstanceName_CraftedGlobalNameMatchingScopedEncoding_ResolvesToDistinctInstanceFromTheScopedPairItWouldHaveCollidedWith() {
-        var resolver = new WorldSessionResolver();
-        const string CollidingGlobalName = "1~a4~user1~b";
-        // PERSISTED both — no generation-ordinal suffix, so nothing but the KIND-segment fix itself could keep these
-        // apart (an Ephemeral pair would coincidentally disambiguate via the resolver's own generation counter).
-        var globalDestination = new WorldDestination(
-            Name: SafeName.Parse(candidate: CollidingGlobalName),
-            Reference: DestinationReference,
-            Durability: WorldDestinationDurability.Persisted
-        );
-        var scopedDestination = new WorldDestination(
-            Name: SafeName.Parse(candidate: "a"),
-            Reference: DestinationReference,
-            Durability: WorldDestinationDurability.Persisted,
-            Scope: WorldDestinationScope.User
-        );
-        var definition = Fixtures.BuildDocument();
 
-        Assert.True(
-            condition: resolver.TryResolve(
-                sourceDefinition: definition,
-                destination: globalDestination,
-                referencedDocument: RefDoc,
-                cohort: Cohort((1, null)),
-                resolved: out var global,
-                reason: out var globalReason
-            ),
-            userMessage: globalReason
-        );
-        Assert.True(
-            condition: resolver.TryResolve(
-                sourceDefinition: definition,
-                destination: scopedDestination,
-                referencedDocument: RefDoc,
-                cohort: Cohort((2, "b")),
-                resolved: out var scoped,
-                reason: out var scopedReason
-            ),
-            userMessage: scopedReason
-        );
-
-        Assert.NotEqual(
-            expected: global.InstanceName,
-            actual: scoped.InstanceName
-        );
-
-        // The reverse-index proof, same shape as G1: retiring one must never touch the other's independent cache
-        // entry — the historical bug was the two entries sharing one instance name, so retiring one silently
-        // dropped both.
-        resolver.NotifyInstanceRetired(instanceName: global.InstanceName);
-
-        Assert.True(
-            condition: resolver.TryResolve(
-                sourceDefinition: definition,
-                destination: scopedDestination,
-                referencedDocument: RefDoc,
-                cohort: Cohort((2, "b")),
-                resolved: out var scopedAgain,
-                reason: out var scopedAgainReason
-            ),
-            userMessage: scopedAgainReason
-        );
-        Assert.False(
-            condition: scopedAgain.IsNewGeneration,
-            userMessage: "retiring the crafted global instance must never have touched the scoped pair's independent cache entry"
-        );
-        Assert.Equal(
-            expected: scoped.GenerationId,
-            actual: scopedAgain.GenerationId
-        );
-    }
-    // G1 — SCOPED INSTANCE NAMES ARE INJECTIVE BY CONSTRUCTION. Before the fix, MintInstanceName joined
-    // destinationName + '~' + a hand-sanitized scope key: the sanitizer only folded SafeName's OWN reserved
-    // characters (quote/angle-brackets/pipe/colon/asterisk/question-mark/both-slashes), never '~' itself, so a
-    // destination name and a group id that DIFFER only in where a '~' falls could still mint the IDENTICAL instance
-    // name. Concretely, under the old scheme: destination "d~group_a" + group "b" and destination "d" + group
-    // "a~group_b" both minted "d~group_a~group_b" — the second destination's raw group id "a~group_b" was legal
-    // under the OLD plain-`string` WorldGroup.Id (and is legal under the NEW SafeName-typed one too, since '~'
-    // is not a reserved character either way; the two destinations that collide are chosen from OPPOSITE ends of the
-    // '~' rather than from a character SafeName has ever forbidden). This law proves the two now resolve to
-    // DISTINCT instance names and that retiring one never touches the other's cache entry — see
-    // WorldSessionResolver.MintInstanceName's own remarks for the length-prefixed ("netstring") construction that
-    // makes this a proof rather than a hope.
-    [Fact]
-    public void MintInstanceName_NamesThatWouldHaveCollidedUnderTheOldSanitizer_ResolveToDistinctInstancesWithIndependentCaches() {
-        var resolver = new WorldSessionResolver();
+    // A destination or group id carrying '~' — the character the resolver's own netstring segments and every
+    // file-backed name the engine mints are spelled with — is refused by name at load and at resolution, so no
+    // instance name is ever spelled from one. Each crafted name is one that could otherwise impersonate a netstring
+    // encoding ('1~a4~user1~b' is ScopedSegment("a") + ScopedSegment("user") + ScopedSegment("b")) or blur where one
+    // segment ends ('d~group_a' beside a group 'a~group_b'). The control is each name with '~' spelled '-', which
+    // loads and resolves.
+    private static WorldDefinition DocumentNaming(string destination, string group) {
         var kind = new WorldGroupKind(
             Capacity: 8,
             EvictionPolicy: WorldGroupEvictionPolicy.Remove,
@@ -561,116 +477,146 @@ public sealed class WorldSessionResolverLawTests {
             Name: "party",
             Roles: []
         );
-        var groups = new WorldGroup[] {
-            new(
-            Id: SafeName.Parse(candidate: "b"),
-            KindName: "party",
-            Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
-                    null,
-                    0
-                )]
-        ),
-            new(
-            Id: SafeName.Parse(candidate: "a~group_b"),
-            KindName: "party",
-            Members: [new WorldGroupMember(
-                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 2)),
-                    null,
-                    0
-                )]
-        ),
+
+        return Fixtures.BuildDocument() with {
+            Destinations = [
+                new WorldDestination(
+                    Durability: WorldDestinationDurability.Persisted,
+                    Name: SafeName.Parse(candidate: destination),
+                    Reference: DestinationReference,
+                    Scope: WorldDestinationScope.Group,
+                    Selector: new WorldGroupSelector.Named(Group: group)
+                ),
+            ],
+            Groups = new WorldGroupsSection(
+                Groups: [new WorldGroup(
+                    Id: SafeName.Parse(candidate: group),
+                    KindName: "party",
+                    Members: [new WorldGroupMember(WorldMemberRef.Local(principal: Principal.Seat(slot: 1)), null, 0)]
+                )],
+                Kinds: [kind],
+                Ownership: []
+            ),
+            References = [new WorldReference(Document: "fixture", Name: SafeName.Parse(candidate: DestinationReference))],
         };
-        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(
-            Groups: groups,
-            Kinds: [kind],
-            Ownership: []
-        ) };
-        // PERSISTED — no generation-ordinal suffix, so nothing but the composition itself could keep these apart
-        // (an Ephemeral pair would coincidentally disambiguate via the resolver's own global generation counter,
-        // which defeats the point of this law).
-        var destinationOne = NamedGroupDestination(
-            durability: WorldDestinationDurability.Persisted,
-            groupId: "b",
-            name: "d~group_a"
-        );
-        var destinationTwo = NamedGroupDestination(
-            durability: WorldDestinationDurability.Persisted,
-            groupId: "a~group_b",
-            name: "d"
+    }
+    private static bool Loads(WorldDefinition definition, out string reason) => WorldDefinitionFileSource.TryParseDocument(
+        definition: out _,
+        json: System.Text.Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition)),
+        reason: out reason,
+        sourceName: "crafted.world.json"
+    );
+    private static bool Resolves(WorldDefinition definition, out string reason) => new WorldSessionResolver().TryResolve(
+        cohort: Cohort((1, null)),
+        destination: definition.Destinations![0],
+        reason: out reason,
+        referencedDocument: RefDoc,
+        resolved: out _,
+        sourceDefinition: definition
+    );
+
+    [InlineData("1~a4~user1~b", "b", "1~a4~user1~b")]
+    [InlineData("d~group_a", "b", "d~group_a")]
+    [InlineData("d", "a~group_b", "a~group_b")]
+    [Theory]
+    public void MintInstanceName_ADestinationOrGroupCarryingTheFileJoiner_IsRefusedByNameAtLoadAndAtResolution(string destination, string group, string refused) {
+        var crafted = DocumentNaming(destination: destination, group: group);
+
+        Assert.False(condition: Loads(definition: crafted, reason: out var loadReason));
+        Assert.Contains(actualString: loadReason, expectedSubstring: $"'{refused}' carries '~'");
+        Assert.False(condition: Resolves(definition: crafted, reason: out var resolveReason));
+        Assert.Contains(actualString: resolveReason, expectedSubstring: $"'{refused}' carries '~'");
+
+        var control = DocumentNaming(
+            destination: destination.Replace(newChar: '-', oldChar: '~'),
+            group: group.Replace(newChar: '-', oldChar: '~')
         );
 
-        Assert.True(
-            condition: resolver.TryResolve(
-                sourceDefinition: definition,
-                destination: destinationOne,
-                referencedDocument: RefDoc,
-                cohort: Cohort((1, null)),
-                resolved: out var first,
-                reason: out var firstReason
-            ),
-            userMessage: firstReason
+        Assert.True(condition: Loads(definition: control, reason: out var controlLoad), userMessage: controlLoad);
+        Assert.True(condition: Resolves(definition: control, reason: out var controlResolve), userMessage: controlResolve);
+    }
+    // An instance name spells its destination and group segments file-backed (GeneratedName.ToFile), so the
+    // directory never carries '$' — and it stays injective: admitted names spelled with '$' exactly where the refused
+    // ones above carried '~' still mint distinct instances with independent caches, the netstring keeping the segment
+    // sequence apart. PERSISTED throughout, so no generation ordinal could keep a pair apart instead.
+    [Fact]
+    public void MintInstanceName_AdmittedNamesSpelledLikeTheNetstring_MintDistinctInstancesThatCarryNoDollar() {
+        var resolver = new WorldSessionResolver();
+        var definition = DocumentNaming(destination: "d$group_a", group: "b");
+        var second = DocumentNaming(destination: "d", group: "a$group_b");
+        var global = new WorldDestination(
+            Durability: WorldDestinationDurability.Persisted,
+            Name: SafeName.Parse(candidate: "1$a4$user1$b"),
+            Reference: DestinationReference
         );
-        Assert.True(
-            condition: resolver.TryResolve(
-                sourceDefinition: definition,
-                destination: destinationTwo,
-                referencedDocument: RefDoc,
-                cohort: Cohort((2, null)),
-                resolved: out var second,
-                reason: out var secondReason
-            ),
-            userMessage: secondReason
+        var scoped = new WorldDestination(
+            Durability: WorldDestinationDurability.Persisted,
+            Name: SafeName.Parse(candidate: "a"),
+            Reference: DestinationReference,
+            Scope: WorldDestinationScope.User
         );
+        var minted = new List<WorldSessionResolver.Resolved>();
 
-        Assert.NotEqual(
-            expected: first.InstanceName,
-            actual: second.InstanceName
-        );
+        void Resolve(WorldDefinition source, WorldDestination destination, int seat, string? identity) {
+            Assert.True(
+                condition: resolver.TryResolve(
+                    cohort: Cohort((seat, identity)),
+                    destination: destination,
+                    reason: out var reason,
+                    referencedDocument: RefDoc,
+                    resolved: out var resolved,
+                    sourceDefinition: source
+                ),
+                userMessage: reason
+            );
+            minted.Add(item: resolved);
+        }
 
-        // The reverse index proof: retiring the FIRST instance must clear ONLY its own cache entry — the historical
-        // bug was the two entries sharing one instance name, so retiring one silently dropped BOTH. Re-resolving the
-        // SECOND destination's SAME cohort afterward must still reuse its own untouched generation.
-        resolver.NotifyInstanceRetired(instanceName: first.InstanceName);
+        Resolve(destination: definition.Destinations![0], identity: null, seat: 1, source: definition);
+        Resolve(destination: second.Destinations![0], identity: null, seat: 1, source: second);
+        Resolve(destination: global, identity: null, seat: 1, source: definition);
+        Resolve(destination: scoped, identity: "b", seat: 2, source: definition);
 
-        Assert.True(
-            condition: resolver.TryResolve(
-                sourceDefinition: definition,
-                destination: destinationTwo,
-                referencedDocument: RefDoc,
-                cohort: Cohort((2, null)),
-                resolved: out var secondAgain,
-                reason: out var secondAgainReason
-            ),
-            userMessage: secondAgainReason
-        );
-        Assert.False(
-            condition: secondAgain.IsNewGeneration,
-            userMessage: "retiring destinationOne's instance must never have touched destinationTwo's independent cache entry"
-        );
         Assert.Equal(
-            expected: second.GenerationId,
-            actual: secondAgain.GenerationId
+            actual: minted.Select(selector: static resolved => resolved.InstanceName).Distinct(comparer: StringComparer.Ordinal).Count(),
+            expected: minted.Count
         );
+        Assert.All(
+            action: static resolved => Assert.DoesNotContain(actualString: resolved.InstanceName, expectedSubstring: "$"),
+            collection: minted
+        );
+        Assert.Equal(actual: minted[2].InstanceName, expected: "6~global12~1~a4~user1~b");
 
-        // And the FIRST destination's own (destination, scope key) pair is genuinely gone — a fresh resolve for it
-        // mints a NEW generation rather than finding a cache entry the collision would have left behind.
+        // Retiring one leaves every other pair's cache entry in place.
+        resolver.NotifyInstanceRetired(instanceName: minted[0].InstanceName);
         Assert.True(
             condition: resolver.TryResolve(
-                sourceDefinition: definition,
-                destination: destinationOne,
-                referencedDocument: RefDoc,
                 cohort: Cohort((1, null)),
-                resolved: out var firstAgain,
-                reason: out var firstAgainReason
+                destination: second.Destinations![0],
+                reason: out var againReason,
+                referencedDocument: RefDoc,
+                resolved: out var again,
+                sourceDefinition: second
             ),
-            userMessage: firstAgainReason
+            userMessage: againReason
         );
-        Assert.True(condition: firstAgain.IsNewGeneration);
-        Assert.NotEqual(
-            expected: first.GenerationId,
-            actual: firstAgain.GenerationId
+        Assert.False(condition: again.IsNewGeneration);
+    }
+    // A generated link destination is spelled file-backed in the instance it starts: 'link$west' is 'link~west'.
+    [Fact]
+    public void MintInstanceName_AGeneratedLinkDestinationStartsAnInstanceSpelledFileBacked() {
+        Assert.True(
+            condition: new WorldSessionResolver().TryResolve(
+                cohort: Cohort((1, null)),
+                destination: new WorldDestination(Durability: WorldDestinationDurability.Persisted, Name: SafeName.Parse(candidate: GeneratedName.Join("link", "west")), Reference: DestinationReference),
+                reason: out var reason,
+                referencedDocument: RefDoc,
+                resolved: out var resolved,
+                sourceDefinition: Fixtures.BuildDocument()
+            ),
+            userMessage: reason
         );
+        Assert.Equal(actual: resolved.InstanceName, expected: "6~global9~link~west");
     }
     // FINDING 3's N:1 REVERSE INDEX: origin adoption can install MORE THAN ONE (destination, scope key, referenced
     // document) key against the SAME already-running instance (two persisted destinations that both happen to

@@ -28,7 +28,7 @@ public static class WorldLightAnchorResolver {
         if (placement is null) { return null; }
         var creation = WorldDefinitionRows.FindCreation(
             creations: client.Definition.Creations,
-            id: placement.PrototypeId
+            id: placement.ShownPrototypeId
         );
 
         if (
@@ -47,10 +47,12 @@ public static class WorldLightAnchorResolver {
             (frame.YawDegrees * (MathF.PI / 180f))
         );
 
-        if (anchor.ShapeId is not { } shapeId) { return new(
+        if (anchor.ShapeId is not { } shapeId) {
+            return new(
             frame.Position,
             rotation
-        ); }
+        );
+        }
         var shape = creation.EngineDocument.Shapes?.FirstOrDefault(predicate: s => (s.Id == shapeId));
 
         if (shape is null) { return null; }

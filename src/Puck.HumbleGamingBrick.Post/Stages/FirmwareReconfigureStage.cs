@@ -305,7 +305,7 @@ internal sealed class FirmwareReconfigureStage : IPostStage<PostContext> {
             );
             return (core!.Instance.Machine.Snapshot(), core.Instance.Configuration.BootRom!.ToArray(), core.Instance.Machine.Model);
         } finally {
-            host.Worker.ReturnCore(hostAccumulator: 0);
+            host.Worker.ReturnCore(hostAccumulator: default);
         }
     }
     private static void Require(bool condition, string detail) {

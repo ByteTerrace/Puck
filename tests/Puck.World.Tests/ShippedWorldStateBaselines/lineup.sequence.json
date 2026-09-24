@@ -1,0 +1,138 @@
+{
+  "schema": "puck.world.state-baseline-sequence.v1",
+  "world": "worlds/parlor/lineup.puck",
+  "host": {
+    "kind": "source",
+    "path": "worlds/parlor/lineup.puck"
+  },
+  "expectsStateChange": true,
+  "steps": [
+    {
+      "advance": 5
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "kind",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "value",
+        "value": 9
+      }
+    },
+    {
+      "add": {
+        "row": "lineupAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "kind",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "value",
+        "value": 7
+      }
+    },
+    {
+      "add": {
+        "row": "lineupAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "kind",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "value",
+        "value": 4
+      }
+    },
+    {
+      "add": {
+        "row": "lineupAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 40
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "seat",
+        "value": 1
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "kind",
+        "value": 2
+      }
+    },
+    {
+      "set": {
+        "row": "lineupAct",
+        "key": "value",
+        "value": 3
+      }
+    },
+    {
+      "add": {
+        "row": "lineupAct",
+        "key": "request",
+        "value": 1
+      }
+    },
+    {
+      "advance": 10
+    }
+  ]
+}

@@ -15,14 +15,28 @@ namespace Puck.World.Transpiler.Vocabulary;
 /// <paramref name="Fallback"/> names.</param>
 /// <param name="RequiredKeys">Keys a node must carry before the spelling applies, beyond the keys the construct's
 /// own required members fill.</param>
+/// <param name="FromRows">Whether the printer reads the construct back from the rows it generated — names in the
+/// generated form (<c>Puck.State.GeneratedName</c>) — rather than from one document node, so
+/// <paramref name="Condition"/> is the whole requirement and the key lists say nothing.</param>
 public sealed record WorldConstructSugar(
     string Fallback,
     IReadOnlyList<string>? AdmittedKeys = null,
     IReadOnlyList<string>? RequiredKeys = null,
     string? Condition = null,
     bool Open = false,
-    bool Printed = true
+    bool Printed = true,
+    bool FromRows = false
 ) {
+    /// <summary>The requirement for a compile-time construct the printer reads back from the rows it generated.</summary>
+    /// <param name="condition">What those rows must be for the construct to print back.</param>
+    /// <returns>The requirement; anything else is refused by naming the generated row.</returns>
+    public static WorldConstructSugar ReadBack(string condition) => new(
+        Condition: condition,
+        Fallback: "a refusal naming the generated row, since printing it as an authored name writes a source the compiler refuses",
+        FromRows: true,
+        Open: true
+    );
+
     /// <summary>The requirement for a construct of the compile-time layer, which reaches no document member of
     /// its own.</summary>
     public static WorldConstructSugar None { get; } = new(

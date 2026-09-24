@@ -1,21 +1,99 @@
 using System.CommandLine;
 using Puck.World.Transpiler.Decompiler;
 using Puck.World.Transpiler.Embeddings;
+using Puck.World;
 
 namespace Puck.Cli.Transpiler;
 
 /// <summary>
-/// The <c>puck decompile</c> verb: decompiles a canonical JSON world definition into idiomatic <c>.puck</c> DSL source code.
+/// The <c>puck decompile</c> verb: decompiles a canonical JSON world definition into idiomatic <c>.puck</c> DSL source code,
+/// or the worlds one composition emitted into the composition source that emits them.
 /// </summary>
 internal static class DecompileCommand {
+    // Several documents are the worlds of one composition, each named by its file stem: the links between them are
+    // generated rows in both worlds they join, so they print back only together, as one source.
+    private static int RunComposition(IReadOnlyList<string> paths, string? output, bool overwrite) {
+        if (output is null) {
+            Console.Error.WriteLine(value: "error: decompiling several worlds writes one composition source; name it with --output.");
+            return 2;
+        }
+
+        var outputPath = Path.GetFullPath(path: output);
+
+        if (File.Exists(path: outputPath) && !overwrite) {
+            Console.Error.WriteLine(value: $"error: Destination file '{outputPath}' already exists. Use --overwrite to overwrite.");
+            return 1;
+        }
+
+        var worlds = new List<KeyValuePair<string, System.Text.Json.Nodes.JsonObject>>(capacity: paths.Count);
+
+        foreach (var path in paths) {
+            var fullPath = Path.GetFullPath(path: path);
+            var name = Path.GetFileName(path: fullPath);
+
+            if (!WorldDocumentName.IsDocumentFile(path: name)) {
+                Console.Error.WriteLine(value: $"error: '{fullPath}' is not a '<world>.world.json' document; a composition names each world by its file stem.");
+                return 2;
+            }
+
+            try {
+                if (System.Text.Json.Nodes.JsonNode.Parse(json: File.ReadAllText(path: fullPath)) is not System.Text.Json.Nodes.JsonObject document) {
+                    Console.Error.WriteLine(value: $"error: '{fullPath}' is not a JSON object.");
+                    return 2;
+                }
+
+                worlds.Add(item: KeyValuePair.Create(key: WorldDocumentName.OfDocumentFile(path: name), value: document));
+            } catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)) {
+                Console.Error.WriteLine(value: $"error: Could not read JSON file '{fullPath}': {ex.Message}");
+                return 2;
+            }
+        }
+
+        string source;
+
+        try {
+            source = WorldDecompiler.DecompileComposition(worlds: worlds);
+        } catch (Exception ex) {
+            Console.Error.WriteLine(value: $"error: Failed to decompile the composition: {ex.Message}");
+            return 1;
+        }
+
+        try {
+            if (Path.GetDirectoryName(path: outputPath) is { Length: > 0 } directory) {
+                _ = Directory.CreateDirectory(path: directory);
+            }
+
+            File.WriteAllText(contents: source, path: outputPath);
+        } catch (Exception ex) {
+            Console.Error.WriteLine(value: $"error: Failed to write output file '{outputPath}': {ex.Message}");
+            return 2;
+        }
+
+        Console.WriteLine(value: $"Successfully decompiled {worlds.Count} worlds -> '{outputPath}' ({System.Text.Encoding.UTF8.GetByteCount(s: source):N0} bytes).");
+        return 0;
+    }
+
     internal static int Run(
-        string path,
+        IReadOnlyList<string> paths,
         string? output,
         bool overwrite,
         bool sql = false,
         string? embeddings = null
     ) {
-        var fullPath = Path.GetFullPath(path: path);
+        if (paths.Count > 1) {
+            if (sql || (embeddings is not null)) {
+                Console.Error.WriteLine(value: "error: --sql and --embeddings decompile one document; name one path.");
+                return 2;
+            }
+
+            return RunComposition(
+                output: output,
+                overwrite: overwrite,
+                paths: paths
+            );
+        }
+
+        var fullPath = Path.GetFullPath(path: paths[0]);
 
         if (!File.Exists(path: fullPath)) {
             Console.Error.WriteLine(value: $"error: JSON world definition file not found: '{fullPath}'");
@@ -112,15 +190,10 @@ internal static class DecompileCommand {
         var dir = (Path.GetDirectoryName(path: sourcePath) ?? "");
         var fileName = Path.GetFileName(path: sourcePath);
 
-        if (fileName.EndsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: ".world.json"
-        )) {
-            var baseName = fileName[..^11];
-
+        if (WorldDocumentName.IsDocumentFile(path: fileName)) {
             return Path.Combine(
                 path1: dir,
-                path2: (baseName + ".puck")
+                path2: WorldDocumentName.SourceFile(name: WorldDocumentName.OfDocumentFile(path: fileName))
             );
         }
 
@@ -143,7 +216,10 @@ internal static class DecompileCommand {
     }
 
     public static Command Create() {
-        var pathArgument = new Argument<string>(name: "path") { Description = "Path to the JSON world definition file to decompile." };
+        var pathArgument = new Argument<string[]>(name: "paths") {
+            Arity = ArgumentArity.OneOrMore,
+            Description = "Path to the JSON world definition file to decompile, or the '<world>.world.json' documents of one composition, which decompile together into the one source that emits them.",
+        };
         var outputOption = new Option<string?>(
             name: "--output",
             aliases: ["-o"]
@@ -153,7 +229,7 @@ internal static class DecompileCommand {
         var embeddingsOption = new Option<string?>(name: "--embeddings") { Description = "Optional companion embedding lock file (.embeddings.json) for resolving vector literals." };
 
         var command = new Command(
-            description: "Decompile a JSON world definition into idiomatic .puck DSL source.",
+            description: "Decompile a JSON world definition, or the worlds of one composition, into idiomatic .puck DSL source.",
             name: "decompile"
         ) {
             pathArgument,
@@ -167,7 +243,7 @@ internal static class DecompileCommand {
             embeddings: parseResult.GetValue(option: embeddingsOption),
             output: parseResult.GetValue(option: outputOption),
             overwrite: parseResult.GetValue(option: overwriteOption),
-            path: parseResult.GetRequiredValue(argument: pathArgument),
+            paths: parseResult.GetRequiredValue(argument: pathArgument),
             sql: parseResult.GetValue(option: sqlOption)
         ));
 

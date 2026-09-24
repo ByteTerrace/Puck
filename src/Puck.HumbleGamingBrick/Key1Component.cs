@@ -137,19 +137,8 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
     public void LeaveStop() =>
         m_stopped = false;
     /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_armed = reader.ReadBoolean();
-        m_isDoubleSpeed = reader.ReadBoolean();
-        m_stopped = reader.ReadBoolean();
-        m_switchEnterCountdown = reader.ReadInt32();
-        m_switchStallCountdown = reader.ReadInt32();
-        m_interruptsBlocked = reader.ReadBoolean();
-        m_interruptBlockCountdown = reader.ReadInt32();
-        m_timersBlocked = reader.ReadBoolean();
-        m_timerBlockCountdown = reader.ReadInt32();
-        m_hdmaBlocked = reader.ReadBoolean();
-        m_hdmaToggleCountdown = reader.ReadInt32();
-    }
+    public void LoadState(StateReader reader) =>
+        TransferState(transfer: new StateLoadTransfer(reader: reader));
     /// <inheritdoc/>
     public byte ReadRegister() =>
         ((byte)(0x7E | (m_armed
@@ -158,19 +147,23 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
             ? 0x80
             : 0x00)));
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBoolean(value: m_armed);
-        writer.WriteBoolean(value: m_isDoubleSpeed);
-        writer.WriteBoolean(value: m_stopped);
-        writer.WriteInt32(value: m_switchEnterCountdown);
-        writer.WriteInt32(value: m_switchStallCountdown);
-        writer.WriteBoolean(value: m_interruptsBlocked);
-        writer.WriteInt32(value: m_interruptBlockCountdown);
-        writer.WriteBoolean(value: m_timersBlocked);
-        writer.WriteInt32(value: m_timerBlockCountdown);
-        writer.WriteBoolean(value: m_hdmaBlocked);
-        writer.WriteInt32(value: m_hdmaToggleCountdown);
+    public void SaveState(StateWriter writer) =>
+        TransferState(transfer: new StateSaveTransfer(writer: writer));
+
+    private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
+        transfer.Boolean(value: ref m_armed);
+        transfer.Boolean(value: ref m_isDoubleSpeed);
+        transfer.Boolean(value: ref m_stopped);
+        transfer.Int32(value: ref m_switchEnterCountdown);
+        transfer.Int32(value: ref m_switchStallCountdown);
+        transfer.Boolean(value: ref m_interruptsBlocked);
+        transfer.Int32(value: ref m_interruptBlockCountdown);
+        transfer.Boolean(value: ref m_timersBlocked);
+        transfer.Int32(value: ref m_timerBlockCountdown);
+        transfer.Boolean(value: ref m_hdmaBlocked);
+        transfer.Int32(value: ref m_hdmaToggleCountdown);
     }
+
     /// <inheritdoc/>
     public void Tick() {
         if (m_switchEnterCountdown > 0) {

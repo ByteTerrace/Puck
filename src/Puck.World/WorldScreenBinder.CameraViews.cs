@@ -105,6 +105,7 @@ internal sealed partial class WorldScreenBinder {
         if (m_anchors is WorldClient client) {
             view.Rig = WorldCameraRigCompiler.Compile(
                 definition: client.Definition,
+                mirror: client.StateMirror,
                 program: camera.Rig
             );
         }
@@ -172,6 +173,11 @@ internal sealed partial class WorldScreenBinder {
             band: ScreenSlotPriority.Ambient,
             isLive: () => !m_parkedViews.Contains(item: name)
         );
+        RegisterViewWork(
+            lifetime: registration.View.WorkLifetime,
+            name: name,
+            work: registration.View.Work
+        );
     }
     // A removed camera row: every slot filming it unbinds (a slot whose DECLARED source still names it — possible only
     // transiently inside one delivery, the validator rejects a durable dangling reference — keeps a visible fault), and
@@ -201,7 +207,7 @@ internal sealed partial class WorldScreenBinder {
             RetireViewExportForRecreation(cameraName: registration.Row.Name);
         }
 
-        m_viewStack?.Release(name: name);
+        ReleaseView(name: name);
         _ = m_cameraViews.Remove(key: name);
         Console.Error.WriteLine(value: $"[world.camera: view '{name}' released — camera removed]");
     }
@@ -231,7 +237,7 @@ internal sealed partial class WorldScreenBinder {
             !exported &&
             !HasRetainedView(registrationName: name)
         ) {
-            stack.Release(name: name);
+            ReleaseView(name: name);
             _ = m_cameraViews.Remove(key: name);
             Console.Error.WriteLine(value: $"[world.screen: camera view '{name}' released — no remaining screen references it]");
         } else {
@@ -440,7 +446,7 @@ internal sealed partial class WorldScreenBinder {
                 // re-narrowing the survivors' self-reference set. A row that became (or stopped being) seat-relative
                 // changes its registration name the same way.
                 RetireViewExportForRecreation(cameraName: registration.Row.Name);
-                m_viewStack?.Release(name: name);
+                ReleaseView(name: name);
                 _ = m_cameraViews.Remove(key: name);
                 RegisterCameraView(
                     camera: next,

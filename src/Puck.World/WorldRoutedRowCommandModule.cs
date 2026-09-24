@@ -91,7 +91,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                     json: raw,
                     mutation: out var mutation,
                     path: path,
-                    principal: context.ActingPrincipal()
+                    principal: context.Principal
                 )) {
                     return CommandResult.Error(output: $"[player.row.set: {error}]");
                 }
@@ -139,7 +139,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                     described: $"state cell '{args[1]}'.'{args[2]}'",
                     display: display,
                     mutation: new WorldMutation.UpsertStateCell(
-                        Principal: context.ActingPrincipal(),
+                        Principal: context.Principal,
                         Row: args[1].ToString(),
                         Key: args[2].ToString(),
                         Value: 0L,
@@ -173,7 +173,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                     described: $"state cell '{row}'.'{key}' cycle",
                     display: PlayerRoster.DisplayNumber(slot: context.Slot),
                     mutation: new WorldMutation.UpsertStateCell(
-                        Principal: context.ActingPrincipal(),
+                        Principal: context.Principal,
                         Row: row,
                         Key: key,
                         Value: 0L,

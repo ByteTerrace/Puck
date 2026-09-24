@@ -1,48 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Puck.Abstractions.Documents;
-using Puck.World.Transpiler;
+using Puck.Assets.Documents;
 using Puck.World.Transpiler.Composition;
+using Puck.World;
 
 namespace Puck.Cli.Test;
 
 internal static partial class TestCommand {
-    private const string WorldSourceSuffix = ".puck";
-
-    // A generated test world is written outside the tree its source sits in, so a path the document resolves
-    // against its own directory has to be rooted before it moves. A `basis` and an `imports[].document` are the two
-    // such paths a document carries at its root.
-    private static void Reroot(JsonObject world, string sourceDirectory) {
-        if (
-            (world[propertyName: "basis"]?.GetValue<string>() is { } basis) &&
-            !Path.IsPathRooted(path: basis)
-        ) {
-            world[propertyName: "basis"] = Rooted(
-                relative: basis,
-                sourceDirectory: sourceDirectory
-            );
-        }
-
-        foreach (var entry in (world[propertyName: "imports"] as JsonArray ?? [])) {
-            if (
-                (entry is JsonObject import) &&
-                (import[propertyName: "document"]?.GetValue<string>() is { } document) &&
-                !Path.IsPathRooted(path: document)
-            ) {
-                import[propertyName: "document"] = Rooted(
-                    relative: document,
-                    sourceDirectory: sourceDirectory
-                );
-            }
-        }
-    }
-    private static string Rooted(string sourceDirectory, string relative) => Path.GetFullPath(path: Path.Combine(
-        path1: sourceDirectory,
-        path2: relative
-    )).Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
     // Whether a document declares the section `puck test` boots it to. A directory sweep is over whatever the
     // author put there, so an ordinary world beside a test world is skipped rather than failing the sweep.
     private static bool DeclaresSchedule(string document) {
@@ -64,30 +28,36 @@ internal static partial class TestCommand {
         reason = null;
         skipped = null;
 
-        var compilation = WorldCompiler.CompileFile(path: source);
+        // The source compiles through the compile cache the composer and the game share, so an unchanged source
+        // run again is not compiled again; a source that does not compile is compiled for its diagnostics.
+        _ = WorldCompileCache.Shared.TryCompile(
+            compiled: out var compiled,
+            failure: out var failure,
+            path: source
+        );
 
-        // A module — a source declaring no schema of its own — is not a world, and a test inside one needs the
-        // `use` that stamps it into a world. Skipped by name before its diagnostics are read, since a fragment
-        // cannot know what the root that uses it will supply.
-        if (compilation.Document?.Schema is null) {
+        // A module — a source declaring no schema of its own — is not a world, and is skipped by name before its
+        // diagnostics are read, since a fragment cannot know what the root that uses it will supply. A module that
+        // carries a test naming the module and the arguments to stand it up with does have something to run.
+        if (((compiled?.Schema ?? failure?.Document?.Schema) is null) && ((compiled?.Tests.Count ?? failure!.TestWorlds.Count) == 0)) {
             if (!sweeping) {
-                reason = $"{source} declares no schema, so it is a module rather than a world — a test inside a module needs the `use` that stamps it into one, which does not exist yet.";
+                reason = $"{source} declares no schema, so it is a module rather than a world, and authors no test block of its own — a module's tests are written `test \"name\" with {Path.GetFileNameWithoutExtension(path: source)}(arguments)`, and its own run wherever it is used.";
 
                 return false;
             }
 
-            skipped = $"test: skipped {source} — it declares no schema, so it is a module rather than a world.";
+            skipped = $"test: skipped {source} — it declares no schema, so it is a module rather than a world, and authors no test block.";
 
             return true;
         }
 
-        if (compilation.Diagnostics.HasErrors) {
-            reason = $"{source} does not compile:{Environment.NewLine}{compilation.Diagnostics.FormatReport(File.ReadAllText(path: source))}";
+        if (failure is not null) {
+            reason = $"{source} does not compile:{Environment.NewLine}{failure.Diagnostics.FormatReport(File.ReadAllText(path: source))}";
 
             return false;
         }
 
-        if (compilation.TestWorlds.Count == 0) {
+        if (compiled!.Tests.Count == 0) {
             if (!sweeping) {
                 reason = $"{source} authors no test block — puck test runs the worlds a source's `test` blocks generate, so a source without one has nothing for this verb to do.";
 
@@ -100,52 +70,50 @@ internal static partial class TestCommand {
         }
 
         var sourceDirectory = (Path.GetDirectoryName(path: Path.GetFullPath(path: source)) ?? ".");
-        var generated = new List<string>(capacity: compilation.TestWorlds.Count);
+        var generated = new List<string>(capacity: compiled.Tests.Count);
 
-        _ = Directory.CreateDirectory(path: directory);
+        foreach (var world in compiled.Tests) {
+            // A test over a composition is several documents: the one the run boots with, plus one per world its
+            // schedule arms. Every one is written; only the boot document is a world this verb runs.
+            foreach (var document in ((IReadOnlyList<(string Name, byte[] Json)>)[
+                (world.Name, world.Json),
+                .. world.Siblings.Select(selector: static sibling => (sibling.Name, sibling.Json)),
+            ])) {
+                if (written.TryGetValue(
+                    key: document.Name,
+                    value: out var owner
+                )) {
+                    reason = $"{source} and {owner} both generate the test world '{document.Name}' — a generated world is named for its source's file name and its test's name, so two sources run together need different file names or different test names.";
 
-        foreach (var world in compilation.TestWorlds) {
-            var path = Path.Combine(
-                path1: directory,
-                path2: (world.Name + WorldDocumentSuffix)
-            );
+                    return false;
+                }
 
-            if (written.TryGetValue(
-                key: world.Name,
-                value: out var owner
-            )) {
-                reason = $"{source} and {owner} both generate the test world '{world.Name}' — a generated world is named for its source's file name and its test's name, so two sources run together need different file names or different test names.";
+                written[document.Name] = source;
 
-                return false;
+                // Test worlds are temporary JSON documents, staged flattened so the executable boots the exact
+                // composed source without depending on the temporary file's location.
+                if (!WorldStaging.TryWrite(
+                    directory: directory,
+                    name: document.Name,
+                    path: out var path,
+                    reason: out var composeReason,
+                    sourceDirectory: sourceDirectory,
+                    world: ((JsonObject)JsonNode.Parse(utf8Json: document.Json)!)
+                )) {
+                    reason = $"{source} test \"{world.Test}\" does not compose: {composeReason}";
+
+                    return false;
+                }
+
+                if (document.Name == world.Name) {
+                    Console.WriteLine(value: $"test: {world.Name} <- {source} test \"{world.Test}\"{((world.Subject is { } subject)
+                        ? $" with {subject}"
+                        : string.Empty)}");
+                    generated.Add(item: path);
+                } else {
+                    Console.WriteLine(value: $"test: {document.Name} <- {source} test \"{world.Test}\" (armed beside {world.Name})");
+                }
             }
-
-            written[world.Name] = source;
-            Reroot(
-                sourceDirectory: sourceDirectory,
-                world: world.Json
-            );
-            var rootBytes = CanonicalJsonDocument.Serialize(node: world.Json);
-
-            // Test worlds are temporary JSON documents. Flatten their authored basis/import graph before writing
-            // them so the executable boots the exact composed source without depending on the temporary file's
-            // location or requiring JSON loading to understand a .puck neighbour.
-            if (!PuckDocumentComposer.TryComposeWorldDocument(
-                chainBytes: out _,
-                composed: out var composed,
-                reason: out var composeReason,
-                rootBytes: rootBytes,
-                rootResolvedPath: path
-            )) {
-                reason = $"{source} test \"{world.Test}\" does not compose: {composeReason}";
-
-                return false;
-            }
-            File.WriteAllBytes(
-                bytes: CanonicalJsonDocument.Serialize(node: composed ?? world.Json),
-                path: path
-            );
-            Console.WriteLine(value: $"test: {world.Name} <- {source} test \"{world.Test}\"");
-            generated.Add(item: path);
         }
 
         worlds = generated;
@@ -153,7 +121,8 @@ internal static partial class TestCommand {
         return true;
     }
     // Every world a path names: a document runs as it stands, a `.puck` source is compiled and its generated test
-    // worlds run instead, and a directory contributes both, recursively, skipping what is not a test.
+    // worlds run instead, and a directory contributes the file carrying each document, recursively, skipping what is
+    // not a test.
     private static bool TryCollectWorlds(string path, string generatedDirectory, out IReadOnlyList<string> worlds, out string? reason) {
         worlds = [];
         reason = null;
@@ -161,10 +130,7 @@ internal static partial class TestCommand {
         var rooted = Path.GetFullPath(path: path);
 
         if (File.Exists(path: rooted)) {
-            if (!rooted.EndsWith(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: WorldSourceSuffix
-            )) {
+            if (!WorldDocumentName.IsSourceFile(path: rooted)) {
                 worlds = [rooted];
 
                 return true;
@@ -177,7 +143,7 @@ internal static partial class TestCommand {
                 source: rooted,
                 sweeping: false,
                 worlds: out worlds,
-                written: new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase)
+                written: new Dictionary<string, string>(comparer: DocumentName.Comparer)
             );
         }
 
@@ -187,31 +153,27 @@ internal static partial class TestCommand {
             return false;
         }
 
-        var documents = Directory.GetFiles(
-            path: rooted,
-            searchOption: SearchOption.AllDirectories,
-            searchPattern: ("*" + WorldDocumentSuffix)
-        );
-        var sources = Directory.GetFiles(
-            path: rooted,
-            searchOption: SearchOption.AllDirectories,
-            searchPattern: ("*" + WorldSourceSuffix)
-        );
+        // One file per document, as the composer resolves a name: a document file beside the source of its name
+        // emitting that name is never read. A module library carries no document name, and a composition only the
+        // worlds it declares, so a document named like either runs, and the library is swept for the tests its modules
+        // carry.
+        if (!PuckDocumentComposer.TryCarriers(
+            carriers: out var carriers,
+            directory: rooted,
+            libraries: out var libraries,
+            option: SearchOption.AllDirectories,
+            reason: out var carrierReason
+        )) {
+            reason = carrierReason;
 
-        Array.Sort(
-            array: documents,
-            comparer: StringComparer.Ordinal
-        );
-        Array.Sort(
-            array: sources,
-            comparer: StringComparer.Ordinal
-        );
+            return false;
+        }
 
         var collected = new List<string>();
         var skips = new List<string>();
-        var written = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var written = new Dictionary<string, string>(comparer: DocumentName.Comparer);
 
-        foreach (var document in documents) {
+        foreach (var document in carriers.Where(predicate: static carrier => !carrier.IsSource).Select(selector: static carrier => carrier.Path)) {
             if (DeclaresSchedule(document: document)) {
                 collected.Add(item: document);
             } else {
@@ -219,7 +181,8 @@ internal static partial class TestCommand {
             }
         }
 
-        foreach (var source in sources) {
+        // A composition carries each world it declares, so its file may carry several names and runs once.
+        foreach (var source in carriers.Where(predicate: static carrier => carrier.IsSource).Select(selector: static carrier => carrier.Path).Distinct(comparer: StringComparer.Ordinal).Concat(second: libraries).Order(comparer: StringComparer.Ordinal)) {
             if (!TryGenerateWorlds(
                 directory: generatedDirectory,
                 reason: out var sourceReason,
@@ -245,7 +208,7 @@ internal static partial class TestCommand {
         }
 
         if (collected.Count == 0) {
-            reason = $"'{path}' holds no test world: no *{WorldDocumentSuffix} document declaring a schedule, and no *{WorldSourceSuffix} source with a test block.";
+            reason = $"'{path}' holds no test world: no *{WorldDocumentName.DocumentSuffix} document declaring a schedule, and no *{WorldDocumentName.SourceSuffix} source with a test block.";
 
             return false;
         }

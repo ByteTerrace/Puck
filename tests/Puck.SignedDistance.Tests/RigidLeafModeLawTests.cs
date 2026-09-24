@@ -67,6 +67,112 @@ public sealed class RigidLeafModeLawTests {
             actual: words[(plan + 1)]
         );
     }
+    [Fact]
+    public void FoldRunCompilesIntoAFoldedLeafAndItsExtensionSlot() {
+        var foldFirst = 2;
+        var words = Build(instructions: [
+            Instruction(op: SdfOp.ResetPoint),
+            Instruction(
+                op: SdfOp.Translate,
+                data0: new Vector4(w: 0f, x: 5f, y: 6f, z: 7f)
+            ),
+            Instruction(
+                op: SdfOp.SymmetryPlane,
+                data0: new Vector4(w: 0f, x: 0f, y: 1f, z: 0f)
+            ),
+            // A domain repeat shifts by its origin around the fold: the run ends at the fold, and the pose after it takes the shift back.
+            Instruction(op: SdfOp.Translate),
+            Instruction(
+                op: SdfOp.RepeatLimited,
+                data0: new Vector4(w: 0f, x: 0.5f, y: 1f, z: 1f)
+            ) with {
+                Data1 = new Vector4(w: 0f, x: 3f, y: 0f, z: 0f),
+            },
+            Instruction(op: SdfOp.Translate),
+            Instruction(
+                op: SdfOp.Translate,
+                data0: new Vector4(w: 0f, x: 1f, y: 2f, z: 3f)
+            ),
+            Instruction(
+                op: SdfOp.ShapeBlend,
+                data0: new Vector4(w: 0f, x: 0.25f, y: 0f, z: 0f)
+            ) with {
+                Shape = ((uint)SdfShapeType.Sphere),
+            }
+        ]).Words;
+        var segmentHeader = SegmentHeader(words: words);
+
+        Assert.NotEqual(
+            actual: words[(segmentHeader + 8)] & 0x80000000u,
+            expected: 0u
+        );
+        var plan = checked((((int)words[(segmentHeader + 2)]) * 4));
+
+        // The folded leaf and its extension slot.
+        Assert.Equal(
+            expected: 2u,
+            actual: words[(plan + 1)]
+        );
+        var leaf = checked((((int)words[plan]) * 4));
+
+        Assert.Equal(
+            expected: 0x40000000u,
+            actual: words[(leaf + 3)] & 0x40000000u
+        );
+        Assert.Equal(
+            expected: 7u,
+            actual: words[(leaf + 3)] & 0x3FFFFFFFu
+        );
+        // The pose after the folds starts at identity; the pose before them is the extension's.
+        Assert.Equal(
+            expected: 1f,
+            actual: BitConverter.UInt32BitsToSingle(value: words[leaf])
+        );
+        Assert.Equal(
+            expected: -1f,
+            actual: BitConverter.UInt32BitsToSingle(value: words[((leaf + 8) + 3)])
+        );
+        var extension = (leaf + 12);
+
+        Assert.Equal(
+            expected: 5f,
+            actual: BitConverter.UInt32BitsToSingle(value: words[extension])
+        );
+        Assert.Equal(
+            expected: ((uint)foldFirst) | 0x80000000u,
+            actual: words[(extension + 3)]
+        );
+        Assert.Equal(
+            expected: 3u,
+            actual: words[(extension + 8)]
+        );
+    }
+    [Fact]
+    public void AFoldOnADynamicChainStaysGeneric() {
+        var words = Build(instructions: [
+            Instruction(op: SdfOp.ResetPoint),
+            Instruction(
+                op: SdfOp.TransformDynamic,
+                data0: new Vector4(w: 0f, x: 3f, y: 0f, z: 0f)
+            ),
+            Instruction(
+                op: SdfOp.SymmetryPlane,
+                data0: new Vector4(w: 0f, x: 1f, y: 0f, z: 0f)
+            ),
+            Instruction(
+                op: SdfOp.ShapeBlend,
+                data0: new Vector4(w: 0f, x: 0.25f, y: 0f, z: 0f)
+            ) with {
+                Shape = ((uint)SdfShapeType.Sphere),
+            }
+        ]).Words;
+        var segmentHeader = SegmentHeader(words: words);
+
+        Assert.Equal(
+            expected: 0u,
+            actual: words[(segmentHeader + 8)] & 0x80000000u
+        );
+    }
     [InlineData(false, true, false)]
     [InlineData(true, true, false)]
     [InlineData(false, false, false)]

@@ -24,12 +24,12 @@ public static class EmbeddingBatcher {
             );
         }
 
-        for (var i = 0; i < items.Count; i += batchSize) {
+        for (var i = 0; (i < items.Count); i += batchSize) {
             var count = Math.Min(val1: batchSize, val2: (items.Count - i));
             var chunk = new T[count];
 
-            for (var c = 0; c < count; c++) {
-                chunk[c] = items[i + c];
+            for (var c = 0; (c < count); c++) {
+                chunk[c] = items[(i + c)];
             }
 
             yield return chunk;

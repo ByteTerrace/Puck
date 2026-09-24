@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Storage;
@@ -45,6 +46,7 @@ public sealed class WorldReleaseManagementLawTests {
     };
     private static string FullHash(byte[] bytes) => ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
     private static WorldReleaseManifest Manifest(IReadOnlyDictionary<string, string> definitions, IReadOnlyDictionary<string, string> artifacts) => new() {
+        CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
         Label = "test",
         SourceRevision = new string(
         c: 'c',
@@ -68,19 +70,25 @@ public sealed class WorldReleaseManagementLawTests {
     public async Task CoordinatorRequiresPairEvidenceAndStartsRollbackFromRetainedPredecessor() {
         var owner = Guid.NewGuid();
         var source = Manifest(
-            new Dictionary<string, string> { ["world"] = ("sha256/" + new string(
+            new Dictionary<string, string> {
+                ["world"] = ("sha256/" + new string(
                 c: 'a',
                 count: 64
-            )) },
+            )),
+            },
             new Dictionary<string, string>()
-        ) with { EngineImageDigest = ("sha256:" + new string(
+        ) with {
+            EngineImageDigest = ("sha256:" + new string(
             c: 'a',
             count: 64
-        )) };
-        var target = source with { EngineImageDigest = ("sha256:" + new string(
+        )),
+        };
+        var target = source with {
+            EngineImageDigest = ("sha256:" + new string(
             c: 'b',
             count: 64
-        )) };
+        )),
+        };
         var groups = new WorldReleaseGroupStore(
             new FakeObjectBlobStore(),
             Target,
@@ -104,6 +112,25 @@ public sealed class WorldReleaseManagementLawTests {
         Assert.Equal(
             WorldReleaseOperationOutcomeKind.Conflict,
             refused.Kind
+        );
+        // A pair that ran and failed a leg's claim is refused with that claim, and claims nothing.
+        var failed = await coordinator.BeginDeploymentAsync(
+            created.Snapshot!.Value,
+            source,
+            target,
+            new FailedQualificationRunner(failure: "candidate import changed the complete source state"),
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(
+            WorldReleaseOperationOutcomeKind.Conflict,
+            failed.Kind
+        );
+        Assert.Contains(
+            actualString: failed.Detail,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "candidate import changed the complete source state"
         );
         var evidence = Evidence(
             source: source,
@@ -408,7 +435,7 @@ public sealed class WorldReleaseManagementLawTests {
     }
     [Fact]
     public void ManifestIdentityIsIndependentOfDictionaryInsertionOrderAndVerifiesFullHashes() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var world = directory.WriteText(
             name: "puck.world.json",
             text: "world"
@@ -498,11 +525,11 @@ public sealed class WorldReleaseManagementLawTests {
         var drained = await groups.AdvanceAsync(
             started.Snapshot!.Value,
             started.Snapshot.Value.Record with {
-            PendingPhase = WorldReleaseOperationPhase.Drain,
-            Admission = WorldReleaseAdmissionState.Closed,
-            RecoveryRoots = new Dictionary<string, string> { ["row"] = "checkpoint:1" },
-            Revision = (started.Snapshot.Value.Record.Revision + 1),
-        },
+                PendingPhase = WorldReleaseOperationPhase.Drain,
+                Admission = WorldReleaseAdmissionState.Closed,
+                RecoveryRoots = new Dictionary<string, string> { ["row"] = "checkpoint:1" },
+                Revision = (started.Snapshot.Value.Record.Revision + 1),
+            },
             TestContext.Current.CancellationToken
         );
         var recovering = await groups.BeginRecoveryAsync(
@@ -544,10 +571,13 @@ public sealed class WorldReleaseManagementLawTests {
             new Dictionary<string, string> { ["row"] = FullHash(bytes: "world"u8.ToArray()) },
             new Dictionary<string, string>()
         );
-        var target = source with { Label = "candidate", EngineImageDigest = ("sha256:" + new string(
+        var target = source with {
+            Label = "candidate",
+            EngineImageDigest = ("sha256:" + new string(
             c: 'e',
             count: 64
-        )) };
+        )),
+        };
         var evidence = Evidence(
             source: source,
             target: target
@@ -590,19 +620,25 @@ public sealed class WorldReleaseManagementLawTests {
     [Fact]
     public void StructuralCompatibilityDoesNotAuthorizeChangedDefinitionsOrArtifacts() {
         var source = Manifest(
-            new Dictionary<string, string> { ["world"] = ("sha256/" + new string(
+            new Dictionary<string, string> {
+                ["world"] = ("sha256/" + new string(
                 c: 'a',
                 count: 64
-            )) },
-            new Dictionary<string, string> { ["neighbor"] = ("sha256/" + new string(
+            )),
+            },
+            new Dictionary<string, string> {
+                ["neighbor"] = ("sha256/" + new string(
                 c: 'b',
                 count: 64
-            )) }
+            )),
+            }
         );
-        var same = source with { EngineImageDigest = ("sha256:" + new string(
+        var same = source with {
+            EngineImageDigest = ("sha256:" + new string(
             c: 'b',
             count: 64
-        )) };
+        )),
+        };
 
         Assert.True(
             condition: WorldReleaseTransitionPolicy.TryPrepare(
@@ -614,23 +650,14 @@ public sealed class WorldReleaseManagementLawTests {
             userMessage: reason
         );
         Assert.Empty(collection: changes);
-        var changedDefinition = same with { Definitions = new Dictionary<string, string> { ["world"] = ("sha256/" + new string(
+        var coordinated = same with {
+            Definitions = new Dictionary<string, string> {
+                ["world"] = ("sha256/" + new string(
             c: 'e',
             count: 64
-        )) } };
-
-        Assert.False(condition: WorldReleaseTransitionPolicy.TryPrepare(
-            changes: out changes,
-            reason: out reason,
-            source: source,
-            target: changedDefinition
-        ));
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "metadata coordinator contract"
-        );
-        var coordinated = changedDefinition with { CoordinatorContract = WorldReleaseManifest.MetadataCoordinatorContract };
+        )),
+            },
+        };
 
         Assert.True(
             condition: WorldReleaseTransitionPolicy.TryPrepare(
@@ -673,10 +700,14 @@ public sealed class WorldReleaseManagementLawTests {
             WorldReleaseTransitionPolicy.Reverse(changes: changes),
             reverse
         );
-        var changedArtifact = source with { Artifacts = new Dictionary<string, string> { ["neighbor"] = ("sha256/" + new string(
+        var changedArtifact = source with {
+            Artifacts = new Dictionary<string, string> {
+                ["neighbor"] = ("sha256/" + new string(
             c: 'c',
             count: 64
-        )) } };
+        )),
+            },
+        };
 
         Assert.False(condition: WorldReleaseCompatibility.TryCheckStructuralCompatibility(
             candidate: changedArtifact,
@@ -700,8 +731,12 @@ public sealed class WorldReleaseManagementLawTests {
         );
     }
 
+    private sealed class FailedQualificationRunner(string failure) : IWorldReleaseQualificationRunner {
+        public Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
+            Task.FromResult(result: WorldReleaseQualificationResult.Failed(failure: failure));
+    }
     private sealed class FixedQualificationRunner(WorldReleaseQualificationReceipt receipt) : IWorldReleaseQualificationRunner {
-        public Task<WorldReleaseQualificationReceipt?> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
-            Task.FromResult<WorldReleaseQualificationReceipt?>(result: receipt with { SourceRelease = source.Identity, TargetRelease = target.Identity });
+        public Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest source, WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
+            Task.FromResult(result: WorldReleaseQualificationResult.Qualified(receipt: receipt with { SourceRelease = source.Identity, TargetRelease = target.Identity }));
     }
 }

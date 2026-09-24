@@ -4,9 +4,9 @@ using Puck.Maths;
 namespace Puck.State;
 
 /// <summary>A compiled immutable adjacency table. Absent neighbours are -1. Direction names come from the
-/// topology's own <see cref="IDiscreteLatticeTopology.Directions"/> when authored; the unauthored default matches
-/// what every kind carried before that field existed — Grid N, NE, E, SE, S, SW, W, NW; Hex E, NE, NW, W, SW, SE;
-/// Box the 26 in <see cref="BoxDirectionNames"/>; Ring forward and backward.</summary>
+/// topology's own <see cref="IDiscreteLatticeTopology.Directions"/> when authored; the unauthored defaults are
+/// Grid N, NE, E, SE, S, SW, W, NW; Hex the six in <see cref="TopologyCompilation.HexDirectionNames"/>; Box the 26
+/// in <see cref="BoxDirectionNames"/>; Ring forward and backward.</summary>
 public sealed partial class CompiledTopology {
     private readonly int[] m_neighbours;
     private readonly int[] m_opposite;
@@ -22,13 +22,16 @@ public sealed partial class CompiledTopology {
     private readonly FixedVector3 m_origin;
     private readonly FixedQ4816 m_cellSize;
     private readonly FixedQ4816 m_band;
-    // Authored centres relative to the origin, present for a Graph alone; every other kind derives its centres.
+    // Authored centres relative to the origin, present for a Graph or Tiling alone; every other kind derives its centres.
     private readonly FixedVector3[]? m_cellCentres;
     // Each cell's axial coordinate — (x, z, layer) on a grid, ring, or box, (q, r, 0) on a hex — and its inverse, present
     // for the lattice kinds alone: what makes a translation between two cells carriable to a third.
     private readonly (int X, int Y, int Z)[]? m_coordinates;
     private readonly Dictionary<(int, int, int), int>? m_coordinateIndex;
     private readonly ulong[]? m_directionShiftMasks;
+
+    // Each direction's longest ray, measured on first use; every measurement is the same, so a race only repeats it.
+    private int[]? m_longestRays;
 
     internal CompiledTopology(LatticeTopology source, TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
         int width, int depth, int radius, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
@@ -127,8 +130,9 @@ public sealed partial class CompiledTopology {
     public int CellCount { get; }
     /// <summary>Gets the number of directions at each cell.</summary>
     public int DirectionCount { get; }
-    /// <summary>Gets the declared minimum corner — the spatial frame a <see cref="Kind"/> of
-    /// <see cref="TopologyKind.Grid"/> resolves <see cref="TryCellOf"/>/<see cref="TryOffset"/> against.</summary>
+    /// <summary>Gets the anchored origin <see cref="CellCentre"/> and <see cref="TryCellOf"/> resolve against: a grid
+    /// or box's minimum corner, a hex's origin-cell lattice point, and the point a graph's or tiling's authored
+    /// centres are relative to.</summary>
     public FixedVector3 Origin => m_origin;
     /// <summary>Gets the declared cell edge, world units.</summary>
     public FixedQ4816 CellSize => m_cellSize;
@@ -181,9 +185,12 @@ public sealed partial class CompiledTopology {
             Z: (m_origin.Z + (m_cellSize * (FixedQ4816.FromInteger(value: (planar / m_width)) + Half)))
         );
     }
-    /// <summary>Resolves the grid cell a world position falls in, X/Z only — a board carries one layer, so no
-    /// height test applies. Only <see cref="TopologyKind.Grid"/> carries a rectangular X/Z frame; every other
-    /// kind answers <see langword="false"/>.</summary>
+    /// <summary>Resolves the cell a world position falls in. A <see cref="TopologyKind.Grid"/> resolves X/Z, within
+    /// its vertical band when it declares one; a <see cref="TopologyKind.Box"/> also resolves the layer from Y; a
+    /// <see cref="TopologyKind.Hex"/> rounds X/Z to the nearest axial coordinate within its radius and band; a
+    /// <see cref="TopologyKind.Graph"/> or <see cref="TopologyKind.Tiling"/> takes the nearest authored centre within
+    /// half a cell size, the lowest ordinal on a tie. A <see cref="TopologyKind.Ring"/> has no spatial frame and
+    /// answers <see langword="false"/>.</summary>
     /// <param name="position">The world position (a body's resolved pose).</param>
     /// <param name="cell">The resolved cell ordinal.</param>
     /// <returns>Whether the position lies over a declared cell.</returns>
@@ -390,6 +397,39 @@ public sealed partial class CompiledTopology {
         ? m_neighbours[((cell * DirectionCount) + direction)]
         : -1
     );
+    /// <summary>Returns the most cells a ray read in one direction can hold, from any origin: the walk stops at an edge
+    /// or on returning to its origin, and never takes more than <see cref="CellCount"/> less one step.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <returns>The longest ray's cell count, or 0 for an invalid direction.</returns>
+    /// <remarks>An axial shape's rays are walked once and remembered; a graph or tiling answers the ceiling, since its
+    /// rays are bounded by nothing narrower than the whole cell set.</remarks>
+    public int LongestRay(int direction) {
+        if (((uint)direction) >= ((uint)DirectionCount)) {
+            return 0;
+        }
+        if (Kind is not (TopologyKind.Grid or TopologyKind.Box or TopologyKind.Hex or TopologyKind.Ring)) {
+            return Math.Max(val1: 0, val2: (CellCount - 1));
+        }
+
+        var rays = m_longestRays;
+
+        if (rays is null) {
+            rays = new int[DirectionCount];
+            for (var way = 0; (way < DirectionCount); way++) {
+                for (var origin = 0; (origin < CellCount); origin++) {
+                    var length = 0;
+
+                    for (var cell = Neighbour(cell: origin, direction: way); ((cell >= 0) && (cell != origin) && (length < (CellCount - 1))); cell = Neighbour(cell: cell, direction: way)) {
+                        length++;
+                    }
+                    rays[way] = Math.Max(val1: rays[way], val2: length);
+                }
+            }
+            m_longestRays = rays;
+        }
+
+        return rays[direction];
+    }
     /// <summary>Reads the direction ordinal whose step vector is the negation of <paramref name="direction"/>'s —
     /// compiled once from each direction's own offset rather than assumed from ordinal arithmetic, so an
     /// asymmetrically-ordered direction table (a <see cref="TopologyKind.Box"/>'s 26) still resolves correctly.</summary>
@@ -433,23 +473,44 @@ public sealed partial class CompiledTopology {
         ? m_directionNames[direction]
         : null
     );
-    /// <summary>Attempts to read precomputed 64-bit shift masks for a direction when the topology has at most 64 cells.</summary>
+    /// <summary>Moves every set bit of a cell mask to its neighbour in a direction through the precomputed shift
+    /// table, dropping a bit whose cell has no neighbour that way. The table exists only for a topology of at most
+    /// 64 cells.</summary>
     /// <param name="direction">The direction ordinal.</param>
-    /// <param name="masks">The 64-element span of destination bitmasks indexed by source cell ordinal.</param>
-    /// <returns><see langword="true"/> when precomputed masks are available; otherwise <see langword="false"/>.</returns>
-    public bool TryGetShiftMasks(int direction, out ReadOnlySpan<ulong> masks) {
+    /// <param name="mask">The mask, bit c set for cell ordinal c.</param>
+    /// <param name="shifted">The shifted mask, or zero when no table answers.</param>
+    /// <returns><see langword="true"/> when the precomputed table answered; otherwise <see langword="false"/>.</returns>
+    public bool TryShiftMask(int direction, ulong mask, out ulong shifted) => TryGather(
+        mask: mask,
+        ordinal: direction,
+        ordinalCount: DirectionCount,
+        result: out shifted,
+        table: m_directionShiftMasks
+    );
+
+    // One row of a precomputed per-cell mask table: 64 destination masks per ordinal, indexed by source cell. The
+    // image of a mask is the union of the rows its set bits select.
+    private static bool TryGather(ulong[]? table, int ordinal, int ordinalCount, ulong mask, out ulong result) {
+        result = 0UL;
+
         if (
-            (m_directionShiftMasks is not null) &&
-            (((uint)direction) < ((uint)DirectionCount))
+            (table is null) ||
+            (((uint)ordinal) >= ((uint)ordinalCount))
         ) {
-            masks = m_directionShiftMasks.AsSpan(
-                length: BoardMask.MaxCells,
-                start: (direction * BoardMask.MaxCells)
-            );
-            return true;
+            return false;
         }
-        masks = default;
-        return false;
+
+        var row = table.AsSpan(
+            length: BoardMask.MaxCells,
+            start: (ordinal * BoardMask.MaxCells)
+        );
+
+        while (mask != 0UL) {
+            result |= row[System.Numerics.BitOperations.TrailingZeroCount(value: mask)];
+            mask &= (mask - 1UL);
+        }
+
+        return true;
     }
 }
 public sealed partial class CompiledTopology {
@@ -459,24 +520,19 @@ public sealed partial class CompiledTopology {
 
     private readonly ulong[]? m_elementImageMasks;
 
-    /// <summary>Attempts to read precomputed 64-bit image masks for a point-group element when the topology has at most 64 cells.</summary>
+    /// <summary>Carries every set bit of a cell mask through a point-group element by the precomputed image table.
+    /// The table exists only for a topology of at most 64 cells.</summary>
     /// <param name="element">The element ordinal.</param>
-    /// <param name="masks">The 64-element span of destination bitmasks indexed by source cell ordinal.</param>
-    /// <returns><see langword="true"/> when precomputed masks are available; otherwise <see langword="false"/>.</returns>
-    public bool TryGetImageMasks(int element, out ReadOnlySpan<ulong> masks) {
-        if (
-            (m_elementImageMasks is not null) &&
-            (((uint)element) < ((uint)ElementCount))
-        ) {
-            masks = m_elementImageMasks.AsSpan(
-                length: BoardMask.MaxCells,
-                start: (element * BoardMask.MaxCells)
-            );
-            return true;
-        }
-        masks = default;
-        return false;
-    }
+    /// <param name="mask">The mask, bit c set for cell ordinal c.</param>
+    /// <param name="image">The image mask, or zero when no table answers.</param>
+    /// <returns><see langword="true"/> when the precomputed table answered; otherwise <see langword="false"/>.</returns>
+    public bool TryImageMask(int element, ulong mask, out ulong image) => TryGather(
+        mask: mask,
+        ordinal: element,
+        ordinalCount: ElementCount,
+        result: out image,
+        table: m_elementImageMasks
+    );
 
     /// <summary>Gets the number of elements in the topology's point group, the identity included: 8 for a square
     /// grid, 4 for a rectangle, 12 for a hex board, 1 for a ring.</summary>

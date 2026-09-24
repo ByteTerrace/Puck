@@ -88,11 +88,13 @@ public sealed class WorldExternalOperationJournal {
             target: m_target
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (content is not { } blob) { return new Snapshot(
+        if (content is not { } blob) {
+            return new Snapshot(
             Entries: [],
             Exists: false,
             Version: null
-        ); }
+        );
+        }
         if (
             (blob.Content.Length > m_maximumBytes) ||
             string.IsNullOrEmpty(value: blob.VersionToken)

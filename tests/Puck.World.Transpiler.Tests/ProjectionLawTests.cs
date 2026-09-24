@@ -48,19 +48,16 @@ public class ProjectionLawTests {
             userMessage: $"{mismatch}{Environment.NewLine}{printed}"
         );
     }
-    private static void AssertFormattingKeepsTheDocument(string source, string label, string? sourcePath = null) {
-        var formatted = PuckFormat.Format(source);
+    // `document` is what `source` itself compiles to, which the formatted source must compile to as well.
+    private static void AssertFormattingKeepsTheDocument(string source, JsonObject document, string label, string? sourcePath = null) {
+        var formatted = PuckFormat.Format(source: source);
         var mismatch = JsonMismatch.Find(
             actual: JsonNode.Parse(json: Canonical(node: Compile(
                 label: $"{label}: formatted",
                 source: formatted,
                 sourcePath: sourcePath
             ))),
-            expected: JsonNode.Parse(json: Canonical(node: Compile(
-                label: label,
-                source: source,
-                sourcePath: sourcePath
-            ))),
+            expected: JsonNode.Parse(json: Canonical(node: document)),
             path: label
         );
 
@@ -110,7 +107,6 @@ public class ProjectionLawTests {
     public static TheoryData<string> Constructs() => new(values: ConstructRegistry.Names);
     public static TheoryData<string> PrintExcludedSources() => new(values: PrintExclusions);
     public static TheoryData<string> ShippedSources() => ShippedWorlds.Sources();
-
     [Fact]
     public void TheGeneratedSetCoversEveryRegisteredConstruct() {
         var registered = ConstructRegistry.Names.ToHashSet(comparer: StringComparer.Ordinal);
@@ -159,6 +155,7 @@ public class ProjectionLawTests {
             label: construct
         );
         AssertFormattingKeepsTheDocument(
+            document: document,
             label: construct,
             source: source!
         );
@@ -166,40 +163,26 @@ public class ProjectionLawTests {
     [MemberData(nameof(ShippedSources))]
     [Theory]
     public void AShippedSourceProjects(string relativePath) {
-        var sourcePath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-        var source = File.ReadAllText(path: sourcePath);
+        var sourcePath = ShippedWorlds.PathOf(relativePath: relativePath);
+        var document = ShippedWorlds.Compile(relativePath: relativePath).RequireJson();
 
         if (!PrintExclusions.Contains(value: relativePath, comparer: StringComparer.Ordinal)) {
             AssertPrintsBackToItself(
-                document: Compile(
-                    label: relativePath,
-                    source: source,
-                    sourcePath: sourcePath
-                ),
+                document: document,
                 label: relativePath
             );
         }
         AssertFormattingKeepsTheDocument(
+            document: document,
             label: relativePath,
-            source: source,
+            source: File.ReadAllText(path: sourcePath),
             sourcePath: sourcePath
         );
     }
     [MemberData(nameof(PrintExcludedSources))]
     [Theory]
     public void APrintExcludedSourceStillOutgrowsTheParser(string relativePath) {
-        var sourcePath = Path.Combine(
-            path1: ShippedWorlds.FindDirectory(),
-            path2: relativePath
-        );
-        var printed = WorldDecompiler.Decompile(root: Compile(
-            label: relativePath,
-            source: File.ReadAllText(path: sourcePath),
-            sourcePath: sourcePath
-        ));
+        var printed = WorldDecompiler.Decompile(root: ShippedWorlds.Compile(relativePath: relativePath).RequireJson());
         var diagnostics = WorldCompiler.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: printed

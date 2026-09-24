@@ -39,6 +39,13 @@ public static partial class WorldDefinitionValidator {
                 reason: out var idReason
             )) {
                 errors.Add(item: $"{path}.id {idReason}.");
+            } else if (!GeneratedName.TryValidateAuthored(
+                name: probe.Id,
+                reason: out var generatedReason
+            )) {
+                // A seat-relative probe's instances are keyed '<id>$<seat>' in the probe-id namespace
+                // (WorldProbes.CreateInstance), so an authored id in that form could name another row's instance.
+                errors.Add(item: $"{path}.id {generatedReason}.");
             } else if (!probeIds.Add(item: probe.Id)) {
                 errors.Add(item: $"{path}.id '{probe.Id}' is declared more than once.");
             }
@@ -103,7 +110,10 @@ public static partial class WorldDefinitionValidator {
 
         foreach (var (_, source) in inputs) {
             if (
-                (source is WorldScreenSource.Camera camera) &&
+                WorldImageProducerSettings.TryCamera(
+                    camera: out var camera,
+                    source: source
+                ) &&
                 (camera.Seat is null)
             ) {
                 return true;
@@ -159,21 +169,31 @@ public static partial class WorldDefinitionValidator {
                     source: source
                 );
 
-                if (source is WorldScreenSource.Capture) {
-                    errors.Add(item: $"{socketPath} binds a capture source, but probe kernels do not host capture inputs.");
+                if (
+                    (source is WorldScreenSource.Producer producer) &&
+                    !string.Equals(
+                        a: producer.Id,
+                        b: WorldImageProducerSettings.CameraId,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    errors.Add(item: $"{socketPath} binds producer '{producer.Id}', but probe kernels host only camera producer inputs.");
                 }
-                if (source is WorldScreenSource.Camera camera) {
+                if (WorldImageProducerSettings.TryCamera(
+                    camera: out var camera,
+                    source: source
+                )) {
                     if (
                         hasCameraSeat &&
                         (camera.Seat != cameraSeat)
                     ) {
-                        errors.Add(item: $"{socketPath}.camera.seat must match every other camera socket in the probe; one kernel run can bind only one camera graph.");
+                        errors.Add(item: $"{socketPath}.producer.settings.seat must match every other camera socket in the probe; one kernel run can bind only one camera graph.");
                     } else if (!hasCameraSeat) {
                         hasCameraSeat = true;
                         cameraSeat = camera.Seat;
                     }
                     if (camera.Controls is not null) {
-                        errors.Add(item: $"{socketPath}.camera.controls is not supported on probe inputs; author device controls on a camera screen.");
+                        errors.Add(item: $"{socketPath}.producer.settings.controls is not supported on probe inputs; author device controls on a camera screen.");
                     }
                 }
 

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using Puck.World.Protocol;
 
@@ -5,7 +6,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
     private readonly Lock m_reflowReviewGate = new();
-    private readonly Dictionary<WorldPrincipal, ReflowReview> m_reflowReviews = [];
+    private readonly Dictionary<Principal, ReflowReview> m_reflowReviews = [];
 
     // Host authoring cache bounds; they never determine a simulation result.
     private const int ReflowReviewCapacity = 64;
@@ -20,7 +21,8 @@ public sealed partial class WorldServer {
             m_reflowReviews.Remove(key: key);
         }
     }
-    public QueryAnswer AnswerReflowQuery(WorldQuery query, WorldPrincipal principal) {
+
+    public QueryAnswer AnswerReflowQuery(WorldQuery query, Principal principal) {
         lock (m_reflowReviewGate) {
             ExpireReflowReviews();
             if (query is WorldQuery.ReflowCancel) {
@@ -99,10 +101,25 @@ public sealed partial class WorldServer {
             );
         }
     }
-
+    /// <summary>Returns the task of the actor's preview worker started by <see cref="WorldQuery.ReflowPreview"/>, so a
+    /// caller can await the proposal instead of polling <see cref="WorldQuery.ReflowStatus"/>, which remains the only
+    /// reader of its result. A faulted worker faults this task too.</summary>
+    /// <param name="principal">The actor whose preview to await.</param>
+    /// <returns>The pending worker, or a completed task when the actor has no preview.</returns>
+    public Task ReflowPreviewCompletion(Principal principal) {
+        lock (m_reflowReviewGate) {
+            return (m_reflowReviews.TryGetValue(
+                key: principal,
+                value: out var entry
+            )
+                ? entry.Pending
+                : Task.CompletedTask
+            );
+        }
+    }
     /// <summary>Consumes the actor's reviewed authoring plan. The caller must submit its batch through the
     /// simulation mutation door; this method itself changes no world state.</summary>
-    public bool TryTakeReviewedReflow(WorldPrincipal principal, out WorldPlacementProposal? proposal, out string reason) {
+    public bool TryTakeReviewedReflow(Principal principal, out WorldPlacementProposal? proposal, out string reason) {
         lock (m_reflowReviewGate) {
             ExpireReflowReviews();
             proposal = null;

@@ -11,5 +11,6 @@ public interface IVulkanPhysicalDeviceSelector {
     /// <param name="instance">The Vulkan instance whose devices are considered.</param>
     /// <param name="surface">The surface the device must be able to present to.</param>
     /// <returns>The selected physical device, including its chosen queue families.</returns>
+    /// <exception cref="GpuDeviceUnavailableException">No device on this host can render and present to the surface.</exception>
     VkPhysicalDevice Select(VulkanInstance instance, VulkanSurface surface);
 }

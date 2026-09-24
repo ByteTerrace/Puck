@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 public sealed record SdfWorldRender(
     SdfEngineNode Producer,
     IRenderNode Root
-) {
+) : ICaptureRequestTarget {
     /// <summary>The outermost decorator's capture capability, when the decorated chain has one — set by
     /// <see cref="SdfWorldRenderBuilder.Build"/> right after building the decorator chain, before it is wrapped for
     /// the caller. <see langword="null"/> when no decorator is present (none specified, or resources absent).</summary>
@@ -28,21 +28,17 @@ public sealed record SdfWorldRender(
     /// or the binding bar beneath it, whichever wraps the chain) so the readback sees what the player actually
     /// sees — the 2D overlays composite AFTER <see cref="Producer"/>'s own render. Falls back to <see cref="Producer"/>
     /// directly when the chain has no capture-capable decorator, matching the pre-overlay behavior in that case.
-    /// Callers outside this file never need to name <see cref="ICaptureRequestTarget"/> themselves.</summary>
-    /// <param name="path">The PNG path to write; the caller creates the parent directory.</param>
-    /// <returns>The request whose completion reports the actual PNG write or failure.</returns>
-    /// <exception cref="InvalidOperationException">The render chain already has a pending capture.</exception>
+    /// The request's completion reports the actual PNG write or failure.</summary>
+    /// <param name="request">The unserved request; the caller creates the parent directory of its path.</param>
+    /// <exception cref="InvalidOperationException">The render chain already has a pending capture, or the request is
+    /// terminal.</exception>
     /// <exception cref="ObjectDisposedException">The serving target has been disposed.</exception>
-    public FrameCaptureRequest RequestCapture(string path) {
-        var request = new FrameCaptureRequest(path: path);
-
+    public void RequestCapture(FrameCaptureRequest request) {
         if (CaptureTarget is { } target) {
             target.RequestCapture(request: request);
         } else {
             Producer.RequestCapture(request: request);
         }
-
-        return request;
     }
 }
 /// <summary>
@@ -54,9 +50,9 @@ public sealed record SdfWorldRender(
 public static class SdfWorldRenderBuilder {
     /// <summary>Assembles the SDF world render host a spec describes.</summary>
     /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) forwarded
-    /// unchanged into the built <see cref="SdfEngineNode"/> — resolved once at the composition root; this factory
-    /// never resolves anything from it itself (Puck.Overlays' <c>OverlayServices.Build</c> precedent's one-shot
-    /// shape).</param>
+    /// unchanged into the built <see cref="SdfEngineNode"/> — resolved once at the composition root. The factory reads
+    /// the node's kernels through its <see cref="SdfViewGpuServices.Pipelines"/> cache
+    /// (<see cref="SdfWorldPipelineCache.LoadDeployed"/>).</param>
     /// <param name="spec">The render spec.</param>
     /// <returns>The assembled producer and root.</returns>
     public static SdfWorldRender Build(SdfViewGpuServices services, SdfWorldRenderSpec spec) {
@@ -80,16 +76,15 @@ public static class SdfWorldRenderBuilder {
             frameSource: frameSource,
             height: spec.Height,
             instanceCapacity: spec.InstanceCapacity,
-            kernels: SdfWorldKernels.Load(bytecodeExtension: BytecodeExtension(hostsOnDirectX: spec.HostsOnDirectX)),
+            // The views the same services build read this same deployed set, so a boot reads the kernels once.
+            kernels: services.Pipelines.LoadDeployed(bytecodeExtension: BytecodeExtension(hostsOnDirectX: spec.HostsOnDirectX)),
             programWordCapacity: spec.ProgramWordCapacity,
-            rayQueryEnabled: spec.RayQuery,
             screenSources: spec.ScreenSources,
             screenLights: spec.ScreenLights,
             // Read straight off the frame source (ISdfFrameSource.ScreenSurfaceTransforms, default null) rather than
             // a spec field: this is the ONE place that needs to know the seam exists at all.
             screenSurfaceTransforms: frameSource.ScreenSurfaceTransforms,
             services: services,
-            timingEnabled: spec.Timing,
             viewportCapacity: spec.ViewportCapacity,
             width: spec.Width
         );

@@ -276,8 +276,8 @@ public static class RuleExpressions {
 
                     continue;
                 }
-                if (token.Operation == ExpressionOp.BoardFill) {
-                    stack[(top - 1)] = BoardQueries.FillMask(
+                if (token.Operation == ExpressionOp.BoardRay) {
+                    stack[(top - 1)] = BoardQueries.RayMask(
                         ((BoardNeighbourQuery)token.Board!),
                         stack[(top - 1)]
                     );

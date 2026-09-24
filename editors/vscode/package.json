@@ -200,6 +200,43 @@
                 "id": "puck"
             }
         ],
+        "semanticTokenScopes": [
+            {
+                "language": "puck",
+                "scopes": {
+                    "comment": [
+                        "comment.line.double-slash.puck"
+                    ],
+                    "enumMember": [
+                        "constant.other.enum.puck"
+                    ],
+                    "function": [
+                        "entity.name.function.call.puck"
+                    ],
+                    "keyword": [
+                        "keyword.control.puck"
+                    ],
+                    "number": [
+                        "constant.numeric.decimal.puck"
+                    ],
+                    "operator": [
+                        "keyword.operator.puck"
+                    ],
+                    "property": [
+                        "variable.object.property.puck"
+                    ],
+                    "string": [
+                        "string.quoted.double.puck"
+                    ],
+                    "type": [
+                        "entity.name.type.shape.puck"
+                    ],
+                    "variable": [
+                        "variable.other.readwrite.puck"
+                    ]
+                }
+            }
+        ],
         "snippets": [
             {
                 "language": "puck",
@@ -232,6 +269,7 @@
         "authoring",
         "simulation"
     ],
+    "license": "Apache-2.0",
     "main": "./dist/extension.js",
     "name": "vscode-puck",
     "publisher": "ByteTerrace",

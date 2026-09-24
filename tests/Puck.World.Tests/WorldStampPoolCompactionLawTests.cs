@@ -132,11 +132,13 @@ public sealed class WorldStampPoolCompactionLawTests {
         var solid = Shape(
             id: 0,
             group: 7
-        ) with { Position = new Vector3(
+        ) with {
+            Position = new Vector3(
             x: 0f,
             y: 8f,
             z: 0f
-        ) };
+        ),
+        };
         var cutter = Shape(
             blend: SdfBlendOp.Subtraction,
             group: 7,
@@ -178,7 +180,7 @@ public sealed class WorldStampPoolCompactionLawTests {
         var creation = new WorldPrototype(
             initial.Id,
             initial.Document with {
-            Frames = [new FrameDocument(
+                Frames = [new FrameDocument(
                     Name: "pose",
                     Transforms: [new FrameTransformDocument(
                             Id: 0,
@@ -187,7 +189,7 @@ public sealed class WorldStampPoolCompactionLawTests {
                             Scale: new Vector3(value: .1f)
                         )]
                 )],
-        }
+            }
         );
         var row = new WorldPlacement(
             Id: "station",
@@ -331,9 +333,11 @@ public sealed class WorldStampPoolCompactionLawTests {
         var second = Shape(
             id: 1,
             group: 7
-        ) with { Parent = (inheritMotion
+        ) with {
+            Parent = (inheritMotion
             ? first.Name!.Value
-            : null) };
+            : null),
+        };
         var template = Creation(Shape(id: 0));
         var canonical = CreationCanonicalizer.Canonicalize(
             document: template.Document with {

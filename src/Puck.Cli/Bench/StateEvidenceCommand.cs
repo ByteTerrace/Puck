@@ -1,8 +1,7 @@
 using System.CommandLine;
-using System.Diagnostics;
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text.Json;
+using Puck.Assets;
 
 namespace Puck.Cli.Bench;
 
@@ -10,14 +9,38 @@ namespace Puck.Cli.Bench;
 // the raw instruction rows only: reviewed control-flow formulas, Native AOT symbol extraction, and memory profiles
 // remain separate evidence and this command never manufactures them from a successful tool run.
 internal static class StateEvidenceCommand {
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(value: 30D);
+
+    // The checkout this verb reads the manifest's kernel sources and reference build from.
+    internal static string? RepositoryRoot => Puck.RepositoryPaths.FindRoot();
+
     internal sealed record McaRow(long Latency, decimal ReciprocalThroughput);
     internal sealed record SourceInventory(string Path, string ExpectedSha256, string? ActualSha256, bool Matches);
     internal sealed record KernelInventory(string Id, string EntryPoint, string Symbol, IReadOnlyList<SourceInventory> Sources, IReadOnlyDictionary<string, IReadOnlyList<string>> UnresolvedTargets);
-    internal sealed record EvidenceInventory(string Schema, string ManifestDigest, string Sdk, string RollForward, IReadOnlyList<KernelInventory> Kernels, IReadOnlyDictionary<string, IReadOnlyList<string>> MemoryGaps);
+    internal sealed record CoverageInventory(string Vocabulary, int Registered, int Priced, IReadOnlyList<string> Unmodeled);
+    internal sealed record EvidenceInventory(string Schema, string ManifestDigest, string Sdk, string RollForward, IReadOnlyList<KernelInventory> Kernels, IReadOnlyList<CoverageInventory> Coverage, IReadOnlyDictionary<string, IReadOnlyList<string>> MemoryGaps);
 
-    public static Command Create() {
+    /// <summary>Creates the <c>state-evidence</c> verb, whose tool runs are bounded on <paramref name="clock"/>.</summary>
+    /// <param name="clock">The CLI host's clock.</param>
+    /// <returns>The verb.</returns>
+    public static Command Create(TimeProvider clock) {
+        var capture = new Option<string?>("--capture") {
+            Description = "Capture the reference evidence into this directory: compile both pinned Native AOT lowerings, walk each declared kernel's maximum permitted path, and render the manifest sections that walk establishes.",
+        };
+        var ilc = new Option<string?>("--ilc") {
+            Description = "ILCompiler executable. Default: the manifest's pinned package under the NuGet package root.",
+        };
         var llvmMca = new Option<string?>("--llvm-mca") {
             Description = "llvm-mca executable. Default: PATH, then C:/Program Files/LLVM/bin/llvm-mca.exe on Windows.",
+        };
+        var llvmObjdump = new Option<string?>("--llvm-objdump") {
+            Description = "llvm-objdump executable. Default: PATH, then C:/Program Files/LLVM/bin/llvm-objdump.exe on Windows.",
+        };
+        var nuGetPackages = new Option<string?>("--nuget-packages") {
+            Description = "NuGet package root the pinned ILCompiler and runtime packs are read from. Default: NUGET_PACKAGES, then the user profile's package root.",
+        };
+        var reuseLowering = new Option<bool>("--reuse-lowering") {
+            Description = "Walk an object already present in the capture directory instead of recompiling it. The capture names every object it reuses.",
         };
         var inventory = new Option<bool>("--inventory") {
             Description = "Emit a machine-readable inventory of kernel source integrity and unresolved target/memory evidence instead of running llvm-mca.",
@@ -26,21 +49,42 @@ internal static class StateEvidenceCommand {
             Description = "Write --inventory JSON to this path instead of standard output.",
         };
         var command = new Command(
-            description: "Replay the reference schedule's instruction forms against every pinned llvm-mca target.",
+            description: "Replay the reference schedule's instruction forms against every pinned llvm-mca target, or capture the evidence afresh.",
             name: "state-evidence"
-        ) { llvmMca, inventory, output };
+        ) { capture, ilc, llvmMca, llvmObjdump, nuGetPackages, reuseLowering, inventory, output };
 
-        command.SetAction(action: (parse, cancellationToken) => (parse.GetValue(option: inventory)
-            ? WriteInventoryAsync(parse.GetValue(option: output), cancellationToken)
-            : RunAsync(cancellationToken: cancellationToken, llvmMca: parse.GetValue(option: llvmMca))));
+        command.SetAction(action: (parse, cancellationToken) => {
+            if (parse.GetValue(option: inventory)) { return WriteInventoryAsync(parse.GetValue(option: output), cancellationToken); }
+            if (parse.GetValue(option: capture) is not { } directory) { return RunAsync(cancellationToken: cancellationToken, clock: clock, llvmMca: parse.GetValue(option: llvmMca)); }
+
+            var root = RepositoryRoot;
+
+            if (root is null) {
+                Console.Error.WriteLine(value: "state-evidence: --capture must run inside the Puck checkout.");
+                return Task.FromResult(result: 2);
+            }
+            return ReferenceCapture.RunAsync(
+                clock: clock,
+                cancellationToken: cancellationToken,
+                directory: Path.GetFullPath(path: directory),
+                options: new(
+                    Ilc: parse.GetValue(option: ilc),
+                    LlvmMca: parse.GetValue(option: llvmMca),
+                    LlvmObjdump: parse.GetValue(option: llvmObjdump),
+                    NuGetPackages: parse.GetValue(option: nuGetPackages),
+                    ReuseLowering: parse.GetValue(option: reuseLowering)
+                ),
+                repositoryRoot: root
+            );
+        });
         return command;
     }
 
     private static async Task<int> WriteInventoryAsync(string? output, CancellationToken cancellationToken) {
-        var root = FindRepositoryRoot();
+        var root = RepositoryRoot;
 
         if (root is null) {
-            Console.Error.WriteLine(value: "state-evidence: --inventory must run inside a checkout containing global.json.");
+            Console.Error.WriteLine(value: "state-evidence: --inventory must run inside the Puck checkout.");
             return 2;
         }
         var report = BuildInventory(repositoryRoot: root);
@@ -68,6 +112,12 @@ internal static class StateEvidenceCommand {
             static entry => MemoryGaps(entry: entry)
         );
         var target = ReferenceScheduleManifest.Targets[0];
+        var coverage = ReferenceSchedule.Coverage.Select(selector: static entry => new CoverageInventory(
+            entry.Vocabulary,
+            entry.Registered,
+            entry.Priced,
+            entry.Unmodeled
+        )).ToArray();
 
         return new EvidenceInventory(
             ReferenceScheduleManifest.Schema,
@@ -75,6 +125,7 @@ internal static class StateEvidenceCommand {
             target.Build.Sdk,
             target.Build.GlobalJsonRollForward,
             kernels,
+            coverage,
             memory
         );
     }
@@ -92,44 +143,16 @@ internal static class StateEvidenceCommand {
         string? actual = null;
 
         if (File.Exists(path: path)) {
-            using var stream = File.OpenRead(path: path);
-
-            actual = Convert.ToHexStringLower(inArray: SHA256.HashData(source: stream));
+            actual = ContentPin.OfFile(path: path).Hex;
         }
         return new SourceInventory(source.Path, source.Sha256, actual, string.Equals(a: source.Sha256, b: actual, comparisonType: StringComparison.Ordinal));
     }
-    private static string? FindRepositoryRoot() {
-        for (var directory = new DirectoryInfo(path: Environment.CurrentDirectory); (directory is not null); directory = directory.Parent) {
-            if (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "global.json"))) { return directory.FullName; }
-        }
-        return null;
-    }
     private static long Ceiling(decimal value) => decimal.ToInt64(d: decimal.Ceiling(d: value));
-    private static string? Resolve(string? requested) {
-        if (!string.IsNullOrWhiteSpace(value: requested)) { return Path.GetFullPath(path: requested); }
-
-        var executable = (OperatingSystem.IsWindows() ? "llvm-mca.exe" : "llvm-mca");
-
-        foreach (var directory in (Environment.GetEnvironmentVariable(variable: "PATH") ?? string.Empty).Split(
-            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
-            separator: Path.PathSeparator
-        )) {
-            var candidate = Path.Combine(path1: directory, path2: executable);
-
-            if (File.Exists(path: candidate)) { return candidate; }
-        }
-        if (OperatingSystem.IsWindows()) {
-            var installed = Path.Combine(
-                path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.ProgramFiles),
-                path2: "LLVM/bin/llvm-mca.exe"
-            );
-
-            if (File.Exists(path: installed)) { return installed; }
-        }
-        return null;
-    }
-    private static async Task<int> RunAsync(string? llvmMca, CancellationToken cancellationToken) {
-        var executable = Resolve(requested: llvmMca);
+    private static async Task<int> RunAsync(string? llvmMca, TimeProvider clock, CancellationToken cancellationToken) {
+        var executable = ReferenceTools.Find(
+            name: "llvm-mca",
+            requested: llvmMca
+        );
 
         if ((executable is null) || !File.Exists(path: executable)) {
             Console.Error.WriteLine(value: "state-evidence: llvm-mca was not found; pass the pinned executable with --llvm-mca.");
@@ -144,11 +167,13 @@ internal static class StateEvidenceCommand {
             Console.Error.WriteLine(value: "state-evidence: the manifest does not pin one scheduler version across its cohort.");
             return 2;
         }
-        var versionRun = await TryRunAsync(
+        var versionRun = await ReferenceTools.RunAsync(
             arguments: ["--version"],
             cancellationToken: cancellationToken,
+            clock: clock,
             executable: executable,
-            standardInput: null
+            standardInput: null,
+            timeout: Timeout
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         if (!versionRun.Success) {
@@ -172,7 +197,8 @@ internal static class StateEvidenceCommand {
             var forms = ReferenceScheduleManifest.InstructionForms[target.Family];
             var source = (string.Join(separator: '\n', values: forms.Select(selector: form => form.Form)) + "\n");
 
-            var run = await TryRunAsync(
+            var run = await ReferenceTools.RunAsync(
+                clock: clock,
                 cancellationToken: cancellationToken,
                 executable: executable,
                 arguments: [
@@ -181,7 +207,8 @@ internal static class StateEvidenceCommand {
                     "--instruction-info",
                     "--iterations=1",
                 ],
-                standardInput: source
+                standardInput: source,
+                timeout: Timeout
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (!run.Success) {
@@ -218,6 +245,9 @@ internal static class StateEvidenceCommand {
         }
         if (failures == 0) {
             Console.WriteLine(value: "state-evidence: instruction-service evidence reproduced; kernel formulas, unresolved helper paths, and memory profiles are outside this check.");
+        }
+        foreach (var entry in ReferenceSchedule.Coverage) {
+            Console.WriteLine(value: $"state-evidence: {entry.Vocabulary}: {entry.Priced}/{entry.Registered} operation(s) priced, {entry.Unmodeled.Count} unmodeled.");
         }
         return ((failures == 0) ? 0 : 1);
     }
@@ -283,61 +313,5 @@ internal static class StateEvidenceCommand {
             ));
         }
         return rows;
-    }
-
-    private static async Task<(bool Success, string Output, string Error)> TryRunAsync(
-        string executable,
-        IReadOnlyList<string> arguments,
-        string? standardInput,
-        CancellationToken cancellationToken
-    ) {
-        var start = new ProcessStartInfo(fileName: executable) {
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = (standardInput is not null),
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
-
-        foreach (var argument in arguments) { start.ArgumentList.Add(item: argument); }
-        using var process = new Process { StartInfo = start };
-
-        try {
-            if (!process.Start()) { return (false, string.Empty, $"could not start {executable}"); }
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            return (false, string.Empty, exception.Message);
-        }
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(
-            token1: cancellationToken,
-            token2: CancellationToken.None
-        );
-
-        timeout.CancelAfter(delay: TimeSpan.FromSeconds(value: 30D));
-        var output = process.StandardOutput.ReadToEndAsync(cancellationToken: timeout.Token);
-        var error = process.StandardError.ReadToEndAsync(cancellationToken: timeout.Token);
-
-        try {
-            if (standardInput is not null) {
-                await process.StandardInput.WriteAsync(
-                    buffer: standardInput.AsMemory(),
-                    cancellationToken: timeout.Token
-                ).ConfigureAwait(continueOnCapturedContext: false);
-                process.StandardInput.Close();
-            }
-            await process.WaitForExitAsync(cancellationToken: timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
-            return (
-                (process.ExitCode == 0),
-                await output.ConfigureAwait(continueOnCapturedContext: false),
-                await error.ConfigureAwait(continueOnCapturedContext: false)
-            );
-        } catch (OperationCanceledException) {
-            if (!process.HasExited) { process.Kill(entireProcessTree: true); }
-            await process.WaitForExitAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
-            return (false, string.Empty, (cancellationToken.IsCancellationRequested ? "cancelled" : "timed out after 30 seconds"));
-        } catch (IOException exception) {
-            if (!process.HasExited) { process.Kill(entireProcessTree: true); }
-            await process.WaitForExitAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
-            return (false, string.Empty, exception.Message);
-        }
     }
 }

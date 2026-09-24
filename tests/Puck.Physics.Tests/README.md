@@ -112,12 +112,12 @@ against its own measured numbers, never a guessed threshold:
 
 - **Envelope corner placement window**—the shared mass/inertia placement a heaviest-and-lightest corner pair can
   both invert at, found by real `FixedMassProperties` refusal. Measured: no shared placement exists once size ratio
-  and aspect ratio both compound past the campaign's authored bands (19 of 60 grid cells at the widest ratios
+  and aspect ratio both compound past the authored density and size bands (19 of 60 grid cells at the widest ratios
   tested).
-- **Global unscaled union**—the campaign's cited 43-bit mass / 74-bit inertia figure, re-measured against real
-  kernels over every shipped world scale, density, and box shape. Measured: mass matches at 43 bits; inertia
-  measures 68 bits, not 74—still leaving a single flat 64-bit carrier, so no one inertia placement serves the
-  whole shipped shape set unscaled.
+- **Global unscaled union**—the exponent window mass and inertia need across every shipped world scale, density,
+  and box shape with no per-world placement, measured against real kernels. Measured: mass needs 43 bits and
+  inertia 68, past a single flat 64-bit carrier, so no one inertia placement serves the whole shipped shape set
+  unscaled.
 - **Settle-jitter floor**—a two-point, frictionless rig (light box resting on ground, heavy box resting on light)
   swept over mass ratio `{1,10,100,1000,10000}` and inverse-inertia placement `{40,32,24,20,16,12,9,6,4}`. Measured:
   `FixedRigidScales.RoomScale`'s shipped 40-bit placement never construction-refuses across the whole ratio sweep,
@@ -125,7 +125,7 @@ against its own measured numbers, never a guessed threshold:
   than staying flat—a real property of this frictionless two-point rig's own unconstrained rocking mode, not a
   bit-budget artifact (the confirmatory iteration sweep shows MORE biased-solve iterations leave MORE drift behind
   at these ratios, ruling out under-iteration).
-- **Accuracy floor (BigInteger oracle)**—the genuinely new measurement: a single head-on, no-rotation, point-mass
+- **Accuracy floor (BigInteger oracle)**—a single head-on, no-rotation, point-mass
   impulse computed through the real fixed-point kernel chain, compared against an exact `BigInteger`-rational oracle
   that rounds once at the very end instead of once per stage. Measured: zero ULP divergence at every ratio from 1:1
   to 10000:1.

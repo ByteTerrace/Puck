@@ -285,7 +285,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 destinationName: destination.Name.Value,
                 durability: destination.Durability,
                 referencedDocument: WorldInstanceHost.ResolveReferenceDocument(
-                    documentPath: documentPath,
+                    neighbourKey: documentPath,
                     source: sourceInstance
                 )
             );
@@ -560,8 +560,8 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.placements",
-            description: "Reports the placement census (Immediate; reads the settled state after any pending mutation): one entry per placement row — id, prototypeId, resolved world position/yaw (the parent chain composed), scale, parent, and every facet it carries; a dealt template echoes 'dealt from <row> (<children present> of <row capacity>)' and a dealt child 'dealt by <template>'. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
-            handler: (_, args) => {
+            description: "Reports the placement census (Immediate; reads the settled state after any pending mutation): one entry per placement row — id, prototypeId, resolved world position/yaw (the parent chain composed), scale, parent, and every facet it carries; a dealt template echoes 'dealt from <row> (<children present> of <row capacity>)' and a dealt child 'dealt by <template>'. A dealt child is described as the caller's state disclosure deals it: one dealt from a cell the caller may not read shows the template's own prototype, or is absent when its dealt cell is withheld. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
+            handler: (context, args) => {
                 if (!TryResolveInstance(
                     args: in args,
                     error: out var tokenError,
@@ -571,8 +571,13 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                     return tokenError!.Value;
                 }
 
+                var target = (instance?.Server ?? server);
+
                 return new CommandResult(Output: WithInstanceTag(
-                    text: ((instance?.Server ?? server).DescribePlacements()),
+                    text: target.DescribePlacements(view: WorldStateReadView.Of(
+                        reader: context.Principal,
+                        server: target
+                    )),
                     instance: instance
                 ));
             }

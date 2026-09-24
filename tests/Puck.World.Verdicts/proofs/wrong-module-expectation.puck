@@ -1,0 +1,19 @@
+// The red twin of the module source beside it: the same module, stood up with the same arguments, claiming a
+// plating it was not given. `puck test` must fail this world by name and print the value the gate read.
+
+schema: "puck.world.definition.v1"
+documentId: "wrong-module-expectation"
+
+module armoury(plating) {
+  state {
+    world {
+      slot armour = plating
+    }
+  }
+}
+
+test "the module boots at a plating it was not given" with armoury(plating: 5) {
+  expect {
+    armour == 9
+  }
+}

@@ -609,7 +609,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             ) {
                 // Sixteen bits compare a byte at a time. > and <= swap their operands so every case reads the
                 // borrow out of one subtraction chain rather than needing a signed test.
-                var swap = (compare.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual));
+                var swap = (compare.Comparison is (ExpressionOp.Greater or ExpressionOp.LessOrEqual));
 
                 LoadWide(
                     expression: (swap
@@ -627,7 +627,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     guard: true
                 );
                 emitter.Pop(pair: StackPair.Hl);
-                if (compare.Comparison is (ActionStateComparison.Equal or ActionStateComparison.NotEqual)) {
+                if (compare.Comparison is (ExpressionOp.Equal or ExpressionOp.NotEqual)) {
                     var differs = emitter.NewLabel();
 
                     emitter.Load(
@@ -640,7 +640,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     );
                     emitter.JumpAbsolute(
                         condition: Condition.NotZero,
-                        label: ((compare.Comparison == ActionStateComparison.Equal)
+                        label: ((compare.Comparison == ExpressionOp.Equal)
                         ? fail
                         : differs)
                     );
@@ -652,7 +652,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                         op: AluOp.Compare,
                         source: Reg8.D
                     );
-                    if (compare.Comparison is ActionStateComparison.Equal) {
+                    if (compare.Comparison is ExpressionOp.Equal) {
                         emitter.JumpAbsolute(
                             condition: Condition.NotZero,
                             label: fail
@@ -688,7 +688,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 );
                 // Carry out of the chain is the borrow: set means the first operand is the smaller one.
                 emitter.JumpAbsolute(
-                    condition: ((compare.Comparison is (ActionStateComparison.Less or ActionStateComparison.Greater))
+                    condition: ((compare.Comparison is (ExpressionOp.Less or ExpressionOp.Greater))
                     ? Condition.NoCarry
                     : Condition.Carry),
                     label: fail
@@ -699,7 +699,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
 
             // Popping the saved left operand into B leaves the right one in A, which is the operand order > and <=
             // need; every other comparison wants the left one in A, so it swaps them back through the accumulator.
-            var reversed = (compare.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual));
+            var reversed = (compare.Comparison is (ExpressionOp.Greater or ExpressionOp.LessOrEqual));
 
             Load(
                 expression: compare.Left,
@@ -726,9 +726,9 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             );
             emitter.JumpAbsolute(
                 condition: compare.Comparison switch {
-                    ActionStateComparison.Equal => Condition.NotZero,
-                    ActionStateComparison.NotEqual => Condition.Zero,
-                    ActionStateComparison.Less or ActionStateComparison.Greater => Condition.NoCarry,
+                    ExpressionOp.Equal => Condition.NotZero,
+                    ExpressionOp.NotEqual => Condition.Zero,
+                    ExpressionOp.Less or ExpressionOp.Greater => Condition.NoCarry,
                     _ => Condition.Carry,
                 },
                 label: fail
@@ -1227,7 +1227,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             switch (action.Operation) {
                 case ExpressionOp.Multiply: arithmetic.EmitMultiply(); break;
                 case ExpressionOp.Divide: arithmetic.EmitDivide(); break;
-                case ExpressionOp.Modulo:
+                case ExpressionOp.Remainder:
                     arithmetic.EmitDivide(); emitter.Load(
                     destination: Reg8.A,
                     source: Reg8.C
@@ -1766,7 +1766,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             switch (operation) {
                 case ExpressionOp.Multiply: arithmetic.EmitMultiply(); return;
                 case ExpressionOp.Divide: arithmetic.EmitDivide(); return;
-                case ExpressionOp.Modulo:
+                case ExpressionOp.Remainder:
                     arithmetic.EmitDivide(); emitter.Load(
                     destination: Reg8.A,
                     source: Reg8.C

@@ -24,23 +24,6 @@ public sealed class ShapePanelLawTests {
     private const double DistanceTolerance = 1e-3;
     private const string PrototypeId = "panelled";
 
-    private static void AssertCanonicalizerAccepts(CreationDocument document) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.Empty(collection: violations);
-    }
-    private static void AssertCanonicalizerRefusesNaming(CreationDocument document, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
     private static void AssertSameShape(SdfInstruction expected, SdfInstruction actual) {
         Assert.Equal(
             expected.Op,
@@ -63,8 +46,7 @@ public sealed class ShapePanelLawTests {
             actual.Data1
         );
     }
-    // The dynamic (animated stamp pool) path — mirrors WorldStampPoolBoundLawTests's own EmitPool scaffold, over a
-    // single panelled shape at a body look scale.
+    // The panelled Box a pool law wears at a body look scale.
     private static ShapeDocument BodyShape(Vector3 scale, ShapePanelDocument? panel) => new(
         Id: 0,
         Name: null,
@@ -99,78 +81,19 @@ public sealed class ShapePanelLawTests {
                 z: z
             )
         );
-    private static CreationDocument Document(params ShapeDocument[] shapes) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: shapes,
-            Frames: null
-        );
-    private static SdfProgram EmitPool(Vector3 scale, ShapePanelDocument? panel, float bodyScale = 1f, bool probeWorstCase = false) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: [new(
-                        "#AAAAAA",
-                        null,
-                        null,
-                        null
-                    ), new(
-                        "#5555FF",
-                        null,
-                        null,
-                        null
-                    )],
-                Shapes: [BodyShape(
-                        panel: panel,
-                        scale: scale
-                    )],
-                Frames: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: bodyScale,
-                Motion: WorldLookMotion.Default
-            )],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: probeWorstCase,
-            maxPlacementScale: bodyScale,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static CreationDocument Document(params ShapeDocument[] shapes) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: shapes
+    );
+    private static SdfProgram EmitPool(Vector3 scale, ShapePanelDocument? panel, float bodyScale = 1f) => CreationFixtures.EmitPool(
+        bodyScale: bodyScale,
+        name: PrototypeId,
+        palette: CreationFixtures.GreyAndBlue,
+        shapes: [BodyShape(
+            panel: panel,
+            scale: scale
+        )]
+    );
     // The static per-shape stamp exactly as WorldPlacementStamper's perShape branch emits it: one tight instance,
     // the shape's own material, the creation's whole palette handed through for the panel.
     private static SdfProgram EmitShapeStamp(CreationDocument document) {
@@ -338,7 +261,7 @@ public sealed class ShapePanelLawTests {
             (RecessedPanel with { Inset = 0.04f, Depth = 0.03f })
         );
 
-        AssertCanonicalizerAccepts(document: Document(shape));
+        CreationFixtures.AssertAccepts(document: Document(shape));
         Assert.Equal(
             0.03,
             MeasuredRecessDepth(shape: shape),
@@ -355,17 +278,17 @@ public sealed class ShapePanelLawTests {
         var raiseCell = RecessedPanel with { Depth = -0.31f };
         var plateExtentCell = RecessedPanel with { Depth = 0.39f };
 
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Box,
             PlateScale,
             recessControl
         )));
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Box,
             PlateScale,
             raiseControl
         )));
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -373,7 +296,7 @@ public sealed class ShapePanelLawTests {
             )),
             needle: "depth"
         );
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -381,7 +304,7 @@ public sealed class ShapePanelLawTests {
             )),
             needle: "depth"
         );
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -392,7 +315,7 @@ public sealed class ShapePanelLawTests {
     }
     [Fact]
     public void ANonFiniteDepthIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -402,21 +325,23 @@ public sealed class ShapePanelLawTests {
         );
     [Fact]
     public void ANonFiniteFaceIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
-                (RecessedPanel with { Face = new DocumentVector3(
+                (RecessedPanel with {
+                    Face = new DocumentVector3(
                     x: float.NaN,
                     y: 0f,
                     z: 1f
-                ) })
+                ),
+                })
             )),
             needle: "face"
         );
     [Fact]
     public void ANonFiniteOrNegativeInsetIsRefusedByName() {
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -424,7 +349,7 @@ public sealed class ShapePanelLawTests {
             )),
             needle: "inset"
         );
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -435,7 +360,7 @@ public sealed class ShapePanelLawTests {
     }
     [Fact]
     public void APanelOnADomainFoldedShapeIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -446,7 +371,7 @@ public sealed class ShapePanelLawTests {
         );
     [Fact]
     public void APanelOnAGroupedShapeIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -457,7 +382,7 @@ public sealed class ShapePanelLawTests {
         );
     [Fact]
     public void APanelOnAPlaneIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Plane,
                 Vector3.One,
@@ -482,7 +407,7 @@ public sealed class ShapePanelLawTests {
             id: 1
         );
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 panelled,
                 sibling
@@ -600,7 +525,7 @@ public sealed class ShapePanelLawTests {
     }
     [Fact]
     public void ARaisedPanelOnABoxIsAccepted() =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Box,
             PlateScale,
             RaisedPanel
@@ -704,25 +629,29 @@ public sealed class ShapePanelLawTests {
     }
     [Fact]
     public void ARecessedPanelOnABoxIsAccepted() =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Box,
             PlateScale,
             RecessedPanel
         )));
     [Fact]
     public void AZeroLengthFaceIsRefusedByNameWhileANonUnitOneIsNormalized() {
-        var zero = RecessedPanel with { Face = new DocumentVector3(
+        var zero = RecessedPanel with {
+            Face = new DocumentVector3(
             x: 0f,
             y: 0f,
             z: 0f
-        ) };
-        var control = RecessedPanel with { Face = new DocumentVector3(
+        ),
+        };
+        var control = RecessedPanel with {
+            Face = new DocumentVector3(
             x: 0f,
             y: 0f,
             z: 2f
-        ) };
+        ),
+        };
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -730,7 +659,7 @@ public sealed class ShapePanelLawTests {
             )),
             needle: "face"
         );
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Box,
             PlateScale,
             control
@@ -774,12 +703,12 @@ public sealed class ShapePanelLawTests {
         var control = RecessedPanel with { Inset = 0.19f, Depth = 0.01f };
         var cell = RecessedPanel with { Inset = 0.25f };
 
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             SdfSolidPrimitive.Box,
             PlateScale,
             control
         )));
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -948,9 +877,11 @@ public sealed class ShapePanelLawTests {
         var shape = Shape(
             SdfSolidPrimitive.Box,
             scale
-        ) with { Chamfer = ((chamfer > 0f)
+        ) with {
+            Chamfer = ((chamfer > 0f)
             ? chamfer
-            : null) };
+            : null),
+        };
 
         foreach (var axis in new[] { Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ }) {
             Assert.Equal(
@@ -1194,11 +1125,7 @@ public sealed class ShapePanelLawTests {
     // the envelope — per slot and over the whole program, for a plate on either emission branch.
     [Fact]
     public void ThePoolProbeDominatesALivePanelledSlot() {
-        var probe = EmitPool(
-            scale: UniformPlateScale,
-            panel: RecessedPanel,
-            probeWorstCase: true
-        );
+        var probe = CreationFixtures.PoolProbe;
         var probeScope = FirstScope(program: probe);
 
         foreach (var scale in new[] { UniformPlateScale, PlateScale }) {
@@ -1225,9 +1152,9 @@ public sealed class ShapePanelLawTests {
         foreach (var scale in new[] { UniformPlateScale, PlateScale }) {
             foreach (var panel in new[] { RecessedPanel, RaisedPanel }) {
                 var scaled = FirstScope(program: EmitPool(
-                    scale: scale,
+                    bodyScale: 2f,
                     panel: panel,
-                    bodyScale: 2f
+                    scale: scale
                 ));
                 var authoredTwice = FirstScope(program: EmitPool(
                     scale: (scale * 2f),

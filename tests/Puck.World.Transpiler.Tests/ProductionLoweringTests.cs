@@ -32,7 +32,7 @@ public sealed class ProductionLoweringTests {
             predicate: d => (d.Code == PuckDiagnosticCodes.UnitNotAdmitted)
         );
     }
-    [InlineData("remainder(9007199254740993, 2)", "1")]
+    [InlineData("floorModulo(9007199254740993, 2)", "1")]
     [InlineData("9007199254740993 % 2", "1")]
     [InlineData("9007199254740993 + 2", "9007199254740995")]
     [InlineData("9007199254740993 > 9007199254740992", "1")]
@@ -73,11 +73,11 @@ public sealed class ProductionLoweringTests {
     [Fact]
     public void FormatterPreservesRawAndInterpolatedLiteralValues() {
         const string Source = "value: \"\"\"a:     b\n  indent\n\n{}[]\"\"\"\nother: $\"\"\"a  {1+2}\n   b\"\"\"";
-        var formatted = PuckFormat.Format(Source);
+        var formatted = PuckFormat.Format(source: Source);
 
         Assert.Equal(
             formatted,
-            PuckFormat.Format(formatted)
+            PuckFormat.Format(source: formatted)
         );
         Assert.True(condition: JsonNode.DeepEquals(
             node1: Lower(source: Source),

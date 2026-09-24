@@ -48,8 +48,9 @@ dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests -c Release
 The tests compile authored documents, compare byte identity after a JSON
 round-trip, and execute input, arithmetic, comparison and graphics behavior
 on both native emulators. Separate emitter probes assert instruction effects.
-`AgbVerifyMachineDriver` provides frame-counted input and clock-free bus
-observations. Compilation validates and emits; it does not pretend to prove
+`AgbVerifyMachineDriver` provides frame-counted input, clock-free bus
+observations, and `RunFramesUntil`, which runs until a condition holds and
+fails at a frame cap. Compilation validates and emits; it does not pretend to prove
 an arbitrary player's game correct or run a hidden sample-game verifier.
 
 ## Documentation

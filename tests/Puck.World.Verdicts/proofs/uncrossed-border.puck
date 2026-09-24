@@ -1,0 +1,31 @@
+// The red half of the distributed test's proof: the same two plots and the same border as
+// `../composition/composition.puck`, with the body posed beside the seam and never sent across it. `puck test`
+// exits 1 and the failing line names the world the verdict came from, the gate as written, and the occupancy the
+// far world's rule read.
+
+import "../composition/plot.puck"
+
+entry world north = plot(centre: [0m, 0m, -12m], landingAt: [0, 0, -3], threshold: 3)
+world south = plot(centre: [0m, 0m, 12m], landingAt: [0, 0, 3], threshold: 7)
+
+border north.south, south.north {
+  height: 6m
+  hysteresis: 2m
+}
+
+test "a body that stays put is still seen by the far world" {
+  when {
+    north {
+      seat1: body.pose 0 1 -2 0 0 0 0
+    }
+    ticks 90
+  }
+  expect {
+    north {
+      visited == 1
+    }
+    south {
+      visited == 1
+    }
+  }
+}

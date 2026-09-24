@@ -1,3 +1,5 @@
+schema: "puck.world.definition.v1"
+
 state {
   spaces {
     space lore {
@@ -7,8 +9,15 @@ state {
     }
   }
   world {
-    table said capacity(32) evicts
-    table saidVectors capacity(32) evicts
+    // A table with no cells infers Int, so the Text request table a runtime embedding connection
+    // reads is spelled as an explicit row.
+    row {
+      name: "said"
+      kind: "Text"
+      capacity: 32
+      evicts: true
+    }
+    table saidVectors capacity(32) evicts space(lore)
     table saidStatus capacity(32) evicts
     table intents embeds(intentVectors) {
       directions = "Where is the road north?"

@@ -116,7 +116,7 @@ authoring reuse expanded at compile time; the other is ROM-size reuse called
 at run time. Macro expansion at retail scale explodes the image; a call at
 authoring scale costs a name for nothing.
 
-**D5 — Payload leaves the source.** The committed Tetris source is barely
+**D5 — Payload leaves the source.** The committed tetromino source is barely
 smaller than the JSON it generates and is overwhelmingly tiles, maps, arrays,
 and audio at one scalar per line; a retail game on those proportions would be
 unreviewable.
@@ -128,7 +128,7 @@ and RAM bytes.
 **D7 — The content engines are a library, not engine features.** A text engine,
 an entity dispatcher, a script interpreter, and an audio driver are procedures
 over typed memory composed through `import`, which is what keeps the forge
-from growing a Pokémon-shaped arm.
+from growing an arm shaped like one retail game.
 
 **D8 — Cost stays advice.** Validation refuses what makes an image wrong, never
 what makes it slow.

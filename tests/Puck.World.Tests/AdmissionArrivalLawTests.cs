@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -98,7 +99,7 @@ public sealed class AdmissionArrivalLawTests {
         PartyAllOrNothing: true,
         PeerAdmission: true,
         Members: [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
+                Principal: Principal.Console,
                 PreferredSlot: WorldBodiesLimits.LocalSeatCount,
                 Identity: identity,
                 Source: IntentSource.Live,

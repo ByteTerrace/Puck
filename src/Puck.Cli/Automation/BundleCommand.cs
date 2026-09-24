@@ -1,8 +1,8 @@
 using System.CommandLine;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Puck.Assets;
 
 namespace Puck.Cli.Automation;
 
@@ -34,7 +34,7 @@ internal static class BundleCommand {
                 newChar: '/',
                 oldChar: '\\'
             ),
-                ["sha256"] = Hash(path: file),
+                ["sha256"] = ContentPin.OfFile(path: file).Hex,
             });
         }
         var release = new JsonObject { ["commit"] = commit, ["channel"] = "stable", ["files"] = files };
@@ -90,12 +90,11 @@ internal static class BundleCommand {
                 throw new InvalidDataException(message: $"Invalid or duplicate artifact path: {relative}");
             }
             if (
-                (((string?)file["sha256"]) is not { } hash) ||
-                !Regex.IsMatch(
-                input: hash,
-                pattern: "\\A[a-f0-9]{64}\\z"
+                !ContentPin.TryParseHex(
+                hex: ((string?)file["sha256"]),
+                pin: out var pin
             ) ||
-                (Hash(path: path) != hash)
+                (ContentPin.OfFile(path: path) != pin)
             ) {
                 throw new InvalidDataException(message: $"Artifact checksum mismatch: {relative}");
             }
@@ -121,11 +120,6 @@ internal static class BundleCommand {
         return 0;
     }
 
-    private static string Hash(string path) {
-        using var stream = File.OpenRead(path: path);
-
-        return Convert.ToHexStringLower(inArray: SHA256.HashData(source: stream));
-    }
     private static void ValidateCommit(string commit) {
         if (!Regex.IsMatch(
             input: commit,

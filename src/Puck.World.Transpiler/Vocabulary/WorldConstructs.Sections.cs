@@ -19,7 +19,6 @@ public static partial class WorldConstructs {
         Required: true,
         Summary: summary
     );
-
     private static IReadOnlyList<WorldConstruct> Sections() => [
         new(
             DocumentMember: "host",
@@ -33,13 +32,13 @@ public static partial class WorldConstructs {
         ),
         new(
             DocumentMember: "views",
-            Grammar: "views { layout … pipeline … seatRig … seatControl { … } }",
+            Grammar: "views { layout … pipeline … graph … seatRig … seatControl { … } }",
             Keyword: "views",
             RootArm: WorldRootArm.Views,
             Shape: WorldConstructShape.Section,
             Snippet: "views {\n    $0\n}",
             Sugar: new(Fallback: "the generic value path", Open: true),
-            Summary: "Camera layouts, render pipelines, and the seat rig a participant looks through."
+            Summary: "Camera layouts, render pipelines, frame-graph instances, and the seat rig a participant looks through."
         ),
         new(
             DocumentMember: "views.layouts[]",
@@ -62,6 +61,17 @@ public static partial class WorldConstructs {
             Snippet: "pipeline \"${1:main}\" {\n    $0\n}",
             Sugar: new(Fallback: "the generic value path", Open: true),
             Summary: "One named post-render pipeline."
+        ),
+        new(
+            DocumentMember: "views.graphs[]",
+            Enclosing: "views",
+            Grammar: "graph \"name\" { … }",
+            Keyword: "graph",
+            Members: [QuotedName(key: "name", summary: "The instance's name, which another instance's input names.")],
+            Shape: WorldConstructShape.Row,
+            Snippet: "graph \"${1:main}\" {\n    source: \"$2\"\n}",
+            Sugar: new(Fallback: "the generic value path", Open: true),
+            Summary: "One named instance of a frame graph."
         ),
         new(
             DocumentMember: "views.seatRig",

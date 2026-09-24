@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Collections.Frozen;
 using System.Security.Cryptography;
 using System.Text;
@@ -81,10 +82,12 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
             ArgumentNullException.ThrowIfNull(operation.CreateRequest);
             using var schema = JsonDocument.Parse(operation.Description.InputSchema);
 
-            if (schema.RootElement.ValueKind != JsonValueKind.Object) { throw new ArgumentException(
+            if (schema.RootElement.ValueKind != JsonValueKind.Object) {
+                throw new ArgumentException(
                 message: "Operation schema must be an object.",
                 paramName: nameof(operations)
-            ); }
+            );
+            }
         }
         m_submissions = new(initialCount: m_options.MaximumConcurrentSubmissions);
     }
@@ -103,7 +106,7 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
     /// <exception cref="ArgumentException">The identity, service grant, or world manifest is invalid.</exception>
     /// <exception cref="InvalidOperationException">Client capacity is exhausted, the principal already has a live client, or live extensions are suppressed.</exception>
     /// <exception cref="ObjectDisposedException">The host has been disposed.</exception>
-    public WorldExtensionClient CreateClient(WorldPrincipal principal, IEnumerable<string> allowedOperations,
+    public WorldExtensionClient CreateClient(Principal principal, IEnumerable<string> allowedOperations,
         IEnumerable<WorldCapabilityRequest> worldRequests, int maximumPendingContributions = 32, ObjectBlobNamespace? storage = null) {
         ArgumentNullException.ThrowIfNull(allowedOperations);
         ArgumentNullException.ThrowIfNull(worldRequests);
@@ -182,10 +185,12 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
         client.CheckActive();
         if (!client.Operations.ContainsKey(key: name)) { throw new UnauthorizedAccessException(message: "This client cannot invoke that operation."); }
         ArgumentException.ThrowIfNullOrWhiteSpace(requestKey);
-        if (Encoding.UTF8.GetByteCount(s: requestKey) > 1024) { throw new ArgumentException(
+        if (Encoding.UTF8.GetByteCount(s: requestKey) > 1024) {
+            throw new ArgumentException(
             message: "Request key exceeds its byte budget.",
             paramName: nameof(requestKey)
-        ); }
+        );
+        }
         return new(
             this,
             client,
@@ -205,10 +210,12 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
         );
 
         ArgumentNullException.ThrowIfNull(input);
-        if (Encoding.UTF8.GetByteCount(s: input) > m_options.MaximumInputBytes) { throw new ArgumentException(
+        if (Encoding.UTF8.GetByteCount(s: input) > m_options.MaximumInputBytes) {
+            throw new ArgumentException(
             message: "Operation input exceeds its byte budget.",
             paramName: nameof(input)
-        ); }
+        );
+        }
         if (!await m_submissions.WaitAsync(
             cancellationToken: cancellationToken,
             millisecondsTimeout: 0

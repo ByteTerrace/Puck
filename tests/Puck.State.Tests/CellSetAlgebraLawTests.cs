@@ -1,4 +1,6 @@
 using Puck.Assets.Documents;
+using Puck.Abstractions.Counting;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.State.Tests;
@@ -29,6 +31,7 @@ public sealed class CellSetAlgebraLawTests {
         Assert.True(
             condition: CellSetLowering.TryLower(
                 arena: arena,
+                time: ArenaTime.Origin,
                 expression: expression,
                 reason: out var reason,
                 set: out var set
@@ -322,6 +325,7 @@ public sealed class CellSetAlgebraLawTests {
 
         Assert.False(condition: CellSetLowering.TryLower(
             arena: arena,
+            time: ArenaTime.Origin,
             expression: new CellSetExpression.Both(Items: [
                 Board(
                     high: 2L,
@@ -356,6 +360,7 @@ public sealed class CellSetAlgebraLawTests {
 
         Assert.False(condition: CellSetLowering.TryLower(
             arena: arena,
+            time: ArenaTime.Origin,
             expression: new CellSetExpression.Board(
                 High: 1L,
                 Low: 0L,
@@ -370,6 +375,7 @@ public sealed class CellSetAlgebraLawTests {
         );
         Assert.False(condition: CellSetLowering.TryLower(
             arena: arena,
+            time: ArenaTime.Origin,
             expression: new CellSetExpression.Zone(
                 High: 1L,
                 Low: 0L,
@@ -435,31 +441,165 @@ public sealed class CellSetAlgebraLawTests {
         Assert.False(condition: actual.Contains(index: cells));
         Assert.False(condition: actual.Contains(index: (cells + 63)));
     }
-    [Fact]
-    public void InlineAlgebraAllocatesNothingAfterWarmup() {
-        var arena = BoardArena(
-            depth: 1,
-            width: 256
-        );
-        var expression = new CellSetExpression.Complement(Item: Board(
-            high: 4L,
-            low: 2L
-        ));
 
-        _ = Lower(
-            arena: arena,
-            expression: expression
+    // Every source kind over one arena, each carrying a cell that advances so the live read path is the one measured:
+    // a 256-cell board (the widest set the value holds inline), a zone and a family of keyed rows over four tokens,
+    // and a family of four slots.
+    private static StateArena Carriers() {
+        var advance = new StateAdvance(
+            PerSecondDenominator: 1L,
+            PerSecondNumerator: 1L
         );
-        var before = GC.GetAllocatedBytesForCurrentThread();
+        string[] tokens = ["t0", "t1", "t2", "t3"];
 
-        for (var repeat = 0; (repeat < 100); repeat++) {
-            _ = Lower(
-                arena: arena,
-                expression: expression
-            );
+        StateRow OverTokens(string name) => new(
+            Name: TopologyArenaFixture.Name(value: name),
+            Kind: CellKind.Int,
+            Capacity: tokens.Length,
+            Domain: new StateDomain.KeysOf(Row: TopologyArenaFixture.Name(value: "tokens")),
+            Cells: [.. tokens.Select(selector: (token, index) => new StateCell(
+                    Advance: ((index == 0) ? advance : null),
+                    Key: TopologyArenaFixture.Name(value: token),
+                    Value: CellValue.Int(value: index)
+                ))]
+        );
+        StateRow Slot(int member) => new(
+            Name: TopologyArenaFixture.Name(value: $"hp{member}"),
+            Kind: CellKind.Int,
+            Advance: ((member == 0) ? advance : null),
+            Cells: [new StateCell(
+                    Key: StateRow.SlotKey,
+                    Value: CellValue.Int(value: member)
+                )]
+        );
+        var section = new StateSection(
+            Rows: [
+                new StateRow(
+                    Name: TopologyArenaFixture.Name(value: "tokens"),
+                    Kind: CellKind.Int,
+                    Capacity: tokens.Length,
+                    Cells: [.. tokens.Select(selector: token => new StateCell(
+                            Key: TopologyArenaFixture.Name(value: token),
+                            Value: CellValue.Int(value: 0L)
+                        ))]
+                ),
+                OverTokens(name: "level"),
+                OverTokens(name: "lv0"),
+                OverTokens(name: "lv1"),
+                Slot(member: 0),
+                Slot(member: 1),
+                Slot(member: 2),
+                Slot(member: 3),
+                new StateRow(
+                    Name: TopologyArenaFixture.Name(value: "board"),
+                    Kind: CellKind.Int,
+                    Domain: new StateDomain.CellsOf(
+                        Empty: 0L,
+                        Topology: "map"
+                    )
+                ),
+            ],
+            Families: [
+                new StateFamily(
+                    Name: TopologyArenaFixture.Name(value: "lv"),
+                    Size: 2
+                ),
+                new StateFamily(
+                    Name: TopologyArenaFixture.Name(value: "hp"),
+                    Size: 4
+                ),
+            ],
+            Lattices: [new LatticeTopology.Grid(
+                    Name: "map",
+                    Origin: new DocumentVector3(
+                        x: 0f,
+                        y: 0f,
+                        z: 0f
+                    ),
+                    CellSize: 1f,
+                    Width: 16,
+                    Depth: 16
+                )]
+        );
+        var arena = new StateArena(
+            catalog: StateCatalog.Compile(section: section),
+            options: null,
+            section: section,
+            time: ArenaTime.Origin
+        );
+
+        for (var cell = 0; (cell < 256); cell++) {
+            Assert.True(condition: arena.TryWriteBoardCell(
+                cell: cell,
+                reason: out var reason,
+                rowOrdinal: 8,
+                value: (cell % 5),
+                write: StateWriteKind.Set
+            ), userMessage: reason);
         }
+
+        return arena;
+    }
+    private static CellSetExpression Source(string kind, long low, long high) => kind switch {
+        "board" => new CellSetExpression.Board(High: high, Low: low, Row: TopologyArenaFixture.Name(value: "board")),
+        "zone" => new CellSetExpression.Zone(High: high, Low: low, Row: TopologyArenaFixture.Name(value: "level")),
+        "tokenFamily" => new CellSetExpression.Family(High: high, Low: low, Name: TopologyArenaFixture.Name(value: "lv")),
+        _ => new CellSetExpression.Family(High: high, Low: low, Name: TopologyArenaFixture.Name(value: "hp")),
+    };
+
+    public static TheoryData<string, string> SourcePairs => new() {
+        { "board", "board" },
+        { "zone", "zone" },
+        { "tokenFamily", "tokenFamily" },
+        { "slotFamily", "slotFamily" },
+        { "zone", "slotFamily" },
+        { "tokenFamily", "zone" },
+    };
+
+    // Each window opens with a collection, so a cache the lowering holds only weakly is rebuilt inside every window and
+    // cannot pass as a one-off; without it, whether such a rebuild is seen depends on another thread's garbage.
+    [MemberData(nameof(SourcePairs))]
+    [Theory]
+    public void LoweringUnionIntersectionAndComplementAllocatesNothingAfterWarmupOrACollection(string left, string right) {
+        var arena = Carriers();
+        var time = ArenaTime.At(
+            engineTick: (2UL * ((ulong)Puck.Maths.FixedTickConversion.TicksPerSecond)),
+            tick: 60UL
+        );
+        var expression = new CellSetExpression.Both(Items: [
+            new CellSetExpression.Any(Items: [
+                Source(high: 1L, kind: left, low: 0L),
+                Source(high: 3L, kind: right, low: 2L),
+                new CellSetExpression.Nothing(),
+            ]),
+            new CellSetExpression.Complement(Item: Source(high: 0L, kind: right, low: 0L)),
+            new CellSetExpression.Everything(),
+        ]);
+
+        Assert.True(
+            condition: CellSetLowering.TryLower(
+                arena: arena,
+                expression: expression,
+                reason: out var reason,
+                set: out var warm,
+                time: in time
+            ),
+            userMessage: reason
+        );
+        Assert.False(condition: warm.IsEmpty);
         Assert.Equal(
-            actual: (GC.GetAllocatedBytesForCurrentThread() - before),
+            actual: AllocationWindow.Least(window: () => {
+                GC.Collect();
+                for (var repeat = 0; (repeat < 100); repeat++) {
+                    _ = CellSetLowering.TryLower(
+                        arena: arena,
+                        expression: expression,
+                        reason: out _,
+                        set: out _,
+                        time: in time
+                    );
+                }
+            }),
             expected: 0L
         );
     }
@@ -469,6 +609,7 @@ public sealed class CellSetAlgebraLawTests {
 
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => CellSetLowering.TryLower(
             arena: arena,
+            time: ArenaTime.Origin,
             expression: new CellSetExpression.Nothing(),
             elements: int.MaxValue,
             set: out _,

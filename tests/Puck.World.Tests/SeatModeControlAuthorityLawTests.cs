@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -23,7 +24,7 @@ public sealed class SeatModeControlAuthorityLawTests {
     // ApplyCommand(SetControl) runs the SAME acting-principal Drive gate the fly control application relies on: a
     // denial leaves the body's source untouched (reset to Live first, so the observation is clean either way), an
     // accept latches Idle.
-    private static bool IdledTargetBody(WorldFixture fixture, WorldPrincipal actor) {
+    private static bool IdledTargetBody(WorldFixture fixture, Principal actor) {
         fixture.Server.Body(index: TargetBody)!.SetIntentSource(source: IntentSource.Live);
         fixture.Server.ApplyCommand(command: new WorldCommand.SetControl(
             Principal: actor,
@@ -38,9 +39,9 @@ public sealed class SeatModeControlAuthorityLawTests {
     public void ActorLackingDriveOverTargetBodyIsRefused_ActorHoldingDriveSucceeds() {
         using var fixture = Fixtures.FreshServer();
 
-        var actor = WorldPrincipal.Seat(slot: 1);
+        var actor = Principal.Seat(slot: 1);
         var driveOverTarget = new WorldGrant(
-            Principal: actor,
+            Grantee: actor,
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: TargetBody),
             Exclusive: false
@@ -49,7 +50,7 @@ public sealed class SeatModeControlAuthorityLawTests {
         // Both bodies must be live: a local seat's body is minted on Join, not at construction, and the observation
         // reads the target body's source directly.
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
-            Principal: WorldPrincipal.Seat(slot: TargetBody),
+            Principal: Principal.Seat(slot: TargetBody),
             Slot: TargetBody,
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
@@ -71,7 +72,7 @@ public sealed class SeatModeControlAuthorityLawTests {
                 // The one discriminating fact reversed: the actor now holds Drive over the target body only.
                 fixture.Server.Grant(
                     grant: driveOverTarget,
-                    actor: WorldPrincipal.Console
+                    actor: Principal.Console
                 );
 
                 return IdledTargetBody(

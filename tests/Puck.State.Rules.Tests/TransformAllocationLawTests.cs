@@ -1,5 +1,6 @@
 using System.Reflection;
 
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Rules.Tests;
@@ -70,10 +71,6 @@ public sealed class TransformAllocationLawTests {
             From: "rankValue",
             Row: "deck"
         ), 0L),
-        ("push", new StateTransform.Push(
-            Row: "log",
-            Value: 3L
-        ), 0L),
         ("clearEnclosed", new StateTransform.ClearEnclosed(
             From: "0",
             Lower: 1L,
@@ -90,23 +87,11 @@ public sealed class TransformAllocationLawTests {
             action();
         }
 
-        var measured = 0L;
-
-        for (var window = 0; (window < 2); window++) {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-
-            var before = GC.GetAllocatedBytesForCurrentThread();
-
+        return AllocationWindow.Measure(window: () => {
             for (var repeat = 0; (repeat < firings); repeat++) {
                 action();
             }
-
-            measured = (GC.GetAllocatedBytesForCurrentThread() - before);
-        }
-
-        return measured;
+        });
     }
     private static long PerFiring(ArenaEffectHost host, ArenaTransform transform) {
         var arena = host.Arena;

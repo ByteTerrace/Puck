@@ -21,40 +21,13 @@ namespace Puck.Maths.Tests;
 internal static class PresentedZetaClaims {
     private const ulong UnitOneRaw = (1UL << 32);
 
-    /// <summary>Builds the codiscrete quiver on a given number of objects at any material: every ordered pair is an
-    /// arrow, so the algebra IS the matrix algebra of that order. A private copy of the same small helper every
-    /// unit-interval subject already carries, kept local so this file calls into no other law file.</summary>
-    private static ChargedPresentation<TValue, TOps> CodiscreteQuiver<TValue, TOps>(int order, TOps material)
-        where TOps : struct, IMaterialOps<TValue, TOps> {
-        var arrows = new (int Source, int Target, TValue Weight)[(order * order)];
-
-        for (var source = 0; (source < order); ++source) {
-            for (var target = 0; (target < order); ++target) { arrows[((source * order) + target)] = (source, target, material.One); }
-        }
-
-        return Presentations.Quiver<TValue, TOps>(
-            arrows: arrows,
-            material: material,
-            objectCount: order
-        );
-    }
     private static ulong DrawRaw(ref ulong counter) {
         counter += 1UL;
 
-        return (MixIndex(index: counter) % (UnitOneRaw + 1UL));
+        return (Domains.SplitMix64(index: counter) % (UnitOneRaw + 1UL));
     }
     private static long Key(int source, int target, int order) =>
         ((source * order) + target);
-    // ---- SplitMix64 index mixer: a pure function of a running counter, never System.Random and never wall-clock ----
-
-    private static ulong MixIndex(ulong index) {
-        var mixed = (index + 0x9E3779B97F4A7C15UL);
-
-        mixed = ((mixed ^ (mixed >> 30)) * 0xBF58476D1CE4E5B9UL);
-        mixed = ((mixed ^ (mixed >> 27)) * 0x94D049BB133111EBUL);
-
-        return mixed ^ (mixed >> 31);
-    }
     /// <summary>Rounds an exact non-negative dyadic value to the closed-unit grid, ties to even — re-derived here
     /// rather than borrowed from <see cref="UnitInterval32"/> or from <c>Oracles.cs</c>, which is the whole point of
     /// an oracle.</summary>
@@ -166,11 +139,11 @@ internal static class PresentedZetaClaims {
         const int Order = 5;
         const int Exponent = 9;
 
-        var likelyAlgebra = PresentedAlgebra<UnitInterval32, MostLikelyPathMaterial>.Create(presentation: CodiscreteQuiver<UnitInterval32, MostLikelyPathMaterial>(
+        var likelyAlgebra = PresentedAlgebra<UnitInterval32, MostLikelyPathMaterial>.Create(presentation: Subjects.CodiscreteQuiver<UnitInterval32, MostLikelyPathMaterial>(
             material: default,
             order: Order
         ));
-        var tropicalAlgebra = PresentedAlgebra<FixedQ4816, TropicalMaterial>.Create(presentation: CodiscreteQuiver<FixedQ4816, TropicalMaterial>(
+        var tropicalAlgebra = PresentedAlgebra<FixedQ4816, TropicalMaterial>.Create(presentation: Subjects.CodiscreteQuiver<FixedQ4816, TropicalMaterial>(
             material: default,
             order: Order
         ));

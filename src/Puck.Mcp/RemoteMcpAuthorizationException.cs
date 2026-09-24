@@ -3,7 +3,9 @@ using System.Text.Json;
 
 namespace Puck.Mcp;
 
-/// <summary>A trusted service's request for interactive user authorization, translated to an HTTP bearer challenge.</summary>
+/// <summary>A trusted service's request for interactive user authorization, translated to an HTTP bearer challenge:
+/// of the request being authorized when thrown before dispatch, or of the caller's next request when a downstream
+/// service rejects the delegated token after dispatch.</summary>
 public sealed class RemoteMcpAuthorizationException : Exception {
     /// <summary>Creates a bounded authorization challenge. The resource server retains its configured issuer and scope.</summary>
     /// <param name="claims">Optional JSON claims request; never a raw header or token.</param>

@@ -8,26 +8,6 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary><c>if</c>/<c>else if</c>/<c>else</c> lowering to <c>ActionEffect.If</c> and its decompiler
 /// inverse.</summary>
 public class ConditionalEffectSyntaxTests {
-    // JsonValue<T>.GetValue<T> refuses cross-numeric-type reads (long vs decimal vs double), and which CLR type an
-    // emitted literal carries depends on whether it was integral.
-    private static double AsDouble(JsonNode? node) => node switch {
-        JsonValue v when v.TryGetValue<int>(value: out var i) => i,
-        JsonValue v when v.TryGetValue<long>(value: out var l) => l,
-        JsonValue v when v.TryGetValue<double>(value: out var d) => d,
-        JsonValue v when v.TryGetValue<decimal>(value: out var m) => ((double)m),
-        _ => throw new InvalidOperationException(message: $"'{node?.ToJsonString()}' is not a number"),
-    };
-    private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string body) {
-        var source = $"schema: \"puck.world.definition.v1\"\n\n{body}";
-        var compilation = WorldCompiler.Compile(
-            cancellationToken: TestContext.Current.CancellationToken,
-            source: source
-        );
-
-        Assert.NotNull(@object: compilation.Json);
-
-        return (compilation.Json, compilation.Diagnostics);
-    }
     private static JsonObject FirstRuleEffect(JsonObject json) {
         var rules = Assert.IsType<JsonArray>(@object: json["rules"]);
         var rule = Assert.IsType<JsonObject>(@object: rules[0]);
@@ -37,7 +17,7 @@ public class ConditionalEffectSyntaxTests {
 
     [Fact]
     public void IfElseLowersToTheIfEffectWithConditionThenAndElse() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 if hp <= 0 {
                     alive = 0
@@ -85,7 +65,7 @@ public class ConditionalEffectSyntaxTests {
         );
         Assert.Equal(
             0,
-            AsDouble(node: thenEffect["value"])
+            LoweredNumbers.AsDouble(node: thenEffect["value"])
         );
 
         var elseArr = Assert.IsType<JsonArray>(@object: effect["else"]);
@@ -93,12 +73,12 @@ public class ConditionalEffectSyntaxTests {
 
         Assert.Equal(
             1,
-            AsDouble(node: elseEffect["value"])
+            LoweredNumbers.AsDouble(node: elseEffect["value"])
         );
     }
     [Fact]
     public void IfWithNoElseOmitsTheElseKeyEntirely() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 if hp <= 0 {
                     alive = 0
@@ -116,7 +96,7 @@ public class ConditionalEffectSyntaxTests {
     }
     [Fact]
     public void ElseIfChainsNestAsAnIfEffectInsideTheElseArray() {
-        var (json, diagnostics) = Lower(body: """
+        var (json, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 if a == 1 {
                     x = 1
@@ -144,25 +124,25 @@ public class ConditionalEffectSyntaxTests {
 
         Assert.Equal(
             2,
-            AsDouble(node: nestedCondition["value"])
+            LoweredNumbers.AsDouble(node: nestedCondition["value"])
         );
         var nestedElse = Assert.IsType<JsonArray>(@object: nestedIf["else"]);
         var nestedElseEffect = Assert.IsType<JsonObject>(@object: nestedElse[0]);
 
         Assert.Equal(
             3,
-            AsDouble(node: nestedElseEffect["value"])
+            LoweredNumbers.AsDouble(node: nestedElseEffect["value"])
         );
     }
     [Fact]
     public void IfUsesTheSamePredicateLoweringAsWhen() {
-        var whenGate = Lower(body: """
+        var whenGate = WorldSources.Lower(body: """
             rule "r" {
                 when a == 1
                 flag = 1
             }
             """).Json;
-        var ifCondition = Lower(body: """
+        var ifCondition = WorldSources.Lower(body: """
             rule "r" {
                 if a == 1 {
                     flag = 1
@@ -185,7 +165,7 @@ public class ConditionalEffectSyntaxTests {
     }
     [Fact]
     public void IfInsideATransactionCompiles() {
-        var (_, diagnostics) = Lower(body: """
+        var (_, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 transaction {
                     if a == 1 {
@@ -204,7 +184,7 @@ public class ConditionalEffectSyntaxTests {
     }
     [Fact]
     public void RepeatInsideAnIfBranchStillRefusesAsPuck037() {
-        var (_, diagnostics) = Lower(body: """
+        var (_, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 if a == 1 {
                     repeat 4 as k {
@@ -221,7 +201,7 @@ public class ConditionalEffectSyntaxTests {
     }
     [Fact]
     public void IfElseLoweringDecompilesAndRecompilesToTheSameJson() {
-        var (original, diagnostics) = Lower(body: """
+        var (original, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 if a == 1 {
                     x = 1

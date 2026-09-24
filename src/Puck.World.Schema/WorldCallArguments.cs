@@ -18,8 +18,9 @@ public enum WorldArgumentForm : byte {
     /// <summary>Free text.</summary>
     Text,
 }
-/// <summary>The form of every member of every <c>$type</c> arm the document model declares, read from the model:
-/// a member's <see cref="WorldNameRegistry"/> role where it carries one, and its C# type otherwise.</summary>
+/// <summary>The form of every member of every <c>$type</c> arm the document model declares, read from the model's
+/// shape (<see cref="WorldModelShape"/>): a member's <see cref="WorldNameRegistry"/> role where it carries one, and
+/// its C# type otherwise.</summary>
 /// <remarks>A source spells an arm as <c>discriminator(member: value, …)</c>, and the discriminator alone names the
 /// arm there, so arms that share a discriminator and a member name must agree on its form;
 /// <see cref="Conflicts"/> lists the ones that do not.</remarks>
@@ -31,10 +32,12 @@ public static class WorldCallArguments {
         FrozenDictionary<(Type Context, string Discriminator), Type> PositionedArms,
         IReadOnlyList<string> Conflicts
     );
+
     private static readonly Lazy<CallTable> Table = new(valueFactory: Build);
 
+    // The table reads what the model declares — each type's members, its polymorphic arms and the arms the document
+    // adds at runtime — from the model's generated shape, so building it describes no type.
     private static CallTable Build() {
-        var options = WorldJsonContext.Default.Options;
         var forms = new Dictionary<(string Discriminator, string Member), WorldArgumentForm>();
         var words = new Dictionary<(string Discriminator, string Member), HashSet<string>>();
         var arms = new Dictionary<string, Type>(comparer: StringComparer.Ordinal);
@@ -60,35 +63,23 @@ public static class WorldCallArguments {
                 continue;
             }
 
-            JsonTypeInfo? info;
+            var shape = WorldModelShape.Of(type: type);
 
-            try {
-                info = options.GetTypeInfo(type: type);
-            } catch (Exception failure) when ((failure is NotSupportedException or InvalidOperationException)) {
-                info = null;
-            }
-
-            if (info?.PolymorphismOptions is { } polymorphism) {
-                foreach (var derived in polymorphism.DerivedTypes) {
-                    if (derived.TypeDiscriminator is string discriminator) {
-                        _ = arms.TryAdd(key: discriminator, value: derived.DerivedType);
-                        positionedArms[(type, discriminator)] = derived.DerivedType;
-                        positionedArms[(derived.DerivedType, discriminator)] = derived.DerivedType;
-                        Record(arm: derived.DerivedType, discriminator: discriminator);
+            if (shape is { Described: true }) {
+                foreach (var derived in shape.Arms) {
+                    if (derived.Discriminator is string discriminator) {
+                        _ = arms.TryAdd(key: discriminator, value: derived.Type);
+                        positionedArms[(type, discriminator)] = derived.Type;
+                        positionedArms[(derived.Type, discriminator)] = derived.Type;
+                        Record(arm: derived.Type, discriminator: discriminator);
                     }
-                    pending.Push(item: derived.DerivedType);
+                    pending.Push(item: derived.Type);
                 }
             }
-            if (info is { Kind: JsonTypeInfoKind.Object }) {
-                foreach (var property in info.Properties) {
-                    pending.Push(item: property.PropertyType);
-                }
-            } else {
-                foreach (var property in type.GetProperties(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)) {
-                    if (property.GetIndexParameters().Length == 0) {
-                        pending.Push(item: property.PropertyType);
-                    }
-                }
+            foreach (var member in ((shape is { Described: true, Kind: JsonTypeInfoKind.Object })
+                ? shape.Members
+                : (shape?.Properties ?? []))) {
+                pending.Push(item: member.Type);
             }
         }
 
@@ -101,28 +92,24 @@ public static class WorldCallArguments {
         );
 
         void Record(Type arm, string discriminator) {
-            JsonTypeInfo info;
-
-            try {
-                info = options.GetTypeInfo(type: arm);
-            } catch (Exception failure) when ((failure is NotSupportedException or InvalidOperationException)) {
+            if (WorldModelShape.Of(type: arm) is not { Described: true } shape) {
                 return;
             }
 
-            foreach (var property in info.Properties) {
-                if (property.IsExtensionData || (property.Get is null)) {
+            foreach (var property in shape.Members) {
+                if (((property.Access & WorldModelAccess.ExtensionData) != 0) || ((property.Access & WorldModelAccess.Read) == 0)) {
                     continue;
                 }
 
                 var key = (discriminator, property.Name);
-                var form = FormOf(property: property);
+                var form = FormOf(member: property);
 
                 if (form == WorldArgumentForm.Choice) {
                     if (!words.TryGetValue(key: key, value: out var admitted)) {
                         words[key] = admitted = new(comparer: StringComparer.Ordinal);
                     }
 
-                    admitted.UnionWith(other: Enum.GetNames(enumType: WorldNameRegistry.Unwrap(type: property.PropertyType)));
+                    admitted.UnionWith(other: Enum.GetNames(enumType: WorldNameRegistry.Unwrap(type: property.Type)));
                 }
 
                 if (forms.TryGetValue(key: key, value: out var recorded) && (recorded != form)) {
@@ -134,10 +121,8 @@ public static class WorldCallArguments {
             }
         }
     }
-    private static WorldArgumentForm FormOf(JsonPropertyInfo property) {
-        var (declaringType, member) = WorldNameRegistry.ResolveMember(property: property);
-
-        if (WorldNameRegistry.TryResolve(declaringType: declaringType, field: out var field, member: member, propertyType: property.PropertyType)) {
+    private static WorldArgumentForm FormOf(WorldModelMember member) {
+        if (WorldNameRegistry.TryResolve(declaringType: member.DeclaringType, field: out var field, member: member.Member, propertyType: member.Type)) {
             return (field.Role switch {
                 WorldNameRole.Names => WorldArgumentForm.Name,
                 WorldNameRole.Key => WorldArgumentForm.Key,
@@ -146,11 +131,11 @@ public static class WorldCallArguments {
             });
         }
 
-        var leaf = WorldNameRegistry.Unwrap(type: property.PropertyType);
+        var leaf = WorldNameRegistry.Unwrap(type: member.Type);
 
         // A holder's own `name` declares it; a declaration is no reference, and a declared name need not be one
         // bare word.
-        if (string.Equals(a: property.Name, b: "name", comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(a: member.Name, b: "name", comparisonType: StringComparison.Ordinal)) {
             return WorldArgumentForm.Unclassified;
         }
         if ((leaf == typeof(StateChannelRef)) || (leaf == typeof(CellName))) {
@@ -197,23 +182,19 @@ public static class WorldCallArguments {
         valueFactory: static type => BuildMembers(owner: type)
     ).GetValueOrDefault(key: member);
     private static FrozenDictionary<string, MemberMetadata> BuildMembers(Type owner) {
-        JsonTypeInfo info;
-
-        try {
-            info = WorldJsonContext.Default.Options.GetTypeInfo(type: owner);
-        } catch (Exception failure) when ((failure is NotSupportedException or InvalidOperationException)) {
+        if (WorldModelShape.Of(type: owner) is not { Described: true } shape) {
             return FrozenDictionary<string, MemberMetadata>.Empty;
         }
 
         var members = new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal);
 
-        foreach (var property in info.Properties) {
-            if (!property.IsExtensionData) {
-                var type = WorldNameRegistry.Unwrap(type: property.PropertyType);
+        foreach (var property in shape.Members) {
+            if ((property.Access & WorldModelAccess.ExtensionData) == 0) {
+                var type = WorldNameRegistry.Unwrap(type: property.Type);
 
                 members[property.Name] = new MemberMetadata(
                     Type: type,
-                    Form: FormOf(property: property),
+                    Form: FormOf(member: property),
                     Choices: (type.IsEnum ? Enum.GetNames(enumType: type).ToFrozenSet(comparer: StringComparer.OrdinalIgnoreCase) : null)
                 );
             }
@@ -231,6 +212,7 @@ public static class WorldCallArguments {
         ArgumentNullException.ThrowIfNull(argument: discriminator);
 
         var table = Table.Value;
+
         return ((baseType is null)
             ? table.Arms.GetValueOrDefault(key: discriminator)
             : table.PositionedArms.GetValueOrDefault(key: (WorldNameRegistry.Unwrap(type: baseType), discriminator)));

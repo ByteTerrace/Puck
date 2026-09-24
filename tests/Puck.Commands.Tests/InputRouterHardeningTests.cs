@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.Commands.Tests;
@@ -345,27 +346,25 @@ public sealed class InputRouterHardeningTests {
             );
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
         var observedEntries = 0;
+        var next = 1_024UL;
 
-        for (var tick = 1_024UL; (tick < 2_048UL); tick++) {
-            CaptureAxis(
-                router: router,
-                tick: tick
-            );
-            observedEntries += router.SnapshotForTick(
-                tick: tick,
-                windowEndTick: ulong.MaxValue
-            ).Lanes[0].Entries.Count;
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        Assert.True(condition: (observedEntries > 0));
         Assert.Equal(
-            actual: allocated,
+            actual: AllocationWindow.Least(window: () => {
+                for (var end = (next + 1_024UL); (next < end); next++) {
+                    CaptureAxis(
+                        router: router,
+                        tick: next
+                    );
+                    observedEntries += router.SnapshotForTick(
+                        tick: next,
+                        windowEndTick: ulong.MaxValue
+                    ).Lanes[0].Entries.Count;
+                }
+            }),
             expected: 0L
         );
+        Assert.True(condition: (observedEntries > 0));
     }
     [Fact]
     public void CaptureRefusesANegativeSlotThatIsNotTheUnresolvedSentinel() {
@@ -723,8 +722,8 @@ public sealed class InputRouterHardeningTests {
         );
     }
 
-    private sealed class ConsolePrincipal : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
+    private sealed class ConsolePrincipal : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Console;
     }
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;

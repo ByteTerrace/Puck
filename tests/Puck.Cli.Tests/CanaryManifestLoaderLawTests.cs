@@ -79,7 +79,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         // orphanDirectory deliberately gets no canary.json — the "has no canary.json" refusal.
     }
 
-    private static string LegManifest(string id, string worldPrefix) =>
+    private static string LegManifest(string id, string worldPrefix, string relaunch = "") =>
         $$"""
         {
           "id": "{{id}}",
@@ -87,12 +87,11 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
           "binding": "a synthetic manifest for the loader's own tolerance law",
           "bootShape": "headless",
           "requirements": [],
-          "seconds": 1,
           "timeoutSeconds": 10,
           "positive": {
             "world": "{{worldPrefix}}positive-world.json",
             "script": "positive.script.txt",
-            "commands": [ { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" } ],
+            "commands": [ { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" } ],{{relaunch}}
             "expect": [ { "type": "line", "name": "clean-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true } ]
           },
           "discriminating": {
@@ -111,50 +110,50 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         Assert.Equal(
             expected: 1,
             actual: CanaryCommand.SuiteExit(
-                runExit: 0,
+                kind: CanaryCommand.CanarySelectionKind.Automatic,
                 refusedCount: 1,
-                kind: CanaryCommand.CanarySelectionKind.Automatic
+                runExit: 0
             )
         );
         Assert.Equal(
             expected: 1,
             actual: CanaryCommand.SuiteExit(
-                runExit: 0,
+                kind: CanaryCommand.CanarySelectionKind.All,
                 refusedCount: 1,
-                kind: CanaryCommand.CanarySelectionKind.All
+                runExit: 0
             )
         );
         Assert.Equal(
             expected: 1,
             actual: CanaryCommand.SuiteExit(
-                runExit: 0,
+                kind: CanaryCommand.CanarySelectionKind.Capability,
                 refusedCount: 1,
-                kind: CanaryCommand.CanarySelectionKind.Capability
+                runExit: 0
             )
         );
         Assert.Equal(
             expected: 0,
             actual: CanaryCommand.SuiteExit(
-                runExit: 0,
+                kind: CanaryCommand.CanarySelectionKind.Ids,
                 refusedCount: 1,
-                kind: CanaryCommand.CanarySelectionKind.Ids
+                runExit: 0
             )
         );
         Assert.Equal(
             expected: 0,
             actual: CanaryCommand.SuiteExit(
-                runExit: 0,
+                kind: CanaryCommand.CanarySelectionKind.All,
                 refusedCount: 0,
-                kind: CanaryCommand.CanarySelectionKind.All
+                runExit: 0
             )
         );
         // A real failure never softens into a skip report.
         Assert.Equal(
             expected: 2,
             actual: CanaryCommand.SuiteExit(
-                runExit: 2,
+                kind: CanaryCommand.CanarySelectionKind.All,
                 refusedCount: 1,
-                kind: CanaryCommand.CanarySelectionKind.All
+                runExit: 2
             )
         );
     }
@@ -165,6 +164,135 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
                 recursive: true
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+        }
+    }
+    // A relaunch names the document the first boot writes by its bare file name in the run directory; a path, which
+    // could reach outside that directory, is refused by name.
+    [InlineData("saved.world.json", true)]
+    [InlineData("../saved.world.json", false)]
+    [InlineData("nested/saved.world.json", false)]
+    [Theory]
+    public void ARelaunchNamesItsSavedDocumentByABareFileName(string world, bool loads) {
+        var goodDirectory = Path.Combine(
+            path1: m_root,
+            path2: "tests",
+            path3: "Puck.World.Canaries",
+            path4: "good-one"
+        );
+
+        Directory.Delete(
+            path: Path.Combine(
+                path1: m_root,
+                path2: "tests",
+                path3: "Puck.World.Canaries",
+                path4: "orphan-one"
+            )
+        );
+        File.WriteAllText(
+            contents: LegManifest(
+                id: "good-one",
+                relaunch: $$"""
+
+                "relaunch": { "world": "{{world}}", "script": "positive.script.txt", "commands": [ { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" } ] },
+                """,
+                worldPrefix: "tests/Puck.World.Canaries/good-one/"
+            ),
+            path: Path.Combine(
+                path1: goodDirectory,
+                path2: "canary.json"
+            )
+        );
+
+        var loaded = CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: m_root,
+            strict: true
+        );
+
+        Assert.Equal(
+            actual: loaded,
+            expected: loads
+        );
+        if (loads) {
+            Assert.Equal(
+                actual: manifests[0].Positive.Relaunch?.WorldFileName,
+                expected: world
+            );
+            Assert.Null(@object: manifests[0].Discriminating.Relaunch);
+        } else {
+            Assert.Contains(
+                actualString: error,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "must be a bare file name"
+            );
+        }
+    }
+    // A package is prepared in the run directory under a bare directory name the runner owns, from a canary file, and
+    // what it alters is a logical path inside the package; anything that could reach elsewhere is refused by name.
+    [InlineData("\"output\": \"tint\"", null)]
+    [InlineData("\"output\": \"tint\", \"alter\": \"lib/tint.hlsl\"", null)]
+    [InlineData("\"output\": \"../tint\"", "must be a bare directory name")]
+    [InlineData("\"output\": \"state\"", "must be a bare directory name")]
+    [InlineData("\"output\": \"tint\", \"alter\": \"../tint.hlsl\"", "alter must be a logical path")]
+    [InlineData("\"output\": \"tint\", \"alter\": \"/tint.hlsl\"", "alter must be a logical path")]
+    [Theory]
+    public void APackageIsPreparedUnderABareNameAndAltersOnlyItsOwnFiles(string members, string? refusal) {
+        var goodDirectory = Path.Combine(
+            path1: m_root,
+            path2: "tests",
+            path3: "Puck.World.Canaries",
+            path4: "good-one"
+        );
+
+        Directory.Delete(
+            path: Path.Combine(
+                path1: m_root,
+                path2: "tests",
+                path3: "Puck.World.Canaries",
+                path4: "orphan-one"
+            )
+        );
+        File.WriteAllText(
+            contents: LegManifest(
+                id: "good-one",
+                relaunch: $$"""
+
+                "package": { "source": "positive.script.txt", {{members}} },
+                """,
+                worldPrefix: "tests/Puck.World.Canaries/good-one/"
+            ),
+            path: Path.Combine(
+                path1: goodDirectory,
+                path2: "canary.json"
+            )
+        );
+
+        var loaded = CanaryManifestLoader.TryLoadAll(
+            error: out var error,
+            manifests: out var manifests,
+            refused: out _,
+            repositoryRoot: m_root,
+            strict: true
+        );
+
+        Assert.Equal(
+            actual: loaded,
+            expected: (refusal is null)
+        );
+        if (refusal is null) {
+            Assert.Equal(
+                actual: manifests[0].Positive.Package?.OutputName,
+                expected: "tint"
+            );
+            Assert.Null(@object: manifests[0].Discriminating.Package);
+        } else {
+            Assert.Contains(
+                actualString: error,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: refusal
+            );
         }
     }
     [Fact]

@@ -10,6 +10,26 @@ public static class FixedSaturate {
     /// <param name="right">The right addend.</param>
     /// <returns>The saturated sum.</returns>
     public static FixedQ4816 Add(FixedQ4816 left, FixedQ4816 right) => FixedQ4816.FromRawBits(value: ToInt64(value: (((Int128)left.Value) + right.Value)));
+    /// <summary>Adds two vectors componentwise, clamping each component to the representable extremes instead of
+    /// wrapping.</summary>
+    /// <param name="left">The left addend.</param>
+    /// <param name="right">The right addend.</param>
+    /// <returns>The componentwise saturated sum: each component is <see cref="Add(FixedQ4816, FixedQ4816)"/> of the
+    /// matching pair, so one component saturating leaves the others exact.</returns>
+    public static FixedVector3 Add(FixedVector3 left, FixedVector3 right) => new(
+        X: Add(
+            left: left.X,
+            right: right.X
+        ),
+        Y: Add(
+            left: left.Y,
+            right: right.Y
+        ),
+        Z: Add(
+            left: left.Z,
+            right: right.Z
+        )
+    );
     /// <summary>Clamps a widened accumulator into the <see cref="long"/> range and narrows it.</summary>
     /// <param name="value">The widened value.</param>
     /// <returns><paramref name="value"/> narrowed, or the nearer <see cref="long"/> extreme when it lies outside.</returns>

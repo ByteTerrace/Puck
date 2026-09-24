@@ -331,7 +331,6 @@ public sealed partial class WorldBody {
         m_restingHoldTicks = 0UL;
         return true;
     }
-
     /// <summary>Returns the velocity an impulse would leave a rigid body at, starting from
     /// <paramref name="velocity"/> rather than the body's own, and changes nothing: the admission
     /// <see cref="TryApplyRigidImpulse"/> decides by, asked ahead of the act.</summary>
@@ -418,26 +417,21 @@ public sealed partial class WorldBody {
     }
 
     private static bool TryAdd(FixedVector3 left, FixedVector3 right, out FixedVector3 sum) {
-        static bool TryAddRaw(long left, long right, out long result) {
-            result = unchecked((left + right));
-            return (((left ^ result) & (right ^ result)) >= 0L);
-        }
-
         if (
-            !TryAddRaw(
+            !BinaryIntegerFunctions.TryAdd(
             left: left.X.Value,
             right: right.X.Value,
-            result: out var x
+            sum: out var x
         ) ||
-            !TryAddRaw(
+            !BinaryIntegerFunctions.TryAdd(
             left: left.Y.Value,
             right: right.Y.Value,
-            result: out var y
+            sum: out var y
         ) ||
-            !TryAddRaw(
+            !BinaryIntegerFunctions.TryAdd(
             left: left.Z.Value,
             right: right.Z.Value,
-            result: out var z
+            sum: out var z
         )
         ) {
             sum = FixedVector3.Zero;
@@ -551,11 +545,7 @@ public sealed partial class WorldBody {
             return default;
         }
 
-        Span<FixedBodyColliderVolume> scratch = stackalloc FixedBodyColliderVolume[1];
-        var volumes = ScaledColliderVolumes(
-            scratch: scratch,
-            volumes: collider.Volumes
-        );
+        var volumes = ScaledColliderVolumes();
 
         return volumes[0];
     }
@@ -696,13 +686,7 @@ public sealed partial class WorldBody {
         var subTicks = (stepTicks / unchecked((ulong)derivedSubsteps));
         var leftoverTicks = (stepTicks - (subTicks * unchecked((ulong)derivedSubsteps)));
         var grounded = false;
-        // Hoisted out of the substep loop: the local-frame collider volumes are constant for the whole tick (only
-        // position/orientation move per substep), so this scales once rather than up to SubstepCeiling times.
-        Span<FixedBodyColliderVolume> staticContactScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        var scaledColliderVolumes = ScaledColliderVolumes(
-            volumes: collider.Volumes,
-            scratch: staticContactScratch
-        );
+        var scaledColliderVolumes = ScaledColliderVolumes();
 
         for (var sub = 0; (sub < derivedSubsteps); sub++) {
             // The remainder rides the first substep so the sum of every substep's ticks is exactly stepTicks.
@@ -739,7 +723,7 @@ public sealed partial class WorldBody {
                     orientation: in m_orientation,
                     position: ref bodyOrigin,
                     previousPosition: in previousBodyOrigin,
-                    up: in UnitY,
+                    up: FixedVector3.UnitY,
                     velocity: ref velocity,
                     volumes: scaledColliderVolumes
                 );
@@ -784,7 +768,7 @@ public sealed partial class WorldBody {
                 // against the still-true contact.
                 var groundNormal = ((resolution.GroundNormal != FixedVector3.Zero)
                     ? resolution.GroundNormal
-                    : UnitY
+                    : FixedVector3.UnitY
                 );
 
                 m_rigidGroundMissStreak = 0;

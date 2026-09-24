@@ -41,12 +41,13 @@ never a Vulkan or DirectX type by name.
   available for comparisons. Authored curvature shading uses four neighboring
   samples and the primary hit's distance. Programs with shading-only details
   need a fifth sample because their shading field differs from the march field.
-  The four neighboring samples run through one loop: spelling out four VM calls
-  duplicates substantial shader code and measured slower on the RTX 4070.
+  Keep the four curvature samples in one loop: each spelled-out VM call
+  duplicates the whole inlined interpreter.
 - *Shading-only detail shapes:* a shape instruction flagged
-  `SdfInstruction.Detail` is invisible to every march (beam, fine, shadow, AO)
-  and appears only in the hit-only normal/material re-evaluation `renderView`
-  runs at an already-found surface point—a seam or rivet too thin for the
+  `SdfInstruction.Detail` is invisible to every march (beam, primary, shadow, AO)
+  and appears only in the hit-only re-evaluations at an already-found surface
+  point: the surface pass's normal (`sdfResolveSurface`) and the views pass's
+  material re-resolve in `renderView`. A seam or rivet too thin for the
   footprint-relative march to resolve at distance stays a crisp mark instead
   of dotting out. Compiled rigid leaves retain the same detail and secondary
   mode gates as the generic scalar and gradient interpreters. When packing proves
@@ -62,15 +63,18 @@ never a Vulkan or DirectX type by name.
 
 ## The render pipeline
 
-Ten kernels run per frame: `sdf-frame-upload.comp` (frame data copied to
-device-local buffers) → `sdf-sky.comp` (a direct, un-culled pass that
+Ten kernels run per frame: `sdf-frame-upload.comp` (the frame data that
+changed, copied into persistent device-local tables; see
+[what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
 fills every source pixel with the authored sky, before any tile is culled)
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
 (cone march over the tile-masked field) → `sdf-cull-args.comp` →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) → the views
 kernel (materials, lighting and diagnostics) → the composite pass (split-screen assembly).
-`SdfWorldEngine.PassLabels` names them for per-pass GPU timing. The views
+`SdfWorldEngine.PassLabels` names them for the per-pass work counts the engine
+publishes through `Work` once a submission completes; the node or view that
+owns an engine owns its ledger, so counts survive a rebuild. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest
@@ -80,8 +84,10 @@ The hit buffer reserves an 80-byte record per active pixel. Primary traversal pr
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
-their combined query count. Each producer has a compute barrier before its
-consumer. These four dispatches share indirect bounds and live view dimensions,
+their combined query count. Each consumer's buffer transition orders the producer's
+record writes before it. Views binds the record read-only, and every hit pass binds the
+beam's tile planes read-only, so a buffer a pass only reads is never held in a
+read-write state. These four dispatches share indirect bounds and live view dimensions,
 and skip child views. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
 The buffer reserves `width × height × viewportCapacity × 80` bytes so changing
@@ -148,9 +154,11 @@ Camera visibility alone never excludes an exact AO candidate. Explicit fast AO
 and camera-tile shadows remain approximation options. Shadow and ambient passes
 each use their own 8 KiB candidate mask.
 
-`SdfWorldEngine`'s construction options (`SdfWorldEngineOptions`) freeze the
-program word capacity, instance capacity, and dynamic-transform capacity for
-the lifetime of the engine; `UploadProgram` is the single owner of every
+`SdfWorldEngine`'s construction options (`SdfWorldEngineOptions`) set an
+initial program-word and instance reserve and a fixed dynamic-transform
+capacity. `UploadProgram` grows the program-word and instance buffers when a
+program outgrows them; it throws when a program needs more dynamic-transform
+slots than the engine was built with. It is the single owner of every
 per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. Composition probes reserve
 `SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
@@ -178,6 +186,44 @@ manifests shipped in this project's `Assets/Shaders/Sdf/` tree
 today), selected by a world document's `render.extensions[].id`; this project
 carries no per-pass C#.
 
+## Pipelines build off the frame thread
+
+Creating a compute pipeline is where the driver translates a kernel to native
+code. With its cache cold, after a kernel or driver change, that can take
+seconds per pipeline, and the engine has about fourteen of them. So the engine
+never creates one. `SdfWorldPipelines.Build` creates the whole set, and
+`SdfEngineNode`, `SdfCameraView`, and `WorldSessionView` lease it from
+`SdfWorldPipelineCache`, which the composition hands them on
+`SdfViewGpuServices`. The cache keeps one set per device, kernel set and
+brick-pipeline choice: the first lease starts its build on the thread pool
+through `Puck.Hosting.BackgroundBuild`, and every other holder of the same key
+shares it, so a world with many camera views builds one set for all of them.
+The engine node has a brick pool and its views do not, so a World with offscreen
+views builds two sets: the node's and one its views share. The cache also reads each backend's deployed kernels once, and it
+counts the pipelines and shader modules it creates under its own
+`gpu.sdf-pipelines` source rather than in any node's or view's ledger.
+
+A holder takes its lease off the frame thread the first time it produces a
+frame. Until the set is ready the node returns an empty surface and a view
+returns its last image, or no signal. The frame thread keeps draining the
+console and stepping the simulation meanwhile, so a `world.wait` or
+`pipeline.wait` still reaches its deadline. The one exception is the offscreen
+host with a capture armed: it steps no further tick until the capture is served
+or refused, and a capture refused for outlasting the hold names the node's
+`UnservedCaptureReason`, "the engine's pipelines never installed" (see
+[the World guide](../Puck.World/README.md#usage)). The node's hosted child panes keep
+stepping and producing too, so a pane builds and installs its own pipelines
+while the engine's are still pending. A holder keeps its lease across engine
+rebuilds, such as a capacity or export-factory change, and releases it on
+device loss and disposal. The last lease on a set waits out any build still in
+flight before disposing the set: nothing may be created on a device that is
+being torn down.
+
+Each backend also keeps a persistent pipeline cache per device, so a warm start
+translates nothing. See [Vulkan](../../docs/rendering/vulkan.md#pipeline-cache)
+and [Direct3D 12](../../docs/rendering/directx.md#pipeline-library). A pipeline
+build writes the cache to disk from its own thread when it finishes.
+
 ## Reload compiled shaders
 
 After compiling HLSL, a running `Puck.World` accepts:
@@ -187,19 +233,27 @@ world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
 world.shaders.status
 ```
 
-Omit the directory to read the deployed assets. The request is pending until
-the next produced frame handles it; status reports `applied`, `unchanged`, or
-`failed`, with a generation and changed pipeline count. Compile before issuing
-the command. Source edits alone do not change a running GPU pipeline.
+Omit the directory to read the deployed assets. The request stays pending while
+the bytecode loads and the changed pipelines are created on the thread pool;
+status then reports `applied`, `unchanged`, or `failed`, with a generation and
+changed pipeline count. Compile before issuing the command. Source edits alone
+do not change a running GPU pipeline.
 
-`SdfEngineNode.RequestShaderReload` queues the work; `SdfWorldEngine.ReloadKernels`
-owns the render-thread transaction. It builds changed pipelines using the
-existing binding descriptions, drains outstanding frames, and checks the beam
-and all three views variants' ISA on the GPU before retiring the old pipelines.
-A failed load or validation keeps the previous kernels. Buffers, images, scene
-programs, animation, and baked bricks remain allocated; shadow history and the
-frame reuse decision are invalidated. Unchanged bytecode skips pipeline creation
-and the GPU drain. Device-loss recovery uses the last successfully loaded set.
+`SdfEngineNode.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
+creates replacements for the kernels whose bytecode changed, using the existing
+binding descriptions, off the frame thread. `SdfWorldEngine.InstallReload` then
+owns the render-thread transaction: it drains outstanding frames, swaps the
+pipelines, and checks the ISA of every march pipeline on the GPU (beam,
+primary, surface, ambient, and the three views variants) before retiring the
+old ones. A failed load or validation keeps the previous kernels. Buffers,
+images, scene programs, animation, and baked bricks remain allocated; only the
+descriptor bindings the ISA probe borrowed and the frame-reuse signature are
+reset, so the next frame rebinds and renders. Unchanged bytecode creates no
+pipeline and causes no GPU drain. Device-loss recovery uses the last
+successfully loaded set, and a loss during a reload fails that request. A
+reload replaces pipelines in place, so the node first takes its set out of the
+cache's sharing; when another engine on the device leases the same set, the
+request fails instead.
 
 This is the primary SDF engine's compute-kernel reload. Child engines and
 overlay/postprocess decorators own separate pipelines. Changing host bindings,
@@ -212,12 +266,19 @@ fixed-geometry room, a sculpted scene, an authoring pool, or a debug takeover
 each become one list entry rather than one hand-written program-build method.
 `SdfCompositionFrameSource` composes a fixed emitter list into one
 `ISdfFrameSource`, assigning each emitter a contiguous dynamic-transform slot
-range and rebuilding only on a revision change.
+range and rebuilding only on a revision change. Its table persists across
+frames and `SdfMovedTransforms` records which ranges each frame's emitters
+repacked, so every engine consuming the frame stages only what moved since it
+last rendered.
 
-`SdfAnchor`/`ISdfAnchorSource`/`SdfAnchorTable` is the engine-side pose
-registry a camera rig resolves against (`Views.SdfCameraView.Resolve` is its
-only consumer). `Puck.SdfVm.Views` holds the camera-rig shapes
-(`OrbitRig`/`FollowRig`/`FixedRig`/`FirstPersonRig`/`DollyRig`) and
+`SdfAnchor` is one resolved pose and `ISdfAnchorSource` resolves an anchor id
+to it. `Views.SdfCameraView.Resolve` and `Puck.World`'s `WorldScreenBinder`
+resolve camera anchors through that interface. The live sources are
+`Puck.World.Client`'s `WorldClient` and `FixedAnchorSource`
+(`WorldCameraRigCompiler.cs`) and the entity-part and ranked-candidate sources
+in `WorldScreenBinder.CameraViews.cs`. `SdfAnchorTable`, a name-keyed
+`ISdfAnchorSource`, has no users. `Puck.SdfVm.Views` holds the camera-rig shapes
+(`OrbitRig`/`FollowRig`/`OrientedFollowRig`/`FixedRig`/`FirstPersonRig`) and
 `ViewStack`, the budgeted round-robin registry for offscreen view content
 (`SdfCameraView`/`WorldSessionView`) with the
 self-reference rule that keeps a screen wired to its own view from
@@ -240,7 +301,7 @@ seams, the total length and `Sample`'s returned position/yaw.
 
 `SdfCameraView.ExportFactory` puts that view's offscreen engine into export
 mode (`SdfWorldEngineOptions.CreateOutputImage` returning an
-`IGpuExportableStorageImage`): the same rendered image both keeps serving
+`IGpuExportableImage`): the same rendered image both keeps serving
 `Resolve`'s same-device view handle (a jumbotron still samples it unchanged)
 and exposes `ExportSharedHandle` for a same-adapter, cross-API consumer to
 open. Setting the factory after the engine already exists retires it and keeps
@@ -252,36 +313,39 @@ reader wires `TryBeginExportWrite`/`EndExportWrite`: `Resolve` then holds the
 last completed image while the reader owns its lease and publishes the next
 image only after export-mode submission drains the producer queue.
 
-## Debug and bench tooling
+## Debug tooling
 
-`Puck.SdfVm.Debug` carries the fullscreen SDF-debug takeover
-(`SdfDebugMode`/`SdfDebugRenderer`/`SdfDebugScene`), the gallery tour
-(`SdfGalleryScene`), the drift monolith
-(`SdfDriftMonolith`—a calibrated cross-backend parity amplifier), and the
-`sdf.bench` synthetic-workload ladder
-(`SdfBenchScene`/`SdfBenchWorkloads`).
+`Puck.SdfVm.Debug` holds a fullscreen SDF-debug takeover
+(`SdfDebugRenderer`/`SdfDebugController`/`SdfDebugScene`), a gallery tour
+(`SdfGalleryScene`), and a drift monolith (`SdfDriftMonolith`). No host
+constructs them and no `sdf.*` console verb is registered, so none of them is
+reachable from a running world. Use `world.debug-view` for live diagnostics.
 
 ## Shader build
 
 `dotnet build src/Puck.SdfVm -c Release` runs the DirectX Shader Compiler
 in place in the source tree and requires `dxc` on the path (override with
-`/p:DxcCommand=path\to\dxc`); commit the regenerated `.spv`/`.dxil` bytecode
-and `.hash` sidecars alongside the source change. `ValidateShaderBytecodeSources`
-fails the build on any committed bytecode without a matching same-stem `.hlsl`
+`/p:DxcCommand=path/to/dxc`). The `.spv`/`.dxil` bytecode and `.hash` sidecars
+are ignored build outputs; never commit them. `ValidateShaderBytecodeSources`
+fails the build on any bytecode file without a matching same-stem `.hlsl`
 source; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
 source or its sidecar. The recipe is `build/Shaders.targets` (`Puck.Shaders`).
 
 ## Verification
 
-`puck parity` (`dotnet src/Puck.Cli/publish/Puck.Cli.dll parity`) is the one
-live automated GPU check over this engine: it boots the authored parity world
-offscreen on both backends and checks scheduled captures for content, exact
-state hashes, and per-tile pixel differences. The Post battery that once
-exercised every kernel and ISA path is quarantined with `Puck.Post` and is
-not run—say so plainly rather than implying coverage that does not exist.
-The [`sdf-world` skill](../../.claude/skills/sdf-world/SKILL.md) carries the
-settled C#↔HLSL sync-pair contracts and engine semantics this project must
-never re-derive or accidentally fork.
+The host-side law suites, `tests/Puck.SignedDistance.Tests` (ISA packing,
+Lipschitz analysis, parts, rigid leaves, the instance grid) and
+`tests/Puck.SdfVm.Tests` (kernel variants, camera programs, environment
+packing), run with `dotnet test`. `puck parity` boots the authored parity
+world offscreen on both backends and checks scheduled captures for content,
+exact state hashes, and per-tile pixel differences. The path-profile fixture
+is booted by hand on each backend and compared with `puck parity compare`;
+the [parity README](../../tests/Puck.Parity/README.md) has the recipe. GPU
+kernel behavior outside the parity stations is not verified by any machine
+check.
+The [`rendering` skill](../../.claude/skills/rendering/SKILL.md) carries the
+C#↔HLSL sync-pair contracts this project and `Puck.SignedDistance` must change
+together.
 
 ## Capture completion
 

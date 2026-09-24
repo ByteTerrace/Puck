@@ -157,12 +157,12 @@ public sealed partial class WorldIdentity {
 
         return FixedQ4816.FromDouble(value: value);
     }
-    // Mints the next monotonic sequence key for rowName's derived "<row>-seq" Int slot counter — reads its current
+    // Mints the next monotonic sequence key for rowName's derived "<row>$seq" Int slot counter — reads its current
     // value (0 if the counter row does not exist yet), increments it, persists the increment, and returns the
     // incremented value's decimal string as a CellName. Deterministic: no wall clock, no RNG — the identical
     // command sequence always mints the identical keys, on every run and every replay.
     private bool TryNextSequenceKey(CellName rowName, out CellName key, out string reason) {
-        var seqRowName = CellName.Parse(candidate: $"{rowName}-seq");
+        var seqRowName = WorldIdentityRows.Sequence(row: rowName);
         var next = 1L;
 
         if (TryReadState(
@@ -321,7 +321,7 @@ public sealed partial class WorldIdentity {
     /// — the ONE append primitive a self-authored chat log and a cross-document delivery into a bounded inbox both
     /// use (see <c>Server.WorldOwnedWorlds.Decide</c>'s text arm), so the two can never disagree about eviction
     /// order, key uniqueness, or determinism. The cell's key comes from <paramref name="rowName"/>'s own derived
-    /// <c>&lt;row&gt;-seq</c> monotonic counter (see the private sequence minter below), never a tick or wall-clock
+    /// <c>&lt;row&gt;$seq</c> monotonic counter (see the private sequence minter below), never a tick or wall-clock
     /// value — two fresh runs of the identical command sequence always mint identical keys.</summary>
     /// <param name="rowName">The already-declared bounded, evicting text row to append to.</param>
     /// <param name="text">The text to append.</param>
@@ -378,22 +378,14 @@ public sealed partial class WorldIdentity {
             return false;
         }
 
-        if (arena.TryEvictionVictim(
-            key: out var victim,
-            rowOrdinal: handle.Ordinal
-        )) {
-            evictedKey = arena.Keys[victim];
-        }
-
-        if (!arena.TryMint(
+        if (!arena.TryMintEvicting(
+            evicted: out evictedKey,
             key: out _,
             name: key,
             reason: out reason,
             rowOrdinal: handle.Ordinal,
             value: CellValue.Text(value: text)
         )) {
-            evictedKey = null;
-
             return false;
         }
 
@@ -522,7 +514,7 @@ public sealed partial class WorldIdentity {
         Document = Document.WithWorldState(rows: state);
         m_factsRevision++;
     }
-    /// <summary>Validates that any space in an identity document sharing a name with a host space satisfies <see cref="StateSpace.HasSameIdentity"/>.</summary>
+    /// <summary>Validates that any space in an identity document sharing a name with a host space carries the same <see cref="StateSpace.Identity"/>.</summary>
     public static bool TryValidateSpacesAgainstHost(IReadOnlyList<StateSpace>? identitySpaces, IReadOnlyList<StateSpace>? hostSpaces, out string reason) {
         reason = string.Empty;
         if ((identitySpaces is null) || (hostSpaces is null) || (identitySpaces.Count == 0) || (hostSpaces.Count == 0)) {
@@ -536,8 +528,8 @@ public sealed partial class WorldIdentity {
                 continue;
             }
 
-            if (hostByName.TryGetValue(key: space.Name.Value, value: out var hostSpace) && !space.HasSameIdentity(other: hostSpace)) {
-                reason = $"identity space '{space.Name}' does not match host space identity (model: '{space.Model}' vs '{hostSpace.Model}', revision: '{space.Revision}' vs '{hostSpace.Revision}', dimensions: {space.Dimensions} vs {hostSpace.Dimensions})";
+            if (hostByName.TryGetValue(key: space.Name.Value, value: out var hostSpace) && (space.Identity != hostSpace.Identity)) {
+                reason = $"identity space '{space.Name}' does not match host space identity (model: '{space.Identity.Model}' vs '{hostSpace.Identity.Model}', revision: '{space.Identity.Revision}' vs '{hostSpace.Identity.Revision}', dimensions: {space.Identity.Dimensions} vs {hostSpace.Identity.Dimensions})";
 
                 return false;
             }

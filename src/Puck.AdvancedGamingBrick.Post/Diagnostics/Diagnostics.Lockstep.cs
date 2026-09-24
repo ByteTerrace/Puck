@@ -1,4 +1,5 @@
-using System.Diagnostics;
+using System.Globalization;
+using Puck.Hosting;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -28,24 +29,6 @@ internal sealed partial class Diagnostics {
             return 2;
         }
 
-        var psi = new ProcessStartInfo {
-            CreateNoWindow = true,
-            FileName = cosimExe,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
-
-        psi.ArgumentList.Add(item: romPath);
-        psi.ArgumentList.Add(item: steps.ToString());
-        psi.ArgumentList.Add(item: biosPath);
-
-        if (direct) {
-            psi.ArgumentList.Add(item: "direct");
-        }
-
-        using var cosim = Process.Start(startInfo: psi)!;
-        var cosimOut = cosim.StandardOutput;
-
         if (!TryLoad(
             romPath: romPath,
             name: Path.GetFileName(path: romPath),
@@ -55,6 +38,23 @@ internal sealed partial class Diagnostics {
         }
 
         using (instance) {
+            using var cosim = ChildProcess.StartRedirected(
+                arguments: (direct
+                    ? [romPath, steps.ToString(provider: CultureInfo.InvariantCulture), biosPath, "direct"]
+                    : [romPath, steps.ToString(provider: CultureInfo.InvariantCulture), biosPath]
+                ),
+                fileName: cosimExe
+            );
+            var cosimOut = cosim.StandardOutput;
+
+            // The oracle reads no input, and its diagnostics pass through to this console as they arrive, so a
+            // chatty error stream never fills its pipe and stalls the trace this loop reads.
+            cosim.StandardInput.Close();
+            cosim.ErrorDataReceived += static (_, line) => {
+                if (line.Data is not null) { Console.Error.WriteLine(value: line.Data); }
+            };
+            cosim.BeginErrorReadLine();
+
             var machine = instance.Machine;
             var cpu = machine.Cpu;
             var bus = ((AgbBus)machine.Bus);

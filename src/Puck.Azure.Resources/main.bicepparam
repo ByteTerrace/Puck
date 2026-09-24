@@ -249,10 +249,12 @@ param resources = {
         'object-src': ['\'none\'']
         'report-to': ['csp-reports']
         'script-src-attr': ['\'none\'']
-        'script-src': ['\'self\'', 'https://aadcdn.msftauth.net']
+        // DuckDB and the world engine compile WebAssembly, which a policy without 'wasm-unsafe-eval' forbids.
+        'script-src': ['\'self\'', '\'wasm-unsafe-eval\'', 'https://aadcdn.msftauth.net']
         'style-src': ['\'self\'', '\'unsafe-inline\'']
         'upgrade-insecure-requests': []
-        'worker-src': ['\'self\'']
+        // DuckDB starts its worker from a same-origin blob that imports the bundled worker script.
+        'worker-src': ['\'self\'', 'blob:']
       }
       reportingEndpoints: {
         'csp-reports': 'https://api.${apexDomainName}/csp-report'
@@ -460,9 +462,45 @@ param resources = {
         privateEndpointNetworkPolicies: 'Disabled'
         privateLinkServiceNetworkPolicies: 'Enabled'
         securityRules: [
-          { name: 'WorldQuic', properties: { priority: 100, direction: 'Inbound', access: 'Allow', protocol: 'Udp', sourcePortRange: '*', destinationPortRange: string(worldQuicPort), sourceAddressPrefix: '*', destinationAddressPrefix: '*' } }
-          { name: 'WorldHealth', properties: { priority: 110, direction: 'Inbound', access: 'Allow', protocol: 'Tcp', sourcePortRange: '*', destinationPortRange: '8081', sourceAddressPrefix: 'AzureLoadBalancer', destinationAddressPrefix: '*' } }
-          { name: 'DenyOtherInbound', properties: { priority: 200, direction: 'Inbound', access: 'Deny', protocol: '*', sourcePortRange: '*', destinationPortRange: '*', sourceAddressPrefix: '*', destinationAddressPrefix: '*' } }
+          {
+            name: 'WorldQuic'
+            properties: {
+              priority: 100
+              direction: 'Inbound'
+              access: 'Allow'
+              protocol: 'Udp'
+              sourcePortRange: '*'
+              destinationPortRange: string(worldQuicPort)
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+            }
+          }
+          {
+            name: 'WorldHealth'
+            properties: {
+              priority: 110
+              direction: 'Inbound'
+              access: 'Allow'
+              protocol: 'Tcp'
+              sourcePortRange: '*'
+              destinationPortRange: '8081'
+              sourceAddressPrefix: 'AzureLoadBalancer'
+              destinationAddressPrefix: '*'
+            }
+          }
+          {
+            name: 'DenyOtherInbound'
+            properties: {
+              priority: 200
+              direction: 'Inbound'
+              access: 'Deny'
+              protocol: '*'
+              sourcePortRange: '*'
+              destinationPortRange: '*'
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+            }
+          }
         ]
       }
       // Existing reserved subnet; retain it when reconciling the production VNet.
@@ -574,15 +612,36 @@ param resources = {
       repairGracePeriod: 'PT30M'
       patchMode: 'AutomaticByPlatform'
       patchAssessmentMode: 'ImageDefault'
-      imageReference: { publisher: 'MicrosoftCBLMariner', offer: 'azure-linux-3', sku: 'azure-linux-3-gen2', version: '3.20260809.01' }
+      imageReference: {
+        publisher: 'MicrosoftCBLMariner'
+        offer: 'azure-linux-3'
+        sku: 'azure-linux-3-gen2'
+        version: '3.20260809.01'
+      }
       osDiskSizeGB: 64
       osDiskStorageType: 'StandardSSD_LRS'
       sku: 'Standard_D2as_v5'
+      spot: { restoreTimeout: 'PT1H' }
       vmNamePrefix: '${prefix}vmp000'
       zones: [1]
     }
-    lifecycle: { azureScheduledEvents: true, healthPort: 8081, pollSeconds: 1, shutdownSeconds: 120, progressTimeoutSeconds: 30, checkpointTimeoutSeconds: 180, journalTimeoutSeconds: 30, journalBacklogLimit: 1024 }
-    monitoring: { alertName: '${prefix}map000', actionGroupResourceIds: [], evaluationFrequency: 'PT1M', windowSize: 'PT5M', severity: 1 }
+    lifecycle: {
+      azureScheduledEvents: true
+      healthPort: 8081
+      pollSeconds: 1
+      shutdownSeconds: 120
+      progressTimeoutSeconds: 30
+      checkpointTimeoutSeconds: 180
+      journalTimeoutSeconds: 30
+      journalBacklogLimit: 1024
+    }
+    monitoring: {
+      alertName: '${prefix}map000'
+      actionGroupResourceIds: []
+      evaluationFrequency: 'PT1M'
+      windowSize: 'PT5M'
+      severity: 1
+    }
     network: {
       virtualNetworkName: '${prefix}vnetp000'
       subnetName: '${prefix}snetp008'

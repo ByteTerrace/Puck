@@ -31,6 +31,6 @@
     </ItemGroup>
     <!-- CompileShaders / CollectShaderBytecode / ValidateShaderBytecodeSources / ValidateShaderBytecodeFresh all
          live in the shared build\Shaders.targets now (imported by Directory.Build.targets), item-driven purely
-         over the ItemGroup globs above — Puck.Vulkan.Presentation declares no ComputeShaderSource/
-         RayQueryComputeShaderSource, so neither Exec ever fires for it. -->
+         over the ItemGroup globs above — Puck.Vulkan.Presentation declares no ComputeShaderSource, so its
+         compute Exec never fires for it. -->
 </Project>

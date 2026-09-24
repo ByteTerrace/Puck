@@ -1,6 +1,6 @@
-using System.Security.Cryptography;
-using System.Text.Json;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using Puck.Assets;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -40,7 +40,7 @@ public static class WorldDefinitionFingerprint {
     /// <summary>Hashes authored document inputs, optionally restricting the world state rows included.</summary>
     /// <param name="definition">The proposal's base definition.</param>
     /// <param name="stateRows">World state dependencies, or null for every row. Other document sections remain included.</param>
-    /// <returns>Uppercase SHA-256 hex of the canonical document bytes.</returns>
+    /// <returns>The <see cref="ContentPin.Hex"/> of the canonical document bytes.</returns>
     public static string Compute(WorldDefinition definition, IReadOnlyList<string>? stateRows = null) {
         if (
             (stateRows is not null) &&
@@ -53,7 +53,20 @@ public static class WorldDefinitionFingerprint {
 
             definition = definition with { StateRaw = state with { World = [.. definition.State.Where(predicate: row => selected.Contains(item: row.Name))] } };
         }
-        return Convert.ToHexString(inArray: SHA256.HashData(source: WorldDefinitionSerialization.Serialize(definition: definition)));
+        return ContentPin.Compute(content: WorldDefinitionSerialization.Serialize(definition: definition)).Hex;
+    }
+    /// <summary>Hashes one <c>views.pipelines</c> row: the revision a parameter preview is based on and a commit of it
+    /// names. Any change to the row, including another commit, moves it; the row's name is part of it, so a revision
+    /// taken from one instance never matches another.</summary>
+    /// <param name="pipeline">The pipeline row.</param>
+    /// <returns>The <see cref="ContentPin.Hex"/> of the row's canonical bytes.</returns>
+    public static string ComputePipeline(WorldViewPipeline pipeline) {
+        ArgumentNullException.ThrowIfNull(argument: pipeline);
+
+        return ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(
+            value: pipeline,
+            jsonTypeInfo: WorldJsonContext.Default.WorldViewPipeline
+        )).Hex;
     }
     /// <summary>Hashes named inputs in ordinal name order, including absent rows and the generation seed.</summary>
     public static string ComputeInputs(WorldDefinition definition, IReadOnlyList<string> placementIds, IReadOnlyList<string> stateRows) {
@@ -82,10 +95,10 @@ public static class WorldDefinitionFingerprint {
             );
             writer.WriteEndArray();
         }
-        return Convert.ToHexString(inArray: SHA256.HashData(source: bytes.GetBuffer().AsSpan(
+        return ContentPin.Compute(content: bytes.GetBuffer().AsSpan(
             0,
             checked((int)bytes.Length)
-        )));
+        )).Hex;
     }
     /// <summary>Computes the canonical census for one bounded spatial read. The census includes every authored
     /// spatial volume whose conservative envelope intersects the region, plus all of those rows'
@@ -130,10 +143,10 @@ public static class WorldDefinitionFingerprint {
             );
             writer.WriteEndArray();
         }
-        return Convert.ToHexString(inArray: SHA256.HashData(source: bytes.GetBuffer().AsSpan(
+        return ContentPin.Compute(content: bytes.GetBuffer().AsSpan(
             0,
             checked((int)bytes.Length)
-        )));
+        )).Hex;
     }
     /// <summary>Returns the authored rows observed by a bounded spatial read in document order.</summary>
     public static IReadOnlyList<WorldPlacement> SpatialRows(WorldDefinition definition, in WorldSpatialReadRegion region) {

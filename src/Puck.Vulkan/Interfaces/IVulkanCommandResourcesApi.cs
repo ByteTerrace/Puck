@@ -1,5 +1,6 @@
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Messages;
+using Puck.Vulkan.Interop;
 
 namespace Puck.Vulkan.Interfaces;
 
@@ -18,8 +19,8 @@ public interface IVulkanCommandResourcesApi {
     /// <param name="commandPoolHandle">When this method returns, the created native <c>VkCommandPool</c> handle.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the command pool was created successfully.</returns>
     VkResult CreateCommandPool(VulkanCommandPoolCreateRequest request, out nint commandPoolHandle);
-    /// <summary>Destroys a command pool and the command buffers allocated from it.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle that owns the command pool.</param>
+    /// <summary>Destroys a command pool and the command buffers allocated from it; a zero handle is skipped.</summary>
+    /// <param name="device">The command table of the logical device that owns the command pool.</param>
     /// <param name="commandPoolHandle">The native <c>VkCommandPool</c> handle to destroy.</param>
-    void DestroyCommandPool(nint deviceHandle, nint commandPoolHandle);
+    void DestroyCommandPool(VulkanDeviceCommands device, nint commandPoolHandle);
 }

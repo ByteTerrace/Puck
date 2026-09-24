@@ -100,7 +100,7 @@ public sealed class WorldEventFeed {
     // under a reused ordinal — a region's identity is its name, exactly as GrantSubject.Region already keys it.
     private readonly Dictionary<string, bool[]> m_regionOccupancy = new(comparer: StringComparer.Ordinal);
 
-    private readonly BroadphaseBody[] m_collisionBodies;
+    private readonly WorldSweepBody[] m_collisionBodies;
     private readonly byte[] m_collisionDegrees;
     private readonly ulong[] m_collisionPairKeys;
     private readonly CollisionTransition[] m_collisionTransitions;
@@ -116,7 +116,7 @@ public sealed class WorldEventFeed {
         );
 
         m_maximumTrackedPairs = MaximumTrackedPairsForCapacity(capacity: capacity);
-        m_collisionBodies = new BroadphaseBody[capacity];
+        m_collisionBodies = new WorldSweepBody[capacity];
         m_collisionDegrees = new byte[capacity];
         m_collisionPairKeys = new ulong[m_maximumTrackedPairs];
         m_collisionTransitions = new CollisionTransition[checked((m_maximumTrackedPairs * 2))];
@@ -350,10 +350,6 @@ public sealed class WorldEventFeed {
         var bodyCount = 0;
 
         if (policy.MaxPairsPerBody > 0) {
-            // Hoisted out of the loop below (CA2014): one reused stack buffer, fully overwritten by
-            // ScaledColliderVolumes on every call, never read across bodies.
-            Span<FixedBodyColliderVolume> broadphaseScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-
             for (var index = 0; (index < population.Capacity); index++) {
                 if (
                     !population.IsActive(index: index) ||
@@ -362,12 +358,9 @@ public sealed class WorldEventFeed {
                     continue;
                 }
 
-                var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes(
-                    volumes: collider.Volumes,
-                    scratch: broadphaseScratch
-                ));
+                var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes());
 
-                m_collisionBodies[bodyCount++] = new BroadphaseBody(
+                m_collisionBodies[bodyCount++] = new WorldSweepBody(
                     Index: index,
                     MinimumX: (body.FixedPosition.X - radius),
                     MaximumX: (body.FixedPosition.X + radius),
@@ -679,16 +672,8 @@ public sealed class WorldEventFeed {
             return false;
         }
 
-        Span<FixedBodyColliderVolume> leftScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        Span<FixedBodyColliderVolume> rightScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        var leftVolumes = a.ScaledColliderVolumes(
-            volumes: aVolume.Volumes,
-            scratch: leftScratch
-        );
-        var rightVolumes = b.ScaledColliderVolumes(
-            volumes: bVolume.Volumes,
-            scratch: rightScratch
-        );
+        var leftVolumes = a.ScaledColliderVolumes();
+        var rightVolumes = b.ScaledColliderVolumes();
 
         foreach (var left in leftVolumes) {
             foreach (var right in rightVolumes) {
@@ -992,37 +977,6 @@ public sealed class WorldEventFeed {
         }
     }
 
-    /// <summary>One authored adjacency row's checkpointed link-liveness state.</summary>
-    /// <param name="Adjacency">The authored <c>adjacencies</c> row name.</param>
-    /// <param name="DeliveredTick">The highest neighbour snapshot tick observed on this edge; <c>0</c> when nothing
-    /// has ever been delivered.</param>
-    /// <param name="StaleTicks">Simulation ticks since the last delivered refresh.</param>
-    /// <param name="PendingRefresh">Whether a refresh has been observed since the last <see cref="Collect"/>.</param>
-    /// <param name="Dropped">Whether the last edge emitted for this row was <see cref="WorldEventFamily.LinkDropped"/>.</param>
-    public readonly record struct WorldEventLinkState(string Adjacency, ulong DeliveredTick, long StaleTicks, bool PendingRefresh, bool Dropped);
-    /// <summary>One <see cref="WorldEventFeed"/>'s checkpointed state — the edge-detection tables
-    /// (<see cref="m_overlapping"/>/<see cref="m_regionOccupancy"/>/<see cref="m_seatOccupied"/>/
-    /// <see cref="m_links"/>) a later tick's enter/exit comparison reads, plus the two buffers that must reproduce
-    /// exactly for a checkpoint taken mid-episode to resume the same edges.</summary>
-    public sealed record WorldEventFeedCheckpoint(
-        IReadOnlyList<WorldEventEdge> Edges,
-        IReadOnlyList<WorldEventEdge> PendingRoutes,
-        bool[] SeatOccupied,
-        IReadOnlyList<(int A, int B)> Overlapping,
-        IReadOnlyList<(string Region, bool[] Occupancy)> RegionOccupancy,
-        IReadOnlyList<WorldEventLinkState> Links
-    );
-
-    private readonly record struct BroadphaseBody(int Index, FixedQ4816 MinimumX, FixedQ4816 MaximumX, FixedQ4816 Radius) : IComparable<BroadphaseBody> {
-        public int CompareTo(BroadphaseBody other) {
-            var minimum = MinimumX.CompareTo(other: other.MinimumX);
-
-            return ((minimum != 0)
-                ? minimum
-                : Index.CompareTo(value: other.Index)
-            );
-        }
-    }
     private readonly record struct CollisionTransition(ulong Key, bool Now) : IComparable<CollisionTransition> {
         public int CompareTo(CollisionTransition other) => Key.CompareTo(value: other.Key);
     }

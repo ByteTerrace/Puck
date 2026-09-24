@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -99,7 +100,7 @@ public static partial class WorldDecompiler {
 
         sb.AppendLine(
             CultureInfo.InvariantCulture,
-            $"{indent}placement \"{EscapeString(s: id)}\" {{"
+            $"{indent}placement {PuckStrings.Write(value: id)} {{"
         );
 
         var elide = new HashSet<string>(comparer: StringComparer.Ordinal) { "id" };

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Assets.Documents;
@@ -9,7 +10,7 @@ using Puck.Physics.Motion;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: the WIDENED <see cref="WorldBody.TransferState"/> — the abort capture must be complete
+/// CONTRACT UNDER TEST: the WIDENED <see cref="WorldBodyTransferState"/> — the abort capture must be complete
 /// for a MEDIUM-hold (Dive) kit body and a DRIVE-row (Kart) kit body, not just the row-less
 /// shape <see cref="TransferAbortDynamicStateLawTests"/> already covers. Each law here builds its own MINIMAL but
 /// REAL drive/medium kit (motion row, channels, and one authored action exercising the action-track/action-state
@@ -335,7 +336,7 @@ public sealed class TransferAbortKitWideningLawTests {
     [Fact]
     public void DetachThenRestore_DriveKitBody_EveryNewlyCapturedFieldRoundTripsExactly() {
         using var fixture = Fixtures.FreshServer(definition: BuildDriveKitDocument());
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -361,7 +362,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         // DrivePitch — forced directly through the SAME public Pose() a hard teleport/warp already uses (this
         // kit's own PitchRate is 0, so nothing in ordinary play would move it; a future flying-variant kit would —
-        // see WorldBody.TransferState's own remarks on why this is captured regardless of today's grounded-only
+        // see WorldBodyTransferState's own remarks on why this is captured regardless of today's grounded-only
         // seat kits).
         body.Pose(
             position: body.FixedPosition,
@@ -616,7 +617,7 @@ public sealed class TransferAbortKitWideningLawTests {
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -709,7 +710,7 @@ public sealed class TransferAbortKitWideningLawTests {
         };
 
         using var fixture = Fixtures.FreshServer(definition: document);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -775,7 +776,7 @@ public sealed class TransferAbortKitWideningLawTests {
     [Fact]
     public void DetachThenRestore_MediumKitBody_EveryNewlyCapturedFieldRoundTripsExactly() {
         using var fixture = Fixtures.FreshServer(definition: BuildMediumKitDocument());
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

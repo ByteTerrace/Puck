@@ -42,6 +42,29 @@ internal static class SdfFieldMarch {
     // there a clear line to that wall" query) never reads as self-obstructing.
     internal static readonly FixedQ4816 LineOfSightSkin = FixedQ4816.FromDouble(value: 0.05);
 
+    internal delegate bool RaycastDelegate(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit);
+
+    internal static bool LineOfSight(FixedPosition from, FixedPosition to, RaycastDelegate raycast) {
+        var delta = (to - from);
+        var distance = delta.Length;
+
+        if (distance <= FixedQ4816.Zero) {
+            return true;
+        }
+
+        var probeDistance = (distance - LineOfSightSkin);
+
+        if (probeDistance <= FixedQ4816.Zero) {
+            return true;
+        }
+
+        return !raycast(
+            dir: delta,
+            hit: out _,
+            maxDist: probeDistance,
+            origin: from
+        );
+    }
     // Fills the non-convergence hit: the last point the march reached, carrying WorldQueryConfidence.Bounded because
     // the answer is a conservative stand-in for a surface never proven, not a measured one.
     internal static MarchOutcome Exhaust(FixedPosition position, FixedQ4816 traveled, int material, out RayHit hit) {

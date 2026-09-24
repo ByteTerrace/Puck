@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Xunit;
@@ -24,8 +25,8 @@ public sealed class DecimalValuesLawTests {
 
     [InlineData(0.12, "0.12")]
     [InlineData(0.05, "0.05")]
-    [InlineData(0.1 + 0.2, "0.3")]
-    [InlineData(1.1 * 1.1, "1.21")]
+    [InlineData((0.1 + 0.2), "0.3")]
+    [InlineData((1.1 * 1.1), "1.21")]
     [InlineData(1e-7, "0.0000001")]
     [InlineData(-2.5, "-2.5")]
     [InlineData(0d, "0")]
@@ -56,87 +57,68 @@ public sealed class DecimalValuesLawTests {
             style: System.Globalization.NumberStyles.Float
         )
     );
+
     // Each origin component is lowered through the general expression path, the one every field's value takes.
     private static string[] LoweredOrigin(string x, string y, string z) {
-        var screens = Assert.IsType<JsonArray>(@object: WorldCompiler.Compile(source: $$"""
+        var screens = Assert.IsType<JsonArray>(@object: WorldSources.LowerSourceClean(source: $$"""
             schema: "puck.world.definition.v1"
             let long = 0.1234567890123456789012345
             screens [
                 { origin [{{x}}, {{y}}, {{z}}] }
             ]
-            """).RequireJson()["screens"]);
+            """)["screens"]);
         var origin = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: screens[0])["origin"]);
 
         return [.. origin.Select(selector: static component => component!.ToJsonString())];
     }
 
-    [Fact]
-    public void AnAuthoredDecimalKeepsEveryDigitThroughTheLowering() => Assert.Equal(
-        actual: LoweredOrigin(
-            x: "0.1234567890123456789012345",
-            y: "-long",
-            z: "long"
+    // Three authored components of one origin and the canonical JSON each lowers to.
+    private static readonly Dictionary<string, (string X, string Y, string Z, string[] Expected)> Origins = new(comparer: StringComparer.Ordinal) {
+        ["an authored decimal keeps every digit through the lowering"] = (
+            X: "0.1234567890123456789012345",
+            Y: "-long",
+            Z: "long",
+            Expected: ["0.1234567890123456789012345", "-0.1234567890123456789012345", "0.1234567890123456789012345"]
         ),
-        expected: [
-            "0.1234567890123456789012345",
-            "-0.1234567890123456789012345",
-            "0.1234567890123456789012345",
-        ]
-    );
-    [Fact]
-    public void ExactArithmeticOverAuthoredDecimalsStaysExact() => Assert.Equal(
-        actual: LoweredOrigin(
-            x: "0.1 + 0.2",
-            y: "long - 0.0234567890123456789012345",
-            z: "1.1 * 1.1"
+        ["exact arithmetic over authored decimals stays exact"] = (
+            X: "0.1 + 0.2",
+            Y: "long - 0.0234567890123456789012345",
+            Z: "1.1 * 1.1",
+            Expected: ["0.3", "0.1", "1.21"]
         ),
-        expected: [
-            "0.3",
-            "0.1",
-            "1.21",
-        ]
-    );
-    [Fact]
-    public void OneValueHasOneSpelling() => Assert.Equal(
-        actual: LoweredOrigin(
-            x: "1.50",
-            y: "2.0",
-            z: "1.5e3"
+        ["one value has one spelling"] = (
+            X: "1.50",
+            Y: "2.0",
+            Z: "1.5e3",
+            Expected: ["1.5", "2", "1500"]
         ),
-        expected: [
-            "1.5",
-            "2",
-            "1500",
-        ]
-    );
-    [Fact]
-    public void AMagnitudeADecimalCannotHoldStaysTheDoubleItWas() => Assert.Equal(
-        actual: LoweredOrigin(
-            x: "1e-40",
-            y: "1e40",
-            z: "0.5"
+        ["a magnitude a decimal cannot hold stays the double it was"] = (
+            X: "1e-40",
+            Y: "1e40",
+            Z: "0.5",
+            Expected: ["1E-40", "1E+40", "0.5"]
         ),
-        expected: [
-            "1E-40",
-            "1E+40",
-            "0.5",
-        ]
-    );
-    // A comparison is worth 1 or 0, and it is decided on the exact values, so it agrees with the exact arithmetic
-    // beside it: a difference the subtraction keeps is a difference the comparison sees.
-    [Fact]
-    public void AComparisonIsDecidedOnTheExactValues() => Assert.Equal(
-        actual: LoweredOrigin(
-            x: "1.0000000000000001 > 1",
-            y: "(1.0000000000000001 - 1) > 0",
-            z: "0.1 + 0.2 == 0.3"
+        // A comparison is worth 1 or 0, and it is decided on the exact values, so it agrees with the exact
+        // arithmetic beside it: a difference the subtraction keeps is a difference the comparison sees.
+        ["a comparison is decided on the exact values"] = (
+            X: "1.0000000000000001 > 1",
+            Y: "(1.0000000000000001 - 1) > 0",
+            Z: "0.1 + 0.2 == 0.3",
+            Expected: ["1", "1", "1"]
         ),
-        expected: [
-            "1",
-            "1",
-            "1",
-        ]
-    );
+    };
+
+    public static TheoryData<string> OriginNames() => new(values: Origins.Keys);
+    [MemberData(nameof(OriginNames))]
+    [Theory]
+    public void AnAuthoredOriginLowersToItsCanonicalSpelling(string name) {
+        var (x, y, z, expected) = Origins[name];
+
+        Assert.Equal(
+            actual: $"{name}: {string.Join(separator: ", ", values: LoweredOrigin(x: x, y: y, z: z))}",
+            expected: $"{name}: {string.Join(separator: ", ", values: expected)}"
+        );
+    }
     [Fact]
     public void NumbersThatCompareEqualHashEqualHoweverEachIsHeld() {
         JsonNode?[] halves = [
@@ -178,19 +160,19 @@ public sealed class DecimalValuesLawTests {
     public void AResultADecimalWouldRoundIsComputedInDouble() {
         Assert.False(condition: DocumentNumbers.TryExactArithmetic(
             left: 1e-28m,
-            operation: "*",
+            operation: ExpressionOp.Multiply,
             result: out _,
             right: 0.1m
         ));
         Assert.False(condition: DocumentNumbers.TryExactArithmetic(
             left: decimal.MaxValue,
-            operation: "+",
+            operation: ExpressionOp.Add,
             result: out _,
             right: 0.5m
         ));
         Assert.True(condition: DocumentNumbers.TryExactArithmetic(
             left: 0.1m,
-            operation: "+",
+            operation: ExpressionOp.Add,
             result: out var sum,
             right: 0.2m
         ));

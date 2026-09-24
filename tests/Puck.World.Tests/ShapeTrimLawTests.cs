@@ -5,7 +5,6 @@ using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.World.Authoring;
-using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -33,23 +32,6 @@ public sealed class ShapeTrimLawTests {
         Width: 0.05f
     );
 
-    private static void AssertCanonicalizerAccepts(CreationDocument document) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.Empty(collection: violations);
-    }
-    private static void AssertCanonicalizerRefusesNaming(CreationDocument document, string needle) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.NotEmpty(collection: violations);
-        Assert.Contains(
-            collection: violations,
-            filter: violation => violation.Message.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: needle
-            )
-        );
-    }
     private static ShapeDocument Cutter(int id = 0, Vector3? position = null) =>
         Shape(
             SdfSolidPrimitive.Sphere,
@@ -58,76 +40,16 @@ public sealed class ShapeTrimLawTests {
             position: position,
             id: id
         );
-    private static CreationDocument Document(params ShapeDocument[] shapes) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: shapes,
-            Frames: null
-        );
-    // The pool (dynamic/body) path — mirrors ShapePanelLawTests's own EmitPool scaffold.
-    private static SdfProgram EmitPool(ShapeDocument[] shapes, float bodyScale = 1f, bool probeWorstCase = false) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: [new(
-                        "#AAAAAA",
-                        null,
-                        null,
-                        null
-                    ), new(
-                        "#5555FF",
-                        null,
-                        null,
-                        null
-                    )],
-                Shapes: shapes,
-                Frames: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: bodyScale,
-                Motion: WorldLookMotion.Default
-            )],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: bodyScale,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: probeWorstCase,
-            maxPlacementScale: bodyScale,
-            slotBase: 0
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
+    private static CreationDocument Document(params ShapeDocument[] shapes) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: shapes
+    );
+    private static SdfProgram EmitPool(ShapeDocument[] shapes, float bodyScale = 1f) => CreationFixtures.EmitPool(
+        bodyScale: bodyScale,
+        name: PrototypeId,
+        palette: CreationFixtures.GreyAndBlue,
+        shapes: shapes
+    );
     private static (SdfProgram Program, int HostMaterial, int TrimMaterial) EmitStatic(params ShapeDocument[] shapes) {
         var builder = new SdfProgramBuilder();
         var hostMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -193,7 +115,7 @@ public sealed class ShapeTrimLawTests {
 
     [Fact]
     public void ANonFiniteOrNegativeInsetIsRefusedByName() {
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 Shape(
@@ -206,7 +128,7 @@ public sealed class ShapeTrimLawTests {
             ),
             needle: "inset"
         );
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 Shape(
@@ -222,7 +144,7 @@ public sealed class ShapeTrimLawTests {
     }
     [Fact]
     public void ANonPositiveWidthIsRefusedByName() {
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 Shape(
@@ -235,7 +157,7 @@ public sealed class ShapeTrimLawTests {
             ),
             needle: "width"
         );
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 Shape(
@@ -303,7 +225,7 @@ public sealed class ShapeTrimLawTests {
         );
         var cutter = Cutter(id: 1);
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 host,
                 cutter
@@ -313,7 +235,7 @@ public sealed class ShapeTrimLawTests {
     }
     [Fact]
     public void ATrimNamingAnUndeclaredShapeIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(Shape(
                 SdfSolidPrimitive.Box,
                 PlateScale,
@@ -324,7 +246,7 @@ public sealed class ShapeTrimLawTests {
         );
     [Fact]
     public void ATrimOnADomainFoldedShapeIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 Shape(
@@ -340,7 +262,7 @@ public sealed class ShapeTrimLawTests {
         );
     [Fact]
     public void ATrimOnAGroupedShapeIsRefusedByName() =>
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 Shape(
@@ -370,7 +292,7 @@ public sealed class ShapeTrimLawTests {
             id: 2
         );
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 host,
@@ -381,7 +303,7 @@ public sealed class ShapeTrimLawTests {
     }
     [Fact]
     public void ATrimOnAnEarlierDeclaredReferenceIsAccepted() =>
-        AssertCanonicalizerAccepts(document: Document(
+        CreationFixtures.AssertAccepts(document: Document(
             Cutter(),
             Shape(
                 SdfSolidPrimitive.Box,
@@ -456,7 +378,7 @@ public sealed class ShapeTrimLawTests {
             domain: [new ShapeDomainOp.Symmetry(Normal: Vector3.UnitX)]
         );
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 foldedCutter,
                 Shape(
@@ -469,7 +391,7 @@ public sealed class ShapeTrimLawTests {
             ),
             needle: "reference 'cutter' carries domain operators"
         );
-        AssertCanonicalizerAccepts(document: Document(
+        CreationFixtures.AssertAccepts(document: Document(
             Cutter(),
             Shape(
                 SdfSolidPrimitive.Box,
@@ -496,7 +418,7 @@ public sealed class ShapeTrimLawTests {
             id: 2
         );
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 groupedCutter,
                 sibling,
@@ -561,11 +483,11 @@ public sealed class ShapeTrimLawTests {
             id: 2
         );
 
-        AssertCanonicalizerAccepts(document: Document(
+        CreationFixtures.AssertAccepts(document: Document(
             Cutter(),
             atCeiling
         ));
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 pastCeiling
@@ -587,7 +509,7 @@ public sealed class ShapeTrimLawTests {
             id: 1
         );
 
-        AssertCanonicalizerAccepts(document: Document(
+        CreationFixtures.AssertAccepts(document: Document(
             Cutter(),
             host
         ));
@@ -697,7 +619,7 @@ public sealed class ShapeTrimLawTests {
             id: 1
         );
 
-        AssertCanonicalizerRefusesNaming(
+        CreationFixtures.AssertRefusesNaming(
             document: Document(
                 Cutter(),
                 host
@@ -771,10 +693,7 @@ public sealed class ShapeTrimLawTests {
             trims: [Trim],
             id: 1
         );
-        var probe = EmitPool(
-            shapes: [Cutter(), host],
-            probeWorstCase: true
-        );
+        var probe = CreationFixtures.PoolProbe;
         var live = EmitPool(shapes: [Cutter(), host]);
 
         Assert.True(

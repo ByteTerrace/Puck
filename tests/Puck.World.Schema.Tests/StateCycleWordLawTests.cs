@@ -17,13 +17,13 @@ public sealed class StateCycleWordLawTests {
     private static long Read(WorldDefinition definition, string row, ulong tick) {
         Assert.True(condition: WorldStateReader.TryRead(
             definition: definition,
+            engineTick: tick,
             key: null,
             rawValue: out var raw,
             row: out _,
             rowName: row,
             text: out _,
-            tick: tick,
-            engineTick: tick
+            tick: tick
         ));
 
         return raw!.Value;
@@ -178,10 +178,10 @@ public sealed class StateCycleWordLawTests {
                     kind: CellKind.Fixed,
                     value: 0L,
                     cycle: new StateCycle(
-                        Word: letters,
-                        Power: power,
                         Output: CycleOutput.Turns,
-                        TicksPerStep: 2
+                        Power: power,
+                        TicksPerStep: 2,
+                        Word: letters
                     )
                 ));
                 var cos = BuildDefinition(SlotRow(
@@ -189,10 +189,10 @@ public sealed class StateCycleWordLawTests {
                     kind: CellKind.Fixed,
                     value: 0L,
                     cycle: new StateCycle(
-                        Word: letters,
-                        Power: power,
                         Output: CycleOutput.Cos,
-                        TicksPerStep: 2
+                        Power: power,
+                        TicksPerStep: 2,
+                        Word: letters
                     )
                 ));
                 var sin = BuildDefinition(SlotRow(
@@ -200,10 +200,10 @@ public sealed class StateCycleWordLawTests {
                     kind: CellKind.Fixed,
                     value: 0L,
                     cycle: new StateCycle(
-                        Word: letters,
-                        Power: power,
                         Output: CycleOutput.Sin,
-                        TicksPerStep: 2
+                        Power: power,
+                        TicksPerStep: 2,
+                        Word: letters
                     )
                 ));
 
@@ -399,10 +399,10 @@ public sealed class StateCycleWordLawTests {
 
         foreach (var output in new[] { CycleOutput.Step, CycleOutput.Node }) {
             var cycle = new StateCycle(
-                Word: letters,
-                Power: 5,
                 Output: output,
-                TicksPerStep: 4
+                Power: 5,
+                TicksPerStep: 4,
+                Word: letters
             );
             var liveRow = SlotRow(
                 clock: new StateCellClock(EpochTick: 3),

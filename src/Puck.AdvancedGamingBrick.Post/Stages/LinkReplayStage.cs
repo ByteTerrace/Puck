@@ -19,6 +19,9 @@ internal sealed class LinkReplayStage : IPostStage<PostContext> {
     private const int Frames = 4;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "link-replay";
     /// <inheritdoc/>

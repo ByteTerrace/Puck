@@ -2,6 +2,7 @@ using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 using Puck.World.Transpiler.Vocabulary;
+using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -44,7 +45,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
         if (expression is AssetExpressionNode asset) {
             value = null;
             if ((scope.Annotations.GetValueOrDefault(key: "AssetContext") is not Assets.AssetCompilationContext context) || (scope.BasePath is null)) {
-                scope.Diagnostics.ReportError(Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.InvalidValue, "An asset reference requires a source path and its sibling asset lock.", asset.Span);
+                scope.Diagnostics.ReportError(code: Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.InvalidValue, message: "An asset reference requires a source path and its sibling asset lock.", span: asset.Span);
             } else if (context.TryResolve(asset.Path, scope.BasePath, asset.Span, scope.Diagnostics, out var path)) {
                 value = System.Text.Json.Nodes.JsonValue.Create(path);
             }
@@ -66,7 +67,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             return true;
         }
         if ((expression is IndexExpressionNode { Target: IdentifierExpressionNode { Name: var familyName } }) &&
-            WorldDocumentEmitter.GetOrCreateStateFamilies(scope: scope).ContainsKey(familyName)) {
+            WorldDocumentEmitter.GetOrCreateStateFamilies(scope: scope).ContainsKey(key: familyName)) {
             value = WorldDocumentEmitter.LowerOperandArgument(
                 operand: Puck.Transpiler.Parsing.PuckParser.CreateOperand(expression: expression, form: DocumentValueForm.Name),
                 scope: scope);
@@ -115,10 +116,33 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// <inheritdoc />
     public UnitDimension ClassifyField(string fieldKey) => WorldDocumentEmitterUnits.Classify(fieldKey: fieldKey);
     /// <inheritdoc />
-    /// <remarks>The camera-program ops and rewindTurn take positional arguments; everything else is written by name and falls
+    /// <remarks>An import names a world document (<see cref="WorldDocumentName"/>): it exists when its <c>.puck</c>
+    /// source or its <c>.world.json</c> document stands beside the importer, the files the composer reads at run
+    /// time. A file-form spelling is refused by name.</remarks>
+    public bool TryFindDocumentImport(string directory, string name, out string reason) {
+        if (!WorldDefinitionFileSource.TryResolveDocumentIn(
+            directory: directory,
+            documentPath: out var documentPath,
+            name: name,
+            reason: out reason,
+            sourcePath: out var sourcePath
+        )) {
+            return false;
+        }
+
+        if (CompileInputs.Exists(path: sourcePath) || CompileInputs.Exists(path: documentPath)) {
+            return true;
+        }
+
+        reason = $"Imported document '{name}' has neither a source at '{sourcePath}' nor a document at '{documentPath}'.";
+
+        return false;
+    }
+    /// <inheritdoc />
+    /// <remarks>The camera-program ops and rewindGroup take positional arguments; everything else is written by name and falls
     /// through to the generic <c>arg&lt;n&gt;</c> spelling.</remarks>
     public string? NameCallArgument(string callName, int positionalIndex) {
-        if ((callName == "rewindTurn") && (positionalIndex == 0)) {
+        if ((callName == "rewindGroup") && (positionalIndex == 0)) {
             return "group";
         }
         if (string.Equals(

@@ -5,10 +5,11 @@ namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
     /// <summary>Resumes only the durable pending operation, using its retained image, template, and secret versions.</summary>
-    internal static Task<WorldReleaseRunResult> ResumeWorldReleaseAsync(CancellationToken cancellationToken) =>
+    internal static Task<WorldReleaseRunResult> ResumeWorldReleaseAsync(TimeProvider clock, CancellationToken cancellationToken) =>
         WithManagedWorldReleaseAsync(
-            ResumeWorldReleaseCoreAsync,
-            cancellationToken
+            action: ResumeWorldReleaseCoreAsync,
+            cancellationToken: cancellationToken,
+            clock: clock
         );
 
     private static async Task<WorldReleaseRunResult> ResumeWorldReleaseCoreAsync(WorldReleaseContext context, CancellationToken token) {
@@ -73,7 +74,8 @@ internal static partial class AzureCommand {
                     context.Authority,
                     context.Owner,
                     ct
-                )
+                ),
+                context.Clock
             );
 
             return await new WorldReleaseCoordinator(groups: context.Groups).ResumeAsync(
@@ -126,12 +128,6 @@ internal static partial class AzureCommand {
                 (existing.Root.JournalHash is not null) || (existing.Root.JournalEntryCount != 0) || (existing.Root.ReceiptHash is not null) || (existing.Root.ReceiptIndexHash is not null))
             ) {
                 throw new InvalidDataException(message: "bootstrap cannot replace existing authoritative gameplay state");
-            }
-            if (await authority.LoadLatestAsync(
-                cancellationToken: cancellationToken,
-                identity: identity
-            ).ConfigureAwait(continueOnCapturedContext: false) is not null) {
-                throw new InvalidDataException(message: "bootstrap cannot adopt an existing legacy checkpoint");
             }
             var current = await authority.LoadPublishedDefinitionBytesAsync(
                 cancellationToken: cancellationToken,

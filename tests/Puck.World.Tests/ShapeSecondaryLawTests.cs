@@ -25,99 +25,19 @@ public sealed class ShapeSecondaryLawTests {
         z: 0.2f
     );
 
-    private static void AssertCanonicalizerAccepts(CreationDocument document) {
-        var violations = CreationCanonicalizer.Validate(document: document);
-
-        Assert.Empty(collection: violations);
-    }
-    private static CreationDocument Document(params ShapeDocument[] shapes) =>
-        new(
-            Schema: CreationDocument.CurrentSchema,
-            Name: PrototypeId,
-            Palette: null,
-            Shapes: shapes,
-            Frames: null
-        );
+    private static CreationDocument Document(params ShapeDocument[] shapes) => CreationFixtures.Document(
+        name: PrototypeId,
+        shapes: shapes
+    );
     // The render seam: both emission paths funnel every shape through SdfProgramBuilder's Shape() core plus
     // MarkSecondary, which packs Secondary as a real flag on the ShapeBlend instruction — never dropped.
-    private static SdfProgram EmitStatic(ShapeDocument shape) {
-        var builder = new SdfProgramBuilder();
-        var albedo = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        CreationStampEmitter.Emit(
-            builder: builder,
-            document: Document(shape),
-            transform: new CreationStampTransform(
-                Origin: Vector3.Zero,
-                Rotation: Quaternion.Identity,
-                Scale: 1f,
-                ReflectionNormal: null
-            ),
-            materialFor: _ => albedo
-        );
-
-        return builder.Build(buildInstanceGrid: false);
-    }
-    // The animated pool seam: WorldStampPool.EmitShape threads the same flag through MarkSecondary.
-    private static SdfInstruction PoolShapeInstruction(ShapeDocument shape) {
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: PrototypeId,
-                Palette: [new(
-                        "#AAAAAA",
-                        null,
-                        null,
-                        null
-                    )],
-                Shapes: [shape],
-                Frames: null
-            ),
-            source: PrototypeId
-        );
-        var creation = new WorldPrototype(
-            Id: PrototypeId,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-        var definition = (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
-            CreationsRaw = [creation],
-            LookRowsRaw = [new WorldLook(
-                Name: "rig",
-                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                Scale: 1f,
-                Motion: WorldLookMotion.Default
-            )],
-        });
-        var pool = new WorldStampPool();
-
-        pool.Reconcile(
-            placements: [],
-            creations: [creation],
-            dynamics: [],
-            bodyStamps: [new WorldStampPool.BodyStamp(
-                    BodyIndex: 0,
-                    Creation: creation,
-                    Scale: 1f,
-                    Motion: WorldLookMotion.Default
-                )]
-        );
-
-        var builder = new SdfProgramBuilder();
-
-        pool.Emit(
-            builder: builder,
-            definition: definition,
-            probeWorstCase: false,
-            maxPlacementScale: 1f,
-            slotBase: 0
-        );
-
-        var program = builder.Build(buildInstanceGrid: false);
-
-        // The compact live pool emits only the authored Box.
-        return program.Instructions.Single(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Box))));
-    }
+    private static SdfProgram EmitStatic(ShapeDocument shape) => CreationFixtures.EmitStatic(document: Document(shape));
+    // The animated pool seam: WorldStampPool.EmitShape threads the same flag through MarkSecondary. The compact live
+    // pool emits only the authored Box.
+    private static SdfInstruction PoolShapeInstruction(ShapeDocument shape) => CreationFixtures.EmitPool(
+        name: PrototypeId,
+        shapes: [shape]
+    ).Instructions.Single(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Box))));
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, bool? secondary = null, string? name = null, Vector3? position = null, int id = 0) =>
         new(
             Id: id,
@@ -149,7 +69,7 @@ public sealed class ShapeSecondaryLawTests {
             Width: 0.05f
         );
 
-        AssertCanonicalizerAccepts(document: Document(
+        CreationFixtures.AssertAccepts(document: Document(
             Shape(
                 SdfSolidPrimitive.Sphere,
                 PlateScale,
@@ -173,7 +93,7 @@ public sealed class ShapeSecondaryLawTests {
     [InlineData(SdfSolidPrimitive.Capsule)]
     [Theory]
     public void ANonSecondaryShapeOfAnyPrimitiveTypeIsAccepted(SdfSolidPrimitive type) =>
-        AssertCanonicalizerAccepts(document: Document(Shape(
+        CreationFixtures.AssertAccepts(document: Document(Shape(
             type,
             PlateScale,
             secondary: false

@@ -18,5 +18,10 @@
     "Id": "integer.combinatorics-refusals", "Tier": "Default",
     "Members": [{ "Type": "Puck.Maths.Combinatorics", "Name": "Binomial" }, { "Type": "Puck.Maths.Combinatorics", "Name": "Factorial" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationRank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationUnrank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationElement" }, { "Type": "Puck.Maths.Combinatorics", "Name": "PermutationRank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "PermutationUnrank" }],
     "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Invalid sizes, ranks, elements, duplicates and ordering are rejected with documented parameter names; failed unranking leaves destinations unchanged", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "integer.lexicographic-order-vs-oracle", "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.LexicographicOrder", "Name": "Compare" }],
+    "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "LexicographicOrder.Compare over signed 64-bit primary and secondary keys, each draw both as drawn and with the primary keys forced to tie, so the tie-break path runs on every draw", "Against": "The sign of the exact BigInteger difference of the primary keys, falling to the sign of the exact BigInteger difference of the secondary keys only when the first is zero; long.CompareTo returns exactly that sign, so the comparison is equality rather than agreement in sign", "Shared": "", "Citation": "", "Absolute": "" }]
   }
 ]

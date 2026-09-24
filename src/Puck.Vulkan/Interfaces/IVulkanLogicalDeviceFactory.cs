@@ -12,5 +12,6 @@ public interface IVulkanLogicalDeviceFactory {
     /// <param name="instance">The Vulkan instance the device is created under.</param>
     /// <param name="physicalDevice">The selected physical device, including its chosen queue families.</param>
     /// <returns>A new, owning <see cref="VulkanLogicalDevice"/>.</returns>
+    /// <exception cref="GpuDeviceUnavailableException">The driver refused to create the device.</exception>
     VulkanLogicalDevice Create(VulkanInstance instance, VkPhysicalDevice physicalDevice);
 }

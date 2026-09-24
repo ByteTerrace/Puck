@@ -1,9 +1,18 @@
 <Project>
-    <ItemGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR '$(MSBuildProjectName)' == 'Puck.Cli'">
+    <ItemGroup Condition="('$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR '$(MSBuildProjectName)' == 'Puck.Cli') AND '$(MSBuildProjectName)' != 'Puck.Cli.Tests'">
         <!-- Repository-only executables resolve live files from their checkout,
-             independently of deterministic compiler source-path mapping. -->
+             independently of deterministic compiler source-path mapping. Puck.Cli.Tests reads the CLI's
+             own copy, which its subject's internals already expose; a second copy there is a type conflict. -->
         <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="Properties\RepositoryPaths.cs" />
     </ItemGroup>
+    <!-- Allocation laws and the emulator batteries' allocation stages read GC.GetAllocatedBytesForCurrentThread. A
+         background collection retires every thread's allocation context without subtracting the unused remainder
+         from that counter, so a thread that allocated nothing reads up to one allocation quantum (about 8 KiB) it
+         never allocated. Blocking collections account the remainder, so these hosts run without background GC.
+         Declared here because PuckKind is set in each project's body, after Directory.Build.props. -->
+    <PropertyGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation'">
+        <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    </PropertyGroup>
     <PropertyGroup>
         <!-- Derived here rather than in Directory.Build.props: $(NuGetPackageRoot) is set by NuGet's
              generated props, which import after Directory.Build.props but before this file. Properties

@@ -18,13 +18,13 @@ public sealed class StateCycleReadLawTests {
     private static long Read(WorldDefinition definition, string row, ulong tick, string? key = null) {
         Assert.True(condition: WorldStateReader.TryRead(
             definition: definition,
+            engineTick: tick,
             key: key,
             rawValue: out var raw,
             row: out _,
             rowName: row,
             text: out _,
-            tick: tick,
-            engineTick: tick
+            tick: tick
         ));
         Assert.NotNull(@object: raw);
 
@@ -613,10 +613,12 @@ public sealed class StateCycleReadLawTests {
                 kind: CellKind.Int,
                 value: 0L,
                 cycle: new StateCycle()
-            ) with { Advance = new StateAdvance(
+            ) with {
+                Advance = new StateAdvance(
                 PerSecondDenominator: 1,
                 PerSecondNumerator: 1
-            ) })
+            ),
+            })
         );
         // A row's cycle default is now legal on a keyed row too — every cell that inherits it (declares no
         // override of its own) reads it as its effective behavior.

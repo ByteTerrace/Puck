@@ -52,21 +52,28 @@ public sealed class SdfFieldScopeClampLawTests {
             1f,
             material
         ).PopField();
-        builder.ResetPoint().PushField().Ellipsoid(
-            new Vector3(
-                x: 2f,
-                y: 1f,
-                z: 1f
-            ),
+        // Two reliefs whose derivative bounds are 1 + amplitude * frequency: 2, then 4.
+        builder.ResetPoint().PushField().Sphere(
+            1f,
             material
+        ).ResetPoint()
+            .CellDisplace(
+            amplitude: 1f,
+            frequency: 1f,
+            mode: SdfCellMode.F1,
+            randomness: .2f,
+            seed: 0
         ).PopField();
-        builder.ResetPoint().PushField().Ellipsoid(
-            new Vector3(
-                x: 4f,
-                y: 1f,
-                z: 1f
-            ),
+        builder.ResetPoint().PushField().Sphere(
+            1f,
             material
+        ).ResetPoint()
+            .CellDisplace(
+            amplitude: 1f,
+            frequency: 3f,
+            mode: SdfCellMode.F1,
+            randomness: .2f,
+            seed: 0
         ).PopField();
         var program = builder.Build(buildInstanceGrid: false);
 
@@ -76,20 +83,24 @@ public sealed class SdfFieldScopeClampLawTests {
         );
         Assert.Collection(
             program.FieldScopeClamps,
-            clamp => { Assert.Equal(
+            clamp => {
+                Assert.Equal(
                 1,
                 clamp.ShapeCount
             ); Assert.Equal(
                 .5f,
                 clamp.StepScale
-            ); },
-            clamp => { Assert.Equal(
+            );
+            },
+            clamp => {
+                Assert.Equal(
                 1,
                 clamp.ShapeCount
             ); Assert.Equal(
                 .25f,
                 clamp.StepScale
-            ); }
+            );
+            }
         );
         Assert.True(condition: (program.FieldScopeClamps[0].PopInstructionIndex < program.FieldScopeClamps[1].PushInstructionIndex));
     }

@@ -773,6 +773,37 @@ internal static class ScriptedTradeExplore {
             }
         }
     }
+    private static bool TryMatchRomOption(string[] args, string flag, out byte[]? rom) {
+        var index = Array.IndexOf(
+            array: args,
+            value: flag
+        );
+
+        if (index < 0) {
+            rom = null;
+
+            return false;
+        }
+
+        var romPath = (((index + 1) < args.Length)
+            ? args[(index + 1)]
+            : null
+        );
+
+        if (
+            (romPath is null) ||
+            !File.Exists(path: romPath)
+        ) {
+            Console.WriteLine(value: $"  {flag} needs a trade-cart ROM path");
+            rom = null;
+
+            return true;
+        }
+
+        rom = File.ReadAllBytes(path: romPath);
+
+        return true;
+    }
 
     /// <summary>Dispatches <c>--trade-explore</c>. Usage:
     /// <c>--trade-explore &lt;rom&gt; [--linked] [--scriptA path] [--scriptB path] [--frames N] [--dump-every M]
@@ -811,27 +842,14 @@ internal static class ScriptedTradeExplore {
         // halt/loop" (a handful of PCs).
         // --trade-talk <rom>: continue, tap UP to face the crafted receptionist, then mash A — logging facing, the
         // receptionist object, and script/link state each step to see whether the interaction fires.
-        var talkIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-talk"
-        );
-
-        if (talkIndex >= 0) {
-            var talkRom = (((talkIndex + 1) < args.Length)
-                ? args[(talkIndex + 1)]
-                : null
-            );
-
-            if (
-                (talkRom is null) ||
-                !File.Exists(path: talkRom)
-            ) {
-                Console.WriteLine(value: "  --trade-talk needs a trade-cart ROM path");
-
-                return true;
+        if (TryMatchRomOption(
+            args: args,
+            flag: "--trade-talk",
+            rom: out var talkRom
+        )) {
+            if (talkRom is not null) {
+                ProbeTalk(rom: talkRom);
             }
-
-            ProbeTalk(rom: File.ReadAllBytes(path: talkRom));
 
             return true;
         }
@@ -840,27 +858,14 @@ internal static class ScriptedTradeExplore {
         // (0,7) down-stairs (dest POKECENTER_2F / warp -1, the dynamic "return to backup" warp) re-enters POKECENTER_2F via
         // MapSetupScript_Warp (SpawnPlayer + LoadMapObjects), spawning the receptionists the CONTINUE path skips. Walk the
         // player to (0,7), step the warp, and report whether wObject1Struct (the receptionist) came alive.
-        var warpIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-warp"
-        );
-
-        if (warpIndex >= 0) {
-            var warpRom = (((warpIndex + 1) < args.Length)
-                ? args[(warpIndex + 1)]
-                : null
-            );
-
-            if (
-                (warpRom is null) ||
-                !File.Exists(path: warpRom)
-            ) {
-                Console.WriteLine(value: "  --trade-warp needs a trade-cart ROM path");
-
-                return true;
+        if (TryMatchRomOption(
+            args: args,
+            flag: "--trade-warp",
+            rom: out var warpRom
+        )) {
+            if (warpRom is not null) {
+                ProbeWarp(rom: warpRom);
             }
-
-            ProbeWarp(rom: File.ReadAllBytes(path: warpRom));
 
             return true;
         }
@@ -869,85 +874,46 @@ internal static class ScriptedTradeExplore {
         // CONTINUE through the post-E4 WARP entry path (MapSetupScript_Warp -> SpawnPlayer + LoadMapObjects) so the game
         // fully populates wObjectStructs + wMapObjects from ROM — a clean source to capture a real, active standing player
         // object struct (and NPC structs) to bake into the crafted save (the CONTINUE path never spawns them).
-        var capIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-capture"
-        );
-
-        if (capIndex >= 0) {
-            var capRom = (((capIndex + 1) < args.Length)
-                ? args[(capIndex + 1)]
-                : null
-            );
-
-            if (
-                (capRom is null) ||
-                !File.Exists(path: capRom)
-            ) {
-                Console.WriteLine(value: "  --trade-capture needs a trade-cart ROM path");
-
-                return true;
+        if (TryMatchRomOption(
+            args: args,
+            flag: "--trade-capture",
+            rom: out var capRom
+        )) {
+            if (capRom is not null) {
+                ProbeCapture(rom: capRom);
             }
-
-            ProbeCapture(rom: File.ReadAllBytes(path: capRom));
 
             return true;
         }
 
         // --trade-diff <rom>: continue to overworld, then report which HRAM/WRAM bytes change over one idle frame (liveness)
         // and which change when a button is held (input reach) — address-agnostic freeze diagnosis.
-        var diffIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-diff"
-        );
-
-        if (diffIndex >= 0) {
-            var diffRom = (((diffIndex + 1) < args.Length)
-                ? args[(diffIndex + 1)]
-                : null
-            );
-
-            if (
-                (diffRom is null) ||
-                !File.Exists(path: diffRom)
-            ) {
-                Console.WriteLine(value: "  --trade-diff needs a trade-cart ROM path");
-
-                return true;
+        if (TryMatchRomOption(
+            args: args,
+            flag: "--trade-diff",
+            rom: out var diffRom
+        )) {
+            if (diffRom is not null) {
+                ProbeDiff(rom: diffRom);
             }
-
-            ProbeDiff(rom: File.ReadAllBytes(path: diffRom));
 
             return true;
         }
 
-        var pcIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-pc"
-        );
-
-        if (pcIndex >= 0) {
-            var pcRom = (((pcIndex + 1) < args.Length)
-                ? args[(pcIndex + 1)]
-                : null
-            );
-
-            if (
-                (pcRom is null) ||
-                !File.Exists(path: pcRom)
-            ) {
-                Console.WriteLine(value: "  --trade-pc needs a trade-cart ROM path");
-
-                return true;
+        if (TryMatchRomOption(
+            args: args,
+            flag: "--trade-pc",
+            rom: out var pcRom
+        )) {
+            if (pcRom is not null) {
+                ProbePc(
+                    hold: (CommandLineArguments.Value(
+                        args: args,
+                        name: "--hold"
+                    ) ?? "Down"),
+                    rom: pcRom
+                );
             }
-
-            ProbePc(
-                rom: File.ReadAllBytes(path: pcRom),
-                hold: (CommandLineArguments.Value(
-                    args: args,
-                    name: "--hold"
-                ) ?? "Down")
-            );
 
             return true;
         }

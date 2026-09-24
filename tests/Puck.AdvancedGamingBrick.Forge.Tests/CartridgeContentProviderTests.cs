@@ -49,12 +49,7 @@ public sealed class CartridgeContentProviderTests {
             title: "PROVENANCE"
         );
         var source = CartridgeDocuments.Canonicalize(document: document).Bytes;
-        ICartridgeCompiler compiler = ((target == "agb")
-            ? new AgbCartridgeCompiler()
-            : new HgbCartridgeCompiler()
-        );
-
-        var prepared = compiler.Prepare(content: source);
+        var prepared = CartridgeProbe.Compiler(target: target).Prepare(content: source);
         var asset = new PreparedMachineAsset(
             Path: "provenance.cartridge.json",
             Image: prepared.Image,

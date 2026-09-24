@@ -44,7 +44,7 @@ public static partial class WorldDefinitionValidator {
             }
             if (
                 (adjacency.Boundary is not { } boundary) ||
-                !IsFinite(value: boundary.Center) ||
+                !VectorFunctions.IsFinite(vector: boundary.Center) ||
                 !float.IsFinite(f: boundary.OutwardYawDegrees) ||
                 !float.IsFinite(f: boundary.OutwardPitchDegrees) ||
                 !float.IsFinite(f: boundary.Width) ||

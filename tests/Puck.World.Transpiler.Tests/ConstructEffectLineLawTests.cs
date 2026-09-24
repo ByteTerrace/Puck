@@ -1,7 +1,4 @@
-using System.Text;
-using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lsp;
 using Puck.World.Transpiler.Validation;
 using Puck.World.Transpiler.Vocabulary;
 using Xunit;
@@ -65,71 +62,7 @@ public class ConstructEffectLineLawTests {
 
         return 0;
     }
-    private static string? ReadRpcMessage(Stream stream) {
-        var header = new List<byte>();
-        var length = -1;
-
-        while (true) {
-            var next = stream.ReadByte();
-
-            if (next == -1) {
-                return null;
-            }
-            header.Add(item: ((byte)next));
-            if (
-                (header.Count >= 4) &&
-                (header[^4] == '\r') &&
-                (header[^3] == '\n') &&
-                (header[^2] == '\r') &&
-                (header[^1] == '\n')
-            ) {
-                foreach (var line in Encoding.ASCII.GetString(bytes: [.. header]).Split(
-                    options: StringSplitOptions.RemoveEmptyEntries,
-                    separator: ["\r\n"]
-                )) {
-                    if (line.StartsWith(
-                        comparisonType: StringComparison.OrdinalIgnoreCase,
-                        value: "Content-Length:"
-                    )) {
-                        _ = int.TryParse(
-                            result: out length,
-                            s: line["Content-Length:".Length..].Trim()
-                        );
-                    }
-                }
-                break;
-            }
-        }
-        if (length <= 0) {
-            return null;
-        }
-
-        var body = new byte[length];
-        var read = 0;
-
-        while (read < length) {
-            var count = stream.Read(
-                buffer: body,
-                count: (length - read),
-                offset: read
-            );
-
-            if (count == 0) {
-                return null;
-            }
-            read += count;
-        }
-
-        return Encoding.UTF8.GetString(bytes: body);
-    }
-    private static void WriteRpcMessage(Stream stream, string json) {
-        var bytes = Encoding.UTF8.GetBytes(s: json);
-
-        stream.Write(buffer: Encoding.ASCII.GetBytes(s: $"Content-Length: {bytes.Length}\r\n\r\n"));
-        stream.Write(buffer: bytes);
-        stream.Flush();
-    }
-    // Every 0-based start line the real language server publishes for a document on disk. A finding about a name
+    // Every 0-based start line the real language server publishes about the undeclared row. A finding about a name
     // the document does not declare needs a resolvable directory, so the probe is written to a file.
     private static async Task<IReadOnlyList<int>> PublishedLinesAsync(string source, string keyword) {
         var directory = Path.Combine(
@@ -150,66 +83,15 @@ public class ConstructEffectLineLawTests {
                 path: path
             ).ConfigureAwait(continueOnCapturedContext: true);
 
-            var uri = new Uri(uriString: path).AbsoluteUri;
-
-            using var clientToServer = new MemoryStream();
-            using var serverToClient = new MemoryStream();
-
-            WriteRpcMessage(
-                json: "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
-                stream: clientToServer
-            );
-            WriteRpcMessage(
-                json: new JsonObject {
-                    ["jsonrpc"] = "2.0",
-                    ["method"] = "textDocument/didOpen",
-                    ["params"] = new JsonObject {
-                        ["textDocument"] = new JsonObject {
-                            ["uri"] = uri,
-                            ["languageId"] = "puck",
-                            ["version"] = 1,
-                            ["text"] = source,
-                        },
-                    },
-                }.ToJsonString(),
-                stream: clientToServer
-            );
-            WriteRpcMessage(
-                json: "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}",
-                stream: clientToServer
-            );
-            WriteRpcMessage(
-                json: "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}",
-                stream: clientToServer
-            );
-            clientToServer.Position = 0;
-            await new PuckLanguageServer(
-                clientToServer,
-                serverToClient
-            ).RunAsync(cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(continueOnCapturedContext: true);
-            serverToClient.Position = 0;
-
-            var lines = new List<int>();
-
-            while (ReadRpcMessage(stream: serverToClient) is { } message) {
-                if (JsonNode.Parse(json: message)?["params"]?["diagnostics"] is not JsonArray published) {
-                    continue;
-                }
-                foreach (var entry in published) {
-                    if (
-                        (entry?["message"]?.ToString() is { } text) &&
-                        text.Contains(
-                        comparisonType: StringComparison.Ordinal,
-                        value: Missing
-                    ) &&
-                        (entry["range"]?["start"]?["line"]?.GetValue<int>() is { } line)
-                    ) {
-                        lines.Add(item: line);
-                    }
-                }
-            }
-
-            return lines;
+            return [.. (await LanguageServerClient.PublishedAsync(
+                text: source,
+                uri: new Uri(uriString: path).AbsoluteUri
+            ).ConfigureAwait(continueOnCapturedContext: true))
+                .Where(predicate: static diagnostic => diagnostic.Message.Contains(
+                    comparisonType: StringComparison.Ordinal,
+                    value: Missing
+                ))
+                .Select(selector: static diagnostic => diagnostic.Line)];
         } finally {
             Directory.Delete(
                 path: directory,

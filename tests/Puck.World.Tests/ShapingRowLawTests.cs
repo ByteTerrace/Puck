@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 
 using Xunit;
@@ -210,7 +211,7 @@ public sealed class ShapingRowLawTests {
                 ]
             ),
             ActionsRaw: new Dictionary<string, ActionSpec> {
-                ["jump"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new WorldEffect.SetVerticalVelocity(Velocity: 9f)])),
+                ["jump"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new WorldEffect.SetVerticalVelocity(Velocity: 9m)])),
             },
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["roam"] = Fixtures.TravelerRoamParameters,
@@ -227,7 +228,7 @@ public sealed class ShapingRowLawTests {
     }
     private static string[] DynamicsTrace(WorldDefinition definition, int ticks) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -269,7 +270,7 @@ public sealed class ShapingRowLawTests {
     );
     private static string[] ResponseTrace(WorldDefinition definition, int ticks) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -412,7 +413,7 @@ public sealed class ShapingRowLawTests {
 
         FixedVector3 RunHeld(bool withHeldRow, bool holdDrift) {
             using var fixture = Fixtures.FreshServer(definition: Build(withHeldRow: withHeldRow));
-            var actor = WorldPrincipal.Seat(slot: 0);
+            var actor = Principal.Seat(slot: 0);
 
             Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
                 Principal: actor,
@@ -476,7 +477,7 @@ public sealed class ShapingRowLawTests {
             KitRowsRaw = [kit with { Motion = kit.Motion with { Shaping = [new WorldShaping(Along: new WorldShapingAlong())] } }],
         };
         using var fixture = Fixtures.FreshServer(definition: instant);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -521,7 +522,7 @@ public sealed class ShapingRowLawTests {
                 ))] } }],
         };
         using var fixture = Fixtures.FreshServer(definition: finite);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -559,7 +560,7 @@ public sealed class ShapingRowLawTests {
     public void TheDynamicsRowMatchesTheIndependentCompiledFollowerForEachLane() {
         var definition = BuildDynamicsDocument();
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,
@@ -624,72 +625,53 @@ public sealed class ShapingRowLawTests {
             );
         }
     }
-    [Fact]
-    public void TheDynamicsRowReproducesTheRecordedTrace_WhereChangingItsFrequencyDiverges() {
-        var full = DynamicsTrace(
-            definition: BuildDynamicsDocument(),
-            ticks: 240
-        );
-        var head = full[..DynamicsTrace240.Length];
+
+    // The recorded prefix reproduces exactly, and the one perturbed row moves at least one tick of it — a trace no
+    // perturbation can move pins nothing about the row.
+    private static void AssertReproducesWherePerturbationDiverges(string[] recorded, Func<int, string[]> trace, Func<int, string[]> perturbed, string because) {
+        var full = trace(arg: 240);
 
         Assert.Equal(
-            actual: head,
-            expected: DynamicsTrace240
+            actual: full[..recorded.Length],
+            expected: recorded
         );
 
-        var perturbed = DynamicsTrace(
+        var moved = perturbed(arg: recorded.Length).Where(predicate: (line, tick) => !string.Equals(
+            a: full[tick],
+            b: line,
+            comparisonType: StringComparison.Ordinal
+        )).Count();
+
+        Assert.True(
+            condition: (moved > 0),
+            userMessage: because
+        );
+    }
+
+    [Fact]
+    public void TheDynamicsRowReproducesTheRecordedTrace_WhereChangingItsFrequencyDiverges() => AssertReproducesWherePerturbationDiverges(
+        because: "a faster dynamics row must move the trace, or the row pins nothing about its own rate",
+        perturbed: static ticks => DynamicsTrace(
             definition: BuildDynamicsDocument(frequency: 5f),
-            ticks: DynamicsTrace240.Length
-        );
-        var moved = 0;
-
-        for (var tick = 0; (tick < DynamicsTrace240.Length); tick++) {
-            if (!string.Equals(
-                a: full[tick],
-                b: perturbed[tick],
-                comparisonType: StringComparison.Ordinal
-            )) {
-                moved++;
-            }
-        }
-
-        Assert.True(
-            condition: (moved > 0),
-            userMessage: "a faster dynamics row must move the trace, or the row pins nothing about its own rate"
-        );
-    }
+            ticks: ticks
+        ),
+        recorded: DynamicsTrace240,
+        trace: static ticks => DynamicsTrace(
+            definition: BuildDynamicsDocument(),
+            ticks: ticks
+        )
+    );
     [Fact]
-    public void TheResponseTableGovernsByRowOrder_ReproducesTheRecordedTrace_WhereChangingTheRisingRowDiverges() {
-        var full = ResponseTrace(
-            definition: BuildResponseDocument(),
-            ticks: 240
-        );
-        var head = full[..ResponseTrace240.Length];
-
-        Assert.Equal(
-            actual: head,
-            expected: ResponseTrace240
-        );
-
-        var perturbed = ResponseTrace(
+    public void TheResponseTableGovernsByRowOrder_ReproducesTheRecordedTrace_WhereChangingTheRisingRowDiverges() => AssertReproducesWherePerturbationDiverges(
+        because: "changing the now-Rising row's own release rate must move the trace, or the row order pins nothing",
+        perturbed: static ticks => ResponseTrace(
             definition: BuildResponseDocument(risingEngage: 60f),
-            ticks: ResponseTrace240.Length
-        );
-        var moved = 0;
-
-        for (var tick = 0; (tick < ResponseTrace240.Length); tick++) {
-            if (!string.Equals(
-                a: full[tick],
-                b: perturbed[tick],
-                comparisonType: StringComparison.Ordinal
-            )) {
-                moved++;
-            }
-        }
-
-        Assert.True(
-            condition: (moved > 0),
-            userMessage: "changing the now-Rising row's own release rate must move the trace, or the row order pins nothing"
-        );
-    }
+            ticks: ticks
+        ),
+        recorded: ResponseTrace240,
+        trace: static ticks => ResponseTrace(
+            definition: BuildResponseDocument(),
+            ticks: ticks
+        )
+    );
 }

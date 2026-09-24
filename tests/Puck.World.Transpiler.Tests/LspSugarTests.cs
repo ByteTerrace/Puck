@@ -1,6 +1,4 @@
-using System.Text;
 using System.Text.Json.Nodes;
-using Puck.World.Transpiler.Lsp;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -10,181 +8,10 @@ namespace Puck.World.Transpiler.Tests;
 public class LspSugarTests {
     private const string SourceWithRuleAndStateRow = "puck: 1\nstate {\n    world: [\n        {\n            name: \"hp\"\n            kind: Int\n            capacity: 1\n        }\n    ]\n}\nrule \"heal\" {\n    when hp < 10\n    hp += 1\n}\n";
 
-    private static Task<JsonNode> HoverMarkedAsync(string markedSource) {
-        var offset = markedSource.IndexOf(
-            comparisonType: StringComparison.Ordinal,
-            value: '|'
-        );
-        var before = markedSource[..offset];
-        var line = before.Count(predicate: character => (character == '\n'));
-        var column = ((offset - before.LastIndexOf(value: '\n')) - 1);
-        var source = markedSource.Remove(
-            count: 1,
-            startIndex: offset
-        );
-
-        return SendRequestsAsync(
-            source,
-            (2,
-            $$$$"""{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///sugar.puck"},"position":{"line":{{{{line}}}},"character":{{{{column}}}}}}}""")
-        );
-    }
-    // Reads messages until one whose "id" equals `id`, skipping notifications (e.g. publishDiagnostics) along the way.
-    private static JsonNode ReadResponseWithId(Stream stream, int id) {
-        while (true) {
-            var raw = ReadRpcMessage(stream: stream);
-
-            Assert.NotNull(@object: raw);
-            var node = JsonNode.Parse(raw)!;
-
-            if (node["id"]?.GetValue<int>() == id) {
-                return node;
-            }
-        }
-    }
-    private static string? ReadRpcMessage(Stream stream) {
-        var headerBuffer = new List<byte>();
-        var contentLength = -1;
-
-        while (true) {
-            var b = stream.ReadByte();
-
-            if (b == -1) {
-                return null;
-            }
-
-            headerBuffer.Add(item: ((byte)b));
-            if (
-                (headerBuffer.Count >= 4) &&
-                (headerBuffer[^4] == '\r') &&
-                (headerBuffer[^3] == '\n') &&
-                (headerBuffer[^2] == '\r') &&
-                (headerBuffer[^1] == '\n')
-            ) {
-                var headerText = Encoding.ASCII.GetString(bytes: headerBuffer.ToArray());
-
-                foreach (var line in headerText.Split(
-                    options: StringSplitOptions.RemoveEmptyEntries,
-                    separator: ["\r\n"]
-                )) {
-                    if (line.StartsWith(
-                        comparisonType: StringComparison.OrdinalIgnoreCase,
-                        value: "Content-Length:"
-                    )) {
-                        var lenStr = line.Substring(startIndex: "Content-Length:".Length).Trim();
-
-                        int.TryParse(
-                            result: out contentLength,
-                            s: lenStr
-                        );
-                    }
-                }
-                break;
-            }
-        }
-
-        if (contentLength <= 0) {
-            return null;
-        }
-
-        var body = new byte[contentLength];
-        var read = 0;
-
-        while (read < contentLength) {
-            var r = stream.Read(
-                buffer: body,
-                count: (contentLength - read),
-                offset: read
-            );
-
-            if (r == 0) {
-                return null;
-            }
-            read += r;
-        }
-
-        return Encoding.UTF8.GetString(bytes: body);
-    }
-    private static async Task<JsonNode> SendRequestsAsync(string documentText, params (int Id, string Json)[] requests) {
-        using var clientToServer = new MemoryStream();
-        using var serverToClient = new MemoryStream();
-
-        WriteRpcMessage(
-            json: "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
-            stream: clientToServer
-        );
-        var openText = documentText.Replace(
-            newValue: "\\\\",
-            oldValue: "\\"
-        ).Replace(
-            newValue: "\\\"",
-            oldValue: "\""
-        ).Replace(
-            newValue: "\\n",
-            oldValue: "\n"
-        );
-
-        WriteRpcMessage(
-            json: $"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":\"file:///sugar.puck\",\"languageId\":\"puck\",\"version\":1,\"text\":\"{openText}\"}}}}}}",
-            stream: clientToServer
-        );
-        foreach (var (_, json) in requests) {
-            WriteRpcMessage(
-                json: json,
-                stream: clientToServer
-            );
-        }
-        WriteRpcMessage(
-            json: "{\"jsonrpc\":\"2.0\",\"id\":9999,\"method\":\"shutdown\"}",
-            stream: clientToServer
-        );
-        WriteRpcMessage(
-            json: "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}",
-            stream: clientToServer
-        );
-        clientToServer.Position = 0;
-
-        var server = new PuckLanguageServer(
-            clientToServer,
-            serverToClient
-        );
-
-        await server.RunAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        serverToClient.Position = 0;
-        JsonNode? last = null;
-
-        foreach (var (id, _) in requests) {
-            last = ReadResponseWithId(
-                id: id,
-                stream: serverToClient
-            );
-        }
-        return last!;
-    }
-    private static void WriteRpcMessage(Stream stream, string json) {
-        var bytes = Encoding.UTF8.GetBytes(s: json);
-        var header = $"Content-Length: {bytes.Length}\r\n\r\n";
-        var headerBytes = Encoding.ASCII.GetBytes(s: header);
-
-        stream.Write(buffer: headerBytes);
-        stream.Write(buffer: bytes);
-        stream.Flush();
-    }
-
     [Fact]
     public async Task CompletionOffersTheNewGateAndEffectKeywords() {
-        var response = await SendRequestsAsync(
-            SourceWithRuleAndStateRow,
-            (2, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/completion\",\"params\":{\"textDocument\":{\"uri\":\"file:///sugar.puck\"},\"position\":{\"line\":0,\"character\":0}}}")
-        );
+        var labels = await LanguageServerClient.CompletionLabelsAsync(markedSource: $"|{SourceWithRuleAndStateRow}");
 
-        var labels = response["result"]?["items"]?.AsArray()
-            .Select(selector: item => item?["label"]?.ToString())
-            .Where(predicate: label => (label is not null))
-            .ToHashSet(comparer: StringComparer.Ordinal);
-
-        Assert.NotNull(@object: labels);
         foreach (var keyword in new[] { "when", "and", "or", "not", "local", "push", "remove", "schedule", "transform", "transaction", "onFailure", "decision", "option", "interrupt", "onNoChoice", "rule", "shape", "placements", "placement" }) {
             Assert.Contains(
                 expected: keyword,
@@ -194,14 +21,10 @@ public class LspSugarTests {
     }
     [Fact]
     public async Task DocumentSymbolReportsARuleBlockWithItsGateAsAChild() {
-        var response = await SendRequestsAsync(
-            SourceWithRuleAndStateRow,
-            (2, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/documentSymbol\",\"params\":{\"textDocument\":{\"uri\":\"file:///sugar.puck\"}}}")
-        );
-
-        var symbols = response["result"]?.AsArray();
-
-        Assert.NotNull(@object: symbols);
+        var symbols = Assert.IsType<JsonArray>(@object: await LanguageServerClient.DocumentRequestAsync(
+            method: "textDocument/documentSymbol",
+            text: SourceWithRuleAndStateRow
+        ));
         var ruleSymbol = symbols.FirstOrDefault(predicate: s => (s?["name"]?.ToString() == "rule \"heal\""));
 
         Assert.NotNull(@object: ruleSymbol);
@@ -213,25 +36,21 @@ public class LspSugarTests {
             filter: child => (child?["name"]?.ToString() == "when")
         );
     }
-    [InlineData(2, true, "  ")]
-    [InlineData(4, true, "    ")]
-    [InlineData(4, false, "\t")]
+    // The editor receives exactly the text `puck format` writes, whatever indentation the client asks for.
+    [InlineData(2, true)]
+    [InlineData(4, true)]
+    [InlineData(4, false)]
     [Theory]
-    public async Task FormattingHonorsClientIndentation(int tabSize, bool insertSpaces, string indent) {
-        var request = System.Text.Json.JsonSerializer.Serialize(new {
-            jsonrpc = "2.0",
-            id = 2,
-            method = "textDocument/formatting",
-            @params = new { textDocument = new { uri = "file:///sugar.puck" }, options = new { tabSize, insertSpaces } }
-        });
-        var response = await SendRequestsAsync(
-            "host { width: 1280, height: 720 }",
-            (2, request)
+    public async Task FormattingIgnoresClientIndentation(int tabSize, bool insertSpaces) {
+        var edits = await LanguageServerClient.DocumentRequestAsync(
+            method: "textDocument/formatting",
+            options: new JsonObject { ["tabSize"] = tabSize, ["insertSpaces"] = insertSpaces },
+            text: "host { width: 1280, height: 720 }"
         );
 
         Assert.Equal(
-            $"host {{\n{indent}width: 1280\n{indent}height: 720\n}}\n",
-            response["result"]?[0]?["newText"]?.ToString()
+            PuckFormat.Format(source: "host { width: 1280, height: 720 }"),
+            edits?[0]?["newText"]?.ToString()
         );
     }
     [InlineData("let seats = 4\ncount: foreign.sea|ts\n")]
@@ -246,14 +65,14 @@ public class LspSugarTests {
     [InlineData("schema: \"puck.creation.v1\"\nnoise { rough|ness: 0.5 }\n")]
     [Theory]
     public async Task HoverDoesNotInventOutOfScopeOrNonCodeSymbols(string source) {
-        var response = await HoverMarkedAsync(markedSource: source);
-
-        Assert.Null(@object: response["result"]);
+        Assert.Null(@object: await LanguageServerClient.RequestAtAsync(
+            cursor: MarkedSource.Parse(marked: source),
+            method: "textDocument/hover"
+        ));
     }
     [Fact]
     public async Task HoverRecognizesAnInlineAuthoredCompositionMember() {
-        var response = await HoverMarkedAsync(markedSource: "ground floor { si|ze [8m, 6m] }");
-        var card = response["result"]?["contents"]?["value"]?.ToString();
+        var card = await LanguageServerClient.HoverAsync(markedSource: "ground floor { si|ze [8m, 6m] }");
 
         Assert.NotNull(@object: card);
         Assert.Contains(actualString: card, comparisonType: StringComparison.Ordinal, expectedSubstring: "A `ground` member");
@@ -280,8 +99,7 @@ public class LspSugarTests {
     [Theory]
     public async Task HoverExplainsCreationFieldsInsideAWorldPrototype(string body, string field, string description) {
         var source = (("schema: \"puck.world.definition.v1\"\nprototypes { prototype \"limestone\" { document {\nschema: \"puck.creation.v1\"\n" + body) + "\n} } }\n");
-        var response = await HoverMarkedAsync(markedSource: source);
-        var text = response["result"]?["contents"]?["value"]?.ToString();
+        var text = await LanguageServerClient.HoverAsync(markedSource: source);
 
         Assert.NotNull(@object: text);
         Assert.Contains(
@@ -298,12 +116,14 @@ public class LspSugarTests {
     [Fact]
     public async Task HoverOnADeclaredStateRowReportsItsKind() {
         // "hp" sits at line 12 ("    hp += 1"), 0-based.
-        var response = await SendRequestsAsync(
-            SourceWithRuleAndStateRow,
-            (2, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/hover\",\"params\":{\"textDocument\":{\"uri\":\"file:///sugar.puck\"},\"position\":{\"line\":12,\"character\":5}}}")
-        );
-
-        var hoverText = response["result"]?["contents"]?["value"]?.ToString();
+        var hoverText = LanguageServerClient.HoverText(result: await LanguageServerClient.RequestAtAsync(
+            cursor: new MarkedSource(
+                Character: 5,
+                Line: 12,
+                Text: SourceWithRuleAndStateRow
+            ),
+            method: "textDocument/hover"
+        ));
 
         Assert.NotNull(@object: hoverText);
         Assert.Contains(
@@ -331,8 +151,7 @@ public class LspSugarTests {
     [InlineData("let seats = 4\nbroken: [\ncount: sea|ts\n", "let seats = 4", "compile-time constant")]
     [Theory]
     public async Task HoverResolvesDeclarationsAndFunctions(string markedSource, string signature, string description) {
-        var response = await HoverMarkedAsync(markedSource: markedSource);
-        var text = response["result"]?["contents"]?["value"]?.ToString();
+        var text = await LanguageServerClient.HoverAsync(markedSource: markedSource);
 
         Assert.NotNull(@object: text);
         Assert.Contains(
@@ -352,8 +171,7 @@ public class LspSugarTests {
     [InlineData("value: setState(st|ate: \"hp\", value: 3)", "state row name")]
     [Theory]
     public async Task HoverUsesOwningSchemaForFieldsAndCallArguments(string source, string expected) {
-        var response = await HoverMarkedAsync(markedSource: source);
-        var text = response["result"]?["contents"]?["value"]?.ToString();
+        var text = await LanguageServerClient.HoverAsync(markedSource: source);
 
         Assert.NotNull(@object: text);
         Assert.Contains(

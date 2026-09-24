@@ -58,5 +58,12 @@ public sealed class CoverageManifestTests {
                 values: regressions.Take(count: 20)
             )}"
         );
+
+        // The committed manifest changes only through `puck baselines maths-ledger`, so every run holds it to what the
+        // declarations generate from it.
+        Assert.True(
+            condition: (File.ReadAllText(path: TestPaths.Artifact(fileName: "coverage-manifest.json")).ReplaceLineEndings(replacementText: "\n") == ArtifactJson.Serialize(value: Coverage.Generate(existing: committed))),
+            userMessage: $"coverage-manifest.json does not match the declarations; record it with {TestPaths.RecordCommand} and commit the result."
+        );
     }
 }

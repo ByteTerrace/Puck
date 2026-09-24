@@ -251,7 +251,7 @@
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",
-        "Name": "ExtractLowestSetBit"
+        "Name": "LowestSetBit"
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",
@@ -275,19 +275,15 @@
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",
-        "Name": "LeastSignificantBit"
-      },
-      {
-        "Type": "Puck.Maths.BinaryIntegerFunctions",
         "Name": "LeastSignificantDigit"
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",
-        "Name": "LogarithmBase10"
+        "Name": "DigitCount"
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",
-        "Name": "MostSignificantBit"
+        "Name": "BitLength"
       },
       {
         "Type": "Puck.Maths.BinaryIntegerFunctions",

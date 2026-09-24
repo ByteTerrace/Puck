@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.Maths;
@@ -13,9 +14,9 @@ public abstract record WorldPendingOpCheckpoint {
     /// <summary>A buffered document mutation.</summary>
     public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId, ushort ActOrdinal) : WorldPendingOpCheckpoint;
     /// <summary>A buffered whole-document rebuild-and-swap.</summary>
-    public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash, string? PreparationFailure) : WorldPendingOpCheckpoint;
+    public sealed record Rebuild(WorldRebuildRequest Request, Principal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash, string? PreparationFailure) : WorldPendingOpCheckpoint;
     /// <summary>A buffered journal undo.</summary>
-    public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : WorldPendingOpCheckpoint;
+    public sealed record Undo(int Count, Principal Principal, int ConnectionId, long CorrelationId) : WorldPendingOpCheckpoint;
 }
 /// <summary>One landed member's checkpointed state — the subset of the host engine's own private
 /// <c>WorldInstanceHost.LandedMember</c> that a co-hosted <c>Committed</c> resolution
@@ -32,7 +33,7 @@ public abstract record WorldPendingOpCheckpoint {
 /// <param name="Position">The member's exact SOURCE pose position at detach — the rollback anchor, distinct from
 /// <see cref="WorldTransferCommitMember.Position"/>'s (possibly frame-mapped) ARRIVAL pose.</param>
 /// <param name="Yaw">The member's exact SOURCE yaw at detach — see <paramref name="Position"/>.</param>
-/// <param name="DynamicState">The member's captured <c>WorldBody.TransferState</c> at detach (velocity, dash
+/// <param name="DynamicState">The member's captured <c>WorldBodyTransferState</c> at detach (velocity, dash
 /// overlay, in-flight timed presses) — the rollback restores this verbatim.</param>
 /// <param name="Designations">The member's captured designation rows at detach.</param>
 /// <param name="Peer">The member's peer admission record when it detached from the PEER range, or
@@ -51,7 +52,7 @@ public sealed record WorldLandedMemberCheckpoint(
     Vector3 BodyColor,
     FixedVector3 Position,
     FixedQ4816 Yaw,
-    WorldBody.TransferState DynamicState,
+    WorldBodyTransferState DynamicState,
     IReadOnlyList<WorldTargetDesignation> Designations,
     WorldPeerEventEntry? Peer,
     IReadOnlyList<WorldAdmissionGrant> AdmissionGrants,
@@ -189,12 +190,12 @@ public sealed record WorldAuthorityHostRowCheckpoint(
 /// </summary>
 public sealed record WorldAuthorityCheckpoint(
     WorldServerCheckpoint Server,
-    WorldPopulation.WorldPopulationCheckpoint Population,
-    WorldGrants.WorldGrantsCheckpoint Grants,
-    WorldTransferEscrow.WorldTransferEscrowCheckpoint Escrow,
-    WorldInputHoldRuntime.WorldInputHoldCheckpoint InputHold,
-    WorldEventFeed.WorldEventFeedCheckpoint EventFeed,
-    WorldOwnedWorlds.WorldOwnedWorldsCheckpoint OwnedWorlds,
+    WorldPopulationCheckpoint Population,
+    WorldGrantsCheckpoint Grants,
+    WorldTransferEscrowCheckpoint Escrow,
+    WorldInputHoldCheckpoint InputHold,
+    WorldEventFeedCheckpoint EventFeed,
+    WorldOwnedWorldsCheckpoint OwnedWorlds,
     WorldAuthorityHostRowCheckpoint HostRow,
     FieldLattice.Checkpoint? Fields = null,
     ArenaSearchCheckpoint? Search = null,

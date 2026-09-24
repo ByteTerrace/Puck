@@ -18,13 +18,13 @@ public sealed class WorldCostSourceTests {
             """, defaultSchema: WorldDefinition.SchemaVersion, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: compilation.Success, userMessage: compilation.Diagnostics.FormatReport(""));
-        var report = WorldCostAnalysis.Generate(compilation);
+        var report = WorldCostAnalysis.Generate(compilation: compilation);
 
         Assert.Equal(2, report.Contributors.Count);
-        Assert.Equal(["first_tick", "second_tick"], report.ContributorSources.Select(static source => source.Name));
-        Assert.Equal(["first", "second"], report.ContributorSources.Select(static source => source.ModuleInstancePath));
-        Assert.Equal(["/rules/0", "/rules/1"], report.ContributorSources.Select(static source => source.JsonPointer));
+        Assert.Equal(["first$tick", "second$tick"], report.ContributorSources.Select(selector: static source => source.Name));
+        Assert.Equal(["first", "second"], report.ContributorSources.Select(selector: static source => source.ModuleInstancePath));
+        Assert.Equal(["/rules/0", "/rules/1"], report.ContributorSources.Select(selector: static source => source.JsonPointer));
         Assert.All(report.ContributorSources, static source => Assert.Equal(3, source.Line));
-        Assert.True(report.TotalBound.IsUnmodeled);
+        Assert.True(condition: report.TotalBound.IsUnmodeled);
     }
 }

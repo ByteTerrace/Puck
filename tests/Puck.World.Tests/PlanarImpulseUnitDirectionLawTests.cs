@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// <c>BodyMotionOp.PlanarImpulse</c> arm) rides the compiled direction AS AUTHORED — rotated by the body's attitude
 /// and multiplied by <c>Speed</c>, never normalized — so an unnormalized direction silently rescales the impulse: an
 /// author who typo'd <c>(3, 0, 4)</c> meaning <c>+X</c> at speed 10 gets a 50 u/s impulse, not a refusal.
-/// <see cref="WorldDefinitionValidator"/> now refuses that BY NAME at load, the same "author states intent, the
+/// <see cref="WorldBodyEffects"/> refuses that by name, at load for a kit and at compile for a rule: the same "author states intent, the
 /// engine never guesses" discipline the neighboring zero-direction refusal already applies.
 /// </summary>
 public sealed class PlanarImpulseUnitDirectionLawTests {
@@ -31,8 +31,8 @@ public sealed class PlanarImpulseUnitDirectionLawTests {
                 LatchSeconds: 0f,
                 Effects: [new WorldEffect.PlanarImpulse(
                         BodyDirection: bodyDirection,
-                        Speed: 10f,
-                        DurationSeconds: 0.2f
+                        Speed: 10m,
+                        DurationSeconds: 0.2m
                     )]
             ),
             OnRelease: null

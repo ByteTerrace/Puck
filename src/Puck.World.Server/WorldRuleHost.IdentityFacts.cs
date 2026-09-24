@@ -170,32 +170,18 @@ public sealed partial class WorldRuleHost {
     // A lane write that would leave the cell as it is moves no row version, so a reload after a persist that
     // already mirrored the lane installs nothing.
     private void WriteIdentityLane(int rowOrdinal, CellKey key, long value) {
-        if (
-            Host.Arena.TryRead(
+        if (LaneHolds(
             key: key,
             rowOrdinal: rowOrdinal,
-            value: out var stored
-        ) &&
-            (stored.Kind == CellKind.Int) &&
-            (stored.AsInt == value)
-        ) {
-            return;
-        }
-        if (Host.Arena.TryWrite(
-            key: key,
-            operand: value,
-            reason: out var reason,
-            rowOrdinal: rowOrdinal,
-            write: StateWriteKind.Set
+            value: value
         )) {
             return;
         }
-        if (Host.Arena.TryMint(
-            key: out _,
-            name: Host.Arena.Keys[key],
-            reason: out reason,
+        if (TryWriteIdentityLane(
+            key: key,
+            reason: out var reason,
             rowOrdinal: rowOrdinal,
-            value: CellValue.Int(value: value)
+            value: value
         )) {
             return;
         }
@@ -206,6 +192,25 @@ public sealed partial class WorldRuleHost {
             );
         }
     }
+    // The one lane write: a set of the stored cell, or its mint when the lane holds no cell under the key. The lane
+    // is trait-free by admission, so the stored value this writes is the value a rule operand reads.
+    private bool TryWriteIdentityLane(int rowOrdinal, CellKey key, long value, out string reason) => Host.Arena.TryWriteOrMint(
+        evicted: out _,
+        key: key,
+        reason: out reason,
+        rowOrdinal: rowOrdinal,
+        value: CellValue.Int(value: value)
+    );
+    // Whether the lane's stored cell holds exactly this fact value.
+    private bool LaneHolds(int rowOrdinal, CellKey key, long value) => (
+        Host.Arena.TryRead(
+        key: key,
+        rowOrdinal: rowOrdinal,
+        value: out var stored
+    ) &&
+        (stored.Kind == CellKind.Int) &&
+        (stored.AsInt == value)
+    );
     private void PersistIdentityFact(WorldIdentity identity, CellName key, long value) {
         if (
             !Host.Profiles.TrySetFact(

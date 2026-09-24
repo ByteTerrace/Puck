@@ -6,6 +6,8 @@ namespace Puck.Vulkan;
 public static class VulkanImageLayout {
     /// <summary>The <c>VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL</c> value.</summary>
     public const uint ColorAttachmentOptimal = 2;
+    /// <summary>The <c>VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL</c> value.</summary>
+    public const uint DepthStencilAttachmentOptimal = 3;
     /// <summary>The <c>VK_IMAGE_LAYOUT_GENERAL</c> value.</summary>
     public const uint General = 1;
     /// <summary>The <c>VK_IMAGE_LAYOUT_PRESENT_SRC_KHR</c> value.</summary>

@@ -5,7 +5,7 @@
 // 'for' in it, none of which the document carries.
 
 schema: "puck.world.definition.v1"
-basis: "avatars/moth.puck"
+basis: "avatars/moth"
 documentId: "moth-courtyard"
 
 // Body indices are explicit; metadata and held pose cells share this table.
@@ -168,8 +168,8 @@ let captureWidth = 1440
 let captureHeight = 900
 
 // Near-elliptical, 1-Lipschitz masses keep a flattened bank or root from
-// shrinking every ray step through its whole noise scope. Exactly 2 delegates
-// to the eccentricity-clamped Ellipsoid primitive, so use a slightly fuller form.
+// shrinking every ray step through its whole noise scope: a slightly fuller
+// form than the ellipsoid (exactly 2).
 let landscapeExponent = 2.05
 
 // Art target: 7.5 cm spacing, varied knee-high blades, a shared traveling gust.
@@ -240,7 +240,6 @@ host {
   width: captureWidth
   height: captureHeight
   targetHertz: 60
-  timing: true
 }
 
 bodies {
@@ -1433,15 +1432,14 @@ state {
       name: pose["name"]
       kind: "Fixed"
       cells: concat(
-        select(pose["replaceCells"], [
+        pose["replaceCells"] ? [
           {
             $replace: true
           }
-        ], []
-        ),
+        ] : [],
         map(stations, station => {
           key: $"""{station["index"]}"""
-          value: select(pose["heldZero"], "0", $"""{station[pose["field"]]}""")
+          value: pose["heldZero"] ? "0" : $"""{station[pose["field"]]}"""
         }
         )
       )
@@ -1614,7 +1612,7 @@ bindingOverlays [
               value: null
             }
             ), map(inspectionViews, (view, i) => {
-              sources [$"""keyboard.{select(i == 7, 0, i + 1)}"""]
+              sources [$"""keyboard.{i == 7 ? 0 : i + 1}"""]
               command: "view.override"
               value {
                 kind: "Axis1D",

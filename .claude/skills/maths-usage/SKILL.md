@@ -31,6 +31,9 @@ path.
 - Treat RNG state and stream identity as simulation state. Preserve draw order;
   do not share or reseed streams casually.
 - Keep presentation conversions at the presentation seam.
+- Gate a `PDEP`/`PEXT` path on `BitManipulation.HasFastParallelBits`, never
+  `Bmi2.IsSupported`: AMD before Zen 3, the Steam Deck's Zen 2 included, and
+  Hygon's licensed Zen 1 run them in microcode at up to hundreds of cycles.
 - Do not infer a primitive's contract from its name; verify its source, XML
   documentation, and tests.
 
@@ -53,7 +56,7 @@ The floor is one command — `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Test
 about thirteen seconds. It is the Default tier, and the only one carrying the
 coverage ratchet and both leg gates, so every change owes it and most changes
 owe nothing more. Run `deep.runsettings` before committing; `exhaustive.runsettings`
-and `bench.runsettings` on demand only.
+on demand only. No tier measures time; cost is `puck bench`'s.
 
 **Do not reflexively run the `exhaustive` tier.** It takes minutes and cannot
 run a subset. Run it only when the member you touched names it as its gate of

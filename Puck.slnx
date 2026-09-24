@@ -54,6 +54,7 @@
         <Project Path="src/Puck.World.Addons/Puck.World.Addons.csproj" />
         <Project Path="src/Puck.World.AgentBridge/Puck.World.AgentBridge.csproj" />
         <Project Path="src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj" />
+        <Project Path="src/Puck.World.AgentHarness.Azure/Puck.World.AgentHarness.Azure.csproj" />
         <Project Path="src/Puck.World.Authoring/Puck.World.Authoring.csproj" />
         <Project Path="src/Puck.World.Azure/Puck.World.Azure.csproj" />
         <Project Path="src/Puck.World.Browser/Puck.World.Browser.csproj" />
@@ -61,6 +62,7 @@
         <Project Path="src/Puck.World.Console/Puck.World.Console.csproj" />
         <Project Path="src/Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
         <Project Path="src/Puck.Mcp/Puck.Mcp.csproj" />
+        <Project Path="src/Puck.Mcp.Azure/Puck.Mcp.Azure.csproj" />
         <Project Path="src/Puck.World.Machines/Puck.World.Machines.csproj" />
         <Project Path="src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <Project Path="src/Puck.World.Schema/Puck.World.Schema.csproj" />
@@ -74,12 +76,14 @@
     <Folder Name="/tests/">
         <Project Path="tests/Puck.Abstractions.Tests/Puck.Abstractions.Tests.csproj" />
         <Project Path="tests/Puck.AdvancedGamingBrick.Forge.Tests/Puck.AdvancedGamingBrick.Forge.Tests.csproj" />
+        <Project Path="tests/Puck.AdvancedGamingBrick.Tests/Puck.AdvancedGamingBrick.Tests.csproj" />
         <Project Path="tests/Puck.Analyzers.Tests/Puck.Analyzers.Tests.csproj" />
         <Project Path="tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj" />
         <Project Path="tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
         <Project Path="tests/Puck.Audio.Tests/Puck.Audio.Tests.csproj" />
         <Project Path="tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj" />
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
+        <Project Path="tests/Puck.DirectX.Tests/Puck.DirectX.Tests.csproj" />
         <Project Path="tests/Puck.GamingBricks.Tests/Puck.GamingBricks.Tests.csproj" />
         <Project Path="tests/Puck.HumbleGamingBrick.Forge.Tests/Puck.HumbleGamingBrick.Forge.Tests.csproj" />
         <Project Path="tests/Puck.HumbleGamingBrick.Tests/Puck.HumbleGamingBrick.Tests.csproj" />
@@ -103,6 +107,7 @@
         <Project Path="tests/Puck.State.Topology.Tests/Puck.State.Topology.Tests.csproj" />
         <Project Path="tests/Puck.State.Vectors.Tests/Puck.State.Vectors.Tests.csproj" />
         <Project Path="tests/Puck.Text.Tests/Puck.Text.Tests.csproj" />
+        <Project Path="tests/Puck.Vulkan.Tests/Puck.Vulkan.Tests.csproj" />
         <Project Path="tests/Puck.World.Azure.Tests/Puck.World.Azure.Tests.csproj" />
         <Project Path="tests/Puck.World.Browser.Tests/Puck.World.Browser.Tests.csproj" />
         <Project Path="tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj" />

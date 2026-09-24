@@ -50,12 +50,10 @@ mod fixed_vectors;
 // zero means "this kind carries no verdict".
 pub use crate::abi_generated::{ChannelKind, InCellKind, OutCellKind, SubjectKind, Verdict};
 
-// The capability mask bits an `Ask` requests in its `B` lane — frozen independently of the host's
+// The capability mask bits an `Ask` requests in its `B` lane — defined independently of the host's
 // own capability ordinals, so these values are the wire, not a projection of an internal enum. An
-// `Ask` names exactly one. GENERATED; see `abi_generated`'s module doc. `CAP_RESERVED` (bit 2,
-// formerly `CAP_PRESENT`) is a PERMANENTLY RESERVED HOLE — the host maps it to no capability, so an
-// `Ask` naming it always resolves as unheld; never spend it on a new capability.
-pub use crate::abi_generated::{CAP_CONTROL, CAP_DRIVE, CAP_EDIT, CAP_MUTATE, CAP_OBSERVE, CAP_RESERVED};
+// `Ask` names exactly one. GENERATED; see `abi_generated`'s module doc.
+pub use crate::abi_generated::{CAP_CONTROL, CAP_DRIVE, CAP_EDIT, CAP_MUTATE, CAP_OBSERVE};
 
 // The closed request/observation verb vocabulary, and the pinned part count of a body-pose answer.
 // An addon needs these to READ what the host sends — matching a disclosure's verb, counting an
@@ -387,7 +385,7 @@ impl<'a> Outputs<'a> {
 
     /// Submits ONE mutation payload through a Mutate handle over a document section — the addon
     /// mutation seam's own act. `kind_ordinal` is the declared `WorldMutation` kind ordinal (the
-    /// World host's `MutationKindAttribute.Ordinal`, `0..=63`); `payload` is the UTF-8 JSON bytes,
+    /// World host's `MutationKindAttribute.Ordinal`, `0..=127`); `payload` is the UTF-8 JSON bytes,
     /// already written into THIS guest's own linear memory by the caller (this method only names the
     /// region — pointer and length — for the host's pointer-safety copy; it never copies the bytes
     /// itself, and `payload` must stay valid until `puck_on_tick` returns, since the host reads it

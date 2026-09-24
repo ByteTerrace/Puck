@@ -757,7 +757,7 @@ public sealed class CommandModalityTests {
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
-    private sealed class SeatPrincipals : ICommandPrincipalResolver {
-        public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
+    private sealed class SeatPrincipals : IPrincipalResolver {
+        public Principal PrincipalOf(int slot) => Principal.Seat(slot: slot);
     }
 }

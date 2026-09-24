@@ -71,7 +71,7 @@ public static partial class ArenaVectorTransforms {
             weights: weights
         )) {
             refusal = Refused(
-                code: code.Value,
+                code: code,
                 reason: $"row '{into.RowName()}' cell '{into.KeyName(key: intoKey)}' takes no mix of its {terms.Length} terms"
             );
 

@@ -68,11 +68,11 @@ public sealed class FixedSpatialNeighborhood {
         Z: Floor(raw: position.Z.Value)
     );
     private static int Compare(in FixedSpatialNeighbor left, in FixedSpatialNeighbor right) {
-        var order = left.SquaredDistanceRaw.CompareTo(value: right.SquaredDistanceRaw);
-
-        return ((order != 0)
-            ? order
-            : left.Index.CompareTo(value: right.Index)
+        return LexicographicOrder.Compare(
+            leftPrimary: left.SquaredDistanceRaw,
+            leftSecondary: left.Index,
+            rightPrimary: right.SquaredDistanceRaw,
+            rightSecondary: right.Index
         );
     }
     private int FindCell(Key key) {
@@ -367,11 +367,11 @@ public sealed class FixedSpatialNeighborhood {
     }
     private readonly record struct Point(Key Key, int Index, FixedVector3 Position) : IComparable<Point> {
         public int CompareTo(Point other) {
-            var order = Key.CompareTo(other: other.Key);
-
-            return ((order != 0)
-                ? order
-                : Index.CompareTo(value: other.Index)
+            return LexicographicOrder.Compare(
+                leftPrimary: Key,
+                leftSecondary: Index,
+                rightPrimary: other.Key,
+                rightSecondary: other.Index
             );
         }
     }

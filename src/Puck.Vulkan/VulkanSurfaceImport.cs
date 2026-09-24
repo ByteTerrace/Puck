@@ -65,26 +65,19 @@ public sealed class VulkanSurfaceImport : IDisposable {
         m_commandResources?.Dispose();
         m_commandResources = null;
 
-        if (
-            (device is not null) &&
-            (0 != m_imageViewHandle)
-        ) {
+        if (device is not null) {
             m_framebufferSetApi.DestroyImageView(
-                deviceHandle: device.Handle,
+                device: device.Commands,
                 imageViewHandle: m_imageViewHandle
             );
-        }
-
-        m_imageViewHandle = 0;
-
-        if (device is not null) {
             m_externalMemoryApi.DestroyImage(
-                deviceHandle: device.Handle,
+                device: device.Commands,
                 imageHandle: m_imageHandle,
                 memoryHandle: m_memoryHandle
             );
         }
 
+        m_imageViewHandle = 0;
         m_imageHandle = 0;
         m_memoryHandle = 0;
         m_sharedHandle = 0;
@@ -96,14 +89,15 @@ public sealed class VulkanSurfaceImport : IDisposable {
 
         m_commandBufferRecordingApi.BeginCommandBuffer(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
+            device: device.Commands
         ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
         m_commandBufferRecordingApi.TransitionImageLayout(
+            aspectMask: VulkanGpuFormats.ColorAspect,
             baseMipLevel: 0,
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: VulkanAccessFlags.ShaderRead,
             destinationStageMask: VulkanPipelineStageFlags.FragmentShader,
-            deviceHandle: device.Handle,
+            device: device.Commands,
             imageHandle: m_imageHandle,
             mipLevelCount: 1,
             newLayout: VulkanImageLayout.ShaderReadOnlyOptimal,
@@ -113,14 +107,14 @@ public sealed class VulkanSurfaceImport : IDisposable {
         );
         m_commandBufferRecordingApi.EndCommandBuffer(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
+            device: device.Commands
         ).ThrowIfFailed(operation: "vkEndCommandBuffer");
 
         Span<nint> commandBuffers = [commandBufferHandle];
 
         m_queueSubmitter.SubmitAndWait(
             commandBufferHandles: commandBuffers,
-            deviceHandle: device.Handle,
+            device: device.Commands,
             graphicsQueue: device.GraphicsQueue
         );
     }
@@ -163,7 +157,7 @@ public sealed class VulkanSurfaceImport : IDisposable {
         if (
             (0 != m_imageViewHandle) &&
             (m_device is not null) &&
-            (m_device.Handle == device.Handle) &&
+            (m_device.Commands == device.Commands) &&
             (m_sharedHandle == sharedHandle) &&
             (m_width == width) &&
             (m_height == height) &&
@@ -176,10 +170,10 @@ public sealed class VulkanSurfaceImport : IDisposable {
 
         var instance = deviceContext.Instance;
         var imported = m_externalMemoryApi.ImportImage(request: new VulkanExternalImageImportRequest(
-            DeviceHandle: device.Handle,
+            Device: device.Commands,
             Format: vulkanFormat,
             Height: height,
-            InstanceHandle: instance.Handle,
+            Instance: instance.Commands,
             PhysicalDeviceHandle: device.PhysicalDevice.Handle,
             SharedHandle: sharedHandle,
             Width: width
@@ -191,7 +185,7 @@ public sealed class VulkanSurfaceImport : IDisposable {
         m_framebufferSetApi.CreateImageView(
             imageViewHandle: out m_imageViewHandle,
             request: new VulkanImageViewCreateRequest(
-                DeviceHandle: device.Handle,
+                Device: device.Commands,
                 Format: vulkanFormat,
                 ImageHandle: m_imageHandle
             )

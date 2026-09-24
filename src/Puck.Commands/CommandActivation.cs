@@ -15,6 +15,6 @@ public readonly record struct CommandActivation(
     CommandPhase Phase,
     CommandResult Result,
     string? Text = null,
-    CommandPrincipal Principal = default,
+    Principal Principal = default,
     int Slot = 0
 );

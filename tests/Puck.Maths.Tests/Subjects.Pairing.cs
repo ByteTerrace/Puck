@@ -104,12 +104,12 @@ internal static partial class Subjects {
             )
         );
     }
-    private static void ExpectElegantResult<T>(Func<T> action, BigInteger expected) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        if (expected > BigInteger.CreateChecked(value: ~T.Zero)) { Assert.Throws<OverflowException>(testCode: () => action()); } else { Assert.Equal(
-            expected: T.CreateChecked(value: expected),
-            actual: action()
-        ); }
-    }
+    private static void ExpectElegantResult<T>(Func<T> action, BigInteger expected) where T : IBinaryInteger<T>, IUnsignedNumber<T> =>
+        ExpectValueOrOverflow(
+            action: action,
+            expected: () => T.CreateChecked(value: expected),
+            overflows: (expected > BigInteger.CreateChecked(value: ~T.Zero))
+        );
     private static void CheckEncodedHexOperations(long value, int factor) {
         var subject = new HexagonalIndex(value: value);
 

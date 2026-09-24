@@ -1,15 +1,20 @@
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using Puck.Networking;
 
 namespace Puck.Mcp;
 
 // Bound replies through the SDK's serialization and send lock, not only through engine dispatch.
-internal sealed class BoundedMcpTransport(Stream input, Stream output, Action<Exception> fail, CancellationToken lifetime)
+internal sealed class BoundedMcpTransport(Stream input, Stream output, Action<Exception> fail, TimeProvider clock, CancellationToken lifetime)
     : StreamServerTransport(
     input,
     output,
     "Puck Operator"
 ) {
+    // The time one reply may take to reach stdout before the adapter treats the client as stalled.
+    private static readonly TimeSpan WriteDeadline = TimeSpan.FromSeconds(seconds: 5);
+
+    private readonly TimeProvider m_clock = clock;
     private readonly Action<Exception> m_fail = fail;
     private readonly CancellationToken m_lifetime = lifetime;
 
@@ -25,12 +30,13 @@ internal sealed class BoundedMcpTransport(Stream input, Stream output, Action<Ex
 
         try {
             if (pending > 4) { throw new InvalidDataException(message: "MCP output exceeds four pending replies; the client must drain stdout."); }
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
-                token1: cancellationToken,
-                token2: m_lifetime
+            using var deadline = new OperationDeadline(
+                caller: cancellationToken,
+                lifetime: m_lifetime,
+                timeProvider: m_clock,
+                timeout: WriteDeadline
             );
 
-            deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 5));
             send = base.SendMessageAsync(
                 message,
                 deadline.Token

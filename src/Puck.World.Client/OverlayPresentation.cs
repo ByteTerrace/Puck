@@ -53,67 +53,66 @@ public static class OverlayRecency {
         ));
     }
 }
-/// <summary>Evaluates an <see cref="OverlayPredicate.State"/> against a live document: text rows compare ordinally,
-/// every other row compares as <see cref="FixedQ4816"/> through <see cref="ActionStateComparisons.Holds(ActionStateComparison, FixedQ4816, FixedQ4816)"/>.</summary>
+/// <summary>Evaluates an <see cref="OverlayPredicate.State"/> against the state mirror: text rows compare ordinally,
+/// every other row compares as <see cref="FixedQ4816"/> through <see cref="ExpressionComparisons.Holds(ExpressionOp, FixedQ4816, FixedQ4816)"/>.
+/// The binding reads the eased follower by default and the stored truth with <c>.$target</c>, at the tick the mirror
+/// last read.</summary>
 public static class OverlayStateComparison {
-    /// <summary>Returns whether the predicate holds as of <paramref name="tick"/>. An unparseable binding, an
-    /// undeclared row, or an absent cell reads false.</summary>
-    /// <param name="definition">The live definition.</param>
+    /// <summary>Returns whether the predicate holds. An unparseable binding, an undeclared row, or an absent cell
+    /// reads false.</summary>
+    /// <param name="mirror">The state mirror the binding reads through.</param>
     /// <param name="state">The predicate.</param>
-    /// <param name="tick">The tick a Cycle row's value is computed at.</param>
-    /// <param name="engineTick">The engine tick a StateAdvance row's value is computed at.</param>
-    public static bool Holds(WorldDefinition definition, OverlayPredicate.State state, ulong tick, ulong engineTick) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    /// <returns><see langword="true"/> when the predicate holds.</returns>
+    public static bool Holds(WorldStateMirror mirror, OverlayPredicate.State state) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: state);
 
-        if (
-            !BindableState.TryParseBinding(
-            key: out var key,
-            row: out var rowName,
-            value: state.Binding
-        ) ||
-            !WorldStateReader.TryRead(
-            definition: definition,
-            key: key,
-            rawValue: out var rawValue,
-            row: out var row,
-            rowName: rowName,
-            text: out var text,
-            tick: tick,
-            engineTick: engineTick
-        )
-        ) {
+        var slot = mirror.RegisterToken(
+            conversion: WorldStateConversion.Number,
+            token: state.Binding
+        );
+
+        if (slot < 0) {
             return false;
         }
 
-        if (row.Kind == CellKind.Text) {
+        var cell = mirror.Sample(slot: slot).Value;
+
+        if (!cell.HasValue) {
+            return false;
+        }
+
+        if (cell.Kind == CellKind.Text) {
             if (state.Text is not { } expectedText) {
                 return false;
             }
 
             var equal = string.Equals(
-                a: text,
+                a: cell.AsText,
                 b: expectedText,
                 comparisonType: StringComparison.Ordinal
             );
 
-            return ((state.Comparison == ActionStateComparison.NotEqual)
+            return ((state.Comparison == ExpressionOp.NotEqual)
                 ? !equal
                 : equal
             );
         }
 
         if (
-            (rawValue is not { } raw) ||
+            (cell.Kind is CellKind.Vector) ||
             (state.Value is not { } expected)
         ) {
             return false;
         }
 
-        var value = ((row.Kind == CellKind.Fixed)
-            ? FixedQ4816.FromRawBits(value: raw)
-            : FixedQ4816.FromDouble(value: raw)
-        );
+        var value = (cell.Kind switch {
+            CellKind.Fixed => FixedQ4816.FromRawBits(value: cell.AsFixed),
+            CellKind.Bool => FixedQ4816.FromDouble(value: (cell.AsBool
+                ? 1d
+                : 0d)),
+            _ => FixedQ4816.FromDouble(value: cell.AsInt),
+        });
 
         return state.Comparison.Holds(
             expected: FixedQ4816.FromDouble(value: expected),

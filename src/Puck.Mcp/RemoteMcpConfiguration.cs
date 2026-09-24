@@ -36,6 +36,12 @@ public static partial class RemoteMcpServer {
         var directory = Path.GetDirectoryName(path: path)!;
 
         return (options with {
+            CertificatePasswordFile = ((options.CertificatePasswordFile is { } passwordFile)
+            ? Path.GetFullPath(
+                passwordFile,
+                directory
+            )
+            : null),
             CertificatePath = ((options.CertificatePath is { } certificate)
             ? Path.GetFullPath(
                 certificate,
@@ -44,7 +50,13 @@ public static partial class RemoteMcpServer {
             : null),
         }).Validate();
     }
-    /// <summary>Reloads gateway access every second. Invalid configuration revokes access; other changes require restart.</summary>
+
+    /// <summary>Gets how often <see cref="WatchConfigurationAsync"/> rereads the configuration, on the host's
+    /// <see cref="TimeProvider"/>.</summary>
+    public static TimeSpan ConfigurationReloadInterval { get; } = TimeSpan.FromSeconds(seconds: 1);
+
+    /// <summary>Reloads gateway access every <see cref="ConfigurationReloadInterval"/> on the host's
+    /// <see cref="TimeProvider"/>. Invalid configuration revokes access; other changes require restart.</summary>
     /// <param name="app">The running resource server.</param>
     /// <param name="configurationPath">Its deployment document.</param>
     /// <param name="initial">The validated startup snapshot.</param>
@@ -54,7 +66,10 @@ public static partial class RemoteMcpServer {
         var policy = app.Services.GetRequiredService<RemoteMcpAccessPolicy>();
         var fingerprint = ConfigurationIdentity(options: initial);
         var failed = false;
-        using var timer = new PeriodicTimer(period: TimeSpan.FromSeconds(seconds: 1));
+        using var timer = new PeriodicTimer(
+            period: ConfigurationReloadInterval,
+            timeProvider: app.Services.GetRequiredService<TimeProvider>()
+        );
 
         try {
             while (await timer.WaitForNextTickAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)) {

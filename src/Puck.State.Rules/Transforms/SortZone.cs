@@ -1,8 +1,9 @@
 namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
-    // The zone's cells are indexed by position once; each attribute row is then walked once to fill its column of
-    // the key table, so a token the attribute row does not carry sorts as zero, exactly as an absent cell did.
+    // Each attribute column of the key table is the zone's word read through that attribute row at the firing's
+    // time, so a token sorts by the live value every other read of its cell answers, and a token the attribute row
+    // does not carry sorts as zero.
     private static bool TrySortZone(in ArenaTransformContext context, ArenaTransform.SortZone sort, out bool moved, out EffectRefusal refusal) {
         moved = false;
 
@@ -61,27 +62,21 @@ public static partial class ArenaTransforms {
             }
 
             descending[key] = attribute.Descending;
-            for (var position = 0; (position < count); position++) {
-                if (
-                    arena.TryKeyAt(
-                    key: out var token,
-                    position: position,
-                    rowOrdinal: sort.RowOrdinal
-                ) &&
-                    arena.TryReadRaw(
-                    key: token,
-                    raw: out var raw,
-                    rowOrdinal: attribute.RowOrdinal
+            _ = arena.ReadWord(
+                attributeOrdinal: attribute.RowOrdinal,
+                rowOrdinal: sort.RowOrdinal,
+                time: context.Time,
+                word: keys.Slice(
+                    length: count,
+                    start: (key * count)
                 )
-                ) {
-                    keys[((key * count) + position)] = raw;
-                }
-            }
+            );
         }
 
         using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
         var order = orderLease.Span;
+
         SortOrder(
             count: count,
             descending: descending,

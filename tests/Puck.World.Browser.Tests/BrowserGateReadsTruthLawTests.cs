@@ -1,4 +1,5 @@
 using System.Text;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Browser.Tests;
@@ -35,7 +36,7 @@ public sealed class BrowserGateReadsTruthLawTests {
         Name: CellName.Parse(candidate: name),
         Gate: new ActionPredicate.CompareState(
             State: gauge,
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: 100m,
             Key: "0"
         ),
@@ -48,23 +49,23 @@ public sealed class BrowserGateReadsTruthLawTests {
     private static WorldDefinition BuildBaseDocument() {
         var errors = new List<string>();
         var deferred = new List<string>();
-        var root = RepositoryRoot();
+        var root = RepositoryPaths.RequireRoot();
         var basisBytes = File.ReadAllBytes(path: Path.Combine(
             root,
             "src",
             "Puck.World",
             "Assets",
             "worlds",
-            "standard.basis.json"
+            "standard.world.json"
         ));
-        var fragmentBytes = File.ReadAllBytes(path: Path.Combine(
+        var fragmentBytes = ShippedWorldDocuments.Read(path: Path.Combine(
             root,
             "src",
             "Puck.World",
             "Assets",
             "worlds",
             "games",
-            "tictactoe.world.json"
+            "tictactoe.puck"
         ));
 
         Assert.True(
@@ -93,21 +94,6 @@ public sealed class BrowserGateReadsTruthLawTests {
 
         return definition!;
     }
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while (
-            (directory is not null) &&
-            !File.Exists(path: Path.Combine(
-            path1: directory.FullName,
-            path2: "Puck.slnx"
-        ))
-        ) {
-            directory = directory.Parent;
-        }
-
-        return directory!.FullName;
-    }
 
     [Fact]
     public void BrowserGateOverAnEasedCellOpensWhenTheTruthCrosses() {
@@ -123,8 +109,8 @@ public sealed class BrowserGateReadsTruthLawTests {
 
         var session = new BrowserSession(definition: document);
 
-        Assert.True(condition: session.TryWriteRow(row: "eased", key: "0", value: 300L, add: false, reason: out var reasonEased), userMessage: reasonEased);
-        Assert.True(condition: session.TryWriteRow(row: "plain", key: "0", value: 300L, add: false, reason: out var reasonPlain), userMessage: reasonPlain);
+        Assert.True(condition: session.TryWriteRow(add: false, key: "0", reason: out var reasonEased, row: "eased", value: 300L), userMessage: reasonEased);
+        Assert.True(condition: session.TryWriteRow(add: false, key: "0", reason: out var reasonPlain, row: "plain", value: 300L), userMessage: reasonPlain);
 
         var easedAt = -1;
         var plainAt = -1;
@@ -132,8 +118,8 @@ public sealed class BrowserGateReadsTruthLawTests {
         for (var step = 1; (step <= 240); step++) {
             _ = session.Judge(tick: ((ulong)step));
 
-            var plainCell = session.ReadRow(row: "plainFired", key: "$value");
-            var easedCell = session.ReadRow(row: "easedFired", key: "$value");
+            var plainCell = session.ReadRow(key: "$value", row: "plainFired");
+            var easedCell = session.ReadRow(key: "$value", row: "easedFired");
 
             if ((plainAt < 0) && (plainCell.Value == "1")) {
                 plainAt = step;

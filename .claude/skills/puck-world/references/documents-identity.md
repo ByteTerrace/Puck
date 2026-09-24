@@ -1,6 +1,6 @@
 # Identity conventions and owned-world identity documents
 
-Part of [`puck.world.def.v1`](documents.md). See
+Part of [`puck.world.definition.v1`](documents.md). See
 [documents-state.md](documents-state.md) for `state.identity` row mechanics.
 
 ## Identity conventions
@@ -12,21 +12,22 @@ Part of [`puck.world.def.v1`](documents.md). See
   per-machine: a `Machine` source's `cable` port (`WorldMachineCable` — name +
   position), never a row of its own; `WorldDefinition.MachineCableGroups()`
   derives the groups.
-- Everything else is string-addressed: stable ids (`WorldSceneRow`,
-  `WorldCreation`, `WorldPlacement`, `WorldSpawnPoint`,
+- Everything else is string-addressed: stable ids (`WorldPrototype`,
+  `WorldPlacement`, `WorldSpawnPoint`,
   `WorldBindingOverlay`, HUD panels/elements, profiles) or names
   (`WorldCamera`, `WorldKit`, `WorldLook`, `WorldChannel`, `WorldSpeaker`,
   `WorldAddonRow`, `WorldViewLayout`, `WorldStateRow`).
 - Spawn points carry both modes deliberately: `Id` is the mutation address,
   but LIST ORDER is seat identity (seat n spawns at `SpawnPoints[n]`).
-- Grant rows are keyed by their `(principal, capability, subject)` triple —
+- Grant rows are keyed by their `(grantee, capability, subject)` triple —
   a grant IS that triple (`Exclusive` and the co-drive fields are row data,
-  not key). `GrantSubject` and `WorldPrincipal` serialize as the console
+  not key). `GrantSubject`, `Grantee` and `Principal` serialize as the console
   grammar tokens through their own converters (`all`, `body:<n>`,
   `screen:<n>`, `section:<name>`, `state:<name>`,
   `region:<name>`, `seat:<n>`, `creation:<id>`, `placement:<id>`;
   `seat1..seat4`, `console`, `addon:<name>`,
-  `peer:<index>:<generation>`, `document:<id>`). A member-wise serialization would permit denormalized
+  `peer:<index>:<generation>`, `world`; a grantee adds `group:<id>` and
+  `document:<id>`). A member-wise serialization would permit denormalized
   "phantom grant" keys no table lookup could match. Two asymmetries to know:
   `composition` is a write-only subject token (echoed by `world.grants`,
   rejected on read — only the boot seed constructs it). A peer identity is
@@ -37,26 +38,26 @@ Part of [`puck.world.def.v1`](documents.md). See
   `WorldPlacement.Region` (`WorldPlacementRegion`) is the document-side
   facet a region name addresses — a sphere on the placement's own position,
   keyed by the placement's own `Id`. `WorldPlacement.Attach`
-  (`WorldPlacementAttach`, new) is a placement's BODY-ATTACHMENT facet — a
+  (`WorldPlacementAttach`) is a placement's BODY-ATTACHMENT facet — a
   0-based `body:<n>`-indexed target plus a local offset rotated into the
   body's own frame. It derives TWICE off the one authored facet: the
   authoritative fixed-point resolve
-  (`Server/WorldPlacementAttachment.TryResolve`, called on demand by
+  (`WorldPlacementAttachment.TryResolve` in `Puck.World.Server`, called on demand by
   `world.attachments` and every active tick for attached gravity areas), and
   the rendered pose —
   presentation float over the client's INTERPOLATED body pose, packed every
-  frame by `Client/WorldStampPool.cs`. Riding the interpolated pose is what
+  frame by `src/Puck.World.Client/WorldStampPool.cs`. Riding the interpolated pose is what
   keeps an attached row as smooth as its body; reading the authoritative
   resolve in the renderer would judder at the tick rate. An attached row
   draws through the reserved stamp pool, never as a static stamp
-  (`Client/WorldPlacementStamper.IsStaticStamp` is the one fork), so it
+  (`WorldPlacementStamper.IsStaticStamp` in `Puck.World.Client` is the one fork), so it
   charges `WorldPlacementPolicy.MaxStampRegistrations` alongside animated
   rows and its authored `Position`/`YawDegrees` are inert. `Region`, `Solid`
-  (under the analytic contact provider), and `Emission` no longer refuse
-  alongside `Attach` — each now reads the resolved DYNAMIC pose instead of
-  the row's static transform (`Server/WorldEventFeed.CollectRegions`,
-  `Server/WorldColliderSet.RefreshAttached`,
-  `Client/WorldStampPool.TryShapePosition`/`RootPose`), so an equipped item's
+  (under the analytic contact provider), and `Emission` combine with
+  `Attach` — each reads the resolved DYNAMIC pose instead of
+  the row's static transform (`WorldEventFeed.CollectRegions`,
+  `WorldColliderSet.RefreshAttached`,
+  `WorldStampPool.TryShapePosition`/`RootPose`), so an equipped item's
   aura/hitbox/voice tracks its carrier; an inactive carrier makes the facet
   contribute/sense/sound nothing, the same verdict the render stamp already
   had. `Distribution`/`Mirror` (static-stamp-only) and `Inhabit` (a row
@@ -74,7 +75,7 @@ Part of [`puck.world.def.v1`](documents.md). See
   `adjacencies` row name, required for `Presence` and refused for `Endowed`)
   and `graceSeconds` are AUTHORED; `contributor` and `retractDeadlineTick` are
   SERVER-STAMPED and a submission naming either is refused BY NAME
-  (`Server/WorldTick.Contributions.cs`'s `TryComposeUpsertPlacement` reads the
+  (`src/Puck.World.Server/WorldTick.Contributions.cs`'s `TryComposeUpsertPlacement` reads the
   contributor off the acting principal — accepting an authored one would be the
   laundering the acting-principal rule forbids). An UNFILLED slot shows its own
   `slotCreationId`, so no creationless placement has to be representable, and
@@ -91,15 +92,23 @@ Part of [`puck.world.def.v1`](documents.md). See
   placement's own coupled lattice cell
   (`Puck.Physics.Fields.FieldLattice.TryBodyCellOf`) by the per-tick
   `SweepPlacementResponses` pass — run right after the field lattice steps,
-  so it reads THIS tick's own writes. Entries try in authored order; the
-  FIRST whose condition holds wins, through an ordinary `UpsertPlacement`
-  under `WorldPrincipal.World`; when none holds the row is left exactly as
-  it reads — the facet only ever SELECTS on a match, it never reverts a
-  prior swap. Refused alongside `Attach`/`Inhabit`/`FaceSources`; every
-  candidate prototype (the row's own base and every entry's) must resolve
-  to a declared, non-animated creation, and the analytic solid-collider
-  ceiling counts the WORST CASE across every variant the row could show.
-  Read back with `world.responses`.
+  so it reads THIS tick's own writes. Every entry is tested; the sweep
+  records which held in the row's `holding` mask (bit i for entry i,
+  refused on a row without `respond`) through an ordinary `UpsertPlacement`
+  under `Principal.World`. The authored `prototypeId` is never
+  overwritten: the row shows the FIRST holding entry
+  (`WorldPlacement.ShownPrototypeId`, which every draw and collide consumer
+  reads), and its authored prototype once none holds — a response lasts as
+  long as its condition, so an author who wants it to outlast the cause
+  latches the cause in state. A reader whose disclosure withholds a cell an
+  entry reads is handed the mask without that entry; a field entry reads the
+  lattice, which is not hidden, so it holds for every reader. Refused
+  alongside `Attach`/`Inhabit`/`FaceSources`; every candidate prototype (the
+  authored one and every entry's) must resolve to a declared, non-animated
+  creation, and the analytic solid-collider ceiling counts the WORST CASE
+  across every variant the row could show. Read back with `world.responses`
+  (shown, authored, and the holding entries) and `world.placements`
+  (`prototype=` is the shown one; `authored=` follows while an entry holds).
   `WorldPlacement.Deal` (`WorldPlacementDeal`) is the DEAL facet — the row is
   a template whose children are dealt from a keyed `state.world` row of any
   cell kind, one child placement per cell named `<template>/<cellKey>`,
@@ -108,8 +117,10 @@ Part of [`puck.world.def.v1`](documents.md). See
   row's capacity), carrying the template's prototype and `solid`/`grip`/
   `region`/`emission`; `deal.variants` maps a second keyed row's same-keyed
   cell text to a prototype. The per-tick `SweepPlacementDeals` pass
-  (`WorldTick.Deals.cs`, right after the response sweep) lands children as
-  ordinary placement mutations in one `Batch` under `WorldPrincipal.World`:
+  (`WorldTick.Deals.cs`, right after the response sweep) lands every
+  re-dealt template's children as ordinary placement mutations in one `Batch`
+  a tick under `Principal.World` (one validation, one journal entry, no
+  edit echo):
   a child keeps its offset while its cell is present, a departing cell frees
   its offset and moves no sibling, an arriving cell takes the lowest free
   offset, and the sweep only re-deals when the row, the variant row, or the
@@ -122,10 +133,15 @@ Part of [`puck.world.def.v1`](documents.md). See
 
 ## Owned-world identities
 
-World/owned-world ids (`Server/WorldOwnedWorlds.cs`) and `world.instance.start`
-names are `SafeName` (`Puck.State/SafeName.cs`) — the reserved-character
+World/owned-world ids (`src/Puck.World.Server/WorldOwnedWorlds.cs`) and `world.instance.start`
+names are `SafeName` (`Puck.State/SafeName.cs`); the verb starts through
+`WorldInstanceHost.TryStartAuthored`, which refuses a name carrying `~`, the
+joiner of the instance names the engine generates itself (`<site>~<n>`,
+`WorldSessionResolver.FreshInstanceName`). The rows the engine declares on an
+identity are the generated names in `WorldIdentityRows` (`identity$move-speed`,
+`chat$log`, `controller$<key>$machine`, `<row>$seq`). `SafeName` is the reserved-character
 kernel `CellName` shares, plus a bare `"."`/`".."` refusal instead of the
-dot-free rule; `WorldOwnedWorldFileName.For` takes a `SafeName` and escapes
+dot-free rule; `WorldDocumentName.For` takes a `SafeName` and escapes
 nothing, so the id→file-name mapping is injective into file-name STRINGS — but
 not into storage LOCATIONS, since the catalog directory resolves names
 case-insensitively. One id names one location only under the separate
@@ -133,10 +149,10 @@ case-insensitively. One id names one location only under the separate
 validator and `WorldOwnedWorlds`).
 
 An identity is an ordinary owned `WorldDefinition` document, not a catalog
-row: `WorldOwnedWorlds` (`Server/WorldOwnedWorlds.cs`) is the CATALOG (seats
+row: `WorldOwnedWorlds` (`src/Puck.World.Server/WorldOwnedWorlds.cs`) is the CATALOG (seats
 select identities from it; a seat's profile IS a `WorldIdentity` wrapping one
 owned document), one file per identity under the local state directory,
-named `WorldOwnedWorldFileName.For(id)` (`"<id>.world.json"`). Every id is a
+named `WorldDocumentName.For(id)` (`"<id>.world.json"`). Every id is a
 `SafeName`, so the mapping escapes nothing and is injective into file-name
 STRINGS — but a string is not a storage location, and the catalog directory
 resolves names case-insensitively, so **ids are unique IGNORING CASE**. That is
@@ -144,7 +160,7 @@ the rule the seed-list validator holds (a case-variant pair refuses at
 validation) and the rule every id comparison in the catalog holds
 (`FindById`, `Create`'s collision guard, `ReplaceFromSync`'s match, and the
 file-name check). A loaded file whose name does not match
-`WorldOwnedWorldFileName.For` of its OWN declared identity `id` — ignoring case,
+`WorldDocumentName.For` of its OWN declared identity `id` — ignoring case,
 so a case-only rename of a catalog file is ADMITTED and keeps the name it
 carries — is refused by name (`[identity] owned world refused: …`,
 distinguishing "the name another file in this directory carries" from "a name
@@ -153,7 +169,7 @@ that document parses, so it stays where it is and the refusal names the remedy.
 
 A document the loader refuses is handled by the CLASS of the refusal, and no
 refusal is ever a hard boot failure. Only a verdict on the BYTES — the
-`{path} is not a valid puck.world.def.v1 document: …` and `cannot decode …`
+`{path} is not a valid puck.world.definition.v1 document: …` and `cannot decode …`
 classes, which include a document with no `identity` section — is DISCARDED:
 the file moves into the `unloadable/` subdirectory (outside the catalog's
 `*.world.json` top-directory glob, like `basis/`), once, so the next boot has
@@ -192,8 +208,10 @@ left in place, whatever the class).
 **Seeding.** When the identity directory holds zero admitted documents,
 `WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row
 (`WorldIdentitySeed(Id, Name, Color)`, validated non-empty, ids and names both
-unique ignoring case, hex color — `ValidatePlayerDefaults` in
-`WorldDefinitionValidator.cs`) and persists each immediately.
+unique ignoring case, hex color — `ValidateIdentitySeeds` in
+`WorldDefinitionValidator.Identities.cs`; an id is a document name, so a
+duplicate is refused in `DocumentName.Collision`'s words) and persists each
+immediately.
 
 **`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
@@ -226,9 +244,15 @@ writes one with the `setIdentityFact` effect (`{key: <body>, fact, value |
 expression}` — lane and identity row together, the identity persisted through
 `WorldOwnedWorlds.TrySetFact`) and reads one through `$identity:<bodyRef>:<fact>`
 (0 when never written or no identity drives the body); a world declaring no
-lane refuses both by name at compile (`IdentityLaneUndeclared`), and a body
-driving under no owned identity refuses the write at fire time
-(`IdentityUnbound`). `identity.facts [player]` echoes the identity's row;
+lane refuses both by name at compile (`IdentityLaneUndeclared`). The lane is
+trait-free: an `advance`, `dynamics` or `cycle` on the row or any cell is
+refused by name at validation and at compile (`IdentityLaneTraited`, one check,
+`WorldIdentityFactLane.TryAdmitTraits`), because the server compares and
+persists the stored value while the operand reads the live one. A body driving
+under no owned identity refuses the write at fire time (`IdentityUnbound`), and
+a lane write the row refuses (its envelope, say) reports that write's own
+reason under `IdentityFactUnwritable`; the lane mints a cell only when it holds
+none under the key (`StateArena.TryWriteOrMint`). `identity.facts [player]` echoes the identity's row;
 `identity.fact.set <key> <value> [player]` writes one from the console (a seat
 principal only its own seat's); `world.state identity` echoes the lane.
 
@@ -241,7 +265,7 @@ slot's participant to a named owned identity.
 `WorldServer.Step`) submit against the OWNER identity's own `state` rows
 through `WorldOwnedWorlds.Submit`/`Decide` — gated by a `Mutate` grant the
 owner's OWN document declares for the writing document's principal
-(`WorldPrincipal.Document(sourceDocumentId)`) over `state:<slot>`; refusals
+(`Grantee.Document(sourceDocumentId)`) over `state:<slot>`; refusals
 name a missing source id, an unknown owner, a missing/unknown slot, the
 absent grant, the wrong storage kind, an out-of-envelope or negative value,
 or overflow. `Save()` re-serializes the owner through

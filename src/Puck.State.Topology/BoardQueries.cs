@@ -4,27 +4,24 @@ namespace Puck.State;
 public static class BoardQueries {
     private static bool Before(long distanceA, int cellA, long distanceB, int cellB) =>
         ((distanceA < distanceB) || ((distanceA == distanceB) && (cellA < cellB)));
-    // The least FNV-1a fingerprint of the board's values over every element: the same number for every board in
-    // one symmetry orbit, so a ring of fingerprints answers repetition up to symmetry.
+    // The least fingerprint of the board's values over every element: the same number for every board in one symmetry
+    // orbit, so a ring of fingerprints answers repetition up to symmetry. Element 0 is the identity, so this is never
+    // more than the board's own fingerprint.
     private static long CanonicalFingerprint(CompiledTopology topology, ReadOnlySpan<long> values) {
         var least = ulong.MaxValue;
 
         for (var element = 0; (element < topology.ElementCount); element++) {
-            // The image board holds value[c] at image(c). The fold is a commutative sum of per-pair mixes, so it
-            // depends only on the set of (image ordinal, value) pairs and not on the order cells are walked.
+            // The image board holds value[c] at image(c).
             var hash = 0UL;
 
             for (var cell = 0; (cell < topology.CellCount); cell++) {
-                var pair = (((ulong)topology.Image(
-                    cell: cell,
-                    element: element
-                )) * 0x9E3779B97F4A7C15UL) ^ ((ulong)values[cell]);
-
-                pair *= 0xBF58476D1CE4E5B9UL;
-                pair ^= (pair >> 31);
-                pair *= 0x94D049BB133111EBUL;
-                pair ^= (pair >> 29);
-                hash += pair;
+                hash += Mix(
+                    ordinal: topology.Image(
+                        cell: cell,
+                        element: element
+                    ),
+                    value: values[cell]
+                );
             }
             least = Math.Min(
                 val1: least,
@@ -32,6 +29,30 @@ public static class BoardQueries {
             );
         }
         return ((long)least);
+    }
+    // The board as it stands, through the identity: the canonical fold's identity term.
+    private static long Fingerprint(CompiledTopology topology, ReadOnlySpan<long> values) {
+        var hash = 0UL;
+
+        for (var cell = 0; (cell < topology.CellCount); cell++) {
+            hash += Mix(
+                ordinal: cell,
+                value: values[cell]
+            );
+        }
+        return ((long)hash);
+    }
+    // One (ordinal, value) pair's mix. A fingerprint is the wrapping sum of its cells' mixes, so it depends only on the
+    // set of pairs and not on the order cells are walked.
+    private static ulong Mix(int ordinal, long value) {
+        var pair = (((ulong)ordinal) * 0x9E3779B97F4A7C15UL) ^ ((ulong)value);
+
+        pair *= 0xBF58476D1CE4E5B9UL;
+        pair ^= (pair >> 31);
+        pair *= 0x94D049BB133111EBUL;
+        pair ^= (pair >> 29);
+
+        return pair;
     }
     // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
     // visit against the budget. Boundary are counted once each through a second mark, so a cell touching the group
@@ -558,6 +579,12 @@ public static class BoardQueries {
                 values: values
             );
         }
+        if (query is BoardFingerprintQuery) {
+            return Fingerprint(
+                topology: topology,
+                values: values
+            );
+        }
         if (query is BoardMaskQuery mask) {
             var result = 0L;
 
@@ -598,7 +625,7 @@ public static class BoardQueries {
             );
         }
         if (query is BoardJumpDistanceQuery jump) {
-            return jump.Evaluate(values, empty, source, jump.TargetIsLive ? dynamicTarget : jump.Target);
+            return jump.Evaluate(values, empty, source, (jump.TargetIsLive ? dynamicTarget : jump.Target));
         }
         if (query is BoardAttacksQuery attacks) {
             var directions = attacks.Directions;
@@ -634,10 +661,10 @@ public static class BoardQueries {
         throw new InvalidOperationException(message: $"unhandled board query kind {query.Kind}");
     }
     /// <summary>Returns the union of a mask and every repeated shift of it in the query's direction until no bit
-    /// has a neighbour that way: a wrapped topology's fill is the whole cycle each seed bit lies on.</summary>
+    /// has a neighbour that way: a wrapped topology's ray is the whole cycle each seed bit lies on.</summary>
     /// <param name="query">The compiled topology and direction.</param>
     /// <param name="mask">The seed mask, one bit per cell ordinal.</param>
-    public static long FillMask(BoardNeighbourQuery query, long mask) {
+    public static long RayMask(BoardNeighbourQuery query, long mask) {
         ArgumentNullException.ThrowIfNull(query);
         var filled = mask;
         var frontier = mask;
@@ -660,17 +687,11 @@ public static class BoardQueries {
         if (mask == 0L) {
             return 0L;
         }
-        if (topology.TryGetImageMasks(
+        if (topology.TryImageMask(
             element: element,
-            masks: out var masks
+            image: out var image,
+            mask: ((ulong)mask)
         )) {
-            var bits = ((ulong)mask);
-            var image = 0UL;
-
-            while (bits != 0UL) {
-                image |= masks[System.Numerics.BitOperations.TrailingZeroCount(value: bits)];
-                bits &= (bits - 1UL);
-            }
             return ((long)image);
         }
         var remaining = ((ulong)mask);
@@ -761,17 +782,11 @@ public static class BoardQueries {
         }
         var topology = query.Topology;
 
-        if (topology.TryGetShiftMasks(
+        if (topology.TryShiftMask(
             direction: query.Direction,
-            masks: out var masks
+            mask: ((ulong)mask),
+            shifted: out var shifted
         )) {
-            var bits = ((ulong)mask);
-            var shifted = 0UL;
-
-            while (bits != 0UL) {
-                shifted |= masks[System.Numerics.BitOperations.TrailingZeroCount(value: bits)];
-                bits &= (bits - 1UL);
-            }
             return ((long)shifted);
         }
         var remaining = ((ulong)mask);

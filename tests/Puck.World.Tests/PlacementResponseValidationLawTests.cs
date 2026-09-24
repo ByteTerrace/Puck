@@ -20,25 +20,6 @@ public sealed class PlacementResponseValidationLawTests {
     private const string PlacementId = "grove";
     private const string TargetCreation = "stump";
 
-    private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: definition,
-            reason: out var reason
-        ));
-        Assert.Contains(
-            actualString: reason,
-            expectedSubstring: needle
-        );
-    }
-    private static void AssertValidates(WorldDefinition definition) {
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: definition,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-    }
     private static WorldPrototype Creation(string id, bool animated = false) {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
@@ -116,7 +97,7 @@ public sealed class PlacementResponseValidationLawTests {
         Respond: [
             new WorldPlacementResponse(
                 When: new WorldPlacementResponseCondition.FieldCondition(
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Field: FieldName,
                     Value: 0.5f
                 ),
@@ -138,11 +119,12 @@ public sealed class PlacementResponseValidationLawTests {
     /// refusal, never a silent default to the first member. CONTROL: a declared comparison validates.</summary>
     [Fact]
     public void ComparisonMustBeADeclaredEnumMember() {
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
                     When: new WorldPlacementResponseCondition.FieldCondition(
-                        Comparison: ((ActionStateComparison)byte.MaxValue),
+                        Comparison: ((ExpressionOp)byte.MaxValue),
                         Field: FieldName,
                         Value: 0.5f
                     ),
@@ -151,17 +133,18 @@ public sealed class PlacementResponseValidationLawTests {
             })),
             needle: "is unknown"
         );
-        AssertValidates(definition: With(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
     /// <summary>DENIAL: a condition naming a field the fields section does not declare. CONTROL: the declared field
     /// name.</summary>
     [Fact]
     public void ConditionFieldMustBeDeclared() {
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
                     When: new WorldPlacementResponseCondition.FieldCondition(
-                        Comparison: ActionStateComparison.GreaterOrEqual,
+                        Comparison: ExpressionOp.GreaterOrEqual,
                         Field: "no-such-field",
                         Value: 0.5f
                     ),
@@ -170,13 +153,14 @@ public sealed class PlacementResponseValidationLawTests {
             })),
             needle: "which fields.fields does not declare"
         );
-        AssertValidates(definition: With(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
     /// <summary>DENIAL: an empty response list and one past the entry ceiling. CONTROL: one well-formed entry.</summary>
     [Fact]
     public void EntryCountMustSitInsideItsBand() {
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(placement: (WellFormed() with { Respond = [] })),
+            locally: true,
             needle: "declares no response entry"
         );
 
@@ -186,16 +170,18 @@ public sealed class PlacementResponseValidationLawTests {
             over.Add(item: WellFormed().Respond![0]);
         }
 
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: With(placement: (WellFormed() with { Respond = over })),
+            locally: true,
             needle: $"exceeding the {WorldResponseCapacity.MaxEntries}-entry ceiling"
         );
-        AssertValidates(definition: With(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
     /// <summary>DENIAL: an entry naming a creation the document does not declare. CONTROL: the declared one.</summary>
     [Fact]
     public void EntryPrototypeIdMustResolve() {
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
                     When: WellFormed().Respond![0].When,
@@ -204,7 +190,7 @@ public sealed class PlacementResponseValidationLawTests {
             })),
             needle: "names no creation row"
         );
-        AssertValidates(definition: With(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
     /// <summary>DENIAL: a response entry targeting an ANIMATED creation (timeline frames) — a response only ever
     /// swaps between static creations. CONTROL: the static target.</summary>
@@ -220,16 +206,18 @@ public sealed class PlacementResponseValidationLawTests {
             PlacementRowsRaw = [WellFormed()],
         });
 
-        AssertRefusedNaming(
+        Laws.Refuses(
             definition: animated,
+            locally: true,
             needle: "carries timeline frames"
         );
-        AssertValidates(definition: With(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
     /// <summary>DENIAL: the facet composing with attach, inhabit, or faceSources. CONTROL: the facet alone.</summary>
     [Fact]
     public void FacetRefusesAlongsideAttachInhabitAndFaceSources() {
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(placement: (WellFormed() with {
                 Attach = new WorldPlacementAttach(
                 BodyIndex: 0,
@@ -238,7 +226,8 @@ public sealed class PlacementResponseValidationLawTests {
             })),
             needle: "is refused alongside attach/inhabit/faceSources"
         );
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(placement: (WellFormed() with {
                 Inhabit = new WorldPlacementInhabit(
                 Kit: Fixtures.SeatKitName,
@@ -248,7 +237,8 @@ public sealed class PlacementResponseValidationLawTests {
             })),
             needle: "is refused alongside attach/inhabit/faceSources"
         );
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(placement: (WellFormed() with {
                 FaceSources = [new WorldPlacementFace(
                     Face: "front",
@@ -257,18 +247,19 @@ public sealed class PlacementResponseValidationLawTests {
             })),
             needle: "is refused alongside attach/inhabit/faceSources"
         );
-        AssertValidates(definition: With(placement: WellFormed()));
+        Laws.Validates(locally: true, definition: With(placement: WellFormed()));
     }
     /// <summary>DENIAL: a state condition naming a row the document does not declare. CONTROL: the declared
     /// row.</summary>
     [Fact]
     public void StateConditionRowMustBeDeclared() {
-        AssertRefusedNaming(
+        Laws.Refuses(
+            locally: true,
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
                     When: new WorldPlacementResponseCondition.StateCondition(
                         State: "no-such-row",
-                        Comparison: ActionStateComparison.GreaterOrEqual,
+                        Comparison: ExpressionOp.GreaterOrEqual,
                         Value: 3
                     ),
                     PrototypeId: TargetCreation
@@ -276,11 +267,11 @@ public sealed class PlacementResponseValidationLawTests {
             })),
             needle: "which the document does not declare"
         );
-        AssertValidates(definition: With(placement: (WellFormed() with {
+        Laws.Validates(locally: true, definition: With(placement: (WellFormed() with {
             Respond = [new WorldPlacementResponse(
                 When: new WorldPlacementResponseCondition.StateCondition(
                     State: CounterRow,
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Value: 3
                 ),
                 PrototypeId: TargetCreation

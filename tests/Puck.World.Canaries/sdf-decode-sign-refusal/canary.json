@@ -1,11 +1,11 @@
 {
   "id": "sdf-decode-sign-refusal",
   "title": "sdf.decode refuses a negative radius/half-extent/round/material channel at decode, by field, at any op/material index",
-  "binding": "The positive leg loads twelve fixtures, each carrying exactly one negative shape or material field at index 1 (index 0 is always a valid entry), and asserts the exact NumberNegative refusal naming that field and index, then a thirteenth, entirely valid document loads clean. The discriminating leg replays the identical verb sequence against the valid document thirteen times, so every refusal assertion above must turn red.",
-  "bootShape": "windowed",
+  "binding": "Both legs boot a minimal offscreen fixture world (one SDF view, no window) on each backend, the smallest boot that composes world.sdf.load. The positive leg loads twelve fixtures, each carrying exactly one negative shape or material field at index 1 (index 0 is always a valid entry), and asserts the exact NumberNegative refusal naming that field and index, then a thirteenth, entirely valid document loads clean. The discriminating leg replays the identical verb sequence against the valid document thirteen times, so every refusal assertion above must turn red. timeoutSeconds is sized from the legs' measured work: the World process on this fixture with each leg's script piped took 3.6 to 8.3 seconds for the positive leg and 9.8 to 17.2 seconds for the discriminating leg (thirteen composes) across both backends, so 45 seconds leaves more than twice the slowest measured leg.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
-  "seconds": 10,
-  "timeoutSeconds": 30,
+  "timeoutSeconds": 45,
   "fixtures": [
     "case-sphere-radius.sdf.json",
     "case-capsule-radius.sdf.json",
@@ -22,7 +22,7 @@
     "valid-control.sdf.json"
   ],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/puck.world.json",
+    "world": "tests/Puck.World.Canaries/sdf-decode-sign-refusal/fixture.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.sdf.load", "occurrence": 1, "outcome": "refused" },
@@ -58,7 +58,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/puck.world.json",
+    "world": "tests/Puck.World.Canaries/sdf-decode-sign-refusal/fixture.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.sdf.load", "occurrence": 1, "outcome": "accepted" },

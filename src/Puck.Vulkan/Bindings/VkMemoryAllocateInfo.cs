@@ -12,7 +12,7 @@ namespace Puck.Vulkan.Bindings;
 public struct VkMemoryAllocateInfo {
     /// <summary>The type of this structure, as a <c>VkStructureType</c> value (<c>VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO</c>).</summary>
     public uint SType;
-    /// <summary>A pointer to a structure extending this one, or <see langword="null"/>. <c>VkMemoryAllocateFlagsInfo</c> is chained here.</summary>
+    /// <summary>A pointer to a structure extending this one, or <see langword="null"/>.</summary>
     public nint PNext;
     /// <summary>The size, in bytes, of the allocation.</summary>
     public ulong AllocationSize;

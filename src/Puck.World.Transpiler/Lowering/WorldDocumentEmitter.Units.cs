@@ -1,3 +1,4 @@
+using Puck.Transpiler.Ast;
 using Puck.Transpiler.Units;
 
 namespace Puck.World.Transpiler.Lowering;
@@ -37,11 +38,7 @@ public static class WorldDocumentEmitterUnits {
             return UnitDimension.Radians;
         }
 
-        var separator = fieldKey.LastIndexOf(value: '.');
-        var bare = ((separator >= 0)
-            ? fieldKey[(separator + 1)..]
-            : fieldKey
-        );
+        var bare = QualifiedName.Parse(text: fieldKey).Last;
 
         if (
             DegreesNativeFields.Contains(item: bare) ||

@@ -1,0 +1,3043 @@
+{
+  "schema": "puck.world.state-export.v1",
+  "tick": 162,
+  "engineTick": 272160,
+  "hashes": {
+    "authoritative": "278b3b73022c8982",
+    "capture": "00a6ffdce55057b8",
+    "pose": "d8ea260466ac91f7",
+    "world": "788ebdf4c9b39a8d"
+  },
+  "state": {
+    "world": [
+      {
+        "name": "transforms",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "identity",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "origin",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "unit",
+            "value": "[1, 1, 1]"
+          }
+        ]
+      },
+      {
+        "name": "colors",
+        "kind": "Text",
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#000000"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#808080"
+          }
+        ]
+      },
+      {
+        "name": "wordSpyBoardShown",
+        "kind": "Int",
+        "min": 0,
+        "max": 4,
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "wordSpyBoardLive",
+        "kind": "Bool",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": true
+          },
+          {
+            "key": "1",
+            "value": true
+          },
+          {
+            "key": "2",
+            "value": true
+          },
+          {
+            "key": "3",
+            "value": true
+          },
+          {
+            "key": "4",
+            "value": true
+          },
+          {
+            "key": "5",
+            "value": true
+          },
+          {
+            "key": "6",
+            "value": true
+          },
+          {
+            "key": "7",
+            "value": true
+          },
+          {
+            "key": "8",
+            "value": true
+          },
+          {
+            "key": "9",
+            "value": true
+          },
+          {
+            "key": "10",
+            "value": true
+          },
+          {
+            "key": "11",
+            "value": true
+          },
+          {
+            "key": "12",
+            "value": true
+          },
+          {
+            "key": "13",
+            "value": true
+          },
+          {
+            "key": "14",
+            "value": true
+          },
+          {
+            "key": "15",
+            "value": true
+          },
+          {
+            "key": "16",
+            "value": true
+          },
+          {
+            "key": "17",
+            "value": true
+          },
+          {
+            "key": "18",
+            "value": true
+          },
+          {
+            "key": "19",
+            "value": true
+          },
+          {
+            "key": "20",
+            "value": true
+          },
+          {
+            "key": "21",
+            "value": true
+          },
+          {
+            "key": "22",
+            "value": true
+          },
+          {
+            "key": "23",
+            "value": true
+          },
+          {
+            "key": "24",
+            "value": true
+          }
+        ]
+      },
+      {
+        "name": "wordSpyStage",
+        "kind": "Int",
+        "min": 0,
+        "max": 3,
+        "value": 1
+      },
+      {
+        "name": "wordSpyTurn",
+        "kind": "Int",
+        "min": 1,
+        "max": 2,
+        "value": 1
+      },
+      {
+        "name": "wordSpyRedLeft",
+        "kind": "Int",
+        "min": 0,
+        "value": 9
+      },
+      {
+        "name": "wordSpyBlueLeft",
+        "kind": "Int",
+        "min": 0,
+        "value": 8
+      },
+      {
+        "name": "wordSpyWinner",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0
+      },
+      {
+        "name": "wordSpyClueNumber",
+        "kind": "Int",
+        "min": 0,
+        "value": 0
+      },
+      {
+        "name": "wordSpyWords",
+        "kind": "Text",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": "anchor"
+          },
+          {
+            "key": "1",
+            "value": "blanket"
+          },
+          {
+            "key": "2",
+            "value": "canyon"
+          },
+          {
+            "key": "3",
+            "value": "comet"
+          },
+          {
+            "key": "4",
+            "value": "compass"
+          },
+          {
+            "key": "5",
+            "value": "ember"
+          },
+          {
+            "key": "6",
+            "value": "falcon"
+          },
+          {
+            "key": "7",
+            "value": "feather"
+          },
+          {
+            "key": "8",
+            "value": "glacier"
+          },
+          {
+            "key": "9",
+            "value": "harbor"
+          },
+          {
+            "key": "10",
+            "value": "kettle"
+          },
+          {
+            "key": "11",
+            "value": "ladder"
+          },
+          {
+            "key": "12",
+            "value": "lagoon"
+          },
+          {
+            "key": "13",
+            "value": "lantern"
+          },
+          {
+            "key": "14",
+            "value": "meadow"
+          },
+          {
+            "key": "15",
+            "value": "orchard"
+          },
+          {
+            "key": "16",
+            "value": "pepper"
+          },
+          {
+            "key": "17",
+            "value": "pillow"
+          },
+          {
+            "key": "18",
+            "value": "quarry"
+          },
+          {
+            "key": "19",
+            "value": "saddle"
+          },
+          {
+            "key": "20",
+            "value": "thunder"
+          },
+          {
+            "key": "21",
+            "value": "tunnel"
+          },
+          {
+            "key": "22",
+            "value": "velvet"
+          },
+          {
+            "key": "23",
+            "value": "violin"
+          },
+          {
+            "key": "24",
+            "value": "whistle"
+          }
+        ]
+      },
+      {
+        "name": "wordSpyWordVectors",
+        "kind": "Vector",
+        "space": "wordSpySpace",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": "GPrrBxrz7A_v8eoKB_r4EQ_8E_Tw9fvn6BD9-AYACQ_nGgQREBQO6QP3BQ30Gu4N6PYJ6wzq8vH8AAbrE_rmFw"
+          },
+          {
+            "key": "1",
+            "value": "7-3_Fv3sFxgRGPsAGRj98_7wDvL5GhfvBvvw6fMRDQXsERcX5g39FvL0_g8D6e_w5vcABgf99usJ5-8D8AAQ_w"
+          },
+          {
+            "key": "2",
+            "value": "Cu7k-_cM_ent5vMM8wgD7OsEDg765BAJ_g0O8hb8C-oNBPcO6AjpFgwHEPHp7RTlAwMa6_nvBvvuAu0M5QH85w"
+          },
+          {
+            "key": "3",
+            "value": "_hUHEgAX6PztDvb76w_4GPAYA-v09QHxFe0Y8Rft-vkO6AQTDhT58BIO9O8JCAwQ_-gJB-397QoJBRbp6ezs7w"
+          },
+          {
+            "key": "4",
+            "value": "-fzk-wf28AIY_e3n4vMa5wbz7ALzCfD36QcKE_ESHA8G5fHsHP7_GxsN_QL79fsB8QIH6_fzCgkRDQIU8-7p_g"
+          },
+          {
+            "key": "5",
+            "value": "7uvo-APr6vr_Ehn18_AP7hYP-O719AwF6fkQEfH2BPgRF-cJDfkI9AUIGOb6DxDyEQ3rCegSAhbt9O8REewX_g"
+          },
+          {
+            "key": "6",
+            "value": "7gkA8-gb5wUZEQr3FBrq-xoa8vMA__AJ_voOABrs9vMQ5PD-EgQc_gQNCQv8BuYZ8gHzEf758xH2_OfzCOoJEw"
+          },
+          {
+            "key": "7",
+            "value": "CAoNAxHuEwAH9eH96PLv6gL_DQcLC_bq_Bb_DvnuBeUFAPgZAhjp_fkI6RcCGhPvBwn_Gfb95BHkAPHhCwQUFA"
+          },
+          {
+            "key": "8",
+            "value": "BQLv9f0IAw7w8uj2FxcXExIKAOoDEOrv7fcU-P_s8BHt7gYXAhgB5gUV6OUaD-r1_hX4BgLsDf31Aef0AgwPEg"
+          },
+          {
+            "key": "9",
+            "value": "Genv9e3--BL__Q4Y8Of19vYB7_315vz0AhL0GBnw6AQUFgwC7hf4EhT0AgEUFwoG_u8W7PERAgfm7w_-8BIJFQ"
+          },
+          {
+            "key": "10",
+            "value": "7wrl9-Xk-fn4HOr3FPb-_RP1EwQB_gru-QMR6wT2EQr94xsW6fD3Cuvr9Pz-8BLu8fn06BIBEBHpGhD_8g_4BQ"
+          },
+          {
+            "key": "11",
+            "value": "CeXqCPIZGQgICuX5EBLx7xcX_QLzBgUAFucLBQYRFekGDxXz--0AEP37-xoKFgkQDxHp8_0L-wkPFevt8f_n6g"
+          },
+          {
+            "key": "12",
+            "value": "CuXw_hsb7ejv-QboBBEL-_QFEgL9AQoQCwTlFv769u0GBPYC6egE6xsbDQQYDfQX6PLzAPHy7_UWAQkD5RT8EQ"
+          },
+          {
+            "key": "13",
+            "value": "BOfv5w796Bb0FPT99gcWCBQM_frs-un96OwFGAf0BBMH7OoT6ur18PAVFBXn9vwDB-4L8vYN-wsSFwX65wjyFg"
+          },
+          {
+            "key": "14",
+            "value": "EuwTFQvyFQIYFwrr5_7nFBL9_wsH_wTu7v_uAOvo_wwR9fD9BvIV_REG_uwW-wrx9eYOEOsA--wZDwXp6Bjy9A"
+          },
+          {
+            "key": "15",
+            "value": "7OsC7_AKEuQW__b_9PQEDAD39P4U-P0NFxQG9xAZ9xbwCOX_5hrxF_MP9AT7CgPlAOr_-hHsGQD7GxMLFvMYDw"
+          },
+          {
+            "key": "16",
+            "value": "_wj_6Rj3CObt_PkL7hD-Bu0W5BURExXu__YO6wz2BxgHHAfiAhLs7g4F7-fn8goOFwH97e8dDf_5_BL8-P0A9g"
+          },
+          {
+            "key": "17",
+            "value": "HBT3-_sB9eYCBP7sGeUDDxAL7AUZGvT6BesS6envFuz9DvDl-gjn6QkE_AT29OkIFOzp8gMFCA_2Fgv_8fb87g"
+          },
+          {
+            "key": "18",
+            "value": "5v_uEhgB-vTv9w7sAhXl8hPxAgL5GeoLCPAE-QUDBfPt_Orp6fAY7fDtFvr9AOb0FwEEGxoDD_kG9xbzEOYJ9Q"
+          },
+          {
+            "key": "19",
+            "value": "9wjt7_3v7QgA8fjnBuYNGukY5uoZDAb86gP0AgII7PYH6w4IBgz2F_ELCwgREPHuBhnrBeoQDBfy-QwQ7AgW5w"
+          },
+          {
+            "key": "20",
+            "value": "HAzzCg4bCwDx5_PwCf4QC_UN9AgPABjsBR7vBwcA5h32Ffju_-wE_vYc5QP0Eebv_RQO6wbv6P_7CA_98Afr8A"
+          },
+          {
+            "key": "21",
+            "value": "6_oE8f_39AMN9uj77_7uBesE9uL4GAX-GwcR9Pn_8fMY5QgcEQHkFQnn5O8LBArpExsGDvf2-AcbFgn1BPoU9A"
+          },
+          {
+            "key": "22",
+            "value": "9g4R_RITFOv-_QjvBhkNCesEDu3_FQca-vMIDuwS-PgY6_Tt9-oP9hcRFusV_PcYB_YG_P379xn3CRYa5e76Fw"
+          },
+          {
+            "key": "23",
+            "value": "9u7-B_PpDuj2FP0PEBX28_n0DhUXBxYDDhILABH9GvQSAgYaEQcL5grrChMX9ekD-RAI8O7rAO0XEhj98vHoDA"
+          },
+          {
+            "key": "24",
+            "value": "-PT9AfnrC_EU_-wYAfQJAw_q5vcY9RMY7wEEEw0Z5wH47fr1GBX__BLoFgvv5BkNBgf7_e4F6g31HQXvGQYB8A"
+          }
+        ]
+      },
+      {
+        "name": "wordSpyLexicon",
+        "kind": "Text",
+        "capacity": 12,
+        "cells": [
+          {
+            "key": "cold",
+            "value": "cold"
+          },
+          {
+            "key": "heat",
+            "value": "heat"
+          },
+          {
+            "key": "water",
+            "value": "water"
+          },
+          {
+            "key": "flight",
+            "value": "flight"
+          },
+          {
+            "key": "music",
+            "value": "music"
+          },
+          {
+            "key": "metal",
+            "value": "metal"
+          },
+          {
+            "key": "money",
+            "value": "money"
+          },
+          {
+            "key": "hunting",
+            "value": "hunting"
+          },
+          {
+            "key": "sport",
+            "value": "sport"
+          },
+          {
+            "key": "journey",
+            "value": "journey"
+          },
+          {
+            "key": "night",
+            "value": "night"
+          },
+          {
+            "key": "medicine",
+            "value": "medicine"
+          }
+        ]
+      },
+      {
+        "name": "wordSpyLexiconVectors",
+        "kind": "Vector",
+        "space": "wordSpySpace",
+        "capacity": 12,
+        "cells": [
+          {
+            "key": "cold",
+            "value": "CgoGC_YK7ewQEO8SFxQX8vP86_z3GfX1CwztAxYC7hcUFBUOC-j16RcR8QnyDhEU6esO7AUNExX2_f4Q8ggAEQ"
+          },
+          {
+            "key": "heat",
+            "value": "GfwD_g32EQr87-oOCgH87QUL7QcIBPQIFuoQ7AkWFRDu7-cQGPzoGfAF-v_y6xjo8woU6-_v6AL6Fv_87Bnv9w"
+          },
+          {
+            "key": "water",
+            "value": "DPwRGRDuCPEXGPz47fb1GRn86RbzCgnm8fP28_sLEhAXEP3t6f3uA-zz7O0F-OYVFOcH9Qnz9ATqARQQ8PT4AQ"
+          },
+          {
+            "key": "flight",
+            "value": "GunzBQ0S9Bnx7QIBCwEHAOf5FRAB6Anu7ef6Bvnt7-b95hgY8f3nFxoDFgAKBvP0AO797_cX-RHu8_Ln_foEDg"
+          },
+          {
+            "key": "music",
+            "value": "ExQVCfUQDvvp-ggT9BHyEQfw9hQZFQ7s9wzn6hTq_AYK6fzo-Ab9BewC7OcZBxYZ-AkR-vESFwHq6_r_6_oI-g"
+          },
+          {
+            "key": "metal",
+            "value": "6ej67ewL-OoNEQ0EEPnnGO0J8RgX7ffnFg3rC_oXBQ4XE_ESEATu7wjv7w8VFgT4Bwjq7Q4C-QILAAb07vv_6Q"
+          },
+          {
+            "key": "money",
+            "value": "8BgJBgoGCxP4Df0G7xr97wDv-xXv9BH1FP7m8wMU9OwaE_3mDuQFAgP-FgTn6-0G6_nt7_L77xzlFPQJCQwO7g"
+          },
+          {
+            "key": "hunting",
+            "value": "-vsNCgIKGgXv-gQK8BIF6wEDGxsNG-0NCgsQ5hf6DQD9BAgU-RsK6QQL6w_zF-zoCvMJ_f0F9Of8F_XqDxzoFA"
+          },
+          {
+            "key": "sport",
+            "value": "6xXy-e0U-AUaA_8a-BoPBhrsEfwH6QMaBPQR7_zpExgVF-r7EAwLEgEIAvMEEewRDgP4Gf_xDfsI8g4W6RcH9w"
+          },
+          {
+            "key": "journey",
+            "value": "9_7sD_4A6Q7l_P39-gsYEhfp5AH0Fev5_xsZD_cVE_oD6e7vDPwXDQ8J6gzy7PbwCuYK6hsA_xEREgoKAgQQ-A"
+          },
+          {
+            "key": "night",
+            "value": "-PQW9eX6Du315_AcEQ389xD7B_T5GP0bEAEEDv8W5xb1CgcXEPgBB_EM7RXy8AgY6f3xDOUTD_cY-_LyEBfyBw"
+          },
+          {
+            "key": "medicine",
+            "value": "6v8PB-kE7usHEQMN8fMU6f30AfvyABgHAPH68-sABv_n8u32-_v8Gefx5-zv6wbt-Bb6FugH8RQOGffuFRMT6Q"
+          }
+        ]
+      },
+      {
+        "name": "wordSpyKey",
+        "kind": "Int",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 3
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 1
+          },
+          {
+            "key": "4",
+            "value": 2
+          },
+          {
+            "key": "5",
+            "value": 2
+          },
+          {
+            "key": "6",
+            "value": 1
+          },
+          {
+            "key": "7",
+            "value": 3
+          },
+          {
+            "key": "8",
+            "value": 1
+          },
+          {
+            "key": "9",
+            "value": 3
+          },
+          {
+            "key": "10",
+            "value": 2
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 4
+          },
+          {
+            "key": "13",
+            "value": 3
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 3
+          },
+          {
+            "key": "16",
+            "value": 2
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": 2
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 2
+          },
+          {
+            "key": "21",
+            "value": 3
+          },
+          {
+            "key": "22",
+            "value": 1
+          },
+          {
+            "key": "23",
+            "value": 2
+          },
+          {
+            "key": "24",
+            "value": 3
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyRedLive",
+        "kind": "Bool",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": true
+          },
+          {
+            "key": "1",
+            "value": false
+          },
+          {
+            "key": "2",
+            "value": false
+          },
+          {
+            "key": "3",
+            "value": true
+          },
+          {
+            "key": "4",
+            "value": false
+          },
+          {
+            "key": "5",
+            "value": false
+          },
+          {
+            "key": "6",
+            "value": true
+          },
+          {
+            "key": "7",
+            "value": false
+          },
+          {
+            "key": "8",
+            "value": true
+          },
+          {
+            "key": "9",
+            "value": false
+          },
+          {
+            "key": "10",
+            "value": false
+          },
+          {
+            "key": "11",
+            "value": true
+          },
+          {
+            "key": "12",
+            "value": false
+          },
+          {
+            "key": "13",
+            "value": false
+          },
+          {
+            "key": "14",
+            "value": true
+          },
+          {
+            "key": "15",
+            "value": false
+          },
+          {
+            "key": "16",
+            "value": false
+          },
+          {
+            "key": "17",
+            "value": true
+          },
+          {
+            "key": "18",
+            "value": false
+          },
+          {
+            "key": "19",
+            "value": true
+          },
+          {
+            "key": "20",
+            "value": false
+          },
+          {
+            "key": "21",
+            "value": false
+          },
+          {
+            "key": "22",
+            "value": true
+          },
+          {
+            "key": "23",
+            "value": false
+          },
+          {
+            "key": "24",
+            "value": false
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyBlueLive",
+        "kind": "Bool",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": false
+          },
+          {
+            "key": "1",
+            "value": false
+          },
+          {
+            "key": "2",
+            "value": true
+          },
+          {
+            "key": "3",
+            "value": false
+          },
+          {
+            "key": "4",
+            "value": true
+          },
+          {
+            "key": "5",
+            "value": true
+          },
+          {
+            "key": "6",
+            "value": false
+          },
+          {
+            "key": "7",
+            "value": false
+          },
+          {
+            "key": "8",
+            "value": false
+          },
+          {
+            "key": "9",
+            "value": false
+          },
+          {
+            "key": "10",
+            "value": true
+          },
+          {
+            "key": "11",
+            "value": false
+          },
+          {
+            "key": "12",
+            "value": false
+          },
+          {
+            "key": "13",
+            "value": false
+          },
+          {
+            "key": "14",
+            "value": false
+          },
+          {
+            "key": "15",
+            "value": false
+          },
+          {
+            "key": "16",
+            "value": true
+          },
+          {
+            "key": "17",
+            "value": false
+          },
+          {
+            "key": "18",
+            "value": true
+          },
+          {
+            "key": "19",
+            "value": false
+          },
+          {
+            "key": "20",
+            "value": true
+          },
+          {
+            "key": "21",
+            "value": false
+          },
+          {
+            "key": "22",
+            "value": false
+          },
+          {
+            "key": "23",
+            "value": true
+          },
+          {
+            "key": "24",
+            "value": false
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyRedAvoid",
+        "kind": "Bool",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": false
+          },
+          {
+            "key": "1",
+            "value": false
+          },
+          {
+            "key": "2",
+            "value": true
+          },
+          {
+            "key": "3",
+            "value": false
+          },
+          {
+            "key": "4",
+            "value": true
+          },
+          {
+            "key": "5",
+            "value": true
+          },
+          {
+            "key": "6",
+            "value": false
+          },
+          {
+            "key": "7",
+            "value": false
+          },
+          {
+            "key": "8",
+            "value": false
+          },
+          {
+            "key": "9",
+            "value": false
+          },
+          {
+            "key": "10",
+            "value": true
+          },
+          {
+            "key": "11",
+            "value": false
+          },
+          {
+            "key": "12",
+            "value": true
+          },
+          {
+            "key": "13",
+            "value": false
+          },
+          {
+            "key": "14",
+            "value": false
+          },
+          {
+            "key": "15",
+            "value": false
+          },
+          {
+            "key": "16",
+            "value": true
+          },
+          {
+            "key": "17",
+            "value": false
+          },
+          {
+            "key": "18",
+            "value": true
+          },
+          {
+            "key": "19",
+            "value": false
+          },
+          {
+            "key": "20",
+            "value": true
+          },
+          {
+            "key": "21",
+            "value": false
+          },
+          {
+            "key": "22",
+            "value": false
+          },
+          {
+            "key": "23",
+            "value": true
+          },
+          {
+            "key": "24",
+            "value": false
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyBlueAvoid",
+        "kind": "Bool",
+        "capacity": 25,
+        "cells": [
+          {
+            "key": "0",
+            "value": true
+          },
+          {
+            "key": "1",
+            "value": false
+          },
+          {
+            "key": "2",
+            "value": false
+          },
+          {
+            "key": "3",
+            "value": true
+          },
+          {
+            "key": "4",
+            "value": false
+          },
+          {
+            "key": "5",
+            "value": false
+          },
+          {
+            "key": "6",
+            "value": true
+          },
+          {
+            "key": "7",
+            "value": false
+          },
+          {
+            "key": "8",
+            "value": true
+          },
+          {
+            "key": "9",
+            "value": false
+          },
+          {
+            "key": "10",
+            "value": false
+          },
+          {
+            "key": "11",
+            "value": true
+          },
+          {
+            "key": "12",
+            "value": true
+          },
+          {
+            "key": "13",
+            "value": false
+          },
+          {
+            "key": "14",
+            "value": true
+          },
+          {
+            "key": "15",
+            "value": false
+          },
+          {
+            "key": "16",
+            "value": false
+          },
+          {
+            "key": "17",
+            "value": true
+          },
+          {
+            "key": "18",
+            "value": false
+          },
+          {
+            "key": "19",
+            "value": true
+          },
+          {
+            "key": "20",
+            "value": false
+          },
+          {
+            "key": "21",
+            "value": false
+          },
+          {
+            "key": "22",
+            "value": true
+          },
+          {
+            "key": "23",
+            "value": false
+          },
+          {
+            "key": "24",
+            "value": false
+          }
+        ],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyAim",
+        "kind": "Vector",
+        "space": "wordSpySpace",
+        "capacity": 2,
+        "cells": [],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyClue",
+        "kind": "Vector",
+        "space": "wordSpySpace",
+        "cells": [],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyClueLog",
+        "kind": "Vector",
+        "space": "wordSpySpace",
+        "capacity": 4,
+        "evicts": true,
+        "cells": [],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyClueChoice",
+        "kind": "Text",
+        "value": "",
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyClueWord",
+        "kind": "Text",
+        "value": ""
+      },
+      {
+        "name": "wordSpyHint",
+        "kind": "Int",
+        "capacity": 3,
+        "cells": [],
+        "visibility": {
+          "readers": [
+            "seat1",
+            "seat3"
+          ],
+          "hidden": "Omit",
+          "isPublic": false
+        }
+      },
+      {
+        "name": "wordSpyAct",
+        "kind": "Int",
+        "capacity": 16,
+        "cells": [
+          {
+            "key": "card",
+            "value": 1
+          },
+          {
+            "key": "applied",
+            "value": 9
+          },
+          {
+            "key": "isLive",
+            "value": 1
+          },
+          {
+            "key": "ready",
+            "value": 0
+          },
+          {
+            "key": "request",
+            "value": 9
+          },
+          {
+            "key": "result",
+            "value": -1
+          },
+          {
+            "key": "safeWord",
+            "value": 3
+          },
+          {
+            "key": "seat",
+            "value": 2
+          },
+          {
+            "key": "seatOk",
+            "value": 1
+          },
+          {
+            "key": "word",
+            "value": 3
+          },
+          {
+            "key": "wordOk",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "name": "wordSpyTable",
+        "kind": "Int",
+        "capacity": 24,
+        "cells": [
+          {
+            "key": "accepted",
+            "value": 0
+          },
+          {
+            "key": "aimPending",
+            "value": 1
+          },
+          {
+            "key": "clueNo",
+            "value": 0
+          },
+          {
+            "key": "guessesLeft",
+            "value": 0
+          },
+          {
+            "key": "livePending",
+            "value": 0
+          },
+          {
+            "key": "mixPending",
+            "value": 0
+          },
+          {
+            "key": "numberPending",
+            "value": 0
+          },
+          {
+            "key": "pickPending",
+            "value": 0
+          },
+          {
+            "key": "refused",
+            "value": 9
+          },
+          {
+            "key": "revealCard",
+            "value": 0
+          },
+          {
+            "key": "revealPending",
+            "value": 0
+          },
+          {
+            "key": "revealWord",
+            "value": 0
+          },
+          {
+            "key": "settlePending",
+            "value": 0
+          }
+        ]
+      }
+    ],
+    "spaces": [
+      {
+        "name": "wordSpySpace",
+        "model": "puck-fixture",
+        "revision": "1",
+        "dimensions": 64
+      }
+    ]
+  },
+  "resolved": [
+    {
+      "row": "transforms",
+      "cells": [
+        {
+          "key": "identity",
+          "value": 0,
+          "text": "[0, 0, 0, 1]"
+        },
+        {
+          "key": "origin",
+          "value": 0,
+          "text": "[0, 0, 0]"
+        },
+        {
+          "key": "unit",
+          "value": 0,
+          "text": "[1, 1, 1]"
+        }
+      ]
+    },
+    {
+      "row": "colors",
+      "cells": [
+        {
+          "key": "axisX",
+          "value": 0,
+          "text": "#FF3B30"
+        },
+        {
+          "key": "axisZ",
+          "value": 0,
+          "text": "#2F6BFF"
+        },
+        {
+          "key": "avatarBody",
+          "value": 0,
+          "text": "#FF73BF"
+        },
+        {
+          "key": "avatarMark",
+          "value": 0,
+          "text": "#1ABFB2"
+        },
+        {
+          "key": "avatarEye",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "avatarPupil",
+          "value": 0,
+          "text": "#0D0D0D"
+        },
+        {
+          "key": "defaultAvatarPrimary",
+          "value": 0,
+          "text": "#FF2D95"
+        },
+        {
+          "key": "defaultAvatarSecondary",
+          "value": 0,
+          "text": "#2DFF97"
+        },
+        {
+          "key": "groundPrimary",
+          "value": 0,
+          "text": "#FFFFFF"
+        },
+        {
+          "key": "groundSecondary",
+          "value": 0,
+          "text": "#000000"
+        },
+        {
+          "key": "groundTertiary",
+          "value": 0,
+          "text": "#808080"
+        }
+      ]
+    },
+    {
+      "row": "wordSpyBoardShown",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyBoardLive",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyStage",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyTurn",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyRedLeft",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 9,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyBlueLeft",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 8,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyWinner",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyClueNumber",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyWords",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": "anchor"
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": "blanket"
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": "canyon"
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": "comet"
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": "compass"
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": "ember"
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": "falcon"
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": "feather"
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": "glacier"
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": "harbor"
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": "kettle"
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": "ladder"
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": "lagoon"
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": "lantern"
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": "meadow"
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": "orchard"
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": "pepper"
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": "pillow"
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": "quarry"
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": "saddle"
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": "thunder"
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": "tunnel"
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": "velvet"
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": "violin"
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": "whistle"
+        }
+      ]
+    },
+    {
+      "row": "wordSpyWordVectors",
+      "cells": [
+        {
+          "key": "0",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": null,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyLexicon",
+      "cells": [
+        {
+          "key": "cold",
+          "value": 0,
+          "text": "cold"
+        },
+        {
+          "key": "heat",
+          "value": 0,
+          "text": "heat"
+        },
+        {
+          "key": "water",
+          "value": 0,
+          "text": "water"
+        },
+        {
+          "key": "flight",
+          "value": 0,
+          "text": "flight"
+        },
+        {
+          "key": "music",
+          "value": 0,
+          "text": "music"
+        },
+        {
+          "key": "metal",
+          "value": 0,
+          "text": "metal"
+        },
+        {
+          "key": "money",
+          "value": 0,
+          "text": "money"
+        },
+        {
+          "key": "hunting",
+          "value": 0,
+          "text": "hunting"
+        },
+        {
+          "key": "sport",
+          "value": 0,
+          "text": "sport"
+        },
+        {
+          "key": "journey",
+          "value": 0,
+          "text": "journey"
+        },
+        {
+          "key": "night",
+          "value": 0,
+          "text": "night"
+        },
+        {
+          "key": "medicine",
+          "value": 0,
+          "text": "medicine"
+        }
+      ]
+    },
+    {
+      "row": "wordSpyLexiconVectors",
+      "cells": [
+        {
+          "key": "cold",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "heat",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "water",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "flight",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "music",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "metal",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "money",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "hunting",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "sport",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "journey",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "night",
+          "value": null,
+          "text": null
+        },
+        {
+          "key": "medicine",
+          "value": null,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyKey",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 3,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyRedLive",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyBlueLive",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyRedAvoid",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyBlueAvoid",
+      "cells": [
+        {
+          "key": "0",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyAim",
+      "cells": []
+    },
+    {
+      "row": "wordSpyClue",
+      "cells": []
+    },
+    {
+      "row": "wordSpyClueLog",
+      "cells": []
+    },
+    {
+      "row": "wordSpyClueChoice",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": ""
+        }
+      ]
+    },
+    {
+      "row": "wordSpyClueWord",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": ""
+        }
+      ]
+    },
+    {
+      "row": "wordSpyHint",
+      "cells": []
+    },
+    {
+      "row": "wordSpyAct",
+      "cells": [
+        {
+          "key": "card",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "applied",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "isLive",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "ready",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "request",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "result",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "safeWord",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "seat",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "seatOk",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "word",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "wordOk",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "wordSpyTable",
+      "cells": [
+        {
+          "key": "accepted",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "aimPending",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "clueNo",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "guessesLeft",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "livePending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "mixPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "numberPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "pickPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "refused",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "revealCard",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "revealPending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "revealWord",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "settlePending",
+          "value": 0,
+          "text": null
+        }
+      ]
+    }
+  ],
+  "fields": null
+}

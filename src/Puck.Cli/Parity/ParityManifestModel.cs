@@ -8,15 +8,16 @@ internal sealed record ParityManifest(
     string World,
     IReadOnlyList<ParityManifestCapture> Captures
 );
-/// <summary>One scheduled capture entry. When <see cref="CameraInside"/> is <see langword="true"/> the capture
-/// was refused (<c>map(cameraPos) &lt;= 0</c>): <see cref="Frame"/> and <see cref="Census"/> are
-/// <see langword="null"/>, and only <see cref="StateHash"/> — the sim-state summary, independent of whether
-/// anything was rendered — is meaningful.</summary>
+/// <summary>One armed capture's entry. When <see cref="Refusal"/> is present the producer wrote no frame for it —
+/// <c>cameraInside</c>, <c>busy</c>, <c>stale</c>, <c>failed</c> or <c>unserved</c>, with <see cref="Detail"/>
+/// naming the ticks involved — so <see cref="Frame"/> and <see cref="Census"/> are <see langword="null"/>, and only
+/// <see cref="StateHash"/>, the sim-state summary at the armed tick, is meaningful.</summary>
 internal sealed record ParityManifestCapture(
     string Station,
     ulong Tick,
     string StateHash,
-    bool CameraInside,
+    string? Refusal,
+    string? Detail,
     string? Frame,
     IReadOnlyDictionary<string, long>? Census
 );

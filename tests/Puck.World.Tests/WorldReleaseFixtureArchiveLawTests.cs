@@ -1,4 +1,5 @@
 using Puck.Storage;
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
@@ -7,7 +8,7 @@ namespace Puck.World.Tests;
 public sealed class WorldReleaseFixtureArchiveLawTests {
     [Fact]
     public async Task InterruptedCapturePublishesNoInventoryAndCannotReplaceACompletedRequest() {
-        using var directory = new TempWorldDirectory();
+        using var directory = new TemporaryDirectory();
         var owner = Guid.NewGuid();
         var blobs = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
@@ -20,14 +21,29 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
         var request = Guid.NewGuid();
         var machine = Guid.NewGuid();
         var token = TestContext.Current.CancellationToken;
+        var alphaReceipts = (await CaptureReceiptsAsync(
+            blobs: blobs,
+            owner: owner,
+            target: target,
+            token: token,
+            world: "alpha"
+        )).History;
         var checkpoints = new Dictionary<string, WorldReleaseFixtureCheckpoint> {
             ["alpha"] = new(
             "alpha checkpoint"u8.ToArray(),
-            5
+            5,
+            alphaReceipts
         ),
             ["beta"] = new(
             "beta checkpoint"u8.ToArray(),
-            5
+            5,
+            (await CaptureReceiptsAsync(
+                blobs: blobs,
+                owner: owner,
+                target: target,
+                token: token,
+                world: "beta"
+            )).History
         ),
         };
         var release = ("sha256/" + new string(
@@ -70,7 +86,8 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
         );
         checkpoints["alpha"] = new(
             "later checkpoint"u8.ToArray(),
-            8
+            8,
+            alphaReceipts
         );
         await Assert.ThrowsAsync<InvalidDataException>(testCode: () => restarted.SaveAsync(
             request,
@@ -107,53 +124,27 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
         ));
     }
     [Fact]
-    public async Task ReceiptGraphIsPinnedBeforeInventoryAndMissingLegacyProofIsExplicit() {
-        using var directory = new TempWorldDirectory();
+    public async Task ReceiptGraphIsPinnedBeforeInventoryAndARowWithoutItsPinIsMalformed() {
+        using var directory = new TemporaryDirectory();
         var owner = Guid.NewGuid();
         var blobs = PuckStorageTestComposition.BuildStore();
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var token = TestContext.Current.CancellationToken;
-        var authority = new WorldAuthorityBlobStore(
-            store: blobs,
-            target: target
-        );
-        var identity = new WorldAuthorityIdentity(
-            Owner: owner,
-            World: SafeName.Parse(candidate: "alpha")
-        );
-        var fence = await authority.AcquireActivationAsync(
-            cancellationToken: token,
-            identity: identity
-        );
-        var receipt = new WorldAuthorityOperationReceipt(
-            Guid.NewGuid(),
-            "actor",
-            "payload",
-            "refused",
-            false,
-            1,
-            null
-        );
 
-        Assert.True(condition: (await authority.RecordReceiptAsync(
-            cancellationToken: token,
-            identity: identity,
-            receipt: receipt,
-            suppliedFence: fence
-        )).Ok);
-        var history = await authority.CaptureReceiptSnapshotAsync(
-            identity,
-            (await authority.LoadRootAsync(
-                cancellationToken: token,
-                identity: identity
-            ))!.Value,
-            token
+        var (receipt, history) = await CaptureReceiptsAsync(
+            blobs: blobs,
+            owner: owner,
+            target: target,
+            token: token,
+            world: "alpha"
         );
-        var checkpoint = new Dictionary<string, WorldReleaseFixtureCheckpoint> { ["alpha"] = new(
+        var checkpoint = new Dictionary<string, WorldReleaseFixtureCheckpoint> {
+            ["alpha"] = new(
             "checkpoint"u8.ToArray(),
             5,
             history
-        ) };
+        ),
+        };
         var request = Guid.NewGuid();
         var release = ("sha256/" + new string(
             c: 'a',
@@ -227,36 +218,39 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
             "unsupported receipt snapshot schema",
             Assert.Throws<InvalidDataException>(testCode: () => WorldAuthorityReceiptSnapshot.Decode(bytes: System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(future))).Message
         );
-        var legacy = await archive.SaveAsync(
-            Guid.NewGuid(),
-            "official",
-            release,
-            machine,
-            new Dictionary<string, WorldReleaseFixtureCheckpoint> { ["alpha"] = new(
-                "checkpoint"u8.ToArray(),
-                5
-            ) },
-            token
-        );
+        // The same inventory under another request loads; without its row's receipt pin it is malformed.
+        var inventory = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(manifest))!;
 
-        Assert.NotEqual(
-            manifest.Identity,
-            legacy.Identity
-        );
-        Assert.DoesNotContain(
-            "ReceiptsHash",
-            System.Text.Json.JsonSerializer.Serialize(legacy)
-        );
-        var missing = await Assert.ThrowsAsync<InvalidDataException>(testCode: () => archive.ReadReceiptsAsync(
-            cancellationToken: token,
-            manifest: legacy,
-            world: "alpha"
-        ));
+        foreach (var drop in new[] { false, true }) {
+            var copy = Guid.NewGuid();
 
-        Assert.Contains(
-            "source worker",
-            missing.Message
-        );
+            inventory["RequestId"] = copy.ToString(format: "D");
+            if (drop) { _ = inventory["Worlds"]!["alpha"]!.AsObject().Remove(propertyName: "ReceiptsHash"); }
+            await blobs.WriteAsync(
+                target,
+                new(
+                    Key: $"private/puck/hosted/releases/fixtures/{copy:D}.json",
+                    ObjectId: owner
+                ),
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(inventory),
+                ObjectBlobWriteMode.CreateOnly,
+                cancellationToken: token
+            );
+            if (drop) {
+                await Assert.ThrowsAsync<InvalidDataException>(testCode: () => archive.LoadAsync(
+                    cancellationToken: token,
+                    requestId: copy
+                ));
+            } else {
+                Assert.Equal(
+                    manifest.Worlds["alpha"],
+                    (await archive.LoadAsync(
+                        cancellationToken: token,
+                        requestId: copy
+                    ))!.Worlds["alpha"]
+                );
+            }
+        }
         var pin = manifest.Worlds["alpha"].ReceiptsHash!;
 
         await blobs.WriteAsync(
@@ -273,6 +267,46 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
             cancellationToken: token,
             manifest: manifest,
             world: "alpha"
+        ));
+    }
+
+    // Records one refused receipt under a fresh activation and captures the resulting receipt graph.
+    private static async Task<(WorldAuthorityOperationReceipt Receipt, WorldAuthorityReceiptSnapshot History)> CaptureReceiptsAsync(IObjectBlobStore blobs, ObjectStorageTarget target, Guid owner, string world, CancellationToken token) {
+        var authority = new WorldAuthorityBlobStore(
+            store: blobs,
+            target: target
+        );
+        var identity = new WorldAuthorityIdentity(
+            Owner: owner,
+            World: SafeName.Parse(candidate: world)
+        );
+        var fence = await authority.AcquireActivationAsync(
+            cancellationToken: token,
+            identity: identity
+        );
+        var receipt = new WorldAuthorityOperationReceipt(
+            Guid.NewGuid(),
+            "actor",
+            "payload",
+            "refused",
+            false,
+            1,
+            null
+        );
+
+        Assert.True(condition: (await authority.RecordReceiptAsync(
+            cancellationToken: token,
+            identity: identity,
+            receipt: receipt,
+            suppliedFence: fence
+        )).Ok);
+        return (receipt, await authority.CaptureReceiptSnapshotAsync(
+            identity,
+            (await authority.LoadRootAsync(
+                cancellationToken: token,
+                identity: identity
+            ))!.Value,
+            token
         ));
     }
 

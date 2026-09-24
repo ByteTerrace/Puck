@@ -144,15 +144,13 @@ public sealed class IncidenceAlgebra<TValue, TOps>
     /// <remarks>Comparability is exactly interval-hood, so this doubles as the order relation itself: the pair names a
     /// key when and only when <c>lower ≤ upper</c>.</remarks>
     public bool TryKey(int lower, int upper, out long key) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: lower);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: lower,
-            other: ElementCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: ElementCount,
+            value: lower
         );
-        ArgumentOutOfRangeException.ThrowIfNegative(value: upper);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
-            value: upper,
-            other: ElementCount
+        ArgumentRange.ThrowIfNotIndex(
+            count: ElementCount,
+            value: upper
         );
 
         key = m_symbolOf[((lower * ElementCount) + upper)];

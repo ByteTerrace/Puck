@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Xunit;
 
 namespace Puck.State.Rules.Tests;
@@ -31,14 +32,13 @@ public sealed class PoolIterationAllocationLawTests {
         for (var iteration = 0; (iteration < 128); iteration++) {
             Candidate();
         }
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var iteration = 0; (iteration < 256); iteration++) {
-            Candidate();
-        }
-        Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - before));
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => {
+            for (var iteration = 0; (iteration < 256); iteration++) {
+                Candidate();
+            }
+        }));
         Assert.Empty(collection: evaluator.Diagnostics());
-        Assert.True(condition: arena.TryRead(handle: catalog.CreateInstanceHandle(poolOrdinal: 0, slot: 2, generation: 0),
+        Assert.True(condition: arena.TryRead(handle: catalog.CreateInstanceHandle(generation: 0, poolOrdinal: 0, slot: 2),
             fieldOrdinal: 0, value: out var value));
         Assert.Equal(expected: 0L, actual: value.AsInt);
     }

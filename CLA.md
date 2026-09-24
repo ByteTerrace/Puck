@@ -9,8 +9,8 @@
 
 We'd love your help — code, art, avatars, stages, levels, fixes, or any other content.
 Before we can include what you make, we need your permission to use it, and we need to be
-able to include it in **both** the free version of ByteTerrace.Puck **and** the paid commercial
-version. This agreement gives us that permission.
+able to distribute it under ByteTerrace.Puck's license (the Apache License 2.0) **and** under any
+other license we choose. This agreement gives us that permission.
 
 A few things to know up front:
 
@@ -59,7 +59,7 @@ distribute, and **sublicense** the Contribution and such derivative works.
 
 **Right to relicense.** This license expressly includes the right for ByteTerrace to license
 and sublicense the Contribution, and derivative works of it, **under any license terms of
-ByteTerrace's choosing, including the PolyForm Noncommercial License, a paid commercial or
+ByteTerrace's choosing, including the Apache License 2.0, a paid commercial or
 proprietary license, or any future license ByteTerrace adopts for ByteTerrace.Puck.** You understand
 and intend that Your Contribution may be included in versions of ByteTerrace.Puck that ByteTerrace
 distributes commercially for a fee.

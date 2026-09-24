@@ -1,3 +1,5 @@
+using Puck.Commands;
+using Puck.Testing;
 using Xunit;
 
 using Puck.World.Authoring;
@@ -17,143 +19,105 @@ public sealed class ClockPhaseErrorLawTests {
     // Divides FixedTickConversion.TicksPerSecond (50400) exactly, matching CheckMusic's own divisibility check.
     private const long TicksPerBeat = 2100;
 
-    private static WorldDefinition ClockDocument(string assetDirectory) {
-        var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
-            Schema: MusicDocument.CurrentSchema,
-            Name: "test-score",
-            Tempo: new MusicTempoDocument(
-                BeatsPerBar: 4,
-                TicksPerBeat: ((int)TicksPerBeat)
-            ),
-            Segments: [new MusicSegmentDocument(
+    private static WorldDefinition ClockDocument(TemporaryDirectory directory) => Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
+        Music = [AudioAssetFixtures.Write(
+            directory: directory,
+            document: AudioAssetFixtures.Score(
+                name: "test-score",
+                segments: [new MusicSegmentDocument(
                     Id: "calm",
                     Transitions: null
-                )]
-        ));
-        var musicPath = Path.Combine(
-            path1: assetDirectory,
-            path2: "score.puck.music.v1.json"
-        );
-
-        File.WriteAllBytes(
-            path: musicPath,
-            bytes: music.Bytes
-        );
-
-        return Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
-            Music = [new WorldMusicRow(
-                Name: "test-score",
-                Source: musicPath,
-                Hash: music.Hash
-            )],
-            StateRaw = new(World: [Slot(name: "phaseError")]),
-            Rules = [Reader(
-                clockName: "test-score",
-                state: "phaseError"
-            )],
-        };
-    }
+                )],
+                ticksPerBeat: ((int)TicksPerBeat)
+            )
+        )],
+        StateRaw = new(World: [StateFixtures.IntSlot(name: "phaseError")]),
+        Rules = [Reader(
+            clockName: "test-score",
+            state: "phaseError"
+        )],
+    };
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static string ReadGradeAfterPress(int restSteps) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-clock-law-").FullName;
+        using var directory = new TemporaryDirectory();
+        var document = ClockDocument(directory: directory);
+        var pressOrdinal = document.Channels.Count;
+        var pressed = new ActionPredicate.CompareState(
+            State: $"$channel:1:press",
+            Comparison: ExpressionOp.GreaterOrEqual,
+            Value: 1m
+        );
 
-        try {
-            var document = ClockDocument(assetDirectory: directory);
-            var pressOrdinal = document.Channels.Count;
-            var pressed = new ActionPredicate.CompareState(
-                State: $"$channel:1:press",
-                Comparison: ActionStateComparison.GreaterOrEqual,
-                Value: 1m
-            );
-
-            document = document with {
-                ChannelsRaw = [.. document.Channels, new WorldChannel(
-                    Name: "press",
-                    Shape: ChannelShape.Binary,
-                    Composition: true
-                )],
-                StateRaw = new(World: [Slot(name: "grade")]),
-                Rules = [
-                    new WorldRule(
-                    Name(value: "gradeGood"),
-                    [new ActionEffect.SetState(
-                            State: "grade",
-                            Value: 2
-                        )],
-                    Gate: WithinTicks(
-                        pressed: pressed,
-                        tolerance: 300
-                    ),
-                    Mode: ActionTriggerMode.Edge
+        document = document with {
+            ChannelsRaw = [.. document.Channels, new WorldChannel(
+                Name: "press",
+                Shape: ChannelShape.Binary,
+                Composition: true
+            )],
+            StateRaw = new(World: [StateFixtures.IntSlot(name: "grade")]),
+            Rules = [
+                new WorldRule(
+                Name(value: "gradeGood"),
+                [new ActionEffect.SetState(
+                        State: "grade",
+                        Value: 2
+                    )],
+                Gate: WithinTicks(
+                    pressed: pressed,
+                    tolerance: 300
                 ),
-                    new WorldRule(
-                    Name(value: "gradePerfect"),
-                    [new ActionEffect.SetState(
-                            State: "grade",
-                            Value: 1
-                        )],
-                    Gate: WithinTicks(
-                        pressed: pressed,
-                        tolerance: 100
-                    ),
-                    Mode: ActionTriggerMode.Edge
+                Mode: ActionTriggerMode.Edge
+            ),
+                new WorldRule(
+                Name(value: "gradePerfect"),
+                [new ActionEffect.SetState(
+                        State: "grade",
+                        Value: 1
+                    )],
+                Gate: WithinTicks(
+                    pressed: pressed,
+                    tolerance: 100
                 ),
-                ],
-            };
+                Mode: ActionTriggerMode.Edge
+            ),
+            ],
+        };
 
-            using var fixture = Fixtures.FreshServer(definition: document);
-            var actor = WorldPrincipal.Seat(slot: 0);
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var actor = Principal.Seat(slot: 0);
 
-            Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
-                Principal: actor,
-                Slot: actor.Index,
-                IdentityName: null,
-                WireProtocolKey: WorldProtocol.WireProtocolKey
-            )).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
 
-            var body = fixture.Server.Body(index: actor.Index)!;
+        var body = fixture.Server.Body(index: actor.Index)!;
 
-            for (var step = 0; (step < restSteps); step++) {
-                fixture.Step();
-            }
-
-            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
-                ordinal: pressOrdinal,
-                value: Puck.Maths.FixedQ4816.One
-            ));
+        for (var step = 0; (step < restSteps); step++) {
             fixture.Step();
-
-            return Value(
-                fixture: fixture,
-                row: "grade"
-            ) switch { 1 => "perfect", 2 => "good", _ => "miss" };
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
         }
+
+        body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
+            ordinal: pressOrdinal,
+            value: Puck.Maths.FixedQ4816.One
+        ));
+        fixture.Step();
+
+        return fixture.SlotValue(row: "grade"
+        ) switch { 1 => "perfect", 2 => "good", _ => "miss" };
     }
     private static long ReadPhaseErrorAfterSteps(int steps) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-clock-law-").FullName;
+        using var directory = new TemporaryDirectory();
+        using var fixture = Fixtures.FreshServer(definition: ClockDocument(directory: directory));
 
-        try {
-            using var fixture = Fixtures.FreshServer(definition: ClockDocument(assetDirectory: directory));
-
-            for (var step = 0; (step < steps); step++) {
-                fixture.Step();
-            }
-
-            return Value(
-                fixture: fixture,
-                row: "phaseError"
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
+        for (var step = 0; (step < steps); step++) {
+            fixture.Step();
         }
+
+        return fixture.SlotValue(row: "phaseError"
+        );
     }
     private static WorldRule Reader(string state, string clockName) => new(
         Name(value: (state + "Reader")),
@@ -162,22 +126,6 @@ public sealed class ClockPhaseErrorLawTests {
                 FromState: $"$clock:{clockName}:phaseError"
             )]
     );
-    private static WorldStateRow Slot(string name) => new(
-        Name(value: name),
-        CellKind.Int,
-        Cells: [new StateCell(
-                WorldStateRow.SlotKey,
-                CellValue.Int(value: 0L)
-            )]
-    );
-    private static long Value(WorldFixture fixture, string row) =>
-        StateRows.FindCell(
-            cells: WorldDefinitionRows.FindStateRow(
-                fixture.Server.Definition.State,
-                row
-            )!.Cells,
-            key: WorldStateRow.SlotKey
-        )!.Value.Raw;
     // phaseError is signed; a tolerance window is symmetric, so the gate is press AND |phaseError| <= tolerance —
     // the bound read as two ANDed comparisons, the ordinary compareState composition every other authored range in
     // this repository uses.
@@ -185,12 +133,12 @@ public sealed class ClockPhaseErrorLawTests {
         pressed,
         new ActionPredicate.CompareState(
             State: "$clock:test-score:phaseError",
-            Comparison: ActionStateComparison.GreaterOrEqual,
+            Comparison: ExpressionOp.GreaterOrEqual,
             Value: -tolerance
         ),
         new ActionPredicate.CompareState(
             State: "$clock:test-score:phaseError",
-            Comparison: ActionStateComparison.LessOrEqual,
+            Comparison: ExpressionOp.LessOrEqual,
             Value: tolerance
         ),
     ]);
@@ -200,12 +148,12 @@ public sealed class ClockPhaseErrorLawTests {
         var reason = default(string);
         var refused = !WorldDefinitionValidator.TryValidateLocally(
             definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz) with {
-            Rules = [Reader(
+                Rules = [Reader(
                     clockName: "anything",
                     state: "phaseError"
                 )],
-            StateRaw = new(World: [Slot(name: "phaseError")]),
-        },
+                StateRaw = new(World: [StateFixtures.IntSlot(name: "phaseError")]),
+            },
             reason: out reason
         );
 
@@ -233,39 +181,31 @@ public sealed class ClockPhaseErrorLawTests {
     }
     [Fact]
     public void AnUndeclaredMusicNameRefuses() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-clock-law-").FullName;
+        using var directory = new TemporaryDirectory();
+        var declared = ClockDocument(directory: directory);
 
-        try {
-            var declared = ClockDocument(assetDirectory: directory);
-
-            Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: declared with {
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: declared with {
                 Rules = [Reader(
-                        clockName: "not-the-declared-name",
-                        state: "phaseError"
-                    )],
+                    clockName: "not-the-declared-name",
+                    state: "phaseError"
+                )],
             },
-                reason: out var undeclaredReason
-            ));
-            Assert.Contains(
-                actualString: undeclaredReason,
-                expectedSubstring: "does not name the document's declared music row"
-            );
+            reason: out var undeclaredReason
+        ));
+        Assert.Contains(
+            actualString: undeclaredReason,
+            expectedSubstring: "does not name the document's declared music row"
+        );
 
-            // Control: the declared name compiles.
-            Assert.True(
-                condition: WorldDefinitionValidator.TryValidateLocally(
-                    definition: declared,
-                    reason: out var okReason
-                ),
-                userMessage: okReason
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        // Control: the declared name compiles.
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: declared,
+                reason: out var okReason
+            ),
+            userMessage: okReason
+        );
     }
     [Fact]
     public void PhaseErrorFlipsSignPastHalfABeatReadingAsEarlyForTheNextBeat() {

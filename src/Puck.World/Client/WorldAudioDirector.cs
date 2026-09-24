@@ -53,7 +53,7 @@ namespace Puck.World.Client;
 /// plan serializes on one reentrant gate. The gate is uncontended in steady state (reconciles are rare, a mix block
 /// is microseconds), which is the deliberate trade: one honest lock instead of a lock-free mixer-mutation protocol.</para>
 /// </remarks>
-internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
+internal sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
     /// <summary>The <c>speaker:</c>/<c>placement:</c> derived-plan key prefixes' sibling for a music-layer bed —
     /// the tune id follows.</summary>
     private const string MusicLayerKeyPrefix = "musicLayer:";
@@ -101,7 +101,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     private ulong m_nextTriggerSequence;
     // The world.volume session lever (the render-levers asymmetry): null until touched — the document's
     // MasterGain then owns the live gain (reconcile follows it; the offline drivers stay purely document-driven);
-    // once set, the lever owns "now" for the rest of the session and world.save folds it back into the document.
+    // once set, the lever owns "now" for the session and world.save folds it back into an authored audio section.
     private float? m_sessionMasterVolume;
     private int m_slabIndex;
 
@@ -169,8 +169,8 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         }
     }
 
-    /// <summary>The live master volume — the session lever when engaged, else the document master gain. The
-    /// <c>world.save</c> fold and the session-drift hint read this.</summary>
+    /// <summary>The live master volume — the session lever when engaged, else the document master gain, which the
+    /// <c>world.volume</c> echo reports.</summary>
     public float EffectiveMasterVolume {
         get {
             lock (m_gate) {
@@ -193,16 +193,16 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     /// <see cref="WorldScreenBinder.AudioMachine"/>; invoked only from <see cref="Publish"/> (the pump thread) —
     /// it reads pump-owned binder state. Null headless: machine-fed emitters then render honest silence.</summary>
     public Func<string, string, IAudioMachine?>? MachineSourceResolver { get; set; }
-    /// <summary>Whether the session lever has been engaged (the drift hint's cheap discriminator).</summary>
-    public bool MasterVolumeLeverEngaged {
+    /// <summary>Whether a mixer is currently attached (the device pump's live/silent echo).</summary>
+    public bool MixerAttached => (m_mixer is not null);
+    /// <inheritdoc/>
+    public float? SessionMasterVolume {
         get {
             lock (m_gate) {
-                return m_sessionMasterVolume.HasValue;
+                return m_sessionMasterVolume;
             }
         }
     }
-    /// <summary>Whether a mixer is currently attached (the device pump's live/silent echo).</summary>
-    public bool MixerAttached => (m_mixer is not null);
 
     // Admit one plan row: resolve its stable id against the registry (keep on identical signature; retire + reissue
     // on an identity change — the fresh id re-enters the mixer from silence) and fire the arrival trigger for
@@ -390,6 +390,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             )) {
                 host.Source.Dispose();
                 m_tuneHosts[tuneId] = CreateTuneHost(
+                    documentDirectory: definition.DocumentDirectory,
                     mixer: mixer,
                     tune: tune
                 );
@@ -413,6 +414,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
             ) is { } tune)
             ) {
                 m_tuneHosts[tuneId] = CreateTuneHost(
+                    documentDirectory: definition.DocumentDirectory,
                     mixer: mixer,
                     tune: tune
                 );
@@ -477,30 +479,6 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
 
         return seen.Count;
     }
-    // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by WorldDefinitionValidator —
-    // this load is expected to succeed by construction, the same discipline WorldServer's music/judge loads take.
-    private static TuneHost CreateTuneHost(WorldTune tune, AudioMixer mixer) {
-        if (!WorldAssetRowLoader.TryLoadTune(
-            document: out var document,
-            error: out var loadError,
-            row: tune
-        )) {
-            throw new InvalidOperationException(message: $"tune[{tune.Name}]: {loadError} (a validated document must still resolve at construction)");
-        }
-
-        var source = new TuneMachineSource(document: document!);
-
-        mixer.SetSource(
-            key: AudioSourceKey.Tune(id: tune.Name),
-            source: source
-        );
-
-        return new TuneHost(
-            TuneId: tune.Name,
-            Hash: tune.Hash,
-            Source: source
-        );
-    }
     // A cue's life derives from its own patch envelope (data): a finite patch lives its duration + release plus one
     // sim step of slack; a looping patch takes the invariant cap (a cue is a transient by definition). A patch the
     // table no longer carries gets one step (its trigger would drop in the mixer anyway).
@@ -541,7 +519,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation) ||
                 (creation.Document.Behavior?.Sounds is not { Count: > 0 } sounds)
             ) {
@@ -1713,6 +1691,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 // WorldDefinitionValidator — this load is expected to succeed by construction.
                 if (!WorldAssetRowLoader.TryLoadPatch(
                     document: out var document,
+                    documentDirectory: definition.DocumentDirectory,
                     error: out var loadError,
                     row: patch
                 )) {
@@ -1795,9 +1774,9 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
 
     /// <summary>Engages the <c>world.volume</c> session lever: the live mix gain applies now and owns every later
     /// reconcile; the document's <see cref="WorldAudioDefaults.MasterGain"/> keeps owning boot, and
-    /// <c>world.save</c> folds the lever back into it (the render-levers asymmetry). Until first engaged, the
-    /// document value flows live (so the offline document-driven proofs and <c>world.row.set audio</c>'s live master
-    /// gain keep flowing from the document).</summary>
+    /// <c>world.save</c> folds the lever into it when the document authors an <c>audio</c> section (the render-levers
+    /// asymmetry). Until first engaged, the document value flows live (so the offline document-driven proofs and
+    /// <c>world.row.set audio</c>'s live master gain keep flowing from the document).</summary>
     /// <param name="value">The master volume (1 = unity), validated by the verb against the shared gain ceiling.</param>
     public void SetMasterVolume(float value) {
         lock (m_gate) {

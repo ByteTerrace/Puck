@@ -1,0 +1,14 @@
+// A fragment the island imports: it composes only under the island root.
+export read tokenCount
+
+state {
+  world {
+    slot tokenCount = 0
+  }
+}
+
+rule "token-tick" {
+  when tokenCount < 1
+  mode: Edge
+  tokenCount += 1
+}

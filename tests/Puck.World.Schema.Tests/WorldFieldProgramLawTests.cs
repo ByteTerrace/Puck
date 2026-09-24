@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Assets.Documents;
 using Puck.Maths;
 
@@ -33,7 +34,7 @@ public sealed class WorldFieldProgramLawTests {
                 new WorldReaction.Transform(
                         When: [new WorldFieldCondition(
                                 Field: fieldName,
-                                Comparison: ActionStateComparison.Greater,
+                                Comparison: ExpressionOp.Greater,
                                 Value: new WorldLatticeScalar(Row: "season")
                             )],
                         Then: [
@@ -55,7 +56,7 @@ public sealed class WorldFieldProgramLawTests {
                         Amount: new WorldLatticeScalar(Row: "season")
                     ),
                 new WorldReaction.Expose(
-                        Comparison: ActionStateComparison.Greater,
+                        Comparison: ExpressionOp.Greater,
                         Field: fieldName,
                         Row: "exposed",
                         Value: 5f
@@ -188,13 +189,13 @@ public sealed class WorldFieldProgramLawTests {
     public void Compile_DoesNotInventAnOrderingEdgeBetweenIndependentBodyOutputs() {
         var state = BuildState(reactions: [
                 new WorldReaction.Expose(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Field: "heat",
                 Row: "burning",
                 Value: 1f
             ),
                 new WorldReaction.Expose(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Field: "heat",
                 Row: "exposed",
                 Value: 2f
@@ -480,7 +481,7 @@ public sealed class WorldFieldProgramLawTests {
     public void Compile_StateWriteToReadCreatesAnEdgeBetweenOtherwiseIndependentFields() {
         var state = BuildState(reactions: [
             new WorldReaction.Expose(
-                Comparison: ActionStateComparison.Greater,
+                Comparison: ExpressionOp.Greater,
                 Field: "heat",
                 Row: "burning",
                 Value: 1f
@@ -567,28 +568,26 @@ public sealed class WorldFieldProgramLawTests {
         var fields = Assert.IsType<WorldFieldsSection>(@object: definition.Fields);
         var catalog = definition.StateCatalog;
         var program = Assert.IsType<WorldFieldProgram>(@object: definition.FieldProgram);
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var index = 0; (index < 64); index++) {
-            if (
-                !ReferenceEquals(
-                objA: fields,
-                objB: definition.Fields
-            ) ||
-                !ReferenceEquals(
-                objA: catalog,
-                objB: definition.StateCatalog
-            ) ||
-                !ReferenceEquals(
-                objA: program,
-                objB: definition.FieldProgram
-            )
-            ) {
-                throw new InvalidOperationException(message: "A warm compatible compiled view changed identity.");
+        var allocated = AllocationWindow.Least(window: () => {
+            for (var index = 0; (index < 64); index++) {
+                if (
+                    !ReferenceEquals(
+                    objA: fields,
+                    objB: definition.Fields
+                ) ||
+                    !ReferenceEquals(
+                    objA: catalog,
+                    objB: definition.StateCatalog
+                ) ||
+                    !ReferenceEquals(
+                    objA: program,
+                    objB: definition.FieldProgram
+                )
+                ) {
+                    throw new InvalidOperationException(message: "A warm compatible compiled view changed identity.");
+                }
             }
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        });
 
         Assert.Equal(
             actual: allocated,

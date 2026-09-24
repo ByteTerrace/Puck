@@ -9,7 +9,8 @@ public enum SdfShapeType : uint {
     Torus = 3, // Data0 = (majorRadius, minorRadius, _, _)
     Cylinder = 4, // Data0 = (radius, halfHeight, _, _) inset by Data1.w, Data1.w = edge-rounding radius; upright, centered on the local origin
     Plane = 5, // Data0 = (normalX, normalY, normalZ, offset)
-    Ellipsoid = 6, // Data0 = (radiusX, radiusY, radiusZ, _)
+    // 6 is retired: the approximate iq ellipsoid it named is gone. Every ellipsoid is a Superellipsoid (18) at
+    // exponent 2, the exact 1-Lipschitz gauge. The id stays unassigned rather than renumbering its neighbours.
     Vesica = 7, // Data0 = (radius, halfSeparation, halfHeight[baked √(r²−d²)], _); exact 2D vesica revolved to a lens (d < r)
     // --- The 2D-primitive family (an exact 2D SDF lifted to 3D by revolve/extrude). SHARED lane layout for all of
     // them: Data0.xyz = the 2D shape params, Data0.w = the lift amount (revolve offset o OR extrude half-height h),
@@ -61,9 +62,11 @@ public enum SdfShapeType : uint {
     ChamferedRectangle = 17,
     // Superellipsoid = 18: NOT a member of the 2D-primitive family above (it lifts nothing — a solid 3D formula
     // directly). Data0 = (radiusX, radiusY, radiusZ, exponent e in [2, 8]); Data1 = (smooth [ISA-wide], 1/radiusX,
-    // 1/radiusY, 1/radiusZ [host-baked, KEEP IN SYNC with sdfSuperellipsoid]). e = 2 reduces the formula to the plain
-    // Ellipsoid shape's own field, so SdfProgramBuilder.Superellipsoid emits SHAPE 6 (Ellipsoid) directly at e == 2
-    // rather than this id — a program never carries this shape at the ellipsoid limit.
+    // 1/radiusY, 1/radiusZ [host-baked, KEEP IN SYNC with sdfSuperellipsoid]). e = 2 is the ellipsoid
+    // (the scaled L2 gauge (|p/r| - 1) * min(r), exactly 1-Lipschitz like every admitted exponent), and this id is the
+    // ISA's ONE ellipsoid: every builder, creation, and debug path emits it at e == 2, which both evaluators take on a
+    // pow-free fast path. KEEP IN SYNC with SdfViewsKernelVariants, which classifies an e == 2 instance as the fold
+    // tier and every other exponent as heavy.
     Superellipsoid = 18,
     // ConvexPolygon = 19: a member of the 2D-primitive family (revolve/extrude lift, family-wide smooth/lift-mode/
     // cap-chamfer/edge-rounding lanes), but its 2D profile is a validated convex vertex list too large to fit inline
@@ -96,8 +99,7 @@ public enum SdfShapeType : uint {
     // shape returns the raw candidate minus a CONSERVATIVE MARGIN derived from the curve's own authored parameters —
     // KEEP IN SYNC with SdfProgramBuilder.SweepConservativeMargin / sdfSweepConservativeMargin (sdf-vm.hlsli) / the
     // fixed-point mirror in Puck.SignedDistance.Queries.SdfFieldEvaluator. The margin is a NUMERICALLY CALIBRATED
-    // constant (like several other approximate shapes in this ISA — Ellipsoid #6's eccentricity factor, Vesica's
-    // pre-fix history), not a closed-form Lipschitz proof; SdfProgramBuilder.Sweep refuses (by name) a declaration
+    // constant (like Vesica's pre-fix history), not a closed-form Lipschitz proof; SdfProgramBuilder.Sweep refuses (by name) a declaration
     // whose bulge/taper/strand-offset ratios exceed the envelope that margin was calibrated against.
     //
     // Fixed-point mirror (Puck.SignedDistance.Queries.SdfFieldEvaluator): supported ONLY for strands == 1 — a single

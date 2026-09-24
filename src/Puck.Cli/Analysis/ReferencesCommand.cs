@@ -2,6 +2,7 @@ using System.CommandLine;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.MSBuild;
 
@@ -222,7 +223,7 @@ internal static class ReferencesCommand {
     // .slnx first, .sln as the fallback. Extensions are compared exactly rather than by wildcard, because a
     // "*.sln" pattern also matches ".slnx" on Windows.
     private static string? Ascend(string start) =>
-        CliPaths.AscendUntil(
+        RepositoryPaths.Ascend(
             start: start,
             probe: static directory => (FirstWithExtension(
                 directory: directory,
@@ -507,6 +508,31 @@ internal static class ReferencesCommand {
             Strict = strict,
         });
     }
+    // A design-time load names an analyzer or generator whose file does not exist (a project-built one not yet
+    // built in the loaded configuration) as an UnresolvedAnalyzerReference, which the reference search cannot
+    // checksum, so the search would throw. Such an analyzer contributes nothing to any compilation, so it is dropped
+    // and named once on stderr.
+    private static Solution WithoutUnresolvedAnalyzers(Solution solution) {
+        var dropped = new SortedDictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        foreach (var projectId in solution.ProjectIds) {
+            foreach (var reference in solution.GetProject(projectId: projectId)!.AnalyzerReferences.OfType<UnresolvedAnalyzerReference>().ToList()) {
+                var path = (reference.FullPath ?? reference.Display);
+
+                dropped[path] = (dropped.GetValueOrDefault(key: path) + 1);
+                solution = solution.RemoveAnalyzerReference(
+                    analyzerReference: reference,
+                    projectId: projectId
+                );
+            }
+        }
+
+        foreach (var (display, projects) in dropped) {
+            Console.Error.WriteLine(value: $"references: skipping analyzer {CliPaths.ToDisplay(fullPath: display)} in {projects} project(s): the file does not exist; build it in this configuration to include what it generates.");
+        }
+
+        return solution;
+    }
     private static async Task<int> RunAsync(ReferencesOptions options) {
         var target = ResolveTarget(options: options);
 
@@ -562,6 +588,8 @@ internal static class ReferencesCommand {
             return 2;
         }
 
+        solution = WithoutUnresolvedAnalyzers(solution: solution);
+
         var symbols = await FindTargetsAsync(
             options: options,
             solution: solution
@@ -612,40 +640,25 @@ internal static class ReferencesCommand {
 
     public static Command Create() {
         var allowPartialOption = new Option<bool>(name: "--allow-partial") { Description = "Report anyway after a workspace load failure, accepting an incomplete answer." };
-        var configurationOption = new Option<string>(name: "--configuration") { DefaultValueFactory = static _ => "Debug", Description = "Build configuration the design-time load runs under." };
+        var configurationOption = CliOptions.Configuration(description: "The build configuration the design-time load runs under.");
         var containingOption = new Option<string?>(name: "--containing") { Description = "Keep declarations whose display string contains this fragment (ordinal)." };
         var containsOption = new Option<bool>(name: "--contains") { Description = "Treat the name as a substring rather than an exact simple name; source-only, so it refuses --metadata." };
         var declarationsOption = new Option<bool>(name: "--declarations") { Description = "Declarations only, no reference search." };
         var derivedOption = new Option<bool>(name: "--derived") { Description = "Derived types." };
-        var ignoreCaseOption = new Option<bool>(name: "-i") { Description = "Case-insensitive name match." };
+        var ignoreCaseOption = new Option<bool>(name: "--ignore-case") { Description = "Match the name case-insensitively." };
         var implementersOption = new Option<bool>(name: "--implementers") { Description = "Implementations of an interface or interface member." };
-        var jsonOption = new Option<bool>(name: "--json") { Description = "One JSON object per line instead of text." };
+        var jsonOption = CliOptions.Json();
         var kindOption = new Option<string?>(name: "--kind") { Description = "Comma-separated symbol kinds: type, member, namespace. Absent means type,member." };
         var metadataOption = new Option<bool>(name: "--metadata") { Description = "Also match declarations from referenced assemblies." };
         var nameArgument = new Argument<string>(name: "name") { Description = "The simple symbol name to resolve." };
         var noDocOption = new Option<bool>(name: "--no-doc") { Description = "Drop locations inside documentation trivia." };
         var overridesOption = new Option<bool>(name: "--overrides") { Description = "Overrides of a virtual or abstract member." };
         var projectOption = new Option<string?>(name: "--project") { Description = "Load one project instead of a solution, which narrows the closure." };
-        var quietOption = new Option<bool>(name: "-q") { Description = "Quiet: exit code only." };
+        var quietOption = new Option<bool>(name: "--quiet") { Description = "Print nothing; report the verdict in the exit code alone." };
         var solutionOption = new Option<string?>(name: "--solution") { Description = "The solution to load; absent, the nearest .slnx walking up from the working directory." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Keep only locations whose group definition is the queried symbol." };
         var command = new Command(
-            description: """
-            References to a source symbol, solution-wide.
-
-            Output is `path:line:col decl|ref <symbol kind> <resolved definition>`, grouped
-            by definition and sorted by position within a group. The symbol on a `ref` line
-            is the definition the compiler resolved, which is not always the one queried:
-            constructing a type reports under its constructor, and an interface-dispatched
-            call reports under the interface. `<see cref="..."/>` targets are ordinary
-            references — pass --no-doc for dead-code work.
-
-            This tier sees only what the project system compiles. Files removed from
-            compilation and files in no project are invisible to it; `puck search` and
-            `puck declarations` see them. Loading runs a design-time build, which writes
-            obj/ in every project and needs the solution restored.
-            Exit codes: 0 a declaration matched, 1 none did, 2 usage error or load failure.
-            """,
+            description: "Find the references to a C# symbol across the solution the compiler loads.",
             name: "references"
         ) {
             nameArgument,
@@ -668,6 +681,21 @@ internal static class ReferencesCommand {
             strictOption,
         };
 
+        command.Detail(detail: """
+            Output is `path:line:col decl|ref <symbol kind> <resolved definition>`, grouped by
+            definition and sorted by position within a group. The symbol on a `ref` line is the
+            definition the compiler resolved, which is not always the one queried: constructing
+            a type reports under its constructor, and an interface-dispatched call reports under
+            the interface. `<see cref="..."/>` targets are ordinary references; pass --no-doc
+            for dead-code work.
+
+            This tier sees only what the project system compiles. Files removed from compilation
+            and files in no project are invisible to it; `puck search` and `puck declarations`
+            see them. Loading runs a design-time build, which writes obj/ in every project and
+            needs the solution restored.
+
+            Exit codes: 0 a declaration matched, 1 none did, 2 usage error or load failure.
+            """);
         command.SetAction(action: (parseResult, cancellationToken) => RunAsync(
             allowPartial: parseResult.GetValue(option: allowPartialOption),
             configuration: parseResult.GetRequiredValue(option: configurationOption),

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Xunit;
 
 using Puck.Maths;
@@ -15,8 +16,7 @@ public sealed class ChannelWorldRuleFactLawTests {
     private const string PortalChannel = "portal";
     private const int PortalOrdinal = 3;
 
-    private static long BeaconCell(WorldFixture fixture) =>
-        fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == BeaconRow)).Cells!.Single().Value.AsInt;
+    private static long BeaconCell(WorldFixture fixture) => fixture.Row(name: BeaconRow).Cells!.Single().Value.Raw;
     // A document carrying the base fixture's three role channels plus one composition channel ("portal", ordinal 3)
     // and a rule that writes the "beacon" row once the authored gate holds — the discriminating write under test is
     // always which STRING names the gate.
@@ -46,7 +46,7 @@ public sealed class ChannelWorldRuleFactLawTests {
                 Name: CellName.Parse(candidate: "channel-beacon"),
                 Gate: new ActionPredicate.CompareState(
                     State: gate,
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Value: 1m
                 ),
                 Effects: [new ActionEffect.SetState(
@@ -61,7 +61,7 @@ public sealed class ChannelWorldRuleFactLawTests {
     [Fact]
     public void ARuleGatedOnAChannelFactFiresOnlyAfterThatSeatsChannelReachesTheThreshold() {
         using var fixture = Fixtures.FreshServer(definition: ChannelGatedDocument(gate: $"{WorldRuleFacts.ChannelPrefix}1:{PortalChannel}"));
-        var actor = WorldPrincipal.Seat(slot: 0);
+        var actor = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             Principal: actor,

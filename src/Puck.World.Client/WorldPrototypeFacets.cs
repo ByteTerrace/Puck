@@ -100,7 +100,7 @@ public static class WorldPrototypeFacets {
         foreach (var placement in definition.Placements) {
             if (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.PrototypeId
+                id: placement.ShownPrototypeId
             ) is not { } creation) {
                 continue;
             }

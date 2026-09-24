@@ -62,8 +62,8 @@ public sealed class FormatSelectionTests : IDisposable {
         var manifest = WriteManifest(paths: ["One.cs", path]);
 
         Assert.Throws<ArgumentException>(testCode: () => FormatSelection.Read(
-            root: m_root,
-            manifest: manifest
+            manifest: manifest,
+            root: m_root
         ));
         Assert.Equal(
             expected: "class One {}\n",
@@ -86,22 +86,30 @@ public sealed class FormatSelectionTests : IDisposable {
             path1: m_root,
             path2: "One.cs"
         ) };
+        // One run's phases share its closures, as `format` hands them over.
+        var closures = new CompileClosures();
 
         Assert.Equal(
             expected: 1,
-            actual: NamedArgsPhase.Run(
+            actual: SemanticPhases.Run(
+                check: true,
+                closures: closures,
+                configuration: "Release",
+                namedArgs: true,
+                nullPattern: false,
                 rootArgument: m_root,
-                whatIf: false,
-                verify: true,
                 targets: targets
             )
         );
         Assert.Equal(
             expected: 1,
-            actual: NullPatternPhase.Run(
+            actual: SemanticPhases.Run(
+                check: true,
+                closures: closures,
+                configuration: "Release",
+                namedArgs: false,
+                nullPattern: true,
                 rootArgument: m_root,
-                whatIf: false,
-                verify: true,
                 targets: targets
             )
         );
@@ -113,11 +121,16 @@ public sealed class FormatSelectionTests : IDisposable {
     [InlineData("src/App/obj/Generated.cs", false)]
     [InlineData("src/App/Generated.g.cs", false)]
     [InlineData(".github/workflows/format.yml", false)]
+    [InlineData("worlds/parlor/basis.puck", true)]
+    [InlineData("experimental/Old/world.puck", false)]
+    [InlineData("src/App/bin/copied.puck", false)]
+    [InlineData("src\\App\\Program.cs", false)]
+    [InlineData("src/../Program.cs", false)]
     [Theory]
-    public void CiSelectionExcludesGeneratedAndQuarantinedCode(string path, bool expected) {
+    public void PullRequestSelectionExcludesGeneratedAndQuarantinedSources(string path, bool expected) {
         Assert.Equal(
             expected: expected,
-            actual: FormatCiCommand.Admits(path: path)
+            actual: FormatSources.Admits(path: path)
         );
     }
     public void Dispose() {
@@ -144,8 +157,8 @@ public sealed class FormatSelectionTests : IDisposable {
                     path2: "One.cs"
                 )],
             actual: FormatSelection.Read(
-                root: m_root,
-                manifest: manifest
+                manifest: manifest,
+                root: m_root
             )
         );
     }

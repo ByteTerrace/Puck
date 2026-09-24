@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Puck.Abstractions.Machines;
 using Puck.Attestation;
@@ -48,7 +47,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         public bool Released;
     }
 
+    /// <summary>Gets how long a refused activation waits, on the silo clock, to release the authority fence it
+    /// acquired.</summary>
+    public static TimeSpan ReleaseActivationTimeout { get; } = TimeSpan.FromSeconds(seconds: 10);
+
     private readonly IObjectBlobStore m_blobStore;
+    private readonly TimeProvider m_clock;
 
     private readonly WorldAuthorityCheckpointCadenceCounter m_cadence = new();
 
@@ -57,9 +61,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly IMachineContentAdmissionPolicy m_contentAdmissionPolicy;
     private readonly string m_catalogFingerprint;
     private readonly Guid m_machineId;
-
-    private readonly ConcurrentQueue<Action> m_mailbox = new();
-
     private readonly SiloConsoleRouting m_routing;
 
     private readonly Dictionary<string, RowBookkeeping> m_rows = new(comparer: StringComparer.Ordinal);
@@ -86,37 +87,49 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private readonly List<Task> m_persistenceOperations = [];
 
     private bool m_ready;
+    private Puck.Abstractions.HostResourceUnavailableException? m_hostUnavailable;
 
-    private readonly Func<WorldSiloExtension, Puck.Networking.IAuthenticator, Puck.Networking.IAuthenticator>? m_authentication;
+    private readonly Func<WorldSiloExtension, Puck.Networking.IAuthenticator, TimeProvider, Puck.Networking.IAuthenticator>? m_authentication;
 
     /// <summary>Initializes the silo host over a validated document and its resolved blob store.</summary>
     /// <param name="definition">The validated silo document.</param>
     /// <param name="blobStore">The composed blob store.</param>
     /// <param name="storageTarget">The target supplied by the selected persistence extension.</param>
     /// <param name="routing">Where every admitted row's own tagged console session is registered and retired.</param>
-    /// <param name="authentication">The composition root's installed authentication-provider resolver.</param>
+    /// <param name="authentication">The composition root's installed authentication-provider resolver, handed the
+    /// silo's clock for the provider it builds.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <param name="machineCatalog">The immutable machine catalog selected by this silo host.</param>
     /// <param name="contentAdmissionPolicy">The captured host policy for machine content; defaults to the open local policy.</param>
+    /// <param name="timeProvider">The silo's one clock (<see cref="Clock"/>); <see langword="null"/> is
+    /// <see cref="TimeProvider.System"/>.</param>
+    /// <param name="extensions">The silo's composed extensions, from which a row's <c>extensions</c> configuration
+    /// selects its providers and participants; <see langword="null"/> is an empty set.</param>
     public WorldSiloHost(WorldSiloDefinition definition, IObjectBlobStore blobStore, SiloConsoleRouting routing, ObjectStorageTarget storageTarget, WorldMachineCatalog? machineCatalog = null,
-        Func<WorldSiloExtension, Puck.Networking.IAuthenticator, Puck.Networking.IAuthenticator>? authentication = null, IMachineContentAdmissionPolicy? contentAdmissionPolicy = null) {
+        Func<WorldSiloExtension, Puck.Networking.IAuthenticator, TimeProvider, Puck.Networking.IAuthenticator>? authentication = null, IMachineContentAdmissionPolicy? contentAdmissionPolicy = null,
+        TimeProvider? timeProvider = null, Puck.Abstractions.PuckExtensionSet? extensions = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: blobStore);
         ArgumentNullException.ThrowIfNull(argument: routing);
         ArgumentNullException.ThrowIfNull(argument: storageTarget);
         machineCatalog ??= new WorldMachineCatalog([]);
 
+        m_clock = (timeProvider ?? TimeProvider.System);
+        m_progressTimestamp = m_clock.GetTimestamp();
         m_definition = definition;
         m_machineCatalog = machineCatalog;
         m_contentAdmissionPolicy = (contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
         m_catalogFingerprint = machineCatalog.CompositionFingerprint;
         m_authentication = authentication;
+        m_extensions = (extensions ?? Puck.Abstractions.PuckExtensionSet.Compose(extensions: []));
         m_blobStore = blobStore;
         m_routing = routing;
         m_storageTarget = storageTarget;
         m_store = new WorldAuthorityBlobStore(
+            machines: m_machineCatalog,
             store: blobStore,
-            target: m_storageTarget
+            target: m_storageTarget,
+            timeProvider: m_clock
         );
         m_releaseManagement = definition.Release;
         m_releaseGroupStore = ((m_releaseManagement is { } managed)
@@ -148,15 +161,25 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
 
+    /// <summary>Gets the silo's one clock: every host deadline — storage, drain, reload, health, retirement, release
+    /// control, and the peer network's — and the progress and persistence health windows read it. Never read by
+    /// simulation.</summary>
+    public TimeProvider Clock => m_clock;
     /// <summary>Gets the immutable machine catalog selected for this silo.</summary>
     public WorldMachineCatalog MachineCatalog => m_machineCatalog;
     /// <summary>Gets the stable fingerprint of the selected machine metadata.</summary>
     public string MachineCatalogFingerprint => m_catalogFingerprint;
     /// <summary>Whether all pinned worlds have established their durable startup baseline.</summary>
-    public bool Ready { get => Volatile.Read(location: ref m_ready); internal set => Volatile.Write(
+    public bool Ready {
+        get => Volatile.Read(location: ref m_ready); internal set => Volatile.Write(
         location: ref m_ready,
         value: value
-    ); }
+    );
+    }
+    /// <summary>Gets the first environment failure a row's door met binding its listen endpoint, or
+    /// <see langword="null"/> when every door this host started bound. The failure still travels its own path (a
+    /// grain call, the tick thread, the release barrier); this is the copy the application reports when the run ends.</summary>
+    public Puck.Abstractions.HostResourceUnavailableException? HostUnavailable => Volatile.Read(location: ref m_hostUnavailable);
     /// <summary>Whether the host has stopped stepping worlds for retirement.</summary>
     public bool IsDraining => (Volatile.Read(location: ref m_draining) != 0);
     /// <summary>Whether managed public, federation, and row-console admission has passed the durable release gate.</summary>
@@ -168,7 +191,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     public async Task<IReadOnlyList<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>> CaptureReleaseFencesAsync(CancellationToken ct = default) {
         var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             try {
                 var rows = new List<(WorldAuthorityIdentity, WorldAuthorityFence)>();
 
@@ -275,7 +298,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         try {
             var empty = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-            m_mailbox.Enqueue(item: () => empty.TrySetResult(result: ((m_rows.Count == 0) && !ReleaseAdmissionOpen && !IsDraining)));
+            Post(action: () => empty.TrySetResult(result: ((m_rows.Count == 0) && !ReleaseAdmissionOpen && !IsDraining)));
             if (!await empty.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) { throw new InvalidOperationException(message: "source restoration requires an empty private host"); }
             foreach (var row in rows) {
                 var identity = new WorldAuthorityIdentity(
@@ -379,7 +402,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     public async Task AbandonPrivateReleaseAsync(CancellationToken ct = default) {
         var stopped = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             try {
                 if (
                     (m_releaseManagement is null) ||
@@ -434,9 +457,10 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             Task.WhenAll(tasks: m_pendingReleases.Values.Select(selector: static release => release.Applied)),
             ct
         );
+        await RetireExtensionsAsync(worldIds: [.. m_definition.Worlds.Select(selector: static declared => declared.World.Value)]);
         var capture = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, RowBookkeeping Bookkeeping, Task<WorldAuthorityStoreOutcome> Save)>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             try {
                 ct.ThrowIfCancellationRequested();
                 Volatile.Write(
@@ -599,8 +623,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
         return false;
     }
-    /// <summary>Publishes a composed definition to the hosted store under the identity's own key — the one writer of
-    /// a hosted <c>definition.json</c>.</summary>
+    /// <summary>Publishes a composed definition to the hosted store through the identity's authority root.</summary>
     /// <param name="identity">The row to publish under.</param>
     /// <param name="composed">The composed definition.</param>
     /// <param name="ct">A token to observe.</param>
@@ -768,6 +791,21 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
         MasterRateHz = fastest;
     }
+    // Every door this host starts binds through here, so a listen endpoint this host cannot bind is kept for the run's
+    // exit however its failure travels on.
+    private void ReleaseHold(WorldInstance row) {
+        try {
+            Instances.ReleaseHold(row: row);
+        } catch (Puck.Abstractions.HostResourceUnavailableException unavailable) {
+            _ = Interlocked.CompareExchange(
+                comparand: null,
+                location1: ref m_hostUnavailable,
+                value: unavailable
+            );
+
+            throw;
+        }
+    }
     private void SweepAwaitingMirrors() {
         if (!ReleaseAdmissionOpen) { return; }
         foreach (var name in Instances.Names) {
@@ -785,7 +823,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 !bookkeeping.Initializing &&
                 AllAdjacenciesPrimed(row: row)
             ) {
-                Instances.ReleaseHold(row: row);
+                ReleaseHold(row: row);
             }
         }
     }
@@ -837,7 +875,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 Subject: subject,
                 Network: new WorldPeerNetwork(
                     identityFile: worldRow.Federation.KeyFile,
-                    allowOutbound: !ClosedGroupRewind
+                    allowOutbound: !ClosedGroupRewind,
+                    timeProvider: m_clock
                 )
             );
             reason = string.Empty;
@@ -854,7 +893,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         ((row.Federation.Authentication is { } selection)
             ? (m_authentication ?? throw new InvalidOperationException(message: "No authentication provider registry is installed."))(
                 selection,
-                federation
+                federation,
+                m_clock
             )
             : federation
         );
@@ -880,7 +920,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         return true;
     }
     private void RecordCheckpointFailure(string worldId, RowBookkeeping bookkeeping, Exception error) {
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             if (
                 m_rows.TryGetValue(
                 key: worldId,
@@ -933,7 +973,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 outcome: outcome
             );
 
-            m_mailbox.Enqueue(item: () => {
+            Post(action: () => {
                 if (
                     m_rows.TryGetValue(
                     key: worldId,
@@ -974,8 +1014,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     cancellationToken: CancellationToken.None,
                     entry: new WorldMutationJournalEntry(
                         Encoded: encoded,
-                        Tick: tick,
-                        EngineTick: engineTick
+                        EngineTick: engineTick,
+                        Tick: tick
                     ),
                     identity: identity,
                     fence: bookkeeping.Fence
@@ -987,7 +1027,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 outcome: outcome
             );
 
-            m_mailbox.Enqueue(item: () => {
+            Post(action: () => {
                 if (
                     m_rows.TryGetValue(
                     key: worldId,
@@ -1009,7 +1049,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 }
             });
         } catch (Exception error) {
-            m_mailbox.Enqueue(item: () => {
+            Post(action: () => {
                 if (
                     m_rows.TryGetValue(
                     key: worldId,
@@ -1069,9 +1109,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             continuationFunction: _ => AppendJournalEntryAsync(
                 bookkeeping: bookkeeping,
                 encoded: encoded,
+                engineTick: engineTick,
                 identity: identity,
                 tick: tick,
-                engineTick: engineTick,
                 worldId: worldId
             ),
             scheduler: TaskScheduler.Default
@@ -1099,7 +1139,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         try {
             var existing = new TaskCompletionSource<bool?>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-            m_mailbox.Enqueue(item: () => existing.TrySetResult(result: ((Instances.TryGet(
+            Post(action: () => existing.TrySetResult(result: ((Instances.TryGet(
                 identity.World.Value,
                 out var row
             ) && (row is not null))
@@ -1181,7 +1221,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         var previousPublicationClaim = Guid.Empty;
         var captured = new TaskCompletionSource<List<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             try {
                 var rows = new List<(WorldAuthorityIdentity, WorldAuthorityFence)>();
 
@@ -1357,7 +1397,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         ) { return WorldReleaseAdmissionPublication.Opened; }
         var published = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        m_mailbox.Enqueue(item: () => {
+        Post(action: () => {
             try {
                 if (
                     ct.IsCancellationRequested ||
@@ -1398,7 +1438,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         declared.World.Value,
                         out _
                     )) { _ = m_routing.Register(worldId: declared.World.Value); }
-                    if (AllAdjacenciesPrimed(row: instance)) { Instances.ReleaseHold(row: instance); }
+                    if (AllAdjacenciesPrimed(row: instance)) { ReleaseHold(row: instance); }
                 }
                 m_publishedAdmissionClaim = groupClaim;
                 published.TrySetResult(result: true);
@@ -1414,6 +1454,15 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         if (IsDraining) { return false; }
         if (FindWorldRow(identity: identity) is not { } worldRow) {
             Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (not declared in this silo's document)]");
+
+            return false;
+        }
+        if (!TryLoadRowExtensions(
+            configuration: out var extensionConfiguration,
+            refusal: out var extensionRefusal,
+            worldRow: worldRow
+        )) {
+            Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({extensionRefusal})]");
 
             return false;
         }
@@ -1451,6 +1500,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 owner: identity.Owner,
                 store: m_blobStore,
                 target: m_storageTarget,
+                timeProvider: m_clock,
                 world: identity.World
             );
 
@@ -1530,6 +1580,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 } else {
                     population = new WorldPopulation(definition: definition);
                     server = new WorldServer(
+                        // This activation's own read admitted the document against this host's catalog, so
+                        // construction installs those programs instead of validating and compiling again.
+                        admission: recovery.Admission,
                         definition: definition,
                         envelope: new WorldRenderEnvelope(),
                         instanceIdentity: identity.World.Value,
@@ -1545,15 +1598,15 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 throw;
             }
 
-            server.Neighbours = origin.Neighbours;
-            if (ClosedGroupRewind) { server.ConstrainTransferAuthorities(allowed: ContainsRewindAuthority); }
-            // Attached BEFORE journal-tail replay and live admission. TryApplyMutation and ApplyRebuild both refuse an
-            // addon-affecting operation outright when NO host is attached at all, so this is not what stops those two —
-            // it is what closes world.undo's own gap: WorldServer.AddonsCanPrepare treats a null m_addons as vacuously
-            // nothing to check, so an undo that restores an enabled addon row would otherwise install silently on a
-            // server with no host attached at all. WorldNoAddonHost.TryPrepare refuses that row BY NAME instead, the
-            // identical door the initial-candidate check above already used, so the two refusals can never disagree.
-            server.AttachAddons(runtime: new WorldNoAddonHost());
+            if (!TryFinishActivationWiring(
+                adjacencies: adjacencies,
+                identity: identity,
+                machines: machines,
+                neighbours: origin.Neighbours,
+                server: server
+            )) {
+                return false;
+            }
 
             {
                 foreach (var entry in recovery.Journal.Entries) {
@@ -1624,7 +1677,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var door = new WorldPeerHost(
                 authenticator: federation.Authenticator,
                 network: federation.Network,
-                server: server
+                server: server,
+                timeProvider: m_clock
             );
             var row = new WorldInstance(
                 documentOrigin: origin,
@@ -1645,7 +1699,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var slice = checkpoint?.HostRow;
             var tcs = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-            m_mailbox.Enqueue(item: () => {
+            Post(action: () => {
                 try {
                     if (IsDraining) {
                         row.Dispose();
@@ -1697,6 +1751,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 ) {
                     throw new IOException(message: "The initial authority checkpoint could not be published.");
                 }
+                if (extensionConfiguration is { } configuration) {
+                    await AttachExtensionsAsync(
+                        configuration: configuration,
+                        row: row
+                    );
+                }
                 var releaseOpen = await EstablishReleaseAdmissionAsync(
                     ct: ct,
                     fence: fence,
@@ -1704,7 +1764,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 var releaseHold = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-                m_mailbox.Enqueue(item: () => {
+                Post(action: () => {
                     try {
                         var bookkeeping = m_rows[row.Name];
 
@@ -1717,16 +1777,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         );
                         if (releaseOpen) {
                             _ = m_routing.Register(worldId: row.Name);
-                            if (AllAdjacenciesPrimed(row: row)) { Instances.ReleaseHold(row: row); }
+                            if (AllAdjacenciesPrimed(row: row)) { ReleaseHold(row: row); }
                         }
                         releaseHold.TrySetResult();
                     } catch (Exception error) { releaseHold.TrySetException(exception: error); }
                 });
                 await releaseHold.Task;
-            } catch {
+            } catch (Exception activationError) {
+                await RetireExtensionsAsync(worldIds: [row.Name]);
                 var cleanup = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-                m_mailbox.Enqueue(item: () => {
+                Post(action: () => {
                     try {
                         row.Server.FreezeForRetirement();
                         _ = Instances.TryStop(
@@ -1740,12 +1801,20 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 });
                 await cleanup.Task;
                 admitted = false;
+                if (activationError is ExtensionsRefusedException refused) {
+                    Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({refused.Message})]");
+
+                    return false;
+                }
                 throw;
             }
             return admitted;
         } finally {
             if (!admitted) {
-                using var releaseDeadline = new CancellationTokenSource(delay: TimeSpan.FromSeconds(seconds: 10));
+                using var releaseDeadline = new CancellationTokenSource(
+                    delay: ReleaseActivationTimeout,
+                    timeProvider: m_clock
+                );
 
                 _ = await m_store.ReleaseActivationAsync(
                     identity,
@@ -1779,7 +1848,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var worldId = identity.World.Value;
             var captureTcs = new TaskCompletionSource<Task<WorldAuthorityStoreOutcome>?>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-            m_mailbox.Enqueue(item: () => {
+            Post(action: () => {
                 try {
                     ct.ThrowIfCancellationRequested();
                     if (
@@ -1855,9 +1924,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private async Task DeactivateCoreAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
         try {
             var worldId = identity.World.Value;
+
+            await RetireExtensionsAsync(worldIds: [worldId]);
             var captureTcs = new TaskCompletionSource<(RowBookkeeping Bookkeeping, Task<WorldAuthorityStoreOutcome> Save)?>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-            m_mailbox.Enqueue(item: () => {
+            Post(action: () => {
                 try {
                     ct.ThrowIfCancellationRequested();
                     if (
@@ -1918,7 +1989,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             var removeTcs = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-            m_mailbox.Enqueue(item: () => {
+            Post(action: () => {
                 if (
                     !m_rows.TryGetValue(
                     key: worldId,
@@ -1948,18 +2019,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
 
-    /// <summary>Drains queued activation/deactivation/checkpoint work built off the tick thread, then sweeps every
-    /// held row for adjacency priming and recomputes the master cadence — the one thing every
-    /// <see cref="Puck.Hosting.IFixedStepSimulation.Step"/> call must do before stepping.</summary>
-    public void DrainActivationMailbox() {
-        while (m_mailbox.TryDequeue(result: out var action)) {
-            action();
-        }
-
-        if (IsDraining) { return; }
-        SweepAwaitingMirrors();
-        RecomputeMasterRateHz();
-    }
     /// <summary>Reports one master step's own engine-tick width toward the checkpoint cadence, arming and honouring a
     /// silo-wide capture request at the accumulated threshold.</summary>
     /// <param name="stepTicks">The master step's own engine-tick width.</param>

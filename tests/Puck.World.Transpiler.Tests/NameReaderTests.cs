@@ -61,9 +61,32 @@ public class NameReaderTests {
     [Theory]
     public void ABlockNamePrintsInTheSpellingItWasWrittenIn(string source) {
         Assert.Equal(
-            actual: PuckFormat.Format(source),
+            actual: PuckFormat.Format(source: source),
             expected: source
         );
+    }
+    // A block's leading word keeps the quotes it was written with: quoted, `for` names a member rather than opening a
+    // loop, and `seat-1` is one name rather than a subtraction.
+    [InlineData("for")]
+    [InlineData("seat-1")]
+    [InlineData("host")]
+    [Theory]
+    public void AQuotedBlockIdentifierPrintsQuoted(string name) {
+        var source = $"extensions {{\n  \"{name}\" {{\n    seat: 1\n  }}\n}}\n";
+
+        Assert.Equal(
+            actual: PuckFormat.Format(source: source),
+            expected: source
+        );
+
+        var extensions = Assert.IsType<BlockNode>(@object: Parse(source: source).Statements[0]);
+        var member = Assert.IsType<BlockNode>(@object: extensions.Statements[0]);
+
+        Assert.Equal(
+            actual: member.Identifier,
+            expected: name
+        );
+        Assert.True(condition: member.IdentifierQuoted);
     }
     // A property name is quoted only where printing it bare would open a different production: `step:` inside a
     // `fill` block is a property wherever it stands, while `score:` inside a rule body is the score statement.
@@ -80,7 +103,7 @@ public class NameReaderTests {
         var source = $"host {{\n  {name}: 1\n}}\n";
 
         Assert.Equal(
-            actual: PuckFormat.Format(source),
+            actual: PuckFormat.Format(source: source),
             expected: source
         );
 
@@ -102,7 +125,7 @@ public class NameReaderTests {
         var source = $"host {{\n  \"{name}\": 1\n}}\n";
 
         Assert.Equal(
-            actual: PuckFormat.Format(source),
+            actual: PuckFormat.Format(source: source),
             expected: source
         );
     }
@@ -113,7 +136,7 @@ public class NameReaderTests {
         const string Source = "\"schema\": 1\nhost {\n  schema: 2\n}\n";
 
         Assert.Equal(
-            actual: PuckFormat.Format(Source),
+            actual: PuckFormat.Format(source: Source),
             expected: Source
         );
     }
@@ -124,13 +147,13 @@ public class NameReaderTests {
         const string Source = "rule \"r\" {\n  when board[next[$value]] == 1\n  board[next[$value]] = 2\n  board[1 + 2] = 3\n}\n";
 
         Assert.Equal(
-            actual: PuckFormat.Format(Source),
+            actual: PuckFormat.Format(source: Source),
             expected: Source
         );
         // The parentheses an author writes around a computed key are the reader's, not the document's: it keeps the
         // key and drops them, and the printer writes back only what reads as the same key.
         Assert.Equal(
-            actual: PuckFormat.Format("rule \"r\" {\n  board[(1 + 2)] = 3\n}\n"),
+            actual: PuckFormat.Format(source: "rule \"r\" {\n  board[(1 + 2)] = 3\n}\n"),
             expected: "rule \"r\" {\n  board[1 + 2] = 3\n}\n"
         );
     }

@@ -10,7 +10,7 @@ public sealed class DeferralLawTests {
         var effects = new List<ActionEffect> {
             new ActionEffect.If(
                 Condition: new ActionPredicate.CompareState(
-                    Comparison: ActionStateComparison.Greater,
+                    Comparison: ExpressionOp.Greater,
                     State: "score",
                     Value: 0m
                 ),

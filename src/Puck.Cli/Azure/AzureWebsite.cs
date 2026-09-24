@@ -1,13 +1,20 @@
+using System.IO.Compression;
 using System.Net;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Azure;
 
 internal static partial class AzureCommand {
+    // An official object is stored Brotli-compressed only when that saves at least this share of its size.
+    private const long MinimumBrotliSavingsPercent = 10;
+
     // KEEP IN SYNC with the `SpaCacheHashed` rule in src/Puck.Azure.Resources/main.bicep.
-    private static readonly string[] HashedWebsiteDirectories = ["assets", "portal/assets"];
-    private static readonly string[] WebsiteEntrypoints = ["host-entry.js", "sw.js", "portal/portal-entry.js", "portal/mf-manifest.json"];
+    // DuckDB extensions are versioned by path (duckdb-extensions/<duckdb version>/...), so they are as immutable as
+    // the hash-named assets and must likewise outlive one release for the sessions still running it.
+    private static readonly string[] HashedWebsiteDirectories = ["assets", "portal/assets", "portal/duckdb-extensions"];
+    private static readonly string[] WebsiteEntrypoints = ["host-entry.js", "portal/portal-entry.js", "portal/mf-manifest.json"];
 
     private static async Task PublishStaticAsync(string bundle) {
         var release = CliFiles.ReadJson(path: $"{bundle}/release.json");
@@ -71,26 +78,46 @@ internal static partial class AzureCommand {
         var staging = Directory.CreateTempSubdirectory(prefix: "puck-official-");
 
         try {
-            // A copy shares one media type, and hash paths carry none, so each type is staged as its own tree.
+            // A copy shares one media type and one encoding, and hash paths carry neither, so each pair is staged as
+            // its own tree. An object is stored Brotli-compressed, with Content-Encoding: br, when that makes it
+            // meaningfully smaller: Front Door compresses on the fly only files of a few megabytes, and the engine's
+            // WebAssembly is tens of megabytes. The path still names the hash of the decoded bytes, which is what
+            // every client checks after its HTTP stack decodes the response.
             foreach (var (group, index) in types.GroupBy(keySelector: item => item.Value).Select(selector: (group, index) => (group, index))) {
-                var tree = $"{LocalPath(path: staging.FullName)}/{index}";
+                var raw = $"{LocalPath(path: staging.FullName)}/{index}/raw";
+                var encoded = $"{LocalPath(path: staging.FullName)}/{index}/br";
 
                 foreach (var path in group.Select(selector: item => item.Key)) {
-                    var target = $"{tree}/{path}";
+                    var bytes = File.ReadAllBytes(path: $"{bundle}/official/{path}");
+                    var compressed = Brotli(bytes: bytes);
+                    var worthwhile = ((compressed.Length * 100L) <= (bytes.Length * (100L - MinimumBrotliSavingsPercent)));
+                    var target = $"{(worthwhile ? encoded : raw)}/{path}";
 
                     Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-                    File.Copy(
-                        destFileName: target,
-                        sourceFileName: $"{bundle}/official/{path}"
+                    File.WriteAllBytes(
+                        bytes: (worthwhile ? compressed : bytes),
+                        path: target
                     );
                 }
-                await CopyBlobsAsync(
-                    commit: commit,
-                    contentType: group.Key,
-                    destination: official,
-                    immutable: true,
-                    source: tree
-                );
+                if (Directory.Exists(path: raw)) {
+                    await CopyBlobsAsync(
+                        commit: commit,
+                        contentType: group.Key,
+                        destination: official,
+                        immutable: true,
+                        source: raw
+                    );
+                }
+                if (Directory.Exists(path: encoded)) {
+                    await CopyBlobsAsync(
+                        commit: commit,
+                        contentEncoding: "br",
+                        contentType: group.Key,
+                        destination: official,
+                        immutable: true,
+                        source: encoded
+                    );
+                }
             }
         } finally { staging.Delete(recursive: true); }
         await CopyBlobsAsync(
@@ -202,7 +229,7 @@ internal static partial class AzureCommand {
             );
         } finally { hashes.Delete(recursive: true); }
     }
-    private static Task CopyBlobsAsync(string commit, string contentType, string destination, string source, string cache = "no-cache", bool immutable = false) =>
+    private static Task CopyBlobsAsync(string commit, string contentType, string destination, string source, string cache = "no-cache", string? contentEncoding = null, bool immutable = false) =>
         // AzCopy owns concurrency, retries and transfer validation. Mutable paths always
         // overwrite: extraction timestamps do not identify releases or safe rollbacks.
         RunAsync(
@@ -214,15 +241,26 @@ internal static partial class AzureCommand {
             $"--cache-control={(immutable
             ? "public,max-age=31536000,immutable"
             : cache)}",
+            .. ((contentEncoding is null) ? Array.Empty<string>() : [$"--content-encoding={contentEncoding}"]),
             $"--metadata=commit={commit}", "--log-level=ERROR", "--output-level=essential",
         ],
             executable: "azcopy"
         );
+    // Brotli at its highest quality: the bytes are compressed once, at publish, and downloaded by every visitor.
+    private static byte[] Brotli(byte[] bytes) {
+        using var output = new MemoryStream();
+
+        using (var brotli = new BrotliStream(
+            compressionLevel: CompressionLevel.SmallestSize,
+            leaveOpen: true,
+            stream: output
+        )) {
+            brotli.Write(buffer: bytes);
+        }
+        return output.ToArray();
+    }
     // AzCopy refuses a local path that mixes separators.
-    private static string LocalPath(string path) => Path.GetFullPath(path: path).Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
+    private static string LocalPath(string path) => PuckPaths.Normalize(path: path);
     private static string WebsiteAddress(JsonNode outputs) => Regex.Replace(
         input: Text(value: Value(
             key: "officialContentBaseUrl",

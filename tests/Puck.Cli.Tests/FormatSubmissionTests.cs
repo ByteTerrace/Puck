@@ -3,7 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 
-using Puck.Cli.Format;
+using Puck.Cli.PullRequest;
 
 using Xunit;
 
@@ -21,9 +21,9 @@ public sealed class FormatSubmissionTests {
             client: client,
             report: m_reports.Add
         ).RunAsync(
+            graphUrl: "https://api.invalid/graphql",
             repository: "owner/Puck",
-            runId: 12,
-            graphUrl: "https://api.invalid/graphql"
+            runId: 12
         ));
         Assert.Empty(collection: handler.Dispatches);
     }
@@ -36,9 +36,9 @@ public sealed class FormatSubmissionTests {
             client: client,
             report: m_reports.Add
         ).RunAsync(
+            graphUrl: "https://api.invalid/graphql",
             repository: "owner/Puck",
-            runId: 12,
-            graphUrl: "https://api.invalid/graphql"
+            runId: 12
         );
         Assert.Single(collection: handler.Commits);
         var input = handler.Commits[0]["variables"]!["input"]!;
@@ -97,9 +97,9 @@ public sealed class FormatSubmissionTests {
             client: client,
             report: m_reports.Add
         ).RunAsync(
+            graphUrl: "https://api.invalid/graphql",
             repository: "owner/Puck",
-            runId: 12,
-            graphUrl: "https://api.invalid/graphql"
+            runId: 12
         );
         Assert.Empty(collection: handler.Commits);
         Assert.Empty(collection: handler.Dispatches);
@@ -114,9 +114,9 @@ public sealed class FormatSubmissionTests {
             client: client,
             report: m_reports.Add
         ).RunAsync(
+            graphUrl: "https://api.invalid/graphql",
             repository: "owner/Puck",
-            runId: 12,
-            graphUrl: "https://api.invalid/graphql"
+            runId: 12
         );
         Assert.Empty(collection: handler.Commits);
         Assert.Equal(
@@ -139,9 +139,9 @@ public sealed class FormatSubmissionTests {
             client: client,
             report: m_reports.Add
         ).RunAsync(
+            graphUrl: "https://api.invalid/graphql",
             repository: "owner/Puck",
-            runId: 12,
-            graphUrl: "https://api.invalid/graphql"
+            runId: 12
         ));
         Assert.Empty(collection: handler.Commits);
         Assert.Empty(collection: handler.Dispatches);
@@ -169,9 +169,13 @@ public sealed class FormatSubmissionTests {
             );
 
             if (m_scenario == "duplicate") { files.Add(item: change.DeepClone()); }
-            var report = new JsonObject { ["base"] = ((m_scenario == "base-moved")
+            var report = new JsonObject {
+                ["base"] = ((m_scenario == "base-moved")
                 ? NewHead
-                : Base), ["head"] = Head, ["files"] = files };
+                : Base),
+                ["head"] = Head,
+                ["files"] = files,
+            };
             using var bytes = new MemoryStream();
 
             using (var zip = new ZipArchive(
@@ -186,21 +190,29 @@ public sealed class FormatSubmissionTests {
             return new HttpResponseMessage(statusCode: HttpStatusCode.OK) { Content = new ByteArrayContent(content: bytes.ToArray()) };
         }
         private static HttpResponseMessage Json(JsonNode value) =>
-            new(statusCode: HttpStatusCode.OK) { Content = new StringContent(
+            new(statusCode: HttpStatusCode.OK) {
+                Content = new StringContent(
                 content: value.ToJsonString(),
                 encoding: Encoding.UTF8,
                 mediaType: "application/json"
-            ) };
+            ),
+            };
         private JsonObject Pull() => new() {
             ["number"] = 7,
             ["state"] = "open",
-            ["head"] = new JsonObject { ["sha"] = ((m_scenario is "stale" or "retry")
+            ["head"] = new JsonObject {
+                ["sha"] = ((m_scenario is "stale" or "retry")
             ? NewHead
-            : Head), ["ref"] = ((m_scenario == "default-branch")
+            : Head),
+                ["ref"] = ((m_scenario == "default-branch")
             ? "main"
-            : "feature"), ["repo"] = new JsonObject { ["full_name"] = ((m_scenario == "fork")
+            : "feature"),
+                ["repo"] = new JsonObject {
+                    ["full_name"] = ((m_scenario == "fork")
             ? "contributor/Puck"
-            : "owner/Puck") } },
+            : "owner/Puck"),
+                },
+            },
             ["base"] = new JsonObject { ["sha"] = Base, ["ref"] = "main", ["repo"] = new JsonObject { ["full_name"] = "owner/Puck" } },
         };
 
@@ -226,19 +238,35 @@ public sealed class FormatSubmissionTests {
             );
 
             return relative switch {
-                "/actions/runs/12" => Json(value: new JsonObject { ["workflow_id"] = ((m_scenario == "wrong-workflow")
+                "/actions/runs/12" => Json(value: new JsonObject {
+                    ["workflow_id"] = ((m_scenario == "wrong-workflow")
                 ? 2
-                : 1), ["event"] = "pull_request", ["head_sha"] = Head, ["run_attempt"] = 1 }),
+                : 1),
+                    ["event"] = "pull_request",
+                    ["head_sha"] = Head,
+                    ["run_attempt"] = 1,
+                }),
                 "/actions/workflows/format.yml" => Json(value: new JsonObject { ["id"] = 1 }),
-                "/actions/runs/12/attempts/1/jobs?per_page=100" => Json(value: new JsonObject { ["jobs"] = new JsonArray(new JsonObject { ["name"] = "Prepare formatting", ["conclusion"] = ((m_scenario == "failed")
+                "/actions/runs/12/attempts/1/jobs?per_page=100" => Json(value: new JsonObject {
+                    ["jobs"] = new JsonArray(new JsonObject {
+                        ["name"] = "Prepare formatting",
+                        ["conclusion"] = ((m_scenario == "failed")
                 ? "failure"
-                : "success") }) }),
+                : "success"),
+                    }),
+                }),
                 var p when (p == $"/commits/{Head}/pulls?per_page=100") => Json(value: new JsonArray(Pull())),
                 "/pulls/7" => Json(value: Pull()),
                 "" => Json(value: new JsonObject { ["default_branch"] = "main" }),
-                var p when (p == $"/commits/{NewHead}") => Json(value: new JsonObject { ["commit"] = new JsonObject { ["message"] = ((m_scenario == "retry")
+                var p when (p == $"/commits/{NewHead}") => Json(value: new JsonObject {
+                    ["commit"] = new JsonObject {
+                        ["message"] = ((m_scenario == "retry")
                 ? "style: apply Puck formatting\n\nPuck-Format-Run: 12"
-                : "contributor change") }, ["author"] = new JsonObject { ["login"] = "github-actions[bot]" }, ["parents"] = new JsonArray(new JsonObject { ["sha"] = Head }) }),
+                : "contributor change"),
+                    },
+                    ["author"] = new JsonObject { ["login"] = "github-actions[bot]" },
+                    ["parents"] = new JsonArray(new JsonObject { ["sha"] = Head }),
+                }),
                 "/actions/runs/12/artifacts?per_page=100" => Json(value: new JsonObject { ["artifacts"] = new JsonArray(new JsonObject { ["name"] = "puck-format", ["expired"] = false, ["id"] = 9 }) }),
                 "/actions/artifacts/9/zip" => Artifact(),
                 "/pulls/7/files?per_page=100&page=1" => Json(value: new JsonArray(
@@ -246,9 +274,15 @@ public sealed class FormatSubmissionTests {
                 new JsonObject { ["filename"] = "../One.cs", ["status"] = "modified" }
             )),
                 var p when (p == $"/git/trees/{Head}") => Json(value: new JsonObject { ["tree"] = new JsonArray(new JsonObject { ["path"] = "src", ["type"] = "tree", ["sha"] = "tree-src" }) }),
-                "/git/trees/tree-src" => Json(value: new JsonObject { ["tree"] = new JsonArray(new JsonObject { ["path"] = "One.cs", ["type"] = "blob", ["mode"] = ((m_scenario == "symlink")
+                "/git/trees/tree-src" => Json(value: new JsonObject {
+                    ["tree"] = new JsonArray(new JsonObject {
+                        ["path"] = "One.cs",
+                        ["type"] = "blob",
+                        ["mode"] = ((m_scenario == "symlink")
                 ? "120000"
-                : "100644") }) }),
+                : "100644"),
+                    }),
+                }),
                 _ => throw new InvalidOperationException(message: $"Unexpected mock API request: {path}"),
             };
         }

@@ -13,10 +13,14 @@
 // shell over logic already proven without a real Worker.
 import { wrapRawExports, dynamicImport, type CreateRawEngine } from "./inlineHost";
 import { bootEngineFromOfficialFiles } from "./workerBoot";
-import type { WorldEngine } from "./engineTypes";
+import { installWasmCallCounts } from "./wasmCounts";
+import type { EngineCore } from "./engineTypes";
 import type { WorkerRequest, WorkerResponse } from "./engineHost";
 
-let engine: WorldEngine | null = null;
+// Counted from before the engine loads, so `wasmCounts()` reports every compile and instantiation this worker made.
+installWasmCallCounts();
+
+let engine: EngineCore | null = null;
 
 // .NET distinguishes its pthread workers from an independently hosted runtime using
 // globalThis.onmessage. Keep that property unset: an event listener receives our protocol
@@ -43,8 +47,15 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
       try {
         // No fetchImpl crosses here (it cannot); the worker's own global `fetch` and byte store
         // do the fetching and hash-verifying entirely on this side of the boundary.
-        engine = await bootEngineFromOfficialFiles({ engineFiles: request.engineFiles }, fetch, undefined, () => self.close());
-        postMessage({ kind: "ready" } satisfies WorkerResponse);
+        // A module another worker compiled boots this one with no compile of its own; either way the module this
+        // runtime runs goes back with `ready`, for the session's next engine.
+        engine = await bootEngineFromOfficialFiles(
+          { engineFiles: request.engineFiles, wasmModule: request.wasmModule },
+          (input, init) => fetch(input, init),
+          undefined,
+          () => self.close(),
+        );
+        postMessage({ kind: "ready", wasmModule: engine.wasmModule } satisfies WorkerResponse);
       } catch (error) {
         postMessage({ kind: "init-error", error: String(error) } satisfies WorkerResponse);
       }

@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Assets;
@@ -6,9 +7,7 @@ namespace Puck.World.Transpiler.Assets;
 /// source compilation.</summary>
 public sealed class AssetCompilationContext {
     private readonly List<AssetReference> m_references = [];
-    private readonly Dictionary<string, string> m_physicalPaths = new(
-        comparer: (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-    );
+    private readonly Dictionary<string, string> m_physicalPaths = new(comparer: PuckPaths.Comparer);
     private readonly HashSet<string> m_verified = new(comparer: StringComparer.Ordinal);
 
     private AssetLock? m_lock;

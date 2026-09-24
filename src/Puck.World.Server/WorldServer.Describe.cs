@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Globalization;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -163,6 +164,7 @@ public sealed partial class WorldServer {
         WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
         WorldMutation.UpsertViewPipeline m => $"UpsertViewPipeline '{m.Pipeline.Name}'",
         WorldMutation.RemoveViewPipeline m => $"RemoveViewPipeline '{m.Name}'",
+        WorldMutation.CommitViewPipeline m => $"CommitViewPipeline '{m.Name}'",
         WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
         WorldMutation.UpsertDynamics m => $"UpsertDynamics '{m.Row.Name}'",
@@ -170,8 +172,8 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertCurve m => $"UpsertCurve '{m.Row.Name}'",
         WorldMutation.RemoveCurve m => $"RemoveCurve '{m.Name}'",
         WorldMutation.SetLookAssignment m => $"SetLookAssignment '{m.Assignment.Sequence.Name}'",
-        WorldMutation.UpsertGrant m => $"UpsertGrant {m.Row.Principal.Describe()} {m.Row.Capability.ToString().ToLowerInvariant()} {m.Row.Subject.Describe()}",
-        WorldMutation.RemoveGrant m => $"RemoveGrant {m.Target.Principal.Describe()} {m.Target.Capability.ToString().ToLowerInvariant()} {m.Target.Subject.Describe()}",
+        WorldMutation.UpsertGrant m => $"UpsertGrant {m.Row.Grantee.Describe()} {m.Row.Capability.ToString().ToLowerInvariant()} {m.Row.Subject.Describe()}",
+        WorldMutation.RemoveGrant m => $"RemoveGrant {m.Target.Grantee.Describe()} {m.Target.Capability.ToString().ToLowerInvariant()} {m.Target.Subject.Describe()}",
         WorldMutation.UpsertHudPanel m => $"UpsertHudPanel '{m.Panel.Id}'",
         WorldMutation.RemoveHudPanel m => $"RemoveHudPanel '{m.Id}'",
         WorldMutation.UpsertHudElement m => $"UpsertHudElement '{m.PanelId}'.'{m.Element.Id}'",
@@ -229,7 +231,7 @@ public sealed partial class WorldServer {
         // the same read-back that already shows the fold shows the whole engagement truth beside it (CLAUDE.md's
         // read-back rule: no decision surface without an echoing verb). The own-body member is listed like any
         // other, so its ABSENCE — capture — is legible rather than inferred.
-        var applyPrincipal = WorldPrincipal.Seat(slot: bodyIndex);
+        var applyPrincipal = Principal.Seat(slot: bodyIndex);
         var applications = m_grants.Applications(principal: applyPrincipal);
         var routeText = $"applications={((applications.Count == 0)
             ? "none"
@@ -289,6 +291,7 @@ public sealed partial class WorldServer {
             values: segments
         )}]";
     }
+
     // Shared by DescribeRules/DescribeInteractions: an `all` gate prints ITS PREDICATES, never a List type name — the
     // whole reason a compiled conjunct carries its authored spelling beside its resolved form.
     //
@@ -348,6 +351,7 @@ public sealed partial class WorldServer {
             values: lines
         )}]";
     }
+
     public static string DescribeContacts(int index, WorldBody body) {
         var normal = body.LastObstructionNormal;
         var obstruction = ((normal == FixedVector3.Zero)
@@ -446,6 +450,7 @@ public sealed partial class WorldServer {
             )
         );
     }
+
     // The lowercase shape word the fold's own read-back names a channel's shape with — the single place these words
     // are produced, never re-derived elsewhere.
     private static string ShapeWord(ChannelShape shape) => shape switch {

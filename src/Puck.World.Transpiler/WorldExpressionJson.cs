@@ -16,19 +16,30 @@ public static class WorldExpressionJson {
     // by more than the member's own name: "left"/"right" are programs on a compareValue predicate and something
     // else everywhere else, "score" is a decision option's and not a search row's (which stays text), and "value"
     // is a pattern row's.
-    private static IEnumerable<string> ProgramMembers(JsonObject obj, string? array) {
-        yield return "expression";
-        yield return "cohesionAffinity";
-        yield return "alignmentAffinity";
+    private static void LowerProgramMembers(JsonObject obj, string? array, DiagnosticBag? diagnostics) {
+        LowerProgramMember(diagnostics: diagnostics, member: "expression", obj: obj);
+        LowerProgramMember(diagnostics: diagnostics, member: "cohesionAffinity", obj: obj);
+        LowerProgramMember(diagnostics: diagnostics, member: "alignmentAffinity", obj: obj);
         if ((obj["$type"] is JsonValue discriminator) && (discriminator.GetValue<string>() == "compareValue")) {
-            yield return "left";
-            yield return "right";
+            LowerProgramMember(diagnostics: diagnostics, member: "left", obj: obj);
+            LowerProgramMember(diagnostics: diagnostics, member: "right", obj: obj);
         }
         if (array == "options") {
-            yield return "score";
+            LowerProgramMember(diagnostics: diagnostics, member: "score", obj: obj);
         }
         if (array == "patterns") {
-            yield return "value";
+            LowerProgramMember(diagnostics: diagnostics, member: "value", obj: obj);
+        }
+    }
+    private static void LowerProgramMember(JsonObject obj, string member, DiagnosticBag? diagnostics) {
+        if (
+            (obj[member] is JsonValue text) &&
+            (text.GetValueKind() == System.Text.Json.JsonValueKind.String)
+        ) {
+            obj[member] = Node(
+                diagnostics: diagnostics,
+                text: text.GetValue<string>()
+            );
         }
     }
 
@@ -46,22 +57,17 @@ public static class WorldExpressionJson {
 
     private static void Lower(JsonNode? node, string? array, DiagnosticBag? diagnostics) {
         switch (node) {
+            // The walk replaces values in place but never adds or removes a member or an element of the container
+            // it is walking, so it walks each by index rather than over a snapshot.
             case JsonObject obj:
-                foreach (var member in ProgramMembers(
+                LowerProgramMembers(
                     array: array,
+                    diagnostics: diagnostics,
                     obj: obj
-                )) {
-                    if (
-                        (obj[member] is JsonValue text) &&
-                        (text.GetValueKind() == System.Text.Json.JsonValueKind.String)
-                    ) {
-                        obj[member] = Node(
-                            diagnostics: diagnostics,
-                            text: text.GetValue<string>()
-                        );
-                    }
-                }
-                foreach (var (member, child) in obj.ToArray()) {
+                );
+                for (var at = 0; (at < obj.Count); at++) {
+                    var (member, child) = obj.GetAt(index: at);
+
                     if (
                         (member == "lanes") &&
                         (child is JsonArray lanes)
@@ -87,11 +93,11 @@ public static class WorldExpressionJson {
                 }
                 break;
             case JsonArray list:
-                foreach (var child in list.ToArray()) {
+                for (var at = 0; (at < list.Count); at++) {
                     Lower(
                         array: array,
                         diagnostics: diagnostics,
-                        node: child
+                        node: list[at]
                     );
                 }
                 break;
@@ -99,6 +105,7 @@ public static class WorldExpressionJson {
                 break;
         }
     }
+
     /// <summary>Returns the IR tree an operand's authored text lowers to.</summary>
     /// <param name="text">The infix spelling.</param>
     /// <param name="diagnostics">Where a spelling that does not parse is reported as PUCK002.</param>
@@ -118,15 +125,15 @@ public static class WorldExpressionJson {
 
         return ExpressionProgramJsonConverter.ToNode(program: program);
     }
-    /// <summary>Returns the infix spelling an expression-valued document member prints back as.</summary>
-    /// <param name="node">The member's IR tree.</param>
-    /// <returns>The spelling, or an empty string when the tree is absent or not a well-formed program.</returns>
-    public static string Text(JsonNode? node) {
+
+    private delegate bool TryPrintExpression(ExpressionProgram program, out string text);
+
+    private static string PrintNode(JsonNode? node, TryPrintExpression printer) {
         if (node is null) {
             return string.Empty;
         }
 
-        return (ExpressionSpelling.TryPrint(
+        return (printer(
             program: ExpressionProgramJsonConverter.FromNode(node: node),
             text: out var text
         )
@@ -134,56 +141,41 @@ public static class WorldExpressionJson {
             : string.Empty
         );
     }
+
+    /// <summary>Returns the infix spelling an expression-valued document member prints back as.</summary>
+    /// <param name="node">The member's IR tree.</param>
+    /// <returns>The spelling, or an empty string when the tree is absent or not a well-formed program.</returns>
+    public static string Text(JsonNode? node) =>
+        PrintNode(
+            node: node,
+            printer: ExpressionSpelling.TryPrint
+        );
     /// <summary>Returns the infix spelling a comparison's operand prints back as, parenthesized exactly when the
     /// joined <c>left cmp right</c> text would otherwise re-parse as a different program.</summary>
     /// <param name="node">The operand's IR tree.</param>
     /// <returns>The spelling, or an empty string when the tree is absent or not a well-formed program.</returns>
-    public static string ComparisonOperand(JsonNode? node) {
-        if (node is null) {
-            return string.Empty;
-        }
-
-        return (ExpressionSpelling.TryPrintComparisonOperand(
-            program: ExpressionProgramJsonConverter.FromNode(node: node),
-            text: out var text
-        )
-            ? text
-            : string.Empty
+    public static string ComparisonOperand(JsonNode? node) =>
+        PrintNode(
+            node: node,
+            printer: ExpressionSpelling.TryPrintComparisonOperand
         );
-    }
     /// <summary>Returns the infix spelling a decompiler writes into unquoted <c>.puck</c> source for an
     /// expression-valued document member: a reserved channel as an author's call, and a plain row read one of the
     /// caller's <see cref="ExpressionSpelling.WithLocals"/> shadows backquoted, so it still reads the row once the
     /// printed source is recompiled under those locals.</summary>
     /// <param name="node">The member's IR tree.</param>
     /// <returns>The spelling, or an empty string when the tree is absent or not a well-formed program.</returns>
-    public static string SourceText(JsonNode? node) {
-        if (node is null) {
-            return string.Empty;
-        }
-
-        return (ExpressionSpelling.TryPrintSource(
-            program: ExpressionProgramJsonConverter.FromNode(node: node),
-            text: out var text
-        )
-            ? text
-            : string.Empty
+    public static string SourceText(JsonNode? node) =>
+        PrintNode(
+            node: node,
+            printer: ExpressionSpelling.TryPrintSource
         );
-    }
     /// <summary>Returns <see cref="SourceText"/> parenthesized on <see cref="ComparisonOperand"/>'s terms.</summary>
     /// <param name="node">The operand's IR tree.</param>
     /// <returns>The spelling, or an empty string when the tree is absent or not a well-formed program.</returns>
-    public static string SourceComparisonOperand(JsonNode? node) {
-        if (node is null) {
-            return string.Empty;
-        }
-
-        return (ExpressionSpelling.TryPrintSourceComparisonOperand(
-            program: ExpressionProgramJsonConverter.FromNode(node: node),
-            text: out var text
-        )
-            ? text
-            : string.Empty
+    public static string SourceComparisonOperand(JsonNode? node) =>
+        PrintNode(
+            node: node,
+            printer: ExpressionSpelling.TryPrintSourceComparisonOperand
         );
-    }
 }

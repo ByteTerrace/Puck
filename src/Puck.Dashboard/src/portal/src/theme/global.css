@@ -1,0 +1,65 @@
+/*
+  The dashboard's brand adapter. The palette and font stacks come from the canonical branding/tokens.css; the
+  font files are the documentation site's self-hosted copies. Everything component-shaped lives in CSS modules
+  beside its component, and Mantine's own styles sit in the `mantine` cascade layer beneath both.
+*/
+
+@import url("../../../../../../branding/tokens.css");
+
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../../../../../docs/site/_theme/fonts/lora-400.woff2") format("woff2"); }
+@font-face { font-family: "Lora"; font-style: italic; font-weight: 400; font-display: swap; src: url("../../../../../../docs/site/_theme/fonts/lora-400i.woff2") format("woff2"); }
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 500; font-display: swap; src: url("../../../../../../docs/site/_theme/fonts/lora-500.woff2") format("woff2"); }
+@font-face { font-family: "Lora"; font-style: normal; font-weight: 600; font-display: swap; src: url("../../../../../../docs/site/_theme/fonts/lora-600.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../../../../../docs/site/_theme/fonts/jetbrains-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("../../../../../../docs/site/_theme/fonts/jetbrains-mono-500.woff2") format("woff2"); }
+
+/* Display type and long-form prose read in the brand serif; interface text stays in the theme's sans. */
+:where(h1, h2, h3, h4, h5, h6),
+.prose {
+  font-family: var(--font-body);
+}
+
+/* The page never shifts sideways when its height starts or stops needing a scrollbar, as a tab switch can. */
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: light-dark(var(--mantine-color-coral-1), color-mix(in oklab, var(--mantine-color-coral-4) 35%, transparent));
+}
+
+/* One visible keyboard focus treatment everywhere: the jade complement, offset from the control. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 10000;
+  top: -100px;
+  left: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--puck-surface-raised);
+  color: var(--mantine-color-text);
+
+  &:focus {
+    top: var(--mantine-spacing-xs);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

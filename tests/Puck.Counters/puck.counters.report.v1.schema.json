@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "puck.counters.report.v1",
+  "x-puck": {
+    "schemaVersion": "puck.counters.report.v1",
+    "generator": "Puck.World.WorldSchema"
+  },
+  "title": "Puck counters report (puck.counters.report.v1)",
+  "description": "A puck.counters.report.v1 document: what puck counters read from one authored workload booted offscreen once per backend, every count tagged with the WorkClass its owner declared. Two reports of the same workload at the same code agree on every deterministic count; puck counters compare says where they do not.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "revision": {
+      "description": "The source the World that produced the counts was built from.",
+      "type": "object",
+      "properties": {
+        "commit": {
+          "description": "The checkout\u0027s HEAD commit.",
+          "type": "string"
+        },
+        "sourceState": {
+          "description": "The key of the World build that ran: a hash of the World\u0027s source closure including every uncommitted change, so two reports with equal keys ran the same code.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "sourceState"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCountersRevision"
+    },
+    "workload": {
+      "description": "The workload\u0027s world document, repository-relative with forward slashes.",
+      "type": "string"
+    },
+    "script": {
+      "description": "The workload\u0027s console script, repository-relative with forward slashes.",
+      "type": "string"
+    },
+    "runs": {
+      "description": "One run per backend, in the order they ran.",
+      "type": "array",
+      "items": {
+        "description": "One backend\u0027s run of the workload.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "backend": {
+            "description": "The backend the World was booted on: vulkan or directx.",
+            "type": "string"
+          },
+          "device": {
+            "description": "The device the render nodes ran on, as the backend reported it at creation.",
+            "type": "object",
+            "properties": {
+              "backend": {
+                "type": "string"
+              },
+              "adapter": {
+                "type": "string"
+              },
+              "vendor": {
+                "type": "integer"
+              },
+              "device": {
+                "type": "integer"
+              },
+              "driver.raw": {
+                "type": "integer"
+              },
+              "driver": {
+                "type": "string"
+              },
+              "api": {
+                "type": "string"
+              },
+              "driver.name": {
+                "type": "string",
+                "default": ""
+              },
+              "driver.id": {
+                "type": "integer",
+                "default": 0
+              },
+              "conformance": {
+                "type": "string",
+                "default": ""
+              },
+              "pipeline-cache.uuid": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "backend",
+              "adapter",
+              "vendor",
+              "device",
+              "driver.raw",
+              "driver",
+              "api"
+            ],
+            "additionalProperties": false,
+            "title": "GpuDeviceIdentity"
+          },
+          "width": {
+            "description": "The offscreen presentation\u0027s width in pixels.",
+            "type": "integer"
+          },
+          "height": {
+            "description": "The offscreen presentation\u0027s height in pixels.",
+            "type": "integer"
+          },
+          "compiler": {
+            "description": "The shader toolchain\u0027s identity: the hash the shader cache keys on, over each tool\u0027s path, timestamp and version.",
+            "type": "string"
+          },
+          "gcMode": {
+            "description": "The World process\u0027s GC mode, which an allocation reading is taken under.",
+            "type": "string"
+          },
+          "counts": {
+            "description": "Every count the run read, in the order the World reported them.",
+            "type": "array",
+            "items": {
+              "description": "One count a run read, named by where it was read and tagged with its class.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "source": {
+                  "description": "The section the count was read from: a counter source\u0027s name, gpu, or allocation.",
+                  "type": "string"
+                },
+                "node": {
+                  "description": "The render node, for a count of the gpu section; otherwise null.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "pass": {
+                  "description": "The pass, for a GPU count recorded inside one; otherwise null.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "description": "The kind\u0027s dotted name, or for an allocation reading the window\u0027s name.",
+                  "type": "string"
+                },
+                "class": {
+                  "description": "What two readings of the count may be expected to agree on.",
+                  "enum": [
+                    "deterministic",
+                    "per-backend-deterministic",
+                    "pacing",
+                    "allocation-zero-nonzero"
+                  ],
+                  "title": "WorkClass"
+                },
+                "value": {
+                  "description": "The count; for an allocation reading, the fewest bytes a run of the window allocated.",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "source",
+                "node",
+                "pass",
+                "kind",
+                "class",
+                "value"
+              ],
+              "additionalProperties": false,
+              "title": "WorldCount"
+            }
+          },
+          "passes": {
+            "description": "Every render node\u0027s passes in its newest completed submission, in pass order.",
+            "type": "array",
+            "items": {
+              "description": "What one pass of a render node did in its newest completed submission. A pass\u0027s state is deterministic: the same inputs execute, skip, or leave unreached the same passes on every backend.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "node": {
+                  "description": "The render node.",
+                  "type": "string"
+                },
+                "label": {
+                  "description": "The pass\u0027s label.",
+                  "type": "string"
+                },
+                "state": {
+                  "description": "What the pass did.",
+                  "enum": [
+                    "not-reached",
+                    "executed",
+                    "skipped"
+                  ],
+                  "title": "GpuPassState"
+                }
+              },
+              "required": [
+                "node",
+                "label",
+                "state"
+              ],
+              "additionalProperties": false,
+              "title": "WorldCountersPass"
+            }
+          }
+        },
+        "required": [
+          "backend",
+          "device",
+          "width",
+          "height",
+          "compiler",
+          "gcMode",
+          "counts",
+          "passes"
+        ],
+        "additionalProperties": false,
+        "title": "WorldCountersRun"
+      }
+    },
+    "schema": {
+      "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",
+      "type": "string",
+      "const": "puck.counters.report.v1"
+    }
+  },
+  "required": [
+    "revision",
+    "workload",
+    "script",
+    "runs"
+  ],
+  "additionalProperties": false
+}

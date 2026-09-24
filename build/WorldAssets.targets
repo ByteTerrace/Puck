@@ -1,40 +1,77 @@
 <Project>
-    <!-- The CLI owns world compilation. Its build generates these outputs before
-         build-only consumers copy or test them; no game assembly references tooling. -->
+    <!-- The game's shipped worlds. The build hands every .puck source and every .world.json document under Assets/worlds
+         to one tree-mode run of the CLI's compile verb, which writes the documents the game ships, beside each that
+         draws as a world its compiled world (<name>.puckb), and at the root the one bake pack (bakes.puckbake) holding
+         the creation bakes those compiled worlds name and the package store (packages/) holding one compiled shader
+         package per pipeline source their views.pipelines rows name, so no device compiles a shipped pipeline and the
+         run needs dxc as the shader build does, into this project's intermediate directory; the output's
+         Assets/worlds carries exactly those. Nothing is written into the source tree, and neither the sources nor the
+         tree's own documents are shipped from it: a document name resolves to its .puck source where one emits a
+         document and to its .world.json document otherwise (WorldDocumentName, PuckDocumentComposer), and only a compile
+         knows which sources emit documents and under which names (a module library emits none, a composition emits the
+         worlds it declares), so the run reports the files it wrote and the build ships that report rather than deriving
+         it from the sources' names. The CLI is a build-time tool here, never a runtime dependency. -->
     <PropertyGroup>
-        <PuckWorldAssetDirectory Condition="'$(PuckWorldAssetDirectory)' == ''">$(MSBuildThisFileDirectory)..\src\Puck.World\Assets\worlds</PuckWorldAssetDirectory>
+        <PuckWorldSourceDirectory>$(MSBuildProjectDirectory)\Assets\worlds\</PuckWorldSourceDirectory>
     </PropertyGroup>
     <ItemGroup>
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\avatars\moth.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\arena.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\backgammon.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\billiards.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\bowling.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\codenames.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\dominoes.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\freecell.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\hexlines.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\klondike.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\mancala.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\poker.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\pong.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\reversi.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\snake.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\spider.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\stratego.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\tictactoe.puck" />
-        <!-- solitaire imports the klondike, spider, and freecell documents, so it compiles after them. -->
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\games\solitaire.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\moth-courtyard.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-compare.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-mirror.puck" />
-        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\shader-compare.puck" />
+        <PuckWorldSource Include="$(PuckWorldSourceDirectory)**\*.puck;$(PuckWorldSourceDirectory)**\*.world.json" />
+        <!-- The pipeline sources the shipped worlds' rows can name, so an edited shader re-runs the tree run that packages
+             it. They ship as content too: a World keys a row's package by the closure it reads beside the document. -->
+        <PuckWorldPipelineSource Include="Assets\**\*.hlsl;Assets\**\*.hlsli;Assets\**\*.pipeline.json" Exclude="Assets\worlds\**" />
+        <!-- Every world document, compiled world and bake pack under Assets/worlds ships from the tree run's report instead. -->
+        <Content Include="Assets\**" Exclude="Assets\worlds\**\*.puck;Assets\worlds\**\*.world.json;Assets\worlds\**\*.puckb;Assets\worlds\**\*.puckbake" CopyToOutputDirectory="PreserveNewest" />
+        <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\Puck.Cli\Puck.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
-    <Target Name="GenerateWorldAssets" AfterTargets="Build"
+    <!-- The intermediate directory is set by the SDK's targets, after this file is read, so the report is named here.
+         The files the last run reported are outputs of the next one, so a run is repeated when one of them is gone. -->
+    <Target Name="PuckNameWorldReport">
+        <PropertyGroup>
+            <PuckWorldDocumentDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)worlds\'))</PuckWorldDocumentDirectory>
+            <PuckWorldReport>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)worlds.written'))</PuckWorldReport>
+        </PropertyGroup>
+        <ReadLinesFromFile File="$(PuckWorldReport)" Condition="Exists('$(PuckWorldReport)')">
+            <Output TaskParameter="Lines" ItemName="PuckWorldReportedLine" />
+        </ReadLinesFromFile>
+        <ItemGroup>
+            <PuckWorldReported Include="@(PuckWorldReportedLine->'$(PuckWorldDocumentDirectory)%(Identity)')" />
+        </ItemGroup>
+    </Target>
+    <Target Name="PuckResolveWorldCompiler" DependsOnTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true'">
+        <!-- The project instance the reference built, so the path is the CLI that build produced. -->
+        <MSBuild
+            Projects="@(_MSBuildProjectReferenceExistent)"
+            Condition="'%(Filename)' == 'Puck.Cli'"
+            Targets="GetTargetPath"
+            BuildInParallel="$(BuildInParallel)"
+            Properties="%(_MSBuildProjectReferenceExistent.SetConfiguration); %(_MSBuildProjectReferenceExistent.SetPlatform); %(_MSBuildProjectReferenceExistent.SetTargetFramework)"
+            RemoveProperties="%(_MSBuildProjectReferenceExistent.GlobalPropertiesToRemove)">
+            <Output TaskParameter="TargetOutputs" PropertyName="PuckWorldCompilerPath" />
+        </MSBuild>
+        <!-- A compiled world is keyed by the engine build it was derived under, so every engine assembly the compiler
+             runs is an input: one can change while the compiler's own assembly does not. -->
+        <ItemGroup>
+            <PuckWorldCompilerAssembly Include="$([System.IO.Path]::GetDirectoryName('$(PuckWorldCompilerPath)'))\Puck.*.dll" />
+        </ItemGroup>
+    </Target>
+    <Target Name="PuckGenerateWorlds" DependsOnTargets="PuckNameWorldReport;PuckResolveWorldCompiler" AfterTargets="ResolveProjectReferences"
             Condition="'$(DesignTimeBuild)' != 'true'"
-            Inputs="@(PuckGeneratedWorldSource);@(ReferenceCopyLocalPaths);$(TargetPath);$(MSBuildThisFileFullPath)"
-            Outputs="@(PuckGeneratedWorldSource -> '%(RootDir)%(Directory)%(Filename).world.json')">
-        <!-- Preserve dependency order, but pay compiler/JIT/schema initialization once for the whole batch. -->
-        <Exec Command="dotnet &quot;$(TargetPath)&quot; compile @(PuckGeneratedWorldSource -> '&quot;%(FullPath)&quot;', ' ')" />
+            Inputs="@(PuckWorldSource);@(PuckWorldPipelineSource);$(PuckWorldCompilerPath);@(PuckWorldCompilerAssembly);$(MSBuildThisFileFullPath)"
+            Outputs="$(PuckWorldReport);@(PuckWorldReported)">
+        <!-- One process for the whole tree pays compiler, JIT and schema initialization once. The tree run also
+             removes any document or compiled world under the directory that no source writes any more. -->
+        <Exec Command="dotnet &quot;$(PuckWorldCompilerPath)&quot; compile --tree &quot;$(PuckWorldSourceDirectory.TrimEnd('\'))&quot; --output &quot;$(PuckWorldDocumentDirectory.TrimEnd('\'))&quot; --written &quot;$(PuckWorldReport)&quot; @(PuckWorldSource -> '&quot;%(FullPath)&quot;', ' ')" />
+    </Target>
+    <!-- The files to ship are known only once a tree run has written them, so they are read from its report, whether it
+         ran in this build or an earlier one. -->
+    <Target Name="PuckShipWorlds" DependsOnTargets="PuckNameWorldReport" AfterTargets="PuckGenerateWorlds" Condition="'$(DesignTimeBuild)' != 'true'">
+        <ReadLinesFromFile File="$(PuckWorldReport)">
+            <Output TaskParameter="Lines" ItemName="PuckWorldWrittenLine" />
+        </ReadLinesFromFile>
+        <ItemGroup>
+            <PuckWorldWritten Include="@(PuckWorldWrittenLine->'$(PuckWorldDocumentDirectory)%(Identity)')" />
+            <ContentWithTargetPath Include="@(PuckWorldWritten->'%(FullPath)')" TargetPath="Assets\worlds\$([MSBuild]::MakeRelative('$(PuckWorldDocumentDirectory)', '%(FullPath)'))" CopyToOutputDirectory="PreserveNewest" />
+            <FileWrites Include="$(PuckWorldReport);@(PuckWorldWritten->'%(FullPath)')" />
+        </ItemGroup>
     </Target>
 </Project>

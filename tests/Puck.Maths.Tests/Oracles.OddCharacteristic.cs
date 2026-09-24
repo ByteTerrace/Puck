@@ -680,13 +680,7 @@ internal static partial class Oracles {
 
         for (var node = 0; (node < total); ++node) { parent[node] = node; }
 
-        int Root(int node) {
-            while (parent[node] != node) { node = parent[node] = parent[parent[node]]; }
-
-            return node;
-        }
-
-        foreach (var (one, other) in edges) { parent[Root(node: one)] = Root(node: other); }
+        foreach (var (one, other) in edges) { parent[UnionFindRoot(node: one, parent: parent)] = UnionFindRoot(node: other, parent: parent); }
 
         var free = new List<int>();
 
@@ -694,9 +688,12 @@ internal static partial class Oracles {
         for (var point = 0; (point < second.OutputWidth); ++point) { free.Add(item: ((leftPoints + second.InputWidth) + point)); }
 
         var components = new HashSet<int>();
-        var openComponents = free.Select(selector: Root).ToHashSet();
+        var openComponents = free.Select(selector: node => UnionFindRoot(
+            node: node,
+            parent: parent
+        )).ToHashSet();
 
-        for (var node = 0; (node < total); ++node) { _ = components.Add(item: Root(node: node)); }
+        for (var node = 0; (node < total); ++node) { _ = components.Add(item: UnionFindRoot(node: node, parent: parent)); }
 
         var composite = new int[free.Count];
 
@@ -704,7 +701,7 @@ internal static partial class Oracles {
             for (var other = 0; (other < free.Count); ++other) {
                 if (
                     (position != other) &&
-                    (Root(node: free[position]) == Root(node: free[other]))
+                    (UnionFindRoot(parent: parent, node: free[position]) == UnionFindRoot(parent: parent, node: free[other]))
                 ) { composite[position] = other; }
             }
         }
@@ -866,13 +863,7 @@ internal static partial class Oracles {
 
             for (var node = 0; (node < nodeCount); ++node) { parent[node] = node; }
 
-            int Root(int node) {
-                while (parent[node] != node) { node = parent[node] = parent[parent[node]]; }
-
-                return node;
-            }
-
-            void Join(int left, int right) { parent[Root(node: left)] = Root(node: right); }
+            void Join(int left, int right) { parent[UnionFindRoot(node: left, parent: parent)] = UnionFindRoot(node: right, parent: parent); }
 
             // The closure: the cups below and the caps above, each joining an adjacent pair.
             for (var wire = 0; (wire < strandCount); wire += 2) {
@@ -902,10 +893,12 @@ internal static partial class Oracles {
                         : -1
                     );
 
-                    for (var wire = 0; (wire < strandCount); ++wire) { Join(
+                    for (var wire = 0; (wire < strandCount); ++wire) {
+                        Join(
                         left: (lower + wire),
                         right: (upper + wire)
-                    ); }
+                    );
+                    }
                 } else {
                     exponent -= ((letter > 0)
                         ? 1
@@ -925,24 +918,28 @@ internal static partial class Oracles {
                         if (
                             (wire != (strand - 1)) &&
                             (wire != strand)
-                        ) { Join(
+                        ) {
+                            Join(
                             left: (lower + wire),
                             right: (upper + wire)
-                        ); }
+                        );
+                        }
                     }
                 }
             }
 
             var curves = new HashSet<int>();
 
-            for (var node = 0; (node < nodeCount); ++node) { _ = curves.Add(item: Root(node: node)); }
+            for (var node = 0; (node < nodeCount); ++node) { _ = curves.Add(item: UnionFindRoot(node: node, parent: parent)); }
 
             var term = (exponent, new[] { BigInteger.One });
 
-            for (var curve = 0; (curve < curves.Count); ++curve) { term = LaurentMultiply(
+            for (var curve = 0; (curve < curves.Count); ++curve) {
+                term = LaurentMultiply(
                 left: term,
                 right: (-2, LoopCharge)
-            ); }
+            );
+            }
 
             total = LaurentAdd(
                 left: total,
@@ -972,10 +969,12 @@ internal static partial class Oracles {
             : (-3, KinkFactor)
         );
 
-        for (var kink = 0; (kink < Math.Abs(value: kinkExponent)); ++kink) { value = LaurentMultiply(
+        for (var kink = 0; (kink < Math.Abs(value: kinkExponent)); ++kink) {
+            value = LaurentMultiply(
             left: value,
             right: factor
-        ); }
+        );
+        }
 
         return value;
     }
@@ -1090,16 +1089,20 @@ internal static partial class Oracles {
     // The canonical word order the presented algebra keys by: shorter first, then lexicographically. It is shared
     // because it IS the key scheme, exactly as the planar oracle shares the diagram order.
     private static int CompareWords(int[] left, int[] right) {
-        if (left.Length != right.Length) { return ((left.Length < right.Length)
+        if (left.Length != right.Length) {
+            return ((left.Length < right.Length)
             ? -1
             : 1
-        ); }
+        );
+        }
 
         for (var index = 0; (index < left.Length); ++index) {
-            if (left[index] != right[index]) { return ((left[index] < right[index])
+            if (left[index] != right[index]) {
+                return ((left[index] < right[index])
                 ? -1
                 : 1
-            ); }
+            );
+            }
         }
 
         return 0;
@@ -1276,5 +1279,10 @@ internal static partial class Oracles {
             ? 1
             : -1
         );
+    // The representative of a node in a union-find forest, halving the path as it climbs.
+    private static int UnionFindRoot(int[] parent, int node) {
+        while (parent[node] != node) { node = parent[node] = parent[parent[node]]; }
 
+        return node;
+    }
 }

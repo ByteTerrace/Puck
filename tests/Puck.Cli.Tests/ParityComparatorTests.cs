@@ -75,10 +75,15 @@ public sealed class ParityComparatorTests : IDisposable {
                     Census: (cameraInsideLeft
             ? null
             : new Dictionary<string, long> { ["0"] = censusLeft }),
-                    CameraInside: cameraInsideLeft,
+                    Detail: (cameraInsideLeft
+            ? "inside"
+            : null),
                     Frame: (cameraInsideLeft
             ? null
             : frame),
+                    Refusal: (cameraInsideLeft
+            ? "cameraInside"
+            : null),
                     Station: station,
                     StateHash: stateHashLeft,
                     Tick: tick
@@ -91,10 +96,15 @@ public sealed class ParityComparatorTests : IDisposable {
                     Census: (cameraInsideRight
             ? null
             : new Dictionary<string, long> { ["0"] = censusRight }),
-                    CameraInside: cameraInsideRight,
+                    Detail: (cameraInsideRight
+            ? "inside"
+            : null),
                     Frame: (cameraInsideRight
             ? null
             : frame),
+                    Refusal: (cameraInsideRight
+            ? "cameraInside"
+            : null),
                     Station: station,
                     StateHash: stateHashRight,
                     Tick: tick
@@ -103,10 +113,8 @@ public sealed class ParityComparatorTests : IDisposable {
 
         return (left, right);
     }
-    private static string CaptureJson(string station, ulong tick, string stateHash, bool cameraInside, long censusMaterial0, string frame) =>
-        (((((((((((("{\"station\":\"" + station) + "\",\"tick\":") + tick) + ",\"stateHash\":\"") + stateHash) + "\",\"cameraInside\":") + (cameraInside
-            ? "true"
-            : "false")) + ",\"frame\":\"") + frame) + "\",\"census\":{\"0\":") + censusMaterial0) + "}}");
+    private static string CaptureJson(string station, ulong tick, string stateHash, long censusMaterial0, string frame) =>
+        (((((((((("{\"station\":\"" + station) + "\",\"tick\":") + tick) + ",\"stateHash\":\"") + stateHash) + "\",\"frame\":\"") + frame) + "\",\"census\":{\"0\":") + censusMaterial0) + "}}");
     private string CreateSubdirectory(string name) {
         var path = Path.Combine(
             path1: m_root,
@@ -121,33 +129,20 @@ public sealed class ParityComparatorTests : IDisposable {
         new(
             TileSize: 16,
             Stations: new Dictionary<string, ParityStationContract> {
-            ["default"] = new ParityStationContract(
+                ["default"] = new ParityStationContract(
                 CensusFloor: new Dictionary<string, long>(),
                 TileMaxDelta: 12,
                 TileMeanDelta: 0.35
             ),
-        }
+            }
         );
     private static int RunCompareCommand(string[] args, out string stdout, out string stderr) {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        var outWriter = new StringWriter();
-        var errorWriter = new StringWriter();
+        var (exitCode, output, error) = ConsoleCapture.RunSplit(run: () => PuckRootCommand.Invoke(args: ["parity", "compare", .. args]));
 
-        Console.SetOut(newOut: outWriter);
-        Console.SetError(newError: errorWriter);
+        stdout = output;
+        stderr = error;
 
-        try {
-            var exitCode = PuckRootCommand.Invoke(args: ["parity", "compare", .. args]);
-
-            stdout = outWriter.ToString();
-            stderr = errorWriter.ToString();
-
-            return exitCode;
-        } finally {
-            Console.SetOut(newOut: originalOut);
-            Console.SetError(newError: originalError);
-        }
+        return exitCode;
     }
     private string WriteContractFile(int tileSize, double tileMeanDelta, int tileMaxDelta, long censusFloorMaterial0) {
         var path = Path.Combine(
@@ -208,14 +203,14 @@ public sealed class ParityComparatorTests : IDisposable {
 
         WritePng(
             directory: leftDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: Height,
             rgba: rgba,
             width: Width
         );
         WritePng(
             directory: rightDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: Height,
             rgba: rgba,
             width: Width
@@ -226,7 +221,7 @@ public sealed class ParityComparatorTests : IDisposable {
             cameraInsideRight: false,
             censusLeft: 40,
             censusRight: 500,
-            frame: "s-1.png",
+            frame: "s~1.png",
             stateHashLeft: ValidStateHash,
             stateHashRight: ValidStateHash,
             station: "s",
@@ -235,12 +230,12 @@ public sealed class ParityComparatorTests : IDisposable {
         var contract = new ParityContract(
             TileSize: 16,
             Stations: new Dictionary<string, ParityStationContract> {
-            ["default"] = new ParityStationContract(
+                ["default"] = new ParityStationContract(
                 CensusFloor: new Dictionary<string, long> { ["0"] = 500 },
                 TileMaxDelta: 12,
                 TileMeanDelta: 0.35
             ),
-        }
+            }
         );
 
         Assert.True(condition: ParityComparator.TryCompare(
@@ -337,14 +332,14 @@ public sealed class ParityComparatorTests : IDisposable {
 
         WritePng(
             directory: leftDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: Height,
             rgba: leftRgba,
             width: Width
         );
         WritePng(
             directory: rightDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: Height,
             rgba: rightRgba,
             width: Width
@@ -355,7 +350,7 @@ public sealed class ParityComparatorTests : IDisposable {
             cameraInsideRight: false,
             censusLeft: 10,
             censusRight: 10,
-            frame: "s-1.png",
+            frame: "s~1.png",
             stateHashLeft: ValidStateHash,
             stateHashRight: ValidStateHash,
             station: "s",
@@ -364,12 +359,12 @@ public sealed class ParityComparatorTests : IDisposable {
         var contract = new ParityContract(
             TileSize: 16,
             Stations: new Dictionary<string, ParityStationContract> {
-            ["default"] = new ParityStationContract(
+                ["default"] = new ParityStationContract(
                 CensusFloor: new Dictionary<string, long>(),
                 TileMaxDelta: 50,
                 TileMeanDelta: ParityEnvelope.MaxMeanDelta
             ),
-        }
+            }
         );
 
         Assert.True(condition: ParityComparator.TryCompare(
@@ -396,7 +391,7 @@ public sealed class ParityComparatorTests : IDisposable {
         Assert.NotNull(@object: outcome.HeatmapRgba);
     }
     [Fact]
-    public void AMalformedManifestExitsThreeDistinctFromAParityFailure() {
+    public void AMalformedManifestExitsRefusedDistinctFromAParityFailure() {
         var leftDir = CreateSubdirectory(name: "left");
         var rightDir = CreateSubdirectory(name: "right");
         var rgba = BuildGradientRgba(
@@ -406,7 +401,7 @@ public sealed class ParityComparatorTests : IDisposable {
 
         WritePng(
             directory: rightDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: 8,
             rgba: rgba,
             width: 8
@@ -421,9 +416,8 @@ public sealed class ParityComparatorTests : IDisposable {
         WriteManifestFile(
             backend: "directx",
             captureLine: CaptureJson(
-                cameraInside: false,
                 censusMaterial0: 10,
-                frame: "s-1.png",
+                frame: "s~1.png",
                 stateHash: ValidStateHash,
                 station: "s",
                 tick: 1
@@ -448,7 +442,7 @@ public sealed class ParityComparatorTests : IDisposable {
 
         Assert.Equal(
             actual: exitCode,
-            expected: 3
+            expected: CliExit.Refused
         );
         Assert.Contains(
             actualString: stderr,
@@ -473,14 +467,14 @@ public sealed class ParityComparatorTests : IDisposable {
 
         WritePng(
             directory: leftDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: Height,
             rgba: rgba,
             width: Width
         );
         WritePng(
             directory: rightDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: Height,
             rgba: rgba,
             width: Width
@@ -491,7 +485,7 @@ public sealed class ParityComparatorTests : IDisposable {
             cameraInsideRight: false,
             censusLeft: 10,
             censusRight: 10,
-            frame: "s-1.png",
+            frame: "s~1.png",
             stateHashLeft: ValidStateHash,
             stateHashRight: OtherStateHash,
             station: "s",
@@ -536,7 +530,7 @@ public sealed class ParityComparatorTests : IDisposable {
 
         WritePng(
             directory: rightDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: 8,
             rgba: rightRgba,
             width: 8
@@ -547,10 +541,11 @@ public sealed class ParityComparatorTests : IDisposable {
             World: "w",
             Captures: [new ParityManifestCapture(
                     Census: null,
-                    CameraInside: true,
+                    Detail: "the camera is inside geometry",
                     Frame: null,
-                    Station: "s",
+                    Refusal: "cameraInside",
                     StateHash: ValidStateHash,
+                    Station: "s",
                     Tick: 1
                 )]
         );
@@ -559,8 +554,9 @@ public sealed class ParityComparatorTests : IDisposable {
             World: "w",
             Captures: [new ParityManifestCapture(
                     Census: new Dictionary<string, long> { ["0"] = 10 },
-                    CameraInside: false,
-                    Frame: "s-1.png",
+                    Detail: null,
+                    Frame: "s~1.png",
+                    Refusal: null,
                     Station: "s",
                     StateHash: OtherStateHash,
                     Tick: 1
@@ -593,6 +589,119 @@ public sealed class ParityComparatorTests : IDisposable {
         Assert.Null(@object: outcome.LeftFrame);
         Assert.Null(@object: outcome.RightFrame);
     }
+    [Fact]
+    public void AProducerRefusalFailsTheGateThroughTheCliVerbNamingItsDetail() {
+        var leftDir = CreateSubdirectory(name: "left");
+        var rightDir = CreateSubdirectory(name: "right");
+        var rgba = BuildGradientRgba(
+            height: 8,
+            width: 8
+        );
+
+        WritePng(
+            directory: leftDir,
+            fileName: "s~1.png",
+            height: 8,
+            rgba: rgba,
+            width: 8
+        );
+        WriteManifestFile(
+            backend: "vulkan",
+            captureLine: CaptureJson(
+                censusMaterial0: 10,
+                frame: "s~1.png",
+                stateHash: ValidStateHash,
+                station: "s",
+                tick: 1
+            ),
+            path: Path.Combine(
+                path1: leftDir,
+                path2: "manifest.json"
+            )
+        );
+        WriteManifestFile(
+            backend: "directx",
+            captureLine: (("{\"station\":\"s\",\"tick\":1,\"stateHash\":\"" + ValidStateHash) + "\",\"refusal\":\"stale\",\"detail\":\"armed at tick 1, but the frame that served it showed tick 21\"}"),
+            path: Path.Combine(
+                path1: rightDir,
+                path2: "manifest.json"
+            )
+        );
+
+        var contractPath = WriteContractFile(
+            censusFloorMaterial0: 1,
+            tileMaxDelta: 12,
+            tileMeanDelta: 0.35,
+            tileSize: 16
+        );
+        var exitCode = RunCompareCommand(
+            args: [leftDir, rightDir, "--contract", contractPath],
+            stderr: out var stderr,
+            stdout: out var stdout
+        );
+
+        Assert.Equal(
+            actual: exitCode,
+            expected: CliExit.Failed
+        );
+        Assert.Contains(
+            actualString: (stdout + stderr),
+            expectedSubstring: "stale: refused on right (armed at tick 1, but the frame that served it showed tick 21)"
+        );
+    }
+    [Fact]
+    public void ARefusalThatAlsoCarriesAFrameIsMalformed() {
+        var leftDir = CreateSubdirectory(name: "left");
+        var rightDir = CreateSubdirectory(name: "right");
+        var line = CaptureJson(
+            censusMaterial0: 10,
+            frame: "s~1.png",
+            stateHash: ValidStateHash,
+            station: "s",
+            tick: 1
+        );
+
+        WriteManifestFile(
+            backend: "vulkan",
+            captureLine: line,
+            path: Path.Combine(
+                path1: leftDir,
+                path2: "manifest.json"
+            )
+        );
+        WriteManifestFile(
+            backend: "directx",
+            captureLine: line.Replace(
+                newValue: ",\"refusal\":\"busy\",\"detail\":\"x\",\"frame\"",
+                oldValue: ",\"frame\""
+            ),
+            path: Path.Combine(
+                path1: rightDir,
+                path2: "manifest.json"
+            )
+        );
+
+        var contractPath = WriteContractFile(
+            censusFloorMaterial0: 1,
+            tileMaxDelta: 12,
+            tileMeanDelta: 0.35,
+            tileSize: 16
+        );
+        var exitCode = RunCompareCommand(
+            args: [leftDir, rightDir, "--contract", contractPath],
+            stderr: out var stderr,
+            stdout: out _
+        );
+
+        Assert.Equal(
+            actual: exitCode,
+            expected: CliExit.Refused
+        );
+        Assert.Contains(
+            actualString: stderr,
+            expectedSubstring: "carries a refusal, so frame and census must be absent"
+        );
+    }
     public void Dispose() {
         try {
             Directory.Delete(
@@ -614,14 +723,14 @@ public sealed class ParityComparatorTests : IDisposable {
 
         WritePng(
             directory: leftDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: 32,
             rgba: rgba,
             width: 32
         );
         WritePng(
             directory: rightDir,
-            fileName: "s-1.png",
+            fileName: "s~1.png",
             height: 32,
             rgba: rgba,
             width: 32
@@ -629,9 +738,8 @@ public sealed class ParityComparatorTests : IDisposable {
         WriteManifestFile(
             backend: "vulkan",
             captureLine: CaptureJson(
-                cameraInside: false,
                 censusMaterial0: 10,
-                frame: "s-1.png",
+                frame: "s~1.png",
                 stateHash: ValidStateHash,
                 station: "s",
                 tick: 1
@@ -644,9 +752,8 @@ public sealed class ParityComparatorTests : IDisposable {
         WriteManifestFile(
             backend: "directx",
             captureLine: CaptureJson(
-                cameraInside: false,
                 censusMaterial0: 10,
-                frame: "s-1.png",
+                frame: "s~1.png",
                 stateHash: ValidStateHash,
                 station: "s",
                 tick: 1
@@ -664,20 +771,20 @@ public sealed class ParityComparatorTests : IDisposable {
             tileSize: 16
         );
         var exitCode = RunCompareCommand(
-            args: [leftDir, rightDir, "--contract", contractPath, "--out", outDir],
+            args: [leftDir, rightDir, "--contract", contractPath, "--output", outDir],
             stderr: out _,
             stdout: out var stdout
         );
 
         Assert.Equal(
             actual: exitCode,
-            expected: 0
+            expected: CliExit.Success
         );
         Assert.Contains(
             actualString: stdout,
             expectedSubstring: "PASS:"
         );
-        // Nothing failed, so no evidence subdirectory should have been written under --out.
+        // Nothing failed, so no evidence subdirectory should have been written under --output.
         Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: outDir));
     }
 }

@@ -1,9 +1,8 @@
+using Puck.Commands;
 using System.Numerics;
 
 using Puck.Assets.Documents;
 using Puck.Maths;
-using Puck.SignedDistance;
-using Puck.World.Authoring;
 using Puck.World.Protocol;
 
 using Xunit;
@@ -22,37 +21,7 @@ public sealed class CueLawTests {
     // fixture adds (with capacity bumped by exactly one, mirroring Fixtures.BuildCameraBodyDocument) lands here.
     private static readonly int BallIndex = WorldBodiesLimits.LocalSeatCount;
 
-    private static WorldPrototype BuildBallCreation() {
-        var shape = new ShapeDocument(
-            Id: 0,
-            Name: null,
-            Type: SdfSolidPrimitive.Sphere,
-            Position: Vector3.Zero,
-            Rotation: Quaternion.Identity,
-            Scale: new Vector3(value: 0.15f),
-            Material: 0,
-            Blend: SdfBlendOp.Union,
-            Smooth: 0f,
-            Group: 0
-        );
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: "cue-ball",
-            Palette: null,
-            Shapes: [shape],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: "cue-ball"
-        );
-
-        return new WorldPrototype(
-            Id: "cue-ball",
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
+    private static WorldPrototype BuildBallCreation() => CreationFixtures.Sphere(id: "cue-ball", scale: 0.15f);
     // Fixtures.BuildDocument() plus one rigid "ball" kit (a second, distinct kit — the seat kit stays untouched),
     // one inhabited placement under it, a "strike" composition channel, and a keyed Fixed "cue" row seeding the
     // charge cell at zero. Every law below adds its own rule(s) on top.
@@ -117,7 +86,7 @@ public sealed class CueLawTests {
     }
     private static WorldFixture JoinSeatAndBall(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
-        var seat = WorldPrincipal.Seat(slot: 0);
+        var seat = Principal.Seat(slot: 0);
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
             seat,
@@ -275,7 +244,7 @@ public sealed class CueLawTests {
                 Mode: ActionTriggerMode.Level,
                 Gate: new ActionPredicate.CompareState(
                     State: $"$channel:1:{StrikeChannel}",
-                    Comparison: ActionStateComparison.GreaterOrEqual,
+                    Comparison: ExpressionOp.GreaterOrEqual,
                     Value: 1m
                 ),
                 Effects: [new ActionEffect.SetState(

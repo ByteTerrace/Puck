@@ -144,41 +144,33 @@ internal static partial class Subjects {
             actual: a.ToString()
         );
     }
-    private static void ExpectSquareScalar(Func<int> action, BigInteger expected) {
-        if (
-            (expected > int.MaxValue) ||
-            (expected < int.MinValue)
-        ) { Assert.Throws<OverflowException>(testCode: () => action()); } else { Assert.Equal(
-            expected: ((int)expected),
-            actual: action()
-        ); }
-    }
-    private static void ExpectSquareCoordinate(Func<SquareCoordinate> action, BigInteger x, BigInteger y) {
-        if (
-            (x < int.MinValue) ||
-            (x > int.MaxValue) ||
-            (y < int.MinValue) ||
-            (y > int.MaxValue)
-        ) { Assert.Throws<OverflowException>(testCode: () => action()); } else { Assert.Equal(
-            expected: new SquareCoordinate(
+    private static void ExpectSquareScalar(Func<int> action, BigInteger expected) =>
+        ExpectValueOrOverflow(
+            action: action,
+            expected: () => ((int)expected),
+            overflows: ((expected > int.MaxValue) || (expected < int.MinValue))
+        );
+    private static void ExpectSquareCoordinate(Func<SquareCoordinate> action, BigInteger x, BigInteger y) =>
+        ExpectValueOrOverflow(
+            action: action,
+            expected: () => new SquareCoordinate(
                 X: ((int)x),
                 Y: ((int)y)
             ),
-            actual: action()
-        ); }
-    }
-    private static void ExpectSquareIndex(Func<SquareIndex> action, BigInteger x, BigInteger y) {
-        if (Oracles.SquareRadius(
-            x: x,
-            y: y
-        ) > SquareIndex.MaxRadius) { Assert.Throws<OverflowException>(testCode: () => action()); } else { Assert.Equal(
-            expected: ((long)Oracles.SquareIndexAt(
+            overflows: ((x < int.MinValue) || (x > int.MaxValue) || (y < int.MinValue) || (y > int.MaxValue))
+        );
+    private static void ExpectSquareIndex(Func<SquareIndex> action, BigInteger x, BigInteger y) =>
+        ExpectValueOrOverflow(
+            action: () => action().Value,
+            expected: () => ((long)Oracles.SquareIndexAt(
                 x: x,
                 y: y
             )),
-            actual: action().Value
-        ); }
-    }
+            overflows: (Oracles.SquareRadius(
+                x: x,
+                y: y
+            ) > SquareIndex.MaxRadius)
+        );
     private static long SquareRaw(long raw) => ((raw & long.MaxValue) % (SquareIndex.MaxValue + 1));
 
     public static string? SquareIndexOperations(long[] left, long[] right) {

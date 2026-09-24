@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
@@ -78,30 +79,84 @@ public sealed class WorldMetadataSectionLawTests {
         reason: out _
     );
 
-    [Fact]
-    public void AuthorOid_InvalidRefusesByName_ControlValidOidClean() {
+    // Every metadata refusal, keyed by its law id, beside the control differing only in the refused field.
+    private static readonly Dictionary<string, (Func<WorldMetadataSection> Control, Func<WorldMetadataSection> Denied)> RefusalPairs = new(comparer: StringComparer.Ordinal) {
+        ["metadata.author-name-empty"] = (
+            Control: static () => new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "Jane")]),
+            Denied: static () => new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "")])
+        ),
+        ["metadata.author-name-length-cap"] = (
+            Control: static () => new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: new string(c: 'x', count: WorldMetadataCapacity.MaxAuthorNameLength))]),
+            Denied: static () => new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: new string(c: 'x', count: (WorldMetadataCapacity.MaxAuthorNameLength + 1)))])
+        ),
+        ["metadata.author-oid"] = (
+            Control: static () => new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "Jane", Oid: "11111111-1111-1111-1111-111111111111")]),
+            Denied: static () => new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "Jane", Oid: "not-a-guid")])
+        ),
+        ["metadata.author-row-null"] = (
+            Control: static () => new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "Jane")]),
+            Denied: static () => new WorldMetadataSection(Authors: [null!])
+        ),
+        ["metadata.authors-row-cap"] = (
+            Control: static () => new WorldMetadataSection(Authors: AuthorRows(count: WorldMetadataCapacity.MaxAuthors)),
+            Denied: static () => new WorldMetadataSection(Authors: AuthorRows(count: (WorldMetadataCapacity.MaxAuthors + 1)))
+        ),
+        ["metadata.custom-byte-cap"] = (
+            Control: static () => new WorldMetadataSection(Custom: SingleStringCustomBag(valueLength: (WorldMetadataCapacity.MaxCustomBytes - 3))),
+            Denied: static () => new WorldMetadataSection(Custom: SingleStringCustomBag(valueLength: ((WorldMetadataCapacity.MaxCustomBytes - 3) + 1)))
+        ),
+        ["metadata.custom-compose-vocabulary"] = (
+            Control: static () => new WorldMetadataSection(Custom: SingleEntryBag(key: "drop")),
+            Denied: static () => new WorldMetadataSection(Custom: SingleEntryBag(key: "$drop"))
+        ),
+        ["metadata.custom-compose-vocabulary-nested"] = (
+            Control: static () => new WorldMetadataSection(Custom: ParseCustomBag(json: /*lang=json*/ """{ "a": { "replace": true } }""")),
+            Denied: static () => new WorldMetadataSection(Custom: ParseCustomBag(json: /*lang=json*/ """{ "a": { "$replace": true } }"""))
+        ),
+        ["metadata.description-control-character"] = (
+            Control: static () => new WorldMetadataSection(Description: "line one line two"),
+            Denied: static () => new WorldMetadataSection(Description: "line one\nline two")
+        ),
+        ["metadata.description-length-cap"] = (
+            Control: static () => new WorldMetadataSection(Description: new string(c: 'x', count: WorldMetadataCapacity.MaxDescriptionLength)),
+            Denied: static () => new WorldMetadataSection(Description: new string(c: 'x', count: (WorldMetadataCapacity.MaxDescriptionLength + 1)))
+        ),
+        ["metadata.duplicate-tag"] = (
+            Control: static () => new WorldMetadataSection(Tags: ["hub", "city"]),
+            Denied: static () => new WorldMetadataSection(Tags: ["hub", "hub"])
+        ),
+        ["metadata.tag-empty"] = (
+            Control: static () => new WorldMetadataSection(Tags: ["hub"]),
+            Denied: static () => new WorldMetadataSection(Tags: [""])
+        ),
+        ["metadata.tag-length-cap"] = (
+            Control: static () => new WorldMetadataSection(Tags: [new string(c: 'x', count: WorldMetadataCapacity.MaxTagLength)]),
+            Denied: static () => new WorldMetadataSection(Tags: [new string(c: 'x', count: (WorldMetadataCapacity.MaxTagLength + 1))])
+        ),
+        ["metadata.tags-row-cap"] = (
+            Control: static () => new WorldMetadataSection(Tags: TagRows(count: WorldMetadataCapacity.MaxTags)),
+            Denied: static () => new WorldMetadataSection(Tags: TagRows(count: (WorldMetadataCapacity.MaxTags + 1)))
+        ),
+        ["metadata.title-closing-bracket"] = (
+            Control: static () => new WorldMetadataSection(Title: "Play"),
+            Denied: static () => new WorldMetadataSection(Title: "Play]")
+        ),
+        ["metadata.title-length-cap"] = (
+            Control: static () => new WorldMetadataSection(Title: new string(c: 'x', count: WorldMetadataCapacity.MaxTitleLength)),
+            Denied: static () => new WorldMetadataSection(Title: new string(c: 'x', count: (WorldMetadataCapacity.MaxTitleLength + 1)))
+        ),
+    };
+
+    public static TheoryData<string> RefusalLawIds() => new(values: RefusalPairs.Keys.Order(comparer: StringComparer.Ordinal));
+    [MemberData(memberName: nameof(RefusalLawIds))]
+    [Theory]
+    public void EveryMetadataRefusal_RefusesWhereItsControlIsClean(string lawId) {
+        var (control, denied) = RefusalPairs[lawId];
+
         Laws.RefusalWithControl(
-            lawId: "metadata.author-oid",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Authors: [new WorldMetadataAuthor(
-                    Name: "Jane",
-                    Oid: "not-a-guid"
-                )]),
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Authors: [new WorldMetadataAuthor(
-                    Name: "Jane",
-                    Oid: "11111111-1111-1111-1111-111111111111"
-                )]),
-            }))
-        );
-    }
-    [Fact]
-    public void ClosingBracketInTitle_RefusesByName_ControlPlainTitleClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.title-closing-bracket",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Title: "Play]") })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Title: "Play") }))
+            lawId: lawId,
+            deniedOutcome: () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = denied() })),
+            controlOutcome: () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = control() }))
         );
     }
     [Fact]
@@ -271,30 +326,6 @@ public sealed class WorldMetadataSectionLawTests {
         Assert.False(condition: clearedMetadata.ContainsKey(propertyName: "title"));
     }
     [Fact]
-    public void ControlCharacterInDescription_RefusesByName_ControlPlainTextClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.description-control-character",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Description: "line one\nline two") })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Description: "line one line two") }))
-        );
-    }
-    [Fact]
-    public void CustomBag_RejectsComposeVocabularyKeys_ByName_ControlPlainKeyClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.custom-compose-vocabulary",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Custom: SingleEntryBag(key: "$drop")) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Custom: SingleEntryBag(key: "drop")) }))
-        );
-    }
-    [Fact]
-    public void CustomOverCap_RefusesByName_ControlAtCapClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.custom-byte-cap",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Custom: SingleStringCustomBag(valueLength: ((WorldMetadataCapacity.MaxCustomBytes - 3) + 1))) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Custom: SingleStringCustomBag(valueLength: (WorldMetadataCapacity.MaxCustomBytes - 3))) }))
-        );
-    }
-    [Fact]
     public void DoesNotAffectReplayHashes_WithDiscriminatingControl() {
         var baseDocument = Fixtures.BuildDocument();
         var metadataA = (baseDocument with { Metadata = new WorldMetadataSection(Title: "Play") });
@@ -353,22 +384,14 @@ public sealed class WorldMetadataSectionLawTests {
         );
     }
     [Fact]
-    public void DuplicateTag_RefusesByName_ControlDistinctTagsClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.duplicate-tag",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Tags: ["hub", "hub"]) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Tags: ["hub", "city"]) }))
-        );
-    }
-    [Fact]
     public void MetadataEditOnTheBasis_MovesTheDerivedChainContentHash() {
-        using var files = new TempWorldDirectory();
+        using var files = new TemporaryDirectory();
 
-        var basisPath = files.WriteFlatDocument(name: "basis.world.json");
+        var basisPath = files.WriteBytes(bytes: Fixtures.DefaultWorldBytes(), name: "basis.world.json");
         var deltaPath = files.WriteText(
             name: "delta.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "motion": { "moveSpeed": 6.5 } }
+            { "basis": "basis", "motion": { "moveSpeed": 6.5 } }
             """
         );
 
@@ -416,126 +439,6 @@ public sealed class WorldMetadataSectionLawTests {
         Assert.NotEqual(
             expected: WorldDefinitionFileSource.ComputeContentHash(content: bytesA),
             actual: WorldDefinitionFileSource.ComputeContentHash(content: bytesB)
-        );
-    }
-    [Fact]
-    public void Metadata_AuthorNameOverLengthCap_RefusesByName_ControlAtCapClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.author-name-length-cap",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: new string(
-                    c: 'x',
-                    count: (WorldMetadataCapacity.MaxAuthorNameLength + 1)
-                ))]),
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: new string(
-                    c: 'x',
-                    count: WorldMetadataCapacity.MaxAuthorNameLength
-                ))]),
-            }))
-        );
-    }
-    [Fact]
-    public void Metadata_AuthorsOverRowCap_RefusesByName_ControlAtCapClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.authors-row-cap",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Authors: AuthorRows(count: (WorldMetadataCapacity.MaxAuthors + 1))) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Authors: AuthorRows(count: WorldMetadataCapacity.MaxAuthors)) }))
-        );
-    }
-    [Fact]
-    public void Metadata_CustomNestedComposeVocabulary_RefusesByName() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.custom-compose-vocabulary-nested",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Custom: ParseCustomBag(json: /*lang=json*/ """{ "a": { "$replace": true } }""")) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Custom: ParseCustomBag(json: /*lang=json*/ """{ "a": { "replace": true } }""")) }))
-        );
-    }
-    [Fact]
-    public void Metadata_DescriptionOverLengthCap_RefusesByName_ControlAtCapClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.description-length-cap",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Description: new string(
-                c: 'x',
-                count: (WorldMetadataCapacity.MaxDescriptionLength + 1)
-            )),
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Description: new string(
-                c: 'x',
-                count: WorldMetadataCapacity.MaxDescriptionLength
-            )),
-            }))
-        );
-    }
-    [Fact]
-    public void Metadata_EmptyAuthorName_RefusesByName_ControlNonEmptyClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.author-name-empty",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "")]) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "Jane")]) }))
-        );
-    }
-    [Fact]
-    public void Metadata_EmptyTag_RefusesByName_ControlNonEmptyClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.tag-empty",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Tags: [""]) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Tags: ["hub"]) }))
-        );
-    }
-    [Fact]
-    public void Metadata_NullAuthorRow_RefusesByName_ControlNonNullClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.author-row-null",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Authors: [null!]) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Authors: [new WorldMetadataAuthor(Name: "Jane")]) }))
-        );
-    }
-    [Fact]
-    public void Metadata_TagOverLengthCap_RefusesByName_ControlAtCapClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.tag-length-cap",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Tags: [new string(
-                    c: 'x',
-                    count: (WorldMetadataCapacity.MaxTagLength + 1)
-                )]),
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Tags: [new string(
-                    c: 'x',
-                    count: WorldMetadataCapacity.MaxTagLength
-                )]),
-            }))
-        );
-    }
-    [Fact]
-    public void Metadata_TagsOverRowCap_RefusesByName_ControlAtCapClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.tags-row-cap",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Tags: TagRows(count: (WorldMetadataCapacity.MaxTags + 1))) })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with { Metadata = new WorldMetadataSection(Tags: TagRows(count: WorldMetadataCapacity.MaxTags)) }))
-        );
-    }
-    [Fact]
-    public void Metadata_TitleOverLengthCap_RefusesByName_ControlAtCapClean() {
-        Laws.RefusalWithControl(
-            lawId: "metadata.title-length-cap",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Title: new string(
-                c: 'x',
-                count: (WorldMetadataCapacity.MaxTitleLength + 1)
-            )),
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                Metadata = new WorldMetadataSection(Title: new string(
-                c: 'x',
-                count: WorldMetadataCapacity.MaxTitleLength
-            )),
-            }))
         );
     }
     [Fact]
@@ -604,49 +507,4 @@ public sealed class WorldMetadataSectionLawTests {
         );
     }
 
-    /// <summary>A per-test directory so relative <c>basis</c> spellings resolve exactly the way the shipped assets'
-    /// do (against the referring file's own directory), cleaned up whole. Not the hoisted shared fixture other law
-    /// files use — this project has no such shared fixture yet — so this is a self-contained copy.</summary>
-    private sealed class TempWorldDirectory : IDisposable {
-        private readonly string m_root = Directory.CreateDirectory(path: Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-world-tests-metadata-{Guid.NewGuid():N}"
-        )).FullName;
-
-        public void Dispose() {
-            try {
-                Directory.Delete(
-                    path: m_root,
-                    recursive: true
-                );
-            } catch (IOException) {
-            }
-        }
-        public string WriteFlatDocument(string name) {
-            var path = Path.Combine(
-                path1: m_root,
-                path2: name
-            );
-
-            File.WriteAllBytes(
-                path: path,
-                bytes: Fixtures.DefaultWorldBytes()
-            );
-
-            return path;
-        }
-        public string WriteText(string name, string text) {
-            var path = Path.Combine(
-                path1: m_root,
-                path2: name
-            );
-
-            File.WriteAllText(
-                contents: text,
-                path: path
-            );
-
-            return path;
-        }
-    }
 }

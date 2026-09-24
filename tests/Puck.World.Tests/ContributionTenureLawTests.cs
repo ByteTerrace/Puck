@@ -1,7 +1,6 @@
+using Puck.Commands;
 using System.Numerics;
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
-using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -35,38 +34,6 @@ public sealed class ContributionTenureLawTests {
         seconds: LivenessGraceSeconds
     );
 
-    private static WorldPrototype Creation(string id) {
-        var document = new CreationDocument(
-            Schema: CreationDocument.CurrentSchema,
-            Name: id,
-            Palette: null,
-            Shapes: [
-                new ShapeDocument(
-                    Id: 0,
-                    Name: null,
-                    Type: SdfSolidPrimitive.Sphere,
-                    Position: Vector3.Zero,
-                    Rotation: Quaternion.Identity,
-                    Scale: new Vector3(value: 1f),
-                    Material: 0,
-                    Blend: SdfBlendOp.Union,
-                    Smooth: 0f,
-                    Group: 0
-                ),
-            ],
-            Frames: null
-        );
-        var canonical = CreationCanonicalizer.Canonicalize(
-            document: document,
-            source: id
-        );
-
-        return new WorldPrototype(
-            Id: id,
-            Document: canonical.Document,
-            HashRaw: canonical.Hash
-        );
-    }
     // The base fixture: two creations (the host's empty plinth and the partner's statue), one authored adjacency whose
     // liveness grace is short enough to drop inside a handful of fixture steps, and one EMPTY presence slot.
     private static WorldDefinition Document(WorldPlacementInhabit? inhabit = null) {
@@ -74,8 +41,8 @@ public sealed class ContributionTenureLawTests {
 
         return (document with {
             CreationsRaw = [
-                Creation(id: SlotCreation),
-                Creation(id: ContributedCreation),
+                CreationFixtures.UnitSphere(id: SlotCreation),
+                CreationFixtures.UnitSphere(id: ContributedCreation),
             ],
             PlacementRowsRaw = [
                 new WorldPlacement(
@@ -101,7 +68,7 @@ public sealed class ContributionTenureLawTests {
             References = [
                 new WorldReference(
                 Name: SafeName.Parse(candidate: "peer"),
-                Document: "peer.world.json",
+                Document: "peer",
                 Owner: null,
                 World: null
             ),
@@ -160,7 +127,7 @@ public sealed class ContributionTenureLawTests {
     private static WorldPlacementContribution Facet(WorldFixture fixture) => Slot(fixture: fixture).Contribution!;
     // Fills the slot the way a partner does — an ordinary whole-row UpsertPlacement re-pointing prototypeId, carrying
     // NO stamped half. `actor` is the identity the ingress would have stamped on the envelope.
-    private static void Fill(WorldFixture fixture, WorldPrincipal actor) {
+    private static void Fill(WorldFixture fixture, Principal actor) {
         var slot = Slot(fixture: fixture);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
@@ -198,7 +165,7 @@ public sealed class ContributionTenureLawTests {
         )));
 
         Fill(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             fixture: fixture
         );
 
@@ -219,17 +186,17 @@ public sealed class ContributionTenureLawTests {
         Assert.NotEmpty(collection: inhabitants);
 
         var body = inhabitants[0];
-        var possessor = WorldPrincipal.Seat(slot: 0);
+        var possessor = Principal.Seat(slot: 0);
 
         var possession = new WorldGrant(
-            Principal: possessor,
+            Grantee: possessor,
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: body),
             Exclusive: false
         );
 
         fixture.Server.Grant(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: possession
         );
 
@@ -250,7 +217,7 @@ public sealed class ContributionTenureLawTests {
 
         // CONTROL: one fact changes — the possession goes — and the same standing deadline retracts.
         fixture.Server.Revoke(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             grant: possession
         );
 
@@ -271,7 +238,7 @@ public sealed class ContributionTenureLawTests {
         var deliveredTick = 0UL;
 
         Fill(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             fixture: fixture
         );
 
@@ -314,7 +281,7 @@ public sealed class ContributionTenureLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document());
 
         Fill(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             fixture: fixture
         );
 
@@ -377,7 +344,7 @@ public sealed class ContributionTenureLawTests {
 
         endowed.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
             Placement: (Slot(fixture: endowed) with { PrototypeId = ContributedCreation }),
-            Principal: WorldPrincipal.Console
+            Principal: Principal.Console
         ));
         endowed.Step();
         DropLink(fixture: endowed);
@@ -393,6 +360,87 @@ public sealed class ContributionTenureLawTests {
         Assert.NotNull(@object: Facet(fixture: endowed).Contributor);
         Assert.Null(@object: Facet(fixture: endowed).RetractDeadlineTick);
     }
+    /// <summary>A retraction releases the contributed creation only when nothing names it
+    /// (<see cref="WorldDefinitionRows.EnumerateCreationReferences"/>). DENIAL: a second, responsive placement names
+    /// the statue in a <c>respond</c> entry, so the retraction leaves the statue's row standing and nothing is refused,
+    /// then or on any tick after; a direct removal is refused naming that entry. CONTROL:
+    /// <see cref="ExpiryRetractsThePieceAndLeavesTheFrame"/>, where nothing else names it, releases it.</summary>
+    [Fact]
+    public void ARetractionKeepsACreationAResponseStillNames() {
+        const string Beacon = "beacon";
+        var document = Document();
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            PlacementRowsRaw = [
+                .. document.Placements,
+                new WorldPlacement(
+                Id: Beacon,
+                PrototypeId: SlotCreation,
+                Position: new DocumentVector3(value: new Vector3(
+                    x: -3f,
+                    y: 0f,
+                    z: 4f
+                )),
+                YawDegrees: 0f,
+                Scale: 1f,
+                Respond: [
+                    new WorldPlacementResponse(
+                    When: new WorldPlacementResponseCondition.StateCondition(
+                        Comparison: ExpressionOp.GreaterOrEqual,
+                        State: "lit",
+                        Value: 1f
+                    ),
+                    PrototypeId: ContributedCreation
+                ),
+                ]
+            ),
+            ],
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(
+                Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 0L))],
+                Kind: CellKind.Int,
+                Name: CellName.Parse(candidate: "lit")
+            ),
+            ]),
+        }));
+        var rejections = new List<string>();
+
+        fixture.Server.EchoTap = echo => {
+            if (echo.Rejected) {
+                rejections.Add(item: echo.Message);
+            }
+        };
+        Fill(
+            actor: Principal.Console,
+            fixture: fixture
+        );
+        DropLink(fixture: fixture);
+
+        for (var index = 0UL; (index <= (ContributionGraceTicks + 8UL)); index++) {
+            fixture.Step();
+        }
+
+        Assert.Equal(
+            actual: Slot(fixture: fixture).PrototypeId,
+            expected: SlotCreation
+        );
+        Assert.Null(@object: Facet(fixture: fixture).Contributor);
+        Assert.NotNull(@object: WorldDefinitionRows.FindCreation(
+            creations: fixture.Server.Definition.Creations,
+            id: ContributedCreation
+        ));
+        Assert.Empty(collection: rejections);
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveCreation(
+            Id: ContributedCreation,
+            Principal: Principal.Console
+        ));
+        fixture.Step();
+
+        Assert.Contains(
+            actualString: Assert.Single(collection: rejections),
+            expectedSubstring: $"creation '{ContributedCreation}' is still named by placements.{Beacon}.respond[0].prototypeId"
+        );
+    }
     /// <summary>DENIAL: a quiet tick — an unchanged document, a watched link reading as it did at the last index
     /// rebuild, and nothing due — reads no placement row at all, so the sweep costs one liveness verdict per watched
     /// link and four deadline-table front comparisons. CONTROL: one fact changes — the watched link drops — and the
@@ -402,7 +450,7 @@ public sealed class ContributionTenureLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document());
 
         Fill(
-            actor: WorldPrincipal.Console,
+            actor: Principal.Console,
             fixture: fixture
         );
         // The fill swapped the document, so the next sweep rebuilds the index; measure from after it.
@@ -436,8 +484,8 @@ public sealed class ContributionTenureLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document());
 
         var slot = Slot(fixture: fixture);
-        var actor = WorldPrincipal.Console;
-        var impersonated = WorldPrincipal.Seat(slot: 1);
+        var actor = Principal.Console;
+        var impersonated = Principal.Seat(slot: 1);
 
         Assert.NotEqual(
             actual: impersonated,
